@@ -101,6 +101,7 @@ func sqlExec(t *testing.T, s *Store, q string, args ...any) {
 }
 
 func TestConnectionPolicy(t *testing.T) {
+	clearPostgresEnvironment(t)
 	for _, name := range []string{"PGSERVICE", "PGPASSWORD", "PGHOST"} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(name, "private")
@@ -452,10 +453,31 @@ func TestSQLStateErrorsDoNotLeak(t *testing.T) {
 }
 
 func TestPostgresInstallPathsDoNotOverrideConnection(t *testing.T) {
+	clearPostgresEnvironment(t)
 	t.Setenv("PGROOT", "C:\\Program Files\\PostgreSQL\\17")
 	t.Setenv("PGBIN", "C:\\Program Files\\PostgreSQL\\17\\bin")
 	config, err := connectionConfig("postgres://user:secret@127.0.0.1/test?sslmode=disable")
 	if err != nil || config.ConnConfig.Host != "127.0.0.1" {
 		t.Fatal("unrelated install paths blocked explicit connection", err)
+	}
+}
+
+// Hosted runners may provision PGUSER/PGPASSWORD. Configuration unit tests must
+// isolate that ambient setup while production continues to reject inheritance.
+func clearPostgresEnvironment(t *testing.T) {
+	t.Helper()
+	var names []string
+	for _, entry := range os.Environ() {
+		key, value, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(strings.ToUpper(key), "PG") {
+			names = append(names, key)
+			if err := os.Unsetenv(key); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Setenv(key, value) })
+		}
+	}
+	if len(names) > 0 {
+		t.Logf("isolated PostgreSQL environment variable names: %v", names)
 	}
 }
