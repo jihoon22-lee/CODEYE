@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate CODEYE design artifacts, not the unimplemented application.
+"""Validate CODEYE contracts and examples, independently of runtime tests.
 
 Checks local Markdown file links (not rendered anchors), JSON Schemas,
 examples, evidence locations/hashes, counts, DAGs, prompt references,
@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import sys
@@ -191,7 +192,12 @@ def expect_invalid(name: str, function, data) -> None:
 
 def main() -> None:
     link_count = 0
-    for path in ROOT.rglob("*.md"):
+    ignored = {".git", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
+    markdown_files = []
+    for directory, dirs, files in os.walk(ROOT):
+        dirs[:] = sorted(name for name in dirs if name not in ignored)
+        markdown_files.extend(Path(directory) / name for name in sorted(files) if name.endswith(".md"))
+    for path in markdown_files:
         for match in re.finditer(r"\[[^\]]*\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
             target = match.group(1).strip().strip("<>")
             if re.match(r"(?:https?://|mailto:|#)", target):
@@ -210,6 +216,7 @@ def main() -> None:
         resources.append((schema["$id"], Resource.from_contents(schema)))
     registry = Registry().with_resources(resources)
     validators = {name: Draft202012Validator(schema, registry=registry, format_checker=FormatChecker()) for name, schema in schemas.items()}
+    validators["doctor.schema.json"].validate(json_file(ROOT / "examples/doctor.json"))
     plan = json_file(ROOT / "examples/plan.json")
     report = json_file(ROOT / "examples/report.json")
     analyzer = yaml_file(ROOT / "examples/analyzer-ruff.yaml")
@@ -264,12 +271,18 @@ def main() -> None:
     bad = copy.deepcopy(analyzer)
     bad["exit_codes"]["findings"] = [0]
     expect_invalid("exit-code overlap", check_analyzer, bad)
+    bad = copy.deepcopy(json_file(ROOT / "examples/doctor.json"))
+    bad["checks"][0]["status"] = "success"
+    expect_invalid("unknown doctor status", validators["doctor.schema.json"].validate, bad)
+    bad = copy.deepcopy(json_file(ROOT / "examples/doctor.json"))
+    bad["checks"][-1]["id"] = "host"
+    expect_invalid("missing doctor capability", validators["doctor.schema.json"].validate, bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
-    print(f"PASS: {link_count} local Markdown file links; {len(schemas)} JSON Schemas; 3 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(schemas)} JSON Schemas; 4 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
-    print("PASS: 6 negative cases; example policy timing; prompt manifest")
+    print("PASS: 8 negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
-    print("Scope: documentation/fixture contracts only; CODEYE runtime and model quality remain untested.")
+    print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 
 
 if __name__ == "__main__":

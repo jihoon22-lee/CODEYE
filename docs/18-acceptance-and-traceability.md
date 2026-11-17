@@ -99,3 +99,17 @@
 ## 7. 문서 보조 검증과 제품 시험의 차이
 
 현재 `scripts/validate_bundle.py`는 문서 링크·Schema·예시·계획 DAG·보고서 수치·범위 참조를 검사한다. `fixtures/cleanup/test_cleanup.py`는 합성 결함 전후를 검사한다. 이 둘의 성공을 TC-01~35 전체 통과나 실제 분석 성능 확보로 보고하지 않는다.
+
+
+## 8. W01 기반 수용 테스트
+
+기존 TC-01~35의 전체 제품 경로와 구분한다. W01이 구현한 범위는 아래 시험과 TC-35 범위 점검이며, 상위 요구사항 전체 완료를 뜻하지 않는다.
+
+| TC | Given / When | Then | 연결 |
+|---|---|---|---|
+| TC-36 | Native doctor 실행, 도구 없음·실패·출력 초과·timeout | OS/arch와 실제 버전만 기록, 실패/미검증 구분, bounded probe, secret 상속·원시 출력 노출 없음 | REQ-004,030; NFR-001,006 |
+| TC-37 | DB 미설정·정상·잘못된 인증·없는 DB·허용되지 않은 TLS 설정 | 인증 query 성공만 available, 고정 실패 reason, credential argv/결과 비노출, 설정 없는 네트워크 호출 없음 | REQ-030; NFR-006 |
+| TC-38 | OpenCode CLI만 설치된 W01 | version_only, 모델·workspace·취소는 unverified, 모델 호출/자동 fallback 없음 | REQ-026,030 |
+| TC-39 | 웹에서 doctor JSON 읽기, 손상·미지원 schema·중복 ID·파일 교체 | 실제 결과만 표시, 오류와 미검증을 성공으로 바꾸지 않음, 파일 서버 전송 없음, 최신 선택 유지 | REQ-013,030; NFR-006 |
+
+실행 결과와 Windows/RHEL·실모델·브라우저 미실행 범위는 [W01 검증 기록](21-w01-foundation.md)에 기록한다.

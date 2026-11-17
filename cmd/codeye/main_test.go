@@ -1,0 +1,26 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+)
+
+func TestCLIRejectsUnsupportedAndSensitiveOptions(t *testing.T) {
+	for _, args := range [][]string{{"start"}, {"stop"}, {"secret"}, {"doctor", "--url=secret"}, {"doctor", "--format=secret"}, {"doctor", "--timeout=0"}, {"doctor", "extra"}} {
+		var out, stderr bytes.Buffer
+		if run(context.Background(), args, &out, &stderr) != 2 {
+			t.Fatalf("accepted %v", args)
+		}
+		if strings.Contains(out.String()+stderr.String(), "secret") {
+			t.Fatal("leaked rejected input")
+		}
+	}
+}
+func TestHelp(t *testing.T) {
+	var b bytes.Buffer
+	if run(context.Background(), nil, &b, &b) != 0 || !strings.Contains(b.String(), "not implemented") {
+		t.Fatal(b.String())
+	}
+}

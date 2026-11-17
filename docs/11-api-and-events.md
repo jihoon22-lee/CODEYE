@@ -1,5 +1,7 @@
 # 11. API와 이벤트 계약
 
+W01의 doctor는 HTTP API가 아닌 로컬 CLI이며 [별도 JSON Schema](../schemas/doctor.schema.json)를 사용한다. 이 문서와 OpenAPI의 운영 endpoint는 아직 구현 계약이다. 진단 파일 뷰어를 제공한다고 인증·API가 구현된 것은 아니다.
+
 ## 1. 공통 규칙
 
 기본 prefix는 `/api/v1`이다. JSON은 UTF-8, 시각은 ISO 8601 UTC, 용량은 bytes, 시간 제한은 seconds를 쓴다. list는 cursor/limit, mutation은 인증·프로젝트 ACL·필요 시 If-Match version을 적용한다. run 생성과 외부 작업 명령은 Idempotency-Key를 지원한다.

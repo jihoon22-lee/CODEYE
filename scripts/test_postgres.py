@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""기존 서비스와 분리된 임시 Native PostgreSQL에서 W01 통합 테스트."""
+import json
+import os
+from pathlib import Path
+import secrets
+import shutil
+import socket
+import subprocess
+import tempfile
+import time
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def main():
+    for tool in ("initdb", "postgres", "psql", "go"):
+        if shutil.which(tool) is None:
+            raise SystemExit(f"필요한 Native 개발 도구가 PATH에 없습니다: {tool}")
+    with tempfile.TemporaryDirectory(prefix="codeye-db-test-") as directory:
+        base = Path(directory)
+        password = secrets.token_hex(24)
+        password_file = base / "password"
+        password_file.write_text(password)
+        password_file.chmod(0o600)
+        # OS가 선택한 빈 포트를 사용한다. 경쟁으로 선점되면 실패하며 기존 DB에 연결하지 않는다.
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        env = {key: value for key, value in os.environ.items() if not key.startswith("PG")}
+        env["GOTOOLCHAIN"] = "local"
+        with (base / "postgres.log").open("w+") as log:
+            subprocess.run(["initdb", "-D", str(base / "data"), "-U", "codeye_test",
+                            "--auth=scram-sha-256", "--pwfile", str(password_file),
+                            "--no-locale", "-E", "UTF8"], env=env, stdout=log, stderr=log, check=True)
+            password_file.unlink()
+            process = subprocess.Popen(["postgres", "-D", str(base / "data"), "-h", "127.0.0.1",
+                                        "-p", str(port), "-k", str(base)], env=env, stdout=log, stderr=log)
+            try:
+                url = f"postgresql://codeye_test:{password}@127.0.0.1:{port}/postgres?sslmode=disable"
+                probe_env = dict(env, PGHOST="127.0.0.1", PGPORT=str(port), PGUSER="codeye_test",
+                                 PGPASSWORD=password, PGDATABASE="postgres", PGSSLMODE="disable", PGCONNECT_TIMEOUT="1")
+                for _ in range(100):
+                    if process.poll() is not None:
+                        raise RuntimeError("임시 PostgreSQL 시작 실패; 기존 서비스는 변경하지 않았습니다")
+                    result = subprocess.run(["psql", "-X", "-w", "-At", "-c", "SELECT 1"],
+                                            env=probe_env, capture_output=True, timeout=2)
+                    if result.returncode == 0:
+                        break
+                    time.sleep(0.1)
+                else:
+                    raise RuntimeError("임시 PostgreSQL 준비 시간 초과")
+                env["CODEYE_TEST_DATABASE_URL"] = url
+                subprocess.run(["go", "test", "-race", "-count=1", "./..."], cwd=ROOT, env=env, check=True)
+                subprocess.run(["go", "build", "-o", str(base / "codeye"), "./cmd/codeye"], cwd=ROOT, env=env, check=True)
+                env["CODEYE_DATABASE_URL"] = url
+                result = subprocess.run([str(base / "codeye"), "doctor", "--format", "json", "--work-dir", str(base / "work")],
+                                        cwd=ROOT, env=env, capture_output=True, timeout=60)
+                report = json.loads(result.stdout)
+                check = next(c for c in report["checks"] if c["id"] == "database")
+                assert result.returncode == 1 and check["status"] == "available", "진단 상태 불일치"
+                assert password not in result.stdout.decode() and password not in result.stderr.decode(), "credential 노출"
+                from jsonschema import Draft202012Validator
+                Draft202012Validator(json.loads((ROOT / "schemas/doctor.schema.json").read_text())).validate(report)
+                print("PASS: Native PostgreSQL 인증/query·인증 실패·없는 DB·CLI JSON schema·비밀값 미노출")
+            finally:
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+
+
+if __name__ == "__main__":
+    main()
