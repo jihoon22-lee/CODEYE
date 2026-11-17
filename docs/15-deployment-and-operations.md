@@ -8,7 +8,7 @@ Go 서비스 바이너리와 정적 웹 파일을 배포하되 분석 도구 런
 
 ## 2. 개인 모드 UX
 
-`codeye doctor`는 [W01 범위](21-w01-foundation.md)에서 구현했다. `codeye start`, `codeye stop`, `codeye agent enroll`은 아직 설계 계약이다. doctor는 DB·작업 디스크·toolchain을 probe하고 모델·프로세스 제어의 미검증 상태를 명시한다. 전체 모델·실행 능력 검증은 W05/W10에서 추가한다. start는 local controller와 agent를 기동하며 DB가 준비되지 않았으면 구체적인 설치/연결 안내를 한다.
+`codeye doctor`는 [W01 범위](21-w01-foundation.md)에서 구현했다. `codeye migrate`와 loopback controller 전용 `codeye serve`는 구현했다([W03 실행 방법](24-w03-api.md)). `codeye start`, `codeye stop`, `codeye agent enroll`은 아직 설계 계약이다. doctor는 DB·작업 디스크·toolchain을 probe하고 모델·프로세스 제어의 미검증 상태를 명시한다. 전체 모델·실행 능력 검증은 W05/W10에서 추가한다. start는 local controller와 agent를 기동하며 DB가 준비되지 않았으면 구체적인 설치/연결 안내를 한다.
 
 PostgreSQL을 몰래 시스템 서비스로 설치하지 않는다. 명시적 사용자 승인 아래 Native 설치 가이드를 제공하고 이후 서비스 시작을 단순화한다. 기본 listen은 loopback이다. 브라우저를 닫아도 서비스를 유지하며 stop은 실행 중 작업 drain 또는 명시적 cancel 선택을 지원한다.
 

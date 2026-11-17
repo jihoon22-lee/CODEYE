@@ -1,6 +1,6 @@
 # 11. API와 이벤트 계약
 
-W01의 doctor는 HTTP API가 아닌 로컬 CLI이며 [별도 JSON Schema](../schemas/doctor.schema.json)를 사용한다. 이 문서와 OpenAPI의 운영 endpoint는 아직 구현 계약이다. W02 저장 계약과 명시적 `codeye migrate`도 HTTP endpoint 구현이 아니다. 진단 파일 뷰어를 제공한다고 인증·API가 구현된 것은 아니다.
+W01 doctor/W02 migrate는 로컬 CLI다. W03에서 세션·프로젝트·run 요청/조회/취소·readiness와 정적 웹 호스팅을 구현했다. [OpenAPI](../api/openapi.yaml)의 `x-codeye-status: implemented-w03` 표시와 실제 route를 자동 대조한다. 나머지 endpoint는 설계 계약이며 [W03 구현 기록](24-w03-api.md)을 따른다.
 
 ## 1. 공통 규칙
 

@@ -132,7 +132,7 @@ func TestProjectACLRevisionAndEnqueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.GetProject(ctx, other, p.ID)
-	expect(t, err, domain.ErrForbidden)
+	expect(t, err, domain.ErrNotFound)
 	if err = s.SetMember(ctx, owner, p.ID, other, domain.RoleViewer); err != nil {
 		t.Fatal(err)
 	}
@@ -151,9 +151,9 @@ func TestProjectACLRevisionAndEnqueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.GetRun(ctx, other, r.ID)
-	expect(t, err, domain.ErrForbidden)
+	expect(t, err, domain.ErrNotFound)
 	_, err = s.Events(ctx, other, r.ID, 0, 100)
-	expect(t, err, domain.ErrForbidden)
+	expect(t, err, domain.ErrNotFound)
 	rev, err := s.ReviseProject(ctx, owner, p.ID, 1, json.RawMessage(`{"source":{"kind":"git"}}`))
 	if err != nil || rev != 2 {
 		t.Fatal(rev, err)

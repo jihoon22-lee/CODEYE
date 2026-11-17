@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/doctor"
@@ -14,14 +15,17 @@ import (
 )
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	os.Exit(run(ctx, os.Args[1:], os.Stdout, os.Stderr))
 }
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
-		fmt.Fprintln(out, "CODEYE foundation\nUsage: codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]\nDatabase: CODEYE_DATABASE_URL (optional for doctor).\nMigration: codeye migrate (explicit schema changes). start/stop/agent are not implemented.")
+		fmt.Fprint(out, usage)
 		return 0
+	}
+	if code, ok := runControl(ctx, args, out, stderr); ok {
+		return code
 	}
 	if args[0] == "migrate" {
 		if len(args) != 1 {

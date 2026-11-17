@@ -162,34 +162,46 @@ func (s *Store) Events(ctx context.Context, actor, id string, after int64, limit
 	})
 }
 func (s *Store) Cancel(ctx context.Context, actor, id string) (Run, error) {
+	r, _, err := s.CancelRun(ctx, actor, id)
+	return r, err
+}
+
+// CancelRun is Cancel that also reports whether this call changed the run.
+// changed is false when the run was already terminal or already cancelling.
+func (s *Store) CancelRun(ctx context.Context, actor, id string) (Run, bool, error) {
 	if !validIDs(actor, id) {
-		return Run{}, domain.ErrInvalid
+		return Run{}, false, domain.ErrInvalid
 	}
-	return transaction(ctx, s, func(tx pgx.Tx) (Run, error) {
+	type result struct {
+		run     Run
+		changed bool
+	}
+	out, err := transaction(ctx, s, func(tx pgx.Tx) (result, error) {
 		r, err := authorizeRun(ctx, tx, actor, id, true)
 		if err != nil {
-			return r, err
+			return result{run: r}, err
 		}
 		if r.Status.Terminal() || r.Status == domain.RunCancelRequested || r.Status == domain.RunCancelling {
-			return r, nil
+			return result{run: r}, nil
 		}
 		if r.Status == domain.RunRecoveryRequired {
-			return r, domain.ErrConflict
+			return result{run: r}, domain.ErrConflict
 		}
 		next := domain.RunCancelRequested
 		if r.Status == domain.RunQueued {
 			var active bool
 			if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM attempts WHERE run_id=$1 AND status!='released')", id).Scan(&active); err != nil {
-				return r, err
+				return result{run: r}, err
 			}
 			if active {
-				return r, domain.ErrConflict
+				return result{run: r}, domain.ErrConflict
 			}
 			next = domain.RunCancelled
 		}
 		err = transitionRun(ctx, tx, &r, next, "run.cancel_requested", map[string]any{"status": next})
-		return r, err
+		return result{run: r, changed: true}, err
 	})
+	return out.run, out.changed, err
 }
 
 // Retry requires a retained snapshot and confirmed cleanup; it never reacquires input.

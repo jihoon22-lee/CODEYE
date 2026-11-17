@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { App } from './App';
+import { DoctorView } from './DoctorView';
 import { parseReport } from './doctor';
 import example from '../../examples/doctor.json';
 
@@ -18,7 +18,7 @@ describe('diagnostics import', () => {
     expect(() => parseReport(text)).toThrow();
   });
   it('shows the implementation boundary without fabricated results', () => {
-    const html = renderToStaticMarkup(<App />);
+    const html = renderToStaticMarkup(<DoctorView />);
     expect(html).toContain('아직 구현되지 않았습니다');
     expect(html).toContain('아직 불러온 진단 결과가 없습니다');
     expect(html).not.toContain('<table');

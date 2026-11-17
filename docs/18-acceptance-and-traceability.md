@@ -127,3 +127,18 @@
 | TC-45 | 성공을 finalizing에 유지·미실행/실패 구분·오류 credential 비노출 | REQ-013; NFR-006 |
 
 [W02 구현 기록](23-w02-storage.md)의 실제 결과와 제한을 따른다. 이 시험은 저장 계층이며 agent·NativeExecutor·artifact bytes·보고서 E2E 통과를 뜻하지 않는다.
+
+
+## 10. W03 API·인증 수용 시험
+
+| TC | 검증 | 요구 연결 |
+|---|---|---|
+| TC-46 | loopback 강제, Host/Origin/CSRF 거부 | NFR-006 |
+| TC-47 | 일회용 launch token, 동시 교환·비활성화, 세션 만료/폐기 | REQ-002; NFR-006 |
+| TC-48 | 설명 없는 local/Git 선언 등록, root grant, 소스 미검증 표시 | REQ-001,002,005 |
+| TC-49 | 비구성원404·viewer403·철회 후 접근 거부 | REQ-002 |
+| TC-50 | 멱등202·충돌409·DB실패503·서버 재접속 후 상태 보존 | REQ-022; NFR-002,003 |
+| TC-51 | readiness 읽기 전용, serve의 구/신/변조 schema 거부 | NFR-003 |
+| TC-52 | 정적 파일 경계·CSP·비밀값 비노출·실브라우저 요청/취소 | NFR-005,006 |
+
+[W03 기록](24-w03-api.md)의 실행 환경·검증 범위를 따른다. W04 이후의 실제 분석 실행은 별도 수용 증거다.

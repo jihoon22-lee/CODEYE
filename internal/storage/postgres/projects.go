@@ -60,16 +60,21 @@ func (s *Store) CreateProject(ctx context.Context, actor, name string, config js
 		if err != nil {
 			return Project{}, err
 		}
-		p := Project{ID: domain.NewID(), OwnerID: actor, Name: name, Revision: 1, Config: canonical, ConfigDigest: digest}
-		if _, err := tx.Exec(ctx, "INSERT INTO projects(id,owner_id,name,current_revision) VALUES($1,$2,$3,1)", p.ID, actor, name); err != nil {
-			return Project{}, err
-		}
-		if _, err := tx.Exec(ctx, "INSERT INTO project_members(project_id,user_id,role) VALUES($1,$2,'manager')", p.ID, actor); err != nil {
-			return Project{}, err
-		}
-		_, err = tx.Exec(ctx, "INSERT INTO project_revisions(project_id,revision,config,config_digest) VALUES($1,1,$2,$3)", p.ID, string(canonical), digest)
-		return p, err
+		return insertProject(ctx, tx, actor, name, canonical, digest)
 	})
+}
+
+// insertProject creates the project, its manager membership and revision 1 in tx.
+func insertProject(ctx context.Context, tx pgx.Tx, actor, name string, canonical json.RawMessage, digest string) (Project, error) {
+	p := Project{ID: domain.NewID(), OwnerID: actor, Name: name, Revision: 1, Config: canonical, ConfigDigest: digest}
+	if _, err := tx.Exec(ctx, "INSERT INTO projects(id,owner_id,name,current_revision) VALUES($1,$2,$3,1)", p.ID, actor, name); err != nil {
+		return Project{}, err
+	}
+	if _, err := tx.Exec(ctx, "INSERT INTO project_members(project_id,user_id,role) VALUES($1,$2,'manager')", p.ID, actor); err != nil {
+		return Project{}, err
+	}
+	_, err := tx.Exec(ctx, "INSERT INTO project_revisions(project_id,revision,config,config_digest) VALUES($1,1,$2,$3)", p.ID, string(canonical), digest)
+	return p, err
 }
 
 // requireProject checks the actor's access under a project row lock so a concurrent
@@ -92,7 +97,8 @@ func requireProject(ctx context.Context, tx pgx.Tx, actor, project string, manag
 	var role domain.Role
 	if err := tx.QueryRow(ctx, "SELECT role FROM project_members WHERE project_id=$1 AND user_id=$2", project, actor).Scan(&role); err != nil {
 		if err == pgx.ErrNoRows {
-			return domain.ErrForbidden
+			// Non-members must not learn whether the project exists.
+			return domain.ErrNotFound
 		}
 		return err
 	}

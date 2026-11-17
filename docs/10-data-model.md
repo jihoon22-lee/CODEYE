@@ -83,3 +83,8 @@ queue는 상태·우선순위·available_at, lease는 expires_at, finding은 pro
 ## 9. W02 구현 경계
 
 프로젝트/ACL·revision, run/attempt/task/task_executions, snapshot/artifact metadata, evidence, event와 migration 이력을 구현한다. 실제 적용 SQL과 오류 코드, 저장 서비스 권한·트랜잭션 경계는 [W02 기록](23-w02-storage.md)을 따른다. 나머지 엔티티와 HTTP API는 후속 작업이다. metadata 참조 제약을 actual artifact bytes 검증이나 보고서 게시로 해석하지 않는다.
+
+
+## 10. W03 인증·소스 선언 metadata
+
+0002 migration은 사용자 비활성화, token hash 기반 일회용 launch/session, 승인 source root/grant, Git provider와 project 생성 시각을 추가한다. 권한 없는 project는404로 존재를 숨기고 session은 매 요청 DB 시각·폐기 상태를 검사한다. [W03 저장 계약](24-w03-api.md)을 따르며 private Git credential과 node credential은 이 테이블에 혼합하지 않는다.

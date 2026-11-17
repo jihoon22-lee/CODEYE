@@ -148,6 +148,7 @@ func execState(t *testing.T, ctx context.Context, c *pgx.Conn, code, sql string,
 var coreTables = []string{
 	"users", "projects", "project_members", "project_revisions", "snapshots", "runs",
 	"attempts", "events", "tasks", "task_executions", "artifacts", "evidence",
+	"auth_launch_tokens", "auth_sessions", "source_roots", "source_root_grants", "providers",
 }
 
 func TestApplyFreshThenReapply(t *testing.T) {
@@ -811,4 +812,76 @@ func TestSchemaRetryGuardIndependentOfSearchPath(t *testing.T) {
 	execState(t, ctx, c, SQLStateIllegalTransition, "UPDATE "+runs+" SET status = 'queued', version = 3 WHERE id = $1", f.runA)
 	mustExec(t, ctx, c, "UPDATE "+attempts+" SET status = 'released', cleanup_state = 'confirmed' WHERE id = $1", f.attemptA)
 	mustExec(t, ctx, c, "UPDATE "+runs+" SET status = 'queued', version = 3 WHERE id = $1", f.runA)
+}
+
+func TestSchema0002GuardsAndUpgradeFromW02(t *testing.T) {
+	_, open := isolatedSchema(t)
+	ctx := testCtx(t)
+	c := open()
+	// A W02 database with rows: apply 0001 only, add data, then upgrade.
+	ms, _ := Embedded()
+	only1 := fstest.MapFS{"m/0001_core_domain.sql": {Data: []byte(ms[0].sql)}}
+	if err := applyFS(ctx, c, only1, "m"); err != nil {
+		t.Fatal(err)
+	}
+	user, project := newID(), newID()
+	mustExec(t, ctx, c, "INSERT INTO users (id) VALUES ($1)", user)
+	tx, err := c.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, "INSERT INTO projects (id, owner_id, name, current_revision) VALUES ($1, $2, 'p', 1)", project, user); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, "INSERT INTO project_revisions (project_id, revision, config, config_digest) VALUES ($1, 1, '{}', $2)", project, digest('c')); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := Apply(ctx, c); err != nil {
+		t.Fatalf("upgrade 0001 -> latest: %v", err)
+	}
+	var created time.Time
+	var disabled *time.Time
+	if err := c.QueryRow(ctx, "SELECT created_at, disabled_at FROM users WHERE id=$1", user).Scan(&created, &disabled); err != nil || created.IsZero() || disabled != nil {
+		t.Fatalf("existing user after upgrade: %v %v %v", created, disabled, err)
+	}
+	if err := c.QueryRow(ctx, "SELECT created_at FROM projects WHERE id=$1", project).Scan(&created); err != nil || created.IsZero() {
+		t.Fatalf("existing project after upgrade: %v", err)
+	}
+
+	// Launch token: used once, then fixed.
+	mustExec(t, ctx, c, "INSERT INTO auth_launch_tokens (token_sha256, user_id, expires_at) VALUES ($1, $2, now() + interval '1 minute')", digest('1'), user)
+	mustExec(t, ctx, c, "UPDATE auth_launch_tokens SET used_at = clock_timestamp() WHERE token_sha256 = $1", digest('1'))
+	execState(t, ctx, c, SQLStateFixedReference, "UPDATE auth_launch_tokens SET used_at = NULL WHERE token_sha256 = $1", digest('1'))
+	execState(t, ctx, c, SQLStateImmutable, "UPDATE auth_launch_tokens SET expires_at = expires_at + interval '1 hour' WHERE token_sha256 = $1", digest('1'))
+	execState(t, ctx, c, "23514", "INSERT INTO auth_launch_tokens (token_sha256, user_id, expires_at) VALUES ('raw-token', $1, now() + interval '1 minute')", user)
+	execState(t, ctx, c, "23514", "INSERT INTO auth_launch_tokens (token_sha256, user_id, expires_at) VALUES ($1, $2, now() - interval '1 minute')", digest('2'), user)
+	// Session: revoked once, expiry fixed, hash unique.
+	sess := newID()
+	mustExec(t, ctx, c, "INSERT INTO auth_sessions (id, user_id, token_sha256, expires_at) VALUES ($1, $2, $3, now() + interval '1 hour')", sess, user, digest('3'))
+	execState(t, ctx, c, "23505", "INSERT INTO auth_sessions (id, user_id, token_sha256, expires_at) VALUES ($1, $2, $3, now() + interval '1 hour')", newID(), user, digest('3'))
+	execState(t, ctx, c, SQLStateImmutable, "UPDATE auth_sessions SET expires_at = expires_at + interval '1 day' WHERE id = $1", sess)
+	mustExec(t, ctx, c, "UPDATE auth_sessions SET revoked_at = clock_timestamp() WHERE id = $1", sess)
+	execState(t, ctx, c, SQLStateFixedReference, "UPDATE auth_sessions SET revoked_at = NULL WHERE id = $1", sess)
+	// User: disable is permanent; identity immutable.
+	mustExec(t, ctx, c, "UPDATE users SET display_name = 'Alice' WHERE id = $1", user)
+	mustExec(t, ctx, c, "UPDATE users SET disabled_at = clock_timestamp() WHERE id = $1", user)
+	execState(t, ctx, c, SQLStateFixedReference, "UPDATE users SET disabled_at = NULL WHERE id = $1", user)
+	execState(t, ctx, c, SQLStateImmutable, "UPDATE users SET created_at = created_at - interval '1 day' WHERE id = $1", user)
+	execState(t, ctx, c, "23514", "UPDATE users SET display_name = '  ' WHERE id = $1", user)
+	// Source roots and providers are immutable registrations.
+	root := newID()
+	mustExec(t, ctx, c, "INSERT INTO source_roots (id, label, path) VALUES ($1, 'work', '/srv/work')", root)
+	execState(t, ctx, c, SQLStateImmutable, "UPDATE source_roots SET path = '/etc' WHERE id = $1", root)
+	execState(t, ctx, c, "23505", "INSERT INTO source_roots (id, label, path) VALUES ($1, 'work', '/srv/other')", newID())
+	mustExec(t, ctx, c, "INSERT INTO source_root_grants (source_root_id, user_id) VALUES ($1, $2)", root, user)
+	execState(t, ctx, c, "23503", "DELETE FROM source_roots WHERE id = $1", root)
+	prov := newID()
+	mustExec(t, ctx, c, "INSERT INTO providers (id, kind, host) VALUES ($1, 'ghes', 'ghe.example')", prov)
+	execState(t, ctx, c, SQLStateImmutable, "UPDATE providers SET host = 'evil.example' WHERE id = $1", prov)
+	execState(t, ctx, c, "23514", "INSERT INTO providers (id, kind, host) VALUES ($1, 'github', 'ghe.example')", newID())
+	execState(t, ctx, c, "23514", "INSERT INTO providers (id, kind, host) VALUES ($1, 'gitlab', 'gitlab.com')", newID())
+	execState(t, ctx, c, "23514", "INSERT INTO providers (id, kind, host, api_url) VALUES ($1, 'ghes', 'b.example', 'http://b.example/api')", newID())
 }
