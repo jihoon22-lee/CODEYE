@@ -14,7 +14,7 @@
 | W06 | [Agent·worker protocol 구현](28-w06-agent-runtime.md) | W02,W05 | enroll/heartbeat/claim/epoch, 두 에이전트로 중복 claim 방지 |
 | W07 | [Scheduler·autoscaler 구현](30-w07-scheduler.md) | W06 | min/max, 0→N→0, drain, resource admission, lease expiry·late result 시험 |
 | W08 | 첫 언어 분석 어댑터 — Go vet 구현 | W04,W05 | 실제 개인 프로젝트에 맞는 한 언어 선정; raw→normalize·실패 parser fixture |
-| W09 | 구조화 보고서 renderer | W03,W08 | LLM 없이도 task 상태·원시 근거·공백이 보이는 보고서 |
+| W09 | [구조화 보고서 게시·내보내기 구현](31-w09-report.md) | W03,W08 | LLM 없이도 task 상태·원시 근거·공백이 보이는 보고서 |
 | W10 | [OpenCode adapter 실연동 검증](32-w10-opencode.md) | W04,W06 | 실제 버전 계약, workspace digest, model request/cancel/permission block 확인 |
 | W11 | [Context·Investigator 실연동](33-w11-context-review.md) | W08,W10 | 문서 없는 코드와 문서 있는 코드 모두 근거 있는 후보 생성 |
 | W12 | Verifier·증거 검증 | W11 | 반례로 후보 철회, 허위 path·재현 주장 차단, 모델 실패 partial |

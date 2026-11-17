@@ -46,12 +46,12 @@ def within_root(path: Path) -> Path:
     return resolved
 
 
-def source_location(location: dict) -> Path:
+def source_location(location: dict, root: Path = ROOT) -> Path:
     name = location["path"]
     relative = PurePosixPath(name)
     ensure(not relative.is_absolute() and ".." not in relative.parts, "Unsafe source path")
     ensure("\\" not in name and not re.match(r"^[A-Za-z]:", name), "Non-canonical source path")
-    path = within_root(ROOT / name)
+    path = within_root(root / name)
     ensure(path.is_file(), "Missing example source: " + name)
     lines = path.read_text(encoding="utf-8").splitlines()
     ensure(1 <= location["start_line"] <= location["end_line"] <= len(lines), "Invalid line range: " + name)
@@ -79,7 +79,7 @@ def check_plan(plan: dict) -> None:
         visit(task_id)
 
 
-def check_report(report: dict) -> None:
+def check_report(report: dict, source_root: Path = ROOT) -> None:
     findings = report["findings"]
     ids = [finding["id"] for finding in findings]
     ensure(len(ids) == len(set(ids)), "Duplicate finding ID")
@@ -97,6 +97,20 @@ def check_report(report: dict) -> None:
     missing_required = any(task["required_for_verdict"] and task["status"] != "succeeded" for task in report["tasks"])
     ensure(not (report["status"] == "completed" and missing_required), "Completed report has incomplete required work")
     ensure(not (report["quality_verdict"] == "no_actionable_findings" and (missing_required or actionable)), "Unsupported clean verdict")
+    if "observations" in report:
+        observations = report["observations"]
+        ensure(summary["raw_observations"] == len(observations), "Raw observation count mismatch")
+        ensure(summary["unresolved_observations"] == sum(o["evidence_state"] != "verified_against_source_manifest" for o in observations), "Unresolved observation count mismatch")
+        rows = {a["id"]: a for a in report["artifacts"]}
+        for obs in observations:
+            raw = obs["raw_ref"]
+            ensure(raw["artifact_id"] in rows, "Unbound raw reference")
+            row = rows[raw["artifact_id"]]
+            ensure(row["role"] == "stdout" and row["sha256"] == raw["sha256"] and row["task_key"] == obs["task_key"], "Incorrect raw stream")
+            ensure(0 <= raw["byte_start"] <= raw["byte_end"] <= row["size_bytes"], "Raw byte range invalid")
+            ensure((obs["raw_message"] is not None) == report["export"]["include_code"], "Export leaked or omitted diagnostic text")
+        if report["coverage"]["ai_review"]["status"] != "performed":
+            ensure(report["status"] != "completed" and report["quality_verdict"] != "no_actionable_findings", "Incomplete AI review marked clean")
     for finding in findings:
         evidence = finding["evidence"]
         evidence_ids = {item["id"] for item in evidence}
@@ -110,11 +124,11 @@ def check_report(report: dict) -> None:
         ensure(set(finding["counterevidence_ids"]).issubset(evidence_ids), "Unknown counterevidence")
         for location in finding["locations"]:
             ensure(location["snapshot_id"] == report["inputs"]["snapshot_id"], "Snapshot mismatch")
-            source_location(location)
+            source_location(location, source_root)
         for item in evidence:
             if item["kind"] in ("code", "document"):
                 ensure(item["location"]["snapshot_id"] == report["inputs"]["snapshot_id"], "Evidence snapshot mismatch")
-                path = source_location(item["location"])
+                path = source_location(item["location"], source_root)
                 digest = hashlib.sha256(path.read_bytes()).hexdigest()
                 ensure(digest == item["blob_sha256"], "Evidence hash mismatch: " + str(path))
 
@@ -227,6 +241,18 @@ def expect_invalid(name: str, function, data) -> None:
     raise ValueError("Negative case was incorrectly accepted: " + name)
 
 
+def make_validators():
+    schemas = {}
+    resources = []
+    for path in sorted((ROOT / "schemas").glob("*.json")):
+        schema = json_file(path)
+        Draft202012Validator.check_schema(schema)
+        schemas[path.name] = schema
+        resources.append((schema["$id"], Resource.from_contents(schema)))
+    registry = Registry().with_resources(resources)
+    return {name: Draft202012Validator(schema, registry=registry, format_checker=FormatChecker()) for name, schema in schemas.items()}
+
+
 def main() -> None:
     link_count = 0
     ignored = {".git", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
@@ -244,18 +270,10 @@ def main() -> None:
                 continue
             ensure(within_root(path.parent / target).exists(), "Broken Markdown link in " + str(path) + ": " + target)
             link_count += 1
-    schemas = {}
-    resources = []
-    for path in sorted((ROOT / "schemas").glob("*.json")):
-        schema = json_file(path)
-        Draft202012Validator.check_schema(schema)
-        schemas[path.name] = schema
-        resources.append((schema["$id"], Resource.from_contents(schema)))
-    registry = Registry().with_resources(resources)
-    validators = {name: Draft202012Validator(schema, registry=registry, format_checker=FormatChecker()) for name, schema in schemas.items()}
+    validators = make_validators()
     validators["doctor.schema.json"].validate(json_file(ROOT / "examples/doctor.json"))
     validators["state.schema.json"].validate(json_file(ROOT / "examples/state.json"))
-    state = schemas["state.schema.json"]["properties"]
+    state = validators["state.schema.json"].schema["properties"]
     api = yaml_file(ROOT / "api/openapi.yaml")["components"]["schemas"]
     for field, name in (("run_status", "RunStatus"), ("attempt_status", "AttemptStatus"), ("cleanup_state", "CleanupState")):
         ensure(set(state[field]["enum"]) == set(api[name]["enum"]), "State/API enum mismatch: " + field)
@@ -273,6 +291,9 @@ def main() -> None:
     validators["go-vet-observations.schema.json"].validate(observations)
     check_plan(plan)
     check_report(report)
+    published = json_file(ROOT / "examples/report-go-vet.json")
+    validators["report.schema.json"].validate(published)
+    check_report(published, ROOT / "fixtures/go-vet")
     check_analyzer(analyzer)
     check_analyzer(go_vet)
     ensure(go_vet["exit_codes"]["findings"] == [], "go vet -json findings are not an exit-code class")
@@ -316,6 +337,12 @@ def main() -> None:
     bad = copy.deepcopy(report)
     bad["findings"][0]["locations"][0]["path"] = "../outside.py"
     expect_invalid("path traversal", check_report, bad)
+    bad = copy.deepcopy(published)
+    bad["observations"][0]["raw_ref"]["artifact_id"] = "unknown"
+    expect_invalid("unbound raw stream", check_report, bad)
+    bad = copy.deepcopy(published)
+    bad["quality_verdict"] = "no_actionable_findings"
+    expect_invalid("clean without AI review", check_report, bad)
     bad = copy.deepcopy(plan)
     bad["tasks"][0]["depends_on"] = [bad["tasks"][-1]["id"]]
     expect_invalid("cyclic plan", check_plan, bad)
@@ -350,9 +377,9 @@ def main() -> None:
     bad["checks"][-1]["id"] = "host"
     expect_invalid("missing doctor capability", validators["doctor.schema.json"].validate, bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
-    print(f"PASS: {link_count} local Markdown file links; {len(schemas)} JSON Schemas; 9 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 10 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
-    print("PASS: 15 negative cases; example policy timing; prompt manifest")
+    print("PASS: 17 negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 
