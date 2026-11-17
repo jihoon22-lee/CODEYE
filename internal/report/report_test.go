@@ -746,3 +746,13 @@ func TestRejectedGoVetCoverageCannotClaimClean(t *testing.T) {
 		})
 	}
 }
+
+func TestWithTestsProfileRequiresTestResults(t *testing.T) {
+	f := withReview(t, map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"})
+	f.in.Run.Profile = "with-tests"
+	reg, _ := NewRegistry(GoVetDecoder{}, fakeReview{accept: true})
+	got := build(t, f.in, reg)
+	if got.Status != StatusPartial || !has(got.Limitations, LimTestsNotPerformed) {
+		t.Fatalf("with-tests without tests: %s %+v", got.Status, got.Limitations)
+	}
+}

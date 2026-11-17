@@ -42,6 +42,7 @@ var Korean = Locale{
 		LimAIReviewPartial:               "필수 AI 검토 중 일부만 검증되었다.",
 		LimResultManifestMissing:         "결과 manifest가 없다. DB에 기록된 작업 상태만 표시한다.",
 		LimResultManifestRejected:        "결과 manifest 검증에 실패했다. DB에 기록된 작업 상태만 표시한다.",
+		LimTestsNotPerformed:             "with-tests 프로필이 요청한 테스트 결과가 없다.",
 		LimRequiredTaskIncomplete:        "필수 작업 중 성공하지 않은 작업이 있다.",
 		LimCleanupUncertain:              "하위 프로세스 정리를 확인하지 못했다.",
 		LimArtifactRejected:              "분석 산출물 검증에 실패해 해당 작업의 결과를 제외했다.",

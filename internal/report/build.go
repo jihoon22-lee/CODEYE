@@ -40,6 +40,7 @@ const (
 	LimTaskStatusMismatch     = "artifact_status_differs_from_accepted_task"
 	LimRunCancelled           = "run_cancelled"
 	LimRunFailed              = "run_failed"
+	LimTestsNotPerformed      = "required_tests_not_performed"
 	NoteInventoryAllLanguages = "inventory_counts_all_included_files"
 	NoteToolFilesUnknown      = "tool_processed_files_unknown"
 	NoteNoTestsPlanned        = "tests_not_planned"
@@ -297,6 +298,10 @@ func Build(in Input, reg *Registry) (Report, error) {
 	}
 	if in.Attempt.Cleanup != "confirmed" || (rm != nil && rm.CleanupState != "confirmed") {
 		lim.add(LimCleanupUncertain)
+	}
+	if in.Run.Profile == "with-tests" && r.Coverage.TestStatus == "not_run" {
+		lim.add(LimTestsNotPerformed)
+		incompleteResult = true
 	}
 	r.Status = decideStatus(in.Run.FinalStatus, readable, requiredMissing || incompleteResult || lim.has(LimCleanupUncertain), r.Coverage.AIReview.Status)
 	switch r.Status {
