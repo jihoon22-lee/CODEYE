@@ -1,0 +1,15 @@
+export const ko = {
+  eyebrow: '코드를 보는 눈', title: '분석을 시작하기 전에',
+  intro: 'CODEYE는 근거를 확인할 수 있는 코드 품질 분석·검토 플랫폼을 준비하고 있습니다.',
+  stage: 'W01 · 개발 기반',
+  limitation: '현재는 환경 진단 단계입니다. 프로젝트 분석, 워커 실행, LLM 검토와 보고서 생성은 아직 구현되지 않았습니다.',
+  diagnostic: '내 환경 확인',
+  commandHelp: 'CLI가 만든 JSON 파일을 열면 실제 진단 결과를 확인할 수 있습니다. 종료 코드 1은 미확인 또는 사용할 수 없는 항목이 있다는 뜻입니다.',
+  open: '진단 JSON 파일 열기', privacy: '파일은 이 브라우저에서만 읽습니다. 서버로 전송하거나 저장하지 않습니다.',
+  invalid: '지원하는 CODEYE 진단 파일이 아닙니다. schema_version 0.1의 JSON 파일을 선택하세요 (최대 1 MiB).',
+  empty: '아직 불러온 진단 결과가 없습니다.',
+  device: '진단 환경', checks: '능력별 진단', columns: ['항목', '상태', '확인 범위·사유', '버전'],
+  unknown: '미측정', next: '다음 구현 단계',
+  steps: ['W02 · 도메인 계약과 PostgreSQL migration', 'W03 · 인증과 프로젝트·실행 API', 'W04 / W05 · 소스 고정과 Native 실행기'],
+  statuses: { available: '확인됨', unavailable: '사용 불가', unverified: '검증 전', not_configured: '미설정' },
+} as const;

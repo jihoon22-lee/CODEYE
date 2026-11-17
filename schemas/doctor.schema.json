@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codeye.invalid/schemas/doctor.schema.json",
+  "title": "CODEYE foundation diagnostics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "stage",
+    "host",
+    "checks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "stage": {
+      "const": "foundation"
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "arch",
+        "logical_cpus",
+        "memory_total_bytes",
+        "disk_available_bytes"
+      ],
+      "properties": {
+        "os": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+$"
+        },
+        "arch": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+$"
+        },
+        "logical_cpus": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "memory_total_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "disk_available_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 13,
+      "maxItems": 13,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "host",
+              "work_disk",
+              "git",
+              "go",
+              "node",
+              "python",
+              "c_cpp",
+              "rust",
+              "postgres_client",
+              "opencode_cli",
+              "database",
+              "model",
+              "process_control"
+            ]
+          },
+          "status": {
+            "enum": [
+              "available",
+              "unavailable",
+              "unverified",
+              "not_configured"
+            ]
+          },
+          "reason": {
+            "enum": [
+              "observed_runtime",
+              "directory_unavailable",
+              "write_failed",
+              "readback_failed",
+              "cleanup_failed",
+              "write_read_remove_verified",
+              "version_only",
+              "executable_missing",
+              "permission_denied",
+              "invalid_executable",
+              "workspace_unavailable",
+              "recovery_required",
+              "output_limit",
+              "probe_failed",
+              "version_unrecognized",
+              "database_url_missing",
+              "invalid_database_url",
+              "unsupported_database_option",
+              "unsupported_tls_mode",
+              "tls_required",
+              "authentication_failed",
+              "database_missing",
+              "connection_failed",
+              "server_version_unrecognized",
+              "authenticated_query_verified",
+              "adapter_contract_pending_w10",
+              "native_executor_pending_w05"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "host"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "work_disk"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "git"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "go"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "node"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "python"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "c_cpp"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "rust"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "postgres_client"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "opencode_cli"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "database"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "model"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "process_control"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

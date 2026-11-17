@@ -1,0 +1,78 @@
+{
+  "schema_version": "0.1",
+  "stage": "foundation",
+  "host": {
+    "os": "linux",
+    "arch": "amd64",
+    "logical_cpus": 2,
+    "memory_total_bytes": null,
+    "disk_available_bytes": null
+  },
+  "checks": [
+    {
+      "id": "host",
+      "status": "available",
+      "reason": "observed_runtime"
+    },
+    {
+      "id": "work_disk",
+      "status": "available",
+      "reason": "write_read_remove_verified"
+    },
+    {
+      "id": "git",
+      "status": "unverified",
+      "reason": "version_unrecognized"
+    },
+    {
+      "id": "go",
+      "status": "unverified",
+      "reason": "version_unrecognized"
+    },
+    {
+      "id": "node",
+      "status": "unverified",
+      "reason": "version_unrecognized"
+    },
+    {
+      "id": "python",
+      "status": "unverified",
+      "reason": "version_unrecognized"
+    },
+    {
+      "id": "c_cpp",
+      "status": "unverified",
+      "reason": "version_unrecognized"
+    },
+    {
+      "id": "rust",
+      "status": "unverified",
+      "reason": "version_unrecognized"
+    },
+    {
+      "id": "postgres_client",
+      "status": "unverified",
+      "reason": "version_unrecognized"
+    },
+    {
+      "id": "opencode_cli",
+      "status": "unverified",
+      "reason": "version_unrecognized"
+    },
+    {
+      "id": "database",
+      "status": "not_configured",
+      "reason": "database_url_missing"
+    },
+    {
+      "id": "model",
+      "status": "unverified",
+      "reason": "adapter_contract_pending_w10"
+    },
+    {
+      "id": "process_control",
+      "status": "unverified",
+      "reason": "native_executor_pending_w05"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # CODEYE 문서 인덱스
 
-기준선 v0.1 · 2026-11-17. 기능 이름·API·CLI는 구현 계약이다. 별도 표시가 없는 성능 수치는 측정 결과가 아니라 초기 운영값 또는 검증 목표다.
+기준선 v0.1 · 2026-11-17. `codeye doctor`와 진단 파일 웹 뷰어는 W01 구현이며 그 외 기능 이름·API·운영 CLI는 구현 계약이다. 별도 표시가 없는 성능 수치는 측정 결과가 아니라 초기 운영값 또는 검증 목표다.
 
 ## 제품과 핵심 설계
 
@@ -37,8 +37,12 @@
 | [18 수용 테스트·추적표](18-acceptance-and-traceability.md) | 성공·실패·장애·보안·품질의 검증 시나리오 |
 | [19 결정과 미확정 사항](19-decisions-and-open-questions.md) | 설계 기본값, 검증할 가정, 변경 절차 |
 | [20 설계 일관성 점검](20-design-review.md) | 충돌하기 쉬운 계약과 구현 검토 질문 |
+| [21 W01 실행 기반](21-w01-foundation.md) | 실제 실행·개발 환경·doctor 계약·테스트와 남은 제한 |
+| [22 W02 착수 준비](22-w02-preparation.md) | 도메인·DB 범위, 트랜잭션 시험과 착수 전 결정 항목 |
 
 ## 기계 판독 계약과 예시
+
+- [Doctor Schema](../schemas/doctor.schema.json), [합성 진단 예시](../examples/doctor.json): W01 CLI 결과 계약.
 
 - [발견 사항 Schema](../schemas/finding.schema.json), [계획 Schema](../schemas/plan.schema.json), [보고서 Schema](../schemas/report.schema.json), [도구 Schema](../schemas/analyzer.schema.json).
 - [핵심 OpenAPI 계약](../api/openapi.yaml): 핵심 수직 경로를 정의한다. 모든 운영 CRUD가 완성된 명세라는 뜻은 아니다.

@@ -87,4 +87,4 @@ migrations/            # DB migration
 prompts/ schemas/ api/  # 버전 관리되는 제품 계약
 ```
 
-이는 구현 예정 구조이며 빈 코드 파일로 구현 완료를 가장하지 않는다. 역할 인터페이스를 먼저 정의하고 [작업 계획](17-implementation-plan.md)의 수직 기능으로 채운다.
+W01에서 `cmd/codeye`, `internal/doctor`, `web`을 구현했다. 나머지는 구현 예정 구조이며 빈 코드 파일로 구현 완료를 가장하지 않는다. 역할 인터페이스를 먼저 정의하고 [작업 계획](17-implementation-plan.md)의 수직 기능으로 채운다.

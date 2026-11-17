@@ -4,7 +4,7 @@
 
 CODEYE는 프로젝트의 소스와 문서를 이해하고, 상호 보완적인 정적 분석 도구와 LLM 검토를 결합하여, 근거와 한계를 확인할 수 있는 QA 보고서를 제공하는 자체 호스팅 플랫폼입니다.
 
-> **상태: 설계 기준선 v0.1 · 2026-11-17.** 현재 저장소는 개발에 사용할 문서·계약·분석 지침·검증 예제를 담습니다. CODEYE 서버나 분석 플랫폼의 구현 완료를 의미하지 않습니다. 문서에 나오는 API·CLI·설정은 구현할 계약이며, `scripts/`와 `fixtures/`는 문서 자료를 확인하는 보조 코드입니다.
+> **상태: W01 실행 기반 구현 · 2026-11-17.** Go 환경 진단 CLI와 React/TypeScript 진단 파일 뷰어를 실행할 수 있습니다. 분석 서버·agent·worker·LLM 검토는 아직 구현되지 않았습니다. `codeye doctor` 외 운영 API·CLI·플랫폼 설정은 설계 계약입니다. [W01 범위·검증 기록](docs/21-w01-foundation.md)을 확인하세요.
 
 ## 제품의 중심
 
@@ -19,6 +19,25 @@ CODEYE는 프로젝트의 소스와 문서를 이해하고, 상호 보완적인 
 GitHub.com·GHES의 저장소와 브랜치 또는 접근 가능한 로컬/NFS 경로를 등록합니다. 분석 시 소스를 별도 공간에 고정합니다. README·AGENTS·설계 문서는 자동으로 읽고, 문서가 없더라도 소스 기반으로 분석합니다. 사용자 설명·첨부는 선택입니다.
 
 **기존 CI 연결·결과 수집·CI 워크플로 생성은 제품 범위 밖입니다. 의존성 CVE 검사는 초기 범위에서 제외합니다.** 의존성 선언은 실행 환경 파악에 계속 사용합니다. SSH 원격 작업 기능은 만들지 않습니다.
+
+## 개발 시작
+
+Go 1.27 이상, Node.js 22.12 이상을 준비하고 저장소 루트에서 실행합니다. 현재 검증한 조합과 DB 시험 방법은 [개발 가이드](docs/21-w01-foundation.md)에 있습니다.
+
+```bash
+go build -o bin/codeye ./cmd/codeye
+./bin/codeye doctor --format json > doctor.json
+npm --prefix web ci
+npm --prefix web run dev
+```
+
+웹에서 `doctor.json`을 열면 실제 진단 결과를 로컬에서 확인할 수 있습니다. doctor 종료 코드 1은 실패·미설정·미검증 항목이 있다는 뜻이며 W01에서는 모델·프로세스 제어가 검증 전이므로 예상된 결과입니다. Docker는 필요하지 않습니다. 이 화면은 운영 API가 연결된 분석 대시보드가 아닙니다.
+
+```bash
+go test ./...
+npm --prefix web test
+npm --prefix web run build
+```
 
 ## 문서 시작점
 
