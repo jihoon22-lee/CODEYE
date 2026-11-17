@@ -87,4 +87,4 @@ migrations/            # DB migration
 prompts/ schemas/ api/  # 버전 관리되는 제품 계약
 ```
 
-W01에서 `cmd/codeye`, `internal/doctor`, `web`을 구현했다. 나머지는 구현 예정 구조이며 빈 코드 파일로 구현 완료를 가장하지 않는다. 역할 인터페이스를 먼저 정의하고 [작업 계획](17-implementation-plan.md)의 수직 기능으로 채운다.
+W01~W05에서 진단 CLI·웹, PostgreSQL 저장 계층과 migration, loopback HTTP API, 워커용 source·executor 패키지를 구현했다. 노드 에이전트와 단일 attempt 워커 프로세스를 연결하는 단계는 W06이다. [구현 계획](17-implementation-plan.md)

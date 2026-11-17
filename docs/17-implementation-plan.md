@@ -11,7 +11,7 @@
 | W03 | 최소 API·인증·웹 뼈대 — 구현 완료 | W02 | 프로젝트 등록→run 202→상태 조회. 무인증 LAN 공개 금지 |
 | W04 | SourceAdapter Git/local — 구현 완료 | W02 | acquire 시 입력 고정, 원본 미변경, manifest·불안정 복사 검사 |
 | W05 | NativeExecutor — 구현 완료 | W01 | argv/env/cwd, timeout, stdout cap, Windows/Linux 프로세스 그룹 종료 |
-| W06 | Agent·worker protocol | W02,W05 | enroll/heartbeat/claim/epoch, 두 에이전트로 중복 claim 방지 |
+| W06 | [Agent·worker protocol 착수 준비](27-w06-preparation.md) | W02,W05 | enroll/heartbeat/claim/epoch, 두 에이전트로 중복 claim 방지 |
 | W07 | Scheduler·autoscaler | W06 | min/max, 0→N→0, drain, resource admission, lease expiry·late result 시험 |
 | W08 | 첫 언어 분석 어댑터 | W04,W05 | 실제 개인 프로젝트에 맞는 한 언어 선정; raw→normalize·실패 parser fixture |
 | W09 | 구조화 보고서 renderer | W03,W08 | LLM 없이도 task 상태·원시 근거·공백이 보이는 보고서 |
