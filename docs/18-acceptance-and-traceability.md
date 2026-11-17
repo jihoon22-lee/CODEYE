@@ -142,3 +142,14 @@
 | TC-52 | 정적 파일 경계·CSP·비밀값 비노출·실브라우저 요청/취소 | NFR-005,006 |
 
 [W03 기록](24-w03-api.md)의 실행 환경·검증 범위를 따른다. W04 이후의 실제 분석 실행은 별도 수용 증거다.
+
+
+## 11. W04 소스 확보 수용 시험
+
+| TC | 검증 | 요구 연결 |
+|---|---|---|
+| TC-53 | 승인 root 원자적 경계·symlink/FIFO 교체·credential 제외·원본 아래 data root 거부 | REQ-002,015; TC-04 |
+| TC-54 | 변경 감지 재시도·불안정 실패·manifest 무결성·독립 workspace·retained retry | REQ-003,015; TC-03,04 |
+| TC-55 | 실제 Git 확보 SHA 고정·filter 미실행·LFS/submodule 공백·host/전송 제한·soft fetch quota | REQ-003,024,030 |
+
+[W04 기록](25-w04-source.md)의 실행 범위와 NFS/Windows 실기·private Git 미검증 제한을 따른다.

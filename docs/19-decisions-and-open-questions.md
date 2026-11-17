@@ -71,3 +71,6 @@
 
 
 **A15 — W03 개인 모드 인증.** loopback 전용 `codeye serve`를 제공하고 controller+agent를 뜻하는 `start`는 후속 supervisor로 유지한다. CLI에서 발급하는 일회용 launch link는 0600 파일에 저장하며 DB에는 token hash만 보관한다. 세션 cookie·same-origin Host/Origin·CSRF를 강제하고 비구성원은404로 존재를 숨긴다. 0002는 forward migration이며 배포/doctor에서 자동 적용하지 않는다. source 접근은 declared_unverified이고 worker 연결 전 queued를 성공으로 바꾸지 않는다. 브라우저 CSP 호환을 위해 JSON validator는 빌드 시 생성한다. [W03 근거와 시험](24-w03-api.md)을 따른다.
+
+
+**A16 — W04 소스 보존 경계.** source root는 열린 디렉터리 핸들에서 하위 경로를 해석하고 플랫폼 data root는 전체 승인 source root 밖에 둔다. Git은 승인 HTTPS 또는 명시적 local root에서 plumbing 명령으로 객체를 읽는다. canonical manifest 전체 bytes의 hash로 limitations·시각·branch까지 묶으며 retained retry에서 원본을 재확보하지 않는다. fetch disk 감시는 soft limit이고 timeout은 recovery_required로 격리한다. private Git credential/CA profile과 snapshot의 노드 간 이동은 후속이다. [W04 계약·근거](25-w04-source.md)를 따른다.
