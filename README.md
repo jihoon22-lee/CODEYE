@@ -4,7 +4,7 @@
 
 CODEYE는 프로젝트의 소스와 문서를 이해하고, 상호 보완적인 정적 분석 도구와 LLM 검토를 결합하여, 근거와 한계를 확인할 수 있는 QA 보고서를 제공하는 자체 호스팅 플랫폼입니다.
 
-> **W06·W07·W08·W10·W11 구현 · 2026-11-18.** 개인 모드에서 요청을 등록하고 별도 에이전트와 워커를 운영할 수 있습니다. 등록된 노드에서 요청에 따라 워커를 시작하고 유휴 워커를 종료합니다. 노드 등록, 단일 attempt 배정, lease 갱신, 실제 프로세스 취소와 정리를 검증했습니다. 에이전트에 Go 실행 파일을 지정하면 확보한 Go 모듈에 대해 오프라인 vet 검사를 실행합니다. 검사 결과·실패·제외 범위는 구조화된 산출물로 남습니다. 명시적으로 선택한 모델의 작업공간·응답·취소는 모델 probe로 검증할 수 있습니다. [워커 풀과 자동 증감](docs/30-w07-scheduler.md) · [Go vet 실행 계약](docs/29-w08-go-vet.md) · [모델 실연동](docs/32-w10-opencode.md) · [API 실행 방법](docs/24-w03-api.md) · [노드 등록](docs/28-w06-node-protocol.md) · [에이전트 실행](docs/28-w06-agent-runtime.md)
+> **W06·W07·W08·W09·W10·W11 구현 · 2026-11-18.** 개인 모드에서 요청을 등록하고 별도 에이전트와 워커를 운영할 수 있습니다. 등록된 노드에서 요청에 따라 워커를 시작하고 유휴 워커를 종료합니다. 노드 등록, 단일 attempt 배정, lease 갱신, 실제 프로세스 취소와 정리를 검증했습니다. 에이전트에 Go 실행 파일을 지정하면 확보한 Go 모듈에 대해 오프라인 vet 검사를 실행합니다. 검사 결과·실패·제외 범위를 보고서에서 확인하고 JSON·Markdown·HTML로 내보낼 수 있습니다. 명시적으로 선택한 모델의 작업공간·응답·취소는 모델 probe로 검증할 수 있습니다. [워커 풀과 자동 증감](docs/30-w07-scheduler.md) · [Go vet 실행 계약](docs/29-w08-go-vet.md) · [모델 실연동](docs/32-w10-opencode.md) · [API 실행 방법](docs/24-w03-api.md) · [노드 등록](docs/28-w06-node-protocol.md) · [에이전트 실행](docs/28-w06-agent-runtime.md)
 
 ## 제품의 중심
 
@@ -51,7 +51,7 @@ npm --prefix web run build
 | 데이터와 화면 | [데이터 모델](docs/10-data-model.md), [API](docs/11-api-and-events.md), [보고서·UI](docs/12-report-and-ui.md) |
 | 구현 착수 | [작업 계획](docs/17-implementation-plan.md), [수용 테스트](docs/18-acceptance-and-traceability.md) |
 | 실제 분석 지침 초안 | [프롬프트 팩](prompts/review-v1/00-core.md) |
-| 결과물의 구체적인 모습 | [합성 예시 보고서](examples/report.md) |
+| 결과물의 구체적인 모습 | [실제 Go vet 보고서 JSON](examples/report-go-vet.json), [합성 예시 보고서](examples/report.md) |
 
 ## 기술 기본안
 

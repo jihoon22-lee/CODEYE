@@ -3,9 +3,9 @@ info:
   title: CODEYE Core API
   version: 0.1.0
   description: >-
-    핵심 수직 경로의 계약이다. `x-codeye-status: implemented-w03` 또는 `implemented-w06`인 operation만
+    핵심 수직 경로의 계약이다. `x-codeye-status` 값이 `implemented-w`로 시작하는 operation을
     `codeye serve`(loopback 전용 controller)가 실제로 제공하며 나머지는 아직 설계 계약이다
-    (docs/24-w03-api.md, docs/28-w06-node-protocol.md). 운영 CRUD 전체는 docs/11-api-and-events.md에 따라 확장한다.
+    (docs/24-w03-api.md, docs/28-w06-node-protocol.md, docs/31-w09-report.md). 운영 CRUD 전체는 docs/11-api-and-events.md에 따라 확장한다.
     의미 제약과 lease fencing은 JSON Schema 검증 외에 서버에서 검사한다.
     W03 사용자 인증은 UserSession cookie뿐이다. UserBearer는 구현되지 않았다.
     상태 변경 요청(POST/PATCH/DELETE)은 Origin이 서버 origin과 정확히 같아야 하고,
@@ -727,7 +727,7 @@ paths:
       responses:
         '202':
           description: >-
-            결과 접수. 성공은 finalizing에 머문다(보고서 게시는 W09). confirmed이면 예약 해제, uncertain이면
+            결과 접수. 성공은 finalizing을 거쳐 W09 게시 트랜잭션에서 종결된다. confirmed이면 예약 해제, uncertain이면
             recovery_required로 예약 유지. 같은 완료의 재전송은 같은 202.
           content:
             application/json:
