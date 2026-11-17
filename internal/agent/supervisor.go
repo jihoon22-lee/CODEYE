@@ -220,7 +220,12 @@ func (ag *Agent) readWorker(w *workerProc) {
 			if w.att == nil && w.state == nodeproto.WorkerBusy {
 				w.state = nodeproto.WorkerIdle
 			}
+			// A drained worker exits once its attempt is done (W07 drain).
+			drained := w.draining && w.att == nil && !ag.shutting
 			ag.mu.Unlock()
+			if drained {
+				go ag.stopWorker(w)
+			}
 			// The controller leases again only after a heartbeat reports idle.
 			ag.heartbeatSoon()
 		case *workerproto.Event, *workerproto.Artifact, *workerproto.Complete:
