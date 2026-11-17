@@ -2,7 +2,10 @@ module github.com/jihoon22-lee/CODEYE
 
 go 1.27.0
 
-require github.com/jackc/pgx/v5 v5.13.0
+require (
+	github.com/jackc/pgx/v5 v5.13.0
+	golang.org/x/sys v0.50.0
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
