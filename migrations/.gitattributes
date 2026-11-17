@@ -1,0 +1,2 @@
+# migration checksum은 원본 bytes 기준이다. 플랫폼별 줄바꿈 변환이 checksum drift가 되지 않도록 고정한다.
+*.sql text eol=lf

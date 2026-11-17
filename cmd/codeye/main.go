@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/doctor"
+	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
 func main() {
@@ -19,7 +20,21 @@ func main() {
 }
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
-		fmt.Fprintln(out, "CODEYE foundation\nUsage: codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]\nDatabase: CODEYE_DATABASE_URL (optional). start/stop/agent are not implemented.")
+		fmt.Fprintln(out, "CODEYE foundation\nUsage: codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]\nDatabase: CODEYE_DATABASE_URL (optional for doctor).\nMigration: codeye migrate (explicit schema changes). start/stop/agent are not implemented.")
+		return 0
+	}
+	if args[0] == "migrate" {
+		if len(args) != 1 {
+			fmt.Fprintln(stderr, "invalid migrate options")
+			return 2
+		}
+		migrationCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		if err := postgres.Migrate(migrationCtx, os.Getenv("CODEYE_DATABASE_URL")); err != nil {
+			fmt.Fprintln(stderr, "migration failed:", err)
+			return 1
+		}
+		fmt.Fprintln(out, "CODEYE database migrations applied")
 		return 0
 	}
 	if args[0] != "doctor" {

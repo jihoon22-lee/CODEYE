@@ -54,6 +54,11 @@ def main():
                 subprocess.run(["go", "test", "-race", "-count=1", "./..."], cwd=ROOT, env=env, check=True)
                 subprocess.run(["go", "build", "-o", str(base / "codeye"), "./cmd/codeye"], cwd=ROOT, env=env, check=True)
                 env["CODEYE_DATABASE_URL"] = url
+                for _ in range(2):
+                    migration = subprocess.run([str(base / "codeye"), "migrate"], cwd=ROOT,
+                                               env=env, capture_output=True, timeout=65)
+                    assert migration.returncode == 0, "명시적 CLI migration 실패"
+                    assert password not in migration.stdout.decode() + migration.stderr.decode(), "credential 노출"
                 result = subprocess.run([str(base / "codeye"), "doctor", "--format", "json", "--work-dir", str(base / "work")],
                                         cwd=ROOT, env=env, capture_output=True, timeout=60)
                 report = json.loads(result.stdout)
@@ -62,7 +67,7 @@ def main():
                 assert password not in result.stdout.decode() and password not in result.stderr.decode(), "credential 노출"
                 from jsonschema import Draft202012Validator
                 Draft202012Validator(json.loads((ROOT / "schemas/doctor.schema.json").read_text())).validate(report)
-                print("PASS: Native PostgreSQL 인증/query·인증 실패·없는 DB·CLI JSON schema·비밀값 미노출")
+                print("PASS: Native PostgreSQL migration·저장 통합·인증/query·CLI 재적용·JSON schema·비밀값 미노출")
             finally:
                 process.terminate()
                 try:

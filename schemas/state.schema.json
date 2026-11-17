@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codeye.invalid/schemas/state.schema.json",
+  "title": "CODEYE structured state vocabulary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_status",
+    "task_status",
+    "attempt_status",
+    "cleanup_state"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "run_status": {
+      "enum": [
+        "queued",
+        "preparing",
+        "running",
+        "finalizing",
+        "cancel_requested",
+        "cancelling",
+        "recovery_required",
+        "completed",
+        "partial",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "task_status": {
+      "enum": [
+        "queued",
+        "blocked",
+        "running",
+        "succeeded",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "unsupported",
+        "skipped_policy",
+        "budget_exhausted"
+      ]
+    },
+    "attempt_status": {
+      "enum": [
+        "leased",
+        "recovery_required",
+        "released"
+      ]
+    },
+    "cleanup_state": {
+      "enum": [
+        "pending",
+        "uncertain",
+        "confirmed"
+      ]
+    }
+  }
+}

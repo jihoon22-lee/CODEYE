@@ -39,9 +39,11 @@
 | [20 설계 일관성 점검](20-design-review.md) | 충돌하기 쉬운 계약과 구현 검토 질문 |
 | [21 W01 실행 기반](21-w01-foundation.md) | 실제 실행·개발 환경·doctor 계약·테스트와 남은 제한 |
 | [22 W02 착수 준비](22-w02-preparation.md) | 도메인·DB 범위, 트랜잭션 시험과 착수 전 결정 항목 |
+| [23 W02 저장 계약](23-w02-storage.md) | 도메인·migration·ACL·lease·근거 metadata와 실제 DB 시험 |
 
 ## 기계 판독 계약과 예시
 
+- [상태 Schema](../schemas/state.schema.json), [상태 예시](../examples/state.json): W02 상태 어휘와 API 일치 검증.
 - [Doctor Schema](../schemas/doctor.schema.json), [합성 진단 예시](../examples/doctor.json): W01 CLI 결과 계약.
 
 - [발견 사항 Schema](../schemas/finding.schema.json), [계획 Schema](../schemas/plan.schema.json), [보고서 Schema](../schemas/report.schema.json), [도구 Schema](../schemas/analyzer.schema.json).

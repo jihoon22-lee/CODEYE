@@ -217,6 +217,11 @@ def main() -> None:
     registry = Registry().with_resources(resources)
     validators = {name: Draft202012Validator(schema, registry=registry, format_checker=FormatChecker()) for name, schema in schemas.items()}
     validators["doctor.schema.json"].validate(json_file(ROOT / "examples/doctor.json"))
+    validators["state.schema.json"].validate(json_file(ROOT / "examples/state.json"))
+    state = schemas["state.schema.json"]["properties"]
+    api = yaml_file(ROOT / "api/openapi.yaml")["components"]["schemas"]
+    for field, name in (("run_status", "RunStatus"), ("attempt_status", "AttemptStatus"), ("cleanup_state", "CleanupState")):
+        ensure(set(state[field]["enum"]) == set(api[name]["enum"]), "State/API enum mismatch: " + field)
     plan = json_file(ROOT / "examples/plan.json")
     report = json_file(ROOT / "examples/report.json")
     analyzer = yaml_file(ROOT / "examples/analyzer-ruff.yaml")
@@ -278,7 +283,7 @@ def main() -> None:
     bad["checks"][-1]["id"] = "host"
     expect_invalid("missing doctor capability", validators["doctor.schema.json"].validate, bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
-    print(f"PASS: {link_count} local Markdown file links; {len(schemas)} JSON Schemas; 4 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(schemas)} JSON Schemas; 5 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print("PASS: 8 negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())

@@ -113,3 +113,17 @@
 | TC-39 | 웹에서 doctor JSON 읽기, 손상·미지원 schema·중복 ID·파일 교체 | 실제 결과만 표시, 오류와 미검증을 성공으로 바꾸지 않음, 파일 서버 전송 없음, 최신 선택 유지 | REQ-013,030; NFR-006 |
 
 실행 결과와 Windows/RHEL·실모델·브라우저 미실행 범위는 [W01 검증 기록](21-w01-foundation.md)에 기록한다.
+
+
+## 9. W02 저장 계층 수용 시험
+
+| TC | 검증 | 요구 연결 |
+|---|---|---|
+| TC-40 | 빈 DB 적용·재적용·동시 migration, checksum/future/gap 거부, 실패 rollback | NFR-003 |
+| TC-41 | 프로젝트 ACL·권한 철회·immutable revision·원자적 생성 | REQ-002,003 |
+| TC-42 | 동시 멱등 enqueue·body 충돌·상태/event rollback·cursor 순서 | REQ-022; NFR-002,003 |
+| TC-43 | 동시 소유권 경쟁·node/epoch 불일치·만료 fencing·불확실 cleanup·명시적 재시도 | REQ-022,035 |
+| TC-44 | snapshot 한 번 고정·동일 입력 재시도·task 실행 이력·다른 run/project 근거 차단 | REQ-003,013; NFR-007 |
+| TC-45 | 성공을 finalizing에 유지·미실행/실패 구분·오류 credential 비노출 | REQ-013; NFR-006 |
+
+[W02 구현 기록](23-w02-storage.md)의 실제 결과와 제한을 따른다. 이 시험은 저장 계층이며 agent·NativeExecutor·artifact bytes·보고서 E2E 통과를 뜻하지 않는다.
