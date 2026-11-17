@@ -7,6 +7,8 @@
 package govet
 
 import (
+	"github.com/jihoon22-lee/CODEYE/internal/nativepath"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -72,7 +74,7 @@ func New(cfg Config) (*Handler, error) {
 	if !filepath.IsAbs(cfg.GoExecutable) {
 		return nil, errors.New("go executable must be an absolute path")
 	}
-	resolved, err := filepath.EvalSymlinks(cfg.GoExecutable)
+	resolved, err := nativepath.Resolve(cfg.GoExecutable)
 	if err != nil {
 		return nil, errors.New("go executable cannot be resolved")
 	}
@@ -89,7 +91,7 @@ func New(cfg Config) (*Handler, error) {
 		if !filepath.IsAbs(cfg.GoModCache) {
 			return nil, errors.New("go module cache must be an absolute path")
 		}
-		mc, err := filepath.EvalSymlinks(cfg.GoModCache)
+		mc, err := nativepath.Resolve(cfg.GoModCache)
 		if err != nil {
 			return nil, errors.New("go module cache cannot be resolved")
 		}

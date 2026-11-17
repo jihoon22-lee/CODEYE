@@ -41,7 +41,7 @@ func stateOf(doc Document, dir string) string {
 // locations are snapshot-relative and verified, unlisted packages are not clean.
 func TestRealVetFindingsExitZero(t *testing.T) {
 	// Spaces and non-ASCII in every node path (data root, workspace, scratch).
-	base := filepath.Join(t.TempDir(), "공백 & <dir>")
+	base := filepath.Join(t.TempDir(), "공백 & (dir)")
 	fx := newFixture(t, base, probeFiles(), domain.Scope{})
 	before := treeHash(t, fx.SourceRoot)
 	snapBefore := treeHash(t, fx.Job.Snapshot.SnapshotDir)
