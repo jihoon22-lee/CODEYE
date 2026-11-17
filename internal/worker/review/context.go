@@ -4,20 +4,16 @@ package review
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"fmt"
-	"io"
 	"os"
 	"path"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
@@ -25,15 +21,6 @@ const maxFiles = 6
 const maxContextBytes = 12000
 const maxFileBytes = 512 << 10
 
-type Excerpt struct {
-	ID     string `json:"id"`
-	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
-	Start  int    `json:"start_line"`
-	End    int    `json:"end_line"`
-	Kind   string `json:"kind"`
-	Text   string `json:"text,omitempty"`
-}
 type Corpus struct {
 	Snapshot    string    `json:"snapshot_manifest_digest"`
 	Excerpts    []Excerpt `json:"excerpts"`
@@ -41,8 +28,6 @@ type Corpus struct {
 	Documents   int       `json:"selected_documents"`
 	Limitations []string  `json:"limitations"`
 }
-
-var sensitiveText = regexp.MustCompile(`(?i)(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-[A-Za-z0-9_-]{12,}|\bgh[pousr]_[A-Za-z0-9_]{16,}|authorization\s*[:=]\s*["']?(bearer|basic)\s+[^\s"']{8,}|(?:api[_-]?key|password|client_secret)\s*[:=]\s*["'][A-Za-z0-9+/_.=-]{12,}["'])`)
 
 func inScope(name string, scope domain.Scope) bool {
 	if scope.Kind == "full" {
@@ -123,20 +108,11 @@ func buildCorpus(snapshot source.Snapshot, scope domain.Scope) (Corpus, error) {
 		if domain.ValidateEvidencePath(e.Path) != nil || *e.Size > maxFileBytes {
 			continue
 		}
-		f, err := root.Open(e.Path)
+		b, err := readVerified(root, e)
 		if err != nil {
 			return c, err
 		}
-		b, err := io.ReadAll(io.LimitReader(f, maxFileBytes+1))
-		f.Close()
-		if err != nil {
-			return c, err
-		}
-		sum := sha256.Sum256(b)
-		if int64(len(b)) != *e.Size || hex.EncodeToString(sum[:]) != e.SHA256 {
-			return c, errors.New("snapshot_integrity_failed")
-		}
-		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || sensitiveText.Match(b) {
+		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || record.Sensitive(b) {
 			continue
 		}
 		var lines []string
@@ -151,8 +127,7 @@ func buildCorpus(snapshot source.Snapshot, scope domain.Scope) (Corpus, error) {
 		if len(lines) == 0 || used <= 1 {
 			continue
 		}
-		id := domain.Digest([]byte(fmt.Sprintf("%s\x00%s\x00%s\x001:%d", snapshot.Digest, e.Path, e.SHA256, len(lines))))
-		c.Excerpts = append(c.Excerpts, Excerpt{ID: "ev_" + id[:24], Path: e.Path, SHA256: e.SHA256, Start: 1, End: len(lines), Kind: o.kind, Text: strings.Join(lines, "\n")})
+		c.Excerpts = append(c.Excerpts, Excerpt{ID: record.ExcerptID(snapshot.Digest, e.Path, e.SHA256, 1, len(lines)), Path: e.Path, SHA256: e.SHA256, Start: 1, End: len(lines), Kind: o.kind, Text: strings.Join(lines, "\n")})
 		remain -= used
 		if o.kind == "document" {
 			c.Documents++

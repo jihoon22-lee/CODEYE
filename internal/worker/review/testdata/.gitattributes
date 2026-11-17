@@ -1,0 +1,2 @@
+# The review-record example references the exact bytes of this fixture.
+verify/* text eol=lf
