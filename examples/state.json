@@ -1,0 +1,7 @@
+{
+  "schema_version": "0.1",
+  "run_status": "recovery_required",
+  "task_status": "running",
+  "attempt_status": "recovery_required",
+  "cleanup_state": "uncertain"
+}

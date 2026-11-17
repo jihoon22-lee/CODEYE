@@ -61,3 +61,8 @@ LLM이 추가 검사를 제안하면 등록된 도구·예산·프로젝트 실�
 ## 7. 종료 조건
 
 requested task가 모두 종료 상태이고, 참조 artifact가 finalize되고, worker가 소유한 프로세스 종료 결과를 보고했을 때만 완료를 확정한다. 완료 상태 판정과 보고서 생성은 서버가 수행한다. LLM이 '끝났다'고 썼다는 이유로 완료하지 않는다.
+
+
+## 8. W02 재시도와 실행 이력
+
+`failed`/`cancelled`는 한 attempt의 종료 이후 명시적 retry 서비스로만 queued가 될 수 있다. 고정 snapshot과 모든 attempt의 confirmed cleanup이 필요하다. 일반 상태 전이 함수로 terminal을 되돌리지 않는다. completed/partial 재시도 정책은 후속에서 추가한다. 만료 attempt는 recovery_required 소유 슬롯을 유지하고 cleanup 확인 후 failed로 정리한다. task의 현재 상태와 attempt별 task_executions를 분리해 재시도가 과거 실패·취소 이력을 지우지 않게 한다.

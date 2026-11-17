@@ -4,7 +4,7 @@
 
 CODEYE는 프로젝트의 소스와 문서를 이해하고, 상호 보완적인 정적 분석 도구와 LLM 검토를 결합하여, 근거와 한계를 확인할 수 있는 QA 보고서를 제공하는 자체 호스팅 플랫폼입니다.
 
-> **상태: W01 실행 기반 구현 · 2026-11-17.** Go 환경 진단 CLI와 React/TypeScript 진단 파일 뷰어를 실행할 수 있습니다. 분석 서버·agent·worker·LLM 검토는 아직 구현되지 않았습니다. `codeye doctor` 외 운영 API·CLI·플랫폼 설정은 설계 계약입니다. [W01 범위·검증 기록](docs/21-w01-foundation.md)을 확인하세요.
+> **상태: W02 도메인·DB 기반 구현 · 2026-11-18.** Go 환경 진단 CLI와 React/TypeScript 진단 파일 뷰어를 실행할 수 있습니다. 분석 서버·agent·worker·LLM 검토는 아직 구현되지 않았습니다. `codeye doctor`와 명시적 `codeye migrate`를 제공합니다. 운영 HTTP API·agent·worker·플랫폼 설정은 아직 설계 계약입니다. [W01 범위·검증 기록](docs/21-w01-foundation.md), [W02 저장 계약](docs/23-w02-storage.md)을 확인하세요.
 
 ## 제품의 중심
 

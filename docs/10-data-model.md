@@ -78,3 +78,8 @@ queue는 상태·우선순위·available_at, lease는 expires_at, finding은 pro
 ## 8. 보고서 revision
 
 서술 재생성은 원래 run 결과를 변조하지 않고 새 report revision을 만든다. 다른 모델·지침으로 재검토하면 새 run 또는 명시된 review revision과 그 근거를 남긴다. 사용자의 disposition은 보고서 출판 당시 값과 현재 값을 분리해 볼 수 있게 한다. 감사 가능한 과거 보고서를 현재 상태로 조용히 덮어쓰지 않는다.
+
+
+## 9. W02 구현 경계
+
+프로젝트/ACL·revision, run/attempt/task/task_executions, snapshot/artifact metadata, evidence, event와 migration 이력을 구현한다. 실제 적용 SQL과 오류 코드, 저장 서비스 권한·트랜잭션 경계는 [W02 기록](23-w02-storage.md)을 따른다. 나머지 엔티티와 HTTP API는 후속 작업이다. metadata 참조 제약을 actual artifact bytes 검증이나 보고서 게시로 해석하지 않는다.

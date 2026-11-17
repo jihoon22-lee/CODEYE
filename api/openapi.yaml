@@ -452,6 +452,11 @@ components:
         idle_timeout_seconds: {type: integer, minimum: 1}
         observed_workers: {type: integer, minimum: 0}
         capacity_state: {enum: [healthy, degraded_capacity, over_target_draining, paused]}
+    AttemptStatus:
+      description: W02 내부 저장 상태. enrollment/claim HTTP 구현은 W06에서 제공한다.
+      enum: [leased, recovery_required, released]
+    CleanupState:
+      enum: [pending, uncertain, confirmed]
     AttemptLease:
       type: object
       required: [run_id, attempt_id, worker_id, lease_epoch, expires_at, project_revision, snapshot_id]

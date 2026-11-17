@@ -24,3 +24,21 @@ func TestHelp(t *testing.T) {
 		t.Fatal(b.String())
 	}
 }
+
+func TestMigrateRequiresExplicitSafeConfiguration(t *testing.T) {
+	t.Setenv("CODEYE_DATABASE_URL", "secret-invalid-url")
+	var out, stderr bytes.Buffer
+	if run(context.Background(), []string{"migrate"}, &out, &stderr) != 1 {
+		t.Fatal("missing migration failure")
+	}
+	if strings.Contains(stderr.String(), "secret") {
+		t.Fatal("credential leaked")
+	}
+	stderr.Reset()
+	if run(context.Background(), []string{"migrate", "--dsn=secret"}, &out, &stderr) != 2 {
+		t.Fatal("unexpected arguments accepted")
+	}
+	if strings.Contains(stderr.String(), "secret") {
+		t.Fatal("credential leaked")
+	}
+}
