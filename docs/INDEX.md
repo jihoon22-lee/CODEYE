@@ -36,8 +36,9 @@
 | [17 구현 작업 계획](17-implementation-plan.md) | 작업 ID, 선행 관계, 산출물, 완료 조건 |
 | [18 수용 테스트·추적표](18-acceptance-and-traceability.md) | 성공·실패·장애·보안·품질의 검증 시나리오 |
 | [19 결정과 미확정 사항](19-decisions-and-open-questions.md) | 설계 기본값, 검증할 가정, 변경 절차 |
-| [21 W01 실행 기반](21-w01-foundation.md) | 실제 실행·개발 환경·doctor 계약·테스트와 남은 제한 |
 | [20 설계 일관성 점검](20-design-review.md) | 충돌하기 쉬운 계약과 구현 검토 질문 |
+| [21 W01 실행 기반](21-w01-foundation.md) | 실제 실행·개발 환경·doctor 계약·테스트와 남은 제한 |
+| [22 W02 착수 준비](22-w02-preparation.md) | 도메인·DB 범위, 트랜잭션 시험과 착수 전 결정 항목 |
 
 ## 기계 판독 계약과 예시
 

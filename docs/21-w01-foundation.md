@@ -101,6 +101,19 @@ python3 scripts/test_postgres.py
 
 ## 5. 미실행·남은 제한
 
-Windows Native·RHEL 8.10 실행, 브라우저 실기/접근성·성능 측정, 실제 OpenCode 모델/workspace/취소 계약, 분석 품질 평가, TC-01~34 전체 수직 시험은 미실행이다. NFR-001과 REQ-026 전체 완료를 주장하지 않는다.
+Windows 11·RHEL 8.10의 제품 실행, 브라우저 실기/접근성·성능 측정, 실제 OpenCode 모델/workspace/취소 계약, 분석 품질 평가, TC-01~34 전체 수직 시험은 미실행이다. NFR-001과 REQ-026 전체 완료를 주장하지 않는다.
 
 W02의 영속 도메인/ACL/event/lease 트랜잭션이 다음 순서다. 이후 W03 API·인증, W04 Git/local snapshot, W05 NativeExecutor, W06~14의 워커·실도구·모델·보고서 수직 기능이 남는다. PostgreSQL 진단에 쓰는 psql은 W02 저장 계층 구현 선택을 강제하지 않는다. 이 작업에는 DB migration이 없으며 롤백은 브랜치 변경과 로컬 빌드 산출물 제거만 필요하다.
+
+
+## 6. PR CI와 검토 (2026-11-17)
+
+PR에 기존 CI가 없어 CODEYE 저장소 자체의 [검증 workflow](../.github/workflows/verify.yml)를 추가했다. 제품 범위의 CI 비목표 해석은 결정 A13을 따른다. [첫 실행](https://github.com/jihoon22-lee/CODEYE/actions/runs/44105863377)의 대상 head는 `93a56c1`이며 세 job 모두 통과했다.
+
+- Ubuntu 24.04 / Go 1.27.4 / PostgreSQL 16.15: Native 임시 DB·race·vet·빌드·문서 계약·기존 fixture 통과. 로컬 PostgreSQL 17.10 결과와 별도로 기록한다.
+- Windows Server 2025 / Go 1.27.4: 실제 Go 단위·자식 프로세스 probe·vet·빌드 통과. DB 통합 시험 두 개는 설정이 없어 명시적으로 skip했다. Windows 11 NativeExecutor/Job Object 수용 시험은 미실행이다.
+- Node 24.18.0: lockfile 설치, 웹 테스트 10개, TypeScript·정적 빌드 통과.
+
+코드 검토는 CLI 입력/비밀값 노출, DB TLS·인증·실패 구분, probe 환경/출력/timeout, JSON Schema와 웹 비동기 파일 교체, 설계·시험 범위를 확인했다. W01 범위에서 병합 차단 결함은 발견하지 못했다. 이는 별도 독립 검토자의 승인이나 분석 품질 보증이 아니다.
+
+W05 프로세스 트리 종료와 W10 모델 능력은 계속 미검증이다. CI에도 모델을 연결하지 않는다. [W02 준비 계획](22-w02-preparation.md)에 다음 작업 순서·시험·미확정 계약을 정리했으며 W02 구현은 아직 시작하지 않았다.
