@@ -20,7 +20,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-const usage = `CODEYE control plane (W03)
+const usage = `CODEYE control plane (W03/W06)
 Usage:
   codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]
   codeye migrate
@@ -30,11 +30,13 @@ Usage:
   codeye source-root grant --root ROOT_ID --user USER_ID
   codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331]
-  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--user USER_ID [--login-link-file .codeye/login-link]]
-Database: CODEYE_DATABASE_URL (required except for doctor). Only "migrate" changes the schema.
+  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--user USER_ID [--login-link-file .codeye/login-link]]
+` + nodeAdminUsage + `Database: CODEYE_DATABASE_URL (required except for doctor). Only "migrate" changes the schema.
 Login links are written to a 0600 file; the token is never printed.
-"serve" runs the controller API only: runs stay queued because analysis execution is not implemented.
-start/stop/agent are not implemented.
+"serve" runs the controller API and the node protocol (enrollment, claims, leases, artifacts).
+Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
+Enrollment tokens are written to a 0600 file; the token is never printed.
+start/stop are not implemented.
 `
 
 const launchTTL = 10 * time.Minute
@@ -288,10 +290,11 @@ func loginLink(ctx context.Context, args []string, out, stderr io.Writer) int {
 }
 
 func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
-	var listen, webDir, user, linkFile string
+	var listen, webDir, user, linkFile, artifactDir string
 	if !parse("serve", args, stderr, func(fs *flag.FlagSet) {
 		fs.StringVar(&listen, "listen", "127.0.0.1:7331", "")
 		fs.StringVar(&webDir, "web-dir", filepath.Join("web", "dist"), "")
+		fs.StringVar(&artifactDir, "artifact-dir", filepath.Join(".codeye", "artifacts"), "")
 		fs.StringVar(&user, "user", "", "")
 		fs.StringVar(&linkFile, "login-link-file", filepath.Join(".codeye", "login-link"), "")
 	}) {
@@ -300,6 +303,14 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 	addr, err := httpapi.ParseListen(listen)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if artifactDir == "" {
+		fmt.Fprintln(stderr, "--artifact-dir must not be empty")
+		return 2
+	}
+	if artifactDir, err = filepath.Abs(artifactDir); err != nil {
+		fmt.Fprintln(stderr, "--artifact-dir cannot be resolved")
 		return 2
 	}
 	startCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -319,12 +330,12 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "database schema is %s (applied %d, this binary expects %d); run \"codeye migrate\" explicitly after reviewing it\n", st.State, st.Applied, st.Latest)
 		return 1
 	}
-	return serveOn(ctx, startCtx, store, addr, webDir, user, linkFile, out, stderr)
+	return serveOn(ctx, startCtx, store, addr, webDir, user, linkFile, artifactDir, out, stderr)
 }
 
-func serveOn(ctx, startCtx context.Context, store *postgres.Store, addr netip.AddrPort, webDir, user, linkFile string, out, stderr io.Writer) int {
+func serveOn(ctx, startCtx context.Context, store *postgres.Store, addr netip.AddrPort, webDir, user, linkFile, artifactDir string, out, stderr io.Writer) int {
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
-	srv, err := httpapi.New(httpapi.Config{Listen: addr, WebDir: webDir, Logger: logger}, store)
+	srv, err := httpapi.New(httpapi.Config{Listen: addr, WebDir: webDir, Logger: logger, ArtifactDir: artifactDir}, store)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -343,7 +354,7 @@ func serveOn(ctx, startCtx context.Context, store *postgres.Store, addr netip.Ad
 			return 1
 		}
 	}
-	fmt.Fprintf(out, "CODEYE controller API on %s (controller only: runs stay queued until execution is implemented)\n", origin)
+	fmt.Fprintf(out, "CODEYE controller API on %s (node protocol enabled; runs wait until a capable node claims them)\n", origin)
 	if err := srv.Serve(ctx, ln); err != nil {
 		fmt.Fprintln(stderr, "server stopped:", err)
 		return 1

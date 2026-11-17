@@ -1,7 +1,9 @@
-// Package httpapi is the CODEYE control-plane HTTP API (W03 subset) and the
-// same-origin static web host. It listens on loopback only and authenticates
-// browser sessions created from single-use launch tokens. Bearer tokens, LAN
-// exposure and TLS are not implemented.
+// Package httpapi is the CODEYE control-plane HTTP API (W03 user subset and
+// W06 node protocol) and the same-origin static web host. It listens on
+// loopback only. Browser sessions come from single-use launch tokens; node
+// routes accept only a node Bearer secret (issued at enrollment) and reject
+// any Origin header. User Bearer tokens, LAN exposure and TLS are not
+// implemented.
 package httpapi
 
 import (
@@ -20,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jihoon22-lee/CODEYE/internal/artifactstore"
+	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
@@ -37,6 +41,20 @@ type Store interface {
 	Enqueue(ctx context.Context, actor, project, key string, body json.RawMessage) (postgres.Run, error)
 	GetRunView(ctx context.Context, actor, id string) (postgres.RunView, error)
 	CancelRun(ctx context.Context, actor, id string) (postgres.Run, bool, error)
+
+	// Node protocol (W06).
+	EnrollNode(ctx context.Context, in postgres.Enrollment) (postgres.NodeIdentity, error)
+	AuthenticateNode(ctx context.Context, secretSHA256 string) (postgres.NodeIdentity, error)
+	NodeHeartbeat(ctx context.Context, node string, in nodeproto.NodeHeartbeatRequest) (nodeproto.NodeHeartbeatResponse, error)
+	ClaimAttempt(ctx context.Context, node, worker, key string) (postgres.ClaimResult, error)
+	RenewAttempt(ctx context.Context, node string, o postgres.Ownership) (nodeproto.AttemptHeartbeatResponse, error)
+	RecordAttemptEvent(ctx context.Context, node string, o postgres.Ownership, ev postgres.AttemptEvent) (nodeproto.EventResponse, error)
+	CheckArtifactLease(ctx context.Context, node string, o postgres.Ownership, client string) error
+	FinalizeArtifact(ctx context.Context, node string, o postgres.Ownership, in postgres.ArtifactUpload) (nodeproto.ArtifactResponse, error)
+	CompleteAttempt(ctx context.Context, node string, o postgres.Ownership, c postgres.Completion) (postgres.Run, error)
+	ConfirmCleanupNode(ctx context.Context, node string, o postgres.Ownership) (postgres.Run, error)
+	SweepExpiredAttempts(ctx context.Context) (int, error)
+	NodesEnrolled(ctx context.Context) (bool, error)
 }
 
 // Config configures the server.
@@ -50,6 +68,12 @@ type Config struct {
 	SessionTTL time.Duration
 	// Logger receives one line per request; nil discards.
 	Logger *slog.Logger
+	// ArtifactDir is the absolute controller directory for attempt artifact
+	// bytes. Empty disables artifact upload (503).
+	ArtifactDir string
+	// SweepInterval is how often Serve expires lapsed attempt leases
+	// (default 5s; negative disables, for tests that drive it directly).
+	SweepInterval time.Duration
 }
 
 // DefaultSessionTTL is the absolute browser session lifetime.
@@ -63,6 +87,8 @@ type Server struct {
 	web        *os.Root
 	log        *slog.Logger
 	routes     []route
+	artifacts  *artifactstore.Store
+	sweepEvery time.Duration
 }
 
 // ParseListen parses and validates a loopback listen address.
@@ -102,6 +128,17 @@ func New(cfg Config, store Store) (*Server, error) {
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
 	}
+	if cfg.ArtifactDir != "" {
+		a, err := artifactstore.Open(cfg.ArtifactDir)
+		if err != nil {
+			return nil, err
+		}
+		s.artifacts = a
+	}
+	s.sweepEvery = cfg.SweepInterval
+	if s.sweepEvery == 0 {
+		s.sweepEvery = 5 * time.Second
+	}
 	if cfg.WebDir != "" {
 		if root, err := os.OpenRoot(cfg.WebDir); err == nil {
 			if f, err := root.Open("index.html"); err == nil {
@@ -138,6 +175,11 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
+	sweepCtx, stopSweep := context.WithCancel(ctx)
+	defer stopSweep()
+	if s.sweepEvery > 0 {
+		go s.sweepLoop(sweepCtx)
+	}
 	select {
 	case err := <-errc:
 		return err

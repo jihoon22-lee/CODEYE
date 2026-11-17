@@ -24,6 +24,12 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprint(out, usage)
 		return 0
 	}
+	if code, ok := runNodeAdmin(ctx, args, out, stderr); ok {
+		return code
+	}
+	if code, ok := runNode(ctx, args, out, stderr); ok {
+		return code
+	}
 	if code, ok := runControl(ctx, args, out, stderr); ok {
 		return code
 	}

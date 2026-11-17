@@ -36,6 +36,7 @@ type request struct {
 	params  []string
 	session postgres.Session
 	cookie  string
+	node    postgres.NodeIdentity
 }
 
 type route struct {
@@ -44,6 +45,9 @@ type route struct {
 	name   string
 	auth   bool
 	body   bool
+	// node marks node-protocol routes: nodePublic (enroll) or nodeAuth
+	// (Bearer node secret). They never read cookies and reject Origin.
+	node   nodeAuthKind
 	handle func(*Server, *request)
 }
 
@@ -51,7 +55,7 @@ func (s *Server) apiRoutes() []route {
 	r := func(method, path, name string, auth, body bool, h func(*Server, *request)) route {
 		return route{method: method, parts: strings.Split(strings.TrimPrefix(path, "/"), "/"), name: name, auth: auth, body: body, handle: h}
 	}
-	return []route{
+	return append([]route{
 		r("GET", "health", "health", false, false, (*Server).health),
 		r("GET", "ready", "ready", false, false, (*Server).ready),
 		r("POST", "session", "session.create", false, true, (*Server).createSession),
@@ -65,7 +69,7 @@ func (s *Server) apiRoutes() []route {
 		r("POST", "projects/{id}/runs", "runs.create", true, true, (*Server).createRun),
 		r("GET", "runs/{id}", "runs.get", true, false, (*Server).getRun),
 		r("POST", "runs/{id}/cancel", "runs.cancel", true, false, (*Server).cancelRun),
-	}
+	}, s.nodeRoutes()...)
 }
 
 func (rt route) match(segs []string) ([]string, bool) {
@@ -126,6 +130,10 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) string {
 
 func (s *Server) dispatch(rt route, q *request) {
 	w, r := q.w, q.r
+	if rt.node != nodeNone {
+		s.dispatchNode(rt, q)
+		return
+	}
 	if unsafeMethod(r.Method) {
 		// Cross-site and DNS-rebinding defence: the browser-sent Origin must be
 		// exactly this server's origin (Host was already allowlisted).
@@ -200,6 +208,8 @@ func (s *Server) storeError(q *request, err error) {
 		writeError(q.w, q.r, http.StatusNotFound, "NOT_FOUND", "not found", false)
 	case errors.Is(err, domain.ErrForbidden):
 		writeError(q.w, q.r, http.StatusForbidden, "FORBIDDEN", "insufficient project role", false)
+	case errors.Is(err, domain.ErrStaleAttempt):
+		writeError(q.w, q.r, http.StatusConflict, "STALE_ATTEMPT", "the attempt lease is not held by this worker and epoch", false)
 	case errors.Is(err, domain.ErrConflict):
 		writeError(q.w, q.r, http.StatusConflict, "CONFLICT", "the request conflicts with the current state", false)
 	case errors.Is(err, domain.ErrUnsupported):
@@ -382,17 +392,34 @@ type projectView struct {
 	LastRun        *runRef         `json:"last_run"`
 }
 
-// capabilityGaps is fixed for W03: no source is acquired, nothing executes and
-// no report is produced, so every project states all three gaps.
-var capabilityGaps = []string{
-	string(domain.GapSourceUnverified),
-	string(domain.GapExecutionUnavailable),
-	string(domain.GapReportUnavailable),
+// projectGaps lists the product capabilities a project view cannot claim.
+// The source declaration is never verified by registration and no report is
+// published before W09. execution_unavailable is a structured, global fact:
+// no enrolled, unrevoked node exists. Whether a specific run can be placed
+// (capabilities, grants, capacity) is reported per run as waiting_reason.
+func projectGaps(executionAvailable bool) []string {
+	gaps := []string{string(domain.GapSourceUnverified)}
+	if !executionAvailable {
+		gaps = append(gaps, string(domain.GapExecutionUnavailable))
+	}
+	return append(gaps, string(domain.GapReportUnavailable))
 }
 
-func viewOf(p postgres.ProjectSummary) projectView {
+// executionGaps reads the global execution fact for a request.
+func (s *Server) executionGaps(q *request) ([]string, bool) {
+	ctx, cancel := q.ctx()
+	defer cancel()
+	ok, err := s.store.NodesEnrolled(ctx)
+	if err != nil {
+		s.storeError(q, err)
+		return nil, false
+	}
+	return projectGaps(ok), true
+}
+
+func viewOf(p postgres.ProjectSummary, gaps []string) projectView {
 	v := projectView{ID: p.ID, Name: p.Name, Source: p.Source, Revision: p.Revision,
-		SourceStatus: "declared_unverified", CapabilityGaps: capabilityGaps}
+		SourceStatus: "declared_unverified", CapabilityGaps: gaps}
 	if v.Source == nil {
 		v.Source = json.RawMessage("null")
 	}
@@ -448,8 +475,12 @@ func (s *Server) createProject(q *request) {
 		Source json.RawMessage `json:"source"`
 	}
 	_ = json.Unmarshal(p.Config, &cfg)
+	gaps, ok := s.executionGaps(q)
+	if !ok {
+		return
+	}
 	q.w.Header().Set("Location", apiPrefix+"/projects/"+p.ID)
-	writeJSON(q.w, http.StatusCreated, viewOf(postgres.ProjectSummary{ID: p.ID, Name: p.Name, Revision: p.Revision, Source: cfg.Source}))
+	writeJSON(q.w, http.StatusCreated, viewOf(postgres.ProjectSummary{ID: p.ID, Name: p.Name, Revision: p.Revision, Source: cfg.Source}, gaps))
 }
 
 func (s *Server) listProjects(q *request) {
@@ -479,9 +510,13 @@ func (s *Server) listProjects(q *request) {
 		}
 		return
 	}
+	gaps, ok := s.executionGaps(q)
+	if !ok {
+		return
+	}
 	items := make([]projectView, 0, len(page.Items))
 	for _, p := range page.Items {
-		items = append(items, viewOf(p))
+		items = append(items, viewOf(p, gaps))
 	}
 	var next *string
 	if page.NextCursor != "" {
@@ -498,7 +533,11 @@ func (s *Server) getProject(q *request) {
 		s.storeError(q, err)
 		return
 	}
-	writeJSON(q.w, http.StatusOK, viewOf(p))
+	gaps, ok := s.executionGaps(q)
+	if !ok {
+		return
+	}
+	writeJSON(q.w, http.StatusOK, viewOf(p, gaps))
 }
 
 // --- runs ------------------------------------------------------------------
@@ -594,11 +633,10 @@ func (s *Server) getRun(q *request) {
 		total := v.TotalTasks
 		out.Progress.TotalTasks = &total
 	}
-	// W03 has no worker protocol: a queued run cannot start. This is a
-	// structured capability fact, not a prediction.
+	// A queued run's reason is derived by the store from enrolled nodes,
+	// capabilities, grants, snapshot locations and limits (never predicted).
 	if v.Status == domain.RunQueued {
-		reason := string(domain.GapExecutionUnavailable)
-		out.Progress.WaitingReason = &reason
+		out.Progress.WaitingReason = v.WaitingReason
 	}
 	writeJSON(q.w, http.StatusOK, out)
 }

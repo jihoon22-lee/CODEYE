@@ -19,7 +19,7 @@ describe('diagnostics import', () => {
   });
   it('shows the implementation boundary without fabricated results', () => {
     const html = renderToStaticMarkup(<DoctorView />);
-    expect(html).toContain('아직 구현되지 않았습니다');
+    expect(html).toContain('진단 파일에 기록된 환경과 검사별 확인 범위');
     expect(html).toContain('아직 불러온 진단 결과가 없습니다');
     expect(html).not.toContain('<table');
   });

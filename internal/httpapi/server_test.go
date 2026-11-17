@@ -37,6 +37,8 @@ type env struct {
 	hs     *httptest.Server
 	host   string
 	logs   *syncBuffer
+	// artifacts is the controller artifact directory (W06 node uploads).
+	artifacts string
 }
 
 type syncBuffer struct {
@@ -124,7 +126,10 @@ func (e *env) start(webDir string) {
 		t.Fatal(err)
 	}
 	ap := netip.MustParseAddrPort(ln.Addr().String())
-	srv, err := New(Config{Listen: ap, WebDir: webDir, Logger: slog.New(slog.NewJSONHandler(e.logs, nil))}, e.store)
+	if e.artifacts == "" {
+		e.artifacts = filepath.Join(t.TempDir(), "artifacts")
+	}
+	srv, err := New(Config{Listen: ap, WebDir: webDir, Logger: slog.New(slog.NewJSONHandler(e.logs, nil)), ArtifactDir: e.artifacts, SweepInterval: -1}, e.store)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -71,6 +71,9 @@ def main():
                 if "--web" in sys.argv[1:]:
                     import browser_smoke
                     browser_smoke.run(base, ROOT, env)
+                if "--nodes" in sys.argv[1:]:
+                    import node_smoke
+                    node_smoke.run(base, ROOT, env)
                 print("PASS: Native PostgreSQL migration·저장 통합·인증/query·CLI 재적용·JSON schema·비밀값 미노출")
             finally:
                 process.terminate()

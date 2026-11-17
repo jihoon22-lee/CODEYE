@@ -12,7 +12,8 @@ import (
 )
 
 // TestOpenAPIImplementedOperationsMatchRoutes keeps api/openapi.yaml honest:
-// exactly the operations marked x-codeye-status: implemented-w03 are routed.
+// exactly the operations marked x-codeye-status: implemented-w03 or
+// implemented-w06 are routed.
 func TestOpenAPIImplementedOperationsMatchRoutes(t *testing.T) {
 	f, err := os.Open("../../api/openapi.yaml")
 	if err != nil {
@@ -31,7 +32,7 @@ func TestOpenAPIImplementedOperationsMatchRoutes(t *testing.T) {
 			path, method = param.ReplaceAllString(m[1], "{id}"), ""
 		} else if m := methodLine.FindStringSubmatch(line); m != nil {
 			method = strings.ToUpper(m[1])
-		} else if strings.TrimSpace(line) == "x-codeye-status: implemented-w03" && path != "" && method != "" {
+		} else if st := strings.TrimSpace(line); (st == "x-codeye-status: implemented-w03" || st == "x-codeye-status: implemented-w06") && path != "" && method != "" {
 			documented[method+" "+path] = true
 		}
 	}

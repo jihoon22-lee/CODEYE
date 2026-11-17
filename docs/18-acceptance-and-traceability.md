@@ -164,3 +164,18 @@
 | TC-58 | Windows suspended 생성→Job 연결→resume·breakaway 거부, 미지원과 enforced limit 구분 | NFR-001,009 |
 
 [W05 실행 기록](26-w05-native.md)을 따른다. 프로세스 그룹/Job은 OS 권한 샌드박스가 아니며 RHEL/Windows11 실기와 agent crash reconciliation은 별도다.
+
+
+## 13. W06 노드와 워커 수용 시험
+
+| TC | 검증 | 요구 연결 |
+|---|---|---|
+| TC-59 | 일회용 등록, 철회·만료, 사용자와 노드 credential 분리 | REQ-019, NFR-006 |
+| TC-60 | 두 노드의 동시 claim, 한 epoch·예약·이벤트, 재전송과 실패 rollback | REQ-018/019/022, TC-21 |
+| TC-61 | 호환성·root 권한·자원과 실제 대기 사유, 비호환 요청 뒤의 호환 작업 선택 | REQ-002/018/019 |
+| TC-62 | 갱신 중단, stale 쓰기 409, cleanup 불확실 시 예약 유지 | REQ-022/035, TC-22 |
+| TC-63 | 워커 환경·IPC에서 노드 비밀값 제외, 취소 후 자손 종료, journal·PID 재사용 복구 | REQ-015/022, TC-18/23 |
+| TC-64 | 고정 snapshot 재시도와 hash·크기·attempt 소유권에 묶인 artifact 접수 | REQ-003/035, NFR-007 |
+| TC-65 | 기존 0002 DB 이행, Linux 실제 두 에이전트에서 취소 후 다음 run 접수, Windows Job 소유자 종료 | NFR-001/003/009 |
+
+실행 명령은 `python3 scripts/test_postgres.py --web --nodes`다. 노드 수용 시험은 전용 빌드의 시험용 handler로 프로토콜과 OS 동작을 검사한다. [저장·HTTP 시험](28-w06-node-protocol.md) · [워커 프로세스 시험](28-w06-agent-runtime.md)

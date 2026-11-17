@@ -53,7 +53,7 @@ jobs:
           test -z "$(gofmt -l cmd internal migrations)"
           go vet ./...
       - name: Native database integration and race tests
-        run: python scripts/test_postgres.py --web
+        run: python scripts/test_postgres.py --nodes --web
       - name: Documentation contracts and regression fixture
         run: |
           python scripts/validate_bundle.py

@@ -123,7 +123,8 @@ func (s *Store) Enqueue(ctx context.Context, actor, project, key string, body js
 		if err != pgx.ErrNoRows {
 			return Run{}, err
 		}
-		r, err := readRun(tx.QueryRow(ctx, "INSERT INTO runs(id,project_id,actor_id,idempotency_key,request_digest,project_revision,status) SELECT $1,id,$2,$3,$4,current_revision,'queued' FROM projects WHERE id=$5 RETURNING "+runColumns, domain.NewID(), actor, key, digest, project))
+		// The canonical request is stored so a claim can build the job from it.
+		r, err := readRun(tx.QueryRow(ctx, "INSERT INTO runs(id,project_id,actor_id,idempotency_key,request_digest,project_revision,status,request) SELECT $1,id,$2,$3,$4,current_revision,'queued',$6::text::jsonb FROM projects WHERE id=$5 RETURNING "+runColumns, domain.NewID(), actor, key, digest, project, string(canonical)))
 		if err != nil {
 			return Run{}, err
 		}

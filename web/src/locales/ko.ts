@@ -3,14 +3,14 @@ export const ko = {
   // --- shell ---
   appName: 'CODEYE',
   eyebrow: '코드를 보는 눈',
-  stage: 'W03 · 제어 API',
+  stage: '프로젝트 관리',
   skipToMain: '본문으로 건너뛰기',
   nav: { label: '주 메뉴', projects: '프로젝트·분석', doctor: '환경 진단' },
 
   // --- doctor viewer (alternate view) ---
   title: '분석을 시작하기 전에',
   intro: 'CODEYE는 근거를 확인할 수 있는 코드 품질 분석·검토 플랫폼을 준비하고 있습니다.',
-  limitation: '이 화면은 진단 파일만 읽습니다. 분석 실행기, 워커 실행, LLM 검토와 보고서 생성은 아직 구현되지 않았습니다.',
+  limitation: '진단 파일에 기록된 환경과 검사별 확인 범위를 표시합니다.',
   diagnostic: '내 환경 확인',
   commandHelp: 'CLI가 만든 JSON 파일을 열면 실제 진단 결과를 확인할 수 있습니다. 종료 코드 1은 미확인 또는 사용할 수 없는 항목이 있다는 뜻입니다.',
   open: '진단 JSON 파일 열기',
@@ -22,7 +22,7 @@ export const ko = {
   columns: ['항목', '상태', '확인 범위·사유', '버전'],
   unknown: '미측정',
   next: '다음 구현 단계',
-  steps: ['W04 · 소스 고정(Git/로컬)', 'W05 · Native 실행기', 'W06 / W07 · 워커 프로토콜과 자동 증감'],
+  steps: ['W07 · 워커 자동 증감', 'W08 · 첫 언어 분석기', 'W09 · 구조화 보고서'],
   statuses: { available: '확인됨', unavailable: '사용 불가', unverified: '검증 전', not_configured: '미설정' },
 
   // --- connection and session ---
@@ -155,6 +155,12 @@ export const ko = {
     statusUnknown: '상태를 알 수 없음',
     statusUnknownNote: '서버가 알려진 목록에 없는 상태를 보냈습니다. 성공이나 완료로 해석하지 않습니다.',
     waitingLabels: {
+      no_capable_node: '소스 접근과 분석 조건을 충족하는 노드를 기다리고 있습니다.',
+      capacity_full: '워커 또는 실행 자원이 확보되면 시작합니다.',
+      project_limit: '프로젝트의 실행 슬롯을 기다리고 있습니다.',
+      node_stale: '호환 노드의 상태 갱신을 기다리고 있습니다.',
+      snapshot_unavailable: '고정된 입력 사본을 사용할 수 있는 노드를 기다리고 있습니다.',
+      request_unavailable: '이전 요청의 실행 설정을 복원할 수 없습니다.',
       execution_unavailable: '실행기가 아직 연결되지 않아 시작되지 않았습니다.',
     } as Record<string, string>,
     terminalNote: '이 실행은 종료되어 더 이상 자동으로 갱신하지 않습니다.',

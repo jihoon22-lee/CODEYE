@@ -17,6 +17,16 @@ import (
 
 func platformHelper(mode string, args []string) bool {
 	switch mode {
+	case "hold-worker-job":
+		self, _ := os.Executable()
+		child := exec.Command(self, helperArg, "tree", "2", "wait")
+		release, err := StartWorkerJob(child)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(3)
+		}
+		defer release()
+		_ = child.Wait()
 	case "breakaway":
 		// A child asking to leave the job must be refused (no BREAKAWAY_OK).
 		self, _ := os.Executable()
@@ -98,4 +108,37 @@ func TestWindowsTimeoutHasNoGracefulPhase(t *testing.T) {
 		t.Fatalf("graceful=%v exit=%v", res.Resources.GracefulStopUsed, derefInt(res.ExitCode))
 	}
 	assertDead(t, readPidFile(t, filepath.Join(ws, "sleep")))
+}
+
+// The owner is a separate OS process so the kernel, not a Go defer, closes
+// its Job handle. Held process handles identify exactly the original tree.
+func TestAgentDeathClosesWorkerJob(t *testing.T) {
+	dir := newWorkspace(t)
+	owner := exec.Command(helperExe(t), helperArg, "hold-worker-job")
+	owner.Dir = dir
+	if err := owner.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = owner.Process.Kill(); _ = owner.Wait() })
+	var handles []windows.Handle
+	for i := 0; i <= 2; i++ {
+		pid := readPidFile(t, filepath.Join(dir, fmt.Sprintf("pid-%d", i)))
+		h, err := windows.OpenProcess(windows.SYNCHRONIZE|windows.PROCESS_TERMINATE, false, uint32(pid))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = windows.TerminateProcess(h, 1); _ = windows.CloseHandle(h) })
+		if state, err := windows.WaitForSingleObject(h, 0); err != nil || state != uint32(windows.WAIT_TIMEOUT) {
+			t.Fatal("worker tree was not running")
+		}
+		handles = append(handles, h)
+	}
+	if err := owner.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range handles {
+		if state, err := windows.WaitForSingleObject(h, 10000); err != nil || state != windows.WAIT_OBJECT_0 {
+			t.Fatal("worker tree survived agent shutdown")
+		}
+	}
 }

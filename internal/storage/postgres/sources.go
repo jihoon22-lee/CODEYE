@@ -312,6 +312,10 @@ func (s *Store) ListProjects(ctx context.Context, actor, cursor string, limit in
 type RunView struct {
 	Run
 	CompletedTasks, TotalTasks int64
+	// WaitingReason is set only for a queued run: a structured reason derived
+	// from nodes, grants, snapshot locations and limits (nodeproto.Waiting*),
+	// or nil when a capable node with free capacity exists.
+	WaitingReason *string
 }
 
 // GetRunView returns the run and its task counts for an actor who may read it.
@@ -327,6 +331,10 @@ func (s *Store) GetRunView(ctx context.Context, actor, id string) (RunView, erro
 		v := RunView{Run: r}
 		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status IN ('succeeded','failed','timed_out','cancelled','unsupported','skipped_policy','budget_exhausted')),count(*)
 			FROM tasks WHERE run_id=$1`, id).Scan(&v.CompletedTasks, &v.TotalTasks)
+		if err != nil || r.Status != domain.RunQueued {
+			return v, err
+		}
+		v.WaitingReason, err = waitingReason(ctx, tx, id)
 		return v, err
 	})
 }
