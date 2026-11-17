@@ -23,6 +23,7 @@ import (
 const usage = `CODEYE control plane (W03/W06)
 Usage:
   codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]
+  codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH] [--timeout 75s]
   codeye migrate
   codeye user create [--name NAME]
   codeye user disable --id USER_ID
@@ -31,7 +32,7 @@ Usage:
   codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331]
   codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--user USER_ID [--login-link-file .codeye/login-link]]
-` + nodeAdminUsage + `Database: CODEYE_DATABASE_URL (required except for doctor). Only "migrate" changes the schema.
+` + nodeAdminUsage + `Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
 Login links are written to a 0600 file; the token is never printed.
 "serve" runs the controller API and the node protocol (enrollment, claims, leases, artifacts).
 Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.

@@ -56,6 +56,7 @@ jobs:
         run: python scripts/test_postgres.py --nodes --web
       - name: Documentation contracts and regression fixture
         run: |
+          python -m unittest discover -s scripts -p test_r0_openai_gateway.py -v
           python scripts/validate_bundle.py
           python -m unittest discover -s fixtures/cleanup -p 'test_*.py' -v
       - name: Build CLI

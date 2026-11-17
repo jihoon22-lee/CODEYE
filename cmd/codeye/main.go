@@ -30,6 +30,9 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if code, ok := runNode(ctx, args, out, stderr); ok {
 		return code
 	}
+	if args[0] == "model" {
+		return modelCommand(ctx, args[1:], out, stderr)
+	}
 	if code, ok := runControl(ctx, args, out, stderr); ok {
 		return code
 	}

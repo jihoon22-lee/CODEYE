@@ -191,3 +191,7 @@
 | TC-70 | build constraint·cgo로 빠진 패키지와 무시 파일의 범위 표시, 분석 패키지 0개는 미지원, 중첩 모듈·scope, workspace drift 실패·위치 미연결, handler registry·result manifest 검증 | REQ-006,008; TC-05 |
 
 [W08 기록](29-w08-go-vet.md)의 실행 환경·실제 CODEYE snapshot 결과·Windows 미실행 제한을 따른다. 이 시험은 Go vet 어댑터 범위이며 W09 보고서와 분석 품질 측정을 뜻하지 않는다.
+
+## W10 모델 통합 수용 시험
+
+TC-76~79는 관리형 OpenCode 프로세스의 실응답, 도구 권한 차단, 실제 요청 뒤 취소와 부정확한 응답·예산 거부를 검증한다. REQ-026/030, NFR-006/008/010에 연결한다. 실제 모델과 합성 전송 시험의 범위는 [W10 기록](32-w10-opencode.md)을 따른다.

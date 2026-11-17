@@ -93,6 +93,12 @@ type Spec struct {
 	// are rejected.
 	Env map[string]string `json:"-"`
 
+	// OpenCodeModel selects the managed, tool-free W10 provider profile.
+	// Other commands leave this empty. No provider credentials are inherited.
+	OpenCodeModel string `json:"-"`
+	// Only this loopback relay receives the ephemeral relay token.
+	OpenCodeRelay *LocalModelRelay `json:"-"`
+
 	// Stdin bytes; nil means the null device.
 	Stdin []byte `json:"-"`
 
