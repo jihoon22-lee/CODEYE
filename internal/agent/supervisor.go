@@ -39,6 +39,7 @@ type workerProc struct {
 	draining   bool
 	att        *activeAttempt
 	claimSeq   int64
+	claimKey   string // reused until a definitive claim answer
 
 	uplink chan any // event/artifact/complete, served in order off the reader
 }
@@ -220,7 +221,8 @@ func (ag *Agent) readWorker(w *workerProc) {
 				w.state = nodeproto.WorkerIdle
 			}
 			ag.mu.Unlock()
-			ag.kick()
+			// The controller leases again only after a heartbeat reports idle.
+			ag.heartbeatSoon()
 		case *workerproto.Event, *workerproto.Artifact, *workerproto.Complete:
 			w.uplink <- m
 		default:
@@ -314,7 +316,7 @@ func (ag *Agent) forwardEvent(w *workerProc, v *workerproto.Event) {
 	}
 	if v.Kind == nodeproto.EventSnapshotFixed && v.SnapshotRoot != "" {
 		var p nodeproto.SnapshotFixedPayload
-		if json.Unmarshal(v.Payload, &p) == nil && within(ag.dataRoot(), v.SnapshotRoot) {
+		if json.Unmarshal(v.Payload, &p) == nil && withinResolved(ag.dataRoot(), v.SnapshotRoot) {
 			if err := ag.cache.put(p.ManifestDigest, v.SnapshotRoot); err != nil {
 				ag.log("warn", "snapshot_cache_write_failed", "attempt_id", v.AttemptID)
 			}
@@ -367,6 +369,14 @@ func (ag *Agent) readArtifact(w *workerProc, path string) ([]byte, error) {
 		return nil, errors.New("artifact too large")
 	}
 	return b, nil
+}
+
+// withinResolved compares after resolving symlinks on both sides (W04
+// returns resolved snapshot roots; the state dir may sit behind a symlink).
+func withinResolved(root, p string) bool {
+	r, err1 := filepath.EvalSymlinks(root)
+	q, err2 := filepath.EvalSymlinks(p)
+	return err1 == nil && err2 == nil && within(r, q)
 }
 
 func within(root, p string) bool {
@@ -440,15 +450,12 @@ func (ag *Agent) forwardComplete(w *workerProc, v *workerproto.Complete) {
 			req.ResultManifestID = &id
 		}
 	}
-	var err error
-	if att.isStale() {
-		err = &APIError{Status: 409, Code: nodeproto.CodeStaleAttempt}
-	} else {
-		err = retry(ag.ctx, 6, func() error {
-			_, e := ag.client.Complete(ag.ctx, v.AttemptID, req)
-			return e
-		})
-	}
+	// Always try: the local lease-margin watchdog may fire while the server
+	// lease is still valid; the controller decides staleness (409).
+	err := retry(ag.ctx, 6, func() error {
+		_, e := ag.client.Complete(ag.ctx, v.AttemptID, req)
+		return e
+	})
 	outcome := v.Outcome
 	if err != nil {
 		outcome = "rejected"
@@ -465,8 +472,7 @@ func (ag *Agent) forwardComplete(w *workerProc, v *workerproto.Complete) {
 	att.completed = true
 	att.mu.Unlock()
 	ag.mu.Lock()
-	w.att = nil
-	w.state = nodeproto.WorkerIdle
+	w.att = nil // state stays busy until the worker's own idle message
 	ag.mu.Unlock()
 	ag.log("info", "attempt_completed", "attempt_id", v.AttemptID, "outcome", outcome, "cleanup_state", cleanup)
 	if err != nil {

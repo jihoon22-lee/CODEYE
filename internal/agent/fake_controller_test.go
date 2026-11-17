@@ -42,6 +42,9 @@ type fakeController struct {
 	lastHB     nodeproto.NodeHeartbeatRequest
 
 	hangAttemptHB bool // never answer attempt heartbeats (lease watchdog test)
+	refuseReports int  // refuse this many confirmed reports with "conflict" (attempt still leased)
+	leaseFor      time.Duration
+	digests       []string // manifest digests fixed, in order
 	staleAttempts bool // answer attempt heartbeats with 409
 	completeCh    chan nodeproto.CompleteRequest
 	reportCh      chan nodeproto.CleanupReport
@@ -198,7 +201,16 @@ func (f *fakeController) nodeHeartbeat(w http.ResponseWriter, r *http.Request, n
 		case f.reportCh <- rep:
 		default:
 		}
-		resp.CleanupResults = append(resp.CleanupResults, nodeproto.CleanupResult{AttemptID: rep.AttemptID, Accepted: rep.CleanupState == nodeproto.CleanupConfirmed})
+		res := nodeproto.CleanupResult{AttemptID: rep.AttemptID, Accepted: rep.CleanupState == nodeproto.CleanupConfirmed}
+		if !res.Accepted {
+			code := "uncertain_not_applied"
+			res.Code = &code
+		} else if f.refuseReports > 0 {
+			f.refuseReports--
+			code := "conflict"
+			res.Accepted, res.Code = false, &code
+		}
+		resp.CleanupResults = append(resp.CleanupResults, res)
 	}
 	ok(w, 200, resp)
 }
@@ -232,7 +244,10 @@ func (f *fakeController) claim(w http.ResponseWriter, r *http.Request, node stri
 	}
 	job := f.jobs[0]
 	f.jobs = f.jobs[1:]
-	lease := nodeproto.Lease{RunID: domain.NewID(), AttemptID: domain.NewID(), WorkerID: req.WorkerID, LeaseEpoch: 1, ExpiresAt: time.Now().Add(30 * time.Second), ProjectRevision: 1, RunVersion: 2}
+	if f.leaseFor == 0 {
+		f.leaseFor = 30 * time.Second
+	}
+	lease := nodeproto.Lease{RunID: domain.NewID(), AttemptID: domain.NewID(), WorkerID: req.WorkerID, LeaseEpoch: 1, ExpiresAt: time.Now().Add(f.leaseFor), ProjectRevision: 1, RunVersion: 2}
 	f.attempts[lease.AttemptID] = &fakeAttempt{lease: lease, artifacts: map[string]fakeArtifact{}, byID: map[string]fakeArtifact{}, tasks: map[string]int64{}, runStatus: "preparing"}
 	resp := &nodeproto.ClaimResponse{Lease: lease, Job: job}
 	f.claimKeys[key] = resp
@@ -241,7 +256,7 @@ func (f *fakeController) claim(w http.ResponseWriter, r *http.Request, node stri
 }
 
 func (f *fakeController) owned(a *fakeAttempt, worker string, epoch int64) bool {
-	return a != nil && a.lease.WorkerID == worker && a.lease.LeaseEpoch == epoch && a.complete == nil
+	return a != nil && a.lease.WorkerID == worker && a.lease.LeaseEpoch == epoch && a.complete == nil && time.Now().Before(a.lease.ExpiresAt)
 }
 
 func (f *fakeController) attemptHeartbeat(w http.ResponseWriter, r *http.Request, id string) {
@@ -263,7 +278,10 @@ func (f *fakeController) attemptHeartbeat(w http.ResponseWriter, r *http.Request
 		fail(w, 409, nodeproto.CodeStaleAttempt)
 		return
 	}
-	ok(w, 200, nodeproto.AttemptHeartbeatResponse{ExpiresAt: time.Now().Add(30 * time.Second)})
+	f.mu.Lock()
+	a.lease.ExpiresAt = time.Now().Add(f.leaseFor)
+	f.mu.Unlock()
+	ok(w, 200, nodeproto.AttemptHeartbeatResponse{ExpiresAt: a.lease.ExpiresAt})
 }
 
 func (f *fakeController) event(w http.ResponseWriter, r *http.Request, id string) {
@@ -305,6 +323,7 @@ func (f *fakeController) event(w http.ResponseWriter, r *http.Request, id string
 		}
 		sid := domain.NewID()
 		resp.SnapshotID = &sid
+		f.digests = append(f.digests, p.ManifestDigest)
 	case nodeproto.EventTaskCreated:
 		tid, v := domain.NewID(), int64(1)
 		a.tasks[tid] = 1

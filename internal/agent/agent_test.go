@@ -331,26 +331,96 @@ func TestCancelCommandKillsTreeAndCompletesCancelled(t *testing.T) {
 func TestLeaseWatchdogCancelsBeforeExpiry(t *testing.T) {
 	h := newHarness(t, "sleep")
 	h.fc.addJob(h.job())
-	h.fc.hangAttemptHB = true // network partition for lease renewals only
 	cfg := testConfig(h.fc.srv.URL, h.state, h.token, h.rootID, h.src, "worker")
+	h.fc.leaseFor = cfg.LeaseDuration
+	h.fc.hangAttemptHB = true // network partition for lease renewals only
 	startAgent(t, cfg)
 	p := waitStartedProc(t, h.state)
 	start := time.Now()
-	rep := waitFor(t, h.fc.reportCh, 30*time.Second, "cleanup report")
-	elapsed := time.Since(start)
-	if rep.CleanupState != "confirmed" || rep.Method != nodeproto.MethodProcessGroupEmpty {
-		t.Fatalf("report %+v", rep)
+	// The watchdog fires at lease − margin; the server lease is still valid,
+	// so the real cleanup result is accepted through complete.
+	c := waitFor(t, h.fc.completeCh, 30*time.Second, "complete")
+	if c.Outcome != "failed" || c.Reason == nil || *c.Reason != "lease_lost" || c.CleanupState != "confirmed" {
+		t.Fatalf("complete %+v", c)
+	}
+	if elapsed := time.Since(start); elapsed > cfg.LeaseDuration {
+		t.Fatalf("lease-loss handling took %v (lease %v)", elapsed, cfg.LeaseDuration)
 	}
 	if !groupEmpty(p.PGID) {
 		t.Fatal("task survived lease loss")
 	}
-	if elapsed > cfg.LeaseDuration {
-		t.Fatalf("lease-loss cleanup took %v (lease %v)", elapsed, cfg.LeaseDuration)
+}
+
+func TestStaleLeaseCleanupReportResentUntilAccepted(t *testing.T) {
+	h := newHarness(t, "sleep")
+	h.fc.addJob(h.job())
+	h.fc.refuseReports = 1 // first confirmed report: attempt still leased → conflict
+	startAgent(t, testConfig(h.fc.srv.URL, h.state, h.token, h.rootID, h.src, "worker"))
+	p := waitStartedProc(t, h.state)
+	h.fc.mu.Lock()
+	h.fc.staleAttempts = true // server-side expiry: renewals, events and complete → 409
+	h.fc.mu.Unlock()
+	first := waitFor(t, h.fc.reportCh, 30*time.Second, "first report")
+	second := waitFor(t, h.fc.reportCh, 30*time.Second, "resent report")
+	if first.AttemptID != second.AttemptID || second.CleanupState != "confirmed" {
+		t.Fatalf("reports %+v %+v", first, second)
+	}
+	if !groupEmpty(p.PGID) {
+		t.Fatal("task survived")
+	}
+	// Once accepted, the report is settled and not sent again.
+	time.Sleep(time.Second)
+	h.fc.mu.Lock()
+	n := 0
+	for _, r := range h.fc.reports {
+		if r.AttemptID == first.AttemptID {
+			n++
+		}
+	}
+	h.fc.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("report sent %d times, want 2", n)
 	}
 	select {
 	case c := <-h.fc.completeCh:
-		t.Fatalf("complete accepted after lease loss: %+v", c)
+		t.Fatalf("stale complete accepted: %+v", c)
 	default:
+	}
+}
+
+func TestPinnedRetryLoadsCachedSnapshotWithoutSource(t *testing.T) {
+	h := newHarness(t, "succeed")
+	// State dir behind a symlink: cache paths must still match W04's resolved roots.
+	real := filepath.Join(t.TempDir(), "real-state")
+	os.MkdirAll(real, 0700)
+	link := filepath.Join(t.TempDir(), "state-link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	h.state = link
+	h.fc.addJob(h.job())
+	startAgent(t, testConfig(h.fc.srv.URL, h.state, h.token, h.rootID, h.src, "worker"))
+	if c := waitFor(t, h.fc.completeCh, 30*time.Second, "first complete"); c.Outcome != "succeeded" {
+		t.Fatalf("first %+v", c)
+	}
+	h.fc.mu.Lock()
+	digest := h.fc.digests[0]
+	h.fc.mu.Unlock()
+	// The original source disappears: a retry must use the retained snapshot.
+	if err := os.RemoveAll(h.src); err != nil {
+		t.Fatal(err)
+	}
+	retry := h.job()
+	retry.Snapshot = &nodeproto.JobSnapshot{ID: domain.NewID(), ManifestDigest: digest, Kind: "local", Consistency: "stable_copy_best_effort"}
+	h.fc.addJob(retry)
+	c := waitFor(t, h.fc.completeCh, 30*time.Second, "retry complete")
+	if c.Outcome != "succeeded" || c.CleanupState != "confirmed" {
+		t.Fatalf("retry %+v", c)
+	}
+	h.fc.mu.Lock()
+	defer h.fc.mu.Unlock()
+	if len(h.fc.digests) != 2 || h.fc.digests[1] != digest {
+		t.Fatalf("retry fixed a different snapshot: %v", h.fc.digests)
 	}
 }
 
@@ -390,7 +460,13 @@ func TestCrashRecoveryKillsVerifiedGroupAndNeverReruns(t *testing.T) {
 	if groupEmpty(p.PGID) {
 		t.Fatal("test setup: task group should have survived the crash")
 	}
-	claimsBefore := h.fc.claimCount()
+	h.fc.mu.Lock()
+	var crashed *fakeAttempt
+	for _, a := range h.fc.attempts {
+		crashed = a
+	}
+	eventsBefore := len(crashed.events)
+	h.fc.mu.Unlock()
 	// Restart in-process with the same state dir: reconciliation first.
 	startAgent(t, testConfig(h.fc.srv.URL, h.state, "", h.rootID, h.src, "worker"))
 	rep := waitFor(t, h.fc.reportCh, 30*time.Second, "cleanup report")
@@ -400,14 +476,24 @@ func TestCrashRecoveryKillsVerifiedGroupAndNeverReruns(t *testing.T) {
 	if !groupEmpty(p.PGID) {
 		t.Fatal("orphaned task group not cleaned")
 	}
+	if rep.AttemptID != crashed.lease.AttemptID {
+		t.Fatalf("report for %s, want %s", rep.AttemptID, crashed.lease.AttemptID)
+	}
 	time.Sleep(time.Second)
 	h.fc.mu.Lock()
-	jobsLeft := len(h.fc.jobs)
+	eventsAfter, attempts := len(crashed.events), len(h.fc.attempts)
 	h.fc.mu.Unlock()
-	if jobsLeft != 0 {
-		t.Fatal("unexpected queue state")
+	// The abandoned attempt is never re-run: no new events for it, no new attempt.
+	if eventsAfter != eventsBefore || attempts != 1 {
+		t.Fatalf("re-run after restart: events %d→%d attempts %d", eventsBefore, eventsAfter, attempts)
 	}
-	_ = claimsBefore // later claims get 204: the abandoned attempt is never re-run locally
+	if ps := taskPGIDs(t, h.state); len(ps) != 0 {
+		for _, p2 := range ps {
+			if p2.PID != p.PID && !groupEmpty(p2.PGID) {
+				t.Fatal("a new task process was started for the abandoned attempt")
+			}
+		}
+	}
 }
 
 func TestRecoveryNeverSignalsReusedPID(t *testing.T) {

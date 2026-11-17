@@ -515,8 +515,12 @@ func (r *journalRunner) Run(ctx context.Context, spec executor.Spec) executor.Re
 		}
 		return reply.Check(nil)
 	}
-	// The attempt ctx governs cancellation; the handler ctx is the same.
-	res := w.runner.Run(a.ctx, spec)
+	// Cancelled by either the attempt (cancel/lease loss) or the handler.
+	runCtx, cancelRun := context.WithCancel(ctx)
+	stop := context.AfterFunc(a.ctx, cancelRun)
+	res := w.runner.Run(runCtx, spec)
+	stop()
+	cancelRun()
 	if res.Process.PID != 0 {
 		a.anyProc.Store(true)
 	}

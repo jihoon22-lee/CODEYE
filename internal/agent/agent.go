@@ -414,13 +414,45 @@ func (ag *Agent) heartbeat(ctx context.Context) error {
 			code = *r.Code
 		}
 		ag.log("info", "cleanup_reported", "attempt_id", r.AttemptID, "accepted", fmt.Sprint(r.Accepted), "code", code)
-		_ = ag.journal.Append(Record{Kind: RecCleanupAcked, AttemptID: r.AttemptID})
+		if ag.reportSettled(r, code) {
+			_ = ag.journal.Append(Record{Kind: RecCleanupAcked, AttemptID: r.AttemptID})
+		}
 	}
 	for _, c := range resp.Commands {
 		ag.applyCommand(c)
 	}
 	ag.kick()
 	return nil
+}
+
+// reportResendWindow bounds how long a confirmed report refused with a
+// retryable code is resent (the attempt is normally still leased until the
+// controller's sweep moves it to recovery_required).
+const reportResendWindow = 15 * time.Minute
+
+// reportSettled decides whether a cleanup report is finished. Accepted and
+// terminal refusals settle it; "conflict" (attempt still leased) and
+// "unavailable" are resent on later heartbeats within reportResendWindow.
+func (ag *Agent) reportSettled(r nodeproto.CleanupResult, code string) bool {
+	if r.Accepted {
+		return true
+	}
+	switch code {
+	case "conflict", "unavailable", "":
+		var verified time.Time
+		ag.journal.With(func(j *Journal) {
+			if p := j.Pending[r.AttemptID]; p != nil {
+				verified = p.VerifiedAt
+			}
+		})
+		if !verified.IsZero() && time.Since(verified) > reportResendWindow {
+			ag.log("error", "cleanup_report_abandoned", "attempt_id", r.AttemptID, "code", code)
+			return true
+		}
+		return false
+	}
+	// not_found, stale_attempt, invalid, uncertain_not_applied: final.
+	return true
 }
 
 func (ag *Agent) applyCommand(c nodeproto.Command) {
@@ -517,7 +549,11 @@ func (ag *Agent) watch(ctx context.Context, w *workerProc, att *activeAttempt) {
 		}
 		nextRenew = time.Now().Add(interval)
 		sent := time.Now()
-		rctx, cancel := context.WithTimeout(ctx, interval)
+		timeout := interval
+		if left := limit - elapsed; left < timeout {
+			timeout = left // never let a hung renewal overshoot lease − margin
+		}
+		rctx, cancel := context.WithTimeout(ctx, timeout)
 		resp, err := ag.client.AttemptHeartbeat(rctx, att.lease.AttemptID, nodeproto.AttemptHeartbeatRequest{WorkerID: w.id, LeaseEpoch: att.lease.LeaseEpoch})
 		cancel()
 		if ctx.Err() != nil {
@@ -553,8 +589,13 @@ func (ag *Agent) claimIdle() {
 			continue
 		}
 		w.registered = false // one claim per idle report; re-armed by the next heartbeat
-		w.claimSeq++
-		go ag.claimFor(w, fmt.Sprintf("%s:%s-%d", w.id, ag.boot, w.claimSeq))
+		if w.claimKey == "" {
+			// A key without a definitive answer is reused, so a claim that
+			// committed but whose response was lost is replayed, not leaked.
+			w.claimSeq++
+			w.claimKey = fmt.Sprintf("%s:%s-%d", w.id, ag.boot, w.claimSeq)
+		}
+		go ag.claimFor(w, w.claimKey)
 	}
 }
 
@@ -566,6 +607,13 @@ func (ag *Agent) claimFor(w *workerProc, key string) {
 		resp, e = ag.client.Claim(ag.ctx, w.id, key)
 		return e
 	})
+	var ae *APIError
+	if err == nil || errors.As(err, &ae) {
+		// Definitive HTTP answer (200/204/4xx/5xx): the key is consumed.
+		ag.mu.Lock()
+		w.claimKey = ""
+		ag.mu.Unlock()
+	}
 	if err != nil || resp == nil {
 		if err != nil {
 			ag.log("warn", "claim_failed", "worker_id", w.id, "code", replyCode(err))
@@ -728,13 +776,12 @@ func (ag *Agent) workerLost(w *workerProc, att *activeAttempt) {
 	state, method := ag.reconcileAttempt(att.lease.AttemptID, nil)
 	reason := "worker_lost"
 	req := nodeproto.CompleteRequest{WorkerID: w.id, LeaseEpoch: att.lease.LeaseEpoch, Outcome: nodeproto.OutcomeFailed, CleanupState: state, Reason: &reason}
-	err := error(&APIError{Status: 409, Code: nodeproto.CodeStaleAttempt})
-	if !att.isStale() {
-		err = retry(context.Background(), 4, func() error {
-			_, e := ag.client.Complete(context.Background(), att.lease.AttemptID, req)
-			return e
-		})
-	}
+	// Always try: the local watchdog margin may fire while the server lease is
+	// still valid; the controller decides staleness.
+	err := retry(context.Background(), 4, func() error {
+		_, e := ag.client.Complete(context.Background(), att.lease.AttemptID, req)
+		return e
+	})
 	outcome := nodeproto.OutcomeFailed
 	if err != nil {
 		outcome = "rejected"
