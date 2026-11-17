@@ -1,0 +1,38 @@
+# 선택적 프로젝트 설정 예시. 이 파일이 없어도 웹에서 경로만 등록해 분석할 수 있어야 한다.
+# 플랫폼 관리자 정책을 확대하거나 secret을 제공하는 파일이 아니다.
+schema_version: '0.1'
+name: example-project
+source:
+  kind: local
+  source_root_id: projects
+  relative_path: example-project
+analysis:
+  profile: deep-review
+  languages: auto
+  documents: auto
+  instruction_pack: codeye.review@1.0.0
+  focus: [error_handling, resource_lifecycle, concurrency, api_contract]
+  exclude: ['.git/**', 'node_modules/**', '.venv/**']
+  include_generated_inputs: []
+  runtime_mismatch: report-and-limit-affected-tasks
+execution:
+  executor: native
+  managed_analyzers: true
+  repository_code_execution: false
+  dependency_install_scripts: false
+  build: false
+  tests: false
+  note: 빌드나 프로젝트 설정 코드를 실행하려면 프로젝트 관리자가 별도로 승인한다.
+budget:
+  run_timeout_seconds: 3600
+  task_timeout_seconds: 600
+  model_calls: 30
+  model_tokens: 120000
+  memory_mb: 2048
+  cpu_cores: 2
+schedule:
+  enabled: false
+  cron: '0 2 * * *'
+  timezone: Asia/Seoul
+  overlap: coalesce_latest
+  misfire: latest_once

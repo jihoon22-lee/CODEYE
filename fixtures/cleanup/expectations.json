@@ -1,0 +1,14 @@
+{
+  "fixture_id": "cleanup-callback-exception",
+  "kind": "synthetic-ground-truth-not-analyzer-output",
+  "language": "python",
+  "positive_source": "before.py",
+  "negative_source": "after.py",
+  "analysis_filename": "job.py",
+  "symbol": "run_job",
+  "defect_family": "resource_lifecycle.exception_cleanup",
+  "trigger": "callback raises before returning; no external cleanup owner",
+  "expected_behavior_before": "temporary workspace remains",
+  "expected_behavior_after": "temporary workspace removed and callback exception propagates if cleanup succeeds",
+  "limitations": ["cleanup failure handling is not solved by this minimal fixture", "do not provide this label or the opposite variant to the analysis model"]
+}

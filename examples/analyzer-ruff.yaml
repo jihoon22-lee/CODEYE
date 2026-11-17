@@ -1,0 +1,29 @@
+# 어댑터 계약 예시. parser 구현과 고정 버전별 fixture 시험은 개발 작업이다.
+schema_version: '0.1'
+id: python.ruff
+languages: [python]
+planned_platforms: [windows, linux]
+availability: unverified
+version_contract: catalog-pinned-and-fixture-tested
+analysis_scope: [syntax]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${tool}'
+  argv: ['--version']
+execute:
+  executable: '${tool}'
+  argv: [check, '--output-format', json, '${workspace}']
+  cwd: '${workspace}'
+  timeout_seconds: 600
+  stdout_max_bytes: 16777216
+  env_allowlist: [PATH, SYSTEMROOT, TEMP, TMP, LANG]
+exit_codes:
+  clean: [0]
+  findings: [1]
+  error: [2]
+parser:
+  id: ruff-json-v1
+  format: json
+  input: stdout-artifact

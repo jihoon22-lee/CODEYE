@@ -1,0 +1,72 @@
+{
+  "schema_version": "0.1",
+  "demo": true,
+  "id": "report_demo",
+  "run_id": "run_demo",
+  "revision": 1,
+  "created_at": "2026-11-17T00:00:00Z",
+  "status": "completed",
+  "quality_verdict": "attention_required",
+  "inputs": {
+    "snapshot_id": "snapshot_cleanup_before",
+    "source_kind": "synthetic",
+    "description": "합성 예시다. 실제 CODEYE 실행 결과·성능 측정이 아니다.",
+    "commit_sha": null
+  },
+  "summary": {
+    "total_findings": 1,
+    "actionable_findings": 1,
+    "pending_candidates": 0,
+    "refuted_findings": 0,
+    "priorities": ["finding_cleanup"]
+  },
+  "coverage": {
+    "scope_mode": "paths",
+    "inventory_files": 1,
+    "tool_processed_files": null,
+    "llm_exposed_files": null,
+    "test_status": "not_run",
+    "notes": ["작업 상태는 출력 계약을 설명하는 예시이며 도구·모델 실제 실행량은 미측정이다.", "소스 근거 검토와 실행 재현은 다르다. 이 예시 finding은 supported다."]
+  },
+  "tasks": [
+    {"id":"task_discover","status":"succeeded","required_for_verdict":true,"reason":null},
+    {"id":"task_static","status":"succeeded","required_for_verdict":true,"reason":null},
+    {"id":"task_context","status":"succeeded","required_for_verdict":true,"reason":null},
+    {"id":"task_verify","status":"succeeded","required_for_verdict":true,"reason":null},
+    {"id":"task_report","status":"succeeded","required_for_verdict":true,"reason":null}
+  ],
+  "findings": [
+    {
+      "schema_version": "0.1",
+      "id": "finding_cleanup",
+      "title": "콜백 예외가 발생하면 임시 작업 디렉터리가 정리되지 않음",
+      "category": "resource_lifecycle",
+      "severity": "medium",
+      "severity_reason": "실패한 호출마다 디렉터리가 남을 수 있다. 실제 디스크 고갈 시점이나 운영 영향은 실행 빈도와 외부 정리 정책에 따라 달라진다.",
+      "validation": "supported",
+      "disposition": "open",
+      "conditions": [
+        {"statement":"process 콜백이 정상 반환 전에 예외를 발생시킨다.","status":"assumed","evidence_ids":["evidence_cleanup_code"]},
+        {"statement":"상위 호출자나 별도 서비스가 이 임시 디렉터리를 대신 정리하지 않는다.","status":"assumed","evidence_ids":[]}
+      ],
+      "impact": "콜백에서 발생한 예외가 11행을 벗어나면 12행의 삭제가 실행되지 않아 생성된 작업 디렉터리가 남는다.",
+      "locations": [{"snapshot_id":"snapshot_cleanup_before","path":"fixtures/cleanup/before.py","start_line":9,"end_line":13,"symbol":"run_job"}],
+      "claims": [
+        {"assertion":"임시 디렉터리 생성 뒤 콜백을 호출하고, 삭제는 콜백의 정상 반환 이후에만 수행한다.","kind":"observed","evidence_ids":["evidence_cleanup_code"]},
+        {"assertion":"콜백 예외 경로에서 별도 정리 주체가 없다면 디렉터리가 남는다.","kind":"inferred","evidence_ids":["evidence_cleanup_code"]}
+      ],
+      "evidence": [
+        {"id":"evidence_cleanup_code","kind":"code","description":"run_job에 finally 또는 context manager가 없고 삭제가 콜백 다음에 있다.","location":{"snapshot_id":"snapshot_cleanup_before","path":"fixtures/cleanup/before.py","start_line":9,"end_line":13,"symbol":"run_job"},"blob_sha256":"be7482b37c88eef1708114611b345ff1514f4b2f645d81bb7abfa589e8e666fc"}
+      ],
+      "counterevidence_ids": [],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "임시 디렉터리의 소유권을 이 함수에 두고 try/finally 또는 명시적인 context manager로 정상·예외 경로에서 정리한다.",
+        "tradeoffs": ["정리 자체가 실패하면 원래 콜백 예외를 덮을 수 있으므로 실제 프로젝트의 오류 보존 정책도 정한다.", "콜백에 디렉터리 소유권을 넘기는 설계라면 삭제 주체와 계약부터 명확히 해야 한다."]
+      },
+      "verification": ["정상 콜백 뒤 디렉터리가 남지 않는지 확인한다.", "예외를 발생시키는 콜백에서도 정리가 수행되고 원래 예외가 전달되는지 확인한다."],
+      "limitations": ["합성 함수만 검토한 예시다. 실제 사용자 프로젝트에 이런 결함이 있다는 의미가 아니다.", "이 보고서에서 테스트 실행 재현을 주장하지 않는다."]
+    }
+  ],
+  "limitations": ["모든 상태·시각은 보고서 계약을 설명하는 합성 데이터다.", "기존 CI 결과를 사용하지 않았으며 의존성 CVE 검사는 범위 밖이다."]
+}

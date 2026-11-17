@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.codeye.invalid/v0.1/report.schema.json",
+  "title": "CODEYE report v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "demo", "id", "run_id", "revision", "created_at", "status", "quality_verdict", "inputs", "summary", "coverage", "tasks", "findings", "limitations"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "demo": {"type": "boolean"},
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "revision": {"type": "integer", "minimum": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["completed", "partial", "failed", "cancelled"]},
+    "quality_verdict": {"enum": ["attention_required", "no_actionable_findings", "inconclusive"]},
+    "inputs": {"type": "object", "additionalProperties": false, "required": ["snapshot_id", "source_kind", "description"], "properties": {"snapshot_id": {"type": "string", "minLength": 1}, "source_kind": {"enum": ["git", "local", "synthetic"]}, "description": {"type": "string"}, "commit_sha": {"type": ["string", "null"]}, "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "summary": {"type": "object", "additionalProperties": false, "required": ["total_findings", "actionable_findings", "pending_candidates", "refuted_findings", "priorities"], "properties": {"total_findings": {"type": "integer", "minimum": 0}, "actionable_findings": {"type": "integer", "minimum": 0}, "pending_candidates": {"type": "integer", "minimum": 0}, "refuted_findings": {"type": "integer", "minimum": 0}, "priorities": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}}},
+    "coverage": {"type": "object", "additionalProperties": false, "required": ["scope_mode", "inventory_files", "tool_processed_files", "llm_exposed_files", "test_status", "notes"], "properties": {"scope_mode": {"enum": ["full", "paths", "pr"]}, "inventory_files": {"type": "integer", "minimum": 0}, "tool_processed_files": {"type": ["integer", "null"], "minimum": 0}, "llm_exposed_files": {"type": ["integer", "null"], "minimum": 0}, "test_status": {"enum": ["no_tests", "not_run", "passed", "failed"]}, "notes": {"type": "array", "items": {"type": "string"}}}},
+    "tasks": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["id", "status", "required_for_verdict", "reason"], "properties": {"id": {"type": "string"}, "status": {"enum": ["succeeded", "failed", "timed_out", "cancelled", "unsupported", "skipped_policy", "budget_exhausted"]}, "required_for_verdict": {"type": "boolean"}, "reason": {"type": ["string", "null"]}}}},
+    "findings": {"type": "array", "items": {"$ref": "finding.schema.json"}},
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1",
+  "run_id": "run_demo",
+  "revision": 1,
+  "tasks": [
+    {"id":"task_discover","kind":"discover","purpose":"입력·문서·환경 파악","scope":{"kind":"paths","paths":["fixtures/cleanup/before.py"]},"depends_on":[],"required_for_verdict":true,"capabilities":["source.read"],"weight":1,"resource_request":{"cpu_cores":1,"memory_mb":256},"budget":{"timeout_seconds":120},"completion_contract":"입력 manifest와 사실·미확인 목록"},
+    {"id":"task_static","kind":"analyzer","purpose":"관리된 정적 규칙 검사","scope":{"kind":"paths","paths":["fixtures/cleanup/before.py"]},"depends_on":["task_discover"],"required_for_verdict":true,"capabilities":["analyzer.python"],"weight":2,"resource_request":{"cpu_cores":1,"memory_mb":512},"budget":{"timeout_seconds":300},"completion_contract":"원시 출력·정규화 관찰·검사 범위"},
+    {"id":"task_context","kind":"llm_review","purpose":"도구 결과를 보지 않은 오류·자원 수명 검토","scope":{"kind":"paths","paths":["fixtures/cleanup/before.py"]},"depends_on":["task_discover"],"required_for_verdict":true,"capabilities":["model.review"],"weight":3,"resource_request":{"cpu_cores":1,"memory_mb":512},"budget":{"timeout_seconds":600,"token_limit":16000,"model_calls":3},"completion_contract":"조건·근거·반례 요청이 있는 후보"},
+    {"id":"task_verify","kind":"verify","purpose":"후보의 조건과 반증 확인","scope":{"kind":"paths","paths":["fixtures/cleanup/before.py"]},"depends_on":["task_static","task_context"],"required_for_verdict":true,"capabilities":["model.review"],"weight":3,"resource_request":{"cpu_cores":1,"memory_mb":512},"budget":{"timeout_seconds":600,"token_limit":16000,"model_calls":3},"completion_contract":"검증 상태와 유효한 evidence 참조"},
+    {"id":"task_report","kind":"report","purpose":"검증된 데이터의 요약·상세 표현","scope":{"kind":"paths","paths":["fixtures/cleanup/before.py"]},"depends_on":["task_verify"],"required_for_verdict":true,"capabilities":["report.render"],"weight":1,"resource_request":{"cpu_cores":1,"memory_mb":256},"budget":{"timeout_seconds":120},"completion_contract":"schema를 통과한 report revision"}
+  ]
+}

@@ -1,0 +1,4 @@
+# Documentation/contract checks only; not CODEYE runtime dependencies.
+PyYAML>=6,<7
+jsonschema>=4.18,<5
+referencing>=0.30,<1

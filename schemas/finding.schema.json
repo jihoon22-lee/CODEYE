@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.codeye.invalid/v0.1/finding.schema.json",
+  "title": "CODEYE finding v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "title", "category", "severity", "severity_reason", "validation", "disposition", "conditions", "impact", "locations", "claims", "evidence", "counterevidence_ids", "recommendation", "verification", "limitations"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 5},
+    "category": {"enum": ["correctness", "error_handling", "concurrency", "resource_lifecycle", "data_integrity", "api_contract", "security", "maintainability", "performance", "test_gap"]},
+    "severity": {"enum": ["critical", "high", "medium", "low", "info"]},
+    "severity_reason": {"type": "string", "minLength": 1},
+    "validation": {"enum": ["unreviewed", "supported", "reproduced", "refuted", "inconclusive"]},
+    "disposition": {"enum": ["open", "acknowledged", "accepted_risk", "false_positive", "fixed_by_user", "suppressed"]},
+    "conditions": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["statement", "status", "evidence_ids"], "properties": {"statement": {"type": "string", "minLength": 1}, "status": {"enum": ["verified", "assumed"]}, "evidence_ids": {"$ref": "#/$defs/ids"}}}},
+    "impact": {"type": "string", "minLength": 1},
+    "locations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/location"}},
+    "claims": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["assertion", "kind", "evidence_ids"], "properties": {"assertion": {"type": "string", "minLength": 1}, "kind": {"enum": ["observed", "inferred"]}, "evidence_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}}},
+    "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}},
+    "counterevidence_ids": {"$ref": "#/$defs/ids"},
+    "observation_ids": {"$ref": "#/$defs/ids"},
+    "fingerprint": {"type": "string"},
+    "recommendation": {"type": "object", "additionalProperties": false, "required": ["summary", "tradeoffs"], "properties": {"summary": {"type": "string", "minLength": 1}, "tradeoffs": {"$ref": "#/$defs/strings"}}},
+    "verification": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "limitations": {"$ref": "#/$defs/strings"}
+  },
+  "allOf": [
+    {"if": {"properties": {"validation": {"const": "reproduced"}}, "required": ["validation"]}, "then": {"properties": {"evidence": {"contains": {"properties": {"kind": {"const": "execution"}}, "required": ["kind"]}}}}}
+  ],
+  "$defs": {
+    "ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "strings": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "location": {"type": "object", "additionalProperties": false, "required": ["snapshot_id", "path", "start_line", "end_line"], "properties": {"snapshot_id": {"type": "string", "minLength": 1}, "path": {"type": "string", "minLength": 1}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "symbol": {"type": "string"}}},
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "description"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["code", "document", "tool", "execution"]},
+        "description": {"type": "string", "minLength": 1},
+        "location": {"$ref": "#/$defs/location"},
+        "blob_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "artifact_id": {"type": "string", "minLength": 1},
+        "task_execution_id": {"type": "string", "minLength": 1},
+        "exit_status": {"enum": ["succeeded", "failed", "timed_out", "cancelled"]},
+        "json_pointer": {"type": "string"}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"enum": ["code", "document"]}}, "required": ["kind"]}, "then": {"required": ["location", "blob_sha256"]}},
+        {"if": {"properties": {"kind": {"enum": ["tool", "execution"]}}, "required": ["kind"]}, "then": {"required": ["artifact_id", "task_execution_id"]}},
+        {"if": {"properties": {"kind": {"const": "execution"}}, "required": ["kind"]}, "then": {"required": ["exit_status"]}}
+      ]
+    }
+  }
+}

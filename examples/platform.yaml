@@ -1,0 +1,70 @@
+# 설계 예시다. 아직 CODEYE 바이너리에서 읽을 수 있는 실제 구현 설정이 아니다.
+# 경로와 용량은 doctor 결과에 맞춰 설정한다. secret 값은 이 파일에 넣지 않는다.
+schema_version: '0.1'
+mode: personal
+api:
+  listen: 127.0.0.1:7331
+  auth: launch-session
+  cors: same-origin
+database:
+  driver: postgres
+  url_env: CODEYE_DATABASE_URL
+storage:
+  work_root: '${CODEYE_DATA_ROOT}/work'
+  artifact_root: '${CODEYE_DATA_ROOT}/artifacts'
+  cache_root: '${CODEYE_DATA_ROOT}/cache'
+  retention_days:
+    workspace: 1
+    snapshot: 14
+    raw_artifact: 30
+    report: 90
+scheduler:
+  global_max_running: 2
+  project_max_running: 1
+  heartbeat_seconds: 5
+  lease_seconds: 30
+  lease_safety_margin_seconds: 10
+  default_overlap: coalesce_latest
+  default_misfire: latest_once
+pools:
+  - id: personal-native
+    executor: native
+    min_workers: 0
+    max_workers: 2
+    reconcile_seconds: 5
+    idle_timeout_seconds: 180
+    scale_up_cooldown_seconds: 10
+    scale_down_cooldown_seconds: 60
+nodes:
+  - id: local
+    pool_id: personal-native
+    max_workers: 2
+    reserve_cpu_cores: 1
+    reserve_memory_mb: 2048
+    source_roots:
+      - id: projects
+        path: '${CODEYE_SOURCE_ROOT}'
+        trust: owner-approved-projects
+execution:
+  default_executor: native
+  allow_automatic_runtime_install: false
+  allow_repository_scripts_by_default: false
+  stdout_max_bytes: 16777216
+  default_task_timeout_seconds: 600
+model:
+  adapter: opencode
+  endpoint_env: CODEYE_OPENCODE_URL
+  auth_secret_env: CODEYE_OPENCODE_SECRET
+  profile: capability-probed
+  max_inflight: 2
+  max_format_repair_attempts: 1
+  allow_external_fallback: false
+network:
+  mode: approved-endpoints
+  telemetry: false
+  automatic_updates: false
+  remote_rule_downloads: false
+reports:
+  default_language: ko
+  formats: [json, markdown, html]
+  include_source_in_export_by_default: false

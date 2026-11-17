@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.codeye.invalid/v0.1/analyzer.schema.json",
+  "title": "CODEYE analyzer descriptor v0.1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "id", "languages", "planned_platforms", "availability", "version_contract", "analysis_scope", "executes_repository_code", "requires_build", "network_policy", "version_probe", "execute", "exit_codes", "parser"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
+    "languages": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+    "planned_platforms": {"type": "array", "minItems": 1, "items": {"enum": ["windows", "linux", "macos"]}},
+    "availability": {"enum": ["unverified", "verified", "unavailable"]},
+    "version_contract": {"type": "string", "minLength": 1},
+    "analysis_scope": {"type": "array", "minItems": 1, "items": {"enum": ["text", "syntax", "typed", "intraprocedural", "interprocedural", "interfile", "structural"]}},
+    "executes_repository_code": {"type": "boolean"},
+    "requires_build": {"type": "boolean"},
+    "network_policy": {"enum": ["none", "approved_mirrors", "explicit_allowlist"]},
+    "version_probe": {"type": "object", "additionalProperties": false, "required": ["executable", "argv"], "properties": {"executable": {"type": "string"}, "argv": {"type": "array", "items": {"type": "string"}}}},
+    "execute": {"type": "object", "additionalProperties": false, "required": ["executable", "argv", "cwd", "timeout_seconds", "stdout_max_bytes", "env_allowlist"], "properties": {"executable": {"type": "string"}, "argv": {"type": "array", "items": {"type": "string"}}, "cwd": {"type": "string"}, "timeout_seconds": {"type": "integer", "minimum": 1}, "stdout_max_bytes": {"type": "integer", "minimum": 1024}, "env_allowlist": {"type": "array", "items": {"type": "string"}}}},
+    "exit_codes": {"type": "object", "additionalProperties": false, "required": ["clean", "findings", "error"], "properties": {"clean": {"$ref": "#/$defs/codes"}, "findings": {"$ref": "#/$defs/codes"}, "error": {"$ref": "#/$defs/codes"}}},
+    "parser": {"type": "object", "additionalProperties": false, "required": ["id", "format", "input"], "properties": {"id": {"type": "string"}, "format": {"enum": ["json", "sarif", "xml", "text"]}, "input": {"type": "string"}}}
+  },
+  "$defs": {"codes": {"type": "array", "uniqueItems": true, "items": {"type": "integer"}}}
+}

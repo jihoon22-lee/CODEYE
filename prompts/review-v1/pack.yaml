@@ -1,0 +1,25 @@
+id: codeye.review
+version: 1.0.0
+schema_version: '0.1'
+language: ko
+status: initial-design-not-performance-validated
+core: 00-core.md
+roles:
+  context: 01-context.md
+  investigate: 02-investigate.md
+  verify: 03-verify.md
+  synthesize: 04-synthesize.md
+  report: 05-report.md
+domains: domains.md
+languages:
+  cpp: languages/cpp.md
+  python: languages/python.md
+  js-ts: languages/js-ts.md
+  go: languages/go.md
+  rust: languages/rust.md
+digest_policy:
+  algorithm: sha256
+  inputs: manifest-and-selected-files
+  ordering: utf8-relative-path-ascending
+  serialization: path-null-byte-content-null-byte
+  note: Compute at run creation; do not trust a repository-supplied digest.
