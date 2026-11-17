@@ -37,8 +37,13 @@ func (s *Store) Close() { s.pool.Close() }
 
 func connectionConfig(dsn string) (*pgxpool.Config, error) {
 	// Fail closed rather than silently inheriting a service, credentials, or options.
+	connectionVariables := map[string]bool{}
+	for _, key := range strings.Fields("PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD PGPASSFILE PGAPPNAME PGCONNECT_TIMEOUT PGSSLMODE PGSSLKEY PGSSLCERT PGSSLCERTMODE PGSSLSNI PGSSLROOTCERT PGSSLPASSWORD PGSSLNEGOTIATION PGTARGETSESSIONATTRS PGSERVICE PGSERVICEFILE PGTZ PGOPTIONS PGMINPROTOCOLVERSION PGMAXPROTOCOLVERSION PGCHANNELBINDING PGREQUIREAUTH") {
+		connectionVariables[key] = true
+	}
 	for _, value := range os.Environ() {
-		if strings.HasPrefix(value, "PG") {
+		key, _, _ := strings.Cut(value, "=")
+		if connectionVariables[strings.ToUpper(key)] {
 			return nil, domain.ErrInvalid
 		}
 	}

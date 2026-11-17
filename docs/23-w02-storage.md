@@ -22,7 +22,7 @@ go build -o bin/codeye ./cmd/codeye
 ./bin/codeye migrate
 ```
 
-연결은 명시적인 PostgreSQL URL의 host/user/database가 필요하다. TLS 기본은 verify-full이며 평문은 literal loopback만 허용한다. 원치 않는 PGSERVICE·PGPASSWORD·PGOPTIONS 등을 상속하지 않도록 저장 계층은 `PG*` 환경이 있으면 거부한다. W01 doctor는 별도 최소 자식 환경을 사용한다. psql 설정, 개인 client certificate, passfile을 자동 사용하지 않는다. 승인된 root CA는 URL의 sslrootcert로 지정한다. 원시 DSN·SQL 오류 detail은 CLI/API 공개 오류로 보내지 않는다.
+연결은 명시적인 PostgreSQL URL의 host/user/database가 필요하다. TLS 기본은 verify-full이며 평문은 literal loopback만 허용한다. 원치 않는 PGSERVICE·PGPASSWORD·PGOPTIONS 등을 상속하지 않도록 저장 계층은 libpq/pgx 연결에 영향을 주는 `PGHOST`, `PGSERVICE`, `PGPASSWORD` 등의 환경변수가 있으면 거부한다. Windows 설치 경로인 `PGROOT`/`PGBIN`은 연결 변수가 아니므로 허용한다. W01 doctor는 별도 최소 자식 환경을 사용한다. psql 설정, 개인 client certificate, passfile을 자동 사용하지 않는다. 승인된 root CA는 URL의 sslrootcert로 지정한다. 원시 DSN·SQL 오류 detail은 CLI/API 공개 오류로 보내지 않는다.
 
 `migrate`는 최대 1분의 호출 제한으로 전용 DB의 public schema에 적용한다. schema 변경 권한은 이 명령에만 필요하다. 실서비스 DB 역할 최소 권한 배포는 W03 이후 운영 구성에서 검증한다. 원래 DB·사용자 권한을 자동 생성/변경하지 않는다.
 

@@ -450,3 +450,12 @@ func TestSQLStateErrorsDoNotLeak(t *testing.T) {
 		t.Fatal("leak")
 	}
 }
+
+func TestPostgresInstallPathsDoNotOverrideConnection(t *testing.T) {
+	t.Setenv("PGROOT", "C:\\Program Files\\PostgreSQL\\17")
+	t.Setenv("PGBIN", "C:\\Program Files\\PostgreSQL\\17\\bin")
+	config, err := connectionConfig("postgres://user:secret@127.0.0.1/test?sslmode=disable")
+	if err != nil || config.ConnConfig.Host != "127.0.0.1" {
+		t.Fatal("unrelated install paths blocked explicit connection", err)
+	}
+}
