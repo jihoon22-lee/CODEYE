@@ -278,3 +278,30 @@ func verifyHistory(ms []Migration, applied []appliedMigration) error {
 	}
 	return nil
 }
+
+// Inspect reports how many embedded migrations the schema visible through tx
+// (its current_schema) has applied, without changing anything. A schema with
+// no history table has applied 0. An inconsistent history returns
+// ErrChecksumMismatch, ErrUnknownVersion or ErrMissingVersion, the same checks
+// Apply performs before it would change anything.
+func Inspect(ctx context.Context, tx pgx.Tx) (applied int, err error) {
+	ms, err := Embedded()
+	if err != nil {
+		return 0, err
+	}
+	var exists bool
+	if err := tx.QueryRow(ctx, "SELECT to_regclass('"+HistoryTable+"') IS NOT NULL").Scan(&exists); err != nil {
+		return 0, fmt.Errorf("migrations: inspect: %w", err)
+	}
+	if !exists {
+		return 0, nil
+	}
+	history, err := readHistory(ctx, tx)
+	if err != nil {
+		return 0, err
+	}
+	if err := verifyHistory(ms, history); err != nil {
+		return len(history), err
+	}
+	return len(history), nil
+}

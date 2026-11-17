@@ -40,6 +40,7 @@
 | [21 W01 실행 기반](21-w01-foundation.md) | 실제 실행·개발 환경·doctor 계약·테스트와 남은 제한 |
 | [22 W02 착수 준비](22-w02-preparation.md) | 도메인·DB 범위, 트랜잭션 시험과 착수 전 결정 항목 |
 | [23 W02 저장 계약](23-w02-storage.md) | 도메인·migration·ACL·lease·근거 metadata와 실제 DB 시험 |
+| [24 W03 API·인증](24-w03-api.md) | loopback 세션·프로젝트/run·브라우저 통합 검증 |
 
 ## 기계 판독 계약과 예시
 

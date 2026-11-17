@@ -1,6 +1,6 @@
 # 17. 구현 작업 계획
 
-현재 W01 환경 진단·프로젝트 기반과 W02 도메인·DB 저장 계약을 구현했다([W01 증거](21-w01-foundation.md), [W02 증거](23-w02-storage.md)). W03~W31은 미착수이며 다음 작업은 W03이다. W01의 `unverified` 결과는 W05/W10 실행 능력 완료가 아니다. 문서·schema·fixture의 존재를 구현 완료로 체크하지 않는다. 일정 추정 대신 선행 관계와 완료 조건으로 관리한다. 목표는 인프라를 오래 쌓은 뒤 품질을 보는 것이 아니라 작은 실제 분석 경로를 먼저 검증하는 것이다.
+현재 W01 환경 진단·프로젝트 기반과 W02 도메인·DB 저장 계약을 구현했다([W01 증거](21-w01-foundation.md), [W02 증거](23-w02-storage.md)). W03 최소 인증 API·웹 연결도 구현했다([W03 증거](24-w03-api.md)). 다음 작업은 W04/W05이며 후속은 계획의 선행 관계를 따른다. W01의 `unverified` 결과는 W05/W10 실행 능력 완료가 아니다. 문서·schema·fixture의 존재를 구현 완료로 체크하지 않는다. 일정 추정 대신 선행 관계와 완료 조건으로 관리한다. 목표는 인프라를 오래 쌓은 뒤 품질을 보는 것이 아니라 작은 실제 분석 경로를 먼저 검증하는 것이다.
 
 ## 1. R0: 개인 PC의 실동작 수직 경로
 
@@ -8,7 +8,7 @@
 |---|---|---|---|
 | W01 | 환경 doctor·프로젝트 skeleton — 기반 구현 완료 | 없음 | 실제 OS/도구/DB/모델 능력 결과. 실패 원인을 구분하고 Docker 요구 없음 |
 | W02 | 도메인 계약·DB migration — 구현 완료 | W01 | run/attempt/task/evidence/project ACL·event·lease의 트랜잭션 테스트 |
-| W03 | 최소 API·인증·웹 뼈대 | W02 | 프로젝트 등록→run 202→상태 조회. 무인증 LAN 공개 금지 |
+| W03 | 최소 API·인증·웹 뼈대 — 구현 완료 | W02 | 프로젝트 등록→run 202→상태 조회. 무인증 LAN 공개 금지 |
 | W04 | SourceAdapter Git/local | W02 | acquire 시 입력 고정, 원본 미변경, manifest·불안정 복사 검사 |
 | W05 | NativeExecutor | W01 | argv/env/cwd, timeout, stdout cap, Windows/Linux 프로세스 그룹 종료 |
 | W06 | Agent·worker protocol | W02,W05 | enroll/heartbeat/claim/epoch, 두 에이전트로 중복 claim 방지 |

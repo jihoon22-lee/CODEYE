@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """기존 서비스와 분리된 임시 Native PostgreSQL에서 W01 통합 테스트."""
 import json
+import sys
 import os
 from pathlib import Path
 import secrets
@@ -67,6 +68,9 @@ def main():
                 assert password not in result.stdout.decode() and password not in result.stderr.decode(), "credential 노출"
                 from jsonschema import Draft202012Validator
                 Draft202012Validator(json.loads((ROOT / "schemas/doctor.schema.json").read_text())).validate(report)
+                if "--web" in sys.argv[1:]:
+                    import browser_smoke
+                    browser_smoke.run(base, ROOT, env)
                 print("PASS: Native PostgreSQL migration·저장 통합·인증/query·CLI 재적용·JSON schema·비밀값 미노출")
             finally:
                 process.terminate()
