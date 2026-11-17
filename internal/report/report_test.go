@@ -725,3 +725,24 @@ func TestUnreportedExecutionsHaveDistinctIDs(t *testing.T) {
 		t.Fatalf("invented execution row: %+v", got.Limitations)
 	}
 }
+
+// A succeeded task and matching hashes do not attest to an analysis when
+// the analyzer's own parse or coverage contradicts success.
+func TestRejectedGoVetCoverageCannotClaimClean(t *testing.T) {
+	for name, change := range map[string]func(map[string]any){
+		"unparsed":        func(d map[string]any) { d["parse"].(map[string]any)["ok"] = false },
+		"missing_command": func(d map[string]any) { d["executions"] = d["executions"].([]any)[:3] },
+		"wrong_count": func(d map[string]any) {
+			d["coverage"].(map[string]any)["packages"] = map[string]int{"analyzed_clean": 94}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t, goVet(t))
+			f.rewriteDoc(t, change)
+			got := build(t, f.in, DefaultRegistry())
+			if !has(got.Limitations, LimArtifactRejected) || len(got.Observations) != 0 || got.Coverage.ToolProcessedFiles != nil {
+				t.Fatalf("contradictory artifact accepted: %+v", got.Limitations)
+			}
+		})
+	}
+}

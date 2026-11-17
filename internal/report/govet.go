@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -74,8 +75,8 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 		// The worker downgraded the handler outcome; the DB row is the authority.
 		out.Limitations = append(out.Limitations, LimTaskStatusMismatch+":"+ctx.Task.Key)
 	}
-	if len(d.Observations) != d.Parse.Observations {
-		return out, invalidf("observation count mismatch")
+	if err := validateGoVetDocument(&d, ctx.Task.Status); err != nil {
+		return out, err
 	}
 	// Raw references bind per task: this task's go.vet execution stdout artifact.
 	vet, haveVet := ctx.Executions["go.vet"]
@@ -89,8 +90,8 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 			docVet = &d.Executions[i]
 		}
 	}
-	if len(d.Observations) > 0 {
-		if stdout == nil || stdout.Role != analysis.RoleStdout || docVet == nil || docVet.Stdout.SHA256 != stdout.SHA256 {
+	if len(d.Observations) > 0 || d.Outcome.TaskStatus == domain.TaskSucceeded {
+		if stdout == nil || stdout.Role != analysis.RoleStdout || docVet == nil || docVet.Stdout.SHA256 != stdout.SHA256 || docVet.Stdout.CapturedBytes != stdout.SizeBytes {
 			return out, invalidf("observations are not bound to this task's go.vet stdout artifact")
 		}
 	}
@@ -107,7 +108,7 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 		obs := Observation{ID: o.ID, TaskKey: ctx.Task.Key, TaskExecutionID: ctx.TaskExecutionID, Tool: o.Tool, ToolVersion: o.ToolVersion, RuleID: o.RuleID,
 			RawSeverity: nil, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes,
 			RawRef: RawRef{ArtifactID: stdout.ID, SHA256: stdout.SHA256, StreamIndex: o.RawRef.StreamIndex, JSONPointer: o.RawRef.JSONPointer, ByteStart: o.RawRef.ByteStart, ByteEnd: o.RawRef.ByteEnd}}
-		if o.RawRef.ByteStart < 0 || o.RawRef.ByteEnd < o.RawRef.ByteStart || o.RawRef.ByteEnd > stdout.SizeBytes {
+		if o.RawRef.ByteStart < 0 || o.RawRef.ByteEnd <= o.RawRef.ByteStart || o.RawRef.ByteEnd > stdout.SizeBytes {
 			return out, invalidf("observation byte range is outside the stdout artifact")
 		}
 		if (o.LocationState == govet.LocationResolved) != (o.Location != nil) {
@@ -115,7 +116,7 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 		}
 		if o.Location != nil {
 			l := o.Location
-			if domain.ValidateEvidencePath(l.Path) != nil || l.StartLine < 1 || l.EndLine < l.StartLine || l.ColumnUnit != "byte" || !hex64.MatchString(l.BlobSHA256) {
+			if o.Path == nil || *o.Path != l.Path || domain.ValidateEvidencePath(l.Path) != nil || l.StartCol < 0 || l.EndCol < 0 || l.StartLine < 1 || l.EndLine < l.StartLine || l.ColumnUnit != "byte" || !hex64.MatchString(l.BlobSHA256) {
 				return out, invalidf("observation location is malformed")
 			}
 			obs.Location = &ObservationLocation{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine, StartCol: l.StartCol, EndCol: l.EndCol, ColumnUnit: l.ColumnUnit, BlobSHA256: l.BlobSHA256}
@@ -154,6 +155,56 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 	}
 	out.Tool = &tc
 	return out, nil
+}
+
+// Validate the W08 cross-field contract before using an artifact for coverage
+// or a verdict. A well-formed envelope alone cannot attest to a clean run.
+func validateGoVetDocument(d *govet.Document, acceptedStatus string) error {
+	if !d.Outcome.TaskStatus.Terminal() || len(d.Observations) != d.Parse.Observations || d.Observations == nil || d.Inventory == nil || d.Executions == nil || d.Coverage.Packages == nil {
+		return invalidf("invalid go vet outcome, inventory or observation count")
+	}
+	unresolved := 0
+	for _, o := range d.Observations {
+		if o.LocationState != govet.LocationResolved {
+			unresolved++
+		}
+		if o.RawSeverity != nil || o.RawRef.StreamIndex < 0 || o.SuggestedFixes < 0 || !strings.HasPrefix(o.RawRef.JSONPointer, "/") {
+			return invalidf("invalid go vet observation metadata")
+		}
+	}
+	if unresolved != d.Parse.UnresolvedObservations || d.Coverage.GoFilesInScope < 0 || d.Coverage.IgnoredGoFiles < 0 || d.Coverage.UnlistedGoFiles < 0 || (d.Coverage.ProcessedGoFiles != nil && *d.Coverage.ProcessedGoFiles < 0) {
+		return invalidf("invalid go vet coverage counts")
+	}
+	states := map[string]int{}
+	for _, pkg := range d.Inventory {
+		states[pkg.State]++
+	}
+	if !maps.Equal(states, d.Coverage.Packages) {
+		return invalidf("go vet package counts do not match inventory")
+	}
+	if d.Outcome.TaskStatus != domain.TaskSucceeded {
+		if acceptedStatus == string(domain.TaskSucceeded) {
+			return invalidf("go vet result does not attest to accepted success")
+		}
+		return nil
+	}
+	expectedClass := govet.ExitSuccessWithoutFindings
+	if len(d.Observations) > 0 {
+		expectedClass = govet.ExitSuccessWithFindings
+	}
+	if !d.Parse.OK || d.Parse.UnparsedBytes != 0 || d.Outcome.PartialParse || d.Outcome.ExitClass != expectedClass || len(d.WorkspaceDrift) != 0 || states[govet.PackageAnalyzedClean]+states[govet.PackageAnalyzedWithFindings] == 0 {
+		return invalidf("incomplete go vet result claims success")
+	}
+	names := []string{"go.version", "go.modedit", "go.list", "go.vet"}
+	if len(d.Executions) != len(names) {
+		return invalidf("missing go vet execution")
+	}
+	for i, e := range d.Executions {
+		if names[i] != e.Name || e.Status != "exited" || e.ExitCode == nil || *e.ExitCode != 0 || e.Cleanup != "confirmed" || e.Stdout.Truncated || e.Stdout.Incomplete {
+			return invalidf("go vet claims success without clean executions")
+		}
+	}
+	return nil
 }
 
 func goVetFinding(ctx DecodeContext, obs []Observation) Finding {

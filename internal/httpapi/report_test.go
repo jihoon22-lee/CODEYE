@@ -113,7 +113,8 @@ func (e *env) driveAttempt(taskStatus string) attemptRun {
 	doc["task_key"], doc["snapshot_manifest_digest"] = "go-vet", a.sourceManifestSHA
 	for _, x := range doc["executions"].([]any) {
 		if ex := x.(map[string]any); ex["name"] == "go.vet" {
-			ex["stdout"].(map[string]any)["sha256"] = vetSHA
+			stream := ex["stdout"].(map[string]any)
+			stream["sha256"], stream["captured_bytes"], stream["total_bytes"] = vetSHA, len(stdout), len(stdout)
 		}
 	}
 	for _, o := range doc["observations"].([]any) {

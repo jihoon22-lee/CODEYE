@@ -462,12 +462,19 @@ func checkContribution(c Contribution, obsSeen, findSeen map[string]bool, arts m
 		}
 		local[o.ID] = true
 	}
+	artIDs := map[string]bool{}
+	for id := range arts {
+		artIDs[id] = true
+	}
 	localFind := map[string]bool{}
 	for _, f := range c.Findings {
 		if f.ID == "" || findSeen[f.ID] || localFind[f.ID] {
 			return invalidf("finding id %q is empty or duplicated", f.ID)
 		}
 		localFind[f.ID] = true
+		if err := validateFinding(f, snapshot, local, artIDs); err != nil {
+			return err
+		}
 		// Only a review decoder may produce anything but unreviewed findings.
 		if c.Review == nil && f.Validation != "unreviewed" {
 			return invalidf("tool-only finding must be unreviewed")
