@@ -98,7 +98,7 @@ func (s TaskStatus) Terminal() bool {
 var taskTransitions = map[TaskStatus][]TaskStatus{
 	TaskQueued:          {TaskRunning, TaskBlocked, TaskCancelled, TaskUnsupported, TaskSkippedPolicy, TaskBudgetExhausted},
 	TaskBlocked:         {TaskQueued, TaskFailed, TaskCancelled, TaskUnsupported, TaskSkippedPolicy, TaskBudgetExhausted},
-	TaskRunning:         {TaskSucceeded, TaskFailed, TaskTimedOut, TaskCancelled, TaskBudgetExhausted},
+	TaskRunning:         {TaskSucceeded, TaskFailed, TaskTimedOut, TaskCancelled, TaskBudgetExhausted, TaskUnsupported, TaskSkippedPolicy},
 	TaskSucceeded:       nil,
 	TaskFailed:          nil,
 	TaskTimedOut:        nil,

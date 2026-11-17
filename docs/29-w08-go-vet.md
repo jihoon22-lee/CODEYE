@@ -221,3 +221,7 @@ W09 계획 §6과 실제가 다른 부분이다. renderer 계약을 정할 때 �
 - **모듈 캐시:** 운영자가 준비한다. 캐시 무결성은 go.sum 대조에 의존하고 `GOSUMDB=off`다. 캐시를 쓰지 않는다는 보장은 OS 권한과 Go의 기본 읽기 전용 모드에 의존한다.
 - **W06 통합:** W06 agent/worker를 거친 end-to-end 실행, 서버 artifact 업로드, result manifest 생성은 W06 통합 후 검증한다. 이 문서의 시험은 handler를 직접 호출했다.
 - **품질:** 시험 통과는 Go vet의 결함 탐지 정확도나 CODEYE 분석 품질의 증거가 아니다. 진단 수가 늘어난 것을 품질 향상으로 해석하지 않는다.
+
+## W06 제품 워커 통합 시험
+
+`python3 scripts/test_postgres.py --nodes`에서 일반 빌드 에이전트에 Go 실행 파일과 전용 source root를 등록했다. 합성 Go 모듈 요청에서 실제 printf 관찰, 고정 입력 상대 위치, 게시한 observations bytes의 SHA-256과 원본 파일 불변을 확인했다. 시험용 handler로 배정된 노드에는 이 root 권한이 없다.
