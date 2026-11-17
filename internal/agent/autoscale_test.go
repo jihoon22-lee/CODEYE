@@ -180,3 +180,18 @@ func TestAutoscaleCommandsDrainAndRestartDedupe(t *testing.T) {
 		t.Fatalf("w5 started more than once:\n%s", logs2.String())
 	}
 }
+
+func TestStartNeedsDurableCommandCursor(t *testing.T) {
+	scaler := &ControllerScaler{Cap: 1}
+	ag := Agent{cfg: Config{Log: &lockedBuf{}}, journal: &Journal{}, scaler: scaler}
+	worker := domain.NewID()
+	command := nodeproto.Command{CommandID: domain.NewID(), Sequence: 1, Kind: nodeproto.CommandStartWorker, WorkerID: &worker}
+	if err := ag.applyCommand(command); err == nil || len(scaler.Plan(0, 0)) != 0 {
+		t.Fatal("a closed journal permitted a start")
+	}
+	// Compaction retains the sequence even after an old command ID has been dropped.
+	ag.journal.LastSequence = command.Sequence
+	if err := ag.applyCommand(command); err != nil || len(scaler.Plan(0, 0)) != 0 {
+		t.Fatal("a command below the durable cursor was replayed")
+	}
+}

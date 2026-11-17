@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -46,5 +47,22 @@ func TestAgentWithoutEnrollmentTokenExitsUsage(t *testing.T) {
 	code, _ := runNode(context.Background(), []string{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir()}, &bytes.Buffer{}, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "enroll-token-file") {
 		t.Fatalf("code %d: %s", code, stderr.String())
+	}
+}
+
+func TestAutoscalePreservesModelSourcePolicy(t *testing.T) {
+	root := "12345678-1234-4234-8234-123456789abc"
+	args := []string{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--autoscale",
+		"--model-source-root", root, "--opencode", filepath.Join(t.TempDir(), "opencode"), "--model", "test/sample"}
+	var stderr bytes.Buffer
+	code, _ := runNode(context.Background(), args, &bytes.Buffer{}, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "model source root must have a local source mapping") {
+		t.Fatalf("unconfigured model-source-root: %d %s", code, stderr.String())
+	}
+	args = append(args, "--source-root", root+"="+t.TempDir())
+	stderr.Reset()
+	code, _ = runNode(context.Background(), args, &bytes.Buffer{}, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "enroll-token-file") {
+		t.Fatalf("approved model-source-root: %d %s", code, stderr.String())
 	}
 }

@@ -406,6 +406,10 @@ paths:
               type: object
               additionalProperties: false
               required: [protocol_version, observed_workers, capacity, capabilities, last_command_sequence]
+              allOf:
+                - if: {required: [worker_scaling], properties: {worker_scaling: {const: controller}}}
+                  then: {required: [max_workers], properties: {max_workers: {minimum: 1}}}
+                  else: {properties: {max_workers: {const: 0}}}
               properties:
                 protocol_version: {const: '0.1'}
                 observed_workers:
@@ -436,7 +440,7 @@ paths:
                   uniqueItems: true
                   items: {type: string, pattern: '^(analysis:[a-z][a-z0-9-]{0,63}|source:local:[0-9a-f-]{36}|source:git:[a-z0-9.:-]+)$'}
                 worker_scaling: {enum: [static, controller], default: static}
-                max_workers: {type: integer, minimum: 1, maximum: 64, description: controller 모드의 노드별 워커 수 상한}
+                max_workers: {type: integer, minimum: 0, maximum: 64, description: controller 모드에서 1~64 필수. static 모드에서는 생략 또는 0.}
                 last_command_sequence: {type: integer, minimum: 0}
                 cleanup_reports:
                   type: array

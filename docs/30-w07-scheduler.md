@@ -37,6 +37,10 @@ codeye serve --reconcile-interval 5s
 
 migration 0004는 기존 등록 노드를 고정 모드로 유지하고 pool마다 기본 revision과 조정 상태를 추가한다. 0003에 데이터가 있는 DB의 이행·재적용·오류 rollback·구버전 거부 시험은 `migrations/w07_integration_test.go`에 있다.
 
+W08 제품 워커도 별도 소스 root에서 `--go`와 `--autoscale`로 기동해 실제 printf 진단의 위치와 산출물 해시를 확인한다. W11의 모델 전송 승인은 각 로컬 root별로 적용한다. CLI 시험은 등록되지 않은 root를 거부하고 명시적으로 등록한 root에서 다음 등록 단계로 진행하는지 검사한다.
+
+2026-11-18 WSL2 Linux 6.18, Go 1.27.4, PostgreSQL 17.10에서 `python3 scripts/test_postgres.py --web --nodes --scheduler`가 종료 코드 0을 반환했다. race 시험이 있는 Go 패키지 19개, 실제 Chromium 시험 1개가 통과했다. 두 자동 모드 노드의 최초 능력 광고부터 lease 만료 시험 종료까지 136초가 걸렸다. TC-71에서 시작과 종료 명령은 각각 두 개였다.
+
 ## 검증 범위
 
-실프로세스 시험은 Linux/WSL2 한 호스트의 복수 에이전트에서 수행한다. Windows 교차 빌드와 정적 검사는 플랫폼별 서버 운영 시험을 대신하지 않는다. 별도 물리 호스트 사이의 네트워크 분할, RHEL 실행과 장애 시 노드 디스크 손실은 검증 범위 밖이다. 불확실한 정리는 W06의 `recovery_required`와 예약을 유지한다. 자원 예약은 입장 제어에 사용하며 OS hard limit을 보증하지 않는다. 모델 endpoint 동시 실행 제한·예약 run과 pool 관리 웹/API는 별도 구현 범위다.
+실프로세스 시험은 Linux/WSL2 한 호스트의 복수 에이전트에서 수행한다. Windows 실행 파일의 CLI 인수와 모델 소스 승인 검사는 WSL interop으로 기동해 확인했다. Windows 전체 자동 증감 운영 시험은 미실행이다. 별도 물리 호스트 사이의 네트워크 분할, RHEL 실행과 장애 시 노드 디스크 손실은 검증 범위 밖이다. 불확실한 정리는 W06의 `recovery_required`와 예약을 유지한다. 자원 예약은 입장 제어에 사용하며 OS hard limit을 보증하지 않는다. 모델 endpoint 동시 실행 제한·예약 run과 pool 관리 웹/API는 별도 구현 범위다.

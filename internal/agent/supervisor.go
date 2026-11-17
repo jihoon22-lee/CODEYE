@@ -464,7 +464,7 @@ func (ag *Agent) forwardComplete(w *workerProc, v *workerproto.Complete) {
 	outcome := v.Outcome
 	if err != nil {
 		outcome = "rejected"
-		ag.log("warn", "complete_rejected", "attempt_id", v.AttemptID, "code", replyCode(err))
+		ag.log("warn", "complete_rejected", "attempt_id", v.AttemptID, "reply_code", replyCode(err))
 		// Report the real cleanup through the heartbeat (stale lease path).
 		method := v.CleanupMethod
 		if method == "" {

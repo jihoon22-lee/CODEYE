@@ -441,7 +441,7 @@ func (ag *Agent) heartbeat(ctx context.Context) error {
 	defer cancel()
 	resp, err := ag.client.Heartbeat(hctx, req)
 	if err != nil {
-		ag.log("warn", "heartbeat_failed", "code", replyCode(err))
+		ag.log("warn", "heartbeat_failed", "reply_code", replyCode(err))
 		return err
 	}
 	ag.mu.Lock()
@@ -457,13 +457,15 @@ func (ag *Agent) heartbeat(ctx context.Context) error {
 		if r.Code != nil {
 			code = *r.Code
 		}
-		ag.log("info", "cleanup_reported", "attempt_id", r.AttemptID, "accepted", fmt.Sprint(r.Accepted), "code", code)
+		ag.log("info", "cleanup_reported", "attempt_id", r.AttemptID, "accepted", fmt.Sprint(r.Accepted), "reply_code", code)
 		if ag.reportSettled(r, code) {
 			_ = ag.journal.Append(Record{Kind: RecCleanupAcked, AttemptID: r.AttemptID})
 		}
 	}
 	for _, c := range resp.Commands {
-		ag.applyCommand(c)
+		if err := ag.applyCommand(c); err != nil {
+			return err // Leave this command and the rest of the batch unacknowledged.
+		}
 	}
 	ag.kick()
 	return nil
@@ -490,7 +492,7 @@ func (ag *Agent) reportSettled(r nodeproto.CleanupResult, code string) bool {
 			}
 		})
 		if !verified.IsZero() && time.Since(verified) > reportResendWindow {
-			ag.log("error", "cleanup_report_abandoned", "attempt_id", r.AttemptID, "code", code)
+			ag.log("error", "cleanup_report_abandoned", "attempt_id", r.AttemptID, "reply_code", code)
 			return true
 		}
 		return false
@@ -499,11 +501,20 @@ func (ag *Agent) reportSettled(r nodeproto.CleanupResult, code string) bool {
 	return true
 }
 
-func (ag *Agent) applyCommand(c nodeproto.Command) {
+func (ag *Agent) applyCommand(c nodeproto.Command) error {
 	applied := false
-	ag.journal.With(func(j *Journal) { _, applied = j.Commands[c.CommandID] })
+	ag.journal.With(func(j *Journal) {
+		_, applied = j.Commands[c.CommandID]
+		applied = applied || c.Sequence <= j.LastSequence
+	})
 	if applied {
-		return
+		return nil
+	}
+	// The command cursor must be durable before its worker can start.
+	// A crash before spawn is recovered by the controller's bounded start timeout.
+	if err := ag.journal.Append(Record{Kind: RecCommandApplied, CommandID: c.CommandID, Sequence: c.Sequence}); err != nil {
+		ag.log("error", "command_journal_failed", "command_id", c.CommandID, "kind", c.Kind)
+		return err
 	}
 	ag.mu.Lock()
 	switch c.Kind {
@@ -531,8 +542,8 @@ func (ag *Agent) applyCommand(c nodeproto.Command) {
 		}
 	}
 	ag.mu.Unlock()
-	_ = ag.journal.Append(Record{Kind: RecCommandApplied, CommandID: c.CommandID, Sequence: c.Sequence})
 	ag.log("info", "command_applied", "command_id", c.CommandID, "kind", c.Kind)
+	return nil
 }
 
 func (ag *Agent) sendCancelLocked(w *workerProc, att *activeAttempt, reason string) {
@@ -660,7 +671,7 @@ func (ag *Agent) claimFor(w *workerProc, key string) {
 	}
 	if err != nil || resp == nil {
 		if err != nil {
-			ag.log("warn", "claim_failed", "worker_id", w.id, "code", replyCode(err))
+			ag.log("warn", "claim_failed", "worker_id", w.id, "reply_code", replyCode(err))
 		}
 		// Re-armed by the next heartbeat that reports the worker idle.
 		return

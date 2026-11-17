@@ -262,7 +262,9 @@ def run(base, root, env):
         complete_409 = [json.loads(line) for line in (directory / "controller2.log").read_text().splitlines()
                         if '"route":"attempts.complete"' in line]
         assert any(e.get("status") == 409 for e in complete_409), complete_409
-        assert '"code":"lease_lost"' in agent_log2.read_text() and "complete_rejected" in agent_log2.read_text()
+        attempt_events = [json.loads(line) for line in agent_log2.read_text().splitlines()]
+        codes = {event.get("code") for event in attempt_events if event.get("attempt_id") == attempt}
+        assert {"lease_lost", "complete_rejected"} <= codes, codes
         assert count(f"SELECT count(*) FROM attempts WHERE run_id='{stale}'") == 1
         log("TC-75 late complete 409 after lease expiry, run failed after confirmed cleanup: ok")
 

@@ -101,7 +101,13 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	for _, id := range modelRoots {
 		approved[id] = true
 	}
-	cfg := agent.Config{ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile, SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers, ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, Log: stderr}
+	cfg := agent.Config{
+		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
+		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
+		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache,
+		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved,
+		Log: stderr,
+	}
 	ag, err := agent.New(cfg)
 	if err == nil {
 		err = ag.Run(ctx)
