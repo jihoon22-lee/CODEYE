@@ -1,6 +1,6 @@
 # 26. W05 NativeExecutor
 
-상태: W05 Linux 실제 subprocess 검증 완료 · Windows는 교차 컴파일·vet만 로컬 확인, 실행 시험은 CI `windows-2025` 결과로 판정 · 2026-11-18. agent·worker protocol(W06), 분석기 어댑터(W08)는 구현하지 않았다.
+상태: W05 Linux 실제 subprocess 검증 완료 · Windows `windows-2025` CI 실행 통과, Windows 호스트 build 26200 실기 추가 검증 · 2026-11-18. agent·worker protocol(W06), 분석기 어댑터(W08)는 구현하지 않았다.
 
 ## 1. 범위와 요구사항
 
@@ -101,7 +101,7 @@ Linux·Windows 외 OS는 `platform_unsupported`로 실행하지 않는다.
 - 그룹 대신 주 프로세스에만 신호: 트리 시험 3개 실패.
 - 첫 `/proc` 조사 실패 시 신호 없이 반환: EMFILE 시험 실패.
 - 긴 값 우선 정렬 제거: 포함 관계 시험 실패.
-- 잘린 접두사 제거 생략: cap 경계 시험 실패. **Windows 실행 시험은 로컬 미실행**이며 CI `windows-2025` 결과가 나오기 전까지 Windows 동작을 검증됐다고 표시하지 않는다. RHEL 8.10 실기 시험도 미실행이다.
+- 잘린 접두사 제거 생략: cap 경계 시험 실패. **Windows 실행 시험은 CI `windows-2025`에서 통과**했다([실행 44123825946](https://github.com/jihoon22-lee/CODEYE/actions/runs/44123825946)). 같은 CI에서 Linux PostgreSQL/race/브라우저·계약, 웹 단위 시험과 build도 통과했다. 추가로 Windows NT 10.0 build 26200에서 WSL interop을 통해 기존 W05 테스트 `.exe`를 실제 실행해 통과했다. 로컬 Windows symlink 권한이 없어 symlink 관련 두 시험은 skip이며, 해당 제한을 성공으로 계산하지 않는다. RHEL 8.10 실기 시험도 미실행이다.
 
 ## 7. 남은 제한
 
