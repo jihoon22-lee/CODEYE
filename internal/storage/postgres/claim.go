@@ -35,10 +35,10 @@ type candidate struct {
 	// dispatchedAt is the project's last claim time (-infinity if never):
 	// the first key of the round-robin order (W07 fairness).
 	dispatchedAt pgtype.Timestamptz
-	request                   domain.RunRequest
-	source                    domain.Source
-	gitHost                   string
-	snapshotID                *string
+	request      domain.RunRequest
+	source       domain.Source
+	gitHost      string
+	snapshotID   *string
 }
 
 // nodeView is a node's scheduling state. Accounting model (docs/09): CPU is a

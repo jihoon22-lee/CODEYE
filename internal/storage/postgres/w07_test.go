@@ -447,7 +447,11 @@ func TestHeartbeatScalingValidation(t *testing.T) {
 	n := e.enroll("a", e.root.ID)
 	for _, bad := range []nodeproto.NodeHeartbeatRequest{
 		func() nodeproto.NodeHeartbeatRequest { in := hb(nil, "", nil); in.WorkerScaling = "auto"; return in }(),
-		func() nodeproto.NodeHeartbeatRequest { in := hb(nil, "", nil); in.WorkerScaling = "controller"; return in }(),
+		func() nodeproto.NodeHeartbeatRequest {
+			in := hb(nil, "", nil)
+			in.WorkerScaling = "controller"
+			return in
+		}(),
 		func() nodeproto.NodeHeartbeatRequest { in := hb(nil, "", nil); in.MaxWorkers = 2; return in }(),
 		func() nodeproto.NodeHeartbeatRequest {
 			in := hb(nil, "", nil)
