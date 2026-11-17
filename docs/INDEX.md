@@ -41,6 +41,7 @@
 | [22 W02 착수 준비](22-w02-preparation.md) | 도메인·DB 범위, 트랜잭션 시험과 착수 전 결정 항목 |
 | [23 W02 저장 계약](23-w02-storage.md) | 도메인·migration·ACL·lease·근거 metadata와 실제 DB 시험 |
 | [24 W03 API·인증](24-w03-api.md) | loopback 세션·프로젝트/run·브라우저 통합 검증 |
+| [25 W04 소스 확보](25-w04-source.md) | Git/local 고정·manifest·독립 workspace·경계 시험 |
 
 ## 기계 판독 계약과 예시
 
@@ -54,3 +55,5 @@
 - [프롬프트 팩 기본 지침](../prompts/review-v1/00-core.md), [팩 manifest](../prompts/review-v1/pack.yaml).
 
 기술 검토자는 02→04→07→10→12→16, 실행기 구현자는 03→05→08→09→11→18, 제품 구현자는 00→01→12→17 순서로 읽는 것을 권장한다.
+
+- [Snapshot manifest Schema](../schemas/snapshot-manifest.schema.json), [local 예시](../examples/snapshot-manifest.json), [Git 예시](../examples/snapshot-manifest-git.json).

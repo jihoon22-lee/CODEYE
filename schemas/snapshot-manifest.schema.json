@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codeye.invalid/schemas/snapshot-manifest.schema.json",
+  "title": "CODEYE source snapshot manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "consistency",
+    "source_fixed_at",
+    "entries",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "kind": {
+      "enum": [
+        "local",
+        "git"
+      ]
+    },
+    "consistency": {
+      "enum": [
+        "stable_copy_best_effort",
+        "git_commit"
+      ]
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "source_branch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Git only: the requested branch name. Never a URL, remote name or credential."
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Git only: when the acquisition was requested (before the commit was observed). source_fixed_at is when the manifest was finalized."
+    },
+    "source_fixed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 50000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "kind",
+          "size_bytes",
+          "mode"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "directory",
+              "symlink",
+              "special",
+              "submodule",
+              "lfs_pointer"
+            ]
+          },
+          "size_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "mode": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 511
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "encoding": {
+            "enum": [
+              "utf-8",
+              "binary_or_unknown"
+            ]
+          },
+          "excluded_reason": {
+            "enum": [
+              "generated_or_cache",
+              "credential_directory",
+              "secret_file_policy",
+              "link_not_followed",
+              "special_file_not_copied",
+              "submodule_not_acquired"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "file",
+                    "lfs_pointer"
+                  ]
+                }
+              },
+              "not": {
+                "required": [
+                  "excluded_reason"
+                ]
+              }
+            },
+            "then": {
+              "required": [
+                "sha256",
+                "encoding"
+              ],
+              "properties": {
+                "size_bytes": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "local_copy_is_not_atomic",
+          "excluded_links_and_special_files_are_not_analyzed",
+          "submodule_objects_not_acquired",
+          "lfs_objects_not_acquired"
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "git"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "source_sha",
+          "source_branch",
+          "requested_at"
+        ],
+        "properties": {
+          "consistency": {
+            "const": "git_commit"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "consistency": {
+            "const": "stable_copy_best_effort"
+          }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "source_sha"
+              ]
+            },
+            {
+              "required": [
+                "source_branch"
+              ]
+            },
+            {
+              "required": [
+                "requested_at"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "description": "Stored as canonical JSON (sorted keys, no whitespace). The snapshot input digest is the SHA-256 of these exact bytes, so it covers source_fixed_at, requested_at and limitations: a new acquisition gets a new digest, a retained snapshot keeps its own."
+}
