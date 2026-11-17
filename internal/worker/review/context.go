@@ -1,0 +1,183 @@
+// Package review composes the static analyzer with bounded model tasks on the
+// same immutable snapshot. Source text is data and cannot select tools or roles.
+package review
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"regexp"
+	"slices"
+	"sort"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
+)
+
+const maxFiles = 6
+const maxContextBytes = 12000
+const maxFileBytes = 512 << 10
+
+type Excerpt struct {
+	ID     string `json:"id"`
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Start  int    `json:"start_line"`
+	End    int    `json:"end_line"`
+	Kind   string `json:"kind"`
+	Text   string `json:"text,omitempty"`
+}
+type Corpus struct {
+	Snapshot    string    `json:"snapshot_manifest_digest"`
+	Excerpts    []Excerpt `json:"excerpts"`
+	Eligible    int       `json:"eligible_files"`
+	Documents   int       `json:"selected_documents"`
+	Limitations []string  `json:"limitations"`
+}
+
+var sensitiveText = regexp.MustCompile(`(?i)(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-[A-Za-z0-9_-]{12,}|\bgh[pousr]_[A-Za-z0-9_]{16,}|authorization\s*[:=]\s*["']?(bearer|basic)\s+[^\s"']{8,}|(?:api[_-]?key|password|client_secret)\s*[:=]\s*["'][A-Za-z0-9+/_.=-]{12,}["'])`)
+
+func inScope(name string, scope domain.Scope) bool {
+	if scope.Kind == "full" {
+		return true
+	}
+	if scope.Kind != "paths" {
+		return false
+	}
+	for _, prefix := range scope.Paths {
+		if name == prefix || strings.HasPrefix(name, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func priority(name string) (rank int, kind string) {
+	base := strings.ToLower(path.Base(name))
+	switch {
+	case base == "readme.md" || base == "agents.md":
+		return 1, "document"
+	case base == "main.go":
+		return 0, "code"
+	case strings.HasSuffix(base, ".go") && !strings.HasSuffix(base, "_test.go"):
+		return 2, "code"
+	case base == "go.mod":
+		return 3, "config"
+	case strings.HasSuffix(base, "_test.go"):
+		return 4, "test"
+	default:
+		return 5, ""
+	}
+}
+
+func buildCorpus(snapshot source.Snapshot, scope domain.Scope) (Corpus, error) {
+	c := Corpus{Snapshot: snapshot.Digest, Excerpts: []Excerpt{}, Limitations: []string{}}
+	root, err := os.OpenRoot(snapshot.SnapshotDir)
+	if err != nil {
+		return c, err
+	}
+	defer root.Close()
+	type selected struct {
+		entry source.Entry
+		rank  int
+		kind  string
+	}
+	var options []selected
+	for _, e := range snapshot.Manifest.Entries {
+		if e.Kind != "file" || e.SHA256 == "" || e.Size == nil || e.ExcludedReason != "" || !inScope(e.Path, scope) {
+			continue
+		}
+		r, k := priority(e.Path)
+		if k == "" {
+			continue
+		}
+		options = append(options, selected{e, r, k})
+	}
+	c.Eligible = len(options)
+	sort.Slice(options, func(i, j int) bool {
+		a, b := options[i], options[j]
+		if a.rank != b.rank {
+			return a.rank < b.rank
+		}
+		if strings.Count(a.entry.Path, "/") != strings.Count(b.entry.Path, "/") {
+			return strings.Count(a.entry.Path, "/") < strings.Count(b.entry.Path, "/")
+		}
+		return a.entry.Path < b.entry.Path
+	})
+	remain := maxContextBytes
+	for _, o := range options {
+		if len(c.Excerpts) >= maxFiles || remain < 128 {
+			break
+		}
+		e := o.entry
+		if o.kind == "document" && c.Documents >= 2 {
+			continue
+		}
+		if domain.ValidateEvidencePath(e.Path) != nil || *e.Size > maxFileBytes {
+			continue
+		}
+		f, err := root.Open(e.Path)
+		if err != nil {
+			return c, err
+		}
+		b, err := io.ReadAll(io.LimitReader(f, maxFileBytes+1))
+		f.Close()
+		if err != nil {
+			return c, err
+		}
+		sum := sha256.Sum256(b)
+		if int64(len(b)) != *e.Size || hex.EncodeToString(sum[:]) != e.SHA256 {
+			return c, errors.New("snapshot_integrity_failed")
+		}
+		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || sensitiveText.Match(b) {
+			continue
+		}
+		var lines []string
+		used := 0
+		for _, line := range strings.Split(strings.TrimSuffix(string(b), "\n"), "\n") {
+			if len(lines) >= 50 || used+len(line)+1 > min(remainingPerFile(o.kind), remain) {
+				break
+			}
+			lines = append(lines, line)
+			used += len(line) + 1
+		}
+		if len(lines) == 0 || used <= 1 {
+			continue
+		}
+		id := domain.Digest([]byte(fmt.Sprintf("%s\x00%s\x00%s\x001:%d", snapshot.Digest, e.Path, e.SHA256, len(lines))))
+		c.Excerpts = append(c.Excerpts, Excerpt{ID: "ev_" + id[:24], Path: e.Path, SHA256: e.SHA256, Start: 1, End: len(lines), Kind: o.kind, Text: strings.Join(lines, "\n")})
+		remain -= used
+		if o.kind == "document" {
+			c.Documents++
+		}
+		if used < len(b) {
+			c.Limitations = append(c.Limitations, "excerpt_only")
+		}
+	}
+	if c.Documents == 0 {
+		c.Limitations = append(c.Limitations, "no_document_in_selected_context")
+	}
+	if c.Eligible > len(c.Excerpts) {
+		c.Limitations = append(c.Limitations, "files_outside_review_context")
+	}
+	sort.Strings(c.Limitations)
+	c.Limitations = slices.Compact(c.Limitations)
+	if len(c.Excerpts) == 0 {
+		return c, errors.New("no_review_context")
+	}
+	return c, nil
+}
+
+func remainingPerFile(kind string) int {
+	if kind == "document" {
+		return 1200
+	}
+	return 3200
+}

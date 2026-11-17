@@ -5,10 +5,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/agent"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
@@ -46,7 +49,11 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	// Do not echo rejected arguments: they may contain credentials.
 	fs.SetOutput(io.Discard)
-	var roots, gitHosts multiFlag
+	var roots, gitHosts, modelRoots multiFlag
+	modelExe := fs.String("opencode", "", "")
+	modelName := fs.String("model", "", "")
+	modelRelay := fs.String("model-relay-file", "", "")
+	fs.Var(&modelRoots, "model-source-root", "")
 	controller := fs.String("controller", "", "")
 	stateDir := fs.String("state-dir", "", "")
 	name := fs.String("name", "", "")
@@ -76,7 +83,11 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		}
 		mapping[strings.ToLower(id)] = filepath.Clean(path)
 	}
-	cfg := agent.Config{ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile, SourceRoots: mapping, Workers: *workers, ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, Log: stderr}
+	approved := map[string]bool{}
+	for _, id := range modelRoots {
+		approved[id] = true
+	}
+	cfg := agent.Config{ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile, SourceRoots: mapping, Workers: *workers, ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, Log: stderr}
 	ag, err := agent.New(cfg)
 	if err == nil {
 		err = ag.Run(ctx)
@@ -101,6 +112,11 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 // W08 has none, so the worker advertises no capability and is never leased.
 func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
 	hs, missing := builtin.Handlers(ctx, builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, ProbeDir: h.ScratchRoot}, runner)
+	for i, handler := range hs {
+		if handler.Info().Name == "go-vet" {
+			hs[i] = review.Handler{Static: handler, Caller: opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}}
+		}
+	}
 	var codes []string
 	for _, m := range missing {
 		codes = append(codes, m.Name+":"+m.Reason)

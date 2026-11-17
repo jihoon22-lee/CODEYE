@@ -71,6 +71,9 @@ type Limits struct {
 
 // Hello is the first agent→worker message.
 type Hello struct {
+	ModelExecutable string `json:"model_executable,omitempty"`
+	ModelName       string `json:"model_name,omitempty"`
+	ModelRelayFile  string `json:"model_relay_file,omitempty"`
 	Header
 	Protocol           string `json:"protocol"`
 	WorkerID           string `json:"worker_id"`
@@ -111,6 +114,7 @@ type JobSnapshot struct {
 
 // Job hands one claimed attempt to the worker.
 type Job struct {
+	AllowModelReview bool `json:"allow_model_review,omitempty"`
 	Header
 	Attempt   AttemptRef      `json:"attempt"`
 	Profile   string          `json:"profile"`
