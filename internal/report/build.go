@@ -151,9 +151,13 @@ func Build(in Input, reg *Registry) (Report, error) {
 			if st.manifest == nil {
 				continue
 			}
-			ctx := DecodeContext{RunID: in.Run.ID, AttemptID: in.Attempt.ID, Snapshot: in.Snapshot, Task: st.facts, TaskExecutionID: TaskExecutionID(in.Attempt.ID, st.facts.ID, max64(st.facts.ExecutionOrdinal, 1)), Executions: map[string]ExecutionRef{}, Source: index}
-			for _, e := range st.manifest.Executions {
-				ref := ExecutionRef{ID: k + "/" + e.Name, Manifest: e}
+			ctx := DecodeContext{RunID: in.Run.ID, AttemptID: in.Attempt.ID, Snapshot: in.Snapshot, Task: st.facts, TaskExecutionID: TaskExecutionID(in.Attempt.ID, st.facts.ID, st.facts.ExecutionOrdinal), Executions: map[string]ExecutionRef{}, Source: index}
+			for i, e := range st.manifest.Executions {
+				id := k + "/" + e.Name
+				if e.Name == "unreported" {
+					id += "/" + itoa(i+1)
+				}
+				ref := ExecutionRef{ID: id, Manifest: e}
 				if e.StdoutArtifactID != nil {
 					a := artByID[*e.StdoutArtifactID]
 					ref.Stdout = &a
@@ -271,7 +275,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	}
 
 	// Status from structured facts only.
-	readable, requiredMissing, rejected := false, false, false
+	readable, requiredMissing, incompleteResult := false, false, false
 	for _, k := range keys {
 		st := states[k]
 		if st.facts.Status == string(domain.TaskSucceeded) && rm != nil && !st.rejected {
@@ -280,8 +284,12 @@ func Build(in Input, reg *Registry) (Report, error) {
 		if st.facts.Required && st.facts.Status != string(domain.TaskSucceeded) {
 			requiredMissing = true
 		}
+		if st.facts.Required && st.facts.Status == string(domain.TaskSucceeded) && !st.decoded {
+			lim.add(LimArtifactMissing + ":" + k)
+			incompleteResult = true
+		}
 		if st.rejected {
-			rejected = true
+			incompleteResult = true
 		}
 	}
 	if requiredMissing {
@@ -290,7 +298,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	if in.Attempt.Cleanup != "confirmed" || (rm != nil && rm.CleanupState != "confirmed") {
 		lim.add(LimCleanupUncertain)
 	}
-	r.Status = decideStatus(in.Run.FinalStatus, readable, requiredMissing || rejected || lim.has(LimCleanupUncertain), r.Coverage.AIReview.Status)
+	r.Status = decideStatus(in.Run.FinalStatus, readable, requiredMissing || incompleteResult || lim.has(LimCleanupUncertain), r.Coverage.AIReview.Status)
 	switch r.Status {
 	case StatusCancelled:
 		lim.add(LimRunCancelled)
@@ -395,12 +403,15 @@ func acceptResultManifest(in Input, arts map[string]ArtifactRef, states map[stri
 		if t.Status == domain.TaskSucceeded && st.facts.Status != string(domain.TaskSucceeded) {
 			return m, "task_status_upgrade"
 		}
+		if st.facts.ExecutionOrdinal < 1 && (len(t.Executions) > 0 || len(t.Artifacts) > 0) {
+			return m, "task_execution_missing"
+		}
 		for _, e := range t.Executions {
-			for _, id := range []*string{e.StdoutArtifactID, e.StderrArtifactID} {
+			for role, id := range map[string]*string{"stdout": e.StdoutArtifactID, "stderr": e.StderrArtifactID} {
 				if id == nil {
 					continue
 				}
-				if x, ok := arts[*id]; !ok || (x.Role != "stdout" && x.Role != "stderr") {
+				if x, ok := arts[*id]; !ok || x.Role != role {
 					return m, "execution_artifact_unbound"
 				}
 			}
@@ -476,7 +487,7 @@ func checkContribution(c Contribution, obsSeen, findSeen map[string]bool, arts m
 					return invalidf("code evidence path/hash is not in the source manifest")
 				}
 			case "tool", "execution":
-				if _, ok := arts[e.ArtifactID]; !ok || e.TaskExecutionID == "" {
+				if _, ok := arts[e.ArtifactID]; !ok || e.TaskExecutionID != ctx.TaskExecutionID {
 					return invalidf("tool evidence is not bound to an attempt artifact")
 				}
 			}
@@ -561,7 +572,7 @@ func DecideVerdict(status string, s Summary, ai string) string {
 	switch {
 	case s.ActionableFindings > 0:
 		return VerdictAttention
-	case status != StatusCompleted, ai != AIReviewPerformed, s.PendingCandidates > 0:
+	case status != StatusCompleted, ai != AIReviewPerformed, s.PendingCandidates > 0, s.UnresolvedObservations > 0:
 		return VerdictInconclusive
 	}
 	return VerdictNoActionable
@@ -670,13 +681,6 @@ func itoa(n int) string {
 		}
 	}
 	return string(b[i:])
-}
-
-func max64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func sourceKind(consistency string) string {

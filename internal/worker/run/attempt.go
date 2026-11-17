@@ -341,7 +341,20 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 	}
 	outcome, reason := decideOutcome(tasks)
 	if outcome == nodeproto.OutcomeFailed {
-		return outcome, reason, nil
+		// Tasks ran but none succeeded: still upload the result manifest so the
+		// controller can report the real task states, raw streams and gaps (W09).
+		// The run is not advanced to finalizing; an upload failure only drops
+		// the manifest, never changes the failed outcome.
+		cleanup, _ := w.cleanupState(a)
+		path, err := w.writeManifest(a, handler, tasks, cleanup)
+		if err != nil {
+			return outcome, reason, nil
+		}
+		if _, err := w.uploadManifest(a, path); err != nil {
+			return outcome, reason, nil
+		}
+		cid := a.manifestClientID
+		return outcome, reason, &cid
 	}
 	if _, err := w.event(a, nodeproto.EventRunAdvance, nodeproto.RunAdvancePayload{Status: string(domain.RunFinalizing)}, ""); err != nil {
 		return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil

@@ -458,7 +458,7 @@ func DecodeManifest(b []byte) (Manifest, error) {
 	var manifest Manifest
 	decoder := json.NewDecoder(bytes.NewReader(b))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&manifest); err != nil || decoder.More() || validateManifest(manifest) != nil {
+	if err := decoder.Decode(&manifest); err != nil || !json.Valid(b) || validateManifest(manifest) != nil {
 		return Manifest{}, ErrIntegrity
 	}
 	return manifest, nil

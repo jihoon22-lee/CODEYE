@@ -285,14 +285,53 @@ paths:
       - {$ref: '#/components/parameters/RunId'}
     get:
       operationId: getReport
+      x-codeye-status: implemented-w09
+      description: 프로젝트 읽기 권한으로 고정된 revision을 조회한다. 기본 내보내기는 도구 원문과 코드 인용을 생략한다.
       parameters:
-        - {name: revision, in: query, schema: {type: integer, minimum: 1}}
+        - {name: revision, in: query, schema: {type: integer, minimum: 1, maximum: 1000000}}
+        - {name: format, in: query, schema: {enum: [json, markdown, html], default: json}}
+        - {name: include_code, in: query, schema: {type: boolean, default: false}}
       responses:
         '200':
-          description: 검증된 report revision
+          description: 검증된 보고서. X-CODEYE-Report-SHA256은 같은 내보내기 옵션의 JSON 해시이고 ETag는 요청 형식의 응답 해시다.
           content:
             application/json:
               schema: {$ref: '../schemas/report.schema.json'}
+            text/markdown: {schema: {type: string}}
+            text/html: {schema: {type: string}}
+        '404': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/runs/{run_id}/reports:
+    parameters:
+      - {$ref: '#/components/parameters/RunId'}
+    get:
+      operationId: listReports
+      x-codeye-status: implemented-w09
+      responses:
+        '200':
+          description: 프로젝트 읽기 권한으로 확인한 revision 목록. 게시 전에는 빈 목록이다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, latest_revision, formats, default_include_code]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, revision, status, quality_verdict, sha256, size_bytes, created_at]
+                      properties:
+                        id: {type: string}
+                        revision: {type: integer, minimum: 1}
+                        status: {enum: [completed, partial, failed, cancelled]}
+                        quality_verdict: {enum: [attention_required, no_actionable_findings, inconclusive]}
+                        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+                        size_bytes: {type: integer}
+                        created_at: {type: string, format: date-time}
+                  latest_revision: {type: [integer, 'null']}
+                  formats: {type: array, items: {enum: [json, markdown, html]}}
+                  default_include_code: {const: false}
         '404': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/runs/{run_id}/events:
@@ -832,7 +871,7 @@ components:
         capability_gaps:
           type: array
           description: >-
-            source_access_unverified(등록은 소스 접근을 확인하지 않음)와 report_unavailable(W09 전)은 항상 포함한다.
+            source_access_unverified는 등록 시 소스 접근을 확인하지 않았음을 표시한다. report_unavailable은 이 프로젝트에 게시된 보고서가 없을 때 포함한다.
             execution_unavailable은 철회되지 않은 등록 노드가 하나도 없을 때만 포함한다(W06). 특정 run의 배치 가능 여부는
             run의 progress.waiting_reason으로 따로 보고한다.
           items: {enum: [source_access_unverified, execution_unavailable, report_unavailable]}
@@ -871,6 +910,14 @@ components:
         version: {type: integer, minimum: 1}
         snapshot_id: {type: [string, 'null']}
         quality_verdict: {enum: [attention_required, no_actionable_findings, inconclusive, null]}
+        report:
+          type: [object, 'null']
+          required: [revision, status, sha256, url]
+          properties:
+            revision: {type: integer, minimum: 1}
+            status: {enum: [completed, partial, failed, cancelled]}
+            sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+            url: {type: string}
         progress:
           type: object
           required: [stage, plan_revision, completed_tasks, total_tasks, estimated_percent, waiting_reason]

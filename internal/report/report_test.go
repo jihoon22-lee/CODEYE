@@ -224,7 +224,7 @@ func has(list []string, v string) bool {
 	return false
 }
 
-// TC-71: real W08 observations become bound observations and unreviewed
+// TC-80: real W08 observations become bound observations and unreviewed
 // findings; the report is partial and inconclusive because AI review is absent.
 func TestBuildFromRealGoVetDocument(t *testing.T) {
 	f := newFixture(t, goVet(t))
@@ -264,7 +264,7 @@ func TestBuildFromRealGoVetDocument(t *testing.T) {
 	}
 }
 
-// TC-73: same input -> same bytes; the input digest ignores id/revision/time.
+// TC-82: same input -> same bytes; the input digest ignores id/revision/time.
 func TestBuildDeterministic(t *testing.T) {
 	f := newFixture(t, goVet(t))
 	a, _ := Marshal(build(t, f.in, DefaultRegistry()))
@@ -321,7 +321,7 @@ func withReview(t *testing.T, statuses map[string]string) *fixture {
 	return f
 }
 
-// TC-72: completion and a clean verdict need succeeded review tasks whose
+// TC-81: completion and a clean verdict need succeeded review tasks whose
 // bytes a registered decoder accepted; W09 registers none.
 func TestAIReviewGate(t *testing.T) {
 	all := map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"}
@@ -360,6 +360,7 @@ func TestVerdictRules(t *testing.T) {
 		{StatusCompleted, Summary{}, AIReviewPerformed, VerdictNoActionable},
 		{StatusCompleted, Summary{PendingCandidates: 1}, AIReviewPerformed, VerdictInconclusive},
 		{StatusCompleted, Summary{}, AIReviewNotPerformed, VerdictInconclusive},
+		{StatusCompleted, Summary{UnresolvedObservations: 1}, AIReviewPerformed, VerdictInconclusive},
 		{StatusPartial, Summary{}, AIReviewPerformed, VerdictInconclusive},
 		{StatusFailed, Summary{}, AIReviewNotPerformed, VerdictInconclusive},
 	}
@@ -374,7 +375,7 @@ func TestVerdictRules(t *testing.T) {
 	}
 }
 
-// TC-71: raw references bind per task even when two tasks have byte-identical stdout.
+// TC-80: raw references bind per task even when two tasks have byte-identical stdout.
 func TestRawRefsBindPerTask(t *testing.T) {
 	second := readDoc(t)
 	// Distinct observation ids (another module); same stdout bytes and hash.
@@ -407,7 +408,7 @@ func TestRawRefsBindPerTask(t *testing.T) {
 	}
 }
 
-// TC-71/TC-08: a rejected or missing document is never zero findings.
+// TC-80/TC-08: a rejected or missing document is never zero findings.
 func TestRejectedDocumentIsNotClean(t *testing.T) {
 	f := newFixture(t, goVet(t))
 	f.rewriteDoc(t, func(d map[string]any) { d["snapshot_manifest_digest"] = strings.Repeat("f", 64) })
@@ -464,7 +465,7 @@ func TestManifestCannotUpgradeTaskStatus(t *testing.T) {
 	}
 }
 
-// TC-75 builder side: a failed run without a result manifest still reports
+// TC-83 builder side: a failed run without a result manifest still reports
 // its DB task rows and never looks clean.
 func TestFailedRunWithoutManifest(t *testing.T) {
 	f := newFixture(t, taskSpec{key: "go-vet", status: "failed", required: true})
@@ -515,7 +516,7 @@ func TestBuildRefusesTamperedInput(t *testing.T) {
 	}
 }
 
-// TC-74: the code-free projection carries no tool message text.
+// TC-84: the code-free projection carries no tool message text.
 func TestCodeFreeProjection(t *testing.T) {
 	f := newFixture(t, goVet(t))
 	r := build(t, f.in, DefaultRegistry())
@@ -547,7 +548,7 @@ func TestCodeFreeProjection(t *testing.T) {
 
 var dataCount = regexp.MustCompile(`data-count="([a-z_]+)">([0-9]+|미확정)<`)
 
-// TC-73: the three formats show the same numbers, ids and digest.
+// TC-82: the three formats show the same numbers, ids and digest.
 func TestFormatsShowSameCounts(t *testing.T) {
 	f := newFixture(t, goVet(t))
 	r := build(t, f.in, DefaultRegistry())
@@ -588,7 +589,7 @@ func TestFormatsShowSameCounts(t *testing.T) {
 	}
 }
 
-// TC-74: hostile tool text cannot create markup, links or table structure.
+// TC-84: hostile tool text cannot create markup, links or table structure.
 func TestRenderingEscapesHostileText(t *testing.T) {
 	f := newFixture(t, goVet(t))
 	hostile := "<script>alert(1)</script> </pre> ](javascript:alert(1)) ![x](http://evil.invalid/a.png) | col | `tick` ``x`` \n# heading <img src=x onerror=1> 한글"
@@ -629,7 +630,7 @@ func TestRenderingEscapesHostileText(t *testing.T) {
 	}
 }
 
-// TC-72: no completion claim in any format unless AI review was performed.
+// TC-81: no completion claim in any format unless AI review was performed.
 func TestNoForbiddenClaims(t *testing.T) {
 	f := newFixture(t, goVet(t))
 	r := build(t, f.in, DefaultRegistry())
@@ -688,4 +689,39 @@ func stripCodeSpans(md string) string {
 		out.WriteByte('\n')
 	}
 	return out.String()
+}
+
+// TC-81: all three model records cannot hide a missing required tool result.
+func TestMissingAnalyzerResultWithAcceptedAIReview(t *testing.T) {
+	f := withReview(t, map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"})
+	delete(f.in.Bodies, f.docArt)
+	reg, _ := NewRegistry(GoVetDecoder{}, fakeReview{accept: true})
+	got := build(t, f.in, reg)
+	if got.Status != StatusPartial || got.QualityVerdict != VerdictInconclusive || got.Coverage.AIReview.Status != AIReviewPerformed {
+		t.Fatalf("missing tool result: %s %s %+v", got.Status, got.QualityVerdict, got.Coverage.AIReview)
+	}
+}
+
+// TC-80: worker privacy mode may record several hidden commands for one task.
+func TestUnreportedExecutionsHaveDistinctIDs(t *testing.T) {
+	f := newFixture(t, goVet(t))
+	var rm analysis.ResultManifest
+	if err := json.Unmarshal(f.in.Bodies[f.in.ResultManifest.ID], &rm); err != nil {
+		t.Fatal(err)
+	}
+	hidden := rm.Tasks[0].Executions[0]
+	hidden.Name = "unreported"
+	hidden.Command = analysis.ManifestCommand{Dir: analysis.RedactedMarker, Argv: []string{}, EnvKeys: []string{}}
+	hidden.StdoutArtifactID, hidden.StderrArtifactID = nil, nil
+	rm.Tasks[0].Executions = append(rm.Tasks[0].Executions, hidden, hidden)
+	f.setManifest(t, rm)
+	got := build(t, f.in, DefaultRegistry())
+	if len(got.Executions) != len(rm.Tasks[0].Executions) {
+		t.Fatalf("lost hidden executions: %d", len(got.Executions))
+	}
+	f.in.Tasks[0].ExecutionOrdinal = 0
+	got = build(t, f.in, DefaultRegistry())
+	if len(got.Executions) != 0 || !has(got.Limitations, LimResultManifestRejected) {
+		t.Fatalf("invented execution row: %+v", got.Limitations)
+	}
 }

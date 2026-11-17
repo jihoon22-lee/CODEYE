@@ -157,15 +157,23 @@ func advanceTx(ctx context.Context, tx pgx.Tx, r *Run, expected *int64, next dom
 }
 
 // receiptCurrent reports whether an accepted completion receipt still describes the
-// run. A finalizing receipt stays valid once the report service publishes the
-// result (completed/partial). The caller has already matched node, worker and epoch
-// against both the attempt and the run, so a requeued run or a newer epoch never
-// replays, and replay never mutates anything.
+// run. A finalizing receipt stays valid once the report service settles the run:
+// published as completed/partial/failed, rejected as failed, or a cancel request
+// after completion settled as cancelled (W09). The caller has already matched node,
+// worker and epoch against both the attempt and the run, so a requeued run or a
+// newer epoch never replays, and replay never mutates anything.
 func receiptCurrent(stored string, current domain.RunStatus) bool {
 	if string(current) == stored {
 		return true
 	}
-	return stored == string(domain.RunFinalizing) && (current == domain.RunCompleted || current == domain.RunPartial)
+	if stored != string(domain.RunFinalizing) {
+		return false
+	}
+	switch current {
+	case domain.RunCompleted, domain.RunPartial, domain.RunFailed, domain.RunCancelRequested, domain.RunCancelling, domain.RunCancelled:
+		return true
+	}
+	return false
 }
 
 // FinishAttempt records execution/cleanup only. Successful outcomes remain finalizing

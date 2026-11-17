@@ -199,6 +199,8 @@ type ProjectSummary struct {
 	Revision int64
 	Source   json.RawMessage
 	LastRun  *RunRef
+	// HasReport is true once any run of the project has a published report.
+	HasReport bool
 }
 
 // ProjectPage is one keyset page of ProjectSummary, newest first.
@@ -207,7 +209,8 @@ type ProjectPage struct {
 	NextCursor string
 }
 
-const projectSummarySQL = `SELECT p.id::text,p.name,p.current_revision,r.config->'source',p.created_at,lr.id::text,lr.status
+const projectSummarySQL = `SELECT p.id::text,p.name,p.current_revision,r.config->'source',p.created_at,lr.id::text,lr.status,
+	EXISTS (SELECT 1 FROM reports rp WHERE rp.project_id=p.id)
 	FROM projects p
 	JOIN project_revisions r ON r.project_id=p.id AND r.revision=p.current_revision
 	LEFT JOIN LATERAL (SELECT id,status FROM runs WHERE project_id=p.id ORDER BY created_at DESC,id DESC LIMIT 1) lr ON true
@@ -226,7 +229,7 @@ func scanSummary(row pgx.Row) (ProjectSummary, time.Time, error) {
 		lastID   *string
 		lastStat *string
 	)
-	if err := row.Scan(&p.ID, &p.Name, &p.Revision, &source, &created, &lastID, &lastStat); err != nil {
+	if err := row.Scan(&p.ID, &p.Name, &p.Revision, &source, &created, &lastID, &lastStat, &p.HasReport); err != nil {
 		return p, created, err
 	}
 	if source != nil {
@@ -316,6 +319,8 @@ type RunView struct {
 	// from nodes, grants, snapshot locations and limits (nodeproto.Waiting*),
 	// or nil when a capable node with free capacity exists.
 	WaitingReason *string
+	// LatestReport is the newest published report revision, nil if none.
+	LatestReport *ReportSummary
 }
 
 // GetRunView returns the run and its task counts for an actor who may read it.
@@ -331,8 +336,22 @@ func (s *Store) GetRunView(ctx context.Context, actor, id string) (RunView, erro
 		v := RunView{Run: r}
 		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status IN ('succeeded','failed','timed_out','cancelled','unsupported','skipped_policy','budget_exhausted')),count(*)
 			FROM tasks WHERE run_id=$1`, id).Scan(&v.CompletedTasks, &v.TotalTasks)
-		if err != nil || r.Status != domain.RunQueued {
+		if err != nil {
 			return v, err
+		}
+		var rep ReportSummary
+		err = tx.QueryRow(ctx, "SELECT id::text,revision,status,quality_verdict,body_sha256,octet_length(body),created_at FROM reports WHERE run_id=$1 ORDER BY revision DESC LIMIT 1", id).
+			Scan(&rep.ID, &rep.Revision, &rep.Status, &rep.QualityVerdict, &rep.BodySHA256, &rep.SizeBytes, &rep.CreatedAt)
+		switch {
+		case err == nil:
+			rep.CreatedAt = rep.CreatedAt.UTC()
+			v.LatestReport = &rep
+		case err != pgx.ErrNoRows:
+			return v, err
+		}
+		err = nil
+		if r.Status != domain.RunQueued {
+			return v, nil
 		}
 		v.WaitingReason, err = waitingReason(ctx, tx, id)
 		return v, err

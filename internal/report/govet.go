@@ -61,7 +61,7 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 	var d govet.Document
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&d); err != nil || dec.More() {
+	if err := dec.Decode(&d); err != nil || !json.Valid(body) {
 		return out, invalidf("go vet document is not valid JSON of the expected shape")
 	}
 	if d.SchemaVersion != govet.DocumentSchemaVersion || d.Kind != govet.DocumentKind || d.AnalyzerID != govet.AnalyzerID || d.ParserID != govet.ParserID {

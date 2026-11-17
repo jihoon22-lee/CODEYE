@@ -406,3 +406,33 @@ func TestPinnedRetryNeverReacquires(t *testing.T) {
 	in.Close()
 	<-done
 }
+
+// W09: a failed attempt whose tasks actually ran still uploads the result
+// manifest (real task states, streams), never advances to finalizing and
+// stays failed.
+func TestFailedTasksUploadManifestWithoutFinalizing(t *testing.T) {
+	e := newEnv(t)
+	fa, in, done, _ := startWorker(t, &testHandler{script: "echo broken >&2; exit 3"})
+	fa.hello(e)
+	fa.conn.Send(localJob(e))
+	c := waitComplete(t, fa)
+	if c.Outcome != "failed" || c.Reason == nil || *c.Reason != "handler_error" || c.ResultManifestClientArtifact == nil {
+		t.Fatalf("complete %+v", c)
+	}
+	kinds := strings.Join(fa.kinds(), ",")
+	if strings.Count(kinds, "event:run_advance") != 1 || !strings.HasSuffix(kinds, "artifact:result_manifest,complete") {
+		t.Fatalf("sequence %s", kinds)
+	}
+	fa.mu.Lock()
+	manifest := fa.artifacts[*c.ResultManifestClientArtifact]
+	fa.mu.Unlock()
+	var m analysis.ResultManifest
+	if err := json.Unmarshal(manifest, &m); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Tasks) != 1 || m.Tasks[0].Status != "failed" || len(m.Tasks[0].Executions) != 1 || m.Tasks[0].Executions[0].ExitCode == nil || *m.Tasks[0].Executions[0].ExitCode != 3 {
+		t.Fatalf("manifest %s", manifest)
+	}
+	in.Close()
+	<-done
+}

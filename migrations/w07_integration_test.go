@@ -23,7 +23,7 @@ func TestW07MigrationFromPopulatedW06Schema(t *testing.T) {
 	mustExec(t, ctx, c, "INSERT INTO workers(id,node_id,state) VALUES($1,$2,'idle')", worker, node)
 	mustExec(t, ctx, c, "UPDATE scheduler_limits SET global_max_running=3")
 
-	if err := Apply(ctx, c); err != nil {
+	if err := applyFS(ctx, c, embeddedPrefix(t, 4), "m"); err != nil {
 		t.Fatalf("apply 0004 on populated schema: %v", err)
 	}
 	var minW, maxW, idle, up, down, rev int
@@ -58,7 +58,7 @@ func TestW07MigrationFromPopulatedW06Schema(t *testing.T) {
 	mustExec(t, ctx, c, "UPDATE nodes SET worker_scaling='controller',max_workers=2 WHERE id=$1", node)
 	execState(t, ctx, c, "23514", "INSERT INTO node_commands(id,node_id,sequence,kind) VALUES($1,$2,1,'start_worker')", newID(), node)
 	// Reapply is a no-op; an 0001-0003 binary refuses the 0004 schema unchanged.
-	if err := Apply(ctx, c); err != nil {
+	if err := applyFS(ctx, c, embeddedPrefix(t, 4), "m"); err != nil {
 		t.Fatalf("reapply: %v", err)
 	}
 	if h := historyRows(t, ctx, c); len(h) != 4 {

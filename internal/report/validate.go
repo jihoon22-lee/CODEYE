@@ -244,7 +244,7 @@ func Unmarshal(b []byte) (Report, error) {
 	var r Report
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&r); err != nil || dec.More() {
+	if err := dec.Decode(&r); err != nil || !json.Valid(b) {
 		return Report{}, invalidf("stored report is not a report document")
 	}
 	return r, ValidateReport(r)
