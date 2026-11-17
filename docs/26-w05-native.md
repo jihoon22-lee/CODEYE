@@ -42,7 +42,7 @@ W08 이후 분석기는 `executor.Runner` 인터페이스에 의존한다. 결�
 | `start_failed` | OS가 실행을 거부(exec format, 권한 등) |
 | `unsupported` | 강제 자원 한도 요구, Job 연결 실패, 미구현 OS 등 능력 부족. 사용자 코드를 실행하지 않음 |
 
-`Cleanup`은 W02 `cleanup_state` 어휘를 따른다: `confirmed`(격리 단위가 비었음을 관찰), `uncertain`(recovery_required), `not_started`. `Reason`은 안정 코드이고 `CleanupNote`는 `processes_remain_after_kill`, `escaped_descendant_alive`, `output_pipe_held_open`, `main_process_not_reaped`, `proc_scan_failed`, `job_query_failed` 등이다. `LeftoverKilled`는 주 프로세스 종료 후 남은 자손을 executor가 종료했음을 뜻한다.
+`Cleanup`은 실행기 전용 결과다(DB에는 confirmed/uncertain으로 변환): `confirmed`(격리 단위가 비었음을 관찰), `uncertain`(recovery_required), `not_started`. `Reason`은 안정 코드이고 `CleanupNote`는 `processes_remain_after_kill`, `escaped_descendant_alive`, `output_pipe_held_open`, `main_process_not_reaped`, `proc_scan_failed`, `job_query_failed` 등이다. `LeftoverKilled`는 주 프로세스 종료 후 남은 자손을 executor가 종료했음을 뜻한다.
 
 `Command`에는 요청한 실행 파일 alias, 실제 실행한 symlink 해석 경로(`ResolvedExecutable`), 마스킹된 argv, cwd, env **키 이름만**, temp 경로가 저장된다. 실행은 해석된 파일로 하고 argv[0]은 alias를 유지한다(multi-call 도구 호환). alias 교체 race를 줄일 뿐 샌드박스는 아니다. `SensitiveArgs` 인덱스는 `[REDACTED]`로 바뀐다. `Redact` 값과 민감 인자 값은 중복 제거 후 **긴 값부터** 기록 executable·argv·cwd·temp 경로와 캡처한 stdout/stderr에서 치환한다. 그래서 다른 비밀값을 포함하는 값의 꼬리가 남지 않는다. stream이 `Truncated` 또는 `Incomplete`이면 끝부분 중 비밀값의 진접두사와 일치하는 바이트를 버린다(짧은 접두사도 보수적으로 제거). `Stdout`/`Stderr`는 `Data`, 전체 관찰 바이트, `Truncated`, `Incomplete`(EOF 미도달, 그때까지 캡처한 데이터는 유지)를 가진다. `Command.TempRetained`는 실행별 temp를 남겼음을 뜻한다. `OnStarted func(ctx, ProcessIdentity{PID, StartTime}) error`는 W06 journal용 **사후 알림**이다.
 - 호출 시점: 프로세스가 격리 단위 안에서 시작된 뒤다(Windows는 resume 후). 이미 코드가 실행됐을 수 있으므로 callback 실패가 "아무 코드도 실행되지 않았다"는 뜻은 아니다. W06은 job 전달 전에 worker를 journal에 기록해야 한다.
