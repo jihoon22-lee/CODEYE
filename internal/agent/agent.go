@@ -45,10 +45,12 @@ func (e *ExitError) Error() string { return e.Msg }
 
 // Config of one agent.
 type Config struct {
-	ControllerURL   string
-	StateDir        string
-	Name            string
-	EnrollTokenFile string
+	ModelExecutable, ModelName, ModelRelayFile string
+	ModelSourceRoots                           map[string]bool
+	ControllerURL                              string
+	StateDir                                   string
+	Name                                       string
+	EnrollTokenFile                            string
 	// SourceRoots is the private mapping source_root_id → absolute path.
 	SourceRoots map[string]string
 	// Workers is the static worker count (W06). A W07 scaler replaces it.
@@ -110,12 +112,17 @@ func New(cfg Config) (*Agent, error) {
 			return nil, &ExitError{ExitUsage, "--source-root must be UUID=/absolute/path"}
 		}
 	}
+	for id := range cfg.ModelSourceRoots {
+		if cfg.SourceRoots[id] == "" {
+			return nil, &ExitError{ExitUsage, "model source root must have a local source mapping"}
+		}
+	}
 	for _, h := range cfg.GitHosts {
 		if domain.ValidateHost(strings.ToLower(h)) != nil {
 			return nil, &ExitError{ExitUsage, "invalid --git-host"}
 		}
 	}
-	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache} {
+	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.ModelExecutable, cfg.ModelRelayFile} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}
@@ -655,6 +662,7 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 	job := &workerproto.Job{Attempt: workerproto.AttemptRef{ID: l.AttemptID, RunID: l.RunID, Epoch: l.LeaseEpoch}, Profile: j.Profile, Scope: scope, Resources: res, RunVersion: l.RunVersion, Source: workerproto.JobSource{Kind: j.Source.Kind}}
 	switch j.Source.Kind {
 	case "local":
+		job.AllowModelReview = ag.cfg.ModelSourceRoots[j.Source.SourceRootID]
 		job.Source.ApprovedRoot = ag.cfg.SourceRoots[j.Source.SourceRootID]
 		job.Source.RelativePath = j.Source.RelativePath
 	case "git":

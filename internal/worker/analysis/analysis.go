@@ -25,6 +25,8 @@ type HandlerInfo struct{ Name, Version, Capability string }
 
 // Job is one attempt as seen by a handler.
 type Job struct {
+	// AllowModelReview is set from the node operator's explicit source grant.
+	AllowModelReview bool
 	RunID, AttemptID string
 	Epoch            int64
 	Profile          string
