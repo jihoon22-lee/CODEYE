@@ -45,7 +45,7 @@ type fakeController struct {
 	refuseReports int  // refuse this many confirmed reports with "conflict" (attempt still leased)
 	leaseFor      time.Duration
 	digests       []string // manifest digests fixed, in order
-	staleAttempts bool // answer attempt heartbeats with 409
+	staleAttempts bool     // answer attempt heartbeats with 409
 	completeCh    chan nodeproto.CompleteRequest
 	reportCh      chan nodeproto.CleanupReport
 	eventCh       chan string
