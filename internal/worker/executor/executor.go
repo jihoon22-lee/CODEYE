@@ -56,12 +56,13 @@ const readerDrain = 3 * time.Second
 // Run executes spec. It never returns before the main process has been
 // reaped or cleanup has been classified as uncertain.
 func (e *Executor) Run(ctx context.Context, spec Spec) (out Result) {
+	secrets := secretValues(spec)
 	res := Result{
 		TaskID:       spec.TaskID,
 		AttemptEpoch: spec.AttemptEpoch,
 		Cleanup:      CleanupNotStarted,
 		Containment:  ContainmentNone,
-		Command:      CommandRecord{Executable: redactString(spec.Executable, spec.Redact), Argv: recordArgv(spec), Dir: spec.Dir},
+		Command:      CommandRecord{Executable: redactString(spec.Executable, secrets), Argv: recordArgv(spec, secrets), Dir: redactString(spec.Dir, secrets)},
 		Resources:    ResourceReport{Requested: spec.Resources},
 	}
 	finish := func() Result {
@@ -82,7 +83,7 @@ func (e *Executor) Run(ctx context.Context, spec Spec) (out Result) {
 		res.Status, res.Reason, res.Detail = serr.status, serr.code, serr.detail
 		return finish()
 	}
-	res.Command.ResolvedExecutable = redactString(p.resolved, spec.Redact)
+	res.Command.ResolvedExecutable = redactString(p.resolved, secrets)
 	if err := ctx.Err(); err != nil {
 		res.Status, res.Reason = StatusCancelled, "cancelled_before_start"
 		return finish()
@@ -90,10 +91,6 @@ func (e *Executor) Run(ctx context.Context, spec Spec) (out Result) {
 	killWait := e.KillWait
 	if killWait <= 0 {
 		killWait = defaultKillWait
-	}
-	outputSecrets := append([]string(nil), spec.Redact...)
-	for _, i := range spec.SensitiveArgs {
-		outputSecrets = append(outputSecrets, spec.Args[i])
 	}
 
 	// Per-run temp/home outside protected roots.
@@ -113,7 +110,7 @@ func (e *Executor) Run(ctx context.Context, spec Spec) (out Result) {
 		res.Status, res.Reason, res.Detail = StatusStartFailed, "temp_unavailable", "cannot create per-run home/tmp"
 		return finish()
 	}
-	res.Command.TempDir = tempDir
+	res.Command.TempDir = redactString(tempDir, secrets)
 	envList, envKeys := buildEnv(p.env, home, tmp)
 	res.Command.EnvKeys = envKeys
 
@@ -139,8 +136,10 @@ func (e *Executor) Run(ctx context.Context, spec Spec) (out Result) {
 		}
 	}
 
+	// Execute the resolved file (narrows alias-swap races; not a sandbox);
+	// argv[0] keeps the alias so multi-call binaries behave as invoked.
 	cmd := &exec.Cmd{
-		Path:   p.executable,
+		Path:   p.resolved,
 		Args:   append([]string{p.executable}, spec.Args...),
 		Dir:    p.dir,
 		Env:    envList,
@@ -177,37 +176,66 @@ func (e *Executor) Run(ctx context.Context, spec Spec) (out Result) {
 			_ = stdinW.Close()
 		}()
 	}
-	if spec.OnStarted != nil {
-		spec.OnStarted(res.Process)
-	}
-
+	// Arm the deadline before notifying, so the callback cannot extend it.
 	timer := time.NewTimer(spec.Timeout)
 	defer timer.Stop()
+	var notified <-chan notifyResult
+	cbCtx, cbCancel := context.WithTimeout(ctx, spec.Timeout)
+	defer cbCancel()
+	if spec.OnStarted != nil {
+		ch := make(chan notifyResult, 1)
+		notified = ch
+		go func(id ProcessIdentity) {
+			defer func() {
+				if r := recover(); r != nil {
+					ch <- notifyResult{panicked: true}
+				}
+			}()
+			ch <- notifyResult{err: spec.OnStarted(cbCtx, id)}
+		}(res.Process)
+	}
+
 	var rep stopReport
-	select {
-	case <-proc.exited():
-		res.Status = StatusExited
-		left, lerr := proc.leftover()
-		switch {
-		case lerr != nil:
+	for {
+		select {
+		case n := <-notified:
+			notified = nil
+			// Success, or an error only because the callback ctx ended
+			// (timeout/cancel are handled by their own cases).
+			if !n.panicked && (n.err == nil || cbCtx.Err() != nil) {
+				continue
+			}
+			res.Status, res.Reason = StatusCancelled, "on_started_failed"
+			res.Detail = "start notification failed; the process may already have run and was terminated"
+			if n.panicked {
+				res.Reason = "on_started_panic"
+			}
 			rep = proc.terminate(p.grace, killWait)
-			rep.confirmed = false
-			rep.note = joinNote("containment_query_failed", rep.note)
-		case left:
-			res.LeftoverKilled = true
+		case <-proc.exited():
+			res.Status = StatusExited
+			left, lerr := proc.leftover()
+			switch {
+			case lerr != nil:
+				rep = proc.terminate(p.grace, killWait)
+				rep.confirmed = false
+				rep.note = joinNote("containment_query_failed", rep.note)
+			case left:
+				res.LeftoverKilled = true
+				rep = proc.terminate(p.grace, killWait)
+			default:
+				rep = stopReport{confirmed: true}
+			}
+		case <-timer.C:
+			res.Status, res.Reason = StatusTimedOut, "wall_clock_timeout"
 			rep = proc.terminate(p.grace, killWait)
-		default:
-			rep = stopReport{confirmed: true}
+		case <-ctx.Done():
+			res.Status, res.Reason = StatusCancelled, "context_cancelled"
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				res.Reason = "context_deadline"
+			}
+			rep = proc.terminate(p.grace, killWait)
 		}
-	case <-timer.C:
-		res.Status, res.Reason = StatusTimedOut, "wall_clock_timeout"
-		rep = proc.terminate(p.grace, killWait)
-	case <-ctx.Done():
-		res.Status, res.Reason = StatusCancelled, "context_cancelled"
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			res.Reason = "context_deadline"
-		}
-		rep = proc.terminate(p.grace, killWait)
+		break
 	}
 	res.Resources.GracefulStopUsed = rep.graceful
 	confirmed, note := rep.confirmed, rep.note
@@ -245,8 +273,8 @@ func (e *Executor) Run(ctx context.Context, spec Spec) (out Result) {
 		confirmed = false
 		note = joinNote(note, "output_pipe_held_open")
 	}
-	res.Stdout.Data = redactBytes(res.Stdout.Data, outputSecrets)
-	res.Stderr.Data = redactBytes(res.Stderr.Data, outputSecrets)
+	res.Stdout.Data = redactStream(res.Stdout, secrets)
+	res.Stderr.Data = redactStream(res.Stderr, secrets)
 
 	if confirmed {
 		res.Cleanup = CleanupConfirmed
@@ -296,13 +324,37 @@ func closeAll(files ...*os.File) {
 	}
 }
 
-func redactBytes(b []byte, values []string) []byte {
+type notifyResult struct {
+	err      error
+	panicked bool
+}
+
+// redactStream masks complete secrets (values sorted longest first) and, if
+// the stream was cut, drops a trailing partial secret.
+func redactStream(s Stream, values []string) []byte {
+	b := s.Data
+	if s.Truncated || s.Incomplete {
+		b = trimPartialSecret(b, values)
+	}
 	for _, v := range values {
-		if v != "" {
-			b = bytes.ReplaceAll(b, []byte(v), []byte(redactedMarker))
-		}
+		b = bytes.ReplaceAll(b, []byte(v), []byte(redactedMarker))
 	}
 	return b
+}
+
+// trimPartialSecret removes the longest suffix of b that is a proper prefix
+// of a secret; the rest of that secret was beyond the cap.
+func trimPartialSecret(b []byte, values []string) []byte {
+	cut := 0
+	for _, v := range values {
+		for k := min(len(v)-1, len(b)); k > cut; k-- {
+			if bytes.HasSuffix(b, []byte(v[:k])) {
+				cut = k
+				break
+			}
+		}
+	}
+	return b[:len(b)-cut]
 }
 
 type capture struct {

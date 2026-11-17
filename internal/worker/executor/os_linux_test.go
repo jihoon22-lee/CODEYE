@@ -3,11 +3,14 @@
 package executor
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -33,10 +36,77 @@ func platformHelper(mode string, args []string) bool {
 		fmt.Print("before-escape")
 		writePid("escape")
 		time.Sleep(120 * time.Second)
+	case "emfile-run":
+		emfileRun(args[0], args[1])
 	default:
 		return false
 	}
 	return true
+}
+
+// emfileRun is an isolated executor parent: once the tree is running it
+// exhausts its own file descriptors (so /proc cannot be opened) and cancels.
+// Its fd table dies with it; the outer test's process is unaffected.
+func emfileRun(ws, tempParent string) {
+	self, _ := os.Executable()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var held []*os.File
+	go func() {
+		waitForFile(filepath.Join(ws, "pid-0"), 60*time.Second)
+		var lim syscall.Rlimit
+		_ = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim)
+		lim.Cur = 256
+		_ = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &lim)
+		for {
+			f, err := os.Open(os.DevNull)
+			if err != nil {
+				break // EMFILE
+			}
+			held = append(held, f)
+		}
+		cancel()
+	}()
+	e := Executor{KillWait: time.Second}
+	res := e.Run(ctx, Spec{
+		Executable: self, Args: []string{helperArg, "tree", "2", "wait"},
+		WorkspaceRoot: ws, Dir: ws, TempParent: tempParent,
+		Timeout: 60 * time.Second, Grace: 200 * time.Millisecond,
+	})
+	for _, f := range held {
+		_ = f.Close()
+	}
+	_ = json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"status": string(res.Status), "cleanup": string(res.Cleanup), "note": res.CleanupNote,
+	})
+}
+
+func TestProcScanFailureStillKillsAndStaysUncertain(t *testing.T) {
+	ws := newWorkspace(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, helperExe(t), helperArg, "emfile-run", ws, t.TempDir())
+	out, err := cmd.Output()
+	pids := []int{}
+	for _, name := range []string{"pid-2", "pid-1", "pid-0"} {
+		pid := readPidFile(t, filepath.Join(ws, name))
+		pids = append(pids, pid)
+		defer syscall.Kill(pid, syscall.SIGKILL) // hygiene if the assertion fails
+	}
+	if err != nil {
+		t.Fatalf("inner executor failed: %v %s", err, out)
+	}
+	var got map[string]string
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	t.Logf("inner result %v", got)
+	if got["status"] != string(StatusCancelled) || got["cleanup"] != string(CleanupUncertain) || !strings.Contains(got["note"], "proc_scan_failed") {
+		t.Fatalf("scan failure must not confirm cleanup: %v", got)
+	}
+	for _, pid := range pids {
+		assertDead(t, pid) // signals reached the pinned group without /proc
+	}
 }
 
 func processAlive(pid int) bool {

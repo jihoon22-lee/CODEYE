@@ -108,17 +108,24 @@ type Spec struct {
 	StderrLimit int64 `json:"stderr_limit,omitempty"`
 
 	// SensitiveArgs are indexes into Args replaced by "[REDACTED]" in the
-	// recorded command. Redact values are masked in the recorded argv and
-	// in captured stdout/stderr.
+	// recorded command. Redact values (and sensitive arg values) are masked,
+	// longest first, in the recorded executable/argv/dir/temp paths and in
+	// captured stdout/stderr. A cut stream drops a trailing partial secret.
 	SensitiveArgs []int    `json:"-"`
 	Redact        []string `json:"-"`
 
 	Resources ResourceRequest `json:"resources"`
 
-	// OnStarted, if set, is called once the process is inside its
-	// containment unit and before it can run user code on Windows (or right
-	// after start on Linux). Intended for the agent journal (W06).
-	OnStarted func(ProcessIdentity) `json:"-"`
+	// OnStarted, if set, is a notification sent after the process has been
+	// started inside its containment unit (Windows: after resume). The
+	// process may already have run code when it is called. It runs on its
+	// own goroutine after the timeout is armed, so a slow or hung callback
+	// never delays timeout/cancel handling. Its ctx is cancelled when Run
+	// returns or the timeout/run ctx ends; callbacks must honour it,
+	// otherwise the goroutine outlives Run. A non-nil error or a panic
+	// terminates the process tree (Status cancelled, Reason
+	// on_started_failed / on_started_panic).
+	OnStarted func(context.Context, ProcessIdentity) error `json:"-"`
 }
 
 // ProcessIdentity identifies the started main process for journals.
@@ -131,6 +138,9 @@ type ProcessIdentity struct {
 
 // CommandRecord is safe-to-store metadata about what was executed.
 type CommandRecord struct {
+	// Executable is the alias given in Spec; ResolvedExecutable is the
+	// symlink-resolved file that was actually executed (argv[0] keeps the
+	// alias for multi-call tools).
 	Executable         string   `json:"executable"`
 	ResolvedExecutable string   `json:"resolved_executable,omitempty"`
 	Argv               []string `json:"argv"` // redacted argv[0..]

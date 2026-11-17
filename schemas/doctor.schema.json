@@ -122,7 +122,8 @@
               "server_version_unrecognized",
               "authenticated_query_verified",
               "adapter_contract_pending_w10",
-              "native_executor_pending_w05"
+              "native_executor_pending_w05",
+              "runtime_process_control_not_probed"
             ]
           },
           "version": {

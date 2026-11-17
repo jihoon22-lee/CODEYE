@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -248,8 +249,8 @@ func TestTimeoutKillsProcessTree(t *testing.T) {
 	spec := helperSpec(t, ws, "tree", "2", "wait")
 	spec.Timeout = 15 * time.Second // three process starts on slow CI runners
 	spec.Grace = 500 * time.Millisecond
-	var started ProcessIdentity
-	spec.OnStarted = func(id ProcessIdentity) { started = id }
+	startedCh := make(chan ProcessIdentity, 1)
+	spec.OnStarted = func(_ context.Context, id ProcessIdentity) error { startedCh <- id; return nil }
 	begin := time.Now()
 	res := run(t, spec)
 	requireClean(t, res, StatusTimedOut)
@@ -260,6 +261,12 @@ func TestTimeoutKillsProcessTree(t *testing.T) {
 		t.Fatalf("returned before timeout: %s", elapsed)
 	}
 	pids := treePids(t, ws)
+	var started ProcessIdentity
+	select {
+	case started = <-startedCh:
+	case <-time.After(10 * time.Second):
+		t.Fatal("OnStarted not called")
+	}
 	if started.PID != pids[0] || res.Process.PID != pids[0] || started.StartTime == 0 {
 		t.Fatalf("identity %+v / %+v, main pid %d", started, res.Process, pids[0])
 	}
@@ -422,5 +429,182 @@ func TestCancelledBeforeStart(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(ws, "started.txt")); err == nil {
 		t.Fatal("process ran")
+	}
+}
+
+func TestOnStartedSlowCallbackDoesNotDelayRun(t *testing.T) {
+	spec := helperSpec(t, newWorkspace(t), "exit", "0")
+	spec.OnStarted = func(context.Context, ProcessIdentity) error {
+		time.Sleep(8 * time.Second) // ignores ctx on purpose
+		return nil
+	}
+	begin := time.Now()
+	res := run(t, spec)
+	requireClean(t, res, StatusExited)
+	if elapsed := time.Since(begin); elapsed > 5*time.Second {
+		t.Fatalf("slow callback delayed Run: %s", elapsed)
+	}
+}
+
+func TestOnStartedHungCallbackDoesNotBlockTimeout(t *testing.T) {
+	ws := newWorkspace(t)
+	spec := helperSpec(t, ws, "sleep")
+	spec.Timeout = 3 * time.Second
+	spec.Grace = 200 * time.Millisecond
+	spec.OnStarted = func(context.Context, ProcessIdentity) error {
+		time.Sleep(30 * time.Second) // hung, ignores ctx
+		return nil
+	}
+	begin := time.Now()
+	res := run(t, spec)
+	requireClean(t, res, StatusTimedOut)
+	if elapsed := time.Since(begin); elapsed > spec.Timeout+5*time.Second {
+		t.Fatalf("hung callback delayed timeout: %s", elapsed)
+	}
+	assertDead(t, readPidFile(t, filepath.Join(ws, "sleep")))
+}
+
+func TestOnStartedCtxEndsWithTimeout(t *testing.T) {
+	spec := helperSpec(t, newWorkspace(t), "sleep")
+	spec.Timeout = 2 * time.Second
+	spec.Grace = 200 * time.Millisecond
+	ctxErr := make(chan error, 1)
+	spec.OnStarted = func(ctx context.Context, _ ProcessIdentity) error {
+		<-ctx.Done()
+		ctxErr <- ctx.Err()
+		return ctx.Err()
+	}
+	res := run(t, spec)
+	requireClean(t, res, StatusTimedOut) // not on_started_failed
+	select {
+	case err := <-ctxErr:
+		if err == nil {
+			t.Fatal("callback ctx not cancelled")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("callback ctx never ended")
+	}
+}
+
+func TestOnStartedErrorTerminatesTree(t *testing.T) {
+	ws := newWorkspace(t)
+	spec := helperSpec(t, ws, "tree", "2", "wait")
+	spec.Grace = 500 * time.Millisecond
+	spec.OnStarted = func(ctx context.Context, _ ProcessIdentity) error {
+		for ctx.Err() == nil {
+			if _, err := os.Stat(filepath.Join(ws, "pid-0")); err == nil {
+				return errors.New("journal unavailable")
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		return ctx.Err()
+	}
+	res := run(t, spec)
+	requireClean(t, res, StatusCancelled)
+	if res.Reason != "on_started_failed" || strings.Contains(res.Detail, "journal unavailable") {
+		t.Fatalf("reason=%s detail=%q", res.Reason, res.Detail)
+	}
+	for _, pid := range treePids(t, ws) {
+		assertDead(t, pid)
+	}
+}
+
+func TestOnStartedPanicTerminatesProcess(t *testing.T) {
+	ws := newWorkspace(t)
+	spec := helperSpec(t, ws, "sleep")
+	spec.OnStarted = func(ctx context.Context, _ ProcessIdentity) error {
+		waitForFile(filepath.Join(ws, "sleep"), 60*time.Second)
+		panic("callback bug")
+	}
+	res := run(t, spec)
+	requireClean(t, res, StatusCancelled)
+	if res.Reason != "on_started_panic" {
+		t.Fatalf("reason = %s", res.Reason)
+	}
+	assertDead(t, readPidFile(t, filepath.Join(ws, "sleep")))
+}
+
+func TestRedactionOverlappingSecretsAndPaths(t *testing.T) {
+	ws := newWorkspace(t)
+	spec := helperSpec(t, ws, "args", "xx abcdef-secret yy", "abc-alone")
+	spec.Redact = []string{"abc", "abcdef-secret", "한글"}
+	res := run(t, spec)
+	requireClean(t, res, StatusExited)
+	meta, _ := json.Marshal(res)
+	for _, blob := range [][]byte{meta, res.Stdout.Data} {
+		for _, leak := range []string{"def-secret", "abc", "한글"} {
+			if bytes.Contains(blob, []byte(leak)) {
+				t.Fatalf("%q leaked in %s", leak, blob)
+			}
+		}
+	}
+	if !bytes.Contains(res.Stdout.Data, []byte("xx [REDACTED] yy")) {
+		t.Fatalf("stdout = %s", res.Stdout.Data)
+	}
+	if !strings.Contains(res.Command.Dir, "[REDACTED]") {
+		t.Fatalf("dir not redacted: %q", res.Command.Dir)
+	}
+}
+
+func TestRedactionSecretCutAtCap(t *testing.T) {
+	prefix := strings.Repeat("p", 20)
+	secret := "TOPSECRET-12345"
+	spec := helperSpec(t, newWorkspace(t), "args", prefix+secret+"tail")
+	spec.Redact = []string{secret}
+	spec.StdoutLimit = int64(len(`["`) + len(prefix) + 7) // cut inside the secret
+	res := run(t, spec)
+	requireClean(t, res, StatusExited)
+	if !res.Stdout.Truncated {
+		t.Fatal("expected truncation")
+	}
+	if got := string(res.Stdout.Data); got != `["`+prefix {
+		t.Fatalf("partial secret kept: %q", got)
+	}
+}
+
+func TestExecutableInProtectedRootRejected(t *testing.T) {
+	ws := newWorkspace(t)
+	snapshot := t.TempDir()
+	copyExe := filepath.Join(snapshot, filepath.Base(helperExe(t)))
+	b, err := os.ReadFile(helperExe(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(copyExe, b, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	spec := helperSpec(t, ws, "cwd")
+	spec.ProtectedRoots = []string{snapshot}
+	spec.Executable = copyExe
+	if res := run(t, spec); res.Reason != "executable_in_protected_root" {
+		t.Fatalf("alias in snapshot: %s", res.Reason)
+	}
+	// A workspace alias whose target is inside the snapshot.
+	link := filepath.Join(ws, "tool-link"+filepath.Ext(copyExe))
+	if err := os.Symlink(copyExe, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	spec.Executable = link
+	if res := run(t, spec); res.Reason != "executable_in_protected_root" {
+		t.Fatalf("target in snapshot: %s", res.Reason)
+	}
+	if _, err := os.Stat(filepath.Join(ws, "started.txt")); err == nil {
+		t.Fatal("process ran")
+	}
+}
+
+func TestExecutesResolvedTargetKeepsAliasArgv0(t *testing.T) {
+	ws := newWorkspace(t)
+	link := filepath.Join(ws, "alias-tool"+filepath.Ext(helperExe(t)))
+	if err := os.Symlink(helperExe(t), link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	spec := helperSpec(t, ws, "argv0")
+	spec.Executable = link
+	res := run(t, spec)
+	requireClean(t, res, StatusExited)
+	real, _ := filepath.EvalSymlinks(helperExe(t))
+	if string(res.Stdout.Data) != link || res.Command.Executable != link || !strings.EqualFold(res.Command.ResolvedExecutable, real) {
+		t.Fatalf("argv0=%q record=%+v", res.Stdout.Data, res.Command)
 	}
 }

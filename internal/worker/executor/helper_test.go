@@ -45,6 +45,8 @@ func runHelper(mode string, args []string) int {
 		code, _ := strconv.Atoi(args[0])
 		fmt.Fprint(os.Stderr, "failing on purpose")
 		return code
+	case "argv0":
+		fmt.Print(os.Args[0])
 	case "stdin":
 		_, _ = io.Copy(os.Stdout, os.Stdin)
 	case "sleep":

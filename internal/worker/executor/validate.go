@@ -104,11 +104,23 @@ func prepare(spec Spec) (*prepared, *specError) {
 	}
 
 	// Protected roots (read-only snapshots / original sources).
+	var protectedForms []string
 	for _, root := range spec.ProtectedRoots {
 		if !filepath.IsAbs(root) {
 			return nil, reject("invalid_protected_root", "protected root must be absolute")
 		}
 		p.protected = append(p.protected, resolveLoose(root))
+		protectedForms = append(protectedForms, filepath.Clean(root), resolveLoose(root))
+	}
+	// Running a tool from the read-only snapshot/original is refused whether
+	// the alias or its target lies there. This is hygiene, not OS isolation.
+	execForms := []string{p.executable, filepath.Join(resolveLoose(filepath.Dir(p.executable)), filepath.Base(p.executable)), p.resolved}
+	for _, pr := range protectedForms {
+		for _, ex := range execForms {
+			if within(ex, pr) {
+				return nil, reject("executable_in_protected_root", "executable is inside a protected source path")
+			}
+		}
 	}
 
 	// Workspace and cwd containment on resolved paths.
@@ -296,27 +308,49 @@ func buildEnv(env map[string]string, home, tmp string) ([]string, []string) {
 	return list, keys
 }
 
+// secretValues returns the non-empty Redact values plus sensitive argument
+// values, deduplicated and sorted longest first so that a secret containing
+// another is masked whole.
+func secretValues(spec Spec) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(v string) {
+		if v != "" && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	for _, v := range spec.Redact {
+		add(v)
+	}
+	for _, i := range spec.SensitiveArgs {
+		if i >= 0 && i < len(spec.Args) {
+			add(spec.Args[i])
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
+	return out
+}
+
 func redactString(s string, values []string) string {
 	for _, v := range values {
-		if v != "" {
-			s = strings.ReplaceAll(s, v, redactedMarker)
-		}
+		s = strings.ReplaceAll(s, v, redactedMarker)
 	}
 	return s
 }
 
-func recordArgv(spec Spec) []string {
+func recordArgv(spec Spec, secrets []string) []string {
 	sensitive := map[int]bool{}
 	for _, i := range spec.SensitiveArgs {
 		sensitive[i] = true
 	}
-	argv := []string{redactString(spec.Executable, spec.Redact)}
+	argv := []string{redactString(spec.Executable, secrets)}
 	for i, a := range spec.Args {
 		if sensitive[i] {
 			argv = append(argv, redactedMarker)
 			continue
 		}
-		argv = append(argv, redactString(a, spec.Redact))
+		argv = append(argv, redactString(a, secrets))
 	}
 	return argv
 }

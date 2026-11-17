@@ -44,11 +44,16 @@ W08 이후 분석기는 `executor.Runner` 인터페이스에 의존한다. 결�
 
 `Cleanup`은 W02 `cleanup_state` 어휘를 따른다: `confirmed`(격리 단위가 비었음을 관찰), `uncertain`(recovery_required), `not_started`. `Reason`은 안정 코드이고 `CleanupNote`는 `processes_remain_after_kill`, `escaped_descendant_alive`, `output_pipe_held_open`, `main_process_not_reaped`, `proc_scan_failed`, `job_query_failed` 등이다. `LeftoverKilled`는 주 프로세스 종료 후 남은 자손을 executor가 종료했음을 뜻한다.
 
-`Command`에는 실행 파일·symlink 해석 경로·마스킹된 argv·cwd·env **키 이름만**·temp 경로가 저장된다. `SensitiveArgs` 인덱스는 `[REDACTED]`로, `Redact` 값과 민감 인자 값은 기록 argv와 캡처한 stdout/stderr에서 치환한다. cap 경계에 걸친 비밀값 일부는 치환되지 않을 수 있다. `Stdout`/`Stderr`는 `Data`, 전체 관찰 바이트, `Truncated`, `Incomplete`(EOF 미도달, 그때까지 캡처한 데이터는 유지)를 가진다. `Command.TempRetained`는 실행별 temp를 남겼음을 뜻한다. `OnStarted(ProcessIdentity{PID, StartTime})`는 W06 journal 기록용 hook이다.
+`Command`에는 요청한 실행 파일 alias, 실제 실행한 symlink 해석 경로(`ResolvedExecutable`), 마스킹된 argv, cwd, env **키 이름만**, temp 경로가 저장된다. 실행은 해석된 파일로 하고 argv[0]은 alias를 유지한다(multi-call 도구 호환). alias 교체 race를 줄일 뿐 샌드박스는 아니다. `SensitiveArgs` 인덱스는 `[REDACTED]`로 바뀐다. `Redact` 값과 민감 인자 값은 중복 제거 후 **긴 값부터** 기록 executable·argv·cwd·temp 경로와 캡처한 stdout/stderr에서 치환한다. 그래서 다른 비밀값을 포함하는 값의 꼬리가 남지 않는다. stream이 `Truncated` 또는 `Incomplete`이면 끝부분 중 비밀값의 진접두사와 일치하는 바이트를 버린다(짧은 접두사도 보수적으로 제거). `Stdout`/`Stderr`는 `Data`, 전체 관찰 바이트, `Truncated`, `Incomplete`(EOF 미도달, 그때까지 캡처한 데이터는 유지)를 가진다. `Command.TempRetained`는 실행별 temp를 남겼음을 뜻한다. `OnStarted func(ctx, ProcessIdentity{PID, StartTime}) error`는 W06 journal용 **사후 알림**이다.
+- 호출 시점: 프로세스가 격리 단위 안에서 시작된 뒤다(Windows는 resume 후). 이미 코드가 실행됐을 수 있으므로 callback 실패가 "아무 코드도 실행되지 않았다"는 뜻은 아니다. W06은 job 전달 전에 worker를 journal에 기록해야 한다.
+- 실행 방식: timeout을 먼저 건 뒤 별도 goroutine에서 호출한다. 느리거나 멈춘 callback은 timeout·취소 처리를 막지 않는다.
+- ctx: timeout, run ctx 종료, Run 반환 중 하나가 일어나면 취소된다. ctx 종료로 생긴 오류는 무시하고 timeout/cancel로 분류한다.
+- 실패 처리: 오류를 반환하거나 panic하면 트리를 종료하고 `cancelled`/`on_started_failed`(`on_started_panic`)로 보고한다. 오류 문자열은 Detail에 넣지 않는다.
+- 제한: ctx를 무시하고 I/O에 멈춘 callback goroutine은 Run 반환 뒤에도 남을 수 있다.
 
 ## 3. 검증 규칙
 
-- 실행 파일: 절대 경로, 존재, 일반 파일, Unix 실행 비트. Windows `.bat`/`.cmd`는 암묵적 `cmd.exe` 해석 때문에 `batch_script_unsupported`로 거부한다. 셸이 필요한 경우는 향후 명시 셸 프로파일로 다룬다.
+- 실행 파일: 절대 경로, 존재, 일반 파일, Unix 실행 비트. 요청 alias(상위 symlink 해석 포함)나 해석 대상이 `ProtectedRoots` 안이면 `executable_in_protected_root`로 거부한다. 스냅샷 안의 symlink가 바깥을 가리켜도 거부한다. 이는 위생 규칙이며 OS 격리가 아니다. Windows `.bat`/`.cmd`는 암묵적 `cmd.exe` 해석 때문에 `batch_script_unsupported`로 거부한다. 셸이 필요한 경우는 향후 명시 셸 프로파일로 다룬다.
 - 경로: `WorkspaceRoot`·`Dir`·`TempParent`는 절대 경로이며 `EvalSymlinks` 후 비교한다(Windows는 대소문자 무시). `Dir`이 workspace 밖(`..`, symlink 포함)이거나 `ProtectedRoots`와 workspace/temp가 겹치면 거부한다. 검증 후 symlink 교체 TOCTOU는 남은 제한이다.
 - env: 부모 env를 상속하지 않는다. `HOME`·`USERPROFILE`·`TMPDIR`·`TMP`·`TEMP`는 실행별 `codeye-exec-*/home|tmp`로 executor가 설정하며 호출자가 덮을 수 없다. `SSH_AUTH_SOCK`, `GIT_ASKPASS`, `DATABASE_URL`, `PGPASSWORD`, `*TOKEN*`, `*SECRET*`, `*PASSWORD*`, `*API_KEY*`, `AWS_*`, `ANTHROPIC_*`, `OPENAI_*` 등 자격증명형 키는 값과 무관하게 거부한다. Windows `os/exec`는 `SYSTEMROOT`가 없으면 부모 값을 추가한다. `PATH`가 필요하면 호출자가 명시한다.
 - temp: 확인된 cleanup 후 삭제(Windows 공유 위반 대비 짧은 재시도)하고, 불확실하거나 삭제에 실패하면 남기고 `TempRetained`를 기록한다.
@@ -58,7 +63,7 @@ W08 이후 분석기는 `executor.Runner` 인터페이스에 의존한다. 결�
 
 ## 4. 프로세스 격리와 종료
 
-**Linux**: `Setsid`로 새 session/process group(sid=pgid=pid)을 만든다. 주 프로세스는 `waitid(WNOWAIT)`로 종료만 관찰하고 reap하지 않아 PID/PGID 번호가 재사용되지 않은 상태에서 group에 신호를 보낸다. 종료 순서는 SIGTERM→grace(기본 2초)→SIGKILL 반복→`/proc` 재조사다. pgrp 또는 sid가 같은 살아 있는 프로세스가 없고 주 프로세스가 종료돼야 `confirmed`다. reap 후 `kill(-pgid, 0)`이 ESRCH인지 다시 확인한다. 주 프로세스가 정상 종료해도 group/session 구성원이 남으면 같은 절차로 종료하고 `LeftoverKilled`를 기록한다.
+**Linux**: `Setsid`로 새 session/process group(sid=pgid=pid)을 만든다. 주 프로세스는 `waitid(WNOWAIT)`로 종료만 관찰하고 reap하지 않아 PID/PGID 번호가 재사용되지 않은 상태에서 group에 신호를 보낸다. 종료 순서는 SIGTERM→grace(기본 2초)→SIGKILL 반복→`/proc` 재조사다. 고정된 PGID로의 TERM/KILL은 `/proc` 조사 성공 여부와 무관하게 먼저, 그리고 반복해서 보낸다. `/proc`는 같은 session의 다른 group 구성원 탐색, 탈출 탐지, 비었음 확인에만 쓴다. `/proc` 디렉터리나 PID별 stat 읽기에서 ENOENT/ESRCH(이미 종료) 외 오류(EMFILE, EACCES 등)가 한 번이라도 나면 `proc_scan_failed`로 `uncertain`이다. pgrp 또는 sid가 같은 살아 있는 프로세스가 없고 주 프로세스가 종료돼야 `confirmed`다. reap 후 `kill(-pgid, 0)`이 ESRCH인지 다시 확인한다. 주 프로세스가 정상 종료해도 group/session 구성원이 남으면 같은 절차로 종료하고 `LeftoverKilled`를 기록한다.
 
 `/proc` 조사 시 트리에서 session/group을 떠난 자손(setsid 등)을 발견하면 종료하지 않고 PID+starttime으로 생존을 확인해 `escaped_descendant_alive`로 `uncertain`을 남긴다. 탈출 프로세스가 출력 pipe를 쥐고 있으면 `output_pipe_held_open`도 기록한다. 부모가 먼저 죽은 뒤 setsid하고 fd를 닫은 daemon은 관찰할 수 없으므로 `confirmed`는 "process group/session이 비었음"이며 "모든 자손이 없음"이 아니다. 에이전트 crash 시 고아 정리는 W06 journal·reconciliation 책임이다.
 
@@ -84,12 +89,19 @@ Linux·Windows 외 OS는 `platform_unsupported`로 실행하지 않는다.
 | TestTimeoutKillsProcessTree / TestCancelKillsProcessTree | 주→자식→손자 트리 timeout·취소 후 세 PID 모두 OS에서 사라짐, `confirmed`, identity hook |
 | TestLeftoverProcessesKilledAfterMainExit | 주 프로세스 exit 0 후 pipe를 쥔 자손 종료와 `LeftoverKilled` |
 | TestSnapshotSourceUnchanged | 보호 원본 hash 불변, 작업 사본만 변경, 원본 cwd 거부 |
-| TestRedaction | 민감 인자·값이 기록 argv·JSON·stdout에 없음 |
+| TestRedaction / TestRedactionOverlappingSecretsAndPaths / TestRedactionSecretCutAtCap | 민감 인자·값이 기록 argv·JSON·stdout에 없음, 포함 관계 비밀값의 꼬리 미노출, cwd 경로 마스킹, cap에서 잘린 비밀값 접두사 제거 |
+| TestOnStarted* | 느린 callback이 Run을 늦추지 않음, 멈춘 callback이 timeout을 막지 않음, ctx 취소, 오류·panic 시 트리 종료 |
+| TestExecutableInProtectedRootRejected / TestExecutesResolvedTargetKeepsAliasArgv0 | 스냅샷 안 alias·스냅샷을 가리키는 symlink 거부, 해석된 파일 실행과 argv[0] alias 유지 |
+| TestProcScanFailureStillKillsAndStaysUncertain (Linux) | 별도 subprocess executor가 트리 시작 후 fd를 고갈시켜(EMFILE) `/proc`를 못 읽어도 세 PID 모두 종료, 결과는 `uncertain`/`proc_scan_failed` |
 | TestEnforcedResourcesUnsupported | 강제 한도 요구 시 미실행, 기본은 `Enforced=false` |
 | Linux 전용 | SIGTERM 정상 종료, SIGTERM 무시 시 grace 후 SIGKILL, setsid 탈출 자손 → `uncertain`·temp 보존, `/proc/stat` comm 파싱 |
 | Windows 전용 | Job breakaway 거부, `.cmd` 거부, graceful 없는 Job 종료, Job 단위 CPU·메모리 관찰 |
 
-로컬 실행 결과(Linux WSL2, Go 1.27.4, `GOTOOLCHAIN=local`): `go test -race -count=3`(보강 전)과 `-race -count=2`(최종) `./internal/worker/executor` 통과, `go test ./...`·`go vet ./...`·`GOOS=windows go vet ./...`·`GOOS=windows go test -c` 통과. 그룹 대신 주 프로세스에만 신호를 보내도록 바꾼 변이에서 트리 시험 3개가 실패함을 확인했다. **Windows 실행 시험은 로컬 미실행**이며 CI `windows-2025` 결과가 나오기 전까지 Windows 동작을 검증됐다고 표시하지 않는다. RHEL 8.10 실기 시험도 미실행이다.
+로컬 실행 결과(Linux WSL2, Go 1.27.4, `GOTOOLCHAIN=local`): `go test -race -count=3`(보강 전)과 `-race -count=2`(최종) `./internal/worker/executor` 통과, `go test ./...`·`go vet ./...`·`GOOS=windows go vet ./...`·`GOOS=windows go test -c` 통과. 시험이 결함을 잡는지 변이로 확인했다.
+- 그룹 대신 주 프로세스에만 신호: 트리 시험 3개 실패.
+- 첫 `/proc` 조사 실패 시 신호 없이 반환: EMFILE 시험 실패.
+- 긴 값 우선 정렬 제거: 포함 관계 시험 실패.
+- 잘린 접두사 제거 생략: cap 경계 시험 실패. **Windows 실행 시험은 로컬 미실행**이며 CI `windows-2025` 결과가 나오기 전까지 Windows 동작을 검증됐다고 표시하지 않는다. RHEL 8.10 실기 시험도 미실행이다.
 
 ## 7. 남은 제한
 
@@ -97,3 +109,8 @@ Linux·Windows 외 OS는 `platform_unsupported`로 실행하지 않는다.
 - 출력 무응답 감지, spool quota, 셸 프로파일, 실행 파일 버전·digest 기록은 W08 이후 분석기 계약에서 다룬다.
 - Windows graceful 종료(CTRL_BREAK 등)는 없다. 서비스 종료 시 Job 정리 시험은 W06 agent에서 수행한다.
 - 종료 불가 상태(D state 등)의 주 프로세스는 reap 대기 goroutine이 남을 수 있으며 결과는 `uncertain`이다.
+
+
+## 통합 상태와 doctor
+
+W05 실행기 라이브러리의 구현과 각 머신의 실시간 능력 probe는 다르다. 현재 doctor는 process_control을 unverified/runtime_process_control_not_probed로 표시한다. 바이너리가 빌드됐다는 이유로 해당 계정에서 Job Object나 전체 프로세스 제어를 확인했다고 표시하지 않는다. Executor의 not_started는 실제 child가 생성되지 않았다는 결과이며 DB/노드 protocol의 cleanup_state와 직접 같은 enum이 아니다. worker는 소유한 다른 프로세스의 불확실성까지 합산해 confirmed/uncertain으로 변환해야 한다.

@@ -4,6 +4,7 @@ package executor
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strconv"
@@ -137,65 +138,76 @@ func (p *linuxProc) signal(sig syscall.Signal, members []procStat) {
 	}
 }
 
-// waitEmpty polls until the main process exited and no member remains.
-func (p *linuxProc) waitEmpty(d time.Duration, resignal syscall.Signal) (bool, error) {
+// waitEmpty polls until the main process exited and no member remains. A
+// failed /proc scan never counts as empty; the pinned group is still
+// re-signalled so termination does not depend on /proc being readable.
+func (p *linuxProc) waitEmpty(d time.Duration, resignal syscall.Signal) (empty, scanFailed bool) {
 	deadline := time.Now().Add(d)
 	for {
 		m, err := p.members()
 		if err != nil {
-			return false, err
-		}
-		if len(m) == 0 && p.mainExited() {
-			return true, nil
+			scanFailed = true
+		} else if len(m) == 0 && p.mainExited() {
+			return true, scanFailed
 		}
 		if resignal != 0 {
 			p.signal(resignal, m)
 		}
 		if time.Now().After(deadline) {
-			return false, nil
+			return false, scanFailed
 		}
 		time.Sleep(pollInterval)
 	}
 }
 
+// terminate signals the pinned process group first and unconditionally;
+// /proc is only used to find same-session members, detect escapes and
+// confirm emptiness. Any scan failure leaves cleanup unconfirmed.
 func (p *linuxProc) terminate(grace, killWait time.Duration) stopReport {
 	rep := stopReport{}
 	m, err := p.members()
-	if err != nil {
-		return stopReport{note: "proc_scan_failed"}
-	}
+	scanFailed := err != nil
 	empty := false
 	if grace > 0 {
 		rep.graceful = true
 		p.signal(syscall.SIGTERM, m)
-		if empty, err = p.waitEmpty(grace, 0); err != nil {
-			return stopReport{graceful: true, note: "proc_scan_failed"}
-		}
+		var failed bool
+		empty, failed = p.waitEmpty(grace, 0)
+		scanFailed = scanFailed || failed
 	}
 	if !empty {
-		m, _ = p.members()
+		m, err = p.members()
+		scanFailed = scanFailed || err != nil
 		p.signal(syscall.SIGKILL, m)
 		// Re-signal while polling: a member may fork between scans.
-		if empty, err = p.waitEmpty(killWait, syscall.SIGKILL); err != nil {
-			rep.note = "proc_scan_failed"
-			return rep
-		}
-		if !empty {
-			rep.note = "processes_remain_after_kill"
-			return rep
-		}
+		var failed bool
+		empty, failed = p.waitEmpty(killWait, syscall.SIGKILL)
+		scanFailed = scanFailed || failed
 	}
-	rep.confirmed = true
-	if p.escapedAlive() {
-		rep.confirmed = false
+	switch {
+	case scanFailed:
+		rep.note = "proc_scan_failed"
+	case !empty:
+		rep.note = "processes_remain_after_kill"
+	case p.escapedAlive():
 		rep.note = "escaped_descendant_alive"
+	default:
+		rep.confirmed = true
 	}
 	return rep
 }
 
+// escapedAlive is conservative: an unreadable escape candidate counts as alive.
 func (p *linuxProc) escapedAlive() bool {
 	for pid, start := range p.escape {
-		if st, err := readStat(pid); err == nil && st.start == start && st.live() {
+		st, err := readStat(pid)
+		if err != nil {
+			if processGone(err) {
+				continue
+			}
+			return true
+		}
+		if st.start == start && st.live() {
 			return true
 		}
 	}
@@ -300,6 +312,11 @@ func parseStat(pid int, s string) (procStat, error) {
 	return st, nil
 }
 
+// processGone reports errors meaning the process no longer exists.
+func processGone(err error) bool {
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
+}
+
 func scanProcs() ([]procStat, error) {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
@@ -313,7 +330,10 @@ func scanProcs() ([]procStat, error) {
 		}
 		st, err := readStat(pid)
 		if err != nil {
-			continue // exited while scanning
+			if processGone(err) {
+				continue // exited while scanning
+			}
+			return nil, err // EMFILE, EACCES, ...: cannot see the tree
 		}
 		out = append(out, st)
 	}
