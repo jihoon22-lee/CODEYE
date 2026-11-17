@@ -386,3 +386,10 @@ func TestAssembleUnredactedRoots(t *testing.T) {
 		t.Fatalf("redact forms = %q", forms)
 	}
 }
+
+func TestWindowsVetExecutablePrefix(t *testing.T) {
+	lines, _ := parseStderr([]byte("# example.test/probe/typeerr\r\nvet.exe: typeerr\\t.go:3:23: cannot use value\r\n"))
+	if len(lines) != 2 || lines[1].Kind != "typecheck" || lines[1].Pos != `typeerr\t.go:3:23` {
+		t.Fatalf("%+v", lines)
+	}
+}

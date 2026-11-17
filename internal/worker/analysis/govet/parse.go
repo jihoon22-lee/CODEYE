@@ -274,9 +274,10 @@ func parseStderr(stderr []byte) (lines []stderrLine, dropped int) {
 		case strings.HasPrefix(text, "# "):
 			current = strings.TrimSpace(text[2:])
 			l = stderrLine{Kind: "header", Package: current}
-		case strings.HasPrefix(text, "vet: "):
-			l = stderrLine{Kind: "typecheck", Package: current, Message: text[5:]}
-			if m := posLine.FindStringSubmatch(text[5:]); m != nil {
+		case strings.HasPrefix(text, "vet: "), strings.HasPrefix(text, "vet.exe: "):
+			_, detail, _ := strings.Cut(text, ": ")
+			l = stderrLine{Kind: "typecheck", Package: current, Message: detail}
+			if m := posLine.FindStringSubmatch(detail); m != nil {
 				l.Pos, l.Message = posOf(m), m[4]
 			}
 		case strings.HasPrefix(text, "go: "):
