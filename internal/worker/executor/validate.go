@@ -172,6 +172,14 @@ func prepare(spec Spec) (*prepared, *specError) {
 	if serr != nil {
 		return nil, serr
 	}
+	if spec.OpenCodeModel != "" || spec.OpenCodeRelay != nil {
+		if !spec.OpenCodeRelay.valid(spec.OpenCodeModel) {
+			return nil, reject("invalid_opencode_model", "invalid model identifier")
+		}
+		for key, value := range managedOpenCodeEnv(spec.OpenCodeModel, spec.OpenCodeRelay) {
+			env[key] = value
+		}
+	}
 	p.env = env
 	return p, nil
 }
