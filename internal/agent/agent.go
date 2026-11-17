@@ -517,9 +517,8 @@ func (ag *Agent) applyCommand(c nodeproto.Command) {
 		if c.WorkerID != nil {
 			if w := ag.workers[*c.WorkerID]; w != nil {
 				w.draining = true
-				if c.Kind == nodeproto.CommandStopWorker && w.att != nil {
-					ag.sendCancelLocked(w, w.att, workerproto.CancelShutdown)
-				}
+				// A delayed stop may reach a worker that is already busy. Only an
+				// explicit attempt cancellation is allowed to interrupt that work.
 				if w.att == nil {
 					go ag.stopWorker(w)
 				}

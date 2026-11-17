@@ -1,6 +1,6 @@
 # 17. 구현 작업 계획
 
-현재 W01 환경 진단·프로젝트 기반과 W02 도메인·DB 저장 계약을 구현했다([W01 증거](21-w01-foundation.md), [W02 증거](23-w02-storage.md)). W03 최소 인증 API·웹 연결도 구현했다([W03 증거](24-w03-api.md)). W04 SourceAdapter도 구현했다([W04 증거](25-w04-source.md)). W05 NativeExecutor도 구현했다([W05 증거](26-w05-native.md)). W06에서 [노드 API](28-w06-node-protocol.md)와 [에이전트·워커](28-w06-agent-runtime.md)를 연결했다. [W08 Go vet](29-w08-go-vet.md)는 고정된 snapshot의 Go 모듈을 검사한다. W07은 자동 증감, W09는 보고서 게시 단계다. W01의 `unverified` 결과는 W05/W10 실행 능력 완료가 아니다. 문서·schema·fixture의 존재를 구현 완료로 체크하지 않는다. 일정 추정 대신 선행 관계와 완료 조건으로 관리한다. 목표는 인프라를 오래 쌓은 뒤 품질을 보는 것이 아니라 작은 실제 분석 경로를 먼저 검증하는 것이다.
+현재 W01 환경 진단·프로젝트 기반과 W02 도메인·DB 저장 계약을 구현했다([W01 증거](21-w01-foundation.md), [W02 증거](23-w02-storage.md)). W03 최소 인증 API·웹 연결도 구현했다([W03 증거](24-w03-api.md)). W04 SourceAdapter도 구현했다([W04 증거](25-w04-source.md)). W05 NativeExecutor도 구현했다([W05 증거](26-w05-native.md)). W06에서 [노드 API](28-w06-node-protocol.md)와 [에이전트·워커](28-w06-agent-runtime.md)를 연결했다. [W08 Go vet](29-w08-go-vet.md)는 고정된 snapshot의 Go 모듈을 검사한다. [W07 스케줄러](30-w07-scheduler.md)는 풀 정책과 등록 노드의 수요에 따라 워커 수를 조절한다. W09는 보고서 게시 단계다. W01의 `unverified` 결과는 W05/W10 실행 능력 완료가 아니다. 문서·schema·fixture의 존재를 구현 완료로 체크하지 않는다. 일정 추정 대신 선행 관계와 완료 조건으로 관리한다. 목표는 인프라를 오래 쌓은 뒤 품질을 보는 것이 아니라 작은 실제 분석 경로를 먼저 검증하는 것이다.
 
 ## 1. R0: 개인 PC의 실동작 수직 경로
 
@@ -12,7 +12,7 @@
 | W04 | SourceAdapter Git/local — 구현 완료 | W02 | acquire 시 입력 고정, 원본 미변경, manifest·불안정 복사 검사 |
 | W05 | NativeExecutor — 구현 완료 | W01 | argv/env/cwd, timeout, stdout cap, Windows/Linux 프로세스 그룹 종료 |
 | W06 | [Agent·worker protocol 구현](28-w06-agent-runtime.md) | W02,W05 | enroll/heartbeat/claim/epoch, 두 에이전트로 중복 claim 방지 |
-| W07 | Scheduler·autoscaler | W06 | min/max, 0→N→0, drain, resource admission, lease expiry·late result 시험 |
+| W07 | [Scheduler·autoscaler 구현](30-w07-scheduler.md) | W06 | min/max, 0→N→0, drain, resource admission, lease expiry·late result 시험 |
 | W08 | 첫 언어 분석 어댑터 — Go vet 구현 | W04,W05 | 실제 개인 프로젝트에 맞는 한 언어 선정; raw→normalize·실패 parser fixture |
 | W09 | 구조화 보고서 renderer | W03,W08 | LLM 없이도 task 상태·원시 근거·공백이 보이는 보고서 |
 | W10 | [OpenCode adapter 실연동 검증](32-w10-opencode.md) | W04,W06 | 실제 버전 계약, workspace digest, model request/cancel/permission block 확인 |

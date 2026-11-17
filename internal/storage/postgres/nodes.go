@@ -365,7 +365,7 @@ func (s *Store) NodeHeartbeat(ctx context.Context, node string, in nodeproto.Nod
 				return out, err
 			}
 		}
-		crows, err := tx.Query(ctx, "SELECT id::text,sequence,kind,worker_id::text,attempt_id::text FROM node_commands WHERE node_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 100", node, in.LastCommandSequence)
+		crows, err := tx.Query(ctx, "SELECT id::text,sequence,kind,worker_id::text,attempt_id::text FROM node_commands WHERE node_id=$1 AND sequence>$2 AND (kind<>'start_worker' OR created_at>clock_timestamp()-$3*interval '1 millisecond') ORDER BY sequence LIMIT 100", node, in.LastCommandSequence, StartTimeout.Milliseconds())
 		if err != nil {
 			return out, err
 		}

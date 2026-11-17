@@ -48,20 +48,21 @@ type candidate struct {
 // that observation cannot reflect yet. Observed free space is never reduced
 // by every reservation again (no double counting).
 type nodeView struct {
-	id           string
-	poolID       string
-	scaling      string
-	maxWorkers   int
-	caps         map[string]bool
-	roots        map[string]bool
-	snapshots    map[string]bool
-	cpuMillis    int64
-	freeMemory   int64
-	freeDisk     int64
-	reservedCPU  int64
-	unseenMemory int64
-	unseenDisk   int64
-	lastBeatOK   bool
+	id                 string
+	poolID             string
+	scaling            string
+	maxWorkers         int
+	caps               map[string]bool
+	roots              map[string]bool
+	snapshots          map[string]bool
+	cpuMillis          int64
+	freeMemory         int64
+	freeDisk           int64
+	activeReservations int64
+	reservedCPU        int64
+	unseenMemory       int64
+	unseenDisk         int64
+	lastBeatOK         bool
 }
 
 func (n nodeView) eligible(c candidate) bool {
@@ -84,7 +85,8 @@ func (n nodeView) eligible(c candidate) bool {
 }
 
 func (n nodeView) hasRoom() bool {
-	return n.reservedCPU+ReserveCPUMillis <= n.cpuMillis &&
+	return (n.scaling != nodeproto.ScalingController || n.activeReservations < int64(n.maxWorkers)) &&
+		n.reservedCPU+ReserveCPUMillis <= n.cpuMillis &&
 		n.freeMemory-n.unseenMemory >= ReserveMemoryBytes &&
 		n.freeDisk-n.unseenDisk >= ReserveDiskBytes
 }
@@ -129,10 +131,10 @@ func loadNode(ctx context.Context, tx pgx.Tx, id string, lock bool) (nodeView, *
 	for _, s := range snaps {
 		n.snapshots[s] = true
 	}
-	err = tx.QueryRow(ctx, `SELECT coalesce(sum(c.cpu_millis),0),
+	err = tx.QueryRow(ctx, `SELECT count(*),coalesce(sum(c.cpu_millis),0),
 		coalesce(sum(c.memory_bytes) FILTER (WHERE n.last_heartbeat_at IS NULL OR c.created_at>n.last_heartbeat_at),0),
 		coalesce(sum(c.disk_bytes) FILTER (WHERE n.last_heartbeat_at IS NULL OR c.created_at>n.last_heartbeat_at),0)
-		FROM capacity_reservations c JOIN nodes n ON n.id=c.node_id WHERE c.node_id=$1 AND c.released_at IS NULL`, id).Scan(&n.reservedCPU, &n.unseenMemory, &n.unseenDisk)
+		FROM capacity_reservations c JOIN nodes n ON n.id=c.node_id WHERE c.node_id=$1 AND c.released_at IS NULL`, id).Scan(&n.activeReservations, &n.reservedCPU, &n.unseenMemory, &n.unseenDisk)
 	return n, revoked, err
 }
 

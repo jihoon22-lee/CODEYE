@@ -211,6 +211,10 @@ func TestTC71WarmMinimumCooldownsAndStartTimeout(t *testing.T) {
 	if s := kinds(r.Actions)[nodeproto.CommandStartWorker]; len(s) != 1 || s[0] == lost {
 		t.Fatalf("replacement start: %+v", r)
 	}
+	reconnected := e.ctlBeat(n, 3, cursor, caps, map[string]string{warm[0]: "idle"})
+	if len(reconnected.Commands) != 1 || *reconnected.Commands[0].WorkerID != r.Actions[0].WorkerID {
+		t.Fatalf("reconnected node received expired start: %+v", reconnected.Commands)
+	}
 }
 
 // TC-72: busy 3 → max 1 drains without killing; new work is refused until
@@ -256,7 +260,7 @@ func TestTC72DrainWhenMaxFallsBelowBusy(t *testing.T) {
 		t.Fatal("drain cancelled work")
 	}
 	// Re-running the decision does not drain more.
-	if again := e.reconcile(); len(again.Actions) != 0 {
+	if again := e.reconcile(); len(again.Actions) != 0 || again.Status.CapacityState != "over_target_draining" || again.Status.BusyWorkers != 3 {
 		t.Fatalf("second drain: %+v", again)
 	}
 	out = e.ctlBeat(n, 4, cursor, caps, ws)
@@ -434,6 +438,9 @@ func TestTC73NodeBudgetAndStaticNodes(t *testing.T) {
 	if err != nil || !contains(warns, WarnMinExceedsGlobalRunning) || !contains(warns, WarnMinExceedsNodeCapacity) {
 		t.Fatalf("warnings %v %v", warns, err)
 	}
+	if r := e.reconcile(); r.Status.CapacityState != "degraded_capacity" || !contains(r.Status.Reasons, WarnMinExceedsGlobalRunning) {
+		t.Fatalf("unreachable pool minimum: %+v", r)
+	}
 	// Optimistic revision check.
 	stale := int64(1)
 	if _, _, err := e.s.SetPoolPolicy(e.ctx, PoolPolicyUpdate{Name: "default", MaxWorkers: intp(4), ExpectRevision: &stale}); err != domain.ErrConflict {
@@ -469,5 +476,24 @@ func TestHeartbeatScalingValidation(t *testing.T) {
 	var maxW *int
 	if err := e.s.pool.QueryRow(e.ctx, "SELECT worker_scaling,max_workers FROM nodes WHERE id=$1", n.id).Scan(&scaling, &maxW); err != nil || scaling != "static" || maxW != nil {
 		t.Fatalf("back to static: %s %v %v", scaling, maxW, err)
+	}
+}
+
+// A controller node may restart with a lower local cap or report extra idle workers.
+// Existing reservations continue to count against the new cap at claim time.
+func TestTC73ClaimHonoursReducedNodeCap(t *testing.T) {
+	e := newW06(t)
+	e.projectLimit(3)
+	e.policy(PoolPolicyUpdate{MaxWorkers: intp(3)})
+	n := e.enroll("ctl", e.root.ID)
+	w1, w2 := domain.NewID(), domain.NewID()
+	e.ctlBeat(n, 2, 0, capable(e.root.ID), map[string]string{w1: "idle", w2: "idle"})
+	e.enqueue("node-one", deepReview)
+	r2 := e.enqueue("node-two", deepReview)
+	e.claimOK(n, w1, "node-one-claim")
+	e.ctlBeat(n, 1, 0, capable(e.root.ID), map[string]string{w1: "busy", w2: "idle"})
+	e.noClaim(n, w2, "node-two-claim")
+	if got := e.waiting(r2.ID); got != nodeproto.WaitingCapacityFull {
+		t.Fatalf("node cap waiting reason %q", got)
 	}
 }

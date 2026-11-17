@@ -132,6 +132,10 @@ func (s *Store) SetPoolPolicy(ctx context.Context, u PoolPolicyUpdate) (PoolPoli
 		if _, err := tx.Exec(ctx, "SELECT 1 FROM pool_scaler_state WHERE pool_id=$1 FOR UPDATE", poolID); err != nil {
 			return result{}, err
 		}
+		// Serialize policy changes with claims admitted under the old limits.
+		if _, err := tx.Exec(ctx, "SELECT 1 FROM scheduler_limits WHERE singleton FOR SHARE"); err != nil {
+			return result{}, err
+		}
 		cur, err := currentPolicy(ctx, tx, poolID)
 		if err != nil {
 			return result{}, err
@@ -386,9 +390,12 @@ func reconcilePool(ctx context.Context, tx pgx.Tx, poolID string) (PoolReconcile
 	if err != nil {
 		return out, err
 	}
-	var global, projectLimit int64
+	var global, projectLimit, poolMinimumTotal int64
 	var now time.Time
-	if err := tx.QueryRow(ctx, "SELECT global_max_running,project_max_running,clock_timestamp() FROM scheduler_limits WHERE singleton FOR SHARE").Scan(&global, &projectLimit, &now); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT global_max_running,project_max_running,clock_timestamp(),
+		(SELECT coalesce(sum(current.min_workers),0) FROM
+		 (SELECT DISTINCT ON (pool_id) min_workers FROM pool_policies ORDER BY pool_id,revision DESC) current)
+		FROM scheduler_limits WHERE singleton FOR SHARE`).Scan(&global, &projectLimit, &now, &poolMinimumTotal); err != nil {
 		return out, err
 	}
 	pol, err := currentPolicy(ctx, tx, poolID)
@@ -450,8 +457,12 @@ func reconcilePool(ctx context.Context, tx pgx.Tx, poolID string) (PoolReconcile
 	}
 
 	busy, live, leaving, pendingStarts := 0, 0, 0, 0
+	observedBusy := 0
 	for _, n := range nodes {
 		for _, w := range n.workers {
+			if w.state == nodeproto.WorkerBusy {
+				observedBusy++
+			}
 			switch {
 			case w.leaving:
 				leaving++
@@ -532,7 +543,7 @@ func reconcilePool(ctx context.Context, tx pgx.Tx, poolID string) (PoolReconcile
 				if !placed {
 					sort.SliceStable(eligible, func(a, b int) bool { return eligible[a].processes() < eligible[b].processes() })
 					for _, n := range eligible {
-						if int64(live)+int64(sumStarts(nodes)) < int64(pol.MaxWorkers) && n.canHost() {
+						if live+leaving+sumStarts(nodes) < pol.MaxWorkers && n.canHost() {
 							n.starts++
 							placed = true
 							break
@@ -574,6 +585,9 @@ func reconcilePool(ctx context.Context, tx pgx.Tx, poolID string) (PoolReconcile
 	if pol.MaxWorkers == 0 {
 		addReason(ScaleReasonPaused)
 	}
+	if pol.MinWorkers > 0 && poolMinimumTotal > global {
+		addReason(WarnMinExceedsGlobalRunning)
+	}
 	if unplaced > 0 {
 		addReason(ScaleReasonNodeCapacity)
 	}
@@ -614,7 +628,7 @@ func reconcilePool(ctx context.Context, tx pgx.Tx, poolID string) (PoolReconcile
 		}
 	default:
 		// Warm minimum: keep at least min_workers processes.
-		for live+starts < pol.MinWorkers {
+		for live+starts < pol.MinWorkers && live+leaving+starts < pol.MaxWorkers {
 			var best *scaleNode
 			for _, n := range nodes {
 				if n.canHost() && (best == nil || n.processes() < best.processes()) {
@@ -710,9 +724,10 @@ func reconcilePool(ctx context.Context, tx pgx.Tx, poolID string) (PoolReconcile
 	switch {
 	case pol.MaxWorkers == 0:
 		state = "paused"
-	case busy > pol.MaxWorkers:
+	case observedBusy > pol.MaxWorkers:
+		addReason(ScaleReasonOverTarget)
 		state = "over_target_draining"
-	case contains(reasons, ScaleReasonNodeCapacity) || contains(reasons, ScaleReasonNoControllerNode) && (pol.MinWorkers > 0 || unplaced > 0):
+	case contains(reasons, WarnMinExceedsGlobalRunning) || contains(reasons, ScaleReasonNodeCapacity) || contains(reasons, ScaleReasonNoControllerNode) && (pol.MinWorkers > 0 || unplaced > 0):
 		state = "degraded_capacity"
 	}
 	if len(nodes) == 0 && (pol.MinWorkers > 0) {
@@ -728,7 +743,7 @@ func reconcilePool(ctx context.Context, tx pgx.Tx, poolID string) (PoolReconcile
 	}
 	liveAfter += startsIssued
 	st := PoolStatus{Policy: pol, Epoch: epoch + 1, CapacityState: state, Reasons: reasons, DesiredWorkers: min(max(pol.MinWorkers, busy+matched), pol.MaxWorkers),
-		LiveWorkers: liveAfter, BusyWorkers: busy, DrainingWorkers: drainingNow, PendingStarts: pendingStarts + startsIssued, QueuedDemand: matched + unplaced}
+		LiveWorkers: liveAfter, BusyWorkers: observedBusy, DrainingWorkers: drainingNow, PendingStarts: pendingStarts + startsIssued, QueuedDemand: matched + unplaced}
 	err = tx.QueryRow(ctx, `UPDATE pool_scaler_state SET epoch=$2,policy_revision=$3,capacity_state=$4,reasons=$5,desired_workers=$6,live_workers=$7,
 		busy_workers=$8,draining_workers=$9,pending_starts=$10,queued_demand=$11,
 		last_scale_up_at=CASE WHEN $12 THEN clock_timestamp() ELSE last_scale_up_at END,

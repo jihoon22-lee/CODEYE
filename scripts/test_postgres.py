@@ -74,6 +74,15 @@ def main():
                 if "--nodes" in sys.argv[1:]:
                     import node_smoke
                     node_smoke.run(base, ROOT, env)
+                if "--scheduler" in sys.argv[1:]:
+                    import scheduler_smoke
+                    # A separate database keeps the node/worker observations independent of other smokes.
+                    subprocess.run(["psql", "-X", "-w", "-v", "ON_ERROR_STOP=1", "-c", "CREATE DATABASE scheduler_test"],
+                                   env=probe_env, capture_output=True, check=True, timeout=10)
+                    scheduler_url = url.replace("/postgres?", "/scheduler_test?")
+                    scheduler_env = dict(env, CODEYE_DATABASE_URL=scheduler_url, CODEYE_TEST_DATABASE_URL=scheduler_url)
+                    subprocess.run([str(base / "codeye"), "migrate"], cwd=base, env=scheduler_env, check=True)
+                    scheduler_smoke.run(base, ROOT, scheduler_env)
                 print("PASS: Native PostgreSQL migration·저장 통합·인증/query·CLI 재적용·JSON schema·비밀값 미노출")
             finally:
                 process.terminate()

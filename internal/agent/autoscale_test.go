@@ -117,6 +117,8 @@ func TestAutoscaleCommandsDrainAndRestartDedupe(t *testing.T) {
 	h.fc.addJob(h.job())
 	waitTaskRunning(t, h.fc)
 	h.fc.queueWorkerCommand(nodeproto.CommandDrainWorker, w1)
+	// A stop planned from an earlier idle heartbeat must also wait for the current attempt.
+	h.fc.queueWorkerCommand(nodeproto.CommandStopWorker, w1)
 	// Drain does not cancel: the sleep task keeps running.
 	time.Sleep(1500 * time.Millisecond)
 	select {

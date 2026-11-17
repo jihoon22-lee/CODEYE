@@ -157,6 +157,7 @@ export const ko = {
     waitingLabels: {
       no_capable_node: '소스 접근과 분석 조건을 충족하는 노드를 기다리고 있습니다.',
       capacity_full: '워커 또는 실행 자원이 확보되면 시작합니다.',
+      pool_paused: '사용 가능한 워커 풀이 일시 중지되었습니다.',
       project_limit: '프로젝트의 실행 슬롯을 기다리고 있습니다.',
       node_stale: '호환 노드의 상태 갱신을 기다리고 있습니다.',
       snapshot_unavailable: '고정된 입력 사본을 사용할 수 있는 노드를 기다리고 있습니다.',
