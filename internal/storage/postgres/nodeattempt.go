@@ -311,11 +311,8 @@ func (s *Store) SweepExpiredAttempts(ctx context.Context) (int, error) {
 }
 
 // SetGlobalMaxRunning changes the scheduler's global concurrent attempt limit
-// (trusted operator action; W07 replaces it with pool policy revisions).
+// (trusted operator action; see SetSchedulerLimits).
 func (s *Store) SetGlobalMaxRunning(ctx context.Context, n int) error {
-	if n < 0 || n > 10000 {
-		return domain.ErrInvalid
-	}
-	_, err := s.pool.Exec(ctx, "UPDATE scheduler_limits SET global_max_running=$1 WHERE singleton", n)
-	return classify(err)
+	_, err := s.SetSchedulerLimits(ctx, &n, nil)
+	return err
 }

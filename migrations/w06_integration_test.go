@@ -105,7 +105,10 @@ func TestW06MigrationFromPopulatedW03Schema(t *testing.T) {
 	if err := c.QueryRow(ctx, "SELECT count(*) FROM scheduler_limits").Scan(&limits); err != nil || limits != 1 {
 		t.Fatalf("scheduler_limits rows %d %v", limits, err)
 	}
-	if h := historyRows(t, ctx, c); len(h) != 3 {
+	// Apply goes to the latest embedded version (W07 added 0004 after this test).
+	if latest, err := LatestVersion(); err != nil {
+		t.Fatal(err)
+	} else if h := historyRows(t, ctx, c); len(h) != latest {
 		t.Fatalf("history %v", h)
 	}
 	// An older (0001-0002) binary refuses the migrated schema without changes.

@@ -122,9 +122,28 @@ type NodeHeartbeatRequest struct {
 	Capabilities        []string         `json:"capabilities"`
 	LastCommandSequence int64            `json:"last_command_sequence"`
 	CleanupReports      []CleanupReport  `json:"cleanup_reports"`
+	// WorkerScaling (W07, optional) is ScalingStatic (absent: the agent keeps
+	// its own --workers N) or ScalingController (the agent starts and stops
+	// workers only on controller commands). Static agents omit it, so their
+	// heartbeat bytes are unchanged.
+	WorkerScaling string `json:"worker_scaling,omitempty"`
+	// MaxWorkers (W07) is the agent's local hard worker cap; required with
+	// ScalingController, absent otherwise.
+	MaxWorkers int `json:"max_workers,omitempty"`
 }
 
-// Command kinds. W06 issues only cancel_attempt; the others are reserved for W07.
+// Worker scaling modes (heartbeat worker_scaling).
+const (
+	ScalingStatic     = "static"
+	ScalingController = "controller"
+	// MaxNodeWorkers bounds a controller-scaled node's reported max_workers.
+	MaxNodeWorkers = 64
+)
+
+// Command kinds. cancel_attempt is derived from run cancellation (W06);
+// start_worker/drain_worker/stop_worker are issued by the W07 autoscaler only
+// to nodes that declared ScalingController. drain_worker lets a busy worker
+// finish its attempt and then exit; stop_worker is sent only for idle workers.
 const (
 	CommandCancelAttempt = "cancel_attempt"
 	CommandStartWorker   = "start_worker"
@@ -383,6 +402,8 @@ const (
 	WaitingCapacityFull         = "capacity_full"
 	WaitingSnapshotUnavailable  = "snapshot_unavailable"
 	WaitingRequestUnavailable   = "request_unavailable" // run created before W06 whose request body is unknown
+	WaitingProjectLimit         = "project_limit"       // W07: the project already runs project_max_running attempts
+	WaitingPoolPaused           = "pool_paused"         // W07: every capable node's pool has max_workers = 0
 )
 
 // Completion/task reasons.

@@ -59,6 +59,9 @@ func (s *Store) IssueEnrollmentToken(ctx context.Context, pool string, roots []s
 		if err := tx.QueryRow(ctx, "SELECT id::text FROM worker_pools WHERE name=$1", pool).Scan(&t.PoolID); err != nil {
 			return t, err
 		}
+		if err := ensurePoolRows(ctx, tx, t.PoolID); err != nil {
+			return t, err
+		}
 		if err := tx.QueryRow(ctx, "INSERT INTO node_enrollment_tokens(id,token_sha256,pool_id,expires_at) VALUES($1,$2,$3,clock_timestamp()+$4*interval '1 millisecond') RETURNING expires_at",
 			t.ID, tokenSHA256, t.PoolID, ttl.Milliseconds()).Scan(&t.ExpiresAt); err != nil {
 			return t, err
@@ -179,7 +182,7 @@ func (s *Store) RevokeNode(ctx context.Context, id string) error {
 		if _, err := tx.Exec(ctx, "UPDATE nodes SET revoked_at=clock_timestamp() WHERE id=$1", id); err != nil {
 			return false, err
 		}
-		_, err := tx.Exec(ctx, "UPDATE workers SET state='stopped' WHERE node_id=$1 AND state NOT IN ('stopped','failed')", id)
+		_, err := tx.Exec(ctx, "UPDATE workers SET state='stopped',state_since=clock_timestamp() WHERE node_id=$1 AND state NOT IN ('stopped','failed')", id)
 		return true, err
 	})
 	return err
@@ -227,6 +230,18 @@ func ValidateHeartbeat(in nodeproto.NodeHeartbeatRequest) error {
 		return domain.ErrUnsupported
 	}
 	if in.ObservedWorkers == nil || in.Capabilities == nil || len(in.ObservedWorkers) > 256 || len(in.Capabilities) > nodeproto.MaxCapabilities || len(in.CleanupReports) > 256 || in.LastCommandSequence < 0 {
+		return domain.ErrInvalid
+	}
+	switch in.WorkerScaling {
+	case "", nodeproto.ScalingStatic:
+		if in.MaxWorkers != 0 {
+			return domain.ErrInvalid
+		}
+	case nodeproto.ScalingController:
+		if in.MaxWorkers < 1 || in.MaxWorkers > nodeproto.MaxNodeWorkers {
+			return domain.ErrInvalid
+		}
+	default:
 		return domain.ErrInvalid
 	}
 	c := in.Capacity
@@ -283,15 +298,25 @@ func (s *Store) NodeHeartbeat(ctx context.Context, node string, in nodeproto.Nod
 		if in.LastCommandSequence > seq {
 			return out, domain.ErrInvalid
 		}
-		if err := tx.QueryRow(ctx, `UPDATE nodes SET last_heartbeat_at=clock_timestamp(),cpu_cores=$2,memory_available_bytes=$3,disk_available_bytes=$4,capabilities=$5,protocol_version=$6
-			WHERE id=$1 RETURNING last_heartbeat_at`, node, in.Capacity.CPUCores, in.Capacity.MemoryAvailableBytes, in.Capacity.DiskAvailableBytes, caps, in.ProtocolVersion).Scan(&out.ServerTime); err != nil {
+		scaling := in.WorkerScaling
+		if scaling == "" {
+			scaling = nodeproto.ScalingStatic
+		}
+		var maxWorkers *int
+		if scaling == nodeproto.ScalingController {
+			maxWorkers = &in.MaxWorkers
+		}
+		if err := tx.QueryRow(ctx, `UPDATE nodes SET last_heartbeat_at=clock_timestamp(),cpu_cores=$2,memory_available_bytes=$3,disk_available_bytes=$4,capabilities=$5,protocol_version=$6,
+			worker_scaling=$7,max_workers=$8
+			WHERE id=$1 RETURNING last_heartbeat_at`, node, in.Capacity.CPUCores, in.Capacity.MemoryAvailableBytes, in.Capacity.DiskAvailableBytes, caps, in.ProtocolVersion, scaling, maxWorkers).Scan(&out.ServerTime); err != nil {
 			return out, err
 		}
 		ids := make([]string, 0, len(in.ObservedWorkers))
 		for _, w := range in.ObservedWorkers {
 			var owner string
 			err := tx.QueryRow(ctx, `INSERT INTO workers(id,node_id,state,attempt_id) VALUES($1,$2,$3,$4)
-				ON CONFLICT(id) DO UPDATE SET state=excluded.state,attempt_id=excluded.attempt_id,last_seen_at=clock_timestamp()
+				ON CONFLICT(id) DO UPDATE SET state=excluded.state,attempt_id=excluded.attempt_id,last_seen_at=clock_timestamp(),
+				state_since=CASE WHEN workers.state=excluded.state THEN workers.state_since ELSE clock_timestamp() END
 				WHERE workers.node_id=excluded.node_id RETURNING node_id::text`, w.ID, node, w.State, w.AttemptID).Scan(&owner)
 			if errors.Is(err, pgx.ErrNoRows) {
 				// The worker ID belongs to another node.
@@ -302,7 +327,7 @@ func (s *Store) NodeHeartbeat(ctx context.Context, node string, in nodeproto.Nod
 			}
 			ids = append(ids, w.ID)
 		}
-		if _, err := tx.Exec(ctx, "UPDATE workers SET state='stopped',attempt_id=NULL WHERE node_id=$1 AND NOT (id::text = ANY($2)) AND state NOT IN ('stopped','failed')", node, ids); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE workers SET state='stopped',attempt_id=NULL,state_since=clock_timestamp() WHERE node_id=$1 AND NOT (id::text = ANY($2)) AND state NOT IN ('stopped','failed')", node, ids); err != nil {
 			return out, err
 		}
 		if _, err := tx.Exec(ctx, "UPDATE node_commands SET acked_at=clock_timestamp() WHERE node_id=$1 AND sequence<=$2 AND acked_at IS NULL", node, in.LastCommandSequence); err != nil {

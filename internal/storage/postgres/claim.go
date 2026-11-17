@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
@@ -31,6 +32,9 @@ type ClaimResult struct {
 type candidate struct {
 	runID, projectID, actorID string
 	createdAt                 time.Time
+	// dispatchedAt is the project's last claim time (-infinity if never):
+	// the first key of the round-robin order (W07 fairness).
+	dispatchedAt pgtype.Timestamptz
 	request                   domain.RunRequest
 	source                    domain.Source
 	gitHost                   string
@@ -45,6 +49,9 @@ type candidate struct {
 // by every reservation again (no double counting).
 type nodeView struct {
 	id           string
+	poolID       string
+	scaling      string
+	maxWorkers   int
 	caps         map[string]bool
 	roots        map[string]bool
 	snapshots    map[string]bool
@@ -85,7 +92,7 @@ func (n nodeView) hasRoom() bool {
 // loadNode reads a node's scheduling view. lock takes the node row FOR UPDATE.
 func loadNode(ctx context.Context, tx pgx.Tx, id string, lock bool) (nodeView, *time.Time, error) {
 	q := `SELECT revoked_at,capabilities,coalesce(cpu_cores,0),coalesce(memory_available_bytes,0),coalesce(disk_available_bytes,0),
-		coalesce(last_heartbeat_at>clock_timestamp()-$2*interval '1 millisecond',false) FROM nodes WHERE id=$1`
+		coalesce(last_heartbeat_at>clock_timestamp()-$2*interval '1 millisecond',false),pool_id::text,worker_scaling,coalesce(max_workers,0) FROM nodes WHERE id=$1`
 	if lock {
 		q += " FOR UPDATE"
 	}
@@ -93,7 +100,7 @@ func loadNode(ctx context.Context, tx pgx.Tx, id string, lock bool) (nodeView, *
 	var revoked *time.Time
 	var caps []string
 	var cores float64
-	if err := tx.QueryRow(ctx, q, id, NodeStaleAfter.Milliseconds()).Scan(&revoked, &caps, &cores, &n.freeMemory, &n.freeDisk, &n.lastBeatOK); err != nil {
+	if err := tx.QueryRow(ctx, q, id, NodeStaleAfter.Milliseconds()).Scan(&revoked, &caps, &cores, &n.freeMemory, &n.freeDisk, &n.lastBeatOK, &n.poolID, &n.scaling, &n.maxWorkers); err != nil {
 		return n, nil, err
 	}
 	for _, c := range caps {
@@ -129,18 +136,30 @@ func loadNode(ctx context.Context, tx pgx.Tx, id string, lock bool) (nodeView, *
 	return n, revoked, err
 }
 
-const candidateSQL = `SELECT r.id::text,r.project_id::text,r.actor_id::text,r.request,pr.config->'source',r.snapshot_id::text,s.manifest_digest,r.created_at
+const candidateSQL = `SELECT r.id::text,r.project_id::text,r.actor_id::text,r.request,pr.config->'source',r.snapshot_id::text,s.manifest_digest,r.created_at,
+	coalesce(pd.last_dispatched_at,'-infinity'::timestamptz)
 	FROM runs r
 	JOIN projects p ON p.id=r.project_id AND p.deleted_at IS NULL
 	JOIN project_revisions pr ON pr.project_id=r.project_id AND pr.revision=r.project_revision
 	LEFT JOIN snapshots s ON s.id=r.snapshot_id
+	LEFT JOIN project_dispatch pd ON pd.project_id=r.project_id
 	WHERE r.status='queued' AND r.request IS NOT NULL `
+
+// fairOrder is the claim order (W07): projects round-robin by their last
+// dispatch (never-dispatched first), then oldest run, then ID. Within one
+// claim transaction (serialized by the scheduler_limits lock) the key is
+// stable, so keyset paging over it is exact.
+const fairKey = `(coalesce(pd.last_dispatched_at,'-infinity'::timestamptz),r.created_at,r.id)`
+
+// projectActiveSQL counts a project's active (unreleased) reservations.
+const projectActiveSQL = `(SELECT count(*) FROM capacity_reservations c JOIN attempts a ON a.id=c.attempt_id JOIN runs ar ON ar.id=a.run_id
+	WHERE c.released_at IS NULL AND ar.project_id=r.project_id)`
 
 func scanCandidate(row pgx.Row) (candidate, bool, error) {
 	var c candidate
 	var req, src []byte
 	var manifest *string
-	if err := row.Scan(&c.runID, &c.projectID, &c.actorID, &req, &src, &c.snapshotID, &manifest, &c.createdAt); err != nil {
+	if err := row.Scan(&c.runID, &c.projectID, &c.actorID, &req, &src, &c.snapshotID, &manifest, &c.createdAt, &c.dispatchedAt); err != nil {
 		return c, false, err
 	}
 	// A stored request or source that does not decode under the current rules
@@ -182,8 +201,8 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 		return ClaimResult{}, domain.ErrInvalid
 	}
 	return transaction(ctx, s, func(tx pgx.Tx) (ClaimResult, error) {
-		var limit int64
-		if err := tx.QueryRow(ctx, "SELECT global_max_running FROM scheduler_limits WHERE singleton FOR UPDATE").Scan(&limit); err != nil {
+		var limit, projectLimit int64
+		if err := tx.QueryRow(ctx, "SELECT global_max_running,project_max_running FROM scheduler_limits WHERE singleton FOR UPDATE").Scan(&limit, &projectLimit); err != nil {
 			return ClaimResult{}, err
 		}
 		n, revoked, err := loadNode(ctx, tx, node, true)
@@ -224,8 +243,14 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 			return ClaimResult{}, err
 		}
 		// Only a worker the agent last reported idle, owning no active attempt,
-		// may claim (starting/busy/draining/stopped/failed are refused).
-		if busy || state != nodeproto.WorkerIdle {
+		// may claim (starting/busy/draining/stopped/failed are refused). A
+		// worker the autoscaler already told to drain or stop is refused too,
+		// even before the agent applied the command (W07).
+		var leaving bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM node_commands WHERE worker_id=$1 AND node_id=$2 AND kind IN ('drain_worker','stop_worker'))", worker, node).Scan(&leaving); err != nil {
+			return ClaimResult{}, err
+		}
+		if busy || leaving || state != nodeproto.WorkerIdle {
 			return ClaimResult{}, domain.ErrConflict
 		}
 		if _, err := tx.Exec(ctx, "DELETE FROM node_claims WHERE node_id=$1 AND created_at<clock_timestamp()-interval '1 day'", node); err != nil {
@@ -242,12 +267,24 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 		if !n.lastBeatOK || active >= limit || !n.hasRoom() {
 			return none()
 		}
-		// Page through the whole queue (oldest first) so incompatible runs at
+		// Pool budget (W07): active reservations of all nodes in the pool stay
+		// below the pool's current max_workers (max 0 pauses the pool).
+		pol, err := currentPolicy(ctx, tx, n.poolID)
+		if err != nil {
+			return ClaimResult{}, err
+		}
+		var poolActive int64
+		if err := tx.QueryRow(ctx, "SELECT count(*) FROM capacity_reservations c JOIN nodes n ON n.id=c.node_id WHERE c.released_at IS NULL AND n.pool_id=$1", n.poolID).Scan(&poolActive); err != nil {
+			return ClaimResult{}, err
+		}
+		if poolActive >= int64(pol.MaxWorkers) {
+			return none()
+		}
+		// Page through the whole queue in fair order so incompatible runs at
 		// the head never starve a compatible one behind them.
-		var afterTime *time.Time
-		var afterID *string
+		var after *candidate
 		for {
-			page, last, err := candidatePageFor(ctx, tx, n, afterTime, afterID)
+			page, last, err := candidatePageFor(ctx, tx, n, projectLimit, after)
 			if err != nil {
 				return ClaimResult{}, err
 			}
@@ -271,17 +308,41 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 			if last == nil {
 				break
 			}
-			afterTime, afterID = &last.createdAt, &last.runID
+			after = last
 		}
 		return none()
 	})
 }
 
-// candidatePageFor reads one keyset page of queued runs after (afterTime,
-// afterID) and returns those node n may run, plus the page's last row (nil
-// when the queue is exhausted).
-func candidatePageFor(ctx context.Context, tx pgx.Tx, n nodeView, afterTime *time.Time, afterID *string) ([]candidate, *candidate, error) {
-	rows, err := tx.Query(ctx, candidateSQL+"AND ($1::timestamptz IS NULL OR (r.created_at,r.id)>($1::timestamptz,$2::uuid)) ORDER BY r.created_at,r.id LIMIT $3", afterTime, afterID, candidatePage)
+// candidatePageFor reads one keyset page of queued runs after the row after
+// (fair order; nil = from the start) whose project is below projectLimit
+// active attempts (projectLimit <= 0 disables that filter), and returns
+// those node n may run, plus the page's last row (nil when the queue is
+// exhausted).
+func candidatePageFor(ctx context.Context, tx pgx.Tx, n nodeView, projectLimit int64, after *candidate) ([]candidate, *candidate, error) {
+	page, last, err := fairPage(ctx, tx, projectLimit, after)
+	if err != nil {
+		return nil, nil, err
+	}
+	var out []candidate
+	for _, c := range page {
+		if n.eligible(c) {
+			out = append(out, c)
+		}
+	}
+	return out, last, nil
+}
+
+// fairPage reads one keyset page of decodable queued runs in fair order.
+func fairPage(ctx context.Context, tx pgx.Tx, projectLimit int64, after *candidate) ([]candidate, *candidate, error) {
+	var afterKey pgtype.Timestamptz
+	var afterTime *time.Time
+	var afterID *string
+	if after != nil {
+		afterKey, afterTime, afterID = after.dispatchedAt, &after.createdAt, &after.runID
+	}
+	rows, err := tx.Query(ctx, candidateSQL+"AND ($1::timestamptz IS NULL OR "+fairKey+">($4::timestamptz,$1::timestamptz,$2::uuid)) AND ($5<=0 OR "+projectActiveSQL+"<$5) ORDER BY "+fairKey+" LIMIT $3",
+		afterTime, afterID, candidatePage, afterKey, projectLimit)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -297,7 +358,7 @@ func candidatePageFor(ctx context.Context, tx pgx.Tx, n nodeView, afterTime *tim
 		count++
 		lc := c
 		last = &lc
-		if ok && n.eligible(c) {
+		if ok {
 			out = append(out, c)
 		}
 	}
@@ -382,7 +443,12 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 	if _, err = tx.Exec(ctx, "INSERT INTO capacity_reservations(attempt_id,node_id,worker_id,cpu_millis,memory_bytes,disk_bytes) VALUES($1,$2,$3,$4,$5,$6)", a.ID, node, worker, ReserveCPUMillis, ReserveMemoryBytes, ReserveDiskBytes); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(ctx, "UPDATE workers SET state='busy',attempt_id=$2 WHERE id=$1", worker, a.ID); err != nil {
+	if _, err = tx.Exec(ctx, "UPDATE workers SET state='busy',attempt_id=$2,state_since=CASE WHEN state='busy' THEN state_since ELSE clock_timestamp() END WHERE id=$1", worker, a.ID); err != nil {
+		return nil, false, err
+	}
+	// Round-robin key (W07): this project was served now.
+	if _, err = tx.Exec(ctx, `INSERT INTO project_dispatch(project_id,last_dispatched_at,dispatch_count) VALUES($1,clock_timestamp(),1)
+		ON CONFLICT(project_id) DO UPDATE SET last_dispatched_at=excluded.last_dispatched_at,dispatch_count=project_dispatch.dispatch_count+1`, r.ProjectID); err != nil {
 		return nil, false, err
 	}
 	if err = appendEvent(ctx, tx, &r, "attempt.leased", map[string]any{"attempt_id": a.ID, "epoch": a.Epoch, "node_id": node, "worker_id": worker}, true); err != nil {
@@ -498,7 +564,8 @@ func waitingReason(ctx context.Context, tx pgx.Tx, runID string) (*string, error
 			return reason(nodeproto.WaitingSnapshotUnavailable)
 		}
 	}
-	fresh, capable, room := false, false, false
+	fresh, capable := false, false
+	var capableViews []nodeView
 	for _, v := range views {
 		if !v.lastBeatOK {
 			continue
@@ -506,7 +573,7 @@ func waitingReason(ctx context.Context, tx pgx.Tx, runID string) (*string, error
 		fresh = true
 		if v.eligible(c) {
 			capable = true
-			room = room || v.hasRoom()
+			capableViews = append(capableViews, v)
 		}
 	}
 	switch {
@@ -515,9 +582,35 @@ func waitingReason(ctx context.Context, tx pgx.Tx, runID string) (*string, error
 	case !capable:
 		return reason(nodeproto.WaitingNoCapableNode)
 	}
-	var limit, active int64
-	if err := tx.QueryRow(ctx, "SELECT global_max_running,(SELECT count(*) FROM capacity_reservations WHERE released_at IS NULL) FROM scheduler_limits WHERE singleton").Scan(&limit, &active); err != nil {
+	var limit, projectLimit, active, projectActive int64
+	if err := tx.QueryRow(ctx, `SELECT global_max_running,project_max_running,(SELECT count(*) FROM capacity_reservations WHERE released_at IS NULL),
+		(SELECT count(*) FROM capacity_reservations c JOIN attempts a ON a.id=c.attempt_id JOIN runs ar ON ar.id=a.run_id WHERE c.released_at IS NULL AND ar.project_id=$1)
+		FROM scheduler_limits WHERE singleton`, c.projectID).Scan(&limit, &projectLimit, &active, &projectActive); err != nil {
 		return nil, err
+	}
+	if projectActive >= projectLimit {
+		return reason(nodeproto.WaitingProjectLimit)
+	}
+	// Pool budget (W07): a capable node has room only if its pool is below
+	// max_workers; pools with max 0 are paused.
+	paused, room := true, false
+	for _, v := range capableViews {
+		pol, err := currentPolicy(ctx, tx, v.poolID)
+		if err != nil {
+			return nil, err
+		}
+		if pol.MaxWorkers == 0 {
+			continue
+		}
+		paused = false
+		var poolActive int64
+		if err := tx.QueryRow(ctx, "SELECT count(*) FROM capacity_reservations c JOIN nodes n ON n.id=c.node_id WHERE c.released_at IS NULL AND n.pool_id=$1", v.poolID).Scan(&poolActive); err != nil {
+			return nil, err
+		}
+		room = room || (v.hasRoom() && poolActive < int64(pol.MaxWorkers))
+	}
+	if paused {
+		return reason(nodeproto.WaitingPoolPaused)
 	}
 	if active >= limit || !room {
 		return reason(nodeproto.WaitingCapacityFull)
