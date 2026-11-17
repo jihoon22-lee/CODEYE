@@ -60,3 +60,11 @@ def run(base: Path, root: Path, env: dict):
             except subprocess.TimeoutExpired:
                 server.kill()
                 server.wait(timeout=5)
+
+
+
+def published_report(root, env, origin, login, project, run_id):
+    browser_env = dict(env, CODEYE_TEST_BASE_URL=origin, CODEYE_TEST_REPORT_LOGIN=str(login),
+                       CODEYE_TEST_REPORT_PROJECT=project, CODEYE_TEST_REPORT_ID=run_id)
+    subprocess.run(["npm", "run", "test:e2e", "--", "report.spec.ts"],
+                   cwd=root / "web", env=browser_env, check=True, timeout=120)

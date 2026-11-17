@@ -73,7 +73,7 @@ def main():
                     browser_smoke.run(base, ROOT, env)
                 if "--nodes" in sys.argv[1:]:
                     import node_smoke
-                    node_smoke.run(base, ROOT, env)
+                    node_smoke.run(base, ROOT, env, browser="--web" in sys.argv[1:])
                 if "--scheduler" in sys.argv[1:]:
                     import scheduler_smoke
                     # A separate database keeps the node/worker observations independent of other smokes.
