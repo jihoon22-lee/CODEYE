@@ -448,6 +448,22 @@ func Load(ctx context.Context, root, expectedDigest string) (Snapshot, error) {
 	return Snapshot{Root: root, SnapshotDir: filepath.Join(root, "snapshot"), WorkspaceDir: filepath.Join(root, "workspace"), ManifestPath: filepath.Join(root, "manifest.json"), Manifest: manifest, Digest: expectedDigest}, nil
 }
 
+// DecodeManifest strictly decodes and validates manifest bytes whose SHA-256
+// the caller has already matched to the snapshot digest (controller readers,
+// W09). It never touches the filesystem. Invalid bytes are ErrIntegrity.
+func DecodeManifest(b []byte) (Manifest, error) {
+	if len(b) > maxManifestBytes {
+		return Manifest{}, ErrIntegrity
+	}
+	var manifest Manifest
+	decoder := json.NewDecoder(bytes.NewReader(b))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&manifest); err != nil || decoder.More() || validateManifest(manifest) != nil {
+		return Manifest{}, ErrIntegrity
+	}
+	return manifest, nil
+}
+
 var (
 	hashPattern   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	shaPattern    = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
