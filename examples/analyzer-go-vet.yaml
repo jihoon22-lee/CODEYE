@@ -1,0 +1,31 @@
+# W08 빌트인 Go vet 어댑터 서술. 구현: internal/worker/analysis/govet, 근거: docs/29-w08-go-vet.md.
+# -json에서는 진단이 있어도 exit 0이므로 findings는 종료 코드 범주가 아니다(빈 배열).
+# 발견 여부는 stdout JSON parser가 결정하고, exit 1은 패키지 오류·설정 오류다.
+schema_version: '0.1'
+id: go.vet
+languages: [go]
+planned_platforms: [linux, windows]
+availability: verified  # Linux go1.27.4 실행으로 검증. Windows 경로 정규화는 Windows CI 결과 전 미검증.
+version_contract: go1.27-fixture-tested
+analysis_scope: [typed, intraprocedural]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${go}'
+  argv: [version]
+execute:
+  executable: '${go}'
+  argv: [vet, -json, './...']
+  cwd: '${workspace}/${module_dir}'
+  timeout_seconds: 900
+  stdout_max_bytes: 33554432
+  env_allowlist: [PATH, LANG, SystemRoot, GOENV, GOWORK, GOTOOLCHAIN, GOPROXY, GOSUMDB, GOVCS, GOFLAGS, CGO_ENABLED, GOCACHE, GOPATH, GOMODCACHE]
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [1, 2]
+parser:
+  id: go-vet-json-v1
+  format: json
+  input: stdout-artifact

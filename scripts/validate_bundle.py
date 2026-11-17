@@ -125,6 +125,43 @@ def check_analyzer(descriptor: dict) -> None:
     ensure(len(merged) == len(set(merged)), "Overlapping exit-code categories")
 
 
+ABSOLUTE = re.compile(r"^(?:/|\\|[A-Za-z]:[\\/])")
+
+
+def check_observations(doc: dict) -> None:
+    """Cross-field rules of the Go vet observations artifact (W08)."""
+    observations = doc["observations"]
+    ensure(doc["parse"]["observations"] == len(observations), "Observation count mismatch")
+    unresolved = sum(1 for o in observations if o["location_state"] != "resolved")
+    ensure(doc["parse"]["unresolved_observations"] == unresolved, "Unresolved observation count mismatch")
+    ensure(len({o["id"] for o in observations}) == len(observations), "Duplicate observation id")
+    vet = [e for e in doc["executions"] if e["name"] == "go.vet"]
+    for o in observations:
+        ensure(bool(vet) and o["raw_ref"]["stream_sha256"] == vet[0]["stdout"]["sha256"], "Observation not bound to go.vet stdout")
+        ensure(o["raw_ref"]["byte_start"] < o["raw_ref"]["byte_end"] <= vet[0]["stdout"]["captured_bytes"], "Raw byte range outside stdout")
+        if o["location"] is not None:
+            ensure(o["location"]["path"] == o["path"], "Location/path mismatch")
+            ensure(o["location"]["start_line"] <= o["location"]["end_line"], "Inverted observation range")
+            ensure(o["path"] not in doc["workspace_drift"], "Drifted file linked to code")
+    outcome = doc["outcome"]
+    if outcome["task_status"] == "succeeded":
+        ensure(all(e["status"] == "exited" and e["exit_code"] == 0 and e["cleanup"] == "confirmed" and not e["stdout"]["truncated"] and not e["stdout"]["incomplete"] for e in doc["executions"]), "Succeeded with an unclean execution")
+        ensure([e["name"] for e in doc["executions"]] == ["go.version", "go.modedit", "go.list", "go.vet"], "Succeeded without all executions")
+        ensure(doc["parse"]["ok"] and doc["parse"]["unparsed_bytes"] == 0, "Succeeded without a complete parse")
+        ensure(not doc["workspace_drift"], "Succeeded although the workspace drifted from the snapshot")
+        ensure(sum(doc["coverage"]["packages"].get(s, 0) for s in ("analyzed_clean", "analyzed_with_findings")) > 0, "Succeeded without any analyzed package")
+        ensure((outcome["exit_class"] == "success_with_findings") == bool(observations), "Exit class does not follow parsed observations")
+        ensure(all(p["state"] not in ("unknown", "failed_typecheck", "load_error", "dependency_unavailable") for p in doc["inventory"]), "Succeeded with unanalyzed listed packages")
+    if any(p["state"] == "unknown" for p in doc["inventory"]):
+        ensure(doc["coverage"]["processed_go_files"] is None, "Processed file count claimed with unknown packages")
+    states = {}
+    for p in doc["inventory"]:
+        states[p["state"]] = states.get(p["state"], 0) + 1
+    ensure(states == doc["coverage"]["packages"], "Package state counts mismatch")
+    for e in doc["executions"]:
+        ensure(not any(ABSOLUTE.match(a) for a in e["command"]["argv"]) and "/" not in e["command"]["argv"][0], "Node path in command")
+
+
 def resolve_pointer(document, pointer: str):
     if not pointer:
         return document
@@ -227,12 +264,19 @@ def main() -> None:
     plan = json_file(ROOT / "examples/plan.json")
     report = json_file(ROOT / "examples/report.json")
     analyzer = yaml_file(ROOT / "examples/analyzer-ruff.yaml")
+    go_vet = yaml_file(ROOT / "examples/analyzer-go-vet.yaml")
+    observations = json_file(ROOT / "examples/observations-go-vet.json")
     validators["plan.schema.json"].validate(plan)
     validators["report.schema.json"].validate(report)
     validators["analyzer.schema.json"].validate(analyzer)
+    validators["analyzer.schema.json"].validate(go_vet)
+    validators["go-vet-observations.schema.json"].validate(observations)
     check_plan(plan)
     check_report(report)
     check_analyzer(analyzer)
+    check_analyzer(go_vet)
+    ensure(go_vet["exit_codes"]["findings"] == [], "go vet -json findings are not an exit-code class")
+    check_observations(observations)
     ensure(plan["run_id"] == report["run_id"], "Example run mismatch")
     plan_tasks = {task["id"]: task for task in plan["tasks"]}
     ensure(set(plan_tasks) == {task["id"] for task in report["tasks"]}, "Plan/report task mismatch")
@@ -278,6 +322,27 @@ def main() -> None:
     bad = copy.deepcopy(analyzer)
     bad["exit_codes"]["findings"] = [0]
     expect_invalid("exit-code overlap", check_analyzer, bad)
+    bad = copy.deepcopy(observations)
+    bad["observations"].pop()
+    expect_invalid("observation count drift", check_observations, bad)
+    bad = copy.deepcopy(observations)
+    bad["outcome"].update(task_status="succeeded", reason=None, exit_class="success_without_findings")
+    expect_invalid("zero findings with observations", check_observations, bad)
+    bad = copy.deepcopy(observations)
+    bad["executions"][3]["stdout"]["truncated"] = True
+    expect_invalid("truncated success", check_observations, bad)
+    bad = copy.deepcopy(observations)
+    bad["workspace_drift"] = ["clean/c.go"]
+    expect_invalid("success with drift", check_observations, bad)
+    bad = copy.deepcopy(observations)
+    bad["observations"][0]["location_state"] = "unresolved_missing_file"
+    expect_invalid("unresolved with location", validators["go-vet-observations.schema.json"].validate, bad)
+    bad = copy.deepcopy(observations)
+    bad["outcome"].update(task_status="failed", reason=None)
+    expect_invalid("failure without reason", validators["go-vet-observations.schema.json"].validate, bad)
+    bad = copy.deepcopy(observations)
+    bad["executions"][0]["command"]["dir"] = "/home/user/workspace"
+    expect_invalid("node path in command dir", validators["go-vet-observations.schema.json"].validate, bad)
     bad = copy.deepcopy(json_file(ROOT / "examples/doctor.json"))
     bad["checks"][0]["status"] = "success"
     expect_invalid("unknown doctor status", validators["doctor.schema.json"].validate, bad)
@@ -285,9 +350,9 @@ def main() -> None:
     bad["checks"][-1]["id"] = "host"
     expect_invalid("missing doctor capability", validators["doctor.schema.json"].validate, bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
-    print(f"PASS: {link_count} local Markdown file links; {len(schemas)} JSON Schemas; 7 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(schemas)} JSON Schemas; 9 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
-    print("PASS: 8 negative cases; example policy timing; prompt manifest")
+    print("PASS: 15 negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 

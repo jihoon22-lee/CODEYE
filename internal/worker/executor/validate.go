@@ -1,6 +1,8 @@
 package executor
 
 import (
+	"github.com/jihoon22-lee/CODEYE/internal/nativepath"
+
 	"fmt"
 	"os"
 	"path/filepath"
@@ -83,7 +85,7 @@ func prepare(spec Spec) (*prepared, *specError) {
 		return nil, reject("invalid_executable", "executable must be an absolute path")
 	}
 	p.executable = filepath.Clean(spec.Executable)
-	resolved, err := filepath.EvalSymlinks(p.executable)
+	resolved, err := nativepath.Resolve(p.executable)
 	if err != nil {
 		return nil, reject("executable_not_found", "executable cannot be resolved")
 	}

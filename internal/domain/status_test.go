@@ -132,7 +132,7 @@ func TestTaskTransitions(t *testing.T) {
 		{TaskBlocked, TaskQueued}, {TaskBlocked, TaskFailed}, {TaskBlocked, TaskSkippedPolicy},
 		{TaskBlocked, TaskCancelled}, {TaskBlocked, TaskUnsupported}, {TaskBlocked, TaskBudgetExhausted},
 		{TaskRunning, TaskSucceeded}, {TaskRunning, TaskFailed}, {TaskRunning, TaskTimedOut},
-		{TaskRunning, TaskCancelled}, {TaskRunning, TaskBudgetExhausted},
+		{TaskRunning, TaskCancelled}, {TaskRunning, TaskBudgetExhausted}, {TaskRunning, TaskUnsupported}, {TaskRunning, TaskSkippedPolicy},
 	}
 	allow := map[[2]TaskStatus]bool{}
 	for _, c := range allowed {
