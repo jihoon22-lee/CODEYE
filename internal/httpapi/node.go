@@ -402,6 +402,37 @@ func (s *Server) sweepLoop(ctx context.Context) {
 	}
 }
 
+// scaleLoop runs the pool autoscaler (W07) until ctx ends. Decisions and
+// commands are in the database; the log line is diagnostic only.
+func (s *Server) scaleLoop(ctx context.Context) {
+	t := time.NewTicker(s.scaleEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		sctx, cancel := context.WithTimeout(ctx, storeTimeout)
+		rs, err := s.store.ReconcilePools(sctx)
+		cancel()
+		if err != nil && ctx.Err() == nil {
+			s.log.Warn("pool reconcile failed", "error_class", errorClass(err))
+		}
+		for _, r := range rs {
+			if len(r.Actions) == 0 {
+				continue
+			}
+			counts := map[string]int{}
+			for _, a := range r.Actions {
+				counts[a.Kind]++
+			}
+			s.log.Info("pool scaled", "pool_id", r.PoolID, "epoch", r.Status.Epoch, "capacity_state", r.Status.CapacityState,
+				"start_worker", counts[nodeproto.CommandStartWorker], "drain_worker", counts[nodeproto.CommandDrainWorker], "stop_worker", counts[nodeproto.CommandStopWorker])
+		}
+	}
+}
+
 func errorClass(err error) string {
 	for _, e := range []error{domain.ErrConflict, domain.ErrInvalid, domain.ErrNotFound, domain.ErrUnavailable, context.DeadlineExceeded, context.Canceled} {
 		if errors.Is(err, e) {

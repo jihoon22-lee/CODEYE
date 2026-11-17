@@ -433,3 +433,49 @@ func TestServeSweepsExpiredLeases(t *testing.T) {
 		t.Fatalf("sweeper did not expire the lease: %s", status)
 	}
 }
+
+// W07: Serve's autoscaler loop turns queued demand for a controller-scaled
+// node (zero workers, probed capability) into a start_worker command that
+// the node receives over the real heartbeat route.
+func TestServeAutoscalerStartsWorkerForControllerNode(t *testing.T) {
+	e := newEnv(t)
+	f := e.nodeFixture()
+	n := e.enrollNode(f.root.ID)
+	caps := []string{nodeproto.AnalysisCapability("deep-review"), nodeproto.LocalSourceCapability(f.root.ID)}
+	beat := heartbeatBody(nil, caps)
+	beat.WorkerScaling, beat.MaxWorkers = nodeproto.ScalingController, 2
+	e.node("POST", "/api/v1/nodes/"+n.NodeID+"/heartbeat", beat, nreq{secret: n.NodeSecret}).want(t, 200, "")
+	e.do("POST", "/api/v1/projects/"+f.projectID+"/runs", map[string]any{"profile": "deep-review", "source_policy": "latest_at_acquire", "scope": map[string]any{"kind": "full"}}, opts{cookie: f.user.cookie, csrf: f.user.csrf, idem: "r1"}).want(t, 202, "")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), SweepInterval: -1, ReconcileInterval: 50 * time.Millisecond}, e.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- srv.Serve(ctx, ln) }()
+	deadline := time.Now().Add(10 * time.Second)
+	var resp nodeproto.NodeHeartbeatResponse
+	for time.Now().Before(deadline) {
+		r := e.node("POST", "/api/v1/nodes/"+n.NodeID+"/heartbeat", beat, nreq{secret: n.NodeSecret}).want(t, 200, "")
+		_ = json.Unmarshal(r.raw, &resp)
+		if len(resp.Commands) > 0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	stop()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Commands) != 1 || resp.Commands[0].Kind != nodeproto.CommandStartWorker || resp.Commands[0].WorkerID == nil || !domain.ValidID(*resp.Commands[0].WorkerID) {
+		t.Fatalf("commands %+v", resp.Commands)
+	}
+	// Invalid scaling fields are a validation error at the route.
+	bad := heartbeatBody(nil, caps)
+	bad.WorkerScaling = nodeproto.ScalingController
+	e.node("POST", "/api/v1/nodes/"+n.NodeID+"/heartbeat", bad, nreq{secret: n.NodeSecret}).want(t, 422, "VALIDATION_FAILED")
+}

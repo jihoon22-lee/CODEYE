@@ -20,6 +20,11 @@ func TestRunNodeDispatchAndUsage(t *testing.T) {
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--workers", "17"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--git", "git"},
 		{"worker", "--anything"},
+		// W07: --autoscale excludes an explicit --workers; --max-workers needs --autoscale and 1..16.
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--autoscale", "--workers", "1"},
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--max-workers", "2"},
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--autoscale", "--max-workers", "17"},
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--autoscale", "--max-workers", "0"},
 	}
 	for _, args := range cases {
 		var stderr bytes.Buffer

@@ -59,6 +59,8 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	name := fs.String("name", "", "")
 	tokenFile := fs.String("enroll-token-file", "", "")
 	workers := fs.Int("workers", 1, "")
+	autoscale := fs.Bool("autoscale", false, "")
+	maxWorkers := fs.Int("max-workers", 2, "")
 	toolPath := fs.String("toolchain-path", "/usr/bin:/bin", "")
 	git := fs.String("git", "", "")
 	goExe := fs.String("go", "", "")
@@ -68,6 +70,18 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || *controller == "" || *stateDir == "" {
 		fmt.Fprintln(stderr, "invalid agent options; use codeye --help")
 		return agent.ExitUsage
+	}
+	// --autoscale (W07) starts with zero workers and follows controller
+	// commands; it excludes an explicit --workers (legacy static mode, the
+	// default). --max-workers only applies to --autoscale.
+	explicit := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+	if (*autoscale && explicit["workers"]) || (!*autoscale && explicit["max-workers"]) {
+		fmt.Fprintln(stderr, "--autoscale [--max-workers N] and --workers N are mutually exclusive")
+		return agent.ExitUsage
+	}
+	if *autoscale {
+		*workers = 0
 	}
 	abs, err := filepath.Abs(*stateDir)
 	if err != nil {
@@ -87,7 +101,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	for _, id := range modelRoots {
 		approved[id] = true
 	}
-	cfg := agent.Config{ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile, SourceRoots: mapping, Workers: *workers, ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, Log: stderr}
+	cfg := agent.Config{ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile, SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers, ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, Log: stderr}
 	ag, err := agent.New(cfg)
 	if err == nil {
 		err = ag.Run(ctx)

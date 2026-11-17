@@ -20,7 +20,10 @@ const nodeAdminUsage = `  codeye node token create --pool NAME [--source-root ID
   codeye node token revoke --id TOKEN_ID
   codeye node list
   codeye node revoke --id NODE_ID
-  codeye scheduler set --global-max-running N
+  codeye scheduler set [--global-max-running N] [--project-max-running N]
+  codeye pool set --name NAME [--min-workers N] [--max-workers N] [--idle-timeout-seconds S]
+                  [--scale-up-cooldown-seconds S] [--scale-down-cooldown-seconds S] [--expect-revision R]
+  codeye pool list
 `
 
 const defaultEnrollTTL = 10 * time.Minute
@@ -31,6 +34,12 @@ const defaultEnrollTTL = 10 * time.Minute
 func runNodeAdmin(ctx context.Context, args []string, out, stderr io.Writer) (code int, ok bool) {
 	if len(args) >= 2 && args[0] == "scheduler" && args[1] == "set" {
 		return schedulerSet(ctx, args[2:], out, stderr), true
+	}
+	if len(args) >= 2 && args[0] == "pool" && args[1] == "set" {
+		return poolSet(ctx, args[2:], out, stderr), true
+	}
+	if len(args) >= 2 && args[0] == "pool" && args[1] == "list" {
+		return poolList(ctx, args[2:], out, stderr), true
 	}
 	if len(args) < 2 || args[0] != "node" {
 		return 0, false
@@ -192,17 +201,104 @@ func nodeRevoke(ctx context.Context, args []string, out, stderr io.Writer) int {
 }
 
 func schedulerSet(ctx context.Context, args []string, out, stderr io.Writer) int {
-	n := -1
-	if !parse("scheduler set", args, stderr, func(fs *flag.FlagSet) { fs.IntVar(&n, "global-max-running", -1, "") }) || n < 0 {
-		fmt.Fprintln(stderr, "--global-max-running N (0..10000) is required")
+	var global, project *int
+	g, p := -1, -1
+	fs, ok := parseSet("scheduler set", args, stderr, func(fs *flag.FlagSet) {
+		fs.IntVar(&g, "global-max-running", -1, "")
+		fs.IntVar(&p, "project-max-running", -1, "")
+	})
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "global-max-running":
+			global = &g
+		case "project-max-running":
+			project = &p
+		}
+	})
+	if !ok || (global == nil && project == nil) || (global != nil && (g < 0 || g > 10000)) || (project != nil && (p < 1 || p > 10000)) {
+		fmt.Fprintln(stderr, "--global-max-running N (0..10000) and/or --project-max-running N (1..10000) is required")
 		return 2
 	}
 	return withStore(ctx, stderr, func(ctx context.Context, s *postgres.Store) int {
-		if err := s.SetGlobalMaxRunning(ctx, n); err != nil {
+		l, err := s.SetSchedulerLimits(ctx, global, project)
+		if err != nil {
 			fmt.Fprintln(stderr, "cannot set scheduler limit:", err)
 			return 1
 		}
 		fmt.Fprintln(out, "scheduler limit updated")
+		printJSON(out, map[string]any{"global_max_running": l.GlobalMaxRunning, "project_max_running": l.ProjectMaxRunning, "revision": l.Revision})
+		return 0
+	})
+}
+
+func poolSet(ctx context.Context, args []string, out, stderr io.Writer) int {
+	var name string
+	ints := map[string]*int{}
+	var expect int64 = -1
+	names := []string{"min-workers", "max-workers", "idle-timeout-seconds", "scale-up-cooldown-seconds", "scale-down-cooldown-seconds"}
+	vals := map[string]*int{}
+	fs, ok := parseSet("pool set", args, stderr, func(fs *flag.FlagSet) {
+		fs.StringVar(&name, "name", "", "")
+		fs.Int64Var(&expect, "expect-revision", -1, "")
+		for _, n := range names {
+			v := new(int)
+			vals[n] = v
+			fs.IntVar(v, n, 0, "")
+		}
+	})
+	if !ok || name == "" {
+		fmt.Fprintln(stderr, "--name is required; see codeye --help")
+		return 2
+	}
+	fs.Visit(func(f *flag.Flag) {
+		if v, ok := vals[f.Name]; ok {
+			ints[f.Name] = v
+		}
+	})
+	u := postgres.PoolPolicyUpdate{Name: name, MinWorkers: ints["min-workers"], MaxWorkers: ints["max-workers"], IdleTimeoutSeconds: ints["idle-timeout-seconds"],
+		ScaleUpCooldownSeconds: ints["scale-up-cooldown-seconds"], ScaleDownCooldownSeconds: ints["scale-down-cooldown-seconds"]}
+	if expect >= 0 {
+		u.ExpectRevision = &expect
+	}
+	return withStore(ctx, stderr, func(ctx context.Context, s *postgres.Store) int {
+		p, warnings, err := s.SetPoolPolicy(ctx, u)
+		if err != nil {
+			fmt.Fprintln(stderr, "cannot set pool policy (min<=max, max 0 only with min 0, idle 1..86400s, cooldowns 0..3600s; revision must match):", err)
+			return 1
+		}
+		item := policyJSON(p)
+		item["warnings"] = warnings
+		printJSON(out, item)
+		return 0
+	})
+}
+
+func policyJSON(p postgres.PoolPolicy) map[string]any {
+	return map[string]any{"pool_id": p.PoolID, "pool": p.PoolName, "revision": p.Revision, "min_workers": p.MinWorkers, "max_workers": p.MaxWorkers,
+		"idle_timeout_seconds": p.IdleTimeoutSeconds, "scale_up_cooldown_seconds": p.ScaleUpCooldownSeconds, "scale_down_cooldown_seconds": p.ScaleDownCooldownSeconds}
+}
+
+func poolList(ctx context.Context, args []string, out, stderr io.Writer) int {
+	if !parse("pool list", args, stderr, func(*flag.FlagSet) {}) {
+		return 2
+	}
+	return withStore(ctx, stderr, func(ctx context.Context, s *postgres.Store) int {
+		pools, err := s.ListPools(ctx)
+		if err != nil {
+			fmt.Fprintln(stderr, "cannot list pools:", err)
+			return 1
+		}
+		items := make([]map[string]any, 0, len(pools))
+		for _, p := range pools {
+			item := policyJSON(p.Policy)
+			for k, v := range map[string]any{"scaler_epoch": p.Epoch, "capacity_state": p.CapacityState, "reasons": p.Reasons, "desired_workers": p.DesiredWorkers,
+				"live_workers": p.LiveWorkers, "busy_workers": p.BusyWorkers, "draining_workers": p.DrainingWorkers, "pending_starts": p.PendingStarts,
+				"queued_demand": p.QueuedDemand, "last_scale_up_at": p.LastScaleUpAt, "last_scale_down_at": p.LastScaleDownAt, "reconciled_at": p.ReconciledAt} {
+				item[k] = v
+			}
+			items = append(items, item)
+		}
+		printJSON(out, map[string]any{"items": items})
 		return 0
 	})
 }

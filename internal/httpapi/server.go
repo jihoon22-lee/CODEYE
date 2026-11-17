@@ -54,6 +54,8 @@ type Store interface {
 	CompleteAttempt(ctx context.Context, node string, o postgres.Ownership, c postgres.Completion) (postgres.Run, error)
 	ConfirmCleanupNode(ctx context.Context, node string, o postgres.Ownership) (postgres.Run, error)
 	SweepExpiredAttempts(ctx context.Context) (int, error)
+	// Autoscaler (W07).
+	ReconcilePools(ctx context.Context) ([]postgres.PoolReconcile, error)
 	NodesEnrolled(ctx context.Context) (bool, error)
 }
 
@@ -74,6 +76,9 @@ type Config struct {
 	// SweepInterval is how often Serve expires lapsed attempt leases
 	// (default 5s; negative disables, for tests that drive it directly).
 	SweepInterval time.Duration
+	// ReconcileInterval is how often Serve runs the pool autoscaler
+	// (docs/09 reconcile_seconds, default 5s; negative disables).
+	ReconcileInterval time.Duration
 }
 
 // DefaultSessionTTL is the absolute browser session lifetime.
@@ -89,6 +94,7 @@ type Server struct {
 	routes     []route
 	artifacts  *artifactstore.Store
 	sweepEvery time.Duration
+	scaleEvery time.Duration
 }
 
 // ParseListen parses and validates a loopback listen address.
@@ -139,6 +145,10 @@ func New(cfg Config, store Store) (*Server, error) {
 	if s.sweepEvery == 0 {
 		s.sweepEvery = 5 * time.Second
 	}
+	s.scaleEvery = cfg.ReconcileInterval
+	if s.scaleEvery == 0 {
+		s.scaleEvery = 5 * time.Second
+	}
 	if cfg.WebDir != "" {
 		if root, err := os.OpenRoot(cfg.WebDir); err == nil {
 			if f, err := root.Open("index.html"); err == nil {
@@ -179,6 +189,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	defer stopSweep()
 	if s.sweepEvery > 0 {
 		go s.sweepLoop(sweepCtx)
+	}
+	if s.scaleEvery > 0 {
+		go s.scaleLoop(sweepCtx)
 	}
 	select {
 	case err := <-errc:
