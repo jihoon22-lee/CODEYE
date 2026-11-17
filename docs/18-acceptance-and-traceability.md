@@ -153,3 +153,14 @@
 | TC-55 | 실제 Git 확보 SHA 고정·filter 미실행·LFS/submodule 공백·host/전송 제한·soft fetch quota | REQ-003,024,030 |
 
 [W04 기록](25-w04-source.md)의 실행 범위와 NFS/Windows 실기·private Git 미검증 제한을 따른다.
+
+
+## 12. W05 NativeExecutor 수용 시험
+
+| TC | 검증 | 요구 연결 |
+|---|---|---|
+| TC-56 | literal argv·최소 env·원본/snapshot/cwd 경계·비밀값과 잘린 출력 마스킹 | REQ-014,015; NFR-006 |
+| TC-57 | timeout/cancel 후 자식·손자 OS 종료, 잔류/탈출·관측 실패는 uncertain | REQ-022,035; TC-18 |
+| TC-58 | Windows suspended 생성→Job 연결→resume·breakaway 거부, 미지원과 enforced limit 구분 | NFR-001,009 |
+
+[W05 실행 기록](26-w05-native.md)을 따른다. 프로세스 그룹/Job은 OS 권한 샌드박스가 아니며 RHEL/Windows11 실기와 agent crash reconciliation은 별도다.

@@ -73,7 +73,7 @@ func Collect(ctx context.Context, opts Options, runner Runner) Report {
 		}
 		report.Checks = append(report.Checks, c)
 	}
-	report.Checks = append(report.Checks, database(ctx, opts, runner), Check{"model", "unverified", "adapter_contract_pending_w10", ""}, Check{"process_control", "unverified", "native_executor_pending_w05", ""})
+	report.Checks = append(report.Checks, database(ctx, opts, runner), Check{"model", "unverified", "adapter_contract_pending_w10", ""}, Check{"process_control", "unverified", "runtime_process_control_not_probed", ""})
 	return report
 }
 

@@ -42,6 +42,7 @@
 | [23 W02 저장 계약](23-w02-storage.md) | 도메인·migration·ACL·lease·근거 metadata와 실제 DB 시험 |
 | [24 W03 API·인증](24-w03-api.md) | loopback 세션·프로젝트/run·브라우저 통합 검증 |
 | [25 W04 소스 확보](25-w04-source.md) | Git/local 고정·manifest·독립 workspace·경계 시험 |
+| [26 W05 Native 실행기](26-w05-native.md) | argv·env·프로세스 트리·timeout·종료 확인 |
 
 ## 기계 판독 계약과 예시
 
