@@ -54,7 +54,7 @@
 
 ## 5. 아직 구현하지 않은 것
 
-W05까지 개인 모드 API와 웹, DB migration, 소스 확보·Native 실행기 라이브러리를 구현했다. 에이전트 배정, 워커 자동 증감, 실제 분석기·모델 연결, 보고서 발행과 분석 품질 측정은 후속 작업이다. [계획 대조와 W06 준비](27-w06-preparation.md)
+W06에서 노드 등록·claim·lease와 워커 프로세스를 연결했다. 제품 빌드에 실제 분석기가 연결되는 단계는 W08이다. 워커 자동 증감(W07), 모델 검토, 보고서 발행과 품질 평가는 후속 작업이다. [노드 계약](28-w06-node-protocol.md)
 
 
 ## 6. W01 구현 결정 (2026-11-17)
@@ -77,3 +77,6 @@ W05까지 개인 모드 API와 웹, DB migration, 소스 확보·Native 실행�
 
 
 **A17 — W05 종료 관측과 실행 경계.** NativeExecutor는 argv/cwd/env와 실행 outcome·cleanup을 분리한다. Linux는 leader PID를 reap 전까지 유지해 group signal의 PID재사용 위험을 줄이고, /proc 관측 실패에도 알려진 그룹을 종료하되 cleanup을 uncertain으로 남긴다. Windows는 suspended 생성 후 Job에 연결한 뒤 resume한다. OnStarted는 제한시간이 적용되는 사후 알림이며 callback 실패가 이미 실행된 코드의 부재를 의미하지 않는다. 경로 검증·env 제거는 OS sandbox가 아니고 CPU/메모리 한도는 advisory다. [W05 근거·시험](26-w05-native.md)을 따른다.
+
+
+**A18 — W06 노드 프로토콜 계약과 0003.** REQ-018/019/022/035, NFR-002/003/006, TC-21에 대해 노드 HTTP를 다음으로 확정한다. (1) capacity는 bytes 단위(`memory_available_bytes`/`disk_available_bytes`), 명령 cursor는 노드별 단조 `sequence`(`last_command_sequence`)이며 command_id로 중복 제거한다. (2) claim 응답은 `{lease, job}`이고 lease에 claim 직후 `run_version`을 넣는다. complete·이벤트는 body의 `worker_id`와 인증 노드로 소유자를 대조한다. (3) 별도 snapshot 경로와 3단계 artifact upload 대신 `snapshot_fixed` 이벤트와 attempt 범위 단일 PUT을 쓴다. manifest bytes를 먼저 artifact로 올리고 그 hash가 snapshot digest와 같아야 한다. (4) 노드 경로는 Bearer만 받고 Origin이 있으면 거부한다. 다른 노드의 attempt는 404, 소유권·epoch·만료 불일치는 409 `STALE_ATTEMPT`다. (5) 자원 회계에서 CPU는 정책 예산(활성 예약 전체 차감)이다. 메모리·disk는 관측 여유에서 마지막 heartbeat 이후 예약만 뺀다. (6) 대기 사유와 프로젝트의 `execution_unavailable`은 저장 데이터에서 계산한다. 대안으로 OpenAPI 초안의 MB 단위·command ID cursor·lease 단독 응답을 검토했다. 단위 혼동, cursor 순서 보장 불가, job 재조회 왕복 때문에 채택하지 않았다. migration 0003은 forward 전용이다. 기존 W03 run 본문은 digest가 정확히 일치하는 scope=full 세 형태만 복원하고, 기존 Git snapshot(digest=commit)은 수정하지 않고 재시도 불가로 둔다. 비용은 claim 직렬화(전역 limits 행 잠금)이며 단일 controller 규모에서 허용한다. 상세 계약·시험은 [W06 기록](28-w06-node-protocol.md)을 따른다.

@@ -264,7 +264,7 @@ func TestServeRefusesUnsafeStartAndServes(t *testing.T) {
 	var sout, serr bytes.Buffer
 	done := make(chan int, 1)
 	go func() {
-		done <- run(ctx, []string{"serve", "--listen", addr, "--web-dir", "", "--user", user, "--login-link-file", link}, &sout, &serr)
+		done <- run(ctx, []string{"serve", "--listen", addr, "--web-dir", "", "--artifact-dir", filepath.Join(t.TempDir(), "artifacts"), "--user", user, "--login-link-file", link}, &sout, &serr)
 	}()
 	deadline := time.Now().Add(10 * time.Second)
 	var res *http.Response

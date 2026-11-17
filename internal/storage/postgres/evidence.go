@@ -73,17 +73,45 @@ func (s *Store) CreateTask(ctx context.Context, o Ownership, required bool) (str
 		if err = activeLease(ctx, tx, r, a, o); err != nil {
 			return "", err
 		}
-		if r.Status != domain.RunPreparing && r.Status != domain.RunRunning {
-			return "", domain.ErrInvalid
-		}
-		id := domain.NewID()
-		if _, err = tx.Exec(ctx, "INSERT INTO tasks(id,run_id,status,required_for_verdict) VALUES($1,$2,'queued',$3)", id, r.ID, required); err != nil {
-			return "", err
-		}
-		err = appendEvent(ctx, tx, &r, "task.created", map[string]any{"task_id": id}, true)
+		id, _, err := createTaskTx(ctx, tx, &r, nil, required)
 		return id, err
 	})
 }
+
+// createTaskTx creates a task of the locked run. With a key, an existing task of
+// the run with that key (a retried run re-planning) is returned unchanged with
+// its current version and no event.
+func createTaskTx(ctx context.Context, tx pgx.Tx, r *Run, key *string, required bool) (string, int64, error) {
+	if key != nil {
+		var id string
+		var version int64
+		var req bool
+		err := tx.QueryRow(ctx, "SELECT id::text,version,required_for_verdict FROM tasks WHERE run_id=$1 AND key=$2 FOR UPDATE", r.ID, *key).Scan(&id, &version, &req)
+		if err == nil {
+			if req != required {
+				return "", 0, domain.ErrConflict
+			}
+			return id, version, nil
+		}
+		if err != pgx.ErrNoRows {
+			return "", 0, err
+		}
+	}
+	if r.Status != domain.RunPreparing && r.Status != domain.RunRunning {
+		return "", 0, domain.ErrInvalid
+	}
+	id := domain.NewID()
+	if _, err := tx.Exec(ctx, "INSERT INTO tasks(id,run_id,status,required_for_verdict,key) VALUES($1,$2,'queued',$3,$4)", id, r.ID, required, key); err != nil {
+		return "", 0, err
+	}
+	payload := map[string]any{"task_id": id}
+	if key != nil {
+		payload["key"] = *key
+		payload["required"] = required
+	}
+	return id, 1, appendEvent(ctx, tx, r, "task.created", payload, true)
+}
+
 func (s *Store) SetTaskStatus(ctx context.Context, o Ownership, id string, expected int64, next domain.TaskStatus) (int64, error) {
 	if !validOwner(o) || !validIDs(id) || expected < 1 || !next.Valid() {
 		return 0, domain.ErrInvalid
@@ -96,29 +124,36 @@ func (s *Store) SetTaskStatus(ctx context.Context, o Ownership, id string, expec
 		if err = activeLease(ctx, tx, r, a, o); err != nil {
 			return 0, err
 		}
-		var status domain.TaskStatus
-		var version int64
-		if err = tx.QueryRow(ctx, "SELECT status,version FROM tasks WHERE run_id=$1 AND id=$2 FOR UPDATE", r.ID, id).Scan(&status, &version); err != nil {
-			return 0, err
-		}
-		if version != expected {
-			return 0, domain.ErrConflict
-		}
-		if !domain.CanTransitionTask(status, next) {
-			return 0, domain.ErrInvalid
-		}
-		if (r.Status == domain.RunCancelRequested || r.Status == domain.RunCancelling) && next == domain.TaskRunning {
-			return 0, domain.ErrConflict
-		}
-		if _, err = tx.Exec(ctx, "INSERT INTO task_executions(run_id,attempt_id,task_id,ordinal,status,version) VALUES($1,$2,$3,1,$4,1) ON CONFLICT(attempt_id,task_id,ordinal) DO UPDATE SET status=excluded.status,version=task_executions.version+1", r.ID, a.ID, id, next); err != nil {
-			return 0, err
-		}
-		if err = tx.QueryRow(ctx, "UPDATE tasks SET status=$3,version=version+1 WHERE run_id=$1 AND id=$2 RETURNING version", r.ID, id, next).Scan(&version); err != nil {
-			return 0, err
-		}
-		err = appendEvent(ctx, tx, &r, "task.status", map[string]any{"task_id": id, "status": next}, true)
-		return version, err
+		return setTaskStatusTx(ctx, tx, &r, a, id, expected, next, nil)
 	})
+}
+
+func setTaskStatusTx(ctx context.Context, tx pgx.Tx, r *Run, a attempt, id string, expected int64, next domain.TaskStatus, reason *string) (int64, error) {
+	var status domain.TaskStatus
+	var version int64
+	if err := tx.QueryRow(ctx, "SELECT status,version FROM tasks WHERE run_id=$1 AND id=$2 FOR UPDATE", r.ID, id).Scan(&status, &version); err != nil {
+		return 0, err
+	}
+	if version != expected {
+		return 0, domain.ErrConflict
+	}
+	if !domain.CanTransitionTask(status, next) {
+		return 0, domain.ErrInvalid
+	}
+	if (r.Status == domain.RunCancelRequested || r.Status == domain.RunCancelling) && next == domain.TaskRunning {
+		return 0, domain.ErrConflict
+	}
+	if _, err := tx.Exec(ctx, "INSERT INTO task_executions(run_id,attempt_id,task_id,ordinal,status,version,reason) VALUES($1,$2,$3,1,$4,1,$5) ON CONFLICT(attempt_id,task_id,ordinal) DO UPDATE SET status=excluded.status,version=task_executions.version+1,reason=excluded.reason", r.ID, a.ID, id, next, reason); err != nil {
+		return 0, err
+	}
+	if err := tx.QueryRow(ctx, "UPDATE tasks SET status=$3,version=version+1,reason=$4 WHERE run_id=$1 AND id=$2 RETURNING version", r.ID, id, next, reason).Scan(&version); err != nil {
+		return 0, err
+	}
+	payload := map[string]any{"task_id": id, "status": next}
+	if reason != nil {
+		payload["reason"] = *reason
+	}
+	return version, appendEvent(ctx, tx, r, "task.status", payload, true)
 }
 
 // closeTasks settles the tasks and this attempt's executions left open when a run

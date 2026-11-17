@@ -18,6 +18,9 @@ var (
 	ErrStaleAttempt = errors.New("stale attempt")
 	ErrUnavailable  = errors.New("unavailable")
 	ErrMigration    = errors.New("migration failed")
+	// ErrUnauthenticated marks a credential that is unknown, revoked, used or
+	// expired (node secrets and enrollment tokens).
+	ErrUnauthenticated = errors.New("unauthenticated")
 )
 
 func invalidf(format string, args ...any) error {

@@ -95,7 +95,10 @@ func classify(err error) error {
 	if err == nil {
 		return nil
 	}
-	for _, e := range []error{domain.ErrUnsupported, domain.ErrInvalid, domain.ErrForbidden, domain.ErrNotFound, domain.ErrConflict, domain.ErrStaleAttempt, domain.ErrUnavailable, domain.ErrMigration, context.Canceled, context.DeadlineExceeded} {
+	if errors.Is(err, ErrIdempotencyConflict) {
+		return ErrIdempotencyConflict
+	}
+	for _, e := range []error{domain.ErrUnauthenticated, domain.ErrUnsupported, domain.ErrInvalid, domain.ErrForbidden, domain.ErrNotFound, domain.ErrConflict, domain.ErrStaleAttempt, domain.ErrUnavailable, domain.ErrMigration, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, e) {
 			return e
 		}

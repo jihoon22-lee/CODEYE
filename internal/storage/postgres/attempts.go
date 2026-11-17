@@ -135,15 +135,25 @@ func (s *Store) Advance(ctx context.Context, o Ownership, expected int64, next d
 		if err = activeLease(ctx, tx, r, a, o); err != nil {
 			return r, err
 		}
-		if r.Version != expected {
-			return r, domain.ErrConflict
-		}
-		if (next != domain.RunRunning && next != domain.RunFinalizing && next != domain.RunCancelling) || !domain.CanTransitionRun(r.Status, next) || (next == domain.RunRunning && r.SnapshotID == nil) {
-			return r, domain.ErrInvalid
-		}
-		err = transitionRun(ctx, tx, &r, next, "run.status", map[string]any{"status": next})
+		err = advanceTx(ctx, tx, &r, &expected, next)
 		return r, err
 	})
+}
+
+// advanceTx moves the locked run to running/finalizing/cancelling. A nil
+// expected skips the optimistic version check (node events: the owner is the
+// only writer besides cancellation, which the transition table already fences).
+func advanceTx(ctx context.Context, tx pgx.Tx, r *Run, expected *int64, next domain.RunStatus) error {
+	if expected != nil && r.Version != *expected {
+		return domain.ErrConflict
+	}
+	if next != domain.RunCancelling && (r.Status == domain.RunCancelRequested || r.Status == domain.RunCancelling) {
+		return domain.ErrConflict
+	}
+	if (next != domain.RunRunning && next != domain.RunFinalizing && next != domain.RunCancelling) || !domain.CanTransitionRun(r.Status, next) || (next == domain.RunRunning && r.SnapshotID == nil) {
+		return domain.ErrInvalid
+	}
+	return transitionRun(ctx, tx, r, next, "run.status", map[string]any{"status": next})
 }
 
 // receiptCurrent reports whether an accepted completion receipt still describes the
@@ -161,14 +171,72 @@ func receiptCurrent(stored string, current domain.RunStatus) bool {
 // FinishAttempt records execution/cleanup only. Successful outcomes remain finalizing
 // until a later report service validates and publishes artifacts (W09).
 func (s *Store) FinishAttempt(ctx context.Context, o Ownership, outcome, cleanup string) (Run, error) {
-	if !validOwner(o) || (cleanup != "confirmed" && cleanup != "uncertain") || (outcome != "succeeded" && outcome != "partial" && outcome != "failed" && outcome != "cancelled") {
+	return s.finish(ctx, "", o, Completion{Outcome: outcome, Cleanup: cleanup})
+}
+
+// Completion is an attempt's final execution report. ResultManifestID must name
+// a finalized result_manifest artifact of the attempt and is required for
+// succeeded/partial when submitted by a node (CompleteAttempt).
+type Completion struct {
+	Outcome, Cleanup string
+	ResultManifestID *string
+	Reason           *string
+}
+
+func (c Completion) valid() bool {
+	if c.Cleanup != "confirmed" && c.Cleanup != "uncertain" {
+		return false
+	}
+	switch c.Outcome {
+	case "succeeded", "partial", "failed", "cancelled":
+	default:
+		return false
+	}
+	if c.ResultManifestID != nil && !validIDs(*c.ResultManifestID) {
+		return false
+	}
+	return c.Reason == nil || reasonPattern.MatchString(*c.Reason)
+}
+
+// digest keeps the W02 form for a bare outcome/cleanup so earlier receipts replay.
+func (c Completion) digest() string {
+	if c.ResultManifestID == nil && c.Reason == nil {
+		return domain.Digest([]byte(c.Outcome + "\x00" + c.Cleanup))
+	}
+	deref := func(p *string) string {
+		if p == nil {
+			return "-"
+		}
+		return *p
+	}
+	return domain.Digest([]byte(c.Outcome + "\x00" + c.Cleanup + "\x00" + deref(c.ResultManifestID) + "\x00" + deref(c.Reason)))
+}
+
+// CompleteAttempt is FinishAttempt for an authenticated node. The attempt must
+// belong to node (else ErrNotFound); succeeded/partial require a finalized
+// result_manifest artifact of the attempt.
+func (s *Store) CompleteAttempt(ctx context.Context, node string, o Ownership, c Completion) (Run, error) {
+	if !validIDs(node) || node != o.NodeID {
 		return Run{}, domain.ErrInvalid
 	}
-	digest := domain.Digest([]byte(outcome + "\x00" + cleanup))
+	if (c.Outcome == "succeeded" || c.Outcome == "partial") && c.ResultManifestID == nil {
+		return Run{}, domain.ErrInvalid
+	}
+	return s.finish(ctx, node, o, c)
+}
+
+func (s *Store) finish(ctx context.Context, node string, o Ownership, c Completion) (Run, error) {
+	if !validOwner(o) || !c.valid() {
+		return Run{}, domain.ErrInvalid
+	}
+	digest := c.digest()
 	return transaction(ctx, s, func(tx pgx.Tx) (Run, error) {
 		r, a, err := lockAttempt(ctx, tx, o.AttemptID)
 		if err != nil {
 			return r, err
+		}
+		if node != "" && a.NodeID != node {
+			return r, domain.ErrNotFound
 		}
 		if !sameOwner(r, a, o) {
 			return r, domain.ErrStaleAttempt
@@ -184,8 +252,17 @@ func (s *Store) FinishAttempt(ctx context.Context, o Ownership, outcome, cleanup
 		if err = activeLease(ctx, tx, r, a, o); err != nil {
 			return r, err
 		}
+		if c.ResultManifestID != nil {
+			var ok bool
+			if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM artifacts WHERE id=$1 AND attempt_id=$2 AND role='result_manifest' AND finalized)", *c.ResultManifestID, a.ID).Scan(&ok); err != nil {
+				return r, err
+			}
+			if !ok {
+				return r, domain.ErrInvalid
+			}
+		}
 		next := domain.RunFailed
-		if outcome == "succeeded" || outcome == "partial" {
+		if c.Outcome == "succeeded" || c.Outcome == "partial" {
 			if r.SnapshotID == nil || r.Status != domain.RunFinalizing {
 				return r, domain.ErrInvalid
 			}
@@ -193,25 +270,30 @@ func (s *Store) FinishAttempt(ctx context.Context, o Ownership, outcome, cleanup
 			if err = tx.QueryRow(ctx, "SELECT count(*),count(*) FILTER(WHERE status IN('queued','blocked','running')),count(*) FILTER(WHERE required_for_verdict AND status!='succeeded') FROM tasks WHERE run_id=$1", r.ID).Scan(&total, &pending, &bad); err != nil {
 				return r, err
 			}
-			if total == 0 || pending > 0 || (outcome == "succeeded" && bad > 0) {
+			if total == 0 || pending > 0 || (c.Outcome == "succeeded" && bad > 0) {
 				return r, domain.ErrInvalid
 			}
 			next = domain.RunFinalizing
 		}
-		if outcome == "cancelled" || r.Status == domain.RunCancelRequested || r.Status == domain.RunCancelling {
+		if c.Outcome == "cancelled" || r.Status == domain.RunCancelRequested || r.Status == domain.RunCancelling {
 			if r.Status != domain.RunCancelRequested && r.Status != domain.RunCancelling {
 				return r, domain.ErrInvalid
 			}
 			next = domain.RunCancelled
 		}
 		status := "released"
-		if cleanup == "uncertain" {
+		if c.Cleanup == "uncertain" {
 			status = "recovery_required"
 			next = domain.RunRecoveryRequired
 		}
-		_, err = tx.Exec(ctx, "UPDATE attempts SET status=$2,cleanup_state=$3,completion_digest=$4,completion_status=$5 WHERE id=$1", a.ID, status, cleanup, digest, next)
+		_, err = tx.Exec(ctx, "UPDATE attempts SET status=$2,cleanup_state=$3,completion_digest=$4,completion_status=$5,result_manifest_id=$6,completion_reason=$7 WHERE id=$1", a.ID, status, c.Cleanup, digest, next, c.ResultManifestID, c.Reason)
 		if err != nil {
 			return r, err
+		}
+		if status == "released" {
+			if err = releaseReservation(ctx, tx, a.ID); err != nil {
+				return r, err
+			}
 		}
 		// Cancellation is receipted as cancel_requested -> cancelling -> cancelled,
 		// each with its own event, in this one transaction.
@@ -220,7 +302,13 @@ func (s *Store) FinishAttempt(ctx context.Context, o Ownership, outcome, cleanup
 				return r, err
 			}
 		}
-		payload := map[string]any{"attempt_id": a.ID, "status": next, "cleanup_state": cleanup}
+		payload := map[string]any{"attempt_id": a.ID, "status": next, "cleanup_state": c.Cleanup}
+		if c.Reason != nil {
+			payload["reason"] = *c.Reason
+		}
+		if c.ResultManifestID != nil {
+			payload["result_manifest_id"] = *c.ResultManifestID
+		}
 		// Confirmed cleanup of a failed/cancelled run settles its open tasks; uncertain
 		// cleanup leaves them untouched until ConfirmCleanup.
 		if status == "released" && (next == domain.RunFailed || next == domain.RunCancelled) {
@@ -232,6 +320,14 @@ func (s *Store) FinishAttempt(ctx context.Context, o Ownership, outcome, cleanup
 		return r, err
 	})
 }
+
+// releaseReservation ends the attempt's capacity reservation, if it has one
+// (attempts created by the W02 BeginAttempt test path have none).
+func releaseReservation(ctx context.Context, tx pgx.Tx, attempt string) error {
+	_, err := tx.Exec(ctx, "UPDATE capacity_reservations SET released_at=clock_timestamp() WHERE attempt_id=$1 AND released_at IS NULL", attempt)
+	return err
+}
+
 func (s *Store) ExpireAttempt(ctx context.Context, id string) (Run, error) {
 	if !validIDs(id) {
 		return Run{}, domain.ErrInvalid
@@ -260,6 +356,19 @@ func (s *Store) ExpireAttempt(ctx context.Context, id string) (Run, error) {
 // ConfirmCleanup is a reconciliation operation for the authenticated owning node.
 // The caller must obtain actual process cleanup evidence; W02 cannot inspect the OS.
 func (s *Store) ConfirmCleanup(ctx context.Context, o Ownership) (Run, error) {
+	return s.confirmCleanup(ctx, "", o)
+}
+
+// ConfirmCleanupNode is ConfirmCleanup for an authenticated node: the attempt
+// must belong to node (else ErrNotFound). It also releases the reservation.
+func (s *Store) ConfirmCleanupNode(ctx context.Context, node string, o Ownership) (Run, error) {
+	if !validIDs(node) || node != o.NodeID {
+		return Run{}, domain.ErrInvalid
+	}
+	return s.confirmCleanup(ctx, node, o)
+}
+
+func (s *Store) confirmCleanup(ctx context.Context, node string, o Ownership) (Run, error) {
 	if !validOwner(o) {
 		return Run{}, domain.ErrInvalid
 	}
@@ -267,6 +376,9 @@ func (s *Store) ConfirmCleanup(ctx context.Context, o Ownership) (Run, error) {
 		r, a, err := lockAttempt(ctx, tx, o.AttemptID)
 		if err != nil {
 			return r, err
+		}
+		if node != "" && a.NodeID != node {
+			return r, domain.ErrNotFound
 		}
 		if !sameOwner(r, a, o) {
 			return r, domain.ErrStaleAttempt
@@ -279,6 +391,9 @@ func (s *Store) ConfirmCleanup(ctx context.Context, o Ownership) (Run, error) {
 		}
 		_, err = tx.Exec(ctx, "UPDATE attempts SET status='released',cleanup_state='confirmed' WHERE id=$1", a.ID)
 		if err != nil {
+			return r, err
+		}
+		if err = releaseReservation(ctx, tx, a.ID); err != nil {
 			return r, err
 		}
 		closed, err := closeTasks(ctx, tx, r.ID, a.ID, domain.RunFailed)
