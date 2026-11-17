@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1",
+  "kind": "local",
+  "consistency": "stable_copy_best_effort",
+  "source_fixed_at": "2026-11-18T00:00:00Z",
+  "entries": [
+    {
+      "path": "fixtures/cleanup/before.py",
+      "kind": "file",
+      "size_bytes": 372,
+      "mode": 420,
+      "sha256": "be7482b37c88eef1708114611b345ff1514f4b2f645d81bb7abfa589e8e666fc",
+      "encoding": "utf-8"
+    }
+  ],
+  "limitations": [
+    "local_copy_is_not_atomic"
+  ]
+}

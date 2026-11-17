@@ -1,0 +1,38 @@
+{
+  "schema_version": "0.1",
+  "kind": "git",
+  "consistency": "git_commit",
+  "source_sha": "0123456789abcdef0123456789abcdef01234567",
+  "source_branch": "main",
+  "requested_at": "2026-11-18T00:00:00Z",
+  "source_fixed_at": "2026-11-18T00:00:03Z",
+  "entries": [
+    {
+      "path": ".gitmodules",
+      "kind": "file",
+      "size_bytes": 38,
+      "mode": 420,
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "encoding": "utf-8"
+    },
+    {
+      "path": "large.bin",
+      "kind": "lfs_pointer",
+      "size_bytes": 130,
+      "mode": 420,
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "encoding": "utf-8"
+    },
+    {
+      "path": "vendor/lib",
+      "kind": "submodule",
+      "size_bytes": null,
+      "mode": 0,
+      "excluded_reason": "submodule_not_acquired"
+    }
+  ],
+  "limitations": [
+    "submodule_objects_not_acquired",
+    "lfs_objects_not_acquired"
+  ]
+}
