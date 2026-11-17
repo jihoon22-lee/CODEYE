@@ -1,0 +1,461 @@
+{
+  "adapter_version": "1",
+  "analyzer_errors": [],
+  "analyzer_id": "go.vet",
+  "coverage": {
+    "go_files_in_scope": 7,
+    "ignored_go_files": 3,
+    "packages": {
+      "analyzed_clean": 1,
+      "analyzed_with_findings": 1,
+      "not_analyzed": 2
+    },
+    "processed_go_files": 4,
+    "unlisted_go_files": 2
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "go",
+          "version"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "go.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 32,
+        "incomplete": false,
+        "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+        "total_bytes": 32,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "go",
+          "mod",
+          "edit",
+          "-json"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "go.modedit",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 66,
+        "incomplete": false,
+        "sha256": "b8a368da5010751776991ffbe559eb90823e94f713dc8ec41155d7165aa2e405",
+        "total_bytes": 66,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "go",
+          "list",
+          "-e",
+          "-json=Dir,ImportPath,Name,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Incomplete,Error,DepsErrors",
+          "./..."
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "go.list",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 345,
+        "incomplete": false,
+        "sha256": "091bad3641eee0ccfbcd736aee5207ac2eca849d5c9e39813d7a6e25def6fd77",
+        "total_bytes": 449,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "go",
+          "vet",
+          "-json",
+          "./..."
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "go.vet",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 1009,
+        "incomplete": false,
+        "sha256": "07fbe1b05fd09b28f86a3f9c0b6317c12577c5639cef8e88ae021f5c6c99428e",
+        "total_bytes": 1529,
+        "truncated": false
+      }
+    }
+  ],
+  "inventory": [
+    {
+      "dir": "bad",
+      "errors": [],
+      "go_files": [
+        "bad/bad.go",
+        "bad/bad_test.go",
+        "bad/x_test.go"
+      ],
+      "ignored_go_files": [],
+      "import_path": "example.test/probe/bad",
+      "state": "analyzed_with_findings"
+    },
+    {
+      "dir": "cg",
+      "errors": [
+        "not_listed_by_go_command"
+      ],
+      "go_files": [],
+      "ignored_go_files": [
+        "cg/c.go"
+      ],
+      "import_path": "",
+      "state": "not_analyzed"
+    },
+    {
+      "dir": "clean",
+      "errors": [],
+      "go_files": [
+        "clean/c.go"
+      ],
+      "ignored_go_files": [
+        "clean/ign.go"
+      ],
+      "import_path": "example.test/probe/clean",
+      "state": "analyzed_clean"
+    },
+    {
+      "dir": "tagged",
+      "errors": [
+        "not_listed_by_go_command"
+      ],
+      "go_files": [],
+      "ignored_go_files": [
+        "tagged/t.go"
+      ],
+      "import_path": "",
+      "state": "not_analyzed"
+    }
+  ],
+  "kind": "go_vet_observations",
+  "limitations": [
+    "build_constraint_ignored_files",
+    "cgo_disabled",
+    "default_build_context_only",
+    "no_offline_module_cache",
+    "unlisted_go_files"
+  ],
+  "module": {
+    "dir": ".",
+    "path": "example.test/probe"
+  },
+  "observations": [
+    {
+      "id": "obs_67f58fb65302db399bb2",
+      "location": {
+        "blob_sha256": "3672a7b8645cea5435e2a717aefbad3d6121aeeba12003b332de0c595e9f15b4",
+        "column_unit": "byte",
+        "end_col": 14,
+        "end_line": 10,
+        "path": "bad/bad.go",
+        "start_col": 13,
+        "start_line": 10
+      },
+      "location_state": "resolved",
+      "package_key": "example.test/probe/bad",
+      "path": "bad/bad.go",
+      "raw_message": "Copy passes lock by value: example.test/probe/bad.T contains sync.Mutex",
+      "raw_ref": {
+        "byte_end": 1008,
+        "byte_start": 227,
+        "execution": "go.vet",
+        "json_pointer": "/example.test~1probe~1bad/copylocks/0",
+        "stream": "stdout",
+        "stream_index": 2,
+        "stream_sha256": "07fbe1b05fd09b28f86a3f9c0b6317c12577c5639cef8e88ae021f5c6c99428e"
+      },
+      "raw_severity": null,
+      "related_count": 0,
+      "rule_id": "copylocks",
+      "suggested_fix_count": 0,
+      "tool": "go.vet",
+      "tool_version": "go1.27.4"
+    },
+    {
+      "id": "obs_f0f3d4d047014cdcc1e4",
+      "location": {
+        "blob_sha256": "3672a7b8645cea5435e2a717aefbad3d6121aeeba12003b332de0c595e9f15b4",
+        "column_unit": "byte",
+        "end_col": 28,
+        "end_line": 10,
+        "path": "bad/bad.go",
+        "start_col": 27,
+        "start_line": 10
+      },
+      "location_state": "resolved",
+      "package_key": "example.test/probe/bad",
+      "path": "bad/bad.go",
+      "raw_message": "return copies lock value: example.test/probe/bad.T contains sync.Mutex",
+      "raw_ref": {
+        "byte_end": 1008,
+        "byte_start": 227,
+        "execution": "go.vet",
+        "json_pointer": "/example.test~1probe~1bad/copylocks/1",
+        "stream": "stdout",
+        "stream_index": 2,
+        "stream_sha256": "07fbe1b05fd09b28f86a3f9c0b6317c12577c5639cef8e88ae021f5c6c99428e"
+      },
+      "raw_severity": null,
+      "related_count": 0,
+      "rule_id": "copylocks",
+      "suggested_fix_count": 0,
+      "tool": "go.vet",
+      "tool_version": "go1.27.4"
+    },
+    {
+      "id": "obs_8352168de05d1b2815a3",
+      "location": {
+        "blob_sha256": "3672a7b8645cea5435e2a717aefbad3d6121aeeba12003b332de0c595e9f15b4",
+        "column_unit": "byte",
+        "end_col": 26,
+        "end_line": 12,
+        "path": "bad/bad.go",
+        "start_col": 24,
+        "start_line": 12
+      },
+      "location_state": "resolved",
+      "package_key": "example.test/probe/bad",
+      "path": "bad/bad.go",
+      "raw_message": "fmt.Printf format %d has arg \"x\" of wrong type string",
+      "raw_ref": {
+        "byte_end": 1008,
+        "byte_start": 227,
+        "execution": "go.vet",
+        "json_pointer": "/example.test~1probe~1bad/printf/0",
+        "stream": "stdout",
+        "stream_index": 2,
+        "stream_sha256": "07fbe1b05fd09b28f86a3f9c0b6317c12577c5639cef8e88ae021f5c6c99428e"
+      },
+      "raw_severity": null,
+      "related_count": 0,
+      "rule_id": "printf",
+      "suggested_fix_count": 0,
+      "tool": "go.vet",
+      "tool_version": "go1.27.4"
+    },
+    {
+      "id": "obs_bc956c2ff583a31b30fe",
+      "location": {
+        "blob_sha256": "6a9cb4720a513dd841e88214606ca98018d1a5f6a600aeb982cf83a5040c0f9a",
+        "column_unit": "byte",
+        "end_col": 42,
+        "end_line": 8,
+        "path": "bad/bad_test.go",
+        "start_col": 40,
+        "start_line": 8
+      },
+      "location_state": "resolved",
+      "package_key": "example.test/probe/bad",
+      "path": "bad/bad_test.go",
+      "raw_message": "fmt.Printf format %s has arg 1 of wrong type int",
+      "raw_ref": {
+        "byte_end": 1008,
+        "byte_start": 227,
+        "execution": "go.vet",
+        "json_pointer": "/example.test~1probe~1bad/printf/1",
+        "stream": "stdout",
+        "stream_index": 2,
+        "stream_sha256": "07fbe1b05fd09b28f86a3f9c0b6317c12577c5639cef8e88ae021f5c6c99428e"
+      },
+      "raw_severity": null,
+      "related_count": 0,
+      "rule_id": "printf",
+      "suggested_fix_count": 0,
+      "tool": "go.vet",
+      "tool_version": "go1.27.4"
+    },
+    {
+      "id": "obs_086d9c44de2a2f2a5255",
+      "location": {
+        "blob_sha256": "da4de28ec08e4352b8429fbfd2178e38a2cec7eabc1a463014034de35b70424f",
+        "column_unit": "byte",
+        "end_col": 42,
+        "end_line": 8,
+        "path": "bad/x_test.go",
+        "start_col": 40,
+        "start_line": 8
+      },
+      "location_state": "resolved",
+      "package_key": "example.test/probe/bad_test",
+      "path": "bad/x_test.go",
+      "raw_message": "fmt.Printf format %s has arg 2 of wrong type int",
+      "raw_ref": {
+        "byte_end": 226,
+        "byte_start": 3,
+        "execution": "go.vet",
+        "json_pointer": "/example.test~1probe~1bad_test/printf/0",
+        "stream": "stdout",
+        "stream_index": 1,
+        "stream_sha256": "07fbe1b05fd09b28f86a3f9c0b6317c12577c5639cef8e88ae021f5c6c99428e"
+      },
+      "raw_severity": null,
+      "related_count": 0,
+      "rule_id": "printf",
+      "suggested_fix_count": 0,
+      "tool": "go.vet",
+      "tool_version": "go1.27.4"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "empty_values": 1,
+    "list_unparsed_bytes": 0,
+    "observations": 5,
+    "ok": true,
+    "shape_errors": 0,
+    "stderr_lines_dropped": 0,
+    "stdout_values": 3,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser_id": "go-vet-json-v1",
+  "parser_version": "1",
+  "patterns": [
+    "./..."
+  ],
+  "platform": "linux/amd64",
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "11a5c77a6bb6c291309f4b8ba26bc244cab84086eb7aec6f49ead559819a1c95",
+  "stderr_failures": [],
+  "task_key": "go-vet",
+  "tool_version": "go1.27.4",
+  "workspace_drift": []
+}

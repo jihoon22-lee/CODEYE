@@ -2,6 +2,8 @@
 from contextlib import ExitStack, contextmanager
 from http.cookiejar import CookieJar
 import json
+import hashlib
+import shutil
 import os
 from pathlib import Path
 import signal
@@ -155,4 +157,37 @@ def run(base, root, env):
         assert final["progress"]["completed_tasks"] >= 1
         assert scalar(f"SELECT count(*) FROM attempts WHERE run_id='{next_run}' AND status='released'") == "1"
         assert mode.read_text() == "succeed\n"
+        # 별도 root를 등록해 시험용 handler가 실제 분석 요청을 가져갈 수 없게 한다.
+        go_source = directory / "go-project"
+        go_source.mkdir()
+        (go_source / "go.mod").write_text("module smoke.test/example\n\ngo 1.23\n")
+        original = 'package example\nimport "fmt"\nfunc Print() { fmt.Printf("%d", "sample") }\n'
+        (go_source / "example.go").write_text(original)
+        go_root = json.loads(cli("source-root", "add", "--label", "go-smoke", "--path", go_source))["id"]
+        cli("source-root", "grant", "--root", go_root, "--user", user)
+        go_token = directory / "go.token"
+        cli("node", "token", "create", "--pool", "default", "--source-root", go_root, "--output", go_token)
+        go_project = session.request("POST", "projects", {"source": {
+            "kind": "local", "source_root_id": go_root, "relative_path": "."}})
+        production = services.enter_context(service(
+            [binary, "agent", "--controller", origin, "--state-dir", directory / "go-agent",
+             "--name", "go-smoke", "--enroll-token-file", go_token, "--source-root", f"{go_root}={go_source}",
+             "--go", shutil.which("go"), "--workers", "1"], directory, node_env, directory / "go.log"))
+        children.append(production)
+        actual = session.enqueue(go_project["id"])
+        def observations_key():
+            state = session.request("GET", f"runs/{actual}")["status"]
+            if state in {"failed", "cancelled", "recovery_required"}:
+                raise RuntimeError(f"Go 분석 run 상태 {state}")
+            if state not in {"finalizing", "partial", "completed"}:
+                return None
+            return scalar(f"SELECT storage_key FROM artifacts WHERE run_id='{actual}' AND role='observations'")
+        key = wait_for("실제 Go vet 산출물", observations_key, children, timeout=140)
+        data = (directory / "artifacts" / key).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == key.split("/")[-1]
+        doc = json.loads(data)
+        assert doc["analyzer_id"] == "go.vet"
+        assert any(o["rule_id"] == "printf" and o["location"]["path"] == "example.go" for o in doc["observations"])
+        assert (go_source / "example.go").read_text() == original
+        print("PASS: 제품 워커·실제 Go vet·printf 관찰·산출물 무결성·원본 보존")
     print("PASS: 두 에이전트 등록·단일 attempt·취소 및 정리·후속 run 결과 접수 (시험용 handler)")

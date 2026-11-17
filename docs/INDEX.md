@@ -45,6 +45,7 @@
 | [26 W05 Native 실행기](26-w05-native.md) | argv·env·프로세스 트리·timeout·종료 확인 |
 | [27 W06 착수 준비](27-w06-preparation.md) | 원계획 대조, 프로토콜 통합 쟁점과 두 에이전트 수용 시험 |
 | [28 W06 노드 API](28-w06-node-protocol.md) · [에이전트 실행](28-w06-agent-runtime.md) | 등록·배정·lease·취소·복구 및 실프로세스 검증 |
+| [29 W08 Go vet](29-w08-go-vet.md) | 실제 Go 도구, 원시 관찰과 미분석 범위 |
 
 ## 기계 판독 계약과 예시
 

@@ -63,4 +63,6 @@ SARIF를 쓰는 도구는 locations·relatedLocations·codeFlows·fingerprints·
 
 ## 9. 어댑터 수용 조건
 
+Go vet(W08) 구현과 실제 종료 코드 매핑은 [W08 기록](29-w08-go-vet.md)과 [Go vet 서술](../examples/analyzer-go-vet.yaml)에 있다. `-json` 모드는 진단이 있어도 exit 0이므로 발견 여부를 stdout parser가 결정한다.
+
 정상/결함 fixture, findings exit, parse 실패, 비ASCII·공백 경로, timeout·취소, 버전 불일치, offline install 실패, 원본 미변경, raw→normalized 추적을 검증한다. CLI 호출 성공만으로 어댑터를 완료 처리하지 않는다. [Schema](../schemas/analyzer.schema.json)와 [예시](../examples/analyzer-ruff.yaml)를 함께 갱신한다.
