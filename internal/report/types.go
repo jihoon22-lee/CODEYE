@@ -300,7 +300,7 @@ type Finding struct {
 	Evidence           []Evidence     `json:"evidence"`
 	CounterevidenceIDs []string       `json:"counterevidence_ids"`
 	ObservationIDs     []string       `json:"observation_ids"`
-	Fingerprint        string         `json:"fingerprint"`
+	Fingerprint        string         `json:"fingerprint,omitempty"`
 	Recommendation     Recommendation `json:"recommendation"`
 	Verification       []string       `json:"verification"`
 	Limitations        []string       `json:"limitations"`

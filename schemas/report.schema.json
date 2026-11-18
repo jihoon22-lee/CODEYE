@@ -258,5 +258,10 @@
       }
     }
   },
-  "allOf": [{"if": {"properties": {"demo": {"const": false}}}, "then": {"required": ["builder", "export", "attempt", "observations", "executions", "artifacts"], "properties": {"coverage": {"required": ["ai_review", "tools"]}, "summary": {"required": ["raw_observations", "unresolved_observations"]}}}}]
+  "allOf": [
+    {"if": {"properties": {"demo": {"const": false}}}, "then": {"required": ["builder", "export", "attempt", "observations", "executions", "artifacts"], "properties": {"coverage": {"required": ["ai_review", "tools"]}, "summary": {"required": ["raw_observations", "unresolved_observations"]}}}},
+    {"$comment": "W23: 코드 미포함 내보내기는 fingerprint·basis·move_key를 싣지 않는다(코드에서 나온 입력의 비keyed digest라 추측한 코드를 확인할 수 있다).",
+     "if": {"required": ["export"], "properties": {"export": {"required": ["include_code"], "properties": {"include_code": {"const": false}}}}},
+     "then": {"properties": {"findings": {"items": {"not": {"anyOf": [{"required": ["fingerprint"]}, {"required": ["fingerprint_basis"]}, {"required": ["disposition_version"]}]}}}}}}
+  ]
 }

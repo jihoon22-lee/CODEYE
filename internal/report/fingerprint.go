@@ -47,8 +47,11 @@ const (
 	ProducerModel = "model"
 	// AnalyzerReview is the analyzer of model review candidates.
 	AnalyzerReview = "review"
-	// CauseCandidate is the cause class of a model candidate. Verifier
-	// categories are not used: they exist only when verification ran.
+	// CauseCandidate prefixes the cause class of a model candidate:
+	// "candidate:<category>" with the verifier's category when a verdict was
+	// recorded, else "candidate:unclassified". A verified and an unverified
+	// candidate therefore never share an identity, so a disposition set on
+	// one is not carried to the other.
 	CauseCandidate = "candidate"
 )
 
@@ -139,14 +142,20 @@ func ToolFingerprint(analyzer, rule, path, symbol, message string) (string, Fing
 }
 
 // setModelFingerprint sets the identity of a model candidate from what the
-// platform, not the model's wording, fixed: the code/test paths and symbols
-// of the excerpts the candidate cited (as a set, so citation order does not
-// matter) and, for a candidate interpreting tool observations, the condition
-// classes of those observations. Document-only citations fall back to the
-// document paths. Candidates of one file without symbols share a fingerprint
-// and are reported as ambiguous groups.
+// platform, not the model's wording, fixed: the cause class (the verifier's
+// category when f carries a verdict), the code/test paths and symbols of the
+// excerpts the candidate cited (as a set, so citation order does not matter)
+// and, for a candidate interpreting tool observations, the condition classes
+// of those observations. Document-only citations fall back to the document
+// paths. It must run after the verdict was applied to f. Candidates of one
+// file without symbols share a fingerprint; such weak identities never carry
+// a disposition automatically (see DispositionCarries).
 func setModelFingerprint(f *Finding, c record.Candidate, catalog map[string]record.Excerpt, linked []Observation) {
-	b := FingerprintBasis{Producer: ProducerModel, Analyzer: AnalyzerReview, Rule: CauseCandidate}
+	cause := CauseCandidate + ":unclassified"
+	if f.Validation != "unreviewed" {
+		cause = CauseCandidate + ":" + f.Category
+	}
+	b := FingerprintBasis{Producer: ProducerModel, Analyzer: AnalyzerReview, Rule: cause}
 	var docs []string
 	for _, id := range c.Evidence {
 		e := catalog[id]
@@ -239,19 +248,41 @@ func ReviewApplies(prefix *string, paths []string) bool {
 	return true
 }
 
+// WeakIdentity reports a basis that only the path identifies: a model
+// candidate with no cited symbol and no linked tool observation (its move
+// key is empty). Two different issues in one file share such a fingerprint.
+func WeakIdentity(b *FingerprintBasis) bool {
+	return b == nil || (b.Producer == ProducerModel && b.MoveKey == "")
+}
+
+// DispositionCarries reports whether a human disposition recorded for a
+// fingerprint may be applied to a finding of another report revision without
+// a person confirming it there: only when the fingerprint names exactly one
+// finding of that revision (matches) and the identity is not weak. Otherwise
+// the finding stays open and the review is only a candidate match.
+func DispositionCarries(b *FingerprintBasis, matches int) bool {
+	return matches == 1 && !WeakIdentity(b)
+}
+
 // applyDispositions stamps the dispositions in effect at publication time
-// (in.Now) on fp2 findings. Expired reviews and reviews whose path scope does
-// not cover the finding leave it open. The stored revision keeps these values
-// forever; later changes are served separately as the current disposition.
+// (in.Now) on fp2 findings. Expired reviews, reviews whose path scope does not
+// cover the finding and ambiguous or weak matches (DispositionCarries) leave
+// it open. The stored revision keeps these values forever; later changes and
+// confirmations are served separately as the current disposition.
 func applyDispositions(r *Report, reviews []ReviewFact, now time.Time) {
 	by := map[string]ReviewFact{}
 	for _, rv := range reviews {
 		by[rv.Fingerprint] = rv
 	}
+	matches := map[string]int{}
+	for _, f := range r.Findings {
+		matches[f.Fingerprint]++
+	}
 	for i := range r.Findings {
 		f := &r.Findings[i]
 		rv, ok := by[f.Fingerprint]
-		if !ok || f.FingerprintBasis == nil || rv.Disposition == "open" || (rv.ExpiresAt != nil && !rv.ExpiresAt.After(now)) || !ReviewApplies(rv.PathPrefix, f.FingerprintBasis.Paths) {
+		if !ok || f.FingerprintBasis == nil || rv.Disposition == "open" || (rv.ExpiresAt != nil && !rv.ExpiresAt.After(now)) ||
+			!ReviewApplies(rv.PathPrefix, f.FingerprintBasis.Paths) || !DispositionCarries(f.FingerprintBasis, matches[f.Fingerprint]) {
 			continue
 		}
 		v := rv.Version

@@ -720,6 +720,12 @@ def main() -> None:
     bad = copy.deepcopy(published)
     bad["quality_verdict"] = "no_actionable_findings"
     expect_invalid("clean without AI review", check_report, bad)
+    ensure(not published["export"]["include_code"] and all("fingerprint" not in f for f in published["findings"]), "Code-free example carries a fingerprint")
+    for field, value in (("fingerprint", "fp2:" + "0" * 64),
+                         ("fingerprint_basis", {"scheme": "fp2", "producer": "tool", "analyzer": "go.vet", "rule": "printf", "paths": ["example.go"], "symbols": [], "context": "unavailable", "move_key": "fp2:" + "1" * 64})):
+        bad = copy.deepcopy(published)
+        bad["findings"][0][field] = value
+        expect_invalid("code-free export with " + field, validators["report.schema.json"].validate, bad)
     bad = copy.deepcopy(plan)
     bad["tasks"][0]["depends_on"] = [bad["tasks"][-1]["id"]]
     expect_invalid("cyclic plan", check_plan, bad)

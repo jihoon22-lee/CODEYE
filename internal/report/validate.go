@@ -317,11 +317,12 @@ func Project(r Report, includeCode bool) Report {
 			l.Symbol = "" // symbol names are code identifiers
 			g.Locations[j] = l
 		}
-		if f.FingerprintBasis != nil {
-			b := *f.FingerprintBasis
-			b.Paths, b.Symbols = append([]string{}, b.Paths...), []string{}
-			g.FingerprintBasis = &b
-		}
+		// The fingerprint, its basis and the move key are unkeyed digests
+		// over code-derived inputs (tool message, symbols, context hash): a
+		// reader of the export could confirm guessed code against them. The
+		// code-free export therefore carries no identity; comparison and
+		// dispositions read it through the project-ACL API.
+		g.Fingerprint, g.FingerprintBasis, g.DispositionVersion = "", nil, nil
 		out.Findings[i] = g
 	}
 	return out

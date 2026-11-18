@@ -59,8 +59,8 @@ func TestModelFingerprintStableAcrossTitles(t *testing.T) {
 	}
 	first := compose(nil)
 	b := first.FingerprintBasis
-	if b == nil || b.Producer != ProducerModel || b.Rule != CauseCandidate || len(b.Paths) == 0 || !ValidFingerprint(first.Fingerprint) {
-		t.Fatalf("model basis %+v", b)
+	if b == nil || b.Producer != ProducerModel || b.Rule != CauseCandidate+":"+first.Category || first.Validation == "unreviewed" || len(b.Paths) == 0 || !ValidFingerprint(first.Fingerprint) {
+		t.Fatalf("model basis %+v (%s)", b, first.Validation)
 	}
 	reworded := compose(func(states map[string]*taskState) {
 		for _, key := range []string{"review.investigate", "review.verify"} {
@@ -76,9 +76,54 @@ func TestModelFingerprintStableAcrossTitles(t *testing.T) {
 	if reworded.Category != first.Category {
 		t.Fatal("fixture changed category")
 	}
+	// The cause class separates candidates: an unverified candidate and one
+	// the verifier classified differently are other identities, so a
+	// disposition on one never carries to the other.
 	unverified := compose(func(states map[string]*taskState) { states["review.verify"].facts.Status = "failed" })
-	if unverified.Validation != "unreviewed" || unverified.Fingerprint != first.Fingerprint {
-		t.Fatalf("verification outcome changed identity (%s)", unverified.Validation)
+	if unverified.Validation != "unreviewed" || unverified.FingerprintBasis.Rule != CauseCandidate+":unclassified" || unverified.Fingerprint == first.Fingerprint {
+		t.Fatalf("unverified candidate shares the verified identity (%s)", unverified.Validation)
+	}
+	recategorized := compose(func(states map[string]*taskState) {
+		v := &states["review.verify"].reviewResult.Record.Verifications[0]
+		if v.Category == "security" {
+			v.Category = "concurrency"
+		} else {
+			v.Category = "security"
+		}
+	})
+	if recategorized.Fingerprint == first.Fingerprint {
+		t.Fatal("verifier cause class is not part of the identity")
+	}
+}
+
+// Security review W23-1: a disposition never hides an ambiguous or weak match.
+func TestDispositionNeverCarriesToAmbiguousOrWeakMatch(t *testing.T) {
+	strong := &FingerprintBasis{Producer: ProducerTool, Analyzer: "go.vet", Rule: "printf", Paths: []string{"a.go"}}
+	weak := &FingerprintBasis{Producer: ProducerModel, Analyzer: AnalyzerReview, Rule: CauseCandidate + ":correctness", Paths: []string{"a.go"}}
+	withSymbol := &FingerprintBasis{Producer: ProducerModel, Analyzer: AnalyzerReview, Rule: CauseCandidate + ":correctness", Paths: []string{"a.go"}, Symbols: []string{"Run"}}
+	fs, fw, fy := fingerprint(strong, "msg"), fingerprint(weak, ""), fingerprint(withSymbol, "")
+	if weak.MoveKey != "" || !WeakIdentity(weak) || WeakIdentity(withSymbol) || WeakIdentity(strong) {
+		t.Fatal("weak identity classification")
+	}
+	if !DispositionCarries(strong, 1) || DispositionCarries(strong, 2) || DispositionCarries(weak, 1) || !DispositionCarries(withSymbol, 1) {
+		t.Fatal("carry rule")
+	}
+	finding := func(id, fp string, b *FingerprintBasis) Finding {
+		bb := *b
+		return Finding{ID: id, Fingerprint: fp, FingerprintBasis: &bb, Disposition: "open", Validation: "supported"}
+	}
+	r := Report{Findings: []Finding{finding("t1", fs, strong), finding("t2", fs, strong), finding("w1", fw, weak), finding("s1", fy, withSymbol)}}
+	reviews := []ReviewFact{{Fingerprint: fs, Version: 1, Disposition: "suppressed"}, {Fingerprint: fw, Version: 1, Disposition: "false_positive"}, {Fingerprint: fy, Version: 2, Disposition: "accepted_risk"}}
+	applyDispositions(&r, reviews, time.Now())
+	got := map[string]string{}
+	for _, f := range r.Findings {
+		got[f.ID] = f.Disposition
+	}
+	if got["t1"] != "open" || got["t2"] != "open" || got["w1"] != "open" || got["s1"] != "accepted_risk" {
+		t.Fatalf("dispositions %v", got)
+	}
+	if s := ComputeSummary(r.Findings, nil); s.ActionableFindings != 3 || s.HiddenFindings != 1 {
+		t.Fatalf("summary %+v", s)
 	}
 }
 
@@ -88,7 +133,17 @@ func TestBuildStampsPublicationDisposition(t *testing.T) {
 	if len(plain.Coverage.Tools) != 1 || !slices.Contains(plain.Coverage.Tools[0].ProcessedPaths, plain.Findings[0].Locations[0].Path) {
 		t.Fatalf("processed paths %+v", plain.Coverage.Tools)
 	}
-	target := plain.Findings[0]
+	count := map[string]int{}
+	for _, x := range plain.Findings {
+		count[x.Fingerprint]++
+	}
+	var target Finding
+	for _, x := range plain.Findings {
+		if count[x.Fingerprint] == 1 {
+			target = x
+			break
+		}
+	}
 	if target.FingerprintBasis == nil || !strings.HasPrefix(target.Fingerprint, "fp2:") || plain.Builder.Version != "3" {
 		t.Fatalf("finding identity %+v", target)
 	}
@@ -156,14 +211,27 @@ func TestBuildStampsPublicationDisposition(t *testing.T) {
 	}
 }
 
-func TestCodeFreeBasisHasNoSymbols(t *testing.T) {
-	f := Finding{Fingerprint: "", FingerprintBasis: &FingerprintBasis{Producer: ProducerModel, Analyzer: AnalyzerReview, Rule: CauseCandidate, Paths: []string{"a.go"}, Symbols: []string{"secretHelper"}}}
+// Security review W23-2: the code-free export carries no fingerprint, basis
+// or move key (unkeyed digests over code-derived inputs).
+func TestCodeFreeExportHasNoIdentity(t *testing.T) {
+	v := int64(1)
+	f := Finding{Disposition: "suppressed", DispositionVersion: &v, FingerprintBasis: &FingerprintBasis{Producer: ProducerModel, Analyzer: AnalyzerReview, Rule: CauseCandidate, Paths: []string{"a.go"}, Symbols: []string{"secretHelper"}}}
 	f.Fingerprint = fingerprint(f.FingerprintBasis, "")
 	out := Project(Report{Findings: []Finding{f}}, false)
-	if got := out.Findings[0].FingerprintBasis; len(got.Symbols) != 0 || got.Paths[0] != "a.go" || out.Findings[0].Fingerprint != f.Fingerprint {
-		t.Fatalf("code-free basis %+v", got)
+	if g := out.Findings[0]; g.Fingerprint != "" || g.FingerprintBasis != nil || g.DispositionVersion != nil || g.Disposition != "suppressed" {
+		t.Fatalf("code-free finding %+v", g)
 	}
-	if len(f.FingerprintBasis.Symbols) != 1 {
-		t.Fatal("projection mutated the stored basis")
+	if f.FingerprintBasis == nil || len(f.FingerprintBasis.Symbols) != 1 {
+		t.Fatal("projection mutated the stored finding")
+	}
+	full := newFixture(t, goVet(t))
+	body, err := Marshal(Project(build(t, full.in, DefaultRegistry()), false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, needle := range []string{`"fingerprint"`, `"fingerprint_basis"`, `"move_key"`, "fp2:"} {
+		if strings.Contains(string(body), needle) {
+			t.Fatalf("code-free export contains %s", needle)
+		}
 	}
 }
