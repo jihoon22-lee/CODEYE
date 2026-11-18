@@ -112,6 +112,20 @@ def targets(corpus, case, variant, documented=False):
     return out
 
 
+def model_exposure(records):
+    """What the kept review records say reached the model: evidence paths by record kind (code, test,
+    config, document) over every review stage, and the paths each stage saw. Records carry the review
+    input's evidence list, so this works for paid runs (which have no request dump) too."""
+    kinds, by_stage = defaultdict(set), defaultdict(set)
+    for r in records:
+        stage = r.get("stage")
+        for e in r.get("evidence") or []:
+            if isinstance(e, dict) and isinstance(e.get("path"), str):
+                kinds[str(e.get("kind"))].add(e["path"])
+                by_stage[stage].add(e["path"])
+    return {"kinds": {k: sorted(v) for k, v in kinds.items()}, "stages": {k: sorted(v) for k, v in by_stage.items()}}
+
+
 def auto_match(view, tgts, slack=2):
     best = None
     for path, s, e, sym in view["locations"]:
@@ -241,7 +255,8 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
         for v in views:
             v["auto"] = auto_match(v, tg, slack)
         judged = {fid: j for (b, key, fid), j in judgments.items() if b == name and key == row["key"]}
-        units.append({"row": row, "case": case, "views": views, "judged": judged})
+        exposure = model_exposure(records_of(batch_dir, row["key"])) if batch_dir else {"kinds": {}, "stages": {}}
+        units.append({"row": row, "case": case, "views": views, "judged": judged, "targets": tg, "exposure": exposure})
 
     def group(pred):
         return [u for u in units if pred(u)]
@@ -311,7 +326,14 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
         "review_outcomes": dict(Counter(r.get("review_outcome", "unrecorded") for r in rows if r["key"] in reports)),
         # the report gives only a count, and README/document excerpts count too: this is not "saw code"
         "model_saw_snapshot_files": rate(units, lambda u: (u["row"].get("llm_exposed_files") or 0) > 0),
+        # from the kept review records: a code-kind excerpt reached some review role
+        "model_saw_code": rate(units, lambda u: bool(u["exposure"]["kinds"].get("code"))),
+        # the labelled defect file (before variants) was in the investigate input
+        "labelled_file_in_investigate": rate(group(before), lambda u: bool(
+            {t["path"] for t in u["targets"]} & set(u["exposure"]["stages"].get("investigate", [])))),
     }
+    # review condition: valid variants where no code excerpt reached any review role
+    structural["no_code_variants"] = sorted(u["row"]["key"] for u in units if not u["exposure"]["kinds"].get("code"))         if manifest.get("condition") == "review" else []
     reproduced = sum(v["validation"] == "reproduced" for u in units for v in u["views"])
     errors, stats_bad, rejected, markers = Counter(), 0, 0, Counter()
     try:
@@ -490,6 +512,8 @@ def render_table(result):
             ("ai review performed", lambda b: fmt(b["structural"]["ai_review_performed"])),
             ("model saw snapshot files, documents included (llm_exposed_files>0)",
              lambda b: fmt(b["structural"]["model_saw_snapshot_files"])),
+            ("model saw code (review records, kind code)", lambda b: fmt(b["structural"]["model_saw_code"])),
+            ("labelled file in investigate input (before)", lambda b: fmt(b["structural"]["labelled_file_in_investigate"])),
             ("review outcome counts (reported variants, excluded included)", lambda b: ", ".join(f"{k} {v}" for k, v in sorted(b["structural"]["review_outcomes"].items()))),
             ("reproduced without execution", lambda b: str(b["structural"]["unsupported_assertions_structural"]["reproduced_without_execution"])),
             ("review calls / ledger requests", lambda b: f"{b['cost_time']['review_calls']} / {b['cost_time']['ledger_requests']}"),

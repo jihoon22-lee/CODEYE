@@ -287,6 +287,22 @@ class ScoringTests(unittest.TestCase):
         judgments, conflicts, _ = r1_score.load_judgments(judgment_files)
         return r1_score.batch_metrics(manifest, rows, reports, judgments, CORPUS, batch_dir=self.batch), conflicts
 
+    def test_code_exposure_comes_from_records_not_the_file_count(self):
+        # GO-06 before: investigate saw the labelled file; GO-01 before: README only (still counted by llm_exposed_files).
+        def keep(key, stage, evidence):
+            d = Path(self.batch) / "records" / key
+            d.mkdir(parents=True, exist_ok=True)
+            (d / f"review.{stage}-0.json").write_text(json.dumps({"stage": stage, "calls": [], "evidence": evidence}))
+        keep("R1-GO-06.before.1", "investigate", [{"path": "counters.go", "kind": "code"},
+                                                  {"path": "README.md", "kind": "document"}])
+        keep("R1-GO-01.before.1", "investigate", [{"path": "README.md", "kind": "document"}])
+        s = self.metrics()[0]["structural"]
+        self.assertEqual(s["model_saw_snapshot_files"]["k"], 4)
+        self.assertEqual((s["model_saw_code"]["k"], s["model_saw_code"]["n"]), (1, 4))
+        self.assertEqual((s["labelled_file_in_investigate"]["k"], s["labelled_file_in_investigate"]["n"]), (1, 2))
+        self.assertIn("R1-GO-01.before.1", s["no_code_variants"])
+        self.assertNotIn("R1-GO-06.before.1", s["no_code_variants"])
+
     def test_unjudged_items_are_counted_not_scored(self):
         m, _ = self.metrics()
         recall = m["metrics"]["known_defect_recall"]
