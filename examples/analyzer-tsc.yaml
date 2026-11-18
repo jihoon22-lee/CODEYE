@@ -1,0 +1,35 @@
+# W18 JS/TS 팩 tsc(javascript.tsc, 추가 깊이) 서술. 구현: internal/worker/analysis/tsc, 근거: docs/43-w18-js-ts-pack.md.
+# 운영자 typescript/bin/tsc를 공유 node toolchain으로 실행한다. tsconfig 체인은 JSONC 데이터로 읽어 manifest와 대조하고(honored),
+# 쓰기 옵션(generateTrace 등)·스냅샷 밖 경로를 가진 체인은 실행 전에 거부한다. --showConfig로 실효 설정과 루트 파일을 먼저 확인한다.
+# TypeScript 6.0.3 실측: 진단이 없으면 exit 0, 진단이 있으면 exit 2(--noEmit), 명령행 오류·설정 로드 실패는 exit 1.
+# --noEmit --incremental false --composite false로 tsbuildinfo를 포함해 아무것도 쓰지 않는다(실측). --build는 쓰지 않는다.
+# 해석되지 않는 모듈·타입(TS2307·TS7016·TS2688 등)은 의존성 공백이며 그 실행의 진단은 모두 보류한다.
+schema_version: '0.1'
+id: javascript.tsc
+languages: [typescript, javascript]
+planned_platforms: [linux, windows]
+availability: verified  # Linux node v24.18.0 + typescript 6.0.3 실행으로 검증. Windows는 단위 테스트만 실행.
+version_contract: typescript-6.0-fixture-tested
+analysis_scope: [typed, interfile]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${node}'
+  argv: ['${tsc}', --version]
+execute:
+  executable: '${node}'
+  argv: ['${tsc}', --noEmit, --pretty, 'false', --incremental, 'false', --composite, 'false', --ignoreDeprecations, '6.0',
+         --noUnusedLocals, 'false', --noUnusedParameters, 'false', --noFallthroughCasesInSwitch, 'false', -p, ./tsconfig.json]
+  cwd: '${workspace}/${module_dir}'
+  timeout_seconds: 900
+  stdout_max_bytes: 33554432
+  env_allowlist: [PATH, LANG, SystemRoot]
+exit_codes:
+  clean: [0]
+  findings: [2]
+  error: [1]
+parser:
+  id: tsc-text-v1
+  format: text
+  input: stdout-artifact
