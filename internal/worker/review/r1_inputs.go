@@ -61,6 +61,10 @@ func (s *r1Stage) readLines(e source.Entry, start, end int) (string, int, bool, 
 	if *e.Size > maxFileBytes || domain.ValidateEvidencePath(e.Path) != nil {
 		return "", 0, false, nil
 	}
+	if s.secretFiles()[e.Path] {
+		s.rec.Limitations = addLim(s.rec.Limitations, limSecretWithheld)
+		return "", 0, false, nil
+	}
 	root, err := os.OpenRoot(s.j.Snapshot.SnapshotDir)
 	if err != nil {
 		return "", 0, false, err
@@ -79,6 +83,53 @@ func (s *r1Stage) readLines(e source.Entry, start, end int) (string, int, bool, 
 	}
 	end = min(end, len(lines))
 	return strings.Join(lines[start-1:end], "\n"), len(lines), true, nil
+}
+
+// limSecretWithheld: a file a secret analyzer reported was kept out of
+// every model input of the stage (docs/45).
+const limSecretWithheld = "secret_files_withheld"
+
+// secretFiles are the paths of the observations of every accepted secret
+// analyzer envelope (obsdoc.SecretAnalyzers) of this run. Their text never
+// reaches a model: not as code context, document, observation window or
+// verification expansion. An envelope that cannot be read withholds
+// nothing (the Sensitive pattern still applies).
+func (s *r1Stage) secretFiles() map[string]bool {
+	if s.withheld != nil {
+		return s.withheld
+	}
+	s.withheld = map[string]bool{}
+	if s.h.Static == nil {
+		return s.withheld
+	}
+	plan, err := s.h.Static.Plan(s.ctx, s.j)
+	if err != nil {
+		return s.withheld
+	}
+	files := s.entries()
+	lookup := func(p string) (string, bool) { e, ok := files[p]; return e.SHA256, ok }
+	for _, t := range plan {
+		if !record.AnalyzerTaskKey(t.Key) {
+			continue
+		}
+		b, err := readBounded(obsdoc.ArtifactPath(s.j.Scratch, t.Key), obsdoc.MaxBytes)
+		if err != nil {
+			continue
+		}
+		d, err := obsdoc.Decode(b, obsdoc.Expect{TaskKey: t.Key, Snapshot: s.j.Snapshot.Digest, Lookup: lookup})
+		if err != nil || !obsdoc.IsSecretAnalyzer(d.Analyzer.ID) {
+			continue
+		}
+		for _, o := range d.Observations {
+			if o.Path != nil {
+				s.withheld[*o.Path] = true
+			}
+			if o.Location != nil {
+				s.withheld[o.Location.Path] = true
+			}
+		}
+	}
+	return s.withheld
 }
 
 // excerpt builds a bounded excerpt of up to maxLines lines and maxBytes of
@@ -266,6 +317,11 @@ func (s *r1Stage) readToolDoc(key string, files map[string]source.Entry) (toolSu
 			// (the envelope's source_suppressed_observations limitation says
 			// some were left out) and never becomes a finding (docs/39 §5.1).
 			if o.Suppressed {
+				continue
+			}
+			// A structure metric (W21) is no defect candidate: the envelope's
+			// metrics_not_defects limitation is all the model sees of it.
+			if o.Metric != nil {
 				continue
 			}
 			to := toolObservation{ID: o.ID, Tool: d.Analyzer.ID, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState}

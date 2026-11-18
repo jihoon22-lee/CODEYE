@@ -115,6 +115,14 @@ func (s *r1Stage) verify() analysis.TaskResult {
 		s.setEvidence(context)
 		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 	}
+	// Callers and tests in a file a secret analyzer reported stay out.
+	extra = slices.DeleteFunc(extra, func(x Excerpt) bool {
+		if s.secretFiles()[x.Path] {
+			s.rec.Limitations = addLim(s.rec.Limitations, limSecretWithheld)
+			return true
+		}
+		return false
+	})
 	s.rec.Limitations = addLim(s.rec.Limitations, lims...)
 	// The request must fit PromptBudget. Expansion, uncited context and
 	// contracts go first; then candidates are verified as a prefix (investigate

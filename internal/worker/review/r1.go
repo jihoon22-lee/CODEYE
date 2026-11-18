@@ -123,6 +123,10 @@ type r1Stage struct {
 	role   string
 	pack   reviewpackr1.Selection
 	rec    record.R1Record
+	// withheld are the files a secret analyzer (W21 gitleaks, docs/45)
+	// reported a credential in: no excerpt of them reaches a model. Loaded
+	// once per stage by secretFiles.
+	withheld map[string]bool
 }
 
 // begin loads the pack and the record skeleton; a nil caller is reported
