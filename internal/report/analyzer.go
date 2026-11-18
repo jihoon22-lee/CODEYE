@@ -36,8 +36,9 @@ var rawSeverityPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,31}$`)
 
 // AnalyzerDecoder decodes the generic analyzer observations envelope of the
 // R1 packs (obsdoc, kind analyzer_observations). Observations become report
-// observations; resolved ones verified against the source manifest and not
-// suppressed in source become tool-reported findings that stay unreviewed
+// observations; resolved ones verified against the source manifest, not
+// suppressed in source and not structure metrics (W21) become tool-reported
+// findings that stay unreviewed
 // (pending, never actionable without review). The row records the
 // envelope's rule context (docs/39 §5.1). Only observations identical in analyzer, rule, location
 // and message are grouped into one finding; a different rule or message on
@@ -109,6 +110,9 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 		obs := Observation{ID: o.ID, TaskKey: ctx.Task.Key, TaskExecutionID: ctx.TaskExecutionID, Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, RuleID: o.RuleID,
 			RawSeverity: severity, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes, Suppressed: o.Suppressed,
 			RawRef: RawRef{ArtifactID: a.ID, SHA256: a.SHA256, StreamIndex: o.RawRef.RecordIndex, JSONPointer: o.RawRef.JSONPointer, ByteStart: o.RawRef.ByteStart, ByteEnd: o.RawRef.ByteEnd}}
+		if m := o.Metric; m != nil {
+			obs.Metric = &ObservationMetric{Name: m.Name, Value: m.Value, Threshold: m.Threshold, Unit: m.Unit}
+		}
 		if l := o.Location; l != nil {
 			startCol, endCol := l.StartCol, l.EndCol
 			if l.ColumnUnit != "byte" {
@@ -124,8 +128,8 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 			}
 			// A diagnostic hidden by an in-source suppression stays an
 			// observation (the comparison reads it) and never becomes a
-			// finding.
-			if obs.EvidenceState == EvidenceVerified && !o.Suppressed {
+			// finding; a structure metric is no defect and never one either.
+			if obs.EvidenceState == EvidenceVerified && !o.Suppressed && o.Metric == nil {
 				k := strings.Join([]string{o.RuleID, l.Path, itoa(l.StartLine), itoa(startCol), msg}, "\x00")
 				if _, seen := groups[k]; !seen {
 					order = append(order, k)

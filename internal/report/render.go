@@ -57,6 +57,11 @@ func newView(r Report, digest string, l Locale) view {
 		{"pending_candidates", "미확정 후보(unreviewed/inconclusive)", strconv.Itoa(s.PendingCandidates)},
 		{"refuted_findings", "기각(refuted)", strconv.Itoa(s.RefutedFindings)},
 	}
+	if s.MetricObservations > 0 {
+		// W21 (docs/45): structure metrics are a subset of the raw
+		// observations, shown apart and never as defects.
+		v.Counts = append(v.Counts, countRow{"metric_observations", l.Label("metric_observations"), strconv.Itoa(s.MetricObservations)})
+	}
 	for _, c := range r.Limitations {
 		v.Limitations = append(v.Limitations, l.Code(c))
 	}
@@ -72,6 +77,9 @@ func newView(r Report, digest string, l Locale) view {
 			v.Message[o.ID] = *o.RawMessage
 		} else {
 			v.Message[o.ID] = l.Label("message_omitted")
+		}
+		if m := o.Metric; m != nil {
+			v.Message[o.ID] = "[" + l.Label("metric_marker") + ": " + m.Name + " " + strconv.Itoa(m.Value) + " >= " + strconv.Itoa(m.Threshold) + " " + m.Unit + "] " + v.Message[o.ID]
 		}
 	}
 	return v

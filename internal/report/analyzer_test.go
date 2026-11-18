@@ -83,6 +83,14 @@ func unionManifest(t *testing.T, docs ...map[string]any) []byte {
 				}
 			}
 		}
+		// W21: repository configuration files a tool read (rule context).
+		if rp, ok := d["rule_pack"].(map[string]any); ok {
+			if cf, ok := rp["config_files"].([]any); ok {
+				for _, c := range cf {
+					paths[c.(map[string]any)["path"].(string)] = c.(map[string]any)["sha256"].(string)
+				}
+			}
+		}
 		if cov, ok := d["coverage"].(map[string]any); ok {
 			if pp, ok := cov["processed_paths"].([]any); ok {
 				for _, p := range pp {
