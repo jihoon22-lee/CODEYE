@@ -8,7 +8,6 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	reviewpackr1 "github.com/jihoon22-lee/CODEYE/prompts/review-r1"
@@ -168,9 +167,10 @@ func TestR1RecordsShowLanguageGuides(t *testing.T) {
 	t.Logf("largest request per role with three guides (bytes): %v", maxPrompt(f))
 }
 
-// A Python-only snapshot gets the Python guide alone and no Go guide. Only
-// the documents role reaches the model here: the code excerpts of the
-// investigate role are still Go only (code_excerpts_go_only).
+// A Python-only snapshot gets the Python guide alone and no Go guide, and
+// since W24 phase 2c every code role reaches the model with Python code:
+// investigate and verify run (they failed with review_input_unavailable and
+// were skipped while code excerpts were Go only).
 func TestR1PythonOnlySnapshotGetsThePythonGuide(t *testing.T) {
 	j := treeJob(t, map[string]string{
 		"README.md":         "# Tool\n\nRun the tool with a configuration file.\n",
@@ -182,22 +182,30 @@ func TestR1PythonOnlySnapshotGetsThePythonGuide(t *testing.T) {
 	if got := languagesInScope(j); !slices.Equal(got, []string{"python"}) {
 		t.Fatalf("ecosystems %v", got)
 	}
-	script := map[string]func(int, opencode.Request) opencode.Reply{
-		"documents": func(int, opencode.Request) opencode.Reply {
-			return asJSON(map[string]any{"contracts": []any{}, "conflicts": []any{}, "questions": []any{}, "instruction_notes": []any{}})
-		},
-	}
-	f := &r1Caller{script: script}
+	f := &r1Caller{script: maxScript(t)}
 	_, res := runR1(t, j, vetStub{}, f, "1.27.4")
-	if res["review.documents"].Status != domain.TaskSucceeded {
-		t.Fatalf("%+v", res["review.documents"])
+	for _, key := range []string{"review.documents", "review.investigate", "review.verify"} {
+		if res[key].Status != domain.TaskSucceeded {
+			t.Fatalf("%s %+v", key, res[key])
+		}
 	}
-	calls := readR1(t, j, "documents").Calls
-	if len(calls) != 1 || !slices.Equal(guideFiles(calls[0].PackFiles), []string{"languages/python.md"}) {
-		t.Fatalf("documents calls %+v", calls)
+	for _, stage := range []string{"documents", "investigate", "verify"} {
+		calls := readR1(t, j, stage).Calls
+		if len(calls) != 1 || !slices.Equal(guideFiles(calls[0].PackFiles), []string{"languages/python.md"}) {
+			t.Fatalf("%s calls %+v", stage, calls)
+		}
 	}
-	if len(f.requests) == 0 {
-		t.Fatal("no request")
+	var paths []string
+	for _, e := range readR1(t, j, "investigate").Evidence {
+		if e.Kind != "document" {
+			paths = append(paths, e.Path+":"+e.Kind)
+		}
+	}
+	if !slices.Equal(paths, []string{"tool/main.py:code", "tests/test_app.py:test"}) {
+		t.Fatalf("investigate evidence %v", paths)
+	}
+	if len(f.requests) != 3 {
+		t.Fatalf("requests %d", len(f.requests))
 	}
 	for _, q := range f.requests {
 		checkGuides(t, q.Role, q.Instructions, []string{"python"})

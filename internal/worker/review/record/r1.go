@@ -362,13 +362,12 @@ func checkUpstream(r R1Record) error {
 }
 
 func checkR1Excerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)) error {
-	lower := strings.ToLower(e.Path)
 	switch {
 	case domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.SHA256) || e.Start < 1 || e.End < e.Start || e.End-e.Start+1 > 80:
 		return invalid("evidence location")
 	case !r1Kinds[e.Kind] || !r1Origins[e.Origin] || e.Text != "" || (e.Symbol != "" && !symbol.MatchString(e.Symbol)):
 		return invalid("evidence attributes")
-	case (e.Kind == "code" && (!strings.HasSuffix(lower, ".go") || strings.HasSuffix(lower, "_test.go"))) || (e.Kind == "test" && !strings.HasSuffix(lower, "_test.go")):
+	case (e.Kind == "code" || e.Kind == "test") && SourceKind(e.Path) != e.Kind:
 		return invalid("evidence kind")
 	case (e.Origin == "caller" || e.Origin == "test") != (e.Symbol != "") || (e.Origin == "test" && e.Kind != "test") || (e.Origin == "caller" && e.Kind != "code"):
 		return invalid("evidence origin")

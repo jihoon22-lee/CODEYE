@@ -98,6 +98,8 @@ var Korean = Locale{
 		"model_input_not_secret_screened":    "비밀값 탐지가 실행되지 않아 모델 입력을 비밀값 기준으로 거르지 않았다.",
 		"secret_files_withheld":              "비밀값이 탐지된 파일은 모델 입력에서 뺐다.",
 		"secret_screen_failed":               "비밀값 탐지 결과를 쓸 수 없어 모델 검토를 건너뛰었다(코드 미전송).",
+		// W24 2c (docs/33, docs/07): review inputs of five languages.
+		"source_in_excluded_directories": "숨김·vendor·testdata·node_modules와 build·dist·target 같은 산출물·의존성 디렉터리 아래 소스는 모델 입력에서 뺐다.",
 	},
 }
 

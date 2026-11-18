@@ -384,7 +384,7 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 - darwin에서는 Go telemetry를 끄지 못한다(§8.2).
 - build context는 노드 기본 GOOS/GOARCH, tag 없음, CGO 끔 하나다. tag·CGO·다른 target 조합은 계획하지 않는다.
 - `related` 위치는 envelope와 R1 입력에만 있다. 보고서 finding은 주 위치만 보인다.
-- R1 해석의 호출자 확장은 Go 코드에서만 동작한다(W15). 다른 언어 팩이 해석 입력을 쓰려면 코드 창 선택을 확인해야 한다.
+- R1 검증의 호출자 확장은 Go 코드에서만 동작한다(W15). 해석 창과 조사 발췌는 W24 2c단계부터 다섯 언어의 소스 파일에서 줄 단위로 만든다. 소스가 아닌 파일(manifest·설정)의 진단에는 창이 없다([docs/07](07-llm-and-instructions.md#다섯-언어-검토-입력w24-2c단계)).
 - 공백 판단은 소스 확장자 기준이다(§2.8). 확장자가 없는 스크립트나 생성 파일은 세지 않는다. 범위에 소스가 있어도 그 생태계의 팩이 모듈을 찾지 못하면 그 팩이 보이는 작업을 계획해야 한다. composite는 이를 강제하지 않는다.
 - 탐색 probe는 범위 안 생태계의 도구만 기록한다. `any` 생태계 도구(W21)는 항상 기록된다.
 - 공유 toolchain은 `node` 하나다(§2.4.1). W17부터 pyright가, W18부터 ESLint·tsc가 node를 interpreter로 쓴다([W17](42-w17-python-pack.md), [W18](43-w18-js-ts-pack.md)). 그 전에는 `--node`가 탐색 관측에만 쓰였다. node 자식 프로세스(worker thread, 언어 서버, telemetry)의 정리와 환경은 각 팩이 측정해야 한다. Windows에서 실제 node probe를 실행하지 않았다.

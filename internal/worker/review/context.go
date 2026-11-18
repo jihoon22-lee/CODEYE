@@ -44,7 +44,10 @@ func inScope(name string, scope domain.Scope) bool {
 	return false
 }
 
-func priority(name string) (rank int, kind string) {
+// priority ranks a corpus candidate: entry points, documents, sources,
+// manifests, tests. The Go, README/AGENTS and go.mod rules are those of W11;
+// the other ecosystems in scope follow otherPriority (sources.go, W24).
+func priority(name string, others otherScope) (rank int, kind string) {
 	base := strings.ToLower(path.Base(name))
 	switch {
 	case base == "readme.md" || base == "agents.md":
@@ -58,7 +61,7 @@ func priority(name string) (rank int, kind string) {
 	case strings.HasSuffix(base, "_test.go"):
 		return 4, "test"
 	default:
-		return 5, ""
+		return otherPriority(name, others)
 	}
 }
 
@@ -81,11 +84,15 @@ func buildScreenedCorpus(snapshot source.Snapshot, scope domain.Scope, withheld 
 		kind  string
 	}
 	var options []selected
+	others := newOtherScope(snapshot.Manifest, scope)
 	for _, e := range snapshot.Manifest.Entries {
 		if e.Kind != "file" || e.SHA256 == "" || e.Size == nil || e.ExcludedReason != "" || !inScope(e.Path, scope) {
 			continue
 		}
-		r, k := priority(e.Path)
+		if excludedSource(e.Path) {
+			c.Limitations = addLim(c.Limitations, limExcludedSource)
+		}
+		r, k := priority(e.Path, others)
 		if k == "" {
 			continue
 		}
