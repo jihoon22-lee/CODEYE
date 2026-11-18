@@ -74,5 +74,66 @@
       "status": "unverified",
       "reason": "native_executor_pending_w05"
     }
-  ]
+  ],
+  "operations": {
+    "storage": [
+      {
+        "area": "snapshot",
+        "status": "no_limit",
+        "bytes": 659,
+        "limit_bytes": null,
+        "filesystem_available_bytes": 7538081792,
+        "incomplete": false,
+        "enforcement": "claim_refusal_node_heartbeat"
+      },
+      {
+        "area": "workspace",
+        "status": "within_limit",
+        "bytes": 0,
+        "limit_bytes": 2000000000,
+        "filesystem_available_bytes": 7538081792,
+        "incomplete": false,
+        "enforcement": "claim_refusal_node_heartbeat"
+      },
+      {
+        "area": "cache",
+        "status": "no_limit",
+        "bytes": 0,
+        "limit_bytes": null,
+        "filesystem_available_bytes": 7538081792,
+        "incomplete": false,
+        "enforcement": "claim_refusal_node_heartbeat"
+      },
+      {
+        "area": "logs",
+        "status": "no_limit",
+        "bytes": 26094,
+        "limit_bytes": null,
+        "filesystem_available_bytes": 7538081792,
+        "incomplete": false,
+        "enforcement": "claim_refusal_node_heartbeat"
+      },
+      {
+        "area": "artifacts",
+        "status": "within_limit",
+        "bytes": 19459,
+        "limit_bytes": 1000000000,
+        "filesystem_available_bytes": 7538081792,
+        "incomplete": false,
+        "enforcement": "claim_refusal_database_accounting"
+      }
+    ],
+    "backup": {
+      "status": "recent",
+      "latest": "codeye-20261118T183443Z",
+      "created_at": "2026-11-18T18:34:43.128988892Z",
+      "age_seconds": 958
+    },
+    "processes": {
+      "status": "consistent",
+      "controller": "not_recorded",
+      "agent": "not_recorded",
+      "issues": []
+    }
+  }
 }

@@ -22,7 +22,7 @@ import (
 
 const usage = `CODEYE control plane (W03/W06/W07)
 Usage:
-  codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]
+  codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
   codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH] [--timeout 75s]
   codeye migrate
   codeye user create [--name NAME]

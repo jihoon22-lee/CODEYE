@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/jihoon22-lee/CODEYE/internal/personal"
 )
 
 type Check struct {
@@ -31,10 +33,14 @@ type Report struct {
 	Stage         string  `json:"stage"`
 	Host          Host    `json:"host"`
 	Checks        []Check `json:"checks"`
+	// Operations is present only with --config (W25, docs/47 §6).
+	Operations *Operations `json:"operations,omitempty"`
 }
 type Options struct {
 	WorkDir, DatabaseURL string
 	Timeout              time.Duration
+	// Personal adds the W25 operations section (storage, backup, processes).
+	Personal *personal.Config
 }
 
 var versionPattern = regexp.MustCompile(`(?:^|[^0-9])([0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:[^0-9]|$)`)
@@ -74,6 +80,9 @@ func Collect(ctx context.Context, opts Options, runner Runner) Report {
 		report.Checks = append(report.Checks, c)
 	}
 	report.Checks = append(report.Checks, database(ctx, opts, runner), Check{"model", "unverified", "adapter_contract_pending_w10", ""}, Check{"process_control", "unverified", "runtime_process_control_not_probed", ""})
+	if opts.Personal != nil {
+		report.Operations = operations(opts.Personal, time.Now())
+	}
 	return report
 }
 
@@ -203,5 +212,5 @@ func (r Report) Write(w io.Writer, format string) error {
 			return err
 		}
 	}
-	return nil
+	return r.Operations.write(w)
 }

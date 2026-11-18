@@ -9,7 +9,7 @@ import (
 
 func TestCLIRejectsUnsupportedAndSensitiveOptions(t *testing.T) {
 	for _, args := range [][]string{{"start", "--config=secret"}, {"stop", "--config", "/secret/none.json"}, {"status", "--format=secret"}, {"start", "secret"},
-		{"backup", "--config=secret"}, {"restore", "--config=secret"}, {"secret"}, {"doctor", "--url=secret"}, {"doctor", "--format=secret"}, {"doctor", "--timeout=0"}, {"doctor", "extra"}} {
+		{"backup", "--config=secret"}, {"restore", "--config=secret"}, {"secret"}, {"doctor", "--url=secret"}, {"doctor", "--format=secret"}, {"doctor", "--timeout=0"}, {"doctor", "extra"}, {"doctor", "--config", "/secret/none.json"}} {
 		var out, stderr bytes.Buffer
 		if run(context.Background(), args, &out, &stderr) != 2 {
 			t.Fatalf("accepted %v", args)

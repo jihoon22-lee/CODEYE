@@ -303,6 +303,507 @@
           }
         }
       ]
+    },
+    "operations": {
+      "description": "W25 personal operations (codeye doctor --config): storage use per area against the configured quota, the newest backup and the start/stop process state. Absent without --config.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "storage",
+        "backup",
+        "processes"
+      ],
+      "properties": {
+        "storage": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "area",
+              "status",
+              "bytes",
+              "limit_bytes",
+              "filesystem_available_bytes",
+              "incomplete",
+              "enforcement"
+            ],
+            "properties": {
+              "area": {
+                "enum": [
+                  "snapshot",
+                  "workspace",
+                  "cache",
+                  "logs",
+                  "artifacts"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "within_limit",
+                  "over_limit",
+                  "no_limit",
+                  "unmeasured"
+                ]
+              },
+              "bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "limit_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "filesystem_available_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "incomplete": {
+                "type": "boolean"
+              },
+              "enforcement": {
+                "enum": [
+                  "claim_refusal_node_heartbeat",
+                  "claim_refusal_database_accounting"
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "unmeasured"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "bytes": {
+                      "type": "null"
+                    },
+                    "incomplete": {
+                      "const": false
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "within_limit",
+                        "over_limit",
+                        "no_limit"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "bytes": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "within_limit",
+                        "over_limit"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "limit_bytes": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "no_limit"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "limit_bytes": {
+                      "type": "null"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "area": {
+                      "enum": [
+                        "artifacts"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "area"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "enforcement": {
+                      "const": "claim_refusal_database_accounting"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "area": {
+                      "enum": [
+                        "snapshot",
+                        "workspace",
+                        "cache",
+                        "logs"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "area"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "enforcement": {
+                      "const": "claim_refusal_node_heartbeat"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "area": {
+                    "const": "snapshot"
+                  }
+                },
+                "required": [
+                  "area"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "area": {
+                    "const": "workspace"
+                  }
+                },
+                "required": [
+                  "area"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "area": {
+                    "const": "cache"
+                  }
+                },
+                "required": [
+                  "area"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "area": {
+                    "const": "logs"
+                  }
+                },
+                "required": [
+                  "area"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "area": {
+                    "const": "artifacts"
+                  }
+                },
+                "required": [
+                  "area"
+                ]
+              }
+            }
+          ]
+        },
+        "backup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "latest",
+            "created_at",
+            "age_seconds"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "not_configured",
+                "none",
+                "unreadable",
+                "recent",
+                "stale"
+              ]
+            },
+            "latest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "created_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+            },
+            "age_seconds": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "recent",
+                      "stale"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "latest": {
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "age_seconds": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "not_configured",
+                      "none",
+                      "unreadable"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "latest": {
+                    "type": "null"
+                  },
+                  "created_at": {
+                    "type": "null"
+                  },
+                  "age_seconds": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "processes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "controller",
+            "agent",
+            "issues"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "consistent",
+                "inconsistent",
+                "unsupported"
+              ]
+            },
+            "controller": {
+              "enum": [
+                "running",
+                "exited",
+                "pid_reused",
+                "not_recorded",
+                "unknown"
+              ]
+            },
+            "agent": {
+              "enum": [
+                "running",
+                "exited",
+                "pid_reused",
+                "not_recorded",
+                "unknown"
+              ]
+            },
+            "issues": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 5,
+              "items": {
+                "enum": [
+                  "stale_record",
+                  "agent_running_without_record",
+                  "listen_in_use_without_record",
+                  "partially_running",
+                  "record_unreadable"
+                ]
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "consistent"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "issues": {
+                    "type": "array",
+                    "maxItems": 0
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "inconsistent"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "issues": {
+                    "type": "array",
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
     }
   }
 }

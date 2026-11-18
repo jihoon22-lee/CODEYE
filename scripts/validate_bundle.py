@@ -1310,6 +1310,44 @@ def expect_invalid(name: str, function, data) -> None:
     raise ValueError("Negative case was incorrectly accepted: " + name)
 
 
+def check_w25_doctor(validator, example) -> None:
+    """W25 (docs/47 §6): the operations section is optional and closed."""
+    ensure("operations" in example, "Doctor example lacks the W25 operations section")
+    base = copy.deepcopy(example)
+    del base["operations"]
+    validator.validate(base)
+    cases = []
+    bad = copy.deepcopy(example)
+    bad["operations"]["storage"][1].update(status="over_limit", limit_bytes=None)
+    cases.append(("over limit without a limit", bad))
+    bad = copy.deepcopy(example)
+    bad["operations"]["storage"][0].update(status="unmeasured")
+    cases.append(("unmeasured with bytes", bad))
+    bad = copy.deepcopy(example)
+    bad["operations"]["storage"][4]["enforcement"] = "claim_refusal_node_heartbeat"
+    cases.append(("artifacts enforced by heartbeat", bad))
+    bad = copy.deepcopy(example)
+    bad["operations"]["storage"][4]["area"] = "logs"
+    cases.append(("missing storage area", bad))
+    bad = copy.deepcopy(example)
+    bad["operations"]["storage"][0]["database_url"] = "postgresql://x"
+    cases.append(("extra storage field", bad))
+    bad = copy.deepcopy(example)
+    bad["operations"]["backup"].update(status="none")
+    cases.append(("absent backup with a set", bad))
+    bad = copy.deepcopy(example)
+    bad["operations"]["processes"]["issues"] = ["stale_record"]
+    cases.append(("consistent with issues", bad))
+    bad = copy.deepcopy(example)
+    bad["operations"]["processes"].update(status="inconsistent")
+    cases.append(("inconsistent without issues", bad))
+    bad = copy.deepcopy(example)
+    bad["operations"]["processes"]["controller"] = "alive"
+    cases.append(("unknown process state", bad))
+    for name, data in cases:
+        expect_invalid(name, validator.validate, data)
+
+
 def make_validators():
     schemas = {}
     resources = []
@@ -1528,6 +1566,7 @@ def main() -> None:
     bad = copy.deepcopy(json_file(ROOT / "examples/doctor.json"))
     bad["checks"][-1]["id"] = "host"
     expect_invalid("missing doctor capability", validators["doctor.schema.json"].validate, bad)
+    check_w25_doctor(validators["doctor.schema.json"], json_file(ROOT / "examples/doctor.json"))
     calls_example = copy.deepcopy(published)
     calls_example["coverage"]["review_calls"] = [
         {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome")}
