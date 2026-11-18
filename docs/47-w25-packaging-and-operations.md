@@ -216,6 +216,16 @@ CI에서 건너뛰는 시험: Windows 작업에는 PostgreSQL이 없다. 그래�
 
 ## 10. 검증 결과
 
-최종 커밋에서 실행한 명령과 결과는 아래에 적는다.
+2026년 11월 19일, Linux(WSL2, 12 CPU), Go 1.27.4, PostgreSQL 17.10, Node 24.18.0. 커밋 `addb776`에서 실행했다. origin/main `0646fff`를 병합한 뒤다. 이 절은 그 뒤 문서만 바꾼 커밋으로 넣었고, 그 커밋에서는 `validate_bundle.py`만 다시 실행했다. 공용 머신이라 Go 시험은 `-p 3`으로 돌렸다.
 
-(최종 검증 뒤 기록)
+| 명령 | 결과 |
+|---|---|
+| `gofmt -l .` | 출력 없음 |
+| `go vet ./...` · `GOOS=windows go vet ./...` | 통과 |
+| `go test -race -p 3 -count=1 ./...`(DB 환경변수 없음) | 44개 패키지 통과, 101초. DB가 필요한 시험은 건너뛴다 |
+| `python3 scripts/validate_bundle.py` | 통과 |
+| `cd web && npm ci && npm test && npm run build` | 17개 파일 189개 시험 통과, 빌드 성공 |
+| `PATH=<PostgreSQL 17.10 bin>:$PATH GOFLAGS=-p=3 python3 scripts/test_postgres.py --nodes --web --scheduler --personal` | 통과, 333초. 안의 `go test -race ./...`(임시 DB 포함) 44개 패키지 통과. W25 smoke 세 줄을 포함해 모든 smoke가 PASS다 |
+| Windows 시험 바이너리(`GOOS=windows go test -c`, WSL interop으로 패키지 디렉터리에서 실행) | `internal/personal`·`quota`·`backup`·`agent`·`storage/postgres`·`pgtool`·`nodeproto`, `cmd/codeye` 통과. `internal/doctor`는 W25 시험을 포함해 모두 통과했다. 기존 `TestGoProbeUsesPrivateTelemetryOffMode` 하나만 실패했는데, Windows 호스트 PATH에 go가 없어서다(`executable_missing`). origin/main `0646fff`의 같은 시험도 같은 이유로 실패한다. `internal/agent/procid`에는 Windows 시험이 없다 |
+
+최종 실행 전에 변경 패키지(`internal/backup`·`storage/postgres`·`agent/...`·`doctor`·`personal`·`quota`·`pgtool`·`nodeproto`, `cmd/codeye`)를 따로 실행했다. 임시 클러스터와 `CODEYE_TEST_PG_BIN`을 주고 `-race -p 3`으로 돌려 모두 통과했다. `-v`로 `TestTC32BackupRestoreRoundTrip`과 `TestW25*`가 건너뛰지 않고 통과한 것을 확인했다. 개발 중 `--smokes-only --personal`을 따로 돌렸고 45~48초가 걸렸다.
