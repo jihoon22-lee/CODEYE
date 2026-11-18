@@ -37,7 +37,7 @@ mypy·pyright·bandit은 추가 깊이다. 실패하거나 미지원이어도 �
 
 네 도구 모두 저장소 설정을 통째로 CODEYE 관리 설정으로 대신하므로 `rule_pack.repository_config=overridden`, `config_files=[]`다. 저장소 설정 값을 읽어 쓰는 경로가 없으므로 "작업 공간 밖을 가리키는 설정 값을 거부"할 대상도 없다(§9).
 
-Python 스크립트 도구(mypy·bandit)는 운영자가 설치한 자기 venv의 절대 `#!` interpreter로 실행한다. `#!/usr/bin/env`는 PATH 검색이라 거부한다. 환경에는 `PYTHONDONTWRITEBYTECODE=1`·`PYTHONNOUSERSITE=1`·`PYTHONSAFEPATH=1`을 둔다. mypy는 `--no-site-packages`라 어떤 interpreter에도 설치 패키지를 묻지 않는다. pyright는 공유 node toolchain이 진입 스크립트를 실행하고 PATH는 node 디렉터리 하나다([§2.4.1](39-r1-analyzer-packs.md#241-공유-interpreter-toolchain)).
+Python 스크립트 도구(mypy·bandit)는 운영자가 설치한 자기 venv의 절대 `#!` interpreter로 실행한다. `#!/usr/bin/env`는 PATH 검색이라 거부한다. 환경에는 `PYTHONDONTWRITEBYTECODE=1`·`PYTHONNOUSERSITE=1`·`PYTHONSAFEPATH=1`을 둔다. mypy는 `--no-site-packages`라 어떤 interpreter에도 설치 패키지를 묻지 않는다. pyright는 공유 node toolchain이 진입 스크립트를 실행하고 PATH는 node 디렉터리 하나다([§2.4.1](39-r1-analyzer-packs.md#241-공유-interpreter-toolchain)). 그 밖의 도구의 PATH는 해석한 도구 실행 파일의 디렉터리 하나다. 네 도구 모두 실행 중 PATH에서 찾는 보조 프로그램이 없으므로 `--toolchain-path`를 쓰지 않고 자식 PATH를 넓히지 않는다([§2.4](39-r1-analyzer-packs.md#24-도구-경로와-에이전트-플래그)).
 
 ## 4. 대상 Python 버전
 
