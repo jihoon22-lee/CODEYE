@@ -189,7 +189,9 @@ func (s *r1Stage) environment() analysis.TaskResult {
 			}
 			seen[n.Module] = true
 			own := byModule[n.Module]
-			cited := map[string]bool{}
+			// citedReq: requirement IDs of the note; cited: evidence IDs of
+			// the cited requirements of this module.
+			citedReq, cited := map[string]bool{}, map[string]bool{}
 			for _, id := range n.RequirementIDs {
 				r, ok := reqs[id]
 				switch {
@@ -197,10 +199,12 @@ func (s *r1Stage) environment() analysis.TaskResult {
 					errs = addLim(errs, "requirement_id_unknown")
 				case r.Module != n.Module:
 					errs = addLim(errs, "requirement_of_other_module")
-				case cited[id]:
+				case citedReq[id]:
 					errs = addLim(errs, "requirement_id_duplicate")
+				default:
+					cited[r.EvidenceID] = true
 				}
-				cited[r.EvidenceID] = ok && r.Module == n.Module
+				citedReq[id] = true
 			}
 			if len(own) > 0 && len(n.RequirementIDs) == 0 {
 				errs = addLim(errs, "requirement_missing")

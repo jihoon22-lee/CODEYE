@@ -437,10 +437,10 @@ func checkStageContent(r R1Record, catalog map[string]Excerpt, observations map[
 			return invalid("environment note")
 		}
 		_, dir, _ := strings.Cut(n.Module, ":")
-		for _, id := range n.RequirementIDs {
+		for i, id := range n.RequirementIDs {
 			_, p, _ := strings.Cut(id, "@")
-			if !requirementID.MatchString(id) || DocumentDir(p) != dir {
-				return invalid("environment note requirement of another module")
+			if !requirementID.MatchString(id) || DocumentDir(p) != dir || slices.Contains(n.RequirementIDs[:i], id) {
+				return invalid("environment note requirement of another module or duplicate")
 			}
 		}
 		if (len(n.EvidenceIDs) > 0 && !refs(n.EvidenceIDs, catalog, 4, "manifest")) || (len(n.RequirementIDs) > 0) != (len(n.EvidenceIDs) > 0) {
