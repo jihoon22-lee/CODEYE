@@ -144,6 +144,9 @@ func (p *Publisher) PublishRun(ctx context.Context, runID string) (Outcome, erro
 	if a.CompletionStatus != nil {
 		in.Attempt.CompletionStatus = *a.CompletionStatus
 	}
+	for _, rv := range pub.Reviews {
+		in.Reviews = append(in.Reviews, report.ReviewFact{Fingerprint: rv.Fingerprint, Version: rv.Version, Disposition: rv.Disposition, PathPrefix: rv.PathPrefix, ExpiresAt: rv.ExpiresAt})
+	}
 	for _, t := range pub.Tasks {
 		if t.Key == nil {
 			return reject("task_key_missing", nil)

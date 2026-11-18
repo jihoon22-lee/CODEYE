@@ -55,6 +55,9 @@ type Publication struct {
 	Artifacts      []ArtifactRecord // finalized artifacts of the attempt
 	SourceManifest *ArtifactRecord  // a finalized source_manifest of the run whose sha256 = manifest digest
 	NextRevision   int
+	// Reviews are the project's latest human review per fingerprint (W23);
+	// the builder stamps those in effect at publication.
+	Reviews []FindingReview
 }
 
 const pendingReportsSQL = `SELECT r.id::text FROM runs r
@@ -156,7 +159,10 @@ func (s *Store) LoadPublication(ctx context.Context, runID string) (Publication,
 				p.SourceManifest = &found[0]
 			}
 		}
-		err = tx.QueryRow(ctx, "SELECT COALESCE(max(revision),0)+1 FROM reports WHERE run_id=$1", runID).Scan(&p.NextRevision)
+		if err = tx.QueryRow(ctx, "SELECT COALESCE(max(revision),0)+1 FROM reports WHERE run_id=$1", runID).Scan(&p.NextRevision); err != nil {
+			return p, err
+		}
+		p.Reviews, err = latestReviews(ctx, tx, r.ProjectID)
 		return p, err
 	})
 }
