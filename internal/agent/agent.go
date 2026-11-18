@@ -48,7 +48,8 @@ func (e *ExitError) Error() string { return e.Msg }
 type Config struct {
 	ModelExecutable, ModelName, ModelRelayFile string
 	// ReviewPack selects the review instruction pack of this node's workers:
-	// "review-v1" (default when empty) or the W15 candidate "review-r1".
+	// "review-r1" (default when empty) or the legacy "review-v1", kept so
+	// earlier runs can be reproduced.
 	ReviewPack       string
 	ModelSourceRoots map[string]bool
 	ControllerURL    string
@@ -183,10 +184,10 @@ func New(cfg Config) (*Agent, error) {
 	}
 	switch cfg.ReviewPack {
 	case "":
-		cfg.ReviewPack = "review-v1"
-	case "review-v1", "review-r1":
+		cfg.ReviewPack = "review-r1"
+	case "review-r1", "review-v1":
 	default:
-		return nil, &ExitError{ExitUsage, "--review-pack must be review-v1 or review-r1"}
+		return nil, &ExitError{ExitUsage, "--review-pack must be review-r1 (default) or review-v1 (legacy)"}
 	}
 	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.ModelExecutable, cfg.ModelRelayFile} {
 		if p != "" && !filepath.IsAbs(p) {

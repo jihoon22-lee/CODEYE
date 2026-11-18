@@ -1,0 +1,153 @@
+# 49. 기본 검토 팩 review-r1 2.0.0
+
+R1 평가 뒤 소유자는 검토 지침 팩을 하나로 합치기로 했다(2026년 11월 19일). review-r1을 2.0.0으로 올려 기본 팩으로 쓴다. review-v1은 이전 기록을 읽고 같은 조건으로 재현할 때만 고르는 이전 팩으로 남는다. 이 문서는 바꾼 것, 그 근거, 검증 결과와 남은 한계를 적는다.
+
+| 범위 | 상태 |
+|---|---|
+| 기본 팩 | `review-r1` 2.0.0(`status: default`). 팩을 지정하지 않으면 r1을 쓰고, `review-v1`은 명시해야 고른다(§4) |
+| v1 규칙 통합 | v1과 r1을 규칙 단위로 대조해 v1에만 있던 규칙 한 문장을 r1 verify 지침에 옮겼다(§2) |
+| 검토 복구 경로 | JSON이 아닌 응답에 형식 복구와 별도인 재시도 1회, verify에서 범위 밖 ID만 틀린 항목의 처리(§3) |
+| 회귀 검증 | R0 사례 12개(시험 실행 1개 포함)를 실모델로 한 번 실행했다. 사전 기준 네 가지 모두 회귀가 아니다(§5.2) |
+
+요구사항 연결: REQ-010/011/013/027, NFR-007/008/010. 수용 시험은 TC-128·TC-129이고 TC-100(지침 교체 시 평가)을 따른다. 결정은 [A33](19-decisions-and-open-questions.md)에 있다.
+
+## 1. 기본 팩을 바꾼 근거
+
+- **보류 평가.** [W24 1회차 보류 비교](46-w24-evaluation.md#132-보류-비교-review-r1-rc2-대-review-v1)에서 r1 rc2는 v1보다 나쁘지 않았다. 점추정으로는 recall, 수정 후 오탐, 비용 모두 r1이 앞섰다. 다만 모든 차이가 구간 안에 있으므로 r1이 더 낫다고 단정하지 않는다. 판정은 팩을 가린 개발 에이전트가 했고 사람의 판정이 아니다.
+- **하나로 합친 이유.** 두 팩을 기본 후보로 나란히 두면 지침을 바꿀 때마다 두 팩을 따로 고치고 비교해야 한다. 기본 팩 하나만 개정하고 회귀 검증한다.
+- **v1을 지우지 않은 이유.** R0·W15·W24 기록은 v1의 팩 id·digest로 해석된다. `TestReviewV1IsPinned`가 그 요청 바이트를 고정한다. v1 파일과 검증기(docs/34)는 바꾸지 않았다.
+- **이름을 유지한 이유.** 디렉터리와 id는 `review-r1` 그대로다. 이름을 바꾸면 기존 기록의 팩 대조(`review_pack_mismatch`)와 운영자 설정이 깨진다.
+
+## 2. v1 규칙 통합
+
+- **작성자.** 지침 문구는 평가 결과(docs/46 §13, `fixtures/r1-quality/`, 저장소 밖 평가 디렉터리)를 읽지 않은 별도 작성자가 썼다. 조정자는 보류 사례를 보았으므로 지침 문구를 쓰지 않았다.
+  - 작성 지시에는 W15 개발 입력에서 관찰한 오탐 유형 하나의 설명이 들어갔다. 이 관찰은 docs/46 §13.1(rc2 R0 회귀)에 기록된 것이다. 보류 사례의 내용은 아니지만 작성자가 읽지 않기로 한 절의 정보가 조정자를 거쳐 전달되었다.
+  - 작성자의 검색 두 번이 금지 경로를 지나갔다. 하나는 docs/를 대상으로 한 이전 pin hash 검색이고, 하나는 `fixtures/r1-quality`를 포함한 Python 파일 검색이다. 두 검색 모두 그 파일의 내용을 출력하지 않았다고 보고되었다. `validate_bundle.py`가 r1-quality 검사를 실행했고 출력은 통과 줄 하나였다.
+- **방법.** v1의 모든 파일(공통, context·investigate·verify·synthesize·report, 영역·언어 지침)의 규칙을 세 가지로 나눴다.
+  - (a) r1에 이미 있다.
+  - (b) r1에 없고 r1에 맞다.
+  - (c) r1에 적용되지 않는다. r1에 없는 역할(synthesize·report: 보고서는 Go가 만든다), Go 계약이 정하는 출력 형식, r1 요청에 없는 도구 사용이 여기에 해당한다.
+
+  (b) 가운데 근거 없는·추측성 결함 보고나 실행 주장을 막는 정밀도 규칙, 또는 개발 입력에서 관찰한 오탐 유형을 다루는 규칙만 옮긴다.
+- **옮긴 규칙.** 기준을 넘은 규칙은 하나였다.
+  - 원래 규칙은 v1 공통 지침의 "조건을 확인하지 못하면 가정이라고 명시한다"이다. r1에는 계약 밖 입력과 범위 밖 호출부에만 조건부로 있었다.
+  - `verify.md` 2항에 "확인하지 못한 조건은 성립 조건이 아니라 남은 가정으로 적는다."를 더했다.
+  - 이제 성립 조건이 모두 가정인 후보는 성립 조건이 없다. 계약의 규칙(지지는 성립 조건 하나 이상)에 따라 판단 보류가 된다.
+  - W15 개발 입력에서 관찰한 오탐이 이 유형이다. 두 문서의 상충 안내를 코드 결함으로 지지했지만 성립 조건이 모두 가정이었고, 두 함수를 잇는 호출 경로도 없었다.
+  - verify만 판정을 정하므로 공통 지침이 아니라 verify 지침에 두었다. 다른 네 역할의 지침 바이트는 그대로다.
+- **옮기지 않은 것.** 언어 지침의 재현율·수정 조언 항목은 정밀도 규칙이 아니고 요청을 늘리므로 옮기지 않았다([A29](19-decisions-and-open-questions.md) (4)). C/C++ ABI·예외 보장, Python aliasing, Rust Pin, JS/TS socket·인코딩 등이 여기에 해당한다.
+- **요청 크기.** verify 요청이 88바이트 늘었다. 합성 최악 입력의 verify 최대 요청은 36,747바이트다(시험 한도 40,000). 발췌 수와 예산 초과 후보 수는 바뀌지 않았다.
+- **digest.** 역할 digest는 pack.yaml을 덮는다. 그래서 version `2.0.0`과 `status: default`로 다섯 역할 digest가 모두 바뀌었다. Go만 있는 예시 기록(w15)의 앞 12자리는 다음과 같다.
+
+  | 역할 | digest 앞 12자리 |
+  |---|---|
+  | environment | `da9c21fe08ef` |
+  | documents | `42c12bd1d7e6` |
+  | investigate | `2df8621fe980` |
+  | interpret | `9fdac5c6493f` |
+  | verify | `b5a7cc45e05d` |
+- **보류 사례.** 같은 팩 id의 다른 digest이므로 이후 r1-quality 실행은 `holdout_seen_by_prior_revision`으로 표시된다. 2.0.0의 독립 보류 평가에는 새 사례가 필요하다.
+
+## 3. 검토 복구 경로
+
+**배경.** W24 rc2 보류 평가에서 검토 1건이 미완료로 끝났다.
+- verify 첫 호출에서 후보 둘은 수락되고 하나는 `evidence_id_unknown`으로 거부되었다.
+- 한 번뿐인 형식 복구의 응답이 JSON이 아니었다(`output_not_json`).
+- 남은 후보는 격리되고 task는 `review_output_incomplete`로 끝났다.
+
+원시 응답은 저장하지 않으므로 어떤 ID였는지 확정할 수 없다. 다만 verify 입력에서 `scope.excerpts` 밖에 있는 ID 형식의 값은 도구 관찰 ID(`obs_…`)뿐이었다. 공통 규칙(`r1Rules`)도 "근거·관찰 ID"를 인용하라고 한다. 그래서 관찰 ID가 근거 목록에 들어갔을 가능성이 크다.
+
+1. **JSON이 아닌 응답의 재시도(모든 r1 역할).**
+   - JSON이 아닌 응답은 항목에 대해 아무 정보도 주지 않는다. 그래서 형식 복구 기회를 쓰지 않고 같은 요청을 한 번 더 보낸다.
+   - 앞서 복구 요청이 있었으면 그 오류 코드를 유지하고 `output_not_json`을 더한다.
+   - 단계당 호출은 첫 요청, 형식 복구 1회, 재시도 1회로 최대 3회다.
+   - 두 번 연속 JSON이 아니면 2회에서 끝난다. 두 번 거부되어도 종전처럼 2회에서 끝난다.
+2. **관찰 ID만 틀린 항목(verify).**
+   - 항목의 오류가 `evidence_id_unknown` 하나뿐이고, 범위 밖 ID가 모두 그 요청에 플랫폼이 넣은 관찰 ID일 때만 적용한다. 그 ID를 빼고 같은 검사를 다시 하며, 통과하면 받아들인다.
+   - 지어낸 `ev_…` ID처럼 요청에 없던 ID가 하나라도 있으면 원래 오류로 거부하고 형식 복구로 보낸다.
+   - 통과하지 못하면 원래 오류로 거부한다. 예를 들어 관찰 ID만으로 지지한 항목은 코드 근거가 없어 거부된다.
+   - 받아들였으면 그 호출의 `output_errors`에 `evidence_id_dropped`를 남긴다.
+   - 게시되는 판정은 범위 안의 근거만 인용한다.
+3. **후속 호출 실패(verify).**
+   - 형식 복구나 재시도 호출이 형식 이외의 이유(timeout, 거절 등)로 실패하면, 앞서 수락한 판정을 버리지 않는다.
+   - 남은 후보는 격리하고 `verification_call_failed` 한계를 남긴다. task는 `failed/review_output_incomplete`이고, 실패 사유는 그 호출의 `outcome`에 남는다.
+   - 첫 호출이 실패하거나 취소되면 종전처럼 단계 전체가 실패한다.
+4. **기록 schema.**
+   - `0.2` 기록의 r1 호출은 `attempt`와 `calls` 모두 최대 3이다. Go decoder 상수는 `R1MaxCalls = 3`이다.
+   - `0.1`(v1) 기록은 그대로다.
+   - 보고서 schema의 `coverage.review_calls` 상한은 10에서 15로 넓혔다(역할 5개 × 최대 3회).
+5. **바꾸지 않은 것.**
+   - 지침과 계약 문구는 바꾸지 않았다. `r1Rules`의 "근거·관찰 ID"와 verify 계약의 "근거 ID"가 어긋나는 문구도 그대로다. 이 실패를 보류 사례에서 알았으므로 문구를 그 사례에 맞추지 않고 구조로 막았다. 문구 정리는 다음 지침 개정에서 독립 작성자가 판단한다.
+   - review-v1 검증기는 그대로다.
+6. **한계.**
+   - 미완료가 사라진다는 보장은 없다. 끝내 검증되지 않은 후보는 종전처럼 `unreviewed`로 격리하고 task는 실패한다.
+   - 단계마다 호출이 하나 늘 수 있어 최악의 비용과 시간이 그만큼 늘어난다.
+
+## 4. 선택 경로
+
+| 경로 | 2.0.0 동작 |
+|---|---|
+| `codeye agent --review-pack` | 기본 `review-r1`. `review-r1`·`review-v1`만 허용한다. 다른 값은 사용 오류(종료 코드 2)이며 기본값으로 바꾸지 않는다 |
+| 워커 Hello `review_pack` | 비어 있으면 `review-r1` |
+| 개인 설정 `agent.model.review_pack` | 비우면 `review-r1`([사용 안내서](48-user-guide.md)) |
+| `scripts/r0_pilot.py` `CODEYE_R0_REVIEW_PACK` | 기본 `review-r1` |
+| `scripts/validate_bundle.py` | r1 pack.yaml의 `status: default`를 확인한다 |
+| 보고서 | 계획의 역할 key로 해석한다. v1 기록은 종전처럼 세 역할로 읽는다 |
+
+## 5. 검증
+
+### 5.1 시험(CI)
+
+| 시험 | 확인 내용 |
+|---|---|
+| `TestR1VerifyNonJSONRepairGetsRetry` | 거부 1건 → JSON 아닌 복구 응답 → 재시도. 3번째 호출로 검증되고 격리가 없다. 재시도 요청은 앞 항목 오류 코드를 담는다 |
+| `TestR1VerifyDropsNonEvidenceID` | 관찰 ID가 섞인 판단 보류 항목은 한 번에 수락된다(`evidence_id_dropped`). 판정의 근거 목록에 관찰 ID가 없다 |
+| `TestR1VerifyTwoNonJSONRepliesFail` | JSON 아닌 응답 두 번이면 2회 호출 뒤 `review_output_invalid`이고 모든 후보가 `unreviewed`다 |
+| `TestR1RoleNonJSONRepairGetsRetry` | documents 역할: 거부 → JSON 아닌 복구 → 정상 응답이 3번째에 수락되고 재시도는 앞 오류 코드를 유지한다 |
+| `TestR1RoleNonJSONTwiceFails` | environment 역할: JSON 아닌 응답 두 번이면 2회에서 실패한다 |
+| `TestR1VerifyFabricatedIDBesideValidIsRepaired` | 유효한 근거 옆의 지어낸 `ev_` ID는 빼지 않고 거부해 형식 복구로 보낸다. 판정에 지어낸 ID가 남지 않는다 |
+| `TestR1VerifyLaterCallFailureKeepsAccepted` | 후속 호출 timeout은 수락한 판정을 유지하고 나머지를 격리한다(`review_output_incomplete`, `verification_call_failed`). 첫 호출 timeout은 단계 전체 실패다 |
+| `TestReviewR1ThroughTheWorkerAndReport/verify_retry` | 실제 worker와 기본 보고서 registry: verify 3회 호출(관찰 ID 제거·거부 → JSON 아님 → 수락) 기록이 보고서까지 가고 보고서 검증을 통과한다 |
+| `validate_bundle.py` | 3회 호출 r1 기록은 기록 schema를 통과하고 4회·attempt 4는 거부된다. 보고서 schema는 review_calls 15개를 받고 16개를 거부한다 |
+| `TestR1FabricatedEvidenceIsQuarantined` | 두 번 거부되면 종전처럼 2회에서 실패한다(변경 없음) |
+| `TestWorkerHandlersComposeDiscovery`·`TestWorkerHandlersSelectReviewPack` | 팩을 지정하지 않은 워커는 r1의 다섯 역할을 계획한다. `review-v1`을 지정하면 세 역할, 모르는 팩은 거부한다 |
+| `TestDefaultPackSelection`·`TestGoSelectionDigestsPinned`·`TestR1ExampleRecords` | 팩 신원(2.0.0, default), 역할 digest, 예시 기록 |
+| `TestReviewV1IsPinned` | v1 요청 바이트 불변 |
+
+첫 커밋의 새 시험 셋(재시도 2개, ID 제거 1개)은 변경 전 코드에서 실패하고 변경 후 통과함을 확인했다. 모든 시험은 합성 입력과 scripted caller를 쓰고 보류 사례의 내용을 담지 않는다.
+
+### 5.2 R0 회귀(실모델)
+
+판정 기준은 실행 전에 적었고 rc2 회귀([docs/46 §13.1](46-w24-evaluation.md#131-review-r1-rc2의-r0-회귀))와 같은 형태다. 대상은 R0 쌍 Q01·Q03·Q05·Q08·Q10(수정 전·후), w15, w12-close이고 모델은 relay를 거친 `gpt-6.2-sol`, 각 사례 1회다.
+
+2.0.0이 회귀했다고 보는 조건:
+1. 차단 조건(허위 근거, 실행 없는 재현 단정, 모델 서술에서 온 상태·통계, 잘못된 근거를 받아들인 verify 출력)이 나타난다.
+2. 수정 전 결함 포착이 Q01·Q03·Q05·Q08·Q10에서 rc2(5/5)보다 2개 이상 적다.
+3. 같은 결함을 수정 후 변형 2개 이상에서 다시 지적한다(rc2 0/5).
+4. w15와 w12-close의 실행 가능한(supported, info 아님) 오탐이 합쳐 2개 이상이다. rc2 첫 실행은 1개였고 w15 3회 중 1회였다. 1개면 알려진 한계로 보고하며 통과로 세지 않는다.
+
+`review_output_incomplete`·`review_output_invalid`로 끝난 검토 task 수, 3번째 호출과 `evidence_id_dropped` 수, 비용은 판정 기준이 아니고 보고만 한다.
+
+결과(2026년 11월 19일, 커밋 `e3241c3`, 조정자 판정이며 사람의 판정이 아니다). 실행 뒤의 커밋은 관찰 ID 제거 범위, 후속 호출 실패 처리, schema 상한과 시험·문서만 바꿨다. 이 실행에는 거부된 호출이 없어 그 분기에 들어가지 않았고, 요청 바이트도 바뀌지 않았으므로 다시 실행하지 않았다.
+
+| 기준 | 2.0.0 | rc2 |
+|---|---|---|
+| 1 차단 조건 | 관찰되지 않았다. `r0_pilot.py --audit-results`가 보고서 12개, claim 17개, 근거 13개를 원본과 다시 대조해 통과했다 | 없음 |
+| 2 수정 전 결함 | 5/5(Q01 마지막 샘플 누락, Q03 멀티바이트 첫 문자, Q05 반환 전 reader 닫음, Q08 음수만 있는 입력의 최댓값, Q10 정수 나눗셈) | 5/5 |
+| 3 수정 후 재지적 | 0/5. Q05-after에는 다른 low 지적 하나(읽을 수 없는 reader에도 성공 반환)가 있었다. rc1·rc2도 같은 별개 지적을 냈다 | 0/5 |
+| 4 w15·w12-close 실행 가능 오탐 | 0. w15의 재시도·중복 청구 후보는 판단 보류(medium)로 남았고, w12-close에는 지적이 없었다 | 1(w15, 3회 중 1회) |
+
+- **판정.** 네 기준 모두 회귀에 해당하지 않는다.
+- **완료 상태.** 모든 사례의 필수 검토 task가 성공했다. 거부된 호출은 없었다.
+- **복구 경로.** 3번째 호출과 `evidence_id_dropped`는 0이었다. 따라서 이번 실행은 새 복구 경로를 거치지 않았고, 그 동작의 근거는 §5.1의 시험이다.
+- **비용.** 호출 27건, 보수 차감 $0.596이다.
+- **해석의 한계.**
+  - 사례마다 1회만 실행했다.
+  - w15 결과는 옮긴 규칙과 독립적이지 않다. 지침 작성자가 그 개발 입력의 오탐 유형 설명을 보고 규칙을 골랐기 때문이다. 이번 w15 결과는 규칙의 의도와 맞는다는 관찰이지 오탐률이 줄었다는 측정이 아니다.
+
+## 6. 남은 한계
+
+- 2.0.0은 보류 사례로 독립 평가하지 않았다. 다음 보류 비교는 새 사례나 tricky normal을 포함해야 한다.
+- 사람 판정과 판정자 간 일치도는 측정하지 않았다.
+- R0 회귀는 사례마다 1회다. w15 오탐처럼 실행마다 달라지는 결과는 한 번 깨끗해도 해소되었다고 볼 수 없다.
+- 다섯 생태계가 모두 범위에 있는 합성 최악 입력에서 verify가 후보 1개를 보내지 못하는 문제([A29](19-decisions-and-open-questions.md) (4))는 그대로다.

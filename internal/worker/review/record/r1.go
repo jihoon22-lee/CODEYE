@@ -11,8 +11,8 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// R1 records (schema 0.2) are written by the review-r1 candidate pack (W15
-// phase 2). They share the media type with 0.1 records; a report registry
+// R1 records (schema 0.2) are written by the review-r1 pack (W15, default
+// since 2.0.0). They share the media type with 0.1 records; a report registry
 // selects the decoder by schema_version, so 0.1 records keep their exact
 // rules above. Unlike 0.1 records, an R1 record is not cumulative: it holds
 // only its own stage's calls and binds every upstream input by the SHA-256 of
@@ -40,8 +40,10 @@ const (
 	r1MaxObservations = 16
 	// r1MaxText bounds the JSON-encoded size of one R1 model text field, so a
 	// downstream request carrying it keeps within the request budget.
-	r1MaxText  = 400
-	r1MaxCalls = 2
+	r1MaxText = 400
+	// R1MaxCalls bounds the calls of one stage: the first request, one
+	// repair of rejected output and one retry of a reply that was not JSON.
+	R1MaxCalls = 3
 )
 
 // R1Stages in plan order.
@@ -555,7 +557,7 @@ func CandidateTextOK(c Candidate) bool {
 }
 
 func checkR1Calls(r R1Record) error {
-	if len(r.Calls) > r1MaxCalls {
+	if len(r.Calls) > R1MaxCalls {
 		return invalid("too many calls")
 	}
 	accepted := false

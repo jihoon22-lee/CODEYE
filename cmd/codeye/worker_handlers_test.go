@@ -53,7 +53,8 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 			t.Fatal("staticcheck is extra depth, not required")
 		}
 	}
-	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "review.context=documents", "review.investigate=code_review", "review.verify=code_review"}
+	// No pack in the hello: the default pack, review-r1, plans its five roles.
+	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.verify=code_review"}
 	if len(keys) != len(want) {
 		t.Fatalf("plan %v", keys)
 	}
@@ -64,8 +65,9 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 	}
 }
 
-// --review-pack review-r1 (via the agent's Hello) composes discovery → go vet
-// → the five R1 roles; an unknown pack is refused, never replaced by v1.
+// --review-pack (via the agent's Hello) selects the pack: review-r1 composes
+// discovery → go vet → the five R1 roles, the legacy review-v1 its three
+// roles; an unknown pack is refused, never replaced by the default.
 func TestWorkerHandlersSelectReviewPack(t *testing.T) {
 	goExe := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if runtime.GOOS == "windows" {
@@ -100,6 +102,21 @@ func TestWorkerHandlersSelectReviewPack(t *testing.T) {
 	want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis review.environment=environment review.documents=documents review.investigate=code_review review.interpret=code_review review.verify=code_review"
 	if strings.Join(keys, " ") != want {
 		t.Fatalf("plan %v", keys)
+	}
+	hs, _, err = workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewPack: "review-v1"}, &executor.Executor{})
+	if err != nil || len(hs) != 1 {
+		t.Fatal(err)
+	}
+	plan, err = hs[0].Plan(context.Background(), analysis.Job{Scope: domain.Scope{Kind: "full"}, Snapshot: snap})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys = keys[:0]
+	for _, p := range plan {
+		keys = append(keys, p.Key+"="+string(p.Stage))
+	}
+	if want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis review.context=documents review.investigate=code_review review.verify=code_review"; strings.Join(keys, " ") != want {
+		t.Fatalf("legacy plan %v", keys)
 	}
 }
 

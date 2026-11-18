@@ -43,14 +43,14 @@ func guidesOf(files []string) []string {
 	return out
 }
 
-func TestCandidatePackSelection(t *testing.T) {
+func TestDefaultPackSelection(t *testing.T) {
 	id, version, err := Identity()
-	if err != nil || id != "review-r1" || version != "2.0.0-rc2" {
+	if err != nil || id != "review-r1" || version != "2.0.0" {
 		t.Fatal(id, version, err)
 	}
 	pack, err := os.ReadFile("pack.yaml")
-	if err != nil || !bytes.Contains(pack, []byte("status: candidate-not-promoted")) {
-		t.Fatal("pack.yaml must mark the candidate as not promoted")
+	if err != nil || !bytes.Contains(pack, []byte("status: default")) {
+		t.Fatal("pack.yaml must mark the pack as the default")
 	}
 	for _, ecosystems := range [][]string{nil, {"go"}, Languages()} {
 		digests := map[string]bool{}
@@ -191,11 +191,11 @@ func mustEmbedded(t *testing.T, name string) []byte {
 // instruction byte changes them together.
 func TestGoSelectionDigestsPinned(t *testing.T) {
 	want := map[string]string{
-		"environment": "6e97b2ac23a10ce157168f5eb8902c1837ebfc31e2d4c579dbbe8d83dd33ddcd",
-		"documents":   "a42ead60396dd73b92521c1ce60ca5ce2293e687ce5858b1b6ad7aef409b7593",
-		"investigate": "af3590babf43f1f1f609a21af2d7ac366281381cfacc7f68cd43d4acd7ac296d",
-		"interpret":   "68790a642d139f204b0cdd09051bf6c0aea87e79f0a3cecd03b77e38754ee145",
-		"verify":      "d0a85eb93bfd60cb5072b271b1e13c0806e5facda5154f4e2151b348c492bda9",
+		"environment": "da9c21fe08efaab7c307490102e69d35fc732f4d57a5faf2da9d2681768cfa3e",
+		"documents":   "42c12bd1d7e62d456d72f6b5af7caed424977dca248ee4f3014dbe5cf98b0d6a",
+		"investigate": "2df8621fe980f31a57d0a1dc8ca698fa05585ea36361bba20ee3c4f31a1be0e7",
+		"interpret":   "9fdac5c6493f275c7ef17058ef4228176281eb6efbf3a88729138df168929921",
+		"verify":      "b5a7cc45e05d4df310c6311ab1ae496a72b6f1ac7d51848e5a59edfd9d4d98b0",
 	}
 	for _, role := range Roles {
 		s, err := For(role, []string{"go"})

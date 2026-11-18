@@ -39,6 +39,8 @@ R0의 두 에이전트 시험은 한 머신에서 별도 node identity로 먼저
 | W24 | 품질 평가 runner — [구현](46-w24-evaluation.md) · [1회차 결과](46-w24-evaluation.md#13-결과--r1-보류-평가-1회차2026년-11월-19일) | W12,W16-W21 | 정답 차단, holdout, 지표/표본·모델 변동·보고서 읽기 평가 |
 | W25 | 개인 패키징·운영 검증 — [구현](47-w25-packaging-and-operations.md) · [사용 안내서](48-user-guide.md) | W22-W24 | Native start/stop/doctor, disk quota, DB·artifact backup/복원, 사용 가이드 |
 
+R1 뒤 소유자 결정으로 검토 팩을 하나로 합쳤다. `review-r1` 2.0.0이 기본 팩이고 `review-v1`은 이전 기록 재현용이다([docs/49](49-review-pack-default.md)).
+
 다섯 언어의 첫 공통 탐색 지원은 빠르게 넣을 수 있지만 정밀 어댑터 완료는 위 시험이 있어야 한다. 실제 첫 프로젝트의 언어에 맞춰 W16~W20 순서를 바꿀 수 있다. '다섯 언어 지원' 표시는 탐색/기본/정밀/실행 검증 수준을 분리한다.
 
 ## 3. R2: 부서 공개

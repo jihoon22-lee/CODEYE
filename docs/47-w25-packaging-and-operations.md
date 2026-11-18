@@ -37,7 +37,7 @@ W25는 한 사람이 한 머신에서 CODEYE를 Native로 운영하는 경로다
 | `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로 |
 | `agent.tools` | 빈 값 | 이 빌드의 분석기·toolchain 플래그 이름(`staticcheck`, `node`, `ruff` 등)만 |
 | `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행 |
-| `agent.model` | 없음 | `opencode`(절대 경로), `name`(`PROVIDER/MODEL`), 선택 `relay_file`, `review_pack`(`review-v1`·`review-r1`) |
+| `agent.model` | 없음 | `opencode`(절대 경로), `name`(`PROVIDER/MODEL`), 선택 `relay_file`, `review_pack`(`review-r1` 기본·`review-v1` 이전 팩) |
 | `quota.*_bytes` | 0(상한 없음) | `snapshot`·`workspace`·`cache`·`logs`·`artifacts`, 음수 거부 |
 | `backup_dir` | 빈 값 | 절대 경로. `state_dir` 안이면 거부 |
 | `stop.drain_timeout_seconds` | 300 | 1~86400 |

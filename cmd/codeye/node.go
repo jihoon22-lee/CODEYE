@@ -59,7 +59,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	modelRelay := fs.String("model-relay-file", "", "")
 	// The review pack is a node operator setting only; runs and profiles
 	// cannot select it. review-r1 is the W15 candidate, not the default.
-	reviewPack := fs.String("review-pack", review.PackV1, "")
+	reviewPack := fs.String("review-pack", review.PackR1, "")
 	fs.Var(&modelRoots, "model-source-root", "")
 	// The repository-code grant (docs/39 §2.7) is a node operator setting
 	// per local source root, like the model-source grant; nothing in a run
@@ -97,7 +97,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		return agent.ExitUsage
 	}
 	if !review.ValidPack(*reviewPack) {
-		fmt.Fprintln(stderr, "invalid --review-pack; expected review-v1 or review-r1")
+		fmt.Fprintln(stderr, "invalid --review-pack; expected review-r1 (default) or review-v1 (legacy)")
 		return agent.ExitUsage
 	}
 	// --autoscale (W07) starts with zero workers and follows controller
@@ -203,7 +203,7 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
 	pack := h.ReviewPack
 	if pack == "" {
-		pack = review.PackV1
+		pack = review.PackR1
 	}
 	if !review.ValidPack(pack) {
 		// No silent fallback to the default pack.

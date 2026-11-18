@@ -121,7 +121,7 @@ re-enrolling the local agent: the configured source roots changed (previous stat
 ```json
 "agent": {
   "model": {"opencode": "/opt/opencode/bin/opencode", "name": "PROVIDER/MODEL",
-            "relay_file": "/home/user/.config/codeye/relay.json", "review_pack": "review-v1"}
+            "relay_file": "/home/user/.config/codeye/relay.json", "review_pack": "review-r1"}
 },
 "source_roots": [{"label": "work", "path": "/home/user/src", "model_review": true}]
 ```
@@ -129,7 +129,7 @@ re-enrolling the local agent: the configured source roots changed (previous stat
 - `opencode`는 설치한 OpenCode CLI의 절대 경로다. `name`은 그 CLI에 구성된 모델 이름이다.
 - `relay_file`은 승인된 로컬 relay를 쓸 때만 넣는다. relay 구동과 비용 장부는 [QA 예산 relay](r0-openai-gateway.md)를 따른다.
 - `model_review: true`인 root의 코드만 모델에 보낸다. 기본은 보내지 않음이다.
-- `review_pack`의 기본은 `review-v1`이다. `review-r1`은 승격 전 후보다.
+- `review_pack`의 기본은 `review-r1`이다. 비워 두면 `review-r1`을 쓴다. `review-v1`은 이전 기록을 같은 조건으로 재현할 때만 고른다([기본 팩](49-review-pack-default.md)).
 - 모델 연결은 먼저 `codeye model probe`로 확인한다([W10 기록](32-w10-opencode.md)). 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다.
 
 ## 8. 저장 공간

@@ -283,7 +283,7 @@ def run(base, root, env):
                         {k: v for k, v in t.items() if k in ("key", "status", "reason")}
                         for t in report["tasks"]
                     ],
-                    "review_pack": os.environ.get("CODEYE_R0_REVIEW_PACK", "review-v1"),
+                    "review_pack": os.environ.get("CODEYE_R0_REVIEW_PACK", "review-r1"),
                     "review_calls": [
                         {k: c.get(k) for k in ("role", "outcome", "pack_sha256")}
                         for c in report["coverage"].get("review_calls", [])

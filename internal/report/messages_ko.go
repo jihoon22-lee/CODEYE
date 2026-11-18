@@ -74,6 +74,7 @@ var Korean = Locale{
 		LimReviewPackMismatch:            "계획한 검토 팩과 다른 형식의 검토 기록이라 제외했다.",
 		"review_input_trimmed":           "요청 크기 한도 때문에 일부 발췌를 모델 입력에서 뺐다.",
 		"verification_budget_exceeded":   "요청 크기 한도 때문에 일부 후보를 검증하지 못했다(미검토).",
+		"verification_call_failed":       "후속 검증 호출이 실패해 일부 후보를 검증하지 못했다(미검토). 앞서 수락한 판정은 유지했다.",
 		"code_excerpts_go_only":          "코드 발췌는 Go 파일만 사용했다.",
 		"execution_claim_rejected":       "실행·재현을 주장한 모델 서술을 거부했다.",
 		// W21 (docs/45): structure, duplication and secrets pack.

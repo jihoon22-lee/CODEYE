@@ -150,7 +150,7 @@
 
 ### 선택과 팩
 
-- **선택.** 노드 운영자만 `codeye agent --review-pack review-v1|review-r1`로 고른다. 기본값은 `review-v1`이다. 다른 값이나 빈 값은 사용 오류(종료 코드 2)이고 v1로 대체하지 않는다. 워커는 Hello의 `review_pack`으로 받는다. run 프로필, run 요청 API, OpenAPI는 바꾸지 않았다.
+- **선택.** 노드 운영자만 `codeye agent --review-pack review-v1|review-r1`로 고른다. 기본값은 `review-v1`이다(W15 당시. 2.0.0부터 기본값은 `review-r1`이다: [docs/49](49-review-pack-default.md)). 다른 값이나 빈 값은 사용 오류(종료 코드 2)이고 v1로 대체하지 않는다. 워커는 Hello의 `review_pack`으로 받는다. run 프로필, run 요청 API, OpenAPI는 바꾸지 않았다.
 - **팩.** [`prompts/review-r1`](../prompts/review-r1/pack.yaml)은 id `review-r1`, version `2.0.0-rc1`, status `candidate-not-promoted`다. 공통 지침 `00-core.md`, 역할 지침 다섯, `domains.md`·`languages/go.md`(v1과 같은 바이트)로 구성한다. 역할별 digest는 v1과 같은 방식(pack.yaml과 선택 파일, 경로 오름차순, 경로 NUL 내용 NUL)이다. 호출 기록마다 팩 ID·버전·digest·파일 목록이 남는다.
 - **review-v1 불변.** 역할별 digest·지침 해시, 기본 계획 key, 발췌 선택, 정규화한 요청 해시를 `TestReviewV1IsPinned`로 고정했다. 팩 전체 digest(`489d1ac5…`)도 변경 전과 같다.
 
@@ -169,7 +169,7 @@ discovery·go vet 뒤에 다섯 task를 이 순서로 둔다. 생략은 `skipped
 ### 출력 검사와 요청 크기
 
 - 출력은 엄격한 JSON이어야 한다. 그 호출에 준 근거·관찰 ID만 인용할 수 있다. 문서 규칙의 적용 경로는 인용한 문서의 디렉터리와 같거나 그 아래여야 한다(`scope_generalized`). 실행·재현을 주장하는 문구는 거부한다(`execution_claim_rejected`). 이 검사는 정규식 기반 휴리스틱이다.
-- 형식 복구는 고정 오류 코드만 담아 한 번 요청한다. 그래도 틀리면 task는 `failed`이고 내용은 격리된다. 탐색 사실과 도구 관찰은 남는다. 하위 역할은 수락된 결과만 받는다. 앞 단계가 생략·실패하면 `upstream_<역할>_<상태>` 한계를 남긴다.
+- 형식 복구는 고정 오류 코드만 담아 한 번 요청한다(2.0.0부터 JSON이 아닌 응답은 이와 별도로 한 번 다시 요청한다: [docs/49](49-review-pack-default.md)). 그래도 틀리면 task는 `failed`이고 내용은 격리된다. 탐색 사실과 도구 관찰은 남는다. 하위 역할은 수락된 결과만 받는다. 앞 단계가 생략·실패하면 `upstream_<역할>_<상태>` 한계를 남긴다.
 - 보내기 전에 메시지 바이트를 확인하고 발췌를 줄인다. 그래도 넘으면 `review_input_too_large`로 실패한다. 요청은 메시지 하나이고 도구 정의를 쓰지 않는다. w15 fixture의 역할별 최대 요청은 environment 9,913, documents 12,303, investigate 12,494, interpret 10,587, verify 14,602바이트였다. 최악 입력 시험의 최대값은 verify 36,645바이트였다. 모두 시험 한도 40,000바이트(relay 한도 49,152바이트) 이하다. 출력 토큰(relay 한도 1,536)은 측정하지 않았다.
 
 ### 기록과 보고서

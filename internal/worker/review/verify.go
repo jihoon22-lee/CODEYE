@@ -289,12 +289,24 @@ func failedRecord(j analysis.Job, rec Record, res analysis.TaskResult) analysis.
 // and per-candidate error codes are fixed platform strings; no model text is
 // echoed into a repair request.
 func parseVerifications(raw json.RawMessage, want map[string]bool, catalog map[string]Excerpt) (map[string]Verification, map[string][]string, []string) {
+	got, itemErrs, outputErrs, _ := parseVerificationItems(raw, want, catalog, nil)
+	return got, itemErrs, outputErrs
+}
+
+// parseVerificationItems is parseVerifications; an entry whose only defect
+// is citing, in its evidence lists, IDs the platform itself gave in the
+// request as something other than evidence (droppable: the observation IDs)
+// is accepted without them when what remains passes every check of its
+// verdict on its own. Any other unknown ID keeps the entry rejected. Those
+// candidates are returned in dropped.
+func parseVerificationItems(raw json.RawMessage, want map[string]bool, catalog map[string]Excerpt, droppable map[string]bool) (map[string]Verification, map[string][]string, []string, []string) {
 	got, itemErrs := map[string]Verification{}, map[string][]string{}
+	var dropped []string
 	var res struct {
 		Verifications []json.RawMessage `json:"verifications"`
 	}
 	if domain.DecodeStrict(raw, &res) != nil || res.Verifications == nil {
-		return got, itemErrs, []string{"output_schema_invalid"}
+		return got, itemErrs, []string{"output_schema_invalid"}, dropped
 	}
 	var outputErrs []string
 	count := map[string]int{}
@@ -324,13 +336,46 @@ func parseVerifications(raw json.RawMessage, want map[string]bool, catalog map[s
 			itemErrs[id] = []string{"item_schema_invalid"}
 			continue
 		}
-		if v, errs := checkModel(m, catalog); len(errs) > 0 {
+		v, errs := checkModel(m, catalog)
+		if len(droppable) > 0 && slices.Equal(errs, []string{"evidence_id_unknown"}) && onlyDroppable(m.SupportingEvidence, catalog, droppable) && onlyDroppable(m.Counterevidence, catalog, droppable) {
+			known := m
+			known.SupportingEvidence, known.Counterevidence = knownIDs(m.SupportingEvidence, catalog), knownIDs(m.Counterevidence, catalog)
+			if kv, kerrs := checkModel(known, catalog); len(kerrs) == 0 {
+				v, errs = kv, nil
+				dropped = append(dropped, id)
+			}
+		}
+		if len(errs) > 0 {
 			itemErrs[id] = errs
 		} else {
 			got[id] = v
 		}
 	}
-	return got, itemErrs, outputErrs
+	return got, itemErrs, outputErrs, dropped
+}
+
+// onlyDroppable reports whether every ID of list outside catalog is droppable.
+func onlyDroppable(list []string, catalog map[string]Excerpt, droppable map[string]bool) bool {
+	for _, id := range list {
+		if _, ok := catalog[id]; !ok && !droppable[id] {
+			return false
+		}
+	}
+	return true
+}
+
+// knownIDs keeps the IDs of list that are in catalog, in order.
+func knownIDs(list []string, catalog map[string]Excerpt) []string {
+	if list == nil {
+		return nil
+	}
+	out := []string{}
+	for _, id := range list {
+		if _, ok := catalog[id]; ok {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func checkModel(m modelVerification, catalog map[string]Excerpt) (Verification, []string) {

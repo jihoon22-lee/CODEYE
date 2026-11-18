@@ -429,7 +429,7 @@ R1-GO-05·R1-PY-07 수정 전 변형을 팩마다 세 번 실행했다. 두 팩 
 
 ### 13.5 승격 판단
 
-review-r1은 `candidate-not-promoted`로 둔다. 기본 팩 변경은 소유자가 정한다(docs/37 §11). 판단 근거는 다음과 같다.
+review-r1은 `candidate-not-promoted`로 둔다. 기본 팩 변경은 소유자가 정한다(docs/37 §11). 판단 근거는 다음과 같다. (이후 소유자가 같은 날 review-r1을 기본 팩으로 정했다. 2.0.0의 변경과 회귀 검증은 [docs/49](49-review-pack-default.md)에 있다.)
 
 - **유리:**
   - 보류 비교에서 recall이 같거나 높았다(10/10 대 9/10).
