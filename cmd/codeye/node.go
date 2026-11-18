@@ -16,6 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/agent"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
+	analyzerpack "github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	workerrun "github.com/jihoon22-lee/CODEYE/internal/worker/run"
@@ -69,6 +70,11 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	git := fs.String("git", "", "")
 	goExe := fs.String("go", "", "")
 	goModCache := fs.String("go-mod-cache", "", "")
+	// One flag per analyzer tool of this build (--staticcheck PATH, docs/39).
+	toolFlags := map[string]*string{}
+	for _, tool := range builtin.ToolFlags() {
+		toolFlags[tool] = fs.String(tool, "", "")
+	}
 	fs.Var(&roots, "source-root", "")
 	fs.Var(&gitHosts, "git-host", "")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || *controller == "" || *stateDir == "" {
@@ -109,10 +115,16 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	for _, id := range modelRoots {
 		approved[id] = true
 	}
+	tools := map[string]string{}
+	for tool, v := range toolFlags {
+		if *v != "" {
+			tools[tool] = *v
+		}
+	}
 	cfg := agent.Config{
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
-		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache,
+		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
 		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ReviewPack: *reviewPack,
 		Log: stderr,
 	}
@@ -136,11 +148,13 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 	return workerrun.Main(ctx, workerrun.Config{In: in, Out: out, Stderr: stderr, Handlers: workerHandlers})
 }
 
-// workerHandlers registers the handlers of this build. Production without
-// W08 has none, so the worker advertises no capability and is never leased.
-// The deep-review profile is discovery (env.discover, docs.discover) →
-// go vet → review roles. Discovery observes only the operator-configured go
-// executable the go-vet handler uses. The test-only fixture handler is left
+// workerHandlers registers the handlers of this build. Without a usable
+// baseline analyzer (go vet needs --go) the worker advertises no
+// capability and is never leased. The deep-review profile is discovery
+// (env.discover, docs.discover) → the analyzer composite (go vet,
+// staticcheck, ... in catalog order; unconfigured tools plan unsupported
+// tasks) → review roles. Discovery observes the configured go toolchain and
+// every configured analyzer tool. The test-only fixture handler is left
 // unwrapped.
 func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
 	pack := h.ReviewPack
@@ -151,15 +165,17 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 		// No silent fallback to the default pack.
 		return nil, nil, errors.New("unknown review pack")
 	}
-	hs, missing := builtin.Handlers(ctx, builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, ProbeDir: h.ScratchRoot}, runner)
+	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot}
+	hs, missing := builtin.Handlers(ctx, cfg, runner)
 	for i, handler := range hs {
-		if handler.Info().Name == "go-vet" {
+		if handler.Info().Name == analyzerpack.CompositeName {
 			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}
 			var reviewed analysis.Handler = review.Handler{Static: handler, Caller: caller}
 			if pack == review.PackR1 {
 				reviewed = review.R1Handler{Static: handler, Caller: caller}
 			}
-			wrapped, err := discovery.Wrap(reviewed, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: h.GoExecutable}})
+			observer := discovery.ProbeObserver{GoExecutable: h.GoExecutable, Analyzers: builtin.Probes(cfg)}
+			wrapped, err := discovery.Wrap(reviewed, discovery.Config{Observer: observer})
 			if err != nil {
 				return nil, nil, err
 			}

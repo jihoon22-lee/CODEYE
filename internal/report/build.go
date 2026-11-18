@@ -149,6 +149,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 
 	// Artifacts of the attempt, bound by id/sha/size/role (never embedded).
 	decoderOf := map[string]string{}
+	processedUnion, unionComplete := map[string]bool{}, true
 	obsSeen := map[string]bool{}
 	findSeen := map[string]bool{}
 	if rm != nil {
@@ -224,6 +225,12 @@ func Build(in Input, reg *Registry) (Report, error) {
 				r.Findings = append(r.Findings, c.Findings...)
 				if c.Tool != nil {
 					r.Coverage.Tools = append(r.Coverage.Tools, *c.Tool)
+					if c.ProcessedPaths == nil {
+						unionComplete = false
+					}
+					for _, p := range c.ProcessedPaths {
+						processedUnion[p] = true
+					}
 				}
 				for _, l := range c.Limitations {
 					lim.add(l)
@@ -264,6 +271,10 @@ func Build(in Input, reg *Registry) (Report, error) {
 		if !strings.HasPrefix(k, "review.") && !st.decoded {
 			known = false
 		}
+	}
+	if known && unionComplete {
+		// Several analyzers read the same files: count each snapshot file once.
+		processed = len(processedUnion)
 	}
 	if known {
 		r.Coverage.ToolProcessedFiles = &processed

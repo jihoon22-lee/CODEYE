@@ -123,10 +123,9 @@ func Environment(in Input, read readFunc, observe func(tools []string) Observed)
 		}
 	}
 	need = uniqueSorted(need)
-	observed := Observed{}
-	if len(need) > 0 {
-		observed = observe(need)
-	}
+	// observe runs even without modules: analyzer tools of ecosystem "any"
+	// (docs/39) apply to every snapshot.
+	observed := observe(need)
 	if observed.Err != nil {
 		return envdoc.Document{}, observed, observed.Err
 	}
@@ -187,6 +186,15 @@ func Environment(in Input, read readFunc, observe func(tools []string) Observed)
 		}
 		return deref(a.Requirement) < deref(b.Requirement)
 	})
+	for _, t := range observed.AnalyzerTools {
+		if t.Status == envdoc.ObsObserved && (t.Version == nil || !envdoc.AnalyzerToolVersionValid(*t.Version)) {
+			// An observer never implies a version it did not read.
+			d := DetailOutputUnrecognized
+			t.Status, t.Version, t.Detail = envdoc.ObsProbeFailed, nil, &d
+		}
+		env.AnalyzerTools = append(env.AnalyzerTools, t)
+	}
+	sort.Slice(env.AnalyzerTools, func(i, j int) bool { return env.AnalyzerTools[i].Tool < env.AnalyzerTools[j].Tool })
 	doc.Environment = &env
 	doc.Limitations = uniqueSorted(lims)
 	return doc, observed, nil

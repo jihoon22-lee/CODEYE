@@ -11,6 +11,8 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
@@ -218,15 +220,84 @@ func (s *r1Stage) documentFacts() (docFacts, string) {
 	return f, ""
 }
 
-// ---- go vet observations -------------------------------------------------
+// ---- analyzer observations -------------------------------------------------
+
+// toolLocation and toolObservation are the analyzer-independent view of one
+// observation; toolSummary of one analyzer task (go vet v0.1 or the generic
+// envelope of docs/39).
+type toolLocation struct {
+	Path               string
+	StartLine, EndLine int
+}
+
+type toolObservation struct {
+	ID, Tool, RuleID, RawMessage, LocationState string
+	Location                                    *toolLocation
+}
+
+type toolSummary struct {
+	Tool, Module, TaskStatus, ExitClass string
+	ToolVersion                         *string
+	PartialParse, ParseOK               bool
+	Limitations                         []string
+	Observations                        []toolObservation
+}
 
 type toolDoc struct {
 	key      string
-	doc      govet.Document
+	doc      toolSummary
 	upstream record.Upstream
 }
 
-// toolFacts reads every planned go-vet task's observations artifact.
+// readToolDoc reads and validates one analyzer task's observations artifact:
+// the generic envelope at obsdoc.ArtifactPath, else a go vet v0.1 document.
+func (s *r1Stage) readToolDoc(key string, files map[string]source.Entry) (toolSummary, []byte, string) {
+	if b, err := readBounded(obsdoc.ArtifactPath(s.j.Scratch, key), obsdoc.MaxBytes); err == nil {
+		lookup := func(p string) (string, bool) { e, ok := files[p]; return e.SHA256, ok }
+		d, err := obsdoc.Decode(b, obsdoc.Expect{TaskKey: key, Snapshot: s.j.Snapshot.Digest, Lookup: lookup})
+		if err != nil {
+			return toolSummary{}, nil, reasonRecordInvalid
+		}
+		sum := toolSummary{Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, Module: d.Module.Dir, TaskStatus: string(d.Outcome.TaskStatus), ExitClass: d.Outcome.ExitClass,
+			PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations}
+		for _, o := range d.Observations {
+			to := toolObservation{ID: o.ID, Tool: d.Analyzer.ID, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState}
+			if o.Location != nil {
+				to.Location = &toolLocation{Path: o.Location.Path, StartLine: o.Location.StartLine, EndLine: o.Location.EndLine}
+			}
+			sum.Observations = append(sum.Observations, to)
+		}
+		return sum, b, ""
+	}
+	if !pack.Owns(govet.HandlerName, key) {
+		return toolSummary{}, nil, reasonRecordMissing
+	}
+	b, err := readBounded(govet.ObservationsPath(s.j.Scratch, key), 8<<20)
+	if err != nil {
+		return toolSummary{}, nil, reasonRecordMissing
+	}
+	var d govet.Document
+	if domain.DecodeStrict(b, &d) != nil || d.SchemaVersion != govet.DocumentSchemaVersion || d.Kind != govet.DocumentKind || d.AnalyzerID != govet.AnalyzerID ||
+		d.TaskKey != key || d.ManifestDigest != s.j.Snapshot.Digest || d.Observations == nil || len(d.Observations) != d.Parse.Observations {
+		return toolSummary{}, nil, reasonRecordInvalid
+	}
+	sum := toolSummary{Tool: d.AnalyzerID, ToolVersion: d.ToolVersion, Module: d.Module.Dir, TaskStatus: string(d.Outcome.TaskStatus), ExitClass: d.Outcome.ExitClass,
+		PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations}
+	for _, o := range d.Observations {
+		to := toolObservation{ID: o.ID, Tool: o.Tool, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState}
+		if o.Location != nil {
+			e, ok := files[o.Location.Path]
+			if !ok || e.SHA256 != o.Location.BlobSHA256 || o.Location.StartLine < 1 {
+				return toolSummary{}, nil, reasonRecordInvalid
+			}
+			to.Location = &toolLocation{Path: o.Location.Path, StartLine: o.Location.StartLine, EndLine: o.Location.EndLine}
+		}
+		sum.Observations = append(sum.Observations, to)
+	}
+	return sum, b, ""
+}
+
+// toolFacts reads every planned analyzer task's observations artifact.
 func (s *r1Stage) toolFacts() ([]toolDoc, int, string) {
 	plan, err := s.h.Static.Plan(s.ctx, s.j)
 	if err != nil {
@@ -236,37 +307,18 @@ func (s *r1Stage) toolFacts() ([]toolDoc, int, string) {
 	var docs []toolDoc
 	total := 0
 	for _, t := range plan {
-		if !strings.HasPrefix(t.Key, "go-vet") {
+		if !record.AnalyzerTaskKey(t.Key) {
 			continue
 		}
 		td := toolDoc{key: t.Key, upstream: record.Upstream{Source: t.Key}}
-		b, err := readBounded(govet.ObservationsPath(s.j.Scratch, t.Key), 8<<20)
-		if err != nil {
-			td.upstream.State, td.upstream.Reason = record.UpstreamUnavailable, reasonRecordMissing
+		sum, b, reason := s.readToolDoc(t.Key, files)
+		if reason != "" {
+			td.upstream.State, td.upstream.Reason = record.UpstreamUnavailable, reason
 			docs = append(docs, td)
 			continue
 		}
-		var d govet.Document
-		if domain.DecodeStrict(b, &d) != nil || d.SchemaVersion != govet.DocumentSchemaVersion || d.Kind != govet.DocumentKind || d.AnalyzerID != govet.AnalyzerID ||
-			d.TaskKey != t.Key || d.ManifestDigest != s.j.Snapshot.Digest || d.Observations == nil || len(d.Observations) != d.Parse.Observations {
-			td.upstream.State, td.upstream.Reason = record.UpstreamUnavailable, reasonRecordInvalid
-			docs = append(docs, td)
-			continue
-		}
-		valid := true
-		for _, o := range d.Observations {
-			if o.Location != nil {
-				e, ok := files[o.Location.Path]
-				valid = valid && ok && e.SHA256 == o.Location.BlobSHA256 && o.Location.StartLine >= 1
-			}
-		}
-		if !valid {
-			td.upstream.State, td.upstream.Reason = record.UpstreamUnavailable, reasonRecordInvalid
-			docs = append(docs, td)
-			continue
-		}
-		td.doc, td.upstream.State, td.upstream.SHA256 = d, record.UpstreamAccepted, digestOf(b)
-		total += len(d.Observations)
+		td.doc, td.upstream.State, td.upstream.SHA256 = sum, record.UpstreamAccepted, digestOf(b)
+		total += len(sum.Observations)
 		docs = append(docs, td)
 	}
 	if total == 0 {
@@ -423,23 +475,25 @@ type toolInput struct {
 func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, []record.ObservationRef, []record.Excerpt, []string, error) {
 	files := s.entries()
 	var tools []toolInput
-	var all []govet.Observation
+	var all []toolObservation
 	keyOf := map[string]string{}
+	var lims []string
 	for _, d := range docs {
 		if d.upstream.State != record.UpstreamAccepted {
 			continue
 		}
-		lims := []string{}
+		toolLims := []string{}
 		for _, l := range d.doc.Limitations {
-			if record.ValidCode(l) && len(lims) < 8 {
-				lims = append(lims, l)
+			if record.ValidCode(l) && len(toolLims) < 8 {
+				toolLims = append(toolLims, l)
 			}
 		}
 		if len(tools) >= r1MaxTools {
+			lims = append(lims, "tools_outside_interpret_input")
 			continue
 		}
-		tools = append(tools, toolInput{TaskKey: d.key, Tool: d.doc.AnalyzerID, ToolVersion: d.doc.ToolVersion, Module: d.doc.Module.Dir, TaskStatus: string(d.doc.Outcome.TaskStatus),
-			ExitClass: d.doc.Outcome.ExitClass, PartialParse: d.doc.Outcome.PartialParse, ParseOK: d.doc.Parse.OK, Observations: len(d.doc.Observations), Limitations: lims})
+		tools = append(tools, toolInput{TaskKey: d.key, Tool: d.doc.Tool, ToolVersion: d.doc.ToolVersion, Module: d.doc.Module, TaskStatus: d.doc.TaskStatus,
+			ExitClass: d.doc.ExitClass, PartialParse: d.doc.PartialParse, ParseOK: d.doc.ParseOK, Observations: len(d.doc.Observations), Limitations: toolLims})
 		for _, o := range d.doc.Observations {
 			all = append(all, o)
 			keyOf[o.ID] = d.key
@@ -463,7 +517,6 @@ func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, [
 		}
 		return x.ID < y.ID
 	})
-	var lims []string
 	if len(all) > r1MaxObservations {
 		all = all[:r1MaxObservations]
 		lims = append(lims, "observations_outside_interpret_input")

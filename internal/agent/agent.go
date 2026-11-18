@@ -68,6 +68,10 @@ type Config struct {
 	GitHosts      []string
 	GoExecutable  string
 	GoModCache    string
+	// AnalyzerTools are absolute analyzer tool paths by tool name, one
+	// agent flag per tool (--staticcheck PATH, docs/39). The worker build
+	// decides which tool names it knows.
+	AnalyzerTools map[string]string
 	Limits        workerproto.Limits
 	// WorkerCommand is the worker argv (default: this executable + "worker").
 	WorkerCommand []string
@@ -151,6 +155,11 @@ func New(cfg Config) (*Agent, error) {
 		return nil, &ExitError{ExitUsage, "--review-pack must be review-v1 or review-r1"}
 	}
 	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.ModelExecutable, cfg.ModelRelayFile} {
+		if p != "" && !filepath.IsAbs(p) {
+			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
+		}
+	}
+	for _, p := range cfg.AnalyzerTools {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}

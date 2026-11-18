@@ -185,6 +185,9 @@ type Contribution struct {
 	// decoder validated the review result bytes against the evidence catalog.
 	Review      *ReviewResult
 	Limitations []string
+	// ProcessedPaths are the snapshot paths behind Tool.ProcessedFiles, so
+	// files read by several analyzers count once; nil when not provided.
+	ProcessedPaths []string
 }
 
 // ReviewResult is a decoded model review artifact of one task.
@@ -227,10 +230,11 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 	return r, nil
 }
 
-// DefaultRegistry handles tool observations, snapshot-bound review records and
-// W15 discovery documents.
+// DefaultRegistry handles tool observations (go vet v0.1 and the generic
+// analyzer envelope, docs/39), snapshot-bound review records and W15
+// discovery documents.
 func DefaultRegistry() *Registry {
-	r, err := NewRegistry(GoVetDecoder{}, ReviewDecoder{}, R1ReviewDecoder{}, EnvironmentDecoder{})
+	r, err := NewRegistry(goVetWithPaths{}, AnalyzerDecoder{}, ReviewDecoder{}, R1ReviewDecoder{}, EnvironmentDecoder{})
 	if err != nil {
 		panic(err)
 	}

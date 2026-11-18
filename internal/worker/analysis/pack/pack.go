@@ -1,0 +1,355 @@
+// Package pack is the analyzer-pack contract of R1 (docs/39). A language pack
+// (W16 C/C++, W17 Python, W18 JS/TS, W19 Go, W20 Rust, W21 structure and
+// secrets) contributes Analyzers; the Composite turns an ordered list of them
+// into the one analysis.Handler of the deep-review capability. Planning reads
+// only the snapshot manifest and scope, so an analyzer whose tool the operator
+// did not configure still plans its tasks and reports them as unsupported.
+package pack
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
+)
+
+// Composite identity: the deep-review handler of a node.
+const (
+	CompositeName    = "analyzers"
+	CompositeVersion = "1"
+	Capability       = "analysis:deep-review"
+)
+
+// Task reasons of the pack contract (TaskResult.Reason and outcome.reason).
+const (
+	// ReasonToolNotConfigured: the operator gave no path for the tool.
+	ReasonToolNotConfigured = "tool_not_configured"
+	// ReasonToolUnavailable: a path was given but the tool failed its
+	// startup validation or version probe.
+	ReasonToolUnavailable = "tool_unavailable"
+	// ReasonToolchainNotConfigured: the tool needs a language toolchain
+	// (e.g. staticcheck needs --go) that is not configured.
+	ReasonToolchainNotConfigured = "toolchain_not_configured"
+	// ReasonUnknownTask: Run was given a key the analyzer did not plan.
+	ReasonUnknownTask = "unknown_task"
+)
+
+var (
+	namePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	toolPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	// reserved task keys and prefixes belong to discovery and review roles.
+	reservedKeys = []string{"env.discover", "docs.discover"}
+)
+
+// Descriptor is the static identity of an analyzer. It never depends on the
+// node's tools.
+type Descriptor struct {
+	// ID is the analyzer id recorded in observations ("go.vet",
+	// "go.staticcheck"); see obsdoc.AnalyzerIDPattern (no hyphen).
+	ID string
+	// Name owns task keys: a key belongs to this analyzer iff it equals
+	// Name or starts with Name+"." (never a bare prefix). It is also the
+	// scratch directory name.
+	Name string
+	// Ecosystem is an envdoc ecosystem (cpp, go, javascript, python, rust)
+	// or "any".
+	Ecosystem string
+	// Required marks the baseline analyzer of its ecosystem: its tasks are
+	// required_for_verdict. Extra-depth analyzers are not required.
+	Required bool
+	// Tool is the operator tool name; it is also the agent flag name
+	// (--<tool>). "go" is the existing --go toolchain.
+	Tool string
+	// VersionArgs is the argv (after the executable) that prints the tool
+	// version; ParseVersion reads its stdout. Both drive the startup probe
+	// and the env.discover probe.
+	VersionArgs  []string
+	ParseVersion func(stdout []byte) (version string, ok bool)
+}
+
+// Validate checks a descriptor.
+func (d Descriptor) Validate() error {
+	switch {
+	case !obsdoc.AnalyzerIDPattern.MatchString(d.ID) || len(d.ID) > 64:
+		return fmt.Errorf("pack: analyzer id %q is invalid", d.ID)
+	case !namePattern.MatchString(d.Name):
+		return fmt.Errorf("pack: analyzer %s task name %q is invalid", d.ID, d.Name)
+	case !slices.Contains(obsdoc.Ecosystems, d.Ecosystem):
+		return fmt.Errorf("pack: analyzer %s ecosystem %q is invalid", d.ID, d.Ecosystem)
+	case !toolPattern.MatchString(d.Tool) || d.ParseVersion == nil:
+		return fmt.Errorf("pack: analyzer %s tool or version parser is invalid", d.ID)
+	}
+	return nil
+}
+
+// Owns reports whether a task key belongs to the analyzer named name.
+func Owns(name, key string) bool { return key == name || strings.HasPrefix(key, name+".") }
+
+// Task is one planned analyzer task with what it targets, so an analyzer that
+// cannot run still reports its scope.
+type Task struct {
+	Spec analysis.TaskSpec
+	// Module is the snapshot-relative module directory ("." = root).
+	Module string
+	// Patterns are the tool scope arguments relative to Module.
+	Patterns []string
+	// FilesInScope is the number of manifest files the task would hand to
+	// the tool; nil when the analyzer cannot count them from the manifest.
+	FilesInScope *int
+}
+
+// Analyzer is what a pack implements for one tool.
+type Analyzer interface {
+	Descriptor() Descriptor
+	// Plan derives the analyzer's tasks from job.Snapshot.Manifest and
+	// job.Scope only. It must not need the tool: NotConfigured reuses it.
+	// Every task key is owned by Descriptor().Name, Required equals
+	// Descriptor().Required and Stage is static_analysis. An analyzer plans
+	// no task when its ecosystem has no module in scope.
+	Plan(ctx context.Context, job analysis.Job) ([]Task, error)
+	// Run executes one planned task, starting processes only via runner,
+	// and writes its envelope to obsdoc.ArtifactPath(job.Scratch, key)
+	// (go-vet keeps its v0.1 document).
+	Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult
+}
+
+// PlanFunc is an analyzer's tool-independent planner.
+type PlanFunc func(ctx context.Context, job analysis.Job) ([]Task, error)
+
+// Composite runs several analyzers as one handler: plans are concatenated in
+// member order, every task key is owned by exactly one member, and Run is
+// dispatched to the owner.
+type Composite struct {
+	members []Analyzer
+}
+
+var _ analysis.Handler = (*Composite)(nil)
+
+// NewComposite validates the members (in plan order).
+func NewComposite(members ...Analyzer) (*Composite, error) {
+	if len(members) == 0 {
+		return nil, errors.New("pack: composite needs a member")
+	}
+	ids, names := map[string]bool{}, []string{}
+	for _, m := range members {
+		if m == nil {
+			return nil, errors.New("pack: nil analyzer")
+		}
+		d := m.Descriptor()
+		if err := d.Validate(); err != nil {
+			return nil, err
+		}
+		if ids[d.ID] {
+			return nil, fmt.Errorf("pack: duplicate analyzer %s", d.ID)
+		}
+		for _, n := range names {
+			if Owns(n, d.Name) || Owns(d.Name, n) {
+				return nil, fmt.Errorf("pack: analyzer names %q and %q overlap", n, d.Name)
+			}
+		}
+		if strings.HasPrefix(d.Name, "review") || Owns(d.Name, "env.discover") || Owns(d.Name, "docs.discover") {
+			return nil, fmt.Errorf("pack: analyzer name %q is reserved", d.Name)
+		}
+		ids[d.ID] = true
+		names = append(names, d.Name)
+	}
+	return &Composite{members: append([]Analyzer(nil), members...)}, nil
+}
+
+// Info is the deep-review handler identity. Each task's envelope records
+// the analyzer, adapter and parser that produced it.
+func (c *Composite) Info() analysis.HandlerInfo {
+	return analysis.HandlerInfo{Name: CompositeName, Version: CompositeVersion, Capability: Capability}
+}
+
+// Descriptors returns the member descriptors in plan order.
+func (c *Composite) Descriptors() []Descriptor {
+	out := make([]Descriptor, len(c.members))
+	for i, m := range c.members {
+		out[i] = m.Descriptor()
+	}
+	return out
+}
+
+// PlanTasks returns every member's tasks in member order, validated.
+func (c *Composite) PlanTasks(ctx context.Context, job analysis.Job) ([]Task, error) {
+	var out []Task
+	seen := map[string]bool{}
+	for _, m := range c.members {
+		d := m.Descriptor()
+		tasks, err := m.Plan(ctx, job)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", d.ID, err)
+		}
+		for _, t := range tasks {
+			k := t.Spec.Key
+			switch {
+			case !analysis.ValidTaskKey(k) || !Owns(d.Name, k) || seen[k] || slices.Contains(reservedKeys, k) || strings.HasPrefix(k, "review."):
+				return nil, fmt.Errorf("pack: analyzer %s planned key %q it does not own", d.ID, k)
+			case t.Spec.Required != d.Required:
+				return nil, fmt.Errorf("pack: analyzer %s task %s required flag differs from its descriptor", d.ID, k)
+			case t.Spec.Stage != domain.StageStaticAnalysis:
+				return nil, fmt.Errorf("pack: analyzer %s task %s is not a static_analysis task", d.ID, k)
+			case t.Module != "." && domain.ValidateEvidencePath(t.Module) != nil:
+				return nil, fmt.Errorf("pack: analyzer %s task %s module is invalid", d.ID, k)
+			}
+			seen[k] = true
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
+// Plan implements analysis.Handler.
+func (c *Composite) Plan(ctx context.Context, job analysis.Job) ([]analysis.TaskSpec, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	tasks, err := c.PlanTasks(ctx, job)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]analysis.TaskSpec, len(tasks))
+	for i, t := range tasks {
+		out[i] = t.Spec
+	}
+	return out, nil
+}
+
+// Owner returns the member owning key.
+func (c *Composite) Owner(key string) (Analyzer, bool) {
+	for _, m := range c.members {
+		if Owns(m.Descriptor().Name, key) {
+			return m, true
+		}
+	}
+	return nil, false
+}
+
+// Run dispatches to the owning analyzer.
+func (c *Composite) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
+	m, ok := c.Owner(task.Key)
+	if !ok {
+		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{ReasonUnknownTask}}
+	}
+	return m.Run(ctx, job, task, runner)
+}
+
+// notConfigured plans like the analyzer it stands for and reports every
+// task as unsupported without running anything.
+type notConfigured struct {
+	d      Descriptor
+	plan   PlanFunc
+	reason string
+}
+
+// NotConfigured stands in for an analyzer whose tool cannot run on this node.
+// Its tasks are planned exactly like the real analyzer's (so the gap is
+// visible in the plan, the stage and the report) and finish unsupported with
+// reason (ReasonToolNotConfigured, ReasonToolUnavailable or
+// ReasonToolchainNotConfigured) and an envelope that records nothing ran.
+func NotConfigured(d Descriptor, plan PlanFunc, reason string) (Analyzer, error) {
+	if err := d.Validate(); err != nil {
+		return nil, err
+	}
+	if plan == nil || !slices.Contains([]string{ReasonToolNotConfigured, ReasonToolUnavailable, ReasonToolchainNotConfigured}, reason) {
+		return nil, errors.New("pack: not-configured analyzer needs a planner and a known reason")
+	}
+	return notConfigured{d: d, plan: plan, reason: reason}, nil
+}
+
+func (n notConfigured) Descriptor() Descriptor { return n.d }
+
+func (n notConfigured) Plan(ctx context.Context, job analysis.Job) ([]Task, error) {
+	return n.plan(ctx, job)
+}
+
+// NotRunAdapter is the adapter identity of envelopes written for analyzers
+// that could not run on the node.
+var NotRunAdapter = obsdoc.Component{ID: "codeye-not-run", Version: "1"}
+
+func (n notConfigured) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, _ executor.Runner) analysis.TaskResult {
+	tasks, err := n.plan(ctx, job)
+	if err != nil {
+		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{"plan_failed"}}
+	}
+	var t *Task
+	for i := range tasks {
+		if tasks[i].Spec.Key == task.Key {
+			t = &tasks[i]
+		}
+	}
+	if t == nil {
+		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{ReasonUnknownTask}}
+	}
+	doc := obsdoc.New(obsdoc.Analyzer{ID: n.d.ID, Ecosystem: n.d.Ecosystem, Required: n.d.Required}, NotRunAdapter, NotRunAdapter, t.Spec.Key, job.Snapshot.Digest)
+	doc.Module.Dir = t.Module
+	doc.Patterns = append([]string{}, t.Patterns...)
+	doc.Tool.Name = n.d.Tool
+	doc.RulePack = obsdoc.RulePack{ID: "none", Version: "1", Selection: []string{}, RepositoryConfig: obsdoc.RepoConfigNone, SourceSuppressions: obsdoc.SuppressNone}
+	reason := n.reason
+	doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskUnsupported, Reason: &reason, ExitClass: obsdoc.ExitNotRun}
+	doc.Coverage.FilesInScope = t.FilesInScope
+	doc.Coverage.ProcessedPaths = []string{}
+	doc.Limitations = []string{reason}
+	art, err := WriteEnvelope(job, doc)
+	if err != nil {
+		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{"observations_write_failed"}}
+	}
+	return analysis.TaskResult{Status: domain.TaskUnsupported, Reason: reason, Artifacts: []analysis.ArtifactFile{art}, Limitations: []string{reason}}
+}
+
+// Expect returns the obsdoc expectation for a task of job (manifest lookup
+// of included files).
+func Expect(job analysis.Job, key string) obsdoc.Expect {
+	index := map[string]string{}
+	for _, e := range job.Snapshot.Manifest.Entries {
+		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" {
+			index[e.Path] = e.SHA256
+		}
+	}
+	return obsdoc.Expect{TaskKey: key, Snapshot: job.Snapshot.Digest, Lookup: func(p string) (string, bool) { s, ok := index[p]; return s, ok }}
+}
+
+// WriteEnvelope finishes, validates and writes doc to
+// obsdoc.ArtifactPath(job.Scratch, doc.TaskKey) (created exclusively) and
+// returns the observations artifact.
+func WriteEnvelope(job analysis.Job, doc obsdoc.Document) (analysis.ArtifactFile, error) {
+	if !filepath.IsAbs(job.Scratch) {
+		return analysis.ArtifactFile{}, errors.New("pack: scratch must be absolute")
+	}
+	doc.Finish()
+	b, err := obsdoc.Marshal(doc, Expect(job, doc.TaskKey))
+	if err != nil {
+		return analysis.ArtifactFile{}, err
+	}
+	p := obsdoc.ArtifactPath(job.Scratch, doc.TaskKey)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return analysis.ArtifactFile{}, err
+	}
+	if err := analysis.WriteFileExclusive(p, b); err != nil {
+		return analysis.ArtifactFile{}, err
+	}
+	return analysis.ArtifactFile{Path: p, Role: analysis.RoleObservations, MediaType: analysis.MediaObservations}, nil
+}
+
+// ToolProbe is the env.discover version probe of one operator tool (docs/39
+// discovery hook). Executable "" means the operator did not configure it;
+// the observation is then not_probed.
+type ToolProbe struct {
+	Tool         string
+	Analyzers    []string // analyzer ids using the tool, sorted
+	Ecosystems   []string // ecosystems of those analyzers ("any" included)
+	Executable   string
+	Args         []string
+	ParseVersion func([]byte) (string, bool)
+}

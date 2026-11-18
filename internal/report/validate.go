@@ -322,6 +322,7 @@ func Project(r Report, includeCode bool) Report {
 var safeTemplates = map[string]bool{
 	textSeverityReason: true, textSeverityUnmapped: true, textCondition: true, textImpact: true, textRecommendation: true,
 	textVerification: true, textLimitManual: true, textLimitStaticOnly: true, textEvidenceTool: true, textEvidenceCode: true, textOmitted: true,
+	textToolSeverityReason: true, textToolCondition: true, textToolVerification: true, textToolEvidence: true,
 }
 
 func safeText(s string) string {
