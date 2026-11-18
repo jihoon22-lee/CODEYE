@@ -61,7 +61,9 @@ R0의 `GET /projects`와 `GET /projects/{id}`는 `last_run`(ID·상태 또는 nu
 
 W15 설계에서는 서버가 목록의 각 프로젝트에 대표 run 참조와 단계 요약을, 실행 상세에 동일 집계의 단계별 상태·종료 수·계획 수·제외/실패 사유·마지막 확인 시각을 추가한다. 기존 `last_run`의 의미와 `progress.stage`는 유지하고 세부 단계는 선택 필드로 확장한다. 프로젝트 목록 응답에 요약을 담아 프로젝트마다 상세를 따로 요청할 필요가 없게 한다. 권한 없는 프로젝트의 run ID·단계·사유도 반환하지 않는다.
 
-근거는 현재 attempt의 수용된 task 전이, 소스 취득·snapshot 기록, 서버의 보고서 게시 기록이다. 단계 시작·종료 기록은 run ID, attempt와 epoch, 적용 계획(있을 때), 단계 키, 순번에 묶는다. 동일 이벤트 재전송은 한 번만 반영하고 오래된 epoch는 제외한다. 보고서 생성 완료는 해당 리비전의 게시가 확정됐을 때 표시한다. 구버전 데이터는 세부 정보 부재를 허용한다. 필드 이름과 스키마는 W15 구현에서 예시·호환 시험과 함께 확정한다. [표시 규칙과 예시](12-report-and-ui.md)
+근거는 현재 attempt의 수용된 task 전이, 소스 취득·snapshot 기록, 서버의 보고서 게시 기록이다. 단계 시작·종료 기록은 run ID, attempt와 epoch, 적용 계획(있을 때), 단계 키, 순번에 묶는다. 동일 이벤트 재전송은 한 번만 반영하고 오래된 epoch는 제외한다. 보고서 생성 완료는 해당 리비전의 게시가 확정됐을 때 표시한다. 구버전 데이터는 세부 정보 부재를 허용한다. [표시 규칙과 예시](12-report-and-ui.md)
+
+**W15 구현 필드.** 프로젝트 목록·상세·생성 응답에 선택 객체 `activity`를 둔다. 필드는 `run`(`id`, `status`, `requested_at` 또는 null), `other_active_runs`, `detail`(`recorded`·`not_recorded`, 실행이 없으면 null), `stages`, `waiting_reason`(대표 run이 대기 중일 때만), `last_report`(`run_id`, `revision`, `published_at` 또는 null), `last_event_at`, `checked_at`이다. `GET /runs/{id}`의 `progress`에는 같은 의미의 `detail`, `stages`, `last_event_at`, `checked_at`을 더한다. 단계 항목은 `key`, `state`, `planned`(계획 확정 시에만 숫자), `finished`, `succeeded`, `counts`, `reasons`, `started_at`, `finished_at`이다. 노드 이벤트 `task_created`는 선택 필드 `stage`를 받고 알 수 없는 값은 422로 거부한다. 재시도에서 NULL 단계를 처음 기록하면 run 이벤트 `task.stage_recorded`를 남긴다. 형식은 [OpenAPI](../api/openapi.yaml)와 [예시](../examples/project-activity.json), 판정 규칙은 [W15 기록](37-w15-discovery-and-progress.md)을 따른다.
 
 ### W22 SSE 설계
 

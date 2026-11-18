@@ -120,3 +120,26 @@
 - 탐색 task가 실패해도 정적 분석과 코드 검토는 계속하고, 해당 단계는 실패 사유와 함께 표시한다.
 - migration `0006`은 forward 전용이다. 새 열은 nullable이고 기존 행을 바꾸지 않는다. 구버전 워커가 `stage` 없이 보내면 NULL로 저장한다.
 - 노드 관측은 다른 모듈로 옮기지 않는다. 선언 버전이 노드보다 높으면 Go vet은 `GOTOOLCHAIN=local`로 toolchain을 내려받지 않는다. 그 실패는 탐색의 `mismatch` 판정과 일치해야 한다.
+
+## 9. 결과 — 1단계(모델 없음)
+
+2026년 11월 18일 Linux(WSL2)의 실제 PostgreSQL 17.10, 제품 워커, Chromium에서 확인했다. 역할 지침 연결과 실모델 평가(§6, TC-97 모델 부분·TC-100)는 2단계에서 수행한다.
+
+| 시험 | 확인한 결과 | 근거 |
+|---|---|---|
+| TC-96 | 첫 입력에서 루트·`svc/a`는 `go 1.22` `satisfied`, `svc/b`는 `go 1.30` `mismatch`. 노드 관측(go1.27.4)은 주입값으로 고정한다. 실제 go1.27.4의 go vet은 `svc/b`에서 toolchain을 내려받지 않고 `toolchain_unavailable`로 끝나 판정과 일치했다. `toolchain` 지시문은 `preferred_minimum`이며 vet을 막지 않았다. | `TestW15FixtureMatchesExpected`, `TestW15FixtureGoVetAgreesWithVerdicts`, `TestToolchainPreferenceVerdict` |
+| TC-97(모델 없음) | 문서 부재(`svc/a`의 `none`), 루트·하위 문서의 겹침 묶음, 읽기 예산 초과(`read_budget_exhausted`/`document_too_large`), 권한 변경을 요구하는 에이전트 지침을 각각 구분한다. 지침 문서가 있어도 계획·도구 설정이 바뀌지 않는다. | `TestDocumentsAbsent`, `TestDocumentsRootAndSubOverlap`, `TestDocumentsBudget`, `TestAgentInstructionsDemandingPermissionsChangeNothing` |
+| TC-98 | 대표 run 선택(그룹·요청 시각·ID), 다른 활성 실행 수, 실행 기록 없는 프로젝트, 권한 없는 프로젝트 비노출, 목록과 상세의 동일 집계. 실제 Chromium에서 대기 중 단계·키보드 펼치기·취소 후 새로고침 상태를 확인했다. | `TestTC98RepresentativeRunsAndStages`, `TestTC98TC99ActivityOverHTTP`, `web/e2e/control.spec.ts`, `StageDisplay.test.tsx` |
+| TC-99 | 도구 실패·성공 혼합의 `partial`과 건수, 정책 제외(`model_source_not_approved`)와 문서 없음의 구분, 취소, 새 attempt 후 옛 epoch 재전송 409와 화면 불변, 같은 `client_event_id` 1회 반영, R0 기록의 `not_recorded`. 실제 Go run은 `detail: recorded`이고 목록·상세가 일치했다. | `TestTC99MixedOutcomesAndExclusions`, `TestTC99StaleReplayAndDuplicateEvents`, `TestTC99LegacyRunIsNotRecorded`, `scripts/node_smoke.py` |
+
+### 구현에서 정한 사항
+
+- **산출물 두 개.** `env.discover`와 `docs.discover`가 각각 `kind`가 `environment`, `documents`인 산출물을 올린다. 예시도 두 개다. 선언 파일을 읽지 못한 경우를 `not_declared`로 쓰면 거짓이므로 판정 사유 `declaration_unreadable`을 추가했다.
+- **탐색만 성공한 실행.** 정적 분석이 모두 실패해도 탐색 사실이 남으므로 실행은 `failed`가 아니라 `partial`이다. 보고서는 탐색 산출물을 검증만 하고 관찰·결함·도구 coverage에 더하지 않는다.
+- **단계 재사용 규칙.** 재시도한 run이 같은 key를 다시 만들 때 단계가 같으면 수용, 다르면 409, 생략하면 저장값을 유지한다. 저장값이 NULL이고 새 워커가 단계를 선언하면 한 번 기록하고 `task.stage_recorded` 이벤트를 남긴다. 실제 워커의 선언이므로 key 추정이 아니다. 재시도는 task의 시작·종료 시각과 사유도 비운다. 실행 이력은 `task_executions`에 남는다.
+- **판정 세부.** `running`에 도달하기 전에 끝난 실행의 task 단계는 `plan_pending`이다. 대기 중인 형제 task가 있는 제외 task는 `running`으로 셈한다. snapshot 없이 취소·복구 중이면 `source`는 `running`이다. `report`는 현재 attempt의 리비전 게시로 `succeeded`가 된다. 목록은 대기 중인 대표 run의 대기 사유를 `activity.waiting_reason`으로 보여준다.
+- **운영 순서.** 구버전 컨트롤러는 `task_created`의 `stage`를 거부하므로 컨트롤러를 워커보다 먼저 올린다. migration 0006은 `events`에 부분 색인을 만든다.
+
+### 실행한 검증
+
+`gofmt -l .`, `go vet ./...`, `go test -race ./...`, `python3 scripts/validate_bundle.py`, `cd web && npm test && npm run build`, `python3 scripts/test_postgres.py --nodes --web --scheduler`가 통합 브랜치에서 모두 통과했다. Windows는 CI의 Go 시험으로 확인한다. 실제 모델 요청은 1단계에서 보내지 않았다.
