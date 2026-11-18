@@ -222,7 +222,7 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 - 웹 parser가 `metric_observations`와 관찰 `metric`을 읽는다.
 - `api/openapi.yaml`은 보고서 schema를 참조하므로 따로 바꾸지 않았다.
 - **보고서 규칙 문맥 검증 완화(W19 계약).** `recorded` 문맥은 이제 digest만 요구한다. 읽은 파일이 없으면 `config_paths`가 없다. 이전 검증은 `config_paths`가 있어야 했다. 그런데 빈 목록은 JSON에서 생략되므로, `.gitleaksignore`가 없는 스냅샷의 gitleaks 행(`honored`, `config_files=[]`)을 가진 보고서는 게시 뒤 controller가 다시 읽을 때 거부됐다(실제 node smoke에서 보고서 조회 500). docs/39 §5.1의 "`recorded`일 때만", "알려짐 = `recorded`이고 digest가 있음"과 맞는다. 기존 보고서는 그대로 유효하다(`TestW21HonoredWithoutConfigFilesReadsBack`).
-- 기존 시험의 기대 목록을 고쳤다. W21 작업이 모든 프로젝트에 계획되기 때문이다. 대상은 카탈로그 순서, 누락 사유, 플래그(`builtin_test.go`, W20의 `rust_test.go`, `cmd/codeye/worker_handlers_test.go`. W18의 eslint·tsc·eslint-typed 행과 합침), TC-69의 Python 전용 계획(`run`), `node_smoke`의 기존 Go run 기대값(관찰 문서 5개, 도구 행 5개, 계획 5, `unsupported` 3 또는 4)이다. `node_smoke`는 도구 변수로 제한한 smoke만 더하라는 규칙이 있었다. 그러나 W21 작업이 기본 smoke의 Go run에도 계획되므로 기존 기대값을 그대로 둘 수 없었다. 판정 규칙은 바꾸지 않았다. W18·W19·W20·W23·W24 시험은 이 기대값 변경 밖에서 그대로 통과한다.
+- 기존 시험의 기대 목록을 고쳤다. W21 작업이 모든 프로젝트에 계획되기 때문이다. 대상은 카탈로그 순서, 누락 사유, 플래그(`builtin_test.go`, W20의 `rust_test.go`, `cmd/codeye/worker_handlers_test.go`. W16의 cppcheck·clang-tidy, W18의 eslint·tsc·eslint-typed 행과 합침), TC-69의 Python 전용 계획(`run`), `node_smoke`의 기존 Go run 기대값(관찰 문서 5개, 도구 행 5개, 계획 5, `unsupported` 3 또는 4)이다. `node_smoke`는 도구 변수로 제한한 smoke만 더하라는 규칙이 있었다. 그러나 W21 작업이 기본 smoke의 Go run에도 계획되므로 기존 기대값을 그대로 둘 수 없었다. 판정 규칙은 바꾸지 않았다. W16·W18·W19·W20·W23·W24 시험은 이 기대값 변경 밖에서 그대로 통과한다.
 
 ## 11. 시험과 실행 근거
 
