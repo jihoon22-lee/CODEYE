@@ -324,7 +324,13 @@ func TestR1RequestSizeWorstCaseAllLanguages(t *testing.T) {
 			j := worstCaseJob(t, c.tree)
 			recs, sizes, dropped := allLanguagesRun(t, j, c.obs)
 			t.Logf("largest request per role (bytes): %v", sizes)
-			t.Logf("investigate excerpts %d, verify: %d of 6 maximal candidates left unreviewed for the budget", len(recs["investigate"].Evidence), dropped)
+			code := 0
+			for _, e := range recs["investigate"].Evidence {
+				if e.Kind == "code" || e.Kind == "test" {
+					code++
+				}
+			}
+			t.Logf("investigate code excerpts %d (limitations %v), verify: %d of 6 maximal candidates left unreviewed for the budget", code, recs["investigate"].Limitations, dropped)
 			for _, stage := range record.R1Stages {
 				for _, call := range recs[stage].Calls {
 					if len(guideFiles(call.PackFiles)) != 5 {

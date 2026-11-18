@@ -189,7 +189,7 @@ discovery·go vet 뒤에 다섯 task를 이 순서로 둔다. 생략은 `skipped
 
 - **OS 간 digest.** 처음 Windows CI에서 review-v1 고정 시험과 r1 예시 비교가 실패했다. checkout의 CRLF 변환으로 지침·fixture 바이트가 바뀌어 팩 digest와 요청 크기가 Linux와 달라졌기 때문이다. 저장소 `.gitattributes`(`* text=auto eol=lf`)로 모든 checkout을 LF로 고정했다. 이 문제는 R0에서도 Windows 노드의 지침 digest를 바꿀 수 있었다.
 
-하지 않은 것: 실모델 요청과 TC-100 평가, 출력 토큰 측정, `coverage.environment` 요약, Go 이외 언어의 코드 발췌(`code_excerpts_go_only`), 후보 팩 승격.
+하지 않은 것: 실모델 요청과 TC-100 평가, 출력 토큰 측정, `coverage.environment` 요약, Go 이외 언어의 코드 발췌(`code_excerpts_go_only`, W24 2c단계에서 다섯 언어로 넓힘: [docs/07](07-llm-and-instructions.md#다섯-언어-검토-입력w24-2c단계)), 후보 팩 승격.
 
 ## 11. 결과 — TC-100 실모델 대조(활성 팩 대 후보 팩)
 
