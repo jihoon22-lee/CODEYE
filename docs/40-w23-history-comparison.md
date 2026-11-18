@@ -150,7 +150,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 
 ### 실행한 검증
 
-(통합 전 최종 SHA에서 실행한 명령과 결과를 여기에 기록한다.)
+2026년 11월 18일 Linux(WSL2), 작업 브랜치 `feat/w23-history`의 커밋 `41ea370`(이 문단을 넣기 직전 커밋)에서 실행했다. `gofmt -l .`(출력 없음), `go vet ./...`, `GOOS=windows go vet ./...`, `go test -race ./...`(DB 없이), `python3 scripts/validate_bundle.py`, `cd web && npm ci && npm test && npm run build`(17개 파일, 187개 시험), PostgreSQL 클라이언트를 `PATH`에 둔 `python3 scripts/test_postgres.py --nodes --web --scheduler`가 모두 통과했다. 마지막 명령은 임시 PostgreSQL 17에서 `go test -race ./...`(PostgreSQL 시험 포함, 27개 패키지 통과), Chromium e2e 2개, 두 노드·실제 Go vet smoke(W23 세 run 비교 포함), scheduler smoke를 실행한다. Windows는 vet만 했고 Windows에서 시험을 실행하지 않았다. 실제 모델 요청은 보내지 않았으므로 모델 후보의 비교·판정은 단위·저장 시험의 구성한 보고서로만 확인했다.
 
 ## 9. 남은 제한
 
