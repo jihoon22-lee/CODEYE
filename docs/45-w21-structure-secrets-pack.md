@@ -18,7 +18,7 @@ W21은 [분석기 팩 계약](39-r1-analyzer-packs.md)에 언어와 무관한(`e
 | 실제 산출물 | [lizard](../examples/observations-lizard.json) · [jscpd](../examples/observations-jscpd.json) · [gitleaks](../examples/observations-gitleaks.json) | 실도구 시험의 envelope |
 | 캡처 | `internal/worker/analysis/{lizard,jscpd,gitleaks}/testdata/` | 고정 버전의 stdout·stderr·종료 코드 |
 
-fixture 소스는 저장소에 두지 않고 시험 코드(`helpers_test.go`)가 시험마다 임시 디렉터리에 만든다. 비밀값을 시험 시점에 생성해야 하기 때문이다(§7.4). 그래서 `fixtures/w21-structure-secrets/`는 만들지 않았다.
+fixture 소스는 저장소에 두지 않는다. 시험 코드(`helpers_test.go`)가 시험마다 임시 디렉터리에 만든다. 그래서 `fixtures/w21-structure-secrets/`는 만들지 않았다. 이유는 셋이다. 비밀값은 시험 시점에 생성해야 한다(§7.4). jscpd의 크기 제한 fixture는 생성한 1.2MB 파일이다. lizard·jscpd fixture는 저장소 `.gitignore`(`src/`)와 `.jscpd.json` 같은 적대적 설정을 담는데, 그런 `.gitignore`를 이 저장소에 커밋하면 fixture 파일 자체가 git에서 빠진다. 캡처가 쓴 입력은 같은 함수에 자리 값을 넣은 것이다.
 
 ## 2. 도구, 플래그, 환경
 
@@ -51,7 +51,7 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 - 보고서 decoder는 지표 관찰을 finding으로 만들지 않는다. 지표 관찰을 `observation_ids`로 인용한 finding이 있는 보고서는 무효다(`TestW21ValidateRejectsMetricFinding`).
 - `summary.metric_observations`는 `raw_observations` 중 지표 관찰 수다. 0이면 생략한다. `raw_observations`·`unresolved_observations`의 뜻은 바꾸지 않았다. 지표도 원시 관찰이다.
 - Markdown·HTML은 원시 관찰 수 아래에 "그중 구조 지표(결함 아님)" 행을 0보다 클 때만 넣는다. 지표 관찰에는 "구조 지표, 결함 아님" 표지를 붙인다. 웹 보고서도 같다. 웹 parser는 요약의 수와 metric을 가진 관찰 수가 다르면 보고서를 거부한다.
-- 모델 입력: R1 해석 역할의 관찰 창은 지표 관찰을 읽지 않는다(`readToolDoc`).
+- 모델 입력: R1 해석 역할의 관찰 창은 지표 관찰을 읽지 않는다(`readToolDoc`). 남는 것은 envelope의 제약 `metrics_not_defects`뿐이다.
 - 판정: 지표는 `attention`을 만들지 않는다. 위치를 확인하지 못한 지표(예: `source_drift`)는 다른 관찰처럼 미해결로 세어 판정을 `inconclusive`로 둔다(`TestW21UnresolvedMetricIsInconclusive`, A28). 근거가 스냅샷과 맞는지 확인하지 못한 결과는 측정값이라도 깨끗한 판정의 근거가 될 수 없다.
 
 ### 4.2 임계값(규칙 팩 v1)
@@ -78,13 +78,13 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 |---|---|
 | exit 0, XML 완전, 넘긴 파일 수 = 분석 파일 수 | 성공. 지표가 있어도 `success_without_findings` |
 | exit 0이지만 XML 손상·모양 오류·파일 수 불일치 | `failed`/`output_unparsed` |
-| exit ≠ 0 | `failed`/`lizard_failed` |
+| exit ≠ 0(측정: 알 수 없는 옵션 2, 읽을 수 없는 목록 1) | `failed`/`lizard_failed` |
 | 출력 잘림 | `failed`/`output_truncated` |
 | 읽을 파일 없음 | `unsupported`/`no_analyzable_files` |
 
 ### 5.2 jscpd
 
-- argv: `<node> <run-jscpd.js> --config <scratch>/analyzers/jscpd/jscpd.json`. 설정의 `path`에 넘길 파일의 절대 경로를 적고 `output`은 scratch로 둔다. `reporters=[xcode]`, `absolute`, `noGitignore`, `noTips`, `noColors`를 켠다.
+- argv: `<node> <run-jscpd.js> --config <scratch>/analyzers/jscpd/jscpd.json`. 설정의 `path`에 넘길 파일의 절대 경로를 적고 `output`은 scratch로 둔다. `reporters=[xcode]`, `absolute`, `noGitignore`, `noTips`, `noColors`를 켠다. json 보고기(`--reporters json --output`)는 쓰지 않는다. 중복된 소스 텍스트를 보고서에 복사하기 때문이다(실측: 소스의 표지 문자열이 `jscpd-report.json`에 들어감). xcode는 경로와 줄 범위만 stdout에 쓴다.
 - `--config`를 주면 저장소의 `.jscpd.json`, `.config/jscpd.json`, `package.json`의 `"jscpd"` 키를 읽지 않는다(실측). 그래서 저장소 설정의 `path`·`output`·`reporters`가 입력이나 쓰기 위치를 바꿀 수 없다. 규칙 문맥은 `repository_config=overridden`, `config_files=[]`다. 소스 안 `jscpd:ignore-start`/`jscpd:ignore-end` 표지는 블록을 기록 없이 숨긴다(실측). 그래서 `source_suppressions=honored`이고, 사라진 지표를 개선으로 읽지 않는다.
 - 실측(5.4.3): 중복이 있든 없든 exit 0이다(`--exit-code`·threshold를 주지 않음). xcode 출력 `…/lib/b.js:1:0: warning: Found 16 lines (1-17) duplicated on file …/src/a.js (1-17)`에서 N은 end − start다. 지표 값은 이 N이고 N < minLines는 모양 오류다. 열 위치는 기록하지 않는다(`clone_columns_not_recorded`). 실행 시간 줄은 100초 실행에서도 `time: 100.32s`처럼 초 단위였다(`TestReplayLongRunTiming`).
 - 처리 파일은 CODEYE가 넘긴 목록이다(`processed_paths_from_input_list`). jscpd는 파일별 처리를 보고하지 않는다. 임계값에 닿는 파일이 없으면 jscpd는 stderr에 "analyzed no files"를 쓰고, CODEYE는 이를 제약 `no_file_reached_clone_thresholds`로 남긴다.
@@ -94,19 +94,19 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 | exit 0, 레코드 수 = `Found N clones.` | 성공. 지표가 있어도 `success_without_findings` |
 | 알 수 없는 stdout 줄, 요약 불일치 | `failed`/`output_unparsed` |
 | 알 수 없는 stderr | `failed`/`jscpd_failed`(도구 오류 `tool_stderr`) |
-| exit ≠ 0 | `failed`/`jscpd_failed` |
+| exit ≠ 0(측정: 없는 설정 1, 알 수 없는 옵션 2) | `failed`/`jscpd_failed` |
 | 비교할 파일 없음 | `unsupported`/`no_analyzable_files` |
 
 ### 5.3 gitleaks
 
-- argv(범위 루트마다 한 번): `dir --no-banner --no-color --log-level info --redact=100 --config <scratch>/codeye-gitleaks.toml --gitleaks-ignore-path <scratch>/ignore --ignore-gitleaks-allow --max-archive-depth 0 --max-decode-depth 5 --exit-code 3 --report-format template --report-template <scratch>/report.tmpl --report-path - -- ./<root>`.
+- argv(범위 루트마다 한 번): `dir --no-banner --no-color --log-level info --redact=100 --config <scratch>/analyzers/gitleaks/codeye-gitleaks.toml --gitleaks-ignore-path <scratch>/analyzers/gitleaks/ignore --ignore-gitleaks-allow --max-archive-depth 0 --max-decode-depth 5 --exit-code 3 --report-format template --report-template <scratch>/analyzers/gitleaks/report.tmpl --report-path - -- ./<root>`. 보고서는 scratch 파일이 아니라 stdout(`--report-path -`)으로 받는다. 기본 JSON 보고서의 `Match`·`Line`은 가려도 주변 텍스트를 담을 수 있으므로 쓰지 않는다. 템플릿이 그 필드를 읽지 않으므로 stdout 산출물에도 값이 없다(§7).
 - CODEYE 설정은 기본 규칙 확장(`[extend] useDefault = true`)이다. `--config`를 주면 저장소 `.gitleaks.toml`을 읽지 않는다(실측: fixture의 `.gitleaks.toml` allowlist가 가리킨 `src/app.py`도 탐지됨).
 - 인라인 `gitleaks:allow`는 무시한다(`--ignore-gitleaks-allow`). 저장소가 주석 한 줄로 탐지를 끌 수 없다. 규칙 문맥은 `source_suppressions=disabled`다.
 - **`.gitleaksignore`는 따른다.** gitleaks는 검사 루트의 `.gitleaksignore`를 `--gitleaks-ignore-path`와 관계없이 항상 읽는다(실측). 끌 수 없으므로 `repository_config=honored`로 기록하고, 그 파일을 `config_files`에 SHA-256과 함께 넣는다. 항목이 사본 밖을 가리키면(절대 경로, `..`, NUL) 작업을 거부한다(§9.1).
 - 기본 전역 allowlist(`gitleaks.toml`, 이미지·글꼴·문서 확장자, `go.mod`·`go.sum`, `vendor/modules.txt`·일부 vendor 경로, `node_modules`, lock 파일 등)에 걸린 파일은 gitleaks가 읽지 않는다. CODEYE는 같은 목록을 복사해 그 파일을 `processed_paths`에서 뺀다(`skipped_default_allowlist`).
 - 이진 파일도 검사한다(실측: `assets/blob.dat`에서 탐지). 다만 UTF-8 텍스트가 아닌 파일은 처리 파일로 주장하지 않는다(`binary_files_not_claimed_processed`). 압축 파일은 풀지 않는다(depth 0). 인코딩된 값은 5단계까지 해독한다.
 - git 이력은 검사하지 않는다(`history_not_scanned`). 스냅샷에는 이력이 없다.
-- 열 위치는 버린다(`secret_columns_not_recorded`). gitleaks 8.30.1은 파일 조각의 첫 줄 뒤에서 시작·끝 열을 모두 1씩 크게 보고한다(캡처로 측정, `TestCapturedColumnsAreOffByOne`). 조각 경계는 도구의 chunk 읽기에 달려 있어 보정할 수 없다. 줄 범위는 정확하다.
+- 열 위치는 버린다(`secret_columns_not_recorded`). gitleaks 8.30.1은 파일의 첫 줄 뒤에서 시작·끝 열을 모두 1씩 크게 보고한다(작은 파일의 캡처로 측정, `TestCapturedColumnsAreOffByOne`). 큰 파일을 나눠 읽는 경계에서 어떻게 되는지는 측정하지 않았으므로 1을 빼서 보정하지 않는다. 줄 범위는 캡처한 네 레코드 모두 정확했다.
 
 | 종료/로그 | 결과 |
 |---|---|
@@ -116,7 +116,7 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 | 종료 코드·로그·레코드 수 불일치 | `failed`/`exit_status_mismatch` |
 | 템플릿 레코드 손상, 종료 레코드 없음 | `failed`/`output_unparsed` |
 | 선택된 스냅샷 파일이 아닌 결과 | 그 레코드를 버리고 `failed`/`result_outside_snapshot` |
-| 그 밖의 종료 코드 | `failed`/`gitleaks_failed` |
+| 그 밖의 종료 코드(측정: 알 수 없는 옵션 126) | `failed`/`gitleaks_failed` |
 
 ## 6. 엔진 중복
 
@@ -140,7 +140,7 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 
 - gitleaks는 CODEYE 보고 템플릿으로만 출력한다. 템플릿은 규칙, 파일, 심볼릭 링크 표시, 줄·열, entropy만 읽는다. `.Secret`·`.Match`·`.Line`·`.Fingerprint`·커밋·작성자는 읽지 않는다(`validate_bundle`이 템플릿 상수를 검사). `--redact=100`은 로그도 가린다. 로그 수준은 info로 고정한다. debug·trace는 원문과 해독값을 찍는다. `-v`는 주지 않는다.
 - 관찰 문구는 고정 템플릿 `secret detected by gitleaks rule <rule> (value withheld)`다. entropy와 위치도 넣지 않는다.
-- 식별(fp2)은 `report.ToolFingerprint(analyzer, rule, path, "", 고정 문구)`다. 비밀값의 plain hash를 쓰지 않는다. 같은 파일에서 같은 규칙이 두 번 탐지되면 fingerprint가 같은 finding 두 개가 된다. 비교(W23)는 이를 ambiguous로 보고 사람 판정을 이월하지 않는다(`TestW21SameRuleTwiceInOneFile`).
+- 식별(fp2)은 `report.ToolFingerprint(analyzer, rule, path, "", 고정 문구)`다. 비밀값의 plain hash를 쓰지 않는다. 같은 파일에서 같은 규칙이 두 번 탐지되면 fingerprint가 같은 finding 두 개가 된다. 보고서는 유효하고, 사람 판정은 이월되지 않는다(`DispositionCarries`, `TestW21SameRuleTwiceInOneFile`). 비교(W23)의 `history.Compare`는 같은 fingerprint가 여럿인 항목을 `ambiguous`로 표시한다. 이 동작은 W23 코드이고 W21에서 따로 시험하지 않았다.
 - 코드 발췌: controller는 스냅샷 원문을 보관하지 않으므로 보고서에 코드 발췌가 없다. 전체 내보내기에도 비밀값을 담은 줄이 들어가지 않는다.
 - lizard 산출물은 함수 이름·줄·지표만 담고, jscpd 산출물은 경로·줄 범위만 담는다. 실도구 시험이 두 도구의 stream에 소스 조각이 없음을 확인한다(`AssertNoSnippet`).
 
@@ -164,7 +164,7 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 |---|---|
 | **실행 안 됨**: 계획에 없음, 또는 `unsupported`이면서 `not_run`(도구 미설정 등) | 거르지 않고 보낸다. 검토 기록과 보고서에 제약 `model_input_not_secret_screened`를 남긴다. 모델 입력 바이트에는 넣지 않는다. |
 | **실행했으나 쓸 수 없음**: 실패, 시간 초과, 취소, 부분 파싱, envelope 없음·무효 | 모든 검토 역할을 `skipped_policy`/`secret_screen_failed`로 건너뛴다. 모델 요청을 보내지 않는다. 거르지 않은 코드로 대신 보내지 않는다. |
-| **완전한 성공**(`succeeded`, 부분 파싱 아님, parse OK) | 탐지된 파일을 모든 발췌에서 뺀다. 대상은 코드 문맥, 문서, 관찰 창, 검증 확장, v1 corpus다. 제약 `secret_files_withheld`를 남긴다. |
+| **완전한 성공**(`succeeded`, 부분 파싱 아님, parse OK) | 탐지된 파일을 모든 발췌에서 뺀다. 대상은 코드 문맥, 문서, 관찰 창, 검증 확장, v1 corpus다. 그 파일에 위치한 도구 관찰은 규칙과 위치만 보내고 문구를 뺀다. 하드코딩 암호 규칙처럼 문구가 값을 인용할 수 있기 때문이다. 제약 `secret_files_withheld`를 남긴다. |
 
 - 순서: 워커는 계획 순서대로 작업을 한 번에 하나씩 실행하고, 검토 역할은 정적 계획 뒤에 붙는다. 그래서 검토가 envelope을 읽을 때 비밀값 작업은 이미 끝나 있다. 계획에 있는데 envelope이 없으면 "실행 안 됨"이 아니라 실패로 본다. 경쟁 상태가 생겨도 열린 쪽으로 처리되지 않는다.
 - review-v1의 고정 요청 바이트는 바뀌지 않는다(`TestReviewV1IsPinned`). 선별 결과는 corpus에서 파일을 빼는 방식으로만 반영한다. 제약은 기록에만 들어간다. R1 예시(`examples/review-r1/`)는 기록의 제약과 상위 기록 SHA만 바뀌었다. 요청 SHA는 그대로다.
@@ -205,7 +205,13 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 
 ### 9.6 모델 입력 선별의 실패 시 동작
 
-이전 구현은 envelope이 없거나 무효이면 빈 선별 목록으로 진행했다. 실패할 때 열리는 동작이었다. 지금은 §8의 세 경우로 나눈다. 쓸 수 없는 결과는 검토를 건너뛴다. 기본 팩 review-v1에도 같은 규칙을 적용했고 고정 요청 시험은 그대로 통과한다.
+이전 구현은 envelope이 없거나 무효이면 빈 선별 목록으로 진행했다. 실패할 때 열리는 동작이었다. 지금은 §8의 세 경우로 나눈다. 쓸 수 없는 결과는 검토를 건너뛴다. 기본 팩 review-v1에도 같은 규칙을 적용했고 고정 요청 시험은 그대로 통과한다. 선별이 뺀 파일에 위치한 도구 관찰의 문구도 R1 해석 입력에서 뺀다(§8).
+
+### 9.7 남은 위험
+
+- gitleaks 기본 allowlist에 걸린 파일(`go.mod`·`go.sum`, lock 파일, `vendor/` 일부, `node_modules`, 이미지 등)은 검사하지 않는다. 그 안의 비밀값은 탐지되지 않고 모델 입력에서도 빠지지 않는다. 플랫폼의 일반 민감값 마스킹(`record.Sensitive`)만 적용된다.
+- 저장소 `.gitleaksignore`가 숨긴 탐지도 같다. 저장소가 그 값을 받아들였다고 보고 따르지만, 적대적 저장소는 이것으로 선별을 피할 수 있다. 피해 대상은 그 저장소 자신의 값이다. 따르는 파일은 digest와 함께 규칙 문맥에 남는다.
+- 비밀값 규칙이 모르는 형식(예: 임의 문자열 암호)은 선별되지 않는다.
 
 ## 10. 계약 변경(가산)
 
@@ -215,7 +221,8 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 - 보고서 builder 버전은 "4" 그대로다. 지표가 없는 보고서는 바이트가 같고, 새 필드는 생략 가능한 가산 필드다(A28).
 - 웹 parser가 `metric_observations`와 관찰 `metric`을 읽는다.
 - `api/openapi.yaml`은 보고서 schema를 참조하므로 따로 바꾸지 않았다.
-- W19·W20·W23 시험은 그대로 통과한다. 카탈로그 기대 목록, 누락 사유 목록, 플래그 목록, TC-69의 Python 전용 계획, `node_smoke`의 Go run 기대값(작업 수 5, `unsupported` 3·4)에는 W21 항목을 더했다.
+- **보고서 규칙 문맥 검증 완화(W19 계약).** `recorded` 문맥은 이제 digest만 요구한다. 읽은 파일이 없으면 `config_paths`가 없다. 이전 검증은 `config_paths`가 있어야 했다. 그런데 빈 목록은 JSON에서 생략되므로, `.gitleaksignore`가 없는 스냅샷의 gitleaks 행(`honored`, `config_files=[]`)을 가진 보고서는 게시 뒤 controller가 다시 읽을 때 거부됐다(실제 node smoke에서 보고서 조회 500). docs/39 §5.1의 "`recorded`일 때만", "알려짐 = `recorded`이고 digest가 있음"과 맞는다. 기존 보고서는 그대로 유효하다(`TestW21HonoredWithoutConfigFilesReadsBack`).
+- 기존 시험의 기대 목록을 고쳤다. W21 작업이 모든 프로젝트에 계획되기 때문이다. 대상은 카탈로그 순서, 누락 사유, 플래그(`builtin_test.go`, W20의 `rust_test.go`, `cmd/codeye/worker_handlers_test.go`), TC-69의 Python 전용 계획(`run`), `node_smoke`의 기존 Go run 기대값(관찰 문서 5개, 도구 행 5개, 계획 5, `unsupported` 3 또는 4)이다. `node_smoke`는 도구 변수로 제한한 smoke만 더하라는 규칙이 있었다. 그러나 W21 작업이 기본 smoke의 Go run에도 계획되므로 기존 기대값을 그대로 둘 수 없었다. 판정 규칙은 바꾸지 않았다. W19·W20·W23 시험은 이 기대값 변경 밖에서 그대로 통과한다.
 
 ## 11. 시험과 실행 근거
 

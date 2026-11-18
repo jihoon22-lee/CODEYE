@@ -42,9 +42,10 @@ const (
 	// .gitleaksignore (its entries are never recorded).
 	LimIgnoreFileRejected = "rejected_option_gitleaksignore"
 	// LimColumnsNotRecorded: gitleaks 8.30.1 reports byte columns one too
-	// high on every line of a scanned fragment after its first (measured,
-	// TestCapturedColumnsAreOffByOne), and where a fragment starts depends
-	// on its chunked reads; observations keep the line range only.
+	// high on every line after a file's first (measured on small files,
+	// TestCapturedColumnsAreOffByOne); its behaviour across the read
+	// boundaries of large files was not measured, so observations keep the
+	// line range only.
 	LimColumnsNotRecorded = "secret_columns_not_recorded"
 )
 
