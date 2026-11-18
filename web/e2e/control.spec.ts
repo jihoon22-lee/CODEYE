@@ -25,6 +25,9 @@ test('real session, project registration, durable request and cancellation', asy
   const run = await response.json();
   expect(run.status).toBe('queued');
   await expect(page.getByText('실행기가 아직 연결되지 않아 시작되지 않았습니다.', { exact: true })).toBeVisible();
+  // W22: Chromium has EventSource, so the panel follows the run's event stream (same origin,
+  // session cookie, CSP connect-src 'self') instead of polling.
+  await expect(page.getByText(/^실시간 연결로 상태가 바뀔 때 갱신합니다/)).toBeVisible();
   // W15: stages come from the same server aggregation for detail and list. A queued
   // run has not started source acquisition and has no plan yet.
   const source = page.getByRole('button', { name: '소스 확보 ◷ 대기', exact: true });

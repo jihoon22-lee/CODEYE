@@ -67,6 +67,8 @@ export type ProjectActivity = Omit<StageSummary, 'detail'> & {
   waiting_reason?: string | null; // only when the representative run is queued
   last_report: { run_id: string; revision: number; published_at: string } | null;
 };
+// One plan revision after the first: a task added after the plan was fixed (W22).
+export type PlanChange = { revision: number; reason: string; stage: string | null; weight: number; planned_weight: number; recorded_at: string | null };
 export type RunProgress = {
   stage: string;
   plan_revision: number | null;
@@ -76,12 +78,22 @@ export type RunProgress = {
   waiting_reason: string | null;
   // Optional W15 additions; undefined when the server predates them (treated as not recorded).
   stages?: StageSummary;
+  // Optional W22 additions: the weighted plan behind estimated_percent and why its denominator changed.
+  planned_weight?: number | null;
+  finished_weight?: number | null;
+  weight_basis?: string | null; // task_count | declared | mixed (open string)
+  plan_changes?: PlanChange[];
 };
+// Why the run exists (W22). kind is an open string; schedule runs name their occurrence.
+export type RunTrigger = { kind: string; schedule_id?: string; scheduled_for?: string };
 export type RunView = {
   id: string;
   project_id: string;
   status: string; // open string: an unrecognised value must reach the UI as "unknown"
   version: number;
+  // W22: the run's event sequence when the view was read; the event stream cursor. Absent before W22.
+  event_sequence?: number;
+  trigger?: RunTrigger;
   snapshot_id: string | null;
   quality_verdict: string | null;
   reportRevision?: number;
@@ -92,9 +104,48 @@ export const RUN_BODY = { profile: 'deep-review', source_policy: 'latest_at_acqu
 
 export type CreateProjectBody = { name?: string; source: Source };
 
+// ---- W22 schedules (members list; managers create and delete) ----
+export type ScheduleOccurrence = { scheduled_for: string; state: string; reason: string | null; missed_from: string | null; decided_at: string; run_id: string | null };
+export type Schedule = {
+  id: string;
+  project_id: string;
+  cron: string;
+  timezone: string;
+  overlap: string;
+  misfire: string;
+  enabled: boolean;
+  version: number;
+  next_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+  last_occurrence: ScheduleOccurrence | null;
+  pending_occurrence: { scheduled_for: string; missed_from: string | null } | null;
+};
+export type ScheduleList = { items: Schedule[]; can_manage: boolean };
+export type CreateScheduleBody = { cron: string; timezone: string; overlap?: string; misfire?: string; run: typeof RUN_BODY };
+
+// The subset of EventSource the run stream uses; injectable for tests.
+export type EventSourceLike = {
+  readonly readyState: number;
+  onopen: ((event: Event) => void) | null;
+  onmessage: ((event: MessageEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  addEventListener(type: string, listener: (event: MessageEvent) => void): void;
+  close(): void;
+};
+export type EventSourceFactory = (url: string) => EventSourceLike;
+
+function defaultEventSource(): EventSourceFactory | null {
+  const ES = (globalThis as { EventSource?: new (url: string) => EventSourceLike }).EventSource;
+  // Same origin: the browser attaches the session cookie itself.
+  return typeof ES === 'function' ? url => new ES(url) : null;
+}
+
 export type ApiOptions = {
   fetch?: typeof fetch;
   onUnauthorized?: () => void;
+  // undefined: the browser's EventSource when it exists; null: never stream (polling only).
+  eventSource?: EventSourceFactory | null;
 };
 
 type Query = { method: string; path: string; body?: unknown; headers?: Record<string, string>; signal?: AbortSignal; session?: boolean };
@@ -153,6 +204,8 @@ export function createApi(options: ApiOptions = {}) {
 
   const json = <T>(q: Query, parse: (v: unknown) => T) => request(q, parse);
   const run = (id: string) => `/api/v1/runs/${encodeURIComponent(id)}`;
+  const schedules = (projectId: string) => `/api/v1/projects/${encodeURIComponent(projectId)}/schedules`;
+  const eventSource = options.eventSource === undefined ? defaultEventSource() : options.eventSource;
 
   return {
     setCsrf(token: string | null) { csrf = token; },
@@ -170,10 +223,19 @@ export function createApi(options: ApiOptions = {}) {
     getRun: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: run(id), signal }, parseRun),
     getReport: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: reportURL(id, 'json', true), signal }, v => parseAnalysisReport(v, id)),
     cancelRun: (id: string) => json({ method: 'POST', path: `${run(id)}/cancel` }, parseAck),
+    // null when this browser (or test) has no EventSource: callers poll instead.
+    openRunEvents: eventSource === null ? null : (id: string, cursor: number) => eventSource(runEventsURL(id, cursor)),
+    listSchedules: (projectId: string, signal?: AbortSignal) => json({ method: 'GET', path: schedules(projectId), signal }, parseScheduleList),
+    createSchedule: (projectId: string, body: CreateScheduleBody, idempotencyKey: string) =>
+      json({ method: 'POST', path: schedules(projectId), body, headers: { 'Idempotency-Key': idempotencyKey } }, parseSchedule),
+    deleteSchedule: (projectId: string, id: string, version: number) =>
+      json({ method: 'DELETE', path: `${schedules(projectId)}/${encodeURIComponent(id)}`, headers: { 'If-Match': `"${version}"` } }, () => undefined),
   };
 }
 
 export type Api = ReturnType<typeof createApi>;
+
+export const runEventsURL = (id: string, cursor: number) => `/api/v1/runs/${encodeURIComponent(id)}/events?cursor=${cursor}`;
 
 function httpError(status: number, text: string): ApiError {
   let code = `http_${status}`;
@@ -336,7 +398,20 @@ function parseAck(v: unknown): RunAck {
   const o = rec(v);
   return { id: str(o.id), status: str(o.status), version: int(o.version, 1), url: nullableStr(o.url) };
 }
-function parseRun(v: unknown): RunView {
+function parsePlanChange(v: unknown): PlanChange {
+  const o = rec(v);
+  return { revision: int(o.revision, 2), reason: str(o.reason), stage: nullableStr(o.stage), weight: int(o.weight, 1), planned_weight: int(o.planned_weight, 1), recorded_at: nullableDate(o.recorded_at) };
+}
+function parseTrigger(v: unknown): RunTrigger {
+  const o = rec(v);
+  return {
+    kind: str(o.kind),
+    ...(o.schedule_id == null ? {} : { schedule_id: str(o.schedule_id) }),
+    ...(o.scheduled_for == null ? {} : { scheduled_for: date(o.scheduled_for) }),
+  };
+}
+// Also parses the run.view event of the run event stream (the same document).
+export function parseRun(v: unknown): RunView {
   const o = rec(v);
   const p = rec(o.progress);
   const percent = p.estimated_percent === null || p.estimated_percent === undefined ? null : p.estimated_percent;
@@ -346,6 +421,8 @@ function parseRun(v: unknown): RunView {
     project_id: str(o.project_id),
     status: str(o.status),
     version: int(o.version, 1),
+    ...(o.event_sequence === undefined ? {} : { event_sequence: int(o.event_sequence) }),
+    ...(o.trigger == null ? {} : { trigger: parseTrigger(o.trigger) }),
     snapshot_id: nullableStr(o.snapshot_id),
     quality_verdict: nullableStr(o.quality_verdict),
     ...(o.report == null ? {} : {reportRevision:int(rec(o.report).revision, 1)}),
@@ -357,6 +434,45 @@ function parseRun(v: unknown): RunView {
       estimated_percent: percent,
       waiting_reason: nullableStr(p.waiting_reason),
       ...(p.detail == null ? {} : { stages: parseStageSummary(p) }),
+      ...(p.planned_weight === undefined ? {} : { planned_weight: nullableInt(p.planned_weight) }),
+      ...(p.finished_weight === undefined ? {} : { finished_weight: nullableInt(p.finished_weight) }),
+      ...(p.weight_basis === undefined ? {} : { weight_basis: nullableStr(p.weight_basis) }),
+      ...(p.plan_changes === undefined ? {} : { plan_changes: list(parsePlanChange)(p.plan_changes) }),
     },
   };
+}
+function parseOccurrence(v: unknown): ScheduleOccurrence {
+  const o = rec(v);
+  return { scheduled_for: date(o.scheduled_for), state: str(o.state), reason: nullableStr(o.reason), missed_from: nullableDate(o.missed_from), decided_at: date(o.decided_at), run_id: nullableStr(o.run_id) };
+}
+function bool(v: unknown): boolean {
+  if (typeof v !== 'boolean') throw new TypeError('boolean');
+  return v;
+}
+function parseSchedule(v: unknown): Schedule {
+  const o = rec(v);
+  let pending: Schedule['pending_occurrence'] = null;
+  if (o.pending_occurrence != null) {
+    const q = rec(o.pending_occurrence);
+    pending = { scheduled_for: date(q.scheduled_for), missed_from: nullableDate(q.missed_from) };
+  }
+  return {
+    id: str(o.id),
+    project_id: str(o.project_id),
+    cron: str(o.cron),
+    timezone: str(o.timezone),
+    overlap: str(o.overlap),
+    misfire: str(o.misfire),
+    enabled: bool(o.enabled),
+    version: int(o.version, 1),
+    next_run_at: nullableDate(o.next_run_at),
+    created_at: date(o.created_at),
+    updated_at: date(o.updated_at),
+    last_occurrence: o.last_occurrence == null ? null : parseOccurrence(o.last_occurrence),
+    pending_occurrence: pending,
+  };
+}
+function parseScheduleList(v: unknown): ScheduleList {
+  const o = rec(v);
+  return { items: list(parseSchedule)(o.items), can_manage: bool(o.can_manage) };
 }

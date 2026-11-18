@@ -1,7 +1,7 @@
 import { act, render } from '@testing-library/react';
 import { vi } from 'vitest';
 import { App } from './App';
-import { createApi } from './api';
+import { createApi, type EventSourceFactory } from './api';
 import { createIdempotency } from './idempotency';
 import { createSessionController } from './session';
 import { PROJECT, SESSION, apiError, json, mockFetch, runView, type Call, type Handler } from './test-utils';
@@ -32,14 +32,16 @@ export function backend(over: Partial<Record<string, Override>> = {}): Handler {
       case 'POST /api/v1/projects/p1/runs': return json(202, { id: 'run1', status: 'queued', version: 1, url: '/api/v1/runs/run1' });
       case 'GET /api/v1/runs/run1': return json(200, runView());
       case 'POST /api/v1/runs/run1/cancel': return json(202, { id: 'run1', status: 'cancel_requested', version: 2, url: null });
+      case 'GET /api/v1/projects/p1/schedules': return json(200, { items: [], can_manage: false });
     }
     return apiError(404, 'NOT_FOUND');
   };
 }
 
-export function renderApp(handler: Handler = backend(), options: { hash?: string } = {}) {
+export function renderApp(handler: Handler = backend(), options: { hash?: string; eventSource?: EventSourceFactory } = {}) {
   const m = mockFetch(handler);
-  const api = createApi({ fetch: m.fetch });
+  // jsdom has no EventSource: without a fake the app polls, as before W22.
+  const api = createApi({ fetch: m.fetch, eventSource: options.eventSource ?? null });
   const replaceState = vi.fn();
   const controller = createSessionController(api, {
     location: { hash: options.hash ?? '', pathname: '/', search: '' },
