@@ -144,6 +144,9 @@ func validateFinding(f Finding, snapshot string, obs, arts map[string]bool) erro
 		!validations[f.Validation] || !dispositions[f.Disposition] || f.Impact == "" || f.Recommendation.Summary == "" {
 		return invalidf("finding %s fields are invalid", f.ID)
 	}
+	if !validBasis(f) {
+		return invalidf("finding %s fingerprint basis is invalid", f.ID)
+	}
 	if len(f.Conditions) == 0 || len(f.Locations) == 0 || len(f.Claims) == 0 || len(f.Evidence) == 0 || len(f.Verification) == 0 ||
 		f.CounterevidenceIDs == nil || f.ObservationIDs == nil || f.Limitations == nil || f.Recommendation.Tradeoffs == nil {
 		return invalidf("finding %s is missing required parts", f.ID)
@@ -314,6 +317,12 @@ func Project(r Report, includeCode bool) Report {
 			l.Symbol = "" // symbol names are code identifiers
 			g.Locations[j] = l
 		}
+		// The fingerprint, its basis and the move key are unkeyed digests
+		// over code-derived inputs (tool message, symbols, context hash): a
+		// reader of the export could confirm guessed code against them. The
+		// code-free export therefore carries no identity; comparison and
+		// dispositions read it through the project-ACL API.
+		g.Fingerprint, g.FingerprintBasis, g.DispositionVersion = "", nil, nil
 		out.Findings[i] = g
 	}
 	return out

@@ -145,7 +145,7 @@ func (e *env) start(webDir string) {
 
 type opts struct {
 	host, origin, cookie, csrf, ctype, idem, fetchSite string
-	ifMatch                                            string
+	ifMatch, ifNoneMatch                               string
 	noOrigin                                           bool
 }
 
@@ -205,6 +205,9 @@ func (e *env) do(method, path string, body any, o opts) resp {
 	}
 	if o.ifMatch != "" {
 		req.Header.Set("If-Match", o.ifMatch)
+	}
+	if o.ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", o.ifNoneMatch)
 	}
 	res, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {

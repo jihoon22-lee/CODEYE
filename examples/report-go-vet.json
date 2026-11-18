@@ -393,7 +393,6 @@
           "task_execution_id": "0db5c46f-5d30-4c27-aebe-628fa8730b26/62df694f-35cf-471b-9b2d-6303b2d33f2e/1"
         }
       ],
-      "fingerprint": "go-vet-fp-v1:f622f69ac78635b7beafee97bbfc710f1a07eaae9b0be81077809c7edefb1786",
       "id": "fnd_8dc98efebf4ba6bda61d",
       "impact": "도구가 보고한 진단이다. 실제 영향은 검토하지 않았다(validation=unreviewed).",
       "limitations": [

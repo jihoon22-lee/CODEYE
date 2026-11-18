@@ -21,16 +21,35 @@
     "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}},
     "counterevidence_ids": {"$ref": "#/$defs/ids"},
     "observation_ids": {"$ref": "#/$defs/ids"},
-    "fingerprint": {"type": "string"},
+    "fingerprint": {"type": "string", "description": "W23 이후(builder 3) fp2:<sha256>. 이전 revision의 값은 저장된 형식 그대로 둔다(비교 불가)."},
+    "fingerprint_basis": {"$ref": "#/$defs/fingerprintBasis"},
+    "disposition_version": {"type": "integer", "minimum": 1, "description": "게시 시점에 적용한 사람 검토 version. disposition이 open이면 없다."},
     "recommendation": {"type": "object", "additionalProperties": false, "required": ["summary", "tradeoffs"], "properties": {"summary": {"type": "string", "minLength": 1}, "tradeoffs": {"$ref": "#/$defs/strings"}}},
     "verification": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
     "limitations": {"$ref": "#/$defs/strings"}
   },
   "allOf": [
-    {"if": {"properties": {"validation": {"const": "reproduced"}}, "required": ["validation"]}, "then": {"properties": {"evidence": {"contains": {"properties": {"kind": {"const": "execution"}}, "required": ["kind"]}}}}}
+    {"if": {"properties": {"validation": {"const": "reproduced"}}, "required": ["validation"]}, "then": {"properties": {"evidence": {"contains": {"properties": {"kind": {"const": "execution"}}, "required": ["kind"]}}}}},
+    {"if": {"required": ["fingerprint_basis"]}, "then": {"required": ["fingerprint"], "properties": {"fingerprint": {"pattern": "^fp2:[0-9a-f]{64}$"}}}},
+    {"if": {"required": ["disposition_version"]}, "then": {"required": ["fingerprint_basis"], "properties": {"disposition": {"not": {"const": "open"}}}}}
   ],
   "$defs": {
     "ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "fingerprintBasis": {
+      "type": "object", "additionalProperties": false,
+      "description": "fp2 식별 입력 중 저장 가능한 부분. 정규화한 조건(도구 원문)은 해시에만 쓰고 저장하지 않는다. 코드 미포함 내보내기는 symbols를 비운다.",
+      "required": ["scheme", "producer", "analyzer", "rule", "paths", "symbols", "context", "move_key"],
+      "properties": {
+        "scheme": {"const": "fp2"},
+        "producer": {"enum": ["tool", "model"]},
+        "analyzer": {"type": "string", "minLength": 1},
+        "rule": {"type": "string", "minLength": 1},
+        "paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "symbols": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "context": {"type": "string", "pattern": "^(unavailable|[0-9a-f]{64})$"},
+        "move_key": {"type": "string", "pattern": "^(|fp2:[0-9a-f]{64})$"}
+      }
+    },
     "strings": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "location": {"type": "object", "additionalProperties": false, "required": ["snapshot_id", "path", "start_line", "end_line"], "properties": {"snapshot_id": {"type": "string", "minLength": 1}, "path": {"type": "string", "minLength": 1}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "symbol": {"type": "string"}}},
     "evidence": {

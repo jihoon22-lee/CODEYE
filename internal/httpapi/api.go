@@ -77,6 +77,9 @@ func (s *Server) apiRoutes() []route {
 		r("POST", "runs/{id}/cancel", "runs.cancel", true, false, (*Server).cancelRun),
 		r("GET", "runs/{id}/report", "runs.report", true, false, (*Server).getReport),
 		r("GET", "runs/{id}/reports", "runs.reports", true, false, (*Server).listReports),
+		r("GET", "runs/{id}/comparison", "runs.comparison", true, false, (*Server).getComparison),
+		r("GET", "projects/{id}/finding-reviews", "finding_reviews.list", true, false, (*Server).listFindingReviews),
+		r("POST", "projects/{id}/finding-reviews", "finding_reviews.create", true, true, (*Server).setFindingReview),
 	}, s.nodeRoutes()...)
 }
 

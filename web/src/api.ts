@@ -1,4 +1,5 @@
 import { parseAnalysisReport, reportURL } from './analysisReport';
+import { comparisonURL, parseComparison, parseFindingReview, type FindingReviewBody } from './comparison';
 // Same-origin client for the CODEYE control API (docs/11, api/openapi.yaml).
 // Credentials are the HttpOnly session cookie, which the browser attaches itself.
 // The CSRF token lives only in this object's memory.
@@ -228,6 +229,17 @@ export function createApi(options: ApiOptions = {}) {
     listSchedules: (projectId: string, signal?: AbortSignal) => json({ method: 'GET', path: schedules(projectId), signal }, parseScheduleList),
     createSchedule: (projectId: string, body: CreateScheduleBody, idempotencyKey: string) =>
       json({ method: 'POST', path: schedules(projectId), body, headers: { 'Idempotency-Key': idempotencyKey } }, parseSchedule),
+    // W23: the comparison of one published revision with its baseline, and human finding reviews.
+    getComparison: (id: string, revision: number, signal?: AbortSignal) =>
+      json({ method: 'GET', path: comparisonURL(id, revision), signal }, v => parseComparison(v, id, revision)),
+    // version: the fingerprint's current review version (If-Match), or null for its first review (If-None-Match: *).
+    createFindingReview: (projectId: string, body: FindingReviewBody, version: number | null, idempotencyKey: string) =>
+      json({
+        method: 'POST',
+        path: `/api/v1/projects/${encodeURIComponent(projectId)}/finding-reviews`,
+        body,
+        headers: { 'Idempotency-Key': idempotencyKey, ...(version === null ? { 'If-None-Match': '*' } : { 'If-Match': `"${version}"` }) },
+      }, parseFindingReview),
     deleteSchedule: (projectId: string, id: string, version: number) =>
       json({ method: 'DELETE', path: `${schedules(projectId)}/${encodeURIComponent(id)}`, headers: { 'If-Match': `"${version}"` } }, () => undefined),
   };
