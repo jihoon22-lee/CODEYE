@@ -291,14 +291,21 @@ func (s *r1Stage) documents() analysis.TaskResult {
 			in.NotRead = append(in.NotRead, docNotRead{Path: it.Path, AppliesTo: it.AppliesTo, Class: it.Class, Status: it.Status, Reason: it.Reason})
 		}
 	}
+	short := func(l []string) []string {
+		if len(l) > 8 {
+			s.rec.Limitations = addLim(s.rec.Limitations, "document_lists_shortened")
+			return l[:8]
+		}
+		return l
+	}
 	for _, m := range f.doc.Documents.Modules {
 		if len(in.Modules) < 32 {
-			in.Modules = append(in.Modules, m)
+			in.Modules = append(in.Modules, envdoc.ModuleDocs{Module: m.Module, State: m.State, Own: short(m.Own), Inherited: short(m.Inherited)})
 		}
 	}
 	for _, o := range f.doc.Documents.OverlappingGuidance {
 		if len(in.Overlapping) < 16 {
-			in.Overlapping = append(in.Overlapping, envdoc.Overlap{Path: o.Path, Documents: o.Documents, Assessment: o.Assessment})
+			in.Overlapping = append(in.Overlapping, envdoc.Overlap{Path: o.Path, Documents: short(o.Documents), Assessment: o.Assessment})
 		}
 	}
 	class := map[string]string{}

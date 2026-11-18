@@ -159,7 +159,7 @@ func (s *r1Stage) instructions(contract string) string {
 	return s.pack.Text + "\n" + contract + r1Rules
 }
 
-const r1Rules = "\nUse only the provided input. No code execution, test runs, reproduction or external access: never claim any. Cite only evidence and observation IDs given in this input; add no paths, line numbers or other fields. Keep every text field under 200 characters of concise Korean prose."
+const r1Rules = "\nUse only the provided input. No code execution, test runs, reproduction or external access: never claim any. Cite only evidence and observation IDs given in this input; add no paths, line numbers or other fields. Keep every text field under 120 characters of concise Korean prose."
 
 const r1RepairRules = "\nFormat repair: your previous output was rejected with the platform error codes in input.repair.output_errors. Return the complete result again in the same contract, citing only IDs from this input."
 

@@ -1,6 +1,7 @@
 package review
 
 import (
+	"errors"
 	"slices"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -29,6 +30,10 @@ type r1VerifyInput struct {
 	Candidates   []record.R1Candidate    `json:"candidates"`
 	Repair       *repairInput            `json:"repair,omitempty"`
 }
+
+// limVerifyBudget marks candidates left unreviewed because the verifier
+// request could not carry them within PromptBudget.
+const limVerifyBudget = "verification_budget_exceeded"
 
 func verificationClaimsExecution(v record.Verification) bool {
 	for _, t := range append(append(append([]string{v.SeverityReason, v.Impact}, v.ValidConditions...), v.InvalidConditions...), append(v.UnresolvedAssumptions, v.NextVerification...)...) {
@@ -111,50 +116,100 @@ func (s *r1Stage) verify() analysis.TaskResult {
 		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 	}
 	s.rec.Limitations = addLim(s.rec.Limitations, lims...)
-	// Cited excerpts are kept; expansion and uncited context go first when
-	// the request must shrink to fit.
-	var ordered []record.Excerpt
-	for _, e := range withText {
-		if cited[e.ID] {
-			ordered = append(ordered, e)
-		}
-	}
-	keep := len(ordered)
-	ordered = append(ordered, extra...)
-	for _, e := range withText {
-		if !cited[e.ID] {
-			ordered = append(ordered, e)
-		}
-	}
-	if len(ordered) > 40 {
-		ordered = ordered[:max(keep, 40)]
-	}
-	var in r1VerifyInput
-	in.Scope.Snapshot, in.Contracts, in.Observations, in.Candidates = s.j.Snapshot.Digest, contracts, s.rec.Observations, candidates
+	// The request must fit PromptBudget. Expansion, uncited context and
+	// contracts go first; then candidates are verified as a prefix (investigate
+	// before interpret) and the rest stay unreviewed with a limitation. Every
+	// sent candidate keeps all excerpts it cites.
+	in := r1VerifyInput{Observations: s.rec.Observations}
+	in.Scope.Snapshot = s.j.Snapshot.Digest
 	instructions := s.instructions(r1VerifyContract)
-	build := func(list []record.Excerpt) ([]byte, error) {
-		x := in
-		x.Scope.Excerpts, x.Scope.Limitations = list, s.rec.Limitations
-		return marshal(x)
+	var sent []record.Excerpt
+	verified := 0
+	fitted := false
+	for n := len(candidates); n >= 1 && !fitted; n-- {
+		citedBy := map[string]bool{}
+		for _, c := range candidates[:n] {
+			for _, id := range c.Evidence {
+				citedBy[id] = true
+			}
+		}
+		var ordered []record.Excerpt
+		for _, e := range withText {
+			if citedBy[e.ID] {
+				ordered = append(ordered, e)
+			}
+		}
+		keep := len(ordered)
+		ordered = append(ordered, extra...)
+		for _, e := range withText {
+			if !citedBy[e.ID] {
+				ordered = append(ordered, e)
+			}
+		}
+		if len(ordered) > 40 {
+			ordered = ordered[:max(keep, 40)]
+		}
+		for _, withContracts := range []bool{true, false} {
+			x := in
+			x.Candidates, x.Contracts = candidates[:n], []record.Contract{}
+			if withContracts {
+				x.Contracts = contracts
+			}
+			build := func(list []record.Excerpt) ([]byte, error) {
+				y := x
+				y.Scope.Excerpts, y.Scope.Limitations = list, s.rec.Limitations
+				return marshal(y)
+			}
+			list, trimmed, err := s.fitExcerpts(instructions, keep, ordered, build)
+			if errors.Is(err, errTooLarge) {
+				continue
+			}
+			if err != nil {
+				s.setEvidence(context)
+				return s.inputFailure(err)
+			}
+			if trimmed {
+				s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, limCallersOutside)
+			}
+			if !withContracts && len(contracts) > 0 {
+				s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, "contracts_outside_verify_input")
+			}
+			in, sent, verified, fitted = x, list, n, true
+			break
+		}
 	}
-	sent, trimmed, err := s.fitExcerpts(instructions, keep, ordered, build)
-	if err != nil {
-		s.setEvidence(ordered[:keep])
-		return s.inputFailure(err)
-	}
-	if trimmed {
-		s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, limCallersOutside)
+	if !fitted {
+		s.setEvidence(context)
+		return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 	}
 	in.Scope.Excerpts, in.Scope.Limitations = sent, s.rec.Limitations
-	s.setEvidence(sent)
-	catalog := catalogOf(s.rec.Evidence)
+	// The record keeps every candidate (its lineage) with the excerpts they
+	// cite, plus what was sent.
+	recorded := append([]record.Excerpt{}, sent...)
+	have := catalogOf(sent)
+	for _, e := range context {
+		if _, ok := have[e.ID]; !ok && cited[e.ID] {
+			recorded = append(recorded, e)
+		}
+	}
+	s.setEvidence(recorded)
+	catalog := catalogOf(sent)
+	for id, e := range catalog {
+		e.Text = ""
+		catalog[id] = e
+	}
 	ids := make([]string, 0, len(sent))
-	for _, e := range s.rec.Evidence {
+	for _, e := range sent {
 		ids = append(ids, e.ID)
+	}
+	budgetDropped := candidates[verified:]
+	candidatesSent := candidates[:verified]
+	if len(budgetDropped) > 0 {
+		s.rec.Limitations = addLim(s.rec.Limitations, limVerifyBudget)
 	}
 
 	accepted := map[string]record.Verification{}
-	pending := candidates
+	pending := candidatesSent
 	var repair *repairInput
 	for attempt := 1; attempt <= 2 && len(pending) > 0; attempt++ {
 		if s.ctx.Err() != nil {
@@ -233,7 +288,11 @@ func (s *r1Stage) verify() analysis.TaskResult {
 	s.rec.Verifications = make([]record.Verification, len(candidates))
 	for i, c := range candidates {
 		v, ok := accepted[c.ID]
-		if !ok {
+		switch {
+		case ok:
+		case i >= verified:
+			v = unreviewed(c.ID, limVerifyBudget)
+		default:
 			v = unreviewed(c.ID, record.LimQuarantined)
 			s.rec.Limitations = addLim(s.rec.Limitations, record.LimQuarantined)
 		}
@@ -243,8 +302,12 @@ func (s *r1Stage) verify() analysis.TaskResult {
 		s.rec.Verifications[i] = v
 	}
 	res := s.finish()
-	if res.Status == domain.TaskSucceeded && len(pending) > 0 {
+	switch {
+	case res.Status != domain.TaskSucceeded:
+	case len(pending) > 0:
 		res.Status, res.Reason = domain.TaskFailed, "review_output_incomplete"
+	case len(budgetDropped) > 0:
+		res.Status, res.Reason = domain.TaskFailed, "review_input_incomplete"
 	}
 	return res
 }

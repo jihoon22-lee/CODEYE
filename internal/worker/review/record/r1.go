@@ -38,8 +38,10 @@ const (
 
 	r1MaxEvidence     = 40
 	r1MaxObservations = 16
-	r1MaxText         = 600
-	r1MaxCalls        = 2
+	// r1MaxText bounds the JSON-encoded size of one R1 model text field, so a
+	// downstream request carrying it keeps within the request budget.
+	r1MaxText  = 400
+	r1MaxCalls = 2
 )
 
 // R1Stages in plan order.
@@ -202,9 +204,17 @@ var executionClaim = regexp.MustCompile(`(재현|실행|통과)(됨|된 것|되�
 // reproduction the platform never performed.
 func ClaimsExecution(s string) bool { return executionClaim.MatchString(s) }
 
-// R1Text bounds one R1 model text field.
+// R1Text bounds one R1 model text field (JSON-encoded size, credentials,
+// execution claims).
 func R1Text(s string) bool {
-	return SafeText(s) && len(s) <= r1MaxText && !ClaimsExecution(s)
+	return SafeText(s) && JSONLen(s) <= r1MaxText && !ClaimsExecution(s)
+}
+
+// JSONLen is the size of s encoded as a JSON string by encoding/json
+// (HTML-escaped, so <, > and & take six bytes each).
+func JSONLen(s string) int {
+	b, _ := json.Marshal(s)
+	return len(b)
 }
 
 // ValidScopePath accepts "." or a snapshot-relative path.

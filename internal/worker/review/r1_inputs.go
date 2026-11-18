@@ -17,19 +17,23 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// Bounds of the review-r1 inputs. Every request must also fit PromptBudget.
+// Bounds of the review-r1 inputs, in JSON-encoded bytes of excerpt text
+// (encoding/json escapes <, > and & to six bytes). Every request must also
+// fit PromptBudget; roles trim excerpts to fit and record it.
 const (
 	r1MaxCodeFiles    = 8
-	r1MaxCodeBytes    = 14000
+	r1MaxCodeFile     = 2400
+	r1MaxCodeBytes    = 12000
 	r1MaxDocs         = 8
-	r1MaxDocBytes     = 2400
+	r1MaxDocBytes     = 2000
 	r1MaxDocLines     = 40
-	r1MaxDocsBytes    = 12000
+	r1MaxDocsBytes    = 10000
 	r1MaxRequirements = 16
 	r1MaxObservations = 8
-	r1MaxWindows      = 6
+	r1MaxTools        = 8
+	r1MaxWindows      = 4
 	r1WindowRadius    = 10
-	r1MaxWindowBytes  = 2000
+	r1MaxWindowBytes  = 1600
 )
 
 func normalizedScope(s domain.Scope) domain.Scope {
@@ -75,8 +79,8 @@ func (s *r1Stage) readLines(e source.Entry, start, end int) (string, int, bool, 
 	return strings.Join(lines[start-1:end], "\n"), len(lines), true, nil
 }
 
-// excerpt builds a bounded excerpt of up to maxLines lines and maxBytes from
-// line start. total is the file's line count.
+// excerpt builds a bounded excerpt of up to maxLines lines and maxBytes of
+// JSON-encoded text from line start. total is the file's line count.
 func (s *r1Stage) excerpt(e source.Entry, kind, origin string, start, maxLines, maxBytes int) (x record.Excerpt, total int, ok bool, err error) {
 	text, total, ok, err := s.readLines(e, start, start+maxLines-1)
 	if err != nil || !ok {
@@ -85,13 +89,14 @@ func (s *r1Stage) excerpt(e source.Entry, kind, origin string, start, maxLines, 
 	var kept []string
 	used := 0
 	for _, line := range strings.Split(text, "\n") {
-		if used+len(line)+1 > maxBytes {
+		cost := record.JSONLen(line)
+		if used+cost > maxBytes {
 			break
 		}
 		kept = append(kept, line)
-		used += len(line) + 1
+		used += cost
 	}
-	if len(kept) == 0 || used <= 1 {
+	if len(kept) == 0 || strings.TrimSpace(strings.Join(kept, "")) == "" {
 		return record.Excerpt{}, total, false, nil
 	}
 	end := start + len(kept) - 1
@@ -361,7 +366,7 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 			if strings.HasSuffix(e.Path, "_test.go") {
 				kind = "test"
 			}
-			x, total, ok, err := s.excerpt(e, kind, "context", 1, 50, min(3200, remain))
+			x, total, ok, err := s.excerpt(e, kind, "context", 1, 50, min(r1MaxCodeFile, remain))
 			if err != nil {
 				return nil, nil, err
 			}
@@ -372,7 +377,7 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 				lims = append(lims, "excerpt_only")
 			}
 			out = append(out, x)
-			remain -= len(x.Text) + 1
+			remain -= record.JSONLen(x.Text)
 		}
 		if !progressed {
 			break
@@ -426,9 +431,12 @@ func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, [
 		}
 		lims := []string{}
 		for _, l := range d.doc.Limitations {
-			if record.ValidCode(l) {
+			if record.ValidCode(l) && len(lims) < 8 {
 				lims = append(lims, l)
 			}
+		}
+		if len(tools) >= r1MaxTools {
+			continue
 		}
 		tools = append(tools, toolInput{TaskKey: d.key, Tool: d.doc.AnalyzerID, ToolVersion: d.doc.ToolVersion, Module: d.doc.Module.Dir, TaskStatus: string(d.doc.Outcome.TaskStatus),
 			ExitClass: d.doc.Outcome.ExitClass, PartialParse: d.doc.Outcome.PartialParse, ParseOK: d.doc.Parse.OK, Observations: len(d.doc.Observations), Limitations: lims})
@@ -533,7 +541,7 @@ func (s *r1Stage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, []s
 			lims = append(lims, "document_excerpt_only")
 		}
 		out = append(out, x)
-		remain -= len(x.Text) + 1
+		remain -= record.JSONLen(x.Text)
 	}
 	return out, addLim(nil, lims...), nil
 }
