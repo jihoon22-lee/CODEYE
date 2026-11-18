@@ -1,0 +1,162 @@
+{
+ "agents": 1,
+ "analyzers": {
+  "go": {
+   "path": "~/.local/lib/codeye-go-1.27.4/bin/go",
+   "sha256": "de0ae3e082ce7599eae4fb69fa2ef1e43b8f31ffd3fce62cdf81930aa9005050"
+  },
+  "go_mod_cache": false,
+  "observed": {
+   "cpp.none": [
+    "None"
+   ],
+   "go.staticcheck": [
+    "2026.2.2 (0.8.2)"
+   ],
+   "go.vet": [
+    "go1.27.4"
+   ],
+   "javascript.none": [
+    "None"
+   ],
+   "python.none": [
+    "None"
+   ]
+  },
+  "repo_code_grant": true,
+  "toolchain_path": "/usr/bin:/bin",
+  "tools": {
+   "cargo": {
+    "path": "~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+    "sha256": "a670e02cfa39ac2e53f77a2d911ca1fc9e2c479b0603ec956625be1daf24e3af"
+   },
+   "clippy": {
+    "path": "~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo-clippy",
+    "sha256": "4255f7671a17fba900ffd84a20f1dd0c986d52a2404496d3b7518f5044de5663"
+   },
+   "staticcheck": {
+    "path": "~/.local/share/codeye-tools/go/bin/staticcheck",
+    "sha256": "46d9c1dacfac2b22d601071b43bf5f46010d5fae50323a5bdca0ef6a47d55a77"
+   }
+  }
+ },
+ "batch": "tools-all",
+ "budget": null,
+ "checkout": {
+  "commit": "e2f203b0a5d3981734216dacfd4c0624a833bd2a",
+  "dirty": true
+ },
+ "condition": "tools",
+ "corpus": {
+  "cases": 55,
+  "digest": "ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4"
+ },
+ "counts": {
+  "partial": 100
+ },
+ "dry_run": false,
+ "finished_at": "2026-11-18T14:18:24Z",
+ "forbidden": null,
+ "holdout": {
+  "labels": [],
+  "prior_revisions": [],
+  "registered": true
+ },
+ "max_workers": 3,
+ "model": null,
+ "notes": [
+  "trimmed copy of the W24 tools dry run for the CI scoring smoke (3 of 100 rows)"
+ ],
+ "os": {
+  "machine": "x86_64",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "python": "3.14.4"
+ },
+ "pack": null,
+ "planted_leak": null,
+ "repeat": 1,
+ "schema": "codeye-r1-eval-manifest",
+ "selection": {
+  "cases": null,
+  "kinds": null,
+  "languages": null,
+  "sample": null,
+  "seed": 0,
+  "strata": {
+   "cpp/defect_pair/semantic_only": {
+    "available": 6,
+    "selected": 6
+   },
+   "cpp/defect_pair/static_likely": {
+    "available": 3,
+    "selected": 3
+   },
+   "cpp/tricky_normal/semantic_only": {
+    "available": 1,
+    "selected": 1
+   },
+   "cpp/tricky_normal/static_likely": {
+    "available": 1,
+    "selected": 1
+   },
+   "go/defect_pair/semantic_only": {
+    "available": 6,
+    "selected": 6
+   },
+   "go/defect_pair/static_likely": {
+    "available": 3,
+    "selected": 3
+   },
+   "go/tricky_normal/semantic_only": {
+    "available": 2,
+    "selected": 2
+   },
+   "javascript/defect_pair/semantic_only": {
+    "available": 5,
+    "selected": 5
+   },
+   "javascript/defect_pair/static_likely": {
+    "available": 4,
+    "selected": 4
+   },
+   "javascript/tricky_normal/semantic_only": {
+    "available": 2,
+    "selected": 2
+   },
+   "python/defect_pair/semantic_only": {
+    "available": 8,
+    "selected": 8
+   },
+   "python/defect_pair/static_likely": {
+    "available": 1,
+    "selected": 1
+   },
+   "python/tricky_normal/static_likely": {
+    "available": 2,
+    "selected": 2
+   },
+   "rust/defect_pair/semantic_only": {
+    "available": 8,
+    "selected": 8
+   },
+   "rust/defect_pair/static_likely": {
+    "available": 1,
+    "selected": 1
+   },
+   "rust/tricky_normal/semantic_only": {
+    "available": 2,
+    "selected": 2
+   }
+  },
+  "variants": null
+ },
+ "started_at": "2026-11-18T14:13:59Z",
+ "stopped": null,
+ "upstream": null,
+ "variants": [
+  "R1-GO-06.after.1",
+  "R1-GO-06.before.1",
+  "R1-GO-09.before.1"
+ ],
+ "version": 1
+}

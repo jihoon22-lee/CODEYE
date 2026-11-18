@@ -24,6 +24,9 @@ python3 scripts/r0_openai_gateway.py \
 | `--max-requests` | 200 | 1~1000. ledger 전체 요청 수 상한이며 낮출 수만 있다 |
 | `--max-input-bytes` | 49152 | 1~65536. 요청당 메시지 텍스트 UTF-8 바이트 합 |
 | `--port` | 0(임시) | 항상 127.0.0.1에만 bind |
+| `--forbidden-phrases` | 없음 | W24 정답 목록(`corpus.py forbidden`). 주면 일치 요청을 막는다. 파일이 없거나 형식이 틀리면 종료 코드 2. 감시용 목록(`purpose: envelope_capture`)은 `--test-upstream`에서만 받는다 |
+| `--allow-model-echo` | 꺼짐 | W24 선택. 이 프로세스가 돌려준 상위 답에 나온 목록 ID는 이후 요청에서 막지 않고 `reserve`에 `echo_matches`로 남긴다. 목록 없이 주면 종료 코드 2 |
+| `--test-upstream` | 없음 | **dry run 전용.** `http://127.0.0.1:PORT`만 받는다. 키를 읽지 않고 환경에서 지운다. 장부 header에 `upstream: test-loopback`을 남기고 실제 장부와 섞지 않는다 |
 
 - **ledger는 R0 전체에서 하나의 영구 경로**(`/tmp` 같은 휘발 경로 금지)를 쓴다. ledger를 잃거나 새 경로를 쓰면 새 USD 9.99 예산이 생기므로, 예산 보장은 같은 ledger 파일을 유지하는 운영 절차에 의존한다.
 - ready file은 반드시 새 경로여야 한다(이미 있으면 종료 코드 2). 0600으로 원자적으로 만들고 내용은 `{"base_url":"http://127.0.0.1:PORT/v1","token":"...","model":"gpt-6.2-sol","pid":N}`이다. SIGTERM/SIGINT 정상 종료 시 삭제한다. SIGKILL 뒤 남은 파일은 무효 token을 담고 있으므로 지운 뒤 새 경로로 다시 시작한다.
@@ -42,7 +45,7 @@ python3 scripts/r0_openai_gateway.py \
 ## 상위 요청
 
 - OpenCode 쪽은 `/v1/chat/completions` 그대로이고, relay→OpenAI 구간만 Responses API를 쓴다(실호출에서 Chat Completions payload가 `unsupported_parameter`로 거부되고 같은 계정·모델의 Responses 직접 호출이 성공한 결과에 따른 변경).
-- 고정 대상: `https://api.openai.com/v1/responses`, `http.client` 직접 연결. 프록시 환경변수·redirect·재시도를 쓰지 않는다. 대상 변경 옵션이나 환경변수는 없다(테스트는 프로세스 내부 hook만 사용).
+- 고정 대상: `https://api.openai.com/v1/responses`, `http.client` 직접 연결. 프록시 환경변수·redirect·재시도를 쓰지 않는다. 대상을 바꾸는 환경변수는 없다. 유일한 예외는 W24 dry run용 `--test-upstream`이다. loopback 주소만 받고, 그 밖의 값은 시작을 거부하며, 실제 대상으로 돌아가는 fallback이 없다.
 - payload는 매번 새로 만든다: `model`, `input`(메시지를 순서대로 `{role, content: 문자열}`로 재구성, role `system|developer|user|assistant`), `max_output_tokens`(≤1536, 추론 토큰 포함, 클라이언트 `max_tokens`/`max_completion_tokens`와 최소값), `reasoning: {effort: "low"}`, `service_tier: "default"`, `store: false`. 응답은 하나이며 스트리밍하지 않는다.
 - 응답에서는 assistant `message` 항목의 `output_text`(없으면 `refusal`)만 읽는다. reasoning 등 다른 출력 항목은 클라이언트에 보내지 않는다. `status: completed`는 `finish_reason: stop`, `incomplete`는 `max_output_tokens`→`length`, `content_filter`→`content_filter`이며 추론이 상한을 모두 쓰면 빈 content와 `length`로 200을 돌려준다. `failed`·`cancelled` 등은 424이고 예약 전액을 차감한다.
 - content가 text part 배열이면 줄바꿈으로 합친다. 이미지·오디오·파일 part, `tool` role, `tool_calls`/`function_call`/`tool_call_id`가 있는 메시지는 400으로 거부한다. 메시지는 64개 이하.
@@ -55,6 +58,7 @@ python3 scripts/r0_openai_gateway.py \
 
 - JSONL, 0600, 소유자 본인, symlink 거부. 모든 갱신은 `flock` 배타 잠금(프로세스 간)과 스레드 잠금 아래에서 전체를 다시 읽고 한 줄을 추가한 뒤 `fsync`한다.
 - 기록: `header`(상한·가격 상수), `cap`(상한 하향), `reserve`, `settle`, `halt`, `clear_halt`, `repair`. 가격 상수가 다른 ledger는 거부한다.
+- W24 추가 기록: `forbidden`(시작 시 정답 목록 SHA-256·항목 수·corpus digest), `blocked`(정답 차단, 일치 항목 ID·역할 표지, 차감 0), `refused`(예산·요청 수·정지로 거절, 차감 0). 기존 상태 계산은 이 기록을 무시한다. `reserve`에는 프롬프트의 `Role:` 줄에서 읽은 역할 표지가 붙는다. 자세한 내용은 [W24 평가](46-w24-evaluation.md#3-정답-차단)를 따른다.
 - `reserve`는 상위 요청 전에 durable하게 기록한다. 마지막 줄이 줄바꿈 없이 끊겨 있으면 쓰기가 끝나지 않은 것이므로(그 요청은 전송되지 않았다) 잘라내고 `repair`를 남긴다. 중간 줄이 깨졌으면 동작을 거부한다.
 - 금액은 정수 microUSD. 공식 standard 단기 컨텍스트 단가 입력 $2, 출력 $10 /1M과 캐시 쓰기 30분 $2.50, 12시간 $5 /1M 중 최악값을 쓴다.
   - 입력 토큰 상한 = 텍스트 UTF-8 바이트 + 메시지당 16 + 고정 256 (BPE 토큰은 최소 1바이트를 덮는다).
@@ -73,6 +77,7 @@ python3 scripts/r0_openai_gateway.py \
 | `usage` | 응답이 보고한 prompt/completion/cached/reasoning 토큰 합 |
 | `standard_rate_estimate_microusd` | 보고 usage × $2/$10 정보용 추정. 청구서가 아니며 승인에 쓰지 않는다 |
 | `settled_by_status`, `halted`, `halt_reasons` | 결과 분포와 정지 상태 |
+| `upstream`, `forbidden_lists`, `blocked_answer_leaks`, `blocked_by_role`, `echo_exempted_requests`, `echo_exempted_by_role`, `refused_by_code` | W24: 장부 종류(시험용이면 `test-loopback`), 읽은 정답 목록과 `allow_model_echo`, 차단·예외·거절 수 |
 
 ## 검증
 
@@ -80,7 +85,7 @@ python3 scripts/r0_openai_gateway.py \
 python3 -m unittest discover -s scripts -p 'test_r0_*.py' -v
 ```
 
-로컬 가짜 OpenAI(Responses API 형식) 서버와 가짜 키·reasoning canary로 25개 시험을 수행한다: 예산 파싱·$9.99 상한, 예약 계산, payload 재구성과 거부, 고정 HTTPS 생성자(기록기), ledger 상한 비증가·재시작·찢긴 줄 복구·손상 거부·권한, 6개 프로세스 동시 예약의 상한 준수, 연속 실패 정지와 해제, HTTP 경계(token·Origin·Host·크기·chunked·미지원 method), 오류 비노출과 전액 차감, usage 누락, tier/usage 이상 정지, 예산 소진, 전체 제한시간, SSE 형식, reasoning 비노출, incomplete/failed 응답, `unsupported_parameter` 오류의 param만 노출, tier 미표시·모델 불일치, CLI ready file·종료·키 비노출, 요청 중 SIGKILL 뒤 재시작 시 전액 차감. 테스트는 실제 `OPENAI_API_KEY`와 프록시 변수를 자식 환경에서 제거한다. 현재 CI(`verify.yml`)는 이 시험을 실행하지 않는다.
+로컬 가짜 OpenAI(Responses API 형식) 서버와 가짜 키·reasoning canary로 25개 시험을 수행한다: 예산 파싱·$9.99 상한, 예약 계산, payload 재구성과 거부, 고정 HTTPS 생성자(기록기), ledger 상한 비증가·재시작·찢긴 줄 복구·손상 거부·권한, 6개 프로세스 동시 예약의 상한 준수, 연속 실패 정지와 해제, HTTP 경계(token·Origin·Host·크기·chunked·미지원 method), 오류 비노출과 전액 차감, usage 누락, tier/usage 이상 정지, 예산 소진, 전체 제한시간, SSE 형식, reasoning 비노출, incomplete/failed 응답, `unsupported_parameter` 오류의 param만 노출, tier 미표시·모델 불일치, CLI ready file·종료·키 비노출, 요청 중 SIGKILL 뒤 재시작 시 전액 차감. 테스트는 실제 `OPENAI_API_KEY`와 프록시 변수를 자식 환경에서 제거한다. W24에서 정답 차단·모델 표현 예외·corpus 목록·시험용 upstream 시험 12개를 더했다(합 37개). CI(`verify.yml`)가 이 시험을 실행한다.
 
 ## 남은 제한
 

@@ -1,0 +1,941 @@
+{
+ "artifacts": [
+  {
+   "decoder": null,
+   "id": "426f2a06-b469-446d-89d9-71a149c9a39b",
+   "media_type": "application/vnd.codeye.source-manifest+json",
+   "role": "source_manifest",
+   "sha256": "ecee636b1af66dec66a27f7f79da2e9c14eaed5ab6cfcb3eb99a9ce047b3f482",
+   "size_bytes": 871,
+   "task_key": null
+  },
+  {
+   "decoder": null,
+   "id": "630a59eb-f0e6-47e0-89a1-ad6f3e9683e0",
+   "media_type": "application/vnd.codeye.result-manifest+json",
+   "role": "result_manifest",
+   "sha256": "4d46606e3a8bb9c935abcd32b29595f6c9d4f9616a8fa01ac6f77dc6a4984ffd",
+   "size_bytes": 9611,
+   "task_key": null
+  },
+  {
+   "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
+   "id": "dac92835-175c-4c22-b6b5-b645669e5879",
+   "media_type": "application/vnd.codeye.observations+json",
+   "role": "observations",
+   "sha256": "7214cedb5a1596c51a75dc2321a6501272e80faf5506aafcfb80f1f769ed4ee3",
+   "size_bytes": 5188,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations",
+   "id": "f7b9e2e9-dcff-47bf-920c-3e000e21e345",
+   "media_type": "application/vnd.codeye.observations+json",
+   "role": "observations",
+   "sha256": "c377b91526485bdf902b2a7c9a149bcd287c0dc5115273e5fc7a84f6c6a8ca91",
+   "size_bytes": 3887,
+   "task_key": "go-vet"
+  },
+  {
+   "decoder": null,
+   "id": "0f8d6cef-41f1-455a-a359-df74242b8cb1",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "dc935cca53ea7459101c35e53cb7f23fe14c5eed3f5048f4b37472a3d88bf6b1",
+   "size_bytes": 70,
+   "task_key": "go-vet"
+  },
+  {
+   "decoder": null,
+   "id": "2b8893e5-18f3-4697-9db9-f50b9d90703b",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+   "size_bytes": 32,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": null,
+   "id": "30e94047-07df-4cd3-9d79-7106e98c5e7e",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+   "size_bytes": 32,
+   "task_key": "go-vet"
+  },
+  {
+   "decoder": null,
+   "id": "4bced1f4-0350-4a7c-823b-e2e5701bee3a",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "7c7f82e69e89ebd866a98fd5c3be1cb0f01aab6b659b6c4ff3867b62986f6c47",
+   "size_bytes": 142,
+   "task_key": "go-vet"
+  },
+  {
+   "decoder": null,
+   "id": "4e5884e3-2590-47a0-b7d5-bfe89e398329",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "129e8482ea7967a9991755f5236f4613081e8b49c8ac47acd416013ae6a4a658",
+   "size_bytes": 29,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": null,
+   "id": "7551d435-af2f-4f41-9ab0-2adc0646e87f",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "7c7f82e69e89ebd866a98fd5c3be1cb0f01aab6b659b6c4ff3867b62986f6c47",
+   "size_bytes": 142,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": null,
+   "id": "a449cb4c-c73c-4680-8528-a9f96821eb17",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+   "size_bytes": 32,
+   "task_key": "env.discover"
+  },
+  {
+   "decoder": null,
+   "id": "a5e820c2-e276-4a3c-8019-5abf4952c32d",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "129e8482ea7967a9991755f5236f4613081e8b49c8ac47acd416013ae6a4a658",
+   "size_bytes": 29,
+   "task_key": "env.discover"
+  },
+  {
+   "decoder": null,
+   "id": "c8d8fc3f-397f-477d-9029-acbf573622b7",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "dc935cca53ea7459101c35e53cb7f23fe14c5eed3f5048f4b37472a3d88bf6b1",
+   "size_bytes": 70,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": null,
+   "id": "cabb5492-a337-4f9b-8166-8273e1952abb",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": null,
+   "id": "d11b44a8-04b6-4721-93f7-2d996ecc5a6e",
+   "media_type": "text/plain",
+   "role": "stdout",
+   "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+   "size_bytes": 3,
+   "task_key": "go-vet"
+  },
+  {
+   "decoder": null,
+   "id": "007a99f3-a218-489a-9243-e4d46c9700bb",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "go-vet"
+  },
+  {
+   "decoder": null,
+   "id": "1d980abf-703f-4b54-8355-29cadc8b705c",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": null,
+   "id": "61ab6dde-a02d-4ee0-bb6c-09317ec68230",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "go-vet"
+  },
+  {
+   "decoder": null,
+   "id": "7636eb4e-1300-4a3d-99ca-6f7db4dd7685",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "go-vet"
+  },
+  {
+   "decoder": null,
+   "id": "920bfe32-9acc-4980-96b1-ddbdab655073",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "env.discover"
+  },
+  {
+   "decoder": null,
+   "id": "bdf77029-0105-4899-83bd-a86b9e352a9a",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": null,
+   "id": "be207f40-4a6a-4d4e-8b86-7661e9abf511",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "go-vet"
+  },
+  {
+   "decoder": null,
+   "id": "d38996be-f378-41cb-9bc5-fa295e8aa100",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": null,
+   "id": "e3935c5e-0775-4c39-8812-2ddba009c55e",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "env.discover"
+  },
+  {
+   "decoder": null,
+   "id": "eeb26af2-1dbb-4ed9-8638-a24068cb8548",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": null,
+   "id": "f9b0f893-4953-40e0-8b78-df6807d4d8dc",
+   "media_type": "text/plain",
+   "role": "stderr",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "size_bytes": 0,
+   "task_key": "staticcheck"
+  },
+  {
+   "decoder": "application/vnd.codeye.environment+json;schema_version=0.1",
+   "id": "01f842cf-f23f-4447-982e-5164b6a68012",
+   "media_type": "application/vnd.codeye.environment+json",
+   "role": "other",
+   "sha256": "877df56d64116a174ceba1adee54ea2f9d8da6c098e348e9b8919091896d5836",
+   "size_bytes": 826,
+   "task_key": "docs.discover"
+  },
+  {
+   "decoder": "application/vnd.codeye.environment+json;schema_version=0.1",
+   "id": "e041a42c-9ef9-43c6-b2bc-164ac56675c5",
+   "media_type": "application/vnd.codeye.environment+json",
+   "role": "other",
+   "sha256": "abc8f45580019908d8ecadbaeb14667e1000eb2d08d82913fd11a6390d2cf453",
+   "size_bytes": 1253,
+   "task_key": "env.discover"
+  }
+ ],
+ "attempt": {
+  "cleanup_state": "confirmed",
+  "completion_status": "finalizing",
+  "id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1",
+  "lease_epoch": 1,
+  "number": 1,
+  "reason": "model_source_not_approved"
+ },
+ "builder": {
+  "id": "codeye-report",
+  "input_digest": "c454c4bf709f9076733fd9c4f58d4fc159aa838bd3f2e50f1abb256a43d0c6ea",
+  "result_manifest_artifact_id": null,
+  "version": "4"
+ },
+ "coverage": {
+  "ai_review": {
+   "reason": "review_results_not_accepted",
+   "required_tasks": [
+    {
+     "key": "review.context",
+     "result": "not_succeeded",
+     "task_status": "skipped_policy"
+    },
+    {
+     "key": "review.investigate",
+     "result": "not_succeeded",
+     "task_status": "skipped_policy"
+    },
+    {
+     "key": "review.verify",
+     "result": "not_succeeded",
+     "task_status": "skipped_policy"
+    }
+   ],
+   "status": "not_performed"
+  },
+  "inventory_files": 4,
+  "llm_exposed_files": null,
+  "notes": [
+   "inventory_counts_all_included_files",
+   "tests_not_planned",
+   "tool_reported_zero_is_not_clean"
+  ],
+  "scope_mode": "full",
+  "test_status": "not_run",
+  "tool_processed_files": 2,
+  "tools": [
+   {
+    "analyzer": "go.vet",
+    "analyzer_errors": 0,
+    "exit_class": "success_without_findings",
+    "files_in_scope": 2,
+    "ignored_files": 0,
+    "limitations": [
+     "cgo_disabled",
+     "default_build_context_only",
+     "no_offline_module_cache"
+    ],
+    "packages": {
+     "analyzed_clean": 1
+    },
+    "partial_parse": false,
+    "processed_files": 2,
+    "processed_paths": [
+     "counters.go",
+     "middleware.go"
+    ],
+    "rule_context": {
+     "config": "not_read",
+     "repository_config": "none",
+     "rule_pack": "codeye-go-vet-default",
+     "rule_pack_version": "1",
+     "selection": [],
+     "source_suppressions": "none"
+    },
+    "stderr_failures": 0,
+    "task_key": "go-vet",
+    "tool_version": "go1.27.4",
+    "unlisted_files": 0
+   },
+   {
+    "analyzer": "go.staticcheck",
+    "analyzer_errors": 0,
+    "exit_class": "success_without_findings",
+    "files_in_scope": 2,
+    "ignored_files": 0,
+    "limitations": [
+     "cgo_disabled",
+     "default_build_context_only",
+     "go_vet_overlap_checks_excluded",
+     "no_offline_module_cache"
+    ],
+    "packages": {
+     "analyzed_clean": 1
+    },
+    "partial_parse": false,
+    "processed_files": 2,
+    "processed_paths": [
+     "counters.go",
+     "middleware.go"
+    ],
+    "rule_context": {
+     "config": "not_read",
+     "repository_config": "overridden",
+     "rule_pack": "codeye-go-staticcheck",
+     "rule_pack_version": "2",
+     "selection": [
+      "-checks",
+      "SA*,U1000,-SA1014,-SA1017,-SA2000,-SA2002,-SA4021,-SA5009",
+      "-tests=true",
+      "-show-ignored"
+     ],
+     "source_suppressions": "reported",
+     "unreported_suppression_rules": [
+      "U1000"
+     ]
+    },
+    "stderr_failures": 0,
+    "task_key": "staticcheck",
+    "tool_version": "2026.2.2 (0.8.2)",
+    "unlisted_files": 0
+   }
+  ]
+ },
+ "created_at": "2026-11-18T14:17:13.149410013Z",
+ "demo": false,
+ "executions": [
+  {
+   "argv": [
+    "go",
+    "version"
+   ],
+   "cleanup": "confirmed",
+   "cwd": "[REDACTED]",
+   "ended_at": "2026-11-18T14:17:02.652788714Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "env.discover/go.version",
+   "name": "go.version",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:02.62743295Z",
+   "status": "exited",
+   "stderr_artifact_id": "e3935c5e-0775-4c39-8812-2ddba009c55e",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "a449cb4c-c73c-4680-8528-a9f96821eb17",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/9b365781-9816-4b4c-89b3-12778e256049/1",
+   "task_key": "env.discover"
+  },
+  {
+   "argv": [
+    "staticcheck",
+    "-version"
+   ],
+   "cleanup": "confirmed",
+   "cwd": "[REDACTED]",
+   "ended_at": "2026-11-18T14:17:02.681126062Z",
+   "env_keys": [
+    "HOME",
+    "LANG",
+    "PATH",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE"
+   ],
+   "exit_code": 0,
+   "id": "env.discover/staticcheck.version",
+   "name": "staticcheck.version",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:02.654234936Z",
+   "status": "exited",
+   "stderr_artifact_id": "920bfe32-9acc-4980-96b1-ddbdab655073",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "a5e820c2-e276-4a3c-8019-5abf4952c32d",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/9b365781-9816-4b4c-89b3-12778e256049/1",
+   "task_key": "env.discover"
+  },
+  {
+   "argv": [
+    "go",
+    "list",
+    "-e",
+    "-json=Dir,ImportPath,Name,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Incomplete,Error,DepsErrors",
+    "./..."
+   ],
+   "cleanup": "confirmed",
+   "cwd": ".",
+   "ended_at": "2026-11-18T14:17:02.932770002Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "go-vet/go.list",
+   "name": "go.list",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:02.831691519Z",
+   "status": "exited",
+   "stderr_artifact_id": "7636eb4e-1300-4a3d-99ca-6f7db4dd7685",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "4bced1f4-0350-4a7c-823b-e2e5701bee3a",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/6b8daed9-c476-498e-bc51-d70bdda9e49b/1",
+   "task_key": "go-vet"
+  },
+  {
+   "argv": [
+    "go",
+    "mod",
+    "edit",
+    "-json"
+   ],
+   "cleanup": "confirmed",
+   "cwd": ".",
+   "ended_at": "2026-11-18T14:17:02.827171324Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "go-vet/go.modedit",
+   "name": "go.modedit",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:02.79040803Z",
+   "status": "exited",
+   "stderr_artifact_id": "be207f40-4a6a-4d4e-8b86-7661e9abf511",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "0f8d6cef-41f1-455a-a359-df74242b8cb1",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/6b8daed9-c476-498e-bc51-d70bdda9e49b/1",
+   "task_key": "go-vet"
+  },
+  {
+   "argv": [
+    "go",
+    "version"
+   ],
+   "cleanup": "confirmed",
+   "cwd": ".",
+   "ended_at": "2026-11-18T14:17:02.789163178Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "go-vet/go.version",
+   "name": "go.version",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:02.777233926Z",
+   "status": "exited",
+   "stderr_artifact_id": "007a99f3-a218-489a-9243-e4d46c9700bb",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "30e94047-07df-4cd3-9d79-7106e98c5e7e",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/6b8daed9-c476-498e-bc51-d70bdda9e49b/1",
+   "task_key": "go-vet"
+  },
+  {
+   "argv": [
+    "go",
+    "vet",
+    "-json",
+    "./..."
+   ],
+   "cleanup": "confirmed",
+   "cwd": ".",
+   "ended_at": "2026-11-18T14:17:06.894654909Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "go-vet/go.vet",
+   "name": "go.vet",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:02.935240604Z",
+   "status": "exited",
+   "stderr_artifact_id": "61ab6dde-a02d-4ee0-bb6c-09317ec68230",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "d11b44a8-04b6-4721-93f7-2d996ecc5a6e",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/6b8daed9-c476-498e-bc51-d70bdda9e49b/1",
+   "task_key": "go-vet"
+  },
+  {
+   "argv": [
+    "go",
+    "list",
+    "-e",
+    "-json=Dir,ImportPath,Name,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Incomplete,Error,DepsErrors",
+    "./..."
+   ],
+   "cleanup": "confirmed",
+   "cwd": ".",
+   "ended_at": "2026-11-18T14:17:07.111093686Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "STATICCHECK_CACHE",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "staticcheck/go.list",
+   "name": "go.list",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:06.989856095Z",
+   "status": "exited",
+   "stderr_artifact_id": "d38996be-f378-41cb-9bc5-fa295e8aa100",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "7551d435-af2f-4f41-9ab0-2adc0646e87f",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/68c2c0b7-382b-43df-9d90-44dd05669b8a/1",
+   "task_key": "staticcheck"
+  },
+  {
+   "argv": [
+    "go",
+    "mod",
+    "edit",
+    "-json"
+   ],
+   "cleanup": "confirmed",
+   "cwd": ".",
+   "ended_at": "2026-11-18T14:17:06.988236035Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "STATICCHECK_CACHE",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "staticcheck/go.modedit",
+   "name": "go.modedit",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:06.976715156Z",
+   "status": "exited",
+   "stderr_artifact_id": "eeb26af2-1dbb-4ed9-8638-a24068cb8548",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "c8d8fc3f-397f-477d-9029-acbf573622b7",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/68c2c0b7-382b-43df-9d90-44dd05669b8a/1",
+   "task_key": "staticcheck"
+  },
+  {
+   "argv": [
+    "go",
+    "version"
+   ],
+   "cleanup": "confirmed",
+   "cwd": ".",
+   "ended_at": "2026-11-18T14:17:06.957220899Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "STATICCHECK_CACHE",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "staticcheck/go.version",
+   "name": "go.version",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:06.94626086Z",
+   "status": "exited",
+   "stderr_artifact_id": "1d980abf-703f-4b54-8355-29cadc8b705c",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "2b8893e5-18f3-4697-9db9-f50b9d90703b",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/68c2c0b7-382b-43df-9d90-44dd05669b8a/1",
+   "task_key": "staticcheck"
+  },
+  {
+   "argv": [
+    "staticcheck",
+    "-f",
+    "json",
+    "-checks",
+    "SA*,U1000,-SA1014,-SA1017,-SA2000,-SA2002,-SA4021,-SA5009",
+    "-tests=true",
+    "-show-ignored",
+    "./..."
+   ],
+   "cleanup": "confirmed",
+   "cwd": ".",
+   "ended_at": "2026-11-18T14:17:13.014861782Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "STATICCHECK_CACHE",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "staticcheck/staticcheck.check",
+   "name": "staticcheck.check",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:07.112960397Z",
+   "status": "exited",
+   "stderr_artifact_id": "f9b0f893-4953-40e0-8b78-df6807d4d8dc",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "cabb5492-a337-4f9b-8166-8273e1952abb",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/68c2c0b7-382b-43df-9d90-44dd05669b8a/1",
+   "task_key": "staticcheck"
+  },
+  {
+   "argv": [
+    "staticcheck",
+    "-version"
+   ],
+   "cleanup": "confirmed",
+   "cwd": ".",
+   "ended_at": "2026-11-18T14:17:06.974665283Z",
+   "env_keys": [
+    "CGO_ENABLED",
+    "GOCACHE",
+    "GOENV",
+    "GOFLAGS",
+    "GOMODCACHE",
+    "GOPATH",
+    "GOPROXY",
+    "GOSUMDB",
+    "GOTOOLCHAIN",
+    "GOVCS",
+    "GOWORK",
+    "HOME",
+    "LANG",
+    "PATH",
+    "STATICCHECK_CACHE",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME"
+   ],
+   "exit_code": 0,
+   "id": "staticcheck/staticcheck.version",
+   "name": "staticcheck.version",
+   "reason": null,
+   "started_at": "2026-11-18T14:17:06.95837815Z",
+   "status": "exited",
+   "stderr_artifact_id": "bdf77029-0105-4899-83bd-a86b9e352a9a",
+   "stderr_truncated": false,
+   "stdout_artifact_id": "4e5884e3-2590-47a0-b7d5-bfe89e398329",
+   "stdout_truncated": false,
+   "task_execution_id": "a3feb05f-53c7-4e35-a6c1-a177da6679b1/68c2c0b7-382b-43df-9d90-44dd05669b8a/1",
+   "task_key": "staticcheck"
+  }
+ ],
+ "export": {
+  "include_code": true
+ },
+ "findings": [],
+ "id": "f0ae1820-3c9f-420d-865d-26040209e398",
+ "inputs": {
+  "commit_sha": null,
+  "description": "승인된 로컬 경로를 복사해 고정한 snapshot이다(안정 복사 best effort).",
+  "manifest_sha256": "ecee636b1af66dec66a27f7f79da2e9c14eaed5ab6cfcb3eb99a9ce047b3f482",
+  "profile": "deep-review",
+  "snapshot_id": "80fef109-3264-4c62-847a-78dc3c11b617",
+  "source_kind": "local"
+ },
+ "limitations": [
+  "ai_review_not_performed",
+  "controller_holds_no_snapshot_bytes",
+  "required_task_not_succeeded"
+ ],
+ "observations": [],
+ "quality_verdict": "inconclusive",
+ "revision": 1,
+ "run_id": "a6cb1cea-796d-44db-b626-629d5c4426c3",
+ "schema_version": "0.1",
+ "status": "partial",
+ "summary": {
+  "actionable_findings": 0,
+  "pending_candidates": 0,
+  "priorities": [],
+  "raw_observations": 0,
+  "refuted_findings": 0,
+  "total_findings": 0,
+  "unresolved_observations": 0
+ },
+ "tasks": [
+  {
+   "id": "7d604576-bb21-43a3-b927-42d5b629dc52",
+   "key": "docs.discover",
+   "reason": null,
+   "required_for_verdict": true,
+   "status": "succeeded"
+  },
+  {
+   "id": "9b365781-9816-4b4c-89b3-12778e256049",
+   "key": "env.discover",
+   "reason": null,
+   "required_for_verdict": true,
+   "status": "succeeded"
+  },
+  {
+   "id": "6b8daed9-c476-498e-bc51-d70bdda9e49b",
+   "key": "go-vet",
+   "reason": null,
+   "required_for_verdict": true,
+   "status": "succeeded"
+  },
+  {
+   "id": "1ac9b1cd-bc3e-4e17-9c52-06c4115e273f",
+   "key": "review.context",
+   "reason": "model_source_not_approved",
+   "required_for_verdict": true,
+   "status": "skipped_policy"
+  },
+  {
+   "id": "43330a54-89fa-4016-b256-154c7487041c",
+   "key": "review.investigate",
+   "reason": "model_source_not_approved",
+   "required_for_verdict": true,
+   "status": "skipped_policy"
+  },
+  {
+   "id": "87af8c97-f84b-4b72-8934-8a7d3b67053a",
+   "key": "review.verify",
+   "reason": "model_source_not_approved",
+   "required_for_verdict": true,
+   "status": "skipped_policy"
+  },
+  {
+   "id": "68c2c0b7-382b-43df-9d90-44dd05669b8a",
+   "key": "staticcheck",
+   "reason": null,
+   "required_for_verdict": false,
+   "status": "succeeded"
+  }
+ ]
+}
