@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -44,7 +45,10 @@ func inScope(name string, scope domain.Scope) bool {
 	return false
 }
 
-func priority(name string) (rank int, kind string) {
+// priority ranks a corpus candidate: entry points, documents, sources,
+// manifests, tests. The Go, README/AGENTS and go.mod rules are those of W11;
+// the other ecosystems in scope follow otherPriority (sources.go, W24).
+func priority(name string, ecosystems []string) (rank int, kind string) {
 	base := strings.ToLower(path.Base(name))
 	switch {
 	case base == "readme.md" || base == "agents.md":
@@ -58,7 +62,7 @@ func priority(name string) (rank int, kind string) {
 	case strings.HasSuffix(base, "_test.go"):
 		return 4, "test"
 	default:
-		return 5, ""
+		return otherPriority(name, ecosystems)
 	}
 }
 
@@ -81,11 +85,12 @@ func buildScreenedCorpus(snapshot source.Snapshot, scope domain.Scope, withheld 
 		kind  string
 	}
 	var options []selected
+	ecosystems := pack.InScope(snapshot.Manifest, scope)
 	for _, e := range snapshot.Manifest.Entries {
 		if e.Kind != "file" || e.SHA256 == "" || e.Size == nil || e.ExcludedReason != "" || !inScope(e.Path, scope) {
 			continue
 		}
-		r, k := priority(e.Path)
+		r, k := priority(e.Path, ecosystems)
 		if k == "" {
 			continue
 		}

@@ -360,11 +360,12 @@ func goIgnored(p string) bool {
 	return false
 }
 
-var otherSource = map[string]bool{".c": true, ".cc": true, ".cpp": true, ".cxx": true, ".h": true, ".hpp": true, ".py": true, ".js": true, ".mjs": true, ".ts": true, ".tsx": true, ".jsx": true, ".rs": true}
-
-// codeCorpus selects Go code and test excerpts round-robin over the Go
-// modules of the snapshot (deepest go.mod directory owns a file), so every
-// module in scope is represented before any module gets a second file.
+// codeCorpus selects code and test excerpts round-robin over the modules of
+// the snapshot, so every module in scope is represented before any module
+// gets a second file. A Go file belongs to its deepest go.mod directory; a
+// file of another ecosystem to its deepest build manifest directory of that
+// ecosystem, and modules are visited ecosystem by ecosystem (sources.go,
+// groupOrder). Every excerpt is the first lines of its file.
 func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 	files := s.entries()
 	scope := normalizedScope(s.j.Scope)
@@ -385,24 +386,29 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 		return best
 	}
 	byModule := map[string][]source.Entry{}
-	eligible, other := 0, false
+	others := otherModuleRoots(files)
+	eligible := 0
 	for _, p := range sortedKeys(files) {
 		e := files[p]
-		if !inScope(p, scope) {
+		if !inScope(p, scope) || *e.Size > maxFileBytes {
 			continue
 		}
-		if otherSource[strings.ToLower(path.Ext(p))] {
-			other = true
-		}
-		if !strings.HasSuffix(p, ".go") || goIgnored(p) || *e.Size > maxFileBytes {
+		m := ""
+		switch eco := otherSource(p); {
+		case strings.HasSuffix(p, ".go") && !goIgnored(p):
+			m = owner(p)
+		case !strings.HasSuffix(p, ".go") && eco != "":
+			m = groupKey(others.owner(eco, p), eco)
+		default:
 			continue
 		}
 		eligible++
-		m := owner(p)
 		byModule[m] = append(byModule[m], e)
 	}
 	rank := func(p string) int {
 		switch {
+		case !strings.HasSuffix(p, ".go"):
+			return otherRank(p)
 		case path.Base(p) == "main.go":
 			return 0
 		case strings.HasSuffix(p, "_test.go"):
@@ -410,7 +416,7 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 		}
 		return 1
 	}
-	order := sortedKeys(byModule)
+	order := groupOrder(byModule)
 	for _, m := range order {
 		list := byModule[m]
 		sort.SliceStable(list, func(a, b int) bool {
@@ -435,10 +441,7 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 			}
 			progressed = true
 			e := byModule[m][round]
-			kind := "code"
-			if strings.HasSuffix(e.Path, "_test.go") {
-				kind = "test"
-			}
+			kind := windowKind(e.Path)
 			x, total, ok, err := s.excerpt(e, kind, "context", 1, 50, min(r1MaxCodeFile, remain))
 			if err != nil {
 				return nil, nil, err
@@ -458,9 +461,6 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 	}
 	if eligible > len(out) {
 		lims = append(lims, "files_outside_review_context")
-	}
-	if other {
-		lims = append(lims, limGoOnly)
 	}
 	return out, addLim(nil, lims...), nil
 }
@@ -574,11 +574,10 @@ func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, [
 				in.EvidenceIDs = []string{covered}
 			case len(windows) >= r1MaxWindows:
 				lims = append(lims, "observation_context_outside_input")
-			case strings.HasSuffix(l.Path, ".go"):
-				kind := "code"
-				if strings.HasSuffix(l.Path, "_test.go") {
-					kind = "test"
-				}
+			case windowKind(l.Path) != "" && files[l.Path].Size != nil:
+				// A line window around the location in any source language
+				// (no parser); other files (manifests, configuration) get none.
+				kind := windowKind(l.Path)
 				x, _, ok, err := s.excerpt(files[l.Path], kind, "observation", max(1, l.StartLine-r1WindowRadius), 2*r1WindowRadius+1, r1MaxWindowBytes)
 				if err != nil {
 					return nil, nil, nil, nil, nil, err

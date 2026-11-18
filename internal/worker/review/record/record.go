@@ -296,10 +296,13 @@ func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)
 	switch {
 	case domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.SHA256) || e.Start < 1 || e.End < e.Start:
 		return invalid("evidence location")
-	case e.End-e.Start+1 > 60 || (e.Kind == "code" && !strings.HasSuffix(strings.ToLower(e.Path), ".go")) ||
-		(e.Kind == "test" && !strings.HasSuffix(strings.ToLower(e.Path), "_test.go")) ||
+	// Kinds follow the path rules of source.go: code is source of a review
+	// ecosystem (a Go test file stays acceptable as code, as before W24),
+	// test a test path and config a build manifest.
+	case e.End-e.Start+1 > 60 || (e.Kind == "code" && SourceEcosystem(e.Path) == "") ||
+		(e.Kind == "test" && SourceKind(e.Path) != "test") ||
 		(e.Kind == "document" && !slices.Contains([]string{"readme.md", "agents.md"}, strings.ToLower(path.Base(e.Path)))) ||
-		(e.Kind == "config" && !strings.EqualFold(path.Base(e.Path), "go.mod")):
+		(e.Kind == "config" && ManifestEcosystem(e.Path) == ""):
 		return invalid("evidence kind or range")
 	case ((e.Origin == "caller" || e.Origin == "test") && (e.Symbol == "" || (e.Origin == "test") != (e.Kind == "test") || (e.Kind != "code" && e.Kind != "test"))) ||
 		((e.Origin == "" || e.Origin == "context") && (e.Start != 1 || e.End > 50 || e.Symbol != "")):

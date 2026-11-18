@@ -53,7 +53,9 @@ const (
 	reasonRecordMissing     = "record_missing"
 	reasonRecordInvalid     = "record_invalid"
 	limInputTrimmed         = "review_input_trimmed"
-	limGoOnly               = "code_excerpts_go_only"
+	// code_excerpts_go_only (rc1/rc2 code context of Go files only) is no
+	// longer written since W24 phase 2c; the report still names it for
+	// earlier records.
 )
 
 // R1Handler composes the static analyzer with the review-r1 candidate roles
