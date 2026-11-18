@@ -176,7 +176,7 @@ CODEYE_W17_CAPTURE=<dir> go test -count=1 -run 'TestReal' ./internal/worker/anal
 
 ## 13. 남은 제한
 
-- Windows에서 실제 도구를 실행하지 않았다. Windows는 `GOOS=windows go vet`까지만 확인했다. bandit·mypy 스크립트의 `#!` 검사는 Unix에서만 한다.
+- Windows에서 실제 도구를 실행하지 않았다. Windows는 `GOOS=windows go vet`과, 바뀐 패키지(python·builtin·cmd/codeye·discovery) 시험을 windows/amd64로 빌드해 WSL interop으로 실행한 것까지 확인했다. 재생·단위 시험은 통과했고 실제 도구 시험(`TestReal*`)은 건너뛰었다. bandit·mypy 스크립트의 `#!` 검사는 Unix에서만 한다.
 - 모듈마다 대상 버전·플랫폼 하나만 검사한다. 조건부 import·버전 분기는 그 조합에서만 본다.
 - 타입 검사는 설치되지 않은 의존성을 `Any`로 보므로 그 경계의 타입 오류는 보지 못한다(§10). 프로젝트 venv를 쓰는 방식은 저장소 코드 실행이라 두지 않았다.
 - mypy `misc`(tuple assert)는 ruff F631과 같은 구성이지만 끌 수 없어 두 관찰이 남는다.
