@@ -318,6 +318,8 @@ export const ko = {
       translation_units_not_processed: '도구 출력이 모든 번역 단위의 처리를 보여 주지 않음 (실패)',
       cppcheck_failed: 'cppcheck가 사용법 오류·입력 없음·비정상 종료로 끝남 (실패)',
       clang_tidy_failed: 'clang-tidy가 compile DB를 읽지 못했거나 사용법 오류·비정상 종료로 끝남 (실패)',
+      cppcheck_not_run: 'cppcheck 실행이 모두 수행되지 않아 결과를 만들지 못함',
+      clang_tidy_not_run: 'clang-tidy 실행이 모두 수행되지 않아 결과를 만들지 못함',
       // W20 Rust 팩 (cargo check, clippy)
       cargo_manifest_missing: 'Rust 소스는 있으나 Cargo.toml이 없어 cargo로 분석할 수 없음 (정적 분석 공백, 0건 통과 아님)',
       scope_has_no_cargo_package: '범위의 Rust 소스를 포함하는 Cargo 패키지가 없어 분석할 수 없음 (0건 통과 아님)',
