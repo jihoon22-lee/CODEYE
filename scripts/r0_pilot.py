@@ -1,7 +1,6 @@
 """명시적으로 선택한 R0 실모델 파일럿. 임시 DB와 승인된 고정 입력에서만 실행한다."""
 
 import argparse
-from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -9,36 +8,12 @@ from pathlib import Path
 import re
 import runpy
 import shutil
-import socket
 import subprocess
-import tarfile
 import tempfile
 import time
-from urllib.error import URLError
 from uuid import uuid4
 
-from node_smoke import Session, service, wait_for
-
-
-def tree_digest(directory):
-    digest = hashlib.sha256()
-    for path in sorted(directory.rglob("*")):
-        if path.is_file():
-            digest.update(path.relative_to(directory).as_posix().encode() + b"\0")
-            digest.update(hashlib.sha256(path.read_bytes()).digest())
-    return digest.hexdigest()
-
-
-def extract_commit(root, commit, work, destination):
-    archive = work / "source.tar"
-    subprocess.run(
-        ["git", "archive", "--format", "tar", "-o", archive, commit],
-        cwd=root,
-        check=True,
-    )
-    with tarfile.open(archive) as tar:
-        tar.extractall(destination, filter="data")
-    archive.unlink()
+from eval_harness import Cluster, extract_commit, keep_review_artifacts, tree_digest
 
 
 W15_MARKER = "<!-- CODEYE test fixture (TC-97)."
@@ -68,24 +43,6 @@ def materialize_w15(root, destination, label="w15"):
             data = data.split(b"\n", 1)[1]
         target.write_bytes(data)
     return tree_digest(destination)
-
-
-def keep_review_artifacts(report, artifacts, destination):
-    """Copy the model-role and discovery artifacts a report references."""
-    wanted = ("application/vnd.codeye.review+json", "application/vnd.codeye.environment+json")
-    index = {f.name: f for f in artifacts.rglob("*") if f.is_file()}
-    destination.mkdir(mode=0o700)
-    kept = 0
-    for a in report["artifacts"]:
-        if a["media_type"] not in wanted:
-            continue
-        found = index.get(a["sha256"])
-        if found is None or hashlib.sha256(found.read_bytes()).hexdigest() != a["sha256"]:
-            raise RuntimeError("보고서가 참조한 검토 산출물을 찾지 못했습니다")
-        name = (a["task_key"] or a["role"]) + "-" + a["sha256"][:12] + ".json"
-        shutil.copyfile(found, destination / name)
-        kept += 1
-    return kept
 
 
 def audit_reports(output, root):
@@ -211,153 +168,28 @@ def run(base, root, env):
     if not dataset and not git_smoke:
         raise ValueError("선택한 사례가 없습니다")
 
-    def cli(*args):
-        r = subprocess.run(
-            [binary, *args], cwd=work, env=env, capture_output=True, timeout=15
-        )
-        if r.returncode:
-            raise RuntimeError(f"운영 명령 실패 {args[0]} ({r.returncode})")
-        return r.stdout
-
-    provider = (
-        json.loads(cli("provider", "add", "--kind", "github", "--host", "github.com"))[
-            "id"
+    def agent_args(root_id):
+        return [
+            *(["--git", shutil.which("git"), "--git-host", "github.com"] if git_smoke else []),
+            "--go", go,
+            "--go-mod-cache", subprocess.check_output([go, "env", "GOMODCACHE"], text=True).strip(),
+            "--model-source-root", root_id,
+            "--opencode", opencode,
+            "--model", "codeye-gateway/gpt-6.2-sol",
+            "--model-relay-file", relay,
+            *(["--review-pack", os.environ["CODEYE_R0_REVIEW_PACK"]] if os.environ.get("CODEYE_R0_REVIEW_PACK") else []),
         ]
-        if git_smoke
-        else None
-    )
-    user = json.loads(cli("user", "create", "--name", "R0 pilot"))["id"]
-    root_id = json.loads(
-        cli("source-root", "add", "--label", "R0 fixed inputs", "--path", source)
-    )["id"]
-    cli("source-root", "grant", "--root", root_id, "--user", user)
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-    origin = f"http://127.0.0.1:{port}"
-    api = Session(origin)
-
-    def ready():
-        try:
-            return api.request("GET", "ready")
-        except URLError:
-            return None
 
     subprocess.run(["npm", "run", "build"], cwd=root / "web", check=True)
-    with ExitStack() as stack:
-        children = [
-            stack.enter_context(
-                service(
-                    [
-                        binary,
-                        "serve",
-                        "--listen",
-                        f"127.0.0.1:{port}",
-                        "--web-dir",
-                        root / "web/dist",
-                        "--artifact-dir",
-                        work / "artifacts",
-                        "--reconcile-interval",
-                        "1s",
-                    ],
-                    work,
-                    env,
-                    work / "control.log",
-                )
-            )
-        ]
-        wait_for("개인 모드 API", ready, children)
-        link = work / "launch"
-        cli("login-link", "--user", user, "--output", link, "--origin", origin)
-        api.csrf = api.request(
-            "POST",
-            "session",
-            {"launch_token": link.read_text().strip().split("#launch=", 1)[1]},
-        )["csrf_token"]
-        # 파일럿의 두 노드는 승인한 고정 사본에만 접근한다. 비용 장부와 키는 source 밖에 있다.
-        for name in ("pilot-a", "pilot-b"):
-            token = work / (name + ".enroll")
-            cli(
-                "node",
-                "token",
-                "create",
-                "--pool",
-                "default",
-                "--source-root",
-                root_id,
-                "--output",
-                token,
-            )
-            children.append(
-                stack.enter_context(
-                    service(
-                        [
-                            binary,
-                            "agent",
-                            "--controller",
-                            origin,
-                            "--state-dir",
-                            work / name,
-                            "--name",
-                            name,
-                            "--enroll-token-file",
-                            token,
-                            "--source-root",
-                            f"{root_id}={source}",
-                            "--model-source-root",
-                            root_id,
-                            *(
-                                [
-                                    "--git",
-                                    shutil.which("git"),
-                                    "--git-host",
-                                    "github.com",
-                                ]
-                                if git_smoke
-                                else []
-                            ),
-                            "--go",
-                            go,
-                            "--go-mod-cache",
-                            subprocess.check_output(
-                                [go, "env", "GOMODCACHE"], text=True
-                            ).strip(),
-                            "--opencode",
-                            opencode,
-                            "--model",
-                            "codeye-gateway/gpt-6.2-sol",
-                            "--model-relay-file",
-                            relay,
-                            "--autoscale",
-                            "--max-workers",
-                            "2",
-                            *(
-                                ["--review-pack", os.environ["CODEYE_R0_REVIEW_PACK"]]
-                                if os.environ.get("CODEYE_R0_REVIEW_PACK")
-                                else []
-                            ),
-                        ],
-                        work,
-                        {"PATH": env["PATH"], "LANG": "C.UTF-8"},
-                        work / (name + ".log"),
-                    )
-                )
-            )
-        cli(
-            "pool",
-            "set",
-            "--name",
-            "default",
-            "--min-workers",
-            "0",
-            "--max-workers",
-            "2",
-            "--idle-timeout-seconds",
-            "3",
-            "--scale-up-cooldown-seconds",
-            "0",
-            "--scale-down-cooldown-seconds",
-            "0",
+    # 파일럿의 두 노드는 승인한 고정 사본에만 접근한다. 비용 장부와 키는 source 밖에 있다.
+    with Cluster(base, binary, env, source, agent_args=agent_args, agents=2, max_workers=2,
+                 label="R0 fixed inputs", web_dir=root / "web/dist", agent_path=env["PATH"], pool_max=2) as cluster:
+        api, cli, origin, user, children = cluster.api, cluster.cli, cluster.origin, cluster.user, cluster.children
+        root_id = cluster.root_id
+        provider = (
+            json.loads(cli("provider", "add", "--kind", "github", "--host", "github.com"))["id"]
+            if git_smoke
+            else None
         )
         outstanding = {}
         start = time.monotonic()
@@ -413,7 +245,7 @@ def run(base, root, env):
                     raise RuntimeError("보고서 입력 참조 불일치")
                 dest = output / (label + ".json")
                 dest.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-                keep_review_artifacts(report, work / "artifacts", output / label)
+                keep_review_artifacts(report, cluster.work / "artifacts", output / label)
                 if label == "git":
                     digest = report["inputs"]["commit_sha"]
                     if (
