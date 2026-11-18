@@ -9192,5 +9192,3155 @@
     ]
    }
   }
+ },
+ {
+  "id": "R1-RS-02",
+  "language": "rust",
+  "split": "holdout",
+  "family": "page-start-beyond-result-length",
+  "category": "boundaries_arithmetic",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "hitpager",
+   "title": "hitpager",
+   "summary": "Pagination of ranked search hits for a documentation search API."
+  },
+  "contract": "page(hits, number, per_page) returns the hits of page `number`, counting from 0, with per_page hits per page (the last page may be shorter). Any page number is accepted: a page past the last one returns an empty slice. per_page must be at least 1; page panics only when it is 0. page_count reports how many non-empty pages there are.",
+  "contract_file": "src/lib.rs",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Pagination of ranked search hits.",
+      "",
+      "/// One search result.",
+      "#[derive(Debug, Clone, PartialEq)]",
+      "pub struct Hit {",
+      "    pub path: String,",
+      "    pub score: f32,",
+      "}",
+      "",
+      "/// Returns one page of hits.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn page(hits: &[Hit], number: usize, per_page: usize) -> &[Hit] {",
+      "    assert!(per_page >= 1, \"per_page must be at least 1\");",
+      "    let start = number * per_page;",
+      "    let end = (start + per_page).min(hits.len());",
+      "    &hits[start..end]",
+      "}",
+      "",
+      "/// Number of non-empty pages for `total` hits.",
+      "pub fn page_count(total: usize, per_page: usize) -> usize {",
+      "    assert!(per_page >= 1, \"per_page must be at least 1\");",
+      "    total.div_ceil(per_page)",
+      "}",
+      "",
+      "/// Text for the pager footer, for example \"page 2 of 3\".",
+      "pub fn footer(total: usize, number: usize, per_page: usize) -> String {",
+      "    let pages = page_count(total, per_page);",
+      "    if pages == 0 {",
+      "        return \"no results\".to_string();",
+      "    }",
+      "    format!(\"page {} of {}\", number.saturating_add(1).min(pages), pages)",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Pagination of ranked search hits.",
+      "",
+      "/// One search result.",
+      "#[derive(Debug, Clone, PartialEq)]",
+      "pub struct Hit {",
+      "    pub path: String,",
+      "    pub score: f32,",
+      "}",
+      "",
+      "/// Returns one page of hits.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn page(hits: &[Hit], number: usize, per_page: usize) -> &[Hit] {",
+      "    assert!(per_page >= 1, \"per_page must be at least 1\");",
+      "    let start = number.saturating_mul(per_page);",
+      "    if start >= hits.len() {",
+      "        return &[];",
+      "    }",
+      "    let end = start.saturating_add(per_page).min(hits.len());",
+      "    &hits[start..end]",
+      "}",
+      "",
+      "/// Number of non-empty pages for `total` hits.",
+      "pub fn page_count(total: usize, per_page: usize) -> usize {",
+      "    assert!(per_page >= 1, \"per_page must be at least 1\");",
+      "    total.div_ceil(per_page)",
+      "}",
+      "",
+      "/// Text for the pager footer, for example \"page 2 of 3\".",
+      "pub fn footer(total: usize, number: usize, per_page: usize) -> String {",
+      "    let pages = page_count(total, per_page);",
+      "    if pages == 0 {",
+      "        return \"no results\".to_string();",
+      "    }",
+      "    format!(\"page {} of {}\", number.saturating_add(1).min(pages), pages)",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "3b41c5ddf77c847cd427bd15455e10f255561d9358d4598e7d804984b4a83ab8",
+   "before_documented": "3a30af52b6d95ccad1d470cfc815ac1ea3ab99111983083c1ded68309ae6fca3",
+   "after": "009001f9a1e5ebb8a599ac2bdfeba9492dec66eba72410af90f9a5fe2d3ac6d6",
+   "after_documented": "cfa9bf55e733c7964944622e84c1d1b55802cc3fc1f0738c6cfbe1770e88dc36"
+  },
+  "check": {
+   "summary": "Pages through 10 hits with 4 per page, then asks for page 3, page 7 and page usize::MAX inside catch_unwind.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "hitpager",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libhitpager.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "hitpager={out}/libhitpager.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: page 3 of 10 hits panicked",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use std::panic;",
+      "",
+      "use hitpager::{footer, page, page_count, Hit};",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn main() {",
+      "    panic::set_hook(Box::new(|_| {}));",
+      "    let hits: Vec<Hit> = (0..10)",
+      "        .map(|i| Hit {",
+      "            path: format!(\"doc/{i}.md\"),",
+      "            score: 1.0 - i as f32 / 10.0,",
+      "        })",
+      "        .collect();",
+      "    let first = page(&hits, 0, 4);",
+      "    let last = page(&hits, 2, 4);",
+      "    if first.len() != 4",
+      "        || first[0].path != \"doc/0.md\"",
+      "        || last.len() != 2",
+      "        || last[1].path != \"doc/9.md\"",
+      "    {",
+      "        fail(\"pages inside the result set\");",
+      "    }",
+      "    for (number, name) in [",
+      "        (3usize, \"page 3\"),",
+      "        (7, \"page 7\"),",
+      "        (usize::MAX, \"page usize::MAX\"),",
+      "    ] {",
+      "        let hits = hits.clone();",
+      "        match panic::catch_unwind(move || page(&hits, number, 4).len()) {",
+      "            Ok(0) => {}",
+      "            Ok(n) => fail(&format!(\"{name} of 10 hits returned {n} hits\")),",
+      "            Err(_) => fail(&format!(\"{name} of 10 hits panicked\")),",
+      "        }",
+      "    }",
+      "    if page(&[], 0, 5).len() != 0 || page_count(10, 4) != 3 || page_count(0, 4) != 0 {",
+      "        fail(\"empty input or page count\");",
+      "    }",
+      "    if footer(10, 1, 4) != \"page 2 of 3\" || footer(0, 0, 4) != \"no results\" {",
+      "        fail(\"footer\");",
+      "    }",
+      "    if panic::catch_unwind(|| page(&[], 0, 0)).is_ok() {",
+      "        fail(\"per_page 0 accepted\");",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A page number whose first index is past the end of the hits, for example page 3 of 10 hits at 4 per page, or a page so large that number * per_page does not fit in usize. The start index is used to slice without clamping.",
+   "expected_impact": "The request thread panics (slice index starts past its end, or an arithmetic panic with overflow checks), turning a harmless out-of-range page into a 500 error; with overflow checks off the multiplication wraps and returns an unrelated page.",
+   "positive_locations": [
+    {
+     "path": "src/lib.rs",
+     "symbol": "page",
+     "anchors": {
+      "start": "let start = number * per_page;",
+      "end": "&hits[start..end]"
+     },
+     "start_line": 19,
+     "end_line": 21
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/lib.rs",
+     "symbol": "page",
+     "anchors": {
+      "start": "let start = number.saturating_mul(per_page);",
+      "end": "&hits[start..end]"
+     },
+     "note": "The corrected version saturates the multiplication and returns an empty slice when the start is at or past the end.",
+     "start_line": 19,
+     "end_line": 24
+    },
+    {
+     "variant": "before",
+     "path": "src/lib.rs",
+     "symbol": "page",
+     "anchors": {
+      "start": "let end = (start + per_page).min(hits.len());"
+     },
+     "note": "Clamping the end is right; the start is the unclamped bound.",
+     "start_line": 20,
+     "end_line": 20
+    }
+   ],
+   "reviewer_notes": "Pages inside the result set and the exact last page work. The assert on per_page is a documented panic and not a finding.",
+   "distinctive_tokens": [
+    "clamped",
+    "unclamped",
+    "starts past",
+    "out-of-range page"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/lib.rs"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-RS-03",
+  "language": "rust",
+  "split": "holdout",
+  "family": "every-read-error-treated-as-absent-file",
+  "category": "error_handling",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "agentconf",
+   "title": "agentconf",
+   "summary": "Loads the optional override file of a backup agent on top of built-in settings."
+  },
+  "contract": "load_overrides(path) returns the built-in settings when no file exists at path. When the file exists it must be readable UTF-8 text of \"key = value\" lines (blank lines and '#' comments allowed) with the keys interval_secs and max_parallel; a malformed line or an unknown key is ConfigError::Parse with its line number. Any other failure to read the file, such as a permission problem or path being a directory, is ConfigError::Io, never the built-in settings.",
+  "contract_file": "src/load.rs",
+  "files": {
+   "shared": [
+    {
+     "path": "src/error.rs",
+     "lines": [
+      "use std::fmt;",
+      "use std::io;",
+      "",
+      "/// Why an override file could not be used.",
+      "#[derive(Debug)]",
+      "pub enum ConfigError {",
+      "    /// The file exists but could not be read.",
+      "    Io(io::Error),",
+      "    /// A line is malformed or uses an unknown key (1-based line number).",
+      "    Parse { line: usize, reason: String },",
+      "}",
+      "",
+      "impl fmt::Display for ConfigError {",
+      "    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {",
+      "        match self {",
+      "            ConfigError::Io(e) => write!(f, \"cannot read overrides: {e}\"),",
+      "            ConfigError::Parse { line, reason } => write!(f, \"overrides line {line}: {reason}\"),",
+      "        }",
+      "    }",
+      "}",
+      "",
+      "impl std::error::Error for ConfigError {}"
+     ]
+    },
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Override file for the backup agent.",
+      "",
+      "mod error;",
+      "mod load;",
+      "",
+      "pub use error::ConfigError;",
+      "pub use load::{load_overrides, Settings};"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/load.rs",
+     "lines": [
+      "use std::fs;",
+      "use std::path::Path;",
+      "",
+      "use crate::error::ConfigError;",
+      "",
+      "/// Effective agent settings.",
+      "#[derive(Debug, Clone, PartialEq, Eq)]",
+      "pub struct Settings {",
+      "    pub interval_secs: u64,",
+      "    pub max_parallel: u32,",
+      "}",
+      "",
+      "impl Default for Settings {",
+      "    fn default() -> Self {",
+      "        Settings {",
+      "            interval_secs: 3600,",
+      "            max_parallel: 2,",
+      "        }",
+      "    }",
+      "}",
+      "",
+      "/// Reads the override file.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn load_overrides(path: &Path) -> Result<Settings, ConfigError> {",
+      "    let text = match fs::read_to_string(path) {",
+      "        Ok(text) => text,",
+      "        Err(_) => return Ok(Settings::default()),",
+      "    };",
+      "    let mut settings = Settings::default();",
+      "    for (index, raw) in text.lines().enumerate() {",
+      "        let line = raw.trim();",
+      "        if line.is_empty() || line.starts_with('#') {",
+      "            continue;",
+      "        }",
+      "        let parse = |reason: &str| ConfigError::Parse {",
+      "            line: index + 1,",
+      "            reason: reason.to_string(),",
+      "        };",
+      "        let (key, value) = line",
+      "            .split_once('=')",
+      "            .ok_or_else(|| parse(\"expected key = value\"))?;",
+      "        match key.trim() {",
+      "            \"interval_secs\" => {",
+      "                settings.interval_secs = value.trim().parse().map_err(|_| parse(\"bad number\"))?",
+      "            }",
+      "            \"max_parallel\" => {",
+      "                settings.max_parallel = value.trim().parse().map_err(|_| parse(\"bad number\"))?",
+      "            }",
+      "            other => return Err(parse(&format!(\"unknown key {other}\"))),",
+      "        }",
+      "    }",
+      "    Ok(settings)",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/load.rs",
+     "lines": [
+      "use std::fs;",
+      "use std::io;",
+      "use std::path::Path;",
+      "",
+      "use crate::error::ConfigError;",
+      "",
+      "/// Effective agent settings.",
+      "#[derive(Debug, Clone, PartialEq, Eq)]",
+      "pub struct Settings {",
+      "    pub interval_secs: u64,",
+      "    pub max_parallel: u32,",
+      "}",
+      "",
+      "impl Default for Settings {",
+      "    fn default() -> Self {",
+      "        Settings {",
+      "            interval_secs: 3600,",
+      "            max_parallel: 2,",
+      "        }",
+      "    }",
+      "}",
+      "",
+      "/// Reads the override file.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn load_overrides(path: &Path) -> Result<Settings, ConfigError> {",
+      "    let text = match fs::read_to_string(path) {",
+      "        Ok(text) => text,",
+      "        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Settings::default()),",
+      "        Err(e) => return Err(ConfigError::Io(e)),",
+      "    };",
+      "    let mut settings = Settings::default();",
+      "    for (index, raw) in text.lines().enumerate() {",
+      "        let line = raw.trim();",
+      "        if line.is_empty() || line.starts_with('#') {",
+      "            continue;",
+      "        }",
+      "        let parse = |reason: &str| ConfigError::Parse {",
+      "            line: index + 1,",
+      "            reason: reason.to_string(),",
+      "        };",
+      "        let (key, value) = line",
+      "            .split_once('=')",
+      "            .ok_or_else(|| parse(\"expected key = value\"))?;",
+      "        match key.trim() {",
+      "            \"interval_secs\" => {",
+      "                settings.interval_secs = value.trim().parse().map_err(|_| parse(\"bad number\"))?",
+      "            }",
+      "            \"max_parallel\" => {",
+      "                settings.max_parallel = value.trim().parse().map_err(|_| parse(\"bad number\"))?",
+      "            }",
+      "            other => return Err(parse(&format!(\"unknown key {other}\"))),",
+      "        }",
+      "    }",
+      "    Ok(settings)",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "9bcf77a290d919814d656c0036f53688a8715362f5b49bea68140cd953fbfaa1",
+   "before_documented": "492afa8d5f1551b02183b283d8d0fb50e3f2abaaeec12ea57fbf746ef42625f8",
+   "after": "254198ca474d7ca13422a581f4bbc5bc88d16fea1654ed7b37318524b887eddc",
+   "after_documented": "ebc08cccd11b71bd959439bfbf66426fde37a512ce65fa6e258673dabd2926af"
+  },
+  "check": {
+   "summary": "Calls load_overrides for a missing file, a valid file, a malformed file and a directory path, and matches the results and error variants.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "agentconf",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libagentconf.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "agentconf={out}/libagentconf.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: directory path returned Ok",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use std::fs;",
+      "",
+      "use agentconf::{load_overrides, ConfigError, Settings};",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn main() {",
+      "    let dir = std::env::temp_dir().join(format!(\"agentconf-{}\", std::process::id()));",
+      "    fs::create_dir_all(dir.join(\"conf.d\")).unwrap();",
+      "    let missing = dir.join(\"absent.conf\");",
+      "    if load_overrides(&missing).unwrap_or_else(|e| fail(&format!(\"missing file: {e}\")))",
+      "        != Settings::default()",
+      "    {",
+      "        fail(\"missing file did not give the built-in settings\");",
+      "    }",
+      "    let good = dir.join(\"agent.conf\");",
+      "    fs::write(",
+      "        &good,",
+      "        \"# overrides\\ninterval_secs = 900\\n\\nmax_parallel=4\\n\",",
+      "    )",
+      "    .unwrap();",
+      "    match load_overrides(&good) {",
+      "        Ok(s)",
+      "            if s == (Settings {",
+      "                interval_secs: 900,",
+      "                max_parallel: 4,",
+      "            }) => {}",
+      "        other => fail(&format!(\"valid file: {other:?}\")),",
+      "    }",
+      "    let bad = dir.join(\"bad.conf\");",
+      "    fs::write(&bad, \"interval_secs = 60\\nretries = 3\\n\").unwrap();",
+      "    match load_overrides(&bad) {",
+      "        Err(ConfigError::Parse { line: 2, .. }) => {}",
+      "        other => fail(&format!(\"unknown key: {other:?}\")),",
+      "    }",
+      "    match load_overrides(&dir.join(\"conf.d\")) {",
+      "        Err(ConfigError::Io(_)) => {}",
+      "        Ok(_) => fail(\"directory path returned Ok\"),",
+      "        Err(e) => fail(&format!(\"directory path: {e}\")),",
+      "    }",
+      "    let binary = dir.join(\"binary.conf\");",
+      "    fs::write(&binary, [0xff, 0xfe, 0x00]).unwrap();",
+      "    if !matches!(load_overrides(&binary), Err(ConfigError::Io(_))) {",
+      "        fail(\"invalid UTF-8 not reported as Io\");",
+      "    }",
+      "    fs::remove_dir_all(&dir).unwrap();",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "The override path exists but cannot be read: a directory, a file without read permission, invalid UTF-8, or an I/O error. The match arm Err(_) maps every read error to the built-in settings.",
+   "expected_impact": "An agent whose override file is unreadable starts silently with built-in intervals and parallelism, ignoring the operator's configuration (for example running backups far more often than allowed) with no error to notice.",
+   "positive_locations": [
+    {
+     "path": "src/load.rs",
+     "symbol": "load_overrides",
+     "anchors": {
+      "start": "Err(_) => return Ok(Settings::default()),"
+     },
+     "start_line": 34,
+     "end_line": 34
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/load.rs",
+     "symbol": "load_overrides",
+     "anchors": {
+      "start": "Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Settings::default()),",
+      "end": "Err(e) => return Err(ConfigError::Io(e)),"
+     },
+     "note": "The corrected match only treats NotFound as an absent file and returns every other error as ConfigError::Io.",
+     "start_line": 35,
+     "end_line": 36
+    },
+    {
+     "variant": "before",
+     "path": "src/error.rs",
+     "symbol": "ConfigError",
+     "anchors": {
+      "start": "pub enum ConfigError {"
+     },
+     "note": "The Io variant exists for exactly these failures but is never constructed by the loader.",
+     "start_line": 6,
+     "end_line": 6
+    }
+   ],
+   "reviewer_notes": "Parse errors are reported correctly. Needs error.rs to see that an Io variant was intended.",
+   "distinctive_tokens": [
+    "notfound only",
+    "all errors",
+    "falls back",
+    "swallows"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/load.rs"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-RS-04",
+  "language": "rust",
+  "split": "holdout",
+  "family": "adjacent-only-dedup-on-unsorted-tags",
+  "category": "api_misuse",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "tagnorm",
+   "title": "tagnorm",
+   "summary": "Normalises user-entered tags for a photo library ahead of storage and indexing."
+  },
+  "contract": "normalize_tags(input) splits input on commas, trims each tag, lower-cases it and drops empty tags. The result contains each distinct tag once, in the order of its first appearance in input. Input is arbitrary user text of at most 4 KiB; tags may contain any characters other than commas.",
+  "contract_file": "src/lib.rs",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Tag normalisation for the photo library.",
+      "",
+      "/// Maximum number of tags stored per photo.",
+      "pub const MAX_TAGS: usize = 32;",
+      "",
+      "/// Normalises a comma-separated tag string.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn normalize_tags(input: &str) -> Vec<String> {",
+      "    let mut tags: Vec<String> = input",
+      "        .split(',')",
+      "        .map(|tag| tag.trim().to_lowercase())",
+      "        .filter(|tag| !tag.is_empty())",
+      "        .collect();",
+      "    tags.dedup();",
+      "    tags",
+      "}",
+      "",
+      "/// Whether a photo with these tags is within the per-photo limit.",
+      "pub fn within_limit(input: &str) -> bool {",
+      "    normalize_tags(input).len() <= MAX_TAGS",
+      "}",
+      "",
+      "/// Joins normalised tags back into the canonical stored form.",
+      "pub fn canonical(input: &str) -> String {",
+      "    normalize_tags(input).join(\",\")",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Tag normalisation for the photo library.",
+      "",
+      "use std::collections::HashSet;",
+      "",
+      "/// Maximum number of tags stored per photo.",
+      "pub const MAX_TAGS: usize = 32;",
+      "",
+      "/// Normalises a comma-separated tag string.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn normalize_tags(input: &str) -> Vec<String> {",
+      "    let mut tags: Vec<String> = input",
+      "        .split(',')",
+      "        .map(|tag| tag.trim().to_lowercase())",
+      "        .filter(|tag| !tag.is_empty())",
+      "        .collect();",
+      "    let mut seen = HashSet::new();",
+      "    tags.retain(|tag| seen.insert(tag.clone()));",
+      "    tags",
+      "}",
+      "",
+      "/// Whether a photo with these tags is within the per-photo limit.",
+      "pub fn within_limit(input: &str) -> bool {",
+      "    normalize_tags(input).len() <= MAX_TAGS",
+      "}",
+      "",
+      "/// Joins normalised tags back into the canonical stored form.",
+      "pub fn canonical(input: &str) -> String {",
+      "    normalize_tags(input).join(\",\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "47107a36f478530379251ddbcc26836c27700680de07f0339f71841d0930fade",
+   "before_documented": "e8d982f38bf9f745571750e4138b82628c72e4454396821bff32100b5dc70275",
+   "after": "419c54c018b22c44d4641a3a6f112d66859dcde021d297cfddca087156cbf312",
+   "after_documented": "e01dbc6a3e05f4247e3ee9136353640d49de150c7ca419e8b44a0c37fb823d85"
+  },
+  "check": {
+   "summary": "Normalises tag strings with repeats that are adjacent, separated by other tags, and differing only in case or surrounding spaces.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "tagnorm",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libtagnorm.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "tagnorm={out}/libtagnorm.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: \"beach, Sunset, beach\" gave \\[\"beach\", \"sunset\", \"beach\"\\]",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use tagnorm::{canonical, normalize_tags, within_limit};",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn main() {",
+      "    let cases: [(&str, &[&str]); 5] = [",
+      "        (\"beach, beach ,sunset\", &[\"beach\", \"sunset\"]),",
+      "        (\"beach, Sunset, beach\", &[\"beach\", \"sunset\"]),",
+      "        (\"a,b,a,c,b,a\", &[\"a\", \"b\", \"c\"]),",
+      "        (\" , ,\", &[]),",
+      "        (\"Ölberg, ölberg , x\", &[\"ölberg\", \"x\"]),",
+      "    ];",
+      "    for (input, want) in cases {",
+      "        let got = normalize_tags(input);",
+      "        if got != want {",
+      "            fail(&format!(\"{input:?} gave {got:?}\"));",
+      "        }",
+      "    }",
+      "    let many: Vec<String> = (0..40).map(|i| format!(\"t{}\", i % 20)).collect();",
+      "    if !within_limit(&many.join(\",\")) {",
+      "        fail(\"40 tags with 20 distinct exceeded the limit\");",
+      "    }",
+      "    if canonical(\"Zoo, art, zoo\") != \"zoo,art\" {",
+      "        fail(\"canonical form\");",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "The same tag appears twice with a different tag in between, e.g. \"beach, sunset, beach\". Vec::dedup only removes consecutive equal elements and the list is not sorted.",
+   "expected_impact": "Duplicate tags are stored and indexed, inflating tag counts and making exact-set comparisons and tag-limit checks wrong.",
+   "positive_locations": [
+    {
+     "path": "src/lib.rs",
+     "symbol": "normalize_tags",
+     "anchors": {
+      "start": "tags.dedup();"
+     },
+     "start_line": 18,
+     "end_line": 18
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/lib.rs",
+     "symbol": "normalize_tags",
+     "anchors": {
+      "start": "let mut seen = HashSet::new();",
+      "end": "tags.retain(|tag| seen.insert(tag.clone()));"
+     },
+     "note": "Keeping a tag only when it is inserted into a set for the first time removes every later repeat and preserves first-appearance order.",
+     "start_line": 20,
+     "end_line": 21
+    },
+    {
+     "variant": "before",
+     "path": "src/lib.rs",
+     "symbol": "normalize_tags",
+     "anchors": {
+      "start": ".map(|tag| tag.trim().to_lowercase())"
+     },
+     "note": "Trimming and lower-casing are done ahead of the comparison, as required.",
+     "start_line": 15,
+     "end_line": 15
+    }
+   ],
+   "reviewer_notes": "Sorting and then deduplicating would remove the repeats but break the documented first-appearance order; judge such a suggestion as a partial correction.",
+   "distinctive_tokens": [
+    "consecutive",
+    "adjacent",
+    "non-adjacent",
+    "dedup_by"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/lib.rs"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-RS-05",
+  "language": "rust",
+  "split": "holdout",
+  "family": "order-breaking-removal-in-sorted-vec",
+  "category": "state_invariants",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "duequeue",
+   "title": "duequeue",
+   "summary": "Deadline queue for retry timers in a job runner."
+  },
+  "contract": "Timers keeps pending timers ordered by deadline, ties in insertion order. schedule adds a timer and returns its id; cancel(id) removes it and reports whether it was pending; pop_due(now) removes and returns, in deadline order, every timer whose deadline is not later than now. Ids are unique for the life of the queue. Deadlines are arbitrary u64 values.",
+  "contract_file": "src/lib.rs",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Deadline-ordered timers.",
+      "",
+      "#[derive(Debug, Clone, Copy, PartialEq, Eq)]",
+      "pub struct TimerId(u64);",
+      "",
+      "#[derive(Debug)]",
+      "struct Timer {",
+      "    id: TimerId,",
+      "    deadline: u64,",
+      "}",
+      "",
+      "/// Pending timers.",
+      "///",
+      "/// {{CONTRACT}}",
+      "#[derive(Debug, Default)]",
+      "pub struct Timers {",
+      "    pending: Vec<Timer>,",
+      "    next_id: u64,",
+      "}",
+      "",
+      "impl Timers {",
+      "    pub fn new() -> Self {",
+      "        Self::default()",
+      "    }",
+      "",
+      "    pub fn schedule(&mut self, deadline: u64) -> TimerId {",
+      "        let id = TimerId(self.next_id);",
+      "        self.next_id += 1;",
+      "        let index = self.pending.partition_point(|t| t.deadline <= deadline);",
+      "        self.pending.insert(index, Timer { id, deadline });",
+      "        id",
+      "    }",
+      "",
+      "    pub fn cancel(&mut self, id: TimerId) -> bool {",
+      "        match self.pending.iter().position(|t| t.id == id) {",
+      "            Some(index) => {",
+      "                self.pending.swap_remove(index);",
+      "                true",
+      "            }",
+      "            None => false,",
+      "        }",
+      "    }",
+      "",
+      "    pub fn pop_due(&mut self, now: u64) -> Vec<TimerId> {",
+      "        let due = self.pending.partition_point(|t| t.deadline <= now);",
+      "        self.pending.drain(..due).map(|t| t.id).collect()",
+      "    }",
+      "",
+      "    pub fn len(&self) -> usize {",
+      "        self.pending.len()",
+      "    }",
+      "",
+      "    pub fn is_empty(&self) -> bool {",
+      "        self.pending.is_empty()",
+      "    }",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Deadline-ordered timers.",
+      "",
+      "#[derive(Debug, Clone, Copy, PartialEq, Eq)]",
+      "pub struct TimerId(u64);",
+      "",
+      "#[derive(Debug)]",
+      "struct Timer {",
+      "    id: TimerId,",
+      "    deadline: u64,",
+      "}",
+      "",
+      "/// Pending timers.",
+      "///",
+      "/// {{CONTRACT}}",
+      "#[derive(Debug, Default)]",
+      "pub struct Timers {",
+      "    pending: Vec<Timer>,",
+      "    next_id: u64,",
+      "}",
+      "",
+      "impl Timers {",
+      "    pub fn new() -> Self {",
+      "        Self::default()",
+      "    }",
+      "",
+      "    pub fn schedule(&mut self, deadline: u64) -> TimerId {",
+      "        let id = TimerId(self.next_id);",
+      "        self.next_id += 1;",
+      "        let index = self.pending.partition_point(|t| t.deadline <= deadline);",
+      "        self.pending.insert(index, Timer { id, deadline });",
+      "        id",
+      "    }",
+      "",
+      "    pub fn cancel(&mut self, id: TimerId) -> bool {",
+      "        match self.pending.iter().position(|t| t.id == id) {",
+      "            Some(index) => {",
+      "                self.pending.remove(index);",
+      "                true",
+      "            }",
+      "            None => false,",
+      "        }",
+      "    }",
+      "",
+      "    pub fn pop_due(&mut self, now: u64) -> Vec<TimerId> {",
+      "        let due = self.pending.partition_point(|t| t.deadline <= now);",
+      "        self.pending.drain(..due).map(|t| t.id).collect()",
+      "    }",
+      "",
+      "    pub fn len(&self) -> usize {",
+      "        self.pending.len()",
+      "    }",
+      "",
+      "    pub fn is_empty(&self) -> bool {",
+      "        self.pending.is_empty()",
+      "    }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "1c8d1bd574f7decac454146fda0076bf65c46497c6c58361866519432b628266",
+   "before_documented": "4318c6557a7aba6620ed466478c9037a90d0b72496f4c51f4eeba6f5eb554c59",
+   "after": "19d15fb13def6b529954e68885385deca68e37154449f6702b72efa7f021187d",
+   "after_documented": "4812cc2814e55b487446fb31c115b5ed4ee7fe146b678d7c3aeae797e7f9c64a"
+  },
+  "check": {
+   "summary": "Schedules six timers, cancels one in the middle, and pops due timers at increasing times; compares the popped ids with the deadline order.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "duequeue",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libduequeue.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "duequeue={out}/libduequeue.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: due at \\d+: got \\[",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use duequeue::{TimerId, Timers};",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn main() {",
+      "    let mut timers = Timers::new();",
+      "    let ids: Vec<TimerId> = [10u64, 20, 30, 40, 50, 60]",
+      "        .iter()",
+      "        .map(|&d| timers.schedule(d))",
+      "        .collect();",
+      "    if !timers.cancel(ids[1]) || timers.cancel(ids[1]) {",
+      "        fail(\"cancel result\");",
+      "    }",
+      "    let tie = timers.schedule(30);",
+      "    let steps: [(u64, Vec<TimerId>); 4] = [",
+      "        (25, vec![ids[0]]),",
+      "        (30, vec![ids[2], tie]),",
+      "        (55, vec![ids[3], ids[4]]),",
+      "        (u64::MAX, vec![ids[5]]),",
+      "    ];",
+      "    for (now, want) in steps {",
+      "        let got = timers.pop_due(now);",
+      "        if got != want {",
+      "            fail(&format!(\"due at {now}: got {got:?}, want {want:?}\"));",
+      "        }",
+      "    }",
+      "    if !timers.is_empty() || timers.pop_due(u64::MAX).len() != 0 {",
+      "        fail(\"queue not empty at the end\");",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "cancel on any timer that is not the last one. Vec::swap_remove moves the last (latest) timer into the freed slot, so the vector is no longer sorted by deadline.",
+   "expected_impact": "pop_due stops at the first entry whose deadline is in the future, so timers that are already due stay queued behind the moved one and fire late; later insertions by binary search land in the wrong place as well.",
+   "positive_locations": [
+    {
+     "path": "src/lib.rs",
+     "symbol": "Timers::cancel",
+     "anchors": {
+      "start": "self.pending.swap_remove(index);"
+     },
+     "start_line": 41,
+     "end_line": 41
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/lib.rs",
+     "symbol": "Timers::cancel",
+     "anchors": {
+      "start": "self.pending.remove(index);"
+     },
+     "note": "Vec::remove shifts the tail down and keeps the order that schedule and pop_due rely on.",
+     "start_line": 41,
+     "end_line": 41
+    },
+    {
+     "variant": "before",
+     "path": "src/lib.rs",
+     "symbol": "Timers::schedule",
+     "anchors": {
+      "start": "let index = self.pending.partition_point(|t| t.deadline <= deadline);"
+     },
+     "note": "Insertion keeps deadline order with ties in insertion order, as documented.",
+     "start_line": 33,
+     "end_line": 33
+    }
+   ],
+   "reviewer_notes": "swap_remove is O(1) and looks like a reasonable optimisation; the invariant that breaks is only stated in the type's documentation and relied on by pop_due.",
+   "distinctive_tokens": [
+    "unsorted",
+    "sortedness",
+    "out of order",
+    "o(1) removal"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/lib.rs"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-RS-06",
+  "language": "rust",
+  "split": "holdout",
+  "family": "key-checked-ahead-of-percent-decoding",
+  "category": "input_validation",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "blobgate",
+   "title": "blobgate",
+   "summary": "A small HTTP gateway that serves blobs stored as files in one directory."
+  },
+  "contract": "object_path(root, raw) maps an object key taken from a request URL to a file directly inside root. raw is untrusted and percent-encoded: each % must start a %XX escape with two hex digits, and the decoded bytes must be UTF-8; otherwise the result is KeyError::Encoding. The decoded key must be a single path component: not empty, not \".\" or \"..\", and without '/', backslash or NUL, else KeyError::Forbidden. On success the result is root joined with the decoded key.",
+  "contract_file": "src/lib.rs",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Object keys for the blob gateway.",
+      "",
+      "use std::path::{Path, PathBuf};",
+      "",
+      "#[derive(Debug, PartialEq, Eq)]",
+      "pub enum KeyError {",
+      "    Encoding,",
+      "    Forbidden(String),",
+      "}",
+      "",
+      "/// Resolves a request key to a file path.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn object_path(root: &Path, raw: &str) -> Result<PathBuf, KeyError> {",
+      "    if raw.is_empty() || raw.contains('\\0') {",
+      "        return Err(KeyError::Forbidden(raw.to_string()));",
+      "    }",
+      "    if raw.contains('/') || raw.contains('\\\\') || raw == \".\" || raw == \"..\" {",
+      "        return Err(KeyError::Forbidden(raw.to_string()));",
+      "    }",
+      "    let key = percent_decode(raw)?;",
+      "    Ok(root.join(key))",
+      "}",
+      "",
+      "fn hex(b: u8) -> Option<u8> {",
+      "    match b {",
+      "        b'0'..=b'9' => Some(b - b'0'),",
+      "        b'a'..=b'f' => Some(b - b'a' + 10),",
+      "        b'A'..=b'F' => Some(b - b'A' + 10),",
+      "        _ => None,",
+      "    }",
+      "}",
+      "",
+      "fn percent_decode(raw: &str) -> Result<String, KeyError> {",
+      "    let bytes = raw.as_bytes();",
+      "    let mut out = Vec::with_capacity(bytes.len());",
+      "    let mut i = 0;",
+      "    while i < bytes.len() {",
+      "        if bytes[i] == b'%' {",
+      "            let hi = bytes",
+      "                .get(i + 1)",
+      "                .copied()",
+      "                .and_then(hex)",
+      "                .ok_or(KeyError::Encoding)?;",
+      "            let lo = bytes",
+      "                .get(i + 2)",
+      "                .copied()",
+      "                .and_then(hex)",
+      "                .ok_or(KeyError::Encoding)?;",
+      "            out.push(hi * 16 + lo);",
+      "            i += 3;",
+      "        } else {",
+      "            out.push(bytes[i]);",
+      "            i += 1;",
+      "        }",
+      "    }",
+      "    String::from_utf8(out).map_err(|_| KeyError::Encoding)",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Object keys for the blob gateway.",
+      "",
+      "use std::path::{Path, PathBuf};",
+      "",
+      "#[derive(Debug, PartialEq, Eq)]",
+      "pub enum KeyError {",
+      "    Encoding,",
+      "    Forbidden(String),",
+      "}",
+      "",
+      "/// Resolves a request key to a file path.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn object_path(root: &Path, raw: &str) -> Result<PathBuf, KeyError> {",
+      "    let key = percent_decode(raw)?;",
+      "    if key.is_empty() || key.contains(['/', '\\\\', '\\0']) || key == \".\" || key == \"..\" {",
+      "        return Err(KeyError::Forbidden(key));",
+      "    }",
+      "    Ok(root.join(key))",
+      "}",
+      "",
+      "fn hex(b: u8) -> Option<u8> {",
+      "    match b {",
+      "        b'0'..=b'9' => Some(b - b'0'),",
+      "        b'a'..=b'f' => Some(b - b'a' + 10),",
+      "        b'A'..=b'F' => Some(b - b'A' + 10),",
+      "        _ => None,",
+      "    }",
+      "}",
+      "",
+      "fn percent_decode(raw: &str) -> Result<String, KeyError> {",
+      "    let bytes = raw.as_bytes();",
+      "    let mut out = Vec::with_capacity(bytes.len());",
+      "    let mut i = 0;",
+      "    while i < bytes.len() {",
+      "        if bytes[i] == b'%' {",
+      "            let hi = bytes",
+      "                .get(i + 1)",
+      "                .copied()",
+      "                .and_then(hex)",
+      "                .ok_or(KeyError::Encoding)?;",
+      "            let lo = bytes",
+      "                .get(i + 2)",
+      "                .copied()",
+      "                .and_then(hex)",
+      "                .ok_or(KeyError::Encoding)?;",
+      "            out.push(hi * 16 + lo);",
+      "            i += 3;",
+      "        } else {",
+      "            out.push(bytes[i]);",
+      "            i += 1;",
+      "        }",
+      "    }",
+      "    String::from_utf8(out).map_err(|_| KeyError::Encoding)",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "e1f2de56b69a94b4d4d82b2b6af8ee8e90b94fb002c152b26af63f8163423f23",
+   "before_documented": "dccf21c2b6f340e58b6b03d1b9060cc51f93675298d53ea9918dbd677dbebc0b",
+   "after": "b5cd1162a9cef1b296f4e2fa9a3499fb0512de4eb9ad037391ebe9c973e37ab5",
+   "after_documented": "039711f167ca8c9fe9c3ddbca775f6e1918f8c770e1bee8dd5cbd7409c2755ee"
+  },
+  "check": {
+   "summary": "Maps plain and percent-encoded keys, including encoded dot-dot, encoded slash, encoded backslash and encoded NUL, and compares the results with the documented outcomes.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "blobgate",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libblobgate.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "blobgate={out}/libblobgate.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: %2E%2E%2Fsecret\\.txt gave Ok",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use std::path::Path;",
+      "",
+      "use blobgate::{object_path, KeyError};",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn main() {",
+      "    let root = Path::new(\"/srv/blobs\");",
+      "    for (raw, want) in [",
+      "        (\"report.pdf\", \"report.pdf\"),",
+      "        (\"a%20b.txt\", \"a b.txt\"),",
+      "        (\"%C3%A9t%C3%A9\", \"\\u{e9}t\\u{e9}\"),",
+      "        (\"..x\", \"..x\"),",
+      "    ] {",
+      "        match object_path(root, raw) {",
+      "            Ok(p) if p == root.join(want) => {}",
+      "            other => fail(&format!(\"{raw} gave {other:?}\")),",
+      "        }",
+      "    }",
+      "    for raw in [",
+      "        \"%2E%2E%2Fsecret.txt\",",
+      "        \"%2e%2e\",",
+      "        \"..%2Fetc\",",
+      "        \"a%2Fb\",",
+      "        \"a%5Cb\",",
+      "        \"x%00y\",",
+      "        \"%2E\",",
+      "        \"\",",
+      "        \"../x\",",
+      "        \"a/b\",",
+      "    ] {",
+      "        match object_path(root, raw) {",
+      "            Err(KeyError::Forbidden(_)) => {}",
+      "            Ok(_) => fail(&format!(\"{raw} gave Ok\")),",
+      "            Err(e) => fail(&format!(\"{raw} gave {e:?}, want Forbidden\")),",
+      "        }",
+      "    }",
+      "    for raw in [\"%\", \"%4\", \"%zz\", \"%+1\", \"%FF\"] {",
+      "        if object_path(root, raw) != Err(KeyError::Encoding) {",
+      "            fail(&format!(\"{raw} not reported as Encoding\"));",
+      "        }",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A key whose forbidden characters are percent-encoded, such as %2E%2E%2Fsecret.txt or %2E%2E. The component checks run on the raw text and the decoding happens afterwards.",
+   "expected_impact": "Requests can name files outside the blob directory (../secret.txt, the parent directory itself, or paths with a NUL byte), so the gateway serves or overwrites arbitrary files the process can reach.",
+   "positive_locations": [
+    {
+     "path": "src/lib.rs",
+     "symbol": "object_path",
+     "anchors": {
+      "start": "if raw.contains('/') || raw.contains('\\\\') || raw == \".\" || raw == \"..\" {",
+      "end": "let key = percent_decode(raw)?;"
+     },
+     "start_line": 24,
+     "end_line": 27
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/lib.rs",
+     "symbol": "object_path",
+     "anchors": {
+      "start": "let key = percent_decode(raw)?;",
+      "end": "return Err(KeyError::Forbidden(key));"
+     },
+     "note": "The corrected function decodes first and checks the decoded key, so encoded separators and dot segments are rejected.",
+     "start_line": 21,
+     "end_line": 23
+    },
+    {
+     "variant": "before",
+     "path": "src/lib.rs",
+     "symbol": "percent_decode",
+     "anchors": {
+      "start": "fn percent_decode(raw: &str) -> Result<String, KeyError> {"
+     },
+     "note": "The decoder itself is strict about escapes and UTF-8.",
+     "start_line": 40,
+     "end_line": 40
+    }
+   ],
+   "reviewer_notes": "Plain '../x' and 'a/b' are rejected correctly, which is why simple tests pass. The NUL case matters because joining with a NUL byte produces a path the OS rejects or truncates.",
+   "distinctive_tokens": [
+    "double-decoding",
+    "encoded dot",
+    "%2e",
+    "validate-then-decode"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/lib.rs"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-RS-07",
+  "language": "rust",
+  "split": "holdout",
+  "family": "strong-parent-backlink-keeps-tree-alive",
+  "category": "resource_lifetime",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "menutree",
+   "title": "menutree",
+   "summary": "In-memory menu trees for a desktop application, rebuilt whenever a plugin is loaded or unloaded."
+  },
+  "contract": "A Tree owns its nodes. Once the Tree and every node handle obtained from it have been dropped, every value stored in the tree has been dropped as well, so rebuilding menus does not grow memory. Node::parent returns the parent while the tree is alive and None for the root. Node::path joins the names from the root down with '/'. Trees are used from one thread.",
+  "contract_file": "src/tree.rs",
+  "files": {
+   "shared": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Menu trees.",
+      "",
+      "mod node;",
+      "mod tree;",
+      "",
+      "pub use node::Node;",
+      "pub use tree::Tree;"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/node.rs",
+     "lines": [
+      "use std::cell::RefCell;",
+      "use std::rc::Rc;",
+      "",
+      "/// One menu entry.",
+      "pub struct Node<T> {",
+      "    pub name: String,",
+      "    pub value: T,",
+      "    pub(crate) parent_link: RefCell<Option<Rc<Node<T>>>>,",
+      "    pub(crate) children: RefCell<Vec<Rc<Node<T>>>>,",
+      "}",
+      "",
+      "impl<T> Node<T> {",
+      "    pub(crate) fn new(name: &str, value: T) -> Rc<Self> {",
+      "        Rc::new(Node {",
+      "            name: name.to_string(),",
+      "            value,",
+      "            parent_link: RefCell::new(None),",
+      "            children: RefCell::new(Vec::new()),",
+      "        })",
+      "    }",
+      "",
+      "    /// The parent entry, or None for the root.",
+      "    pub fn parent(&self) -> Option<Rc<Node<T>>> {",
+      "        self.parent_link.borrow().clone()",
+      "    }",
+      "",
+      "    pub fn children(&self) -> Vec<Rc<Node<T>>> {",
+      "        self.children.borrow().clone()",
+      "    }",
+      "",
+      "    /// Names from the root down to this node, joined with '/'.",
+      "    pub fn path(&self) -> String {",
+      "        match self.parent() {",
+      "            Some(parent) => format!(\"{}/{}\", parent.path(), self.name),",
+      "            None => self.name.clone(),",
+      "        }",
+      "    }",
+      "}"
+     ]
+    },
+    {
+     "path": "src/tree.rs",
+     "lines": [
+      "use std::rc::Rc;",
+      "",
+      "use crate::node::Node;",
+      "",
+      "/// A menu tree.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub struct Tree<T> {",
+      "    root: Rc<Node<T>>,",
+      "}",
+      "",
+      "impl<T> Tree<T> {",
+      "    pub fn new(name: &str, value: T) -> Self {",
+      "        Tree {",
+      "            root: Node::new(name, value),",
+      "        }",
+      "    }",
+      "",
+      "    pub fn root(&self) -> Rc<Node<T>> {",
+      "        Rc::clone(&self.root)",
+      "    }",
+      "",
+      "    /// Adds a child under `parent` and returns it.",
+      "    pub fn add_child(&self, parent: &Rc<Node<T>>, name: &str, value: T) -> Rc<Node<T>> {",
+      "        let child = Node::new(name, value);",
+      "        *child.parent_link.borrow_mut() = Some(Rc::clone(parent));",
+      "        parent.children.borrow_mut().push(Rc::clone(&child));",
+      "        child",
+      "    }",
+      "",
+      "    /// Finds a node by its full path.",
+      "    pub fn find(&self, path: &str) -> Option<Rc<Node<T>>> {",
+      "        let mut parts = path.split('/');",
+      "        if parts.next()? != self.root.name {",
+      "            return None;",
+      "        }",
+      "        let mut current = Rc::clone(&self.root);",
+      "        for part in parts {",
+      "            let next = current.children().into_iter().find(|c| c.name == part)?;",
+      "            current = next;",
+      "        }",
+      "        Some(current)",
+      "    }",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/node.rs",
+     "lines": [
+      "use std::cell::RefCell;",
+      "use std::rc::{Rc, Weak};",
+      "",
+      "/// One menu entry.",
+      "pub struct Node<T> {",
+      "    pub name: String,",
+      "    pub value: T,",
+      "    pub(crate) parent_link: RefCell<Weak<Node<T>>>,",
+      "    pub(crate) children: RefCell<Vec<Rc<Node<T>>>>,",
+      "}",
+      "",
+      "impl<T> Node<T> {",
+      "    pub(crate) fn new(name: &str, value: T) -> Rc<Self> {",
+      "        Rc::new(Node {",
+      "            name: name.to_string(),",
+      "            value,",
+      "            parent_link: RefCell::new(Weak::new()),",
+      "            children: RefCell::new(Vec::new()),",
+      "        })",
+      "    }",
+      "",
+      "    /// The parent entry, or None for the root.",
+      "    pub fn parent(&self) -> Option<Rc<Node<T>>> {",
+      "        self.parent_link.borrow().upgrade()",
+      "    }",
+      "",
+      "    pub fn children(&self) -> Vec<Rc<Node<T>>> {",
+      "        self.children.borrow().clone()",
+      "    }",
+      "",
+      "    /// Names from the root down to this node, joined with '/'.",
+      "    pub fn path(&self) -> String {",
+      "        match self.parent() {",
+      "            Some(parent) => format!(\"{}/{}\", parent.path(), self.name),",
+      "            None => self.name.clone(),",
+      "        }",
+      "    }",
+      "}"
+     ]
+    },
+    {
+     "path": "src/tree.rs",
+     "lines": [
+      "use std::rc::Rc;",
+      "",
+      "use crate::node::Node;",
+      "",
+      "/// A menu tree.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub struct Tree<T> {",
+      "    root: Rc<Node<T>>,",
+      "}",
+      "",
+      "impl<T> Tree<T> {",
+      "    pub fn new(name: &str, value: T) -> Self {",
+      "        Tree {",
+      "            root: Node::new(name, value),",
+      "        }",
+      "    }",
+      "",
+      "    pub fn root(&self) -> Rc<Node<T>> {",
+      "        Rc::clone(&self.root)",
+      "    }",
+      "",
+      "    /// Adds a child under `parent` and returns it.",
+      "    pub fn add_child(&self, parent: &Rc<Node<T>>, name: &str, value: T) -> Rc<Node<T>> {",
+      "        let child = Node::new(name, value);",
+      "        *child.parent_link.borrow_mut() = Rc::downgrade(parent);",
+      "        parent.children.borrow_mut().push(Rc::clone(&child));",
+      "        child",
+      "    }",
+      "",
+      "    /// Finds a node by its full path.",
+      "    pub fn find(&self, path: &str) -> Option<Rc<Node<T>>> {",
+      "        let mut parts = path.split('/');",
+      "        if parts.next()? != self.root.name {",
+      "            return None;",
+      "        }",
+      "        let mut current = Rc::clone(&self.root);",
+      "        for part in parts {",
+      "            let next = current.children().into_iter().find(|c| c.name == part)?;",
+      "            current = next;",
+      "        }",
+      "        Some(current)",
+      "    }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "f69740944637835a487e040f9e6113857c179540de0446a3ca574fe64ca84111",
+   "before_documented": "4151be33dbfc9a2c8ed863bb24422adf237a9ab90349e5264a71138def4a90bb",
+   "after": "7e1553c456a0f7110caf89f65358eb057bd44782f85efc634fad50092e72343f",
+   "after_documented": "330376a8024f91eb24026e2606860cf60df882047f3bfb2f34dc8cdff0e700b8"
+  },
+  "check": {
+   "summary": "Builds a three-level tree of values that count their own drops, checks parent and path, drops the tree and every handle, and compares the drop count with the number of nodes.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "menutree",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libmenutree.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "menutree={out}/libmenutree.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: 0 of 7 values dropped",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use std::cell::Cell;",
+      "use std::rc::Rc;",
+      "",
+      "use menutree::Tree;",
+      "",
+      "thread_local! {",
+      "    static DROPS: Cell<usize> = const { Cell::new(0) };",
+      "}",
+      "",
+      "struct Counted;",
+      "",
+      "impl Drop for Counted {",
+      "    fn drop(&mut self) {",
+      "        DROPS.with(|d| d.set(d.get() + 1));",
+      "    }",
+      "}",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn main() {",
+      "    {",
+      "        let tree = Tree::new(\"menu\", Counted);",
+      "        let root = tree.root();",
+      "        let file = tree.add_child(&root, \"file\", Counted);",
+      "        let edit = tree.add_child(&root, \"edit\", Counted);",
+      "        let recent = tree.add_child(&file, \"recent\", Counted);",
+      "        tree.add_child(&recent, \"a.txt\", Counted);",
+      "        tree.add_child(&recent, \"b.txt\", Counted);",
+      "        tree.add_child(&edit, \"undo\", Counted);",
+      "        let found = tree",
+      "            .find(\"menu/file/recent/b.txt\")",
+      "            .unwrap_or_else(|| fail(\"find\"));",
+      "        if found.path() != \"menu/file/recent/b.txt\" || root.parent().is_some() {",
+      "            fail(\"path or root parent\");",
+      "        }",
+      "        if !Rc::ptr_eq(&found.parent().unwrap(), &recent) || tree.find(\"menu/nope\").is_some() {",
+      "            fail(\"parent link or missing path\");",
+      "        }",
+      "    }",
+      "    let dropped = DROPS.with(|d| d.get());",
+      "    if dropped != 7 {",
+      "        fail(&format!(",
+      "            \"{dropped} of 7 values dropped once the tree and its handles were gone\"",
+      "        ));",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Any tree with at least one child. add_child stores an Rc of the parent in the child while the parent's children vector holds an Rc of the child, so every parent-child pair forms a reference cycle.",
+   "expected_impact": "Dropping the Tree frees nothing: reference counts never reach zero, Drop never runs for any node or value, and each menu rebuild keeps the whole previous tree in memory for the life of the process.",
+   "positive_locations": [
+    {
+     "path": "src/node.rs",
+     "symbol": "Node::parent_link",
+     "anchors": {
+      "start": "pub(crate) parent_link: RefCell<Option<Rc<Node<T>>>>,"
+     },
+     "start_line": 8,
+     "end_line": 8
+    },
+    {
+     "path": "src/tree.rs",
+     "symbol": "Tree::add_child",
+     "anchors": {
+      "start": "*child.parent_link.borrow_mut() = Some(Rc::clone(parent));"
+     },
+     "start_line": 30,
+     "end_line": 30
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/node.rs",
+     "symbol": "Node::parent_link",
+     "anchors": {
+      "start": "pub(crate) parent_link: RefCell<Weak<Node<T>>>,"
+     },
+     "note": "A Weak back-link does not keep the parent alive, so the only strong references point downwards and the tree is freed from the root.",
+     "start_line": 8,
+     "end_line": 8
+    },
+    {
+     "variant": "after",
+     "path": "src/tree.rs",
+     "symbol": "Tree::add_child",
+     "anchors": {
+      "start": "*child.parent_link.borrow_mut() = Rc::downgrade(parent);"
+     },
+     "note": "The child records a downgraded reference to its parent.",
+     "start_line": 30,
+     "end_line": 30
+    }
+   ],
+   "reviewer_notes": "Safe Rust, no warnings; only the cycle reveals it. Needs both files: the field type is in node.rs and the cycle is created in tree.rs.",
+   "distinctive_tokens": [
+    "reference cycle",
+    "cycle",
+    "weak reference",
+    "never freed"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/node.rs",
+     "src/tree.rs"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-RS-08",
+  "language": "rust",
+  "split": "holdout",
+  "family": "join-while-own-sender-still-open",
+  "category": "concurrency_async",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "batchlog",
+   "title": "batchlog",
+   "summary": "Writes access-log records to disk in batches from a background thread."
+  },
+  "contract": "BatchWriter::spawn starts a background thread that writes queued records to the sink in batches of up to batch_size lines (batch_size of 1 or more). push queues one record and never blocks on I/O. finish flushes everything queued, stops the thread and returns the number of records written, or the first I/O error from the sink. Records are written in push order.",
+  "contract_file": "src/lib.rs",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Batched record writer on a background thread.",
+      "",
+      "use std::io::{self, Write};",
+      "use std::sync::mpsc::{self, Receiver, Sender};",
+      "use std::thread::{self, JoinHandle};",
+      "",
+      "/// Background batch writer.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub struct BatchWriter {",
+      "    sender: Sender<String>,",
+      "    worker: JoinHandle<io::Result<usize>>,",
+      "}",
+      "",
+      "impl BatchWriter {",
+      "    pub fn spawn<W: Write + Send + 'static>(sink: W, batch_size: usize) -> Self {",
+      "        assert!(batch_size >= 1, \"batch_size must be at least 1\");",
+      "        let (sender, records) = mpsc::channel();",
+      "        let worker = thread::spawn(move || run(sink, records, batch_size));",
+      "        BatchWriter { sender, worker }",
+      "    }",
+      "",
+      "    pub fn push(&self, record: impl Into<String>) {",
+      "        // The worker only stops in finish or on an I/O error; a send error means",
+      "        // the error is reported by finish.",
+      "        let _ = self.sender.send(record.into());",
+      "    }",
+      "",
+      "    pub fn finish(self) -> io::Result<usize> {",
+      "        self.worker",
+      "            .join()",
+      "            .map_err(|_| io::Error::other(\"writer thread panicked\"))?",
+      "    }",
+      "}",
+      "",
+      "fn flush<W: Write>(sink: &mut W, batch: &mut Vec<String>) -> io::Result<()> {",
+      "    if batch.is_empty() {",
+      "        return Ok(());",
+      "    }",
+      "    let mut chunk = batch.join(\"\\n\");",
+      "    chunk.push('\\n');",
+      "    sink.write_all(chunk.as_bytes())?;",
+      "    sink.flush()?;",
+      "    batch.clear();",
+      "    Ok(())",
+      "}",
+      "",
+      "fn run<W: Write>(mut sink: W, records: Receiver<String>, batch_size: usize) -> io::Result<usize> {",
+      "    let mut batch = Vec::with_capacity(batch_size);",
+      "    let mut written = 0;",
+      "    for record in records {",
+      "        batch.push(record);",
+      "        if batch.len() == batch_size {",
+      "            written += batch.len();",
+      "            flush(&mut sink, &mut batch)?;",
+      "        }",
+      "    }",
+      "    written += batch.len();",
+      "    flush(&mut sink, &mut batch)?;",
+      "    Ok(written)",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Batched record writer on a background thread.",
+      "",
+      "use std::io::{self, Write};",
+      "use std::sync::mpsc::{self, Receiver, Sender};",
+      "use std::thread::{self, JoinHandle};",
+      "",
+      "/// Background batch writer.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub struct BatchWriter {",
+      "    sender: Sender<String>,",
+      "    worker: JoinHandle<io::Result<usize>>,",
+      "}",
+      "",
+      "impl BatchWriter {",
+      "    pub fn spawn<W: Write + Send + 'static>(sink: W, batch_size: usize) -> Self {",
+      "        assert!(batch_size >= 1, \"batch_size must be at least 1\");",
+      "        let (sender, records) = mpsc::channel();",
+      "        let worker = thread::spawn(move || run(sink, records, batch_size));",
+      "        BatchWriter { sender, worker }",
+      "    }",
+      "",
+      "    pub fn push(&self, record: impl Into<String>) {",
+      "        // The worker only stops in finish or on an I/O error; a send error means",
+      "        // the error is reported by finish.",
+      "        let _ = self.sender.send(record.into());",
+      "    }",
+      "",
+      "    pub fn finish(self) -> io::Result<usize> {",
+      "        let BatchWriter { sender, worker } = self;",
+      "        drop(sender);",
+      "        worker",
+      "            .join()",
+      "            .map_err(|_| io::Error::other(\"writer thread panicked\"))?",
+      "    }",
+      "}",
+      "",
+      "fn flush<W: Write>(sink: &mut W, batch: &mut Vec<String>) -> io::Result<()> {",
+      "    if batch.is_empty() {",
+      "        return Ok(());",
+      "    }",
+      "    let mut chunk = batch.join(\"\\n\");",
+      "    chunk.push('\\n');",
+      "    sink.write_all(chunk.as_bytes())?;",
+      "    sink.flush()?;",
+      "    batch.clear();",
+      "    Ok(())",
+      "}",
+      "",
+      "fn run<W: Write>(mut sink: W, records: Receiver<String>, batch_size: usize) -> io::Result<usize> {",
+      "    let mut batch = Vec::with_capacity(batch_size);",
+      "    let mut written = 0;",
+      "    for record in records {",
+      "        batch.push(record);",
+      "        if batch.len() == batch_size {",
+      "            written += batch.len();",
+      "            flush(&mut sink, &mut batch)?;",
+      "        }",
+      "    }",
+      "    written += batch.len();",
+      "    flush(&mut sink, &mut batch)?;",
+      "    Ok(written)",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "3d7bbc0fa67be3edd7d90b22192206320f4c1d647bd897634fe8a71cd58ae7dc",
+   "before_documented": "433e14509e93fae5d8ef1ebbd16cdad1cfdf29907ab02755cbeba2c3bba9824d",
+   "after": "be08322f4e72e9a429d9c2cbf0b9d6641b98070c6414ab7c845ccc5b023f7688",
+   "after_documented": "d31e8cda11883d6cb3fe3b9e47815fbf3f9a130d0a371dbffe90490c76088ae9"
+  },
+  "check": {
+   "summary": "Pushes 25 records with batch size 10 into an in-memory sink and calls finish on a helper thread, waiting up to three seconds; then checks the count and the written lines, and the error path with a failing sink.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "batchlog",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libbatchlog.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "batchlog={out}/libbatchlog.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: finish did not return within 3 s",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use std::io::{self, Write};",
+      "use std::sync::{mpsc, Arc, Mutex};",
+      "use std::thread;",
+      "use std::time::Duration;",
+      "",
+      "use batchlog::BatchWriter;",
+      "",
+      "#[derive(Clone, Default)]",
+      "struct Memory(Arc<Mutex<Vec<u8>>>);",
+      "",
+      "impl Write for Memory {",
+      "    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {",
+      "        self.0.lock().unwrap().extend_from_slice(buf);",
+      "        Ok(buf.len())",
+      "    }",
+      "    fn flush(&mut self) -> io::Result<()> {",
+      "        Ok(())",
+      "    }",
+      "}",
+      "",
+      "struct Full;",
+      "",
+      "impl Write for Full {",
+      "    fn write(&mut self, _: &[u8]) -> io::Result<usize> {",
+      "        Err(io::Error::other(\"no space left on device\"))",
+      "    }",
+      "    fn flush(&mut self) -> io::Result<()> {",
+      "        Ok(())",
+      "    }",
+      "}",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn finish_within(writer: BatchWriter) -> io::Result<usize> {",
+      "    let (tx, rx) = mpsc::channel();",
+      "    thread::spawn(move || {",
+      "        let _ = tx.send(writer.finish());",
+      "    });",
+      "    rx.recv_timeout(Duration::from_secs(3))",
+      "        .unwrap_or_else(|_| fail(\"finish did not return within 3 s\"))",
+      "}",
+      "",
+      "fn main() {",
+      "    let memory = Memory::default();",
+      "    let writer = BatchWriter::spawn(memory.clone(), 10);",
+      "    for n in 0..25 {",
+      "        writer.push(format!(\"GET /item/{n} 200\"));",
+      "    }",
+      "    let written = finish_within(writer).unwrap_or_else(|e| fail(&format!(\"finish error {e}\")));",
+      "    let text = String::from_utf8(memory.0.lock().unwrap().clone()).unwrap();",
+      "    let lines: Vec<&str> = text.lines().collect();",
+      "    if written != 25 || lines.len() != 25 || lines[24] != \"GET /item/24 200\" {",
+      "        fail(&format!(\"written {written}, lines {}\", lines.len()));",
+      "    }",
+      "    let failing = BatchWriter::spawn(Full, 2);",
+      "    for n in 0..5 {",
+      "        failing.push(format!(\"r{n}\"));",
+      "    }",
+      "    match finish_within(failing) {",
+      "        Err(e) if e.to_string().contains(\"no space\") => {}",
+      "        other => fail(&format!(\"failing sink gave {other:?}\")),",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Every call to finish. It joins the worker through self.worker while self.sender is still alive (the rest of self is only dropped when finish returns), so the worker's receiving loop never sees the channel close.",
+   "expected_impact": "finish blocks forever and the last partial batch is never written; a service that calls finish during shutdown hangs and has to be killed, losing up to batch_size - 1 records each time.",
+   "positive_locations": [
+    {
+     "path": "src/lib.rs",
+     "symbol": "BatchWriter::finish",
+     "anchors": {
+      "start": "pub fn finish(self) -> io::Result<usize> {",
+      "end": ".map_err(|_| io::Error::other(\"writer thread panicked\"))?"
+     },
+     "start_line": 34,
+     "end_line": 37
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/lib.rs",
+     "symbol": "BatchWriter::finish",
+     "anchors": {
+      "start": "drop(sender);"
+     },
+     "note": "Dropping the only Sender ahead of the join closes the channel, so the worker loop ends, flushes the last batch and returns.",
+     "start_line": 36,
+     "end_line": 36
+    },
+    {
+     "variant": "before",
+     "path": "src/lib.rs",
+     "symbol": "run",
+     "anchors": {
+      "start": "for record in records {",
+      "end": "flush(&mut sink, &mut batch)?;"
+     },
+     "note": "The worker flushes the remainder correctly once the channel closes.",
+     "start_line": 56,
+     "end_line": 60
+    }
+   ],
+   "reviewer_notes": "Moving one field out of self is allowed because BatchWriter has no Drop impl; the remaining field lives to the end of finish. The worker and batching logic are correct.",
+   "distinctive_tokens": [
+    "channel never closes",
+    "hangs",
+    "sender kept alive",
+    "blocked join"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/lib.rs"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-RS-09",
+  "language": "rust",
+  "split": "holdout",
+  "family": "single-write-call-assumed-complete",
+  "category": "api_misuse",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": true,
+  "project": {
+   "name": "telemetry-wire",
+   "title": "telemetry-wire",
+   "summary": "Framing for telemetry messages sent from field devices to a collector over TCP."
+  },
+  "contract": "write_frame(out, kind, payload) writes one complete frame to out: the kind byte, the payload length as a big-endian u32, then the payload. Payloads of up to MAX_PAYLOAD bytes are accepted; a larger payload returns ErrorKind::InvalidInput and writes nothing. Any write error from out is returned. out is any io::Write, typically a TcpStream; read_frame reads back what write_frame produced.",
+  "contract_file": "src/frame.rs",
+  "files": {
+   "shared": [
+    {
+     "path": "src/client.rs",
+     "lines": [
+      "use std::io::{self, Write};",
+      "use std::net::TcpStream;",
+      "",
+      "use crate::frame::write_frame;",
+      "",
+      "const KIND_SAMPLE: u8 = 1;",
+      "",
+      "/// Device-side connection to the collector.",
+      "pub struct Uplink<W: Write = TcpStream> {",
+      "    out: W,",
+      "    sent: u64,",
+      "}",
+      "",
+      "impl Uplink<TcpStream> {",
+      "    pub fn connect(addr: &str) -> io::Result<Self> {",
+      "        Ok(Uplink::over(TcpStream::connect(addr)?))",
+      "    }",
+      "}",
+      "",
+      "impl<W: Write> Uplink<W> {",
+      "    pub fn over(out: W) -> Self {",
+      "        Uplink { out, sent: 0 }",
+      "    }",
+      "",
+      "    /// Sends one encoded sample.",
+      "    pub fn send_sample(&mut self, sample: &[u8]) -> io::Result<()> {",
+      "        write_frame(&mut self.out, KIND_SAMPLE, sample)?;",
+      "        self.sent += 1;",
+      "        Ok(())",
+      "    }",
+      "",
+      "    pub fn sent(&self) -> u64 {",
+      "        self.sent",
+      "    }",
+      "}"
+     ]
+    },
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Telemetry framing.",
+      "",
+      "mod client;",
+      "mod frame;",
+      "",
+      "pub use client::Uplink;",
+      "pub use frame::{read_frame, write_frame, MAX_PAYLOAD};"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/frame.rs",
+     "lines": [
+      "use std::io::{self, Read, Write};",
+      "",
+      "/// Largest payload a frame may carry.",
+      "pub const MAX_PAYLOAD: usize = 1 << 20;",
+      "",
+      "/// Writes one frame.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn write_frame<W: Write>(out: &mut W, kind: u8, payload: &[u8]) -> io::Result<()> {",
+      "    if payload.len() > MAX_PAYLOAD {",
+      "        return Err(io::Error::new(",
+      "            io::ErrorKind::InvalidInput,",
+      "            \"payload too large\",",
+      "        ));",
+      "    }",
+      "    let mut header = [0u8; 5];",
+      "    header[0] = kind;",
+      "    header[1..].copy_from_slice(&(payload.len() as u32).to_be_bytes());",
+      "    out.write(&header)?;",
+      "    out.write(payload)?;",
+      "    Ok(())",
+      "}",
+      "",
+      "/// Reads one frame and returns its kind and payload.",
+      "pub fn read_frame<R: Read>(input: &mut R) -> io::Result<(u8, Vec<u8>)> {",
+      "    let mut header = [0u8; 5];",
+      "    input.read_exact(&mut header)?;",
+      "    let len = u32::from_be_bytes([header[1], header[2], header[3], header[4]]) as usize;",
+      "    if len > MAX_PAYLOAD {",
+      "        return Err(io::Error::new(",
+      "            io::ErrorKind::InvalidData,",
+      "            \"frame length out of range\",",
+      "        ));",
+      "    }",
+      "    let mut payload = vec![0u8; len];",
+      "    input.read_exact(&mut payload)?;",
+      "    Ok((header[0], payload))",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/frame.rs",
+     "lines": [
+      "use std::io::{self, Read, Write};",
+      "",
+      "/// Largest payload a frame may carry.",
+      "pub const MAX_PAYLOAD: usize = 1 << 20;",
+      "",
+      "/// Writes one frame.",
+      "///",
+      "/// {{CONTRACT}}",
+      "pub fn write_frame<W: Write>(out: &mut W, kind: u8, payload: &[u8]) -> io::Result<()> {",
+      "    if payload.len() > MAX_PAYLOAD {",
+      "        return Err(io::Error::new(",
+      "            io::ErrorKind::InvalidInput,",
+      "            \"payload too large\",",
+      "        ));",
+      "    }",
+      "    let mut header = [0u8; 5];",
+      "    header[0] = kind;",
+      "    header[1..].copy_from_slice(&(payload.len() as u32).to_be_bytes());",
+      "    out.write_all(&header)?;",
+      "    out.write_all(payload)?;",
+      "    Ok(())",
+      "}",
+      "",
+      "/// Reads one frame and returns its kind and payload.",
+      "pub fn read_frame<R: Read>(input: &mut R) -> io::Result<(u8, Vec<u8>)> {",
+      "    let mut header = [0u8; 5];",
+      "    input.read_exact(&mut header)?;",
+      "    let len = u32::from_be_bytes([header[1], header[2], header[3], header[4]]) as usize;",
+      "    if len > MAX_PAYLOAD {",
+      "        return Err(io::Error::new(",
+      "            io::ErrorKind::InvalidData,",
+      "            \"frame length out of range\",",
+      "        ));",
+      "    }",
+      "    let mut payload = vec![0u8; len];",
+      "    input.read_exact(&mut payload)?;",
+      "    Ok((header[0], payload))",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "2696c0e92e816d15e1e2db9570d62a7144bb1fa68a5352aea81a0acc878fe1be",
+   "before_documented": "767e2b14d2811d3e419a7ddac74664fa90bee25d283acde697eacea8257e1222",
+   "after": "3e018488cc2cf9fcf961893012cecf73ac0e5b55fdcec322bf225f857e066365",
+   "after_documented": "b2a26b57ca8fb7cb52b54e0ca1f9cc3f9c37444b5b6fc2cb1e6e61ac58482c2d"
+  },
+  "check": {
+   "summary": "Writes two frames into a writer that accepts at most three bytes per write call, as a busy socket does, then reads them back with read_frame.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "telemetry_wire",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libtelemetry_wire.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "telemetry_wire={out}/libtelemetry_wire.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: short writes: wrote \\d+ bytes, want 21",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use std::io::{self, Cursor, Write};",
+      "",
+      "use telemetry_wire::{read_frame, write_frame, Uplink, MAX_PAYLOAD};",
+      "",
+      "struct Trickle(Vec<u8>);",
+      "",
+      "impl Write for Trickle {",
+      "    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {",
+      "        let n = buf.len().min(3);",
+      "        self.0.extend_from_slice(&buf[..n]);",
+      "        Ok(n)",
+      "    }",
+      "    fn flush(&mut self) -> io::Result<()> {",
+      "        Ok(())",
+      "    }",
+      "}",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn main() {",
+      "    let mut uplink = Uplink::over(Trickle(Vec::new()));",
+      "    uplink",
+      "        .send_sample(b\"temp=21.5\")",
+      "        .unwrap_or_else(|e| fail(&format!(\"send: {e}\")));",
+      "    let mut wire = Trickle(Vec::new());",
+      "    write_frame(&mut wire, 2, b\"ok\").unwrap_or_else(|e| fail(&format!(\"write: {e}\")));",
+      "    let mut bytes = Vec::new();",
+      "    {",
+      "        let mut first = Trickle(Vec::new());",
+      "        write_frame(&mut first, 1, b\"temp=21.5\").unwrap();",
+      "        bytes.extend_from_slice(&first.0);",
+      "    }",
+      "    bytes.extend_from_slice(&wire.0);",
+      "    if bytes.len() != 21 {",
+      "        fail(&format!(",
+      "            \"short writes: wrote {} bytes, want 21\",",
+      "            bytes.len()",
+      "        ));",
+      "    }",
+      "    let mut input = Cursor::new(bytes);",
+      "    let a = read_frame(&mut input).unwrap_or_else(|e| fail(&format!(\"read 1: {e}\")));",
+      "    let b = read_frame(&mut input).unwrap_or_else(|e| fail(&format!(\"read 2: {e}\")));",
+      "    if a != (1, b\"temp=21.5\".to_vec()) || b != (2, b\"ok\".to_vec()) || uplink.sent() != 1 {",
+      "        fail(\"frames read back\");",
+      "    }",
+      "    let mut sink = Vec::new();",
+      "    let big = vec![0u8; MAX_PAYLOAD + 1];",
+      "    match write_frame(&mut sink, 1, &big) {",
+      "        Err(e) if e.kind() == io::ErrorKind::InvalidInput && sink.is_empty() => {}",
+      "        other => fail(&format!(\"oversized payload: {other:?}\")),",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A writer that accepts fewer bytes than offered in one call, which TcpStream, pipes and many wrappers do under load. Write::write returns the number of bytes taken and write_frame discards it.",
+   "expected_impact": "Frames are cut short on the wire while write_frame reports success; the collector then reads the next frame's bytes as the rest of this one and the stream is desynchronised until reconnect.",
+   "positive_locations": [
+    {
+     "path": "src/frame.rs",
+     "symbol": "write_frame",
+     "anchors": {
+      "start": "out.write(&header)?;",
+      "end": "out.write(payload)?;"
+     },
+     "start_line": 24,
+     "end_line": 25
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/frame.rs",
+     "symbol": "write_frame",
+     "anchors": {
+      "start": "out.write_all(&header)?;",
+      "end": "out.write_all(payload)?;"
+     },
+     "note": "write_all loops until every byte is accepted or an error occurs.",
+     "start_line": 24,
+     "end_line": 25
+    },
+    {
+     "variant": "before",
+     "path": "src/frame.rs",
+     "symbol": "read_frame",
+     "anchors": {
+      "start": "input.read_exact(&mut header)?;"
+     },
+     "note": "The reading side already uses read_exact and handles short reads correctly.",
+     "start_line": 32,
+     "end_line": 32
+    },
+    {
+     "variant": "before",
+     "path": "src/client.rs",
+     "symbol": "Uplink::send_sample",
+     "anchors": {
+      "start": "write_frame(&mut self.out, KIND_SAMPLE, sample)?;"
+     },
+     "note": "The device client writes frames straight to a TcpStream and counts a sample as sent once write_frame returns Ok.",
+     "start_line": 27,
+     "end_line": 27
+    }
+   ],
+   "reviewer_notes": "Clippy's unused_io_amount (correctness group) reports both calls. In-memory Vec<u8> writers take everything at once, which is why tests that write into a Vec pass. The device client in client.rs writes to a TcpStream.",
+   "distinctive_tokens": [
+    "short write",
+    "partial write",
+    "unused_io_amount",
+    "desynchronised"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/frame.rs"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-RS-10",
+  "language": "rust",
+  "split": "holdout",
+  "family": "boxed-session-reclaimed-by-c-close",
+  "category": "resource_lifetime",
+  "kind": "tricky_normal",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "codecbridge",
+   "title": "codecbridge",
+   "summary": "A C ABI over a Rust audio codec, used by a C++ media player and by Rust callers through a safe wrapper."
+  },
+  "contract": "codec_open returns a pointer to a new session that the caller owns. Each pointer must be released exactly once with codec_close and not used afterwards; codec_close(NULL) does nothing. codec_feed(session, data, len) decodes len bytes from data into the session and returns the total number of bytes it has consumed, or -1 when session or data is NULL. Session is the safe Rust wrapper: it releases its pointer when dropped.",
+  "contract_file": "src/ffi.rs",
+  "files": {
+   "shared": [
+    {
+     "path": "src/decoder.rs",
+     "lines": [
+      "use std::sync::atomic::{AtomicUsize, Ordering};",
+      "",
+      "static LIVE: AtomicUsize = AtomicUsize::new(0);",
+      "",
+      "/// Number of decoders currently allocated.",
+      "pub fn live_decoders() -> usize {",
+      "    LIVE.load(Ordering::SeqCst)",
+      "}",
+      "",
+      "pub struct Decoder {",
+      "    consumed: u64,",
+      "    frames: Vec<u8>,",
+      "}",
+      "",
+      "impl Decoder {",
+      "    pub(crate) fn new() -> Self {",
+      "        LIVE.fetch_add(1, Ordering::SeqCst);",
+      "        Decoder {",
+      "            consumed: 0,",
+      "            frames: Vec::with_capacity(4096),",
+      "        }",
+      "    }",
+      "",
+      "    pub(crate) fn feed(&mut self, data: &[u8]) -> u64 {",
+      "        self.frames.extend(data.iter().map(|b| b ^ 0x5a));",
+      "        self.frames.truncate(4096);",
+      "        self.consumed += data.len() as u64;",
+      "        self.consumed",
+      "    }",
+      "}",
+      "",
+      "impl Drop for Decoder {",
+      "    fn drop(&mut self) {",
+      "        LIVE.fetch_sub(1, Ordering::SeqCst);",
+      "    }",
+      "}"
+     ]
+    },
+    {
+     "path": "src/ffi.rs",
+     "lines": [
+      "use std::os::raw::c_long;",
+      "use std::slice;",
+      "",
+      "use crate::decoder::Decoder;",
+      "",
+      "/// Opens a decoding session.",
+      "///",
+      "/// {{CONTRACT}}",
+      "#[no_mangle]",
+      "pub extern \"C\" fn codec_open() -> *mut Decoder {",
+      "    Box::into_raw(Box::new(Decoder::new()))",
+      "}",
+      "",
+      "/// Releases a session returned by codec_open.",
+      "///",
+      "/// # Safety",
+      "/// `session` is NULL or a pointer from codec_open that was not released yet.",
+      "#[no_mangle]",
+      "pub unsafe extern \"C\" fn codec_close(session: *mut Decoder) {",
+      "    if session.is_null() {",
+      "        return;",
+      "    }",
+      "    drop(unsafe { Box::from_raw(session) });",
+      "}",
+      "",
+      "/// Feeds bytes to a session.",
+      "///",
+      "/// # Safety",
+      "/// `session` comes from codec_open and is still open; `data` points to `len`",
+      "/// readable bytes.",
+      "#[no_mangle]",
+      "pub unsafe extern \"C\" fn codec_feed(session: *mut Decoder, data: *const u8, len: usize) -> c_long {",
+      "    if session.is_null() || data.is_null() {",
+      "        return -1;",
+      "    }",
+      "    let decoder = unsafe { &mut *session };",
+      "    let bytes = unsafe { slice::from_raw_parts(data, len) };",
+      "    decoder.feed(bytes) as c_long",
+      "}"
+     ]
+    },
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! C ABI for the codec.",
+      "",
+      "mod decoder;",
+      "mod ffi;",
+      "mod session;",
+      "",
+      "pub use decoder::live_decoders;",
+      "pub use ffi::{codec_close, codec_feed, codec_open};",
+      "pub use session::Session;"
+     ]
+    },
+    {
+     "path": "src/session.rs",
+     "lines": [
+      "use std::ptr::NonNull;",
+      "",
+      "use crate::decoder::Decoder;",
+      "use crate::ffi::{codec_close, codec_feed, codec_open};",
+      "",
+      "/// Safe owner of one codec session.",
+      "pub struct Session {",
+      "    raw: NonNull<Decoder>,",
+      "}",
+      "",
+      "impl Session {",
+      "    pub fn open() -> Self {",
+      "        let raw = NonNull::new(codec_open()).expect(\"codec_open never returns NULL\");",
+      "        Session { raw }",
+      "    }",
+      "",
+      "    /// Feeds data and returns the total number of bytes consumed so far.",
+      "    pub fn feed(&mut self, data: &[u8]) -> u64 {",
+      "        // The pointer is open for as long as self exists.",
+      "        unsafe { codec_feed(self.raw.as_ptr(), data.as_ptr(), data.len()) as u64 }",
+      "    }",
+      "}",
+      "",
+      "impl Drop for Session {",
+      "    fn drop(&mut self) {",
+      "        // Released exactly once: Session is neither Clone nor Copy.",
+      "        unsafe { codec_close(self.raw.as_ptr()) }",
+      "    }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "8173418a7f105a741fed52e232529861b304489c92f5dd6460d1ae950695b226",
+   "before_documented": "12920348f98d0659aaa7475b0a0e09a897aa3df6d280500253503249da5d515a"
+  },
+  "check": {
+   "summary": "Opens 200 sessions through the safe wrapper and 50 through the raw functions, feeds data, closes or drops them all, and compares the live-session counter with zero; also calls codec_close(NULL) and codec_feed with NULL.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "codecbridge",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libcodecbridge.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "codecbridge={out}/libcodecbridge.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: ",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use std::ptr;",
+      "",
+      "use codecbridge::{codec_close, codec_feed, codec_open, live_decoders, Session};",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn main() {",
+      "    {",
+      "        let mut sessions: Vec<Session> = (0..200).map(|_| Session::open()).collect();",
+      "        for (n, s) in sessions.iter_mut().enumerate() {",
+      "            if s.feed(&vec![7u8; n % 13]) != (n % 13) as u64 {",
+      "                fail(\"feed count\");",
+      "            }",
+      "        }",
+      "        if live_decoders() != 200 {",
+      "            fail(&format!(",
+      "                \"{} live decoders while 200 sessions are open\",",
+      "                live_decoders()",
+      "            ));",
+      "        }",
+      "    }",
+      "    let raw: Vec<_> = (0..50).map(|_| codec_open()).collect();",
+      "    for &p in &raw {",
+      "        unsafe {",
+      "            if codec_feed(p, b\"abc\".as_ptr(), 3) != 3 || codec_feed(p, ptr::null(), 3) != -1 {",
+      "                fail(\"raw feed\");",
+      "            }",
+      "            codec_close(p);",
+      "        }",
+      "    }",
+      "    unsafe {",
+      "        codec_close(ptr::null_mut());",
+      "        if codec_feed(ptr::null_mut(), b\"x\".as_ptr(), 1) != -1 {",
+      "            fail(\"NULL session feed\");",
+      "        }",
+      "    }",
+      "    if live_decoders() != 0 {",
+      "        fail(&format!(",
+      "            \"{} decoders still allocated once every session was released\",",
+      "            live_decoders()",
+      "        ));",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. codec_open calls Box::into_raw and nothing in that function frees the box, which resembles memory handed out and never reclaimed.",
+   "expected_impact": "No defect: ownership passes to the caller by contract. codec_close turns the pointer back into a Box and drops it, and the Rust wrapper in session.rs calls codec_close from Drop, so every session is freed exactly once.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "src/ffi.rs",
+     "symbol": "codec_open",
+     "anchors": {
+      "start": "Box::into_raw(Box::new(Decoder::new()))"
+     },
+     "note": "Raw pointer created from a Box with no matching free in sight.",
+     "start_line": 16,
+     "end_line": 16
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "src/ffi.rs",
+     "symbol": "codec_close",
+     "anchors": {
+      "start": "drop(unsafe { Box::from_raw(session) });"
+     },
+     "note": "The matching release reconstructs the Box and drops it.",
+     "start_line": 28,
+     "end_line": 28
+    },
+    {
+     "variant": "before",
+     "path": "src/session.rs",
+     "symbol": "Session::drop",
+     "anchors": {
+      "start": "unsafe { codec_close(self.raw.as_ptr()) }"
+     },
+     "note": "The safe wrapper owns the pointer and releases it exactly once when dropped.",
+     "start_line": 27,
+     "end_line": 27
+    }
+   ],
+   "reviewer_notes": "A finding that codec_open frees nothing is a false positive. Notes that codec_close cannot detect a double close are out of contract (each pointer is released once).",
+   "distinctive_tokens": [
+    "into_raw without",
+    "never reclaimed",
+    "ownership transfer"
+   ],
+   "corrected_variant": null
+  }
+ },
+ {
+  "id": "R1-RS-11",
+  "language": "rust",
+  "split": "holdout",
+  "family": "expect-backed-by-constructor-validation",
+  "category": "input_validation",
+  "kind": "tricky_normal",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "maintwin",
+   "title": "maintwin",
+   "summary": "Weekly maintenance windows for database clusters, read from operator-supplied text."
+  },
+  "contract": "Schedule::parse reads operator text with one window per line, \"<weekday> <HH:MM> <minutes>\" (weekday as mon..sun, 00:00 to 23:59, duration 1 to 1440 minutes), ignoring blank lines. The text is untrusted: anything else, including an empty schedule, is a ParseError naming the line, and parse never panics. next_start(now) returns the start of the next window that begins at now or later, expressed in minutes since Monday 00:00 of a reference week, wrapping around to the following week.",
+  "contract_file": "src/schedule.rs",
+  "files": {
+   "shared": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Maintenance windows.",
+      "",
+      "mod next;",
+      "mod schedule;",
+      "",
+      "pub use schedule::{ParseError, Schedule, WEEKDAYS};"
+     ]
+    },
+    {
+     "path": "src/next.rs",
+     "lines": [
+      "use crate::schedule::{Schedule, WEEKDAYS};",
+      "",
+      "const WEEK: u32 = 7 * 24 * 60;",
+      "",
+      "impl Schedule {",
+      "    /// Minutes since Monday 00:00 of each window start.",
+      "    fn starts(&self) -> impl Iterator<Item = u32> + '_ {",
+      "        self.windows.iter().map(|w| {",
+      "            let day = WEEKDAYS",
+      "                .iter()",
+      "                .position(|d| *d == w.day)",
+      "                .expect(\"weekday checked by parse\") as u32;",
+      "            day * 24 * 60 + w.start",
+      "        })",
+      "    }",
+      "",
+      "    /// Start of the next window beginning at `now` or later (minutes since Monday 00:00).",
+      "    pub fn next_start(&self, now: u32) -> u32 {",
+      "        let now = now % WEEK;",
+      "        self.starts()",
+      "            .map(|s| if s >= now { s } else { s + WEEK })",
+      "            .min()",
+      "            .expect(\"parse rejects empty schedules\")",
+      "    }",
+      "",
+      "    pub fn total_minutes(&self) -> u32 {",
+      "        self.windows.iter().map(|w| w.minutes).sum()",
+      "    }",
+      "}"
+     ]
+    },
+    {
+     "path": "src/schedule.rs",
+     "lines": [
+      "use std::fmt;",
+      "",
+      "/// Weekday names accepted in schedules, Monday first.",
+      "pub const WEEKDAYS: [&str; 7] = [\"mon\", \"tue\", \"wed\", \"thu\", \"fri\", \"sat\", \"sun\"];",
+      "",
+      "#[derive(Debug, PartialEq, Eq)]",
+      "pub struct ParseError {",
+      "    pub line: usize,",
+      "    pub reason: &'static str,",
+      "}",
+      "",
+      "impl fmt::Display for ParseError {",
+      "    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {",
+      "        write!(f, \"line {}: {}\", self.line, self.reason)",
+      "    }",
+      "}",
+      "",
+      "#[derive(Debug, Clone)]",
+      "pub(crate) struct Window {",
+      "    pub(crate) day: &'static str,",
+      "    pub(crate) start: u32,",
+      "    pub(crate) minutes: u32,",
+      "}",
+      "",
+      "/// A weekly maintenance schedule.",
+      "///",
+      "/// {{CONTRACT}}",
+      "#[derive(Debug, Clone)]",
+      "pub struct Schedule {",
+      "    pub(crate) windows: Vec<Window>,",
+      "}",
+      "",
+      "impl Schedule {",
+      "    pub fn parse(text: &str) -> Result<Schedule, ParseError> {",
+      "        let mut windows = Vec::new();",
+      "        for (index, raw) in text.lines().enumerate() {",
+      "            let err = |reason| ParseError {",
+      "                line: index + 1,",
+      "                reason,",
+      "            };",
+      "            let fields: Vec<&str> = raw.split_whitespace().collect();",
+      "            if fields.is_empty() {",
+      "                continue;",
+      "            }",
+      "            let [day, time, minutes] = fields[..] else {",
+      "                return Err(err(\"expected weekday, HH:MM and minutes\"));",
+      "            };",
+      "            let day = WEEKDAYS",
+      "                .iter()",
+      "                .copied()",
+      "                .find(|d| *d == day)",
+      "                .ok_or_else(|| err(\"unknown weekday\"))?;",
+      "            let (h, m) = time.split_once(':').ok_or_else(|| err(\"bad time\"))?;",
+      "            let two_digits = |s: &str| s.len() == 2 && s.bytes().all(|b| b.is_ascii_digit());",
+      "            if !two_digits(h) || !two_digits(m) {",
+      "                return Err(err(\"bad time\"));",
+      "            }",
+      "            let h: u32 = h.parse().map_err(|_| err(\"bad time\"))?;",
+      "            let m: u32 = m.parse().map_err(|_| err(\"bad time\"))?;",
+      "            if h > 23 || m > 59 {",
+      "                return Err(err(\"bad time\"));",
+      "            }",
+      "            if minutes.is_empty() || !minutes.bytes().all(|b| b.is_ascii_digit()) {",
+      "                return Err(err(\"bad duration\"));",
+      "            }",
+      "            let minutes: u32 = minutes.parse().map_err(|_| err(\"bad duration\"))?;",
+      "            if !(1..=1440).contains(&minutes) {",
+      "                return Err(err(\"bad duration\"));",
+      "            }",
+      "            windows.push(Window {",
+      "                day,",
+      "                start: h * 60 + m,",
+      "                minutes,",
+      "            });",
+      "        }",
+      "        if windows.is_empty() {",
+      "            return Err(ParseError {",
+      "                line: 0,",
+      "                reason: \"no windows\",",
+      "            });",
+      "        }",
+      "        Ok(Schedule { windows })",
+      "    }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "4ca31f7aed1d74bb52a7d15f34596cba15d669f4360f054292ccfc8e91ab4cb5",
+   "before_documented": "5963c6ac56ce5dc75532d99689332242c36c26e3be10abdecceab0cfac66b102"
+  },
+  "check": {
+   "summary": "Parses valid schedules and many malformed ones (empty, unknown weekday, bad times, bad durations, extra fields), plus a deterministic stream of random byte strings, recovering panics; then checks next_start around week boundaries.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "maintwin",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libmaintwin.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "maintwin={out}/libmaintwin.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: ",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use std::panic;",
+      "",
+      "use maintwin::Schedule;",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn parse(text: &str) -> Option<Schedule> {",
+      "    match panic::catch_unwind(|| Schedule::parse(text)) {",
+      "        Ok(result) => result.ok(),",
+      "        Err(_) => fail(&format!(\"parse panicked on {text:?}\")),",
+      "    }",
+      "}",
+      "",
+      "fn main() {",
+      "    panic::set_hook(Box::new(|_| {}));",
+      "    let s =",
+      "        parse(\"sat 02:00 120\\n\\nwed 23:30 60\\n\").unwrap_or_else(|| fail(\"valid schedule rejected\"));",
+      "    let wed = 2 * 1440 + 23 * 60 + 30;",
+      "    let sat = 5 * 1440 + 120;",
+      "    for (now, want) in [",
+      "        (0, wed),",
+      "        (wed, wed),",
+      "        (wed + 1, sat),",
+      "        (sat + 1, wed + 10080),",
+      "        (10080 + 5, wed),",
+      "    ] {",
+      "        if s.next_start(now) != want {",
+      "            fail(&format!(",
+      "                \"next_start({now}) = {}, want {want}\",",
+      "                s.next_start(now)",
+      "            ));",
+      "        }",
+      "    }",
+      "    if s.total_minutes() != 180 {",
+      "        fail(\"total minutes\");",
+      "    }",
+      "    for bad in [",
+      "        \"\",",
+      "        \"\\n \\n\",",
+      "        \"funday 02:00 10\",",
+      "        \"mon 24:00 10\",",
+      "        \"mon 2:00 10\",",
+      "        \"mon 02:60 10\",",
+      "        \"mon 02:00 0\",",
+      "        \"mon 02:00 1441\",",
+      "        \"mon 02:00\",",
+      "        \"mon 02:00 10 extra\",",
+      "        \"MON 02:00 10\",",
+      "        \"mon 02:00 -5\",",
+      "        \"mon +2:00 10\",",
+      "        \"mon 02:00 +10\",",
+      "    ] {",
+      "        if parse(bad).is_some() {",
+      "            fail(&format!(\"accepted {bad:?}\"));",
+      "        }",
+      "    }",
+      "    let mut state: u64 = 0x9e3779b97f4a7c15;",
+      "    let alphabet = b\"montuewdhfrisa 0123456789:\\n-+x\";",
+      "    for _ in 0..20000 {",
+      "        let len = (state % 24) as usize;",
+      "        let mut text = String::new();",
+      "        for _ in 0..len {",
+      "            state ^= state << 13;",
+      "            state ^= state >> 7;",
+      "            state ^= state << 17;",
+      "            text.push(alphabet[(state % alphabet.len() as u64) as usize] as char);",
+      "        }",
+      "        if let Some(schedule) = parse(&text) {",
+      "            let _ = schedule.next_start((state % 20000) as u32);",
+      "        }",
+      "        state = state.wrapping_add(0x2545f4914f6cdd1d);",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. next.rs calls expect on the weekday lookup and on the minimum over the windows, which resembles a panic reachable from operator input.",
+   "expected_impact": "No defect: a Schedule can only be built by Schedule::parse, whose fields are private, and parse rejects unknown weekdays and empty schedules, so both expect calls hold for every Schedule that exists.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "src/next.rs",
+     "symbol": "Schedule::next_start",
+     "anchors": {
+      "start": ".expect(\"weekday checked by parse\")"
+     },
+     "note": "expect on a lookup by weekday name.",
+     "start_line": 12,
+     "end_line": 12
+    },
+    {
+     "path": "src/next.rs",
+     "symbol": "Schedule::next_start",
+     "anchors": {
+      "start": ".expect(\"parse rejects empty schedules\")"
+     },
+     "note": "expect on min() over the windows.",
+     "start_line": 23,
+     "end_line": 23
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "src/schedule.rs",
+     "symbol": "Schedule::parse",
+     "anchors": {
+      "start": "let day = WEEKDAYS",
+      "end": ".ok_or_else(|| err(\"unknown weekday\"))?;"
+     },
+     "note": "parse only accepts the seven known weekday names.",
+     "start_line": 54,
+     "end_line": 58
+    },
+    {
+     "variant": "before",
+     "path": "src/schedule.rs",
+     "symbol": "Schedule::parse",
+     "anchors": {
+      "start": "if windows.is_empty() {"
+     },
+     "note": "parse rejects a schedule without windows, and the windows field is private to the crate.",
+     "start_line": 82,
+     "end_line": 82
+    }
+   ],
+   "reviewer_notes": "A finding that next_start can panic on bad operator input is a false positive; the panics are unreachable. Replacing expect with a Result would be a style choice.",
+   "distinctive_tokens": [
+    "unreachable panic",
+    "invariant",
+    "constructor guarantees"
+   ],
+   "corrected_variant": null
+  }
  }
 ]
