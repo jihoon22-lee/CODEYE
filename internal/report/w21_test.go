@@ -147,3 +147,61 @@ func TestW21ValidateRejectsMetricFinding(t *testing.T) {
 		t.Fatal("metric under its threshold accepted")
 	}
 }
+
+// Two detections of one rule in one file are two findings with one
+// fingerprint (rule, path, fixed template): the report is valid, and the
+// identity is ambiguous, so no review disposition carries to either.
+func TestW21SameRuleTwiceInOneFile(t *testing.T) {
+	doc := readExample(t, "gitl"+"eaks")
+	obs := doc["observations"].([]any)
+	var dup map[string]any
+	for _, o := range obs {
+		if m := o.(map[string]any); m["path"] == "src/app.py" {
+			b, _ := json.Marshal(m)
+			_ = json.Unmarshal(b, &dup)
+		}
+	}
+	dup["id"] = "obs_00000000000000000001"
+	loc := dup["location"].(map[string]any)
+	loc["start_line"], loc["end_line"] = 1.0, 1.0
+	doc["observations"] = append(obs, dup)
+	parse := doc["parse"].(map[string]any)
+	parse["observations"] = parse["observations"].(float64) + 1
+	f := analyzerFixture(t, nil, taskSpec{key: "gitl" + "eaks", status: "succeeded", doc: doc})
+	r := build(t, f.in, DefaultRegistry())
+	if err := ValidateReport(r); err != nil {
+		t.Fatal(err)
+	}
+	var same []Finding
+	for _, x := range r.Findings {
+		if x.Locations[0].Path == "src/app.py" {
+			same = append(same, x)
+		}
+	}
+	if len(r.Findings) != 5 || len(same) != 2 || same[0].Fingerprint != same[1].Fingerprint || same[0].ID == same[1].ID {
+		t.Fatalf("findings %d, src/app.py %+v", len(r.Findings), same)
+	}
+	if DispositionCarries(same[0].FingerprintBasis, 2) {
+		t.Fatal("a disposition carries to an ambiguous secret identity")
+	}
+}
+
+// A metric the adapter could not place in the snapshot (the measured file
+// changed under the tool: source_drift) is counted unresolved like any
+// observation and keeps the verdict inconclusive: its evidence did not
+// check out, whatever the observation measures (A28).
+func TestW21UnresolvedMetricIsInconclusive(t *testing.T) {
+	doc := readExample(t, "lizard")
+	o := doc["observations"].([]any)[0].(map[string]any)
+	o["location"], o["location_state"] = nil, "source_drift"
+	parse := doc["parse"].(map[string]any)
+	parse["unresolved_observations"] = parse["unresolved_observations"].(float64) + 1
+	f := analyzerFixture(t, nil, taskSpec{key: "lizard", status: "succeeded", doc: doc})
+	r := build(t, f.in, DefaultRegistry())
+	if r.Summary.UnresolvedObservations != 1 || r.Summary.MetricObservations != 2 || r.Summary.TotalFindings != 0 {
+		t.Fatalf("summary %+v limitations %v", r.Summary, r.Limitations)
+	}
+	if v := DecideVerdict(StatusCompleted, r.Summary, AIReviewPerformed); v != VerdictInconclusive {
+		t.Fatalf("verdict %s", v)
+	}
+}

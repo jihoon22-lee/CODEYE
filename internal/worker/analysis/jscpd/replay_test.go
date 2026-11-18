@@ -131,6 +131,21 @@ func TestReplayNoClones(t *testing.T) {
 	}
 }
 
+// The timing line of a long run stays in seconds: jscpd 5.4.3 printed
+// "time: 100.32s" for a 100-second scan (docs/45), never minutes.
+func TestReplayLongRunTiming(t *testing.T) {
+	rec := anypacktest.LoadCapture(t, "noclones")
+	at := strings.Index(string(rec.Stdout), "time: ")
+	if at < 0 {
+		t.Fatal("capture has no timing line")
+	}
+	rec.Stdout = append(append([]byte{}, rec.Stdout[:at]...), "time: 100.32s\n"...)
+	p := replay(t, replayCase{run: rec, files: noCloneFiles()})
+	if p.res.Status != domain.TaskSucceeded || p.doc.Outcome.ExitClass != obsdoc.ExitSuccessWithoutFindings || p.doc.Parse.UnparsedBytes != 0 {
+		t.Fatalf("%s/%s %+v %+v", p.res.Status, p.res.Reason, p.doc.Outcome, p.doc.Parse)
+	}
+}
+
 // Every failure is a failure, never "no duplication".
 func TestReplayFailuresAreNotSuccess(t *testing.T) {
 	good := anypacktest.LoadCapture(t, "clones")
