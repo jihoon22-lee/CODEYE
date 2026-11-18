@@ -46,8 +46,8 @@ class Session:
         self.origin = origin
         self.client = build_opener(HTTPCookieProcessor(CookieJar()))
         self.csrf = None
-        token = (state_dir / "login-link").read_text().strip().split("#launch=", 1)[1]
-        self.csrf = self.request("POST", "session", {"launch_token": token})["csrf_token"]
+        self.token = (state_dir / "login-link").read_text().strip().split("#launch=", 1)[1]
+        self.csrf = self.request("POST", "session", {"launch_token": self.token})["csrf_token"]
 
     def request(self, method, path, payload=None, headers=None, raw=False):
         fields = dict(headers or {})
@@ -91,10 +91,10 @@ def run(base, root, env, probe_env):
     # start detaches the controller and agent (setsid): stop them even when an assertion fails.
     launched = []
 
-    def cli(exe, *args, db, expect=0, timeout=120):
+    def cli(exe, *args, db, expect=0, timeout=120, extra_env=None):
         if args[0] == "start":
             launched.append((exe, args[2], db))
-        result = subprocess.run([exe, *map(str, args)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db]),
+        result = subprocess.run([exe, *map(str, args)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db], **(extra_env or {})),
                                 capture_output=True, text=True, timeout=timeout)
         text = result.stdout + result.stderr
         assert password not in text and urls[db] not in text, f"{args[0]}: credential 노출"
@@ -116,6 +116,19 @@ def run(base, root, env, probe_env):
 
     def private(path):
         return stat.S_IMODE(path.stat().st_mode)
+
+    def no_secrets(state, tokens=()):
+        secret = password.encode()
+        checked = 0
+        for path in state.rglob("*"):
+            if path.is_file() and not path.is_symlink():
+                data = path.read_bytes()
+                assert secret not in data and b"postgresql://" not in data, f"DB 인증정보가 상태 파일에 있음: {path.relative_to(state)}"
+                if path.parent.name == "logs":
+                    for token in tokens:
+                        assert token.encode() not in data, f"로그인 토큰이 로그에 있음: {path.name}"
+                checked += 1
+        assert checked > 0, state
 
     source = directory / "src"
     (source / "hello").mkdir(parents=True)
@@ -164,6 +177,13 @@ def run(base, root, env, probe_env):
         assert {p["state_after"] for p in stopped["processes"]} == {"exited"}, stopped
         assert json.loads(cli(binary, "stop", "--config", cfg_a, "--format", "json", db="personal_a").stdout)["outcome"] == "not_running"
         assert not (state_a / "run/controller.json").exists() and not (state_a / "run/agent.json").exists()
+        no_secrets(state_a, [session.token])
+        # Without --config the path is $XDG_CONFIG_HOME/codeye/personal.json.
+        xdg = directory / "xdg"
+        (xdg / "codeye").mkdir(parents=True, mode=0o700)
+        shutil.copy(cfg_a, xdg / "codeye/personal.json")
+        default = json.loads(cli(binary, "status", "--format", "json", db="personal_a", extra_env={"XDG_CONFIG_HOME": str(xdg)}).stdout)
+        assert default["state"] == "stopped" and default["controller"]["origin"] == origin_a, default
 
         # 5. 백업: 비밀값 없는 manifest, 0600 파일, 같은 출력 재사용 거절.
         out = directory / "backups/b1"
@@ -211,6 +231,7 @@ def run(base, root, env, probe_env):
         assert ops["backup"]["status"] == "recent" and ops["backup"]["latest"] in ("b1", "live"), ops
         stopped = json.loads(cli(binary, "stop", "--config", cfg_b, "--format", "json", db="personal_b", timeout=200).stdout)
         assert stopped["outcome"] == "stopped", stopped
+        no_secrets(state_b, [restored_session.token])
         print("PASS: W25 개인 모드 start/status/stop·실제 Go 분석·온라인/정지 백업·비어 있지 않은 대상 거절·복원·새 노드·보고서와 증거 hash·새 분석")
 
         # C: 진행 중 작업이 drain 시간을 넘기면 취소하고 정리를 확인한다(시험용 handler).
@@ -297,7 +318,9 @@ def run(base, root, env, probe_env):
         assert fresh.request("GET", f"runs/{blocked}")["status"] == "queued" and node_status["in_flight"] == []
         stopped = json.loads(cli(fixture, "stop", "--config", cfg_c, "--format", "json", db="personal_c", timeout=200).stdout)
         assert stopped["outcome"] == "stopped" and stopped["in_flight_at_stop"] == [], stopped
+        no_secrets(state_c, [fixture_session.token, fresh.token])
         print("PASS: W25 산출물·노드 저장 영역(logs) 상한 도달 시 새 작업 거절(storage_quota_exceeded)·기존 보고서 유지")
+        print("PASS: W25 상태 디렉터리 전체에 DB 인증정보 없음·로그에 로그인 토큰 없음·기본 설정 경로")
     finally:
         for exe, cfg, db in launched:
             subprocess.run([exe, "stop", "--config", str(cfg)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db]),

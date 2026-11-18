@@ -175,18 +175,18 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | ID | 시험 | 위치 |
 |---|---|---|
 | TC-124 | 영역 측정(`TestMeasureAreas`, `TestParseLimit`), heartbeat 보고와 상한 없을 때 생략(`TestStorageQuotaReportedInHeartbeat`, `TestHeartbeatOmitsQuotaWithoutLimits`), 새 claim만 거절·대기 사유·실행 중 attempt 유지(`TestW25StorageQuotaRefusesOnlyNewClaims`), 실제 바이너리의 artifacts·logs 상한 거절 | `internal/quota`, `internal/agent/w25_test.go`, `internal/storage/postgres/w25_test.go`, `scripts/personal_smoke.py` C |
-| TC-125 | drain 중 실행 작업 완료·추가 claim 없음·exit 0(`TestDrainFinishesRunningWorkThenExits`), 검증된 신호(`TestSignalVerifiedSingleProcess`), 설정 엄격성(`TestParseDefaultsAndStrictness`), 0600·0700·symlink 거부(`TestRecordsAndIdentityArePrivate`), stale·재사용 pid·기록 없는 에이전트·lock 배타(`TestInspectFindsStaleAndUnrecordedProcesses`), agent argv(`TestPersonalAgentArgv`), drain 시간 초과 취소·남은 프로세스 없음·재사용 pid 기록 무신호 | `internal/agent`, `internal/agent/procid`, `internal/personal`, `cmd/codeye`, smoke C |
+| TC-125 | drain 중 실행 작업 완료·추가 claim 없음·exit 0(`TestDrainFinishesRunningWorkThenExits`), 검증된 신호(`TestSignalVerifiedSingleProcess`), 설정 엄격성(`TestParseDefaultsAndStrictness`), 0600·0700·symlink 거부(`TestRecordsAndIdentityArePrivate`), stale·재사용 pid·기록 없는 에이전트·lock 배타(`TestInspectFindsStaleAndUnrecordedProcesses`), agent argv(`TestPersonalAgentArgv`), drain 시간 초과 취소·남은 프로세스 없음·재사용 pid 기록 무신호, 정지 뒤 상태 디렉터리 전체에 DB 비밀번호·URL 없음과 로그에 로그인 토큰 없음, `XDG_CONFIG_HOME` 기본 설정 경로 | `internal/agent`, `internal/agent/procid`, `internal/personal`, `cmd/codeye`, smoke C |
 | TC-126 | doctor operations(`TestOperationsStorageBackupAndProcesses`), schema 음성 사례 9개(`check_w25_doctor`), 복원 설치의 실제 doctor 출력 schema 검증 | `internal/doctor`, `scripts/validate_bundle.py`, smoke A |
 | TC-127 | 개인 사용 경로 8단계 자동 실행과 수동 walkthrough(§8). 안내서의 명령은 모두 실행한 것이다 | smoke A, §8, [docs/48](48-user-guide.md) |
 | TC-32 | 실행 중 백업, 늦게 확정된 산출물 제외, 0600·manifest 비밀값 없음, 변조 거부, 비어 있지 않은 대상 거절(DB·산출물 미변경), 복원 뒤 보고서·근거 hash·ACL·source grant·예약 회차 중복 없음·`recovery_required`·이전 lease/노드/세션 거부·새 노드 claim(`TestTC32BackupRestoreRoundTrip`), fence 단위(`TestW25FenceRestoredNeverRevivesLeases`), TOC 필터(`TestSchemaEntryFilter`), 불완전 세트(`TestVerifyRejectsIncompleteSets`), URL·redaction(`TestParseURLEnvironmentOnly`, `TestRunRedactsPassword`) | `internal/backup`, `internal/storage/postgres`, `internal/pgtool`, smoke A |
 
-`scripts/test_postgres.py --personal`이 [personal_smoke.py](../scripts/personal_smoke.py)를 실행한다. 임시 PostgreSQL에 DB 셋을 만든다. A는 실제 `go vet` 분석, 온라인·정지 백업, 거절과 복원, 복원본 재시작·새 분석까지다. C는 시험용 handler(`-tags codeye_fixture`) sleep 작업으로 drain 시간 초과와 저장 상한을 본다. 실패해도 띄운 설치는 `finally`에서 멈춘다. 이 저장소 CI의 Linux 작업은 `--nodes --web --scheduler --personal`로 실행한다. `--smokes-only`는 Go 시험 묶음 없이 smoke만 다시 돌리며, 이때 마지막 줄은 저장 통합 시험을 실행했다고 쓰지 않는다.
+`scripts/test_postgres.py --personal`이 [personal_smoke.py](../scripts/personal_smoke.py)를 실행한다. 임시 PostgreSQL에 DB 셋을 만든다. A는 실제 `go vet` 분석, 온라인·정지 백업, 거절과 복원, 복원본 재시작·새 분석까지다. C는 시험용 handler(`-tags codeye_fixture`) sleep 작업으로 drain 시간 초과와 저장 상한을 본다. 실패해도 띄운 설치는 `finally`에서 멈춘다. CI 워크플로의 Linux 작업을 `--nodes --web --scheduler --personal`로 바꿨다. 이 브랜치는 푸시하지 않았으므로 CI에서 실행된 적은 없다. TC-32와 smoke는 PostgreSQL 17.10에서만 실행했다. CI는 러너에 설치된 PostgreSQL을 쓴다. `--smokes-only`는 Go 시험 묶음 없이 smoke만 다시 돌리며, 이때 마지막 줄은 저장 통합 시험을 실행했다고 쓰지 않는다.
 
 CI에서 건너뛰는 시험: Windows 작업에는 PostgreSQL이 없다. 그래서 `TestTC32BackupRestoreRoundTrip`, `TestW25*`, `TestDatabaseIntegration*`는 건너뛴다. 프로세스 관리 시험(`TestRecordsAndIdentityArePrivate`, `TestInspectFindsStaleAndUnrecordedProcesses`), `TestRunRedactsPassword`, `TestPersonal*`도 Windows에서 건너뛴다. `internal/agent/w25_test.go`는 Linux 빌드 태그다. Linux 작업에서 TC-32는 `pg_dump`가 PATH에 있어야 실행된다(CI는 `pg_config --bindir`를 PATH에 넣는다).
 
 ## 8. 수동 walkthrough
 
-2026년 11월 19일, Linux(WSL2), PostgreSQL 17.10(운영자 준비 클러스터, loopback), Go 1.27.4. 바이너리는 이 브랜치의 최종 코드에서 빌드했다. 웹 자산은 `npm run build`로 만든 `web/dist`를 썼다. 화면은 Playwright로 띄운 Chromium에서 사람이 하듯 조작했다. 아래 경로는 임시 디렉터리이며 DB URL과 로그인 토큰은 적지 않는다. 설정은 두 개를 썼다. `w1.json`(state `s1`, `127.0.0.1:47341`)과 `w2.json`(state `s2`, `127.0.0.1:47342`)이다. 둘 다 같은 source root `work`, `agent.go`, 상한(workspace 2 GB, logs 500 MB, artifacts 1 GB), `backup_dir`를 쓴다. DB는 빈 `walk1`·`walk2`다.
+2026년 11월 19일, Linux(WSL2), PostgreSQL 17.10(운영자 준비 클러스터, loopback), Go 1.27.4. 바이너리는 커밋 `4aa0d63`의 코드로 빌드했다. 그 뒤 커밋은 사용법 문구(`codeye --help`), 문서, CI, smoke만 바꿨다. 웹 자산은 `npm run build`로 만든 `web/dist`를 썼다. 화면은 Playwright로 띄운 Chromium에서 사람이 하듯 조작했다. 아래 경로는 임시 디렉터리이며 DB URL과 로그인 토큰은 적지 않는다. 설정은 두 개를 썼다. `w1.json`(state `s1`, `127.0.0.1:47341`)과 `w2.json`(state `s2`, `127.0.0.1:47342`)이다. 둘 다 같은 source root `work`, `agent.go`, 상한(workspace 2 GB, logs 500 MB, artifacts 1 GB), `backup_dir`를 쓴다. DB는 빈 `walk1`·`walk2`다.
 
 | 단계 | 명령·조작 | 결과 |
 |---|---|---|
@@ -216,7 +216,7 @@ CI에서 건너뛰는 시험: Windows 작업에는 PostgreSQL이 없다. 그래�
 
 ## 10. 검증 결과
 
-2026년 11월 19일, Linux(WSL2, 12 CPU), Go 1.27.4, PostgreSQL 17.10, Node 24.18.0. 커밋 `addb776`에서 실행했다. origin/main `0646fff`를 병합한 뒤다. 이 절은 그 뒤 문서만 바꾼 커밋으로 넣었고, 그 커밋에서는 `validate_bundle.py`만 다시 실행했다. 공용 머신이라 Go 시험은 `-p 3`으로 돌렸다.
+2026년 11월 19일, Linux(WSL2, 12 CPU), Go 1.27.4, PostgreSQL 17.10, Node 24.18.0. 커밋 `addb776`에서 실행했다. origin/main `0646fff`를 병합한 뒤다. 이 절은 그 뒤 커밋으로 넣었다. 그 뒤의 변경과 재실행은 이 절 끝에 적는다. 공용 머신이라 Go 시험은 `-p 3`으로 돌렸다.
 
 | 명령 | 결과 |
 |---|---|
@@ -229,3 +229,5 @@ CI에서 건너뛰는 시험: Windows 작업에는 PostgreSQL이 없다. 그래�
 | Windows 시험 바이너리(`GOOS=windows go test -c`, WSL interop으로 패키지 디렉터리에서 실행) | `internal/personal`·`quota`·`backup`·`agent`·`storage/postgres`·`pgtool`·`nodeproto`, `cmd/codeye` 통과. `internal/doctor`는 W25 시험을 포함해 모두 통과했다. 기존 `TestGoProbeUsesPrivateTelemetryOffMode` 하나만 실패했는데, Windows 호스트 PATH에 go가 없어서다(`executable_missing`). origin/main `0646fff`의 같은 시험도 같은 이유로 실패한다. `internal/agent/procid`에는 Windows 시험이 없다 |
 
 최종 실행 전에 변경 패키지(`internal/backup`·`storage/postgres`·`agent/...`·`doctor`·`personal`·`quota`·`pgtool`·`nodeproto`, `cmd/codeye`)를 따로 실행했다. 임시 클러스터와 `CODEYE_TEST_PG_BIN`을 주고 `-race -p 3`으로 돌려 모두 통과했다. `-v`로 `TestTC32BackupRestoreRoundTrip`과 `TestW25*`가 건너뛰지 않고 통과한 것을 확인했다. 개발 중 `--smokes-only --personal`을 따로 돌렸고 45~48초가 걸렸다.
+
+검증 뒤 smoke에 두 가지 검사를 더했다. 하나는 정지 뒤 상태 디렉터리 전체에 DB 비밀번호·URL이 없고 로그에 로그인 토큰이 없는지, 다른 하나는 `XDG_CONFIG_HOME` 기본 설정 경로다. 이 변경 뒤에는 `PATH=<PostgreSQL 17.10 bin>:$PATH python3 scripts/test_postgres.py --smokes-only --personal`(49초, W25 PASS 네 줄)과 `validate_bundle.py`만 다시 실행했다. 전체 Go 시험과 다른 smoke는 위 `addb776` 결과다.
