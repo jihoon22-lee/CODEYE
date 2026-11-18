@@ -62,6 +62,7 @@ export type StageSummary = {
 export type ProjectActivity = StageSummary & {
   run: { id: string; status: string; requested_at: string } | null;
   other_active_runs: number;
+  waiting_reason?: string | null; // only when the representative run is queued
   last_report: { run_id: string; revision: number; published_at: string } | null;
 };
 export type RunProgress = {
@@ -313,6 +314,7 @@ function parseActivity(v: unknown): ProjectActivity {
     ...parseStageSummary(o),
     run,
     other_active_runs: int(o.other_active_runs ?? 0),
+    ...(o.waiting_reason === undefined ? {} : { waiting_reason: nullableStr(o.waiting_reason) }),
     last_report: lastReport,
   };
 }

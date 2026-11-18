@@ -86,7 +86,10 @@ export function ProjectActivity({ project }: { project: Project }) {
       const waiting = stages.filter(x => x.state === 'waiting');
       if (stages.some(x => x.state === 'plan_pending')) parts.push(s.planPending);
       else if (status !== 'queued' && waiting.length > 0) waiting.forEach(x => parts.push(s.waitingFor(stageName(x.key))));
-      else parts.push(s.noStarted);
+      else if (status === 'queued' && a.waiting_reason) {
+        const r = a.waiting_reason;
+        parts.push(Object.hasOwn(t.runs.waitingLabels, r) ? t.runs.waitingLabels[r]! : shorten(r, 80));
+      } else parts.push(s.noStarted);
     }
   }
   return <div className="small activity">
