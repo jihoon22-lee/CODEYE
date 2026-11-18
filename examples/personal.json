@@ -1,0 +1,31 @@
+{
+  "schema_version": "0.1",
+  "state_dir": "/home/user/.local/state/codeye",
+  "listen": "127.0.0.1:7331",
+  "web_dir": "/opt/codeye/web/dist",
+  "database": {
+    "mode": "external",
+    "postgres_bin_dir": "/usr/pgsql-17/bin"
+  },
+  "source_roots": [
+    {"label": "work", "path": "/home/user/src"}
+  ],
+  "agent": {
+    "max_workers": 2,
+    "toolchain_path": "/usr/bin:/bin",
+    "go": "/usr/local/go/bin/go",
+    "tools": {"staticcheck": "/home/user/go/bin/staticcheck"}
+  },
+  "quota": {
+    "snapshot_bytes": 10737418240,
+    "workspace_bytes": 10737418240,
+    "cache_bytes": 5368709120,
+    "logs_bytes": 1073741824,
+    "artifacts_bytes": 21474836480
+  },
+  "backup_dir": "/home/user/codeye-backups",
+  "stop": {
+    "drain_timeout_seconds": 300,
+    "cancel_timeout_seconds": 90
+  }
+}
