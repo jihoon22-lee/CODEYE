@@ -1,0 +1,85 @@
+{
+  "run": {
+    "id": "5f0c2a8e-3b1d-4c7e-9a64-2d8f1e7b9c30",
+    "status": "running",
+    "requested_at": "2026-11-18T03:00:00Z"
+  },
+  "other_active_runs": 1,
+  "detail": "recorded",
+  "stages": [
+    {
+      "key": "source",
+      "state": "succeeded",
+      "planned": null,
+      "finished": 0,
+      "succeeded": 0,
+      "counts": {},
+      "reasons": [],
+      "started_at": "2026-11-18T03:00:02Z",
+      "finished_at": "2026-11-18T03:00:05Z"
+    },
+    {
+      "key": "environment",
+      "state": "succeeded",
+      "planned": 1,
+      "finished": 1,
+      "succeeded": 1,
+      "counts": {},
+      "reasons": [],
+      "started_at": "2026-11-18T03:00:06Z",
+      "finished_at": "2026-11-18T03:00:08Z"
+    },
+    {
+      "key": "documents",
+      "state": "skipped",
+      "planned": 1,
+      "finished": 1,
+      "succeeded": 0,
+      "counts": {"skipped_policy": 1},
+      "reasons": ["no_documents"],
+      "started_at": null,
+      "finished_at": "2026-11-18T03:00:06Z"
+    },
+    {
+      "key": "static_analysis",
+      "state": "running",
+      "planned": 3,
+      "finished": 1,
+      "succeeded": 0,
+      "counts": {"failed": 1},
+      "reasons": ["tool_failed"],
+      "started_at": "2026-11-18T03:00:09Z",
+      "finished_at": null
+    },
+    {
+      "key": "code_review",
+      "state": "running",
+      "planned": 2,
+      "finished": 0,
+      "succeeded": 0,
+      "counts": {},
+      "reasons": [],
+      "started_at": "2026-11-18T03:00:20Z",
+      "finished_at": null
+    },
+    {
+      "key": "report",
+      "state": "waiting",
+      "planned": null,
+      "finished": 0,
+      "succeeded": 0,
+      "counts": {},
+      "reasons": [],
+      "started_at": null,
+      "finished_at": null
+    }
+  ],
+  "waiting_reason": null,
+  "last_report": {
+    "run_id": "1e9b7d40-8c2a-4f5e-b3a1-6c0d9e2f4a17",
+    "revision": 1,
+    "published_at": "2026-11-17T22:14:31Z"
+  },
+  "last_event_at": "2026-11-18T03:01:10Z",
+  "checked_at": "2026-11-18T03:01:12Z"
+}
