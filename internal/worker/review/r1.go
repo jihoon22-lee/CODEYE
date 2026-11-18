@@ -25,6 +25,8 @@ import (
 )
 
 // Review packs a node operator may select (codeye agent --review-pack).
+// review-r1 is the default; review-v1 is kept so earlier runs can be
+// reproduced and their records read.
 const (
 	PackV1 = "review-v1"
 	PackR1 = "review-r1"
@@ -214,7 +216,8 @@ func (s *r1Stage) fits(instructions string, input []byte, reserve bool) (int, bo
 func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error), parse func(json.RawMessage) []string) *analysis.TaskResult {
 	instructions := s.instructions(contract)
 	var repair *r1Repair
-	for attempt := 1; attempt <= 2; attempt++ {
+	repaired, retried := false, false
+	for attempt := 1; attempt <= record.R1MaxCalls; attempt++ {
 		if s.ctx.Err() != nil {
 			return s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
@@ -242,8 +245,9 @@ func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error
 			s.rec.Calls = append(s.rec.Calls, call)
 			return s.fail(failure(reply))
 		}
+		notJSON := reply.Reason != ""
 		errs := []string{"output_not_json"}
-		if reply.Reason == "" {
+		if !notJSON {
 			errs = parse(reply.Output)
 		}
 		if len(errs) == 0 {
@@ -254,6 +258,23 @@ func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error
 		call.Outcome, call.OutputErrors = callRejected, addLim(nil, errs...)
 		s.rec.Calls = append(s.rec.Calls, call)
 		s.noteExecutionClaim(call)
+		// One repair of a rejected output, and one retry of a reply that was
+		// not JSON at all; the retry keeps the earlier repair's codes.
+		if notJSON {
+			if retried {
+				break
+			}
+			retried = true
+			if repair != nil {
+				repair = &r1Repair{OutputErrors: addLim(append([]string{}, repair.OutputErrors...), errs...)}
+				continue
+			}
+		} else {
+			if repaired {
+				break
+			}
+			repaired = true
+		}
 		repair = &r1Repair{OutputErrors: call.OutputErrors}
 	}
 	return s.fail(result(domain.TaskFailed, reasonOutputInvalid))

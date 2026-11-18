@@ -14,7 +14,11 @@ import (
 // acceptance, one bounded repair of the rejected candidates, quarantine as
 // unreviewed, reproduction claims downgraded, success without a call when
 // there is no candidate) over the accepted candidates of investigate and
-// interpret.
+// interpret. Since 2.0.0 a reply that is not JSON at all gets one retry of
+// its own (it does not use up the repair; at most record.R1MaxCalls calls), and an
+// entry whose only defect is citing IDs outside scope.excerpts is accepted
+// without them when the rest still meets its verdict's rule
+// (evidence_id_dropped on the call).
 const r1VerifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_..."],"counterevidence_ids":["ev_..."],"unresolved_assumptions":["..."],"next_verification":["..."]}]}, ignoring any wider output examples. Return exactly one entry per candidate in input. Before deciding, read the caller and test excerpts (origin caller/test) for guards, deferred cleanup or ownership transfer that would invalidate the candidate, and keep each documents contract to its applies_to path. supported needs a code or test evidence ID and at least one valid condition; refuted needs counterevidence IDs and invalid conditions; otherwise use inconclusive with unresolved assumptions. Nothing was executed: never claim reproduction, test results or runtime output. Cite only evidence IDs given in scope; do not add paths, line numbers or other fields. Give 1-3 next_verification items that are reading or review steps, not commands.`
 
 const r1VerifyRepairRules = "\nFormat repair: your previous output for the candidates listed in input.repair was rejected with the listed platform error codes. Return a verifications entry only for those candidates, citing only IDs from scope.excerpts; accepted_evidence_ids lists every valid ID."
@@ -219,7 +223,8 @@ func (s *r1Stage) verify() analysis.TaskResult {
 	accepted := map[string]record.Verification{}
 	pending := candidatesSent
 	var repair *repairInput
-	for attempt := 1; attempt <= 2 && len(pending) > 0; attempt++ {
+	repaired, retried := false, false
+	for attempt := 1; attempt <= record.R1MaxCalls && len(pending) > 0; attempt++ {
 		if s.ctx.Err() != nil {
 			return *s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
@@ -253,9 +258,10 @@ func (s *r1Stage) verify() analysis.TaskResult {
 		for _, p := range pending {
 			want[p.ID] = true
 		}
-		got, itemErrs, outputErrs := map[string]record.Verification{}, map[string][]string{}, []string{"output_not_json"}
-		if reply.Reason == "" {
-			got, itemErrs, outputErrs = parseVerifications(reply.Output, want, catalog)
+		notJSON := reply.Reason != ""
+		got, itemErrs, outputErrs, dropped := map[string]record.Verification{}, map[string][]string{}, []string{"output_not_json"}, []string(nil)
+		if !notJSON {
+			got, itemErrs, outputErrs, dropped = parseVerificationItems(reply.Output, want, catalog, true)
 		}
 		for id, v := range got {
 			if verificationClaimsExecution(v) {
@@ -267,6 +273,11 @@ func (s *r1Stage) verify() analysis.TaskResult {
 		for _, errs := range itemErrs {
 			all = addLim(all, errs...)
 		}
+		for _, id := range dropped {
+			if _, ok := got[id]; ok {
+				all = addLim(all, "evidence_id_dropped")
+			}
+		}
 		call.Outcome, call.OutputErrors = callRejected, nonNil(all)
 		if len(got) > 0 {
 			call.Outcome = callAccepted
@@ -276,6 +287,33 @@ func (s *r1Stage) verify() analysis.TaskResult {
 		for id, v := range got {
 			accepted[id] = v
 		}
+		// A reply that is not JSON says nothing about the items: it gets one
+		// retry of the same request (with the earlier item errors, if any)
+		// and does not use up the repair of the rejected items.
+		if notJSON {
+			if retried {
+				break
+			}
+			retried = true
+		} else {
+			if repaired {
+				var next []record.R1Candidate
+				for _, p := range pending {
+					if _, ok := accepted[p.ID]; !ok {
+						next = append(next, p)
+					}
+				}
+				pending = next
+				break
+			}
+			repaired = true
+		}
+		prior := map[string][]string{}
+		if notJSON && repair != nil {
+			for _, item := range repair.Candidates {
+				prior[item.ID] = item.Errors
+			}
+		}
 		var next []record.R1Candidate
 		repair = &repairInput{OutputErrors: nonNil(outputErrs), Candidates: []repairItem{}, AcceptedIDs: ids}
 		for _, p := range pending {
@@ -284,6 +322,9 @@ func (s *r1Stage) verify() analysis.TaskResult {
 			}
 			next = append(next, p)
 			errs := itemErrs[p.ID]
+			if len(errs) == 0 {
+				errs = prior[p.ID]
+			}
 			if len(errs) == 0 {
 				errs = []string{"verification_missing"}
 			}

@@ -40,8 +40,10 @@ const (
 	r1MaxObservations = 16
 	// r1MaxText bounds the JSON-encoded size of one R1 model text field, so a
 	// downstream request carrying it keeps within the request budget.
-	r1MaxText  = 400
-	r1MaxCalls = 2
+	r1MaxText = 400
+	// R1MaxCalls bounds the calls of one stage: the first request, one
+	// repair of rejected output and one retry of a reply that was not JSON.
+	R1MaxCalls = 3
 )
 
 // R1Stages in plan order.
@@ -555,7 +557,7 @@ func CandidateTextOK(c Candidate) bool {
 }
 
 func checkR1Calls(r R1Record) error {
-	if len(r.Calls) > r1MaxCalls {
+	if len(r.Calls) > R1MaxCalls {
 		return invalid("too many calls")
 	}
 	accepted := false
