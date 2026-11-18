@@ -1,17 +1,14 @@
 package report
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
@@ -148,11 +145,15 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 		tc.Packages[k] = v
 	}
 	// Processed files count only for a task the controller accepted as
-	// succeeded, or one that ran nothing (known zero).
+	// succeeded, or one that ran nothing (known zero). The paths themselves
+	// (W23: locations inspected again) are recorded only for an accepted
+	// success.
 	if paths := d.Coverage.ProcessedPaths; paths != nil && (accepted || d.Outcome.ExitClass == obsdoc.ExitNotRun) {
 		n := len(paths)
 		tc.ProcessedFiles = &n
-		out.ProcessedPaths = append([]string{}, paths...)
+		if accepted && n > 0 {
+			tc.ProcessedPaths = sortedUnique(paths)
+		}
 	}
 	for _, l := range d.Limitations {
 		if codePattern.MatchString(l) {
@@ -175,10 +176,11 @@ func toolFinding(ctx DecodeContext, analyzerID, category string, obs []Observati
 	}
 	loc := Location{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine}
 	codeID := "ev_" + id[4:] + "_code"
+	fp, basis := ToolFingerprint(analyzerID, first.RuleID, l.Path, "", msg)
 	f := Finding{SchemaVersion: "0.1", ID: id, Title: truncateRunes(analyzerID+" "+first.RuleID+": "+msg, 160), Category: category, Severity: "low", SeverityReason: textToolSeverityReason,
 		Validation: "unreviewed", Disposition: "open", Impact: textImpact, Locations: []Location{loc},
 		Evidence:           []Evidence{{ID: codeID, Kind: "code", Description: textEvidenceCode, Location: &loc, BlobSHA256: l.BlobSHA256}},
-		CounterevidenceIDs: []string{}, ObservationIDs: []string{}, Fingerprint: ToolFingerprint(analyzerID, first.RuleID, l.Path, msg),
+		CounterevidenceIDs: []string{}, ObservationIDs: []string{}, Fingerprint: fp, FingerprintBasis: &basis,
 		Recommendation: Recommendation{Summary: textRecommendation, Tradeoffs: []string{}}, Verification: []string{textToolVerification},
 		Limitations: []string{textLimitManual, textLimitStaticOnly}}
 	var toolIDs []string
@@ -196,39 +198,4 @@ func toolFinding(ctx DecodeContext, analyzerID, category string, obs []Observati
 	f.Conditions = []Condition{{Statement: textToolCondition, Status: "verified", EvidenceIDs: append([]string{}, toolIDs...)}}
 	f.Claims = []Claim{{Assertion: analyzerID + " " + first.RuleID + " 진단: " + msg, Kind: "observed", EvidenceIDs: append(append([]string{}, toolIDs...), codeID)}}
 	return f
-}
-
-// goVetWithPaths adds the processed snapshot paths of a go vet document to
-// GoVetDecoder's contribution, so the report counts a file processed by go
-// vet and another analyzer once (tool_processed_files is a union).
-type goVetWithPaths struct{ GoVetDecoder }
-
-func (g goVetWithPaths) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
-	c, err := g.GoVetDecoder.Decode(ctx, art, body)
-	if err != nil || c.Tool == nil || c.Tool.ProcessedFiles == nil {
-		return c, err
-	}
-	var d govet.Document
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.DisallowUnknownFields()
-	if dec.Decode(&d) != nil {
-		return c, nil
-	}
-	seen := map[string]bool{}
-	for _, p := range d.Inventory {
-		if p.State == govet.PackageAnalyzedClean || p.State == govet.PackageAnalyzedWithFindings {
-			for _, f := range p.GoFiles {
-				seen[f] = true
-			}
-		}
-	}
-	if len(seen) != *c.Tool.ProcessedFiles {
-		return c, nil // inconsistent: keep the count, no union
-	}
-	c.ProcessedPaths = make([]string, 0, len(seen))
-	for p := range seen {
-		c.ProcessedPaths = append(c.ProcessedPaths, p)
-	}
-	sort.Strings(c.ProcessedPaths)
-	return c, nil
 }

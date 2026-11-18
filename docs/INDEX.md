@@ -33,5 +33,6 @@ R0는 개인 모드의 Go 분석·승인된 모델 검토·근거 보고서까�
 | 검토와 검증 | [W11 맥락·후보](33-w11-context-review.md) · [W12 반증](34-w12-verifier.md) · [W13 근거 화면](35-w13-evidence-report.md) · [W14 품질 회귀](36-r0-pilot.md) |
 | R1 탐색과 진행 | [W15 모듈·문서·환경 탐색과 단계 표시](37-w15-discovery-and-progress.md) · [W22 예약·가중 진행률·SSE](38-w22-schedules-progress-sse.md) |
 | R1 분석 팩 | [W19 분석기 팩 계약과 Go 팩(Staticcheck)](39-r1-analyzer-packs.md) |
+| R1 이력과 판정 | [W23 이력·비교·사람 검토](40-w23-history-comparison.md) |
 
 HTTP 경로의 구현 표시는 [OpenAPI](../api/openapi.yaml)에 있다. 기계 판독 계약은 [schemas](../schemas), 입력·출력 예시는 [examples](../examples), 활성 모델 지침은 [R0 팩](../prompts/review-v1/pack.yaml)에서 찾을 수 있다.

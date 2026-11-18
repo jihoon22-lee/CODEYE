@@ -640,6 +640,131 @@ def check_w22_contracts() -> None:
     print(f"PASS: W22 schedule/progress/stream contracts (3 examples; overlap/misfire/occurrence/reason/stream/weight enums and bounds; {negatives} negative cases)")
 
 
+def check_w23_contracts(published: dict) -> None:
+    """W23 run comparison and human finding reviews (docs/40).
+
+    Examples validate against OpenAPI; disposition/state/reason/match enums
+    agree across OpenAPI, migration 0008, the report schema and the Go
+    constants; counts are recomputed from entries, summaries from findings;
+    a resolved entry never comes from a model and an absent one always has a
+    reason. Plus negative cases.
+    """
+    api = yaml_file(ROOT / "api/openapi.yaml")["components"]["schemas"]
+    migration = (ROOT / "migrations/sql/0008_finding_reviews.sql").read_text(encoding="utf-8")
+    go = lambda name: (ROOT / name).read_text(encoding="utf-8")
+    consts = lambda text, prefix: {v for _, v in re.findall(r"\b" + prefix + r"(\w*)\s*=\s*\"([a-z_]+)\"", text)}
+    compare, reviews = go("internal/history/compare.go"), go("internal/history/reviews.go")
+    stored = set(re.findall(r"'([a-z_]+)'", re.search(r"disposition\s+text\s+NOT NULL CHECK \(disposition IN \(([^)]*)\)\)", migration).group(1)))
+    finding_schema = json_file(ROOT / "schemas/finding.schema.json")
+    validate_go = go("internal/report/validate.go")
+    go_dispositions = set(re.findall(r'"([a-z_]+)": true', re.search(r"dispositions\s*=\s*map\[string\]bool\{([^}]*)\}", validate_go).group(1)))
+    ensure(set(api["Disposition"]["enum"]) == stored == set(finding_schema["properties"]["disposition"]["enum"]) == go_dispositions,
+           "Disposition enum mismatch: OpenAPI/migration 0008/finding schema/report")
+    ensure(api["ComparisonState"]["enum"] == [v for v in re.findall(r"State\w+\s*=\s*\"([a-z_]+)\"", compare)], "Comparison state enum mismatch: OpenAPI/history")
+    reasons = api["ComparisonEntry"]["properties"]["reason"]["oneOf"][1]["enum"]
+    ensure(set(reasons) == consts(compare, "Reason"), "Comparison reason enum mismatch: OpenAPI/history")
+    ensure(set(api["RunComparison"]["properties"]["not_comparable_reason"]["oneOf"][1]["enum"]) == consts(compare, "NotComparable"), "Not-comparable reason mismatch: OpenAPI/history")
+    matches = api["RunComparison"]["properties"]["findings"]["items"]["properties"]["review_match"]["enum"]
+    ensure(set(matches) == consts(reviews, "Match"), "Review match enum mismatch: OpenAPI/history")
+    ensure(set(api["RunComparison"]["properties"]["counts"]["required"]) == set(api["ComparisonState"]["enum"]), "Counts keys are not the comparison states")
+
+    comparison_validator, review_validator = api_validator("RunComparison"), api_validator("FindingReview")
+    comparison = json_file(ROOT / "examples/comparison.json")
+    listing = json_file(ROOT / "examples/finding-reviews.json")
+    hidden = {"accepted_risk", "false_positive", "suppressed"}
+
+    def check_comparison(doc: dict) -> None:
+        comparison_validator.validate(doc)
+        ensure((doc["baseline"] is None) == (doc["not_comparable_reason"] == "no_baseline"), "Baseline/no_baseline mismatch")
+        ensure(doc["comparable"] == (doc["not_comparable_reason"] is None), "comparable/not_comparable_reason mismatch")
+        # Differences stay visible when the schemes differ (builder_version tells why); entries do not.
+        ensure(doc["comparable"] or doc["entries"] == [], "Entries in a comparison that is not comparable")
+        ensure(doc["baseline"] is not None or doc["differences"] == [], "Differences without a baseline")
+        states = [e["state"] for e in doc["entries"]]
+        ensure(doc["counts"] == {s: states.count(s) for s in api["ComparisonState"]["enum"]}, "Counts are not recomputed from entries")
+        ensure(len({e["fingerprint"] for e in doc["entries"]}) == len(doc["entries"]), "Duplicate comparison entry")
+        by_fp = {e["fingerprint"]: e for e in doc["entries"]}
+        for e in doc["entries"]:
+            ensure(e["state"] != "resolved_observed" or (e["producer"] == "tool" and e["current"] == [] and e["baseline"] and e["reason"] is None), "Resolved entry not observed by a tool")
+            ensure(e["state"] != "absent_unverified" or (e["current"] == [] and e["baseline"] and e["reason"] is not None), "Absent entry without a reason")
+            ensure(e["state"] != "new" or (e["baseline"] == [] and e["current"]), "New entry with a baseline occurrence")
+            ensure(e["state"] not in ("persisting", "changed") or (e["current"] and e["baseline"] and e["reason"] is None), "Matched entry missing a side")
+            ensure((e["state"] == "changed") == bool(set(e["changes"]) - {"lines"}) or e["state"] not in ("persisting", "changed"), "changed/persisting disagree with changes")
+            ensure(not e["ambiguous"] or max(len(e["current"]), len(e["baseline"])) > 1, "Ambiguous entry with single occurrences")
+            ensure(all(m in by_fp and m != e["fingerprint"] for m in e["move_candidates"]), "Move candidate is not another entry")
+        ids = [f["finding_id"] for f in doc["findings"]]
+        ensure(len(set(ids)) == len(ids), "Duplicate finding in overlay")
+        current = {o["finding_id"]: e for e in doc["entries"] for o in e["current"]}
+        for f in doc["findings"]:
+            e = current.get(f["finding_id"])
+            ensure(e is None or (f["fingerprint"] == e["fingerprint"] and f["state"] == e["state"]), "Overlay state differs from its entry")
+            ensure(doc["comparable"] or f["state"] is None, "State on a finding of a comparison that is not comparable")
+            r, m = f["review"], f["review_match"]
+            ensure((r is None) == (m == "none"), "Review/match mismatch")
+            if m == "applied":
+                ensure(f["current_disposition"] == r["disposition"] and r["disposition"] != "open" and not r["expired"], "Applied review not in effect")
+            elif m != "none":
+                ensure(f["current_disposition"] == "open", "Unapplied review changed the current disposition")
+            ensure(m != "expired" or r["expired"], "Expired match on an unexpired review")
+        for key in ("at_publication", "current"):
+            field = "publication_disposition" if key == "at_publication" else "current_disposition"
+            n = sum(f[field] in hidden for f in doc["findings"])
+            ensure(doc["summary"][key]["hidden_findings"] == n and doc["summary"][key]["total_findings"] == len(doc["findings"]), "Summary " + key + " not from findings")
+
+    def check_reviews(doc: dict) -> None:
+        ensure(set(doc) == {"items", "next_cursor", "can_review"}, "Finding review list shape")
+        versions = {}
+        for item in doc["items"]:
+            review_validator.validate(item)
+            ensure(item["reason"].strip() != "", "Blank review reason")
+            ensure(item["disposition"] != "open" or (item["expires_at"] is None and item["path_prefix"] is None), "Open review with expiry or path scope")
+            ensure(item["expires_at"] is None or item["expires_at"] > item["created_at"], "Review expiry before it was recorded")
+            versions.setdefault(item["fingerprint"], []).append(item["version"])
+        ensure(all(sorted(v, reverse=True) == v and len(set(v)) == len(v) for v in versions.values()), "Review versions not newest first")
+
+    check_comparison(comparison)
+    check_reviews(listing)
+    applied = [f for f in comparison["findings"] if f["review_match"] == "applied"]
+    ensure(applied and all(f["review"]["version"] == max(i["version"] for i in listing["items"] if i["fingerprint"] == f["fingerprint"]) for f in applied),
+           "Applied review is not the latest version of examples/finding-reviews.json")
+    ensure(all("fingerprint" not in f and "fingerprint_basis" not in f for f in published["findings"]), "Code-free export carries finding identity")
+
+    negatives = 0
+
+    def reject(name: str, function, data) -> None:
+        nonlocal negatives
+        expect_invalid(name, function, data)
+        negatives += 1
+
+    resolved = next(i for i, e in enumerate(comparison["entries"]) if e["state"] == "resolved_observed")
+    bad = copy.deepcopy(comparison)
+    bad["entries"][resolved]["producer"] = "model"
+    reject("model candidate resolved", check_comparison, bad)
+    bad = copy.deepcopy(comparison)
+    bad["entries"][resolved]["state"] = "absent_unverified"
+    reject("absent without reason", check_comparison, bad)
+    bad = copy.deepcopy(comparison)
+    bad["counts"]["persisting"] += 1
+    reject("counts not from entries", check_comparison, bad)
+    bad = copy.deepcopy(comparison)
+    bad["summary"]["current"]["hidden_findings"] = 0
+    reject("hidden count not from findings", check_comparison, bad)
+    bad = copy.deepcopy(comparison)
+    i = next(i for i, f in enumerate(bad["findings"]) if f["review_match"] == "applied")
+    bad["findings"][i]["review_match"] = "candidate"
+    reject("candidate match hides a finding", check_comparison, bad)
+    bad = copy.deepcopy(comparison)
+    bad["findings"][0]["publication_disposition"] = "ignored"
+    reject("unknown disposition", check_comparison, bad)
+    bad = copy.deepcopy(listing)
+    bad["items"][0]["reason"] = "   "
+    reject("blank review reason", check_reviews, bad)
+    bad = copy.deepcopy(listing)
+    bad["items"][0]["fingerprint"] = "go-vet-fp-v1:1234"
+    reject("review of a non-fp2 fingerprint", check_reviews, bad)
+    print(f"PASS: W23 comparison/review contracts (2 examples; disposition/state/reason/match enums across OpenAPI, migration 0008, schema and Go; {negatives} negative cases)")
+
+
 def resolve_pointer(document, pointer: str):
     if not pointer:
         return document
@@ -744,6 +869,7 @@ def main() -> None:
     stage_order, stored_stages, stage_states = stage_vocabulary()
     check_stage_enums(api, stage_order, stored_stages, stage_states)
     check_w22_contracts()
+    check_w23_contracts(json_file(ROOT / "examples/report-go-vet.json"))
     events = yaml_file(ROOT / "api/openapi.yaml")["paths"]["/api/v1/attempts/{attempt_id}/events"]["post"]
     payloads = events["requestBody"]["content"]["application/json"]["schema"]["properties"]["payload"]["oneOf"]
     created = [p for p in payloads if p.get("required") == ["key", "required"]]
@@ -834,6 +960,12 @@ def main() -> None:
     bad = copy.deepcopy(published)
     bad["quality_verdict"] = "no_actionable_findings"
     expect_invalid("clean without AI review", check_report, bad)
+    ensure(not published["export"]["include_code"] and all("fingerprint" not in f for f in published["findings"]), "Code-free example carries a fingerprint")
+    for field, value in (("fingerprint", "fp2:" + "0" * 64),
+                         ("fingerprint_basis", {"scheme": "fp2", "producer": "tool", "analyzer": "go.vet", "rule": "printf", "paths": ["example.go"], "symbols": [], "context": "unavailable", "move_key": "fp2:" + "1" * 64})):
+        bad = copy.deepcopy(published)
+        bad["findings"][0][field] = value
+        expect_invalid("code-free export with " + field, validators["report.schema.json"].validate, bad)
     bad = copy.deepcopy(plan)
     bad["tasks"][0]["depends_on"] = [bad["tasks"][-1]["id"]]
     expect_invalid("cyclic plan", check_plan, bad)

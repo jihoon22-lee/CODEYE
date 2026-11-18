@@ -131,6 +131,70 @@ def stream_agrees(session, run_id):
     return len(rows), p["plan_revision"]
 
 
+def published_report(session, run_id):
+    state = session.request("GET", f"runs/{run_id}")
+    if state["status"] in {"failed", "recovery_required", "cancelled"}:
+        raise RuntimeError(f"Go 보고서 게시 실패 ({state['status']})")
+    return state["report"] if state["status"] == "partial" else None
+
+
+def w23_history(session, project_id, first_run, first_report, go_source, original, publish):
+    """W23 (REQ-028, TC-14) with the real go vet worker: a review recorded on
+    run 1 is stamped into run 2's publication; moved lines persist, a new
+    diagnostic is new; the fixed diagnostic is resolved_observed only because
+    go vet succeeded again and analyzed example.go. Schemas: OpenAPI."""
+    import validate_bundle
+    comparison_schema = validate_bundle.api_validator("RunComparison")
+
+    def compare(run_id, query=""):
+        doc = session.request("GET", f"runs/{run_id}/comparison{query}")
+        comparison_schema.validate(doc)
+        return doc
+
+    first = compare(first_run)
+    assert first["baseline"] is None and first["not_comparable_reason"] == "no_baseline" and first["entries"] == [], first
+    printf = [f for f in first_report["findings"] if f["fingerprint_basis"]["rule"] == "printf"]
+    assert len(printf) == 1 and printf[0]["fingerprint"].startswith("fp2:"), first_report["findings"]
+    original_fp = printf[0]["fingerprint"]
+    review = {"fingerprint": original_fp, "disposition": "accepted_risk", "reason": "W23 smoke: 의도된 형식 문자열",
+              "run_id": first_run, "revision": 1, "finding_id": printf[0]["id"]}
+    recorded = session.request("POST", f"projects/{project_id}/finding-reviews", review,
+                               {"Idempotency-Key": str(uuid4()), "If-None-Match": "*"})
+    assert recorded["version"] == 1 and recorded["disposition"] == "accepted_risk", recorded
+
+    # Run 2: two lines inserted above the diagnostic and a second, different printf misuse.
+    (go_source / "example.go").write_text(original.replace("func Print()", "// W23: shifted\n//\nfunc Print()")
+                                           + '\nfunc Count() { fmt.Printf("%s %s", "x") }\n')
+    second = session.enqueue(project_id)
+    assert publish(second)["revision"] == 1
+    assert session.request("GET", f"runs/{second}/reports")["default_baseline"]["run_id"] == first_run
+    c = compare(second)
+    assert c["baseline"]["run_id"] == first_run and c["baseline"]["selection"] == "default" and c["comparable"], c
+    assert c["counts"] == {"new": 1, "persisting": 1, "changed": 0, "absent_unverified": 0, "resolved_observed": 0}, c["counts"]
+    moved = next(e for e in c["entries"] if e["fingerprint"] == original_fp)
+    assert moved["state"] == "persisting" and moved["changes"] == ["lines"], moved
+    assert moved["current"][0]["start_line"] == moved["baseline"][0]["start_line"] + 2, moved
+    stamped = next(f for f in c["findings"] if f["fingerprint"] == original_fp)
+    assert stamped["publication_disposition"] == stamped["current_disposition"] == "accepted_risk" and stamped["review_match"] == "applied", stamped
+    report2 = session.request("GET", f"runs/{second}/report?include_code=true")
+    assert report2["summary"]["hidden_findings"] == 1 and report2["summary"]["total_findings"] == 2, report2["summary"]
+    code_free = session.request("GET", f"runs/{second}/report")
+    assert all("fingerprint" not in f and "fingerprint_basis" not in f for f in code_free["findings"])
+
+    # Run 3: the original misuse fixed; the second one stays.
+    (go_source / "example.go").write_text((go_source / "example.go").read_text().replace('Printf("%d", "sample")', 'Printf("%s", "sample")'))
+    third = session.enqueue(project_id)
+    assert publish(third)["revision"] == 1
+    c = compare(third)
+    assert c["baseline"]["run_id"] == second and c["counts"]["resolved_observed"] == 1 and c["counts"]["persisting"] == 1, c["counts"]
+    resolved = next(e for e in c["entries"] if e["state"] == "resolved_observed")
+    assert resolved["fingerprint"] == original_fp and resolved["reason"] is None and resolved["producer"] == "tool", resolved
+    c = compare(third, f"?baseline={first_run}")
+    assert c["baseline"]["selection"] == "explicit" and c["counts"]["resolved_observed"] == 1 and c["counts"]["new"] == 1, c["counts"]
+    (go_source / "example.go").write_text(original)
+    print("PASS: W23 실제 go vet 세 run 비교(줄 이동 persisting·새 진단 new·수정 resolved_observed)·게시 시점 판정·코드 제외 식별 없음")
+
+
 def stage_map(activity):
     return {stage["key"]: stage for stage in activity["stages"]}
 
@@ -380,5 +444,7 @@ def run(base, root, env, *, browser=False):
             cli("login-link", "--user", user, "--output", browser_link, "--origin", origin)
             browser_smoke.published_report(root, env, origin, browser_link, "published-go-report", actual)
         print("PASS: 실제 워커→검증된 보고서 revision, 미실행 AI 검토, 코드 제외·포함과 3개 형식")
+        w23_history(session, go_project["id"], actual, full, go_source, original, lambda run: wait_for(
+            "W23 Go vet 보고서 게시", lambda: published_report(session, run), children, timeout=140))
         print("PASS: 자동 증감 제품 워커·실제 Go vet·printf 관찰·산출물 무결성·원본 보존")
     print("PASS: 두 에이전트 등록·단일 attempt·취소 및 정리·후속 run 결과 접수 (시험용 handler)")

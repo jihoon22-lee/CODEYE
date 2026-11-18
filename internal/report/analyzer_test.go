@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -226,8 +227,15 @@ func TestAnalyzerDecoderStaticcheckFindings(t *testing.T) {
 	}
 	sa4006 := 0
 	for _, x := range r.Findings {
-		if x.Validation != "unreviewed" || x.Severity != "low" || x.Disposition != "open" || !strings.HasPrefix(x.Fingerprint, "tool-fp-v1:") && strings.HasPrefix(x.Title, "go.staticcheck") {
+		if x.Validation != "unreviewed" || x.Severity != "low" || x.Disposition != "open" || !ValidFingerprint(x.Fingerprint) || x.FingerprintBasis == nil {
 			t.Fatalf("tool finding %+v", x)
+		}
+		if strings.HasPrefix(x.Title, "go.staticcheck") {
+			// W23 identity: the shared ToolFingerprint, never a decoder hash.
+			want, basis := ToolFingerprint("go.staticcheck", x.FingerprintBasis.Rule, x.Locations[0].Path, "", strings.TrimPrefix(x.Title, "go.staticcheck "+x.FingerprintBasis.Rule+": "))
+			if len(x.Title) < 160 && (x.Fingerprint != want || x.FingerprintBasis.Analyzer != "go.staticcheck" || x.FingerprintBasis.Producer != ProducerTool || x.FingerprintBasis.MoveKey != basis.MoveKey) {
+				t.Fatalf("staticcheck fingerprint %s %+v", x.Fingerprint, x.FingerprintBasis)
+			}
 		}
 		if strings.HasPrefix(x.Title, "go.staticcheck SA4006") {
 			sa4006++
@@ -252,7 +260,8 @@ func TestAnalyzerDecoderStaticcheckFindings(t *testing.T) {
 		}
 	}
 	row := toolRow(r, "staticcheck")
-	if scObs != 8 || row == nil || row.Analyzer != "go.staticcheck" || row.ExitClass != "success_with_findings" || row.ProcessedFiles == nil || *row.ProcessedFiles != 3 || row.FilesInScope != 4 {
+	if scObs != 8 || row == nil || row.Analyzer != "go.staticcheck" || row.ExitClass != "success_with_findings" || row.ProcessedFiles == nil || *row.ProcessedFiles != 3 || row.FilesInScope != 4 ||
+		!slices.Equal(row.ProcessedPaths, []string{"clean/c.go", "find/find.go", "find/find_test.go"}) {
 		t.Fatalf("staticcheck observations %d row %+v", scObs, row)
 	}
 	// go vet (4 files) and staticcheck (3 files, clean/c.go is in both): the
@@ -313,7 +322,7 @@ func TestAnalyzerDecoderProcessedUnion(t *testing.T) {
 func TestAnalyzerDecoderNotConfigured(t *testing.T) {
 	r := build(t, analyzerFixture(t, nil, goVet(t), taskSpec{key: "staticcheck", status: "unsupported", required: false, doc: notRunDoc(t)}).in, DefaultRegistry())
 	row := toolRow(r, "staticcheck")
-	if row == nil || row.ExitClass != "not_run" || row.ProcessedFiles == nil || *row.ProcessedFiles != 0 || !has(row.Limitations, "tool_not_configured") {
+	if row == nil || row.ExitClass != "not_run" || row.ProcessedFiles == nil || *row.ProcessedFiles != 0 || row.ProcessedPaths != nil || !has(row.Limitations, "tool_not_configured") {
 		t.Fatalf("row %+v", row)
 	}
 	if r.Summary.RawObservations != 5 || r.Coverage.ToolProcessedFiles == nil || *r.Coverage.ToolProcessedFiles != 4 {

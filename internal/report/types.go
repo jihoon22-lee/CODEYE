@@ -17,7 +17,7 @@ import "time"
 const (
 	SchemaVersion  = "0.1"
 	BuilderID      = "codeye-report"
-	BuilderVersion = "2"
+	BuilderVersion = "3"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -113,6 +113,11 @@ type Summary struct {
 	RawObservations        int      `json:"raw_observations"`
 	UnresolvedObservations int      `json:"unresolved_observations"`
 	Priorities             []string `json:"priorities"`
+
+	// HiddenFindings counts findings whose publication-time human
+	// disposition hides them from the action counts (W23). They stay in
+	// TotalFindings and in comparison. Omitted when zero (older revisions).
+	HiddenFindings int `json:"hidden_findings,omitempty"`
 }
 
 // ReviewCall records one request once across the cumulative stage artifacts.
@@ -179,6 +184,12 @@ type ToolCoverage struct {
 	StderrFailures int            `json:"stderr_failures"`
 	AnalyzerErrors int            `json:"analyzer_errors"`
 	Limitations    []string       `json:"limitations"`
+
+	// ProcessedPaths are the snapshot files the tool analyzed in an accepted
+	// succeeded task (W23). Only these locations count as inspected when a
+	// comparison decides a vanished finding was resolved. Omitted when the
+	// adapter does not record them (and in revisions before builder 3).
+	ProcessedPaths []string `json:"processed_paths,omitempty"`
 }
 
 // Task is one DB task row as accepted by the controller (the authority).
@@ -289,10 +300,17 @@ type Finding struct {
 	Evidence           []Evidence     `json:"evidence"`
 	CounterevidenceIDs []string       `json:"counterevidence_ids"`
 	ObservationIDs     []string       `json:"observation_ids"`
-	Fingerprint        string         `json:"fingerprint"`
+	Fingerprint        string         `json:"fingerprint,omitempty"`
 	Recommendation     Recommendation `json:"recommendation"`
 	Verification       []string       `json:"verification"`
 	Limitations        []string       `json:"limitations"`
+
+	// FingerprintBasis records the fp2 identity inputs (W23); absent in
+	// revisions before builder 3, whose fingerprints are kept as stored.
+	FingerprintBasis *FingerprintBasis `json:"fingerprint_basis,omitempty"`
+	// DispositionVersion is the human review version stamped at publication
+	// when Disposition is not open.
+	DispositionVersion *int64 `json:"disposition_version,omitempty"`
 }
 
 type Condition struct {

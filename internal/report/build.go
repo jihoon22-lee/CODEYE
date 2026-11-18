@@ -225,11 +225,17 @@ func Build(in Input, reg *Registry) (Report, error) {
 				r.Findings = append(r.Findings, c.Findings...)
 				if c.Tool != nil {
 					r.Coverage.Tools = append(r.Coverage.Tools, *c.Tool)
-					if c.ProcessedPaths == nil {
+					// tool_processed_files is the union of the analyzers'
+					// processed paths when every counted task gave them (a
+					// known zero needs none); otherwise the sum.
+					switch pf, pp := c.Tool.ProcessedFiles, c.Tool.ProcessedPaths; {
+					case pf == nil || *pf == 0 && len(pp) == 0:
+					case len(pp) != *pf:
 						unionComplete = false
-					}
-					for _, p := range c.ProcessedPaths {
-						processedUnion[p] = true
+					default:
+						for _, p := range pp {
+							processedUnion[p] = true
+						}
 					}
 				}
 				for _, l := range c.Limitations {
@@ -255,6 +261,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	} else {
 		composeReviews(&r, states, lim)
 	}
+	applyDispositions(&r, in.Reviews, in.Now)
 	sortReport(&r)
 
 	// Coverage: processed files only when every analyzer task produced a known count.
@@ -395,6 +402,9 @@ func checkInput(in Input) error {
 		if !seenArt[id] {
 			return invalidf("body for an unknown artifact")
 		}
+	}
+	if err := checkReviews(in.Reviews); err != nil {
+		return err
 	}
 	if in.ResultManifest != nil && !seenArt[in.ResultManifest.ID] {
 		return invalidf("result manifest is not an artifact of this attempt")
@@ -704,6 +714,9 @@ func ComputeSummary(findings []Finding, obs []Observation) Summary {
 	}
 	var cands []cand
 	for _, f := range findings {
+		if hiddenDisposition[f.Disposition] {
+			s.HiddenFindings++
+		}
 		switch f.Validation {
 		case "supported", "reproduced":
 			if !hiddenDisposition[f.Disposition] {

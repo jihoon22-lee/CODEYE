@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { Api } from './api';
 import type { AnalysisReport, Finding } from './analysisReport';
 import { reportURL } from './analysisReport';
 import { describeError } from './format';
+import { ComparisonSection, FindingHistory, HIDDEN, findingBadge, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
 
@@ -23,15 +24,17 @@ function TextList({ values }: { values: string[] }) {
     </ul>
   );
 }
-function FindingCard({ f }: { f: Finding }) {
+function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null; history?: ReactNode }) {
   return (
     <details className="finding-card">
       <summary>
         <strong>{f.title}</strong>
         <span>
           {label(t.validation, f.validation)} · {label(t.severity, f.severity)}
+          {badge && <> · {badge}</>}
         </span>
       </summary>
+      {history}
       <dl>
         <dt>{t.conditions}</dt>
         <dd>
@@ -92,11 +95,21 @@ function FindingCard({ f }: { f: Finding }) {
   );
 }
 
-export function ReportDocument({ report }: { report: AnalysisReport }) {
+// W23: the comparison of this revision and the reviews of its findings, when loaded.
+export type ReportHistory = { load: ComparisonLoad; api: Api; reload: () => void };
+
+export function ReportDocument({ report, history }: { report: AnalysisReport; history?: ReportHistory }) {
   const [includeCode, setIncludeCode] = useState(false);
   const [filter, setFilter] = useState('');
+  const [showHidden, setShowHidden] = useState(false);
+  const comparison = history?.load.state === 'ready' ? history.load.value : null;
+  const statuses = new Map(comparison?.findings.map((s) => [s.findingID, s]));
+  const entries = new Map(comparison?.entries.map((e) => [e.fingerprint, e]));
+  // Only a loaded current disposition hides a finding from the list; counts keep it.
+  const hidden = report.findings.filter((f) => HIDDEN.has(statuses.get(f.id)?.current ?? 'open'));
   const grouped = new Map<string, Finding[]>();
   for (const item of report.findings) {
+    if (!showHidden && hidden.includes(item)) continue;
     if (
       filter &&
       !(
@@ -148,6 +161,7 @@ export function ReportDocument({ report }: { report: AnalysisReport }) {
           ),
         )}
       </dl>
+      {history && <ComparisonSection load={history.load} reload={history.reload} />}
       {report.calls.length > 0 && (
         <details>
           <summary>{t.calls}</summary>
@@ -176,15 +190,43 @@ export function ReportDocument({ report }: { report: AnalysisReport }) {
           />
         </label>
       )}
-      {grouped.size === 0 && <p>{filter ? t.noMatch : t.empty}</p>}
+      {hidden.length > 0 && (
+        <>
+          <label>
+            <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> {ko.history.hiddenFilter(hidden.length)}
+          </label>
+          {!showHidden && <p className="small">{ko.history.hiddenNote(hidden.length)}</p>}
+        </>
+      )}
+      {grouped.size === 0 && (filter ? <p>{t.noMatch}</p> : hidden.length === 0 && <p>{t.empty}</p>)}
       {Array.from(grouped, ([category, findings]) => (
         <section key={category}>
           <h5>
             {label(t.categories, category)} ({findings.length})
           </h5>
-          {findings.map((f) => (
-            <FindingCard key={f.id} f={f} />
-          ))}
+          {findings.map((f) => {
+            const status = statuses.get(f.id);
+            return (
+              <FindingCard
+                key={f.id}
+                f={f}
+                badge={findingBadge(status)}
+                history={
+                  comparison &&
+                  status &&
+                  history && (
+                    <FindingHistory
+                      api={history.api}
+                      comparison={comparison}
+                      status={status}
+                      entry={status.fingerprint ? entries.get(status.fingerprint) : undefined}
+                      onChanged={history.reload}
+                    />
+                  )
+                }
+              />
+            );
+          })}
         </section>
       ))}
       <details>
@@ -262,6 +304,22 @@ export function ReportPanel({ api, runID }: { api: Api; runID: string }) {
   const [requested, setRequested] = useState(0);
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [error, setError] = useState('');
+  const [load, setLoad] = useState<ComparisonLoad>({ state: 'loading' });
+  const [loads, setLoads] = useState(0);
+  const reload = useCallback(() => setLoads((n) => n + 1), []);
+  const revision = report?.revision;
+  useEffect(() => {
+    if (revision === undefined) return;
+    // The comparison is of the revision shown, never of a newer one published meanwhile.
+    const controller = new AbortController();
+    api.getComparison(runID, revision, controller.signal).then(
+      (value) => setLoad({ state: 'ready', value }),
+      (err) => {
+        if (!controller.signal.aborted) setLoad({ state: 'failed', error: describeError(err) });
+      },
+    );
+    return () => controller.abort();
+  }, [api, runID, revision, loads]);
   useEffect(() => {
     if (!requested) return;
     const controller = new AbortController();
@@ -275,7 +333,7 @@ export function ReportPanel({ api, runID }: { api: Api; runID: string }) {
       });
     return () => controller.abort();
   }, [api, runID, requested]);
-  if (report) return <ReportDocument report={report} />;
+  if (report) return <ReportDocument report={report} history={{ load, api, reload }} />;
   return (
     <section>
       {error && <p role="alert">{error}</p>}

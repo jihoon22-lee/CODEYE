@@ -137,8 +137,8 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 4. 관찰은 보고서 관찰이 된다. `raw_severity`는 짧은 단어(`^[A-Za-z][A-Za-z0-9_-]{0,31}$`, 예 `error`)일 때만 옮기고, 그 밖은 envelope에만 남긴다. byte가 아닌 열 단위는 열을 0으로 두고 제약을 남긴다.
 5. manifest와 맞는 관찰은 **검토 전 도구 finding**이 된다. severity `low`, validation `unreviewed`, disposition `open`이고 검토 없이는 actionable이 아니다. 문구는 도구 이름이나 코드를 담지 않는 고정 템플릿이므로 코드 제외 export에도 남는다.
 6. **analyzer·규칙·경로·시작 행·시작 열·메시지가 모두 같은 관찰만** 한 finding으로 묶는다(TC-09). 같은 행이라도 메시지가 다르면 별도 finding이다. 실제 예: SA4006 두 건(`err`, `n`)은 같은 위치지만 두 finding이다. 도구 사이의 자동 병합은 하지 않는다(§9).
-7. fingerprint는 `report.ToolFingerprint(analyzer, rule, path, message)` = `tool-fp-v1:` + SHA-256이다. 이 helper 하나만 추가했다. 이력 비교 규칙은 W23이 정한다.
-8. task마다 도구 범위 행을 하나 만든다(`coverage.tools`). 처리 파일 수는 DB가 성공으로 받은 task이거나 `not_run`일 때만 센다. 보고서의 `tool_processed_files`는 분석기들의 처리 경로 **합집합**이다. go vet과 staticcheck가 같은 파일을 읽으면 한 번 센다. 경로를 줄 수 없는 decoder가 있으면 이전처럼 합계를 쓴다.
+7. fingerprint는 W23의 공용 `report.ToolFingerprint(analyzer, rule, path, "", message)`로 만든다(fp2와 `fingerprint_basis`, [W23 기록](40-w23-history-comparison.md)). decoder가 자기 hash를 만들지 않는다. 팩 decoder도 이 함수를 호출해야 한다. 줄 이동은 identity를 바꾸지 않는다.
+8. task마다 도구 범위 행을 하나 만든다(`coverage.tools`, `analyzer`는 envelope의 analyzer ID). 처리 파일 수(`processed_files`)는 DB가 성공으로 받은 task이거나 `not_run`일 때만 센다(`not_run`은 0). 처리 경로(`processed_paths`)는 DB가 성공으로 받은 task에만 기록한다. W23 비교는 이 경로에 있는 위치만 다시 검사한 것으로 본다. 그래서 staticcheck가 설정되지 않은 run에서 사라진 staticcheck finding은 `resolved_observed`가 아니라 `absent_unverified`다. 보고서의 `tool_processed_files`는 처리 경로의 **합집합**이다. go vet과 staticcheck가 같은 파일을 읽으면 한 번 센다. 처리 수와 경로 수가 다른 행이 있으면 합계를 쓴다.
 
 거부된 envelope는 `artifact_rejected:<key>` 제약이 된다. 그 task는 해석되지 않은 것으로 처리되고 처리 파일 수는 미확정이 된다.
 
@@ -244,7 +244,8 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 | `pack.Test*` | 계획 연결·dispatch·소유권·예약 이름·필수 불일치·대역 envelope·배타 쓰기 |
 | `obsdoc.Test*` | 실제 예시 round trip과 33개 거부 사례 |
 | `builtin.TestGoVetUnchangedInComposite`, `TestHandlers*` | go vet 고정, capability 광고, 도구 플래그 |
-| `report.TestAnalyzerDecoder*` | TC-09·TC-13, 합집합, 미설정 행, 위조 거부, 코드 제외 export |
+| `report.TestAnalyzerDecoder*` | TC-09·TC-13, fp2 fingerprint, 처리 경로·합집합, 미설정 행, 위조 거부, 코드 제외 export |
+| `history.TestStaticcheckFindingsCompare` | W23 비교: 줄 이동 persisting, 성공한 재검사 resolved, 미설정 run은 absent_unverified |
 | `discovery.TestAnalyzerToolProbe*`, `envdoc.TestAnalyzerToolsValidation` | probe 실행 계약, not_probed, 실패 기록, 생태계 범위, 실제 probe |
 | `review.TestR1InterpretReadsGenericEnvelope` | R1 해석 입력에 두 엔진 관찰, not-run 행, 누락 상류 |
 | `run.TestAnalyzerPackWith*` (Linux) | 실제 워커: CI 조건의 미설정 가시성, 실제 go vet + staticcheck end-to-end |
@@ -259,4 +260,5 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 - R1 해석의 호출자 확장은 Go 코드에서만 동작한다(W15). 다른 언어 팩이 해석 입력을 쓰려면 코드 창 선택을 확인해야 한다.
 - go vet은 Go가 없는 스냅샷에도 R0의 `unsupported` 자리 작업을 계획한다. review-v1 고정 때문에 유지했다. W17 이후 Go 없는 노드·스냅샷의 표시를 다시 정해야 한다.
 - 탐색 probe는 범위 안 생태계의 도구만 기록한다. `any` 생태계 도구(W21)는 항상 기록된다.
-- `tool_processed_files` 합집합은 모든 decoder가 경로를 줄 때만 쓴다. go vet 문서의 inventory와 수가 다르면 합계로 돌아간다.
+- `tool_processed_files` 합집합은 처리 수가 있는 모든 행이 같은 수의 경로를 줄 때만 쓴다. 그렇지 않으면 합계로 돌아간다.
+- 보고서 builder 버전은 W23의 `3`을 유지했다. 같은 입력이라도 staticcheck envelope가 있는 attempt는 W19 이전 builder에서 미인식 artifact였으므로 보고서 내용이 다르다. W19와 W23 이전에 게시된 staticcheck 보고서는 없다.

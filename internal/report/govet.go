@@ -148,6 +148,7 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 	if ctx.Task.Status != string(domain.TaskSucceeded) {
 		tc.ProcessedFiles = nil
 	}
+	tc.ProcessedPaths = goVetProcessedPaths(&d, ctx)
 	for _, l := range d.Limitations {
 		if codePattern.MatchString(l) {
 			tc.Limitations = append(tc.Limitations, l)
@@ -211,7 +212,7 @@ func goVetFinding(ctx DecodeContext, obs []Observation) Finding {
 	first := obs[0]
 	l := first.Location
 	msg := *first.RawMessage
-	fp := sha256.Sum256([]byte(strings.Join([]string{"go-vet-fp-v1", first.RuleID, l.Path, msg}, "\x00")))
+	fp, basis := ToolFingerprint(govet.AnalyzerID, first.RuleID, l.Path, "", msg)
 	idSum := sha256.Sum256([]byte(strings.Join([]string{ctx.Task.Key, first.RuleID, l.Path, itoa(l.StartLine), msg}, "\x00")))
 	id := "fnd_" + hex.EncodeToString(idSum[:])[:20]
 	category, reason := goVetCategory[first.RuleID], textSeverityReason
@@ -223,7 +224,7 @@ func goVetFinding(ctx DecodeContext, obs []Observation) Finding {
 	f := Finding{SchemaVersion: "0.1", ID: id, Title: truncateRunes("go vet "+first.RuleID+": "+msg, 160), Category: category, Severity: "low", SeverityReason: reason,
 		Validation: "unreviewed", Disposition: "open", Impact: textImpact, Locations: []Location{loc},
 		Evidence:           []Evidence{{ID: codeID, Kind: "code", Description: textEvidenceCode, Location: &loc, BlobSHA256: l.BlobSHA256}},
-		CounterevidenceIDs: []string{}, ObservationIDs: []string{}, Fingerprint: "go-vet-fp-v1:" + hex.EncodeToString(fp[:]),
+		CounterevidenceIDs: []string{}, ObservationIDs: []string{}, Fingerprint: fp, FingerprintBasis: &basis,
 		Recommendation: Recommendation{Summary: textRecommendation, Tradeoffs: []string{}}, Verification: []string{textVerification},
 		Limitations: []string{textLimitManual, textLimitStaticOnly}}
 	var toolIDs []string

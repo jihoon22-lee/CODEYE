@@ -5,7 +5,7 @@ info:
   description: >-
     핵심 수직 경로의 계약이다. `x-codeye-status` 값이 `implemented-w`로 시작하는 operation을
     `codeye serve`(loopback 전용 controller)가 실제로 제공하며 나머지는 아직 설계 계약이다
-    (docs/24-w03-api.md, docs/28-w06-node-protocol.md, docs/31-w09-report.md, docs/38-w22-schedules-progress-sse.md). 운영 CRUD 전체는 docs/11-api-and-events.md에 따라 확장한다.
+    (docs/24-w03-api.md, docs/28-w06-node-protocol.md, docs/31-w09-report.md, docs/38-w22-schedules-progress-sse.md, docs/40-w23-history-comparison.md). 운영 CRUD 전체는 docs/11-api-and-events.md에 따라 확장한다.
     의미 제약과 lease fencing은 JSON Schema 검증 외에 서버에서 검사한다.
     W03 사용자 인증은 UserSession cookie뿐이다. UserBearer는 구현되지 않았다.
     상태 변경 요청(POST/PATCH/DELETE)은 Origin이 서버 origin과 정확히 같아야 하고,
@@ -314,7 +314,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items, latest_revision, formats, default_include_code]
+                required: [items, latest_revision, formats, default_include_code, default_baseline]
                 properties:
                   items:
                     type: array
@@ -332,7 +332,114 @@ paths:
                   latest_revision: {type: [integer, 'null']}
                   formats: {type: array, items: {enum: [json, markdown, html]}}
                   default_include_code: {const: false}
+                  default_baseline:
+                    description: W23 비교 화면의 기본 기준(getRunComparison 규칙). 없으면 null.
+                    oneOf:
+                      - type: 'null'
+                      - type: object
+                        additionalProperties: false
+                        required: [run_id, revision, url]
+                        properties:
+                          run_id: {type: string}
+                          revision: {type: integer, minimum: 1}
+                          url: {type: string}
         '404': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/runs/{run_id}/comparison:
+    parameters:
+      - {$ref: '#/components/parameters/RunId'}
+    get:
+      operationId: getRunComparison
+      x-codeye-status: implemented-w23
+      description: >-
+        프로젝트 읽기 권한(viewer 포함, 비구성원 404)으로 run의 게시 revision(기본 최신)을 기준 revision과 비교한다. 기준은
+        baseline(같은 프로젝트의 run만, 다른 프로젝트·없는 run 404, 자기 자신 422) 또는 기본값이다. 기본 기준은 같은 프로젝트에서 먼저 요청된
+        run 중 source variant(그 run의 project revision source: Git 저장소+브랜치 또는 root+경로)·profile·scope가 같고 completed/partial
+        fp2 보고서(builder 3 이상)가 있는 가장 최근 run의 최신 그런 revision이다. 상태는 저장된 보고서 본문과 run 사실로 매번 다시 계산한다.
+        resolved_observed는 같은 source variant·scope 안에서 같은 도구(같은 버전)가 이번 run에 성공했고 그 파일을 실제로 분석했을 때만이다.
+        모델 후보가 다시 나오지 않은 것은 해결 관찰이 아니다(absent_unverified, model_absence_not_observation). fingerprint 체계가 다르면
+        comparable=false이고 entries는 비어 있다. findings는 현재 revision의 각 발견에 대해 게시 시점 disposition(보고서에 고정)과 현재
+        disposition(만료·경로 범위·모호한 일치 반영)을 따로 준다. 제목·도구 원문은 싣지 않는다(보고서 본문과 finding_id로 연결).
+      parameters:
+        - {name: revision, in: query, schema: {type: integer, minimum: 1, maximum: 1000000}}
+        - {name: baseline, in: query, schema: {type: string}, description: 기준 run ID(같은 프로젝트)}
+        - {name: baseline_revision, in: query, schema: {type: integer, minimum: 1, maximum: 1000000}, description: baseline이 있을 때만}
+      responses:
+        '200':
+          description: 비교와 사람 판정 overlay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunComparison'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/projects/{project_id}/finding-reviews:
+    parameters:
+      - {name: project_id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: listFindingReviews
+      x-codeye-status: implemented-w23
+      description: >-
+        프로젝트 구성원(viewer 포함, 비구성원 404)이 사람 판정을 읽는다. fingerprint를 주면 그 fingerprint의 모든 version(최신 먼저,
+        감사 이력), 없으면 fingerprint별 최신 version을 fingerprint 순서로 cursor pagination한다. can_review는 owner·manager·runner 여부다.
+      parameters:
+        - {name: fingerprint, in: query, schema: {type: string, pattern: '^fp2:[0-9a-f]{64}$'}}
+        - {name: cursor, in: query, schema: {type: string, pattern: '^fp2:[0-9a-f]{64}$'}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: 판정 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items, next_cursor, can_review]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/FindingReview'}}
+                  next_cursor: {type: [string, 'null']}
+                  can_review: {type: boolean}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createFindingReview
+      x-codeye-status: implemented-w23
+      description: >-
+        owner·manager·runner만 기록한다(viewer 403, 비구성원 404). 판정은 fingerprint의 다음 version으로 추가되며 수정·삭제할 수 없다
+        (이 행들이 감사 기록이다). If-Match "N"은 현재 version이어야 하고 첫 판정은 If-None-Match: *를 쓴다. 다르면 409 CONFLICT, 둘 다
+        없으면 400. 같은 actor·Idempotency-Key·요청은 같은 행을 200으로 반환하고 다른 요청은 409 IDEMPOTENCY_CONFLICT. reason은 필수(공백 제외
+        1..2000자). expires_at은 미래여야 하고, 지나면 현재 화면에서 open으로 읽는다. path_prefix가 있으면 그 경로(또는 아래)에 있는
+        발견에만 적용한다. open은 만료·경로 범위를 갖지 않는다. run_id·revision·finding_id는 사람이 판단한 게시 revision의 발견이며 그 본문에
+        같은 fingerprint로 있어야 한다(아니면 422). 다른 revision의 발견에는 fingerprint가 그 revision에서 하나뿐이고 식별이 약하지 않을 때만
+        자동 적용된다. 그 밖에는 후보 일치(review_match=candidate)로 열린 채 남고 사람이 그 발견에서 다시 기록해야 적용된다.
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/CSRF'}
+        - {name: If-Match, in: header, schema: {type: string}, description: 현재 판정 version ETag("N")}
+        - {name: If-None-Match, in: header, schema: {const: '*'}, description: 첫 판정}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/FindingReviewCreate'}
+      responses:
+        '201':
+          description: 추가된 version. ETag는 version이다.
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FindingReview'}
+        '200':
+          description: 같은 Idempotency-Key·요청의 재전송(새 version 없음)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FindingReview'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/runs/{run_id}/events:
     parameters:
@@ -1406,3 +1513,195 @@ components:
         verified_at: {type: string, format: date-time}
     TaskStatus:
       enum: [queued, blocked, running, succeeded, failed, timed_out, cancelled, unsupported, skipped_policy, budget_exhausted]
+    Disposition:
+      enum: [open, acknowledged, accepted_risk, false_positive, fixed_by_user, suppressed]
+    ComparisonState:
+      enum: [new, persisting, changed, absent_unverified, resolved_observed]
+    FindingReviewCreate:
+      type: object
+      additionalProperties: false
+      required: [fingerprint, disposition, reason, run_id, revision, finding_id]
+      properties:
+        fingerprint: {type: string, pattern: '^fp2:[0-9a-f]{64}$'}
+        disposition: {$ref: '#/components/schemas/Disposition'}
+        reason: {type: string, minLength: 1, maxLength: 2000}
+        expires_at: {type: [string, 'null'], format: date-time}
+        path_prefix: {type: [string, 'null'], minLength: 1, maxLength: 1024, description: snapshot 상대 경로}
+        run_id: {type: string}
+        revision: {type: integer, minimum: 1}
+        finding_id: {type: string, minLength: 1, maxLength: 200}
+    FindingReview:
+      type: object
+      additionalProperties: false
+      required: [id, project_id, fingerprint, version, disposition, reason, path_prefix, expires_at, actor_id, run_id, report_revision, finding_id, created_at]
+      properties:
+        id: {type: string}
+        project_id: {type: string}
+        fingerprint: {type: string, pattern: '^fp2:[0-9a-f]{64}$'}
+        version: {type: integer, minimum: 1}
+        disposition: {$ref: '#/components/schemas/Disposition'}
+        reason: {type: string, minLength: 1}
+        path_prefix: {type: [string, 'null']}
+        expires_at: {type: [string, 'null'], format: date-time}
+        actor_id: {type: string}
+        run_id: {type: string}
+        report_revision: {type: integer, minimum: 1}
+        finding_id: {type: string}
+        created_at: {type: string, format: date-time}
+    ReviewOverlay:
+      type: object
+      additionalProperties: false
+      required: [version, disposition, reason, path_prefix, expires_at, expired, actor_id, created_at, run_id, report_revision, finding_id]
+      properties:
+        version: {type: integer, minimum: 1}
+        disposition: {$ref: '#/components/schemas/Disposition'}
+        reason: {type: string}
+        path_prefix: {type: [string, 'null']}
+        expires_at: {type: [string, 'null'], format: date-time}
+        expired: {type: boolean, description: DB 시각 기준 만료 여부}
+        actor_id: {type: string}
+        created_at: {type: string, format: date-time}
+        run_id: {type: string}
+        report_revision: {type: integer, minimum: 1}
+        finding_id: {type: string}
+    ComparisonOccurrence:
+      type: object
+      additionalProperties: false
+      required: [finding_id, path, start_line, end_line, severity, validation, category, disposition]
+      properties:
+        finding_id: {type: string}
+        path: {type: string}
+        start_line: {type: integer, minimum: 0}
+        end_line: {type: integer, minimum: 0}
+        severity: {enum: [critical, high, medium, low, info]}
+        validation: {enum: [unreviewed, supported, reproduced, refuted, inconclusive]}
+        category: {type: string}
+        disposition: {$ref: '#/components/schemas/Disposition'}
+    ComparisonEntry:
+      type: object
+      additionalProperties: false
+      required: [fingerprint, state, reason, ambiguous, producer, analyzer, rule, paths, current, baseline, changes, move_candidates, review]
+      properties:
+        fingerprint: {type: string, pattern: '^fp2:[0-9a-f]{64}$'}
+        state: {$ref: '#/components/schemas/ComparisonState'}
+        reason:
+          description: >-
+            absent_unverified는 해결로 볼 수 없는 이유(필수), new는 기준 run이 이 위치를 같은 규칙으로 검사하지 않았다는 표시(선택).
+            persisting·changed·resolved_observed는 null.
+          oneOf:
+            - type: 'null'
+            - enum: [source_variant_differs, scope_reduced, check_not_run, check_failed, rules_changed, rules_unknown, location_not_inspected, model_review_not_performed, model_review_partial, model_absence_not_observation]
+        ambiguous: {type: boolean, description: 한 쪽에 같은 fingerprint의 발견이 여럿이라 하나씩 짝짓지 않았다}
+        producer: {enum: [tool, model]}
+        analyzer: {type: string}
+        rule: {type: string}
+        paths: {type: array, items: {type: string}}
+        current: {type: array, items: {$ref: '#/components/schemas/ComparisonOccurrence'}}
+        baseline: {type: array, items: {$ref: '#/components/schemas/ComparisonOccurrence'}}
+        changes:
+          type: array
+          description: 'count·severity·validation·category가 있으면 changed. lines만 다르면 persisting(같은 파일 안 이동).'
+          items: {enum: [count, severity, validation, category, lines]}
+        move_candidates:
+          type: array
+          description: 경로만 다르고 나머지 식별이 같은 new↔사라진 항목. 자동으로 합치거나 확정하지 않는다.
+          items: {type: string, pattern: '^fp2:[0-9a-f]{64}$'}
+        review:
+          oneOf:
+            - type: 'null'
+            - {$ref: '#/components/schemas/ReviewOverlay'}
+    ComparisonCounts:
+      type: object
+      additionalProperties: false
+      required: [total_findings, actionable_findings, pending_candidates, refuted_findings, hidden_findings]
+      properties:
+        total_findings: {type: integer, minimum: 0}
+        actionable_findings: {type: integer, minimum: 0}
+        pending_candidates: {type: integer, minimum: 0}
+        refuted_findings: {type: integer, minimum: 0}
+        hidden_findings: {type: integer, minimum: 0}
+    RunComparison:
+      type: object
+      additionalProperties: false
+      required: [run_id, project_id, revision, report_created_at, baseline, comparable, not_comparable_reason, differences, counts, entries, unidentified, findings, summary, can_review, checked_at]
+      properties:
+        run_id: {type: string}
+        project_id: {type: string}
+        revision: {type: integer, minimum: 1}
+        report_created_at: {type: string, format: date-time}
+        baseline:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [run_id, revision, report_created_at, selection]
+              properties:
+                run_id: {type: string}
+                revision: {type: integer, minimum: 1}
+                report_created_at: {type: string, format: date-time}
+                selection: {enum: [default, explicit]}
+        comparable: {type: boolean}
+        not_comparable_reason:
+          oneOf:
+            - type: 'null'
+            - enum: [no_baseline, fingerprint_scheme_differs]
+        differences:
+          type: array
+          description: 'source_variant, source_revision, profile, scope, builder_version, tool:<analyzer>:version|result|processed_files, ai_review, review:<role>(모델 / 지침 digest). 같은 값은 생략한다.'
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, baseline, current]
+            properties:
+              key: {type: string}
+              baseline: {type: [string, 'null']}
+              current: {type: [string, 'null']}
+        counts:
+          type: object
+          description: entry(fingerprint) 단위 상태 수
+          additionalProperties: false
+          required: [new, persisting, changed, absent_unverified, resolved_observed]
+          properties:
+            new: {type: integer, minimum: 0}
+            persisting: {type: integer, minimum: 0}
+            changed: {type: integer, minimum: 0}
+            absent_unverified: {type: integer, minimum: 0}
+            resolved_observed: {type: integer, minimum: 0}
+        entries: {type: array, items: {$ref: '#/components/schemas/ComparisonEntry'}}
+        unidentified:
+          type: object
+          description: fp2 식별이 없어 비교하지 않은 발견 수
+          additionalProperties: false
+          required: [current, baseline]
+          properties:
+            current: {type: integer, minimum: 0}
+            baseline: {type: integer, minimum: 0}
+        findings:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [finding_id, fingerprint, state, publication_disposition, current_disposition, review_match, review]
+            properties:
+              finding_id: {type: string}
+              fingerprint: {type: [string, 'null']}
+              state:
+                oneOf:
+                  - type: 'null'
+                  - {$ref: '#/components/schemas/ComparisonState'}
+              publication_disposition: {$ref: '#/components/schemas/Disposition'}
+              current_disposition: {$ref: '#/components/schemas/Disposition'}
+              review_match: {enum: [none, applied, candidate, expired, out_of_scope, reverted]}
+              review:
+                oneOf:
+                  - type: 'null'
+                  - {$ref: '#/components/schemas/ReviewOverlay'}
+        summary:
+          type: object
+          additionalProperties: false
+          required: [at_publication, current]
+          properties:
+            at_publication: {$ref: '#/components/schemas/ComparisonCounts'}
+            current: {$ref: '#/components/schemas/ComparisonCounts'}
+        can_review: {type: boolean}
+        checked_at: {type: string, format: date-time, description: 만료 판단에 쓴 DB 시각}

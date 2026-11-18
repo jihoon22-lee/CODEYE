@@ -77,6 +77,9 @@ type Input struct {
 	ResultManifest *ArtifactRef
 	Artifacts      []ArtifactRef
 	Bodies         map[string][]byte
+	// Reviews are the project's latest human dispositions per fingerprint
+	// (W23). Build stamps those in effect at Now on matching findings.
+	Reviews []ReviewFact
 }
 
 // MaxDecodedBytes bounds the artifact bytes the publisher loads for decoding.
@@ -116,6 +119,7 @@ func InputDigest(in Input) string {
 	for _, a := range arts {
 		w("artifact", a.ID, a.Role, a.MediaType, a.SHA256, strconv.FormatInt(a.SizeBytes, 10))
 	}
+	writeReviews(w, in.Reviews)
 	return domain.Digest([]byte(b.String()))
 }
 
@@ -185,9 +189,6 @@ type Contribution struct {
 	// decoder validated the review result bytes against the evidence catalog.
 	Review      *ReviewResult
 	Limitations []string
-	// ProcessedPaths are the snapshot paths behind Tool.ProcessedFiles, so
-	// files read by several analyzers count once; nil when not provided.
-	ProcessedPaths []string
 }
 
 // ReviewResult is a decoded model review artifact of one task.
@@ -234,7 +235,7 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 // analyzer envelope, docs/39), snapshot-bound review records and W15
 // discovery documents.
 func DefaultRegistry() *Registry {
-	r, err := NewRegistry(goVetWithPaths{}, AnalyzerDecoder{}, ReviewDecoder{}, R1ReviewDecoder{}, EnvironmentDecoder{})
+	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, R1ReviewDecoder{}, EnvironmentDecoder{})
 	if err != nil {
 		panic(err)
 	}

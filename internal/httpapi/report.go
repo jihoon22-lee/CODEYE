@@ -134,7 +134,18 @@ func (s *Server) listReports(q *request) {
 		n := items[len(items)-1].Revision
 		latest = &n
 	}
-	writeJSON(q.w, http.StatusOK, map[string]any{"items": items, "latest_revision": latest, "formats": report.Formats, "default_include_code": false})
+	// W23: the run the comparison view uses by default (same project, source
+	// variant, profile and scope; an earlier fp2 report), or null.
+	ref, err := s.store.DefaultBaseline(ctx, q.session.UserID, q.params[0])
+	if err != nil {
+		s.storeError(q, err)
+		return
+	}
+	var baseline any
+	if ref != nil {
+		baseline = map[string]any{"run_id": ref.RunID, "revision": ref.Revision, "url": apiPrefix + "/runs/" + q.params[0] + "/comparison"}
+	}
+	writeJSON(q.w, http.StatusOK, map[string]any{"items": items, "latest_revision": latest, "formats": report.Formats, "default_include_code": false, "default_baseline": baseline})
 }
 
 // publishLoop reconciles pending reports at start and then on every tick or

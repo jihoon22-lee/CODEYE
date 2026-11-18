@@ -170,6 +170,6 @@ func reviewFinding(snapshot string, c record.Candidate, v record.Verification, c
 			f.Evidence = append(f.Evidence, Evidence{ID: id, Kind: kind, Description: "고정 스냅샷의 " + e.Kind + " 발췌 위치", Location: &loc, BlobSHA256: e.SHA256})
 		}
 	}
-	f.Fingerprint = domain.Digest([]byte(f.Category + "\x00" + f.Locations[0].Path + "\x00" + c.Title))
+	setModelFingerprint(&f, c, catalog, nil)
 	return f
 }
