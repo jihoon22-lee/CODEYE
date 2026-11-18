@@ -1,5 +1,5 @@
 id: review-r1
-version: 2.0.0-rc1
+version: 2.0.0-rc2
 schema_version: '0.2'
 language: ko
 status: candidate-not-promoted
@@ -13,7 +13,12 @@ roles:
   verify: verify.md
 domains: domains.md
 languages:
+  cpp: languages/cpp.md
   go: languages/go.md
+  javascript: languages/javascript.md
+  python: languages/python.md
+  rust: languages/rust.md
+language_selection: guides of the snapshot's in-scope source ecosystems (the analyzer packs' rule), sorted; none when no supported ecosystem is in scope
 digest_policy:
   algorithm: sha256
   inputs: manifest-and-selected-files
