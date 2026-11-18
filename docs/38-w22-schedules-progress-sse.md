@@ -100,6 +100,7 @@ data: {"run_id":"…"}
 - 이벤트 행은 이름 없는 메시지이며 `id`는 그 run의 이벤트 순번이다. `type`은 저장된 이벤트 종류(`run.queued`, `attempt.leased`, `snapshot.fixed`, `task.created`, `task.status`, `run.status`, `report.published` 등)다. [API 문서](11-api-and-events.md)의 설계 예시 `task.updated`라는 이름은 쓰지 않는다.
 - `data`는 `run_id`·`sequence`·`version`(그 이벤트 뒤 run version)·`type`·`at`(DB 시각)과 payload의 허용 필드만 담는다. 허용 목록은 OpenAPI `RunEventData.x-codeye-payload-fields`이며 서버 코드와 같은지 검증 스크립트가 확인한다. 노드·워커 식별자, digest, 경로, 로그, 자격증명은 보내지 않는다.
 - 한 묶음의 행 뒤에 `run.view`를 보낸다. 상태의 원천은 이 문서와 GET이며 이벤트 행은 무효화 신호다.
+- `run.view`는 행 묶음을 보낸 뒤에 읽는다. 그사이 커밋된 이벤트는 view에 이미 반영돼 있으므로, view의 `event_sequence`까지의 행을 먼저 보내고 view를 보낸다. 그래서 `run.view`의 `event_sequence`는 그 연결에서 보낸 마지막 행 순번과 같다. 그 행을 읽지 못하거나 순번이 끊기면 view를 보내지 않고 `state.resync`(`view_unavailable`·`gap`)로 끝낸다.
 - 제어 메시지(`run.view`, `heartbeat`, `state.resync`, `closed`)에는 `id`가 없어 cursor를 움직이지 않는다. heartbeat는 SSE 주석이 아닌 이름 있는 이벤트다(브라우저 EventSource는 주석을 전달하지 않는다). 진행률을 바꾸지 않는다.
 - 예시: [재접속 wire 예시](../examples/run-events.txt).
 
@@ -147,7 +148,7 @@ data: {"run_id":"…"}
 | TC-25 serve 경로 | `codeye serve`의 reconcile 루프가 due occurrence를 일반 queued run으로 만들고 GET·목록·SSE가 같은 출처를 보여준다. | `TestServeLoopMaterializesSchedule` |
 | 예약 권한·API | actor 권한 재검사, manager 전용 변경, viewer 목록, 비구성원 404, Idempotency-Key·If-Match. | `TestScheduleOccurrenceRechecksActor`, `TestScheduleManagement`, `TestScheduleAPI` |
 | TC-99 계획 분모 | 확정 뒤 task 추가로 revision 2와 사유, 가중치 충돌 409·범위 밖 422, heartbeat 뒤 불변, 재시도 뒤 revision 1. | `TestTC99PlanRevisionAndWeightedProgress`, `TestPlanRevisionAndWeightedPercent` |
-| TC-99 SSE | 순번 연속·허용 필드·`run.view`=GET, `Last-Event-ID` 우선, heartbeat 무 id, `cursor_ahead`·`cursor_expired`·`gap`, 401·404·400, 로그아웃·권한 상실 종료, 사용자별 상한(사용자 A 초과 503, 사용자 B 연결), 실제 `http.Server` timeout 생존, shutdown 시 종료. | `TestSSE*` (`internal/httpapi/w22_test.go`) |
+| TC-99 SSE | 순번 연속·허용 필드·`run.view`=GET·view가 보낸 행보다 앞서지 않음(행 묶음과 view 읽기 사이에 커밋된 이벤트), `Last-Event-ID` 우선, heartbeat 무 id, `cursor_ahead`·`cursor_expired`·`gap`, 401·404·400, 로그아웃·권한 상실 종료, 사용자별 상한(사용자 A 초과 503, 사용자 B 연결), 실제 `http.Server` timeout 생존, shutdown 시 종료. | `TestSSE*` (`internal/httpapi/w22_test.go`) |
 | TC-99 실제 run | 실제 Go run의 SSE가 저장된 이벤트를 순서대로 전달하고 마지막 `run.view`가 GET과 같다. | `scripts/node_smoke.py` |
 | 웹 | stream 적용·gap 재조회·오래된 view 무시·polling 대체·제한된 재연결·숨김 탭·queued 재조회, 계획 표시, 예약 화면. Chromium에서 실시간 연결 표시. | `runStream.test.ts`, `W22View.test.tsx`, `apiW22.test.ts`, `web/e2e/control.spec.ts` |
 | migration | 0006 데이터에 0007 적용 시 기존 행 불변, 제약·불변·삭제 금지, 재적용, 0006 바이너리 거부. | `TestW22MigrationKeepsLegacyRows` |

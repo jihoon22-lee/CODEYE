@@ -1,0 +1,3 @@
+# Captured tool streams are replayed byte for byte (bandit CSV ends records
+# with CRLF): no line-ending conversion.
+* -text

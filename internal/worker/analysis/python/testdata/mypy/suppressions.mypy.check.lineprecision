@@ -1,0 +1,7 @@
+Name           Lines  Precise  Imprecise  Any  Empty  Unanalyzed
+----------------------------------------------------------------
+sup                0        0          0    0      0           0
+sup.ruff_file      4        1          0    0      3           0
+sup.ruff_line      5        3          0    0      2           0
+sup.sec           11        1          0    4      6           0
+sup.types         13        6          0    0      7           0
