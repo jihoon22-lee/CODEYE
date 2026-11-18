@@ -1,0 +1,4 @@
+error: rustc 1.99.1 is not supported by the following packages:
+  toonew@0.1.0 requires rustc 1.200
+  toonew@0.1.0 requires rustc 1.200
+

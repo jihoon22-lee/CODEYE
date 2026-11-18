@@ -19,7 +19,7 @@ W18은 [분석기 팩 계약](39-r1-analyzer-packs.md)(W19)을 따르는 JavaScr
 
 ### 1.1 기준 분석기 선택(§2.6)
 
-기준선은 ESLint의 구문 규칙(`@eslint/js` recommended, TS 파일에는 typescript-eslint recommended)이다. tsc는 기준선이 될 수 없다. 스냅샷은 `node_modules`를 항상 제외하므로 실제 저장소에서 tsc는 대부분 의존성 공백으로 끝난다(§4의 실측). 기준선이 공백으로 실패하면 거의 모든 JS/TS run의 판정이 공백이 된다. 구문 규칙은 타입 정보 없이 JS 전용 모듈과 TS 모듈 모두에서 끝까지 실행된다. tsc와 type-aware 규칙은 의존성이 갖춰진 경우의 추가 깊이다. 이제 ESLint 기준선만 probe에 성공한 노드도 deep-review를 광고한다. [팩 계약 §2.6](39-r1-analyzer-packs.md#26-필수required-규칙)의 "현재 기준 분석기는 go vet뿐" 문장은 W18 이후 맞지 않는다. 공유 문서라 이 단계에서는 고치지 않았다.
+기준선은 ESLint의 구문 규칙(`@eslint/js` recommended, TS 파일에는 typescript-eslint recommended)이다. tsc는 기준선이 될 수 없다. 스냅샷은 `node_modules`를 항상 제외하므로 실제 저장소에서 tsc는 대부분 의존성 공백으로 끝난다(§4의 실측). 기준선이 공백으로 실패하면 거의 모든 JS/TS run의 판정이 공백이 된다. 구문 규칙은 타입 정보 없이 JS 전용 모듈과 TS 모듈 모두에서 끝까지 실행된다. tsc와 type-aware 규칙은 의존성이 갖춰진 경우의 추가 깊이다. [팩 계약 §2.6](39-r1-analyzer-packs.md#26-필수required-규칙)대로 ESLint 기준선만 probe에 성공한 노드(`--node`와 `--eslint`)도 deep-review를 광고한다. W18 도구는 보조 프로그램을 쓰지 않으므로 §2.4의 `--toolchain-path` 조회와 무관하고, 자식 PATH는 node 디렉터리뿐이다.
 
 ## 2. 실행
 

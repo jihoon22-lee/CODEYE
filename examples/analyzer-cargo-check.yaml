@@ -1,0 +1,34 @@
+# W20 Rust 팩 기준 분석기 cargo check 서술. 구현: internal/worker/analysis/rustpack, 근거: docs/44-w20-rust-pack.md.
+# cargo 1.99.1 check --message-format=json은 경고만 있으면 exit 0, 컴파일 오류·deny 수준 lint·빌드 스크립트 실패면 exit 101이다.
+# 경고(발견 사항)와 정상 종료가 같은 exit 0이므로 종료 코드만으로 findings를 정하지 않는다.
+# stdout의 마지막 build-finished 레코드(success)와 종료 코드가 일치해야 성공이며, 진단 레코드가 findings를 정한다.
+# cargo check는 build script(build.rs)와 proc macro를 컴파일하고 실행하며 저장소의 .cargo/config.toml을 읽는다.
+# 그래서 executes_repository_code=true이고, 노드 운영자의 --repo-code-source-root 허가가 없으면 실행하지 않는다.
+schema_version: '0.1'
+id: rust.cargocheck
+languages: [rust]
+planned_platforms: [linux, windows, macos]
+availability: verified  # Linux cargo/rustc 1.99.1 실행으로 검증. Windows·macOS는 컴파일과 단위 시험만 대상이다.
+version_contract: cargo-1.99-fixture-tested
+analysis_scope: [typed, interfile]
+executes_repository_code: true
+requires_build: true  # build script와 proc macro를 빌드한다. 산출물(rmeta)은 scratch의 target에 둔다.
+network_policy: none  # --offline --locked, CARGO_NET_OFFLINE=true. 의존성 누락은 구성 오류다.
+version_probe:
+  executable: '${cargo}'
+  argv: [--version]
+execute:
+  executable: '${cargo}'
+  argv: [check, --offline, --locked, --message-format=json, --workspace, --all-targets]
+  cwd: '${workspace}/${module_dir}'
+  timeout_seconds: 1800
+  stdout_max_bytes: 67108864
+  env_allowlist: [PATH, LANG, SystemRoot, CARGO, CARGO_HOME, CARGO_TARGET_DIR, CARGO_BUILD_TARGET, CARGO_NET_OFFLINE, CARGO_TERM_COLOR, CARGO_TERM_PROGRESS_WHEN, CARGO_INCREMENTAL, RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, 'CARGO_TARGET_<HOST_TRIPLE>_LINKER']
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [101]
+parser:
+  id: cargo-json-v1
+  format: json
+  input: stdout-artifact
