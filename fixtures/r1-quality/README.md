@@ -42,7 +42,15 @@ R1 검토 지침과 모델 구성을 평가할 때 쓰는 보류(holdout) 사례
 | `label` | `trigger`, `expected_impact`, `positive_locations`(경로·심볼·before 기준 줄 범위), 정상 사례의 `suspect_locations`, `known_counterevidence`, `corrected_variant`, `reviewer_notes`, `distinctive_tokens`. |
 | `digests` | 변형별(`before`, `before_documented`, `after`, `after_documented`) 입력 트리 sha256. |
 
-`detection`의 `static_likely`는 일반적인 정적 분석기나 컴파일러 경고가 해당 위치를 지적할 것이라는 **작성자의 예상**이다. `reviewer_notes`에 도구와 버전을 적고 "관측"이라고 표시한 경우만 실제로 실행해 확인한 결과다. `semantic_only`는 계약과 코드 의미를 함께 읽어야 판단할 수 있다는 뜻이다. 어느 쪽도 모델이나 도구의 측정된 정확도가 아니다.
+`detection`의 `static_likely`는 널리 쓰이는 분석기 규칙이나 컴파일러 경고가 해당 위치를 지적한다는 뜻이다. 규칙이 기본 설정에 들어 있지 않을 수도 있다. `reviewer_notes`에서 `Observed`나 `(observed)`로 표시한 내용만 도구와 버전을 적어 실제로 실행한 결과이고, `Expected but not run here`는 실행하지 않은 예상이다. `semantic_only`는 계약과 코드 의미를 함께 읽어야 판단할 수 있다는 뜻이다. 어느 쪽도 모델이나 도구의 측정된 정확도가 아니다.
+
+작성 시점(2026-11-18)에 before 입력에 분석기를 한 번 실행한 결과는 다음과 같다.
+
+- 기본 설정(g++ `-Wall -Wextra`, clang-tidy 기본 검사, ruff 기본 규칙, ESLint recommended, `go vet`, staticcheck, clippy)이 정답 위치를 지적한 사례: R1-CPP-04, R1-JS-02, R1-GO-06, R1-GO-09, R1-RS-09. 기본 설정이 지적한 `semantic_only` 사례는 없었다.
+- 이름 붙은 규칙을 켜거나 더 엄격한 preset을 써야 지적된 사례: R1-CPP-02, R1-CPP-03, R1-PY-09(근처 위치), R1-JS-05, R1-JS-07.
+- 실행하지 않은 보안 분석 질의에 기댄 예상: R1-JS-04, R1-GO-07.
+- 정상 사례의 의심 위치를 지적해 오탐이 되는 경우: R1-CPP-11(bugprone-empty-catch), R1-PY-10(SIM115), R1-PY-11(BLE001).
+- 처음에 `static_likely`로 예상했지만 실행한 도구가 지적하지 않아 `semantic_only`로 바꾼 사례: R1-CPP-05, R1-PY-06, R1-GO-03.
 
 검사 결과는 구조화 데이터로만 분류한다. 빌드 단계는 종료 코드 0이어야 한다. 실행 결과는 다음과 같이 나뉜다.
 
@@ -94,4 +102,4 @@ python3 -I fixtures/r1-quality/corpus.py digest
 - TypeScript 사례는 Node의 타입 제거 실행만 확인했다. `tsc` 타입 검사는 검사 조건이 아니다.
 - 검사는 계약의 일부만 확인한다. 검사 통과가 after나 정상 사례의 모든 측면이 옳다는 증명은 아니다.
 - 사례 수가 언어마다 11개라 언어별 지표의 신뢰구간이 넓다. 범주별 비교는 참고용이다.
-- `static_likely`는 대부분 작성자의 예상이며, 실제 도구로 확인한 사례만 `reviewer_notes`에 도구와 버전을 적었다.
+- 분석기 결과는 한 번 실행해 본 것이고 검사 조건이 아니다. 도구 버전이나 설정이 바뀌면 `detection` 분류가 달라질 수 있다.

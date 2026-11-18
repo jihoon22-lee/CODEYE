@@ -678,7 +678,7 @@
      "end_line": 16
     }
    ],
-   "reviewer_notes": "cppcheck (noCopyConstructor) and clang-tidy's special-member-functions check report the class. Code that only moves or passes by reference works, so the defect hides until the first copy.",
+   "reviewer_notes": "Observed with clang-tidy 23.1.5: cppcoreguidelines-special-member-functions reports the class; cppcheck 2.22 (--enable=warning) reports noCopyConstructor and noOperatorEq at the allocating constructor in frame.cpp. On the corrected class the clang-tidy check still notes the missing move assignment, which the by-value assignment covers. Code that only moves or passes by reference works, so the defect hides until the first copy.",
    "distinctive_tokens": [
     "rule of three",
     "shallow copy",
@@ -945,7 +945,7 @@
      "end_line": 18
     }
    ],
-   "reviewer_notes": "clang-tidy's bugprone-implicit-widening-of-multiplication-result reports the line. Typical test images are small, so the overflow only shows on large rasters.",
+   "reviewer_notes": "Observed with clang-tidy 23.1.5: bugprone-misplaced-widening-cast reports the line; bugprone-implicit-widening-of-multiplication-result stays quiet because the cast is explicit. Typical test images are small, so the overflow only shows on large rasters.",
    "distinctive_tokens": [
     "int_max",
     "wraps",
@@ -1224,7 +1224,7 @@
      "end_line": 21
     }
    ],
-   "reviewer_notes": "GCC's -Wunused-result fires because libstdc++ marks remove_if nodiscard, as does clang-tidy's bugprone-unused-return-value. Order preservation comes for free with remove_if.",
+   "reviewer_notes": "Observed: g++ 15.2 -Wall (-Wunused-result) and clang-tidy 23.1.5 (clang-diagnostic-unused-result, bugprone-unused-return-value) report the call because libstdc++ marks remove_if nodiscard. Order preservation comes for free with remove_if.",
    "distinctive_tokens": [
     "erase-remove",
     "logical end",
@@ -1246,7 +1246,7 @@
   "family": "timed-wait-ignores-already-open-latch",
   "category": "concurrency_async",
   "kind": "defect_pair",
-  "detection": "static_likely",
+  "detection": "semantic_only",
   "cross_file": true,
   "project": {
    "name": "bootgate",
@@ -1547,7 +1547,7 @@
      "end_line": 19
     }
    ],
-   "reviewer_notes": "clang-tidy's bugprone-spuriously-wake-up-functions reports a wait_for without a predicate. Needs startup.cpp to see that the latch can open ahead of the wait.",
+   "reviewer_notes": "Observed: clang-tidy 23.1.5 bugprone-spuriously-wake-up-functions does not report this call and g++ -Wall -Wextra is quiet, so this is semantic only. Needs startup.cpp to see that the latch can open ahead of the wait.",
    "distinctive_tokens": [
     "lost wake-up",
     "lost wakeup",
@@ -3447,7 +3447,7 @@
      "end_line": 44
     }
    ],
-   "reviewer_notes": "Findings that the destructor hides write errors are false positives under this contract. Rethrowing from the destructor would call std::terminate during unwinding.",
+   "reviewer_notes": "Observed with clang-tidy 23.1.5: bugprone-empty-catch reports the handler, a false positive here. Findings that the destructor hides write errors are false positives under this contract. Rethrowing from the destructor would call std::terminate during unwinding.",
    "distinctive_tokens": [
     "swallow",
     "empty catch",
@@ -4834,7 +4834,7 @@
   "family": "character-set-strip-used-as-suffix-removal",
   "category": "api_misuse",
   "kind": "defect_pair",
-  "detection": "static_likely",
+  "detection": "semantic_only",
   "cross_file": false,
   "project": {
    "name": "datasets",
@@ -5040,7 +5040,7 @@
      "end_line": 18
     }
    ],
-   "reviewer_notes": "Linters with a multi-character strip rule (flake8-bugbear B005) point at the line. Names like 'sales.2024' happen to survive, which is why it passes casual testing.",
+   "reviewer_notes": "Observed: ruff 0.16.3 B005 stays quiet because the argument is a named constant without repeated characters, and no default rule targets the call. Names like 'sales.2024' happen to survive, which is why it passes casual testing.",
    "distinctive_tokens": [
     "character set",
     "charset",
@@ -5783,7 +5783,7 @@
      "end_line": 24
     }
    ],
-   "reviewer_notes": "Linters with timezone rules (flake8-datetimez DTZ003, the utcnow deprecation) flag the default clock, which is near but not the root cause: the expiry itself loses its offset. Both locations must change together.",
+   "reviewer_notes": "Observed: ruff 0.16.3 DTZ003 flags the utcnow default clock, which is near but not the root cause: the expiry itself loses its offset. Both locations must change together.",
    "distinctive_tokens": [
     "naive",
     "wall-clock reading",
@@ -6026,7 +6026,7 @@
      "end_line": 33
     }
    ],
-   "reviewer_notes": "Linters for unmanaged open() calls (SIM115-style rules) will point here; a finding claiming an unclosed file is a false positive given the documented ownership transfer. A note that the API could return a context manager is a style suggestion, not a defect.",
+   "reviewer_notes": "Observed: ruff 0.16.3 SIM115 points here; a finding claiming an unclosed file is a false positive given the documented ownership transfer. A note that the API could return a context manager is a style suggestion, not a defect.",
    "distinctive_tokens": [
     "ownership transfer",
     "handed over",
@@ -6245,7 +6245,7 @@
      "end_line": 35
     }
    ],
-   "reviewer_notes": "Blind-except rules (BLE001-style) flag the handler. A finding that hook errors are swallowed or hidden is a false positive. Suggesting traceback capture is an improvement, not a defect.",
+   "reviewer_notes": "Observed: ruff 0.16.3 BLE001 flags the handler. A finding that hook errors are swallowed or hidden is a false positive. Suggesting traceback capture is an improvement, not a defect.",
    "distinctive_tokens": [
     "isolation policy",
     "by design",
@@ -6770,7 +6770,7 @@
      "end_line": 8
     }
    ],
-   "reviewer_notes": "ESLint's no-unsafe-finally (in the recommended set) reports the return in finally. The sequence number is correctly left unchanged on failure; the problem is only that the failure is reported as success.",
+   "reviewer_notes": "Observed: ESLint 10.15 no-unsafe-finally (recommended set) reports the return in finally. The sequence number is correctly left unchanged on failure; the problem is only that the failure is reported as success.",
    "distinctive_tokens": [
     "overrides",
     "overridden",
@@ -7257,7 +7257,7 @@
      "end_line": 26
     }
    ],
-   "reviewer_notes": "Cross-file: the untrusted origin is documented in preferences.js, the unsafe recursion is in merge.js. Prototype-pollution queries in common JS analyzers target this shape. Rejecting the special keys instead of keeping them as data is an acceptable correction too.",
+   "reviewer_notes": "Cross-file: the untrusted origin is documented in preferences.js, the unsafe recursion is in merge.js. Expected but not run here: prototype-pollution queries of security analyzers target this shape; the ESLint recommended set is quiet (observed). Rejecting the special keys instead of keeping them as data is an acceptable correction too.",
    "distinctive_tokens": [
     "pollution",
     "polluted",
@@ -7542,7 +7542,7 @@
      "end_line": 42
     }
    ],
-   "reviewer_notes": "typescript-eslint's return-await rule (in-try-catch) reports the line. Whether refresh throws synchronously or rejects is only visible in directory.ts.",
+   "reviewer_notes": "Observed: typescript-eslint 8.73 return-await in the strict-type-checked preset reports the line; the recommended-type-checked preset is quiet. Whether refresh throws synchronously or rejects is only visible in directory.ts.",
    "distinctive_tokens": [
     "return-await",
     "unawaited",
@@ -8070,7 +8070,7 @@
      "end_line": 22
     }
    ],
-   "reviewer_notes": "typescript-eslint's require-array-sort-compare flags the call. The copy with spread correctly leaves the caller's array untouched.",
+   "reviewer_notes": "Observed: typescript-eslint 8.73 require-array-sort-compare flags the call when enabled; it is in no preset. The copy with spread correctly leaves the caller's array untouched.",
    "distinctive_tokens": [
     "lexicographic",
     "lexicographically",
@@ -8733,7 +8733,7 @@
      "end_line": 22
     }
    ],
-   "reviewer_notes": "Floating-promise rules that honour the void operator stay quiet; reviewers often flag it anyway. A finding of lost metrics or unhandled rejections is a false positive.",
+   "reviewer_notes": "Observed: typescript-eslint 8.73 no-floating-promises (recommended-type-checked) honours the void operator and stays quiet; reviewers often flag it anyway. A finding of lost metrics or unhandled rejections is a false positive.",
    "distinctive_tokens": [
     "floating promise",
     "fire-and-forget",
@@ -9558,7 +9558,7 @@
   "family": "deferred-close-accumulates-across-iterations",
   "category": "resource_lifetime",
   "kind": "defect_pair",
-  "detection": "static_likely",
+  "detection": "semantic_only",
   "cross_file": false,
   "project": {
    "name": "treesum",
@@ -9800,7 +9800,7 @@
      "end_line": 27
     }
    ],
-   "reviewer_notes": "Linters with a defer-in-loop rule report it. Small trees work, so unit tests on a few files pass.",
+   "reviewer_notes": "Observed: go vet (go1.27.4) and staticcheck 2026.2.2 are quiet; only opt-in defer-in-loop linter rules target this. Small trees work, so unit tests on a few files pass.",
    "distinctive_tokens": [
     "emfile",
     "descriptor exhaustion",
@@ -10633,7 +10633,7 @@
      "end_line": 11
     }
    ],
-   "reviewer_notes": "go vet's copylocks analyzer reports the value receiver. Single-goroutine tests pass because the map is shared by reference. Needs middleware.go to see the concurrent callers.",
+   "reviewer_notes": "Observed: go vet (go1.27.4) copylocks reports the value receiver. Single-goroutine tests pass because the map is shared by reference. Needs middleware.go to see the concurrent callers.",
    "distinctive_tokens": [
     "copylocks",
     "copied mutex",
@@ -10903,7 +10903,7 @@
      "end_line": 29
     }
    ],
-   "reviewer_notes": "Analyzers with a missing-regexp-anchor query report this pattern. Go's regexp is unanchored by default for MatchString, unlike full-match APIs in some other languages.",
+   "reviewer_notes": "Expected but not run here: missing-regexp-anchor queries of security analyzers report this pattern; staticcheck 2026.2.2 is quiet (observed). Go's regexp is unanchored by default for MatchString, unlike full-match APIs in some other languages.",
    "distinctive_tokens": [
     "unanchored",
     "anchor",
@@ -11196,7 +11196,7 @@
      "end_line": 37
     }
    ],
-   "reviewer_notes": "The shadow analyzer is not part of go vet's default set. The log line shows the failure, which makes the code look handled.",
+   "reviewer_notes": "The shadow analyzer is not part of go vet's default set; go vet and staticcheck 2026.2.2 are quiet (observed). The log line shows the failure, which makes the code look handled.",
    "distinctive_tokens": [
     "shadowed",
     "shadowing",
@@ -11447,7 +11447,7 @@
      "end_line": 22
     }
    ],
-   "reviewer_notes": "go vet's structtag analyzer reports a json tag on an unexported field. Needs load.go to see that decoding goes straight into Config.",
+   "reviewer_notes": "Observed: go vet (go1.27.4) structtag and staticcheck 2026.2.2 SA5008 report the json tag on an unexported field. Needs load.go to see that decoding goes straight into Config.",
    "distinctive_tokens": [
     "unexported",
     "structtag",
@@ -14130,7 +14130,7 @@
      "end_line": 30
     }
    ],
-   "reviewer_notes": "Safe Rust, no warnings; only the cycle reveals it. Needs both files: the field type is in node.rs and the cycle is created in tree.rs.",
+   "reviewer_notes": "Safe Rust; rustc and clippy 0.1.99 are quiet (observed), and only the cycle reveals it. Needs both files: the field type is in node.rs and the cycle is created in tree.rs.",
    "distinctive_tokens": [
     "reference cycle",
     "cycle",
@@ -14808,7 +14808,7 @@
      "end_line": 27
     }
    ],
-   "reviewer_notes": "Clippy's unused_io_amount (correctness group) reports both calls. In-memory Vec<u8> writers take everything at once, which is why tests that write into a Vec pass. The device client in client.rs writes to a TcpStream.",
+   "reviewer_notes": "Observed: clippy 0.1.99 unused_io_amount (deny by default) reports both calls. In-memory Vec<u8> writers take everything at once, which is why tests that write into a Vec pass. The device client in client.rs writes to a TcpStream.",
    "distinctive_tokens": [
     "short write",
     "partial write",
