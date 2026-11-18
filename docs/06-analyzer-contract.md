@@ -16,7 +16,7 @@ R0의 제품 어댑터는 [오프라인 Go vet](29-w08-go-vet.md)다. W19에서 
 | Python | Ruff, Pyright 또는 mypy, Bandit | 일부 Pylint 의미 규칙·모듈 의존 구조 | 타입 정보 부족은 별도 표시. Pyright/mypy 모두 실행은 명시 선택 |
 | JS/TS | TypeScript compiler, ESLint 및 타입 인지 규칙 | dependency-cruiser, 승인된 로컬 Semgrep 규칙 | Node·tsconfig·프로젝트 서비스가 맞아야 함. JS config는 실행 가능 코드 |
 | Go | go vet(기준, 구현), Staticcheck(추가 깊이, W19 구현) | 소유권/취소 관련 선택 검사·패키지 구조 | tags·CGO·toolchain·target 기록. wrapper 내부 같은 엔진 중복 금지. go vet과 같은 구성을 보는 Staticcheck 검사는 제외([§9](39-r1-analyzer-packs.md#9-go-vet과-staticcheck-서로-다른-엔진과-중복)) |
-| Rust | cargo check/clippy | 선택 lint group·unsafe 경계의 LLM 검토 | features·target·build script·proc macro에 따라 결과 달라짐 |
+| Rust | cargo check(기준, W20 구현), clippy(추가 깊이, W20 구현) | allow-by-default unsafe·panic review lint(구현)·unsafe 경계의 LLM 검토 | 모든 작업이 build script·proc macro·저장소 Cargo 설정을 실행하므로 노드 허가가 있어야 함. features·target은 기본값·host 하나로 기록. clippy 작업은 `clippy::` 진단만 남겨 rustc 진단 중복 제거([§4](44-w20-rust-pack.md#4-cargo-check와-clippy-서로-다른-작업과-중복)) |
 | 공통 | 승인된 로컬 패턴 규칙, Gitleaks, 구조/복잡도 추출 | jscpd·Lizard·언어별 심볼/의존 그래프 | CVE 검사 아님. 구조 지표는 결함 확정 근거가 아님 |
 
 Semgrep CE 어댑터는 지원하는 범위만 명세하며 파일 간 완전한 데이터 흐름 분석을 했다고 표시하지 않는다. 상용 분석 엔진을 필수 종속성으로 두지 않는다. 도구·규칙팩·바이너리의 사용/재배포 조건은 운영자 카탈로그에 기록한다.

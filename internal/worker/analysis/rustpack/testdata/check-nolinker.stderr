@@ -1,0 +1,5 @@
+   Compiling app v0.1.0 ([REDACTED]/app)
+   Compiling macros v0.1.0 ([REDACTED]/macros)
+error: could not compile `app` (build script) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `macros` (lib) due to 1 previous error
