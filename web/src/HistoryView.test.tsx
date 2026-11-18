@@ -209,6 +209,21 @@ describe('W23 report history view', () => {
     expect(m.calls).toHaveLength(0);
   });
 
+  it('keeps run differences visible when the identity schemes differ', () => {
+    const doc = clone(example) as Record<string, unknown> & typeof example;
+    doc.comparable = false;
+    (doc as Record<string, unknown>).not_comparable_reason = 'fingerprint_scheme_differs';
+    (doc as Record<string, unknown>).differences = [{ key: 'builder_version', baseline: '2', current: '3' }, { key: 'tool:go.vet:version', baseline: null, current: 'go1.26' }];
+    doc.entries = [];
+    doc.counts = { new: 0, persisting: 0, changed: 0, absent_unverified: 0, resolved_observed: 0 };
+    for (const f of doc.findings) (f as Record<string, unknown>).state = null;
+    show(parseComparison(doc, RUN));
+    expect(screen.getByText(/발견 식별 방식이 달라 비교하지 않았습니다/)).toBeTruthy();
+    expect(screen.getByText('보고서 생성기 버전: 2 → 3')).toBeTruthy();
+    expect(screen.getByText('도구 go.vet 버전: 없음 → go1.26')).toBeTruthy();
+    expect(screen.queryByText('비교 결과(식별 단위)')).toBeNull();
+  });
+
   it('says when there is no baseline instead of inventing states', () => {
     const doc = clone(example) as Record<string, unknown> & typeof example;
     (doc as Record<string, unknown>).baseline = null;

@@ -565,7 +565,9 @@ def check_w23_contracts(published: dict) -> None:
         comparison_validator.validate(doc)
         ensure((doc["baseline"] is None) == (doc["not_comparable_reason"] == "no_baseline"), "Baseline/no_baseline mismatch")
         ensure(doc["comparable"] == (doc["not_comparable_reason"] is None), "comparable/not_comparable_reason mismatch")
-        ensure(doc["comparable"] or (doc["entries"] == [] and doc["differences"] == []), "Entries in a comparison that is not comparable")
+        # Differences stay visible when the schemes differ (builder_version tells why); entries do not.
+        ensure(doc["comparable"] or doc["entries"] == [], "Entries in a comparison that is not comparable")
+        ensure(doc["baseline"] is not None or doc["differences"] == [], "Differences without a baseline")
         states = [e["state"] for e in doc["entries"]]
         ensure(doc["counts"] == {s: states.count(s) for s in api["ComparisonState"]["enum"]}, "Counts are not recomputed from entries")
         ensure(len({e["fingerprint"] for e in doc["entries"]}) == len(doc["entries"]), "Duplicate comparison entry")

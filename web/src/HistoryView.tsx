@@ -69,7 +69,7 @@ function ComparisonHeader({ c }: { c: Comparison }) {
         </p>
       )}
       {!c.comparable && <p role="note">{c.notComparableReason ? pick(t.notComparable, c.notComparableReason, t.notComparableUnknown) : null}</p>}
-      {c.comparable && (
+      {c.baseline && (
         <>
           <h6>{t.differences}</h6>
           {c.differences.length === 0 ? (
@@ -83,6 +83,10 @@ function ComparisonHeader({ c }: { c: Comparison }) {
               ))}
             </ul>
           )}
+        </>
+      )}
+      {c.comparable && (
+        <>
           <h6>{t.counts}</h6>
           <dl className="report-counts">
             {Object.keys(t.states).map((state) => (
