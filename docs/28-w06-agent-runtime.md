@@ -23,8 +23,11 @@
 codeye agent --controller URL --state-dir DIR [--name NAME] [--enroll-token-file PATH]
              [--source-root ID=/abs/path ...] [--workers N] [--toolchain-path PATH]
              [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache /abs/dir]
+             [--staticcheck /abs/staticcheck]
 codeye worker      # agent만 실행한다. 옵션 없음.
 ```
+
+- 분석 도구 경로는 도구마다 플래그 하나다(`--<tool> /abs/path`, W19부터 `--staticcheck`). 절대 경로만 받고 PATH를 검색하거나 내려받지 않는다. 지정하지 않은 도구의 작업은 계획되고 `unsupported`(`tool_not_configured`)로 끝난다. 규칙은 [분석기 팩 계약](39-r1-analyzer-packs.md#24-도구-경로와-에이전트-플래그)에 있다.
 
 - `--controller`는 https이거나, loopback 주소의 http만 허용한다. 프록시 환경변수를 쓰지 않고 redirect를 따르지 않는다.
 - 첫 실행에는 `--enroll-token-file`이 필요하다. 토큰 파일은 읽기만 하고 로그에 남기지 않는다. 등록 결과는 `<state-dir>/node.json`(0600, 디렉터리 0700)에 저장한다. 저장된 controller와 `--controller`가 다르면 요청을 보내기 전에 종료한다(exit 2). 노드 비밀값을 다른 controller에 보내지 않기 위해서다.

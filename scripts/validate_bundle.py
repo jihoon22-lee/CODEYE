@@ -177,6 +177,118 @@ def check_observations(doc: dict) -> None:
         ensure(not any(ABSOLUTE.match(a) for a in e["command"]["argv"]) and "/" not in e["command"]["argv"][0], "Node path in command")
 
 
+def check_analyzer_observations(doc: dict) -> None:
+    """Cross-field rules of the generic analyzer envelope (W19, docs/39; obsdoc.Validate)."""
+    observations = doc["observations"]
+    parse, outcome, coverage = doc["parse"], doc["outcome"], doc["coverage"]
+    ensure(parse["observations"] == len(observations), "Envelope observation count mismatch")
+    ensure(parse["tool_errors"] == len(doc["tool_errors"]), "Envelope tool error count mismatch")
+    ensure(parse["unresolved_observations"] == sum(1 for o in observations if o["location_state"] != "resolved"), "Envelope unresolved count mismatch")
+    ensure(len({o["id"] for o in observations}) == len(observations), "Duplicate envelope observation id")
+    ensure(doc["limitations"] == sorted(set(doc["limitations"])), "Envelope limitations must be sorted unique codes")
+    executions = {e["name"]: e for e in doc["executions"]}
+    ensure(len(executions) == len(doc["executions"]), "Duplicate envelope execution")
+    for o in observations:
+        ref = o["raw_ref"]
+        ensure(ref["execution"] in executions, "Observation names an unrecorded execution")
+        stream = executions[ref["execution"]][ref["stream"]]
+        ensure(ref["stream_sha256"] == stream["sha256"], "Observation not bound to its execution stream")
+        ensure(ref["byte_start"] < ref["byte_end"] <= stream["captured_bytes"], "Raw byte range outside the captured stream")
+        for place in [o] + o["related"]:
+            if place["location"] is not None:
+                ensure(place["location"]["path"] == place["path"], "Location/path mismatch")
+                ensure(place["location"]["start_line"] <= place["location"]["end_line"], "Inverted observation range")
+        if o["location"] is not None:
+            ensure(o["path"] not in doc["workspace_drift"], "Drifted file linked to code")
+    processed = coverage["processed_paths"]
+    if processed is not None:
+        ensure(processed == sorted(set(processed)), "Processed paths must be sorted unique")
+    if outcome["task_status"] == "succeeded":
+        ensure((outcome["exit_class"] == "success_with_findings") == bool(observations), "Exit class does not follow parsed observations")
+        ensure(all(e["status"] == "exited" and e["exit_code"] is not None and e["cleanup"] == "confirmed" and not any(e[s]["truncated"] or e[s]["incomplete"] for s in ("stdout", "stderr")) for e in doc["executions"]), "Succeeded with an unclean execution")
+        ensure(parse["ok"] and not doc["tool_errors"] and not doc["workspace_drift"] and processed, "Succeeded without a complete parse or processed files")
+    if outcome["exit_class"] == "not_run":
+        ensure(not observations and processed == [] and not outcome["partial_parse"], "not_run claims processed files or observations")
+    for e in doc["executions"]:
+        ensure(not any(ABSOLUTE.match(a) for a in e["command"]["argv"]) and "/" not in e["command"]["argv"][0], "Node path in command")
+
+
+def go_string_constant(path: Path, name: str) -> str:
+    match = re.search(r"^const " + name + r' = "([^"]*)"$', path.read_text(encoding="utf-8"), re.M)
+    ensure(match is not None, "Missing Go constant " + name + " in " + str(path))
+    return match.group(1)
+
+
+def check_w19_contracts(validators: dict) -> int:
+    """The staticcheck descriptor, the real envelope example and the analyzer_tools environment field.
+
+    Returns the number of negative cases."""
+    negatives = 0
+    descriptor = yaml_file(ROOT / "examples/analyzer-staticcheck.yaml")
+    validators["analyzer.schema.json"].validate(descriptor)
+    check_analyzer(descriptor)
+    ensure(descriptor["exit_codes"] == {"clean": [0], "findings": [1], "error": [2]}, "staticcheck exit-code contract changed")
+    checks = go_string_constant(ROOT / "internal/worker/analysis/staticcheck/staticcheck.go", "Checks")
+    argv = descriptor["execute"]["argv"]
+    ensure(argv[argv.index("-checks") + 1] == checks, "Descriptor -checks differs from staticcheck.Checks")
+    envelope_validator = validators["analyzer-observations.schema.json"]
+    envelope = json_file(ROOT / "examples/observations-staticcheck.json")
+    envelope_validator.validate(envelope)
+    check_analyzer_observations(envelope)
+    ensure(envelope["analyzer"] == {"id": "go.staticcheck", "ecosystem": "go", "required": False}, "staticcheck is extra depth (not required)")
+    ensure(envelope["rule_pack"]["selection"][1] == checks, "Envelope rule selection differs from staticcheck.Checks")
+    ensure(envelope["outcome"]["exit_class"] == "success_with_findings" and executions_exit(envelope, "staticcheck.check") == 1, "Example is the exit-1 findings run (TC-07)")
+    go_vet = json_file(ROOT / "examples/observations-go-vet.json")
+    expect_invalid("go vet document as envelope", envelope_validator.validate, go_vet)
+    expect_invalid("envelope as go vet document", validators["go-vet-observations.schema.json"].validate, envelope)
+    negatives += 2
+
+    def both(doc):
+        envelope_validator.validate(doc)
+        check_analyzer_observations(doc)
+
+    def case(name, edit):
+        nonlocal negatives
+        bad = copy.deepcopy(envelope)
+        edit(bad)
+        expect_invalid(name, both, bad)
+        negatives += 1
+
+    case("success with partial parse", lambda d: d["outcome"].update(partial_parse=True))
+    case("success without processed files", lambda d: d["coverage"].update(processed_paths=None))
+    case("not_run with observations", lambda d: d["outcome"].update(task_status="unsupported", reason="tool_not_configured", exit_class="not_run"))
+    case("observation count drift", lambda d: d["observations"].pop())
+    case("unbound raw stream", lambda d: d["observations"][0]["raw_ref"].update(stream_sha256="0" * 64))
+    case("raw range outside stream", lambda d: d["observations"][0]["raw_ref"].update(byte_end=1 << 30))
+    case("truncated success", lambda d: d["executions"][-1]["stdout"].update(truncated=True))
+    case("node path in argv", lambda d: d["executions"][-1]["command"]["argv"].append("/home/user/x"))
+    case("hyphen analyzer id", lambda d: d["analyzer"].update(id="go.static-check"))
+    case("unknown category", lambda d: d["observations"][0].update(category="style"))
+    case("unsorted limitations", lambda d: d.update(limitations=list(reversed(d["limitations"]))))
+    case("absolute target property", lambda d: d["target"]["properties"].update(goroot="/usr/lib/go"))
+    not_run = copy.deepcopy(envelope)
+    not_run.update(observations=[], executions=[], limitations=["tool_not_configured"])
+    not_run["outcome"] = {"task_status": "unsupported", "reason": "tool_not_configured", "exit_class": "not_run", "partial_parse": False}
+    not_run["coverage"]["processed_paths"] = []
+    not_run["parse"].update(ok=False, observations=0)
+    both(not_run)
+    environment = copy.deepcopy(json_file(ROOT / "examples/environment.json"))
+    environment["environment"]["analyzer_tools"] = [
+        {"tool": "staticcheck", "analyzers": ["go.staticcheck"], "status": "observed", "version": "2026.2.2 (0.8.2)", "detail": None, "execution": "staticcheck.version"}]
+    validators["environment.schema.json"].validate(environment)
+    for name, edit in (("observed without version", {"version": None}), ("runtime tool as analyzer tool", {"tool": "go"}),
+                       ("not_probed with execution", {"status": "not_probed", "version": None}), ("version with a path", {"version": "/opt/sc 1"})):
+        bad = copy.deepcopy(environment)
+        bad["environment"]["analyzer_tools"][0].update(edit)
+        expect_invalid(name, validators["environment.schema.json"].validate, bad)
+        negatives += 1
+    return negatives
+
+
+def executions_exit(doc: dict, name: str):
+    return next(e["exit_code"] for e in doc["executions"] if e["name"] == name)
+
+
 def check_environment_example(doc: dict) -> None:
     """Bind the W15 discovery examples to the fixture input bytes and evidence IDs."""
     root = ROOT / "fixtures/w15-modules/input"
@@ -661,6 +773,8 @@ def main() -> None:
     check_analyzer(go_vet)
     ensure(go_vet["exit_codes"]["findings"] == [], "go vet -json findings are not an exit-code class")
     check_observations(observations)
+    w19_negatives = check_w19_contracts(validators)
+    print(f"PASS: W19 analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {w19_negatives} negative cases)")
     review = json_file(ROOT / "examples/review-record.json")
     review_validator = validators["review-record.schema.json"]
     review_validator.validate(review)
@@ -822,7 +936,7 @@ def main() -> None:
     bad["TaskStage"] = {"enum": [*stage_order, "lint"]}
     expect_invalid("stage enum drift", lambda doc: check_stage_enums(doc, stage_order, stored_stages, stage_states), bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
-    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 17 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 19 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
     print(f"PASS: {27 + len(r1_negative)} negative cases; example policy timing; prompt manifest")

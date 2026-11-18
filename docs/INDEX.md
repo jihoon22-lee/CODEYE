@@ -6,6 +6,7 @@ R0는 개인 모드의 Go 분석·승인된 모델 검토·근거 보고서까�
 |---|---|
 | 개인 모드에서 분석 실행 | [서버·로그인](24-w03-api.md) · [노드 토큰](28-w06-node-protocol.md) · [에이전트](28-w06-agent-runtime.md) · [자동 증감](30-w07-scheduler.md) |
 | 결과 읽기와 평가 | [보고서 사용법](35-w13-evidence-report.md) · [실제 파일럿과 한계](36-r0-pilot.md) · [Go vet 보고서 예시](../examples/report-go-vet.json) |
+| 언어 분석 팩 구현(W16~W21) | [분석기 팩 계약](39-r1-analyzer-packs.md) · [도구 어댑터 계약](06-analyzer-contract.md) · [envelope schema](../schemas/analyzer-observations.schema.json) |
 | 모델 역할 설계 | [역할별 지침과 현재 팩](07-llm-and-instructions.md) · [평가 기준](16-evaluation.md) |
 | 프로젝트 진행 화면 구현 | [화면 단계·상태 예시](12-report-and-ui.md) · [조회와 재접속](11-api-and-events.md) · [내부 파이프라인](04-analysis-pipeline.md) |
 
@@ -31,5 +32,6 @@ R0는 개인 모드의 Go 분석·승인된 모델 검토·근거 보고서까�
 | 분석과 게시 | [W08 Go vet](29-w08-go-vet.md) · [W09 보고서 게시](31-w09-report.md) · [W10 OpenCode](32-w10-opencode.md) · [QA 예산 relay](r0-openai-gateway.md) |
 | 검토와 검증 | [W11 맥락·후보](33-w11-context-review.md) · [W12 반증](34-w12-verifier.md) · [W13 근거 화면](35-w13-evidence-report.md) · [W14 품질 회귀](36-r0-pilot.md) |
 | R1 탐색과 진행 | [W15 모듈·문서·환경 탐색과 단계 표시](37-w15-discovery-and-progress.md) · [W22 예약·가중 진행률·SSE](38-w22-schedules-progress-sse.md) |
+| R1 분석 팩 | [W19 분석기 팩 계약과 Go 팩(Staticcheck)](39-r1-analyzer-packs.md) |
 
 HTTP 경로의 구현 표시는 [OpenAPI](../api/openapi.yaml)에 있다. 기계 판독 계약은 [schemas](../schemas), 입력·출력 예시는 [examples](../examples), 활성 모델 지침은 [R0 팩](../prompts/review-v1/pack.yaml)에서 찾을 수 있다.

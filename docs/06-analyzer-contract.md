@@ -1,6 +1,6 @@
 # 06. 정적 분석 도구와 어댑터 계약
 
-R0의 제품 어댑터는 [오프라인 Go vet](29-w08-go-vet.md)다. 아래 다언어 도구 표는 W16~W21의 구현 후보이며, 선택한 도구의 실제 지원 여부는 노드별 probe와 시험 결과로 판단한다. R1에서 모델이 원시 관찰을 해석할 때는 [진단 해석 지침](../prompts/review-r1/interpret-diagnostics.md)을 적용 후보로 평가한다.
+R0의 제품 어댑터는 [오프라인 Go vet](29-w08-go-vet.md)다. W19에서 언어 팩이 공유하는 [분석기 팩 계약](39-r1-analyzer-packs.md)과 Go 팩의 Staticcheck 어댑터를 구현했다. 아래 다언어 도구 표의 나머지는 W16~W18·W20·W21의 구현 후보이며, 선택한 도구의 실제 지원 여부는 노드별 probe와 시험 결과로 판단한다. R1에서 모델이 원시 관찰을 해석할 때는 [진단 해석 지침](../prompts/review-r1/interpret-diagnostics.md)을 적용 후보로 평가한다.
 
 ## 1. 선정 원칙
 
@@ -15,7 +15,7 @@ R0의 제품 어댑터는 [오프라인 Go vet](29-w08-go-vet.md)다. 아래 다
 | C/C++ | clang-tidy, Clang Static Analyzer, Cppcheck | 컴파일 경고, 승인된 CTU, 복잡도/중복 | compile DB·헤더·매크로·ABI에 따라 분석 범위가 달라짐 |
 | Python | Ruff, Pyright 또는 mypy, Bandit | 일부 Pylint 의미 규칙·모듈 의존 구조 | 타입 정보 부족은 별도 표시. Pyright/mypy 모두 실행은 명시 선택 |
 | JS/TS | TypeScript compiler, ESLint 및 타입 인지 규칙 | dependency-cruiser, 승인된 로컬 Semgrep 규칙 | Node·tsconfig·프로젝트 서비스가 맞아야 함. JS config는 실행 가능 코드 |
-| Go | go vet, Staticcheck | 소유권/취소 관련 선택 검사·패키지 구조 | tags·CGO·toolchain·target 기록. wrapper 내부 같은 엔진 중복 금지 |
+| Go | go vet(기준, 구현), Staticcheck(추가 깊이, W19 구현) | 소유권/취소 관련 선택 검사·패키지 구조 | tags·CGO·toolchain·target 기록. wrapper 내부 같은 엔진 중복 금지. go vet과 같은 구성을 보는 Staticcheck 검사는 제외([§9](39-r1-analyzer-packs.md#9-go-vet과-staticcheck-서로-다른-엔진과-중복)) |
 | Rust | cargo check/clippy | 선택 lint group·unsafe 경계의 LLM 검토 | features·target·build script·proc macro에 따라 결과 달라짐 |
 | 공통 | 승인된 로컬 패턴 규칙, Gitleaks, 구조/복잡도 추출 | jscpd·Lizard·언어별 심볼/의존 그래프 | CVE 검사 아님. 구조 지표는 결함 확정 근거가 아님 |
 
@@ -65,6 +65,8 @@ SARIF를 쓰는 도구는 locations·relatedLocations·codeFlows·fingerprints·
 
 ## 9. 어댑터 수용 조건
 
-Go vet(W08) 구현과 실제 종료 코드 매핑은 [W08 기록](29-w08-go-vet.md)과 [Go vet 서술](../examples/analyzer-go-vet.yaml)에 있다. `-json` 모드는 진단이 있어도 exit 0이므로 발견 여부를 stdout parser가 결정한다.
+Go vet(W08) 구현과 실제 종료 코드 매핑은 [W08 기록](29-w08-go-vet.md)과 [Go vet 서술](../examples/analyzer-go-vet.yaml)에 있다. `-json` 모드는 진단이 있어도 exit 0이므로 발견 여부를 stdout parser가 결정한다. Staticcheck(W19)는 exit 0/1/2를 쓰지만 exit 1이 진단과 compile 오류에 함께 쓰여 stdout·stderr parser가 결정한다([서술](../examples/analyzer-staticcheck.yaml), [§8.5](39-r1-analyzer-packs.md#85-종료-코드와-결과)).
+
+W16 이후 팩은 [분석기 팩 계약](39-r1-analyzer-packs.md)을 따른다. 도구마다 `pack.Analyzer` 하나, 에이전트 플래그 하나, 생태계마다 필수 기준 분석기 하나를 둔다. 공통 산출물은 [`analyzer_observations` envelope](../schemas/analyzer-observations.schema.json)다. 미설정 도구의 작업도 계획해 `unsupported`로 보인다.
 
 정상/결함 fixture, findings exit, parse 실패, 비ASCII·공백 경로, timeout·취소, 버전 불일치, offline install 실패, 원본 미변경, raw→normalized 추적을 검증한다. CLI 호출 성공만으로 어댑터를 완료 처리하지 않는다. [Schema](../schemas/analyzer.schema.json)와 [예시](../examples/analyzer-ruff.yaml)를 함께 갱신한다.
