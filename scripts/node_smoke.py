@@ -336,8 +336,9 @@ def run(base, root, env, *, browser=False):
         staticcheck = os.environ.get("CODEYE_TEST_STATICCHECK", "")
         tool_args = ["--staticcheck", staticcheck] if staticcheck else []
         # The shared node toolchain (docs/39 §2.4.1) is probed at worker
-        # startup when CODEYE_TEST_NODE names it; no analyzer of this build
-        # needs it yet, so only its startup codes are checked.
+        # startup when CODEYE_TEST_NODE names it; only pyright (W17) needs it
+        # and the Go fixture plans no Python task, so only startup codes are
+        # checked.
         node_toolchain = os.environ.get("CODEYE_TEST_NODE", "")
         if node_toolchain:
             tool_args += ["--node", node_toolchain]

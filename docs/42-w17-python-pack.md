@@ -107,7 +107,7 @@ ruff의 S 규칙은 bandit 검사를 다시 구현한 것이다. bandit이 보�
 
 1. **저장소 설정은 경로를 정하지 못한다.** 네 도구 모두 CODEYE 관리 설정으로 저장소 설정을 통째로 대신한다(§3). 그래서 `mypy_path`·`cache_dir`·`files`·`plugins`·`html_report`, pyright `extraPaths`·`stubPath`·`typeshedPath`·`venvPath`/`venv`·`include`, ruff `extend`·`src`·`cache-dir`, `.bandit`의 `targets`·`output` 같은 값은 읽히지 않는다. 쓰기 위치(캐시, 보고서, bandit JSON, pyright 설정·빈 venv)는 모두 task scratch다. `TestRealOutsideConfigCanary`(도구별)와 `run.TestPythonPackOutsideConfigCanary`(production 구성)는 작업 공간 밖 임시 디렉터리에 고유 canary를 두고 위 옵션 전부로 가리킨다. canary는 어떤 stream·envelope·업로드 artifact·보고서에도 없고 밖 디렉터리에는 아무것도 쓰이지 않는다. 대조 실행(같은 프로젝트에서 CODEYE 플래그 없이)에서는 mypy가 외부 plugin을 실행하고 외부 캐시를 썼으며 ruff는 외부 `extend` 파일의 canary를 출력했다.
 2. **작업 공간 밖 파일의 진단은 버린다.** 도구가 보고한 파일이 작업 공간 사본 밖으로 풀리면(절대 경로, `..`) 그 관찰과 tool error를 메시지째 버리고 개수만 `diagnostics_outside_workspace_dropped` 제약으로 남긴다. 처리 파일로도 세지 않는다. 원시 stdout artifact에는 도구가 낸 그대로 남는다(executor의 경로 redaction은 적용된다).
-3. **수집 stream에 소스 줄을 두지 않는다.** ruff는 fix edit에 원본 소스를 옮겨 적으므로(`"content": "value is None"`, 여러 줄 삽입) `--unfixable ALL`로 `fix`를 비운다. bandit JSON은 `-n 0`이어도 `code`에 소스 줄을 담으므로 scratch 파일(`-o`)로만 쓰고, stream 관찰은 소스 줄이 없는 CSV에서 읽는다. mypy `-O json`과 pyright `--outputjson`에는 소스 줄이 없다. `TestRealStreamsHoldNoSourceLines`가 네 도구의 모든 stream에서 fixture 소스 줄(12자 이상)이 없음을 확인한다.
+3. **수집 stream에 소스 줄을 두지 않는다.** ruff는 fix edit에 원본 소스를 옮겨 적으므로(`"content": "value is None"`, 여러 줄 삽입) `--unfixable ALL`로 `fix`를 비운다. bandit JSON은 `-n 0`이어도 `code`에 소스 줄을 담으므로 scratch 파일(`-o`)로만 쓰고, stream 관찰은 소스 줄이 없는 CSV에서 읽는다. mypy `-O json`과 pyright `--outputjson`에는 소스 줄이 없다. `TestRealStreamsHoldNoSourceLines`가 네 도구의 모든 stream에서 fixture 소스 줄(12자 이상)이 없음을 확인한다. 단, pyright 메시지는 문자열 literal 타입을 값째 적는다(`Type "Literal['...']" is not assignable to return type "int"`, 측정). 줄 전체는 아니지만 literal 값이 stream·envelope `raw_message`·보고서에 들어간다. mypy의 같은 오류 메시지에는 값이 없다(`got "str", expected "int"`). 비밀정보 redaction은 W21 팩의 범위라 이 팩은 메시지를 가리지 않는다(§13).
 4. **저장소에서 온 위치 인자는 옵션으로 읽히지 않는다.** ruff·bandit 대상은 `--` 뒤에 두고 `.`이 아니면 `./`를 붙인다. mypy `@` 파일 목록의 각 줄(인자로 읽힌다)과 pyright stdin 목록도 `./`로 시작한다. W04 경로 검사가 제어 문자를 막으므로 줄바꿈으로 목록을 나눌 수 없다. 하위 모듈 디렉터리 이름에 쉼표나 glob 문자가 있으면 ruff·bandit 제외 목록이 나뉘거나 확장되므로 그 task는 `nested_module_name_unsupported`로 실행을 거부한다. `TestRealOptionLikeFileNames`는 `--help.py`·`-x.py`·`pkg/-y.py`를 전체 범위와 경로 범위에서 네 도구로 분석해 모두 파일로 처리됨을 확인한다.
 
 ## 10. import·stub 공백과 coverage 단위
@@ -168,6 +168,7 @@ CODEYE_W17_CAPTURE=<dir> go test -count=1 -run 'TestReal' ./internal/worker/anal
 | `python.TestDeclarationMatchesDiscovery`, `TestResolveTarget`, `TestMinimumMinorAndClamp` | §4 |
 | `python.TestPlanModules`, `TestPlanKeysAndScope`, `TestByteColumn`, `TestParseDocumentRanges`, `TestVersionParsers`, `TestRulePackSelections`, `TestArgvPositionalsNeverReadAsOptions` | 계획·key·필수·범위, 열 변환, JSON 범위, 버전, 규칙 팩, argv |
 | `builtin.TestHandlers*`, `TestToolFlagsAndProbes` | catalog 순서, 도구 플래그, 미설정 Python 멤버, 탐색 probe |
+| `builtin.TestRuffOnlyNodeAdvertisesDeepReview`, `TestBothTypeCheckersSelectionIsRecorded` (도구 필요) | ruff만 있는 노드의 deep-review 광고, 두 검사기 선택에서 `--node` 없는 pyright는 `toolchain_not_configured`이고 mypy에 선택 제약이 남음 |
 | `main.TestPythonTypeCheckerChoice` | §5의 agent 플래그 규칙 |
 | `run.TestPythonSnapshotWithoutRuff` (Linux, TC-108) | `--go`만 있는 노드의 Python 스냅샷: 정적 task 네 개, ruff 필수 `unsupported`, `pack-gap.python` 없음, 보고서 `partial`·`required_task_not_succeeded`, 탐색 `not_probed` |
 | `run.TestPythonPackWithRealTools`, `run.TestPythonPackOutsideConfigCanary` (Linux, 도구 필요) | 실제 워커 production 구성에서 네 도구 성공·실행 기록·버전 출처, 외부 설정 canary가 artifact·보고서에 없음 |
@@ -183,4 +184,6 @@ CODEYE_W17_CAPTURE=<dir> go test -count=1 -run 'TestReal' ./internal/worker/anal
 - 노트북(`.ipynb`)은 분석하지 않는다(ruff 제외 목록, 계획에도 없음).
 - `honored` 억제(mypy·pyright)의 사라진 finding은 비교에서 해결로 보지 않는다.
 - 작업 공간 밖 진단의 원시 텍스트는 stdout artifact에 남는다(envelope·보고서에는 없음).
+- pyright 메시지의 문자열 literal 값은 가리지 않는다(§9).
+- 백그라운드 자식: 모든 실제 도구 실행에서 정리가 `confirmed`이고 남은 프로세스 종료(`leftover_killed`)가 없었다(`runReal`이 확인). pyright의 node worker thread는 프로세스가 아니다. Windows에서는 측정하지 않았다.
 - 두 타입 검사기 선택은 agent 플래그 검사로만 집행한다. hello를 직접 만드는 다른 클라이언트는 없다.

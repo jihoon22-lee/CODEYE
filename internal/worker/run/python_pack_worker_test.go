@@ -136,6 +136,11 @@ func TestPythonPackWithRealTools(t *testing.T) {
 		if len(names) < 2 || names[0] != key+".version" {
 			t.Fatalf("%s executions %v", key, names)
 		}
+		// The both-checkers selection is recorded exactly when both run.
+		_, both := want["pyright"]
+		if _, m := want["mypy"]; (key == "mypy" || key == "pyright") && slices.Contains(d.Limitations, "python_type_checkers_both_selected") != (both && m) {
+			t.Fatalf("%s limitations %v", key, d.Limitations)
+		}
 		t.Logf("%s: %d observations, executions %v, limitations %v", key, len(d.Observations), names, d.Limitations)
 	}
 	for _, a := range analyzerTools(r.envs) {

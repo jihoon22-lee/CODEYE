@@ -59,6 +59,13 @@ type realRun struct {
 func runReal(t *testing.T, a planner, fixtureName, key string, extra ...string) realRun {
 	t.Helper()
 	r := runWith(t, a, fixtureName, key, &executor.Executor{}, extra...)
+	for i, res := range r.rr.results {
+		// docs/39 §11: no tool leaves a background child (daemon, worker
+		// process, telemetry) behind; cleanup is confirmed for every run.
+		if res.Cleanup != executor.CleanupConfirmed || res.LeftoverKilled {
+			t.Fatalf("execution %d cleanup %s leftover %v", i, res.Cleanup, res.LeftoverKilled)
+		}
+	}
 	capture(t, fixtureName, key, r)
 	return r
 }
