@@ -195,7 +195,7 @@ func TestGoSelectionDigestsPinned(t *testing.T) {
 		"documents":   "a42ead60396dd73b92521c1ce60ca5ce2293e687ce5858b1b6ad7aef409b7593",
 		"investigate": "af3590babf43f1f1f609a21af2d7ac366281381cfacc7f68cd43d4acd7ac296d",
 		"interpret":   "68790a642d139f204b0cdd09051bf6c0aea87e79f0a3cecd03b77e38754ee145",
-		"verify":      "d0a85eb93bfd60cb5072b271b1e13c0806e5facda5154f4e2151b348c492bda9",
+		"verify":      "40d840eeb6893602acdfd4a27179ed8224cec2270da4a3659d8eb91654990525",
 	}
 	for _, role := range Roles {
 		s, err := For(role, []string{"go"})

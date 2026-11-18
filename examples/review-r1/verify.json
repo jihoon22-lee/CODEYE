@@ -177,7 +177,7 @@
       "opencode_version": "1.19.5",
       "pack_id": "review-r1",
       "pack_version": "2.0.0-rc2",
-      "pack_sha256": "d0a85eb93bfd60cb5072b271b1e13c0806e5facda5154f4e2151b348c492bda9",
+      "pack_sha256": "40d840eeb6893602acdfd4a27179ed8224cec2270da4a3659d8eb91654990525",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -185,8 +185,8 @@
         "pack.yaml",
         "verify.md"
       ],
-      "request_sha256": "ad0cc1d8aad25980652694ba5edcc768c0d66b798d62708a26b742e9f4504aac",
-      "request_bytes": 14616,
+      "request_sha256": "cdec3c01254cdc08ac13127e533470242a28018a41c91ecd0b524eb1118c0e0e",
+      "request_bytes": 14704,
       "usage": {
         "input": 4879,
         "output": 50
