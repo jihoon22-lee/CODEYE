@@ -1,0 +1,3 @@
+src/main.ts(1,19): error TS2307: Cannot find module 'zod' or its corresponding type declarations.
+src/main.ts(5,50): error TS7006: Parameter 'x' implicitly has an 'any' type.
+src/main.ts(7,14): error TS2322: Type 'string' is not assignable to type 'number'.

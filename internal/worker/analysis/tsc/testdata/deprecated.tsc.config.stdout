@@ -1,0 +1,28 @@
+{
+    "compilerOptions": {
+        "target": "es2022",
+        "module": "commonjs",
+        "moduleResolution": "node10",
+        "lib": [
+            "es2022"
+        ],
+        "strict": true,
+        "baseUrl": "./",
+        "noEmit": true,
+        "incremental": false,
+        "composite": false,
+        "ignoreDeprecations": "6.0",
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "noFallthroughCasesInSwitch": false,
+        "resolvePackageJsonExports": false,
+        "resolvePackageJsonImports": false,
+        "resolveJsonModule": false
+    },
+    "files": [
+        "./src/a.ts"
+    ],
+    "include": [
+        "src"
+    ]
+}

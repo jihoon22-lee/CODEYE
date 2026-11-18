@@ -1,0 +1,448 @@
+{
+  "adapter": {
+    "id": "tsc",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "javascript",
+    "id": "javascript.tsc",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 2,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "src/main.ts",
+      "vite.config.ts"
+    ],
+    "unit": "file",
+    "units": {
+      "checked": 2
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "node",
+          "[REDACTED]",
+          "--version"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "tsc.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 14,
+        "incomplete": false,
+        "sha256": "13af495bed3deeb9d4f80a19f5b54797937e54e69bdffe4292db85b4e211fdde",
+        "total_bytes": 14,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "node",
+          "[REDACTED]",
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--incremental",
+          "false",
+          "--composite",
+          "false",
+          "--ignoreDeprecations",
+          "6.0",
+          "--noUnusedLocals",
+          "false",
+          "--noUnusedParameters",
+          "false",
+          "--noFallthroughCasesInSwitch",
+          "false",
+          "-p",
+          "./tsconfig.json",
+          "--showConfig"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "tsc.config",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 421,
+        "incomplete": false,
+        "sha256": "ff896e4375417ac95fe05b85e47bb4718c5c34fb04eea91419604688706e1c50",
+        "total_bytes": 421,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "node",
+          "[REDACTED]",
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--incremental",
+          "false",
+          "--composite",
+          "false",
+          "--ignoreDeprecations",
+          "6.0",
+          "--noUnusedLocals",
+          "false",
+          "--noUnusedParameters",
+          "false",
+          "--noFallthroughCasesInSwitch",
+          "false",
+          "-p",
+          "./tsconfig.app.json",
+          "--showConfig"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "tsc.config.r01",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 520,
+        "incomplete": false,
+        "sha256": "1a48f79b2cf3eb809870c73ed295c6c22e67b41c6000ded64b62927515012b96",
+        "total_bytes": 520,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "node",
+          "[REDACTED]",
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--incremental",
+          "false",
+          "--composite",
+          "false",
+          "--ignoreDeprecations",
+          "6.0",
+          "--noUnusedLocals",
+          "false",
+          "--noUnusedParameters",
+          "false",
+          "--noFallthroughCasesInSwitch",
+          "false",
+          "-p",
+          "./tsconfig.app.json"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 2,
+      "name": "tsc.check.r01",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 83,
+        "incomplete": false,
+        "sha256": "64e9611b7bbce1be1a6d823ecc26b3382a52553ce4b942ffcc7cfac48569439d",
+        "total_bytes": 83,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "node",
+          "[REDACTED]",
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--incremental",
+          "false",
+          "--composite",
+          "false",
+          "--ignoreDeprecations",
+          "6.0",
+          "--noUnusedLocals",
+          "false",
+          "--noUnusedParameters",
+          "false",
+          "--noFallthroughCasesInSwitch",
+          "false",
+          "-p",
+          "./tsconfig.node.json",
+          "--showConfig"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "tsc.config.r02",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 534,
+        "incomplete": false,
+        "sha256": "c5f3e70730b88b36fc27bfad7ae760da788049a528af57f01be4f1c0764b07c7",
+        "total_bytes": 534,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "node",
+          "[REDACTED]",
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--incremental",
+          "false",
+          "--composite",
+          "false",
+          "--ignoreDeprecations",
+          "6.0",
+          "--noUnusedLocals",
+          "false",
+          "--noUnusedParameters",
+          "false",
+          "--noFallthroughCasesInSwitch",
+          "false",
+          "-p",
+          "./tsconfig.node.json"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "tsc.check.r02",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "solution_config_references_checked",
+    "type_check_without_dependencies"
+  ],
+  "module": {
+    "dir": ".",
+    "name": "w18-case"
+  },
+  "observations": [
+    {
+      "category": "correctness",
+      "id": "obs_ed1a5f216694a8bd7125",
+      "location": {
+        "blob_sha256": "9627e8eafea2fbe017b9283543c584c98464adda41d106f2dfab43f906ad0e37",
+        "column_unit": "byte",
+        "end_col": 14,
+        "end_line": 1,
+        "path": "src/main.ts",
+        "start_col": 14,
+        "start_line": 1
+      },
+      "location_state": "resolved",
+      "path": "src/main.ts",
+      "raw_message": "Type 'string' is not assignable to type 'number'.",
+      "raw_ref": {
+        "byte_end": 82,
+        "byte_start": 0,
+        "execution": "tsc.check.r01",
+        "json_pointer": "",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "64e9611b7bbce1be1a6d823ecc26b3382a52553ce4b942ffcc7cfac48569439d"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "TS2322",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "src/main.ts"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 1,
+    "ok": true,
+    "records": 1,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "tsc-text-v1",
+    "version": "1"
+  },
+  "patterns": [
+    "tsconfig.json"
+  ],
+  "rule_pack": {
+    "config_files": [
+      {
+        "path": "tsconfig.app.json",
+        "sha256": "a7ca38e6dc6118361d33be728d8065a55efcfecda404a2b52fe07bc5fbd28512"
+      },
+      {
+        "path": "tsconfig.json",
+        "sha256": "67312658d22f72e4310e3c1410ea5862b1489055bbd9d70107f3f3cbbb86bdf8"
+      },
+      {
+        "path": "tsconfig.node.json",
+        "sha256": "9f7de47dca8eb133016a9ee793145d4432ef4a683604df95c7164a971bde312c"
+      }
+    ],
+    "id": "codeye-ts-tsc",
+    "repository_config": "honored",
+    "selection": [
+      "--noEmit",
+      "--incremental false",
+      "--composite false",
+      "--ignoreDeprecations 6.0",
+      "--noUnusedLocals false",
+      "--noUnusedParameters false",
+      "--noFallthroughCasesInSwitch false",
+      "-p tsconfig.json",
+      "solution references checked one by one"
+    ],
+    "source_suppressions": "honored",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "2025c54dda08a06adda99dae0c517e252667f006d8dcb60d144dab1bd7776a89",
+  "target": {
+    "platform": null,
+    "properties": {
+      "module": "esnext",
+      "module_resolution": "bundler",
+      "node": "24.18.0",
+      "strict": "true",
+      "target": "es2022",
+      "tsconfig": "tsconfig.json"
+    }
+  },
+  "task_key": "tsc",
+  "tool": {
+    "name": "tsc",
+    "version": "6.0.3",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}
