@@ -291,3 +291,56 @@ func TestEmptyCollections(t *testing.T) {
 		t.Fatal("state vocabulary changed; reconcile the API enum")
 	}
 }
+
+func seq(n int64) *int64 { return &n }
+func weight(n int) *int  { return &n }
+
+// W22 (REQ-017, TC-99): plan revision and weighted estimate.
+func TestPlanRevisionAndWeightedPercent(t *testing.T) {
+	sa, cr := domain.StageStaticAnalysis, domain.StageCodeReview
+	// Before the plan is fixed there is no revision, denominator or percent.
+	for _, st := range []domain.RunStatus{domain.RunQueued, domain.RunPreparing} {
+		p := Compute(Run{Status: st, Tasks: []Task{{Stage: sa, Status: domain.TaskQueued, CreatedSeq: seq(3)}}}).Plan
+		if p.Revision != nil || p.PlannedWeight != nil || p.EstimatedPercent != nil || p.WeightBasis != "" || len(p.Changes) != 0 || p.Changes == nil {
+			t.Fatalf("%s: plan %+v", st, p)
+		}
+	}
+	vet := Task{Stage: sa, Status: domain.TaskSucceeded, Weight: weight(1), CreatedSeq: seq(3)}
+	review := Task{Stage: cr, Status: domain.TaskRunning, Weight: weight(3), CreatedSeq: seq(4)}
+	run := Run{Status: domain.RunRunning, RunningAt: at(5), RunningSeq: seq(5), Tasks: []Task{vet, review}}
+	p := Compute(run).Plan
+	if *p.Revision != 1 || *p.PlannedWeight != 4 || p.FinishedWeight != 1 || *p.EstimatedPercent != 25 || p.WeightBasis != BasisDeclared || len(p.Changes) != 0 {
+		t.Fatalf("fixed plan %+v", p)
+	}
+	// A task created after the plan was fixed adds a revision and moves the
+	// denominator; the change says which stage and weight caused it.
+	added := Task{Stage: cr, Status: domain.TaskQueued, Weight: weight(2), CreatedSeq: seq(9), CreatedAt: at(30)}
+	run.Tasks = append(run.Tasks, added)
+	p = Compute(run).Plan
+	if *p.Revision != 2 || *p.PlannedWeight != 6 || *p.EstimatedPercent != 16.7 || len(p.Changes) != 1 {
+		t.Fatalf("revised plan %+v", p)
+	}
+	if c := p.Changes[0]; c.Revision != 2 || c.Reason != PlanChangeTaskAdded || c.Stage != cr || c.Weight != 2 || c.PlannedWeight != 6 || !c.At.Equal(*at(30)) {
+		t.Fatalf("change %+v", c)
+	}
+	// Undeclared weights count as one (task_count basis); mixed is reported.
+	run.Tasks = append(run.Tasks, Task{Stage: sa, Status: domain.TaskFailed, CreatedSeq: seq(11)})
+	p = Compute(run).Plan
+	if *p.Revision != 3 || *p.PlannedWeight != 7 || p.FinishedWeight != 2 || p.WeightBasis != BasisMixed || p.Changes[1].PlannedWeight != 7 {
+		t.Fatalf("mixed plan %+v", p)
+	}
+	legacy := Compute(Run{Status: domain.RunCompleted, Tasks: []Task{{Status: domain.TaskSucceeded}, {Status: domain.TaskFailed}}})
+	if legacy.Detail != NotRecorded || *legacy.Plan.Revision != 1 || *legacy.Plan.EstimatedPercent != 100 || legacy.Plan.WeightBasis != BasisTaskCount {
+		t.Fatalf("legacy plan %+v", legacy.Plan)
+	}
+	// A fixed plan with no tasks has no estimate (never 0% or 100% by default).
+	if p := Compute(Run{Status: domain.RunRunning, RunningSeq: seq(2)}).Plan; *p.Revision != 1 || *p.PlannedWeight != 0 || p.EstimatedPercent != nil {
+		t.Fatalf("empty plan %+v", p)
+	}
+	// A retried run re-plans: tasks created by an earlier attempt (before this
+	// attempt's running event) belong to revision 1 again.
+	retried := Run{Status: domain.RunRunning, RunningSeq: seq(40), Tasks: []Task{vet, {Stage: cr, Status: domain.TaskQueued, CreatedSeq: seq(20)}}}
+	if p := Compute(retried).Plan; *p.Revision != 1 || *p.PlannedWeight != 2 {
+		t.Fatalf("retried plan %+v", p)
+	}
+}

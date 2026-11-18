@@ -310,7 +310,7 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 	seen := map[string]bool{}
 	for _, s := range specs {
 		// An unknown stage is a handler bug; "" is sent as no stage (not recorded).
-		if !nodeproto.ValidTaskKey(s.Key) || seen[s.Key] || (s.Stage != "" && !s.Stage.Valid()) {
+		if !nodeproto.ValidTaskKey(s.Key) || seen[s.Key] || (s.Stage != "" && !s.Stage.Valid()) || s.Weight < 0 || s.Weight > 1000 {
 			return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil
 		}
 		seen[s.Key] = true
@@ -321,6 +321,10 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 		if s.Stage != "" {
 			stage := string(s.Stage)
 			payload.Stage = &stage
+		}
+		if s.Weight > 0 {
+			weight := s.Weight
+			payload.Weight = &weight
 		}
 		resp, err := w.event(a, nodeproto.EventTaskCreated, payload, "")
 		if err != nil || resp.TaskID == nil {

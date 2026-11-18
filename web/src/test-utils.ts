@@ -51,3 +51,31 @@ export const runView = (over: Record<string, unknown> = {}, progress: Record<str
   progress: { stage: 'queued', plan_revision: null, completed_tasks: 0, total_tasks: null, estimated_percent: null, waiting_reason: 'execution_unavailable', ...progress },
   ...over,
 });
+
+// A scripted EventSource: the test opens, fails and emits messages by hand.
+export class FakeEventSource {
+  static all: FakeEventSource[] = [];
+  readyState = 0;
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  closed = false;
+  private listeners = new Map<string, ((event: MessageEvent) => void)[]>();
+  constructor(readonly url: string) { FakeEventSource.all.push(this); }
+  static factory = (url: string) => new FakeEventSource(url);
+  static reset() { FakeEventSource.all = []; }
+  static last(): FakeEventSource { return FakeEventSource.all[FakeEventSource.all.length - 1]!; }
+  addEventListener(type: string, listener: (event: MessageEvent) => void) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+  close() { this.readyState = 2; this.closed = true; }
+  open() { this.readyState = 1; this.onopen?.(new Event('open')); }
+  fail() { this.readyState = 2; this.onerror?.(new Event('error')); }
+  // An unnamed message is an event row (id = sequence); a named one is run.view or a control.
+  emit(event: string | null, data: unknown, id?: string) {
+    const message = new MessageEvent(event ?? 'message', { data: JSON.stringify(data), lastEventId: id ?? '' });
+    if (event === null) this.onmessage?.(message);
+    else for (const l of this.listeners.get(event) ?? []) l(message);
+  }
+  row(sequence: number, type = 'task.status') { this.emit(null, { run_id: 'run1', sequence, version: 1, type, at: '2026-11-18T03:00:00Z' }, String(sequence)); }
+}

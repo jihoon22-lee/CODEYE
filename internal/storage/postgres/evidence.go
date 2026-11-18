@@ -73,20 +73,26 @@ func (s *Store) CreateTask(ctx context.Context, o Ownership, required bool) (str
 		if err = activeLease(ctx, tx, r, a, o); err != nil {
 			return "", err
 		}
-		id, _, err := createTaskTx(ctx, tx, &r, nil, required, nil)
+		id, _, err := createTaskTx(ctx, tx, &r, nil, required, nil, nil)
 		return id, err
 	})
 }
 
 // createTaskTx creates a task of the locked run. With a key, an existing task of
 // the run with that key (a retried run re-planning) is returned with its current
-// version. The display stage (docs/37 §2) is fixed at the first record: an
-// omitted stage keeps the stored one, a different stage is ErrConflict (like
-// required), and a stage declared for a task stored without one (a pre-W15
-// record re-planned by a W15 worker) is recorded once with a
-// task.stage_recorded event. Nothing is inferred from the key.
-func createTaskTx(ctx context.Context, tx pgx.Tx, r *Run, key *string, required bool, stage *domain.Stage) (string, int64, error) {
+// version. The display stage (docs/37 §2) and the estimate weight (W22) are
+// fixed at the first record: an omitted value keeps the stored one, a
+// different value is ErrConflict (like required), and a value declared for a
+// task stored without one (an older record re-planned by a newer worker) is
+// recorded once with a task.stage_recorded / task.weight_recorded event.
+// Nothing is inferred from the key. A new task stores the sequence of its
+// task.created event (created_sequence), written in this transaction, so the
+// progress view can tell tasks added after the plan was fixed.
+func createTaskTx(ctx context.Context, tx pgx.Tx, r *Run, key *string, required bool, stage *domain.Stage, weight *int) (string, int64, error) {
 	if stage != nil && !stage.Valid() {
+		return "", 0, domain.ErrInvalid
+	}
+	if weight != nil && !validWeight(*weight) {
 		return "", 0, domain.ErrInvalid
 	}
 	if key != nil {
@@ -94,16 +100,27 @@ func createTaskTx(ctx context.Context, tx pgx.Tx, r *Run, key *string, required 
 		var version int64
 		var req bool
 		var stored *string
-		err := tx.QueryRow(ctx, "SELECT id::text,version,required_for_verdict,stage FROM tasks WHERE run_id=$1 AND key=$2 FOR UPDATE", r.ID, *key).Scan(&id, &version, &req, &stored)
+		var storedWeight *int
+		err := tx.QueryRow(ctx, "SELECT id::text,version,required_for_verdict,stage,weight FROM tasks WHERE run_id=$1 AND key=$2 FOR UPDATE", r.ID, *key).Scan(&id, &version, &req, &stored, &storedWeight)
 		if err == nil {
-			if req != required || (stage != nil && stored != nil && *stored != string(*stage)) {
+			if req != required || (stage != nil && stored != nil && *stored != string(*stage)) || (weight != nil && storedWeight != nil && *storedWeight != *weight) {
 				return "", 0, domain.ErrConflict
 			}
 			if stage != nil && stored == nil {
 				if _, err = tx.Exec(ctx, "UPDATE tasks SET stage=$3 WHERE run_id=$1 AND id=$2", r.ID, id, string(*stage)); err != nil {
 					return "", 0, err
 				}
-				return id, version, appendEvent(ctx, tx, r, "task.stage_recorded", map[string]any{"task_id": id, "stage": *stage}, false)
+				if err = appendEvent(ctx, tx, r, "task.stage_recorded", map[string]any{"task_id": id, "stage": *stage}, false); err != nil {
+					return "", 0, err
+				}
+			}
+			if weight != nil && storedWeight == nil {
+				if _, err = tx.Exec(ctx, "UPDATE tasks SET weight=$3 WHERE run_id=$1 AND id=$2", r.ID, id, *weight); err != nil {
+					return "", 0, err
+				}
+				if err = appendEvent(ctx, tx, r, "task.weight_recorded", map[string]any{"task_id": id, "weight": *weight}, false); err != nil {
+					return "", 0, err
+				}
 			}
 			return id, version, nil
 		}
@@ -120,9 +137,6 @@ func createTaskTx(ctx context.Context, tx pgx.Tx, r *Run, key *string, required 
 		stored = &v
 	}
 	id := domain.NewID()
-	if _, err := tx.Exec(ctx, "INSERT INTO tasks(id,run_id,status,required_for_verdict,key,stage) VALUES($1,$2,'queued',$3,$4,$5)", id, r.ID, required, key, stored); err != nil {
-		return "", 0, err
-	}
 	payload := map[string]any{"task_id": id}
 	if key != nil {
 		payload["key"] = *key
@@ -131,8 +145,18 @@ func createTaskTx(ctx context.Context, tx pgx.Tx, r *Run, key *string, required 
 	if stage != nil {
 		payload["stage"] = *stage
 	}
-	return id, 1, appendEvent(ctx, tx, r, "task.created", payload, true)
+	if weight != nil {
+		payload["weight"] = *weight
+	}
+	if err := appendEvent(ctx, tx, r, "task.created", payload, true); err != nil {
+		return "", 0, err
+	}
+	_, err := tx.Exec(ctx, "INSERT INTO tasks(id,run_id,status,required_for_verdict,key,stage,weight,created_sequence) VALUES($1,$2,'queued',$3,$4,$5,$6,$7)", id, r.ID, required, key, stored, weight, r.EventSequence)
+	return id, 1, err
 }
+
+// validWeight bounds a declared task weight (migration 0007 CHECK).
+func validWeight(w int) bool { return w >= 1 && w <= 1000 }
 
 func (s *Store) SetTaskStatus(ctx context.Context, o Ownership, id string, expected int64, next domain.TaskStatus) (int64, error) {
 	if !validOwner(o) || !validIDs(id) || expected < 1 || !next.Valid() {

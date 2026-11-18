@@ -37,7 +37,7 @@ Usage:
                [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-v1|review-r1]
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
 Login links are written to a 0600 file; the token is never printed.
-"serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts) and the pool autoscaler.
+"serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.
 Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
 Enrollment tokens are written to a 0600 file; the token is never printed.
 start/stop are not implemented.
@@ -319,7 +319,7 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return 2
 	}
 	if reconcile == 0 || reconcile > time.Hour || (reconcile > 0 && reconcile < 100*time.Millisecond) {
-		fmt.Fprintln(stderr, "--reconcile-interval must be between 100ms and 1h (negative disables the autoscaler)")
+		fmt.Fprintln(stderr, "--reconcile-interval must be between 100ms and 1h (negative disables the autoscaler and schedules)")
 		return 2
 	}
 	if artifactDir == "" {

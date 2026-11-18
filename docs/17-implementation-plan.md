@@ -34,7 +34,7 @@ R0의 두 에이전트 시험은 한 머신에서 별도 node identity로 먼저
 | W19 | Go 분석 팩 | W15 | vet/Staticcheck, tags/CGO, context·goroutine·오류 경로 |
 | W20 | Rust 분석 팩 | W15 | check/clippy, features/target, build script 신뢰, unsafe·panic 검토 |
 | W21 | 구조/복잡도·비밀정보 팩 | W15 | 지표를 결함으로 오인하지 않음, secret raw redaction, 중복 엔진 제거 |
-| W22 | 예약·진행·재접속 확장 | W07,W13,W15 | 예약 중첩·누락 처리, W15의 단계 조회와 같은 기준으로 계획 revision·가중 진행률·SSE gap 복원 |
+| W22 | 예약·진행·재접속 확장 — [구현](38-w22-schedules-progress-sse.md) | W07,W13,W15 | 예약 중첩·누락 처리, W15의 단계 조회와 같은 기준으로 계획 revision·가중 진행률·SSE gap 복원 |
 | W23 | 이력·비교·사람 검토 | W13 | fingerprint, absent≠fixed, disposition 이유·기간·권한 |
 | W24 | 품질 평가 runner | W12,W16-W21 | 정답 차단, holdout, 지표/표본·모델 변동·보고서 읽기 평가 |
 | W25 | 개인 패키징·운영 검증 | W22-W24 | Native start/stop/doctor, disk quota, DB·artifact backup/복원, 사용 가이드 |

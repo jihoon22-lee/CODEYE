@@ -369,6 +369,9 @@ type RunView struct {
 	LatestReport *ReportSummary
 	// Stages is the W15 stage view, computed like the project activity.
 	Stages RunStages
+	// Origin is the schedule occurrence the run was requested for (W22); nil
+	// for a manual request.
+	Origin *RunOrigin
 }
 
 // GetRunView returns the run and its task counts for an actor who may read it.
@@ -382,6 +385,14 @@ func (s *Store) GetRunView(ctx context.Context, actor, id string) (RunView, erro
 			return RunView{}, err
 		}
 		v := RunView{Run: r}
+		var scheduleID *string
+		var scheduledFor *time.Time
+		if err = tx.QueryRow(ctx, "SELECT schedule_id::text,scheduled_for FROM runs WHERE id=$1", id).Scan(&scheduleID, &scheduledFor); err != nil {
+			return v, err
+		}
+		if scheduleID != nil && scheduledFor != nil {
+			v.Origin = &RunOrigin{ScheduleID: *scheduleID, ScheduledFor: scheduledFor.UTC()}
+		}
 		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status IN ('succeeded','failed','timed_out','cancelled','unsupported','skipped_policy','budget_exhausted')),count(*)
 			FROM tasks WHERE run_id=$1`, id).Scan(&v.CompletedTasks, &v.TotalTasks)
 		if err != nil {

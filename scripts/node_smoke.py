@@ -79,6 +79,58 @@ def activity_agrees(session, project_id):
     return activity
 
 
+def stream_agrees(session, run_id):
+    """W22 (TC-99): the real run's event stream replays its stored events in
+    sequence with allowlisted fields only, then the same RunView as
+    GET /runs/{id}; the plan fields follow the stored tasks."""
+    import validate_bundle
+    run = session.request("GET", f"runs/{run_id}")
+    validate_bundle.api_validator("RunView").validate(run)
+    row_schema = validate_bundle.api_validator("RunEventData")
+    allowed = set(validate_bundle.yaml_file(validate_bundle.ROOT / "api/openapi.yaml")["components"]["schemas"]["RunEventData"]["x-codeye-payload-fields"])
+    head = run["event_sequence"]
+    start = max(0, head - 1000)  # the server's default replay window
+    req = Request(session.origin + f"/api/v1/runs/{run_id}/events?cursor={start}", headers={"Accept": "text/event-stream"})
+    rows, view, fields = [], None, {}
+    with session.client.open(req, timeout=10) as response:
+        assert response.headers.get_content_type() == "text/event-stream" and response.headers["Cache-Control"] == "no-store"
+        for raw in response:
+            line = raw.decode("utf-8").rstrip("\n")
+            if line:
+                key, _, value = line.partition(": ")
+                fields[key] = value
+                continue
+            message, fields = fields, {}
+            if "data" not in message:
+                continue  # the retry: hint
+            data = json.loads(message["data"])
+            event = message.get("event")
+            if event is None:
+                row_schema.validate(data)
+                assert int(message["id"]) == data["sequence"] == start + len(rows) + 1, "SSE 이벤트 id 불연속"
+                assert set(data) - {"run_id", "sequence", "version", "type", "at"} <= allowed, sorted(data)
+                rows.append(data)
+            elif event == "run.view":
+                assert "id" not in message, "run.view에 id"
+                view = data
+                if rows and rows[-1]["sequence"] >= head:
+                    break
+            else:
+                assert event == "heartbeat" and "id" not in message, message
+    assert rows and rows[-1]["sequence"] >= head and view["event_sequence"] >= head, "SSE가 저장된 이벤트를 모두 전달하지 않음"
+    types = [r["type"] for r in rows]
+    assert "task.created" in types and "task.status" in types, types
+    assert start > 0 or types[0] == "run.queued", types
+    again = session.request("GET", f"runs/{run_id}")
+    strip = lambda v: {**v, "progress": {k: x for k, x in v["progress"].items() if k != "checked_at"}}
+    assert strip(view) == strip(again), "SSE run.view와 GET 불일치"
+    p = view["progress"]
+    # Product handlers declare no weights: the percentage is the finished task ratio.
+    assert p["plan_revision"] is not None and p["weight_basis"] == "task_count" and p["planned_weight"] == p["total_tasks"], p
+    assert p["finished_weight"] == p["planned_weight"] and p["estimated_percent"] == 100, p
+    return len(rows), p["plan_revision"]
+
+
 def stage_map(activity):
     return {stage["key"]: stage for stage in activity["stages"]}
 
@@ -255,6 +307,8 @@ def run(base, root, env, *, browser=False):
         assert go_stages["code_review"]["state"] == "skipped" and go_stages["code_review"]["reasons"] == ["model_source_not_approved"], go_stages
         assert go_stages["documents"]["succeeded"] == 1 and "model_source_not_approved" in go_stages["documents"]["reasons"], go_stages
         print(f"PASS: W15 실제 Go run 단계 표시 detail={go_activity['detail']} (목록/상세 일치)")
+        streamed, plan_revision = stream_agrees(session, actual)
+        print(f"PASS: W22 실제 Go run SSE {streamed}개 이벤트 순서 전달, run.view=GET, plan revision {plan_revision}")
         path = f"runs/{actual}/report?revision=1"
         code_free = session.request("GET", path)
         full = session.request("GET", path + "&include_code=true")
