@@ -1,0 +1,10 @@
+[project]
+name = "w17-config"
+requires-python = ">=3.11"
+
+[tool.mypy]
+plugins = ["canary_plugin.py"]
+disable_error_code = ["return-value"]
+
+[tool.pyright]
+typeCheckingMode = "off"

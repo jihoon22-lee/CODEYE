@@ -1,0 +1,30 @@
+{
+    "version": "1.1.414",
+    "time": "1795007459408",
+    "generalDiagnostics": [
+        {
+            "file": "[REDACTED]/sup/types.py",
+            "severity": "error",
+            "message": "Type \"Literal['z']\" is not assignable to return type \"int\"\n  \"Literal['z']\" is not assignable to \"int\"",
+            "range": {
+                "start": {
+                    "line": 12,
+                    "character": 11
+                },
+                "end": {
+                    "line": 12,
+                    "character": 14
+                }
+            },
+            "rule": "reportReturnType"
+        }
+    ],
+    "summary": {
+        "filesAnalyzed": 5,
+        "errorCount": 1,
+        "warningCount": 0,
+        "informationCount": 0,
+        "timeInSec": 0.335
+    }
+}
+

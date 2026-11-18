@@ -1,0 +1,5 @@
+Name       Lines  Precise  Imprecise  Any  Empty  Unanalyzed
+------------------------------------------------------------
+app            0        0          0    0      0           0
+app.core      31        7          0    8     16           0
+app.stubs      1        1          0    0      0           0

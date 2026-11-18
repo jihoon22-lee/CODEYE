@@ -1,0 +1,1 @@
+{"cell":null,"code":"F401","end_location":{"column":12,"row":5},"filename":"[REDACTED]/sup/ruff_line.py","fix":null,"location":{"column":8,"row":5},"message":"`json` imported but unused","name":"unused-import","noqa_row":5,"severity":"error","url":"https://docs.astral.sh/ruff/rules/unused-import"}

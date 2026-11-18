@@ -1,0 +1,119 @@
+{
+    "version": "1.1.414",
+    "time": "1795007460108",
+    "generalDiagnostics": [
+        {
+            "file": "[REDACTED]/broken.py",
+            "severity": "error",
+            "message": "\"(\" was not closed",
+            "range": {
+                "start": {
+                    "line": 0,
+                    "character": 10
+                },
+                "end": {
+                    "line": 0,
+                    "character": 11
+                }
+            }
+        },
+        {
+            "file": "[REDACTED]/broken.py",
+            "severity": "error",
+            "message": "Expected parameter name",
+            "range": {
+                "start": {
+                    "line": 0,
+                    "character": 11
+                },
+                "end": {
+                    "line": 0,
+                    "character": 12
+                }
+            }
+        },
+        {
+            "file": "[REDACTED]/broken.py",
+            "severity": "error",
+            "message": "Position-only parameter separator not allowed as first parameter",
+            "range": {
+                "start": {
+                    "line": 0,
+                    "character": 11
+                },
+                "end": {
+                    "line": 1,
+                    "character": 8
+                }
+            }
+        },
+        {
+            "file": "[REDACTED]/broken.py",
+            "severity": "error",
+            "message": "Expected expression",
+            "range": {
+                "start": {
+                    "line": 1,
+                    "character": 4
+                },
+                "end": {
+                    "line": 1,
+                    "character": 8
+                }
+            }
+        },
+        {
+            "file": "[REDACTED]/broken.py",
+            "severity": "error",
+            "message": "Expected \":\"",
+            "range": {
+                "start": {
+                    "line": 2,
+                    "character": 0
+                },
+                "end": {
+                    "line": 2,
+                    "character": 0
+                }
+            }
+        },
+        {
+            "file": "[REDACTED]/broken.py",
+            "severity": "error",
+            "message": "Expected expression",
+            "range": {
+                "start": {
+                    "line": 2,
+                    "character": 0
+                },
+                "end": {
+                    "line": 2,
+                    "character": 0
+                }
+            }
+        },
+        {
+            "file": "[REDACTED]/broken.py",
+            "severity": "error",
+            "message": "Statements must be separated by newlines or semicolons",
+            "range": {
+                "start": {
+                    "line": 2,
+                    "character": 0
+                },
+                "end": {
+                    "line": 2,
+                    "character": 0
+                }
+            }
+        }
+    ],
+    "summary": {
+        "filesAnalyzed": 2,
+        "errorCount": 7,
+        "warningCount": 0,
+        "informationCount": 0,
+        "timeInSec": 0.285
+    }
+}
+
