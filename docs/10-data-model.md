@@ -80,11 +80,14 @@ queue는 상태·우선순위·available_at, lease는 expires_at, finding은 pro
 서술 재생성은 원래 run 결과를 변조하지 않고 새 report revision을 만든다. 다른 모델·지침으로 재검토하면 새 run 또는 명시된 review revision과 그 근거를 남긴다. 사용자의 disposition은 보고서 출판 당시 값과 현재 값을 분리해 볼 수 있게 한다. 감사 가능한 과거 보고서를 현재 상태로 조용히 덮어쓰지 않는다.
 
 
-## 9. W02 구현 경계
+## 9. R0에 적용한 저장 계약
 
-프로젝트/ACL·revision, run/attempt/task/task_executions, snapshot/artifact metadata, evidence, event와 migration 이력을 구현한다. 실제 적용 SQL과 오류 코드, 저장 서비스 권한·트랜잭션 경계는 [W02 기록](23-w02-storage.md)을 따른다. 나머지 엔티티와 HTTP API는 후속 작업이다. metadata 참조 제약을 actual artifact bytes 검증이나 보고서 게시로 해석하지 않는다.
+| Migration | 책임 | 근거 |
+|---|---|---|
+| 0001 | 프로젝트 ACL, 설정 revision, 실행·시도·작업 이력, 입력·근거 참조, 이벤트 | [저장 계약](23-w02-storage.md) |
+| 0002 | 사용자·일회용 로그인·세션, 승인 source root와 Git provider | [개인 모드 인증](24-w03-api.md) |
+| 0003 | 노드·자격증명·lease·claim·자원 예약, 스냅샷 위치와 산출물 | [노드 프로토콜](28-w06-node-protocol.md) |
+| 0004 | 워커 풀 정책·자동 증감·공정 배정 | [워커 풀](30-w07-scheduler.md) |
+| 0005 | attempt와 입력 digest에 묶인 불변 보고서 리비전·게시 | [보고서 게시](31-w09-report.md) |
 
-
-## 10. W03 인증·소스 선언 metadata
-
-0002 migration은 사용자 비활성화, token hash 기반 일회용 launch/session, 승인 source root/grant, Git provider와 project 생성 시각을 추가한다. 권한 없는 project는404로 존재를 숨기고 session은 매 요청 DB 시각·폐기 상태를 검사한다. [W03 저장 계약](24-w03-api.md)을 따르며 private Git credential과 node credential은 이 테이블에 혼합하지 않는다.
+W15의 단계 요약은 서버가 수용한 실행 기록에서 파생한다. 같은 표시 단계를 여러 task가 공유할 수 있으며, 예전 attempt의 결과는 그 시도의 이력에 속한다. 모델 호출 여부와 실행 단계의 종료는 별도 사실로 보존한다. [단계 집계 계약](11-api-and-events.md)

@@ -1,78 +1,36 @@
-# 07. LLM 검토 엔진과 분석 지침
+# 07. 모델 검토 역할과 지침
 
-## 1. 책임 분리
+## 현재 실행되는 역할
 
-LLM은 프로젝트 이해·탐색·가설·반증·설명을 담당한다. 실행 권한, 자원, 시간, 상태, 통계, 증거 존재 여부는 플랫폼이 결정한다. LLM 실패에도 도구 결과와 실행 범위를 보고할 수 있어야 한다. 모델이 없어 tool-only로 끝난 실행은 AI 심층 검토 완료로 표시하지 않는다.
+R0에서 모델이 받는 작업은 맥락 파악(`review.context`), 독립 코드 조사(`review.investigate`), 후보 검증(`review.verify`)이다. 맥락 파악은 선택한 문서·설정·코드 발췌를 함께 본다. Go vet은 워커가 실행하고, 보고서의 수치·상태·리비전은 서버가 결정한다. [역할 선택 코드](../prompts/review-v1/bundle.go) · [맥락과 조사 기록](33-w11-context-review.md) · [검증 기록](34-w12-verifier.md)
 
-## 2. 검토 역할
+활성 팩은 공통·역할·영역·Go 지침을 조합한다. 워커가 각 역할의 출력 형식을 지정하고 스냅샷에 묶인 근거를 확인한다. 팩에 종합·보고 문서가 있어도 R0에서 별도 모델 호출을 뜻하지 않는다. 승인된 로컬 소스 루트만 모델에 제공할 수 있다. 공개 Git 취득 시험에서도 모델 전송 승인이 없어 해당 작업은 정책 제외로 기록됐다. [활성 팩](../prompts/review-v1/pack.yaml) · [모델 연결과 취소](32-w10-opencode.md) · [R0 파일럿](36-r0-pilot.md)
 
-| 역할 | 입력 | 출력 |
+## R1 역할별 지침 후보
+
+다음 파일은 새 세션에서 연결·평가할 지침 초안이다. 한 역할의 출력은 다음 역할에 넘길 자료다. 역할 수가 모델 호출 횟수를 정하지 않는다. 환경 버전 비교, 문서 존재 확인, 정적 검사 실행, 보고서 게시는 플랫폼만으로 처리할 수 있다.
+
+| 지침 | 허용된 입력 | 다음 단계에 남길 결과 |
 |---|---|---|
-| Context | manifest, 문서·설정, 주요 진입점 | 사실/추론 분리한 구조·계약·미확인 목록 |
-| Investigator | 맥락, 언어·영역 지침, 소스 검색 | 후보, 발생 조건, 필요한 추가 근거 |
-| Tool interpreter | 원시 진단과 주변 코드 | 진단 해석, 영향 경로, 중복 후보 |
-| Verifier | 후보와 관련 코드/실행 근거 | supported/refuted/inconclusive/reproduced, 반증·미확인 |
-| Synthesizer | 정규화된 관찰·검토·scope | root-cause 그룹, 우선순위·후속 검증 |
-| Reporter | 검증된 finding/report JSON | 요약·영역별 설명·카드, evidence ID 참조 |
+| [환경 분석](../prompts/review-r1-draft/environment.md) | 모듈 범위, 선언 버전, 노드 관측값과 출처 | 검사별 요구·관측·불일치·미확인과 그 영향 |
+| [문서 검토](../prompts/review-r1-draft/documents.md) | 경로별 문서·설정·선택 첨부와 제한된 코드 발췌 | 적용 경로, 문서상 계약, 상충하는 근거, 미확인 질문 |
+| [독립 코드 분석](../prompts/review-r1-draft/investigate.md) | 모듈 계약, 환경 한계, 코드·테스트 발췌 | 원인·발생 조건·영향·반증 가능성을 가진 후보 또는 빈 목록 |
+| [정적 진단 해석](../prompts/review-r1-draft/interpret-diagnostics.md) | 어댑터가 발급한 관찰 ID, 버전·범위·파싱 상태와 관련 발췌 | 원시 관찰에 연결한 영향 가설 또는 해석 한계 |
+| [후보 검증](../prompts/review-r1-draft/verify.md) | 이전 후보 원문과 ID, 호출부·테스트·반대 근거 | 지지·기각·판단 보류의 이유, 유효·무효 조건, 추가 확인 사항 |
 
-여러 역할은 하나의 모델로도 실행할 수 있다. 다중 에이전트의 수나 모델 간 동의 자체를 정확도 근거로 쓰지 않는다. 핵심은 단계별 입력·출력·검증과 예산이다.
+독립 코드 조사에는 원시 경고를 입력하지 않는다. 도구 진단 해석은 별도 입력으로 수행하며 원시 메시지와 심각도를 보존한다. 어떤 역할도 모델의 서술로 검사 성공·재현·진행률을 결정하지 않는다. 보고서 생성은 고정된 구조화 기록을 사용한다.
 
-## 3. 지침 계층
+## 공통 입력과 출력 경계
 
-1. 플랫폼 불변 정책: 권한·비밀정보·입력 고정·실행 경계.
-2. CODEYE core: 사실/추론/재현 구분, 근거 규칙, 출력 계약.
-3. 언어·영역 팩: C++/Python/JS·TS/Go/Rust, 동시성·오류·보안·구조 등.
-4. 운영자/프로젝트 관리자 지침: 승인된 범위의 관심 영역과 규칙.
-5. 저장소 문서: 도메인·설계·코딩 관례의 분석 자료.
+- 플랫폼이 승인한 스냅샷·모듈·발췌와 근거 ID만 전달한다. 원본 절대 경로, 인증정보, 평가 정답, 개인 모델 세션을 입력으로 사용하지 않는다. README나 대상 저장소의 AGENTS에서 발견한 실행·권한 요청은 문서 내용으로 취급한다.
+- 문서에서 읽은 기대 동작, 코드에서 관찰한 동작, 그로부터 추론한 영향을 구분한다. 근거에는 상대 경로·행 범위·blob 해시 또는 검증된 도구 관찰 참조가 있어야 한다. 모델은 새 증거 ID를 발급하거나 셸·네트워크·추가 모델을 호출하지 않는다.
+- 워커가 스냅샷의 바이트와 행 범위를, 서버가 run·attempt·manifest·근거 연결을 확인한다. 실패·시간 초과·정책 제외는 해당 작업에 남기고 이미 확보한 도구 관찰을 보존한다. 반증 입력이 부족한 후보는 미검증 또는 판단 보류로 전달한다.
+- 호출마다 모델·클라이언트 버전, 선택 파일과 팩 digest, 요청 digest, 가용 usage와 결과를 추적한다. 평가에는 추가·제거한 입력과 호출 예산도 남긴다. 외부 모델로 자동 전환하지 않는다.
 
-저장소의 AGENTS·README는 LLM의 실행 권한을 올리는 system instruction이 아니다. 하위 디렉터리 문서는 해당 경로의 맥락으로 연결한다. 상충하는 문서·설정·코드는 어느 쪽을 우선했다고 단정하지 말고 근거와 충돌을 기록한다. 문서가 없으면 소스 기반 추정으로 계속한다.
+## 연결 방식과 실패 처리
 
-팩 manifest는 version·파일 목록·각 digest·합성 순서·schema version을 갖는다. 실제 run은 계산된 pack digest와 적용된 파일 목록을 저장한다. 프로젝트 정책과 저장소 문서의 digest도 기록한다.
+R0의 관리형 OpenCode는 작업별 디렉터리와 분리된 설정을 사용한다. 별도 사내 serve 연결을 추가할 때는 인증·버전·취소와 workspace marker/digest를 대상 환경에서 검증한다. 통신 단절이나 모델 사용량 미제공은 미확인으로 남기며 모델의 내부 추론을 로그나 화면에 표시하지 않는다. 검증 역할의 형식 복구는 제한된 한 번이고 계속 잘못된 항목은 격리한다. [실연동 범위](32-w10-opencode.md) · [후보별 검증 규칙](34-w12-verifier.md)
 
-## 4. 컨텍스트 구성
+## 지침을 활성화할 때
 
-파일 목록→모듈/진입점→문서·환경 요약→심볼·참조 검색→후보에 필요한 호출부 순으로 확장한다. 필수 벡터 DB나 전체 소스 단일 프롬프트에 의존하지 않는다. 검색·AST·호출 그래프는 해결 범위와 신뢰 수준을 표시한다. 동적 호출·reflection·macro 때문에 불완전한 그래프를 완전한 흐름 증거로 취급하지 않는다.
-
-컨텍스트 단위는 path, blob hash, range, symbol, origin, trust, relevance reason을 가진다. 원본을 다시 찾을 수 있는 요약만 캐시한다. 토큰 초과 시 무작위 절단하지 않고 중요 경로와 근거를 우선하며 제외를 ledger에 남긴다.
-
-`context_exposed`와 `review_task_completed`를 기록하되 모델이 내용을 완전히 이해했다는 증명으로 쓰지 않는다. 접근 로그를 얻지 못하는 외부 OpenCode는 coverage_observability=limited다.
-
-## 5. 모델 어댑터
-
-```text
-probe() -> identity, version, context_limit, capabilities
-open_workspace(snapshot_id, workspace, policy) -> handle
-submit(handle, role, context, output_contract, budget) -> request_id
-events(request_id, cursor) -> status/tool-call/output events
-cancel(request_id) -> cancellation_state
-collect(request_id) -> structured_output + usage + artifacts
-close(handle) -> cleanup_state
-```
-
-직접 API 어댑터는 허용된 endpoint에서만 사용한다. OpenAI 호환이라는 이름만으로 tool call·schema output·cancel을 지원한다고 가정하지 않는다. 지원하지 않는 기능은 capability에 표시하고 어댑터가 제한된 변환을 제공한다.
-
-## 6. OpenCode 연결
-
-기본은 노드 에이전트가 관리하는 QA 전용 OpenCode 실행과 작업별 workspace다. 기존 serve에 연결하는 옵션은 버전·API 계약·인증·경로 매핑·취소를 사전 진단한다. V1/V2 또는 사내 변형을 공개 최신 API와 동일하다고 가정하지 않는다. live OpenAPI 또는 명시한 버전 프로파일을 고정하고 계약 시험을 저장한다.
-
-원격 serve가 워커 경로를 볼 수 있는지 확인한다. 단순히 같은 문자열의 경로를 보냈다는 이유로 동일 snapshot을 읽는다고 간주하지 않는다. workspace marker와 파일 digest를 비교한다. 접근 불가면 workspace_unreachable로 보고하며 개인 개발 디렉터리로 조용히 대체하지 않는다.
-
-관리된 설정·별도 home/config·승인된 MCP/도구만 사용한다. 외부 검색·공유·업데이트·플러그인 설치는 폐쇄망 정책에 따라 끈다. 모델 서비스 credential만 필요한 경계에 전달하며 Git 게시 토큰은 넘기지 않는다. 세션 분리는 OS 파일/프로세스 격리가 아니다.
-
-가능한 shell 작업은 플랫폼 task API로 실행한다. OpenCode 자체 shell이 필요한 배포는 승인된 allowlist와 Native 신뢰 모델을 명시하고 실행 이벤트를 기록한다. 자동 예약 중 권한 ask가 발생하면 policy_blocked로 제한시간 안에 끝내며 무기한 대기시키지 않는다.
-
-## 7. 구조화 응답 검증
-
-JSON Schema, enum, 필수 발생 조건, path/range, evidence ID, snapshot digest, 재현 근거를 기계적으로 검사한다. 지원 근거가 없는 강한 문장은 보류한다. 형식 오류는 오류 목록만 전달해 1회 복구하고, 의미나 증거 오류는 검토 task로 되돌리거나 inconclusive로 표시한다.
-
-모델의 내부 추론 전문을 저장·표시하도록 요구하지 않는다. 대신 관찰 사실, 검토한 경로, 반증, 결론의 조건, 다음 확인 절차를 제출하게 한다. 보고서가 임의 source line이나 테스트 출력을 만들어낼 수 없도록 수집 계층이 증거 ID를 발급한다.
-
-## 8. 예산·실패
-
-run/task별 입력·출력 토큰, 호출 수, wall time, tool calls, 최대 검토 후보 수를 제한한다. provider가 usage를 반환하지 않으면 unknown이며 임의 비용을 계산하지 않는다. endpoint별 동시 요청 semaphore와 backoff를 공유한다. 프롬프트 길이와 비용·시간의 관계는 실제 모델 측정으로 조정한다.
-
-모델 실패, context 초과, cancel 미지원, permission block은 개별 reason으로 보고한다. 단순히 재시도를 늘리는 것으로 분석을 끝내려 하지 않는다. 중요한 확인이 남았으면 미확정 항목과 다음 행동을 남기고 종료한다.
-
-## 9. 품질 변경 관리
-
-팩·모델·규칙 변경은 평가 정답을 숨긴 holdout에서 비교한다. 출력 수 증가보다 actionable precision, 중요한 결함 recall, evidence 정확성, 반증 철회율, 설명의 이해도를 본다. 미검증 모델 업그레이드를 모든 프로젝트의 기본값으로 자동 적용하지 않는다.
+W15에서 환경·문서 자료를 먼저 수집하고 현재 `review.context`의 사실과 연결한다. 역할을 개별 task로 나누는 경우 워커의 선택기·출력 검증·선행 기록과 보고서의 필수 역할 판정을 함께 수정한다. 계획을 고정할 때 각 역할의 필수 여부와 생략 사유를 정한다. 문서가 없어 생략한 문서 역할을 모델 검토 성공으로 세지 않는다. 반대로 필수 모델 작업이 실패했으면 도구 결과가 남아도 검토 전체를 완료로 올리지 않는다. R0의 기존 기록은 작성 당시의 세 역할과 팩으로 계속 해석한다. 운영자가 승인한 모델 범위와 예산 안에서 같은 입력을 활성 팩과 후보 팩으로 평가한 뒤 기본값을 결정한다. [평가와 승격 조건](16-evaluation.md) · [W15 착수 순서](17-implementation-plan.md)

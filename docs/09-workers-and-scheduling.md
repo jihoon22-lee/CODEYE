@@ -1,5 +1,7 @@
 # 09. 워커·스케줄러·자동 증감
 
+R0의 워커 풀 정책 변경과 관측에는 [운영 CLI](30-w07-scheduler.md)를 사용한다. 아래 예약 정책과 관리 웹은 후속 설계다. 프로젝트의 분석 단계는 풀 상태가 아닌 [실행별 작업 기록](12-report-and-ui.md)에서 읽는다.
+
 ## 1. 객체와 범위
 
 노드는 실제 PC/서버, 에이전트는 상주 관리자, 워커는 한 번에 한 run attempt를 실행하는 프로세스다. 초기 자동 증감은 등록된 노드 안에서 워커를 만들고 줄이는 기능이다. VM 생성·삭제는 별도 CapacityProvider 확장점이며 초기 제공 범위가 아니다.
@@ -21,7 +23,7 @@
 | lease_seconds | 30 | attempt 소유권 유효 기간 |
 | model_max_inflight | 2 | endpoint별 동시 모델 요청 |
 
-운영자가 UI/API에서 조정한다. 수치는 성능 실측값이 아닌 시작점이다. min<=max, nonnegative, heartbeat<lease 조건을 검증한다. 설정 수정은 revision으로 기록한다. 여러 pool의 최소값이 전역·노드 용량을 초과하면 저장 전 경고하고 degraded_capacity를 표시한다.
+자동 증감 정책은 현재 운영자가 CLI로 조정한다. UI/API 편집은 후속이다. 수치는 성능 실측값이 아닌 시작점이다. min<=max, nonnegative, heartbeat<lease 조건을 검증한다. 설정 수정은 revision으로 기록한다. 여러 pool의 최소값이 전역·노드 용량을 초과하면 저장 전 경고하고 degraded_capacity를 표시한다.
 
 ## 3. 노드 능력
 

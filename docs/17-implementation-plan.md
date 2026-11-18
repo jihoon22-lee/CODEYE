@@ -27,14 +27,14 @@ R0의 두 에이전트 시험은 한 머신에서 별도 node identity로 먼저
 
 | ID | 작업 | 선행 | 완료 조건 |
 |---|---|---|---|
-| W15 | 모듈·문서·환경 자동 탐색 | W14 | monorepo, 하위 AGENTS, 상충 문서, runtime mismatch, optional attachment |
+| W15 | 모듈·문서·환경 탐색과 프로젝트별 단계 표시 | W14 | 고정 입력에서 모듈별 환경·문서 근거 수집, 역할별 지침 검증, 저장된 단계로 목록과 상세를 갱신하는 첫 수직 경로 |
 | W16 | C/C++ 분석 팩 | W15 | compile DB path mapping, 생성 헤더·flags, 부분 TU 범위, clang/cppcheck 정규화 |
 | W17 | Python 분석 팩 | W15 | Ruff+타입 검사+보안/오류 흐름, interpreter/stub/import 공백 표시 |
 | W18 | JS/TS 분석 팩 | W15 | tsconfig/workspace/Node, type-aware lint, async·경계 검토 |
 | W19 | Go 분석 팩 | W15 | vet/Staticcheck, tags/CGO, context·goroutine·오류 경로 |
 | W20 | Rust 분석 팩 | W15 | check/clippy, features/target, build script 신뢰, unsafe·panic 검토 |
 | W21 | 구조/복잡도·비밀정보 팩 | W15 | 지표를 결함으로 오인하지 않음, secret raw redaction, 중복 엔진 제거 |
-| W22 | 예약·진행·재접속 | W07,W13 | timezone/overlap/misfire, 계획 revision 진행률, SSE gap 복원 |
+| W22 | 예약·진행·재접속 확장 | W07,W13,W15 | 예약 중첩·누락 처리, W15의 단계 조회와 같은 기준으로 계획 revision·가중 진행률·SSE gap 복원 |
 | W23 | 이력·비교·사람 검토 | W13 | fingerprint, absent≠fixed, disposition 이유·기간·권한 |
 | W24 | 품질 평가 runner | W12,W16-W21 | 정답 차단, holdout, 지표/표본·모델 변동·보고서 읽기 평가 |
 | W25 | 개인 패키징·운영 검증 | W22-W24 | Native start/stop/doctor, disk quota, DB·artifact backup/복원, 사용 가이드 |
@@ -60,11 +60,18 @@ ContainerExecutor, 고비용 interfile 분석, 추가 OS, 인프라 CapacityProv
 
 각 작업에는 목적, 요구 ID, 입력/출력, 변경 모듈, 선행 작업, 실패 시나리오, API/schema 영향, 수용 테스트, 관측 지표, rollback·마이그레이션, 완료 증거를 적는다. 구현 설명만 있고 실제 시험 결과가 없으면 done으로 처리하지 않는다.
 
-## 6. 권장 개발 순서
+## 6. 다음 세션에서 시작할 W15
 
-첫 보고서 데이터와 화면은 W09에서 일찍 만든다. 지침 W11/W12와 품질 평가를 인프라 완료 뒤로 무한 연기하지 않는다. 분산 계약은 처음부터 구현하되 한 run을 여러 머신에 쪼개는 복잡성은 넣지 않는다. UI 데모 데이터와 실제 결과의 모드를 명확히 구분한다.
+기준은 R0의 `9c5bca2`다. W15는 기존 run의 취득·lease·게시 경로에 연결한다. 첫 입력으로 루트 안내가 있는 저장소에 하위 모듈 둘을 둔다. 한 모듈은 문서가 없고 다른 하나는 루트와 충돌하는 안내 및 노드와 다른 버전 요구를 갖게 한다. 정답과 비교 자료는 스냅샷 밖에 둔다.
 
-개인 프로젝트 이름은 파일럿 후보일 뿐 현재 소스·언어·규모를 확인한 결과가 아니다. 실제 저장소와 권한을 확인하고 immutable snapshot으로 기준을 만든다. 사용자 프로젝트에 결함 fixture를 몰래 삽입하지 않는다.
+| 순서 | 구현할 범위 | 확인할 결과 |
+|---|---|---|
+| 1. 환경과 문서 수집 | 워커가 고정된 manifest에서 모듈과 자료의 적용 경로를 찾고 버전 선언과 노드 관측을 구분한다. 기존 [맥락 수집](../internal/worker/review/context.go)을 출발점으로 삼는다. | 모델이 없어도 환경·문서 목록, 출처, 누락·제외 사유가 남는다. TC-96 |
+| 2. 역할별 해석 | [역할 지침](07-llm-and-instructions.md)을 선택기에 연결하고 구조화 산출물과 검증기를 함께 버전 관리한다. 기존 context·investigate·verify 기록을 읽는 경로와 선택 첨부의 출처·모듈 범위를 보존한다. | 허위 근거·범위 이탈을 거부하고, 모델 실패 시 독립 수집 결과가 남는다. TC-97, TC-100 |
+| 3. 진행 상태 게시 | 워커가 어떤 단계에서 task를 수행했는지 기록하고, 서버가 attempt/epoch와 task 전이를 검증해 저장한다. 환경·문서를 한 작업으로 묶었던 과거 실행에는 세부 단계를 추정하지 않는다. | 동일 실행의 프로젝트 요약과 상세가 일치한다. 중복 이벤트와 늦은 attempt가 화면을 되돌리지 않는다. TC-98, TC-99 |
+| 4. 제품 화면·회귀 | 프로젝트 목록에 단계 요약, 상세에 단계별 상태·사유를 연결한다. 실제 워커·PostgreSQL·Chromium에서 polling 경로를 먼저 검증한다. | 복수 프로젝트를 구분하고 부분 실패·미기록을 볼 수 있다. 실제 모델 평가는 동일 예산으로 기존 팩과 대조한다. TC-98~100 |
+
+W15에서는 모델 연결 없이도 수집과 단계 표시를 먼저 시험할 수 있다. 언어별 진단 해석은 W16~W21의 실제 어댑터와 연결한다. W22의 예약과 SSE 도입은 W15의 선행조건이 아니다. API/schema를 변경하는 구현 PR에서 호환 가능한 응답·예시·검증 스크립트와 migration 필요 여부를 함께 검토한다. [시험 시나리오](18-acceptance-and-traceability.md) · [화면 설계](12-report-and-ui.md)
 
 ## 7. 단계 종료 증거
 

@@ -21,7 +21,7 @@ flowchart TD
   OC --> LM[Configured LLM]
 ```
 
-개인 모드는 한 PC에 관리 서버·PostgreSQL·에이전트를 둔다. 워커가 다른 노드로 이동해도 관리 API 계약은 같다. NFS는 필수 공용 버스가 아니라 선택적인 소스·산출물 저장 경로다. 공유 스토리지가 없는 노드는 인증된 artifact API로 스냅샷과 결과를 전송한다.
+개인 모드는 한 PC에 관리 서버·PostgreSQL·에이전트를 둔다. 워커가 다른 노드로 이동해도 관리 API 계약은 같다. NFS는 필수 공용 버스가 아니라 선택적인 소스·산출물 저장 경로다. R0에서는 스냅샷 사본을 노드에 보관하고 manifest와 결과 산출물을 인증된 API로 전송한다. 고정 입력 재시도에는 해당 스냅샷을 보유한 노드가 필요하다.
 
 ## 2. 기술 기본안과 대가
 
@@ -31,13 +31,13 @@ flowchart TD
 | 서버·에이전트·워커 | Go | 계약과 프로세스 관리 코드 공유. OS별 제어 구현 필요 |
 | 상태·작업 큐 | PostgreSQL | 트랜잭션과 영속성 통일. 개인 PC에도 DB 설치 필요 |
 | 대형 산출물 | local filesystem, NFS 선택 | DB에 소스·대형 로그를 넣지 않음. 추후 object store 어댑터 |
-| UI 이벤트 | DB 이벤트+SSE, polling fallback | 재접속·재시작 복구. 지속 로그는 별도 cursor 사용 |
+| UI 이벤트 | R0 polling, W22 SSE·polling | 재접속·재시작 복구. 지속 로그는 별도 cursor 사용 |
 | LLM | OpenCodeAdapter 우선 | 승인된 모델 경로. 직접 API는 환경에서 허용할 때만 |
 | 실행 | NativeExecutor | 컨테이너 없이 동작. 보안 격리는 OS 능력에 의존 |
 
 초기에는 SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 필수로 도입하지 않는다. 임베딩 없이 파일 목록·심볼 인덱스·검색·관련 코드 확장으로 시작한다. 설치를 단순화하더라도 DB와 언어 런타임이 필요 없다고 주장하지 않는다.
 
-## 3. 모듈 경계
+## 3. 제품 설계의 모듈 경계
 
 | 모듈 | 책임 |
 |---|---|
@@ -72,19 +72,14 @@ flowchart TD
 
 상태 변경과 상태 이벤트는 같은 DB 트랜잭션이다. artifact는 임시 업로드 후 hash/size 검증과 finalize를 거친다. 보고서는 참조 artifact가 준비된 뒤 게시한다. 댓글 실패는 notification 상태로 분리하며 완료된 분석을 failed로 바꾸지 않는다.
 
-## 6. 디렉터리 제안
+## 6. 현재 저장소에서 찾는 위치
 
-```text
-cmd/codeye/             # 관리 서버 및 개인용 supervisor
-cmd/codeye-agent/       # 노드 에이전트
-cmd/codeye-worker/      # 단일 attempt 실행 프로세스
-internal/domain/       # 상태·finding·evidence·policy
-internal/control/      # API·scheduler·autoscaler·services
-internal/worker/       # DAG·executor·source·model·analyzers
-internal/storage/      # PostgreSQL·artifact store
-web/                   # React·TypeScript
-migrations/            # DB migration
-prompts/ schemas/ api/  # 버전 관리되는 제품 계약
-```
+| 책임 | 코드 |
+|---|---|
+| CLI·컨트롤러·에이전트·워커 진입점 | [cmd/codeye](../cmd/codeye) 아래 한 바이너리의 하위 명령 |
+| 세션·프로젝트·실행 조회 | [HTTP API](../internal/httpapi) · [PostgreSQL 저장 계층](../internal/storage/postgres) |
+| 노드 관리·소스 취득·프로세스 종료 | [agent](../internal/agent) · [source](../internal/worker/source) · [executor](../internal/worker/executor) |
+| 어댑터·발췌·모델 역할 | [분석기](../internal/worker/analysis) · [검토 워커](../internal/worker/review) · [OpenCode](../internal/worker/opencode) |
+| 보고서 게시·표시 | [게시 서비스](../internal/reportsvc) · [보고서 생성](../internal/report) · [프로젝트 웹](../web/src) |
 
-W01~W05에서 진단 CLI·웹, PostgreSQL 저장 계층과 migration, loopback HTTP API, 워커용 source·executor 패키지를 구현했다. 노드 에이전트와 단일 attempt 워커 프로세스를 연결하는 단계는 W06이다. [구현 계획](17-implementation-plan.md)
+설계에 포함된 예약·Git 이벤트·다중 물리 노드 운영의 구현 시점은 [작업 계획](17-implementation-plan.md)에서 확인한다.

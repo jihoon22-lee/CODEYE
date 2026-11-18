@@ -1,5 +1,7 @@
 # 13. GitHub.com·GHES 연결
 
+R0는 승인한 HTTPS 호스트의 Git 브랜치를 가져와 SHA를 고정한다. 공개 저장소 실측은 [W14 기록](36-r0-pilot.md)에 있다. 아래 GitHub App 설치·권한 진단·webhook·댓글 게시와 GHES 실기 검증은 W27~W28의 범위다.
+
 ## 1. 범위
 
 Git 저장소 읽기, 브랜치 선택, 선택적인 PR/댓글 트리거와 결과 댓글만 다룬다. GitHub Actions·다른 CI의 결과·workflow·status check를 수집하거나 생성하지 않는다. GitHub App은 Git 연동 인증 수단이지 CI 연계가 아니다.

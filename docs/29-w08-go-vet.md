@@ -1,6 +1,6 @@
 # 29. W08 첫 언어 분석 어댑터: Go vet
 
-상태: 2026-11-18. Linux(Ubuntu 26.04.1 / WSL2 amd64, Go 1.27.4)에서 실제 `go` 프로세스를 W05 실행기로 실행해 검증했다. Windows는 교차 컴파일과 Windows 형태 경로의 단위 시험만 했다. Windows 실행 결과는 Windows CI 전까지 미검증이다. W06 agent·worker 통합, W09 보고서 renderer, LLM task 계획은 이 작업 범위가 아니다.
+W08은 Go 1.27.4를 Native 실행기로 호출해 모듈별 도구 관찰을 생성한다. Linux 어댑터 단독 시험과 제품 워커 통합 시험의 범위는 아래에 구분했다. R0의 Windows CI는 Go 시험이며, 실제 모델과 함께 수행한 개인 파일럿 환경은 Linux다. [통합 파일럿](36-r0-pilot.md)
 
 ## 1. 선정과 범위
 
@@ -211,7 +211,7 @@ W09 계획 §6과 실제가 다른 부분이다. renderer 계약을 정할 때 �
   - 위치 상태 `unresolved_no_position`, 패키지 상태 `load_error`
   - task 상태 `skipped_policy`(`replace_outside_snapshot`), `unsupported`(`no_analyzable_packages`)
 - **실행 구성:** 한 task 안에 `go.version`, `go.modedit`, `go.list`, `go.vet` 네 실행을 둔다.
-- **LLM task:** go-vet handler는 Go vet task만 계획하고 필수 LLM task(`context_review`, `verify`)는 계획하지 않는다. W09는 이 task 집합만 보고 `completed`를 판정하면 안 된다. AI 검토가 빠졌다는 사실은 profile이나 W10 이후 task가 표현해야 한다.
+- **모델 작업.** Go vet handler는 모듈별 도구 작업을 계획한다. R0 검토 handler가 세 모델 역할을 추가하고, 서버가 수용한 작업과 산출물에 따라 검토 수행 여부를 판정한다. [역할 구성](07-llm-and-instructions.md)
 
 ## 9. 남은 제한
 

@@ -1,6 +1,6 @@
 # 28. W06 노드 agent·worker 런타임
 
-상태: 노드 쪽(agent 감독·journal·lease watchdog·재시작 복구, worker 실행 루프, `codeye agent`/`codeye worker` 진입점)을 구현했다. Linux에서 실제 하위 프로세스로 시험했다 · 2026-11-18. controller·저장 계층은 [28 node protocol](28-w06-node-protocol.md)이 다룬다. 분석 handler(W08 Go vet)가 없는 제품 빌드는 `analysis:*` 능력을 광고하지 않고 claim하지 않는다. 시험용 fixture handler는 `-tags codeye_fixture`에서만 들어간다. Windows는 컴파일·vet만 확인했고 실행하지 않았다.
+이 기록은 에이전트 감독·journal·lease와 워커 실행 루프를 다룬다. Linux 실제 프로세스 시험과 Windows Job 검증의 범위는 아래 시험 기록에 있다. 제품의 Go vet 능력은 도구 probe 후 등록되고 시험용 handler는 `codeye_fixture` 태그에서만 포함된다. [컨트롤러 계약](28-w06-node-protocol.md) · [Go vet 실행](29-w08-go-vet.md)
 
 ## 1. 범위와 요구사항
 
@@ -109,5 +109,5 @@ process group 종료(`procid.TerminateVerifiedGroup`):
 - handler 능력 probe(W08 `go version`)는 attempt 전 worker 시작 시 실행하며 journal하지 않는다. executor timeout으로만 제한된다.
 - journal 압축은 시작 시에만 한다. snapshot cache GC와 노드 간 snapshot 전송은 없다.
 - Windows에서는 에이전트가 suspended 워커를 전용 Job에 배치하고 시작한다. WSL interop을 통해 Windows 실행 파일에서 에이전트 강제 종료 후 워커와 자손 2개의 종료를 열린 프로세스 handle로 검증했다(`TestAgentDeathClosesWorkerJob`). 에이전트 재시작 후 이전 Job의 상태를 확인할 수 없으면 복구 상태를 유지한다.
-- 자동 증감은 W07이다. W06은 고정 worker 수(`StaticScaler`)를 쓴다. `start/drain/stop_worker` 명령은 받아서 적용하지만 controller가 아직 보내지 않는다.
+- W06 기본 모드는 고정 worker 수를 사용한다. [W07 자동 증감 모드](30-w07-scheduler.md)에서는 controller가 시작·drain·종료 명령을 보낸다.
 - `internal/worker/analysis`·`builtin/builtin.go`는 W08 파일의 임시 사본이다. 병합 시 W08 버전을 쓴다.

@@ -1,6 +1,6 @@
 # 28. W06 노드 프로토콜: controller·저장 계층
 
-상태: controller 쪽(migration 0003, 저장 함수, HTTP 노드 경로, 노드 관리 CLI, artifact 저장소) 구현과 실제 PostgreSQL 시험 완료 · 2026-11-18. 노드 agent·worker 프로세스 감독·journal은 별도 작업 범위이며 이 문서는 그 결과를 주장하지 않는다. 분석 handler가 없는 제품 빌드는 `analysis:*` 능력을 광고하지 않으므로 run은 `no_capable_node`로 대기한다(W08 전). 성공 attempt는 `finalizing`에 머물며 `completed`/`partial` 전이는 W09 보고서 게시가 맡는다.
+이 기록은 migration 0003, 노드 등록·lease·산출물 수용과 실제 PostgreSQL 시험을 다룬다. 성공한 attempt를 수용한 뒤 run은 `finalizing`으로 이동하고 서버가 보고서를 게시하며 종료 상태를 결정한다. [워커 실행](28-w06-agent-runtime.md) · [보고서 게시](31-w09-report.md)
 
 ## 1. 범위와 요구사항
 
