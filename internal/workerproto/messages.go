@@ -72,8 +72,10 @@ type Limits struct {
 // Hello is the first agent→worker message.
 type Hello struct {
 	ModelExecutable string `json:"model_executable,omitempty"`
-	ModelName       string `json:"model_name,omitempty"`
-	ModelRelayFile  string `json:"model_relay_file,omitempty"`
+	// ReviewPack is the node operator's review pack (review-v1 default, review-r1 candidate).
+	ReviewPack     string `json:"review_pack,omitempty"`
+	ModelName      string `json:"model_name,omitempty"`
+	ModelRelayFile string `json:"model_relay_file,omitempty"`
 	Header
 	Protocol           string `json:"protocol"`
 	WorkerID           string `json:"worker_id"`
