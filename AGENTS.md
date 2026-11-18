@@ -1,6 +1,6 @@
 # CODEYE 개발 에이전트 지침
 
-이 파일은 **CODEYE 자체를 구현하는 개발 에이전트**를 위한 지침이다. 대상 프로젝트를 검토하는 런타임 지침은 `prompts/review-v1/`에 별도로 있다. 현재 저장소는 W01 환경 진단, W02 저장 계약, W03 인증 API·웹 연결, W04 SourceAdapter, W05 NativeExecutor, W06 노드 API·에이전트·워커 프로토콜, W07 스케줄러·자동 증감, W08 Go vet 어댑터, W09 보고서 게시·내보내기, W10 관리형 모델 연결과 W11 맥락 검토를 구현했으며 제품 구현 완료 상태가 아니다. 구현 범위와 검증 증거는 `docs/21-w01-foundation.md`, `docs/23-w02-storage.md`, `docs/24-w03-api.md`, `docs/25-w04-source.md`, `docs/26-w05-native.md`, `docs/28-w06-node-protocol.md`, `docs/28-w06-agent-runtime.md`, `docs/29-w08-go-vet.md`, `docs/30-w07-scheduler.md`, `docs/31-w09-report.md`, `docs/32-w10-opencode.md`, `docs/33-w11-context-review.md`를 따른다.
+이 파일은 **CODEYE 자체를 구현하는 개발 에이전트**를 위한 지침이다. 대상 프로젝트를 검토하는 런타임 지침은 `prompts/review-v1/`에 별도로 있다. 현재 저장소는 W01 환경 진단, W02 저장 계약, W03 인증 API·웹 연결, W04 SourceAdapter, W05 NativeExecutor, W06 노드 API·에이전트·워커 프로토콜, W07 스케줄러·자동 증감, W08 Go vet 어댑터, W09 보고서 게시·내보내기, W10 관리형 모델 연결, W11 맥락 검토와 W12 후보 반증을 구현했으며 제품 구현 완료 상태가 아니다. 구현 범위와 검증 증거는 `docs/21-w01-foundation.md`, `docs/23-w02-storage.md`, `docs/24-w03-api.md`, `docs/25-w04-source.md`, `docs/26-w05-native.md`, `docs/28-w06-node-protocol.md`, `docs/28-w06-agent-runtime.md`, `docs/29-w08-go-vet.md`, `docs/30-w07-scheduler.md`, `docs/31-w09-report.md`, `docs/32-w10-opencode.md`, `docs/33-w11-context-review.md`, `docs/34-w12-verifier.md`를 따른다.
 
 ## 착수 순서
 

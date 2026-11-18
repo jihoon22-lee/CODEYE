@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,10 +15,11 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review-v1"
 )
 
-const MediaType = "application/vnd.codeye.review+json"
+const MediaType = record.MediaType
 
 type Caller interface {
 	Review(context.Context, executor.Runner, opencode.Request) opencode.Reply
@@ -26,41 +28,17 @@ type Handler struct {
 	Static analysis.Handler
 	Caller Caller
 }
-type Fact struct {
-	Kind      string   `json:"kind"`
-	Statement string   `json:"statement"`
-	Evidence  []string `json:"evidence_ids"`
-}
-type Candidate struct {
-	ID           string   `json:"id,omitempty"`
-	Title        string   `json:"title"`
-	Condition    string   `json:"condition"`
-	Impact       string   `json:"impact"`
-	Improvement  string   `json:"improvement"`
-	Counterpoint string   `json:"counterpoint"`
-	Evidence     []string `json:"evidence_ids"`
-}
-type Provenance struct {
-	Role          string          `json:"role"`
-	Model         string          `json:"model"`
-	Version       string          `json:"opencode_version"`
-	PackDigest    string          `json:"pack_sha256"`
-	PackFiles     []string        `json:"pack_files"`
-	RequestDigest string          `json:"request_sha256"`
-	Usage         *opencode.Usage `json:"usage"`
-}
-type Record struct {
-	Schema      string       `json:"schema_version"`
-	Snapshot    string       `json:"snapshot_manifest_digest"`
-	RunID       string       `json:"run_id"`
-	AttemptID   string       `json:"attempt_id"`
-	Stage       string       `json:"stage"`
-	Evidence    []Excerpt    `json:"evidence"`
-	Facts       []Fact       `json:"facts"`
-	Candidates  []Candidate  `json:"candidates"`
-	Limitations []string     `json:"limitations"`
-	Calls       []Provenance `json:"calls"`
-}
+
+// Record types live in the I/O-free record package so report decoders can
+// validate artifacts without importing model or process code.
+type (
+	Fact         = record.Fact
+	Candidate    = record.Candidate
+	Provenance   = record.Call
+	Record       = record.Record
+	Excerpt      = record.Excerpt
+	Verification = record.Verification
+)
 
 func (h Handler) Info() analysis.HandlerInfo { return h.Static.Info() }
 func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec, error) {
@@ -69,7 +47,8 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 		return nil, err
 	}
 	return append(plan, analysis.TaskSpec{Key: "review.context", Required: true, Title: "프로젝트 맥락 검토"},
-		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "코드 근거와 반례 검토"}), nil
+		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "코드 근거와 반례 검토"},
+		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증"}), nil
 }
 func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	role, review := strings.CutPrefix(t.Key, "review.")
@@ -82,26 +61,29 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 	if h.Caller == nil {
 		return result(domain.TaskUnsupported, "model_not_configured")
 	}
+	if role == "verify" {
+		return h.verify(ctx, j, runner)
+	}
 	c, err := buildCorpus(j.Snapshot, j.Scope)
 	if err != nil {
 		return result(domain.TaskFailed, "review_input_unavailable")
 	}
-	record := Record{Schema: "0.1", Snapshot: c.Snapshot, RunID: j.RunID, AttemptID: j.AttemptID, Stage: role,
+	rec := Record{Schema: "0.1", Snapshot: c.Snapshot, RunID: j.RunID, AttemptID: j.AttemptID, Stage: role,
 		Evidence: append([]Excerpt(nil), c.Excerpts...), Facts: []Fact{}, Candidates: []Candidate{}, Limitations: c.Limitations, Calls: []Provenance{}}
-	for i := range record.Evidence {
-		record.Evidence[i].Text = ""
+	for i := range rec.Evidence {
+		rec.Evidence[i].Text = ""
 	}
 	input := struct {
 		Corpus Corpus `json:"scope"`
 		Facts  []Fact `json:"facts,omitempty"`
 	}{Corpus: c}
 	if role == "investigate" {
-		record, err = readRecord(j, "context")
-		if err != nil {
+		rec, err = readRecord(j, "context")
+		if err != nil || !sameEvidence(rec.Evidence, c.Excerpts) {
 			return result(domain.TaskSkippedPolicy, "dependency_failed")
 		}
-		input.Facts = record.Facts
-		record.Stage = role
+		input.Facts = rec.Facts
+		rec.Stage = role
 	}
 	query, err := json.Marshal(input)
 	if err != nil {
@@ -115,14 +97,21 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 	reply := h.Caller.Review(ctx, runner, opencode.Request{Role: role, Scratch: j.Scratch, SnapshotDigest: c.Snapshot,
 		Instructions: pack.Text + "\n" + contract + "\nUse only the provided excerpts. Review ordinary software behavior and maintainability. No code execution, test generation or external access. Cite only evidence IDs given in scope. Write concise Korean prose.",
 		Input:        query, ProtectedRoots: []string{j.Snapshot.SnapshotDir}})
+	call := Provenance{Role: role, Model: reply.Model, Version: reply.Version, PackDigest: pack.Digest, PackFiles: pack.Files, RequestDigest: reply.RequestDigest, Usage: usage(reply.Usage), Attempt: 1, Outcome: record.OutcomeAccepted}
+	res := result(domain.TaskSucceeded, "")
 	if reply.Reason != "" {
-		return failure(reply)
+		res = failure(reply)
+	} else if err = accept(role, reply.Output, &rec); err != nil {
+		res = result(domain.TaskFailed, "review_evidence_invalid")
 	}
-	if err = accept(role, reply.Output, &record); err != nil {
-		return result(domain.TaskFailed, "review_evidence_invalid")
+	if res.Status != domain.TaskSucceeded {
+		call.Outcome = res.Reason
+		rec.Calls = append(rec.Calls, call)
+		return failedRecord(j, rec, res)
 	}
-	record.Calls = append(record.Calls, Provenance{Role: role, Model: reply.Model, Version: reply.Version, PackDigest: pack.Digest, PackFiles: pack.Files, RequestDigest: reply.RequestDigest, Usage: reply.Usage})
-	return writeRecord(j, record)
+	rec.Calls = append(rec.Calls, call)
+	rec.Outcome = record.OutcomeAccepted
+	return writeRecord(j, rec)
 }
 
 var contracts = map[string]string{
@@ -146,40 +135,13 @@ func failure(reply opencode.Reply) analysis.TaskResult {
 	}
 	return result(domain.TaskFailed, reply.Reason)
 }
-func safeText(s string) bool {
-	return strings.TrimSpace(s) != "" && len(s) <= 2400 && !sensitiveText.MatchString(s)
-}
-func refsOK(ids []string, evidence []Excerpt, kind string) bool {
-	if len(ids) == 0 || len(ids) > 6 {
-		return false
-	}
-	seen := map[string]bool{}
-	hasKind := kind == ""
-	for _, id := range ids {
-		if seen[id] {
-			return false
-		}
-		seen[id] = true
-		found := false
-		for _, e := range evidence {
-			if e.ID != id {
-				continue
-			}
-			found = true
-			if e.Kind == kind || (kind == "code" && e.Kind == "test") || (kind == "document" && e.Kind == "config") {
-				hasKind = true
-			}
-			break
-		}
-		if !found {
-			return false
-		}
-	}
-	return hasKind
-}
-
+func safeText(s string) bool { return record.SafeText(s) }
 func accept(role string, raw json.RawMessage, r *Record) error {
 	bad := errors.New("invalid model evidence")
+	catalog := map[string]Excerpt{}
+	for _, e := range r.Evidence {
+		catalog[e.ID] = e
+	}
 	switch role {
 	case "context":
 		var res struct {
@@ -197,7 +159,7 @@ func accept(role string, raw json.RawMessage, r *Record) error {
 			default:
 				return bad
 			}
-			if !safeText(f.Statement) || !refsOK(f.Evidence, r.Evidence, kind) {
+			if !safeText(f.Statement) || !record.RefsOK(f.Evidence, catalog, kind, 6) {
 				return bad
 			}
 		}
@@ -211,7 +173,7 @@ func accept(role string, raw json.RawMessage, r *Record) error {
 		}
 		for i := range res.Candidates {
 			c := &res.Candidates[i]
-			if c.ID != "" || !safeText(c.Title) || !safeText(c.Condition) || !safeText(c.Impact) || !safeText(c.Improvement) || !safeText(c.Counterpoint) || !refsOK(c.Evidence, r.Evidence, "code") {
+			if c.ID != "" || !safeText(c.Title) || !safeText(c.Condition) || !safeText(c.Impact) || !safeText(c.Improvement) || !safeText(c.Counterpoint) || !record.RefsOK(c.Evidence, catalog, "code", 6) {
 				return bad
 			}
 			c.ID = fmt.Sprintf("candidate_%d", i+1)
@@ -223,22 +185,59 @@ func accept(role string, raw json.RawMessage, r *Record) error {
 	return nil
 }
 
-func readRecord(j analysis.Job, role string) (Record, error) {
-	var rec Record
-	b, err := os.ReadFile(filepath.Join(j.Scratch, "review."+role+".json"))
-	if err != nil {
-		return rec, err
+// expect binds record validation to this attempt and its immutable snapshot
+// manifest; prior stage records in scratch are not trusted on their own.
+func expect(j analysis.Job, stage string) record.Expect {
+	index := map[string]string{}
+	for _, e := range j.Snapshot.Manifest.Entries {
+		if e.Kind == "file" && e.SHA256 != "" && e.ExcludedReason == "" && inScope(e.Path, j.Scope) {
+			index[e.Path] = e.SHA256
+		}
 	}
-	if len(b) > 256<<10 || domain.DecodeStrict(b, &rec) != nil || rec.Stage != role || rec.Schema != "0.1" || rec.Snapshot != j.Snapshot.Digest || rec.RunID != j.RunID || rec.AttemptID != j.AttemptID {
+	return record.Expect{Snapshot: j.Snapshot.Digest, RunID: j.RunID, AttemptID: j.AttemptID, Stage: stage,
+		Lookup: func(p string) (string, bool) { sha, ok := index[p]; return sha, ok }}
+}
+
+func readRecord(j analysis.Job, role string) (Record, error) {
+	f, err := os.Open(filepath.Join(j.Scratch, "review."+role+".json"))
+	if err != nil {
+		return Record{}, err
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, record.MaxBytes+1))
+	if err != nil {
+		return Record{}, err
+	}
+	rec, err := record.Decode(b, expect(j, role))
+	if err != nil || !rec.Accepted() {
 		return Record{}, errors.New("invalid prior review")
 	}
 	return rec, nil
 }
-func writeRecord(j analysis.Job, r Record) analysis.TaskResult {
-	b, err := json.Marshal(r)
+
+func persist(j analysis.Job, r Record) (analysis.ArtifactFile, error) {
+	b, err := record.MarshalRecord(r, expect(j, r.Stage))
+	if err != nil {
+		return analysis.ArtifactFile{}, err
+	}
 	p := filepath.Join(j.Scratch, "review."+r.Stage+".json")
-	if err != nil || len(b) > 256<<10 || os.WriteFile(p, bytes.TrimSpace(b), 0600) != nil {
+	if err = os.WriteFile(p, bytes.TrimSpace(b), 0600); err != nil {
+		return analysis.ArtifactFile{}, err
+	}
+	return analysis.ArtifactFile{Path: p, Role: "other", MediaType: MediaType}, nil
+}
+
+func writeRecord(j analysis.Job, r Record) analysis.TaskResult {
+	art, err := persist(j, r)
+	if err != nil {
 		return result(domain.TaskFailed, "review_record_failed")
 	}
-	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{{Path: p, Role: "other", MediaType: MediaType}}}
+	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}}
+}
+
+func usage(u *opencode.Usage) *record.Usage {
+	if u == nil {
+		return nil
+	}
+	return &record.Usage{Input: u.Input, Output: u.Output}
 }

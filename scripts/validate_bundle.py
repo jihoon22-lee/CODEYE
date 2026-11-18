@@ -176,6 +176,34 @@ def check_observations(doc: dict) -> None:
         ensure(not any(ABSOLUTE.match(a) for a in e["command"]["argv"]) and "/" not in e["command"]["argv"][0], "Node path in command")
 
 
+def check_review_example(doc: dict) -> None:
+    """Bind the verifier example to its labelled, synthetic source fixture."""
+    root = ROOT / "internal/worker/review/testdata/verify"
+    catalog = {}
+    for e in doc["evidence"]:
+        path = PurePosixPath(e["path"])
+        ensure(not path.is_absolute() and ".." not in path.parts, "Invalid review example path")
+        file = (root / path).resolve()
+        ensure(file.is_relative_to(root) and file.is_file(), "Review evidence file is missing")
+        body = file.read_bytes()
+        start, end = e["start_line"], e["end_line"]
+        ensure(1 <= start <= end <= len(body.splitlines()), "Review evidence range outside file")
+        sha = hashlib.sha256(body).hexdigest()
+        ensure(sha == e["sha256"], "Review evidence blob mismatch")
+        binding = "\0".join([doc["snapshot_manifest_digest"], e["path"], sha, f"{start}:{end}"])
+        expected_id = "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24]
+        ensure(e["id"] == expected_id and expected_id not in catalog, "Review evidence ID mismatch")
+        catalog[expected_id] = e
+    candidates = [c["id"] for c in doc["candidates"]]
+    ensure(candidates == [v["candidate_id"] for v in doc["verifications"]], "Verification coverage mismatch")
+    for item in doc["facts"] + doc["candidates"] + doc["verifications"]:
+        for key in ("evidence_ids", "supporting_evidence_ids", "counterevidence_ids"):
+            ensure(all(ref in catalog for ref in item.get(key, [])), "Unknown review evidence")
+    verdict = doc["verifications"][0]
+    callers = [catalog[ref] for ref in verdict["counterevidence_ids"]]
+    ensure(verdict["verdict"] == "refuted" and any(e["path"] == "load.go" and e.get("origin") == "caller" for e in callers), "Missing fixture counterexample")
+
+
 def resolve_pointer(document, pointer: str):
     if not pointer:
         return document
@@ -298,6 +326,10 @@ def main() -> None:
     check_analyzer(go_vet)
     ensure(go_vet["exit_codes"]["findings"] == [], "go vet -json findings are not an exit-code class")
     check_observations(observations)
+    review = json_file(ROOT / "examples/review-record.json")
+    review_validator = validators["review-record.schema.json"]
+    review_validator.validate(review)
+    check_review_example(review)
     ensure(plan["run_id"] == report["run_id"], "Example run mismatch")
     plan_tasks = {task["id"]: task for task in plan["tasks"]}
     ensure(set(plan_tasks) == {task["id"] for task in report["tasks"]}, "Plan/report task mismatch")
@@ -376,10 +408,22 @@ def main() -> None:
     bad = copy.deepcopy(json_file(ROOT / "examples/doctor.json"))
     bad["checks"][-1]["id"] = "host"
     expect_invalid("missing doctor capability", validators["doctor.schema.json"].validate, bad)
+    bad = copy.deepcopy(review)
+    bad["verifications"][0]["verdict"] = "reproduced"
+    expect_invalid("model reproduction claim", review_validator.validate, bad)
+    bad = copy.deepcopy(review)
+    bad["evidence"][0]["end_line"] = 100000
+    expect_invalid("review source range", check_review_example, bad)
+    bad = copy.deepcopy(review)
+    bad["verifications"][0]["counterevidence_ids"] = ["ev_" + "0" * 24]
+    expect_invalid("unknown counterevidence", check_review_example, bad)
+    bad = copy.deepcopy(review)
+    bad["evidence"][0]["text"] = "raw source"
+    expect_invalid("source text in review record", review_validator.validate, bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
-    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 10 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 11 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
-    print("PASS: 17 negative cases; example policy timing; prompt manifest")
+    print("PASS: 21 negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 

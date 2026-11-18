@@ -441,22 +441,59 @@ func TestCrashRecoveryKillsVerifiedGroupAndNeverReruns(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if cmd.ProcessState == nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	})
 	p := waitStartedProc(t, h.state)
-	// Find the worker process group from the journal and kill agent + worker
-	// without any cleanup (models a host crash of the supervisor tree).
-	j, _ := ReadJournal(filepath.Join(h.state, "journal.jsonl"))
-	var workerPGID int
+	t.Cleanup(func() {
+		if !groupEmpty(p.PGID) {
+			_, _ = procid.TerminateVerifiedGroup(p.PGID, p.StartTime, 200*time.Millisecond, time.Second)
+		}
+	})
+	// Stop the agent before killing its worker. Killing the agent first sends
+	// the worker PDEATHSIG/SIGTERM; a fast worker then legitimately cleans up
+	// the task before this test can simulate the loss of both supervisors.
+	if err := cmd.Process.Signal(syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	var stopped syscall.WaitStatus
+	for {
+		_, err := syscall.Wait4(cmd.Process.Pid, &stopped, syscall.WUNTRACED, nil)
+		if err == syscall.EINTR {
+			continue
+		}
+		if err != nil || !stopped.Stopped() {
+			t.Fatalf("wait for stopped agent: %v, %v", stopped, err)
+		}
+		break
+	}
+	j, err := ReadJournal(filepath.Join(h.state, "journal.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(j.Workers) != 1 {
+		t.Fatalf("expected one worker, got %d", len(j.Workers))
+	}
 	for _, w := range j.Workers {
-		if !w.Exited {
-			workerPGID = w.PGID
+		worker, err := os.FindProcess(w.PID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer worker.Release()
+		if status, err := procid.Check(w.PID, w.StartTime); err != nil || status != procid.Same || w.Exited {
+			t.Fatalf("journaled worker is not alive: %v %v", status, err)
+		}
+		if err := worker.Kill(); err != nil {
+			t.Fatal(err)
 		}
 	}
-	_ = cmd.Process.Signal(syscall.SIGKILL)
-	_ = cmd.Wait()
-	if workerPGID > 1 {
-		_ = syscall.Kill(-workerPGID, syscall.SIGKILL)
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
 	}
-	time.Sleep(300 * time.Millisecond)
+	_ = cmd.Wait()
 	if groupEmpty(p.PGID) {
 		t.Fatal("test setup: task group should have survived the crash")
 	}

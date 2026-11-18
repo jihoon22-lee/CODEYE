@@ -1,0 +1,179 @@
+{
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "136af9d09c1707b43de8e7550847b988c2e75695c6e15575369cf28b49d611e8",
+  "run_id": "00000000-0000-4000-ac00-000000000001",
+  "attempt_id": "00000000-0000-4000-ac00-000000000002",
+  "stage": "verify",
+  "outcome": "accepted",
+  "evidence": [
+    {
+      "id": "ev_a126d03d75563309a60cb719",
+      "path": "load.go",
+      "sha256": "194c335461a0735afe747d0370dde7403fdbe8bf81dea4541f8832f63cdc7c7c",
+      "start_line": 1,
+      "end_line": 50,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_a30d60ea1ee2211cfbfc9d68",
+      "path": "store.go",
+      "sha256": "5f8a48bcba1857d6bb4365eca48204a51dcbb042e05d3daeb96bdb7a43f4bfee",
+      "start_line": 1,
+      "end_line": 9,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_06e62916d20674522e5b4b28",
+      "path": "go.mod",
+      "sha256": "0919d8b75dfbfaa6a9dcea1e9411102bb1058b2952b4118e241a9187feb61d3a",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "config",
+      "origin": "context"
+    },
+    {
+      "id": "ev_d61d5d8b0f524209ec4ccc6f",
+      "path": "store_test.go",
+      "sha256": "73417a9ba845dbc68d69ee9cbfe26a2c4dd3002f5a73e154d28c61568b6d2853",
+      "start_line": 1,
+      "end_line": 50,
+      "kind": "test",
+      "origin": "context"
+    },
+    {
+      "id": "ev_af33260c9831954667f11cee",
+      "path": "load.go",
+      "sha256": "194c335461a0735afe747d0370dde7403fdbe8bf81dea4541f8832f63cdc7c7c",
+      "start_line": 56,
+      "end_line": 67,
+      "kind": "code",
+      "origin": "caller",
+      "symbol": "Open"
+    },
+    {
+      "id": "ev_d1ed16e0c18e05ed9e447449",
+      "path": "store_test.go",
+      "sha256": "73417a9ba845dbc68d69ee9cbfe26a2c4dd3002f5a73e154d28c61568b6d2853",
+      "start_line": 56,
+      "end_line": 63,
+      "kind": "test",
+      "origin": "test",
+      "symbol": "Open"
+    }
+  ],
+  "facts": [
+    {
+      "kind": "observed",
+      "statement": "Open은 os.Open 결과를 그대로 반환한다.",
+      "evidence_ids": [
+        "ev_a30d60ea1ee2211cfbfc9d68"
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "id": "candidate_1",
+      "title": "Open 반환 파일 미종료 가능성 1",
+      "condition": "호출자가 반환된 파일을 닫지 않는 경우",
+      "impact": "파일 descriptor가 누수될 수 있다.",
+      "improvement": "호출자 정리 계약을 확인한다.",
+      "counterpoint": "호출자에서 defer Close를 하는지 확인하지 않았다.",
+      "evidence_ids": [
+        "ev_a30d60ea1ee2211cfbfc9d68"
+      ]
+    }
+  ],
+  "verifications": [
+    {
+      "candidate_id": "candidate_1",
+      "verdict": "refuted",
+      "category": "resource_lifecycle",
+      "severity": "info",
+      "severity_reason": "호출자가 파일 종료를 예약한다.",
+      "impact": "Load 호출 경로에서 제기된 파일 누수는 성립하지 않는다.",
+      "valid_conditions": [],
+      "invalid_conditions": [
+        "Load는 Open 성공 직후 반환된 파일 종료를 예약한다."
+      ],
+      "supporting_evidence_ids": [],
+      "counterevidence_ids": [
+        "ev_af33260c9831954667f11cee"
+      ],
+      "unresolved_assumptions": [],
+      "next_verification": [
+        "다른 호출자의 정리 경로를 읽는다."
+      ],
+      "limitations": []
+    }
+  ],
+  "limitations": [
+    "caller_expansion_go_only",
+    "caller_expansion_package_functions_only",
+    "excerpt_only",
+    "no_document_in_selected_context"
+  ],
+  "calls": [
+    {
+      "role": "context",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_sha256": "89d35b04633d2dca52d22e89f52b6187dc43001396622616622f1fdfaec7b43b",
+      "pack_files": [
+        "00-core.md",
+        "01-context.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "14a6cb7cdf2cde63640a69f30a158cc9a761aa293919f8e05858f5b82689aa8d",
+      "usage": {
+        "input": 3107,
+        "output": 40
+      },
+      "attempt": 1,
+      "outcome": "accepted"
+    },
+    {
+      "role": "investigate",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_sha256": "dffe2f5da7168be7b279c6d70a15164b336746c0ca6dc91e93e5bf018c59ec31",
+      "pack_files": [
+        "00-core.md",
+        "02-investigate.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "0a209a13a55ce150dc835c922fca0c1a1f67fbf20b768296a89aec2c0a8ce154",
+      "usage": {
+        "input": 3248,
+        "output": 40
+      },
+      "attempt": 1,
+      "outcome": "accepted"
+    },
+    {
+      "role": "verify",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_sha256": "91fae3032a783078cdcbef985e4612b631eeec1a86e25020f27335a82a37f0ec",
+      "pack_files": [
+        "00-core.md",
+        "03-verify.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "05fa3308823740a101d129cc1123ef16699dd5d675142735dcc4405243f4a541",
+      "usage": {
+        "input": 4646,
+        "output": 40
+      },
+      "attempt": 1,
+      "outcome": "accepted"
+    }
+  ]
+}
