@@ -258,6 +258,43 @@ func TestRuleContextAccepted(t *testing.T) {
 	}
 }
 
+// W21 (docs/45): a metric observation is a structure measurement over its
+// threshold. It is never active (no finding, never success_with_findings)
+// and its fields are bounded; older envelopes without metric decode as
+// before.
+func TestMetricObservations(t *testing.T) {
+	d := example(t)
+	for _, o := range d["observations"].([]any) {
+		o.(map[string]any)["metric"] = map[string]any{"name": "cyclomatic_complexity", "value": 17, "threshold": 16, "unit": "count"}
+	}
+	d["outcome"].(map[string]any)["exit_class"] = ExitSuccessWithoutFindings
+	doc, err := Decode(encode(t, d), Expect{Lookup: lookupOf(d)})
+	if err != nil || doc.Active() != 0 || len(doc.Observations) != 7 || doc.Observations[0].Metric.Value != 17 {
+		t.Fatalf("metric document: %v", err)
+	}
+	for name, m := range map[string]map[string]any{
+		"under threshold": {"name": "cyclomatic_complexity", "value": 15, "threshold": 16, "unit": "count"},
+		"unknown unit":    {"name": "cyclomatic_complexity", "value": 17, "threshold": 16, "unit": "percent"},
+		"bad name":        {"name": "Cyclomatic Complexity", "value": 17, "threshold": 16, "unit": "count"},
+		"negative":        {"name": "duplicated_lines", "value": -1, "threshold": -2, "unit": "lines"},
+		"extra field":     {"name": "duplicated_lines", "value": 12, "threshold": 10, "unit": "lines", "x": 1},
+	} {
+		bad := example(t)
+		obs0(bad)["metric"] = m
+		if _, err := Decode(encode(t, bad), Expect{Lookup: lookupOf(bad)}); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+	// With every observation a metric the class must not claim findings.
+	d["outcome"].(map[string]any)["exit_class"] = ExitSuccessWithFindings
+	if _, err := Decode(encode(t, d), Expect{Lookup: lookupOf(d)}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("metrics counted as findings")
+	}
+	if !IsSecretAnalyzer("any.gitleaks") || IsSecretAnalyzer("go.staticcheck") {
+		t.Fatal("secret analyzers")
+	}
+}
+
 func TestObservationIDIsContentDerived(t *testing.T) {
 	a := ObservationID("go.staticcheck", ".", "u", "SA1000", "f.go:1:1", "f.go:1:2", "m", 0)
 	if a != ObservationID("go.staticcheck", ".", "u", "SA1000", "f.go:1:1", "f.go:1:2", "m", 0) || !observationID.MatchString(a) {
