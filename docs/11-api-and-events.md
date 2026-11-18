@@ -1,6 +1,6 @@
 # 11. API와 이벤트 계약
 
-R0에서 세션·프로젝트·실행 요청과 조회·취소·노드 프로토콜·보고서 조회와 내보내기를 제공한다. [OpenAPI](../api/openapi.yaml)의 `x-codeye-status`와 [실제 라우트 검사](../internal/httpapi/contract_test.go)로 구현된 경로를 확인한다. W22에서 예약과 실행 SSE를 추가했다. 설계 경로는 아래에 구분했다.
+R0에서 세션·프로젝트·실행 요청과 조회·취소·노드 프로토콜·보고서 조회와 내보내기를 제공한다. [OpenAPI](../api/openapi.yaml)의 `x-codeye-status`와 [실제 라우트 검사](../internal/httpapi/contract_test.go)로 구현된 경로를 확인한다. W22에서 예약과 실행 SSE를, W23에서 run 비교와 사람 판정을 추가했다. 설계 경로는 아래에 구분했다.
 
 ## 1. 공통 규칙
 
@@ -26,7 +26,7 @@ R0에서 세션·프로젝트·실행 요청과 조회·취소·노드 프로토
 
 ### 후속 설계
 
-W22에서 프로젝트 예약(`/projects/{id}/schedules`)과 실행 SSE(`GET /runs/{id}/events`)를 구현했다. 프로젝트 설정 변경·연결 진단·브랜치 조회, 같은 입력 retry, 개별 task·log 조회, finding 이력·사람 판정, 풀·노드 관리 웹 API는 후속 작업이다. R0의 풀·노드 관리는 운영자 CLI를 사용한다. 보고서 내보내기는 위의 게시 리비전 GET 경로로 수행한다. [근거와 게시 계약](31-w09-report.md)
+W22에서 프로젝트 예약(`/projects/{id}/schedules`)과 실행 SSE(`GET /runs/{id}/events`)를 구현했다. 프로젝트 설정 변경·연결 진단·브랜치 조회, 같은 입력 retry, 개별 task·log 조회, 첫 발견 시각 이력, 판정 일괄 적용, 풀·노드 관리 웹 API는 후속 작업이다. W23의 run 비교(`GET /runs/{id}/comparison`)와 사람 판정(`GET/POST /projects/{id}/finding-reviews`)은 아래 W23 절을 따른다. R0의 풀·노드 관리는 운영자 CLI를 사용한다. 보고서 내보내기는 위의 게시 리비전 GET 경로로 수행한다. [근거와 게시 계약](31-w09-report.md)
 
 ## 3. 작업 요청
 
@@ -70,6 +70,12 @@ W15 설계에서는 서버가 목록의 각 프로젝트에 대표 run 참조와
 이벤트 이름은 저장된 run 이벤트 type(`task.status`, `task.created`, `run.status` 등)이고 `id`는 run 안의 sequence다. 연결 유지는 이름 있는 `heartbeat` 이벤트로 보낸다. 브라우저가 SSE 주석을 전달하지 않기 때문이다. 형식은 [예시](../examples/run-events.txt)와 [W22 기록](38-w22-schedules-progress-sse.md)을 따른다. sequence는 run 안에서 단조 증가하며 event와 DB 상태는 같은 트랜잭션으로 기록한다. UI는 첫 조회로 상태를 받고 cursor 이후 이벤트를 적용한다. sequence gap 또는 보관 기간 만료 시 전체 상태를 다시 조회한다. event_id를 DB 행 ID와 임의 혼용하지 않는다.
 
 heartbeat 이벤트는 연결 유지용이며 분석 진행률을 올리지 않는다. 로그는 byte/record cursor로 별도 가져오고 거대한 로그를 상태 이벤트에 넣지 않는다. 권한 변경·로그아웃 시 SSE 연결을 해제한다. polling fallback은 같은 version 기반 API를 쓴다.
+
+### W23 비교·판정
+
+`GET /runs/{id}/comparison`은 저장된 게시 보고서에서 매 요청 다시 계산한다(비교 표 없음). 기준은 `baseline`·`baseline_revision`으로 고르며, 생략하면 보고서 목록의 `default_baseline`(같은 source variant·profile·scope의 직전 completed/partial 보고서)이다. 항목 상태는 `new`, `persisting`, `changed`, `absent_unverified`(이유 필수), `resolved_observed`다. `resolved_observed`는 같은 도구·같은 확인된 버전이 다시 성공하고 그 발견의 경로를 실제로 처리했을 때만이며 모델 후보에는 쓰지 않는다. 모호한 묶음과 이동 가능성은 표시만 하고 자동으로 짝짓지 않는다.
+
+`POST /projects/{id}/finding-reviews`는 판정 version을 덧붙인다. owner·manager·runner만 쓸 수 있고(viewer 403, 비구성원 404), `If-Match: "N"`(첫 판정은 `If-None-Match: *`)와 `Idempotency-Key`가 필수다. 게시 시점 판정은 보고서에 고정하고 현재 판정(만료·범위·되돌림·모호한 일치 반영)은 따로 응답한다. 코드 제외 내보내기에는 `fingerprint`·`fingerprint_basis`·`disposition_version`이 없다. 형식은 [OpenAPI](../api/openapi.yaml)의 `implemented-w23`, [비교 예시](../examples/comparison.json), [판정 예시](../examples/finding-reviews.json), 규칙은 [W23 기록](40-w23-history-comparison.md)을 따른다.
 
 ## 6. 오류 모델
 

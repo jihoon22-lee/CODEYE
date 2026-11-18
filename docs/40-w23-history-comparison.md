@@ -1,6 +1,6 @@
 # W23 이력·비교·사람 검토
 
-> 구현 기록(검토용 초안). 아래 계약을 구현하고 시험했다. 필드 형식의 기준은 [OpenAPI](../api/openapi.yaml)의 `x-codeye-status: implemented-w23` 경로와 스키마, [발견 스키마](../schemas/finding.schema.json), [보고서 스키마](../schemas/report.schema.json)다.
+> 구현 기록. 아래 계약을 구현하고 시험했다. 필드 형식의 기준은 [OpenAPI](../api/openapi.yaml)의 `x-codeye-status: implemented-w23` 경로와 스키마, [발견 스키마](../schemas/finding.schema.json), [보고서 스키마](../schemas/report.schema.json)다.
 
 ## 1. 목적과 요구
 
