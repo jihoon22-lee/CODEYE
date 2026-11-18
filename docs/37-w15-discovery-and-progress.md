@@ -106,7 +106,7 @@
 
 ## 6. 역할 지침 후보 팩
 
-`prompts/review-r1-draft`를 후보 팩으로 묶어 활성 팩 `review-v1`과 나란히 둔다. 기본값은 `review-v1`이다. 후보 팩은 노드 운영자가 워커 설정으로만 선택한다. run 요청의 프로필 enum과 API는 바꾸지 않는다. 호출마다 팩 ID·버전·역할별 digest를 기록하고, 보고서는 실제 사용한 팩을 표시한다. 보고서의 필수 역할은 고정 목록이 아니라 계획된 task의 `required_for_verdict`로 판정한다. 필수 검토 task가 하나도 없으면 `not_performed`이고, R0 기록은 작성 당시의 세 역할로 해석한다.
+초안을 [`prompts/review-r1`](../prompts/review-r1/pack.yaml) 후보 팩으로 묶어 활성 팩 `review-v1`과 나란히 둔다. 기본값은 `review-v1`이다. 후보 팩은 노드 운영자가 워커 설정으로만 선택한다. run 요청의 프로필 enum과 API는 바꾸지 않는다. 호출마다 팩 ID·버전·역할별 digest를 기록하고, 보고서는 실제 사용한 팩을 표시한다. 보고서의 필수 역할은 고정 목록이 아니라 계획된 task의 `required_for_verdict`로 판정한다. 필수 검토 task가 하나도 없으면 `not_performed`이고, R0 기록은 작성 당시의 세 역할로 해석한다.
 
 후보 팩 평가(TC-100)는 같은 스냅샷·모델·역할별 예산에서 활성 팩과 후보 팩을 실행하고 팩별 호출 수·usage를 따로 보고한다. W15 입력과 R0 사례로 조정한 결과는 회귀 근거일 뿐 독립 평가가 아니다. 조정에 쓰지 않은 사례가 없으면 후보 팩을 승격하지 않고 미측정 지표를 기록한다.
 
@@ -143,3 +143,48 @@
 ### 실행한 검증
 
 `gofmt -l .`, `go vet ./...`, `go test -race ./...`, `python3 scripts/validate_bundle.py`, `cd web && npm test && npm run build`, `python3 scripts/test_postgres.py --nodes --web --scheduler`가 통합 브랜치에서 모두 통과했다. Windows는 CI의 Go 시험으로 확인한다. 실제 모델 요청은 1단계에서 보내지 않았다.
+
+## 10. 결과 — 2단계(후보 팩 연결, 실모델 없음)
+
+2026년 11월 18일 같은 환경에서 확인했다. 모델 응답은 시험용 scripted caller가 만들었고 실제 모델 요청은 보내지 않았다. 따라서 아래 결과는 플랫폼 검사·기록·보고서 규칙의 근거이며 후보 지침의 품질 근거가 아니다. TC-100(같은 조건에서 활성 팩과 후보 팩 비교)은 수행하지 않았고 후보 팩은 승격하지 않았다.
+
+### 선택과 팩
+
+- **선택.** 노드 운영자만 `codeye agent --review-pack review-v1|review-r1`로 고른다. 기본값은 `review-v1`이다. 다른 값이나 빈 값은 사용 오류(종료 코드 2)이고 v1로 대체하지 않는다. 워커는 Hello의 `review_pack`으로 받는다. run 프로필, run 요청 API, OpenAPI는 바꾸지 않았다.
+- **팩.** [`prompts/review-r1`](../prompts/review-r1/pack.yaml)은 id `review-r1`, version `2.0.0-rc1`, status `candidate-not-promoted`다. 공통 지침 `00-core.md`, 역할 지침 다섯, `domains.md`·`languages/go.md`(v1과 같은 바이트)로 구성한다. 역할별 digest는 v1과 같은 방식(pack.yaml과 선택 파일, 경로 오름차순, 경로 NUL 내용 NUL)이다. 호출 기록마다 팩 ID·버전·digest·파일 목록이 남는다.
+- **review-v1 불변.** 역할별 digest·지침 해시, 기본 계획 key, 발췌 선택, 정규화한 요청 해시를 `TestReviewV1IsPinned`로 고정했다. 팩 전체 digest(`489d1ac5…`)도 변경 전과 같다.
+
+### review-r1 계획
+
+discovery·go vet 뒤에 다섯 task를 이 순서로 둔다. 생략은 `skipped_policy`와 사유 코드이며 모델 검토 성공으로 세지 않는다([A20](19-decisions-and-open-questions.md)). 모델 전송이 승인되지 않으면 모든 역할이 `model_source_not_approved`로 생략되고, 모델 연결이 없으면 `unsupported`/`model_not_configured`다.
+
+| task | 단계 | 판정 필수 | 호출 없이 끝나는 경우 | 입력 | 출력 |
+|---|---|---|---|---|---|
+| `review.environment` | `environment` | 아니오 | 선언된 요구가 모두 `satisfied`면 `no_environment_gap`, 탐색 산출물을 못 쓰면 `dependency_failed` | 차이가 있는 모듈의 요구·근거 ID·노드 관측·판정 | 모듈별 영향 메모. 판정은 바꾸지 못한다. |
+| `review.documents` | `documents` | 계획 시 범위 안 안내 문서가 있을 때만 | 문서 없음 `no_documents`(필수 아님), 선택된 문서 없음 `documents_not_selected`, `dependency_failed` | 선택 문서 발췌(문서당 40행·2,000바이트, 최대 8개) | 적용 경로가 있는 계약·충돌·질문, 지침성 문구 메모 |
+| `review.investigate` | `code_review` | 예 | — | 수락된 문서·환경 결과, 모듈별 코드·테스트 발췌. 원시 도구 진단은 넣지 않는다(REQ-009). | 후보 `investigate_N`(최대 4) |
+| `review.interpret` | `code_review` | 아니오 | go vet 관찰 0건이면 `no_tool_observations` | 관찰 ID·규칙·위치와 주변 발췌 | 관찰에 연결한 가설 `interpret_N`(최대 2) 또는 해석 한계 |
+| `review.verify` | `code_review` | 예 | 앞 두 역할이 모두 수락되지 않으면 `dependency_failed`. 후보가 없으면 호출 없이 성공(`no_candidates_to_verify`) | 수락된 두 역할의 후보, 문서 계약, 관찰, 발췌 | 후보별 판정(v1 규칙) |
+
+### 출력 검사와 요청 크기
+
+- 출력은 엄격한 JSON이어야 한다. 그 호출에 준 근거·관찰 ID만 인용할 수 있다. 문서 규칙의 적용 경로는 인용한 문서의 디렉터리와 같거나 그 아래여야 한다(`scope_generalized`). 실행·재현을 주장하는 문구는 거부한다(`execution_claim_rejected`). 이 검사는 정규식 기반 휴리스틱이다.
+- 형식 복구는 고정 오류 코드만 담아 한 번 요청한다. 그래도 틀리면 task는 `failed`이고 내용은 격리된다. 탐색 사실과 도구 관찰은 남는다. 하위 역할은 수락된 결과만 받는다. 앞 단계가 생략·실패하면 `upstream_<역할>_<상태>` 한계를 남긴다.
+- 보내기 전에 메시지 바이트를 확인하고 발췌를 줄인다. 그래도 넘으면 `review_input_too_large`로 실패한다. 요청은 메시지 하나이고 도구 정의를 쓰지 않는다. w15 fixture의 역할별 최대 요청은 environment 9,913, documents 12,303, investigate 12,494, interpret 10,587, verify 14,602바이트였다. 최악 입력 시험의 최대값은 verify 36,645바이트였다. 모두 시험 한도 40,000바이트(relay 한도 49,152바이트) 이하다. 출력 토큰(relay 한도 1,536)은 측정하지 않았다.
+
+### 기록과 보고서
+
+- **기록.** review 기록 schema `0.2`(`record.R1Record`)는 단계마다 하나이고 자기 호출만 담는다. `pack`, `upstream`(source·state·reason·읽은 산출물의 sha256), `observations`, 역할별 내용을 가진다. `0.1` 기록은 이전 규칙 그대로 읽는다. [스키마](../schemas/review-record.schema.json) · [예시](../examples/review-r1/verify.json)(scripted caller로 worker가 쓴 다섯 단계 기록)
+- **필수 역할.** R1 역할 key가 계획에 있으면 필수 검토 task는 `required_for_verdict`인 `review.*`다. 하나 이상이고 모두 수락됐을 때만 `performed`이고, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 생략된 역할의 결과는 `skipped`다. R0 계획은 작성 당시의 세 역할(미계획 행 포함)로 해석한다.
+- **연결 검사.** `coverage.review_calls`에 `pack_id`·`pack_version`을 싣는다(0.2 기록만). 앞 단계·탐색·go vet 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. 계획과 다른 팩의 기록은 `review_pack_mismatch:<task>`로 제외한다.
+- **단계 표시.** `env.discover`가 성공하고 `review.environment`가 생략되면 environment 단계는 §2 규칙대로 `partial`(생략 1건과 사유)이다. review-v1에서 `docs.discover` 성공과 `review.context` 정책 제외가 섞인 documents 단계와 같은 규칙이며 바꾸지 않았다.
+
+| 시험 | 확인한 결과 | 근거 |
+|---|---|---|
+| TC-97(모델 경로, 플랫폼 검사) | 적대적 AGENTS.md가 있어도 OpenCode 요청 설정은 같고 그 문구는 `<review-input>` 안에만 있다. 꾸민 근거 ID, 상위 경로로 넓힌 규칙, 실행·재현 주장, 판정 필드를 붙인 환경 출력은 거부되고 하위 역할로 넘어가지 않는다. | `TestTC97DocumentContentCannotChangeRequestConfig`, `TestR1FabricatedEvidenceIsQuarantined`, `TestR1ScopeGeneralizationRejected`, `TestR1ExecutionAndReproductionClaimsRejected`, `TestR1EnvironmentOutputRules` |
+| 계획·생략 | 순서·단계·필수 여부와 `no_documents`·`no_environment_gap`·`no_tool_observations`, 모델 실패 시 탐색 사실 보존과 하위 역할의 한계 기록 | `TestR1PlanOrderStagesAndRequired`, `TestR1SkipReasons`, `TestR1ModelFailureKeepsFactsAndLimitsDownstream` |
+| 실제 worker 경로 | 실제 go vet(go1.27.4)과 scripted caller로 다섯 역할을 실행했다. `svc/b`의 vet 실패, interpret 생략(`no_tool_observations`), 보고서의 필수 세 역할 수락과 `performed`, 선택 역할과 사유, 팩 표시를 확인했다. | `TestReviewR1ThroughTheWorkerAndReport` |
+| 보고서 규칙 | 필수 검토 task가 없으면 `not_performed`, R0 세 역할 규칙 유지, 연결이 어긋난 단계 제외 | `TestR1RequiredRolesFromPlan`, `TestR1NoRequiredReviewTaskIsNotPerformed`, `TestR0ReviewRolesUnchanged`, `TestR1LineageRejected` |
+| 요청 크기 | fixture·최악 입력 모두 40,000바이트 이하 | `TestR1RequestSizeOnFixture`, `TestR1RequestSizeWorstCase` |
+
+하지 않은 것: 실모델 요청과 TC-100 평가, 출력 토큰 측정, `coverage.environment` 요약, Go 이외 언어의 코드 발췌(`code_excerpts_go_only`), 후보 팩 승격.
