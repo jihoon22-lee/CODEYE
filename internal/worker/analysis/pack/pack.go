@@ -82,6 +82,18 @@ type Descriptor struct {
 	// and the env.discover probe.
 	VersionArgs  []string
 	ParseVersion func(stdout []byte) (version string, ok bool)
+	// Toolchains are the shared toolchains (builtin's toolchain table, e.g.
+	// "node") the tool needs, sorted unique. builtin builds the analyzer only
+	// when each one is configured (--<toolchain>) and passed its startup
+	// probe, and passes the validated handles; otherwise the analyzer is the
+	// NotConfigured stand-in (docs/39 §2.4). The go toolchain is not listed:
+	// --go stays its own setting.
+	Toolchains []string
+	// Interpreter, when set, is the toolchain (one of Toolchains) that runs
+	// the tool: the tool's absolute --<tool> path is a script started as
+	// <interpreter> <tool path> <args>, with PATH set to the interpreter's
+	// directory only, never through the script's #! line.
+	Interpreter string
 }
 
 // Validate checks a descriptor.
@@ -95,8 +107,26 @@ func (d Descriptor) Validate() error {
 		return fmt.Errorf("pack: analyzer %s ecosystem %q is invalid", d.ID, d.Ecosystem)
 	case !toolPattern.MatchString(d.Tool) || d.ParseVersion == nil:
 		return fmt.Errorf("pack: analyzer %s tool or version parser is invalid", d.ID)
+	case d.Interpreter != "" && !slices.Contains(d.Toolchains, d.Interpreter):
+		return fmt.Errorf("pack: analyzer %s interpreter %q is not one of its toolchains", d.ID, d.Interpreter)
+	}
+	for i, t := range d.Toolchains {
+		if !toolPattern.MatchString(t) || t == "go" || t == d.Tool || (i > 0 && d.Toolchains[i-1] >= t) {
+			return fmt.Errorf("pack: analyzer %s toolchains must be sorted unique names other than go and its tool", d.ID)
+		}
 	}
 	return nil
+}
+
+// Toolchain is a validated shared toolchain (docs/39 §2.4): the operator's
+// absolute path (--<name>), the directory of the resolved executable (the
+// only PATH entry a child of the toolchain gets) and the version its startup
+// probe read. builtin passes one per Descriptor.Toolchains entry.
+type Toolchain struct {
+	Name       string
+	Executable string
+	Dir        string
+	Version    string
 }
 
 // Owns reports whether a task key belongs to the analyzer named name.
@@ -439,6 +469,13 @@ func WriteEnvelope(job analysis.Job, doc obsdoc.Document) (analysis.ArtifactFile
 // ToolProbe is the env.discover version probe of one operator tool (docs/39
 // discovery hook). Executable "" means the operator did not configure it;
 // the observation is then not_probed.
+//
+// A tool whose descriptor names an Interpreter is probed as
+// <InterpreterExecutable> <Executable> <Args> with PATH set to the
+// interpreter's directory; with the interpreter not configured the probe
+// fails (toolchain_not_configured) without starting anything. The same type
+// describes a shared toolchain's own probe (builtin.ToolchainProbes), which
+// env.discover records as a runtime observation.
 type ToolProbe struct {
 	Tool         string
 	Analyzers    []string // analyzer ids using the tool, sorted
@@ -446,4 +483,8 @@ type ToolProbe struct {
 	Executable   string
 	Args         []string
 	ParseVersion func([]byte) (string, bool)
+	// Interpreter is the toolchain name that runs the tool ("" = the tool
+	// is executed directly); InterpreterExecutable is its operator path.
+	Interpreter           string
+	InterpreterExecutable string
 }

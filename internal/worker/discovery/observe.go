@@ -28,6 +28,12 @@ const (
 	DetailCleanupUncertain   = "cleanup_uncertain"
 	DetailOutputUnrecognized = "output_unrecognized"
 	DetailNotExecutable      = "not_executable"
+	// DetailToolchainNotConfigured: the tool runs under a shared toolchain
+	// (docs/39 §2.4) the operator did not configure; nothing was started.
+	DetailToolchainNotConfigured = "toolchain_not_configured"
+	// DetailToolchainUnavailable: the configured toolchain path is not an
+	// executable file; nothing was started.
+	DetailToolchainUnavailable = "toolchain_unavailable"
 
 	// ExecGoVersion is the execution name of the Go probe.
 	ExecGoVersion = "go.version"
@@ -40,7 +46,11 @@ type Observed struct {
 	// AnalyzerTools are the analyzer tool observations (docs/39) of the
 	// ecosystems the requested runtime tools belong to.
 	AnalyzerTools []envdoc.AnalyzerTool
-	Executions    []analysis.Execution
+	// Needed are runtime tools observed beyond the requested ones: shared
+	// toolchains (docs/39 §2.4) that an analyzer of a requested ecosystem
+	// needs. Environment records them like the modules' runtimes.
+	Needed     []string
+	Executions []analysis.Execution
 	// Incomplete is set when a probe execution did not exit cleanly (timeout,
 	// cancellation, refused start, uncertain cleanup, truncated output). The
 	// worker never lets such a task claim success, so env.discover reports
@@ -59,14 +69,19 @@ type Observer interface {
 }
 
 // ProbeObserver probes operator-configured tools through the attempt's
-// executor.Runner. Of the runtimes only Go is configurable (the agent's --go
-// executable, the same one the go-vet handler uses); every other runtime is
-// not_probed. Analyzers are the analyzer tool probes of the worker build
+// executor.Runner. Of the runtimes Go (the agent's --go executable, the same
+// one the go-vet handler uses) and the shared toolchains (--node) are
+// configurable; every other runtime is not_probed. Analyzers are the analyzer tool probes of the worker build
 // (builtin.Probes): a configured tool is probed with its version argv, an
-// unconfigured one is not_probed.
+// unconfigured one is not_probed. Toolchains are the shared toolchain probes
+// (builtin.ToolchainProbes, e.g. node): a toolchain is a runtime
+// observation like go, probed with its own version argv when requested or
+// when an analyzer of a requested ecosystem needs it (then it is listed in
+// Observed.Needed), and not_probed when the operator configured no path.
 type ProbeObserver struct {
 	GoExecutable string
 	Analyzers    []pack.ToolProbe
+	Toolchains   []pack.ToolProbe
 	Timeout      time.Duration
 }
 
@@ -98,7 +113,7 @@ func (p ProbeObserver) observeAnalyzers(ctx context.Context, job analysis.Job, t
 		}
 		t := envdoc.AnalyzerTool{Tool: probe.Tool, Analyzers: sortedUnique(probe.Analyzers), Status: envdoc.ObsNotProbed}
 		if probe.Executable != "" {
-			o, exec, incomplete, cancelled, err := p.probeTool(ctx, job, probe, runner)
+			o, exec, incomplete, cancelled, err := p.probeTool(ctx, job, probe, runner, envdoc.AnalyzerToolVersionValid)
 			if err != nil {
 				out.Err = err
 				return
@@ -115,9 +130,12 @@ func (p ProbeObserver) observeAnalyzers(ctx context.Context, job analysis.Job, t
 	sort.Slice(out.AnalyzerTools, func(a, b int) bool { return out.AnalyzerTools[a].Tool < out.AnalyzerTools[b].Tool })
 }
 
-// probeTool runs one analyzer tool's version argv in fresh attempt scratch
-// with an explicit minimal environment (PATH is the tool directory only).
-func (p ProbeObserver) probeTool(ctx context.Context, job analysis.Job, probe pack.ToolProbe, runner executor.Runner) (o envdoc.Observation, exec *analysis.Execution, incomplete, cancelled bool, err error) {
+// probeTool runs one tool's version argv in fresh attempt scratch with an
+// explicit minimal environment: PATH is the directory of the program that is
+// started (the tool, or the interpreter toolchain of a tool that names one,
+// which is started as <interpreter> <tool path> <args>, never through the
+// script's #! line). valid checks the parsed version text.
+func (p ProbeObserver) probeTool(ctx context.Context, job analysis.Job, probe pack.ToolProbe, runner executor.Runner, valid func(string) bool) (o envdoc.Observation, exec *analysis.Execution, incomplete, cancelled bool, err error) {
 	tool := probe.Tool
 	if !filepath.IsAbs(probe.Executable) {
 		return probeFailed(tool, DetailStartFailed, nil), nil, false, false, nil
@@ -130,7 +148,17 @@ func (p ProbeObserver) probeTool(ctx context.Context, job analysis.Job, probe pa
 	if serr != nil || !st.Mode().IsRegular() {
 		return envdoc.Observation{Tool: tool, Status: envdoc.ObsNotFound}, nil, false, false, nil
 	}
-	if runtime.GOOS != "windows" && st.Mode().Perm()&0o111 == 0 {
+	exe, args, pathDir := probe.Executable, append([]string{}, probe.Args...), filepath.Dir(resolved)
+	if probe.Interpreter != "" {
+		if probe.InterpreterExecutable == "" {
+			return probeFailed(tool, DetailToolchainNotConfigured, nil), nil, false, false, nil
+		}
+		ires, ok := executableFile(probe.InterpreterExecutable)
+		if !ok {
+			return probeFailed(tool, DetailToolchainUnavailable, nil), nil, false, false, nil
+		}
+		exe, args, pathDir = probe.InterpreterExecutable, append([]string{probe.Executable}, args...), filepath.Dir(ires)
+	} else if runtime.GOOS != "windows" && st.Mode().Perm()&0o111 == 0 {
 		return probeFailed(tool, DetailNotExecutable, nil), nil, false, false, nil
 	}
 	if !filepath.IsAbs(job.Scratch) {
@@ -151,14 +179,14 @@ func (p ProbeObserver) probeTool(ctx context.Context, job analysis.Job, probe pa
 	if job.Snapshot.SnapshotDir != "" {
 		protected = []string{job.Snapshot.SnapshotDir}
 	}
-	env := map[string]string{"PATH": filepath.Dir(resolved), "LANG": "C.UTF-8"}
+	env := map[string]string{"PATH": pathDir, "LANG": "C.UTF-8"}
 	if runtime.GOOS == "windows" {
 		if v := os.Getenv("SystemRoot"); v != "" {
 			env["SystemRoot"] = v
 		}
 	}
 	name := tool + ".version"
-	res := runner.Run(ctx, executor.Spec{Executable: probe.Executable, Args: append([]string{}, probe.Args...), WorkspaceRoot: ws, Dir: ws,
+	res := runner.Run(ctx, executor.Spec{Executable: exe, Args: args, WorkspaceRoot: ws, Dir: ws,
 		ProtectedRoots: protected, TempParent: filepath.Join(work, "tmp"), Env: env, Timeout: timeout, StdoutLimit: 64 << 10, StderrLimit: 64 << 10})
 	e, werr := analysis.WriteExecution(filepath.Join(work, "exec"), name, res)
 	if werr != nil {
@@ -166,8 +194,24 @@ func (p ProbeObserver) probeTool(ctx context.Context, job analysis.Job, probe pa
 	}
 	return classifyProbe(tool, res, &name, func(b []byte) (string, bool) {
 		v, ok := probe.ParseVersion(b)
-		return v, ok && envdoc.AnalyzerToolVersionValid(v)
+		return v, ok && valid(v)
 	}), &e, probeIncomplete(res), res.Status == executor.StatusCancelled, nil
+}
+
+// executableFile resolves an absolute path to an executable regular file.
+func executableFile(p string) (string, bool) {
+	if !filepath.IsAbs(p) {
+		return "", false
+	}
+	resolved, err := nativepath.Resolve(p)
+	if err != nil {
+		return "", false
+	}
+	st, err := os.Stat(resolved)
+	if err != nil || !st.Mode().IsRegular() || (runtime.GOOS != "windows" && st.Mode().Perm()&0o111 == 0) {
+		return "", false
+	}
+	return resolved, true
 }
 
 func notProbed(tool string) envdoc.Observation {
@@ -181,12 +225,45 @@ func probeFailed(tool, detail string, exec *string) envdoc.Observation {
 // Observe implements Observer.
 func (p ProbeObserver) Observe(ctx context.Context, job analysis.Job, tools []string, runner executor.Runner) Observed {
 	var out Observed
-	for _, tool := range sortedUnique(tools) {
-		if tool != "go" || p.GoExecutable == "" {
+	// Shared toolchains needed by an analyzer of a requested ecosystem are
+	// observed even when no module declares the runtime.
+	ecos := ecosystemsOf(tools)
+	toolchains := map[string]pack.ToolProbe{}
+	all := append([]string{}, tools...)
+	for _, tc := range p.Toolchains {
+		if tc.Tool == "go" || !envdoc.IsRuntimeTool(tc.Tool) {
+			continue // go keeps --go; a toolchain is always a runtime tool
+		}
+		toolchains[tc.Tool] = tc
+		if slices.Contains(tools, tc.Tool) {
+			continue
+		}
+		for _, e := range tc.Ecosystems {
+			if ecos[e] {
+				out.Needed = append(out.Needed, tc.Tool)
+				all = append(all, tc.Tool)
+				break
+			}
+		}
+	}
+	out.Needed = sortedUnique(out.Needed)
+	for _, tool := range sortedUnique(all) {
+		var (
+			o                     envdoc.Observation
+			exec                  *analysis.Execution
+			incomplete, cancelled bool
+			err                   error
+		)
+		tc, isToolchain := toolchains[tool]
+		switch {
+		case tool == "go" && p.GoExecutable != "":
+			o, exec, incomplete, cancelled, err = p.probeGo(ctx, job, runner)
+		case isToolchain && tc.Executable != "":
+			o, exec, incomplete, cancelled, err = p.probeTool(ctx, job, tc, runner, func(v string) bool { return envdoc.ComparableObservation(tool, v) })
+		default:
 			out.Observations = append(out.Observations, notProbed(tool))
 			continue
 		}
-		o, exec, incomplete, cancelled, err := p.probeGo(ctx, job, runner)
 		if err != nil {
 			out.Err = err
 			return out

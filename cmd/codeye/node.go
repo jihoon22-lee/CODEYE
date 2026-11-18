@@ -74,9 +74,11 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	git := fs.String("git", "", "")
 	goExe := fs.String("go", "", "")
 	goModCache := fs.String("go-mod-cache", "", "")
-	// One flag per analyzer tool of this build (--staticcheck PATH, docs/39).
+	// One flag per analyzer tool of this build (--staticcheck PATH) and per
+	// shared toolchain (--node PATH, docs/39 §2.4). Both travel in the hello's
+	// analyzer_tools map; toolchain names are reserved there.
 	toolFlags := map[string]*string{}
-	for _, tool := range builtin.ToolFlags() {
+	for _, tool := range append(builtin.ToolFlags(), builtin.ToolchainFlags()...) {
 		toolFlags[tool] = fs.String(tool, "", "")
 	}
 	fs.Var(&roots, "source-root", "")
@@ -162,8 +164,8 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 // capability and is never leased. The deep-review profile is discovery
 // (env.discover, docs.discover) → the analyzer composite (go vet,
 // staticcheck, ... in catalog order; unconfigured tools plan unsupported
-// tasks) → review roles. Discovery observes the configured go toolchain and
-// every configured analyzer tool. The test-only fixture handler is left
+// tasks) → review roles. Discovery observes the configured go and shared
+// toolchains (--node) and every configured analyzer tool. The test-only fixture handler is left
 // unwrapped.
 func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
 	pack := h.ReviewPack
@@ -183,7 +185,7 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 			if pack == review.PackR1 {
 				reviewed = review.R1Handler{Static: handler, Caller: caller}
 			}
-			observer := discovery.ProbeObserver{GoExecutable: h.GoExecutable, Analyzers: builtin.Probes(cfg)}
+			observer := discovery.ProbeObserver{GoExecutable: h.GoExecutable, Analyzers: builtin.Probes(cfg), Toolchains: builtin.ToolchainProbes(cfg)}
 			wrapped, err := discovery.Wrap(reviewed, discovery.Config{Observer: observer})
 			if err != nil {
 				return nil, nil, err

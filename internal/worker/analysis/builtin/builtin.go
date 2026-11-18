@@ -25,18 +25,20 @@ type Config struct {
 	GoExecutable string
 	// GoModCache is an optional absolute offline module cache.
 	GoModCache string
-	// Tools are absolute analyzer tool paths by tool name (--<tool>).
+	// Tools are absolute paths by name: analyzer tools (--<tool>) and the
+	// shared toolchains of the toolchain table (--node), whose names are
+	// reserved and never analyzer tool names (docs/39 §2.4).
 	Tools map[string]string
 	// ProbeDir is an absolute writable directory outside any source tree
 	// (e.g. the worker scratch root) used for toolchain probes.
 	ProbeDir string
 }
 
-// Unavailable explains why a known analyzer (or the whole capability) is
-// not usable on this node.
+// Unavailable explains why a known analyzer, a configured toolchain (or the
+// whole capability) is not usable on this node.
 type Unavailable struct {
 	Name   string
-	Reason string // not_configured | invalid_config | probe_failed | toolchain_not_configured | unknown_tool
+	Reason string // not_configured | invalid_config | probe_failed | toolchain_not_configured | toolchain_unavailable | unknown_tool
 	Detail string // no secrets, no paths
 }
 
@@ -47,11 +49,16 @@ type built struct {
 	stub     string // pack reason when analyzer is nil
 }
 
+// buildFunc configures one analyzer. goh is the go toolchain (nil when --go
+// is unset or invalid); toolchains are the validated handles of every
+// toolchain the descriptor lists (builtin checked them before the call).
+type buildFunc func(ctx context.Context, cfg Config, runner executor.Runner, goh *govet.Handler, toolchains map[string]pack.Toolchain) built
+
 // entry is one analyzer of this build. Catalog order is plan order.
 type entry struct {
 	desc  pack.Descriptor
 	plan  pack.PlanFunc
-	build func(ctx context.Context, cfg Config, runner executor.Runner, goh *govet.Handler) built
+	build buildFunc
 }
 
 // catalog lists the analyzers of this build in plan order: per ecosystem the
@@ -66,7 +73,8 @@ func catalog() []entry {
 }
 
 // ToolFlags are the agent flag names (--<tool>) of this build's analyzer
-// tools, sorted; "go" is the separate --go toolchain flag.
+// tools, sorted; "go" is the separate --go toolchain flag and the shared
+// toolchains are ToolchainFlags.
 func ToolFlags() []string {
 	seen := map[string]bool{}
 	var out []string
@@ -84,7 +92,7 @@ func unavailable(name, reason, detail, stub string) built {
 	return built{missing: &Unavailable{Name: name, Reason: reason, Detail: detail}, stub: stub}
 }
 
-func buildGoVet(ctx context.Context, cfg Config, runner executor.Runner, goh *govet.Handler) built {
+func buildGoVet(ctx context.Context, cfg Config, runner executor.Runner, goh *govet.Handler, _ map[string]pack.Toolchain) built {
 	if cfg.GoExecutable == "" {
 		return unavailable(govet.HandlerName, "not_configured", "", pack.ReasonToolNotConfigured)
 	}
@@ -104,7 +112,7 @@ func buildGoVet(ctx context.Context, cfg Config, runner executor.Runner, goh *go
 	return built{analyzer: goh.Analyzer()}
 }
 
-func buildStaticcheck(ctx context.Context, cfg Config, runner executor.Runner, goh *govet.Handler) built {
+func buildStaticcheck(ctx context.Context, cfg Config, runner executor.Runner, goh *govet.Handler, _ map[string]pack.Toolchain) built {
 	exe := cfg.Tools[staticcheck.Tool]
 	switch {
 	case exe == "":
@@ -143,21 +151,34 @@ func Handlers(ctx context.Context, cfg Config, runner executor.Runner) ([]analys
 var ErrNoBaseline = errors.New("no baseline analyzer is usable")
 
 // Composite builds the deep-review composite. A go toolchain that is set
-// but invalid disables every Go analyzer.
+// but invalid disables every Go analyzer; a shared toolchain that is not
+// configured or fails its probe disables the analyzers that need it.
 func Composite(ctx context.Context, cfg Config, runner executor.Runner) (*pack.Composite, []Unavailable, error) {
+	return compose(ctx, cfg, runner, catalog())
+}
+
+func compose(ctx context.Context, cfg Config, runner executor.Runner, entries []entry) (*pack.Composite, []Unavailable, error) {
 	var goh *govet.Handler
 	if cfg.GoExecutable != "" {
 		if h, err := govet.New(govet.Config{GoExecutable: cfg.GoExecutable, GoModCache: cfg.GoModCache}); err == nil {
 			goh = h
 		}
 	}
+	// Shared toolchains are validated once, before any analyzer is built.
+	states, missing := validateToolchains(ctx, cfg, runner)
 	known := map[string]bool{}
+	for _, tc := range toolchainTable() {
+		known[tc.name] = true
+	}
 	var members []pack.Analyzer
-	var missing []Unavailable
 	baseline := false
-	for _, e := range catalog() {
+	for _, e := range entries {
 		known[e.desc.Tool] = true
-		b := e.build(ctx, cfg, runner, goh)
+		b, handles := gateToolchains(e.desc, cfg, states)
+		if b == nil {
+			r := e.build(ctx, cfg, runner, goh, handles)
+			b = &r
+		}
 		if b.missing != nil {
 			missing = append(missing, *b.missing)
 		}
@@ -192,10 +213,13 @@ func Composite(ctx context.Context, cfg Config, runner executor.Runner) (*pack.C
 // Probes are the env.discover version probes of this build's analyzer
 // tools other than the go toolchain (which discovery observes as a
 // runtime): one per tool, not_probed when the operator configured no path.
-func Probes(cfg Config) []pack.ToolProbe {
+// A tool run by an interpreter toolchain carries that toolchain's path.
+func Probes(cfg Config) []pack.ToolProbe { return probesOf(cfg, catalog()) }
+
+func probesOf(cfg Config, entries []entry) []pack.ToolProbe {
 	byTool := map[string]*pack.ToolProbe{}
 	var order []string
-	for _, e := range catalog() {
+	for _, e := range entries {
 		d := e.desc
 		if d.Tool == "go" {
 			continue
@@ -203,6 +227,9 @@ func Probes(cfg Config) []pack.ToolProbe {
 		p := byTool[d.Tool]
 		if p == nil {
 			p = &pack.ToolProbe{Tool: d.Tool, Executable: cfg.Tools[d.Tool], Args: append([]string{}, d.VersionArgs...), ParseVersion: d.ParseVersion}
+			if d.Interpreter != "" {
+				p.Interpreter, p.InterpreterExecutable = d.Interpreter, cfg.Tools[d.Interpreter]
+			}
 			byTool[d.Tool] = p
 			order = append(order, d.Tool)
 		}

@@ -23,11 +23,12 @@
 codeye agent --controller URL --state-dir DIR [--name NAME] [--enroll-token-file PATH]
              [--source-root ID=/abs/path ...] [--workers N] [--toolchain-path PATH]
              [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache /abs/dir]
-             [--staticcheck /abs/staticcheck] [--repo-code-source-root ID ...]
+             [--node /abs/node] [--staticcheck /abs/staticcheck] [--repo-code-source-root ID ...]
 codeye worker      # agent만 실행한다. 옵션 없음.
 ```
 
 - 분석 도구 경로는 도구마다 플래그 하나다(`--<tool> /abs/path`, W19부터 `--staticcheck`). 절대 경로만 받고 PATH를 검색하거나 내려받지 않는다. 지정하지 않은 도구의 작업은 계획되고 `unsupported`(`tool_not_configured`)로 끝난다. 규칙은 [분석기 팩 계약](39-r1-analyzer-packs.md#24-도구-경로와-에이전트-플래그)에 있다.
+- 여러 팩이 쓰는 interpreter는 공유 toolchain 플래그 하나로 받는다(`--node /abs/node`). 경로는 hello `analyzer_tools`에 예약 이름 `node`로 들어가고, 워커 시작 시 `node --version` probe로 한 번 검증한다. node가 필요한 분석기는 node가 없으면 `toolchain_not_configured`다. 규칙은 [공유 toolchain](39-r1-analyzer-packs.md#241-공유-interpreter-toolchain)에 있다.
 - `--repo-code-source-root ID`(반복 가능)는 그 local source root의 job에서 저장소 코드를 실행하는 분석 작업(build script, 설정 프로그램, plugin, proc macro)을 허가한다. ID는 `--source-root` 매핑이 있어야 한다. Git 소스와 허가 없는 root에서는 그런 작업이 `unsupported`(`repository_code_not_allowed`)로 끝난다([분석기 팩 계약 §2.7](39-r1-analyzer-packs.md#27-저장소-코드-실행-허가)).
 
 - `--controller`는 https이거나, loopback 주소의 http만 허용한다. 프록시 환경변수를 쓰지 않고 redirect를 따르지 않는다.

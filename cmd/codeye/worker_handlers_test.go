@@ -102,3 +102,25 @@ func TestWorkerHandlersSelectReviewPack(t *testing.T) {
 		t.Fatalf("plan %v", keys)
 	}
 }
+
+// The shared node toolchain (--node) travels in the hello's analyzer_tools
+// under its reserved name: it is probed at startup, never an unknown tool.
+// With CODEYE_TEST_NODE the real node passes and adds no missing code.
+func TestWorkerHandlersKnowTheNodeToolchain(t *testing.T) {
+	exe := "go"
+	if runtime.GOOS == "windows" {
+		exe = "go.exe"
+	}
+	goExe := filepath.Join(runtime.GOROOT(), "bin", exe)
+	if _, err := os.Stat(goExe); err != nil {
+		t.Skip("go toolchain not found at GOROOT/bin")
+	}
+	node, want := filepath.Join(t.TempDir(), "absent-node"), "node:invalid_config,staticcheck:not_configured"
+	if p := os.Getenv("CODEYE_TEST_NODE"); p != "" {
+		node, want = p, "staticcheck:not_configured"
+	}
+	hs, missing, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), AnalyzerTools: map[string]string{"node": node}}, &executor.Executor{})
+	if err != nil || len(hs) != 1 || strings.Join(missing, ",") != want {
+		t.Fatalf("handlers %d missing %v err %v", len(hs), missing, err)
+	}
+}

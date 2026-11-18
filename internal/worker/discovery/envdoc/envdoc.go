@@ -302,6 +302,10 @@ var (
 // version text: short, printable, no path separator.
 func AnalyzerToolVersionValid(v string) bool { return toolVersionText.MatchString(v) }
 
+// IsRuntimeTool reports whether name is a runtime tool of observations and
+// verdicts (go, node, python, ...); analyzer tools never use these names.
+func IsRuntimeTool(name string) bool { return slices.Contains(tools, name) }
+
 func checkAnalyzerTools(list []AnalyzerTool) error {
 	for i, t := range list {
 		observed := t.Status == ObsObserved

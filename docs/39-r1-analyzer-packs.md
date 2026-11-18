@@ -31,6 +31,8 @@ type Descriptor struct {
     Tool         string   // 운영자 도구 이름 = 에이전트 플래그 이름 (§2.4)
     VersionArgs  []string // 버전 출력 argv (실행 파일 다음)
     ParseVersion func(stdout []byte) (string, bool)
+    Toolchains   []string // 필요한 공유 toolchain(§2.4.1), 정렬·중복 없음: ["node"]
+    Interpreter  string   // Toolchains 중 도구 스크립트를 실행하는 것: "node" 또는 ""
 }
 
 type Analyzer interface {
@@ -71,6 +73,28 @@ type Analyzer interface {
 - 값은 hello의 `analyzer_tools`(도구 이름 → 경로)로 워커에 간다. 이 빌드가 모르는 도구 이름(새 에이전트·옛 워커)은 `unknown_tool`로 보고하고 실행하지 않는다.
 - 도구가 언어 toolchain을 써야 하면(staticcheck는 `go list`로 패키지를 읽는다) 그 toolchain 설정을 공유한다.
 
+#### 2.4.1 공유 interpreter toolchain
+
+여러 팩의 도구가 같은 interpreter를 쓴다. W17 pyright, W18 tsc·eslint, W21 jscpd는 모두 Node 스크립트다. 팩마다 interpreter 설정을 따로 만들지 않도록 builtin에 toolchain 표(`builtin/toolchain.go`의 `toolchainTable()`)를 하나 둔다. 팩은 필요를 선언만 하고 interpreter를 직접 설정하지 않는다.
+
+| 이름 | 에이전트 플래그 | 버전 argv | 버전 parser |
+|---|---|---|---|
+| `node` | `--node /abs/node` | `--version` | 한 줄 `v<major>.<minor>.<patch>`(각 1~4자리) → `<major>.<minor>.<patch>`. pre-release·nightly·여러 줄은 거부 |
+
+- `go`는 표에 넣지 않는다. 기존 `--go`와 `GoExecutable`을 그대로 쓴다. go vet 요청 바이트 고정과 W08 경로를 바꾸지 않기 위해서다. python toolchain은 아직 없다. W17이 필요하면 표에 추가한다.
+- **이름은 예약어다.** toolchain 이름은 분석기 도구 이름으로 쓸 수 없고, env.discover 런타임 도구 이름(`go`·`node`·`python` 등)이어야 한다(`TestToolchainNamesAreReserved`).
+- **hello**: toolchain 경로는 분석기 도구와 같은 hello 맵 `analyzer_tools`에 예약 이름으로 들어간다(`{"node": "/abs/node", "staticcheck": "/abs/staticcheck"}`). hello 필드를 새로 만들지 않는 가장 작은 변경이다. agent는 같은 절대 경로 검사를 한다. 이 빌드의 toolchain 이름은 알려진 이름이므로 `unknown_tool`이 되지 않는다. 플래그 목록은 `builtin.ToolchainFlags()`이고 `codeye --help`에 `[--node /abs/node]`가 있다.
+- **검증**: 워커 시작 시 toolchain마다 한 번 한다. 절대 경로이고 실행 가능한 일반 파일인지 확인한 뒤 executor로 `<node> --version`을 도구 probe와 같은 규칙으로 실행한다. 규칙은 새 probe 디렉터리, `PATH=<해석한 실행 파일의 디렉터리>`, `LANG=C.UTF-8`(Windows는 `SystemRoot` 추가), 30초, 출력 64 KiB다. 정리 불확실, 0이 아닌 종료, 잘린 출력, 인식하지 못한 버전은 실패다. 성공하면 검증된 핸들 `pack.Toolchain{Name, Executable, Dir, Version}`이 된다. `Executable`은 운영자 경로, `Dir`은 해석한 실행 파일의 디렉터리, `Version`은 probe가 읽은 값이다.
+- **선언**: 분석기는 `Descriptor.Toolchains`(정렬·중복 없음, `go`와 자기 도구 이름 제외)에 필요한 toolchain을 적는다. 도구 실행 파일이 interpreter가 실행할 스크립트이면 `Descriptor.Interpreter`에 그 toolchain(Toolchains 중 하나)을 적는다. builtin은 필요한 toolchain이 모두 설정되고 시작 probe에 성공했을 때만 build 함수를 호출하고, 검증된 핸들 map(`toolchains["node"]`)을 넘긴다. build 함수는 핸들만 쓰고 hello 경로를 다시 읽지 않는다.
+- **사유 우선순위**: builtin이 build 전에 정한다.
+  1. 도구 경로 없음: `tool_not_configured`(hello 누락 코드 `<분석기>:not_configured`).
+  2. 필요한 toolchain 미설정: `toolchain_not_configured`(`<분석기>:toolchain_not_configured`).
+  3. toolchain 경로가 잘못됐거나 probe 실패: `tool_unavailable`(`<분석기>:toolchain_unavailable`). toolchain 자체의 행 `node:invalid_config` 또는 `node:probe_failed`도 남는다.
+  4. 그 다음 build 함수 자신의 검증·시작 probe.
+
+  설정하지 않은 toolchain은 따로 누락 행을 만들지 않는다. 그것이 필요한 분석기의 행이 보인다. 저장소 코드 허가(§2.7)는 작업마다 `Composite.Run`이 이 모두보다 먼저 검사한다. 허가가 없으면 사유는 `repository_code_not_allowed`이고 toolchain 사유는 제약으로 남는다.
+- **실행 규칙**: 도구 자신의 실행 파일은 여전히 절대 `--<tool>` 경로다. interpreter는 toolchain 핸들에서만 온다. `Interpreter`가 있으면 argv는 `<핸들.Executable> <도구 경로> <args>`이고, 자식의 `PATH`는 명시적으로 `핸들.Dir` 하나다. 도구 경로를 직접 실행하지 않으므로 스크립트의 `#!/usr/bin/env node`를 노드의 PATH로 해석하는 일이 없다. 도구 경로는 interpreter가 읽을 진입 스크립트(패키지의 JS 파일)여야 한다. shell·`.cmd` shim은 받지 않는다. 그 밖의 자식 환경은 팩이 측정해 정한다.
+
 ### 2.5 설정되지 않은 도구
 
 도구 경로가 없거나, 검증·시작 probe에 실패하거나, 필요한 toolchain이 없으면 분석기는 `pack.NotConfigured` 대역이 된다. 대역은 실제 분석기와 **같은 작업을 계획**하고 프로세스 없이 끝낸다.
@@ -78,8 +102,8 @@ type Analyzer interface {
 | 사유 (`TaskResult.Reason`) | 조건 |
 |---|---|
 | `tool_not_configured` | 운영자가 도구 경로를 주지 않음 |
-| `tool_unavailable` | 경로가 있으나 검증·시작 probe 실패(실행 파일 아님, 버전 미인식 등) |
-| `toolchain_not_configured` | 도구가 필요로 하는 언어 toolchain이 없음(staticcheck에 `--go` 없음) |
+| `tool_unavailable` | 경로가 있으나 검증·시작 probe 실패(실행 파일 아님, 버전 미인식 등), 또는 필요한 공유 toolchain의 검증·probe 실패(§2.4.1) |
+| `toolchain_not_configured` | 도구가 필요로 하는 toolchain이 설정되지 않음(staticcheck에 `--go` 없음, `Toolchains`의 `--node` 없음) |
 
 상태는 `unsupported`다. 성공·0건 통과로 세지 않는다. envelope도 쓴다. `exit_class=not_run`, 실행 0개, 관찰 0개, `processed_paths=[]`(처리 파일 0으로 알려짐), 어댑터·parser는 `codeye-not-run`이다. 단계 표시는 같은 단계의 다른 작업이 성공해도 `partial`이 되고 사유가 보인다. 예: go vet 성공 + staticcheck `tool_not_configured`이면 `static_analysis`가 `partial`이다.
 
@@ -220,6 +244,12 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 - 설정되지 않은 도구: `not_probed`. 실행 파일이 없으면 `not_found`, 시작·종료·출력 문제는 `probe_failed`와 사유 코드다.
 - 결과는 환경 문서의 `environment.analyzer_tools`에 쓴다. 추가 필드이며 W19 이전 문서에는 없다. 선언과 비교하지 않는다. 보고서는 관측 버전에 기록된 정상 probe 실행이 있어야 받아들인다.
 - 버전 명령이 없거나 출력을 인식할 수 없는 도구는 쓸 수 없다. 식별되지 않은 실행 파일을 코드에 실행하지 않는다.
+- `Interpreter`가 있는 도구는 `<interpreter> <도구> <VersionArgs>`로 실행하고 `PATH`는 interpreter 디렉터리 하나다. interpreter가 설정되지 않았으면 `probe_failed`(`toolchain_not_configured`), 경로가 실행 파일이 아니면 `probe_failed`(`toolchain_unavailable`)이며 아무것도 시작하지 않는다.
+
+공유 toolchain(§2.4.1)은 `builtin.ToolchainProbes(cfg)`가 `discovery.ProbeObserver.Toolchains`로 넘긴다. go와 같이 **런타임 관측**(`environment.observations`)으로 기록한다. `environment.analyzer_tools`는 런타임 도구 이름을 거부하므로 쓰지 않는다.
+
+- 설정된 node는 같은 probe 규칙으로 `node --version`을 실행한다. 실행 이름은 `node.version`이고, 관측 버전은 선언(`engines.node` 등)과 비교해 판정을 만든다. 설정하지 않으면 `not_probed`이고 `tool_not_probed` 제약이 남는다.
+- JS 모듈이 범위에 있으면(런타임 도구 `node`) 관측한다. 범위 생태계(또는 `any`)의 분석기가 그 toolchain을 필요로 하면 모듈 선언이 없어도 관측한다(`Observed.Needed`). 예를 들어 Python만 있는 스냅샷의 pyright가 쓰는 node다. 이 관측은 판정을 만들지 않는다.
 
 ## 7. review-r1 해석 입력
 
@@ -334,6 +364,9 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 | `report.TestRuleContextAndSuppressedObservations`, `report.TestRuleContextConfigDigest` (TC-104) | 억제 관찰은 finding이 아님, 억제 fingerprint, staticcheck·go vet 행 문맥, 억제 관찰을 인용한 finding 거부, 설정 digest 규칙, 코드 제외 export에서 경로·digest 제거와 원본 불변, 모드와 상태 불일치 거부 |
 | `staticcheck.TestRealStaticcheckSuppressionsReported` (도구 필요), `staticcheck.TestReplaySuppressionsReported` (CI) (TC-104) | `-show-ignored`: 줄·파일 억제가 `ignored` 관찰로 남음, 억제한 U1000은 기록 없음(억제하지 않은 U1000은 보고됨), 억제만 있는 exit 1의 `success_without_findings`, `reported`와 `unreported_suppression_rules=["U1000"]` 기록 |
 | `discovery.TestAnalyzerToolProbe*`, `envdoc.TestAnalyzerToolsValidation` | probe 실행 계약, not_probed, 실패 기록, 생태계 범위, 실제 probe |
+| `builtin.TestToolchainGatesAnalyzer`, `TestToolchainHandleAndProbeSpec`, `TestParseNodeVersion`, `TestToolchainNamesAreReserved`, `TestProbesCarryToolchains`, `TestDescriptorToolchainRules`, `main.TestWorkerHandlersKnowTheNodeToolchain` (TC-101) | node가 필요한 가짜 분석기: 도구 없음·toolchain 없음·상대·없는 경로·probe 종료·pre-release·정리 불확실의 사유와 우선순위, 허가 우선, 설정·probe 성공 시 핸들(경로·디렉터리·버전)로 build, probe argv·환경·제한시간, probe 디렉터리 정리, 경로 없는 detail, hello `analyzer_tools`의 node가 `unknown_tool`이 아님, 예약 이름, 탐색 probe의 interpreter·필요 분석기, Descriptor 규칙 |
+| `discovery.TestToolchainObservedAsRuntime`, `TestToolchainNeededByAnalyzerEcosystem`, `TestInterpreterToolProbe` (TC-101) | node 런타임 관측과 `engines.node` 판정, 미설정 `not_probed`, 미인식 버전, 분석기 생태계에 따른 관측(판정 없음), interpreter argv·PATH, interpreter 없음·없는 경로에서 미시작 |
+| `builtin.TestToolchainProbeRealNode`, `discovery.TestToolchainProbeRealNode` (`CODEYE_TEST_NODE` 필요) | 실제 node의 시작 probe 핸들과 env.discover 관측·판정 |
 | `review.TestR1InterpretReadsGenericEnvelope` | R1 해석 입력에 두 엔진 관찰, not-run 행, 누락 상류, 억제 관찰 제외 |
 | `run.TestAnalyzerPackWith*` (Linux) | 실제 워커: CI 조건의 미설정 가시성, 실제 go vet + staticcheck end-to-end |
 | `pack.TestGapsForEcosystemsWithoutAnalyzer`, `govet.TestNonGoSnapshotUnsupported`, `report.TestStaticAnalysisGapMakesTheReportPartial` (TC-69) | 공백 작업 계획·실행·envelope, 확장자·scope·데이터 디렉터리 규칙, `any` 미충족, 예약 이름, go vet 멤버의 비 Go 무계획과 `go_module_missing` 유지, 보고서 `partial` |
@@ -341,7 +374,7 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 
 실제 staticcheck finding이 든 보고서(전체·코드 제외)는 `CODEYE_W19_REPORT_DUMP=<dir> go test -run TestAnalyzerDecoderStaticcheckFindings ./internal/report/`로 꺼내 `report.schema.json`·`finding.schema.json`으로 검증했다(fixture의 Go 프로젝트에서는 staticcheck 진단이 없어 node smoke가 이 형태를 만들지 않는다). Windows는 바뀐 패키지의 시험을 windows/amd64로 빌드해 WSL interop으로 실행했다. Windows용 Go가 없는 환경이라 Go toolchain이 필요한 시험(재생, go vet 고정, 실제 probe)은 건너뛰었고 Windows CI의 Go로 실행된다. review-v1 역할은 스냅샷 코퍼스만 읽고 정적 계획·도구 산출물을 읽지 않으므로 staticcheck 작업이 추가돼도 v1 요청 바이트는 같다.
 
-실행 결과와 명령별 통과 여부는 W19 PR 보고에 적는다. 실제 end-to-end는 `CODEYE_TEST_STATICCHECK`를 설정한 `go test -run TestAnalyzerPackWithRealStaticcheck ./internal/worker/run/`과 `scripts/test_postgres.py --nodes`(같은 변수로 `--staticcheck` 전달)로 실행한다.
+실행 결과와 명령별 통과 여부는 W19 PR 보고에 적는다. 실제 end-to-end는 `CODEYE_TEST_STATICCHECK`를 설정한 `go test -run TestAnalyzerPackWithRealStaticcheck ./internal/worker/run/`과 `scripts/test_postgres.py --nodes`(같은 변수로 `--staticcheck` 전달, `CODEYE_TEST_NODE`가 있으면 `--node`도 전달해 시작 probe 거부가 없는지 확인)로 실행한다.
 
 ## 11. 남은 제한과 다음 팩을 위한 메모
 
@@ -353,6 +386,7 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 - R1 해석의 호출자 확장은 Go 코드에서만 동작한다(W15). 다른 언어 팩이 해석 입력을 쓰려면 코드 창 선택을 확인해야 한다.
 - 공백 판단은 소스 확장자 기준이다(§2.8). 확장자가 없는 스크립트나 생성 파일은 세지 않는다. 범위에 소스가 있어도 그 생태계의 팩이 모듈을 찾지 못하면 그 팩이 보이는 작업을 계획해야 한다. composite는 이를 강제하지 않는다.
 - 탐색 probe는 범위 안 생태계의 도구만 기록한다. `any` 생태계 도구(W21)는 항상 기록된다.
+- 공유 toolchain은 `node` 하나다(§2.4.1). 이 빌드에는 node가 필요한 분석기가 없어서 `--node`는 탐색 관측에만 쓰인다. node 자식 프로세스(worker thread, 언어 서버, telemetry)의 정리와 환경은 각 팩이 측정해야 한다. Windows에서 실제 node probe를 실행하지 않았다.
 - `tool_processed_files` 합집합은 처리 수가 있는 모든 행이 같은 수의 경로를 줄 때만 쓴다. 그렇지 않으면 합계로 돌아간다.
 - 보고서 builder 버전은 `4`다(§5.1의 `rule_context`와 관찰 `suppressed`). builder 3 이하의 go vet 외 분석기 행은 문맥을 모르므로, 그 기준과 비교한 사라진 finding은 해결되지 않는다(`rule_context_unknown`). W19 이전에 게시된 staticcheck 보고서는 없다.
 - 규칙 문맥은 분석기 단위로 비교한다. 같은 분석기의 행이 여럿(모듈별 task)이면 모든 행의 문맥 집합이 같아야 한다. 한 모듈의 설정만 바뀌어도 그 분석기의 모든 사라진 finding이 `rule_context_changed`가 된다.

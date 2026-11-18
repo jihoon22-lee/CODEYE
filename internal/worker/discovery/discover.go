@@ -129,6 +129,14 @@ func Environment(in Input, read readFunc, observe func(tools []string) Observed)
 	if observed.Err != nil {
 		return envdoc.Document{}, observed, observed.Err
 	}
+	// Shared toolchains an in-scope analyzer needs (docs/39 §2.4) are
+	// recorded like the modules' runtimes; they add no verdict.
+	for _, t := range observed.Needed {
+		if envdoc.IsRuntimeTool(t) {
+			need = append(need, t)
+		}
+	}
+	need = uniqueSorted(need)
 	obs := map[string]envdoc.Observation{}
 	for _, o := range observed.Observations {
 		if !slices.Contains(need, o.Tool) {

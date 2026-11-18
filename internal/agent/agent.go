@@ -73,8 +73,9 @@ type Config struct {
 	GoExecutable  string
 	GoModCache    string
 	// AnalyzerTools are absolute analyzer tool paths by tool name, one
-	// agent flag per tool (--staticcheck PATH, docs/39). The worker build
-	// decides which tool names it knows.
+	// agent flag per tool (--staticcheck PATH, docs/39), and the shared
+	// toolchains under their reserved names (--node PATH, docs/39 §2.4). The
+	// worker build decides which names it knows.
 	AnalyzerTools map[string]string
 	Limits        workerproto.Limits
 	// WorkerCommand is the worker argv (default: this executable + "worker").

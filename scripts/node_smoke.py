@@ -335,6 +335,12 @@ def run(base, root, env, *, browser=False):
         # and finishes unsupported/tool_not_configured.
         staticcheck = os.environ.get("CODEYE_TEST_STATICCHECK", "")
         tool_args = ["--staticcheck", staticcheck] if staticcheck else []
+        # The shared node toolchain (docs/39 §2.4.1) is probed at worker
+        # startup when CODEYE_TEST_NODE names it; no analyzer of this build
+        # needs it yet, so only its startup codes are checked.
+        node_toolchain = os.environ.get("CODEYE_TEST_NODE", "")
+        if node_toolchain:
+            tool_args += ["--node", node_toolchain]
         production = services.enter_context(service(
             [binary, "agent", "--controller", origin, "--state-dir", directory / "go-agent",
              "--name", "go-smoke", "--enroll-token-file", go_token, "--source-root", f"{go_root}={go_source}",
@@ -422,6 +428,11 @@ def run(base, root, env, *, browser=False):
         statuses = {task["key"]: task["status"] for task in full["tasks"]}
         assert statuses["env.discover"] == statuses["docs.discover"] == "succeeded"
         assert statuses["staticcheck"] == ("succeeded" if staticcheck else "unsupported"), statuses
+        # Startup codes of the worker (handler_unavailable) reach the agent log.
+        agent_log = (directory / "go.log").read_text(errors="replace")
+        assert ("staticcheck:not_configured" in agent_log) == (not staticcheck), "startup codes not in the agent log"
+        if node_toolchain:
+            assert not any(f"node:{r}" in agent_log for r in ("invalid_config", "probe_failed", "unknown_tool")), "node toolchain rejected"
         assert all(o["raw_message"] is None for o in code_free["observations"])
         assert any(o["raw_message"] and o["evidence_state"] == "verified_against_source_manifest"
                    for o in full["observations"])

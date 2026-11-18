@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.codeye.invalid/v0.1/environment.schema.json",
   "title": "CODEYE module, environment and document discovery (W15)",
-  "description": "application/vnd.codeye.environment+json. Written without a model by env.discover (kind environment) and docs.discover (kind documents) from the verified snapshot manifest. Node observations come only from operator-configured tool probes of the attempt. Document content is never stored. Cross-field rules (sorting, evidence ID binding, verdict recomputation, read budget totals) are enforced by internal/worker/discovery/envdoc.Validate.",
+  "description": "application/vnd.codeye.environment+json. Written without a model by env.discover (kind environment) and docs.discover (kind documents) from the verified snapshot manifest. Node observations come only from operator-configured tool probes of the attempt (--go, the shared toolchains such as --node, analyzer tools; docs/39). Document content is never stored. Cross-field rules (sorting, evidence ID binding, verdict recomputation, read budget totals) are enforced by internal/worker/discovery/envdoc.Validate.",
   "type": "object", "additionalProperties": false,
   "required": ["schema_version", "kind", "snapshot_manifest_digest", "run_id", "attempt_id", "scope", "modules", "limitations"],
   "properties": {

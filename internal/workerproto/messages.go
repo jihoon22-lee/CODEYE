@@ -85,8 +85,9 @@ type Hello struct {
 	GitExecutable string `json:"git_executable"`
 	GoExecutable  string `json:"go_executable"`
 	GoModCache    string `json:"go_mod_cache"`
-	// AnalyzerTools are operator analyzer tool paths by tool name
-	// (docs/39); absent when none is configured.
+	// AnalyzerTools are operator analyzer tool paths by tool name and the
+	// shared toolchain paths under their reserved names (node, docs/39
+	// §2.4); absent when none is configured.
 	AnalyzerTools      map[string]string `json:"analyzer_tools,omitempty"`
 	ToolPath           string            `json:"tool_path"`
 	LeaseMarginSeconds int               `json:"lease_margin_seconds"`
