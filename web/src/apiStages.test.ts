@@ -20,6 +20,10 @@ describe('W15 stage fields (optional, strict when present)', () => {
     const old = await createApi({ fetch: mockFetch(() => json(200, { items: [PROJECT], next_cursor: null })).fetch }).listProjects();
     expect('activity' in old.items[0]!).toBe(false);
     expect((await list(activity({ run: null, stages: [], last_report: null }))).items[0]!.activity!.run).toBeNull();
+    // Server contract: a project without runs sends detail: null.
+    const none = (await list(activity({ run: null, detail: null, stages: [], last_report: null, last_event_at: null }))).items[0]!.activity!;
+    expect(none).toMatchObject({ run: null, detail: null, stages: [] });
+    expect(await rejection(list(activity({ detail: null })))).toMatchObject({ code: 'invalid_response' });
   });
 
   it('keeps unknown enum values as opaque strings', async () => {

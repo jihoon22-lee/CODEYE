@@ -59,7 +59,9 @@ export type StageSummary = {
   last_event_at: string | null;
   checked_at: string | null;
 };
-export type ProjectActivity = StageSummary & {
+// detail is null exactly when the project has no run (run === null).
+export type ProjectActivity = Omit<StageSummary, 'detail'> & {
+  detail: string | null;
   run: { id: string; status: string; requested_at: string } | null;
   other_active_runs: number;
   waiting_reason?: string | null; // only when the representative run is queued
@@ -291,8 +293,10 @@ function parseStage(v: unknown): StageView {
 }
 // Shared by project activity and run progress: detail, stages, last_event_at, checked_at.
 function parseStageSummary(o: Record<string, unknown>): StageSummary {
+  return { detail: str(o.detail), ...parseStageFacts(o) };
+}
+function parseStageFacts(o: Record<string, unknown>): Omit<StageSummary, 'detail'> {
   return {
-    detail: str(o.detail),
     stages: list(parseStage)(o.stages ?? []),
     last_event_at: nullableDate(o.last_event_at),
     checked_at: nullableDate(o.checked_at),
@@ -311,7 +315,9 @@ function parseActivity(v: unknown): ProjectActivity {
     lastReport = { run_id: str(r.run_id), revision: int(r.revision, 1), published_at: date(r.published_at) };
   }
   return {
-    ...parseStageSummary(o),
+    ...parseStageFacts(o),
+    // The server sends detail: null exactly when there is no run.
+    detail: run === null ? nullableStr(o.detail) : str(o.detail),
     run,
     other_active_runs: int(o.other_active_runs ?? 0),
     ...(o.waiting_reason === undefined ? {} : { waiting_reason: nullableStr(o.waiting_reason) }),

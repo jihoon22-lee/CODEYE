@@ -74,7 +74,7 @@ export function ProjectActivity({ project }: { project: Project }) {
   if (!a.run) return <p className="small activity">{s.noRun}</p>;
   const status = a.run.status;
   const parts: string[] = [];
-  if (a.detail === 'not_recorded') parts.push(s.unrecorded);
+  if (a.detail === null || a.detail === 'not_recorded') parts.push(s.unrecorded);
   else if (a.detail !== 'recorded') parts.push(s.unknownDetail(shorten(a.detail, 40)));
   else {
     const stages = visible(a.stages);
