@@ -501,7 +501,9 @@ func (s *r1Stage) investigate() analysis.TaskResult {
 			modules = append(modules, record.DocumentDir(p))
 		}
 	}
+	modules = append(modules, s.otherModuleDirs(code)...)
 	sort.Strings(modules)
+	modules = slices.Compact(modules)
 	if len(modules) > 32 {
 		modules = modules[:32]
 	}

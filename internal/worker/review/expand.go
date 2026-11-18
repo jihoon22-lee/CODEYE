@@ -59,7 +59,8 @@ func citedSymbols(catalog []Excerpt, candidates []Candidate) map[functionName]bo
 	for _, c := range candidates {
 		for _, id := range c.Evidence {
 			e, ok := byID[id]
-			if !ok || (e.Kind != "code" && e.Kind != "test") {
+			// Caller expansion reads Go only (caller_expansion_go_only).
+			if !ok || (e.Kind != "code" && e.Kind != "test") || !strings.HasSuffix(e.Path, ".go") {
 				continue
 			}
 			file, err := parser.ParseFile(token.NewFileSet(), e.Path, e.Text, parser.PackageClauseOnly)
