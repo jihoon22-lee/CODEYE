@@ -35,8 +35,8 @@ Usage:
 ` + nodeAdminUsage + `  codeye start [--config PATH]      (personal mode, Linux: controller + local agent from one JSON config)
   codeye stop [--config PATH] [--format text|json]
   codeye status [--config PATH] [--format text|json]
-  codeye backup [--config PATH] --output DIR
-  codeye restore [--config PATH] --from DIR
+  codeye backup [--config PATH] [--output DIR] [--format text|json]   (default output: <backup_dir>/codeye-<UTC>)
+  codeye restore [--config PATH] --from DIR [--format text|json]   (new empty database and state_dir only)
   codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
                [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
                [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit]

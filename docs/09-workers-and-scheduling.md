@@ -15,6 +15,7 @@ R0의 워커 풀 정책 변경과 관측에는 [운영 CLI](30-w07-scheduler.md)
 | min_workers | 0 | 유지하려는 프로세스 수 하한 |
 | max_workers | 2 | starting/idle/busy/draining 워커 수의 목표 상한 |
 | global_max_running | 2 | 전체 동시에 실행 중인 attempt 수 상한 |
+| artifact_quota_bytes | 없음 | W25. 확정 산출물 합(sha256별 한 번)의 상한. 도달하면 새 claim 거절([W25 §4](47-w25-packaging-and-operations.md#4-저장-영역-상한)) |
 | reconcile_seconds | 5 | 증감 판단 주기 |
 | idle_timeout_seconds | 180 | 유휴 워커 축소 대기 |
 | scale_up_cooldown_seconds | 10 | 급격한 생성 반복 완화 |

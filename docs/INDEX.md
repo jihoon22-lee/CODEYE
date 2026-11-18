@@ -4,7 +4,7 @@ R0는 개인 모드의 Go 분석·승인된 모델 검토·근거 보고서까�
 
 | 하려는 일 | 먼저 읽을 문서 |
 |---|---|
-| 개인 모드에서 분석 실행 | [서버·로그인](24-w03-api.md) · [노드 토큰](28-w06-node-protocol.md) · [에이전트](28-w06-agent-runtime.md) · [자동 증감](30-w07-scheduler.md) |
+| 개인 모드에서 분석 실행 | [개인 사용 안내서(start·stop·백업)](48-user-guide.md) · [서버·로그인](24-w03-api.md) · [노드 토큰](28-w06-node-protocol.md) · [에이전트](28-w06-agent-runtime.md) · [자동 증감](30-w07-scheduler.md) |
 | 결과 읽기와 평가 | [보고서 사용법](35-w13-evidence-report.md) · [실제 파일럿과 한계](36-r0-pilot.md) · [Go vet 보고서 예시](../examples/report-go-vet.json) |
 | 언어 분석 팩 구현(W16~W21) | [분석기 팩 계약](39-r1-analyzer-packs.md) · [도구 어댑터 계약](06-analyzer-contract.md) · [envelope schema](../schemas/analyzer-observations.schema.json) |
 | 모델 역할 설계 | [역할별 지침과 현재 팩](07-llm-and-instructions.md) · [평가 기준](16-evaluation.md) |
@@ -35,5 +35,6 @@ R0는 개인 모드의 Go 분석·승인된 모델 검토·근거 보고서까�
 | R1 분석 팩 | [W19 분석기 팩 계약과 Go 팩(Staticcheck)](39-r1-analyzer-packs.md) · [W16 C/C++ 팩(cppcheck·clang-tidy)](41-w16-cpp-pack.md) · [W17 Python 팩](42-w17-python-pack.md) · [W18 JS/TS 팩(ESLint·tsc)](43-w18-js-ts-pack.md) · [W20 Rust 팩(cargo check·clippy)](44-w20-rust-pack.md) · [W21 구조·중복·비밀값 팩(lizard·jscpd·gitleaks)](45-w21-structure-secrets-pack.md) |
 | R1 이력과 판정 | [W23 이력·비교·사람 검토](40-w23-history-comparison.md) |
 | R1 품질 평가 | [W24 평가 runner·정답 차단·채점](46-w24-evaluation.md) |
+| R1 개인 운영 | [W25 개인 패키징·운영](47-w25-packaging-and-operations.md) · [개인 사용 안내서](48-user-guide.md) |
 
 HTTP 경로의 구현 표시는 [OpenAPI](../api/openapi.yaml)에 있다. 기계 판독 계약은 [schemas](../schemas), 입력·출력 예시는 [examples](../examples), 활성 모델 지침은 [R0 팩](../prompts/review-v1/pack.yaml)에서 찾을 수 있다.
