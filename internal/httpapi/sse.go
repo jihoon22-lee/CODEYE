@@ -148,6 +148,12 @@ func eventData(run string, e postgres.Event) map[string]any {
 	return out
 }
 
+// accessLost reports a read the actor may no longer make (membership removed,
+// project deleted).
+func accessLost(err error) bool {
+	return errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrForbidden)
+}
+
 // streamCursor reads Last-Event-ID (sent by a reconnecting browser, so it wins
 // over the URL) or ?cursor=: a canonical non-negative integer.
 func streamCursor(r *http.Request) (int64, bool) {
@@ -287,6 +293,10 @@ func (s *Server) streamRunEvents(q *request) {
 				break
 			}
 			if err := read(); err != nil {
+				if accessLost(err) {
+					control("closed", ClosedAccessRevoked, nil)
+					return
+				}
 				break
 			}
 		}
@@ -296,6 +306,10 @@ func (s *Server) streamRunEvents(q *request) {
 				view, err = s.store.GetRunView(c, actor, run)
 				return err
 			})
+			if accessLost(err) {
+				control("closed", ClosedAccessRevoked, nil)
+				return
+			}
 			if err != nil {
 				control("state.resync", ResyncViewUnavailable, nil)
 				return
@@ -332,7 +346,7 @@ func (s *Server) streamRunEvents(q *request) {
 		})
 		if err == nil {
 			err = read()
-			if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrForbidden) {
+			if accessLost(err) {
 				control("closed", ClosedAccessRevoked, nil)
 				return
 			}

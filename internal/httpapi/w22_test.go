@@ -616,3 +616,59 @@ func TestScheduleAPI(t *testing.T) {
 		t.Fatalf("after delete %s", left.raw)
 	}
 }
+
+// TC-25 through the serve path: the reconcile loop of Serve materializes a due
+// occurrence into a normal queued run whose trigger names the schedule, seen
+// over GET /runs/{id}, the schedule list and the run's event stream.
+func TestServeLoopMaterializesSchedule(t *testing.T) {
+	e := newEnv(t)
+	f := e.nodeFixture()
+	m := f.user
+	path := "/api/v1/projects/" + f.projectID + "/schedules"
+	created := e.do("POST", path, map[string]any{"cron": "*/5 * * * *", "timezone": "UTC", "run": map[string]any{"profile": "deep-review", "source_policy": "latest_at_acquire", "scope": map[string]any{"kind": "full"}}},
+		opts{cookie: m.cookie, csrf: m.csrf, idem: "serve"}).want(t, 201, "")
+	id := created.body["id"].(string)
+	var due time.Time
+	if err := e.pool.QueryRow(context.Background(), "UPDATE schedules SET next_at=date_bin('5 minutes', now(), timestamptz 'epoch') - interval '10 minutes' WHERE id=$1 RETURNING next_at", id).Scan(&due); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ap := netip.MustParseAddrPort(ln.Addr().String())
+	srv, err := New(Config{Listen: ap, Logger: slog.New(slog.DiscardHandler), SweepInterval: -1, PublishInterval: -1, ReconcileInterval: 50 * time.Millisecond}, e.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- srv.Serve(ctx, ln) }()
+	defer func() { cancel(); <-served }()
+	var last map[string]any
+	deadline := time.Now().Add(10 * time.Second)
+	for last == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the serve loop did not materialize the due occurrence")
+		}
+		time.Sleep(50 * time.Millisecond)
+		items := e.do("GET", path, nil, m.o()).want(t, 200, "").body["items"].([]any)
+		last, _ = items[0].(map[string]any)["last_occurrence"].(map[string]any)
+	}
+	runID, _ := last["run_id"].(string)
+	// The controller was "down" for two occurrences: latest_once runs only the
+	// latest and records the first missed one.
+	at, _ := time.Parse(time.RFC3339, last["scheduled_for"].(string))
+	if last["state"] != "enqueued" || runID == "" || last["missed_from"] != due.UTC().Format(time.RFC3339) || !at.After(due) || at.Sub(due) > 15*time.Minute {
+		t.Fatalf("occurrence %v (due %s)", last, due.UTC().Format(time.RFC3339))
+	}
+	run := e.do("GET", "/api/v1/runs/"+runID, nil, m.o()).want(t, 200, "").body
+	if want := map[string]any{"kind": "schedule", "schedule_id": id, "scheduled_for": last["scheduled_for"]}; !reflect.DeepEqual(run["trigger"], want) || run["status"] != "queued" {
+		t.Fatalf("scheduled run %v", run)
+	}
+	s := e.openStream("", m, runID, "?cursor=0", "")
+	got := s.until(isView)
+	if got[0].data["type"] != "run.queued" || got[0].data["trigger"] != "schedule" || got[0].data["schedule_id"] != id || got[0].data["scheduled_for"] != last["scheduled_for"] {
+		t.Fatalf("run.queued row %+v", got[0])
+	}
+}
