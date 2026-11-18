@@ -264,6 +264,7 @@ func (s *r1Stage) verify() analysis.TaskResult {
 			call.Outcome = callAccepted
 		}
 		s.rec.Calls = append(s.rec.Calls, call)
+		s.noteExecutionClaim(call)
 		for id, v := range got {
 			accepted[id] = v
 		}

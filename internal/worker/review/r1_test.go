@@ -261,8 +261,9 @@ func TestR1ExecutionAndReproductionClaimsRejected(t *testing.T) {
 	f := &r1Caller{script: script}
 	_, res := runR1(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	inv := readR1(t, j, "investigate")
-	if res["review.investigate"].Status != domain.TaskFailed || !slices.Contains(inv.Calls[0].OutputErrors, "execution_claim") || len(inv.Candidates) != 0 {
-		t.Fatalf("investigate %+v %+v", res["review.investigate"], inv.Calls)
+	if res["review.investigate"].Status != domain.TaskFailed || !slices.Contains(inv.Calls[0].OutputErrors, "execution_claim") || len(inv.Candidates) != 0 ||
+		!slices.Contains(inv.Limitations, record.LimExecutionClaim) {
+		t.Fatalf("investigate %+v %+v %v", res["review.investigate"], inv.Calls, inv.Limitations)
 	}
 	// verify still runs on the accepted interpret candidate; the reproduced
 	// verdict becomes inconclusive with reproduction_claim_rejected.

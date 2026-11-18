@@ -225,9 +225,19 @@ func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error
 		}
 		call.Outcome, call.OutputErrors = callRejected, addLim(nil, errs...)
 		s.rec.Calls = append(s.rec.Calls, call)
+		s.noteExecutionClaim(call)
 		repair = &r1Repair{OutputErrors: call.OutputErrors}
 	}
 	return s.fail(result(domain.TaskFailed, reasonOutputInvalid))
+}
+
+// noteExecutionClaim records at stage level that the platform rejected a
+// model claim of running or reproducing something, so an evaluation can count
+// it without reading every call.
+func (s *r1Stage) noteExecutionClaim(c record.R1Call) {
+	if slices.Contains(c.OutputErrors, "execution_claim") {
+		s.rec.Limitations = addLim(s.rec.Limitations, record.LimExecutionClaim)
+	}
 }
 
 // fail keeps the attempted calls, the inputs given and the upstream states
