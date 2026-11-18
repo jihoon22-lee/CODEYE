@@ -418,8 +418,10 @@ type ScheduleDecision struct {
 // MaterializeSchedules evaluates every due schedule (next occurrence at or
 // before the database clock) and every schedule with a pending occurrence,
 // one transaction per schedule. It is safe to run from several controllers:
-// a schedule whose project row is locked is left for the next pass, and the
-// occurrence key makes a repeated decision impossible.
+// each transaction locks the project and then the schedule row, so a second
+// controller waits and then finds the schedule no longer due, and the
+// occurrence key (schedule_id, scheduled_for) makes a repeated decision
+// impossible.
 func (s *Store) MaterializeSchedules(ctx context.Context) ([]ScheduleDecision, error) {
 	return s.materializeSchedules(ctx, nil)
 }
