@@ -169,12 +169,16 @@ func assemble(in assembleInput) obsdoc.Document {
 	doc.Module.Dir = in.ModuleDir
 	doc.Patterns = append([]string{}, in.Patterns...)
 	doc.Tool.Name = Tool
-	doc.RulePack = obsdoc.RulePack{ID: RulePackID, Version: RulePackVersion, Selection: []string{"-checks", Checks, "-tests=true"},
-		RepositoryConfig: obsdoc.RepoConfigOverridden, SourceSuppressions: obsdoc.SuppressHonored}
+	// -checks replaces the repository's staticcheck.conf checks (overridden;
+	// no other conf option applies to SA*/U1000), and -show-ignored keeps
+	// the diagnostics //lint:ignore hides (reported), except U1000's.
+	doc.RulePack = obsdoc.RulePack{ID: RulePackID, Version: RulePackVersion, Selection: append([]string{}, Selection...),
+		RepositoryConfig: obsdoc.RepoConfigOverridden, SourceSuppressions: obsdoc.SuppressReported, ConfigFiles: []obsdoc.ConfigFile{},
+		UnreportedSuppressionRules: append([]string{}, UnreportedSuppressionRules...)}
 	doc.Target.Properties = map[string]string{"cgo_enabled": "0", "build_tags": "", "go_flags": "", "tests": "true", "go_version_target": "module"}
 	doc.Coverage.Unit = "package"
 	doc.Coverage.FilesInScope = ptr(len(in.ScopeGoFiles))
-	limitations := append([]string{"default_build_context_only", "cgo_disabled", "source_suppressions_honored", "go_vet_overlap_checks_excluded"}, in.ExtraLimitations...)
+	limitations := append([]string{"default_build_context_only", "cgo_disabled", "go_vet_overlap_checks_excluded"}, in.ExtraLimitations...)
 	for _, e := range in.Executions {
 		doc.Executions = append(doc.Executions, obsdoc.ExecutionOf(e.Name, e.Result))
 	}
@@ -358,7 +362,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	}
 	rs := &resolver{in: in, cache: map[string][3]any{}}
 	withFindings := map[*pkgState]bool{}
-	compile := false
+	compile, suppressed := false, false
 	ordinals := map[string]int{}
 	for _, r := range st.Records {
 		msg := mask(r.Message)
@@ -418,7 +422,10 @@ func assemble(in assembleInput) obsdoc.Document {
 		ordinals[tuple]++
 		o := obsdoc.Observation{ID: obsdoc.ObservationID(AnalyzerID, in.ModuleDir, unit, r.Code, normStart, normEnd, msg, ordinal), RuleID: r.Code, Category: category(r.Code),
 			RawSeverity: ptr(r.Severity), RawMessage: msg, Path: pathPtr, Location: loc, LocationState: state, Related: []obsdoc.Related{},
-			RawRef: obsdoc.RawRef{Execution: execCheck, Stream: "stdout", StreamSHA256: stdoutSHA, RecordIndex: r.Index, ByteStart: r.ByteStart, ByteEnd: r.ByteEnd}, Unit: unit}
+			RawRef: obsdoc.RawRef{Execution: execCheck, Stream: "stdout", StreamSHA256: stdoutSHA, RecordIndex: r.Index, ByteStart: r.ByteStart, ByteEnd: r.ByteEnd}, Unit: unit,
+			// -show-ignored marks a problem hidden by //lint:ignore or
+			// //lint:file-ignore with severity "ignored".
+			Suppressed: r.Severity == severityIgnored}
 		if o.RawMessage == "" {
 			o.RawMessage = "(empty message)"
 		}
@@ -427,8 +434,13 @@ func assemble(in assembleInput) obsdoc.Document {
 			o.Related = append(o.Related, obsdoc.Related{RawMessage: mask(rel.Message), Path: rp, Location: rl, LocationState: rst})
 		}
 		doc.Observations = append(doc.Observations, o)
+		if o.Suppressed {
+			suppressed = true
+		}
 		if owner != nil {
-			withFindings[owner] = true
+			if !o.Suppressed {
+				withFindings[owner] = true
+			}
 		} else {
 			limitations = append(limitations, "unattributed_observation_unit")
 		}
@@ -590,10 +602,13 @@ func assemble(in assembleInput) obsdoc.Document {
 	if analyzed == 0 {
 		fail(domain.TaskUnsupported, ReasonNoPackages, obsdoc.ExitConfigurationError)
 	}
+	if suppressed {
+		limitations = append(limitations, "source_suppressed_observations")
+	}
 	partial := false
 	if reason == "" {
 		class = obsdoc.ExitSuccessWithoutFindings
-		if len(doc.Observations) > 0 {
+		if doc.Active() > 0 {
 			class = obsdoc.ExitSuccessWithFindings
 		}
 	} else {

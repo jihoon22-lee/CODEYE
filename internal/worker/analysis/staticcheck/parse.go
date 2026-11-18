@@ -30,6 +30,10 @@ type relatedJSON struct {
 	Message  *string   `json:"message"`
 }
 
+// severityIgnored is the severity -show-ignored gives a problem that an
+// in-source //lint:ignore or //lint:file-ignore directive hides.
+const severityIgnored = "ignored"
+
 // recordJSON is one output line of `staticcheck -f json` 2026.2. Unknown
 // fields are a shape error: the parser is pinned to this version's format.
 type recordJSON struct {

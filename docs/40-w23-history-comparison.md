@@ -74,14 +74,16 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 | `new` | 이번에만 있다. 기준 run이 이 위치를 같은 방식으로 볼 수 없었다면 `reason`에 그 이유를 단다. |
 | `persisting` | 양쪽에 있고 개수·심각도·검증 상태·영역이 같다. 줄 위치만 다르면 `changes: ["lines"]`인 persisting이다. |
 | `changed` | 양쪽에 있고 `count`·`severity`·`validation`·`category` 중 하나가 다르다. |
-| `resolved_observed` | 기준에만 있고, 이번 run이 같은 source variant·scope에서 같은 분석기를 성공적으로 실행했고(성공 종료, 부분 파싱 아님, 산출물 거부 아님) 그 분석기의 `processed_paths`가 발견의 모든 경로를 포함하며, 도구 버전이 양쪽에서 알려져 있고 같을 때만. 도구 발견만 가능하다. |
+| `resolved_observed` | 기준에만 있고, 이번 run이 같은 source variant·scope에서 같은 분석기를 성공적으로 실행했고(성공 종료, 부분 파싱 아님, 산출물 거부 아님) 그 분석기의 `processed_paths`가 발견의 모든 경로를 포함하며, 도구 버전과 규칙 문맥(W19, [docs/39 §5.1](39-r1-analyzer-packs.md#51-규칙-문맥과-소스-안-억제-builder-4-tc-104))이 양쪽에서 알려져 있고 같으며, 이번 run의 도구가 그 진단을 소스 안 억제로 숨겨졌다고 보고하지 않았고 억제를 보고하지 않는 방식(`source_suppressions=honored`)도 아닐 때만. 도구 발견만 가능하다. |
 | `absent_unverified` | 기준에만 있고 위 조건 중 하나라도 확인되지 않는다. `reason`이 필수다. |
 
-`reason` 값: `source_variant_differs`, `scope_reduced`, `check_not_run`, `check_failed`, `rules_changed`, `rules_unknown`, `location_not_inspected`, `model_review_not_performed`, `model_review_partial`, `model_absence_not_observation`. 모델이 후보를 다시 내지 않은 것은 관찰이 아니므로 모델 후보는 절대 `resolved_observed`가 되지 않는다.
+`reason` 값: `source_variant_differs`, `scope_reduced`, `check_not_run`, `check_failed`, `rules_changed`, `rules_unknown`, `location_not_inspected`, `model_review_not_performed`, `model_review_partial`, `model_absence_not_observation`, 그리고 W19의 `rule_context_unknown`(한쪽 규칙 문맥을 모름; builder 3 이하의 go vet 외 분석기 행 포함), `rule_context_changed`(규칙 팩·버전·선택·저장소 설정 모드·설정 파일 digest·억제 처리 중 하나가 다름), `suppressed_in_source`(관찰한 쪽 도구가 같은 fp2의 진단을 억제됨으로 보고함; new에서는 기준 쪽이 억제했음), `source_suppressions_hidden`(현재 쪽 도구가 억제를 적용하고 숨긴 진단을 보고하지 않음: `source_suppressions=honored`이거나 그 규칙이 `unreported_suppression_rules`에 있음, 예 staticcheck U1000). 모델이 후보를 다시 내지 않은 것은 관찰이 아니므로 모델 후보는 절대 `resolved_observed`가 되지 않는다.
+
+도구 발견의 이유 우선순위는 source variant → scope → 미실행·실패 → 위치 미검사 → `suppressed_in_source` → 도구 버전(`rules_unknown`, `rules_changed`) → 규칙 문맥(`rule_context_unknown`, `rule_context_changed`) → `source_suppressions_hidden`이다. go vet 문서에는 rule pack이 없다. builder 4 decoder는 `codeye-go-vet-default` v1을 합성해 행에 쓰고, 문맥이 없는 builder 3 go vet 행에는 비교가 같은 문맥을 합성한다. 그래서 builder 3과 4의 go vet 보고서는 서로 비교되고 W23 세 run smoke의 수정 → `resolved_observed`가 유지된다.
 
 - `ambiguous`: 한쪽에 같은 식별의 발견이 여럿이면 true이며, 상태는 묶음 전체로 정하고 하나씩 짝짓지 않는다.
 - `move_candidates`: `move_key`가 같고 경로만 다른 new↔사라진 항목. 이동·이름 변경 후보로만 보여주고 자동으로 합치거나 판정을 옮기지 않는다.
-- `differences`: `source_variant`, `source_revision`, `profile`, `scope`, `builder_version`, `tool:<analyzer>:version|result|processed_files`, `ai_review`, `review:<role>`(모델·지침 digest). 같은 값은 생략한다.
+- `differences`: `source_variant`, `source_revision`, `profile`, `scope`, `builder_version`, `tool:<analyzer>:version|rule_context|result|processed_files`, `ai_review`, `review:<role>`(모델·지침 digest). `rule_context` 값은 `pack@version [선택] config=<모드>[:설정 digest 앞 12자|:unrecorded] suppressions=<모드>[ unreported=<규칙,…>]`이고 문맥이 없는 행은 `unknown`이다. 설정 digest 앞부분은 코드 제외 내보내기에서 빼는 값이지만, 비교 응답은 `include_code=true` 보고서를 받을 수 있는 같은 프로젝트 읽기 권한자에게만 가고 이미 fp2 식별을 싣는다. 같은 값은 생략한다.
 - `counts`는 entry(식별) 단위 상태 수이고, `unidentified`는 `fp2` 식별이 없어 비교하지 않은 발견 수다.
 
 ## 4. 사람 판정
@@ -146,7 +148,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 | migration | 0007 데이터에 0008 적용 시 기존 행 불변, CHECK·FK·version trigger, 재적용, 0007 바이너리 거부. | `TestW23MigrationAddsReviewsOnly` |
 | 실제 worker | 실제 go vet 세 run: 줄 이동 persisting(`changes: ["lines"]`, 줄 +2), 새 printf 진단 new, run 1에 기록한 판정이 run 2 게시 시점에 고정(`hidden_findings` 1), 수정 뒤 `resolved_observed`(이유 없음), 명시 기준 비교, 코드 제외 내보내기에 식별 없음. 응답은 OpenAPI `RunComparison`으로 검증. | `scripts/node_smoke.py`의 `w23_history` |
 | 웹 | 예시 파싱·불일치 거부, 기준·상태 글자 표시, 숨김 발견 목록 제외와 표시, 후보 일치는 열린 채 표시, viewer 양식 없음, 필수 사유·과거 만료 차단, If-None-Match/If-Match, 재시도 키 재사용, 409 뒤 재조회, 식별 체계 차이 시 run 차이 표시. | `web/src/HistoryView.test.tsx` |
-| 계약 | OpenAPI·0008·발견 스키마·Go의 판정/상태/이유/일치 enum 일치, 예시의 counts·summary 재계산, 해결 항목은 도구만, 부정 사례 8개. | `scripts/validate_bundle.py`의 `check_w23_contracts` |
+| 계약 | OpenAPI·0008·발견 스키마·Go의 판정/상태/이유/일치 enum 일치, 예시의 counts·summary 재계산, 해결 항목은 도구만, 부정 사례 10개(W19의 규칙 문맥·도구 버전 차이가 있는데 해결로 표시한 항목 2개 포함). | `scripts/validate_bundle.py`의 `check_w23_contracts` |
 
 ### 실행한 검증
 
@@ -160,7 +162,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 - 모델 후보는 다시 나오지 않아도 해결로 보지 않는다. 모델 후보의 해결은 사람 판정(`fixed_by_user`)이나 도구 관찰로만 남는다.
 - 첫 발견 시각과 run 사이 연속 이력(몇 번째 run부터 있었는지)은 계산하지 않는다. 비교는 두 revision 사이만 본다.
 - 코드 제외 내보내기에는 식별과 현재 판정이 없다. Markdown·HTML 내보내기는 게시 시점 판정만 보여준다.
-- 새 분석기 decoder는 `ToolFingerprint`로 식별을 만들고 성공한 작업의 `processed_paths`를 채워야 `resolved_observed`가 가능하다. 채우지 않으면 그 분석기의 사라진 발견은 항상 `location_not_inspected`다.
+- 새 분석기 decoder는 `ToolFingerprint`로 식별을 만들고 성공한 작업의 `processed_paths`를 채워야 `resolved_observed`가 가능하다. 채우지 않으면 그 분석기의 사라진 발견은 항상 `location_not_inspected`다. 도구 행에 규칙 문맥(`rule_context`)이 없거나 저장소 설정을 읽으면서 파일을 기록하지 못하면 `rule_context_unknown`, 억제를 보고하지 않으면 `source_suppressions_hidden`이다(W19).
 - 판정 화면은 최신 판정만 보여주며 감사 이력 목록 화면, 일괄 판정, 이동 후보의 판정 이전 기능은 없다(API로 이력을 읽을 수 있다).
 - 경로 범위는 snapshot 상대 경로 접두사만 받는다. glob은 지원하지 않는다.
 - [데이터 모델](10-data-model.md)의 migration 표, [API 문서](11-api-and-events.md), 구현 순서·수용 시험·색인의 W23 상태는 이 브랜치에서 고치지 않았다(통합 검토에서 갱신).

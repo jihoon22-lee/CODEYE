@@ -261,6 +261,13 @@ func (s *r1Stage) readToolDoc(key string, files map[string]source.Entry) (toolSu
 		sum := toolSummary{Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, Module: d.Module.Dir, TaskStatus: string(d.Outcome.TaskStatus), ExitClass: d.Outcome.ExitClass,
 			PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations}
 		for _, o := range d.Observations {
+			// A diagnostic the tool reported as suppressed in source is the
+			// project's decision, not a candidate: it never reaches the model
+			// (the envelope's source_suppressed_observations limitation says
+			// some were left out) and never becomes a finding (docs/39 §5.1).
+			if o.Suppressed {
+				continue
+			}
 			to := toolObservation{ID: o.ID, Tool: d.Analyzer.ID, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState}
 			if o.Location != nil {
 				to.Location = &toolLocation{Path: o.Location.Path, StartLine: o.Location.StartLine, EndLine: o.Location.EndLine}

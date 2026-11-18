@@ -32,11 +32,21 @@ const (
 	AnalyzerID     = "go.staticcheck"
 	Name           = "staticcheck"
 	Tool           = "staticcheck"
-	AdapterVersion = "1"
-	// RulePackID/Version name the CODEYE check selection below.
+	AdapterVersion = "2"
+	// RulePackID/Version name the CODEYE check selection below. Version 2
+	// adds -show-ignored: diagnostics hidden by //lint:ignore and
+	// //lint:file-ignore are reported (severity "ignored") and kept as
+	// suppressed observations, except U1000's (UnreportedSuppressionRules).
 	RulePackID      = "codeye-go-staticcheck"
-	RulePackVersion = "1"
+	RulePackVersion = "2"
 )
+
+// UnreportedSuppressionRules are the selected checks whose in-source
+// suppressions -show-ignored does not report. Measured with staticcheck
+// 2026.2.2: //lint:ignore U1000 on a declaration and //lint:file-ignore U1000
+// leave no record at all (the unused check treats the object as used), so a
+// U1000 finding that vanishes may have been suppressed (docs/39 §5.1).
+var UnreportedSuppressionRules = []string{"U1000"}
 
 // Checks is the CODEYE selection passed with -checks (it overrides the
 // repository's staticcheck.conf "checks"; with ST* disabled no other
@@ -370,9 +380,16 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	return res
 }
 
+// Selection is the rule-pack part of the staticcheck argv: the checks, the
+// test files and -show-ignored (source suppressions are reported, docs/39
+// §5.1). Measured with 2026.2.2: -checks replaces staticcheck.conf
+// "checks" (a conf disabling SA1000 and U1000 changes nothing), and with
+// -show-ignored a run whose only problems are ignored ones exits 1.
+var Selection = []string{"-checks", Checks, "-tests=true", "-show-ignored"}
+
 // CheckArgs is the staticcheck argv after the executable.
 func CheckArgs(patterns []string) []string {
-	return append([]string{"-f", "json", "-checks", Checks, "-tests=true"}, patterns...)
+	return append(append([]string{"-f", "json"}, Selection...), patterns...)
 }
 
 func stoppable(r *executor.Result) bool {

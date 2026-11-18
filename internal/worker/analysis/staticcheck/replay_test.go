@@ -189,6 +189,50 @@ func TestReplayClean(t *testing.T) {
 	}
 }
 
+// TC-104 on captured bytes (-show-ignored): problems //lint:ignore and
+// //lint:file-ignore hide arrive with severity "ignored" and become
+// suppressed observations; only the active one makes the class
+// success_with_findings, and all suppressed with exit 1 is
+// success_without_findings with the package analyzed clean.
+func TestReplaySuppressionsReported(t *testing.T) {
+	for _, tc := range []struct {
+		capture        string
+		all            bool
+		active, hidden int
+		class, unit    string
+	}{
+		{"suppressed", false, 2, 2, obsdoc.ExitSuccessWithFindings, PackageAnalyzedWithFindings},
+		{"suppressed-only", true, 0, 3, obsdoc.ExitSuccessWithoutFindings, PackageAnalyzedClean},
+	} {
+		res, doc, _, _ := replay(t, suppressionFiles(tc.all), tc.capture, nil)
+		if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != tc.class || doc.Coverage.Units[tc.unit] != 1 {
+			t.Fatalf("%s: %s/%s %+v units %v", tc.capture, res.Status, res.Reason, doc.Outcome, doc.Coverage.Units)
+		}
+		active, hidden := 0, 0
+		for _, o := range doc.Observations {
+			switch {
+			case o.Suppressed && *o.RawSeverity == "ignored":
+				hidden++
+			case !o.Suppressed && *o.RawSeverity == "error":
+				active++
+			default:
+				t.Fatalf("%s: observation %+v", tc.capture, o)
+			}
+		}
+		if active != tc.active || hidden != tc.hidden || doc.Active() != tc.active || doc.RulePack.SourceSuppressions != obsdoc.SuppressReported ||
+			!slices.Equal(doc.RulePack.UnreportedSuppressionRules, []string{"U1000"}) {
+			t.Fatalf("%s: active %d hidden %d %+v", tc.capture, active, hidden, doc.RulePack)
+		}
+	}
+	// The same bytes without -show-ignored semantics would be a contract
+	// break: a suppressed record under honored suppressions is invalid.
+	_, doc, _, _ := replay(t, suppressionFiles(false), "suppressed", nil)
+	doc.RulePack.SourceSuppressions, doc.RulePack.UnreportedSuppressionRules = obsdoc.SuppressHonored, []string{}
+	if err := obsdoc.Validate(doc, obsdoc.Expect{}); err == nil {
+		t.Fatal("suppressed observations accepted under honored suppressions")
+	}
+}
+
 // TC-08: a compile record fails the task, keeps the other package's
 // observations and leaves processed files unknown.
 func TestReplayTypeErrorPartial(t *testing.T) {

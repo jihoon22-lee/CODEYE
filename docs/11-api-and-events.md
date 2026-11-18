@@ -75,9 +75,9 @@ heartbeat 이벤트는 연결 유지용이며 분석 진행률을 올리지 않�
 
 ### W23 비교·판정
 
-`GET /runs/{id}/comparison`은 저장된 게시 보고서에서 매 요청 다시 계산한다(비교 표 없음). 기준은 `baseline`·`baseline_revision`으로 고르며, 생략하면 보고서 목록의 `default_baseline`(같은 source variant·profile·scope의 직전 completed/partial 보고서)이다. 항목 상태는 `new`, `persisting`, `changed`, `absent_unverified`(이유 필수), `resolved_observed`다. `resolved_observed`는 같은 도구·같은 확인된 버전이 다시 성공하고 그 발견의 경로를 실제로 처리했을 때만이며 모델 후보에는 쓰지 않는다. 모호한 묶음과 이동 가능성은 표시만 하고 자동으로 짝짓지 않는다.
+`GET /runs/{id}/comparison`은 저장된 게시 보고서에서 매 요청 다시 계산한다(비교 표 없음). 기준은 `baseline`·`baseline_revision`으로 고르며, 생략하면 보고서 목록의 `default_baseline`(같은 source variant·profile·scope의 직전 completed/partial 보고서)이다. 항목 상태는 `new`, `persisting`, `changed`, `absent_unverified`(이유 필수), `resolved_observed`다. `resolved_observed`는 같은 도구·같은 확인된 버전이 다시 성공하고 그 발견의 경로를 실제로 처리했으며, 규칙 문맥(보고서 builder 4 도구 행의 `rule_context`: 규칙 팩·선택·저장소 설정·소스 안 억제 처리; go vet은 합성)이 양쪽 모두 알려져 있고 같고, 그 진단이 소스 안 억제로 숨겨졌다고 보고되지 않았을 때만이다(이유 `rule_context_unknown`, `rule_context_changed`, `suppressed_in_source`, `source_suppressions_hidden`, [W19 계약](39-r1-analyzer-packs.md)). 모델 후보에는 쓰지 않는다. 모호한 묶음과 이동 가능성은 표시만 하고 자동으로 짝짓지 않는다.
 
-`POST /projects/{id}/finding-reviews`는 판정 version을 덧붙인다. owner·manager·runner만 쓸 수 있고(viewer 403, 비구성원 404), `If-Match: "N"`(첫 판정은 `If-None-Match: *`)와 `Idempotency-Key`가 필수다. 게시 시점 판정은 보고서에 고정하고 현재 판정(만료·범위·되돌림·모호한 일치 반영)은 따로 응답한다. 코드 제외 내보내기에는 `fingerprint`·`fingerprint_basis`·`disposition_version`이 없다. 형식은 [OpenAPI](../api/openapi.yaml)의 `implemented-w23`, [비교 예시](../examples/comparison.json), [판정 예시](../examples/finding-reviews.json), 규칙은 [W23 기록](40-w23-history-comparison.md)을 따른다.
+`POST /projects/{id}/finding-reviews`는 판정 version을 덧붙인다. owner·manager·runner만 쓸 수 있고(viewer 403, 비구성원 404), `If-Match: "N"`(첫 판정은 `If-None-Match: *`)와 `Idempotency-Key`가 필수다. 게시 시점 판정은 보고서에 고정하고 현재 판정(만료·범위·되돌림·모호한 일치 반영)은 따로 응답한다. 코드 제외 내보내기에는 `fingerprint`·`fingerprint_basis`·`disposition_version`과 도구 행 `rule_context`의 `config_paths`·`config_digest`가 없다. 형식은 [OpenAPI](../api/openapi.yaml)의 `implemented-w23`, [비교 예시](../examples/comparison.json), [판정 예시](../examples/finding-reviews.json), 규칙은 [W23 기록](40-w23-history-comparison.md)을 따른다.
 
 ## 6. 오류 모델
 

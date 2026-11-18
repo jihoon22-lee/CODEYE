@@ -57,13 +57,20 @@ const (
 	LocationSourceDrift     = "source_drift"
 )
 
-// Rule pack handling of repository configuration and in-source suppressions.
+// Rule pack handling of repository configuration and in-source suppressions
+// (docs/39 §5.1 rule context). A pack that honors repository configuration
+// records the files the tool read in RulePack.ConfigFiles; one that cannot
+// enumerate them records null, and its vanished findings are never
+// resolved. A pack whose tool hides suppressed diagnostics records honored;
+// one that keeps them records reported and marks those observations
+// Suppressed.
 const (
 	RepoConfigOverridden = "overridden" // CLI flags replace the repository selection
 	RepoConfigHonored    = "honored"    // the tool reads repository configuration
 	RepoConfigNone       = "none"       // the tool has no repository configuration
 	SuppressHonored      = "honored"    // in-source suppressions hide diagnostics
-	SuppressReported     = "reported"   // suppressed diagnostics are kept
+	SuppressReported     = "reported"   // suppressed diagnostics are kept, marked suppressed
+	SuppressDisabled     = "disabled"   // CODEYE turned the tool's in-source suppressions off
 	SuppressNone         = "none"       // the tool has no suppression syntax
 )
 
@@ -79,7 +86,7 @@ var (
 	columnUnits    = []string{"byte", "utf16", "rune"}
 	units          = []string{"crate", "file", "module", "package", "project", "translation_unit"}
 	repoConfig     = []string{RepoConfigOverridden, RepoConfigHonored, RepoConfigNone}
-	suppressions   = []string{SuppressHonored, SuppressReported, SuppressNone}
+	suppressions   = []string{SuppressHonored, SuppressReported, SuppressDisabled, SuppressNone}
 	streams        = []string{"stdout", "stderr"}
 	// AnalyzerIDPattern: <ecosystem>.<tool>, no hyphen (review record
 	// tool codes replace "." with "_" and must stay a code).
@@ -154,13 +161,32 @@ type Target struct {
 }
 
 // RulePack is the CODEYE selection passed to the tool and how repository
-// configuration and in-source suppressions were treated.
+// configuration and in-source suppressions were treated. Together they are
+// the rule context a comparison must find equal before it may call a
+// vanished finding resolved.
 type RulePack struct {
 	ID                 string   `json:"id"`
 	Version            string   `json:"version"`
 	Selection          []string `json:"selection"`
 	RepositoryConfig   string   `json:"repository_config"`
 	SourceSuppressions string   `json:"source_suppressions"`
+	// ConfigFiles are the repository configuration files the tool read,
+	// sorted by path, each bound to its manifest SHA-256. [] unless
+	// RepositoryConfig is honored; with honored, [] means the tool read no
+	// file (its defaults) and null means the pack could not enumerate them.
+	ConfigFiles []ConfigFile `json:"config_files"`
+	// UnreportedSuppressionRules are the selected rules whose in-source
+	// suppressions the tool applies without reporting them although the pack
+	// records SourceSuppressions reported (measured per rule; staticcheck
+	// U1000). Sorted unique rule IDs; [] unless SourceSuppressions is
+	// reported. A comparison never resolves a vanished finding of these rules.
+	UnreportedSuppressionRules []string `json:"unreported_suppression_rules"`
+}
+
+// ConfigFile is one repository configuration file a tool read.
+type ConfigFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
 }
 
 // Outcome is the adapter's task outcome; the DB task row stays the authority.
@@ -252,6 +278,11 @@ type Observation struct {
 	RawRef         RawRef    `json:"raw_ref"`
 	Unit           string    `json:"unit"`
 	SuggestedFixes int       `json:"suggested_fix_count"`
+	// Suppressed marks a diagnostic the tool reports as hidden by an
+	// in-source suppression (only with source_suppressions=reported). It is
+	// kept so a comparison can tell "suppressed" from "fixed"; it never
+	// becomes a finding.
+	Suppressed bool `json:"suppressed"`
 }
 
 // ToolError is a tool-reported failure to analyze (type error, missing
@@ -325,7 +356,7 @@ func ObservationID(analyzerID, moduleDir, unit, rule, position, end, message str
 // New returns an empty document of the envelope with every list non-nil.
 func New(a Analyzer, adapter, parser Component, taskKey, manifestDigest string) Document {
 	return Document{SchemaVersion: SchemaVersion, Kind: Kind, Analyzer: a, Adapter: adapter, Parser: parser, TaskKey: taskKey, ManifestDigest: manifestDigest,
-		Patterns: []string{}, Target: Target{Properties: map[string]string{}}, RulePack: RulePack{Selection: []string{}, RepositoryConfig: RepoConfigNone, SourceSuppressions: SuppressNone},
+		Patterns: []string{}, Target: Target{Properties: map[string]string{}}, RulePack: RulePack{Selection: []string{}, RepositoryConfig: RepoConfigNone, SourceSuppressions: SuppressNone, ConfigFiles: []ConfigFile{}, UnreportedSuppressionRules: []string{}},
 		Executions: []Execution{}, Coverage: Coverage{Unit: "file", Units: map[string]int{}}, Observations: []Observation{}, ToolErrors: []ToolError{},
 		WorkspaceDrift: []string{}, Limitations: []string{}}
 }
@@ -488,6 +519,9 @@ func Validate(d Document, want Expect) error {
 			return invalid("rule selection")
 		}
 	}
+	if err := checkConfigFiles(d.RulePack, want.Lookup); err != nil {
+		return err
+	}
 	if err := checkOutcome(d); err != nil {
 		return err
 	}
@@ -514,6 +548,49 @@ func Validate(d Document, want Expect) error {
 	return nil
 }
 
+// checkConfigFiles: config files only when the tool honors repository
+// configuration (null = not enumerated), sorted unique manifest paths bound
+// to their manifest SHA-256.
+func checkConfigFiles(r RulePack, lookup func(string) (string, bool)) error {
+	rules := r.UnreportedSuppressionRules
+	if rules == nil || len(rules) > 64 || (r.SourceSuppressions != SuppressReported && len(rules) != 0) {
+		return invalid("unreported suppression rules")
+	}
+	for i, id := range rules {
+		if id == "" || !SafeText(id, 128) || strings.ContainsAny(id, " \n\t") || (i > 0 && rules[i-1] >= id) {
+			return invalid("unreported suppression rules must be sorted unique rule IDs")
+		}
+	}
+	if r.RepositoryConfig != RepoConfigHonored && (r.ConfigFiles == nil || len(r.ConfigFiles) != 0) {
+		return invalid("config files without honored repository configuration")
+	}
+	if len(r.ConfigFiles) > 256 {
+		return invalid("config files")
+	}
+	for i, f := range r.ConfigFiles {
+		if domain.ValidateEvidencePath(f.Path) != nil || !hex64.MatchString(f.SHA256) || (i > 0 && r.ConfigFiles[i-1].Path >= f.Path) {
+			return invalid("config files must be sorted unique paths with SHA-256")
+		}
+		if lookup != nil {
+			if sha, ok := lookup(f.Path); !ok || sha != f.SHA256 {
+				return invalid("config file %s is not the manifest file", f.Path)
+			}
+		}
+	}
+	return nil
+}
+
+// Active reports the observations that are not suppressed in source.
+func (d Document) Active() int {
+	n := 0
+	for _, o := range d.Observations {
+		if !o.Suppressed {
+			n++
+		}
+	}
+	return n
+}
+
 func checkOutcome(d Document) error {
 	o := d.Outcome
 	switch {
@@ -523,8 +600,10 @@ func checkOutcome(d Document) error {
 		return invalid("outcome reason")
 	}
 	if o.TaskStatus == domain.TaskSucceeded {
+		// Findings are the active observations: diagnostics hidden by an
+		// in-source suppression are kept but are not findings.
 		want := ExitSuccessWithoutFindings
-		if len(d.Observations) > 0 {
+		if d.Active() > 0 {
 			want = ExitSuccessWithFindings
 		}
 		switch {
@@ -650,6 +729,8 @@ func checkObservations(d Document, execs map[string]Execution, lookup func(strin
 			return invalid("observation %s metadata", o.ID)
 		case o.Location != nil && slices.Contains(d.WorkspaceDrift, o.Location.Path):
 			return invalid("observation %s links a drifted file", o.ID)
+		case o.Suppressed && d.RulePack.SourceSuppressions != SuppressReported:
+			return invalid("observation %s is suppressed without reported source suppressions", o.ID)
 		}
 		for _, r := range o.Related {
 			if !SafeText(r.RawMessage, 8192) || !checkPlace(r.Path, r.Location, r.LocationState, lookup) {

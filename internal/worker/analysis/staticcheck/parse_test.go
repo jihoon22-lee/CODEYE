@@ -147,7 +147,7 @@ func TestCategoryPolicyAndArgs(t *testing.T) {
 		}
 	}
 	args := CheckArgs([]string{"./..."})
-	if !slices.Equal(args, []string{"-f", "json", "-checks", Checks, "-tests=true", "./..."}) {
+	if !slices.Equal(args, []string{"-f", "json", "-checks", Checks, "-tests=true", "-show-ignored", "./..."}) {
 		t.Fatalf("args %v", args)
 	}
 	for code := range VetOverlap {

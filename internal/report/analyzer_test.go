@@ -43,7 +43,7 @@ func notRunDoc(t *testing.T) map[string]any {
 	d["executions"], d["observations"], d["tool_errors"] = []any{}, []any{}, []any{}
 	d["tool"] = map[string]any{"name": "staticcheck", "version": nil, "version_tested": false}
 	d["target"] = map[string]any{"platform": nil, "properties": map[string]any{}}
-	d["rule_pack"] = map[string]any{"id": "none", "version": "1", "selection": []any{}, "repository_config": "none", "source_suppressions": "none"}
+	d["rule_pack"] = map[string]any{"id": "none", "version": "1", "selection": []any{}, "repository_config": "none", "source_suppressions": "none", "config_files": []any{}, "unreported_suppression_rules": []any{}}
 	cov := d["coverage"].(map[string]any)
 	cov["processed_paths"], cov["files_skipped"], cov["units"] = []any{}, 0, map[string]any{}
 	d["parse"] = map[string]any{"ok": false, "records": 0, "unparsed_bytes": 0, "shape_errors": 0, "observations": 0, "unresolved_observations": 0, "tool_errors": 0}

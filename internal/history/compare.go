@@ -44,6 +44,20 @@ const (
 	// A model that does not raise a candidate again has not observed that
 	// it was fixed: model candidates are never resolved_observed.
 	ReasonModelAbsence = "model_absence_not_observation"
+	// W19 rule context (docs/39 §5.1, docs/40 §3.3). A tool finding is
+	// resolved only when its rule pack and selection and the handling of
+	// repository configuration and in-source suppressions are known and
+	// equal on both sides.
+	ReasonRuleContextUnknown = "rule_context_unknown"
+	ReasonRuleContextChanged = "rule_context_changed"
+	// The observing side reported this diagnostic as suppressed in source:
+	// it was hidden, not fixed (on a new entry: the baseline had hidden it).
+	ReasonSuppressedInSource = "suppressed_in_source"
+	// The current side applies in-source suppressions of this rule without
+	// reporting them (all rules under honored, or the pack's
+	// unreported_suppression_rules), so a vanished diagnostic may have been
+	// suppressed, not fixed.
+	ReasonSuppressionsHidden = "source_suppressions_hidden"
 )
 
 // Not-comparable reasons of a whole comparison.
@@ -189,11 +203,11 @@ func Compare(cur, base Side) Comparison {
 		switch {
 		case len(e.Baseline) == 0:
 			e.State = StateNew
-			if r := unverified(e.basis, base, cur, false); r != "" {
+			if r := unverified(fp, e.basis, base, cur, false); r != "" {
 				e.Reason = ptr(r)
 			}
 		case len(e.Current) == 0:
-			if r := unverified(e.basis, cur, base, true); r != "" {
+			if r := unverified(fp, e.basis, cur, base, true); r != "" {
 				e.State, e.Reason = StateAbsentUnverified, ptr(r)
 			} else {
 				e.State = StateResolvedObserved
@@ -328,6 +342,38 @@ func versions(tcs []report.ToolCoverage) ([]string, bool) {
 	return slices.Compact(out), true
 }
 
+// ruleContexts are the rule-context keys of analyzer's rows and whether all
+// of them are known. Like versions, every row counts (the
+// tool:<analyzer>:rule_context difference shows the same rows). A row
+// without a context is unknown, except go vet's, which report.RuleContextOf
+// synthesizes (revisions before builder 4 and the go vet document carry
+// none).
+func ruleContexts(r report.Report, analyzer string) (keys []string, known bool) {
+	known = true
+	for _, tc := range toolsOf(r, analyzer) {
+		c := report.RuleContextOf(tc)
+		if c == nil || !c.Known() {
+			known = false
+			continue
+		}
+		keys = append(keys, c.Key())
+	}
+	slices.Sort(keys)
+	return slices.Compact(keys), known
+}
+
+// suppressionsHidden reports a row of analyzer that ran and may hide an
+// in-source suppression of rule without reporting it: suppressions honored,
+// or reported except for this rule (staticcheck U1000).
+func suppressionsHidden(r report.Report, analyzer, rule string) bool {
+	for _, tc := range toolsOf(r, analyzer) {
+		if c := report.RuleContextOf(tc); tc.ExitClass != "not_run" && c != nil && c.HidesSuppressionsOf(rule) {
+			return true
+		}
+	}
+	return false
+}
+
 // reviewRules is the role/model/pack identity of the accepted review calls.
 func reviewRules(r report.Report) []string {
 	var out []string
@@ -342,7 +388,7 @@ func reviewRules(r report.Report) []string {
 // would produce) this basis over its location with the rules of other, or
 // "" when it did. For a vanished entry observed is the current side; for a
 // new entry it is the baseline.
-func unverified(b report.FingerprintBasis, observed, other Side, vanished bool) string {
+func unverified(fp string, b report.FingerprintBasis, observed, other Side, vanished bool) string {
 	if !bytes.Equal(observed.Source, other.Source) {
 		return ReasonSourceVariant
 	}
@@ -396,15 +442,28 @@ func unverified(b report.FingerprintBasis, observed, other Side, vanished bool) 
 		}
 		inspected = inspected && seen
 	}
+	ca, knownA := ruleContexts(observed.Report, b.Analyzer)
+	co, knownO := ruleContexts(other.Report, b.Analyzer)
+	// Precedence (docs/40 §3.3): the location was not inspected; the
+	// observing side reported the diagnostic suppressed; the tool version;
+	// the rule context; unreported suppressions on the current side.
 	switch {
 	case !inspected && failed:
 		return ReasonCheckFailed
 	case !inspected:
 		return ReasonLocationNotChecked
+	case report.SuppressedFingerprints(observed.Report, b.Analyzer)[fp]:
+		return ReasonSuppressedInSource
 	case !okA || (!okO && len(toolsOf(other.Report, b.Analyzer)) > 0):
 		return ReasonRulesUnknown
 	case okO && len(o) > 0 && !slices.Equal(a, o):
 		return ReasonRulesChanged
+	case !knownA || (!knownO && len(toolsOf(other.Report, b.Analyzer)) > 0):
+		return ReasonRuleContextUnknown
+	case knownO && len(co) > 0 && !slices.Equal(ca, co):
+		return ReasonRuleContextChanged
+	case vanished && suppressionsHidden(observed.Report, b.Analyzer, b.Rule):
+		return ReasonSuppressionsHidden
 	}
 	return ""
 }
@@ -467,6 +526,12 @@ func differences(cur, base Side) []Difference {
 			var parts []string
 			for _, tc := range tcs {
 				switch what {
+				case "rule_context":
+					v := "unknown"
+					if c := report.RuleContextOf(tc); c != nil {
+						v = c.Label()
+					}
+					parts = append(parts, v)
 				case "version":
 					v := "unknown"
 					if tc.ToolVersion != nil {
@@ -490,7 +555,7 @@ func differences(cur, base Side) []Difference {
 			slices.Sort(parts)
 			return ptr(strings.Join(slices.Compact(parts), ", "))
 		}
-		for _, what := range []string{"version", "result", "processed_files"} {
+		for _, what := range []string{"version", "rule_context", "result", "processed_files"} {
 			diff("tool:"+a+":"+what, label(base, what), label(cur, what))
 		}
 	}

@@ -71,7 +71,26 @@ const (
 	// overlap: constructs both go vet and staticcheck report (docs/39 §6).
 	fixOverlap  = "package overlap\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"os/signal\"\n\t\"sync\"\n)\n\nfunc Printf() { fmt.Printf(\"%d\", \"x\") }\n\nfunc Sig() {\n\tc := make(chan os.Signal)\n\tsignal.Notify(c, os.Interrupt)\n}\n\nfunc WG() {\n\tvar wg sync.WaitGroup\n\tgo func() {\n\t\twg.Add(1)\n\t\tdefer wg.Done()\n\t}()\n\twg.Wait()\n}\n\nfunc Appends(x []int) []int {\n\tx = append(x)\n\treturn x\n}\n\nfunc Unmarshal(b []byte) {\n\tvar v struct{ A int }\n\t_ = json.Unmarshal(b, v)\n}\n\nfunc Bools(a int) bool { return a == 1 || a == 1 }\n"
 	fixOverlapT = "package overlap\n\nimport \"testing\"\n\nfunc TestX(t *testing.T) {\n\tgo func() { t.Fatal(\"x\") }()\n}\n"
+	// suppressions (docs/39 §5.1): one active SA1000, one hidden by
+	// //lint:ignore, one by //lint:file-ignore in another file.
+	fixSup     = "package sup\n\nimport \"regexp\"\n\nfunc Active() *regexp.Regexp { return regexp.MustCompile(\"[\") }\n\nfunc Hidden() *regexp.Regexp {\n\t//lint:ignore SA1000 kept for the W19 suppression fixture\n\treturn regexp.MustCompile(\"(\")\n}\n"
+	fixSupFile = "//lint:file-ignore SA1000 whole file kept for the W19 suppression fixture\n\npackage sup\n\nimport \"regexp\"\n\nfunc FileHidden() *regexp.Regexp { return regexp.MustCompile(\"(\") }\n"
+	// U1000 (measured, staticcheck 2026.2.2): //lint:ignore U1000 hides the
+	// unused function without any record, even with -show-ignored; the
+	// visible one shows the check fires on the same construct.
+	fixSupUnused       = "package sup\n\nfunc unusedVisible() int { return 1 }\n\n//lint:ignore U1000 kept for the W19 suppression fixture\nfunc unusedHidden() int { return 2 }\n"
+	fixSupUnusedHidden = "package sup\n\n//lint:ignore U1000 kept for the W19 suppression fixture\nfunc unusedHidden() int { return 2 }\n"
+	// the same package with the active problems suppressed too.
+	fixSupAll = "package sup\n\nimport \"regexp\"\n\nfunc Active() *regexp.Regexp {\n\t//lint:ignore SA1000 suppressed after review\n\treturn regexp.MustCompile(\"[\")\n}\n\nfunc Hidden() *regexp.Regexp {\n\t//lint:ignore SA1000 kept for the W19 suppression fixture\n\treturn regexp.MustCompile(\"(\")\n}\n"
 )
+
+func suppressionFiles(all bool) map[string]string {
+	sup, unused := fixSup, fixSupUnused
+	if all {
+		sup, unused = fixSupAll, fixSupUnusedHidden
+	}
+	return map[string]string{"go.mod": fixGoMod, "sup/sup.go": sup, "sup/file.go": fixSupFile, "sup/unused.go": unused}
+}
 
 func findingFiles() map[string]string {
 	return map[string]string{"go.mod": fixGoMod, "find/find.go": fixFind, "find/find_test.go": fixFindT, "clean/c.go": fixClean, "clean/ign.go": fixIgn, "README.md": "# sc\n"}

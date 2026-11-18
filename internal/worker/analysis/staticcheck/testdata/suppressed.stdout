@@ -1,0 +1,4 @@
+{"code":"SA1000","severity":"ignored","location":{"file":"[REDACTED]/sup/file.go","line":7,"column":62},"end":{"file":"[REDACTED]/sup/file.go","line":7,"column":65},"message":"error parsing regexp: missing closing ): `(`"}
+{"code":"SA1000","severity":"error","location":{"file":"[REDACTED]/sup/sup.go","line":5,"column":58},"end":{"file":"[REDACTED]/sup/sup.go","line":5,"column":61},"message":"error parsing regexp: missing closing ]: `[`"}
+{"code":"SA1000","severity":"ignored","location":{"file":"[REDACTED]/sup/sup.go","line":9,"column":28},"end":{"file":"[REDACTED]/sup/sup.go","line":9,"column":31},"message":"error parsing regexp: missing closing ): `(`"}
+{"code":"U1000","severity":"error","location":{"file":"[REDACTED]/sup/unused.go","line":3,"column":6},"end":{"file":"","line":0,"column":0},"message":"func unusedVisible is unused"}

@@ -36,9 +36,10 @@ var rawSeverityPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,31}$`)
 
 // AnalyzerDecoder decodes the generic analyzer observations envelope of the
 // R1 packs (obsdoc, kind analyzer_observations). Observations become report
-// observations; resolved ones verified against the source manifest become
-// tool-reported findings that stay unreviewed (pending, never actionable
-// without review). Only observations identical in analyzer, rule, location
+// observations; resolved ones verified against the source manifest and not
+// suppressed in source become tool-reported findings that stay unreviewed
+// (pending, never actionable without review). The row records the
+// envelope's rule context (docs/39 §5.1). Only observations identical in analyzer, rule, location
 // and message are grouped into one finding; a different rule or message on
 // the same line stays a separate finding (TC-09).
 type AnalyzerDecoder struct{}
@@ -106,7 +107,7 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 			out.Limitations = append(out.Limitations, LimRawSeverityText+":"+ctx.Task.Key)
 		}
 		obs := Observation{ID: o.ID, TaskKey: ctx.Task.Key, TaskExecutionID: ctx.TaskExecutionID, Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, RuleID: o.RuleID,
-			RawSeverity: severity, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes,
+			RawSeverity: severity, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes, Suppressed: o.Suppressed,
 			RawRef: RawRef{ArtifactID: a.ID, SHA256: a.SHA256, StreamIndex: o.RawRef.RecordIndex, JSONPointer: o.RawRef.JSONPointer, ByteStart: o.RawRef.ByteStart, ByteEnd: o.RawRef.ByteEnd}}
 		if l := o.Location; l != nil {
 			startCol, endCol := l.StartCol, l.EndCol
@@ -118,14 +119,19 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 			obs.Location = &ObservationLocation{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine, StartCol: startCol, EndCol: endCol, ColumnUnit: "byte", BlobSHA256: l.BlobSHA256}
 			if sha, ok := ctx.Source.Lookup(l.Path); ok && sha == l.BlobSHA256 {
 				obs.EvidenceState = EvidenceVerified
+			} else {
+				obs.EvidenceState = EvidenceManifestMismatch
+			}
+			// A diagnostic hidden by an in-source suppression stays an
+			// observation (the comparison reads it) and never becomes a
+			// finding.
+			if obs.EvidenceState == EvidenceVerified && !o.Suppressed {
 				k := strings.Join([]string{o.RuleID, l.Path, itoa(l.StartLine), itoa(startCol), msg}, "\x00")
 				if _, seen := groups[k]; !seen {
 					order = append(order, k)
 				}
 				groups[k] = append(groups[k], obs)
 				categories[k] = o.Category
-			} else {
-				obs.EvidenceState = EvidenceManifestMismatch
 			}
 		}
 		out.Observations = append(out.Observations, obs)
@@ -135,7 +141,8 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 		out.Findings = append(out.Findings, toolFinding(ctx, d.Analyzer.ID, categories[k], groups[k]))
 	}
 	tc := ToolCoverage{TaskKey: ctx.Task.Key, Analyzer: d.Analyzer.ID, ToolVersion: d.Tool.Version, ExitClass: d.Outcome.ExitClass, PartialParse: d.Outcome.PartialParse,
-		IgnoredFiles: d.Coverage.FilesSkipped, UnlistedFiles: d.Coverage.FilesUnlisted, Packages: map[string]int{}, StderrFailures: len(d.ToolErrors), AnalyzerErrors: 0, Limitations: []string{}}
+		IgnoredFiles: d.Coverage.FilesSkipped, UnlistedFiles: d.Coverage.FilesUnlisted, Packages: map[string]int{}, StderrFailures: len(d.ToolErrors), AnalyzerErrors: 0, Limitations: []string{},
+		RuleContext: ruleContextOf(d.RulePack)}
 	if d.Coverage.FilesInScope != nil {
 		tc.FilesInScope = *d.Coverage.FilesInScope
 	} else {

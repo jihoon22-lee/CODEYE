@@ -390,7 +390,7 @@ func NotRun(job analysis.Job, d Descriptor, t Task, reason string, limitations .
 	}
 	doc.Patterns = append([]string{}, t.Patterns...)
 	doc.Tool.Name = d.Tool
-	doc.RulePack = obsdoc.RulePack{ID: "none", Version: "1", Selection: []string{}, RepositoryConfig: obsdoc.RepoConfigNone, SourceSuppressions: obsdoc.SuppressNone}
+	doc.RulePack = obsdoc.RulePack{ID: "none", Version: "1", Selection: []string{}, RepositoryConfig: obsdoc.RepoConfigNone, SourceSuppressions: obsdoc.SuppressNone, ConfigFiles: []obsdoc.ConfigFile{}, UnreportedSuppressionRules: []string{}}
 	doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskUnsupported, Reason: &reason, ExitClass: obsdoc.ExitNotRun}
 	doc.Coverage.FilesInScope = t.FilesInScope
 	doc.Coverage.ProcessedPaths = []string{}

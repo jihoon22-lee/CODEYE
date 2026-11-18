@@ -15,9 +15,11 @@ import "time"
 // Version identifiers of this builder. BuilderVersion is part of the input
 // digest: a new builder version publishes a new report revision.
 const (
-	SchemaVersion  = "0.1"
-	BuilderID      = "codeye-report"
-	BuilderVersion = "3"
+	SchemaVersion = "0.1"
+	BuilderID     = "codeye-report"
+	// BuilderVersion 4 (W19) adds the tool rows' rule_context and the
+	// observations' suppressed flag (docs/39 §5.1, docs/40 §3.3).
+	BuilderVersion = "4"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -190,6 +192,11 @@ type ToolCoverage struct {
 	// comparison decides a vanished finding was resolved. Omitted when the
 	// adapter does not record them (and in revisions before builder 3).
 	ProcessedPaths []string `json:"processed_paths,omitempty"`
+	// RuleContext is the rule pack and configuration the tool ran with
+	// (builder 4, docs/39 §5.1). A comparison resolves a vanished finding only
+	// when it is known and equal on both sides. Omitted in revisions before
+	// builder 4; RuleContextOf synthesizes go vet's.
+	RuleContext *RuleContext `json:"rule_context,omitempty"`
 }
 
 // Task is one DB task row as accepted by the controller (the authority).
@@ -253,6 +260,10 @@ type Observation struct {
 	EvidenceState   string               `json:"evidence_state"`
 	RawRef          RawRef               `json:"raw_ref"`
 	SuggestedFixes  int                  `json:"suggested_fix_count"`
+	// Suppressed marks a diagnostic the tool reported as hidden by an
+	// in-source suppression (builder 4). It is never a finding; a comparison
+	// uses it to tell "suppressed" from "fixed".
+	Suppressed bool `json:"suppressed,omitempty"`
 }
 
 // Evidence states of an observation location (report-level check).

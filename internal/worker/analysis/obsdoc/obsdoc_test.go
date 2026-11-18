@@ -142,6 +142,46 @@ func TestValidateRejects(t *testing.T) {
 		"processed paths unsorted": func(d map[string]any) {
 			d["coverage"].(map[string]any)["processed_paths"] = []any{"find/find.go", "clean/c.go"}
 		},
+		// Rule context (docs/39 §5.1).
+		"config files with overridden config": func(d map[string]any) {
+			d["rule_pack"].(map[string]any)["config_files"] = []any{map[string]any{"path": "clean/c.go", "sha256": strings.Repeat("b", 64)}}
+		},
+		"null config files with overridden config": func(d map[string]any) { d["rule_pack"].(map[string]any)["config_files"] = nil },
+		"missing config files":                     func(d map[string]any) { delete(d["rule_pack"].(map[string]any), "config_files") },
+		"honored config file not in manifest": func(d map[string]any) {
+			d["rule_pack"].(map[string]any)["repository_config"] = RepoConfigHonored
+			d["rule_pack"].(map[string]any)["config_files"] = []any{map[string]any{"path": "staticcheck.conf", "sha256": strings.Repeat("c", 64)}}
+		},
+		"honored config file other sha": func(d map[string]any) {
+			d["rule_pack"].(map[string]any)["repository_config"] = RepoConfigHonored
+			d["rule_pack"].(map[string]any)["config_files"] = []any{map[string]any{"path": "clean/c.go", "sha256": strings.Repeat("c", 64)}}
+		},
+		"honored config files unsorted": func(d map[string]any) {
+			d["rule_pack"].(map[string]any)["repository_config"] = RepoConfigHonored
+			d["rule_pack"].(map[string]any)["config_files"] = []any{map[string]any{"path": "find/find.go", "sha256": strings.Repeat("b", 64)},
+				map[string]any{"path": "clean/c.go", "sha256": strings.Repeat("b", 64)}}
+		},
+		"missing unreported suppression rules": func(d map[string]any) { delete(d["rule_pack"].(map[string]any), "unreported_suppression_rules") },
+		"null unreported suppression rules":    func(d map[string]any) { d["rule_pack"].(map[string]any)["unreported_suppression_rules"] = nil },
+		"unreported suppression rules unsorted": func(d map[string]any) {
+			d["rule_pack"].(map[string]any)["unreported_suppression_rules"] = []any{"U1000", "SA4006"}
+		},
+		"unreported suppression rule with space": func(d map[string]any) {
+			d["rule_pack"].(map[string]any)["unreported_suppression_rules"] = []any{"U 1000"}
+		},
+		"unreported suppression rules under honored": func(d map[string]any) {
+			d["rule_pack"].(map[string]any)["source_suppressions"] = SuppressHonored
+		},
+		"suppressed without reported": func(d map[string]any) {
+			d["rule_pack"].(map[string]any)["source_suppressions"] = SuppressHonored
+			d["rule_pack"].(map[string]any)["unreported_suppression_rules"] = []any{}
+			obs0(d)["suppressed"] = true
+		},
+		"only suppressed observations with findings class": func(d map[string]any) {
+			for _, o := range d["observations"].([]any) {
+				o.(map[string]any)["suppressed"] = true
+			}
+		},
 		"related unresolved with location": func(d map[string]any) {
 			for _, o := range d["observations"].([]any) {
 				for _, r := range o.(map[string]any)["related"].([]any) {
@@ -183,6 +223,38 @@ func TestValidateNotRunAndFailed(t *testing.T) {
 	f["parse"].(map[string]any)["ok"] = false
 	if _, err := Decode(encode(t, f), Expect{}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The rule context a pack may record (docs/39 §5.1): honored repository
+// configuration with the files read (bound to the manifest) or null when it
+// cannot enumerate them, and suppressed observations under reported
+// suppressions, which are not findings.
+func TestRuleContextAccepted(t *testing.T) {
+	d := example(t)
+	lookup := lookupOf(d)
+	rp := d["rule_pack"].(map[string]any)
+	rp["repository_config"] = RepoConfigHonored
+	rp["config_files"] = []any{map[string]any{"path": "clean/c.go", "sha256": strings.Repeat("b", 64)}}
+	if doc, err := Decode(encode(t, d), Expect{Lookup: lookup}); err != nil || len(doc.RulePack.ConfigFiles) != 1 {
+		t.Fatal(err)
+	}
+	rp["config_files"] = nil
+	if doc, err := Decode(encode(t, d), Expect{Lookup: lookup}); err != nil || doc.RulePack.ConfigFiles != nil {
+		t.Fatalf("unenumerated config files: %v", err)
+	}
+	rp["config_files"] = []any{}
+	if doc, err := Decode(encode(t, d), Expect{Lookup: lookup}); err != nil || doc.RulePack.ConfigFiles == nil {
+		t.Fatalf("no config file read: %v", err)
+	}
+	s := example(t)
+	for _, o := range s["observations"].([]any) {
+		o.(map[string]any)["suppressed"] = true
+	}
+	s["outcome"].(map[string]any)["exit_class"] = ExitSuccessWithoutFindings
+	doc, err := Decode(encode(t, s), Expect{Lookup: lookupOf(s)})
+	if err != nil || doc.Active() != 0 || len(doc.Observations) != 7 {
+		t.Fatalf("all suppressed: %v", err)
 	}
 }
 

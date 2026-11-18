@@ -25,12 +25,15 @@
     "target": {"type": "object", "additionalProperties": false, "required": ["platform", "properties"], "properties": {
       "platform": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/version"}]},
       "properties": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,31}$"}, "additionalProperties": {"type": "string", "maxLength": 256, "not": {"pattern": "^(?:/|\\\\|[A-Za-z]:[\\\\/])"}}}}},
-    "rule_pack": {"type": "object", "additionalProperties": false, "required": ["id", "version", "selection", "repository_config", "source_suppressions"], "properties": {
+    "rule_pack": {"type": "object", "additionalProperties": false, "required": ["id", "version", "selection", "repository_config", "source_suppressions", "config_files", "unreported_suppression_rules"], "description": "규칙 맥락(docs/39 §5.1). repository_config가 honored가 아니면 config_files는 []이다. honored에서 null은 팩이 읽은 설정 파일을 열거하지 못했다는 뜻이며 그 finding은 비교에서 해결로 보지 않는다. unreported_suppression_rules는 source_suppressions=reported인데도 억제를 보고하지 않는 규칙(측정값, staticcheck U1000)이며 reported가 아니면 []이다.", "properties": {
       "id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
       "version": {"type": "string", "minLength": 1},
       "selection": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 1024, "not": {"pattern": "^(?:/|\\\\|[A-Za-z]:[\\\\/])"}}},
       "repository_config": {"enum": ["overridden", "honored", "none"]},
-      "source_suppressions": {"enum": ["honored", "reported", "none"]}}},
+      "source_suppressions": {"enum": ["honored", "reported", "disabled", "none"]},
+      "config_files": {"anyOf": [{"type": "null"}, {"type": "array", "maxItems": 256, "items": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {
+        "path": {"$ref": "#/$defs/relpath"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}}]},
+      "unreported_suppression_rules": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^\\S+$"}}}},
     "outcome": {
       "type": "object", "additionalProperties": false, "required": ["task_status", "reason", "exit_class", "partial_parse"],
       "properties": {
@@ -69,7 +72,7 @@
       "units": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,63}$"}, "additionalProperties": {"type": "integer", "minimum": 0}}}},
     "observations": {"type": "array", "items": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "rule_id", "category", "raw_severity", "raw_message", "path", "location", "location_state", "related", "raw_ref", "unit", "suggested_fix_count"],
+      "required": ["id", "rule_id", "category", "raw_severity", "raw_message", "path", "location", "location_state", "related", "raw_ref", "unit", "suggested_fix_count", "suppressed"],
       "properties": {
         "id": {"type": "string", "pattern": "^obs_[0-9a-f]{20}$"},
         "rule_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\s]+$"},
@@ -96,7 +99,8 @@
           "byte_start": {"type": "integer", "minimum": 0},
           "byte_end": {"type": "integer", "minimum": 1}}},
         "unit": {"type": "string", "maxLength": 512},
-        "suggested_fix_count": {"type": "integer", "minimum": 0}
+        "suggested_fix_count": {"type": "integer", "minimum": 0},
+        "suppressed": {"type": "boolean", "description": "소스 내 억제 지시문이 숨긴 진단(source_suppressions=reported일 때만 true). finding이 되지 않는다."}
       },
       "if": {"properties": {"location_state": {"const": "resolved"}}},
       "then": {"properties": {"location": {"type": "object"}, "path": {"type": "string"}}},

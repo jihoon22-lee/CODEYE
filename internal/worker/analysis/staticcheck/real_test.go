@@ -106,7 +106,7 @@ func TestRealStaticcheckFindingsExitOne(t *testing.T) {
 	if doc.Tool.Version == nil || !doc.Tool.VersionTested || doc.Target.Properties["toolchain"] == "" || doc.Target.Platform == nil || doc.Module.Name != "example.test/sc" {
 		t.Fatalf("tool/target %+v %+v", doc.Tool, doc.Target)
 	}
-	for _, l := range []string{"cgo_disabled", "default_build_context_only", "source_suppressions_honored", "go_vet_overlap_checks_excluded", "build_constraint_ignored_files", "no_offline_module_cache"} {
+	for _, l := range []string{"cgo_disabled", "default_build_context_only", "go_vet_overlap_checks_excluded", "build_constraint_ignored_files", "no_offline_module_cache"} {
 		if !slices.Contains(doc.Limitations, l) {
 			t.Fatalf("limitation %s missing: %v", l, doc.Limitations)
 		}
@@ -121,6 +121,59 @@ func TestRealStaticcheckFindingsExitOne(t *testing.T) {
 	for i := range doc.Observations {
 		if doc.Observations[i].ID != doc2.Observations[i].ID {
 			t.Fatalf("observation ids differ between runs: %s %s", doc.Observations[i].ID, doc2.Observations[i].ID)
+		}
+	}
+}
+
+// TC-104 (docs/39 §5.1): with -show-ignored staticcheck reports the
+// problems //lint:ignore and //lint:file-ignore hide, with severity
+// "ignored". They are kept as suppressed observations (source_suppressions
+// reported) and are not findings: a package whose every problem is
+// suppressed still exits 1 and is success_without_findings. A suppressed
+// U1000 leaves no record at all, so the rule pack lists U1000 as an
+// unreported suppression rule.
+func TestRealStaticcheckSuppressionsReported(t *testing.T) {
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
+	a := newAnalyzer(t, "")
+	for _, tc := range []struct {
+		name           string
+		all            bool
+		active, hidden int
+		class          string
+	}{
+		{"suppressed", false, 2, 2, obsdoc.ExitSuccessWithFindings},
+		{"suppressed-only", true, 0, 3, obsdoc.ExitSuccessWithoutFindings},
+	} {
+		fx := newFixture(t, "", suppressionFiles(tc.all), domain.Scope{})
+		res := runTask(t, a, fx.Job, "staticcheck", &executor.Executor{})
+		capture(t, tc.name, res)
+		doc, _ := readEnvelope(t, fx.Job, res)
+		check := res.Executions[len(res.Executions)-1]
+		if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != tc.class || check.Result.ExitCode == nil || *check.Result.ExitCode != 1 {
+			t.Fatalf("%s: %s/%s %+v exit %v", tc.name, res.Status, res.Reason, doc.Outcome, check.Result.ExitCode)
+		}
+		active, hidden := 0, 0
+		for _, o := range doc.Observations {
+			// The only U1000 record is the visible function's.
+			if o.LocationState != obsdoc.LocationResolved || (o.RuleID != "SA1000" && (o.RuleID != "U1000" || o.Suppressed || o.Location.StartLine != 3)) {
+				t.Fatalf("%s: observation %+v", tc.name, o)
+			}
+			if o.Suppressed {
+				hidden++
+				if *o.RawSeverity != "ignored" {
+					t.Fatalf("%s: suppressed severity %+v", tc.name, o)
+				}
+			} else {
+				active++
+			}
+		}
+		if active != tc.active || hidden != tc.hidden || doc.RulePack.SourceSuppressions != obsdoc.SuppressReported ||
+			!slices.Contains(doc.RulePack.Selection, "-show-ignored") || !slices.Contains(doc.Limitations, "source_suppressed_observations") ||
+			!slices.Equal(doc.RulePack.UnreportedSuppressionRules, []string{"U1000"}) {
+			t.Fatalf("%s: active %d hidden %d rule pack %+v limitations %v", tc.name, active, hidden, doc.RulePack, doc.Limitations)
+		}
+		if !slices.Equal(doc.Coverage.ProcessedPaths, []string{"sup/file.go", "sup/sup.go", "sup/unused.go"}) {
+			t.Fatalf("%s: coverage %+v", tc.name, doc.Coverage)
 		}
 	}
 }

@@ -1,7 +1,7 @@
 {
   "adapter": {
     "id": "staticcheck",
-    "version": "1"
+    "version": "2"
   },
   "analyzer": {
     "ecosystem": "go",
@@ -217,7 +217,7 @@
         "captured_bytes": 307,
         "incomplete": false,
         "sha256": "e60dcf38c3a5b2c3f6cbaa300a18f633efe6123da466d2c0dcc5592ae965de29",
-        "total_bytes": 437,
+        "total_bytes": 439,
         "truncated": false
       }
     },
@@ -231,6 +231,7 @@
           "-checks",
           "SA*,U1000,-SA1014,-SA1017,-SA2000,-SA2002,-SA4021,-SA5009",
           "-tests=true",
+          "-show-ignored",
           "./..."
         ],
         "dir": ".",
@@ -270,7 +271,7 @@
         "captured_bytes": 1772,
         "incomplete": false,
         "sha256": "586a8fd3e5066794f3fbaef2cd749c3ceaf21d645581521d83545f921803893e",
-        "total_bytes": 2747,
+        "total_bytes": 2762,
         "truncated": false
       }
     }
@@ -281,8 +282,7 @@
     "cgo_disabled",
     "default_build_context_only",
     "go_vet_overlap_checks_excluded",
-    "no_offline_module_cache",
-    "source_suppressions_honored"
+    "no_offline_module_cache"
   ],
   "module": {
     "dir": ".",
@@ -317,6 +317,7 @@
       "related": [],
       "rule_id": "SA1000",
       "suggested_fix_count": 0,
+      "suppressed": false,
       "unit": "example.test/sc/find"
     },
     {
@@ -347,6 +348,7 @@
       "related": [],
       "rule_id": "SA1012",
       "suggested_fix_count": 0,
+      "suppressed": false,
       "unit": "example.test/sc/find"
     },
     {
@@ -377,6 +379,7 @@
       "related": [],
       "rule_id": "SA4006",
       "suggested_fix_count": 0,
+      "suppressed": false,
       "unit": "example.test/sc/find"
     },
     {
@@ -407,6 +410,7 @@
       "related": [],
       "rule_id": "SA4006",
       "suggested_fix_count": 0,
+      "suppressed": false,
       "unit": "example.test/sc/find"
     },
     {
@@ -452,6 +456,7 @@
       ],
       "rule_id": "SA4023",
       "suggested_fix_count": 0,
+      "suppressed": false,
       "unit": "example.test/sc/find"
     },
     {
@@ -482,6 +487,7 @@
       "related": [],
       "rule_id": "U1000",
       "suggested_fix_count": 0,
+      "suppressed": false,
       "unit": "example.test/sc/find"
     },
     {
@@ -512,6 +518,7 @@
       "related": [],
       "rule_id": "SA2001",
       "suggested_fix_count": 0,
+      "suppressed": false,
       "unit": "example.test/sc/find"
     }
   ],
@@ -538,18 +545,23 @@
     "./..."
   ],
   "rule_pack": {
+    "config_files": [],
     "id": "codeye-go-staticcheck",
     "repository_config": "overridden",
     "selection": [
       "-checks",
       "SA*,U1000,-SA1014,-SA1017,-SA2000,-SA2002,-SA4021,-SA5009",
-      "-tests=true"
+      "-tests=true",
+      "-show-ignored"
     ],
-    "source_suppressions": "honored",
-    "version": "1"
+    "source_suppressions": "reported",
+    "unreported_suppression_rules": [
+      "U1000"
+    ],
+    "version": "2"
   },
   "schema_version": "0.1",
-  "snapshot_manifest_digest": "1448018ffa9a6fc68f0b3976fd38cfc2e7a028a07f79a1c826f9de64683cf06b",
+  "snapshot_manifest_digest": "f92515bbc28af8c069015970536e8821538648c07254e5e3d78b0c65b43c8a71",
   "target": {
     "platform": "linux/amd64",
     "properties": {
