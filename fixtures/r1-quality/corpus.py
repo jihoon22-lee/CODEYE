@@ -656,7 +656,9 @@ def verify(cases, args):
           f"{len(errors)} structural/leakage errors, repeat={args.repeat}")
     print("counts:", json.dumps(counts, sort_keys=True))
     print("corpus digest:", corpus_digest(cases))
-    if mismatches or errors or not selftest_ok or (args.require_all and (skipped or skipped_cases)):
+    if executed == 0:
+        print("verify: no case executed; give at least one toolchain (nothing is reported as passed)")
+    if mismatches or errors or not selftest_ok or executed == 0 or (args.require_all and (skipped or skipped_cases)):
         raise SystemExit(1)
 
 

@@ -78,7 +78,7 @@ python3 -I fixtures/r1-quality/corpus.py materialize R1-GO-03 before /tmp/r1-go-
 python3 -I fixtures/r1-quality/corpus.py digest
 ```
 
-- `--require-all`은 건너뛴 언어나 사례가 하나라도 있으면 실패한다. `--language`, `--case`로 일부만 실행할 수 있다.
+- 실행된 사례가 하나도 없으면 `verify`는 실패한다. `--require-all`은 건너뛴 언어나 사례가 하나라도 있으면 실패한다. `--language`, `--case`로 일부만 실행할 수 있다.
 - Rust는 링크 단계에 C/C++ 드라이버가 필요해 `CODEYE_TEST_CXX`(또는 `--cxx`)도 있어야 실행된다.
 - Go 검사는 `GOTOOLCHAIN=local`, `GOPROXY=off`, `GOFLAGS=`, `CGO_ENABLED=0`, `-vet=off`로 실행한다. 네트워크와 모델 호출은 없다.
 - 사례를 고친 뒤에는 `rehash`로 저장된 digest를 갱신하고, 변경 이유를 검토한 뒤 다시 `verify`한다.
