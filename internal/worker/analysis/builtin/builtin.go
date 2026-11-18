@@ -74,6 +74,9 @@ func catalog() []entry {
 		// Go (W08 baseline, W19 extra depth).
 		{desc: govet.Descriptor(), plan: govet.Plan, build: buildGoVet},
 		{desc: staticcheck.Descriptor(), plan: staticcheck.Plan, build: buildStaticcheck},
+		// JavaScript/TypeScript (W18 baseline ESLint, extra depth tsc and
+		// type-aware ESLint; javascript.go, docs/43).
+		eslintEntry(), tscEntry(), eslintTypedEntry(),
 		// Rust (W20 baseline cargo check, extra depth clippy).
 		{desc: rustpack.CheckDescriptor(), plan: rustpack.CheckPlan, build: buildCargoCheck},
 		{desc: rustpack.ClippyDescriptor(), plan: rustpack.ClippyPlan, build: buildClippy},
