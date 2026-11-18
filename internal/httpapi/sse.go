@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -207,6 +208,10 @@ func (st *eventStream) flush() {
 	}
 }
 
+// testHookBeforeView, when set by a test, runs between sending a batch of
+// rows and reading the run.view for it (to append an event in between).
+var testHookBeforeView atomic.Pointer[func()]
+
 func (s *Server) streamRunEvents(q *request) {
 	cursor, ok := streamCursor(q.r)
 	if !ok {
@@ -301,6 +306,9 @@ func (s *Server) streamRunEvents(q *request) {
 			}
 		}
 		if sent {
+			if hook := testHookBeforeView.Load(); hook != nil {
+				(*hook)()
+			}
 			var view postgres.RunView
 			err := call(func(c context.Context) (err error) {
 				view, err = s.store.GetRunView(c, actor, run)
@@ -312,6 +320,40 @@ func (s *Server) streamRunEvents(q *request) {
 			}
 			if err != nil {
 				control("state.resync", ResyncViewUnavailable, nil)
+				return
+			}
+			// The view is read after the batch, so events committed in
+			// between are already in it. Send those rows first: a run.view
+			// never describes an event_sequence beyond the last row sent.
+			// Rows newer than the view wait for the next batch.
+			for cursor < view.EventSequence && st.err == nil {
+				if err := read(); err != nil {
+					if accessLost(err) {
+						control("closed", ClosedAccessRevoked, nil)
+					} else {
+						control("state.resync", ResyncViewUnavailable, nil)
+					}
+					return
+				}
+				progressed := false
+				for _, e := range page.Events {
+					if e.Sequence > view.EventSequence {
+						break
+					}
+					if e.Sequence != cursor+1 {
+						control("state.resync", ResyncGap, map[string]any{"head": page.Head, "expected": cursor + 1})
+						return
+					}
+					seq := e.Sequence
+					st.send("", &seq, eventData(run, e))
+					cursor, progressed = seq, true
+				}
+				if !progressed {
+					control("state.resync", ResyncGap, map[string]any{"head": page.Head, "expected": cursor + 1})
+					return
+				}
+			}
+			if st.err != nil {
 				return
 			}
 			st.send("run.view", nil, runViewOf(view))
