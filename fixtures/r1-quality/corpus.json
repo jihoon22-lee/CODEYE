@@ -11595,7 +11595,7 @@
    "before_documented": "697d1c5b55715d80645bba706feb716acd9a8f784b8d621252236a0794dab14f"
   },
   "check": {
-   "summary": "Runs a service with a 5 ms interval and a fetcher that fails every third call, closes it, and checks the goroutine count against the baseline, that no poll runs once Close returned, and the failure count.",
+   "summary": "Runs a service with a 5 ms interval and a fetcher that fails every third call, closes it, and checks the goroutine count against the baseline, that no poll runs once Close returned, and the failure count; then closes a service while a poll is blocked and checks that Close waited for it.",
    "build": [
     {
      "argv": [
@@ -11669,6 +11669,30 @@
       "\t}",
       "\tif n := runtime.NumGoroutine(); n > base {",
       "\t\tt.Fatalf(\"CHECK-FAIL: %d goroutines still running (baseline %d)\", n, base)",
+      "\t}",
+      "",
+      "\tvar finished atomic.Bool",
+      "\tstarted := make(chan struct{}, 1)",
+      "\tslow := func(ctx context.Context) (string, error) {",
+      "\t\tselect {",
+      "\t\tcase started <- struct{}{}:",
+      "\t\tdefault:",
+      "\t\t}",
+      "\t\t<-ctx.Done()",
+      "\t\ttime.Sleep(20 * time.Millisecond)",
+      "\t\tfinished.Store(true)",
+      "\t\treturn \"\", ctx.Err()",
+      "\t}",
+      "\tbusy := NewService(slow, time.Millisecond)",
+      "\tbusy.Run()",
+      "\tselect {",
+      "\tcase <-started:",
+      "\tcase <-time.After(2 * time.Second):",
+      "\t\tt.Fatalf(\"CHECK-FAIL: slow poll never started\")",
+      "\t}",
+      "\tbusy.Close()",
+      "\tif !finished.Load() {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: Close returned while a poll was still running\")",
       "\t}",
       "\tfmt.Println(\"CHECK-PASS\")",
       "}"
