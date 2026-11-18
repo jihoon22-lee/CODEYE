@@ -91,6 +91,19 @@
 - **문서**: README·CONTRIBUTING·설계 문서·경로별 `AGENTS.md` 등. 적용 경로(문서 디렉터리), 분류(`readme`, `agent_instructions`, `design`, `contributing`, `other`), 상태(`selected`, `budget_exceeded`, `excluded`, `unreadable`)와 사유를 둔다. 모듈마다 자기 문서, 상속 문서, `none`을 구분한다. 에이전트 지침 문서는 분석 자료로 분류할 뿐 권한·도구 설정을 바꾸지 않는다.
 - **충돌**: 플랫폼은 같은 경로에 적용되는 문서가 여럿이면 `overlapping_guidance`로 묶는다. 의미 충돌 판정은 문서 역할의 몫이며, 모델 미실행 시 미판정으로 남는다.
 
+### 5.1 탐색 task와 산출물 필드(구현)
+
+[`internal/worker/discovery`](../internal/worker/discovery/discover.go)가 생성하고 [`envdoc`](../internal/worker/discovery/envdoc/envdoc.go)가 검증한다. 예시는 [환경](../examples/environment.json)·[문서](../examples/environment-documents.json)이며 첫 입력에서 고정 ID로 만든다.
+
+- **task**: deep-review 계획 맨 앞에 `env.discover`(stage `environment`)와 `docs.discover`(stage `documents`)를 둔다. 둘 다 필수다. 탐색이 실패하면 사유와 함께 `failed`로 남고 정적 분석과 코드 검토 task는 계속 실행된다. 시험용 fixture handler에는 붙이지 않는다. review-v1의 `review.context`는 `documents`, `review.investigate`·`review.verify`는 `code_review`, go-vet은 `static_analysis` 단계다.
+- **산출물**: task마다 하나를 role `other`로 올린다. `kind`는 `environment` 또는 `documents`다. 공통 필드는 `schema_version`, `kind`, `snapshot_manifest_digest`, `run_id`, `attempt_id`, `scope`, `modules`, `limitations`다. 정렬 순서는 고정이고 시각 필드와 문서 본문은 넣지 않는다. 보고서는 `EnvironmentDecoder`로 이 산출물을 검증만 하고 관찰·결함·도구 coverage에는 더하지 않는다. decoder가 없으면 성공한 필수 task의 산출물이 누락으로 집계되어 모든 보고서가 `partial`이 된다.
+- **모듈**: (디렉터리, 생태계) 쌍이고 ID는 `<ecosystem>:<path>`다. `excluded_paths`는 같은 생태계의 가장 바깥 하위 모듈이다. Go는 go-vet 계획과 같이 `vendor`·`testdata`·`.`/`_` 디렉터리를 건너뛴다. C/C++의 하위 빌드 파일은 빌드 스크립트를 평가하지 않고는 별도 프로젝트인지 알 수 없어 가장 바깥 모듈에 합친다(`nested_build_files_merged`).
+- **scope**: kind가 비어 있으면 go-vet과 같이 `full`로 기록한다. `paths`에서 모듈은 scope 경로가 모듈 범위 안에 있거나 모듈이 scope 경로 안에 있을 때 대상이다. 대상 모듈의 manifest는 scope가 모듈 안의 파일 하나만 가리켜도 읽는다. go vet이 읽는 입력과 같다. 문서는 경로가 scope에 들어갈 때만 읽고 나머지는 `excluded`/`out_of_scope`로 남긴다.
+- **선언**: `environment.requirements`의 각 항목은 `kind`, 원문 `constraint`, `comparison`(`minimum`, `preferred_minimum`, `prefix`, `unsupported`), `source`(path, sha256, 행 범위), `evidence_id`를 갖는다. `evidence_id`는 `record.ExcerptID`와 같은 방식으로 만든다. review-v1 기록 검증기는 아직 이 근거 종류를 받지 않으며 R1 역할에서 연결한다. TOML·JSON·INI는 실행 없이 한 줄 단위로 읽는다. 읽지 못한 manifest는 `malformed`·`not_utf8`·`too_large`로 표시한다.
+- **관측**: 운영자가 지정한 go 실행 파일(go-vet과 같은 `--go`)만 attempt scratch에서 `go version`으로 확인한다. 이때 `GOTOOLCHAIN=local`, `GOPROXY=off`, `GOENV=off`를 쓴다. 다른 도구는 설정 경로가 없어 `not_probed`다. probe가 깨끗하게 끝나지 않으면 task는 `failed`/`environment_probe_incomplete`로 남고 산출물은 올린다. timeout, 취소, 시작 거부, 정리 불확실, 잘린 출력이 이 경우다. 워커는 그런 실행이 붙은 성공을 허용하지 않는다.
+- **판정**: 사유는 `not_declared`, `unsupported_constraint`, `not_observed` 순으로 정한다. 선언 파일을 읽지 못해 선언 여부를 모르면 확장 사유 `declaration_unreadable`을 쓴다. Go `toolchain`은 `preferred_minimum`이다. go1.27.4에서 `go 1.22`+`toolchain go1.31.0`은 `GOTOOLCHAIN=local`로 vet에 성공했다. 따라서 이 불일치는 vet을 막지 않는다. go vet과 같은 결과를 내는 것은 `go` 지시문 판정이다.
+- **문서**: 기본 예산은 문서당 32 KiB, 합계 256 KiB, 최대 1,000개이고 산출물의 `budget`에 기록한다. 읽는 순서는 에이전트 지침, README, CONTRIBUTING, 설계, 기타 순이다. 같은 분류에서는 얕은 경로가 먼저다. 사유 코드는 `document_too_large`, `read_budget_exhausted`, `out_of_scope`, `credential_like_content`, `not_utf8`, `contains_nul`과 manifest 제외 사유다. `applies_to`는 문서 디렉터리다. `other` 분류는 목록에만 남기고 모듈 연결과 겹침 묶음에는 넣지 않는다. 겹침 묶음은 문서 디렉터리마다 만든다.
+
 ## 6. 역할 지침 후보 팩
 
 `prompts/review-r1-draft`를 후보 팩으로 묶어 활성 팩 `review-v1`과 나란히 둔다. 기본값은 `review-v1`이다. 후보 팩 선택은 run 프로필로 하고, 호출마다 팩 ID·버전·역할별 digest를 기록한다. 보고서의 필수 역할은 고정 목록이 아니라 계획된 task의 `required_for_verdict`로 판정한다. 필수 검토 task가 하나도 없으면 `not_performed`이고, R0 기록은 작성 당시의 세 역할로 해석한다.

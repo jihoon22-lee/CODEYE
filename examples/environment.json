@@ -1,0 +1,145 @@
+{
+  "schema_version": "0.1",
+  "kind": "environment",
+  "snapshot_manifest_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+  "run_id": "0195f3a0-0000-7000-8000-000000000015",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000016",
+  "scope": {
+    "kind": "full",
+    "paths": []
+  },
+  "modules": [
+    {
+      "id": "go:.",
+      "ecosystem": "go",
+      "path": ".",
+      "manifests": [
+        "go.mod"
+      ],
+      "excluded_paths": [
+        "svc/a",
+        "svc/b"
+      ],
+      "in_scope": true
+    },
+    {
+      "id": "go:svc/a",
+      "ecosystem": "go",
+      "path": "svc/a",
+      "manifests": [
+        "svc/a/go.mod"
+      ],
+      "excluded_paths": [],
+      "in_scope": true
+    },
+    {
+      "id": "go:svc/b",
+      "ecosystem": "go",
+      "path": "svc/b",
+      "manifests": [
+        "svc/b/go.mod"
+      ],
+      "excluded_paths": [],
+      "in_scope": true
+    }
+  ],
+  "environment": {
+    "manifests": [
+      {
+        "path": "go.mod",
+        "sha256": "ce63d0c6484a9b8a95a2e05199747a4d930591d085372edf8d8ede5c1590e3fa",
+        "status": "parsed"
+      },
+      {
+        "path": "svc/a/go.mod",
+        "sha256": "8bdecfdaf4a6cf771b6e9e16e7929928c133a8872ea13059649759a565831cda",
+        "status": "parsed"
+      },
+      {
+        "path": "svc/b/go.mod",
+        "sha256": "190d2b4870102860c723cba70861e8277061a117ed60678000bf45fd9dcb803c",
+        "status": "parsed"
+      }
+    ],
+    "requirements": [
+      {
+        "id": "go_directive@go.mod",
+        "module": "go:.",
+        "tool": "go",
+        "kind": "go_directive",
+        "constraint": "1.22",
+        "comparison": "minimum",
+        "source": {
+          "path": "go.mod",
+          "sha256": "ce63d0c6484a9b8a95a2e05199747a4d930591d085372edf8d8ede5c1590e3fa",
+          "start_line": 3,
+          "end_line": 3
+        },
+        "evidence_id": "ev_92fd01835bf0e2e5c4de9ffe"
+      },
+      {
+        "id": "go_directive@svc/a/go.mod",
+        "module": "go:svc/a",
+        "tool": "go",
+        "kind": "go_directive",
+        "constraint": "1.21",
+        "comparison": "minimum",
+        "source": {
+          "path": "svc/a/go.mod",
+          "sha256": "8bdecfdaf4a6cf771b6e9e16e7929928c133a8872ea13059649759a565831cda",
+          "start_line": 3,
+          "end_line": 3
+        },
+        "evidence_id": "ev_ec9437fcf999b4649a4d386c"
+      },
+      {
+        "id": "go_directive@svc/b/go.mod",
+        "module": "go:svc/b",
+        "tool": "go",
+        "kind": "go_directive",
+        "constraint": "1.30",
+        "comparison": "minimum",
+        "source": {
+          "path": "svc/b/go.mod",
+          "sha256": "190d2b4870102860c723cba70861e8277061a117ed60678000bf45fd9dcb803c",
+          "start_line": 3,
+          "end_line": 3
+        },
+        "evidence_id": "ev_5211e79b42ecd5995a6ad747"
+      }
+    ],
+    "observations": [
+      {
+        "tool": "go",
+        "status": "observed",
+        "version": "1.27.4",
+        "detail": null,
+        "execution": "go.version"
+      }
+    ],
+    "verdicts": [
+      {
+        "module": "go:.",
+        "tool": "go",
+        "requirement": "go_directive@go.mod",
+        "status": "satisfied",
+        "reason": null
+      },
+      {
+        "module": "go:svc/a",
+        "tool": "go",
+        "requirement": "go_directive@svc/a/go.mod",
+        "status": "satisfied",
+        "reason": null
+      },
+      {
+        "module": "go:svc/b",
+        "tool": "go",
+        "requirement": "go_directive@svc/b/go.mod",
+        "status": "mismatch",
+        "reason": null
+      }
+    ]
+  },
+  "limitations": []
+}
