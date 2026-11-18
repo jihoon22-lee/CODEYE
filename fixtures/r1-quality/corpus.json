@@ -352,6 +352,3112 @@
   }
  },
  {
+  "id": "R1-CPP-02",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "owning-buffer-with-implicit-shallow-copy",
+  "category": "resource_lifetime",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": false,
+  "project": {
+   "name": "framebuf",
+   "title": "framebuf",
+   "summary": "Owned byte frames and a bounded frame queue for a video capture pipeline."
+  },
+  "contract": "Frame owns a heap buffer of size() bytes. Frame is a value type: a copy, whether made by construction or assignment, owns its own bytes with the same contents, and changing or destroying one Frame never affects another. FrameQueue::push stores a copy of the frame and drops the oldest frame once more than capacity frames are queued; pop returns the oldest frame. Sizes range from 0 to 64 MiB.",
+  "contract_file": "include/frame.h",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "include/frame.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstddef>",
+      "#include <cstdint>",
+      "#include <deque>",
+      "",
+      "namespace capture {",
+      "",
+      "// {{CONTRACT}}",
+      "class Frame {",
+      "public:",
+      "    explicit Frame(std::size_t size, std::uint8_t fill = 0);",
+      "    ~Frame();",
+      "",
+      "    std::size_t size() const { return size_; }",
+      "    std::uint8_t* data() { return data_; }",
+      "    const std::uint8_t* data() const { return data_; }",
+      "",
+      "private:",
+      "    std::uint8_t* data_;",
+      "    std::size_t size_;",
+      "};",
+      "",
+      "class FrameQueue {",
+      "public:",
+      "    explicit FrameQueue(std::size_t capacity) : capacity_(capacity) {}",
+      "    void push(const Frame& frame);",
+      "    Frame pop();",
+      "    std::size_t size() const { return frames_.size(); }",
+      "",
+      "private:",
+      "    std::size_t capacity_;",
+      "    std::deque<Frame> frames_;",
+      "};",
+      "",
+      "}  // namespace capture"
+     ]
+    },
+    {
+     "path": "src/frame.cpp",
+     "lines": [
+      "#include \"frame.h\"",
+      "",
+      "#include <cstring>",
+      "#include <stdexcept>",
+      "",
+      "namespace capture {",
+      "",
+      "Frame::Frame(std::size_t size, std::uint8_t fill) : data_(new std::uint8_t[size]), size_(size) {",
+      "    std::memset(data_, fill, size_);",
+      "}",
+      "",
+      "Frame::~Frame() {",
+      "    delete[] data_;",
+      "}",
+      "",
+      "void FrameQueue::push(const Frame& frame) {",
+      "    frames_.push_back(frame);",
+      "    if (frames_.size() > capacity_) {",
+      "        frames_.pop_front();",
+      "    }",
+      "}",
+      "",
+      "Frame FrameQueue::pop() {",
+      "    if (frames_.empty()) {",
+      "        throw std::out_of_range(\"frame queue is empty\");",
+      "    }",
+      "    Frame oldest = frames_.front();",
+      "    frames_.pop_front();",
+      "    return oldest;",
+      "}",
+      "",
+      "}  // namespace capture"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "include/frame.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstddef>",
+      "#include <cstdint>",
+      "#include <deque>",
+      "",
+      "namespace capture {",
+      "",
+      "// {{CONTRACT}}",
+      "class Frame {",
+      "public:",
+      "    explicit Frame(std::size_t size, std::uint8_t fill = 0);",
+      "    Frame(const Frame& other);",
+      "    Frame(Frame&& other) noexcept;",
+      "    Frame& operator=(Frame other) noexcept;",
+      "    ~Frame();",
+      "",
+      "    std::size_t size() const { return size_; }",
+      "    std::uint8_t* data() { return data_; }",
+      "    const std::uint8_t* data() const { return data_; }",
+      "",
+      "private:",
+      "    std::uint8_t* data_;",
+      "    std::size_t size_;",
+      "};",
+      "",
+      "class FrameQueue {",
+      "public:",
+      "    explicit FrameQueue(std::size_t capacity) : capacity_(capacity) {}",
+      "    void push(const Frame& frame);",
+      "    Frame pop();",
+      "    std::size_t size() const { return frames_.size(); }",
+      "",
+      "private:",
+      "    std::size_t capacity_;",
+      "    std::deque<Frame> frames_;",
+      "};",
+      "",
+      "}  // namespace capture"
+     ]
+    },
+    {
+     "path": "src/frame.cpp",
+     "lines": [
+      "#include \"frame.h\"",
+      "",
+      "#include <cstring>",
+      "#include <stdexcept>",
+      "#include <utility>",
+      "",
+      "namespace capture {",
+      "",
+      "Frame::Frame(std::size_t size, std::uint8_t fill) : data_(new std::uint8_t[size]), size_(size) {",
+      "    std::memset(data_, fill, size_);",
+      "}",
+      "",
+      "Frame::Frame(const Frame& other) : data_(new std::uint8_t[other.size_]), size_(other.size_) {",
+      "    if (size_ != 0) {",
+      "        std::memcpy(data_, other.data_, size_);",
+      "    }",
+      "}",
+      "",
+      "Frame::Frame(Frame&& other) noexcept : data_(other.data_), size_(other.size_) {",
+      "    other.data_ = nullptr;",
+      "    other.size_ = 0;",
+      "}",
+      "",
+      "Frame& Frame::operator=(Frame other) noexcept {",
+      "    std::swap(data_, other.data_);",
+      "    std::swap(size_, other.size_);",
+      "    return *this;",
+      "}",
+      "",
+      "Frame::~Frame() {",
+      "    delete[] data_;",
+      "}",
+      "",
+      "void FrameQueue::push(const Frame& frame) {",
+      "    frames_.push_back(frame);",
+      "    if (frames_.size() > capacity_) {",
+      "        frames_.pop_front();",
+      "    }",
+      "}",
+      "",
+      "Frame FrameQueue::pop() {",
+      "    if (frames_.empty()) {",
+      "        throw std::out_of_range(\"frame queue is empty\");",
+      "    }",
+      "    Frame oldest = frames_.front();",
+      "    frames_.pop_front();",
+      "    return oldest;",
+      "}",
+      "",
+      "}  // namespace capture"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "0daffc8dab9260bc70f46af74a611b32a772d35bc43179dc161f710eab4ac713",
+   "before_documented": "a7fbcbb627db3843e565e9611d67371befd9b7ca1a064a2f845c7d6aa1d124ae",
+   "after": "76f475703e1692c4a24bf38af4015b7e9aaefa475254d78de35fe906caf58584",
+   "after_documented": "17ade4f8bc99172db04ff9c72e71f5dfe9e217b8517740fb5fef99ee29468fb2"
+  },
+  "check": {
+   "summary": "Pushes frames into a two-slot queue, mutates and destroys the originals, pops the copies and assigns frames to each other; built with AddressSanitizer so a second release of one buffer aborts the run.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/frame.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "ERROR: AddressSanitizer: (attempting double-free|heap-use-after-free)",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <cstdio>",
+      "",
+      "#include \"frame.h\"",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "int main() {",
+      "    using capture::Frame;",
+      "    capture::FrameQueue queue(2);",
+      "    {",
+      "        Frame a(16, 0xaa);",
+      "        Frame b(8, 0xbb);",
+      "        queue.push(a);",
+      "        queue.push(b);",
+      "        a.data()[0] = 0x11;",
+      "    }",
+      "    Frame c(4, 0xcc);",
+      "    queue.push(c);",
+      "    expect(queue.size() == 2, \"queue size\");",
+      "    Frame first = queue.pop();",
+      "    expect(first.size() == 8 && first.data()[0] == 0xbb, \"oldest kept frame\");",
+      "    Frame second = queue.pop();",
+      "    expect(second.size() == 4 && second.data()[3] == 0xcc, \"newest frame\");",
+      "    Frame d(3, 0x01);",
+      "    d = second;",
+      "    d.data()[0] = 0x02;",
+      "    expect(second.data()[0] == 0xcc && d.size() == 4, \"assignment made an independent copy\");",
+      "    Frame empty(0);",
+      "    Frame empty_copy = empty;",
+      "    expect(empty_copy.size() == 0, \"empty frame copy\");",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Any copy of a Frame, such as FrameQueue::push storing one. Frame declares a destructor that deletes the buffer but no copy constructor or copy assignment, so the compiler-generated ones copy the pointer.",
+   "expected_impact": "Two Frames share one buffer: writes through one show up in the other, and the second destructor deletes the buffer again. In the capture pipeline that is heap corruption and crashes some time later (a double free or use-after-free under AddressSanitizer).",
+   "positive_locations": [
+    {
+     "path": "include/frame.h",
+     "symbol": "Frame",
+     "anchors": {
+      "start": "class Frame {",
+      "end": "~Frame();"
+     },
+     "start_line": 15,
+     "end_line": 18
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "include/frame.h",
+     "symbol": "Frame",
+     "anchors": {
+      "start": "Frame(const Frame& other);",
+      "end": "Frame& operator=(Frame other) noexcept;"
+     },
+     "note": "The corrected class declares a deep-copying copy constructor, a move constructor and a by-value (copy-and-swap) assignment, so each Frame owns its bytes.",
+     "start_line": 18,
+     "end_line": 20
+    },
+    {
+     "variant": "before",
+     "path": "src/frame.cpp",
+     "symbol": "FrameQueue::push",
+     "anchors": {
+      "start": "void FrameQueue::push(const Frame& frame) {"
+     },
+     "note": "The queue's use of copies is legitimate for a value type; the problem is in Frame.",
+     "start_line": 16,
+     "end_line": 16
+    }
+   ],
+   "reviewer_notes": "cppcheck (noCopyConstructor) and clang-tidy's special-member-functions check report the class. Code that only moves or passes by reference works, so the defect hides until the first copy.",
+   "distinctive_tokens": [
+    "rule of three",
+    "shallow copy",
+    "double free",
+    "double-free"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "include/frame.h",
+     "src/frame.cpp"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-CPP-03",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "int-product-widened-only-after-multiplying",
+  "category": "boundaries_arithmetic",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": false,
+  "project": {
+   "name": "rasterplan",
+   "title": "rasterplan",
+   "summary": "Buffer planning for a raster tile renderer: sizes, strides and tiling of large images."
+  },
+  "contract": "ImageShape describes an image of width x height pixels with 1 to 4 channels of one byte each; width and height range from 1 to 50000, and the constructor throws std::invalid_argument outside those ranges. row_bytes() and total_bytes() return the exact sizes in bytes as std::size_t, on 64-bit platforms up to 10^10 bytes. tile_count(tile) returns how many tile x tile squares cover the image.",
+  "contract_file": "include/shape.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/shape.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstddef>",
+      "",
+      "namespace raster {",
+      "",
+      "// {{CONTRACT}}",
+      "class ImageShape {",
+      "public:",
+      "    ImageShape(int width, int height, int channels);",
+      "",
+      "    int width() const { return width_; }",
+      "    int height() const { return height_; }",
+      "    int channels() const { return channels_; }",
+      "",
+      "    std::size_t row_bytes() const;",
+      "    std::size_t total_bytes() const;",
+      "    std::size_t tile_count(int tile) const;",
+      "",
+      "private:",
+      "    int width_;",
+      "    int height_;",
+      "    int channels_;",
+      "};",
+      "",
+      "}  // namespace raster"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/shape.cpp",
+     "lines": [
+      "#include \"shape.h\"",
+      "",
+      "#include <stdexcept>",
+      "",
+      "namespace raster {",
+      "",
+      "ImageShape::ImageShape(int width, int height, int channels)",
+      "    : width_(width), height_(height), channels_(channels) {",
+      "    if (width < 1 || width > 50000 || height < 1 || height > 50000) {",
+      "        throw std::invalid_argument(\"image dimensions out of range\");",
+      "    }",
+      "    if (channels < 1 || channels > 4) {",
+      "        throw std::invalid_argument(\"channels must be 1 to 4\");",
+      "    }",
+      "}",
+      "",
+      "std::size_t ImageShape::row_bytes() const {",
+      "    return static_cast<std::size_t>(width_) * channels_;",
+      "}",
+      "",
+      "std::size_t ImageShape::total_bytes() const {",
+      "    return static_cast<std::size_t>(width_ * height_ * channels_);",
+      "}",
+      "",
+      "std::size_t ImageShape::tile_count(int tile) const {",
+      "    if (tile < 1) {",
+      "        throw std::invalid_argument(\"tile size must be positive\");",
+      "    }",
+      "    std::size_t across = (static_cast<std::size_t>(width_) + tile - 1) / tile;",
+      "    std::size_t down = (static_cast<std::size_t>(height_) + tile - 1) / tile;",
+      "    return across * down;",
+      "}",
+      "",
+      "}  // namespace raster"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/shape.cpp",
+     "lines": [
+      "#include \"shape.h\"",
+      "",
+      "#include <stdexcept>",
+      "",
+      "namespace raster {",
+      "",
+      "ImageShape::ImageShape(int width, int height, int channels)",
+      "    : width_(width), height_(height), channels_(channels) {",
+      "    if (width < 1 || width > 50000 || height < 1 || height > 50000) {",
+      "        throw std::invalid_argument(\"image dimensions out of range\");",
+      "    }",
+      "    if (channels < 1 || channels > 4) {",
+      "        throw std::invalid_argument(\"channels must be 1 to 4\");",
+      "    }",
+      "}",
+      "",
+      "std::size_t ImageShape::row_bytes() const {",
+      "    return static_cast<std::size_t>(width_) * channels_;",
+      "}",
+      "",
+      "std::size_t ImageShape::total_bytes() const {",
+      "    return static_cast<std::size_t>(width_) * height_ * channels_;",
+      "}",
+      "",
+      "std::size_t ImageShape::tile_count(int tile) const {",
+      "    if (tile < 1) {",
+      "        throw std::invalid_argument(\"tile size must be positive\");",
+      "    }",
+      "    std::size_t across = (static_cast<std::size_t>(width_) + tile - 1) / tile;",
+      "    std::size_t down = (static_cast<std::size_t>(height_) + tile - 1) / tile;",
+      "    return across * down;",
+      "}",
+      "",
+      "}  // namespace raster"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "f468b0ab37b4af8317492563f17afc14df680c5eac418ce1b86e280e87996288",
+   "before_documented": "169502f787622ae979b26a0cfb674b7664c6eba7d73cb675a607c76fa936a60e",
+   "after": "706ada09a350090a55a5e601d659d0df8598aa51d3c76c6d18d2a67a8fb0e6c5",
+   "after_documented": "174525ecacb01b09c95d9bf3c4bbbc66162c9ab5c00ccb1ac772cbb40afec869"
+  },
+  "check": {
+   "summary": "Builds shapes up to 50000 x 50000 x 4 and compares total_bytes, row_bytes and tile_count with 64-bit reference values; built with UBSan so signed overflow aborts the run.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/shape.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "runtime error: signed integer overflow",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <cstdint>",
+      "#include <cstdio>",
+      "#include <stdexcept>",
+      "",
+      "#include \"shape.h\"",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "int main() {",
+      "    raster::ImageShape small(640, 480, 3);",
+      "    expect(small.total_bytes() == 921600 && small.row_bytes() == 1920, \"small image\");",
+      "    raster::ImageShape big(30000, 30000, 3);",
+      "    expect(big.total_bytes() == 2700000000ULL, \"30000 x 30000 x 3\");",
+      "    raster::ImageShape largest(50000, 50000, 4);",
+      "    expect(largest.total_bytes() == 10000000000ULL && largest.row_bytes() == 200000, \"50000 x 50000 x 4\");",
+      "    expect(largest.tile_count(256) == 196 * 196, \"tile count\");",
+      "    bool threw = false;",
+      "    try {",
+      "        raster::ImageShape bad(50001, 1, 1);",
+      "    } catch (const std::invalid_argument&) {",
+      "        threw = true;",
+      "    }",
+      "    expect(threw, \"width above 50000 rejected\");",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Any shape with width * height * channels above INT_MAX (about 2.1e9), for example 30000 x 30000 x 3. The product is computed in int and only the result is converted to std::size_t.",
+   "expected_impact": "Signed overflow is undefined behaviour; in practice total_bytes wraps to a small or huge value, so the renderer allocates a buffer far smaller than the image and later writes past it.",
+   "positive_locations": [
+    {
+     "path": "src/shape.cpp",
+     "symbol": "ImageShape::total_bytes",
+     "anchors": {
+      "start": "return static_cast<std::size_t>(width_ * height_ * channels_);"
+     },
+     "start_line": 22,
+     "end_line": 22
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/shape.cpp",
+     "symbol": "ImageShape::total_bytes",
+     "anchors": {
+      "start": "return static_cast<std::size_t>(width_) * height_ * channels_;"
+     },
+     "note": "Converting the first operand makes the whole product unsigned 64-bit, which holds every in-contract size.",
+     "start_line": 22,
+     "end_line": 22
+    },
+    {
+     "variant": "before",
+     "path": "src/shape.cpp",
+     "symbol": "ImageShape::row_bytes",
+     "anchors": {
+      "start": "return static_cast<std::size_t>(width_) * channels_;"
+     },
+     "note": "row_bytes already widens first; at most 200000 it could not overflow anyway.",
+     "start_line": 18,
+     "end_line": 18
+    }
+   ],
+   "reviewer_notes": "clang-tidy's bugprone-implicit-widening-of-multiplication-result reports the line. Typical test images are small, so the overflow only shows on large rasters.",
+   "distinctive_tokens": [
+    "int_max",
+    "wraps",
+    "widening",
+    "2^31"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/shape.cpp"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-CPP-04",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "remove-if-result-discarded-without-erase",
+  "category": "api_misuse",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": false,
+  "project": {
+   "name": "sessiontable",
+   "title": "sessiontable",
+   "summary": "In-memory login session table for a small admin console."
+  },
+  "contract": "SessionTable stores sessions keyed by token. expire(now) removes every session whose expires_at is not later than now and keeps the others in their original order; afterwards size() and find() reflect the removal and an expired token is no longer found. Tokens are non-empty strings and times are seconds since an arbitrary epoch. The table is used from one thread.",
+  "contract_file": "include/sessions.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/sessions.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstddef>",
+      "#include <cstdint>",
+      "#include <string>",
+      "#include <vector>",
+      "",
+      "namespace console {",
+      "",
+      "struct Session {",
+      "    std::string token;",
+      "    std::string user;",
+      "    std::int64_t expires_at;",
+      "};",
+      "",
+      "// {{CONTRACT}}",
+      "class SessionTable {",
+      "public:",
+      "    void add(Session session);",
+      "    void expire(std::int64_t now);",
+      "    const Session* find(const std::string& token) const;",
+      "    std::size_t size() const { return sessions_.size(); }",
+      "    std::vector<std::string> users() const;",
+      "",
+      "private:",
+      "    std::vector<Session> sessions_;",
+      "};",
+      "",
+      "}  // namespace console"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/sessions.cpp",
+     "lines": [
+      "#include \"sessions.h\"",
+      "",
+      "#include <algorithm>",
+      "#include <stdexcept>",
+      "#include <utility>",
+      "",
+      "namespace console {",
+      "",
+      "void SessionTable::add(Session session) {",
+      "    if (session.token.empty()) {",
+      "        throw std::invalid_argument(\"empty session token\");",
+      "    }",
+      "    sessions_.push_back(std::move(session));",
+      "}",
+      "",
+      "void SessionTable::expire(std::int64_t now) {",
+      "    std::remove_if(sessions_.begin(), sessions_.end(),",
+      "                   [now](const Session& s) { return s.expires_at <= now; });",
+      "}",
+      "",
+      "const Session* SessionTable::find(const std::string& token) const {",
+      "    for (const Session& s : sessions_) {",
+      "        if (s.token == token) {",
+      "            return &s;",
+      "        }",
+      "    }",
+      "    return nullptr;",
+      "}",
+      "",
+      "std::vector<std::string> SessionTable::users() const {",
+      "    std::vector<std::string> out;",
+      "    for (const Session& s : sessions_) {",
+      "        out.push_back(s.user);",
+      "    }",
+      "    return out;",
+      "}",
+      "",
+      "}  // namespace console"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/sessions.cpp",
+     "lines": [
+      "#include \"sessions.h\"",
+      "",
+      "#include <algorithm>",
+      "#include <stdexcept>",
+      "#include <utility>",
+      "",
+      "namespace console {",
+      "",
+      "void SessionTable::add(Session session) {",
+      "    if (session.token.empty()) {",
+      "        throw std::invalid_argument(\"empty session token\");",
+      "    }",
+      "    sessions_.push_back(std::move(session));",
+      "}",
+      "",
+      "void SessionTable::expire(std::int64_t now) {",
+      "    sessions_.erase(std::remove_if(sessions_.begin(), sessions_.end(),",
+      "                                   [now](const Session& s) { return s.expires_at <= now; }),",
+      "                    sessions_.end());",
+      "}",
+      "",
+      "const Session* SessionTable::find(const std::string& token) const {",
+      "    for (const Session& s : sessions_) {",
+      "        if (s.token == token) {",
+      "            return &s;",
+      "        }",
+      "    }",
+      "    return nullptr;",
+      "}",
+      "",
+      "std::vector<std::string> SessionTable::users() const {",
+      "    std::vector<std::string> out;",
+      "    for (const Session& s : sessions_) {",
+      "        out.push_back(s.user);",
+      "    }",
+      "    return out;",
+      "}",
+      "",
+      "}  // namespace console"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "5ff9627e73e137d665c8b5bc992be55d10709924123b9e12958f832376fb7c12",
+   "before_documented": "cd7364d887b2907170e1d7a9faf478a3426a7ec558f4a160ee1985359e32caff",
+   "after": "609efb29c1718cb33ed0e4531129ad748e4c1b03b9881f3e2dbff2f3373042cf",
+   "after_documented": "8a0aea1a3d12752eb578953b36441f169e60b7cc6ca7452a7680f069bb477b5c"
+  },
+  "check": {
+   "summary": "Adds five sessions with different expiry times, expires at a time that covers three of them, and checks size, lookups and order of the survivors.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/sessions.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: size is 5 once three sessions expired",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <cstdio>",
+      "#include <string>",
+      "#include <vector>",
+      "",
+      "#include \"sessions.h\"",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "int main() {",
+      "    console::SessionTable table;",
+      "    table.add({\"t1\", \"ana\", 100});",
+      "    table.add({\"t2\", \"bo\", 300});",
+      "    table.add({\"t3\", \"cy\", 150});",
+      "    table.add({\"t4\", \"di\", 400});",
+      "    table.add({\"t5\", \"ed\", 200});",
+      "    table.expire(200);",
+      "    expect(table.size() == 2, table.size() == 5 ? \"size is 5 once three sessions expired\" : \"size after expire\");",
+      "    expect(table.find(\"t1\") == nullptr && table.find(\"t5\") == nullptr, \"expired token still found\");",
+      "    expect(table.find(\"t2\") != nullptr && table.find(\"t4\")->user == \"di\", \"live tokens\");",
+      "    expect(table.users() == std::vector<std::string>({\"bo\", \"di\"}), \"survivor order\");",
+      "    table.expire(1000);",
+      "    expect(table.size() == 0, \"everything expired\");",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Any call to expire that matches at least one session. std::remove_if only moves the kept elements to the front and returns the new logical end; the tail is never erased.",
+   "expected_impact": "size() never shrinks, expired tokens can still be found (the tail holds leftover or moved-from entries), and memory grows with every login; a logged-out or timed-out session may keep working.",
+   "positive_locations": [
+    {
+     "path": "src/sessions.cpp",
+     "symbol": "SessionTable::expire",
+     "anchors": {
+      "start": "std::remove_if(sessions_.begin(), sessions_.end(),",
+      "end": "[now](const Session& s) { return s.expires_at <= now; });"
+     },
+     "start_line": 17,
+     "end_line": 18
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/sessions.cpp",
+     "symbol": "SessionTable::expire",
+     "anchors": {
+      "start": "sessions_.erase(std::remove_if(sessions_.begin(), sessions_.end(),",
+      "end": "sessions_.end());"
+     },
+     "note": "The erase-remove form drops the tail returned by remove_if.",
+     "start_line": 17,
+     "end_line": 19
+    },
+    {
+     "variant": "before",
+     "path": "src/sessions.cpp",
+     "symbol": "SessionTable::find",
+     "anchors": {
+      "start": "const Session* SessionTable::find(const std::string& token) const {"
+     },
+     "note": "find is a plain linear search and is correct for whatever the vector holds.",
+     "start_line": 21,
+     "end_line": 21
+    }
+   ],
+   "reviewer_notes": "GCC's -Wunused-result fires because libstdc++ marks remove_if nodiscard, as does clang-tidy's bugprone-unused-return-value. Order preservation comes for free with remove_if.",
+   "distinctive_tokens": [
+    "erase-remove",
+    "logical end",
+    "nodiscard",
+    "moved-from"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/sessions.cpp"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-CPP-05",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "timed-wait-ignores-already-open-latch",
+  "category": "concurrency_async",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": true,
+  "project": {
+   "name": "bootgate",
+   "title": "bootgate",
+   "summary": "Starts the services of an embedded gateway in parallel and waits for all of them to report ready.",
+   "threads": true
+  },
+  "contract": "Latch starts at a count of 0 or more. count_down() decrements it (never below zero) and is safe to call from any thread. wait_for(timeout) returns true as soon as the count is zero, immediately when it already is, and false only if the timeout expires while the count is still above zero; spurious wake-ups never end the wait early. wait() blocks until the count is zero.",
+  "contract_file": "include/latch.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/latch.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <chrono>",
+      "#include <condition_variable>",
+      "#include <cstddef>",
+      "#include <mutex>",
+      "",
+      "namespace boot {",
+      "",
+      "// {{CONTRACT}}",
+      "class Latch {",
+      "public:",
+      "    explicit Latch(std::size_t count) : count_(count) {}",
+      "    Latch(const Latch&) = delete;",
+      "    Latch& operator=(const Latch&) = delete;",
+      "",
+      "    void count_down();",
+      "    bool wait_for(std::chrono::milliseconds timeout);",
+      "    void wait();",
+      "",
+      "private:",
+      "    std::mutex mutex_;",
+      "    std::condition_variable ready_;",
+      "    std::size_t count_;",
+      "};",
+      "",
+      "}  // namespace boot"
+     ]
+    },
+    {
+     "path": "include/startup.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <chrono>",
+      "#include <functional>",
+      "#include <string>",
+      "#include <vector>",
+      "",
+      "namespace boot {",
+      "",
+      "struct Service {",
+      "    std::string name;",
+      "    std::function<void()> start;  // returns once the service is ready",
+      "};",
+      "",
+      "// Starts every service on its own thread and reports whether all of them were",
+      "// ready within timeout. Always joins the threads it started.",
+      "bool start_all(const std::vector<Service>& services, std::chrono::milliseconds timeout);",
+      "",
+      "}  // namespace boot"
+     ]
+    },
+    {
+     "path": "src/startup.cpp",
+     "lines": [
+      "#include \"startup.h\"",
+      "",
+      "#include <thread>",
+      "",
+      "#include \"latch.h\"",
+      "",
+      "namespace boot {",
+      "",
+      "bool start_all(const std::vector<Service>& services, std::chrono::milliseconds timeout) {",
+      "    Latch latch(services.size());",
+      "    std::vector<std::thread> threads;",
+      "    threads.reserve(services.size());",
+      "    for (const Service& service : services) {",
+      "        threads.emplace_back([&latch, &service] {",
+      "            service.start();",
+      "            latch.count_down();",
+      "        });",
+      "    }",
+      "    bool ready = latch.wait_for(timeout);",
+      "    for (std::thread& t : threads) {",
+      "        t.join();",
+      "    }",
+      "    return ready;",
+      "}",
+      "",
+      "}  // namespace boot"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/latch.cpp",
+     "lines": [
+      "#include \"latch.h\"",
+      "",
+      "namespace boot {",
+      "",
+      "void Latch::count_down() {",
+      "    std::lock_guard<std::mutex> lock(mutex_);",
+      "    if (count_ == 0) {",
+      "        return;",
+      "    }",
+      "    if (--count_ == 0) {",
+      "        ready_.notify_all();",
+      "    }",
+      "}",
+      "",
+      "bool Latch::wait_for(std::chrono::milliseconds timeout) {",
+      "    std::unique_lock<std::mutex> lock(mutex_);",
+      "    return ready_.wait_for(lock, timeout) == std::cv_status::no_timeout;",
+      "}",
+      "",
+      "void Latch::wait() {",
+      "    std::unique_lock<std::mutex> lock(mutex_);",
+      "    ready_.wait(lock, [this] { return count_ == 0; });",
+      "}",
+      "",
+      "}  // namespace boot"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/latch.cpp",
+     "lines": [
+      "#include \"latch.h\"",
+      "",
+      "namespace boot {",
+      "",
+      "void Latch::count_down() {",
+      "    std::lock_guard<std::mutex> lock(mutex_);",
+      "    if (count_ == 0) {",
+      "        return;",
+      "    }",
+      "    if (--count_ == 0) {",
+      "        ready_.notify_all();",
+      "    }",
+      "}",
+      "",
+      "bool Latch::wait_for(std::chrono::milliseconds timeout) {",
+      "    std::unique_lock<std::mutex> lock(mutex_);",
+      "    return ready_.wait_for(lock, timeout, [this] { return count_ == 0; });",
+      "}",
+      "",
+      "void Latch::wait() {",
+      "    std::unique_lock<std::mutex> lock(mutex_);",
+      "    ready_.wait(lock, [this] { return count_ == 0; });",
+      "}",
+      "",
+      "}  // namespace boot"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "89fde664e8f78950cd5472b0052b36a1521dcae946f60cbc442b4bf9dad10f99",
+   "before_documented": "50fd8e1d923a487455f9fc560030ef39439c5c69754fd84513f91afac5609c69",
+   "after": "17326d807911aa031cceed44948f32000b2c359e263717be7b2a27eb2a088127",
+   "after_documented": "e390ada0126ad9ed82e9c01b3c9daaff080bb79b9a7c121d97508bd672b2b148"
+  },
+  "check": {
+   "summary": "Calls wait_for on a latch created at zero, on one counted down to zero and on one that stays closed, then runs start_all with instant, slow and stuck services.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/latch.cpp",
+      "{run}/src/startup.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: (latch at zero reported a timeout|fast services reported as not ready)",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <chrono>",
+      "#include <cstdio>",
+      "#include <thread>",
+      "",
+      "#include \"latch.h\"",
+      "#include \"startup.h\"",
+      "",
+      "using namespace std::chrono_literals;",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "int main() {",
+      "    boot::Latch open(0);",
+      "    expect(open.wait_for(300ms), \"latch at zero reported a timeout\");",
+      "    boot::Latch two(2);",
+      "    two.count_down();",
+      "    two.count_down();",
+      "    two.count_down();",
+      "    expect(two.wait_for(300ms), \"latch counted down to zero reported a timeout\");",
+      "    boot::Latch never(1);",
+      "    auto started = std::chrono::steady_clock::now();",
+      "    expect(!never.wait_for(100ms), \"closed latch reported ready\");",
+      "    expect(std::chrono::steady_clock::now() - started >= 100ms, \"timed wait returned early\");",
+      "    std::vector<boot::Service> instant = {{\"db\", [] {}}, {\"cache\", [] {}}, {\"api\", [] {}}};",
+      "    expect(boot::start_all(instant, 300ms), \"fast services reported as not ready\");",
+      "    std::vector<boot::Service> slow = {{\"mq\", [] { std::this_thread::sleep_for(50ms); }}};",
+      "    expect(boot::start_all(slow, 1000ms), \"slow service reported as not ready\");",
+      "    expect(!boot::start_all({{\"stuck\", [] { std::this_thread::sleep_for(400ms); }}}, 100ms), \"stuck service reported ready\");",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "The count reaches zero ahead of the call to wait_for, which happens in start_all whenever every service starts quickly. wait_for waits on the condition variable without checking the count, so it sleeps until the timeout and returns false.",
+   "expected_impact": "A gateway whose services start fast is reported as failing to start after the full timeout; with slow services the result is right, so the failure is intermittent. A spurious wake-up can also return true early.",
+   "positive_locations": [
+    {
+     "path": "src/latch.cpp",
+     "symbol": "Latch::wait_for",
+     "anchors": {
+      "start": "bool Latch::wait_for(std::chrono::milliseconds timeout) {",
+      "end": "return ready_.wait_for(lock, timeout) == std::cv_status::no_timeout;"
+     },
+     "start_line": 15,
+     "end_line": 17
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/latch.cpp",
+     "symbol": "Latch::wait_for",
+     "anchors": {
+      "start": "return ready_.wait_for(lock, timeout, [this] { return count_ == 0; });"
+     },
+     "note": "The predicate overload checks the count under the lock first and again on every wake-up.",
+     "start_line": 17,
+     "end_line": 17
+    },
+    {
+     "variant": "before",
+     "path": "src/latch.cpp",
+     "symbol": "Latch::wait",
+     "anchors": {
+      "start": "ready_.wait(lock, [this] { return count_ == 0; });"
+     },
+     "note": "The untimed wait already uses the predicate form and is correct.",
+     "start_line": 22,
+     "end_line": 22
+    },
+    {
+     "variant": "before",
+     "path": "src/startup.cpp",
+     "symbol": "start_all",
+     "anchors": {
+      "start": "bool ready = latch.wait_for(timeout);"
+     },
+     "note": "start_all is a legitimate user: services may count down ahead of this call.",
+     "start_line": 19,
+     "end_line": 19
+    }
+   ],
+   "reviewer_notes": "clang-tidy's bugprone-spuriously-wake-up-functions reports a wait_for without a predicate. Needs startup.cpp to see that the latch can open ahead of the wait.",
+   "distinctive_tokens": [
+    "lost wake-up",
+    "lost wakeup",
+    "predicate overload",
+    "spuriously"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/latch.cpp"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-CPP-06",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "settings-cleared-ahead-of-throwing-parse",
+  "category": "error_handling",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "hotconf",
+   "title": "hotconf",
+   "summary": "Live-reloadable key/value settings for a proxy, re-read when the operator edits the file."
+  },
+  "contract": "Settings::reload(text) replaces every setting with the \"key = value\" lines of text (blank lines and '#' comments allowed) and increments generation(). If any line is invalid it throws ParseError naming the line number, and the settings that were in effect stay exactly as they were, generation() included. get(key) returns the value or std::nullopt. Settings is used from one thread.",
+  "contract_file": "include/settings.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/settings.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstdint>",
+      "#include <map>",
+      "#include <optional>",
+      "#include <stdexcept>",
+      "#include <string>",
+      "",
+      "namespace hotconf {",
+      "",
+      "class ParseError : public std::runtime_error {",
+      "public:",
+      "    ParseError(int line, const std::string& reason)",
+      "        : std::runtime_error(\"line \" + std::to_string(line) + \": \" + reason), line_(line) {}",
+      "    int line() const { return line_; }",
+      "",
+      "private:",
+      "    int line_;",
+      "};",
+      "",
+      "struct Entry {",
+      "    std::string key;",
+      "    std::string value;",
+      "};",
+      "",
+      "// Parses one line; returns std::nullopt for blank and comment lines.",
+      "std::optional<Entry> parse_line(const std::string& line, int number);",
+      "",
+      "// {{CONTRACT}}",
+      "class Settings {",
+      "public:",
+      "    void reload(const std::string& text);",
+      "    std::optional<std::string> get(const std::string& key) const;",
+      "    std::uint64_t generation() const { return generation_; }",
+      "    std::size_t size() const { return values_.size(); }",
+      "",
+      "private:",
+      "    std::map<std::string, std::string> values_;",
+      "    std::uint64_t generation_ = 0;",
+      "};",
+      "",
+      "}  // namespace hotconf"
+     ]
+    },
+    {
+     "path": "src/line.cpp",
+     "lines": [
+      "#include <cctype>",
+      "",
+      "#include \"settings.h\"",
+      "",
+      "namespace hotconf {",
+      "",
+      "namespace {",
+      "",
+      "std::string trim(const std::string& s) {",
+      "    std::size_t begin = 0;",
+      "    std::size_t end = s.size();",
+      "    while (begin < end && std::isspace(static_cast<unsigned char>(s[begin]))) ++begin;",
+      "    while (end > begin && std::isspace(static_cast<unsigned char>(s[end - 1]))) --end;",
+      "    return s.substr(begin, end - begin);",
+      "}",
+      "",
+      "}  // namespace",
+      "",
+      "std::optional<Entry> parse_line(const std::string& line, int number) {",
+      "    std::string text = trim(line);",
+      "    if (text.empty() || text[0] == '#') {",
+      "        return std::nullopt;",
+      "    }",
+      "    std::size_t eq = text.find('=');",
+      "    if (eq == std::string::npos) {",
+      "        throw ParseError(number, \"expected key = value\");",
+      "    }",
+      "    Entry entry{trim(text.substr(0, eq)), trim(text.substr(eq + 1))};",
+      "    if (entry.key.empty()) {",
+      "        throw ParseError(number, \"empty key\");",
+      "    }",
+      "    return entry;",
+      "}",
+      "",
+      "}  // namespace hotconf"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/settings.cpp",
+     "lines": [
+      "#include \"settings.h\"",
+      "",
+      "#include <sstream>",
+      "",
+      "namespace hotconf {",
+      "",
+      "void Settings::reload(const std::string& text) {",
+      "    values_.clear();",
+      "    std::istringstream in(text);",
+      "    std::string line;",
+      "    int number = 0;",
+      "    while (std::getline(in, line)) {",
+      "        ++number;",
+      "        std::optional<Entry> entry = parse_line(line, number);",
+      "        if (entry) {",
+      "            values_[entry->key] = entry->value;",
+      "        }",
+      "    }",
+      "    ++generation_;",
+      "}",
+      "",
+      "std::optional<std::string> Settings::get(const std::string& key) const {",
+      "    auto it = values_.find(key);",
+      "    if (it == values_.end()) {",
+      "        return std::nullopt;",
+      "    }",
+      "    return it->second;",
+      "}",
+      "",
+      "}  // namespace hotconf"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/settings.cpp",
+     "lines": [
+      "#include \"settings.h\"",
+      "",
+      "#include <sstream>",
+      "",
+      "namespace hotconf {",
+      "",
+      "void Settings::reload(const std::string& text) {",
+      "    std::map<std::string, std::string> next;",
+      "    std::istringstream in(text);",
+      "    std::string line;",
+      "    int number = 0;",
+      "    while (std::getline(in, line)) {",
+      "        ++number;",
+      "        std::optional<Entry> entry = parse_line(line, number);",
+      "        if (entry) {",
+      "            next[entry->key] = entry->value;",
+      "        }",
+      "    }",
+      "    values_.swap(next);",
+      "    ++generation_;",
+      "}",
+      "",
+      "std::optional<std::string> Settings::get(const std::string& key) const {",
+      "    auto it = values_.find(key);",
+      "    if (it == values_.end()) {",
+      "        return std::nullopt;",
+      "    }",
+      "    return it->second;",
+      "}",
+      "",
+      "}  // namespace hotconf"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "30943e36e0b772d927aacdb1282dd5c9a75dab21d5dcda594e963453ff12ada3",
+   "before_documented": "6aeac3dc0cefb4b699d3e3490fef1828308cae3f38bd449731d41c8c56d10603",
+   "after": "5000cbcb52c738970ad584144a12d5f3e251df2eb968d7e80c373cfd0a8bae36",
+   "after_documented": "dd7143b4ae16fc5b0d1aa9c7ad9ba5c226c06c99fe1d444b0c1d9895cebb81c0"
+  },
+  "check": {
+   "summary": "Loads a valid file, then reloads text whose third line is invalid, catching ParseError, and checks that the earlier keys, values and generation are unchanged; then reloads valid text again.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/settings.cpp",
+      "{run}/src/line.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: settings changed by a rejected reload",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <cstdio>",
+      "",
+      "#include \"settings.h\"",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "int main() {",
+      "    hotconf::Settings settings;",
+      "    settings.reload(\"# proxy\\nupstream = 192.0.2.7:8080\\nmax_conns = 512\\n\\ntimeout_ms = 1500\\n\");",
+      "    expect(settings.size() == 3 && settings.generation() == 1, \"initial load\");",
+      "    expect(settings.get(\"upstream\") == std::optional<std::string>(\"192.0.2.7:8080\"), \"upstream value\");",
+      "    int line = 0;",
+      "    try {",
+      "        settings.reload(\"upstream = 192.0.2.9:8080\\nmax_conns = 64\\ntimeout_ms 10\\nretries = 2\\n\");",
+      "    } catch (const hotconf::ParseError& e) {",
+      "        line = e.line();",
+      "    }",
+      "    expect(line == 3, \"ParseError names line 3\");",
+      "    bool same = settings.size() == 3 && settings.generation() == 1 &&",
+      "                settings.get(\"upstream\") == std::optional<std::string>(\"192.0.2.7:8080\") &&",
+      "                settings.get(\"max_conns\") == std::optional<std::string>(\"512\") &&",
+      "                settings.get(\"timeout_ms\") == std::optional<std::string>(\"1500\") &&",
+      "                !settings.get(\"retries\");",
+      "    expect(same, \"settings changed by a rejected reload\");",
+      "    settings.reload(\"upstream = 192.0.2.9:8080\\nretries = 2\\n\");",
+      "    expect(settings.size() == 2 && settings.generation() == 2, \"second valid reload\");",
+      "    expect(!settings.get(\"max_conns\") && settings.get(\"retries\") == std::optional<std::string>(\"2\"), \"reload replaces all keys\");",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A reload whose text contains an invalid line anywhere. reload clears the map and inserts entries one by one, so when parse_line in line.cpp throws, the map holds only the lines that came first.",
+   "expected_impact": "A typo in the edited file wipes most settings of the running proxy: upstream addresses and limits fall back to unset until the next valid reload, even though the reload reported an error.",
+   "positive_locations": [
+    {
+     "path": "src/settings.cpp",
+     "symbol": "Settings::reload",
+     "anchors": {
+      "start": "values_.clear();",
+      "end": "values_[entry->key] = entry->value;"
+     },
+     "start_line": 8,
+     "end_line": 16
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/settings.cpp",
+     "symbol": "Settings::reload",
+     "anchors": {
+      "start": "std::map<std::string, std::string> next;",
+      "end": "values_.swap(next);"
+     },
+     "note": "The corrected reload parses into a local map and swaps it in only once every line parsed, which gives the strong guarantee.",
+     "start_line": 8,
+     "end_line": 19
+    },
+    {
+     "variant": "before",
+     "path": "src/line.cpp",
+     "symbol": "parse_line",
+     "anchors": {
+      "start": "throw ParseError(number, \"expected key = value\");"
+     },
+     "note": "Throwing from parse_line is the documented way to report an invalid line.",
+     "start_line": 26,
+     "end_line": 26
+    }
+   ],
+   "reviewer_notes": "Needs line.cpp to see that parsing throws mid-loop. The generation counter is only incremented at the end, so it stays right; the map does not.",
+   "distinctive_tokens": [
+    "strong guarantee",
+    "strong exception",
+    "half-applied",
+    "partially applied"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/settings.cpp"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-CPP-07",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "lenient-integer-conversion-used-as-validator",
+  "category": "input_validation",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "thumbsrv",
+   "title": "thumbsrv",
+   "summary": "Request parsing for an image thumbnail endpoint: /thumb?src=<name>&size=<w>x<h>."
+  },
+  "contract": "parse_size(text) accepts exactly \"<w>x<h>\" where each side is 1 to 5 ASCII digits whose value lies in 1..16384, and returns std::nullopt for every other string, including signs, spaces, units and empty sides. It never throws. parse_request maps a missing or rejected size to status 400 and never throws either; the server calls it for every request.",
+  "contract_file": "include/size.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/size.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <optional>",
+      "#include <string>",
+      "",
+      "namespace thumb {",
+      "",
+      "constexpr int kMaxSide = 16384;",
+      "",
+      "struct Size {",
+      "    int width;",
+      "    int height;",
+      "};",
+      "",
+      "struct Request {",
+      "    int status;",
+      "    std::string source;",
+      "    Size size;",
+      "};",
+      "",
+      "// {{CONTRACT}}",
+      "std::optional<Size> parse_size(const std::string& text);",
+      "",
+      "// Parses \"src=<name>&size=<w>x<h>\" (in any order) into a Request.",
+      "Request parse_request(const std::string& query);",
+      "",
+      "}  // namespace thumb"
+     ]
+    },
+    {
+     "path": "src/request.cpp",
+     "lines": [
+      "#include \"size.h\"",
+      "",
+      "namespace thumb {",
+      "",
+      "namespace {",
+      "",
+      "std::string field(const std::string& query, const std::string& name) {",
+      "    std::size_t start = 0;",
+      "    while (start <= query.size()) {",
+      "        std::size_t amp = query.find('&', start);",
+      "        std::size_t stop = amp == std::string::npos ? query.size() : amp;",
+      "        std::string pair = query.substr(start, stop - start);",
+      "        if (pair.compare(0, name.size() + 1, name + \"=\") == 0) {",
+      "            return pair.substr(name.size() + 1);",
+      "        }",
+      "        if (amp == std::string::npos) {",
+      "            break;",
+      "        }",
+      "        start = amp + 1;",
+      "    }",
+      "    return std::string();",
+      "}",
+      "",
+      "}  // namespace",
+      "",
+      "Request parse_request(const std::string& query) {",
+      "    Request request{400, field(query, \"src\"), Size{0, 0}};",
+      "    std::string value = field(query, \"size\");",
+      "    if (request.source.empty() || value.empty()) {",
+      "        return request;",
+      "    }",
+      "    std::optional<Size> size = parse_size(value);",
+      "    if (!size) {",
+      "        return request;",
+      "    }",
+      "    request.status = 200;",
+      "    request.size = *size;",
+      "    return request;",
+      "}",
+      "",
+      "}  // namespace thumb"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/size.cpp",
+     "lines": [
+      "#include \"size.h\"",
+      "",
+      "namespace thumb {",
+      "",
+      "namespace {",
+      "",
+      "std::optional<int> parse_side(const std::string& digits) {",
+      "    if (digits.empty() || digits.size() > 5) {",
+      "        return std::nullopt;",
+      "    }",
+      "    int value = std::stoi(digits);",
+      "    if (value < 1 || value > kMaxSide) {",
+      "        return std::nullopt;",
+      "    }",
+      "    return value;",
+      "}",
+      "",
+      "}  // namespace",
+      "",
+      "std::optional<Size> parse_size(const std::string& text) {",
+      "    std::size_t x = text.find('x');",
+      "    if (x == std::string::npos) {",
+      "        return std::nullopt;",
+      "    }",
+      "    std::optional<int> width = parse_side(text.substr(0, x));",
+      "    std::optional<int> height = parse_side(text.substr(x + 1));",
+      "    if (!width || !height) {",
+      "        return std::nullopt;",
+      "    }",
+      "    return Size{*width, *height};",
+      "}",
+      "",
+      "}  // namespace thumb"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/size.cpp",
+     "lines": [
+      "#include \"size.h\"",
+      "",
+      "#include <charconv>",
+      "#include <system_error>",
+      "",
+      "namespace thumb {",
+      "",
+      "namespace {",
+      "",
+      "std::optional<int> parse_side(const std::string& digits) {",
+      "    if (digits.empty() || digits.size() > 5) {",
+      "        return std::nullopt;",
+      "    }",
+      "    const char* first = digits.data();",
+      "    const char* last = first + digits.size();",
+      "    int value = 0;",
+      "    auto [end, ec] = std::from_chars(first, last, value);",
+      "    if (ec != std::errc() || end != last) {",
+      "        return std::nullopt;",
+      "    }",
+      "    if (value < 1 || value > kMaxSide) {",
+      "        return std::nullopt;",
+      "    }",
+      "    return value;",
+      "}",
+      "",
+      "}  // namespace",
+      "",
+      "std::optional<Size> parse_size(const std::string& text) {",
+      "    std::size_t x = text.find('x');",
+      "    if (x == std::string::npos) {",
+      "        return std::nullopt;",
+      "    }",
+      "    std::optional<int> width = parse_side(text.substr(0, x));",
+      "    std::optional<int> height = parse_side(text.substr(x + 1));",
+      "    if (!width || !height) {",
+      "        return std::nullopt;",
+      "    }",
+      "    return Size{*width, *height};",
+      "}",
+      "",
+      "}  // namespace thumb"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "f3555b7b482cd3e3f4098504659ab28e73258569a3cad3f67acc2f16665de9e0",
+   "before_documented": "b80100f7886eace35ec0fd4ef580e63cb7092b2f9b75c2b6490bd5c8190d8cfd",
+   "after": "02268cd1f6ea8cc01d46372ca3873153b3b31ecfe167704f983c306267ade220",
+   "after_documented": "95324140345412a3ee081cd2e99b38e043dc1da8d6c4c8339af2c39cde2e214d"
+  },
+  "check": {
+   "summary": "Feeds parse_size and parse_request well-formed sizes and a table of malformed ones (units, spaces, signs, letters, empty sides, too many digits) and expects std::nullopt or status 400 without exceptions.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/size.cpp",
+      "{run}/src/request.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: (accepted|threw on) ",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <cstdio>",
+      "#include <exception>",
+      "#include <string>",
+      "",
+      "#include \"size.h\"",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const std::string& what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what.c_str());",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "static void reject(const std::string& text) {",
+      "    try {",
+      "        expect(!thumb::parse_size(text), \"accepted '\" + text + \"'\");",
+      "    } catch (const std::exception& e) {",
+      "        expect(false, \"threw on '\" + text + \"': \" + e.what());",
+      "    }",
+      "}",
+      "",
+      "int main() {",
+      "    std::optional<thumb::Size> ok = thumb::parse_size(\"640x480\");",
+      "    expect(ok && ok->width == 640 && ok->height == 480, \"640x480\");",
+      "    ok = thumb::parse_size(\"16384x1\");",
+      "    expect(ok && ok->width == 16384 && ok->height == 1, \"16384x1\");",
+      "    ok = thumb::parse_size(\"00064x00032\");",
+      "    expect(ok && ok->width == 64 && ok->height == 32, \"leading zeros\");",
+      "    const char* bad[] = {\"64pxx64\", \"64x64px\", \" 64x64\", \"64x 64\", \"+64x64\", \"-1x5\", \"abcx10\", \"10x\",",
+      "                         \"x10\", \"0x10\", \"16385x10\", \"123456x1\", \"64x64x64\", \"\", \"x\", \"6 4x10\"};",
+      "    for (const char* text : bad) {",
+      "        reject(text);",
+      "    }",
+      "    try {",
+      "        thumb::Request r = thumb::parse_request(\"src=cat.png&size=320x200\");",
+      "        expect(r.status == 200 && r.size.width == 320 && r.source == \"cat.png\", \"valid request\");",
+      "        r = thumb::parse_request(\"size=abcx10&src=cat.png\");",
+      "        expect(r.status == 400, \"request with letters gets 400\");",
+      "        r = thumb::parse_request(\"src=cat.png\");",
+      "        expect(r.status == 400, \"request without size gets 400\");",
+      "    } catch (const std::exception& e) {",
+      "        expect(false, std::string(\"threw on request: \") + e.what());",
+      "    }",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A size side that is not purely digits, such as \"64px\", \" 64\", \"+64\" or \"ab\". std::stoi skips leading whitespace, accepts a sign, stops at the first non-digit and throws std::invalid_argument when no digits come first.",
+   "expected_impact": "Malformed sizes such as 64x64px or 6 4x10 are silently accepted as 64 x 64 and 6 x 10, and a size like abcx10 throws out of parse_request, which has no handler, so one crafted query string terminates the thumbnail server instead of getting a 400.",
+   "positive_locations": [
+    {
+     "path": "src/size.cpp",
+     "symbol": "parse_side",
+     "anchors": {
+      "start": "int value = std::stoi(digits);"
+     },
+     "start_line": 11,
+     "end_line": 11
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/size.cpp",
+     "symbol": "parse_side",
+     "anchors": {
+      "start": "auto [end, ec] = std::from_chars(first, last, value);",
+      "end": "if (ec != std::errc() || end != last) {"
+     },
+     "note": "from_chars rejects whitespace and '+', reports failure through ec instead of throwing, and the end check rejects trailing characters.",
+     "start_line": 17,
+     "end_line": 18
+    },
+    {
+     "variant": "before",
+     "path": "src/request.cpp",
+     "symbol": "parse_request",
+     "anchors": {
+      "start": "std::optional<Size> size = parse_size(value);"
+     },
+     "note": "parse_request relies on parse_size never throwing; it is not at fault itself.",
+     "start_line": 32,
+     "end_line": 32
+    },
+    {
+     "variant": "before",
+     "path": "src/size.cpp",
+     "symbol": "parse_side",
+     "anchors": {
+      "start": "if (digits.empty() || digits.size() > 5) {"
+     },
+     "note": "The length check keeps std::stoi away from std::out_of_range, so only the lenient parsing and invalid_argument remain.",
+     "start_line": 8,
+     "end_line": 8
+    }
+   ],
+   "reviewer_notes": "Needs request.cpp (and the contract) to see that an exception reaches the server. Length limits make it look safe at a glance.",
+   "distinctive_tokens": [
+    "invalid_argument",
+    "trailing garbage",
+    "lenient",
+    "first non-digit"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/size.cpp"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-CPP-08",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "memoized-area-kept-after-vertex-move",
+  "category": "state_invariants",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "plotgeom",
+   "title": "plotgeom",
+   "summary": "Polygon editing for a land-plot drawing tool: vertices are added and dragged, and the area readout is shown live."
+  },
+  "contract": "Polygon holds an ordered list of vertices. area() returns the absolute shoelace area of the vertices as they are at the time of the call (0 for fewer than three vertices), whatever sequence of add_vertex, move_vertex and clear calls came first. move_vertex(i, p) replaces vertex i and throws std::out_of_range when i >= size(). Polygon is used from one thread.",
+  "contract_file": "include/polygon.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/polygon.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstddef>",
+      "#include <optional>",
+      "#include <vector>",
+      "",
+      "namespace plot {",
+      "",
+      "struct Point {",
+      "    double x;",
+      "    double y;",
+      "};",
+      "",
+      "// {{CONTRACT}}",
+      "class Polygon {",
+      "public:",
+      "    void add_vertex(Point p);",
+      "    void move_vertex(std::size_t index, Point p);",
+      "    void clear();",
+      "",
+      "    std::size_t size() const { return vertices_.size(); }",
+      "    const Point& vertex(std::size_t index) const { return vertices_.at(index); }",
+      "    double area() const;",
+      "    double perimeter() const;",
+      "",
+      "private:",
+      "    std::vector<Point> vertices_;",
+      "    mutable std::optional<double> area_;",
+      "};",
+      "",
+      "}  // namespace plot"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/polygon.cpp",
+     "lines": [
+      "#include \"polygon.h\"",
+      "",
+      "#include <cmath>",
+      "",
+      "namespace plot {",
+      "",
+      "void Polygon::add_vertex(Point p) {",
+      "    vertices_.push_back(p);",
+      "    area_.reset();",
+      "}",
+      "",
+      "void Polygon::move_vertex(std::size_t index, Point p) {",
+      "    vertices_.at(index) = p;",
+      "}",
+      "",
+      "void Polygon::clear() {",
+      "    vertices_.clear();",
+      "    area_.reset();",
+      "}",
+      "",
+      "double Polygon::area() const {",
+      "    if (!area_) {",
+      "        double twice = 0.0;",
+      "        std::size_t n = vertices_.size();",
+      "        if (n >= 3) {",
+      "            for (std::size_t i = 0; i < n; ++i) {",
+      "                const Point& a = vertices_[i];",
+      "                const Point& b = vertices_[(i + 1) % n];",
+      "                twice += a.x * b.y - b.x * a.y;",
+      "            }",
+      "        }",
+      "        area_ = std::fabs(twice) / 2.0;",
+      "    }",
+      "    return *area_;",
+      "}",
+      "",
+      "double Polygon::perimeter() const {",
+      "    double total = 0.0;",
+      "    std::size_t n = vertices_.size();",
+      "    for (std::size_t i = 0; n >= 2 && i < n; ++i) {",
+      "        const Point& a = vertices_[i];",
+      "        const Point& b = vertices_[(i + 1) % n];",
+      "        total += std::hypot(b.x - a.x, b.y - a.y);",
+      "    }",
+      "    return total;",
+      "}",
+      "",
+      "}  // namespace plot"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/polygon.cpp",
+     "lines": [
+      "#include \"polygon.h\"",
+      "",
+      "#include <cmath>",
+      "",
+      "namespace plot {",
+      "",
+      "void Polygon::add_vertex(Point p) {",
+      "    vertices_.push_back(p);",
+      "    area_.reset();",
+      "}",
+      "",
+      "void Polygon::move_vertex(std::size_t index, Point p) {",
+      "    vertices_.at(index) = p;",
+      "    area_.reset();",
+      "}",
+      "",
+      "void Polygon::clear() {",
+      "    vertices_.clear();",
+      "    area_.reset();",
+      "}",
+      "",
+      "double Polygon::area() const {",
+      "    if (!area_) {",
+      "        double twice = 0.0;",
+      "        std::size_t n = vertices_.size();",
+      "        if (n >= 3) {",
+      "            for (std::size_t i = 0; i < n; ++i) {",
+      "                const Point& a = vertices_[i];",
+      "                const Point& b = vertices_[(i + 1) % n];",
+      "                twice += a.x * b.y - b.x * a.y;",
+      "            }",
+      "        }",
+      "        area_ = std::fabs(twice) / 2.0;",
+      "    }",
+      "    return *area_;",
+      "}",
+      "",
+      "double Polygon::perimeter() const {",
+      "    double total = 0.0;",
+      "    std::size_t n = vertices_.size();",
+      "    for (std::size_t i = 0; n >= 2 && i < n; ++i) {",
+      "        const Point& a = vertices_[i];",
+      "        const Point& b = vertices_[(i + 1) % n];",
+      "        total += std::hypot(b.x - a.x, b.y - a.y);",
+      "    }",
+      "    return total;",
+      "}",
+      "",
+      "}  // namespace plot"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "ca8dc336ee525d2719de6f8fdc192e0233f787744a24daa9094602793edadc41",
+   "before_documented": "dbeb6ef63e3888e4a7146c81b55d25b948635efa3228ebcc357056efaf46cf94",
+   "after": "2860b4774b1e7123d2522d0b968f5c194bcd0a1e1851545e7864ce926f439e49",
+   "after_documented": "a8cc3b46706849fc0f4a9e400732369831862c906a1bcf4f6b2ff2f10f79ae8f"
+  },
+  "check": {
+   "summary": "Builds a 4 x 3 rectangle, reads its area, drags one corner outward, reads the area again and compares with the shoelace value of the new outline; also adds and clears vertices.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/polygon.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: area once a vertex moved",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <cmath>",
+      "#include <cstdio>",
+      "#include <stdexcept>",
+      "",
+      "#include \"polygon.h\"",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "static bool near(double a, double b) { return std::fabs(a - b) < 1e-9; }",
+      "",
+      "int main() {",
+      "    plot::Polygon plot;",
+      "    expect(near(plot.area(), 0.0), \"empty polygon\");",
+      "    plot.add_vertex({0, 0});",
+      "    plot.add_vertex({4, 0});",
+      "    plot.add_vertex({4, 3});",
+      "    plot.add_vertex({0, 3});",
+      "    expect(near(plot.area(), 12.0), \"4 x 3 rectangle\");",
+      "    plot.move_vertex(2, {6, 3});",
+      "    expect(near(plot.area(), 15.0), \"area once a vertex moved\");",
+      "    expect(near(plot.perimeter(), 4 + std::hypot(2.0, 3.0) + 6 + 3), \"perimeter once a vertex moved\");",
+      "    plot.add_vertex({-2, 1.5});",
+      "    expect(near(plot.area(), 18.0), \"area with a fifth vertex\");",
+      "    bool threw = false;",
+      "    try {",
+      "        plot.move_vertex(9, {1, 1});",
+      "    } catch (const std::out_of_range&) {",
+      "        threw = true;",
+      "    }",
+      "    expect(threw, \"move_vertex beyond size throws\");",
+      "    plot.clear();",
+      "    expect(near(plot.area(), 0.0) && plot.size() == 0, \"cleared polygon\");",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Calling area(), then move_vertex, then area() again. add_vertex and clear reset the memoized area, move_vertex does not, so the second call returns the area of the old outline.",
+   "expected_impact": "Dragging a vertex leaves the live area label at its old value until a vertex is added; plot areas computed for invoices or permits can be wrong without any error.",
+   "positive_locations": [
+    {
+     "path": "src/polygon.cpp",
+     "symbol": "Polygon::move_vertex",
+     "anchors": {
+      "start": "void Polygon::move_vertex(std::size_t index, Point p) {",
+      "end": "vertices_.at(index) = p;"
+     },
+     "start_line": 12,
+     "end_line": 13
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/polygon.cpp",
+     "symbol": "Polygon::move_vertex",
+     "anchors": {
+      "start": "vertices_.at(index) = p;",
+      "end": "area_.reset();"
+     },
+     "note": "The corrected move_vertex resets the memoized area once the vertex is replaced.",
+     "start_line": 13,
+     "end_line": 14
+    },
+    {
+     "variant": "before",
+     "path": "src/polygon.cpp",
+     "symbol": "Polygon::add_vertex",
+     "anchors": {
+      "start": "void Polygon::add_vertex(Point p) {",
+      "end": "area_.reset();"
+     },
+     "note": "add_vertex already resets the memoized value.",
+     "start_line": 7,
+     "end_line": 9
+    },
+    {
+     "variant": "before",
+     "path": "src/polygon.cpp",
+     "symbol": "Polygon::area",
+     "anchors": {
+      "start": "if (!area_) {"
+     },
+     "note": "Memoizing in area() is fine as long as every mutation resets it.",
+     "start_line": 22,
+     "end_line": 22
+    }
+   ],
+   "reviewer_notes": "The pattern is visible by comparing the three mutators. A test that only builds a polygon once and reads area once passes.",
+   "distinctive_tokens": [
+    "stale",
+    "invalidat",
+    "outdated"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/polygon.cpp"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-CPP-09",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "worker-thread-signalled-but-not-joined-in-destructor",
+  "category": "concurrency_async",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "heartbeat",
+   "title": "heartbeat",
+   "summary": "A periodic heartbeat ticker for a device agent: runs a callback every period on its own thread.",
+   "threads": true
+  },
+  "contract": "Ticker runs tick() on its own thread every period until it is stopped. stop() wakes the thread, waits for it to finish and may be called any number of times. Destroying a Ticker, whether or not stop() was called, stops it the same way: once the destructor returns, the thread has finished and tick() no longer runs.",
+  "contract_file": "include/ticker.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/ticker.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <chrono>",
+      "#include <condition_variable>",
+      "#include <functional>",
+      "#include <mutex>",
+      "#include <thread>",
+      "",
+      "namespace agent {",
+      "",
+      "// {{CONTRACT}}",
+      "class Ticker {",
+      "public:",
+      "    Ticker(std::chrono::milliseconds period, std::function<void()> tick);",
+      "    ~Ticker();",
+      "    Ticker(const Ticker&) = delete;",
+      "    Ticker& operator=(const Ticker&) = delete;",
+      "",
+      "    void stop();",
+      "",
+      "private:",
+      "    void run();",
+      "",
+      "    std::chrono::milliseconds period_;",
+      "    std::function<void()> tick_;",
+      "    std::mutex mutex_;",
+      "    std::condition_variable wake_;",
+      "    bool stopping_ = false;",
+      "    std::thread worker_;",
+      "};",
+      "",
+      "}  // namespace agent"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/ticker.cpp",
+     "lines": [
+      "#include \"ticker.h\"",
+      "",
+      "#include <utility>",
+      "",
+      "namespace agent {",
+      "",
+      "Ticker::Ticker(std::chrono::milliseconds period, std::function<void()> tick)",
+      "    : period_(period), tick_(std::move(tick)), worker_([this] { run(); }) {}",
+      "",
+      "Ticker::~Ticker() {",
+      "    {",
+      "        std::lock_guard<std::mutex> lock(mutex_);",
+      "        stopping_ = true;",
+      "    }",
+      "    wake_.notify_all();",
+      "}",
+      "",
+      "void Ticker::stop() {",
+      "    {",
+      "        std::lock_guard<std::mutex> lock(mutex_);",
+      "        stopping_ = true;",
+      "    }",
+      "    wake_.notify_all();",
+      "    if (worker_.joinable()) {",
+      "        worker_.join();",
+      "    }",
+      "}",
+      "",
+      "void Ticker::run() {",
+      "    std::unique_lock<std::mutex> lock(mutex_);",
+      "    while (!stopping_) {",
+      "        if (wake_.wait_for(lock, period_, [this] { return stopping_; })) {",
+      "            break;",
+      "        }",
+      "        lock.unlock();",
+      "        tick_();",
+      "        lock.lock();",
+      "    }",
+      "}",
+      "",
+      "}  // namespace agent"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/ticker.cpp",
+     "lines": [
+      "#include \"ticker.h\"",
+      "",
+      "#include <utility>",
+      "",
+      "namespace agent {",
+      "",
+      "Ticker::Ticker(std::chrono::milliseconds period, std::function<void()> tick)",
+      "    : period_(period), tick_(std::move(tick)), worker_([this] { run(); }) {}",
+      "",
+      "Ticker::~Ticker() { stop(); }",
+      "",
+      "void Ticker::stop() {",
+      "    {",
+      "        std::lock_guard<std::mutex> lock(mutex_);",
+      "        stopping_ = true;",
+      "    }",
+      "    wake_.notify_all();",
+      "    if (worker_.joinable()) {",
+      "        worker_.join();",
+      "    }",
+      "}",
+      "",
+      "void Ticker::run() {",
+      "    std::unique_lock<std::mutex> lock(mutex_);",
+      "    while (!stopping_) {",
+      "        if (wake_.wait_for(lock, period_, [this] { return stopping_; })) {",
+      "            break;",
+      "        }",
+      "        lock.unlock();",
+      "        tick_();",
+      "        lock.lock();",
+      "    }",
+      "}",
+      "",
+      "}  // namespace agent"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "f6373c3ab96c41455c13894e19058d81e3ea726d1372d7d3a263d2eb117bf758",
+   "before_documented": "d2139c530d44e0b990ac732ef1620d55702c398e20e041d8bf958cd9d98e42fa",
+   "after": "edc91513d54f0ca7362bf8e22c26265e23856f4e7e70cd33213d30011c2962da",
+   "after_documented": "6488a080629c833efbe4f9eae4e0ffe72749d84f4a74df3d710632752b2f6190"
+  },
+  "check": {
+   "summary": "Runs a Ticker with a 5 ms period, stops one explicitly and lets another go out of scope without stop(), then checks that the tick count no longer changes.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/ticker.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "terminate called without an active exception",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <atomic>",
+      "#include <chrono>",
+      "#include <cstdio>",
+      "#include <thread>",
+      "",
+      "#include \"ticker.h\"",
+      "",
+      "using namespace std::chrono_literals;",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        std::fflush(stdout);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "int main() {",
+      "    std::atomic<int> beats{0};",
+      "    {",
+      "        agent::Ticker ticker(5ms, [&beats] { ++beats; });",
+      "        std::this_thread::sleep_for(60ms);",
+      "        ticker.stop();",
+      "        ticker.stop();",
+      "    }",
+      "    int stopped_at = beats.load();",
+      "    expect(stopped_at > 0, \"explicitly stopped ticker never ticked\");",
+      "    std::this_thread::sleep_for(30ms);",
+      "    expect(beats.load() == stopped_at, \"ticks continued after stop\");",
+      "",
+      "    std::atomic<int> scoped{0};",
+      "    {",
+      "        agent::Ticker ticker(5ms, [&scoped] { ++scoped; });",
+      "        std::this_thread::sleep_for(60ms);",
+      "    }",
+      "    int ended_at = scoped.load();",
+      "    expect(ended_at > 0, \"scoped ticker never ticked\");",
+      "    std::this_thread::sleep_for(30ms);",
+      "    expect(scoped.load() == ended_at, \"ticks continued after destruction\");",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Destroying a Ticker on which stop() was not called. The destructor sets the flag and notifies, but the joinable std::thread member is then destroyed without join().",
+   "expected_impact": "std::thread's destructor calls std::terminate, so the whole agent aborts whenever a Ticker goes out of scope, for example on an early return or exception; if terminate were avoided the thread would still read the destroyed members.",
+   "positive_locations": [
+    {
+     "path": "src/ticker.cpp",
+     "symbol": "Ticker::~Ticker",
+     "anchors": {
+      "start": "Ticker::~Ticker() {",
+      "end": "wake_.notify_all();"
+     },
+     "start_line": 10,
+     "end_line": 15
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/ticker.cpp",
+     "symbol": "Ticker::~Ticker",
+     "anchors": {
+      "start": "Ticker::~Ticker() { stop(); }"
+     },
+     "note": "The corrected destructor reuses stop(), which joins the thread.",
+     "start_line": 10,
+     "end_line": 10
+    },
+    {
+     "variant": "before",
+     "path": "src/ticker.cpp",
+     "symbol": "Ticker::stop",
+     "anchors": {
+      "start": "if (worker_.joinable()) {",
+      "end": "worker_.join();"
+     },
+     "note": "stop() joins correctly and is safe to repeat.",
+     "start_line": 24,
+     "end_line": 25
+    }
+   ],
+   "reviewer_notes": "Code paths that always call stop() first never show it. Needs knowing that a joinable std::thread must not be destroyed.",
+   "distinctive_tokens": [
+    "joinable thread",
+    "std::terminate",
+    "jthread",
+    "without join"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/ticker.cpp"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-CPP-10",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "this-capturing-task-outlived-by-owning-member-order",
+  "category": "resource_lifetime",
+  "kind": "tricky_normal",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "wordindex",
+   "title": "wordindex",
+   "summary": "Background word counting for a document search service, fed by an upload handler.",
+   "threads": true
+  },
+  "contract": "add(document) queues a document for counting on worker threads and returns at once; on_indexed runs once per counted document, and flush() waits for all queued ones. Destroying an Indexer counts every document already added, and no task touches it once the destructor returns. count() is thread-safe.",
+  "contract_file": "include/indexer.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/indexer.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstddef>",
+      "#include <functional>",
+      "#include <map>",
+      "#include <mutex>",
+      "#include <string>",
+      "#include <utility>",
+      "",
+      "#include \"work_queue.h\"",
+      "",
+      "namespace idx {",
+      "",
+      "// {{CONTRACT}}",
+      "class Indexer {",
+      "public:",
+      "    Indexer(unsigned threads, std::function<void()> on_indexed)",
+      "        : on_indexed_(std::move(on_indexed)), queue_(threads) {}",
+      "",
+      "    void add(std::string document);",
+      "    void flush() { queue_.wait_idle(); }",
+      "    std::size_t count(const std::string& word) const {",
+      "        std::lock_guard<std::mutex> lock(mutex_);",
+      "        auto it = counts_.find(word);",
+      "        return it == counts_.end() ? 0 : it->second;",
+      "    }",
+      "",
+      "private:",
+      "    void index(const std::string& document);",
+      "",
+      "    mutable std::mutex mutex_;",
+      "    std::map<std::string, std::size_t> counts_;",
+      "    std::function<void()> on_indexed_;",
+      "    WorkQueue queue_;",
+      "};",
+      "",
+      "}  // namespace idx"
+     ]
+    },
+    {
+     "path": "include/work_queue.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <condition_variable>",
+      "#include <deque>",
+      "#include <functional>",
+      "#include <mutex>",
+      "#include <thread>",
+      "#include <vector>",
+      "",
+      "namespace idx {",
+      "",
+      "// Runs tasks on worker threads; the destructor runs every task submitted so far.",
+      "class WorkQueue {",
+      "public:",
+      "    explicit WorkQueue(unsigned threads);",
+      "    ~WorkQueue();",
+      "",
+      "    void submit(std::function<void()> task);",
+      "    void wait_idle();",
+      "",
+      "private:",
+      "    void run();",
+      "",
+      "    std::mutex mutex_;",
+      "    std::condition_variable has_work_;",
+      "    std::condition_variable idle_;",
+      "    std::deque<std::function<void()>> tasks_;",
+      "    unsigned busy_ = 0;",
+      "    bool closing_ = false;",
+      "    std::vector<std::thread> workers_;",
+      "};",
+      "",
+      "}  // namespace idx"
+     ]
+    },
+    {
+     "path": "src/indexer.cpp",
+     "lines": [
+      "#include \"indexer.h\"",
+      "",
+      "#include <sstream>",
+      "",
+      "namespace idx {",
+      "",
+      "void Indexer::add(std::string document) {",
+      "    queue_.submit([this, doc = std::move(document)] { index(doc); });",
+      "}",
+      "",
+      "void Indexer::index(const std::string& document) {",
+      "    std::istringstream words(document);",
+      "    std::string word;",
+      "    {",
+      "        std::lock_guard<std::mutex> lock(mutex_);",
+      "        while (words >> word) {",
+      "            ++counts_[word];",
+      "        }",
+      "    }",
+      "    on_indexed_();",
+      "}",
+      "",
+      "}  // namespace idx"
+     ]
+    },
+    {
+     "path": "src/work_queue.cpp",
+     "lines": [
+      "#include \"work_queue.h\"",
+      "",
+      "#include <utility>",
+      "",
+      "namespace idx {",
+      "",
+      "WorkQueue::WorkQueue(unsigned threads) {",
+      "    for (unsigned i = 0; i < threads; ++i) {",
+      "        workers_.emplace_back([this] { run(); });",
+      "    }",
+      "}",
+      "",
+      "WorkQueue::~WorkQueue() {",
+      "    {",
+      "        std::lock_guard<std::mutex> lock(mutex_);",
+      "        closing_ = true;",
+      "    }",
+      "    has_work_.notify_all();",
+      "    for (std::thread& t : workers_) {",
+      "        t.join();",
+      "    }",
+      "}",
+      "",
+      "void WorkQueue::submit(std::function<void()> task) {",
+      "    std::lock_guard<std::mutex> lock(mutex_);",
+      "    tasks_.push_back(std::move(task));",
+      "    has_work_.notify_one();",
+      "}",
+      "",
+      "void WorkQueue::wait_idle() {",
+      "    std::unique_lock<std::mutex> lock(mutex_);",
+      "    idle_.wait(lock, [this] { return tasks_.empty() && busy_ == 0; });",
+      "}",
+      "",
+      "void WorkQueue::run() {",
+      "    std::unique_lock<std::mutex> lock(mutex_);",
+      "    for (;;) {",
+      "        has_work_.wait(lock, [this] { return closing_ || !tasks_.empty(); });",
+      "        if (tasks_.empty()) {",
+      "            return;",
+      "        }",
+      "        std::function<void()> task = std::move(tasks_.front());",
+      "        tasks_.pop_front();",
+      "        ++busy_;",
+      "        lock.unlock();",
+      "        task();",
+      "        lock.lock();",
+      "        if (--busy_ == 0 && tasks_.empty()) {",
+      "            idle_.notify_all();",
+      "        }",
+      "    }",
+      "}",
+      "",
+      "}  // namespace idx"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "7885a1f9ded25925bc65c56137e41650cd22ee62d9d82b1eb6e4226021875b79",
+   "before_documented": "37b50556b68106ae3f9702dc311c0b697175703e13f5f250f7c4e2c36462b83d"
+  },
+  "check": {
+   "summary": "Counts words in a few documents after flush(), then adds 400 documents to a heap-allocated Indexer and deletes it at once, checking that on_indexed ran 400 times; built with AddressSanitizer so a task running on freed state aborts the run.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/work_queue.cpp",
+      "{run}/src/indexer.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: |ERROR: AddressSanitizer",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <atomic>",
+      "#include <cstdio>",
+      "#include <string>",
+      "",
+      "#include \"indexer.h\"",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "int main() {",
+      "    std::atomic<int> seen{0};",
+      "    idx::Indexer small(2, [&seen] { ++seen; });",
+      "    small.add(\"the quick brown fox\");",
+      "    small.add(\"the lazy dog  and the fox\");",
+      "    small.add(\"\");",
+      "    small.flush();",
+      "    expect(seen.load() == 3, \"on_indexed per document\");",
+      "    expect(small.count(\"the\") == 3 && small.count(\"fox\") == 2 && small.count(\"cat\") == 0, \"word counts\");",
+      "",
+      "    std::atomic<int> done{0};",
+      "    auto* indexer = new idx::Indexer(4, [&done] { ++done; });",
+      "    for (int i = 0; i < 400; ++i) {",
+      "        indexer->add(\"doc \" + std::to_string(i) + \" alpha beta gamma delta epsilon\");",
+      "    }",
+      "    delete indexer;",
+      "    expect(done.load() == 400, \"documents added ahead of destruction were all counted\");",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. Indexer::add hands a lambda that captures this to a worker thread, which resembles a task that can run after its object is gone.",
+   "expected_impact": "No defect: queue_ is the last member of Indexer, so it is destroyed first, and WorkQueue's destructor runs every queued task and joins the workers while mutex_, counts_ and on_indexed_ are still alive.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "src/indexer.cpp",
+     "symbol": "Indexer::add",
+     "anchors": {
+      "start": "queue_.submit([this, doc = std::move(document)] { index(doc); });"
+     },
+     "note": "Task captures this and runs later on another thread.",
+     "start_line": 8,
+     "end_line": 8
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "include/indexer.h",
+     "symbol": "Indexer",
+     "anchors": {
+      "start": "WorkQueue queue_;"
+     },
+     "note": "Declared after every member the tasks use, so it is destroyed before them.",
+     "start_line": 37,
+     "end_line": 37
+    },
+    {
+     "variant": "before",
+     "path": "src/work_queue.cpp",
+     "symbol": "WorkQueue::~WorkQueue",
+     "anchors": {
+      "start": "WorkQueue::~WorkQueue() {",
+      "end": "t.join();"
+     },
+     "note": "The destructor lets workers drain the queue and joins them.",
+     "start_line": 13,
+     "end_line": 20
+    },
+    {
+     "variant": "before",
+     "path": "src/work_queue.cpp",
+     "symbol": "WorkQueue::run",
+     "anchors": {
+      "start": "if (tasks_.empty()) {",
+      "end": "return;"
+     },
+     "note": "Workers exit only once closing and the queue is empty.",
+     "start_line": 39,
+     "end_line": 40
+    }
+   ],
+   "reviewer_notes": "A finding that tasks may run on a destroyed Indexer is a false positive; it would become real if queue_ moved above the other members. Remarks about the absence of an explicit destructor in Indexer are style.",
+   "distinctive_tokens": [
+    "declaration order",
+    "destroyed first",
+    "reverse order",
+    "member order"
+   ],
+   "corrected_variant": null
+  }
+ },
+ {
+  "id": "R1-CPP-11",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "noexcept-destructor-with-explicit-close-path",
+  "category": "error_handling",
+  "kind": "tricky_normal",
+  "detection": "static_likely",
+  "cross_file": true,
+  "project": {
+   "name": "csvexport",
+   "title": "csvexport",
+   "summary": "Writes report rows to a CSV file for a nightly accounting export job."
+  },
+  "contract": "ExportFile writes rows to the file at path. close() flushes and closes the file and throws std::system_error if the data could not be written or the file could not be closed; calling it again does nothing. The destructor closes a file that is still open and never throws, so it is safe while an exception propagates; callers that need to know whether the data reached the disk call close() themselves. run_export returns 0 when every row was written and the file closed; otherwise it prints the reason to stderr and returns 1.",
+  "contract_file": "include/export_file.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/export_file.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstdio>",
+      "#include <string>",
+      "#include <vector>",
+      "",
+      "namespace exporter {",
+      "",
+      "// {{CONTRACT}}",
+      "class ExportFile {",
+      "public:",
+      "    explicit ExportFile(const std::string& path);",
+      "    ~ExportFile();",
+      "    ExportFile(const ExportFile&) = delete;",
+      "    ExportFile& operator=(const ExportFile&) = delete;",
+      "",
+      "    void write_row(const std::string& row);",
+      "    void close();",
+      "",
+      "private:",
+      "    std::FILE* file_;",
+      "    std::string path_;",
+      "};",
+      "",
+      "int run_export(const std::string& path, const std::vector<std::string>& rows);",
+      "",
+      "}  // namespace exporter"
+     ]
+    },
+    {
+     "path": "src/export_file.cpp",
+     "lines": [
+      "#include \"export_file.h\"",
+      "",
+      "#include <cerrno>",
+      "#include <stdexcept>",
+      "#include <system_error>",
+      "",
+      "namespace exporter {",
+      "",
+      "ExportFile::ExportFile(const std::string& path) : file_(std::fopen(path.c_str(), \"w\")), path_(path) {",
+      "    if (file_ == nullptr) {",
+      "        throw std::system_error(errno, std::generic_category(), \"opening \" + path);",
+      "    }",
+      "}",
+      "",
+      "ExportFile::~ExportFile() {",
+      "    try {",
+      "        close();",
+      "    } catch (...) {",
+      "    }",
+      "}",
+      "",
+      "void ExportFile::write_row(const std::string& row) {",
+      "    if (file_ == nullptr) {",
+      "        throw std::logic_error(\"row written to a closed export file\");",
+      "    }",
+      "    std::fputs(row.c_str(), file_);",
+      "    std::fputc('\\n', file_);",
+      "}",
+      "",
+      "void ExportFile::close() {",
+      "    if (file_ == nullptr) {",
+      "        return;",
+      "    }",
+      "    std::FILE* f = file_;",
+      "    file_ = nullptr;",
+      "    errno = 0;",
+      "    bool ok = std::fflush(f) == 0 && std::ferror(f) == 0;",
+      "    int code = errno;",
+      "    if (std::fclose(f) != 0 && ok) {",
+      "        ok = false;",
+      "        code = errno;",
+      "    }",
+      "    if (!ok) {",
+      "        throw std::system_error(code != 0 ? code : EIO, std::generic_category(), \"writing \" + path_);",
+      "    }",
+      "}",
+      "",
+      "}  // namespace exporter"
+     ]
+    },
+    {
+     "path": "src/run_export.cpp",
+     "lines": [
+      "#include <cstdio>",
+      "#include <exception>",
+      "",
+      "#include \"export_file.h\"",
+      "",
+      "namespace exporter {",
+      "",
+      "int run_export(const std::string& path, const std::vector<std::string>& rows) {",
+      "    try {",
+      "        ExportFile out(path);",
+      "        for (const std::string& row : rows) {",
+      "            out.write_row(row);",
+      "        }",
+      "        out.close();",
+      "        return 0;",
+      "    } catch (const std::exception& e) {",
+      "        std::fprintf(stderr, \"export failed: %s\\n\", e.what());",
+      "        return 1;",
+      "    }",
+      "}",
+      "",
+      "}  // namespace exporter"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "d93252eba4c91ca052236287449d571d5c084335ba950521660f30afdfd85ffe",
+   "before_documented": "6a5fcee4eb6b260fa3c9c5827fc32934552409984817307ddb8c753496497302"
+  },
+  "check": {
+   "summary": "Exports rows to a regular file and reads them back, exports to /dev/full and to a missing directory and expects exit code 1, closes twice, and lets an ExportFile on /dev/full go out of scope without close().",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/export_file.cpp",
+      "{run}/src/run_export.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check",
+     "{out}"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: |terminate called",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <cstdio>",
+      "#include <fstream>",
+      "#include <sstream>",
+      "#include <string>",
+      "#include <vector>",
+      "",
+      "#include \"export_file.h\"",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        std::fflush(stdout);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "int main(int argc, char** argv) {",
+      "    if (argc != 2) {",
+      "        std::printf(\"usage: check <scratch-dir>\\n\");",
+      "        return 2;",
+      "    }",
+      "    std::string dir = argv[1];",
+      "    std::vector<std::string> rows = {\"date,account,amount\", \"2026-01-31,4000,125.50\", \"2026-01-31,4100,-20.00\"};",
+      "    expect(exporter::run_export(dir + \"/ledger.csv\", rows) == 0, \"export to a regular file\");",
+      "    std::ifstream in(dir + \"/ledger.csv\");",
+      "    std::stringstream text;",
+      "    text << in.rdbuf();",
+      "    expect(text.str() == \"date,account,amount\\n2026-01-31,4000,125.50\\n2026-01-31,4100,-20.00\\n\", \"file contents\");",
+      "    expect(exporter::run_export(\"/dev/full\", rows) == 1, \"export to a full device reports failure\");",
+      "    expect(exporter::run_export(dir + \"/missing/ledger.csv\", rows) == 1, \"export to a missing directory reports failure\");",
+      "    {",
+      "        exporter::ExportFile twice(dir + \"/twice.csv\");",
+      "        twice.write_row(\"x\");",
+      "        twice.close();",
+      "        twice.close();",
+      "    }",
+      "    {",
+      "        exporter::ExportFile dropped(\"/dev/full\");",
+      "        dropped.write_row(\"lost row\");",
+      "    }",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. The destructor of ExportFile catches every exception from close() and discards it, which resembles an error being silently swallowed.",
+   "expected_impact": "No defect: a destructor must not throw, and the contract makes close() the reporting path. run_export calls close() explicitly inside its try block and turns a failure into exit code 1; the destructor only cleans up on early exits, where an exception is already in flight or the caller chose not to check.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "src/export_file.cpp",
+     "symbol": "ExportFile::~ExportFile",
+     "anchors": {
+      "start": "ExportFile::~ExportFile() {",
+      "end": "} catch (...) {"
+     },
+     "note": "Empty catch-all discards the close error.",
+     "start_line": 15,
+     "end_line": 18
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "src/run_export.cpp",
+     "symbol": "run_export",
+     "anchors": {
+      "start": "out.close();",
+      "end": "return 1;"
+     },
+     "note": "The caller closes explicitly and reports any failure as exit code 1.",
+     "start_line": 14,
+     "end_line": 18
+    },
+    {
+     "variant": "before",
+     "path": "src/export_file.cpp",
+     "symbol": "ExportFile::close",
+     "anchors": {
+      "start": "if (!ok) {",
+      "end": "throw std::system_error(code != 0 ? code : EIO, std::generic_category(), \"writing \" + path_);"
+     },
+     "note": "close() reports write, flush and close failures.",
+     "start_line": 43,
+     "end_line": 44
+    }
+   ],
+   "reviewer_notes": "Findings that the destructor hides write errors are false positives under this contract. Rethrowing from the destructor would call std::terminate during unwinding.",
+   "distinctive_tokens": [
+    "swallow",
+    "empty catch",
+    "during unwinding",
+    "stack unwinding"
+   ],
+   "corrected_variant": null
+  }
+ },
+ {
   "id": "R1-PY-01",
   "language": "python",
   "split": "holdout",
