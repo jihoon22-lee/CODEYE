@@ -154,7 +154,7 @@ data: {"run_id":"…"}
 
 ### 실행한 검증
 
-`gofmt -l .`, `go vet ./...`, `GOOS=windows go vet ./...`, PostgreSQL을 지정한 `go test -race ./...`, `python3 scripts/validate_bundle.py`, `cd web && npm ci && npm test && npm run build`, `python3 scripts/test_postgres.py --nodes --web --scheduler`. 결과는 통합 검토에서 확정한다.
+작업 브랜치에서 `gofmt -l .`(출력 없음), `go vet ./...`, `GOOS=windows go vet ./...`, `python3 scripts/validate_bundle.py`, `cd web && npm ci && npm test && npm run build`(16개 파일, 176개 시험), PostgreSQL 클라이언트를 `PATH`에 둔 `python3 scripts/test_postgres.py --nodes --web --scheduler`가 모두 통과했다. 마지막 명령은 임시 PostgreSQL에서 `go test -race ./...`(PostgreSQL 시험 포함, 건너뜀 없음), Chromium e2e, 두 노드·실제 Go vet smoke(실제 run SSE 40개 이벤트), scheduler smoke를 실행한다. Windows는 vet만 했고 Windows에서 시험을 실행하지 않았다. 실제 모델 요청은 보내지 않았다.
 
 ## 7. 남은 제한
 
