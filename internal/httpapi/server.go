@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/artifactstore"
@@ -124,9 +123,12 @@ type Server struct {
 	publishKick  chan struct{}
 
 	stream StreamConfig
-	// streams counts open event streams (a per-process connection limit, not
-	// scheduling state); stopStreams ends them before a graceful shutdown.
-	streams     atomic.Int32
+	// streams counts open event streams in total and per session user (a
+	// per-process connection limit, not scheduling state); stopStreams ends
+	// them before a graceful shutdown.
+	streamsMu   sync.Mutex
+	streams     int32
+	userStreams map[string]int32
 	stopStreams chan struct{}
 	stopOnce    sync.Once
 }
@@ -163,6 +165,7 @@ func New(cfg Config, store Store) (*Server, error) {
 		log:         cfg.Logger,
 		stream:      cfg.Stream.withDefaults(),
 		stopStreams: make(chan struct{}),
+		userStreams: map[string]int32{},
 	}
 	if s.sessionTTL <= 0 {
 		s.sessionTTL = DefaultSessionTTL

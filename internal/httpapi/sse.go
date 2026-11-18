@@ -46,6 +46,10 @@ type StreamConfig struct {
 	MaxAge time.Duration
 	// MaxStreams bounds concurrently open streams (default 32); more get 503.
 	MaxStreams int32
+	// MaxStreamsPerUser bounds the open streams of one session user
+	// (default 4), checked before a global slot is taken, so one user cannot
+	// exhaust MaxStreams for everyone; more get 503 for that user only.
+	MaxStreamsPerUser int32
 }
 
 func (c StreamConfig) withDefaults() StreamConfig {
@@ -64,7 +68,32 @@ func (c StreamConfig) withDefaults() StreamConfig {
 	if c.MaxStreams <= 0 {
 		c.MaxStreams = 32
 	}
+	if c.MaxStreamsPerUser <= 0 {
+		c.MaxStreamsPerUser = 4
+	}
 	return c
+}
+
+// acquireStream takes a per-user slot and then a global slot; it takes
+// neither when either limit is reached. The caller must releaseStream.
+func (s *Server) acquireStream(user string) bool {
+	s.streamsMu.Lock()
+	defer s.streamsMu.Unlock()
+	if s.userStreams[user] >= s.stream.MaxStreamsPerUser || s.streams >= s.stream.MaxStreams {
+		return false
+	}
+	s.userStreams[user]++
+	s.streams++
+	return true
+}
+
+func (s *Server) releaseStream(user string) {
+	s.streamsMu.Lock()
+	defer s.streamsMu.Unlock()
+	s.streams--
+	if s.userStreams[user]--; s.userStreams[user] <= 0 {
+		delete(s.userStreams, user)
+	}
 }
 
 // Stream control reasons (state.resync and closed data.reason).
@@ -178,13 +207,12 @@ func (s *Server) streamRunEvents(q *request) {
 		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", "cursor query parameter or Last-Event-ID header must be a non-negative integer event sequence", false)
 		return
 	}
-	if s.streams.Add(1) > s.stream.MaxStreams {
-		s.streams.Add(-1)
+	run, actor := q.params[0], q.session.UserID
+	if !s.acquireStream(actor) {
 		writeError(q.w, q.r, http.StatusServiceUnavailable, "UNAVAILABLE", "too many open event streams", true)
 		return
 	}
-	defer s.streams.Add(-1)
-	run, actor := q.params[0], q.session.UserID
+	defer s.releaseStream(actor)
 	ctx, cancel := context.WithCancel(q.r.Context())
 	defer cancel()
 	go func() {
