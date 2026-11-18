@@ -3423,6 +3423,2404 @@
   }
  },
  {
+  "id": "R1-JS-02",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "finally-block-return-replaces-rejection",
+  "category": "error_handling",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": false,
+  "project": {
+   "name": "audit-journal",
+   "title": "audit-journal",
+   "summary": "Serialises audit entries into numbered batches and appends them to a pluggable sink."
+  },
+  "contract": "Journal.commit(entries) appends entries (a non-empty array of plain objects) as one batch and resolves with the new sequence number, the count of entries committed so far. If the sink rejects, commit rejects with that same error and the sequence number stays unchanged. Commits run one at a time in call order, and the internal lock is released whether the append succeeded or not, so later commits proceed.",
+  "contract_file": "src/journal.js",
+  "files": {
+   "shared": [
+    {
+     "path": "src/mutex.js",
+     "lines": [
+      "/**",
+      " * Minimal FIFO async mutex.",
+      " */",
+      "export class Mutex {",
+      "  #tail = Promise.resolve();",
+      "",
+      "  /** Resolves with a release function once every earlier holder released. */",
+      "  async acquire() {",
+      "    let release;",
+      "    const held = new Promise((resolve) => {",
+      "      release = resolve;",
+      "    });",
+      "    const previous = this.#tail;",
+      "    this.#tail = previous.then(() => held);",
+      "    await previous;",
+      "    let released = false;",
+      "    return () => {",
+      "      if (!released) {",
+      "        released = true;",
+      "        release();",
+      "      }",
+      "    };",
+      "  }",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/journal.js",
+     "lines": [
+      "import { Mutex } from './mutex.js';",
+      "",
+      "/**",
+      " * Append-only audit journal.",
+      " */",
+      "export class Journal {",
+      "  #sink;",
+      "  #lock = new Mutex();",
+      "  #sequence = 0;",
+      "",
+      "  /** @param {{ append(batch: object): Promise<void> }} sink */",
+      "  constructor(sink) {",
+      "    this.#sink = sink;",
+      "  }",
+      "",
+      "  get sequence() {",
+      "    return this.#sequence;",
+      "  }",
+      "",
+      "  /**",
+      "   * Commits a batch of entries.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   */",
+      "  async commit(entries) {",
+      "    if (!Array.isArray(entries) || entries.length === 0) {",
+      "      throw new TypeError('commit needs a non-empty array of entries');",
+      "    }",
+      "    const release = await this.#lock.acquire();",
+      "    try {",
+      "      const batch = { first: this.#sequence + 1, entries: entries.map((e) => ({ ...e })) };",
+      "      await this.#sink.append(batch);",
+      "      this.#sequence += entries.length;",
+      "    } finally {",
+      "      release();",
+      "      return this.#sequence;",
+      "    }",
+      "  }",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/journal.js",
+     "lines": [
+      "import { Mutex } from './mutex.js';",
+      "",
+      "/**",
+      " * Append-only audit journal.",
+      " */",
+      "export class Journal {",
+      "  #sink;",
+      "  #lock = new Mutex();",
+      "  #sequence = 0;",
+      "",
+      "  /** @param {{ append(batch: object): Promise<void> }} sink */",
+      "  constructor(sink) {",
+      "    this.#sink = sink;",
+      "  }",
+      "",
+      "  get sequence() {",
+      "    return this.#sequence;",
+      "  }",
+      "",
+      "  /**",
+      "   * Commits a batch of entries.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   */",
+      "  async commit(entries) {",
+      "    if (!Array.isArray(entries) || entries.length === 0) {",
+      "      throw new TypeError('commit needs a non-empty array of entries');",
+      "    }",
+      "    const release = await this.#lock.acquire();",
+      "    try {",
+      "      const batch = { first: this.#sequence + 1, entries: entries.map((e) => ({ ...e })) };",
+      "      await this.#sink.append(batch);",
+      "      this.#sequence += entries.length;",
+      "    } finally {",
+      "      release();",
+      "    }",
+      "    return this.#sequence;",
+      "  }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "d92379e9d015db80cf5dd0a667f6f82520f6c2fba9d491661d7e238a0b78da5a",
+   "before_documented": "3b087d7bbf532cfe6122349837e9c06188112da0630859632fa8aced6ba1b659",
+   "after": "213df1ab62acb5c7241753a8ede2fdeaf1b3225b4032f9d66bef5c7edba0da0b",
+   "after_documented": "4352d023da216bbf7dafca723948b6266f665a9483be604b6ff3799bf7d52a22"
+  },
+  "check": {
+   "summary": "Commits three batches to a sink whose second append rejects, and checks the resolved sequence numbers, the rejection, the stored batches and that a further commit still runs.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: rejected append resolved with 2",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { Journal } from '../src/journal.js';",
+      "",
+      "const failures = [];",
+      "const stored = [];",
+      "let calls = 0;",
+      "const sink = {",
+      "  async append(batch) {",
+      "    calls += 1;",
+      "    await new Promise((resolve) => setImmediate(resolve));",
+      "    if (calls === 2) throw new Error('disk quota exceeded');",
+      "    stored.push(batch);",
+      "  },",
+      "};",
+      "const journal = new Journal(sink);",
+      "const first = await journal.commit([{ who: 'a' }, { who: 'b' }]);",
+      "if (first !== 2) failures.push(`first commit resolved with ${first}`);",
+      "try {",
+      "  const got = await journal.commit([{ who: 'c' }]);",
+      "  failures.push(`rejected append resolved with ${got}`);",
+      "} catch (err) {",
+      "  if (err.message !== 'disk quota exceeded') failures.push(`wrong error ${err}`);",
+      "}",
+      "if (journal.sequence !== 2) failures.push(`sequence moved to ${journal.sequence}`);",
+      "const [third, fourth] = await Promise.all([journal.commit([{ who: 'd' }]), journal.commit([{ who: 'e' }, { who: 'f' }])]);",
+      "if (third !== 3 || fourth !== 5) failures.push(`ordered commits resolved with ${third}, ${fourth}`);",
+      "if (JSON.stringify(stored.map((b) => b.first)) !== '[1,3,4]') failures.push(`stored batches ${JSON.stringify(stored)}`);",
+      "try {",
+      "  await journal.commit([]);",
+      "  failures.push('empty batch accepted');",
+      "} catch (err) {",
+      "  if (!(err instanceof TypeError)) failures.push(`empty batch threw ${err}`);",
+      "}",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "The sink rejects an append. The return statement inside the finally block overrides the pending rejection, so the async function resolves.",
+   "expected_impact": "commit resolves with the old sequence number as if the batch had been written; callers acknowledge audit entries that were never stored and never learn about the sink failure.",
+   "positive_locations": [
+    {
+     "path": "src/journal.js",
+     "symbol": "Journal.commit",
+     "anchors": {
+      "start": "} finally {",
+      "end": "return this.#sequence;"
+     },
+     "start_line": 39,
+     "end_line": 41
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/journal.js",
+     "symbol": "Journal.commit",
+     "anchors": {
+      "start": "} finally {",
+      "end": "return this.#sequence;"
+     },
+     "note": "The corrected version only releases the lock in finally and returns the sequence number from the normal path, so the rejection propagates.",
+     "start_line": 39,
+     "end_line": 42
+    },
+    {
+     "variant": "before",
+     "path": "src/mutex.js",
+     "symbol": "Mutex.acquire",
+     "anchors": {
+      "start": "async acquire() {"
+     },
+     "note": "The mutex hands out the lock in order and the release callback is idempotent; the lock handling is sound.",
+     "start_line": 8,
+     "end_line": 8
+    }
+   ],
+   "reviewer_notes": "ESLint's no-unsafe-finally (in the recommended set) reports the return in finally. The sequence number is correctly left unchanged on failure; the problem is only that the failure is reported as success.",
+   "distinctive_tokens": [
+    "overrides",
+    "overridden",
+    "unsafe-finally",
+    "masks"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/journal.js"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-JS-03",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "listener-list-spliced-during-dispatch",
+  "category": "state_invariants",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "tinybus",
+   "title": "tinybus",
+   "summary": "A small typed event bus for a desktop app, with persistent and one-shot subscriptions."
+  },
+  "contract": "emit(type, ...args) calls every listener that was registered for type at the moment emit starts, in registration order and exactly once each, even when listeners subscribe or unsubscribe during the call; listeners added during an emit first run on the next emit. It returns true when at least one listener was called. Listeners are functions; the same function may be registered more than once.",
+  "contract_file": "src/bus.js",
+  "files": {
+   "shared": [
+    {
+     "path": "src/subscriptions.js",
+     "lines": [
+      "/**",
+      " * Subscription helpers on top of Bus.",
+      " */",
+      "",
+      "/** Runs listener for the next `type` event only. */",
+      "export function once(bus, type, listener) {",
+      "  const wrapper = (...args) => {",
+      "    bus.off(type, wrapper);",
+      "    listener(...args);",
+      "  };",
+      "  return bus.on(type, wrapper);",
+      "}",
+      "",
+      "/** Subscribes listener to several event types; returns one unsubscribe function. */",
+      "export function onAll(bus, types, listener) {",
+      "  const stops = types.map((type) => bus.on(type, (...args) => listener(type, ...args)));",
+      "  return () => stops.forEach((stop) => stop());",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/bus.js",
+     "lines": [
+      "/**",
+      " * Event bus with ordered listeners.",
+      " */",
+      "export class Bus {",
+      "  #listeners = new Map();",
+      "",
+      "  on(type, listener) {",
+      "    if (typeof listener !== 'function') throw new TypeError('listener must be a function');",
+      "    const list = this.#listeners.get(type) ?? [];",
+      "    list.push(listener);",
+      "    this.#listeners.set(type, list);",
+      "    return () => this.off(type, listener);",
+      "  }",
+      "",
+      "  off(type, listener) {",
+      "    const list = this.#listeners.get(type);",
+      "    if (!list) return false;",
+      "    const index = list.indexOf(listener);",
+      "    if (index === -1) return false;",
+      "    list.splice(index, 1);",
+      "    if (list.length === 0) this.#listeners.delete(type);",
+      "    return true;",
+      "  }",
+      "",
+      "  /**",
+      "   * Delivers an event.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   */",
+      "  emit(type, ...args) {",
+      "    const listeners = this.#listeners.get(type) ?? [];",
+      "    let called = false;",
+      "    for (const listener of listeners) {",
+      "      listener(...args);",
+      "      called = true;",
+      "    }",
+      "    return called;",
+      "  }",
+      "",
+      "  listenerCount(type) {",
+      "    return this.#listeners.get(type)?.length ?? 0;",
+      "  }",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/bus.js",
+     "lines": [
+      "/**",
+      " * Event bus with ordered listeners.",
+      " */",
+      "export class Bus {",
+      "  #listeners = new Map();",
+      "",
+      "  on(type, listener) {",
+      "    if (typeof listener !== 'function') throw new TypeError('listener must be a function');",
+      "    const list = this.#listeners.get(type) ?? [];",
+      "    list.push(listener);",
+      "    this.#listeners.set(type, list);",
+      "    return () => this.off(type, listener);",
+      "  }",
+      "",
+      "  off(type, listener) {",
+      "    const list = this.#listeners.get(type);",
+      "    if (!list) return false;",
+      "    const index = list.indexOf(listener);",
+      "    if (index === -1) return false;",
+      "    list.splice(index, 1);",
+      "    if (list.length === 0) this.#listeners.delete(type);",
+      "    return true;",
+      "  }",
+      "",
+      "  /**",
+      "   * Delivers an event.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   */",
+      "  emit(type, ...args) {",
+      "    const listeners = [...(this.#listeners.get(type) ?? [])];",
+      "    let called = false;",
+      "    for (const listener of listeners) {",
+      "      listener(...args);",
+      "      called = true;",
+      "    }",
+      "    return called;",
+      "  }",
+      "",
+      "  listenerCount(type) {",
+      "    return this.#listeners.get(type)?.length ?? 0;",
+      "  }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "ebe182db5b1dbcd45600192de47da39a34137687e59acdef6912be13e6f7b764",
+   "before_documented": "dd6f5668990faa66ea08de7305711c285f0cf231473962ba154c97e21913e898",
+   "after": "5854b959546c0e711bd7a9df7f97b3c0780f9c97695f260f2dadb668e1df7dd6",
+   "after_documented": "e5f0365328a7f139864c96a0a4029732ac2489c4c3556bd928c545bb6f892e8e"
+  },
+  "check": {
+   "summary": "Registers a one-shot listener followed by two persistent ones, emits twice and records which listeners ran; also adds a listener from inside a listener.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: first emit ran \\[\"once\",\"b\"\\]",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { Bus } from '../src/bus.js';",
+      "import { once, onAll } from '../src/subscriptions.js';",
+      "",
+      "const failures = [];",
+      "const bus = new Bus();",
+      "let ran = [];",
+      "once(bus, 'ready', () => ran.push('once'));",
+      "bus.on('ready', () => ran.push('a'));",
+      "bus.on('ready', () => ran.push('b'));",
+      "bus.emit('ready');",
+      "if (JSON.stringify(ran) !== '[\"once\",\"a\",\"b\"]') failures.push(`first emit ran ${JSON.stringify(ran)}`);",
+      "ran = [];",
+      "bus.emit('ready');",
+      "if (JSON.stringify(ran) !== '[\"a\",\"b\"]') failures.push(`second emit ran ${JSON.stringify(ran)}`);",
+      "",
+      "const grow = new Bus();",
+      "const seen = [];",
+      "grow.on('tick', () => {",
+      "  seen.push('first');",
+      "  grow.on('tick', () => seen.push('late'));",
+      "});",
+      "grow.emit('tick');",
+      "if (JSON.stringify(seen) !== '[\"first\"]') failures.push(`listener added during emit ran early: ${JSON.stringify(seen)}`);",
+      "",
+      "const multi = new Bus();",
+      "const got = [];",
+      "const stop = onAll(multi, ['x', 'y'], (type, v) => got.push(`${type}${v}`));",
+      "multi.emit('x', 1);",
+      "multi.emit('y', 2);",
+      "stop();",
+      "if (multi.emit('x', 3) !== false || got.join() !== 'x1,y2') failures.push(`onAll ${got}`);",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A listener removes itself (or an earlier one) while emit is iterating, which is exactly what the one-shot wrapper in subscriptions.js does. emit walks the live array that off() splices.",
+   "expected_impact": "The listener that sits right behind the removed one is skipped for that event, and a listener added during emit runs in the same pass. A component subscribed next to a one-shot 'ready' handler never sees 'ready'.",
+   "positive_locations": [
+    {
+     "path": "src/bus.js",
+     "symbol": "Bus.emit",
+     "anchors": {
+      "start": "const listeners = this.#listeners.get(type) ?? [];",
+      "end": "for (const listener of listeners) {"
+     },
+     "start_line": 36,
+     "end_line": 38
+    },
+    {
+     "path": "src/subscriptions.js",
+     "symbol": "once",
+     "anchors": {
+      "start": "bus.off(type, wrapper);"
+     },
+     "start_line": 8,
+     "end_line": 8
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/bus.js",
+     "symbol": "Bus.emit",
+     "anchors": {
+      "start": "const listeners = [...(this.#listeners.get(type) ?? [])];"
+     },
+     "note": "The corrected emit iterates over a snapshot taken when it starts, so splicing the stored array no longer shifts the iteration.",
+     "start_line": 36,
+     "end_line": 36
+    },
+    {
+     "variant": "before",
+     "path": "src/bus.js",
+     "symbol": "Bus.off",
+     "anchors": {
+      "start": "off(type, listener) {"
+     },
+     "note": "off removes exactly one registration as intended; mutating the stored array is fine when nothing iterates it.",
+     "start_line": 15,
+     "end_line": 15
+    }
+   ],
+   "reviewer_notes": "Needs subscriptions.js to see that removal happens during emit. With only persistent listeners the bus behaves correctly.",
+   "distinctive_tokens": [
+    "skipped listener",
+    "snapshot",
+    "live array",
+    "mutated during iteration"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/bus.js"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-JS-04",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "recursive-merge-follows-proto-key",
+  "category": "input_validation",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": true,
+  "project": {
+   "name": "user-prefs",
+   "title": "user-prefs",
+   "summary": "Per-user preference documents for a web dashboard, stored as JSON overrides over shared defaults."
+  },
+  "contract": "loadPreferences(text) returns DEFAULTS overlaid with the JSON object in text. text comes from end users and is untrusted: any JSON object is allowed and unknown keys are kept as data. Nested objects merge recursively; arrays and other values replace. Text that is not JSON throws SyntaxError and a top-level value that is not an object throws TypeError. Neither DEFAULTS nor any object outside the returned tree is ever modified.",
+  "contract_file": "src/preferences.js",
+  "files": {
+   "shared": [
+    {
+     "path": "src/preferences.js",
+     "lines": [
+      "import { isPlainObject, mergeInto } from './merge.js';",
+      "",
+      "export const DEFAULTS = Object.freeze({",
+      "  theme: 'light',",
+      "  layout: { columns: 3, dense: false },",
+      "  alerts: { email: true, digest: 'daily' },",
+      "});",
+      "",
+      "/**",
+      " * Builds a user's preferences from their stored override document.",
+      " *",
+      " * {{CONTRACT}}",
+      " *",
+      " * @param {string} text",
+      " */",
+      "export function loadPreferences(text) {",
+      "  const parsed = JSON.parse(text);",
+      "  if (!isPlainObject(parsed)) {",
+      "    throw new TypeError('preferences must be a JSON object');",
+      "  }",
+      "  return mergeInto(structuredClone(DEFAULTS), parsed);",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/merge.js",
+     "lines": [
+      "/**",
+      " * Recursive merge for JSON-like trees.",
+      " */",
+      "",
+      "export function isPlainObject(value) {",
+      "  if (value === null || typeof value !== 'object') return false;",
+      "  const proto = Object.getPrototypeOf(value);",
+      "  return proto === Object.prototype || proto === null;",
+      "}",
+      "",
+      "/** Merges source into target in place and returns target. */",
+      "export function mergeInto(target, source) {",
+      "  for (const [key, value] of Object.entries(source)) {",
+      "    if (isPlainObject(value) && isPlainObject(target[key])) {",
+      "      mergeInto(target[key], value);",
+      "    } else if (isPlainObject(value)) {",
+      "      target[key] = mergeInto({}, value);",
+      "    } else {",
+      "      target[key] = value;",
+      "    }",
+      "  }",
+      "  return target;",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/merge.js",
+     "lines": [
+      "/**",
+      " * Recursive merge for JSON-like trees.",
+      " */",
+      "",
+      "export function isPlainObject(value) {",
+      "  if (value === null || typeof value !== 'object') return false;",
+      "  const proto = Object.getPrototypeOf(value);",
+      "  return proto === Object.prototype || proto === null;",
+      "}",
+      "",
+      "function define(target, key, value) {",
+      "  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });",
+      "}",
+      "",
+      "/** Merges source into target in place and returns target. */",
+      "export function mergeInto(target, source) {",
+      "  for (const [key, value] of Object.entries(source)) {",
+      "    const current = Object.hasOwn(target, key) ? target[key] : undefined;",
+      "    if (isPlainObject(value) && isPlainObject(current)) {",
+      "      mergeInto(current, value);",
+      "    } else if (isPlainObject(value)) {",
+      "      define(target, key, mergeInto({}, value));",
+      "    } else {",
+      "      define(target, key, value);",
+      "    }",
+      "  }",
+      "  return target;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "16a8cf00776363d18f242a2a7231269e9352b588ab5e0cd1f49b7901177aa6dc",
+   "before_documented": "0d5cac9ec9d34319001162fdfa4db9dad09d96f76405cfa829b6051767585432",
+   "after": "8d291b3404d91c1ff4397e9c613517e4723f705a47aaee6713ba5332187e783a",
+   "after_documented": "5713dce1a6257d48c5710d4d9230ef190d972f88e0a9cf6be26251aaa7851077"
+  },
+  "check": {
+   "summary": "Loads override documents containing __proto__ at the top level and nested under a section, plus an ordinary override, and inspects Object.prototype, DEFAULTS and the returned trees.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: Object.prototype gained",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { DEFAULTS, loadPreferences } from '../src/preferences.js';",
+      "",
+      "const failures = [];",
+      "const pristine = JSON.stringify(DEFAULTS);",
+      "const top = loadPreferences('{\"__proto__\": {\"isAdmin\": true}, \"theme\": \"dark\"}');",
+      "const nested = loadPreferences('{\"layout\": {\"__proto__\": {\"canExport\": true}, \"columns\": 4}}');",
+      "const plain = loadPreferences('{\"alerts\": {\"digest\": \"weekly\"}, \"extra\": [1, 2]}');",
+      "const probe = {};",
+      "const leaked = ['isAdmin', 'canExport'].filter((k) => k in probe || k in Object.prototype);",
+      "if (leaked.length) failures.push(`Object.prototype gained ${leaked.join(', ')}`);",
+      "for (const k of leaked) delete Object.prototype[k];",
+      "if (top.theme !== 'dark' || top.layout.columns !== 3) failures.push(`top-level override ${JSON.stringify(top)}`);",
+      "if (nested.layout.columns !== 4 || nested.layout.dense !== false) failures.push(`nested override ${JSON.stringify(nested)}`);",
+      "if (plain.alerts.digest !== 'weekly' || plain.alerts.email !== true || plain.extra.length !== 2) {",
+      "  failures.push(`plain override ${JSON.stringify(plain)}`);",
+      "}",
+      "if (JSON.stringify(DEFAULTS) !== pristine) failures.push('DEFAULTS modified');",
+      "for (const [text, type] of [['nope', SyntaxError], ['[1]', TypeError], ['null', TypeError]]) {",
+      "  try {",
+      "    loadPreferences(text);",
+      "    failures.push(`${text} accepted`);",
+      "  } catch (err) {",
+      "    if (!(err instanceof type)) failures.push(`${text} threw ${err}`);",
+      "  }",
+      "}",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "An override document with a \"__proto__\" key whose value is an object, at any depth. JSON.parse creates it as an own key, Object.entries yields it, and target[key] then reads the prototype of the target, which merge recurses into.",
+   "expected_impact": "The user's keys are written onto Object.prototype, so every object in the process inherits them (for example isAdmin: true on every request context) until restart. One request's preferences change behaviour for all users.",
+   "positive_locations": [
+    {
+     "path": "src/merge.js",
+     "symbol": "mergeInto",
+     "anchors": {
+      "start": "if (isPlainObject(value) && isPlainObject(target[key])) {",
+      "end": "target[key] = value;"
+     },
+     "start_line": 14,
+     "end_line": 19
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/merge.js",
+     "symbol": "mergeInto",
+     "anchors": {
+      "start": "const current = Object.hasOwn(target, key) ? target[key] : undefined;",
+      "end": "define(target, key, value);"
+     },
+     "note": "The corrected merge only recurses into own properties and writes with defineProperty, so a __proto__ key becomes ordinary data on the result and no prototype is touched.",
+     "start_line": 18,
+     "end_line": 24
+    },
+    {
+     "variant": "before",
+     "path": "src/preferences.js",
+     "symbol": "loadPreferences",
+     "anchors": {
+      "start": "return mergeInto(structuredClone(DEFAULTS), parsed);"
+     },
+     "note": "Cloning DEFAULTS first is correct; the defaults object itself is never the merge target.",
+     "start_line": 26,
+     "end_line": 26
+    }
+   ],
+   "reviewer_notes": "Cross-file: the untrusted origin is documented in preferences.js, the unsafe recursion is in merge.js. Prototype-pollution queries in common JS analyzers target this shape. Rejecting the special keys instead of keeping them as data is an acceptable correction too.",
+   "distinctive_tokens": [
+    "pollution",
+    "polluted",
+    "prototype pollution",
+    "isadmin"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/merge.js"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-JS-05",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "unawaited-promise-escapes-try-fallback",
+  "category": "error_handling",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": true,
+  "project": {
+   "name": "profile-cache",
+   "title": "profile-cache",
+   "summary": "Serves user profiles from a remote directory service, falling back to the last known copy when the service is down.",
+   "typescript": true
+  },
+  "contract": "ProfileService.load(id) resolves with the profile from the directory service and remembers it. When the directory request fails for any reason, load resolves with the remembered profile for id if there is one, and otherwise rejects with ProfileUnavailable whose cause is the directory error. id is a non-empty string; an empty id throws TypeError.",
+  "contract_file": "src/profiles.ts",
+  "files": {
+   "shared": [
+    {
+     "path": "src/directory.ts",
+     "lines": [
+      "export interface Profile {",
+      "  id: string;",
+      "  name: string;",
+      "  team: string;",
+      "}",
+      "",
+      "export interface Response {",
+      "  status: number;",
+      "  body: string;",
+      "}",
+      "",
+      "export type Transport = (path: string) => Promise<Response>;",
+      "",
+      "export class DirectoryError extends Error {",
+      "  status: number;",
+      "",
+      "  constructor(status: number, message: string) {",
+      "    super(message);",
+      "    this.name = 'DirectoryError';",
+      "    this.status = status;",
+      "  }",
+      "}",
+      "",
+      "/** Fetches a profile from the directory and stores it in `known`. */",
+      "export async function refresh(transport: Transport, known: Map<string, Profile>, id: string): Promise<Profile> {",
+      "  const response = await transport(`/profiles/${encodeURIComponent(id)}`);",
+      "  if (response.status !== 200) {",
+      "    throw new DirectoryError(response.status, `directory answered ${response.status} for ${id}`);",
+      "  }",
+      "  const profile = JSON.parse(response.body) as Profile;",
+      "  known.set(id, profile);",
+      "  return profile;",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/profiles.ts",
+     "lines": [
+      "import { refresh } from './directory.ts';",
+      "import type { Profile, Transport } from './directory.ts';",
+      "",
+      "export class ProfileUnavailable extends Error {",
+      "  id: string;",
+      "",
+      "  constructor(id: string, cause: unknown) {",
+      "    super(`profile ${id} unavailable`, { cause });",
+      "    this.name = 'ProfileUnavailable';",
+      "    this.id = id;",
+      "  }",
+      "}",
+      "",
+      "export class ProfileService {",
+      "  #directory: Transport;",
+      "  #known = new Map<string, Profile>();",
+      "",
+      "  constructor(directory: Transport) {",
+      "    this.#directory = directory;",
+      "  }",
+      "",
+      "  /**",
+      "   * Loads a profile.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   */",
+      "  async load(id: string): Promise<Profile> {",
+      "    if (typeof id !== 'string' || id.length === 0) {",
+      "      throw new TypeError('profile id must be a non-empty string');",
+      "    }",
+      "    try {",
+      "      return refresh(this.#directory, this.#known, id);",
+      "    } catch (error) {",
+      "      const remembered = this.#known.get(id);",
+      "      if (remembered !== undefined) {",
+      "        return remembered;",
+      "      }",
+      "      throw new ProfileUnavailable(id, error);",
+      "    }",
+      "  }",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/profiles.ts",
+     "lines": [
+      "import { refresh } from './directory.ts';",
+      "import type { Profile, Transport } from './directory.ts';",
+      "",
+      "export class ProfileUnavailable extends Error {",
+      "  id: string;",
+      "",
+      "  constructor(id: string, cause: unknown) {",
+      "    super(`profile ${id} unavailable`, { cause });",
+      "    this.name = 'ProfileUnavailable';",
+      "    this.id = id;",
+      "  }",
+      "}",
+      "",
+      "export class ProfileService {",
+      "  #directory: Transport;",
+      "  #known = new Map<string, Profile>();",
+      "",
+      "  constructor(directory: Transport) {",
+      "    this.#directory = directory;",
+      "  }",
+      "",
+      "  /**",
+      "   * Loads a profile.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   */",
+      "  async load(id: string): Promise<Profile> {",
+      "    if (typeof id !== 'string' || id.length === 0) {",
+      "      throw new TypeError('profile id must be a non-empty string');",
+      "    }",
+      "    try {",
+      "      return await refresh(this.#directory, this.#known, id);",
+      "    } catch (error) {",
+      "      const remembered = this.#known.get(id);",
+      "      if (remembered !== undefined) {",
+      "        return remembered;",
+      "      }",
+      "      throw new ProfileUnavailable(id, error);",
+      "    }",
+      "  }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "403cf2b742b48d147033019b263500327e323302931b0dd4ae2932368600da47",
+   "before_documented": "872d3314aecc671e04f9997b545a9efb8d5b93704d93251ca1abb4a0207224af",
+   "after": "ae1a7bf97a9a25ca01925ea5302e52c504b59ad337e37fb1372e9200eb976a73",
+   "after_documented": "bb36bbca5b9d025c79da8c03b13e65a8c2971f286852fa4099a3823292ec08a0"
+  },
+  "check": {
+   "summary": "Loads a profile while the directory answers, then makes the directory fail and loads the same and an unknown id; checks the fallback value and the error class and cause.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: outage: rejected with Error instead of using the remembered profile",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { ProfileService, ProfileUnavailable } from '../src/profiles.ts';",
+      "",
+      "const failures = [];",
+      "let up = true;",
+      "const transport = async (path) => {",
+      "  if (!up) throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });",
+      "  if (path === '/profiles/u-1') return { status: 200, body: '{\"id\":\"u-1\",\"name\":\"Ana\",\"team\":\"infra\"}' };",
+      "  return { status: 404, body: '' };",
+      "};",
+      "const service = new ProfileService(transport);",
+      "const fresh = await service.load('u-1');",
+      "if (fresh.name !== 'Ana') failures.push(`fresh load ${JSON.stringify(fresh)}`);",
+      "up = false;",
+      "try {",
+      "  const fallback = await service.load('u-1');",
+      "  if (fallback.name !== 'Ana') failures.push(`outage: fallback ${JSON.stringify(fallback)}`);",
+      "} catch (err) {",
+      "  failures.push(`outage: rejected with ${err.name} instead of using the remembered profile`);",
+      "}",
+      "try {",
+      "  await service.load('u-2');",
+      "  failures.push('unknown id during outage resolved');",
+      "} catch (err) {",
+      "  if (!(err instanceof ProfileUnavailable) || err.cause?.code !== 'ECONNREFUSED') failures.push(`unknown id: ${err}`);",
+      "}",
+      "up = true;",
+      "try {",
+      "  await service.load('u-404');",
+      "  failures.push('404 without remembered profile resolved');",
+      "} catch (err) {",
+      "  if (!(err instanceof ProfileUnavailable) || err.cause?.status !== 404) failures.push(`404: ${err}`);",
+      "}",
+      "try {",
+      "  await service.load('');",
+      "  failures.push('empty id accepted');",
+      "} catch (err) {",
+      "  if (!(err instanceof TypeError)) failures.push(`empty id: ${err}`);",
+      "}",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "The directory request rejects (status other than 200, network error). refresh in directory.ts is async, so calling it inside try returns a pending promise that rejects later; returning it without await leaves the catch block unused.",
+   "expected_impact": "During an outage load rejects with the raw transport or DirectoryError instead of serving the remembered profile, and unknown ids never get ProfileUnavailable. The fallback the service exists for never runs.",
+   "positive_locations": [
+    {
+     "path": "src/profiles.ts",
+     "symbol": "ProfileService.load",
+     "anchors": {
+      "start": "return refresh(this.#directory, this.#known, id);"
+     },
+     "start_line": 36,
+     "end_line": 36
+    },
+    {
+     "path": "src/directory.ts",
+     "symbol": "refresh",
+     "anchors": {
+      "start": "export async function refresh("
+     },
+     "start_line": 25,
+     "end_line": 25
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/profiles.ts",
+     "symbol": "ProfileService.load",
+     "anchors": {
+      "start": "return await refresh(this.#directory, this.#known, id);"
+     },
+     "note": "Awaiting inside try makes the rejection surface there, so the catch block runs.",
+     "start_line": 36,
+     "end_line": 36
+    },
+    {
+     "variant": "before",
+     "path": "src/profiles.ts",
+     "symbol": "ProfileService.load",
+     "anchors": {
+      "start": "} catch (error) {",
+      "end": "throw new ProfileUnavailable(id, error);"
+     },
+     "note": "The fallback logic itself is right; it is never reached.",
+     "start_line": 37,
+     "end_line": 42
+    }
+   ],
+   "reviewer_notes": "typescript-eslint's return-await rule (in-try-catch) reports the line. Whether refresh throws synchronously or rejects is only visible in directory.ts.",
+   "distinctive_tokens": [
+    "return-await",
+    "unawaited",
+    "pending promise",
+    "never reached"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/profiles.ts"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-JS-06",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "interval-handle-overwritten-on-restart",
+  "category": "resource_lifetime",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "ws-session",
+   "title": "ws-session",
+   "summary": "Keeps a websocket-style session alive with periodic heartbeats and resumes it across short network drops."
+  },
+  "contract": "Heartbeat.start() begins calling send() every intervalMs milliseconds; calling start() while the heartbeat is already running has no effect. stop() ends the beats: once it returns, send() is never called again and the heartbeat holds no timers. start() may be called again later. intervalMs is a positive integer.",
+  "contract_file": "src/heartbeat.js",
+  "files": {
+   "shared": [
+    {
+     "path": "src/session.js",
+     "lines": [
+      "import { Heartbeat } from './heartbeat.js';",
+      "",
+      "/**",
+      " * Session over a message transport. The transport may drop briefly; resume()",
+      " * is called when it is back and the server still knows the session.",
+      " */",
+      "export class Session {",
+      "  #transport;",
+      "  #heartbeat;",
+      "  state = 'idle';",
+      "",
+      "  constructor(transport, { heartbeatMs = 15000 } = {}) {",
+      "    this.#transport = transport;",
+      "    this.#heartbeat = new Heartbeat(() => this.#transport.send('{\"type\":\"ping\"}'), heartbeatMs);",
+      "  }",
+      "",
+      "  open() {",
+      "    this.state = 'open';",
+      "    this.#heartbeat.start();",
+      "  }",
+      "",
+      "  resume() {",
+      "    this.state = 'open';",
+      "    this.#heartbeat.start();",
+      "  }",
+      "",
+      "  close() {",
+      "    this.state = 'closed';",
+      "    this.#heartbeat.stop();",
+      "  }",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/heartbeat.js",
+     "lines": [
+      "/**",
+      " * Periodic heartbeat sender.",
+      " */",
+      "export class Heartbeat {",
+      "  #send;",
+      "  #intervalMs;",
+      "  #timer = null;",
+      "  #sent = 0;",
+      "",
+      "  /**",
+      "   * {{CONTRACT}}",
+      "   *",
+      "   * @param {() => void} send",
+      "   * @param {number} intervalMs",
+      "   */",
+      "  constructor(send, intervalMs) {",
+      "    if (!Number.isInteger(intervalMs) || intervalMs <= 0) {",
+      "      throw new RangeError(`intervalMs must be a positive integer, got ${intervalMs}`);",
+      "    }",
+      "    this.#send = send;",
+      "    this.#intervalMs = intervalMs;",
+      "  }",
+      "",
+      "  get running() {",
+      "    return this.#timer !== null;",
+      "  }",
+      "",
+      "  get sent() {",
+      "    return this.#sent;",
+      "  }",
+      "",
+      "  start() {",
+      "    this.#timer = setInterval(() => this.#beat(), this.#intervalMs);",
+      "  }",
+      "",
+      "  stop() {",
+      "    clearInterval(this.#timer);",
+      "    this.#timer = null;",
+      "  }",
+      "",
+      "  #beat() {",
+      "    this.#sent += 1;",
+      "    this.#send();",
+      "  }",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/heartbeat.js",
+     "lines": [
+      "/**",
+      " * Periodic heartbeat sender.",
+      " */",
+      "export class Heartbeat {",
+      "  #send;",
+      "  #intervalMs;",
+      "  #timer = null;",
+      "  #sent = 0;",
+      "",
+      "  /**",
+      "   * {{CONTRACT}}",
+      "   *",
+      "   * @param {() => void} send",
+      "   * @param {number} intervalMs",
+      "   */",
+      "  constructor(send, intervalMs) {",
+      "    if (!Number.isInteger(intervalMs) || intervalMs <= 0) {",
+      "      throw new RangeError(`intervalMs must be a positive integer, got ${intervalMs}`);",
+      "    }",
+      "    this.#send = send;",
+      "    this.#intervalMs = intervalMs;",
+      "  }",
+      "",
+      "  get running() {",
+      "    return this.#timer !== null;",
+      "  }",
+      "",
+      "  get sent() {",
+      "    return this.#sent;",
+      "  }",
+      "",
+      "  start() {",
+      "    if (this.#timer !== null) return;",
+      "    this.#timer = setInterval(() => this.#beat(), this.#intervalMs);",
+      "  }",
+      "",
+      "  stop() {",
+      "    clearInterval(this.#timer);",
+      "    this.#timer = null;",
+      "  }",
+      "",
+      "  #beat() {",
+      "    this.#sent += 1;",
+      "    this.#send();",
+      "  }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "462f13143ae62c55ab700fb8f689e1c0fa06ddef8f3a0cc0d22a029ee0b34a1d",
+   "before_documented": "0cc896d6b9dbdfbf0bc2be38cc40570d104e37046bd24020a1305970e0910f41",
+   "after": "cad7339375d12b996afe13907d9ef8deed0e5236b7ece18de3661cbf6451f214",
+   "after_documented": "096e11851c2f2e019fbe87659af70fe47d25f7865d9a4a45345f8ed44ff67812"
+  },
+  "check": {
+   "summary": "Drives a session through open, resume and close with a 10 ms heartbeat, then counts beats sent during the 80 ms that follow close; also checks start/stop directly.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: \\d+ beats sent once the session closed",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { Heartbeat } from '../src/heartbeat.js';",
+      "import { Session } from '../src/session.js';",
+      "",
+      "const failures = [];",
+      "const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));",
+      "const finish = () => {",
+      "  for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "  if (failures.length) process.exit(1);",
+      "  console.log('CHECK-PASS');",
+      "};",
+      "",
+      "let pings = 0;",
+      "const session = new Session({ send: () => { pings += 1; } }, { heartbeatMs: 10 });",
+      "session.open();",
+      "await sleep(35);",
+      "session.resume();",
+      "await sleep(35);",
+      "session.close();",
+      "const atClose = pings;",
+      "await sleep(80);",
+      "if (atClose === 0) failures.push('no heartbeat while open');",
+      "if (pings !== atClose) failures.push(`${pings - atClose} beats sent once the session closed`);",
+      "",
+      "const beat = new Heartbeat(() => {}, 10);",
+      "beat.start();",
+      "beat.start();",
+      "beat.stop();",
+      "const stopped = beat.sent;",
+      "await sleep(40);",
+      "if (beat.sent !== stopped || beat.running) failures.push(`direct start/start/stop kept beating: ${beat.sent - stopped}`);",
+      "beat.start();",
+      "await sleep(30);",
+      "beat.stop();",
+      "if (beat.sent === stopped) failures.push('restart after stop did not beat');",
+      "finish();"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "start() is called while a timer is already active. Session.resume in session.js does that whenever the transport comes back without a close, so a single network drop is enough.",
+   "expected_impact": "The second setInterval replaces the stored handle, and stop() only clears the newer one. The orphan interval keeps sending heartbeats on a closed session forever and keeps the Node process from exiting.",
+   "positive_locations": [
+    {
+     "path": "src/heartbeat.js",
+     "symbol": "Heartbeat.start",
+     "anchors": {
+      "start": "start() {",
+      "end": "this.#timer = setInterval(() => this.#beat(), this.#intervalMs);"
+     },
+     "start_line": 36,
+     "end_line": 37
+    },
+    {
+     "path": "src/session.js",
+     "symbol": "Session.resume",
+     "anchors": {
+      "start": "resume() {",
+      "end": "this.#heartbeat.start();"
+     },
+     "start_line": 22,
+     "end_line": 24
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/heartbeat.js",
+     "symbol": "Heartbeat.start",
+     "anchors": {
+      "start": "if (this.#timer !== null) return;"
+     },
+     "note": "The corrected start returns early while a timer is active, so there is only ever one interval for stop to clear.",
+     "start_line": 37,
+     "end_line": 37
+    },
+    {
+     "variant": "before",
+     "path": "src/heartbeat.js",
+     "symbol": "Heartbeat.stop",
+     "anchors": {
+      "start": "stop() {",
+      "end": "this.#timer = null;"
+     },
+     "note": "stop itself is right for a single timer.",
+     "start_line": 40,
+     "end_line": 42
+    }
+   ],
+   "reviewer_notes": "Needs session.js to see that start can run twice. Calling stop() inside start() would also be an acceptable correction.",
+   "distinctive_tokens": [
+    "orphan",
+    "orphaned",
+    "zombie",
+    "second interval"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/heartbeat.js"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-JS-07",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "default-sort-orders-numbers-as-strings",
+  "category": "api_misuse",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": false,
+  "project": {
+   "name": "slo-check",
+   "title": "slo-check",
+   "summary": "Computes latency percentiles from request samples and compares them with service level objectives.",
+   "typescript": true
+  },
+  "contract": "percentile(samples, p) uses the nearest-rank method: it returns the smallest sample s such that at least p percent of the samples are less than or equal to s, and percentile(samples, 0) is the minimum. samples is a non-empty array of finite, non-negative numbers of milliseconds in any order and is not modified; p is a number from 0 to 100. Anything else throws RangeError.",
+  "contract_file": "src/percentiles.ts",
+  "files": {
+   "shared": [
+    {
+     "path": "src/slo.ts",
+     "lines": [
+      "import { percentile } from './percentiles.ts';",
+      "",
+      "export interface Objective {",
+      "  name: string;",
+      "  percentile: number;",
+      "  limitMs: number;",
+      "}",
+      "",
+      "export interface Verdict {",
+      "  name: string;",
+      "  observedMs: number;",
+      "  met: boolean;",
+      "}",
+      "",
+      "/** Evaluates each objective against the same sample set. */",
+      "export function evaluate(samples: readonly number[], objectives: readonly Objective[]): Verdict[] {",
+      "  return objectives.map((objective) => {",
+      "    const observedMs = percentile(samples, objective.percentile);",
+      "    return { name: objective.name, observedMs, met: observedMs <= objective.limitMs };",
+      "  });",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/percentiles.ts",
+     "lines": [
+      "/**",
+      " * Nearest-rank percentile of latency samples.",
+      " *",
+      " * {{CONTRACT}}",
+      " */",
+      "export function percentile(samples: readonly number[], p: number): number {",
+      "  if (!Array.isArray(samples) || samples.length === 0) {",
+      "    throw new RangeError('samples must be a non-empty array');",
+      "  }",
+      "  if (!samples.every((s) => Number.isFinite(s) && s >= 0)) {",
+      "    throw new RangeError('samples must be finite non-negative numbers');",
+      "  }",
+      "  if (!(typeof p === 'number' && p >= 0 && p <= 100)) {",
+      "    throw new RangeError(`percentile must be within 0..100, got ${p}`);",
+      "  }",
+      "  const ordered = [...samples].sort();",
+      "  const rank = Math.max(1, Math.ceil((p / 100) * ordered.length));",
+      "  return ordered[rank - 1];",
+      "}",
+      "",
+      "export interface Summary {",
+      "  p50: number;",
+      "  p90: number;",
+      "  p99: number;",
+      "  max: number;",
+      "}",
+      "",
+      "export function summarize(samples: readonly number[]): Summary {",
+      "  return {",
+      "    p50: percentile(samples, 50),",
+      "    p90: percentile(samples, 90),",
+      "    p99: percentile(samples, 99),",
+      "    max: percentile(samples, 100),",
+      "  };",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/percentiles.ts",
+     "lines": [
+      "/**",
+      " * Nearest-rank percentile of latency samples.",
+      " *",
+      " * {{CONTRACT}}",
+      " */",
+      "export function percentile(samples: readonly number[], p: number): number {",
+      "  if (!Array.isArray(samples) || samples.length === 0) {",
+      "    throw new RangeError('samples must be a non-empty array');",
+      "  }",
+      "  if (!samples.every((s) => Number.isFinite(s) && s >= 0)) {",
+      "    throw new RangeError('samples must be finite non-negative numbers');",
+      "  }",
+      "  if (!(typeof p === 'number' && p >= 0 && p <= 100)) {",
+      "    throw new RangeError(`percentile must be within 0..100, got ${p}`);",
+      "  }",
+      "  const ordered = [...samples].sort((a, b) => a - b);",
+      "  const rank = Math.max(1, Math.ceil((p / 100) * ordered.length));",
+      "  return ordered[rank - 1];",
+      "}",
+      "",
+      "export interface Summary {",
+      "  p50: number;",
+      "  p90: number;",
+      "  p99: number;",
+      "  max: number;",
+      "}",
+      "",
+      "export function summarize(samples: readonly number[]): Summary {",
+      "  return {",
+      "    p50: percentile(samples, 50),",
+      "    p90: percentile(samples, 90),",
+      "    p99: percentile(samples, 99),",
+      "    max: percentile(samples, 100),",
+      "  };",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "a0a1742665cefec22d0f39f1c2e88a54869dc3682f8bff740153723e98592a7b",
+   "before_documented": "152760f3454b4554e46b2e17b6d4c527265ce26af3b5c89dfdaefacdffcec50e",
+   "after": "4347b4d224317c6fb20605d79c0574ccc6ad681847b2b86d13013ff671a8785d",
+   "after_documented": "d50e1db8cdb61adb2bfd8a53158af3003dc485317b6bcde4756cd52c12fe8846"
+  },
+  "check": {
+   "summary": "Computes p0, p50, p90 and p100 over sample sets that mix one-, two- and three-digit latencies, and evaluates an objective with the slo module.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: p0 of \\[5,40,120,9,300\\] = 120, want 5",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { percentile, summarize } from '../src/percentiles.ts';",
+      "import { evaluate } from '../src/slo.ts';",
+      "",
+      "const failures = [];",
+      "const show = (a) => JSON.stringify(a);",
+      "const cases = [",
+      "  [[5, 40, 120, 9, 300], 50, 40],",
+      "  [[5, 40, 120, 9, 300], 0, 5],",
+      "  [[5, 40, 120, 9, 300], 100, 300],",
+      "  [[100, 25, 3, 7, 18, 64, 2, 11, 90, 45], 90, 90],",
+      "  [[7], 99, 7],",
+      "];",
+      "for (const [samples, p, want] of cases) {",
+      "  const got = percentile(samples, p);",
+      "  if (got !== want) failures.push(`p${p} of ${show(samples)} = ${got}, want ${want}`);",
+      "}",
+      "const input = [30, 4, 200];",
+      "summarize(input);",
+      "if (show(input) !== '[30,4,200]') failures.push('samples modified');",
+      "const verdicts = evaluate([12, 80, 9, 110, 95, 15, 8, 70, 60, 13], [{ name: 'p90<100', percentile: 90, limitMs: 100 }]);",
+      "if (verdicts[0].observedMs !== 95 || !verdicts[0].met) failures.push(`slo verdict ${show(verdicts)}`);",
+      "for (const [samples, p] of [[[], 50], [[1, -2], 50], [[1], 101], [[1], Number.NaN]]) {",
+      "  try {",
+      "    percentile(samples, p);",
+      "    failures.push(`accepted ${show(samples)} p=${p}`);",
+      "  } catch (err) {",
+      "    if (!(err instanceof RangeError)) failures.push(`threw ${err}`);",
+      "  }",
+      "}",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Samples whose decimal representations sort differently from their values, for example 9 and 40 next to 120. Array.prototype.sort without a comparator compares the values as strings.",
+   "expected_impact": "Percentiles are taken from a lexicographically ordered copy: for [5, 40, 120, 9, 300] the minimum comes out as 120 and the maximum as 9. Objective checks pass or fail at random relative to the real latency distribution.",
+   "positive_locations": [
+    {
+     "path": "src/percentiles.ts",
+     "symbol": "percentile",
+     "anchors": {
+      "start": "const ordered = [...samples].sort();"
+     },
+     "start_line": 21,
+     "end_line": 21
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/percentiles.ts",
+     "symbol": "percentile",
+     "anchors": {
+      "start": "const ordered = [...samples].sort((a, b) => a - b);"
+     },
+     "note": "A numeric comparator orders by value; the rank computation was already right.",
+     "start_line": 21,
+     "end_line": 21
+    },
+    {
+     "variant": "before",
+     "path": "src/percentiles.ts",
+     "symbol": "percentile",
+     "anchors": {
+      "start": "const rank = Math.max(1, Math.ceil((p / 100) * ordered.length));"
+     },
+     "note": "The nearest-rank index is computed correctly, including p = 0 and p = 100.",
+     "start_line": 22,
+     "end_line": 22
+    }
+   ],
+   "reviewer_notes": "typescript-eslint's require-array-sort-compare flags the call. The copy with spread correctly leaves the caller's array untouched.",
+   "distinctive_tokens": [
+    "lexicographic",
+    "lexicographically",
+    "string order",
+    "comparator"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/percentiles.ts"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-JS-08",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "read-modify-write-split-by-await",
+  "category": "concurrency_async",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "points-wallet",
+   "title": "points-wallet",
+   "summary": "Loyalty points balances kept in an asynchronous key-value store and credited by many request handlers at once."
+  },
+  "contract": "Wallet.credit(account, points) adds points, a positive safe integer, to the account's balance and resolves with the new balance; unknown accounts start at 0. Credits may be issued concurrently from many requests: every credit is applied exactly once, so n concurrent credits grow the balance by their sum. Credits to different accounts do not wait for each other. account is a non-empty string.",
+  "contract_file": "src/wallet.js",
+  "files": {
+   "shared": [
+    {
+     "path": "src/store.js",
+     "lines": [
+      "/**",
+      " * In-memory stand-in for the remote key-value store. Every call completes",
+      " * asynchronously, like a network round trip.",
+      " */",
+      "const tick = () => new Promise((resolve) => setImmediate(resolve));",
+      "",
+      "export class MemoryStore {",
+      "  #data = new Map();",
+      "",
+      "  async get(key) {",
+      "    await tick();",
+      "    return this.#data.get(key);",
+      "  }",
+      "",
+      "  async set(key, value) {",
+      "    await tick();",
+      "    this.#data.set(key, value);",
+      "  }",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/wallet.js",
+     "lines": [
+      "/**",
+      " * Loyalty points balances.",
+      " */",
+      "export class Wallet {",
+      "  #store;",
+      "",
+      "  /** @param {{ get(key: string): Promise<number | undefined>, set(key: string, value: number): Promise<void> }} store */",
+      "  constructor(store) {",
+      "    this.#store = store;",
+      "  }",
+      "",
+      "  /**",
+      "   * Credits points to an account.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   */",
+      "  async credit(account, points) {",
+      "    if (typeof account !== 'string' || account.length === 0) throw new TypeError('account must be a non-empty string');",
+      "    if (!Number.isSafeInteger(points) || points <= 0) throw new RangeError(`points must be a positive integer, got ${points}`);",
+      "    const key = `balance:${account}`;",
+      "    const current = (await this.#store.get(key)) ?? 0;",
+      "    const next = current + points;",
+      "    await this.#store.set(key, next);",
+      "    return next;",
+      "  }",
+      "",
+      "  async balance(account) {",
+      "    return (await this.#store.get(`balance:${account}`)) ?? 0;",
+      "  }",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/wallet.js",
+     "lines": [
+      "/**",
+      " * Loyalty points balances.",
+      " */",
+      "export class Wallet {",
+      "  #store;",
+      "  #tails = new Map();",
+      "",
+      "  /** @param {{ get(key: string): Promise<number | undefined>, set(key: string, value: number): Promise<void> }} store */",
+      "  constructor(store) {",
+      "    this.#store = store;",
+      "  }",
+      "",
+      "  /**",
+      "   * Credits points to an account.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   */",
+      "  async credit(account, points) {",
+      "    if (typeof account !== 'string' || account.length === 0) throw new TypeError('account must be a non-empty string');",
+      "    if (!Number.isSafeInteger(points) || points <= 0) throw new RangeError(`points must be a positive integer, got ${points}`);",
+      "    const key = `balance:${account}`;",
+      "    const apply = async () => {",
+      "      const current = (await this.#store.get(key)) ?? 0;",
+      "      const next = current + points;",
+      "      await this.#store.set(key, next);",
+      "      return next;",
+      "    };",
+      "    const queued = (this.#tails.get(key) ?? Promise.resolve()).then(apply, apply);",
+      "    this.#tails.set(key, queued);",
+      "    queued.finally(() => {",
+      "      if (this.#tails.get(key) === queued) this.#tails.delete(key);",
+      "    }).catch(() => {});",
+      "    return queued;",
+      "  }",
+      "",
+      "  async balance(account) {",
+      "    return (await this.#store.get(`balance:${account}`)) ?? 0;",
+      "  }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "de7fa5006d63de671088f29e60fe69c3e902809a7dba2a85b0e7becd7084e298",
+   "before_documented": "1ba2237fc1a3b6c172ecdafa7f5ae0cf27b6dd7fc389464c195c150a15275f98",
+   "after": "631b79979d2e6feb8273b474cebd50fc3353303d30c44c29ea894647ef3cc61f",
+   "after_documented": "9abb88ef93e1999cf1c2f2ec84e8c11c263439b350a070634a23905c88f6c734"
+  },
+  "check": {
+   "summary": "Issues twenty concurrent credits to one account and five to another through Promise.all and compares the stored balances with the sums.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: balance of acct-1 is \\d+, want 210",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { MemoryStore } from '../src/store.js';",
+      "import { Wallet } from '../src/wallet.js';",
+      "",
+      "const failures = [];",
+      "const wallet = new Wallet(new MemoryStore());",
+      "const credits = [];",
+      "for (let n = 1; n <= 20; n += 1) credits.push(wallet.credit('acct-1', n));",
+      "for (let n = 0; n < 5; n += 1) credits.push(wallet.credit('acct-2', 100));",
+      "const results = await Promise.all(credits);",
+      "const one = await wallet.balance('acct-1');",
+      "const two = await wallet.balance('acct-2');",
+      "if (one !== 210) failures.push(`balance of acct-1 is ${one}, want 210`);",
+      "if (two !== 500) failures.push(`balance of acct-2 is ${two}, want 500`);",
+      "if (Math.max(...results.slice(0, 20)) !== 210) failures.push(`resolved balances ${results.slice(0, 20)}`);",
+      "try {",
+      "  await wallet.credit('acct-1', 0);",
+      "  failures.push('zero credit accepted');",
+      "} catch (err) {",
+      "  if (!(err instanceof RangeError)) failures.push(`zero credit threw ${err}`);",
+      "}",
+      "if ((await wallet.credit('acct-1', 5)) !== 215) failures.push('sequential credit');",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Two or more credits for the same account in flight together. Each reads the balance, yields at the await on store.set (the store in store.js is asynchronous), and writes back its own sum.",
+   "expected_impact": "Later writes overwrite earlier ones, so most concurrent credits vanish: twenty parallel credits leave the balance at one credit's worth. Points are silently lost under load while every request reports success.",
+   "positive_locations": [
+    {
+     "path": "src/wallet.js",
+     "symbol": "Wallet.credit",
+     "anchors": {
+      "start": "const current = (await this.#store.get(key)) ?? 0;",
+      "end": "await this.#store.set(key, next);"
+     },
+     "start_line": 26,
+     "end_line": 28
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/wallet.js",
+     "symbol": "Wallet.credit",
+     "anchors": {
+      "start": "const queued = (this.#tails.get(key) ?? Promise.resolve()).then(apply, apply);",
+      "end": "return queued;"
+     },
+     "note": "The corrected credit chains operations per account, so each read-modify-write starts only once the previous one for that account has settled.",
+     "start_line": 33,
+     "end_line": 38
+    },
+    {
+     "variant": "before",
+     "path": "src/store.js",
+     "symbol": "MemoryStore.get",
+     "anchors": {
+      "start": "async get(key) {"
+     },
+     "note": "The store's get and set are individually consistent; the problem is the gap between them in the caller.",
+     "start_line": 10,
+     "end_line": 10
+    }
+   ],
+   "reviewer_notes": "Single-threaded JavaScript still interleaves at await points; a review that dismisses this because there are no threads is wrong. Cross-file: the yield comes from the asynchronous store.",
+   "distinctive_tokens": [
+    "lost update",
+    "lost updates",
+    "interleave",
+    "interleaving",
+    "serialize"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/wallet.js"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-JS-09",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "sticky-regexp-state-shared-across-tests",
+  "category": "api_misuse",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "order-import",
+   "title": "order-import",
+   "summary": "Imports warehouse order sheets and pulls SKU codes out of free-text notes."
+  },
+  "contract": "isSku(text) returns true exactly when the whole string is three upper-case ASCII letters, a hyphen and four ASCII digits, such as \"ABC-0042\"; it returns false for every other string. skusIn(note) returns every SKU-shaped token in a free-text note, in order of appearance, including repeats. parseLines(lines) keeps the trimmed lines that are SKUs and reports the others as rejected, in input order.",
+  "contract_file": "src/sku.js",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "src/sku.js",
+     "lines": [
+      "/**",
+      " * SKU codes: three upper-case letters, a hyphen, four digits.",
+      " */",
+      "const SKU_SOURCE = '[A-Z]{3}-[0-9]{4}';",
+      "const SKU_IN_TEXT = new RegExp(`\\\\b${SKU_SOURCE}\\\\b`, 'g');",
+      "const WHOLE_SKU = new RegExp(`^${SKU_SOURCE}$`, 'g');",
+      "",
+      "/**",
+      " * Order-sheet helpers.",
+      " *",
+      " * {{CONTRACT}}",
+      " *",
+      " * @param {string} text",
+      " */",
+      "export function isSku(text) {",
+      "  return WHOLE_SKU.test(text);",
+      "}",
+      "",
+      "/** @param {string} note */",
+      "export function skusIn(note) {",
+      "  return [...note.matchAll(SKU_IN_TEXT)].map((m) => m[0]);",
+      "}",
+      "",
+      "/** @param {string[]} lines */",
+      "export function parseLines(lines) {",
+      "  const skus = [];",
+      "  const rejected = [];",
+      "  for (const raw of lines) {",
+      "    const line = raw.trim();",
+      "    if (isSku(line)) {",
+      "      skus.push(line);",
+      "    } else {",
+      "      rejected.push(raw);",
+      "    }",
+      "  }",
+      "  return { skus, rejected };",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/sku.js",
+     "lines": [
+      "/**",
+      " * SKU codes: three upper-case letters, a hyphen, four digits.",
+      " */",
+      "const SKU_SOURCE = '[A-Z]{3}-[0-9]{4}';",
+      "const SKU_IN_TEXT = new RegExp(`\\\\b${SKU_SOURCE}\\\\b`, 'g');",
+      "const WHOLE_SKU = new RegExp(`^${SKU_SOURCE}$`);",
+      "",
+      "/**",
+      " * Order-sheet helpers.",
+      " *",
+      " * {{CONTRACT}}",
+      " *",
+      " * @param {string} text",
+      " */",
+      "export function isSku(text) {",
+      "  return WHOLE_SKU.test(text);",
+      "}",
+      "",
+      "/** @param {string} note */",
+      "export function skusIn(note) {",
+      "  return [...note.matchAll(SKU_IN_TEXT)].map((m) => m[0]);",
+      "}",
+      "",
+      "/** @param {string[]} lines */",
+      "export function parseLines(lines) {",
+      "  const skus = [];",
+      "  const rejected = [];",
+      "  for (const raw of lines) {",
+      "    const line = raw.trim();",
+      "    if (isSku(line)) {",
+      "      skus.push(line);",
+      "    } else {",
+      "      rejected.push(raw);",
+      "    }",
+      "  }",
+      "  return { skus, rejected };",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "7d1b0609596049539af16a56e85602db3860aa2ca9656b63e78d39e125d24644",
+   "before_documented": "034a4db01680f245acf9aae7e2ae72ad9418d21f3687ddc4db322a80b1854cc7",
+   "after": "8912ae3944fd5452c19a21edba4bf2fc2735cf72e087aca636aec08da44aaff7",
+   "after_documented": "d55bfc7774316f5c167601c85d5a390745d0141045d6270511648075c2ce0646"
+  },
+  "check": {
+   "summary": "Validates a list of order lines that are all valid SKUs, calls isSku twice on the same value, and extracts SKUs from notes.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: isSku\\(\"XYZ-0001\"\\) is false",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { isSku, parseLines, skusIn } from '../src/sku.js';",
+      "",
+      "const failures = [];",
+      "for (const value of ['ABC-0042', 'XYZ-0001', 'XYZ-0001', 'QRS-9999']) {",
+      "  if (!isSku(value)) failures.push(`isSku(\"${value}\") is false`);",
+      "}",
+      "for (const value of ['abc-0042', 'ABC-042', 'ABCD-0042', ' ABC-0042', 'ABC-0042x', '']) {",
+      "  if (isSku(value)) failures.push(`isSku(\"${value}\") is true`);",
+      "}",
+      "const parsed = parseLines(['AAA-1111', ' BBB-2222 ', 'CCC-3333', 'nope', 'DDD-4444']);",
+      "if (JSON.stringify(parsed) !== '{\"skus\":[\"AAA-1111\",\"BBB-2222\",\"CCC-3333\",\"DDD-4444\"],\"rejected\":[\"nope\"]}') {",
+      "  failures.push(`parseLines ${JSON.stringify(parsed)}`);",
+      "}",
+      "const found = skusIn('ship ABC-0042 and XYZ-0001, then ABC-0042 again; not abc-0042');",
+      "if (JSON.stringify(found) !== '[\"ABC-0042\",\"XYZ-0001\",\"ABC-0042\"]') failures.push(`skusIn ${JSON.stringify(found)}`);",
+      "if (skusIn('no codes here').length !== 0) failures.push('skusIn on plain text');",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Calling isSku more than once. WHOLE_SKU is built with the g flag, so RegExp.prototype.test stores lastIndex after a match and the next call starts searching at that offset.",
+   "expected_impact": "Every second valid SKU in a row is reported as invalid (the following call resets lastIndex and succeeds again), so imports reject roughly half of the good order lines depending on their order.",
+   "positive_locations": [
+    {
+     "path": "src/sku.js",
+     "symbol": "WHOLE_SKU",
+     "anchors": {
+      "start": "const WHOLE_SKU = new RegExp(`^${SKU_SOURCE}$`, 'g');"
+     },
+     "start_line": 6,
+     "end_line": 6
+    },
+    {
+     "path": "src/sku.js",
+     "symbol": "isSku",
+     "anchors": {
+      "start": "return WHOLE_SKU.test(text);"
+     },
+     "start_line": 21,
+     "end_line": 21
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/sku.js",
+     "symbol": "WHOLE_SKU",
+     "anchors": {
+      "start": "const WHOLE_SKU = new RegExp(`^${SKU_SOURCE}$`);"
+     },
+     "note": "Without the g flag test() ignores lastIndex, so every call is independent.",
+     "start_line": 6,
+     "end_line": 6
+    },
+    {
+     "variant": "before",
+     "path": "src/sku.js",
+     "symbol": "skusIn",
+     "anchors": {
+      "start": "return [...note.matchAll(SKU_IN_TEXT)].map((m) => m[0]);"
+     },
+     "note": "matchAll needs the g flag and copies the regexp internally, so skusIn is stateless and correct.",
+     "start_line": 26,
+     "end_line": 26
+    }
+   ],
+   "reviewer_notes": "Tests that call isSku once per process pass. The g flag on SKU_IN_TEXT is required and fine.",
+   "distinctive_tokens": [
+    "lastindex",
+    "stateful",
+    "alternating",
+    "sticky"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/sku.js"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-JS-10",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "tracked-background-flush-awaited-at-shutdown",
+  "category": "concurrency_async",
+  "kind": "tricky_normal",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "edge-metrics",
+   "title": "edge-metrics",
+   "summary": "Batches request metrics in an HTTP edge service and ships them to a collector in the background."
+  },
+  "contract": "Metrics.record(name, value) buffers a sample and, once batchSize samples are buffered, ships them to the collector in the background without delaying the request. A failed shipment is kept in errors and never rejects record. close() ships what is still buffered and resolves only once every shipment started so far has settled, so no recorded sample is lost. record must not be called once close() was called.",
+  "contract_file": "src/metrics.js",
+  "files": {
+   "shared": [
+    {
+     "path": "src/metrics.js",
+     "lines": [
+      "/**",
+      " * Background metric shipping.",
+      " *",
+      " * {{CONTRACT}}",
+      " */",
+      "export class Metrics {",
+      "  #send;",
+      "  #batchSize;",
+      "  #buffer = [];",
+      "  #inFlight = new Set();",
+      "  #closed = false;",
+      "  errors = [];",
+      "",
+      "  /** @param {(batch: object[]) => Promise<void>} send */",
+      "  constructor(send, { batchSize = 100 } = {}) {",
+      "    this.#send = send;",
+      "    this.#batchSize = batchSize;",
+      "  }",
+      "",
+      "  record(name, value) {",
+      "    if (this.#closed) throw new Error('metrics already closed');",
+      "    this.#buffer.push({ name, value, at: Date.now() });",
+      "    if (this.#buffer.length >= this.#batchSize) {",
+      "      void this.#ship(this.#buffer.splice(0));",
+      "    }",
+      "  }",
+      "",
+      "  async close() {",
+      "    this.#closed = true;",
+      "    if (this.#buffer.length > 0) {",
+      "      void this.#ship(this.#buffer.splice(0));",
+      "    }",
+      "    await Promise.allSettled([...this.#inFlight]);",
+      "  }",
+      "",
+      "  #ship(batch) {",
+      "    const shipment = this.#send(batch)",
+      "      .catch((error) => {",
+      "        this.errors.push({ error, size: batch.length });",
+      "      })",
+      "      .finally(() => {",
+      "        this.#inFlight.delete(shipment);",
+      "      });",
+      "    this.#inFlight.add(shipment);",
+      "    return shipment;",
+      "  }",
+      "}"
+     ]
+    },
+    {
+     "path": "src/server.js",
+     "lines": [
+      "import { Metrics } from './metrics.js';",
+      "",
+      "/**",
+      " * Request loop of the edge service, reduced to what matters for shutdown.",
+      " */",
+      "export class Server {",
+      "  #metrics;",
+      "  #accepting = true;",
+      "",
+      "  constructor(collector, options) {",
+      "    this.#metrics = new Metrics(collector, options);",
+      "  }",
+      "",
+      "  handle(route, durationMs) {",
+      "    if (!this.#accepting) return false;",
+      "    this.#metrics.record(`latency.${route}`, durationMs);",
+      "    return true;",
+      "  }",
+      "",
+      "  async shutdown() {",
+      "    this.#accepting = false;",
+      "    await this.#metrics.close();",
+      "  }",
+      "",
+      "  get metricErrors() {",
+      "    return this.#metrics.errors;",
+      "  }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "e7607af36bf44c3c45fc8e765a2ded4b7aeaaa6266b7fedaa1365fdb7b0e6c21",
+   "before_documented": "3cee22d96fd6798d0fd20aead29522e943d39452b6aa24c93006a75b4b8fc2d2"
+  },
+  "check": {
+   "summary": "Records 25 samples with batch size 10 through the server, one shipment failing, then runs the server shutdown and checks that every sample reached the collector or errors, with no unhandled rejection and close resolving last.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: ",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { Server } from '../src/server.js';",
+      "",
+      "const failures = [];",
+      "const unhandled = [];",
+      "process.on('unhandledRejection', (reason) => unhandled.push(String(reason)));",
+      "const delivered = [];",
+      "let shipments = 0;",
+      "const collector = async (batch) => {",
+      "  shipments += 1;",
+      "  const mine = shipments;",
+      "  await new Promise((resolve) => setTimeout(resolve, 20 + 10 * (3 - mine)));",
+      "  if (mine === 2) throw new Error('collector returned 503');",
+      "  delivered.push(...batch);",
+      "};",
+      "const server = new Server(collector, { batchSize: 10 });",
+      "for (let n = 0; n < 25; n += 1) server.handle(n % 2 ? 'api' : 'static', n);",
+      "const pendingAtShutdown = delivered.length;",
+      "await server.shutdown();",
+      "const lost = server.metricErrors.reduce((sum, e) => sum + e.size, 0);",
+      "if (pendingAtShutdown !== 0) failures.push('record waited for shipping');",
+      "if (delivered.length + lost !== 25 || delivered.length !== 15 || lost !== 10) {",
+      "  failures.push(`delivered ${delivered.length}, failed ${lost}`);",
+      "}",
+      "if (server.handle('api', 1) !== false) failures.push('request accepted during shutdown');",
+      "await new Promise((resolve) => setTimeout(resolve, 20));",
+      "if (unhandled.length) failures.push(`unhandled rejections: ${unhandled}`);",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. record starts #ship without awaiting it (void this.#ship(...)), which resembles a floating promise that can lose data or reject unhandled.",
+   "expected_impact": "No defect: every shipment promise is caught, tracked in #inFlight and removed when settled, and Server.shutdown in server.js awaits metrics.close(), which waits for all of them.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "src/metrics.js",
+     "symbol": "Metrics.record",
+     "anchors": {
+      "near": "record(name, value) {",
+      "start": "void this.#ship(this.#buffer.splice(0));"
+     },
+     "note": "Promise started and not awaited.",
+     "start_line": 29,
+     "end_line": 29
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "src/metrics.js",
+     "symbol": "Metrics.#ship",
+     "anchors": {
+      "start": "const shipment = this.#send(batch)",
+      "end": "this.#inFlight.add(shipment);"
+     },
+     "note": "The rejection is handled and the promise is tracked until it settles.",
+     "start_line": 42,
+     "end_line": 49
+    },
+    {
+     "variant": "before",
+     "path": "src/server.js",
+     "symbol": "Server.shutdown",
+     "anchors": {
+      "start": "async shutdown() {",
+      "end": "await this.#metrics.close();"
+     },
+     "note": "Shutdown stops intake and then awaits close(), which awaits every tracked shipment.",
+     "start_line": 20,
+     "end_line": 22
+    }
+   ],
+   "reviewer_notes": "Floating-promise rules that honour the void operator stay quiet; reviewers often flag it anyway. A finding of lost metrics or unhandled rejections is a false positive.",
+   "distinctive_tokens": [
+    "floating promise",
+    "fire-and-forget",
+    "tracked promise"
+   ],
+   "corrected_variant": null
+  }
+ },
+ {
+  "id": "R1-JS-11",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "read-stream-closed-by-caller-pipeline",
+  "category": "resource_lifetime",
+  "kind": "tricky_normal",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "report-exports",
+   "title": "report-exports",
+   "summary": "Streams generated CSV report exports from disk to download clients."
+  },
+  "contract": "openExport(dir, name) validates name (letters, digits, '-' and '_', ending in \".csv\") and returns a readable stream of that file in dir; an invalid name throws RangeError and opens nothing. The returned stream belongs to the caller, which must consume or destroy it. sendExport(dir, name, destination) pipes the export into destination and settles once both streams are finished or one of them failed; in every case the file is closed.",
+  "contract_file": "src/exports.js",
+  "files": {
+   "shared": [
+    {
+     "path": "src/download.js",
+     "lines": [
+      "import { pipeline } from 'node:stream/promises';",
+      "",
+      "import { openExport } from './exports.js';",
+      "",
+      "/**",
+      " * Sends one export to a client stream.",
+      " *",
+      " * @param {string} dir",
+      " * @param {string} name",
+      " * @param {import('node:stream').Writable} destination",
+      " */",
+      "export async function sendExport(dir, name, destination) {",
+      "  await pipeline(openExport(dir, name), destination);",
+      "}",
+      "",
+      "/** Sends the same export to several destinations one by one; returns the failures. */",
+      "export async function broadcastExport(dir, name, destinations) {",
+      "  const failures = [];",
+      "  for (const destination of destinations) {",
+      "    try {",
+      "      await sendExport(dir, name, destination);",
+      "    } catch (error) {",
+      "      failures.push(error);",
+      "    }",
+      "  }",
+      "  return failures;",
+      "}"
+     ]
+    },
+    {
+     "path": "src/exports.js",
+     "lines": [
+      "import { createReadStream } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "",
+      "const EXPORT_NAME = /^[A-Za-z0-9_-]+\\.csv$/;",
+      "",
+      "/**",
+      " * Report export files.",
+      " *",
+      " * {{CONTRACT}}",
+      " *",
+      " * @param {string} dir",
+      " * @param {string} name",
+      " */",
+      "export function openExport(dir, name) {",
+      "  if (typeof name !== 'string' || !EXPORT_NAME.test(name)) {",
+      "    throw new RangeError(`invalid export name ${JSON.stringify(name)}`);",
+      "  }",
+      "  return createReadStream(join(dir, name));",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "0a66b65de02683a8145bf4955395195ca8313fe9d81f515e87651996b8e0004e",
+   "before_documented": "672f1c6a44136b785834917dab7db8e9744ca4661cb69d823fa892caea335518"
+  },
+  "check": {
+   "summary": "Sends an export to a collecting writable and to a writable that fails part-way, 30 times each, and compares the process's open file descriptors from /proc/self/fd with a warmed-up baseline; also checks the delivered bytes and name validation.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: ",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';",
+      "import { tmpdir } from 'node:os';",
+      "import { join } from 'node:path';",
+      "import { Writable } from 'node:stream';",
+      "",
+      "import { openExport } from '../src/exports.js';",
+      "import { broadcastExport, sendExport } from '../src/download.js';",
+      "",
+      "const failures = [];",
+      "const dir = mkdtempSync(join(tmpdir(), 'exports-'));",
+      "const body = 'id,total\\n' + Array.from({ length: 4000 }, (_, n) => `${n},${n * 3}`).join('\\n') + '\\n';",
+      "writeFileSync(join(dir, 'q3-sales.csv'), body);",
+      "const collecting = () => {",
+      "  const parts = [];",
+      "  const w = new Writable({ write(chunk, _enc, cb) { parts.push(chunk); cb(); } });",
+      "  w.text = () => Buffer.concat(parts).toString();",
+      "  return w;",
+      "};",
+      "const failing = () => new Writable({ write(_chunk, _enc, cb) { cb(new Error('client went away')); } });",
+      "const openFds = () => readdirSync('/proc/self/fd').length;",
+      "",
+      "const first = collecting();",
+      "await sendExport(dir, 'q3-sales.csv', first);",
+      "if (first.text() !== body) failures.push('delivered bytes differ');",
+      "await broadcastExport(dir, 'q3-sales.csv', [failing()]);",
+      "await new Promise((resolve) => setTimeout(resolve, 50));",
+      "const baseline = openFds();",
+      "const errors = [];",
+      "for (let n = 0; n < 30; n += 1) {",
+      "  errors.push(...(await broadcastExport(dir, 'q3-sales.csv', [collecting(), failing()])));",
+      "}",
+      "await new Promise((resolve) => setTimeout(resolve, 50));",
+      "if (errors.length !== 30 || !errors.every((e) => e.message === 'client went away')) failures.push(`errors ${errors.length}`);",
+      "if (openFds() > baseline) failures.push(`open descriptors grew from ${baseline} to ${openFds()}`);",
+      "for (const bad of ['../secret.csv', 'x.txt', '', 'a b.csv']) {",
+      "  try {",
+      "    openExport(dir, bad);",
+      "    failures.push(`accepted ${bad}`);",
+      "  } catch (err) {",
+      "    if (!(err instanceof RangeError)) failures.push(`${bad} threw ${err}`);",
+      "  }",
+      "}",
+      "rmSync(dir, { recursive: true, force: true });",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. openExport creates a read stream and returns it without closing it or attaching any error handling, which resembles a descriptor that stays open.",
+   "expected_impact": "No defect: the documented owner is the caller, and sendExport in download.js hands the stream to stream.promises.pipeline, which destroys and closes it on completion and on failure of either side.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "src/exports.js",
+     "symbol": "openExport",
+     "anchors": {
+      "start": "return createReadStream(join(dir, name));"
+     },
+     "note": "Stream created and returned, never closed here.",
+     "start_line": 24,
+     "end_line": 24
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "src/download.js",
+     "symbol": "sendExport",
+     "anchors": {
+      "start": "await pipeline(openExport(dir, name), destination);"
+     },
+     "note": "pipeline owns both streams from here and destroys them on success and on error.",
+     "start_line": 13,
+     "end_line": 13
+    }
+   ],
+   "reviewer_notes": "A finding that openExport keeps files open is a false positive given the ownership statement and the only call site. Suggesting an AbortSignal for client disconnects is an enhancement.",
+   "distinctive_tokens": [
+    "ownership transfer",
+    "descriptor stays open",
+    "takes ownership"
+   ],
+   "corrected_variant": null
+  }
+ },
+ {
   "id": "R1-GO-01",
   "language": "go",
   "split": "holdout",
