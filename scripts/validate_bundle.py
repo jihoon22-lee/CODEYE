@@ -107,7 +107,8 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
             raw = obs["raw_ref"]
             ensure(raw["artifact_id"] in rows, "Unbound raw reference")
             row = rows[raw["artifact_id"]]
-            ensure(row["role"] == "stdout" and row["sha256"] == raw["sha256"] and row["task_key"] == obs["task_key"], "Incorrect raw stream")
+            # W19 analyzer documents may cite either recorded stream (cppcheck writes its XML to stderr).
+            ensure(row["role"] in ("stdout", "stderr") and row["sha256"] == raw["sha256"] and row["task_key"] == obs["task_key"], "Incorrect raw stream")
             ensure(0 <= raw["byte_start"] <= raw["byte_end"] <= row["size_bytes"], "Raw byte range invalid")
             ensure((obs["raw_message"] is not None) == report["export"]["include_code"], "Export leaked or omitted diagnostic text")
         # W19: a diagnostic the tool reported as suppressed in source never becomes a finding.
