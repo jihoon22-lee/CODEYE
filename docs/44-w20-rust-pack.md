@@ -213,6 +213,7 @@ go test -count=1 ./internal/worker/analysis/rustpack/
 
 ## 10. 남은 제한
 
+- 허가(`--repo-code-source-root`) 아래의 build script·proc macro는 노드 계정이 읽을 수 있는 파일을 읽고 `cargo:warning` 등으로 출력할 수 있다. cargo의 JSON 출력(`rendered` 포함)은 실행 stream으로 저장된다. 스냅샷 밖 위치의 진단은 위치 없는 관찰로 남기지만 원시 stream까지 걸러내지는 않는다. 이는 [docs/08 §2](08-native-execution.md)의 신뢰 경계에 따른 것이며, 신뢰 경계가 다른 저장소에는 허가를 주지 않거나 별도 계정·노드를 쓴다.
 - Windows와 macOS에서 실제 cargo를 실행하지 않았다. Windows는 링커 조회를 하지 않으므로 build script가 있는 crate는 `linker_unavailable`일 수 있다.
 - 오프라인 레지스트리 캐시 플래그가 없다. 레지스트리 의존성이 있는 저장소는 vendor 디렉터리가 없으면 `dependency_unavailable`이다. 읽기 전용 캐시를 지원하려면 `CARGO_HOME`을 복사하거나 cargo의 `registry` 설정과 vendor 형식을 써야 하며 이 단계에서 만들지 않았다.
 - 기본 feature, host target 하나다. `--all-features`, feature 조합, 교차 target은 계획하지 않는다. 비멤버 crate와 `cfg`·feature로 꺼진 파일은 컴파일되지 않고 `files_unlisted`로 보일 뿐 분석되지 않는다.
