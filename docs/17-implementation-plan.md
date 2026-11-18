@@ -18,7 +18,7 @@
 | W10 | [OpenCode adapter 실연동 검증](32-w10-opencode.md) | W04,W06 | 실제 버전 계약, workspace digest, model request/cancel/permission block 확인 |
 | W11 | [Context·Investigator 실연동](33-w11-context-review.md) | W08,W10 | 문서 없는 코드와 문서 있는 코드 모두 근거 있는 후보 생성 |
 | W12 | [Verifier·증거 검증 구현](34-w12-verifier.md) | W11 | 반례로 후보 철회, 허위 path·재현 주장 차단, 모델 실패 partial |
-| W13 | 보고서 종합·상세 UI | W09,W12 | 요약→영역→근거, 숫자 일치, 미확정 표시, export |
+| W13 | [보고서 종합·상세 UI](35-w13-evidence-report.md) | W09,W12 | 요약→영역→근거, 숫자 일치, 미확정 표시, export |
 | W14 | R0 회귀·개인 파일럿 | W07,W13 | 최소 합성 집합+승인된 개인 프로젝트에서 실제 end-to-end 실행 기록 |
 
 R0의 두 에이전트 시험은 한 머신에서 별도 node identity로 먼저 수행할 수 있다. 실제 다중 머신·NFS·네트워크 partition 보증을 대체하지 않는다. Windows와 RHEL 중 개발에 사용하지 않은 환경의 시험은 미실행으로 명시한다.

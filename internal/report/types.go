@@ -17,7 +17,7 @@ import "time"
 const (
 	SchemaVersion  = "0.1"
 	BuilderID      = "codeye-report"
-	BuilderVersion = "1"
+	BuilderVersion = "2"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -115,7 +115,18 @@ type Summary struct {
 	Priorities             []string `json:"priorities"`
 }
 
+// ReviewCall records one request once across the cumulative stage artifacts.
+type ReviewCall struct {
+	Role          string `json:"role"`
+	Model         string `json:"model"`
+	Version       string `json:"opencode_version"`
+	PackDigest    string `json:"pack_sha256"`
+	RequestDigest string `json:"request_sha256"`
+	Outcome       string `json:"outcome"`
+}
+
 type Coverage struct {
+	ReviewCalls        []ReviewCall   `json:"review_calls,omitempty"`
 	ScopeMode          string         `json:"scope_mode"`
 	InventoryFiles     int            `json:"inventory_files"`
 	ToolProcessedFiles *int           `json:"tool_processed_files"`

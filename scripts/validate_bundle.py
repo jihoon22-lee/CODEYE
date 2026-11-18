@@ -408,6 +408,13 @@ def main() -> None:
     bad = copy.deepcopy(json_file(ROOT / "examples/doctor.json"))
     bad["checks"][-1]["id"] = "host"
     expect_invalid("missing doctor capability", validators["doctor.schema.json"].validate, bad)
+    calls_example = copy.deepcopy(published)
+    calls_example["coverage"]["review_calls"] = [
+        {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome")}
+        for call in review["calls"]]
+    validators["report.schema.json"].validate(calls_example)
+    calls_example["coverage"]["review_calls"][0]["pack_sha256"] = "invalid"
+    expect_invalid("unbound report prompt digest", validators["report.schema.json"].validate, calls_example)
     bad = copy.deepcopy(review)
     bad["verifications"][0]["verdict"] = "reproduced"
     expect_invalid("model reproduction claim", review_validator.validate, bad)
@@ -423,7 +430,7 @@ def main() -> None:
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
     print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 11 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
-    print("PASS: 21 negative cases; example policy timing; prompt manifest")
+    print("PASS: 22 negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 
