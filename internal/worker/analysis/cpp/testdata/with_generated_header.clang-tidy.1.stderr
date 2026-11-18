@@ -2,5 +2,5 @@
 [2/3] Processing file [REDACTED]/src/ring.c.
 4 warnings generated.
 [3/3] Processing file [REDACTED]/src/util.cpp.
-8 warnings generated.
-Suppressed 4 warnings (2 NOLINT, 2 with check filters).
+7 warnings generated.
+Suppressed 3 warnings (1 NOLINT, 2 with check filters).

@@ -80,13 +80,21 @@ func TestCppPackWithoutTools(t *testing.T) {
 	if tools["cpp.cppcheck"].ExitClass != "not_run" || tools["cpp.clang_tidy"].ExitClass != "not_run" {
 		t.Fatalf("tool rows %+v", r.report.Coverage.Tools)
 	}
-	var names []string
-	for _, at := range analyzerTools(r.envs) {
-		names = append(names, at.Tool+"="+at.Status)
-	}
-	if !slices.Equal(names, []string{"clang-tidy=" + envdoc.ObsNotProbed, "cppcheck=" + envdoc.ObsNotProbed}) {
+	if names := cppToolStates(r.envs); !slices.Equal(names, []string{"clang-tidy=" + envdoc.ObsNotProbed, "cppcheck=" + envdoc.ObsNotProbed}) {
 		t.Fatalf("analyzer tools %v", names)
 	}
+}
+
+// cppToolStates are the discovery records of the two C/C++ tools; tools of
+// other packs (and the always-recorded "any" ecosystem) are not compared.
+func cppToolStates(envs []envdoc.Document) []string {
+	var out []string
+	for _, at := range analyzerTools(envs) {
+		if at.Tool == "cppcheck" || at.Tool == "clang-tidy" {
+			out = append(out, at.Tool+"="+at.Status)
+		}
+	}
+	return out
 }
 
 func cppTools(t *testing.T) map[string]string {
@@ -143,11 +151,7 @@ func TestCppPackWithRealTools(t *testing.T) {
 	if !slices.Contains(obs, "cpp.cppcheck nullPointer") || !slices.Contains(obs, "cpp.clang_tidy clang-analyzer-core.NullDereference") {
 		t.Fatalf("report observations %v", obs)
 	}
-	var at []string
-	for _, a := range analyzerTools(r.envs) {
-		at = append(at, a.Tool+"="+a.Status)
-	}
-	if !slices.Equal(at, []string{"clang-tidy=" + envdoc.ObsObserved, "cppcheck=" + envdoc.ObsObserved}) {
+	if at := cppToolStates(r.envs); !slices.Equal(at, []string{"clang-tidy=" + envdoc.ObsObserved, "cppcheck=" + envdoc.ObsObserved}) {
 		t.Fatalf("analyzer tools %v", at)
 	}
 }

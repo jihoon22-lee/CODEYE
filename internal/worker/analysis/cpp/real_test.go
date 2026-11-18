@@ -254,12 +254,13 @@ func TestRealProbes(t *testing.T) {
 	}
 }
 
-// Engine overlap (docs/41 §7): cppcheck and clang-tidy are different
-// engines and both run; inside clang-tidy the Clang Static Analyzer runs as
-// clang-analyzer-* checks only, the CSA float loop counter that duplicates
-// bugprone-float-loop-counter is not selected and no alias family (cert-*,
-// hicpp-*, cppcoreguidelines-*) appears. The same-line table is logged for
-// the document.
+// Engine overlap (docs/41 §7), measured on fixtures/w16-cpp/overlap: the
+// baseline cppcheck and clang-tidy are different engines and both run. A
+// clang-tidy check that reported only constructs cppcheck also reported on
+// the same lines is not selected; a kept check that overlaps has a variant
+// that only clang-tidy reports. Inside clang-tidy, an Analyzer check that
+// reported only what a bugprone check reported is not selected, and no alias
+// family appears. The line table is logged for the document.
 func TestRealEngineOverlap(t *testing.T) {
 	ccPath, ctPath := optionalTool("CODEYE_TEST_CPPCHECK"), optionalTool("CODEYE_TEST_CLANG_TIDY")
 	if ccPath == "" || ctPath == "" {
@@ -268,6 +269,13 @@ func TestRealEngineOverlap(t *testing.T) {
 	src, err := os.ReadFile("../../../../fixtures/w16-cpp/overlap/overlap.cpp")
 	if err != nil {
 		t.Fatal(err)
+	}
+	lineOf := func(marker string) int {
+		i := strings.Index(string(src), marker)
+		if i < 0 || strings.Count(string(src), marker) != 1 {
+			t.Fatalf("marker %q", marker)
+		}
+		return strings.Count(string(src[:i]), "\n") + 1
 	}
 	db, _ := json.Marshal([]map[string]any{{"directory": "/build/ov", "file": "overlap.cpp", "arguments": []string{"c++", "-std=c++17", "-c", "overlap.cpp"}}})
 	files := map[string]string{"overlap.cpp": string(src), CompileDBName: string(db)}
@@ -280,16 +288,45 @@ func TestRealEngineOverlap(t *testing.T) {
 			t.Fatalf("%s outcome %+v", r.doc.Analyzer.ID, r.doc.Outcome)
 		}
 		for _, o := range r.doc.Observations {
-			if o.Location == nil {
-				continue
+			if o.Location != nil {
+				l := lines[o.Location.StartLine]
+				l[i] = append(l[i], o.RuleID)
+				lines[o.Location.StartLine] = l
 			}
-			l := lines[o.Location.StartLine]
-			l[i] = append(l[i], o.RuleID)
-			lines[o.Location.StartLine] = l
-			if i == 1 && (o.RuleID == "clang-analyzer-security.FloatLoopCounter" || strings.HasPrefix(o.RuleID, "cert-") || strings.HasPrefix(o.RuleID, "hicpp-") ||
-				strings.HasPrefix(o.RuleID, "cppcoreguidelines-")) {
-				t.Fatalf("excluded rule reported: %s", o.RuleID)
+		}
+	}
+	excluded := []string{"bugprone-assert-side-effect", "bugprone-suspicious-memset-usage", "clang-analyzer-core.BitwiseShift", "clang-analyzer-core.StackAddressEscape",
+		"clang-analyzer-cplusplus.InnerPointer", "clang-analyzer-cplusplus.Move", "clang-analyzer-security.FloatLoopCounter"}
+	for _, l := range lines {
+		for _, rule := range l[1] {
+			if slices.Contains(excluded, rule) || strings.HasPrefix(rule, "cert-") || strings.HasPrefix(rule, "hicpp-") || strings.HasPrefix(rule, "cppcoreguidelines-") {
+				t.Fatalf("excluded rule reported: %s", rule)
 			}
+		}
+	}
+	// The kept overlapping checks: a variant only clang-tidy reports.
+	for marker, rule := range map[string]string{
+		"std::error_code make_error(void);\nvoid unused_error_code": "bugprone-unused-return-value",
+		"int *p = make_array(); delete p;":                          "clang-analyzer-unix.MismatchedDeallocator",
+		"static int at(const int *a, int i) { return a[i]; }":       "clang-analyzer-security.ArrayBound",
+		"return 10 / q->d;":                  "clang-analyzer-core.DivideZero",
+		"return *q->p;":                      "clang-analyzer-core.NullDereference",
+		"release(p); free(p);":               "clang-analyzer-unix.Malloc",
+		"Owner &operator=(const Owner &o) {": "bugprone-unhandled-self-assignment",
+		"b.empty(); }":                       "bugprone-standalone-empty",
+		"if (a) x = 1; else x = 1;":          "bugprone-branch-clone",
+		"return a.v + b.v;":                  "bugprone-use-after-move",
+		"for (float f = 0.0f;":               "bugprone-float-loop-counter",
+	} {
+		n := lineOf(marker) + strings.Count(marker, "\n")
+		if l := lines[n]; !slices.Contains(l[1], rule) || len(l[0]) > 0 {
+			t.Fatalf("line %d (%s): cppcheck %v clang-tidy %v", n, rule, l[0], l[1])
+		}
+	}
+	// What only the baseline reports.
+	for _, marker := range []string{"memset(buf, 0xff, 0);", "return *null_source();"} {
+		if l := lines[lineOf(marker)]; len(l[0]) == 0 || len(l[1]) > 0 {
+			t.Fatalf("%q: cppcheck %v clang-tidy %v", marker, l[0], l[1])
 		}
 	}
 	var keys []int
@@ -297,15 +334,7 @@ func TestRealEngineOverlap(t *testing.T) {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
-	both := 0
 	for _, k := range keys {
-		l := lines[k]
-		if len(l[0]) > 0 && len(l[1]) > 0 {
-			both++
-		}
-		t.Logf("%3d | %s | %s", k, strings.Join(l[0], ","), strings.Join(l[1], ","))
-	}
-	if both == 0 || !slices.ContainsFunc(keys, func(k int) bool { return slices.Contains(lines[k][1], "bugprone-float-loop-counter") }) {
-		t.Fatalf("overlap table %v", lines)
+		t.Logf("%3d | %s | %s", k, strings.Join(lines[k][0], ","), strings.Join(lines[k][1], ","))
 	}
 }

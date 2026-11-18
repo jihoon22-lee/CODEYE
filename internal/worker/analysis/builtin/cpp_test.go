@@ -50,11 +50,17 @@ func TestCppAnalyzersAdvertiseOnlyWithTheBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ids []string
+	// Catalog order (go, cpp, python, javascript, rust, any): the C/C++
+	// members follow the Go members; other packs' members are not compared.
+	var ids, cppIDs []string
 	for _, d := range c.Descriptors() {
 		ids = append(ids, d.ID)
+		if d.Ecosystem == "cpp" {
+			cppIDs = append(cppIDs, d.ID)
+		}
 	}
-	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "cpp.cppcheck", "cpp.clang_tidy"}) {
+	if !slices.Equal(cppIDs, []string{"cpp.cppcheck", "cpp.clang_tidy"}) || slices.Index(ids, "go.staticcheck") > slices.Index(ids, "cpp.cppcheck") ||
+		slices.Index(ids, "cpp.clang_tidy") != slices.Index(ids, "cpp.cppcheck")+1 {
 		t.Fatalf("members %v", ids)
 	}
 	if entries, _ := os.ReadDir(probe); len(entries) != 0 {

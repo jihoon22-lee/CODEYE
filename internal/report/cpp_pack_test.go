@@ -34,7 +34,7 @@ func TestAnalyzerDecoderCppPack(t *testing.T) {
 	if err := ValidateReport(r); err != nil {
 		t.Fatal(err)
 	}
-	if r.Summary.RawObservations != 4+6 || r.Summary.TotalFindings != 4+6 || r.Summary.ActionableFindings != 0 {
+	if r.Summary.RawObservations != 4+5 || r.Summary.TotalFindings != 4+5 || r.Summary.ActionableFindings != 0 {
 		t.Fatalf("summary %+v", r.Summary)
 	}
 	units := []string{"src/parse.cpp", "src/ring.c", "src/util.cpp"}

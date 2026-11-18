@@ -41,12 +41,16 @@ const (
 // clang-tidy glob order. Excluded: platform families that do not apply to
 // the main targets (osx, webkit, fuchsia), opt-in Analyzer families (taint,
 // MPI, padding, localizability), checks that report every use of a standard
-// function (DeprecatedOrUnsafeBufferHandling, mt-unsafe), the CSA float loop
-// counter (the same rule as bugprone-float-loop-counter, measured on the
-// same line), and bugprone checks about naming, style or conversions that
-// fire on most C code without a defect. Aliases (cert-*, hicpp-*,
-// cppcoreguidelines-*) of these checks are not selected: clang-tidy would
-// report the same diagnostic under two names.
+// function (DeprecatedOrUnsafeBufferHandling, mt-unsafe), bugprone checks
+// about naming, style or conversions that fire on most C code without a
+// defect, and the duplicates measured on fixtures/w16-cpp/overlap
+// (TestRealEngineOverlap, docs/41 §7): checks that reported only what the
+// baseline cppcheck also reported on the same lines (assert-side-effect,
+// suspicious-memset-usage, core.BitwiseShift, core.StackAddressEscape,
+// cplusplus.InnerPointer) and the Analyzer checks that reported only what a
+// bugprone check reported (security.FloatLoopCounter, cplusplus.Move).
+// Aliases (cert-*, hicpp-*, cppcoreguidelines-*) are not selected:
+// clang-tidy would report the same diagnostic under two names.
 var ClangTidyChecks = []string{
 	"-*",
 	"clang-analyzer-*",
@@ -56,6 +60,10 @@ var ClangTidyChecks = []string{
 	"-clang-analyzer-fuchsia.*",
 	"-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling",
 	"-clang-analyzer-security.FloatLoopCounter",
+	"-clang-analyzer-core.BitwiseShift",
+	"-clang-analyzer-core.StackAddressEscape",
+	"-clang-analyzer-cplusplus.InnerPointer",
+	"-clang-analyzer-cplusplus.Move",
 	"bugprone-*",
 	"-bugprone-easily-swappable-parameters",
 	"-bugprone-narrowing-conversions",
@@ -67,6 +75,8 @@ var ClangTidyChecks = []string{
 	"-bugprone-casting-through-void",
 	"-bugprone-multi-level-implicit-pointer-conversion",
 	"-bugprone-macro-parentheses",
+	"-bugprone-assert-side-effect",
+	"-bugprone-suspicious-memset-usage",
 	"performance-*",
 	"-performance-avoid-endl",
 	"-performance-enum-size",

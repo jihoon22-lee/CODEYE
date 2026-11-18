@@ -68,7 +68,7 @@
           "clang-tidy",
           "-p",
           "[REDACTED]",
-          "--config={Checks: \"-*,clang-analyzer-*,-clang-analyzer-osx.*,-clang-analyzer-optin.*,-clang-analyzer-webkit.*,-clang-analyzer-fuchsia.*,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,-clang-analyzer-security.FloatLoopCounter,bugprone-*,-bugprone-easily-swappable-parameters,-bugprone-narrowing-conversions,-bugprone-implicit-widening-of-multiplication-result,-bugprone-reserved-identifier,-bugprone-signed-bitwise,-bugprone-switch-missing-default-case,-bugprone-assignment-in-if-condition,-bugprone-casting-through-void,-bugprone-multi-level-implicit-pointer-conversion,-bugprone-macro-parentheses,performance-*,-performance-avoid-endl,-performance-enum-size,concurrency-thread-canceltype-asynchronous,misc-redundant-expression,misc-unconventional-assign-operator,misc-throw-by-value-catch-by-reference\", WarningsAsErrors: \"\", HeaderFilterRegex: \".*\", ExcludeHeaderFilterRegex: \"\", SystemHeaders: false, FormatStyle: none, CheckOptions: {}}",
+          "--config={Checks: \"-*,clang-analyzer-*,-clang-analyzer-osx.*,-clang-analyzer-optin.*,-clang-analyzer-webkit.*,-clang-analyzer-fuchsia.*,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,-clang-analyzer-security.FloatLoopCounter,-clang-analyzer-core.BitwiseShift,-clang-analyzer-core.StackAddressEscape,-clang-analyzer-cplusplus.InnerPointer,-clang-analyzer-cplusplus.Move,bugprone-*,-bugprone-easily-swappable-parameters,-bugprone-narrowing-conversions,-bugprone-implicit-widening-of-multiplication-result,-bugprone-reserved-identifier,-bugprone-signed-bitwise,-bugprone-switch-missing-default-case,-bugprone-assignment-in-if-condition,-bugprone-casting-through-void,-bugprone-multi-level-implicit-pointer-conversion,-bugprone-macro-parentheses,-bugprone-assert-side-effect,-bugprone-suspicious-memset-usage,performance-*,-performance-avoid-endl,-performance-enum-size,concurrency-thread-canceltype-asynchronous,misc-redundant-expression,misc-unconventional-assign-operator,misc-throw-by-value-catch-by-reference\", WarningsAsErrors: \"\", HeaderFilterRegex: \".*\", ExcludeHeaderFilterRegex: \"\", SystemHeaders: false, FormatStyle: none, CheckOptions: {}}",
           "--extra-arg-before=--no-default-config",
           "--use-color=false",
           "[REDACTED]/src/parse.cpp",
@@ -92,15 +92,15 @@
       "stderr": {
         "captured_bytes": 240,
         "incomplete": false,
-        "sha256": "30c875ed8d28a31a911f838093b4488ce85a9389636dfa85777bf8e8cccfbca7",
-        "total_bytes": 459,
+        "sha256": "c42131e6819af9ee823e2fedb1123a72d1e3f77baf48aa73625c25853535701c",
+        "total_bytes": 456,
         "truncated": false
       },
       "stdout": {
-        "captured_bytes": 1868,
+        "captured_bytes": 1500,
         "incomplete": false,
-        "sha256": "dcb6f6c83a5be7f12276d9475b0395fb376a458dfa0955bd14f013a1d4fd7c5c",
-        "total_bytes": 3401,
+        "sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b",
+        "total_bytes": 2796,
         "truncated": false
       }
     }
@@ -142,7 +142,7 @@
         "json_pointer": "",
         "record_index": 0,
         "stream": "stdout",
-        "stream_sha256": "dcb6f6c83a5be7f12276d9475b0395fb376a458dfa0955bd14f013a1d4fd7c5c"
+        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
       },
       "raw_severity": "warning",
       "related": [],
@@ -173,7 +173,7 @@
         "json_pointer": "",
         "record_index": 1,
         "stream": "stdout",
-        "stream_sha256": "dcb6f6c83a5be7f12276d9475b0395fb376a458dfa0955bd14f013a1d4fd7c5c"
+        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
       },
       "raw_severity": "warning",
       "related": [
@@ -289,7 +289,7 @@
         "json_pointer": "",
         "record_index": 2,
         "stream": "stdout",
-        "stream_sha256": "dcb6f6c83a5be7f12276d9475b0395fb376a458dfa0955bd14f013a1d4fd7c5c"
+        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
       },
       "raw_severity": "warning",
       "related": [
@@ -377,7 +377,7 @@
         "json_pointer": "",
         "record_index": 3,
         "stream": "stdout",
-        "stream_sha256": "dcb6f6c83a5be7f12276d9475b0395fb376a458dfa0955bd14f013a1d4fd7c5c"
+        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
       },
       "raw_severity": "warning",
       "related": [
@@ -402,66 +402,6 @@
       "unit": "src/util.cpp"
     },
     {
-      "category": "correctness",
-      "id": "obs_47557741ab5c476f2e6f",
-      "location": {
-        "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
-        "column_unit": "byte",
-        "end_col": 10,
-        "end_line": 9,
-        "path": "src/util.cpp",
-        "start_col": 10,
-        "start_line": 9
-      },
-      "location_state": "resolved",
-      "path": "src/util.cpp",
-      "raw_message": "Method called on moved-from object 'a' of type 'std::basic_string'",
-      "raw_ref": {
-        "byte_end": 1306,
-        "byte_start": 1168,
-        "execution": "clang-tidy.check.1",
-        "json_pointer": "",
-        "record_index": 4,
-        "stream": "stdout",
-        "stream_sha256": "dcb6f6c83a5be7f12276d9475b0395fb376a458dfa0955bd14f013a1d4fd7c5c"
-      },
-      "raw_severity": "warning",
-      "related": [
-        {
-          "location": {
-            "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
-            "column_unit": "byte",
-            "end_col": 19,
-            "end_line": 8,
-            "path": "src/util.cpp",
-            "start_col": 19,
-            "start_line": 8
-          },
-          "location_state": "resolved",
-          "path": "src/util.cpp",
-          "raw_message": "Object 'a' of type 'std::basic_string' is left in a valid but unspecified state after move"
-        },
-        {
-          "location": {
-            "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
-            "column_unit": "byte",
-            "end_col": 10,
-            "end_line": 9,
-            "path": "src/util.cpp",
-            "start_col": 10,
-            "start_line": 9
-          },
-          "location_state": "resolved",
-          "path": "src/util.cpp",
-          "raw_message": "Method called on moved-from object 'a' of type 'std::basic_string'"
-        }
-      ],
-      "rule_id": "clang-analyzer-cplusplus.Move",
-      "suggested_fix_count": 0,
-      "suppressed": false,
-      "unit": "src/util.cpp"
-    },
-    {
       "category": "resource_lifecycle",
       "id": "obs_265de289c275fa289c44",
       "location": {
@@ -477,13 +417,13 @@
       "path": "src/util.cpp",
       "raw_message": "Memory allocated by 'new[]' should be deallocated by 'delete[]', not 'delete'",
       "raw_ref": {
-        "byte_end": 1697,
-        "byte_start": 1536,
+        "byte_end": 1329,
+        "byte_start": 1168,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
-        "record_index": 5,
+        "record_index": 4,
         "stream": "stdout",
-        "stream_sha256": "dcb6f6c83a5be7f12276d9475b0395fb376a458dfa0955bd14f013a1d4fd7c5c"
+        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
       },
       "raw_severity": "warning",
       "related": [
@@ -529,9 +469,9 @@
     "task_status": "succeeded"
   },
   "parse": {
-    "observations": 6,
+    "observations": 5,
     "ok": true,
-    "records": 6,
+    "records": 5,
     "shape_errors": 0,
     "tool_errors": 0,
     "unparsed_bytes": 0,
@@ -562,6 +502,10 @@
       "-clang-analyzer-fuchsia.*",
       "-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling",
       "-clang-analyzer-security.FloatLoopCounter",
+      "-clang-analyzer-core.BitwiseShift",
+      "-clang-analyzer-core.StackAddressEscape",
+      "-clang-analyzer-cplusplus.InnerPointer",
+      "-clang-analyzer-cplusplus.Move",
       "bugprone-*",
       "-bugprone-easily-swappable-parameters",
       "-bugprone-narrowing-conversions",
@@ -573,6 +517,8 @@
       "-bugprone-casting-through-void",
       "-bugprone-multi-level-implicit-pointer-conversion",
       "-bugprone-macro-parentheses",
+      "-bugprone-assert-side-effect",
+      "-bugprone-suspicious-memset-usage",
       "performance-*",
       "-performance-avoid-endl",
       "-performance-enum-size",
@@ -592,7 +538,7 @@
     "version": "1"
   },
   "schema_version": "0.1",
-  "snapshot_manifest_digest": "c4514196e96fc7946f5ac323792f7ca01b4d3cdfec4a7edfe9fd59deed682486",
+  "snapshot_manifest_digest": "7860b5b7c12684ef40be21a880012bc02759dc4ec441a6a54bde806221a4f0b4",
   "target": {
     "platform": "linux/amd64",
     "properties": {
@@ -604,7 +550,7 @@
       "flags_dropped": "code_loading:3,response_file:1",
       "header_filter": ".*",
       "mode": "compile_db",
-      "nolint_suppressed": "2",
+      "nolint_suppressed": "1",
       "repository_clang_tidy_config": "overridden",
       "source_snippets": "removed",
       "std": "c++17,c11",
