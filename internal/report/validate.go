@@ -95,7 +95,7 @@ func ValidateReport(r Report) error {
 	}
 	obs := map[string]bool{}
 	for _, o := range r.Observations {
-		if obs[o.ID] || !taskKeys[o.TaskKey] || !arts[o.RawRef.ArtifactID] || o.RawSeverity != nil {
+		if obs[o.ID] || !taskKeys[o.TaskKey] || !arts[o.RawRef.ArtifactID] || (o.RawSeverity != nil && !rawSeverityPattern.MatchString(*o.RawSeverity)) {
 			return invalidf("observation %s is invalid", o.ID)
 		}
 		if r.Export.IncludeCode == (o.RawMessage == nil) {

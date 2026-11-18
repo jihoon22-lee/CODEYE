@@ -1,0 +1,574 @@
+{
+  "adapter": {
+    "id": "staticcheck",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "go",
+    "id": "go.staticcheck",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 4,
+    "files_skipped": 1,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "clean/c.go",
+      "find/find.go",
+      "find/find_test.go"
+    ],
+    "unit": "package",
+    "units": {
+      "analyzed_clean": 1,
+      "analyzed_with_findings": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "go",
+          "version"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "STATICCHECK_CACHE",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "go.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 32,
+        "incomplete": false,
+        "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+        "total_bytes": 32,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "staticcheck",
+          "-version"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "STATICCHECK_CACHE",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "staticcheck.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 29,
+        "incomplete": false,
+        "sha256": "129e8482ea7967a9991755f5236f4613081e8b49c8ac47acd416013ae6a4a658",
+        "total_bytes": 29,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "go",
+          "mod",
+          "edit",
+          "-json"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "STATICCHECK_CACHE",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "go.modedit",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 63,
+        "incomplete": false,
+        "sha256": "025fbc50d93d6e9e13f20075d845589d14555e5248436c897f5bdd6d61cd209d",
+        "total_bytes": 63,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "go",
+          "list",
+          "-e",
+          "-json=Dir,ImportPath,Name,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Incomplete,Error,DepsErrors",
+          "./..."
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "STATICCHECK_CACHE",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "go.list",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 307,
+        "incomplete": false,
+        "sha256": "e60dcf38c3a5b2c3f6cbaa300a18f633efe6123da466d2c0dcc5592ae965de29",
+        "total_bytes": 437,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "staticcheck",
+          "-f",
+          "json",
+          "-checks",
+          "SA*,U1000,-SA1014,-SA1017,-SA2000,-SA2002,-SA4021,-SA5009",
+          "-tests=true",
+          "./..."
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "STATICCHECK_CACHE",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 1,
+      "name": "staticcheck.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 1772,
+        "incomplete": false,
+        "sha256": "586a8fd3e5066794f3fbaef2cd749c3ceaf21d645581521d83545f921803893e",
+        "total_bytes": 2747,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "build_constraint_ignored_files",
+    "cgo_disabled",
+    "default_build_context_only",
+    "go_vet_overlap_checks_excluded",
+    "no_offline_module_cache",
+    "source_suppressions_honored"
+  ],
+  "module": {
+    "dir": ".",
+    "name": "example.test/sc"
+  },
+  "observations": [
+    {
+      "category": "correctness",
+      "id": "obs_3a2a03836475ad7df2af",
+      "location": {
+        "blob_sha256": "eeaac315e58205ba588063c0bfd87331294563eb34da20da2dd9db5cdc05348f",
+        "column_unit": "byte",
+        "end_col": 57,
+        "end_line": 9,
+        "path": "find/find.go",
+        "start_col": 54,
+        "start_line": 9
+      },
+      "location_state": "resolved",
+      "path": "find/find.go",
+      "raw_message": "error parsing regexp: missing closing ]: `[`",
+      "raw_ref": {
+        "byte_end": 222,
+        "byte_start": 0,
+        "execution": "staticcheck.check",
+        "json_pointer": "",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "586a8fd3e5066794f3fbaef2cd749c3ceaf21d645581521d83545f921803893e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "SA1000",
+      "suggested_fix_count": 0,
+      "unit": "example.test/sc/find"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_f7ce89fd81c6cfdef157",
+      "location": {
+        "blob_sha256": "eeaac315e58205ba588063c0bfd87331294563eb34da20da2dd9db5cdc05348f",
+        "column_unit": "byte",
+        "end_col": 81,
+        "end_line": 11,
+        "path": "find/find.go",
+        "start_col": 78,
+        "start_line": 11
+      },
+      "location_state": "resolved",
+      "path": "find/find.go",
+      "raw_message": "do not pass a nil Context, even if a function permits it; pass context.TODO if you are unsure about which Context to use",
+      "raw_ref": {
+        "byte_end": 523,
+        "byte_start": 223,
+        "execution": "staticcheck.check",
+        "json_pointer": "",
+        "record_index": 1,
+        "stream": "stdout",
+        "stream_sha256": "586a8fd3e5066794f3fbaef2cd749c3ceaf21d645581521d83545f921803893e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "SA1012",
+      "suggested_fix_count": 0,
+      "unit": "example.test/sc/find"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_b24c15e0df2141b51875",
+      "location": {
+        "blob_sha256": "eeaac315e58205ba588063c0bfd87331294563eb34da20da2dd9db5cdc05348f",
+        "column_unit": "byte",
+        "end_col": 27,
+        "end_line": 14,
+        "path": "find/find.go",
+        "start_col": 2,
+        "start_line": 14
+      },
+      "location_state": "resolved",
+      "path": "find/find.go",
+      "raw_message": "this value of err is never used",
+      "raw_ref": {
+        "byte_end": 734,
+        "byte_start": 524,
+        "execution": "staticcheck.check",
+        "json_pointer": "",
+        "record_index": 2,
+        "stream": "stdout",
+        "stream_sha256": "586a8fd3e5066794f3fbaef2cd749c3ceaf21d645581521d83545f921803893e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "SA4006",
+      "suggested_fix_count": 0,
+      "unit": "example.test/sc/find"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_ee9cedf72e11223fed29",
+      "location": {
+        "blob_sha256": "eeaac315e58205ba588063c0bfd87331294563eb34da20da2dd9db5cdc05348f",
+        "column_unit": "byte",
+        "end_col": 27,
+        "end_line": 14,
+        "path": "find/find.go",
+        "start_col": 2,
+        "start_line": 14
+      },
+      "location_state": "resolved",
+      "path": "find/find.go",
+      "raw_message": "this value of n is never used",
+      "raw_ref": {
+        "byte_end": 943,
+        "byte_start": 735,
+        "execution": "staticcheck.check",
+        "json_pointer": "",
+        "record_index": 3,
+        "stream": "stdout",
+        "stream_sha256": "586a8fd3e5066794f3fbaef2cd749c3ceaf21d645581521d83545f921803893e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "SA4006",
+      "suggested_fix_count": 0,
+      "unit": "example.test/sc/find"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_6aeb5a1179784417c3ed",
+      "location": {
+        "blob_sha256": "eeaac315e58205ba588063c0bfd87331294563eb34da20da2dd9db5cdc05348f",
+        "column_unit": "byte",
+        "end_col": 19,
+        "end_line": 28,
+        "path": "find/find.go",
+        "start_col": 9,
+        "start_line": 28
+      },
+      "location_state": "resolved",
+      "path": "find/find.go",
+      "raw_message": "this comparison is never true",
+      "raw_ref": {
+        "byte_end": 1384,
+        "byte_start": 944,
+        "execution": "staticcheck.check",
+        "json_pointer": "",
+        "record_index": 4,
+        "stream": "stdout",
+        "stream_sha256": "586a8fd3e5066794f3fbaef2cd749c3ceaf21d645581521d83545f921803893e"
+      },
+      "raw_severity": "error",
+      "related": [
+        {
+          "location": {
+            "blob_sha256": "eeaac315e58205ba588063c0bfd87331294563eb34da20da2dd9db5cdc05348f",
+            "column_unit": "byte",
+            "end_col": 23,
+            "end_line": 27,
+            "path": "find/find.go",
+            "start_col": 18,
+            "start_line": 27
+          },
+          "location_state": "resolved",
+          "path": "find/find.go",
+          "raw_message": "the lhs of the comparison gets its value from here and has a concrete type"
+        }
+      ],
+      "rule_id": "SA4023",
+      "suggested_fix_count": 0,
+      "unit": "example.test/sc/find"
+    },
+    {
+      "category": "maintainability",
+      "id": "obs_2e8ccb82a8b19b97bed5",
+      "location": {
+        "blob_sha256": "eeaac315e58205ba588063c0bfd87331294563eb34da20da2dd9db5cdc05348f",
+        "column_unit": "byte",
+        "end_col": 6,
+        "end_line": 31,
+        "path": "find/find.go",
+        "start_col": 6,
+        "start_line": 31
+      },
+      "location_state": "resolved",
+      "path": "find/find.go",
+      "raw_message": "func unused is unused",
+      "raw_ref": {
+        "byte_end": 1559,
+        "byte_start": 1385,
+        "execution": "staticcheck.check",
+        "json_pointer": "",
+        "record_index": 5,
+        "stream": "stdout",
+        "stream_sha256": "586a8fd3e5066794f3fbaef2cd749c3ceaf21d645581521d83545f921803893e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "U1000",
+      "suggested_fix_count": 0,
+      "unit": "example.test/sc/find"
+    },
+    {
+      "category": "concurrency",
+      "id": "obs_f1cae3b6dc08f5a6b315",
+      "location": {
+        "blob_sha256": "c9d3d4560be33e286decbadfe71e2b23248082db1ec01f8db82b2a94b48a871a",
+        "column_unit": "byte",
+        "end_col": 13,
+        "end_line": 11,
+        "path": "find/find_test.go",
+        "start_col": 2,
+        "start_line": 11
+      },
+      "location_state": "resolved",
+      "path": "find/find_test.go",
+      "raw_message": "empty critical section",
+      "raw_ref": {
+        "byte_end": 1771,
+        "byte_start": 1560,
+        "execution": "staticcheck.check",
+        "json_pointer": "",
+        "record_index": 6,
+        "stream": "stdout",
+        "stream_sha256": "586a8fd3e5066794f3fbaef2cd749c3ceaf21d645581521d83545f921803893e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "SA2001",
+      "suggested_fix_count": 0,
+      "unit": "example.test/sc/find"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 7,
+    "ok": true,
+    "records": 7,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "staticcheck-json-v1",
+    "version": "1"
+  },
+  "patterns": [
+    "./..."
+  ],
+  "rule_pack": {
+    "id": "codeye-go-staticcheck",
+    "repository_config": "overridden",
+    "selection": [
+      "-checks",
+      "SA*,U1000,-SA1014,-SA1017,-SA2000,-SA2002,-SA4021,-SA5009",
+      "-tests=true"
+    ],
+    "source_suppressions": "honored",
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "1448018ffa9a6fc68f0b3976fd38cfc2e7a028a07f79a1c826f9de64683cf06b",
+  "target": {
+    "platform": "linux/amd64",
+    "properties": {
+      "build_tags": "",
+      "cgo_enabled": "0",
+      "go_flags": "",
+      "go_version_target": "module",
+      "goarch": "amd64",
+      "goos": "linux",
+      "tests": "true",
+      "toolchain": "go1.27.4"
+    }
+  },
+  "task_key": "staticcheck",
+  "tool": {
+    "name": "staticcheck",
+    "version": "2026.2.2 (0.8.2)",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

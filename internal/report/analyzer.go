@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -28,7 +29,13 @@ const (
 // Limitation codes of the generic decoder.
 const (
 	LimColumnsNotBytes = "observation_columns_not_bytes"
+	LimRawSeverityText = "observation_raw_severity_omitted"
 )
+
+// rawSeverityPattern is the tool grade a report observation may carry
+// ("error", "warning", "note"): a short word, never free text, so the
+// code-free export can keep it. Other grades stay in the envelope only.
+var rawSeverityPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,31}$`)
 
 // AnalyzerDecoder decodes the generic analyzer observations envelope of the
 // R1 packs (obsdoc, kind analyzer_observations). Observations become report
@@ -96,8 +103,13 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 			return out, invalidf("observation %s is not bound to a recorded stream artifact", o.ID)
 		}
 		msg := o.RawMessage
+		severity := o.RawSeverity
+		if severity != nil && !rawSeverityPattern.MatchString(*severity) {
+			severity = nil
+			out.Limitations = append(out.Limitations, LimRawSeverityText+":"+ctx.Task.Key)
+		}
 		obs := Observation{ID: o.ID, TaskKey: ctx.Task.Key, TaskExecutionID: ctx.TaskExecutionID, Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, RuleID: o.RuleID,
-			RawSeverity: o.RawSeverity, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes,
+			RawSeverity: severity, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes,
 			RawRef: RawRef{ArtifactID: a.ID, SHA256: a.SHA256, StreamIndex: o.RawRef.RecordIndex, JSONPointer: o.RawRef.JSONPointer, ByteStart: o.RawRef.ByteStart, ByteEnd: o.RawRef.ByteEnd}}
 		if l := o.Location; l != nil {
 			startCol, endCol := l.StartCol, l.EndCol
