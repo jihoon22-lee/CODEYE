@@ -62,6 +62,10 @@ const (
 	AreaUnmeasured  = "unmeasured"
 )
 
+// IssueOperationInProgress: a start/stop/backup/restore holds the personal
+// lock, so the state may be changing (same word as codeye status).
+const IssueOperationInProgress = "operation_in_progress"
+
 // backupStaleAfter: an older newest backup is reported "stale".
 const backupStaleAfter = 7 * 24 * time.Hour
 
@@ -95,8 +99,20 @@ func operations(cfg *personal.Config, now time.Time) *Operations {
 		ops.Storage = append(ops.Storage, a)
 	}
 	ops.Backup = backupStatus(cfg.BackupDir, now)
-	state := layout.Inspect(cfg.Listen, false)
+	// Like codeye status: probe the agent lock (an agent without a record) only
+	// while no start/stop/backup/restore holds the personal lock.
+	probe, busy := false, false
+	if unlock, err := layout.Lock(); err == nil {
+		probe = true
+		defer unlock()
+	} else if errors.Is(err, personal.ErrBusy) {
+		busy = true
+	}
+	state := layout.Inspect(cfg.Listen, probe)
 	ops.Processes = ProcessesSummary{Status: "consistent", Issues: append([]string{}, state.Issues...)}
+	if busy {
+		ops.Processes.Issues = append(ops.Processes.Issues, IssueOperationInProgress)
+	}
 	for _, p := range state.Processes {
 		switch p.Role {
 		case personal.RoleController:
@@ -107,7 +123,7 @@ func operations(cfg *personal.Config, now time.Time) *Operations {
 	}
 	if personal.Supported() != nil {
 		ops.Processes.Status = "unsupported"
-	} else if len(state.Issues) > 0 {
+	} else if len(ops.Processes.Issues) > 0 {
 		ops.Processes.Status = "inconsistent"
 	}
 	return ops
@@ -139,6 +155,11 @@ func existingParent(path string) string {
 func backupStatus(dir string, now time.Time) BackupStatus {
 	if dir == "" {
 		return BackupStatus{Status: "not_configured"}
+	}
+	// A path that is not a directory is unreadable on every OS (Windows
+	// reports reading a file as a directory as "not found").
+	if st, err := os.Stat(dir); err == nil && !st.IsDir() {
+		return BackupStatus{Status: "unreadable"}
 	}
 	name, at, err := backup.Newest(dir)
 	switch {

@@ -740,14 +740,15 @@
             "issues": {
               "type": "array",
               "uniqueItems": true,
-              "maxItems": 5,
+              "maxItems": 6,
               "items": {
                 "enum": [
                   "stale_record",
                   "agent_running_without_record",
                   "listen_in_use_without_record",
                   "partially_running",
-                  "record_unreadable"
+                  "record_unreadable",
+                  "operation_in_progress"
                 ]
               }
             }

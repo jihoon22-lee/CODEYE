@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -123,6 +124,45 @@ func TestOperationsStorageBackupAndProcesses(t *testing.T) {
 		ops = operations(cfg, now)
 		if ops.Processes.Status != "inconsistent" || ops.Processes.Agent != personal.ProcReused || !strings.Contains(strings.Join(ops.Processes.Issues, ","), personal.IssueStaleRecord) {
 			t.Fatalf("stale record %+v", ops.Processes)
+		}
+		if err := layout.RemoveRecord(personal.RoleAgent); err != nil {
+			t.Fatal(err)
+		}
+		// A running start/stop holds the personal lock: reported, not probed.
+		unlock, err := layout.Lock()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ops = operations(cfg, now)
+		unlock()
+		if ops.Processes.Status != "inconsistent" || strings.Join(ops.Processes.Issues, ",") != IssueOperationInProgress {
+			t.Fatalf("busy %+v", ops.Processes)
+		}
+		// An agent holding its state lock without a record is found.
+		if _, err := exec.LookPath("/usr/bin/flock"); err == nil {
+			lock := filepath.Join(layout.AgentDir(), "agent.lock")
+			if err := os.WriteFile(lock, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			holder := exec.Command("/usr/bin/flock", lock, "/bin/sleep", "60")
+			if err := holder.Start(); err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = holder.Process.Kill(); _ = holder.Wait() }()
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				if held, _ := layout.AgentLockHeld(); held {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("lock never observed held")
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			ops = operations(cfg, now)
+			if ops.Processes.Status != "inconsistent" || strings.Join(ops.Processes.Issues, ",") != personal.IssueAgentWithoutRecord {
+				t.Fatalf("unrecorded agent %+v", ops.Processes)
+			}
 		}
 	}
 

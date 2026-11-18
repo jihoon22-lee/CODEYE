@@ -92,12 +92,12 @@ def run(base, root, env, probe_env):
     launched = []
 
     def cli(exe, *args, db, expect=0, timeout=120):
+        if args[0] == "start":
+            launched.append((exe, args[2], db))
         result = subprocess.run([exe, *map(str, args)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db]),
                                 capture_output=True, text=True, timeout=timeout)
         text = result.stdout + result.stderr
         assert password not in text and urls[db] not in text, f"{args[0]}: credential 노출"
-        if args[0] == "start":
-            launched.append((exe, args[2], db))
         if expect is not None and result.returncode != expect:
             raise RuntimeError(f"{args[0]} 종료 코드 {result.returncode} (기대 {expect}): {text[-2000:]}")
         return result
@@ -279,7 +279,25 @@ def run(base, root, env, probe_env):
         assert fresh.request("GET", f"runs/{blocked}")["status"] == "queued"
         stopped = json.loads(cli(fixture, "stop", "--config", cfg_c, "--format", "json", db="personal_c", timeout=200).stdout)
         assert stopped["outcome"] == "stopped" and stopped["in_flight_at_stop"] == [], stopped
-        print("PASS: W25 산출물 저장 상한 도달 시 새 작업 거절(storage_quota_exceeded)·기존 보고서 유지")
+        # A node area (logs, measured by the agent and sent in its heartbeat) at its
+        # limit refuses the same queued run; dropping artifacts_bytes clears that quota.
+        doc["quota"] = {"logs_bytes": 1}
+        cfg_c.write_text(json.dumps(doc, indent=2))
+        cli(fixture, "start", "--config", cfg_c, db="personal_c", timeout=200)
+        fresh = Session(state_c, origin_c)
+
+        def node_quota():
+            status = json.loads(cli(fixture, "status", "--config", cfg_c, "--format", "json", db="personal_c").stdout)
+            areas = {s["area"]: s for s in status["storage"]}
+            return status if areas["logs"]["exceeded"] and not areas["artifacts"]["exceeded"] else None
+        node_status = wait_for("노드 저장 영역 상한 보고", node_quota, 30)
+        assert next(s for s in node_status["storage"] if s["area"] == "logs")["basis"] == "node_heartbeat", node_status
+        assert fresh.request("GET", f"runs/{blocked}")["progress"]["waiting_reason"] == "storage_quota_exceeded"
+        time.sleep(2)
+        assert fresh.request("GET", f"runs/{blocked}")["status"] == "queued" and node_status["in_flight"] == []
+        stopped = json.loads(cli(fixture, "stop", "--config", cfg_c, "--format", "json", db="personal_c", timeout=200).stdout)
+        assert stopped["outcome"] == "stopped" and stopped["in_flight_at_stop"] == [], stopped
+        print("PASS: W25 산출물·노드 저장 영역(logs) 상한 도달 시 새 작업 거절(storage_quota_exceeded)·기존 보고서 유지")
     finally:
         for exe, cfg, db in launched:
             subprocess.run([exe, "stop", "--config", str(cfg)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db]),

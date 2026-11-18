@@ -16,6 +16,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -276,7 +277,9 @@ func (c *Config) validate(knownTools []string) error {
 	if a.Name != "" && (strings.TrimSpace(a.Name) != a.Name || utf8.RuneCountInString(a.Name) > 100) {
 		return errors.New("agent.name must be at most 100 characters without surrounding spaces")
 	}
-	if a.ToolchainPath == "" {
+	// The default is a Linux PATH; personal start/stop is Linux-only (W25), so
+	// on other systems the field stays empty unless set.
+	if a.ToolchainPath == "" && runtime.GOOS != "windows" {
 		a.ToolchainPath = DefaultToolchainPath
 	}
 	for _, p := range filepath.SplitList(a.ToolchainPath) {

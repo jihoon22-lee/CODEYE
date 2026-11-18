@@ -28,7 +28,7 @@ func TestParseDefaultsAndStrictness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Listen != DefaultListen || c.Agent.MaxWorkers != 1 || c.Stop.DrainTimeoutSeconds != DefaultDrainSeconds || c.Stop.CancelTimeoutSeconds != DefaultCancelSeconds || c.Agent.ToolchainPath == "" {
+	if c.Listen != DefaultListen || c.Agent.MaxWorkers != 1 || c.Stop.DrainTimeoutSeconds != DefaultDrainSeconds || c.Stop.CancelTimeoutSeconds != DefaultCancelSeconds || (runtime.GOOS != "windows" && c.Agent.ToolchainPath != DefaultToolchainPath) {
 		t.Fatalf("defaults %+v", c)
 	}
 	if got := c.Quota.NodeLimits(); len(got) != 1 || got["workspace"] != 5 || c.Quota.Limit("artifacts") != 7 {
