@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -292,6 +293,19 @@ func TestAnalyzerDecoderStaticcheckFindings(t *testing.T) {
 	}
 	if _, err := RenderHTML(r, Digest(b), Korean); err != nil {
 		t.Fatal(err)
+	}
+	// CODEYE_W19_REPORT_DUMP=DIR writes both projections for the JSON Schema
+	// check of docs/39 §10 (schemas/report.schema.json via validate_bundle).
+	if dir := os.Getenv("CODEYE_W19_REPORT_DUMP"); dir != "" {
+		full, err := Marshal(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, body := range map[string][]byte{"report-staticcheck-full.json": full, "report-staticcheck-codefree.json": b} {
+			if err := os.WriteFile(filepath.Join(dir, name), body, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 

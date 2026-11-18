@@ -239,6 +239,7 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 | 시험 | 범위 |
 |---|---|
 | `staticcheck.TestRealStaticcheck*` (도구 필요) | findings exit 1, 정상, 타입 오류 부분 parse, 오프라인 의존·toolchain, 분석 대상 없음, 스냅샷 밖 replace, 손상 출력, 취소·timeout, go vet 중복 제외, 원본·스냅샷 불변, 노드 경로 미노출, 재실행 ID 동일 |
+| `staticcheck.TestRealStaticcheckOperatorModuleCache` (도구와 `CODEYE_TEST_GOMODCACHE` 필요) | 운영자 모듈 캐시의 의존 모듈로 오프라인 성공, 캐시는 보호 경로이며 실행 전후 내용 동일 |
 | `staticcheck.TestReplay*` (CI) | 캡처 바이트 재생: 위 판정, exit 매핑 표, 버전 계약, argv·cwd·환경·제한시간 |
 | `staticcheck.TestParse*`, `TestPlanModules`, `TestCategoryPolicyAndArgs` | parser(손상·잘림·알 수 없는 필드), stderr, 버전, 계획 key·순서·필수 아님·Go 없음 |
 | `pack.Test*` | 계획 연결·dispatch·소유권·예약 이름·필수 불일치·대역 envelope·배타 쓰기 |
@@ -249,6 +250,8 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 | `discovery.TestAnalyzerToolProbe*`, `envdoc.TestAnalyzerToolsValidation` | probe 실행 계약, not_probed, 실패 기록, 생태계 범위, 실제 probe |
 | `review.TestR1InterpretReadsGenericEnvelope` | R1 해석 입력에 두 엔진 관찰, not-run 행, 누락 상류 |
 | `run.TestAnalyzerPackWith*` (Linux) | 실제 워커: CI 조건의 미설정 가시성, 실제 go vet + staticcheck end-to-end |
+
+실제 staticcheck finding이 든 보고서(전체·코드 제외)는 `CODEYE_W19_REPORT_DUMP=<dir> go test -run TestAnalyzerDecoderStaticcheckFindings ./internal/report/`로 꺼내 `report.schema.json`·`finding.schema.json`으로 검증했다(fixture의 Go 프로젝트에서는 staticcheck 진단이 없어 node smoke가 이 형태를 만들지 않는다). Windows는 바뀐 패키지의 시험을 windows/amd64로 빌드해 WSL interop으로 실행했다. Windows용 Go가 없는 환경이라 Go toolchain이 필요한 시험(재생, go vet 고정, 실제 probe)은 건너뛰었고 Windows CI의 Go로 실행된다. review-v1 역할은 스냅샷 코퍼스만 읽고 정적 계획·도구 산출물을 읽지 않으므로 staticcheck 작업이 추가돼도 v1 요청 바이트는 같다.
 
 실행 결과와 명령별 통과 여부는 W19 PR 보고에 적는다. 실제 end-to-end는 `CODEYE_TEST_STATICCHECK`를 설정한 `go test -run TestAnalyzerPackWithRealStaticcheck ./internal/worker/run/`과 `scripts/test_postgres.py --nodes`(같은 변수로 `--staticcheck` 전달)로 실행한다.
 
@@ -261,4 +264,5 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 - go vet은 Go가 없는 스냅샷에도 R0의 `unsupported` 자리 작업을 계획한다. review-v1 고정 때문에 유지했다. W17 이후 Go 없는 노드·스냅샷의 표시를 다시 정해야 한다.
 - 탐색 probe는 범위 안 생태계의 도구만 기록한다. `any` 생태계 도구(W21)는 항상 기록된다.
 - `tool_processed_files` 합집합은 처리 수가 있는 모든 행이 같은 수의 경로를 줄 때만 쓴다. 그렇지 않으면 합계로 돌아간다.
+- W23 비교는 같은 분석기의 `tool_version`만 대조한다. 규칙 선택(`rule_pack`, staticcheck의 `Checks`)이 바뀌어도 비교는 이를 규칙 변경으로 보지 않는다. 팩이 늘기 전에 규칙 팩 ID·버전을 보고서 도구 행에 올려 비교에 넣어야 한다.
 - 보고서 builder 버전은 W23의 `3`을 유지했다. 같은 입력이라도 staticcheck envelope가 있는 attempt는 W19 이전 builder에서 미인식 artifact였으므로 보고서 내용이 다르다. W19와 W23 이전에 게시된 staticcheck 보고서는 없다.

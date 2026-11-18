@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/nativepath"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
@@ -82,7 +83,13 @@ func TestAnalyzerToolProbes(t *testing.T) {
 		t.Fatalf("executions %v specs %d", names, len(runner.specs))
 	}
 	spec := runner.specs[1]
-	wantEnv := map[string]string{"PATH": filepath.Dir(sc), "LANG": "C.UTF-8"}
+	resolved, err := nativepath.Resolve(sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// PATH is the directory of the resolved executable (Windows temp dirs
+	// may resolve to another spelling than t.TempDir returns).
+	wantEnv := map[string]string{"PATH": filepath.Dir(resolved), "LANG": "C.UTF-8"}
 	if runtime.GOOS == "windows" {
 		if v := os.Getenv("SystemRoot"); v != "" {
 			wantEnv["SystemRoot"] = v

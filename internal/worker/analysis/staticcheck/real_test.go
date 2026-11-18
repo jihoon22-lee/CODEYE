@@ -58,7 +58,8 @@ func ruleCount(doc obsdoc.Document) map[string]int {
 // TC-07: findings make staticcheck exit 1; with only check records and a
 // clean stderr that is success_with_findings, not a crash.
 func TestRealStaticcheckFindingsExitOne(t *testing.T) {
-	base := filepath.Join(t.TempDir(), "공백 & <dir>")
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
+	base := filepath.Join(t.TempDir(), "공백 & (dir)")
 	fx := newFixture(t, base, findingFiles(), domain.Scope{})
 	before, snapBefore := treeHash(t, fx.SourceRoot), treeHash(t, fx.Job.Snapshot.SnapshotDir)
 	a := newAnalyzer(t, "")
@@ -125,6 +126,7 @@ func TestRealStaticcheckFindingsExitOne(t *testing.T) {
 }
 
 func TestRealStaticcheckClean(t *testing.T) {
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	fx := newFixture(t, "", map[string]string{"go.mod": fixGoMod, "clean/c.go": fixClean}, domain.Scope{})
 	res := runTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
 	capture(t, "clean", res)
@@ -138,6 +140,7 @@ func TestRealStaticcheckClean(t *testing.T) {
 // package_errors, the other package's observations are kept (partial parse)
 // and processed files are unknown.
 func TestRealStaticcheckTypeErrorPartial(t *testing.T) {
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	files := findingFiles()
 	files["typeerr/t.go"] = fixType
 	fx := newFixture(t, "", files, domain.Scope{})
@@ -159,6 +162,7 @@ func TestRealStaticcheckTypeErrorPartial(t *testing.T) {
 // TC-68: offline dependency and toolchain gaps are configuration errors; no
 // download fallback, the empty module cache gains no file.
 func TestRealStaticcheckOfflineConfigurationErrors(t *testing.T) {
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	a := newAnalyzer(t, "")
 	dep := newFixture(t, "", map[string]string{"go.mod": "module example.test/dep\n\ngo 1.22\n\nrequire golang.org/x/text v0.3.0\n", "dep.go": fixDep}, domain.Scope{})
 	res := runTask(t, a, dep.Job, "staticcheck", &executor.Executor{})
@@ -189,6 +193,7 @@ func TestRealStaticcheckOfflineConfigurationErrors(t *testing.T) {
 // Every package excluded by build constraints: staticcheck exits 0 with only
 // a stderr warning, which is not a clean result.
 func TestRealStaticcheckNothingAnalyzable(t *testing.T) {
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	fx := newFixture(t, "", map[string]string{"go.mod": fixGoMod, "tagged/t.go": fixTag}, domain.Scope{})
 	res := runTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
 	capture(t, "no-packages", res)
@@ -201,6 +206,7 @@ func TestRealStaticcheckNothingAnalyzable(t *testing.T) {
 // A filesystem replace leaving the snapshot is refused before go list and
 // staticcheck read the host path.
 func TestRealStaticcheckReplaceOutsideRefused(t *testing.T) {
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	fx := newFixture(t, "", map[string]string{"go.mod": "module example.test/r\n\ngo 1.22\n\nreplace example.test/x => ../outside\n", "r.go": "package r\n"}, domain.Scope{})
 	runner := &mutatingRunner{inner: &executor.Executor{}}
 	res := runTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", runner)
@@ -213,6 +219,7 @@ func TestRealStaticcheckReplaceOutsideRefused(t *testing.T) {
 // TC-08 on real bytes: truncated or garbled stdout and a crash exit are
 // failures that keep what was parsed; none of them reads as zero findings.
 func TestRealStaticcheckDamagedOutput(t *testing.T) {
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	a := newAnalyzer(t, "")
 	isCheck := func(s executor.Spec) bool { return len(s.Args) > 0 && s.Args[0] == "-f" }
 	cases := []struct {
@@ -251,6 +258,7 @@ func TestRealStaticcheckDamagedOutput(t *testing.T) {
 }
 
 func TestRealStaticcheckCancelAndTimeout(t *testing.T) {
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	a := newAnalyzer(t, "")
 	fx := newFixture(t, "", findingFiles(), domain.Scope{})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -277,6 +285,7 @@ func TestRealStaticcheckCancelAndTimeout(t *testing.T) {
 // the same run; SA4000 (identical operands) stays on as a broader check, so
 // it and go vet's bools both report line 37 as separate observations.
 func TestRealStaticcheckVetOverlapExcluded(t *testing.T) {
+	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	fx := newFixture(t, "", map[string]string{"go.mod": fixGoMod, "overlap/o.go": fixOverlap, "overlap/o_test.go": fixOverlapT}, domain.Scope{})
 	res := runTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
 	capture(t, "overlap", res)
