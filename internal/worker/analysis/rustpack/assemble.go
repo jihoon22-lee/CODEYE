@@ -481,7 +481,12 @@ func assemble(in assembleInput) obsdoc.Document {
 		st = ParseStream(in.Main.Stdout.Data)
 		parsed = st.UnparsedBytes == 0 && st.ShapeErrors == 0 && st.DecodeError == ""
 		stdoutSHA = obsdoc.SHA256Hex(in.Main.Stdout.Data)
-		facts = ClassifyStderr(in.Main.Stderr.Data)
+		// stderr explains a failed run; a run that exited 0 with a successful
+		// build-finished is decided by those two alone (a build script can
+		// print any text).
+		if in.Main.Status == executor.StatusExited && in.Main.ExitCode != nil && *in.Main.ExitCode != 0 {
+			facts = ClassifyStderr(in.Main.Stderr.Data)
+		}
 	}
 	doc.Parse.Records, doc.Parse.UnparsedBytes, doc.Parse.ShapeErrors, doc.Parse.DecodeError = st.Values, st.UnparsedBytes, st.ShapeErrors, st.DecodeError
 
@@ -652,7 +657,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	if unattributed > 0 {
 		limitations = append(limitations, "diagnostics_without_location_omitted")
 	}
-	if facts.Lines > 0 && facts.Other > 0 {
+	if facts.Other > 0 {
 		limitations = append(limitations, "tool_stderr_errors")
 	}
 	if in.Linker {

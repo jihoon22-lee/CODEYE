@@ -1,4 +1,4 @@
     Checking typeerr v0.1.0 ([REDACTED])
-error: could not compile `typeerr` (lib test) due to 1 previous error
-warning: build failed, waiting for other jobs to finish...
 error: could not compile `typeerr` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `typeerr` (lib test) due to 1 previous error

@@ -393,6 +393,10 @@ func TestRealWorkspace(t *testing.T) {
 	if doc.Target.Properties["rustc"] == "1.0.0" || !slices.Contains(doc.Limitations, "rust_toolchain_file_ignored") || !RustcVersionTested(doc.Target.Properties["rustc"]) {
 		t.Fatalf("toolchain %v limitations %v", doc.Target.Properties, doc.Limitations)
 	}
+	// The repository's build.target-dir is overridden by CARGO_TARGET_DIR (measured).
+	if _, err := os.Stat(filepath.Join(fx.Job.Snapshot.WorkspaceDir, "repo-target")); err == nil {
+		t.Fatal("the repository's build.target-dir was used")
+	}
 	plan, err := CheckPlan(context.Background(), fx.Job)
 	if err != nil || len(plan) != 1 || plan[0].Module != "." || !plan[0].RepositoryCode {
 		t.Fatalf("plan %+v %v", plan, err)

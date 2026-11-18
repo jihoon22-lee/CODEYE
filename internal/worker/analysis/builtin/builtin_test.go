@@ -108,7 +108,8 @@ func TestToolFlagsAndProbes(t *testing.T) {
 	if got := ToolFlags(); !slices.Equal(got, []string{"cargo", "clippy", "staticcheck"}) {
 		t.Fatalf("flags %v", got)
 	}
-	probes := Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc", "cargo": "/tc/cargo", "clippy": "/tc/cargo-clippy"}})
+	tc := fakeRust(t, false)
+	probes := Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc", "cargo": filepath.Join(tc, "cargo"), "clippy": filepath.Join(tc, "cargo-clippy")}})
 	if len(probes) != 3 || probes[0].Tool != "cargo" || probes[1].Tool != "clippy" || probes[2].Tool != "staticcheck" {
 		t.Fatalf("probes %+v", probes)
 	}
@@ -120,13 +121,13 @@ func TestToolFlagsAndProbes(t *testing.T) {
 		t.Fatalf("version %q %v", v, ok)
 	}
 	// The Rust pack (W20): cargo and clippy are probed directly, in the rust ecosystem.
-	if c := probes[0]; c.Executable != "/tc/cargo" || !slices.Equal(c.Analyzers, []string{"rust.cargocheck"}) || !slices.Equal(c.Args, []string{"--version"}) || !slices.Equal(c.Ecosystems, []string{"rust"}) || c.Interpreter != "" {
+	if c := probes[0]; c.Executable != filepath.Join(tc, "cargo") || !slices.Equal(c.Analyzers, []string{"rust.cargocheck"}) || !slices.Equal(c.Args, []string{"--version"}) || !slices.Equal(c.Ecosystems, []string{"rust"}) || c.Interpreter != "" {
 		t.Fatalf("cargo probe %+v", c)
 	}
 	if v, ok := probes[0].ParseVersion([]byte("cargo 1.99.1 (5f94df478 2026-08-27)\n")); !ok || v != "1.99.1 (5f94df478 2026-08-27)" {
 		t.Fatalf("cargo version %q %v", v, ok)
 	}
-	if c := probes[1]; c.Executable != "/tc/cargo-clippy" || !slices.Equal(c.Analyzers, []string{"rust.clippy"}) {
+	if c := probes[1]; c.Executable != filepath.Join(tc, "cargo-clippy") || !slices.Equal(c.Analyzers, []string{"rust.clippy"}) {
 		t.Fatalf("clippy probe %+v", c)
 	}
 	for _, p := range Probes(Config{}) {

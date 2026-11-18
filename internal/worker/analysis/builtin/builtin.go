@@ -222,7 +222,7 @@ func compose(ctx context.Context, cfg Config, runner executor.Runner, entries []
 // tools other than the go toolchain (which discovery observes as a
 // runtime): one per tool, not_probed when the operator configured no path.
 // A tool run by an interpreter toolchain carries that toolchain's path.
-func Probes(cfg Config) []pack.ToolProbe { return probesOf(cfg, catalog()) }
+func Probes(cfg Config) []pack.ToolProbe { return guardRustProbes(cfg, probesOf(cfg, catalog())) }
 
 func probesOf(cfg Config, entries []entry) []pack.ToolProbe {
 	byTool := map[string]*pack.ToolProbe{}

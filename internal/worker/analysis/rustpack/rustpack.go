@@ -667,17 +667,25 @@ func ruleConfig(k Kind, files map[string]source.Entry, mod, workspace string, re
 	if k == KindClippy {
 		probe = append(probe, "clippy.toml", ".clippy.toml")
 	}
-	for dir := filepath.Dir(workspace); ; {
-		for _, n := range probe {
-			if _, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(n))); err == nil || !errors.Is(err, fs.ErrNotExist) {
-				external = true
+	// Cargo uses the process's real working directory: walk the ancestors of
+	// the workspace as named and as the symlinks resolve.
+	starts := []string{filepath.Dir(workspace)}
+	if r, err := filepath.EvalSymlinks(workspace); err == nil && filepath.Dir(r) != starts[0] {
+		starts = append(starts, filepath.Dir(r))
+	}
+	for _, start := range starts {
+		for dir := start; ; {
+			for _, n := range probe {
+				if _, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(n))); err == nil || !errors.Is(err, fs.ErrNotExist) {
+					external = true
+				}
 			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
 		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
 	}
 	paths := make([]string, 0, len(set))
 	for p := range set {

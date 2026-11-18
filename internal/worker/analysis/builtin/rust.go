@@ -50,3 +50,27 @@ func probeRust(ctx context.Context, cfg Config, runner executor.Runner, name str
 	}
 	return built{analyzer: a}
 }
+
+// guardRustProbes keeps env.discover from executing a Rust tool path the pack
+// refuses (a rustup proxy would pick a toolchain from the repository and may
+// download one). The path of a refused tool is replaced by a non-absolute
+// marker: discovery records probe_failed and starts nothing.
+func guardRustProbes(cfg Config, probes []pack.ToolProbe) []pack.ToolProbe {
+	for i := range probes {
+		p := &probes[i]
+		if p.Executable == "" {
+			continue
+		}
+		var err error
+		switch p.Tool {
+		case rustpack.CheckTool:
+			_, err = rustpack.New(rustpack.KindCheck, rustpack.Config{Cargo: p.Executable})
+		case rustpack.ClippyTool:
+			_, err = rustpack.New(rustpack.KindClippy, rustpack.Config{Cargo: cfg.Tools[rustpack.CheckTool], Clippy: p.Executable})
+		}
+		if err != nil {
+			p.Executable = "refused"
+		}
+	}
+	return probes
+}

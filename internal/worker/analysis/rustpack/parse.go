@@ -442,15 +442,30 @@ var (
 	errorLine = regexp.MustCompile(`^error(\[E[0-9]{4}\])?: `)
 )
 
-// ClassifyStderr reads cargo's stderr by stable message prefixes and phrases.
+// ClassifyStderr reads cargo's stderr. Only cargo's own error lines count: they
+// start in column 0 with "error". Everything else is not evidence of anything:
+// "warning:" lines (a build script can print `cargo:warning=...` with any
+// text), and the indented stderr of a failed build script or tool. The caller
+// applies the facts to a run that exited non-zero only.
 func ClassifyStderr(stderr []byte) StderrFacts {
 	var f StderrFacts
+	afterError := false
 	for _, l := range strings.Split(string(stderr), "\n") {
 		l = strings.TrimRight(l, "\r")
 		if strings.TrimSpace(l) == "" {
 			continue
 		}
 		f.Lines++
+		if !strings.HasPrefix(l, "error") {
+			// TOML syntax errors point into the manifest on the next line:
+			// " --> Cargo.toml:1:9".
+			if afterError && strings.HasPrefix(l, " --> ") && strings.Contains(l, "Cargo.toml:") {
+				f.ManifestInvalid = true
+			}
+			afterError = false
+			continue
+		}
+		afterError = true
 		switch {
 		case strings.Contains(l, "cannot create the lock file") && strings.Contains(l, "--locked"):
 			f.LockMissing = true
@@ -459,19 +474,16 @@ func ClassifyStderr(stderr []byte) StderrFacts {
 		case strings.Contains(l, "no matching package named"), strings.Contains(l, "failed to select a version for"), strings.Contains(l, "failed to get `"),
 			strings.Contains(l, "failed to load source for dependency"), strings.Contains(l, "unable to get packages from source"),
 			strings.Contains(l, "attempting to make an HTTP request, but --offline was specified"), strings.Contains(l, "failed to download"),
-			strings.Contains(l, "is not available offline"), strings.Contains(l, "can't update"):
+			strings.Contains(l, "is not available offline"):
 			f.Dependency = true
 		case strings.Contains(l, "linker `") && strings.Contains(l, "not found"):
 			f.Linker = true
-		case strings.Contains(l, "failed to parse manifest"), strings.Contains(l, "could not find `Cargo.toml`"), strings.Contains(l, "failed to load manifest for"),
-			strings.HasPrefix(strings.TrimSpace(l), "--> ") && strings.Contains(l, "Cargo.toml:"):
-			// TOML syntax errors point into the manifest: " --> Cargo.toml:1:9".
+		case strings.Contains(l, "failed to parse manifest"), strings.Contains(l, "could not find `Cargo.toml`"), strings.Contains(l, "failed to load manifest for"):
 			f.ManifestInvalid = true
 		case strings.Contains(l, "failed to run custom build command"):
 			f.BuildScript = true
 		case strings.Contains(l, "requires rustc ") && strings.Contains(l, "or newer"), strings.Contains(l, "is not supported by the following packages"),
-			strings.Contains(l, "is required, but it is not available"),
-			strings.Contains(l, "feature `") && strings.Contains(l, "is required"), strings.Contains(l, "can't find crate for `std`"), strings.Contains(l, "can't find crate for `core`"):
+			strings.Contains(l, "can't find crate for `std`"), strings.Contains(l, "can't find crate for `core`"):
 			f.Toolchain = true
 		case strings.HasPrefix(l, "error: could not compile "):
 			f.CompileError = true

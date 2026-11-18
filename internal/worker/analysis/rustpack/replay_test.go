@@ -236,7 +236,7 @@ func TestReplayClippyFindings(t *testing.T) {
 		t.Fatalf("executions %v limitations %v", execNames(doc), doc.Limitations)
 	}
 	m := x.r.mains[0]
-	if !slices.Equal(m.Args, ClippyArgs()) || filepath.Base(m.Executable) != exeName("cargo-clippy") || m.Env["CARGO"] != filepath.Join(x.a.tcDir, exeName("cargo")) {
+	if !slices.Equal(m.Args, ClippyArgs()) || filepath.Base(m.Executable) != exeName("cargo-clippy") || m.Env["CARGO"] != x.a.cargo {
 		t.Fatalf("clippy spec %+v", m)
 	}
 	// clippy runs as cargo-clippy, never as `cargo clippy`: a repository alias
@@ -307,6 +307,7 @@ func TestReplayOutcomeTable(t *testing.T) {
 		}},
 		{"linker missing", "buildscript", "check-nolinker", KindCheck, domain.TaskFailed, ReasonLinker, obsdoc.ExitConfigurationError, nil, true, nil},
 		{"build script fails", "buildfail", "check-buildfail", KindCheck, domain.TaskFailed, ReasonBuildScript, obsdoc.ExitExecutionError, nil, true, nil},
+		{"vendored dependency", "vendored", "check-vendored", KindCheck, domain.TaskSucceeded, "", obsdoc.ExitSuccessWithoutFindings, []string{"src/lib.rs"}, false, nil},
 		{"offline dependency missing", "nodeps", "check-nodeps", KindCheck, domain.TaskFailed, ReasonDependency, obsdoc.ExitConfigurationError, nil, false, nil},
 		{"lock file missing", "missinglock", "check-missinglock", KindCheck, domain.TaskFailed, ReasonLockMissing, obsdoc.ExitConfigurationError, nil, false, nil},
 		{"lock file outdated", "lockoutdated", "check-lockoutdated", KindCheck, domain.TaskFailed, ReasonLockOutdated, obsdoc.ExitConfigurationError, nil, false, nil},

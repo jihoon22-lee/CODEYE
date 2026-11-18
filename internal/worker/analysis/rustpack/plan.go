@@ -116,11 +116,18 @@ func planModules(m source.Manifest, scope domain.Scope, name, title string) (pla
 	}
 	sort.Strings(manifestDirs)
 	sort.Strings(rs)
+	// A root has no Cargo.toml in any ancestor directory (membership, not
+	// sort order: "-x" sorts before ".").
+	has := map[string]bool{}
+	for _, d := range manifestDirs {
+		has[d] = true
+	}
 	var roots []string
 	for _, d := range manifestDirs {
 		nested := false
-		for _, r := range roots {
-			if r != d && underDir(d, r) {
+		for a := d; a != "."; {
+			a = dirOf(a)
+			if has[a] {
 				nested = true
 				break
 			}
