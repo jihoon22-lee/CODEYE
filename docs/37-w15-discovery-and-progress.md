@@ -183,7 +183,7 @@ discovery·go vet 뒤에 다섯 task를 이 순서로 둔다. 생략은 `skipped
 |---|---|---|
 | TC-97(모델 경로, 플랫폼 검사) | 적대적 AGENTS.md가 있어도 OpenCode 요청 설정은 같고 그 문구는 `<review-input>` 안에만 있다. 꾸민 근거 ID, 상위 경로로 넓힌 규칙, 실행·재현 주장, 판정 필드를 붙인 환경 출력은 거부되고 하위 역할로 넘어가지 않는다. | `TestTC97DocumentContentCannotChangeRequestConfig`, `TestR1FabricatedEvidenceIsQuarantined`, `TestR1ScopeGeneralizationRejected`, `TestR1ExecutionAndReproductionClaimsRejected`, `TestR1EnvironmentOutputRules` |
 | 계획·생략 | 순서·단계·필수 여부와 `no_documents`·`no_environment_gap`·`no_tool_observations`, 모델 실패 시 탐색 사실 보존과 하위 역할의 한계 기록 | `TestR1PlanOrderStagesAndRequired`, `TestR1SkipReasons`, `TestR1ModelFailureKeepsFactsAndLimitsDownstream` |
-| 실제 worker 경로 | 실제 go vet(go1.27.4)과 scripted caller로 다섯 역할을 실행했다. `svc/b`의 vet 실패, interpret 생략(`no_tool_observations`), 보고서의 필수 세 역할 수락과 `performed`, 선택 역할과 사유, 팩 표시를 확인했다. | `TestReviewR1ThroughTheWorkerAndReport` |
+| 실제 worker 경로 | 실제 go vet(go1.27.4)과 scripted caller로 다섯 역할을 실행하고 기본 registry로 보고서를 만들었다. fixture 그대로는 `svc/b`의 vet 실패와 interpret 생략(`no_tool_observations`)을, 루트 모듈에 printf 위반 파일 하나를 더하면 실제 go vet 관찰이 interpret 입력·후보·보고서 결과까지 같은 ID로 이어짐을 확인했다. 두 경우 모두 필수 세 역할이 수락되어 `performed`이고 선택 역할·사유·팩이 표시된다. 같은 발췌가 investigate(`context`)와 interpret(`observation`)에서 다른 출처 표시로 verify에 오는 경우를 이 시험에서 발견해, 보고서 연결 검사가 앞 단계의 어느 한 표시와 같으면 받도록 고쳤다. | `TestReviewR1ThroughTheWorkerAndReport` |
 | 보고서 규칙 | 필수 검토 task가 없으면 `not_performed`, R0 세 역할 규칙 유지, 연결이 어긋난 단계 제외 | `TestR1RequiredRolesFromPlan`, `TestR1NoRequiredReviewTaskIsNotPerformed`, `TestR0ReviewRolesUnchanged`, `TestR1LineageRejected` |
 | 요청 크기 | fixture·최악 입력 모두 40,000바이트 이하 | `TestR1RequestSizeOnFixture`, `TestR1RequestSizeWorstCase` |
 

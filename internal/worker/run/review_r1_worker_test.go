@@ -28,8 +28,9 @@ import (
 )
 
 // r1Scripted answers every review-r1 role from the request input alone
-// (first gap requirement, first code excerpt, every candidate). Only the
-// model is scripted; it never starts a process or contacts a model.
+// (first gap requirement, first code excerpt, first observation, every
+// candidate). Only the model is scripted; it never starts a process or
+// contacts a model.
 type r1Scripted struct {
 	mu    sync.Mutex
 	roles []string
@@ -53,6 +54,10 @@ func (f *r1Scripted) Review(_ context.Context, _ executor.Runner, q opencode.Req
 			ID       string   `json:"id"`
 			Evidence []string `json:"evidence_ids"`
 		} `json:"candidates"`
+		Observations []struct {
+			ID       string   `json:"id"`
+			Evidence []string `json:"evidence_ids"`
+		} `json:"observations"`
 	}
 	if json.Unmarshal(q.Input, &in) != nil {
 		reply.Reason = "invalid_review_input"
@@ -80,6 +85,11 @@ func (f *r1Scripted) Review(_ context.Context, _ executor.Runner, q opencode.Req
 		}
 		body = map[string]any{"candidates": []map[string]any{{"title": "재시도 경계가 불분명함", "condition": "하위 호출이 계속 실패하는 경우", "impact": "호출이 반복될 수 있다.",
 			"improvement": "재시도 한도를 문서와 맞춘다.", "counterpoint": "호출자가 한도를 보장할 수 있다.", "evidence_ids": []string{code}}}}
+	case "interpret":
+		o := in.Observations[0]
+		body = map[string]any{"hypotheses": []map[string]any{{"observation_ids": []string{o.ID}, "title": "형식 문자열과 인자 형식이 다름", "condition": "Describe가 호출되는 경우",
+			"impact": "출력 문자열이 잘못 만들어진다.", "improvement": "형식 지정자를 인자 형식과 맞춘다.", "counterpoint": "출력이 사람에게만 보이는 진단일 수 있다.", "evidence_ids": o.Evidence[:1]}},
+			"limits": []any{}}
 	case "verify":
 		var out []map[string]any
 		for _, c := range in.Candidates {
@@ -155,129 +165,177 @@ func reportInput(t *testing.T, fa *fakeAgent, m analysis.ResultManifest, manifes
 
 // W15 phase 2 through the real worker: discovery → actual go vet → the five
 // review-r1 roles with a scripted model, then the report built from the
-// uploaded artifacts with the default registry.
+// uploaded artifacts with the default registry. "vet finding" adds one file
+// to the root module so go vet reports a real observation and the interpret
+// role, its observation links and the report lineage run on real data.
 func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 	goExe := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
-	e := newEnv(t)
-	if err := os.Remove(filepath.Join(e.src, "main.go")); err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		name               string
+		extra              map[string]string
+		interpret, calls   string
+		optional, findings []string
+	}{
+		{name: "clean", interpret: "review.interpret=skipped_policy:no_tool_observations", calls: "environment,documents,investigate,verify",
+			optional: []string{"review.environment=accepted", "review.interpret=skipped:no_tool_observations"}, findings: []string{"review_investigate_1=inconclusive"}},
+		{name: "vet finding", extra: map[string]string{"describe.go": "package gateway\n\nimport \"fmt\"\n\n// Describe formats n for logs.\nfunc Describe(n int) string {\n\treturn fmt.Sprintf(\"%s retries\", n)\n}\n"},
+			interpret: "review.interpret=succeeded", calls: "environment,documents,investigate,interpret,verify",
+			optional: []string{"review.environment=accepted", "review.interpret=accepted"}, findings: []string{"review_interpret_1=inconclusive", "review_investigate_1=inconclusive"}},
 	}
-	copyW15(t, e.src)
-	vet, err := govet.New(govet.Config{GoExecutable: goExe})
-	if err != nil {
-		t.Fatal(err)
-	}
-	caller := &r1Scripted{}
-	h, err := discovery.Wrap(review.R1Handler{Static: vet, Caller: caller}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	fa, in, done, _ := startWorker(t, h)
-	defer func() {
-		in.Close()
-		if code := <-done; code != 0 {
-			t.Errorf("worker exit %d", code)
-		}
-	}()
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		for {
-			select {
-			case <-fa.started:
-			case <-stop:
-				return
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			if err := os.Remove(filepath.Join(e.src, "main.go")); err != nil {
+				t.Fatal(err)
 			}
-		}
-	}()
-	fa.hello(e)
-	job := localJob(e)
-	job.AllowModelReview = true
-	if err := fa.conn.Send(job); err != nil {
-		t.Fatal(err)
-	}
-	var c *workerproto.Complete
-	select {
-	case c = <-fa.complete:
-	case <-time.After(90 * time.Second):
-		t.Fatalf("no complete; messages %v", fa.kinds())
-	}
-	if c.Outcome != "partial" || c.ResultManifestClientArtifact == nil || c.CleanupState != "confirmed" {
-		t.Fatalf("completion: %+v", c)
-	}
-	fa.mu.Lock()
-	defer fa.mu.Unlock()
-	var m analysis.ResultManifest
-	if err := json.Unmarshal(fa.artifacts[*c.ResultManifestClientArtifact], &m); err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, task := range m.Tasks {
-		row := task.Key + "=" + string(task.Status)
-		if task.Reason != nil {
-			row += ":" + *task.Reason
-		}
-		got = append(got, row)
-	}
-	want := []string{"env.discover=succeeded", "docs.discover=succeeded", "go-vet=succeeded", "go-vet.m01=succeeded", "go-vet.m02=failed:" + govet.ReasonToolchain,
-		"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", "review.interpret=skipped_policy:no_tool_observations", "review.verify=succeeded"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("tasks\n got %v\nwant %v", got, want)
-	}
-	caller.mu.Lock()
-	roles := strings.Join(caller.roles, ",")
-	caller.mu.Unlock()
-	if roles != "environment,documents,investigate,verify" {
-		t.Fatalf("model calls %s", roles)
-	}
+			copyW15(t, e.src)
+			for name, body := range tc.extra {
+				if err := os.WriteFile(filepath.Join(e.src, name), []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			vet, err := govet.New(govet.Config{GoExecutable: goExe})
+			if err != nil {
+				t.Fatal(err)
+			}
+			caller := &r1Scripted{}
+			h, err := discovery.Wrap(review.R1Handler{Static: vet, Caller: caller}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			fa, in, done, _ := startWorker(t, h)
+			defer func() {
+				in.Close()
+				if code := <-done; code != 0 {
+					t.Errorf("worker exit %d", code)
+				}
+			}()
+			stop := make(chan struct{})
+			defer close(stop)
+			go func() {
+				for {
+					select {
+					case <-fa.started:
+					case <-stop:
+						return
+					}
+				}
+			}()
+			fa.hello(e)
+			job := localJob(e)
+			job.AllowModelReview = true
+			if err := fa.conn.Send(job); err != nil {
+				t.Fatal(err)
+			}
+			var c *workerproto.Complete
+			select {
+			case c = <-fa.complete:
+			case <-time.After(90 * time.Second):
+				t.Fatalf("no complete; messages %v", fa.kinds())
+			}
+			if c.Outcome != "partial" || c.ResultManifestClientArtifact == nil || c.CleanupState != "confirmed" {
+				t.Fatalf("completion: %+v", c)
+			}
+			fa.mu.Lock()
+			defer fa.mu.Unlock()
+			var m analysis.ResultManifest
+			if err := json.Unmarshal(fa.artifacts[*c.ResultManifestClientArtifact], &m); err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, task := range m.Tasks {
+				row := task.Key + "=" + string(task.Status)
+				if task.Reason != nil {
+					row += ":" + *task.Reason
+				}
+				got = append(got, row)
+			}
+			// go-vet.m02 (svc/b, go 1.30) fails on a node older than go1.30,
+			// as in TestDiscoveryTasksThroughTheWorker.
+			want := []string{"env.discover=succeeded", "docs.discover=succeeded", "go-vet=succeeded", "go-vet.m01=succeeded", "go-vet.m02=failed:" + govet.ReasonToolchain,
+				"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", tc.interpret, "review.verify=succeeded"}
+			if !slices.Equal(got, want) {
+				t.Fatalf("tasks\n got %v\nwant %v", got, want)
+			}
+			caller.mu.Lock()
+			roles := strings.Join(caller.roles, ",")
+			caller.mu.Unlock()
+			if roles != tc.calls {
+				t.Fatalf("model calls %s", roles)
+			}
 
-	r, err := report.Build(reportInput(t, fa, m, *c.ResultManifestClientArtifact), report.DefaultRegistry())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ai := r.Coverage.AIReview
-	var required, optional []string
-	for _, x := range ai.RequiredTasks {
-		required = append(required, x.Key+"="+x.Result)
-	}
-	for _, x := range ai.OptionalTasks {
-		row := x.Key + "=" + x.Result
-		if x.Reason != nil {
-			row += ":" + *x.Reason
-		}
-		optional = append(optional, row)
-	}
-	if ai.Status != report.AIReviewPerformed || !slices.Equal(required, []string{"review.documents=accepted", "review.investigate=accepted", "review.verify=accepted"}) ||
-		!slices.Equal(optional, []string{"review.environment=accepted", "review.interpret=skipped:no_tool_observations"}) {
-		t.Fatalf("ai review %s required %v optional %v limitations %v", ai.Status, required, optional, r.Limitations)
-	}
-	if len(r.Coverage.ReviewCalls) != 4 || r.Coverage.LLMExposedFiles == nil || *r.Coverage.LLMExposedFiles == 0 {
-		t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
-	}
-	for _, call := range r.Coverage.ReviewCalls {
-		if call.PackID != review.PackR1 || call.PackVersion != "2.0.0-rc1" {
-			t.Fatalf("call %+v", call)
-		}
-	}
-	reviewed := 0
-	for _, f := range r.Findings {
-		if f.ID == "review_investigate_1" && f.Validation == "inconclusive" {
-			reviewed++
-		}
-	}
-	// go-vet.m02 failed on this node, so the report stays partial even with
-	// the review performed.
-	if reviewed != 1 || r.Status != report.StatusPartial {
-		t.Fatalf("status %s findings %+v", r.Status, r.Findings)
-	}
-	if err := report.ValidateReport(r); err != nil {
-		t.Fatal(err)
-	}
-	md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
-	if !strings.Contains(md, "review-r1@2.0.0-rc1") || !strings.Contains(md, "no_tool_observations") {
-		t.Fatalf("markdown lacks the pack or the optional reason:\n%s", md)
+			r, err := report.Build(reportInput(t, fa, m, *c.ResultManifestClientArtifact), report.DefaultRegistry())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, l := range r.Limitations {
+				if strings.HasPrefix(l, report.LimReviewLineage) || strings.HasPrefix(l, report.LimReviewPackMismatch) || strings.HasPrefix(l, "analysis_artifact_") {
+					for cid, body := range fa.artifacts {
+						if fa.media[cid] == "application/vnd.codeye.review+json" {
+							t.Logf("%s", body)
+						}
+					}
+					t.Fatalf("limitation %s in %v", l, r.Limitations)
+				}
+			}
+			ai := r.Coverage.AIReview
+			var required, optional []string
+			for _, x := range ai.RequiredTasks {
+				required = append(required, x.Key+"="+x.Result)
+			}
+			for _, x := range ai.OptionalTasks {
+				row := x.Key + "=" + x.Result
+				if x.Reason != nil {
+					row += ":" + *x.Reason
+				}
+				optional = append(optional, row)
+			}
+			if ai.Status != report.AIReviewPerformed || !slices.Equal(required, []string{"review.documents=accepted", "review.investigate=accepted", "review.verify=accepted"}) ||
+				!slices.Equal(optional, tc.optional) {
+				t.Fatalf("ai review %s required %v optional %v limitations %v", ai.Status, required, optional, r.Limitations)
+			}
+			if len(r.Coverage.ReviewCalls) != len(strings.Split(tc.calls, ",")) || r.Coverage.LLMExposedFiles == nil || *r.Coverage.LLMExposedFiles == 0 {
+				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
+			}
+			for _, call := range r.Coverage.ReviewCalls {
+				if call.PackID != review.PackR1 || call.PackVersion != "2.0.0-rc1" {
+					t.Fatalf("call %+v", call)
+				}
+			}
+			var reviewed []string
+			observations := map[string]bool{}
+			for _, o := range r.Observations {
+				observations[o.ID] = true
+			}
+			for _, f := range r.Findings {
+				if strings.HasPrefix(f.ID, "review_") {
+					reviewed = append(reviewed, f.ID+"="+f.Validation)
+				}
+				for _, id := range f.ObservationIDs {
+					if !observations[id] {
+						t.Fatalf("finding %s cites observation %s not in the report", f.ID, id)
+					}
+				}
+				if f.ID == "review_interpret_1" && len(f.ObservationIDs) != 1 {
+					t.Fatalf("interpret finding without its observation: %+v", f)
+				}
+			}
+			slices.Sort(reviewed)
+			// go-vet.m02 failed on this node, so the report stays partial even
+			// with the review performed.
+			if !slices.Equal(reviewed, tc.findings) || r.Status != report.StatusPartial {
+				t.Fatalf("status %s review findings %v", r.Status, reviewed)
+			}
+			if err := report.ValidateReport(r); err != nil {
+				t.Fatal(err)
+			}
+			md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
+			if !strings.Contains(md, "review-r1@2.0.0-rc1") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
+				t.Fatalf("markdown lacks the pack or the optional row:\n%s", md)
+			}
+		})
 	}
 }

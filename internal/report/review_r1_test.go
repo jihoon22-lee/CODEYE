@@ -214,6 +214,16 @@ func TestR1LineageRejected(t *testing.T) {
 		"v1 record in an r1 plan": {func(s map[string]*taskState, _ *Report) {
 			s["review.investigate"].reviewResult = &ReviewResult{Accepted: true, Record: &record.Record{}}
 		}, "review.investigate"},
+		"verify relabels upstream evidence": {func(s map[string]*taskState, _ *Report) {
+			ev := s["review.verify"].reviewResult.R1.Evidence
+			for i := range ev {
+				if ev[i].Origin == "context" {
+					ev[i].Origin = "caller"
+					ev[i].Symbol = "Forward"
+					return
+				}
+			}
+		}, "review.verify"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

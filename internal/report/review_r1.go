@@ -83,7 +83,10 @@ func r1Lineage(rec *record.R1Record, states map[string]*taskState, obs map[strin
 		return true
 	}
 	var want []record.R1Candidate
-	evidence := map[string]record.Excerpt{}
+	// One excerpt ID (bound to path, blob and range) may reach verify from
+	// both stages with a different origin label (context vs observation);
+	// verify must carry one of the upstream variants unchanged.
+	evidence := map[string][]record.Excerpt{}
 	for _, stage := range []string{record.StageInvestigate, record.StageInterpret} {
 		u, ok := up["review."+stage]
 		if !ok || u.State != record.UpstreamAccepted {
@@ -92,14 +95,14 @@ func r1Lineage(rec *record.R1Record, states map[string]*taskState, obs map[strin
 		prior := states["review."+stage].reviewResult.R1
 		want = append(want, prior.Candidates...)
 		for _, e := range prior.Evidence {
-			evidence[e.ID] = e
+			evidence[e.ID] = append(evidence[e.ID], e)
 		}
 	}
 	if !reflect.DeepEqual(nonNilCandidates(want), nonNilCandidates(rec.Candidates)) {
 		return false
 	}
 	for _, e := range rec.Evidence {
-		if p, ok := evidence[e.ID]; ok && p != e {
+		if variants, ok := evidence[e.ID]; ok && !slices.Contains(variants, e) {
 			return false
 		}
 	}
