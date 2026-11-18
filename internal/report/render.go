@@ -154,11 +154,36 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		if t.TaskStatus != nil {
 			st = *t.TaskStatus
 		}
-		p("| ", mdCode(t.Key), " | ", mdCode(st), " | ", mdCode(t.Result), " |")
+		reason := ""
+		if t.Reason != nil {
+			reason = " " + mdCode(*t.Reason)
+		}
+		p("| ", mdCode(t.Key), " | ", mdCode(st), " | ", mdCode(t.Result), reason, " |")
 	}
 	p()
+	if len(ai.OptionalTasks) > 0 {
+		p(mdText(l.Label("ai_review_optional")))
+		p()
+		p("| task | 상태 | 결과 |")
+		p("|---|---|---|")
+		for _, t := range ai.OptionalTasks {
+			st, reason := l.Label("none"), ""
+			if t.TaskStatus != nil {
+				st = *t.TaskStatus
+			}
+			if t.Reason != nil {
+				reason = " " + mdCode(*t.Reason)
+			}
+			p("| ", mdCode(t.Key), " | ", mdCode(st), " | ", mdCode(t.Result), reason, " |")
+		}
+		p()
+	}
 	for _, c := range r.Coverage.ReviewCalls {
-		p("- 모델 호출 ", mdCode(c.Role), " · ", mdCode(c.Model), " · OpenCode ", mdCode(c.Version), " · ", mdCode(c.Outcome), " · 지침 ", mdCode(c.PackDigest))
+		pack := ""
+		if c.PackID != "" {
+			pack = " " + mdCode(c.PackID+"@"+c.PackVersion)
+		}
+		p("- 모델 호출 ", mdCode(c.Role), " · ", mdCode(c.Model), " · OpenCode ", mdCode(c.Version), " · ", mdCode(c.Outcome), " · 지침", pack, " ", mdCode(c.PackDigest))
 	}
 	p()
 	p("## ", mdText(l.Label("coverage")))
@@ -469,9 +494,13 @@ code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:a
 <h2 id="ai-review">{{.L.Label "ai_review"}}</h2>
 <p>상태: <code data-field="ai_review">{{.R.Coverage.AIReview.Status}}</code> {{with .R.Coverage.AIReview.Reason}}<code>{{.}}</code>{{end}}</p>
 <table><tr><th>task</th><th>상태</th><th>결과</th></tr>
-{{range .R.Coverage.AIReview.RequiredTasks}}<tr><td><code>{{.Key}}</code></td><td><code>{{deref .TaskStatus "없음"}}</code></td><td><code>{{.Result}}</code></td></tr>
+{{range .R.Coverage.AIReview.RequiredTasks}}<tr><td><code>{{.Key}}</code></td><td><code>{{deref .TaskStatus "없음"}}</code></td><td><code>{{.Result}}</code>{{with .Reason}} <code>{{.}}</code>{{end}}</td></tr>
 {{end}}</table>
-{{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code> · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침 <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
+{{if .R.Coverage.AIReview.OptionalTasks}}<p>{{.L.Label "ai_review_optional"}}</p>
+<table><tr><th>task</th><th>상태</th><th>결과</th></tr>
+{{range .R.Coverage.AIReview.OptionalTasks}}<tr><td><code>{{.Key}}</code></td><td><code>{{deref .TaskStatus "없음"}}</code></td><td><code>{{.Result}}</code>{{with .Reason}} <code>{{.}}</code>{{end}}</td></tr>
+{{end}}</table>{{end}}
+{{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code> · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침{{if .PackID}} <code>{{.PackID}}@{{.PackVersion}}</code>{{end}} <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
 <h2 id="coverage">{{.L.Label "coverage"}}</h2>
 <ul>
 <li>scope: <code>{{.R.Coverage.ScopeMode}}</code></li>

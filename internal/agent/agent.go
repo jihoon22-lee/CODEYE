@@ -46,11 +46,14 @@ func (e *ExitError) Error() string { return e.Msg }
 // Config of one agent.
 type Config struct {
 	ModelExecutable, ModelName, ModelRelayFile string
-	ModelSourceRoots                           map[string]bool
-	ControllerURL                              string
-	StateDir                                   string
-	Name                                       string
-	EnrollTokenFile                            string
+	// ReviewPack selects the review instruction pack of this node's workers:
+	// "review-v1" (default when empty) or the W15 candidate "review-r1".
+	ReviewPack       string
+	ModelSourceRoots map[string]bool
+	ControllerURL    string
+	StateDir         string
+	Name             string
+	EnrollTokenFile  string
 	// SourceRoots is the private mapping source_root_id → absolute path.
 	SourceRoots map[string]string
 	// Workers is the static worker count (W06, default mode).
@@ -139,6 +142,13 @@ func New(cfg Config) (*Agent, error) {
 		if domain.ValidateHost(strings.ToLower(h)) != nil {
 			return nil, &ExitError{ExitUsage, "invalid --git-host"}
 		}
+	}
+	switch cfg.ReviewPack {
+	case "":
+		cfg.ReviewPack = "review-v1"
+	case "review-v1", "review-r1":
+	default:
+		return nil, &ExitError{ExitUsage, "--review-pack must be review-v1 or review-r1"}
 	}
 	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.ModelExecutable, cfg.ModelRelayFile} {
 		if p != "" && !filepath.IsAbs(p) {

@@ -1,6 +1,6 @@
 # 06. 정적 분석 도구와 어댑터 계약
 
-R0의 제품 어댑터는 [오프라인 Go vet](29-w08-go-vet.md)다. 아래 다언어 도구 표는 W16~W21의 구현 후보이며, 선택한 도구의 실제 지원 여부는 노드별 probe와 시험 결과로 판단한다. R1에서 모델이 원시 관찰을 해석할 때는 [진단 해석 지침](../prompts/review-r1-draft/interpret-diagnostics.md)을 적용 후보로 평가한다.
+R0의 제품 어댑터는 [오프라인 Go vet](29-w08-go-vet.md)다. 아래 다언어 도구 표는 W16~W21의 구현 후보이며, 선택한 도구의 실제 지원 여부는 노드별 probe와 시험 결과로 판단한다. R1에서 모델이 원시 관찰을 해석할 때는 [진단 해석 지침](../prompts/review-r1/interpret-diagnostics.md)을 적용 후보로 평가한다.
 
 ## 1. 선정 원칙
 

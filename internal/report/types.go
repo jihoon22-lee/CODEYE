@@ -123,6 +123,10 @@ type ReviewCall struct {
 	PackDigest    string `json:"pack_sha256"`
 	RequestDigest string `json:"request_sha256"`
 	Outcome       string `json:"outcome"`
+	// PackID/PackVersion are set for review-r1 records (schema 0.2), which
+	// record the pack identity; R0 (0.1) calls leave them out.
+	PackID      string `json:"pack_id,omitempty"`
+	PackVersion string `json:"pack_version,omitempty"`
 }
 
 type Coverage struct {
@@ -143,6 +147,10 @@ type AIReview struct {
 	Status        string         `json:"status"`
 	Reason        *string        `json:"reason"`
 	RequiredTasks []AIReviewTask `json:"required_tasks"`
+	// OptionalTasks are planned review tasks not required for the verdict
+	// (review-r1 environment/interpret, documents without documents). They
+	// are listed with their outcome and reason and never count as performed.
+	OptionalTasks []AIReviewTask `json:"optional_tasks,omitempty"`
 }
 
 // AIReviewTask is one required review task key and what was verified for it.
@@ -152,6 +160,8 @@ type AIReviewTask struct {
 	Key        string  `json:"key"`
 	TaskStatus *string `json:"task_status"`
 	Result     string  `json:"result"`
+	// Reason is the task's reason code (review-r1 plans only).
+	Reason *string `json:"reason,omitempty"`
 }
 
 // ToolCoverage is one analyzer task's scope, copied from its decoded artifact.

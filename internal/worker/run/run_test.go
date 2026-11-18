@@ -69,6 +69,8 @@ type fakeAgent struct {
 	ready     chan *workerproto.Ready
 	artifacts map[string][]byte // client id → bytes
 	roles     map[string]string
+	media     map[string]string // client id → media type
+	serverIDs map[string]string // artifact id the agent returned → client id
 }
 
 func startWorker(t *testing.T, h analysis.Handler) (*fakeAgent, io.WriteCloser, chan int, *syncWriter) {
@@ -87,7 +89,7 @@ func startWorker(t *testing.T, h analysis.Handler) (*fakeAgent, io.WriteCloser, 
 		outW.Close()
 		done <- code
 	}()
-	fa := &fakeAgent{t: t, started: make(chan *workerproto.ProcessStarted, 8), complete: make(chan *workerproto.Complete, 1), ready: make(chan *workerproto.Ready, 1), artifacts: map[string][]byte{}, roles: map[string]string{}}
+	fa := &fakeAgent{t: t, started: make(chan *workerproto.ProcessStarted, 8), complete: make(chan *workerproto.Complete, 1), ready: make(chan *workerproto.Ready, 1), artifacts: map[string][]byte{}, roles: map[string]string{}, media: map[string]string{}, serverIDs: map[string]string{}}
 	fa.conn = workerproto.NewConn(outR, inW)
 	fa.conn.Transcript = transcript
 	fa.conn.Start()
@@ -159,8 +161,11 @@ func (fa *fakeAgent) loop() {
 			fa.mu.Lock()
 			fa.artifacts[v.ClientArtifactID] = b
 			fa.roles[v.ClientArtifactID] = v.Role
+			fa.media[v.ClientArtifactID] = v.MediaType
+			sid := domain.NewID()
+			fa.serverIDs[sid] = v.ClientArtifactID
 			fa.mu.Unlock()
-			_ = fa.conn.ReplyOK(v.ID, map[string]string{"artifact_id": domain.NewID()})
+			_ = fa.conn.ReplyOK(v.ID, map[string]string{"artifact_id": sid})
 		case *workerproto.Complete:
 			_ = fa.conn.ReplyOK(v.ID, nil)
 			fa.complete <- v

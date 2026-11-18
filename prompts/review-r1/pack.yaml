@@ -1,0 +1,22 @@
+id: review-r1
+version: 2.0.0-rc1
+schema_version: '0.2'
+language: ko
+status: candidate-not-promoted
+selection: node operator only (codeye agent --review-pack review-r1); review-v1 stays the default
+core: 00-core.md
+roles:
+  environment: environment.md
+  documents: documents.md
+  investigate: investigate.md
+  interpret: interpret-diagnostics.md
+  verify: verify.md
+domains: domains.md
+languages:
+  go: languages/go.md
+digest_policy:
+  algorithm: sha256
+  inputs: manifest-and-selected-files
+  ordering: utf8-relative-path-ascending
+  serialization: path-null-byte-content-null-byte
+  note: Compute at run creation; do not trust a repository-supplied digest.

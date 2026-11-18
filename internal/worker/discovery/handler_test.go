@@ -11,7 +11,6 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/review"
 )
 
 type recordingHandler struct {
@@ -24,10 +23,15 @@ func (h recordingHandler) Run(_ context.Context, _ analysis.Job, t analysis.Task
 	return analysis.TaskResult{Status: domain.TaskSucceeded}
 }
 
+// The review handlers import this package (review-r1 reads its artifacts),
+// so the composition with the real review plans is tested in package
+// review (TestDiscoveryCompositionPlans); the inner plan here stands for it.
 func TestPlanPrependsRequiredDiscoveryTasks(t *testing.T) {
-	inner := []analysis.TaskSpec{{Key: "go-vet", Required: true, Stage: domain.StageStaticAnalysis}}
+	inner := []analysis.TaskSpec{{Key: "go-vet", Required: true, Stage: domain.StageStaticAnalysis},
+		{Key: "review.context", Required: true, Stage: domain.StageDocuments}, {Key: "review.investigate", Required: true, Stage: domain.StageCodeReview},
+		{Key: "review.verify", Required: true, Stage: domain.StageCodeReview}}
 	var ran []string
-	h, err := Wrap(review.Handler{Static: recordingHandler{noopHandler{planned: inner}, &ran}}, Config{})
+	h, err := Wrap(recordingHandler{noopHandler{planned: inner}, &ran}, Config{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -145,7 +145,8 @@ func TestTaskStageStates(t *testing.T) {
 		{"failed", []domain.TaskStatus{fail, to, bud}, []string{"handler_error", "timeout", "budget_exhausted"}, Failed, map[string]int{"failed": 1, "timed_out": 1, "budget_exhausted": 1}, []string{"budget_exhausted", "handler_error", "timeout"}, 3},
 		{"cancelled", []domain.TaskStatus{can, can}, []string{"cancelled", "cancelled"}, Cancelled, map[string]int{"cancelled": 2}, []string{"cancelled"}, 2},
 		{"partial tool failure and success", []domain.TaskStatus{ok, fail, ok}, []string{"", "tool_failed", ""}, Partial, map[string]int{"failed": 1}, []string{"tool_failed"}, 3},
-		{"partial success and policy skip", []domain.TaskStatus{ok, skip}, []string{"", "no_tool_observations"}, Partial, map[string]int{"skipped_policy": 1}, []string{"no_tool_observations"}, 2},
+		{"partial success and policy skip", []domain.TaskStatus{ok, skip}, []string{"", "model_source_not_approved"}, Partial, map[string]int{"skipped_policy": 1}, []string{"model_source_not_approved"}, 2},
+		{"success with nothing-to-review skip", []domain.TaskStatus{ok, skip}, []string{"", "no_tool_observations"}, Succeeded, map[string]int{"skipped_policy": 1}, []string{"no_tool_observations"}, 2},
 		{"partial without success", []domain.TaskStatus{fail, skip}, nil, Partial, map[string]int{"failed": 1, "skipped_policy": 1}, []string{}, 2},
 		{"partial cancelled and failed", []domain.TaskStatus{can, fail}, nil, Partial, map[string]int{"failed": 1, "cancelled": 1}, []string{}, 2},
 	}
@@ -342,5 +343,39 @@ func TestPlanRevisionAndWeightedPercent(t *testing.T) {
 	retried := Run{Status: domain.RunRunning, RunningSeq: seq(40), Tasks: []Task{vet, {Stage: cr, Status: domain.TaskQueued, CreatedSeq: seq(20)}}}
 	if p := Compute(retried).Plan; *p.Revision != 1 || *p.PlannedWeight != 2 {
 		t.Fatalf("retried plan %+v", p)
+	}
+}
+
+// A role skipped because it had nothing to review leaves an otherwise
+// successful stage succeeded (count and reason stay visible); a policy
+// exclusion in the same position still makes the stage partial.
+func TestNothingToReviewDoesNotDegradeStage(t *testing.T) {
+	cr, env := domain.StageCodeReview, domain.StageEnvironment
+	run := Run{Status: domain.RunCompleted, SnapshotFixed: true, RunningAt: at(3), FinalizingAt: at(30), ReportAt: at(31), Tasks: []Task{
+		task(env, domain.TaskSucceeded, ""),
+		task(env, domain.TaskSkippedPolicy, domain.ReasonNoEnvironmentGap),
+		task(cr, domain.TaskSucceeded, ""),
+		task(cr, domain.TaskSkippedPolicy, domain.ReasonNoToolObservations),
+		task(cr, domain.TaskSucceeded, ""),
+	}}
+	v := Compute(run)
+	for _, key := range []domain.Stage{env, cr} {
+		s := find(t, v, string(key))
+		if s.State != Succeeded || s.Counts["skipped_policy"] != 1 || len(s.Reasons) != 1 {
+			t.Fatalf("%s %+v", key, s)
+		}
+	}
+	run.Tasks[3] = task(cr, domain.TaskSkippedPolicy, domain.ReasonModelSourceNotApproved)
+	if s := find(t, Compute(run), string(cr)); s.State != Partial {
+		t.Fatalf("policy exclusion must stay partial: %+v", s)
+	}
+	run.Tasks[3] = task(cr, domain.TaskFailed, "review_output_invalid")
+	if s := find(t, Compute(run), string(cr)); s.State != Partial {
+		t.Fatalf("a failure must stay partial: %+v", s)
+	}
+	// Only nothing-to-review skips: the stage is skipped, not succeeded.
+	only := Run{Status: domain.RunCompleted, SnapshotFixed: true, RunningAt: at(3), Tasks: []Task{task(domain.StageDocuments, domain.TaskSkippedPolicy, domain.ReasonNoDocuments)}}
+	if s := find(t, Compute(only), string(domain.StageDocuments)); s.State != Skipped {
+		t.Fatalf("documents %+v", s)
 	}
 }

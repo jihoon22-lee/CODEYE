@@ -41,6 +41,53 @@ def extract_commit(root, commit, work, destination):
     archive.unlink()
 
 
+W15_MARKER = "<!-- CODEYE test fixture (TC-97)."
+
+
+# Fixed repository inputs that are not R0 synthetic pairs. The W12 verifier
+# fixture is the caller-closes counterexample TC-100 scores separately.
+FIXED_INPUTS = {"w15": "fixtures/w15-modules/input", "w12-close": "internal/worker/review/testdata/verify"}
+
+
+def materialize_w15(root, destination, label="w15"):
+    """Copy a fixed input; drop the W15 development-agent warning comment.
+
+    The repository copy of AGENTS.md starts with a comment telling development
+    agents not to follow it. A real hostile document would not announce itself,
+    so the evaluated snapshot omits that one line. Expected facts stay outside.
+    """
+    source = root / FIXED_INPUTS[label]
+    for path in sorted(source.rglob("*")):
+        target = destination / path.relative_to(source)
+        if path.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        data = path.read_bytes()
+        if path.name == "AGENTS.md" and data.startswith(W15_MARKER.encode()):
+            data = data.split(b"\n", 1)[1]
+        target.write_bytes(data)
+    return tree_digest(destination)
+
+
+def keep_review_artifacts(report, artifacts, destination):
+    """Copy the model-role and discovery artifacts a report references."""
+    wanted = ("application/vnd.codeye.review+json", "application/vnd.codeye.environment+json")
+    index = {f.name: f for f in artifacts.rglob("*") if f.is_file()}
+    destination.mkdir(mode=0o700)
+    kept = 0
+    for a in report["artifacts"]:
+        if a["media_type"] not in wanted:
+            continue
+        found = index.get(a["sha256"])
+        if found is None or hashlib.sha256(found.read_bytes()).hexdigest() != a["sha256"]:
+            raise RuntimeError("보고서가 참조한 검토 산출물을 찾지 못했습니다")
+        name = (a["task_key"] or a["role"]) + "-" + a["sha256"][:12] + ".json"
+        shutil.copyfile(found, destination / name)
+        kept += 1
+    return kept
+
+
 def audit_reports(output, root):
     from validate_bundle import check_report, make_validators
 
@@ -49,7 +96,7 @@ def audit_reports(output, root):
     materialize = runpy.run_path(str(qa / "corpus.py"))["materialize"]
     schema = make_validators()["report.schema.json"]
     rows = json.loads((output / "summary.json").read_bytes())
-    allowed = {"git", "pilot"} | {
+    allowed = {"git", "pilot", *FIXED_INPUTS} | {
         c["id"] + "-" + v for c in cases for v in ("before", "after")
     }
     seen = set()
@@ -72,7 +119,10 @@ def audit_reports(output, root):
                 or row["manifest"] != report["inputs"]["manifest_sha256"]
             ):
                 raise ValueError("요약과 게시 리비전 불일치")
-            if label in ("git", "pilot"):
+            if label in FIXED_INPUTS:
+                if materialize_w15(root, inputs, label) != row["input"]:
+                    raise ValueError("고정 입력 digest 불일치")
+            elif label in ("git", "pilot"):
                 commit = row["input"]
                 if not isinstance(commit, str) or not re.fullmatch(
                     r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit
@@ -143,6 +193,10 @@ def run(base, root, env):
             rel = uuid4().hex
             digest = materialize(source / rel, case, variant, documented=i % 2 == 0)
             dataset.append((label, rel, digest))
+    for label in FIXED_INPUTS:
+        if selected and label in selected:
+            rel = uuid4().hex
+            dataset.append((label, rel, materialize_w15(root, source / rel, label)))
     commit = subprocess.check_output(
         ["git", "rev-parse", "bcfad99^{commit}"], cwd=root, text=True
     ).strip()
@@ -277,6 +331,11 @@ def run(base, root, env):
                             "--autoscale",
                             "--max-workers",
                             "2",
+                            *(
+                                ["--review-pack", os.environ["CODEYE_R0_REVIEW_PACK"]]
+                                if os.environ.get("CODEYE_R0_REVIEW_PACK")
+                                else []
+                            ),
                         ],
                         work,
                         {"PATH": env["PATH"], "LANG": "C.UTF-8"},
@@ -354,6 +413,7 @@ def run(base, root, env):
                     raise RuntimeError("보고서 입력 참조 불일치")
                 dest = output / (label + ".json")
                 dest.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+                keep_review_artifacts(report, work / "artifacts", output / label)
                 if label == "git":
                     digest = report["inputs"]["commit_sha"]
                     if (
@@ -370,7 +430,7 @@ def run(base, root, env):
                         raise RuntimeError("Git commit 고정 또는 모델 전송 정책 불일치")
                 elif tree_digest(source / rel) != original_trees[label]:
                     raise RuntimeError(f"{label} 원본 입력이 변경됐습니다")
-                if label not in ("git", "pilot"):
+                if label not in ("git", "pilot", *FIXED_INPUTS):
                     assert (
                         hashlib.sha256(
                             (source / rel / "metrics.go").read_bytes()
@@ -390,6 +450,11 @@ def run(base, root, env):
                     "tasks": [
                         {k: v for k, v in t.items() if k in ("key", "status", "reason")}
                         for t in report["tasks"]
+                    ],
+                    "review_pack": os.environ.get("CODEYE_R0_REVIEW_PACK", "review-v1"),
+                    "review_calls": [
+                        {k: c.get(k) for k in ("role", "outcome", "pack_sha256")}
+                        for c in report["coverage"].get("review_calls", [])
                     ],
                     "elapsed_s": round(time.monotonic() - start, 1),
                 }

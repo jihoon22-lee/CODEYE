@@ -1,0 +1,566 @@
+package review
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path"
+	"sort"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
+)
+
+// Bounds of the review-r1 inputs, in JSON-encoded bytes of excerpt text
+// (encoding/json escapes <, > and & to six bytes). Every request must also
+// fit PromptBudget; roles trim excerpts to fit and record it.
+const (
+	r1MaxCodeFiles    = 8
+	r1MaxCodeFile     = 2400
+	r1MaxCodeBytes    = 12000
+	r1MaxDocs         = 8
+	r1MaxDocBytes     = 2000
+	r1MaxDocLines     = 40
+	r1MaxDocsBytes    = 10000
+	r1MaxRequirements = 16
+	r1MaxObservations = 8
+	r1MaxTools        = 8
+	r1MaxWindows      = 4
+	r1WindowRadius    = 10
+	r1MaxWindowBytes  = 1600
+)
+
+func normalizedScope(s domain.Scope) domain.Scope {
+	if s.Kind == "" {
+		return domain.Scope{Kind: "full"}
+	}
+	return s
+}
+
+func (s *r1Stage) entries() map[string]source.Entry {
+	out := map[string]source.Entry{}
+	for _, e := range s.j.Snapshot.Manifest.Entries {
+		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil {
+			out[e.Path] = e
+		}
+	}
+	return out
+}
+
+// readLines returns lines start..end (1-based, inclusive) of a verified
+// snapshot blob, or ok=false when the blob is not safe model input.
+func (s *r1Stage) readLines(e source.Entry, start, end int) (string, int, bool, error) {
+	if *e.Size > maxFileBytes || domain.ValidateEvidencePath(e.Path) != nil {
+		return "", 0, false, nil
+	}
+	root, err := os.OpenRoot(s.j.Snapshot.SnapshotDir)
+	if err != nil {
+		return "", 0, false, err
+	}
+	defer root.Close()
+	b, err := readVerified(root, e)
+	if err != nil {
+		return "", 0, false, err
+	}
+	if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || record.Sensitive(b) {
+		return "", 0, false, nil
+	}
+	lines := strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
+	if start < 1 || start > len(lines) {
+		return "", len(lines), false, nil
+	}
+	end = min(end, len(lines))
+	return strings.Join(lines[start-1:end], "\n"), len(lines), true, nil
+}
+
+// excerpt builds a bounded excerpt of up to maxLines lines and maxBytes of
+// JSON-encoded text from line start. total is the file's line count.
+func (s *r1Stage) excerpt(e source.Entry, kind, origin string, start, maxLines, maxBytes int) (x record.Excerpt, total int, ok bool, err error) {
+	text, total, ok, err := s.readLines(e, start, start+maxLines-1)
+	if err != nil || !ok {
+		return record.Excerpt{}, total, false, err
+	}
+	var kept []string
+	used := 0
+	for _, line := range strings.Split(text, "\n") {
+		cost := record.JSONLen(line)
+		if used+cost > maxBytes {
+			break
+		}
+		kept = append(kept, line)
+		used += cost
+	}
+	if len(kept) == 0 || strings.TrimSpace(strings.Join(kept, "")) == "" {
+		return record.Excerpt{}, total, false, nil
+	}
+	end := start + len(kept) - 1
+	return record.Excerpt{ID: record.ExcerptID(s.j.Snapshot.Digest, e.Path, e.SHA256, start, end), Path: e.Path, SHA256: e.SHA256, Start: start, End: end,
+		Kind: kind, Origin: origin, Text: strings.Join(kept, "\n")}, total, true, nil
+}
+
+// withText re-reads the text of record excerpts from the snapshot, checking
+// each excerpt's ID binding again.
+func (s *r1Stage) withText(list []record.Excerpt) ([]record.Excerpt, error) {
+	files := s.entries()
+	out := make([]record.Excerpt, 0, len(list))
+	for _, x := range list {
+		e, ok := files[x.Path]
+		if !ok || e.SHA256 != x.SHA256 || x.ID != record.ExcerptID(s.j.Snapshot.Digest, x.Path, x.SHA256, x.Start, x.End) {
+			return nil, errSnapshotIntegrity
+		}
+		text, _, ok, err := s.readLines(e, x.Start, x.End)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, errSnapshotIntegrity
+		}
+		x.Text = text
+		out = append(out, x)
+	}
+	return out, nil
+}
+
+var errSnapshotIntegrity = os.ErrInvalid
+
+// ---- discovery artifacts -------------------------------------------------
+
+func (s *r1Stage) discoveryDoc(kind string) (envdoc.Document, record.Upstream) {
+	src := map[string]string{envdoc.KindEnvironment: envdoc.TaskEnvironment, envdoc.KindDocuments: envdoc.TaskDocuments}[kind]
+	u := record.Upstream{Source: src}
+	b, err := readBounded(discovery.ArtifactPath(s.j.Scratch, kind), envdoc.MaxBytes)
+	if err != nil {
+		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordMissing
+		return envdoc.Document{}, u
+	}
+	in := discovery.Input{Manifest: s.j.Snapshot.Manifest, Digest: s.j.Snapshot.Digest, Scope: s.j.Scope, RunID: s.j.RunID, AttemptID: s.j.AttemptID}
+	d, err := envdoc.Decode(b, in.Expect(kind))
+	if err != nil {
+		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordInvalid
+		return envdoc.Document{}, u
+	}
+	u.State, u.SHA256 = record.UpstreamAccepted, digestOf(b)
+	return d, u
+}
+
+type envFacts struct {
+	doc      envdoc.Document
+	upstream record.Upstream
+	gaps     []string // modules with a verdict other than satisfied
+}
+
+// environmentFacts loads env.discover's artifact and the skip rule: no model
+// call when every declared requirement is satisfied.
+func (s *r1Stage) environmentFacts() (envFacts, string) {
+	d, u := s.discoveryDoc(envdoc.KindEnvironment)
+	f := envFacts{doc: d, upstream: u}
+	if u.State != record.UpstreamAccepted || d.Environment == nil {
+		return f, reasonDependency
+	}
+	gap, declaredGap := map[string]bool{}, false
+	for _, v := range d.Environment.Verdicts {
+		if v.Status != envdoc.VerdictSatisfied {
+			gap[v.Module] = true
+			declaredGap = declaredGap || v.Requirement != nil
+		}
+	}
+	if !declaredGap {
+		return f, ReasonNoEnvironmentGap
+	}
+	f.gaps = sortedKeys(gap)
+	return f, ""
+}
+
+type docFacts struct {
+	doc      envdoc.Document
+	upstream record.Upstream
+	selected []envdoc.Doc
+}
+
+var docOrder = map[string]int{envdoc.ClassAgent: 0, envdoc.ClassReadme: 1, envdoc.ClassContributing: 2, envdoc.ClassDesign: 3}
+
+// documentFacts applies the documents role's skip rules: no guidance
+// document in scope (no_documents), discovery unavailable (dependency_failed)
+// or none of them selected under the read budget (documents_not_selected).
+func (s *r1Stage) documentFacts() (docFacts, string) {
+	if len(discovery.EligibleDocuments(s.j.Snapshot.Manifest, s.j.Scope)) == 0 {
+		return docFacts{}, ReasonNoDocuments
+	}
+	d, u := s.discoveryDoc(envdoc.KindDocuments)
+	f := docFacts{doc: d, upstream: u}
+	if u.State != record.UpstreamAccepted || d.Documents == nil {
+		return f, reasonDependency
+	}
+	for _, it := range d.Documents.Items {
+		if it.Status == envdoc.DocSelected && envdoc.IsGuidance(it.Class) && it.SHA256 != nil && it.LineCount != nil && *it.LineCount > 0 {
+			f.selected = append(f.selected, it)
+		}
+	}
+	sort.SliceStable(f.selected, func(a, b int) bool {
+		x, y := f.selected[a], f.selected[b]
+		if docOrder[x.Class] != docOrder[y.Class] {
+			return docOrder[x.Class] < docOrder[y.Class]
+		}
+		if strings.Count(x.Path, "/") != strings.Count(y.Path, "/") {
+			return strings.Count(x.Path, "/") < strings.Count(y.Path, "/")
+		}
+		return x.Path < y.Path
+	})
+	if len(f.selected) == 0 {
+		return f, ReasonDocsNotSelected
+	}
+	return f, ""
+}
+
+// ---- go vet observations -------------------------------------------------
+
+type toolDoc struct {
+	key      string
+	doc      govet.Document
+	upstream record.Upstream
+}
+
+// toolFacts reads every planned go-vet task's observations artifact.
+func (s *r1Stage) toolFacts() ([]toolDoc, int, string) {
+	plan, err := s.h.Static.Plan(s.ctx, s.j)
+	if err != nil {
+		return nil, 0, reasonDependency
+	}
+	files := s.entries()
+	var docs []toolDoc
+	total := 0
+	for _, t := range plan {
+		if !strings.HasPrefix(t.Key, "go-vet") {
+			continue
+		}
+		td := toolDoc{key: t.Key, upstream: record.Upstream{Source: t.Key}}
+		b, err := readBounded(govet.ObservationsPath(s.j.Scratch, t.Key), 8<<20)
+		if err != nil {
+			td.upstream.State, td.upstream.Reason = record.UpstreamUnavailable, reasonRecordMissing
+			docs = append(docs, td)
+			continue
+		}
+		var d govet.Document
+		if domain.DecodeStrict(b, &d) != nil || d.SchemaVersion != govet.DocumentSchemaVersion || d.Kind != govet.DocumentKind || d.AnalyzerID != govet.AnalyzerID ||
+			d.TaskKey != t.Key || d.ManifestDigest != s.j.Snapshot.Digest || d.Observations == nil || len(d.Observations) != d.Parse.Observations {
+			td.upstream.State, td.upstream.Reason = record.UpstreamUnavailable, reasonRecordInvalid
+			docs = append(docs, td)
+			continue
+		}
+		valid := true
+		for _, o := range d.Observations {
+			if o.Location != nil {
+				e, ok := files[o.Location.Path]
+				valid = valid && ok && e.SHA256 == o.Location.BlobSHA256 && o.Location.StartLine >= 1
+			}
+		}
+		if !valid {
+			td.upstream.State, td.upstream.Reason = record.UpstreamUnavailable, reasonRecordInvalid
+			docs = append(docs, td)
+			continue
+		}
+		td.doc, td.upstream.State, td.upstream.SHA256 = d, record.UpstreamAccepted, digestOf(b)
+		total += len(d.Observations)
+		docs = append(docs, td)
+	}
+	if total == 0 {
+		return docs, 0, ReasonNoToolObservation
+	}
+	return docs, total, ""
+}
+
+// ---- module-aware code corpus --------------------------------------------
+
+func goIgnored(p string) bool {
+	segs := strings.Split(p, "/")
+	for _, seg := range segs[:len(segs)-1] {
+		if seg == "vendor" || seg == "testdata" || strings.HasPrefix(seg, ".") || strings.HasPrefix(seg, "_") {
+			return true
+		}
+	}
+	return false
+}
+
+var otherSource = map[string]bool{".c": true, ".cc": true, ".cpp": true, ".cxx": true, ".h": true, ".hpp": true, ".py": true, ".js": true, ".mjs": true, ".ts": true, ".tsx": true, ".jsx": true, ".rs": true}
+
+// codeCorpus selects Go code and test excerpts round-robin over the Go
+// modules of the snapshot (deepest go.mod directory owns a file), so every
+// module in scope is represented before any module gets a second file.
+func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
+	files := s.entries()
+	scope := normalizedScope(s.j.Scope)
+	var modules []string
+	for p := range files {
+		if path.Base(p) == "go.mod" && !goIgnored(p) {
+			modules = append(modules, record.DocumentDir(p))
+		}
+	}
+	sort.Strings(modules)
+	owner := func(p string) string {
+		best := "."
+		for _, m := range modules {
+			if record.ScopeUnder(p, m) && len(m) >= len(best) {
+				best = m
+			}
+		}
+		return best
+	}
+	byModule := map[string][]source.Entry{}
+	eligible, other := 0, false
+	for _, p := range sortedKeys(files) {
+		e := files[p]
+		if !inScope(p, scope) {
+			continue
+		}
+		if otherSource[strings.ToLower(path.Ext(p))] {
+			other = true
+		}
+		if !strings.HasSuffix(p, ".go") || goIgnored(p) || *e.Size > maxFileBytes {
+			continue
+		}
+		eligible++
+		m := owner(p)
+		byModule[m] = append(byModule[m], e)
+	}
+	rank := func(p string) int {
+		switch {
+		case path.Base(p) == "main.go":
+			return 0
+		case strings.HasSuffix(p, "_test.go"):
+			return 2
+		}
+		return 1
+	}
+	order := sortedKeys(byModule)
+	for _, m := range order {
+		list := byModule[m]
+		sort.SliceStable(list, func(a, b int) bool {
+			x, y := list[a].Path, list[b].Path
+			if rank(x) != rank(y) {
+				return rank(x) < rank(y)
+			}
+			if strings.Count(x, "/") != strings.Count(y, "/") {
+				return strings.Count(x, "/") < strings.Count(y, "/")
+			}
+			return x < y
+		})
+	}
+	var out []record.Excerpt
+	var lims []string
+	remain := r1MaxCodeBytes
+	for round := 0; len(out) < r1MaxCodeFiles && remain >= 128; round++ {
+		progressed := false
+		for _, m := range order {
+			if round >= len(byModule[m]) || len(out) >= r1MaxCodeFiles || remain < 128 {
+				continue
+			}
+			progressed = true
+			e := byModule[m][round]
+			kind := "code"
+			if strings.HasSuffix(e.Path, "_test.go") {
+				kind = "test"
+			}
+			x, total, ok, err := s.excerpt(e, kind, "context", 1, 50, min(r1MaxCodeFile, remain))
+			if err != nil {
+				return nil, nil, err
+			}
+			if !ok {
+				continue
+			}
+			if x.End < total {
+				lims = append(lims, "excerpt_only")
+			}
+			out = append(out, x)
+			remain -= record.JSONLen(x.Text)
+		}
+		if !progressed {
+			break
+		}
+	}
+	if eligible > len(out) {
+		lims = append(lims, "files_outside_review_context")
+	}
+	if other {
+		lims = append(lims, limGoOnly)
+	}
+	return out, addLim(nil, lims...), nil
+}
+
+// observation input of the interpret role
+type obsInput struct {
+	ID            string   `json:"id"`
+	TaskKey       string   `json:"task_key"`
+	RuleID        string   `json:"rule_id"`
+	Message       string   `json:"message"`
+	Path          string   `json:"path,omitempty"`
+	StartLine     int      `json:"start_line,omitempty"`
+	EndLine       int      `json:"end_line,omitempty"`
+	LocationState string   `json:"location_state"`
+	EvidenceIDs   []string `json:"evidence_ids"`
+}
+
+type toolInput struct {
+	TaskKey      string   `json:"task_key"`
+	Tool         string   `json:"tool"`
+	ToolVersion  *string  `json:"tool_version"`
+	Module       string   `json:"module"`
+	TaskStatus   string   `json:"task_status"`
+	ExitClass    string   `json:"exit_class"`
+	PartialParse bool     `json:"partial_parse"`
+	ParseOK      bool     `json:"parse_ok"`
+	Observations int      `json:"observations"`
+	Limitations  []string `json:"limitations"`
+}
+
+// observationWindows builds the interpret inputs: tool states, up to
+// r1MaxObservations observations and code windows around their locations.
+func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, []record.ObservationRef, []record.Excerpt, []string, error) {
+	files := s.entries()
+	var tools []toolInput
+	var all []govet.Observation
+	keyOf := map[string]string{}
+	for _, d := range docs {
+		if d.upstream.State != record.UpstreamAccepted {
+			continue
+		}
+		lims := []string{}
+		for _, l := range d.doc.Limitations {
+			if record.ValidCode(l) && len(lims) < 8 {
+				lims = append(lims, l)
+			}
+		}
+		if len(tools) >= r1MaxTools {
+			continue
+		}
+		tools = append(tools, toolInput{TaskKey: d.key, Tool: d.doc.AnalyzerID, ToolVersion: d.doc.ToolVersion, Module: d.doc.Module.Dir, TaskStatus: string(d.doc.Outcome.TaskStatus),
+			ExitClass: d.doc.Outcome.ExitClass, PartialParse: d.doc.Outcome.PartialParse, ParseOK: d.doc.Parse.OK, Observations: len(d.doc.Observations), Limitations: lims})
+		for _, o := range d.doc.Observations {
+			all = append(all, o)
+			keyOf[o.ID] = d.key
+		}
+	}
+	sort.SliceStable(all, func(a, b int) bool {
+		x, y := all[a], all[b]
+		px, py := "\xff", "\xff"
+		lx, ly := 0, 0
+		if x.Location != nil {
+			px, lx = x.Location.Path, x.Location.StartLine
+		}
+		if y.Location != nil {
+			py, ly = y.Location.Path, y.Location.StartLine
+		}
+		if px != py {
+			return px < py
+		}
+		if lx != ly {
+			return lx < ly
+		}
+		return x.ID < y.ID
+	})
+	var lims []string
+	if len(all) > r1MaxObservations {
+		all = all[:r1MaxObservations]
+		lims = append(lims, "observations_outside_interpret_input")
+	}
+	var obs []obsInput
+	var refs []record.ObservationRef
+	var windows []record.Excerpt
+	for _, o := range all {
+		in := obsInput{ID: o.ID, TaskKey: keyOf[o.ID], RuleID: o.RuleID, Message: o.RawMessage, LocationState: o.LocationState, EvidenceIDs: []string{}}
+		ref := record.ObservationRef{ID: o.ID, TaskKey: keyOf[o.ID], Tool: o.Tool, RuleID: o.RuleID}
+		if !utf8.ValidString(in.Message) || record.Sensitive([]byte(in.Message)) || len(in.Message) > 600 {
+			in.Message = "(omitted by the platform)"
+			lims = append(lims, "observation_message_omitted")
+		}
+		if o.Location != nil {
+			l := o.Location
+			in.Path, in.StartLine, in.EndLine = l.Path, l.StartLine, l.EndLine
+			ref.Path, ref.StartLine = l.Path, l.StartLine
+			covered := ""
+			for _, w := range windows {
+				if w.Path == l.Path && w.Start <= l.StartLine && l.StartLine <= w.End {
+					covered = w.ID
+				}
+			}
+			switch {
+			case covered != "":
+				in.EvidenceIDs = []string{covered}
+			case len(windows) >= r1MaxWindows:
+				lims = append(lims, "observation_context_outside_input")
+			case strings.HasSuffix(l.Path, ".go"):
+				kind := "code"
+				if strings.HasSuffix(l.Path, "_test.go") {
+					kind = "test"
+				}
+				x, _, ok, err := s.excerpt(files[l.Path], kind, "observation", max(1, l.StartLine-r1WindowRadius), 2*r1WindowRadius+1, r1MaxWindowBytes)
+				if err != nil {
+					return nil, nil, nil, nil, nil, err
+				}
+				if ok {
+					windows = append(windows, x)
+					in.EvidenceIDs = []string{x.ID}
+				}
+			}
+		}
+		obs = append(obs, in)
+		refs = append(refs, ref)
+	}
+	return tools, obs, refs, windows, addLim(nil, lims...), nil
+}
+
+// documentExcerpts reads the selected guidance documents within the bounds.
+func (s *r1Stage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, []string, error) {
+	files := s.entries()
+	var out []record.Excerpt
+	var lims []string
+	remain := r1MaxDocsBytes
+	for _, d := range selected {
+		e, ok := files[d.Path]
+		if !ok || e.SHA256 != *d.SHA256 {
+			return nil, nil, errSnapshotIntegrity
+		}
+		if len(out) >= r1MaxDocs || remain < 128 {
+			lims = append(lims, "documents_outside_review_input")
+			continue
+		}
+		x, _, ok, err := s.excerpt(e, "document", "", 1, r1MaxDocLines, min(r1MaxDocBytes, remain))
+		if err != nil {
+			return nil, nil, err
+		}
+		if !ok {
+			lims = append(lims, "documents_outside_review_input")
+			continue
+		}
+		if x.End < *d.LineCount {
+			lims = append(lims, "document_excerpt_only")
+		}
+		out = append(out, x)
+		remain -= record.JSONLen(x.Text)
+	}
+	return out, addLim(nil, lims...), nil
+}
+
+// existingDir reports whether p is "." or a directory holding an included
+// file of the snapshot (a path a contract can apply to).
+func (s *r1Stage) existingDir(p string) bool {
+	if p == "." {
+		return true
+	}
+	if !record.ValidScopePath(p) {
+		return false
+	}
+	for q := range s.entries() {
+		if strings.HasPrefix(q, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func marshal(v any) ([]byte, error) { return json.Marshal(v) }
