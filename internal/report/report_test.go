@@ -321,6 +321,61 @@ func withReview(t *testing.T, statuses map[string]string) *fixture {
 	return f
 }
 
+// TC-69 (W19, docs/39 §2.8): a report that would be completed is partial
+// when the run had a static analysis gap (a pack-gap task, not required) or
+// planned no analyzer task at all. Neither is counted as a required task.
+func TestStaticAnalysisGapMakesTheReportPartial(t *testing.T) {
+	reg, _ := NewRegistry(GoVetDecoder{}, fakeReview{accept: true})
+	all := map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"}
+	if r := build(t, withReview(t, all).in, reg); r.Status != StatusCompleted {
+		t.Fatalf("baseline %s %v", r.Status, r.Limitations)
+	}
+	f := withReview(t, all)
+	var rm analysis.ResultManifest
+	_ = json.Unmarshal(f.in.Bodies[f.in.ResultManifest.ID], &rm)
+	reason, id := "analyzer_pack_missing", domain.NewID()
+	rm.Tasks = append(rm.Tasks, analysis.ManifestTask{TaskID: id, Key: "pack-gap.python", Status: domain.TaskUnsupported, Reason: &reason,
+		Executions: []analysis.ManifestExecution{}, Artifacts: []analysis.ManifestArtifact{}, Limitations: []string{reason}})
+	f.in.Tasks = append(f.in.Tasks, TaskFacts{ID: id, Key: "pack-gap.python", Status: "unsupported", Reason: &reason, ExecutionOrdinal: 1})
+	f.setManifest(t, rm)
+	r := build(t, f.in, reg)
+	if r.Status != StatusPartial || r.QualityVerdict != VerdictInconclusive || !has(r.Limitations, LimStaticAnalysisGap+":python") || has(r.Limitations, LimRequiredTaskIncomplete) {
+		t.Fatalf("gap: %s %s %v", r.Status, r.QualityVerdict, r.Limitations)
+	}
+	// The same reason on a key outside the gap namespace is not a gap.
+	f = withReview(t, all)
+	_ = json.Unmarshal(f.in.Bodies[f.in.ResultManifest.ID], &rm)
+	for i := range f.in.Tasks {
+		if f.in.Tasks[i].Key == "go-vet" {
+			f.in.Tasks[i].Reason = &reason
+		}
+	}
+	if r := build(t, f.in, reg); has(r.Limitations, LimStaticAnalysisGap+":go-vet") {
+		t.Fatalf("non-gap key read as gap: %v", r.Limitations)
+	}
+	// No analyzer task at all: the static analysis did not run.
+	f = withReview(t, all)
+	_ = json.Unmarshal(f.in.Bodies[f.in.ResultManifest.ID], &rm)
+	var kept []analysis.ManifestTask
+	for _, mt := range rm.Tasks {
+		if mt.Key != "go-vet" {
+			kept = append(kept, mt)
+		}
+	}
+	rm.Tasks = kept
+	var facts []TaskFacts
+	for _, tf := range f.in.Tasks {
+		if tf.Key != "go-vet" {
+			facts = append(facts, tf)
+		}
+	}
+	f.in.Tasks = facts
+	f.setManifest(t, rm)
+	if r := build(t, f.in, reg); r.Status != StatusPartial || !has(r.Limitations, LimStaticAnalysisNotPlanned) || has(r.Limitations, LimRequiredTaskIncomplete) {
+		t.Fatalf("no analyzer task: %s %v", r.Status, r.Limitations)
+	}
+}
+
 // TC-81: completion and a clean verdict need succeeded review tasks whose
 // bytes a registered decoder accepted; W09 registers none.
 func TestAIReviewGate(t *testing.T) {

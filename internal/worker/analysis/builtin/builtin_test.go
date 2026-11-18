@@ -93,7 +93,14 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(probe)
 	if len(entries) != 0 {
-		t.Fatalf("probe left files: %v", entries)
+		var tree []string
+		_ = filepath.Walk(probe, func(p string, fi os.FileInfo, err error) error {
+			if fi != nil {
+				tree = append(tree, p[len(probe):]+" "+fi.Mode().String())
+			}
+			return nil
+		})
+		t.Fatalf("probe left files: %v (tree %v)", entries, tree)
 	}
 }
 

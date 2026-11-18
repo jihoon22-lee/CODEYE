@@ -112,11 +112,23 @@ type Analyzer interface {
 
 **W20 메모**: `cargo check`와 `cargo clippy`는 항상 build script(`build.rs`)와 proc macro를 컴파일하고 실행한다. 따라서 Rust 기준 분석기 작업은 `RepositoryCode=true`이고, 허가가 없는 소스에서 Rust 기준 분석은 `unsupported`(`repository_code_not_allowed`)다.
 
+### 2.8 범위에 없는 생태계와 분석기 공백
+
+- **범위에 모듈이 없는 생태계는 작업을 계획하지 않는다.** 다른 생태계의 분석기가 자리 작업을 계획해 실패를 만들지 않는다. go vet은 팩 멤버로서 Go 소스가 범위에 없으면 아무것도 계획하지 않는다. R0의 필수 자리 작업(`no_go_files`, `scope_has_no_go_packages`)은 composite에서 사라졌다.
+- **분석할 수 없는 소스는 그 생태계의 팩이 보인다.** Go 소스가 범위에 있는데 go.mod가 없거나 패키지를 만들 수 없으면 go vet은 기존 자리 작업(`unsupported`, `go_module_missing` 등)을 그대로 계획한다. 다른 팩도 자기 생태계의 소스를 분석할 수 없으면 같은 방식으로 보이는 작업을 계획한다.
+- **범위의 생태계에 분석기가 없으면 공백 작업 하나를 계획한다.** composite가 생태계마다 `pack-gap.<생태계>` 작업을 만든다. 이 작업은 필수가 아니고 단계는 `static_analysis`다. 프로세스 없이 `unsupported`(`analyzer_pack_missing`)로 끝나고 not-run envelope(분석기 ID `<생태계>.none`, 도구 `none`, `files_in_scope`=해당 소스 수)를 쓴다. 단계 표시는 그 사유를 보인다. 예: Python만 있는 스냅샷은 `static_analysis`가 `skipped`(`analyzer_pack_missing`)다. 보고서에는 `static_analysis_gap:<생태계>` 제약과 not-run 도구 행이 남고 상태는 `partial`이다. 필수 작업으로 세지 않으므로 `required_task_not_succeeded`가 되지 않는다. 분석하지 않은 소스를 0건 통과로 보이지 않기 위해 보고서는 완료가 아니다.
+- **지원 언어 소스가 하나도 없으면** 분석기 작업이 없다. 단계는 `no_tasks`이고 보고서는 `static_analysis_not_planned` 제약과 함께 `partial`이다.
+- **"범위에 있다"의 정의는 하나다**: `pack.SourceFiles`. 범위 안의 포함 파일 중 소스 확장자(Go `.go`, Python `.py`·`.pyi`, JS/TS `.js`·`.jsx`·`.mjs`·`.cjs`·`.ts`·`.tsx`·`.mts`·`.cts`, Rust `.rs`, C/C++ `.c`·`.cc`·`.cpp`·`.cxx`·`.h`·`.hh`·`.hpp`·`.hxx` 등)를 센다. 숨김 디렉터리, `testdata`, `vendor`, `node_modules` 아래 파일은 세지 않는다. build 파일만으로는(Makefile, package.json, pyproject.toml) 생태계가 범위에 들어오지 않는다. Makefile이 있는 Go 저장소에 C/C++ 공백이 생기지 않게 하기 위해서다. 모듈 판단은 각 팩이 한다.
+- **분석기가 있는지는 카탈로그가 정한다.** 생태계의 멤버(설정된 분석기든 미설정 대역이든)가 하나라도 있으면 공백 작업을 만들지 않는다. 그 생태계는 그 팩이 계획한다. 팩은 카탈로그에 자기 항목만 추가하면 된다. `any` 생태계 분석기(W21 구조·비밀정보)는 언어 공백을 메우지 않는다.
+- `pack-gap` 이름은 예약어다. 분석기 이름으로 쓸 수 없고 다른 분석기의 소유 범위와 겹칠 수 없다.
+
+review-v1 고정은 공백 작업과 무관하다. `TestReviewV1IsPinned`는 정적 계획 대신 고정 stub으로 역할 key·지침·코퍼스·요청 바이트를 고정한다. 정적 작업 목록이 바뀌어도 v1 요청은 같다.
+
 ## 3. review-v1과 go vet 고정
 
 - go vet은 `govet.Handler.Analyzer()`로 멤버가 된다. 계획(key·제목·필수·단계), 실행, v0.1 문서 바이트가 W08과 같다. `builtin.TestGoVetUnchangedInComposite`가 go vet 단독 handler와 composite 경유 결과를 바이트 단위로 비교한다.
 - `review.TestReviewV1IsPinned`는 수정하지 않았다. review-v1의 요청·지침·코퍼스는 그대로다.
-- 바뀐 것: result manifest의 handler 이름이 `go-vet`에서 `analyzers`로 바뀐다. Go 모듈이 있는 스냅샷의 계획에 `staticcheck`(·`.mNN`) 작업이 go vet 작업 뒤에 추가된다. staticcheck를 설정하지 않은 노드에서는 §2.5에 따라 `static_analysis` 단계가 `partial`로 표시된다.
+- 바뀐 것: result manifest의 handler 이름이 `go-vet`에서 `analyzers`로 바뀐다. Go 모듈이 있는 스냅샷의 계획에 `staticcheck`(·`.mNN`) 작업이 go vet 작업 뒤에 추가된다. staticcheck를 설정하지 않은 노드에서는 §2.5에 따라 `static_analysis` 단계가 `partial`로 표시된다. Go 소스가 범위에 없는 스냅샷에서는 go vet 자리 작업 대신 §2.8의 공백 규칙을 따른다(단독 `govet.Handler`의 W08 동작과 TC-69 단위 시험은 그대로다).
 
 ## 4. 관찰 envelope `analyzer_observations` v0.1
 
@@ -272,6 +284,8 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 | `discovery.TestAnalyzerToolProbe*`, `envdoc.TestAnalyzerToolsValidation` | probe 실행 계약, not_probed, 실패 기록, 생태계 범위, 실제 probe |
 | `review.TestR1InterpretReadsGenericEnvelope` | R1 해석 입력에 두 엔진 관찰, not-run 행, 누락 상류 |
 | `run.TestAnalyzerPackWith*` (Linux) | 실제 워커: CI 조건의 미설정 가시성, 실제 go vet + staticcheck end-to-end |
+| `pack.TestGapsForEcosystemsWithoutAnalyzer`, `govet.TestNonGoSnapshotUnsupported`, `report.TestStaticAnalysisGapMakesTheReportPartial` (TC-69) | 공백 작업 계획·실행·envelope, 확장자·scope·데이터 디렉터리 규칙, `any` 미충족, 예약 이름, go vet 멤버의 비 Go 무계획과 `go_module_missing` 유지, 보고서 `partial` |
+| `run.TestNonGoSnapshotsShowTheGapNotARequiredFailure` (Linux, TC-69) | 실제 워커·composite·보고서·단계: Python만 있는 스냅샷은 `static_analysis` `skipped`(`analyzer_pack_missing`)·보고서 `partial`/`inconclusive`·필수 정적 작업 없음, 지원 언어가 없는 스냅샷은 `no_tasks`·`static_analysis_not_planned` |
 
 실제 staticcheck finding이 든 보고서(전체·코드 제외)는 `CODEYE_W19_REPORT_DUMP=<dir> go test -run TestAnalyzerDecoderStaticcheckFindings ./internal/report/`로 꺼내 `report.schema.json`·`finding.schema.json`으로 검증했다(fixture의 Go 프로젝트에서는 staticcheck 진단이 없어 node smoke가 이 형태를 만들지 않는다). Windows는 바뀐 패키지의 시험을 windows/amd64로 빌드해 WSL interop으로 실행했다. Windows용 Go가 없는 환경이라 Go toolchain이 필요한 시험(재생, go vet 고정, 실제 probe)은 건너뛰었고 Windows CI의 Go로 실행된다. review-v1 역할은 스냅샷 코퍼스만 읽고 정적 계획·도구 산출물을 읽지 않으므로 staticcheck 작업이 추가돼도 v1 요청 바이트는 같다.
 
@@ -283,7 +297,7 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 - build context는 노드 기본 GOOS/GOARCH, tag 없음, CGO 끔 하나다. tag·CGO·다른 target 조합은 계획하지 않는다.
 - `related` 위치는 envelope와 R1 입력에만 있다. 보고서 finding은 주 위치만 보인다.
 - R1 해석의 호출자 확장은 Go 코드에서만 동작한다(W15). 다른 언어 팩이 해석 입력을 쓰려면 코드 창 선택을 확인해야 한다.
-- go vet은 Go가 없는 스냅샷에도 R0의 `unsupported` 자리 작업을 계획한다. review-v1 고정 때문에 유지했다. W17 이후 Go 없는 노드·스냅샷의 표시를 다시 정해야 한다.
+- 공백 판단은 소스 확장자 기준이다(§2.8). 확장자가 없는 스크립트나 생성 파일은 세지 않는다. 범위에 소스가 있어도 그 생태계의 팩이 모듈을 찾지 못하면 그 팩이 보이는 작업을 계획해야 한다. composite는 이를 강제하지 않는다.
 - 탐색 probe는 범위 안 생태계의 도구만 기록한다. `any` 생태계 도구(W21)는 항상 기록된다.
 - `tool_processed_files` 합집합은 처리 수가 있는 모든 행이 같은 수의 경로를 줄 때만 쓴다. 그렇지 않으면 합계로 돌아간다.
 - W23 비교는 같은 분석기의 `tool_version`만 대조한다. 규칙 선택(`rule_pack`, staticcheck의 `Checks`)이 바뀌어도 비교는 이를 규칙 변경으로 보지 않는다. 팩이 늘기 전에 규칙 팩 ID·버전을 보고서 도구 행에 올려 비교에 넣어야 한다.

@@ -308,6 +308,7 @@ export const ko = {
       tool_unavailable: '지정된 분석 도구가 시작 검증·버전 확인을 통과하지 못해 실행하지 않음 (미지원)',
       toolchain_not_configured: '이 분석 도구가 필요로 하는 언어 toolchain이 노드에 지정되지 않아 실행하지 않음 (미지원)',
       repository_code_not_allowed: '저장소 코드(build script·설정 프로그램·plugin)를 실행해야 하는 분석인데 노드 운영자가 이 소스에 허가하지 않아 실행하지 않음 (미지원)',
+      analyzer_pack_missing: '범위에 이 언어의 소스가 있으나 이 노드에 그 언어의 분석기가 없음 (정적 분석 공백, 0건 통과 아님)',
     } as Record<string, string>,
     reasonLabel: (label: string) => `사유: ${label}`,
     finishedOfPlanned: (finished: number, planned: number) => `${finished}/${planned} 종료`,

@@ -187,7 +187,7 @@
 | TC-66 | 실제 `go vet -json` exit 0 + 진단을 관찰로 변환, snapshot 상대 위치·manifest hash·raw byte 범위, 순서 무관 ID, 노드 경로 미노출, 원본·snapshot 불변 | REQ-006,007,008,014; TC-07,17 |
 | TC-67 | 타입 오류 부분 파싱, 잘림·손상·analyzer 오류를 실패로 기록하고 0건으로 바꾸지 않음 | REQ-007,008; TC-08 |
 | TC-68 | 오프라인 의존 모듈·toolchain 부족은 configuration_error, 다운로드 fallback 없음, snapshot 밖 `replace` 실행 전 거부 | REQ-015; NFR-006 |
-| TC-69 | timeout·취소·실행 거부·정리 불확실·비 Go 입력의 상태, probe 실패 시 capability 미광고 | REQ-022,035; TC-18 |
+| TC-69 | timeout·취소·실행 거부·정리 불확실·비 Go 입력의 상태, probe 실패 시 capability 미광고. W19 composite: Go 소스가 범위에 없으면 go vet 작업을 계획하지 않고, 분석기가 없는 언어의 소스는 필수가 아닌 공백 작업(`pack-gap.<생태계>`, `analyzer_pack_missing`)과 보고서 `static_analysis_gap`으로, 지원 언어 소스가 없으면 `static_analysis_not_planned`로 보이며 보고서는 `partial`이다 | REQ-012,022,035; TC-18 |
 | TC-70 | build constraint·cgo로 빠진 패키지와 무시 파일의 범위 표시, 분석 패키지 0개는 미지원, 중첩 모듈·scope, workspace drift 실패·위치 미연결, handler registry·result manifest 검증 | REQ-006,008; TC-05 |
 
 [W08 기록](29-w08-go-vet.md)의 실행 환경·실제 CODEYE snapshot 결과·OS별 시험 범위을 따른다. 이 시험은 Go vet 어댑터 범위이며 W09 보고서와 분석 품질 측정을 뜻하지 않는다.

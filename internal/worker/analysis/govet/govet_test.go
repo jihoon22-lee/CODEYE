@@ -368,6 +368,26 @@ func TestNonGoSnapshotUnsupported(t *testing.T) {
 	if !contains(doc.Limitations, "no_go_files") || doc.Outcome.ExitClass != ExitNotRun {
 		t.Fatalf("doc = %+v", doc)
 	}
+	// W19 (docs/39 §2.8): as a pack member go vet plans nothing when no Go
+	// source is in scope; the composite shows the ecosystems' own gaps. The
+	// placeholder stays when Go source is in scope but cannot be analyzed.
+	ctx := context.Background()
+	if tasks, err := Plan(ctx, fx.Job); err != nil || len(tasks) != 0 {
+		t.Fatalf("member plan without Go: %+v %v", tasks, err)
+	}
+	scoped := newFixture(t, "", probeFiles(), domain.Scope{Kind: "paths", Paths: []string{"README.md"}})
+	if tasks, err := Plan(ctx, scoped.Job); err != nil || len(tasks) != 0 {
+		t.Fatalf("member plan with Go out of scope: %+v %v", tasks, err)
+	}
+	noModule := newFixture(t, "", map[string]string{"main.go": "package main\n"}, domain.Scope{})
+	tasks, err := Plan(ctx, noModule.Job)
+	if err != nil || len(tasks) != 1 || tasks[0].Spec.Key != "go-vet" || !tasks[0].Spec.Required {
+		t.Fatalf("member plan with Go but no module: %+v %v", tasks, err)
+	}
+	res = runAll(t, h, noModule.Job, runner)["go-vet"]
+	if doc, _ := readDoc(t, res); res.Status != domain.TaskUnsupported || !contains(doc.Limitations, "go_module_missing") {
+		t.Fatalf("no module: %s %+v", res.Status, doc.Limitations)
+	}
 }
 
 // TC-70: a workspace file changed after cloning is reported and

@@ -17,8 +17,13 @@ import (
 
 func job(t *testing.T) analysis.Job {
 	t.Helper()
+	return jobFiles(t, map[string]string{"go.mod": "module x\n\ngo 1.22\n", "a.go": "package x\n", "README.md": "x\n"})
+}
+
+func jobFiles(t *testing.T, files map[string]string) analysis.Job {
+	t.Helper()
 	src, data := t.TempDir(), t.TempDir()
-	for rel, body := range map[string]string{"go.mod": "module x\n\ngo 1.22\n", "a.go": "package x\n", "py/m.py": "print(1)\n"} {
+	for rel, body := range files {
 		p := filepath.Join(src, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
@@ -320,6 +325,74 @@ func TestRepositoryCodeGrantIsEnforcedBeforeDispatch(t *testing.T) {
 	j.AllowRepositoryCode = true
 	if r := c.Run(ctx, j, analysis.TaskSpec{Key: "build.m09"}, &countingRunner{}); r.Status != domain.TaskFailed || !slices.Contains(r.Limitations, ReasonUnknownTask) || len(tool.ran) != 0 {
 		t.Fatalf("unplanned key %+v ran=%v", r, tool.ran)
+	}
+}
+
+// TC-69 (W19 composite): an ecosystem whose source is in scope but which has
+// no analyzer in this build plans one visible, not-required gap task per
+// ecosystem; it ends unsupported/analyzer_pack_missing with a not-run
+// envelope. Build files alone, vendored, hidden and testdata files and
+// out-of-scope source do not create a gap, and an "any" analyzer does not
+// fill a language gap.
+func TestGapsForEcosystemsWithoutAnalyzer(t *testing.T) {
+	ctx := context.Background()
+	j := jobFiles(t, map[string]string{
+		"go.mod": "module x\n\ngo 1.22\n", "a.go": "package x\n", "Makefile": "all:\n", "package.json": "{}\n",
+		"py/m.py": "print(1)\n", "py/n.py": "print(2)\n", "web/app.ts": "export {}\n",
+		"vendor/v.rs": "fn main() {}\n", ".hidden/h.c": "int x;\n", "py/testdata/t.cc": "int y;\n", "node_modules/m/i.js": "x\n",
+	})
+	vet := &fake{d: desc("go.vet", "go-vet", true), keys: []string{"go-vet"}}
+	secrets := &fake{d: Descriptor{ID: "any.secrets", Name: "secrets", Ecosystem: "any", Tool: "secrets", ParseVersion: version}}
+	c, err := NewComposite(vet, secrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := c.PlanTasks(ctx, j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	for _, task := range tasks {
+		keys = append(keys, task.Spec.Key)
+	}
+	if !slices.Equal(keys, []string{"go-vet", "pack-gap.javascript", "pack-gap.python"}) {
+		t.Fatalf("keys %v", keys)
+	}
+	py := tasks[2]
+	if py.Spec.Required || py.Spec.Stage != domain.StageStaticAnalysis || py.FilesInScope == nil || *py.FilesInScope != 2 || py.RepositoryCode {
+		t.Fatalf("gap task %+v", py)
+	}
+	runner := &countingRunner{}
+	res := c.Run(ctx, j, py.Spec, runner)
+	if res.Status != domain.TaskUnsupported || res.Reason != ReasonAnalyzerPackMissing || runner.starts != 0 || len(res.Executions) != 0 {
+		t.Fatalf("gap result %+v", res)
+	}
+	doc := readEnvelope(t, j, res, "pack-gap.python")
+	if doc.Analyzer != (obsdoc.Analyzer{ID: "python.none", Ecosystem: "python", Required: false}) || doc.Outcome.ExitClass != obsdoc.ExitNotRun ||
+		len(doc.Coverage.ProcessedPaths) != 0 || doc.Coverage.ProcessedPaths == nil || *doc.Coverage.FilesInScope != 2 ||
+		!slices.Equal(doc.Limitations, []string{ReasonAnalyzerPackMissing}) {
+		t.Fatalf("gap envelope %+v", doc)
+	}
+	for _, key := range []string{"pack-gap.rust", "pack-gap", "pack-gap.python.x"} {
+		if r := c.Run(ctx, j, analysis.TaskSpec{Key: key}, runner); r.Status != domain.TaskFailed || !slices.Contains(r.Limitations, ReasonUnknownTask) {
+			t.Fatalf("%s: %+v", key, r)
+		}
+	}
+
+	// Scope decides: only the scoped ecosystem's gap remains.
+	j.Scope = domain.Scope{Kind: "paths", Paths: []string{"py"}}
+	if tasks, _ := c.PlanTasks(ctx, j); len(tasks) != 2 || tasks[1].Spec.Key != "pack-gap.python" {
+		t.Fatalf("scoped plan %+v", tasks)
+	}
+	// An ecosystem with an analyzer is the analyzer's to plan: no gap even
+	// when it plans nothing.
+	pyAnalyzer := &fake{d: Descriptor{ID: "python.lint", Name: "py-lint", Ecosystem: "python", Required: true, Tool: "lint", ParseVersion: version}}
+	c2, _ := NewComposite(vet, pyAnalyzer)
+	if tasks, _ := c2.PlanTasks(ctx, j); len(tasks) != 1 || tasks[0].Spec.Key != "go-vet" {
+		t.Fatalf("covered ecosystem %+v", tasks)
+	}
+	if _, err := NewComposite(&fake{d: desc("go.gap", "pack-gap", true)}); err == nil {
+		t.Fatal("reserved gap name accepted")
 	}
 }
 

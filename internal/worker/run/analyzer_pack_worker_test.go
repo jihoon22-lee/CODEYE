@@ -9,9 +9,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
+	"github.com/jihoon22-lee/CODEYE/internal/progress"
+	"github.com/jihoon22-lee/CODEYE/internal/report"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
@@ -29,22 +34,35 @@ type packRun struct {
 	envs     []envdoc.Document
 	docs     map[string]obsdoc.Document // generic envelopes by task key
 	complete *workerproto.Complete
+	// stages are the task_created stages by key; report is built from the
+	// uploaded artifacts with the default registry.
+	stages map[string]domain.Stage
+	report report.Report
 }
 
 // runPack runs the production deep-review composition (discovery → the
 // analyzer composite → review-v1 roles) through the real worker on a small
 // Go module with a go vet and a staticcheck finding.
 func runPack(t *testing.T, tools map[string]string) packRun {
+	return runPackFiles(t, map[string]string{
+		"main.go":    "package main\n",
+		"go.mod":     "module example.test/e2e\n\ngo 1.22\n",
+		"lib/lib.go": "package lib\n\nimport (\n\t\"fmt\"\n\t\"regexp\"\n)\n\nfunc Re() *regexp.Regexp { return regexp.MustCompile(\"[\") }\n\nfunc P() { fmt.Printf(\"%d\", \"x\") }\n",
+	}, tools)
+}
+
+// runPackFiles is runPack on a snapshot of exactly files.
+func runPackFiles(t *testing.T, files map[string]string, tools map[string]string) packRun {
 	t.Helper()
 	goExe := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
 	e := newEnv(t)
-	for rel, body := range map[string]string{
-		"go.mod":     "module example.test/e2e\n\ngo 1.22\n",
-		"lib/lib.go": "package lib\n\nimport (\n\t\"fmt\"\n\t\"regexp\"\n)\n\nfunc Re() *regexp.Regexp { return regexp.MustCompile(\"[\") }\n\nfunc P() { fmt.Printf(\"%d\", \"x\") }\n",
-	} {
+	if err := os.Remove(filepath.Join(e.src, "main.go")); err != nil {
+		t.Fatal(err)
+	}
+	for rel, body := range files {
 		p := filepath.Join(e.src, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 			t.Fatal(err)
@@ -96,6 +114,25 @@ func runPack(t *testing.T, tools map[string]string) packRun {
 	fa.mu.Lock()
 	defer fa.mu.Unlock()
 	if err := json.Unmarshal(fa.artifacts[*out.complete.ResultManifestClientArtifact], &out.manifest); err != nil {
+		t.Fatal(err)
+	}
+	out.stages = map[string]domain.Stage{}
+	for _, m := range fa.msgs {
+		if v, ok := m.(*workerproto.Event); ok && v.Kind == nodeproto.EventTaskCreated {
+			var p struct {
+				Key   string       `json:"key"`
+				Stage domain.Stage `json:"stage"`
+			}
+			if err := json.Unmarshal(v.Payload, &p); err != nil {
+				t.Fatal(err)
+			}
+			out.stages[p.Key] = p.Stage
+		}
+	}
+	if out.report, err = report.Build(reportInput(t, fa, out.manifest, *out.complete.ResultManifestClientArtifact), report.DefaultRegistry()); err != nil {
+		t.Fatal(err)
+	}
+	if err := report.ValidateReport(out.report); err != nil {
 		t.Fatal(err)
 	}
 	for id, body := range fa.artifacts {
@@ -227,4 +264,84 @@ func TestAnalyzerPackWithRealStaticcheck(t *testing.T) {
 		t.Fatalf("analyzer tools %+v", at)
 	}
 	t.Logf("staticcheck %s: %d observations, rules %v", *at[0].Version, len(d.Observations), rules)
+}
+
+// TC-69 (W19, docs/39 §2.8): snapshots without Go through the production
+// composition on a node with --go only. go vet plans nothing (no required
+// placeholder), so nothing fails for an ecosystem that is not there. A
+// Python-only snapshot has a visible gap instead: one not-required
+// pack-gap.python task, the static_analysis stage skipped with
+// analyzer_pack_missing, the report partial with static_analysis_gap:python
+// and a not-run tool row, never required_task_not_succeeded, verdict
+// inconclusive. A snapshot with no supported language source plans no
+// analyzer task: the stage has no tasks and the report is partial with
+// static_analysis_not_planned.
+func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		files   map[string]string
+		static  []string
+		state   progress.State
+		reasons []string
+		lim     string
+	}{
+		{"python only", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
+			[]string{"pack-gap.python"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:python"},
+		{"no supported language", map[string]string{"README.md": "# docs\n", "docs/guide.md": "guide\n", "Makefile": "all:\n"},
+			nil, progress.NoTasks, []string{}, "static_analysis_not_planned"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := runPackFiles(t, tc.files, nil)
+			var static []string
+			var tasks []progress.Task
+			for _, task := range r.manifest.Tasks {
+				stage := r.stages[task.Key]
+				if stage == domain.StageStaticAnalysis {
+					static = append(static, task.Key)
+					if task.Required {
+						t.Fatalf("required static task %+v", task)
+					}
+				}
+				reason := ""
+				if task.Reason != nil {
+					reason = *task.Reason
+				}
+				tasks = append(tasks, progress.Task{Stage: stage, Status: task.Status, Reason: reason})
+			}
+			if !slices.Equal(static, tc.static) {
+				t.Fatalf("static tasks %v, all %v", static, taskRows(r.manifest))
+			}
+			view := progress.Compute(progress.Run{Status: domain.RunPartial, SnapshotFixed: true, Tasks: tasks})
+			var stage progress.Stage
+			for _, s := range view.Stages {
+				if s.Key == string(domain.StageStaticAnalysis) {
+					stage = s
+				}
+			}
+			if stage.State != tc.state || !slices.Equal(stage.Reasons, tc.reasons) || stage.Planned == nil || *stage.Planned != len(tc.static) {
+				t.Fatalf("static_analysis stage %+v", stage)
+			}
+			rep := r.report
+			if rep.Status != report.StatusPartial || rep.QualityVerdict != report.VerdictInconclusive || !slices.Contains(rep.Limitations, tc.lim) {
+				t.Fatalf("report %s/%s limitations %v", rep.Status, rep.QualityVerdict, rep.Limitations)
+			}
+			// The model review is not approved for this source, so its
+			// required roles did not succeed; no other required task exists.
+			for _, task := range rep.Tasks {
+				if task.RequiredForVerdict && task.Status != "succeeded" && !strings.HasPrefix(task.Key, "review.") {
+					t.Fatalf("required non-review task did not succeed: %+v", task)
+				}
+			}
+			var analyzers []string
+			for _, row := range rep.Coverage.Tools {
+				analyzers = append(analyzers, row.Analyzer+"="+row.ExitClass)
+				if row.ProcessedFiles == nil || *row.ProcessedFiles != 0 {
+					t.Fatalf("gap row %+v", row)
+				}
+			}
+			if want := map[int][]string{1: {"python.none=not_run"}, 0: nil}[len(tc.static)]; !slices.Equal(analyzers, want) {
+				t.Fatalf("tool rows %v", analyzers)
+			}
+		})
+	}
 }

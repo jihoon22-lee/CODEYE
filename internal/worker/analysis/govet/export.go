@@ -21,7 +21,11 @@ func Descriptor() pack.Descriptor {
 		ParseVersion: func(b []byte) (string, bool) { v, _, ok := parseVersion(b); return v, ok }}
 }
 
-// Plan is go vet's tool-independent planner (the handler's plan, with scope).
+// Plan is go vet's tool-independent planner as a pack member: the handler's
+// plan with scope, except that a snapshot or scope without Go source plans
+// nothing (docs/39 §2.8). The R0 placeholder stays only when Go source is in
+// scope but no module or package can be analyzed (go_module_missing,
+// scope_has_no_go_packages): that is a real gap of this ecosystem.
 func Plan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -29,6 +33,9 @@ func Plan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {
 	planned, err := planTasks(job.Snapshot.Manifest, job.Scope)
 	if err != nil {
 		return nil, err
+	}
+	if len(planned) == 1 && planned[0].Unsupported != "" && pack.SourceFiles(job.Snapshot.Manifest, job.Scope)["go"] == 0 {
+		return nil, nil
 	}
 	files := includedFiles(job.Snapshot.Manifest)
 	modules := moduleDirs(files)

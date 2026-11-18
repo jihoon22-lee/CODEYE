@@ -9,6 +9,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -42,10 +43,17 @@ const (
 	LimRunCancelled           = "run_cancelled"
 	LimRunFailed              = "run_failed"
 	LimTestsNotPerformed      = "required_tests_not_performed"
-	NoteInventoryAllLanguages = "inventory_counts_all_included_files"
-	NoteToolFilesUnknown      = "tool_processed_files_unknown"
-	NoteNoTestsPlanned        = "tests_not_planned"
-	NoteToolZeroIsNotClean    = "tool_reported_zero_is_not_clean"
+	// LimStaticAnalysisGap (":<ecosystem>"): source of a language ecosystem
+	// was in scope and the worker had no analyzer for it (a pack-gap task,
+	// docs/39 §2.8). The report is partial; the gap is not a required task.
+	LimStaticAnalysisGap = "static_analysis_gap"
+	// LimStaticAnalysisNotPlanned: the run planned no analyzer task at all
+	// (no supported language source in scope). The report is partial.
+	LimStaticAnalysisNotPlanned = "static_analysis_not_planned"
+	NoteInventoryAllLanguages   = "inventory_counts_all_included_files"
+	NoteToolFilesUnknown        = "tool_processed_files_unknown"
+	NoteNoTestsPlanned          = "tests_not_planned"
+	NoteToolZeroIsNotClean      = "tool_reported_zero_is_not_clean"
 )
 
 type taskState struct {
@@ -314,8 +322,18 @@ func Build(in Input, reg *Registry) (Report, error) {
 
 	// Status from structured facts only.
 	readable, requiredMissing, incompleteResult := false, false, false
+	analyzerPlanned := false
 	for _, k := range keys {
 		st := states[k]
+		if record.AnalyzerTaskKey(k) {
+			analyzerPlanned = true
+		}
+		// A static analysis gap is visible and makes the report partial
+		// without being counted as a required task (docs/39 §2.8).
+		if pack.Owns(pack.GapName, k) && st.facts.Reason != nil && *st.facts.Reason == pack.ReasonAnalyzerPackMissing {
+			lim.add(LimStaticAnalysisGap + ":" + strings.TrimPrefix(k, pack.GapName+"."))
+			incompleteResult = true
+		}
 		if st.facts.Status == string(domain.TaskSucceeded) && rm != nil && !st.rejected {
 			readable = true
 		}
@@ -332,6 +350,10 @@ func Build(in Input, reg *Registry) (Report, error) {
 	}
 	if requiredMissing {
 		lim.add(LimRequiredTaskIncomplete)
+	}
+	if !analyzerPlanned {
+		lim.add(LimStaticAnalysisNotPlanned)
+		incompleteResult = true
 	}
 	if in.Attempt.Cleanup != "confirmed" || (rm != nil && rm.CleanupState != "confirmed") {
 		lim.add(LimCleanupUncertain)

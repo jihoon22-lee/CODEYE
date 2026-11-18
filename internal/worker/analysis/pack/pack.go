@@ -144,7 +144,8 @@ type PlanFunc func(ctx context.Context, job analysis.Job) ([]Task, error)
 
 // Composite runs several analyzers as one handler: plans are concatenated in
 // member order, every task key is owned by exactly one member, and Run is
-// dispatched to the owner.
+// dispatched to the owner. After the members it plans one gap task per
+// language ecosystem with source in scope and no member (docs/39 §2.8).
 type Composite struct {
 	members []Analyzer
 }
@@ -173,7 +174,7 @@ func NewComposite(members ...Analyzer) (*Composite, error) {
 				return nil, fmt.Errorf("pack: analyzer names %q and %q overlap", n, d.Name)
 			}
 		}
-		if strings.HasPrefix(d.Name, "review") || Owns(d.Name, "env.discover") || Owns(d.Name, "docs.discover") {
+		if strings.HasPrefix(d.Name, "review") || Owns(d.Name, "env.discover") || Owns(d.Name, "docs.discover") || Owns(d.Name, GapName) || Owns(GapName, d.Name) {
 			return nil, fmt.Errorf("pack: analyzer name %q is reserved", d.Name)
 		}
 		ids[d.ID] = true
@@ -223,7 +224,30 @@ func (c *Composite) PlanTasks(ctx context.Context, job analysis.Job) ([]Task, er
 			out = append(out, t)
 		}
 	}
-	return out, nil
+	return append(out, c.gaps(job)...), nil
+}
+
+// gaps are the gap tasks of job: one per language ecosystem with source in
+// scope and no member analyzer (docs/39 §2.8). A member of ecosystem "any"
+// (structure, secrets) never fills a language gap. An ecosystem that has a
+// member is that member's to plan, including a visible placeholder when its
+// source cannot be analyzed.
+func (c *Composite) gaps(job analysis.Job) []Task {
+	covered := map[string]bool{}
+	for _, m := range c.members {
+		covered[m.Descriptor().Ecosystem] = true
+	}
+	files := SourceFiles(job.Snapshot.Manifest, job.Scope)
+	var out []Task
+	for _, eco := range InScope(job.Snapshot.Manifest, job.Scope) {
+		if covered[eco] {
+			continue
+		}
+		n := files[eco]
+		out = append(out, Task{Spec: analysis.TaskSpec{Key: GapName + "." + eco, Required: false, Title: "static analysis gap: no " + eco + " analyzer in this build",
+			Stage: domain.StageStaticAnalysis}, Module: ".", Patterns: []string{}, FilesInScope: &n})
+	}
+	return out
 }
 
 // Plan implements analysis.Handler.
@@ -270,6 +294,12 @@ func findTask(tasks []Task, key string) *Task {
 // the owner's plan (never taken from the TaskSpec handed back by the
 // worker), and a key the plan does not produce fails closed.
 func (c *Composite) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
+	if Owns(GapName, task.Key) {
+		if t := findTask(c.gaps(job), task.Key); t != nil {
+			return NotRun(job, gapDescriptor(t.Spec.Key[len(GapName)+1:]), *t, ReasonAnalyzerPackMissing)
+		}
+		return handlerFailure(ReasonUnknownTask)
+	}
 	m, ok := c.Owner(task.Key)
 	if !ok {
 		return handlerFailure(ReasonUnknownTask)
