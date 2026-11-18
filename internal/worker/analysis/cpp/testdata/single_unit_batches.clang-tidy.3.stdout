@@ -1,0 +1,5 @@
+[REDACTED]/src/util.cpp:9:10: warning: 'a' used after it was moved [bugprone-use-after-move]
+[REDACTED]/src/util.cpp:8:19: note: move occurred here
+[REDACTED]/src/util.cpp:22:3: warning: Memory allocated by 'new[]' should be deallocated by 'delete[]', not 'delete' [clang-analyzer-unix.MismatchedDeallocator]
+[REDACTED]/src/util.cpp:18:17: note: Memory is allocated
+[REDACTED]/src/util.cpp:22:3: note: Memory allocated by 'new[]' should be deallocated by 'delete[]', not 'delete'

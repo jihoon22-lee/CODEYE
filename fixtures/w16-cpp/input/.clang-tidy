@@ -1,0 +1,9 @@
+---
+# Repository configuration. CODEYE's --config replaces it (docs/41 §5): if
+# clang-tidy read it, only readability-identifier-naming would run, header
+# diagnostics would be filtered out and every warning would become an error.
+Checks: '-*,readability-identifier-naming'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '^$'
+ExtraArgs: ['-DW16_REPOSITORY_CONFIG_READ=1', '-Wno-everything']
+...

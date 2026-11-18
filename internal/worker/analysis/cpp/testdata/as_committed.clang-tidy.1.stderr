@@ -1,0 +1,11 @@
+[1/3] Processing file [REDACTED]/src/parse.cpp.
+1 error generated.
+Error while processing [REDACTED]/src/parse.cpp.
+[2/3] Processing file [REDACTED]/src/ring.c.
+4 warnings and 1 error generated.
+Error while processing [REDACTED]/src/ring.c.
+[3/3] Processing file [REDACTED]/src/util.cpp.
+7 warnings and 1 error generated.
+Error while processing [REDACTED]/src/util.cpp.
+Suppressed 3 warnings (1 NOLINT, 2 with check filters).
+Found compiler error(s).

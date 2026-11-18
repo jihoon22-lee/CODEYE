@@ -1,0 +1,4 @@
+#ifndef W16_CONFIG_H
+#define W16_CONFIG_H
+#define W16_VERSION "@PROJECT_VERSION@"
+#endif

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<results version="2">
+    <cppcheck version="2.22.0"/>
+    <errors>
+        <error id="zerodiv" severity="error" msg="Division by zero." verbose="Division by zero." cwe="369" hash="9118917848494943683" file0="[REDACTED]/src/--help.cpp">
+            <location file="[REDACTED]/src/--help.cpp" line="3" column="12" info="Division by zero"/>
+            <location file="[REDACTED]/src/--help.cpp" line="2" column="11" info="Assignment &apos;z=0&apos;, assigned value is 0"/>
+        </error>
+        <error id="zerodiv" severity="error" msg="Division by zero." verbose="Division by zero." cwe="369" hash="9118917848494943683" file0="[REDACTED]/src/-x.c">
+            <location file="[REDACTED]/src/-x.c" line="3" column="12" info="Division by zero"/>
+            <location file="[REDACTED]/src/-x.c" line="2" column="11" info="Assignment &apos;z=0&apos;, assigned value is 0"/>
+        </error>
+        <error id="checkersReport" severity="information" msg="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
+    </errors>
+</results>

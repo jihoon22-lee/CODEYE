@@ -1,0 +1,372 @@
+{
+  "adapter": {
+    "id": "cppcheck",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "cpp",
+    "id": "cpp.cppcheck",
+    "required": true
+  },
+  "coverage": {
+    "files_in_scope": 4,
+    "files_skipped": 0,
+    "files_unlisted": 1,
+    "processed_paths": [
+      "src/parse.cpp",
+      "src/ring.c",
+      "src/util.cpp"
+    ],
+    "unit": "translation_unit",
+    "units": {
+      "analyzed_with_findings": 3,
+      "not_in_compile_db": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "cppcheck",
+          "--version"
+        ],
+        "dir": "[REDACTED]",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "cppcheck.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 16,
+        "incomplete": false,
+        "sha256": "d00f732494c29aecf4e44d4eb7d74a14870273613f07bcde0671d9adcca5e1aa",
+        "total_bytes": 16,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "cppcheck",
+          "--output-format=xmlv2",
+          "--enable=warning,performance,portability,information,missingInclude",
+          "--check-level=normal",
+          "--platform=native",
+          "--error-exitcode=2",
+          "--project=[REDACTED]/compile_commands.json"
+        ],
+        "dir": "[REDACTED]",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 2,
+      "name": "cppcheck.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 4444,
+        "incomplete": false,
+        "sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48",
+        "total_bytes": 5685,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 238,
+        "incomplete": false,
+        "sha256": "b478aa32edb008461beca11ee6c0511e89f68f019e878bd5c4efb282d3c8385e",
+        "total_bytes": 530,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "code_loading_flags_dropped",
+    "compile_db_entries_excluded",
+    "compiler_wrappers_stripped",
+    "duplicate_compile_db_entries",
+    "response_files_dropped",
+    "sources_not_in_compile_db",
+    "system_includes_not_parsed"
+  ],
+  "module": {
+    "dir": ".",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "correctness",
+      "id": "obs_07764acd2d1602ace576",
+      "location": {
+        "blob_sha256": "6e5a0d3f0fdf3a498779a1f83fefe9594ea081bf0490c47867b710b242fc56b2",
+        "column_unit": "byte",
+        "end_col": 11,
+        "end_line": 14,
+        "path": "src/parse.cpp",
+        "start_col": 11,
+        "start_line": 14
+      },
+      "location_state": "resolved",
+      "path": "src/parse.cpp",
+      "raw_message": "Array 'widths[4]' accessed at index 4, which is out of bounds.",
+      "raw_ref": {
+        "byte_end": 1103,
+        "byte_start": 545,
+        "execution": "cppcheck.check",
+        "json_pointer": "",
+        "record_index": 1,
+        "stream": "stderr",
+        "stream_sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48"
+      },
+      "raw_severity": "error",
+      "related": [
+        {
+          "location": {
+            "blob_sha256": "6e5a0d3f0fdf3a498779a1f83fefe9594ea081bf0490c47867b710b242fc56b2",
+            "column_unit": "byte",
+            "end_col": 21,
+            "end_line": 13,
+            "path": "src/parse.cpp",
+            "start_col": 21,
+            "start_line": 13
+          },
+          "location_state": "resolved",
+          "path": "src/parse.cpp",
+          "raw_message": "Assuming that condition 'i<=4' is not redundant"
+        }
+      ],
+      "rule_id": "arrayIndexOutOfBounds",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "src/parse.cpp"
+    },
+    {
+      "category": "resource_lifecycle",
+      "id": "obs_f1418a1f246e85144e60",
+      "location": {
+        "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+        "column_unit": "byte",
+        "end_col": 5,
+        "end_line": 12,
+        "path": "src/ring.c",
+        "start_col": 5,
+        "start_line": 12
+      },
+      "location_state": "resolved",
+      "path": "src/ring.c",
+      "raw_message": "Memory leak: r",
+      "raw_ref": {
+        "byte_end": 2255,
+        "byte_start": 1982,
+        "execution": "cppcheck.check",
+        "json_pointer": "",
+        "record_index": 4,
+        "stream": "stderr",
+        "stream_sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "memleak",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "src/ring.c"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_33222acf3c259527c2fd",
+      "location": {
+        "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+        "column_unit": "byte",
+        "end_col": 11,
+        "end_line": 23,
+        "path": "src/ring.c",
+        "start_col": 11,
+        "start_line": 23
+      },
+      "location_state": "resolved",
+      "path": "src/ring.c",
+      "raw_message": "Possible null pointer dereference: slot",
+      "raw_ref": {
+        "byte_end": 2872,
+        "byte_start": 2264,
+        "execution": "cppcheck.check",
+        "json_pointer": "",
+        "record_index": 5,
+        "stream": "stderr",
+        "stream_sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48"
+      },
+      "raw_severity": "warning",
+      "related": [
+        {
+          "location": {
+            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "column_unit": "byte",
+            "end_col": 14,
+            "end_line": 21,
+            "path": "src/ring.c",
+            "start_col": 14,
+            "start_line": 21
+          },
+          "location_state": "resolved",
+          "path": "src/ring.c",
+          "raw_message": "Assuming condition is false"
+        },
+        {
+          "location": {
+            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "column_unit": "byte",
+            "end_col": 15,
+            "end_line": 20,
+            "path": "src/ring.c",
+            "start_col": 15,
+            "start_line": 20
+          },
+          "location_state": "resolved",
+          "path": "src/ring.c",
+          "raw_message": "Assignment 'slot=0', assigned value is 0"
+        }
+      ],
+      "rule_id": "nullPointer",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "src/ring.c"
+    },
+    {
+      "category": "resource_lifecycle",
+      "id": "obs_f8eb28831cb7af59d9f0",
+      "location": {
+        "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
+        "column_unit": "byte",
+        "end_col": 10,
+        "end_line": 22,
+        "path": "src/util.cpp",
+        "start_col": 10,
+        "start_line": 22
+      },
+      "location_state": "resolved",
+      "path": "src/util.cpp",
+      "raw_message": "Mismatching allocation and deallocation: counts",
+      "raw_ref": {
+        "byte_end": 4180,
+        "byte_start": 3741,
+        "execution": "cppcheck.check",
+        "json_pointer": "",
+        "record_index": 8,
+        "stream": "stderr",
+        "stream_sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48"
+      },
+      "raw_severity": "error",
+      "related": [
+        {
+          "location": {
+            "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
+            "column_unit": "byte",
+            "end_col": 17,
+            "end_line": 18,
+            "path": "src/util.cpp",
+            "start_col": 17,
+            "start_line": 18
+          },
+          "location_state": "resolved",
+          "path": "src/util.cpp",
+          "raw_message": ""
+        }
+      ],
+      "rule_id": "mismatchAllocDealloc",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "src/util.cpp"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 4,
+    "ok": true,
+    "records": 10,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "cppcheck-xml-v2",
+    "version": "1"
+  },
+  "patterns": [
+    "."
+  ],
+  "rule_pack": {
+    "config_files": [
+      {
+        "path": "compile_commands.json",
+        "sha256": "48d64ed9481ebbf6e68338e4715cc22879ebc8bee8b147355dfc1acebdbb0060"
+      }
+    ],
+    "id": "codeye-cpp-cppcheck",
+    "repository_config": "honored",
+    "selection": [
+      "--enable=warning,performance,portability,information,missingInclude",
+      "--check-level=normal",
+      "--platform=native"
+    ],
+    "source_suppressions": "disabled",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "de14ddc4ee3ba79510952ffa70271eb18af3ae9cbdf902dd657995e2b1f26c43",
+  "target": {
+    "platform": "linux/amd64",
+    "properties": {
+      "active_checkers": "125/189",
+      "check_level": "normal",
+      "compile_db_entries": "6",
+      "compile_db_units": "3",
+      "compile_dbs": "1",
+      "drivers": "c++,cc",
+      "entries_excluded": "duplicate_entry:1,file_outside_snapshot_root:1,header_entry:1",
+      "flags_dropped": "code_loading:3,response_file:1",
+      "inline_suppressions": "disabled",
+      "mode": "compile_db",
+      "platform": "native",
+      "preprocessor_configs_checked": "1",
+      "std": "c++17,c11"
+    }
+  },
+  "task_key": "cppcheck",
+  "tool": {
+    "name": "cppcheck",
+    "version": "2.22.0",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}
