@@ -1,0 +1,5 @@
+[term]
+verbose = false
+
+[build]
+target-dir = "repo-target"
