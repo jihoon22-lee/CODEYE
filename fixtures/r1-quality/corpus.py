@@ -6,6 +6,7 @@
   verify [--go ... --cxx ...] [--repeat N]              validate + 실제 도구로 전후·정상 사례 실행
   digest                                                보류 집합 봉인용 corpus digest 출력
   rehash                                                corpus.json에 저장된 변형별 digest 갱신
+  forbidden [--allow-text PATH ...] [--output FILE]     모델 입력에 나오면 안 되는 정답 문구 목록(JSON)
 
 표준 라이브러리만 사용하며 `python3 -I`로 실행한다. 도구는 플래그나 CODEYE_TEST_* 환경변수의
 절대 경로로만 받는다. PATH에서 도구를 찾지 않는다.
@@ -304,6 +305,108 @@ def leakage_selftest(case):
     planted.append(bool(leakage(case, {"before": trial})))
     clean = not leakage(case, {"before": files})
     return all(planted) and clean, len(planted)
+
+
+# ---------------------------------------------------------------- forbidden phrases (W24 answer blocking)
+
+FORBIDDEN_SCHEMA = "codeye-forbidden-phrases"
+FORBIDDEN_VERSION = 1
+# Matching rule shared with the relay (scripts/r0_openai_gateway.py). The modes are the leakage() rules:
+#   subword   - one [a-z0-9]+ token, compared with subwords() (whole tokens and camelCase/snake_case parts)
+#   words     - several tokens, compared as a run of words() separated by single spaces
+#   substring - anything else, compared with the lowercased text
+NORMALIZATION = "codeye-words-v1"
+
+
+def match_mode(text):
+    t = text.lower()
+    if re.fullmatch(r"[a-z0-9]+", t):
+        return "subword"
+    if re.fullmatch(r"[a-z0-9]+( [a-z0-9]+)+", t):
+        return "words"
+    return "substring"
+
+
+class TextIndex:
+    """Normalized view of a set of texts, for the three match modes."""
+
+    def __init__(self):
+        self.subwords, self.joined, self.lower = set(), [], []
+
+    def add(self, text):
+        self.subwords |= subwords(text)
+        self.joined.append(" " + " ".join(words(text)) + " ")
+        self.lower.append(text.lower())
+
+    def contains(self, mode, text):
+        if mode == "subword":
+            return text in self.subwords
+        if mode == "words":
+            return any(" " + text + " " in j for j in self.joined)
+        return any(text in low for low in self.lower)
+
+
+def allowed_texts(paths):
+    """Explicit operator-supplied texts that may legitimately reach the model (instruction packs, tool messages)."""
+    out = []
+    for path in paths:
+        path = Path(path)
+        files = sorted(p for p in path.rglob("*") if p.is_file()) if path.is_dir() else [path]
+        for f in files:
+            data = f.read_bytes()
+            out.append((str(f), hashlib.sha256(data).hexdigest(), data.decode("utf-8", errors="replace")))
+    return out
+
+
+def forbidden_list(cases, allow_paths=()):
+    """Label n-grams and distinctive tokens that occur in no materialized input (any case, any variant,
+    with or without README) and in no allowed text. Generic BANNED_* words are not exported."""
+    inputs = TextIndex()
+    for case in cases:
+        for variant in variants(case):
+            for documented in (False, True):
+                for path, content in render(case, variant, documented).items():
+                    inputs.add(path + "\n" + content)
+    allowed = TextIndex()
+    sources = allowed_texts(allow_paths)
+    for _, _, text in sources:
+        allowed.add(text)
+    entries, dropped = {}, {"in_inputs": 0, "in_allowed_text": 0}
+    for case in sorted(cases, key=lambda c: c["id"]):
+        candidates = []
+        for index, token in enumerate(case["label"]["distinctive_tokens"]):
+            candidates.append((f"{case['id']}/token/{index}", "distinctive_token", token.lower()))
+        for field_index, text in enumerate(label_prose(case)):
+            seq = words(text)
+            for i in range(len(seq) - NGRAM + 1):
+                candidates.append((f"{case['id']}/prose/{field_index}.{i}", "label_prose", " ".join(seq[i:i + NGRAM])))
+        seen = set()
+        for entry_id, source, text in candidates:
+            mode = match_mode(text)
+            if (mode, text) in seen:
+                continue
+            seen.add((mode, text))
+            if inputs.contains(mode, text):
+                dropped["in_inputs"] += 1
+                continue
+            if allowed.contains(mode, text):
+                dropped["in_allowed_text"] += 1
+                continue
+            key = (mode, text)
+            if key in entries:  # the same phrase in two cases: keep the first id, list both cases
+                entries[key]["cases"] = sorted(set(entries[key]["cases"]) | {case["id"]})
+                continue
+            entries[key] = {"id": entry_id, "cases": [case["id"]], "source": source, "mode": mode, "text": text}
+    return {
+        "schema": FORBIDDEN_SCHEMA,
+        "version": FORBIDDEN_VERSION,
+        "normalization": NORMALIZATION,
+        "ngram": NGRAM,
+        "corpus_digest": corpus_digest(cases),
+        "allowed_texts": [{"name": Path(name).name, "sha256": sha} for name, sha, _ in sources],
+        "dropped": dropped,
+        "entries": sorted(entries.values(), key=lambda e: e["id"]),
+    }
 
 
 # ---------------------------------------------------------------- structure
@@ -683,6 +786,10 @@ def main():
     v.add_argument("--case", action="append", help="run checks for this case id only (repeatable)")
     sub.add_parser("digest", help="print the corpus digest")
     sub.add_parser("rehash", help="rewrite stored per-variant digests in corpus.json")
+    f = sub.add_parser("forbidden", help="label phrases and tokens the relay must block (never in inputs)")
+    f.add_argument("--allow-text", action="append", default=[], type=Path,
+                   help="file or directory of text that may legitimately reach the model (repeatable)")
+    f.add_argument("--output", type=Path, help="write the JSON here (default stdout)")
     args = parser.parse_args()
     cases = load_cases()
     if args.command == "materialize":
@@ -701,6 +808,17 @@ def main():
         verify(cases, args)
     elif args.command == "digest":
         print(corpus_digest(cases))
+    elif args.command == "forbidden":
+        doc = forbidden_list(cases, args.allow_text)
+        text = json.dumps(doc, indent=1, ensure_ascii=False, sort_keys=True) + "\n"
+        if args.output:
+            if args.output.exists():
+                raise SystemExit(f"output exists: {args.output}")
+            args.output.write_text(text, encoding="utf-8")
+            print(f"{len(doc['entries'])} entries, dropped {doc['dropped']}, sha256 "
+                  f"{hashlib.sha256(text.encode('utf-8')).hexdigest()}", file=sys.stderr)
+        else:
+            sys.stdout.write(text)
     elif args.command == "rehash":
         for case in cases:
             case["digests"] = computed_digests(case)

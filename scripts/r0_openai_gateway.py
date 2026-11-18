@@ -14,6 +14,14 @@ Guarantees (see docs/r0-openai-gateway.md):
   is sent. Failures, missing usage and crashes are charged the full reservation.
 - Errors returned to clients use non-retryable HTTP statuses only, so SDK retry
   loops cannot silently multiply paid calls.
+- W24: with --forbidden-phrases FILE (the evaluation corpus answer list), a
+  request whose forwarded text contains a listed phrase is never reserved or
+  forwarded; a durable `blocked` ledger record (no charge) is written instead.
+  Budget/request-limit refusals are also recorded (`refused`, no charge).
+- W24 dry runs only: --test-upstream http://127.0.0.1:PORT replaces the pinned
+  endpoint with a loopback fake. It never reads OPENAI_API_KEY, accepts no other
+  host, and binds the ledger to the test upstream (a real relay refuses that
+  ledger and a test relay refuses a real one). Default behaviour is unchanged.
 
 Stdlib only; Linux/macOS (fcntl).
 """
@@ -22,6 +30,7 @@ from __future__ import annotations
 import argparse
 import decimal
 import fcntl
+import hashlib
 import hmac
 import http.client
 import http.server
@@ -92,6 +101,19 @@ HALT_STATUSES = ("usage_out_of_bounds", "tier_mismatch", "model_mismatch")
 # Client-visible statuses. AI SDK style clients retry 408/409/429/5xx; never use them.
 RETRYABLE_STATUSES = frozenset({408, 409, 429}) | frozenset(range(500, 600))
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+# W24 answer blocking. The file is produced by fixtures/r1-quality/corpus.py forbidden.
+FORBIDDEN_SCHEMA = "codeye-forbidden-phrases"
+FORBIDDEN_VERSION = 1
+FORBIDDEN_NORMALIZATION = "codeye-words-v1"
+FORBIDDEN_MAX_BYTES = 16 << 20
+BLOCKED_STATUS = "blocked_answer_leak"
+MAX_RECORDED_MATCHES = 16
+ROLE_HINT = re.compile(r"\ARole: ([a-z]{1,32})\n")
+# Test-only upstream: an explicit loopback URL, nothing else.
+TEST_UPSTREAM = re.compile(r"\Ahttp://127\.0\.0\.1:([0-9]{1,5})/?\Z")
+TEST_UPSTREAM_KIND = "test-loopback"
+TEST_UPSTREAM_KEY = "test-upstream-no-key"
 
 
 class LedgerError(Exception):
@@ -174,7 +196,11 @@ class Ledger:
     """
 
     def __init__(self, path: str, *, cap_microusd: int | None = None,
-                 max_requests: int | None = None, create: bool = True):
+                 max_requests: int | None = None, create: bool = True,
+                 upstream_kind: str | None = None):
+        """upstream_kind: None (report/clear-halt: any ledger), "openai" (the
+        pinned endpoint; refuses a test ledger) or TEST_UPSTREAM_KIND (refuses
+        a real ledger; a new test ledger is marked in its header)."""
         self.path = path
         self._thread_lock = threading.Lock()
         flags = os.O_RDWR | os.O_APPEND | os.O_CLOEXEC | os.O_NOFOLLOW
@@ -196,12 +222,19 @@ class Ledger:
                 if not records:
                     if not create or cap_microusd is None:
                         raise LedgerError("ledger is empty")
-                    self._append({"type": "header", "v": LEDGER_VERSION, "created_at": _now(),
-                                  "cap_microusd": cap_microusd,
-                                  "max_requests": max_requests or DEFAULT_MAX_REQUESTS,
-                                  "pricing": PRICING})
+                    header = {"type": "header", "v": LEDGER_VERSION, "created_at": _now(),
+                              "cap_microusd": cap_microusd,
+                              "max_requests": max_requests or DEFAULT_MAX_REQUESTS,
+                              "pricing": PRICING}
+                    if upstream_kind == TEST_UPSTREAM_KIND:
+                        header["upstream"] = TEST_UPSTREAM_KIND  # real ledgers keep the original header
+                    self._append(header)
                     _fsync_dir(path)
                 else:
+                    kind = records[0].get("upstream", "openai")
+                    if upstream_kind is not None and kind != upstream_kind:
+                        raise LedgerError("ledger belongs to the " + str(kind)[:32]
+                                          + " upstream; use a separate ledger for each upstream")
                     state = self._state(records)
                     if cap_microusd is not None and cap_microusd < state["cap_microusd"]:
                         self._append({"type": "cap", "at": _now(), "cap_microusd": cap_microusd})
@@ -330,12 +363,18 @@ class Ledger:
                 dropped_keys: list[str]) -> str:
         with self._locked() as records:
             state = self._state(records)
+            refused = None
             if state["halted"]:
-                raise BudgetRefused("relay_halted")
-            if len(state["reserves"]) >= state["max_requests"]:
-                raise BudgetRefused("request_limit_reached")
-            if state["committed_microusd"] + reserved_microusd > state["cap_microusd"]:
-                raise BudgetRefused("budget_exhausted")
+                refused = "relay_halted"
+            elif len(state["reserves"]) >= state["max_requests"]:
+                refused = "request_limit_reached"
+            elif state["committed_microusd"] + reserved_microusd > state["cap_microusd"]:
+                refused = "budget_exhausted"
+            if refused is not None:
+                # Durable signal for batch runners (W24); never charged, never forwarded.
+                self._append({"type": "refused", "at": _now(), "pid": os.getpid(), "code": refused,
+                              "reserved_microusd": reserved_microusd})
+                raise BudgetRefused(refused)
             rid = uuid.uuid4().hex
             self._append({"type": "reserve", "id": rid, "at": _now(), "pid": os.getpid(),
                           "model": model, "reserved_microusd": reserved_microusd,
@@ -361,9 +400,35 @@ class Ledger:
         with self._locked():
             self._append({"type": "clear_halt", "at": _now(), "reason": reason[:200]})
 
+    def note_forbidden(self, phrases: "ForbiddenPhrases") -> None:
+        """Record which answer list this relay process enforces (W24)."""
+        with self._locked():
+            self._append({"type": "forbidden", "at": _now(), "pid": os.getpid(), "sha256": phrases.sha256,
+                          "entries": len(phrases.entries), "corpus_digest": phrases.corpus_digest})
+
+    def block(self, *, matches: list[str], match_count: int, input_bytes: int, message_count: int,
+              role_hint: str | None) -> None:
+        """A request that would have carried answer text: recorded, never reserved or charged."""
+        with self._locked():
+            self._append({"type": "blocked", "at": _now(), "pid": os.getpid(), "status": BLOCKED_STATUS,
+                          "matches": matches[:MAX_RECORDED_MATCHES], "match_count": match_count,
+                          "input_bytes": input_bytes, "message_count": message_count, "role_hint": role_hint})
+
     def report(self) -> dict:
         with self._locked() as records:
             state = self._state(records)
+        refused_by_code: dict[str, int] = {}
+        blocked_by_role: dict[str, int] = {}
+        forbidden_lists = []
+        for record in records[1:]:
+            if record["type"] == "refused":
+                code = str(record.get("code"))
+                refused_by_code[code] = refused_by_code.get(code, 0) + 1
+            elif record["type"] == "blocked":
+                role = str(record.get("role_hint") or "unknown")
+                blocked_by_role[role] = blocked_by_role.get(role, 0) + 1
+            elif record["type"] == "forbidden":
+                forbidden_lists.append({k: record.get(k) for k in ("at", "pid", "sha256", "entries", "corpus_digest")})
         usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0,
                         "reasoning_tokens": 0}
         by_status: dict[str, int] = {}
@@ -397,6 +462,12 @@ class Ledger:
             "halted": state["halted"],
             "halt_reasons": state["halt_reasons"],
             "consecutive_failures": state["consecutive_failures"],
+            "upstream": records[0].get("upstream", "openai"),
+            "refused_by_code": refused_by_code,
+            "blocked_answer_leaks": sum(blocked_by_role.values()),
+            "blocked_by_role": blocked_by_role,
+            "forbidden_lists": forbidden_lists,
+            "records": len(records),
             "note": ("charged_microusd_total is the conservative budget debit (worst-case rates; "
                      "full reservation for failures, missing usage and pending/crashed requests). "
                      "standard_rate_estimate_microusd uses reported usage at $2/$10 per 1M and is "
@@ -470,6 +541,102 @@ def build_upstream_request(request, model: str, max_input_bytes: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# W24 answer blocking
+# ---------------------------------------------------------------------------
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def _subwords(text: str) -> set[str]:
+    out = set()
+    for token in re.findall(r"[A-Za-z0-9]+", text):
+        out.add(token.lower())
+        for part in re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+", token):
+            out.add(part.lower())
+    return out
+
+
+class ForbiddenPhrases:
+    """The corpus answer list, matched exactly like corpus.py's leakage scan
+    (normalization codeye-words-v1): `subword` tokens against whole tokens and
+    their camelCase/snake_case parts, `words` phrases against the text's run of
+    [a-z0-9]+ words, `substring` against the lowercased text."""
+
+    def __init__(self, data: bytes):
+        self.sha256 = hashlib.sha256(data).hexdigest()
+        try:
+            doc = json.loads(data)
+        except ValueError:
+            raise ValueError("forbidden phrase file is not JSON") from None
+        if not isinstance(doc, dict) or doc.get("schema") != FORBIDDEN_SCHEMA or doc.get("version") != FORBIDDEN_VERSION \
+                or doc.get("normalization") != FORBIDDEN_NORMALIZATION:
+            raise ValueError("forbidden phrase file has an unknown schema, version or normalization")
+        entries = doc.get("entries")
+        if not isinstance(entries, list) or not entries:
+            raise ValueError("forbidden phrase file has no entries")
+        self.corpus_digest = doc.get("corpus_digest") if isinstance(doc.get("corpus_digest"), str) else None
+        self.entries = []
+        self.subword: dict[str, str] = {}
+        self.phrases: dict[int, dict[str, str]] = {}  # word count -> phrase -> entry id
+        self.substrings: list[tuple[str, str]] = []
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("id"), str) or not isinstance(entry.get("text"), str) \
+                    or not entry["text"] or entry.get("mode") not in ("subword", "words", "substring"):
+                raise ValueError("invalid forbidden phrase entry")
+            text, eid, mode = entry["text"], entry["id"], entry["mode"]
+            if mode == "subword":
+                if not re.fullmatch(r"[a-z0-9]+", text):
+                    raise ValueError("invalid subword entry")
+                self.subword.setdefault(text, eid)
+            elif mode == "words":
+                if not re.fullmatch(r"[a-z0-9]+( [a-z0-9]+)+", text):
+                    raise ValueError("invalid words entry")
+                self.phrases.setdefault(text.count(" ") + 1, {}).setdefault(text, eid)
+            else:
+                self.substrings.append((text.lower(), eid))
+            self.entries.append(eid)
+
+    def matches(self, texts: list[str]) -> list[str]:
+        """Entry ids found in any of the texts (each text is one forwarded message)."""
+        found = set()
+        for text in texts:
+            subs = _subwords(text)
+            for token in subs & self.subword.keys():
+                found.add(self.subword[token])
+            seq = _words(text)
+            for size, table in self.phrases.items():
+                for i in range(len(seq) - size + 1):
+                    eid = table.get(" ".join(seq[i:i + size]))
+                    if eid is not None:
+                        found.add(eid)
+            lower = text.lower()
+            for needle, eid in self.substrings:
+                if needle in lower:
+                    found.add(eid)
+        return sorted(found)
+
+
+def load_forbidden(path: str) -> ForbiddenPhrases:
+    """Fail closed: a missing, empty, oversized or malformed list is an error."""
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read(FORBIDDEN_MAX_BYTES + 1)
+    except OSError as exc:
+        raise ValueError(f"cannot read forbidden phrase file: {exc.strerror}") from None
+    if not data or len(data) > FORBIDDEN_MAX_BYTES:
+        raise ValueError("forbidden phrase file is empty or too large")
+    return ForbiddenPhrases(data)
+
+
+def parse_test_upstream(url: str) -> int:
+    """Return the port of an explicit http://127.0.0.1:PORT test upstream; refuse anything else."""
+    match = TEST_UPSTREAM.match(url or "")
+    if not match or not 1 <= int(match.group(1)) <= 65535:
+        raise ValueError("--test-upstream must be http://127.0.0.1:PORT (loopback only)")
+    return int(match.group(1))
+
+
+# ---------------------------------------------------------------------------
 # Upstream
 # ---------------------------------------------------------------------------
 class OpenAIUpstream:
@@ -529,6 +696,16 @@ class OpenAIUpstream:
             raise UpstreamFailure("transport_error") from None
         finally:
             connection.close()
+
+
+class LoopbackTestUpstream(OpenAIUpstream):
+    """W24 dry runs: plain HTTP to 127.0.0.1:PORT, same path, deadline and
+    response limits. It never sees a real key: the bearer is a fixed dummy."""
+
+    def __init__(self, port: int):
+        super().__init__(TEST_UPSTREAM_KEY,
+                         _connection_factory=lambda timeout: http.client.HTTPConnection("127.0.0.1", port, timeout=timeout))
+        self.port = port
 
 
 def _safe(value) -> str | None:
@@ -697,12 +874,14 @@ def error_body(code: str, kind: str = "r0_gateway_error", extra: dict | None = N
 # ---------------------------------------------------------------------------
 class Gateway:
     def __init__(self, *, model: str, ledger: Ledger, upstream: OpenAIUpstream, token: str,
-                 max_input_bytes: int = DEFAULT_MAX_INPUT_BYTES, log=None):
+                 max_input_bytes: int = DEFAULT_MAX_INPUT_BYTES, log=None,
+                 forbidden: ForbiddenPhrases | None = None):
         self.model = model
         self.ledger = ledger
         self.upstream = upstream
         self.token = token.encode()
         self.max_input_bytes = max_input_bytes
+        self.forbidden = forbidden
         self.in_flight = threading.Semaphore(1)
         self.log = log or (lambda event: print(json.dumps(event), file=sys.stderr, flush=True))
         self.port = 0
@@ -718,6 +897,21 @@ class Gateway:
         except ValueError:
             raise RequestRejected(400, "invalid_json") from None
         prepared = build_upstream_request(request, self.model, self.max_input_bytes)
+        if self.forbidden is not None:
+            # Scan exactly the text that would be forwarded, one message at a time.
+            texts = [m["content"] for m in prepared["payload"]["input"]]
+            found = self.forbidden.matches(texts)
+            if found:
+                hint = None
+                for text in texts:
+                    match = ROLE_HINT.match(text)
+                    if match:
+                        hint = match.group(1)
+                        break
+                self.ledger.block(matches=found, match_count=len(found), input_bytes=prepared["input_bytes"],
+                                  message_count=prepared["message_count"], role_hint=hint)
+                self.log({"event": "blocked", "status": BLOCKED_STATUS, "match_count": len(found), "role_hint": hint})
+                raise RequestRejected(403, BLOCKED_STATUS)
         if not self.in_flight.acquire(timeout=QUEUE_WAIT_S):
             raise RequestRejected(424, "relay_busy")
         try:
@@ -926,6 +1120,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--report", action="store_true", help="print the ledger report and exit")
     parser.add_argument("--clear-halt", metavar="REASON",
                         help="append an audited clear_halt record (never changes cap or charges)")
+    parser.add_argument("--forbidden-phrases", metavar="FILE",
+                        help="W24: answer list from `corpus.py forbidden`; matching requests are blocked "
+                             "(ledger `blocked`, no charge, never forwarded). A bad file is a usage error.")
+    parser.add_argument("--test-upstream", metavar="URL",
+                        help="W24 dry runs only: http://127.0.0.1:PORT fake upstream instead of the pinned "
+                             "endpoint. Never reads OPENAI_API_KEY; needs a ledger created in this mode.")
     return parser
 
 
@@ -963,17 +1163,47 @@ def main(argv=None, *, _connection_factory=None) -> int:
     if os.path.lexists(args.ready_file):
         print("ready file already exists; use a fresh path", file=sys.stderr)
         return 2
-    api_key = _read_api_key()
+    forbidden = None
+    if args.forbidden_phrases is not None:
+        try:
+            forbidden = load_forbidden(args.forbidden_phrases)
+        except ValueError as exc:
+            print("invalid --forbidden-phrases:", exc, file=sys.stderr)
+            return 2
+    test_port = None
+    if args.test_upstream is not None:
+        try:
+            test_port = parse_test_upstream(args.test_upstream)
+        except ValueError as exc:
+            print("invalid --test-upstream:", exc, file=sys.stderr)
+            return 2
+        if args.port and args.port == test_port:
+            print("invalid --test-upstream: same port as the relay", file=sys.stderr)
+            return 2
+        # Never read, keep or forward a real key in test mode.
+        os.environ.pop("OPENAI_API_KEY", None)
+        upstream = LoopbackTestUpstream(test_port)
+        kind = TEST_UPSTREAM_KIND
+    else:
+        api_key = _read_api_key()
+        upstream = OpenAIUpstream(api_key, _connection_factory=_connection_factory)
+        del api_key
+        kind = "openai"
     try:
-        ledger = Ledger(args.ledger, cap_microusd=cap, max_requests=args.max_requests)
+        ledger = Ledger(args.ledger, cap_microusd=cap, max_requests=args.max_requests, upstream_kind=kind)
+        if forbidden is not None:
+            ledger.note_forbidden(forbidden)
     except LedgerError as exc:
         print("ledger error:", exc, file=sys.stderr)
         return 1
     gateway = Gateway(model=args.model, ledger=ledger, token=secrets.token_urlsafe(32),
-                      upstream=OpenAIUpstream(api_key, _connection_factory=_connection_factory),
-                      max_input_bytes=args.max_input_bytes)
-    del api_key
+                      upstream=upstream, max_input_bytes=args.max_input_bytes, forbidden=forbidden)
     server = start_server(gateway, args.port)
+    if test_port is not None and gateway.port == test_port:
+        server.server_close()
+        ledger.close()
+        print("invalid --test-upstream: same port as the relay", file=sys.stderr)
+        return 2
     stop = threading.Event()
 
     def _shutdown(signum, frame):
@@ -992,7 +1222,8 @@ def main(argv=None, *, _connection_factory=None) -> int:
         gateway.log({"event": "ready", "port": gateway.port, "model": args.model,
                      "cap_microusd": report["cap_microusd"],
                      "charged_microusd_total": report["charged_microusd_total"],
-                     "halted": report["halted"]})
+                     "halted": report["halted"], "upstream": kind,
+                     "forbidden_sha256": forbidden.sha256 if forbidden else None})
         server.serve_forever(poll_interval=0.2)
     except FileExistsError:
         print("ready file already exists; use a fresh path", file=sys.stderr)
