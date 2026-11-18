@@ -63,6 +63,9 @@ type nodeView struct {
 	unseenMemory       int64
 	unseenDisk         int64
 	lastBeatOK         bool
+	// quotaExceeded are the storage areas the node last reported at or over
+	// their limit (W25); a non-empty list refuses new attempts on the node.
+	quotaExceeded []string
 }
 
 func (n nodeView) eligible(c candidate) bool {
@@ -94,7 +97,7 @@ func (n nodeView) hasRoom() bool {
 // loadNode reads a node's scheduling view. lock takes the node row FOR UPDATE.
 func loadNode(ctx context.Context, tx pgx.Tx, id string, lock bool) (nodeView, *time.Time, error) {
 	q := `SELECT revoked_at,capabilities,coalesce(cpu_cores,0),coalesce(memory_available_bytes,0),coalesce(disk_available_bytes,0),
-		coalesce(last_heartbeat_at>clock_timestamp()-$2*interval '1 millisecond',false),pool_id::text,worker_scaling,coalesce(max_workers,0) FROM nodes WHERE id=$1`
+		coalesce(last_heartbeat_at>clock_timestamp()-$2*interval '1 millisecond',false),pool_id::text,worker_scaling,coalesce(max_workers,0),storage_quota_exceeded FROM nodes WHERE id=$1`
 	if lock {
 		q += " FOR UPDATE"
 	}
@@ -102,7 +105,7 @@ func loadNode(ctx context.Context, tx pgx.Tx, id string, lock bool) (nodeView, *
 	var revoked *time.Time
 	var caps []string
 	var cores float64
-	if err := tx.QueryRow(ctx, q, id, NodeStaleAfter.Milliseconds()).Scan(&revoked, &caps, &cores, &n.freeMemory, &n.freeDisk, &n.lastBeatOK, &n.poolID, &n.scaling, &n.maxWorkers); err != nil {
+	if err := tx.QueryRow(ctx, q, id, NodeStaleAfter.Milliseconds()).Scan(&revoked, &caps, &cores, &n.freeMemory, &n.freeDisk, &n.lastBeatOK, &n.poolID, &n.scaling, &n.maxWorkers, &n.quotaExceeded); err != nil {
 		return n, nil, err
 	}
 	for _, c := range caps {
@@ -204,7 +207,8 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 	}
 	return transaction(ctx, s, func(tx pgx.Tx) (ClaimResult, error) {
 		var limit, projectLimit int64
-		if err := tx.QueryRow(ctx, "SELECT global_max_running,project_max_running FROM scheduler_limits WHERE singleton FOR UPDATE").Scan(&limit, &projectLimit); err != nil {
+		var artifactQuota *int64
+		if err := tx.QueryRow(ctx, "SELECT global_max_running,project_max_running,artifact_quota_bytes FROM scheduler_limits WHERE singleton FOR UPDATE").Scan(&limit, &projectLimit, &artifactQuota); err != nil {
 			return ClaimResult{}, err
 		}
 		n, revoked, err := loadNode(ctx, tx, node, true)
@@ -267,6 +271,17 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 			return ClaimResult{}, err
 		}
 		if !n.lastBeatOK || active >= limit || !n.hasRoom() {
+			return none()
+		}
+		// Storage quota (W25, docs/47 §4): admission only. New attempts are
+		// refused; running attempts and their uploads are never affected.
+		if len(n.quotaExceeded) > 0 {
+			return none()
+		}
+		if reached, err := artifactQuotaReached(ctx, tx, artifactQuota); err != nil || reached {
+			if err != nil {
+				return ClaimResult{}, err
+			}
 			return none()
 		}
 		// Pool budget (W07): active reservations of all nodes in the pool stay
@@ -585,17 +600,20 @@ func waitingReason(ctx context.Context, tx pgx.Tx, runID string) (*string, error
 		return reason(nodeproto.WaitingNoCapableNode)
 	}
 	var limit, projectLimit, active, projectActive int64
+	var artifactQuota *int64
 	if err := tx.QueryRow(ctx, `SELECT global_max_running,project_max_running,(SELECT count(*) FROM capacity_reservations WHERE released_at IS NULL),
-		(SELECT count(*) FROM capacity_reservations c JOIN attempts a ON a.id=c.attempt_id JOIN runs ar ON ar.id=a.run_id WHERE c.released_at IS NULL AND ar.project_id=$1)
-		FROM scheduler_limits WHERE singleton`, c.projectID).Scan(&limit, &projectLimit, &active, &projectActive); err != nil {
+		(SELECT count(*) FROM capacity_reservations c JOIN attempts a ON a.id=c.attempt_id JOIN runs ar ON ar.id=a.run_id WHERE c.released_at IS NULL AND ar.project_id=$1),
+		artifact_quota_bytes
+		FROM scheduler_limits WHERE singleton`, c.projectID).Scan(&limit, &projectLimit, &active, &projectActive, &artifactQuota); err != nil {
 		return nil, err
 	}
 	if projectActive >= projectLimit {
 		return reason(nodeproto.WaitingProjectLimit)
 	}
 	// Pool budget (W07): a capable node has room only if its pool is below
-	// max_workers; pools with max 0 are paused.
-	paused, room := true, false
+	// max_workers; pools with max 0 are paused. A node over a storage quota
+	// (W25) has no room; quotaOnly records that it would have otherwise.
+	paused, room, quotaOnly := true, false, false
 	for _, v := range capableViews {
 		pol, err := currentPolicy(ctx, tx, v.poolID)
 		if err != nil {
@@ -609,13 +627,46 @@ func waitingReason(ctx context.Context, tx pgx.Tx, runID string) (*string, error
 		if err := tx.QueryRow(ctx, "SELECT count(*) FROM capacity_reservations c JOIN nodes n ON n.id=c.node_id WHERE c.released_at IS NULL AND n.pool_id=$1", v.poolID).Scan(&poolActive); err != nil {
 			return nil, err
 		}
-		room = room || (v.hasRoom() && poolActive < int64(pol.MaxWorkers))
+		free := v.hasRoom() && poolActive < int64(pol.MaxWorkers)
+		room = room || (free && len(v.quotaExceeded) == 0)
+		quotaOnly = quotaOnly || (free && len(v.quotaExceeded) > 0)
 	}
 	if paused {
 		return reason(nodeproto.WaitingPoolPaused)
 	}
-	if active >= limit || !room {
+	if active >= limit {
+		return reason(nodeproto.WaitingCapacityFull)
+	}
+	reached, err := artifactQuotaReached(ctx, tx, artifactQuota)
+	if err != nil {
+		return nil, err
+	}
+	if reached || (!room && quotaOnly) {
+		return reason(nodeproto.WaitingStorageQuotaExceeded)
+	}
+	if !room {
 		return reason(nodeproto.WaitingCapacityFull)
 	}
 	return nil, nil
+}
+
+// ArtifactUsageSQL is the controller artifact store accounting (W25): the
+// total size of the distinct contents the artifacts rows reference
+// (finalized or announced). The store is content-addressed, so one blob is
+// counted once. Files the database does not reference (a crash between the
+// blob write and its row, interrupted uploads under tmp/) are not counted
+// here; doctor measures the directory itself.
+const ArtifactUsageSQL = `SELECT coalesce(sum(size_bytes),0)::bigint FROM (SELECT DISTINCT ON (sha256) sha256,size_bytes FROM artifacts ORDER BY sha256) a`
+
+// artifactQuotaReached reports whether the artifact accounting reached quota
+// (nil = no limit).
+func artifactQuotaReached(ctx context.Context, tx pgx.Tx, quota *int64) (bool, error) {
+	if quota == nil {
+		return false, nil
+	}
+	var used int64
+	if err := tx.QueryRow(ctx, ArtifactUsageSQL).Scan(&used); err != nil {
+		return false, err
+	}
+	return used >= *quota, nil
 }

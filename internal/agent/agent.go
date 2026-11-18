@@ -21,6 +21,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
+	"github.com/jihoon22-lee/CODEYE/internal/quota"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
@@ -84,6 +85,19 @@ type Config struct {
 	// Transcript, if set, records all worker IPC (tests).
 	Transcript io.Writer
 
+	// Drain (W25, personal stop) asks the agent to finish: no new claims and
+	// no new workers; running attempts finish normally. Once nothing runs,
+	// the agent shuts down like on a signal and exits 0 when every cleanup is
+	// confirmed. A nil channel never drains.
+	Drain <-chan struct{}
+	// StorageQuota (W25, docs/47 §4) are node storage area limits in bytes
+	// (quota.NodeAreas). Areas at or over their limit are reported in the
+	// heartbeat (storage_quota_exceeded) and the controller refuses new
+	// claims for this node; running attempts are never interrupted.
+	StorageQuota map[string]int64
+	// StorageLogDir locates the "logs" area (personal mode log directory).
+	StorageLogDir string
+
 	// Timing overrides (tests); zero uses the controller's values.
 	HeartbeatInterval time.Duration
 	LeaseDuration     time.Duration
@@ -108,6 +122,8 @@ type Agent struct {
 	mu        sync.Mutex
 	workers   map[string]*workerProc
 	shutting  bool
+	draining  bool
+	claiming  int
 	starting  int
 	kickCh    chan struct{}
 	hbNow     chan struct{}
@@ -121,7 +137,15 @@ type Agent struct {
 	probed        bool
 	probing       bool
 	lastProbe     time.Time
+
+	// Storage areas over their limit, re-measured at most every
+	// storageMeasureEvery (heartbeat path).
+	quotaExceeded []string
+	quotaChecked  time.Time
 }
+
+// storageMeasureEvery bounds how often the node storage areas are walked.
+const storageMeasureEvery = 30 * time.Second
 
 // probeRetry is the delay between failed capability probes (autoscale).
 const probeRetry = 30 * time.Second
@@ -173,6 +197,14 @@ func New(cfg Config) (*Agent, error) {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}
+	}
+	for area, limit := range cfg.StorageQuota {
+		if !quota.ValidNodeArea(area) || limit <= 0 {
+			return nil, &ExitError{ExitUsage, "--storage-quota must be AREA=BYTES (snapshot, workspace, cache, logs)"}
+		}
+	}
+	if cfg.StorageQuota[quota.Logs] > 0 && (cfg.StorageLogDir == "" || !filepath.IsAbs(cfg.StorageLogDir)) {
+		return nil, &ExitError{ExitUsage, "a logs quota needs an absolute --storage-log-dir"}
 	}
 	if cfg.ToolPath == "" {
 		cfg.ToolPath = "/usr/bin:/bin"
@@ -314,13 +346,22 @@ func (ag *Agent) Run(ctx context.Context) error {
 	defer hb.Stop()
 	poll := time.NewTicker(time.Second)
 	defer poll.Stop()
+	drain := ag.cfg.Drain
 	for !revoked {
 		ag.reconcileWorkers(ctx)
 		ag.claimIdle()
 		ag.retryProbe(ctx)
+		if ag.drained() {
+			ag.log("info", "agent_drained")
+			return ag.shutdown()
+		}
 		select {
 		case <-ctx.Done():
 			return ag.shutdown()
+		case <-drain:
+			drain = nil
+			ag.beginDrain()
+			ag.heartbeatSoon()
 		case <-hb.C:
 			if err := ag.heartbeat(ctx); IsUnauthenticated(err) {
 				revoked = true
@@ -466,6 +507,7 @@ func (ag *Agent) heartbeat(ctx context.Context) error {
 	if ag.cfg.Autoscale {
 		req.WorkerScaling, req.MaxWorkers = nodeproto.ScalingController, ag.cfg.MaxWorkers
 	}
+	req.StorageQuotaExceeded = ag.storageQuotaExceeded()
 	hctx, cancel := context.WithTimeout(ctx, ag.heartbeatInterval()*2)
 	defer cancel()
 	resp, err := ag.client.Heartbeat(hctx, req)
@@ -673,6 +715,7 @@ func (ag *Agent) claimIdle() {
 			continue
 		}
 		w.registered = false // one claim per idle report; re-armed by the next heartbeat
+		ag.claiming++
 		if w.claimKey == "" {
 			// A key without a definitive answer is reused, so a claim that
 			// committed but whose response was lost is replayed, not leaked.
@@ -684,6 +727,12 @@ func (ag *Agent) claimIdle() {
 }
 
 func (ag *Agent) claimFor(w *workerProc, key string) {
+	defer func() {
+		ag.mu.Lock()
+		ag.claiming--
+		ag.mu.Unlock()
+		ag.kick()
+	}()
 	sent := time.Now()
 	var resp *nodeproto.ClaimResponse
 	err := retry(ag.ctx, 5, func() error {
@@ -760,7 +809,7 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 // reconcileWorkers keeps the scaler's desired worker count.
 func (ag *Agent) reconcileWorkers(ctx context.Context) {
 	ag.mu.Lock()
-	if ag.shutting || ag.starting > 0 {
+	if ag.shutting || ag.draining || ag.starting > 0 {
 		ag.mu.Unlock()
 		return
 	}
@@ -805,7 +854,10 @@ func (ag *Agent) reconcileWorkers(ctx context.Context) {
 			if ag.cfg.Autoscale {
 				ag.probeHandlers, ag.probed = w.handlers, true // latest observation
 			}
-			shutting := ag.shutting
+			shutting := ag.shutting || ag.draining
+			if ag.draining {
+				w.draining = true
+			}
 			ag.mu.Unlock()
 			go ag.awaitExit(w)
 			if shutting {
@@ -873,7 +925,7 @@ func (ag *Agent) retryProbe(ctx context.Context) {
 		return
 	}
 	ag.mu.Lock()
-	due := !ag.probed && !ag.probing && !ag.shutting && time.Since(ag.lastProbe) >= probeRetry
+	due := !ag.probed && !ag.probing && !ag.shutting && !ag.draining && time.Since(ag.lastProbe) >= probeRetry
 	ag.mu.Unlock()
 	if due {
 		go ag.probe(ctx)
@@ -940,6 +992,62 @@ func (ag *Agent) workerLost(w *workerProc, att *activeAttempt) {
 	}
 	_ = ag.journal.Append(Record{Kind: RecAttemptDone, AttemptID: att.lease.AttemptID, Outcome: outcome, CleanupState: state})
 	ag.log("warn", "attempt_worker_lost", "attempt_id", att.lease.AttemptID, "cleanup_state", state)
+}
+
+// beginDrain (W25) stops claims and worker starts; idle workers are stopped
+// now, busy ones when their attempt ends (they are marked draining).
+func (ag *Agent) beginDrain() {
+	ag.mu.Lock()
+	defer ag.mu.Unlock()
+	if ag.draining {
+		return
+	}
+	ag.draining = true
+	for _, w := range ag.workers {
+		w.draining = true
+		if w.att == nil {
+			go ag.stopWorker(w)
+		}
+	}
+	ag.log("info", "agent_drain_requested")
+}
+
+// drained: a drain was requested and no attempt runs, no claim is in flight
+// and no worker is starting.
+func (ag *Agent) drained() bool {
+	ag.mu.Lock()
+	defer ag.mu.Unlock()
+	if !ag.draining || ag.claiming > 0 || ag.starting > 0 || ag.probing {
+		return false
+	}
+	for _, w := range ag.workers {
+		if w.att != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// storageQuotaExceeded returns the node storage areas at or over their limit
+// (sorted), re-measuring at most every storageMeasureEvery. A change is logged.
+func (ag *Agent) storageQuotaExceeded() []string {
+	if len(ag.cfg.StorageQuota) == 0 {
+		return nil
+	}
+	if !ag.quotaChecked.IsZero() && time.Since(ag.quotaChecked) < storageMeasureEvery {
+		return ag.quotaExceeded
+	}
+	layout := quota.Layout{AgentStateDir: ag.cfg.StateDir, GoModCache: ag.cfg.GoModCache, LogDir: ag.cfg.StorageLogDir}
+	exceeded, _ := quota.Exceeded(layout, ag.cfg.StorageQuota)
+	if strings.Join(exceeded, ",") != strings.Join(ag.quotaExceeded, ",") {
+		if len(exceeded) > 0 {
+			ag.log("warn", "storage_quota_exceeded", "areas", strings.Join(exceeded, ","))
+		} else {
+			ag.log("info", "storage_quota_ok")
+		}
+	}
+	ag.quotaExceeded, ag.quotaChecked = exceeded, time.Now()
+	return exceeded
 }
 
 // shutdown cancels running attempts, waits for their real cleanup, stops

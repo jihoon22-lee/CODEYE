@@ -130,6 +130,11 @@ type NodeHeartbeatRequest struct {
 	// MaxWorkers (W07) is the agent's local hard worker cap; required with
 	// ScalingController, absent otherwise.
 	MaxWorkers int `json:"max_workers,omitempty"`
+	// StorageQuotaExceeded (W25, optional) lists the node storage areas
+	// (snapshot, workspace, cache, logs) at or over the operator's limit. The
+	// controller then creates no new attempt on this node. Agents without a
+	// quota omit it, so their heartbeat bytes are unchanged.
+	StorageQuotaExceeded []string `json:"storage_quota_exceeded,omitempty"`
 }
 
 // Worker scaling modes (heartbeat worker_scaling).
@@ -413,6 +418,9 @@ const (
 	WaitingRequestUnavailable   = "request_unavailable" // run created before W06 whose request body is unknown
 	WaitingProjectLimit         = "project_limit"       // W07: the project already runs project_max_running attempts
 	WaitingPoolPaused           = "pool_paused"         // W07: every capable node's pool has max_workers = 0
+	// W25: a storage quota is reached (the artifact store, or a storage area
+	// of every capable node that would otherwise have room).
+	WaitingStorageQuotaExceeded = "storage_quota_exceeded"
 )
 
 // Completion/task reasons.

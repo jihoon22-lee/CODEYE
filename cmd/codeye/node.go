@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/agent"
+	"github.com/jihoon22-lee/CODEYE/internal/quota"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 	analyzerpack "github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
@@ -52,7 +53,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	// Do not echo rejected arguments: they may contain credentials.
 	fs.SetOutput(io.Discard)
-	var roots, gitHosts, modelRoots, codeRoots multiFlag
+	var roots, gitHosts, modelRoots, codeRoots, storageQuota multiFlag
 	modelExe := fs.String("opencode", "", "")
 	modelName := fs.String("model", "", "")
 	modelRelay := fs.String("model-relay-file", "", "")
@@ -87,6 +88,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	bothTypeCheckers := fs.Bool("python-both-type-checkers", false, "")
 	fs.Var(&roots, "source-root", "")
 	fs.Var(&gitHosts, "git-host", "")
+	// W25 storage quota (docs/47 §4): AREA=BYTES for snapshot, workspace,
+	// cache and logs; areas at their limit refuse new claims for this node.
+	fs.Var(&storageQuota, "storage-quota", "")
+	storageLogDir := fs.String("storage-log-dir", "", "")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || *controller == "" || *stateDir == "" {
 		fmt.Fprintln(stderr, "invalid agent options; use codeye --help")
 		return agent.ExitUsage
@@ -129,6 +134,15 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	for _, id := range codeRoots {
 		codeApproved[id] = true
 	}
+	limits := map[string]int64{}
+	for _, q := range storageQuota {
+		area, n, err := quota.ParseLimit(q)
+		if err != nil || limits[area] != 0 {
+			fmt.Fprintln(stderr, "invalid --storage-quota; expected AREA=BYTES once per area (snapshot, workspace, cache, logs)")
+			return agent.ExitUsage
+		}
+		limits[area] = n
+	}
 	tools := map[string]string{}
 	for tool, v := range toolFlags {
 		if *v != "" {
@@ -149,8 +163,15 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
 		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ReviewPack: *reviewPack,
 		RepositoryCodeSourceRoots: codeApproved,
+		StorageQuota:              limits,
+		StorageLogDir:             *storageLogDir,
 		Log:                       stderr,
 	}
+	// W25: SIGUSR1 (codeye stop) drains: no new claims, running work
+	// finishes, then a clean exit.
+	drain, stopDrain := drainSignal()
+	defer stopDrain()
+	cfg.Drain = drain
 	ag, err := agent.New(cfg)
 	if err == nil {
 		err = ag.Run(ctx)
