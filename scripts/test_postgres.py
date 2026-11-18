@@ -73,7 +73,11 @@ def main():
         with temporary_postgres(base) as (url, env, probe_env):
             password = url.split(":", 2)[2].split("@", 1)[0]
             env["CODEYE_TEST_DATABASE_URL"] = url
-            subprocess.run(["go", "test", "-race", "-count=1", "./..."], cwd=ROOT, env=env, check=True)
+            # --smokes-only (W25): skip the Go suite to rerun only the selected smokes; the
+            # final line then does not claim the storage integration tests ran.
+            go_suite = "--smokes-only" not in sys.argv[1:]
+            if go_suite:
+                subprocess.run(["go", "test", "-race", "-count=1", "./..."], cwd=ROOT, env=env, check=True)
             subprocess.run(["go", "build", "-o", str(base / "codeye"), "./cmd/codeye"], cwd=ROOT, env=env, check=True)
             env["CODEYE_DATABASE_URL"] = url
             for _ in range(2):
@@ -104,10 +108,16 @@ def main():
                 scheduler_env = dict(env, CODEYE_DATABASE_URL=scheduler_url, CODEYE_TEST_DATABASE_URL=scheduler_url)
                 subprocess.run([str(base / "codeye"), "migrate"], cwd=base, env=scheduler_env, check=True)
                 scheduler_smoke.run(base, ROOT, scheduler_env)
+            if "--personal" in sys.argv[1:]:
+                import personal_smoke
+                personal_smoke.run(base, ROOT, env, probe_env)
             if "--r0-pilot" in sys.argv[1:]:
                 import r0_pilot
                 r0_pilot.run(base, ROOT, env)
-            print("PASS: Native PostgreSQL migration·저장 통합·인증/query·CLI 재적용·JSON schema·비밀값 미노출")
+            if go_suite:
+                print("PASS: Native PostgreSQL migration·저장 통합·인증/query·CLI 재적용·JSON schema·비밀값 미노출")
+            else:
+                print("PASS(--smokes-only): migration·CLI·JSON schema·선택한 smoke. Go 저장 통합 시험은 실행하지 않음")
 
 
 if __name__ == "__main__":

@@ -129,6 +129,52 @@ func TerminateVerifiedGroup(pgid int, leaderStart uint64, grace, wait time.Durat
 	return waitEmpty(pgid, wait)
 }
 
+// ErrReused: the pid is alive but is not the recorded process (other start
+// time); it was not signalled.
+var ErrReused = errors.New("process_identity_mismatch")
+
+// ErrGone: no process with the recorded identity exists.
+var ErrGone = errGone
+
+// SignalVerified (W25) sends sig to the single process pid only if it is
+// still the process recorded with start time start. The process is pinned
+// with pidfd_open BEFORE its identity is checked and is signalled only through
+// that pidfd, so a recycled PID can never be hit. Kernels without pidfd
+// (before Linux 5.3) return ErrPidfdUnsupported; there is no kill(2) fallback.
+func SignalVerified(pid int, start uint64, sig unix.Signal) error {
+	if pid <= 1 {
+		return errors.New("invalid pid")
+	}
+	fd, err := unix.PidfdOpen(pid, 0)
+	if errors.Is(err, unix.ESRCH) {
+		return ErrGone
+	}
+	if err != nil {
+		return ErrPidfdUnsupported
+	}
+	defer unix.Close(fd)
+	id, err := Read(pid)
+	if errors.Is(err, errGone) {
+		return ErrGone
+	}
+	if err != nil {
+		return err
+	}
+	if id.StartTime != start {
+		return ErrReused
+	}
+	if id.Zombie {
+		return ErrGone
+	}
+	if err := unix.PidfdSendSignal(fd, sig, nil, 0); err != nil {
+		if errors.Is(err, unix.ESRCH) {
+			return ErrGone
+		}
+		return ErrPidfdUnsupported
+	}
+	return nil
+}
+
 func waitEmpty(pgid int, d time.Duration) (bool, error) {
 	deadline := time.Now().Add(d)
 	for {

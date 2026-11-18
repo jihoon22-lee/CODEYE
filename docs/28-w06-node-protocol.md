@@ -30,7 +30,7 @@ codeye serve [--artifact-dir .codeye/artifacts] ...
 - pool은 이름으로 처음 사용할 때 만든다. pool 정책(min/max worker, revision)은 W07이다.
 - TTL은 1분~24시간, 기본 10분이다. 사용·만료·철회된 토큰은 등록에 쓸 수 없다. 사용된 토큰의 철회는 409이며 그때는 노드를 철회한다.
 - `node revoke`는 즉시 credential을 무효화한다. 그 노드의 lease는 갱신되지 않아 만료 후 `recovery_required`가 된다.
-- `scheduler set`은 전역 동시 attempt 상한(초기값 2)을 바꾼다.
+- `scheduler set`은 전역 동시 attempt 상한(초기값 2)을 바꾼다. W25의 `--artifact-quota-bytes N`(0이면 제거)은 산출물 저장 상한이다([migration 0009](../migrations/sql/0009_storage_quota.sql), [W25 §4](47-w25-packaging-and-operations.md#4-저장-영역-상한)).
 - 이 명령의 진입점은 `runNodeAdmin(ctx, args, out, stderr) (code, ok)`이며 `main.go`의 dispatch 연결은 통합 단계에서 한다.
 
 ## 3. HTTP 계약 요약
@@ -77,7 +77,7 @@ codeye serve [--artifact-dir .codeye/artifacts] ...
 
 ## 7. 대기 사유와 프로젝트 공백
 
-`GET /runs/{id}`의 queued run `progress.waiting_reason`은 저장 데이터에서 매번 계산한다. 검사 순서: `request_unavailable` → `execution_unavailable`(철회되지 않은 노드 없음) → `snapshot_unavailable` → `node_stale`(신선한 노드 없음) → `no_capable_node` → `capacity_full`(전역 상한 또는 호환 노드 여유 부족) → null(호환 노드에 여유가 있어 다음 idle 워커가 가져갈 수 있음). 프로젝트 `capability_gaps`의 `execution_unavailable`은 등록 노드가 하나도 없을 때만 나온다. `source_access_unverified`와 `report_unavailable`은 계속 표시한다. 특정 run의 배치 가능성은 waiting_reason이 따로 말한다.
+`GET /runs/{id}`의 queued run `progress.waiting_reason`은 저장 데이터에서 매번 계산한다. 검사 순서: `request_unavailable` → `execution_unavailable`(철회되지 않은 노드 없음) → `snapshot_unavailable` → `node_stale`(신선한 노드 없음) → `no_capable_node` → `capacity_full`(전역 상한 또는 호환 노드 여유 부족) → `storage_quota_exceeded`(W25: 산출물 저장 상한 도달, 또는 여유 있는 호환 노드가 모두 저장 영역 상한 도달, [W25 기록](47-w25-packaging-and-operations.md) §4) → null(호환 노드에 여유가 있어 다음 idle 워커가 가져갈 수 있음). 프로젝트 `capability_gaps`의 `execution_unavailable`은 등록 노드가 하나도 없을 때만 나온다. `source_access_unverified`와 `report_unavailable`은 계속 표시한다. 특정 run의 배치 가능성은 waiting_reason이 따로 말한다.
 
 ## 8. 시험
 

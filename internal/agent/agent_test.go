@@ -61,8 +61,11 @@ func (modeHandler) Plan(context.Context, analysis.Job) ([]analysis.TaskSpec, err
 func (modeHandler) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, r executor.Runner) analysis.TaskResult {
 	mode, _ := os.ReadFile(filepath.Join(job.Snapshot.SnapshotDir, "mode"))
 	script := "echo ok"
-	if strings.TrimSpace(string(mode)) == "sleep" {
+	switch strings.TrimSpace(string(mode)) {
+	case "sleep":
 		script = "sleep 300 & sleep 300; wait"
+	case "brief": // W25 drain: work that finishes on its own
+		script = "sleep 2"
 	}
 	res := r.Run(ctx, executor.Spec{Executable: "/bin/sh", Args: []string{"-c", script}, WorkspaceRoot: job.Snapshot.WorkspaceDir, Dir: job.Snapshot.WorkspaceDir, Env: map[string]string{"PATH": "/usr/bin:/bin"}, Timeout: 5 * time.Minute})
 	ex, err := analysis.WriteExecution(filepath.Join(job.Scratch, task.Key), "sh", res)

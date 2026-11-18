@@ -22,7 +22,7 @@ import (
 
 const usage = `CODEYE control plane (W03/W06/W07)
 Usage:
-  codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]
+  codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
   codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH] [--timeout 75s]
   codeye migrate
   codeye user create [--name NAME]
@@ -32,18 +32,23 @@ Usage:
   codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331]
   codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]]
-` + nodeAdminUsage + `  codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
+` + nodeAdminUsage + `  codeye start [--config PATH]      (personal mode, Linux: controller + local agent from one JSON config)
+  codeye stop [--config PATH] [--format text|json]
+  codeye status [--config PATH] [--format text|json]
+  codeye backup [--config PATH] [--output DIR] [--format text|json]   (default output: <backup_dir>/codeye-<UTC>)
+  codeye restore [--config PATH] --from DIR [--format text|json]   (new empty database and state_dir only)
+  codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
                [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
                [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit]
                [--cargo /abs/toolchain/bin/cargo [--clippy /abs/toolchain/bin/cargo-clippy]]
-               [--repo-code-source-root ID ...]
+               [--repo-code-source-root ID ...] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
                [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-v1|review-r1]
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
 Login links are written to a 0600 file; the token is never printed.
 "serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.
 Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
 Enrollment tokens are written to a 0600 file; the token is never printed.
-start/stop are not implemented.
+Personal mode (W25): the config path defaults to $XDG_CONFIG_HOME/codeye/personal.json; the database is CODEYE_DATABASE_URL.
 `
 
 const launchTTL = 10 * time.Minute

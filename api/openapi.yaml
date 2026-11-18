@@ -697,6 +697,15 @@ paths:
                   type: array
                   maxItems: 256
                   items: {$ref: '#/components/schemas/CleanupReport'}
+                storage_quota_exceeded:
+                  type: array
+                  maxItems: 4
+                  uniqueItems: true
+                  items: {enum: [snapshot, workspace, cache, logs]}
+                  description: >-
+                    W25. 노드가 직접 잰 저장 영역 중 설정한 상한에 도달한 영역(docs/47 §4). 상한이 없으면 생략한다.
+                    비어 있지 않으면 controller는 이 노드의 새 claim을 거절하고(204) 실행 중인 attempt와 확정된 산출물은
+                    건드리지 않는다. 생략은 빈 목록과 같다.
       responses:
         '200':
           description: 상태 수신. cursor 이후 명령을 sequence 오름차순으로 반환한다.
@@ -744,7 +753,9 @@ paths:
         능력(analysis:profile, source)·노드 source root 허가·요청자 실행 권한과 source root grant·snapshot 위치·
         예약 여유를 확인한 뒤 attempt(epoch+1)·예약·run 전이·attempt.leased 이벤트·멱등 응답을 함께 저장한다.
         마지막 heartbeat에서 idle로 보고된 워커만 claim할 수 있다. 같은 Idempotency-Key와 같은 worker는 저장된
-        200/204를 그대로 재전송하고 다른 worker는 409 IDEMPOTENCY_CONFLICT다.
+        200/204를 그대로 재전송하고 다른 worker는 409 IDEMPOTENCY_CONFLICT다. W25: 노드의 마지막 heartbeat가
+        storage_quota_exceeded를 보고했거나 scheduler_limits.artifact_quota_bytes에 확정 산출물 합(sha256별 한 번)이
+        도달했으면 새 claim은 204다.
       parameters:
         - {$ref: '#/components/parameters/IdempotencyKey'}
       requestBody:
@@ -1424,7 +1435,8 @@ components:
               description: >-
                 queued일 때만 구조화 데이터에서 계산한다(W06): request_unavailable(W06 이전 본문 미복원),
                 execution_unavailable(철회되지 않은 등록 노드 없음), snapshot_unavailable, node_stale, no_capable_node
-                (분석 handler가 없는 제품 빌드 포함), capacity_full, project_limit(프로젝트 동시 실행 상한), pool_paused(모든 호환 pool 중지). 호환 노드에 여유가 있으면 null. 그 외 상태는 null.
+                (분석 handler가 없는 제품 빌드 포함), capacity_full, project_limit(프로젝트 동시 실행 상한), pool_paused(모든 호환 pool 중지), storage_quota_exceeded(W25: 산출물 저장 상한 도달
+                또는 여유가 있는 호환 노드가 모두 저장 영역 상한 도달). 호환 노드에 여유가 있으면 null. 그 외 상태는 null.
     Pool:
       type: object
       required: [id, revision, min_workers, max_workers, idle_timeout_seconds, observed_workers, capacity_state]

@@ -20,7 +20,7 @@ const nodeAdminUsage = `  codeye node token create --pool NAME [--source-root ID
   codeye node token revoke --id TOKEN_ID
   codeye node list
   codeye node revoke --id NODE_ID
-  codeye scheduler set [--global-max-running N] [--project-max-running N]
+  codeye scheduler set [--global-max-running N] [--project-max-running N] [--artifact-quota-bytes N]
   codeye pool set --name NAME [--min-workers N] [--max-workers N] [--idle-timeout-seconds S]
                   [--scale-up-cooldown-seconds S] [--scale-down-cooldown-seconds S] [--expect-revision R]
   codeye pool list
@@ -202,10 +202,13 @@ func nodeRevoke(ctx context.Context, args []string, out, stderr io.Writer) int {
 
 func schedulerSet(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var global, project *int
+	var artifactQuota *int64
 	g, p := -1, -1
+	var aq int64 = -1
 	fs, ok := parseSet("scheduler set", args, stderr, func(fs *flag.FlagSet) {
 		fs.IntVar(&g, "global-max-running", -1, "")
 		fs.IntVar(&p, "project-max-running", -1, "")
+		fs.Int64Var(&aq, "artifact-quota-bytes", -1, "")
 	})
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
@@ -213,20 +216,37 @@ func schedulerSet(ctx context.Context, args []string, out, stderr io.Writer) int
 			global = &g
 		case "project-max-running":
 			project = &p
+		case "artifact-quota-bytes":
+			artifactQuota = &aq
 		}
 	})
-	if !ok || (global == nil && project == nil) || (global != nil && (g < 0 || g > 10000)) || (project != nil && (p < 1 || p > 10000)) {
-		fmt.Fprintln(stderr, "--global-max-running N (0..10000) and/or --project-max-running N (1..10000) is required")
+	if !ok || (global == nil && project == nil && artifactQuota == nil) || (global != nil && (g < 0 || g > 10000)) || (project != nil && (p < 1 || p > 10000)) || (artifactQuota != nil && aq < 0) {
+		fmt.Fprintln(stderr, "--global-max-running N (0..10000), --project-max-running N (1..10000) and/or --artifact-quota-bytes N (0 removes the limit) is required")
 		return 2
 	}
 	return withStore(ctx, stderr, func(ctx context.Context, s *postgres.Store) int {
-		l, err := s.SetSchedulerLimits(ctx, global, project)
-		if err != nil {
-			fmt.Fprintln(stderr, "cannot set scheduler limit:", err)
-			return 1
+		if global != nil || project != nil {
+			l, err := s.SetSchedulerLimits(ctx, global, project)
+			if err != nil {
+				fmt.Fprintln(stderr, "cannot set scheduler limit:", err)
+				return 1
+			}
+			fmt.Fprintln(out, "scheduler limit updated")
+			printJSON(out, map[string]any{"global_max_running": l.GlobalMaxRunning, "project_max_running": l.ProjectMaxRunning, "revision": l.Revision})
 		}
-		fmt.Fprintln(out, "scheduler limit updated")
-		printJSON(out, map[string]any{"global_max_running": l.GlobalMaxRunning, "project_max_running": l.ProjectMaxRunning, "revision": l.Revision})
+		if artifactQuota != nil {
+			if err := s.SetArtifactQuota(ctx, *artifactQuota); err != nil {
+				fmt.Fprintln(stderr, "cannot set the artifact quota:", err)
+				return 1
+			}
+			u, err := s.ArtifactUsage(ctx)
+			if err != nil {
+				fmt.Fprintln(stderr, "cannot read the artifact usage:", err)
+				return 1
+			}
+			fmt.Fprintln(out, "artifact quota updated")
+			printJSON(out, map[string]any{"artifact_quota_bytes": u.Quota, "artifact_bytes": u.Bytes})
+		}
 		return 0
 	})
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/doctor"
+	"github.com/jihoon22-lee/CODEYE/internal/personal"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
@@ -32,6 +33,9 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	if args[0] == "model" {
 		return modelCommand(ctx, args[1:], out, stderr)
+	}
+	if code, ok := runPersonal(ctx, args, out, stderr); ok {
+		return code
 	}
 	if code, ok := runControl(ctx, args, out, stderr); ok {
 		return code
@@ -60,11 +64,22 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	format := flags.String("format", "text", "")
 	work := flags.String("work-dir", ".codeye/work", "")
 	timeout := flags.Duration("timeout", 5*time.Second, "")
+	config := flags.String("config", "", "")
 	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 || (*format != "json" && *format != "text") || *timeout <= 0 || *timeout > time.Minute || *work == "" {
 		fmt.Fprintln(stderr, "invalid doctor options; use codeye --help")
 		return 2
 	}
-	report := doctor.Collect(ctx, doctor.Options{WorkDir: *work, DatabaseURL: os.Getenv("CODEYE_DATABASE_URL"), Timeout: *timeout}, doctor.NativeRunner{})
+	opts := doctor.Options{WorkDir: *work, DatabaseURL: os.Getenv("CODEYE_DATABASE_URL"), Timeout: *timeout}
+	if *config != "" {
+		// W25: --config adds the personal operations section.
+		cfg, err := personal.Load(*config, knownTools())
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		opts.Personal = cfg
+	}
+	report := doctor.Collect(ctx, opts, doctor.NativeRunner{})
 	if err := report.Write(out, *format); err != nil {
 		fmt.Fprintln(stderr, "cannot write diagnostic report")
 		return 2

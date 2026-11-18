@@ -12,7 +12,7 @@ R0에서는 운영자가 PostgreSQL 연결을 준비해 `codeye migrate`로 sche
 
 호스트 진단은 `codeye doctor`, 승인 모델의 실요청 확인은 `codeye model probe`로 수행한다. 모델 구성을 선택하지 않은 환경에서 다른 서비스로 우회하지 않는다. [진단 결과 읽기](21-w01-foundation.md) · [모델 검증](32-w10-opencode.md)
 
-통합 `start`·`stop`과 백업·복원은 W25의 운영 목표다. 아래의 배포·quota·폐쇄망 운영 절은 후속 지원을 설계할 때의 조건이다.
+W25부터 개인 모드는 설정 파일 하나로 `codeye start`·`stop`·`status`를 쓴다(Linux). 저장 영역 상한, 같은 시점 백업·복원, `codeye doctor --config`의 운영 점검이 함께 있다. 관리형 PostgreSQL과 Windows의 start/stop은 없다. [개인 사용 안내서](48-user-guide.md) · [W25 기록](47-w25-packaging-and-operations.md). 아래의 서버 배포·폐쇄망 운영 절은 후속 지원을 설계할 때의 조건이다.
 
 ## 3. 서버/노드 배포
 
@@ -24,7 +24,7 @@ enrollment token은 짧은 수명·1회용이며 node identity와 pool·신뢰 �
 
 로컬 디스크에는 DB data, workspace, tool/runtime cache, 임시 결과를 우선 둔다. NFS는 원본 source와 선택적 보관 산출물에 사용한다. DB data를 NFS로 옮기는 것은 별도 DB 운영 검증 없이 기본 지원하지 않는다. node cache를 공용 NFS에 두어 잠금·성능 문제가 발생하는 것을 기본 설계로 삼지 않는다.
 
-디스크 quota는 snapshot·workspace·cache·logs별로 둔다. 용량 부족 시 새 작업을 막고 기존 작업의 산출물 보호를 우선한다. 무조건 가장 오래된 파일 삭제 대신 retention·참조·pin 여부를 확인한다.
+디스크 quota는 snapshot·workspace·cache·logs별로 둔다. 용량 부족 시 새 작업을 막고 기존 작업의 산출물 보호를 우선한다. 무조건 가장 오래된 파일 삭제 대신 retention·참조·pin 여부를 확인한다. W25는 영역별 상한과 새 작업 거절까지 구현했고 삭제·retention은 없다([W25 §4](47-w25-packaging-and-operations.md#4-저장-영역-상한)).
 
 ## 5. 폐쇄망 패키징
 
@@ -38,7 +38,7 @@ enrollment token은 짧은 수명·1회용이며 node identity와 pool·신뢰 �
 
 ## 7. 백업과 복구
 
-DB backup과 finalized artifact manifest를 같은 논리 시점으로 맞춘다. DB만 복원하면 evidence가 누락될 수 있다. 최소 복구 시험은 프로젝트·run·report·evidence 링크·ACL·예약 중복 방지를 확인한다. 복원 직후 과거 lease를 살리지 않고 노드와 reconciliation한다. 백업·복구 목표 시간은 실제 데이터 규모 측정 후 결정한다.
+DB backup과 finalized artifact manifest를 같은 논리 시점으로 맞춘다. DB만 복원하면 evidence가 누락될 수 있다. 최소 복구 시험은 프로젝트·run·report·evidence 링크·ACL·예약 중복 방지를 확인한다. 복원 직후 과거 lease를 살리지 않고 노드와 reconciliation한다. 백업·복구 목표 시간은 실제 데이터 규모 측정 후 결정한다. 개인 모드의 구현과 복구 시험은 [W25 §5](47-w25-packaging-and-operations.md#5-백업과-복원)에 있다.
 
 ## 8. 운영 상황별 대응
 

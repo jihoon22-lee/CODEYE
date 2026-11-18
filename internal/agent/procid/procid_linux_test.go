@@ -80,3 +80,35 @@ func TestGoneLeaderWithSurvivorIsNotEmpty(t *testing.T) {
 		t.Fatal("survivor must not have been blindly signalled")
 	}
 }
+
+// W25: personal stop signals one recorded process only while its identity
+// still matches; a reused PID is never signalled and a gone one is reported.
+func TestSignalVerifiedSingleProcess(t *testing.T) {
+	cmd := exec.Command("/bin/sleep", "300")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	pid := cmd.Process.Pid
+	id, err := Read(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SignalVerified(pid, id.StartTime+1, syscall.SIGTERM); err != ErrReused {
+		t.Fatalf("reused identity: %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if st, _ := Check(pid, id.StartTime); st != Same {
+		t.Fatal("a process with another identity was signalled")
+	}
+	if err := SignalVerified(pid, id.StartTime, syscall.SIGTERM); err != nil {
+		if err == ErrPidfdUnsupported {
+			t.Skip("kernel without pidfd: stop reports unsupported")
+		}
+		t.Fatal(err)
+	}
+	_ = cmd.Wait()
+	if err := SignalVerified(pid, id.StartTime, syscall.SIGTERM); err != ErrGone {
+		t.Fatalf("gone process: %v", err)
+	}
+}

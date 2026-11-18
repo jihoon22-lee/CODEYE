@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
+	"github.com/jihoon22-lee/CODEYE/internal/quota"
 )
 
 // ErrIdempotencyConflict is returned when a claim Idempotency-Key was already
@@ -267,6 +268,13 @@ func ValidateHeartbeat(in nodeproto.NodeHeartbeatRequest) error {
 			return domain.ErrInvalid
 		}
 	}
+	areas := map[string]bool{}
+	for _, a := range in.StorageQuotaExceeded {
+		if !quota.ValidNodeArea(a) || areas[a] {
+			return domain.ErrInvalid
+		}
+		areas[a] = true
+	}
 	return nil
 }
 
@@ -285,6 +293,8 @@ func (s *Store) NodeHeartbeat(ctx context.Context, node string, in nodeproto.Nod
 	}
 	caps := append([]string{}, in.Capabilities...)
 	sort.Strings(caps)
+	exceeded := append([]string{}, in.StorageQuotaExceeded...)
+	sort.Strings(exceeded)
 	return transaction(ctx, s, func(tx pgx.Tx) (nodeproto.NodeHeartbeatResponse, error) {
 		out := nodeproto.NodeHeartbeatResponse{Commands: []nodeproto.Command{}, CleanupResults: []nodeproto.CleanupResult{}}
 		var revoked *time.Time
@@ -307,8 +317,8 @@ func (s *Store) NodeHeartbeat(ctx context.Context, node string, in nodeproto.Nod
 			maxWorkers = &in.MaxWorkers
 		}
 		if err := tx.QueryRow(ctx, `UPDATE nodes SET last_heartbeat_at=clock_timestamp(),cpu_cores=$2,memory_available_bytes=$3,disk_available_bytes=$4,capabilities=$5,protocol_version=$6,
-			worker_scaling=$7,max_workers=$8
-			WHERE id=$1 RETURNING last_heartbeat_at`, node, in.Capacity.CPUCores, in.Capacity.MemoryAvailableBytes, in.Capacity.DiskAvailableBytes, caps, in.ProtocolVersion, scaling, maxWorkers).Scan(&out.ServerTime); err != nil {
+			worker_scaling=$7,max_workers=$8,storage_quota_exceeded=$9
+			WHERE id=$1 RETURNING last_heartbeat_at`, node, in.Capacity.CPUCores, in.Capacity.MemoryAvailableBytes, in.Capacity.DiskAvailableBytes, caps, in.ProtocolVersion, scaling, maxWorkers, exceeded).Scan(&out.ServerTime); err != nil {
 			return out, err
 		}
 		ids := make([]string, 0, len(in.ObservedWorkers))

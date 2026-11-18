@@ -12,7 +12,7 @@ go build -o bin/codeye ./cmd/codeye
 ## 출력과 종료 코드
 
 ```text
-codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]
+codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
 ```
 
 - [doctor Schema](../schemas/doctor.schema.json), [합성 예시](../examples/doctor.json). 예시는 현재 머신의 실측 결과가 아니다.
@@ -23,6 +23,7 @@ codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]
 - `--timeout`은 probe별 제한이며 기본 5초, 최대 1분이다. 여러 probe를 순서대로 실행하므로 전체 시간 제한은 아니다.
 - 작업 디스크 probe는 지정한 플랫폼 work 경로를 생성하고 임시 파일 쓰기→sync→읽기→삭제를 확인한다. 분석 대상 프로젝트 경로를 지정하지 않는다. 같은 경로의 기존 파일을 덮어쓰지 않는다.
 - 도구는 PATH에서 찾은 실행 파일을 argv로 호출한다. 임시 cwd/home, 제한된 환경, 8 KiB 출력 상한을 사용한다. 계정 credential을 상속하지 않는다. 실행 파일 자체는 운영자가 신뢰하는 설치여야 한다. 이는 OS 샌드박스가 아니다.
+- W25: `--config PATH`(개인 모드 설정)를 주면 선택 필드 `operations`가 붙는다. 저장 영역별 사용량·상한·파일시스템 여유, 최신 백업 나이, start/stop 상태 일관성이다. 종료 코드 규칙은 같다. 상세는 [W25 기록](47-w25-packaging-and-operations.md) §6.
 - 원시 stdout/stderr·실행 경로·DSN·비밀번호를 결과에 넣지 않는다. 버전은 숫자 부분만 기록하고 실패는 고정 reason으로 표시한다. timeout은 종료를 확정하지 않고 `recovery_required`다. Linux의 probe process group 중지는 W05 전체 취소 계약을 대체하지 않는다.
 
 DB는 `CODEYE_DATABASE_URL` 환경변수에 명시한 PostgreSQL URL만 검사한다. argv에 URL을 넣는 옵션은 없다. URL에는 host/user/database가 필요하며 `sslmode`, `sslrootcert`만 허용한다. 기본 TLS는 verify-full, `sslmode=disable`은 `127.0.0.1`/`::1`만 허용한다. 인증정보는 psql 자식 환경에만 전달한다. 사용자 psqlrc·PGSERVICE·기존 PGPASS·운영 DB 환경을 상속하지 않는다. `psql -X -w`로 비대화형 읽기 쿼리 `SELECT current_setting('server_version')`만 수행한다. psql이 없으면 명확히 실패한다. TCP 포트가 열렸다는 이유로 DB 정상이라고 표시하지 않는다. DB 생성·migration은 하지 않는다.

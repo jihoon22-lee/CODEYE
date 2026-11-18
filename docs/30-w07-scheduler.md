@@ -21,7 +21,7 @@ codeye serve --reconcile-interval 5s
 - 각 pool은 하나의 조정 트랜잭션에서 현재 정책과 워커 상태를 읽고 시작·종료 명령, 조정 epoch, 쿨다운 시각을 함께 저장한다. controller 재시작 뒤에도 보낸 명령과 준비 중인 워커를 계산에 포함한다. 시한을 넘긴 미등록 시작 요청은 새 명령으로 대체한다.
 - `pool set --expect-revision R`은 현재 revision이 다르면 충돌을 반환한다. 같은 설정의 재적용은 revision을 유지한다. `min_workers=0,max_workers=0`은 새 배정을 중지한다. 노드 상한이나 전역 실행 상한을 초과하는 최소값은 경고와 용량 부족 사유를 표시한다.
 - 상한을 낮추면 먼저 유휴 워커를 종료한다. 실행 중인 워커는 새 배정을 받지 않고 현재 작업의 완료·정리를 보고한 후 나간다. `over_target_draining`은 실제 busy 수가 상한을 초과하는 동안 유지한다. `pool list`의 `busy_workers`에는 아직 실행 중인 drain 대상도 포함된다. `live_workers`는 조정 후 유지할 워커 수이며, 시작 요청과 종료 대기는 각각 `pending_starts`와 `draining_workers`에서 확인한다.
-- 모든 호환 pool이 정지했으면 run의 대기 사유는 `pool_paused`, 프로젝트 동시 실행 상한이면 `project_limit`, 호환 자원이 부족하면 `capacity_full`이다.
+- 모든 호환 pool이 정지했으면 run의 대기 사유는 `pool_paused`, 프로젝트 동시 실행 상한이면 `project_limit`, 호환 자원이 부족하면 `capacity_full`이다. W25부터 저장 영역 상한에 걸려 새 claim이 거절되면 `storage_quota_exceeded`다([W25 기록](47-w25-packaging-and-operations.md) §4).
 
 ## 검증 경로
 
