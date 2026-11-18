@@ -20,6 +20,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/artifactstore"
@@ -43,6 +45,13 @@ type Store interface {
 	Enqueue(ctx context.Context, actor, project, key string, body json.RawMessage) (postgres.Run, error)
 	GetRunView(ctx context.Context, actor, id string) (postgres.RunView, error)
 	CancelRun(ctx context.Context, actor, id string) (postgres.Run, bool, error)
+	// Run event stream and schedules (W22).
+	RunEvents(ctx context.Context, actor, id string, after int64, limit int) (postgres.EventPage, error)
+	ListSchedules(ctx context.Context, actor, project string) ([]postgres.Schedule, bool, error)
+	CreateSchedule(ctx context.Context, actor, project, key string, in postgres.ScheduleInput) (postgres.Schedule, error)
+	UpdateSchedule(ctx context.Context, actor, project, id string, expected int64, p postgres.SchedulePatch) (postgres.Schedule, error)
+	DeleteSchedule(ctx context.Context, actor, project, id string, expected int64) error
+	MaterializeSchedules(ctx context.Context) ([]postgres.ScheduleDecision, error)
 
 	// Node protocol (W06).
 	EnrollNode(ctx context.Context, in postgres.Enrollment) (postgres.NodeIdentity, error)
@@ -90,6 +99,9 @@ type Config struct {
 	// 2s; negative disables, for tests that drive the publisher directly).
 	// Publication needs ArtifactDir.
 	PublishInterval time.Duration
+	// Stream configures GET /runs/{id}/events (W22 SSE); zero fields take
+	// the defaults of StreamConfig.
+	Stream StreamConfig
 }
 
 // DefaultSessionTTL is the absolute browser session lifetime.
@@ -110,6 +122,13 @@ type Server struct {
 	publisher    *reportsvc.Publisher
 	publishEvery time.Duration
 	publishKick  chan struct{}
+
+	stream StreamConfig
+	// streams counts open event streams (a per-process connection limit, not
+	// scheduling state); stopStreams ends them before a graceful shutdown.
+	streams     atomic.Int32
+	stopStreams chan struct{}
+	stopOnce    sync.Once
 }
 
 // ParseListen parses and validates a loopback listen address.
@@ -140,8 +159,10 @@ func New(cfg Config, store Store) (*Server, error) {
 			"localhost:" + port: true,
 			"[::1]:" + port:     true,
 		},
-		sessionTTL: cfg.SessionTTL,
-		log:        cfg.Logger,
+		sessionTTL:  cfg.SessionTTL,
+		log:         cfg.Logger,
+		stream:      cfg.Stream.withDefaults(),
+		stopStreams: make(chan struct{}),
 	}
 	if s.sessionTTL <= 0 {
 		s.sessionTTL = DefaultSessionTTL
@@ -186,8 +207,13 @@ func New(cfg Config, store Store) (*Server, error) {
 	return s, nil
 }
 
-// Close releases the web root.
+// StopStreams ends every open event stream (idempotent). Serve calls it when
+// shutdown begins so open streams do not hold the graceful shutdown.
+func (s *Server) StopStreams() { s.stopOnce.Do(func() { close(s.stopStreams) }) }
+
+// Close ends open event streams and releases the web root.
 func (s *Server) Close() error {
+	s.StopStreams()
 	if s.web != nil {
 		return s.web.Close()
 	}
@@ -206,6 +232,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		MaxHeaderBytes:    16 << 10,
 		ErrorLog:          slog.NewLogLogger(s.log.Handler(), slog.LevelWarn),
 	}
+	// Event streams clear their own read deadline and extend the write
+	// deadline per write; they end here when shutdown begins.
+	srv.RegisterOnShutdown(s.StopStreams)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	sweepCtx, stopSweep := context.WithCancel(ctx)
@@ -269,6 +298,10 @@ func (w *recorder) Write(b []byte) (int, error) {
 	}
 	return w.ResponseWriter.Write(b)
 }
+
+// Unwrap lets http.ResponseController reach the connection (flush and
+// deadlines for event streams).
+func (w *recorder) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 const contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; connect-src 'self'"
 
