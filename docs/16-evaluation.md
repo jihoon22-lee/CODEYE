@@ -49,6 +49,8 @@ precision은 점 추정만 제시하지 않고 표본 수·불확실성 구간·
 
 도구·rule/pack digest, 모델 endpoint identity/revision(가용 시), adapter version, context selection, temperature 등 제공 설정, OS/runtime, 시간 제한, 캐시를 기록한다. 변경된 요소가 여러 개면 효과를 분리할 추가 실험을 계획한다.
 
+R1 보류 corpus에서 이 구성·기록·지표를 실행하는 절차와 정답 차단, holdout 표시, 예산 거절은 [W24 평가 runner](46-w24-evaluation.md)에 있다.
+
 ## 6. 출시 판단
 
 출판되는 근거 참조의 구조적 유효성은 100%를 요구한다. 유효하지 않은 참조는 숨기고 제한을 표시해야 하므로 무효 링크를 그대로 게시하는 것은 출시 차단이다. 실행 근거 없는 reproduced, 검사 실패를 0건 통과로 표시, 다른 프로젝트 데이터 노출, late result 덮어쓰기도 차단한다.
