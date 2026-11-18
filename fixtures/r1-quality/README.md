@@ -93,11 +93,11 @@ python3 -I fixtures/r1-quality/corpus.py digest
 
 ## 알려진 한계
 
-- C/C++는 g++ 15.2(libstdc++)에서만 확인했다. 이 환경의 clang++는 libstdc++ 헤더를 찾지 못해 검사하지 않았다.
+- C/C++ 검사는 g++ 15.2(libstdc++)에서만 실행했다. 이 환경의 clang++ 23은 기본 설정으로 libstdc++ 헤더를 찾지 못해 검사 실행에는 쓰지 않았다(정적 분석에는 `--gcc-install-dir`을 주어 사용했다).
 - 새니타이저에 의존하는 검사가 있다. R1-CPP-01·02·10은 AddressSanitizer, R1-CPP-03은 UndefinedBehaviorSanitizer 보고를 실패 근거로 쓴다. 새니타이저가 없는 컴파일러에서는 결과가 다를 수 있다.
 - R1-CPP-09는 libstdc++의 terminate 처리기가 출력하는 문구를 서명으로 쓴다. 다른 표준 라이브러리에서는 서명을 바꿔야 한다.
 - 시간과 스레드 실행 순서에 기대는 검사가 있다(R1-JS-06, R1-JS-10, R1-GO-01, R1-GO-10, R1-CPP-05, R1-CPP-09, R1-CPP-10). 여유를 두었고 반복 실행으로 확인했지만, 매우 느리거나 부하가 큰 머신에서는 흔들릴 수 있다. R1-PY-04, R1-RS-01, R1-RS-08은 멈춤을 감지하는 감시 시간을 쓴다.
-- R1-GO-06은 Go 런타임의 동시 map 쓰기 감지에 기대며, 감지는 확률적이다.
+- R1-GO-06은 Go 런타임의 동시 map 쓰기 감지나 합계 불일치로 실패가 드러나며, 둘 다 스케줄링에 따라 확률적이다. 반복 실행에서는 매번 실패했다.
 - Linux 전용 요소가 있다. R1-GO-03은 `RLIMIT_NOFILE`, R1-JS-11은 `/proc/self/fd`, R1-CPP-11은 `/dev/full`을 쓴다.
 - TypeScript 사례는 Node의 타입 제거 실행만 확인했다. `tsc` 타입 검사는 검사 조건이 아니다.
 - 검사는 계약의 일부만 확인한다. 검사 통과가 after나 정상 사례의 모든 측면이 옳다는 증명은 아니다.
