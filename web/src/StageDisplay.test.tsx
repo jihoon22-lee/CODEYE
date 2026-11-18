@@ -119,14 +119,17 @@ describe('project list activity', () => {
 
 describe('queued waiting reason', () => {
   it('shows the localized reason, a raw fallback, and the default when absent', async () => {
+    // As the server sends it: a queued run's task stages are plan_pending.
+    const queued = [stage('source', 'waiting'), stage('environment', 'plan_pending'), stage('code_review', 'plan_pending'), stage('report', 'waiting')];
     renderApp(projects([
-      proj('p1', 'known', activity('queued', [stage('source', 'waiting')], { waiting_reason: 'capacity_full' })),
+      proj('p1', 'known', activity('queued', queued, { waiting_reason: 'capacity_full' })),
       proj('p2', 'rawone', activity('queued', [stage('source', 'waiting')], { waiting_reason: 'odd_reason' })),
       proj('p3', 'absent', activity('queued', [stage('source', 'waiting')], { waiting_reason: null })),
     ]));
     await flush();
     expect(row('known').textContent).toContain(`◷ 대기열에 있음 · ${t.runs.waitingLabels.capacity_full}`);
     expect(row('known').textContent).not.toContain('시작한 단계 없음');
+    expect(row('known').textContent).not.toContain('계획 미확정');
     expect(row('rawone').textContent).toContain('◷ 대기열에 있음 · odd_reason');
     expect(row('absent').textContent).toContain('◷ 대기열에 있음 · 시작한 단계 없음');
   });
