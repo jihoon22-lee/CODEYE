@@ -53,6 +53,10 @@ const (
 // tsconfig does not include (typescript-eslint 8.73, parserOptions.project).
 const outsideProgram = "was not found in any of the provided project(s)"
 
+// tsconfigUnparsed is typescript-eslint's fatal message for a tsconfig that
+// does not load.
+const tsconfigUnparsed = "Unable to parse the specified 'tsconfig' file"
+
 type assembleInput struct {
 	Typed                   bool
 	TaskKey, ManifestDigest string
@@ -246,7 +250,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	var cands []obsdoc.Observation
 	var withheld []obsdoc.ToolError
 	states := map[string]string{}
-	suppressedActive, gap, config, parseErr := false, false, false, false
+	suppressedActive, gap, config, parseErr, configReported := false, false, false, false, false
 	errorsN := 0
 	ordinals := map[string]int{}
 	toolError := func(te obsdoc.ToolError) {
@@ -280,6 +284,17 @@ func assemble(in assembleInput) obsdoc.Document {
 			switch {
 			case m.Fatal && in.Typed && strings.Contains(m.Text, outsideProgram):
 				state = FileOutsideTSConfig
+				continue
+			case m.Fatal && in.Typed && strings.Contains(m.Text, tsconfigUnparsed):
+				// The tsconfig did not load (measured: an unresolved
+				// package extends, TS6053): a configuration error of the
+				// program, not a parse error of the file.
+				config = true
+				state = FileNotLinted
+				if !configReported {
+					configReported = true
+					toolError(obsdoc.ToolError{Execution: execCheck, Kind: "config", Unit: "program", Message: text})
+				}
 				continue
 			case m.Fatal:
 				parseErr = true

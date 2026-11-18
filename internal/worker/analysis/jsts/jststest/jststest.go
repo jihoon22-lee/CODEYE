@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -419,6 +420,21 @@ func FakeTools(t *testing.T) (eslintJS, tscJS string, node pack.Toolchain) {
 	WriteTree(t, bin, map[string]string{"node": ""})
 	return filepath.Join(nm, "eslint", "bin", "eslint.js"), filepath.Join(nm, "typescript", "bin", "tsc"),
 		pack.Toolchain{Name: "node", Executable: filepath.Join(bin, "node"), Dir: bin, Version: "24.18.0"}
+}
+
+// EnvAllowlisted reports exactly the script environment allowlist: PATH and
+// LANG, plus SystemRoot on Windows.
+func EnvAllowlisted(env map[string]string) bool {
+	want := 2
+	if runtime.GOOS == "windows" {
+		want = 3
+		if _, ok := env["SystemRoot"]; !ok && os.Getenv("SystemRoot") != "" {
+			return false
+		}
+	}
+	_, path := env["PATH"]
+	_, lang := env["LANG"]
+	return path && lang && len(env) <= want
 }
 
 // Rules counts observations per rule id.

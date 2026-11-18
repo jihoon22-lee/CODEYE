@@ -178,3 +178,28 @@ func TestRealTscWriteOptionsCanary(t *testing.T) {
 		t.Fatalf("effective %v %v", w, err)
 	}
 }
+
+// A typical library/Vite config with in-snapshot emit paths (outDir,
+// declarationDir, rootDir, baseUrl+paths, composite, incremental,
+// tsBuildInfoFile, and emitDeclarationOnly) passes the chain and effective
+// checks (showConfig adds the outDir to exclude as a redacted absolute
+// path), checks the program and leaves the workspace unchanged.
+func TestRealTscTypicalEmitConfigRuns(t *testing.T) {
+	a := newReal(t)
+	for _, extra := range []string{"", ",\"emitDeclarationOnly\":true"} {
+		config := "{\"compilerOptions\":{" + opts + ",\"outDir\":\"./dist\",\"declaration\":true,\"declarationDir\":\"./types\",\"rootDir\":\"./src\",\"baseUrl\":\".\"," +
+			"\"paths\":{\"@/*\":[\"./src/*\"]},\"composite\":true,\"incremental\":true,\"tsBuildInfoFile\":\"./build/app.tsbuildinfo\"" + extra + "},\"include\":[\"src\"]}\n"
+		fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": config, "src/a.ts": fixClean,
+			"src/b.ts": "import { add } from \"@/a\";\n\nexport const three: number = add(1, 2);\n"}), domain.Scope{})
+		ws := jststest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir)
+		res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
+		doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
+		if res.Status != domain.TaskSucceeded || len(doc.Observations) != 0 || len(doc.Coverage.ProcessedPaths) != 2 {
+			t.Fatalf("%q: %s/%s %+v %v\n%s", extra, res.Status, res.Reason, doc.ToolErrors, doc.Limitations, res.Executions[len(res.Executions)-1].Result.Stdout.Data)
+		}
+		if jststest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir) != ws {
+			t.Fatalf("%q: tsc wrote into the workspace", extra)
+		}
+		jststest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
+	}
+}

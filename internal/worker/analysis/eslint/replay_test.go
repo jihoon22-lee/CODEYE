@@ -20,6 +20,8 @@ import (
 // capture command in real_test.go). The fixture sources are the ones the
 // captures were taken from; changing them requires a new capture.
 
+const typedMain = "export async function later(): Promise<number> {\n  return 1;\n}\n"
+
 func replayFiles(t *testing.T, name string) map[string]string {
 	switch {
 	case strings.HasPrefix(name, "monorepo"):
@@ -32,6 +34,12 @@ func replayFiles(t *testing.T, name string) map[string]string {
 		return caseFiles(map[string]string{"index.js": fixSup, "eslint-suppressions.json": fixSupFile})
 	case name == "typed-gap":
 		return caseFiles(map[string]string{"tsconfig.json": fixGapTSConfig, "src/main.ts": fixGapMain})
+	case name == "typed-deprecated":
+		return caseFiles(map[string]string{"tsconfig.json": "{\"compilerOptions\":{\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"baseUrl\":\".\",\"lib\":[\"ES2022\"],\"strict\":true},\"include\":[\"src\"]}\n",
+			"src/main.ts": typedMain})
+	case name == "typed-package-extends":
+		return caseFiles(map[string]string{"tsconfig.json": "{\"extends\":\"@tsconfig/strictest/tsconfig.json\",\"compilerOptions\":{\"lib\":[\"ES2022\"]},\"include\":[\"src\"]}\n",
+			"src/main.ts": typedMain})
 	case strings.HasPrefix(name, "overlap"):
 		return caseFiles(map[string]string{"tsconfig.json": fixOverlapConfig, "src/o.ts": fixOverlapTS, "lib/o.js": fixOverlapJS})
 	}
@@ -70,6 +78,8 @@ func TestReplayESLintCaptures(t *testing.T) {
 		{"parse-error", "eslint", false, domain.TaskFailed, ReasonParseErrors, map[string]int{"no-unused-vars": 1}, -1},
 		{"suppressions", "eslint", false, domain.TaskSucceeded, "", map[string]int{"no-empty": 1, "no-unused-vars": 1, "no-debugger": 1}, 1},
 		{"typed-gap", "eslint-typed", true, domain.TaskFailed, ReasonDependency, map[string]int{}, -1},
+		{"typed-deprecated", "eslint-typed", true, domain.TaskSucceeded, "", map[string]int{"@typescript-eslint/require-await": 1}, 1},
+		{"typed-package-extends", "eslint-typed", true, domain.TaskFailed, ReasonConfig, map[string]int{}, -1},
 		{"overlap", "eslint", false, domain.TaskSucceeded, "", map[string]int{"@typescript-eslint/no-unused-vars": 2, "no-unused-vars": 2, "no-fallthrough": 2, "no-dupe-class-members": 1}, 2},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -105,7 +115,7 @@ func mapsEqual(a, b map[string]int) bool {
 func checkSpecs(t *testing.T, a *Analyzer, fx jststest.Fixture, specs []executor.Spec) {
 	t.Helper()
 	for _, s := range specs {
-		if s.Executable != a.script.Node.Executable || s.Args[0] != a.script.Path || s.Env["PATH"] != a.script.Node.Dir || len(s.Env) != 2 || s.Env["LANG"] != "C.UTF-8" ||
+		if s.Executable != a.script.Node.Executable || s.Args[0] != a.script.Path || s.Env["PATH"] != a.script.Node.Dir || !jststest.EnvAllowlisted(s.Env) || s.Env["LANG"] != "C.UTF-8" ||
 			!strings.HasPrefix(s.Dir, fx.Job.Snapshot.WorkspaceDir) || s.Timeout <= 0 || !slices.Contains(s.ProtectedRoots, fx.Job.Snapshot.SnapshotDir) {
 			t.Fatalf("spec %+v", s)
 		}
@@ -198,5 +208,31 @@ func TestReplayESLintDamagedAndVersions(t *testing.T) {
 	})
 	if doc.Outcome.TaskStatus != domain.TaskSucceeded || doc.Tool.VersionTested || !slices.Contains(doc.Limitations, "tool_version_untested") {
 		t.Fatalf("untested version %+v %+v %v", doc.Outcome, doc.Tool, doc.Limitations)
+	}
+}
+
+// docs/43 §3.2: a result for a file outside the snapshot is dropped without
+// echoing its path or messages, and recorded as a limitation.
+func TestReplayESLintHostResultDropped(t *testing.T) {
+	host := `{"filePath":"/etc/host-secret.js","messages":[{"ruleId":"no-unused-vars","severity":2,"message":"MARKER-host-text","line":1,"column":1}],` +
+		`"suppressedMessages":[],"errorCount":1,"fatalErrorCount":0,"warningCount":0,"fixableErrorCount":0,"fixableWarningCount":0,"usedDeprecatedRules":[]},`
+	_, _, _, doc := replayRun(t, "monorepo-lib", false, "eslint.m02", func(s jststest.Recorded, r *executor.Result) {
+		if s.Name == execCheck {
+			r.Stdout.Data = append([]byte("["+host), r.Stdout.Data[1:]...)
+			r.Stdout.TotalBytes = int64(len(r.Stdout.Data))
+		}
+	})
+	for _, o := range doc.Observations {
+		if strings.Contains(o.RawMessage, "MARKER") || strings.Contains(*o.Path, "host-secret") {
+			t.Fatalf("host result kept: %+v", o)
+		}
+	}
+	for _, te := range doc.ToolErrors {
+		if strings.Contains(te.Message, "MARKER") || strings.Contains(te.Message, "host-secret") {
+			t.Fatalf("host result echoed: %+v", te)
+		}
+	}
+	if !slices.Contains(doc.Limitations, "results_outside_snapshot") || len(doc.Observations) != 5 {
+		t.Fatalf("%+v %v %d", doc.Outcome, doc.Limitations, len(doc.Observations))
 	}
 }

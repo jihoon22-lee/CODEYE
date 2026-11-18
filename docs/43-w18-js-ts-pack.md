@@ -2,7 +2,7 @@
 
 W18은 [분석기 팩 계약](39-r1-analyzer-packs.md)(W19)을 따르는 JavaScript·TypeScript 팩이다. ESLint 기준선, tsc, type-aware ESLint 세 분석기를 공유 `--node` toolchain으로 실행한다. 요구사항은 REQ-007/008/012/013/015, 수용 시험은 TC-111~TC-113, 결정은 [A26](19-decisions-and-open-questions.md)이다. 구현은 `internal/worker/analysis/{jsts,eslint,tsc}`와 `builtin/javascript.go`이다.
 
-이 문서의 수치는 Linux(WSL2)의 node v24.18.0, eslint 10.15.0, @eslint/js 10.0.1, typescript-eslint 8.73.0, typescript 6.0.3에서 잰 값이다. Windows는 `GOOS=windows go vet`만 확인했다.
+이 문서의 수치는 Linux(WSL2)의 node v24.18.0, eslint 10.15.0, @eslint/js 10.0.1, typescript-eslint 8.73.0, typescript 6.0.3에서 잰 값이다. Windows는 `GOOS=windows go vet`과, 바뀐 패키지(jsts·eslint·tsc·builtin·report)의 Windows 시험 바이너리를 WSL interop으로 실행한 결과(실도구 시험은 skip)만 확인했다.
 
 ## 1. 구성 요약
 
@@ -19,7 +19,7 @@ W18은 [분석기 팩 계약](39-r1-analyzer-packs.md)(W19)을 따르는 JavaScr
 
 ### 1.1 기준 분석기 선택(§2.6)
 
-기준선은 ESLint의 구문 규칙(`@eslint/js` recommended, TS 파일에는 typescript-eslint recommended)이다. tsc는 기준선이 될 수 없다. 스냅샷은 `node_modules`를 항상 제외하므로 실제 저장소에서 tsc는 대부분 의존성 공백으로 끝난다(§4의 실측). 기준선이 공백으로 실패하면 거의 모든 JS/TS run의 판정이 공백이 된다. 구문 규칙은 타입 정보 없이 JS 전용 모듈과 TS 모듈 모두에서 끝까지 실행된다. tsc와 type-aware 규칙은 의존성이 갖춰진 경우의 추가 깊이다.
+기준선은 ESLint의 구문 규칙(`@eslint/js` recommended, TS 파일에는 typescript-eslint recommended)이다. tsc는 기준선이 될 수 없다. 스냅샷은 `node_modules`를 항상 제외하므로 실제 저장소에서 tsc는 대부분 의존성 공백으로 끝난다(§4의 실측). 기준선이 공백으로 실패하면 거의 모든 JS/TS run의 판정이 공백이 된다. 구문 규칙은 타입 정보 없이 JS 전용 모듈과 TS 모듈 모두에서 끝까지 실행된다. tsc와 type-aware 규칙은 의존성이 갖춰진 경우의 추가 깊이다. 이제 ESLint 기준선만 probe에 성공한 노드도 deep-review를 광고한다. [팩 계약 §2.6](39-r1-analyzer-packs.md#26-필수required-규칙)의 "현재 기준 분석기는 go vet뿐" 문장은 W18 이후 맞지 않는다. 공유 문서라 이 단계에서는 고치지 않았다.
 
 ## 2. 실행
 
@@ -57,7 +57,7 @@ tsc와 type-aware 작업은 도구를 실행하기 전에 tsconfig 체인 전체
 
 - **쓰기 옵션 → `skipped_policy`(`tsconfig_write_option`).**
   - `generateTrace`는 `--noEmit`에서도 trace.json·types.json을 쓴다(실측). `generateCpuProfile`은 명령행에서 끌 값이 없다. 두 옵션은 값과 무관하게 거부한다.
-  - `outDir`·`declarationDir`·`outFile`·`tsBuildInfoFile`은 적용 플래그 아래에서 아무것도 쓰지 않는다. 바깥 canary 디렉터리를 가리켜도 비어 있었다(`TestRealTscWriteOptionsCanary`). 그래서 스냅샷 안을 가리키면 허용하고, 절대경로이거나 스냅샷을 벗어나면 거부한다.
+  - `outDir`·`declarationDir`·`outFile`·`tsBuildInfoFile`은 적용 플래그 아래에서 아무것도 쓰지 않는다. 바깥 canary 디렉터리를 가리켜도 비어 있었다(`TestRealTscWriteOptionsCanary`). 그래서 스냅샷 안을 가리키면 허용하고, 절대경로이거나 스냅샷을 벗어나면 거부한다. 이 값이 설정되기만 해도 거부하는 더 엄격한 규칙은 채택하지 않았다. 그 규칙이면 `outDir`을 둔 라이브러리 저장소와 `tsBuildInfoFile`을 둔 Vite 템플릿 대부분이 tsc 대상에서 빠진다. 스냅샷 안 `outDir`·`declarationDir`·`rootDir`·`baseUrl`+`paths`·`composite`·`incremental`·`tsBuildInfoFile`·`emitDeclarationOnly: true`를 둔 설정은 성공하고 작업 사본이 바뀌지 않았다(`TestRealTscTypicalEmitConfigRuns`). `--showConfig`는 `outDir`을 `exclude`에 절대경로로 더하는데, 작업 사본 경로는 표식으로 가려져 상대 경로로 검사된다.
   - 실효 설정(`--showConfig`)에서 `noEmit`이 true가 아니거나 `incremental`·`composite`가 켜져 있어도 검사 전에 거부한다.
 - **호스트 경로 → `skipped_policy`(`tsconfig_outside_snapshot`).** 다음 값이 절대경로이거나 정규화 후 스냅샷을 벗어나면 거부한다. 대상은 `files`·`include`·`exclude`·`baseUrl`·`rootDir`·`rootDirs`·`typeRoots`, 경로 모양의 `types`, `paths`(자기 `baseUrl` 또는 설정 디렉터리 기준), `extends`·`references`다. `${configDir}`는 검사 대상 설정의 디렉터리로 푼다. 작업 사본 안에서 symlink를 따라 밖으로 나가는 경로도 거부한다(`tsconfig_option_symlink`). 스냅샷은 symlink를 복사하지 않는다(`link_not_followed`). 이 검사는 바뀐 작업 사본을 막는 방어다. `--showConfig` 결과도 같은 검사를 거친다. 루트 파일이 스냅샷 밖이면 검사 전에 `program_files_outside_snapshot`으로 끝난다.
 - **진단 본문.** 도구 메시지의 작업·도구 경로는 표식으로 바꾼다. 남은 따옴표 안 절대경로는 `[host path withheld]`로 바꾼다. 작업 사본 밖 설정 파일의 진단은 본문 없이 기록한다.
@@ -76,7 +76,7 @@ CODEYE `web/src`를 node_modules 없이 복사해 tsc로 쟀다.
 | `types` 항목 제거 | TS7026 813, TS7006 71, TS2307 46, TS2875 15, TS2322 6, TS7053 1, TS2882 1, TS2503 1 |
 | 실제 의존성 연결(main checkout의 `web/node_modules` symlink) | TS2307(복사 범위 밖 예시 JSON·생성 validator)과 TS7006 9뿐. TS2322 6건은 모두 사라짐 |
 
-공백이 있는 실행에서는 공백과 무관해 보이는 TS2322도 의존성 누락의 결과였다. 그래서 공백이 하나라도 있는 tsc 실행은 `failed`(`dependency_unavailable`)다. 공백은 `dependency` tool error로, 나머지 진단은 모두 `withheld` tool error로 남기고 관찰로 내지 않는다. type-aware lint도 같다. 의존성 없는 `web/src`에서 no-unsafe-call 1861, no-unsafe-member-access 1150 등이 나왔고, 메시지가 "error typed value"·"could not be resolved"로 공백을 가리켰다. no-misused-promises 8건은 의존성이 있을 때만 나왔다. type-aware 작업은 관리 규칙 `codeye/program-diagnostics`로 프로그램의 설정·전역 진단과 파일별 공백 코드를 함께 보고받는다. 공백이나 설정 오류가 있으면 모든 진단을 보류한다(`diagnostics_withheld_incomplete_types`). 이 규칙의 비용은 `web/src`에서 3.05초에서 3.25초로 약 7%였다. TS 파일이 tsconfig 프로그램 밖이면 typescript-eslint의 치명 메시지를 `outside_tsconfig_program`(건너뜀)으로 센다. 구문 오류는 tsc가 타입 검사 전에 멈추므로 `syntax_errors`로 실패하고 구문 진단만 tool error로 남긴다.
+공백이 있는 실행에서는 공백과 무관해 보이는 TS2322도 의존성 누락의 결과였다. 그래서 공백이 하나라도 있는 tsc 실행은 `failed`(`dependency_unavailable`)다. 공백은 `dependency` tool error로, 나머지 진단은 모두 `withheld` tool error로 남기고 관찰로 내지 않는다. type-aware lint도 같다. 의존성 없는 `web/src`에서 no-unsafe-call 1861, no-unsafe-member-access 1150 등이 나왔고, 메시지가 "error typed value"·"could not be resolved"로 공백을 가리켰다. no-misused-promises 8건은 의존성이 있을 때만 나왔다. type-aware 작업은 관리 규칙 `codeye/program-diagnostics`로 프로그램의 설정·전역 진단과 파일별 공백 코드를 함께 보고받는다. 공백이나 설정 오류가 있으면 모든 진단을 보류한다(`diagnostics_withheld_incomplete_types`). 이 규칙의 비용은 `web/src`에서 3.05초에서 3.25초로 약 7%였다. type-aware 작업에서 tsconfig가 로드되지 않으면(실측: 해석되지 않는 패키지 `extends`) typescript-eslint는 파일마다 "Unable to parse the specified 'tsconfig' file"를 낸다. 이것은 파일 구문 오류가 아니라 설정 오류(`tsconfig_invalid`)로 세고 진단을 보류한다. 폐기 옵션은 제약만 남기고 성공한다(`TestRealESLintTypedProgramDiagnostics`). TS 파일이 tsconfig 프로그램 밖이면 typescript-eslint의 치명 메시지를 `outside_tsconfig_program`(건너뜀)으로 센다. 구문 오류는 tsc가 타입 검사 전에 멈추므로 `syntax_errors`로 실패하고 구문 진단만 tool error로 남긴다.
 
 ## 5. 규칙 문맥과 소스 안 억제(§5.1)
 
@@ -131,6 +131,7 @@ CODEYE_W18_CAPTURE=$PWD/internal/worker/analysis/eslint/testdata go test -count=
 CODEYE_W18_CAPTURE=$PWD/internal/worker/analysis/tsc/testdata go test -count=1 -run TestRealTsc ./internal/worker/analysis/tsc/
 ```
 
+- 보고서 decoder: 예시 envelope 둘과 solution 실행 envelope(`.rNN` 실행)이 `internal/report`의 분석기 decoder를 통과한다. 관찰은 기록된 stdout 산출물에 묶이고, finding 정체성은 `report.ToolFingerprint`이며, Required 불일치는 거부된다(`TestAnalyzerDecoderW18JSTS`). 이 시험을 위해 W19 시험 helper `unionManifest`가 honored 설정 파일도 manifest에 넣도록 더했다.
 - 예시: `examples/analyzer-eslint.yaml`, `examples/analyzer-tsc.yaml`, `examples/observations-eslint.json`·`observations-tsc.json`이다. 두 JSON은 `fixtures/w18-js-ts/input` 실행에서 얻은 실제 envelope다. `scripts/validate_bundle.py`의 `check_w18_contracts`가 이 예시와 Go의 `tsc.Flags`를 대조한다.
 
 | TC | 내용 | 시험 |

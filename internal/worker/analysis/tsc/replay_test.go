@@ -1,6 +1,7 @@
 package tsc
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -54,7 +55,7 @@ func replayRun(t *testing.T, name, key string, mutate func(jststest.Recorded, *e
 	jststest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
 	for _, s := range r.Specs {
 		p := s.Args[slices.Index(s.Args, "-p")+1:]
-		if s.Args[1] != "--version" && (len(p) == 0 || !strings.HasPrefix(p[0], "./")) || s.Env["PATH"] != a.script.Node.Dir || len(s.Env) != 2 ||
+		if s.Args[1] != "--version" && (len(p) == 0 || !strings.HasPrefix(p[0], "./")) || s.Env["PATH"] != a.script.Node.Dir || !jststest.EnvAllowlisted(s.Env) ||
 			!strings.HasPrefix(s.Dir, fx.Job.Snapshot.WorkspaceDir) || slices.Contains(s.Args, "--build") || slices.Contains(s.Args, "-b") {
 			t.Fatalf("spec %+v", s)
 		}
@@ -144,5 +145,32 @@ func TestReplayTscDamaged(t *testing.T) {
 				t.Fatalf("an unidentified tsc ran: %d", len(r.Specs))
 			}
 		})
+	}
+}
+
+// docs/43 §3.2: a diagnostic about a file or a configuration file outside
+// the workspace is never echoed, and a quoted host path in a global
+// diagnostic is withheld; the run is refused as reading outside files.
+func TestReplayTscHostDiagnosticsWithheld(t *testing.T) {
+	inject := "/etc/host-secret.ts(1,1): error TS2322: MARKER-host-text\n" +
+		"/etc/host-secret.json(1,1): error TS5024: MARKER-config-text\n" +
+		"error TS5083: Cannot read file '/etc/host-secret/tsconfig.json'.\n"
+	_, doc := replayRun(t, "monorepo", "tsc.m01", func(s jststest.Recorded, r *executor.Result) {
+		if s.Name == execCheck {
+			r.Stdout.Data = append([]byte(inject), r.Stdout.Data...)
+			r.Stdout.TotalBytes = int64(len(r.Stdout.Data))
+		}
+	})
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{"MARKER-host-text", "MARKER-config-text", "/etc/host-secret"} {
+		if strings.Contains(string(raw), marker) {
+			t.Fatalf("host diagnostic echoed (%s): %s", marker, raw)
+		}
+	}
+	if doc.Outcome.TaskStatus != domain.TaskSkippedPolicy || *doc.Outcome.Reason != ReasonFilesOutside || !slices.Contains(doc.Limitations, "program_files_outside_snapshot") {
+		t.Fatalf("%+v %v", doc.Outcome, doc.Limitations)
 	}
 }

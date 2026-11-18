@@ -350,3 +350,29 @@ func TestRealESLintCancelAndTimeout(t *testing.T) {
 		}
 	}
 }
+
+// Type-aware program diagnostics on real tools: TypeScript 6 deprecations
+// are not errors of the program (limitation only); an unresolved package
+// extends is a configuration error that withholds every diagnostic.
+func TestRealESLintTypedProgramDiagnostics(t *testing.T) {
+	typed := newReal(t, true)
+	main := "export async function later(): Promise<number> {\n  return 1;\n}\n"
+	for _, c := range []struct {
+		name, config string
+		status       domain.TaskStatus
+		reason, lim  string
+	}{
+		{"deprecated", "{\"compilerOptions\":{\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"baseUrl\":\".\",\"lib\":[\"ES2022\"],\"strict\":true},\"include\":[\"src\"]}\n",
+			domain.TaskSucceeded, "", "typescript_deprecations_ignored"},
+		{"package-extends", "{\"extends\":\"@tsconfig/strictest/tsconfig.json\",\"compilerOptions\":{\"lib\":[\"ES2022\"]},\"include\":[\"src\"]}\n",
+			domain.TaskFailed, ReasonConfig, "diagnostics_withheld_incomplete_types"},
+	} {
+		fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/main.ts": main}), domain.Scope{})
+		res := jststest.RunTask(t, typed, fx.Job, "eslint-typed", &executor.Executor{})
+		jststest.Capture(t, "typed-"+c.name, res)
+		doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
+		if res.Status != c.status || res.Reason != c.reason || !slices.Contains(doc.Limitations, c.lim) {
+			t.Fatalf("%s: %s/%s %v %+v %+v", c.name, res.Status, res.Reason, doc.Limitations, doc.ToolErrors, doc.Observations)
+		}
+	}
+}
