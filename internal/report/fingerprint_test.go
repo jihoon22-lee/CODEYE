@@ -144,7 +144,7 @@ func TestBuildStampsPublicationDisposition(t *testing.T) {
 			break
 		}
 	}
-	if target.FingerprintBasis == nil || !strings.HasPrefix(target.Fingerprint, "fp2:") || plain.Builder.Version != "3" {
+	if target.FingerprintBasis == nil || !strings.HasPrefix(target.Fingerprint, "fp2:") || plain.Builder.Version != "4" {
 		t.Fatalf("finding identity %+v", target)
 	}
 	path := target.FingerprintBasis.Paths[0]

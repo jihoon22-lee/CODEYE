@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -93,9 +94,9 @@ func ValidateReport(r Report) error {
 			}
 		}
 	}
-	obs := map[string]bool{}
+	obs, suppressed := map[string]bool{}, map[string]bool{}
 	for _, o := range r.Observations {
-		if obs[o.ID] || !taskKeys[o.TaskKey] || !arts[o.RawRef.ArtifactID] || o.RawSeverity != nil {
+		if obs[o.ID] || !taskKeys[o.TaskKey] || !arts[o.RawRef.ArtifactID] || (o.RawSeverity != nil && !rawSeverityPattern.MatchString(*o.RawSeverity)) {
 			return invalidf("observation %s is invalid", o.ID)
 		}
 		if r.Export.IncludeCode == (o.RawMessage == nil) {
@@ -108,11 +109,24 @@ func ValidateReport(r Report) error {
 			return invalidf("verified observation without location")
 		}
 		obs[o.ID] = true
+		if o.Suppressed {
+			suppressed[o.ID] = true
+		}
+	}
+	for _, tc := range r.Coverage.Tools {
+		if err := validateRuleContext(tc.RuleContext, r.Export.IncludeCode); err != nil {
+			return err
+		}
 	}
 	findings := map[string]bool{}
 	for _, f := range r.Findings {
 		if err := validateFinding(f, r.Inputs.SnapshotID, obs, arts); err != nil {
 			return err
+		}
+		for _, id := range f.ObservationIDs {
+			if suppressed[id] {
+				return invalidf("finding %s is built from a suppressed observation", f.ID)
+			}
 		}
 		if findings[f.ID] {
 			return invalidf("duplicate finding %s", f.ID)
@@ -260,12 +274,56 @@ func Digest(canonical []byte) string { return domain.Digest(canonical) }
 // report. includeCode=false removes every raw tool message and replaces all
 // free text of findings that is not a fixed builder template, so neither code
 // nor tool/model text reaches the code-free export.
+// validateRuleContext checks a tool row's rule context (docs/39 §5.1).
+// The configuration paths and digest exist only in the full export.
+func validateRuleContext(c *RuleContext, includeCode bool) error {
+	if c == nil {
+		return nil
+	}
+	switch {
+	case !rulePackPattern.MatchString(c.RulePack) || c.RulePackVersion == "" || len(c.RulePackVersion) > 32 || c.Selection == nil:
+		return invalidf("rule context pack is invalid")
+	case c.Config != ConfigNotRead && c.Config != ConfigRecorded && c.Config != ConfigUnrecorded:
+		return invalidf("rule context config state is invalid")
+	case (c.Config == ConfigNotRead) == (c.RepositoryConfig == "honored"):
+		return invalidf("rule context config state does not follow repository_config")
+	case c.Config != ConfigRecorded && (c.ConfigPaths != nil || c.ConfigDigest != ""):
+		return invalidf("rule context records configuration it did not read")
+	case !includeCode && (c.ConfigPaths != nil || c.ConfigDigest != ""):
+		return invalidf("code-free export carries configuration paths or digest")
+	case includeCode && c.Config == ConfigRecorded && (c.ConfigPaths == nil || !hex64.MatchString(c.ConfigDigest)):
+		return invalidf("recorded rule context without paths and digest")
+	case len(c.UnreportedSuppressionRules) > 0 && c.SourceSuppressions != "reported":
+		return invalidf("rule context lists unreported suppression rules without reported suppressions")
+	}
+	for i, id := range c.UnreportedSuppressionRules {
+		if id == "" || len(id) > 128 || strings.ContainsAny(id, " \n\t") || (i > 0 && c.UnreportedSuppressionRules[i-1] >= id) {
+			return invalidf("rule context unreported suppression rules must be sorted unique rule IDs")
+		}
+	}
+	return nil
+}
+
 func Project(r Report, includeCode bool) Report {
 	if includeCode {
 		return r
 	}
 	out := r
 	out.Export = Export{IncludeCode: false}
+	// The configuration digest and paths of a rule context are removed like
+	// fingerprint_basis: a digest over configuration bytes would confirm
+	// guessed content. The rows are copied; r is not changed.
+	out.Coverage.Tools = make([]ToolCoverage, len(r.Coverage.Tools))
+	for i, tc := range r.Coverage.Tools {
+		if tc.RuleContext != nil {
+			c := *tc.RuleContext
+			c.Selection = append([]string{}, c.Selection...)
+			c.UnreportedSuppressionRules = slices.Clone(c.UnreportedSuppressionRules)
+			c.ConfigPaths, c.ConfigDigest = nil, ""
+			tc.RuleContext = &c
+		}
+		out.Coverage.Tools[i] = tc
+	}
 	out.Observations = make([]Observation, len(r.Observations))
 	rules := map[string]Observation{}
 	for i, o := range r.Observations {
@@ -331,6 +389,7 @@ func Project(r Report, includeCode bool) Report {
 var safeTemplates = map[string]bool{
 	textSeverityReason: true, textSeverityUnmapped: true, textCondition: true, textImpact: true, textRecommendation: true,
 	textVerification: true, textLimitManual: true, textLimitStaticOnly: true, textEvidenceTool: true, textEvidenceCode: true, textOmitted: true,
+	textToolSeverityReason: true, textToolCondition: true, textToolVerification: true, textToolEvidence: true,
 }
 
 func safeText(s string) string {

@@ -184,12 +184,14 @@ var (
 	packID        = regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`)
 	r1Kinds       = map[string]bool{"code": true, "test": true, "document": true, "manifest": true}
 	r1Origins     = map[string]bool{"": true, "context": true, "caller": true, "test": true, "observation": true}
-	// Upstream sources each stage may name; go-vet tasks are matched by prefix.
+	// Upstream sources each stage may name. Interpret names analyzer tasks:
+	// any task key outside the discovery and review namespaces (docs/39);
+	// the report binds each to that task's accepted observations artifact.
 	r1Sources = map[string][]string{
 		StageEnvironment: {"env.discover"},
 		StageDocuments:   {"docs.discover"},
 		StageInvestigate: {"review.environment", "review.documents"},
-		StageInterpret:   {"go-vet"},
+		StageInterpret:   {analyzerSource},
 		StageVerify:      {"review.documents", "review.investigate", "review.interpret"},
 	}
 )
@@ -323,12 +325,21 @@ func ValidateR1(r R1Record, want Expect) error {
 	return checkR1Calls(r)
 }
 
+// analyzerSource marks the interpret stage's upstream rule in r1Sources.
+const analyzerSource = "(analyzer task)"
+
+// AnalyzerTaskKey reports whether key can name an analyzer task: a valid
+// task key outside the discovery tasks and the review.* roles.
+func AnalyzerTaskKey(key string) bool {
+	return taskKey.MatchString(key) && key != "env.discover" && key != "docs.discover" && !strings.HasPrefix(key, "review.")
+}
+
 func checkUpstream(r R1Record) error {
 	seen := map[string]bool{}
 	for _, u := range r.Upstream {
 		allowed := false
 		for _, s := range r1Sources[r.Stage] {
-			allowed = allowed || u.Source == s || (s == "go-vet" && taskKey.MatchString(u.Source) && strings.HasPrefix(u.Source, "go-vet"))
+			allowed = allowed || u.Source == s || (s == analyzerSource && AnalyzerTaskKey(u.Source))
 		}
 		if !allowed || seen[u.Source] {
 			return invalid("upstream source")

@@ -1,0 +1,33 @@
+# W19 Go 팩 Staticcheck 어댑터 서술. 구현: internal/worker/analysis/staticcheck, 근거: docs/39-r1-analyzer-packs.md.
+# staticcheck 2026.2.2 -f json(-fail 기본값 all)은 문제를 하나라도 보고하면 exit 1, 없으면 exit 0이다.
+# exit 1은 진단(findings)과 compile 레코드·"err:" 치명 오류가 같이 쓰므로 종료 코드만으로 결정하지 않는다.
+# stdout 레코드가 진단만이고 stderr가 깨끗한 exit 1이 success_with_findings다. exit 2는 사용법 오류·crash다.
+# -show-ignored: //lint:ignore가 숨긴 문제도 severity "ignored"로 보고한다(억제 관찰, finding 아님). 억제된 문제만 있어도 exit 1이며 success_without_findings다.
+schema_version: '0.1'
+id: go.staticcheck
+languages: [go]
+planned_platforms: [linux, windows]
+availability: verified  # Linux staticcheck 2026.2.2 + go1.27.4 실행으로 검증. Windows는 단위 테스트만 실행.
+version_contract: staticcheck-2026.2-fixture-tested
+analysis_scope: [typed, intraprocedural, interfile]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${staticcheck}'
+  argv: [-version]
+execute:
+  executable: '${staticcheck}'
+  argv: [-f, json, -checks, 'SA*,U1000,-SA1014,-SA1017,-SA2000,-SA2002,-SA4021,-SA5009', -tests=true, -show-ignored, './...']
+  cwd: '${workspace}/${module_dir}'
+  timeout_seconds: 900
+  stdout_max_bytes: 33554432
+  env_allowlist: [PATH, LANG, SystemRoot, GOENV, GOWORK, GOTOOLCHAIN, GOPROXY, GOSUMDB, GOVCS, GOFLAGS, CGO_ENABLED, GOCACHE, GOPATH, GOMODCACHE, STATICCHECK_CACHE, XDG_CONFIG_HOME]
+exit_codes:
+  clean: [0]
+  findings: [1]
+  error: [2]
+parser:
+  id: staticcheck-json-v1
+  format: json
+  input: stdout-artifact

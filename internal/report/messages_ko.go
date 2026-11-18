@@ -45,6 +45,8 @@ var Korean = Locale{
 		LimResultManifestRejected:        "결과 manifest 검증에 실패했다. DB에 기록된 작업 상태만 표시한다.",
 		LimTestsNotPerformed:             "with-tests 프로필이 요청한 테스트 결과가 없다.",
 		LimRequiredTaskIncomplete:        "필수 작업 중 성공하지 않은 작업이 있다.",
+		LimStaticAnalysisGap:             "범위에 이 언어의 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않았다.",
+		LimStaticAnalysisNotPlanned:      "범위에 지원 언어의 소스가 없어 정적 분석 작업을 계획하지 않았다.",
 		LimCleanupUncertain:              "하위 프로세스 정리를 확인하지 못했다.",
 		LimArtifactRejected:              "분석 산출물 검증에 실패해 해당 작업의 결과를 제외했다.",
 		LimArtifactMissing:               "분석 산출물을 읽지 못했다.",

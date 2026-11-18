@@ -54,6 +54,7 @@ Go 모듈이 없으면 `go-vet` 하나를 계획하고 실행 없이 `unsupporte
   - `GOENV=off`, `GOWORK=off`, `GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`, `GOVCS=*:off`, `GOFLAGS=`, `CGO_ENABLED=0`
   - `GOCACHE`·`GOPATH`=task scratch, `GOMODCACHE`=운영자 캐시 또는 빈 scratch 디렉터리
   - Windows는 `SystemRoot`를 추가한다. HOME·TMP는 W05가 실행별로 만든다.
+  - W19부터 Linux 등(darwin·Windows 제외)에서는 `XDG_CONFIG_HOME`=task scratch의 `config`이고, 그 안의 `go/telemetry/mode`가 `off`다. Go telemetry가 꺼져 있지 않으면 go 명령이 counter 파일을 쓰고 분리된(setsid) 자식을 시작하며, 그 자식은 명령이 끝난 뒤에도 W05가 지운 실행별 HOME에 파일을 쓴다([W19 기록 §8.2](39-r1-analyzer-packs.md#82-환경과-build-context)).
 - **대상 코드 미실행:** cgo를 끄고 toolchain 전환과 모듈 다운로드를 막는다. `go generate`, test 실행, `-vettool`도 쓰지 않는다.
 - **go.mod 검사:**
   - 실행 전에 snapshot의 `go.mod` hash를 manifest와 대조한다. 다르면 `failed`(`snapshot_integrity_failed`)로 끝낸다.

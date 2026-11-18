@@ -77,16 +77,20 @@ type Hello struct {
 	ModelName      string `json:"model_name,omitempty"`
 	ModelRelayFile string `json:"model_relay_file,omitempty"`
 	Header
-	Protocol           string `json:"protocol"`
-	WorkerID           string `json:"worker_id"`
-	DataRoot           string `json:"data_root"`
-	ScratchRoot        string `json:"scratch_root"`
-	Limits             Limits `json:"limits"`
-	GitExecutable      string `json:"git_executable"`
-	GoExecutable       string `json:"go_executable"`
-	GoModCache         string `json:"go_mod_cache"`
-	ToolPath           string `json:"tool_path"`
-	LeaseMarginSeconds int    `json:"lease_margin_seconds"`
+	Protocol      string `json:"protocol"`
+	WorkerID      string `json:"worker_id"`
+	DataRoot      string `json:"data_root"`
+	ScratchRoot   string `json:"scratch_root"`
+	Limits        Limits `json:"limits"`
+	GitExecutable string `json:"git_executable"`
+	GoExecutable  string `json:"go_executable"`
+	GoModCache    string `json:"go_mod_cache"`
+	// AnalyzerTools are operator analyzer tool paths by tool name and the
+	// shared toolchain paths under their reserved names (node, docs/39
+	// §2.4); absent when none is configured.
+	AnalyzerTools      map[string]string `json:"analyzer_tools,omitempty"`
+	ToolPath           string            `json:"tool_path"`
+	LeaseMarginSeconds int               `json:"lease_margin_seconds"`
 }
 
 // AttemptRef identifies the attempt a message belongs to.
@@ -117,6 +121,9 @@ type JobSnapshot struct {
 // Job hands one claimed attempt to the worker.
 type Job struct {
 	AllowModelReview bool `json:"allow_model_review,omitempty"`
+	// AllowRepositoryCode is the node operator's repository-code grant for
+	// the job's local source root (docs/39 §2.7). Absent means not granted.
+	AllowRepositoryCode bool `json:"allow_repository_code,omitempty"`
 	Header
 	Attempt   AttemptRef      `json:"attempt"`
 	Profile   string          `json:"profile"`

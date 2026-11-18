@@ -110,8 +110,20 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
             ensure(row["role"] == "stdout" and row["sha256"] == raw["sha256"] and row["task_key"] == obs["task_key"], "Incorrect raw stream")
             ensure(0 <= raw["byte_start"] <= raw["byte_end"] <= row["size_bytes"], "Raw byte range invalid")
             ensure((obs["raw_message"] is not None) == report["export"]["include_code"], "Export leaked or omitted diagnostic text")
+        # W19: a diagnostic the tool reported as suppressed in source never becomes a finding.
+        suppressed = {o["id"] for o in observations if o.get("suppressed")}
+        ensure(not any(suppressed & set(f.get("observation_ids", [])) for f in findings), "Finding built from a suppressed observation")
         if report["coverage"]["ai_review"]["status"] != "performed":
             ensure(report["status"] != "completed" and report["quality_verdict"] != "no_actionable_findings", "Incomplete AI review marked clean")
+    for row in report["coverage"].get("tools", []):
+        context = row.get("rule_context")
+        if context is None:
+            continue
+        recorded, include = "config_paths" in context or "config_digest" in context, report.get("export", {}).get("include_code")
+        ensure(context["config"] == "recorded" or not recorded, "Rule context records configuration it did not read")
+        ensure(include is not False or not recorded, "Code-free export carries rule-context configuration")
+        ensure(not (include and context["config"] == "recorded") or ("config_paths" in context and "config_digest" in context),
+               "Recorded rule context without paths and digest")
     for finding in findings:
         evidence = finding["evidence"]
         evidence_ids = {item["id"] for item in evidence}
@@ -175,6 +187,142 @@ def check_observations(doc: dict) -> None:
     ensure(states == doc["coverage"]["packages"], "Package state counts mismatch")
     for e in doc["executions"]:
         ensure(not any(ABSOLUTE.match(a) for a in e["command"]["argv"]) and "/" not in e["command"]["argv"][0], "Node path in command")
+
+
+def check_analyzer_observations(doc: dict) -> None:
+    """Cross-field rules of the generic analyzer envelope (W19, docs/39; obsdoc.Validate)."""
+    observations = doc["observations"]
+    parse, outcome, coverage = doc["parse"], doc["outcome"], doc["coverage"]
+    ensure(parse["observations"] == len(observations), "Envelope observation count mismatch")
+    ensure(parse["tool_errors"] == len(doc["tool_errors"]), "Envelope tool error count mismatch")
+    ensure(parse["unresolved_observations"] == sum(1 for o in observations if o["location_state"] != "resolved"), "Envelope unresolved count mismatch")
+    ensure(len({o["id"] for o in observations}) == len(observations), "Duplicate envelope observation id")
+    ensure(doc["limitations"] == sorted(set(doc["limitations"])), "Envelope limitations must be sorted unique codes")
+    executions = {e["name"]: e for e in doc["executions"]}
+    ensure(len(executions) == len(doc["executions"]), "Duplicate envelope execution")
+    for o in observations:
+        ref = o["raw_ref"]
+        ensure(ref["execution"] in executions, "Observation names an unrecorded execution")
+        stream = executions[ref["execution"]][ref["stream"]]
+        ensure(ref["stream_sha256"] == stream["sha256"], "Observation not bound to its execution stream")
+        ensure(ref["byte_start"] < ref["byte_end"] <= stream["captured_bytes"], "Raw byte range outside the captured stream")
+        for place in [o] + o["related"]:
+            if place["location"] is not None:
+                ensure(place["location"]["path"] == place["path"], "Location/path mismatch")
+                ensure(place["location"]["start_line"] <= place["location"]["end_line"], "Inverted observation range")
+        if o["location"] is not None:
+            ensure(o["path"] not in doc["workspace_drift"], "Drifted file linked to code")
+    processed = coverage["processed_paths"]
+    if processed is not None:
+        ensure(processed == sorted(set(processed)), "Processed paths must be sorted unique")
+    # Rule context (docs/39 §5.1): config files only when the tool honors
+    # repository configuration; suppressed observations only when reported.
+    rule_pack = doc["rule_pack"]
+    config = rule_pack["config_files"]
+    ensure(rule_pack["repository_config"] == "honored" or config == [], "Config files without honored repository configuration")
+    if config:
+        paths = [f["path"] for f in config]
+        ensure(paths == sorted(set(paths)), "Config files must be sorted unique paths")
+    ensure(rule_pack["source_suppressions"] == "reported" or not any(o["suppressed"] for o in observations), "Suppressed observation without reported source suppressions")
+    unreported = rule_pack["unreported_suppression_rules"]
+    ensure(unreported == sorted(set(unreported)) and (rule_pack["source_suppressions"] == "reported" or unreported == []), "Unreported suppression rules must be sorted and need reported suppressions")
+    active = [o for o in observations if not o["suppressed"]]
+    if outcome["task_status"] == "succeeded":
+        ensure((outcome["exit_class"] == "success_with_findings") == bool(active), "Exit class does not follow the active (unsuppressed) observations")
+        ensure(all(e["status"] == "exited" and e["exit_code"] is not None and e["cleanup"] == "confirmed" and not any(e[s]["truncated"] or e[s]["incomplete"] for s in ("stdout", "stderr")) for e in doc["executions"]), "Succeeded with an unclean execution")
+        ensure(parse["ok"] and not doc["tool_errors"] and not doc["workspace_drift"] and processed, "Succeeded without a complete parse or processed files")
+    if outcome["exit_class"] == "not_run":
+        ensure(not observations and processed == [] and not outcome["partial_parse"], "not_run claims processed files or observations")
+    for e in doc["executions"]:
+        ensure(not any(ABSOLUTE.match(a) for a in e["command"]["argv"]) and "/" not in e["command"]["argv"][0], "Node path in command")
+
+
+def go_string_constant(path: Path, name: str) -> str:
+    match = re.search(r"^const " + name + r' = "([^"]*)"$', path.read_text(encoding="utf-8"), re.M)
+    ensure(match is not None, "Missing Go constant " + name + " in " + str(path))
+    return match.group(1)
+
+
+def check_w19_contracts(validators: dict) -> int:
+    """The staticcheck descriptor, the real envelope example and the analyzer_tools environment field.
+
+    Returns the number of negative cases."""
+    negatives = 0
+    descriptor = yaml_file(ROOT / "examples/analyzer-staticcheck.yaml")
+    validators["analyzer.schema.json"].validate(descriptor)
+    check_analyzer(descriptor)
+    ensure(descriptor["exit_codes"] == {"clean": [0], "findings": [1], "error": [2]}, "staticcheck exit-code contract changed")
+    checks = go_string_constant(ROOT / "internal/worker/analysis/staticcheck/staticcheck.go", "Checks")
+    argv = descriptor["execute"]["argv"]
+    ensure(argv[argv.index("-checks") + 1] == checks, "Descriptor -checks differs from staticcheck.Checks")
+    envelope_validator = validators["analyzer-observations.schema.json"]
+    envelope = json_file(ROOT / "examples/observations-staticcheck.json")
+    envelope_validator.validate(envelope)
+    check_analyzer_observations(envelope)
+    ensure(envelope["analyzer"] == {"id": "go.staticcheck", "ecosystem": "go", "required": False}, "staticcheck is extra depth (not required)")
+    ensure(envelope["rule_pack"]["selection"][1] == checks, "Envelope rule selection differs from staticcheck.Checks")
+    ensure("-show-ignored" in argv and "-show-ignored" in envelope["rule_pack"]["selection"], "staticcheck must report suppressed problems (-show-ignored)")
+    ensure(envelope["rule_pack"]["repository_config"] == "overridden" and envelope["rule_pack"]["source_suppressions"] == "reported" and envelope["rule_pack"]["config_files"] == [],
+           "staticcheck rule context: -checks overrides staticcheck.conf, suppressions are reported")
+    ensure(envelope["rule_pack"]["unreported_suppression_rules"] == ["U1000"], "staticcheck: U1000 suppressions are not reported by -show-ignored (measured)")
+    ensure(envelope["outcome"]["exit_class"] == "success_with_findings" and executions_exit(envelope, "staticcheck.check") == 1, "Example is the exit-1 findings run (TC-07)")
+    go_vet = json_file(ROOT / "examples/observations-go-vet.json")
+    expect_invalid("go vet document as envelope", envelope_validator.validate, go_vet)
+    expect_invalid("envelope as go vet document", validators["go-vet-observations.schema.json"].validate, envelope)
+    negatives += 2
+
+    def both(doc):
+        envelope_validator.validate(doc)
+        check_analyzer_observations(doc)
+
+    def case(name, edit):
+        nonlocal negatives
+        bad = copy.deepcopy(envelope)
+        edit(bad)
+        expect_invalid(name, both, bad)
+        negatives += 1
+
+    case("success with partial parse", lambda d: d["outcome"].update(partial_parse=True))
+    case("success without processed files", lambda d: d["coverage"].update(processed_paths=None))
+    case("not_run with observations", lambda d: d["outcome"].update(task_status="unsupported", reason="tool_not_configured", exit_class="not_run"))
+    case("observation count drift", lambda d: d["observations"].pop())
+    case("unbound raw stream", lambda d: d["observations"][0]["raw_ref"].update(stream_sha256="0" * 64))
+    case("raw range outside stream", lambda d: d["observations"][0]["raw_ref"].update(byte_end=1 << 30))
+    case("truncated success", lambda d: d["executions"][-1]["stdout"].update(truncated=True))
+    case("node path in argv", lambda d: d["executions"][-1]["command"]["argv"].append("/home/user/x"))
+    case("hyphen analyzer id", lambda d: d["analyzer"].update(id="go.static-check"))
+    case("unknown category", lambda d: d["observations"][0].update(category="style"))
+    case("unsorted limitations", lambda d: d.update(limitations=list(reversed(d["limitations"]))))
+    case("absolute target property", lambda d: d["target"]["properties"].update(goroot="/usr/lib/go"))
+    case("config files with overridden configuration", lambda d: d["rule_pack"].update(config_files=[{"path": "staticcheck.conf", "sha256": "a" * 64}]))
+    case("unenumerated config files without honored", lambda d: d["rule_pack"].update(config_files=None))
+    case("suppressed with honored suppressions", lambda d: (d["rule_pack"].update(source_suppressions="honored", unreported_suppression_rules=[]), d["observations"][0].update(suppressed=True)))
+    case("only suppressed but with findings", lambda d: [o.update(suppressed=True) for o in d["observations"]])
+    case("unknown suppression mode", lambda d: d["rule_pack"].update(source_suppressions="ignored"))
+    case("unreported suppression rules under honored", lambda d: d["rule_pack"].update(source_suppressions="honored"))
+    case("unsorted unreported suppression rules", lambda d: d["rule_pack"].update(unreported_suppression_rules=["U1000", "SA4006"]))
+    case("missing unreported suppression rules", lambda d: d["rule_pack"].pop("unreported_suppression_rules"))
+    not_run = copy.deepcopy(envelope)
+    not_run.update(observations=[], executions=[], limitations=["tool_not_configured"])
+    not_run["outcome"] = {"task_status": "unsupported", "reason": "tool_not_configured", "exit_class": "not_run", "partial_parse": False}
+    not_run["coverage"]["processed_paths"] = []
+    not_run["parse"].update(ok=False, observations=0)
+    both(not_run)
+    environment = copy.deepcopy(json_file(ROOT / "examples/environment.json"))
+    environment["environment"]["analyzer_tools"] = [
+        {"tool": "staticcheck", "analyzers": ["go.staticcheck"], "status": "observed", "version": "2026.2.2 (0.8.2)", "detail": None, "execution": "staticcheck.version"}]
+    validators["environment.schema.json"].validate(environment)
+    for name, edit in (("observed without version", {"version": None}), ("runtime tool as analyzer tool", {"tool": "go"}),
+                       ("not_probed with execution", {"status": "not_probed", "version": None}), ("version with a path", {"version": "/opt/sc 1"})):
+        bad = copy.deepcopy(environment)
+        bad["environment"]["analyzer_tools"][0].update(edit)
+        expect_invalid(name, validators["environment.schema.json"].validate, bad)
+        negatives += 1
+    return negatives
+
+
+def executions_exit(doc: dict, name: str):
+    return next(e["exit_code"] for e in doc["executions"] if e["name"] == name)
 
 
 def check_environment_example(doc: dict) -> None:
@@ -572,8 +720,12 @@ def check_w23_contracts(published: dict) -> None:
         ensure(doc["counts"] == {s: states.count(s) for s in api["ComparisonState"]["enum"]}, "Counts are not recomputed from entries")
         ensure(len({e["fingerprint"] for e in doc["entries"]}) == len(doc["entries"]), "Duplicate comparison entry")
         by_fp = {e["fingerprint"]: e for e in doc["entries"]}
+        # W19: a resolved tool entry needs the same tool version and rule context on both sides (docs/40 §3.3).
+        rule_keys = {d["key"] for d in doc["differences"]}
         for e in doc["entries"]:
             ensure(e["state"] != "resolved_observed" or (e["producer"] == "tool" and e["current"] == [] and e["baseline"] and e["reason"] is None), "Resolved entry not observed by a tool")
+            ensure(e["state"] != "resolved_observed" or not ({"tool:" + e["analyzer"] + ":version", "tool:" + e["analyzer"] + ":rule_context"} & rule_keys),
+                   "Resolved entry despite a tool version or rule-context difference")
             ensure(e["state"] != "absent_unverified" or (e["current"] == [] and e["baseline"] and e["reason"] is not None), "Absent entry without a reason")
             ensure(e["state"] != "new" or (e["baseline"] == [] and e["current"]), "New entry with a baseline occurrence")
             ensure(e["state"] not in ("persisting", "changed") or (e["current"] and e["baseline"] and e["reason"] is None), "Matched entry missing a side")
@@ -644,6 +796,11 @@ def check_w23_contracts(published: dict) -> None:
     bad = copy.deepcopy(comparison)
     bad["findings"][0]["publication_disposition"] = "ignored"
     reject("unknown disposition", check_comparison, bad)
+    analyzer = comparison["entries"][resolved]["analyzer"]
+    for what, baseline, current in (("rule_context", "codeye-go-vet-default@1 config=none suppressions=none", "unknown"), ("version", "go1.27.4", "go1.28.0")):
+        bad = copy.deepcopy(comparison)
+        bad["differences"].append({"key": "tool:" + analyzer + ":" + what, "baseline": baseline, "current": current})
+        reject("resolved despite a " + what + " difference", check_comparison, bad)
     bad = copy.deepcopy(listing)
     bad["items"][0]["reason"] = "   "
     reject("blank review reason", check_reviews, bad)
@@ -787,6 +944,8 @@ def main() -> None:
     check_analyzer(go_vet)
     ensure(go_vet["exit_codes"]["findings"] == [], "go vet -json findings are not an exit-code class")
     check_observations(observations)
+    w19_negatives = check_w19_contracts(validators)
+    print(f"PASS: W19 analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {w19_negatives} negative cases)")
     review = json_file(ROOT / "examples/review-record.json")
     review_validator = validators["review-record.schema.json"]
     review_validator.validate(review)
@@ -852,6 +1011,32 @@ def main() -> None:
         bad = copy.deepcopy(published)
         bad["findings"][0][field] = value
         expect_invalid("code-free export with " + field, validators["report.schema.json"].validate, bad)
+    # W19 rule context (builder 4): the code-free export keeps the mode but not the configuration paths or digest.
+    context = {"rule_pack": "codeye-go-staticcheck", "rule_pack_version": "2", "selection": ["-checks", "SA*"], "repository_config": "honored",
+               "source_suppressions": "reported", "config": "recorded"}
+    ok = copy.deepcopy(published)
+    ok["coverage"]["tools"][0]["rule_context"] = context
+    validators["report.schema.json"].validate(ok)
+    check_report(ok, ROOT / "fixtures/go-vet")
+    for field, value in (("config_digest", "0" * 64), ("config_paths", ["staticcheck.conf"])):
+        bad = copy.deepcopy(ok)
+        bad["coverage"]["tools"][0]["rule_context"][field] = value
+        expect_invalid("code-free export with rule-context " + field, validators["report.schema.json"].validate, bad)
+        expect_invalid("code-free export with rule-context " + field + " (cross-field)", check_report, bad)
+    bad = copy.deepcopy(ok)
+    bad["coverage"]["tools"][0]["rule_context"]["config"] = "not_read"
+    expect_invalid("honored repository configuration marked not read", validators["report.schema.json"].validate, bad)
+    bad = copy.deepcopy(ok)
+    bad["coverage"]["tools"][0]["rule_context"].update(source_suppressions="honored", unreported_suppression_rules=["U1000"])
+    expect_invalid("unreported suppression rules without reported suppressions", validators["report.schema.json"].validate, bad)
+    bad = copy.deepcopy(ok)
+    bad["coverage"]["tools"][0]["rule_context"].update(repository_config="overridden", config="not_read", config_digest="0" * 64)
+    bad["export"]["include_code"] = True
+    expect_invalid("rule context records configuration it did not read", validators["report.schema.json"].validate, bad)
+    bad = copy.deepcopy(published)
+    bad["observations"][0]["suppressed"] = True
+    bad["findings"][0]["observation_ids"] = [bad["observations"][0]["id"]]
+    expect_invalid("finding from a suppressed observation", check_report, bad)
     bad = copy.deepcopy(plan)
     bad["tasks"][0]["depends_on"] = [bad["tasks"][-1]["id"]]
     expect_invalid("cyclic plan", check_plan, bad)
@@ -954,7 +1139,7 @@ def main() -> None:
     bad["TaskStage"] = {"enum": [*stage_order, "lint"]}
     expect_invalid("stage enum drift", lambda doc: check_stage_enums(doc, stage_order, stored_stages, stage_states), bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
-    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 17 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 19 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
     print(f"PASS: {27 + len(r1_negative)} negative cases; example policy timing; prompt manifest")

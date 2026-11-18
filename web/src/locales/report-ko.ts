@@ -12,6 +12,8 @@ export const reportKo = {
     ai_review_partial: '필수 모델 검토 중 일부만 수행했습니다.',
     ai_review_not_performed: '필수 모델 검토를 수행하지 못했습니다.',
     required_task_not_succeeded: '완료되지 않은 필수 작업이 있습니다.',
+    static_analysis_gap: '범위에 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않았습니다.',
+    static_analysis_not_planned: '범위에 지원 언어의 소스가 없어 정적 분석 작업을 계획하지 않았습니다.',
     review_lineage_mismatch:
       '검토 단계 사이의 후보 또는 호출 기록이 일치하지 않습니다.',
     model_source_not_approved: '이 소스의 모델 전송을 승인하지 않았습니다.',

@@ -29,7 +29,11 @@ func (EnvironmentDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte
 	if d.Environment != nil {
 		// A node observation must be backed by the probe execution the worker
 		// recorded for this task; an observed version needs a clean exit.
-		for _, o := range d.Environment.Observations {
+		observations := append([]envdoc.Observation{}, d.Environment.Observations...)
+		for _, t := range d.Environment.AnalyzerTools {
+			observations = append(observations, envdoc.Observation{Tool: t.Tool, Status: t.Status, Version: t.Version, Detail: t.Detail, Execution: t.Execution})
+		}
+		for _, o := range observations {
 			if o.Execution == nil {
 				if o.Status == envdoc.ObsObserved {
 					return Contribution{}, invalidf("observed version without a recorded probe")

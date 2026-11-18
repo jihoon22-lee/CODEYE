@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.codeye.invalid/v0.1/analyzer-observations.schema.json",
+  "title": "CODEYE analyzer observations envelope v0.1 (role observations, media application/vnd.codeye.observations+json, kind analyzer_observations; docs/39)",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "kind", "analyzer", "adapter", "parser", "task_key", "snapshot_manifest_digest", "module", "patterns", "tool", "target", "rule_pack", "outcome", "executions", "coverage", "observations", "tool_errors", "parse", "workspace_drift", "limitations"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "analyzer_observations"},
+    "analyzer": {"type": "object", "additionalProperties": false, "required": ["id", "ecosystem", "required"], "properties": {
+      "id": {"type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+$"},
+      "ecosystem": {"enum": ["any", "cpp", "go", "javascript", "python", "rust"]},
+      "required": {"type": "boolean"}}},
+    "adapter": {"$ref": "#/$defs/component"},
+    "parser": {"$ref": "#/$defs/component"},
+    "task_key": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+    "snapshot_manifest_digest": {"$ref": "#/$defs/sha256"},
+    "module": {"type": "object", "additionalProperties": false, "required": ["dir", "name"], "properties": {"dir": {"$ref": "#/$defs/reldir"}, "name": {"type": "string", "maxLength": 256}}},
+    "patterns": {"type": "array", "maxItems": 256, "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+    "tool": {"type": "object", "additionalProperties": false, "required": ["name", "version", "version_tested"], "properties": {
+      "name": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+      "version": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/version"}]},
+      "version_tested": {"type": "boolean"}},
+      "if": {"properties": {"version": {"const": null}}}, "then": {"properties": {"version_tested": {"const": false}}}},
+    "target": {"type": "object", "additionalProperties": false, "required": ["platform", "properties"], "properties": {
+      "platform": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/version"}]},
+      "properties": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,31}$"}, "additionalProperties": {"type": "string", "maxLength": 256, "not": {"pattern": "^(?:/|\\\\|[A-Za-z]:[\\\\/])"}}}}},
+    "rule_pack": {"type": "object", "additionalProperties": false, "required": ["id", "version", "selection", "repository_config", "source_suppressions", "config_files", "unreported_suppression_rules"], "description": "규칙 맥락(docs/39 §5.1). repository_config가 honored가 아니면 config_files는 []이다. honored에서 null은 팩이 읽은 설정 파일을 열거하지 못했다는 뜻이며 그 finding은 비교에서 해결로 보지 않는다. unreported_suppression_rules는 source_suppressions=reported인데도 억제를 보고하지 않는 규칙(측정값, staticcheck U1000)이며 reported가 아니면 []이다.", "properties": {
+      "id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+      "version": {"type": "string", "minLength": 1},
+      "selection": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 1024, "not": {"pattern": "^(?:/|\\\\|[A-Za-z]:[\\\\/])"}}},
+      "repository_config": {"enum": ["overridden", "honored", "none"]},
+      "source_suppressions": {"enum": ["honored", "reported", "disabled", "none"]},
+      "config_files": {"anyOf": [{"type": "null"}, {"type": "array", "maxItems": 256, "items": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {
+        "path": {"$ref": "#/$defs/relpath"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}}]},
+      "unreported_suppression_rules": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^\\S+$"}}}},
+    "outcome": {
+      "type": "object", "additionalProperties": false, "required": ["task_status", "reason", "exit_class", "partial_parse"],
+      "properties": {
+        "task_status": {"enum": ["succeeded", "failed", "timed_out", "cancelled", "unsupported", "skipped_policy"]},
+        "reason": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+        "exit_class": {"enum": ["success_without_findings", "success_with_findings", "configuration_error", "execution_error", "timeout", "cancelled", "not_run"]},
+        "partial_parse": {"type": "boolean"}
+      },
+      "allOf": [
+        {"if": {"properties": {"task_status": {"const": "succeeded"}}}, "then": {"properties": {"reason": {"const": null}, "exit_class": {"enum": ["success_without_findings", "success_with_findings"]}, "partial_parse": {"const": false}}}},
+        {"if": {"properties": {"task_status": {"not": {"const": "succeeded"}}}}, "then": {"properties": {"reason": {"type": "string"}, "exit_class": {"not": {"enum": ["success_without_findings", "success_with_findings"]}}}}},
+        {"if": {"properties": {"exit_class": {"const": "not_run"}}}, "then": {"properties": {"partial_parse": {"const": false}}}}
+      ]
+    },
+    "executions": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false, "required": ["name", "status", "exit_code", "cleanup", "command", "stdout", "stderr"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+        "status": {"enum": ["exited", "timed_out", "cancelled", "rejected", "start_failed", "unsupported"]},
+        "reason": {"type": "string"},
+        "exit_code": {"type": ["integer", "null"]},
+        "cleanup": {"enum": ["confirmed", "uncertain", "not_started"]},
+        "command": {"type": "object", "additionalProperties": false, "required": ["argv", "dir", "env_keys"], "properties": {
+          "argv": {"type": "array", "items": {"type": "string", "not": {"pattern": "^(?:/|\\\\|[A-Za-z]:[\\\\/])"}}},
+          "dir": {"anyOf": [{"$ref": "#/$defs/reldir"}, {"const": "[REDACTED]"}]},
+          "env_keys": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}}}},
+        "stdout": {"$ref": "#/$defs/stream"},
+        "stderr": {"$ref": "#/$defs/stream"}
+      }}},
+    "coverage": {"type": "object", "additionalProperties": false, "required": ["unit", "files_in_scope", "processed_paths", "files_skipped", "files_unlisted", "units"], "properties": {
+      "unit": {"enum": ["crate", "file", "module", "package", "project", "translation_unit"]},
+      "files_in_scope": {"type": ["integer", "null"], "minimum": 0},
+      "processed_paths": {"anyOf": [{"type": "null"}, {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/relpath"}}]},
+      "files_skipped": {"type": "integer", "minimum": 0},
+      "files_unlisted": {"type": "integer", "minimum": 0},
+      "units": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,63}$"}, "additionalProperties": {"type": "integer", "minimum": 0}}}},
+    "observations": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "rule_id", "category", "raw_severity", "raw_message", "path", "location", "location_state", "related", "raw_ref", "unit", "suggested_fix_count", "suppressed"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^obs_[0-9a-f]{20}$"},
+        "rule_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\s]+$"},
+        "category": {"enum": ["api_contract", "concurrency", "correctness", "data_integrity", "error_handling", "maintainability", "performance", "resource_lifecycle", "security", "test_gap"]},
+        "raw_severity": {"type": ["string", "null"], "minLength": 1, "maxLength": 32},
+        "raw_message": {"type": "string", "minLength": 1},
+        "path": {"anyOf": [{"$ref": "#/$defs/relpath"}, {"type": "null"}]},
+        "location": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/location"}]},
+        "location_state": {"$ref": "#/$defs/location_state"},
+        "related": {"type": "array", "maxItems": 64, "items": {"type": "object", "additionalProperties": false, "required": ["raw_message", "path", "location", "location_state"], "properties": {
+          "raw_message": {"type": "string"},
+          "path": {"anyOf": [{"$ref": "#/$defs/relpath"}, {"type": "null"}]},
+          "location": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/location"}]},
+          "location_state": {"$ref": "#/$defs/location_state"}},
+          "if": {"properties": {"location_state": {"const": "resolved"}}},
+          "then": {"properties": {"location": {"type": "object"}, "path": {"type": "string"}}},
+          "else": {"properties": {"location": {"type": "null"}}}}},
+        "raw_ref": {"type": "object", "additionalProperties": false, "required": ["execution", "stream", "stream_sha256", "record_index", "json_pointer", "byte_start", "byte_end"], "properties": {
+          "execution": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+          "stream": {"enum": ["stdout", "stderr"]},
+          "stream_sha256": {"$ref": "#/$defs/sha256"},
+          "record_index": {"type": "integer", "minimum": 0},
+          "json_pointer": {"type": "string", "pattern": "^(?:/.*)?$"},
+          "byte_start": {"type": "integer", "minimum": 0},
+          "byte_end": {"type": "integer", "minimum": 1}}},
+        "unit": {"type": "string", "maxLength": 512},
+        "suggested_fix_count": {"type": "integer", "minimum": 0},
+        "suppressed": {"type": "boolean", "description": "소스 내 억제 지시문이 숨긴 진단(source_suppressions=reported일 때만 true). finding이 되지 않는다."}
+      },
+      "if": {"properties": {"location_state": {"const": "resolved"}}},
+      "then": {"properties": {"location": {"type": "object"}, "path": {"type": "string"}}},
+      "else": {"properties": {"location": {"type": "null"}}}
+    }},
+    "tool_errors": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["execution", "kind", "unit", "message", "path", "line", "column"], "properties": {
+      "execution": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+      "kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+      "unit": {"type": "string", "maxLength": 512},
+      "message": {"type": "string", "maxLength": 8192},
+      "path": {"anyOf": [{"$ref": "#/$defs/relpath"}, {"type": "null"}]},
+      "line": {"type": "integer", "minimum": 0},
+      "column": {"type": "integer", "minimum": 0}}}},
+    "parse": {"type": "object", "additionalProperties": false, "required": ["ok", "records", "unparsed_bytes", "shape_errors", "observations", "unresolved_observations", "tool_errors"], "properties": {
+      "ok": {"type": "boolean"}, "records": {"type": "integer", "minimum": 0}, "unparsed_bytes": {"type": "integer", "minimum": 0},
+      "shape_errors": {"type": "integer", "minimum": 0}, "decode_error": {"type": "string", "maxLength": 256},
+      "observations": {"type": "integer", "minimum": 0}, "unresolved_observations": {"type": "integer", "minimum": 0}, "tool_errors": {"type": "integer", "minimum": 0}}},
+    "workspace_drift": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/relpath"}},
+    "limitations": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}}
+  },
+  "allOf": [
+    {"if": {"properties": {"outcome": {"properties": {"task_status": {"const": "succeeded"}}}}},
+     "then": {"properties": {"coverage": {"properties": {"processed_paths": {"type": "array", "minItems": 1}}}, "tool_errors": {"maxItems": 0}, "workspace_drift": {"maxItems": 0}, "executions": {"minItems": 1}, "parse": {"properties": {"ok": {"const": true}, "unparsed_bytes": {"const": 0}, "shape_errors": {"const": 0}}}}}},
+    {"if": {"properties": {"outcome": {"properties": {"exit_class": {"const": "not_run"}}}}},
+     "then": {"properties": {"observations": {"maxItems": 0}, "coverage": {"properties": {"processed_paths": {"type": "array", "maxItems": 0}}}}}}
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "relpath": {"type": "string", "minLength": 1, "pattern": "^(?![/\\\\])(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\\\:\\u0000-\\u001f]+$"},
+    "reldir": {"anyOf": [{"const": "."}, {"$ref": "#/$defs/relpath"}]},
+    "version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._+()/:-]{0,79}$"},
+    "component": {"type": "object", "additionalProperties": false, "required": ["id", "version"], "properties": {"id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"}, "version": {"type": "string", "minLength": 1, "maxLength": 32}}},
+    "location_state": {"enum": ["resolved", "unresolved_no_position", "unresolved_outside_snapshot", "unresolved_missing_file", "unresolved_line_out_of_range", "source_drift"]},
+    "location": {"type": "object", "additionalProperties": false, "required": ["path", "start_line", "start_col", "end_line", "end_col", "column_unit", "blob_sha256"], "properties": {
+      "path": {"$ref": "#/$defs/relpath"}, "start_line": {"type": "integer", "minimum": 1}, "start_col": {"type": "integer", "minimum": 0},
+      "end_line": {"type": "integer", "minimum": 1}, "end_col": {"type": "integer", "minimum": 0}, "column_unit": {"enum": ["byte", "utf16", "rune"]}, "blob_sha256": {"$ref": "#/$defs/sha256"}}},
+    "stream": {"type": "object", "additionalProperties": false, "required": ["sha256", "captured_bytes", "total_bytes", "truncated", "incomplete"], "properties": {
+      "sha256": {"$ref": "#/$defs/sha256"}, "captured_bytes": {"type": "integer", "minimum": 0}, "total_bytes": {"type": "integer", "minimum": 0},
+      "truncated": {"type": "boolean"}, "incomplete": {"type": "boolean"}}}
+  }
+}

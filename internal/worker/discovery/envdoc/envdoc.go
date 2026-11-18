@@ -153,6 +153,23 @@ type Environment struct {
 	Requirements []Requirement  `json:"requirements"`
 	Observations []Observation  `json:"observations"`
 	Verdicts     []Verdict      `json:"verdicts"`
+	// AnalyzerTools are the node's analyzer tools (docs/39) for the
+	// in-scope ecosystems: probed when the operator configured them,
+	// not_probed otherwise. They are not compared with declarations.
+	// Absent in documents written before W19.
+	AnalyzerTools []AnalyzerTool `json:"analyzer_tools,omitempty"`
+}
+
+// AnalyzerTool is this attempt's node observation of one analyzer tool
+// (staticcheck, ruff, ...). Version is the tool's own version text; the
+// execution, when set, is named "<tool>.version".
+type AnalyzerTool struct {
+	Tool      string   `json:"tool"`
+	Analyzers []string `json:"analyzers"`
+	Status    string   `json:"status"`
+	Version   *string  `json:"version"`
+	Detail    *string  `json:"detail"`
+	Execution *string  `json:"execution"`
 }
 
 // ManifestRead is how one manifest of an in-scope module was read.
@@ -275,7 +292,38 @@ var (
 	hex64      = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	evidenceID = regexp.MustCompile(`^ev_[0-9a-f]{24}$`)
 	execName   = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
+	// analyzer tools: names, analyzer ids and version text (no path).
+	analyzerToolName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	analyzerID       = regexp.MustCompile(`^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$`)
+	toolVersionText  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._+():-]{0,79}$`)
 )
+
+// AnalyzerToolVersionValid reports whether v is acceptable analyzer tool
+// version text: short, printable, no path separator.
+func AnalyzerToolVersionValid(v string) bool { return toolVersionText.MatchString(v) }
+
+// IsRuntimeTool reports whether name is a runtime tool of observations and
+// verdicts (go, node, python, ...); analyzer tools never use these names.
+func IsRuntimeTool(name string) bool { return slices.Contains(tools, name) }
+
+func checkAnalyzerTools(list []AnalyzerTool) error {
+	for i, t := range list {
+		observed := t.Status == ObsObserved
+		switch {
+		case i > 0 && list[i-1].Tool >= t.Tool, !analyzerToolName.MatchString(t.Tool), slices.Contains(tools, t.Tool), !slices.Contains(obsStatus, t.Status):
+			return invalid("analyzer tool %q", t.Tool)
+		case len(t.Analyzers) == 0 || !sortedUnique(t.Analyzers, analyzerID.MatchString):
+			return invalid("analyzer tool %q analyzers", t.Tool)
+		case observed != (t.Version != nil), t.Version != nil && !AnalyzerToolVersionValid(*t.Version):
+			return invalid("analyzer tool %q version", t.Tool)
+		case (observed || t.Status == ObsNotProbed || t.Status == ObsNotFound) && t.Detail != nil, t.Status == ObsProbeFailed && (t.Detail == nil || !record.ValidCode(*t.Detail)):
+			return invalid("analyzer tool %q detail", t.Tool)
+		case t.Execution != nil && *t.Execution != t.Tool+".version", t.Status == ObsNotProbed && t.Execution != nil, observed && t.Execution == nil:
+			return invalid("analyzer tool %q execution", t.Tool)
+		}
+	}
+	return nil
+}
 
 // Expect is what a consumer already trusts: the attempt identity and the
 // immutable snapshot manifest. Lookup returns the manifest sha256 of an
@@ -483,6 +531,9 @@ func checkEnvironment(d Document, e Environment, mods map[string]Module, want Ex
 			return invalid("observation %q execution", o.Tool)
 		}
 		obs[o.Tool] = o
+	}
+	if err := checkAnalyzerTools(e.AnalyzerTools); err != nil {
+		return err
 	}
 	for i, v := range e.Verdicts {
 		if i > 0 {

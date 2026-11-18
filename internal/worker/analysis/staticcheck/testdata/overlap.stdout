@@ -1,0 +1,1 @@
+{"code":"SA4000","severity":"error","location":{"file":"[REDACTED]/overlap/o.go","line":37,"column":33},"end":{"file":"[REDACTED]/overlap/o.go","line":37,"column":49},"message":"identical expressions on the left and right side of the '||' operator"}

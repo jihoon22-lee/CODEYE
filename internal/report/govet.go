@@ -140,6 +140,10 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 	tc := ToolCoverage{TaskKey: ctx.Task.Key, Analyzer: govet.AnalyzerID, ToolVersion: d.ToolVersion, ExitClass: d.Outcome.ExitClass, PartialParse: d.Outcome.PartialParse,
 		FilesInScope: d.Coverage.GoFilesInScope, ProcessedFiles: d.Coverage.ProcessedGoFiles, IgnoredFiles: d.Coverage.IgnoredGoFiles, UnlistedFiles: d.Coverage.UnlistedGoFiles,
 		Packages: map[string]int{}, StderrFailures: len(d.StderrFailures), AnalyzerErrors: len(d.AnalyzerErrors), Limitations: []string{}}
+	// The v0.1 document has no rule pack (it stays byte-identical): the row
+	// carries the synthesized go vet context (docs/39 §5.1).
+	rc := GoVetRuleContext()
+	tc.RuleContext = &rc
 	for k, v := range d.Coverage.Packages {
 		tc.Packages[k] = v
 	}

@@ -330,25 +330,50 @@ def run(base, root, env, *, browser=False):
         cli("node", "token", "create", "--pool", "default", "--source-root", go_root, "--output", go_token)
         go_project = session.request("POST", "projects", {"name": "published-go-report", "source": {
             "kind": "local", "source_root_id": go_root, "relative_path": "."}})
+        # W19: staticcheck runs only when the operator names its binary
+        # (CODEYE_TEST_STATICCHECK, absolute); otherwise its task is planned
+        # and finishes unsupported/tool_not_configured.
+        staticcheck = os.environ.get("CODEYE_TEST_STATICCHECK", "")
+        tool_args = ["--staticcheck", staticcheck] if staticcheck else []
+        # The shared node toolchain (docs/39 §2.4.1) is probed at worker
+        # startup when CODEYE_TEST_NODE names it; no analyzer of this build
+        # needs it yet, so only its startup codes are checked.
+        node_toolchain = os.environ.get("CODEYE_TEST_NODE", "")
+        if node_toolchain:
+            tool_args += ["--node", node_toolchain]
         production = services.enter_context(service(
             [binary, "agent", "--controller", origin, "--state-dir", directory / "go-agent",
              "--name", "go-smoke", "--enroll-token-file", go_token, "--source-root", f"{go_root}={go_source}",
-             "--go", shutil.which("go"), "--autoscale", "--max-workers", "1"], directory, node_env, directory / "go.log"))
+             "--go", shutil.which("go"), *tool_args, "--autoscale", "--max-workers", "1"], directory, node_env, directory / "go.log"))
         children.append(production)
         actual = session.enqueue(go_project["id"])
-        def observations_key():
+        def observations_keys():
             state = session.request("GET", f"runs/{actual}")["status"]
             if state in {"failed", "cancelled", "recovery_required"}:
                 raise RuntimeError(f"Go 분석 run 상태 {state}")
             if state not in {"finalizing", "partial", "completed"}:
                 return None
-            return scalar(f"SELECT storage_key FROM artifacts WHERE run_id='{actual}' AND role='observations'")
-        key = wait_for("실제 Go vet 산출물", observations_key, children, timeout=140)
-        data = (directory / "artifacts" / key).read_bytes()
-        assert hashlib.sha256(data).hexdigest() == key.split("/")[-1]
-        doc = json.loads(data)
+            keys = scalar(f"SELECT string_agg(storage_key, ' ' ORDER BY storage_key) FROM artifacts WHERE run_id='{actual}' AND role='observations'")
+            return keys.split() if keys else None
+        observation_docs = []
+        for key in wait_for("실제 Go 분석 산출물", observations_keys, children, timeout=140):
+            data = (directory / "artifacts" / key).read_bytes()
+            assert hashlib.sha256(data).hexdigest() == key.split("/")[-1]
+            observation_docs.append(json.loads(data))
+        # go vet keeps its v0.1 document; staticcheck writes the generic envelope (docs/39).
+        vet_docs = [d for d in observation_docs if d.get("kind") == "go_vet_observations"]
+        sc_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations"]
+        assert len(vet_docs) == 1 and len(sc_docs) == 1 and len(observation_docs) == 2, [d.get("kind") for d in observation_docs]
+        doc, sc_doc = vet_docs[0], sc_docs[0]
         assert doc["analyzer_id"] == "go.vet"
         assert any(o["rule_id"] == "printf" and o["location"]["path"] == "example.go" for o in doc["observations"])
+        assert sc_doc["analyzer"] == {"id": "go.staticcheck", "ecosystem": "go", "required": False}
+        if staticcheck:
+            # staticcheck reports nothing on the fixture (exit 0): clean, never an error.
+            assert sc_doc["outcome"]["task_status"] == "succeeded" and sc_doc["coverage"]["processed_paths"] == ["example.go"], sc_doc["outcome"]
+        else:
+            assert sc_doc["outcome"] == {"task_status": "unsupported", "reason": "tool_not_configured", "exit_class": "not_run", "partial_parse": False}, sc_doc["outcome"]
+            assert sc_doc["executions"] == [] and sc_doc["coverage"]["processed_paths"] == []
         assert (go_source / "example.go").read_text() == original
         # 실제 워커가 생성한 서로 다른 두 manifest와 도구 산출물을 함께 검증한다.
         def published():
@@ -365,8 +390,16 @@ def run(base, root, env, *, browser=False):
         assert go_activity["detail"] == "recorded", go_activity
         go_stages = stage_map(go_activity)
         assert go_stages["source"]["state"] == "succeeded", go_stages
-        assert go_stages["environment"]["state"] == go_stages["static_analysis"]["state"] == "succeeded", go_stages
-        assert go_stages["static_analysis"]["planned"] and go_stages["report"]["state"] == "succeeded", go_stages
+        assert go_stages["environment"]["state"] == "succeeded", go_stages
+        static_stage = go_stages["static_analysis"]
+        if staticcheck:
+            assert static_stage["state"] == "succeeded" and static_stage["succeeded"] == 2, static_stage
+        else:
+            # An analyzer without its tool is visible: go vet succeeded, staticcheck
+            # unsupported, so the stage is partial (never succeeded).
+            assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 1}, static_stage
+            assert static_stage["reasons"] == ["tool_not_configured"] and static_stage["succeeded"] == 1, static_stage
+        assert static_stage["planned"] == 2 and go_stages["report"]["state"] == "succeeded", go_stages
         # The model review was not approved for this source: excluded by policy, never success.
         assert go_stages["code_review"]["state"] == "skipped" and go_stages["code_review"]["reasons"] == ["model_source_not_approved"], go_stages
         assert go_stages["documents"]["succeeded"] == 1 and "model_source_not_approved" in go_stages["documents"]["reasons"], go_stages
@@ -377,7 +410,13 @@ def run(base, root, env, *, browser=False):
         code_free = session.request("GET", path)
         full = session.request("GET", path + "&include_code=true")
         assert code_free["summary"] == full["summary"]
-        assert full["summary"]["raw_observations"] == len(doc["observations"])
+        assert full["summary"]["raw_observations"] == len(doc["observations"]) + len(sc_doc["observations"])
+        tool_rows = {row["task_key"]: row for row in full["coverage"]["tools"]}
+        assert sorted(tool_rows) == ["go-vet", "staticcheck"], tool_rows
+        assert tool_rows["staticcheck"]["analyzer"] == "go.staticcheck"
+        assert tool_rows["staticcheck"]["exit_class"] == ("success_without_findings" if staticcheck else "not_run"), tool_rows
+        decoders = {a["task_key"]: a["decoder"] for a in full["artifacts"] if a["role"] == "observations"}
+        assert decoders["staticcheck"] == "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations", decoders
         assert full["summary"]["pending_candidates"] > 0 and full["summary"]["actionable_findings"] == 0
         assert full["coverage"]["ai_review"]["status"] == "not_performed"
         assert full["quality_verdict"] == "inconclusive"
@@ -388,6 +427,12 @@ def run(base, root, env, *, browser=False):
         assert not any(item.endswith((":env.discover", ":docs.discover")) for item in full["limitations"])
         statuses = {task["key"]: task["status"] for task in full["tasks"]}
         assert statuses["env.discover"] == statuses["docs.discover"] == "succeeded"
+        assert statuses["staticcheck"] == ("succeeded" if staticcheck else "unsupported"), statuses
+        # Startup codes of the worker (handler_unavailable) reach the agent log.
+        agent_log = (directory / "go.log").read_text(errors="replace")
+        assert ("staticcheck:not_configured" in agent_log) == (not staticcheck), "startup codes not in the agent log"
+        if node_toolchain:
+            assert not any(f"node:{r}" in agent_log for r in ("invalid_config", "probe_failed", "unknown_tool")), "node toolchain rejected"
         assert all(o["raw_message"] is None for o in code_free["observations"])
         assert any(o["raw_message"] and o["evidence_state"] == "verified_against_source_manifest"
                    for o in full["observations"])

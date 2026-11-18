@@ -15,7 +15,9 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
-// The production deep-review handler is discovery → go vet → review roles.
+// The production deep-review handler is discovery → the analyzer composite
+// (go vet, then staticcheck planned unsupported when --staticcheck is not
+// given) → review roles. The go-vet and review task specs are unchanged.
 func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 	exe := "go"
 	if runtime.GOOS == "windows" {
@@ -26,10 +28,10 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
 	hs, missing, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir()}, &executor.Executor{})
-	if err != nil || len(hs) != 1 || len(missing) != 0 {
+	if err != nil || len(hs) != 1 || strings.Join(missing, ",") != "staticcheck:not_configured" {
 		t.Fatalf("handlers %d missing %v err %v", len(hs), missing, err)
 	}
-	if info := hs[0].Info(); info.Name != "go-vet" || info.Capability != "analysis:deep-review" {
+	if info := hs[0].Info(); info.Name != "analyzers" || info.Capability != "analysis:deep-review" {
 		t.Fatalf("identity %+v", info)
 	}
 	src := t.TempDir()
@@ -47,8 +49,11 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 	keys := []string{}
 	for _, p := range plan {
 		keys = append(keys, p.Key+"="+string(p.Stage))
+		if p.Key == "staticcheck" && p.Required {
+			t.Fatal("staticcheck is extra depth, not required")
+		}
 	}
-	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "review.context=documents", "review.investigate=code_review", "review.verify=code_review"}
+	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "review.context=documents", "review.investigate=code_review", "review.verify=code_review"}
 	if len(keys) != len(want) {
 		t.Fatalf("plan %v", keys)
 	}
@@ -92,8 +97,30 @@ func TestWorkerHandlersSelectReviewPack(t *testing.T) {
 	for _, p := range plan {
 		keys = append(keys, p.Key+"="+string(p.Stage))
 	}
-	want := "env.discover=environment docs.discover=documents go-vet=static_analysis review.environment=environment review.documents=documents review.investigate=code_review review.interpret=code_review review.verify=code_review"
+	want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis review.environment=environment review.documents=documents review.investigate=code_review review.interpret=code_review review.verify=code_review"
 	if strings.Join(keys, " ") != want {
 		t.Fatalf("plan %v", keys)
+	}
+}
+
+// The shared node toolchain (--node) travels in the hello's analyzer_tools
+// under its reserved name: it is probed at startup, never an unknown tool.
+// With CODEYE_TEST_NODE the real node passes and adds no missing code.
+func TestWorkerHandlersKnowTheNodeToolchain(t *testing.T) {
+	exe := "go"
+	if runtime.GOOS == "windows" {
+		exe = "go.exe"
+	}
+	goExe := filepath.Join(runtime.GOROOT(), "bin", exe)
+	if _, err := os.Stat(goExe); err != nil {
+		t.Skip("go toolchain not found at GOROOT/bin")
+	}
+	node, want := filepath.Join(t.TempDir(), "absent-node"), "node:invalid_config,staticcheck:not_configured"
+	if p := os.Getenv("CODEYE_TEST_NODE"); p != "" {
+		node, want = p, "staticcheck:not_configured"
+	}
+	hs, missing, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), AnalyzerTools: map[string]string{"node": node}}, &executor.Executor{})
+	if err != nil || len(hs) != 1 || strings.Join(missing, ",") != want {
+		t.Fatalf("handlers %d missing %v err %v", len(hs), missing, err)
 	}
 }

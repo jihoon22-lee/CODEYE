@@ -224,6 +224,25 @@ describe('W23 report history view', () => {
     expect(screen.queryByText('비교 결과(식별 단위)')).toBeNull();
   });
 
+  it('explains a vanished finding hidden by an in-source suppression and shows a rule-context difference', () => {
+    const doc = clone(example) as Record<string, unknown> & typeof example;
+    const gone = doc.entries.find((e) => e.state === 'resolved_observed')!;
+    gone.state = 'absent_unverified';
+    (gone as Record<string, unknown>).reason = 'suppressed_in_source';
+    doc.counts = { ...doc.counts, resolved_observed: 0, absent_unverified: 1 };
+    (doc as Record<string, unknown>).differences = [
+      { key: 'tool:go.staticcheck:rule_context', baseline: 'codeye-go-staticcheck@1 config=overridden suppressions=honored', current: 'codeye-go-staticcheck@2 config=overridden suppressions=reported' },
+    ];
+    show(parseComparison(doc, RUN));
+    expect(screen.getByText('도구가 이 진단을 소스 안 억제로 숨겨진 것으로 보고했습니다(억제는 수정이 아닙니다).')).toBeTruthy();
+    expect(screen.getByText(/^도구 go\.staticcheck 규칙 문맥: codeye-go-staticcheck@1 .* → codeye-go-staticcheck@2 /)).toBeTruthy();
+    // An unknown future reason reaches the UI raw rather than failing the parse.
+    (gone as Record<string, unknown>).reason = 'future_reason';
+    cleanup();
+    show(parseComparison(doc, RUN));
+    expect(screen.getByText('future_reason')).toBeTruthy();
+  });
+
   it('says when there is no baseline instead of inventing states', () => {
     const doc = clone(example) as Record<string, unknown> & typeof example;
     (doc as Record<string, unknown>).baseline = null;

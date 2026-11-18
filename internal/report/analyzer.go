@@ -1,0 +1,208 @@
+package report
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"regexp"
+	"sort"
+	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
+)
+
+// Fixed template texts of findings decoded from the generic analyzer
+// envelope (docs/39). They name no tool and hold no code, so the code-free
+// export keeps them verbatim (safeTemplates).
+const (
+	textToolSeverityReason = "분석 도구 진단의 심각도는 검토 전 기본값 low이다. 도구가 표시한 원문 등급은 관찰에 그대로 남기며 영향을 검토하지 않았다."
+	textToolCondition      = "정적 분석 도구가 이 snapshot 위치에 진단을 보고했다."
+	textToolVerification   = "수정 뒤 이 보고서의 실행 기록과 같은 argv로 같은 도구를 다시 실행해 진단이 사라지는지 확인한다."
+	textToolEvidence       = "도구 출력 stream의 원시 진단(레코드 순번과 byte 범위로 위치 지정)."
+)
+
+// Limitation codes of the generic decoder.
+const (
+	LimColumnsNotBytes = "observation_columns_not_bytes"
+	LimRawSeverityText = "observation_raw_severity_omitted"
+)
+
+// rawSeverityPattern is the tool grade a report observation may carry
+// ("error", "warning", "note"): a short word, never free text, so the
+// code-free export can keep it. Other grades stay in the envelope only.
+var rawSeverityPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,31}$`)
+
+// AnalyzerDecoder decodes the generic analyzer observations envelope of the
+// R1 packs (obsdoc, kind analyzer_observations). Observations become report
+// observations; resolved ones verified against the source manifest and not
+// suppressed in source become tool-reported findings that stay unreviewed
+// (pending, never actionable without review). The row records the
+// envelope's rule context (docs/39 §5.1). Only observations identical in analyzer, rule, location
+// and message are grouped into one finding; a different rule or message on
+// the same line stays a separate finding (TC-09).
+type AnalyzerDecoder struct{}
+
+func (AnalyzerDecoder) Key() DecoderKey {
+	return DecoderKey{MediaType: analysis.MediaObservations, SchemaVersion: obsdoc.SchemaVersion, Kind: obsdoc.Kind}
+}
+
+func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
+	var out Contribution
+	if art.Role != analysis.RoleObservations {
+		return out, invalidf("analyzer document must have role observations")
+	}
+	d, err := obsdoc.Decode(body, obsdoc.Expect{TaskKey: ctx.Task.Key, Snapshot: ctx.Snapshot.ManifestDigest, Lookup: ctx.Source.Lookup})
+	if err != nil {
+		return out, invalidf("analyzer document: %v", err)
+	}
+	if d.Analyzer.Required != ctx.Task.Required {
+		return out, invalidf("analyzer document required flag differs from the accepted task")
+	}
+	accepted := ctx.Task.Status == string(domain.TaskSucceeded)
+	switch {
+	case d.Outcome.TaskStatus == domain.TaskSucceeded && !accepted:
+		// The worker downgraded the handler outcome; the DB row is the authority.
+		out.Limitations = append(out.Limitations, LimTaskStatusMismatch+":"+ctx.Task.Key)
+	case d.Outcome.TaskStatus != domain.TaskSucceeded && accepted:
+		return out, invalidf("analyzer result does not attest to accepted success")
+	}
+	// Every execution the document names must be the worker's record of it,
+	// bound by the stream artifacts' hash and size.
+	streams := map[string]*ArtifactRef{}
+	for _, e := range d.Executions {
+		ref, ok := ctx.Executions[e.Name]
+		if !ok {
+			return out, invalidf("analyzer document names an unrecorded execution %s", e.Name)
+		}
+		if accepted && (ref.Manifest.Status != executor.StatusExited || ref.Manifest.ExitCode == nil || e.ExitCode == nil || *ref.Manifest.ExitCode != *e.ExitCode) {
+			return out, invalidf("analyzer document execution %s differs from the worker record", e.Name)
+		}
+		for stream, pair := range map[string]struct {
+			art *ArtifactRef
+			doc obsdoc.StreamRef
+		}{"stdout": {ref.Stdout, e.Stdout}, "stderr": {ref.Stderr, e.Stderr}} {
+			if pair.art == nil {
+				continue
+			}
+			if pair.art.SHA256 != pair.doc.SHA256 || pair.art.SizeBytes != pair.doc.CapturedBytes {
+				return out, invalidf("analyzer document execution %s %s is not the recorded stream", e.Name, stream)
+			}
+			streams[e.Name+"/"+stream] = pair.art
+		}
+	}
+	groups := map[string][]Observation{}
+	categories := map[string]string{}
+	var order []string
+	for _, o := range d.Observations {
+		a := streams[o.RawRef.Execution+"/"+o.RawRef.Stream]
+		if a == nil || a.SHA256 != o.RawRef.StreamSHA256 || o.RawRef.ByteEnd > a.SizeBytes {
+			return out, invalidf("observation %s is not bound to a recorded stream artifact", o.ID)
+		}
+		msg := o.RawMessage
+		severity := o.RawSeverity
+		if severity != nil && !rawSeverityPattern.MatchString(*severity) {
+			severity = nil
+			out.Limitations = append(out.Limitations, LimRawSeverityText+":"+ctx.Task.Key)
+		}
+		obs := Observation{ID: o.ID, TaskKey: ctx.Task.Key, TaskExecutionID: ctx.TaskExecutionID, Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, RuleID: o.RuleID,
+			RawSeverity: severity, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes, Suppressed: o.Suppressed,
+			RawRef: RawRef{ArtifactID: a.ID, SHA256: a.SHA256, StreamIndex: o.RawRef.RecordIndex, JSONPointer: o.RawRef.JSONPointer, ByteStart: o.RawRef.ByteStart, ByteEnd: o.RawRef.ByteEnd}}
+		if l := o.Location; l != nil {
+			startCol, endCol := l.StartCol, l.EndCol
+			if l.ColumnUnit != "byte" {
+				// The report column unit is bytes; other units are not converted.
+				startCol, endCol = 0, 0
+				out.Limitations = append(out.Limitations, LimColumnsNotBytes+":"+ctx.Task.Key)
+			}
+			obs.Location = &ObservationLocation{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine, StartCol: startCol, EndCol: endCol, ColumnUnit: "byte", BlobSHA256: l.BlobSHA256}
+			if sha, ok := ctx.Source.Lookup(l.Path); ok && sha == l.BlobSHA256 {
+				obs.EvidenceState = EvidenceVerified
+			} else {
+				obs.EvidenceState = EvidenceManifestMismatch
+			}
+			// A diagnostic hidden by an in-source suppression stays an
+			// observation (the comparison reads it) and never becomes a
+			// finding.
+			if obs.EvidenceState == EvidenceVerified && !o.Suppressed {
+				k := strings.Join([]string{o.RuleID, l.Path, itoa(l.StartLine), itoa(startCol), msg}, "\x00")
+				if _, seen := groups[k]; !seen {
+					order = append(order, k)
+				}
+				groups[k] = append(groups[k], obs)
+				categories[k] = o.Category
+			}
+		}
+		out.Observations = append(out.Observations, obs)
+	}
+	sort.Strings(order)
+	for _, k := range order {
+		out.Findings = append(out.Findings, toolFinding(ctx, d.Analyzer.ID, categories[k], groups[k]))
+	}
+	tc := ToolCoverage{TaskKey: ctx.Task.Key, Analyzer: d.Analyzer.ID, ToolVersion: d.Tool.Version, ExitClass: d.Outcome.ExitClass, PartialParse: d.Outcome.PartialParse,
+		IgnoredFiles: d.Coverage.FilesSkipped, UnlistedFiles: d.Coverage.FilesUnlisted, Packages: map[string]int{}, StderrFailures: len(d.ToolErrors), AnalyzerErrors: 0, Limitations: []string{},
+		RuleContext: ruleContextOf(d.RulePack)}
+	if d.Coverage.FilesInScope != nil {
+		tc.FilesInScope = *d.Coverage.FilesInScope
+	} else {
+		tc.Limitations = append(tc.Limitations, "files_in_scope_unknown")
+	}
+	for k, v := range d.Coverage.Units {
+		tc.Packages[k] = v
+	}
+	// Processed files count only for a task the controller accepted as
+	// succeeded, or one that ran nothing (known zero). The paths themselves
+	// (W23: locations inspected again) are recorded only for an accepted
+	// success.
+	if paths := d.Coverage.ProcessedPaths; paths != nil && (accepted || d.Outcome.ExitClass == obsdoc.ExitNotRun) {
+		n := len(paths)
+		tc.ProcessedFiles = &n
+		if accepted && n > 0 {
+			tc.ProcessedPaths = sortedUnique(paths)
+		}
+	}
+	for _, l := range d.Limitations {
+		if codePattern.MatchString(l) {
+			tc.Limitations = append(tc.Limitations, l)
+		}
+	}
+	out.Tool = &tc
+	return out, nil
+}
+
+// toolFinding builds the unreviewed finding of identical observations.
+func toolFinding(ctx DecodeContext, analyzerID, category string, obs []Observation) Finding {
+	first := obs[0]
+	l := first.Location
+	msg := *first.RawMessage
+	idSum := sha256.Sum256([]byte(strings.Join([]string{ctx.Task.Key, analyzerID, first.RuleID, l.Path, itoa(l.StartLine), itoa(l.StartCol), msg}, "\x00")))
+	id := "fnd_" + hex.EncodeToString(idSum[:])[:20]
+	if category == "" {
+		category = "correctness"
+	}
+	loc := Location{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine}
+	codeID := "ev_" + id[4:] + "_code"
+	fp, basis := ToolFingerprint(analyzerID, first.RuleID, l.Path, "", msg)
+	f := Finding{SchemaVersion: "0.1", ID: id, Title: truncateRunes(analyzerID+" "+first.RuleID+": "+msg, 160), Category: category, Severity: "low", SeverityReason: textToolSeverityReason,
+		Validation: "unreviewed", Disposition: "open", Impact: textImpact, Locations: []Location{loc},
+		Evidence:           []Evidence{{ID: codeID, Kind: "code", Description: textEvidenceCode, Location: &loc, BlobSHA256: l.BlobSHA256}},
+		CounterevidenceIDs: []string{}, ObservationIDs: []string{}, Fingerprint: fp, FingerprintBasis: &basis,
+		Recommendation: Recommendation{Summary: textRecommendation, Tradeoffs: []string{}}, Verification: []string{textToolVerification},
+		Limitations: []string{textLimitManual, textLimitStaticOnly}}
+	var toolIDs []string
+	for _, o := range obs {
+		evID := "ev_" + strings.TrimPrefix(o.ID, "obs_") + "_tool"
+		ev := Evidence{ID: evID, Kind: "tool", Description: textToolEvidence, ArtifactID: o.RawRef.ArtifactID, TaskExecutionID: o.TaskExecutionID}
+		if o.RawRef.JSONPointer != "" {
+			ptr := o.RawRef.JSONPointer
+			ev.JSONPointer = &ptr
+		}
+		f.Evidence = append(f.Evidence, ev)
+		f.ObservationIDs = append(f.ObservationIDs, o.ID)
+		toolIDs = append(toolIDs, evID)
+	}
+	f.Conditions = []Condition{{Statement: textToolCondition, Status: "verified", EvidenceIDs: append([]string{}, toolIDs...)}}
+	f.Claims = []Claim{{Assertion: analyzerID + " " + first.RuleID + " 진단: " + msg, Kind: "observed", EvidenceIDs: append(append([]string{}, toolIDs...), codeID)}}
+	return f
+}

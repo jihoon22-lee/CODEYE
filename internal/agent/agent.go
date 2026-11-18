@@ -56,6 +56,10 @@ type Config struct {
 	EnrollTokenFile  string
 	// SourceRoots is the private mapping source_root_id → absolute path.
 	SourceRoots map[string]string
+	// RepositoryCodeSourceRoots are the local source roots whose jobs may run
+	// repository-controlled code (--repo-code-source-root, docs/39 §2.7).
+	// Git sources never get the grant.
+	RepositoryCodeSourceRoots map[string]bool
 	// Workers is the static worker count (W06, default mode).
 	Workers int
 	// Autoscale (W07) starts with zero workers and starts/drains/stops
@@ -68,6 +72,11 @@ type Config struct {
 	GitHosts      []string
 	GoExecutable  string
 	GoModCache    string
+	// AnalyzerTools are absolute analyzer tool paths by tool name, one
+	// agent flag per tool (--staticcheck PATH, docs/39), and the shared
+	// toolchains under their reserved names (--node PATH, docs/39 §2.4). The
+	// worker build decides which names it knows.
+	AnalyzerTools map[string]string
 	Limits        workerproto.Limits
 	// WorkerCommand is the worker argv (default: this executable + "worker").
 	WorkerCommand []string
@@ -138,6 +147,11 @@ func New(cfg Config) (*Agent, error) {
 			return nil, &ExitError{ExitUsage, "model source root must have a local source mapping"}
 		}
 	}
+	for id := range cfg.RepositoryCodeSourceRoots {
+		if cfg.SourceRoots[id] == "" {
+			return nil, &ExitError{ExitUsage, "repository-code source root must have a local source mapping"}
+		}
+	}
 	for _, h := range cfg.GitHosts {
 		if domain.ValidateHost(strings.ToLower(h)) != nil {
 			return nil, &ExitError{ExitUsage, "invalid --git-host"}
@@ -151,6 +165,11 @@ func New(cfg Config) (*Agent, error) {
 		return nil, &ExitError{ExitUsage, "--review-pack must be review-v1 or review-r1"}
 	}
 	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.ModelExecutable, cfg.ModelRelayFile} {
+		if p != "" && !filepath.IsAbs(p) {
+			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
+		}
+	}
+	for _, p := range cfg.AnalyzerTools {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}
@@ -721,6 +740,7 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 	switch j.Source.Kind {
 	case "local":
 		job.AllowModelReview = ag.cfg.ModelSourceRoots[j.Source.SourceRootID]
+		job.AllowRepositoryCode = ag.cfg.RepositoryCodeSourceRoots[j.Source.SourceRootID]
 		job.Source.ApprovedRoot = ag.cfg.SourceRoots[j.Source.SourceRootID]
 		job.Source.RelativePath = j.Source.RelativePath
 	case "git":

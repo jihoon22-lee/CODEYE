@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"errors"
+	"testing"
+
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
-	"testing"
 )
 
 func TestModelSourceGrantIsSeparateFromAcquisition(t *testing.T) {
@@ -20,5 +22,33 @@ func TestModelSourceGrantIsSeparateFromAcquisition(t *testing.T) {
 		if j := ag.buildJob(&a); j.AllowModelReview != tc.allowed {
 			t.Fatalf("%s: unexpected model source grant", tc.kind)
 		}
+	}
+}
+
+// The repository-code grant (docs/39 §2.7) mirrors the model-source grant:
+// it is node configuration per local source root, separate from acquisition
+// and from the model grant, and git sources never get it.
+func TestRepositoryCodeGrantIsSeparateFromAcquisition(t *testing.T) {
+	granted, other := domain.NewID(), domain.NewID()
+	ag := Agent{cfg: Config{SourceRoots: map[string]string{granted: t.TempDir(), other: t.TempDir()},
+		ModelSourceRoots: map[string]bool{other: true}, RepositoryCodeSourceRoots: map[string]bool{granted: true}}}
+	for _, tc := range []struct {
+		kind, id     string
+		code, models bool
+	}{
+		{"local", granted, true, false}, {"local", other, false, true}, {"git", granted, false, false},
+	} {
+		a := activeAttempt{}
+		a.job.Source = nodeproto.JobSource{Kind: tc.kind, SourceRootID: tc.id}
+		if j := ag.buildJob(&a); j.AllowRepositoryCode != tc.code || j.AllowModelReview != tc.models {
+			t.Fatalf("%s: repository code %v, model %v", tc.kind, j.AllowRepositoryCode, j.AllowModelReview)
+		}
+	}
+	// A grant for a root the node does not map is an option error.
+	_, err := New(Config{ControllerURL: "http://127.0.0.1:1", StateDir: t.TempDir(), Workers: 1,
+		SourceRoots: map[string]string{granted: t.TempDir()}, RepositoryCodeSourceRoots: map[string]bool{other: true}})
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitUsage || exit.Msg != "repository-code source root must have a local source mapping" {
+		t.Fatalf("unmapped repository-code root: %v", err)
 	}
 }

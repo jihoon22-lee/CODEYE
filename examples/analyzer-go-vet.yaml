@@ -20,7 +20,7 @@ execute:
   cwd: '${workspace}/${module_dir}'
   timeout_seconds: 900
   stdout_max_bytes: 33554432
-  env_allowlist: [PATH, LANG, SystemRoot, GOENV, GOWORK, GOTOOLCHAIN, GOPROXY, GOSUMDB, GOVCS, GOFLAGS, CGO_ENABLED, GOCACHE, GOPATH, GOMODCACHE]
+  env_allowlist: [PATH, LANG, SystemRoot, GOENV, GOWORK, GOTOOLCHAIN, GOPROXY, GOSUMDB, GOVCS, GOFLAGS, CGO_ENABLED, GOCACHE, GOPATH, GOMODCACHE, XDG_CONFIG_HOME]
 exit_codes:
   clean: [0]
   findings: []

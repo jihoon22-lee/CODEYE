@@ -187,7 +187,7 @@
 | TC-66 | 실제 `go vet -json` exit 0 + 진단을 관찰로 변환, snapshot 상대 위치·manifest hash·raw byte 범위, 순서 무관 ID, 노드 경로 미노출, 원본·snapshot 불변 | REQ-006,007,008,014; TC-07,17 |
 | TC-67 | 타입 오류 부분 파싱, 잘림·손상·analyzer 오류를 실패로 기록하고 0건으로 바꾸지 않음 | REQ-007,008; TC-08 |
 | TC-68 | 오프라인 의존 모듈·toolchain 부족은 configuration_error, 다운로드 fallback 없음, snapshot 밖 `replace` 실행 전 거부 | REQ-015; NFR-006 |
-| TC-69 | timeout·취소·실행 거부·정리 불확실·비 Go 입력의 상태, probe 실패 시 capability 미광고 | REQ-022,035; TC-18 |
+| TC-69 | timeout·취소·실행 거부·정리 불확실·비 Go 입력의 상태, probe 실패 시 capability 미광고. W19 composite: Go 소스가 범위에 없으면 go vet 작업을 계획하지 않고, 분석기가 없는 언어의 소스는 필수가 아닌 공백 작업(`pack-gap.<생태계>`, `analyzer_pack_missing`)과 보고서 `static_analysis_gap`으로, 지원 언어 소스가 없으면 `static_analysis_not_planned`로 보이며 보고서는 `partial`이다 | REQ-012,022,035; TC-18 |
 | TC-70 | build constraint·cgo로 빠진 패키지와 무시 파일의 범위 표시, 분석 패키지 0개는 미지원, 중첩 모듈·scope, workspace drift 실패·위치 미연결, handler registry·result manifest 검증 | REQ-006,008; TC-05 |
 
 [W08 기록](29-w08-go-vet.md)의 실행 환경·실제 CODEYE snapshot 결과·OS별 시험 범위을 따른다. 이 시험은 Go vet 어댑터 범위이며 W09 보고서와 분석 품질 측정을 뜻하지 않는다.
@@ -248,7 +248,7 @@ REQ-003/009/010/011/012/013/026과 NFR-007/008에 연결한다. 실행 근거와
 
 ## R1 수용 시험 설계
 
-아래는 R1의 수용 조건이다. R0에서 실행한 시험은 [파일럿 기록](36-r0-pilot.md)과 TC-36~95의 단계별 기록에서 확인한다. TC-96·TC-98·TC-99와 TC-97의 모델 없는 부분은 [W15 1단계 결과](37-w15-discovery-and-progress.md#9-결과--1단계모델-없음), TC-97 모델 경로의 플랫폼 검사(scripted caller)는 [2단계 결과](37-w15-discovery-and-progress.md#10-결과--2단계후보-팩-연결-실모델-없음)에 시험 이름과 함께 기록했다. TC-100의 첫 실모델 대조와 미측정 항목은 [W15 기록](37-w15-discovery-and-progress.md#11-결과--tc-100-실모델-대조활성-팩-대-후보-팩)에 있다. TC-25와 TC-99의 W22 추가분(SSE 순번 누락·계획 분모 변경)은 [W22 기록](38-w22-schedules-progress-sse.md)에 있다. TC-14와 TC-31의 코드 제외 내보내기 식별 제거는 [W23 기록](40-w23-history-comparison.md#8-결과)에 있다.
+아래는 R1의 수용 조건이다. R0에서 실행한 시험은 [파일럿 기록](36-r0-pilot.md)과 TC-36~95의 단계별 기록에서 확인한다. TC-96·TC-98·TC-99와 TC-97의 모델 없는 부분은 [W15 1단계 결과](37-w15-discovery-and-progress.md#9-결과--1단계모델-없음), TC-97 모델 경로의 플랫폼 검사(scripted caller)는 [2단계 결과](37-w15-discovery-and-progress.md#10-결과--2단계후보-팩-연결-실모델-없음)에 시험 이름과 함께 기록했다. TC-100의 첫 실모델 대조와 미측정 항목은 [W15 기록](37-w15-discovery-and-progress.md#11-결과--tc-100-실모델-대조활성-팩-대-후보-팩)에 있다. TC-25와 TC-99의 W22 추가분(SSE 순번 누락·계획 분모 변경)은 [W22 기록](38-w22-schedules-progress-sse.md)에 있다. TC-14와 TC-31의 코드 제외 내보내기 식별 제거는 [W23 기록](40-w23-history-comparison.md#8-결과)에 있다. TC-101~104와 W19의 TC-07·08·09·13·68 적용은 [W19 기록](39-r1-analyzer-packs.md#10-시험과-실행-근거)에 있다.
 
 | ID | 입력 또는 사건 | 관찰할 결과 | 요구 |
 |---|---|---|---|
@@ -257,3 +257,7 @@ REQ-003/009/010/011/012/013/026과 NFR-007/008에 연결한다. 실행 근거와
 | TC-98 | W15. 두 프로젝트의 서로 다른 단계, 한 프로젝트의 복수 run, 실행 이력이 없는 프로젝트 | 목록과 상세가 같은 대표 run·단계·상태를 표시한다. 병렬 단계, 대기 사유와 과거 보고서가 구별된다. 권한 없는 프로젝트는 노출되지 않는다. 텍스트만으로도 상태를 식별할 수 있다. | REQ-002/016, NFR-005 |
 | TC-99 | W15. 도구 실패와 성공 혼합, 정책 제외, 취소, 새 attempt 후 옛 이벤트 재전송, 연결 단절, 단계 정보 없는 R0 기록 | 일부 수행·미실행·복구를 구분한다. 새로고침 뒤 같은 상태가 복원되고 오래된 epoch가 덮어쓰지 않는다. W22에서 SSE 순번 누락과 계획 분모 변경을 추가 시험한다. | REQ-013/016/017/022, NFR-003/004 |
 | TC-100 | W15 및 지침 교체 시. 동일 스냅샷·모델·예산에서 활성 팩과 후보 팩을 평가 | 역할별 digest·호출 내역과 평가 분모를 보존한다. Q08·Q10의 계약 밖 입력, 수정 전 결함, 호출자가 정리하는 반례를 분리 채점한다. 허위 근거·모델 재현 단정·통계 오염은 기본 팩 승격을 막는다. | REQ-010/011/013/027, NFR-007/008/010 |
+| TC-101 | W19 이후 각 팩. 도구 경로 없음, 잘못된 경로·버전, 필요한 toolchain(`--go`, 공유 `--node`) 없음·검증 실패 | 작업은 계획되고 `unsupported`(`tool_not_configured`·`tool_unavailable`·`toolchain_not_configured`)로 끝난다. 처리 파일 0이 알려지고 성공·0건 통과로 세지 않는다. 공유 toolchain은 시작 시 한 번 검증하고 그 핸들로만 도구 스크립트를 실행한다(`#!` 해석 없음). 탐색은 `not_probed`·`probe_failed`를 기록하고 PATH 검색·다운로드가 없다. | REQ-007/012/013/015 |
+| TC-102 | W19. 같은 스냅샷에서 두 분석 엔진이 같은 줄·같은 구성을 보고, 같은 행에 다른 메시지 | 중복 검사는 규칙 선택에서 제외하고 남은 관찰은 도구별로 분리한다. 같은 분석기·규칙·위치·메시지만 한 finding으로 묶는다. 처리 파일은 합집합으로 센다. | REQ-007/008/009/013; TC-09,13 |
+| TC-103 | W19 이후 각 팩. 저장소 코드(build script·설정 프로그램·plugin·proc macro)를 실행하는 분석 작업, 노드 허가 없음·있음, 도구 미설정 동시 발생, Git 소스 | 허가 없으면 `Composite.Run`이 dispatch 전에 `unsupported`(`repository_code_not_allowed`)로 끝내고 프로세스를 시작하지 않는다. not-run envelope는 처리 파일 0을 기록한다. 도구 사유는 제약으로 남는다. 허가는 노드 설정의 local source root에서만 오고 Git 소스·스냅샷·저장소 설정은 올릴 수 없다. | REQ-002/015 |
+| TC-104 | W19 이후 각 팩. 이전 run에 있던 도구 finding이 사라짐: 규칙 선택·규칙 팩 버전·저장소 설정 파일 변경, 규칙 문맥이 없는 이전 builder 보고서, 소스 안 억제 주석 추가, 억제를 보고하지 않는 도구 | 양쪽 규칙 문맥이 알려지고 같을 때만 `resolved_observed`다. 그 밖은 `absent_unverified`와 `rule_context_unknown`·`rule_context_changed`·`suppressed_in_source`·`source_suppressions_hidden`이다. 억제된 진단은 관찰로 남고 finding이 아니다. go vet 문맥은 합성되어 이전 builder와도 해결이 유지된다. 코드 제외 export에는 설정 경로·digest가 없다. | REQ-028; TC-14,31 |

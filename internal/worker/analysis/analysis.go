@@ -27,10 +27,16 @@ type HandlerInfo struct{ Name, Version, Capability string }
 type Job struct {
 	// AllowModelReview is set from the node operator's explicit source grant.
 	AllowModelReview bool
-	RunID, AttemptID string
-	Epoch            int64
-	Profile          string
-	Scope            domain.Scope
+	// AllowRepositoryCode is the node operator's explicit grant to run
+	// repository-controlled code (build scripts, configuration programs,
+	// plugins, proc macros) for this job's source (--repo-code-source-root,
+	// docs/39 §2.7). Only node configuration and the job set it; nothing in
+	// the snapshot or its configuration can.
+	AllowRepositoryCode bool
+	RunID, AttemptID    string
+	Epoch               int64
+	Profile             string
+	Scope               domain.Scope
 	// Snapshot.SnapshotDir is read-only; Snapshot.WorkspaceDir is a fresh
 	// writable clone for this attempt. Snapshot.Digest is the manifest digest.
 	Snapshot source.Snapshot
