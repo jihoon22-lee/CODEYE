@@ -2,7 +2,7 @@
 
 W18은 [분석기 팩 계약](39-r1-analyzer-packs.md)(W19)을 따르는 JavaScript·TypeScript 팩이다. ESLint 기준선, tsc, type-aware ESLint 세 분석기를 공유 `--node` toolchain으로 실행한다. 요구사항은 REQ-007/008/012/013/015, 수용 시험은 TC-111~TC-113, 결정은 [A26](19-decisions-and-open-questions.md)이다. 구현은 `internal/worker/analysis/{jsts,eslint,tsc}`와 `builtin/javascript.go`이다.
 
-이 문서의 수치는 Linux(WSL2)의 node v24.18.0, eslint 10.15.0, @eslint/js 10.0.1, typescript-eslint 8.73.0, typescript 6.0.3에서 잰 값이다. Windows는 `GOOS=windows go vet`과, 바뀐 패키지(jsts·eslint·tsc·builtin·report)의 Windows 시험 바이너리를 WSL interop으로 실행한 결과(실도구 시험은 skip)만 확인했다.
+이 문서의 수치는 Linux(WSL2)의 node v24.18.0, eslint 10.15.0, @eslint/js 10.0.1, typescript-eslint 8.73.0, typescript 6.0.3에서 잰 값이다. Windows는 `GOOS=windows go vet`과, 바뀐 패키지(jsts·eslint·tsc·builtin·report·cmd)의 Windows 시험 바이너리를 WSL interop으로 실행한 결과만 확인했다. 실도구 시험과, Go toolchain·가짜 shell 도구·symlink 권한이 필요한 시험(builtin의 분석기 목록 시험, cmd의 `TestWorkerHandlers*`, jsts의 `TestPathsLeaveWorkspace`)은 Windows에서 skip했다. 그래서 병합된 분석기 목록은 Linux에서만 확인했다.
 
 ## 1. 구성 요약
 
