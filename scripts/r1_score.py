@@ -361,8 +361,18 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
                           "auto_any_actionable_on_after_or_normal": rate(fa, lambda u: any(v["actionable"] for v in u["views"]))}
         return out
 
+    forbidden = manifest.get("forbidden") or None
+    blocks = [b for l in ledger for b in l.get("blocked", [])]
+    blocking = None if forbidden is None else {
+        "mode": "model_echo_allowed" if forbidden.get("allow_model_echo") else "strict",
+        "list_sha256": forbidden.get("sha256"),
+        "blocked_variants": sum(r.get("invalid") == "blocked_answer_leak" for r in rows),
+        "blocked_requests_by_cause": dict(Counter(b.get("cause", "unknown") for b in blocks)),
+        "echo_exempted_requests": sum(bool(q.get("echo_matches")) for l in ledger for q in l.get("requests", [])),
+        "echo_unverified_variants": sum(r.get("invalid") == "answer_echo_unverified" for r in rows)}
     return {"batch": name, "condition": manifest["condition"], "pack": (manifest.get("pack") or {}).get("id"),
             "pack_version": (manifest.get("pack") or {}).get("version"), "dry_run": bool(manifest.get("dry_run")),
+            "answer_blocking": blocking,
             "holdout_labels": (manifest.get("holdout") or {}).get("labels", []),
             "rows": len(rows), "scored_variants": len(units), "excluded": dict(excluded),
             "judged_findings": len(judged_all), "findings": total_findings,
@@ -432,10 +442,13 @@ def score(batches, judgment_files, corpus, line_slack=2):
         m["evidence_validity"] = evidence_validity(b, rows, reports, corpus)
         out["batches"].append(m)
     labelled = [m["batch"] for m in out["batches"] if m["holdout_labels"] or m["dry_run"]]
+    modes = sorted({m["answer_blocking"]["mode"] for m in out["batches"] if m.get("answer_blocking")})
     out["comparison"] = {"independent": len(out["batches"]) > 1 and not labelled,
                          "not_independent_because": labelled,
+                         "answer_blocking_modes": modes,
                          "note": ("A comparison is independent only when no batch is a dry run and no pack digest "
-                                  "is labelled holdout_seen_by_prior_revision (docs/46 §4).")}
+                                  "is labelled holdout_seen_by_prior_revision (docs/46 §4). Review batches with "
+                                  "different answer_blocking modes exclude different variants (docs/46 §3.4).")}
     out["report_reading"] = {"status": "not_measured",
                              "reason": "report-reading answers are scored separately with `r1_eval.py reader-score`"}
     return out
@@ -476,12 +489,18 @@ def render_table(result):
             ("ledger charged (USD)", lambda b: f"{b['cost_time']['ledger_charged_microusd'] / 1e6:.4f}"),
             ("wall s total / median", lambda b: f"{b['cost_time']['wall_s_total']} / {b['cost_time']['wall_s_median']}"),
             ("variants scored / excluded", lambda b: f"{b['scored_variants']} / {sum(b['excluded'].values())}"),
+            ("answer blocking: mode / blocked variants / echo-exempted requests",
+             lambda b: "-" if not b.get("answer_blocking") else
+             f"{b['answer_blocking']['mode']} / {b['answer_blocking']['blocked_variants']} / "
+             f"{b['answer_blocking']['echo_exempted_requests']}"),
             ("findings judged / total", lambda b: f"{b['judged_findings']} / {b['findings']}")]
     for name, fn in rows:
         lines.append(f"| {name} | " + " | ".join(fn(b) for b in bs) + " |")
     c = result["comparison"]
     lines.append("")
     lines.append(f"independent comparison: {c['independent']} {('(labelled: ' + ', '.join(c['not_independent_because']) + ')') if c['not_independent_because'] else ''}")
+    if len(c.get("answer_blocking_modes", [])) > 1:
+        lines.append("answer blocking differs between batches: " + ", ".join(c["answer_blocking_modes"]))
     lines.append("report reading: not measured here (reader-score)")
     return "\n".join(lines)
 

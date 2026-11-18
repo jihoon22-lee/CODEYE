@@ -108,6 +108,7 @@ FORBIDDEN_VERSION = 1
 FORBIDDEN_NORMALIZATION = "codeye-words-v1"
 FORBIDDEN_MAX_BYTES = 16 << 20
 BLOCKED_STATUS = "blocked_answer_leak"
+FORBIDDEN_CAPTURE = "envelope_capture"
 MAX_RECORDED_MATCHES = 16
 # CODEYE prompts carry "Role: <role>" on its own line (opencode.Prompt); OpenCode puts the
 # attached identity file before it. Review input is JSON, so input text cannot start a line here.
@@ -362,7 +363,8 @@ class Ledger:
     # -- transactions ------------------------------------------------------
     def reserve(self, *, model: str, reserved_microusd: int, input_bytes: int,
                 input_token_bound: int, message_count: int, output_cap: int,
-                dropped_keys: list[str], role_hint: str | None = None) -> str:
+                dropped_keys: list[str], role_hint: str | None = None,
+                echo_matches: list[str] | None = None) -> str:
         with self._locked() as records:
             state = self._state(records)
             refused = None
@@ -382,7 +384,9 @@ class Ledger:
                           "model": model, "reserved_microusd": reserved_microusd,
                           "input_bytes": input_bytes, "input_token_bound": input_token_bound,
                           "message_count": message_count, "output_cap": output_cap,
-                          "dropped_keys": dropped_keys, "role_hint": role_hint})
+                          "dropped_keys": dropped_keys, "role_hint": role_hint,
+                          **({"echo_matches": echo_matches[:MAX_RECORDED_MATCHES], "echo_match_count": len(echo_matches)}
+                             if echo_matches else {})})
             return rid
 
     def settle(self, rid: str, *, status: str, charged_microusd: int, usage: dict | None,
@@ -402,27 +406,34 @@ class Ledger:
         with self._locked():
             self._append({"type": "clear_halt", "at": _now(), "reason": reason[:200]})
 
-    def note_forbidden(self, phrases: "ForbiddenPhrases") -> None:
-        """Record which answer list this relay process enforces (W24)."""
+    def note_forbidden(self, phrases: "ForbiddenPhrases", allow_model_echo: bool = False) -> None:
+        """Record which answer list this relay process enforces (W24), and whether ids the model
+        itself returned earlier in this process are exempt (--allow-model-echo)."""
         with self._locked():
             self._append({"type": "forbidden", "at": _now(), "pid": os.getpid(), "sha256": phrases.sha256,
-                          "entries": len(phrases.entries), "corpus_digest": phrases.corpus_digest})
+                          "entries": len(phrases.entries), "corpus_digest": phrases.corpus_digest,
+                          "allow_model_echo": bool(allow_model_echo)})
 
     def block(self, *, matches: list[str], match_count: int, input_bytes: int, message_count: int,
-              role_hint: str | None) -> None:
+              role_hint: str | None, echo_matches: list[str] | None = None) -> None:
         """A request that would have carried answer text: recorded, never reserved or charged."""
         with self._locked():
             self._append({"type": "blocked", "at": _now(), "pid": os.getpid(), "status": BLOCKED_STATUS,
                           "matches": matches[:MAX_RECORDED_MATCHES], "match_count": match_count,
-                          "input_bytes": input_bytes, "message_count": message_count, "role_hint": role_hint})
+                          "input_bytes": input_bytes, "message_count": message_count, "role_hint": role_hint,
+                          **({"echo_matches": echo_matches[:MAX_RECORDED_MATCHES]} if echo_matches else {})})
 
     def report(self) -> dict:
         with self._locked() as records:
             state = self._state(records)
         refused_by_code: dict[str, int] = {}
         blocked_by_role: dict[str, int] = {}
+        echo_by_role: dict[str, int] = {}
         forbidden_lists = []
         for record in records[1:]:
+            if record["type"] == "reserve" and record.get("echo_matches"):
+                role = str(record.get("role_hint") or "unknown")
+                echo_by_role[role] = echo_by_role.get(role, 0) + 1
             if record["type"] == "refused":
                 code = str(record.get("code"))
                 refused_by_code[code] = refused_by_code.get(code, 0) + 1
@@ -430,7 +441,8 @@ class Ledger:
                 role = str(record.get("role_hint") or "unknown")
                 blocked_by_role[role] = blocked_by_role.get(role, 0) + 1
             elif record["type"] == "forbidden":
-                forbidden_lists.append({k: record.get(k) for k in ("at", "pid", "sha256", "entries", "corpus_digest")})
+                forbidden_lists.append({k: record.get(k) for k in ("at", "pid", "sha256", "entries", "corpus_digest",
+                                                                    "allow_model_echo")})
         usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0,
                         "reasoning_tokens": 0}
         by_status: dict[str, int] = {}
@@ -468,6 +480,8 @@ class Ledger:
             "refused_by_code": refused_by_code,
             "blocked_answer_leaks": sum(blocked_by_role.values()),
             "blocked_by_role": blocked_by_role,
+            "echo_exempted_requests": sum(echo_by_role.values()),
+            "echo_exempted_by_role": echo_by_role,
             "forbidden_lists": forbidden_lists,
             "records": len(records),
             "note": ("charged_microusd_total is the conservative budget debit (worst-case rates; "
@@ -577,6 +591,9 @@ class ForbiddenPhrases:
         if not isinstance(entries, list) or not entries:
             raise ValueError("forbidden phrase file has no entries")
         self.corpus_digest = doc.get("corpus_digest") if isinstance(doc.get("corpus_digest"), str) else None
+        # "envelope_capture": a sentinel list that blocks nothing, for recording instruction
+        # envelopes in a dry run. Only a --test-upstream relay accepts it.
+        self.purpose = doc.get("purpose") if isinstance(doc.get("purpose"), str) else None
         self.entries = []
         self.subword: dict[str, str] = {}
         self.phrases: dict[int, dict[str, str]] = {}  # word count -> phrase -> entry id
@@ -877,13 +894,21 @@ def error_body(code: str, kind: str = "r0_gateway_error", extra: dict | None = N
 class Gateway:
     def __init__(self, *, model: str, ledger: Ledger, upstream: OpenAIUpstream, token: str,
                  max_input_bytes: int = DEFAULT_MAX_INPUT_BYTES, log=None,
-                 forbidden: ForbiddenPhrases | None = None):
+                 forbidden: ForbiddenPhrases | None = None, allow_model_echo: bool = False):
+        if allow_model_echo and forbidden is None:
+            raise ValueError("allow_model_echo needs an answer list")
         self.model = model
         self.ledger = ledger
         self.upstream = upstream
         self.token = token.encode()
         self.max_input_bytes = max_input_bytes
         self.forbidden = forbidden
+        # --allow-model-echo: entry ids found in upstream answers this process returned. Only
+        # the relay's own responses count (never client-supplied assistant messages); kept in
+        # memory, so a restart starts strict again.
+        self.allow_model_echo = allow_model_echo
+        self.emitted: set[str] = set()
+        self.emitted_lock = threading.Lock()
         self.in_flight = threading.Semaphore(1)
         self.log = log or (lambda event: print(json.dumps(event), file=sys.stderr, flush=True))
         self.port = 0
@@ -901,12 +926,17 @@ class Gateway:
         prepared = build_upstream_request(request, self.model, self.max_input_bytes)
         texts = [m["content"] for m in prepared["payload"]["input"]]
         hint = next((m.group(1) for m in map(ROLE_HINT.search, texts) if m), None)
+        echo = None
         if self.forbidden is not None:
             # Scan exactly the text that would be forwarded, one message at a time.
             found = self.forbidden.matches(texts)
-            if found:
+            if found and self.allow_model_echo:
+                with self.emitted_lock:
+                    echo = [i for i in found if i in self.emitted]
+                found = [i for i in found if i not in echo]
+            if found:  # any id the model did not itself return blocks the whole request
                 self.ledger.block(matches=found, match_count=len(found), input_bytes=prepared["input_bytes"],
-                                  message_count=prepared["message_count"], role_hint=hint)
+                                  message_count=prepared["message_count"], role_hint=hint, echo_matches=echo)
                 self.log({"event": "blocked", "status": BLOCKED_STATUS, "match_count": len(found), "role_hint": hint})
                 raise RequestRejected(403, BLOCKED_STATUS)
         if not self.in_flight.acquire(timeout=QUEUE_WAIT_S):
@@ -917,7 +947,7 @@ class Gateway:
                     model=self.model, reserved_microusd=prepared["reserved_microusd"],
                     input_bytes=prepared["input_bytes"], input_token_bound=prepared["input_token_bound"],
                     message_count=prepared["message_count"], output_cap=prepared["output_cap"],
-                    dropped_keys=prepared["dropped_keys"], role_hint=hint)
+                    dropped_keys=prepared["dropped_keys"], role_hint=hint, echo_matches=echo)
             except BudgetRefused as refused:
                 self.log({"event": "refused", "code": refused.code,
                           "reserved_microusd": prepared["reserved_microusd"]})
@@ -947,6 +977,11 @@ class Gateway:
             if detail.get("http_status"):
                 raise _UpstreamHTTPError(detail)
             raise RequestRejected(424, "upstream_" + outcome["status"])
+        if self.allow_model_echo:
+            emitted = self.forbidden.matches([outcome["text"]])
+            if emitted:
+                with self.emitted_lock:
+                    self.emitted.update(emitted)
         if prepared["stream"]:
             return 200, "text/event-stream", sse_body(self.model, outcome["text"], outcome["finish"],
                                                       outcome["usage"], prepared["include_usage"])
@@ -1120,6 +1155,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--forbidden-phrases", metavar="FILE",
                         help="W24: answer list from `corpus.py forbidden`; matching requests are blocked "
                              "(ledger `blocked`, no charge, never forwarded). A bad file is a usage error.")
+    parser.add_argument("--allow-model-echo", action="store_true",
+                        help="W24, opt-in: do not block answer-list ids that occur in an upstream answer this "
+                             "process already returned (the model's own words fed back, e.g. investigate -> "
+                             "verify). Exempted ids are recorded on the request. Default: block every match.")
     parser.add_argument("--test-upstream", metavar="URL",
                         help="W24 dry runs only: http://127.0.0.1:PORT fake upstream instead of the pinned "
                              "endpoint. Never reads OPENAI_API_KEY; needs a ledger created in this mode.")
@@ -1167,6 +1206,13 @@ def main(argv=None, *, _connection_factory=None) -> int:
         except ValueError as exc:
             print("invalid --forbidden-phrases:", exc, file=sys.stderr)
             return 2
+        if forbidden.purpose is not None and (forbidden.purpose != FORBIDDEN_CAPTURE or args.test_upstream is None):
+            print("invalid --forbidden-phrases: an envelope-capture list blocks nothing and only runs with --test-upstream",
+                  file=sys.stderr)
+            return 2
+    if args.allow_model_echo and forbidden is None:
+        print("--allow-model-echo needs --forbidden-phrases", file=sys.stderr)
+        return 2
     test_port = None
     if args.test_upstream is not None:
         try:
@@ -1189,12 +1235,13 @@ def main(argv=None, *, _connection_factory=None) -> int:
     try:
         ledger = Ledger(args.ledger, cap_microusd=cap, max_requests=args.max_requests, upstream_kind=kind)
         if forbidden is not None:
-            ledger.note_forbidden(forbidden)
+            ledger.note_forbidden(forbidden, allow_model_echo=args.allow_model_echo)
     except LedgerError as exc:
         print("ledger error:", exc, file=sys.stderr)
         return 1
     gateway = Gateway(model=args.model, ledger=ledger, token=secrets.token_urlsafe(32),
-                      upstream=upstream, max_input_bytes=args.max_input_bytes, forbidden=forbidden)
+                      upstream=upstream, max_input_bytes=args.max_input_bytes, forbidden=forbidden,
+                      allow_model_echo=args.allow_model_echo)
     server = start_server(gateway, args.port)
     if test_port is not None and gateway.port == test_port:
         server.server_close()
@@ -1220,7 +1267,8 @@ def main(argv=None, *, _connection_factory=None) -> int:
                      "cap_microusd": report["cap_microusd"],
                      "charged_microusd_total": report["charged_microusd_total"],
                      "halted": report["halted"], "upstream": kind,
-                     "forbidden_sha256": forbidden.sha256 if forbidden else None})
+                     "forbidden_sha256": forbidden.sha256 if forbidden else None,
+                     "allow_model_echo": args.allow_model_echo})
         server.serve_forever(poll_interval=0.2)
     except FileExistsError:
         print("ready file already exists; use a fresh path", file=sys.stderr)

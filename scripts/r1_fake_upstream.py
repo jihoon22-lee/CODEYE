@@ -15,6 +15,9 @@ only evidence ids present in `<review-input>` are cited.
 
 Modes: `normal` (small usage), `expensive` (usage at the relay's bounds, to
 exhaust a small ledger cap quickly), `fail` (HTTP 500, charged in full by the relay).
+`--echo-text TEXT` appends an operator-chosen text to every investigate candidate
+title, to see whether a model's own words reach the verify request (the relay's
+`--allow-model-echo` path). The text comes from the operator, never from labels.
 
 Stdlib only.
 """
@@ -70,12 +73,13 @@ def _candidates(node, out):
             _candidates(value, out)
 
 
-def result_for(role: str, review_input) -> dict:
+def result_for(role: str, review_input, echo: str | None = None) -> dict:
     evidence: dict[str, str] = {}
     _evidence(review_input, evidence)
     code = [i for i, k in evidence.items() if k == "code"]
     docs = [i for i, k in evidence.items() if k == "document"]
-    candidate = {"title": "Placeholder candidate (dry run)", "condition": TEXT, "impact": TEXT,
+    title = "Placeholder candidate (dry run)" + (": " + echo if echo else "")
+    candidate = {"title": title, "condition": TEXT, "impact": TEXT,
                  "improvement": TEXT, "counterpoint": TEXT, "evidence_ids": code[:1]}
     if role == "context":  # review-v1
         if code:
@@ -102,7 +106,7 @@ def result_for(role: str, review_input) -> dict:
     return {}
 
 
-def reply_text(payload: dict) -> tuple[str, str]:
+def reply_text(payload: dict, echo: str | None = None) -> tuple[str, str]:
     """Return (role, assistant text) for a rebuilt Responses payload."""
     texts = [m.get("content", "") for m in payload.get("input", []) if isinstance(m, dict) and m.get("role") == "user"]
     prompt = next((t for t in texts if ROLE.search(t)), "")
@@ -118,13 +122,15 @@ def reply_text(payload: dict) -> tuple[str, str]:
     head = prompt[:found.start()] if found else prompt  # the attachment precedes the prompt
     proofs = PROOF.findall(head)
     proof = proofs[-1] if proofs else ""
-    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input)}, ensure_ascii=False)
+    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input, echo)},
+                            ensure_ascii=False)
 
 
 class FakeUpstream:
-    def __init__(self, mode: str, dump: Path | None):
+    def __init__(self, mode: str, dump: Path | None, echo: str | None = None):
         self.mode = mode
         self.dump = dump
+        self.echo = echo
         self.calls = 0
         self.lock = threading.Lock()
 
@@ -136,7 +142,7 @@ class FakeUpstream:
             (self.dump / f"{number:04d}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=1))
         if self.mode == "fail":
             return 500, {"error": {"message": "fake failure", "type": "server_error", "code": "fake_failure"}}
-        role, text = reply_text(payload)
+        role, text = reply_text(payload, self.echo)
         messages = payload.get("input", [])
         input_bytes = sum(len(str(m.get("content", "")).encode()) for m in messages if isinstance(m, dict))
         cap = int(payload.get("max_output_tokens") or 1)
@@ -189,13 +195,14 @@ def main(argv=None) -> int:
     parser.add_argument("--ready-file", required=True, type=Path, help="fresh path; receives {\"port\": N}")
     parser.add_argument("--mode", choices=("normal", "expensive", "fail"), default="normal")
     parser.add_argument("--dump", type=Path, help="write every received payload here (dry-run analysis only)")
+    parser.add_argument("--echo-text", help="append this operator text to investigate candidate titles")
     args = parser.parse_args(argv)
     if args.ready_file.exists():
         print("ready file exists", file=sys.stderr)
         return 2
     if args.dump is not None:
         args.dump.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fake = FakeUpstream(args.mode, args.dump)
+    fake = FakeUpstream(args.mode, args.dump, args.echo_text)
     server = make_server(fake)
     stop = threading.Event()
 

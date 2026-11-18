@@ -139,7 +139,45 @@ class PlannerTests(unittest.TestCase):
             plan = r1_eval.variant_plan(CORPUS, [CORPUS.by_id["R1-GO-06"]])
             est = r1_eval.estimate("review-r1", plan, history=hist)
             self.assertEqual(est["per_call_microusd"]["verify"], int(21000 / 3 * 5 + 600 * 10))
-            self.assertIsNone(r1_eval.history_profile([batch], "review-v1"))
+            with self.assertRaises(SystemExit):  # another pack's batch is not history
+                r1_eval.history_profile([batch], "review-v1")
+            self.assertIsNone(r1_eval.history_profile([], "review-v1"))
+            v1 = make_batch(tmp, "v1", rows[:1], {}, dry_run=True, pack="codeye.review")  # review-v1's pack id
+            self.assertEqual(r1_eval.history_profile([v1], "review-v1")["variants"], 1)
+
+
+class EchoAuditTests(unittest.TestCase):
+    def test_exempted_ids_must_come_from_this_variants_model_output(self):
+        import r0_openai_gateway as gateway
+        doc = {"schema": gateway.FORBIDDEN_SCHEMA, "version": gateway.FORBIDDEN_VERSION,
+               "normalization": gateway.FORBIDDEN_NORMALIZATION, "corpus_digest": CORPUS.digest,
+               "entries": [{"id": "R1-GO-01/token/3", "mode": "words", "text": "goroutine leak"},
+                           {"id": "R1-GO-08/token/0", "mode": "subword", "text": "shadowed"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "f.json"
+            path.write_text(json.dumps(doc))
+            records = [{"candidates": [{"title": "Goroutine leak when the reader stops", "id": "c1"}]}]
+            ok = [{"role": "verify", "echo_matches": ["R1-GO-01/token/3"], "echo_match_count": 1}]
+            self.assertEqual(r1_eval.echo_audit(ok, records, path), [])
+            self.assertEqual(r1_eval.echo_audit([{"role": "verify"}], records, path), [])
+            other = [{"role": "verify", "echo_matches": ["R1-GO-08/token/0"], "echo_match_count": 1}]
+            self.assertEqual(r1_eval.echo_audit(other, records, path), ["R1-GO-08/token/0"])  # another variant's words
+            cut = [{"role": "verify", "echo_matches": ["R1-GO-01/token/3"], "echo_match_count": 20}]
+            self.assertEqual(r1_eval.echo_audit(cut, records, path), ["<truncated>"])
+
+
+class CaptureListTests(unittest.TestCase):
+    def test_capture_list_is_a_valid_list_that_blocks_nothing(self):
+        import r0_openai_gateway as gateway
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "capture.json"
+            r1_eval.capture_list(out, CORPUS)
+            phrases = gateway.load_forbidden(str(out))
+            self.assertEqual((phrases.purpose, phrases.corpus_digest), (gateway.FORBIDDEN_CAPTURE, CORPUS.digest))
+            texts = [t for v in ("before", "after") for t in CORPUS.render(CORPUS.by_id["R1-GO-06"], v).values()]
+            self.assertEqual(phrases.matches(texts), [])
+            with self.assertRaises(FileExistsError):
+                r1_eval.capture_list(out, CORPUS)
 
 
 class RegistryTests(unittest.TestCase):

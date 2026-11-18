@@ -53,6 +53,7 @@ def child_env(**extra):
 class FakeOpenAI:
     def __init__(self):
         self.mode = "ok"
+        self.text = None  # W24 echo tests: replace the assistant answer text
         self.calls = []
         self.release = threading.Event()
         self.received = threading.Event()
@@ -96,7 +97,8 @@ class FakeOpenAI:
                    "encrypted_content": REASONING_CANARY},
                   {"type": "message", "id": "msg_1", "role": "assistant", "status": "completed",
                    "content": [{"type": "output_text", "text": "hello ", "annotations": []},
-                               {"type": "output_text", "text": "from fake", "annotations": []}]}],
+                               {"type": "output_text", "text": "from fake", "annotations": []}]
+                   if self.text is None else [{"type": "output_text", "text": self.text, "annotations": []}]}],
               "usage": {"input_tokens": 40, "output_tokens": 30, "total_tokens": 70,
                         "input_tokens_details": {"cached_tokens": 8},
                         "output_tokens_details": {"reasoning_tokens": 12}}}
@@ -816,6 +818,16 @@ class AnswerBlockingTests(unittest.TestCase):
         self.assertEqual(len(self.fake.calls), 1)
         self.assertEqual(self.ledger.report()["blocked_answer_leaks"], 0)
 
+    def test_strict_mode_blocks_the_models_own_words(self):
+        self.fake.text = "candidate: runCopylocksPass copies the mutex"
+        clean = chat_request()
+        clean["messages"][-1]["content"] = "Role: investigate\nlook at the counters"
+        self.assertEqual(self.call(clean)[0], 200)
+        echo = chat_request()
+        echo["messages"][-1]["content"] = "Role: verify\ncandidate: runCopylocksPass copies the mutex"
+        self.assertEqual(self.call(echo)[0], 403)  # default: every match blocks
+        self.assertFalse(self.ledger.report()["forbidden_lists"][0]["allow_model_echo"])
+
     def test_refusals_are_durable_and_uncharged(self):
         small = g.Ledger(self.ledger.path, cap_microusd=30_000)
         small.close()
@@ -837,6 +849,74 @@ class AnswerBlockingTests(unittest.TestCase):
                 g.load_forbidden(path)
         with self.assertRaises(ValueError):
             g.load_forbidden(os.path.join(self.dir.name, "missing.json"))
+
+
+class ModelEchoTests(unittest.TestCase):
+    """--allow-model-echo: ids the relay itself returned in an upstream answer may come back."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory(prefix="r1-echo-")
+        self.fake = FakeOpenAI()
+        self.ledger = g.Ledger(os.path.join(self.dir.name, "ledger.jsonl"), cap_microusd=2_000_000, upstream_kind="openai")
+        self.phrases = g.ForbiddenPhrases(json.dumps(PLANTED).encode())
+        self.ledger.note_forbidden(self.phrases, allow_model_echo=True)
+        self.gateway = g.Gateway(model=MODEL, ledger=self.ledger, token="tok-123",
+                                 upstream=g.OpenAIUpstream(CANARY_KEY, _connection_factory=self.fake.factory),
+                                 log=lambda event: None, forbidden=self.phrases, allow_model_echo=True)
+        self.server = g.start_server(self.gateway)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.fake.close()
+        self.ledger.close()
+        self.dir.cleanup()
+
+    def call(self, text, assistant=None):
+        request = chat_request()
+        if assistant is not None:
+            request["messages"].insert(-1, {"role": "assistant", "content": assistant})
+        request["messages"][-1]["content"] = text
+        return http_call(self.gateway.port, "POST", "/v1/chat/completions", request, {"Authorization": "Bearer tok-123"})
+
+    def records(self, kind):
+        rows = [json.loads(line) for line in Path(self.ledger.path).read_text().splitlines()]
+        return [row for row in rows if row["type"] == kind]
+
+    def test_only_the_relays_own_answers_exempt_ids(self):
+        self.assertEqual(self.call("Role: verify\ncandidate copylocks")[0], 403)  # not emitted yet
+        # A client-supplied assistant message is not the relay's own answer.
+        self.assertEqual(self.call("Role: verify\ncandidate copylocks", assistant="I found copylocks")[0], 403)
+        self.fake.text = '{"result": {"candidates": [{"title": "runCopylocksPass copies the mutex"}]}}'
+        self.assertEqual(self.call("Role: investigate\nlook at the counters")[0], 200)
+        self.fake.text = None
+        self.assertEqual(self.call("Role: verify\ncandidate: runCopylocksPass copies the mutex")[0], 200)
+        echoed = [r for r in self.records("reserve") if r.get("echo_matches")]
+        self.assertEqual([(r["role_hint"], r["echo_matches"]) for r in echoed], [("verify", ["X-01/token/0"])])
+        # Mixed: an exempt id does not excuse another id in the same request.
+        status, _, body = self.call("Role: verify\ncopylocks; noexcept calls std::terminate")
+        self.assertEqual((status, json.loads(body)["error"]["code"]), (403, "blocked_answer_leak"))
+        blocked = self.records("blocked")[-1]
+        self.assertEqual((blocked["matches"], blocked["echo_matches"]), (["X-02/token/1"], ["X-01/token/0"]))
+        report = self.ledger.report()
+        self.assertEqual((report["echo_exempted_requests"], report["echo_exempted_by_role"]), (1, {"verify": 1}))
+        self.assertEqual(report["blocked_answer_leaks"], 3)
+        self.assertTrue(report["forbidden_lists"][0]["allow_model_echo"])
+        self.assertEqual(len(self.fake.calls), 2)
+        self.assertNotIn("copies the mutex", Path(self.ledger.path).read_text())
+
+    def test_flag_needs_a_list(self):
+        with self.assertRaises(ValueError):
+            g.Gateway(model=MODEL, ledger=self.ledger, token="t", upstream=None, allow_model_echo=True)
+        ready = os.path.join(self.dir.name, "ready.json")
+        result = subprocess.run([sys.executable, str(SCRIPTS / "r0_openai_gateway.py"), "--ready-file", ready,
+                                 "--ledger", os.path.join(self.dir.name, "other.jsonl"), "--model", MODEL,
+                                 "--allow-model-echo", "--test-upstream", f"http://127.0.0.1:{self.fake.port}"],
+                                capture_output=True, env=child_env(), timeout=30)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(b"needs --forbidden-phrases", result.stderr)
+        self.assertFalse(os.path.exists(ready))
 
 
 class CorpusListTests(unittest.TestCase):
@@ -955,6 +1035,33 @@ class TestUpstreamTests(unittest.TestCase):
                                  "--forbidden-phrases", os.path.join(self.dir.name, "f.json"), key=None)
             process.wait(timeout=20)
             self.assertEqual(process.returncode, 2)
+        self.assertEqual(self.fake.calls, [])
+
+    def test_capture_list_only_with_the_test_upstream(self):
+        doc = {"schema": g.FORBIDDEN_SCHEMA, "version": g.FORBIDDEN_VERSION, "normalization": g.FORBIDDEN_NORMALIZATION,
+               "purpose": g.FORBIDDEN_CAPTURE, "entries": [{"id": "capture/sentinel", "mode": "words",
+                                                           "text": "zq capture sentinel zq"}]}
+        capture = os.path.join(self.dir.name, "capture.json")
+        Path(capture).write_text(json.dumps(doc))
+        real = self.start(os.path.join(self.dir.name, "c1.json"), "--forbidden-phrases", capture)
+        real.wait(timeout=20)
+        self.assertEqual(real.returncode, 2)
+        self.assertIn(b"envelope-capture", real.stderr.read())
+        doc["purpose"] = "something_else"
+        Path(capture).write_text(json.dumps(doc))
+        url = f"http://127.0.0.1:{self.fake.port}"
+        other = self.start(os.path.join(self.dir.name, "c2.json"), "--test-upstream", url, "--forbidden-phrases", capture, key=None)
+        other.wait(timeout=20)
+        self.assertEqual(other.returncode, 2)
+        doc["purpose"] = g.FORBIDDEN_CAPTURE
+        Path(capture).write_text(json.dumps(doc))
+        ready = os.path.join(self.dir.name, "c3.json")
+        test = self.start(ready, "--test-upstream", url, "--forbidden-phrases", capture, key=None)
+        self.assertTrue(os.path.exists(ready))
+        test.send_signal(signal.SIGTERM)
+        test.communicate(timeout=20)
+        self.assertEqual(test.returncode, 0)
+        self.assertFalse(os.path.exists(os.path.join(self.dir.name, "c1.json")))
         self.assertEqual(self.fake.calls, [])
 
 

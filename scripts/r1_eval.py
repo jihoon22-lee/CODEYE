@@ -6,7 +6,9 @@ Subcommands:
   run         run one batch: --condition tools (analyzers only, no model) or
               --condition review (the full pipeline with --pack review-v1|review-r1)
   score       judged metrics with Wilson intervals, side by side over batches (r1_score.py)
-  allow-text  tool messages of a tools batch, for an explicit `corpus.py forbidden --allow-text`
+  allow-text  tool messages of a tools batch and instruction envelopes of a capture dry run,
+              for an explicit `corpus.py forbidden --allow-text`
+  capture-list  sentinel answer list (blocks nothing) for that capture dry run; test upstream only
   reader      report-reading task sheets and an evaluator answer key (docs/16 §7)
   reader-score  score supplied human answers; without answers the result is "not_measured"
 
@@ -276,7 +278,9 @@ def ledger_delta(records):
         requests.append({"role": r.get("role_hint"), "input_bytes": r.get("input_bytes"),
                          "message_count": r.get("message_count"),
                          "charged_microusd": s.get("charged_microusd") if s else r.get("reserved_microusd"),
-                         "status": s.get("status") if s else "pending", "usage": (s or {}).get("usage")})
+                         "status": s.get("status") if s else "pending", "usage": (s or {}).get("usage"),
+                         **({"echo_matches": r["echo_matches"], "echo_match_count": r.get("echo_match_count")}
+                            if r.get("echo_matches") else {})})
     blocked = [{"role": r.get("role_hint"), "matches": r.get("matches", []), "match_count": r.get("match_count")}
                for r in records if r.get("type") == "blocked"]
     refused = [r.get("code") for r in records if r.get("type") == "refused"]
@@ -287,12 +291,18 @@ def ledger_delta(records):
 # ---------------------------------------------------------------- planner
 
 def history_profile(dirs, pack):
-    """Per-role calls per variant and request sizes from saved batch dirs of this pack (rows.jsonl)."""
+    """Per-role calls per variant and request sizes from saved batch dirs of this pack (rows.jsonl).
+
+    Batches are matched by the pack id of prompts/<pack> (review-v1 is `codeye.review`). Given
+    directories without a usable row of this pack are an error, never a silent constants fallback."""
+    if not dirs:
+        return None
+    pack_id = pack_tree(pack)["id"]
     variants, calls, sizes, usage = 0, Counter(), defaultdict(list), defaultdict(list)
     per_key = {}
     for d in dirs:
         manifest = json.loads((Path(d) / "manifest.json").read_text())
-        if manifest.get("pack", {}) is None or (manifest.get("pack") or {}).get("id") != pack:
+        if (manifest.get("pack") or {}).get("id") != pack_id:
             continue
         for row in read_rows(Path(d)):
             if row.get("invalid"):
@@ -309,7 +319,7 @@ def history_profile(dirs, pack):
                         usage[q["role"]].append((u["prompt_tokens"], u.get("completion_tokens") or 0))
             per_key[(row["case"], row["variant"])] = roles
     if not variants:
-        return None
+        raise SystemExit(f"--history: no valid rows of pack {pack} ({pack_id}) in " + ", ".join(map(str, dirs)))
     return {"variants": variants, "calls_per_variant": {r: calls[r] / variants for r in calls},
             "input_bytes_max": {r: max(v) for r, v in sizes.items()},
             "input_bytes_mean": {r: sum(v) / len(v) for r, v in sizes.items()},
@@ -320,7 +330,8 @@ def history_profile(dirs, pack):
 def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAULTS["repair_rate"]):
     """Calls and conservative ledger cost for a review batch.
 
-    expected: per-role calls per variant from history (or CONSTANTS) times a per-call cost.
+    expected: per-role calls of the same variant in history (else history's per-variant average,
+    else CONSTANTS) times a per-call cost.
     upper: every role of the pack is called once per variant (unless history shows the exact
     variant needs fewer: never fewer than history's own count), plus repair_rate extra calls,
     each at the per-call cost times margin. Per-call cost: history usage when real, else
@@ -343,12 +354,16 @@ def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate
                 tokens = history["input_bytes_max"][r] / DEFAULTS["bytes_per_token"]
                 per_call[r] = int(tokens * PRICE_IN + DEFAULTS["output_tokens_upper"] * PRICE_OUT)
     n = len(plan)
-    expected_calls = sum(rates.get(r, 0) for r in roles) * n
-    expected_cost = sum(rates.get(r, 0) * per_call[r] for r in roles) * n
+    expected_calls = 0.0
+    expected_cost = 0.0
     upper_calls = 0.0
     upper_cost = 0.0
     for case, variant, _ in plan:
         seen = (history or {}).get("per_key", {}).get((case["id"], variant))
+        # expected: the exact variant's history when recorded, else the per-variant average
+        counts = {r: seen.get(r, 0) for r in roles} if seen is not None else {r: rates.get(r, 0) for r in roles}
+        expected_calls += sum(counts.values())
+        expected_cost += sum(counts[r] * per_call[r] for r in roles)
         for r in roles:
             count = max(1, seen.get(r, 0)) if seen is not None else 1
             upper_calls += count * (1 + repair_rate)
@@ -510,6 +525,22 @@ def classify_blocks(blocks, records, phrases_file):
     return blocks
 
 
+def echo_audit(requests, records, phrases_file):
+    """--allow-model-echo audit for one variant: exempted ids that do not occur in this variant's
+    own model output (the relay exempts ids from any answer it returned in the process; the
+    runner runs review variants one at a time and narrows that to the variant). A truncated id
+    list cannot be checked and counts as unverified."""
+    ids, truncated = set(), False
+    for q in requests:
+        ids.update(q.get("echo_matches") or [])
+        truncated |= (q.get("echo_match_count") or 0) > len(q.get("echo_matches") or [])
+    if not ids:
+        return []
+    import r0_openai_gateway as gateway
+    own = set(gateway.load_forbidden(phrases_file).matches(model_texts(records)))
+    return sorted(ids - own) + (["<truncated>"] if truncated else [])
+
+
 def run_batch(args):
     from eval_harness import Cluster, build_product, file_sha256, home_relative, keep_review_artifacts, tree_digest
     import test_postgres
@@ -552,11 +583,14 @@ def run_batch(args):
         forbidden_doc = json.loads(phrases)
         forbidden = {"sha256": hashlib.sha256(phrases).hexdigest(), "entries": len(forbidden_doc["entries"]),
                      "corpus_digest": forbidden_doc.get("corpus_digest"),
-                     "allowed_texts": forbidden_doc.get("allowed_texts", [])}
+                     "allowed_texts": forbidden_doc.get("allowed_texts", []), "purpose": forbidden_doc.get("purpose")}
+        if forbidden["purpose"] is not None and not args.dry_run:
+            raise SystemExit("an envelope-capture answer list blocks nothing; it is for dry runs only")
         active = [f for f in report_before.get("forbidden_lists", []) if f.get("pid") == relay["pid"]]
         if not active or active[-1]["sha256"] != forbidden["sha256"] or forbidden["corpus_digest"] != corpus.digest:
             raise SystemExit("answer blocking is not active: the relay process must have loaded this "
                              "--forbidden-phrases file for the current corpus digest")
+        forbidden["allow_model_echo"] = bool(active[-1].get("allow_model_echo"))
         history = history_profile([Path(h) for h in args.history or []], args.pack)
         est = estimate(args.pack, plan, history=history, margin=args.margin)
         refusal = budget_gate(est, report_before, parse_usd(args.reserve_usd), args.request_reserve)
@@ -639,7 +673,8 @@ def run_batch(args):
     observed = defaultdict(set)
     for row in rows:
         for t in row.get("tools", []):
-            observed[t["analyzer"]].add(str(t.get("tool_version")))
+            if t.get("tool_version"):  # pack-gap tasks have no tool
+                observed[t["analyzer"]].add(str(t["tool_version"]))
     manifest["analyzers"]["observed"] = {k: sorted(v) for k, v in sorted(observed.items())}
     if review:
         digests = defaultdict(set)
@@ -729,7 +764,7 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
                    "run_status": run["status"], "started_at": info["started_at"], "finished_at": now(),
                    "wall_s": round(time.monotonic() - info["started"], 1), "invalid": None, "planted_leak": info["planted"]}
             if tree_digest(source / info["rel"]) != info["original"]:
-                row["invalid"] = "source_changed"
+                row["invalid"] = "source_changed"  # kept over any later reason
             report = None
             try:
                 report = cluster.report(run_id)
@@ -755,12 +790,20 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
                 delta = ledger_delta(ledger_records(ledger, info["mark"]))
                 if delta["blocked"]:
                     classify_blocks(delta["blocked"], records, args.forbidden_phrases)
+                unverified = echo_audit(delta["requests"], records, args.forbidden_phrases)
+                if unverified:
+                    delta["echo_unverified"] = unverified
                 row["ledger"] = delta
-                if delta["blocked"]:
+                if set(delta["refused"]) & set(BUDGET_REFUSALS):
+                    stopped = stopped or "relay_refused_budget"
+                if row["invalid"]:
+                    pass
+                elif delta["blocked"]:
                     row["invalid"] = "blocked_answer_leak"
                 elif set(delta["refused"]) & set(BUDGET_REFUSALS):
                     row["invalid"] = "budget_refused"
-                    stopped = stopped or "relay_refused_budget"
+                elif unverified:
+                    row["invalid"] = "answer_echo_unverified"
             if info["planted"]:
                 row["planted_leak_blocked"] = any(info["planted"] in b["matches"]
                                                   for b in (row.get("ledger") or {}).get("blocked", []))
@@ -811,6 +854,22 @@ def allow_text(output, batches=(), dumps=()):
     print(f"{len(tool)} tool lines, {len(envelope)} instruction envelopes -> {output}")
 
 
+def capture_list(output, corpus):
+    """Sentinel answer list for a dry run that records instruction envelopes (`--request-dump` of
+    the fake upstream): it blocks nothing, so every role's request reaches the dump. The relay and
+    `run` accept it only with the test upstream."""
+    import r0_openai_gateway as gateway
+    doc = {"schema": gateway.FORBIDDEN_SCHEMA, "version": gateway.FORBIDDEN_VERSION,
+           "normalization": gateway.FORBIDDEN_NORMALIZATION, "purpose": gateway.FORBIDDEN_CAPTURE,
+           "corpus_digest": corpus.digest,
+           "entries": [{"id": "capture/sentinel", "mode": "words", "text": "zq capture sentinel zq", "cases": [],
+                        "source": "sentinel"}]}
+    path = Path(output)
+    with open(path, "x", encoding="utf-8") as f:
+        f.write(json.dumps(doc, indent=1) + "\n")
+    print(f"envelope-capture list -> {path} (dry runs only)")
+
+
 # ---------------------------------------------------------------- cli
 
 def add_selection(p):
@@ -859,7 +918,7 @@ def main(argv=None):
     r.add_argument("--reserve-usd", default=DEFAULTS["reserve_usd"])
     r.add_argument("--request-reserve", type=int, default=DEFAULTS["request_reserve"])
     r.add_argument("--dry-run", action="store_true", help="the relay uses --test-upstream (labelled, never evaluation)")
-    r.add_argument("--plant-leak", metavar="CASE:VARIANT", help="dry-run self-test: append a label phrase to that input")
+    r.add_argument("--plant-leak", metavar="CASE:VARIANT", help="dry-run self-test: put a label phrase in a comment near the top of that input")
     s = sub.add_parser("score", help="metrics over judged items")
     s.add_argument("batches", nargs="+", type=Path)
     s.add_argument("--judgments", action="append", type=Path, default=[])
@@ -870,6 +929,8 @@ def main(argv=None):
     a.add_argument("--request-dump", type=Path, action="append", default=[],
                    help="r1_fake_upstream.py --dump directory of a clean dry run")
     a.add_argument("--output", type=Path, required=True)
+    cl = sub.add_parser("capture-list", help="sentinel answer list for an envelope-capture dry run")
+    cl.add_argument("--output", type=Path, required=True, help="new file")
     rd = sub.add_parser("reader", help="report-reading task sheets and answer key")
     rd.add_argument("batch", type=Path)
     rd.add_argument("--sample", type=int, default=6)
@@ -921,6 +982,9 @@ def main(argv=None):
         return 0
     if args.command == "allow-text":
         allow_text(args.output, args.tools_batch, args.request_dump)
+        return 0
+    if args.command == "capture-list":
+        capture_list(args.output, Corpus())
         return 0
     if args.command == "reader":
         r1_score.reader_sheets(args.batch, Corpus(), args.sample, args.seed, args.output)

@@ -354,7 +354,8 @@ def allowed_texts(paths):
         files = sorted(p for p in path.rglob("*") if p.is_file()) if path.is_dir() else [path]
         for f in files:
             data = f.read_bytes()
-            out.append((str(f), hashlib.sha256(data).hexdigest(), data.decode("utf-8", errors="replace")))
+            name = f.relative_to(path.parent).as_posix() if path.is_dir() else f.name  # e.g. review-r1/roles/x.md
+            out.append((name, hashlib.sha256(data).hexdigest(), data.decode("utf-8", errors="replace")))
     return out
 
 
@@ -367,11 +368,15 @@ def forbidden_list(cases, allow_paths=()):
             for documented in (False, True):
                 for path, content in render(case, variant, documented).items():
                     inputs.add(path + "\n" + content)
-    allowed = TextIndex()
     sources = allowed_texts(allow_paths)
-    for _, _, text in sources:
-        allowed.add(text)
-    entries, dropped = {}, {"in_inputs": 0, "in_allowed_text": 0}
+    allowed = []  # one index per allowed file, so every exemption names its source
+    for name, _, text in sources:
+        index = TextIndex()
+        index.add(text)
+        allowed.append((name, index))
+    # Dropped candidates are listed by id (a phrase shared by two cases appears once per case), so an
+    # allowed text that exempts label wording, e.g. an instruction pack, can be inspected.
+    entries, dropped = {}, {"in_inputs": [], "in_allowed_text": []}
     for case in sorted(cases, key=lambda c: c["id"]):
         candidates = []
         for index, token in enumerate(case["label"]["distinctive_tokens"]):
@@ -387,10 +392,11 @@ def forbidden_list(cases, allow_paths=()):
                 continue
             seen.add((mode, text))
             if inputs.contains(mode, text):
-                dropped["in_inputs"] += 1
+                dropped["in_inputs"].append(entry_id)
                 continue
-            if allowed.contains(mode, text):
-                dropped["in_allowed_text"] += 1
+            exempting = [name for name, index in allowed if index.contains(mode, text)]
+            if exempting:
+                dropped["in_allowed_text"].append({"id": entry_id, "mode": mode, "text": text, "allowed_by": exempting})
                 continue
             key = (mode, text)
             if key in entries:  # the same phrase in two cases: keep the first id, list both cases
@@ -403,7 +409,7 @@ def forbidden_list(cases, allow_paths=()):
         "normalization": NORMALIZATION,
         "ngram": NGRAM,
         "corpus_digest": corpus_digest(cases),
-        "allowed_texts": [{"name": Path(name).name, "sha256": sha} for name, sha, _ in sources],
+        "allowed_texts": [{"name": name, "sha256": sha} for name, sha, _ in sources],
         "dropped": dropped,
         "entries": sorted(entries.values(), key=lambda e: e["id"]),
     }
@@ -815,7 +821,12 @@ def main():
             if args.output.exists():
                 raise SystemExit(f"output exists: {args.output}")
             args.output.write_text(text, encoding="utf-8")
-            print(f"{len(doc['entries'])} entries, dropped {doc['dropped']}, sha256 "
+            by_source = {}
+            for d in doc["dropped"]["in_allowed_text"]:
+                for name in d["allowed_by"]:
+                    by_source[name] = by_source.get(name, 0) + 1
+            print(f"{len(doc['entries'])} entries; dropped {len(doc['dropped']['in_inputs'])} in inputs, "
+                  f"{len(doc['dropped']['in_allowed_text'])} in allowed text {by_source}; sha256 "
                   f"{hashlib.sha256(text.encode('utf-8')).hexdigest()}", file=sys.stderr)
         else:
             sys.stdout.write(text)
