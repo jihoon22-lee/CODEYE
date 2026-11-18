@@ -26,7 +26,7 @@ W24 2c부터 세 역할(`review.context`·`review.investigate`·`review.verify`)
 
 | 순위 | 종류 | 파일 |
 |---|---|---|
-| 0 | code | 진입점. Go `main.go`, Python `__main__`·`main`·`app`·`cli`·`manage`(`.py`), JS/TS `index`·`main`·`app`·`server`·`cli`(소스 확장자), Rust `main.rs`·`lib.rs`, C/C++ `main`(`.c`·`.cc`·`.cpp`·`.cxx`·`.c++`) |
+| 0 | code | 진입점. Go `main.go`, Python `__main__`·`main`·`app`·`cli`·`manage`(`.py`), JS/TS `main`·`app`·`server`·`cli`(소스 확장자)와 모듈 루트(가장 깊은 package.json·tsconfig.json 디렉터리) 또는 그 `src`의 `index`, Rust `main.rs`·`lib.rs`, C/C++ `main`(`.c`·`.cc`·`.cpp`·`.cxx`·`.c++`) |
 | 1 | document | README.md, AGENTS.md(최대 2개) |
 | 2 | code | 그 밖의 소스. 확장자는 `pack.SourceFiles`와 같다([docs/39 §2.8](39-r1-analyzer-packs.md#28-범위에-없는-생태계와-분석기-공백)). |
 | 3 | config | go.mod, pyproject.toml·setup.cfg, package.json·tsconfig.json, Cargo.toml, CMakeLists.txt·compile_commands.json |
@@ -34,17 +34,21 @@ W24 2c부터 세 역할(`review.context`·`review.investigate`·`review.verify`)
 
 - **Go는 그대로다.** Go 파일·README/AGENTS·go.mod의 순위와 포함 규칙은 W11과 같다. vendor 아래 Go 파일도 이전처럼 후보다. 기존 Go fixture의 요청 바이트는 `TestReviewV1IsPinned`가 고정한다. `TestW24GoReviewInputsUnchanged`도 고정한다. 이 시험은 변경 전 코드(aa2ae13)로 두 팩의 모든 요청 해시를 캡처했다. 다른 생태계의 build 파일, vendor·testdata·숨김 디렉터리를 가진 Go 트리도 포함한다.
 - **다른 생태계는 범위 안에 그 소스가 있을 때만 넣는다.** 판별은 `pack.InScope`다. Go 저장소의 package.json·Cargo.toml처럼 build 파일만 있으면 config 발췌가 되지 않는다.
-- **제외.** Go가 아닌 파일은 분석기 팩의 data 디렉터리 아래에 있으면 후보가 아니다. 숨김·testdata·vendor·node_modules 디렉터리다(`anypack.DataDir`). 어느 깊이든 `build`·`dist`·`target`·`coverage`·`htmlcov`·`site-packages`·`venv`·`__pycache__`·`third_party` 아래 파일도 제외한다. snapshot은 node_modules·`__pycache__`를 모든 깊이에서, build·dist·target·venv를 최상위에서 이미 뺀다. 이 규칙은 그 아래 중첩된 산출물을 뺀다. 예: crate의 target, packages/x/dist, C/C++ build 트리. 그래서 이 이름을 가진 Python·JS/TS·Rust·C/C++ 소스 디렉터리도 빠진다. Go 패키지(internal/build 등)는 이 규칙을 받지 않는다.
-- **종류는 경로로만 정한다.** worker와 보고서 decoder가 같은 규칙(`internal/worker/review/record/source.go`)을 쓴다. code는 다섯 생태계의 소스 확장자다. test는 위 테스트 경로, config는 위 manifest다. 이전 기록(Go만)은 그대로 읽힌다. JSON schema는 경로 규칙을 담지 않으므로 바꾸지 않았다.
+- **제외.** Go가 아닌 파일은 분석기 팩의 data 디렉터리 아래에 있으면 후보가 아니다. 숨김·testdata·vendor·node_modules 디렉터리다(`anypack.DataDir`). 어느 깊이든 `build`·`dist`·`target`·`coverage`·`htmlcov`·`site-packages`·`venv`·`__pycache__`·`third_party` 아래 파일도 제외한다. snapshot은 node_modules·`__pycache__`를 모든 깊이에서, build·dist·target·venv를 최상위에서 이미 뺀다. 이 규칙은 그 아래 중첩된 산출물을 뺀다. 예: crate의 target, packages/x/dist, C/C++ build 트리. 그래서 이 이름을 가진 Python·JS/TS·Rust·C/C++ 소스 디렉터리도 빠진다. 범위 안 소스가 이렇게 빠지면 `source_in_excluded_directories`를 남긴다. 코드 발췌가 비거나 적은 이유를 기록에서 볼 수 있다. Go 패키지(internal/build 등)는 이 규칙을 받지 않는다.
+- **종류는 경로로만 정한다.** worker와 보고서 decoder가 같은 규칙(`internal/worker/review/record/source.go`)을 쓴다. code는 다섯 생태계의 소스 확장자다. test는 위 테스트 경로, config는 위 manifest다. 이전 기록(Go만)은 그대로 읽힌다. JSON schema의 제약은 바꾸지 않았다. 경로 규칙은 decoder만 검사하므로 schema 설명에만 적었다.
 - **한계.**
   - review-v1 팩은 바꾸지 않았다. 그래서 언어와 무관하게 Go 지침만 붙는다. 팩 변경에는 [docs/16 §8](16-evaluation.md)의 승격 근거가 필요하다.
   - 구문 분석기를 쓰지 않는다. 발췌는 파일 첫 50줄이고 함수 경계를 모른다.
   - 검증 역할의 호출자 확장은 Go만이다. 다른 언어 후보는 `no_symbol_for_expansion`과 `caller_expansion_go_only`를 남기고 코퍼스 발췌로만 검증된다.
   - 확장자 없는 스크립트와 생성 파일 이름(예: `.min.js`)은 판별하지 않는다.
+  - `compile_commands.json`은 요청대로 config 후보다. 이 파일은 보통 생성한 머신의 절대 경로를 담는다. 그 경로가 대상 저장소 자료로 모델에 갈 수 있으므로 계속 둘지는 소유자가 정한다.
   - 파일 6개 상한에서 진입점·소스가 먼저 차므로 테스트는 자주 빠진다(`files_outside_review_context`).
 - **시험(TC-123).**
   - `TestW24V1CorpusPerLanguage`: `fixtures/w24-review-inputs`의 언어별 다파일 입력. 코퍼스 내용·순서, 세 역할 실행, 기록 decode, 같은 신원의 두 취득에서 같은 요청 바이트를 확인한다.
   - `TestW24ExclusionsHonoured`: snapshot이 남기는 경로에서 제외 규칙과 build 파일만 있는 생태계를 확인한다.
+  - `TestW24ExcludedSourceIsExplained`: 소스가 build 아래에만 있는 Python 프로젝트의 제약 기록을 확인한다.
+  - `TestW24BarrelIndexIsNotAnEntryPoint`: 중첩 index 파일이 진입점으로 상한을 채우지 않는지 확인한다.
+  - `TestReviewInputsOfPythonThroughTheWorkerAndReport`(`internal/worker/run`): 실제 worker와 기본 보고서 registry로 두 팩의 Python 기록을 확인한다.
   - `TestW24SecretScreenOnPython`: 비 Go 파일의 탐지, 쓸 수 없는 탐지.
   - `TestW24GoReviewInputsUnchanged`.
   - 모두 scripted caller로만 실행했고 실모델 품질 근거가 아니다.

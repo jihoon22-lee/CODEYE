@@ -106,13 +106,13 @@ R0에서 Go를 첫 언어로 선택하고 Native 워커, 승인 모델, 근거 �
 
 **A31 — W24 2c 다섯 언어 검토 입력.** REQ-004/009/027과 TC-123에 대해 다음을 확정한다.
 
-(1) **종류 판별.** 발췌의 code·test·config는 경로만으로 정한다(`record/source.go`). 같은 규칙을 review 입력 선택과 worker·보고서 decoder가 쓴다. code는 `pack.SourceFiles`와 같은 소스 확장자이고 시험이 두 표를 같게 묶는다. test는 언어별 이름·디렉터리 관례, config는 고정 manifest 목록이다. Go 규칙(`*_test.go`, go.mod)은 바뀌지 않아 이전 기록이 그대로 읽힌다. JSON schema는 경로 규칙을 담지 않으므로 바꾸지 않았다.
+(1) **종류 판별.** 발췌의 code·test·config는 경로만으로 정한다(`record/source.go`). 같은 규칙을 review 입력 선택과 worker·보고서 decoder가 쓴다. code는 `pack.SourceFiles`와 같은 소스 확장자이고 시험이 두 표를 같게 묶는다. test는 언어별 이름·디렉터리 관례, config는 고정 manifest 목록이다. Go 규칙(`*_test.go`, go.mod)은 바뀌지 않아 이전 기록이 그대로 읽힌다. JSON schema의 제약은 바꾸지 않았고 설명에 경로 규칙을 적었다.
 
 (2) **review-v1 코퍼스.** 순위는 진입점, 문서, 소스, manifest, 테스트다. 예산·읽기·선별은 W11·W21과 같다. Go·README/AGENTS·go.mod 분기는 그대로 두고 다른 생태계만 덧붙였다. 그래서 Go 저장소의 선택은 구조적으로 바뀌지 않는다. vendor 아래 Go 파일도 계속 후보다. 다른 생태계의 파일과 manifest는 `pack.InScope`에 그 생태계가 있을 때만 넣는다. 팩 지침(Go 지침만)은 승격 근거 없이 바꿀 수 없어 그대로다.
 
 (3) **review-r1.** 다른 언어 파일은 그 생태계 manifest의 가장 깊은 디렉터리로 묶는다. 순회는 생태계마다 첫 묶음부터 돈다. 발췌는 파일 첫 줄부터이고 해석 창은 진단 위치 주변의 줄 창이다. 구문 분석기는 없다. 호출자 확장은 Go만 한다(`caller_expansion_go_only`). Go만 있는 스냅샷의 요청은 변경 전 캡처와 같다.
 
-(4) **제외.** 분석기 팩의 data 디렉터리 규칙에 더해, Go가 아닌 파일은 모든 깊이의 `build`·`dist`·`target`·`coverage`·`htmlcov`·`site-packages`·`venv`·`__pycache__`·`third_party` 아래에서 뺀다. 중첩 산출물을 모델에 보내지 않기 위해서다. 같은 이름의 소스 디렉터리도 빠지는 비용을 받아들였다. Go는 이 규칙에서 뺐다. internal/build 같은 Go 패키지가 흔하기 때문이다.
+(4) **제외.** 분석기 팩의 data 디렉터리 규칙에 더해, Go가 아닌 파일은 모든 깊이의 `build`·`dist`·`target`·`coverage`·`htmlcov`·`site-packages`·`venv`·`__pycache__`·`third_party` 아래에서 뺀다. 중첩 산출물을 모델에 보내지 않기 위해서다. 같은 이름의 소스 디렉터리도 빠지는 비용을 받아들였다. 이렇게 빠진 범위 안 소스는 `source_in_excluded_directories`로 기록한다. 이 규칙은 `pack.InScope`보다 넓다. 그래서 언어 지침은 붙지만 그 언어 코드가 없는 요청이 생길 수 있다. Go는 이 규칙에서 뺐다. internal/build 같은 Go 패키지가 흔하기 때문이다.
 
 (5) **언어 지침은 rc2 규칙(범위 안 생태계)을 유지한다.** 역할 입력에 있는 언어만 고르는 안을 시험 구현했다. 큰 다섯 언어 최악 입력에서 verify는 두 규칙 모두 최대 후보 6개 중 5개를 보냈다. 조사 역할은 입력에 다섯 언어가 모두 있어 지침이 줄지 않았다. 줄어든 것은 한도 압박이 없던 해석 역할(32,223→26,676바이트)뿐이었다. 압박을 줄이지 못하고 digest 조합만 늘리므로 채택하지 않았다. 요청 한도는 소유자 결정으로 남는다.
 

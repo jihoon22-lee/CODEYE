@@ -416,8 +416,8 @@ func TestW24ExclusionsHonoured(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Eligible != len(own) {
-		t.Fatalf("v1 eligible %d, want %d", c.Eligible, len(own))
+	if c.Eligible != len(own) || !slices.Contains(c.Limitations, limExcludedSource) {
+		t.Fatalf("v1 eligible %d, want %d; limitations %v", c.Eligible, len(own), c.Limitations)
 	}
 	for _, e := range c.Excerpts {
 		if _, ok := own[e.Path]; !ok {
@@ -434,11 +434,12 @@ func TestW24ExclusionsHonoured(t *testing.T) {
 		paths = append(paths, e.Path)
 	}
 	slices.Sort(paths)
-	if !slices.Equal(paths, []string{"app/main.py", "app/util.py", "crate/src/lib.rs", "internal/build/b.go", "native/main.cc", "web/index.js"}) || slices.Contains(lims, "files_outside_review_context") {
+	if !slices.Equal(paths, []string{"app/main.py", "app/util.py", "crate/src/lib.rs", "internal/build/b.go", "native/main.cc", "web/index.js"}) || slices.Contains(lims, "files_outside_review_context") ||
+		!slices.Contains(lims, limExcludedSource) {
 		t.Fatalf("r1 code corpus %v limitations %v", paths, lims)
 	}
 	for _, p := range excluded {
-		if r, _ := priority(p, pack.InScope(j.Snapshot.Manifest, j.Scope)); r != 5 {
+		if r, _ := priority(p, newOtherScope(j.Snapshot.Manifest, j.Scope)); r != 5 {
 			t.Fatalf("v1 priority of %s is %d", p, r)
 		}
 	}
@@ -570,5 +571,95 @@ func TestW24SourceExtensionsMatchPack(t *testing.T) {
 		if got := record.SourceEcosystem(name); got != want {
 			t.Errorf("%s: record %q, pack %q", name, got, want)
 		}
+	}
+}
+
+// Source the review rule leaves out is never silent: a Python project whose
+// only source lies below build/ gives review-v1 a document-only corpus and
+// review-r1 no code context, and both say why
+// (source_in_excluded_directories). investigate fails, as before for any
+// snapshot without reviewable code, instead of reviewing nothing.
+func TestW24ExcludedSourceIsExplained(t *testing.T) {
+	j := treeJob(t, map[string]string{
+		"README.md":          "# Gen\n\nGenerated package.\n",
+		"pyproject.toml":     "[project]\nname = \"gen\"\n",
+		"pkg/build/gen/m.py": "def f():\n    return 1\n",
+		"pkg/build/gen/n.py": "def g():\n    return 2\n",
+	})
+	if got := languagesInScope(j); !slices.Equal(got, []string{"python"}) {
+		t.Fatalf("ecosystems %v", got)
+	}
+	c, err := buildCorpus(j.Snapshot, j.Scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kinds []string
+	for _, e := range c.Excerpts {
+		kinds = append(kinds, e.Path+":"+e.Kind)
+	}
+	if !slices.Equal(kinds, []string{"README.md:document", "pyproject.toml:config"}) || !slices.Contains(c.Limitations, limExcludedSource) {
+		t.Fatalf("v1 corpus %v limitations %v", kinds, c.Limitations)
+	}
+	f := &r1Caller{script: maxScript(t)}
+	_, res := runR1(t, j, vetStub{}, f, "1.27.4")
+	if r := res["review.investigate"]; r.Status != domain.TaskFailed || r.Reason != "review_input_unavailable" {
+		t.Fatalf("investigate %+v", r)
+	}
+	if rec := readR1(t, j, "investigate"); !slices.Contains(rec.Limitations, limExcludedSource) {
+		t.Fatalf("investigate limitations %v", rec.Limitations)
+	}
+	for _, q := range f.requests {
+		if q.Role == "investigate" || q.Role == "verify" {
+			t.Fatalf("%s request without code", q.Role)
+		}
+	}
+}
+
+// Barrel files: a JS/TS index file is an entry point only in its module root
+// or that root's src, so nested re-export index files rank as ordinary
+// sources (deeper ones last) in both packs.
+func TestW24BarrelIndexIsNotAnEntryPoint(t *testing.T) {
+	tree := map[string]string{
+		"package.json":        "{\"name\": \"barrels\"}\n",
+		"src/index.ts":        "export * from \"./a/index.js\";\n",
+		"src/real.ts":         "export function real(x: number): number {\n  return x + 1;\n}\n",
+		"src/util.ts":         "export const util = 1;\n",
+		"pkgs/p/package.json": "{\"name\": \"p\"}\n",
+		"pkgs/p/index.js":     "module.exports = 1;\n",
+	}
+	for _, d := range []string{"a", "b", "c", "d", "e"} {
+		tree["src/"+d+"/index.ts"] = "export * from \"./" + d + ".js\";\n"
+	}
+	j := treeJob(t, tree)
+	o := newOtherScope(j.Snapshot.Manifest, j.Scope)
+	for p, want := range map[string]int{"src/index.ts": 0, "pkgs/p/index.js": 0, "src/a/index.ts": 2, "src/real.ts": 2} {
+		if r, _ := priority(p, o); r != want {
+			t.Fatalf("v1 rank of %s is %d, want %d", p, r, want)
+		}
+	}
+	c, err := buildCorpus(j.Snapshot, j.Scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, e := range c.Excerpts {
+		got = append(got, e.Path)
+	}
+	if !slices.Equal(got, []string{"src/index.ts", "pkgs/p/index.js", "src/real.ts", "src/util.ts", "src/a/index.ts", "src/b/index.ts"}) {
+		t.Fatalf("v1 corpus %v", got)
+	}
+	s := &r1Stage{h: R1Handler{Caller: &r1Caller{}}, ctx: t.Context(), j: j, role: "investigate"}
+	code, _, err := s.codeCorpus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = nil
+	for _, e := range code[:4] {
+		got = append(got, e.Path)
+	}
+	// Groups "." and "pkgs/p" alternate; within "." the root index, then
+	// src/real.ts and src/util.ts before any nested index file.
+	if !slices.Equal(got, []string{"src/index.ts", "pkgs/p/index.js", "src/real.ts", "src/util.ts"}) {
+		t.Fatalf("r1 corpus %v", got)
 	}
 }

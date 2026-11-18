@@ -5,7 +5,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -46,9 +48,23 @@ func otherSource(p string) string {
 	return eco
 }
 
+// limExcludedSource says that non-Go source in scope lies below an excluded
+// directory (reviewDataPath) and was not offered to the model, so an empty
+// or thin code context is explained.
+const limExcludedSource = "source_in_excluded_directories"
+
+// excludedSource reports non-Go source that reviewDataPath leaves out.
+func excludedSource(p string) bool {
+	eco := record.SourceEcosystem(p)
+	return eco != "" && eco != "go" && reviewDataPath(p)
+}
+
 // entryPoint reports a conventional program or library entry file of a
-// non-Go ecosystem. Test paths are never entry points.
-func entryPoint(p string) bool {
+// non-Go ecosystem. Test paths are never entry points. A JS/TS index file is
+// one only in its module root (the deepest package.json or tsconfig.json
+// directory, else ".") or that root's src: barrel index files in every
+// directory would otherwise fill the context before any real source.
+func entryPoint(p string, roots otherModules) bool {
 	if record.IsTestPath(p) {
 		return false
 	}
@@ -59,7 +75,11 @@ func entryPoint(p string) bool {
 	case "python":
 		return slices.Contains([]string{"__main__", "main", "app", "cli", "manage"}, stem)
 	case "javascript":
-		return slices.Contains([]string{"index", "main", "app", "server", "cli"}, stem)
+		if stem == "index" {
+			root, dir := roots.owner("javascript", p), record.DocumentDir(p)
+			return dir == root || dir == path.Join(root, "src")
+		}
+		return slices.Contains([]string{"main", "app", "server", "cli"}, stem)
 	case "rust":
 		return base == "main.rs" || base == "lib.rs"
 	case "cpp":
@@ -68,11 +88,29 @@ func entryPoint(p string) bool {
 	return false
 }
 
+// otherScope is what otherPriority needs of the whole snapshot: the
+// ecosystems with source in scope (pack.InScope) and the module roots.
+type otherScope struct {
+	ecosystems []string
+	roots      otherModules
+}
+
+func newOtherScope(m source.Manifest, scope domain.Scope) otherScope {
+	files := map[string]source.Entry{}
+	for _, e := range m.Entries {
+		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil {
+			files[e.Path] = e
+		}
+	}
+	return otherScope{ecosystems: pack.InScope(m, scope), roots: otherModuleRoots(files)}
+}
+
 // otherPriority is the review-v1 rank of a path the Go rules do not select
 // (context.go priority): entry points 0, other sources 2, build manifests 3
 // and tests 4, for ecosystems with source in scope only (pack.InScope:
 // build files alone never add a manifest). 5 is not selected.
-func otherPriority(name string, ecosystems []string) (rank int, kind string) {
+func otherPriority(name string, o otherScope) (rank int, kind string) {
+	ecosystems := o.ecosystems
 	if eco := record.ManifestEcosystem(name); eco != "" && eco != "go" {
 		if !slices.Contains(ecosystems, eco) || reviewDataPath(name) {
 			return 5, ""
@@ -85,7 +123,7 @@ func otherPriority(name string, ecosystems []string) (rank int, kind string) {
 		return 5, ""
 	case record.IsTestPath(name):
 		return 4, "test"
-	case entryPoint(name):
+	case entryPoint(name, o.roots):
 		return 0, "code"
 	}
 	return 2, "code"
@@ -158,9 +196,9 @@ func groupOrder(byModule map[string][]source.Entry) []string {
 
 // otherRank is the r1 code corpus rank of a non-Go file within its group
 // (Go: main.go 0, other 1, tests 2).
-func otherRank(p string) int {
+func otherRank(p string, roots otherModules) int {
 	switch {
-	case entryPoint(p):
+	case entryPoint(p, roots):
 		return 0
 	case record.IsTestPath(p):
 		return 2

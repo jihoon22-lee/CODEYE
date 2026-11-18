@@ -388,6 +388,7 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 	byModule := map[string][]source.Entry{}
 	others := otherModuleRoots(files)
 	eligible := 0
+	var lims []string
 	for _, p := range sortedKeys(files) {
 		e := files[p]
 		if !inScope(p, scope) || *e.Size > maxFileBytes {
@@ -400,6 +401,9 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 		case !strings.HasSuffix(p, ".go") && eco != "":
 			m = groupKey(others.owner(eco, p), eco)
 		default:
+			if excludedSource(p) {
+				lims = append(lims, limExcludedSource)
+			}
 			continue
 		}
 		eligible++
@@ -408,7 +412,7 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 	rank := func(p string) int {
 		switch {
 		case !strings.HasSuffix(p, ".go"):
-			return otherRank(p)
+			return otherRank(p, others)
 		case path.Base(p) == "main.go":
 			return 0
 		case strings.HasSuffix(p, "_test.go"):
@@ -431,7 +435,6 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 		})
 	}
 	var out []record.Excerpt
-	var lims []string
 	remain := r1MaxCodeBytes
 	for round := 0; len(out) < r1MaxCodeFiles && remain >= 128; round++ {
 		progressed := false
