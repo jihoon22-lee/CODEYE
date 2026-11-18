@@ -54,10 +54,31 @@ func canonicalJSON(t *testing.T, v any) []byte {
 // and completes it with taskStatus (succeeded → finalizing; failed → failed
 // outcome that still uploads the result manifest).
 func (e *env) driveAttempt(taskStatus string) attemptRun {
+	e.t.Helper()
+	return e.drive(nil, driveOpts{taskStatus: taskStatus})
+}
+
+// driveOpts varies one driven attempt (W23 runs several in one project).
+type driveOpts struct {
+	taskStatus string
+	scope      map[string]any       // nil: full
+	edit       func(map[string]any) // edits the observations document before upload
+}
+
+func (e *env) drive(f *nodeFixture, o driveOpts) attemptRun {
 	t := e.t
 	t.Helper()
-	a := attemptRun{f: e.nodeFixture(), worker: domain.NewID()}
-	run := e.do("POST", "/api/v1/projects/"+a.f.projectID+"/runs", map[string]any{"profile": "deep-review", "source_policy": "latest_at_acquire", "scope": map[string]any{"kind": "full"}},
+	taskStatus := o.taskStatus
+	if f == nil {
+		fx := e.nodeFixture()
+		f = &fx
+	}
+	scope := o.scope
+	if scope == nil {
+		scope = map[string]any{"kind": "full"}
+	}
+	a := attemptRun{f: *f, worker: domain.NewID()}
+	run := e.do("POST", "/api/v1/projects/"+a.f.projectID+"/runs", map[string]any{"profile": "deep-review", "source_policy": "latest_at_acquire", "scope": scope},
 		opts{cookie: a.f.user.cookie, csrf: a.f.user.csrf, idem: domain.NewID()}).want(t, 202, "")
 	a.runID = run.body["id"].(string)
 	a.node = e.enrollNode(a.f.root.ID)
@@ -121,6 +142,9 @@ func (e *env) driveAttempt(taskStatus string) attemptRun {
 		m := o.(map[string]any)
 		m["raw_ref"].(map[string]any)["stream_sha256"] = vetSHA
 		a.message = m["raw_message"].(string)
+	}
+	if o.edit != nil {
+		o.edit(doc)
 	}
 	docBody := canonicalJSON(t, doc)
 	docID := put("observations", analysis.MediaObservations, docBody)

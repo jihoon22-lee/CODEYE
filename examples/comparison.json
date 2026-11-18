@@ -1,0 +1,300 @@
+{
+  "run_id": "1623a2d9-d2d0-44f9-82fb-3f05e0aeb93c",
+  "project_id": "7b68d00d-72b7-42bc-be8f-d8c005c9c328",
+  "revision": 1,
+  "report_created_at": "2026-11-18T07:33:17.427217Z",
+  "baseline": {
+    "run_id": "c971678a-d687-48b9-91c4-c4fe4e9660f8",
+    "revision": 1,
+    "report_created_at": "2026-11-18T07:33:17.330174Z",
+    "selection": "default"
+  },
+  "comparable": true,
+  "not_comparable_reason": null,
+  "differences": [],
+  "counts": {
+    "absent_unverified": 0,
+    "changed": 0,
+    "new": 0,
+    "persisting": 4,
+    "resolved_observed": 1
+  },
+  "entries": [
+    {
+      "fingerprint": "fp2:176cda9a28a96523278159736a6bd66f25c75edab398c117066bd29f6aa38081",
+      "state": "resolved_observed",
+      "reason": null,
+      "ambiguous": false,
+      "producer": "tool",
+      "analyzer": "go.vet",
+      "rule": "printf",
+      "paths": [
+        "bad/bad.go"
+      ],
+      "current": [],
+      "baseline": [
+        {
+          "finding_id": "fnd_8460c938210a5292a675",
+          "path": "bad/bad.go",
+          "start_line": 12,
+          "end_line": 12,
+          "severity": "low",
+          "validation": "unreviewed",
+          "category": "correctness",
+          "disposition": "open"
+        }
+      ],
+      "changes": [],
+      "move_candidates": [],
+      "review": null
+    },
+    {
+      "fingerprint": "fp2:3df1d78ece89887426905f1930a8113d3ee7f2a2c86f8154a29b42e65fdb0f8b",
+      "state": "persisting",
+      "reason": null,
+      "ambiguous": false,
+      "producer": "tool",
+      "analyzer": "go.vet",
+      "rule": "copylocks",
+      "paths": [
+        "bad/bad.go"
+      ],
+      "current": [
+        {
+          "finding_id": "fnd_a3a4daa1d64003cc21f5",
+          "path": "bad/bad.go",
+          "start_line": 12,
+          "end_line": 12,
+          "severity": "low",
+          "validation": "unreviewed",
+          "category": "concurrency",
+          "disposition": "open"
+        }
+      ],
+      "baseline": [
+        {
+          "finding_id": "fnd_b5df3f00a2c19083cac3",
+          "path": "bad/bad.go",
+          "start_line": 10,
+          "end_line": 10,
+          "severity": "low",
+          "validation": "unreviewed",
+          "category": "concurrency",
+          "disposition": "open"
+        }
+      ],
+      "changes": [
+        "lines"
+      ],
+      "move_candidates": [],
+      "review": null
+    },
+    {
+      "fingerprint": "fp2:94bb937e7726daadee85f28685dd5e924733c5a7260d20a65ff117a06d9cbb07",
+      "state": "persisting",
+      "reason": null,
+      "ambiguous": false,
+      "producer": "tool",
+      "analyzer": "go.vet",
+      "rule": "printf",
+      "paths": [
+        "bad/x_test.go"
+      ],
+      "current": [
+        {
+          "finding_id": "fnd_d60c5f6772216bd819b3",
+          "path": "bad/x_test.go",
+          "start_line": 10,
+          "end_line": 10,
+          "severity": "low",
+          "validation": "unreviewed",
+          "category": "correctness",
+          "disposition": "open"
+        }
+      ],
+      "baseline": [
+        {
+          "finding_id": "fnd_964e91b25519e6484c2c",
+          "path": "bad/x_test.go",
+          "start_line": 8,
+          "end_line": 8,
+          "severity": "low",
+          "validation": "unreviewed",
+          "category": "correctness",
+          "disposition": "open"
+        }
+      ],
+      "changes": [
+        "lines"
+      ],
+      "move_candidates": [],
+      "review": null
+    },
+    {
+      "fingerprint": "fp2:b6cd59cd365e43c2a439e23ea117f8896414f9a9187e340421b52c69efc3cad0",
+      "state": "persisting",
+      "reason": null,
+      "ambiguous": false,
+      "producer": "tool",
+      "analyzer": "go.vet",
+      "rule": "printf",
+      "paths": [
+        "bad/bad_test.go"
+      ],
+      "current": [
+        {
+          "finding_id": "fnd_c9f7a387b2e2be99e3d9",
+          "path": "bad/bad_test.go",
+          "start_line": 10,
+          "end_line": 10,
+          "severity": "low",
+          "validation": "unreviewed",
+          "category": "correctness",
+          "disposition": "open"
+        }
+      ],
+      "baseline": [
+        {
+          "finding_id": "fnd_c39d18878ec1680dd258",
+          "path": "bad/bad_test.go",
+          "start_line": 8,
+          "end_line": 8,
+          "severity": "low",
+          "validation": "unreviewed",
+          "category": "correctness",
+          "disposition": "open"
+        }
+      ],
+      "changes": [
+        "lines"
+      ],
+      "move_candidates": [],
+      "review": null
+    },
+    {
+      "fingerprint": "fp2:c8a6a99a8bcad51fa4c3b6b4a7afde72cdeac7a60c70f4604f40e8534cad0cd7",
+      "state": "persisting",
+      "reason": null,
+      "ambiguous": false,
+      "producer": "tool",
+      "analyzer": "go.vet",
+      "rule": "copylocks",
+      "paths": [
+        "bad/bad.go"
+      ],
+      "current": [
+        {
+          "finding_id": "fnd_05b16ff5a404b718c216",
+          "path": "bad/bad.go",
+          "start_line": 12,
+          "end_line": 12,
+          "severity": "low",
+          "validation": "unreviewed",
+          "category": "concurrency",
+          "disposition": "false_positive"
+        }
+      ],
+      "baseline": [
+        {
+          "finding_id": "fnd_fd0cef568f28821757c6",
+          "path": "bad/bad.go",
+          "start_line": 10,
+          "end_line": 10,
+          "severity": "low",
+          "validation": "unreviewed",
+          "category": "concurrency",
+          "disposition": "open"
+        }
+      ],
+      "changes": [
+        "lines"
+      ],
+      "move_candidates": [],
+      "review": {
+        "version": 1,
+        "disposition": "false_positive",
+        "reason": "테스트 환경 전용 코드다",
+        "path_prefix": null,
+        "expires_at": null,
+        "expired": false,
+        "actor_id": "1d5d5d6b-2f01-4e69-91bf-b516d2e7d079",
+        "created_at": "2026-11-18T07:33:17.35813Z",
+        "run_id": "c971678a-d687-48b9-91c4-c4fe4e9660f8",
+        "report_revision": 1,
+        "finding_id": "fnd_fd0cef568f28821757c6"
+      }
+    }
+  ],
+  "unidentified": {
+    "current": 0,
+    "baseline": 0
+  },
+  "findings": [
+    {
+      "finding_id": "fnd_05b16ff5a404b718c216",
+      "fingerprint": "fp2:c8a6a99a8bcad51fa4c3b6b4a7afde72cdeac7a60c70f4604f40e8534cad0cd7",
+      "state": "persisting",
+      "publication_disposition": "false_positive",
+      "current_disposition": "false_positive",
+      "review_match": "applied",
+      "review": {
+        "version": 1,
+        "disposition": "false_positive",
+        "reason": "테스트 환경 전용 코드다",
+        "path_prefix": null,
+        "expires_at": null,
+        "expired": false,
+        "actor_id": "1d5d5d6b-2f01-4e69-91bf-b516d2e7d079",
+        "created_at": "2026-11-18T07:33:17.35813Z",
+        "run_id": "c971678a-d687-48b9-91c4-c4fe4e9660f8",
+        "report_revision": 1,
+        "finding_id": "fnd_fd0cef568f28821757c6"
+      }
+    },
+    {
+      "finding_id": "fnd_a3a4daa1d64003cc21f5",
+      "fingerprint": "fp2:3df1d78ece89887426905f1930a8113d3ee7f2a2c86f8154a29b42e65fdb0f8b",
+      "state": "persisting",
+      "publication_disposition": "open",
+      "current_disposition": "open",
+      "review_match": "none",
+      "review": null
+    },
+    {
+      "finding_id": "fnd_c9f7a387b2e2be99e3d9",
+      "fingerprint": "fp2:b6cd59cd365e43c2a439e23ea117f8896414f9a9187e340421b52c69efc3cad0",
+      "state": "persisting",
+      "publication_disposition": "open",
+      "current_disposition": "open",
+      "review_match": "none",
+      "review": null
+    },
+    {
+      "finding_id": "fnd_d60c5f6772216bd819b3",
+      "fingerprint": "fp2:94bb937e7726daadee85f28685dd5e924733c5a7260d20a65ff117a06d9cbb07",
+      "state": "persisting",
+      "publication_disposition": "open",
+      "current_disposition": "open",
+      "review_match": "none",
+      "review": null
+    }
+  ],
+  "summary": {
+    "at_publication": {
+      "total_findings": 4,
+      "actionable_findings": 0,
+      "pending_candidates": 4,
+      "refuted_findings": 0,
+      "hidden_findings": 1
+    },
+    "current": {
+      "total_findings": 4,
+      "actionable_findings": 0,
+      "pending_candidates": 4,
+      "refuted_findings": 0,
+      "hidden_findings": 1
+    }
+  },
+  "can_review": false,
+  "checked_at": "2026-11-18T07:33:17.440658Z"
+}

@@ -72,6 +72,11 @@ type Store interface {
 	GetReport(ctx context.Context, actor, runID string, revision int) (postgres.ReportRecord, error)
 	ListReports(ctx context.Context, actor, runID string) ([]postgres.ReportSummary, error)
 	reportsvc.Store
+	// Comparison and finding reviews (W23).
+	LoadComparison(ctx context.Context, actor, runID string, revision int, baselineRun string, baselineRevision int) (postgres.ComparisonData, error)
+	DefaultBaseline(ctx context.Context, actor, runID string) (*postgres.BaselineRef, error)
+	SetFindingReview(ctx context.Context, actor, project string, in postgres.ReviewRequest) (postgres.FindingReview, bool, error)
+	ListFindingReviews(ctx context.Context, actor, project, fingerprint, cursor string, limit int) (postgres.ReviewPage, error)
 }
 
 // Config configures the server.
