@@ -327,6 +327,11 @@ func TestTC98RepresentativeRunsAndStages(t *testing.T) {
 	if got := states(e.runStages(rDone).View); got != "recorded:source=succeeded,environment=no_tasks,documents=no_tasks,static_analysis=succeeded,code_review=succeeded,report=succeeded" {
 		t.Fatalf("published run %s", got)
 	}
+	// Within one group the latest request wins.
+	rQ2 := e.enqueue("queued-2", deepReview)
+	if a := e.activity(e.project.ID); a.Run.ID != rQ2.ID || a.OtherActiveRuns != 1 {
+		t.Fatalf("newer queued run not representative: %+v other %d", a.Run, a.OtherActiveRuns)
+	}
 }
 
 // TC-99: tool failure and success, policy exclusion versus no documents,
