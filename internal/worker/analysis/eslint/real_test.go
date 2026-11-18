@@ -79,7 +79,7 @@ func TestRealESLintMonorepo(t *testing.T) {
 	}
 	for _, c := range cases {
 		res := jststest.RunTask(t, c.a, fx.Job, c.key, &executor.Executor{})
-		jststest.Capture(t, c.capture, execCheck, res)
+		jststest.Capture(t, c.capture, res)
 		doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
 		if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || doc.Outcome.PartialParse {
 			t.Fatalf("%s: %s/%s %+v errors %+v", c.key, res.Status, res.Reason, doc.Outcome, doc.ToolErrors)
@@ -148,7 +148,7 @@ func TestRealESLintClean(t *testing.T) {
 	a := newReal(t, false)
 	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixClean}), domain.Scope{})
 	res := jststest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
-	jststest.Capture(t, "clean", execCheck, res)
+	jststest.Capture(t, "clean", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	check := res.Executions[len(res.Executions)-1]
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithoutFindings || len(doc.Observations) != 0 ||
@@ -164,7 +164,7 @@ func TestRealESLintParseError(t *testing.T) {
 	a := newReal(t, false)
 	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixBroken, "ok.js": "const unused = 1;\n"}), domain.Scope{})
 	res := jststest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
-	jststest.Capture(t, "parse-error", execCheck, res)
+	jststest.Capture(t, "parse-error", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	check := res.Executions[len(res.Executions)-1]
 	if res.Status != domain.TaskFailed || res.Reason != ReasonParseErrors || !doc.Outcome.PartialParse || *check.Result.ExitCode != 1 {
@@ -185,7 +185,7 @@ func TestRealESLintSuppressionsDisabled(t *testing.T) {
 	a := newReal(t, false)
 	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixSup, "eslint-suppressions.json": fixSupFile}), domain.Scope{})
 	res := jststest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
-	jststest.Capture(t, "suppressions", execCheck, res)
+	jststest.Capture(t, "suppressions", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	rules := jststest.Rules(doc)
 	if res.Status != domain.TaskSucceeded || rules["no-empty"] != 1 || rules["no-unused-vars"] != 1 || rules["no-debugger"] != 1 {
@@ -213,7 +213,7 @@ func TestRealESLintTypedDependencyGap(t *testing.T) {
 		t.Fatalf("baseline %s/%s %+v %+v", res.Status, res.Reason, doc.Outcome, doc.Observations)
 	}
 	res = jststest.RunTask(t, typed, fx.Job, "eslint-typed", &executor.Executor{})
-	jststest.Capture(t, "typed-gap", execCheck, res)
+	jststest.Capture(t, "typed-gap", res)
 	doc, _ = jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonDependency || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError || len(doc.Observations) != 0 {
 		t.Fatalf("typed gap %s/%s %+v %+v", res.Status, res.Reason, doc.Outcome, doc.Observations)

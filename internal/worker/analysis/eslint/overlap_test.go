@@ -37,7 +37,7 @@ func TestRealEngineOverlapExcluded(t *testing.T) {
 	}
 	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixOverlapConfig, "src/o.ts": fixOverlapTS, "lib/o.js": fixOverlapJS}), domain.Scope{})
 	res := jststest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
-	jststest.Capture(t, "overlap", execCheck, res)
+	jststest.Capture(t, "overlap", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	byFile := map[string]map[string]int{}
 	for _, o := range doc.Observations {
@@ -60,6 +60,7 @@ func TestRealEngineOverlapExcluded(t *testing.T) {
 		t.Fatalf("baseline JS rules %v", js)
 	}
 	tres := jststest.RunTask(t, tc, fx.Job, "tsc", &executor.Executor{})
+	jststest.Capture(t, "overlap-tsc", tres)
 	tdoc, _ := jststest.ReadEnvelope(t, fx.Job, tres)
 	rules := jststest.Rules(tdoc)
 	if rules["TS2304"] != 1 || rules["TS2393"] != 2 || rules["TS6133"] != 0 || rules["TS6196"] != 0 || rules["TS7029"] != 0 {

@@ -69,8 +69,7 @@ func TestRealTscMonorepo(t *testing.T) {
 		t.Fatalf("plan %v %+v", err, tasks)
 	}
 	res := jststest.RunTask(t, a, fx.Job, "tsc.m01", &executor.Executor{})
-	jststest.Capture(t, "monorepo", execCheck, res)
-	jststest.Capture(t, "monorepo-config", execConfig, res)
+	jststest.Capture(t, "monorepo", res)
 	doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || doc.Outcome.PartialParse {
 		t.Fatalf("%s/%s %+v errors %+v", res.Status, res.Reason, doc.Outcome, doc.ToolErrors)
@@ -116,7 +115,7 @@ func TestRealTscCleanWritesNothing(t *testing.T) {
 	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixCleanConfig, "src/a.ts": fixClean}), domain.Scope{})
 	ws := jststest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir)
 	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
-	jststest.Capture(t, "clean", execCheck, res)
+	jststest.Capture(t, "clean", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	check := res.Executions[len(res.Executions)-1]
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithoutFindings || *check.Result.ExitCode != 0 ||
@@ -136,7 +135,7 @@ func TestRealTscDependencyGap(t *testing.T) {
 	a := newReal(t)
 	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/main.ts": fixGap}), domain.Scope{})
 	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
-	jststest.Capture(t, "gap", execCheck, res)
+	jststest.Capture(t, "gap", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonDependency || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError || len(doc.Observations) != 0 {
 		t.Fatalf("gap %s/%s %+v %+v", res.Status, res.Reason, doc.Outcome, doc.Observations)
@@ -156,7 +155,7 @@ func TestRealTscSyntaxError(t *testing.T) {
 	a := newReal(t)
 	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/bad.ts": fixSyntax, "src/ok.ts": fixTypeErr}), domain.Scope{})
 	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
-	jststest.Capture(t, "syntax", execCheck, res)
+	jststest.Capture(t, "syntax", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonSyntax || doc.Coverage.ProcessedPaths != nil {
 		t.Fatalf("syntax %s/%s %+v %+v errors %+v", res.Status, res.Reason, doc.Outcome, doc.Observations, doc.ToolErrors)
@@ -173,7 +172,7 @@ func TestRealTscSolutionConfig(t *testing.T) {
 	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixSolution, "tsconfig.app.json": fixSolutionApp, "tsconfig.node.json": fixSolutionNod,
 		"src/main.ts": fixTypeErr, "vite.config.ts": fixClean}), domain.Scope{})
 	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
-	jststest.Capture(t, "solution", execCheck+".r01", res)
+	jststest.Capture(t, "solution", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	names := []string{}
 	for _, e := range res.Executions {
@@ -203,8 +202,7 @@ func TestRealTscConfigurationFailures(t *testing.T) {
 	} {
 		fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/a.ts": fixClean}), domain.Scope{})
 		res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
-		jststest.Capture(t, c.name, execConfig, res)
-		jststest.Capture(t, c.name+"-check", execCheck, res)
+		jststest.Capture(t, c.name, res)
 		doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 		if res.Status != c.status || res.Reason != c.reason || len(doc.Observations) != 0 || len(doc.Coverage.ProcessedPaths) != 0 {
 			t.Fatalf("%s: %s/%s %+v %+v", c.name, res.Status, res.Reason, doc.Outcome, doc.ToolErrors)
@@ -218,7 +216,7 @@ func TestRealTscDeprecatedOptionsStillCheck(t *testing.T) {
 	a := newReal(t)
 	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixDeprecated, "src/a.ts": fixTypeErr}), domain.Scope{})
 	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
-	jststest.Capture(t, "deprecated", execCheck, res)
+	jststest.Capture(t, "deprecated", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || len(doc.Observations) != 1 || doc.Observations[0].RuleID != "TS2322" {
 		t.Fatalf("deprecated %s/%s %+v %+v", res.Status, res.Reason, doc.Observations, doc.ToolErrors)
