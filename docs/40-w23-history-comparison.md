@@ -111,7 +111,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 | `out_of_scope` | 경로 범위가 발견 경로를 덮지 않는다 | `open` |
 | `reverted` | 최신 판정이 `open`이다 | `open` |
 
-사람이 직접 판정한 그 발견(같은 run·revision·finding_id)에는 식별이 약하거나 모호해도 적용한다. 그 밖에는 `DispositionCarries(basis, matches) = matches == 1 && !WeakIdentity(basis)`일 때만 자동 적용한다.
+적용하는 판정은 fingerprint마다 최신 version 하나다. 그 판정이 직접 가리킨 발견(같은 run·revision·finding_id)에는 식별이 약하거나 모호해도 적용한다. 그 밖에는 `DispositionCarries(basis, matches) = matches == 1 && !WeakIdentity(basis)`일 때만 자동 적용한다.
 
 ### 4.4 게시 시점과 현재
 
@@ -131,7 +131,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 
 | 지적 | 조치 | 시험 |
 |---|---|---|
-| 모델 식별에 원인 구분이 없어 같은 심볼·경로의 다른 후보가 충돌하고, 숨김 판정 하나가 둘 다 숨길 수 있다 | 검증기 category를 원인 분류(`candidate:<category>`/`candidate:unclassified`)로 식별에 넣었다. 모호한 일치(같은 revision에 같은 식별 2개 이상)와 약한 식별에는 판정을 자동 적용하지 않고 `candidate`로 열어 둔다(게시 시점과 현재 모두). | `TestModelFingerprintStableAcrossTitles`, `TestDispositionNeverCarriesToAmbiguousOrWeakMatch`, `TestBuildStampsPublicationDisposition`, `TestOverlayKeepsPublicationAndCurrentApart` |
+| 모델 식별에 원인 구분이 없어 같은 심볼·경로의 다른 후보가 충돌하고, 숨김 판정 하나가 둘 다 숨길 수 있다 | 검증기 category를 원인 분류(`candidate:<category>`/`candidate:unclassified`)로 식별에 넣었다. 모호한 일치(같은 revision에 같은 식별 2개 이상)와 약한 식별에는 판정을 자동 적용하지 않고 `candidate`로 열어 둔다(게시 시점과 현재 모두). | `TestModelFingerprintStableAcrossTitles`, `TestDispositionNeverCarriesToAmbiguousOrWeakMatch`, `TestBuildStampsPublicationDisposition`, `TestOverlayKeepsPublicationAndCurrentApart`, `TestAmbiguousGroupHasOneConfirmedFinding` |
 | 코드 제외 내보내기의 `fingerprint_basis`(경로·문맥)와 `move_key`가 추측으로 코드 내용을 확인하게 한다 | 코드 제외 내보내기에서 `fingerprint`·`fingerprint_basis`·`disposition_version`을 모두 뺐다(2.3). | `TestCodeFreeExportHasNoIdentity`, 보고서 스키마 code-free 규칙, `validate_bundle.py` 부정 사례, HTTP·smoke의 코드 제외 확인 |
 
 ## 8. 결과
@@ -139,7 +139,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 | 시험 | 확인한 결과 | 근거 |
 |---|---|---|
 | 식별 안정성 | 메시지 속 위치·줄 번호가 달라도 같고, 규칙·경로·메시지가 다르면 다르다. 모델 후보는 제목·서술·인용 순서가 달라도 같고 검증 전후·영역이 다르면 다르다. | `TestToolFingerprintIgnoresPositions`, `TestModelFingerprintStableAcrossTitles` |
-| TC-14 | 도구 실패·미실행·범위 축소·source variant 차이·파일 미분석·도구 버전 미상에서 사라진 발견은 `absent_unverified`와 이유이며 `resolved_observed`가 아니다. | `TestTC14MissingCheckIsNeverResolved`, `TestW23DefaultBaselineAndTC14` |
+| TC-14 | 도구 실패·산출물 거부·부분 파싱·미계획·범위 축소·파일 미분석·도구 버전 변경·버전 미상·source variant 차이에서 사라진 발견은 `absent_unverified`와 이유이며 `resolved_observed`가 아니다. | `TestTC14MissingCheckIsNeverResolved`, `TestW23DefaultBaselineAndTC14` |
 | 상태 | 줄 이동 persisting, 심각도·개수 변화 changed, 새 발견 new, 모호한 이동은 확정하지 않음, 모델 부재는 해결 아님. | `TestPersistingChangedNew`, `TestAmbiguousMoveIsNotConfirmed`, `TestModelAbsenceIsNotResolution` |
 | 기본 기준 | 같은 source variant·profile·scope의 직전 fp2 보고서, failed 보고서 제외, 다른 프로젝트 404, 자기 자신 422. | `TestW23DefaultBaselineAndTC14`, `TestW23ComparisonAndReviewsOverHTTP` |
 | 판정 | viewer 403·비구성원 404, Idempotency 재전송·충돌, If-Match 불일치 409, 과거 만료·빈 사유·없는 발견 거부, 행 불변, version 빈틈 거부, 이력 목록, 만료 뒤 open, 게시 시점 고정과 되돌림 뒤 현재 open. | `TestW23FindingReviews`, `TestW23ComparisonAndReviewsOverHTTP`, `TestBuildStampsPublicationDisposition` |
@@ -154,7 +154,9 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 
 ## 9. 남은 제한
 
-- 코드 문맥 해시가 없다(`context: unavailable`). 컨트롤러는 snapshot 원문을 갖지 않고 현재 산출물(go vet 관찰, 검토 기록)이 정규화 문맥을 싣지 않는다. 그래서 같은 파일·규칙·메시지의 진단은 같은 식별을 공유하고 `ambiguous`로 묶인다.
+- 코드 문맥 해시가 없다(`context: unavailable`). 컨트롤러는 snapshot 원문을 갖지 않고 현재 산출물(go vet 관찰, 검토 기록)이 정규화 문맥을 싣지 않는다. 그래서 같은 파일·규칙·메시지의 진단은 같은 식별을 공유하고 `ambiguous`로 묶이며, 그 묶음에는 판정이 자동 적용되지 않는다.
+- 판정은 fingerprint마다 최신 하나만 적용된다. 모호한 묶음에서 사람이 한 발견을 확인한 뒤 같은 묶음의 다른 발견을 확인하면 앞의 확인은 후보(열림)로 돌아가고, 이후 run의 게시 시점에도 그 묶음에는 고정되지 않는다(`TestAmbiguousGroupHasOneConfirmedFinding`).
+- 보안 검토 1의 위험은 줄였지만 없애지 않았다. 이후 run에서 원인 분류·경로·심볼이 모두 같은 다른 모델 후보가 그 revision에 하나만 있으면 강한 단일 일치로 보아 판정을 이어받는다. 원인 분류는 검증기 category 수준이라 같은 심볼의 서로 다른 결함을 구분하지 못한다.
 - 모델 후보는 다시 나오지 않아도 해결로 보지 않는다. 모델 후보의 해결은 사람 판정(`fixed_by_user`)이나 도구 관찰로만 남는다.
 - 첫 발견 시각과 run 사이 연속 이력(몇 번째 run부터 있었는지)은 계산하지 않는다. 비교는 두 revision 사이만 본다.
 - 코드 제외 내보내기에는 식별과 현재 판정이 없다. Markdown·HTML 내보내기는 게시 시점 판정만 보여준다.

@@ -240,3 +240,33 @@ func TestOverlayKeepsPublicationAndCurrentApart(t *testing.T) {
 		t.Fatalf("summary after confirm/expiry %+v", o.Summary.Current)
 	}
 }
+
+// One review (the latest version) is in effect per fingerprint. In an
+// ambiguous group it applies only to the finding a person named; confirming
+// a second finding of the group moves the confirmation, so the first is a
+// candidate (open) again. docs/40 §9 records this limit.
+func TestAmbiguousGroupHasOneConfirmedFinding(t *testing.T) {
+	now := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
+	a, b := vetFinding("a", "a.go", 5, msg), vetFinding("b", "a.go", 9, msg)
+	cur := vetRun("cur", "succeeded", "go1.27.4", []string{"a.go"}, a, b)
+	c := Compare(cur, vetRun("base", "succeeded", "go1.27.4", []string{"a.go"}))
+	match := func(reviews map[string]Review) []string {
+		var out []string
+		for _, f := range ApplyReviews(&c, cur, reviews, now).Findings {
+			out = append(out, f.FindingID+":"+f.ReviewMatch+":"+f.CurrentDisposition)
+		}
+		return out
+	}
+	review := Review{Fingerprint: a.Fingerprint, Version: 1, Disposition: "false_positive", Reason: "test", RunID: "base", ReportRevision: 1, FindingID: "old"}
+	if got := match(map[string]Review{a.Fingerprint: review}); !slices.Equal(got, []string{"a:candidate:open", "b:candidate:open"}) {
+		t.Fatalf("unconfirmed group %v", got)
+	}
+	review.RunID, review.FindingID, review.Version = "cur", "a", 2
+	if got := match(map[string]Review{a.Fingerprint: review}); !slices.Equal(got, []string{"a:applied:false_positive", "b:candidate:open"}) {
+		t.Fatalf("confirmed on a %v", got)
+	}
+	review.FindingID, review.Version = "b", 3
+	if got := match(map[string]Review{a.Fingerprint: review}); !slices.Equal(got, []string{"a:candidate:open", "b:applied:false_positive"}) {
+		t.Fatalf("confirmed on b %v", got)
+	}
+}
