@@ -63,6 +63,12 @@ func priority(name string) (rank int, kind string) {
 }
 
 func buildCorpus(snapshot source.Snapshot, scope domain.Scope) (Corpus, error) {
+	return buildScreenedCorpus(snapshot, scope, nil)
+}
+
+// buildScreenedCorpus is buildCorpus without the files the secrets screen
+// withholds (screen.go); with none withheld it is buildCorpus exactly.
+func buildScreenedCorpus(snapshot source.Snapshot, scope domain.Scope, withheld map[string]bool) (Corpus, error) {
 	c := Corpus{Snapshot: snapshot.Digest, Excerpts: []Excerpt{}, Limitations: []string{}}
 	root, err := os.OpenRoot(snapshot.SnapshotDir)
 	if err != nil {
@@ -106,6 +112,10 @@ func buildCorpus(snapshot source.Snapshot, scope domain.Scope) (Corpus, error) {
 			continue
 		}
 		if domain.ValidateEvidencePath(e.Path) != nil || *e.Size > maxFileBytes {
+			continue
+		}
+		if withheld[e.Path] {
+			c.Limitations = addLim(c.Limitations, limSecretWithheld)
 			continue
 		}
 		b, err := readVerified(root, e)

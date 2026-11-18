@@ -14,7 +14,8 @@ import (
 // which the agent accepts only with --python-both-type-checkers); bandit is
 // security depth.
 
-// prober is the startup probe every Python adapter implements.
+// prober is the startup version probe every Python (W17) and W21 adapter
+// implements.
 type prober interface {
 	pack.Analyzer
 	Probe(ctx context.Context, runner executor.Runner, dir string) (string, error)

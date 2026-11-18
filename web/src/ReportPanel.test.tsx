@@ -89,4 +89,36 @@ describe('published report', () => {
       parseAnalysisReport({ ...doc(), demo: true }, 'run1'),
     ).toThrow();
   });
+  // W21 (docs/45): a structure metric is counted apart, marked as no defect,
+  // and the summary count must match the observations that carry one.
+  it('shows structure metrics apart from findings and rejects a count that does not match', () => {
+    const metricDoc = () => ({
+      ...doc(),
+      summary: { ...doc().summary, raw_observations: 1, metric_observations: 1 },
+      observations: [
+        {
+          id: 'obs1',
+          rule_id: 'cyclomatic_complexity',
+          raw_message: 'classify(...) at src/complex.py:4: NCSS 34, CCN 17',
+          location_state: 'resolved',
+          location: { path: 'src/complex.py', start_line: 4, end_line: 4 },
+          metric: { name: 'cyclomatic_complexity', value: 17, threshold: 16, unit: 'count' },
+        },
+      ],
+    });
+    const r = parseAnalysisReport(metricDoc(), 'run1');
+    expect(r.metricObservations).toBe(1);
+    expect(r.counts.total).toBe(1);
+    render(<ReportDocument report={r} />);
+    expect(screen.getByText('그중 구조 지표(결함 아님)')).toBeTruthy();
+    expect(screen.getByText('(구조 지표, 결함 아님: 17 ≥ 16)')).toBeTruthy();
+    const missing = metricDoc();
+    delete (missing.summary as { metric_observations?: number }).metric_observations;
+    expect(() => parseAnalysisReport(missing, 'run1')).toThrow();
+    const unmarked = metricDoc();
+    (unmarked.observations[0] as { metric?: unknown }).metric = undefined;
+    expect(() => parseAnalysisReport(unmarked, 'run1')).toThrow();
+    const plain = parseAnalysisReport(doc(), 'run1');
+    expect(plain.metricObservations).toBe(0);
+  });
 });

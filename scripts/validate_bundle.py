@@ -632,6 +632,117 @@ def check_w20_rust_pack(validators: dict) -> int:
     return negatives
 
 
+def check_w21_contracts(validators: dict) -> int:
+    """W21 (docs/45): lizard, jscpd and gitleaks descriptors and real envelopes.
+
+    Metric observations are measurements, never active observations or
+    findings; secret detections carry the fixed message and no value or
+    column. Returns the number of negative cases."""
+    negatives = 0
+    envelope_validator = validators["analyzer-observations.schema.json"]
+    adapters = ROOT / "internal/worker/analysis"
+    secrets_name = "gitl" + "eaks"
+
+    def go_int(path: Path, name: str) -> int:
+        match = re.search(r"^\s*(?:const )?" + name + r"\s*=\s*(\d+)$", path.read_text(encoding="utf-8"), re.M)
+        ensure(match is not None, "Missing Go constant " + name + " in " + str(path))
+        return int(match.group(1))
+
+    def check_envelope(doc: dict, metric: dict | None) -> None:
+        """The generic rules on the diagnostics, the metric rules on the rest."""
+        envelope_validator.validate(doc)
+        rest = copy.deepcopy(doc)
+        metrics = [o for o in rest["observations"] if "metric" in o]
+        rest["observations"] = [o for o in rest["observations"] if "metric" not in o]
+        rest["parse"]["observations"] -= len(metrics)
+        rest["parse"]["unresolved_observations"] -= sum(1 for o in metrics if o["location_state"] != "resolved")
+        check_analyzer_observations(rest)
+        ensure(doc["parse"]["observations"] == len(doc["observations"]), "Envelope observation count mismatch")
+        executions = {e["name"]: e for e in doc["executions"]}
+        for o in metrics:
+            ensure(metric is not None, "Metric observation from a diagnostic analyzer")
+            m = o["metric"]
+            ensure(m["value"] >= m["threshold"] and not o["suppressed"], "Metric under its threshold or suppressed")
+            ensure((m["name"], m["unit"], m["threshold"]) == (metric["name"], metric["unit"], metric["threshold"]), "Metric differs from the rule pack")
+            ensure(o["category"] == "maintainability" and o["rule_id"] == metric["rule"], "Metric rule or category")
+            ref = o["raw_ref"]
+            stream = executions[ref["execution"]][ref["stream"]]
+            ensure(ref["stream_sha256"] == stream["sha256"] and ref["byte_start"] < ref["byte_end"] <= stream["captured_bytes"], "Metric not bound to its stream")
+            for place in [o] + o["related"]:
+                ensure(place["location"] is None or place["location"]["path"] == place["path"], "Location/path mismatch")
+        if metric is not None:
+            ensure(len(metrics) == len(doc["observations"]) > 0, "Structure envelope with a diagnostic")
+            ensure("metrics_not_defects" in doc["limitations"] and "data_directories_excluded" in doc["limitations"], "Structure envelope limitations")
+            ensure(doc["rule_pack"]["repository_config"] == "overridden" and doc["rule_pack"]["config_files"] == [], "Structure rule pack reads no repository configuration")
+
+    def same_argv(descriptor: dict, doc: dict, run: str) -> None:
+        recorded = next(e for e in doc["executions"] if e["name"] == run)["command"]["argv"]
+        argv = [descriptor["execute"]["executable"], *descriptor["execute"]["argv"]]
+        for key in ("${scratch}", "${lizard}", "${node}", "${jscpd}", "${" + secrets_name + "}"):
+            argv = [a.replace(key, "[REDACTED]") for a in argv]
+        argv = [a.replace("${scan_root}", ".") for a in argv]
+        ensure(argv == recorded, "Descriptor argv differs from the recorded " + run + " command")
+        ensure(descriptor["executes_repository_code"] is False and descriptor["network_policy"] == "none", run + ": no repository code, no network")
+
+    envelopes = {}
+    for name in ("lizard", "jscpd", secrets_name):
+        descriptor = yaml_file(ROOT / ("examples/analyzer-" + name + ".yaml"))
+        validators["analyzer.schema.json"].validate(descriptor)
+        check_analyzer(descriptor)
+        envelopes[name] = (descriptor, json_file(ROOT / ("examples/observations-" + name + ".json")))
+    lizard_metric = {"name": "cyclomatic_complexity", "unit": "count", "rule": "cyclomatic_complexity", "threshold": go_int(adapters / "lizard/lizard.go", "CCNThreshold")}
+    jscpd_metric = {"name": "duplicated_lines", "unit": "lines", "rule": "duplicated_code", "threshold": go_int(adapters / "jscpd/jscpd.go", "MinLines")}
+    descriptor, lizard = envelopes["lizard"]
+    check_envelope(lizard, lizard_metric)
+    same_argv(descriptor, lizard, "lizard.run")
+    ensure(not any(a.startswith("-E") for a in descriptor["execute"]["argv"]), "lizard extensions (-Eduplicate) belong to jscpd")
+    descriptor, jscpd = envelopes["jscpd"]
+    check_envelope(jscpd, jscpd_metric)
+    same_argv(descriptor, jscpd, "jscpd.run")
+    descriptor, secrets = envelopes[secrets_name]
+
+    def check_secrets(doc: dict) -> None:
+        check_envelope(doc, None)
+        for o in doc["observations"]:
+            ensure(o["category"] == "security" and o["raw_message"] == "secret detected by " + secrets_name + " rule " + o["rule_id"] + " (value withheld)", "Secret observation text is the fixed template")
+            ensure(o["location"]["start_col"] == o["location"]["end_col"] == 0, "Secret columns are not recorded")
+        ensure({"history_not_scanned", "secret_values_withheld", "secret_columns_not_recorded"} <= set(doc["limitations"]), "gitleaks limitations")
+
+    check_secrets(secrets)
+    same_argv(descriptor, secrets, secrets_name + ".scan")
+    ensure("--redact=100" in descriptor["execute"]["argv"] and descriptor["execute"]["argv"][-2] == "--", "gitleaks: full redaction, roots after --")
+    template = re.search(r"^const Template = `([^`]*)`$", (adapters / secrets_name / (secrets_name + ".go")).read_text(encoding="utf-8"), re.M)
+    ensure(template is not None and not re.search(r"\.(?:Secret|Match|Line|Fingerprint|Commit|Author|Email|Message)\b", template.group(1)), "gitleaks template must not read secret material")
+
+    def case(name, doc, metric, edit):
+        nonlocal negatives
+        bad = copy.deepcopy(doc)
+        edit(bad)
+        expect_invalid(name, check_secrets if doc is secrets else lambda d: check_envelope(d, metric), bad)
+        negatives += 1
+
+    case("metric under threshold", lizard, lizard_metric, lambda d: d["observations"][0]["metric"].update(value=lizard_metric["threshold"] - 1))
+    case("metric unknown unit", lizard, lizard_metric, lambda d: d["observations"][0]["metric"].update(unit="percent"))
+    case("metric extra field", jscpd, jscpd_metric, lambda d: d["observations"][0]["metric"].update(severity="high"))
+    case("metric-only success with findings", jscpd, jscpd_metric, lambda d: d["outcome"].update(exit_class="success_with_findings"))
+    case("suppressed metric", lizard, lizard_metric, lambda d: d["observations"][0].update(suppressed=True))
+    case("metric threshold not the rule pack", jscpd, jscpd_metric, lambda d: d["observations"][0]["metric"].update(threshold=5))
+    case("metric in the secrets envelope", secrets, None, lambda d: d["observations"][0].update(metric={"name": "entropy", "value": 4, "threshold": 3, "unit": "count"}))
+    case("structure envelope reading repository config", lizard, lizard_metric, lambda d: d["rule_pack"].update(repository_config="honored"))
+    case("secret columns recorded", secrets, None, lambda d: d["observations"][0]["location"].update(start_col=13, end_col=32))
+    case("secret message with more than the rule", secrets, None, lambda d: d["observations"][0].update(raw_message=d["observations"][0]["raw_message"] + ": AKIA"))
+    case("secret limitations dropped", secrets, None, lambda d: d.update(limitations=[x for x in d["limitations"] if x != "secret_values_withheld"]))
+    report = json_file(ROOT / "examples/report-go-vet.json")
+    validators["report.schema.json"].validate(report)
+    bad = copy.deepcopy(report)
+    bad["observations"][0]["metric"] = {"name": "cyclomatic_complexity", "value": 17, "threshold": 16, "unit": "percent"}
+    expect_invalid("report metric unit", validators["report.schema.json"].validate, bad)
+    bad = copy.deepcopy(report)
+    bad["summary"]["metric_observations"] = 0
+    expect_invalid("report zero metric count (omitted when 0)", validators["report.schema.json"].validate, bad)
+    return negatives + 2
+
+
 def check_environment_example(doc: dict) -> None:
     """Bind the W15 discovery examples to the fixture input bytes and evidence IDs."""
     root = ROOT / "fixtures/w15-modules/input"
@@ -1289,6 +1400,7 @@ def main() -> None:
     w20_negatives = check_w20_rust_pack(validators)
     print(f"PASS: W20 Rust pack contracts (cargo check and clippy descriptors, real envelope examples; {w20_negatives} negative cases)")
     check_w17_python(validators)
+    print(f"PASS: W21 structure and secrets pack contracts (lizard, jscpd, gitleaks descriptors and real envelopes; {check_w21_contracts(validators)} negative cases)")
     review = json_file(ROOT / "examples/review-record.json")
     review_validator = validators["review-record.schema.json"]
     review_validator.validate(review)

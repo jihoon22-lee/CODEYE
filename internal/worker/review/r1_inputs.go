@@ -61,6 +61,10 @@ func (s *r1Stage) readLines(e source.Entry, start, end int) (string, int, bool, 
 	if *e.Size > maxFileBytes || domain.ValidateEvidencePath(e.Path) != nil {
 		return "", 0, false, nil
 	}
+	if s.secretFiles()[e.Path] {
+		s.rec.Limitations = addLim(s.rec.Limitations, limSecretWithheld)
+		return "", 0, false, nil
+	}
 	root, err := os.OpenRoot(s.j.Snapshot.SnapshotDir)
 	if err != nil {
 		return "", 0, false, err
@@ -80,6 +84,11 @@ func (s *r1Stage) readLines(e source.Entry, start, end int) (string, int, bool, 
 	end = min(end, len(lines))
 	return strings.Join(lines[start-1:end], "\n"), len(lines), true, nil
 }
+
+// secretFiles are the files the secrets screen withholds from every model
+// input of the stage (screen.go): code context, documents, observation
+// windows and verification expansions.
+func (s *r1Stage) secretFiles() map[string]bool { return s.screen.withheld }
 
 // excerpt builds a bounded excerpt of up to maxLines lines and maxBytes of
 // JSON-encoded text from line start. total is the file's line count.
@@ -266,6 +275,11 @@ func (s *r1Stage) readToolDoc(key string, files map[string]source.Entry) (toolSu
 			// (the envelope's source_suppressed_observations limitation says
 			// some were left out) and never becomes a finding (docs/39 §5.1).
 			if o.Suppressed {
+				continue
+			}
+			// A structure metric (W21) is no defect candidate: the envelope's
+			// metrics_not_defects limitation is all the model sees of it.
+			if o.Metric != nil {
 				continue
 			}
 			to := toolObservation{ID: o.ID, Tool: d.Analyzer.ID, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState}
@@ -537,6 +551,13 @@ func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, [
 		if !utf8.ValidString(in.Message) || record.Sensitive([]byte(in.Message)) || len(in.Message) > 600 {
 			in.Message = "(omitted by the platform)"
 			lims = append(lims, "observation_message_omitted")
+		}
+		// A tool message about a file the secrets screen withholds may quote
+		// the value (e.g. a hardcoded-password rule): only its rule and place
+		// reach the model.
+		if o.Location != nil && s.secretFiles()[o.Location.Path] && in.Message != "(omitted by the platform)" {
+			in.Message = "(omitted by the platform)"
+			lims = append(lims, limSecretWithheld)
 		}
 		if o.Location != nil {
 			l := o.Location

@@ -729,6 +729,9 @@ func ComputeSummary(findings []Finding, obs []Observation) Summary {
 		if o.EvidenceState != EvidenceVerified {
 			s.UnresolvedObservations++
 		}
+		if o.Metric != nil {
+			s.MetricObservations++
+		}
 	}
 	type cand struct {
 		f    Finding

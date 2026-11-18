@@ -102,12 +102,12 @@ func sameEvidence(prior, now []Excerpt) bool {
 	return true
 }
 
-func (h Handler) verify(ctx context.Context, j analysis.Job, runner executor.Runner) analysis.TaskResult {
+func (h Handler) verify(ctx context.Context, j analysis.Job, runner executor.Runner, screen secretScreen) analysis.TaskResult {
 	prior, err := readRecord(j, "investigate")
 	if err != nil {
 		return result(domain.TaskSkippedPolicy, "dependency_failed")
 	}
-	c, err := buildCorpus(j.Snapshot, j.Scope)
+	c, err := buildScreenedCorpus(j.Snapshot, j.Scope, screen.withheld)
 	if err != nil {
 		return result(domain.TaskFailed, "review_input_unavailable")
 	}
@@ -127,6 +127,9 @@ func (h Handler) verify(ctx context.Context, j analysis.Job, runner executor.Run
 		}
 	}
 	setEvidence(c.Excerpts)
+	if screen.state == screenUnscreened {
+		rec.Limitations = addLim(rec.Limitations, limNotSecretScreened)
+	}
 	if len(prior.Candidates) == 0 {
 		rec.Limitations = addLim(rec.Limitations, limNoCandidates)
 		res := writeRecord(j, rec)
@@ -136,6 +139,13 @@ func (h Handler) verify(ctx context.Context, j analysis.Job, runner executor.Run
 	extra, lims, err := expand(ctx, j.Snapshot, j.Scope, c.Excerpts, prior.Candidates)
 	if err != nil {
 		return failedRecord(j, rec, result(domain.TaskFailed, "review_input_unavailable"))
+	}
+	// Callers and tests in a file the secrets screen withholds stay out.
+	if n := len(extra); n > 0 {
+		extra = slices.DeleteFunc(extra, func(x Excerpt) bool { return screen.withheld[x.Path] })
+		if len(extra) < n {
+			lims = addLim(lims, limSecretWithheld)
+		}
 	}
 	pack, err := reviewpack.For("verify")
 	if err != nil {
