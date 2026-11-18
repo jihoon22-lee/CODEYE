@@ -55,7 +55,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 - 제외된 후보는 수가 아니라 ID로 남는다. `dropped.in_inputs`는 ID 목록, `dropped.in_allowed_text`는 ID·문구·제외한 허용 텍스트 이름이다. 지침 팩이 라벨 표현을 담고 있으면 여기서 보인다(§10.2).
 - 일반 금지어(`BANNED_WORDS`·`BANNED_STEMS`, 예: before·fix)는 내보내지 않는다. 지침과 모델 출력에 흔한 단어라 정상 요청을 막기 때문이다.
 - 대조 방식(`codeye-words-v1`): 한 단어 토큰은 단어 전체와 camelCase·snake_case 조각, 여러 단어는 `[a-z0-9]+` 단어열, 그 밖은 소문자 부분 문자열. relay와 corpus.py가 같은 규칙을 쓴다.
-- dry run 최종 목록(W16 C/C++ 팩과 review-r1 2.0.0-rc2 병합 뒤)은 7,722개 항목이다. 허용 텍스트는 두 팩, tools batch의 도구 메시지·규칙 ID 16줄, 역할 envelope 100개다. 입력에 있어 12개, 허용 텍스트에 있어 13개를 뺐다.
+- dry run 최종 목록(W16 C/C++·W17 Python 팩과 review-r1 2.0.0-rc2 병합 뒤)은 7,722개 항목이다. 허용 텍스트는 두 팩, tools batch의 도구 메시지·규칙 ID 20줄, 역할 envelope 100개다. 입력에 있어 12개, 허용 텍스트에 있어 13개를 뺐다.
 
 ### 3.1.1 허용 텍스트 만들기
 
@@ -215,23 +215,23 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 
 모두 같은 WSL2 머신(12코어, 다른 작업과 공유)에서 실행했다. 모델 호출은 없다. review 조건은 가짜 upstream과 `--test-upstream` relay(시험 장부)를 썼다. 가짜의 답은 입력 구조에서 만든 고정 문장이므로 아래 위치 대조·검토 수치에는 품질 의미가 없다. 가짜는 첫 code 근거를 인용하는데, 발췌가 결함 파일 둘레이므로 위치 대조가 높게 나온다.
 
-**tools, 55개 사례 전체(변형 100개).** W16·W18 병합 뒤 go·staticcheck·cargo·clippy·cppcheck·clang-tidy·node·eslint·tsc 플래그로 실행했다. 100개 모두 `partial`이다(검토 task가 `model_source_not_approved`).
+**tools, 55개 사례 전체(변형 100개).** W16·W17·W18 병합 뒤 go·staticcheck·cargo·clippy·cppcheck·clang-tidy·ruff·mypy·bandit·node·eslint·tsc 플래그로 실행했다. 100개 모두 `partial`이다(검토 task가 `model_source_not_approved`).
 
 | 언어 | 결과 |
 |---|---|
 | C/C++ | cppcheck는 20개 모두 `missing_include_files` 구성 오류로 끝났고 R1-CPP-04 before에서 finding 2개를 남겼다. clang-tidy는 compile DB가 없어(`compile_db_missing`) 실행되지 않았다 |
-| Python | 변형 20개 모두 `pack-gap.python:analyzer_pack_missing`. 분석기 미실행 |
+| Python | ruff·mypy·bandit 실행(pyright는 주지 않아 `tool_not_configured`). finding 5개(R1-PY-04 전후, R1-PY-11 before) |
 | Go | go vet·Staticcheck 실행. finding 3개(R1-GO-06 before의 copylocks, R1-GO-09 before의 structtag·SA5008) |
 | JS/TS | ESLint 20개, tsc·type-aware ESLint는 TS 모듈 4개. finding 5개(R1-JS-02 before의 `no-unsafe-finally`, R1-JS-07 전후) |
 | Rust | 변형 20개 모두 보고서 조회 500 `REPORT_INVALID`(§12). 분석은 `lockfile_missing` |
 
-보고서가 있는 80개는 새로 만든 입력과의 근거 대조를 모두 통과했다. 관측한 도구 버전은 go1.27.4, Staticcheck 2026.2.2, cppcheck 2.22.0, ESLint 10.15.0, tsc 6.0.3이다.
+보고서가 있는 80개는 새로 만든 입력과의 근거 대조를 모두 통과했다. 관측한 도구 버전은 go1.27.4, Staticcheck 2026.2.2, cppcheck 2.22.0, ruff 0.16.3, mypy 2.4.1, bandit 1.9.4, ESLint 10.15.0, tsc 6.0.3이다. finding은 모두 15개다.
 
 **정답 차단과 envelope.**
 
 1. review-r1 rc1 시점에 지침 팩만 허용한 목록으로 review dry run을 돌렸다. review-v1 변형 11개 중 3개, review-r1 14개 중 6개가 막혔다. 모두 Go 사례의 verify(역할 계약의 `ownership transfer`)와 R1-GO-06 before의 interpret(go vet 메시지)였다.
 2. 감시용 목록으로 envelope를 모으고, 도구 메시지와 envelope를 허용한 목록으로 Go 11개 사례 전체와 C++·JS 1개씩을 다시 돌렸다. 두 팩 모두 심은 문구 말고는 막힌 요청이 없었다(rc1, W18 병합 전).
-3. W16 C/C++ 팩과 review-r1 2.0.0-rc2가 병합된 뒤 같은 절차를 다시 했다. 감시용 목록으로 6개 사례(Go 3, C++·JS·Python 1)의 envelope 100개를 모았고(역할: v1 context·investigate·verify 각 6, r1 environment 8, documents 4, investigate 6, interpret 8, verify 6), tools 결과와 함께 최종 목록(7,722개)을 만들었다. 이 목록으로 Go 11개 사례 전체와 C++·JS 1개씩을 돌렸다.
+3. W16 C/C++ 팩과 review-r1 2.0.0-rc2가 병합된 뒤 같은 절차를 다시 했다(W17 Python 팩 병합 뒤 tools 결과로 목록을 한 번 더 만들었고 항목은 같았다). 감시용 목록으로 6개 사례(Go 3, C++·JS·Python 1)의 envelope 100개를 모았고(역할: v1 context·investigate·verify 각 6, r1 environment 8, documents 4, investigate 6, interpret 8, verify 6), tools 결과와 함께 최종 목록(7,722개)을 만들었다. 이 목록으로 Go 11개 사례 전체와 C++·JS 1개씩을 돌렸다.
    - review-v1(1.0.0): 변형 24개, 막힘 0. Go 20개 `completed`, C++·JS 4개는 검토 입력이 없어 `partial`. 시험 장부 요청 60건(역할마다 20).
    - review-r1(2.0.0-rc2): 변형 25개(R1-GO-10 before 2회 반복 포함). 막힌 요청은 R1-GO-01 before에 일부러 심은 문구 하나뿐이었다(investigate, ID `R1-GO-01/prose/0.0`, `invalid: planted_leak`). 시험 장부 요청 62건(investigate·verify 20, documents 10, interpret 8, environment 4). C++·JS 사례에서도 environment·interpret가 호출되었다.
 4. 가짜에 `--echo-text "goroutine leak"`를 주고 R1-GO-02·03 before를 두 방식으로 돌렸다. 엄격 방식에서는 두 verify가 막혔다(원인 `model_echo`). `--allow-model-echo`에서는 둘 다 `completed`이고 verify 2건이 예외로 기록되었으며 사례 단위 확인을 통과했다.
@@ -253,6 +253,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 # 노드에 맞게 도구 경로를 정한다. 임시 PostgreSQL을 쓰므로 PostgreSQL 도구(initdb, pg_ctl, psql)가 PATH에 있어야 한다.
 TOOLS=(--go "$GO" --tool staticcheck="$STATICCHECK" --tool cargo="$CARGO" --tool clippy="$CLIPPY"
        --tool cppcheck="$CPPCHECK" --tool clang-tidy="$CLANG_TIDY"
+       --tool ruff="$RUFF" --tool mypy="$MYPY" --tool bandit="$BANDIT"
        --tool node="$NODE" --tool eslint="$ESLINT_JS" --tool tsc="$TSC_JS")
 REVIEW=(--opencode "$OPENCODE" --model codeye-gateway/gpt-6.2-sol)
 SEL=(--languages go)   # 유료 표본. B안은 SEL=(--languages go --sample 8 --seed 24)
@@ -325,7 +326,7 @@ python3 scripts/r1_eval.py reader "$R/paid-r1" --sample 6 --seed 24 --output "$R
 
 - **Go가 아닌 사례는 모델 검토를 측정할 수 없다.** 검토용 code 발췌가 Go만 지원한다(`code_excerpts_go_only`). C/C++·Python·JS/TS·Rust 사례에서 v1의 context·investigate와 r1의 investigate는 `review_input_unavailable`로 끝난다. r1은 환경 역할을 여전히 호출해 비용을 쓴다. 발췌가 다른 언어를 지원하기 전에는 review 조건을 Go로 한정한다.
 - **Rust 보고서를 조회하지 못한다.** main의 보고서 검증이 설정 파일 없는 Rust 규칙 문맥(`config=recorded`, 경로 없음)을 거부해 500 `REPORT_INVALID`가 난다. W21 브랜치에 고친 검증이 있다. 또 corpus의 Rust 사례에는 Cargo.lock이 없어 `--offline --locked` 분석이 `lockfile_missing`으로 끝난다. Rust tools 결과는 둘이 고쳐질 때까지 측정되지 않는다.
-- **Python 분석 팩이 아직 없고 C/C++ 팩은 corpus에서 깊이 돌지 않는다.** Python tools 결과는 `analyzer_pack_missing` 공백뿐이다. C/C++ 사례에는 compile DB가 없어 clang-tidy가 실행되지 않고 cppcheck는 include 누락 구성 오류로 끝난다. 팩이 병합되면 runner는 그대로 두고 `--tool` 플래그만 더한다.
+- **C/C++ 팩은 corpus에서 깊이 돌지 않는다.** C/C++ 사례에는 compile DB가 없어 clang-tidy가 실행되지 않고 cppcheck는 include 누락 구성 오류로 끝난다. 구조·비밀정보 팩(W21)은 아직 병합되지 않았다. 팩이 병합되면 runner는 그대로 두고 `--tool` 플래그만 더한다.
 - **모델 표현 차단의 크기를 모른다.** 엄격 방식이 맞힌 사례를 얼마나 무효로 만드는지는 실모델 batch에서만 보인다. 가짜로는 경로만 확인했다. 예외 방식의 범위는 relay 프로세스 전체이고 사례 단위 확인은 runner가 한다. runner를 거치지 않고 relay를 쓰면 이 확인이 없다.
 - **dry run 수치에는 품질 의미가 없다.** 가짜 upstream은 정답을 모르고 입력 구조로 답한다. 위치 대조·검토 수·차감은 경로 동작의 근거일 뿐이다.
 - **정답 목록은 표현 일치만 본다.** 다른 말로 바꾼 정답, 다른 언어로 쓴 설명, 코드 모양의 힌트는 막지 않는다. 라벨 문장의 5-gram과 고유 토큰만 대상이다.
