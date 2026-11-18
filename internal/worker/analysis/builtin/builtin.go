@@ -12,7 +12,10 @@ import (
 	"sort"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gitleaks"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/staticcheck"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
@@ -69,6 +72,10 @@ func catalog() []entry {
 		// Go (W08 baseline, W19 extra depth).
 		{desc: govet.Descriptor(), plan: govet.Plan, build: buildGoVet},
 		{desc: staticcheck.Descriptor(), plan: staticcheck.Plan, build: buildStaticcheck},
+		// Any ecosystem (W21 extra depth: complexity, duplication, secrets).
+		{desc: lizard.Descriptor(), plan: lizard.Plan, build: buildLizard},
+		{desc: jscpd.Descriptor(), plan: jscpd.Plan, build: buildJscpd},
+		{desc: gitleaks.Descriptor(), plan: gitleaks.Plan, build: buildGitleaks},
 	}
 }
 

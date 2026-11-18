@@ -216,7 +216,7 @@ func TestAnalyzerPackWithoutStaticcheck(t *testing.T) {
 			t.Fatalf("staticcheck manifest task %+v", task)
 		}
 	}
-	at := analyzerTools(r.envs)
+	at := withoutW21Tools(t, analyzerTools(r.envs))
 	if len(at) != 1 || at[0].Tool != "staticcheck" || at[0].Status != envdoc.ObsNotProbed {
 		t.Fatalf("analyzer tools %+v", at)
 	}
@@ -259,7 +259,7 @@ func TestAnalyzerPackWithRealStaticcheck(t *testing.T) {
 	if !rules["SA1000"] || d.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || !slices.Equal(d.Coverage.ProcessedPaths, []string{"lib/lib.go", "main.go"}) {
 		t.Fatalf("staticcheck envelope rules %v outcome %+v coverage %+v", rules, d.Outcome, d.Coverage)
 	}
-	at := analyzerTools(r.envs)
+	at := withoutW21Tools(t, analyzerTools(r.envs))
 	if len(at) != 1 || at[0].Status != envdoc.ObsObserved || at[0].Version == nil || at[0].Execution == nil {
 		t.Fatalf("analyzer tools %+v", at)
 	}
@@ -284,11 +284,16 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 		state   progress.State
 		reasons []string
 		lim     string
+		tools   []string
 	}{
+		// W21 (docs/45): the any-ecosystem analyzers plan for a snapshot
+		// with language source and, without their tool flags, add
+		// not-required tool_not_configured tasks and not-run tool rows.
 		{"python only", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
-			[]string{"pack-gap.python"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:python"},
+			append(w21StaticTasks(), "pack-gap.python"), progress.Skipped, []string{"analyzer_pack_missing", "tool_not_configured"}, "static_analysis_gap:python",
+			append(w21NotRunRows(), "python.none=not_run")},
 		{"no supported language", map[string]string{"README.md": "# docs\n", "docs/guide.md": "guide\n", "Makefile": "all:\n"},
-			nil, progress.NoTasks, []string{}, "static_analysis_not_planned"},
+			nil, progress.NoTasks, []string{}, "static_analysis_not_planned", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := runPackFiles(t, tc.files, nil)
@@ -339,7 +344,7 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 					t.Fatalf("gap row %+v", row)
 				}
 			}
-			if want := map[int][]string{1: {"python.none=not_run"}, 0: nil}[len(tc.static)]; !slices.Equal(analyzers, want) {
+			if want := tc.tools; !slices.Equal(analyzers, want) {
 				t.Fatalf("tool rows %v", analyzers)
 			}
 		})

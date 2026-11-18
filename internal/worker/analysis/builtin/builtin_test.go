@@ -45,7 +45,7 @@ func reasons(missing []Unavailable) []string {
 
 func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	ctx := context.Background()
-	if hs, missing := Handlers(ctx, Config{}, &executor.Executor{}); len(hs) != 0 || !slices.Equal(reasons(missing), []string{"go-vet:not_configured", "staticcheck:not_configured"}) {
+	if hs, missing := Handlers(ctx, Config{}, &executor.Executor{}); len(hs) != 0 || !slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:not_configured"}, w21Missing...)) {
 		t.Fatalf("unconfigured: %d %+v", len(hs), missing)
 	}
 	if hs, missing := Handlers(ctx, Config{GoExecutable: "relative/go"}, &executor.Executor{}); len(hs) != 0 || missing[0].Reason != "invalid_config" {
@@ -53,7 +53,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	}
 	// staticcheck alone is extra depth: without a baseline nothing is advertised.
 	if hs, missing := Handlers(ctx, Config{Tools: map[string]string{"staticcheck": filepath.Join(t.TempDir(), "staticcheck")}}, &executor.Executor{}); len(hs) != 0 ||
-		!slices.Equal(reasons(missing), []string{"go-vet:not_configured", "staticcheck:toolchain_not_configured"}) {
+		!slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:toolchain_not_configured"}, w21Missing...)) {
 		t.Fatalf("staticcheck without go: %d %+v", len(hs), missing)
 	}
 	goExe := goPath(t)
@@ -62,7 +62,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 		t.Fatalf("probe failure advertised: %d %+v", len(hs), missing)
 	}
 	hs, missing := Handlers(ctx, Config{GoExecutable: goExe, ProbeDir: probe}, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), []string{"staticcheck:not_configured"}) {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:not_configured"}, w21Missing...)) {
 		t.Fatalf("real probe: %d %+v", len(hs), missing)
 	}
 	reg, err := analysis.NewRegistry(hs...)
@@ -77,13 +77,13 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	for _, d := range c.Descriptors() {
 		ids = append(ids, d.ID)
 	}
-	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck"}) {
+	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "any.lizard", "any.jscpd", "any.gitleaks"}) {
 		t.Fatalf("catalog order %v", ids)
 	}
 	// A configured staticcheck path that is not a file is invalid: the
 	// analyzer stays a member and its tasks report tool_unavailable.
 	hs, missing = Handlers(ctx, Config{GoExecutable: goExe, ProbeDir: probe, Tools: map[string]string{"staticcheck": filepath.Join(t.TempDir(), "missing")}}, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), []string{"staticcheck:invalid_config"}) {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:invalid_config"}, w21Missing...)) {
 		t.Fatalf("invalid staticcheck: %d %+v", len(hs), missing)
 	}
 	// An unknown tool of a newer agent is reported, never run.
@@ -105,10 +105,10 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 }
 
 func TestToolFlagsAndProbes(t *testing.T) {
-	if got := ToolFlags(); !slices.Equal(got, []string{"staticcheck"}) {
+	if got := ToolFlags(); !slices.Equal(got, []string{"gitleaks", "jscpd", "lizard", "staticcheck"}) {
 		t.Fatalf("flags %v", got)
 	}
-	probes := Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc"}})
+	probes := withoutW21(Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc"}}))
 	if len(probes) != 1 || probes[0].Tool != "staticcheck" || probes[0].Executable != "/sc" || !slices.Equal(probes[0].Analyzers, []string{"go.staticcheck"}) ||
 		!slices.Equal(probes[0].Args, []string{"-version"}) || !slices.Equal(probes[0].Ecosystems, []string{"go"}) {
 		t.Fatalf("probes %+v", probes)
@@ -116,7 +116,7 @@ func TestToolFlagsAndProbes(t *testing.T) {
 	if v, ok := probes[0].ParseVersion([]byte("staticcheck 2026.2.2 (0.8.2)\n")); !ok || v != "2026.2.2 (0.8.2)" {
 		t.Fatalf("version %q %v", v, ok)
 	}
-	if p := Probes(Config{}); p[0].Executable != "" {
+	if p := withoutW21(Probes(Config{})); p[0].Executable != "" {
 		t.Fatalf("unconfigured tool has an executable: %+v", p)
 	}
 }
@@ -129,7 +129,7 @@ func TestHandlersProbeRealStaticcheck(t *testing.T) {
 		t.Skip("set CODEYE_TEST_STATICCHECK to the staticcheck binary")
 	}
 	hs, missing := Handlers(context.Background(), Config{GoExecutable: goPath(t), ProbeDir: t.TempDir(), Tools: map[string]string{"staticcheck": sc}}, &executor.Executor{})
-	if len(hs) != 1 || len(missing) != 0 {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), w21Missing) {
 		t.Fatalf("staticcheck configured: %d %+v", len(hs), missing)
 	}
 }

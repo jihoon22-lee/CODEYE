@@ -78,6 +78,9 @@ func TestGoVetUnchangedInComposite(t *testing.T) {
 	}
 	var vet, other []analysis.TaskSpec
 	for _, p := range plan {
+		if w21Task(p.Key) {
+			continue
+		}
 		if pack.Owns(govet.HandlerName, p.Key) {
 			vet = append(vet, p)
 		} else {

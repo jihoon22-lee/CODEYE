@@ -1,0 +1,4 @@
+{"rule":"aws-access-token","file":"src/ignored.py","symlink":"","start_line":1,"end_line":1,"start_column":8,"end_column":27,"entropy":3.3842}
+{"rule":"aws-access-token","file":"src/allow.py","symlink":"","start_line":1,"end_line":1,"start_column":8,"end_column":27,"entropy":3.3842}
+{"rule":"aws-access-token","file":"src/app.py","symlink":"","start_line":3,"end_line":3,"start_column":13,"end_column":32,"entropy":3.3842}
+{"codeye_end":true,"findings":3}
