@@ -93,7 +93,10 @@ func TestRealGitleaksFindsWithoutValues(t *testing.T) {
 	}
 	scan := rr.specs[len(rr.specs)-1]
 	joined := strings.Join(scan.Args, " ")
-	for _, want := range []string{"dir . ", "--redact=100", "--no-banner", "--log-level info", "--ignore-gitleaks-allow", "--report-format template", "--report-path -"} {
+	if !strings.HasPrefix(joined, "dir ") || !strings.HasSuffix(joined, " -- .") || slices.Contains(scan.Args, "--follow-symlinks") {
+		t.Fatalf("scan argv %v", scan.Args)
+	}
+	for _, want := range []string{"--redact=100", "--no-banner", "--log-level info", "--ignore-gitleaks-allow", "--report-format template", "--report-path -"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("scan argv lacks %q: %v", want, scan.Args)
 		}

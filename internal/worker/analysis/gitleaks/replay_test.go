@@ -61,7 +61,7 @@ func replay(t *testing.T, c replayCase) replayed {
 		if slices.Equal(spec.Args, []string{"version"}) {
 			return anypacktest.Recorded{Stdout: []byte(c.version)}
 		}
-		return c.scans[spec.Args[1]]
+		return c.scans[ScanRoot(spec.Args)]
 	}}
 	res := anypacktest.RunTask(t, a, fx.Job, Name, r)
 	doc, _ := anypacktest.ReadEnvelope(t, fx.Job, res)
@@ -120,7 +120,8 @@ func TestReplayClean(t *testing.T) {
 func TestReplayScopedRoots(t *testing.T) {
 	p := replay(t, replayCase{scope: domain.Scope{Kind: "paths", Paths: []string{"src", "config/"}},
 		scans: map[string]anypacktest.Recorded{"config": anypacktest.LoadCapture(t, "scoped-r01"), "src": anypacktest.LoadCapture(t, "scoped-r02")}})
-	if p.res.Status != domain.TaskSucceeded || len(p.r.Specs) != 3 || p.r.Specs[1].Args[1] != "config" || p.r.Specs[2].Args[1] != "src" {
+	if p.res.Status != domain.TaskSucceeded || len(p.r.Specs) != 3 || ScanRoot(p.r.Specs[1].Args) != "config" || ScanRoot(p.r.Specs[2].Args) != "src" ||
+		!slices.Equal(p.r.Specs[1].Args[len(p.r.Specs[1].Args)-2:], []string{"--", "./config"}) {
 		t.Fatalf("%s/%s specs %d", p.res.Status, p.res.Reason, len(p.r.Specs))
 	}
 	if got := placesOf(t, p.doc); len(got) != 4 {

@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -57,6 +58,10 @@ const (
 	ReasonOutputTruncated      = "output_truncated"
 	ReasonOutputUnparsed       = "output_unparsed"
 	ReasonNoAnalyzableFiles    = "no_analyzable_files"
+	// ReasonWorkspaceLink: the attempt workspace holds a symbolic link or
+	// special file where a tool would read; nothing is started (a tool must
+	// never follow a link out of the copy).
+	ReasonWorkspaceLink = "workspace_link_refused"
 )
 
 // InScope reports whether a snapshot path is covered by the scope ("full"
@@ -660,6 +665,54 @@ func ClassifyText(snapshotDir string, e source.Entry) TextState {
 	}
 	return TextUTF8
 }
+
+// LinkFreeTree reports whether the workspace below each root holds only
+// directories and regular files. The snapshot never copies a link
+// (link_not_followed), so anything else means the copy was changed.
+func LinkFreeTree(workspace string, roots []string) bool {
+	for _, r := range roots {
+		err := filepath.WalkDir(filepath.Join(workspace, filepath.FromSlash(r)), func(_ string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if t := d.Type(); t&fs.ModeSymlink != 0 || !(t.IsDir() || t.IsRegular()) {
+				return errLink
+			}
+			return nil
+		})
+		if err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// LinkFreeFiles reports whether each listed workspace file is a regular
+// file reached through directories only (no link on the way).
+func LinkFreeFiles(workspace string, files []source.Entry) bool {
+	seen := map[string]bool{}
+	for _, f := range files {
+		segs := strings.Split(f.Path, "/")
+		for i := range segs {
+			rel := strings.Join(segs[:i+1], "/")
+			if seen[rel] {
+				continue
+			}
+			fi, err := os.Lstat(filepath.Join(workspace, filepath.FromSlash(rel)))
+			if err != nil {
+				return false
+			}
+			last := i == len(segs)-1
+			if (last && !fi.Mode().IsRegular()) || (!last && !fi.IsDir()) {
+				return false
+			}
+			seen[rel] = true
+		}
+	}
+	return true
+}
+
+var errLink = errors.New("workspace link")
 
 // ExecutionsOf summarizes the recorded executions for the envelope.
 func ExecutionsOf(list []analysis.Execution) []obsdoc.Execution {

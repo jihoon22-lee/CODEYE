@@ -24,6 +24,12 @@ const (
 	ReasonFailed         = "gitleaks_failed"
 	ReasonExitMismatch   = "exit_status_mismatch"
 	ReasonScanIncomplete = "scan_incomplete"
+	// ReasonConfigRejected: repository configuration gitleaks would read
+	// names a path outside the workspace copy.
+	ReasonConfigRejected = "repository_config_rejected"
+	// ReasonOutsideSnapshot: gitleaks reported a file that is not one of the
+	// selected snapshot files; the record is dropped, its path not kept.
+	ReasonOutsideSnapshot = "result_outside_snapshot"
 )
 
 // Limitation codes.
@@ -32,6 +38,9 @@ const (
 	LimSecretValuesWithheld = "secret_values_withheld"
 	LimIgnoreFileHonored    = "repository_ignore_file_honored"
 	LimBinaryNotClaimed     = "binary_files_not_claimed_processed"
+	// LimIgnoreFileRejected names the refused option: a scan root's
+	// .gitleaksignore (its entries are never recorded).
+	LimIgnoreFileRejected = "rejected_option_gitleaksignore"
 )
 
 // Coverage unit states (files).
@@ -200,6 +209,9 @@ type assembleInput struct {
 	// Integrity: a selected snapshot file could not be read or does not
 	// match its manifest SHA-256; nothing was started.
 	Integrity bool
+	// ConfigRejected: a scan root's .gitleaksignore names a path outside
+	// the workspace copy; Linked: a scan root holds a link. Nothing started.
+	ConfigRejected, Linked bool
 }
 
 // assemble builds the envelope and decides the task outcome.
@@ -247,6 +259,12 @@ func assemble(in assembleInput) obsdoc.Document {
 	switch {
 	case in.Integrity:
 		o.Fail(domain.TaskFailed, anypack.ReasonSnapshotIntegrity, obsdoc.ExitNotRun)
+	case in.ConfigRejected:
+		// The option is named (limitation), the value never recorded.
+		lims = append(lims, LimIgnoreFileRejected)
+		o.Fail(domain.TaskFailed, ReasonConfigRejected, obsdoc.ExitNotRun)
+	case in.Linked:
+		o.Fail(domain.TaskFailed, anypack.ReasonWorkspaceLink, obsdoc.ExitNotRun)
 	case in.ScratchFailed:
 		o.Fail(domain.TaskFailed, analysis.ReasonHandlerError, obsdoc.ExitNotRun)
 	}
@@ -276,6 +294,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		if res == nil {
 			continue
 		}
+		dropped := 0
 		st := parseStdout(res.Stdout.Data)
 		lg := parseStderr(res.Stderr.Data)
 		records += st.Records
@@ -313,25 +332,28 @@ func assemble(in assembleInput) obsdoc.Document {
 				file = filepath.ToSlash(file)
 			}
 			file = strings.TrimPrefix(file, "./")
+			if _, ok := byPath[file]; !ok || domain.ValidateEvidencePath(file) != nil {
+				// Not a selected snapshot file (outside the copy or never
+				// selected): nothing of the record is kept.
+				dropped++
+				continue
+			}
 			msg := Message(f.Rule)
 			pos := file + ":" + strconv.Itoa(f.StartLine) + ":" + strconv.Itoa(f.StartColumn)
 			end := file + ":" + strconv.Itoa(f.EndLine) + ":" + strconv.Itoa(f.EndColumn)
 			tuple := strings.Join([]string{file, f.Rule, pos, end, msg}, "\x00")
 			ord := ordinals[tuple]
 			ordinals[tuple]++
-			var pathPtr *string
-			var loc *obsdoc.Location
-			state := obsdoc.LocationOutsideSnapshot
-			if domain.ValidateEvidencePath(file) == nil {
-				pathPtr, loc, state = in.Resolver.Resolve(file, f.StartLine, f.EndLine, f.StartColumn, f.EndColumn)
-			}
-			if state == obsdoc.LocationOutsideSnapshot {
-				pathPtr = nil
-			}
+			pathPtr, loc, state := in.Resolver.Resolve(file, f.StartLine, f.EndLine, f.StartColumn, f.EndColumn)
 			doc.Observations = append(doc.Observations, obsdoc.Observation{ID: obsdoc.ObservationID(AnalyzerID, anypack.ModuleDir, file, f.Rule, pos, end, msg, ord),
 				RuleID: f.Rule, Category: "security", RawMessage: msg, Path: pathPtr, Location: loc, LocationState: state, Related: []obsdoc.Related{},
 				RawRef: obsdoc.RawRef{Execution: s.Exec, Stream: "stdout", StreamSHA256: stdoutSHA, RecordIndex: f.Index, ByteStart: f.ByteStart, ByteEnd: f.ByteEnd},
 				Unit:   file})
+		}
+		if dropped > 0 {
+			doc.ToolErrors = append(doc.ToolErrors, obsdoc.ToolError{Execution: s.Exec, Kind: "result_outside_snapshot", Unit: s.Root,
+				Message: "gitleaks reported " + strconv.Itoa(dropped) + " result(s) for files outside the selected snapshot files (paths not recorded)"})
+			o.Fail(domain.TaskFailed, ReasonOutsideSnapshot, obsdoc.ExitExecutionError)
 		}
 	}
 	// processed_paths are claimed fail-closed: only non-empty valid UTF-8

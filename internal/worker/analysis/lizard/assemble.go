@@ -240,6 +240,9 @@ type assembleInput struct {
 	ScratchFailed           bool
 	// Excluded: eligible files below a data directory, not measured.
 	Excluded int
+	// Linked: a listed workspace file is reached through a link; nothing
+	// was started.
+	Linked bool
 }
 
 // assemble builds the envelope and decides the task outcome.
@@ -266,8 +269,11 @@ func assemble(in assembleInput) obsdoc.Document {
 	}
 	var o anypack.Outcome
 	o.Executions(in.Cancelled, in.Version, in.Run)
-	if in.ScratchFailed {
+	switch {
+	case in.ScratchFailed:
 		o.Fail(domain.TaskFailed, analysis.ReasonHandlerError, obsdoc.ExitNotRun)
+	case in.Linked:
+		o.Fail(domain.TaskFailed, anypack.ReasonWorkspaceLink, obsdoc.ExitNotRun)
 	}
 	toolOK := false
 	if in.Version != nil && anypack.ExitedZero(in.Version) {

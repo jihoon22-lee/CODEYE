@@ -165,6 +165,9 @@ type assembleInput struct {
 	Integrity     bool
 	// Excluded: eligible files below a data directory, not compared.
 	Excluded int
+	// Linked: a listed workspace file is reached through a link; nothing
+	// was started.
+	Linked bool
 }
 
 // assemble builds the envelope and decides the task outcome.
@@ -203,6 +206,8 @@ func assemble(in assembleInput) obsdoc.Document {
 		o.Fail(domain.TaskFailed, anypack.ReasonSnapshotIntegrity, obsdoc.ExitNotRun)
 	case in.ScratchFailed:
 		o.Fail(domain.TaskFailed, analysis.ReasonHandlerError, obsdoc.ExitNotRun)
+	case in.Linked:
+		o.Fail(domain.TaskFailed, anypack.ReasonWorkspaceLink, obsdoc.ExitNotRun)
 	case len(in.Listed) == 0:
 		// Every file was too large or not UTF-8: nothing could be compared.
 		o.Fail(domain.TaskUnsupported, anypack.ReasonNoAnalyzableFiles, obsdoc.ExitNotRun)

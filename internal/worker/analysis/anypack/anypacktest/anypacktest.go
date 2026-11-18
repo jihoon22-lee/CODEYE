@@ -75,6 +75,63 @@ func New(t testing.TB, base string, files map[string][]byte, scope domain.Scope)
 	return Fixture{SourceRoot: src, Job: analysis.Job{RunID: "run-1", AttemptID: "attempt-1", Epoch: 1, Profile: "deep-review", Scope: scope, Snapshot: loaded, Scratch: scratch}}
 }
 
+// Canary writes a file outside any source tree holding value and returns
+// its path: the target of the hostile links of the security fixtures.
+func Canary(t testing.TB, value string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "outside-canary.py")
+	if err := os.WriteFile(p, []byte("TOKEN = \""+value+"\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// NewLinked is New with symbolic links in the source tree: links maps a
+// relative path to its (absolute, outside) target. The snapshot records a
+// link as link_not_followed and never copies it into the workspace.
+func NewLinked(t testing.TB, files map[string][]byte, links map[string]string, scope domain.Scope) Fixture {
+	t.Helper()
+	base := t.TempDir()
+	src := filepath.Join(base, "source")
+	for rel, target := range links {
+		p := filepath.Join(src, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, p); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+	}
+	return New(t, base, files, scope)
+}
+
+// LinkInWorkspace plants a link to target at rel in the attempt workspace
+// (a changed copy): the adapters must refuse to run.
+func LinkInWorkspace(t testing.TB, fx Fixture, rel, target string) {
+	t.Helper()
+	p := filepath.Join(fx.Job.Snapshot.WorkspaceDir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(p)
+	if err := os.Symlink(target, p); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+}
+
+// AssertNoSnippet fails when a captured stream of res holds one of the
+// source lines (the executor stores the streams as artifacts).
+func AssertNoSnippet(t testing.TB, res analysis.TaskResult, lines ...string) {
+	t.Helper()
+	for _, e := range res.Executions {
+		for _, l := range lines {
+			if bytes.Contains(e.Result.Stdout.Data, []byte(l)) || bytes.Contains(e.Result.Stderr.Data, []byte(l)) {
+				t.Fatalf("%s streams hold source text %q", e.Name, l)
+			}
+		}
+	}
+}
+
 // Text converts string sources to bytes.
 func Text(m map[string]string) map[string][]byte {
 	out := make(map[string][]byte, len(m))

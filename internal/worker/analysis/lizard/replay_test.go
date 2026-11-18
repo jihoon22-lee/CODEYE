@@ -28,6 +28,7 @@ type replayCase struct {
 	mutate  func(spec executor.Spec, r *executor.Result)
 	files   map[string][]byte
 	scope   domain.Scope
+	before  func(anypacktest.Fixture)
 }
 
 func replay(t *testing.T, c replayCase) (analysis.TaskResult, obsdoc.Document, *anypacktest.Replay, anypacktest.Fixture) {
@@ -44,6 +45,9 @@ func replay(t *testing.T, c replayCase) (analysis.TaskResult, obsdoc.Document, *
 		c.version = capturedVersion
 	}
 	fx := anypacktest.New(t, "", c.files, c.scope)
+	if c.before != nil {
+		c.before(fx)
+	}
 	r := &anypacktest.Replay{Fake: fake, Mutate: c.mutate, Answer: func(spec executor.Spec) anypacktest.Recorded {
 		if slices.Equal(spec.Args, []string{"--version"}) {
 			return anypacktest.Recorded{Stdout: []byte(c.version)}

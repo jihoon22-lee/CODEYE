@@ -182,7 +182,10 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	if err != nil {
 		in.ScratchFailed = true
 	}
-	if !in.ScratchFailed {
+	// lizard reads the listed files only; a link on the way would lead out
+	// of the copy, so none may be there.
+	in.Linked = !anypack.LinkFreeFiles(r.Workspace, files)
+	if !in.ScratchFailed && !in.Linked {
 		env := a.env()
 		in.Version = r.Exec(ctx, runner, execVersion, r.Spec(a.tool, env, anypack.ProbeTimeout, 64<<10, 64<<10, "--version"))
 		if !anypack.Stoppable(in.Version) && anypack.ExitedZero(in.Version) {

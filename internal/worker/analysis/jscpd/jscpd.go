@@ -234,8 +234,11 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	if err != nil {
 		in.ScratchFailed = true
 	}
+	// jscpd reads the listed files only; a link on the way would lead out
+	// of the copy, so none may be there.
+	in.Linked = !anypack.LinkFreeFiles(r.Workspace, files)
 	var cfgPath string
-	if !in.ScratchFailed && !in.Integrity && len(abs) > 0 {
+	if !in.ScratchFailed && !in.Integrity && !in.Linked && len(abs) > 0 {
 		body, err := ConfigFile(abs, out)
 		if err == nil {
 			cfgPath, err = r.WriteFile("jscpd.json", body)
@@ -244,7 +247,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			in.ScratchFailed = true
 		}
 	}
-	if !in.ScratchFailed && !in.Integrity && len(abs) > 0 {
+	if !in.ScratchFailed && !in.Integrity && !in.Linked && len(abs) > 0 {
 		env := a.env(cache)
 		in.Version = r.Exec(ctx, runner, execVersion, r.Spec(a.tool, env, anypack.ProbeTimeout, 64<<10, 64<<10, "--version"))
 		if !anypack.Stoppable(in.Version) && anypack.ExitedZero(in.Version) {

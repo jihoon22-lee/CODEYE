@@ -23,8 +23,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
@@ -210,17 +213,39 @@ func (a *Analyzer) Probe(ctx context.Context, runner executor.Runner, dir string
 }
 
 // ScanArgs is the argv of one scan root (workspace-relative, cwd = the
-// workspace root, so reported paths are snapshot paths).
+// workspace root, so reported paths are snapshot paths). The root comes
+// from the run scope: it is the last argument, after "--", and written
+// "./<root>", so a directory named like an option ("--config=x", "-v") is
+// always a path (measured with 8.30.1: reported paths stay "<root>/...").
 func ScanArgs(root, config, ignoreDir, template string) []string {
-	return []string{"dir", root, "--no-banner", "--no-color", "--log-level", "info", "--redact=100",
+	return []string{"dir", "--no-banner", "--no-color", "--log-level", "info", "--redact=100",
 		"--config", config, "--gitleaks-ignore-path", ignoreDir, "--ignore-gitleaks-allow", "--max-archive-depth", "0", "--max-decode-depth", "5",
-		"--exit-code", strconv.Itoa(ExitCodeLeaks), "--report-format", "template", "--report-template", template, "--report-path", "-"}
+		"--exit-code", strconv.Itoa(ExitCodeLeaks), "--report-format", "template", "--report-template", template, "--report-path", "-", "--", RootArg(root)}
+}
+
+// RootArg is the positional form of a scan root: "." or "./<root>".
+func RootArg(root string) string {
+	if root == "." {
+		return root
+	}
+	return "./" + root
+}
+
+// ScanRoot returns the scan root of a scan argv (its last argument).
+func ScanRoot(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return strings.TrimPrefix(args[len(args)-1], "./")
 }
 
 // scanRoots are the scope roots that hold a selected file.
 func scanRoots(scope []string, files []source.Entry) []string {
 	var out []string
 	for _, r := range scope {
+		if r != "." && domain.ValidateEvidencePath(r) != nil {
+			continue
+		}
 		if slices.ContainsFunc(files, func(f source.Entry) bool { return r == "." || f.Path == r || strings.HasPrefix(f.Path, r+"/") }) {
 			out = append(out, r)
 		}
@@ -253,6 +278,43 @@ func IgnoreFile(root string) string {
 	return path.Join(root, ".gitleaksignore")
 }
 
+// IgnoreFilesSafe checks the repository .gitleaksignore of every scan root
+// (read from the snapshot, bound to its manifest SHA-256): gitleaks always
+// reads it, so an entry whose path field is absolute, climbs with "..",
+// or holds a NUL refuses the task instead of being passed on.
+func IgnoreFilesSafe(snapshotDir string, files []source.Entry, roots []string) bool {
+	byPath := map[string]source.Entry{}
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+	for _, root := range roots {
+		e, ok := byPath[IgnoreFile(root)]
+		if !ok {
+			continue
+		}
+		b, err := govet.ReadSnapshotFile(snapshotDir, e.Path)
+		if err != nil || obsdoc.SHA256Hex(b) != e.SHA256 {
+			return false
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			if strings.ContainsRune(line, 0) {
+				return false
+			}
+			fields := strings.Split(line, ":")
+			for _, f := range fields[:len(fields)-1] {
+				if strings.HasPrefix(f, "/") || strings.HasPrefix(f, "\\") || slices.Contains(strings.FieldsFunc(f, func(r rune) bool { return r == '/' || r == '\\' }), "..") {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
 // Run executes the gitleaks task.
 func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	r, failed := anypack.Start(ctx, job, task.Key, Plan)
@@ -280,7 +342,9 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	if err != nil {
 		in.ScratchFailed = true
 	}
-	if !in.ScratchFailed && !in.Integrity {
+	in.ConfigRejected = !IgnoreFilesSafe(job.Snapshot.SnapshotDir, files, in.Roots)
+	in.Linked = !anypack.LinkFreeTree(r.Workspace, in.Roots)
+	if !in.ScratchFailed && !in.Integrity && !in.ConfigRejected && !in.Linked {
 		env := a.tool.Env(nil)
 		in.Version = r.Exec(ctx, runner, execVersion, r.Spec(a.tool, env, anypack.ProbeTimeout, 64<<10, 64<<10, "version"))
 		if !anypack.Stoppable(in.Version) && anypack.ExitedZero(in.Version) {

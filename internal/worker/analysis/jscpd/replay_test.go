@@ -29,6 +29,7 @@ type replayCase struct {
 	run     anypacktest.Recorded
 	mutate  func(spec executor.Spec, r *executor.Result)
 	files   map[string][]byte
+	before  func(anypacktest.Fixture)
 }
 
 type replayed struct {
@@ -56,6 +57,9 @@ func replay(t *testing.T, c replayCase) replayed {
 		c.version = capturedVersion
 	}
 	fx := anypacktest.New(t, "", c.files, domain.Scope{})
+	if c.before != nil {
+		c.before(fx)
+	}
 	r := &anypacktest.Replay{Fake: node, Mutate: c.mutate, Answer: func(spec executor.Spec) anypacktest.Recorded {
 		if slices.Equal(spec.Args, []string{script, "--version"}) {
 			return anypacktest.Recorded{Stdout: []byte(c.version)}
