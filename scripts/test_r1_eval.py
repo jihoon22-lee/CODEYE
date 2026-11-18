@@ -289,13 +289,17 @@ class ScoringTests(unittest.TestCase):
 
     def test_code_exposure_comes_from_records_not_the_file_count(self):
         # GO-06 before: investigate saw the labelled file; GO-01 before: README only (still counted by llm_exposed_files).
-        def keep(key, stage, evidence):
+        def keep(key, stage, evidence, outcome="accepted"):
             d = Path(self.batch) / "records" / key
             d.mkdir(parents=True, exist_ok=True)
-            (d / f"review.{stage}-0.json").write_text(json.dumps({"stage": stage, "calls": [], "evidence": evidence}))
+            (d / f"review.{stage}-0.json").write_text(json.dumps(
+                {"stage": stage, "calls": [{"outcome": outcome}] if outcome else [], "evidence": evidence}))
         keep("R1-GO-06.before.1", "investigate", [{"path": "counters.go", "kind": "code"},
                                                   {"path": "README.md", "kind": "document"}])
         keep("R1-GO-01.before.1", "investigate", [{"path": "README.md", "kind": "document"}])
+        # prepared but never answered: a blocked call and a stage without calls are not exposure
+        keep("R1-GO-01.before.1", "verify", [{"path": "manifest.go", "kind": "code"}], outcome="model_unavailable")
+        keep("R1-GO-01.before.1", "context", [{"path": "load.go", "kind": "code"}], outcome=None)
         s = self.metrics()[0]["structural"]
         self.assertEqual(s["model_saw_snapshot_files"]["k"], 4)
         self.assertEqual((s["model_saw_code"]["k"], s["model_saw_code"]["n"]), (1, 4))

@@ -172,7 +172,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 | 비용·시간 | batch | 검토 호출(역할·결과별), usage, 장부 요청 수·차감, batch 차감, 변형당 wall time(합·중앙값·최대) |
 | 검토 결과 분류 | 보고서가 있는 모든 변형(무효 포함) | `review_outcomes`: `performed`, `secret_screen_failed`(W21 비밀값 작업이 실행됐으나 실패해 모든 검토 역할이 `skipped_policy`), `review_input_unavailable`, `model_source_not_approved`(tools 조건), 그 밖 `not_performed:<사유>`. 비밀값 선별 실패는 정책 결과이고 모델 실패가 아니므로 따로 센다. review 조건에서는 그 변형을 `invalid: secret_screen_failed`로 지표에서 뺀다. 모델이 실행되지 않은 변형을 모델이 놓친 것으로 세지 않기 위해서다. 행의 `review_outcome`과 진행 출력에도 같은 값이 남는다 |
 | 구조 지표 | 변형 | `auto_location_hit_before`, `auto_location_reflag_after`, `auto_suspect_flag_normal`, `auto_any_actionable_on_after_or_normal`, `ai_review_performed`, `model_saw_snapshot_files`(`llm_exposed_files>0`. 보고서는 수만 주고 README 같은 문서 발췌도 센다. 모델이 코드를 봤다는 뜻이 아니다) |
-| 코드 노출 | 변형 | 보존한 검토 기록의 근거 목록(경로·종류)에서 낸다. `model_saw_code`: 어느 검토 역할의 입력에 kind `code` 발췌가 있음. `labelled_file_in_investigate`: before 변형에서 라벨 결함 파일이 investigate 입력에 있음(recall의 상한을 읽는 값). `no_code_variants`: review 조건에서 코드가 가지 않은 변형 목록. 기록은 review input의 근거 목록을 그대로 담으므로 요청 dump가 없는 유료 batch에서도 계산된다. dry run 200개 변형에서 역할마다 dump의 경로와 같음을 확인했다(§10.2 항목 7) |
+| 코드 노출 | 변형 | 보존한 검토 기록의 근거 목록(경로·종류)에서 낸다. `model_saw_code`: 어느 검토 역할의 입력에 kind `code` 발췌가 있음. `labelled_file_in_investigate`: before 변형에서 라벨 결함 파일이 investigate 입력에 있음(recall의 상한을 읽는 값). `no_code_variants`: review 조건에서 코드가 가지 않은 변형 목록. 모델이 답한(수락 또는 출력 거부) 호출이 있는 역할의 기록만 센다. 호출이 모두 막혔거나 거절·실패했거나 호출이 없는 기록은 준비된 입력일 뿐이므로 세지 않는다. 기록은 review input의 근거 목록을 그대로 담으므로 요청 dump가 없는 유료 batch에서도 계산된다. dry run 200개 변형에서 역할마다 dump의 경로와 같음을 확인했다(§10.2 항목 7) |
 
 - 분해: 언어, 범주(category), `detection`별로 recall·FP와 구조 지표를 낸다.
 - 비교: `score A B ...`가 batch를 나란히 표로 낸다. `tools`와 `review`, 두 팩을 같은 표에 둔다.
@@ -333,12 +333,12 @@ python3 scripts/r1_eval.py reader "$R/paid-r1" --sample 6 --seed 24 --output "$R
 |---|---|---|---|---|---|---|---|---|
 | E(기본) | `--sample 8 --seed 24`: 사례 8개(다섯 언어), 변형 16 | review-r1 | 45.0 | $1.70 | 88 | $4.80 | $8.49, 137건 | 시작 |
 | E | 같음 | review-v1 | 48.0 | $1.98 | 53 | $3.27 | $6.79, 92건 | 시작 |
-| E 다음 분산 | `--cases R1-GO-02,R1-PY-04 --variants before --repeat 3` | review-r1 | 24.0 | $0.88 | 33 | $1.80 | $4.81, 44건 | 시작. 같은 분산을 v1까지 하면 v1 거절(20건 > 20 − 5) |
+| E 다음 분산 | `--cases R1-GO-05,R1-PY-07 --variants before --repeat 3`(E 안의 사례) | review-r1 → v1 | 15.0 / 18.0 | $0.58 / $0.74 | 33 / 20 | $1.80 / $1.22 | $4.81, 44건 → $4.23, 29건 | 둘 다 시작. v1 여유 4건 |
 | D | `--sample 10 --seed 24`: 사례 10개(언어마다 2개), 변형 20 | review-r1 → v1 | 59.0 / 60.0 | $2.23 / $2.47 | 110 / 66 | $6.01 / $4.08 | $8.49, 137건 → $6.27, 78건 | 둘 다 시작. v1 여유 7건 |
 | A | `--languages go`: 사례 11개, 변형 20 | review-r1 → v1 | 51.0 / 60.0 | $1.97 / $2.47 | 110 / 66 | $6.01 / $4.08 | $8.49, 137건 → $6.53, 86건 | 둘 다 시작 |
 | E 역순 | E를 v1 → r1 | review-v1 → r1 | 48.0 / 45.0 | $1.98 / $1.70 | 53 / 88 | $3.27 / $4.80 | r1 시작 전 $6.51, 89건 | r1 거절(88건 > 89 − 5) |
 
-E의 사례는 R1-CPP-03·CPP-08·GO-05·GO-07·JS-02·JS-03·PY-07·RS-07이고, D는 여기에 R1-PY-04·RS-08을 더한다(seed로 정해진다). 요청 수 상한(장부 전체 200건)이 금액보다 먼저 묶이고, r1의 상한이 크므로 r1을 먼저 실행한다. E는 다섯 언어를 모두 포함하고 두 batch 뒤 기대 기준 약 44건이 남아 r1 한 팩의 반복 분산을 볼 수 있다. D는 언어마다 사례 2개지만 r1 뒤 v1의 여유가 7건뿐이어서 r1에 형식 복구가 조금만 늘어도 v1이 거절된다. A는 Go만 깊게 본다(2c 전의 기본안). 6단계는 r1이 끝난 뒤 v1을 다시 계획하고 거절이면 v1을 실행하지 않는다. 5단계의 `plan --ledger`에서 r1 시작 전 남은 요청이 137건보다 적으면 `남은 요청 − r1 기대 호출 − 5 ≥ v1 상한 호출`이 되는 안을 고른다. 2단계의 capture는 같은 `SEL`로 돌리므로 요청이 E 93건, D 119건, A 111건이고 시험 장부 상한(200건) 안이다.
+E의 사례는 R1-CPP-03·CPP-08·GO-05·GO-07·JS-02·JS-03·PY-07·RS-07이고, D는 여기에 R1-PY-04·RS-08을 더한다(seed로 정해진다). 요청 수 상한(장부 전체 200건)이 금액보다 먼저 묶이고, r1의 상한이 크므로 r1을 먼저 실행한다. E는 다섯 언어를 모두 포함하고 두 batch 뒤 기대 기준 약 44건이 남아 두 사례의 반복 분산을 볼 수 있다. 분산 사례는 E 안에서 골라 2단계 capture가 이력을 갖게 했다. v1 분산의 여유는 4건뿐이므로 r1 분산 뒤에 다시 계획한다. D는 언어마다 사례 2개지만 r1 뒤 v1의 여유가 7건뿐이어서 r1에 형식 복구가 조금만 늘어도 v1이 거절된다. A는 Go만 깊게 본다(2c 전의 기본안). 6단계는 r1이 끝난 뒤 v1을 다시 계획하고 거절이면 v1을 실행하지 않는다. 5단계의 `plan --ledger`에서 r1 시작 전 남은 요청이 137건보다 적으면 `남은 요청 − r1 기대 호출 − 5 ≥ v1 상한 호출`이 되는 안을 고른다. 2단계의 capture는 같은 `SEL`로 돌리므로 요청이 E 93건, D 119건, A 111건이고 시험 장부 상한(200건) 안이다.
 
 ## 12. 제한
 

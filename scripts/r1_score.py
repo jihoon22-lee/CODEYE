@@ -112,12 +112,19 @@ def targets(corpus, case, variant, documented=False):
     return out
 
 
+ANSWERED = ("accepted", "output_rejected")
+
+
 def model_exposure(records):
     """What the kept review records say reached the model: evidence paths by record kind (code, test,
     config, document) over every review stage, and the paths each stage saw. Records carry the review
-    input's evidence list, so this works for paid runs (which have no request dump) too."""
+    input's evidence list, so this works for paid runs (which have no request dump) too. A stage counts
+    only if the model answered at least one of its calls (accepted or output_rejected): a record whose
+    calls were all blocked, refused or failed upstream, or that has no call, lists prepared input only."""
     kinds, by_stage = defaultdict(set), defaultdict(set)
     for r in records:
+        if not any(isinstance(c, dict) and c.get("outcome") in ANSWERED for c in r.get("calls") or []):
+            continue
         stage = r.get("stage")
         for e in r.get("evidence") or []:
             if isinstance(e, dict) and isinstance(e.get("path"), str):
