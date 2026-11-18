@@ -8,9 +8,11 @@ Go 서비스 바이너리와 정적 웹 파일을 배포하되 분석 도구 런
 
 ## 2. 개인 모드 UX
 
-`codeye doctor`는 [W01 범위](21-w01-foundation.md)에서 구현했다. `codeye migrate`와 loopback controller 전용 `codeye serve`는 구현했다([W03 실행 방법](24-w03-api.md)). `codeye start`, `codeye stop`, `codeye agent enroll`은 아직 설계 계약이다. doctor는 DB·작업 디스크·toolchain을 probe하고 모델·프로세스 제어의 미검증 상태를 명시한다. W05의 OS별 프로세스 종료 시험은 [실행기 검증 기록](26-w05-native.md)에 있다. 실모델 연결 시험은 W10에서 수행한다. start는 local controller와 agent를 기동하며 DB가 준비되지 않았으면 구체적인 설치/연결 안내를 한다.
+R0에서는 운영자가 PostgreSQL 연결을 준비해 `codeye migrate`로 schema를 적용하고 `codeye serve`로 loopback 서버와 정적 웹을 띄운다. 일회용 토큰을 발급한 뒤 별도 `codeye agent` 프로세스를 시작하면 등록과 heartbeat가 진행된다. `--autoscale`은 풀 정책에 맞게 워커를 시작·정리한다. [로그인과 서버](24-w03-api.md) · [노드 토큰](28-w06-node-protocol.md) · [에이전트 옵션](28-w06-agent-runtime.md) · [풀 정책](30-w07-scheduler.md)
 
-PostgreSQL을 몰래 시스템 서비스로 설치하지 않는다. 명시적 사용자 승인 아래 Native 설치 가이드를 제공하고 이후 서비스 시작을 단순화한다. 기본 listen은 loopback이다. 브라우저를 닫아도 서비스를 유지하며 stop은 실행 중 작업 drain 또는 명시적 cancel 선택을 지원한다.
+호스트 진단은 `codeye doctor`, 승인 모델의 실요청 확인은 `codeye model probe`로 수행한다. 모델 구성을 선택하지 않은 환경에서 다른 서비스로 우회하지 않는다. [진단 결과 읽기](21-w01-foundation.md) · [모델 검증](32-w10-opencode.md)
+
+통합 `start`·`stop`과 백업·복원은 W25의 운영 목표다. 아래의 배포·quota·폐쇄망 운영 절은 후속 지원을 설계할 때의 조건이다.
 
 ## 3. 서버/노드 배포
 

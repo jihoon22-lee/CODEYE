@@ -1,6 +1,6 @@
 # 11. API와 이벤트 계약
 
-W01 doctor/W02 migrate는 로컬 CLI다. W03에서 세션·프로젝트·run 요청/조회/취소·readiness와 정적 웹 호스팅을 구현했다. W06에서 노드 등록·heartbeat·claim·attempt lease/event/artifact/완료/정리 확인 경로를 구현했다. [OpenAPI](../api/openapi.yaml)의 `x-codeye-status: implemented-w03`/`implemented-w06` 표시와 실제 route를 자동 대조한다. 나머지 endpoint는 설계 계약이며 [W03 구현 기록](24-w03-api.md)과 [W06 노드 프로토콜 기록](28-w06-node-protocol.md)을 따른다.
+R0에서 세션·프로젝트·실행 요청과 조회·취소·노드 프로토콜·보고서 조회와 내보내기를 제공한다. [OpenAPI](../api/openapi.yaml)의 `x-codeye-status`와 [실제 라우트 검사](../internal/httpapi/contract_test.go)로 구현된 경로를 확인한다. SSE·예약 등 설계 경로는 아래에 구분했다.
 
 ## 1. 공통 규칙
 
@@ -10,32 +10,23 @@ W01 doctor/W02 migrate는 로컬 CLI다. W03에서 세션·프로젝트·run 요
 
 ## 2. 사용자 API
 
-| Method / Path | 의미 |
-|---|---|
-| GET /health, /ready | liveness와 DB/필수 설정 readiness 분리 |
-| POST /projects | 최소 입력으로 등록·접근 진단 |
-| GET /projects | 권한 있는 프로젝트와 현재/마지막 실행 상태 |
-| GET/PATCH /projects/{id} | 설정 조회·revision 생성 |
-| POST /projects/{id}/diagnostics | 소스·환경·모델 연결 진단. 무단 빌드 없음 |
-| GET /projects/{id}/branches | provider에서 브랜치 조회 |
-| POST /projects/{id}/runs | durable enqueue 후 202 |
-| GET /runs/{id} | 실행·attempt·scope·progress·version |
-| POST /runs/{id}/cancel | 취소 요청 후 202, 실제 종료는 상태로 확인 |
-| POST /runs/{id}/retry | 같은 입력 새 attempt 또는 거부 사유 |
-| GET /runs/{id}/tasks | task별 상태·도구·소요·reason |
-| GET /runs/{id}/events | SSE, Last-Event-ID 복원 |
-| GET /runs/{id}/logs | task/stream별 cursor 조회·민감값 마스킹 |
-| GET /runs/{id}/report | [W09 구현](31-w09-report.md). 선택 revision의 JSON·Markdown·HTML. 기본 코드 미포함 |
-| GET /runs/{id}/reports | W09 구현. 프로젝트 열람 권한으로 게시된 revision과 내보내기 형식 조회 |
-| GET /runs/{id}/findings | 필터·정렬·페이지 |
-| GET /findings/{id} | 발생 이력·근거·사람 검토 |
-| PATCH /findings/{id}/disposition | version 검사 후 검토 기록 추가 |
-| POST /runs/{id}/exports | 형식·코드 포함 여부를 검사해 export 생성 |
-| GET/POST/PATCH /projects/{id}/schedules | 시간대·overlap·misfire 정책 |
-| GET/PATCH /admin/pools/{id} | min/max·동시 한도·revision·degraded 이유 |
-| GET /admin/nodes | 능력·health·워커·자원·강제 한도 수준 |
+### R0 구현 경로
 
-직접 API에 필드를 추가하는 CRUD는 구현 시 OpenAPI를 함께 확장한다. [핵심 OpenAPI](../api/openapi.yaml)는 프로젝트·실행·취소·보고서·이벤트·노드 heartbeat/claim/완료의 수직 경로를 기계 판독 가능하게 정의한다.
+아래 경로는 같은 origin의 개인 모드에서 사용한다. session 생성과 상태 변경 요청의 인증·CSRF 조건은 [인증 절차](24-w03-api.md)를 따른다.
+
+| 메서드·경로 | 반환 또는 동작 |
+|---|---|
+| GET /health, GET /ready | 프로세스 응답과 DB/schema 준비 상태 |
+| POST, GET, DELETE /session | 일회용 로그인, 현재 세션 조회, 로그아웃 |
+| GET /source-roots, GET /providers | 등록할 수 있는 소스 루트와 Git 공급자 |
+| POST /projects, GET /projects, GET /projects/{id} | 소스 위치 선언, 허가된 프로젝트 목록·상세와 마지막 실행 참조 |
+| POST /projects/{id}/runs | 실행을 영속 큐에 등록하고 202 반환 |
+| GET /runs/{id}, POST /runs/{id}/cancel | 실행 상태·진행 요약·게시 보고서 참조 조회, 실행 취소 요청 |
+| GET /runs/{id}/report, GET /runs/{id}/reports | 선택 리비전의 JSON·Markdown·HTML과 리비전 목록. 기본은 코드 제외 |
+
+### 후속 설계
+
+프로젝트 설정 변경·연결 진단·브랜치 조회, 같은 입력 retry, 개별 task·log 조회, SSE, finding 이력·사람 판정, 예약, 풀·노드 관리 웹 API는 후속 작업이다. R0의 풀·노드 관리는 운영자 CLI를 사용한다. 보고서 내보내기는 위의 게시 리비전 GET 경로로 수행한다. [근거와 게시 계약](31-w09-report.md)
 
 ## 3. 작업 요청
 
@@ -64,7 +55,15 @@ W06 구현 경로(`/api/v1` 아래, 개인 모드 loopback controller). 노드 �
 
 초기 설계의 `POST /attempts/{id}/snapshot`과 3단계 artifact upload(`/artifacts/uploads...`)는 W06에서 각각 `snapshot_fixed` 이벤트와 attempt 범위 단일 PUT으로 대체했다(결정 A18). worker에게 node secret을 주지 않고 agent가 중계한다. node identity·attempt의 owner·epoch를 모두 검증한다. 명령은 노드별 sequence와 command_id를 가지며 cursor 이하 재전송은 확인 처리되어 중복 실행으로 이어지지 않는다.
 
-## 5. 이벤트와 화면 복원
+## 5. 프로젝트 진행 조회와 이벤트 복원
+
+R0의 `GET /projects`와 `GET /projects/{id}`는 `last_run`(ID·상태 또는 null)을 제공한다. `GET /runs/{id}`는 실행 상태, task 종료 수, 가용한 전체 수와 대기 사유를 제공한다. R0의 `progress.stage`는 run 상태이며 활성 분석 역할을 식별하지 않는다.
+
+W15 설계에서는 서버가 목록의 각 프로젝트에 대표 run 참조와 단계 요약을, 실행 상세에 동일 집계의 단계별 상태·종료 수·계획 수·제외/실패 사유·마지막 확인 시각을 추가한다. 기존 `last_run`의 의미와 `progress.stage`는 유지하고 세부 단계는 선택 필드로 확장한다. 프로젝트 목록 응답에 요약을 담아 프로젝트마다 상세를 따로 요청할 필요가 없게 한다. 권한 없는 프로젝트의 run ID·단계·사유도 반환하지 않는다.
+
+근거는 현재 attempt의 수용된 task 전이, 소스 취득·snapshot 기록, 서버의 보고서 게시 기록이다. 단계 시작·종료 기록은 run ID, attempt와 epoch, 적용 계획(있을 때), 단계 키, 순번에 묶는다. 동일 이벤트 재전송은 한 번만 반영하고 오래된 epoch는 제외한다. 보고서 생성 완료는 해당 리비전의 게시가 확정됐을 때 표시한다. 구버전 데이터는 세부 정보 부재를 허용한다. 필드 이름과 스키마는 W15 구현에서 예시·호환 시험과 함께 확정한다. [표시 규칙과 예시](12-report-and-ui.md)
+
+### W22 SSE 설계
 
 ```text
 id: 142

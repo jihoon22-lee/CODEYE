@@ -1,6 +1,6 @@
 # 23. W02 도메인과 PostgreSQL 저장 계약
 
-상태: W02 구현·로컬 실제 DB 검증 완료 · 2026-11-18. W03 HTTP 인증·W06 노드 protocol·W09 보고서 게시를 구현한 것은 아니다.
+W02에서 검증한 migration 0001과 저장 계층의 기록이다. 이후 추가된 노드·스케줄러·보고서 테이블은 [현재 migration 목록](10-data-model.md)에 있다.
 
 ## 1. 구현 범위
 
@@ -62,7 +62,7 @@ evidence는 같은 project/run/attempt/task, 해당 run의 고정 snapshot 또�
 
 공개 저장 오류는 invalid / forbidden / not_found / conflict / stale_attempt / unavailable / migration으로 제한한다. SQLSTATE class 22의 값 오류와 제약 오류를 unavailable로 숨기지 않는다. 사용자 입력·비밀번호가 포함될 수 있는 pgx error detail은 버린다.
 
-DB 불변조건 위반 코드는 CY001(불변 행/열), CY002(고정 참조), CY003(카운터 감소), CY004(금지 상태 전이)이며 저장 서비스에서 conflict로 분류한다. 이는 향후 HTTP 409 등의 근거이며 현재 HTTP endpoint 구현은 아니다.
+DB 불변조건 위반 코드는 CY001(불변 행/열), CY002(고정 참조), CY003(카운터 감소), CY004(금지 상태 전이)이며 저장 서비스에서 conflict로 분류한다. HTTP 계층에서 이 오류를 공개 응답으로 변환한다. [API 오류 계약](11-api-and-events.md)
 
 ## 6. 수용 시험과 남은 범위
 
@@ -79,4 +79,4 @@ python3 scripts/validate_bundle.py
 
 Native PostgreSQL의 initdb/postgres/psql을 PATH에 두고 test_postgres.py를 실행하면 임시 DB에서 migration·저장 서비스 시험이 실제 실행된다. DB 설정 없이 go test만 실행하면 통합 시험은 skip되므로 W02 완료 증거로 삼지 않는다. CI Linux job에서는 실제 DB 시험이 필수다.
 
-요구사항 연결은 REQ-002/003/013/022/035, NFR-002/003/007의 저장 기반이다. TC-40~45를 별도로 정의하고 기존 TC-02/03/04/12/13/21/22/23/31/32의 전체 제품 경로와 구분한다. W03 인증 HTTP, W04 실제 소스 고정, W05 OS 종료, W06/W07 자원·agent·autoscale, W09 실제 보고서 게시가 다음 작업이다.
+요구사항 연결은 REQ-002/003/013/022/035, NFR-002/003/007의 저장 기반이다. TC-40~45를 별도로 정의하고 기존 TC-02/03/04/12/13/21/22/23/31/32의 전체 제품 경로와 구분한다. 통합 경로의 수용 결과는 [R0 파일럿](36-r0-pilot.md)에 있다.

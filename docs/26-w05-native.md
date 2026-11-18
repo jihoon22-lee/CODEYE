@@ -1,6 +1,6 @@
 # 26. W05 NativeExecutor
 
-상태: W05 Linux 실제 subprocess 검증 완료 · Windows `windows-2025` CI 실행 통과, Windows 호스트 build 26200 실기 추가 검증 · 2026-11-18. agent·worker protocol(W06), 분석기 어댑터(W08)는 구현하지 않았다.
+W05 실행기는 Linux에서 실제 하위 프로세스로 검증했다. Windows Server 2025 CI와 Windows 호스트 build 26200의 실행 범위는 아래에 기록했다. 에이전트와 결합한 종료·복구는 [W06 런타임](28-w06-agent-runtime.md)을 따른다.
 
 ## 1. 범위와 요구사항
 

@@ -1,70 +1,34 @@
-# CODEYE 문서 인덱스
+# CODEYE 문서 안내
 
-설계 기준선 v0.1. 구현된 단계의 범위와 검증 환경은 아래 개발 기록에 정리했다. 성능 목표와 초기 운영값은 각 명세에서 확인할 수 있다.
+R0는 개인 모드의 Go 분석·승인된 모델 검토·근거 보고서까지 검증했다. R1은 모듈·문서·환경 탐색과 프로젝트별 진행 표시에서 시작한다. 새 세션은 [W15 작업 순서](17-implementation-plan.md)와 [수용 조건 TC-96~100](18-acceptance-and-traceability.md)을 함께 읽는다.
 
-## 제품과 핵심 설계
-
-| 문서 | 내용 |
+| 하려는 일 | 먼저 읽을 문서 |
 |---|---|
-| [00 제품 개요와 범위](00-product-and-scope.md) | 확정 요구, 비목표, 단계별 제공 범위 |
-| [01 요구사항](01-requirements.md) | 추적 가능한 기능·비기능 요구사항 |
-| [02 분석 품질 원칙](02-analysis-quality.md) | 깊은 검토, 근거, 반증, 분석 범위, 보고서 품질 |
-| [03 아키텍처](03-architecture.md) | 관리 서버·노드·워커·저장소·모델의 경계 |
-| [04 분석 파이프라인](04-analysis-pipeline.md) | 분석 DAG, 상태 전이, 부분 실패, 캐시 |
-| [05 소스와 실행 환경](05-source-and-environments.md) | Git/local 스냅샷, NFS, 환경 탐색·재현 |
-| [06 도구 어댑터](06-analyzer-contract.md) | 분석기 계약, 언어별 도구 구성, 정규화 |
-| [07 LLM과 분석 지침](07-llm-and-instructions.md) | 검토 역할, 컨텍스트, OpenCode, 지침 버전 |
-| [08 Native 실행](08-native-execution.md) | Windows/Linux 프로세스·자원·취소·신뢰 경계 |
-| [09 워커·예약·자동 증감](09-workers-and-scheduling.md) | 다중 노드, 최소·최대, 공정성, lease·복구 |
+| 개인 모드에서 분석 실행 | [서버·로그인](24-w03-api.md) · [노드 토큰](28-w06-node-protocol.md) · [에이전트](28-w06-agent-runtime.md) · [자동 증감](30-w07-scheduler.md) |
+| 결과 읽기와 평가 | [보고서 사용법](35-w13-evidence-report.md) · [실제 파일럿과 한계](36-r0-pilot.md) · [Go vet 보고서 예시](../examples/report-go-vet.json) |
+| 모델 역할 설계 | [역할별 지침과 현재 팩](07-llm-and-instructions.md) · [평가 기준](16-evaluation.md) |
+| 프로젝트 진행 화면 구현 | [화면 단계·상태 예시](12-report-and-ui.md) · [조회와 재접속](11-api-and-events.md) · [내부 파이프라인](04-analysis-pipeline.md) |
 
-## 계약과 사용자 경험
+## 제품 계약과 계획
 
-| 문서 | 내용 |
+| 분야 | 문서 |
 |---|---|
-| [10 데이터 모델](10-data-model.md) | 엔티티, 무결성, 발견 사항·증거·이력 |
-| [11 API와 이벤트](11-api-and-events.md) | 인증, 멱등성, API 계약, SSE, 오류 |
-| [12 보고서와 UI](12-report-and-ui.md) | 요약·영역·상세, 진행 표시, 접근성·내보내기 |
-| [13 GitHub·GHES](13-github-and-ghes.md) | App, 저장소 연결, 웹훅, PR·댓글 명령 |
-| [14 보안·권한](14-security-and-governance.md) | 프로젝트 권한, Native 한계, 프롬프트 주입, 보관 |
-| [15 배포·운영](15-deployment-and-operations.md) | 개인 PC, 서버, 폐쇄망, 백업·장애 대응 |
+| 제품과 범위 | [00 제품 정의](00-product-and-scope.md) · [01 요구사항](01-requirements.md) · [02 분석 품질](02-analysis-quality.md) |
+| 실행 경로 | [03 아키텍처](03-architecture.md) · [04 파이프라인](04-analysis-pipeline.md) · [05 소스·환경](05-source-and-environments.md) · [06 도구 어댑터](06-analyzer-contract.md) |
+| 모델과 노드 | [07 모델 역할](07-llm-and-instructions.md) · [08 Native 실행](08-native-execution.md) · [09 워커와 스케줄링](09-workers-and-scheduling.md) |
+| 저장·조회·표시 | [10 데이터 무결성](10-data-model.md) · [11 API·이벤트](11-api-and-events.md) · [12 보고서·진행 표시](12-report-and-ui.md) |
+| 연동과 운영 | [13 GitHub·GHES](13-github-and-ghes.md) · [14 보안·권한](14-security-and-governance.md) · [15 배포·운영](15-deployment-and-operations.md) |
+| 개발과 인수 | [16 품질 평가](16-evaluation.md) · [17 구현 계획](17-implementation-plan.md) · [18 요구사항·시험 추적](18-acceptance-and-traceability.md) · [19 결정 기록](19-decisions-and-open-questions.md) |
 
-## 개발 실행
+## R0 구현 근거
 
-| 문서 | 내용 |
+단계별 기록의 환경·시험 수·미실행 항목은 각 단계의 검증 시점에 해당한다. 현재 통합 범위는 [W14 기록](36-r0-pilot.md)을 기준으로 확인한다.
+
+| 확인할 범위 | 구현·시험 기록 |
 |---|---|
-| [16 분석 품질 평가](16-evaluation.md) | 데이터셋, precision/recall 범위, 근거·보고서 평가 |
-| [17 구현 작업 계획](17-implementation-plan.md) | 작업 ID, 선행 관계, 산출물, 완료 조건 |
-| [18 수용 테스트·추적표](18-acceptance-and-traceability.md) | 성공·실패·장애·보안·품질의 검증 시나리오 |
-| [19 결정과 미확정 사항](19-decisions-and-open-questions.md) | 설계 기본값, 검증할 가정, 변경 절차 |
-| [20 설계 일관성 점검](20-design-review.md) | 충돌하기 쉬운 계약과 구현 검토 질문 |
-| [21 W01 실행 기반](21-w01-foundation.md) | 실제 실행·개발 환경·doctor 계약·테스트와 남은 제한 |
-| [22 W02 착수 준비](22-w02-preparation.md) | 도메인·DB 범위, 트랜잭션 시험과 착수 전 결정 항목 |
-| [23 W02 저장 계약](23-w02-storage.md) | 도메인·migration·ACL·lease·근거 metadata와 실제 DB 시험 |
-| [24 W03 API·인증](24-w03-api.md) | loopback 세션·프로젝트/run·브라우저 통합 검증 |
-| [25 W04 소스 확보](25-w04-source.md) | Git/local 고정·manifest·독립 workspace·경계 시험 |
-| [26 W05 Native 실행기](26-w05-native.md) | argv·env·프로세스 트리·timeout·종료 확인 |
-| [27 W06 착수 준비](27-w06-preparation.md) | 원계획 대조, 프로토콜 통합 쟁점과 두 에이전트 수용 시험 |
-| [28 W06 노드 API](28-w06-node-protocol.md) · [에이전트 실행](28-w06-agent-runtime.md) | 등록·배정·lease·취소·복구 및 실프로세스 검증 |
-| [29 W08 Go vet](29-w08-go-vet.md) | 실제 Go 도구, 원시 관찰과 미분석 범위 |
-| [30 W07 워커 풀과 자동 증감](30-w07-scheduler.md) | 정책 revision, 공정 배정·자동 증감, 복구 시험 |
-| [31 W09 구조화 보고서](31-w09-report.md) | 게시 fencing·원시 근거 검증·프로젝트별 내보내기 |
-| [32 W10 OpenCode](32-w10-opencode.md) | 응답·취소·도구 권한 차단과 호출 예산 |
-| [33 W11 맥락 검토](33-w11-context-review.md) | 소스 승인, 발췌와 근거 ID, 실제 역할 실행 |
-| [34 W12 후보 검증](34-w12-verifier.md) | 호출자·테스트 반례, 근거 검증과 부분 완료 |
-| [35 W13 근거 보고서](35-w13-evidence-report.md) | 후보·반대 근거 통합, 범위와 내보내기 |
-| [36 W14 R0 파일럿](36-r0-pilot.md) | 합성 전후 10쌍과 고정 CODEYE 사본, 결과와 제한 |
+| 환경과 저장 | [W01 doctor](21-w01-foundation.md) · [W02 PostgreSQL](23-w02-storage.md) · [W03 인증 API](24-w03-api.md) |
+| 입력과 실행 | [W04 소스 사본](25-w04-source.md) · [W05 실행기](26-w05-native.md) · [W06 노드 프로토콜](28-w06-node-protocol.md) · [W06 런타임](28-w06-agent-runtime.md) · [W07 워커 풀](30-w07-scheduler.md) |
+| 분석과 게시 | [W08 Go vet](29-w08-go-vet.md) · [W09 보고서 게시](31-w09-report.md) · [W10 OpenCode](32-w10-opencode.md) · [QA 예산 relay](r0-openai-gateway.md) |
+| 검토와 검증 | [W11 맥락·후보](33-w11-context-review.md) · [W12 반증](34-w12-verifier.md) · [W13 근거 화면](35-w13-evidence-report.md) · [W14 품질 회귀](36-r0-pilot.md) |
 
-## 기계 판독 계약과 예시
-
-- [상태 Schema](../schemas/state.schema.json), [상태 예시](../examples/state.json): W02 상태 어휘와 API 일치 검증.
-- [Doctor Schema](../schemas/doctor.schema.json), [합성 진단 예시](../examples/doctor.json): W01 CLI 결과 계약.
-
-- [발견 사항 Schema](../schemas/finding.schema.json), [계획 Schema](../schemas/plan.schema.json), [보고서 Schema](../schemas/report.schema.json), [도구 Schema](../schemas/analyzer.schema.json).
-- [핵심 OpenAPI 계약](../api/openapi.yaml): 핵심 수직 경로를 정의한다. 모든 운영 CRUD가 완성된 명세라는 뜻은 아니다.
-- [플랫폼 설정](../examples/platform.yaml), [프로젝트 설정](../examples/project.yaml), [Ruff 어댑터 예시](../examples/analyzer-ruff.yaml), [계획 예시](../examples/plan.json).
-- [합성 보고서](../examples/report.md), [기계 판독 보고서](../examples/report.json), [합성 코드와 평가 정답](../fixtures/cleanup/README.md).
-- [프롬프트 팩 기본 지침](../prompts/review-v1/00-core.md), [팩 manifest](../prompts/review-v1/pack.yaml).
-
-기술 검토자는 02→04→07→10→12→16, 실행기 구현자는 03→05→08→09→11→18, 제품 구현자는 00→01→12→17 순서로 읽는 것을 권장한다.
-
-- [Snapshot manifest Schema](../schemas/snapshot-manifest.schema.json), [local 예시](../examples/snapshot-manifest.json), [Git 예시](../examples/snapshot-manifest-git.json).
+HTTP 경로의 구현 표시는 [OpenAPI](../api/openapi.yaml)에 있다. 기계 판독 계약은 [schemas](../schemas), 입력·출력 예시는 [examples](../examples), 활성 모델 지침은 [R0 팩](../prompts/review-v1/pack.yaml)에서 찾을 수 있다.
