@@ -38,6 +38,10 @@ type packRun struct {
 	// uploaded artifacts with the default registry.
 	stages map[string]domain.Stage
 	report report.Report
+	// uploads are every artifact body and protocol message the fake agent
+	// received, and scratch the worker scratch root (W21 leak checks).
+	uploads [][]byte
+	scratch string
 }
 
 // runPack runs the production deep-review composition (discovery → the
@@ -115,6 +119,15 @@ func runPackFiles(t *testing.T, files map[string]string, tools map[string]string
 	defer fa.mu.Unlock()
 	if err := json.Unmarshal(fa.artifacts[*out.complete.ResultManifestClientArtifact], &out.manifest); err != nil {
 		t.Fatal(err)
+	}
+	out.scratch = e.scratch
+	for _, body := range fa.artifacts {
+		out.uploads = append(out.uploads, body)
+	}
+	for _, m := range fa.msgs {
+		if b, err := json.Marshal(m); err == nil {
+			out.uploads = append(out.uploads, b)
+		}
 	}
 	out.stages = map[string]domain.Stage{}
 	for _, m := range fa.msgs {
