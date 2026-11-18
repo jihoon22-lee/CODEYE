@@ -14,6 +14,13 @@ import json
 from pathlib import Path
 
 ACTION = {"supported", "reproduced"}
+# Validator error codes (docs/37 §10) grouped into the TC-100 blocking classes.
+ERROR_CLASS = {
+    **dict.fromkeys(("evidence_id_unknown", "evidence_missing", "evidence_kind_invalid", "observation_id_unknown",
+                     "evidence_not_at_observation", "code_evidence_missing"), "fabricated_evidence"),
+    **dict.fromkeys(("scope_generalized", "scope_unknown_path", "scope_invalid", "module_out_of_scope"), "scope_violation"),
+    "execution_claim": "execution_claim",
+}
 PENDING = {"unreviewed", "inconclusive"}
 
 
@@ -27,7 +34,7 @@ def load(results):
         if kept.is_dir():
             for f in sorted(kept.glob("*.json")):
                 doc = json.loads(f.read_bytes())
-                if "stage" in doc and "calls" in doc:
+                if "stage" in doc and "calls" in doc:  # review record 0.1 or 0.2
                     records.append(doc)
         out[row["case"]] = {"row": row, "report": report, "records": records}
     return out
@@ -53,6 +60,27 @@ def structural(case):
         for r in records
         if r.get("outcome") not in (None, "", "accepted")
     ]
+    # Output errors are counted per call attempt across stages (the content of a
+    # rejected stage is dropped, so the errors are the only trace of what was refused).
+    errors = Counter()
+    usage = Counter()
+    for r in records:
+        for c in r.get("calls", []):
+            for e in c.get("output_errors") or []:
+                errors[ERROR_CLASS.get(e, "other")] += 1
+            u = c.get("usage") or {}
+            for k in ("input", "output", "input_tokens", "output_tokens"):
+                if isinstance(u.get(k), int):
+                    usage[k] += u[k]
+    markers = Counter(
+        m for r in records for m in r.get("limitations", [])
+        if m in ("execution_claim_rejected", "quarantined") or m.startswith("upstream_")
+    )
+    markers.update(
+        m for r in records for v in r.get("verifications", []) for m in v.get("limitations", [])
+        if m == "reproduction_claim_rejected"
+    )
+    candidates = Counter(r["stage"] for r in records for _ in r.get("candidates", []))
     return {
         "status": case["row"]["status"],
         "ai_review": report["coverage"]["ai_review"]["status"],
@@ -64,6 +92,13 @@ def structural(case):
         "reproduced_without_execution": reproduced,
         "stats_consistent": stats_ok,
         "rejected_outputs": rejected,
+        "output_errors": dict(sorted(errors.items())),
+        "markers": dict(sorted(markers.items())),
+        "candidates_by_stage": dict(sorted(candidates.items())),
+        "documents_contracts": sum(len(r.get("contracts", [])) for r in records),
+        "documents_conflicts": sum(len(r.get("conflicts", [])) for r in records),
+        "instruction_notes": sum(len(r.get("instruction_notes", [])) for r in records),
+        "usage": dict(usage),
     }
 
 
@@ -100,6 +135,8 @@ def main():
             "reproduced_without_execution": sum(r["reproduced_without_execution"] for r in rows),
             "stats_inconsistent": sum(not r["stats_consistent"] for r in rows),
             "rejected_outputs": sum(len(r["rejected_outputs"]) for r in rows),
+            "output_errors": dict(sum((Counter(r["output_errors"]) for r in rows), Counter())),
+            "usage": dict(sum((Counter(r["usage"]) for r in rows), Counter())),
         }
     result = {"cases": table, "totals": totals}
     if args.output:
