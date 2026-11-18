@@ -166,7 +166,7 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 | **실행했으나 쓸 수 없음**: 실패, 시간 초과, 취소, 부분 파싱, envelope 없음·무효 | 모든 검토 역할을 `skipped_policy`/`secret_screen_failed`로 건너뛴다. 모델 요청을 보내지 않는다. 거르지 않은 코드로 대신 보내지 않는다. |
 | **완전한 성공**(`succeeded`, 부분 파싱 아님, parse OK) | 탐지된 파일을 모든 발췌에서 뺀다. 대상은 코드 문맥, 문서, 관찰 창, 검증 확장, v1 corpus다. 그 파일에 위치한 도구 관찰은 규칙과 위치만 보내고 문구를 뺀다. 하드코딩 암호 규칙처럼 문구가 값을 인용할 수 있기 때문이다. 제약 `secret_files_withheld`를 남긴다. |
 
-- 순서: 워커는 계획 순서대로 작업을 한 번에 하나씩 실행하고, 검토 역할은 정적 계획 뒤에 붙는다. 그래서 검토가 envelope을 읽을 때 비밀값 작업은 이미 끝나 있다. 계획에 있는데 envelope이 없으면 "실행 안 됨"이 아니라 실패로 본다. 경쟁 상태가 생겨도 열린 쪽으로 처리되지 않는다.
+- 순서: 워커는 계획 순서대로 작업을 한 번에 하나씩 실행하고, 검토 역할은 정적 계획 뒤에 붙는다. 그래서 검토가 envelope을 읽을 때 비밀값 작업은 이미 끝나 있다. 계획에 있는데 envelope이 없으면 "실행 안 됨"이 아니라 실패로 본다. 경쟁 상태가 생겨도 열린 쪽으로 처리되지 않는다. R1 역할은 선별을 언어 지침 선택(`reviewpackr1.For(role, pack.InScope)`, A29)과 요청 작성보다 먼저 한다.
 - review-v1의 고정 요청 바이트는 바뀌지 않는다(`TestReviewV1IsPinned`). 선별 결과는 corpus에서 파일을 빼는 방식으로만 반영한다. 제약은 기록에만 들어간다. R1 예시(`examples/review-r1/`)는 기록의 제약과 상위 기록 SHA만 바뀌었다. 요청 SHA는 그대로다.
 - 시험: `TestR1WithholdsSecretFiles`, `TestR1SecretScreenCases`(실행 안 됨·실패·envelope 없음), `TestV1SecretScreen`(성공·실행 안 됨·실패·없음).
 
@@ -222,7 +222,7 @@ envelope 관찰에 선택 필드 `metric{name, value, threshold, unit}`을 더�
 - 웹 parser가 `metric_observations`와 관찰 `metric`을 읽는다.
 - `api/openapi.yaml`은 보고서 schema를 참조하므로 따로 바꾸지 않았다.
 - **보고서 규칙 문맥 검증 완화(W19 계약).** `recorded` 문맥은 이제 digest만 요구한다. 읽은 파일이 없으면 `config_paths`가 없다. 이전 검증은 `config_paths`가 있어야 했다. 그런데 빈 목록은 JSON에서 생략되므로, `.gitleaksignore`가 없는 스냅샷의 gitleaks 행(`honored`, `config_files=[]`)을 가진 보고서는 게시 뒤 controller가 다시 읽을 때 거부됐다(실제 node smoke에서 보고서 조회 500). docs/39 §5.1의 "`recorded`일 때만", "알려짐 = `recorded`이고 digest가 있음"과 맞는다. 기존 보고서는 그대로 유효하다(`TestW21HonoredWithoutConfigFilesReadsBack`).
-- 기존 시험의 기대 목록을 고쳤다. W21 작업이 모든 프로젝트에 계획되기 때문이다. 대상은 카탈로그 순서, 누락 사유, 플래그(`builtin_test.go`, W20의 `rust_test.go`, `cmd/codeye/worker_handlers_test.go`), TC-69의 Python 전용 계획(`run`), `node_smoke`의 기존 Go run 기대값(관찰 문서 5개, 도구 행 5개, 계획 5, `unsupported` 3 또는 4)이다. `node_smoke`는 도구 변수로 제한한 smoke만 더하라는 규칙이 있었다. 그러나 W21 작업이 기본 smoke의 Go run에도 계획되므로 기존 기대값을 그대로 둘 수 없었다. 판정 규칙은 바꾸지 않았다. W19·W20·W23 시험은 이 기대값 변경 밖에서 그대로 통과한다.
+- 기존 시험의 기대 목록을 고쳤다. W21 작업이 모든 프로젝트에 계획되기 때문이다. 대상은 카탈로그 순서, 누락 사유, 플래그(`builtin_test.go`, W20의 `rust_test.go`, `cmd/codeye/worker_handlers_test.go`. W18의 eslint·tsc·eslint-typed 행과 합침), TC-69의 Python 전용 계획(`run`), `node_smoke`의 기존 Go run 기대값(관찰 문서 5개, 도구 행 5개, 계획 5, `unsupported` 3 또는 4)이다. `node_smoke`는 도구 변수로 제한한 smoke만 더하라는 규칙이 있었다. 그러나 W21 작업이 기본 smoke의 Go run에도 계획되므로 기존 기대값을 그대로 둘 수 없었다. 판정 규칙은 바꾸지 않았다. W18·W19·W20·W23·W24 시험은 이 기대값 변경 밖에서 그대로 통과한다.
 
 ## 11. 시험과 실행 근거
 
