@@ -20,7 +20,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-const usage = `CODEYE control plane (W03/W06)
+const usage = `CODEYE control plane (W03/W06/W07)
 Usage:
   codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s]
   codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH] [--timeout 75s]
@@ -31,10 +31,13 @@ Usage:
   codeye source-root grant --root ROOT_ID --user USER_ID
   codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331]
-  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--user USER_ID [--login-link-file .codeye/login-link]]
-` + nodeAdminUsage + `Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
+  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]]
+` + nodeAdminUsage + `  codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
+               [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache DIR]
+               [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH]
+Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
 Login links are written to a 0600 file; the token is never printed.
-"serve" runs the controller API and the node protocol (enrollment, claims, leases, artifacts).
+"serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts) and the pool autoscaler.
 Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
 Enrollment tokens are written to a 0600 file; the token is never printed.
 start/stop are not implemented.
@@ -84,14 +87,21 @@ func runControl(ctx context.Context, args []string, out, stderr io.Writer) (code
 
 // parse parses flags without echoing rejected values (they may be secrets).
 func parse(name string, args []string, stderr io.Writer, define func(*flag.FlagSet)) bool {
+	_, ok := parseSet(name, args, stderr, define)
+	return ok
+}
+
+// parseSet is parse that also returns the flag set (fs.Visit lists the flags
+// given explicitly).
+func parseSet(name string, args []string, stderr io.Writer, define func(*flag.FlagSet)) (*flag.FlagSet, bool) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	define(fs)
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		fmt.Fprintf(stderr, "invalid %s options; use codeye --help\n", name)
-		return false
+		return fs, false
 	}
-	return true
+	return fs, true
 }
 
 func withStore(ctx context.Context, stderr io.Writer, fn func(context.Context, *postgres.Store) int) int {
@@ -292,7 +302,9 @@ func loginLink(ctx context.Context, args []string, out, stderr io.Writer) int {
 
 func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var listen, webDir, user, linkFile, artifactDir string
+	var reconcile time.Duration
 	if !parse("serve", args, stderr, func(fs *flag.FlagSet) {
+		fs.DurationVar(&reconcile, "reconcile-interval", 5*time.Second, "")
 		fs.StringVar(&listen, "listen", "127.0.0.1:7331", "")
 		fs.StringVar(&webDir, "web-dir", filepath.Join("web", "dist"), "")
 		fs.StringVar(&artifactDir, "artifact-dir", filepath.Join(".codeye", "artifacts"), "")
@@ -304,6 +316,10 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 	addr, err := httpapi.ParseListen(listen)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if reconcile == 0 || reconcile > time.Hour || (reconcile > 0 && reconcile < 100*time.Millisecond) {
+		fmt.Fprintln(stderr, "--reconcile-interval must be between 100ms and 1h (negative disables the autoscaler)")
 		return 2
 	}
 	if artifactDir == "" {
@@ -331,12 +347,12 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "database schema is %s (applied %d, this binary expects %d); run \"codeye migrate\" explicitly after reviewing it\n", st.State, st.Applied, st.Latest)
 		return 1
 	}
-	return serveOn(ctx, startCtx, store, addr, webDir, user, linkFile, artifactDir, out, stderr)
+	return serveOn(ctx, startCtx, store, addr, webDir, user, linkFile, artifactDir, reconcile, out, stderr)
 }
 
-func serveOn(ctx, startCtx context.Context, store *postgres.Store, addr netip.AddrPort, webDir, user, linkFile, artifactDir string, out, stderr io.Writer) int {
+func serveOn(ctx, startCtx context.Context, store *postgres.Store, addr netip.AddrPort, webDir, user, linkFile, artifactDir string, reconcile time.Duration, out, stderr io.Writer) int {
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
-	srv, err := httpapi.New(httpapi.Config{Listen: addr, WebDir: webDir, Logger: logger, ArtifactDir: artifactDir}, store)
+	srv, err := httpapi.New(httpapi.Config{Listen: addr, WebDir: webDir, Logger: logger, ArtifactDir: artifactDir, ReconcileInterval: reconcile}, store)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2

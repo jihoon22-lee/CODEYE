@@ -53,8 +53,13 @@ type Config struct {
 	EnrollTokenFile                            string
 	// SourceRoots is the private mapping source_root_id → absolute path.
 	SourceRoots map[string]string
-	// Workers is the static worker count (W06). A W07 scaler replaces it.
-	Workers       int
+	// Workers is the static worker count (W06, default mode).
+	Workers int
+	// Autoscale (W07) starts with zero workers and starts/drains/stops
+	// workers only on controller commands; MaxWorkers is then the local
+	// hard cap reported to the controller (1..16).
+	Autoscale     bool
+	MaxWorkers    int
 	ToolPath      string
 	GitExecutable string
 	GitHosts      []string
@@ -97,7 +102,17 @@ type Agent struct {
 	logMu     sync.Mutex
 	failures  int
 	lastStart time.Time
+
+	// Capability probe (autoscale): analysis handlers advertised by the most
+	// recent worker handshake (probe worker or a started worker).
+	probeHandlers []workerproto.HandlerInfo
+	probed        bool
+	probing       bool
+	lastProbe     time.Time
 }
+
+// probeRetry is the delay between failed capability probes (autoscale).
+const probeRetry = 30 * time.Second
 
 // New validates cfg.
 func New(cfg Config) (*Agent, error) {
@@ -106,6 +121,9 @@ func New(cfg Config) (*Agent, error) {
 	}
 	if cfg.Workers < 0 || cfg.Workers > maxWorkers {
 		return nil, &ExitError{ExitUsage, "--workers must be 0..16"}
+	}
+	if cfg.Autoscale && (cfg.MaxWorkers < 1 || cfg.MaxWorkers > maxWorkers) {
+		return nil, &ExitError{ExitUsage, "--max-workers must be 1..16"}
 	}
 	for id, p := range cfg.SourceRoots {
 		if !domain.ValidID(id) || !filepath.IsAbs(p) {
@@ -150,7 +168,11 @@ func New(cfg Config) (*Agent, error) {
 	if err != nil {
 		return nil, &ExitError{ExitUsage, err.Error()}
 	}
-	return &Agent{cfg: cfg, client: client, workers: map[string]*workerProc{}, kickCh: make(chan struct{}, 1), hbNow: make(chan struct{}, 1), boot: domain.NewID()[:8], scaler: &StaticScaler{N: cfg.Workers}}, nil
+	var scaler Scaler = &StaticScaler{N: cfg.Workers}
+	if cfg.Autoscale {
+		scaler = &ControllerScaler{Cap: cfg.MaxWorkers}
+	}
+	return &Agent{cfg: cfg, client: client, workers: map[string]*workerProc{}, kickCh: make(chan struct{}, 1), hbNow: make(chan struct{}, 1), boot: domain.NewID()[:8], scaler: scaler}, nil
 }
 
 func (ag *Agent) dataRoot() string { return filepath.Join(ag.cfg.StateDir, "data") }
@@ -248,6 +270,12 @@ func (ag *Agent) Run(ctx context.Context) error {
 	ag.spawner = newSpawner()
 	ag.ctx, ag.cancel = context.WithCancel(context.Background())
 	defer ag.cancel()
+	if ag.cfg.Autoscale {
+		// Zero workers at rest: learn the analysis capabilities from one
+		// short-lived probe worker before the first heartbeat, so the
+		// controller can see this node as capable without a running worker.
+		ag.probe(ctx)
+	}
 
 	revoked := false
 	if err := ag.heartbeat(ctx); IsUnauthenticated(err) {
@@ -260,6 +288,7 @@ func (ag *Agent) Run(ctx context.Context) error {
 	for !revoked {
 		ag.reconcileWorkers(ctx)
 		ag.claimIdle()
+		ag.retryProbe(ctx)
 		select {
 		case <-ctx.Done():
 			return ag.shutdown()
@@ -334,6 +363,11 @@ func (ag *Agent) loadOrEnroll(ctx context.Context) error {
 func (ag *Agent) capabilities() []string {
 	set := map[string]bool{}
 	ag.mu.Lock()
+	for _, h := range ag.probeHandlers {
+		if nodeproto.ValidCapability(h.Capability) && strings.HasPrefix(h.Capability, "analysis:") {
+			set[h.Capability] = true
+		}
+	}
 	for _, w := range ag.workers {
 		if w.draining {
 			continue
@@ -400,11 +434,14 @@ func (ag *Agent) heartbeat(ctx context.Context) error {
 	if req.CleanupReports == nil {
 		req.CleanupReports = []nodeproto.CleanupReport{}
 	}
+	if ag.cfg.Autoscale {
+		req.WorkerScaling, req.MaxWorkers = nodeproto.ScalingController, ag.cfg.MaxWorkers
+	}
 	hctx, cancel := context.WithTimeout(ctx, ag.heartbeatInterval()*2)
 	defer cancel()
 	resp, err := ag.client.Heartbeat(hctx, req)
 	if err != nil {
-		ag.log("warn", "heartbeat_failed", "code", replyCode(err))
+		ag.log("warn", "heartbeat_failed", "reply_code", replyCode(err))
 		return err
 	}
 	ag.mu.Lock()
@@ -420,13 +457,15 @@ func (ag *Agent) heartbeat(ctx context.Context) error {
 		if r.Code != nil {
 			code = *r.Code
 		}
-		ag.log("info", "cleanup_reported", "attempt_id", r.AttemptID, "accepted", fmt.Sprint(r.Accepted), "code", code)
+		ag.log("info", "cleanup_reported", "attempt_id", r.AttemptID, "accepted", fmt.Sprint(r.Accepted), "reply_code", code)
 		if ag.reportSettled(r, code) {
 			_ = ag.journal.Append(Record{Kind: RecCleanupAcked, AttemptID: r.AttemptID})
 		}
 	}
 	for _, c := range resp.Commands {
-		ag.applyCommand(c)
+		if err := ag.applyCommand(c); err != nil {
+			return err // Leave this command and the rest of the batch unacknowledged.
+		}
 	}
 	ag.kick()
 	return nil
@@ -453,7 +492,7 @@ func (ag *Agent) reportSettled(r nodeproto.CleanupResult, code string) bool {
 			}
 		})
 		if !verified.IsZero() && time.Since(verified) > reportResendWindow {
-			ag.log("error", "cleanup_report_abandoned", "attempt_id", r.AttemptID, "code", code)
+			ag.log("error", "cleanup_report_abandoned", "attempt_id", r.AttemptID, "reply_code", code)
 			return true
 		}
 		return false
@@ -462,11 +501,20 @@ func (ag *Agent) reportSettled(r nodeproto.CleanupResult, code string) bool {
 	return true
 }
 
-func (ag *Agent) applyCommand(c nodeproto.Command) {
+func (ag *Agent) applyCommand(c nodeproto.Command) error {
 	applied := false
-	ag.journal.With(func(j *Journal) { _, applied = j.Commands[c.CommandID] })
+	ag.journal.With(func(j *Journal) {
+		_, applied = j.Commands[c.CommandID]
+		applied = applied || c.Sequence <= j.LastSequence
+	})
 	if applied {
-		return
+		return nil
+	}
+	// The command cursor must be durable before its worker can start.
+	// A crash before spawn is recovered by the controller's bounded start timeout.
+	if err := ag.journal.Append(Record{Kind: RecCommandApplied, CommandID: c.CommandID, Sequence: c.Sequence}); err != nil {
+		ag.log("error", "command_journal_failed", "command_id", c.CommandID, "kind", c.Kind)
+		return err
 	}
 	ag.mu.Lock()
 	switch c.Kind {
@@ -480,22 +528,22 @@ func (ag *Agent) applyCommand(c nodeproto.Command) {
 		if c.WorkerID != nil {
 			if w := ag.workers[*c.WorkerID]; w != nil {
 				w.draining = true
-				if c.Kind == nodeproto.CommandStopWorker && w.att != nil {
-					ag.sendCancelLocked(w, w.att, workerproto.CancelShutdown)
-				}
+				// A delayed stop may reach a worker that is already busy. Only an
+				// explicit attempt cancellation is allowed to interrupt that work.
 				if w.att == nil {
 					go ag.stopWorker(w)
 				}
 			}
 		}
 	case nodeproto.CommandStartWorker:
-		if c.WorkerID != nil && domain.ValidID(*c.WorkerID) {
+		// Applied once per command ID (journal) and once per worker ID.
+		if c.WorkerID != nil && domain.ValidID(*c.WorkerID) && ag.workers[*c.WorkerID] == nil {
 			ag.scaler.Requested(*c.WorkerID)
 		}
 	}
 	ag.mu.Unlock()
-	_ = ag.journal.Append(Record{Kind: RecCommandApplied, CommandID: c.CommandID, Sequence: c.Sequence})
 	ag.log("info", "command_applied", "command_id", c.CommandID, "kind", c.Kind)
+	return nil
 }
 
 func (ag *Agent) sendCancelLocked(w *workerProc, att *activeAttempt, reason string) {
@@ -623,7 +671,7 @@ func (ag *Agent) claimFor(w *workerProc, key string) {
 	}
 	if err != nil || resp == nil {
 		if err != nil {
-			ag.log("warn", "claim_failed", "worker_id", w.id, "code", replyCode(err))
+			ag.log("warn", "claim_failed", "worker_id", w.id, "reply_code", replyCode(err))
 		}
 		// Re-armed by the next heartbeat that reports the worker idle.
 		return
@@ -686,14 +734,25 @@ func (ag *Agent) reconcileWorkers(ctx context.Context) {
 		ag.mu.Unlock()
 		return
 	}
+	// Backoff first: Plan consumes controller start requests, which must not
+	// be dropped while a failed start is backing off.
+	if time.Since(ag.lastStart) < ag.backoff() {
+		ag.mu.Unlock()
+		return
+	}
 	alive := 0
 	for _, w := range ag.workers {
 		if !w.draining {
 			alive++
 		}
 	}
-	ids := ag.scaler.Plan(alive)
-	if len(ids) == 0 || time.Since(ag.lastStart) < ag.backoff() {
+	ids := ag.scaler.Plan(alive, len(ag.workers))
+	if cs, ok := ag.scaler.(*ControllerScaler); ok {
+		for _, id := range cs.Refused() {
+			ag.log("warn", "worker_start_refused", "worker_id", id, "reason", "max_workers")
+		}
+	}
+	if len(ids) == 0 {
 		ag.mu.Unlock()
 		return
 	}
@@ -713,6 +772,9 @@ func (ag *Agent) reconcileWorkers(ctx context.Context) {
 			}
 			ag.failures = 0
 			ag.workers[id] = w
+			if ag.cfg.Autoscale {
+				ag.probeHandlers, ag.probed = w.handlers, true // latest observation
+			}
 			shutting := ag.shutting
 			ag.mu.Unlock()
 			go ag.awaitExit(w)
@@ -735,6 +797,57 @@ func (ag *Agent) backoff() time.Duration {
 	}
 	d := time.Second << min(ag.failures, 6)
 	return d
+}
+
+// probe starts one worker only to read its ready handlers (validated in
+// capabilities()), then stops it. The probe worker is journaled like any
+// worker but is never reported to the controller and never claims. If the
+// probe fails nothing is advertised and it is retried after probeRetry.
+func (ag *Agent) probe(ctx context.Context) {
+	ag.mu.Lock()
+	if ag.probing || ag.shutting {
+		ag.mu.Unlock()
+		return
+	}
+	ag.probing, ag.lastProbe = true, time.Now()
+	ag.mu.Unlock()
+	defer func() {
+		ag.mu.Lock()
+		ag.probing = false
+		ag.mu.Unlock()
+	}()
+	w, err := ag.startWorker(ctx, domain.NewID())
+	if err != nil {
+		ag.log("warn", "capability_probe_failed")
+		return
+	}
+	ag.stopWorker(w)
+	select {
+	case <-w.exited:
+		_ = os.RemoveAll(w.dir)
+	case <-time.After(10 * time.Second):
+		ag.log("warn", "capability_probe_worker_not_exited", "worker_id", w.id)
+	}
+	ag.mu.Lock()
+	ag.probeHandlers, ag.probed = w.handlers, true
+	ag.mu.Unlock()
+	ag.log("info", "capability_probe", "worker_id", w.id, "handlers", fmt.Sprint(len(w.handlers)))
+	if len(w.handlers) == 0 {
+		ag.log("warn", "no_analysis_handler", "worker_id", w.id)
+	}
+}
+
+// retryProbe re-runs a failed startup probe in the background (autoscale).
+func (ag *Agent) retryProbe(ctx context.Context) {
+	if !ag.cfg.Autoscale {
+		return
+	}
+	ag.mu.Lock()
+	due := !ag.probed && !ag.probing && !ag.shutting && time.Since(ag.lastProbe) >= probeRetry
+	ag.mu.Unlock()
+	if due {
+		go ag.probe(ctx)
+	}
 }
 
 // stopWorker asks an idle worker to exit.

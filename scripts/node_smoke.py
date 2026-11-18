@@ -172,7 +172,7 @@ def run(base, root, env):
         production = services.enter_context(service(
             [binary, "agent", "--controller", origin, "--state-dir", directory / "go-agent",
              "--name", "go-smoke", "--enroll-token-file", go_token, "--source-root", f"{go_root}={go_source}",
-             "--go", shutil.which("go"), "--workers", "1"], directory, node_env, directory / "go.log"))
+             "--go", shutil.which("go"), "--autoscale", "--max-workers", "1"], directory, node_env, directory / "go.log"))
         children.append(production)
         actual = session.enqueue(go_project["id"])
         def observations_key():
@@ -189,5 +189,5 @@ def run(base, root, env):
         assert doc["analyzer_id"] == "go.vet"
         assert any(o["rule_id"] == "printf" and o["location"]["path"] == "example.go" for o in doc["observations"])
         assert (go_source / "example.go").read_text() == original
-        print("PASS: 제품 워커·실제 Go vet·printf 관찰·산출물 무결성·원본 보존")
+        print("PASS: 자동 증감 제품 워커·실제 Go vet·printf 관찰·산출물 무결성·원본 보존")
     print("PASS: 두 에이전트 등록·단일 attempt·취소 및 정리·후속 run 결과 접수 (시험용 handler)")

@@ -406,6 +406,10 @@ paths:
               type: object
               additionalProperties: false
               required: [protocol_version, observed_workers, capacity, capabilities, last_command_sequence]
+              allOf:
+                - if: {required: [worker_scaling], properties: {worker_scaling: {const: controller}}}
+                  then: {required: [max_workers], properties: {max_workers: {minimum: 1}}}
+                  else: {properties: {max_workers: {const: 0}}}
               properties:
                 protocol_version: {const: '0.1'}
                 observed_workers:
@@ -435,6 +439,8 @@ paths:
                   maxItems: 128
                   uniqueItems: true
                   items: {type: string, pattern: '^(analysis:[a-z][a-z0-9-]{0,63}|source:local:[0-9a-f-]{36}|source:git:[a-z0-9.:-]+)$'}
+                worker_scaling: {enum: [static, controller], default: static}
+                max_workers: {type: integer, minimum: 0, maximum: 64, description: controller 모드에서 1~64 필수. static 모드에서는 생략 또는 0.}
                 last_command_sequence: {type: integer, minimum: 0}
                 cleanup_reports:
                   type: array
@@ -879,7 +885,7 @@ components:
               description: >-
                 queued일 때만 구조화 데이터에서 계산한다(W06): request_unavailable(W06 이전 본문 미복원),
                 execution_unavailable(철회되지 않은 등록 노드 없음), snapshot_unavailable, node_stale, no_capable_node
-                (분석 handler가 없는 제품 빌드 포함), capacity_full. 호환 노드에 여유가 있으면 null. 그 외 상태는 null.
+                (분석 handler가 없는 제품 빌드 포함), capacity_full, project_limit(프로젝트 동시 실행 상한), pool_paused(모든 호환 pool 중지). 호환 노드에 여유가 있으면 null. 그 외 상태는 null.
     Pool:
       type: object
       required: [id, revision, min_workers, max_workers, idle_timeout_seconds, observed_workers, capacity_state]
