@@ -20,6 +20,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
@@ -56,6 +57,36 @@ func runPack(t *testing.T, tools map[string]string) packRun {
 // runPackFiles is runPack on a snapshot of exactly files.
 func runPackFiles(t *testing.T, files map[string]string, tools map[string]string) packRun {
 	t.Helper()
+	return runPackCatalog(t, files, tools, nil)
+}
+
+// goOnlyCatalog keeps the Go members (go vet, staticcheck) of the production
+// composite: a synthetic catalog in which every other language ecosystem has
+// no pack, whatever packs this build has.
+func goOnlyCatalog(t *testing.T, c *pack.Composite) *pack.Composite {
+	t.Helper()
+	var members []pack.Analyzer
+	for _, d := range c.Descriptors() {
+		if d.Ecosystem != "go" {
+			continue
+		}
+		m, ok := c.Owner(d.Name)
+		if !ok {
+			t.Fatalf("no member owns %s", d.Name)
+		}
+		members = append(members, m)
+	}
+	g, err := pack.NewComposite(members...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+// runPackCatalog is runPackFiles with the production composite replaced by
+// catalog(composite) when catalog is not nil.
+func runPackCatalog(t *testing.T, files map[string]string, tools map[string]string, catalog func(*testing.T, *pack.Composite) *pack.Composite) packRun {
+	t.Helper()
 	goExe := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
@@ -77,6 +108,9 @@ func runPackFiles(t *testing.T, files map[string]string, tools map[string]string
 	c, _, err := builtin.Composite(context.Background(), cfg, &executor.Executor{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if catalog != nil {
+		c = catalog(t, c)
 	}
 	h, err := discovery.Wrap(review.Handler{Static: c}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
 	if err != nil {
@@ -271,16 +305,19 @@ func TestAnalyzerPackWithRealStaticcheck(t *testing.T) {
 	t.Logf("staticcheck %s: %d observations, rules %v", *at[0].Version, len(d.Observations), rules)
 }
 
-// TC-69 (W19, docs/39 §2.8): snapshots without Go through the production
-// composition on a node with --go only. go vet plans nothing (no required
-// placeholder), so nothing fails for an ecosystem that is not there. A
-// Python-only snapshot has a visible gap instead: one not-required
-// pack-gap.python task, the static_analysis stage skipped with
-// analyzer_pack_missing, the report partial with static_analysis_gap:python
-// and a not-run tool row, never required_task_not_succeeded, verdict
-// inconclusive. A snapshot with no supported language source plans no
-// analyzer task: the stage has no tasks and the report is partial with
-// static_analysis_not_planned.
+// TC-69 (W19, docs/39 §2.8): snapshots without Go through the worker on a
+// node with --go only. go vet plans nothing (no required placeholder), so
+// nothing fails for an ecosystem that is not there. A snapshot of an
+// ecosystem without a pack has a visible gap instead: one not-required
+// pack-gap.<ecosystem> task, the static_analysis stage skipped with
+// analyzer_pack_missing, the report partial with
+// static_analysis_gap:<ecosystem> and a not-run tool row, never
+// required_task_not_succeeded, verdict inconclusive. The gap case runs a
+// synthetic Go-only catalog (goOnlyCatalog) so it does not depend on which
+// packs this build has (Python has had a pack since W17, see
+// TestPythonSnapshotWithoutRuff). A snapshot with no supported language
+// source plans no analyzer task in the production catalog: the stage has no
+// tasks and the report is partial with static_analysis_not_planned.
 func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -289,14 +326,15 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 		state   progress.State
 		reasons []string
 		lim     string
+		catalog func(*testing.T, *pack.Composite) *pack.Composite
 	}{
-		{"python only", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
-			[]string{"pack-gap.python"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:python"},
+		{"python without a pack", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
+			[]string{"pack-gap.python"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:python", goOnlyCatalog},
 		{"no supported language", map[string]string{"README.md": "# docs\n", "docs/guide.md": "guide\n", "Makefile": "all:\n"},
-			nil, progress.NoTasks, []string{}, "static_analysis_not_planned"},
+			nil, progress.NoTasks, []string{}, "static_analysis_not_planned", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := runPackFiles(t, tc.files, nil)
+			r := runPackCatalog(t, tc.files, nil, tc.catalog)
 			var static []string
 			var tasks []progress.Task
 			for _, task := range r.manifest.Tasks {

@@ -321,6 +321,58 @@ def check_w19_contracts(validators: dict) -> int:
     return negatives
 
 
+def check_w17_python(validators: dict) -> None:
+    """W17 Python pack: the four descriptors, their selections against the Go constants and the real ruff envelope."""
+    negatives = 0
+    src = ROOT / "internal/worker/analysis/python"
+    descriptors = {}
+    for tool in ("ruff", "mypy", "pyright", "bandit"):
+        descriptor = yaml_file(ROOT / f"examples/analyzer-{tool}.yaml")
+        validators["analyzer.schema.json"].validate(descriptor)
+        check_analyzer(descriptor)
+        ensure(descriptor["id"] == "python." + tool and descriptor["executes_repository_code"] is False and descriptor["network_policy"] == "none",
+               f"{tool}: Python tools run no repository code and no network")
+        descriptors[tool] = descriptor
+    ruff_rules = go_string_constant(src / "ruff.go", "RuffRules")
+    ruff_ignore = go_string_constant(src / "ruff.go", "RuffIgnore")
+    argv = descriptors["ruff"]["execute"]["argv"]
+    ensure(argv[argv.index("--select") + 1] == ruff_rules and argv[argv.index("--ignore") + 1] == ruff_ignore, "ruff descriptor differs from RuffRules/RuffIgnore")
+    ensure(not any(r.startswith("S") for r in ruff_rules.split(",")), "ruff S rules re-implement bandit (docs/42 section 7)")
+    ensure({"--isolated", "--unfixable", "--"} <= set(argv), "ruff: isolated configuration, no fix edits in stdout, -- before targets")
+    ensure("--config-file=" in descriptors["mypy"]["execute"]["argv"], "mypy runs with the CODEYE configuration only (plugins execute code)")
+    bandit_argv = descriptors["bandit"]["execute"]["argv"]
+    ensure(bandit_argv[bandit_argv.index("--skip") + 1] == go_string_constant(src / "bandit.go", "BanditSkips") and "csv" in bandit_argv,
+           "bandit descriptor differs from BanditSkips or streams JSON with source lines")
+    envelope_validator = validators["analyzer-observations.schema.json"]
+    envelope = json_file(ROOT / "examples/observations-ruff.json")
+    envelope_validator.validate(envelope)
+    check_analyzer_observations(envelope)
+    rp = envelope["rule_pack"]
+    ensure(envelope["analyzer"] == {"id": "python.ruff", "ecosystem": "python", "required": True}, "ruff is the required Python baseline")
+    ensure(rp["selection"][rp["selection"].index("--select") + 1] == ruff_rules, "Envelope rule selection differs from RuffRules")
+    ensure(rp["repository_config"] == "overridden" and rp["source_suppressions"] == "reported" and rp["config_files"] == [] and rp["unreported_suppression_rules"] == [],
+           "ruff rule context: --isolated overrides configuration, --ignore-noqa reports every suppression form")
+    ensure(envelope["outcome"]["exit_class"] == "success_with_findings" and executions_exit(envelope, "ruff.check-ignore-noqa") == 1, "Example is the exit-1 findings run")
+    ensure(envelope["target"]["properties"].get("python_version_source") == "requires_python", "The target Python version and its source are recorded")
+
+    def bad(name, edit):
+        nonlocal negatives
+        doc = copy.deepcopy(envelope)
+        edit(doc)
+
+        def both(d):
+            envelope_validator.validate(d)
+            check_analyzer_observations(d)
+        expect_invalid(name, both, doc)
+        negatives += 1
+
+    bad("ruff success with partial parse", lambda d: d["outcome"].update(partial_parse=True))
+    bad("ruff unbound raw stream", lambda d: d["observations"][0]["raw_ref"].update(stream_sha256="0" * 64))
+    bad("ruff node path in argv", lambda d: d["executions"][-1]["command"]["argv"].append("/home/user/project"))
+    bad("ruff suppressed under honored", lambda d: (d["rule_pack"].update(source_suppressions="honored"), d["observations"][0].update(suppressed=True)))
+    print(f"PASS: W17 Python pack (ruff, mypy, pyright, bandit descriptors; real ruff envelope; {negatives} negative cases)")
+
+
 def go_string_slice(path: Path, name: str) -> list[str]:
     """The quoted elements of `var <name> = []string{...}` in a Go file."""
     match = re.search(r"^var " + name + r" = \[\]string\{(.*?)\}$", path.read_text(encoding="utf-8"), re.M | re.S)
@@ -1235,6 +1287,7 @@ def main() -> None:
     print(f"PASS: W18 JS/TS pack contracts (eslint and tsc descriptors, real envelope examples; {check_w18_contracts(validators)} negative cases)")
     w20_negatives = check_w20_rust_pack(validators)
     print(f"PASS: W20 Rust pack contracts (cargo check and clippy descriptors, real envelope examples; {w20_negatives} negative cases)")
+    check_w17_python(validators)
     review = json_file(ROOT / "examples/review-record.json")
     review_validator = validators["review-record.schema.json"]
     review_validator.validate(review)

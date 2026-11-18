@@ -1,0 +1,1 @@
+{"file": "broken.py", "line": 1, "column": 12, "end_line": 1, "end_column": 13, "message": "Invalid syntax", "hint": null, "code": "syntax", "severity": "error"}

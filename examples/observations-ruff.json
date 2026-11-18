@@ -1,0 +1,451 @@
+{
+  "adapter": {
+    "id": "ruff",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "python",
+    "id": "python.ruff",
+    "required": true
+  },
+  "coverage": {
+    "files_in_scope": 3,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "app/__init__.py",
+      "app/core.py",
+      "app/stubs.pyi"
+    ],
+    "unit": "file",
+    "units": {
+      "analyzed_clean": 2,
+      "analyzed_with_findings": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "ruff",
+          "--version"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "ruff.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 12,
+        "incomplete": false,
+        "sha256": "bfe8e679bbd44119921e638e71a35912ac128214744be275492ff2315a5d5dd4",
+        "total_bytes": 12,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "ruff",
+          "check",
+          "--isolated",
+          "--no-respect-gitignore",
+          "--select",
+          "E711,E712,E713,E714,E721,E722,E9,F,B,BLE,PLE,ASYNC",
+          "--ignore",
+          "B905,B911,B912",
+          "--unfixable",
+          "ALL",
+          "--no-cache",
+          "--force-exclude",
+          "--extend-exclude",
+          ".*,*.ipynb,__pycache__,__pypackages__,node_modules,site-packages,testdata,vendor,venv",
+          "--target-version",
+          "py311",
+          "--show-files",
+          "--",
+          "."
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUFF_CACHE_DIR",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "ruff.files",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 101,
+        "incomplete": false,
+        "sha256": "49c8f49e3382743eb06644268361a00ecac62c8a06a5c6ef462e24f206333a5e",
+        "total_bytes": 309,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "ruff",
+          "check",
+          "--isolated",
+          "--no-respect-gitignore",
+          "--select",
+          "E711,E712,E713,E714,E721,E722,E9,F,B,BLE,PLE,ASYNC",
+          "--ignore",
+          "B905,B911,B912",
+          "--unfixable",
+          "ALL",
+          "--no-cache",
+          "--force-exclude",
+          "--extend-exclude",
+          ".*,*.ipynb,__pycache__,__pypackages__,node_modules,site-packages,testdata,vendor,venv",
+          "--target-version",
+          "py311",
+          "--output-format",
+          "json-lines",
+          "--",
+          "."
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUFF_CACHE_DIR",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 1,
+      "name": "ruff.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 1561,
+        "incomplete": false,
+        "sha256": "b7c858e563d002e5decb19b9039c74dd36db4329d8afa4710065dc85f44f204e",
+        "total_bytes": 1821,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "ruff",
+          "check",
+          "--isolated",
+          "--no-respect-gitignore",
+          "--select",
+          "E711,E712,E713,E714,E721,E722,E9,F,B,BLE,PLE,ASYNC",
+          "--ignore",
+          "B905,B911,B912",
+          "--unfixable",
+          "ALL",
+          "--no-cache",
+          "--force-exclude",
+          "--extend-exclude",
+          ".*,*.ipynb,__pycache__,__pypackages__,node_modules,site-packages,testdata,vendor,venv",
+          "--target-version",
+          "py311",
+          "--output-format",
+          "json-lines",
+          "--ignore-noqa",
+          "--",
+          "."
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUFF_CACHE_DIR",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 1,
+      "name": "ruff.check-ignore-noqa",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 1561,
+        "incomplete": false,
+        "sha256": "b7c858e563d002e5decb19b9039c74dd36db4329d8afa4710065dc85f44f204e",
+        "total_bytes": 1821,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [],
+  "module": {
+    "dir": ".",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "maintainability",
+      "id": "obs_afe8025e1d33eba1e281",
+      "location": {
+        "blob_sha256": "2e3d305043e04db22d817297952c923fdddd04f48599d40063bf22eb4bc4f1c0",
+        "column_unit": "byte",
+        "end_col": 10,
+        "end_line": 3,
+        "path": "app/core.py",
+        "start_col": 8,
+        "start_line": 3
+      },
+      "location_state": "resolved",
+      "path": "app/core.py",
+      "raw_message": "`os` imported but unused",
+      "raw_ref": {
+        "byte_end": 291,
+        "byte_start": 0,
+        "execution": "ruff.check-ignore-noqa",
+        "json_pointer": "",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "b7c858e563d002e5decb19b9039c74dd36db4329d8afa4710065dc85f44f204e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "F401",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "app/core.py"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_8076c760f3cf3e3a7b17",
+      "location": {
+        "blob_sha256": "2e3d305043e04db22d817297952c923fdddd04f48599d40063bf22eb4bc4f1c0",
+        "column_unit": "byte",
+        "end_col": 21,
+        "end_line": 16,
+        "path": "app/core.py",
+        "start_col": 17,
+        "start_line": 16
+      },
+      "location_state": "resolved",
+      "path": "app/core.py",
+      "raw_message": "Comparison to `None` should be `cond is None`",
+      "raw_ref": {
+        "byte_end": 612,
+        "byte_start": 292,
+        "execution": "ruff.check-ignore-noqa",
+        "json_pointer": "",
+        "record_index": 1,
+        "stream": "stdout",
+        "stream_sha256": "b7c858e563d002e5decb19b9039c74dd36db4329d8afa4710065dc85f44f204e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "E711",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "app/core.py"
+    },
+    {
+      "category": "error_handling",
+      "id": "obs_3e31f512ceecf9a98ff0",
+      "location": {
+        "blob_sha256": "2e3d305043e04db22d817297952c923fdddd04f48599d40063bf22eb4bc4f1c0",
+        "column_unit": "byte",
+        "end_col": 11,
+        "end_line": 20,
+        "path": "app/core.py",
+        "start_col": 5,
+        "start_line": 20
+      },
+      "location_state": "resolved",
+      "path": "app/core.py",
+      "raw_message": "Do not use bare `except`",
+      "raw_ref": {
+        "byte_end": 903,
+        "byte_start": 613,
+        "execution": "ruff.check-ignore-noqa",
+        "json_pointer": "",
+        "record_index": 2,
+        "stream": "stdout",
+        "stream_sha256": "b7c858e563d002e5decb19b9039c74dd36db4329d8afa4710065dc85f44f204e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "E722",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "app/core.py"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_02035fb0128fc1d817b7",
+      "location": {
+        "blob_sha256": "2e3d305043e04db22d817297952c923fdddd04f48599d40063bf22eb4bc4f1c0",
+        "column_unit": "byte",
+        "end_col": 30,
+        "end_line": 24,
+        "path": "app/core.py",
+        "start_col": 28,
+        "start_line": 24
+      },
+      "location_state": "resolved",
+      "path": "app/core.py",
+      "raw_message": "Do not use mutable data structures for argument defaults",
+      "raw_ref": {
+        "byte_end": 1253,
+        "byte_start": 904,
+        "execution": "ruff.check-ignore-noqa",
+        "json_pointer": "",
+        "record_index": 3,
+        "stream": "stdout",
+        "stream_sha256": "b7c858e563d002e5decb19b9039c74dd36db4329d8afa4710065dc85f44f204e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "B006",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "app/core.py"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_47d20ed9d03b34c2a5ad",
+      "location": {
+        "blob_sha256": "2e3d305043e04db22d817297952c923fdddd04f48599d40063bf22eb4bc4f1c0",
+        "column_unit": "byte",
+        "end_col": 39,
+        "end_line": 31,
+        "path": "app/core.py",
+        "start_col": 23,
+        "start_line": 31
+      },
+      "location_state": "resolved",
+      "path": "app/core.py",
+      "raw_message": "Undefined name `undefined_suffix`",
+      "raw_ref": {
+        "byte_end": 1560,
+        "byte_start": 1254,
+        "execution": "ruff.check-ignore-noqa",
+        "json_pointer": "",
+        "record_index": 4,
+        "stream": "stdout",
+        "stream_sha256": "b7c858e563d002e5decb19b9039c74dd36db4329d8afa4710065dc85f44f204e"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "F821",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "app/core.py"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 5,
+    "ok": true,
+    "records": 5,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "ruff-json-lines-v1",
+    "version": "1"
+  },
+  "patterns": [
+    "."
+  ],
+  "rule_pack": {
+    "config_files": [],
+    "id": "codeye-python-ruff",
+    "repository_config": "overridden",
+    "selection": [
+      "--isolated",
+      "--no-respect-gitignore",
+      "--select",
+      "E711,E712,E713,E714,E721,E722,E9,F,B,BLE,PLE,ASYNC",
+      "--ignore",
+      "B905,B911,B912",
+      "--unfixable",
+      "ALL"
+    ],
+    "source_suppressions": "reported",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "c4d2ec588652041b7d1724ed62f79afc74843d283b4b3689ee1c0a1601e6ba61",
+  "target": {
+    "platform": null,
+    "properties": {
+      "python_version": "3.11",
+      "python_version_declared": ">=3.11",
+      "python_version_source": "requires_python",
+      "target_version": "py311"
+    }
+  },
+  "task_key": "ruff",
+  "tool": {
+    "name": "ruff",
+    "version": "0.16.3",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}
