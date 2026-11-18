@@ -41,6 +41,7 @@ type fakeController struct {
 	hbCount    int
 	lastHB     nodeproto.NodeHeartbeatRequest
 
+	resendAll     bool // W07: resend every command regardless of the cursor (dedupe test)
 	hangAttemptHB bool // never answer attempt heartbeats (lease watchdog test)
 	refuseReports int  // refuse this many confirmed reports with "conflict" (attempt still leased)
 	leaseFor      time.Duration
@@ -85,6 +86,22 @@ func (f *fakeController) queueCommand(kind, attemptID string) {
 	f.commandSeq++
 	a := attemptID
 	f.commands = append(f.commands, nodeproto.Command{CommandID: domain.NewID(), Sequence: f.commandSeq, Kind: kind, AttemptID: &a})
+}
+
+// queueWorkerCommand queues start_worker/drain_worker/stop_worker (W07).
+func (f *fakeController) queueWorkerCommand(kind, workerID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.commandSeq++
+	id := workerID
+	f.commands = append(f.commands, nodeproto.Command{CommandID: domain.NewID(), Sequence: f.commandSeq, Kind: kind, WorkerID: &id})
+}
+
+// heartbeatState returns the last heartbeat and the heartbeat count.
+func (f *fakeController) heartbeatState() (nodeproto.NodeHeartbeatRequest, int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastHB, f.hbCount
 }
 
 func fail(w http.ResponseWriter, status int, code string) {
@@ -191,7 +208,7 @@ func (f *fakeController) nodeHeartbeat(w http.ResponseWriter, r *http.Request, n
 	}
 	resp := nodeproto.NodeHeartbeatResponse{ServerTime: time.Now().UTC(), Commands: []nodeproto.Command{}, CleanupResults: []nodeproto.CleanupResult{}}
 	for _, c := range f.commands {
-		if c.Sequence > req.LastCommandSequence {
+		if c.Sequence > req.LastCommandSequence || f.resendAll {
 			resp.Commands = append(resp.Commands, c)
 		}
 	}

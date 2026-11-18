@@ -136,6 +136,14 @@ func (e *w06) waiting(run string) string {
 	return *v.WaitingReason
 }
 
+// projectLimit sets scheduler_limits.project_max_running (W07).
+func (e *w06) projectLimit(n int) {
+	e.t.Helper()
+	if _, err := e.s.SetSchedulerLimits(e.ctx, nil, &n); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
 func (e *w06) count(q string, args ...any) int {
 	e.t.Helper()
 	var n int
@@ -426,6 +434,9 @@ func TestTC21ConcurrentClaimSingleOwner(t *testing.T) {
 	c3 := e.enroll("c", e.root.ID)
 	e.idle(c3)
 	e.noClaim(c3, c3.workers[0], "empty")
+	// W07: r2 is in the same project as the running r1; this test is about
+	// ownership, so lift the per-project limit (default 1, see TC-73).
+	e.projectLimit(2)
 	e.enqueue("r2", deepReview)
 	e.idle(c3)
 	e.noClaim(c3, c3.workers[0], "empty")
@@ -544,6 +555,9 @@ func TestClaimRefusalsAndWaitingReasons(t *testing.T) {
 // again; only reservations made after the last heartbeat are subtracted.
 func TestCapacityAccountingWithoutDoubleCounting(t *testing.T) {
 	e := newW06(t)
+	// W07: three runs of one project run concurrently here; this test is about
+	// node resource accounting, so lift the per-project limit (default 1).
+	e.projectLimit(3)
 	n := e.enroll("a", e.root.ID)
 	in := hb(n.workers, "idle", capable(e.root.ID))
 	in.Capacity.MemoryAvailableBytes = 1536 << 20 // 1.5 GiB free
