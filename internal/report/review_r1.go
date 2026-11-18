@@ -194,6 +194,7 @@ func composeR1Reviews(r *Report, states map[string]*taskState, limits *stringSet
 	for _, c := range candidates {
 		f := reviewFinding(r.Inputs.SnapshotID, c.Candidate, verdicts[c.ID], evidence)
 		f.ObservationIDs = append([]string{}, c.ObservationIDs...)
+		setModelFingerprint(&f, c.Candidate, evidence, linkedObservations(obs, c.ObservationIDs))
 		r.Findings = append(r.Findings, f)
 	}
 }

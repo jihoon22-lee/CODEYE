@@ -248,6 +248,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	} else {
 		composeReviews(&r, states, lim)
 	}
+	applyDispositions(&r, in.Reviews, in.Now)
 	sortReport(&r)
 
 	// Coverage: processed files only when every analyzer task produced a known count.
@@ -384,6 +385,9 @@ func checkInput(in Input) error {
 		if !seenArt[id] {
 			return invalidf("body for an unknown artifact")
 		}
+	}
+	if err := checkReviews(in.Reviews); err != nil {
+		return err
 	}
 	if in.ResultManifest != nil && !seenArt[in.ResultManifest.ID] {
 		return invalidf("result manifest is not an artifact of this attempt")
@@ -693,6 +697,9 @@ func ComputeSummary(findings []Finding, obs []Observation) Summary {
 	}
 	var cands []cand
 	for _, f := range findings {
+		if hiddenDisposition[f.Disposition] {
+			s.HiddenFindings++
+		}
 		switch f.Validation {
 		case "supported", "reproduced":
 			if !hiddenDisposition[f.Disposition] {

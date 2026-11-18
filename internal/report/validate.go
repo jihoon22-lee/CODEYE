@@ -144,6 +144,9 @@ func validateFinding(f Finding, snapshot string, obs, arts map[string]bool) erro
 		!validations[f.Validation] || !dispositions[f.Disposition] || f.Impact == "" || f.Recommendation.Summary == "" {
 		return invalidf("finding %s fields are invalid", f.ID)
 	}
+	if !validBasis(f) {
+		return invalidf("finding %s fingerprint basis is invalid", f.ID)
+	}
 	if len(f.Conditions) == 0 || len(f.Locations) == 0 || len(f.Claims) == 0 || len(f.Evidence) == 0 || len(f.Verification) == 0 ||
 		f.CounterevidenceIDs == nil || f.ObservationIDs == nil || f.Limitations == nil || f.Recommendation.Tradeoffs == nil {
 		return invalidf("finding %s is missing required parts", f.ID)
@@ -313,6 +316,11 @@ func Project(r Report, includeCode bool) Report {
 		for j, l := range f.Locations {
 			l.Symbol = "" // symbol names are code identifiers
 			g.Locations[j] = l
+		}
+		if f.FingerprintBasis != nil {
+			b := *f.FingerprintBasis
+			b.Paths, b.Symbols = append([]string{}, b.Paths...), []string{}
+			g.FingerprintBasis = &b
 		}
 		out.Findings[i] = g
 	}
