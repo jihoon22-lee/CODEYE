@@ -110,4 +110,3 @@ process group 종료(`procid.TerminateVerifiedGroup`):
 - journal 압축은 시작 시에만 한다. snapshot cache GC와 노드 간 snapshot 전송은 없다.
 - Windows에서는 에이전트가 suspended 워커를 전용 Job에 배치하고 시작한다. WSL interop을 통해 Windows 실행 파일에서 에이전트 강제 종료 후 워커와 자손 2개의 종료를 열린 프로세스 handle로 검증했다(`TestAgentDeathClosesWorkerJob`). 에이전트 재시작 후 이전 Job의 상태를 확인할 수 없으면 복구 상태를 유지한다.
 - W06 기본 모드는 고정 worker 수를 사용한다. [W07 자동 증감 모드](30-w07-scheduler.md)에서는 controller가 시작·drain·종료 명령을 보낸다.
-- `internal/worker/analysis`·`builtin/builtin.go`는 W08 파일의 임시 사본이다. 병합 시 W08 버전을 쓴다.

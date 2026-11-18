@@ -200,9 +200,9 @@ handler는 task마다 `observations.json`을 만든다. role은 `observations`, 
 
 두 경우 모두 원본 사본·snapshot·모듈 캐시의 트리 hash가 실행 전후로 같았다. snapshot은 확보할 때마다 manifest digest가 새로 생기므로 두 digest가 다르다. CODEYE에서 나온 vet 진단은 0건이다. 진단이 있는 경로와 실패 경로는 합성 fixture 시험으로만 검증했다.
 
-## 8. W09 계획과 다른 점
+## 8. 관찰을 보고서에 연결하는 규칙
 
-W09 계획 §6과 실제가 다른 부분이다. renderer 계약을 정할 때 반영해야 한다.
+어댑터에서 확인한 값은 워커의 result manifest와 함께 [게시 서비스](31-w09-report.md)로 전달된다.
 
 - **출력 형태:** 진단 없는 단위는 `{}`를 출력하고 출력 순서는 실행마다 바뀐다. 그래서 ID는 내용 기반이다.
 - **실행·artifact 연결:** 보고서의 `Execution.ID`와 artifact ID는 서버가 부여한다. 관찰 문서는 실행 이름과 stdout sha256으로 연결하므로 W09는 result manifest의 `executions[].name`과 stdout artifact의 sha256으로 연결을 다시 만든다.
@@ -215,11 +215,10 @@ W09 계획 §6과 실제가 다른 부분이다. renderer 계약을 정할 때 �
 
 ## 9. 남은 제한
 
-- **Windows:** 경로 해석(드라이브, 대소문자, 역슬래시, JSON escape)은 Windows 형태 입력의 단위 시험으로만 확인했다. Windows에서 실제로 실행하지 않았으므로 8.3 짧은 이름 같은 차이는 Windows CI 결과로 확인해야 한다. RHEL 8.10도 실행하지 않았다.
+- **Windows.** Windows CI에서 Go 시험을 실행한다. 운영 계정·툴체인을 포함한 Windows 실모델 파일럿은 미검증이다.
 - **분석 범위:** build context는 노드 기본 GOOS/GOARCH와 기본 tag만 쓴다. cgo 파일은 분석하지 않고 vet analyzer 선택·flag 설정도 없다.
 - **원시 출력의 경로:** 원시 stderr에는 모듈 캐시나 GOROOT 절대 경로가 남을 수 있다. 구조화 문서에서는 이 경로를 가린다. W09 export는 원시 bytes를 렌더링하지 않는 규칙을 지켜야 한다.
 - **모듈 캐시:** 운영자가 준비한다. 캐시 무결성은 go.sum 대조에 의존하고 `GOSUMDB=off`다. 캐시를 쓰지 않는다는 보장은 OS 권한과 Go의 기본 읽기 전용 모드에 의존한다.
-- **W06 통합:** W06 agent/worker를 거친 end-to-end 실행, 서버 artifact 업로드, result manifest 생성은 W06 통합 후 검증한다. 이 문서의 시험은 handler를 직접 호출했다.
 - **품질:** 시험 통과는 Go vet의 결함 탐지 정확도나 CODEYE 분석 품질의 증거가 아니다. 진단 수가 늘어난 것을 품질 향상으로 해석하지 않는다.
 
 ## W06 제품 워커 통합 시험

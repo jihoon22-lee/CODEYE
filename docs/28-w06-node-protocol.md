@@ -121,12 +121,12 @@ PostgreSQL 17.10(임시 Native 인스턴스, 시험별 격리 스키마)에서 �
 | `go list -deps ./internal/nodeproto` | storage·migrations·pgx 의존 없음 |
 | `python3 scripts/validate_bundle.py` | 로컬 링크·Schema·예시·OpenAPI 참조 검사 통과 |
 
-웹 브라우저 smoke는 이 작업 트리에 웹 의존성이 없어 기존 체크아웃의 `web/node_modules`를 연결하고 `npm --prefix web run build`로 정적 파일을 만든 뒤 실행했다. 브라우저 시험은 W03 경로이며 노드 경로를 브라우저로 검사하지 않는다.
+당시 브라우저 smoke는 로그인·요청·취소 경로를 검증했다. 이후 제품 워커의 분석 결과를 브라우저에서 여는 시험은 [W13 기록](35-w13-evidence-report.md)에 있다.
 
 ## 10. 남은 제한
 
 - 노드 agent·worker 프로세스·journal과 두 agent 프로세스 간 실제 경쟁·OS 종료 관측은 [워커 실행 기록](28-w06-agent-runtime.md)에서 확인할 수 있다. 이 문서의 시험은 controller와 저장 계층이다.
-- 철회 노드의 recovery_required 예약 강제 해제, pool 정책, 워커 자동 증감, 노드 간 snapshot 전송·GC는 W07 이후다.
+- 풀 정책과 자동 증감은 [W07](30-w07-scheduler.md)에서 구현했다. 철회 노드의 복구 예약과 노드 간 snapshot 전송·GC는 별도 운영 과제다.
 - artifact 파일은 DB 기록 전에 저장되므로 기록 실패 시 참조 없는 파일이 남을 수 있다(GC 미구현). Windows에서는 디렉터리 fsync를 하지 않는다.
 - 예약 수요는 고정값이며 OS 제한이 아니다. 메모리·disk 관측은 heartbeat 간격만큼 늦다.
 - Windows·RHEL 8.10에서 노드 경로를 실행하지 않았다.
