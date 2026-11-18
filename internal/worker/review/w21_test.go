@@ -149,6 +149,10 @@ func TestR1WithholdsSecretFiles(t *testing.T) {
 		if o.Path == "gateway.go" && len(o.EvidenceIDs) != 0 {
 			t.Fatalf("window on a withheld file: %+v", o)
 		}
+		// A tool message on a withheld file may quote the value.
+		if o.Path == "gateway.go" && o.Message != "(omitted by the platform)" {
+			t.Fatalf("message of a withheld file reached the model: %+v", o)
+		}
 	}
 	slices.Sort(rules)
 	if !slices.Equal(rules, []string{"go-vet/unusedresult", w21SecretKey + "/aws-access-token"}) {

@@ -552,6 +552,13 @@ func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, [
 			in.Message = "(omitted by the platform)"
 			lims = append(lims, "observation_message_omitted")
 		}
+		// A tool message about a file the secrets screen withholds may quote
+		// the value (e.g. a hardcoded-password rule): only its rule and place
+		// reach the model.
+		if o.Location != nil && s.secretFiles()[o.Location.Path] && in.Message != "(omitted by the platform)" {
+			in.Message = "(omitted by the platform)"
+			lims = append(lims, limSecretWithheld)
+		}
 		if o.Location != nil {
 			l := o.Location
 			in.Path, in.StartLine, in.EndLine = l.Path, l.StartLine, l.EndLine
