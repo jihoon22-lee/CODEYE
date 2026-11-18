@@ -1,6 +1,7 @@
 package rustpack
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -51,7 +52,7 @@ func TestReplaySiblingModules(t *testing.T) {
 				t.Fatalf("config files %v, want %v", cfg, tc.config)
 			}
 			// The process runs in the module directory of the workspace copy.
-			if m := r.mains[0]; !strings.HasSuffix(m.Dir, "/"+tc.dir) {
+			if m := r.mains[0]; !strings.HasSuffix(filepath.ToSlash(m.Dir), "/"+tc.dir) {
 				t.Fatalf("cwd %s", m.Dir)
 			}
 			if tc.key == "cargo-check.m01" {
