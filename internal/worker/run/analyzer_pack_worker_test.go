@@ -42,6 +42,8 @@ type packRun struct {
 	// received, and scratch the worker scratch root (W21 leak checks).
 	uploads [][]byte
 	scratch string
+	// blobs are the bytes of every uploaded artifact (W16 leak checks).
+	blobs [][]byte
 }
 
 // runPack runs the production deep-review composition (discovery → the
@@ -117,6 +119,9 @@ func runPackFiles(t *testing.T, files map[string]string, tools map[string]string
 	}
 	fa.mu.Lock()
 	defer fa.mu.Unlock()
+	for _, b := range fa.artifacts {
+		out.blobs = append(out.blobs, b)
+	}
 	if err := json.Unmarshal(fa.artifacts[*out.complete.ResultManifestClientArtifact], &out.manifest); err != nil {
 		t.Fatal(err)
 	}

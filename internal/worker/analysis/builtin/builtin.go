@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/cpp"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gitleaks"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
@@ -77,6 +78,10 @@ func catalog() []entry {
 		// Go (W08 baseline, W19 extra depth).
 		{desc: govet.Descriptor(), plan: govet.Plan, build: buildGoVet},
 		{desc: staticcheck.Descriptor(), plan: staticcheck.Plan, build: buildStaticcheck},
+		// C/C++ (W16 baseline cppcheck, extra depth clang-tidy with the Clang
+		// Static Analyzer).
+		{desc: cpp.CppcheckDescriptor(), plan: cpp.PlanCppcheck, build: buildCppcheck},
+		{desc: cpp.ClangTidyDescriptor(), plan: cpp.PlanClangTidy, build: buildClangTidy},
 		// JavaScript/TypeScript (W18 baseline ESLint, extra depth tsc and
 		// type-aware ESLint; javascript.go, docs/43).
 		eslintEntry(), tscEntry(), eslintTypedEntry(),

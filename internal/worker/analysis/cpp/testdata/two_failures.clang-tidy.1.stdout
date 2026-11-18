@@ -1,0 +1,16 @@
+[REDACTED]/include/w16/ring.h:18:24: warning: potentially unintended semicolon [bugprone-suspicious-semicolon]
+[REDACTED]/src/parse.cpp:5:10: error: 'config.h' file not found [clang-diagnostic-error]
+[REDACTED]/src/ring.c:12:12: warning: Potential leak of memory pointed to by 'r' [clang-analyzer-unix.Malloc]
+[REDACTED]/src/ring.c:7:20: note: Memory is allocated
+[REDACTED]/src/ring.c:8:7: note: Assuming 'r' is not equal to null
+[REDACTED]/src/ring.c:8:3: note: Taking false branch
+[REDACTED]/src/ring.c:11:7: note: Assuming field 'data' is equal to null
+[REDACTED]/src/ring.c:11:3: note: Taking true branch
+[REDACTED]/src/ring.c:12:12: note: Potential leak of memory pointed to by 'r'
+[REDACTED]/src/ring.c:23:10: warning: Dereference of null pointer (loaded from variable 'slot') [clang-analyzer-core.NullDereference]
+[REDACTED]/src/ring.c:20:3: note: 'slot' initialized to a null pointer value
+[REDACTED]/src/ring.c:21:7: note: Assuming field 'len' is <= 0
+[REDACTED]/src/ring.c:21:3: note: Taking false branch
+[REDACTED]/src/ring.c:23:10: note: Dereference of null pointer (loaded from variable 'slot')
+[REDACTED]/src/util.cpp:3:3: error: expected expression [clang-diagnostic-error]
+[REDACTED]/src/util.cpp:4:2: error: expected ';' after top level declarator [clang-diagnostic-error]

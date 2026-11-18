@@ -321,10 +321,123 @@ def check_w19_contracts(validators: dict) -> int:
     return negatives
 
 
-def go_string_slice(path: Path, name: str) -> list:
+def go_string_slice(path: Path, name: str) -> list[str]:
+    """The quoted elements of `var <name> = []string{...}` in a Go file."""
     match = re.search(r"^var " + name + r" = \[\]string\{(.*?)\}$", path.read_text(encoding="utf-8"), re.M | re.S)
     ensure(match is not None, "Missing Go []string " + name + " in " + str(path))
-    return re.findall(r'"([^"]*)"', match.group(1))
+    return re.findall(r'"((?:[^"\\]|\\.)*)"', match.group(1))
+
+
+W16_SOURCE = (".c", ".cc", ".cpp", ".cxx", ".c++")
+
+
+def check_w16_contracts(validators: dict) -> int:
+    """W16 C/C++ pack (docs/41): the cppcheck and clang-tidy descriptors, the real envelope examples bound to the
+    committed fixture bytes, the rule context, the single required baseline and the expected fixture outcomes.
+
+    Returns the number of negative cases."""
+    negatives = 0
+    package = ROOT / "internal/worker/analysis/cpp"
+    fixture = ROOT / "fixtures/w16-cpp"
+    selection = go_string_slice(package / "cppcheck.go", "CppcheckSelection")
+    checks = go_string_slice(package / "clangtidy.go", "ClangTidyChecks")
+    cc = yaml_file(ROOT / "examples/analyzer-cppcheck.yaml")
+    ct = yaml_file(ROOT / "examples/analyzer-clang-tidy.yaml")
+    for descriptor in (cc, ct):
+        validators["analyzer.schema.json"].validate(descriptor)
+        check_analyzer(descriptor)
+        ensure(descriptor["executes_repository_code"] is False and descriptor["requires_build"] is False and descriptor["network_policy"] == "none",
+               descriptor["id"] + ": the C/C++ pack never executes repository code (compile DB read as data)")
+    ensure(cc["exit_codes"] == {"clean": [0], "findings": [2], "error": [1]}, "cppcheck --error-exitcode=2 contract changed")
+    ensure(ct["exit_codes"] == {"clean": [0], "findings": [], "error": [1]}, "clang-tidy warnings exit 0, compiler errors exit 1")
+    argv = cc["execute"]["argv"]
+    ensure(argv[1:1 + len(selection)] == selection and "--error-exitcode=2" in argv and argv[-1].startswith("--project="),
+           "cppcheck descriptor argv differs from cpp.CppcheckArgs")
+    ensure(not any(a.startswith("--inline-suppr") or a.startswith("--suppress") or a.startswith("--cppcheck-build-dir") for a in argv),
+           "cppcheck: inline suppressions stay disabled and no build dir outside scratch")
+    argv = ct["execute"]["argv"]
+    ensure(argv[:2] == ["-p", "${scratch}/work"] and "--extra-arg-before=--no-default-config" in argv and "--" not in argv and not any(a.startswith("--fix") for a in argv),
+           "clang-tidy descriptor argv differs from cpp.ClangTidyArgs (no fixed-DB '--', no fixes)")
+    ensure(checks[:2] == ["-*", "clang-analyzer-*"], "clang-tidy selection starts from -* and carries the Clang Static Analyzer")
+    ensure(not any(c.lstrip("-").startswith(("cert-", "hicpp-", "cppcoreguidelines-")) for c in checks),
+           "clang-tidy alias families report the same diagnostic twice")
+    ensure("bugprone-*" in checks and "-clang-analyzer-security.FloatLoopCounter" in checks, "CSA FloatLoopCounter duplicates bugprone-float-loop-counter (measured)")
+
+    envelope_validator = validators["analyzer-observations.schema.json"]
+    db_sha = hashlib.sha256((fixture / "input/compile_commands.json").read_bytes()).hexdigest()
+    expected = json_file(fixture / "expected.json")
+    ensure(not (fixture / "input/expected.json").exists(), "Expected outcomes must stay outside the fixture input")
+    case = expected["cases"]["with_generated_header"]
+
+    def w16(doc: dict, tool: str) -> None:
+        envelope_validator.validate(doc)
+        check_analyzer_observations(doc)
+        rule_pack, coverage, outcome = doc["rule_pack"], doc["coverage"], doc["outcome"]
+        ensure(doc["analyzer"] == ({"id": "cpp.cppcheck", "ecosystem": "cpp", "required": True} if tool == "cppcheck" else
+                                   {"id": "cpp.clang_tidy", "ecosystem": "cpp", "required": False}), tool + ": cppcheck is the one required C/C++ baseline")
+        ensure(rule_pack["repository_config"] == "honored" and rule_pack["config_files"] == [{"path": "compile_commands.json", "sha256": db_sha}],
+               tool + ": the compile DB is honored repository build configuration bound to its manifest digest")
+        ensure(rule_pack["source_suppressions"] == ("disabled" if tool == "cppcheck" else "honored") and rule_pack["unreported_suppression_rules"] == [],
+               tool + ": cppcheck runs without --inline-suppr; clang-tidy NOLINT cannot be reported (measured)")
+        ensure(rule_pack["selection"][:len(selection if tool == "cppcheck" else checks)] == (selection if tool == "cppcheck" else checks), tool + ": envelope selection differs from the Go source")
+        ensure(all(p.endswith(W16_SOURCE) for p in coverage["processed_paths"] or []), tool + ": processed paths are translation units only (no header claims)")
+        ensure(coverage["unit"] == "translation_unit" and doc["target"]["properties"]["mode"] == "compile_db", tool + ": compile DB mode example")
+        ensure(not any(ABSOLUTE.match(v) or "/home/" in v or "/tmp/" in v for v in doc["target"]["properties"].values()), tool + ": node path in a target property")
+        for o in doc["observations"]:
+            source = fixture / "input" / o["location"]["path"]
+            ensure(source.is_file() and o["location"]["blob_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest(), tool + ": observation not bound to the committed fixture bytes")
+        want = case["cppcheck" if tool == "cppcheck" else "clang_tidy"]
+        ensure(outcome["task_status"] == want["task_status"] and outcome["exit_class"] == want["exit_class"] and coverage["processed_paths"] == want["processed_paths"] and
+               coverage["units"] == want["units"] and doc["limitations"] == want["limitations"], tool + ": example differs from expected.json with_generated_header")
+        got = sorted(o["rule_id"] + " " + o["path"] + ":" + str(o["location"]["start_line"]) for o in doc["observations"])
+        ensure(got == want["observations"], tool + ": example observations differ from expected.json")
+
+    examples = {"cppcheck": json_file(ROOT / "examples/observations-cppcheck.json"), "clang-tidy": json_file(ROOT / "examples/observations-clang-tidy.json")}
+    for tool, doc in examples.items():
+        w16(doc, tool)
+    ensure(executions_exit(examples["cppcheck"], "cppcheck.check") == 2 and executions_exit(examples["clang-tidy"], "clang-tidy.check.1") == 0,
+           "Examples are the measured exits: cppcheck 2 with records, clang-tidy 0 with warnings")
+
+    def bad(name, tool, edit):
+        nonlocal negatives
+        doc = copy.deepcopy(examples[tool])
+        edit(doc)
+        expect_invalid(name, lambda d: w16(d, tool), doc)
+        negatives += 1
+
+    bad("clang-tidy as a second required baseline", "clang-tidy", lambda d: d["analyzer"].update(required=True))
+    bad("cppcheck not required", "cppcheck", lambda d: d["analyzer"].update(required=False))
+    bad("cppcheck inline suppressions honored", "cppcheck", lambda d: d["rule_pack"].update(source_suppressions="honored"))
+    bad("clang-tidy NOLINT claimed reported", "clang-tidy", lambda d: d["rule_pack"].update(source_suppressions="reported"))
+    bad("compile DB digest drift", "cppcheck", lambda d: d["rule_pack"]["config_files"][0].update(sha256="0" * 64))
+    bad("compile DB not recorded", "clang-tidy", lambda d: d["rule_pack"].update(config_files=[]))
+    bad("header claimed as processed", "clang-tidy", lambda d: d["coverage"].update(processed_paths=sorted(d["coverage"]["processed_paths"] + ["include/w16/ring.h"])))
+    bad("observation bound to other bytes", "cppcheck", lambda d: d["observations"][0]["location"].update(blob_sha256="0" * 64))
+    bad("node path in a property", "clang-tidy", lambda d: d["target"]["properties"].update(drivers="/usr/bin/cc"))
+    bad("alias family selected", "clang-tidy", lambda d: d["rule_pack"]["selection"].__setitem__(1, "cert-*"))
+    bad("limitation dropped", "cppcheck", lambda d: d["limitations"].remove("code_loading_flags_dropped"))
+
+    # Expected outcomes: a missing or generated header is a coverage gap (never a
+    # pass, never a defect), reduced mode says so, and only succeeded tasks claim
+    # processed files.
+    gaps = {"partial_missing_include", "possibly_partial_missing_include", "failed_missing_include", "failed_compile", "failed_parse", "not_processed", "unknown"}
+    for name, c in expected["cases"].items():
+        for tool in ("cppcheck", "clang_tidy"):
+            want = c.get(tool)
+            if want is None:
+                continue
+            units = set(want["units"])
+            ensure(want["task_status"] != "succeeded" or not units & gaps, name + " " + tool + ": success with a translation-unit gap")
+            ensure((want["processed_paths"] is not None) == (want["task_status"] in ("succeeded", "unsupported")), name + " " + tool + ": processed paths only for succeeded or not-run tasks")
+            ensure(all(p.endswith(W16_SOURCE) for p in want["processed_paths"] or []), name + " " + tool + ": header in processed paths")
+            if want["properties"].get("mode") == "reduced":
+                ensure({"compile_db_missing", "reduced_mode_no_build_flags"} <= set(want["limitations"]) and not units & {"analyzed_clean", "analyzed_with_findings"},
+                       name + ": reduced mode must say it ran without build flags")
+            if tool == "clang_tidy" and "compile_commands.json" in c.get("remove", []):
+                ensure(want["task_status"] == "unsupported" and want["reason"] == "compile_db_missing" and want["executions"] == [],
+                       name + ": clang-tidy without a compile DB is not run (generation would execute repository code)")
+    ensure(any(c.get("cppcheck", {}).get("reason") == "missing_include_files" for c in expected["cases"].values()), "A generated-header case must fail as missing_include_files")
+    return negatives
 
 
 def check_w18_contracts(validators: dict) -> int:
@@ -1229,6 +1342,7 @@ def main() -> None:
     check_observations(observations)
     w19_negatives = check_w19_contracts(validators)
     print(f"PASS: W19 analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {w19_negatives} negative cases)")
+    print(f"PASS: W16 C/C++ pack (cppcheck/clang-tidy descriptors, real envelopes bound to the fixture, expected outcomes; {check_w16_contracts(validators)} negative cases)")
     print(f"PASS: W18 JS/TS pack contracts (eslint and tsc descriptors, real envelope examples; {check_w18_contracts(validators)} negative cases)")
     w20_negatives = check_w20_rust_pack(validators)
     print(f"PASS: W20 Rust pack contracts (cargo check and clippy descriptors, real envelope examples; {w20_negatives} negative cases)")

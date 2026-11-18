@@ -45,7 +45,7 @@ func reasons(missing []Unavailable) []string {
 
 func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	ctx := context.Background()
-	if hs, missing := Handlers(ctx, Config{}, &executor.Executor{}); len(hs) != 0 || !slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:not_configured", "eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
+	if hs, missing := Handlers(ctx, Config{}, &executor.Executor{}); len(hs) != 0 || !slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:not_configured", "cppcheck:not_configured", "clang-tidy:not_configured", "eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
 		t.Fatalf("unconfigured: %d %+v", len(hs), missing)
 	}
 	if hs, missing := Handlers(ctx, Config{GoExecutable: "relative/go"}, &executor.Executor{}); len(hs) != 0 || missing[0].Reason != "invalid_config" {
@@ -53,7 +53,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	}
 	// staticcheck alone is extra depth: without a baseline nothing is advertised.
 	if hs, missing := Handlers(ctx, Config{Tools: map[string]string{"staticcheck": filepath.Join(t.TempDir(), "staticcheck")}}, &executor.Executor{}); len(hs) != 0 ||
-		!slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:toolchain_not_configured", "eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
+		!slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:toolchain_not_configured", "cppcheck:not_configured", "clang-tidy:not_configured", "eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
 		t.Fatalf("staticcheck without go: %d %+v", len(hs), missing)
 	}
 	goExe := goPath(t)
@@ -62,7 +62,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 		t.Fatalf("probe failure advertised: %d %+v", len(hs), missing)
 	}
 	hs, missing := Handlers(ctx, Config{GoExecutable: goExe, ProbeDir: probe}, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:not_configured", "eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:not_configured", "cppcheck:not_configured", "clang-tidy:not_configured", "eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
 		t.Fatalf("real probe: %d %+v", len(hs), missing)
 	}
 	reg, err := analysis.NewRegistry(hs...)
@@ -77,13 +77,13 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	for _, d := range c.Descriptors() {
 		ids = append(ids, d.ID)
 	}
-	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "javascript.eslint", "javascript.tsc", "javascript.eslint_typed", "rust.cargocheck", "rust.clippy", "any.lizard", "any.jscpd", "any.gitleaks"}) {
+	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "cpp.cppcheck", "cpp.clang_tidy", "javascript.eslint", "javascript.tsc", "javascript.eslint_typed", "rust.cargocheck", "rust.clippy", "any.lizard", "any.jscpd", "any.gitleaks"}) {
 		t.Fatalf("catalog order %v", ids)
 	}
 	// A configured staticcheck path that is not a file is invalid: the
 	// analyzer stays a member and its tasks report tool_unavailable.
 	hs, missing = Handlers(ctx, Config{GoExecutable: goExe, ProbeDir: probe, Tools: map[string]string{"staticcheck": filepath.Join(t.TempDir(), "missing")}}, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:invalid_config", "eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:invalid_config", "cppcheck:not_configured", "clang-tidy:not_configured", "eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
 		t.Fatalf("invalid staticcheck: %d %+v", len(hs), missing)
 	}
 	// An unknown tool of a newer agent is reported, never run.
@@ -105,11 +105,21 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 }
 
 func TestToolFlagsAndProbes(t *testing.T) {
-	if got := ToolFlags(); !slices.Equal(got, []string{"cargo", "clippy", "eslint", "gitleaks", "jscpd", "lizard", "staticcheck", "tsc"}) {
+	if got := ToolFlags(); !slices.Equal(got, []string{"cargo", "clang-tidy", "clippy", "cppcheck", "eslint", "gitleaks", "jscpd", "lizard", "staticcheck", "tsc"}) {
 		t.Fatalf("flags %v", got)
 	}
 	tc := fakeRust(t, false)
-	probes := withoutW21(Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc", "cargo": filepath.Join(tc, "cargo"), "clippy": filepath.Join(tc, "cargo-clippy")}}))
+	all := Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc", "cargo": filepath.Join(tc, "cargo"), "clippy": filepath.Join(tc, "cargo-clippy")}})
+	var tools []string
+	for _, p := range all {
+		tools = append(tools, p.Tool)
+	}
+	if !slices.Equal(tools, []string{"cargo", "clang-tidy", "clippy", "cppcheck", "eslint", "gitleaks", "jscpd", "lizard", "staticcheck", "tsc"}) {
+		t.Fatalf("probes %+v", all)
+	}
+	// The C/C++ probes (W16) are checked by TestCppAnalyzersAdvertiseOnlyWithTheBaseline,
+	// the W21 probes by TestW21CatalogEntries.
+	probes := withoutW21(slices.DeleteFunc(slices.Clone(all), func(p pack.ToolProbe) bool { return p.Tool == "clang-tidy" || p.Tool == "cppcheck" }))
 	if len(probes) != 5 || probes[0].Tool != "cargo" || probes[1].Tool != "clippy" || probes[2].Tool != "eslint" || probes[3].Tool != "staticcheck" || probes[4].Tool != "tsc" {
 		t.Fatalf("probes %+v", probes)
 	}
