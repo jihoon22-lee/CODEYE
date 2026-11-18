@@ -1,0 +1,1649 @@
+[
+ {
+  "id": "R1-CPP-01",
+  "language": "cpp",
+  "split": "holdout",
+  "family": "stable-reference-promise-on-growable-storage",
+  "category": "resource_lifetime",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "stockkeep",
+   "title": "stockkeep",
+   "summary": "Inventory bookkeeping for a small workshop: a SKU catalog and kit assembly."
+  },
+  "contract": "Catalog owns inventory items keyed by SKU. add(sku, quantity) inserts a new item and returns a reference to it; an empty SKU or one already present throws std::invalid_argument and leaves the catalog unchanged. find(sku) returns a pointer to the item, or nullptr for an unknown SKU. Items are never removed, and every reference or pointer obtained from add or find stays valid for the lifetime of the Catalog, however many items are added later. A Catalog is used from one thread at a time.",
+  "contract_file": "include/catalog.h",
+  "files": {
+   "shared": [
+    {
+     "path": "include/kits.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <string>",
+      "#include <vector>",
+      "",
+      "#include \"catalog.h\"",
+      "",
+      "namespace stock {",
+      "",
+      "struct Part {",
+      "    std::string sku;",
+      "    long per_kit;",
+      "};",
+      "",
+      "struct Kit {",
+      "    std::string sku;",
+      "    std::vector<Part> parts;",
+      "};",
+      "",
+      "// Assembles `count` kits (count >= 1): every part's quantity drops by",
+      "// per_kit * count and the kit's own quantity rises by count. Parts and kits",
+      "// missing from the catalog are added with quantity 0 first; part quantities",
+      "// may go negative, which means back-ordered. The kit SKU differs from every",
+      "// part SKU.",
+      "void assemble(Catalog& catalog, const Kit& kit, long count);",
+      "",
+      "}  // namespace stock"
+     ]
+    },
+    {
+     "path": "src/catalog.cpp",
+     "lines": [
+      "#include \"catalog.h\"",
+      "",
+      "#include <stdexcept>",
+      "",
+      "namespace stock {",
+      "",
+      "Catalog::Item& Catalog::add(const std::string& sku, long quantity) {",
+      "    if (sku.empty()) {",
+      "        throw std::invalid_argument(\"empty SKU\");",
+      "    }",
+      "    if (index_.count(sku) != 0) {",
+      "        throw std::invalid_argument(\"duplicate SKU \" + sku);",
+      "    }",
+      "    items_.push_back(Item{sku, quantity});",
+      "    index_.emplace(sku, items_.size() - 1);",
+      "    return items_.back();",
+      "}",
+      "",
+      "Catalog::Item* Catalog::find(const std::string& sku) {",
+      "    auto it = index_.find(sku);",
+      "    return it == index_.end() ? nullptr : &items_[it->second];",
+      "}",
+      "",
+      "}  // namespace stock"
+     ]
+    },
+    {
+     "path": "src/kits.cpp",
+     "lines": [
+      "#include \"kits.h\"",
+      "",
+      "#include <stdexcept>",
+      "",
+      "namespace stock {",
+      "",
+      "namespace {",
+      "",
+      "Catalog::Item& find_or_add(Catalog& catalog, const std::string& sku) {",
+      "    Catalog::Item* item = catalog.find(sku);",
+      "    return item != nullptr ? *item : catalog.add(sku, 0);",
+      "}",
+      "",
+      "}  // namespace",
+      "",
+      "void assemble(Catalog& catalog, const Kit& kit, long count) {",
+      "    if (count < 1) {",
+      "        throw std::invalid_argument(\"kit count must be positive\");",
+      "    }",
+      "    Catalog::Item& assembled = find_or_add(catalog, kit.sku);",
+      "    for (const Part& part : kit.parts) {",
+      "        Catalog::Item& component = find_or_add(catalog, part.sku);",
+      "        component.quantity -= part.per_kit * count;",
+      "    }",
+      "    assembled.quantity += count;",
+      "}",
+      "",
+      "}  // namespace stock"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "include/catalog.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstddef>",
+      "#include <string>",
+      "#include <unordered_map>",
+      "#include <vector>",
+      "",
+      "namespace stock {",
+      "",
+      "// {{CONTRACT}}",
+      "class Catalog {",
+      "public:",
+      "    struct Item {",
+      "        std::string sku;",
+      "        long quantity = 0;",
+      "    };",
+      "",
+      "    Item& add(const std::string& sku, long quantity);",
+      "    Item* find(const std::string& sku);",
+      "    std::size_t size() const { return items_.size(); }",
+      "",
+      "private:",
+      "    std::vector<Item> items_;",
+      "    std::unordered_map<std::string, std::size_t> index_;",
+      "};",
+      "",
+      "}  // namespace stock"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "include/catalog.h",
+     "lines": [
+      "#pragma once",
+      "",
+      "#include <cstddef>",
+      "#include <string>",
+      "#include <unordered_map>",
+      "#include <deque>",
+      "",
+      "namespace stock {",
+      "",
+      "// {{CONTRACT}}",
+      "class Catalog {",
+      "public:",
+      "    struct Item {",
+      "        std::string sku;",
+      "        long quantity = 0;",
+      "    };",
+      "",
+      "    Item& add(const std::string& sku, long quantity);",
+      "    Item* find(const std::string& sku);",
+      "    std::size_t size() const { return items_.size(); }",
+      "",
+      "private:",
+      "    std::deque<Item> items_;",
+      "    std::unordered_map<std::string, std::size_t> index_;",
+      "};",
+      "",
+      "}  // namespace stock"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "744d357838e041354d6d3dd5ad628f16b78d232d49f464e33a5b7e8e093c0400",
+   "before_documented": "63b30af6180de1758b21335ebfa4f97f19a586a5ac2c843992149b274dd90d2d",
+   "after": "29a21b5cdd8fdbcb78e40ea4839cba790bfcdd2d916500cab969c8a70768c8d3",
+   "after_documented": "f67cd7031b2f9a56a32301532295207fe45b2bf833dc4d5255516fe1742f569a"
+  },
+  "check": {
+   "summary": "Assembles a three-part kit into an empty catalog, keeps a reference across 64 insertions and assembles again; built with AddressSanitizer and UBSan so a stale reference aborts the run.",
+   "build": [
+    {
+     "argv": [
+      "{cxx}",
+      "-std=c++17",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-pthread",
+      "-fsanitize=address,undefined",
+      "-fno-sanitize-recover=all",
+      "-fno-omit-frame-pointer",
+      "-I{run}/include",
+      "{run}/src/catalog.cpp",
+      "{run}/src/kits.cpp",
+      "{run}/_check/check.cpp",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "ERROR: AddressSanitizer: heap-use-after-free",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.cpp",
+     "lines": [
+      "#include <cstdio>",
+      "#include <cstdlib>",
+      "#include <stdexcept>",
+      "#include <string>",
+      "",
+      "#include \"catalog.h\"",
+      "#include \"kits.h\"",
+      "",
+      "static int failures = 0;",
+      "",
+      "static void expect(bool ok, const char* what) {",
+      "    if (!ok) {",
+      "        std::printf(\"CHECK-FAIL: %s\\n\", what);",
+      "        ++failures;",
+      "    }",
+      "}",
+      "",
+      "static long quantity(stock::Catalog& catalog, const std::string& sku) {",
+      "    stock::Catalog::Item* item = catalog.find(sku);",
+      "    return item == nullptr ? -999999 : item->quantity;",
+      "}",
+      "",
+      "int main() {",
+      "    stock::Catalog catalog;",
+      "    stock::Kit shelf{\"shelf-kit\", {{\"board\", 4}, {\"bracket\", 8}, {\"screw\", 16}}};",
+      "    stock::assemble(catalog, shelf, 3);",
+      "    expect(quantity(catalog, \"shelf-kit\") == 3, \"kit quantity\");",
+      "    expect(quantity(catalog, \"board\") == -12, \"board quantity\");",
+      "    expect(quantity(catalog, \"screw\") == -48, \"screw quantity\");",
+      "    catalog.find(\"board\")->quantity = 100;",
+      "    stock::Catalog::Item& board = *catalog.find(\"board\");",
+      "    for (int i = 0; i < 64; ++i) {",
+      "        catalog.add(\"filler-\" + std::to_string(i), i);",
+      "    }",
+      "    expect(board.quantity == 100 && board.sku == \"board\", \"reference survives insertions\");",
+      "    stock::assemble(catalog, shelf, 1);",
+      "    expect(quantity(catalog, \"shelf-kit\") == 4 && quantity(catalog, \"board\") == 96, \"second assembly\");",
+      "    bool threw = false;",
+      "    try {",
+      "        catalog.add(\"board\", 1);",
+      "    } catch (const std::invalid_argument&) {",
+      "        threw = true;",
+      "    }",
+      "    expect(threw, \"duplicate SKU rejected\");",
+      "    expect(catalog.find(\"missing\") == nullptr && catalog.size() == 68, \"find and size\");",
+      "    if (failures != 0) {",
+      "        return 1;",
+      "    }",
+      "    std::printf(\"CHECK-PASS\\n\");",
+      "    return 0;",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Any insertion that grows the item storage while a reference from add or find is held. assemble in kits.cpp keeps a reference to the kit item and then adds missing parts, so the first assembly into an empty catalog is enough.",
+   "expected_impact": "std::vector reallocates and the held reference points into freed memory. assemble then writes the kit quantity through it: undefined behaviour, in practice a lost update or heap corruption (a use-after-free under AddressSanitizer).",
+   "positive_locations": [
+    {
+     "path": "include/catalog.h",
+     "symbol": "Catalog::items_",
+     "anchors": {
+      "start": "std::vector<Item> items_;"
+     },
+     "start_line": 29,
+     "end_line": 29
+    },
+    {
+     "path": "src/catalog.cpp",
+     "symbol": "Catalog::add",
+     "anchors": {
+      "start": "items_.push_back(Item{sku, quantity});"
+     },
+     "start_line": 14,
+     "end_line": 14
+    },
+    {
+     "path": "src/kits.cpp",
+     "symbol": "assemble",
+     "anchors": {
+      "start": "Catalog::Item& assembled = find_or_add(catalog, kit.sku);",
+      "end": "assembled.quantity += count;"
+     },
+     "start_line": 20,
+     "end_line": 25
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "include/catalog.h",
+     "symbol": "Catalog::items_",
+     "anchors": {
+      "start": "std::deque<Item> items_;"
+     },
+     "note": "std::deque::push_back never moves existing elements, so references and pointers stay valid as the documented guarantee requires; kits.cpp needs no change.",
+     "start_line": 29,
+     "end_line": 29
+    },
+    {
+     "variant": "before",
+     "path": "src/kits.cpp",
+     "symbol": "assemble",
+     "anchors": {
+      "start": "void assemble(Catalog& catalog, const Kit& kit, long count) {"
+     },
+     "note": "assemble relies on the documented guarantee; holding the reference is legitimate under the contract. Blaming only the caller misses that Catalog breaks its own promise.",
+     "start_line": 16,
+     "end_line": 16
+    }
+   ],
+   "reviewer_notes": "The storage type and the promise are in the header, the manifestation in kits.cpp. Re-looking up the kit item in assemble would also avoid the crash but leaves every other holder of a reference exposed; judge that as a partial finding.",
+   "distinctive_tokens": [
+    "reallocation",
+    "reallocate",
+    "invalidated",
+    "invalidation",
+    "use-after-free",
+    "stale reference"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "include/catalog.h"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-PY-01",
+  "language": "python",
+  "split": "holdout",
+  "family": "except-clause-catches-subclassed-status-error",
+  "category": "error_handling",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "recordsync",
+   "title": "recordsync",
+   "summary": "A small client for the record service. It maps HTTP-style status codes to exceptions and retries outages with exponential backoff."
+  },
+  "contract": "RecordClient.fetch(record_id) accepts ids that are non-empty strings of ASCII letters, digits and '-'; any other id raises ValueError without calling the transport. For status 200 the transport returns a JSON object and fetch returns its \"data\" member. Status 404 raises RecordMissing and status 401 or 403 raises AccessDenied; each makes exactly one transport call. Statuses 429, 502, 503 and 504, an OSError from the transport, and a 200 object without \"data\" count as outages: fetch makes at most `attempts` transport calls in total and then raises TransientError. Every other status raises FetchError, also with a single call.",
+  "contract_file": "src/recordsync/client.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/recordsync/__init__.py",
+     "lines": [
+      "\"\"\"Client for the record service.\"\"\"",
+      "",
+      "from .client import RecordClient",
+      "from .errors import AccessDenied, FetchError, RecordMissing, TransientError",
+      "",
+      "__all__ = [\"AccessDenied\", \"FetchError\", \"RecordClient\", \"RecordMissing\", \"TransientError\"]"
+     ]
+    },
+    {
+     "path": "src/recordsync/errors.py",
+     "lines": [
+      "\"\"\"Exception types raised by the record client.\"\"\"",
+      "",
+      "",
+      "class FetchError(Exception):",
+      "    \"\"\"Base class for every failure reported by RecordClient.\"\"\"",
+      "",
+      "    def __init__(self, record_id, detail):",
+      "        super().__init__(f\"{record_id}: {detail}\")",
+      "        self.record_id = record_id",
+      "",
+      "",
+      "class TransientError(FetchError):",
+      "    \"\"\"The service may answer differently when asked again later.\"\"\"",
+      "",
+      "",
+      "class AccessDenied(FetchError):",
+      "    \"\"\"The credentials were refused for this record.\"\"\"",
+      "",
+      "",
+      "class RecordMissing(FetchError, KeyError):",
+      "    \"\"\"No record exists under the requested id.",
+      "",
+      "    Deriving from KeyError lets callers handle an absent record the same way",
+      "    as an absent mapping key.",
+      "    \"\"\"",
+      "",
+      "    def __str__(self):",
+      "        return Exception.__str__(self)"
+     ]
+    },
+    {
+     "path": "src/recordsync/retry.py",
+     "lines": [
+      "\"\"\"Bounded retry with exponential backoff.\"\"\"",
+      "",
+      "import time",
+      "",
+      "",
+      "def call_with_retry(operation, *, attempts, retry_on, base_delay=0.05, sleep=time.sleep):",
+      "    \"\"\"Call ``operation()`` until it returns, at most ``attempts`` times.",
+      "",
+      "    Exceptions that are instances of ``retry_on`` are retried with a doubling",
+      "    delay; the last one is re-raised when no attempts remain. Any other",
+      "    exception propagates immediately.",
+      "    \"\"\"",
+      "    if attempts < 1:",
+      "        raise ValueError(\"attempts must be at least 1\")",
+      "    delay = base_delay",
+      "    for attempt in range(1, attempts + 1):",
+      "        try:",
+      "            return operation()",
+      "        except retry_on:",
+      "            if attempt == attempts:",
+      "                raise",
+      "            sleep(delay)",
+      "            delay *= 2",
+      "    raise RuntimeError(\"unreachable\")"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/recordsync/client.py",
+     "lines": [
+      "\"\"\"Record service client built on a minimal transport interface.\"\"\"",
+      "",
+      "import json",
+      "import re",
+      "import time",
+      "",
+      "from .errors import AccessDenied, FetchError, RecordMissing, TransientError",
+      "from .retry import call_with_retry",
+      "",
+      "_RECORD_ID = re.compile(r\"[A-Za-z0-9-]+\")",
+      "_RETRY_STATUS = frozenset({429, 502, 503, 504})",
+      "",
+      "",
+      "class RecordClient:",
+      "    \"\"\"Reads records through a transport exposing ``get(path) -> (status, body)``.\"\"\"",
+      "",
+      "    def __init__(self, transport, *, attempts=3, sleep=time.sleep):",
+      "        self._transport = transport",
+      "        self._attempts = attempts",
+      "        self._sleep = sleep",
+      "",
+      "    def fetch(self, record_id):",
+      "        \"\"\"Return the ``data`` member of the record stored under ``record_id``.",
+      "",
+      "        {{CONTRACT}}",
+      "        \"\"\"",
+      "        if not isinstance(record_id, str) or not _RECORD_ID.fullmatch(record_id):",
+      "            raise ValueError(f\"invalid record id {record_id!r}\")",
+      "        return call_with_retry(",
+      "            lambda: self._fetch_once(record_id),",
+      "            attempts=self._attempts,",
+      "            retry_on=TransientError,",
+      "            sleep=self._sleep,",
+      "        )",
+      "",
+      "    def _fetch_once(self, record_id):",
+      "        try:",
+      "            status, body = self._transport.get(f\"/records/{record_id}\")",
+      "            return self._decode(record_id, status, body)",
+      "        except (OSError, KeyError) as exc:",
+      "            raise TransientError(record_id, f\"incomplete exchange: {exc!r}\") from exc",
+      "",
+      "    def _decode(self, record_id, status, body):",
+      "        if status == 200:",
+      "            return json.loads(body)[\"data\"]",
+      "        if status == 404:",
+      "            raise RecordMissing(record_id, \"not found\")",
+      "        if status in (401, 403):",
+      "            raise AccessDenied(record_id, f\"status {status}\")",
+      "        if status in _RETRY_STATUS:",
+      "            raise TransientError(record_id, f\"status {status}\")",
+      "        raise FetchError(record_id, f\"unexpected status {status}\")"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/recordsync/client.py",
+     "lines": [
+      "\"\"\"Record service client built on a minimal transport interface.\"\"\"",
+      "",
+      "import json",
+      "import re",
+      "import time",
+      "",
+      "from .errors import AccessDenied, FetchError, RecordMissing, TransientError",
+      "from .retry import call_with_retry",
+      "",
+      "_RECORD_ID = re.compile(r\"[A-Za-z0-9-]+\")",
+      "_RETRY_STATUS = frozenset({429, 502, 503, 504})",
+      "",
+      "",
+      "class RecordClient:",
+      "    \"\"\"Reads records through a transport exposing ``get(path) -> (status, body)``.\"\"\"",
+      "",
+      "    def __init__(self, transport, *, attempts=3, sleep=time.sleep):",
+      "        self._transport = transport",
+      "        self._attempts = attempts",
+      "        self._sleep = sleep",
+      "",
+      "    def fetch(self, record_id):",
+      "        \"\"\"Return the ``data`` member of the record stored under ``record_id``.",
+      "",
+      "        {{CONTRACT}}",
+      "        \"\"\"",
+      "        if not isinstance(record_id, str) or not _RECORD_ID.fullmatch(record_id):",
+      "            raise ValueError(f\"invalid record id {record_id!r}\")",
+      "        return call_with_retry(",
+      "            lambda: self._fetch_once(record_id),",
+      "            attempts=self._attempts,",
+      "            retry_on=TransientError,",
+      "            sleep=self._sleep,",
+      "        )",
+      "",
+      "    def _fetch_once(self, record_id):",
+      "        try:",
+      "            status, body = self._transport.get(f\"/records/{record_id}\")",
+      "        except OSError as exc:",
+      "            raise TransientError(record_id, f\"incomplete exchange: {exc!r}\") from exc",
+      "        return self._decode(record_id, status, body)",
+      "",
+      "    def _decode(self, record_id, status, body):",
+      "        if status == 200:",
+      "            payload = json.loads(body)",
+      "            if \"data\" not in payload:",
+      "                raise TransientError(record_id, \"incomplete exchange: no data member\")",
+      "            return payload[\"data\"]",
+      "        if status == 404:",
+      "            raise RecordMissing(record_id, \"not found\")",
+      "        if status in (401, 403):",
+      "            raise AccessDenied(record_id, f\"status {status}\")",
+      "        if status in _RETRY_STATUS:",
+      "            raise TransientError(record_id, f\"status {status}\")",
+      "        raise FetchError(record_id, f\"unexpected status {status}\")"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "c7a9445a2ab45f22535fc9ada37fa2ef5420e625aa5bc4edc19f11889adc24c0",
+   "before_documented": "4f4639fd704307043bb91e02bf8d1a031afb6eb66197cfc8d1b166332173e6d6",
+   "after": "df34b9aba4f84ae0bde5454c2030f437cc39b3ad40ad2777b521516cb3cd347b",
+   "after_documented": "f08694188b85aa11f4a82006fc8465406b47ea9756ecc599e45947df16294a7f"
+  },
+  "check": {
+   "summary": "Scripted transport answers per scenario; the harness compares the raised exception class and the number of transport calls with the documented status table.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: status 404: got TransientError after 3 calls",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import sys",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from recordsync import AccessDenied, FetchError, RecordClient, RecordMissing, TransientError  # noqa: E402",
+      "",
+      "failures = []",
+      "",
+      "",
+      "class Scripted:",
+      "    def __init__(self, *responses):",
+      "        self.responses = list(responses)",
+      "        self.calls = 0",
+      "",
+      "    def get(self, path):",
+      "        self.calls += 1",
+      "        item = self.responses.pop(0)",
+      "        if isinstance(item, BaseException):",
+      "            raise item",
+      "        return item",
+      "",
+      "",
+      "def run(name, responses, want_type, want_calls, want_value=None):",
+      "    transport = Scripted(*responses)",
+      "    client = RecordClient(transport, attempts=3, sleep=lambda _: None)",
+      "    try:",
+      "        value = client.fetch(\"rec-7\")",
+      "        got = None",
+      "    except FetchError as exc:",
+      "        value, got = None, type(exc)",
+      "    if got is not want_type or transport.calls != want_calls or (want_type is None and value != want_value):",
+      "        seen = got.__name__ if got else repr(value)",
+      "        wanted = want_type.__name__ if want_type else repr(want_value)",
+      "        failures.append(f\"{name}: got {seen} after {transport.calls} calls, want {wanted} after {want_calls}\")",
+      "",
+      "",
+      "run(\"status 404\", [(404, \"{}\")] * 3, RecordMissing, 1)",
+      "run(\"status 403\", [(403, \"{}\")] * 3, AccessDenied, 1)",
+      "run(\"status 500\", [(500, \"{}\")] * 3, FetchError, 1)",
+      "run(\"retry then ok\", [(503, \"\"), OSError(\"reset\"), (200, '{\"data\": {\"v\": 1}}')], None, 3, {\"v\": 1})",
+      "run(\"payload without data\", [(200, \"{}\")] * 3, TransientError, 3)",
+      "run(\"always 502\", [(502, \"\")] * 3, TransientError, 3)",
+      "try:",
+      "    RecordClient(Scripted(), sleep=lambda _: None).fetch(\"a b\")",
+      "    failures.append(\"invalid id accepted\")",
+      "except ValueError:",
+      "    pass",
+      "try:",
+      "    RecordClient(Scripted(*[(404, \"{}\")] * 3), sleep=lambda _: None).fetch(\"gone\")",
+      "except KeyError:",
+      "    pass",
+      "except FetchError as exc:",
+      "    failures.append(f\"missing record surfaced as {type(exc).__name__}, not KeyError\")",
+      "else:",
+      "    failures.append(\"missing record returned a value\")",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "The service answers 404. _decode raises RecordMissing inside the try block of _fetch_once, and the handler there lists KeyError, which RecordMissing inherits in errors.py.",
+   "expected_impact": "An absent record is retried until attempts run out (three calls by default) and reaches the caller as TransientError. Callers that handle RecordMissing or KeyError never see the absence and treat it as an outage, adding backoff delay and load on the service.",
+   "positive_locations": [
+    {
+     "path": "src/recordsync/client.py",
+     "symbol": "RecordClient._fetch_once",
+     "anchors": {
+      "start": "def _fetch_once",
+      "end": "raise TransientError(record_id, f\"incomplete exchange"
+     },
+     "start_line": 45,
+     "end_line": 50
+    },
+    {
+     "path": "src/recordsync/errors.py",
+     "symbol": "RecordMissing",
+     "anchors": {
+      "start": "class RecordMissing(FetchError, KeyError):"
+     },
+     "start_line": 20,
+     "end_line": 20
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/recordsync/client.py",
+     "symbol": "RecordClient._fetch_once",
+     "anchors": {
+      "start": "def _fetch_once",
+      "end": "return self._decode(record_id, status, body)"
+     },
+     "note": "The corrected version guards only the transport call with the OSError handler and raises TransientError itself when the payload has no data member, so a 404 leaves on the first call.",
+     "start_line": 45,
+     "end_line": 50
+    },
+    {
+     "variant": "before",
+     "path": "src/recordsync/retry.py",
+     "symbol": "call_with_retry",
+     "anchors": {
+      "start": "def call_with_retry"
+     },
+     "note": "The retry helper is sound: it retries only the classes passed in retry_on. The status is reclassified upstream of it.",
+     "start_line": 6,
+     "end_line": 6
+    }
+   ],
+   "reviewer_notes": "Needs both files: the handler looks narrow until errors.py shows the KeyError base. 401/403 and 500 are not affected. A finding that only says the handler is broad, without the 404 path or the inheritance, should be judged incomplete rather than a match.",
+   "distinctive_tokens": [
+    "reclassified",
+    "reclassifies",
+    "misclassified",
+    "masks",
+    "masked",
+    "swallowed",
+    "mro",
+    "outage-retried"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/recordsync/client.py"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-JS-01",
+  "language": "javascript",
+  "split": "holdout",
+  "family": "negated-count-slice-at-zero",
+  "category": "boundaries_arithmetic",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "console-history",
+   "title": "console-history",
+   "summary": "Command history and the history pane of a terminal console."
+  },
+  "contract": "History.recent(count) returns a new array holding the newest min(count, size) entries, oldest first: recent(0) returns an empty array and a count larger than size returns every entry. count must be an integer of 0 or more; any other value throws RangeError. The history itself is not modified.",
+  "contract_file": "src/history.js",
+  "files": {
+   "shared": [
+    {
+     "path": "src/screen.js",
+     "lines": [
+      "import { History } from './history.js';",
+      "",
+      "const HEADER = '-- history --';",
+      "",
+      "/**",
+      " * Renders the history pane of the console.",
+      " *",
+      " * The pane is `rows` lines tall (an integer, at least 2): one header line,",
+      " * one prompt line, and as many of the newest history entries as fit in the",
+      " * lines between them. Returns the lines from top to bottom.",
+      " *",
+      " * @param {History} history",
+      " * @param {number} rows",
+      " * @param {string} prompt",
+      " */",
+      "export function renderPane(history, rows, prompt = '> ') {",
+      "  if (!Number.isInteger(rows) || rows < 2) {",
+      "    throw new RangeError(`pane needs at least 2 rows, got ${rows}`);",
+      "  }",
+      "  const visible = history.recent(rows - 2);",
+      "  return [HEADER, ...visible.map((entry) => `  ${entry}`), prompt];",
+      "}",
+      "",
+      "export function demo() {",
+      "  const history = new History(50);",
+      "  for (const command of ['status', 'pull', 'build --release', 'deploy staging']) {",
+      "    history.push(command);",
+      "  }",
+      "  return renderPane(history, 4).join('\\n');",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/history.js",
+     "lines": [
+      "/**",
+      " * Bounded command history for the interactive console.",
+      " */",
+      "export class History {",
+      "  #entries = [];",
+      "  #limit;",
+      "",
+      "  /** @param {number} limit maximum number of entries kept (positive integer) */",
+      "  constructor(limit = 500) {",
+      "    if (!Number.isInteger(limit) || limit < 1) {",
+      "      throw new RangeError(`history limit must be a positive integer, got ${limit}`);",
+      "    }",
+      "    this.#limit = limit;",
+      "  }",
+      "",
+      "  /** Appends one entry, discarding the oldest once the limit is reached. */",
+      "  push(entry) {",
+      "    this.#entries.push(String(entry));",
+      "    if (this.#entries.length > this.#limit) {",
+      "      this.#entries.shift();",
+      "    }",
+      "  }",
+      "",
+      "  get size() {",
+      "    return this.#entries.length;",
+      "  }",
+      "",
+      "  /**",
+      "   * Returns the newest entries.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   *",
+      "   * @param {number} count",
+      "   * @returns {string[]}",
+      "   */",
+      "  recent(count) {",
+      "    if (!Number.isInteger(count) || count < 0) {",
+      "      throw new RangeError(`count must be a non-negative integer, got ${count}`);",
+      "    }",
+      "    return this.#entries.slice(-count);",
+      "  }",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/history.js",
+     "lines": [
+      "/**",
+      " * Bounded command history for the interactive console.",
+      " */",
+      "export class History {",
+      "  #entries = [];",
+      "  #limit;",
+      "",
+      "  /** @param {number} limit maximum number of entries kept (positive integer) */",
+      "  constructor(limit = 500) {",
+      "    if (!Number.isInteger(limit) || limit < 1) {",
+      "      throw new RangeError(`history limit must be a positive integer, got ${limit}`);",
+      "    }",
+      "    this.#limit = limit;",
+      "  }",
+      "",
+      "  /** Appends one entry, discarding the oldest once the limit is reached. */",
+      "  push(entry) {",
+      "    this.#entries.push(String(entry));",
+      "    if (this.#entries.length > this.#limit) {",
+      "      this.#entries.shift();",
+      "    }",
+      "  }",
+      "",
+      "  get size() {",
+      "    return this.#entries.length;",
+      "  }",
+      "",
+      "  /**",
+      "   * Returns the newest entries.",
+      "   *",
+      "   * {{CONTRACT}}",
+      "   *",
+      "   * @param {number} count",
+      "   * @returns {string[]}",
+      "   */",
+      "  recent(count) {",
+      "    if (!Number.isInteger(count) || count < 0) {",
+      "      throw new RangeError(`count must be a non-negative integer, got ${count}`);",
+      "    }",
+      "    return this.#entries.slice(this.#entries.length - Math.min(count, this.#entries.length));",
+      "  }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "b93390643dba71ddbd599b2bade1690dbe4867e71f194dc460d0339607133a78",
+   "before_documented": "2cb37c8d3aaed028d0af2899659dc33e5b75623bbd5a56231c908bfa90eb0a71",
+   "after": "5f6130580d38dd2c0d381424d13d213dbff3d24bbfe478aae0b32f023caad6ed",
+   "after_documented": "f32ececb4e69a42a1666bfb527a82f5ea3fd383a1b873793d6b56c2b3e53601f"
+  },
+  "check": {
+   "summary": "Calls recent with counts from 0 to more than the size and renders panes of 2 to 4 rows; compares the arrays and pane lines with the documented results.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{node}",
+     "{run}/_check/check.mjs"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: recent\\(0\\): got \\[\"b\",\"c\",\"d\"\\], want \\[\\]",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.mjs",
+     "lines": [
+      "import { History } from '../src/history.js';",
+      "import { renderPane } from '../src/screen.js';",
+      "",
+      "const failures = [];",
+      "const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);",
+      "const expect = (name, got, want) => {",
+      "  if (!same(got, want)) failures.push(`${name}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);",
+      "};",
+      "",
+      "const history = new History(3);",
+      "for (const entry of ['a', 'b', 'c', 'd']) history.push(entry);",
+      "expect('limit keeps newest', history.recent(3), ['b', 'c', 'd']);",
+      "expect('recent(2)', history.recent(2), ['c', 'd']);",
+      "expect('recent larger than size', history.recent(10), ['b', 'c', 'd']);",
+      "expect('recent(0)', history.recent(0), []);",
+      "const copy = history.recent(3);",
+      "copy.push('x');",
+      "expect('returns a copy', history.recent(3), ['b', 'c', 'd']);",
+      "for (const bad of [-1, 1.5, NaN, '2']) {",
+      "  try {",
+      "    history.recent(bad);",
+      "    failures.push(`recent(${String(bad)}) accepted`);",
+      "  } catch (err) {",
+      "    if (!(err instanceof RangeError)) failures.push(`recent(${String(bad)}) threw ${err}`);",
+      "  }",
+      "}",
+      "expect('pane of 4 rows', renderPane(history, 4), ['-- history --', '  c', '  d', '> ']);",
+      "expect('pane of 2 rows', renderPane(history, 2), ['-- history --', '> ']);",
+      "expect('empty history', renderPane(new History(5), 3), ['-- history --', '> ']);",
+      "",
+      "for (const failure of failures) console.log(`CHECK-FAIL: ${failure}`);",
+      "if (failures.length) process.exit(1);",
+      "console.log('CHECK-PASS');"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "recent is called with 0. That happens whenever renderPane gets rows === 2, the smallest pane screen.js allows, because it asks for rows - 2 entries.",
+   "expected_impact": "slice(-0) is slice(0), so the whole history comes back instead of nothing. The two-row pane is drawn with up to the full history limit of lines and pushes the prompt off the terminal.",
+   "positive_locations": [
+    {
+     "path": "src/history.js",
+     "symbol": "History.recent",
+     "anchors": {
+      "start": "return this.#entries.slice(-count);"
+     },
+     "start_line": 44,
+     "end_line": 44
+    },
+    {
+     "path": "src/screen.js",
+     "symbol": "renderPane",
+     "anchors": {
+      "start": "const visible = history.recent(rows - 2);"
+     },
+     "start_line": 20,
+     "end_line": 20
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/history.js",
+     "symbol": "History.recent",
+     "anchors": {
+      "start": "return this.#entries.slice(this.#entries.length - Math.min"
+     },
+     "note": "The corrected slice computes a non-negative start index from the length, which equals the length for a zero count and yields an empty array.",
+     "start_line": 44,
+     "end_line": 44
+    },
+    {
+     "variant": "before",
+     "path": "src/history.js",
+     "symbol": "History.recent",
+     "anchors": {
+      "start": "if (!Number.isInteger(count) || count < 0) {"
+     },
+     "note": "The guard rejects negative and fractional counts correctly; it is the zero count, which it accepts by design, that misbehaves.",
+     "start_line": 41,
+     "end_line": 41
+    }
+   ],
+   "reviewer_notes": "Counts from 1 upward are correct, so ordinary use hides it. The renderPane guard (rows >= 2) is in contract and is where the zero comes from.",
+   "distinctive_tokens": [
+    "negative zero",
+    "-0",
+    "minus zero",
+    "signed zero",
+    "slice(0)"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/history.js"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-GO-01",
+  "language": "go",
+  "split": "holdout",
+  "family": "first-answer-wins-abandons-senders",
+  "category": "concurrency_async",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "mirrors",
+   "title": "mirrors",
+   "summary": "Locates release artifacts across a set of download mirrors for a long-running package proxy."
+  },
+  "contract": "Locate probes every mirror concurrently and returns the URL of the first probe that succeeds; the context handed to the remaining probes is then cancelled. If every probe fails, the error matches ErrNotFound and wraps each probe error. If ctx ends first, Locate returns ctx.Err(). The artifact name must pass ValidateArtifact and mirrors must be non-empty; otherwise Locate returns an error without probing. Probes honour cancellation. The package proxy calls Locate for every request for the lifetime of the process.",
+  "contract_file": "locate.go",
+  "files": {
+   "shared": [
+    {
+     "path": "probe.go",
+     "lines": [
+      "package mirrors",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"strings\"",
+      ")",
+      "",
+      "// Probe asks one mirror whether it holds the named artifact and returns the",
+      "// artifact URL on that mirror. A Probe must return promptly once ctx is done.",
+      "type Probe func(ctx context.Context, mirror, artifact string) (string, error)",
+      "",
+      "// ErrNotFound reports that no mirror holds the artifact.",
+      "var ErrNotFound = errors.New(\"artifact not found on any mirror\")",
+      "",
+      "// ValidateArtifact rejects names that cannot be requested from a mirror.",
+      "func ValidateArtifact(artifact string) error {",
+      "\tif artifact == \"\" || strings.ContainsAny(artifact, \"/\\\\ \") {",
+      "\t\treturn fmt.Errorf(\"invalid artifact name %q\", artifact)",
+      "\t}",
+      "\treturn nil",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "locate.go",
+     "lines": [
+      "package mirrors",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      ")",
+      "",
+      "type answer struct {",
+      "\tmirror string",
+      "\turl    string",
+      "\terr    error",
+      "}",
+      "",
+      "// Locate finds an artifact on the fastest mirror that holds it.",
+      "//",
+      "// {{CONTRACT}}",
+      "func Locate(ctx context.Context, probe Probe, mirrors []string, artifact string) (string, error) {",
+      "\tif err := ValidateArtifact(artifact); err != nil {",
+      "\t\treturn \"\", err",
+      "\t}",
+      "\tif len(mirrors) == 0 {",
+      "\t\treturn \"\", fmt.Errorf(\"locate %s: no mirrors configured\", artifact)",
+      "\t}",
+      "\tctx, cancel := context.WithCancel(ctx)",
+      "\tdefer cancel()",
+      "",
+      "\tanswers := make(chan answer)",
+      "\tfor _, mirror := range mirrors {",
+      "\t\tgo func() {",
+      "\t\t\turl, err := probe(ctx, mirror, artifact)",
+      "\t\t\tanswers <- answer{mirror: mirror, url: url, err: err}",
+      "\t\t}()",
+      "\t}",
+      "",
+      "\terrs := []error{ErrNotFound}",
+      "\tfor range mirrors {",
+      "\t\tselect {",
+      "\t\tcase a := <-answers:",
+      "\t\t\tif a.err == nil {",
+      "\t\t\t\treturn a.url, nil",
+      "\t\t\t}",
+      "\t\t\terrs = append(errs, fmt.Errorf(\"%s: %w\", a.mirror, a.err))",
+      "\t\tcase <-ctx.Done():",
+      "\t\t\treturn \"\", ctx.Err()",
+      "\t\t}",
+      "\t}",
+      "\treturn \"\", fmt.Errorf(\"locate %s: %w\", artifact, errors.Join(errs...))",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "locate.go",
+     "lines": [
+      "package mirrors",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      ")",
+      "",
+      "type answer struct {",
+      "\tmirror string",
+      "\turl    string",
+      "\terr    error",
+      "}",
+      "",
+      "// Locate finds an artifact on the fastest mirror that holds it.",
+      "//",
+      "// {{CONTRACT}}",
+      "func Locate(ctx context.Context, probe Probe, mirrors []string, artifact string) (string, error) {",
+      "\tif err := ValidateArtifact(artifact); err != nil {",
+      "\t\treturn \"\", err",
+      "\t}",
+      "\tif len(mirrors) == 0 {",
+      "\t\treturn \"\", fmt.Errorf(\"locate %s: no mirrors configured\", artifact)",
+      "\t}",
+      "\tctx, cancel := context.WithCancel(ctx)",
+      "\tdefer cancel()",
+      "",
+      "\tanswers := make(chan answer, len(mirrors))",
+      "\tfor _, mirror := range mirrors {",
+      "\t\tgo func() {",
+      "\t\t\turl, err := probe(ctx, mirror, artifact)",
+      "\t\t\tanswers <- answer{mirror: mirror, url: url, err: err}",
+      "\t\t}()",
+      "\t}",
+      "",
+      "\terrs := []error{ErrNotFound}",
+      "\tfor range mirrors {",
+      "\t\tselect {",
+      "\t\tcase a := <-answers:",
+      "\t\t\tif a.err == nil {",
+      "\t\t\t\treturn a.url, nil",
+      "\t\t\t}",
+      "\t\t\terrs = append(errs, fmt.Errorf(\"%s: %w\", a.mirror, a.err))",
+      "\t\tcase <-ctx.Done():",
+      "\t\t\treturn \"\", ctx.Err()",
+      "\t\t}",
+      "\t}",
+      "\treturn \"\", fmt.Errorf(\"locate %s: %w\", artifact, errors.Join(errs...))",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "02a53055456b696be2c6ca76b496c4d271c5ccb1a1c47d2516885966fec8439e",
+   "before_documented": "d9894694866302e2e21daea93b148f282babbe5b83f8e49c048095d2e1d70840",
+   "after": "63dc8ba8444660255d815c5ef710d2f7d3e8abd087fad6f8698024b326390eda",
+   "after_documented": "149c8558bf9b745a38c278161c11d936f2fe7e318fea12da21dd4f0b680ffcfd"
+  },
+  "check": {
+   "summary": "Twenty-five lookups where one mirror answers and the others wait for cancellation; the harness then waits two seconds for the goroutine count to return to its baseline.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: \\d+ goroutines still running",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package mirrors",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"runtime\"",
+      "\t\"strings\"",
+      "\t\"testing\"",
+      "\t\"time\"",
+      ")",
+      "",
+      "func settle(base int) int {",
+      "\tdeadline := time.Now().Add(2 * time.Second)",
+      "\tfor runtime.NumGoroutine() > base && time.Now().Before(deadline) {",
+      "\t\ttime.Sleep(10 * time.Millisecond)",
+      "\t}",
+      "\treturn runtime.NumGoroutine()",
+      "}",
+      "",
+      "func TestCheckLocate(t *testing.T) {",
+      "\tbase := runtime.NumGoroutine()",
+      "\tprobe := func(ctx context.Context, mirror, artifact string) (string, error) {",
+      "\t\tif mirror == \"near\" {",
+      "\t\t\treturn \"https://\" + mirror + \"/\" + artifact, nil",
+      "\t\t}",
+      "\t\t<-ctx.Done()",
+      "\t\treturn \"\", ctx.Err()",
+      "\t}",
+      "\tfor i := 0; i < 25; i++ {",
+      "\t\turl, err := Locate(context.Background(), probe, []string{\"far-a\", \"near\", \"far-b\"}, \"tool.tar\")",
+      "\t\tif err != nil || url != \"https://near/tool.tar\" {",
+      "\t\t\tt.Fatalf(\"CHECK-FAIL: first success: %q %v\", url, err)",
+      "\t\t}",
+      "\t}",
+      "\tmissing := func(ctx context.Context, mirror, artifact string) (string, error) {",
+      "\t\treturn \"\", fmt.Errorf(\"status 404 from %s\", mirror)",
+      "\t}",
+      "\t_, err := Locate(context.Background(), missing, []string{\"a\", \"b\"}, \"tool.tar\")",
+      "\tif !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), \"status 404 from b\") {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: all mirrors missing: %v\", err)",
+      "\t}",
+      "\tif _, err := Locate(context.Background(), missing, nil, \"tool.tar\"); err == nil {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: empty mirror list accepted\")",
+      "\t}",
+      "\tif _, err := Locate(context.Background(), missing, []string{\"a\"}, \"x/y\"); err == nil {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: invalid artifact accepted\")",
+      "\t}",
+      "\tif n := settle(base); n > base {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: %d goroutines still running once every probe returned (baseline %d)\", n, base)",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "At least two mirrors and one probe succeeds while others are still pending. Locate returns on the first success; each remaining probe returns on cancellation and then blocks forever sending its result on the unbuffered channel nobody reads.",
+   "expected_impact": "Every early return strands len(mirrors)-1 goroutines with their closures. In the long-running proxy the goroutine count and memory grow with each request until the process is restarted.",
+   "positive_locations": [
+    {
+     "path": "locate.go",
+     "symbol": "Locate",
+     "anchors": {
+      "start": "answers := make(chan answer)",
+      "end": "answers := make(chan answer)"
+     },
+     "start_line": 35,
+     "end_line": 35
+    },
+    {
+     "path": "locate.go",
+     "symbol": "Locate",
+     "anchors": {
+      "start": "answers <- answer{mirror: mirror",
+      "end": "answers <- answer{mirror: mirror"
+     },
+     "start_line": 39,
+     "end_line": 39
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "locate.go",
+     "symbol": "Locate",
+     "anchors": {
+      "start": "answers := make(chan answer, len(mirrors))"
+     },
+     "note": "With a buffer sized to the number of probes every send completes without a receiver, so each goroutine exits when its probe returns.",
+     "start_line": 35,
+     "end_line": 35
+    },
+    {
+     "variant": "before",
+     "path": "locate.go",
+     "symbol": "Locate",
+     "anchors": {
+      "start": "defer cancel()"
+     },
+     "note": "Cancelling the context is not enough on its own: it makes the probes return but does not unblock the sends.",
+     "start_line": 33,
+     "end_line": 33
+    }
+   ],
+   "reviewer_notes": "Also reached through the ctx.Done branch. The all-fail path drains every answer and is fine. A finding about the probes ignoring cancellation is out of contract (probes must honour it).",
+   "distinctive_tokens": [
+    "stranded",
+    "strands",
+    "orphaned",
+    "goroutine leak",
+    "unbuffered",
+    "blocked forever"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "locate.go"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-RS-01",
+  "language": "rust",
+  "split": "holdout",
+  "family": "guard-in-match-scrutinee-relocked",
+  "category": "concurrency_async",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "profiles",
+   "title": "profiles",
+   "summary": "A thread-safe cache of configuration profiles loaded on first use from a pluggable backing store."
+  },
+  "contract": "Registry is shared between threads. get(name) returns the cached profile when there is one. Otherwise it loads the settings from the source, caches the new profile and returns it; a name the source does not know returns None and caches nothing. Two threads that miss at the same time may both call load, but the first insert wins and both receive the same Arc. Any name is accepted, including the empty string.",
+  "contract_file": "src/registry.rs",
+  "files": {
+   "shared": [
+    {
+     "path": "src/lib.rs",
+     "lines": [
+      "//! Shared configuration profiles for worker threads.",
+      "",
+      "mod registry;",
+      "",
+      "pub use registry::Registry;",
+      "",
+      "/// A named list of settings, shared between threads through `Arc`.",
+      "#[derive(Debug, PartialEq, Eq)]",
+      "pub struct Profile {",
+      "    pub name: String,",
+      "    pub settings: Vec<(String, String)>,",
+      "}",
+      "",
+      "/// Backing store for profiles, for example a directory of files.",
+      "///",
+      "/// `load` may block on I/O. It returns `None` when the store has no profile",
+      "/// with that name.",
+      "pub trait Source: Send + Sync {",
+      "    fn load(&self, name: &str) -> Option<Vec<(String, String)>>;",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/registry.rs",
+     "lines": [
+      "use std::collections::HashMap;",
+      "use std::sync::{Arc, Mutex};",
+      "",
+      "use crate::{Profile, Source};",
+      "",
+      "/// Caches profiles loaded from a [`Source`].",
+      "pub struct Registry<S: Source> {",
+      "    source: S,",
+      "    cache: Mutex<HashMap<String, Arc<Profile>>>,",
+      "}",
+      "",
+      "impl<S: Source> Registry<S> {",
+      "    pub fn new(source: S) -> Self {",
+      "        Registry {",
+      "            source,",
+      "            cache: Mutex::new(HashMap::new()),",
+      "        }",
+      "    }",
+      "",
+      "    /// Returns the profile called `name`.",
+      "    ///",
+      "    /// {{CONTRACT}}",
+      "    pub fn get(&self, name: &str) -> Option<Arc<Profile>> {",
+      "        match self.cache.lock().unwrap().get(name) {",
+      "            Some(profile) => Some(Arc::clone(profile)),",
+      "            None => {",
+      "                let settings = self.source.load(name)?;",
+      "                let loaded = Arc::new(Profile {",
+      "                    name: name.to_string(),",
+      "                    settings,",
+      "                });",
+      "                let mut cache = self.cache.lock().unwrap();",
+      "                let entry = cache.entry(name.to_string()).or_insert(loaded);",
+      "                Some(Arc::clone(entry))",
+      "            }",
+      "        }",
+      "    }",
+      "",
+      "    /// Number of cached profiles.",
+      "    pub fn cached(&self) -> usize {",
+      "        self.cache.lock().unwrap().len()",
+      "    }",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/registry.rs",
+     "lines": [
+      "use std::collections::HashMap;",
+      "use std::sync::{Arc, Mutex};",
+      "",
+      "use crate::{Profile, Source};",
+      "",
+      "/// Caches profiles loaded from a [`Source`].",
+      "pub struct Registry<S: Source> {",
+      "    source: S,",
+      "    cache: Mutex<HashMap<String, Arc<Profile>>>,",
+      "}",
+      "",
+      "impl<S: Source> Registry<S> {",
+      "    pub fn new(source: S) -> Self {",
+      "        Registry {",
+      "            source,",
+      "            cache: Mutex::new(HashMap::new()),",
+      "        }",
+      "    }",
+      "",
+      "    /// Returns the profile called `name`.",
+      "    ///",
+      "    /// {{CONTRACT}}",
+      "    pub fn get(&self, name: &str) -> Option<Arc<Profile>> {",
+      "        let hit = self.cache.lock().unwrap().get(name).cloned();",
+      "        match hit {",
+      "            Some(profile) => Some(profile),",
+      "            None => {",
+      "                let settings = self.source.load(name)?;",
+      "                let loaded = Arc::new(Profile {",
+      "                    name: name.to_string(),",
+      "                    settings,",
+      "                });",
+      "                let mut cache = self.cache.lock().unwrap();",
+      "                let entry = cache.entry(name.to_string()).or_insert(loaded);",
+      "                Some(Arc::clone(entry))",
+      "            }",
+      "        }",
+      "    }",
+      "",
+      "    /// Number of cached profiles.",
+      "    pub fn cached(&self) -> usize {",
+      "        self.cache.lock().unwrap().len()",
+      "    }",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "5d2f1884486962995ab1fb6bfa9a031c0f5390140ecb8f1b32dae1d76651302e",
+   "before_documented": "d2b6cfbaea6e816872b185e5129a9e03f9b54db580022194178bbda60e3807e9",
+   "after": "5a64ffb744b6aa1bf40fd3f19fd57ef795d84eb8fc89abdde496895ad700b1da",
+   "after_documented": "06c1cfc065662e845740591e326fda920e14d422b135b4bb44e89910521d1de8"
+  },
+  "check": {
+   "summary": "A worker thread calls get on an empty registry for a known name, again for the same name, and for an unknown name; the main thread waits three seconds for the results, then four threads request one more name concurrently.",
+   "build": [
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "--crate-type",
+      "rlib",
+      "--crate-name",
+      "profiles",
+      "-C",
+      "overflow-checks=on",
+      "{run}/src/lib.rs",
+      "-o",
+      "{out}/libprofiles.rlib"
+     ]
+    },
+    {
+     "argv": [
+      "{rustc}",
+      "--edition",
+      "2021",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "linker={cxx}",
+      "--extern",
+      "profiles={out}/libprofiles.rlib",
+      "{run}/_check/check.rs",
+      "-o",
+      "{out}/check"
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{out}/check"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: get did not return within 3 s on a cache miss",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.rs",
+     "lines": [
+      "use std::sync::atomic::{AtomicUsize, Ordering};",
+      "use std::sync::{mpsc, Arc};",
+      "use std::thread;",
+      "use std::time::Duration;",
+      "",
+      "use profiles::{Registry, Source};",
+      "",
+      "struct Counting(Arc<AtomicUsize>);",
+      "",
+      "impl Source for Counting {",
+      "    fn load(&self, name: &str) -> Option<Vec<(String, String)>> {",
+      "        self.0.fetch_add(1, Ordering::SeqCst);",
+      "        if name == \"absent\" {",
+      "            None",
+      "        } else {",
+      "            Some(vec![(\"level\".to_string(), name.to_string())])",
+      "        }",
+      "    }",
+      "}",
+      "",
+      "fn fail(message: &str) -> ! {",
+      "    println!(\"CHECK-FAIL: {message}\");",
+      "    std::process::exit(1)",
+      "}",
+      "",
+      "fn main() {",
+      "    let loads = Arc::new(AtomicUsize::new(0));",
+      "    let registry = Arc::new(Registry::new(Counting(Arc::clone(&loads))));",
+      "    let (tx, rx) = mpsc::channel();",
+      "    let worker = Arc::clone(&registry);",
+      "    thread::spawn(move || {",
+      "        let first = worker.get(\"base\");",
+      "        let second = worker.get(\"base\");",
+      "        let absent = worker.get(\"absent\");",
+      "        let _ = tx.send((first, second, absent));",
+      "    });",
+      "    let (first, second, absent) = match rx.recv_timeout(Duration::from_secs(3)) {",
+      "        Ok(result) => result,",
+      "        Err(_) => fail(\"get did not return within 3 s on a cache miss\"),",
+      "    };",
+      "    let (Some(first), Some(second)) = (first, second) else {",
+      "        fail(\"known profile not returned\");",
+      "    };",
+      "    if !Arc::ptr_eq(&first, &second) || first.settings != vec![(\"level\".to_string(), \"base\".to_string())] {",
+      "        fail(\"second get did not return the cached profile\");",
+      "    }",
+      "    if absent.is_some() || registry.cached() != 1 || loads.load(Ordering::SeqCst) != 2 {",
+      "        fail(\"absent profile cached or loads miscounted\");",
+      "    }",
+      "    let handles: Vec<_> = (0..4)",
+      "        .map(|_| {",
+      "            let r = Arc::clone(&registry);",
+      "            thread::spawn(move || r.get(\"shared\"))",
+      "        })",
+      "        .collect();",
+      "    let all: Vec<_> = handles.into_iter().map(|h| h.join().unwrap().unwrap()).collect();",
+      "    if !all.windows(2).all(|w| Arc::ptr_eq(&w[0], &w[1])) {",
+      "        fail(\"concurrent callers received different profiles\");",
+      "    }",
+      "    println!(\"CHECK-PASS\");",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Any call for a name that is not cached yet. The MutexGuard created in the match scrutinee lives until the end of the whole match, so the None arm calls lock() on a mutex its own thread still holds.",
+   "expected_impact": "The first lookup of every profile blocks its thread for good (std's Mutex is not reentrant). Every other thread that touches the registry then waits on the same lock, so the worker pool stalls on startup.",
+   "positive_locations": [
+    {
+     "path": "src/registry.rs",
+     "symbol": "Registry::get",
+     "anchors": {
+      "start": "match self.cache.lock().unwrap().get(name) {"
+     },
+     "start_line": 30,
+     "end_line": 30
+    },
+    {
+     "path": "src/registry.rs",
+     "symbol": "Registry::get",
+     "anchors": {
+      "start": "let mut cache = self.cache.lock().unwrap();"
+     },
+     "start_line": 38,
+     "end_line": 38
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/registry.rs",
+     "symbol": "Registry::get",
+     "anchors": {
+      "start": "let hit = self.cache.lock().unwrap().get(name).cloned();"
+     },
+     "note": "Binding the cloned Arc in its own statement ends the temporary guard at the semicolon, so the second lock() in the miss path is uncontended and load runs without the lock.",
+     "start_line": 30,
+     "end_line": 30
+    },
+    {
+     "variant": "before",
+     "path": "src/registry.rs",
+     "symbol": "Registry::get",
+     "anchors": {
+      "start": "let entry = cache.entry(name.to_string()).or_insert(loaded);"
+     },
+     "note": "The entry().or_insert() insert is the correct way to honour the first-insert-wins rule; it is not the problem.",
+     "start_line": 39,
+     "end_line": 39
+    }
+   ],
+   "reviewer_notes": "Cached hits work, so only the miss path shows it. The borrow checker accepts the code. A report that only says the lock is held while load runs is the same root cause and should count, provided it reaches the re-lock in the None arm.",
+   "distinctive_tokens": [
+    "scrutinee",
+    "reentrant",
+    "re-entrant",
+    "relock",
+    "self-deadlock",
+    "temporary lifetime"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/registry.rs"
+    ]
+   }
+  }
+ }
+]
