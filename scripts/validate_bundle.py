@@ -1452,6 +1452,20 @@ def main() -> None:
     for doc in r1_docs.values():
         review_validator.validate(doc)
     check_review_r1_examples(r1_docs, r1_raw, r1_pack_doc, r1_roles)
+    # review-r1 2.0.0 (docs/49 §3): a stage keeps at most three calls (the
+    # request, one repair, one retry of a reply that was not JSON).
+    retried = copy.deepcopy(r1_docs["verify"])
+    first = retried["calls"][0]
+    retried["calls"] = [dict(first, attempt=1, output_errors=["evidence_id_dropped", "evidence_id_unknown"]),
+                        dict(first, attempt=2, outcome="output_rejected", output_errors=["output_not_json"], usage=None),
+                        dict(first, attempt=3)]
+    review_validator.validate(retried)
+    too_many = copy.deepcopy(retried)
+    too_many["calls"].append(dict(first, attempt=4))
+    expect_invalid("review-r1 stage with four calls", review_validator.validate, too_many)
+    fourth = copy.deepcopy(retried)
+    fourth["calls"][2]["attempt"] = 4
+    expect_invalid("review-r1 call attempt 4", review_validator.validate, fourth)
     for name in ("examples/environment.json", "examples/environment-documents.json"):
         environment = json_file(ROOT / name)
         validators["environment.schema.json"].validate(environment)
@@ -1591,6 +1605,12 @@ def main() -> None:
         {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome", "pack_id", "pack_version")}
         for stage in R1_STAGES for call in r1_docs[stage]["calls"]]
     validators["report.schema.json"].validate(r1_calls)
+    # Five review-r1 stages of up to three calls each fit the report; more do not.
+    most = copy.deepcopy(r1_calls)
+    most["coverage"]["review_calls"] = [dict(r1_calls["coverage"]["review_calls"][0]) for _ in range(15)]
+    validators["report.schema.json"].validate(most)
+    most["coverage"]["review_calls"].append(dict(r1_calls["coverage"]["review_calls"][0]))
+    expect_invalid("report with 16 review calls", validators["report.schema.json"].validate, most)
     r1_calls["coverage"]["review_calls"][0]["pack_version"] = "2.0.0 rc1"
     expect_invalid("invalid report pack version", validators["report.schema.json"].validate, r1_calls)
 

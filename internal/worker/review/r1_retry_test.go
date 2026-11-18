@@ -194,3 +194,79 @@ func TestR1RoleNonJSONTwiceFails(t *testing.T) {
 		t.Fatalf("environment %+v calls=%d", r, f.calls("environment"))
 	}
 }
+
+// Only observation IDs of the request are trimmed: a fabricated evidence ID
+// beside a valid one keeps the entry rejected, and the repair verifies it.
+func TestR1VerifyFabricatedIDBesideValidIsRepaired(t *testing.T) {
+	j := w15Job(t, nil)
+	script := validScript(t)
+	script["verify"] = func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[r1VerifyInput](t, q)
+		var out []map[string]any
+		for _, c := range in.Candidates {
+			ids := []string{c.Evidence[0]}
+			if n == 1 && c.Origin == "interpret" {
+				ids = append(ids, "ev_000000000000000000000000")
+			}
+			out = append(out, inconclusiveFor(c, ids...))
+		}
+		return asJSON(map[string]any{"verifications": out})
+	}
+	f := &r1Caller{script: script}
+	_, res := runR1(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
+	if r := res["review.verify"]; r.Status != domain.TaskSucceeded || f.calls("verify") != 2 {
+		t.Fatalf("verify %+v calls=%d", r, f.calls("verify"))
+	}
+	v := readR1(t, j, "verify")
+	if slices.Contains(v.Calls[0].OutputErrors, "evidence_id_dropped") || !slices.Contains(v.Calls[0].OutputErrors, "evidence_id_unknown") {
+		t.Fatalf("first call %+v", v.Calls[0])
+	}
+	for _, x := range v.Verifications {
+		if slices.Contains(x.SupportingEvidence, "ev_000000000000000000000000") {
+			t.Fatalf("fabricated evidence kept %+v", x)
+		}
+	}
+}
+
+// A later verify call that fails (here a timeout) keeps the verdict already
+// accepted; the other candidate is quarantined and the task is incomplete.
+// A failing first call still fails the whole stage.
+func TestR1VerifyLaterCallFailureKeepsAccepted(t *testing.T) {
+	j := w15Job(t, nil)
+	script := validScript(t)
+	script["verify"] = func(n int, q opencode.Request) opencode.Reply {
+		if n > 1 {
+			return opencode.Reply{Reason: "model_timeout"}
+		}
+		in := decodeAs[r1VerifyInput](t, q)
+		var out []map[string]any
+		for _, c := range in.Candidates {
+			if c.Origin == "interpret" {
+				out = append(out, inconclusiveFor(c, "ev_000000000000000000000000"))
+				continue
+			}
+			out = append(out, inconclusiveFor(c, c.Evidence[0]))
+		}
+		return asJSON(map[string]any{"verifications": out})
+	}
+	f := &r1Caller{script: script}
+	_, res := runR1(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
+	if r := res["review.verify"]; r.Status != domain.TaskFailed || r.Reason != "review_output_incomplete" || f.calls("verify") != 2 {
+		t.Fatalf("verify %+v calls=%d", r, f.calls("verify"))
+	}
+	v := readR1(t, j, "verify")
+	if len(v.Calls) != 2 || v.Calls[1].Outcome != "model_timeout" || !slices.Contains(v.Limitations, "verification_call_failed") || !slices.Contains(v.Limitations, record.LimQuarantined) {
+		t.Fatalf("record %+v %v", v.Calls, v.Limitations)
+	}
+	if v.Verifications[0].Verdict != record.VerdictInconclusive || v.Verifications[1].Verdict != record.VerdictUnreviewed {
+		t.Fatalf("verifications %+v", v.Verifications)
+	}
+
+	j = w15Job(t, nil)
+	script["verify"] = func(int, opencode.Request) opencode.Reply { return opencode.Reply{Reason: "model_timeout"} }
+	f = &r1Caller{script: script}
+	_, res = runR1(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
+	if r := res["review.verify"]; r.Status != domain.TaskTimedOut || f.calls("verify") != 1 {
+		t.Fatalf("first-call timeout %+v calls=%d", r, f.calls("verify"))
+	}
+}

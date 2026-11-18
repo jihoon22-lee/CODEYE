@@ -23,6 +23,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
@@ -30,10 +31,15 @@ import (
 // r1Scripted answers every review-r1 role from the request input alone
 // (first gap requirement, first code excerpt, first observation, every
 // candidate). Only the model is scripted; it never starts a process or
-// contacts a model.
+// contacts a model. With retry, verify takes three calls: the first trims an
+// observation ID beside valid evidence for the first candidate and rejects
+// the second (a fabricated ID only), the repair reply is not JSON, and the
+// retry is valid.
 type r1Scripted struct {
-	mu    sync.Mutex
-	roles []string
+	mu      sync.Mutex
+	roles   []string
+	retry   bool
+	verifyN int
 }
 
 func (f *r1Scripted) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
@@ -91,11 +97,29 @@ func (f *r1Scripted) Review(_ context.Context, _ executor.Runner, q opencode.Req
 			"impact": "출력 문자열이 잘못 만들어진다.", "improvement": "형식 지정자를 인자 형식과 맞춘다.", "counterpoint": "출력이 사람에게만 보이는 진단일 수 있다.", "evidence_ids": o.Evidence[:1]}},
 			"limits": []any{}}
 	case "verify":
+		f.mu.Lock()
+		f.verifyN++
+		n := f.verifyN
+		f.mu.Unlock()
+		if f.retry && n == 2 {
+			reply.Reason = "model_output_invalid"
+			return reply
+		}
 		var out []map[string]any
-		for _, c := range in.Candidates {
-			out = append(out, map[string]any{"candidate_id": c.ID, "verdict": "inconclusive", "category": "error_handling", "severity": "low", "severity_reason": "영향 범위가 제한적이다.",
-				"impact": "실패 시 호출이 반복될 수 있다.", "valid_conditions": []string{}, "invalid_conditions": []string{}, "supporting_evidence_ids": c.Evidence[:1], "counterevidence_ids": []string{},
-				"unresolved_assumptions": []string{"호출자를 발췌에서 확인하지 못했다."}, "next_verification": []string{"호출자를 읽는다."}})
+		for i, c := range in.Candidates {
+			ev := c.Evidence[:1]
+			v := map[string]any{"candidate_id": c.ID, "verdict": "inconclusive", "category": "error_handling", "severity": "low", "severity_reason": "영향 범위가 제한적이다.",
+				"impact": "실패 시 호출이 반복될 수 있다.", "valid_conditions": []string{}, "invalid_conditions": []string{}, "supporting_evidence_ids": ev, "counterevidence_ids": []string{},
+				"unresolved_assumptions": []string{"호출자를 발췌에서 확인하지 못했다."}, "next_verification": []string{"호출자를 읽는다."}}
+			if f.retry && n == 1 {
+				if i == 0 {
+					v["supporting_evidence_ids"] = append(append([]string{}, ev...), in.Observations[0].ID)
+				} else {
+					v["verdict"], v["valid_conditions"], v["unresolved_assumptions"] = "supported", []string{"형식이 어긋난다."}, []string{}
+					v["supporting_evidence_ids"] = []string{"ev_000000000000000000000000"}
+				}
+			}
+			out = append(out, v)
 		}
 		body = map[string]any{"verifications": out}
 	default:
@@ -173,16 +197,23 @@ func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
+	vetFinding := map[string]string{"describe.go": "package gateway\n\nimport \"fmt\"\n\n// Describe formats n for logs.\nfunc Describe(n int) string {\n\treturn fmt.Sprintf(\"%s retries\", n)\n}\n"}
 	cases := []struct {
 		name               string
 		extra              map[string]string
+		retry              bool
 		interpret, calls   string
 		optional, findings []string
 	}{
 		{name: "clean", interpret: "review.interpret=skipped_policy:no_tool_observations", calls: "environment,documents,investigate,verify",
 			optional: []string{"review.environment=accepted", "review.interpret=skipped:no_tool_observations"}, findings: []string{"review_investigate_1=inconclusive"}},
-		{name: "vet finding", extra: map[string]string{"describe.go": "package gateway\n\nimport \"fmt\"\n\n// Describe formats n for logs.\nfunc Describe(n int) string {\n\treturn fmt.Sprintf(\"%s retries\", n)\n}\n"},
+		{name: "vet finding", extra: vetFinding,
 			interpret: "review.interpret=succeeded", calls: "environment,documents,investigate,interpret,verify",
+			optional: []string{"review.environment=accepted", "review.interpret=accepted"}, findings: []string{"review_interpret_1=inconclusive", "review_investigate_1=inconclusive"}},
+		// review-r1 2.0.0 (docs/49 §3): a three-call verifier record reaches
+		// the report and validates.
+		{name: "verify retry", extra: vetFinding, retry: true,
+			interpret: "review.interpret=succeeded", calls: "environment,documents,investigate,interpret,verify,verify,verify",
 			optional: []string{"review.environment=accepted", "review.interpret=accepted"}, findings: []string{"review_interpret_1=inconclusive", "review_investigate_1=inconclusive"}},
 	}
 	for _, tc := range cases {
@@ -201,7 +232,7 @@ func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			caller := &r1Scripted{}
+			caller := &r1Scripted{retry: tc.retry}
 			h, err := discovery.Wrap(review.R1Handler{Static: vet, Caller: caller}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
 			if err != nil {
 				t.Fatal(err)
@@ -303,6 +334,29 @@ func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 			for _, call := range r.Coverage.ReviewCalls {
 				if call.PackID != review.PackR1 || call.PackVersion != "2.0.0" {
 					t.Fatalf("call %+v", call)
+				}
+			}
+			if tc.retry {
+				var outcomes []string
+				for _, call := range r.Coverage.ReviewCalls {
+					if call.Role == "verify" {
+						outcomes = append(outcomes, call.Outcome)
+					}
+				}
+				if !slices.Equal(outcomes, []string{"accepted", "output_rejected", "accepted"}) {
+					t.Fatalf("verify calls %v", outcomes)
+				}
+				var rec record.R1Record
+				for cid, body := range fa.artifacts {
+					if fa.media[cid] == "application/vnd.codeye.review+json" && strings.Contains(string(body), `"stage":"verify"`) {
+						if err := json.Unmarshal(body, &rec); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				if len(rec.Calls) != 3 || rec.Calls[2].Attempt != 3 || !slices.Contains(rec.Calls[0].OutputErrors, "evidence_id_dropped") ||
+					!slices.Contains(rec.Calls[0].OutputErrors, "evidence_id_unknown") || !slices.Equal(rec.Calls[1].OutputErrors, []string{"output_not_json"}) {
+					t.Fatalf("verify record calls %+v", rec.Calls)
 				}
 			}
 			var reviewed []string

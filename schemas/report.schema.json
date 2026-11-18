@@ -54,7 +54,7 @@
         "llm_exposed_files": {"type": ["integer", "null"], "minimum": 0},
         "test_status": {"enum": ["no_tests", "not_run", "passed", "failed"]},
         "notes": {"type": "array", "items": {"type": "string"}},
-        "review_calls": {"type": "array", "maxItems": 10, "items": {"$ref": "#/$defs/reviewCall"}},
+        "review_calls": {"type": "array", "maxItems": 15, "items": {"$ref": "#/$defs/reviewCall"}},
         "ai_review": {"$ref": "#/$defs/aiReview"},
         "tools": {"type": "array", "items": {"$ref": "#/$defs/toolCoverage"}}
       }

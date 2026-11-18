@@ -21,6 +21,8 @@ R1 평가 뒤 소유자는 검토 지침 팩을 하나로 합치기로 했다(20
 ## 2. v1 규칙 통합
 
 - **작성자.** 지침 문구는 평가 결과(docs/46 §13, `fixtures/r1-quality/`, 저장소 밖 평가 디렉터리)를 읽지 않은 별도 작성자가 썼다. 조정자는 보류 사례를 보았으므로 지침 문구를 쓰지 않았다.
+  - 작성 지시에는 W15 개발 입력에서 관찰한 오탐 유형 하나의 설명이 들어갔다. 이 관찰은 docs/46 §13.1(rc2 R0 회귀)에 기록된 것이다. 보류 사례의 내용은 아니지만 작성자가 읽지 않기로 한 절의 정보가 조정자를 거쳐 전달되었다.
+  - 작성자의 검색 두 번이 금지 경로를 지나갔다. 하나는 docs/를 대상으로 한 이전 pin hash 검색이고, 하나는 `fixtures/r1-quality`를 포함한 Python 파일 검색이다. 두 검색 모두 그 파일의 내용을 출력하지 않았다고 보고되었다. `validate_bundle.py`가 r1-quality 검사를 실행했고 출력은 통과 줄 하나였다.
 - **방법.** v1의 모든 파일(공통, context·investigate·verify·synthesize·report, 영역·언어 지침)의 규칙을 세 가지로 나눴다.
   - (a) r1에 이미 있다.
   - (b) r1에 없고 r1에 맞다.
@@ -60,18 +62,24 @@ R1 평가 뒤 소유자는 검토 지침 팩을 하나로 합치기로 했다(20
    - 앞서 복구 요청이 있었으면 그 오류 코드를 유지하고 `output_not_json`을 더한다.
    - 단계당 호출은 첫 요청, 형식 복구 1회, 재시도 1회로 최대 3회다.
    - 두 번 연속 JSON이 아니면 2회에서 끝난다. 두 번 거부되어도 종전처럼 2회에서 끝난다.
-2. **범위 밖 ID만 틀린 항목(verify).**
-   - 항목의 오류가 `evidence_id_unknown` 하나뿐일 때만 적용한다. 범위 밖 ID를 빼고 같은 검사를 다시 하며, 통과하면 받아들인다.
+2. **관찰 ID만 틀린 항목(verify).**
+   - 항목의 오류가 `evidence_id_unknown` 하나뿐이고, 범위 밖 ID가 모두 그 요청에 플랫폼이 넣은 관찰 ID일 때만 적용한다. 그 ID를 빼고 같은 검사를 다시 하며, 통과하면 받아들인다.
+   - 지어낸 `ev_…` ID처럼 요청에 없던 ID가 하나라도 있으면 원래 오류로 거부하고 형식 복구로 보낸다.
    - 통과하지 못하면 원래 오류로 거부한다. 예를 들어 관찰 ID만으로 지지한 항목은 코드 근거가 없어 거부된다.
    - 받아들였으면 그 호출의 `output_errors`에 `evidence_id_dropped`를 남긴다.
    - 게시되는 판정은 범위 안의 근거만 인용한다.
-3. **기록 schema.**
+3. **후속 호출 실패(verify).**
+   - 형식 복구나 재시도 호출이 형식 이외의 이유(timeout, 거절 등)로 실패하면, 앞서 수락한 판정을 버리지 않는다.
+   - 남은 후보는 격리하고 `verification_call_failed` 한계를 남긴다. task는 `failed/review_output_incomplete`이고, 실패 사유는 그 호출의 `outcome`에 남는다.
+   - 첫 호출이 실패하거나 취소되면 종전처럼 단계 전체가 실패한다.
+4. **기록 schema.**
    - `0.2` 기록의 r1 호출은 `attempt`와 `calls` 모두 최대 3이다. Go decoder 상수는 `R1MaxCalls = 3`이다.
    - `0.1`(v1) 기록은 그대로다.
-4. **바꾸지 않은 것.**
+   - 보고서 schema의 `coverage.review_calls` 상한은 10에서 15로 넓혔다(역할 5개 × 최대 3회).
+5. **바꾸지 않은 것.**
    - 지침과 계약 문구는 바꾸지 않았다. `r1Rules`의 "근거·관찰 ID"와 verify 계약의 "근거 ID"가 어긋나는 문구도 그대로다. 이 실패를 보류 사례에서 알았으므로 문구를 그 사례에 맞추지 않고 구조로 막았다. 문구 정리는 다음 지침 개정에서 독립 작성자가 판단한다.
    - review-v1 검증기는 그대로다.
-5. **한계.**
+6. **한계.**
    - 미완료가 사라진다는 보장은 없다. 끝내 검증되지 않은 후보는 종전처럼 `unreviewed`로 격리하고 task는 실패한다.
    - 단계마다 호출이 하나 늘 수 있어 최악의 비용과 시간이 그만큼 늘어난다.
 
@@ -97,12 +105,16 @@ R1 평가 뒤 소유자는 검토 지침 팩을 하나로 합치기로 했다(20
 | `TestR1VerifyTwoNonJSONRepliesFail` | JSON 아닌 응답 두 번이면 2회 호출 뒤 `review_output_invalid`이고 모든 후보가 `unreviewed`다 |
 | `TestR1RoleNonJSONRepairGetsRetry` | documents 역할: 거부 → JSON 아닌 복구 → 정상 응답이 3번째에 수락되고 재시도는 앞 오류 코드를 유지한다 |
 | `TestR1RoleNonJSONTwiceFails` | environment 역할: JSON 아닌 응답 두 번이면 2회에서 실패한다 |
+| `TestR1VerifyFabricatedIDBesideValidIsRepaired` | 유효한 근거 옆의 지어낸 `ev_` ID는 빼지 않고 거부해 형식 복구로 보낸다. 판정에 지어낸 ID가 남지 않는다 |
+| `TestR1VerifyLaterCallFailureKeepsAccepted` | 후속 호출 timeout은 수락한 판정을 유지하고 나머지를 격리한다(`review_output_incomplete`, `verification_call_failed`). 첫 호출 timeout은 단계 전체 실패다 |
+| `TestReviewR1ThroughTheWorkerAndReport/verify_retry` | 실제 worker와 기본 보고서 registry: verify 3회 호출(관찰 ID 제거·거부 → JSON 아님 → 수락) 기록이 보고서까지 가고 보고서 검증을 통과한다 |
+| `validate_bundle.py` | 3회 호출 r1 기록은 기록 schema를 통과하고 4회·attempt 4는 거부된다. 보고서 schema는 review_calls 15개를 받고 16개를 거부한다 |
 | `TestR1FabricatedEvidenceIsQuarantined` | 두 번 거부되면 종전처럼 2회에서 실패한다(변경 없음) |
 | `TestWorkerHandlersComposeDiscovery`·`TestWorkerHandlersSelectReviewPack` | 팩을 지정하지 않은 워커는 r1의 다섯 역할을 계획한다. `review-v1`을 지정하면 세 역할, 모르는 팩은 거부한다 |
 | `TestDefaultPackSelection`·`TestGoSelectionDigestsPinned`·`TestR1ExampleRecords` | 팩 신원(2.0.0, default), 역할 digest, 예시 기록 |
 | `TestReviewV1IsPinned` | v1 요청 바이트 불변 |
 
-새 시험 셋(재시도 2개, ID 제거 1개)은 변경 전 코드에서 실패하고 변경 후 통과함을 확인했다. 모든 시험은 합성 입력과 scripted caller를 쓰고 보류 사례의 내용을 담지 않는다.
+첫 커밋의 새 시험 셋(재시도 2개, ID 제거 1개)은 변경 전 코드에서 실패하고 변경 후 통과함을 확인했다. 모든 시험은 합성 입력과 scripted caller를 쓰고 보류 사례의 내용을 담지 않는다.
 
 ### 5.2 R0 회귀(실모델)
 
@@ -116,7 +128,7 @@ R1 평가 뒤 소유자는 검토 지침 팩을 하나로 합치기로 했다(20
 
 `review_output_incomplete`·`review_output_invalid`로 끝난 검토 task 수, 3번째 호출과 `evidence_id_dropped` 수, 비용은 판정 기준이 아니고 보고만 한다.
 
-결과(2026년 11월 19일, 커밋 `e3241c3`, 조정자 판정이며 사람의 판정이 아니다):
+결과(2026년 11월 19일, 커밋 `e3241c3`, 조정자 판정이며 사람의 판정이 아니다). 실행 뒤의 커밋은 관찰 ID 제거 범위, 후속 호출 실패 처리, schema 상한과 시험·문서만 바꿨다. 이 실행에는 거부된 호출이 없어 그 분기에 들어가지 않았고, 요청 바이트도 바뀌지 않았으므로 다시 실행하지 않았다.
 
 | 기준 | 2.0.0 | rc2 |
 |---|---|---|
