@@ -157,6 +157,10 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		p("| ", mdCode(t.Key), " | ", mdCode(st), " | ", mdCode(t.Result), " |")
 	}
 	p()
+	for _, c := range r.Coverage.ReviewCalls {
+		p("- 모델 호출 ", mdCode(c.Role), " · ", mdCode(c.Model), " · OpenCode ", mdCode(c.Version), " · ", mdCode(c.Outcome), " · 지침 ", mdCode(c.PackDigest))
+	}
+	p()
 	p("## ", mdText(l.Label("coverage")))
 	p()
 	p("- scope: ", mdCode(r.Coverage.ScopeMode))
@@ -217,6 +221,12 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		p("- validation / disposition: ", mdCode(f.Validation), " / ", mdCode(f.Disposition))
 		for _, loc := range f.Locations {
 			p("- location: ", mdCode(loc.Path+":"+strconv.Itoa(loc.StartLine)+"-"+strconv.Itoa(loc.EndLine)))
+		}
+		for _, cond := range f.Conditions {
+			p("- 발생 조건 (", mdCode(cond.Status), ") ", mdText(cond.Statement), " ", mdCode(strings.Join(cond.EvidenceIDs, ",")))
+		}
+		if len(f.CounterevidenceIDs) > 0 {
+			p("- 반대 근거 ", mdCode(strings.Join(f.CounterevidenceIDs, ",")))
 		}
 		p("- impact: ", mdText(f.Impact))
 		for _, c := range f.Claims {
@@ -461,6 +471,7 @@ code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:a
 <table><tr><th>task</th><th>상태</th><th>결과</th></tr>
 {{range .R.Coverage.AIReview.RequiredTasks}}<tr><td><code>{{.Key}}</code></td><td><code>{{deref .TaskStatus "없음"}}</code></td><td><code>{{.Result}}</code></td></tr>
 {{end}}</table>
+{{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code> · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침 <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
 <h2 id="coverage">{{.L.Label "coverage"}}</h2>
 <ul>
 <li>scope: <code>{{.R.Coverage.ScopeMode}}</code></li>
@@ -486,6 +497,8 @@ code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:a
 <li>category / severity: <code>{{.Category}}</code> / <code>{{.Severity}}</code> — {{.SeverityReason}}</li>
 <li>validation / disposition: <code>{{.Validation}}</code> / <code>{{.Disposition}}</code></li>
 {{range .Locations}}<li>location: <code>{{.Path}}:{{.StartLine}}-{{.EndLine}}</code></li>{{end}}
+{{range .Conditions}}<li>발생 조건 (<code>{{.Status}}</code>) {{.Statement}} <code>{{join .EvidenceIDs ","}}</code></li>{{end}}
+{{if .CounterevidenceIDs}}<li>반대 근거 <code>{{join .CounterevidenceIDs ","}}</code></li>{{end}}
 <li>impact: {{.Impact}}</li>
 {{range .Claims}}<li>claim (<code>{{.Kind}}</code>): {{.Assertion}} <code>{{join .EvidenceIDs ","}}</code></li>{{end}}
 {{range .Evidence}}<li>evidence <code>{{.ID}}</code> (<code>{{.Kind}}</code>): {{.Description}} {{with .Location}}<code>{{.Path}}:{{.StartLine}}</code>{{end}} {{with .ArtifactID}}<code>{{.}}</code>{{end}} {{with .JSONPointer}}<code>{{.}}</code>{{end}}</li>{{end}}

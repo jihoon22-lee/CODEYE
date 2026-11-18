@@ -117,3 +117,16 @@ thead { background: #f1f5f8; }
 @media (prefers-reduced-motion: no-preference) {
   button { transition: background-color .12s; }
 }
+
+.report-document { margin-block: 20px; overflow-wrap: anywhere; }
+.report-document header { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #dce2e8; }
+.report-document h4 { margin: 0; font-size: 1.35rem; }
+.report-document h5 { margin: 16px 0 6px; font-size: 1rem; }
+.report-document h6 { margin: 12px 0 4px; font-size: .94rem; }
+.report-document summary { cursor: pointer; padding: 8px 0; }
+.report-document .report-counts { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.report-counts dd { margin: 0; font-size: 1.2rem; font-weight: 600; }
+.finding-card { padding: 3px 10px; border-left: 3px solid #7696a7; margin-block: 8px; }
+.finding-card summary span { display: block; font-size: .875rem; margin-inline-start: 14px; }
+.report-document a { color: #245b7a; text-underline-offset: 3px; }
+.report-ref { margin-inline-start: .45rem; font-size: .88em; }

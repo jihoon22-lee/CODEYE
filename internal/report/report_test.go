@@ -326,7 +326,8 @@ func withReview(t *testing.T, statuses map[string]string) *fixture {
 func TestAIReviewGate(t *testing.T) {
 	all := map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"}
 	f := withReview(t, all)
-	r := build(t, f.in, DefaultRegistry())
+	toolsOnly, _ := NewRegistry(GoVetDecoder{})
+	r := build(t, f.in, toolsOnly)
 	if r.Status != StatusPartial || r.Coverage.AIReview.Status != AIReviewNotPerformed || r.Coverage.AIReview.RequiredTasks[0].Result != "result_missing" || r.Coverage.LLMExposedFiles != nil {
 		t.Fatalf("succeeded review tasks without a decoder: %s %+v", r.Status, r.Coverage.AIReview)
 	}

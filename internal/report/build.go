@@ -48,11 +48,12 @@ const (
 )
 
 type taskState struct {
-	facts    TaskFacts
-	manifest *analysis.ManifestTask
-	rejected bool
-	decoded  bool
-	review   bool
+	facts        TaskFacts
+	manifest     *analysis.ManifestTask
+	rejected     bool
+	decoded      bool
+	review       bool
+	reviewResult *ReviewResult
 }
 
 // Build validates the input and produces the report. Every refusal wraps
@@ -197,8 +198,13 @@ func Build(in Input, reg *Registry) (Report, error) {
 				}
 				decoderOf[art.ID] = d.Key().String()
 				st.decoded = true
-				if c.Review != nil && c.Review.Accepted {
-					st.review = true
+				if c.Review != nil {
+					if st.reviewResult != nil {
+						st.rejected = true
+						lim.add(LimArtifactRejected + ":" + k)
+					}
+					st.reviewResult = c.Review
+					st.review = c.Review.Accepted
 				}
 				for _, o := range c.Observations {
 					obsSeen[o.ID] = true
@@ -229,6 +235,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 		}
 		r.Artifacts = append(r.Artifacts, item)
 	}
+	composeReviews(&r, states, lim)
 	sortReport(&r)
 
 	// Coverage: processed files only when every analyzer task produced a known count.

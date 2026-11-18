@@ -1,3 +1,4 @@
+import { parseAnalysisReport, reportURL } from './analysisReport';
 // Same-origin client for the CODEYE control API (docs/11, api/openapi.yaml).
 // Credentials are the HttpOnly session cookie, which the browser attaches itself.
 // The CSRF token lives only in this object's memory.
@@ -52,6 +53,7 @@ export type RunView = {
   version: number;
   snapshot_id: string | null;
   quality_verdict: string | null;
+  reportRevision?: number;
   progress: RunProgress;
 };
 
@@ -135,6 +137,7 @@ export function createApi(options: ApiOptions = {}) {
     createRun: (projectId: string, idempotencyKey: string) =>
       json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: RUN_BODY, headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
     getRun: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: run(id), signal }, parseRun),
+    getReport: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: reportURL(id, 'json', true), signal }, v => parseAnalysisReport(v, id)),
     cancelRun: (id: string) => json({ method: 'POST', path: `${run(id)}/cancel` }, parseAck),
   };
 }
@@ -251,6 +254,7 @@ function parseRun(v: unknown): RunView {
     version: int(o.version, 1),
     snapshot_id: nullableStr(o.snapshot_id),
     quality_verdict: nullableStr(o.quality_verdict),
+    ...(o.report == null ? {} : {reportRevision:int(rec(o.report).revision, 1)}),
     progress: {
       stage: typeof p.stage === 'string' ? p.stage : '',
       plan_revision: nullableInt(p.plan_revision, 1),

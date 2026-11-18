@@ -72,7 +72,7 @@ def service(argv, directory, env, log_path):
                 raise RuntimeError(f"{log_path.stem} 비정상 종료 ({code})")
 
 
-def run(base, root, env):
+def run(base, root, env, *, browser=False):
     directory = base / "node-smoke"
     directory.mkdir(mode=0o700)
     binary = base / "codeye"
@@ -117,7 +117,7 @@ def run(base, root, env):
 
     with ExitStack() as services:
         children = [services.enter_context(service(
-            [binary, "serve", "--listen", f"127.0.0.1:{port}", "--artifact-dir", directory / "artifacts"],
+            [binary, "serve", "--listen", f"127.0.0.1:{port}", "--artifact-dir", directory / "artifacts", "--web-dir", root / "web/dist"],
             directory, env, directory / "controller.log"))]
         wait_for("controller 준비", ready, children)
         login = directory / "login"
@@ -164,7 +164,7 @@ def run(base, root, env):
         cli("source-root", "grant", "--root", go_root, "--user", user)
         go_token = directory / "go.token"
         cli("node", "token", "create", "--pool", "default", "--source-root", go_root, "--output", go_token)
-        go_project = session.request("POST", "projects", {"source": {
+        go_project = session.request("POST", "projects", {"name": "published-go-report", "source": {
             "kind": "local", "source_root_id": go_root, "relative_path": "."}})
         production = services.enter_context(service(
             [binary, "agent", "--controller", origin, "--state-dir", directory / "go-agent",
@@ -214,6 +214,15 @@ def run(base, root, env):
                 rendered = response.read()
                 assert response.headers["X-CODEYE-Report-SHA256"].encode() in rendered
                 assert response.headers["ETag"] == '"' + hashlib.sha256(rendered).hexdigest() + '"'
+        if browser:
+            import browser_smoke
+            # The report may belong to an older project beyond the initial page.
+            for i in range(21):
+                session.request("POST", "projects", {"name": f"browser-page-{i}", "source": {
+                    "kind": "local", "source_root_id": source_id, "relative_path": "."}})
+            browser_link = directory / "report-login"
+            cli("login-link", "--user", user, "--output", browser_link, "--origin", origin)
+            browser_smoke.published_report(root, env, origin, browser_link, "published-go-report", actual)
         print("PASS: 실제 워커→검증된 보고서 revision, 미실행 AI 검토, 코드 제외·포함과 3개 형식")
         print("PASS: 자동 증감 제품 워커·실제 Go vet·printf 관찰·산출물 무결성·원본 보존")
     print("PASS: 두 에이전트 등록·단일 attempt·취소 및 정리·후속 run 결과 접수 (시험용 handler)")

@@ -1,3 +1,4 @@
+import { ReportPanel } from './ReportPanel';
 import { useState } from 'react';
 import type { Api, Project, RunAck, RunView } from './api';
 import { canCancelRun, describeError, isKnownRunStatus, isTerminalRun, runStatusLabel, shorten, type ErrorText } from './format';
@@ -63,13 +64,14 @@ function RunStatus({ api, runId, placeholder }: { api: Api; runId: string; place
     </div>
     {status !== null && !isKnownRunStatus(status) && <p className="notice">{t.runs.statusUnknownNote} <code>{shorten(status, 40)}</code></p>}
     {run && <RunDetails run={run} />}
+    {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}/> }
     {!run && <dl><dt>{t.runs.id}</dt><dd><code>{runId}</code></dd>{version !== null && <><dt>{t.runs.version}</dt><dd>{version}</dd></>}</dl>}
     {error !== null && <p role="alert" className="error">{stopped ? t.runs.pollStopped : t.runs.pollError} {describeError(error).message}</p>}
     <p className="small">
       {terminal ? t.runs.terminalNote : hidden ? t.runs.pollingHidden : stopped ? t.runs.pollStopped : t.runs.polling}
     </p>
     <div className="actions">
-      {!terminal && <button type="button" onClick={refresh}>{t.runs.refresh}</button>}
+      {(!terminal || (run?.snapshot_id && !run.reportRevision)) && <button type="button" onClick={refresh}>{t.runs.refresh}</button>}
       {status !== null && !terminal && <CancelControl api={api} runId={runId} status={status} onAck={applyAck} />}
     </div>
   </div>;

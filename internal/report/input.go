@@ -12,6 +12,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 // ErrInvalidInput wraps every input the builder refuses. It is deterministic:
@@ -189,6 +190,7 @@ type Contribution struct {
 // ReviewResult is a decoded model review artifact of one task.
 type ReviewResult struct {
 	Accepted bool
+	Record   *record.Record
 }
 
 // ArtifactDecoder turns one verified artifact into a contribution. Decode must
@@ -223,10 +225,9 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 	return r, nil
 }
 
-// DefaultRegistry holds the decoders W09 implements: Go vet observations only.
-// It registers no review decoder, so AI review can never count as performed.
+// DefaultRegistry handles both tool observations and snapshot-bound review records.
 func DefaultRegistry() *Registry {
-	r, err := NewRegistry(GoVetDecoder{})
+	r, err := NewRegistry(GoVetDecoder{}, ReviewDecoder{})
 	if err != nil {
 		panic(err)
 	}

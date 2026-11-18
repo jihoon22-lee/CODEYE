@@ -52,6 +52,7 @@
         "llm_exposed_files": {"type": ["integer", "null"], "minimum": 0},
         "test_status": {"enum": ["no_tests", "not_run", "passed", "failed"]},
         "notes": {"type": "array", "items": {"type": "string"}},
+        "review_calls": {"type": "array", "maxItems": 4, "items": {"$ref": "#/$defs/reviewCall"}},
         "ai_review": {"$ref": "#/$defs/aiReview"},
         "tools": {"type": "array", "items": {"$ref": "#/$defs/toolCoverage"}}
       }
@@ -110,6 +111,19 @@
     "artifacts": {"type": "array", "items": {"$ref": "#/$defs/artifact"}}
   },
   "$defs": {
+    "reviewCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome"],
+      "properties": {
+        "role": {"enum": ["context", "investigate", "verify"]},
+        "model": {"type": "string", "maxLength": 160},
+        "opencode_version": {"type": "string", "maxLength": 64},
+        "pack_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "request_sha256": {"type": "string", "pattern": "^(|[0-9a-f]{64})$"},
+        "outcome": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}
+      }
+    },
     "reviewTask": {
       "type": "object",
       "additionalProperties": false,
