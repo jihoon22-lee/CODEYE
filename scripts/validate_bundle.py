@@ -177,6 +177,21 @@ def check_observations(doc: dict) -> None:
         ensure(not any(ABSOLUTE.match(a) for a in e["command"]["argv"]) and "/" not in e["command"]["argv"][0], "Node path in command")
 
 
+def check_environment_example(doc: dict) -> None:
+    """Bind the W15 discovery examples to the fixture input bytes and evidence IDs."""
+    root = ROOT / "fixtures/w15-modules/input"
+    for r in doc.get("environment", {}).get("requirements", []):
+        src = r["source"]
+        sha = hashlib.sha256((root / src["path"]).read_bytes()).hexdigest()
+        ensure(sha == src["sha256"], "Environment requirement blob mismatch: " + src["path"])
+        binding = "\0".join([doc["snapshot_manifest_digest"], src["path"], sha, f'{src["start_line"]}:{src["end_line"]}'])
+        ensure(r["evidence_id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24], "Environment evidence ID mismatch")
+    for d in doc.get("documents", {}).get("items", []):
+        if d["sha256"] is not None:
+            body = (root / d["path"]).read_bytes()
+            ensure(hashlib.sha256(body).hexdigest() == d["sha256"] and len(body) == d["size_bytes"], "Document blob mismatch: " + d["path"])
+
+
 def check_review_example(doc: dict) -> None:
     """Bind the verifier example to its labelled, synthetic source fixture."""
     root = ROOT / "internal/worker/review/testdata/verify"
@@ -420,6 +435,10 @@ def main() -> None:
     review_validator = validators["review-record.schema.json"]
     review_validator.validate(review)
     check_review_example(review)
+    for name in ("examples/environment.json", "examples/environment-documents.json"):
+        environment = json_file(ROOT / name)
+        validators["environment.schema.json"].validate(environment)
+        check_environment_example(environment)
     ensure(plan["run_id"] == report["run_id"], "Example run mismatch")
     plan_tasks = {task["id"]: task for task in plan["tasks"]}
     ensure(set(plan_tasks) == {task["id"] for task in report["tasks"]}, "Plan/report task mismatch")

@@ -242,13 +242,18 @@ def run(base, root, env, *, browser=False):
             return state["report"] if state["status"] == "partial" else None
         revision = wait_for("실제 Go vet 보고서 게시", published, children)
         assert revision["revision"] == 1
-        # The product handlers' stages arrive with W15 discovery (track D);
-        # until then this run is "not_recorded". Either way list/detail agree.
+        # The product handlers declare a stage for every planned task (W15),
+        # so the real run is recorded and list/detail agree.
         go_activity = activity_agrees(session, go_project["id"])
         assert go_activity["run"]["id"] == actual and go_activity["last_report"]["run_id"] == actual and go_activity["last_report"]["revision"] == 1
-        if go_activity["detail"] == "recorded":
-            go_stages = stage_map(go_activity)
-            assert go_stages["static_analysis"]["planned"] and go_stages["report"]["state"] == "succeeded", go_stages
+        assert go_activity["detail"] == "recorded", go_activity
+        go_stages = stage_map(go_activity)
+        assert go_stages["source"]["state"] == "succeeded", go_stages
+        assert go_stages["environment"]["state"] == go_stages["static_analysis"]["state"] == "succeeded", go_stages
+        assert go_stages["static_analysis"]["planned"] and go_stages["report"]["state"] == "succeeded", go_stages
+        # The model review was not approved for this source: excluded by policy, never success.
+        assert go_stages["code_review"]["state"] == "skipped" and go_stages["code_review"]["reasons"] == ["model_source_not_approved"], go_stages
+        assert go_stages["documents"]["succeeded"] == 1 and "model_source_not_approved" in go_stages["documents"]["reasons"], go_stages
         print(f"PASS: W15 실제 Go run 단계 표시 detail={go_activity['detail']} (목록/상세 일치)")
         path = f"runs/{actual}/report?revision=1"
         code_free = session.request("GET", path)
