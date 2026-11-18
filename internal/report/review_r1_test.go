@@ -115,7 +115,7 @@ func TestR1RequiredRolesFromPlan(t *testing.T) {
 		t.Fatalf("calls %d exposed %v", len(r.Coverage.ReviewCalls), r.Coverage.LLMExposedFiles)
 	}
 	for _, c := range r.Coverage.ReviewCalls {
-		if c.PackID != "review-r1" || c.PackVersion != "2.0.0-rc1" || len(c.PackDigest) != 64 {
+		if c.PackID != "review-r1" || c.PackVersion != "2.0.0-rc2" || len(c.PackDigest) != 64 {
 			t.Fatalf("call %+v", c)
 		}
 	}

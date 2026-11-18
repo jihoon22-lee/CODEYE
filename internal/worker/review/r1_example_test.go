@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,6 +40,13 @@ func TestR1ExampleRecords(t *testing.T) {
 		}
 	}
 	update := os.Getenv("CODEYE_UPDATE_EXAMPLES") == "1"
+	// The w15 snapshot has Go source only, so every role gets the Go guide
+	// alone (scripts/validate_bundle.py computes the example digests for the
+	// same selection).
+	ecosystems := languagesInScope(j)
+	if !slices.Equal(ecosystems, []string{"go"}) {
+		t.Fatalf("w15 ecosystems in scope %v", ecosystems)
+	}
 	stages := []string{"environment", "documents", "investigate", "interpret", "verify"}
 	for _, stage := range stages {
 		raw := mustRead(t, r1Path(j, stage))
@@ -69,9 +77,12 @@ func TestR1ExampleRecords(t *testing.T) {
 			t.Fatalf("%s does not compact to the record bytes", path)
 		}
 		rec := readR1(t, j, stage)
-		sel, err := reviewpackr1.For(stage)
+		sel, err := reviewpackr1.For(stage, []string{"go"})
 		if err != nil {
 			t.Fatal(err)
+		}
+		if len(rec.Calls) == 0 {
+			t.Fatalf("%s example has no call", stage)
 		}
 		for _, c := range rec.Calls {
 			if c.PackDigest != sel.Digest || c.PackID != sel.ID || c.PackVersion != sel.Version || strings.Join(c.PackFiles, ",") != strings.Join(sel.Files, ",") {

@@ -464,24 +464,38 @@ def compact_json(text: str) -> bytes:
     return "".join(out).encode("utf-8")
 
 
-def r1_pack() -> tuple[dict, dict]:
+# Language guides of review-r1 follow the snapshot's in-scope source
+# ecosystems (W24 rc2, A29). The w15 example snapshot has Go source only;
+# TestR1ExampleRecords checks that selection against the worker.
+R1_LANGUAGES = ("cpp", "go", "javascript", "python", "rust")
+R1_EXAMPLE_LANGUAGES = ("go",)
+
+
+def r1_pack(languages=R1_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
     """The review-r1 candidate pack: identity, files and per-role digests
-    (review-v1 algorithm over pack.yaml and the role's selected files)."""
+    (review-v1 algorithm over pack.yaml and the role's selected files) for
+    the given in-scope ecosystems."""
     pack_file = ROOT / "prompts/review-r1/pack.yaml"
     pack = yaml_file(pack_file)
     ensure(pack["id"] == "review-r1" and pack["status"] == "candidate-not-promoted" and pack["schema_version"] == "0.2", "review-r1 pack identity")
     ensure(tuple(pack["roles"]) == R1_STAGES, "review-r1 roles")
+    ensure(tuple(pack["languages"]) == R1_LANGUAGES and all(f == f"languages/{eco}.md" for eco, f in pack["languages"].items()), "review-r1 language guides")
+    for guide in pack["languages"].values():
+        ensure(within_root(pack_file.parent / guide).is_file(), "Missing review-r1 prompt: " + guide)
+    selected = [pack["languages"][eco] for eco in sorted(set(languages)) if eco in pack["languages"]]
     roles = {}
     for role, file in pack["roles"].items():
-        names = sorted({"pack.yaml", pack["core"], file, pack["domains"], *pack["languages"].values()})
+        names = sorted({"pack.yaml", pack["core"], file, pack["domains"], *selected})
         digest = hashlib.sha256()
         for relative in names:
             path = within_root(pack_file.parent / relative)
             ensure(path.is_file(), "Missing review-r1 prompt: " + relative)
             digest.update(relative.encode("utf-8") + b"\0" + path.read_bytes() + b"\0")
         roles[role] = {"files": names, "digest": digest.hexdigest()}
+    # The domain pack and the Go guide are copies of review-v1's; the other
+    # guides are review-r1's own.
     v1 = ROOT / "prompts/review-v1"
-    for shared in [pack["domains"], *pack["languages"].values()]:
+    for shared in [pack["domains"], pack["languages"]["go"]]:
         ensure((pack_file.parent / shared).read_bytes() == (v1 / shared).read_bytes(), "review-r1 copy differs from review-v1: " + shared)
     return pack, roles
 
@@ -1206,6 +1220,7 @@ def main() -> None:
         ("review-r1 fabricated evidence", "investigate", lambda d: d["candidates"][0]["evidence_ids"].append(fake_id), None),
         ("review-r1 scope generalization", "documents", set_key("contracts", ".", 1, "applies_to"), None),
         ("review-r1 pack digest drift", "verify", set_key("calls", "0" * 64, 0, "pack_sha256"), None),
+        ("review-r1 language guide outside the selection", "investigate", lambda d: d["calls"][0]["pack_files"].insert(3, "languages/python.md"), None),
         ("review-r1 altered upstream candidate", "verify", lambda d: d["candidates"][0].update(title=d["candidates"][0]["title"] + "!"), None),
         ("review-r1 model reproduction verdict", "verify", set_key("verifications", "reproduced", 0, "verdict"), review_validator.validate),
         ("review-r1 source text", "investigate", lambda d: d["evidence"][0].update(text="raw source"), review_validator.validate),
@@ -1235,7 +1250,7 @@ def main() -> None:
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
     print(f"PASS: {27 + len(r1_negative)} negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
-    print("review-r1 candidate pack (not promoted):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in r1_roles.items()))
+    print(f"review-r1 candidate pack {r1_pack_doc['version']} (not promoted; Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in r1_roles.items()))
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 
 
