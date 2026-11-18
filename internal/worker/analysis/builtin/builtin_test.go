@@ -45,7 +45,7 @@ func reasons(missing []Unavailable) []string {
 
 func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	ctx := context.Background()
-	if hs, missing := Handlers(ctx, Config{}, &executor.Executor{}); len(hs) != 0 || !slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:not_configured"}, w21Missing...)) {
+	if hs, missing := Handlers(ctx, Config{}, &executor.Executor{}); len(hs) != 0 || !slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
 		t.Fatalf("unconfigured: %d %+v", len(hs), missing)
 	}
 	if hs, missing := Handlers(ctx, Config{GoExecutable: "relative/go"}, &executor.Executor{}); len(hs) != 0 || missing[0].Reason != "invalid_config" {
@@ -53,7 +53,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	}
 	// staticcheck alone is extra depth: without a baseline nothing is advertised.
 	if hs, missing := Handlers(ctx, Config{Tools: map[string]string{"staticcheck": filepath.Join(t.TempDir(), "staticcheck")}}, &executor.Executor{}); len(hs) != 0 ||
-		!slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:toolchain_not_configured"}, w21Missing...)) {
+		!slices.Equal(reasons(missing), append([]string{"go-vet:not_configured", "staticcheck:toolchain_not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
 		t.Fatalf("staticcheck without go: %d %+v", len(hs), missing)
 	}
 	goExe := goPath(t)
@@ -62,7 +62,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 		t.Fatalf("probe failure advertised: %d %+v", len(hs), missing)
 	}
 	hs, missing := Handlers(ctx, Config{GoExecutable: goExe, ProbeDir: probe}, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:not_configured"}, w21Missing...)) {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:not_configured", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
 		t.Fatalf("real probe: %d %+v", len(hs), missing)
 	}
 	reg, err := analysis.NewRegistry(hs...)
@@ -77,13 +77,13 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	for _, d := range c.Descriptors() {
 		ids = append(ids, d.ID)
 	}
-	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "any.lizard", "any.jscpd", "any.gitleaks"}) {
+	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "rust.cargocheck", "rust.clippy", "any.lizard", "any.jscpd", "any.gitleaks"}) {
 		t.Fatalf("catalog order %v", ids)
 	}
 	// A configured staticcheck path that is not a file is invalid: the
 	// analyzer stays a member and its tasks report tool_unavailable.
 	hs, missing = Handlers(ctx, Config{GoExecutable: goExe, ProbeDir: probe, Tools: map[string]string{"staticcheck": filepath.Join(t.TempDir(), "missing")}}, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:invalid_config"}, w21Missing...)) {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"staticcheck:invalid_config", "cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
 		t.Fatalf("invalid staticcheck: %d %+v", len(hs), missing)
 	}
 	// An unknown tool of a newer agent is reported, never run.
@@ -105,19 +105,35 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 }
 
 func TestToolFlagsAndProbes(t *testing.T) {
-	if got := ToolFlags(); !slices.Equal(got, []string{"gitleaks", "jscpd", "lizard", "staticcheck"}) {
+	if got := ToolFlags(); !slices.Equal(got, []string{"cargo", "clippy", "gitleaks", "jscpd", "lizard", "staticcheck"}) {
 		t.Fatalf("flags %v", got)
 	}
-	probes := withoutW21(Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc"}}))
-	if len(probes) != 1 || probes[0].Tool != "staticcheck" || probes[0].Executable != "/sc" || !slices.Equal(probes[0].Analyzers, []string{"go.staticcheck"}) ||
-		!slices.Equal(probes[0].Args, []string{"-version"}) || !slices.Equal(probes[0].Ecosystems, []string{"go"}) {
+	tc := fakeRust(t, false)
+	probes := withoutW21(Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc", "cargo": filepath.Join(tc, "cargo"), "clippy": filepath.Join(tc, "cargo-clippy")}}))
+	if len(probes) != 3 || probes[0].Tool != "cargo" || probes[1].Tool != "clippy" || probes[2].Tool != "staticcheck" {
 		t.Fatalf("probes %+v", probes)
 	}
-	if v, ok := probes[0].ParseVersion([]byte("staticcheck 2026.2.2 (0.8.2)\n")); !ok || v != "2026.2.2 (0.8.2)" {
+	sc := probes[2]
+	if sc.Executable != "/sc" || !slices.Equal(sc.Analyzers, []string{"go.staticcheck"}) || !slices.Equal(sc.Args, []string{"-version"}) || !slices.Equal(sc.Ecosystems, []string{"go"}) {
+		t.Fatalf("probes %+v", probes)
+	}
+	if v, ok := sc.ParseVersion([]byte("staticcheck 2026.2.2 (0.8.2)\n")); !ok || v != "2026.2.2 (0.8.2)" {
 		t.Fatalf("version %q %v", v, ok)
 	}
-	if p := withoutW21(Probes(Config{})); p[0].Executable != "" {
-		t.Fatalf("unconfigured tool has an executable: %+v", p)
+	// The Rust pack (W20): cargo and clippy are probed directly, in the rust ecosystem.
+	if c := probes[0]; c.Executable != filepath.Join(tc, "cargo") || !slices.Equal(c.Analyzers, []string{"rust.cargocheck"}) || !slices.Equal(c.Args, []string{"--version"}) || !slices.Equal(c.Ecosystems, []string{"rust"}) || c.Interpreter != "" {
+		t.Fatalf("cargo probe %+v", c)
+	}
+	if v, ok := probes[0].ParseVersion([]byte("cargo 1.99.1 (5f94df478 2026-08-27)\n")); !ok || v != "1.99.1 (5f94df478 2026-08-27)" {
+		t.Fatalf("cargo version %q %v", v, ok)
+	}
+	if c := probes[1]; c.Executable != filepath.Join(tc, "cargo-clippy") || !slices.Equal(c.Analyzers, []string{"rust.clippy"}) {
+		t.Fatalf("clippy probe %+v", c)
+	}
+	for _, p := range Probes(Config{}) {
+		if p.Executable != "" {
+			t.Fatalf("unconfigured tool has an executable: %+v", p)
+		}
 	}
 }
 

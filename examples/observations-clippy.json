@@ -1,0 +1,588 @@
+{
+  "adapter": {
+    "id": "clippy",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "rust",
+    "id": "rust.clippy",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 3,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "src/lib.rs",
+      "src/main.rs",
+      "tests/it.rs"
+    ],
+    "unit": "crate",
+    "units": {
+      "analyzed_with_findings": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "rustc",
+          "-vV"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CARGO",
+          "CARGO_HOME",
+          "CARGO_INCREMENTAL",
+          "CARGO_NET_OFFLINE",
+          "CARGO_TARGET_DIR",
+          "CARGO_TERM_COLOR",
+          "CARGO_TERM_PROGRESS_WHEN",
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUSTC",
+          "RUSTC_WORKSPACE_WRAPPER",
+          "RUSTC_WRAPPER",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "rustc.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 196,
+        "incomplete": false,
+        "sha256": "f22d5e4e9ced367e774ce5bc140d9e6b1235c1882fec80d011044851f3ae6369",
+        "total_bytes": 196,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "cargo",
+          "--version"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CARGO",
+          "CARGO_BUILD_TARGET",
+          "CARGO_HOME",
+          "CARGO_INCREMENTAL",
+          "CARGO_NET_OFFLINE",
+          "CARGO_TARGET_DIR",
+          "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER",
+          "CARGO_TERM_COLOR",
+          "CARGO_TERM_PROGRESS_WHEN",
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUSTC",
+          "RUSTC_WORKSPACE_WRAPPER",
+          "RUSTC_WRAPPER",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "cargo.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 36,
+        "incomplete": false,
+        "sha256": "c35608815f43d0b8788a9b826fad2bb17384f49fb328dc4fe64da9db5f5ef4d6",
+        "total_bytes": 36,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "cargo-clippy",
+          "--version"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CARGO",
+          "CARGO_BUILD_TARGET",
+          "CARGO_HOME",
+          "CARGO_INCREMENTAL",
+          "CARGO_NET_OFFLINE",
+          "CARGO_TARGET_DIR",
+          "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER",
+          "CARGO_TERM_COLOR",
+          "CARGO_TERM_PROGRESS_WHEN",
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUSTC",
+          "RUSTC_WORKSPACE_WRAPPER",
+          "RUSTC_WRAPPER",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "clippy.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 38,
+        "incomplete": false,
+        "sha256": "514f4171a1bed07e7d27a872fc29ebb3e32360eb297e28acf00ab796f80e1038",
+        "total_bytes": 38,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "cargo-clippy",
+          "clippy",
+          "--offline",
+          "--locked",
+          "--message-format=json",
+          "--workspace",
+          "--all-targets",
+          "--",
+          "--cap-lints",
+          "warn",
+          "-W",
+          "clippy::undocumented_unsafe_blocks",
+          "-W",
+          "clippy::multiple_unsafe_ops_per_block",
+          "-W",
+          "clippy::panic_in_result_fn",
+          "-W",
+          "clippy::unwrap_in_result",
+          "-W",
+          "clippy::todo",
+          "-W",
+          "clippy::unimplemented"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CARGO",
+          "CARGO_BUILD_TARGET",
+          "CARGO_HOME",
+          "CARGO_INCREMENTAL",
+          "CARGO_NET_OFFLINE",
+          "CARGO_TARGET_DIR",
+          "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER",
+          "CARGO_TERM_COLOR",
+          "CARGO_TERM_PROGRESS_WHEN",
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUSTC",
+          "RUSTC_WORKSPACE_WRAPPER",
+          "RUSTC_WRAPPER",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "clippy.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 114,
+        "incomplete": false,
+        "sha256": "436e4e32ac96d28f258bcee24177754b8d65a201cdab874f5235b1386f41e6c1",
+        "total_bytes": 168,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 40694,
+        "incomplete": false,
+        "sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e",
+        "total_bytes": 45186,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "cap_lints_warn",
+    "default_features_only",
+    "duplicate_diagnostics_merged",
+    "host_target_only",
+    "linker_from_toolchain_path",
+    "offline_scratch_cargo_home",
+    "rustc_diagnostics_excluded",
+    "rustc_wrapper_overridden"
+  ],
+  "module": {
+    "dir": ".",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "maintainability",
+      "id": "obs_d6d5f472f17e142c591c",
+      "location": {
+        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "column_unit": "byte",
+        "end_col": 20,
+        "end_line": 7,
+        "path": "src/lib.rs",
+        "start_col": 8,
+        "start_line": 7
+      },
+      "location_state": "resolved",
+      "path": "src/lib.rs",
+      "raw_message": "length comparison to zero",
+      "raw_ref": {
+        "byte_end": 11819,
+        "byte_start": 9918,
+        "execution": "clippy.check",
+        "json_pointer": "/message",
+        "record_index": 6,
+        "stream": "stdout",
+        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+      },
+      "raw_severity": "warning",
+      "related": [
+        {
+          "location": {
+            "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+            "column_unit": "byte",
+            "end_col": 20,
+            "end_line": 7,
+            "path": "src/lib.rs",
+            "start_col": 8,
+            "start_line": 7
+          },
+          "location_state": "resolved",
+          "path": "src/lib.rs",
+          "raw_message": "using `is_empty` is clearer and more explicit"
+        }
+      ],
+      "rule_id": "clippy::len_zero",
+      "suggested_fix_count": 1,
+      "suppressed": false,
+      "unit": "findings"
+    },
+    {
+      "category": "maintainability",
+      "id": "obs_17539c29ed4c6e8cce1d",
+      "location": {
+        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "column_unit": "byte",
+        "end_col": 28,
+        "end_line": 13,
+        "path": "src/lib.rs",
+        "start_col": 19,
+        "start_line": 13
+      },
+      "location_state": "resolved",
+      "path": "src/lib.rs",
+      "raw_message": "writing `&Vec` instead of `&[_]` involves a new object where a slice will do",
+      "raw_ref": {
+        "byte_end": 15811,
+        "byte_start": 13722,
+        "execution": "clippy.check",
+        "json_pointer": "/message",
+        "record_index": 8,
+        "stream": "stdout",
+        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+      },
+      "raw_severity": "warning",
+      "related": [
+        {
+          "location": {
+            "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+            "column_unit": "byte",
+            "end_col": 28,
+            "end_line": 13,
+            "path": "src/lib.rs",
+            "start_col": 19,
+            "start_line": 13
+          },
+          "location_state": "resolved",
+          "path": "src/lib.rs",
+          "raw_message": "change this to"
+        }
+      ],
+      "rule_id": "clippy::ptr_arg",
+      "suggested_fix_count": 1,
+      "suppressed": false,
+      "unit": "findings"
+    },
+    {
+      "category": "maintainability",
+      "id": "obs_d00d5dc2beaa57165109",
+      "location": {
+        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "column_unit": "byte",
+        "end_col": 43,
+        "end_line": 18,
+        "path": "src/lib.rs",
+        "start_col": 1,
+        "start_line": 18
+      },
+      "location_state": "resolved",
+      "path": "src/lib.rs",
+      "raw_message": "unsafe function's docs are missing a `# Safety` section",
+      "raw_ref": {
+        "byte_end": 17372,
+        "byte_start": 15812,
+        "execution": "clippy.check",
+        "json_pointer": "/message",
+        "record_index": 9,
+        "stream": "stdout",
+        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+      },
+      "raw_severity": "warning",
+      "related": [],
+      "rule_id": "clippy::missing_safety_doc",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "findings"
+    },
+    {
+      "category": "security",
+      "id": "obs_8e9f5db8b4f772007c7b",
+      "location": {
+        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "column_unit": "byte",
+        "end_col": 18,
+        "end_line": 23,
+        "path": "src/lib.rs",
+        "start_col": 5,
+        "start_line": 23
+      },
+      "location_state": "resolved",
+      "path": "src/lib.rs",
+      "raw_message": "unsafe block missing a safety comment",
+      "raw_ref": {
+        "byte_end": 25865,
+        "byte_start": 24146,
+        "execution": "clippy.check",
+        "json_pointer": "/message",
+        "record_index": 14,
+        "stream": "stdout",
+        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+      },
+      "raw_severity": "warning",
+      "related": [],
+      "rule_id": "clippy::undocumented_unsafe_blocks",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "findings"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_b28442b6010380f2f531",
+      "location": {
+        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "column_unit": "byte",
+        "end_col": 16,
+        "end_line": 23,
+        "path": "src/lib.rs",
+        "start_col": 15,
+        "start_line": 23
+      },
+      "location_state": "resolved",
+      "path": "src/lib.rs",
+      "raw_message": "this public function might dereference a raw pointer but is not marked `unsafe`",
+      "raw_ref": {
+        "byte_end": 21023,
+        "byte_start": 19463,
+        "execution": "clippy.check",
+        "json_pointer": "/message",
+        "record_index": 11,
+        "stream": "stdout",
+        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+      },
+      "raw_severity": "warning",
+      "related": [],
+      "rule_id": "clippy::not_unsafe_ptr_arg_deref",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "findings"
+    },
+    {
+      "category": "error_handling",
+      "id": "obs_52b93240e1858701f4f6",
+      "location": {
+        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "column_unit": "byte",
+        "end_col": 2,
+        "end_line": 31,
+        "path": "src/lib.rs",
+        "start_col": 1,
+        "start_line": 26
+      },
+      "location_state": "resolved",
+      "path": "src/lib.rs",
+      "raw_message": "used `panic!()` or assertion in a function that returns `Result`",
+      "raw_ref": {
+        "byte_end": 30523,
+        "byte_start": 27586,
+        "execution": "clippy.check",
+        "json_pointer": "/message",
+        "record_index": 16,
+        "stream": "stdout",
+        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+      },
+      "raw_severity": "warning",
+      "related": [
+        {
+          "location": {
+            "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+            "column_unit": "byte",
+            "end_col": 24,
+            "end_line": 28,
+            "path": "src/lib.rs",
+            "start_col": 9,
+            "start_line": 28
+          },
+          "location_state": "resolved",
+          "path": "src/lib.rs",
+          "raw_message": "return Err() instead of panicking"
+        }
+      ],
+      "rule_id": "clippy::panic_in_result_fn",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "findings"
+    },
+    {
+      "category": "error_handling",
+      "id": "obs_6deb0c7dd9c28fe9e44c",
+      "location": {
+        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "column_unit": "byte",
+        "end_col": 12,
+        "end_line": 34,
+        "path": "src/lib.rs",
+        "start_col": 5,
+        "start_line": 34
+      },
+      "location_state": "resolved",
+      "path": "src/lib.rs",
+      "raw_message": "`todo` should not be present in production code",
+      "raw_ref": {
+        "byte_end": 34869,
+        "byte_start": 33462,
+        "execution": "clippy.check",
+        "json_pointer": "/message",
+        "record_index": 18,
+        "stream": "stdout",
+        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+      },
+      "raw_severity": "warning",
+      "related": [],
+      "rule_id": "clippy::todo",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "findings"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 7,
+    "ok": true,
+    "records": 27,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "cargo-json-v1",
+    "version": "1"
+  },
+  "patterns": [
+    "."
+  ],
+  "rule_pack": {
+    "config_files": [],
+    "id": "codeye-rust-clippy",
+    "repository_config": "honored",
+    "selection": [
+      "--workspace",
+      "--all-targets",
+      "--",
+      "--cap-lints",
+      "warn",
+      "-W",
+      "clippy::undocumented_unsafe_blocks",
+      "-W",
+      "clippy::multiple_unsafe_ops_per_block",
+      "-W",
+      "clippy::panic_in_result_fn",
+      "-W",
+      "clippy::unwrap_in_result",
+      "-W",
+      "clippy::todo",
+      "-W",
+      "clippy::unimplemented",
+      "keep:clippy::*"
+    ],
+    "source_suppressions": "honored",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "3d1da0393bea266fa324f3d8588d907f15aa8da0198612475bd0f519f53a9030",
+  "target": {
+    "platform": "x86_64-unknown-linux-gnu",
+    "properties": {
+      "cargo": "1.99.1",
+      "features": "default",
+      "host_only": "true",
+      "profile": "dev",
+      "rustc": "1.99.1",
+      "targets": "all_targets",
+      "workspace": "true"
+    }
+  },
+  "task_key": "clippy",
+  "tool": {
+    "name": "clippy",
+    "version": "0.1.99 (58cf8f9c35 2026-10-13)",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}
