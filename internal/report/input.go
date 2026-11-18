@@ -191,6 +191,8 @@ type Contribution struct {
 type ReviewResult struct {
 	Accepted bool
 	Record   *record.Record
+	// R1 is set instead of Record for review-r1 (schema 0.2) records.
+	R1 *record.R1Record
 }
 
 // ArtifactDecoder turns one verified artifact into a contribution. Decode must
@@ -228,7 +230,7 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 // DefaultRegistry handles tool observations, snapshot-bound review records and
 // W15 discovery documents.
 func DefaultRegistry() *Registry {
-	r, err := NewRegistry(GoVetDecoder{}, ReviewDecoder{}, EnvironmentDecoder{})
+	r, err := NewRegistry(GoVetDecoder{}, ReviewDecoder{}, R1ReviewDecoder{}, EnvironmentDecoder{})
 	if err != nil {
 		panic(err)
 	}

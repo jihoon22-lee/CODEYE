@@ -54,6 +54,9 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	modelExe := fs.String("opencode", "", "")
 	modelName := fs.String("model", "", "")
 	modelRelay := fs.String("model-relay-file", "", "")
+	// The review pack is a node operator setting only; runs and profiles
+	// cannot select it. review-r1 is the W15 candidate, not the default.
+	reviewPack := fs.String("review-pack", review.PackV1, "")
 	fs.Var(&modelRoots, "model-source-root", "")
 	controller := fs.String("controller", "", "")
 	stateDir := fs.String("state-dir", "", "")
@@ -70,6 +73,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	fs.Var(&gitHosts, "git-host", "")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || *controller == "" || *stateDir == "" {
 		fmt.Fprintln(stderr, "invalid agent options; use codeye --help")
+		return agent.ExitUsage
+	}
+	if !review.ValidPack(*reviewPack) {
+		fmt.Fprintln(stderr, "invalid --review-pack; expected review-v1 or review-r1")
 		return agent.ExitUsage
 	}
 	// --autoscale (W07) starts with zero workers and follows controller
@@ -106,7 +113,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
 		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache,
-		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved,
+		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ReviewPack: *reviewPack,
 		Log: stderr,
 	}
 	ag, err := agent.New(cfg)
@@ -136,10 +143,22 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 // executable the go-vet handler uses. The test-only fixture handler is left
 // unwrapped.
 func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
+	pack := h.ReviewPack
+	if pack == "" {
+		pack = review.PackV1
+	}
+	if !review.ValidPack(pack) {
+		// No silent fallback to the default pack.
+		return nil, nil, errors.New("unknown review pack")
+	}
 	hs, missing := builtin.Handlers(ctx, builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, ProbeDir: h.ScratchRoot}, runner)
 	for i, handler := range hs {
 		if handler.Info().Name == "go-vet" {
-			reviewed := review.Handler{Static: handler, Caller: opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}}
+			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}
+			var reviewed analysis.Handler = review.Handler{Static: handler, Caller: caller}
+			if pack == review.PackR1 {
+				reviewed = review.R1Handler{Static: handler, Caller: caller}
+			}
 			wrapped, err := discovery.Wrap(reviewed, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: h.GoExecutable}})
 			if err != nil {
 				return nil, nil, err

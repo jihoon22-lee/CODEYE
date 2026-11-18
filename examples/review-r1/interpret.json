@@ -1,0 +1,84 @@
+{
+  "schema_version": "0.2",
+  "pack": {
+    "id": "review-r1",
+    "version": "2.0.0-rc1"
+  },
+  "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+  "run_id": "0195f3a0-0000-7000-8000-000000000025",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000026",
+  "stage": "interpret",
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "go-vet",
+      "state": "accepted",
+      "sha256": "aedead57a0dd46d184eb4725c81bff34f61779152e22e7bdcfe3a0149c850c2d"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_405823cae53ecf5dd298c5fd",
+      "path": "gateway.go",
+      "sha256": "a03fee1a659e56ed4175a7562b7a6838839236d736e602444b8ed2fdb65958d8",
+      "start_line": 3,
+      "end_line": 16,
+      "kind": "code",
+      "origin": "observation"
+    }
+  ],
+  "observations": [
+    {
+      "id": "obs_0123456789abcdef0123",
+      "task_key": "go-vet",
+      "tool": "go.vet",
+      "rule_id": "unusedresult",
+      "path": "gateway.go",
+      "start_line": 13
+    }
+  ],
+  "candidates": [
+    {
+      "id": "interpret_1",
+      "title": "재시도 분기에서 결과를 버릴 수 있음",
+      "condition": "send가 실패한 뒤 다시 호출되는 경우",
+      "impact": "마지막 오류만 남는다.",
+      "improvement": "각 시도의 오류를 기록한다.",
+      "counterpoint": "마지막 오류만 반환하는 것이 문서상 계약일 수 있다.",
+      "evidence_ids": [
+        "ev_405823cae53ecf5dd298c5fd"
+      ],
+      "origin": "interpret",
+      "observation_ids": [
+        "obs_0123456789abcdef0123"
+      ]
+    }
+  ],
+  "limitations": [],
+  "calls": [
+    {
+      "role": "interpret",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review-r1",
+      "pack_version": "2.0.0-rc1",
+      "pack_sha256": "488dc8ad2707125c96e6079d4371d64a4f6b08b3a767155ffceae369ecc23e73",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "interpret-diagnostics.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "adf08550211c7710134426679d1ad0f423aa1be8d856f785a6168ebde863b19d",
+      "request_bytes": 10587,
+      "usage": {
+        "input": 1372,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

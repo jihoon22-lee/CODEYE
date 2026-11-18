@@ -9,6 +9,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
@@ -54,6 +55,9 @@ type taskState struct {
 	decoded      bool
 	review       bool
 	reviewResult *ReviewResult
+	// decodedSHA is the SHA-256 of each accepted artifact by media type; an
+	// R1 record binds its upstream inputs to these digests.
+	decodedSHA map[string]string
 }
 
 // Build validates the input and produces the report. Every refusal wraps
@@ -198,6 +202,10 @@ func Build(in Input, reg *Registry) (Report, error) {
 				}
 				decoderOf[art.ID] = d.Key().String()
 				st.decoded = true
+				if st.decodedSHA == nil {
+					st.decodedSHA = map[string]string{}
+				}
+				st.decodedSHA[art.MediaType] = art.SHA256
 				if c.Review != nil {
 					if st.reviewResult != nil {
 						st.rejected = true
@@ -235,7 +243,11 @@ func Build(in Input, reg *Registry) (Report, error) {
 		}
 		r.Artifacts = append(r.Artifacts, item)
 	}
-	composeReviews(&r, states, lim)
+	if r1Planned(states) {
+		composeR1Reviews(&r, states, lim)
+	} else {
+		composeReviews(&r, states, lim)
+	}
 	sortReport(&r)
 
 	// Coverage: processed files only when every analyzer task produced a known count.
@@ -528,38 +540,105 @@ func checkContribution(c Contribution, obsSeen, findSeen map[string]bool, arts m
 	return nil
 }
 
+// requiredReviewKeys derives the review tasks the verdict needs from the
+// planned tasks. A plan with a review-r1 role key requires exactly its
+// review.* tasks with required_for_verdict; the others are optional. Any
+// other plan (R0/review-v1 records, or no review task) is read with the three
+// roles of the time, listing the ones not planned.
+func requiredReviewKeys(states map[string]*taskState) (required, optional []string, r1 bool) {
+	if !r1Planned(states) {
+		return RequiredReviewTasks, nil, false
+	}
+	var keys []string
+	for k := range states {
+		if strings.HasPrefix(k, "review.") {
+			keys = append(keys, k)
+		}
+	}
+	order := map[string]int{}
+	for i, stage := range record.R1Stages {
+		order["review."+stage] = i
+	}
+	sort.Slice(keys, func(a, b int) bool {
+		x, okx := order[keys[a]]
+		y, oky := order[keys[b]]
+		if okx != oky {
+			return okx
+		}
+		if x != y {
+			return x < y
+		}
+		return keys[a] < keys[b]
+	})
+	for _, k := range keys {
+		if states[k].facts.Required {
+			required = append(required, k)
+		} else {
+			optional = append(optional, k)
+		}
+	}
+	return required, optional, true
+}
+
+// r1Planned reports a plan with a review-r1 role that review-v1 never plans.
+func r1Planned(states map[string]*taskState) bool {
+	for _, k := range []string{"review.environment", "review.documents", "review.interpret"} {
+		if states[k] != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func reviewItem(k string, st *taskState, r1 bool) (AIReviewTask, bool) {
+	item := AIReviewTask{Key: k}
+	if st == nil {
+		item.Result = "not_planned"
+		return item, false
+	}
+	s := st.facts.Status
+	item.TaskStatus = &s
+	if r1 && st.facts.Reason != nil {
+		reason := *st.facts.Reason
+		item.Reason = &reason
+	}
+	switch {
+	case r1 && st.facts.Status == string(domain.TaskSkippedPolicy):
+		item.Result = "skipped"
+	case st.facts.Status != string(domain.TaskSucceeded):
+		item.Result = "not_succeeded"
+	case st.rejected:
+		item.Result = "result_rejected"
+	case !st.review:
+		item.Result = "result_missing"
+	default:
+		item.Result = "accepted"
+		return item, true
+	}
+	return item, false
+}
+
 func decideAIReview(states map[string]*taskState) AIReview {
 	out := AIReview{RequiredTasks: []AIReviewTask{}}
+	required, optional, r1 := requiredReviewKeys(states)
 	accepted, planned := 0, 0
-	for _, k := range RequiredReviewTasks {
-		item := AIReviewTask{Key: k}
-		st, ok := states[k]
-		switch {
-		case !ok:
-			item.Result = "not_planned"
-		case st.facts.Status != string(domain.TaskSucceeded):
+	for _, k := range required {
+		item, ok := reviewItem(k, states[k], r1)
+		if states[k] != nil {
 			planned++
-			s := st.facts.Status
-			item.TaskStatus, item.Result = &s, "not_succeeded"
-		case st.rejected:
-			planned++
-			s := st.facts.Status
-			item.TaskStatus, item.Result = &s, "result_rejected"
-		case !st.review:
-			planned++
-			s := st.facts.Status
-			item.TaskStatus, item.Result = &s, "result_missing"
-		default:
-			planned++
+		}
+		if ok {
 			accepted++
-			s := st.facts.Status
-			item.TaskStatus, item.Result = &s, "accepted"
 		}
 		out.RequiredTasks = append(out.RequiredTasks, item)
 	}
+	for _, k := range optional {
+		item, _ := reviewItem(k, states[k], r1)
+		out.OptionalTasks = append(out.OptionalTasks, item)
+	}
 	reason := func(s string) *string { return &s }
 	switch {
-	case accepted == len(RequiredReviewTasks):
+	case len(required) > 0 && accepted == len(required):
 		out.Status = AIReviewPerformed
 	case accepted > 0:
 		out.Status, out.Reason = AIReviewPartial, reason("required_review_incomplete")

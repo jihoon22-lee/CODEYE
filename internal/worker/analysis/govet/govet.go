@@ -200,6 +200,13 @@ func failed(reason string, limitations ...string) analysis.TaskResult {
 	return analysis.TaskResult{Status: domain.TaskFailed, Reason: reason, Limitations: append([]string{}, limitations...)}
 }
 
+// ObservationsPath is where the go-vet task key writes its observations
+// artifact in attempt scratch. Later roles of the same attempt (review-r1
+// interpret) read it from there and validate it again.
+func ObservationsPath(scratch, key string) string {
+	return filepath.Join(scratch, "go-vet", key, "observations.json")
+}
+
 // Run executes one go-vet task.
 func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	planned, err := planTasks(job.Snapshot.Manifest, job.Scope)
@@ -233,7 +240,7 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 		if err != nil {
 			return analysis.ArtifactFile{}, err
 		}
-		p := filepath.Join(taskDir, "observations.json")
+		p := ObservationsPath(job.Scratch, pt.Key)
 		if err := analysis.WriteFileExclusive(p, raw); err != nil {
 			return analysis.ArtifactFile{}, err
 		}

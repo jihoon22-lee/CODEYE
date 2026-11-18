@@ -220,6 +220,99 @@ def check_review_example(doc: dict) -> None:
     ensure(verdict["verdict"] == "refuted" and any(e["path"] == "load.go" and e.get("origin") == "caller" for e in callers), "Missing fixture counterexample")
 
 
+R1_STAGES = ("environment", "documents", "investigate", "interpret", "verify")
+
+
+def compact_json(text: str) -> bytes:
+    """Remove the whitespace json.Indent added outside strings; the result is
+    the exact record bytes the worker wrote (escapes are kept as written)."""
+    out, in_string, escaped = [], False, False
+    for ch in text:
+        if in_string:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+            out.append(ch)
+        elif ch not in " \t\r\n":
+            out.append(ch)
+    return "".join(out).encode("utf-8")
+
+
+def r1_pack() -> tuple[dict, dict]:
+    """The review-r1 candidate pack: identity, files and per-role digests
+    (review-v1 algorithm over pack.yaml and the role's selected files)."""
+    pack_file = ROOT / "prompts/review-r1/pack.yaml"
+    pack = yaml_file(pack_file)
+    ensure(pack["id"] == "review-r1" and pack["status"] == "candidate-not-promoted" and pack["schema_version"] == "0.2", "review-r1 pack identity")
+    ensure(tuple(pack["roles"]) == R1_STAGES, "review-r1 roles")
+    roles = {}
+    for role, file in pack["roles"].items():
+        names = sorted({"pack.yaml", pack["core"], file, pack["domains"], *pack["languages"].values()})
+        digest = hashlib.sha256()
+        for relative in names:
+            path = within_root(pack_file.parent / relative)
+            ensure(path.is_file(), "Missing review-r1 prompt: " + relative)
+            digest.update(relative.encode("utf-8") + b"\0" + path.read_bytes() + b"\0")
+        roles[role] = {"files": names, "digest": digest.hexdigest()}
+    v1 = ROOT / "prompts/review-v1"
+    for shared in [pack["domains"], *pack["languages"].values()]:
+        ensure((pack_file.parent / shared).read_bytes() == (v1 / shared).read_bytes(), "review-r1 copy differs from review-v1: " + shared)
+    return pack, roles
+
+
+def check_review_r1_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None:
+    """Bind the review-r1 stage examples to the w15 fixture bytes, the pack
+    files, each other (upstream SHA-256, candidates) and the scope rules."""
+    root = ROOT / "fixtures/w15-modules/input"
+    first = docs["environment"]
+    for stage in R1_STAGES:
+        doc = docs[stage]
+        ensure(doc["stage"] == stage and doc["pack"] == {"id": pack["id"], "version": pack["version"]}, "review-r1 stage or pack: " + stage)
+        ensure(all(doc[k] == first[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id")), "review-r1 examples of different attempts")
+        catalog = {}
+        for e in doc["evidence"]:
+            body = (root / e["path"]).read_bytes()
+            sha = hashlib.sha256(body).hexdigest()
+            ensure(sha == e["sha256"] and 1 <= e["start_line"] <= e["end_line"] <= len(body.splitlines()), "review-r1 evidence blob or range: " + e["path"])
+            binding = "\0".join([doc["snapshot_manifest_digest"], e["path"], sha, f'{e["start_line"]}:{e["end_line"]}'])
+            ensure(e["id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24] and e["id"] not in catalog, "review-r1 evidence ID")
+            catalog[e["id"]] = e
+        cited = []
+        for key in ("environment_notes", "contracts", "conflicts", "questions", "instruction_notes", "candidates", "verifications"):
+            for item in doc.get(key, []):
+                for field in ("evidence_ids", "first_evidence_ids", "second_evidence_ids", "supporting_evidence_ids", "counterevidence_ids"):
+                    cited.extend(item.get(field, []))
+        ensure(all(ref in catalog for ref in cited), "review-r1 cites evidence it was not given: " + stage)
+        # A rule of a sub-directory is never generalized to a parent scope.
+        def covers(ids, scope):
+            dirs = [str(PurePosixPath(catalog[i]["path"]).parent) for i in ids]
+            return all(d == "." or scope == d or scope.startswith(d + "/") for d in dirs)
+        for c in doc.get("contracts", []) + doc.get("questions", []):
+            ensure(covers(c["evidence_ids"], c["applies_to"]), "review-r1 scope generalized: " + c["applies_to"])
+        for c in doc.get("conflicts", []):
+            ensure(covers(c["first_evidence_ids"] + c["second_evidence_ids"], c["scope"]), "review-r1 conflict scope generalized")
+        observations = {o["id"] for o in doc["observations"]}
+        for c in doc.get("candidates", []):
+            ensure(set(c.get("observation_ids", [])) <= observations, "review-r1 candidate cites an unknown observation")
+        for call in doc["calls"]:
+            ensure(call["role"] == stage and call["pack_files"] == roles[stage]["files"] and call["pack_sha256"] == roles[stage]["digest"], "review-r1 call pack digest: " + stage)
+            ensure(call["pack_id"] == pack["id"] and call["pack_version"] == pack["version"], "review-r1 call pack identity")
+        for u in doc["upstream"]:
+            if u["state"] == "accepted" and u["source"].startswith("review."):
+                sibling = u["source"][len("review."):]
+                ensure(hashlib.sha256(compact_json(raw[sibling])).hexdigest() == u["sha256"], "review-r1 upstream digest: " + u["source"])
+    verify = docs["verify"]
+    upstream = docs["investigate"].get("candidates", []) + docs["interpret"].get("candidates", [])
+    ensure(verify.get("candidates", []) == upstream, "verify candidates differ from the accepted upstream candidates")
+    ensure([c["id"] for c in verify.get("candidates", [])] == [v["candidate_id"] for v in verify.get("verifications", [])], "review-r1 verification coverage")
+
+
 SERVER_STAGES = ("source", "report")
 
 
@@ -435,6 +528,12 @@ def main() -> None:
     review_validator = validators["review-record.schema.json"]
     review_validator.validate(review)
     check_review_example(review)
+    r1_pack_doc, r1_roles = r1_pack()
+    r1_raw = {stage: (ROOT / "examples/review-r1" / (stage + ".json")).read_text(encoding="utf-8") for stage in R1_STAGES}
+    r1_docs = {stage: json.loads(text) for stage, text in r1_raw.items()}
+    for doc in r1_docs.values():
+        review_validator.validate(doc)
+    check_review_r1_examples(r1_docs, r1_raw, r1_pack_doc, r1_roles)
     for name in ("examples/environment.json", "examples/environment-documents.json"):
         environment = json_file(ROOT / name)
         validators["environment.schema.json"].validate(environment)
@@ -536,6 +635,43 @@ def main() -> None:
     bad = copy.deepcopy(review)
     bad["evidence"][0]["text"] = "raw source"
     expect_invalid("source text in review record", review_validator.validate, bad)
+    r1_calls = copy.deepcopy(published)
+    r1_calls["coverage"]["review_calls"] = [
+        {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome", "pack_id", "pack_version")}
+        for stage in R1_STAGES for call in r1_docs[stage]["calls"]]
+    validators["report.schema.json"].validate(r1_calls)
+    r1_calls["coverage"]["review_calls"][0]["pack_version"] = "2.0.0 rc1"
+    expect_invalid("invalid report pack version", validators["report.schema.json"].validate, r1_calls)
+
+    def r1_case(stage, edit, check):
+        docs = copy.deepcopy(r1_docs)
+        edit(docs[stage])
+        return lambda _: check(docs[stage]) if check else check_review_r1_examples(docs, r1_raw, r1_pack_doc, r1_roles)
+
+    def set_key(key, value, index=0, field=None):
+        def edit(doc):
+            if field is None:
+                doc[key] = value
+            else:
+                doc[key][index][field] = value
+        return edit
+
+    fake_id = "ev_" + "0" * 24
+    r1_negative = [
+        ("review-r1 fabricated evidence", "investigate", lambda d: d["candidates"][0]["evidence_ids"].append(fake_id), None),
+        ("review-r1 scope generalization", "documents", set_key("contracts", ".", 1, "applies_to"), None),
+        ("review-r1 pack digest drift", "verify", set_key("calls", "0" * 64, 0, "pack_sha256"), None),
+        ("review-r1 altered upstream candidate", "verify", lambda d: d["candidates"][0].update(title=d["candidates"][0]["title"] + "!"), None),
+        ("review-r1 model reproduction verdict", "verify", set_key("verifications", "reproduced", 0, "verdict"), review_validator.validate),
+        ("review-r1 source text", "investigate", lambda d: d["evidence"][0].update(text="raw source"), review_validator.validate),
+        ("review-r1 platform verdict in environment output", "environment", lambda d: d["environment_notes"][0].update(status="satisfied"), review_validator.validate),
+        ("review-r1 interpret candidate without observation", "interpret", lambda d: d["candidates"][0].pop("observation_ids"), review_validator.validate),
+        ("review-r1 failed record keeps accepted call", "documents", lambda d: [d.update(outcome="failed", failure_reason="model_timeout")] + [d.pop(k) for k in ("contracts", "conflicts", "questions", "instruction_notes")], review_validator.validate),
+        ("review-r1 investigate given raw tool observations", "investigate", lambda d: d.update(observations=docs_obs), review_validator.validate),
+    ]
+    docs_obs = copy.deepcopy(r1_docs["interpret"]["observations"])
+    for name, stage, edit, check in r1_negative:
+        expect_invalid(name, r1_case(stage, edit, check), None)
     bad = copy.deepcopy(activity)
     bad["stages"][3]["counts"]["timed_out"] = 0
     expect_invalid("zero stage count", activity_validator.validate, bad)
@@ -549,11 +685,12 @@ def main() -> None:
     bad["TaskStage"] = {"enum": [*stage_order, "lint"]}
     expect_invalid("stage enum drift", lambda doc: check_stage_enums(doc, stage_order, stored_stages, stage_states), bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
-    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 12 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 17 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
-    print("PASS: 26 negative cases; example policy timing; prompt manifest")
+    print(f"PASS: {27 + len(r1_negative)} negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
+    print("review-r1 candidate pack (not promoted):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in r1_roles.items()))
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 
 
