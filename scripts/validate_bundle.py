@@ -325,6 +325,78 @@ def executions_exit(doc: dict, name: str):
     return next(e["exit_code"] for e in doc["executions"] if e["name"] == name)
 
 
+def check_w20_rust_pack(validators: dict) -> int:
+    """The cargo check and clippy descriptors and their real envelope examples (W20, docs/44).
+
+    Returns the number of negative cases."""
+    negatives = 0
+    envelope_validator = validators["analyzer-observations.schema.json"]
+    source = ROOT / "internal/worker/analysis/rustpack/assemble.go"
+
+    def go_const(path: Path, name: str) -> str:
+        match = re.search(r"^\s*" + name + r'\s*=\s*"([^"]*)"$', path.read_text(encoding="utf-8"), re.M)
+        ensure(match is not None, "Missing Go constant " + name + " in " + str(path))
+        return match.group(1)
+
+    version = go_const(source, "RulePackVersion")
+    for name, analyzer_id, required, rule_pack_id_const, tool in (("cargo-check", "rust.cargocheck", True, "CheckRulePackID", "cargo"), ("clippy", "rust.clippy", False, "ClippyRulePackID", "clippy")):
+        descriptor = yaml_file(ROOT / f"examples/analyzer-{name}.yaml")
+        validators["analyzer.schema.json"].validate(descriptor)
+        check_analyzer(descriptor)
+        ensure(descriptor["id"] == analyzer_id and descriptor["languages"] == ["rust"], f"{name}: analyzer identity")
+        ensure(descriptor["executes_repository_code"] is True and descriptor["requires_build"] is True, f"{name}: cargo runs build scripts, proc macros and repository Cargo configuration")
+        ensure(descriptor["network_policy"] == "none", f"{name}: offline")
+        argv = descriptor["execute"]["argv"]
+        ensure({"--offline", "--locked", "--message-format=json", "--workspace", "--all-targets"} <= set(argv), f"{name}: offline, locked, JSON, whole workspace")
+        ensure(descriptor["exit_codes"] == {"clean": [0], "findings": [], "error": [101]}, f"{name}: warnings exit 0, build failures exit 101")
+        ensure(descriptor["execute"]["env_allowlist"].count("PATH") == 1 and "RUSTC_WRAPPER" in descriptor["execute"]["env_allowlist"], f"{name}: explicit environment")
+        envelope = json_file(ROOT / f"examples/observations-{name}.json")
+        envelope_validator.validate(envelope)
+        check_analyzer_observations(envelope)
+        ensure(envelope["analyzer"] == {"id": analyzer_id, "ecosystem": "rust", "required": required}, f"{name}: required follows the baseline rule")
+        rule_pack = envelope["rule_pack"]
+        ensure(rule_pack["id"] == go_const(source, rule_pack_id_const) and rule_pack["version"] == version, f"{name}: rule pack identity differs from the Go constants")
+        ensure(rule_pack["repository_config"] == "honored" and rule_pack["source_suppressions"] == "honored" and rule_pack["unreported_suppression_rules"] == [],
+               f"{name}: repository configuration and in-source suppressions are honored (nothing reports #[allow])")
+        ensure(isinstance(rule_pack["config_files"], list), f"{name}: the example enumerates the configuration it read")
+        selection = rule_pack["selection"]
+        ensure(selection[:2] == ["--workspace", "--all-targets"], f"{name}: selection starts with the scope")
+        lints = [argv[i + 1] for i, a in enumerate(argv) if a == "-W"]
+        ensure([s for i, s in enumerate(selection) if i > 0 and selection[i - 1] == "-W"] == lints, f"{name}: -W lints of the descriptor differ from the envelope selection")
+        if name == "clippy":
+            ensure(len(lints) == 6 and "--cap-lints" in argv and argv[argv.index("--cap-lints") + 1] == "warn" and argv[0] == "clippy", "clippy: review lints and capped lint levels, run as cargo-clippy")
+            ensure(all(o["rule_id"].startswith("clippy::") for o in envelope["observations"]), "clippy keeps only clippy:: diagnostics")
+            ensure(envelope["tool"]["name"] == "clippy" and "rustc_diagnostics_excluded" in envelope["limitations"], "clippy overlap with cargo check is excluded")
+        else:
+            ensure(argv[0] == "check" and not any(o["rule_id"].startswith("clippy::") for o in envelope["observations"]), "cargo check keeps rustc diagnostics")
+        ensure(envelope["tool"]["name"] == tool and envelope["target"]["platform"] and envelope["target"]["properties"]["host_only"] == "true", f"{name}: tool and host target")
+        ensure(envelope["outcome"]["exit_class"] == "success_with_findings" and executions_exit(envelope, f"{'cargo' if name == 'cargo-check' else 'clippy'}.check") == 0, f"{name}: warnings exit 0 and are findings")
+        ensure(envelope["coverage"]["unit"] == "crate" and envelope["analyzer"]["ecosystem"] == "rust", f"{name}: crate coverage")
+
+        def both(doc):
+            envelope_validator.validate(doc)
+            check_analyzer_observations(doc)
+
+        def case(label, edit):
+            nonlocal negatives
+            bad = copy.deepcopy(envelope)
+            edit(bad)
+            expect_invalid(f"{name}: {label}", both, bad)
+            negatives += 1
+
+        case("success with partial parse", lambda d: d["outcome"].update(partial_parse=True))
+        case("success without processed files", lambda d: d["coverage"].update(processed_paths=None))
+        case("observation count drift", lambda d: d["observations"].pop())
+        case("unbound raw stream", lambda d: d["observations"][0]["raw_ref"].update(stream_sha256="0" * 64))
+        case("truncated success", lambda d: d["executions"][-1]["stdout"].update(truncated=True))
+        case("hyphen analyzer id", lambda d: d["analyzer"].update(id="rust.cargo-check"))
+        case("config files with overridden configuration", lambda d: d["rule_pack"].update(repository_config="overridden", config_files=[{"path": "Cargo.toml", "sha256": "a" * 64}]))
+        case("suppressed observation with honored suppressions", lambda d: d["observations"][0].update(suppressed=True))
+        case("unreported rules under honored suppressions", lambda d: d["rule_pack"].update(unreported_suppression_rules=["clippy::todo"]))
+        case("node path in a target property", lambda d: d["target"]["properties"].update(cargo_home="/home/user/.cargo"))
+    return negatives
+
+
 def check_environment_example(doc: dict) -> None:
     """Bind the W15 discovery examples to the fixture input bytes and evidence IDs."""
     root = ROOT / "fixtures/w15-modules/input"
@@ -963,6 +1035,8 @@ def main() -> None:
     check_observations(observations)
     w19_negatives = check_w19_contracts(validators)
     print(f"PASS: W19 analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {w19_negatives} negative cases)")
+    w20_negatives = check_w20_rust_pack(validators)
+    print(f"PASS: W20 Rust pack contracts (cargo check and clippy descriptors, real envelope examples; {w20_negatives} negative cases)")
     review = json_file(ROOT / "examples/review-record.json")
     review_validator = validators["review-record.schema.json"]
     review_validator.validate(review)
