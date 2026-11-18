@@ -166,6 +166,42 @@ class EchoAuditTests(unittest.TestCase):
             self.assertEqual(r1_eval.echo_audit(cut, records, path), ["<truncated>"])
 
 
+class ReviewOutcomeTests(unittest.TestCase):
+    def test_secret_screen_is_its_own_outcome(self):
+        def report(ai, tasks):
+            return {"coverage": {"ai_review": {"status": ai, "reason": None}},
+                    "tasks": [{"key": k, "status": s, "reason": r} for k, s, r in tasks]}
+        screened = report("not_performed", [("gitleaks", "failed", "tool_error"),
+                                            ("review.investigate", "skipped_policy", "secret_screen_failed"),
+                                            ("review.verify", "skipped_policy", "secret_screen_failed")])
+        self.assertEqual(r1_eval.review_outcome(screened), "secret_screen_failed")
+        self.assertEqual(r1_eval.review_outcome(report("performed", [("review.verify", "succeeded", None)])), "performed")
+        tools = report("not_performed", [("review.context", "skipped_policy", "model_source_not_approved")])
+        self.assertEqual(r1_eval.review_outcome(tools), "model_source_not_approved")
+        other = report("not_performed", [("review.investigate", "failed", "review_input_unavailable")])
+        self.assertEqual(r1_eval.review_outcome(other), "review_input_unavailable")
+
+    def test_review_invalid_precedence(self):
+        clean = {"blocked": [], "refused": []}
+        self.assertIsNone(r1_eval.review_invalid(None, clean, "performed"))
+        self.assertEqual(r1_eval.review_invalid(None, clean, "secret_screen_failed"), "secret_screen_failed")
+        self.assertEqual(r1_eval.review_invalid("source_changed", {"blocked": [{}], "refused": []}, "performed"),
+                         "source_changed")
+        self.assertEqual(r1_eval.review_invalid(None, {"blocked": [{}], "refused": ["budget_exhausted"]},
+                                                "secret_screen_failed"), "blocked_answer_leak")
+        self.assertEqual(r1_eval.review_invalid(None, {"blocked": [], "refused": ["budget_exhausted"]}, None),
+                         "budget_refused")
+        self.assertEqual(r1_eval.review_invalid(None, {**clean, "echo_unverified": ["x"]}, "secret_screen_failed"),
+                         "answer_echo_unverified")
+
+    def test_agent_switches(self):
+        self.assertEqual(r1_eval.agent_switches(["python-both-type-checkers", "python-both-type-checkers"]),
+                         ["python-both-type-checkers"])
+        for bad in ("--x", "X", "a b", ""):
+            with self.assertRaises(SystemExit):
+                r1_eval.agent_switches([bad])
+
+
 class CaptureListTests(unittest.TestCase):
     def test_capture_list_is_a_valid_list_that_blocks_nothing(self):
         import r0_openai_gateway as gateway
@@ -332,6 +368,23 @@ class RealReportTests(unittest.TestCase):
             self.assertGreaterEqual(m["structural"]["auto_location_hit_before"]["k"], 1)
             t = r1_score.judgment_template(batch, CORPUS)
             self.assertTrue(any(f["producer"] == "tool" for i in t["items"] for f in i["findings"]))
+
+    def test_recorded_rule_context_needs_only_a_digest(self):
+        # internal/report/validate.go: paths are omitted when the tool read no file (W21 gitleaks).
+        from validate_bundle import check_report
+        key = "R1-GO-06.before.1"
+        row = next(json.loads(l) for l in (TESTDATA / "rows.jsonl").read_text().splitlines() if key in l)
+        report = json.loads((TESTDATA / "reports" / (key + ".json")).read_text())
+        context = {"rule_pack": "codeye-secrets-gitleaks", "rule_pack_version": "1", "selection": [],
+                   "repository_config": "honored", "source_suppressions": "disabled", "config": "recorded",
+                   "config_digest": "0" * 64}
+        report["coverage"]["tools"][0]["rule_context"] = context
+        with tempfile.TemporaryDirectory() as tmp:
+            CORPUS.materialize(Path(tmp) / "in", CORPUS.by_id[row["case"]], row["variant"], row["documented"])
+            check_report(report, Path(tmp) / "in")
+            del context["config_digest"]
+            with self.assertRaises(ValueError):
+                check_report(report, Path(tmp) / "in")
 
 
 class ReaderTests(unittest.TestCase):

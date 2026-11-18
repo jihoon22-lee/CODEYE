@@ -123,8 +123,11 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
         recorded, include = "config_paths" in context or "config_digest" in context, report.get("export", {}).get("include_code")
         ensure(context["config"] == "recorded" or not recorded, "Rule context records configuration it did not read")
         ensure(include is not False or not recorded, "Code-free export carries rule-context configuration")
-        ensure(not (include and context["config"] == "recorded") or ("config_paths" in context and "config_digest" in context),
-               "Recorded rule context without paths and digest")
+        # Same rule as internal/report/validate.go: a recorded context needs a digest; the paths list is
+        # omitted when the tool read no file (W21 gitleaks with only the built-in configuration).
+        ensure(not (include and context["config"] == "recorded")
+               or bool(re.fullmatch(r"[0-9a-f]{64}", str(context.get("config_digest", "")))),
+               "Recorded rule context without digest")
     for finding in findings:
         evidence = finding["evidence"]
         evidence_ids = {item["id"] for item in evidence}

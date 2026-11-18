@@ -425,6 +425,39 @@ def records_of(batch, key):
     return out
 
 
+def review_outcome(report):
+    """Why model review did or did not run, from task states only. A failed secret screen (W21:
+    every review role skipped_policy/secret_screen_failed) is a platform policy outcome, not a
+    model failure, and is reported as its own value."""
+    review = [t for t in report["tasks"] if str(t.get("key", "")).startswith("review.")]
+    reasons = {t.get("reason") for t in review}
+    if any(t.get("status") == "skipped_policy" and t.get("reason") == "secret_screen_failed" for t in review):
+        return "secret_screen_failed"
+    if report["coverage"]["ai_review"]["status"] == "performed":
+        return "performed"
+    for reason in ("model_source_not_approved", "review_input_unavailable"):
+        if reason in reasons:
+            return reason
+    return "not_performed:" + str(report["coverage"]["ai_review"].get("reason") or "unknown")
+
+
+def review_invalid(current, delta, outcome):
+    """Why a review-condition variant is excluded from the metrics, in precedence order. A failed
+    secret screen means the model never ran: counting the variant would score a policy outcome as a
+    model miss, so it is excluded and counted under its own reason."""
+    if current:
+        return current  # source_changed is kept over any later reason
+    if delta["blocked"]:
+        return "blocked_answer_leak"
+    if set(delta["refused"]) & set(BUDGET_REFUSALS):
+        return "budget_refused"
+    if delta.get("echo_unverified"):
+        return "answer_echo_unverified"
+    if outcome == "secret_screen_failed":
+        return "secret_screen_failed"
+    return None
+
+
 def summarize_report(report, records):
     """Structured facts of one published report (no LLM narrative is used)."""
     tasks = [{k: t.get(k) for k in ("key", "status", "reason", "required_for_verdict")} for t in report["tasks"]]
@@ -446,7 +479,8 @@ def summarize_report(report, records):
     tools = [{k: row.get(k) for k in ("task_key", "analyzer", "tool_version", "exit_class", "processed_files",
                                        "files_in_scope")} for row in report["coverage"].get("tools", [])]
     return {"status": report["status"], "quality_verdict": report.get("quality_verdict"),
-            "ai_review": report["coverage"]["ai_review"]["status"], "summary": report["summary"],
+            "ai_review": report["coverage"]["ai_review"]["status"], "review_outcome": review_outcome(report),
+            "summary": report["summary"],
             "llm_exposed_files": report["coverage"].get("llm_exposed_files"),
             "tool_processed_files": report["coverage"].get("tool_processed_files"),
             "tasks": tasks, "gaps": gaps, "tools": tools,
@@ -464,16 +498,34 @@ def tool_specs(values):
         name, sep, path = value.partition("=")
         if not sep or not name or not os.path.isabs(path):
             raise SystemExit(f"--tool expects NAME=/absolute/path, got {value!r}")
-        if not os.path.isfile(path) or not os.access(path, os.X_OK):
-            raise SystemExit(f"--tool {name}: not an executable file")
+        if not os.path.isfile(path):  # the agent checks the rest (JS entry scripts run under --node)
+            raise SystemExit(f"--tool {name}: not a regular file")
         out[name] = path
     return out
 
 
 def help_flags(binary):
-    text = subprocess.run([str(binary), "--help"], capture_output=True, text=True, timeout=30).stdout
+    """Option names in the `codeye agent` usage of `codeye --help` (the agent itself rejects unknown ones)."""
     import re
-    return set(re.findall(r"--([a-z][a-z0-9-]*) /abs", text))
+    text = subprocess.run([str(binary), "--help"], capture_output=True, text=True, timeout=30).stdout
+    usage, inside = [], False
+    for line in text.splitlines():
+        if line.strip().startswith("codeye "):
+            inside = line.strip().startswith("codeye agent ")
+        if inside:
+            usage.append(line)
+    return set(re.findall(r"--([a-z][a-z0-9-]*)", "\n".join(usage)))
+
+
+def agent_switches(values):
+    """Boolean agent options given as --agent-flag NAME (e.g. python-both-type-checkers)."""
+    import re
+    out = []
+    for value in values or []:
+        if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", value):
+            raise SystemExit(f"--agent-flag expects an option name without dashes, got {value!r}")
+        out.append(value)
+    return sorted(set(out))
 
 
 def plant_leak(destination, case, phrases_file):
@@ -552,6 +604,7 @@ def run_batch(args):
     if not os.path.isabs(args.go) or not os.access(args.go, os.X_OK):
         raise SystemExit("--go must be an absolute executable path")
     tools = tool_specs(args.tool)
+    switches = agent_switches(args.agent_flag)
     results_root = Path(args.results_root).resolve()
     results_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     chosen, selection = select(corpus, cases=set(args.cases.split(",")) if args.cases else None,
@@ -607,7 +660,7 @@ def run_batch(args):
         labels, prior = holdout_labels(entries, pack["id"], pack["tree_digest"], corpus.digest)
         reg_entry = {"pack_id": pack["id"], "pack_version": pack["version"], "pack_digest": pack["tree_digest"]}
     else:
-        config = canonical(sorted((k, file_sha256(v)) for k, v in {**tools, "go": args.go}.items()))
+        config = canonical(sorted((k, file_sha256(v)) for k, v in {**tools, "go": args.go}.items()) + switches)
         labels, prior = [], []
         reg_entry = {"pack_id": "analyzers", "pack_version": None, "pack_digest": hashlib.sha256(config.encode()).hexdigest()}
     reg_entry.update(corpus_digest=corpus.digest, condition=args.condition, first_run_at=now(), batch=name,
@@ -622,6 +675,7 @@ def run_batch(args):
                                              "machine": platform.machine()},
         "analyzers": {"go": {"path": home_relative(args.go), "sha256": file_sha256(args.go)},
                       "tools": {k: {"path": home_relative(v), "sha256": file_sha256(v)} for k, v in sorted(tools.items())},
+                      "agent_flags": switches,
                       "repo_code_grant": not args.no_repo_code_grant, "go_mod_cache": bool(args.go_mod_cache),
                       "toolchain_path": args.toolchain_path, "observed": {}},
         "budget": ({"ledger_before": {k: report_before.get(k) for k in (
@@ -647,9 +701,10 @@ def run_batch(args):
             env["CODEYE_DATABASE_URL"] = url
             binary = build_product(base, ROOT, env)
             flags = help_flags(binary)
-            unknown = sorted(t for t in tools if t not in flags)
+            unknown = sorted(t for t in list(tools) + switches if t not in flags)
             if unknown:
-                manifest["notes"].append("tool flags not listed in codeye --help: " + ", ".join(unknown))
+                manifest["notes"].append("agent options not listed in the codeye --help agent usage (the agent "
+                                         "accepted them if the batch ran): " + ", ".join(unknown))
 
             def agent_args(root_id):
                 out = ["--go", args.go, "--toolchain-path", args.toolchain_path]
@@ -657,6 +712,7 @@ def run_batch(args):
                     out += ["--go-mod-cache", args.go_mod_cache]
                 for k, v in sorted(tools.items()):
                     out += ["--" + k, v]
+                out += ["--" + s for s in switches]
                 if not args.no_repo_code_grant:
                     out += ["--repo-code-source-root", root_id]
                 if review:
@@ -796,20 +852,13 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
                 row["ledger"] = delta
                 if set(delta["refused"]) & set(BUDGET_REFUSALS):
                     stopped = stopped or "relay_refused_budget"
-                if row["invalid"]:
-                    pass
-                elif delta["blocked"]:
-                    row["invalid"] = "blocked_answer_leak"
-                elif set(delta["refused"]) & set(BUDGET_REFUSALS):
-                    row["invalid"] = "budget_refused"
-                elif unverified:
-                    row["invalid"] = "answer_echo_unverified"
+                row["invalid"] = review_invalid(row["invalid"], delta, row.get("review_outcome"))
             if info["planted"]:
                 row["planted_leak_blocked"] = any(info["planted"] in b["matches"]
                                                   for b in (row.get("ledger") or {}).get("blocked", []))
                 row["invalid"] = "planted_leak" if row["planted_leak_blocked"] else "planted_leak_not_blocked"
             append_row(batch, row)
-            print(key, row["status"], row.get("ai_review"), "findings", (row.get("summary") or {}).get("total_findings"),
+            print(key, row["status"], row.get("review_outcome"), "findings", (row.get("summary") or {}).get("total_findings"),
                   "invalid=" + str(row["invalid"]), f"{row['wall_s']}s", flush=True)
             shutil.rmtree(source / info["rel"], ignore_errors=True)
         if inflight:
@@ -903,6 +952,8 @@ def main(argv=None):
     r.add_argument("--go", required=True, help="absolute go toolchain (--go)")
     r.add_argument("--go-mod-cache")
     r.add_argument("--tool", action="append", help="analyzer tool or shared toolchain flag NAME=/abs/path (repeatable)")
+    r.add_argument("--agent-flag", action="append", help="boolean agent option NAME, passed as --NAME (repeatable), "
+                                                          "e.g. python-both-type-checkers")
     r.add_argument("--toolchain-path", default="/usr/bin:/bin")
     r.add_argument("--no-repo-code-grant", action="store_true", help="omit --repo-code-source-root for the corpus root")
     r.add_argument("--agents", type=int, default=1)

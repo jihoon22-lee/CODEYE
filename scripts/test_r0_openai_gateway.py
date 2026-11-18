@@ -89,7 +89,6 @@ class FakeOpenAI:
         return http.client.HTTPConnection("127.0.0.1", self.port, timeout=timeout)
 
     def respond(self, payload):
-        text = "hello from fake"
         ok = {"id": "resp_x", "object": "response", "status": "completed",
               "model": MODEL + "-2026-10-01", "service_tier": "default", "incomplete_details": None,
               "output": [

@@ -28,7 +28,7 @@ W24 2단계는 [R1 보류 corpus](../fixtures/r1-quality/README.md)로 분석기
 | `review` | 제품 전체 경로. `--pack review-v1` 또는 `review-r1`을 agent의 `--review-pack`으로 준다 | coordinator가 시작한 relay | 표본 |
 
 - 사례 변형마다 `corpus.py materialize`로 무작위 이름의 디렉터리에 입력만 만든다. 프로젝트 이름도 무작위(`eval-<hex>`)다. 사례 ID·변형 이름·라벨은 스냅샷에 들어가지 않는다. README 포함 여부(`--documented`)는 corpus 순서로 고정했다(짝수 번째 사례). 모든 batch가 같은 선택을 쓴다.
-- 분석기 플래그는 `--tool NAME=/abs/path`로 받아 agent에 그대로 넘긴다. 이 빌드가 모르는 이름이면 agent가 사용 오류로 끝나고 runner가 멈춘다. 새 팩이 병합되면 runner를 고치지 않고 플래그만 더한다. 공백은 보고서의 task(`pack-gap.<생태계>`, `tool_not_configured` 등)에서 읽는다.
+- 분석기 플래그는 `--tool NAME=/abs/path`로 받아 agent에 `--NAME PATH`로 그대로 넘긴다. 값이 없는 agent 옵션(예: 두 타입 검사기를 함께 쓰는 `python-both-type-checkers`)은 `--agent-flag NAME`으로 준다. 둘 다 manifest에 남고 tools 조건의 holdout digest에 들어간다. 이 빌드가 모르는 이름이면 agent가 사용 오류로 끝나고 runner가 멈춘다. 새 팩이 병합되면 runner를 고치지 않고 플래그만 더한다. 공백은 보고서의 task(`pack-gap.<생태계>`, `tool_not_configured` 등)에서 읽는다.
 - corpus source root에는 기본으로 저장소 코드 실행 허가(`--repo-code-source-root`)를 준다. Rust 기준 분석기가 build script를 실행하기 때문이다. `--no-repo-code-grant`로 끌 수 있고 manifest에 기록한다.
 - 실패한 run도 자료로 기록한다. 보고서를 조회하지 못하면 `report_error`에 HTTP 상태와 오류 코드를 남긴다.
 - `review` 조건은 사례를 **하나씩** 실행한다. 사례 전후의 relay 장부를 비교해 호출·차감·차단·거절을 그 사례에 귀속하기 위해서다. `tools` 조건은 `--agents × --max-workers`개까지 동시에 실행한다.
@@ -55,7 +55,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 - 제외된 후보는 수가 아니라 ID로 남는다. `dropped.in_inputs`는 ID 목록, `dropped.in_allowed_text`는 ID·문구·제외한 허용 텍스트 이름이다. 지침 팩이 라벨 표현을 담고 있으면 여기서 보인다(§10.2).
 - 일반 금지어(`BANNED_WORDS`·`BANNED_STEMS`, 예: before·fix)는 내보내지 않는다. 지침과 모델 출력에 흔한 단어라 정상 요청을 막기 때문이다.
 - 대조 방식(`codeye-words-v1`): 한 단어 토큰은 단어 전체와 camelCase·snake_case 조각, 여러 단어는 `[a-z0-9]+` 단어열, 그 밖은 소문자 부분 문자열. relay와 corpus.py가 같은 규칙을 쓴다.
-- dry run 최종 목록(W16 C/C++·W17 Python 팩과 review-r1 2.0.0-rc2 병합 뒤)은 7,722개 항목이다. 허용 텍스트는 두 팩, tools batch의 도구 메시지·규칙 ID 20줄, 역할 envelope 100개다. 입력에 있어 12개, 허용 텍스트에 있어 13개를 뺐다.
+- dry run 최종 목록(모든 분석 팩(W16~W21)과 review-r1 2.0.0-rc2 병합 뒤)은 7,722개 항목이다. 허용 텍스트는 두 팩, tools batch의 도구 메시지·규칙 ID 22줄, 역할 envelope 100개다. 입력에 있어 12개, 허용 텍스트에 있어 13개를 뺐다. W17·W21 병합 뒤 도구 메시지가 늘었지만 항목은 바뀌지 않았다.
 
 ### 3.1.1 허용 텍스트 만들기
 
@@ -158,7 +158,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 
 ## 7. 지표와 분모
 
-모든 비율은 판정할 수 있는 단위만 분모에 넣는다. 판정할 수 없는 단위는 `unjudged`로 따로 센다. 변형에 범위 안 finding이 하나도 없으면 판정 없이 "아님"으로 정해진다. 판정된 finding 하나가 조건을 만족하면 "맞음"이다. 그 밖에 미판정 finding이 남아 있으면 미판정이다. 비율마다 Wilson 95% 구간을 붙인다. 무효 행(차단, 예산 거절, 입력 변경, 미실행)은 빼고 사유별로 센다.
+모든 비율은 판정할 수 있는 단위만 분모에 넣는다. 판정할 수 없는 단위는 `unjudged`로 따로 센다. 변형에 범위 안 finding이 하나도 없으면 판정 없이 "아님"으로 정해진다. 판정된 finding 하나가 조건을 만족하면 "맞음"이다. 그 밖에 미판정 finding이 남아 있으면 미판정이다. 비율마다 Wilson 95% 구간을 붙인다. 무효 행(차단, 예산 거절, 입력 변경, 예외 ID 미확인, review 조건의 비밀값 선별 실패, 미실행)은 빼고 사유별로 센다.
 
 | 지표 | 단위·분모 | 분자 |
 |---|---|---|
@@ -170,7 +170,8 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 | unsupported assertions | 판정된 finding / 구조 | `insufficient_evidence` 비율. 구조로는 실행 근거 없는 `reproduced`, 검증기가 거부한 출력·오류 분류(꾸민 근거·범위 일반화·실행 주장, `w15_pack_compare.structural`), 통계 불일치 보고서 |
 | duplicate burden | 판정된 finding / 구조 | `duplicate` 수. 구조로는 같은 변형에서 위치가 겹치는 finding 수 |
 | 비용·시간 | batch | 검토 호출(역할·결과별), usage, 장부 요청 수·차감, batch 차감, 변형당 wall time(합·중앙값·최대) |
-| 구조 지표 | 변형 | `auto_location_hit_before`, `auto_location_reflag_after`, `auto_suspect_flag_normal`, `auto_any_actionable_on_after_or_normal`, `ai_review_performed`, `model_saw_code`(`llm_exposed_files>0`) |
+| 검토 결과 분류 | 보고서가 있는 모든 변형(무효 포함) | `review_outcomes`: `performed`, `secret_screen_failed`(W21 비밀값 작업이 실행됐으나 실패해 모든 검토 역할이 `skipped_policy`), `review_input_unavailable`, `model_source_not_approved`(tools 조건), 그 밖 `not_performed:<사유>`. 비밀값 선별 실패는 정책 결과이고 모델 실패가 아니므로 따로 센다. review 조건에서는 그 변형을 `invalid: secret_screen_failed`로 지표에서 뺀다. 모델이 실행되지 않은 변형을 모델이 놓친 것으로 세지 않기 위해서다. 행의 `review_outcome`과 진행 출력에도 같은 값이 남는다 |
+| 구조 지표 | 변형 | `auto_location_hit_before`, `auto_location_reflag_after`, `auto_suspect_flag_normal`, `auto_any_actionable_on_after_or_normal`, `ai_review_performed`, `model_saw_snapshot_files`(`llm_exposed_files>0`. 보고서는 수만 주고 README 같은 문서 발췌도 센다. 모델이 코드를 봤다는 뜻이 아니다) |
 
 - 분해: 언어, 범주(category), `detection`별로 recall·FP와 구조 지표를 낸다.
 - 비교: `score A B ...`가 batch를 나란히 표로 낸다. `tools`와 `review`, 두 팩을 같은 표에 둔다.
@@ -204,28 +205,29 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
   - `--allow-model-echo`: relay가 돌려준 답에 나온 ID만 예외다. 아직 나오지 않은 ID, 클라이언트가 보낸 assistant 메시지, 예외 ID와 다른 ID가 섞인 요청은 막는다. 예외 기록과 보고 필드가 남는다. 목록 없이 옵션만 주면 시작하지 않는다.
   - corpus 목록 교차 시험: 모든 사례·변형·README 입력에서 0건이고, 사례마다 심은 토큰과 문구는 잡는다.
   - 시험용 upstream: loopback URL만 받고 키를 읽거나 보내지 않는다. 시험 장부와 실제 장부를 서로 거부한다. 감시용 목록은 시험용 upstream에서만 받는다.
-- `scripts/test_r1_eval.py`(16개).
-  - runner: Wilson 기준값, diff 위치 이동, 층별 표본의 seed 재현성과 층 포함, 상수표·이력 추정과 거절(금액·요청 수·정지), 다른 팩 이력의 오류 처리, 등록부 표시(dry run 제외), 장부 귀속, 예외 ID의 사례 단위 확인, 감시용 목록.
+- `scripts/test_r1_eval.py`(20개).
+  - runner: Wilson 기준값, diff 위치 이동, 층별 표본의 seed 재현성과 층 포함, 상수표·이력 추정과 거절(금액·요청 수·정지), 다른 팩 이력의 오류 처리, 등록부 표시(dry run 제외), 장부 귀속, 예외 ID의 사례 단위 확인, 감시용 목록, 비밀값 선별 실패를 별도 결과로 분류하고 review 지표에서 빼는 무효 사유 순서, `--agent-flag` 이름 검사.
   - 채점: 위치 pre-fill, 미판정 계수, 판정 지표, 판정 충돌, 분산, 독립성 표시.
   - 보고서 읽기: 과제의 라벨 비노출, 답이 없을 때 `not_measured`, 답이 있을 때의 채점.
-  - dry run에서 얻은 실제 tools 보고서 3개(`scripts/testdata/r1_eval`)는 새로 만든 입력과 근거 대조까지 통과한다.
+  - dry run에서 얻은 실제 tools 보고서 3개(`scripts/testdata/r1_eval`)는 새로 만든 입력과 근거 대조까지 통과한다. 기록된 규칙 문맥은 digest만 있으면 통과하고 digest가 없으면 거부된다.
 - CI: `verify.yml`의 "Documentation contracts and regression fixture" 단계가 두 시험을 `python -m unittest discover`로 실행한다. 모델·키·네트워크가 필요 없다.
 
 ### 10.2 dry run
 
 모두 같은 WSL2 머신(12코어, 다른 작업과 공유)에서 실행했다. 모델 호출은 없다. review 조건은 가짜 upstream과 `--test-upstream` relay(시험 장부)를 썼다. 가짜의 답은 입력 구조에서 만든 고정 문장이므로 아래 위치 대조·검토 수치에는 품질 의미가 없다. 가짜는 첫 code 근거를 인용하는데, 발췌가 결함 파일 둘레이므로 위치 대조가 높게 나온다.
 
-**tools, 55개 사례 전체(변형 100개).** W16·W17·W18 병합 뒤 go·staticcheck·cargo·clippy·cppcheck·clang-tidy·ruff·mypy·bandit·node·eslint·tsc 플래그로 실행했다. 100개 모두 `partial`이다(검토 task가 `model_source_not_approved`).
+**tools, 55개 사례 전체(변형 100개).** 모든 분석 팩(W16~W21) 병합 뒤 go·staticcheck·cargo·clippy·cppcheck·clang-tidy·ruff·mypy·pyright·bandit·lizard·jscpd·gitleaks·node·eslint·tsc 플래그와 `--agent-flag python-both-type-checkers`로 실행했다. 100개 모두 `partial`이고 검토 결과 분류는 모두 `model_source_not_approved`다. 분석기 이름은 모두 이 빌드의 agent가 받았다.
 
 | 언어 | 결과 |
 |---|---|
 | C/C++ | cppcheck는 20개 모두 `missing_include_files` 구성 오류로 끝났고 R1-CPP-04 before에서 finding 2개를 남겼다. clang-tidy는 compile DB가 없어(`compile_db_missing`) 실행되지 않았다 |
-| Python | ruff·mypy·bandit 실행(pyright는 주지 않아 `tool_not_configured`). finding 5개(R1-PY-04 전후, R1-PY-11 before) |
+| Python | ruff·mypy·pyright·bandit 20개 모두 실행. finding 5개(ruff 3개 변형, mypy 2개 변형. R1-PY-04 전후, R1-PY-11 before). pyright·bandit은 finding 없음 |
 | Go | go vet·Staticcheck 실행. finding 3개(R1-GO-06 before의 copylocks, R1-GO-09 before의 structtag·SA5008) |
 | JS/TS | ESLint 20개, tsc·type-aware ESLint는 TS 모듈 4개. finding 5개(R1-JS-02 before의 `no-unsafe-finally`, R1-JS-07 전후) |
-| Rust | 변형 20개 모두 보고서 조회 500 `REPORT_INVALID`(§12). 분석은 `lockfile_missing` |
+| Rust | 보고서 20개 모두 조회된다(W21이 main의 Rust 규칙 문맥 검증을 고쳤다). cargo check·Clippy는 20개 모두 `lockfile_missing` 구성 오류, finding 0개(§12) |
+| 구조·비밀값(W21) | lizard·jscpd·gitleaks가 변형 100개 모두에서 실행되어 finding 없이 끝났다. gitleaks가 성공했으므로 비밀값 선별로 막힌 검토는 없다 |
 
-보고서가 있는 80개는 새로 만든 입력과의 근거 대조를 모두 통과했다. 관측한 도구 버전은 go1.27.4, Staticcheck 2026.2.2, cppcheck 2.22.0, ruff 0.16.3, mypy 2.4.1, bandit 1.9.4, ESLint 10.15.0, tsc 6.0.3이다. finding은 모두 15개다.
+보고서 100개 모두 새로 만든 입력과의 근거 대조를 통과했다. 관측한 도구 버전은 go1.27.4, Staticcheck 2026.2.2, cppcheck 2.22.0, ruff 0.16.3, mypy 2.4.1, pyright 1.1.414, bandit 1.9.4, ESLint 10.15.0, tsc 6.0.3, cargo check 1.99.1, Clippy 0.1.99, lizard 1.26.1, jscpd 5.4.3, gitleaks 8.30.1이다. finding은 모두 15개다(Python 5, JS/TS 5, Go 3, C/C++ 2).
 
 **정답 차단과 envelope.**
 
@@ -235,25 +237,32 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
    - review-v1(1.0.0): 변형 24개, 막힘 0. Go 20개 `completed`, C++·JS 4개는 검토 입력이 없어 `partial`. 시험 장부 요청 60건(역할마다 20).
    - review-r1(2.0.0-rc2): 변형 25개(R1-GO-10 before 2회 반복 포함). 막힌 요청은 R1-GO-01 before에 일부러 심은 문구 하나뿐이었다(investigate, ID `R1-GO-01/prose/0.0`, `invalid: planted_leak`). 시험 장부 요청 62건(investigate·verify 20, documents 10, interpret 8, environment 4). C++·JS 사례에서도 environment·interpret가 호출되었다.
 4. 가짜에 `--echo-text "goroutine leak"`를 주고 R1-GO-02·03 before를 두 방식으로 돌렸다. 엄격 방식에서는 두 verify가 막혔다(원인 `model_echo`). `--allow-model-echo`에서는 둘 다 `completed`이고 verify 2건이 예외로 기록되었으며 사례 단위 확인을 통과했다.
+5. 모든 분석 팩 병합 뒤 tools 결과로 목록을 다시 만들고(항목 같음), 7개 사례(Go 4, C++·Python·Rust 1)의 변형 13개를 두 팩으로 돌렸다. R1-GO-02 before에는 문구를 심었다.
+   - review-v1: 막힘 0. Go 7개와 Python·Rust 4개가 `performed`, C++ 2개는 `review_input_unavailable`. 시험 장부 요청 29건.
+   - review-r1: 막힌 요청은 심은 문구 하나뿐이었다(investigate, `invalid: planted_leak`). Go 6개가 `performed`, C++·Python·Rust 6개는 `review_input_unavailable`. 시험 장부 요청 39건.
+   - 이 실행에서 가짜의 review-r1 environment·interpret 답이 rc2 계약에 맞지 않아 `output_rejected`가 되고, 형식 복구 호출도 같은 이유로 거부된 것을 발견했다. 항목 1~3의 r1 environment·interpret도 모두 이렇게 두 번 거부되어 끝났다(필수 역할이 아니어서 `completed`에는 영향이 없었다). 두 호출의 요청은 모두 relay의 대조를 거쳤으므로 그 요청에 대한 차단 확인은 유효하다. 수락된 출력이 뒤 역할의 입력으로 가는 경로는 고친 뒤의 실행에서 확인했다. 가짜를 고쳐 environment는 gap 모듈마다 그 모듈의 요구사항·근거 ID를 인용하고 interpret는 첫 관찰의 한계 하나를 낸다. 고친 뒤 4개 사례(R1-GO-06·09, R1-PY-04, R1-CPP-04 before)에서 모든 역할이 한 번에 수락되었다(요청 12건).
+6. 비밀값 선별 실패: 버전 질의에는 실제 도구로 답하고 검사는 실패하는 대역을 비밀값 분석기 경로로 주고 R1-GO-06 before를 review-r1로 돌렸다. 비밀값 task는 `failed`(`scan_incomplete`), 검토 역할 5개는 모두 `skipped_policy`(`secret_screen_failed`)였고 relay 요청은 0건이다. 행은 `review_outcome: secret_screen_failed`, `invalid: secret_screen_failed`로 지표에서 빠졌고 `score`의 검토 결과 분류에 `secret_screen_failed 1`이 보인다.
 
 **예산 거절.**
 
 - 시작 전: 상한 $5 시험 장부에서 review-r1 13개 사례(변형 25개) batch의 상한 추정 $4.568이 남은 금액 − 예약 $1.00을 넘어 시작하지 않았다. `plan.json`과 manifest에 사유가 남았다.
 - 중간: 상한 $0.80 시험 장부, 가짜 `--mode expensive`, `--reserve-usd 0.05`로 review-v1 3개 사례(변형 6개)를 돌렸다. 상한 추정 $0.732는 시작을 허용했다. R1-GO-02 before가 끝난 뒤 after의 세 번째 호출을 relay가 `budget_exhausted`로 거절했다. 그 변형은 `invalid: budget_refused`, 남은 4개는 `not_run:relay_refused_budget`이고 batch는 `relay_refused_budget`으로 멈췄다. 장부는 요청 5건, 차감 $0.5587, 남은 금액 $0.2414이다.
 
-**채점·읽기.** `score`로 최종 tools·두 팩 dry run을 나란히 냈다. 판정 파일이 없으므로 판정 지표는 finding이 없는 변형만 "아님"으로 정해지고 나머지는 미판정이다. 비교는 `independent: false`(dry run)다. 근거 유효성은 tools 80/80, review-v1 24/24, review-r1 24/24다. 처음에는 세 batch 모두 R1-CPP-04 before 하나가 실패했다. `validate_bundle.check_report`가 원시 관찰의 stream을 stdout만 받았는데, cppcheck는 XML을 stderr에 쓰고 제품의 보고서 검증(`internal/report/analyzer.go`)은 두 stream을 모두 허용한다. 검사기를 제품 계약에 맞춰 stdout·stderr를 받도록 고쳤다. `reader --sample 6`은 라벨·사례 ID 없는 과제 6개와 평가자용 answer key를 만들었다. 답 없이 `reader-score`를 실행하면 `not_measured`다.
+**채점·읽기.** `score`로 최종 tools·두 팩 dry run을 나란히 냈다. 판정 파일이 없으므로 판정 지표는 finding이 없는 변형만 "아님"으로 정해지고 나머지는 미판정이다. 비교는 `independent: false`(dry run)다. 근거 유효성은 W21 이전 tools 80/80, review-v1 24/24, review-r1 24/24이고 W21 이후 tools 100/100, 항목 5의 review-v1 13/13, review-r1 12/12(심은 변형 제외), 고친 가짜 4/4다. 검사기는 두 번 제품 계약에 맞췄다. 처음에는 세 batch 모두 R1-CPP-04 before 하나가 실패했다. `validate_bundle.check_report`가 원시 관찰의 stream을 stdout만 받았는데, cppcheck는 XML을 stderr에 쓰고 제품의 보고서 검증(`internal/report/analyzer.go`)은 두 stream을 모두 허용한다. 다음으로 W21 병합 직후 tools 100개가 모두 실패했다. 검사기가 기록된 규칙 문맥(`config: recorded`)에 설정 경로와 digest를 모두 요구했는데, 제품(`internal/report/validate.go`)은 digest만 요구하고 도구가 읽은 파일이 없으면 경로를 생략한다(gitleaks 기본 규칙). 둘 다 검사기를 제품 쪽에 맞췄다. `reader --sample 6`은 라벨·사례 ID 없는 과제 6개와 평가자용 answer key를 만들었다. 답 없이 `reader-score`를 실행하면 `not_measured`다.
 
 **R0 파일럿.** 공용 실행 틀로 옮긴 `r0_pilot.py`를 가짜 relay와 합성 사례 하나(`CODEYE_R0_CASES=Q01-before`)로 실행했다. 보고서 1개가 `completed`, `ai_review: performed`(context·investigate·verify 수락)로 게시·조회되었고 브라우저 시험 1개가 통과했다. 시험 장부 요청은 3건이다. 실모델·Git·고정 공개 커밋 입력은 이번에 실행하지 않았다.
 
 ## 11. 유료 batch 실행 방법(coordinator)
 
-키는 coordinator의 셸에만 있다. runner는 relay를 시작하지 않고 키를 읽지 않는다. 아래는 저장소 루트에서 실행한다. `$R`은 영구 비공개 결과 루트(모든 batch와 holdout 등록부가 같은 곳에 있어야 한다), `$LEDGER`는 R1이 공유하는 relay 장부다. 도구 경로는 노드에 맞게 바꾼다. tools와 review 조건에 같은 도구 플래그를 준다. 1~3단계와 5~7단계는 이 문서 작성 중 시험 relay로 그대로 실행해 확인했다(4단계만 가짜 upstream과 `--test-upstream --allow-model-echo`로 바꾸고 6단계에 `--dry-run`을 더함. 표본은 R1-GO-06 하나, tools-all은 R1-GO-06·R1-JS-02로 줄였다. 두 계획 모두 거절 없음, batch 4개 모두 끝남).
+키는 coordinator의 셸에만 있다. runner는 relay를 시작하지 않고 키를 읽지 않는다. 아래는 저장소 루트에서 실행한다. `$R`은 영구 비공개 결과 루트(모든 batch와 holdout 등록부가 같은 곳에 있어야 한다), `$LEDGER`는 R1이 공유하는 relay 장부다. 도구 경로는 노드에 맞게 바꾼다. tools와 review 조건에 같은 도구 플래그를 준다. 1~3단계와 5~7단계는 이 문서 작성 중 시험 relay로 그대로 실행해 확인했다(4단계만 가짜 upstream과 `--test-upstream --allow-model-echo`로 바꾸고 6단계에 `--dry-run`을 더함. 표본은 R1-GO-06 하나, tools-all은 R1-GO-06·R1-JS-02·R1-PY-01로 줄였다. 모든 분석 팩 병합 뒤 아래 `TOOLS` 그대로 다시 실행했다. 두 계획 모두 거절 없음, batch 6개 모두 끝남).
 
 ```bash
 # 노드에 맞게 도구 경로를 정한다. 임시 PostgreSQL을 쓰므로 PostgreSQL 도구(initdb, pg_ctl, psql)가 PATH에 있어야 한다.
 TOOLS=(--go "$GO" --tool staticcheck="$STATICCHECK" --tool cargo="$CARGO" --tool clippy="$CLIPPY"
        --tool cppcheck="$CPPCHECK" --tool clang-tidy="$CLANG_TIDY"
-       --tool ruff="$RUFF" --tool mypy="$MYPY" --tool bandit="$BANDIT"
+       --tool ruff="$RUFF" --tool mypy="$MYPY" --tool bandit="$BANDIT" --tool pyright="$PYRIGHT_JS"
+       --agent-flag python-both-type-checkers
+       --tool lizard="$LIZARD" --tool jscpd="$JSCPD_JS" --tool gitleaks="$GITLEAKS"
        --tool node="$NODE" --tool eslint="$ESLINT_JS" --tool tsc="$TSC_JS")
 REVIEW=(--opencode "$OPENCODE" --model codeye-gateway/gpt-6.2-sol)
 SEL=(--languages go)   # 유료 표본. B안은 SEL=(--languages go --sample 8 --seed 24)
@@ -310,7 +319,7 @@ python3 scripts/r1_eval.py score "$R/tools-sel" "$R/paid-r1" "$R/paid-v1" \
 python3 scripts/r1_eval.py reader "$R/paid-r1" --sample 6 --seed 24 --output "$R/reading-r1"
 ```
 
-추정은 이 문서의 최종 dry run(review-v1 1.0.0, review-r1 2.0.0-rc2, Go 사례 전체)을 이력으로 계산했다. 호출당 비용은 요청 바이트 ÷ 3 토큰과 출력 600 토큰을 relay 단가로 셈한 보수값이다(호출당 약 $0.032~0.041). W15의 실측 호출당 차감($0.022~0.025)보다 크다. 남은 장부는 docs/37의 W15 기록($8.492, 요청 137건)을 가정했다. 실제 값은 5단계의 `plan --ledger`로 확인한다.
+추정은 review-v1 1.0.0과 review-r1 2.0.0-rc2로 Go 사례 전체를 돌린 dry run(§10.2 항목 3)을 이력으로 계산했다. 이 이력의 r1 interpret 호출에는 가짜의 답이 거부되어 생긴 복구 호출이 들어 있어(§10.2 항목 5) r1 추정이 조금 크다(R1-GO-06·09 before에서 호출 1건씩). 실모델도 형식 복구를 부를 수 있으므로 보수 쪽 오차다. 2단계는 고친 가짜로 이력을 새로 만든다. 호출당 비용은 요청 바이트 ÷ 3 토큰과 출력 600 토큰을 relay 단가로 셈한 보수값이다(호출당 약 $0.032~0.041). W15의 실측 호출당 차감($0.022~0.025)보다 크다. 남은 장부는 docs/37의 W15 기록($8.492, 요청 137건)을 가정했다. 실제 값은 5단계의 `plan --ledger`로 확인한다.
 
 | 순서 | batch | 기대 호출 | 기대 차감 | 상한 호출 | 상한 차감 | 시작 전 남은 값 | 판정 |
 |---|---|---|---|---|---|---|---|
@@ -320,13 +329,14 @@ python3 scripts/r1_eval.py reader "$R/paid-r1" --sample 6 --seed 24 --output "$R
 | B | `--sample 8 --seed 24`(변형 14) r1 → v1 | 33.6 / 42.0 | $1.19 / $1.62 | 79 / 47 | $3.98 / $2.68 | $8.49, 137건 → $7.31, 103건 | 둘 다 시작 |
 | C | B 다음 분산: `--cases R1-GO-02,R1-GO-09 --variants before --repeat 3`, r1 → v1 | 21.0 / 18.0 | $0.73 / $0.70 | 37 / 20 | $1.85 / $1.15 | $5.68, 61건 → $4.95, 40건 | 둘 다 시작 |
 
-요청 수 상한(장부 전체 200건)이 금액보다 먼저 묶인다. A는 Go 사례 전체를 두 팩으로 비교하고 반복 실행은 남지 않는다(기대 사용 뒤 약 23건). A에서 v1은 r1이 끝난 뒤 남은 요청이 71건(v1 상한 66 + 여유 5) 이상이고 남은 금액이 $4.83(상한 $3.83 + 예약 $1.00) 이상일 때만 시작한다. 기대 사용 기준의 여유는 약 12건뿐이고, 장부가 W15 이후 더 쓰였거나 r1에 형식 복구 호출이 많으면 v1이 거절된다. 그래서 6단계는 r1이 끝난 뒤 v1을 다시 계획하고, 거절이면 v1을 실행하지 않는다. 5단계의 `plan --ledger` 결과로 r1 시작 전 남은 요청이 137건보다 적으면(대략 `남은 요청 − 54 − 5 < 66`) 처음부터 B안을 고른다. B+C는 표본이 작지만 두 사례의 반복 분산을 볼 수 있다. Go가 아닌 사례는 검토 입력이 없어(§12) 비용만 쓰므로 유료 batch에서 뺐다.
+요청 수 상한(장부 전체 200건)이 금액보다 먼저 묶인다. A는 Go 사례 전체를 두 팩으로 비교하고 반복 실행은 남지 않는다(기대 사용 뒤 약 23건). A에서 v1은 r1이 끝난 뒤 남은 요청이 71건(v1 상한 66 + 여유 5) 이상이고 남은 금액이 $4.83(상한 $3.83 + 예약 $1.00) 이상일 때만 시작한다. 기대 사용 기준의 여유는 약 12건뿐이고, 장부가 W15 이후 더 쓰였거나 r1에 형식 복구 호출이 많으면 v1이 거절된다. 그래서 6단계는 r1이 끝난 뒤 v1을 다시 계획하고, 거절이면 v1을 실행하지 않는다. 5단계의 `plan --ledger` 결과로 r1 시작 전 남은 요청이 137건보다 적으면(대략 `남은 요청 − 54 − 5 < 66`) 처음부터 B안을 고른다. B+C는 표본이 작지만 두 사례의 반복 분산을 볼 수 있다. Go가 아닌 사례는 코드 발췌가 없어(§12) 측정할 수 없는 호출에 비용을 쓰므로 유료 batch에서 뺐다.
 
 ## 12. 제한
 
-- **Go가 아닌 사례는 모델 검토를 측정할 수 없다.** 검토용 code 발췌가 Go만 지원한다(`code_excerpts_go_only`). C/C++·Python·JS/TS·Rust 사례에서 v1의 context·investigate와 r1의 investigate는 `review_input_unavailable`로 끝난다. r1은 환경 역할을 여전히 호출해 비용을 쓴다. 발췌가 다른 언어를 지원하기 전에는 review 조건을 Go로 한정한다.
-- **Rust 보고서를 조회하지 못한다.** main의 보고서 검증이 설정 파일 없는 Rust 규칙 문맥(`config=recorded`, 경로 없음)을 거부해 500 `REPORT_INVALID`가 난다. W21 브랜치에 고친 검증이 있다. 또 corpus의 Rust 사례에는 Cargo.lock이 없어 `--offline --locked` 분석이 `lockfile_missing`으로 끝난다. Rust tools 결과는 둘이 고쳐질 때까지 측정되지 않는다.
-- **C/C++ 팩은 corpus에서 깊이 돌지 않는다.** C/C++ 사례에는 compile DB가 없어 clang-tidy가 실행되지 않고 cppcheck는 include 누락 구성 오류로 끝난다. 구조·비밀정보 팩(W21)은 아직 병합되지 않았다. 팩이 병합되면 runner는 그대로 두고 `--tool` 플래그만 더한다.
+- **Go가 아닌 사례는 모델 검토를 측정할 수 없다.** 검토용 code 발췌가 Go만 지원한다. review-r1은 C/C++·Python·Rust 사례에서 investigate가 `review_input_unavailable`(`code_excerpts_go_only`)로 끝나고 environment·documents·interpret만 호출해 비용을 쓴다. review-v1은 W17·W21 병합 뒤 Python·Rust 사례에서도 context·investigate를 호출하고 `performed`로 기록하지만, 모델 입력에는 README 발췌만 있고 코드 파일이 없다(dry run 요청 dump로 확인). 이런 변형의 `performed`는 코드 검토가 아니다. `model_saw_snapshot_files`도 README를 세므로 코드 노출의 근거가 아니다. C/C++ 사례는 v1에서 `review_input_unavailable`이다. 발췌가 다른 언어를 지원하기 전에는 review 조건을 Go로 한정한다.
+- **Rust 분석기는 corpus에서 돌지 않는다.** W21 병합으로 Rust 보고서는 조회된다. 그러나 corpus의 Rust 사례에는 Cargo.lock이 없어 `--offline --locked` 분석(cargo check·Clippy)이 `lockfile_missing`으로 끝난다. Rust 분석기 결과는 corpus에 lockfile을 더하기 전까지 측정되지 않는다.
+- **C/C++ 팩은 corpus에서 깊이 돌지 않는다.** C/C++ 사례에는 compile DB가 없어 clang-tidy가 실행되지 않고 cppcheck는 include 누락 구성 오류로 끝난다.
+- **구조·비밀값 팩(W21)은 corpus에서 finding을 내지 않았다.** corpus에는 비밀값·중복·복잡도 라벨이 없으므로 이 팩의 recall은 측정되지 않는다. corpus 실행에서 비밀값 선별이 실패한 적은 없다. `secret_screen_failed` 처리는 단위 시험과 실패하는 대역(§10.2 항목 6)으로만 확인했다.
 - **모델 표현 차단의 크기를 모른다.** 엄격 방식이 맞힌 사례를 얼마나 무효로 만드는지는 실모델 batch에서만 보인다. 가짜로는 경로만 확인했다. 예외 방식의 범위는 relay 프로세스 전체이고 사례 단위 확인은 runner가 한다. runner를 거치지 않고 relay를 쓰면 이 확인이 없다.
 - **dry run 수치에는 품질 의미가 없다.** 가짜 upstream은 정답을 모르고 입력 구조로 답한다. 위치 대조·검토 수·차감은 경로 동작의 근거일 뿐이다.
 - **정답 목록은 표현 일치만 본다.** 다른 말로 바꾼 정답, 다른 언어로 쓴 설명, 코드 모양의 힌트는 막지 않는다. 라벨 문장의 5-gram과 고유 토큰만 대상이다.

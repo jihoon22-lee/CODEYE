@@ -6,7 +6,8 @@ Rules that keep the numbers honest:
   Location-based rates are reported separately as `auto_*` structural rates.
 - Every judged metric counts only judged units; undeterminable units are counted as `unjudged`.
 - Cost/time and accuracy are reported side by side, never folded into one score.
-- Rows marked invalid (answer leak, budget refusal, changed source, not run) are excluded and counted.
+- Rows marked invalid (answer leak, budget refusal, changed source, unverified echo, failed secret screen in
+  the review condition, not run) are excluded and counted.
 """
 from __future__ import annotations
 
@@ -305,7 +306,11 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
         "auto_any_actionable_on_after_or_normal": rate(group(lambda u: normal(u) or after(u)),
                                                        lambda u: any(v["actionable"] for v in u["views"])),
         "ai_review_performed": rate(units, lambda u: u["row"].get("ai_review") == "performed"),
-        "model_saw_code": rate(units, lambda u: (u["row"].get("llm_exposed_files") or 0) > 0),
+        # why review did or did not run, over every reported variant including excluded ones
+        # (secret_screen_failed is a policy outcome, not a model failure, and is excluded from the metrics)
+        "review_outcomes": dict(Counter(r.get("review_outcome", "unrecorded") for r in rows if r["key"] in reports)),
+        # the report gives only a count, and README/document excerpts count too: this is not "saw code"
+        "model_saw_snapshot_files": rate(units, lambda u: (u["row"].get("llm_exposed_files") or 0) > 0),
     }
     reproduced = sum(v["validation"] == "reproduced" for u in units for v in u["views"])
     errors, stats_bad, rejected, markers = Counter(), 0, 0, Counter()
@@ -483,7 +488,9 @@ def render_table(result):
             ("auto: suspect flagged on normals", lambda b: fmt(b["structural"]["auto_suspect_flag_normal"])),
             ("auto: any actionable on after/normal", lambda b: fmt(b["structural"]["auto_any_actionable_on_after_or_normal"])),
             ("ai review performed", lambda b: fmt(b["structural"]["ai_review_performed"])),
-            ("model saw code (llm_exposed_files>0)", lambda b: fmt(b["structural"]["model_saw_code"])),
+            ("model saw snapshot files, documents included (llm_exposed_files>0)",
+             lambda b: fmt(b["structural"]["model_saw_snapshot_files"])),
+            ("review outcome counts (reported variants, excluded included)", lambda b: ", ".join(f"{k} {v}" for k, v in sorted(b["structural"]["review_outcomes"].items()))),
             ("reproduced without execution", lambda b: str(b["structural"]["unsupported_assertions_structural"]["reproduced_without_execution"])),
             ("review calls / ledger requests", lambda b: f"{b['cost_time']['review_calls']} / {b['cost_time']['ledger_requests']}"),
             ("ledger charged (USD)", lambda b: f"{b['cost_time']['ledger_charged_microusd'] / 1e6:.4f}"),
