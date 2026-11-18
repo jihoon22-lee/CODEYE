@@ -14,12 +14,6 @@ import (
 // W21 analyzers of ecosystem "any" (docs/45): lizard complexity, jscpd
 // duplication (node script) and gitleaks secrets, all extra depth.
 
-// prober is the startup version probe of a configured W21 analyzer.
-type prober interface {
-	pack.Analyzer
-	Probe(ctx context.Context, runner executor.Runner, dir string) (string, error)
-}
-
 func probeBuilt(ctx context.Context, cfg Config, runner executor.Runner, name string, a prober, err error) built {
 	if err != nil {
 		return unavailable(name, "invalid_config", err.Error(), pack.ReasonToolUnavailable)

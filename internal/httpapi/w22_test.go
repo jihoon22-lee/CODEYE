@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -376,6 +377,59 @@ func TestSSEGapIsReported(t *testing.T) {
 
 // TC-02/TC-31 for streams: a stranger gets 404 before any stream, no session
 // is 401, logout and loss of membership close an open stream.
+// TC-99 (W22): events committed between a row batch and the run.view read
+// are sent as rows before that view, so a run.view never describes an
+// event_sequence beyond the rows the client has received.
+func TestSSEViewNeverAheadOfRows(t *testing.T) {
+	e := newEnv(t)
+	fastStreams(e, StreamConfig{})
+	f := e.nodeFixture()
+	u := f.user
+	runID := e.createRun(u, f.projectID)
+	a := e.claimHTTP(f, e.enrollNode(f.root.ID), domain.NewID(), 1)
+	reached, resume := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	hook := func() {
+		once.Do(func() {
+			close(reached)
+			select {
+			case <-resume:
+			case <-time.After(10 * time.Second):
+			}
+		})
+	}
+	testHookBeforeView.Store(&hook)
+	t.Cleanup(func() { testHookBeforeView.Store(nil) })
+	s := e.openStream("", u, runID, "?cursor=0", "")
+	select {
+	case <-reached:
+	case <-time.After(10 * time.Second):
+		t.Fatal("stream never reached the run.view read")
+	}
+	// Rows 1-2 are sent; two more events commit before the view is read.
+	a.snapshot()
+	close(resume)
+	var head int64
+	if err := e.pool.QueryRow(context.Background(), "SELECT event_sequence FROM runs WHERE id=$1", runID).Scan(&head); err != nil {
+		t.Fatal(err)
+	}
+	got := s.until(isView)
+	view := got[len(got)-1]
+	var types []string
+	for i, m := range got[:len(got)-1] {
+		if m.event != "" || m.id != strconv.Itoa(i+1) {
+			t.Fatalf("message %d before the view: %+v", i, m)
+		}
+		types = append(types, m.data["type"].(string))
+	}
+	if head != 4 || view.data["event_sequence"] != float64(head) || len(types) != int(head) {
+		t.Fatalf("view event_sequence %v after %d rows (head %d)", view.data["event_sequence"], len(types), head)
+	}
+	if want := "run.queued,attempt.leased,artifact.finalized,snapshot.fixed"; strings.Join(types, ",") != want {
+		t.Fatalf("event types %s", strings.Join(types, ","))
+	}
+}
+
 func TestSSEAccessControl(t *testing.T) {
 	e := newEnv(t)
 	fastStreams(e, StreamConfig{})

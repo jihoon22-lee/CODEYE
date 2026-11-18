@@ -1,29 +1,35 @@
-# 어댑터 계약 예시. parser 구현과 고정 버전별 fixture 시험은 개발 작업이다.
+# W17 Python 팩 ruff 어댑터 서술(필수 기준선). 구현: internal/worker/analysis/python, 근거: docs/42-w17-python-pack.md.
+# ruff 0.16.3 check는 진단이 있으면 exit 1, 없으면 exit 0, 사용법·설정 오류는 exit 2다(측정). 구문 오류도 invalid-syntax 레코드와 exit 1이므로
+# 종료 코드만으로 결정하지 않는다. invalid-syntax 레코드는 관찰이 아닌 tool error이며 task는 source_syntax_errors로 실패한다.
+# 실행은 네 번이다: ruff.version, ruff.files(--show-files, 처리 파일 목록), ruff.check(억제 존중), ruff.check-ignore-noqa(모든 진단, 원시 참조).
+# --isolated는 저장소·사용자 설정을 모두 읽지 않고(overridden), --unfixable ALL은 원본 소스를 옮겨 적는 fix edit을 stdout에서 뺀다.
 schema_version: '0.1'
 id: python.ruff
 languages: [python]
-planned_platforms: [windows, linux]
-availability: unverified
-version_contract: catalog-pinned-and-fixture-tested
-analysis_scope: [syntax]
+planned_platforms: [linux, windows]
+availability: verified  # Linux ruff 0.16.3 실행으로 검증. Windows는 단위 테스트만 실행.
+version_contract: ruff-0.16-fixture-tested
+analysis_scope: [syntax, intraprocedural]
 executes_repository_code: false
 requires_build: false
 network_policy: none
 version_probe:
-  executable: '${tool}'
+  executable: '${ruff}'
   argv: ['--version']
 execute:
-  executable: '${tool}'
-  argv: [check, '--output-format', json, '${workspace}']
-  cwd: '${workspace}'
-  timeout_seconds: 600
-  stdout_max_bytes: 16777216
-  env_allowlist: [PATH, SYSTEMROOT, TEMP, TMP, LANG]
+  executable: '${ruff}'
+  argv: [check, '--isolated', '--no-respect-gitignore', '--select', 'E711,E712,E713,E714,E721,E722,E9,F,B,BLE,PLE,ASYNC', '--ignore', 'B905,B911,B912',
+         '--unfixable', 'ALL', '--no-cache', '--force-exclude', '--extend-exclude', '${exclusions}', '--target-version', 'py3${minor}',
+         '--output-format', json-lines, '--', '${targets}']
+  cwd: '${workspace}/${module_dir}'
+  timeout_seconds: 900
+  stdout_max_bytes: 33554432
+  env_allowlist: [PATH, LANG, SystemRoot, RUFF_CACHE_DIR]
 exit_codes:
   clean: [0]
   findings: [1]
   error: [2]
 parser:
-  id: ruff-json-v1
+  id: ruff-json-lines-v1
   format: json
   input: stdout-artifact

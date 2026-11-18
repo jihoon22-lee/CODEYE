@@ -24,6 +24,7 @@ codeye agent --controller URL --state-dir DIR [--name NAME] [--enroll-token-file
              [--source-root ID=/abs/path ...] [--workers N] [--toolchain-path PATH]
              [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache /abs/dir]
              [--node /abs/node] [--staticcheck /abs/staticcheck] [--cargo /abs/cargo [--clippy /abs/cargo-clippy]] [--repo-code-source-root ID ...]
+             [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit]
 codeye worker      # agent만 실행한다. 옵션 없음.
 ```
 

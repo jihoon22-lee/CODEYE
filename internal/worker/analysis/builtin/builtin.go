@@ -18,6 +18,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/rustpack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/staticcheck"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
@@ -82,6 +83,11 @@ func catalog() []entry {
 		// Static Analyzer).
 		{desc: cpp.CppcheckDescriptor(), plan: cpp.PlanCppcheck, build: buildCppcheck},
 		{desc: cpp.ClangTidyDescriptor(), plan: cpp.PlanClangTidy, build: buildClangTidy},
+		// Python (W17 baseline ruff; mypy, pyright and bandit extra depth).
+		{desc: python.RuffDescriptor(), plan: python.RuffPlan, build: buildRuff},
+		{desc: python.MypyDescriptor(), plan: python.MypyPlan, build: buildMypy},
+		{desc: python.PyrightDescriptor(), plan: python.PyrightPlan, build: buildPyright},
+		{desc: python.BanditDescriptor(), plan: python.BanditPlan, build: buildBandit},
 		// JavaScript/TypeScript (W18 baseline ESLint, extra depth tsc and
 		// type-aware ESLint; javascript.go, docs/43).
 		eslintEntry(), tscEntry(), eslintTypedEntry(),

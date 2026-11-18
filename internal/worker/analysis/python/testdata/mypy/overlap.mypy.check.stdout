@@ -1,0 +1,2 @@
+{"file": "checks.py", "line": 21, "column": 4, "end_line": 21, "end_column": 25, "message": "Assertion is always true, perhaps remove parentheses?", "hint": null, "code": "misc", "severity": "error"}
+{"file": "checks.py", "line": 28, "column": 11, "end_line": 28, "end_column": 20, "message": "List item 0 has incompatible type \"Callable[[], Any]\"; expected \"str\"", "hint": null, "code": "list-item", "severity": "error"}
