@@ -216,6 +216,10 @@ def run(base, root, env, *, browser=False):
                 assert response.headers["ETag"] == '"' + hashlib.sha256(rendered).hexdigest() + '"'
         if browser:
             import browser_smoke
+            # The report may belong to an older project beyond the initial page.
+            for i in range(21):
+                session.request("POST", "projects", {"name": f"browser-page-{i}", "source": {
+                    "kind": "local", "source_root_id": source_id, "relative_path": "."}})
             browser_link = directory / "report-login"
             cli("login-link", "--user", user, "--output", browser_link, "--origin", origin)
             browser_smoke.published_report(root, env, origin, browser_link, "published-go-report", actual)

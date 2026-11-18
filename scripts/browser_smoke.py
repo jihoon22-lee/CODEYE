@@ -47,7 +47,7 @@ def run(base: Path, root: Path, env: dict):
             else:
                 raise RuntimeError("브라우저 fixture 서버 준비 시간 초과")
             browser_env = dict(env, CODEYE_TEST_BASE_URL=origin, CODEYE_TEST_LOGIN_FILE=str(link))
-            subprocess.run(["npm", "run", "test:e2e"], cwd=root / "web", env=browser_env, check=True, timeout=120)
+            subprocess.run(["npm", "run", "test:e2e", "--", "control.spec.ts"], cwd=root / "web", env=browser_env, check=True, timeout=120)
             log.flush()
             text = (base / "http.log").read_text()
             token = link.read_text().strip().split("#launch=", 1)[1]

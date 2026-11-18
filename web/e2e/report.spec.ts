@@ -8,7 +8,17 @@ test('published report exposes the same counts, evidence and revision in the bro
   const id = process.env.CODEYE_TEST_REPORT_ID!;
   await page.goto(readFileSync(login!, 'utf8').trim());
   await expect(page.getByRole('heading', {name:'프로젝트', exact:true})).toBeVisible();
-  await page.getByRole('button', {name: new RegExp(project)}).first().click();
+  const entries = page.locator('.projects .item');
+  await expect(entries.first()).toBeVisible();
+  const target = entries.filter({has:page.getByText(project,{exact:true})});
+  while (await target.count() === 0) {
+    const previous = await entries.count();
+    const more = page.getByRole('button',{name:'더 보기',exact:true});
+    await expect(more).toBeVisible();
+    await more.click();
+    await expect.poll(() => entries.count()).toBeGreaterThan(previous);
+  }
+  await target.click();
   await page.getByRole('button', {name:'마지막 실행 상태 보기'}).click();
   await page.getByRole('button', {name:'보고서 열기'}).click();
   const report = page.getByRole('article', {name:'분석 보고서'});
