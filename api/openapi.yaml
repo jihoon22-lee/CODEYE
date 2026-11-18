@@ -1147,6 +1147,7 @@ components:
         구조화 필드만 담는다(status, task_id, key, required, stage, weight, reason, snapshot_id, attempt_id, epoch, report_id, revision,
         quality_verdict, closed_tasks, trigger, schedule_id, scheduled_for). 경로·로그·digest·노드/워커 식별자·자격증명은 보내지 않는다.
         type은 저장된 이벤트 종류(run.queued, attempt.leased, snapshot.fixed, task.created, task.status, run.status, report.published 등)다.
+      x-codeye-payload-fields: [status, task_id, key, required, stage, weight, reason, snapshot_id, attempt_id, epoch, report_id, revision, quality_verdict, closed_tasks, trigger, schedule_id, scheduled_for]
       required: [run_id, sequence, version, type, at]
       properties:
         run_id: {type: string}

@@ -1,0 +1,16 @@
+retry: 3000
+
+id: 21
+data: {"run_id":"7b3e9c14-2f6a-4d8b-9e01-5c4a3f2d1e60","sequence":21,"version":13,"type":"task.status","at":"2026-11-18T03:00:19Z","task_id":"e4a6c8f0-2b5d-4e7f-9a1c-3d5e7f9a1b35","status":"failed","reason":"tool_failed"}
+
+id: 22
+data: {"run_id":"7b3e9c14-2f6a-4d8b-9e01-5c4a3f2d1e60","sequence":22,"version":14,"type":"task.created","at":"2026-11-18T03:00:20Z","task_id":"f5b7d9a1-3c6e-4f8a-8b2d-4e6f8a0b2c46","key":"review.security","required":true,"stage":"code_review","weight":3}
+
+event: run.view
+data: {"id":"7b3e9c14-2f6a-4d8b-9e01-5c4a3f2d1e60","project_id":"a2c4e6f8-1b3d-4f5a-8c7e-9d0b2a4c6e81","status":"running","version":14,"event_sequence":22,"trigger":{"kind":"schedule","schedule_id":"3d5f7a9c-0e2b-4c6d-8f1a-2b4c6d8e0f13","scheduled_for":"2026-11-18T03:00:00Z"},"snapshot_id":"c1e3a5b7-9d2f-4a6c-8e0b-1d3f5a7c9e24","progress":{"stage":"running","plan_revision":2,"completed_tasks":3,"total_tasks":7,"estimated_percent":27.3,"planned_weight":11,"finished_weight":3,"weight_basis":"mixed","plan_changes":[{"revision":2,"reason":"task_added","stage":"code_review","weight":3,"planned_weight":11,"recorded_at":"2026-11-18T03:00:20Z"}],"waiting_reason":null,"detail":"recorded","stages":[{"key":"source","state":"succeeded","planned":null,"finished":0,"succeeded":0,"counts":{},"reasons":[],"started_at":"2026-11-18T03:00:02Z","finished_at":"2026-11-18T03:00:05Z"},{"key":"environment","state":"succeeded","planned":1,"finished":1,"succeeded":1,"counts":{},"reasons":[],"started_at":"2026-11-18T03:00:06Z","finished_at":"2026-11-18T03:00:08Z"},{"key":"documents","state":"skipped","planned":1,"finished":1,"succeeded":0,"counts":{"skipped_policy":1},"reasons":["no_documents"],"started_at":null,"finished_at":"2026-11-18T03:00:06Z"},{"key":"static_analysis","state":"running","planned":3,"finished":1,"succeeded":0,"counts":{"failed":1},"reasons":["tool_failed"],"started_at":"2026-11-18T03:00:09Z","finished_at":null},{"key":"code_review","state":"running","planned":2,"finished":0,"succeeded":0,"counts":{},"reasons":[],"started_at":"2026-11-18T03:00:12Z","finished_at":null},{"key":"report","state":"waiting","planned":null,"finished":0,"succeeded":0,"counts":{},"reasons":[],"started_at":null,"finished_at":null}],"last_event_at":"2026-11-18T03:00:20Z","checked_at":"2026-11-18T03:00:21Z"}}
+
+event: heartbeat
+data: {"run_id":"7b3e9c14-2f6a-4d8b-9e01-5c4a3f2d1e60"}
+
+event: closed
+data: {"run_id":"7b3e9c14-2f6a-4d8b-9e01-5c4a3f2d1e60","reason":"unauthenticated"}

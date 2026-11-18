@@ -299,6 +299,142 @@ def api_validator(name: str) -> Draft202012Validator:
     return Draft202012Validator(root, format_checker=FormatChecker())
 
 
+def check_w22_contracts() -> None:
+    """W22 schedules, plan revision/weighted progress and the run event stream.
+
+    Examples validate against OpenAPI; enums and bounds agree across OpenAPI,
+    migration 0007 and the Go constants; derived progress fields are
+    recomputed; the SSE example has contiguous ids, allowlisted payload fields
+    and ends with the RunView example. Plus negative cases.
+    """
+    api = yaml_file(ROOT / "api/openapi.yaml")["components"]["schemas"]
+    migration = (ROOT / "migrations/sql/0007_schedules_and_plan_progress.sql").read_text(encoding="utf-8")
+    go = lambda name: (ROOT / name).read_text(encoding="utf-8")
+    consts = lambda text, prefix: {v for _, v in re.findall(r"\b" + prefix + r"([A-Z]\w*)\s*=\s*\"([a-z_]+)\"", text)}
+    stored = lambda column: set(re.findall(r"'([a-z_]+)'", re.search(column + r"\s+text\s+NOT NULL CHECK \(" + column + r" IN \(([^)]*)\)\)", migration).group(1)))
+    cron, schedules = go("internal/schedule/cron.go"), go("internal/storage/postgres/schedules.go")
+    sse, progress = go("internal/httpapi/sse.go"), go("internal/progress/progress.go")
+    for column, name, prefix in (("overlap", "ScheduleOverlap", "Overlap"), ("misfire", "ScheduleMisfire", "Misfire")):
+        ensure(set(api[name]["enum"]) == stored(column) == consts(cron, prefix), "Schedule " + column + " enum mismatch: OpenAPI/migration 0007/internal/schedule")
+    states = set(api["ScheduleOccurrence"]["properties"]["state"]["enum"]) | {"pending"}
+    ensure(states == stored("state") == consts(schedules, "Occurrence"), "Occurrence state enum mismatch: OpenAPI/migration 0007/store")
+    reasons = api["ScheduleOccurrence"]["properties"]["reason"]["oneOf"][1]["enum"]
+    ensure(set(reasons) == consts(schedules, "Reason"), "Occurrence reason enum mismatch: OpenAPI/store")
+    ensure(set(api["StreamControl"]["properties"]["reason"]["enum"]) == consts(sse, "Resync") | consts(sse, "Closed"), "Stream reason enum mismatch: OpenAPI/sse.go")
+    ensure(api["RunView"]["properties"]["progress"]["properties"]["weight_basis"]["oneOf"][1]["enum"] == sorted(consts(progress, "Basis"), key=["task_count", "declared", "mixed"].index), "Weight basis enum mismatch: OpenAPI/progress")
+    allowed = set(re.findall(r'"(\w+)": true', re.search(r"var eventFields = map\[string\]bool\{(.*?)\n\}", sse, re.S).group(1)))
+    ensure(allowed == set(api["RunEventData"]["x-codeye-payload-fields"]), "SSE payload allowlist mismatch: OpenAPI/sse.go")
+    events = yaml_file(ROOT / "api/openapi.yaml")["paths"]["/api/v1/attempts/{attempt_id}/events"]["post"]
+    payloads = events["requestBody"]["content"]["application/json"]["schema"]["properties"]["payload"]["oneOf"]
+    declared = [p["properties"]["weight"] for p in payloads if "weight" in p.get("properties", {})]
+    bounds = re.search(r"weight IS NULL OR weight BETWEEN (\d+) AND (\d+)", migration)
+    go_bounds = re.search(r"func validWeight\(w int\) bool \{ return w >= (\d+) && w <= (\d+) \}", go("internal/storage/postgres/evidence.go"))
+    ensure(len(declared) == 1 and bounds is not None and go_bounds is not None, "Task weight bound definitions not found")
+    low, high = int(bounds.group(1)), int(bounds.group(2))
+    ensure((low, high) == (int(go_bounds.group(1)), int(go_bounds.group(2))) == (declared[0]["minimum"], declared[0]["maximum"])
+           == (api["PlanChange"]["properties"]["weight"]["minimum"], api["PlanChange"]["properties"]["weight"]["maximum"]), "Task weight bounds mismatch")
+
+    schedule_validator, run_validator = api_validator("Schedule"), api_validator("RunView")
+    row_validator, control_validator = api_validator("RunEventData"), api_validator("StreamControl")
+    listing = json_file(ROOT / "examples/schedules.json")
+    run = json_file(ROOT / "examples/run-progress.json")
+
+    def check_schedules(doc: dict) -> None:
+        ensure(set(doc) == {"items", "can_manage"} and isinstance(doc["can_manage"], bool), "Schedule list shape")
+        for item in doc["items"]:
+            schedule_validator.validate(item)
+            ensure(item["enabled"] or item["next_run_at"] is None, "Disabled schedule with a next occurrence")
+            last = item["last_occurrence"]
+            if last is not None:
+                ensure((last["state"] == "enqueued") == (last["run_id"] is not None) == (last["reason"] is None), "Occurrence run/reason mismatch")
+                ensure(last["missed_from"] is None or last["missed_from"] < last["scheduled_for"], "missed_from must precede the occurrence")
+                ensure(item["next_run_at"] is None or item["next_run_at"] > last["scheduled_for"], "Next occurrence is not after the last one")
+        ensure(len({i["id"] for i in doc["items"]}) == len(doc["items"]), "Duplicate schedule")
+
+    def check_progress(doc: dict) -> None:
+        run_validator.validate(doc)
+        p = doc["progress"]
+        derived = (p["estimated_percent"], p["planned_weight"], p["finished_weight"], p["weight_basis"])
+        if p["plan_revision"] is None:
+            ensure(derived == (None, None, None, None) and p["plan_changes"] == [], "Plan fields before the plan is fixed")
+            return
+        ensure(p["plan_revision"] == 1 + len(p["plan_changes"]), "Plan revision does not match plan changes")
+        tasks = [s for s in p["stages"] if s["planned"] is not None]
+        ensure(p["total_tasks"] == sum(s["planned"] for s in tasks) and p["completed_tasks"] == sum(s["finished"] for s in tasks), "Task counts mismatch: progress/stages")
+        planned = p["planned_weight"] - sum(c["weight"] for c in p["plan_changes"])
+        for revision, change in enumerate(p["plan_changes"], start=2):
+            planned += change["weight"]
+            ensure(change["revision"] == revision and change["planned_weight"] == planned, "Plan change sequence drift")
+        ensure(planned == p["planned_weight"] and 0 <= p["finished_weight"] <= planned, "Planned weight drift")
+        ensure(p["weight_basis"] != "task_count" or planned == p["total_tasks"], "task_count basis with declared weights")
+        expected = None if planned == 0 else int(p["finished_weight"] * 1000 / planned + 0.5) / 10
+        ensure(p["estimated_percent"] == expected, "Estimated percent is not finished/planned weight")
+
+    def check_stream(text: str) -> None:
+        messages = []
+        for block in text.split("\n\n"):
+            fields = dict(line.split(": ", 1) for line in block.strip("\n").split("\n") if line)
+            if "data" in fields:
+                messages.append((fields.get("id"), fields.get("event"), json.loads(fields["data"])))
+        ensure(text.startswith("retry: ") and messages, "Stream example shape")
+        cursor, version, view = None, 0, None
+        for seq, event, data in messages:
+            ensure(data.get("id" if event == "run.view" else "run_id") == run["id"], "Stream message for another run")
+            if event is None:
+                row_validator.validate(data)
+                ensure(seq is not None and int(seq) == data["sequence"] and (cursor is None or data["sequence"] == cursor + 1), "Event ids not contiguous")
+                ensure(set(data) - {"run_id", "sequence", "version", "type", "at"} <= allowed, "Event row carries a field outside the allowlist")
+                ensure(data["version"] >= version, "Run version decreased")
+                cursor, version = data["sequence"], data["version"]
+                continue
+            ensure(seq is None, "Control message moves the cursor")
+            if event == "run.view":
+                check_progress(data)
+                ensure(cursor is not None and data["event_sequence"] >= cursor and data["version"] >= version, "Run view older than the delivered events")
+                view = data
+            else:
+                ensure(event in ("heartbeat", "state.resync", "closed"), "Unknown stream event: " + event)
+                control_validator.validate(data)
+                ensure((event == "heartbeat") == ("reason" not in data), "Heartbeat/reason mismatch")
+        ensure(view == run, "Stream run.view differs from examples/run-progress.json")
+
+    stream = (ROOT / "examples/run-events.txt").read_text(encoding="utf-8")
+    check_schedules(listing)
+    check_progress(run)
+    check_stream(stream)
+    trigger = run["trigger"]
+    linked = [i for i in listing["items"] if i["id"] == trigger.get("schedule_id")]
+    ensure(trigger["kind"] == "schedule" and len(linked) == 1 and linked[0]["last_occurrence"]["run_id"] == run["id"]
+           and linked[0]["last_occurrence"]["scheduled_for"] == trigger["scheduled_for"], "Scheduled run is not the schedule's last occurrence")
+
+    negatives = 0
+
+    def reject(name: str, function, data) -> None:
+        nonlocal negatives
+        expect_invalid(name, function, data)
+        negatives += 1
+
+    bad = copy.deepcopy(run)
+    bad["progress"]["plan_revision"] = 3
+    reject("plan revision drift", check_progress, bad)
+    bad = copy.deepcopy(run)
+    bad["progress"]["estimated_percent"] = 30.0
+    reject("percent not from weights", check_progress, bad)
+    bad = copy.deepcopy(run)
+    bad["progress"]["plan_changes"][0]["reason"] = "heartbeat"
+    reject("plan change from a heartbeat", check_progress, bad)
+    bad = copy.deepcopy(listing)
+    bad["items"][0]["misfire"] = "catch_up"
+    reject("unbounded catch-up policy", check_schedules, bad)
+    bad = copy.deepcopy(listing)
+    bad["items"][1]["next_run_at"] = "2026-11-19T07:30:00Z"
+    reject("disabled schedule with next occurrence", check_schedules, bad)
+    reject("gap in event ids", check_stream, stream.replace("id: 22\n", "id: 23\n").replace('"sequence":22,', '"sequence":23,'))
+    reject("node identity in event row", check_stream, stream.replace('"status":"failed",', '"status":"failed","node_id":"n1",'))
+    reject("control message with id", check_stream, stream.replace("event: heartbeat\n", "id: 23\nevent: heartbeat\n"))
+    print(f"PASS: W22 schedule/progress/stream contracts (3 examples; overlap/misfire/occurrence/reason/stream/weight enums and bounds; {negatives} negative cases)")
+
+
 def resolve_pointer(document, pointer: str):
     if not pointer:
         return document
@@ -402,6 +538,7 @@ def main() -> None:
         ensure(set(state[field]["enum"]) == set(api[name]["enum"]), "State/API enum mismatch: " + field)
     stage_order, stored_stages, stage_states = stage_vocabulary()
     check_stage_enums(api, stage_order, stored_stages, stage_states)
+    check_w22_contracts()
     events = yaml_file(ROOT / "api/openapi.yaml")["paths"]["/api/v1/attempts/{attempt_id}/events"]["post"]
     payloads = events["requestBody"]["content"]["application/json"]["schema"]["properties"]["payload"]["oneOf"]
     created = [p for p in payloads if p.get("required") == ["key", "required"]]
