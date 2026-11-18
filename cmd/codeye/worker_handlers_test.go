@@ -28,7 +28,7 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
 	hs, missing, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir()}, &executor.Executor{})
-	if err != nil || len(hs) != 1 || strings.Join(missing, ",") != "staticcheck:not_configured,ruff:not_configured,mypy:not_configured,pyright:not_configured,bandit:not_configured" {
+	if err != nil || len(hs) != 1 || strings.Join(missing, ",") != "staticcheck:not_configured,ruff:not_configured,mypy:not_configured,pyright:not_configured,bandit:not_configured,cargo-check:not_configured,clippy:not_configured" {
 		t.Fatalf("handlers %d missing %v err %v", len(hs), missing, err)
 	}
 	if info := hs[0].Info(); info.Name != "analyzers" || info.Capability != "analysis:deep-review" {
@@ -115,9 +115,9 @@ func TestWorkerHandlersKnowTheNodeToolchain(t *testing.T) {
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
-	node, want := filepath.Join(t.TempDir(), "absent-node"), "node:invalid_config,staticcheck:not_configured,ruff:not_configured,mypy:not_configured,pyright:not_configured,bandit:not_configured"
+	node, want := filepath.Join(t.TempDir(), "absent-node"), "node:invalid_config,staticcheck:not_configured,ruff:not_configured,mypy:not_configured,pyright:not_configured,bandit:not_configured,cargo-check:not_configured,clippy:not_configured"
 	if p := os.Getenv("CODEYE_TEST_NODE"); p != "" {
-		node, want = p, "staticcheck:not_configured,ruff:not_configured,mypy:not_configured,pyright:not_configured,bandit:not_configured"
+		node, want = p, "staticcheck:not_configured,ruff:not_configured,mypy:not_configured,pyright:not_configured,bandit:not_configured,cargo-check:not_configured,clippy:not_configured"
 	}
 	hs, missing, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), AnalyzerTools: map[string]string{"node": node}}, &executor.Executor{})
 	if err != nil || len(hs) != 1 || strings.Join(missing, ",") != want {

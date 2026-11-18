@@ -15,6 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/rustpack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/staticcheck"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
@@ -33,6 +34,10 @@ type Config struct {
 	// ProbeDir is an absolute writable directory outside any source tree
 	// (e.g. the worker scratch root) used for toolchain probes.
 	ProbeDir string
+	// ToolPath is the operator's --toolchain-path list (hello tool_path). It
+	// is only searched, once, for the system linker `cc` of the Rust pack
+	// (docs/44 §2); it is never given to an analyzer as PATH.
+	ToolPath string
 }
 
 // Unavailable explains why a known analyzer, a configured toolchain (or the
@@ -75,6 +80,9 @@ func catalog() []entry {
 		{desc: python.MypyDescriptor(), plan: python.MypyPlan, build: buildMypy},
 		{desc: python.PyrightDescriptor(), plan: python.PyrightPlan, build: buildPyright},
 		{desc: python.BanditDescriptor(), plan: python.BanditPlan, build: buildBandit},
+		// Rust (W20 baseline cargo check, extra depth clippy).
+		{desc: rustpack.CheckDescriptor(), plan: rustpack.CheckPlan, build: buildCargoCheck},
+		{desc: rustpack.ClippyDescriptor(), plan: rustpack.ClippyPlan, build: buildClippy},
 	}
 }
 
@@ -220,7 +228,7 @@ func compose(ctx context.Context, cfg Config, runner executor.Runner, entries []
 // tools other than the go toolchain (which discovery observes as a
 // runtime): one per tool, not_probed when the operator configured no path.
 // A tool run by an interpreter toolchain carries that toolchain's path.
-func Probes(cfg Config) []pack.ToolProbe { return probesOf(cfg, catalog()) }
+func Probes(cfg Config) []pack.ToolProbe { return guardRustProbes(cfg, probesOf(cfg, catalog())) }
 
 func probesOf(cfg Config, entries []entry) []pack.ToolProbe {
 	byTool := map[string]*pack.ToolProbe{}

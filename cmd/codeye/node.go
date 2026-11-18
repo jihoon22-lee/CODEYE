@@ -188,7 +188,7 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 		// No silent fallback to the default pack.
 		return nil, nil, errors.New("unknown review pack")
 	}
-	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot}
+	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot, ToolPath: h.ToolPath}
 	hs, missing := builtin.Handlers(ctx, cfg, runner)
 	for i, handler := range hs {
 		if handler.Info().Name == analyzerpack.CompositeName {

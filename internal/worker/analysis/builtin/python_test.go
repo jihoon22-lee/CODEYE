@@ -21,7 +21,7 @@ func TestRuffOnlyNodeAdvertisesDeepReview(t *testing.T) {
 		t.Skip("set CODEYE_TEST_RUFF to the ruff binary")
 	}
 	hs, missing := Handlers(context.Background(), Config{ProbeDir: t.TempDir(), Tools: map[string]string{"ruff": ruff}}, &executor.Executor{})
-	want := []string{"go-vet:not_configured", "staticcheck:not_configured", "mypy:not_configured", "pyright:not_configured", "bandit:not_configured"}
+	want := append([]string{"go-vet:not_configured", "staticcheck:not_configured", "mypy:not_configured", "pyright:not_configured", "bandit:not_configured"}, rustUnconfigured...)
 	if len(hs) != 1 || hs[0].Info().Name != pack.CompositeName || !slices.Equal(reasons(missing), want) {
 		t.Fatalf("ruff only: %d handlers, missing %v", len(hs), reasons(missing))
 	}

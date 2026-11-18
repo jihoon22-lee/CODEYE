@@ -1,0 +1,36 @@
+# W20 Rust 팩 추가 깊이 분석기 clippy 서술. 구현: internal/worker/analysis/rustpack, 근거: docs/44-w20-rust-pack.md.
+# cargo-clippy 0.1.99는 cargo check와 같은 종료 코드를 쓴다(경고만 있으면 0, 오류면 101).
+# `cargo clippy`가 아니라 cargo-clippy를 직접 실행한다. 저장소의 [alias] clippy가 외부 하위 명령을 가리면
+# 다른 명령이 실행되어 깨끗한 clippy 결과처럼 보일 수 있기 때문이다(실측).
+# -- --cap-lints warn: deny 수준 lint가 빌드를 실패시키고 의존 crate 검사를 막지 않도록 경고로 낮춘다.
+# -W clippy::...: unsafe·panic 검토용 allow-by-default lint 여섯 개만 켠다. 소스의 #[allow]는 그대로 억제한다.
+# 이 도구의 진단 중 clippy:: 코드만 관찰로 남긴다. rustc 자신의 진단은 cargo check 작업이 이미 보고한다.
+# executes_repository_code=true: cargo check와 같은 이유(build script, proc macro, 저장소 Cargo 설정).
+schema_version: '0.1'
+id: rust.clippy
+languages: [rust]
+planned_platforms: [linux, windows, macos]
+availability: verified  # Linux cargo-clippy 0.1.99 실행으로 검증. Windows·macOS는 컴파일과 단위 시험만 대상이다.
+version_contract: clippy-0.1.99-fixture-tested
+analysis_scope: [typed, intraprocedural, interfile]
+executes_repository_code: true
+requires_build: true
+network_policy: none
+version_probe:
+  executable: '${clippy}'
+  argv: [--version]
+execute:
+  executable: '${clippy}'
+  argv: [clippy, --offline, --locked, --message-format=json, --workspace, --all-targets, --, --cap-lints, warn, -W, 'clippy::undocumented_unsafe_blocks', -W, 'clippy::multiple_unsafe_ops_per_block', -W, 'clippy::panic_in_result_fn', -W, 'clippy::unwrap_in_result', -W, 'clippy::todo', -W, 'clippy::unimplemented']
+  cwd: '${workspace}/${module_dir}'
+  timeout_seconds: 1800
+  stdout_max_bytes: 67108864
+  env_allowlist: [PATH, LANG, SystemRoot, CARGO, CARGO_HOME, CARGO_TARGET_DIR, CARGO_BUILD_TARGET, CARGO_NET_OFFLINE, CARGO_TERM_COLOR, CARGO_TERM_PROGRESS_WHEN, CARGO_INCREMENTAL, RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, 'CARGO_TARGET_<HOST_TRIPLE>_LINKER']
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [101]
+parser:
+  id: cargo-json-v1
+  format: json
+  input: stdout-artifact

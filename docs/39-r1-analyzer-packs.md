@@ -72,6 +72,7 @@ type Analyzer interface {
 - 절대 경로만 받는다. PATH를 검색하지 않고, 내려받지 않으며, 다른 위치로 대체하지 않는다.
 - 값은 hello의 `analyzer_tools`(도구 이름 → 경로)로 워커에 간다. 이 빌드가 모르는 도구 이름(새 에이전트·옛 워커)은 `unknown_tool`로 보고하고 실행하지 않는다.
 - 도구가 언어 toolchain을 써야 하면(staticcheck는 `go list`로 패키지를 읽는다) 그 toolchain 설정을 공유한다.
+- 도구가 실행 중 보조 프로그램을 PATH에서 찾아야 하면(W20: rustc가 build script·proc macro 링크에 `cc`를 찾는다) 자식 PATH를 넓히지 않는다. 분석기 생성 시 **한 번** 운영자의 `--toolchain-path`(`builtin.Config.ToolPath`, hello `tool_path`)의 절대 경로 디렉터리에서 찾아 그 절대 경로만 도구 고유의 설정(예: `CARGO_TARGET_<HOST>_LINKER`)으로 준다. 찾지 못하면 그 프로그램이 필요한 작업만 구성 오류로 끝나며, 사용한 경우 제약을 남긴다. 보조 프로그램의 버전은 식별하지 않으므로 팩 문서에 그 한계를 적는다([W20](44-w20-rust-pack.md)).
 
 #### 2.4.1 공유 interpreter toolchain
 
@@ -112,7 +113,7 @@ type Analyzer interface {
 - 생태계마다 **기준 분석기 하나**가 `Required=true`다. 기준 분석기의 작업은 `required_for_verdict`다. Go는 go vet이다.
 - 추가 깊이 분석기는 `Required=false`다. Staticcheck가 여기에 해당한다. 실패·미지원은 보고서에 보이지만 판정 필수 작업 실패로 세지 않는다.
 - `Required`는 Descriptor·계획·envelope(`analyzer.required`)·DB task에서 같아야 한다. 보고서 decoder는 다르면 거부한다(§5).
-- deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 이상 있을 때만 광고한다. 추가 깊이 도구만 있는 노드는 광고하지 않는다. 현재 기준 분석기는 go vet뿐이므로 `--go` 없는 노드는 deep-review를 광고하지 않는다. W17 등이 자기 생태계의 기준 분석기를 추가하면 그 도구만 있는 노드도 광고할 수 있다.
+- deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 이상 있을 때만 광고한다. 추가 깊이 도구만 있는 노드는 광고하지 않는다. 기준 분석기는 생태계마다 있으므로(Go는 go vet, Rust는 cargo check 등) 그중 하나라도 probe에 성공하면 광고한다. 예: `--cargo`만 있는 노드도 광고하지만 저장소 코드 허가가 없는 소스 루트에서는 Rust 기준 작업이 `repository_code_not_allowed`로 끝난다. capability는 노드 단위이고 생태계별 배정은 하지 않는다(W29).
 - 기준 분석기는 해당 언어 노드에서 가장 흔히 쓸 수 있는 도구로 고른다. 팩 문서에 선택 근거를 기록한다.
 
 ### 2.7 저장소 코드 실행 허가
