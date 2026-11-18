@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/progress"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
@@ -392,6 +393,71 @@ type projectView struct {
 	SourceStatus   string          `json:"source_status"`
 	CapabilityGaps []string        `json:"capability_gaps"`
 	LastRun        *runRef         `json:"last_run"`
+	Activity       activityView    `json:"activity"`
+}
+
+// stageView is one display stage (docs/37 §2, §4). Planned is null until the
+// plan is fixed and always null for source/report.
+type stageView struct {
+	Key        string         `json:"key"`
+	State      string         `json:"state"`
+	Planned    *int           `json:"planned"`
+	Finished   int            `json:"finished"`
+	Succeeded  int            `json:"succeeded"`
+	Counts     map[string]int `json:"counts"`
+	Reasons    []string       `json:"reasons"`
+	StartedAt  *time.Time     `json:"started_at"`
+	FinishedAt *time.Time     `json:"finished_at"`
+}
+
+func stagesOf(v *progress.View) (*string, []stageView) {
+	out := []stageView{}
+	if v == nil {
+		return nil, out
+	}
+	for _, s := range v.Stages {
+		out = append(out, stageView{Key: s.Key, State: string(s.State), Planned: s.Planned, Finished: s.Finished, Succeeded: s.Succeeded,
+			Counts: s.Counts, Reasons: s.Reasons, StartedAt: s.StartedAt, FinishedAt: s.FinishedAt})
+	}
+	detail := string(v.Detail)
+	return &detail, out
+}
+
+type activityRunView struct {
+	ID          string    `json:"id"`
+	Status      string    `json:"status"`
+	RequestedAt time.Time `json:"requested_at"`
+}
+
+type reportRefView struct {
+	RunID       string    `json:"run_id"`
+	Revision    int       `json:"revision"`
+	PublishedAt time.Time `json:"published_at"`
+}
+
+// activityView is the project's representative run and its stages. detail is
+// null exactly when run is null (no run recorded).
+type activityView struct {
+	Run             *activityRunView `json:"run"`
+	OtherActiveRuns int64            `json:"other_active_runs"`
+	Detail          *string          `json:"detail"`
+	Stages          []stageView      `json:"stages"`
+	WaitingReason   *string          `json:"waiting_reason"`
+	LastReport      *reportRefView   `json:"last_report"`
+	LastEventAt     *time.Time       `json:"last_event_at"`
+	CheckedAt       time.Time        `json:"checked_at"`
+}
+
+func activityOf(a postgres.Activity) activityView {
+	v := activityView{OtherActiveRuns: a.OtherActiveRuns, WaitingReason: a.WaitingReason, LastEventAt: a.LastEventAt, CheckedAt: a.CheckedAt}
+	v.Detail, v.Stages = stagesOf(a.Stages)
+	if a.Run != nil {
+		v.Run = &activityRunView{ID: a.Run.ID, Status: string(a.Run.Status), RequestedAt: a.Run.RequestedAt}
+	}
+	if r := a.LastReport; r != nil {
+		v.LastReport = &reportRefView{RunID: r.RunID, Revision: r.Revision, PublishedAt: r.PublishedAt}
+	}
+	return v
 }
 
 // projectGaps lists the product capabilities a project view cannot claim.
@@ -426,7 +492,7 @@ func viewOf(p postgres.ProjectSummary, gaps []string) projectView {
 		gaps = append(gaps, string(domain.GapReportUnavailable))
 	}
 	v := projectView{ID: p.ID, Name: p.Name, Source: p.Source, Revision: p.Revision,
-		SourceStatus: "declared_unverified", CapabilityGaps: gaps}
+		SourceStatus: "declared_unverified", CapabilityGaps: gaps, Activity: activityOf(p.Activity)}
 	if v.Source == nil {
 		v.Source = json.RawMessage("null")
 	}
@@ -487,7 +553,10 @@ func (s *Server) createProject(q *request) {
 		return
 	}
 	q.w.Header().Set("Location", apiPrefix+"/projects/"+p.ID)
-	writeJSON(q.w, http.StatusCreated, viewOf(postgres.ProjectSummary{ID: p.ID, Name: p.Name, Revision: p.Revision, Source: cfg.Source}, gaps))
+	// A new project has no run: an empty activity checked now (server clock).
+	created := postgres.ProjectSummary{ID: p.ID, Name: p.Name, Revision: p.Revision, Source: cfg.Source,
+		Activity: postgres.Activity{CheckedAt: time.Now().UTC()}}
+	writeJSON(q.w, http.StatusCreated, viewOf(created, gaps))
 }
 
 func (s *Server) listProjects(q *request) {
@@ -607,13 +676,19 @@ func (s *Server) createRun(q *request) {
 	writeJSON(q.w, http.StatusAccepted, ack)
 }
 
+// progressView keeps the R0 fields (stage is the run status) and adds the W15
+// stage view computed exactly like the project activity.
 type progressView struct {
-	Stage            string   `json:"stage"`
-	PlanRevision     *int64   `json:"plan_revision"`
-	CompletedTasks   int64    `json:"completed_tasks"`
-	TotalTasks       *int64   `json:"total_tasks"`
-	EstimatedPercent *float64 `json:"estimated_percent"`
-	WaitingReason    *string  `json:"waiting_reason"`
+	Stage            string      `json:"stage"`
+	PlanRevision     *int64      `json:"plan_revision"`
+	CompletedTasks   int64       `json:"completed_tasks"`
+	TotalTasks       *int64      `json:"total_tasks"`
+	EstimatedPercent *float64    `json:"estimated_percent"`
+	WaitingReason    *string     `json:"waiting_reason"`
+	Detail           string      `json:"detail"`
+	Stages           []stageView `json:"stages"`
+	LastEventAt      *time.Time  `json:"last_event_at"`
+	CheckedAt        time.Time   `json:"checked_at"`
 }
 
 type runView struct {
@@ -645,7 +720,9 @@ func (s *Server) getRun(q *request) {
 		return
 	}
 	out := runView{ID: v.ID, ProjectID: v.ProjectID, Status: string(v.Status), Version: v.Version, SnapshotID: v.SnapshotID,
-		Progress: progressView{Stage: string(v.Status), CompletedTasks: v.CompletedTasks}}
+		Progress: progressView{Stage: string(v.Status), CompletedTasks: v.CompletedTasks, LastEventAt: v.Stages.LastEventAt, CheckedAt: v.Stages.CheckedAt}}
+	detail, stages := stagesOf(&v.Stages.View)
+	out.Progress.Detail, out.Progress.Stages = *detail, stages
 	if v.TotalTasks > 0 {
 		total := v.TotalTasks
 		out.Progress.TotalTasks = &total

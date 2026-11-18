@@ -201,6 +201,11 @@ type ProjectSummary struct {
 	LastRun  *RunRef
 	// HasReport is true once any run of the project has a published report.
 	HasReport bool
+	// Activity is the representative run's stage view (W15). Store reads
+	// always fill it; a hand-built summary has CheckedAt zero.
+	Activity Activity
+	// representative is the run chosen per docs/37 §3 ("" without runs).
+	representative string
 }
 
 // ProjectPage is one keyset page of ProjectSummary, newest first.
@@ -209,11 +214,28 @@ type ProjectPage struct {
 	NextCursor string
 }
 
+// nonTerminalRuns are the run states that can still change; activeRuns are
+// those executing or settling a cancellation (docs/37 §3 first group).
+const (
+	nonTerminalRuns = `('queued','preparing','running','finalizing','cancel_requested','cancelling','recovery_required')`
+	activeRuns      = `('preparing','running','finalizing','cancel_requested','cancelling')`
+)
+
+// projectSummarySQL selects the project, its latest run (last_run), the
+// representative run of docs/37 §3 (the best non-terminal run by group, then
+// requested_at desc, id desc; else the latest run, which then is terminal),
+// the count of the other non-terminal runs, the latest published report and
+// the read time. Each lateral is an indexed per-project lookup.
 const projectSummarySQL = `SELECT p.id::text,p.name,p.current_revision,r.config->'source',p.created_at,lr.id::text,lr.status,
-	EXISTS (SELECT 1 FROM reports rp WHERE rp.project_id=p.id)
+	lp.run_id::text,lp.revision,lp.created_at,COALESCE(act.id,lr.id)::text,
+	(SELECT count(*) FROM runs o WHERE o.project_id=p.id AND o.status IN ` + nonTerminalRuns + `)-(CASE WHEN act.id IS NULL THEN 0 ELSE 1 END),
+	statement_timestamp()
 	FROM projects p
 	JOIN project_revisions r ON r.project_id=p.id AND r.revision=p.current_revision
 	LEFT JOIN LATERAL (SELECT id,status FROM runs WHERE project_id=p.id ORDER BY created_at DESC,id DESC LIMIT 1) lr ON true
+	LEFT JOIN LATERAL (SELECT id FROM runs WHERE project_id=p.id AND status IN ` + nonTerminalRuns + `
+		ORDER BY CASE WHEN status IN ` + activeRuns + ` THEN 0 WHEN status='recovery_required' THEN 1 ELSE 2 END,created_at DESC,id DESC LIMIT 1) act ON true
+	LEFT JOIN LATERAL (SELECT run_id,revision,created_at FROM reports WHERE project_id=p.id ORDER BY created_at DESC,run_id DESC,revision DESC LIMIT 1) lp ON true
 	WHERE p.deleted_at IS NULL `
 
 type projectCursor struct {
@@ -223,14 +245,27 @@ type projectCursor struct {
 
 func scanSummary(row pgx.Row) (ProjectSummary, time.Time, error) {
 	var (
-		p        ProjectSummary
-		created  time.Time
-		source   []byte
-		lastID   *string
-		lastStat *string
+		p          ProjectSummary
+		created    time.Time
+		source     []byte
+		lastID     *string
+		lastStat   *string
+		reportRun  *string
+		reportRev  *int
+		reportAt   *time.Time
+		represents *string
 	)
-	if err := row.Scan(&p.ID, &p.Name, &p.Revision, &source, &created, &lastID, &lastStat, &p.HasReport); err != nil {
+	if err := row.Scan(&p.ID, &p.Name, &p.Revision, &source, &created, &lastID, &lastStat,
+		&reportRun, &reportRev, &reportAt, &represents, &p.Activity.OtherActiveRuns, &p.Activity.CheckedAt); err != nil {
 		return p, created, err
+	}
+	p.Activity.CheckedAt = p.Activity.CheckedAt.UTC()
+	if reportRun != nil && reportRev != nil && reportAt != nil {
+		p.HasReport = true
+		p.Activity.LastReport = &ReportRef{RunID: *reportRun, Revision: *reportRev, PublishedAt: reportAt.UTC()}
+	}
+	if represents != nil {
+		p.representative = *represents
 	}
 	if source != nil {
 		canonical, err := domain.CanonicalJSON(source)
@@ -256,7 +291,12 @@ func (s *Store) GetProjectSummary(ctx context.Context, actor, id string) (Projec
 			return ProjectSummary{}, err
 		}
 		p, _, err := scanSummary(tx.QueryRow(ctx, projectSummarySQL+"AND p.id=$1", id))
-		return p, err
+		if err != nil {
+			return p, err
+		}
+		items := []ProjectSummary{p}
+		err = attachActivity(ctx, tx, items)
+		return items[0], err
 	})
 }
 
@@ -306,7 +346,13 @@ func (s *Store) ListProjects(ctx context.Context, actor, cursor string, limit in
 			page.Items = append(page.Items, p)
 			last = projectCursor{CreatedAt: created, ID: p.ID}
 		}
-		return page, rows.Err()
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return ProjectPage{}, err
+		}
+		// One statement for the stage views of the whole page (no per-project
+		// round trip); only queued representatives add waiting-reason reads.
+		return page, attachActivity(ctx, tx, page.Items)
 	})
 }
 
@@ -321,6 +367,8 @@ type RunView struct {
 	WaitingReason *string
 	// LatestReport is the newest published report revision, nil if none.
 	LatestReport *ReportSummary
+	// Stages is the W15 stage view, computed like the project activity.
+	Stages RunStages
 }
 
 // GetRunView returns the run and its task counts for an actor who may read it.
@@ -349,7 +397,11 @@ func (s *Store) GetRunView(ctx context.Context, actor, id string) (RunView, erro
 		case err != pgx.ErrNoRows:
 			return v, err
 		}
-		err = nil
+		stages, err := loadRunStages(ctx, tx, []string{id})
+		if err != nil {
+			return v, err
+		}
+		v.Stages = stages[id]
 		if r.Status != domain.RunQueued {
 			return v, nil
 		}
