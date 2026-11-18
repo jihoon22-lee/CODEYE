@@ -89,6 +89,15 @@ var Korean = Locale{
 		"secret_values_withheld":             "gitleaks: 비밀값과 그 일부·hash를 저장하지 않는다. 위치와 규칙만 남긴다.",
 		"repository_ignore_file_honored":     "gitleaks: 저장소의 .gitleaksignore를 적용했다(digest 기록).",
 		"binary_files_not_claimed_processed": "gitleaks: 텍스트가 아닌 파일은 처리 파일로 세지 않았다.",
+		"secret_columns_not_recorded":        "gitleaks: 도구의 열 위치가 첫 줄 뒤에서 1씩 어긋나 줄 범위만 남긴다.",
+		"rejected_option_gitleaksignore":     "gitleaks: 저장소 .gitleaksignore에 사본 밖을 가리키는 항목이 있어 검사를 거부했다(값은 기록하지 않음).",
+		"data_directories_excluded":          "숨김·testdata·vendor·node_modules 아래 파일은 측정하지 않았다.",
+		"workspace_link_refused":             "검사 대상 사본에 링크나 특수 파일이 있어 도구를 실행하지 않았다.",
+		"repository_config_rejected":         "저장소 설정이 사본 밖을 가리켜 도구를 실행하지 않았다(값은 기록하지 않음).",
+		"result_outside_snapshot":            "도구가 선택된 snapshot 파일이 아닌 곳의 결과를 냈다. 그 결과는 버렸고 작업은 실패다.",
+		"model_input_not_secret_screened":    "비밀값 탐지가 실행되지 않아 모델 입력을 비밀값 기준으로 거르지 않았다.",
+		"secret_files_withheld":              "비밀값이 탐지된 파일은 모델 입력에서 뺐다.",
+		"secret_screen_failed":               "비밀값 탐지 결과를 쓸 수 없어 모델 검토를 건너뛰었다(코드 미전송).",
 	},
 }
 

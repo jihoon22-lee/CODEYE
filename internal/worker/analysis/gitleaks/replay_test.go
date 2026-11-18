@@ -86,7 +86,7 @@ func TestReplayFindings(t *testing.T) {
 		t.Fatalf("places %v", got)
 	}
 	for _, o := range p.doc.Observations {
-		if strings.Contains(o.RawMessage, "3.68") || o.Location.StartCol == 0 || o.Location.EndCol <= o.Location.StartCol {
+		if strings.Contains(o.RawMessage, "3.68") || o.Location.StartCol != 0 || o.Location.EndCol != 0 || !slices.Contains(p.doc.Limitations, LimColumnsNotRecorded) {
 			t.Fatalf("observation %+v", o)
 		}
 	}

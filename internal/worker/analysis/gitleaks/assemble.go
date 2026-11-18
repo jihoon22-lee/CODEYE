@@ -41,6 +41,11 @@ const (
 	// LimIgnoreFileRejected names the refused option: a scan root's
 	// .gitleaksignore (its entries are never recorded).
 	LimIgnoreFileRejected = "rejected_option_gitleaksignore"
+	// LimColumnsNotRecorded: gitleaks 8.30.1 reports byte columns one too
+	// high on every line of a scanned fragment after its first (measured,
+	// TestCapturedColumnsAreOffByOne), and where a fragment starts depends
+	// on its chunked reads; observations keep the line range only.
+	LimColumnsNotRecorded = "secret_columns_not_recorded"
 )
 
 // Coverage unit states (files).
@@ -242,7 +247,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	doc.Coverage.Unit = "file"
 	doc.Coverage.FilesInScope = anypack.Ptr(len(in.Files))
 	doc.Executions = anypack.ExecutionsOf(in.Executions)
-	lims := []string{LimHistoryNotScanned, LimSecretValuesWithheld}
+	lims := []string{LimHistoryNotScanned, LimSecretValuesWithheld, LimColumnsNotRecorded}
 	if len(configFiles) > 0 {
 		lims = append(lims, LimIgnoreFileHonored)
 	}
@@ -339,12 +344,14 @@ func assemble(in assembleInput) obsdoc.Document {
 				continue
 			}
 			msg := Message(f.Rule)
-			pos := file + ":" + strconv.Itoa(f.StartLine) + ":" + strconv.Itoa(f.StartColumn)
-			end := file + ":" + strconv.Itoa(f.EndLine) + ":" + strconv.Itoa(f.EndColumn)
+			// Columns are parsed for the record shape but not kept
+			// (LimColumnsNotRecorded): 0 is "not recorded".
+			pos := file + ":" + strconv.Itoa(f.StartLine) + ":0"
+			end := file + ":" + strconv.Itoa(f.EndLine) + ":0"
 			tuple := strings.Join([]string{file, f.Rule, pos, end, msg}, "\x00")
 			ord := ordinals[tuple]
 			ordinals[tuple]++
-			pathPtr, loc, state := in.Resolver.Resolve(file, f.StartLine, f.EndLine, f.StartColumn, f.EndColumn)
+			pathPtr, loc, state := in.Resolver.Resolve(file, f.StartLine, f.EndLine, 0, 0)
 			doc.Observations = append(doc.Observations, obsdoc.Observation{ID: obsdoc.ObservationID(AnalyzerID, anypack.ModuleDir, file, f.Rule, pos, end, msg, ord),
 				RuleID: f.Rule, Category: "security", RawMessage: msg, Path: pathPtr, Location: loc, LocationState: state, Related: []obsdoc.Related{},
 				RawRef: obsdoc.RawRef{Execution: s.Exec, Stream: "stdout", StreamSHA256: stdoutSHA, RecordIndex: f.Index, ByteStart: f.ByteStart, ByteEnd: f.ByteEnd},
