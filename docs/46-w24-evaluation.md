@@ -247,56 +247,66 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 
 ## 11. 유료 batch 실행 방법(coordinator)
 
-키는 coordinator의 셸에만 있다. runner는 relay를 시작하지 않고 키를 읽지 않는다. 아래는 저장소 루트에서 실행한다. `$R`은 영구 비공개 결과 루트, `$LEDGER`는 R1이 공유하는 relay 장부다. 도구 경로는 노드에 맞게 바꾼다. tools와 review 조건에 같은 도구 플래그를 준다.
+키는 coordinator의 셸에만 있다. runner는 relay를 시작하지 않고 키를 읽지 않는다. 아래는 저장소 루트에서 실행한다. `$R`은 영구 비공개 결과 루트(모든 batch와 holdout 등록부가 같은 곳에 있어야 한다), `$LEDGER`는 R1이 공유하는 relay 장부다. 도구 경로는 노드에 맞게 바꾼다. tools와 review 조건에 같은 도구 플래그를 준다. 1~3단계와 5~7단계는 이 문서 작성 중 시험 relay로 그대로 실행해 확인했다(4단계만 가짜 upstream과 `--test-upstream --allow-model-echo`로 바꾸고 6단계에 `--dry-run`을 더함. 표본은 R1-GO-06 하나, tools-all은 R1-GO-06·R1-JS-02로 줄였다. 두 계획 모두 거절 없음, batch 4개 모두 끝남).
 
 ```bash
+# 노드에 맞게 도구 경로를 정한다. 임시 PostgreSQL을 쓰므로 PostgreSQL 도구(initdb, pg_ctl, psql)가 PATH에 있어야 한다.
 TOOLS=(--go "$GO" --tool staticcheck="$STATICCHECK" --tool cargo="$CARGO" --tool clippy="$CLIPPY"
+       --tool cppcheck="$CPPCHECK" --tool clang-tidy="$CLANG_TIDY"
        --tool node="$NODE" --tool eslint="$ESLINT_JS" --tool tsc="$TSC_JS")
 REVIEW=(--opencode "$OPENCODE" --model codeye-gateway/gpt-6.2-sol)
+SEL=(--languages go)   # 유료 표본. B안은 SEL=(--languages go --sample 8 --seed 24)
 
-# 1. tools(모델 없음): 전체와 비교용 Go 표본
+# 1. tools(모델 없음): 전체와 비교용 표본
 python3 scripts/r1_eval.py run --condition tools --results-root "$R" --batch tools-all "${TOOLS[@]}" --max-workers 3
-python3 scripts/r1_eval.py run --condition tools --results-root "$R" --batch tools-go --languages go "${TOOLS[@]}"
+python3 scripts/r1_eval.py run --condition tools --results-root "$R" --batch tools-sel "${SEL[@]}" "${TOOLS[@]}"
 
 # 2. envelope 수집 dry run(가짜 upstream, 시험 장부, 키 없음). 이 batch가 계획 이력도 된다.
 python3 scripts/r1_eval.py capture-list --output "$R/capture-list.json"
 mkdir -p "$R/cap"
 env -u OPENAI_API_KEY python3 scripts/r1_fake_upstream.py --ready-file "$R/cap/fake.json" --dump "$R/cap/dump" &
+FAKE_PID=$!
+until [ -s "$R/cap/fake.json" ]; do sleep 0.2; done
 PORT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["port"])' "$R/cap/fake.json")
 env -u OPENAI_API_KEY python3 scripts/r0_openai_gateway.py --ready-file "$R/cap/relay.json" \
   --ledger "$R/cap/ledger.jsonl" --model gpt-6.2-sol --forbidden-phrases "$R/capture-list.json" \
   --test-upstream "http://127.0.0.1:$PORT" &
+CAP_RELAY_PID=$!
+until [ -s "$R/cap/relay.json" ]; do sleep 0.2; done
 for PACK in review-r1 review-v1; do
   python3 scripts/r1_eval.py run --condition review --pack $PACK --dry-run --results-root "$R" \
-    --batch capture-$PACK --languages go --relay-file "$R/cap/relay.json" --ledger "$R/cap/ledger.jsonl" \
+    --batch capture-$PACK "${SEL[@]}" --relay-file "$R/cap/relay.json" --ledger "$R/cap/ledger.jsonl" \
     --forbidden-phrases "$R/capture-list.json" "${TOOLS[@]}" "${REVIEW[@]}"
 done
-# 가짜와 시험 relay를 SIGTERM으로 끝낸다.
+kill $CAP_RELAY_PID $FAKE_PID
 
-# 3. 정답 목록. dropped.in_allowed_text를 읽고 허용 텍스트가 뺀 라벨 표현을 확인한다.
+# 3. 정답 목록. 출력의 dropped.in_allowed_text에서 허용 텍스트가 뺀 라벨 표현을 확인한다.
 python3 scripts/r1_eval.py allow-text --tools-batch "$R/tools-all" --request-dump "$R/cap/dump" --output "$R/allow.txt"
 python3 -I fixtures/r1-quality/corpus.py forbidden --allow-text prompts/review-v1 --allow-text prompts/review-r1 \
   --allow-text "$R/allow.txt" --output "$R/forbidden.json"
 
-# 4. 실제 relay(coordinator 셸). --allow-model-echo는 선택이다(§3.4).
-python3 scripts/r0_openai_gateway.py --ready-file "$R/relay-$(date +%s).json" --ledger "$LEDGER" \
+# 4. 실제 relay(coordinator 셸, 키는 이 프로세스만 읽는다). --allow-model-echo는 선택이다(§3.4).
+READY="$R/relay-$(date +%s).json"
+python3 scripts/r0_openai_gateway.py --ready-file "$READY" --ledger "$LEDGER" \
   --model gpt-6.2-sol --forbidden-phrases "$R/forbidden.json" [--allow-model-echo] &
+until [ -s "$READY" ]; do sleep 0.2; done
+RELAY=(--relay-file "$READY" --ledger "$LEDGER" --forbidden-phrases "$R/forbidden.json")
 
-# 5. 계획과 장부 확인(거절이면 종료 코드 1)
-python3 scripts/r1_eval.py plan --pack review-r1 --languages go --history "$R/capture-review-r1" --ledger "$LEDGER"
-python3 scripts/r1_eval.py plan --pack review-v1 --languages go --history "$R/capture-review-v1" --ledger "$LEDGER"
+# 5. 계획과 장부 확인(거절이면 종료 코드 1, 출력의 refusal에 사유)
+python3 scripts/r1_eval.py plan --pack review-r1 "${SEL[@]}" --history "$R/capture-review-r1" --ledger "$LEDGER"
 
 # 6. 유료 batch: review-r1을 먼저 실행한다(요청 수 상한 때문, 아래 표).
-RELAY=(--relay-file "$R/relay-<시각>.json" --ledger "$LEDGER" --forbidden-phrases "$R/forbidden.json")
-python3 scripts/r1_eval.py run --condition review --pack review-r1 --results-root "$R" --batch paid-r1-go \
-  --languages go --history "$R/capture-review-r1" "${RELAY[@]}" "${TOOLS[@]}" "${REVIEW[@]}"
-python3 scripts/r1_eval.py run --condition review --pack review-v1 --results-root "$R" --batch paid-v1-go \
-  --languages go --history "$R/capture-review-v1" "${RELAY[@]}" "${TOOLS[@]}" "${REVIEW[@]}"
+python3 scripts/r1_eval.py run --condition review --pack review-r1 --results-root "$R" --batch paid-r1 \
+  "${SEL[@]}" --history "$R/capture-review-r1" "${RELAY[@]}" "${TOOLS[@]}" "${REVIEW[@]}"
+# r1이 끝난 뒤의 장부로 v1을 다시 계획한다. 거절이면 v1을 실행하지 말고 B안으로 줄인다.
+python3 scripts/r1_eval.py plan --pack review-v1 "${SEL[@]}" --history "$R/capture-review-v1" --ledger "$LEDGER" &&
+python3 scripts/r1_eval.py run --condition review --pack review-v1 --results-root "$R" --batch paid-v1 \
+  "${SEL[@]}" --history "$R/capture-review-v1" "${RELAY[@]}" "${TOOLS[@]}" "${REVIEW[@]}"
 
 # 7. 판정과 채점: 각 batch의 judgments-template.json을 채운 뒤
-python3 scripts/r1_eval.py score "$R/tools-go" "$R/paid-r1-go" "$R/paid-v1-go" \
+python3 scripts/r1_eval.py score "$R/tools-sel" "$R/paid-r1" "$R/paid-v1" \
   --judgments J1.json [--judgments J2.json] --output "$R/score.json"
-python3 scripts/r1_eval.py reader "$R/paid-r1-go" --sample 6 --seed 24 --output "$R/reading-r1"
+python3 scripts/r1_eval.py reader "$R/paid-r1" --sample 6 --seed 24 --output "$R/reading-r1"
 ```
 
 추정은 이 문서의 최종 dry run(review-v1 1.0.0, review-r1 2.0.0-rc2, Go 사례 전체)을 이력으로 계산했다. 호출당 비용은 요청 바이트 ÷ 3 토큰과 출력 600 토큰을 relay 단가로 셈한 보수값이다(호출당 약 $0.032~0.041). W15의 실측 호출당 차감($0.022~0.025)보다 크다. 남은 장부는 docs/37의 W15 기록($8.492, 요청 137건)을 가정했다. 실제 값은 5단계의 `plan --ledger`로 확인한다.
@@ -309,7 +319,7 @@ python3 scripts/r1_eval.py reader "$R/paid-r1-go" --sample 6 --seed 24 --output 
 | B | `--sample 8 --seed 24`(변형 14) r1 → v1 | 33.6 / 42.0 | $1.19 / $1.62 | 79 / 47 | $3.98 / $2.68 | $8.49, 137건 → $7.31, 103건 | 둘 다 시작 |
 | C | B 다음 분산: `--cases R1-GO-02,R1-GO-09 --variants before --repeat 3`, r1 → v1 | 21.0 / 18.0 | $0.73 / $0.70 | 37 / 20 | $1.85 / $1.15 | $5.68, 61건 → $4.95, 40건 | 둘 다 시작 |
 
-요청 수 상한(장부 전체 200건)이 금액보다 먼저 묶인다. A는 Go 사례 전체를 두 팩으로 비교하고 반복 실행은 남지 않는다(기대 사용 뒤 약 23건). B+C는 표본이 작지만 두 사례의 반복 분산을 볼 수 있다. Go가 아닌 사례는 검토 입력이 없어(§12) 비용만 쓰므로 유료 batch에서 뺐다.
+요청 수 상한(장부 전체 200건)이 금액보다 먼저 묶인다. A는 Go 사례 전체를 두 팩으로 비교하고 반복 실행은 남지 않는다(기대 사용 뒤 약 23건). A에서 v1은 r1이 끝난 뒤 남은 요청이 71건(v1 상한 66 + 여유 5) 이상이고 남은 금액이 $4.83(상한 $3.83 + 예약 $1.00) 이상일 때만 시작한다. 기대 사용 기준의 여유는 약 12건뿐이고, 장부가 W15 이후 더 쓰였거나 r1에 형식 복구 호출이 많으면 v1이 거절된다. 그래서 6단계는 r1이 끝난 뒤 v1을 다시 계획하고, 거절이면 v1을 실행하지 않는다. 5단계의 `plan --ledger` 결과로 r1 시작 전 남은 요청이 137건보다 적으면(대략 `남은 요청 − 54 − 5 < 66`) 처음부터 B안을 고른다. B+C는 표본이 작지만 두 사례의 반복 분산을 볼 수 있다. Go가 아닌 사례는 검토 입력이 없어(§12) 비용만 쓰므로 유료 batch에서 뺐다.
 
 ## 12. 제한
 
@@ -322,6 +332,7 @@ python3 scripts/r1_eval.py reader "$R/paid-r1-go" --sample 6 --seed 24 --output 
 - **판정은 사람이 한다.** 위치 자동 대조는 pre-fill이다. 판정 파일이 없으면 recall·FP·precision은 대부분 미판정으로 남는다. 판정자 간 일치도는 판정이 둘 이상일 때 충돌 목록으로만 보인다.
 - **보고서 읽기는 측정하지 않았다.** 과제와 채점기만 있다. 모델로 독자를 흉내 내지 않는다.
 - **비용 추정은 보수적 근사다.** 바이트당 3토큰과 여유 계수 1.5는 실측에 맞춘 값이 아니다. 실제 batch의 usage를 이력으로 주면 그 값을 쓴다.
+- **예외 ID 확인은 순서를 보지 않는다.** runner는 예외 ID가 같은 사례의 모델 출력에 있는지만 확인하고, 그 출력이 요청보다 먼저였는지는 보지 않는다. corpus 입력에는 구성상 목록 항목이 없으므로 실제 차이는 없다고 보지만 확인하지 않았다.
 - **holdout 표시는 같은 결과 루트 안에서만 동작한다.** 다른 `--results-root`에서 실행한 batch는 등록부가 달라 보이지 않는다.
 - review-r1 rc2 등 팩을 바꾸면 envelope와 지침 허용 텍스트가 바뀐다. 목록을 다시 만들고(§3.1.1), 같은 팩 id의 이전 실제 실행이 있으면 새 batch는 `holdout_seen_by_prior_revision`으로 표시된다.
 - 실행 환경은 WSL2 한 대다. Windows·RHEL 실측, 여러 노드 분할 실행은 하지 않았다.
