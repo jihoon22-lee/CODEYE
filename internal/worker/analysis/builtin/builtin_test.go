@@ -145,7 +145,7 @@ func TestHandlersProbeRealStaticcheck(t *testing.T) {
 		t.Skip("set CODEYE_TEST_STATICCHECK to the staticcheck binary")
 	}
 	hs, missing := Handlers(context.Background(), Config{GoExecutable: goPath(t), ProbeDir: t.TempDir(), Tools: map[string]string{"staticcheck": sc}}, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), w21Missing) {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), append([]string{"cargo-check:not_configured", "clippy:not_configured"}, w21Missing...)) {
 		t.Fatalf("staticcheck configured: %d %+v", len(hs), missing)
 	}
 }
