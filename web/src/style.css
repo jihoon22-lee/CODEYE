@@ -130,3 +130,9 @@ thead { background: #f1f5f8; }
 .finding-card summary span { display: block; font-size: .875rem; margin-inline-start: 14px; }
 .report-document a { color: #245b7a; text-underline-offset: 3px; }
 .report-ref { margin-inline-start: .45rem; font-size: .88em; }
+
+.activity { margin: 2px 0 0; }
+.activity p { margin: 2px 0; }
+.stages { padding: 0; }
+.stage { margin: 6px 0; }
+.stage-toggle { text-align: left; }

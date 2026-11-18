@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { Api, Project, Provider, SourceRoot } from './api';
-import { describeError, shorten, type ErrorText } from './format';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Api, Project, ProjectPage, Provider, SourceRoot } from './api';
+import { describeError, formatClock, isTerminalRun, shorten, type ErrorText } from './format';
+import { createPoller, type Poller } from './poller';
+import { LastReportLink, ProjectActivity } from './StageView';
+import { retryable } from './useRunPolling';
 import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
 import { ProjectForm } from './ProjectForm';
@@ -34,6 +37,19 @@ export function describeSource(project: Project, roots: SourceRoot[], providers:
   return t.projects.gitSource(host, s.repository_url, s.branch);
 }
 
+// A project needs polling while its representative run is not terminal. Servers without
+// `activity` only expose last_run, which is the fallback.
+export function hasActiveRun(p: Project): boolean {
+  const status = p.activity ? p.activity.run?.status : p.last_run?.status;
+  return status !== undefined && !isTerminalRun(status) || (p.activity?.other_active_runs ?? 0) > 0;
+}
+
+// Replace first-page entries with fresh values, keep entries loaded by "more" that the first page does not cover.
+export function mergeFirstPage(prev: Project[], first: Project[]): Project[] {
+  const ids = new Set(first.map(p => p.id));
+  return [...first, ...prev.filter(p => !ids.has(p.id))];
+}
+
 export function ProjectsView({ api, userId, idempotency }: Props) {
   const roots = useLookup<SourceRoot>(useCallback(signal => api.listSourceRoots(signal), [api]));
   const providers = useLookup<Provider>(useCallback(signal => api.listProviders(signal), [api]));
@@ -41,28 +57,55 @@ export function ProjectsView({ api, userId, idempotency }: Props) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ErrorText | null>(null);
+  const [lastOk, setLastOk] = useState<Date | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
+  const latest = useRef<Project[]>([]);
+  const poller = useRef<Poller<ProjectPage> | null>(null);
+  const firstCursor = useRef(false);
 
+  const commit = useCallback((next: Project[]) => { latest.current = next; setProjects(next); }, []);
+  // Start (or fetch now) after a run was accepted or changed state; no-op before the first poller exists.
+  const wake = useCallback(() => {
+    const p = poller.current;
+    if (!p) return;
+    if (p.isRunning()) p.refresh(); else p.start();
+  }, []);
+
+  // Polls the first page. Polling stops once no project has a non-terminal run (nothing can change
+  // without a user action) and is restarted by wake(), loadMore() and project creation.
   useEffect(() => {
-    const controller = new AbortController();
+    latest.current = [];
+    firstCursor.current = false;
     setLoading(true);
     setError(null);
-    api.listProjects(null, controller.signal).then(
-      page => { setProjects(page.items); setCursor(page.next_cursor); setLoading(false); },
-      e => { if (!controller.signal.aborted) { setError(describeError(e)); setLoading(false); } },
-    );
-    return () => controller.abort();
-  }, [api, reloads]);
+    const p = createPoller<ProjectPage>({
+      fetch: signal => api.listProjects(null, signal),
+      onData: page => {
+        commit(mergeFirstPage(latest.current, page.items));
+        if (!firstCursor.current) { firstCursor.current = true; setCursor(page.next_cursor); }
+        setLoading(false);
+        setError(null);
+        setLastOk(new Date());
+      },
+      onError: e => { setError(describeError(e)); setLoading(false); },
+      done: () => !latest.current.some(hasActiveRun),
+      retryable,
+    });
+    poller.current = p;
+    p.start();
+    return () => { p.stop(); poller.current = null; };
+  }, [api, reloads, commit]);
 
   async function loadMore() {
     if (!cursor || loading) return;
     setLoading(true);
     try {
       const page = await api.listProjects(cursor);
-      setProjects(prev => [...prev, ...page.items.filter(item => !prev.some(p => p.id === item.id))]);
+      commit([...latest.current, ...page.items.filter(item => !latest.current.some(p => p.id === item.id))]);
       setCursor(page.next_cursor);
       setError(null);
+      if (page.items.some(hasActiveRun)) wake();
     } catch (e) {
       setError(describeError(e));
     } finally {
@@ -80,7 +123,7 @@ export function ProjectsView({ api, userId, idempotency }: Props) {
     <div className="grid">
       <section className="panel" aria-labelledby="list-title">
         <h2 id="list-title">{p.listTitle}</h2>
-        {error && <><ErrorNote error={{ ...error, message: `${p.loadFailed} ${error.message}` }} /><button type="button" onClick={() => setReloads(n => n + 1)}>{p.reload}</button></>}
+        {error && <><ErrorNote error={{ ...error, message: `${p.loadFailed} ${error.message}` }} />{projects.length > 0 && lastOk && <p className="small">{t.stages.listPollError} {t.stages.lastConfirmed(formatClock(lastOk))}</p>}<button type="button" onClick={() => setReloads(n => n + 1)}>{p.reload}</button></>}
         <div aria-live="polite" aria-busy={loading}>
           {loading && projects.length === 0 ? <p>{p.loading}</p> : projects.length === 0 && !error ? <p>{p.listEmpty}</p> : null}
         </div>
@@ -92,6 +135,8 @@ export function ProjectsView({ api, userId, idempotency }: Props) {
                 <strong>{project.name === '' ? shorten(summary, 60) : project.name}</strong>
                 {project.name !== '' && <span className="small">{summary}</span>}
               </button>
+              <ProjectActivity project={project} />
+              <LastReportLink project={project} />
             </li>;
           })}
         </ul>
@@ -100,14 +145,14 @@ export function ProjectsView({ api, userId, idempotency }: Props) {
       <section className="panel" aria-labelledby="create-title">
         <h2 id="create-title" className="visually-hidden">{p.createTitle}</h2>
         {(roots.error || providers.error) && <p role="alert" className="error">{p.lookupFailed} {(roots.error ?? providers.error)!.message}</p>}
-        <ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={project => { setProjects(prev => [project, ...prev.filter(x => x.id !== project.id)]); setSelectedId(project.id); }} />
+        <ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={project => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); }} />
       </section>
     </div>
-    {selected && <ProjectDetail key={selected.id} api={api} userId={userId} project={selected} idempotency={idempotency} source={describeSource(selected, roots.items, providers.items)} />}
+    {selected && <ProjectDetail key={selected.id} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)} />}
   </>;
 }
 
-function ProjectDetail({ api, userId, project, idempotency, source }: { api: Api; userId: string; project: Project; idempotency: Idempotency; source: string }) {
+function ProjectDetail({ api, userId, project, idempotency, source, onRunChange }: { api: Api; userId: string; project: Project; idempotency: Idempotency; source: string; onRunChange: () => void }) {
   const [openRun, setOpenRun] = useState<string | null>(null);
   const p = t.projects;
   const status = Object.hasOwn(p.sourceStatuses, project.source_status) ? p.sourceStatuses[project.source_status] : p.sourceStatusUnknown;
@@ -130,6 +175,6 @@ function ProjectDetail({ api, userId, project, idempotency, source }: { api: Api
         <button type="button" onClick={() => setOpenRun(project.last_run!.id)} disabled={openRun === project.last_run.id}>{p.lastRunOpen}</button>
       </>}
     </section>
-    <RunPanel api={api} userId={userId} project={project} idempotency={idempotency} openRunId={openRun} />
+    <RunPanel api={api} userId={userId} project={project} idempotency={idempotency} openRunId={openRun} onRunChange={onRunChange} />
   </>;
 }

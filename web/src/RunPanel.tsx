@@ -1,18 +1,20 @@
 import { ReportPanel } from './ReportPanel';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Api, Project, RunAck, RunView } from './api';
 import { canCancelRun, describeError, isKnownRunStatus, isTerminalRun, runStatusLabel, shorten, type ErrorText } from './format';
 import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
+import { StageList } from './StageView';
 import { useRunPolling } from './useRunPolling';
 
 export function ErrorNote({ error }: { error: ErrorText }) {
   return <p role="alert" className="error">{error.message}{error.detail ? <> {error.detail}</> : null}{error.requestId ? <small> {t.errors.requestId(error.requestId)}</small> : null}</p>;
 }
 
-type Props = { api: Api; userId: string; project: Project; idempotency: Idempotency; openRunId?: string | null };
+// onRunChange lets the project list re-read its aggregate after this run was accepted or changed state.
+type Props = { api: Api; userId: string; project: Project; idempotency: Idempotency; openRunId?: string | null; onRunChange?: () => void };
 
-export function RunPanel({ api, userId, project, idempotency, openRunId = null }: Props) {
+export function RunPanel({ api, userId, project, idempotency, openRunId = null, onRunChange }: Props) {
   const [runId, setRunId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<ErrorText | null>(null);
@@ -32,6 +34,7 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null }
       idempotency.complete(userId, project.id);
       setAccepted(ack);
       setRunId(ack.id);
+      onRunChange?.();
     } catch (e) {
       setError(describeError(e));
     } finally {
@@ -46,12 +49,14 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null }
     <button type="button" className="primary" onClick={start} disabled={pending} aria-busy={pending}>{pending ? t.runs.starting : t.runs.start}</button>
     {error && <><ErrorNote error={error} />{retrying && <p className="small">{t.runs.retryNote}</p>}</>}
     {accepted && <p role="status">{t.runs.accepted(shorten(accepted.id, 12))}</p>}
-    {activeId && <RunStatus key={activeId} api={api} runId={activeId} placeholder={accepted?.id === activeId ? accepted : null} />}
+    {activeId && <RunStatus key={activeId} api={api} runId={activeId} placeholder={accepted?.id === activeId ? accepted : null} onRunChange={onRunChange} />}
   </section>;
 }
 
-function RunStatus({ api, runId, placeholder }: { api: Api; runId: string; placeholder: RunAck | null }) {
-  const { run, error, stopped, hidden, applyAck, refresh } = useRunPolling(api, runId);
+function RunStatus({ api, runId, placeholder, onRunChange }: { api: Api; runId: string; placeholder: RunAck | null; onRunChange?: () => void }) {
+  const { run, error, stopped, hidden, confirmedAt, applyAck, refresh } = useRunPolling(api, runId);
+  const runVersion = run?.version;
+  useEffect(() => { if (runVersion !== undefined) onRunChange?.(); }, [runVersion]); // eslint-disable-line react-hooks/exhaustive-deps
   const status = run?.status ?? placeholder?.status ?? null;
   const version = run?.version ?? placeholder?.version ?? null;
   const terminal = status !== null && isTerminalRun(status);
@@ -63,7 +68,7 @@ function RunStatus({ api, runId, placeholder }: { api: Api; runId: string; place
         : <p className={`badge ${isKnownRunStatus(status) ? `s-${status}` : 's-unknown'}`}><strong>{runStatusLabel(status)}</strong></p>}
     </div>
     {status !== null && !isKnownRunStatus(status) && <p className="notice">{t.runs.statusUnknownNote} <code>{shorten(status, 40)}</code></p>}
-    {run && <RunDetails run={run} />}
+    {run && <RunDetails run={run} confirmedAt={error !== null ? confirmedAt : null} />}
     {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}/> }
     {!run && <dl><dt>{t.runs.id}</dt><dd><code>{runId}</code></dd>{version !== null && <><dt>{t.runs.version}</dt><dd>{version}</dd></>}</dl>}
     {error !== null && <p role="alert" className="error">{stopped ? t.runs.pollStopped : t.runs.pollError} {describeError(error).message}</p>}
@@ -77,14 +82,13 @@ function RunStatus({ api, runId, placeholder }: { api: Api; runId: string; place
   </div>;
 }
 
-function RunDetails({ run }: { run: RunView }) {
+function RunDetails({ run, confirmedAt }: { run: RunView; confirmedAt: Date | null }) {
   const p = run.progress;
   const reason = p.waiting_reason;
-  return <dl>
+  return <><dl>
     <dt>{t.runs.id}</dt><dd><code>{run.id}</code></dd>
     <dt>{t.runs.version}</dt><dd>{run.version}</dd>
     <dt>{t.runs.snapshot}</dt><dd>{run.snapshot_id ? <code>{run.snapshot_id}</code> : t.runs.snapshotNone}</dd>
-    <dt>{t.runs.stage}</dt><dd>{p.stage === '' ? '—' : shorten(p.stage)}</dd>
     <dt>{t.runs.tasks}</dt><dd>{t.runs.tasksValue(p.completed_tasks, p.total_tasks)}</dd>
     <dt>{t.runs.percent}</dt>
     <dd>{p.estimated_percent === null
@@ -92,7 +96,8 @@ function RunDetails({ run }: { run: RunView }) {
       : <><progress max={100} value={p.estimated_percent} aria-label={t.runs.percent} /> {p.estimated_percent}%</>}</dd>
     {reason !== null && <><dt>{t.runs.waiting}</dt><dd>{Object.hasOwn(t.runs.waitingLabels, reason) ? t.runs.waitingLabels[reason] : shorten(reason, 120)}</dd></>}
     {run.quality_verdict !== null && <><dt>{t.runs.verdict}</dt><dd>{Object.hasOwn(t.runs.verdictLabels, run.quality_verdict) ? t.runs.verdictLabels[run.quality_verdict] : t.runs.statusUnknown}</dd></>}
-  </dl>;
+  </dl>
+  <StageList summary={p.stages} runStatus={run.status} confirmedAt={confirmedAt} /></>;
 }
 
 function CancelControl({ api, runId, status, onAck }: { api: Api; runId: string; status: string; onAck: (ack: RunAck) => void }) {

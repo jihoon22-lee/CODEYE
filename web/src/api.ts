@@ -32,12 +32,39 @@ export type Project = {
   source_status: string;
   capability_gaps: string[];
   last_run: { id: string; status: string } | null;
+  // Optional: servers before W15 do not send it (docs/37 section 4).
+  activity?: ProjectActivity;
 };
 export type ProjectPage = { items: Project[]; next_cursor: string | null };
 export type SourceRoot = { id: string; label: string };
 export type Provider = { id: string; kind: string; host: string }; // kind: github | ghes
 export type SessionInfo = { user_id: string; csrf_token: string; expires_at: string };
 export type RunAck = { id: string; status: string; version: number; url: string | null };
+// One displayed stage. `key` and `state` are open strings: an unrecognised value must reach the UI
+// as "unknown (raw)", never be read as success.
+export type StageView = {
+  key: string;
+  state: string;
+  planned: number | null; // a number only when the plan is confirmed
+  finished: number;
+  succeeded: number;
+  counts: Record<string, number>; // non-zero terminal statuses only
+  reasons: string[];
+  started_at: string | null;
+  finished_at: string | null;
+};
+export type StageSummary = {
+  detail: string; // recorded | not_recorded (open string)
+  stages: StageView[];
+  last_event_at: string | null;
+  checked_at: string | null;
+};
+export type ProjectActivity = StageSummary & {
+  run: { id: string; status: string; requested_at: string } | null;
+  other_active_runs: number;
+  waiting_reason?: string | null; // only when the representative run is queued
+  last_report: { run_id: string; revision: number; published_at: string } | null;
+};
 export type RunProgress = {
   stage: string;
   plan_revision: number | null;
@@ -45,6 +72,8 @@ export type RunProgress = {
   total_tasks: number | null;
   estimated_percent: number | null;
   waiting_reason: string | null;
+  // Optional W15 additions; undefined when the server predates them (treated as not recorded).
+  stages?: StageSummary;
 };
 export type RunView = {
   id: string;
@@ -228,6 +257,65 @@ function parseProject(v: unknown): Project {
     source_status: str(o.source_status),
     capability_gaps: list(str)(o.capability_gaps ?? []),
     last_run: o.last_run === null || o.last_run === undefined ? null : parseLastRun(o.last_run),
+    ...(o.activity == null ? {} : { activity: parseActivity(o.activity) }),
+  };
+}
+function date(v: unknown): string {
+  const s = str(v);
+  if (Number.isNaN(Date.parse(s))) throw new TypeError('date');
+  return s;
+}
+function nullableDate(v: unknown): string | null {
+  return v === null || v === undefined ? null : date(v);
+}
+function counts(v: unknown): Record<string, number> {
+  if (v === null || v === undefined) return {};
+  const o = rec(v);
+  const out: Record<string, number> = {};
+  for (const [k, n] of Object.entries(o)) out[k] = int(n);
+  return out;
+}
+function parseStage(v: unknown): StageView {
+  const o = rec(v);
+  return {
+    key: str(o.key),
+    state: str(o.state),
+    planned: nullableInt(o.planned),
+    finished: int(o.finished ?? 0),
+    succeeded: int(o.succeeded ?? 0),
+    counts: counts(o.counts),
+    reasons: list(str)(o.reasons ?? []),
+    started_at: nullableDate(o.started_at),
+    finished_at: nullableDate(o.finished_at),
+  };
+}
+// Shared by project activity and run progress: detail, stages, last_event_at, checked_at.
+function parseStageSummary(o: Record<string, unknown>): StageSummary {
+  return {
+    detail: str(o.detail),
+    stages: list(parseStage)(o.stages ?? []),
+    last_event_at: nullableDate(o.last_event_at),
+    checked_at: nullableDate(o.checked_at),
+  };
+}
+function parseActivity(v: unknown): ProjectActivity {
+  const o = rec(v);
+  let run: ProjectActivity['run'] = null;
+  if (o.run != null) {
+    const r = rec(o.run);
+    run = { id: str(r.id), status: str(r.status), requested_at: date(r.requested_at) };
+  }
+  let lastReport: ProjectActivity['last_report'] = null;
+  if (o.last_report != null) {
+    const r = rec(o.last_report);
+    lastReport = { run_id: str(r.run_id), revision: int(r.revision, 1), published_at: date(r.published_at) };
+  }
+  return {
+    ...parseStageSummary(o),
+    run,
+    other_active_runs: int(o.other_active_runs ?? 0),
+    ...(o.waiting_reason === undefined ? {} : { waiting_reason: nullableStr(o.waiting_reason) }),
+    last_report: lastReport,
   };
 }
 function parseLastRun(v: unknown): { id: string; status: string } {
@@ -262,6 +350,7 @@ function parseRun(v: unknown): RunView {
       total_tasks: nullableInt(p.total_tasks),
       estimated_percent: percent,
       waiting_reason: nullableStr(p.waiting_reason),
+      ...(p.detail == null ? {} : { stages: parseStageSummary(p) }),
     },
   };
 }
