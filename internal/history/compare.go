@@ -94,9 +94,6 @@ type Entry struct {
 	Changes        []string     `json:"changes"`
 	MoveCandidates []string     `json:"move_candidates"`
 	Review         *ReviewView  `json:"review"`
-	// CurrentDisposition is the disposition in effect now (expired or
-	// out-of-scope reviews read as open).
-	CurrentDisposition string `json:"current_disposition"`
 
 	basis   report.FingerprintBasis
 	moveKey string
@@ -268,7 +265,9 @@ func changes(cur, base []Occurrence) []string {
 	field("severity", func(o Occurrence) string { return o.Severity })
 	field("validation", func(o Occurrence) string { return o.Validation })
 	field("category", func(o Occurrence) string { return o.Category })
-	field("lines", func(o Occurrence) string { return o.Path + ":" + strconv.Itoa(o.StartLine) + "-" + strconv.Itoa(o.EndLine) })
+	field("lines", func(o Occurrence) string {
+		return o.Path + ":" + strconv.Itoa(o.StartLine) + "-" + strconv.Itoa(o.EndLine)
+	})
 	return out
 }
 
