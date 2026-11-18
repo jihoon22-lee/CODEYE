@@ -114,7 +114,7 @@ data: {"run_id":"…"}
 - 첫 읽기에서 프로젝트 ACL을 확인하며 권한이 없으면 스트림 전에 일반 404다. 세션 없음 401.
 - 매 poll(기본 1초)마다 짧은 트랜잭션으로 세션과 ACL을 다시 확인한다. 로그아웃·세션 만료·사용자 비활성은 `closed(unauthenticated)`, 구성원 제거·프로젝트 삭제는 `closed(access_revoked)`로 끝난다. poll 사이에 DB 연결을 잡지 않는다.
 - 동시 스트림은 세션 사용자별 4개, 전체 32개다. 사용자별 상한을 먼저 확인하므로 한 사용자가 전체 상한을 모두 차지할 수 없다. 넘으면 그 사용자만 503 `UNAVAILABLE`(재시도 가능)이다. 모든 종료 경로에서 슬롯을 반환한다.
-- 스트림은 30분 뒤 닫히고 브라우저가 다시 인증해 이어 받는다. 서버의 Read/WriteTimeout은 스트림마다 해제·연장하며, 종료(shutdown) 때는 열린 스트림을 먼저 닫는다.
+- 스트림은 30분 뒤 닫힌다. 웹 클라이언트는 GET으로 다시 읽고 새 연결에서 다시 인증받는다(§4.4). 서버의 Read/WriteTimeout은 스트림마다 해제·연장하며, 종료(shutdown) 때는 열린 스트림을 먼저 닫는다.
 - 저장소 오류가 30초 넘게 이어지면 `closed(unavailable)`.
 - 값은 `httpapi.StreamConfig`의 기본값이며 현재 CLI 플래그는 없다.
 
@@ -122,7 +122,8 @@ data: {"run_id":"…"}
 
 - 첫 GET의 `event_sequence`에서 연결한다. 이벤트 행으로 cursor만 옮기고 순번이 이어지지 않으면 연결을 닫고 GET 뒤 다시 연결한다. 받은 `run.view`와 GET은 `event_sequence`, 그다음 `version`이 작아지면 적용하지 않는다.
 - 재연결은 클라이언트가 맡는다. resync·closed·오류·종료 상태·탭 숨김·화면 이탈 때 EventSource를 닫아 브라우저가 오래된 cursor로 재시도하지 않게 한다.
-- 연결 실패(503 상한, 401, 404 포함)·45초 무응답은 5초 polling으로 바꾸고 30초·60초·120초 뒤 최대 3번 다시 연결을 시도한다. `closed`는 GET 한 번으로 오류(401·404)를 표시한다.
+- 열렸던 연결이 끝나면(서버 30분 상한, 재시작) 바로 GET 뒤 다시 연결한다. heartbeat나 `run.view` 없이 연속 3번을 넘으면 실패로 본다.
+- 열리지 않은 연결(503 상한, 401, 404 포함)·45초 무응답은 5초 polling으로 바꾸고 30초·60초·120초 뒤 최대 3번 다시 연결을 시도한다. `closed`는 GET 한 번으로 오류(401·404)를 표시한다.
 - 대기 중 run의 대기 사유는 읽을 때 계산되고 이벤트가 없으므로, 실시간 연결 중에도 `queued`이면 5초마다 GET한다.
 - 화면은 연결 방식(실시간·연결 중·polling 대체·숨김), 마지막 확인 시각, 계획 revision과 분모 변경 사유, 요청 경로(사용자·예약)를 보여준다. EventSource가 없는 환경은 W22 이전과 같은 polling이다.
 - 예약 화면은 구성원에게 목록을, manager에게 등록(같은 본문 재시도는 같은 `Idempotency-Key`)·삭제(`If-Match`)를 제공한다. 문자열은 `web/src/locales/ko.ts`에 있다.
@@ -154,7 +155,7 @@ data: {"run_id":"…"}
 
 ### 실행한 검증
 
-작업 브랜치에서 `gofmt -l .`(출력 없음), `go vet ./...`, `GOOS=windows go vet ./...`, `python3 scripts/validate_bundle.py`, `cd web && npm ci && npm test && npm run build`(16개 파일, 176개 시험), PostgreSQL 클라이언트를 `PATH`에 둔 `python3 scripts/test_postgres.py --nodes --web --scheduler`가 모두 통과했다. 마지막 명령은 임시 PostgreSQL에서 `go test -race ./...`(PostgreSQL 시험 포함, 건너뜀 없음), Chromium e2e, 두 노드·실제 Go vet smoke(실제 run SSE 40개 이벤트), scheduler smoke를 실행한다. Windows는 vet만 했고 Windows에서 시험을 실행하지 않았다. 실제 모델 요청은 보내지 않았다.
+작업 브랜치에서 `gofmt -l .`(출력 없음), `go vet ./...`, `GOOS=windows go vet ./...`, `python3 scripts/validate_bundle.py`, `cd web && npm ci && npm test && npm run build`(16개 파일, 177개 시험), PostgreSQL 클라이언트를 `PATH`에 둔 `python3 scripts/test_postgres.py --nodes --web --scheduler`가 모두 통과했다. 마지막 명령은 임시 PostgreSQL에서 `go test -race ./...`(PostgreSQL 시험 포함, 건너뜀 없음), Chromium e2e, 두 노드·실제 Go vet smoke(실제 run SSE 40개 이벤트), scheduler smoke를 실행한다. Windows는 vet만 했고 Windows에서 시험을 실행하지 않았다. 실제 모델 요청은 보내지 않았다.
 
 ## 7. 남은 제한
 
@@ -163,3 +164,5 @@ data: {"run_id":"…"}
 - 예약 수정(PATCH)은 API만 있고 화면은 등록·삭제만 있다.
 - SSE 이벤트 보관·삭제 정책이 없어 `cursor_expired`는 재전송 상한(1000)만 뜻한다. 스트림 설정은 CLI로 바꿀 수 없다.
 - 한 reconcile 패스는 예약 100개까지 평가한다. 더 많으면 다음 패스로 넘어간다.
+- 배치 중간·상태 문서 조회 중 권한 상실(`closed(access_revoked)`) 분기와 세션 만료(로그아웃 경로만 시험)는 별도 시험이 없다. 실제 서버의 예약 응답을 OpenAPI `Schedule`로 검증하는 스크립트 시험은 없다(예시와 Go 시험만).
+- [API 문서](11-api-and-events.md)의 SSE·예약 "후속 작업" 문구와 설계 예시, [워커·예약 문서](09-workers-and-scheduling.md)의 "후속 설계" 문구, [데이터 모델](10-data-model.md)의 migration 표, 구현 순서·수용 시험·색인의 W22 상태는 이 브랜치에서 고치지 않았다(통합 검토에서 갱신).

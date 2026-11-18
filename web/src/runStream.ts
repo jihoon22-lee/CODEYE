@@ -198,10 +198,12 @@ export function createRunStream(o: RunStreamOptions) {
       return;
     }
     es = source;
+    let opened = false;
     touch();
     // Open means the server answered 200 text/event-stream (a 401/404/503 fires onerror instead).
     source.onopen = () => {
       if (es !== source) return;
+      opened = true;
       touch();
       setMode('live');
       reconcileWhileQueued();
@@ -232,14 +234,19 @@ export function createRunStream(o: RunStreamOptions) {
     source.addEventListener('heartbeat', () => {
       if (es !== source) return;
       touch();
-      failures = 0;
+      failures = resyncs = 0;
       setMode('live');
       o.onConfirmed?.(new Date());
     });
     source.addEventListener('state.resync', () => { if (es === source) resync(); });
     // The session ended or the run is no longer readable: one GET surfaces 401/404 as an error.
     source.addEventListener('closed', () => { if (es === source) { failures = maxReopens; fail(); } });
-    source.onerror = () => { if (es === source) fail(); };
+    // An open stream that ends (the server's 30-minute limit, a restart) reconnects at once from a
+    // fresh GET (bounded by maxResyncs); a stream that never opened is a failure.
+    source.onerror = () => {
+      if (es !== source) return;
+      if (opened) resync(); else fail();
+    };
   }
 
   function pause() {

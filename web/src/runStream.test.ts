@@ -130,6 +130,28 @@ describe('run event stream', () => {
     h.s.stop();
   });
 
+  it('reconnects at once when an open stream ends (server time limit), and falls back after repeated ends', async () => {
+    const h = setup([view(3, 2), view(5, 3)], { maxResyncs: 2 });
+    h.s.start();
+    await tick();
+    const first = FakeEventSource.last();
+    first.open();
+    first.fail(); // the server closed a stream that was open
+    expect(first.closed).toBe(true);
+    await tick();
+    expect(h.opened).toEqual([3, 5]); // fresh GET, then the new cursor; no polling detour
+    expect(h.mode()).toBe('connecting');
+    FakeEventSource.last().open();
+    expect(h.mode()).toBe('live');
+    FakeEventSource.last().fail();
+    await tick();
+    FakeEventSource.last().open();
+    FakeEventSource.last().fail(); // third end without a heartbeat or run.view in between
+    await tick();
+    expect(h.mode()).toBe('fallback');
+    h.s.stop();
+  });
+
   it('treats silence past the watchdog as a failure', async () => {
     const h = setup([view(3, 2)], { watchdogMs: 1000, reopenMs: 60_000 });
     h.s.start();

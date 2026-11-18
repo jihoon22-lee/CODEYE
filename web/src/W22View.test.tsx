@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen } from '@testing-library/react';
 import { advance, backend, flush, renderApp, runCalls } from './harness';
+import { formatInstant } from './format';
 import { ko as t } from './locales/ko';
 import { FakeEventSource, apiError, json, runView } from './test-utils';
 
@@ -34,7 +35,7 @@ describe('run panel over the event stream (W22)', () => {
     expect(screen.getByText(new RegExp(t.runs.streamLive))).toBeTruthy();
     expect(screen.getByText(t.runs.planValue(1, 1, 4))).toBeTruthy();
     expect(screen.getByText(t.runs.weightBasis.mixed!)).toBeTruthy();
-    expect(screen.getByText(t.runs.triggerSchedule('2026-11-18 ' + new Date('2026-11-18T03:00:00Z').toTimeString().slice(0, 8)))).toBeTruthy();
+    expect(screen.getByText(t.runs.triggerSchedule(formatInstant('2026-11-18T03:00:00Z')))).toBeTruthy();
     act(() => {
       es.row(4, 'task.created');
       es.emit('run.view', running(4, 3, { plan_revision: 2, total_tasks: 5, estimated_percent: 14.3, planned_weight: 7,
