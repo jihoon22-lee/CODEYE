@@ -52,6 +52,37 @@ def wait_for(description, probe, children, timeout=60):
     raise RuntimeError(f"{description} 시간 초과")
 
 
+def without_clock(activity):
+    return {key: value for key, value in activity.items() if key != "checked_at"}
+
+
+def activity_agrees(session, project_id):
+    """W15 (TC-98): the project list, project detail and run detail show the
+    same representative run and stages, and all match the OpenAPI contract."""
+    import validate_bundle
+    order = validate_bundle.stage_vocabulary()[0]
+    listed = [p for p in session.request("GET", "projects?limit=100")["items"] if p["id"] == project_id]
+    detail = session.request("GET", f"projects/{project_id}")
+    assert len(listed) == 1, "프로젝트 목록 누락"
+    project_schema = validate_bundle.api_validator("Project")
+    project_schema.validate(listed[0])
+    project_schema.validate(detail)
+    activity = detail["activity"]
+    assert without_clock(listed[0]["activity"]) == without_clock(activity), "목록과 상세의 단계 표시 불일치"
+    validate_bundle.check_activity(activity, order)
+    if activity["run"] is not None:
+        run = session.request("GET", f"runs/{activity['run']['id']}")
+        validate_bundle.api_validator("RunView").validate(run)
+        progress = run["progress"]
+        assert (progress["detail"], progress["stages"], progress["last_event_at"]) == (activity["detail"], activity["stages"], activity["last_event_at"]), "실행 상세와 프로젝트 단계 불일치"
+        assert run["status"] == activity["run"]["status"] == progress["stage"]
+    return activity
+
+
+def stage_map(activity):
+    return {stage["key"]: stage for stage in activity["stages"]}
+
+
 @contextmanager
 def service(argv, directory, env, log_path):
     with log_path.open("wb") as log:
@@ -146,6 +177,16 @@ def run(base, root, env, *, browser=False):
         wait_for("실행 취소 확인", lambda: session.request("GET", lookup)["status"] == "cancelled", children)
         assert scalar(f"SELECT number || ':' || epoch || ':' || cleanup_state FROM attempts WHERE run_id='{run_id}'") == "1:1:confirmed"
         assert mode.read_text() == "sleep\n"
+        # W15: the real worker's planned stage is shown once the controller has
+        # settled the cancelled run's report (published or refused).
+        def report_settled(run):
+            return scalar(f"SELECT (SELECT count(*) FROM reports WHERE run_id='{run}')+(SELECT count(*) FROM report_rejections WHERE run_id='{run}')") != "0"
+        wait_for("취소 run 보고서 처리", lambda: report_settled(run_id), children)
+        cancelled = activity_agrees(session, project["id"])
+        stages = stage_map(cancelled)
+        assert cancelled["run"]["id"] == run_id and cancelled["run"]["status"] == "cancelled" and cancelled["detail"] == "recorded", cancelled
+        assert stages["source"]["state"] == "succeeded" and stages["report"]["state"] in ("succeeded", "cancelled"), stages
+        assert stages["static_analysis"]["state"] == "cancelled" and stages["static_analysis"]["counts"] == {"cancelled": 1}, stages
 
         mode.write_text("succeed\n")
         next_run = session.enqueue(project["id"])
@@ -156,6 +197,13 @@ def run(base, root, env, *, browser=False):
         assert final["progress"]["completed_tasks"] >= 1
         assert scalar(f"SELECT count(*) FROM attempts WHERE run_id='{next_run}' AND status='released'") == "1"
         assert mode.read_text() == "succeed\n"
+        done = activity_agrees(session, project["id"])
+        stages = stage_map(done)
+        assert done["run"]["id"] == next_run and done["other_active_runs"] == 0 and done["last_report"]["run_id"] == next_run, done
+        analysis = stages["static_analysis"]
+        assert (analysis["state"], analysis["planned"], analysis["finished"], analysis["succeeded"]) == ("succeeded", 1, 1, 1), analysis
+        assert stages["source"]["state"] == stages["report"]["state"] == "succeeded" and analysis["started_at"] and analysis["finished_at"], stages
+        print("PASS: W15 실제 워커 단계 기록·목록/상세/실행 상세 일치·취소 단계 (시험용 handler)")
         # 별도 root를 등록해 시험용 handler가 실제 분석 요청을 가져갈 수 없게 한다.
         go_source = directory / "go-project"
         shutil.copytree(root / "fixtures" / "go-vet", go_source)
@@ -194,6 +242,14 @@ def run(base, root, env, *, browser=False):
             return state["report"] if state["status"] == "partial" else None
         revision = wait_for("실제 Go vet 보고서 게시", published, children)
         assert revision["revision"] == 1
+        # The product handlers' stages arrive with W15 discovery (track D);
+        # until then this run is "not_recorded". Either way list/detail agree.
+        go_activity = activity_agrees(session, go_project["id"])
+        assert go_activity["run"]["id"] == actual and go_activity["last_report"]["run_id"] == actual and go_activity["last_report"]["revision"] == 1
+        if go_activity["detail"] == "recorded":
+            go_stages = stage_map(go_activity)
+            assert go_stages["static_analysis"]["planned"] and go_stages["report"]["state"] == "succeeded", go_stages
+        print(f"PASS: W15 실제 Go run 단계 표시 detail={go_activity['detail']} (목록/상세 일치)")
         path = f"runs/{actual}/report?revision=1"
         code_free = session.request("GET", path)
         full = session.request("GET", path + "&include_code=true")

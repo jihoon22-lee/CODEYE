@@ -51,9 +51,10 @@ func mode(job analysis.Job) string {
 }
 
 func (handler) Plan(_ context.Context, job analysis.Job) ([]analysis.TaskSpec, error) {
-	tasks := []analysis.TaskSpec{{Key: "fixture.scan", Required: true, Title: "fixture scan"}}
+	// The fixture's shell tasks stand in for tool runs (display stage only).
+	tasks := []analysis.TaskSpec{{Key: "fixture.scan", Required: true, Title: "fixture scan", Stage: domain.StageStaticAnalysis}}
 	if mode(job) == "partial" {
-		tasks = append(tasks, analysis.TaskSpec{Key: "fixture.extra", Required: true, Title: "fixture extra"})
+		tasks = append(tasks, analysis.TaskSpec{Key: "fixture.extra", Required: true, Title: "fixture extra", Stage: domain.StageStaticAnalysis})
 	}
 	return tasks, nil
 }

@@ -73,23 +73,37 @@ func (s *Store) CreateTask(ctx context.Context, o Ownership, required bool) (str
 		if err = activeLease(ctx, tx, r, a, o); err != nil {
 			return "", err
 		}
-		id, _, err := createTaskTx(ctx, tx, &r, nil, required)
+		id, _, err := createTaskTx(ctx, tx, &r, nil, required, nil)
 		return id, err
 	})
 }
 
 // createTaskTx creates a task of the locked run. With a key, an existing task of
-// the run with that key (a retried run re-planning) is returned unchanged with
-// its current version and no event.
-func createTaskTx(ctx context.Context, tx pgx.Tx, r *Run, key *string, required bool) (string, int64, error) {
+// the run with that key (a retried run re-planning) is returned with its current
+// version. The display stage (docs/37 §2) is fixed at the first record: an
+// omitted stage keeps the stored one, a different stage is ErrConflict (like
+// required), and a stage declared for a task stored without one (a pre-W15
+// record re-planned by a W15 worker) is recorded once with a
+// task.stage_recorded event. Nothing is inferred from the key.
+func createTaskTx(ctx context.Context, tx pgx.Tx, r *Run, key *string, required bool, stage *domain.Stage) (string, int64, error) {
+	if stage != nil && !stage.Valid() {
+		return "", 0, domain.ErrInvalid
+	}
 	if key != nil {
 		var id string
 		var version int64
 		var req bool
-		err := tx.QueryRow(ctx, "SELECT id::text,version,required_for_verdict FROM tasks WHERE run_id=$1 AND key=$2 FOR UPDATE", r.ID, *key).Scan(&id, &version, &req)
+		var stored *string
+		err := tx.QueryRow(ctx, "SELECT id::text,version,required_for_verdict,stage FROM tasks WHERE run_id=$1 AND key=$2 FOR UPDATE", r.ID, *key).Scan(&id, &version, &req, &stored)
 		if err == nil {
-			if req != required {
+			if req != required || (stage != nil && stored != nil && *stored != string(*stage)) {
 				return "", 0, domain.ErrConflict
+			}
+			if stage != nil && stored == nil {
+				if _, err = tx.Exec(ctx, "UPDATE tasks SET stage=$3 WHERE run_id=$1 AND id=$2", r.ID, id, string(*stage)); err != nil {
+					return "", 0, err
+				}
+				return id, version, appendEvent(ctx, tx, r, "task.stage_recorded", map[string]any{"task_id": id, "stage": *stage}, false)
 			}
 			return id, version, nil
 		}
@@ -100,14 +114,22 @@ func createTaskTx(ctx context.Context, tx pgx.Tx, r *Run, key *string, required 
 	if r.Status != domain.RunPreparing && r.Status != domain.RunRunning {
 		return "", 0, domain.ErrInvalid
 	}
+	var stored *string
+	if stage != nil {
+		v := string(*stage)
+		stored = &v
+	}
 	id := domain.NewID()
-	if _, err := tx.Exec(ctx, "INSERT INTO tasks(id,run_id,status,required_for_verdict,key) VALUES($1,$2,'queued',$3,$4)", id, r.ID, required, key); err != nil {
+	if _, err := tx.Exec(ctx, "INSERT INTO tasks(id,run_id,status,required_for_verdict,key,stage) VALUES($1,$2,'queued',$3,$4,$5)", id, r.ID, required, key, stored); err != nil {
 		return "", 0, err
 	}
 	payload := map[string]any{"task_id": id}
 	if key != nil {
 		payload["key"] = *key
 		payload["required"] = required
+	}
+	if stage != nil {
+		payload["stage"] = *stage
 	}
 	return id, 1, appendEvent(ctx, tx, r, "task.created", payload, true)
 }
@@ -146,7 +168,12 @@ func setTaskStatusTx(ctx context.Context, tx pgx.Tx, r *Run, a attempt, id strin
 	if _, err := tx.Exec(ctx, "INSERT INTO task_executions(run_id,attempt_id,task_id,ordinal,status,version,reason) VALUES($1,$2,$3,1,$4,1,$5) ON CONFLICT(attempt_id,task_id,ordinal) DO UPDATE SET status=excluded.status,version=task_executions.version+1,reason=excluded.reason", r.ID, a.ID, id, next, reason); err != nil {
 		return 0, err
 	}
-	if err := tx.QueryRow(ctx, "UPDATE tasks SET status=$3,version=version+1,reason=$4 WHERE run_id=$1 AND id=$2 RETURNING version", r.ID, id, next, reason).Scan(&version); err != nil {
+	// started_at/finished_at are the database times this transition was
+	// accepted (never a worker clock).
+	if err := tx.QueryRow(ctx, `UPDATE tasks SET status=$3,version=version+1,reason=$4,
+		started_at=CASE WHEN $5 THEN clock_timestamp() ELSE started_at END,
+		finished_at=CASE WHEN $6 THEN clock_timestamp() ELSE finished_at END
+		WHERE run_id=$1 AND id=$2 RETURNING version`, r.ID, id, next, reason, next == domain.TaskRunning, next.Terminal()).Scan(&version); err != nil {
 		return 0, err
 	}
 	payload := map[string]any{"task_id": id, "status": next}
@@ -168,7 +195,7 @@ func closeTasks(ctx context.Context, tx pgx.Tx, runID, attemptID string, final d
 	if _, err := tx.Exec(ctx, "UPDATE task_executions SET status=CASE WHEN status='running' THEN $3::text ELSE $4::text END,version=version+1 WHERE run_id=$1 AND attempt_id=$2 AND status IN ('queued','blocked','running')", runID, attemptID, string(running), string(waiting)); err != nil {
 		return 0, err
 	}
-	tag, err := tx.Exec(ctx, "UPDATE tasks SET status=CASE WHEN status='running' THEN $2::text ELSE $3::text END,version=version+1 WHERE run_id=$1 AND status IN ('queued','blocked','running')", runID, string(running), string(waiting))
+	tag, err := tx.Exec(ctx, "UPDATE tasks SET status=CASE WHEN status='running' THEN $2::text ELSE $3::text END,version=version+1,finished_at=clock_timestamp() WHERE run_id=$1 AND status IN ('queued','blocked','running')", runID, string(running), string(waiting))
 	return tag.RowsAffected(), err
 }
 
