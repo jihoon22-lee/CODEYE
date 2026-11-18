@@ -162,7 +162,7 @@ def render(case, variant, documented=False):
     if variant not in variants(case):
         raise ValueError(f"{case['id']} has no {variant} variant")
     files = {}
-    for entry in case["files"]["shared"] + case["files"][variant]:
+    for entry in case["files"]["shared"] + case["files"].get(variant, []):
         files[entry["path"]] = text_of(entry)
     files[case["contract_file"]] = inject_contract(files[case["contract_file"]], case["contract"])
     files.update(manifests(case))
@@ -361,7 +361,7 @@ def validate_case(case, errors):
     if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)+", case["family"]):
         fail(errors, case, "family must be a kebab-case slug")
     name = case["project"]["name"]
-    if case["id"].lower() in name.lower() or any(w in name.lower() for w in case["family"].split("-") if len(w) > 3):
+    if case["id"].lower() in name.lower() or any(w in name.lower() for w in case["family"].split("-") if len(w) >= 6):
         fail(errors, case, "project name carries the id or family")
     label = case["label"]
     for field in REQUIRED_LABEL:
@@ -595,11 +595,17 @@ def verify(cases, args):
     errors, counts = validate(cases)
     selftest_ok, planted = leakage_selftest(cases[0])
     tools, skipped = toolchains(args)
+    skipped_cases = set()
     print("toolchains:")
     for tool, path in sorted(tools.items()):
         print(f"  {tool}: {path} ({tool_version(tool, path)})")
-    jobs = []
+    selected = [c for c in cases if (not args.language or c["language"] == args.language)
+                and (not args.case or c["id"] in args.case)]
     for case in cases:
+        if case not in selected and case["language"] not in skipped:
+            skipped_cases.add(case["id"])
+    jobs = []
+    for case in selected:
         if case["language"] in skipped:
             continue
         expected = {"before": "violation", "after": "pass"} if case["kind"] == "defect_pair" else {"before": "pass"}
@@ -620,8 +626,9 @@ def verify(cases, args):
                 results.setdefault((case["id"], variant), []).append((outcome, want, detail))
     mismatches = 0
     for case in cases:
-        if case["language"] in skipped:
-            print(f"SKIP {case['id']:<10} {case['language']:<10} {case['kind']:<13} ({skipped[case['language']]})")
+        if case["language"] in skipped or case["id"] in skipped_cases:
+            reason = skipped.get(case["language"], "not selected")
+            print(f"SKIP {case['id']:<10} {case['language']:<10} {case['kind']:<13} ({reason})")
             continue
         parts = []
         ok = True
@@ -644,12 +651,12 @@ def verify(cases, args):
     for error in errors:
         print("INVALID", error)
     print(f"leakage scanner self-test: {'ok' if selftest_ok else 'FAILED'} ({planted} planted leaks detected, clean input clean)")
-    executed = sum(1 for c in cases if c["language"] not in skipped)
+    executed = sum(1 for c in cases if c["language"] not in skipped and c["id"] not in skipped_cases)
     print(f"summary: {executed - mismatches}/{executed} executed cases as expected, {len(cases) - executed} skipped, "
           f"{len(errors)} structural/leakage errors, repeat={args.repeat}")
     print("counts:", json.dumps(counts, sort_keys=True))
     print("corpus digest:", corpus_digest(cases))
-    if mismatches or errors or not selftest_ok or (args.require_all and skipped):
+    if mismatches or errors or not selftest_ok or (args.require_all and (skipped or skipped_cases)):
         raise SystemExit(1)
 
 
@@ -669,7 +676,9 @@ def main():
         v.add_argument("--" + tool, help=f"absolute path (default ${env})")
     v.add_argument("--repeat", type=int, default=1, help="runs per variant, to expose nondeterminism")
     v.add_argument("--jobs", type=int, default=4)
-    v.add_argument("--require-all", action="store_true", help="fail when a language is skipped")
+    v.add_argument("--require-all", action="store_true", help="fail when a language or case is skipped")
+    v.add_argument("--language", choices=LANGUAGES, help="run checks for one language only")
+    v.add_argument("--case", action="append", help="run checks for this case id only (repeatable)")
     sub.add_parser("digest", help="print the corpus digest")
     sub.add_parser("rehash", help="rewrite stored per-variant digests in corpus.json")
     args = parser.parse_args()

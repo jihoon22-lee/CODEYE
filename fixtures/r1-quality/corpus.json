@@ -723,6 +723,2432 @@
   }
  },
  {
+  "id": "R1-PY-02",
+  "language": "python",
+  "split": "holdout",
+  "family": "mkstemp-file-kept-when-serialisation-raises",
+  "category": "resource_lifetime",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "statefile",
+   "title": "statefile",
+   "summary": "Durable JSON state snapshots for a single-process daemon, replaced atomically on every save."
+  },
+  "contract": "save_state(path, state) replaces the snapshot at path with state encoded as JSON. state is a dict whose values JSON can encode; anything else raises TypeError or ValueError from the encoder. The replacement is atomic: readers see either the previous snapshot or the new one, never a partial file, and a failed save leaves the directory exactly as it was. The parent directory must exist and be writable.",
+  "contract_file": "src/statefile/snapshot.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/statefile/__init__.py",
+     "lines": [
+      "\"\"\"Atomic JSON state snapshots.\"\"\"",
+      "",
+      "from .snapshot import load_state, save_state",
+      "",
+      "__all__ = [\"load_state\", \"save_state\"]"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/statefile/snapshot.py",
+     "lines": [
+      "\"\"\"Read and replace JSON snapshots on local disk.\"\"\"",
+      "",
+      "import json",
+      "import os",
+      "import tempfile",
+      "from pathlib import Path",
+      "",
+      "",
+      "def save_state(path, state):",
+      "    \"\"\"Write ``state`` to ``path``.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    path = Path(path)",
+      "    fd, temp_name = tempfile.mkstemp(prefix=f\".{path.name}.\", suffix=\".tmp\", dir=path.parent)",
+      "    with os.fdopen(fd, \"w\", encoding=\"utf-8\") as handle:",
+      "        json.dump(state, handle, sort_keys=True, indent=2)",
+      "        handle.write(\"\\n\")",
+      "        handle.flush()",
+      "        os.fsync(handle.fileno())",
+      "    os.replace(temp_name, path)",
+      "",
+      "",
+      "def load_state(path, default=None):",
+      "    \"\"\"Return the saved state, or ``default`` when no snapshot exists yet.",
+      "",
+      "    A snapshot that is not valid JSON raises ValueError.",
+      "    \"\"\"",
+      "    try:",
+      "        with open(path, encoding=\"utf-8\") as handle:",
+      "            return json.load(handle)",
+      "    except FileNotFoundError:",
+      "        return default"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/statefile/snapshot.py",
+     "lines": [
+      "\"\"\"Read and replace JSON snapshots on local disk.\"\"\"",
+      "",
+      "import json",
+      "import os",
+      "import tempfile",
+      "from pathlib import Path",
+      "",
+      "",
+      "def save_state(path, state):",
+      "    \"\"\"Write ``state`` to ``path``.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    path = Path(path)",
+      "    fd, temp_name = tempfile.mkstemp(prefix=f\".{path.name}.\", suffix=\".tmp\", dir=path.parent)",
+      "    try:",
+      "        with os.fdopen(fd, \"w\", encoding=\"utf-8\") as handle:",
+      "            json.dump(state, handle, sort_keys=True, indent=2)",
+      "            handle.write(\"\\n\")",
+      "            handle.flush()",
+      "            os.fsync(handle.fileno())",
+      "        os.replace(temp_name, path)",
+      "    except BaseException:",
+      "        os.unlink(temp_name)",
+      "        raise",
+      "",
+      "",
+      "def load_state(path, default=None):",
+      "    \"\"\"Return the saved state, or ``default`` when no snapshot exists yet.",
+      "",
+      "    A snapshot that is not valid JSON raises ValueError.",
+      "    \"\"\"",
+      "    try:",
+      "        with open(path, encoding=\"utf-8\") as handle:",
+      "            return json.load(handle)",
+      "    except FileNotFoundError:",
+      "        return default"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "e950b720992122ff8558673140c40da37cf83e924eb22479783d72394190d0d8",
+   "before_documented": "b410b92f1acae6ae150052a49c41864bd84b8bb6e00d55339603d3b2e2afd4dc",
+   "after": "ce1befe652cd80658e277dc4390cf4c07c71b8cd8633bb3179640cebee57e99e",
+   "after_documented": "7727040c76bdaea0b825ead05118fb99b7a1199a5cd14f8a5631e4684e41363f"
+  },
+  "check": {
+   "summary": "Saves a valid state, then a state holding a set; asserts the TypeError, the unchanged snapshot content and that the directory listing still has only the snapshot.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: directory changed by a failed save",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import os",
+      "import sys",
+      "import tempfile",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from statefile import load_state, save_state  # noqa: E402",
+      "",
+      "failures = []",
+      "with tempfile.TemporaryDirectory() as tmp:",
+      "    target = Path(tmp) / \"daemon.json\"",
+      "    if load_state(target, default={}) != {}:",
+      "        failures.append(\"missing snapshot did not return the default\")",
+      "    save_state(target, {\"cursor\": 41, \"peers\": [\"a\", \"b\"]})",
+      "    first = target.read_text(encoding=\"utf-8\")",
+      "    for bad in ({\"seen\": {1, 2}}, {\"cursor\": object()}):",
+      "        try:",
+      "            save_state(target, bad)",
+      "            failures.append(\"unencodable state saved\")",
+      "        except TypeError:",
+      "            pass",
+      "    if sorted(os.listdir(tmp)) != [\"daemon.json\"]:",
+      "        failures.append(f\"directory changed by a failed save: {sorted(os.listdir(tmp))}\")",
+      "    if target.read_text(encoding=\"utf-8\") != first or load_state(target) != {\"cursor\": 41, \"peers\": [\"a\", \"b\"]}:",
+      "        failures.append(\"previous snapshot modified\")",
+      "    save_state(target, {\"cursor\": 42})",
+      "    if load_state(target) != {\"cursor\": 42} or sorted(os.listdir(tmp)) != [\"daemon.json\"]:",
+      "        failures.append(\"second save did not replace the snapshot cleanly\")",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "state contains a value the encoder rejects (a set, a datetime, an arbitrary object). json.dump raises inside the with block, once mkstemp has already created the temporary file next to the snapshot.",
+   "expected_impact": "The exception reaches the caller and the old snapshot survives, but the partially written .tmp file stays in the directory. Every failed save adds one; a daemon that retries saves on a timer fills the state directory, and tools that list it see the debris.",
+   "positive_locations": [
+    {
+     "path": "src/statefile/snapshot.py",
+     "symbol": "save_state",
+     "anchors": {
+      "start": "fd, temp_name = tempfile.mkstemp(",
+      "end": "os.replace(temp_name, path)"
+     },
+     "start_line": 20,
+     "end_line": 26
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/statefile/snapshot.py",
+     "symbol": "save_state",
+     "anchors": {
+      "start": "except BaseException:",
+      "end": "raise"
+     },
+     "note": "The corrected version removes the temporary file on any exception and re-raises, so the directory is unchanged and the caller still gets the encoder error.",
+     "start_line": 28,
+     "end_line": 30
+    },
+    {
+     "variant": "before",
+     "path": "src/statefile/snapshot.py",
+     "symbol": "save_state",
+     "anchors": {
+      "start": "with os.fdopen(fd, \"w\", encoding=\"utf-8\") as handle:"
+     },
+     "note": "The descriptor itself is closed by the with block; only the directory entry remains.",
+     "start_line": 21,
+     "end_line": 21
+    }
+   ],
+   "reviewer_notes": "Atomicity for readers holds in both versions; the difference is the directory state on failure. OSError from a full disk takes the same path.",
+   "distinctive_tokens": [
+    "orphaned",
+    "stray",
+    "debris",
+    "litter",
+    "unlinked"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/statefile/snapshot.py"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-PY-03",
+  "language": "python",
+  "split": "holdout",
+  "family": "executor-submit-results-never-collected",
+  "category": "concurrency_async",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "thumbnailer",
+   "title": "thumbnailer",
+   "summary": "Batch preview generation for an image archive, rendering files on a thread pool."
+  },
+  "contract": "render_all(sources, out_dir, workers=4) renders every source concurrently and returns the output paths in source order. If any render fails, render_all waits for the remaining renders and then raises the exception of the first failed source in source order; outputs that rendered successfully are kept. sources is a list of paths to existing files, out_dir an existing directory, workers an integer of 1 or more.",
+  "contract_file": "src/thumbnailer/batch.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/thumbnailer/__init__.py",
+     "lines": [
+      "\"\"\"Preview generation for the image archive.\"\"\"",
+      "",
+      "from .batch import render_all",
+      "from .render import RenderError, render_one",
+      "",
+      "__all__ = [\"RenderError\", \"render_all\", \"render_one\"]"
+     ]
+    },
+    {
+     "path": "src/thumbnailer/render.py",
+     "lines": [
+      "\"\"\"Render one preview from an archive image.\"\"\"",
+      "",
+      "from pathlib import Path",
+      "",
+      "MAGIC = b\"ARIM\"",
+      "STRIDE = 4",
+      "",
+      "",
+      "class RenderError(Exception):",
+      "    \"\"\"A source could not be turned into a preview.\"\"\"",
+      "",
+      "    def __init__(self, source, reason):",
+      "        super().__init__(f\"{source}: {reason}\")",
+      "        self.source = Path(source)",
+      "",
+      "",
+      "def render_one(source, output):",
+      "    \"\"\"Write a preview of ``source`` to ``output``.",
+      "",
+      "    Archive images start with MAGIC; the preview keeps every STRIDE-th byte",
+      "    of the pixel data.",
+      "    \"\"\"",
+      "    data = Path(source).read_bytes()",
+      "    if not data.startswith(MAGIC):",
+      "        raise RenderError(source, \"not an archive image\")",
+      "    pixels = data[len(MAGIC):]",
+      "    Path(output).write_bytes(MAGIC + pixels[::STRIDE])",
+      "    return Path(output)"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/thumbnailer/batch.py",
+     "lines": [
+      "\"\"\"Render many previews concurrently.\"\"\"",
+      "",
+      "from concurrent.futures import ThreadPoolExecutor",
+      "from pathlib import Path",
+      "",
+      "from .render import render_one",
+      "",
+      "",
+      "def render_all(sources, out_dir, *, workers=4, render=render_one):",
+      "    \"\"\"Render a preview for each source into ``out_dir``.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    if workers < 1:",
+      "        raise ValueError(\"workers must be at least 1\")",
+      "    out_dir = Path(out_dir)",
+      "    outputs = [out_dir / (Path(source).stem + \".preview\") for source in sources]",
+      "    with ThreadPoolExecutor(max_workers=workers) as pool:",
+      "        for source, output in zip(sources, outputs):",
+      "            pool.submit(render, source, output)",
+      "    return outputs"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/thumbnailer/batch.py",
+     "lines": [
+      "\"\"\"Render many previews concurrently.\"\"\"",
+      "",
+      "from concurrent.futures import ThreadPoolExecutor",
+      "from pathlib import Path",
+      "",
+      "from .render import render_one",
+      "",
+      "",
+      "def render_all(sources, out_dir, *, workers=4, render=render_one):",
+      "    \"\"\"Render a preview for each source into ``out_dir``.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    if workers < 1:",
+      "        raise ValueError(\"workers must be at least 1\")",
+      "    out_dir = Path(out_dir)",
+      "    outputs = [out_dir / (Path(source).stem + \".preview\") for source in sources]",
+      "    with ThreadPoolExecutor(max_workers=workers) as pool:",
+      "        futures = [pool.submit(render, source, output) for source, output in zip(sources, outputs)]",
+      "    for future in futures:",
+      "        future.result()",
+      "    return outputs"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "6c15e97a8a23b51a380fdbd52f89fb0b76ba7a68b0e4de6dcb27b3a828acec65",
+   "before_documented": "6dd3acc1d4cdc645b85c9f8247055e880eddf6317684939a3e38e0df1ecad83c",
+   "after": "8084a0e79d1082c237b05aef959fb8a6d85fcd78cbbd2e7df03b3e559638eb87",
+   "after_documented": "d31457ff00c9dab1fe934fd004c2895ff276c1c64c387248f88540bbc0a6217d"
+  },
+  "check": {
+   "summary": "Renders three sources whose second one has a bad header and asserts that the batch raises RenderError naming that source while the other two outputs exist; also renders a clean batch.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: batch with a bad source returned normally",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import sys",
+      "import tempfile",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from thumbnailer import RenderError, render_all  # noqa: E402",
+      "",
+      "failures = []",
+      "with tempfile.TemporaryDirectory() as tmp:",
+      "    root = Path(tmp)",
+      "    src = root / \"src\"",
+      "    out = root / \"out\"",
+      "    src.mkdir()",
+      "    out.mkdir()",
+      "    (src / \"a.img\").write_bytes(b\"ARIM\" + bytes(range(64)))",
+      "    (src / \"b.img\").write_bytes(b\"PNG?\" + bytes(16))",
+      "    (src / \"c.img\").write_bytes(b\"ARIM\" + bytes(range(32)))",
+      "    try:",
+      "        result = render_all([src / \"a.img\", src / \"b.img\", src / \"c.img\"], out, workers=2)",
+      "        failures.append(f\"batch with a bad source returned normally: {[p.name for p in result]}\")",
+      "    except RenderError as exc:",
+      "        if exc.source.name != \"b.img\":",
+      "            failures.append(f\"wrong source reported: {exc.source}\")",
+      "    if not (out / \"a.preview\").exists() or not (out / \"c.preview\").exists() or (out / \"b.preview\").exists():",
+      "        failures.append(f\"unexpected outputs: {sorted(p.name for p in out.iterdir())}\")",
+      "    clean = render_all([src / \"a.img\", src / \"c.img\"], out, workers=1)",
+      "    if [p.name for p in clean] != [\"a.preview\", \"c.preview\"]:",
+      "        failures.append(f\"clean batch returned {clean}\")",
+      "    if (out / \"a.preview\").read_bytes() != b\"ARIM\" + bytes(range(0, 64, 4)):",
+      "        failures.append(\"preview content\")",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Any source that render_one rejects (bad header, unreadable file). The exception is stored in the Future returned by submit, and render_all never keeps or inspects those futures.",
+   "expected_impact": "render_all returns the full list of output paths as if every render succeeded. The caller publishes or indexes previews that were never written, and the failure is not logged anywhere because a Future's exception is only reported when someone asks for it.",
+   "positive_locations": [
+    {
+     "path": "src/thumbnailer/batch.py",
+     "symbol": "render_all",
+     "anchors": {
+      "start": "with ThreadPoolExecutor(max_workers=workers) as pool:",
+      "end": "return outputs"
+     },
+     "start_line": 23,
+     "end_line": 26
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/thumbnailer/batch.py",
+     "symbol": "render_all",
+     "anchors": {
+      "start": "futures = [pool.submit(render, source, output)",
+      "end": "future.result()"
+     },
+     "note": "The corrected version keeps every future and calls result() in source order once the pool has finished, which re-raises the first failure in order.",
+     "start_line": 24,
+     "end_line": 26
+    },
+    {
+     "variant": "before",
+     "path": "src/thumbnailer/render.py",
+     "symbol": "render_one",
+     "anchors": {
+      "start": "raise RenderError(source, \"not an archive image\")"
+     },
+     "note": "render_one reports a bad header correctly; the exception is produced, it just never leaves the pool.",
+     "start_line": 25,
+     "end_line": 25
+    }
+   ],
+   "reviewer_notes": "Shutting the pool down with the context manager waits for completion, so the batch is not cut short; only the error is lost. Cross-file: render.py raises, batch.py drops.",
+   "distinctive_tokens": [
+    "discarded",
+    "unobserved",
+    "fire-and-forget",
+    "uninspected"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/thumbnailer/batch.py"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-PY-04",
+  "language": "python",
+  "split": "holdout",
+  "family": "queue-accounting-skipped-on-handler-exception",
+  "category": "concurrency_async",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "eventpump",
+   "title": "eventpump",
+   "summary": "An asyncio dispatcher that feeds webhook events to a handler on a few worker tasks."
+  },
+  "contract": "Dispatcher.drain() returns once every event submitted so far, including events submitted while drain is waiting, has been handled, whether its handler returned or raised. A handler exception (any Exception subclass) is recorded in failures as an (event, exception) pair and never stops a worker. start() must be called once, inside a running event loop, prior to drain; close() cancels the workers. Events can be any object.",
+  "contract_file": "src/eventpump/dispatch.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/eventpump/__init__.py",
+     "lines": [
+      "\"\"\"Asynchronous event dispatch.\"\"\"",
+      "",
+      "from .dispatch import Dispatcher",
+      "",
+      "__all__ = [\"Dispatcher\"]"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/eventpump/dispatch.py",
+     "lines": [
+      "\"\"\"Fan events out to an async handler on a small pool of worker tasks.\"\"\"",
+      "",
+      "import asyncio",
+      "import logging",
+      "",
+      "log = logging.getLogger(__name__)",
+      "",
+      "",
+      "class Dispatcher:",
+      "    \"\"\"Runs ``handler(event)`` for queued events on ``workers`` tasks.\"\"\"",
+      "",
+      "    def __init__(self, handler, *, workers=2):",
+      "        if workers < 1:",
+      "            raise ValueError(\"workers must be at least 1\")",
+      "        self._handler = handler",
+      "        self._workers = workers",
+      "        self._queue = asyncio.Queue()",
+      "        self._tasks = []",
+      "        self.failures = []",
+      "",
+      "    def start(self):",
+      "        if self._tasks:",
+      "            raise RuntimeError(\"dispatcher already started\")",
+      "        self._tasks = [asyncio.create_task(self._work(n)) for n in range(self._workers)]",
+      "",
+      "    def submit(self, event):",
+      "        self._queue.put_nowait(event)",
+      "",
+      "    async def drain(self):",
+      "        \"\"\"Wait for submitted events.",
+      "",
+      "        {{CONTRACT}}",
+      "        \"\"\"",
+      "        await self._queue.join()",
+      "",
+      "    async def close(self):",
+      "        for task in self._tasks:",
+      "            task.cancel()",
+      "        await asyncio.gather(*self._tasks, return_exceptions=True)",
+      "        self._tasks = []",
+      "",
+      "    async def _work(self, number):",
+      "        while True:",
+      "            event = await self._queue.get()",
+      "            try:",
+      "                await self._handler(event)",
+      "                self._queue.task_done()",
+      "            except Exception as exc:",
+      "                log.warning(\"worker %d: handler raised for %r: %s\", number, event, exc)",
+      "                self.failures.append((event, exc))"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/eventpump/dispatch.py",
+     "lines": [
+      "\"\"\"Fan events out to an async handler on a small pool of worker tasks.\"\"\"",
+      "",
+      "import asyncio",
+      "import logging",
+      "",
+      "log = logging.getLogger(__name__)",
+      "",
+      "",
+      "class Dispatcher:",
+      "    \"\"\"Runs ``handler(event)`` for queued events on ``workers`` tasks.\"\"\"",
+      "",
+      "    def __init__(self, handler, *, workers=2):",
+      "        if workers < 1:",
+      "            raise ValueError(\"workers must be at least 1\")",
+      "        self._handler = handler",
+      "        self._workers = workers",
+      "        self._queue = asyncio.Queue()",
+      "        self._tasks = []",
+      "        self.failures = []",
+      "",
+      "    def start(self):",
+      "        if self._tasks:",
+      "            raise RuntimeError(\"dispatcher already started\")",
+      "        self._tasks = [asyncio.create_task(self._work(n)) for n in range(self._workers)]",
+      "",
+      "    def submit(self, event):",
+      "        self._queue.put_nowait(event)",
+      "",
+      "    async def drain(self):",
+      "        \"\"\"Wait for submitted events.",
+      "",
+      "        {{CONTRACT}}",
+      "        \"\"\"",
+      "        await self._queue.join()",
+      "",
+      "    async def close(self):",
+      "        for task in self._tasks:",
+      "            task.cancel()",
+      "        await asyncio.gather(*self._tasks, return_exceptions=True)",
+      "        self._tasks = []",
+      "",
+      "    async def _work(self, number):",
+      "        while True:",
+      "            event = await self._queue.get()",
+      "            try:",
+      "                await self._handler(event)",
+      "            except Exception as exc:",
+      "                log.warning(\"worker %d: handler raised for %r: %s\", number, event, exc)",
+      "                self.failures.append((event, exc))",
+      "            finally:",
+      "                self._queue.task_done()"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "69baf01af65df06b8ca9cb6bd25013fa974930d9b25a14f2ef2f1cee149b4ad4",
+   "before_documented": "12653209ffee6045f0b9f1d51dd9c4bba37abc469197b197bee3e4dda5a0fd01",
+   "after": "8e4026f3ca9e1214cf00738236d126af550f99cf8e01a47d5b620543e95dd5ee",
+   "after_documented": "45b3748f89a5bb5b82c76cc3af22762e33d3b6d8043e9994c82b57ad57a58c9b"
+  },
+  "check": {
+   "summary": "Starts two workers, submits five events of which one handler raises, and waits up to two seconds for drain; then checks the recorded failure and the handled set.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: drain did not return within 2 s",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import asyncio",
+      "import logging",
+      "import sys",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from eventpump import Dispatcher  # noqa: E402",
+      "",
+      "logging.disable(logging.CRITICAL)",
+      "failures = []",
+      "",
+      "",
+      "async def main():",
+      "    handled = []",
+      "",
+      "    async def handler(event):",
+      "        await asyncio.sleep(0.01)",
+      "        if event == \"e3\":",
+      "            raise ValueError(\"payload rejected\")",
+      "        handled.append(event)",
+      "",
+      "    dispatcher = Dispatcher(handler, workers=2)",
+      "    dispatcher.start()",
+      "    for n in range(1, 6):",
+      "        dispatcher.submit(f\"e{n}\")",
+      "    try:",
+      "        await asyncio.wait_for(dispatcher.drain(), 2)",
+      "    except TimeoutError:",
+      "        failures.append(\"drain did not return within 2 s\")",
+      "    if sorted(handled) != [\"e1\", \"e2\", \"e4\", \"e5\"]:",
+      "        failures.append(f\"handled {sorted(handled)}\")",
+      "    if [(e, type(x).__name__) for e, x in dispatcher.failures] != [(\"e3\", \"ValueError\")]:",
+      "        failures.append(f\"failures {dispatcher.failures}\")",
+      "    dispatcher.submit(\"e6\")",
+      "    try:",
+      "        await asyncio.wait_for(dispatcher.drain(), 2)",
+      "    except TimeoutError:",
+      "        if not failures:",
+      "            failures.append(\"second drain did not return\")",
+      "    if \"e6\" not in handled:",
+      "        failures.append(\"worker stopped after a handler exception\")",
+      "    await asyncio.wait_for(dispatcher.close(), 2)",
+      "",
+      "",
+      "asyncio.run(main())",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A handler raises for at least one event. task_done() is only reached on the success path inside the try block, so the queue's count of unfinished tasks never returns to zero.",
+   "expected_impact": "drain() waits on queue.join() for good. Shutdown sequences that drain before closing hang, and the failure list shows the event while nothing reports that drain is stuck.",
+   "positive_locations": [
+    {
+     "path": "src/eventpump/dispatch.py",
+     "symbol": "Dispatcher._work",
+     "anchors": {
+      "start": "await self._handler(event)",
+      "end": "self.failures.append((event, exc))"
+     },
+     "start_line": 52,
+     "end_line": 56
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/eventpump/dispatch.py",
+     "symbol": "Dispatcher._work",
+     "anchors": {
+      "start": "finally:",
+      "end": "self._queue.task_done()"
+     },
+     "note": "The corrected worker marks the item done in a finally clause, so successes and handler exceptions both settle the count.",
+     "start_line": 56,
+     "end_line": 57
+    },
+    {
+     "variant": "before",
+     "path": "src/eventpump/dispatch.py",
+     "symbol": "Dispatcher._work",
+     "anchors": {
+      "start": "except Exception as exc:"
+     },
+     "note": "Catching Exception keeps workers alive as required and lets CancelledError through for close(); the handler is not the problem.",
+     "start_line": 54,
+     "end_line": 54
+    }
+   ],
+   "reviewer_notes": "Only drain is affected; workers keep processing later events. A finding that just says handler errors are only logged is not the defect: recording them is documented.",
+   "distinctive_tokens": [
+    "hangs forever",
+    "unfinished_tasks",
+    "join forever",
+    "never settles"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/eventpump/dispatch.py"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-PY-05",
+  "language": "python",
+  "split": "holdout",
+  "family": "half-open-tier-upper-bound-inclusive",
+  "category": "boundaries_arithmetic",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "meterbill",
+   "title": "meterbill",
+   "summary": "Monthly billing for metered API usage with volume pricing tiers."
+  },
+  "contract": "tier_for(tiers, total) returns the tier containing total. Tiers are half-open ranges lo <= total < hi, listed in ascending order, contiguous from 0, and only the last one is unbounded (hi is None); validate_tiers enforces this shape. total is an integer of 0 or more; a negative total raises ValueError.",
+  "contract_file": "src/meterbill/tiers.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/meterbill/__init__.py",
+     "lines": [
+      "\"\"\"Volume-priced billing for metered usage.\"\"\"",
+      "",
+      "from .billing import PRICE_LIST, monthly_charge",
+      "from .tiers import Tier, tier_for, validate_tiers",
+      "",
+      "__all__ = [\"PRICE_LIST\", \"Tier\", \"monthly_charge\", \"tier_for\", \"validate_tiers\"]"
+     ]
+    },
+    {
+     "path": "src/meterbill/billing.py",
+     "lines": [
+      "\"\"\"Monthly charges under volume pricing.\"\"\"",
+      "",
+      "from .tiers import Tier, tier_for, validate_tiers",
+      "",
+      "PRICE_LIST = validate_tiers([",
+      "    Tier(0, 1_000, 3),",
+      "    Tier(1_000, 10_000, 2),",
+      "    Tier(10_000, None, 1),",
+      "])",
+      "",
+      "",
+      "def monthly_charge(total, tiers=PRICE_LIST):",
+      "    \"\"\"Charge in cents for a month with ``total`` units.",
+      "",
+      "    Volume pricing: every unit of the month is billed at the rate of the",
+      "    tier that contains the monthly total.",
+      "    \"\"\"",
+      "    tier = tier_for(tiers, total)",
+      "    return total * tier.cents_per_unit"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/meterbill/tiers.py",
+     "lines": [
+      "\"\"\"Pricing tiers.\"\"\"",
+      "",
+      "from dataclasses import dataclass",
+      "",
+      "",
+      "@dataclass(frozen=True)",
+      "class Tier:",
+      "    lo: int",
+      "    hi: int | None",
+      "    cents_per_unit: int",
+      "",
+      "",
+      "def validate_tiers(tiers):",
+      "    \"\"\"Check that ``tiers`` partition [0, inf) and return them as a tuple.\"\"\"",
+      "    tiers = tuple(tiers)",
+      "    if not tiers or tiers[0].lo != 0 or tiers[-1].hi is not None:",
+      "        raise ValueError(\"tiers must start at 0 and end unbounded\")",
+      "    for current, following in zip(tiers, tiers[1:]):",
+      "        if current.hi is None or current.hi != following.lo or current.hi <= current.lo:",
+      "            raise ValueError(f\"tiers not contiguous at {current}\")",
+      "    return tiers",
+      "",
+      "",
+      "def tier_for(tiers, total):",
+      "    \"\"\"Find the tier for a monthly total.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    if total < 0:",
+      "        raise ValueError(f\"negative total {total}\")",
+      "    for tier in tiers:",
+      "        if tier.lo <= total and (tier.hi is None or total <= tier.hi):",
+      "            return tier",
+      "    raise LookupError(f\"no tier for {total}\")"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/meterbill/tiers.py",
+     "lines": [
+      "\"\"\"Pricing tiers.\"\"\"",
+      "",
+      "from dataclasses import dataclass",
+      "",
+      "",
+      "@dataclass(frozen=True)",
+      "class Tier:",
+      "    lo: int",
+      "    hi: int | None",
+      "    cents_per_unit: int",
+      "",
+      "",
+      "def validate_tiers(tiers):",
+      "    \"\"\"Check that ``tiers`` partition [0, inf) and return them as a tuple.\"\"\"",
+      "    tiers = tuple(tiers)",
+      "    if not tiers or tiers[0].lo != 0 or tiers[-1].hi is not None:",
+      "        raise ValueError(\"tiers must start at 0 and end unbounded\")",
+      "    for current, following in zip(tiers, tiers[1:]):",
+      "        if current.hi is None or current.hi != following.lo or current.hi <= current.lo:",
+      "            raise ValueError(f\"tiers not contiguous at {current}\")",
+      "    return tiers",
+      "",
+      "",
+      "def tier_for(tiers, total):",
+      "    \"\"\"Find the tier for a monthly total.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    if total < 0:",
+      "        raise ValueError(f\"negative total {total}\")",
+      "    for tier in tiers:",
+      "        if tier.lo <= total and (tier.hi is None or total < tier.hi):",
+      "            return tier",
+      "    raise LookupError(f\"no tier for {total}\")"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "e6dc6f67b45e23d3074b8af89c4a1936a7966a01c4be51667b7987a6933286ce",
+   "before_documented": "4c3ec10464cc1eb6f2d47879c6e8a4d976a68e48eb79bcec0edc30bf65ef39a7",
+   "after": "a9b95135f31a78784b95ef35f2d5a0860ed2fc91fda7850229b553dc58904416",
+   "after_documented": "78481ed38b48462bcb0f57f5f034caaffd338471f6e24f3360a91d4f06258c71"
+  },
+  "check": {
+   "summary": "Asks for the tier and the monthly charge at totals 0, 999, 1000, 1001, 9999, 10000 and above, with the published three-tier price list.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: total 1000: tier starting at 0, want 1000",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import sys",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from meterbill import PRICE_LIST, Tier, monthly_charge, tier_for, validate_tiers  # noqa: E402",
+      "",
+      "failures = []",
+      "want = {0: (0, 0), 999: (0, 2997), 1000: (1000, 2000), 1001: (1000, 2002), 9999: (1000, 19998),",
+      "        10000: (10000, 10000), 250000: (10000, 250000)}",
+      "for total, (lo, charge) in want.items():",
+      "    tier = tier_for(PRICE_LIST, total)",
+      "    if tier.lo != lo:",
+      "        failures.append(f\"total {total}: tier starting at {tier.lo}, want {lo}\")",
+      "    if monthly_charge(total) != charge:",
+      "        failures.append(f\"total {total}: charge {monthly_charge(total)}, want {charge}\")",
+      "try:",
+      "    tier_for(PRICE_LIST, -1)",
+      "    failures.append(\"negative total accepted\")",
+      "except ValueError:",
+      "    pass",
+      "try:",
+      "    validate_tiers([Tier(0, 10, 1), Tier(11, None, 1)])",
+      "    failures.append(\"gap accepted\")",
+      "except ValueError:",
+      "    pass",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A monthly total exactly equal to a tier boundary (1000 or 10000 units in the shipped price list). The membership test uses total <= hi, so the lower tier matches first.",
+   "expected_impact": "Customers who land exactly on a boundary are billed every unit at the lower tier's higher rate: 1000 units cost 3000 cents instead of 2000. Totals one unit above the boundary are priced correctly, so invoices are not monotonic in usage.",
+   "positive_locations": [
+    {
+     "path": "src/meterbill/tiers.py",
+     "symbol": "tier_for",
+     "anchors": {
+      "start": "if tier.lo <= total and (tier.hi is None or total <= tier.hi):"
+     },
+     "start_line": 36,
+     "end_line": 36
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/meterbill/tiers.py",
+     "symbol": "tier_for",
+     "anchors": {
+      "start": "if tier.lo <= total and (tier.hi is None or total < tier.hi):"
+     },
+     "note": "The corrected test excludes the upper bound, matching the documented half-open ranges.",
+     "start_line": 36,
+     "end_line": 36
+    },
+    {
+     "variant": "before",
+     "path": "src/meterbill/billing.py",
+     "symbol": "monthly_charge",
+     "anchors": {
+      "start": "tier = tier_for(tiers, total)"
+     },
+     "note": "monthly_charge applies volume pricing correctly once it has a tier; the arithmetic is integral and exact.",
+     "start_line": 18,
+     "end_line": 18
+    }
+   ],
+   "reviewer_notes": "validate_tiers guarantees hi of one tier equals lo of the next, which is exactly why an inclusive upper bound makes two tiers claim the same total. Totals strictly inside a tier are unaffected.",
+   "distinctive_tokens": [
+    "inclusive",
+    "fencepost",
+    "off-by-one",
+    "double-claimed"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/meterbill/tiers.py"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-PY-06",
+  "language": "python",
+  "split": "holdout",
+  "family": "character-set-strip-used-as-suffix-removal",
+  "category": "api_misuse",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": false,
+  "project": {
+   "name": "datasets",
+   "title": "datasets",
+   "summary": "A file-backed catalog of JSON datasets, one file per dataset in a single directory."
+  },
+  "contract": "dataset_name(filename) maps a catalog file name to its dataset name by removing the single trailing \".json\" extension, so \"sales.2024.json\" becomes \"sales.2024\" and \"a.json.json\" becomes \"a.json\". A name without that extension, or one that would leave an empty dataset name, raises ValueError. Dataset names may contain any characters other than \"/\".",
+  "contract_file": "src/datasets/catalog.py",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "src/datasets/catalog.py",
+     "lines": [
+      "\"\"\"Catalog of JSON datasets stored as one file each.\"\"\"",
+      "",
+      "import json",
+      "from pathlib import Path",
+      "",
+      "SUFFIX = \".json\"",
+      "",
+      "",
+      "def dataset_name(filename):",
+      "    \"\"\"Return the dataset name for a catalog file name.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    if not filename.endswith(SUFFIX) or filename == SUFFIX:",
+      "        raise ValueError(f\"not a dataset file: {filename!r}\")",
+      "    return filename.rstrip(SUFFIX)",
+      "",
+      "",
+      "def path_for(directory, name):",
+      "    \"\"\"Path of the file that stores dataset ``name``.\"\"\"",
+      "    if not name or \"/\" in name:",
+      "        raise ValueError(f\"invalid dataset name {name!r}\")",
+      "    return Path(directory) / (name + SUFFIX)",
+      "",
+      "",
+      "def list_datasets(directory):",
+      "    \"\"\"Sorted dataset names found in ``directory``; other files are ignored.\"\"\"",
+      "    names = []",
+      "    for entry in Path(directory).iterdir():",
+      "        if entry.is_file() and entry.name.endswith(SUFFIX) and entry.name != SUFFIX:",
+      "            names.append(dataset_name(entry.name))",
+      "    return sorted(names)",
+      "",
+      "",
+      "def load(directory, name):",
+      "    \"\"\"Parsed contents of dataset ``name``.\"\"\"",
+      "    with open(path_for(directory, name), encoding=\"utf-8\") as handle:",
+      "        return json.load(handle)"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/datasets/catalog.py",
+     "lines": [
+      "\"\"\"Catalog of JSON datasets stored as one file each.\"\"\"",
+      "",
+      "import json",
+      "from pathlib import Path",
+      "",
+      "SUFFIX = \".json\"",
+      "",
+      "",
+      "def dataset_name(filename):",
+      "    \"\"\"Return the dataset name for a catalog file name.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    if not filename.endswith(SUFFIX) or filename == SUFFIX:",
+      "        raise ValueError(f\"not a dataset file: {filename!r}\")",
+      "    return filename.removesuffix(SUFFIX)",
+      "",
+      "",
+      "def path_for(directory, name):",
+      "    \"\"\"Path of the file that stores dataset ``name``.\"\"\"",
+      "    if not name or \"/\" in name:",
+      "        raise ValueError(f\"invalid dataset name {name!r}\")",
+      "    return Path(directory) / (name + SUFFIX)",
+      "",
+      "",
+      "def list_datasets(directory):",
+      "    \"\"\"Sorted dataset names found in ``directory``; other files are ignored.\"\"\"",
+      "    names = []",
+      "    for entry in Path(directory).iterdir():",
+      "        if entry.is_file() and entry.name.endswith(SUFFIX) and entry.name != SUFFIX:",
+      "            names.append(dataset_name(entry.name))",
+      "    return sorted(names)",
+      "",
+      "",
+      "def load(directory, name):",
+      "    \"\"\"Parsed contents of dataset ``name``.\"\"\"",
+      "    with open(path_for(directory, name), encoding=\"utf-8\") as handle:",
+      "        return json.load(handle)"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "524e0b0a205d3fdcea9a02d414d567328de9c0adb8a3159f0580993548ee9368",
+   "before_documented": "332cc60576585841b7b6bd9e3d6a030e77bbe4e94b385a2a0d80eb0a83cb1839",
+   "after": "0867222ddd6caa3e8971653e3418aad0564eb60bf0182494179862c3e12391f7",
+   "after_documented": "264004ad781b1d64c702b08a35b05e0a029ae0bb72dff08572939051c41289fa"
+  },
+  "check": {
+   "summary": "Maps a set of catalog file names to dataset names and round-trips them through path_for; lists a directory with three dataset files.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: dataset_name\\('sessions.json'\\) = 'sessi'",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import sys",
+      "import tempfile",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from datasets.catalog import dataset_name, list_datasets, load, path_for  # noqa: E402",
+      "",
+      "failures = []",
+      "want = {\"sales.2024.json\": \"sales.2024\", \"a.json.json\": \"a.json\", \"sessions.json\": \"sessions\",",
+      "        \"events.json\": \"events\", \"region.json\": \"region\", \"x.json\": \"x\"}",
+      "for filename, name in want.items():",
+      "    got = dataset_name(filename)",
+      "    if got != name:",
+      "        failures.append(f\"dataset_name({filename!r}) = {got!r}, want {name!r}\")",
+      "for bad in (\"notes.txt\", \".json\", \"json\"):",
+      "    try:",
+      "        dataset_name(bad)",
+      "        failures.append(f\"{bad!r} accepted\")",
+      "    except ValueError:",
+      "        pass",
+      "with tempfile.TemporaryDirectory() as tmp:",
+      "    for name in (\"sessions\", \"sales.2024\", \"zone\"):",
+      "        path_for(tmp, name).write_text('{\"rows\": 1}', encoding=\"utf-8\")",
+      "    (Path(tmp) / \"README.txt\").write_text(\"x\", encoding=\"utf-8\")",
+      "    names = list_datasets(tmp)",
+      "    if names != [\"sales.2024\", \"sessions\", \"zone\"]:",
+      "        failures.append(f\"list_datasets = {names}\")",
+      "    for name in names:",
+      "        try:",
+      "            load(tmp, name)",
+      "        except FileNotFoundError:",
+      "            failures.append(f\"listed dataset {name!r} cannot be loaded\")",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A dataset name that ends in one of the characters '.', 'j', 's', 'o' or 'n', such as sessions, events, region or v2.json. str.rstrip treats its argument as a set of characters, not as a suffix.",
+   "expected_impact": "Those names lose trailing letters ('sessions.json' maps to 'sessi'), so list_datasets reports names that path_for cannot open, and two different files can map to the same dataset name.",
+   "positive_locations": [
+    {
+     "path": "src/datasets/catalog.py",
+     "symbol": "dataset_name",
+     "anchors": {
+      "start": "return filename.rstrip(SUFFIX)"
+     },
+     "start_line": 20,
+     "end_line": 20
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/datasets/catalog.py",
+     "symbol": "dataset_name",
+     "anchors": {
+      "start": "return filename.removesuffix(SUFFIX)"
+     },
+     "note": "removesuffix removes exactly one trailing occurrence of the extension.",
+     "start_line": 20,
+     "end_line": 20
+    },
+    {
+     "variant": "before",
+     "path": "src/datasets/catalog.py",
+     "symbol": "dataset_name",
+     "anchors": {
+      "start": "if not filename.endswith(SUFFIX) or filename == SUFFIX:"
+     },
+     "note": "The guard is right; the name passes it and is then cut too far.",
+     "start_line": 18,
+     "end_line": 18
+    }
+   ],
+   "reviewer_notes": "Linters with a multi-character strip rule (flake8-bugbear B005) point at the line. Names like 'sales.2024' happen to survive, which is why it passes casual testing.",
+   "distinctive_tokens": [
+    "character set",
+    "charset",
+    "multi-character",
+    "set of characters"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/datasets/catalog.py"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-PY-07",
+  "language": "python",
+  "split": "holdout",
+  "family": "recency-not-refreshed-on-read-hit",
+  "category": "state_invariants",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "schemacache",
+   "title": "schemacache",
+   "summary": "Caches compiled message schemas for a decoder so hot schemas are not recompiled."
+  },
+  "contract": "LRUCache(capacity) holds at most capacity entries; capacity is an integer of 1 or more. get(key, default=None) returns the stored value, or default when the key is absent, and a hit makes that entry the most recently used. put(key, value) stores the value, makes the entry the most recently used and then, when over capacity, evicts the least recently used entry. Keys are hashable. The cache is used from a single thread.",
+  "contract_file": "src/schemacache/lru.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/schemacache/__init__.py",
+     "lines": [
+      "\"\"\"Schema caching for the message decoder.\"\"\"",
+      "",
+      "from .lru import LRUCache",
+      "from .registry import SchemaRegistry",
+      "",
+      "__all__ = [\"LRUCache\", \"SchemaRegistry\"]"
+     ]
+    },
+    {
+     "path": "src/schemacache/registry.py",
+     "lines": [
+      "\"\"\"Compiled schemas, cached by name and version.\"\"\"",
+      "",
+      "import re",
+      "",
+      "from .lru import LRUCache",
+      "",
+      "_FIELD = re.compile(r\"(\\w+):(int|str|bool)\")",
+      "",
+      "",
+      "class SchemaRegistry:",
+      "    \"\"\"Compiles schema sources on demand and keeps the hottest ones.\"\"\"",
+      "",
+      "    def __init__(self, sources, capacity=64):",
+      "        self._sources = sources",
+      "        self._cache = LRUCache(capacity)",
+      "        self.compilations = 0",
+      "",
+      "    def schema(self, name, version):",
+      "        key = (name, version)",
+      "        compiled = self._cache.get(key)",
+      "        if compiled is None:",
+      "            compiled = self._compile(self._sources[key])",
+      "            self._cache.put(key, compiled)",
+      "        return compiled",
+      "",
+      "    def _compile(self, source):",
+      "        self.compilations += 1",
+      "        return tuple(_FIELD.findall(source))"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/schemacache/lru.py",
+     "lines": [
+      "\"\"\"A small least-recently-used cache.\"\"\"",
+      "",
+      "from collections import OrderedDict",
+      "",
+      "",
+      "class LRUCache:",
+      "    \"\"\"Mapping with bounded size.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "",
+      "    def __init__(self, capacity):",
+      "        if not isinstance(capacity, int) or capacity < 1:",
+      "            raise ValueError(f\"capacity must be a positive integer, got {capacity!r}\")",
+      "        self._capacity = capacity",
+      "        self._entries = OrderedDict()",
+      "",
+      "    def __len__(self):",
+      "        return len(self._entries)",
+      "",
+      "    def __contains__(self, key):",
+      "        return key in self._entries",
+      "",
+      "    def get(self, key, default=None):",
+      "        if key not in self._entries:",
+      "            return default",
+      "        return self._entries[key]",
+      "",
+      "    def put(self, key, value):",
+      "        self._entries[key] = value",
+      "        self._entries.move_to_end(key)",
+      "        if len(self._entries) > self._capacity:",
+      "            self._entries.popitem(last=False)"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/schemacache/lru.py",
+     "lines": [
+      "\"\"\"A small least-recently-used cache.\"\"\"",
+      "",
+      "from collections import OrderedDict",
+      "",
+      "",
+      "class LRUCache:",
+      "    \"\"\"Mapping with bounded size.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "",
+      "    def __init__(self, capacity):",
+      "        if not isinstance(capacity, int) or capacity < 1:",
+      "            raise ValueError(f\"capacity must be a positive integer, got {capacity!r}\")",
+      "        self._capacity = capacity",
+      "        self._entries = OrderedDict()",
+      "",
+      "    def __len__(self):",
+      "        return len(self._entries)",
+      "",
+      "    def __contains__(self, key):",
+      "        return key in self._entries",
+      "",
+      "    def get(self, key, default=None):",
+      "        if key not in self._entries:",
+      "            return default",
+      "        self._entries.move_to_end(key)",
+      "        return self._entries[key]",
+      "",
+      "    def put(self, key, value):",
+      "        self._entries[key] = value",
+      "        self._entries.move_to_end(key)",
+      "        if len(self._entries) > self._capacity:",
+      "            self._entries.popitem(last=False)"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "6b2b0f7323a7cbfee4ee77741173ff6fc5715ca745cc245127a3347b5704b74a",
+   "before_documented": "4f8816674d03733df26d071de711fb80fdab9ae0cc0590e8c35b2497b0c61fd1",
+   "after": "7b375a0d67b5e5aa63579c63c65ae77b7cf86dc823a12c6003b83bfa7c1c0d27",
+   "after_documented": "92dd9347df94198d5e2ab8585f4096cc6290940e82d70b10d67e517c0ff5e7ee"
+  },
+  "check": {
+   "summary": "Fills a two-entry cache, reads the older entry, inserts a third and checks which key was evicted; then counts compilations in the schema registry under a hot/cold access pattern.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: read entry evicted",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import sys",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from schemacache import LRUCache, SchemaRegistry  # noqa: E402",
+      "",
+      "failures = []",
+      "cache = LRUCache(2)",
+      "cache.put(\"a\", 1)",
+      "cache.put(\"b\", 2)",
+      "if cache.get(\"a\") != 1:",
+      "    failures.append(\"get a\")",
+      "cache.put(\"c\", 3)",
+      "if \"a\" not in cache:",
+      "    failures.append(\"read entry evicted while an older unread entry stayed\")",
+      "if \"b\" in cache or len(cache) != 2:",
+      "    failures.append(\"least recently used entry kept\")",
+      "if cache.get(\"zz\", \"none\") != \"none\":",
+      "    failures.append(\"default for missing key\")",
+      "cache.put(\"c\", 30)",
+      "if cache.get(\"c\") != 30 or len(cache) != 2:",
+      "    failures.append(\"replacing a value\")",
+      "",
+      "sources = {(f\"m{n}\", 1): f\"id:int name{n}:str\" for n in range(6)}",
+      "sources[(\"hot\", 1)] = \"id:int ok:bool\"",
+      "registry = SchemaRegistry(sources, capacity=3)",
+      "for n in range(6):",
+      "    registry.schema(\"hot\", 1)",
+      "    registry.schema(f\"m{n}\", 1)",
+      "if registry.compilations != 7:",
+      "    failures.append(f\"hot schema recompiled: {registry.compilations} compilations, want 7\")",
+      "if registry.schema(\"hot\", 1) != ((\"id\", \"int\"), (\"ok\", \"bool\")):",
+      "    failures.append(\"compiled schema content\")",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A key is read with get and then enough other keys are put to reach capacity. get returns the value without reordering, so eviction order is insertion order.",
+   "expected_impact": "The cache behaves as FIFO: a schema used on every message is evicted as soon as capacity new schemas arrive, and the registry recompiles it again and again under mixed traffic.",
+   "positive_locations": [
+    {
+     "path": "src/schemacache/lru.py",
+     "symbol": "LRUCache.get",
+     "anchors": {
+      "start": "def get(self, key, default=None):",
+      "end": "return self._entries[key]"
+     },
+     "start_line": 29,
+     "end_line": 32
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/schemacache/lru.py",
+     "symbol": "LRUCache.get",
+     "anchors": {
+      "near": "def get(self, key, default=None):",
+      "start": "self._entries.move_to_end(key)"
+     },
+     "note": "The corrected get moves the hit to the end of the OrderedDict, which is the most recently used position popitem(last=False) never takes first.",
+     "start_line": 32,
+     "end_line": 32
+    },
+    {
+     "variant": "before",
+     "path": "src/schemacache/lru.py",
+     "symbol": "LRUCache.put",
+     "anchors": {
+      "start": "def put(self, key, value):",
+      "end": "self._entries.popitem(last=False)"
+     },
+     "note": "put already maintains recency and evicts from the right end.",
+     "start_line": 34,
+     "end_line": 38
+    },
+    {
+     "variant": "before",
+     "path": "src/schemacache/registry.py",
+     "symbol": "SchemaRegistry.schema",
+     "anchors": {
+      "start": "compiled = self._cache.get(key)"
+     },
+     "note": "The registry calls get on every lookup and put only on a miss, which is the right usage; it depends on get refreshing recency.",
+     "start_line": 20,
+     "end_line": 20
+    }
+   ],
+   "reviewer_notes": "The visible cost is in registry.py, which relies on get for the hot path, so compile counts grow. Results stay correct; only performance and churn suffer.",
+   "distinctive_tokens": [
+    "fifo",
+    "first-in",
+    "insertion order",
+    "recompiles"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/schemacache/lru.py"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-PY-08",
+  "language": "python",
+  "split": "holdout",
+  "family": "unicode-digit-class-accepted-as-ascii",
+  "category": "input_validation",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "listenspec",
+   "title": "listenspec",
+   "summary": "Parses listener addresses such as \"0.0.0.0:8080\" from service configuration files."
+  },
+  "contract": "parse_port(text) accepts one to five ASCII digits 0-9, with no sign, spaces or other characters, whose value is between 1 and 65535, and returns the port as an int. Every other string raises InvalidPort, a ValueError subclass, with the offending text in its message. Leading zeros are allowed (\"0080\" is 80).",
+  "contract_file": "src/listenspec/ports.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/listenspec/__init__.py",
+     "lines": [
+      "\"\"\"Listener address parsing.\"\"\"",
+      "",
+      "from .listeners import Listener, parse_listener",
+      "from .ports import InvalidPort, parse_port",
+      "",
+      "__all__ = [\"InvalidPort\", \"Listener\", \"parse_listener\", \"parse_port\"]"
+     ]
+    },
+    {
+     "path": "src/listenspec/listeners.py",
+     "lines": [
+      "\"\"\"host:port listener specifications.\"\"\"",
+      "",
+      "import ipaddress",
+      "from dataclasses import dataclass",
+      "",
+      "from .ports import parse_port",
+      "",
+      "",
+      "@dataclass(frozen=True)",
+      "class Listener:",
+      "    host: str",
+      "    port: int",
+      "",
+      "",
+      "def parse_listener(spec):",
+      "    \"\"\"Parse ``host:port`` where host is an IPv4 address or ``[IPv6]``.\"\"\"",
+      "    host, sep, port_text = spec.rpartition(\":\")",
+      "    if not sep or not host:",
+      "        raise ValueError(f\"listener {spec!r} needs host:port\")",
+      "    if host.startswith(\"[\") and host.endswith(\"]\"):",
+      "        host = host[1:-1]",
+      "    ipaddress.ip_address(host)",
+      "    return Listener(host, parse_port(port_text))"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/listenspec/ports.py",
+     "lines": [
+      "\"\"\"TCP port numbers from configuration text.\"\"\"",
+      "",
+      "",
+      "class InvalidPort(ValueError):",
+      "    \"\"\"A configured port is not a decimal number from 1 to 65535.\"\"\"",
+      "",
+      "",
+      "def parse_port(text):",
+      "    \"\"\"Parse a TCP port number.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    if not text.isdigit() or len(text) > 5:",
+      "        raise InvalidPort(f\"invalid port {text!r}\")",
+      "    value = int(text)",
+      "    if not 1 <= value <= 65535:",
+      "        raise InvalidPort(f\"port {text!r} out of range\")",
+      "    return value"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/listenspec/ports.py",
+     "lines": [
+      "\"\"\"TCP port numbers from configuration text.\"\"\"",
+      "",
+      "",
+      "class InvalidPort(ValueError):",
+      "    \"\"\"A configured port is not a decimal number from 1 to 65535.\"\"\"",
+      "",
+      "",
+      "def parse_port(text):",
+      "    \"\"\"Parse a TCP port number.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    if not (text.isascii() and text.isdigit()) or len(text) > 5:",
+      "        raise InvalidPort(f\"invalid port {text!r}\")",
+      "    value = int(text)",
+      "    if not 1 <= value <= 65535:",
+      "        raise InvalidPort(f\"port {text!r} out of range\")",
+      "    return value"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "dd1234e404bbedf4b60238d6e0f36d730c668faad32a38e00a1e8938e59276d3",
+   "before_documented": "3591e2a7f3eb6d3f6f10a7f76001f1f4b6d835c589b56fbaa6b46ef11e699038",
+   "after": "3421173eab597540854948cd725dfdff3c6e75c21598dcf5af8fd3cc3fcce4de",
+   "after_documented": "4ccdf3d8ea770193be88b6b51c10490b6836425ed8497e88d124cce4af61fc91"
+  },
+  "check": {
+   "summary": "Feeds ASCII ports, out-of-range values and digit strings from other Unicode scripts (Arabic-Indic, full-width, superscript) to parse_port and parse_listener and compares results or the raised class.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: parse_port\\(full-width 80\\) returned 80",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import sys",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from listenspec import InvalidPort, Listener, parse_listener, parse_port  # noqa: E402",
+      "",
+      "failures = []",
+      "for text, value in {\"80\": 80, \"0080\": 80, \"65535\": 65535, \"1\": 1}.items():",
+      "    if parse_port(text) != value:",
+      "        failures.append(f\"parse_port({text!r}) != {value}\")",
+      "rejected = {\"full-width 80\": \"８０\", \"arabic-indic 8080\": \"٨٠٨٠\",",
+      "            \"superscript 2\": \"²\", \"devanagari 20\": \"२०\", \"empty\": \"\", \"negative\": \"-1\",",
+      "            \"plus sign\": \"+80\", \"leading space\": \" 80\", \"zero\": \"0\", \"too large\": \"65536\", \"six digits\": \"123456\",",
+      "            \"letter o\": \"8o\"}",
+      "for name, text in rejected.items():",
+      "    try:",
+      "        got = parse_port(text)",
+      "        failures.append(f\"parse_port({name}) returned {got}\")",
+      "    except InvalidPort:",
+      "        pass",
+      "    except ValueError as exc:",
+      "        failures.append(f\"parse_port({name}) raised bare {type(exc).__name__}\")",
+      "if parse_listener(\"[::1]:8443\") != Listener(\"::1\", 8443) or parse_listener(\"10.0.0.5:80\") != Listener(\"10.0.0.5\", 80):",
+      "    failures.append(\"parse_listener\")",
+      "try:",
+      "    parse_listener(\"0.0.0.0:\\uff18\\uff10\\uff18\\uff10\")",
+      "    failures.append(\"listener with full-width port accepted\")",
+      "except InvalidPort:",
+      "    pass",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A port written with non-ASCII digits, for example full-width '８０', Arabic-Indic '٨٠٨٠' or superscript '²'. str.isdigit() is true for all of them; int() converts the decimal ones and raises a plain ValueError for the superscript.",
+   "expected_impact": "Configuration that every other consumer of the file rejects is accepted and silently bound to port 80 or 8080, and a superscript digit escapes as a bare ValueError with an int() message instead of InvalidPort, so the config loader's error report misses the offending setting.",
+   "positive_locations": [
+    {
+     "path": "src/listenspec/ports.py",
+     "symbol": "parse_port",
+     "anchors": {
+      "start": "if not text.isdigit() or len(text) > 5:"
+     },
+     "start_line": 17,
+     "end_line": 17
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/listenspec/ports.py",
+     "symbol": "parse_port",
+     "anchors": {
+      "start": "if not (text.isascii() and text.isdigit()) or len(text) > 5:"
+     },
+     "note": "Requiring isascii() as well restricts the accepted characters to 0-9, after which int() cannot fail.",
+     "start_line": 17,
+     "end_line": 17
+    },
+    {
+     "variant": "before",
+     "path": "src/listenspec/ports.py",
+     "symbol": "parse_port",
+     "anchors": {
+      "start": "if not 1 <= value <= 65535:"
+     },
+     "note": "The range check is correct; it only sees values that already passed the character test.",
+     "start_line": 20,
+     "end_line": 20
+    }
+   ],
+   "reviewer_notes": "Signs, spaces and empty strings are rejected correctly by isdigit; only other Unicode decimal and digit characters get through. Mentioning str.isdecimal instead of isascii is still incomplete: isdecimal also accepts other scripts.",
+   "distinctive_tokens": [
+    "arabic-indic",
+    "full-width",
+    "fullwidth",
+    "superscript",
+    "unicode digits",
+    "non-ascii"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/listenspec/ports.py"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-PY-09",
+  "language": "python",
+  "split": "holdout",
+  "family": "utc-offset-discarded-by-tzinfo-replace",
+  "category": "api_misuse",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": false,
+  "project": {
+   "name": "grants",
+   "title": "grants",
+   "summary": "Short-lived access grants issued by a partner identity service and checked by the API gateway."
+  },
+  "contract": "parse_grant(record) reads a grant whose \"expires\" field is an ISO 8601 timestamp with an explicit UTC offset, such as \"2026-03-01T09:00:00+09:00\"; a timestamp without an offset raises ValueError. is_expired(grant, now=None) is true once the current instant is at or past the expiry instant. now, when given, is a timezone-aware datetime; by default the current time is used.",
+  "contract_file": "src/grants/grant.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/grants/__init__.py",
+     "lines": [
+      "\"\"\"Access grants.\"\"\"",
+      "",
+      "from .grant import Grant, is_expired, parse_grant, remaining_seconds",
+      "",
+      "__all__ = [\"Grant\", \"is_expired\", \"parse_grant\", \"remaining_seconds\"]"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "src/grants/grant.py",
+     "lines": [
+      "\"\"\"Partner-issued access grants and their expiry.\"\"\"",
+      "",
+      "from dataclasses import dataclass",
+      "from datetime import datetime, timezone",
+      "",
+      "",
+      "@dataclass(frozen=True)",
+      "class Grant:",
+      "    subject: str",
+      "    expires: datetime",
+      "",
+      "",
+      "def parse_grant(record):",
+      "    \"\"\"Build a Grant from a decoded partner record.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    moment = datetime.fromisoformat(record[\"expires\"])",
+      "    if moment.tzinfo is None:",
+      "        raise ValueError(f\"expiry without UTC offset: {record['expires']!r}\")",
+      "    return Grant(subject=record[\"subject\"], expires=moment.replace(tzinfo=None))",
+      "",
+      "",
+      "def is_expired(grant, now=None):",
+      "    current = now.replace(tzinfo=None) if now is not None else datetime.utcnow()",
+      "    return current >= grant.expires",
+      "",
+      "",
+      "def remaining_seconds(grant, now=None):",
+      "    \"\"\"Seconds until expiry, never negative.\"\"\"",
+      "    if is_expired(grant, now):",
+      "        return 0",
+      "    current = now if now is not None else datetime.now(timezone.utc)",
+      "    expires = grant.expires if grant.expires.tzinfo else grant.expires.replace(tzinfo=timezone.utc)",
+      "    return max(0, int((expires - current).total_seconds()))"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "src/grants/grant.py",
+     "lines": [
+      "\"\"\"Partner-issued access grants and their expiry.\"\"\"",
+      "",
+      "from dataclasses import dataclass",
+      "from datetime import datetime, timezone",
+      "",
+      "",
+      "@dataclass(frozen=True)",
+      "class Grant:",
+      "    subject: str",
+      "    expires: datetime",
+      "",
+      "",
+      "def parse_grant(record):",
+      "    \"\"\"Build a Grant from a decoded partner record.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    moment = datetime.fromisoformat(record[\"expires\"])",
+      "    if moment.tzinfo is None:",
+      "        raise ValueError(f\"expiry without UTC offset: {record['expires']!r}\")",
+      "    return Grant(subject=record[\"subject\"], expires=moment.astimezone(timezone.utc))",
+      "",
+      "",
+      "def is_expired(grant, now=None):",
+      "    current = now if now is not None else datetime.now(timezone.utc)",
+      "    return current >= grant.expires",
+      "",
+      "",
+      "def remaining_seconds(grant, now=None):",
+      "    \"\"\"Seconds until expiry, never negative.\"\"\"",
+      "    if is_expired(grant, now):",
+      "        return 0",
+      "    current = now if now is not None else datetime.now(timezone.utc)",
+      "    expires = grant.expires if grant.expires.tzinfo else grant.expires.replace(tzinfo=timezone.utc)",
+      "    return max(0, int((expires - current).total_seconds()))"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "b9e44581c053e540f9bd0e9d5735c2d8572c545f5bb7ab2c3d420f6b2c8e6aad",
+   "before_documented": "fe5966148006b5052c3d9b5d4cbc545bed122d127992eb8280fe9f9b0800153d",
+   "after": "4a494e2ff2e1db15a1441840d1bf4275973854e2c5b10ae65e7e5a1ab4223f76",
+   "after_documented": "41c53a08c2974261baca6422fa2ea4ee33505ece7e0636ae785c19c592b924f6"
+  },
+  "check": {
+   "summary": "Parses grants that expire at the same instant written with offsets +00:00, +09:00 and -05:00 and asks is_expired at aware instants just around that expiry; also checks the default clock.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: \\+09:00 grant at expiry\\+1s: expired=False",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import sys",
+      "from datetime import datetime, timedelta, timezone",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from grants import is_expired, parse_grant  # noqa: E402",
+      "",
+      "failures = []",
+      "expiry = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)",
+      "for offset in (\"+00:00\", \"+09:00\", \"-05:00\"):",
+      "    zone = timezone(timedelta(hours=int(offset[:3])))",
+      "    text = expiry.astimezone(zone).isoformat()",
+      "    grant = parse_grant({\"subject\": \"svc-a\", \"expires\": text})",
+      "    for label_, delta, want in ((\"expiry-1s\", -1, False), (\"expiry\", 0, True), (\"expiry+1s\", 1, True)):",
+      "        at = (expiry + timedelta(seconds=delta)).astimezone(timezone(timedelta(hours=3)))",
+      "        got = is_expired(grant, at)",
+      "        if got != want:",
+      "            failures.append(f\"{offset} grant at {label_}: expired={got}, want {want}\")",
+      "old = parse_grant({\"subject\": \"svc-b\", \"expires\": \"2001-01-01T00:00:00+02:00\"})",
+      "future = parse_grant({\"subject\": \"svc-c\", \"expires\": \"2999-01-01T00:00:00-07:00\"})",
+      "if not is_expired(old) or is_expired(future):",
+      "    failures.append(\"default clock\")",
+      "try:",
+      "    parse_grant({\"subject\": \"svc-d\", \"expires\": \"2026-03-01T09:00:00\"})",
+      "    failures.append(\"timestamp without offset accepted\")",
+      "except ValueError:",
+      "    pass",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "An expiry written with a non-zero offset. parse_grant keeps the wall-clock reading and drops the offset with replace(tzinfo=None) instead of converting to UTC, and is_expired compares it with a naive UTC reading.",
+   "expected_impact": "Grants issued with +09:00 stay valid nine hours too long and grants with -05:00 expire five hours early; only UTC-stamped grants behave. An expired credential keeps opening the gateway for hours.",
+   "positive_locations": [
+    {
+     "path": "src/grants/grant.py",
+     "symbol": "parse_grant",
+     "anchors": {
+      "start": "return Grant(subject=record[\"subject\"], expires=moment.replace(tzinfo=None))"
+     },
+     "start_line": 26,
+     "end_line": 26
+    },
+    {
+     "path": "src/grants/grant.py",
+     "symbol": "is_expired",
+     "anchors": {
+      "start": "current = now.replace(tzinfo=None) if now is not None else datetime.utcnow()"
+     },
+     "start_line": 30,
+     "end_line": 30
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "src/grants/grant.py",
+     "symbol": "parse_grant",
+     "anchors": {
+      "start": "return Grant(subject=record[\"subject\"], expires=moment.astimezone(timezone.utc))"
+     },
+     "note": "astimezone converts the instant to UTC and keeps it aware; is_expired then compares aware datetimes, which compares instants.",
+     "start_line": 26,
+     "end_line": 26
+    },
+    {
+     "variant": "before",
+     "path": "src/grants/grant.py",
+     "symbol": "parse_grant",
+     "anchors": {
+      "start": "if moment.tzinfo is None:"
+     },
+     "note": "Rejecting timestamps without an offset is correct and documented.",
+     "start_line": 24,
+     "end_line": 24
+    }
+   ],
+   "reviewer_notes": "Linters with timezone rules (flake8-datetimez DTZ003, the utcnow deprecation) flag the default clock, which is near but not the root cause: the expiry itself loses its offset. Both locations must change together.",
+   "distinctive_tokens": [
+    "naive",
+    "wall-clock reading",
+    "offset dropped",
+    "nine hours"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "src/grants/grant.py"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-PY-10",
+  "language": "python",
+  "split": "holdout",
+  "family": "opened-file-returned-to-owning-caller",
+  "category": "resource_lifetime",
+  "kind": "tricky_normal",
+  "detection": "static_likely",
+  "cross_file": true,
+  "project": {
+   "name": "segstore",
+   "title": "segstore",
+   "summary": "Reads append-only segment files written by the ingest service."
+  },
+  "contract": "open_segment(path) opens a segment file, validates its 8-byte header (the magic b\"SEG1\" followed by a big-endian record count) and returns (file, count) with the binary file positioned at the first record. The caller owns the returned file and closes it. A missing file raises FileNotFoundError; a short header, or one with other magic bytes, raises CorruptSegment, and in that case no file stays open.",
+  "contract_file": "src/segstore/segment.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/segstore/__init__.py",
+     "lines": [
+      "\"\"\"Segment file access.\"\"\"",
+      "",
+      "from .reader import count_records, read_records",
+      "from .segment import CorruptSegment, open_segment",
+      "",
+      "__all__ = [\"CorruptSegment\", \"count_records\", \"open_segment\", \"read_records\"]"
+     ]
+    },
+    {
+     "path": "src/segstore/reader.py",
+     "lines": [
+      "\"\"\"Record-level access built on open_segment.\"\"\"",
+      "",
+      "import struct",
+      "",
+      "from .segment import CorruptSegment, open_segment",
+      "",
+      "_LENGTH = struct.Struct(\">H\")",
+      "",
+      "",
+      "def read_records(path):",
+      "    \"\"\"Return every record in the segment as a list of bytes.\"\"\"",
+      "    handle, count = open_segment(path)",
+      "    with handle:",
+      "        records = []",
+      "        for index in range(count):",
+      "            prefix = handle.read(_LENGTH.size)",
+      "            if len(prefix) != _LENGTH.size:",
+      "                raise CorruptSegment(f\"{path}: record {index} truncated\")",
+      "            (length,) = _LENGTH.unpack(prefix)",
+      "            body = handle.read(length)",
+      "            if len(body) != length:",
+      "                raise CorruptSegment(f\"{path}: record {index} truncated\")",
+      "            records.append(body)",
+      "        return records",
+      "",
+      "",
+      "def count_records(path):",
+      "    \"\"\"Record count from the header, without reading the records.\"\"\"",
+      "    handle, count = open_segment(path)",
+      "    with handle:",
+      "        return count"
+     ]
+    },
+    {
+     "path": "src/segstore/segment.py",
+     "lines": [
+      "\"\"\"Segment file format: an 8-byte header, then length-prefixed records.\"\"\"",
+      "",
+      "import struct",
+      "",
+      "MAGIC = b\"SEG1\"",
+      "HEADER = struct.Struct(\">4sI\")",
+      "",
+      "",
+      "class CorruptSegment(ValueError):",
+      "    \"\"\"The file is not a readable segment.\"\"\"",
+      "",
+      "",
+      "def open_segment(path):",
+      "    \"\"\"Open a segment for reading.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    handle = open(path, \"rb\")",
+      "    try:",
+      "        header = handle.read(HEADER.size)",
+      "        if len(header) != HEADER.size:",
+      "            raise CorruptSegment(f\"{path}: short header\")",
+      "        magic, count = HEADER.unpack(header)",
+      "        if magic != MAGIC:",
+      "            raise CorruptSegment(f\"{path}: bad magic {magic!r}\")",
+      "    except BaseException:",
+      "        handle.close()",
+      "        raise",
+      "    return handle, count"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "7578e2d2de383784ca3ac85475950e04e85b198c654015207f8d05ab29ffba69",
+   "before_documented": "bfb94fa49ee16a8d0bb2a3dbc2485f374da1840bbabc9675c3ff8d472e2e70ac"
+  },
+  "check": {
+   "summary": "Instruments the module's open() to track every file object, then reads valid, corrupt and truncated segments through the public helpers and asserts that every opened file ends up closed and the records are right.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: ",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import struct",
+      "import sys",
+      "import tempfile",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "import segstore.segment as segment  # noqa: E402",
+      "from segstore import CorruptSegment, count_records, read_records  # noqa: E402",
+      "",
+      "opened = []",
+      "",
+      "",
+      "def tracking_open(*args, **kwargs):",
+      "    handle = open(*args, **kwargs)",
+      "    opened.append(handle)",
+      "    return handle",
+      "",
+      "",
+      "segment.open = tracking_open",
+      "failures = []",
+      "",
+      "",
+      "def frame(*records):",
+      "    out = b\"SEG1\" + struct.pack(\">I\", len(records))",
+      "    for record in records:",
+      "        out += struct.pack(\">H\", len(record)) + record",
+      "    return out",
+      "",
+      "",
+      "with tempfile.TemporaryDirectory() as tmp:",
+      "    root = Path(tmp)",
+      "    (root / \"good.seg\").write_bytes(frame(b\"alpha\", b\"\", b\"gamma\"))",
+      "    (root / \"magic.seg\").write_bytes(b\"SEG2\" + bytes(8))",
+      "    (root / \"short.seg\").write_bytes(b\"SE\")",
+      "    (root / \"cut.seg\").write_bytes(frame(b\"alpha\", b\"beta\")[:-2])",
+      "    if read_records(root / \"good.seg\") != [b\"alpha\", b\"\", b\"gamma\"] or count_records(root / \"good.seg\") != 3:",
+      "        failures.append(\"records of a valid segment\")",
+      "    for name in (\"magic.seg\", \"short.seg\", \"cut.seg\"):",
+      "        try:",
+      "            read_records(root / name)",
+      "            failures.append(f\"{name} accepted\")",
+      "        except CorruptSegment:",
+      "            pass",
+      "    try:",
+      "        count_records(root / \"absent.seg\")",
+      "        failures.append(\"missing file accepted\")",
+      "    except FileNotFoundError:",
+      "        pass",
+      "    still_open = [h.name for h in opened if not h.closed]",
+      "    if still_open or len(opened) != 5:",
+      "        failures.append(f\"opened {len(opened)} files, still open: {still_open}\")",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. open_segment opens a file without a with block and returns it, which resembles an unclosed handle.",
+   "expected_impact": "No defect: on success ownership moves to the caller, which closes it with a with statement in reader.py; on a bad header open_segment closes the file before raising.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "src/segstore/segment.py",
+     "symbol": "open_segment",
+     "anchors": {
+      "start": "handle = open(path, \"rb\")",
+      "end": "return handle, count"
+     },
+     "note": "open() without a context manager whose handle is returned.",
+     "start_line": 23,
+     "end_line": 34
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "src/segstore/reader.py",
+     "symbol": "read_records",
+     "anchors": {
+      "near": "def read_records(path):",
+      "start": "handle, count = open_segment(path)",
+      "end": "with handle:"
+     },
+     "note": "Every caller in the package takes ownership immediately and closes the handle with a with statement, also when record decoding raises.",
+     "start_line": 12,
+     "end_line": 13
+    },
+    {
+     "variant": "before",
+     "path": "src/segstore/segment.py",
+     "symbol": "open_segment",
+     "anchors": {
+      "start": "except BaseException:",
+      "end": "raise"
+     },
+     "note": "Header validation failures close the file before the exception propagates.",
+     "start_line": 31,
+     "end_line": 33
+    }
+   ],
+   "reviewer_notes": "Linters for unmanaged open() calls (SIM115-style rules) will point here; a finding claiming an unclosed file is a false positive given the documented ownership transfer. A note that the API could return a context manager is a style suggestion, not a defect.",
+   "distinctive_tokens": [
+    "ownership transfer",
+    "handed over",
+    "transfers ownership"
+   ],
+   "corrected_variant": null
+  }
+ },
+ {
+  "id": "R1-PY-11",
+  "language": "python",
+  "split": "holdout",
+  "family": "plugin-failures-isolated-and-reported",
+  "category": "error_handling",
+  "kind": "tricky_normal",
+  "detection": "static_likely",
+  "cross_file": true,
+  "project": {
+   "name": "releasehooks",
+   "title": "releasehooks",
+   "summary": "Runs third-party release hooks (changelog, notifications, mirrors) once a release is tagged."
+  },
+  "contract": "run_hooks(hooks, release) calls every hook in order with the release, even when earlier hooks fail. A hook that raises an Exception subclass is recorded in the returned HookReport as (hook name, exception) and does not stop the run; KeyboardInterrupt, SystemExit and other BaseException subclasses that are not Exception propagate immediately. The command-line entry point prints every recorded failure to stderr and exits with status 1 when there is at least one.",
+  "contract_file": "src/releasehooks/runner.py",
+  "files": {
+   "shared": [
+    {
+     "path": "src/releasehooks/__init__.py",
+     "lines": [
+      "\"\"\"Post-release hook execution.\"\"\"",
+      "",
+      "from .runner import HookReport, run_hooks",
+      "",
+      "__all__ = [\"HookReport\", \"run_hooks\"]"
+     ]
+    },
+    {
+     "path": "src/releasehooks/cli.py",
+     "lines": [
+      "\"\"\"Command-line entry point: ``releasehooks <tag>``.\"\"\"",
+      "",
+      "import sys",
+      "",
+      "from .runner import run_hooks",
+      "",
+      "",
+      "def main(argv, hooks, stderr=sys.stderr):",
+      "    if len(argv) != 1 or not argv[0]:",
+      "        print(\"usage: releasehooks <tag>\", file=stderr)",
+      "        return 2",
+      "    report = run_hooks(hooks, argv[0])",
+      "    for name, exc in report.failures:",
+      "        print(f\"hook {name} failed: {type(exc).__name__}: {exc}\", file=stderr)",
+      "    return 1 if report.failures else 0"
+     ]
+    },
+    {
+     "path": "src/releasehooks/runner.py",
+     "lines": [
+      "\"\"\"Run release hooks in sequence.\"\"\"",
+      "",
+      "import logging",
+      "from dataclasses import dataclass, field",
+      "",
+      "log = logging.getLogger(__name__)",
+      "",
+      "",
+      "@dataclass",
+      "class HookReport:",
+      "    ran: list = field(default_factory=list)",
+      "    failures: list = field(default_factory=list)",
+      "",
+      "    @property",
+      "    def ok(self):",
+      "        return not self.failures",
+      "",
+      "",
+      "def run_hooks(hooks, release):",
+      "    \"\"\"Run each ``(name, callable)`` hook for ``release``.",
+      "",
+      "    {{CONTRACT}}",
+      "    \"\"\"",
+      "    report = HookReport()",
+      "    for name, hook in hooks:",
+      "        report.ran.append(name)",
+      "        try:",
+      "            hook(release)",
+      "        except Exception as exc:",
+      "            log.error(\"hook %s failed for %s: %s\", name, release, exc)",
+      "            report.failures.append((name, exc))",
+      "    return report"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "b30cc468b8774bdfba2ef65840c86c3eb68f3aafbf09711385d351fc054d93fd",
+   "before_documented": "8c1702e6e2c91726e08c5c1eac049c8116d68a1808612e69fae35f5baa5e5f31"
+  },
+  "check": {
+   "summary": "Runs three hooks where the middle one raises, checks the report and that the last hook still ran; runs the CLI entry point and checks the exit status and stderr; checks that KeyboardInterrupt from a hook propagates.",
+   "build": [],
+   "run": {
+    "argv": [
+     "{python}",
+     "-I",
+     "-B",
+     "{run}/_check/check.py"
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: ",
+   "timeout_seconds": 60,
+   "files": [
+    {
+     "path": "_check/check.py",
+     "lines": [
+      "import io",
+      "import logging",
+      "import sys",
+      "from pathlib import Path",
+      "",
+      "sys.path.insert(0, str(Path(__file__).resolve().parent.parent / \"src\"))",
+      "",
+      "from releasehooks import run_hooks  # noqa: E402",
+      "from releasehooks.cli import main  # noqa: E402",
+      "",
+      "logging.disable(logging.CRITICAL)",
+      "failures = []",
+      "calls = []",
+      "",
+      "",
+      "def changelog(release):",
+      "    calls.append((\"changelog\", release))",
+      "",
+      "",
+      "def notify(release):",
+      "    raise ConnectionError(\"chat service unavailable\")",
+      "",
+      "",
+      "def mirror(release):",
+      "    calls.append((\"mirror\", release))",
+      "",
+      "",
+      "hooks = [(\"changelog\", changelog), (\"notify\", notify), (\"mirror\", mirror)]",
+      "report = run_hooks(hooks, \"v1.4.0\")",
+      "if calls != [(\"changelog\", \"v1.4.0\"), (\"mirror\", \"v1.4.0\")] or report.ran != [\"changelog\", \"notify\", \"mirror\"]:",
+      "    failures.append(f\"hooks did not all run: {calls}\")",
+      "if [(n, type(e).__name__) for n, e in report.failures] != [(\"notify\", \"ConnectionError\")] or report.ok:",
+      "    failures.append(f\"report {report.failures}\")",
+      "err = io.StringIO()",
+      "status = main([\"v1.4.1\"], hooks, stderr=err)",
+      "if status != 1 or \"hook notify failed: ConnectionError: chat service unavailable\" not in err.getvalue():",
+      "    failures.append(f\"cli status {status}, stderr {err.getvalue()!r}\")",
+      "if main([\"v1.4.2\"], [(\"changelog\", changelog)], stderr=io.StringIO()) != 0:",
+      "    failures.append(\"clean run did not exit 0\")",
+      "",
+      "",
+      "def interrupted(release):",
+      "    raise KeyboardInterrupt",
+      "",
+      "",
+      "try:",
+      "    run_hooks([(\"stop\", interrupted), (\"mirror\", mirror)], \"v2\")",
+      "    failures.append(\"KeyboardInterrupt swallowed\")",
+      "except KeyboardInterrupt:",
+      "    pass",
+      "",
+      "for failure in failures:",
+      "    print(\"CHECK-FAIL:\", failure)",
+      "if failures:",
+      "    sys.exit(1)",
+      "print(\"CHECK-PASS\")"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. run_hooks catches Exception around each hook and continues, which resembles swallowed errors.",
+   "expected_impact": "No defect: the isolation is the documented contract, every failure is returned in the report, and cli.main turns any failure into exit status 1 with the details on stderr; interrupts are not caught.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "src/releasehooks/runner.py",
+     "symbol": "run_hooks",
+     "anchors": {
+      "start": "except Exception as exc:",
+      "end": "report.failures.append((name, exc))"
+     },
+     "note": "Broad except clause inside a loop.",
+     "start_line": 35,
+     "end_line": 37
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "src/releasehooks/cli.py",
+     "symbol": "main",
+     "anchors": {
+      "start": "for name, exc in report.failures:",
+      "end": "return 1 if report.failures else 0"
+     },
+     "note": "The entry point reports every recorded failure and exits non-zero, so nothing is lost.",
+     "start_line": 13,
+     "end_line": 15
+    },
+    {
+     "variant": "before",
+     "path": "src/releasehooks/runner.py",
+     "symbol": "run_hooks",
+     "anchors": {
+      "start": "except Exception as exc:"
+     },
+     "note": "The handler is limited to Exception, so KeyboardInterrupt and SystemExit still stop the run as documented.",
+     "start_line": 35,
+     "end_line": 35
+    }
+   ],
+   "reviewer_notes": "Blind-except rules (BLE001-style) flag the handler. A finding that hook errors are swallowed or hidden is a false positive. Suggesting traceback capture is an improvement, not a defect.",
+   "distinctive_tokens": [
+    "isolation policy",
+    "by design",
+    "error isolation"
+   ],
+   "corrected_variant": null
+  }
+ },
+ {
   "id": "R1-JS-01",
   "language": "javascript",
   "split": "holdout",
