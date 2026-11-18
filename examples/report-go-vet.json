@@ -1,0 +1,499 @@
+{
+  "artifacts": [
+    {
+      "decoder": null,
+      "id": "409e47bd-ab77-4b63-8591-a32c381498ad",
+      "media_type": "application/vnd.codeye.source-manifest+json",
+      "role": "source_manifest",
+      "sha256": "934b65c3121ba7eaf10e02f05ca56a1b7f8d202a84374bdd1b01a322b8da9032",
+      "size_bytes": 549,
+      "task_key": null
+    },
+    {
+      "decoder": null,
+      "id": "41cc6643-39ea-4180-9803-6972f94c0ce9",
+      "media_type": "application/vnd.codeye.result-manifest+json",
+      "role": "result_manifest",
+      "sha256": "0a77bedf10d2a00a1635729dc09817ca1dc69b84e49382aeee9b8f92f8e4d4e5",
+      "size_bytes": 3284,
+      "task_key": null
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations",
+      "id": "666d4936-6bab-42b9-b91e-bba312e26540",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "d72c6dcec2dc1ee0ab3830abb3d6812e025a4f03c62a5a4f5319aeee6f4d12d5",
+      "size_bytes": 4542,
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "25992040-6180-4857-9880-8e7b4bb632a1",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "d90a5b0536243352cc04efe8b7437056a3fcbfa198e01fb4c2432138d0759307",
+      "size_bytes": 221,
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "8515fee3-0971-4964-8e65-caa478ebb9eb",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "04513871e92c8227bb2e06a808559f61e1c3379f36be77c6a39b14f68ce35ecc",
+      "size_bytes": 115,
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "94e413ab-7b6d-4c2e-b069-6d3191aed704",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "f9d0b941-de63-4811-92a0-d13e5e6eae89",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "4ff055905c9ba3ee906c1de91948d632f90cdbab99fbd357e2276ea70dd11b65",
+      "size_bytes": 66,
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "2f277363-0725-4f62-a262-38ca4086492e",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "5bd73030-5674-4d3c-9387-02a2d978e9bb",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "a3622c40-0465-4c55-8f99-9f0ea6140e8e",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "bb65a06a-175c-4dd5-b7a3-48ac39dce4d2",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet"
+    }
+  ],
+  "attempt": {
+    "cleanup_state": "confirmed",
+    "completion_status": "finalizing",
+    "id": "0db5c46f-5d30-4c27-aebe-628fa8730b26",
+    "lease_epoch": 1,
+    "number": 1,
+    "reason": null
+  },
+  "builder": {
+    "id": "codeye-report",
+    "input_digest": "e7a1b7e012b113e245ba10538e1b508c2f644a08a815da5f33cc35812bf316d6",
+    "result_manifest_artifact_id": null,
+    "version": "1"
+  },
+  "coverage": {
+    "ai_review": {
+      "reason": "review_tasks_not_planned",
+      "required_tasks": [
+        {
+          "key": "review.context",
+          "result": "not_planned",
+          "task_status": null
+        },
+        {
+          "key": "review.investigate",
+          "result": "not_planned",
+          "task_status": null
+        },
+        {
+          "key": "review.verify",
+          "result": "not_planned",
+          "task_status": null
+        }
+      ],
+      "status": "not_performed"
+    },
+    "inventory_files": 2,
+    "llm_exposed_files": 0,
+    "notes": [
+      "inventory_counts_all_included_files",
+      "tests_not_planned"
+    ],
+    "scope_mode": "full",
+    "test_status": "not_run",
+    "tool_processed_files": 1,
+    "tools": [
+      {
+        "analyzer": "go.vet",
+        "analyzer_errors": 0,
+        "exit_class": "success_with_findings",
+        "files_in_scope": 1,
+        "ignored_files": 0,
+        "limitations": [
+          "cgo_disabled",
+          "default_build_context_only",
+          "no_offline_module_cache"
+        ],
+        "packages": {
+          "analyzed_with_findings": 1
+        },
+        "partial_parse": false,
+        "processed_files": 1,
+        "stderr_failures": 0,
+        "task_key": "go-vet",
+        "tool_version": "go1.27.4",
+        "unlisted_files": 0
+      }
+    ]
+  },
+  "created_at": "2026-11-17T23:50:09.29466596Z",
+  "demo": false,
+  "executions": [
+    {
+      "argv": [
+        "go",
+        "list",
+        "-e",
+        "-json=Dir,ImportPath,Name,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Incomplete,Error,DepsErrors",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-17T23:50:05.640061534Z",
+      "env_keys": [
+        "CGO_ENABLED",
+        "GOCACHE",
+        "GOENV",
+        "GOFLAGS",
+        "GOMODCACHE",
+        "GOPATH",
+        "GOPROXY",
+        "GOSUMDB",
+        "GOTOOLCHAIN",
+        "GOVCS",
+        "GOWORK",
+        "HOME",
+        "LANG",
+        "PATH",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "USERPROFILE"
+      ],
+      "exit_code": 0,
+      "id": "go-vet/go.list",
+      "name": "go.list",
+      "reason": null,
+      "started_at": "2026-11-17T23:50:05.586091625Z",
+      "status": "exited",
+      "stderr_artifact_id": "a3622c40-0465-4c55-8f99-9f0ea6140e8e",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "8515fee3-0971-4964-8e65-caa478ebb9eb",
+      "stdout_truncated": false,
+      "task_execution_id": "0db5c46f-5d30-4c27-aebe-628fa8730b26/62df694f-35cf-471b-9b2d-6303b2d33f2e/1",
+      "task_key": "go-vet"
+    },
+    {
+      "argv": [
+        "go",
+        "mod",
+        "edit",
+        "-json"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-17T23:50:05.585215482Z",
+      "env_keys": [
+        "CGO_ENABLED",
+        "GOCACHE",
+        "GOENV",
+        "GOFLAGS",
+        "GOMODCACHE",
+        "GOPATH",
+        "GOPROXY",
+        "GOSUMDB",
+        "GOTOOLCHAIN",
+        "GOVCS",
+        "GOWORK",
+        "HOME",
+        "LANG",
+        "PATH",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "USERPROFILE"
+      ],
+      "exit_code": 0,
+      "id": "go-vet/go.modedit",
+      "name": "go.modedit",
+      "reason": null,
+      "started_at": "2026-11-17T23:50:05.577143038Z",
+      "status": "exited",
+      "stderr_artifact_id": "bb65a06a-175c-4dd5-b7a3-48ac39dce4d2",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "f9d0b941-de63-4811-92a0-d13e5e6eae89",
+      "stdout_truncated": false,
+      "task_execution_id": "0db5c46f-5d30-4c27-aebe-628fa8730b26/62df694f-35cf-471b-9b2d-6303b2d33f2e/1",
+      "task_key": "go-vet"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-17T23:50:05.576262056Z",
+      "env_keys": [
+        "CGO_ENABLED",
+        "GOCACHE",
+        "GOENV",
+        "GOFLAGS",
+        "GOMODCACHE",
+        "GOPATH",
+        "GOPROXY",
+        "GOSUMDB",
+        "GOTOOLCHAIN",
+        "GOVCS",
+        "GOWORK",
+        "HOME",
+        "LANG",
+        "PATH",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "USERPROFILE"
+      ],
+      "exit_code": 0,
+      "id": "go-vet/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-17T23:50:05.569342797Z",
+      "status": "exited",
+      "stderr_artifact_id": "5bd73030-5674-4d3c-9387-02a2d978e9bb",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "94e413ab-7b6d-4c2e-b069-6d3191aed704",
+      "stdout_truncated": false,
+      "task_execution_id": "0db5c46f-5d30-4c27-aebe-628fa8730b26/62df694f-35cf-471b-9b2d-6303b2d33f2e/1",
+      "task_key": "go-vet"
+    },
+    {
+      "argv": [
+        "go",
+        "vet",
+        "-json",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-17T23:50:09.224017051Z",
+      "env_keys": [
+        "CGO_ENABLED",
+        "GOCACHE",
+        "GOENV",
+        "GOFLAGS",
+        "GOMODCACHE",
+        "GOPATH",
+        "GOPROXY",
+        "GOSUMDB",
+        "GOTOOLCHAIN",
+        "GOVCS",
+        "GOWORK",
+        "HOME",
+        "LANG",
+        "PATH",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "USERPROFILE"
+      ],
+      "exit_code": 0,
+      "id": "go-vet/go.vet",
+      "name": "go.vet",
+      "reason": null,
+      "started_at": "2026-11-17T23:50:05.641046639Z",
+      "status": "exited",
+      "stderr_artifact_id": "2f277363-0725-4f62-a262-38ca4086492e",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "25992040-6180-4857-9880-8e7b4bb632a1",
+      "stdout_truncated": false,
+      "task_execution_id": "0db5c46f-5d30-4c27-aebe-628fa8730b26/62df694f-35cf-471b-9b2d-6303b2d33f2e/1",
+      "task_key": "go-vet"
+    }
+  ],
+  "export": {
+    "include_code": false
+  },
+  "findings": [
+    {
+      "category": "correctness",
+      "claims": [
+        {
+          "assertion": "원문 생략(코드 미포함 내보내기).",
+          "evidence_ids": [
+            "ev_9a5607ac979b4c2b1416_tool",
+            "ev_8dc98efebf4ba6bda61d_code"
+          ],
+          "kind": "observed"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_9a5607ac979b4c2b1416_tool"
+          ],
+          "statement": "go vet이 이 snapshot 위치에 진단을 보고했다.",
+          "status": "verified"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "33befd57c8b2c310bbc759383c0dda74aca37f8b8466a6dc88a4997d69722bef",
+          "description": "진단 위치. 경로와 blob hash를 snapshot manifest와 대조했다. 줄 범위는 노드가 manifest hash와 같은 snapshot 파일로 확인했다.",
+          "id": "ev_8dc98efebf4ba6bda61d_code",
+          "kind": "code",
+          "location": {
+            "end_line": 5,
+            "path": "example.go",
+            "snapshot_id": "742de1c6-d825-4b33-8101-b1669082cf18",
+            "start_line": 5
+          }
+        },
+        {
+          "artifact_id": "25992040-6180-4857-9880-8e7b4bb632a1",
+          "description": "go vet stdout의 원시 진단(JSON pointer로 위치 지정).",
+          "id": "ev_9a5607ac979b4c2b1416_tool",
+          "json_pointer": "/smoke.test~1example/printf/0",
+          "kind": "tool",
+          "task_execution_id": "0db5c46f-5d30-4c27-aebe-628fa8730b26/62df694f-35cf-471b-9b2d-6303b2d33f2e/1"
+        }
+      ],
+      "fingerprint": "go-vet-fp-v1:f622f69ac78635b7beafee97bbfc710f1a07eaae9b0be81077809c7edefb1786",
+      "id": "fnd_8dc98efebf4ba6bda61d",
+      "impact": "도구가 보고한 진단이다. 실제 영향은 검토하지 않았다(validation=unreviewed).",
+      "limitations": [
+        "사람이나 AI가 검토하지 않은 도구 진단이다.",
+        "정적 도구 관찰만 포함하며 실행으로 재현하지 않았다."
+      ],
+      "locations": [
+        {
+          "end_line": 5,
+          "path": "example.go",
+          "snapshot_id": "742de1c6-d825-4b33-8101-b1669082cf18",
+          "start_line": 5
+        }
+      ],
+      "observation_ids": [
+        "obs_9a5607ac979b4c2b1416"
+      ],
+      "recommendation": {
+        "summary": "도구 메시지와 해당 snapshot 코드를 확인한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "low",
+      "severity_reason": "정책 go-vet-v1: go vet은 심각도를 제공하지 않으며 영향을 검토하지 않았다. 검토 전 기본값 low이다.",
+      "title": "go.vet printf 진단 (example.go:5)",
+      "validation": "unreviewed",
+      "verification": [
+        "수정 뒤 이 보고서의 실행 기록과 같은 argv로 go vet을 다시 실행해 진단이 사라지는지 확인한다."
+      ]
+    }
+  ],
+  "id": "eebfcfd1-b7c6-4417-ab52-cf481ccf487a",
+  "inputs": {
+    "commit_sha": null,
+    "description": "승인된 로컬 경로를 복사해 고정한 snapshot이다(안정 복사 best effort).",
+    "manifest_sha256": "934b65c3121ba7eaf10e02f05ca56a1b7f8d202a84374bdd1b01a322b8da9032",
+    "profile": "deep-review",
+    "snapshot_id": "742de1c6-d825-4b33-8101-b1669082cf18",
+    "source_kind": "local"
+  },
+  "limitations": [
+    "ai_review_not_performed",
+    "controller_holds_no_snapshot_bytes"
+  ],
+  "observations": [
+    {
+      "evidence_state": "verified_against_source_manifest",
+      "id": "obs_9a5607ac979b4c2b1416",
+      "location": {
+        "blob_sha256": "33befd57c8b2c310bbc759383c0dda74aca37f8b8466a6dc88a4997d69722bef",
+        "column_unit": "byte",
+        "end_col": 30,
+        "end_line": 5,
+        "path": "example.go",
+        "snapshot_id": "742de1c6-d825-4b33-8101-b1669082cf18",
+        "start_col": 28,
+        "start_line": 5
+      },
+      "location_state": "resolved",
+      "raw_message": null,
+      "raw_ref": {
+        "artifact_id": "25992040-6180-4857-9880-8e7b4bb632a1",
+        "byte_end": 220,
+        "byte_start": 0,
+        "json_pointer": "/smoke.test~1example/printf/0",
+        "sha256": "d90a5b0536243352cc04efe8b7437056a3fcbfa198e01fb4c2432138d0759307",
+        "stream_index": 0
+      },
+      "raw_severity": null,
+      "rule_id": "printf",
+      "suggested_fix_count": 0,
+      "task_execution_id": "0db5c46f-5d30-4c27-aebe-628fa8730b26/62df694f-35cf-471b-9b2d-6303b2d33f2e/1",
+      "task_key": "go-vet",
+      "tool": "go.vet",
+      "tool_version": "go1.27.4"
+    }
+  ],
+  "quality_verdict": "inconclusive",
+  "revision": 1,
+  "run_id": "e54c0dd2-aa43-4f1c-9422-0b0c33e3fc4b",
+  "schema_version": "0.1",
+  "status": "partial",
+  "summary": {
+    "actionable_findings": 0,
+    "pending_candidates": 1,
+    "priorities": [
+      "fnd_8dc98efebf4ba6bda61d"
+    ],
+    "raw_observations": 1,
+    "refuted_findings": 0,
+    "total_findings": 1,
+    "unresolved_observations": 0
+  },
+  "tasks": [
+    {
+      "id": "62df694f-35cf-471b-9b2d-6303b2d33f2e",
+      "key": "go-vet",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    }
+  ]
+}

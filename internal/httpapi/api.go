@@ -69,6 +69,8 @@ func (s *Server) apiRoutes() []route {
 		r("POST", "projects/{id}/runs", "runs.create", true, true, (*Server).createRun),
 		r("GET", "runs/{id}", "runs.get", true, false, (*Server).getRun),
 		r("POST", "runs/{id}/cancel", "runs.cancel", true, false, (*Server).cancelRun),
+		r("GET", "runs/{id}/report", "runs.report", true, false, (*Server).getReport),
+		r("GET", "runs/{id}/reports", "runs.reports", true, false, (*Server).listReports),
 	}, s.nodeRoutes()...)
 }
 
@@ -393,16 +395,17 @@ type projectView struct {
 }
 
 // projectGaps lists the product capabilities a project view cannot claim.
-// The source declaration is never verified by registration and no report is
-// published before W09. execution_unavailable is a structured, global fact:
-// no enrolled, unrevoked node exists. Whether a specific run can be placed
-// (capabilities, grants, capacity) is reported per run as waiting_reason.
+// The source declaration is never verified by registration.
+// execution_unavailable is a structured, global fact: no enrolled, unrevoked
+// node exists. Whether a specific run can be placed (capabilities, grants,
+// capacity) is reported per run as waiting_reason. report_unavailable is added
+// per project by viewOf until one of its runs has a published report.
 func projectGaps(executionAvailable bool) []string {
 	gaps := []string{string(domain.GapSourceUnverified)}
 	if !executionAvailable {
 		gaps = append(gaps, string(domain.GapExecutionUnavailable))
 	}
-	return append(gaps, string(domain.GapReportUnavailable))
+	return gaps
 }
 
 // executionGaps reads the global execution fact for a request.
@@ -418,6 +421,10 @@ func (s *Server) executionGaps(q *request) ([]string, bool) {
 }
 
 func viewOf(p postgres.ProjectSummary, gaps []string) projectView {
+	gaps = append([]string{}, gaps...)
+	if !p.HasReport {
+		gaps = append(gaps, string(domain.GapReportUnavailable))
+	}
 	v := projectView{ID: p.ID, Name: p.Name, Source: p.Source, Revision: p.Revision,
 		SourceStatus: "declared_unverified", CapabilityGaps: gaps}
 	if v.Source == nil {
@@ -610,13 +617,23 @@ type progressView struct {
 }
 
 type runView struct {
-	ID             string       `json:"id"`
-	ProjectID      string       `json:"project_id"`
-	Status         string       `json:"status"`
-	Version        int64        `json:"version"`
-	SnapshotID     *string      `json:"snapshot_id"`
-	QualityVerdict *string      `json:"quality_verdict"`
-	Progress       progressView `json:"progress"`
+	ID             string         `json:"id"`
+	ProjectID      string         `json:"project_id"`
+	Status         string         `json:"status"`
+	Version        int64          `json:"version"`
+	SnapshotID     *string        `json:"snapshot_id"`
+	QualityVerdict *string        `json:"quality_verdict"`
+	Report         *runReportView `json:"report"`
+	Progress       progressView   `json:"progress"`
+}
+
+// runReportView points at the newest published report revision. Its quality
+// verdict comes from that stored report, never from the run status alone.
+type runReportView struct {
+	Revision int    `json:"revision"`
+	Status   string `json:"status"`
+	SHA256   string `json:"sha256"`
+	URL      string `json:"url"`
 }
 
 func (s *Server) getRun(q *request) {
@@ -632,6 +649,11 @@ func (s *Server) getRun(q *request) {
 	if v.TotalTasks > 0 {
 		total := v.TotalTasks
 		out.Progress.TotalTasks = &total
+	}
+	if r := v.LatestReport; r != nil {
+		verdict := r.QualityVerdict
+		out.QualityVerdict = &verdict
+		out.Report = &runReportView{Revision: r.Revision, Status: r.Status, SHA256: r.BodySHA256, URL: apiPrefix + "/runs/" + v.ID + "/report?revision=" + strconv.Itoa(r.Revision)}
 	}
 	// A queued run's reason is derived by the store from enrolled nodes,
 	// capabilities, grants, snapshot locations and limits (never predicted).

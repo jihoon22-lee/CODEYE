@@ -24,6 +24,8 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/artifactstore"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
+	"github.com/jihoon22-lee/CODEYE/internal/report"
+	"github.com/jihoon22-lee/CODEYE/internal/reportsvc"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
@@ -57,6 +59,11 @@ type Store interface {
 	// Autoscaler (W07).
 	ReconcilePools(ctx context.Context) ([]postgres.PoolReconcile, error)
 	NodesEnrolled(ctx context.Context) (bool, error)
+
+	// Reports (W09).
+	GetReport(ctx context.Context, actor, runID string, revision int) (postgres.ReportRecord, error)
+	ListReports(ctx context.Context, actor, runID string) ([]postgres.ReportSummary, error)
+	reportsvc.Store
 }
 
 // Config configures the server.
@@ -79,6 +86,10 @@ type Config struct {
 	// ReconcileInterval is how often Serve runs the pool autoscaler
 	// (docs/09 reconcile_seconds, default 5s; negative disables).
 	ReconcileInterval time.Duration
+	// PublishInterval is how often Serve reconciles pending reports (default
+	// 2s; negative disables, for tests that drive the publisher directly).
+	// Publication needs ArtifactDir.
+	PublishInterval time.Duration
 }
 
 // DefaultSessionTTL is the absolute browser session lifetime.
@@ -95,6 +106,10 @@ type Server struct {
 	artifacts  *artifactstore.Store
 	sweepEvery time.Duration
 	scaleEvery time.Duration
+
+	publisher    *reportsvc.Publisher
+	publishEvery time.Duration
+	publishKick  chan struct{}
 }
 
 // ParseListen parses and validates a loopback listen address.
@@ -149,6 +164,14 @@ func New(cfg Config, store Store) (*Server, error) {
 	if s.scaleEvery == 0 {
 		s.scaleEvery = 5 * time.Second
 	}
+	s.publishEvery = cfg.PublishInterval
+	if s.publishEvery == 0 {
+		s.publishEvery = 2 * time.Second
+	}
+	if s.artifacts != nil {
+		s.publisher = &reportsvc.Publisher{Store: store, Artifacts: s.artifacts, Registry: report.DefaultRegistry(), Log: s.log}
+		s.publishKick = make(chan struct{}, 1)
+	}
 	if cfg.WebDir != "" {
 		if root, err := os.OpenRoot(cfg.WebDir); err == nil {
 			if f, err := root.Open("index.html"); err == nil {
@@ -192,6 +215,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 	if s.scaleEvery > 0 {
 		go s.scaleLoop(sweepCtx)
+	}
+	if s.publisher != nil && s.publishEvery > 0 {
+		go s.publishLoop(sweepCtx)
 	}
 	select {
 	case err := <-errc:

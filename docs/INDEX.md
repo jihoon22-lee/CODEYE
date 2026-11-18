@@ -47,6 +47,7 @@
 | [28 W06 노드 API](28-w06-node-protocol.md) · [에이전트 실행](28-w06-agent-runtime.md) | 등록·배정·lease·취소·복구 및 실프로세스 검증 |
 | [29 W08 Go vet](29-w08-go-vet.md) | 실제 Go 도구, 원시 관찰과 미분석 범위 |
 | [30 W07 워커 풀과 자동 증감](30-w07-scheduler.md) | 정책 revision, 공정 배정·자동 증감, 복구 시험 |
+| [31 W09 구조화 보고서](31-w09-report.md) | 게시 fencing·원시 근거 검증·프로젝트별 내보내기 |
 | [32 W10 OpenCode](32-w10-opencode.md) | 응답·취소·도구 권한 차단과 호출 예산 |
 | [33 W11 맥락 검토](33-w11-context-review.md) | 소스 승인, 발췌와 근거 ID, 실제 역할 실행 |
 | [34 W12 후보 검증](34-w12-verifier.md) | 호출자·테스트 반례, 근거 검증과 부분 완료 |

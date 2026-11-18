@@ -5,7 +5,6 @@ import json
 import hashlib
 import shutil
 import os
-from pathlib import Path
 import signal
 import socket
 import subprocess
@@ -152,17 +151,15 @@ def run(base, root, env):
         next_run = session.enqueue(project["id"])
         def finished():
             state = session.request("GET", f"runs/{next_run}")
-            return state if state["status"] == "finalizing" and state["snapshot_id"] else None
+            return state if state["status"] == "partial" and state["snapshot_id"] else None
         final = wait_for("작업 결과 접수", finished, children)
         assert final["progress"]["completed_tasks"] >= 1
         assert scalar(f"SELECT count(*) FROM attempts WHERE run_id='{next_run}' AND status='released'") == "1"
         assert mode.read_text() == "succeed\n"
         # 별도 root를 등록해 시험용 handler가 실제 분석 요청을 가져갈 수 없게 한다.
         go_source = directory / "go-project"
-        go_source.mkdir()
-        (go_source / "go.mod").write_text("module smoke.test/example\n\ngo 1.23\n")
-        original = 'package example\nimport "fmt"\nfunc Print() { fmt.Printf("%d", "sample") }\n'
-        (go_source / "example.go").write_text(original)
+        shutil.copytree(root / "fixtures" / "go-vet", go_source)
+        original = (go_source / "example.go").read_text()
         go_root = json.loads(cli("source-root", "add", "--label", "go-smoke", "--path", go_source))["id"]
         cli("source-root", "grant", "--root", go_root, "--user", user)
         go_token = directory / "go.token"
@@ -189,5 +186,34 @@ def run(base, root, env):
         assert doc["analyzer_id"] == "go.vet"
         assert any(o["rule_id"] == "printf" and o["location"]["path"] == "example.go" for o in doc["observations"])
         assert (go_source / "example.go").read_text() == original
+        # 실제 워커가 생성한 서로 다른 두 manifest와 도구 산출물을 함께 검증한다.
+        def published():
+            state = session.request("GET", f"runs/{actual}")
+            if state["status"] in {"failed", "recovery_required", "cancelled"}:
+                raise RuntimeError(f"Go 보고서 게시 실패 ({state['status']})")
+            return state["report"] if state["status"] == "partial" else None
+        revision = wait_for("실제 Go vet 보고서 게시", published, children)
+        assert revision["revision"] == 1
+        path = f"runs/{actual}/report?revision=1"
+        code_free = session.request("GET", path)
+        full = session.request("GET", path + "&include_code=true")
+        assert code_free["summary"] == full["summary"]
+        assert full["summary"]["raw_observations"] == len(doc["observations"])
+        assert full["summary"]["pending_candidates"] > 0 and full["summary"]["actionable_findings"] == 0
+        assert full["coverage"]["ai_review"]["status"] == "not_performed"
+        assert full["quality_verdict"] == "inconclusive"
+        assert all(o["raw_message"] is None for o in code_free["observations"])
+        assert any(o["raw_message"] and o["evidence_state"] == "verified_against_source_manifest"
+                   for o in full["observations"])
+        import validate_bundle
+        schema = validate_bundle.make_validators()["report.schema.json"]
+        schema.validate(code_free)
+        schema.validate(full)
+        for fmt in ("markdown", "html"):
+            with session.client.open(origin + "/api/v1/" + path + "&format=" + fmt, timeout=5) as response:
+                rendered = response.read()
+                assert response.headers["X-CODEYE-Report-SHA256"].encode() in rendered
+                assert response.headers["ETag"] == '"' + hashlib.sha256(rendered).hexdigest() + '"'
+        print("PASS: 실제 워커→검증된 보고서 revision, 미실행 AI 검토, 코드 제외·포함과 3개 형식")
         print("PASS: 자동 증감 제품 워커·실제 Go vet·printf 관찰·산출물 무결성·원본 보존")
     print("PASS: 두 에이전트 등록·단일 attempt·취소 및 정리·후속 run 결과 접수 (시험용 handler)")

@@ -355,6 +355,7 @@ func (s *Server) completeAttempt(q *request) {
 		s.nodeError(q, err)
 		return
 	}
+	s.kickPublisher()
 	writeJSON(q.w, http.StatusAccepted, ackOf(run))
 }
 
@@ -378,6 +379,7 @@ func (s *Server) cleanupAttempt(q *request) {
 		s.nodeError(q, err)
 		return
 	}
+	s.kickPublisher()
 	writeJSON(q.w, http.StatusAccepted, ackOf(run))
 }
 

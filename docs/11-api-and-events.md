@@ -25,7 +25,8 @@ W01 doctor/W02 migrate는 로컬 CLI다. W03에서 세션·프로젝트·run 요
 | GET /runs/{id}/tasks | task별 상태·도구·소요·reason |
 | GET /runs/{id}/events | SSE, Last-Event-ID 복원 |
 | GET /runs/{id}/logs | task/stream별 cursor 조회·민감값 마스킹 |
-| GET /runs/{id}/report | 선택 revision 구조화 보고서 |
+| GET /runs/{id}/report | [W09 구현](31-w09-report.md). 선택 revision의 JSON·Markdown·HTML. 기본 코드 미포함 |
+| GET /runs/{id}/reports | W09 구현. 프로젝트 열람 권한으로 게시된 revision과 내보내기 형식 조회 |
 | GET /runs/{id}/findings | 필터·정렬·페이지 |
 | GET /findings/{id} | 발생 이력·근거·사람 검토 |
 | PATCH /findings/{id}/disposition | version 검사 후 검토 기록 추가 |
@@ -58,7 +59,7 @@ W06 구현 경로(`/api/v1` 아래, 개인 모드 loopback controller). 노드 �
 | POST /attempts/{id}/heartbeat | node·worker·epoch와 DB 시각으로 갱신, `cancel_requested` 반환 |
 | POST /attempts/{id}/events | `client_event_id` 멱등. snapshot_fixed(업로드된 source_manifest 필요)·task_created(key 재사용)·task_status·run_advance. 응답에 run event sequence·run_version |
 | PUT /attempts/{id}/artifacts/{client_artifact_id} | 크기·SHA-256 header와 bytes 대조 후 controller 저장소에 내구 저장, finalized 행 기록. 동일 재전송은 같은 201 |
-| POST /attempts/{id}/complete | epoch·정리 상태·result_manifest artifact 확인 후 결과 접수. 성공은 finalizing 유지(보고서 게시는 W09) |
+| POST /attempts/{id}/complete | epoch·정리 상태·result_manifest artifact 확인 후 결과 접수. 접수된 성공은 finalizing을 거쳐 W09 게시 트랜잭션에서 종결 |
 | POST /attempts/{id}/cleanup | recovery_required attempt의 실제 정리 확인→failed, 예약 해제 |
 
 초기 설계의 `POST /attempts/{id}/snapshot`과 3단계 artifact upload(`/artifacts/uploads...`)는 W06에서 각각 `snapshot_fixed` 이벤트와 attempt 범위 단일 PUT으로 대체했다(결정 A18). worker에게 node secret을 주지 않고 agent가 중계한다. node identity·attempt의 owner·epoch를 모두 검증한다. 명령은 노드별 sequence와 command_id를 가지며 cursor 이하 재전송은 확인 처리되어 중복 실행으로 이어지지 않는다.
