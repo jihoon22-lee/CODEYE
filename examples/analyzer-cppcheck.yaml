@@ -1,0 +1,34 @@
+# W16 C/C++ 팩 기준 분석기(Required) cppcheck 어댑터 서술. 구현: internal/worker/analysis/cpp, 근거: docs/41-w16-cpp-pack.md.
+# cppcheck 2.22.0 --error-exitcode=2는 <error> 레코드(심각도 무관, missingInclude 같은 범위 레코드 포함)가 하나라도 있으면 exit 2, 없으면 0이다. 실행마다 쓰는 checkersReport 요약 레코드는 세지 않는다.
+# exit 2만으로 발견을 판정하지 않는다. 범위 레코드는 도구 오류·제약이고, 관찰 여부는 stderr XML(version 2) parser가 결정한다.
+# exit 1은 사용법 오류·입력 없음("cppcheck: error:"), 그 밖의 종료와 signal은 실패다.
+# 입력은 CODEYE가 task scratch에 쓴 compile DB(--project, 저장소 DB를 매핑·허용 목록으로 거른 것) 또는 compile DB가 없을 때의 파일 목록(--file-list, 축소 모드)이다.
+# cwd는 빈 scratch 디렉터리다(cppcheck는 cwd의 std.cfg를 읽는다, 실측). --inline-suppr를 주지 않으므로 cppcheck-suppress 주석은 효력이 없다(disabled).
+schema_version: '0.1'
+id: cpp.cppcheck
+languages: [c, cpp]
+planned_platforms: [linux, windows]
+availability: verified  # Linux cppcheck 2.22.0(conda-forge) 실행으로 검증. Windows는 단위 시험과 GOOS=windows vet만 실행.
+version_contract: cppcheck-2.22-fixture-tested
+analysis_scope: [syntax, intraprocedural, interfile]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${cppcheck}'
+  argv: [--version]
+execute:
+  executable: '${cppcheck}'
+  argv: [--output-format=xmlv2, '--enable=warning,performance,portability,information,missingInclude', --check-level=normal, --platform=native, --error-exitcode=2, '--project=${scratch}/work/compile_commands.json']
+  cwd: '${scratch}/cwd'
+  timeout_seconds: 1800
+  stdout_max_bytes: 33554432
+  env_allowlist: [PATH, LANG, SystemRoot]
+exit_codes:
+  clean: [0]
+  findings: [2]
+  error: [1]
+parser:
+  id: cppcheck-xml-v2
+  format: xml
+  input: stderr-artifact

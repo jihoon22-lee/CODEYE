@@ -101,6 +101,16 @@ func unionManifest(t *testing.T, docs ...map[string]any) []byte {
 				}
 			}
 		}
+		// Repository configuration a pack honored (W16: the compile DB) is
+		// bound to its manifest digest.
+		if rp, ok := d["rule_pack"].(map[string]any); ok {
+			if files, ok := rp["config_files"].([]any); ok {
+				for _, f := range files {
+					cf := f.(map[string]any)
+					paths[cf["path"].(string)] = cf["sha256"].(string)
+				}
+			}
+		}
 		if _, ok := d["inventory"]; ok {
 			for _, p := range goVetProcessed(d) {
 				if _, seen := paths[p]; !seen {

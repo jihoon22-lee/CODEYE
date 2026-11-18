@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<results version="2">
+    <cppcheck version="2.22.0"/>
+    <errors>
+        <error id="zerodiv" severity="error" msg="Division by zero." verbose="Division by zero." cwe="369" hash="788798651419197743" file0="[REDACTED]/src/standalone.c">
+            <location file="[REDACTED]/src/standalone.c" line="4" column="16" info="Division by zero"/>
+            <location file="[REDACTED]/src/standalone.c" line="3" column="15" info="Assignment &apos;parts=0&apos;, assigned value is 0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Standard library headers do not need to be provided to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Standard library headers do not need to be provided to get proper results.">
+            <location file="[REDACTED]/src/util.cpp" line="2" column="2"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Standard library headers do not need to be provided to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Standard library headers do not need to be provided to get proper results.">
+            <location file="[REDACTED]/src/util.cpp" line="3" column="2"/>
+        </error>
+        <error id="mismatchAllocDealloc" severity="error" msg="Mismatching allocation and deallocation: counts" verbose="Mismatching allocation and deallocation: counts" cwe="762" hash="16354160553432284241" file0="[REDACTED]/src/util.cpp">
+            <location file="[REDACTED]/src/util.cpp" line="22" column="10"/>
+            <location file="[REDACTED]/src/util.cpp" line="18" column="17"/>
+            <symbol>counts</symbol>
+        </error>
+        <error id="checkersReport" severity="information" msg="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
+    </errors>
+</results>
