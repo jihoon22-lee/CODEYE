@@ -56,6 +56,11 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 	var previous, findings *record.Record
 	for _, key := range RequiredReviewTasks {
 		st := states[key]
+		if st != nil && !st.rejected && st.reviewResult != nil && st.reviewResult.R1 != nil {
+			// A review-r1 record in a plan without review-r1 roles.
+			st.rejected = true
+			limits.add(LimReviewPackMismatch + ":" + key)
+		}
 		if st == nil || st.rejected || st.reviewResult == nil || st.reviewResult.Record == nil {
 			previous = nil
 			continue

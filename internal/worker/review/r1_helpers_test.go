@@ -251,6 +251,8 @@ func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.R
 			var out []map[string]any
 			for _, c := range in.Candidates {
 				out = append(out, verdict(c.ID, "inconclusive", func(m map[string]any) {
+					m["category"], m["severity_reason"], m["impact"] = "error_handling", "재시도 범위가 문서 계약과 어긋날 수 있다.", "실패 처리 방식이 모듈 안내와 다를 수 있다."
+					m["next_verification"] = []string{"Forward의 호출자와 결제 경로를 읽는다."}
 					m["unresolved_assumptions"] = []string{"Forward의 실제 호출자를 발췌에서 확인하지 못했다."}
 					m["supporting_evidence_ids"] = []string{c.Evidence[0]}
 				}))

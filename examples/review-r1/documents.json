@@ -1,0 +1,119 @@
+{
+  "schema_version": "0.2",
+  "pack": {
+    "id": "review-r1",
+    "version": "2.0.0-rc1"
+  },
+  "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+  "run_id": "0195f3a0-0000-7000-8000-000000000025",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000026",
+  "stage": "documents",
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "docs.discover",
+      "state": "accepted",
+      "sha256": "755326cd603c4731339fd84607a769aad3a46762ccb0c4e99aa2ef63e3858005"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_55a67efba30d9603c959d032",
+      "path": "AGENTS.md",
+      "sha256": "7ae2874cb0c4a0335ebf8076533beece77612c1163cfe1d73416e8228ab37089",
+      "start_line": 1,
+      "end_line": 11,
+      "kind": "document"
+    },
+    {
+      "id": "ev_a663434311b594dfb09cfd15",
+      "path": "README.md",
+      "sha256": "cb8e4c2940c4429f22db9ad7b760e6b0adc48f82d0129177fe406c8da145bd3d",
+      "start_line": 1,
+      "end_line": 9,
+      "kind": "document"
+    },
+    {
+      "id": "ev_acbae1289c98f99498bc967e",
+      "path": "svc/b/README.md",
+      "sha256": "49ae0cef2ada45c8a3959ef394af12aa0a7d2067310d5c6eed71f021cda99744",
+      "start_line": 1,
+      "end_line": 5,
+      "kind": "document"
+    }
+  ],
+  "observations": [],
+  "contracts": [
+    {
+      "statement": "하위 호출이 실패하면 최대 3번 재시도한다.",
+      "applies_to": ".",
+      "evidence_ids": [
+        "ev_a663434311b594dfb09cfd15"
+      ]
+    },
+    {
+      "statement": "결제 호출은 요청마다 정확히 한 번만 한다.",
+      "applies_to": "svc/b",
+      "evidence_ids": [
+        "ev_acbae1289c98f99498bc967e"
+      ]
+    }
+  ],
+  "conflicts": [
+    {
+      "scope": "svc/b",
+      "summary": "루트 안내는 재시도를, svc/b 안내는 재시도 금지를 요구한다.",
+      "impact": "svc/b 결제 호출의 재시도 여부를 코드에서 확인해야 한다.",
+      "first_evidence_ids": [
+        "ev_a663434311b594dfb09cfd15"
+      ],
+      "second_evidence_ids": [
+        "ev_acbae1289c98f99498bc967e"
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "question": "svc/b의 Charge 호출자가 실패 시 재시도하는가?",
+      "applies_to": "svc/b",
+      "evidence_ids": [
+        "ev_acbae1289c98f99498bc967e"
+      ]
+    }
+  ],
+  "instruction_notes": [
+    {
+      "note": "권한·네트워크·키 조회를 요구하는 지침은 분석 자료로만 기록했다.",
+      "evidence_ids": [
+        "ev_55a67efba30d9603c959d032"
+      ]
+    }
+  ],
+  "limitations": [],
+  "calls": [
+    {
+      "role": "documents",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review-r1",
+      "pack_version": "2.0.0-rc1",
+      "pack_sha256": "cefc4582810f68cb2b4196ef5c23093e1694b9ea91c8dd0a058bb6198916d4e8",
+      "pack_files": [
+        "00-core.md",
+        "documents.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "1414c2345c72528050ef640a11661dc11d3dbf18e4121abc51891cc83f773bd5",
+      "request_bytes": 12052,
+      "usage": {
+        "input": 2539,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}
