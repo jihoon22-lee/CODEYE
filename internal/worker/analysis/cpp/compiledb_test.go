@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -20,6 +21,17 @@ func snapshotFiles(paths ...string) map[string]source.Entry {
 }
 
 func all(string) bool { return true }
+
+// absWS is an absolute workspace path on the test OS ("/ws/..." on Unix,
+// `C:\ws\...` on Windows, where a rooted path without a volume is not
+// absolute).
+func absWS(elem ...string) string {
+	root := string(filepath.Separator)
+	if runtime.GOOS == "windows" {
+		root = `C:\`
+	}
+	return filepath.Join(append([]string{root, "ws"}, elem...)...)
+}
 
 func mapOne(t *testing.T, db string, files map[string]source.Entry, scope func(string) bool) Mapping {
 	t.Helper()
@@ -55,7 +67,7 @@ func TestCompileDBMapsPathsAndDropsCodeLoading(t *testing.T) {
 	if len(m.Units) != 2 || m.Units[0].Rel != "src/a.c" || m.Units[1].Rel != "src/b.cpp" || m.Units[0].Driver != "cc" || m.Units[1].Driver != "clang++" {
 		t.Fatalf("units %+v", m.Units)
 	}
-	ws := filepath.FromSlash("/ws/attempt")
+	ws := absWS("attempt")
 	got := rendered(t, m, ws)
 	want := [][]string{
 		{"clang", "-DX=1", "-DY", "-UZ", "-I" + filepath.Join(ws, "include"), "-I" + filepath.Join(ws, "include"), "-iquote" + filepath.Join(ws, "missing"),
@@ -270,7 +282,7 @@ func TestCompileDBValuesCannotInjectArguments(t *testing.T) {
 	if len(m.Units) != 2 || m.Excluded[ExclUnsupportedDrive] != 1 {
 		t.Fatalf("units %+v excluded %v", m.Units, m.Excluded)
 	}
-	ws := "/ws"
+	ws := absWS()
 	for _, argv := range rendered(t, m, ws) {
 		for i, a := range argv {
 			if strings.HasPrefix(a, "@") || (i > 0 && unsafeArg(a)) {
@@ -326,7 +338,7 @@ func TestOptionLikeFileNamesStayPaths(t *testing.T) {
 	if len(m.Units) != 3 {
 		t.Fatalf("units %+v %v", m.Units, m.Excluded)
 	}
-	ws := filepath.FromSlash("/ws")
+	ws := absWS()
 	db, err := RenderDB(ws, m.Units)
 	if err != nil {
 		t.Fatal(err)
