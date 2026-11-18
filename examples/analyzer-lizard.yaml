@@ -1,0 +1,33 @@
+# W21 구조 지표 팩 lizard 어댑터 서술. 구현: internal/worker/analysis/lizard, 근거: docs/45-w21-structure-secrets-pack.md.
+# lizard 1.26.1 --xml은 자체 경고 임계값과 관계없이 exit 0이다(측정). CODEYE가 CCN >= 16(lizard 기본 경고 "CCN > 15")인 함수만 지표 관찰로 남긴다.
+# 지표는 결함이 아니다: finding·결함 수·조치 수·모델 입력이 되지 않는다. -Eduplicate는 쓰지 않는다(중복은 jscpd 담당).
+# 입력은 CODEYE가 scratch에 쓴 파일 목록(--input_file)이다. 저장소 경로는 argv에 들어가지 않고 .gitignore·whitelizard.txt는 결과를 바꾸지 않는다.
+# 0이 아닌 종료 코드는 모두 실패다. 아래 error는 측정한 대표값이다.
+schema_version: '0.1'
+id: any.lizard
+languages: [c, cpp, python, javascript, typescript, go, rust]
+planned_platforms: [linux, windows]
+availability: verified  # Linux lizard 1.26.1(Python 3) 실행으로 검증. Windows는 단위·replay 테스트만 실행.
+version_contract: lizard-1.26-fixture-tested
+analysis_scope: [syntax, structural]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${lizard}'
+  argv: [--version]
+execute:
+  executable: '${lizard}'
+  argv: [--xml, --no-gitignore, --input_file, '${scratch}/analyzers/lizard/files.txt']
+  cwd: '${workspace}'
+  timeout_seconds: 900
+  stdout_max_bytes: 33554432
+  env_allowlist: [PATH, LANG, SystemRoot, PYTHONDONTWRITEBYTECODE, PYTHONNOUSERSITE, PYTHONIOENCODING, HOME, USERPROFILE, TMPDIR, TMP, TEMP]
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [1, 2]
+parser:
+  id: lizard-xml
+  format: xml
+  input: stdout-artifact
