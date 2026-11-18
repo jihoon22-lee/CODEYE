@@ -1,6 +1,6 @@
 # 17. 구현 작업 계획
 
-현재 W01 환경 진단·프로젝트 기반과 W02 도메인·DB 저장 계약을 구현했다([W01 증거](21-w01-foundation.md), [W02 증거](23-w02-storage.md)). W03 최소 인증 API·웹 연결도 구현했다([W03 증거](24-w03-api.md)). W04 SourceAdapter도 구현했다([W04 증거](25-w04-source.md)). W05 NativeExecutor도 구현했다([W05 증거](26-w05-native.md)). W06에서 [노드 API](28-w06-node-protocol.md)와 [에이전트·워커](28-w06-agent-runtime.md)를 연결했다. [W08 Go vet](29-w08-go-vet.md)는 고정된 snapshot의 Go 모듈을 검사한다. [W07 스케줄러](30-w07-scheduler.md)는 풀 정책과 등록 노드의 수요에 따라 워커 수를 조절한다. [W09 보고서](31-w09-report.md)는 고정된 근거로 revision을 게시하고 JSON·Markdown·HTML을 제공한다. W01의 `unverified` 결과는 W05/W10 실행 능력 완료가 아니다. 문서·schema·fixture의 존재를 구현 완료로 체크하지 않는다. 일정 추정 대신 선행 관계와 완료 조건으로 관리한다. 목표는 인프라를 오래 쌓은 뒤 품질을 보는 것이 아니라 작은 실제 분석 경로를 먼저 검증하는 것이다.
+W01~W14의 R0 수직 경로를 구현했다. Go 실도구와 실제 모델을 사용한 개인 프로젝트·합성 자료 평가 결과, 미검증 환경과 다음 W15의 착수 자료는 [R0 파일럿 기록](36-r0-pilot.md)에 있다. 단계별 수용 조건과 선행 관계는 아래 표를 따른다.
 
 ## 1. R0: 개인 PC의 실동작 수직 경로
 
@@ -19,7 +19,7 @@
 | W11 | [Context·Investigator 실연동](33-w11-context-review.md) | W08,W10 | 문서 없는 코드와 문서 있는 코드 모두 근거 있는 후보 생성 |
 | W12 | [Verifier·증거 검증 구현](34-w12-verifier.md) | W11 | 반례로 후보 철회, 허위 path·재현 주장 차단, 모델 실패 partial |
 | W13 | [보고서 종합·상세 UI](35-w13-evidence-report.md) | W09,W12 | 요약→영역→근거, 숫자 일치, 미확정 표시, export |
-| W14 | R0 회귀·개인 파일럿 | W07,W13 | 최소 합성 집합+승인된 개인 프로젝트에서 실제 end-to-end 실행 기록 |
+| W14 | [R0 회귀·개인 파일럿](36-r0-pilot.md) | W07,W13 | 최소 합성 집합+승인된 개인 프로젝트에서 실제 end-to-end 실행 기록 |
 
 R0의 두 에이전트 시험은 한 머신에서 별도 node identity로 먼저 수행할 수 있다. 실제 다중 머신·NFS·네트워크 partition 보증을 대체하지 않는다. Windows와 RHEL 중 개발에 사용하지 않은 환경의 시험은 미실행으로 명시한다.
 

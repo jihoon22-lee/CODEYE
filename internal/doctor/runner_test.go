@@ -66,3 +66,10 @@ func TestNativeRunner(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+func TestGoProbeUsesPrivateTelemetryOffMode(t *testing.T) {
+	result := (NativeRunner{}).Run(t.Context(), Command{Name: "go", Args: []string{"env", "GOTELEMETRY"}, Timeout: 10 * time.Second})
+	if result.Reason != "" || strings.TrimSpace(result.Output) != "off" {
+		t.Fatalf("Go probe telemetry mode: %q (%s)", result.Output, result.Reason)
+	}
+}

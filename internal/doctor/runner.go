@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 )
 
@@ -63,6 +65,22 @@ func (NativeRunner) Run(parent context.Context, spec Command) Result {
 	cmd := exec.CommandContext(ctx, path, spec.Args...)
 	cmd.Dir = dir
 	cmd.Env = []string{"HOME=" + dir, "USERPROFILE=" + dir, "TMPDIR=" + dir, "TMP=" + dir, "TEMP=" + dir, "LC_ALL=C", "LANG=C", "GOTOOLCHAIN=local", "GOWORK=off", "GOENV=off", "GOPROXY=off", "GOSUMDB=off"}
+	// A Go toolchain can start a detached telemetry child even for a version
+	// probe. Its local counters could recreate this HOME after RemoveAll.
+	if base := strings.ToLower(filepath.Base(path)); base == "go" || base == "go.exe" {
+		configDir := filepath.Join(dir, "config")
+		if runtime.GOOS == "darwin" {
+			configDir = filepath.Join(dir, "Library", "Application Support")
+		}
+		modeDir := filepath.Join(configDir, "go", "telemetry")
+		if err := os.MkdirAll(modeDir, 0700); err != nil {
+			return Result{Reason: "workspace_unavailable"}
+		}
+		if err := os.WriteFile(filepath.Join(modeDir, "mode"), []byte("off\n"), 0600); err != nil {
+			return Result{Reason: "workspace_unavailable"}
+		}
+		cmd.Env = append(cmd.Env, "XDG_CONFIG_HOME="+configDir, "APPDATA="+configDir)
+	}
 	for _, key := range []string{"PATH", "SystemRoot", "WINDIR"} {
 		if value, ok := os.LookupEnv(key); ok {
 			cmd.Env = append(cmd.Env, key+"="+value)

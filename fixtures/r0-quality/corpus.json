@@ -1,0 +1,188 @@
+[
+  {
+    "id": "Q01",
+    "split": "development",
+    "family": "aggregation",
+    "contract": "Sum includes all samples, including the last.",
+    "imports": [],
+    "before": "func Sum(samples []int) int {\n total := 0\n for i := 0; i+1 < len(samples); i++ { total += samples[i] }\n return total\n}",
+    "after": "func Sum(samples []int) int {\n total := 0\n for _, sample := range samples { total += sample }\n return total\n}",
+    "check": "if v:=Sum([]int{4,7}); v!=11 { t.Errorf(\"sum=%d, want 11\",v) }",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "Sum",
+      "trigger": "마지막 표본이 0이 아닌 입력",
+      "expected_impact": "마지막 값이 합계에서 빠진다.",
+      "corrected_counterevidence": "모든 표본을 순회한다."
+    }
+  },
+  {
+    "id": "Q02",
+    "split": "development",
+    "family": "copy_ownership",
+    "contract": "With appends to a new list. A caller can keep using the original backing array.",
+    "imports": [],
+    "before": "func With(values []int, x int) []int {\n return append(values, x)\n}",
+    "after": "func With(values []int, x int) []int {\n out := make([]int,len(values),len(values)+1)\n copy(out,values)\n return append(out,x)\n}",
+    "check": "all:=[]int{2,4,6}; out:=With(all[:2],7); if all[2]!=6 || out[2]!=7 {t.Errorf(\"source=%v result=%v\",all,out)}",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "With",
+      "trigger": "여유 용량이 있는 슬라이스에서 호출자가 배후 배열을 보유",
+      "expected_impact": "append가 공유 배열의 다음 원소를 덮어쓴다.",
+      "corrected_counterevidence": "새 배열을 만든 뒤 원소를 복사한다."
+    }
+  },
+  {
+    "id": "Q03",
+    "split": "development",
+    "family": "unicode_units",
+    "contract": "Initial returns the first complete Unicode code point or an empty string.",
+    "imports": [],
+    "before": "func Initial(s string) string {\n if len(s)==0 { return \"\" }\n return s[:1]\n}",
+    "after": "func Initial(s string) string {\n for _, r := range s { return string(r) }\n return \"\"\n}",
+    "check": "if v:=Initial(\"가을\"); v!=\"가\" {t.Errorf(\"initial=%q\",v)}",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "Initial",
+      "trigger": "첫 글자가 여러 바이트인 올바른 UTF-8",
+      "expected_impact": "한 바이트만 반환해 첫 코드 포인트가 손상된다.",
+      "corrected_counterevidence": "range로 첫 rune을 읽는다."
+    }
+  },
+  {
+    "id": "Q04",
+    "split": "development",
+    "family": "optional_value",
+    "contract": "A recorded score of zero must remain distinguishable from a missing score.",
+    "imports": [],
+    "before": "func Score(scores map[string]int, k string) (int,bool) {\n n:=scores[k]\n return n,n!=0\n}",
+    "after": "func Score(scores map[string]int, k string) (int,bool) {\n n,ok:=scores[k]\n return n,ok\n}",
+    "check": "if n,ok:=Score(map[string]int{\"a\":0},\"a\"); n!=0 || !ok {t.Errorf(\"score=%d, present=%v\",n,ok)}",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "Score",
+      "trigger": "키가 있고 값이 0인 map",
+      "expected_impact": "존재하는 키를 누락된 것으로 반환한다.",
+      "corrected_counterevidence": "map 조회의 두 번째 결과로 존재 여부를 반환한다."
+    }
+  },
+  {
+    "id": "Q05",
+    "split": "development",
+    "family": "resource_lifetime",
+    "contract": "A successful Open returns an open reader. The caller owns Close.",
+    "imports": [
+      "io"
+    ],
+    "before": "func Open(r io.ReadCloser) (io.ReadCloser,error) {\n defer r.Close()\n return r,nil\n}",
+    "after": "func Open(r io.ReadCloser) (io.ReadCloser,error) {\n return r,nil\n}",
+    "check": "r,w:=io.Pipe(); defer w.Close(); reader,err:=Open(r); if err!=nil {t.Fatal(err)}; defer reader.Close(); go w.Write([]byte{'a'}); b:=make([]byte,1); n,err:=reader.Read(b); if n!=1 || err!=nil {t.Errorf(\"read=%d %v\",n,err)}",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "Open",
+      "trigger": "호출자가 성공 결과의 reader를 읽음",
+      "expected_impact": "반환 전에 reader가 닫혀 호출자가 읽을 수 없다.",
+      "corrected_counterevidence": "Close 소유권을 호출자에게 둔다."
+    }
+  },
+  {
+    "id": "Q06",
+    "split": "holdout",
+    "family": "error_chain",
+    "contract": "NameError adds the name while preserving errors.Is matching for the cause.",
+    "imports": [
+      "fmt"
+    ],
+    "before": "func NameError(name string, cause error) error {\n return fmt.Errorf(\"%s: %v\",name,cause)\n}",
+    "after": "func NameError(name string, cause error) error {\n return fmt.Errorf(\"%s: %w\",name,cause)\n}",
+    "check": "cause:=errors.New(\"missing\"); if !errors.Is(NameError(\"plan\",cause),cause){ t.Error(\"cause was lost\") }",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "NameError",
+      "trigger": "원인 오류를 넣고 errors.Is로 질의",
+      "expected_impact": "문자열만 남아 오류 체인이 끊긴다.",
+      "corrected_counterevidence": "%w로 원인 오류를 보관한다."
+    }
+  },
+  {
+    "id": "Q07",
+    "split": "holdout",
+    "family": "unit_conversion",
+    "contract": "Seconds interprets the argument as a count of seconds.",
+    "imports": [
+      "time"
+    ],
+    "before": "func Seconds(n int) time.Duration {\n return time.Duration(n)\n}",
+    "after": "func Seconds(n int) time.Duration {\n return time.Duration(n)*time.Second\n}",
+    "check": "if v:=Seconds(3); v!=3*time.Second{t.Errorf(\"duration=%v\",v)}",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "Seconds",
+      "trigger": "작은 양의 초 단위를 입력",
+      "expected_impact": "기간이 초가 아닌 나노초 크기다.",
+      "corrected_counterevidence": "time.Second를 곱한다."
+    }
+  },
+  {
+    "id": "Q08",
+    "split": "holdout",
+    "family": "initial_state",
+    "contract": "Peak returns the largest reading in a nonempty series, including negative readings.",
+    "imports": [],
+    "before": "func Peak(series []int) int {\n peak:=0\n for _,r:=range series { if r>peak {peak=r} }\n return peak\n}",
+    "after": "func Peak(series []int) int {\n peak:=series[0]\n for _,r:=range series[1:] { if r>peak {peak=r} }\n return peak\n}",
+    "check": "if v:=Peak([]int{-9,-3}); v!=-3 {t.Errorf(\"peak=%d\",v)}",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "Peak",
+      "trigger": "비어 있지 않고 모든 값이 음수인 입력",
+      "expected_impact": "실제 최댓값 대신 0을 반환한다.",
+      "corrected_counterevidence": "첫 표본으로 최댓값을 초기화한다."
+    }
+  },
+  {
+    "id": "Q09",
+    "split": "holdout",
+    "family": "partition_order",
+    "contract": "Visible returns the first n visible names, skipping empty entries.",
+    "imports": [],
+    "before": "func Visible(names []string,n int) []string {\n var out []string\n for i,s:=range names { if i>=n {break}; if s!=\"\" {out=append(out,s)} }\n return out\n}",
+    "after": "func Visible(names []string,n int) []string {\n var out []string\n for _,s:=range names { if len(out)>=n {break}; if s!=\"\" {out=append(out,s)} }\n return out\n}",
+    "check": "got:=Visible([]string{\"\",\"a\",\"b\"},2); if len(got)!=2 || got[1]!=\"b\"{t.Errorf(\"visible=%v\",got)}",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "Visible",
+      "trigger": "앞부분에 빈 이름이 있고 뒤에 유효 이름이 충분한 입력",
+      "expected_impact": "빈 항목도 한도에 포함돼 유효 이름이 누락된다.",
+      "corrected_counterevidence": "반환 배열의 길이로 중단 여부를 판단한다."
+    }
+  },
+  {
+    "id": "Q10",
+    "split": "holdout",
+    "family": "numeric_precision",
+    "contract": "Fraction returns the fractional share of a positive total.",
+    "imports": [],
+    "before": "func Fraction(count,total int) float64 {\n return float64(count/total)\n}",
+    "after": "func Fraction(count,total int) float64 {\n return float64(count)/float64(total)\n}",
+    "check": "if v:=Fraction(1,4); v!=0.25 {t.Errorf(\"fraction=%g\",v)}",
+    "label": {
+      "language": "Go",
+      "location": "metrics.go",
+      "symbol": "Fraction",
+      "trigger": "양의 분모이고 나누어떨어지지 않는 정수",
+      "expected_impact": "정수 나눗셈 때문에 소수 부분이 사라진다.",
+      "corrected_counterevidence": "두 피연산자를 실수로 변환한 뒤 나눈다."
+    }
+  }
+]

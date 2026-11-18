@@ -83,6 +83,9 @@ def main():
                     scheduler_env = dict(env, CODEYE_DATABASE_URL=scheduler_url, CODEYE_TEST_DATABASE_URL=scheduler_url)
                     subprocess.run([str(base / "codeye"), "migrate"], cwd=base, env=scheduler_env, check=True)
                     scheduler_smoke.run(base, ROOT, scheduler_env)
+                if "--r0-pilot" in sys.argv[1:]:
+                    import r0_pilot
+                    r0_pilot.run(base, ROOT, env)
                 print("PASS: Native PostgreSQL migration·저장 통합·인증/query·CLI 재적용·JSON schema·비밀값 미노출")
             finally:
                 process.terminate()
