@@ -1,0 +1,2 @@
+src/bad.ts(1,14): error TS1134: Variable declaration expected.
+src/bad.ts(1,16): error TS1134: Variable declaration expected.

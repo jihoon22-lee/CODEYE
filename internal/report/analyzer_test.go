@@ -83,6 +83,15 @@ func unionManifest(t *testing.T, docs ...map[string]any) []byte {
 				}
 			}
 		}
+		// Honored repository config files are bound to the manifest too (W18).
+		if rp, ok := d["rule_pack"].(map[string]any); ok {
+			if cfgs, ok := rp["config_files"].([]any); ok {
+				for _, c := range cfgs {
+					cm := c.(map[string]any)
+					paths[cm["path"].(string)] = cm["sha256"].(string)
+				}
+			}
+		}
 		if cov, ok := d["coverage"].(map[string]any); ok {
 			if pp, ok := cov["processed_paths"].([]any); ok {
 				for _, p := range pp {

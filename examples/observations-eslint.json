@@ -1,0 +1,337 @@
+{
+  "adapter": {
+    "id": "eslint",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "javascript",
+    "id": "javascript.eslint",
+    "required": true
+  },
+  "coverage": {
+    "files_in_scope": 2,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "packages/lib/eslint.config.js",
+      "packages/lib/index.js"
+    ],
+    "unit": "file",
+    "units": {
+      "linted_clean": 1,
+      "linted_with_findings": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "node",
+          "[REDACTED]",
+          "--version"
+        ],
+        "dir": "packages/lib",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "eslint.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 9,
+        "incomplete": false,
+        "sha256": "cb4bbe99adf02d344d43e1153d880332d0ab1716246e63295902db587884de79",
+        "total_bytes": 9,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "node",
+          "[REDACTED]",
+          "--no-config-lookup",
+          "-c",
+          "[REDACTED]",
+          "--no-inline-config",
+          "--suppressions-location",
+          "[REDACTED]",
+          "--no-warn-ignored",
+          "--no-error-on-unmatched-pattern",
+          "--format",
+          "json",
+          "--",
+          "."
+        ],
+        "dir": "packages/lib",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 1,
+      "name": "eslint.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 1574,
+        "incomplete": false,
+        "sha256": "10a246d480f945e4a855fa54f147006d22a14fe3630cabf6f22a5acc0a758179",
+        "total_bytes": 1682,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "repository_eslint_config_not_loaded"
+  ],
+  "module": {
+    "dir": "packages/lib",
+    "name": "@w18/lib"
+  },
+  "observations": [
+    {
+      "category": "maintainability",
+      "id": "obs_8a0cb03769c132c821ea",
+      "location": {
+        "blob_sha256": "b403c59ba6cd7b8035a4a2da3c95587ae6868b11ae04b815612417e7bdd4f2d5",
+        "column_unit": "byte",
+        "end_col": 13,
+        "end_line": 3,
+        "path": "packages/lib/index.js",
+        "start_col": 7,
+        "start_line": 3
+      },
+      "location_state": "resolved",
+      "path": "packages/lib/index.js",
+      "raw_message": "'unused' is assigned a value but never used.",
+      "raw_ref": {
+        "byte_end": 591,
+        "byte_start": 277,
+        "execution": "eslint.check",
+        "json_pointer": "/1/messages/0",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "10a246d480f945e4a855fa54f147006d22a14fe3630cabf6f22a5acc0a758179"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "no-unused-vars",
+      "suggested_fix_count": 1,
+      "suppressed": false,
+      "unit": "packages/lib/index.js"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_cfbe0fcc6fb1fead6843",
+      "location": {
+        "blob_sha256": "b403c59ba6cd7b8035a4a2da3c95587ae6868b11ae04b815612417e7bdd4f2d5",
+        "column_unit": "byte",
+        "end_col": 12,
+        "end_line": 6,
+        "path": "packages/lib/index.js",
+        "start_col": 7,
+        "start_line": 6
+      },
+      "location_state": "resolved",
+      "path": "packages/lib/index.js",
+      "raw_message": "Expected a conditional expression and instead saw an assignment.",
+      "raw_ref": {
+        "byte_end": 778,
+        "byte_start": 592,
+        "execution": "eslint.check",
+        "json_pointer": "/1/messages/1",
+        "record_index": 1,
+        "stream": "stdout",
+        "stream_sha256": "10a246d480f945e4a855fa54f147006d22a14fe3630cabf6f22a5acc0a758179"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "no-cond-assign",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "packages/lib/index.js"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_2cbb56b8897bb3e02244",
+      "location": {
+        "blob_sha256": "b403c59ba6cd7b8035a4a2da3c95587ae6868b11ae04b815612417e7bdd4f2d5",
+        "column_unit": "byte",
+        "end_col": 12,
+        "end_line": 6,
+        "path": "packages/lib/index.js",
+        "start_col": 7,
+        "start_line": 6
+      },
+      "location_state": "resolved",
+      "path": "packages/lib/index.js",
+      "raw_message": "Unexpected constant condition.",
+      "raw_ref": {
+        "byte_end": 941,
+        "byte_start": 779,
+        "execution": "eslint.check",
+        "json_pointer": "/1/messages/2",
+        "record_index": 2,
+        "stream": "stdout",
+        "stream_sha256": "10a246d480f945e4a855fa54f147006d22a14fe3630cabf6f22a5acc0a758179"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "no-constant-condition",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "packages/lib/index.js"
+    },
+    {
+      "category": "maintainability",
+      "id": "obs_b0a940c5a0d694a6df11",
+      "location": {
+        "blob_sha256": "b403c59ba6cd7b8035a4a2da3c95587ae6868b11ae04b815612417e7bdd4f2d5",
+        "column_unit": "byte",
+        "end_col": 8,
+        "end_line": 6,
+        "path": "packages/lib/index.js",
+        "start_col": 7,
+        "start_line": 6
+      },
+      "location_state": "resolved",
+      "path": "packages/lib/index.js",
+      "raw_message": "'a' is assigned a value but never used.",
+      "raw_ref": {
+        "byte_end": 1104,
+        "byte_start": 942,
+        "execution": "eslint.check",
+        "json_pointer": "/1/messages/3",
+        "record_index": 3,
+        "stream": "stdout",
+        "stream_sha256": "10a246d480f945e4a855fa54f147006d22a14fe3630cabf6f22a5acc0a758179"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "no-unused-vars",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "packages/lib/index.js"
+    },
+    {
+      "category": "correctness",
+      "id": "obs_8773f3e3bce1019d1676",
+      "location": {
+        "blob_sha256": "b403c59ba6cd7b8035a4a2da3c95587ae6868b11ae04b815612417e7bdd4f2d5",
+        "column_unit": "byte",
+        "end_col": 19,
+        "end_line": 9,
+        "path": "packages/lib/index.js",
+        "start_col": 18,
+        "start_line": 9
+      },
+      "location_state": "resolved",
+      "path": "packages/lib/index.js",
+      "raw_message": "Duplicate key 'k'.",
+      "raw_ref": {
+        "byte_end": 1247,
+        "byte_start": 1105,
+        "execution": "eslint.check",
+        "json_pointer": "/1/messages/4",
+        "record_index": 4,
+        "stream": "stdout",
+        "stream_sha256": "10a246d480f945e4a855fa54f147006d22a14fe3630cabf6f22a5acc0a758179"
+      },
+      "raw_severity": "error",
+      "related": [],
+      "rule_id": "no-dupe-keys",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "packages/lib/index.js"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 5,
+    "ok": true,
+    "records": 2,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "eslint-json-v1",
+    "version": "1"
+  },
+  "patterns": [
+    "."
+  ],
+  "rule_pack": {
+    "config_files": [],
+    "id": "codeye-js-eslint",
+    "repository_config": "overridden",
+    "selection": [
+      "@eslint/js@10.0.1 recommended (JS and TS files)",
+      "typescript-eslint@8.73.0 recommended (TS files)",
+      "no-undef off",
+      "parser typescript@6.0.3",
+      "jsx in JS files",
+      "--no-config-lookup",
+      "--no-inline-config",
+      "--suppressions-location empty"
+    ],
+    "source_suppressions": "disabled",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "8e69ffad78aa517a9a2f5165ae41258e88719cd4c2c51cf94df3f635e90b018a",
+  "target": {
+    "platform": null,
+    "properties": {
+      "eslint_js": "10.0.1",
+      "node": "24.18.0",
+      "parser_typescript": "6.0.3",
+      "tsconfig": "not_used",
+      "typescript_eslint": "8.73.0"
+    }
+  },
+  "task_key": "eslint.m02",
+  "tool": {
+    "name": "eslint",
+    "version": "10.15.0",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

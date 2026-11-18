@@ -440,6 +440,69 @@ def check_w16_contracts(validators: dict) -> int:
     return negatives
 
 
+def check_w18_contracts(validators: dict) -> int:
+    """W18 JS/TS pack: the ESLint and tsc descriptors and their real envelope examples.
+
+    Returns the number of negative cases."""
+    negatives = 0
+    envelope_validator = validators["analyzer-observations.schema.json"]
+
+    def both(doc):
+        envelope_validator.validate(doc)
+        check_analyzer_observations(doc)
+
+    eslint = yaml_file(ROOT / "examples/analyzer-eslint.yaml")
+    tsc = yaml_file(ROOT / "examples/analyzer-tsc.yaml")
+    for descriptor in (eslint, tsc):
+        validators["analyzer.schema.json"].validate(descriptor)
+        check_analyzer(descriptor)
+        ensure(descriptor["executes_repository_code"] is False and descriptor["network_policy"] == "none", "W18 tasks never execute repository code")
+        ensure(descriptor["execute"]["executable"] == "${node}", "W18 tools run through the shared node toolchain, never their #! line")
+        ensure(descriptor["execute"]["env_allowlist"] == ["PATH", "LANG", "SystemRoot"], "W18 environment allowlist changed")
+    ensure(eslint["exit_codes"] == {"clean": [0], "findings": [1], "error": [2]}, "eslint exit-code contract changed")
+    ensure(tsc["exit_codes"] == {"clean": [0], "findings": [2], "error": [1]}, "tsc exit-code contract changed")
+    argv = eslint["execute"]["argv"]
+    for flag in ("--no-config-lookup", "--no-inline-config", "--suppressions-location", "--"):
+        ensure(flag in argv, "eslint argv must hold " + flag)
+    ensure(argv.index("--") == len(argv) - 2, "eslint positionals follow --")
+    flags = go_string_slice(ROOT / "internal/worker/analysis/tsc/tsc.go", "Flags")
+    ensure(tsc["execute"]["argv"][1:-2] == flags, "Descriptor argv differs from tsc.Flags")
+    ensure("--build" not in flags and "-b" not in flags and tsc["execute"]["argv"][-1].startswith("./"), "tsc: --noEmit, never --build, ./ project path")
+
+    base = json_file(ROOT / "examples/observations-eslint.json")
+    both(base)
+    ensure(base["analyzer"] == {"id": "javascript.eslint", "ecosystem": "javascript", "required": True}, "javascript.eslint is the ecosystem baseline")
+    rp = base["rule_pack"]
+    ensure(rp["repository_config"] == "overridden" and rp["config_files"] == [] and rp["source_suppressions"] == "disabled" and rp["unreported_suppression_rules"] == [],
+           "eslint rule context: managed config overrides the repository's, directives are disabled")
+    ensure("--no-inline-config" in rp["selection"] and "repository_eslint_config_not_loaded" in base["limitations"], "eslint selection records the disabled directives")
+    ensure(base["outcome"]["exit_class"] == "success_with_findings" and executions_exit(base, "eslint.check") == 1, "ESLint example is the exit-1 findings run")
+    ensure(all(o["raw_ref"]["stream"] == "stdout" and o["raw_ref"]["json_pointer"] for o in base["observations"]), "ESLint observations point into stdout JSON")
+    checker = json_file(ROOT / "examples/observations-tsc.json")
+    both(checker)
+    ensure(checker["analyzer"] == {"id": "javascript.tsc", "ecosystem": "javascript", "required": False}, "javascript.tsc is extra depth")
+    rp = checker["rule_pack"]
+    ensure(rp["repository_config"] == "honored" and rp["config_files"] and rp["source_suppressions"] == "honored" and rp["unreported_suppression_rules"] == [],
+           "tsc rule context: tsconfig chain honored and enumerated, @ts-ignore/@ts-expect-error honored")
+    ensure(checker["outcome"]["exit_class"] == "success_with_findings" and executions_exit(checker, "tsc.check") == 2, "tsc example is the exit-2 findings run")
+    ensure([e["name"] for e in checker["executions"]] == ["tsc.version", "tsc.config", "tsc.check"], "tsc shows the effective config before the check")
+
+    def case(name, doc, edit):
+        nonlocal negatives
+        bad = copy.deepcopy(doc)
+        edit(bad)
+        expect_invalid(name, both, bad)
+        negatives += 1
+
+    case("eslint suppressed under disabled directives", base, lambda d: d["observations"][0].update(suppressed=True))
+    case("eslint config files under overridden configuration", base, lambda d: d["rule_pack"].update(config_files=[{"path": "eslint.config.js", "sha256": "a" * 64}]))
+    case("eslint observation outside stdout", base, lambda d: d["observations"][0]["raw_ref"].update(stream="stderr"))
+    case("tsc unreported suppression rules under honored", checker, lambda d: d["rule_pack"].update(unreported_suppression_rules=["TS2322"]))
+    case("tsc success without processed files", checker, lambda d: d["coverage"].update(processed_paths=[]))
+    case("tsc host path in target", checker, lambda d: d["target"]["properties"].update(tsconfig="/home/u/tsconfig.json"))
+    return negatives
+
+
 def executions_exit(doc: dict, name: str):
     return next(e["exit_code"] for e in doc["executions"] if e["name"] == name)
 
@@ -1155,6 +1218,7 @@ def main() -> None:
     w19_negatives = check_w19_contracts(validators)
     print(f"PASS: W19 analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {w19_negatives} negative cases)")
     print(f"PASS: W16 C/C++ pack (cppcheck/clang-tidy descriptors, real envelopes bound to the fixture, expected outcomes; {check_w16_contracts(validators)} negative cases)")
+    print(f"PASS: W18 JS/TS pack contracts (eslint and tsc descriptors, real envelope examples; {check_w18_contracts(validators)} negative cases)")
     w20_negatives = check_w20_rust_pack(validators)
     print(f"PASS: W20 Rust pack contracts (cargo check and clippy descriptors, real envelope examples; {w20_negatives} negative cases)")
     review = json_file(ROOT / "examples/review-record.json")
