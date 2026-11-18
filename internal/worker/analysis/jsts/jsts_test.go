@@ -156,7 +156,13 @@ func TestStripJSONCKeepsStrings(t *testing.T) {
 
 func TestScriptValidation(t *testing.T) {
 	eslint, tscJS, node := jststest.FakeTools(t)
-	if s, err := jsts.NewScript(eslint, "eslint", node); err != nil || s.Package != filepath.Dir(filepath.Dir(eslint)) || s.Env()["PATH"] != node.Dir {
+	// The package directory is derived from the resolved script path; on
+	// Windows that also expands 8.3 short names (RUNNER~1) in temp paths.
+	resolved, err := filepath.EvalSymlinks(eslint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, err := jsts.NewScript(eslint, "eslint", node); err != nil || s.Package != filepath.Dir(filepath.Dir(resolved)) || s.Env()["PATH"] != node.Dir {
 		t.Fatalf("%v %+v", err, s)
 	}
 	for _, c := range []struct {
