@@ -147,17 +147,23 @@ func openSnapshot(job analysis.Job) (*os.Root, error) {
 	return os.OpenRoot(job.Snapshot.SnapshotDir)
 }
 
+// ArtifactPath is where the discovery task of kind writes its artifact in
+// attempt scratch. Later roles of the same attempt (review-r1) read it from
+// there and validate it again with envdoc.Decode.
+func ArtifactPath(scratch, kind string) string {
+	return filepath.Join(scratch, "discovery", kind+".json")
+}
+
 // write stores a validated document in attempt scratch.
-func write(job analysis.Job, doc envdoc.Document, name string) (analysis.ArtifactFile, error) {
+func write(job analysis.Job, doc envdoc.Document) (analysis.ArtifactFile, error) {
 	b, err := envdoc.Marshal(doc, input(job).Expect(doc.Kind))
 	if err != nil {
 		return analysis.ArtifactFile{}, err
 	}
-	dir := filepath.Join(job.Scratch, "discovery")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	p := ArtifactPath(job.Scratch, doc.Kind)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return analysis.ArtifactFile{}, err
 	}
-	p := filepath.Join(dir, name)
 	if err := analysis.WriteFileExclusive(p, b); err != nil {
 		return analysis.ArtifactFile{}, err
 	}
@@ -190,7 +196,7 @@ func (h *Handler) runEnvironment(ctx context.Context, job analysis.Job, runner e
 		res.Status, res.Reason = domain.TaskCancelled, ReasonCancelled
 		return res
 	}
-	art, err := write(job, doc, "environment.json")
+	art, err := write(job, doc)
 	if err != nil {
 		res.Status, res.Reason = domain.TaskFailed, ReasonArtifactFailed
 		return res
@@ -218,7 +224,7 @@ func (h *Handler) runDocuments(ctx context.Context, job analysis.Job) analysis.T
 	if err != nil {
 		return taskError(err)
 	}
-	art, err := write(job, doc, "documents.json")
+	art, err := write(job, doc)
 	if err != nil {
 		return failed(ReasonArtifactFailed)
 	}

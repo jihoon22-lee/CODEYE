@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
@@ -83,6 +84,26 @@ func Classify(p string) string {
 }
 
 func depth(p string) int { return strings.Count(p, "/") }
+
+// EligibleDocuments lists, from the manifest alone, the guidance documents
+// docs.discover may read in this scope: included regular files of a guidance
+// class inside the scope. Sizes, budget and content checks are decided when
+// the documents are read, so a run can still select none of them. The
+// review-r1 planner uses it to decide whether the documents role is required.
+func EligibleDocuments(m source.Manifest, scope domain.Scope) []string {
+	s, ok := normalScope(scope)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, e := range m.Entries {
+		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil && envdoc.IsGuidance(Classify(e.Path)) && pathInScope(e.Path, s) {
+			out = append(out, e.Path)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
 
 // readFunc returns the verified bytes of an included file entry; any error is
 // a snapshot integrity failure.
