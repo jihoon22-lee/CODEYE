@@ -311,8 +311,8 @@ func (c *Config) validate(knownTools []string) error {
 		if m.RelayFile != "" && !absClean(m.RelayFile) {
 			return errors.New("agent.model.relay_file must be an absolute, clean path")
 		}
-		if m.ReviewPack != "" && m.ReviewPack != "review-v1" && m.ReviewPack != "review-r1" {
-			return errors.New("agent.model.review_pack must be review-v1 or review-r1")
+		if m.ReviewPack != "" && m.ReviewPack != "review-r1" && m.ReviewPack != "review-v1" {
+			return errors.New("agent.model.review_pack must be review-r1 (default) or review-v1 (legacy)")
 		}
 	}
 	for _, v := range []int64{c.Quota.SnapshotBytes, c.Quota.WorkspaceBytes, c.Quota.CacheBytes, c.Quota.LogsBytes, c.Quota.ArtifactsBytes} {

@@ -1,7 +1,7 @@
-// Package reviewpackr1 embeds the R1 candidate review pack (W15 phase 2,
-// revised in W24). It is selected only by the node operator (codeye agent
-// --review-pack review-r1); review-v1 stays the default and is not affected
-// by this pack.
+// Package reviewpackr1 embeds the default review pack (W15 phase 2, revised
+// in W24, default since 2.0.0). The node operator may select the legacy
+// review-v1 instead (codeye agent --review-pack review-v1); review-v1 is not
+// affected by this pack.
 package reviewpackr1
 
 import (

@@ -47,7 +47,7 @@ LLM이 추가 검사를 제안하면 등록된 도구·예산·프로젝트 실�
 | findings를 뜻하는 종료 코드 | 어댑터의 코드 매핑에 따라 succeeded+observations |
 | parser 오류 | raw 보존, parser_error, 0건 주장 금지 |
 | 모델 timeout/429 | 제한된 지수 backoff, 예산 소진 시 partial |
-| 잘못된 JSON/증거 참조 | 오류 항목만 전달해 1회 형식 복구, 계속 실패하면 격리 |
+| 잘못된 JSON/증거 참조 | 오류 항목만 전달해 1회 형식 복구, 계속 실패하면 격리. review-r1은 JSON이 아닌 응답에 복구와 별도로 1회 재시도한다(단계당 최대 3회 호출, [docs/49](49-review-pack-default.md)) |
 | 노드 lease 만료 | fenced, recovery_required. 부작용 가능한 작업은 종료 확인 전 재시도 금지 |
 | Git 댓글 실패 | 보고서 유지, outbox만 재시도 |
 | 원본과 workspace의 불일치 | 변경 파일과 이유 기록, stale 근거 invalid 처리 |

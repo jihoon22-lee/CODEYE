@@ -11,8 +11,8 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// R1 records (schema 0.2) are written by the review-r1 candidate pack (W15
-// phase 2). They share the media type with 0.1 records; a report registry
+// R1 records (schema 0.2) are written by the review-r1 pack (W15, default
+// since 2.0.0). They share the media type with 0.1 records; a report registry
 // selects the decoder by schema_version, so 0.1 records keep their exact
 // rules above. Unlike 0.1 records, an R1 record is not cumulative: it holds
 // only its own stage's calls and binds every upstream input by the SHA-256 of

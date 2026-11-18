@@ -6,7 +6,7 @@
 - `review.investigate`는 발생 조건, 영향, 개선 방향, 반례 가능성과 실제 코드 근거를 가진 후보를 반환한다. 후보가 없으면 빈 배열을 명시한다. 누락된 배열, 알 수 없는 필드, 존재하지 않는 ID 또는 문서만 인용한 코드 후보는 거부한다.
 - 플랫폼에 포함한 core·역할·영역·Go 지침과 manifest의 선택 목록 및 SHA-256, 모델·CLI 버전, 요청 digest, 제공된 사용량을 기록한다. 대상 README와 AGENTS는 자료로 전달하며 모델 권한을 설정할 수 없다.
 - 한 요청의 입력 범위는 선택된 파일 최대 6개, 파일당 최대 50줄, 발췌 합계 약 12KB다. 제한된 scope, 줄 번호, blob SHA-256을 확인한다. 비텍스트, 민감값 패턴에 걸린 파일과 예산 밖의 자료를 제외한다. 이 방식은 완전한 비밀 탐지를 보장하지 않는다. 미분석 파일과 문서 부재를 한계로 표시한다.
-- 노드 운영자는 일반 소스 매핑과 별도로 `--model-source-root ROOT_ID`로 모델 전송을 허용한다. 실제 모델을 쓰려면 agent에 `--opencode ABSOLUTE_PATH --model PROVIDER/MODEL`을 준다. 예산 relay를 선택한 경우에만 `--model-relay-file ABSOLUTE_PATH`를 추가한다. W15 후보 팩은 `--review-pack review-r1`로만 선택한다. 기본값은 `review-v1`이다([W15 2단계](37-w15-discovery-and-progress.md#10-결과--2단계후보-팩-연결-실모델-없음)). relay에만 실제 OpenAI 키가 있고, 관리형 OpenCode는 loopback 전용 접근 값을 사용한다. Git 소스에 대한 개별 모델 전송 승인은 후속이다.
+- 노드 운영자는 일반 소스 매핑과 별도로 `--model-source-root ROOT_ID`로 모델 전송을 허용한다. 실제 모델을 쓰려면 agent에 `--opencode ABSOLUTE_PATH --model PROVIDER/MODEL`을 준다. 예산 relay를 선택한 경우에만 `--model-relay-file ABSOLUTE_PATH`를 추가한다. W15 후보 팩은 `--review-pack review-r1`로만 선택했고 기본값은 `review-v1`이었다([W15 2단계](37-w15-discovery-and-progress.md#10-결과--2단계후보-팩-연결-실모델-없음)). 2.0.0부터 기본값은 `review-r1`이고, v1은 `--review-pack review-v1`로 고르는 이전 팩이다([docs/49](49-review-pack-default.md)). relay에만 실제 OpenAI 키가 있고, 관리형 OpenCode는 loopback 전용 접근 값을 사용한다. Git 소스에 대한 개별 모델 전송 승인은 후속이다.
 - 미설정, 모델 오류, 비허용 root를 구조화 상태와 reason에 남긴다. 도구 관찰과 모델 후보는 서로 다른 산출물이다. 모델이 서술한 숫자를 run 상태 또는 통계로 쓰지 않는다.
 
 ## 실행 근거

@@ -42,7 +42,7 @@ Usage:
                [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit]
                [--cargo /abs/toolchain/bin/cargo [--clippy /abs/toolchain/bin/cargo-clippy]]
                [--repo-code-source-root ID ...] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
-               [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-v1|review-r1]
+               [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1]
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
 Login links are written to a 0600 file; the token is never printed.
 "serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.

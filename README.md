@@ -27,6 +27,6 @@ npm --prefix web run build
 
 ## 다음 개발 단계
 
-W15에서는 모듈별 환경과 문서를 탐색하고, 프로젝트 목록에서 환경 분석·문서 검토·정적 분석·코드 분석·보고서 생성 등 실제 진행 단계를 볼 수 있게 할 예정입니다. 현재 화면은 마지막 실행 상태와 작업 수를 보여줍니다. 역할별 후보 지침은 기존 모델 팩과 비교 평가한 뒤 적용합니다. [작업 순서](docs/17-implementation-plan.md) · [역할별 지침](docs/07-llm-and-instructions.md) · [화면 예시](docs/12-report-and-ui.md)
+R1(W15~W25)을 마쳤습니다. 모듈별 환경·문서 탐색과 단계별 진행 표시, 다섯 언어 분석 팩, 실행 비교와 사람 판정, 개인 모드 운영(start·stop·백업·복원)을 쓸 수 있습니다. 기본 검토 지침은 [`review-r1` 2.0.0](docs/49-review-pack-default.md)입니다. 다음 범위는 R2(W26~)이며 착수는 소유자가 정합니다. [개인 사용 안내서](docs/48-user-guide.md) [작업 순서](docs/17-implementation-plan.md) · [역할별 지침](docs/07-llm-and-instructions.md) · [화면 예시](docs/12-report-and-ui.md)
 
 [문서 인덱스](docs/INDEX.md)에서 제품 범위, 계약, 실행 근거를 찾을 수 있습니다. 저장소 개발 절차는 [AGENTS.md](AGENTS.md)에 있습니다. 라이선스는 소유자가 결정합니다.

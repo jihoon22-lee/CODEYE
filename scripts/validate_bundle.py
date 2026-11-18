@@ -821,12 +821,12 @@ R1_EXAMPLE_LANGUAGES = ("go",)
 
 
 def r1_pack(languages=R1_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
-    """The review-r1 candidate pack: identity, files and per-role digests
+    """The review-r1 default pack: identity, files and per-role digests
     (review-v1 algorithm over pack.yaml and the role's selected files) for
     the given in-scope ecosystems."""
     pack_file = ROOT / "prompts/review-r1/pack.yaml"
     pack = yaml_file(pack_file)
-    ensure(pack["id"] == "review-r1" and pack["status"] == "candidate-not-promoted" and pack["schema_version"] == "0.2", "review-r1 pack identity")
+    ensure(pack["id"] == "review-r1" and pack["status"] == "default" and pack["schema_version"] == "0.2", "review-r1 pack identity")
     ensure(tuple(pack["roles"]) == R1_STAGES, "review-r1 roles")
     ensure(tuple(pack["languages"]) == R1_LANGUAGES and all(f == f"languages/{eco}.md" for eco, f in pack["languages"].items()), "review-r1 language guides")
     for guide in pack["languages"].values():
@@ -1642,7 +1642,7 @@ def main() -> None:
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
     print(f"PASS: {27 + len(r1_negative)} negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
-    print(f"review-r1 candidate pack {r1_pack_doc['version']} (not promoted; Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in r1_roles.items()))
+    print(f"review-r1 default pack {r1_pack_doc['version']} (Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in r1_roles.items()))
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 
 
