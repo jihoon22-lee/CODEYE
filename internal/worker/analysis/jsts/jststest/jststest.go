@@ -1,0 +1,341 @@
+// Package jststest holds the test fixtures the W18 tsc and ESLint adapters
+// share: operator tool paths from CODEYE_TEST_* (real-tool tests skip
+// without them; CI has no Node tools), a W04 snapshot with a cloned attempt
+// workspace, tree hashes, a result-mutating runner, envelope decoding and
+// the capture of real tool streams into testdata. It is imported by tests
+// only.
+package jststest
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/nativepath"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
+)
+
+// Env names the operator tool paths of the real-tool tests.
+const (
+	EnvNode   = "CODEYE_TEST_NODE"
+	EnvTsc    = "CODEYE_TEST_TSC"
+	EnvESLint = "CODEYE_TEST_ESLINT"
+	// EnvCapture names a directory: real-tool tests then write the check
+	// streams and exit code of each case there (how testdata was captured).
+	EnvCapture = "CODEYE_W18_CAPTURE"
+)
+
+func toolPath(t *testing.T, env, what string) string {
+	t.Helper()
+	p := os.Getenv(env)
+	if p == "" {
+		t.Skipf("set %s to %s to run real-tool tests", env, what)
+	}
+	if _, err := os.Stat(p); err != nil {
+		t.Skipf("%s not found: %v", what, err)
+	}
+	return p
+}
+
+var (
+	nodeOnce sync.Once
+	nodeTC   pack.Toolchain
+	nodeErr  string
+)
+
+// Node is the shared node toolchain from CODEYE_TEST_NODE, its version read
+// through the executor like the agent's startup probe; it skips without it.
+func Node(t *testing.T) pack.Toolchain {
+	t.Helper()
+	p := toolPath(t, EnvNode, "the node executable (v24)")
+	nodeOnce.Do(func() {
+		resolved, err := nativepath.Resolve(p)
+		if err != nil {
+			nodeErr = err.Error()
+			return
+		}
+		dir, err := os.MkdirTemp("", "jststest-node-")
+		if err != nil {
+			nodeErr = err.Error()
+			return
+		}
+		defer os.RemoveAll(dir)
+		res := (&executor.Executor{}).Run(context.Background(), executor.Spec{Executable: p, Args: []string{"--version"}, WorkspaceRoot: dir, Dir: dir, TempParent: dir,
+			Env: map[string]string{"PATH": filepath.Dir(resolved)}, Timeout: 30e9, StdoutLimit: 1 << 10, StderrLimit: 1 << 10})
+		m := regexp.MustCompile(`^v([0-9]+\.[0-9]+\.[0-9]+)$`).FindStringSubmatch(strings.TrimSpace(string(res.Stdout.Data)))
+		if m == nil {
+			nodeErr = "node --version: " + string(res.Status) + " " + string(res.Stdout.Data)
+			return
+		}
+		nodeTC = pack.Toolchain{Name: "node", Executable: p, Dir: filepath.Dir(resolved), Version: m[1]}
+	})
+	if nodeErr != "" {
+		t.Fatalf("node toolchain: %s", nodeErr)
+	}
+	return nodeTC
+}
+
+// Tsc is the operator's typescript/bin/tsc from CODEYE_TEST_TSC.
+func Tsc(t *testing.T) string { return toolPath(t, EnvTsc, "typescript/bin/tsc (6.0.x)") }
+
+// ESLint is the operator's eslint/bin/eslint.js from CODEYE_TEST_ESLINT.
+func ESLint(t *testing.T) string { return toolPath(t, EnvESLint, "eslint/bin/eslint.js (10.15.x)") }
+
+// WriteTree writes files (slash paths) below root.
+func WriteTree(t *testing.T, root string, files map[string]string) {
+	t.Helper()
+	for rel, body := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// ReadTree reads every regular file below dir as slash path -> content.
+func ReadTree(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || !d.Type().IsRegular() {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(dir, p)
+		out[filepath.ToSlash(rel)] = string(b)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// MonorepoFiles is fixtures/w18-js-ts/input, read from a package directory
+// depth levels below the repository root.
+func MonorepoFiles(t *testing.T, depth int) map[string]string {
+	t.Helper()
+	return ReadTree(t, filepath.Join(strings.Repeat("../", depth)+"fixtures", "w18-js-ts", "input"))
+}
+
+// TreeHash digests every path, mode and regular file content below root.
+func TreeHash(t *testing.T, root string) string {
+	t.Helper()
+	var lines []string
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(root, p)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		line := filepath.ToSlash(rel) + "|" + info.Mode().String()
+		if d.Type().IsRegular() {
+			b, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			sum := sha256.Sum256(b)
+			line += "|" + hex.EncodeToString(sum[:])
+		}
+		lines = append(lines, line)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(lines)
+	h := sha256.New()
+	for _, l := range lines {
+		h.Write([]byte(l + "\n"))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Fixture is a snapshot of files with a cloned attempt workspace.
+type Fixture struct {
+	Base, SourceRoot string
+	Job              analysis.Job
+}
+
+// NewFixture acquires a W04 snapshot of files under base (a temp dir when
+// empty) and clones an attempt workspace like the worker.
+func NewFixture(t *testing.T, base string, files map[string]string, scope domain.Scope) Fixture {
+	t.Helper()
+	if base == "" {
+		base = t.TempDir()
+	}
+	src, data, scratch := filepath.Join(base, "source"), filepath.Join(base, "data"), filepath.Join(base, "scratch")
+	WriteTree(t, src, files)
+	for _, d := range []string{data, scratch} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx := context.Background()
+	snap, err := source.AcquireLocal(ctx, src, ".", data, source.DefaultLimits())
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	loaded, err := source.Load(ctx, snap.Root, snap.Digest)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ws := filepath.Join(data, "attempt-workspace")
+	if err := source.CloneWorkspace(ctx, loaded, ws); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	loaded.WorkspaceDir = ws
+	if scope.Kind == "" {
+		scope.Kind = "full"
+	}
+	return Fixture{Base: base, SourceRoot: src, Job: analysis.Job{RunID: "run-1", AttemptID: "attempt-1", Epoch: 1, Profile: "deep-review", Scope: scope, Snapshot: loaded, Scratch: scratch}}
+}
+
+// MutatingRunner wraps a runner, records the specs and lets a test alter a
+// result.
+type MutatingRunner struct {
+	Inner  executor.Runner
+	Mutate func(spec executor.Spec, r *executor.Result)
+	Specs  []executor.Spec
+}
+
+// Run implements executor.Runner.
+func (m *MutatingRunner) Run(ctx context.Context, spec executor.Spec) executor.Result {
+	m.Specs = append(m.Specs, spec)
+	r := m.Inner.Run(ctx, spec)
+	if m.Mutate != nil {
+		m.Mutate(spec, &r)
+	}
+	return r
+}
+
+// ReadEnvelope reads the task's observations artifact and decodes it with
+// the contract checks.
+func ReadEnvelope(t *testing.T, job analysis.Job, res analysis.TaskResult) (obsdoc.Document, []byte) {
+	t.Helper()
+	if len(res.Artifacts) != 1 || res.Artifacts[0].Role != analysis.RoleObservations || res.Artifacts[0].MediaType != analysis.MediaObservations {
+		t.Fatalf("observations artifact missing: %+v", res)
+	}
+	raw, err := os.ReadFile(res.Artifacts[0].Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := filepath.Base(filepath.Dir(res.Artifacts[0].Path))
+	doc, err := obsdoc.Decode(raw, pack.Expect(job, key))
+	if err != nil {
+		t.Fatalf("envelope invalid: %v\n%s", err, raw)
+	}
+	if dump := os.Getenv("CODEYE_W18_DUMP"); dump != "" {
+		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + key + ".json"
+		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return doc, raw
+}
+
+// RunTask plans with plan and runs the task keyed key.
+func RunTask(t *testing.T, a pack.Analyzer, job analysis.Job, key string, runner executor.Runner) analysis.TaskResult {
+	t.Helper()
+	return RunTaskCtx(t, context.Background(), a, job, key, runner)
+}
+
+// RunTaskCtx is RunTask with a run context.
+func RunTaskCtx(t *testing.T, ctx context.Context, a pack.Analyzer, job analysis.Job, key string, runner executor.Runner) analysis.TaskResult {
+	t.Helper()
+	tasks, err := a.Plan(context.Background(), job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range tasks {
+		if task.Spec.Key == key {
+			return a.Run(ctx, job, task.Spec, runner)
+		}
+	}
+	t.Fatalf("task %s not planned: %+v", key, tasks)
+	return analysis.TaskResult{}
+}
+
+// AssertNoNodePaths fails when raw holds any of the node paths.
+func AssertNoNodePaths(t *testing.T, raw []byte, paths ...string) {
+	t.Helper()
+	s := string(raw)
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		for _, f := range []string{p, filepath.ToSlash(p)} {
+			if strings.Contains(s, f) {
+				t.Fatalf("structured output contains node path %q", f)
+			}
+		}
+	}
+}
+
+// Capture writes the streams and exit code of the executions named exec
+// (with CODEYE_W18_CAPTURE set) as <name>.stdout|stderr|exit; with several
+// executions of that name the later ones get .<n> suffixes. Captures must
+// hold no node path.
+func Capture(t *testing.T, name, exec string, res analysis.TaskResult) {
+	t.Helper()
+	dir := os.Getenv(EnvCapture)
+	if dir == "" {
+		return
+	}
+	n := 0
+	for _, e := range res.Executions {
+		if e.Name != exec {
+			continue
+		}
+		stem := name
+		if n > 0 {
+			stem += "." + strconv.Itoa(n)
+		}
+		n++
+		code := "none"
+		if e.Result.ExitCode != nil {
+			code = strconv.Itoa(*e.Result.ExitCode)
+		}
+		for suffix, data := range map[string][]byte{".stdout": e.Result.Stdout.Data, ".stderr": e.Result.Stderr.Data, ".exit": []byte(code + "\n")} {
+			if bytes.Contains(data, []byte("/home/")) || bytes.Contains(data, []byte("/tmp/")) || bytes.Contains(data, []byte(`\Users\`)) {
+				t.Fatalf("capture %s%s holds a node path:\n%s", stem, suffix, data)
+			}
+			if err := os.WriteFile(filepath.Join(dir, stem+suffix), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// Rules counts observations per rule id.
+func Rules(doc obsdoc.Document) map[string]int {
+	out := map[string]int{}
+	for _, o := range doc.Observations {
+		out[o.RuleID]++
+	}
+	return out
+}
