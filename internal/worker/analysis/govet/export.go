@@ -2,6 +2,8 @@ package govet
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -14,6 +16,32 @@ import (
 // This file exposes the go vet handler as a pack.Analyzer (docs/39) and the
 // Go plumbing other Go analyzers share with it (W19 staticcheck). The
 // wrappers do not change go vet behavior: Plan and Run are the handler's.
+
+// DisableTelemetry turns Go telemetry off for an execution with env. The go
+// command (go1.23+) keeps telemetry in os.UserConfigDir()/go/telemetry and,
+// unless the mode file there says "off", opens counter files and may start a
+// detached (setsid) child that keeps writing after the command exits: into
+// the executor's per-run HOME after it was removed, that is after cleanup was
+// confirmed (measured with go1.27.4 on Linux). dir (in scratch) becomes
+// XDG_CONFIG_HOME with go/telemetry/mode "off", so neither the counters nor
+// the child start. os.UserConfigDir reads XDG_CONFIG_HOME on Unix except
+// darwin; on Windows the executor passes no AppData, so the config dir is
+// unknown and telemetry is off; darwin has no override and is not covered
+// (docs/39 §8.2).
+func DisableTelemetry(env map[string]string, dir string) error {
+	switch runtime.GOOS {
+	case "windows", "darwin", "ios", "plan9":
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "go", "telemetry"), 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go", "telemetry", "mode"), []byte("off\n"), 0o600); err != nil {
+		return err
+	}
+	env["XDG_CONFIG_HOME"] = dir
+	return nil
+}
 
 // Descriptor is go vet's pack identity: the baseline (required) Go analyzer.
 func Descriptor() pack.Descriptor {

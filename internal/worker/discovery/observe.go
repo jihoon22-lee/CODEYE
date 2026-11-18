@@ -13,6 +13,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/nativepath"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
@@ -267,8 +268,12 @@ func (p ProbeObserver) probeGo(ctx context.Context, job analysis.Job, runner exe
 	if job.Snapshot.SnapshotDir != "" {
 		protected = []string{job.Snapshot.SnapshotDir}
 	}
+	env := goEnv(resolved, work)
+	if err := govet.DisableTelemetry(env, filepath.Join(work, "config")); err != nil {
+		return o, nil, false, false, err
+	}
 	res := runner.Run(ctx, executor.Spec{Executable: p.GoExecutable, Args: []string{"version"}, WorkspaceRoot: ws, Dir: ws,
-		ProtectedRoots: protected, TempParent: filepath.Join(work, "tmp"), Env: goEnv(resolved, work), Timeout: timeout,
+		ProtectedRoots: protected, TempParent: filepath.Join(work, "tmp"), Env: env, Timeout: timeout,
 		StdoutLimit: 64 << 10, StderrLimit: 64 << 10})
 	e, werr := analysis.WriteExecution(filepath.Join(work, "exec"), ExecGoVersion, res)
 	if werr != nil {

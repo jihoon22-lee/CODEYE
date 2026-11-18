@@ -180,8 +180,12 @@ func (h *Handler) Probe(ctx context.Context, runner executor.Runner, dir string)
 		modcache = filepath.Join(work, "gopath", "pkg", "mod")
 	}
 	ws := filepath.Join(work, "ws")
+	env := h.env(filepath.Join(work, "gocache"), filepath.Join(work, "gopath"), modcache)
+	if err := DisableTelemetry(env, filepath.Join(work, "config")); err != nil {
+		return "", err
+	}
 	res := runner.Run(ctx, executor.Spec{Executable: h.cfg.GoExecutable, Args: []string{"version"}, WorkspaceRoot: ws, Dir: ws,
-		TempParent: work, Env: h.env(filepath.Join(work, "gocache"), filepath.Join(work, "gopath"), modcache), Timeout: probeTimeout,
+		TempParent: work, Env: env, Timeout: probeTimeout,
 		StdoutLimit: 64 << 10, StderrLimit: 64 << 10})
 	if res.Cleanup == executor.CleanupUncertain {
 		return "", errors.New("go version probe cleanup uncertain")
@@ -308,12 +312,16 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 	if h.modcache != "" {
 		protected = append(protected, h.modcache)
 	}
+	env := h.env(dirs["gocache"], dirs["gopath"], modcache)
+	if err := DisableTelemetry(env, filepath.Join(taskDir, "config")); err != nil {
+		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+	}
 	spec := func(args ...string) executor.Spec {
 		return executor.Spec{
 			Executable: h.cfg.GoExecutable, Args: args,
 			WorkspaceRoot: workspace, Dir: filepath.Join(workspace, filepath.FromSlash(pt.ModuleDir)),
 			ProtectedRoots: protected, TempParent: dirs["tmp"],
-			Env: h.env(dirs["gocache"], dirs["gopath"], modcache), Timeout: h.cfg.Timeout,
+			Env: env, Timeout: h.cfg.Timeout,
 			StdoutLimit: h.cfg.StdoutLimit, StderrLimit: h.cfg.StderrLimit, Redact: redact,
 		}
 	}

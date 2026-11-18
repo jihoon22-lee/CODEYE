@@ -245,6 +245,8 @@ go.mod는 실행 전에 manifest SHA-256과 대조한다. 원본 경로·스냅�
 
 go vet과 같은 명시적 환경을 쓴다: `PATH=<go bin>`, `LANG=C.UTF-8`, `GOENV=off`, `GOWORK=off`, `GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`, `GOVCS=*:off`, `GOFLAGS=`(빈 값), `CGO_ENABLED=0`, task scratch의 `GOCACHE`·`GOPATH`·`STATICCHECK_CACHE`, `GOMODCACHE`는 운영자 캐시(`--go-mod-cache`, 읽기 전용 보호) 또는 빈 scratch 캐시다.
 
+**Go telemetry를 끈다.** go1.27.4(Linux)에서 측정한 결과, telemetry mode 파일이 없으면 go 명령(`go version` 포함, staticcheck가 부르는 `go list`도 같다)은 `os.UserConfigDir()/go/telemetry`에 counter 파일을 쓰고 분리된(setsid) upload 자식을 시작한다. W05의 실행별 HOME 아래였으므로 이 자식은 executor가 HOME을 지우고 정리를 확인한 **뒤에** 파일을 다시 만들었다. probe 디렉터리가 비지 않는 간헐 실패(`builtin.TestHandlersAdvertiseOnlyProbedToolchains`)가 이 때문이었다. 프로세스 그룹을 벗어난 자손이 정리 확인 뒤에도 쓴다는 뜻이므로, 정리 확인이 자손 전체를 보장하지 않는다는 executor 제한이기도 하다. `GOTELEMETRY=off` 환경 변수는 효과가 없었다(읽기 전용 보고 값). 그래서 go vet·staticcheck의 실행과 probe, env.discover의 go probe는 scratch의 `config`를 `XDG_CONFIG_HOME`으로 주고 `config/go/telemetry/mode`에 `off`를 쓴다. mode가 `off`면 go 명령은 counter를 열지 않고 자식도 시작하지 않는다(`govet.DisableTelemetry`, `TestRealGoVetTelemetryOff`). `os.UserConfigDir`는 darwin을 뺀 Unix에서만 `XDG_CONFIG_HOME`을 읽는다. Windows는 executor 환경에 `AppData`가 없어 설정 디렉터리를 정할 수 없으므로 telemetry가 꺼진다(소스 확인, 실행 측정 아님). darwin은 덮어쓸 수단이 없어 다루지 않는다.
+
 `GOFLAGS`는 비워 Go 기본값을 따른다. 기본값은 vendor 디렉터리가 없으면 `-mod=readonly`, 있으면 `-mod=vendor`다. `-mod=readonly`를 강제하면 vendor 모듈 프로젝트가 실패하는 것을 측정했다. go vet도 같은 선택이다. build tag 지정은 없다(기본 context), CGO는 끈다, GOOS/GOARCH는 노드 기본값이다. 이 값은 `target.properties`와 제약(`default_build_context_only`, `cgo_disabled`)으로 기록한다. 그 밖의 tag 파일은 `files_skipped`와 `build_constraint_ignored_files`로 보인다.
 
 ### 8.3 규칙 팩 `codeye-go-staticcheck` v2
@@ -325,6 +327,7 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 | `pack.TestRepositoryCodeGrantIsEnforcedBeforeDispatch`, `agent.TestRepositoryCodeGrantIsSeparateFromAcquisition` (TC-103) | 허가 없음·있음, 한 도구의 두 방식, 대역의 같은 선언과 사유 우선순위, 계획 밖 key 거부, 프로세스 미시작, Git 소스 미허가, 매핑 없는 ID 옵션 오류 |
 | `obsdoc.Test*` | 실제 예시 round trip, 46개 거부 사례, 규칙 문맥(`config_files`·`suppressed`) 수용 |
 | `builtin.TestGoVetUnchangedInComposite`, `TestHandlers*` | go vet 고정, capability 광고, 도구 플래그 |
+| `govet.TestDisableTelemetry`, `govet.TestRealGoVetTelemetryOff` (Linux, go 필요) | 운영체제별 telemetry 끄기, 실제 go vet 실행 뒤 telemetry 디렉터리에 mode 파일만 남음(counter·upload 자식 없음), 모든 실행의 `XDG_CONFIG_HOME` |
 | `report.TestAnalyzerDecoder*` | TC-09·TC-13, fp2 fingerprint, 처리 경로·합집합, 미설정 행, 위조 거부, 코드 제외 export |
 | `history.TestStaticcheckFindingsCompare` | W23 비교: 줄 이동 persisting, 성공한 재검사 resolved, 미설정 run은 absent_unverified |
 | `history.TestTC104RuleContextGatesResolution`, `history.TestGoVetRuleContextIsSynthesized` (TC-104) | builder 3 staticcheck 기준·현재 행의 문맥 없음, 선택·규칙 팩 버전·설정 모드·설정 파일 변경, unrecorded, 억제 보고와 그 우선순위, honored 억제, 억제를 보고하지 않는 규칙(U1000)과 같은 run의 SA 해결, 같은 설정의 해결, 다른 메시지의 억제, 억제 해제 후 new, 차이 표시, go vet 합성 문맥의 builder 3 해결 |
@@ -343,6 +346,8 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 ## 11. 남은 제한과 다음 팩을 위한 메모
 
 - Windows에서 실제 staticcheck를 실행하지 않았다. 경로 정규화는 Windows 단위 시험까지만 확인했다.
+- executor는 setsid로 프로세스 그룹을 벗어난 자손을 추적하지 않는다. Go telemetry 자식은 끄는 것으로 막았지만(§8.2), 다른 도구가 분리된 자손을 만들면 정리 확인 뒤에도 실행별 디렉터리에 쓸 수 있다. 다른 팩은 도구의 백그라운드 자식(데몬, telemetry, 언어 서버)을 측정하고 끄는 방법을 기록해야 한다.
+- darwin에서는 Go telemetry를 끄지 못한다(§8.2).
 - build context는 노드 기본 GOOS/GOARCH, tag 없음, CGO 끔 하나다. tag·CGO·다른 target 조합은 계획하지 않는다.
 - `related` 위치는 envelope와 R1 입력에만 있다. 보고서 finding은 주 위치만 보인다.
 - R1 해석의 호출자 확장은 Go 코드에서만 동작한다(W15). 다른 언어 팩이 해석 입력을 쓰려면 코드 창 선택을 확인해야 한다.

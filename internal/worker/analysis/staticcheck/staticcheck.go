@@ -195,9 +195,12 @@ func (a *Analyzer) Probe(ctx context.Context, runner executor.Runner, dir string
 		}
 	}
 	ws := filepath.Join(work, "ws")
+	env := a.env(filepath.Join(work, "gocache"), filepath.Join(work, "gopath"), filepath.Join(work, "gopath", "pkg", "mod"), filepath.Join(work, "cache"))
+	if err := govet.DisableTelemetry(env, filepath.Join(work, "config")); err != nil {
+		return "", err
+	}
 	res := runner.Run(ctx, executor.Spec{Executable: a.cfg.Executable, Args: []string{"-version"}, WorkspaceRoot: ws, Dir: ws, TempParent: work,
-		Env:     a.env(filepath.Join(work, "gocache"), filepath.Join(work, "gopath"), filepath.Join(work, "gopath", "pkg", "mod"), filepath.Join(work, "cache")),
-		Timeout: probeTimeout, StdoutLimit: 64 << 10, StderrLimit: 64 << 10})
+		Env: env, Timeout: probeTimeout, StdoutLimit: 64 << 10, StderrLimit: 64 << 10})
 	if res.Cleanup == executor.CleanupUncertain {
 		return "", errors.New("staticcheck version probe cleanup uncertain")
 	}
@@ -304,6 +307,9 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		protected = append(protected, goh.ModCache())
 	}
 	env := a.env(dirs["gocache"], dirs["gopath"], modcache, dirs["cache"])
+	if err := govet.DisableTelemetry(env, filepath.Join(taskDir, "config")); err != nil {
+		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+	}
 	spec := func(exe string, args ...string) executor.Spec {
 		return executor.Spec{Executable: exe, Args: args, WorkspaceRoot: workspace, Dir: filepath.Join(workspace, filepath.FromSlash(pt.Module)),
 			ProtectedRoots: protected, TempParent: dirs["tmp"], Env: env, Timeout: a.cfg.Timeout,
