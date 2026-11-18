@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/cpp"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
@@ -75,11 +76,18 @@ func catalog() []entry {
 		// Go (W08 baseline, W19 extra depth).
 		{desc: govet.Descriptor(), plan: govet.Plan, build: buildGoVet},
 		{desc: staticcheck.Descriptor(), plan: staticcheck.Plan, build: buildStaticcheck},
+		// C/C++ (W16 baseline cppcheck, extra depth clang-tidy with the Clang
+		// Static Analyzer).
+		{desc: cpp.CppcheckDescriptor(), plan: cpp.PlanCppcheck, build: buildCppcheck},
+		{desc: cpp.ClangTidyDescriptor(), plan: cpp.PlanClangTidy, build: buildClangTidy},
 		// Python (W17 baseline ruff; mypy, pyright and bandit extra depth).
 		{desc: python.RuffDescriptor(), plan: python.RuffPlan, build: buildRuff},
 		{desc: python.MypyDescriptor(), plan: python.MypyPlan, build: buildMypy},
 		{desc: python.PyrightDescriptor(), plan: python.PyrightPlan, build: buildPyright},
 		{desc: python.BanditDescriptor(), plan: python.BanditPlan, build: buildBandit},
+		// JavaScript/TypeScript (W18 baseline ESLint, extra depth tsc and
+		// type-aware ESLint; javascript.go, docs/43).
+		eslintEntry(), tscEntry(), eslintTypedEntry(),
 		// Rust (W20 baseline cargo check, extra depth clippy).
 		{desc: rustpack.CheckDescriptor(), plan: rustpack.CheckPlan, build: buildCargoCheck},
 		{desc: rustpack.ClippyDescriptor(), plan: rustpack.ClippyPlan, build: buildClippy},

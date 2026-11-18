@@ -16,6 +16,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
@@ -132,19 +133,27 @@ func (s *r1Stage) begin(upstream []record.Upstream) *analysis.TaskResult {
 		r := result(domain.TaskUnsupported, "model_not_configured")
 		return &r
 	}
-	pack, err := reviewpackr1.For(s.role)
+	sel, err := reviewpackr1.For(s.role, languagesInScope(s.j))
 	if err != nil {
 		r := result(domain.TaskFailed, "review_pack_invalid")
 		return &r
 	}
-	s.pack = pack
+	s.pack = sel
 	if upstream == nil {
 		upstream = []record.Upstream{}
 	}
-	s.rec = record.R1Record{Schema: record.SchemaVersionR1, Pack: record.PackRef{ID: pack.ID, Version: pack.Version}, Snapshot: s.j.Snapshot.Digest,
+	s.rec = record.R1Record{Schema: record.SchemaVersionR1, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
 		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Stage: s.role, Outcome: record.OutcomeAccepted, Upstream: upstream,
 		Evidence: []record.Excerpt{}, Observations: []record.ObservationRef{}, Limitations: []string{}, Calls: []record.R1Call{}}
 	return nil
+}
+
+// languagesInScope are the source ecosystems whose language guides a role
+// gets: the analyzer packs' one definition of an ecosystem in scope
+// (pack.InScope, docs/39 §2.8) over the job's manifest and scope. Every call
+// records the selected guide files in pack_files.
+func languagesInScope(j analysis.Job) []string {
+	return pack.InScope(j.Snapshot.Manifest, j.Scope)
 }
 
 func (s *r1Stage) setEvidence(list []record.Excerpt) {

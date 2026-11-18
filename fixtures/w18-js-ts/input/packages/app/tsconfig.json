@@ -1,0 +1,9 @@
+{
+  // JSONC: comments and trailing commas are data, never code.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // A language-service plugin entry: tsc and typescript-eslint never load it.
+    "plugins": [{ "name": "w18-marker-plugin" }],
+  },
+  "include": ["src"],
+}

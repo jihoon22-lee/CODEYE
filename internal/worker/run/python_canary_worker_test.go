@@ -57,7 +57,7 @@ func TestPythonPackOutsideConfigCanary(t *testing.T) {
 			t.Fatalf("%s: %s (all %v)", tool, rows[tool], rows)
 		}
 	}
-	for i, body := range r.artifacts {
+	for i, body := range r.blobs {
 		if bytes.Contains(body, []byte(canary)) || bytes.Contains(body, []byte(o)) {
 			t.Fatalf("artifact %d holds the canary or the outside path", i)
 		}

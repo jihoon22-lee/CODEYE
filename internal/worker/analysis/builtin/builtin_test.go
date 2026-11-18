@@ -43,17 +43,20 @@ func reasons(missing []Unavailable) []string {
 	return out
 }
 
-// pythonUnconfigured and rustUnconfigured are the W17 and W20 analyzers when
-// none of their tool paths is set: members that plan unsupported tasks.
+// cppUnconfigured, pythonUnconfigured, jsUnconfigured and rustUnconfigured
+// are the W16, W17, W18 and W20 analyzers when none of their tool paths is
+// set: members that plan unsupported tasks.
 var (
+	cppUnconfigured    = []string{"cppcheck:not_configured", "clang-tidy:not_configured"}
 	pythonUnconfigured = []string{"ruff:not_configured", "mypy:not_configured", "pyright:not_configured", "bandit:not_configured"}
+	jsUnconfigured     = []string{"eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured"}
 	rustUnconfigured   = []string{"cargo-check:not_configured", "clippy:not_configured"}
 )
 
-// withPacks appends the unconfigured Python and Rust members in catalog
-// order (Go, Python, Rust).
+// withPacks appends the unconfigured C/C++, Python, JavaScript and Rust
+// members in catalog order (Go, C/C++, Python, JavaScript, Rust).
 func withPacks(r ...string) []string {
-	return append(append(r, pythonUnconfigured...), rustUnconfigured...)
+	return slices.Concat(r, cppUnconfigured, pythonUnconfigured, jsUnconfigured, rustUnconfigured)
 }
 
 func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
@@ -90,7 +93,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	for _, d := range c.Descriptors() {
 		ids = append(ids, d.ID)
 	}
-	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "python.ruff", "python.mypy", "python.pyright", "python.bandit", "rust.cargocheck", "rust.clippy"}) {
+	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "cpp.cppcheck", "cpp.clang_tidy", "python.ruff", "python.mypy", "python.pyright", "python.bandit", "javascript.eslint", "javascript.tsc", "javascript.eslint_typed", "rust.cargocheck", "rust.clippy"}) {
 		t.Fatalf("catalog order %v", ids)
 	}
 	// A configured staticcheck path that is not a file is invalid: the
@@ -118,19 +121,21 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 }
 
 func TestToolFlagsAndProbes(t *testing.T) {
-	if got := ToolFlags(); !slices.Equal(got, []string{"bandit", "cargo", "clippy", "mypy", "pyright", "ruff", "staticcheck"}) {
+	if got := ToolFlags(); !slices.Equal(got, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "eslint", "mypy", "pyright", "ruff", "staticcheck", "tsc"}) {
 		t.Fatalf("flags %v", got)
 	}
 	tc := fakeRust(t, false)
-	probes := Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc", "cargo": filepath.Join(tc, "cargo"), "clippy": filepath.Join(tc, "cargo-clippy")}})
+	all := Probes(Config{GoExecutable: "/go", Tools: map[string]string{"staticcheck": "/sc", "cargo": filepath.Join(tc, "cargo"), "clippy": filepath.Join(tc, "cargo-clippy")}})
 	var tools []string
-	for _, p := range probes {
+	for _, p := range all {
 		tools = append(tools, p.Tool)
 	}
-	if !slices.Equal(tools, []string{"bandit", "cargo", "clippy", "mypy", "pyright", "ruff", "staticcheck"}) {
+	if !slices.Equal(tools, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "eslint", "mypy", "pyright", "ruff", "staticcheck", "tsc"}) {
 		t.Fatalf("probe tools %v", tools)
 	}
-	sc := probes[6]
+	// The C/C++ probes (W16) are checked by TestCppAnalyzersAdvertiseOnlyWithTheBaseline.
+	probes := slices.DeleteFunc(slices.Clone(all), func(p pack.ToolProbe) bool { return p.Tool == "clang-tidy" || p.Tool == "cppcheck" })
+	sc := probes[7]
 	if sc.Executable != "/sc" || !slices.Equal(sc.Analyzers, []string{"go.staticcheck"}) || !slices.Equal(sc.Args, []string{"-version"}) || !slices.Equal(sc.Ecosystems, []string{"go"}) {
 		t.Fatalf("probes %+v", probes)
 	}
@@ -148,7 +153,7 @@ func TestToolFlagsAndProbes(t *testing.T) {
 		t.Fatalf("clippy probe %+v", c)
 	}
 	// The Python pack (W17): pyright is run by the node toolchain.
-	if p := probes[4]; p.Tool != "pyright" || p.Interpreter != "node" || !slices.Equal(p.Analyzers, []string{"python.pyright"}) || !slices.Equal(p.Ecosystems, []string{"python"}) {
+	if p := probes[5]; p.Tool != "pyright" || p.Interpreter != "node" || !slices.Equal(p.Analyzers, []string{"python.pyright"}) || !slices.Equal(p.Ecosystems, []string{"python"}) {
 		t.Fatalf("pyright probe %+v", p)
 	}
 	for _, p := range Probes(Config{}) {
@@ -166,7 +171,8 @@ func TestHandlersProbeRealStaticcheck(t *testing.T) {
 		t.Skip("set CODEYE_TEST_STATICCHECK to the staticcheck binary")
 	}
 	hs, missing := Handlers(context.Background(), Config{GoExecutable: goPath(t), ProbeDir: t.TempDir(), Tools: map[string]string{"staticcheck": sc}}, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), withPacks()) {
+	// Only the Go rows are asserted; the other packs' tools are not configured here.
+	if len(hs) != 1 || slices.ContainsFunc(missing, func(m Unavailable) bool { return m.Name == "go-vet" || m.Name == "staticcheck" }) {
 		t.Fatalf("staticcheck configured: %d %+v", len(hs), missing)
 	}
 }

@@ -1,0 +1,6 @@
+[1/3] Processing file [REDACTED]/src/parse.cpp.
+[2/3] Processing file [REDACTED]/src/ring.c.
+4 warnings generated.
+[3/3] Processing file [REDACTED]/src/util.cpp.
+7 warnings generated.
+Suppressed 3 warnings (1 NOLINT, 2 with check filters).

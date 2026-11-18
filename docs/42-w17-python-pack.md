@@ -11,7 +11,7 @@ W17은 [분석기 팩 계약](39-r1-analyzer-packs.md)을 따르는 Python 팩�
 | `python.pyright` | 타입 검사(mypy와 대안) | 아니요 | 1.1.414 정확히 | `--node` + `--pyright` JS 진입 스크립트 | `overridden` (scratch `pyrightconfig.json`) | `honored` |
 | `python.bandit` | 보안 | 아니요 | 1.9.x (1.9.4 측정) | `--bandit` 스크립트 | `overridden` (scratch `--ini`) | `reported` (`--ignore-nosec` 두 번째 실행) |
 
-catalog 순서는 Go 뒤에 ruff, mypy, pyright, bandit이다. 모듈마다 도구별 task 하나를 계획한다. key는 루트 모듈이 `<도구>`, 나머지는 디렉터리 순으로 `<도구>.mNN`이다. 모듈 디렉터리는 `pyproject.toml`·`setup.cfg`·`.python-version`·`requirements*.txt`가 있는 디렉터리다. 숨김 디렉터리·숨김 파일·`__pycache__`·`__pypackages__`·`node_modules`·`site-packages`·`testdata`·`vendor`·`venv`는 분석하지 않는다. 스냅샷은 `pyvenv.cfg`가 있는 가상환경과 symlink를 이미 복사하지 않는다(W04). 범위에 Python 소스가 있지만 분석할 파일이 없으면 자리 task 하나가 `no_analyzable_python_files`로 미실행 envelope를 남긴다. W19의 `pack-gap.python` 공백은 이 팩으로 대체됐다. 그 결과 `--go`만 있는 노드에서 Python 스냅샷은 필수 ruff task가 `unsupported`(`tool_not_configured`)가 되어 보고서가 `partial`(`required_task_not_succeeded`)이다.
+catalog 순서는 Go·C/C++ 뒤, JavaScript·Rust 앞에 ruff, mypy, pyright, bandit이다. 모듈마다 도구별 task 하나를 계획한다. key는 루트 모듈이 `<도구>`, 나머지는 디렉터리 순으로 `<도구>.mNN`이다. 모듈 디렉터리는 `pyproject.toml`·`setup.cfg`·`.python-version`·`requirements*.txt`가 있는 디렉터리다. 숨김 디렉터리·숨김 파일·`__pycache__`·`__pypackages__`·`node_modules`·`site-packages`·`testdata`·`vendor`·`venv`는 분석하지 않는다. 스냅샷은 `pyvenv.cfg`가 있는 가상환경과 symlink를 이미 복사하지 않는다(W04). 범위에 Python 소스가 있지만 분석할 파일이 없으면 자리 task 하나가 `no_analyzable_python_files`로 미실행 envelope를 남긴다. W19의 `pack-gap.python` 공백은 이 팩으로 대체됐다. 그 결과 `--go`만 있는 노드에서 Python 스냅샷은 필수 ruff task가 `unsupported`(`tool_not_configured`)가 되어 보고서가 `partial`(`required_task_not_succeeded`)이다.
 
 모든 task는 `RepositoryCode=false`다. 어떤 도구도 프로젝트의 interpreter·venv·plugin·설정 프로그램을 실행하지 않는다(§3).
 
@@ -172,7 +172,7 @@ CODEYE_W17_CAPTURE=<dir> go test -count=1 -run 'TestReal' ./internal/worker/anal
 | `main.TestPythonTypeCheckerChoice` | §5의 agent 플래그 규칙 |
 | `run.TestPythonSnapshotWithoutRuff` (Linux, TC-108) | `--go`만 있는 노드의 Python 스냅샷: 정적 task 네 개, ruff 필수 `unsupported`, `pack-gap.python` 없음, 보고서 `partial`·`required_task_not_succeeded`, 탐색 `not_probed` |
 | `run.TestPythonPackWithRealTools`, `run.TestPythonPackOutsideConfigCanary` (Linux, 도구 필요) | 실제 워커 production 구성에서 네 도구 성공·실행 기록·버전 출처, 외부 설정 canary가 artifact·보고서에 없음 |
-| `run.TestNonGoSnapshotsShowTheGapNotARequiredFailure` (Linux, TC-69) | 공백 행을 JavaScript 스냅샷으로 옮김 |
+| `run.TestNonGoSnapshotsShowTheGapNotARequiredFailure` (Linux, TC-69) | 공백 경로를 Go 분석기만 둔 합성 catalog로 시험한다(`goOnlyCatalog`). 빌드에 어떤 팩이 있든 Python 스냅샷이 `pack-gap.python`이 된다 |
 
 ## 13. 남은 제한
 
