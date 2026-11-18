@@ -120,6 +120,9 @@ type JobSnapshot struct {
 // Job hands one claimed attempt to the worker.
 type Job struct {
 	AllowModelReview bool `json:"allow_model_review,omitempty"`
+	// AllowRepositoryCode is the node operator's repository-code grant for
+	// the job's local source root (docs/39 §2.7). Absent means not granted.
+	AllowRepositoryCode bool `json:"allow_repository_code,omitempty"`
 	Header
 	Attempt   AttemptRef      `json:"attempt"`
 	Profile   string          `json:"profile"`

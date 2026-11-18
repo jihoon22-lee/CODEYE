@@ -51,7 +51,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	// Do not echo rejected arguments: they may contain credentials.
 	fs.SetOutput(io.Discard)
-	var roots, gitHosts, modelRoots multiFlag
+	var roots, gitHosts, modelRoots, codeRoots multiFlag
 	modelExe := fs.String("opencode", "", "")
 	modelName := fs.String("model", "", "")
 	modelRelay := fs.String("model-relay-file", "", "")
@@ -59,6 +59,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// cannot select it. review-r1 is the W15 candidate, not the default.
 	reviewPack := fs.String("review-pack", review.PackV1, "")
 	fs.Var(&modelRoots, "model-source-root", "")
+	// The repository-code grant (docs/39 §2.7) is a node operator setting
+	// per local source root, like the model-source grant; nothing in a run
+	// or its snapshot can raise it.
+	fs.Var(&codeRoots, "repo-code-source-root", "")
 	controller := fs.String("controller", "", "")
 	stateDir := fs.String("state-dir", "", "")
 	name := fs.String("name", "", "")
@@ -115,6 +119,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	for _, id := range modelRoots {
 		approved[id] = true
 	}
+	codeApproved := map[string]bool{}
+	for _, id := range codeRoots {
+		codeApproved[id] = true
+	}
 	tools := map[string]string{}
 	for tool, v := range toolFlags {
 		if *v != "" {
@@ -126,7 +134,8 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
 		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
 		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ReviewPack: *reviewPack,
-		Log: stderr,
+		RepositoryCodeSourceRoots: codeApproved,
+		Log:                       stderr,
 	}
 	ag, err := agent.New(cfg)
 	if err == nil {

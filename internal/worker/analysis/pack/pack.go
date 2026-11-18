@@ -41,6 +41,14 @@ const (
 	ReasonToolchainNotConfigured = "toolchain_not_configured"
 	// ReasonUnknownTask: Run was given a key the analyzer did not plan.
 	ReasonUnknownTask = "unknown_task"
+	// ReasonRepositoryCodeNotAllowed: the task would execute
+	// repository-controlled code and the job carries no repository-code
+	// grant (docs/39 §2.7). It takes precedence over the not-configured
+	// reasons, which stay visible as limitations.
+	ReasonRepositoryCodeNotAllowed = "repository_code_not_allowed"
+	// LimRepositoryCodeExecuted marks a task that ran processes under the
+	// repository-code grant.
+	LimRepositoryCodeExecuted = "repository_code_executed"
 )
 
 var (
@@ -105,6 +113,15 @@ type Task struct {
 	// FilesInScope is the number of manifest files the task would hand to
 	// the tool; nil when the analyzer cannot count them from the manifest.
 	FilesInScope *int
+	// RepositoryCode declares that running the task executes
+	// repository-controlled code: build scripts, configuration programs,
+	// compiler plugins, proc macros, configure steps (docs/39 §2.7). Plan
+	// derives it from the manifest and scope only, so the NotConfigured
+	// stand-in declares it identically, and Run never executes more than
+	// Plan declared (no fallback from a declared-safe mode to a configure
+	// step). One tool may plan tasks of both kinds. Composite.Run refuses a
+	// declared task when the job has no repository-code grant.
+	RepositoryCode bool
 }
 
 // Analyzer is what a pack implements for one tool.
@@ -235,13 +252,54 @@ func (c *Composite) Owner(key string) (Analyzer, bool) {
 	return nil, false
 }
 
-// Run dispatches to the owning analyzer.
+func handlerFailure(limitation string) analysis.TaskResult {
+	return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{limitation}}
+}
+
+func findTask(tasks []Task, key string) *Task {
+	for i := range tasks {
+		if tasks[i].Spec.Key == key {
+			return &tasks[i]
+		}
+	}
+	return nil
+}
+
+// Run dispatches to the owning analyzer. The repository-code grant is
+// enforced here, once, before dispatch: the declaration is re-derived from
+// the owner's plan (never taken from the TaskSpec handed back by the
+// worker), and a key the plan does not produce fails closed.
 func (c *Composite) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	m, ok := c.Owner(task.Key)
 	if !ok {
-		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{ReasonUnknownTask}}
+		return handlerFailure(ReasonUnknownTask)
 	}
-	return m.Run(ctx, job, task, runner)
+	tasks, err := m.Plan(ctx, job)
+	if err != nil {
+		return handlerFailure("plan_failed")
+	}
+	t := findTask(tasks, task.Key)
+	if t == nil {
+		return handlerFailure(ReasonUnknownTask)
+	}
+	if !t.RepositoryCode {
+		return m.Run(ctx, job, task, runner)
+	}
+	if !job.AllowRepositoryCode {
+		// Policy before tooling: without the grant nothing is started, even
+		// for an analyzer whose tool is also missing; that reason stays
+		// visible as a limitation.
+		var also []string
+		if nc, ok := m.(notConfigured); ok {
+			also = append(also, nc.reason)
+		}
+		return NotRun(job, m.Descriptor(), *t, ReasonRepositoryCodeNotAllowed, also...)
+	}
+	r := m.Run(ctx, job, task, runner)
+	if len(r.Executions) > 0 {
+		r.Limitations = append(r.Limitations, LimRepositoryCodeExecuted)
+	}
+	return r
 }
 
 // notConfigured plans like the analyzer it stands for and reports every
@@ -280,32 +338,38 @@ var NotRunAdapter = obsdoc.Component{ID: "codeye-not-run", Version: "1"}
 func (n notConfigured) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, _ executor.Runner) analysis.TaskResult {
 	tasks, err := n.plan(ctx, job)
 	if err != nil {
-		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{"plan_failed"}}
+		return handlerFailure("plan_failed")
 	}
-	var t *Task
-	for i := range tasks {
-		if tasks[i].Spec.Key == task.Key {
-			t = &tasks[i]
-		}
-	}
+	t := findTask(tasks, task.Key)
 	if t == nil {
-		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{ReasonUnknownTask}}
+		return handlerFailure(ReasonUnknownTask)
 	}
-	doc := obsdoc.New(obsdoc.Analyzer{ID: n.d.ID, Ecosystem: n.d.Ecosystem, Required: n.d.Required}, NotRunAdapter, NotRunAdapter, t.Spec.Key, job.Snapshot.Digest)
+	return NotRun(job, n.d, *t, n.reason)
+}
+
+// NotRun ends planned task t of analyzer d without starting a process: the
+// task is unsupported with reason, and its envelope records exit class
+// not_run, no execution, no observation and processed_paths=[] (a known
+// zero). Further limitation codes (e.g. a second reason) are recorded with
+// reason.
+func NotRun(job analysis.Job, d Descriptor, t Task, reason string, limitations ...string) analysis.TaskResult {
+	doc := obsdoc.New(obsdoc.Analyzer{ID: d.ID, Ecosystem: d.Ecosystem, Required: d.Required}, NotRunAdapter, NotRunAdapter, t.Spec.Key, job.Snapshot.Digest)
 	doc.Module.Dir = t.Module
+	if doc.Module.Dir == "" {
+		doc.Module.Dir = "."
+	}
 	doc.Patterns = append([]string{}, t.Patterns...)
-	doc.Tool.Name = n.d.Tool
+	doc.Tool.Name = d.Tool
 	doc.RulePack = obsdoc.RulePack{ID: "none", Version: "1", Selection: []string{}, RepositoryConfig: obsdoc.RepoConfigNone, SourceSuppressions: obsdoc.SuppressNone}
-	reason := n.reason
 	doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskUnsupported, Reason: &reason, ExitClass: obsdoc.ExitNotRun}
 	doc.Coverage.FilesInScope = t.FilesInScope
 	doc.Coverage.ProcessedPaths = []string{}
-	doc.Limitations = []string{reason}
+	doc.Limitations = append([]string{reason}, limitations...)
 	art, err := WriteEnvelope(job, doc)
 	if err != nil {
-		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{"observations_write_failed"}}
+		return handlerFailure("observations_write_failed")
 	}
-	return analysis.TaskResult{Status: domain.TaskUnsupported, Reason: reason, Artifacts: []analysis.ArtifactFile{art}, Limitations: []string{reason}}
+	return analysis.TaskResult{Status: domain.TaskUnsupported, Reason: reason, Artifacts: []analysis.ArtifactFile{art}, Limitations: append([]string{reason}, limitations...)}
 }
 
 // Expect returns the obsdoc expectation for a task of job (manifest lookup

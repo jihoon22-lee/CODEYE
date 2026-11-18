@@ -53,6 +53,8 @@ W06 구현 경로(`/api/v1` 아래, 개인 모드 loopback controller). 노드 �
 | POST /attempts/{id}/complete | epoch·정리 상태·result_manifest artifact 확인 후 결과 접수. 접수된 성공은 finalizing을 거쳐 W09 게시 트랜잭션에서 종결 |
 | POST /attempts/{id}/cleanup | recovery_required attempt의 실제 정리 확인→failed, 예약 해제 |
 
+agent가 worker에 넘기는 job에는 노드 운영자 설정에서 나온 허가 두 개가 있다. `allow_model_review`(`--model-source-root`)와 `allow_repository_code`(`--repo-code-source-root`, W19)다. 둘 다 local source root에만 적용하고 controller와 run 요청은 정하지 않는다. 없으면 허가하지 않은 것이다([분석기 팩 계약 §2.7](39-r1-analyzer-packs.md#27-저장소-코드-실행-허가)).
+
 초기 설계의 `POST /attempts/{id}/snapshot`과 3단계 artifact upload(`/artifacts/uploads...`)는 W06에서 각각 `snapshot_fixed` 이벤트와 attempt 범위 단일 PUT으로 대체했다(결정 A18). worker에게 node secret을 주지 않고 agent가 중계한다. node identity·attempt의 owner·epoch를 모두 검증한다. 명령은 노드별 sequence와 command_id를 가지며 cursor 이하 재전송은 확인 처리되어 중복 실행으로 이어지지 않는다.
 
 ## 5. 프로젝트 진행 조회와 이벤트 복원

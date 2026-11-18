@@ -307,6 +307,7 @@ export const ko = {
       tool_not_configured: '노드 운영자가 이 분석 도구 경로를 지정하지 않아 실행하지 않음 (미지원, 0건 통과 아님)',
       tool_unavailable: '지정된 분석 도구가 시작 검증·버전 확인을 통과하지 못해 실행하지 않음 (미지원)',
       toolchain_not_configured: '이 분석 도구가 필요로 하는 언어 toolchain이 노드에 지정되지 않아 실행하지 않음 (미지원)',
+      repository_code_not_allowed: '저장소 코드(build script·설정 프로그램·plugin)를 실행해야 하는 분석인데 노드 운영자가 이 소스에 허가하지 않아 실행하지 않음 (미지원)',
     } as Record<string, string>,
     reasonLabel: (label: string) => `사유: ${label}`,
     finishedOfPlanned: (finished: number, planned: number) => `${finished}/${planned} 종료`,

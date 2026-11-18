@@ -11,7 +11,7 @@ W19는 두 가지를 구현한다. 첫째는 W16(C/C++), W17(Python), W18(JS/TS)
 | 팩 계약 | `internal/worker/analysis/pack` | `Descriptor`·`Analyzer`·`Composite`·`NotConfigured`·`WriteEnvelope`·`ToolProbe` |
 | 관찰 envelope | `internal/worker/analysis/obsdoc`, [schema](../schemas/analyzer-observations.schema.json) | 분석기 공통 산출물 `analyzer_observations` v0.1과 검증 |
 | 빌트인 카탈로그 | `internal/worker/analysis/builtin` | 분석기 목록(계획 순서), 도구 플래그, 시작 probe, 탐색 probe 목록 |
-| 보고서 decoder | `internal/report/analyzer.go`, `toolfp.go` | envelope → 관찰·검토 전 도구 finding·도구 범위 행 |
+| 보고서 decoder | `internal/report/analyzer.go`(fingerprint는 W23 `fingerprint.go`) | envelope → 관찰·검토 전 도구 finding·도구 범위 행 |
 | 탐색 probe | `internal/worker/discovery/observe.go` | env.discover에서 설정된 분석 도구의 버전 확인 |
 | R1 해석 입력 | `internal/worker/review/r1_inputs.go` | review.interpret가 envelope와 go vet v0.1을 함께 읽음 |
 | Go 팩 | `internal/worker/analysis/staticcheck`, [서술](../examples/analyzer-staticcheck.yaml), [실제 산출물](../examples/observations-staticcheck.json) | Staticcheck 어댑터 |
@@ -90,6 +90,27 @@ type Analyzer interface {
 - `Required`는 Descriptor·계획·envelope(`analyzer.required`)·DB task에서 같아야 한다. 보고서 decoder는 다르면 거부한다(§5).
 - deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 이상 있을 때만 광고한다. 추가 깊이 도구만 있는 노드는 광고하지 않는다. 현재 기준 분석기는 go vet뿐이므로 `--go` 없는 노드는 deep-review를 광고하지 않는다. W17 등이 자기 생태계의 기준 분석기를 추가하면 그 도구만 있는 노드도 광고할 수 있다.
 - 기준 분석기는 해당 언어 노드에서 가장 흔히 쓸 수 있는 도구로 고른다. 팩 문서에 선택 근거를 기록한다.
+
+### 2.7 저장소 코드 실행 허가
+
+정적 분석도 저장소가 정한 코드를 실행할 수 있다. JS 설정 파일, build script, compiler plugin, proc macro, configure 단계가 그렇다([Native 실행기 §2](08-native-execution.md#2-신뢰와-실행-정책)). 이런 작업은 노드 운영자가 명시적으로 허가한 소스에서만 실행한다(결정 A23).
+
+- **허가**: `codeye agent --repo-code-source-root ID`(반복 가능). 모델 전송 허가 `--model-source-root`와 같은 방식이다. ID는 같은 agent의 `--source-root` 매핑이 있어야 하며, 없으면 옵션 오류다. agent는 그 local source root의 job에만 `allow_repository_code=true`를 보낸다. Git 소스는 허가를 받지 않는다. 워커는 이 값을 `analysis.Job.AllowRepositoryCode`로 받는다. 값을 정하는 것은 노드 설정과 job뿐이다. 스냅샷·저장소 설정·run 요청은 이 값을 올릴 수 없다.
+- **선언**: `pack.Task.RepositoryCode`. `Plan`이 manifest와 scope만으로 정하므로 미설정 대역도 같은 선언을 계획한다. 한 도구가 두 방식을 함께 계획할 수 있다. 예를 들어 기존 compile DB를 읽는 clang-tidy 작업은 false, configure 단계를 거치는 작업은 true다. `Run`은 `Plan`이 선언한 것보다 더 실행하지 않는다. false로 선언한 작업이 실행 중 configure 단계로 넘어가는 대체 경로는 금지다.
+- **집행**: `Composite.Run`이 dispatch 전에 한 번만 검사한다. 선언은 워커가 돌려준 TaskSpec이 아니라 소유 분석기의 계획에서 다시 얻는다. 계획에 없는 key는 실행하지 않고 실패(`unknown_task`)로 끝낸다. 허가가 없으면 `unsupported`, 사유 `repository_code_not_allowed`다. 분석기를 호출하지 않으므로 프로세스가 시작되지 않는다. not-run envelope(실행 0, 관찰 0, `processed_paths=[]`)를 쓴다. 허가가 있어 프로세스를 실행한 작업에는 `repository_code_executed` 제약을 남긴다.
+- **우선순위**: 허가 검사가 도구 검사보다 먼저다. 허가가 없으면 도구도 없더라도(`tool_not_configured`·`tool_unavailable`·`toolchain_not_configured`) 작업 사유는 `repository_code_not_allowed`다. 도구 사유는 제약 목록에 함께 남는다. 허가가 있으면 대역의 사유가 그대로 쓰인다.
+- **필수 여부와 무관**: 허가가 없는 기준 분석기 작업은 필수 작업 미완료다. 그 보고서는 `partial`이다.
+- 이 허가는 [docs/08 §2](08-native-execution.md#2-신뢰와-실행-정책)의 프로젝트 단위·revision 기반 권한 저장소를 대신하는 노드 운영자 설정이다. 프로젝트 권한 저장소는 구현하지 않았다.
+
+**Go 팩은 저장소 코드를 실행하지 않는다.** go vet과 staticcheck 작업은 `RepositoryCode=false`다.
+
+- 두 도구는 패키지를 읽어 type-check하고 분석할 뿐 패키지 코드를 실행하지 않는다. 테스트 파일도 type-check만 한다. 분석 코드는 toolchain의 vet analyzer와 staticcheck 자신의 것이다. `-vettool`·`-toolexec`·`-exec`는 쓰지 않는다.
+- `CGO_ENABLED=0`이므로 cgo 파일을 빌드하지 않는다. C 컴파일러, `#cgo` 지시문, pkg-config를 호출하지 않는다.
+- `//go:generate`는 `go generate`만 실행한다. go vet·`go list`·staticcheck는 실행하지 않는다.
+- `GOTOOLCHAIN=local`이므로 go.mod의 `toolchain`·`go` 줄이 다른 toolchain을 내려받거나 실행하게 만들지 못한다. `GOFLAGS=`(빈 값), `GOENV=off`, `GOWORK=off`이므로 저장소·사용자 설정이 명령 옵션을 바꾸지 못한다. `GOPROXY=off`, `GOVCS=*:off`이므로 모듈을 내려받거나 VCS 명령을 실행하지 않는다.
+- go.mod의 `go` 줄은 언어 판이다. 일부 analyzer의 대상이 바뀌지만(예: Go 1.22의 반복 변수) 프로그램의 의미를 바꾸는 코드의 일부로 본다.
+
+**W20 메모**: `cargo check`와 `cargo clippy`는 항상 build script(`build.rs`)와 proc macro를 컴파일하고 실행한다. 따라서 Rust 기준 분석기 작업은 `RepositoryCode=true`이고, 허가가 없는 소스에서 Rust 기준 분석은 `unsupported`(`repository_code_not_allowed`)다.
 
 ## 3. review-v1과 go vet 고정
 
@@ -243,6 +264,7 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 | `staticcheck.TestReplay*` (CI) | 캡처 바이트 재생: 위 판정, exit 매핑 표, 버전 계약, argv·cwd·환경·제한시간 |
 | `staticcheck.TestParse*`, `TestPlanModules`, `TestCategoryPolicyAndArgs` | parser(손상·잘림·알 수 없는 필드), stderr, 버전, 계획 key·순서·필수 아님·Go 없음 |
 | `pack.Test*` | 계획 연결·dispatch·소유권·예약 이름·필수 불일치·대역 envelope·배타 쓰기 |
+| `pack.TestRepositoryCodeGrantIsEnforcedBeforeDispatch`, `agent.TestRepositoryCodeGrantIsSeparateFromAcquisition` (TC-103) | 허가 없음·있음, 한 도구의 두 방식, 대역의 같은 선언과 사유 우선순위, 계획 밖 key 거부, 프로세스 미시작, Git 소스 미허가, 매핑 없는 ID 옵션 오류 |
 | `obsdoc.Test*` | 실제 예시 round trip과 33개 거부 사례 |
 | `builtin.TestGoVetUnchangedInComposite`, `TestHandlers*` | go vet 고정, capability 광고, 도구 플래그 |
 | `report.TestAnalyzerDecoder*` | TC-09·TC-13, fp2 fingerprint, 처리 경로·합집합, 미설정 행, 위조 거부, 코드 제외 export |

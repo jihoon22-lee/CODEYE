@@ -56,6 +56,10 @@ type Config struct {
 	EnrollTokenFile  string
 	// SourceRoots is the private mapping source_root_id → absolute path.
 	SourceRoots map[string]string
+	// RepositoryCodeSourceRoots are the local source roots whose jobs may run
+	// repository-controlled code (--repo-code-source-root, docs/39 §2.7).
+	// Git sources never get the grant.
+	RepositoryCodeSourceRoots map[string]bool
 	// Workers is the static worker count (W06, default mode).
 	Workers int
 	// Autoscale (W07) starts with zero workers and starts/drains/stops
@@ -140,6 +144,11 @@ func New(cfg Config) (*Agent, error) {
 	for id := range cfg.ModelSourceRoots {
 		if cfg.SourceRoots[id] == "" {
 			return nil, &ExitError{ExitUsage, "model source root must have a local source mapping"}
+		}
+	}
+	for id := range cfg.RepositoryCodeSourceRoots {
+		if cfg.SourceRoots[id] == "" {
+			return nil, &ExitError{ExitUsage, "repository-code source root must have a local source mapping"}
 		}
 	}
 	for _, h := range cfg.GitHosts {
@@ -730,6 +739,7 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 	switch j.Source.Kind {
 	case "local":
 		job.AllowModelReview = ag.cfg.ModelSourceRoots[j.Source.SourceRootID]
+		job.AllowRepositoryCode = ag.cfg.RepositoryCodeSourceRoots[j.Source.SourceRootID]
 		job.Source.ApprovedRoot = ag.cfg.SourceRoots[j.Source.SourceRootID]
 		job.Source.RelativePath = j.Source.RelativePath
 	case "git":

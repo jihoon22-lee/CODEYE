@@ -44,13 +44,16 @@ func desc(id, name string, required bool) Descriptor {
 	return Descriptor{ID: id, Name: name, Ecosystem: "go", Required: required, Tool: name, VersionArgs: []string{"--version"}, ParseVersion: version}
 }
 
-// fake plans the given keys and records which keys it ran.
+// fake plans the given keys and records which keys it ran. Keys in code
+// are declared to run repository code; Run starts one process through the
+// runner when it has one.
 type fake struct {
 	d     Descriptor
 	keys  []string
 	ran   []string
 	stage domain.Stage
 	req   *bool
+	code  map[string]bool
 }
 
 func (f *fake) Descriptor() Descriptor { return f.d }
@@ -66,14 +69,27 @@ func (f *fake) Plan(ctx context.Context, job analysis.Job) ([]Task, error) {
 		if f.stage != "" {
 			stage = f.stage
 		}
-		out = append(out, Task{Spec: analysis.TaskSpec{Key: k, Required: req, Title: k, Stage: stage}, Module: ".", Patterns: []string{"./..."}})
+		out = append(out, Task{Spec: analysis.TaskSpec{Key: k, Required: req, Title: k, Stage: stage}, Module: ".", Patterns: []string{"./..."}, RepositoryCode: f.code[k]})
 	}
 	return out, nil
 }
 
-func (f *fake) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, _ executor.Runner) analysis.TaskResult {
+func (f *fake) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	f.ran = append(f.ran, task.Key)
-	return analysis.TaskResult{Status: domain.TaskSucceeded}
+	r := analysis.TaskResult{Status: domain.TaskSucceeded}
+	if runner != nil {
+		r.Executions = append(r.Executions, analysis.Execution{Name: "tool.run", Result: runner.Run(ctx, executor.Spec{Executable: "/bin/tool"})})
+	}
+	return r
+}
+
+// countingRunner records every process start.
+type countingRunner struct{ starts int }
+
+func (r *countingRunner) Run(context.Context, executor.Spec) executor.Result {
+	r.starts++
+	zero := 0
+	return executor.Result{Status: executor.StatusExited, ExitCode: &zero, Cleanup: executor.CleanupConfirmed}
 }
 
 // Plans are concatenated in member order; Run goes to the owner only.
@@ -202,6 +218,108 @@ func TestNotConfiguredIsVisible(t *testing.T) {
 		if r := stub.Run(context.Background(), j, analysis.TaskSpec{Key: "staticcheck.m09"}, nil); r.Status != domain.TaskFailed {
 			t.Fatalf("unplanned key %+v", r)
 		}
+	}
+}
+
+func readEnvelope(t *testing.T, j analysis.Job, res analysis.TaskResult, key string) obsdoc.Document {
+	t.Helper()
+	if len(res.Artifacts) != 1 {
+		t.Fatalf("artifacts %+v", res.Artifacts)
+	}
+	b, err := os.ReadFile(res.Artifacts[0].Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := obsdoc.Decode(b, Expect(j, key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc
+}
+
+// TC-103: the repository-code grant (docs/39 §2.7) is enforced once in
+// Composite.Run before dispatch. A task declared to run repository code
+// ends unsupported/repository_code_not_allowed without the grant: no process
+// started, the analyzer never called, a not-run envelope with zero processed
+// paths. One tool plans both modes; the undeclared task is unaffected. The
+// declaration comes from the owner's plan, so a stand-in declares it alike,
+// the policy reason wins over the tool reason, and an unplanned key fails
+// closed.
+func TestRepositoryCodeGrantIsEnforcedBeforeDispatch(t *testing.T) {
+	d := desc("go.build", "build", true)
+	newTool := func() *fake {
+		return &fake{d: d, keys: []string{"build", "build.configure"}, code: map[string]bool{"build.configure": true}}
+	}
+	ctx := context.Background()
+	for _, granted := range []bool{false, true} {
+		tool := newTool()
+		c, err := NewComposite(tool)
+		if err != nil {
+			t.Fatal(err)
+		}
+		j := job(t)
+		j.AllowRepositoryCode = granted
+		tasks, err := c.PlanTasks(ctx, j)
+		if err != nil || len(tasks) != 2 || tasks[0].RepositoryCode || !tasks[1].RepositoryCode {
+			t.Fatalf("plan %+v %v", tasks, err)
+		}
+		runner := &countingRunner{}
+		safe := c.Run(ctx, j, tasks[0].Spec, runner)
+		code := c.Run(ctx, j, tasks[1].Spec, runner)
+		if safe.Status != domain.TaskSucceeded || slices.Contains(safe.Limitations, LimRepositoryCodeExecuted) {
+			t.Fatalf("undeclared task %+v", safe)
+		}
+		if granted {
+			if code.Status != domain.TaskSucceeded || !slices.Equal(tool.ran, []string{"build", "build.configure"}) || runner.starts != 2 ||
+				!slices.Contains(code.Limitations, LimRepositoryCodeExecuted) {
+				t.Fatalf("granted: %+v ran=%v starts=%d", code, tool.ran, runner.starts)
+			}
+			continue
+		}
+		if code.Status != domain.TaskUnsupported || code.Reason != ReasonRepositoryCodeNotAllowed || len(code.Executions) != 0 ||
+			!slices.Equal(tool.ran, []string{"build"}) || runner.starts != 1 {
+			t.Fatalf("not granted: %+v ran=%v starts=%d", code, tool.ran, runner.starts)
+		}
+		doc := readEnvelope(t, j, code, "build.configure")
+		if doc.Outcome.ExitClass != obsdoc.ExitNotRun || doc.Outcome.TaskStatus != domain.TaskUnsupported || len(doc.Executions) != 0 ||
+			doc.Coverage.ProcessedPaths == nil || len(doc.Coverage.ProcessedPaths) != 0 || !doc.Analyzer.Required ||
+			!slices.Equal(doc.Limitations, []string{ReasonRepositoryCodeNotAllowed}) {
+			t.Fatalf("envelope %+v", doc)
+		}
+	}
+
+	// The stand-in plans the same declaration. Without the grant the policy
+	// reason is the task reason and the missing tool stays a limitation;
+	// with it the stand-in's own reason applies and nothing is executed.
+	for _, granted := range []bool{false, true} {
+		stub, err := NotConfigured(d, newTool().Plan, ReasonToolNotConfigured)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, _ := NewComposite(stub)
+		j := job(t)
+		j.AllowRepositoryCode = granted
+		runner := &countingRunner{}
+		res := c.Run(ctx, j, analysis.TaskSpec{Key: "build.configure"}, runner)
+		want, lims := ReasonRepositoryCodeNotAllowed, []string{ReasonRepositoryCodeNotAllowed, ReasonToolNotConfigured}
+		if granted {
+			want, lims = ReasonToolNotConfigured, []string{ReasonToolNotConfigured}
+		}
+		if res.Status != domain.TaskUnsupported || res.Reason != want || runner.starts != 0 || !slices.Equal(res.Limitations, lims) {
+			t.Fatalf("stand-in granted=%v: %+v", granted, res)
+		}
+		if doc := readEnvelope(t, j, res, "build.configure"); !slices.Equal(doc.Limitations, lims) || *doc.Outcome.Reason != want {
+			t.Fatalf("stand-in envelope %+v", doc)
+		}
+	}
+
+	// A key the owner does not plan is never dispatched, granted or not.
+	tool := newTool()
+	c, _ := NewComposite(tool)
+	j := job(t)
+	j.AllowRepositoryCode = true
+	if r := c.Run(ctx, j, analysis.TaskSpec{Key: "build.m09"}, &countingRunner{}); r.Status != domain.TaskFailed || !slices.Contains(r.Limitations, ReasonUnknownTask) || len(tool.ran) != 0 {
+		t.Fatalf("unplanned key %+v ran=%v", r, tool.ran)
 	}
 }
 
