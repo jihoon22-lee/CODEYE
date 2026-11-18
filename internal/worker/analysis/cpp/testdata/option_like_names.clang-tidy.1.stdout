@@ -1,0 +1,6 @@
+[REDACTED]/src/--help.cpp:3:12: warning: Division by zero [clang-analyzer-core.DivideZero]
+[REDACTED]/src/--help.cpp:2:3: note: 'z' initialized to 0
+[REDACTED]/src/--help.cpp:3:12: note: Division by zero
+[REDACTED]/src/-x.c:3:12: warning: Division by zero [clang-analyzer-core.DivideZero]
+[REDACTED]/src/-x.c:2:3: note: 'z' initialized to 0
+[REDACTED]/src/-x.c:3:12: note: Division by zero

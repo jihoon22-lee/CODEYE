@@ -33,6 +33,10 @@ const (
 	ExclDuplicate        = "duplicate_entry"
 	ExclMSVCDriver       = "msvc_driver_unsupported"
 	ExclUnsupportedDrive = "unsupported_driver"
+	// ExclUnsafeArgument: a kept argument would still be read as a response
+	// file or as a code-loading or toolchain-redirecting option (defense in
+	// depth behind the allowlist; never expected).
+	ExclUnsafeArgument = "unsafe_argument"
 )
 
 // Dropped-flag reasons (counted per argument).
@@ -56,6 +60,7 @@ const (
 	maxCompileDBBytes    = 64 << 20
 	maxCompileDBEntries  = 100000
 	maxArgumentsPerEntry = 4096
+	maxMacroArg          = 1024
 )
 
 // Limitation codes of the mapping.
@@ -80,6 +85,57 @@ const (
 var wrappers = map[string]bool{"ccache": true, "sccache": true, "distcc": true, "icecc": true, "buildcache": true, "colorgcc": true}
 
 var driverPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
+
+// Values the allowlist keeps from an entry are validated: clang expands any
+// argv element that starts with "@" as a response file, so a value such as
+// "-x @/x.rsp" would inject arguments. Every kept value is from a fixed set
+// or a strict pattern, and values are joined to their flag where clang
+// accepts that.
+var (
+	keepLanguages = map[string]bool{"c": true, "c++": true, "c-header": true, "c++-header": true}
+	keepStdlib    = map[string]bool{"libc++": true, "libstdc++": true, "platform": true}
+	targetPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`)
+	stdPattern    = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+]{0,15}$`)
+	optPattern    = regexp.MustCompile(`^-O(?:[0-3sgz]|fast)?$`)
+	macroPattern  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}(?:\([A-Za-z0-9_, .]*\))?(?:=[^\x00\n\r]*)?$`)
+	undefPattern  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
+)
+
+// unsafeArg reports an argument that clang would expand as a response file
+// or that loads code, redirects the toolchain or reads driver configuration.
+// The allowlist never keeps one; Unit validation rejects the entry if it
+// ever did.
+func unsafeArg(a string) bool {
+	if strings.HasPrefix(a, "@") {
+		return true
+	}
+	for _, p := range []string{"-fplugin", "-fpass-plugin", "-load", "-Xclang", "-Xanalyzer", "-mllvm", "-B", "--gcc-toolchain", "--gcc-install-dir", "-specs", "--specs",
+		"--sysroot", "-isysroot", "--config", "--no-default-config", "-resource-dir", "-ivfsoverlay", "-include-pch", "-fmodule", "--driver-mode", "-Wl,", "-Wp,", "-Xlinker",
+		"-Xpreprocessor", "-Xassembler", "-fprofile", "-fsanitize", "-fcoverage", "-Xopenmp-target", "-cc1", "-fdepfile", "-MF", "-o"} {
+		if strings.HasPrefix(a, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// safe reports a unit whose kept arguments and driver are all safe.
+func (u Unit) safe() bool {
+	if !driverPattern.MatchString(u.Driver) || unsafeArg(u.Driver) {
+		return false
+	}
+	for _, a := range u.Args {
+		if unsafeArg(a.Flag) || (a.Value != "" && (unsafeArg(a.Value) || strings.HasPrefix(a.Value, "-"))) || (a.Path != "" && domain.ValidateEvidencePath(a.Path) != nil) {
+			return false
+		}
+	}
+	return domain.ValidateEvidencePath(u.Rel) == nil
+}
+
+// cxxDriver reports a C++ driver name (g++, clang++-18, c++).
+func cxxDriver(name string) bool { return strings.Contains(name, "++") }
+
+var cxxExt = map[string]bool{".cc": true, ".cpp": true, ".cxx": true, ".c++": true}
 
 // Arg is one kept compiler argument. Path, when set, is snapshot-relative and
 // is rendered as the absolute workspace path, joined to Flag or as the next
@@ -250,6 +306,59 @@ func splitCommand(s string) ([]string, bool) {
 	return out, true
 }
 
+// splitWindowsCommand splits a "command" string of a Windows compile DB
+// like CommandLineToArgvW: white space separates outside double quotes,
+// backslashes are literal unless they precede a double quote (2n
+// backslashes + quote: n backslashes and a quote toggle; 2n+1: n
+// backslashes and a literal quote).
+func splitWindowsCommand(s string) ([]string, bool) {
+	var out []string
+	var cur strings.Builder
+	inArg, quoted := false, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case (c == ' ' || c == '\t' || c == '\n' || c == '\r') && !quoted:
+			if inArg {
+				out = append(out, cur.String())
+				cur.Reset()
+				inArg = false
+			}
+		case c == '\\':
+			n := 0
+			for i < len(s) && s[i] == '\\' {
+				n++
+				i++
+			}
+			if i < len(s) && s[i] == '"' {
+				cur.WriteString(strings.Repeat(`\`, n/2))
+				if n%2 == 1 {
+					cur.WriteByte('"')
+				} else {
+					quoted = !quoted
+				}
+			} else {
+				cur.WriteString(strings.Repeat(`\`, n))
+				i--
+			}
+			inArg = true
+		case c == '"':
+			quoted = !quoted
+			inArg = true
+		default:
+			cur.WriteByte(c)
+			inArg = true
+		}
+	}
+	if quoted {
+		return nil, false
+	}
+	if inArg {
+		out = append(out, cur.String())
+	}
+	return out, true
+}
+
 var drivePath = regexp.MustCompile(`^[A-Za-z]:[\\/]`)
 
 // norm makes a build-machine path slash separated (Windows drive and UNC
@@ -263,9 +372,19 @@ func norm(p string) string {
 
 func isAbs(p string) bool { return strings.HasPrefix(p, "/") || drivePath.MatchString(p) }
 
+// winDir reports a compile DB entry written on Windows (drive or UNC
+// directory): its paths use backslashes, also relative ones.
+func winDir(dir string) bool {
+	return drivePath.MatchString(dir) || strings.HasPrefix(dir, `\\`) || strings.HasPrefix(dir, "//")
+}
+
 // absOn resolves a build-machine path against the entry directory.
 func absOn(dir, p string) (string, bool) {
-	p = norm(p)
+	if winDir(dir) {
+		p = strings.ReplaceAll(p, `\`, "/")
+	} else {
+		p = norm(p)
+	}
 	if !isAbs(p) {
 		if !isAbs(dir) {
 			return "", false
@@ -371,7 +490,7 @@ func MapDBs(dbs []string, data map[string][]byte, files map[string]source.Entry,
 			u, reason, rel := mapEntry(e, root, files, dirs, inScope, &m)
 			if reason != "" {
 				m.Excluded[reason]++
-				if rel != "" && inScope(rel) && IsSource(rel) && !seen[rel] && reason != ExclDuplicate {
+				if rel != "" && inScope(rel) && IsSource(rel) && !underDataDir(rel) && !seen[rel] && reason != ExclDuplicate {
 					if _, already := m.ExcludedSources[rel]; !already {
 						m.ExcludedSources[rel] = reason
 					}
@@ -409,8 +528,12 @@ func mapEntry(e dbEntry, root string, files map[string]source.Entry, dirs map[st
 	}
 	argv := e.Arguments
 	if len(argv) == 0 {
+		split := splitCommand
+		if winDir(dir) {
+			split = splitWindowsCommand
+		}
 		var ok bool
-		if argv, ok = splitCommand(*e.Command); !ok || len(argv) == 0 {
+		if argv, ok = split(*e.Command); !ok || len(argv) == 0 {
 			return Unit{}, ExclMalformed, ""
 		}
 	}
@@ -454,9 +577,12 @@ func mapEntry(e dbEntry, root string, files map[string]source.Entry, dirs map[st
 	case lower == "nvcc" || !driverPattern.MatchString(driver):
 		return Unit{}, ExclUnsupportedDrive, rel
 	}
-	m.Wrappers += wrapped
 	u := Unit{Rel: rel, Driver: driver}
 	mapFlags(argv[1:], dir, root, *e.File, file, files, dirs, &u, m)
+	if !u.safe() {
+		return Unit{}, ExclUnsafeArgument, rel
+	}
+	m.Wrappers += wrapped
 	return u, "", rel
 }
 
@@ -554,13 +680,15 @@ func mapFlags(args []string, dir, root, fileArg, fileAbs string, files map[strin
 		switch {
 		case a == "":
 			continue
+		case isInput(a):
+			// The main file (also one named like an option, "-x.c"); the
+			// tools receive it as an absolute path.
+			continue
 		case strings.HasPrefix(a, "@"):
 			m.Dropped[DropResponseFile]++
 			continue
 		case !strings.HasPrefix(a, "-"):
-			if !isInput(a) {
-				m.Dropped[DropPositional]++
-			}
+			m.Dropped[DropPositional]++
 			continue
 		}
 		matched := false
@@ -606,29 +734,58 @@ func mapFlags(args []string, dir, root, fileArg, fileAbs string, files map[strin
 		if matched {
 			continue
 		}
+		keep := func(ok bool, arg Arg) {
+			if ok {
+				u.Args = append(u.Args, arg)
+			} else {
+				m.Dropped[DropNotAllowlisted]++
+			}
+		}
 		switch {
 		case a == "-D" || a == "-U":
 			if v, ok := next(); ok && v != "" {
-				u.Args = append(u.Args, Arg{Flag: a + v})
+				pat := macroPattern
+				if a == "-U" {
+					pat = undefPattern
+				}
+				keep(pat.MatchString(v) && len(v) <= maxMacroArg, Arg{Flag: a + v})
 			} else {
 				m.Dropped[DropPositional]++
 			}
 			continue
-		case strings.HasPrefix(a, "-D") || strings.HasPrefix(a, "-U"):
-			u.Args = append(u.Args, Arg{Flag: a})
+		case strings.HasPrefix(a, "-D"):
+			keep(macroPattern.MatchString(a[2:]) && len(a) <= maxMacroArg, Arg{Flag: a})
+			continue
+		case strings.HasPrefix(a, "-U"):
+			keep(undefPattern.MatchString(a[2:]), Arg{Flag: a})
 			continue
 		case strings.HasPrefix(a, "-std=") || strings.HasPrefix(a, "--std="):
-			u.Args = append(u.Args, Arg{Flag: "-std=" + a[strings.IndexByte(a, '=')+1:]})
+			v := a[strings.IndexByte(a, '=')+1:]
+			keep(stdPattern.MatchString(v), Arg{Flag: "-std=" + v})
 			continue
-		case a == "-x" || a == "-target":
+		case a == "-x":
+			// The language is rendered as "-x <v>" from a fixed set only.
 			if v, ok := next(); ok && v != "" {
-				u.Args = append(u.Args, Arg{Flag: a, Value: v})
+				keep(keepLanguages[v], Arg{Flag: a, Value: v})
 			} else {
 				m.Dropped[DropPositional]++
 			}
 			continue
-		case strings.HasPrefix(a, "--target=") || strings.HasPrefix(a, "-stdlib=") || a == "-ansi" || a == "-pthread" || a == "-nostdinc" ||
-			a == "-nostdinc++" || keepF[a] || keepM.MatchString(a) || (strings.HasPrefix(a, "-O") && len(a) <= 6 && !strings.ContainsAny(a, "/\\")):
+		case a == "-target" || strings.HasPrefix(a, "--target="):
+			v := strings.TrimPrefix(a, "--target=")
+			if a == "-target" {
+				var ok bool
+				if v, ok = next(); !ok {
+					m.Dropped[DropPositional]++
+					continue
+				}
+			}
+			keep(targetPattern.MatchString(v), Arg{Flag: "--target=" + v})
+			continue
+		case strings.HasPrefix(a, "-stdlib="):
+			keep(keepStdlib[strings.TrimPrefix(a, "-stdlib=")], Arg{Flag: a})
+			continue
+		case a == "-ansi" || a == "-pthread" || a == "-nostdinc" || a == "-nostdinc++" || keepF[a] || keepM.MatchString(a) || optPattern.MatchString(a):
 			u.Args = append(u.Args, Arg{Flag: a})
 			continue
 		}
@@ -643,8 +800,27 @@ func mapFlags(args []string, dir, root, fileArg, fileAbs string, files map[strin
 	}
 }
 
+// RenderedDriver is the driver name the tools see: "clang++" for C++
+// (a C++ driver name, a C++ extension or -x c++), otherwise "clang". The
+// entry's own driver name is recorded but never rendered: its prefix or
+// suffix would select a target, a driver mode or configuration files.
+func (u Unit) RenderedDriver() string {
+	lang := ""
+	for _, a := range u.Args {
+		if a.Flag == "-x" {
+			lang = a.Value
+		}
+	}
+	if strings.HasPrefix(lang, "c++") || (lang == "" && (cxxDriver(u.Driver) || cxxExt[strings.ToLower(path.Ext(u.Rel))])) {
+		return "clang++"
+	}
+	return "clang"
+}
+
 // Render returns the argv of a unit for the workspace: driver, kept
-// arguments with absolute workspace paths, then the main file.
+// arguments with absolute workspace paths, then the main file. Every
+// positional (the main file, separate include paths) is absolute, so no
+// repository path can be read as an option.
 func (u Unit) Render(workspace string) []string {
 	abs := func(rel string) string {
 		if rel == "." {
@@ -652,7 +828,7 @@ func (u Unit) Render(workspace string) []string {
 		}
 		return filepath.Join(workspace, filepath.FromSlash(rel))
 	}
-	out := []string{u.Driver}
+	out := []string{u.RenderedDriver()}
 	for _, a := range u.Args {
 		switch {
 		case a.Path != "" && a.Joined:
@@ -681,9 +857,21 @@ func RenderDB(workspace string, units []Unit) ([]byte, error) {
 		File      string   `json:"file"`
 		Arguments []string `json:"arguments"`
 	}
+	if !filepath.IsAbs(workspace) {
+		return nil, errors.New("workspace must be absolute")
+	}
 	list := make([]out, 0, len(units))
 	for _, u := range units {
-		list = append(list, out{Directory: workspace, File: u.File(workspace), Arguments: u.Render(workspace)})
+		if !u.safe() {
+			return nil, errors.New("unsafe compile DB unit")
+		}
+		argv := u.Render(workspace)
+		for _, a := range argv[1:] {
+			if strings.HasPrefix(a, "@") || (!strings.HasPrefix(a, "-") && !filepath.IsAbs(a) && !keepLanguages[a]) {
+				return nil, errors.New("unsafe compile DB argument")
+			}
+		}
+		list = append(list, out{Directory: workspace, File: u.File(workspace), Arguments: argv})
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)

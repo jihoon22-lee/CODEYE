@@ -183,7 +183,11 @@ func (a *Cppcheck) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			in.Cancelled = true
 			break
 		}
-		res, e, err := s.run(ctx, runner, st.name, s.spec(st.args, a.t.cfg.Timeout))
+		var clean func(*executor.Result)
+		if st.name == execCppcheckCheck {
+			clean = func(r *executor.Result) { in.Dropped = sanitizeCppcheck(r, s.inside) }
+		}
+		res, e, err := s.run(ctx, runner, st.name, s.spec(st.args, a.t.cfg.Timeout), clean)
 		*st.dst = res
 		if err != nil {
 			return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Executions: in.Executions, Limitations: []string{"execution_write_failed"}}
@@ -219,6 +223,10 @@ type ccInput struct {
 	Units       []string
 	Version     *executor.Result
 	Check       *executor.Result
+	// Dropped are the check records removed from the stored stream because
+	// a location is outside the workspace (sanitize.go): id, severity and
+	// file0 only.
+	Dropped     []ccRecord
 	Executions  []analysis.Execution
 	Drift       map[string]bool
 	Roots       []string
@@ -486,6 +494,29 @@ func assembleCppcheck(doc obsdoc.Document, in ccInput) obsdoc.Document {
 			doc.Limitations = append(doc.Limitations, "unattributed_observation_unit")
 		}
 	}
+	// Records removed from the stored stream (a location outside the
+	// workspace copy) still decide the outcome, without their text.
+	for _, r := range in.Dropped {
+		unit := tuOf(r.File0)
+		switch ccKind(r) {
+		case ccParse:
+			if len(doc.ToolErrors) < 200 {
+				doc.ToolErrors = append(doc.ToolErrors, obsdoc.ToolError{Execution: execCppcheckCheck, Kind: ccParse, Unit: unit,
+					Message: r.ID + ": message withheld (location outside the workspace copy)"})
+			}
+			if unit != "" {
+				failedParse[unit] = true
+			} else {
+				unattributedParse = true
+			}
+		case ccMissingInclude:
+			headerMissing = true
+		}
+	}
+	if len(in.Dropped) > 0 {
+		doc.Limitations = append(doc.Limitations, LimOutsideDropped)
+		doc.Target.Properties["outside_records_dropped"] = strconv.Itoa(len(in.Dropped))
+	}
 	if headerMissing {
 		doc.Limitations = append(doc.Limitations, "missing_include_in_header")
 	}
@@ -561,7 +592,8 @@ func assembleCppcheck(doc obsdoc.Document, in ccInput) obsdoc.Document {
 	}
 	// --error-exitcode=2: exit 2 iff at least one <error> record (any
 	// severity, measured), 0 iff none.
-	if in.Check != nil && !(exit == 0 && st.Values == 0 || exit == 2 && st.Values > 0) {
+	records := st.Values + len(in.Dropped)
+	if in.Check != nil && !(exit == 0 && records == 0 || exit == 2 && records > 0) {
 		o.fail(domain.TaskFailed, ReasonExitMismatch, obsdoc.ExitExecutionError)
 	}
 	if len(failedParse) > 0 || unattributedParse {

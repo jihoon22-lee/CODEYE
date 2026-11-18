@@ -164,7 +164,7 @@ func clangTidyBase(job analysis.Job, key string, l layout) obsdoc.Document {
 	doc.RulePack = obsdoc.RulePack{ID: ClangTidyRulePackID, Version: ClangTidyRulePackVersion, Selection: ClangTidySelection(),
 		RepositoryConfig: obsdoc.RepoConfigNone, SourceSuppressions: obsdoc.SuppressHonored, ConfigFiles: []obsdoc.ConfigFile{}, UnreportedSuppressionRules: []string{}}
 	doc.Target.Platform = ptr(runtime.GOOS + "/" + runtime.GOARCH)
-	doc.Target.Properties = map[string]string{"header_filter": ".*", "system_headers": "false", "repository_clang_tidy_config": "overridden"}
+	doc.Target.Properties = map[string]string{"header_filter": ".*", "system_headers": "false", "repository_clang_tidy_config": "overridden", "source_snippets": "removed"}
 	doc.Coverage.Unit = "translation_unit"
 	doc.Coverage.FilesInScope = ptr(len(l.Sources))
 	return doc
@@ -219,7 +219,8 @@ func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 		in.Batches = append(in.Batches, batch)
 	}
 	in.Checks = make([]*executor.Result, len(in.Batches))
-	res, e, err := s.run(ctx, runner, execClangTidyVersion, s.spec([]string{"--version"}, probeTimeout))
+	in.Dropped = make([]ctDropped, len(in.Batches))
+	res, e, err := s.run(ctx, runner, execClangTidyVersion, s.spec([]string{"--version"}, probeTimeout), nil)
 	in.Version = res
 	if err != nil {
 		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{"execution_write_failed"}}
@@ -235,7 +236,9 @@ func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 			for j, rel := range batch {
 				files[j] = filepath.Join(s.workspace, filepath.FromSlash(rel))
 			}
-			res, e, err := s.run(ctx, runner, checkExecName(bi), s.spec(ClangTidyArgs(cdbDir, files), a.t.cfg.Timeout))
+			res, e, err := s.run(ctx, runner, checkExecName(bi), s.spec(ClangTidyArgs(cdbDir, files), a.t.cfg.Timeout), func(r *executor.Result) {
+				in.Dropped[bi] = sanitizeClangTidy(r, func(p string) bool { return insideOrPseudo(p, s.inside) })
+			})
 			in.Checks[bi] = res
 			if err != nil {
 				return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Executions: in.Executions, Limitations: []string{"execution_write_failed"}}
@@ -262,6 +265,7 @@ type ctInput struct {
 	Batches     [][]string
 	Version     *executor.Result
 	Checks      []*executor.Result // per batch; nil = not run
+	Dropped     []ctDropped        // per batch: what sanitizeClangTidy removed
 	Executions  []analysis.Execution
 	Drift       map[string]bool
 	Roots       []string
@@ -341,6 +345,7 @@ type ctBatch struct {
 	shape   int // stderr blocks that do not follow the measured format
 	// lastErrors is the cumulative error count at the end of the run.
 	lastErrors int
+	dropped    ctDropped
 }
 
 // assembleClangTidy builds the envelope and decides the outcome.
@@ -459,6 +464,25 @@ func assembleClangTidy(doc obsdoc.Document, in ctInput) obsdoc.Document {
 	if nolint > 0 {
 		doc.Target.Properties["nolint_suppressed"] = strconv.Itoa(nolint)
 		doc.Limitations = append(doc.Limitations, "nolint_suppressed_diagnostics")
+	}
+	// What sanitizeClangTidy removed from the stored streams: errors outside
+	// the workspace still count as compile errors, without their text.
+	droppedDiags := 0
+	for bi := range batches {
+		if bi >= len(in.Dropped) || batches[bi].res == nil {
+			continue
+		}
+		d := in.Dropped[bi]
+		batches[bi].dropped = d
+		droppedDiags += d.Diagnostics + d.Notes
+		for i := 0; i < d.Errors && len(doc.ToolErrors) < 200; i++ {
+			doc.ToolErrors = append(doc.ToolErrors, obsdoc.ToolError{Execution: checkExecName(bi), Kind: "compile_error",
+				Message: "compiler error message withheld (location outside the workspace copy)"})
+		}
+	}
+	if droppedDiags > 0 {
+		doc.Limitations = append(doc.Limitations, LimOutsideDropped)
+		doc.Target.Properties["outside_records_dropped"] = strconv.Itoa(droppedDiags)
 	}
 
 	withFindings := map[string]bool{}
@@ -581,7 +605,7 @@ func assembleClangTidy(doc obsdoc.Document, in ctInput) obsdoc.Document {
 		if b.res == nil || (b.exit != 0 && b.exit != 1) || len(b.errs.Fatal) > 0 {
 			continue
 		}
-		errorDiags := false
+		errorDiags := b.dropped.Errors > 0
 		for _, d := range b.out.Diags {
 			errorDiags = errorDiags || d.Level == "error" || d.Level == "fatal error"
 		}

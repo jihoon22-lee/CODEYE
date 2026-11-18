@@ -233,10 +233,22 @@ func (s *session) spec(args []string, timeout time.Duration) executor.Spec {
 }
 
 // run executes one step and records its streams.
-func (s *session) run(ctx context.Context, runner executor.Runner, name string, spec executor.Spec) (*executor.Result, analysis.Execution, error) {
+// clean, when set, rewrites the result before anything of it is stored
+// (sanitize.go).
+func (s *session) run(ctx context.Context, runner executor.Runner, name string, spec executor.Spec, clean func(*executor.Result)) (*executor.Result, analysis.Execution, error) {
 	res := runner.Run(ctx, spec)
+	if clean != nil {
+		clean(&res)
+	}
 	e, err := analysis.WriteExecution(s.execDir, name, res)
 	return &res, e, err
+}
+
+// inside reports a tool path in the workspace copy ("[REDACTED]/x" after
+// redaction, an absolute workspace path, or workspace-relative without "..").
+func (s *session) inside(p string) bool {
+	_, ok := govet.StripWorkspace(p, ".", s.roots, true)
+	return ok
 }
 
 // write finishes the envelope and the task result.
