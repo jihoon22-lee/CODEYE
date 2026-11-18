@@ -63,10 +63,15 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 	if h.Caller == nil {
 		return result(domain.TaskUnsupported, "model_not_configured")
 	}
-	if role == "verify" {
-		return h.verify(ctx, j, runner)
+	screen := screenSecrets(ctx, h.Static, j)
+	if screen.state == screenFailed {
+		// The secrets task ran but its result is unusable (screen.go).
+		return result(domain.TaskSkippedPolicy, reasonSecretScreenFailed)
 	}
-	c, err := buildCorpus(j.Snapshot, j.Scope)
+	if role == "verify" {
+		return h.verify(ctx, j, runner, screen)
+	}
+	c, err := buildScreenedCorpus(j.Snapshot, j.Scope, screen.withheld)
 	if err != nil {
 		return result(domain.TaskFailed, "review_input_unavailable")
 	}
@@ -86,6 +91,11 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 		}
 		input.Facts = rec.Facts
 		rec.Stage = role
+	}
+	// The record (never the pinned model input) says when nothing screened
+	// the corpus for secrets.
+	if screen.state == screenUnscreened {
+		rec.Limitations = addLim(rec.Limitations, limNotSecretScreened)
 	}
 	query, err := json.Marshal(input)
 	if err != nil {

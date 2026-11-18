@@ -41,7 +41,9 @@
       "needed_observation": "go 1.30 이상 toolchain의 노드 관측"
     }
   ],
-  "limitations": [],
+  "limitations": [
+    "model_input_not_secret_screened"
+  ],
   "calls": [
     {
       "role": "environment",

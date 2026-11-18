@@ -13,12 +13,12 @@
     {
       "source": "review.environment",
       "state": "accepted",
-      "sha256": "04428cf42ebf48cf0b6fb2dd37e1887f3190d6e78980a79fdd5554173f8e9326"
+      "sha256": "d98d3fe3aad619adb23bac7325259f8146d56a8fed0895fdf095bdc968c4f325"
     },
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "97050a22ee1b3dfd78378eeb03eefa8147b6c2037042f05247bd86f2f0fc061e"
+      "sha256": "88d9938ff483247adb200920c0a90f928914b4ed66415ffe5d4f7c88e58bd6cc"
     }
   ],
   "evidence": [
@@ -82,7 +82,9 @@
       "origin": "investigate"
     }
   ],
-  "limitations": [],
+  "limitations": [
+    "model_input_not_secret_screened"
+  ],
   "calls": [
     {
       "role": "investigate",

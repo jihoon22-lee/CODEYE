@@ -19,8 +19,15 @@ import (
 // w21Stub is the go vet stub plus the W21 envelopes (docs/45): "lizard"
 // with one complexity metric on gateway.go and the secrets task with one
 // detection on gateway.go, where the test planted a value the platform's
-// Sensitive pattern does not recognize.
-type w21Stub struct{}
+// Sensitive pattern does not recognize. mode is the secrets task outcome:
+// "" a complete successful scan, "not_run" the not-configured stand-in,
+// "failed" a failed scan, "missing" no envelope at all. Descriptors names
+// the analyzers as the production composite does.
+type w21Stub struct{ mode string }
+
+func (w21Stub) Descriptors() []pack.Descriptor {
+	return []pack.Descriptor{{ID: "go.vet", Name: "go-vet"}, {ID: "any.lizard", Name: "lizard"}, {ID: "any.gitl" + "eaks", Name: w21SecretKey}}
+}
 
 const w21SecretKey = "secrets"
 
@@ -36,9 +43,12 @@ func (w21Stub) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec, e
 	return plan, nil
 }
 
-func (w21Stub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r executor.Runner) analysis.TaskResult {
+func (w w21Stub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r executor.Runner) analysis.TaskResult {
 	if pack.Owns("go-vet", t.Key) {
 		return vetStub{obs: gatewayObservation}.Run(ctx, j, t, r)
+	}
+	if t.Key == w21SecretKey && w.mode == "missing" {
+		return analysis.TaskResult{Status: domain.TaskFailed, Reason: "handler_error"}
 	}
 	id, rule, msg, category := "any.lizard", "cyclomatic_complexity", "Forward(...) at gateway.go:10: NCSS 5, CCN 17", "maintainability"
 	var metric *obsdoc.Metric
@@ -75,6 +85,19 @@ func (w21Stub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r e
 	}
 	doc.Coverage.ProcessedPaths = []string{p}
 	doc.Parse.OK = true
+	if t.Key == w21SecretKey && w.mode != "" {
+		doc.Observations = []obsdoc.Observation{}
+		doc.Parse.OK = false
+		if w.mode == "failed" {
+			reason := "scan_incomplete"
+			doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskFailed, Reason: &reason, ExitClass: obsdoc.ExitExecutionError}
+			doc.Coverage.ProcessedPaths = nil
+		} else {
+			reason := "tool_not_configured"
+			doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskUnsupported, Reason: &reason, ExitClass: obsdoc.ExitNotRun}
+			doc.Executions, doc.Coverage.ProcessedPaths = []obsdoc.Execution{}, []string{}
+		}
+	}
 	art, err := pack.WriteEnvelope(j, doc)
 	if err != nil {
 		panic(err)
@@ -102,6 +125,9 @@ func TestR1WithholdsSecretFiles(t *testing.T) {
 	}
 	f := &r1Caller{script: script}
 	_, res := runR1(t, j, w21Stub{}, f, "1.27.4")
+	if slices.Contains(readR1(t, j, "investigate").Limitations, limNotSecretScreened) {
+		t.Fatal("screened inputs marked unscreened")
+	}
 	if res[w21SecretKey].Status != domain.TaskSucceeded || res["lizard"].Status != domain.TaskSucceeded {
 		t.Fatalf("static tasks %+v %+v", res[w21SecretKey], res["lizard"])
 	}
@@ -138,5 +164,115 @@ func TestR1WithholdsSecretFiles(t *testing.T) {
 				t.Fatalf("%s evidence on a withheld file", role)
 			}
 		}
+	}
+}
+
+// plantedJob is the w15 fixture with a value the Sensitive pattern does not
+// recognize appended to gateway.go (inside the first 50 lines).
+func plantedJob(t *testing.T) (analysis.Job, string) {
+	value := "deploy-token-" + strings.Repeat("z9", 10)
+	j := w15Job(t, func(root string) {
+		b, err := os.ReadFile(filepath.Join(root, "gateway.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, root, "gateway.go", string(b)+"\nconst deployToken = \""+value+"\"\n")
+	})
+	return j, value
+}
+
+// The secrets screen is three-way (screen.go). Not run (the stand-in's
+// not_run envelope): R1 runs unscreened and every record says so. Ran but
+// unusable (a failed scan, or no envelope at all, also what a role would
+// see if it ever ran before the secrets task): every role is skipped with
+// secret_screen_failed and no request is made.
+func TestR1SecretScreenCases(t *testing.T) {
+	for _, mode := range []string{"not_run", "failed", "missing"} {
+		t.Run(mode, func(t *testing.T) {
+			j, value := plantedJob(t)
+			script := validScript(t)
+			script["interpret"] = func(int, opencode.Request) opencode.Reply {
+				return asJSON(map[string]any{"hypotheses": []any{}, "limits": []any{}})
+			}
+			f := &r1Caller{script: script}
+			plan, res := runR1(t, j, w21Stub{mode: mode}, f, "1.27.4")
+			if mode != "not_run" {
+				if len(f.requests) != 0 {
+					t.Fatalf("%d model requests after an unusable scan", len(f.requests))
+				}
+				for _, p := range plan {
+					if strings.HasPrefix(p.Key, "review.") && (res[p.Key].Status != domain.TaskSkippedPolicy || res[p.Key].Reason != reasonSecretScreenFailed) {
+						t.Fatalf("%s: %+v", p.Key, res[p.Key])
+					}
+				}
+				return
+			}
+			sent := false
+			for _, q := range f.requests {
+				sent = sent || strings.Contains(string(q.Input), value)
+				if strings.Contains(string(q.Input), limNotSecretScreened) {
+					t.Fatal("the limitation changed a model input")
+				}
+			}
+			if !sent {
+				t.Fatal("unscreened inputs should carry the file (the limitation is the signal)")
+			}
+			for _, role := range []string{"environment", "documents", "investigate", "interpret", "verify"} {
+				if !slices.Contains(readR1(t, j, role).Limitations, limNotSecretScreened) {
+					t.Fatalf("%s record lacks %s", role, limNotSecretScreened)
+				}
+			}
+		})
+	}
+}
+
+// review-v1, the default pack, applies the same screen: its corpus leaves
+// the reported file out, an unusable scan skips the role without a request,
+// and an unscreened corpus is recorded (never in the pinned model input).
+func TestV1SecretScreen(t *testing.T) {
+	for _, mode := range []string{"", "not_run", "failed", "missing"} {
+		t.Run("mode="+mode, func(t *testing.T) {
+			j, value := plantedJob(t)
+			f := &r1Caller{script: map[string]func(int, opencode.Request) opencode.Reply{"context": func(_ int, q opencode.Request) opencode.Reply {
+				in := decodeInput(t, q)
+				return ok(map[string]any{"facts": []any{map[string]any{"kind": "observed", "statement": "게이트웨이는 실패한 호출을 다시 시도한다.", "evidence_ids": []string{in.Scope.Excerpts[0].ID}}}})
+			}}}
+			h := Handler{Static: w21Stub{mode: mode}, Caller: f}
+			plan, err := h.Plan(t.Context(), j)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, p := range plan {
+				if !strings.HasPrefix(p.Key, "review.") {
+					h.Run(t.Context(), j, p, nil)
+				}
+			}
+			res := h.Run(t.Context(), j, analysis.TaskSpec{Key: "review.context"}, nil)
+			switch mode {
+			case "failed", "missing":
+				if res.Status != domain.TaskSkippedPolicy || res.Reason != reasonSecretScreenFailed || len(f.requests) != 0 {
+					t.Fatalf("%+v requests %d", res, len(f.requests))
+				}
+				return
+			}
+			if res.Status != domain.TaskSucceeded || len(f.requests) != 1 {
+				t.Fatalf("%+v requests %d", res, len(f.requests))
+			}
+			in := decodeInput(t, f.requests[0])
+			hasGateway := slices.ContainsFunc(in.Scope.Excerpts, func(x Excerpt) bool { return x.Path == "gateway.go" })
+			rec, err := readRecord(j, "context")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "" {
+				if hasGateway || strings.Contains(string(f.requests[0].Input), value) || slices.Contains(rec.Limitations, limNotSecretScreened) || !slices.Contains(rec.Limitations, limSecretWithheld) {
+					t.Fatalf("screened corpus: gateway %v limitations %v", hasGateway, rec.Limitations)
+				}
+				return
+			}
+			if !hasGateway || !slices.Contains(rec.Limitations, limNotSecretScreened) || strings.Contains(string(f.requests[0].Input), limNotSecretScreened) {
+				t.Fatalf("unscreened corpus: gateway %v limitations %v", hasGateway, rec.Limitations)
+			}
+		})
 	}
 }

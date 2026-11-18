@@ -13,17 +13,17 @@
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "97050a22ee1b3dfd78378eeb03eefa8147b6c2037042f05247bd86f2f0fc061e"
+      "sha256": "88d9938ff483247adb200920c0a90f928914b4ed66415ffe5d4f7c88e58bd6cc"
     },
     {
       "source": "review.investigate",
       "state": "accepted",
-      "sha256": "4d4c9a07478929a7d2b920e19a7ec9af98152ff2ec7479b426e2d96a33b36e99"
+      "sha256": "60ed2da0667c2274f78dc15a80a8082dd91710aaeee2dffad8b3db8645a0dcb4"
     },
     {
       "source": "review.interpret",
       "state": "accepted",
-      "sha256": "b4a0ddd6c1cc28fe32afdefc90c214d9e638c2e756375780b79d705fdd68e684"
+      "sha256": "267a95ff0121ca627442440fe5f631f871146f3b6b7b00074e2e686b106ac059"
     }
   ],
   "evidence": [
@@ -167,6 +167,7 @@
   "limitations": [
     "caller_expansion_go_only",
     "caller_expansion_package_functions_only",
+    "model_input_not_secret_screened",
     "no_callers_found"
   ],
   "calls": [

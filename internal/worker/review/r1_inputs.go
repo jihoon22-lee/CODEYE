@@ -85,52 +85,10 @@ func (s *r1Stage) readLines(e source.Entry, start, end int) (string, int, bool, 
 	return strings.Join(lines[start-1:end], "\n"), len(lines), true, nil
 }
 
-// limSecretWithheld: a file a secret analyzer reported was kept out of
-// every model input of the stage (docs/45).
-const limSecretWithheld = "secret_files_withheld"
-
-// secretFiles are the paths of the observations of every accepted secret
-// analyzer envelope (obsdoc.SecretAnalyzers) of this run. Their text never
-// reaches a model: not as code context, document, observation window or
-// verification expansion. An envelope that cannot be read withholds
-// nothing (the Sensitive pattern still applies).
-func (s *r1Stage) secretFiles() map[string]bool {
-	if s.withheld != nil {
-		return s.withheld
-	}
-	s.withheld = map[string]bool{}
-	if s.h.Static == nil {
-		return s.withheld
-	}
-	plan, err := s.h.Static.Plan(s.ctx, s.j)
-	if err != nil {
-		return s.withheld
-	}
-	files := s.entries()
-	lookup := func(p string) (string, bool) { e, ok := files[p]; return e.SHA256, ok }
-	for _, t := range plan {
-		if !record.AnalyzerTaskKey(t.Key) {
-			continue
-		}
-		b, err := readBounded(obsdoc.ArtifactPath(s.j.Scratch, t.Key), obsdoc.MaxBytes)
-		if err != nil {
-			continue
-		}
-		d, err := obsdoc.Decode(b, obsdoc.Expect{TaskKey: t.Key, Snapshot: s.j.Snapshot.Digest, Lookup: lookup})
-		if err != nil || !obsdoc.IsSecretAnalyzer(d.Analyzer.ID) {
-			continue
-		}
-		for _, o := range d.Observations {
-			if o.Path != nil {
-				s.withheld[*o.Path] = true
-			}
-			if o.Location != nil {
-				s.withheld[o.Location.Path] = true
-			}
-		}
-	}
-	return s.withheld
-}
+// secretFiles are the files the secrets screen withholds from every model
+// input of the stage (screen.go): code context, documents, observation
+// windows and verification expansions.
+func (s *r1Stage) secretFiles() map[string]bool { return s.screen.withheld }
 
 // excerpt builds a bounded excerpt of up to maxLines lines and maxBytes of
 // JSON-encoded text from line start. total is the file's line count.

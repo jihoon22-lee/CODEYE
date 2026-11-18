@@ -89,7 +89,9 @@
       ]
     }
   ],
-  "limitations": [],
+  "limitations": [
+    "model_input_not_secret_screened"
+  ],
   "calls": [
     {
       "role": "documents",
