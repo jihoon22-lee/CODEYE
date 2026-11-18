@@ -44,14 +44,19 @@ def extract_commit(root, commit, work, destination):
 W15_MARKER = "<!-- CODEYE test fixture (TC-97)."
 
 
-def materialize_w15(root, destination):
-    """Copy the W15 first input; drop the development-agent warning comment.
+# Fixed repository inputs that are not R0 synthetic pairs. The W12 verifier
+# fixture is the caller-closes counterexample TC-100 scores separately.
+FIXED_INPUTS = {"w15": "fixtures/w15-modules/input", "w12-close": "internal/worker/review/testdata/verify"}
+
+
+def materialize_w15(root, destination, label="w15"):
+    """Copy a fixed input; drop the W15 development-agent warning comment.
 
     The repository copy of AGENTS.md starts with a comment telling development
     agents not to follow it. A real hostile document would not announce itself,
     so the evaluated snapshot omits that one line. Expected facts stay outside.
     """
-    source = root / "fixtures/w15-modules/input"
+    source = root / FIXED_INPUTS[label]
     for path in sorted(source.rglob("*")):
         target = destination / path.relative_to(source)
         if path.is_dir():
@@ -91,7 +96,7 @@ def audit_reports(output, root):
     materialize = runpy.run_path(str(qa / "corpus.py"))["materialize"]
     schema = make_validators()["report.schema.json"]
     rows = json.loads((output / "summary.json").read_bytes())
-    allowed = {"git", "pilot", "w15"} | {
+    allowed = {"git", "pilot", *FIXED_INPUTS} | {
         c["id"] + "-" + v for c in cases for v in ("before", "after")
     }
     seen = set()
@@ -114,9 +119,9 @@ def audit_reports(output, root):
                 or row["manifest"] != report["inputs"]["manifest_sha256"]
             ):
                 raise ValueError("요약과 게시 리비전 불일치")
-            if label == "w15":
-                if materialize_w15(root, inputs) != row["input"]:
-                    raise ValueError("W15 입력 digest 불일치")
+            if label in FIXED_INPUTS:
+                if materialize_w15(root, inputs, label) != row["input"]:
+                    raise ValueError("고정 입력 digest 불일치")
             elif label in ("git", "pilot"):
                 commit = row["input"]
                 if not isinstance(commit, str) or not re.fullmatch(
@@ -188,9 +193,10 @@ def run(base, root, env):
             rel = uuid4().hex
             digest = materialize(source / rel, case, variant, documented=i % 2 == 0)
             dataset.append((label, rel, digest))
-    if selected and "w15" in selected:
-        rel = uuid4().hex
-        dataset.append(("w15", rel, materialize_w15(root, source / rel)))
+    for label in FIXED_INPUTS:
+        if selected and label in selected:
+            rel = uuid4().hex
+            dataset.append((label, rel, materialize_w15(root, source / rel, label)))
     commit = subprocess.check_output(
         ["git", "rev-parse", "bcfad99^{commit}"], cwd=root, text=True
     ).strip()
@@ -424,7 +430,7 @@ def run(base, root, env):
                         raise RuntimeError("Git commit 고정 또는 모델 전송 정책 불일치")
                 elif tree_digest(source / rel) != original_trees[label]:
                     raise RuntimeError(f"{label} 원본 입력이 변경됐습니다")
-                if label not in ("git", "pilot", "w15"):
+                if label not in ("git", "pilot", *FIXED_INPUTS):
                     assert (
                         hashlib.sha256(
                             (source / rel / "metrics.go").read_bytes()

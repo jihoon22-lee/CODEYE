@@ -1,6 +1,6 @@
 # CODEYE 개발 에이전트 지침
 
-이 파일은 **CODEYE 자체를 구현하는 개발 에이전트**를 위한 지침이다. 대상 프로젝트를 검토하는 런타임 지침은 `prompts/review-v1/`에 있다. W01~W14의 R0 수직 경로와 W15의 모듈·문서·환경 탐색, 프로젝트별 단계 표시를 구현했다. 실도구·모델·보고서 검증 범위와 운영 한계는 [R0 파일럿](docs/36-r0-pilot.md)과 [W15 기록](docs/37-w15-discovery-and-progress.md)을 따른다. R1 후보 지침 `prompts/review-r1/`은 노드 운영자 선택용이며 승격 전이다. 다음 범위는 W16~W21 언어별 분석 팩이다. [구현 순서](docs/17-implementation-plan.md), [역할별 후보 지침](docs/07-llm-and-instructions.md), [화면·상태 기준](docs/12-report-and-ui.md)을 따른다.
+이 파일은 **CODEYE 자체를 구현하는 개발 에이전트**를 위한 지침이다. 대상 프로젝트를 검토하는 런타임 지침은 `prompts/review-v1/`에 있다. W01~W14의 R0 수직 경로, W15의 모듈·문서·환경 탐색과 프로젝트별 단계 표시, W22의 예약·가중 진행률·SSE를 구현했다. 실도구·모델·보고서 검증 범위와 운영 한계는 [R0 파일럿](docs/36-r0-pilot.md), [W15 기록](docs/37-w15-discovery-and-progress.md), [W22 기록](docs/38-w22-schedules-progress-sse.md)을 따른다. R1 후보 지침 `prompts/review-r1/`은 노드 운영자 선택용이며 승격 전이다. 다음 범위는 W16~W21 언어별 분석 팩이다. [구현 순서](docs/17-implementation-plan.md), [역할별 후보 지침](docs/07-llm-and-instructions.md), [화면·상태 기준](docs/12-report-and-ui.md)을 따른다.
 
 ## 착수 순서
 

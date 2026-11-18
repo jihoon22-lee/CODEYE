@@ -326,7 +326,7 @@ func taskStage(key string, tasks []Task, fixed bool) Stage {
 		return s
 	}
 	reasons := map[string]bool{}
-	waiting := 0
+	waiting, nothing := 0, 0
 	var finishedAt *time.Time
 	for _, t := range tasks {
 		if t.StartedAt != nil && (s.StartedAt == nil || t.StartedAt.Before(*s.StartedAt)) {
@@ -344,6 +344,9 @@ func taskStage(key string, tasks []Task, fixed bool) Stage {
 			s.Succeeded++
 		} else {
 			s.Counts[string(t.Status)]++
+			if t.Status == domain.TaskSkippedPolicy && domain.NothingToReview(t.Reason) {
+				nothing++
+			}
 		}
 		if t.Reason != "" {
 			reasons[t.Reason] = true
@@ -366,13 +369,13 @@ func taskStage(key string, tasks []Task, fixed bool) Stage {
 		s.State = Running
 	default:
 		s.FinishedAt = finishedAt
-		s.State = settled(s, total)
+		s.State = settled(s, total, nothing)
 	}
 	return s
 }
 
 // settled classifies a stage whose tasks have all ended.
-func settled(s Stage, total int) State {
+func settled(s Stage, total, nothingToReview int) State {
 	sum := func(statuses ...domain.TaskStatus) int {
 		n := 0
 		for _, st := range statuses {
@@ -382,6 +385,11 @@ func settled(s Stage, total int) State {
 	}
 	switch {
 	case s.Succeeded == total:
+		return Succeeded
+	// A role skipped because it had nothing to review (no documents, no tool
+	// observations, no environment gap) does not degrade a stage whose other
+	// tasks all succeeded; its count and reason stay visible.
+	case s.Succeeded > 0 && s.Succeeded+nothingToReview == total:
 		return Succeeded
 	case s.Succeeded > 0:
 		return Partial

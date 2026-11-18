@@ -32,7 +32,7 @@
 | `no_tasks` | 계획이 확정됐지만 해당 단계의 task가 없다. 목록과 상세에서는 숨길 수 있다. |
 | `waiting` | 계획된 task가 모두 `queued`/`blocked`이다. |
 | `running` | 시작 기록이 있는 task가 있고 종료되지 않은 task가 남아 있다. 먼저 발생한 실패 건수를 함께 둔다. |
-| `succeeded` | 모든 task가 `succeeded`이다. |
+| `succeeded` | 모든 task가 `succeeded`이다. 또는 성공이 하나 이상이고 나머지가 모두 검토 대상 없음 사유(`no_documents`, `no_tool_observations`, `no_environment_gap`)의 생략이다. 생략 건수와 사유는 그대로 표시한다. |
 | `skipped` | 성공 없이 모두 `skipped_policy`/`unsupported`이다. 사유 코드로 정책 제외와 검토 대상 없음을 구분한다. |
 | `failed` | 성공 없이 모두 `failed`/`timed_out`/`budget_exhausted`이다. |
 | `cancelled` | 모두 `cancelled`이다. |
@@ -177,7 +177,7 @@ discovery·go vet 뒤에 다섯 task를 이 순서로 둔다. 생략은 `skipped
 - **기록.** review 기록 schema `0.2`(`record.R1Record`)는 단계마다 하나이고 자기 호출만 담는다. `pack`, `upstream`(source·state·reason·읽은 산출물의 sha256), `observations`, 역할별 내용을 가진다. `0.1` 기록은 이전 규칙 그대로 읽는다. [스키마](../schemas/review-record.schema.json) · [예시](../examples/review-r1/verify.json)(scripted caller로 worker가 쓴 다섯 단계 기록)
 - **필수 역할.** R1 역할 key가 계획에 있으면 필수 검토 task는 `required_for_verdict`인 `review.*`다. 하나 이상이고 모두 수락됐을 때만 `performed`이고, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 생략된 역할의 결과는 `skipped`다. R0 계획은 작성 당시의 세 역할(미계획 행 포함)로 해석한다.
 - **연결 검사.** `coverage.review_calls`에 `pack_id`·`pack_version`을 싣는다(0.2 기록만). 앞 단계·탐색·go vet 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. 계획과 다른 팩의 기록은 `review_pack_mismatch:<task>`로 제외한다.
-- **단계 표시.** `env.discover`가 성공하고 `review.environment`가 생략되면 environment 단계는 §2 규칙대로 `partial`(생략 1건과 사유)이다. review-v1에서 `docs.discover` 성공과 `review.context` 정책 제외가 섞인 documents 단계와 같은 규칙이며 바꾸지 않았다.
+- **단계 표시.** 처음에는 `env.discover` 성공과 `review.environment`의 `no_environment_gap` 생략이 섞이면 environment 단계가 `partial`이 되었다. 정상 실행의 목록에도 주의 표시가 생겼다. 실모델 대조 뒤 §2 판정을 바꿨다. 검토 대상 없음 사유의 생략은 다른 task가 모두 성공한 단계를 `succeeded`로 둔다. 정책 제외(`model_source_not_approved`)와 실패는 계속 `partial`이다(`TestNothingToReviewDoesNotDegradeStage`).
 
 | 시험 | 확인한 결과 | 근거 |
 |---|---|---|
@@ -191,20 +191,22 @@ discovery·go vet 뒤에 다섯 task를 이 순서로 둔다. 생략은 `skipped
 
 ## 11. 결과 — TC-100 실모델 대조(활성 팩 대 후보 팩)
 
-2026년 11월 18일 같은 WSL2 호스트에서 실행했다. 실제 PostgreSQL 컨트롤러, 에이전트 두 대(최대 워커 2), Go 1.27.4, OpenCode 1.19.5를 썼다. 모델은 승인 relay를 거친 `gpt-6.2-sol`(추론 강도 low)이다. 입력은 R0 사례 다섯 쌍과 W15 첫 입력이다. 다섯 쌍은 Q01·Q03·Q05·Q08·Q10의 수정 전후 10개이고, Q01·Q03·Q05만 README를 둔다. 두 팩은 같은 바이트의 소스 트리(디렉터리 digest 일치)와 같은 모델·relay·호출 상한을 썼다. manifest digest는 고정 시각을 포함하므로 run마다 다르다([A16](19-decisions-and-open-questions.md)). 평가용 W15 사본은 개발 에이전트 경고 주석 한 줄을 뺀 `AGENTS.md`를 쓴다(`scripts/r0_pilot.py`의 `materialize_w15`). 정답과 판정은 스냅샷 밖에 두었다.
+2026년 11월 18일 같은 WSL2 호스트에서 실행했다. 실제 PostgreSQL 컨트롤러, 에이전트 두 대(최대 워커 2), Go 1.27.4, OpenCode 1.19.5를 썼다. 모델은 승인 relay를 거친 `gpt-6.2-sol`(추론 강도 low)이다. 입력은 R0 사례 다섯 쌍, W15 첫 입력, W12의 호출자 정리 반례(`w12-close`)다. 다섯 쌍은 Q01·Q03·Q05·Q08·Q10의 수정 전후 10개이고, Q01·Q03·Q05만 README를 둔다. `w12-close`는 `Open`이 반환한 handle을 호출자 `Load`가 닫는 W12 검증 fixture다. 두 팩은 같은 바이트의 소스 트리(디렉터리 digest 일치)와 같은 모델·relay·호출 상한을 썼다. 역할별 입력은 고정하지 않았다. 팩마다 발췌를 고르는 규칙이 달라서, v1 맥락 역할은 문서를 최대 둘, r1 문서 역할은 최대 여덟 개를 받는다. 따라서 아래 차이는 지침과 입력 선택을 함께 반영한 결과다. manifest digest는 고정 시각을 포함하므로 run마다 다르다([A16](19-decisions-and-open-questions.md)). 평가용 W15 사본은 개발 에이전트 경고 주석 한 줄을 뺀 `AGENTS.md`를 쓴다(`scripts/r0_pilot.py`의 `materialize_w15`). 정답과 판정은 스냅샷 밖에 두었다.
 
 | 지표 | review-v1(활성) | review-r1(후보) |
 |---|---|---|
-| 모델 호출 / 정상 정산 | 32 / 32 | 27 / 27 |
+| 모델 호출 / 정상 정산(R0 쌍·W15) | 32 / 32 | 27 / 27 |
+| 역할별 호출 | context 11, investigate 11, verify 10 | documents 7, environment 1, investigate 11, verify 8, interpret 0 |
 | 보고 usage(입력·출력 토큰) | 137,057 · 10,361 | 104,549 · 7,521 |
 | relay 장부 차감(보수적) / 표준 단가 추정 | $0.789 / $0.378 | $0.598 / $0.284 |
 | 모델 검토 `performed` | 11/11 | 11/11 |
 | 수정 전 결함 포착 | 5/5 | 5/5 |
 | 수정 후 같은 결함 재지적 | 0/5 | 0/5 |
-| 수정 후 계약 밖 입력 경고(Q08 빈 입력, Q10 분모 0) | 2건, info지만 `supported`로 조치 수에 포함 | 0건 |
+| 수정 후 계약 밖 입력 경고(Q08 빈 입력, Q10 분모 0) | 2건, info지만 `supported`로 조치 수에 포함 | Q10 0건(n=1). Q08은 후보 지침이 정답을 담고 있어 무효 실험으로 제외 |
 | 수정 후 별도 계약 지적(Q03, Q05) | 2건(low) | 2건(low) |
 | W15 입력의 조치 대상 | 1건 오탐(루트 재시도 지침을 `svc/b`에 적용) | 0건(모듈 간 호출 근거 없는 후보 1건은 `inconclusive`) |
-| 조치 대상 합계 | 10 | 7 |
+| 조치 대상 합계 | 10 | 7(Q08 수정본 포함) |
+| 호출자 정리 반례(`w12-close`) | 누수 주장 없음. 다른 후보 1건(미등록 키의 0 값) `inconclusive`, 호출 3 | 누수 주장 없음, 후보 0, 호출 1 |
 | 검증기가 거부한 출력·꾸민 근거·범위 일반화·실행 주장 | 0 | 0 |
 | 실행 없는 `reproduced` / 통계 불일치 | 0 / 0 | 0 / 0 |
 | 보관 결과 감사(근거 위치·줄 범위·blob) | 11개, claim 21·근거 16 통과 | 11개, claim 19·근거 15 통과 |
@@ -215,22 +217,26 @@ W15 입력에서 두 팩의 차이는 다음과 같다.
 - **review-r1:**
   - 문서 역할이 루트(`.`)의 재시도 계약과 `svc/b`의 단일 호출 계약을 각각의 적용 경로로 기록했다. 둘의 충돌은 `svc/b` 범위로 한정했다.
   - 예산으로 읽지 못한 설계 문서에 대한 질문을 남겼다. AGENTS.md의 권한·네트워크·키 조회 요구는 문서 내용으로만 적었다.
-  - 환경 역할은 `svc/b`의 Go 1.30 요구 불일치를 해석했다.
+  - 환경 역할은 `go:svc/b` 모듈에만 영향 메모를 남겼다. Go 1.30 요구 때문에 빌드·타입 검사 기반 분석이 영향을 받고, 실제로 선택되는 toolchain 관측이 필요하다는 내용이다. 다른 모듈로 옮기지 않았다.
   - 조사 역할은 `Forward`가 결과가 불명확한 청구 오류도 재시도할 수 있다는 후보를 냈다. 두 모듈을 잇는 호출 근거가 없어 검증 역할이 `inconclusive`로 남겼다.
 
 ### 판정과 승격
 
 - **판정 방법.** 개발 에이전트가 `corpus.json`의 원인·조건과 첫 입력의 설계 의도를 보고서의 조건·근거 위치와 대조했다. 사람의 판정이 아니며 precision·recall 추정치로 쓰지 않는다. 표본은 10+1개이고, 각 팩을 한 번씩 실행해 모델 변동을 측정하지 않았다.
-- **차단 조건.** TC-100의 차단 조건(허위 근거, 실행 없는 재현 단정, 통계 오염)은 두 팩 모두 관찰되지 않았다. 후보 팩은 호출 5건과 장부 $0.19를 덜 쓰고 같은 포착 수를 냈다. 계약 밖 경고와 W15 오탐도 없었다.
+- **차단 조건.** TC-100의 차단 조건(허위 근거, 실행 없는 재현 단정, 통계 오염)은 두 팩 모두 관찰되지 않았다. 후보 팩은 R0 쌍·W15에서 호출 5건과 장부 $0.19를 덜 쓰고 같은 포착 수를 냈다. Q10 계약 밖 경고와 W15 오탐도 없었다.
+- **미측정.**
+  - 호출자 정리 반례에서는 두 팩 모두 누수 후보를 내지 않았다. 따라서 반대 근거로 후보를 철회하는 검증 경로는 실모델에서 측정되지 않았다.
+  - `review.interpret`는 go vet 관찰이 있는 사례가 없어 실모델 호출이 0건이다.
+  - `review.environment`는 1건만 호출됐다.
 - **승격하지 않음.** 후보 팩은 `candidate-not-promoted`로 둔다. 이유는 두 가지다.
-  - 후보 지침의 조사 예시가 Q08 수정본을 직접 언급한다. W15 첫 입력도 이 지침과 함께 설계했다. 따라서 위 결과는 조정에 쓴 사례의 회귀 근거일 뿐 독립 평가가 아니다([평가 기준](16-evaluation.md#8-역할-지침을-바꿀-때의-비교)).
+  - 후보 지침의 조사 예시가 Q08 수정본의 답을 직접 담고 있다. 평가 기준([§2](16-evaluation.md#2-데이터셋))에 따라 그 사례는 무효이며, 보류 평가 전에 예시를 바꾼 rc2가 필요하다. W15 첫 입력도 이 지침과 함께 설계했다. 따라서 위 결과는 조정에 쓴 사례의 회귀 근거일 뿐 독립 평가가 아니다([평가 기준](16-evaluation.md#8-역할-지침을-바꿀-때의-비교)).
   - 거부 경로(꾸민 근거·범위 일반화·실행 주장)는 실모델에서 한 번도 발동하지 않았다. 시험용 caller로만 확인했다.
 - **후속.** 조정에 쓰지 않은 보류 사례, 다른 언어, 반복 실행 분산은 W24 평가 runner에서 측정한다. 기본 팩 변경은 그 결과와 소유자 판단으로 정한다.
 
 ### 비용과 재현
 
-R1 전체가 공유하는 relay 장부 하나에서 W15가 쓴 금액은 보수적 차감 기준 $1.387(호출 59건, 실패 0)이고, 남은 상한은 $8.603이다. 공급자 청구서는 확인하지 않았다. 결과 디렉터리와 판정은 저장소 밖 비공개 경로에 보관했다. 재현 방법은 다음과 같다.
+R1 전체가 공유하는 relay 장부 하나에서 W15가 쓴 금액은 보수적 차감 기준 $1.498(호출 63건, 실패 0)이고, 남은 상한은 $8.492다. 표준 단가 추정은 $0.714다. 공급자 청구서는 확인하지 않았다. 결과 디렉터리와 판정은 저장소 밖 비공개 경로에 보관했다. 재현 방법은 다음과 같다.
 
-- `CODEYE_R0_REVIEW_PACK=review-r1`(생략 시 v1)과 `CODEYE_R0_CASES=Q01-before,…,w15`를 지정해 `python3 scripts/test_postgres.py --r0-pilot`을 실행한다.
+- `CODEYE_R0_REVIEW_PACK=review-r1`(생략 시 v1)과 `CODEYE_R0_CASES=Q01-before,…,w15,w12-close`를 지정해 `python3 scripts/test_postgres.py --r0-pilot`을 실행한다.
 - `python3 scripts/r0_pilot.py --audit-results DIR`로 보관 결과를 감사한다.
 - `python3 scripts/w15_pack_compare.py V1_DIR R1_DIR --judgments FILE`로 두 결과를 비교한다.

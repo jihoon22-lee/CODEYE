@@ -39,3 +39,15 @@ const (
 	ReasonNoToolObservations     = "no_tool_observations"
 	ReasonNoEnvironmentGap       = "no_environment_gap"
 )
+
+// NothingToReview reports whether reason marks a planned role skipped because
+// its input was empty (docs/37 §2). Such a skip is never a successful model
+// review, but it does not make an otherwise successful stage partial. Policy
+// exclusion and unreadable inputs are not in this set.
+func NothingToReview(reason string) bool {
+	switch reason {
+	case ReasonNoDocuments, ReasonNoToolObservations, ReasonNoEnvironmentGap:
+		return true
+	}
+	return false
+}
