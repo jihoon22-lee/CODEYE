@@ -195,6 +195,102 @@ def w23_history(session, project_id, first_run, first_report, go_source, origina
     print("PASS: W23 실제 go vet 세 run 비교(줄 이동 persisting·새 진단 new·수정 resolved_observed)·게시 시점 판정·코드 제외 식별 없음")
 
 
+def w21_secrets(session, cli, services, children, directory, binary, origin, user, node_env, sql_env, scalar):
+    """W21 (TC-119, docs/45) through the agent, the controller and PostgreSQL
+    with the real lizard, jscpd (on node) and gitleaks: the structure metrics
+    are no findings, the secret generated here is an unreviewed detection, and
+    its value is in no uploaded artifact (streams included), report revision,
+    export, log, DB row or worker scratch. Runs only when CODEYE_TEST_LIZARD,
+    CODEYE_TEST_JSCPD, CODEYE_TEST_NODE and CODEYE_TEST_GITLEAKS name the tools."""
+    names = ("lizard", "jscpd", "node", "gitl" + "eaks")
+    tools = {name: os.environ.get("CODEYE_TEST_" + name.upper(), "") for name in names}
+    if not all(tools.values()):
+        print("SKIP: W21 실도구 smoke (CODEYE_TEST_LIZARD·JSCPD·NODE·GITLEAKS 중 미설정)")
+        return
+    import base64
+    import secrets as entropy
+    secret = "AKIA" + base64.b32encode(entropy.token_bytes(10)).decode()  # fake, generated now
+    body = secret[4:]
+    forms = [f.encode() for f in (secret, body, body.lower())] + [secret.encode().hex().encode(), body.encode().hex().encode()]
+
+    def absent(where, data):
+        assert not any(f in data for f in forms), "W21 비밀값 노출: " + where
+
+    source = directory / "w21-project"
+    branches = "".join(f"    if v == {i}:\n        return {i}\n" for i in range(1, 17))
+    block = ("function alpha(items, token) {\n  const key = \"" + secret + "\";\n  let total = 0;\n  for (const item of items) {\n"
+             "    if (item.active && item.value > 10) {\n      total += item.value * 2;\n    } else if (item.value < 0) {\n"
+             "      total -= item.value;\n    } else {\n      total += 1;\n    }\n  }\n"
+             "  const label = \"total:\" + total + \":\" + key.length;\n  console.log(label, token);\n"
+             "  return { total, label, count: items.length };\n}\nmodule.exports = { alpha };\n")
+    files = {"src/app.py": "import os\n\nAWS_KEY = \"" + secret + "\"\n",
+             "src/complex.py": "def route(v, token=\"" + secret + "\"):\n" + branches + "    return 0\n",
+             "src/a.js": block, "lib/b.js": block}
+    for rel, text in files.items():
+        (source / rel).parent.mkdir(parents=True, exist_ok=True)
+        (source / rel).write_text(text)
+    root_id = json.loads(cli("source-root", "add", "--label", "w21-smoke", "--path", source))["id"]
+    cli("source-root", "grant", "--root", root_id, "--user", user)
+    token = directory / "w21.token"
+    cli("node", "token", "create", "--pool", "default", "--source-root", root_id, "--output", token)
+    tool_args = [arg for name in names for arg in ("--" + name, tools[name])]
+    state = directory / "w21-agent"
+    children.append(services.enter_context(service(
+        [binary, "agent", "--controller", origin, "--state-dir", state, "--name", "w21-smoke", "--enroll-token-file", token,
+         "--source-root", f"{root_id}={source}", "--go", shutil.which("go"), *tool_args, "--autoscale", "--max-workers", "1"],
+        directory, node_env, directory / "w21.log")))
+    project = session.request("POST", "projects", {"name": "w21-secrets", "source": {"kind": "local", "source_root_id": root_id, "relative_path": "."}})
+    run_id = session.enqueue(project["id"])
+    revision = wait_for("W21 보고서 게시", lambda: published_report(session, run_id), children, timeout=240)
+    assert revision["revision"] == 1
+    path = f"runs/{run_id}/report?revision=1"
+    full = session.request("GET", path + "&include_code=true")
+    code_free = session.request("GET", path)
+    # The stored revision is the full report: the DB check below reads it.
+    assert scalar(f"SELECT count(*) FROM reports WHERE run_id='{run_id}'") == "1"
+    import validate_bundle
+    schema = validate_bundle.make_validators()["report.schema.json"]
+    schema.validate(full)
+    schema.validate(code_free)
+    rows = {row["task_key"]: row for row in full["coverage"]["tools"]}
+    assert (rows["lizard"]["exit_class"], rows["jscpd"]["exit_class"], rows["gitl" + "eaks"]["exit_class"]) == (
+        "success_without_findings", "success_without_findings", "success_with_findings"), rows
+    summary = full["summary"]
+    assert summary == code_free["summary"] and summary["metric_observations"] == 2 and summary["actionable_findings"] == 0, summary
+    metrics = {o["id"] for o in full["observations"] if "metric" in o}
+    assert len(metrics) == 2 and not any(set(f["observation_ids"]) & metrics for f in full["findings"]), full["findings"]
+    detected = sorted(f["locations"][0]["path"] for f in full["findings"] if f["category"] == "security")
+    assert detected == ["lib/b.js", "src/a.js", "src/app.py", "src/complex.py"], detected
+    assert all(f["validation"] == "unreviewed" and f["severity"] == "low" for f in full["findings"] if f["category"] == "security")
+    for name, doc in (("full report", full), ("code-free report", code_free)):
+        absent(name, json.dumps(doc).encode())
+    for fmt in ("markdown", "html"):
+        for query in ("", "&include_code=true"):
+            with session.client.open(origin + "/api/v1/" + path + query + "&format=" + fmt, timeout=5) as response:
+                absent(fmt + query, response.read())
+    stored = 0
+    for item in sorted((directory / "artifacts").rglob("*")):
+        if item.is_file():
+            absent("artifact " + item.name, item.read_bytes())
+            stored += 1
+    # The worker's own copies of the source (snapshot and workspace under
+    # data/) hold the file; everything else of the node (scratch, home, tmp,
+    # journal) must not.
+    for item in sorted(state.rglob("*")):
+        if item.is_file() and "data" not in item.relative_to(state).parts[:1]:
+            absent("node state " + str(item.relative_to(state)), item.read_bytes())
+    for log in ("controller.log", "w21.log"):
+        absent(log, (directory / log).read_bytes())
+    dump = shutil.which("pg_dump", path=sql_env.get("PATH"))
+    assert dump, "pg_dump 없음: DB 행 확인 불가"
+    # stderr only carries pg_dump's notes on circular foreign keys of a data-only dump.
+    rows = subprocess.run([dump, "--data-only", "--no-owner"], env=sql_env, capture_output=True, check=True, timeout=30).stdout
+    assert b"COPY public.reports" in rows and len(rows) > 10000, "DB dump is not the run database"
+    absent("DB rows", rows)
+    assert all((source / rel).read_text() == text for rel, text in files.items())
+    print(f"PASS: W21 실제 lizard·jscpd·gitleaks run(지표 2개는 finding 아님, 비밀값 탐지 {len(detected)}개 미검토) — 산출물 {stored}개·보고서·내보내기·로그·DB 행·노드 scratch에 비밀값 없음")
+
+
 def stage_map(activity):
     return {stage["key"]: stage for stage in activity["stages"]}
 
@@ -362,8 +458,13 @@ def run(base, root, env, *, browser=False):
             observation_docs.append(json.loads(data))
         # go vet keeps its v0.1 document; staticcheck writes the generic envelope (docs/39).
         vet_docs = [d for d in observation_docs if d.get("kind") == "go_vet_observations"]
-        sc_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations"]
-        assert len(vet_docs) == 1 and len(sc_docs) == 1 and len(observation_docs) == 2, [d.get("kind") for d in observation_docs]
+        sc_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.staticcheck"]
+        # W21 (docs/45): lizard, jscpd and gitleaks are planned for every
+        # project; this node has none of their tools, so each is a visible
+        # not_run stand-in.
+        w21_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["ecosystem"] == "any"]
+        assert len(vet_docs) == 1 and len(sc_docs) == 1 and len(w21_docs) == 3 and len(observation_docs) == 5, [d.get("kind") for d in observation_docs]
+        assert all(d["outcome"]["exit_class"] == "not_run" and d["outcome"]["reason"] == "tool_not_configured" for d in w21_docs), [d["outcome"] for d in w21_docs]
         doc, sc_doc = vet_docs[0], sc_docs[0]
         assert doc["analyzer_id"] == "go.vet"
         assert any(o["rule_id"] == "printf" and o["location"]["path"] == "example.go" for o in doc["observations"])
@@ -393,13 +494,15 @@ def run(base, root, env, *, browser=False):
         assert go_stages["environment"]["state"] == "succeeded", go_stages
         static_stage = go_stages["static_analysis"]
         if staticcheck:
-            assert static_stage["state"] == "succeeded" and static_stage["succeeded"] == 2, static_stage
+            # The three W21 tasks without their tools keep the stage partial.
+            assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 3} and static_stage["succeeded"] == 2, static_stage
         else:
             # An analyzer without its tool is visible: go vet succeeded, staticcheck
-            # unsupported, so the stage is partial (never succeeded).
-            assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 1}, static_stage
-            assert static_stage["reasons"] == ["tool_not_configured"] and static_stage["succeeded"] == 1, static_stage
-        assert static_stage["planned"] == 2 and go_stages["report"]["state"] == "succeeded", go_stages
+            # and the W21 tasks unsupported, so the stage is partial (never succeeded).
+            assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 4}, static_stage
+            assert static_stage["succeeded"] == 1, static_stage
+        assert static_stage["reasons"] == ["tool_not_configured"], static_stage
+        assert static_stage["planned"] == 5 and go_stages["report"]["state"] == "succeeded", go_stages
         # The model review was not approved for this source: excluded by policy, never success.
         assert go_stages["code_review"]["state"] == "skipped" and go_stages["code_review"]["reasons"] == ["model_source_not_approved"], go_stages
         assert go_stages["documents"]["succeeded"] == 1 and "model_source_not_approved" in go_stages["documents"]["reasons"], go_stages
@@ -412,7 +515,8 @@ def run(base, root, env, *, browser=False):
         assert code_free["summary"] == full["summary"]
         assert full["summary"]["raw_observations"] == len(doc["observations"]) + len(sc_doc["observations"])
         tool_rows = {row["task_key"]: row for row in full["coverage"]["tools"]}
-        assert sorted(tool_rows) == ["go-vet", "staticcheck"], tool_rows
+        assert sorted(tool_rows) == ["gitl" "eaks", "go-vet", "jscpd", "lizard", "staticcheck"], tool_rows
+        assert all(tool_rows[k]["exit_class"] == "not_run" for k in ("lizard", "jscpd", "gitl" "eaks")), tool_rows
         assert tool_rows["staticcheck"]["analyzer"] == "go.staticcheck"
         assert tool_rows["staticcheck"]["exit_class"] == ("success_without_findings" if staticcheck else "not_run"), tool_rows
         decoders = {a["task_key"]: a["decoder"] for a in full["artifacts"] if a["role"] == "observations"}
@@ -428,9 +532,11 @@ def run(base, root, env, *, browser=False):
         statuses = {task["key"]: task["status"] for task in full["tasks"]}
         assert statuses["env.discover"] == statuses["docs.discover"] == "succeeded"
         assert statuses["staticcheck"] == ("succeeded" if staticcheck else "unsupported"), statuses
+        assert statuses["lizard"] == statuses["jscpd"] == statuses["gitl" "eaks"] == "unsupported", statuses
         # Startup codes of the worker (handler_unavailable) reach the agent log.
         agent_log = (directory / "go.log").read_text(errors="replace")
         assert ("staticcheck:not_configured" in agent_log) == (not staticcheck), "startup codes not in the agent log"
+        assert all(f"{t}:not_configured" in agent_log for t in ("lizard", "jscpd", "gitl" "eaks")), "W21 startup codes not in the agent log"
         if node_toolchain:
             assert not any(f"node:{r}" in agent_log for r in ("invalid_config", "probe_failed", "unknown_tool")), "node toolchain rejected"
         assert all(o["raw_message"] is None for o in code_free["observations"])
@@ -458,4 +564,5 @@ def run(base, root, env, *, browser=False):
         w23_history(session, go_project["id"], actual, full, go_source, original, lambda run: wait_for(
             "W23 Go vet 보고서 게시", lambda: published_report(session, run), children, timeout=140))
         print("PASS: 자동 증감 제품 워커·실제 Go vet·printf 관찰·산출물 무결성·원본 보존")
+        w21_secrets(session, cli, services, children, directory, binary, origin, user, node_env, sql_env, scalar)
     print("PASS: 두 에이전트 등록·단일 attempt·취소 및 정리·후속 run 결과 접수 (시험용 handler)")
