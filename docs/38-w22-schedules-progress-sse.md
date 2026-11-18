@@ -1,6 +1,6 @@
 # W22 예약·계획 revision·가중 진행률·SSE
 
-> 구현 기록(초안). 아래 계약은 `feat/w22-schedules` 브랜치에서 구현하고 시험했다. 필드 형식의 기준은 [OpenAPI](../api/openapi.yaml)의 `x-codeye-status: implemented-w22` 경로와 스키마다.
+> 구현 기록. 아래 계약을 구현하고 시험했다. 필드 형식의 기준은 [OpenAPI](../api/openapi.yaml)의 `x-codeye-status: implemented-w22` 경로와 스키마다.
 
 ## 1. 목적과 요구
 
