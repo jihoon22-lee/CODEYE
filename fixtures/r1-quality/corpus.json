@@ -6143,6 +6143,2729 @@
   }
  },
  {
+  "id": "R1-GO-02",
+  "language": "go",
+  "split": "holdout",
+  "family": "line-scanner-stop-reason-unchecked",
+  "category": "error_handling",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "releasesums",
+   "title": "releasesums",
+   "summary": "Downloads and parses SHA-256 manifests that list the files of a release."
+  },
+  "contract": "ParseManifest reads a manifest in which each non-blank line is \"<64 hex digits> <path>\" and lines starting with '#' are comments; lines are at most 4 KiB. It returns the entries in file order. A malformed line yields an error naming its line number, and an error returned by r, at any point of the stream, is returned wrapped; in both cases no entries are returned.",
+  "contract_file": "manifest.go",
+  "files": {
+   "shared": [
+    {
+     "path": "load.go",
+     "lines": [
+      "package releasesums",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"fmt\"",
+      "\t\"io\"",
+      ")",
+      "",
+      "// Source opens named release files, for example over HTTP. The returned",
+      "// body may fail part-way through when the connection drops.",
+      "type Source interface {",
+      "\tOpen(ctx context.Context, name string) (io.ReadCloser, error)",
+      "}",
+      "",
+      "// Manifest is a parsed manifest with an index by path.",
+      "type Manifest struct {",
+      "\tEntries []Entry",
+      "\tbyPath  map[string]string",
+      "}",
+      "",
+      "// Sum returns the expected digest for path.",
+      "func (m *Manifest) Sum(path string) (string, bool) {",
+      "\tsum, ok := m.byPath[path]",
+      "\treturn sum, ok",
+      "}",
+      "",
+      "// Load fetches and parses the manifest called name.",
+      "func Load(ctx context.Context, src Source, name string) (*Manifest, error) {",
+      "\tbody, err := src.Open(ctx, name)",
+      "\tif err != nil {",
+      "\t\treturn nil, fmt.Errorf(\"load %s: %w\", name, err)",
+      "\t}",
+      "\tdefer body.Close()",
+      "\tentries, err := ParseManifest(body)",
+      "\tif err != nil {",
+      "\t\treturn nil, fmt.Errorf(\"load %s: %w\", name, err)",
+      "\t}",
+      "\tm := &Manifest{Entries: entries, byPath: make(map[string]string, len(entries))}",
+      "\tfor _, e := range entries {",
+      "\t\tm.byPath[e.Path] = e.SHA256",
+      "\t}",
+      "\treturn m, nil",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "manifest.go",
+     "lines": [
+      "package releasesums",
+      "",
+      "import (",
+      "\t\"bufio\"",
+      "\t\"fmt\"",
+      "\t\"io\"",
+      "\t\"strings\"",
+      ")",
+      "",
+      "// Entry is one file listed in a release manifest.",
+      "type Entry struct {",
+      "\tSHA256 string",
+      "\tPath   string",
+      "}",
+      "",
+      "// ParseManifest parses a release manifest.",
+      "//",
+      "// {{CONTRACT}}",
+      "func ParseManifest(r io.Reader) ([]Entry, error) {",
+      "\tvar entries []Entry",
+      "\tscanner := bufio.NewScanner(r)",
+      "\tline := 0",
+      "\tfor scanner.Scan() {",
+      "\t\tline++",
+      "\t\ttext := strings.TrimSpace(scanner.Text())",
+      "\t\tif text == \"\" || strings.HasPrefix(text, \"#\") {",
+      "\t\t\tcontinue",
+      "\t\t}",
+      "\t\tsum, path, ok := strings.Cut(text, \" \")",
+      "\t\tif !ok || len(sum) != 64 || strings.Trim(sum, \"0123456789abcdef\") != \"\" || path == \"\" {",
+      "\t\t\treturn nil, fmt.Errorf(\"manifest line %d: malformed entry\", line)",
+      "\t\t}",
+      "\t\tentries = append(entries, Entry{SHA256: sum, Path: path})",
+      "\t}",
+      "\treturn entries, nil",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "manifest.go",
+     "lines": [
+      "package releasesums",
+      "",
+      "import (",
+      "\t\"bufio\"",
+      "\t\"fmt\"",
+      "\t\"io\"",
+      "\t\"strings\"",
+      ")",
+      "",
+      "// Entry is one file listed in a release manifest.",
+      "type Entry struct {",
+      "\tSHA256 string",
+      "\tPath   string",
+      "}",
+      "",
+      "// ParseManifest parses a release manifest.",
+      "//",
+      "// {{CONTRACT}}",
+      "func ParseManifest(r io.Reader) ([]Entry, error) {",
+      "\tvar entries []Entry",
+      "\tscanner := bufio.NewScanner(r)",
+      "\tline := 0",
+      "\tfor scanner.Scan() {",
+      "\t\tline++",
+      "\t\ttext := strings.TrimSpace(scanner.Text())",
+      "\t\tif text == \"\" || strings.HasPrefix(text, \"#\") {",
+      "\t\t\tcontinue",
+      "\t\t}",
+      "\t\tsum, path, ok := strings.Cut(text, \" \")",
+      "\t\tif !ok || len(sum) != 64 || strings.Trim(sum, \"0123456789abcdef\") != \"\" || path == \"\" {",
+      "\t\t\treturn nil, fmt.Errorf(\"manifest line %d: malformed entry\", line)",
+      "\t\t}",
+      "\t\tentries = append(entries, Entry{SHA256: sum, Path: path})",
+      "\t}",
+      "\tif err := scanner.Err(); err != nil {",
+      "\t\treturn nil, fmt.Errorf(\"manifest: read: %w\", err)",
+      "\t}",
+      "\treturn entries, nil",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "a9c399e1e289d07d874965821d27f32a4046797e46b285822b060100af2b3f05",
+   "before_documented": "4f4a6ab6aa1bf0ff00bd5c4f57412e88342aea474fd3d87d3b7037dbeaa83bf5",
+   "after": "cf95e7cfaa86d4f31ec83bc51017402fde4be8afc74a4faa34422acbf9164dc8",
+   "after_documented": "3c004779d0c679197826686b4b232716cd9c446688b2a917211de3679a794310"
+  },
+  "check": {
+   "summary": "Parses a complete manifest, a manifest with a malformed line, and a stream that delivers two valid lines and then fails with io.ErrUnexpectedEOF, both directly and through Load.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: stream error: got 2 entries and err=<nil>",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package releasesums",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"io\"",
+      "\t\"strings\"",
+      "\t\"testing\"",
+      "\t\"testing/iotest\"",
+      ")",
+      "",
+      "const sumA = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
+      "const sumB = \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"",
+      "",
+      "type flaky struct{ body io.Reader }",
+      "",
+      "func (f flaky) Open(ctx context.Context, name string) (io.ReadCloser, error) {",
+      "\treturn io.NopCloser(f.body), nil",
+      "}",
+      "",
+      "func TestCheckManifest(t *testing.T) {",
+      "\tfull := \"# release 1.2\\n\" + sumA + \" bin/tool\\n\\n\" + sumB + \" share/doc.txt\\n\"",
+      "\tentries, err := ParseManifest(strings.NewReader(full))",
+      "\tif err != nil || len(entries) != 2 || entries[1].Path != \"share/doc.txt\" {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: full manifest: %v %v\", entries, err)",
+      "\t}",
+      "\tif _, err := ParseManifest(strings.NewReader(sumA + \" a\\nnot-a-sum b\\n\")); err == nil || !strings.Contains(err.Error(), \"line 2\") {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: malformed line: %v\", err)",
+      "\t}",
+      "\tcut := func() io.Reader {",
+      "\t\treturn io.MultiReader(strings.NewReader(sumA+\" a\\n\"+sumB+\" b\\n\"), iotest.ErrReader(io.ErrUnexpectedEOF))",
+      "\t}",
+      "\tentries, err = ParseManifest(cut())",
+      "\tif !errors.Is(err, io.ErrUnexpectedEOF) || entries != nil {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: stream error: got %d entries and err=%v\", len(entries), err)",
+      "\t}",
+      "\tm, err := Load(context.Background(), flaky{cut()}, \"SHA256SUMS\")",
+      "\tif !errors.Is(err, io.ErrUnexpectedEOF) || m != nil {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: Load with stream error: %v %v\", m, err)",
+      "\t}",
+      "\tm, err = Load(context.Background(), flaky{strings.NewReader(full)}, \"SHA256SUMS\")",
+      "\tif sum, ok := m.Sum(\"bin/tool\"); err != nil || !ok || sum != sumA {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: Load full: %v\", err)",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "The underlying reader fails mid-stream, as a network body does when the connection drops. Scanner.Scan then returns false exactly as at end of input, and ParseManifest never asks scanner.Err() why it stopped.",
+   "expected_impact": "A truncated manifest is returned as complete with a nil error; Load hands the verifier a list missing every file after the drop, so those files are never checked and the release is reported verified.",
+   "positive_locations": [
+    {
+     "path": "manifest.go",
+     "symbol": "ParseManifest",
+     "anchors": {
+      "start": "for scanner.Scan() {",
+      "end": "return entries, nil"
+     },
+     "start_line": 27,
+     "end_line": 39
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "manifest.go",
+     "symbol": "ParseManifest",
+     "anchors": {
+      "start": "if err := scanner.Err(); err != nil {",
+      "end": "return nil, fmt.Errorf(\"manifest: read: %w\", err)"
+     },
+     "note": "The corrected parser checks why the scan stopped and returns the read error.",
+     "start_line": 39,
+     "end_line": 40
+    },
+    {
+     "variant": "before",
+     "path": "load.go",
+     "symbol": "Load",
+     "anchors": {
+      "start": "entries, err := ParseManifest(body)",
+      "end": "return nil, fmt.Errorf(\"load %s: %w\", name, err)"
+     },
+     "note": "Load propagates whatever ParseManifest reports; it is correct but depends on the parser surfacing read errors.",
+     "start_line": 34,
+     "end_line": 36
+    }
+   ],
+   "reviewer_notes": "Malformed lines are handled correctly. The bodies Load reads come from a Source that can fail mid-stream (load.go), which is what makes the missing check reachable.",
+   "distinctive_tokens": [
+    "truncated",
+    "silently stops",
+    "mid-stream",
+    "partial list"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "manifest.go"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-GO-03",
+  "language": "go",
+  "split": "holdout",
+  "family": "deferred-close-accumulates-across-iterations",
+  "category": "resource_lifetime",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": false,
+  "project": {
+   "name": "treesum",
+   "title": "treesum",
+   "summary": "Computes content digests for every file of a release tree ahead of publication."
+  },
+  "contract": "SumFiles returns the hex SHA-256 of each file in paths, keyed by path. Release trees can list tens of thousands of files, and SumFiles must work for any number of paths under the process's usual open-file limit. The first file that cannot be opened or read stops the walk with an error naming that path. paths holds regular files; duplicates are allowed.",
+  "contract_file": "sum.go",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "sum.go",
+     "lines": [
+      "package treesum",
+      "",
+      "import (",
+      "\t\"crypto/sha256\"",
+      "\t\"encoding/hex\"",
+      "\t\"fmt\"",
+      "\t\"io\"",
+      "\t\"os\"",
+      ")",
+      "",
+      "// SumFiles hashes release files.",
+      "//",
+      "// {{CONTRACT}}",
+      "func SumFiles(paths []string) (map[string]string, error) {",
+      "\tsums := make(map[string]string, len(paths))",
+      "\tfor _, path := range paths {",
+      "\t\tf, err := os.Open(path)",
+      "\t\tif err != nil {",
+      "\t\t\treturn nil, fmt.Errorf(\"sum %s: %w\", path, err)",
+      "\t\t}",
+      "\t\tdefer f.Close()",
+      "\t\th := sha256.New()",
+      "\t\tif _, err := io.Copy(h, f); err != nil {",
+      "\t\t\treturn nil, fmt.Errorf(\"sum %s: %w\", path, err)",
+      "\t\t}",
+      "\t\tsums[path] = hex.EncodeToString(h.Sum(nil))",
+      "\t}",
+      "\treturn sums, nil",
+      "}",
+      "",
+      "// Changed lists the paths whose digest differs from previous, in input order.",
+      "func Changed(paths []string, current, previous map[string]string) []string {",
+      "\tvar out []string",
+      "\tfor _, path := range paths {",
+      "\t\tif current[path] != previous[path] {",
+      "\t\t\tout = append(out, path)",
+      "\t\t}",
+      "\t}",
+      "\treturn out",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "sum.go",
+     "lines": [
+      "package treesum",
+      "",
+      "import (",
+      "\t\"crypto/sha256\"",
+      "\t\"encoding/hex\"",
+      "\t\"fmt\"",
+      "\t\"io\"",
+      "\t\"os\"",
+      ")",
+      "",
+      "// SumFiles hashes release files.",
+      "//",
+      "// {{CONTRACT}}",
+      "func SumFiles(paths []string) (map[string]string, error) {",
+      "\tsums := make(map[string]string, len(paths))",
+      "\tfor _, path := range paths {",
+      "\t\tsum, err := sumOne(path)",
+      "\t\tif err != nil {",
+      "\t\t\treturn nil, err",
+      "\t\t}",
+      "\t\tsums[path] = sum",
+      "\t}",
+      "\treturn sums, nil",
+      "}",
+      "",
+      "func sumOne(path string) (string, error) {",
+      "\tf, err := os.Open(path)",
+      "\tif err != nil {",
+      "\t\treturn \"\", fmt.Errorf(\"sum %s: %w\", path, err)",
+      "\t}",
+      "\tdefer f.Close()",
+      "\th := sha256.New()",
+      "\tif _, err := io.Copy(h, f); err != nil {",
+      "\t\treturn \"\", fmt.Errorf(\"sum %s: %w\", path, err)",
+      "\t}",
+      "\treturn hex.EncodeToString(h.Sum(nil)), nil",
+      "}",
+      "",
+      "// Changed lists the paths whose digest differs from previous, in input order.",
+      "func Changed(paths []string, current, previous map[string]string) []string {",
+      "\tvar out []string",
+      "\tfor _, path := range paths {",
+      "\t\tif current[path] != previous[path] {",
+      "\t\t\tout = append(out, path)",
+      "\t\t}",
+      "\t}",
+      "\treturn out",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "31a4519fff5d4713f7ed665abaeb567114f14089382b609a66e7064d371f9cc7",
+   "before_documented": "3b34068f4c86d63407a39eef38cbf31bf41dbd950894904a95f7f3f88afc8e39",
+   "after": "8b02a34af6e7fb754b161e923b005ccf0862588fceb8ff89b70f8dd880981193",
+   "after_documented": "58313692e559f933b4b665d1c2b6b4d4570d67895e66fb7f0ad0f65b617f384b"
+  },
+  "check": {
+   "summary": "Lowers the soft RLIMIT_NOFILE of the test process to 64, creates 300 small files and calls SumFiles on all of them; then compares a few digests and the error for a missing path.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: 300 files under a 64-descriptor limit: .*too many open files",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package treesum",
+      "",
+      "import (",
+      "\t\"fmt\"",
+      "\t\"os\"",
+      "\t\"path/filepath\"",
+      "\t\"strings\"",
+      "\t\"syscall\"",
+      "\t\"testing\"",
+      ")",
+      "",
+      "func TestCheckSumFiles(t *testing.T) {",
+      "\tdir := t.TempDir()",
+      "\tvar paths []string",
+      "\tfor i := 0; i < 300; i++ {",
+      "\t\tp := filepath.Join(dir, fmt.Sprintf(\"f%03d.txt\", i))",
+      "\t\tif err := os.WriteFile(p, []byte(fmt.Sprintf(\"file %d\\n\", i)), 0o644); err != nil {",
+      "\t\t\tt.Fatal(err)",
+      "\t\t}",
+      "\t\tpaths = append(paths, p)",
+      "\t}",
+      "\tvar old syscall.Rlimit",
+      "\tif err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &old); err != nil {",
+      "\t\tt.Fatal(err)",
+      "\t}",
+      "\tlimited := syscall.Rlimit{Cur: 64, Max: old.Max}",
+      "\tif err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &limited); err != nil {",
+      "\t\tt.Fatal(err)",
+      "\t}",
+      "\tsums, err := SumFiles(paths)",
+      "\tsyscall.Setrlimit(syscall.RLIMIT_NOFILE, &old)",
+      "\tif err != nil {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: 300 files under a 64-descriptor limit: %v\", err)",
+      "\t}",
+      "\tif len(sums) != 300 || sums[paths[0]] != \"41b3fbbe4d8d6bbd44c4b610bb678c55dd53fdbe9a3ed257057ee1edf5136f5b\" {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: digests %d %s\", len(sums), sums[paths[0]])",
+      "\t}",
+      "\tif _, err := SumFiles([]string{paths[1], filepath.Join(dir, \"absent\")}); err == nil || !strings.Contains(err.Error(), \"absent\") {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: missing path error %v\", err)",
+      "\t}",
+      "\tif got := Changed(paths[:2], sums, map[string]string{paths[0]: sums[paths[0]]}); len(got) != 1 || got[0] != paths[1] {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: Changed %v\", got)",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "More paths than free file descriptors (about 1024 by default on Linux). The defer f.Close() sits inside the loop, so every file stays open until SumFiles returns.",
+   "expected_impact": "Large trees fail with \"too many open files\" part-way through, and while SumFiles runs it starves the rest of the process (sockets, logs) of descriptors.",
+   "positive_locations": [
+    {
+     "path": "sum.go",
+     "symbol": "SumFiles",
+     "anchors": {
+      "start": "f, err := os.Open(path)",
+      "end": "defer f.Close()"
+     },
+     "start_line": 21,
+     "end_line": 25
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "sum.go",
+     "symbol": "sumOne",
+     "anchors": {
+      "start": "func sumOne(path string) (string, error) {",
+      "end": "defer f.Close()"
+     },
+     "note": "Moving the per-file work into its own function runs each deferred Close at the end of that file.",
+     "start_line": 30,
+     "end_line": 35
+    },
+    {
+     "variant": "before",
+     "path": "sum.go",
+     "symbol": "SumFiles",
+     "anchors": {
+      "start": "if _, err := io.Copy(h, f); err != nil {"
+     },
+     "note": "Read errors are reported with the path as required; only the descriptor lifetime is off.",
+     "start_line": 27,
+     "end_line": 27
+    }
+   ],
+   "reviewer_notes": "Linters with a defer-in-loop rule report it. Small trees work, so unit tests on a few files pass.",
+   "distinctive_tokens": [
+    "emfile",
+    "descriptor exhaustion",
+    "defer in loop",
+    "defer-in-loop"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "sum.go"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-GO-04",
+  "language": "go",
+  "split": "holdout",
+  "family": "unsigned-headroom-wraps-when-limit-lowered",
+  "category": "boundaries_arithmetic",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "storagequota",
+   "title": "storagequota",
+   "summary": "Per-tenant storage quotas for an object store, adjustable by operators at run time."
+  },
+  "contract": "Quota tracks units in use against a limit and is safe for concurrent use. TryUse(n) reserves n units and reports true only when usage plus n stays within the limit; otherwise it reserves nothing and reports false. Release(n) returns units, and releasing more than is in use leaves usage at zero. SetLimit may lower the limit below current usage: existing usage is kept and TryUse refuses every request until releases bring usage below the limit again. All amounts are uint64 values; n may be 0.",
+  "contract_file": "quota.go",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "quota.go",
+     "lines": [
+      "package storagequota",
+      "",
+      "import \"sync\"",
+      "",
+      "// Quota is a tenant's storage allowance.",
+      "//",
+      "// {{CONTRACT}}",
+      "type Quota struct {",
+      "\tmu    sync.Mutex",
+      "\tlimit uint64",
+      "\tused  uint64",
+      "}",
+      "",
+      "// New returns a quota with the given limit and nothing in use.",
+      "func New(limit uint64) *Quota {",
+      "\treturn &Quota{limit: limit}",
+      "}",
+      "",
+      "// TryUse reserves n units if they fit.",
+      "func (q *Quota) TryUse(n uint64) bool {",
+      "\tq.mu.Lock()",
+      "\tdefer q.mu.Unlock()",
+      "\tif n > q.limit-q.used {",
+      "\t\treturn false",
+      "\t}",
+      "\tq.used += n",
+      "\treturn true",
+      "}",
+      "",
+      "// Release returns n units.",
+      "func (q *Quota) Release(n uint64) {",
+      "\tq.mu.Lock()",
+      "\tdefer q.mu.Unlock()",
+      "\tif n >= q.used {",
+      "\t\tq.used = 0",
+      "\t\treturn",
+      "\t}",
+      "\tq.used -= n",
+      "}",
+      "",
+      "// SetLimit changes the limit without touching current usage.",
+      "func (q *Quota) SetLimit(limit uint64) {",
+      "\tq.mu.Lock()",
+      "\tdefer q.mu.Unlock()",
+      "\tq.limit = limit",
+      "}",
+      "",
+      "// Usage reports units in use and the current limit.",
+      "func (q *Quota) Usage() (used, limit uint64) {",
+      "\tq.mu.Lock()",
+      "\tdefer q.mu.Unlock()",
+      "\treturn q.used, q.limit",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "quota.go",
+     "lines": [
+      "package storagequota",
+      "",
+      "import \"sync\"",
+      "",
+      "// Quota is a tenant's storage allowance.",
+      "//",
+      "// {{CONTRACT}}",
+      "type Quota struct {",
+      "\tmu    sync.Mutex",
+      "\tlimit uint64",
+      "\tused  uint64",
+      "}",
+      "",
+      "// New returns a quota with the given limit and nothing in use.",
+      "func New(limit uint64) *Quota {",
+      "\treturn &Quota{limit: limit}",
+      "}",
+      "",
+      "// TryUse reserves n units if they fit.",
+      "func (q *Quota) TryUse(n uint64) bool {",
+      "\tq.mu.Lock()",
+      "\tdefer q.mu.Unlock()",
+      "\tif q.used >= q.limit || n > q.limit-q.used {",
+      "\t\treturn false",
+      "\t}",
+      "\tq.used += n",
+      "\treturn true",
+      "}",
+      "",
+      "// Release returns n units.",
+      "func (q *Quota) Release(n uint64) {",
+      "\tq.mu.Lock()",
+      "\tdefer q.mu.Unlock()",
+      "\tif n >= q.used {",
+      "\t\tq.used = 0",
+      "\t\treturn",
+      "\t}",
+      "\tq.used -= n",
+      "}",
+      "",
+      "// SetLimit changes the limit without touching current usage.",
+      "func (q *Quota) SetLimit(limit uint64) {",
+      "\tq.mu.Lock()",
+      "\tdefer q.mu.Unlock()",
+      "\tq.limit = limit",
+      "}",
+      "",
+      "// Usage reports units in use and the current limit.",
+      "func (q *Quota) Usage() (used, limit uint64) {",
+      "\tq.mu.Lock()",
+      "\tdefer q.mu.Unlock()",
+      "\treturn q.used, q.limit",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "6a9cec3e13e8983f76735d27e78f04205256512e56758e76a4f82d34436ed1d2",
+   "before_documented": "d9afb956e18d4d7c9d11c318559e5ea3944464e3265c57b86b6313e7eb306780",
+   "after": "ea738ad88dd124c9a6a5dbca881613c1dc04494e6287a58938a386c530ca1840",
+   "after_documented": "f48a1f257da8cab64dcf3d95ac7a12f5d52075174aa76514adb038cd100b14e3"
+  },
+  "check": {
+   "summary": "Uses 80 of 100 units, lowers the limit to 50 and asks for 10 and for a huge amount; then releases down under the limit and asks again.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: over-limit tenant granted 10 units",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package storagequota",
+      "",
+      "import (",
+      "\t\"fmt\"",
+      "\t\"math\"",
+      "\t\"testing\"",
+      ")",
+      "",
+      "func TestCheckQuota(t *testing.T) {",
+      "\tq := New(100)",
+      "\tif !q.TryUse(80) || q.TryUse(21) || !q.TryUse(20) || q.TryUse(1) {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: basic accounting\")",
+      "\t}",
+      "\tq.Release(20)",
+      "\tq.SetLimit(50)",
+      "\tif q.TryUse(10) {",
+      "\t\tused, limit := q.Usage()",
+      "\t\tt.Fatalf(\"CHECK-FAIL: over-limit tenant granted 10 units (used %d, limit %d)\", used, limit)",
+      "\t}",
+      "\tif q.TryUse(math.MaxUint64 - 5) {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: over-limit tenant granted a huge request\")",
+      "\t}",
+      "\tif q.TryUse(0) {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: zero-unit request granted while over the limit\")",
+      "\t}",
+      "\tq.Release(40)",
+      "\tif used, _ := q.Usage(); used != 40 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: usage %d, want 40\", used)",
+      "\t}",
+      "\tif !q.TryUse(10) || q.TryUse(1) {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: accounting once back under the lowered limit\")",
+      "\t}",
+      "\tq.Release(1000)",
+      "\tif used, _ := q.Usage(); used != 0 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: over-release left %d\", used)",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Usage above the limit, which happens as soon as an operator lowers the limit with SetLimit below what the tenant already stores. q.limit - q.used is then computed on uint64 and wraps to a value near 2^64.",
+   "expected_impact": "Instead of refusing, TryUse grants every request, including absurd ones, and usage keeps growing past the lowered limit; the operator's quota reduction has the opposite effect.",
+   "positive_locations": [
+    {
+     "path": "quota.go",
+     "symbol": "Quota.TryUse",
+     "anchors": {
+      "start": "if n > q.limit-q.used {"
+     },
+     "start_line": 29,
+     "end_line": 29
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "quota.go",
+     "symbol": "Quota.TryUse",
+     "anchors": {
+      "start": "if q.used >= q.limit || n > q.limit-q.used {"
+     },
+     "note": "The corrected test refuses whenever usage already reaches the limit, so the subtraction is only evaluated when it cannot wrap.",
+     "start_line": 29,
+     "end_line": 29
+    },
+    {
+     "variant": "before",
+     "path": "quota.go",
+     "symbol": "Quota.Release",
+     "anchors": {
+      "start": "if n >= q.used {"
+     },
+     "note": "Release clamps at zero correctly; it is the other subtraction that is unguarded.",
+     "start_line": 40,
+     "end_line": 40
+    }
+   ],
+   "reviewer_notes": "With usage at or under the limit the arithmetic is exact, so ordinary operation never shows it; only the documented limit reduction does.",
+   "distinctive_tokens": [
+    "wraparound",
+    "wraps around",
+    "2^64",
+    "unsigned subtraction"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "quota.go"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-GO-05",
+  "language": "go",
+  "split": "holdout",
+  "family": "time-value-equality-includes-location",
+  "category": "api_misuse",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "auditmerge",
+   "title": "auditmerge",
+   "summary": "Merges audit events reported by several regional collectors into one timeline."
+  },
+  "contract": "Merge combines event streams from several collectors into one timeline. Two events are duplicates when they have the same Source and happen at the same instant, whatever zone or offset their timestamps were written in; only the first one seen is kept, streams being taken in argument order and events in stream order. The result is ordered by instant, ties keeping that order. Timestamps come from ParseEvent and carry no monotonic clock reading.",
+  "contract_file": "merge.go",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "merge.go",
+     "lines": [
+      "package auditmerge",
+      "",
+      "import (",
+      "\t\"fmt\"",
+      "\t\"sort\"",
+      "\t\"strings\"",
+      "\t\"time\"",
+      ")",
+      "",
+      "// Event is one audit record.",
+      "type Event struct {",
+      "\tAt     time.Time",
+      "\tSource string",
+      "\tAction string",
+      "}",
+      "",
+      "// ParseEvent parses \"<RFC 3339 timestamp> <source> <action>\".",
+      "func ParseEvent(line string) (Event, error) {",
+      "\tfields := strings.Fields(line)",
+      "\tif len(fields) != 3 {",
+      "\t\treturn Event{}, fmt.Errorf(\"event %q: want 3 fields\", line)",
+      "\t}",
+      "\tat, err := time.Parse(time.RFC3339Nano, fields[0])",
+      "\tif err != nil {",
+      "\t\treturn Event{}, fmt.Errorf(\"event %q: %w\", line, err)",
+      "\t}",
+      "\treturn Event{At: at, Source: fields[1], Action: fields[2]}, nil",
+      "}",
+      "",
+      "type key struct {",
+      "\tsource string",
+      "\tat     time.Time",
+      "}",
+      "",
+      "// Merge builds one deduplicated timeline.",
+      "//",
+      "// {{CONTRACT}}",
+      "func Merge(streams ...[]Event) []Event {",
+      "\tseen := make(map[key]bool)",
+      "\tvar out []Event",
+      "\tfor _, stream := range streams {",
+      "\t\tfor _, e := range stream {",
+      "\t\t\tk := key{source: e.Source, at: e.At}",
+      "\t\t\tif seen[k] {",
+      "\t\t\t\tcontinue",
+      "\t\t\t}",
+      "\t\t\tseen[k] = true",
+      "\t\t\tout = append(out, e)",
+      "\t\t}",
+      "\t}",
+      "\tsort.SliceStable(out, func(i, j int) bool {",
+      "\t\treturn out[i].At.Compare(out[j].At) < 0",
+      "\t})",
+      "\treturn out",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "merge.go",
+     "lines": [
+      "package auditmerge",
+      "",
+      "import (",
+      "\t\"fmt\"",
+      "\t\"sort\"",
+      "\t\"strings\"",
+      "\t\"time\"",
+      ")",
+      "",
+      "// Event is one audit record.",
+      "type Event struct {",
+      "\tAt     time.Time",
+      "\tSource string",
+      "\tAction string",
+      "}",
+      "",
+      "// ParseEvent parses \"<RFC 3339 timestamp> <source> <action>\".",
+      "func ParseEvent(line string) (Event, error) {",
+      "\tfields := strings.Fields(line)",
+      "\tif len(fields) != 3 {",
+      "\t\treturn Event{}, fmt.Errorf(\"event %q: want 3 fields\", line)",
+      "\t}",
+      "\tat, err := time.Parse(time.RFC3339Nano, fields[0])",
+      "\tif err != nil {",
+      "\t\treturn Event{}, fmt.Errorf(\"event %q: %w\", line, err)",
+      "\t}",
+      "\treturn Event{At: at, Source: fields[1], Action: fields[2]}, nil",
+      "}",
+      "",
+      "type key struct {",
+      "\tsource string",
+      "\tat     time.Time",
+      "}",
+      "",
+      "// Merge builds one deduplicated timeline.",
+      "//",
+      "// {{CONTRACT}}",
+      "func Merge(streams ...[]Event) []Event {",
+      "\tseen := make(map[key]bool)",
+      "\tvar out []Event",
+      "\tfor _, stream := range streams {",
+      "\t\tfor _, e := range stream {",
+      "\t\t\tk := key{source: e.Source, at: e.At.UTC()}",
+      "\t\t\tif seen[k] {",
+      "\t\t\t\tcontinue",
+      "\t\t\t}",
+      "\t\t\tseen[k] = true",
+      "\t\t\tout = append(out, e)",
+      "\t\t}",
+      "\t}",
+      "\tsort.SliceStable(out, func(i, j int) bool {",
+      "\t\treturn out[i].At.Compare(out[j].At) < 0",
+      "\t})",
+      "\treturn out",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "43531b9ed6088f6d0fdfeae70ea1d97bceb609411b25e9c20ce021a5d79b21cf",
+   "before_documented": "4a67ecd465e83e82562c8af944866c40926a7ecb226462d08088f48e02de568e",
+   "after": "e442d0df0ded2d1398b8e6cb217595702c7b3cff2a6240d3142ac75d0b209786",
+   "after_documented": "7a58d24328417244eeab319653693c4c02745ee0b38ba1bfaf3eb9459c8e2e17"
+  },
+  "check": {
+   "summary": "Builds the same three events as reported by a UTC collector and a +09:00 collector, merges both streams and counts the result; also checks ordering and that distinct sources at one instant stay separate.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: merged 6 events, want 3",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package auditmerge",
+      "",
+      "import (",
+      "\t\"fmt\"",
+      "\t\"testing\"",
+      ")",
+      "",
+      "func parse(t *testing.T, lines ...string) []Event {",
+      "\tvar out []Event",
+      "\tfor _, l := range lines {",
+      "\t\te, err := ParseEvent(l)",
+      "\t\tif err != nil {",
+      "\t\t\tt.Fatalf(\"CHECK-FAIL: parse %v\", err)",
+      "\t\t}",
+      "\t\tout = append(out, e)",
+      "\t}",
+      "\treturn out",
+      "}",
+      "",
+      "func TestCheckMerge(t *testing.T) {",
+      "\tutc := parse(t,",
+      "\t\t\"2026-05-01T00:00:00Z gw-1 login\",",
+      "\t\t\"2026-05-01T00:00:05Z gw-1 upload\",",
+      "\t\t\"2026-05-01T00:00:09.5Z gw-2 logout\")",
+      "\ttokyo := parse(t,",
+      "\t\t\"2026-05-01T09:00:00+09:00 gw-1 login\",",
+      "\t\t\"2026-05-01T09:00:05+09:00 gw-1 upload\",",
+      "\t\t\"2026-05-01T09:00:09.5+09:00 gw-2 logout\")",
+      "\tmerged := Merge(utc, tokyo)",
+      "\tif len(merged) != 3 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: merged %d events, want 3\", len(merged))",
+      "\t}",
+      "\tif merged[0].At.Location().String() != \"UTC\" || merged[2].Action != \"logout\" {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: first-seen events or order: %v\", merged)",
+      "\t}",
+      "\tmixed := Merge(parse(t, \"2026-05-01T00:00:05Z gw-9 a\", \"2026-05-01T00:00:01Z gw-1 b\"),",
+      "\t\tparse(t, \"2026-05-01T00:00:05Z gw-8 c\"))",
+      "\tif len(mixed) != 3 || mixed[0].Action != \"b\" || mixed[1].Action != \"a\" || mixed[2].Action != \"c\" {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: distinct sources or stable order: %v\", mixed)",
+      "\t}",
+      "\tif _, err := ParseEvent(\"2026-05-01T00:00:05 gw-1 a\"); err == nil {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: timestamp without offset accepted\")",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "The same event reported by collectors that write timestamps with different offsets (Z versus +09:00). time.Time values used as map keys compare their location pointer as well as the instant.",
+   "expected_impact": "Cross-region duplicates survive, so every event seen by two collectors appears twice in the timeline and audit counts double for those regions.",
+   "positive_locations": [
+    {
+     "path": "merge.go",
+     "symbol": "Merge",
+     "anchors": {
+      "start": "k := key{source: e.Source, at: e.At}"
+     },
+     "start_line": 48,
+     "end_line": 48
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "merge.go",
+     "symbol": "Merge",
+     "anchors": {
+      "start": "k := key{source: e.Source, at: e.At.UTC()}"
+     },
+     "note": "Normalising to UTC gives every key the same location, so equal instants produce equal keys.",
+     "start_line": 48,
+     "end_line": 48
+    },
+    {
+     "variant": "before",
+     "path": "merge.go",
+     "symbol": "Merge",
+     "anchors": {
+      "start": "sort.SliceStable(out, func(i, j int) bool {",
+      "end": "return out[i].At.Compare(out[j].At) < 0"
+     },
+     "note": "Ordering uses Time.Compare, which compares instants, so the sort is right.",
+     "start_line": 56,
+     "end_line": 57
+    }
+   ],
+   "reviewer_notes": "The time package documentation warns against using Time as a map key without normalising the location. Events from a single collector are deduplicated correctly.",
+   "distinctive_tokens": [
+    "location pointer",
+    "same instant twice",
+    "equal method",
+    "loc pointer"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "merge.go"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-GO-06",
+  "language": "go",
+  "split": "holdout",
+  "family": "value-receiver-copies-guarding-mutex",
+  "category": "state_invariants",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": true,
+  "project": {
+   "name": "routestats",
+   "title": "routestats",
+   "summary": "Per-route request and error counters for an HTTP service, exported on a metrics page."
+  },
+  "contract": "Counters is safe for concurrent use by multiple goroutines. Add(name, n) adds n to the named counter, creating it at zero first; Snapshot returns a copy of every counter. Create Counters with NewCounters; the zero value is not ready for use. Counter names are arbitrary strings and n may be negative.",
+  "contract_file": "counters.go",
+  "files": {
+   "shared": [
+    {
+     "path": "middleware.go",
+     "lines": [
+      "package routestats",
+      "",
+      "// Handler serves one request for a route.",
+      "type Handler func(route string) error",
+      "",
+      "// Instrument wraps next so that every call counts a request for its route",
+      "// and, when next fails, an error. The wrapped handler is called concurrently",
+      "// by the server, one goroutine per request.",
+      "func Instrument(c *Counters, next Handler) Handler {",
+      "\treturn func(route string) error {",
+      "\t\tc.Add(\"requests.\"+route, 1)",
+      "\t\terr := next(route)",
+      "\t\tif err != nil {",
+      "\t\t\tc.Add(\"errors.\"+route, 1)",
+      "\t\t}",
+      "\t\treturn err",
+      "\t}",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "counters.go",
+     "lines": [
+      "package routestats",
+      "",
+      "import \"sync\"",
+      "",
+      "// Counters holds named int64 counters.",
+      "//",
+      "// {{CONTRACT}}",
+      "type Counters struct {",
+      "\tmu     sync.Mutex",
+      "\tvalues map[string]int64",
+      "}",
+      "",
+      "// NewCounters returns an empty set of counters.",
+      "func NewCounters() *Counters {",
+      "\treturn &Counters{values: make(map[string]int64)}",
+      "}",
+      "",
+      "// Add adds n to the counter called name.",
+      "func (c Counters) Add(name string, n int64) {",
+      "\tc.mu.Lock()",
+      "\tdefer c.mu.Unlock()",
+      "\tc.values[name] += n",
+      "}",
+      "",
+      "// Snapshot copies every counter.",
+      "func (c *Counters) Snapshot() map[string]int64 {",
+      "\tc.mu.Lock()",
+      "\tdefer c.mu.Unlock()",
+      "\tout := make(map[string]int64, len(c.values))",
+      "\tfor k, v := range c.values {",
+      "\t\tout[k] = v",
+      "\t}",
+      "\treturn out",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "counters.go",
+     "lines": [
+      "package routestats",
+      "",
+      "import \"sync\"",
+      "",
+      "// Counters holds named int64 counters.",
+      "//",
+      "// {{CONTRACT}}",
+      "type Counters struct {",
+      "\tmu     sync.Mutex",
+      "\tvalues map[string]int64",
+      "}",
+      "",
+      "// NewCounters returns an empty set of counters.",
+      "func NewCounters() *Counters {",
+      "\treturn &Counters{values: make(map[string]int64)}",
+      "}",
+      "",
+      "// Add adds n to the counter called name.",
+      "func (c *Counters) Add(name string, n int64) {",
+      "\tc.mu.Lock()",
+      "\tdefer c.mu.Unlock()",
+      "\tc.values[name] += n",
+      "}",
+      "",
+      "// Snapshot copies every counter.",
+      "func (c *Counters) Snapshot() map[string]int64 {",
+      "\tc.mu.Lock()",
+      "\tdefer c.mu.Unlock()",
+      "\tout := make(map[string]int64, len(c.values))",
+      "\tfor k, v := range c.values {",
+      "\t\tout[k] = v",
+      "\t}",
+      "\treturn out",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "7e608226f3b6aeab07aa2427b009810547f6cb6664ecdbd4a59c24044fbc3f5f",
+   "before_documented": "f7394aab92c8eeaa0bb44e9c74860f3bbb7e3e2145ead32b1d039a2bda358f69",
+   "after": "964748b0932193c22ee855130a9fdd247c01efeecc9a3984dc46c580cd1af713",
+   "after_documented": "6a00d6958f3c74a413380ea08a1ca490814a8b990baa00b3487e6ab76bfd139a"
+  },
+  "check": {
+   "summary": "Sends 8 x 4000 requests from parallel goroutines through Instrument, a quarter of them failing, then compares the snapshot totals with the exact counts.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "fatal error: concurrent map (writes|read and map write)|CHECK-FAIL: totals",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package routestats",
+      "",
+      "import (",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"sync\"",
+      "\t\"testing\"",
+      ")",
+      "",
+      "func TestCheckCounters(t *testing.T) {",
+      "\tc := NewCounters()",
+      "\th := Instrument(c, func(route string) error {",
+      "\t\tif route == \"/upload\" {",
+      "\t\t\treturn errors.New(\"payload too large\")",
+      "\t\t}",
+      "\t\treturn nil",
+      "\t})",
+      "\troutes := []string{\"/\", \"/api\", \"/static\", \"/upload\"}",
+      "\tvar wg sync.WaitGroup",
+      "\tfor g := 0; g < 8; g++ {",
+      "\t\twg.Add(1)",
+      "\t\tgo func() {",
+      "\t\t\tdefer wg.Done()",
+      "\t\t\tfor i := 0; i < 4000; i++ {",
+      "\t\t\t\t_ = h(routes[(g+i)%len(routes)])",
+      "\t\t\t}",
+      "\t\t}()",
+      "\t}",
+      "\twg.Wait()",
+      "\tsnap := c.Snapshot()",
+      "\tvar requests int64",
+      "\tfor _, r := range routes {",
+      "\t\trequests += snap[\"requests.\"+r]",
+      "\t}",
+      "\tif requests != 32000 || snap[\"errors./upload\"] != 8000 || snap[\"requests./api\"] != 8000 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: totals %v\", snap)",
+      "\t}",
+      "\tc.Add(\"requests./\", -5)",
+      "\tif c.Snapshot()[\"requests./\"] != 7995 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: negative add\")",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Concurrent calls to Add, which Instrument in middleware.go makes for every request. Add has a value receiver, so each call locks its own copy of the mutex while all copies share the same map.",
+   "expected_impact": "There is no mutual exclusion at all: concurrent requests write the map simultaneously, which crashes the whole service with \"fatal error: concurrent map writes\" (or silently corrupts counts when the runtime does not catch it).",
+   "positive_locations": [
+    {
+     "path": "counters.go",
+     "symbol": "Counters.Add",
+     "anchors": {
+      "start": "func (c Counters) Add(name string, n int64) {"
+     },
+     "start_line": 23,
+     "end_line": 23
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "counters.go",
+     "symbol": "Counters.Add",
+     "anchors": {
+      "start": "func (c *Counters) Add(name string, n int64) {"
+     },
+     "note": "A pointer receiver makes every call lock the one mutex stored in the shared Counters.",
+     "start_line": 23,
+     "end_line": 23
+    },
+    {
+     "variant": "before",
+     "path": "counters.go",
+     "symbol": "Counters.Snapshot",
+     "anchors": {
+      "start": "func (c *Counters) Snapshot() map[string]int64 {"
+     },
+     "note": "Snapshot already uses a pointer receiver and copies under the lock.",
+     "start_line": 30,
+     "end_line": 30
+    },
+    {
+     "variant": "before",
+     "path": "middleware.go",
+     "symbol": "Instrument",
+     "anchors": {
+      "start": "c.Add(\"requests.\"+route, 1)"
+     },
+     "note": "Instrument uses the shared *Counters correctly; it is the concurrent caller that exposes the receiver problem.",
+     "start_line": 11,
+     "end_line": 11
+    }
+   ],
+   "reviewer_notes": "go vet's copylocks analyzer reports the value receiver. Single-goroutine tests pass because the map is shared by reference. Needs middleware.go to see the concurrent callers.",
+   "distinctive_tokens": [
+    "copylocks",
+    "copied mutex",
+    "lock copy",
+    "passes lock by value"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "counters.go"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-GO-07",
+  "language": "go",
+  "split": "holdout",
+  "family": "host-allowlist-pattern-matches-substring",
+  "category": "input_validation",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": false,
+  "project": {
+   "name": "hookreg",
+   "title": "hookreg",
+   "summary": "Registers customer webhook callbacks for build notifications and validates their URLs."
+  },
+  "contract": "CheckCallback accepts only https URLs whose host is one name segment of lower-case letters, digits and '-' followed by \".hooks.example.com\", for example \"https://build-7.hooks.example.com/notify\". The URL must not carry user information, and the only port allowed is an explicit 443. Every other input, including any other host, returns an error that matches ErrCallbackNotAllowed. Registration URLs come from customers and are untrusted.",
+  "contract_file": "callback.go",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "callback.go",
+     "lines": [
+      "package hookreg",
+      "",
+      "import (",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"net/url\"",
+      "\t\"regexp\"",
+      ")",
+      "",
+      "// ErrCallbackNotAllowed is returned for callback URLs outside the allowed hosts.",
+      "var ErrCallbackNotAllowed = errors.New(\"callback URL not allowed\")",
+      "",
+      "var allowedHost = regexp.MustCompile(`[a-z0-9-]+\\.hooks\\.example\\.com`)",
+      "",
+      "// CheckCallback validates a customer callback URL.",
+      "//",
+      "// {{CONTRACT}}",
+      "func CheckCallback(raw string) error {",
+      "\tu, err := url.Parse(raw)",
+      "\tif err != nil {",
+      "\t\treturn fmt.Errorf(\"%w: %v\", ErrCallbackNotAllowed, err)",
+      "\t}",
+      "\tif u.Scheme != \"https\" || u.User != nil {",
+      "\t\treturn fmt.Errorf(\"%w: scheme or credentials in %q\", ErrCallbackNotAllowed, raw)",
+      "\t}",
+      "\tif port := u.Port(); port != \"\" && port != \"443\" {",
+      "\t\treturn fmt.Errorf(\"%w: port %s\", ErrCallbackNotAllowed, port)",
+      "\t}",
+      "\tif !allowedHost.MatchString(u.Hostname()) {",
+      "\t\treturn fmt.Errorf(\"%w: host %q\", ErrCallbackNotAllowed, u.Hostname())",
+      "\t}",
+      "\treturn nil",
+      "}",
+      "",
+      "// Registry stores validated callbacks per project.",
+      "type Registry struct {",
+      "\tcallbacks map[string][]string",
+      "}",
+      "",
+      "// Register validates raw and records it for project.",
+      "func (r *Registry) Register(project, raw string) error {",
+      "\tif err := CheckCallback(raw); err != nil {",
+      "\t\treturn err",
+      "\t}",
+      "\tif r.callbacks == nil {",
+      "\t\tr.callbacks = make(map[string][]string)",
+      "\t}",
+      "\tr.callbacks[project] = append(r.callbacks[project], raw)",
+      "\treturn nil",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "callback.go",
+     "lines": [
+      "package hookreg",
+      "",
+      "import (",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"net/url\"",
+      "\t\"regexp\"",
+      ")",
+      "",
+      "// ErrCallbackNotAllowed is returned for callback URLs outside the allowed hosts.",
+      "var ErrCallbackNotAllowed = errors.New(\"callback URL not allowed\")",
+      "",
+      "var allowedHost = regexp.MustCompile(`^[a-z0-9-]+\\.hooks\\.example\\.com$`)",
+      "",
+      "// CheckCallback validates a customer callback URL.",
+      "//",
+      "// {{CONTRACT}}",
+      "func CheckCallback(raw string) error {",
+      "\tu, err := url.Parse(raw)",
+      "\tif err != nil {",
+      "\t\treturn fmt.Errorf(\"%w: %v\", ErrCallbackNotAllowed, err)",
+      "\t}",
+      "\tif u.Scheme != \"https\" || u.User != nil {",
+      "\t\treturn fmt.Errorf(\"%w: scheme or credentials in %q\", ErrCallbackNotAllowed, raw)",
+      "\t}",
+      "\tif port := u.Port(); port != \"\" && port != \"443\" {",
+      "\t\treturn fmt.Errorf(\"%w: port %s\", ErrCallbackNotAllowed, port)",
+      "\t}",
+      "\tif !allowedHost.MatchString(u.Hostname()) {",
+      "\t\treturn fmt.Errorf(\"%w: host %q\", ErrCallbackNotAllowed, u.Hostname())",
+      "\t}",
+      "\treturn nil",
+      "}",
+      "",
+      "// Registry stores validated callbacks per project.",
+      "type Registry struct {",
+      "\tcallbacks map[string][]string",
+      "}",
+      "",
+      "// Register validates raw and records it for project.",
+      "func (r *Registry) Register(project, raw string) error {",
+      "\tif err := CheckCallback(raw); err != nil {",
+      "\t\treturn err",
+      "\t}",
+      "\tif r.callbacks == nil {",
+      "\t\tr.callbacks = make(map[string][]string)",
+      "\t}",
+      "\tr.callbacks[project] = append(r.callbacks[project], raw)",
+      "\treturn nil",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "fb4426611a1fa0c3b49e2e62b3dbba2708c39356ba35bfb491a319a0fce9ae30",
+   "before_documented": "5bc09f0485bb868958cf1c141b5ade6834bbcc8cb47230bce2a50292d8a95fe0",
+   "after": "8a6379e206d9044cf5c4156518e4cbef694cf2aa2863cea5b0349a765183376d",
+   "after_documented": "f7c37b46c7fdd04c5b90744b22be71f18e815f48c9a6fe404d38055516fba963"
+  },
+  "check": {
+   "summary": "Checks allowed callback URLs and a set of hosts that merely contain an allowed name (as a prefix label, inside a longer label, or followed by another domain).",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: accepted https://ci\\.hooks\\.example\\.com\\.attacker\\.test/x",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package hookreg",
+      "",
+      "import (",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"testing\"",
+      ")",
+      "",
+      "func TestCheckCallback(t *testing.T) {",
+      "\tfor _, ok := range []string{",
+      "\t\t\"https://build-7.hooks.example.com/notify\",",
+      "\t\t\"https://ci.hooks.example.com:443/x?y=1\",",
+      "\t} {",
+      "\t\tif err := CheckCallback(ok); err != nil {",
+      "\t\t\tt.Fatalf(\"CHECK-FAIL: rejected %s: %v\", ok, err)",
+      "\t\t}",
+      "\t}",
+      "\tfor _, bad := range []string{",
+      "\t\t\"https://ci.hooks.example.com.attacker.test/x\",",
+      "\t\t\"https://a.b.hooks.example.com/x\",",
+      "\t\t\"https://xci.hooks.example.community/x\",",
+      "\t\t\"https://Ci.hooks.example.com/x\",",
+      "\t\t\"http://ci.hooks.example.com/x\",",
+      "\t\t\"https://u:p@ci.hooks.example.com/x\",",
+      "\t\t\"https://ci.hooks.example.com:8443/x\",",
+      "\t\t\"https://hooks.example.com/x\",",
+      "\t} {",
+      "\t\terr := CheckCallback(bad)",
+      "\t\tif err == nil {",
+      "\t\t\tt.Fatalf(\"CHECK-FAIL: accepted %s\", bad)",
+      "\t\t}",
+      "\t\tif !errors.Is(err, ErrCallbackNotAllowed) {",
+      "\t\t\tt.Fatalf(\"CHECK-FAIL: %s: error does not match ErrCallbackNotAllowed: %v\", bad, err)",
+      "\t\t}",
+      "\t}",
+      "\tvar r Registry",
+      "\tif err := r.Register(\"p1\", \"https://ci.hooks.example.com/x\"); err != nil || len(r.callbacks[\"p1\"]) != 1 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: register: %v\", err)",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "A host that contains an allowed name somewhere inside it, such as ci.hooks.example.com.attacker.test or a.b.hooks.example.com. regexp.MatchString reports a match anywhere in the string, and the pattern has no ^ or $.",
+   "expected_impact": "Customers can register callbacks on any domain they control, so build notifications (with their tokens and artifact links) are delivered to third-party hosts.",
+   "positive_locations": [
+    {
+     "path": "callback.go",
+     "symbol": "allowedHost",
+     "anchors": {
+      "start": "var allowedHost = regexp.MustCompile("
+     },
+     "start_line": 13,
+     "end_line": 13
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "callback.go",
+     "symbol": "allowedHost",
+     "anchors": {
+      "start": "var allowedHost = regexp.MustCompile(`^[a-z0-9-]+\\.hooks\\.example\\.com$`)"
+     },
+     "note": "Anchoring both ends makes the whole host match the single-label pattern.",
+     "start_line": 13,
+     "end_line": 13
+    },
+    {
+     "variant": "before",
+     "path": "callback.go",
+     "symbol": "CheckCallback",
+     "anchors": {
+      "start": "if u.Scheme != \"https\" || u.User != nil {"
+     },
+     "note": "Scheme, user-info and port checks are correct; only the host test is loose.",
+     "start_line": 29,
+     "end_line": 29
+    }
+   ],
+   "reviewer_notes": "Analyzers with a missing-regexp-anchor query report this pattern. Go's regexp is unanchored by default for MatchString, unlike full-match APIs in some other languages.",
+   "distinctive_tokens": [
+    "unanchored",
+    "anchor",
+    "substring match",
+    "attacker"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "callback.go"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-GO-08",
+  "language": "go",
+  "split": "holdout",
+  "family": "loop-scoped-err-hides-named-result",
+  "category": "error_handling",
+  "kind": "defect_pair",
+  "detection": "semantic_only",
+  "cross_file": false,
+  "project": {
+   "name": "blobsync",
+   "title": "blobsync",
+   "summary": "Copies new blobs from a primary object store to a backup store on a schedule."
+  },
+  "contract": "Sync copies every key listed by the source that the destination does not have yet, in listing order. It stops at the first key that cannot be read or written and returns the number of blobs copied so far together with an error naming that key; when it returns a nil error, every listed key is present in the destination. A failure to list keys returns 0 and that error.",
+  "contract_file": "sync.go",
+  "files": {
+   "shared": [],
+   "before": [
+    {
+     "path": "sync.go",
+     "lines": [
+      "package blobsync",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"fmt\"",
+      "\t\"log\"",
+      ")",
+      "",
+      "// Store is a minimal object store.",
+      "type Store interface {",
+      "\tList(ctx context.Context) ([]string, error)",
+      "\tHas(ctx context.Context, key string) (bool, error)",
+      "\tGet(ctx context.Context, key string) ([]byte, error)",
+      "\tPut(ctx context.Context, key string, data []byte) error",
+      "}",
+      "",
+      "// Syncer copies blobs from src to dst.",
+      "type Syncer struct {",
+      "\tsrc, dst Store",
+      "\tlog      *log.Logger",
+      "}",
+      "",
+      "// NewSyncer returns a Syncer that logs to logger.",
+      "func NewSyncer(src, dst Store, logger *log.Logger) *Syncer {",
+      "\treturn &Syncer{src: src, dst: dst, log: logger}",
+      "}",
+      "",
+      "// Sync copies missing blobs.",
+      "//",
+      "// {{CONTRACT}}",
+      "func (s *Syncer) Sync(ctx context.Context) (copied int, err error) {",
+      "\tkeys, err := s.src.List(ctx)",
+      "\tif err != nil {",
+      "\t\treturn 0, fmt.Errorf(\"sync: list: %w\", err)",
+      "\t}",
+      "\tfor _, key := range keys {",
+      "\t\tpresent, err := s.dst.Has(ctx, key)",
+      "\t\tif err == nil && present {",
+      "\t\t\tcontinue",
+      "\t\t}",
+      "\t\tdata, err := s.src.Get(ctx, key)",
+      "\t\tif err == nil {",
+      "\t\t\terr = s.dst.Put(ctx, key, data)",
+      "\t\t}",
+      "\t\tif err != nil {",
+      "\t\t\ts.log.Printf(\"sync %s: %v\", key, err)",
+      "\t\t\tbreak",
+      "\t\t}",
+      "\t\tcopied++",
+      "\t}",
+      "\treturn copied, err",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "sync.go",
+     "lines": [
+      "package blobsync",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"fmt\"",
+      "\t\"log\"",
+      ")",
+      "",
+      "// Store is a minimal object store.",
+      "type Store interface {",
+      "\tList(ctx context.Context) ([]string, error)",
+      "\tHas(ctx context.Context, key string) (bool, error)",
+      "\tGet(ctx context.Context, key string) ([]byte, error)",
+      "\tPut(ctx context.Context, key string, data []byte) error",
+      "}",
+      "",
+      "// Syncer copies blobs from src to dst.",
+      "type Syncer struct {",
+      "\tsrc, dst Store",
+      "\tlog      *log.Logger",
+      "}",
+      "",
+      "// NewSyncer returns a Syncer that logs to logger.",
+      "func NewSyncer(src, dst Store, logger *log.Logger) *Syncer {",
+      "\treturn &Syncer{src: src, dst: dst, log: logger}",
+      "}",
+      "",
+      "// Sync copies missing blobs.",
+      "//",
+      "// {{CONTRACT}}",
+      "func (s *Syncer) Sync(ctx context.Context) (copied int, err error) {",
+      "\tkeys, err := s.src.List(ctx)",
+      "\tif err != nil {",
+      "\t\treturn 0, fmt.Errorf(\"sync: list: %w\", err)",
+      "\t}",
+      "\tfor _, key := range keys {",
+      "\t\tpresent, hasErr := s.dst.Has(ctx, key)",
+      "\t\tif hasErr == nil && present {",
+      "\t\t\tcontinue",
+      "\t\t}",
+      "\t\tdata, getErr := s.src.Get(ctx, key)",
+      "\t\tif getErr == nil {",
+      "\t\t\tgetErr = s.dst.Put(ctx, key, data)",
+      "\t\t}",
+      "\t\tif getErr != nil {",
+      "\t\t\ts.log.Printf(\"sync %s: %v\", key, getErr)",
+      "\t\t\treturn copied, fmt.Errorf(\"sync %s: %w\", key, getErr)",
+      "\t\t}",
+      "\t\tcopied++",
+      "\t}",
+      "\treturn copied, err",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "2a7222158e2b0f9a2944ec9d029b760f0c7f39f790a455b2a58dac29b22d75d2",
+   "before_documented": "0a2a41f129d3cee5aede40bf7e805bab0446a72a0eaa99a660e3ebe25c8e3372",
+   "after": "c61e21e15c9fae6265cc70b139b0a15a2b118eae5b2919137a278836b9a17634",
+   "after_documented": "97352b022b4f9519e1d9785d0a5c70cb68975931ec0d3f230c8834704b127293"
+  },
+  "check": {
+   "summary": "Syncs five keys where reading the third one fails, then checks the count, the error and the destination; repeats with a healthy source.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: read failure on k3: copied 2, err=<nil>",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package blobsync",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"io\"",
+      "\t\"log\"",
+      "\t\"strings\"",
+      "\t\"testing\"",
+      ")",
+      "",
+      "type memStore struct {",
+      "\tkeys    []string",
+      "\tdata    map[string][]byte",
+      "\tfailGet string",
+      "}",
+      "",
+      "func (m *memStore) List(ctx context.Context) ([]string, error) { return m.keys, nil }",
+      "func (m *memStore) Has(ctx context.Context, key string) (bool, error) {",
+      "\t_, ok := m.data[key]",
+      "\treturn ok, nil",
+      "}",
+      "func (m *memStore) Get(ctx context.Context, key string) ([]byte, error) {",
+      "\tif key == m.failGet {",
+      "\t\treturn nil, errors.New(\"read timeout\")",
+      "\t}",
+      "\treturn m.data[key], nil",
+      "}",
+      "func (m *memStore) Put(ctx context.Context, key string, data []byte) error {",
+      "\tm.data[key] = data",
+      "\treturn nil",
+      "}",
+      "",
+      "func TestCheckSync(t *testing.T) {",
+      "\tkeys := []string{\"k1\", \"k2\", \"k3\", \"k4\", \"k5\"}",
+      "\tnewSrc := func(fail string) *memStore {",
+      "\t\tsrc := &memStore{keys: keys, data: map[string][]byte{}, failGet: fail}",
+      "\t\tfor _, k := range keys {",
+      "\t\t\tsrc.data[k] = []byte(\"blob \" + k)",
+      "\t\t}",
+      "\t\treturn src",
+      "\t}",
+      "\tdst := &memStore{data: map[string][]byte{}}",
+      "\ts := NewSyncer(newSrc(\"k3\"), dst, log.New(io.Discard, \"\", 0))",
+      "\tn, err := s.Sync(context.Background())",
+      "\tif n != 2 || err == nil || !strings.Contains(err.Error(), \"k3\") {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: read failure on k3: copied %d, err=%v\", n, err)",
+      "\t}",
+      "\tif len(dst.data) != 2 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: destination has %d blobs\", len(dst.data))",
+      "\t}",
+      "\tn, err = NewSyncer(newSrc(\"\"), dst, log.New(io.Discard, \"\", 0)).Sync(context.Background())",
+      "\tif n != 3 || err != nil || len(dst.data) != 5 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: healthy sync copied %d, err=%v\", n, err)",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Any Get or Put failure inside the loop. data, err := ... declares a new err scoped to the loop body, so the break leaves the named result err, which is still nil from the successful List.",
+   "expected_impact": "Sync reports success with a short count; the scheduler records the run as complete and never retries, so the backup silently misses every blob from the failing key onwards.",
+   "positive_locations": [
+    {
+     "path": "sync.go",
+     "symbol": "Syncer.Sync",
+     "anchors": {
+      "start": "data, err := s.src.Get(ctx, key)",
+      "end": "break"
+     },
+     "start_line": 46,
+     "end_line": 52
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "sync.go",
+     "symbol": "Syncer.Sync",
+     "anchors": {
+      "start": "data, getErr := s.src.Get(ctx, key)",
+      "end": "return copied, fmt.Errorf(\"sync %s: %w\", key, getErr)"
+     },
+     "note": "The corrected loop uses distinct names and returns the wrapped error directly, so nothing is shadowed.",
+     "start_line": 46,
+     "end_line": 52
+    },
+    {
+     "variant": "before",
+     "path": "sync.go",
+     "symbol": "Syncer.Sync",
+     "anchors": {
+      "start": "keys, err := s.src.List(ctx)"
+     },
+     "note": "The List error path is handled correctly.",
+     "start_line": 37,
+     "end_line": 37
+    }
+   ],
+   "reviewer_notes": "The shadow analyzer is not part of go vet's default set. The log line shows the failure, which makes the code look handled.",
+   "distinctive_tokens": [
+    "shadowed",
+    "shadowing",
+    "shadows",
+    "inner err"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "sync.go"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-GO-09",
+  "language": "go",
+  "split": "holdout",
+  "family": "json-tag-on-unexported-struct-field",
+  "category": "api_misuse",
+  "kind": "defect_pair",
+  "detection": "static_likely",
+  "cross_file": true,
+  "project": {
+   "name": "relayconf",
+   "title": "relayconf",
+   "summary": "Configuration loading for a message relay daemon."
+  },
+  "contract": "Load decodes a JSON configuration with the keys listen (string, required), timeout_ms (integer, 1 to 60000, default 5000) and retries (integer, 0 to 10, default 3). A key present in the document overrides its default, a value outside its range is an error, and unknown keys are ignored. Config.Retries reports the configured retries.",
+  "contract_file": "config.go",
+  "files": {
+   "shared": [
+    {
+     "path": "load.go",
+     "lines": [
+      "package relayconf",
+      "",
+      "import (",
+      "\t\"encoding/json\"",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"io\"",
+      ")",
+      "",
+      "// Load reads and validates a configuration document.",
+      "func Load(r io.Reader) (Config, error) {",
+      "\tcfg := defaults()",
+      "\tif err := json.NewDecoder(r).Decode(&cfg); err != nil {",
+      "\t\treturn Config{}, fmt.Errorf(\"config: %w\", err)",
+      "\t}",
+      "\tif cfg.Listen == \"\" {",
+      "\t\treturn Config{}, errors.New(\"config: listen is required\")",
+      "\t}",
+      "\tif cfg.TimeoutMS < 1 || cfg.TimeoutMS > 60000 {",
+      "\t\treturn Config{}, fmt.Errorf(\"config: timeout_ms %d out of range\", cfg.TimeoutMS)",
+      "\t}",
+      "\tif r := cfg.Retries(); r < 0 || r > 10 {",
+      "\t\treturn Config{}, fmt.Errorf(\"config: retries %d out of range\", r)",
+      "\t}",
+      "\treturn cfg, nil",
+      "}"
+     ]
+    }
+   ],
+   "before": [
+    {
+     "path": "config.go",
+     "lines": [
+      "package relayconf",
+      "",
+      "import \"time\"",
+      "",
+      "// Config is the relay configuration.",
+      "//",
+      "// {{CONTRACT}}",
+      "type Config struct {",
+      "\tListen    string `json:\"listen\"`",
+      "\tTimeoutMS int    `json:\"timeout_ms\"`",
+      "\tretries   int    `json:\"retries\"`",
+      "}",
+      "",
+      "func defaults() Config {",
+      "\treturn Config{TimeoutMS: 5000, retries: 3}",
+      "}",
+      "",
+      "// Timeout is the per-message delivery timeout.",
+      "func (c Config) Timeout() time.Duration {",
+      "\treturn time.Duration(c.TimeoutMS) * time.Millisecond",
+      "}",
+      "",
+      "// Retries is how many times a failed delivery is attempted again.",
+      "func (c Config) Retries() int {",
+      "\treturn c.retries",
+      "}"
+     ]
+    }
+   ],
+   "after": [
+    {
+     "path": "config.go",
+     "lines": [
+      "package relayconf",
+      "",
+      "import \"time\"",
+      "",
+      "// Config is the relay configuration.",
+      "//",
+      "// {{CONTRACT}}",
+      "type Config struct {",
+      "\tListen     string `json:\"listen\"`",
+      "\tTimeoutMS  int    `json:\"timeout_ms\"`",
+      "\tMaxRetries int    `json:\"retries\"`",
+      "}",
+      "",
+      "func defaults() Config {",
+      "\treturn Config{TimeoutMS: 5000, MaxRetries: 3}",
+      "}",
+      "",
+      "// Timeout is the per-message delivery timeout.",
+      "func (c Config) Timeout() time.Duration {",
+      "\treturn time.Duration(c.TimeoutMS) * time.Millisecond",
+      "}",
+      "",
+      "// Retries is how many times a failed delivery is attempted again.",
+      "func (c Config) Retries() int {",
+      "\treturn c.MaxRetries",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "b602cd3ff79c864182693771c7db49719b40f9860e5f6aee2920f823dbc62ecc",
+   "before_documented": "f64f0700991348df789b7976d719c9b28953258ef643613e777afdca44194b26",
+   "after": "b9cd24d8380145cfd14c11e030c0a5267cc8a882834617e18f5eb6fbd218be26",
+   "after_documented": "8629f237cf28f14c58989dca7b515359dade52d0588c1897a3a6f7640b9a598d"
+  },
+  "check": {
+   "summary": "Loads documents that set retries to 7, to 0 and to 50 and one without retries, and compares Retries() and the returned errors.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: retries 7: got 3",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package relayconf",
+      "",
+      "import (",
+      "\t\"fmt\"",
+      "\t\"strings\"",
+      "\t\"testing\"",
+      "\t\"time\"",
+      ")",
+      "",
+      "func TestCheckLoad(t *testing.T) {",
+      "\tfor _, c := range []struct {",
+      "\t\tdoc  string",
+      "\t\twant int",
+      "\t}{",
+      "\t\t{`{\"listen\": \":7000\", \"retries\": 7}`, 7},",
+      "\t\t{`{\"listen\": \":7000\", \"retries\": 0}`, 0},",
+      "\t\t{`{\"listen\": \":7000\"}`, 3},",
+      "\t} {",
+      "\t\tcfg, err := Load(strings.NewReader(c.doc))",
+      "\t\tif err != nil {",
+      "\t\t\tt.Fatalf(\"CHECK-FAIL: %s: %v\", c.doc, err)",
+      "\t\t}",
+      "\t\tif cfg.Retries() != c.want {",
+      "\t\t\tt.Fatalf(\"CHECK-FAIL: retries %d: got %d\", c.want, cfg.Retries())",
+      "\t\t}",
+      "\t}",
+      "\tif _, err := Load(strings.NewReader(`{\"listen\": \":7000\", \"retries\": 50}`)); err == nil {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: retries 50 accepted\")",
+      "\t}",
+      "\tcfg, err := Load(strings.NewReader(`{\"listen\": \":7000\", \"timeout_ms\": 250, \"extra\": true}`))",
+      "\tif err != nil || cfg.Timeout() != 250*time.Millisecond {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: timeout %v %v\", cfg.Timeout(), err)",
+      "\t}",
+      "\tif _, err := Load(strings.NewReader(`{\"timeout_ms\": 250}`)); err == nil {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: missing listen accepted\")",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "Any document that sets retries. encoding/json only assigns exported fields, so the tagged but unexported retries field is skipped without an error.",
+   "expected_impact": "Operators cannot change the retry count: every relay runs with the default of 3, and an out-of-range value such as 50 is accepted silently instead of being rejected.",
+   "positive_locations": [
+    {
+     "path": "config.go",
+     "symbol": "Config.retries",
+     "anchors": {
+      "start": "retries   int    `json:\"retries\"`"
+     },
+     "start_line": 15,
+     "end_line": 15
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "after",
+     "path": "config.go",
+     "symbol": "Config.MaxRetries",
+     "anchors": {
+      "start": "MaxRetries int    `json:\"retries\"`"
+     },
+     "note": "Exporting the field lets the decoder fill it; the accessor and the defaults follow.",
+     "start_line": 15,
+     "end_line": 15
+    },
+    {
+     "variant": "before",
+     "path": "load.go",
+     "symbol": "Load",
+     "anchors": {
+      "start": "if r := cfg.Retries(); r < 0 || r > 10 {"
+     },
+     "note": "Validation in load.go is right but can only see the default.",
+     "start_line": 22,
+     "end_line": 22
+    }
+   ],
+   "reviewer_notes": "go vet's structtag analyzer reports a json tag on an unexported field. Needs load.go to see that decoding goes straight into Config.",
+   "distinctive_tokens": [
+    "unexported",
+    "structtag",
+    "never decoded",
+    "ignored silently"
+   ],
+   "corrected_variant": {
+    "variant": "after",
+    "changed_files": [
+     "config.go"
+    ]
+   }
+  }
+ },
+ {
+  "id": "R1-GO-10",
+  "language": "go",
+  "split": "holdout",
+  "family": "poll-loop-stopped-by-owning-service",
+  "category": "concurrency_async",
+  "kind": "tricky_normal",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "feedwatch",
+   "title": "feedwatch",
+   "summary": "Polls upstream package feeds and records when they change."
+  },
+  "contract": "Poller.Start launches the polling loop in the background and returns at once; the loop polls every interval until ctx is done and then exits. Start is called once per Poller, by Service.Run, which owns the context. Wait blocks until the loop has exited. A poll that fails is counted in Failures and does not stop the loop.",
+  "contract_file": "poller.go",
+  "files": {
+   "shared": [
+    {
+     "path": "poller.go",
+     "lines": [
+      "package feedwatch",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"sync\"",
+      "\t\"sync/atomic\"",
+      "\t\"time\"",
+      ")",
+      "",
+      "// Fetcher returns the current version tag of a feed.",
+      "type Fetcher func(ctx context.Context) (string, error)",
+      "",
+      "// Poller polls one feed and remembers the last version it saw.",
+      "//",
+      "// {{CONTRACT}}",
+      "type Poller struct {",
+      "\tfetch    Fetcher",
+      "\tinterval time.Duration",
+      "\twg       sync.WaitGroup",
+      "\tpolls    atomic.Int64",
+      "\tfailures atomic.Int64",
+      "\tmu       sync.Mutex",
+      "\tversion  string",
+      "}",
+      "",
+      "// NewPoller returns a stopped poller.",
+      "func NewPoller(fetch Fetcher, interval time.Duration) *Poller {",
+      "\treturn &Poller{fetch: fetch, interval: interval}",
+      "}",
+      "",
+      "// Start begins polling in the background.",
+      "func (p *Poller) Start(ctx context.Context) {",
+      "\tp.wg.Add(1)",
+      "\tgo func() {",
+      "\t\tdefer p.wg.Done()",
+      "\t\tticker := time.NewTicker(p.interval)",
+      "\t\tdefer ticker.Stop()",
+      "\t\tfor {",
+      "\t\t\tselect {",
+      "\t\t\tcase <-ctx.Done():",
+      "\t\t\t\treturn",
+      "\t\t\tcase <-ticker.C:",
+      "\t\t\t\tp.poll(ctx)",
+      "\t\t\t}",
+      "\t\t}",
+      "\t}()",
+      "}",
+      "",
+      "// Wait blocks until the polling loop has exited.",
+      "func (p *Poller) Wait() { p.wg.Wait() }",
+      "",
+      "// Failures is the number of failed polls so far.",
+      "func (p *Poller) Failures() int64 { return p.failures.Load() }",
+      "",
+      "// Polls is the number of polls so far.",
+      "func (p *Poller) Polls() int64 { return p.polls.Load() }",
+      "",
+      "func (p *Poller) poll(ctx context.Context) {",
+      "\tp.polls.Add(1)",
+      "\tv, err := p.fetch(ctx)",
+      "\tif err != nil {",
+      "\t\tp.failures.Add(1)",
+      "\t\treturn",
+      "\t}",
+      "\tp.mu.Lock()",
+      "\tp.version = v",
+      "\tp.mu.Unlock()",
+      "}"
+     ]
+    },
+    {
+     "path": "service.go",
+     "lines": [
+      "package feedwatch",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"time\"",
+      ")",
+      "",
+      "// Service owns one poller and its lifetime.",
+      "type Service struct {",
+      "\tpoller *Poller",
+      "\tcancel context.CancelFunc",
+      "}",
+      "",
+      "// NewService prepares a service polling fetch every interval.",
+      "func NewService(fetch Fetcher, interval time.Duration) *Service {",
+      "\treturn &Service{poller: NewPoller(fetch, interval)}",
+      "}",
+      "",
+      "// Run starts the background polling.",
+      "func (s *Service) Run() {",
+      "\tctx, cancel := context.WithCancel(context.Background())",
+      "\ts.cancel = cancel",
+      "\ts.poller.Start(ctx)",
+      "}",
+      "",
+      "// Close stops polling and returns once the loop has exited.",
+      "func (s *Service) Close() {",
+      "\ts.cancel()",
+      "\ts.poller.Wait()",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "ca64de69bf434185d25f7645573caf2182f19009cc8c991288fd4c8035a3d042",
+   "before_documented": "697d1c5b55715d80645bba706feb716acd9a8f784b8d621252236a0794dab14f"
+  },
+  "check": {
+   "summary": "Runs a service with a 5 ms interval and a fetcher that fails every third call, closes it, and checks the goroutine count against the baseline, that no poll runs once Close returned, and the failure count.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: ",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package feedwatch",
+      "",
+      "import (",
+      "\t\"context\"",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"runtime\"",
+      "\t\"sync/atomic\"",
+      "\t\"testing\"",
+      "\t\"time\"",
+      ")",
+      "",
+      "func TestCheckService(t *testing.T) {",
+      "\tbase := runtime.NumGoroutine()",
+      "\tvar calls atomic.Int64",
+      "\tfetch := func(ctx context.Context) (string, error) {",
+      "\t\tn := calls.Add(1)",
+      "\t\tif n%3 == 0 {",
+      "\t\t\treturn \"\", errors.New(\"feed returned 502\")",
+      "\t\t}",
+      "\t\treturn fmt.Sprintf(\"v%d\", n), nil",
+      "\t}",
+      "\ts := NewService(fetch, 5*time.Millisecond)",
+      "\ts.Run()",
+      "\tdeadline := time.Now().Add(2 * time.Second)",
+      "\tfor s.poller.Polls() < 6 && time.Now().Before(deadline) {",
+      "\t\ttime.Sleep(2 * time.Millisecond)",
+      "\t}",
+      "\ts.Close()",
+      "\tatClose := calls.Load()",
+      "\ttime.Sleep(40 * time.Millisecond)",
+      "\tif calls.Load() != atClose {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: %d polls once Close returned\", calls.Load()-atClose)",
+      "\t}",
+      "\tif atClose < 6 || s.poller.Failures() != atClose/3 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: polls %d failures %d\", atClose, s.poller.Failures())",
+      "\t}",
+      "\tfor i := 0; i < 100 && runtime.NumGoroutine() > base; i++ {",
+      "\t\ttime.Sleep(10 * time.Millisecond)",
+      "\t}",
+      "\tif n := runtime.NumGoroutine(); n > base {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: %d goroutines still running (baseline %d)\", n, base)",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. Start spawns a goroutine and returns without any visible way to stop it in poller.go, which resembles an unbounded background goroutine.",
+   "expected_impact": "No defect: the loop ends when ctx is cancelled, and Service in service.go creates that context, cancels it in Close and then waits for the loop through Poller.Wait.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "poller.go",
+     "symbol": "Poller.Start",
+     "anchors": {
+      "start": "func (p *Poller) Start(ctx context.Context) {",
+      "end": "}()"
+     },
+     "note": "Goroutine started from Start with no stop method in this file.",
+     "start_line": 36,
+     "end_line": 50
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "service.go",
+     "symbol": "Service.Close",
+     "anchors": {
+      "start": "func (s *Service) Close() {",
+      "end": "s.poller.Wait()"
+     },
+     "note": "The owner cancels the loop's context and waits for it to exit.",
+     "start_line": 27,
+     "end_line": 29
+    },
+    {
+     "variant": "before",
+     "path": "poller.go",
+     "symbol": "Poller.Start",
+     "anchors": {
+      "start": "case <-ctx.Done():"
+     },
+     "note": "The loop exits on cancellation and stops its ticker on the way out.",
+     "start_line": 44,
+     "end_line": 44
+    }
+   ],
+   "reviewer_notes": "A finding that the goroutine can never stop, or that Start leaks, is a false positive. Calling Start twice is out of contract.",
+   "distinctive_tokens": [
+    "goroutine leak",
+    "never stops",
+    "owned context"
+   ],
+   "corrected_variant": null
+  }
+ },
+ {
+  "id": "R1-GO-11",
+  "language": "go",
+  "split": "holdout",
+  "family": "field-count-enforced-by-csv-reader",
+  "category": "input_validation",
+  "kind": "tricky_normal",
+  "detection": "semantic_only",
+  "cross_file": true,
+  "project": {
+   "name": "fxrates",
+   "title": "fxrates",
+   "summary": "Imports daily currency exchange rates published as CSV by a partner bank."
+  },
+  "contract": "ReadRates parses CSV lines of the form \"date,base,quote,rate\" (date as YYYY-MM-DD, currencies as three upper-case letters, rate a positive decimal) with '#' comment lines. Input comes from a partner and may be malformed: a line with any other number of fields, a bad value or unbalanced quotes returns an error naming the line, and ReadRates never panics. On error no rates are returned.",
+  "contract_file": "read.go",
+  "files": {
+   "shared": [
+    {
+     "path": "rate.go",
+     "lines": [
+      "package fxrates",
+      "",
+      "import (",
+      "\t\"fmt\"",
+      "\t\"strconv\"",
+      "\t\"time\"",
+      ")",
+      "",
+      "// Rate is one published exchange rate.",
+      "type Rate struct {",
+      "\tDay   time.Time",
+      "\tBase  string",
+      "\tQuote string",
+      "\tValue float64",
+      "}",
+      "",
+      "// parseRate converts one CSV record.",
+      "// fields has exactly four elements: ReadRates configures its reader that way.",
+      "func parseRate(fields []string) (Rate, error) {",
+      "\tday, err := time.Parse(\"2006-01-02\", fields[0])",
+      "\tif err != nil {",
+      "\t\treturn Rate{}, fmt.Errorf(\"date %q: %w\", fields[0], err)",
+      "\t}",
+      "\tbase, quote := fields[1], fields[2]",
+      "\tif !isCurrency(base) || !isCurrency(quote) {",
+      "\t\treturn Rate{}, fmt.Errorf(\"currency pair %q/%q\", base, quote)",
+      "\t}",
+      "\tvalue, err := strconv.ParseFloat(fields[3], 64)",
+      "\tif err != nil || !(value > 0) || value > 1e9 {",
+      "\t\treturn Rate{}, fmt.Errorf(\"rate %q\", fields[3])",
+      "\t}",
+      "\treturn Rate{Day: day, Base: base, Quote: quote, Value: value}, nil",
+      "}",
+      "",
+      "func isCurrency(s string) bool {",
+      "\tif len(s) != 3 {",
+      "\t\treturn false",
+      "\t}",
+      "\tfor _, c := range []byte(s) {",
+      "\t\tif c < 'A' || c > 'Z' {",
+      "\t\t\treturn false",
+      "\t\t}",
+      "\t}",
+      "\treturn true",
+      "}"
+     ]
+    },
+    {
+     "path": "read.go",
+     "lines": [
+      "package fxrates",
+      "",
+      "import (",
+      "\t\"encoding/csv\"",
+      "\t\"errors\"",
+      "\t\"fmt\"",
+      "\t\"io\"",
+      ")",
+      "",
+      "// ReadRates parses partner rate files.",
+      "//",
+      "// {{CONTRACT}}",
+      "func ReadRates(r io.Reader) ([]Rate, error) {",
+      "\tcr := csv.NewReader(r)",
+      "\tcr.Comment = '#'",
+      "\tcr.FieldsPerRecord = 4",
+      "\tcr.TrimLeadingSpace = true",
+      "\tvar rates []Rate",
+      "\tfor {",
+      "\t\tfields, err := cr.Read()",
+      "\t\tif errors.Is(err, io.EOF) {",
+      "\t\t\treturn rates, nil",
+      "\t\t}",
+      "\t\tif err != nil {",
+      "\t\t\treturn nil, fmt.Errorf(\"rates: %w\", err)",
+      "\t\t}",
+      "\t\tline, _ := cr.FieldPos(0)",
+      "\t\trate, err := parseRate(fields)",
+      "\t\tif err != nil {",
+      "\t\t\treturn nil, fmt.Errorf(\"rates line %d: %w\", line, err)",
+      "\t\t}",
+      "\t\trates = append(rates, rate)",
+      "\t}",
+      "}"
+     ]
+    }
+   ]
+  },
+  "digests": {
+   "before": "4a62ef9adcf299f62f3859066e1ba32a2f9a78f066c398f1daea1cd570b89908",
+   "before_documented": "636dfd653474c97d52a301ef96155c74a7643730a6bfabfbe60bb67a27d7fbbf"
+  },
+  "check": {
+   "summary": "Feeds ReadRates valid files and files with three, five and one field on a line, an empty line, broken quoting and bad values, recovering any panic, and compares the results and errors.",
+   "build": [
+    {
+     "argv": [
+      "{go}",
+      "test",
+      "-count=1",
+      "-vet=off",
+      "-run",
+      "^$",
+      "./..."
+     ]
+    }
+   ],
+   "run": {
+    "argv": [
+     "{go}",
+     "test",
+     "-count=1",
+     "-vet=off",
+     "-v",
+     "-run",
+     "^TestCheck",
+     "./..."
+    ]
+   },
+   "failure_signature": "CHECK-FAIL: ",
+   "timeout_seconds": 120,
+   "files": [
+    {
+     "path": "zz_check_test.go",
+     "lines": [
+      "package fxrates",
+      "",
+      "import (",
+      "\t\"fmt\"",
+      "\t\"strings\"",
+      "\t\"testing\"",
+      ")",
+      "",
+      "func read(t *testing.T, doc string) (rates []Rate, err error) {",
+      "\tdefer func() {",
+      "\t\tif r := recover(); r != nil {",
+      "\t\t\tt.Fatalf(\"CHECK-FAIL: ReadRates panicked on %q: %v\", doc, r)",
+      "\t\t}",
+      "\t}()",
+      "\treturn ReadRates(strings.NewReader(doc))",
+      "}",
+      "",
+      "func TestCheckRates(t *testing.T) {",
+      "\tgood := \"# rates\\n2026-04-01,EUR,USD,1.0812\\n2026-04-01, EUR, JPY, 163.2\\n\"",
+      "\trates, err := read(t, good)",
+      "\tif err != nil || len(rates) != 2 || rates[1].Quote != \"JPY\" || rates[1].Value != 163.2 {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: good file: %v %v\", rates, err)",
+      "\t}",
+      "\tfor _, bad := range []string{",
+      "\t\t\"2026-04-01,EUR,USD\\n\",",
+      "\t\t\"2026-04-01,EUR,USD,1.08,extra\\n\",",
+      "\t\t\"2026-04-01\\n\",",
+      "\t\t\"2026-04-01,EUR,USD,1.08\\n2026-04-02,EUR\\n\",",
+      "\t\t\"2026-04-01,\\\"EUR,USD,1.08\\n\",",
+      "\t\t\"2026-13-01,EUR,USD,1.08\\n\",",
+      "\t\t\"2026-04-01,eur,USD,1.08\\n\",",
+      "\t\t\"2026-04-01,EUR,USD,-1\\n\",",
+      "\t\t\"2026-04-01,EUR,USD,NaN\\n\",",
+      "\t} {",
+      "\t\trates, err := read(t, bad)",
+      "\t\tif err == nil || rates != nil {",
+      "\t\t\tt.Fatalf(\"CHECK-FAIL: accepted %q: %v\", bad, rates)",
+      "\t\t}",
+      "\t}",
+      "\tif _, err := read(t, \"2026-04-01,EUR,USD,1.08\\n\\n2026-04-02,EUR,USD,x\\n\"); err == nil || !strings.Contains(err.Error(), \"line 3\") {",
+      "\t\tt.Fatalf(\"CHECK-FAIL: error does not name line 3: %v\", err)",
+      "\t}",
+      "\tfmt.Println(\"CHECK-PASS\")",
+      "}"
+     ]
+    }
+   ]
+  },
+  "label": {
+   "trigger": "None. parseRate in rate.go indexes fields[0] to fields[3] without checking the slice length, which resembles an out-of-range panic on short lines.",
+   "expected_impact": "No defect: ReadRates sets FieldsPerRecord = 4 on the csv.Reader, which then returns csv.ErrFieldCount for any record with another field count, so parseRate only ever sees four fields.",
+   "positive_locations": [],
+   "suspect_locations": [
+    {
+     "path": "rate.go",
+     "symbol": "parseRate",
+     "anchors": {
+      "start": "day, err := time.Parse(\"2006-01-02\", fields[0])",
+      "end": "value, err := strconv.ParseFloat(fields[3], 64)"
+     },
+     "note": "Unchecked indexes into fields.",
+     "start_line": 20,
+     "end_line": 28
+    }
+   ],
+   "known_counterevidence": [
+    {
+     "variant": "before",
+     "path": "read.go",
+     "symbol": "ReadRates",
+     "anchors": {
+      "start": "cr.FieldsPerRecord = 4"
+     },
+     "note": "The reader enforces exactly four fields per record before parseRate is called.",
+     "start_line": 21,
+     "end_line": 21
+    },
+    {
+     "variant": "before",
+     "path": "rate.go",
+     "symbol": "parseRate",
+     "anchors": {
+      "start": "// fields has exactly four elements"
+     },
+     "note": "The precondition is documented on the helper, which is unexported and has a single caller.",
+     "start_line": 18,
+     "end_line": 18
+    }
+   ],
+   "reviewer_notes": "A finding of an index-out-of-range panic is a false positive. Suggesting a defensive length check is a style point.",
+   "distinctive_tokens": [
+    "index out of range",
+    "out-of-range panic",
+    "guaranteed four fields"
+   ],
+   "corrected_variant": null
+  }
+ },
+ {
   "id": "R1-RS-01",
   "language": "rust",
   "split": "holdout",
