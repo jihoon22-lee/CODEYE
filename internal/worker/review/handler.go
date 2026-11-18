@@ -46,9 +46,11 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 	if err != nil {
 		return nil, err
 	}
-	return append(plan, analysis.TaskSpec{Key: "review.context", Required: true, Title: "프로젝트 맥락 검토"},
-		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "코드 근거와 반례 검토"},
-		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증"}), nil
+	// review-v1 context reads documents and code; it is shown with the
+	// documents stage. Investigation and verification are code review.
+	return append(plan, analysis.TaskSpec{Key: "review.context", Required: true, Title: "프로젝트 맥락 검토", Stage: domain.StageDocuments},
+		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "코드 근거와 반례 검토", Stage: domain.StageCodeReview},
+		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview}), nil
 }
 func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	role, review := strings.CutPrefix(t.Key, "review.")

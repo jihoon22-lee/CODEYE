@@ -258,6 +258,13 @@ def run(base, root, env, *, browser=False):
         assert full["summary"]["pending_candidates"] > 0 and full["summary"]["actionable_findings"] == 0
         assert full["coverage"]["ai_review"]["status"] == "not_performed"
         assert full["quality_verdict"] == "inconclusive"
+        # W15: the real worker's discovery artifacts pass the report decoder.
+        environment = [a for a in full["artifacts"] if a["media_type"] == "application/vnd.codeye.environment+json"]
+        assert sorted(a["task_key"] for a in environment) == ["docs.discover", "env.discover"]
+        assert all(a["decoder"] == "application/vnd.codeye.environment+json;schema_version=0.1" for a in environment)
+        assert not any(item.endswith((":env.discover", ":docs.discover")) for item in full["limitations"])
+        statuses = {task["key"]: task["status"] for task in full["tasks"]}
+        assert statuses["env.discover"] == statuses["docs.discover"] == "succeeded"
         assert all(o["raw_message"] is None for o in code_free["observations"])
         assert any(o["raw_message"] and o["evidence_state"] == "verified_against_source_manifest"
                    for o in full["observations"])
