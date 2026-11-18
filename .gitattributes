@@ -1,0 +1,4 @@
+# Instruction packs, fixtures, examples and schemas are bound by SHA-256 digests
+# (pack digests, evidence blob hashes, pinned request hashes). Keep every
+# checkout byte-identical across operating systems: no CRLF conversion.
+* text=auto eol=lf
