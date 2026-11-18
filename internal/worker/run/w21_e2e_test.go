@@ -91,6 +91,10 @@ func TestW21PackWithRealTools(t *testing.T) {
 			t.Fatal(err)
 		}
 		anypacktest.AssertAbsent(t, secret, "report json", b)
+		// The controller reads the stored revision back before serving it.
+		if _, err := report.Unmarshal(b); err != nil {
+			t.Fatalf("include_code=%v: stored report does not read back: %v", include, err)
+		}
 		html, err := report.RenderHTML(p, report.Digest(b), report.Korean)
 		if err != nil {
 			t.Fatal(err)

@@ -302,8 +302,10 @@ func validateRuleContext(c *RuleContext, includeCode bool) error {
 		return invalidf("rule context records configuration it did not read")
 	case !includeCode && (c.ConfigPaths != nil || c.ConfigDigest != ""):
 		return invalidf("code-free export carries configuration paths or digest")
-	case includeCode && c.Config == ConfigRecorded && (c.ConfigPaths == nil || !hex64.MatchString(c.ConfigDigest)):
-		return invalidf("recorded rule context without paths and digest")
+	case includeCode && c.Config == ConfigRecorded && !hex64.MatchString(c.ConfigDigest):
+		// Paths are absent when the tool read no file (the JSON form omits
+		// an empty list, so a stored revision reads back the same).
+		return invalidf("recorded rule context without digest")
 	case len(c.UnreportedSuppressionRules) > 0 && c.SourceSuppressions != "reported":
 		return invalidf("rule context lists unreported suppression rules without reported suppressions")
 	}

@@ -122,6 +122,12 @@ func TestW21MetricsRendered(t *testing.T) {
 	if strings.Contains(string(fb), "classify(") || strings.Contains(string(fb), "duplicated on file") {
 		t.Fatal("code-free export holds tool text")
 	}
+	// The controller reads a stored revision back with Unmarshal.
+	for _, body := range [][]byte{b, fb} {
+		if _, err := Unmarshal(body); err != nil {
+			t.Fatalf("stored report does not read back: %v", err)
+		}
+	}
 }
 
 // A report whose finding cites a metric observation is invalid.
@@ -203,5 +209,32 @@ func TestW21UnresolvedMetricIsInconclusive(t *testing.T) {
 	}
 	if v := DecideVerdict(StatusCompleted, r.Summary, AIReviewPerformed); v != VerdictInconclusive {
 		t.Fatalf("verdict %s", v)
+	}
+}
+
+// gitleaks honors the repository .gitleaksignore; a snapshot without one
+// is a recorded context with no file: the digest of the empty list and no
+// paths. The stored revision reads back (the JSON form omits the empty
+// path list) and its key differs from a context with an ignore file.
+func TestW21HonoredWithoutConfigFilesReadsBack(t *testing.T) {
+	doc := readExample(t, "gitl"+"eaks")
+	doc["rule_pack"].(map[string]any)["config_files"] = []any{}
+	f := analyzerFixture(t, nil, taskSpec{key: "gitl" + "eaks", status: "succeeded", doc: doc})
+	r := build(t, f.in, DefaultRegistry())
+	rc := toolRow(r, "gitl"+"eaks").RuleContext
+	if rc == nil || rc.Config != ConfigRecorded || len(rc.ConfigPaths) != 0 || rc.ConfigDigest != ConfigDigest(nil) || !rc.Known() {
+		t.Fatalf("rule context %+v", rc)
+	}
+	if rc.Key() == toolRow(w21Report(t), "gitl"+"eaks").RuleContext.Key() {
+		t.Fatal("an ignore file did not change the rule context key")
+	}
+	for _, include := range []bool{true, false} {
+		b, err := Marshal(Project(r, include))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Unmarshal(b); err != nil {
+			t.Fatalf("include_code=%v: %v", include, err)
+		}
 	}
 }
