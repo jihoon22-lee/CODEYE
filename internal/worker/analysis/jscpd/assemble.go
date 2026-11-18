@@ -1,7 +1,9 @@
 package jscpd
 
 import (
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -120,6 +122,11 @@ func parseStdout(b []byte, listed map[string]bool) stream {
 
 // rel maps a masked absolute path to a listed snapshot path.
 func rel(p string, listed map[string]bool) (string, bool) {
+	if runtime.GOOS == "windows" {
+		// CODEYE passes native absolute paths and jscpd prints them back
+		// (measured on Linux only): compare in slash form.
+		p = filepath.ToSlash(p)
+	}
 	if !strings.HasPrefix(p, analysis.RedactedMarker+"/") {
 		return "", false
 	}
