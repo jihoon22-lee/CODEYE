@@ -259,7 +259,7 @@ go test -count=1 -run TestReal ./internal/worker/analysis/gitleaks/
 | `scripts/node_smoke.py` (`w21_secrets`, 도구 변수 필요) | §7.4 노드·controller·DB 종단 |
 | 웹 `ReportPanel.test.tsx` | 지표 행·표지, 요약 수 불일치 거부 |
 
-Windows: 바뀐 패키지(`cmd/codeye`, `report`, `anypack`, `builtin`, `gitleaks`, `jscpd`, `lizard`, `obsdoc`, `review`, `run`)를 `GOOS=windows`로 교차 컴파일했다. 그 바이너리를 WSL interop로 패키지 디렉터리에서 실행했고 모두 통과했다. 실도구 시험, 링크 시험(Windows에서 링크 생성 권한 필요), 일부 기존 시험은 건너뛴다.
+Windows: 바뀐 패키지(`cmd/codeye`, `report`, `anypack`, `builtin`, `gitleaks`, `jscpd`, `lizard`, `obsdoc`, `review`, `run`)를 `GOOS=windows`로 교차 컴파일했다. 그 바이너리를 WSL interop로 패키지 디렉터리에서 실행했고 모두 통과했다. 실도구 시험, 링크 시험(Windows에서 링크 생성 권한 필요), 일부 기존 시험은 건너뛴다. 시험은 경로를 OS 형식 그대로 서로 비교하거나(`filepath.Join`) slash 형식으로 비교한다. `EvalSymlinks`로 푼 경로를 풀지 않은 임시 경로와 비교하는 곳은 없다. jscpd는 넘긴 원본 경로를 출력하므로 Windows에서는 slash 형식으로 바꿔 읽는다(`TestRelativePathsPerPlatform`, 실제 Windows jscpd 출력은 측정하지 않음).
 
 ## 12. 남은 제한
 
