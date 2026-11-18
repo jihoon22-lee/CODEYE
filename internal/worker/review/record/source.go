@@ -31,13 +31,15 @@ func SourceEcosystem(p string) string {
 }
 
 // manifests are the build manifests a review-v1 corpus may carry as config
-// excerpts, by lower-cased base name.
+// excerpts, by lower-cased base name. compile_commands.json is not one: it
+// is generated build output that usually holds absolute paths of the machine
+// that wrote it, and the C/C++ pack already reads it as data (docs/41).
 var manifests = map[string]string{
 	"go.mod":         "go",
 	"pyproject.toml": "python", "setup.cfg": "python",
 	"package.json": "javascript", "tsconfig.json": "javascript",
 	"cargo.toml":     "rust",
-	"cmakelists.txt": "cpp", "compile_commands.json": "cpp",
+	"cmakelists.txt": "cpp",
 }
 
 // ManifestEcosystem returns the ecosystem of a build manifest path, or "".

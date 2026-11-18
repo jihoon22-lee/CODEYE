@@ -29,7 +29,7 @@ W24 2c부터 세 역할(`review.context`·`review.investigate`·`review.verify`)
 | 0 | code | 진입점. Go `main.go`, Python `__main__`·`main`·`app`·`cli`·`manage`(`.py`), JS/TS `main`·`app`·`server`·`cli`(소스 확장자)와 모듈 루트(가장 깊은 package.json·tsconfig.json 디렉터리) 또는 그 `src`의 `index`, Rust `main.rs`·`lib.rs`, C/C++ `main`(`.c`·`.cc`·`.cpp`·`.cxx`·`.c++`) |
 | 1 | document | README.md, AGENTS.md(최대 2개) |
 | 2 | code | 그 밖의 소스. 확장자는 `pack.SourceFiles`와 같다([docs/39 §2.8](39-r1-analyzer-packs.md#28-범위에-없는-생태계와-분석기-공백)). |
-| 3 | config | go.mod, pyproject.toml·setup.cfg, package.json·tsconfig.json, Cargo.toml, CMakeLists.txt·compile_commands.json |
+| 3 | config | go.mod, pyproject.toml·setup.cfg, package.json·tsconfig.json, Cargo.toml, CMakeLists.txt |
 | 4 | test | Go `*_test.go`. Python `test_*`·`*_test`·`conftest.py`. JS/TS `*.test.*`·`*.spec.*`. Rust `tests.rs`. C/C++ `test_*`·`*_test`·`*_tests`·`*_unittest`·`*-test`. Go가 아닌 언어는 test·tests 디렉터리(JS/TS는 `__tests__`도, Rust는 tests만) 아래 파일도 테스트다. |
 
 - **Go는 그대로다.** Go 파일·README/AGENTS·go.mod의 순위와 포함 규칙은 W11과 같다. vendor 아래 Go 파일도 이전처럼 후보다. 기존 Go fixture의 요청 바이트는 `TestReviewV1IsPinned`가 고정한다. `TestW24GoReviewInputsUnchanged`도 고정한다. 이 시험은 변경 전 코드(aa2ae13)로 두 팩의 모든 요청 해시를 캡처했다. 다른 생태계의 build 파일, vendor·testdata·숨김 디렉터리를 가진 Go 트리도 포함한다.
@@ -41,7 +41,7 @@ W24 2c부터 세 역할(`review.context`·`review.investigate`·`review.verify`)
   - 구문 분석기를 쓰지 않는다. 발췌는 파일 첫 50줄이고 함수 경계를 모른다.
   - 검증 역할의 호출자 확장은 Go만이다. 다른 언어 후보는 `no_symbol_for_expansion`과 `caller_expansion_go_only`를 남기고 코퍼스 발췌로만 검증된다.
   - 확장자 없는 스크립트와 생성 파일 이름(예: `.min.js`)은 판별하지 않는다.
-  - `compile_commands.json`은 요청대로 config 후보다. 이 파일은 보통 생성한 머신의 절대 경로를 담는다. 그 경로가 대상 저장소 자료로 모델에 갈 수 있으므로 계속 둘지는 소유자가 정한다.
+  - `compile_commands.json`은 config 후보가 아니다. 생성된 빌드 산출물이고 보통 생성한 머신의 절대 경로를 담으며, 검토 가치보다 크기가 크다. C/C++ 팩이 자료로 읽는다([W16](41-w16-cpp-pack.md)).
   - 파일 6개 상한에서 진입점·소스가 먼저 차므로 테스트는 자주 빠진다(`files_outside_review_context`).
 - **시험(TC-123).**
   - `TestW24V1CorpusPerLanguage`: `fixtures/w24-review-inputs`의 언어별 다파일 입력. 코퍼스 내용·순서, 세 역할 실행, 기록 decode, 같은 신원의 두 취득에서 같은 요청 바이트를 확인한다.

@@ -23,7 +23,7 @@ func TestSourceKinds(t *testing.T) {
 	}
 	manifests := map[string]string{
 		"go.mod": "go", "sub/pyproject.toml": "python", "setup.cfg": "python", "web/package.json": "javascript", "tsconfig.json": "javascript",
-		"crate/Cargo.toml": "rust", "CMakeLists.txt": "cpp", "build/compile_commands.json": "cpp",
+		"crate/Cargo.toml": "rust", "CMakeLists.txt": "cpp", "build/compile_commands.json": "", "compile_commands.json": "",
 		"Makefile": "", "go.sum": "", "package-lock.json": "", "requirements.txt": "", "setup.py": "",
 	}
 	for p, want := range manifests {

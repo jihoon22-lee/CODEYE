@@ -42,7 +42,7 @@ R0에서 모델이 받는 작업은 맥락 파악(`review.context`), 독립 코�
 
 - **조사 코드 발췌.**
   - Go 파일은 W15 규칙 그대로 가장 깊은 go.mod 디렉터리(모듈)로 묶는다. vendor·testdata·숨김·`_` 디렉터리는 뺀다.
-  - 다른 언어 파일은 같은 생태계의 manifest가 있는 가장 깊은 디렉터리로 묶고, 없으면 `.`다. manifest는 pyproject.toml·setup.cfg, package.json·tsconfig.json, Cargo.toml, CMakeLists.txt·compile_commands.json이다. 제외 디렉터리는 W11 기록과 같다.
+  - 다른 언어 파일은 같은 생태계의 manifest가 있는 가장 깊은 디렉터리로 묶고, 없으면 `.`다. manifest는 pyproject.toml·setup.cfg, package.json·tsconfig.json, Cargo.toml, CMakeLists.txt다(`compile_commands.json`은 생성 산출물이라 manifest로 보지 않는다). 제외 디렉터리는 W11 기록과 같다.
   - 묶음 안의 순서는 진입점, 소스, 테스트이고 같은 순위는 깊이와 경로 순이다. 진입점 규칙은 W11 기록과 같다. JS/TS `index`는 모듈 루트나 그 `src`에 있을 때만 진입점이다. 순회마다 각 생태계의 첫 묶음을 생태계 이름 순으로 돌고, 다음 순회에 둘째 묶음을 돈다. 그래서 첫 순회가 범위 안의 모든 언어를 지난다. Go만 있으면 순서는 이전과 같다.
   - 발췌는 파일 첫 50줄·2,400바이트 이하, 합계 8개·12,000바이트다. 근거 ID 규칙은 같다. 발췌가 있는 다른 언어 모듈 디렉터리도 `modules`에 넣는다.
   - `code_excerpts_go_only`는 더 쓰지 않는다. 보고서는 이전 기록을 위해 문구를 남긴다. 범위 안 소스가 제외 디렉터리 아래에 있어 빠지면 `source_in_excluded_directories`를 남긴다. 소스가 모두 그 아래에 있으면 investigate는 이전처럼 `review_input_unavailable`로 실패하고, 기록에 이 제약이 남는다.
