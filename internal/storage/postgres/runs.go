@@ -22,6 +22,8 @@ type Event struct {
 	Sequence, EntityVersion int64
 	Type                    string
 	Payload                 json.RawMessage
+	// CreatedAt is the database time the event was recorded.
+	CreatedAt time.Time
 }
 
 const runColumns = "id::text,project_id::text,actor_id::text,project_revision,snapshot_id::text,status,version,event_sequence,lease_epoch,created_at"
@@ -107,31 +109,64 @@ func (s *Store) Enqueue(ctx context.Context, actor, project, key string, body js
 	if err != nil {
 		return Run{}, domain.ErrInvalid
 	}
-	digest := domain.Digest(canonical)
 	return transaction(ctx, s, func(tx pgx.Tx) (Run, error) {
-		if err := requireProject(ctx, tx, actor, project, false, true); err != nil {
-			return Run{}, err
-		}
-		var existing, stored string
-		err := tx.QueryRow(ctx, "SELECT id::text,request_digest FROM runs WHERE project_id=$1 AND actor_id=$2 AND idempotency_key=$3", project, actor, key).Scan(&existing, &stored)
-		if err == nil {
-			if stored != digest {
-				return Run{}, domain.ErrConflict
-			}
-			return lockRun(ctx, tx, existing)
-		}
-		if err != pgx.ErrNoRows {
-			return Run{}, err
-		}
-		// The canonical request is stored so a claim can build the job from it.
-		r, err := readRun(tx.QueryRow(ctx, "INSERT INTO runs(id,project_id,actor_id,idempotency_key,request_digest,project_revision,status,request) SELECT $1,id,$2,$3,$4,current_revision,'queued',$6::text::jsonb FROM projects WHERE id=$5 RETURNING "+runColumns, domain.NewID(), actor, key, digest, project, string(canonical)))
-		if err != nil {
-			return Run{}, err
-		}
-		err = appendEvent(ctx, tx, &r, "run.queued", map[string]any{"status": r.Status}, false)
-		return r, err
+		return enqueueTx(ctx, tx, actor, project, key, canonical, nil)
 	})
 }
+
+// RunOrigin is the schedule occurrence a run was requested for (W22). A run
+// without one was requested manually.
+type RunOrigin struct {
+	ScheduleID   string
+	ScheduledFor time.Time
+}
+
+// enqueueTx is the one enqueue path for manual and scheduled runs: the
+// actor's run permission is checked under the project lock, the request is
+// stored canonically and the source is fixed only at acquire. The same
+// (project, actor, key) with the same body returns the existing run; another
+// body is ErrConflict. origin binds a scheduled run to its occurrence row,
+// which must already exist in tx.
+func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canonical json.RawMessage, origin *RunOrigin) (Run, error) {
+	digest := domain.Digest(canonical)
+	if err := requireProject(ctx, tx, actor, project, false, true); err != nil {
+		return Run{}, err
+	}
+	var existing, stored string
+	err := tx.QueryRow(ctx, "SELECT id::text,request_digest FROM runs WHERE project_id=$1 AND actor_id=$2 AND idempotency_key=$3", project, actor, key).Scan(&existing, &stored)
+	if err == nil {
+		if stored != digest {
+			return Run{}, domain.ErrConflict
+		}
+		return lockRun(ctx, tx, existing)
+	}
+	if err != pgx.ErrNoRows {
+		return Run{}, err
+	}
+	var scheduleID *string
+	var scheduledFor *time.Time
+	payload := map[string]any{"status": domain.RunQueued, "trigger": TriggerManual}
+	if origin != nil {
+		at := origin.ScheduledFor.UTC()
+		scheduleID, scheduledFor = &origin.ScheduleID, &at
+		payload["trigger"], payload["schedule_id"], payload["scheduled_for"] = TriggerSchedule, origin.ScheduleID, at
+	}
+	// The canonical request is stored so a claim can build the job from it.
+	r, err := readRun(tx.QueryRow(ctx, "INSERT INTO runs(id,project_id,actor_id,idempotency_key,request_digest,project_revision,status,request,schedule_id,scheduled_for) SELECT $1,id,$2,$3,$4,current_revision,'queued',$6::text::jsonb,$7,$8 FROM projects WHERE id=$5 RETURNING "+runColumns,
+		domain.NewID(), actor, key, digest, project, string(canonical), scheduleID, scheduledFor))
+	if err != nil {
+		return Run{}, err
+	}
+	err = appendEvent(ctx, tx, &r, "run.queued", payload, false)
+	return r, err
+}
+
+// Run triggers (RunView.Origin, run.queued payload).
+const (
+	TriggerManual   = "manual"
+	TriggerSchedule = "schedule"
+)
+
 func (s *Store) GetRun(ctx context.Context, actor, id string) (Run, error) {
 	if !validIDs(actor, id) {
 		return Run{}, domain.ErrInvalid
@@ -142,22 +177,41 @@ func (s *Store) Events(ctx context.Context, actor, id string, after int64, limit
 	if !validIDs(actor, id) || after < 0 || limit < 1 || limit > 1000 {
 		return nil, domain.ErrInvalid
 	}
-	return transaction(ctx, s, func(tx pgx.Tx) ([]Event, error) {
-		if _, err := authorizeRunRead(ctx, tx, actor, id); err != nil {
-			return nil, err
-		}
-		rows, err := tx.Query(ctx, "SELECT sequence,entity_version,type,payload FROM events WHERE run_id=$1 AND sequence>$2 ORDER BY sequence LIMIT $3", id, after, limit)
+	page, err := s.RunEvents(ctx, actor, id, after, limit)
+	return page.Events, err
+}
+
+// EventPage is a slice of a run's event log and the run's latest sequence
+// (Head), read in one transaction after the ACL check.
+type EventPage struct {
+	Head   int64
+	Events []Event
+}
+
+// RunEvents returns up to limit events of a run after sequence after, for an
+// actor who may read the run (W22 SSE). Every call re-checks the project ACL.
+func (s *Store) RunEvents(ctx context.Context, actor, id string, after int64, limit int) (EventPage, error) {
+	if !validIDs(actor, id) || after < 0 || limit < 1 || limit > 1000 {
+		return EventPage{}, domain.ErrInvalid
+	}
+	return transaction(ctx, s, func(tx pgx.Tx) (EventPage, error) {
+		r, err := authorizeRunRead(ctx, tx, actor, id)
 		if err != nil {
-			return nil, err
+			return EventPage{}, err
+		}
+		rows, err := tx.Query(ctx, "SELECT sequence,entity_version,type,payload,created_at FROM events WHERE run_id=$1 AND sequence>$2 ORDER BY sequence LIMIT $3", id, after, limit)
+		if err != nil {
+			return EventPage{}, err
 		}
 		defer rows.Close()
-		out := []Event{}
+		out := EventPage{Head: r.EventSequence, Events: []Event{}}
 		for rows.Next() {
 			var e Event
-			if err := rows.Scan(&e.Sequence, &e.EntityVersion, &e.Type, &e.Payload); err != nil {
-				return nil, err
+			if err := rows.Scan(&e.Sequence, &e.EntityVersion, &e.Type, &e.Payload, &e.CreatedAt); err != nil {
+				return EventPage{}, err
 			}
-			out = append(out, e)
+			e.CreatedAt = e.CreatedAt.UTC()
+			out.Events = append(out.Events, e)
 		}
 		return out, rows.Err()
 	})

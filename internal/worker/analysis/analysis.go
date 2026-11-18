@@ -47,6 +47,10 @@ type TaskSpec struct {
 	// Stage is the display stage (docs/37 §2) sent with task_created. Empty
 	// means "not recorded"; the server never infers it from Key.
 	Stage domain.Stage
+	// Weight is the optional estimate weight (1..1000) sent with task_created
+	// for the weighted progress (W22). 0 means not declared (the server counts
+	// the task as 1). Handlers must not claim a weight they have not measured.
+	Weight int
 }
 
 // Execution is one executor.Runner.Run call made by a handler. Name is stable

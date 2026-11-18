@@ -1,9 +1,10 @@
 import { ReportPanel } from './ReportPanel';
 import { useEffect, useState } from 'react';
-import type { Api, Project, RunAck, RunView } from './api';
-import { canCancelRun, describeError, isKnownRunStatus, isTerminalRun, runStatusLabel, shorten, type ErrorText } from './format';
+import type { Api, Project, RunAck, RunProgress, RunTrigger, RunView } from './api';
+import { canCancelRun, describeError, formatClock, formatInstant, isKnownRunStatus, isTerminalRun, runStatusLabel, shorten, stageName, type ErrorText } from './format';
 import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
+import type { StreamMode } from './runStream';
 import { StageList } from './StageView';
 import { useRunPolling } from './useRunPolling';
 
@@ -54,7 +55,7 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
 }
 
 function RunStatus({ api, runId, placeholder, onRunChange }: { api: Api; runId: string; placeholder: RunAck | null; onRunChange?: () => void }) {
-  const { run, error, stopped, hidden, confirmedAt, applyAck, refresh } = useRunPolling(api, runId);
+  const { run, error, stopped, hidden, confirmedAt, mode, applyAck, refresh } = useRunPolling(api, runId);
   const runVersion = run?.version;
   useEffect(() => { if (runVersion !== undefined) onRunChange?.(); }, [runVersion]); // eslint-disable-line react-hooks/exhaustive-deps
   const status = run?.status ?? placeholder?.status ?? null;
@@ -73,7 +74,8 @@ function RunStatus({ api, runId, placeholder, onRunChange }: { api: Api; runId: 
     {!run && <dl><dt>{t.runs.id}</dt><dd><code>{runId}</code></dd>{version !== null && <><dt>{t.runs.version}</dt><dd>{version}</dd></>}</dl>}
     {error !== null && <p role="alert" className="error">{stopped ? t.runs.pollStopped : t.runs.pollError} {describeError(error).message}</p>}
     <p className="small">
-      {terminal ? t.runs.terminalNote : hidden ? t.runs.pollingHidden : stopped ? t.runs.pollStopped : t.runs.polling}
+      {terminal ? t.runs.terminalNote : hidden && mode !== 'paused' ? t.runs.pollingHidden : stopped ? t.runs.pollStopped : updateText(mode)}
+      {!terminal && !stopped && mode === 'live' && confirmedAt && <> {t.stages.lastConfirmed(formatClock(confirmedAt))}</>}
     </p>
     <div className="actions">
       {(!terminal || (run?.snapshot_id && !run.reportRevision)) && <button type="button" onClick={refresh}>{t.runs.refresh}</button>}
@@ -82,18 +84,64 @@ function RunStatus({ api, runId, placeholder, onRunChange }: { api: Api; runId: 
   </div>;
 }
 
+// How the panel is kept up to date. polling keeps the pre-W22 wording.
+function updateText(mode: StreamMode): string {
+  switch (mode) {
+    case 'connecting': return t.runs.streamConnecting;
+    case 'live': return t.runs.streamLive;
+    case 'fallback': return t.runs.streamFallback;
+    case 'paused': return t.runs.streamPaused;
+    default: return t.runs.polling;
+  }
+}
+
+function triggerText(trigger: RunTrigger): string {
+  if (trigger.kind === 'manual') return t.runs.triggerManual;
+  if (trigger.kind === 'schedule' && trigger.scheduled_for) return t.runs.triggerSchedule(formatInstant(trigger.scheduled_for));
+  return t.runs.triggerUnknown(shorten(trigger.kind, 40));
+}
+
+// The weighted plan behind the percentage and why its denominator changed (W22). Servers before
+// W22 send none of it: nothing is shown rather than a guess.
+function PlanDetails({ p }: { p: RunProgress }) {
+  if (p.planned_weight === undefined && p.plan_changes === undefined) return null;
+  const basis = p.weight_basis ?? null;
+  const changes = p.plan_changes ?? [];
+  return <>
+    <dt>{t.runs.plan}</dt>
+    <dd>
+      {p.plan_revision === null || p.planned_weight == null
+        ? t.runs.planPending
+        : <>{t.runs.planValue(p.plan_revision, p.finished_weight ?? 0, p.planned_weight)}
+          {basis !== null && <span className="small"> {Object.hasOwn(t.runs.weightBasis, basis) ? t.runs.weightBasis[basis] : t.runs.weightBasisUnknown(shorten(basis, 40))}</span>}</>}
+      {changes.length > 0 && <details>
+        <summary>{t.runs.planChanges}</summary>
+        <ul className="plain small">{changes.map(c => <li key={c.revision}>
+          {c.reason === 'task_added'
+            ? t.runs.planChange(c.revision, c.stage === null ? t.runs.planChangeNoStage : stageName(c.stage), c.weight, c.planned_weight)
+            : t.runs.planChangeUnknown(c.revision, shorten(c.reason, 40))}
+          {c.recorded_at && <> ({formatInstant(c.recorded_at)})</>}
+        </li>)}</ul>
+      </details>}
+    </dd>
+  </>;
+}
+
 function RunDetails({ run, confirmedAt }: { run: RunView; confirmedAt: Date | null }) {
   const p = run.progress;
   const reason = p.waiting_reason;
   return <><dl>
     <dt>{t.runs.id}</dt><dd><code>{run.id}</code></dd>
     <dt>{t.runs.version}</dt><dd>{run.version}</dd>
+    {run.trigger && <><dt>{t.runs.trigger}</dt><dd>{triggerText(run.trigger)}</dd></>}
     <dt>{t.runs.snapshot}</dt><dd>{run.snapshot_id ? <code>{run.snapshot_id}</code> : t.runs.snapshotNone}</dd>
     <dt>{t.runs.tasks}</dt><dd>{t.runs.tasksValue(p.completed_tasks, p.total_tasks)}</dd>
     <dt>{t.runs.percent}</dt>
     <dd>{p.estimated_percent === null
       ? t.runs.percentUnknown
-      : <><progress max={100} value={p.estimated_percent} aria-label={t.runs.percent} /> {p.estimated_percent}%</>}</dd>
+      : <><progress max={100} value={p.estimated_percent} aria-label={t.runs.percent} /> {p.estimated_percent}%</>}
+      {p.planned_weight !== undefined && <p className="small">{t.runs.percentNote}</p>}</dd>
+    <PlanDetails p={p} />
     {reason !== null && <><dt>{t.runs.waiting}</dt><dd>{Object.hasOwn(t.runs.waitingLabels, reason) ? t.runs.waitingLabels[reason] : shorten(reason, 120)}</dd></>}
     {run.quality_verdict !== null && <><dt>{t.runs.verdict}</dt><dd>{Object.hasOwn(t.runs.verdictLabels, run.quality_verdict) ? t.runs.verdictLabels[run.quality_verdict] : t.runs.statusUnknown}</dd></>}
   </dl>

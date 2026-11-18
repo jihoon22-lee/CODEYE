@@ -31,16 +31,19 @@ const lifecycleTypes = `('attempt.leased','run.retried','run.status','snapshot.f
 
 // runStagesSQL reads, per run: status, snapshot presence, request time, the
 // latest event time, the current attempt's milestones (events after the latest
-// lease or retry), its published report, completion and rejection reasons, and
-// all logical tasks. The current attempt is the one whose epoch is the run's
+// lease or retry, including the plan-fixing running event's sequence), its
+// published report, completion and rejection reasons, and all logical tasks
+// with their weight and creation event (W22 plan revision). The current attempt is the one whose epoch is the run's
 // lease_epoch; earlier attempts' reports and reasons are history.
 const runStagesSQL = `SELECT x.id::text,x.status,x.snapshot_id IS NOT NULL,x.created_at,
 	(SELECT e.created_at FROM events e WHERE e.run_id=x.id AND e.sequence=x.event_sequence),
-	cur.leased_at,cur.snapshot_at,cur.running_at,cur.finalizing_at,
+	cur.leased_at,cur.snapshot_at,cur.running_at,cur.running_seq,cur.finalizing_at,
 	(SELECT max(rp.created_at) FROM reports rp WHERE rp.run_id=x.id AND rp.lease_epoch=x.lease_epoch),
 	(SELECT a.completion_reason FROM attempts a WHERE a.run_id=x.id AND a.epoch=x.lease_epoch),
 	(SELECT j.reason FROM report_rejections j JOIN attempts a ON a.id=j.attempt_id WHERE a.run_id=x.id AND a.epoch=x.lease_epoch),
-	COALESCE((SELECT json_agg(json_build_object('stage',t.stage,'status',t.status,'reason',t.reason,'started_at',t.started_at,'finished_at',t.finished_at) ORDER BY t.id)
+	COALESCE((SELECT json_agg(json_build_object('stage',t.stage,'status',t.status,'reason',t.reason,'started_at',t.started_at,'finished_at',t.finished_at,
+			'weight',t.weight,'created_sequence',t.created_sequence,
+			'created_at',(SELECT ce.created_at FROM events ce WHERE ce.run_id=t.run_id AND ce.sequence=t.created_sequence)) ORDER BY t.id)
 		FROM tasks t WHERE t.run_id=x.id),'[]'::json),
 	statement_timestamp()
 	FROM runs x
@@ -50,6 +53,7 @@ const runStagesSQL = `SELECT x.id::text,x.status,x.snapshot_id IS NOT NULL,x.cre
 		min(c.created_at) FILTER (WHERE c.type='attempt.leased') AS leased_at,
 		min(c.created_at) FILTER (WHERE c.type IN ('snapshot.fixed','snapshot.confirmed')) AS snapshot_at,
 		min(c.created_at) FILTER (WHERE c.type='run.status' AND c.payload->>'status'='running') AS running_at,
+		min(c.sequence) FILTER (WHERE c.type='run.status' AND c.payload->>'status'='running') AS running_seq,
 		min(c.created_at) FILTER (WHERE c.type='run.status' AND c.payload->>'status'='finalizing') AS finalizing_at
 		FROM events c WHERE c.run_id=x.id AND c.type IN ` + lifecycleTypes + ` AND c.sequence>=COALESCE(bound.seq,0)) cur ON true
 	WHERE x.id=ANY($1::uuid[])`
@@ -60,6 +64,9 @@ type stageTaskRow struct {
 	Reason     *string    `json:"reason"`
 	StartedAt  *time.Time `json:"started_at"`
 	FinishedAt *time.Time `json:"finished_at"`
+	Weight     *int       `json:"weight"`
+	CreatedSeq *int64     `json:"created_sequence"`
+	CreatedAt  *time.Time `json:"created_at"`
 }
 
 func utc(t *time.Time) *time.Time {
@@ -99,7 +106,7 @@ func loadRunStages(ctx context.Context, tx pgx.Tx, ids []string) (map[string]Run
 			tasks                 []byte
 		)
 		if err := rows.Scan(&id, &rs.Status, &in.SnapshotFixed, &rs.RequestedAt, &lastEvent,
-			&in.LeasedAt, &in.SnapshotAt, &in.RunningAt, &in.FinalizingAt, &report, &attemptReason, &reject, &tasks, &rs.CheckedAt); err != nil {
+			&in.LeasedAt, &in.SnapshotAt, &in.RunningAt, &in.RunningSeq, &in.FinalizingAt, &report, &attemptReason, &reject, &tasks, &rs.CheckedAt); err != nil {
 			return nil, err
 		}
 		var stored []stageTaskRow
@@ -111,7 +118,7 @@ func loadRunStages(ctx context.Context, tx pgx.Tx, ids []string) (map[string]Run
 		in.AttemptReason, in.ReportRejection = deref(attemptReason), deref(reject)
 		for _, t := range stored {
 			in.Tasks = append(in.Tasks, progress.Task{Stage: domain.Stage(deref(t.Stage)), Status: domain.TaskStatus(t.Status), Reason: deref(t.Reason),
-				StartedAt: utc(t.StartedAt), FinishedAt: utc(t.FinishedAt)})
+				StartedAt: utc(t.StartedAt), FinishedAt: utc(t.FinishedAt), Weight: t.Weight, CreatedSeq: t.CreatedSeq, CreatedAt: utc(t.CreatedAt)})
 		}
 		rs.View = progress.Compute(in)
 		rs.RequestedAt, rs.LastEventAt, rs.CheckedAt = rs.RequestedAt.UTC(), utc(lastEvent), rs.CheckedAt.UTC()

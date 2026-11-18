@@ -108,7 +108,7 @@ func (s *Store) RecordAttemptEvent(ctx context.Context, node string, o Ownership
 			out.SnapshotID = &id
 		case nodeproto.EventTaskCreated:
 			var p nodeproto.TaskCreatedPayload
-			if domain.DecodeStrict(ev.Payload, &p) != nil || !nodeproto.ValidTaskKey(p.Key) || (p.Stage != nil && !domain.Stage(*p.Stage).Valid()) {
+			if domain.DecodeStrict(ev.Payload, &p) != nil || !nodeproto.ValidTaskKey(p.Key) || (p.Stage != nil && !domain.Stage(*p.Stage).Valid()) || (p.Weight != nil && !validWeight(*p.Weight)) {
 				return out, domain.ErrInvalid
 			}
 			var stage *domain.Stage
@@ -116,7 +116,7 @@ func (s *Store) RecordAttemptEvent(ctx context.Context, node string, o Ownership
 				st := domain.Stage(*p.Stage)
 				stage = &st
 			}
-			id, version, err := createTaskTx(ctx, tx, &r, &p.Key, p.Required, stage)
+			id, version, err := createTaskTx(ctx, tx, &r, &p.Key, p.Required, stage, p.Weight)
 			if err != nil {
 				return out, err
 			}

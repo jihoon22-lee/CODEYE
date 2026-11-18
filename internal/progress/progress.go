@@ -6,6 +6,7 @@
 package progress
 
 import (
+	"math"
 	"sort"
 	"time"
 
@@ -52,7 +53,29 @@ type Task struct {
 	Reason     string
 	StartedAt  *time.Time
 	FinishedAt *time.Time
+	// Weight is the worker's declared estimate weight (W22); nil means not
+	// declared and counts as DefaultWeight.
+	Weight *int
+	// CreatedSeq is the run event sequence of the task's creation and
+	// CreatedAt its database time; both nil for tasks recorded before W22.
+	CreatedSeq *int64
+	CreatedAt  *time.Time
 }
+
+// DefaultWeight is the weight of a task without a declared weight: the
+// estimate is then the share of finished tasks (task_count basis).
+const DefaultWeight = 1
+
+// Weight bases (Plan.WeightBasis).
+const (
+	BasisTaskCount = "task_count" // no task declared a weight
+	BasisDeclared  = "declared"   // every task declared one
+	BasisMixed     = "mixed"
+)
+
+// PlanChangeTaskAdded is the only plan change reason: a task was created after
+// the current attempt fixed its plan.
+const PlanChangeTaskAdded = "task_added"
 
 // Run is the stored state of one run. Times are database times of accepted
 // records of the run's current attempt (after its latest lease or retry); nil
@@ -65,8 +88,9 @@ type Run struct {
 	// SnapshotAt is when the current attempt fixed or confirmed the snapshot.
 	SnapshotAt *time.Time
 	// RunningAt is when the current attempt advanced the run to running,
-	// i.e. its task plan was fixed.
-	RunningAt *time.Time
+	// i.e. its task plan was fixed; RunningSeq is that event's sequence.
+	RunningAt  *time.Time
+	RunningSeq *int64
 	// FinalizingAt is when the current attempt advanced the run to finalizing.
 	FinalizingAt *time.Time
 	// ReportAt is when a report revision of the current attempt was published.
@@ -95,10 +119,38 @@ type Stage struct {
 }
 
 // View is the ordered stage list of a run. Stages is empty (never nil) when
-// Detail is NotRecorded.
+// Detail is NotRecorded. Plan does not depend on stage records.
 type View struct {
 	Detail Detail
 	Stages []Stage
+	Plan   Plan
+}
+
+// Plan is the weighted progress estimate of the current attempt (W22,
+// REQ-017). Before the plan is fixed every pointer is nil and Changes is
+// empty. Revision is 1 when the plan is fixed and grows by one for each task
+// created afterwards (Changes says which task, with what weight, moved the
+// denominator). The estimate is finished weight / planned weight of the
+// current revision; it is computed only from stored task records, never
+// from heartbeats, model tokens or elapsed time.
+type Plan struct {
+	Revision         *int
+	PlannedWeight    *int
+	FinishedWeight   int
+	EstimatedPercent *float64
+	WeightBasis      string
+	Changes          []PlanChange
+}
+
+// PlanChange records one plan revision after the first. PlannedWeight is the
+// denominator after the change.
+type PlanChange struct {
+	Revision      int
+	Reason        string
+	Stage         domain.Stage
+	Weight        int
+	PlannedWeight int
+	At            *time.Time
 }
 
 // planFixed reports whether the current attempt fixed its task plan. queued
@@ -118,14 +170,15 @@ func planFixed(r Run) bool {
 // Compute derives the ordered stage list: source, the task stages in
 // domain.TaskStages order (build/test only when planned), then report.
 func Compute(r Run) View {
+	fixed := planFixed(r)
+	plan := computePlan(r, fixed)
 	byStage := map[domain.Stage][]Task{}
 	for _, t := range r.Tasks {
 		if !t.Stage.Valid() {
-			return View{Detail: NotRecorded, Stages: []Stage{}}
+			return View{Detail: NotRecorded, Stages: []Stage{}, Plan: plan}
 		}
 		byStage[t.Stage] = append(byStage[t.Stage], t)
 	}
-	fixed := planFixed(r)
 	stages := []Stage{source(r)}
 	for _, key := range domain.TaskStages {
 		tasks := byStage[key]
@@ -135,7 +188,61 @@ func Compute(r Run) View {
 		stages = append(stages, taskStage(string(key), tasks, fixed))
 	}
 	stages = append(stages, report(r))
-	return View{Detail: Recorded, Stages: stages}
+	return View{Detail: Recorded, Stages: stages, Plan: plan}
+}
+
+func weightOf(t Task) int {
+	if t.Weight != nil {
+		return *t.Weight
+	}
+	return DefaultWeight
+}
+
+// computePlan derives the plan revision and weighted estimate. A task belongs
+// to the first revision unless it was created after the current attempt's
+// plan-fixing event (CreatedSeq > RunningSeq); tasks without a creation
+// sequence (before W22) belong to the first revision.
+func computePlan(r Run, fixed bool) Plan {
+	p := Plan{Changes: []PlanChange{}}
+	if !fixed {
+		return p
+	}
+	var added []Task
+	base, finished, declared := 0, 0, 0
+	for _, t := range r.Tasks {
+		if t.Weight != nil {
+			declared++
+		}
+		if t.Status.Terminal() {
+			finished += weightOf(t)
+		}
+		if r.RunningSeq != nil && t.CreatedSeq != nil && *t.CreatedSeq > *r.RunningSeq {
+			added = append(added, t)
+			continue
+		}
+		base += weightOf(t)
+	}
+	sort.SliceStable(added, func(i, j int) bool { return *added[i].CreatedSeq < *added[j].CreatedSeq })
+	revision, planned := 1, base
+	for _, t := range added {
+		revision++
+		planned += weightOf(t)
+		p.Changes = append(p.Changes, PlanChange{Revision: revision, Reason: PlanChangeTaskAdded, Stage: t.Stage, Weight: weightOf(t), PlannedWeight: planned, At: t.CreatedAt})
+	}
+	p.Revision, p.PlannedWeight, p.FinishedWeight = &revision, &planned, finished
+	switch {
+	case declared == 0:
+		p.WeightBasis = BasisTaskCount
+	case declared == len(r.Tasks):
+		p.WeightBasis = BasisDeclared
+	default:
+		p.WeightBasis = BasisMixed
+	}
+	if planned > 0 {
+		percent := math.Round(float64(finished)*1000/float64(planned)) / 10
+		p.EstimatedPercent = &percent
+	}
+	return p
 }
 
 func newStage(key string) Stage {

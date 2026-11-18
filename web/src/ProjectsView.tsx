@@ -8,6 +8,7 @@ import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
 import { ProjectForm } from './ProjectForm';
 import { ErrorNote, RunPanel } from './RunPanel';
+import { SchedulePanel } from './SchedulePanel';
 
 type Props = { api: Api; userId: string; idempotency: Idempotency };
 
@@ -176,5 +177,6 @@ function ProjectDetail({ api, userId, project, idempotency, source, onRunChange 
       </>}
     </section>
     <RunPanel api={api} userId={userId} project={project} idempotency={idempotency} openRunId={openRun} onRunChange={onRunChange} />
+    <SchedulePanel api={api} projectId={project.id} />
   </>;
 }

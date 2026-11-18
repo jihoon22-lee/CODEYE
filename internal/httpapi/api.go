@@ -68,7 +68,12 @@ func (s *Server) apiRoutes() []route {
 		r("POST", "projects", "projects.create", true, true, (*Server).createProject),
 		r("GET", "projects/{id}", "projects.get", true, false, (*Server).getProject),
 		r("POST", "projects/{id}/runs", "runs.create", true, true, (*Server).createRun),
+		r("GET", "projects/{id}/schedules", "schedules.list", true, false, (*Server).listSchedules),
+		r("POST", "projects/{id}/schedules", "schedules.create", true, true, (*Server).createSchedule),
+		r("PATCH", "projects/{id}/schedules/{id}", "schedules.update", true, true, (*Server).updateSchedule),
+		r("DELETE", "projects/{id}/schedules/{id}", "schedules.delete", true, false, (*Server).deleteSchedule),
 		r("GET", "runs/{id}", "runs.get", true, false, (*Server).getRun),
+		r("GET", "runs/{id}/events", "runs.events", true, false, (*Server).streamRunEvents),
 		r("POST", "runs/{id}/cancel", "runs.cancel", true, false, (*Server).cancelRun),
 		r("GET", "runs/{id}/report", "runs.report", true, false, (*Server).getReport),
 		r("GET", "runs/{id}/reports", "runs.reports", true, false, (*Server).listReports),
@@ -676,19 +681,44 @@ func (s *Server) createRun(q *request) {
 	writeJSON(q.w, http.StatusAccepted, ack)
 }
 
-// progressView keeps the R0 fields (stage is the run status) and adds the W15
-// stage view computed exactly like the project activity.
+// progressView keeps the R0 fields (stage is the run status), adds the W15
+// stage view computed exactly like the project activity and the W22 plan
+// revision and weighted estimate (progress.Plan, same computation).
 type progressView struct {
-	Stage            string      `json:"stage"`
-	PlanRevision     *int64      `json:"plan_revision"`
-	CompletedTasks   int64       `json:"completed_tasks"`
-	TotalTasks       *int64      `json:"total_tasks"`
-	EstimatedPercent *float64    `json:"estimated_percent"`
-	WaitingReason    *string     `json:"waiting_reason"`
-	Detail           string      `json:"detail"`
-	Stages           []stageView `json:"stages"`
-	LastEventAt      *time.Time  `json:"last_event_at"`
-	CheckedAt        time.Time   `json:"checked_at"`
+	Stage            string           `json:"stage"`
+	PlanRevision     *int             `json:"plan_revision"`
+	CompletedTasks   int64            `json:"completed_tasks"`
+	TotalTasks       *int64           `json:"total_tasks"`
+	EstimatedPercent *float64         `json:"estimated_percent"`
+	PlannedWeight    *int             `json:"planned_weight"`
+	FinishedWeight   *int             `json:"finished_weight"`
+	WeightBasis      *string          `json:"weight_basis"`
+	PlanChanges      []planChangeView `json:"plan_changes"`
+	WaitingReason    *string          `json:"waiting_reason"`
+	Detail           string           `json:"detail"`
+	Stages           []stageView      `json:"stages"`
+	LastEventAt      *time.Time       `json:"last_event_at"`
+	CheckedAt        time.Time        `json:"checked_at"`
+}
+
+// planChangeView explains one plan revision after the first: which task
+// (stage, weight) was added after the plan was fixed and the denominator
+// after it.
+type planChangeView struct {
+	Revision      int        `json:"revision"`
+	Reason        string     `json:"reason"`
+	Stage         *string    `json:"stage"`
+	Weight        int        `json:"weight"`
+	PlannedWeight int        `json:"planned_weight"`
+	RecordedAt    *time.Time `json:"recorded_at"`
+}
+
+// triggerView says why a run exists: a manual request or a schedule
+// occurrence (W22).
+type triggerView struct {
+	Kind         string     `json:"kind"`
+	ScheduleID   *string    `json:"schedule_id,omitempty"`
+	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
 }
 
 type runView struct {
@@ -696,6 +726,8 @@ type runView struct {
 	ProjectID      string         `json:"project_id"`
 	Status         string         `json:"status"`
 	Version        int64          `json:"version"`
+	EventSequence  int64          `json:"event_sequence"`
+	Trigger        triggerView    `json:"trigger"`
 	SnapshotID     *string        `json:"snapshot_id"`
 	QualityVerdict *string        `json:"quality_verdict"`
 	Report         *runReportView `json:"report"`
@@ -719,10 +751,36 @@ func (s *Server) getRun(q *request) {
 		s.storeError(q, err)
 		return
 	}
-	out := runView{ID: v.ID, ProjectID: v.ProjectID, Status: string(v.Status), Version: v.Version, SnapshotID: v.SnapshotID,
+	writeJSON(q.w, http.StatusOK, runViewOf(v))
+}
+
+// runViewOf is the GET /runs/{id} body; the SSE run.view event carries the
+// same document.
+func runViewOf(v postgres.RunView) runView {
+	out := runView{ID: v.ID, ProjectID: v.ProjectID, Status: string(v.Status), Version: v.Version, EventSequence: v.EventSequence, SnapshotID: v.SnapshotID,
+		Trigger:  triggerView{Kind: postgres.TriggerManual},
 		Progress: progressView{Stage: string(v.Status), CompletedTasks: v.CompletedTasks, LastEventAt: v.Stages.LastEventAt, CheckedAt: v.Stages.CheckedAt}}
+	if o := v.Origin; o != nil {
+		id, at := o.ScheduleID, o.ScheduledFor
+		out.Trigger = triggerView{Kind: postgres.TriggerSchedule, ScheduleID: &id, ScheduledFor: &at}
+	}
 	detail, stages := stagesOf(&v.Stages.View)
 	out.Progress.Detail, out.Progress.Stages = *detail, stages
+	plan := v.Stages.View.Plan
+	out.Progress.PlanRevision, out.Progress.EstimatedPercent, out.Progress.PlannedWeight = plan.Revision, plan.EstimatedPercent, plan.PlannedWeight
+	out.Progress.PlanChanges = []planChangeView{}
+	if plan.Revision != nil {
+		finished, basis := plan.FinishedWeight, plan.WeightBasis
+		out.Progress.FinishedWeight, out.Progress.WeightBasis = &finished, &basis
+	}
+	for _, c := range plan.Changes {
+		var stage *string
+		if c.Stage != "" {
+			st := string(c.Stage)
+			stage = &st
+		}
+		out.Progress.PlanChanges = append(out.Progress.PlanChanges, planChangeView{Revision: c.Revision, Reason: c.Reason, Stage: stage, Weight: c.Weight, PlannedWeight: c.PlannedWeight, RecordedAt: c.At})
+	}
 	if v.TotalTasks > 0 {
 		total := v.TotalTasks
 		out.Progress.TotalTasks = &total
@@ -737,7 +795,7 @@ func (s *Server) getRun(q *request) {
 	if v.Status == domain.RunQueued {
 		out.Progress.WaitingReason = v.WaitingReason
 	}
-	writeJSON(q.w, http.StatusOK, out)
+	return out
 }
 
 func (s *Server) cancelRun(q *request) {

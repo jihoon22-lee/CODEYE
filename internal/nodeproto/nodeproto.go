@@ -293,11 +293,15 @@ type SnapshotFixedPayload struct {
 // optional display stage (domain.Stage, docs/37 §2); pre-W15 workers omit it
 // and the task is stored without one. On key reuse an omitted stage keeps the
 // stored one, a stage for a task stored without one is recorded once, and a
-// different stage is a conflict.
+// different stage is a conflict. Weight (W22) is the optional estimate weight
+// 1..1000 of the task for the weighted progress (undeclared counts as 1); it
+// follows the same first-record rule as Stage. Controllers before W22 reject
+// the field, so the controller is upgraded before the workers.
 type TaskCreatedPayload struct {
 	Key      string  `json:"key"`
 	Required bool    `json:"required"`
 	Stage    *string `json:"stage,omitempty"`
+	Weight   *int    `json:"weight,omitempty"`
 }
 
 // TaskStatusPayload moves a task. ExpectedVersion is the task version.

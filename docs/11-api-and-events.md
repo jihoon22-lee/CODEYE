@@ -1,6 +1,6 @@
 # 11. API와 이벤트 계약
 
-R0에서 세션·프로젝트·실행 요청과 조회·취소·노드 프로토콜·보고서 조회와 내보내기를 제공한다. [OpenAPI](../api/openapi.yaml)의 `x-codeye-status`와 [실제 라우트 검사](../internal/httpapi/contract_test.go)로 구현된 경로를 확인한다. SSE·예약 등 설계 경로는 아래에 구분했다.
+R0에서 세션·프로젝트·실행 요청과 조회·취소·노드 프로토콜·보고서 조회와 내보내기를 제공한다. [OpenAPI](../api/openapi.yaml)의 `x-codeye-status`와 [실제 라우트 검사](../internal/httpapi/contract_test.go)로 구현된 경로를 확인한다. W22에서 예약과 실행 SSE를 추가했다. 설계 경로는 아래에 구분했다.
 
 ## 1. 공통 규칙
 
@@ -26,7 +26,7 @@ R0에서 세션·프로젝트·실행 요청과 조회·취소·노드 프로토
 
 ### 후속 설계
 
-프로젝트 설정 변경·연결 진단·브랜치 조회, 같은 입력 retry, 개별 task·log 조회, SSE, finding 이력·사람 판정, 예약, 풀·노드 관리 웹 API는 후속 작업이다. R0의 풀·노드 관리는 운영자 CLI를 사용한다. 보고서 내보내기는 위의 게시 리비전 GET 경로로 수행한다. [근거와 게시 계약](31-w09-report.md)
+W22에서 프로젝트 예약(`/projects/{id}/schedules`)과 실행 SSE(`GET /runs/{id}/events`)를 구현했다. 프로젝트 설정 변경·연결 진단·브랜치 조회, 같은 입력 retry, 개별 task·log 조회, finding 이력·사람 판정, 풀·노드 관리 웹 API는 후속 작업이다. R0의 풀·노드 관리는 운영자 CLI를 사용한다. 보고서 내보내기는 위의 게시 리비전 GET 경로로 수행한다. [근거와 게시 계약](31-w09-report.md)
 
 ## 3. 작업 요청
 
@@ -65,15 +65,9 @@ W15 설계에서는 서버가 목록의 각 프로젝트에 대표 run 참조와
 
 **W15 구현 필드.** 프로젝트 목록·상세·생성 응답에 선택 객체 `activity`를 둔다. 필드는 `run`(`id`, `status`, `requested_at` 또는 null), `other_active_runs`, `detail`(`recorded`·`not_recorded`, 실행이 없으면 null), `stages`, `waiting_reason`(대표 run이 대기 중일 때만), `last_report`(`run_id`, `revision`, `published_at` 또는 null), `last_event_at`, `checked_at`이다. `GET /runs/{id}`의 `progress`에는 같은 의미의 `detail`, `stages`, `last_event_at`, `checked_at`을 더한다. 단계 항목은 `key`, `state`, `planned`(계획 확정 시에만 숫자), `finished`, `succeeded`, `counts`, `reasons`, `started_at`, `finished_at`이다. 노드 이벤트 `task_created`는 선택 필드 `stage`를 받고 알 수 없는 값은 422로 거부한다. 재시도에서 NULL 단계를 처음 기록하면 run 이벤트 `task.stage_recorded`를 남긴다. 형식은 [OpenAPI](../api/openapi.yaml)와 [예시](../examples/project-activity.json), 판정 규칙은 [W15 기록](37-w15-discovery-and-progress.md)을 따른다.
 
-### W22 SSE 설계
+### W22 SSE
 
-```text
-id: 142
- event: task.updated
- data: {"run_id":"run_demo","sequence":142,"version":19,"task_id":"task_typecheck","status":"running"}
-```
-
-실제 SSE에서는 event/data 줄 앞의 공백 없이 직렬화한다. sequence는 run 안에서 단조 증가하며 event와 DB 상태는 같은 트랜잭션으로 기록한다. UI는 첫 조회로 상태를 받고 cursor 이후 이벤트를 적용한다. sequence gap 또는 보관 기간 만료 시 전체 상태를 다시 조회한다. event_id를 DB 행 ID와 임의 혼용하지 않는다.
+이벤트 이름은 저장된 run 이벤트 type(`task.status`, `task.created`, `run.status` 등)이고 `id`는 run 안의 sequence다. 연결 유지는 이름 있는 `heartbeat` 이벤트로 보낸다. 브라우저가 SSE 주석을 전달하지 않기 때문이다. 형식은 [예시](../examples/run-events.txt)와 [W22 기록](38-w22-schedules-progress-sse.md)을 따른다. sequence는 run 안에서 단조 증가하며 event와 DB 상태는 같은 트랜잭션으로 기록한다. UI는 첫 조회로 상태를 받고 cursor 이후 이벤트를 적용한다. sequence gap 또는 보관 기간 만료 시 전체 상태를 다시 조회한다. event_id를 DB 행 ID와 임의 혼용하지 않는다.
 
 heartbeat 이벤트는 연결 유지용이며 분석 진행률을 올리지 않는다. 로그는 byte/record cursor로 별도 가져오고 거대한 로그를 상태 이벤트에 넣지 않는다. 권한 변경·로그아웃 시 SSE 연결을 해제한다. polling fallback은 같은 version 기반 API를 쓴다.
 

@@ -39,6 +39,8 @@ type env struct {
 	logs   *syncBuffer
 	// artifacts is the controller artifact directory (W06 node uploads).
 	artifacts string
+	// stream is the event stream configuration start uses (W22).
+	stream StreamConfig
 }
 
 type syncBuffer struct {
@@ -98,6 +100,7 @@ func newEnv(t *testing.T) *env {
 	e := &env{t: t, url: url, schema: schema, logs: &syncBuffer{}}
 	t.Cleanup(func() {
 		if e.hs != nil {
+			e.srv.StopStreams() // open event streams would hold Close
 			e.hs.Close()
 		}
 		if e.pool != nil {
@@ -114,6 +117,7 @@ func newEnv(t *testing.T) *env {
 func (e *env) start(webDir string) {
 	t := e.t
 	if e.hs != nil {
+		e.srv.StopStreams()
 		e.hs.Close()
 	}
 	if e.pool != nil {
@@ -129,7 +133,7 @@ func (e *env) start(webDir string) {
 	if e.artifacts == "" {
 		e.artifacts = filepath.Join(t.TempDir(), "artifacts")
 	}
-	srv, err := New(Config{Listen: ap, WebDir: webDir, Logger: slog.New(slog.NewJSONHandler(e.logs, nil)), ArtifactDir: e.artifacts, SweepInterval: -1}, e.store)
+	srv, err := New(Config{Listen: ap, WebDir: webDir, Logger: slog.New(slog.NewJSONHandler(e.logs, nil)), ArtifactDir: e.artifacts, SweepInterval: -1, Stream: e.stream}, e.store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +145,7 @@ func (e *env) start(webDir string) {
 
 type opts struct {
 	host, origin, cookie, csrf, ctype, idem, fetchSite string
+	ifMatch                                            string
 	noOrigin                                           bool
 }
 
@@ -197,6 +202,9 @@ func (e *env) do(method, path string, body any, o opts) resp {
 	}
 	if o.fetchSite != "" {
 		req.Header.Set("Sec-Fetch-Site", o.fetchSite)
+	}
+	if o.ifMatch != "" {
+		req.Header.Set("If-Match", o.ifMatch)
 	}
 	res, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {
