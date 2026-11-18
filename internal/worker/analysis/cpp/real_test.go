@@ -253,3 +253,59 @@ func TestRealProbes(t *testing.T) {
 		t.Fatalf("probe left %v", entries)
 	}
 }
+
+// Engine overlap (docs/41 §7): cppcheck and clang-tidy are different
+// engines and both run; inside clang-tidy the Clang Static Analyzer runs as
+// clang-analyzer-* checks only, the CSA float loop counter that duplicates
+// bugprone-float-loop-counter is not selected and no alias family (cert-*,
+// hicpp-*, cppcoreguidelines-*) appears. The same-line table is logged for
+// the document.
+func TestRealEngineOverlap(t *testing.T) {
+	ccPath, ctPath := optionalTool("CODEYE_TEST_CPPCHECK"), optionalTool("CODEYE_TEST_CLANG_TIDY")
+	if ccPath == "" || ctPath == "" {
+		t.Skip("set CODEYE_TEST_CPPCHECK and CODEYE_TEST_CLANG_TIDY to measure the engine overlap")
+	}
+	src, err := os.ReadFile("../../../../fixtures/w16-cpp/overlap/overlap.cpp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, _ := json.Marshal([]map[string]any{{"directory": "/build/ov", "file": "overlap.cpp", "arguments": []string{"c++", "-std=c++17", "-c", "overlap.cpp"}}})
+	files := map[string]string{"overlap.cpp": string(src), CompileDBName: string(db)}
+	cc, _ := NewCppcheck(Config{Executable: ccPath})
+	ct, _ := NewClangTidy(Config{Executable: ctPath})
+	lines := map[int][2][]string{}
+	for i, a := range []planner{cc, ct} {
+		r := runReal(t, a, files, domain.Scope{})
+		if r.doc.Outcome.TaskStatus != domain.TaskSucceeded {
+			t.Fatalf("%s outcome %+v", r.doc.Analyzer.ID, r.doc.Outcome)
+		}
+		for _, o := range r.doc.Observations {
+			if o.Location == nil {
+				continue
+			}
+			l := lines[o.Location.StartLine]
+			l[i] = append(l[i], o.RuleID)
+			lines[o.Location.StartLine] = l
+			if i == 1 && (o.RuleID == "clang-analyzer-security.FloatLoopCounter" || strings.HasPrefix(o.RuleID, "cert-") || strings.HasPrefix(o.RuleID, "hicpp-") ||
+				strings.HasPrefix(o.RuleID, "cppcoreguidelines-")) {
+				t.Fatalf("excluded rule reported: %s", o.RuleID)
+			}
+		}
+	}
+	var keys []int
+	for k := range lines {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	both := 0
+	for _, k := range keys {
+		l := lines[k]
+		if len(l[0]) > 0 && len(l[1]) > 0 {
+			both++
+		}
+		t.Logf("%3d | %s | %s", k, strings.Join(l[0], ","), strings.Join(l[1], ","))
+	}
+	if both == 0 || !slices.ContainsFunc(keys, func(k int) bool { return slices.Contains(lines[k][1], "bugprone-float-loop-counter") }) {
+		t.Fatalf("overlap table %v", lines)
+	}
+}
