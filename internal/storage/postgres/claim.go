@@ -428,7 +428,7 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 	if !allowed {
 		// The requester lost run permission (or was disabled) while the run
 		// waited: it must not execute on their behalf.
-		if _, err := tx.Exec(ctx, "UPDATE tasks SET status='skipped_policy',version=version+1,reason=$2 WHERE run_id=$1 AND status IN ('queued','blocked')", r.ID, reason); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE tasks SET status='skipped_policy',version=version+1,reason=$2,finished_at=clock_timestamp() WHERE run_id=$1 AND status IN ('queued','blocked')", r.ID, reason); err != nil {
 			return nil, false, err
 		}
 		return nil, false, transitionRun(ctx, tx, &r, domain.RunFailed, "run.failed", map[string]any{"status": domain.RunFailed, "reason": reason})

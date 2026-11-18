@@ -108,10 +108,15 @@ func (s *Store) RecordAttemptEvent(ctx context.Context, node string, o Ownership
 			out.SnapshotID = &id
 		case nodeproto.EventTaskCreated:
 			var p nodeproto.TaskCreatedPayload
-			if domain.DecodeStrict(ev.Payload, &p) != nil || !nodeproto.ValidTaskKey(p.Key) {
+			if domain.DecodeStrict(ev.Payload, &p) != nil || !nodeproto.ValidTaskKey(p.Key) || (p.Stage != nil && !domain.Stage(*p.Stage).Valid()) {
 				return out, domain.ErrInvalid
 			}
-			id, version, err := createTaskTx(ctx, tx, &r, &p.Key, p.Required)
+			var stage *domain.Stage
+			if p.Stage != nil {
+				st := domain.Stage(*p.Stage)
+				stage = &st
+			}
+			id, version, err := createTaskTx(ctx, tx, &r, &p.Key, p.Required, stage)
 			if err != nil {
 				return out, err
 			}
