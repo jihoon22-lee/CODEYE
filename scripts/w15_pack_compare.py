@@ -64,8 +64,14 @@ def structural(case):
     # rejected stage is dropped, so the errors are the only trace of what was refused).
     errors = Counter()
     usage = Counter()
+    seen = set()
     for r in records:
         for c in r.get("calls", []):
+            # review-v1 stage records repeat earlier stages' calls; count each request once.
+            key = (c.get("request_sha256"), c.get("attempt"), c.get("role"))
+            if key in seen:
+                continue
+            seen.add(key)
             for e in c.get("output_errors") or []:
                 errors[ERROR_CLASS.get(e, "other")] += 1
             u = c.get("usage") or {}
@@ -116,10 +122,12 @@ def main():
     table = {}
     for name in sorted(packs["active"]):
         a, c = packs["active"][name], packs["candidate"][name]
-        if a["report"]["inputs"]["manifest_sha256"] != c["report"]["inputs"]["manifest_sha256"]:
-            raise SystemExit(f"{name}: 두 팩의 입력 manifest가 다릅니다")
+        # The manifest digest also binds the fix time (A16), so two runs of the same
+        # bytes differ there; the archived source tree digest must match instead.
+        if a["row"]["source_tree_sha256"] != c["row"]["source_tree_sha256"] or a["row"]["input"] != c["row"]["input"]:
+            raise SystemExit(f"{name}: 두 팩의 입력 소스가 다릅니다")
         table[name] = {
-            "manifest_sha256": a["report"]["inputs"]["manifest_sha256"],
+            "source_tree_sha256": a["row"]["source_tree_sha256"],
             "active": structural(a),
             "candidate": structural(c),
             "judgment": judgments.get(name),
