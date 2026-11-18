@@ -283,7 +283,38 @@ type Observation struct {
 	// kept so a comparison can tell "suppressed" from "fixed"; it never
 	// becomes a finding.
 	Suppressed bool `json:"suppressed"`
+	// Metric, when set, makes the observation a structure or duplication
+	// measurement that reached the rule pack's reporting threshold (W21,
+	// docs/45), not a diagnostic of a defect: it is never active (Active), a
+	// finding, a defect count or model review input. Absent on diagnostics.
+	Metric *Metric `json:"metric,omitempty"`
 }
+
+// Metric is a measured value at or above its rule pack threshold. A metric
+// is maintainability information, never evidence of a defect.
+type Metric struct {
+	// Name is the measured quantity (a code: cyclomatic_complexity,
+	// duplicated_lines).
+	Name string `json:"name"`
+	// Value is the measured value; Threshold the rule pack's inclusive
+	// reporting threshold (Value >= Threshold).
+	Value     int `json:"value"`
+	Threshold int `json:"threshold"`
+	// Unit is what Value counts.
+	Unit string `json:"unit"`
+}
+
+// MetricUnits are the units a metric may count.
+var MetricUnits = []string{"count", "lines", "tokens"}
+
+// SecretAnalyzers are the analyzers whose observations locate a credential
+// in the snapshot (W21 gitleaks). No consumer attaches a code excerpt of
+// such a location, and their messages are fixed templates without secret
+// material (docs/45).
+var SecretAnalyzers = []string{"any.gitleaks"}
+
+// IsSecretAnalyzer reports an analyzer of SecretAnalyzers.
+func IsSecretAnalyzer(id string) bool { return slices.Contains(SecretAnalyzers, id) }
 
 // ToolError is a tool-reported failure to analyze (type error, missing
 // dependency, load failure). It is not an observation of the code.
@@ -580,11 +611,13 @@ func checkConfigFiles(r RulePack, lookup func(string) (string, bool)) error {
 	return nil
 }
 
-// Active reports the observations that are not suppressed in source.
+// Active reports the observations that are diagnostics a finding may come
+// from: not suppressed in source and not a metric (W21). A task whose only
+// observations are metrics succeeds without findings.
 func (d Document) Active() int {
 	n := 0
 	for _, o := range d.Observations {
-		if !o.Suppressed {
+		if !o.Suppressed && o.Metric == nil {
 			n++
 		}
 	}
@@ -731,6 +764,8 @@ func checkObservations(d Document, execs map[string]Execution, lookup func(strin
 			return invalid("observation %s links a drifted file", o.ID)
 		case o.Suppressed && d.RulePack.SourceSuppressions != SuppressReported:
 			return invalid("observation %s is suppressed without reported source suppressions", o.ID)
+		case o.Metric != nil && (!code.MatchString(o.Metric.Name) || !slices.Contains(MetricUnits, o.Metric.Unit) || o.Metric.Threshold < 0 || o.Metric.Value < o.Metric.Threshold || o.Suppressed):
+			return invalid("observation %s metric", o.ID)
 		}
 		for _, r := range o.Related {
 			if !SafeText(r.RawMessage, 8192) || !checkPlace(r.Path, r.Location, r.LocationState, lookup) {

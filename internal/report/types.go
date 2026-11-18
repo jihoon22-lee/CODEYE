@@ -120,6 +120,11 @@ type Summary struct {
 	// disposition hides them from the action counts (W23). They stay in
 	// TotalFindings and in comparison. Omitted when zero (older revisions).
 	HiddenFindings int `json:"hidden_findings,omitempty"`
+
+	// MetricObservations counts the observations of RawObservations that
+	// are structure metrics (W21, docs/45: complexity, duplication). They
+	// are never findings, candidates or actionable; omitted when zero.
+	MetricObservations int `json:"metric_observations,omitempty"`
 }
 
 // ReviewCall records one request once across the cumulative stage artifacts.
@@ -264,6 +269,19 @@ type Observation struct {
 	// in-source suppression (builder 4). It is never a finding; a comparison
 	// uses it to tell "suppressed" from "fixed".
 	Suppressed bool `json:"suppressed,omitempty"`
+	// Metric marks a structure measurement over its threshold (W21, docs/45),
+	// never a defect: it is never a finding. Its numbers hold no code, so
+	// the code-free export keeps them.
+	Metric *ObservationMetric `json:"metric,omitempty"`
+}
+
+// ObservationMetric is the measured value of a metric observation (the
+// envelope's metric, docs/45).
+type ObservationMetric struct {
+	Name      string `json:"name"`
+	Value     int    `json:"value"`
+	Threshold int    `json:"threshold"`
+	Unit      string `json:"unit"`
 }
 
 // Evidence states of an observation location (report-level check).

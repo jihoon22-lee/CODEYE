@@ -34,6 +34,8 @@ export type Observation = {
   message: string | null;
   path: string | null;
   state: string;
+  // W21 structure or duplication measurement (never a finding).
+  metric: { name: string; value: number; threshold: number; unit: string } | null;
 };
 export type AnalysisReport = {
   runID: string;
@@ -49,6 +51,8 @@ export type AnalysisReport = {
     refuted: number;
     raw: number;
   };
+  // W21: observations of counts.raw that are structure metrics (omitted as 0).
+  metricObservations: number;
   scope: {
     inventory: number | null;
     processed: number | null;
@@ -162,9 +166,18 @@ export function parseAnalysisReport(
       message: nullable(o.raw_message),
       state: str(o.location_state),
       path: loc ? str(loc.path) + ':' + count(loc.start_line) : null,
+      metric: o.metric == null ? null : (() => {
+        const m = object(o.metric);
+        return { name: str(m.name), value: count(m.value), threshold: count(m.threshold), unit: str(m.unit) };
+      })(),
     };
   });
-  if (findings.length !== counts.total || counts.raw !== observations.length)
+  const metricObservations = s.metric_observations == null ? 0 : count(s.metric_observations);
+  if (
+    findings.length !== counts.total ||
+    counts.raw !== observations.length ||
+    metricObservations !== observations.filter((o) => o.metric !== null).length
+  )
     invalid();
   const coverage = object(r.coverage);
   function metric(key: string) {
@@ -193,6 +206,7 @@ export function parseAnalysisReport(
     verdict: str(r.quality_verdict),
     aiReview: str(object(object(r.coverage).ai_review).status),
     counts,
+    metricObservations,
     findings,
     observations,
     tasks: array(r.tasks, (v) => {

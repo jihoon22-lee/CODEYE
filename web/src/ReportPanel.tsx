@@ -144,6 +144,12 @@ export function ReportDocument({ report, history }: { report: AnalysisReport; hi
             <dd>{report.counts[key]}</dd>
           </div>
         ))}
+        {report.metricObservations > 0 && (
+          <div>
+            <dt>{t.metricObservations}</dt>
+            <dd>{report.metricObservations}</dd>
+          </div>
+        )}
       </dl>
       {report.limitations.length > 0 && (
         <section>
@@ -263,6 +269,7 @@ export function ReportDocument({ report, history }: { report: AnalysisReport; hi
             {report.observations.map((o) => (
               <li key={o.id}>
                 <code>{o.rule}</code> {o.message}{' '}
+                {o.metric && <small>({t.metricMarker(o.metric.value, o.metric.threshold)})</small>}{' '}
                 <small>{o.path ?? o.state}</small>
               </li>
             ))}

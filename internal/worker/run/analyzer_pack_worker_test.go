@@ -39,6 +39,10 @@ type packRun struct {
 	// uploaded artifacts with the default registry.
 	stages map[string]domain.Stage
 	report report.Report
+	// uploads are every artifact body and protocol message the fake agent
+	// received, and scratch the worker scratch root (W21 leak checks).
+	uploads [][]byte
+	scratch string
 	// blobs are the bytes of every uploaded artifact (W16 leak checks).
 	blobs [][]byte
 }
@@ -68,6 +72,27 @@ func goOnlyCatalog(t *testing.T, c *pack.Composite) *pack.Composite {
 	var members []pack.Analyzer
 	for _, d := range c.Descriptors() {
 		if d.Ecosystem != "go" {
+			continue
+		}
+		m, ok := c.Owner(d.Name)
+		if !ok {
+			t.Fatalf("no member owns %s", d.Name)
+		}
+		members = append(members, m)
+	}
+	g, err := pack.NewComposite(members...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+// goAndAnyCatalog is goOnlyCatalog plus the any-ecosystem (W21) members.
+func goAndAnyCatalog(t *testing.T, c *pack.Composite) *pack.Composite {
+	t.Helper()
+	var members []pack.Analyzer
+	for _, d := range c.Descriptors() {
+		if d.Ecosystem != "go" && d.Ecosystem != "any" {
 			continue
 		}
 		m, ok := c.Owner(d.Name)
@@ -154,6 +179,15 @@ func runPackCatalog(t *testing.T, files map[string]string, tools map[string]stri
 	}
 	if err := json.Unmarshal(fa.artifacts[*out.complete.ResultManifestClientArtifact], &out.manifest); err != nil {
 		t.Fatal(err)
+	}
+	out.scratch = e.scratch
+	for _, body := range fa.artifacts {
+		out.uploads = append(out.uploads, body)
+	}
+	for _, m := range fa.msgs {
+		if b, err := json.Marshal(m); err == nil {
+			out.uploads = append(out.uploads, b)
+		}
 	}
 	out.stages = map[string]domain.Stage{}
 	for _, m := range fa.msgs {
@@ -255,7 +289,7 @@ func TestAnalyzerPackWithoutStaticcheck(t *testing.T) {
 			t.Fatalf("staticcheck manifest task %+v", task)
 		}
 	}
-	at := analyzerTools(r.envs)
+	at := withoutW21Tools(t, analyzerTools(r.envs))
 	if len(at) != 1 || at[0].Tool != "staticcheck" || at[0].Status != envdoc.ObsNotProbed {
 		t.Fatalf("analyzer tools %+v", at)
 	}
@@ -298,7 +332,7 @@ func TestAnalyzerPackWithRealStaticcheck(t *testing.T) {
 	if !rules["SA1000"] || d.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || !slices.Equal(d.Coverage.ProcessedPaths, []string{"lib/lib.go", "main.go"}) {
 		t.Fatalf("staticcheck envelope rules %v outcome %+v coverage %+v", rules, d.Outcome, d.Coverage)
 	}
-	at := analyzerTools(r.envs)
+	at := withoutW21Tools(t, analyzerTools(r.envs))
 	if len(at) != 1 || at[0].Status != envdoc.ObsObserved || at[0].Version == nil || at[0].Execution == nil {
 		t.Fatalf("analyzer tools %+v", at)
 	}
@@ -326,12 +360,21 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 		state   progress.State
 		reasons []string
 		lim     string
+		tools   []string
 		catalog func(*testing.T, *pack.Composite) *pack.Composite
 	}{
 		{"python without a pack", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
-			[]string{"pack-gap.python"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:python", goOnlyCatalog},
+			[]string{"pack-gap.python"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:python",
+			[]string{"python.none=not_run"}, goOnlyCatalog},
+		// W21 (docs/45): the any-ecosystem analyzers plan for a snapshot
+		// with language source and, without their tool flags, add
+		// not-required tool_not_configured tasks and not-run tool rows
+		// before the gap task.
+		{"python without a pack, with the any-ecosystem analyzers", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
+			append(w21StaticTasks(), "pack-gap.python"), progress.Skipped, []string{"analyzer_pack_missing", "tool_not_configured"}, "static_analysis_gap:python",
+			append(w21NotRunRows(), "python.none=not_run"), goAndAnyCatalog},
 		{"no supported language", map[string]string{"README.md": "# docs\n", "docs/guide.md": "guide\n", "Makefile": "all:\n"},
-			nil, progress.NoTasks, []string{}, "static_analysis_not_planned", nil},
+			nil, progress.NoTasks, []string{}, "static_analysis_not_planned", nil, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := runPackCatalog(t, tc.files, nil, tc.catalog)
@@ -382,7 +425,7 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 					t.Fatalf("gap row %+v", row)
 				}
 			}
-			if want := map[int][]string{1: {"python.none=not_run"}, 0: nil}[len(tc.static)]; !slices.Equal(analyzers, want) {
+			if want := tc.tools; !slices.Equal(analyzers, want) {
 				t.Fatalf("tool rows %v", analyzers)
 			}
 		})

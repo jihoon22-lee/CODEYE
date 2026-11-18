@@ -19,7 +19,9 @@ import (
 const (
 	// Config states. not_read: the rule pack overrides repository
 	// configuration or the tool has none. recorded: the tool honors it and
-	// the files it read are recorded (ConfigPaths, ConfigDigest).
+	// the files it read are recorded (ConfigPaths, ConfigDigest); with no
+	// file read ConfigPaths is absent and ConfigDigest is the digest of the
+	// empty list (W21: gitleaks without a .gitleaksignore).
 	// unrecorded: the tool honors it but the pack could not enumerate the
 	// files; the context is unknown.
 	ConfigNotRead    = "not_read"
@@ -79,7 +81,6 @@ func ruleContextOf(rp obsdoc.RulePack) *RuleContext {
 		c.Config = ConfigUnrecorded
 		if rp.ConfigFiles != nil {
 			c.Config = ConfigRecorded
-			c.ConfigPaths = []string{}
 			for _, f := range rp.ConfigFiles {
 				c.ConfigPaths = append(c.ConfigPaths, f.Path)
 			}

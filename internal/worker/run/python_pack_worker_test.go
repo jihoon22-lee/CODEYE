@@ -30,7 +30,8 @@ var pythonFiles = map[string]string{
 // pack's tasks: the ruff baseline is required and unsupported
 // (tool_not_configured), so the report is partial with a required task that
 // did not succeed; mypy, pyright and bandit are visible not-required
-// unsupported tasks; no gap task is planned.
+// unsupported tasks; no gap task is planned. The W21 analyzers plan their
+// not-required tool_not_configured tasks after them.
 func TestPythonSnapshotWithoutRuff(t *testing.T) {
 	r := runPackFiles(t, pythonFiles, nil)
 	rows := taskRows(r.manifest)
@@ -44,10 +45,12 @@ func TestPythonSnapshotWithoutRuff(t *testing.T) {
 			t.Fatalf("required flag %+v", task)
 		}
 	}
-	if !slices.Equal(static, []string{"ruff", "mypy", "pyright", "bandit"}) {
+	// The W21 any-ecosystem analyzers (docs/45) also plan, not required.
+	pyKeys := []string{"ruff", "mypy", "pyright", "bandit"}
+	if !slices.Equal(static, append(slices.Clone(pyKeys), w21StaticTasks()...)) {
 		t.Fatalf("static tasks %v (all %v)", static, rows)
 	}
-	for _, k := range static {
+	for _, k := range pyKeys {
 		if rows[k] != "unsupported/tool_not_configured" {
 			t.Fatalf("%s: %s", k, rows[k])
 		}
@@ -75,7 +78,7 @@ func TestPythonSnapshotWithoutRuff(t *testing.T) {
 	for _, a := range at {
 		tools = append(tools, a.Tool+"="+string(a.Status))
 	}
-	if !slices.Equal(tools, []string{"bandit=not_probed", "mypy=not_probed", "pyright=not_probed", "ruff=not_probed"}) {
+	if !slices.Equal(tools, []string{"bandit=not_probed", "gitleaks=not_probed", "jscpd=not_probed", "lizard=not_probed", "mypy=not_probed", "pyright=not_probed", "ruff=not_probed"}) {
 		t.Fatalf("analyzer tools %v", tools)
 	}
 }

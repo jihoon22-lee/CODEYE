@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 )
 
 var (
@@ -94,7 +95,7 @@ func ValidateReport(r Report) error {
 			}
 		}
 	}
-	obs, suppressed := map[string]bool{}, map[string]bool{}
+	obs, suppressed, metrics := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, o := range r.Observations {
 		if obs[o.ID] || !taskKeys[o.TaskKey] || !arts[o.RawRef.ArtifactID] || (o.RawSeverity != nil && !rawSeverityPattern.MatchString(*o.RawSeverity)) {
 			return invalidf("observation %s is invalid", o.ID)
@@ -112,6 +113,12 @@ func ValidateReport(r Report) error {
 		if o.Suppressed {
 			suppressed[o.ID] = true
 		}
+		if m := o.Metric; m != nil {
+			if !codePattern.MatchString(m.Name) || !slices.Contains(obsdoc.MetricUnits, m.Unit) || m.Threshold < 0 || m.Value < m.Threshold || o.Suppressed {
+				return invalidf("observation %s metric is invalid", o.ID)
+			}
+			metrics[o.ID] = true
+		}
 	}
 	for _, tc := range r.Coverage.Tools {
 		if err := validateRuleContext(tc.RuleContext, r.Export.IncludeCode); err != nil {
@@ -126,6 +133,10 @@ func ValidateReport(r Report) error {
 		for _, id := range f.ObservationIDs {
 			if suppressed[id] {
 				return invalidf("finding %s is built from a suppressed observation", f.ID)
+			}
+			// A structure metric is never defect evidence (W21, docs/45).
+			if metrics[id] {
+				return invalidf("finding %s is built from a metric observation", f.ID)
 			}
 		}
 		if findings[f.ID] {
@@ -291,8 +302,10 @@ func validateRuleContext(c *RuleContext, includeCode bool) error {
 		return invalidf("rule context records configuration it did not read")
 	case !includeCode && (c.ConfigPaths != nil || c.ConfigDigest != ""):
 		return invalidf("code-free export carries configuration paths or digest")
-	case includeCode && c.Config == ConfigRecorded && (c.ConfigPaths == nil || !hex64.MatchString(c.ConfigDigest)):
-		return invalidf("recorded rule context without paths and digest")
+	case includeCode && c.Config == ConfigRecorded && !hex64.MatchString(c.ConfigDigest):
+		// Paths are absent when the tool read no file (the JSON form omits
+		// an empty list, so a stored revision reads back the same).
+		return invalidf("recorded rule context without digest")
 	case len(c.UnreportedSuppressionRules) > 0 && c.SourceSuppressions != "reported":
 		return invalidf("rule context lists unreported suppression rules without reported suppressions")
 	}

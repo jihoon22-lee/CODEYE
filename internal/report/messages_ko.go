@@ -37,6 +37,9 @@ var Korean = Locale{
 		"verdict_note":       "품질 판정은 안전 인증이 아니다.",
 		"code_excerpt_none":  "코드 발췌 없음: controller는 snapshot 원본을 보관하지 않는다. 위치와 blob hash로 snapshot 코드를 확인한다.",
 		"ai_review_optional": "선택 검토 작업(판정에 필요하지 않으며 수행으로 세지 않음)",
+		// W21 (docs/45): structure metrics and secret detection.
+		"metric_observations": "그중 구조 지표(결함 아님)",
+		"metric_marker":       "구조 지표, 결함 아님",
 	},
 	Codes: map[string]string{
 		LimAIReviewNotPerformed:          "AI 검토를 수행하지 않았거나 그 결과를 검증하지 못했다. 도구 진단만 포함한다.",
@@ -73,6 +76,28 @@ var Korean = Locale{
 		"verification_budget_exceeded":   "요청 크기 한도 때문에 일부 후보를 검증하지 못했다(미검토).",
 		"code_excerpts_go_only":          "코드 발췌는 Go 파일만 사용했다.",
 		"execution_claim_rejected":       "실행·재현을 주장한 모델 서술을 거부했다.",
+		// W21 (docs/45): structure, duplication and secrets pack.
+		"metrics_not_defects":                "구조 지표(복잡도·중복)는 임계값 초과 측정값이며 결함 근거가 아니다.",
+		"function_end_lines_not_recorded":    "lizard: 함수 끝 줄을 기록하지 않아 시작 줄만 위치로 쓴다.",
+		"in_source_suppressions_honored":     "소스 안의 도구 억제 주석을 도구가 적용했다.",
+		"source_files_not_analyzed":          "도구가 읽지 못한 소스 파일이 있다.",
+		"clone_columns_not_recorded":         "jscpd: 중복 구간의 열 위치를 기록하지 않았다.",
+		"processed_paths_from_input_list":    "jscpd: 처리 파일은 CODEYE가 넘긴 입력 목록이다(도구가 파일별 처리를 보고하지 않음).",
+		"source_files_not_compared":          "jscpd: 크기·인코딩 때문에 비교하지 않은 소스 파일이 있다.",
+		"no_file_reached_clone_thresholds":   "jscpd: 중복 임계값에 닿는 파일이 없었다.",
+		"history_not_scanned":                "gitleaks: workspace 사본만 검사했고 git 이력은 검사하지 않았다.",
+		"secret_values_withheld":             "gitleaks: 비밀값과 그 일부·hash를 저장하지 않는다. 위치와 규칙만 남긴다.",
+		"repository_ignore_file_honored":     "gitleaks: 저장소의 .gitleaksignore를 적용했다(digest 기록).",
+		"binary_files_not_claimed_processed": "gitleaks: 텍스트가 아닌 파일은 처리 파일로 세지 않았다.",
+		"secret_columns_not_recorded":        "gitleaks: 도구의 열 위치가 첫 줄 뒤에서 1씩 어긋나 줄 범위만 남긴다.",
+		"rejected_option_gitleaksignore":     "gitleaks: 저장소 .gitleaksignore에 사본 밖을 가리키는 항목이 있어 검사를 거부했다(값은 기록하지 않음).",
+		"data_directories_excluded":          "숨김·testdata·vendor·node_modules 아래 파일은 측정하지 않았다.",
+		"workspace_link_refused":             "검사 대상 사본에 링크나 특수 파일이 있어 도구를 실행하지 않았다.",
+		"repository_config_rejected":         "저장소 설정이 사본 밖을 가리켜 도구를 실행하지 않았다(값은 기록하지 않음).",
+		"result_outside_snapshot":            "도구가 선택된 snapshot 파일이 아닌 곳의 결과를 냈다. 그 결과는 버렸고 작업은 실패다.",
+		"model_input_not_secret_screened":    "비밀값 탐지가 실행되지 않아 모델 입력을 비밀값 기준으로 거르지 않았다.",
+		"secret_files_withheld":              "비밀값이 탐지된 파일은 모델 입력에서 뺐다.",
+		"secret_screen_failed":               "비밀값 탐지 결과를 쓸 수 없어 모델 검토를 건너뛰었다(코드 미전송).",
 	},
 }
 

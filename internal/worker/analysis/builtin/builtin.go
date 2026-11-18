@@ -13,7 +13,10 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/cpp"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gitleaks"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/rustpack"
@@ -91,6 +94,10 @@ func catalog() []entry {
 		// Rust (W20 baseline cargo check, extra depth clippy).
 		{desc: rustpack.CheckDescriptor(), plan: rustpack.CheckPlan, build: buildCargoCheck},
 		{desc: rustpack.ClippyDescriptor(), plan: rustpack.ClippyPlan, build: buildClippy},
+		// Any ecosystem (W21 extra depth: complexity, duplication, secrets).
+		{desc: lizard.Descriptor(), plan: lizard.Plan, build: buildLizard},
+		{desc: jscpd.Descriptor(), plan: jscpd.Plan, build: buildJscpd},
+		{desc: gitleaks.Descriptor(), plan: gitleaks.Plan, build: buildGitleaks},
 	}
 }
 

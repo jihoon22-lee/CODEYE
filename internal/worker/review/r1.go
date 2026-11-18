@@ -101,7 +101,12 @@ func (h R1Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec,
 	if ctx.Err() != nil {
 		return result(domain.TaskCancelled, "cancelled")
 	}
-	s := &r1Stage{h: h, ctx: ctx, j: j, runner: runner, role: role}
+	s := &r1Stage{h: h, ctx: ctx, j: j, runner: runner, role: role, screen: screenSecrets(ctx, h.Static, j)}
+	if s.screen.state == screenFailed {
+		// The secrets task ran but its result is unusable: nothing of the
+		// snapshot may reach a model unscreened.
+		return result(domain.TaskSkippedPolicy, reasonSecretScreenFailed)
+	}
 	switch role {
 	case record.StageEnvironment:
 		return s.environment()
@@ -124,6 +129,8 @@ type r1Stage struct {
 	role   string
 	pack   reviewpackr1.Selection
 	rec    record.R1Record
+	// screen is the secrets screen of the run's model inputs (screen.go).
+	screen secretScreen
 }
 
 // begin loads the pack and the record skeleton; a nil caller is reported
@@ -146,6 +153,16 @@ func (s *r1Stage) begin(upstream []record.Upstream) *analysis.TaskResult {
 		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Stage: s.role, Outcome: record.OutcomeAccepted, Upstream: upstream,
 		Evidence: []record.Excerpt{}, Observations: []record.ObservationRef{}, Limitations: []string{}, Calls: []record.R1Call{}}
 	return nil
+}
+
+// screenLimitation is added when the record is written, after the model
+// input was built: the record and the report say the inputs were not
+// screened for secrets; the model input stays as it was.
+func (s *r1Stage) screenLimitation(lims []string) []string {
+	if s.screen.state == screenUnscreened {
+		return addLim(lims, limNotSecretScreened)
+	}
+	return lims
 }
 
 // languagesInScope are the source ecosystems whose language guides a role
@@ -253,6 +270,7 @@ func (s *r1Stage) noteExecutionClaim(c record.R1Call) {
 // in a failed record; model content is quarantined (not kept).
 func (s *r1Stage) fail(res analysis.TaskResult) *analysis.TaskResult {
 	r := s.rec
+	r.Limitations = s.screenLimitation(r.Limitations)
 	r.Outcome, r.FailureReason = record.OutcomeFailed, res.Reason
 	if !record.ValidCode(r.FailureReason) {
 		r.FailureReason = "review_failed"
@@ -282,7 +300,7 @@ func (s *r1Stage) fail(res analysis.TaskResult) *analysis.TaskResult {
 
 // finish writes the accepted record.
 func (s *r1Stage) finish() analysis.TaskResult {
-	s.rec.Limitations = addLim(s.rec.Limitations)
+	s.rec.Limitations = s.screenLimitation(addLim(s.rec.Limitations))
 	art, err := persistR1(s.j, s.rec)
 	if err != nil {
 		return result(domain.TaskFailed, "review_record_failed")
