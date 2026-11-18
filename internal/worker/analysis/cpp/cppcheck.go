@@ -590,9 +590,17 @@ func assembleCppcheck(doc obsdoc.Document, in ccInput) obsdoc.Document {
 	if in.Check != nil && !parsed {
 		o.fail(domain.TaskFailed, ReasonOutputUnparsed, obsdoc.ExitExecutionError)
 	}
-	// --error-exitcode=2: exit 2 iff at least one <error> record (any
-	// severity, measured), 0 iff none.
+	// --error-exitcode=2: exit 2 iff at least one <error> record of any
+	// severity other than the checkersReport summary, which cppcheck 2.22
+	// writes on every run (measured: a clean unit exits 0 with only that
+	// record; a lone missingInclude, missingIncludeSystem or syntaxError
+	// exits 2).
 	records := st.Values + len(in.Dropped)
+	for _, r := range st.Records {
+		if r.ID == "checkersReport" {
+			records--
+		}
+	}
 	if in.Check != nil && !(exit == 0 && records == 0 || exit == 2 && records > 0) {
 		o.fail(domain.TaskFailed, ReasonExitMismatch, obsdoc.ExitExecutionError)
 	}
