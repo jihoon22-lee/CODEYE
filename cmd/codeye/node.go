@@ -17,6 +17,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 	analyzerpack "github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	workerrun "github.com/jihoon22-lee/CODEYE/internal/worker/run"
@@ -81,6 +82,9 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	for _, tool := range append(builtin.ToolFlags(), builtin.ToolchainFlags()...) {
 		toolFlags[tool] = fs.String(tool, "", "")
 	}
+	// mypy and pyright are alternative Python type checkers (docs/42 §5):
+	// configuring both runs both only when the operator says so.
+	bothTypeCheckers := fs.Bool("python-both-type-checkers", false, "")
 	fs.Var(&roots, "source-root", "")
 	fs.Var(&gitHosts, "git-host", "")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || *controller == "" || *stateDir == "" {
@@ -130,6 +134,14 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		if *v != "" {
 			tools[tool] = *v
 		}
+	}
+	if both := tools[python.MypyTool] != "" && tools[python.PyrightTool] != ""; both != *bothTypeCheckers {
+		if both {
+			fmt.Fprintln(stderr, "--mypy and --pyright are alternative type checkers; add --python-both-type-checkers to run both")
+		} else {
+			fmt.Fprintln(stderr, "--python-both-type-checkers needs both --mypy and --pyright")
+		}
+		return agent.ExitUsage
 	}
 	cfg := agent.Config{
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,

@@ -38,6 +38,9 @@ type packRun struct {
 	// uploaded artifacts with the default registry.
 	stages map[string]domain.Stage
 	report report.Report
+	// artifacts are the bytes of every uploaded artifact (streams,
+	// envelopes, manifests).
+	artifacts [][]byte
 }
 
 // runPack runs the production deep-review composition (discovery → the
@@ -136,6 +139,7 @@ func runPackFiles(t *testing.T, files map[string]string, tools map[string]string
 		t.Fatal(err)
 	}
 	for id, body := range fa.artifacts {
+		out.artifacts = append(out.artifacts, body)
 		if fa.roles[id] == "source_manifest" {
 			if out.source, err = source.DecodeManifest(body); err != nil {
 				t.Fatal(err)
@@ -269,11 +273,13 @@ func TestAnalyzerPackWithRealStaticcheck(t *testing.T) {
 // TC-69 (W19, docs/39 §2.8): snapshots without Go through the production
 // composition on a node with --go only. go vet plans nothing (no required
 // placeholder), so nothing fails for an ecosystem that is not there. A
-// Python-only snapshot has a visible gap instead: one not-required
-// pack-gap.python task, the static_analysis stage skipped with
-// analyzer_pack_missing, the report partial with static_analysis_gap:python
-// and a not-run tool row, never required_task_not_succeeded, verdict
-// inconclusive. A snapshot with no supported language source plans no
+// snapshot of an ecosystem without a pack of this build (JavaScript; Python
+// was the W19 example until W17 added its pack, see
+// TestPythonSnapshotWithoutRuff) has a visible gap instead: one
+// not-required pack-gap.<ecosystem> task, the static_analysis stage skipped
+// with analyzer_pack_missing, the report partial with
+// static_analysis_gap:<ecosystem> and a not-run tool row, never
+// required_task_not_succeeded, verdict inconclusive. A snapshot with no supported language source plans no
 // analyzer task: the stage has no tasks and the report is partial with
 // static_analysis_not_planned.
 func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
@@ -285,8 +291,8 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 		reasons []string
 		lim     string
 	}{
-		{"python only", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
-			[]string{"pack-gap.python"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:python"},
+		{"javascript only", map[string]string{"app.js": "console.log(1)\n", "pkg/util.js": "exports.x = 1\n", "README.md": "# app\n"},
+			[]string{"pack-gap.javascript"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:javascript"},
 		{"no supported language", map[string]string{"README.md": "# docs\n", "docs/guide.md": "guide\n", "Makefile": "all:\n"},
 			nil, progress.NoTasks, []string{}, "static_analysis_not_planned"},
 	} {
@@ -339,7 +345,7 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 					t.Fatalf("gap row %+v", row)
 				}
 			}
-			if want := map[int][]string{1: {"python.none=not_run"}, 0: nil}[len(tc.static)]; !slices.Equal(analyzers, want) {
+			if want := map[int][]string{1: {"javascript.none=not_run"}, 0: nil}[len(tc.static)]; !slices.Equal(analyzers, want) {
 				t.Fatalf("tool rows %v", analyzers)
 			}
 		})

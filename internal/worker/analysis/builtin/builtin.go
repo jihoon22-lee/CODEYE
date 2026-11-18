@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/staticcheck"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
@@ -69,6 +70,11 @@ func catalog() []entry {
 		// Go (W08 baseline, W19 extra depth).
 		{desc: govet.Descriptor(), plan: govet.Plan, build: buildGoVet},
 		{desc: staticcheck.Descriptor(), plan: staticcheck.Plan, build: buildStaticcheck},
+		// Python (W17 baseline ruff; mypy, pyright and bandit extra depth).
+		{desc: python.RuffDescriptor(), plan: python.RuffPlan, build: buildRuff},
+		{desc: python.MypyDescriptor(), plan: python.MypyPlan, build: buildMypy},
+		{desc: python.PyrightDescriptor(), plan: python.PyrightPlan, build: buildPyright},
+		{desc: python.BanditDescriptor(), plan: python.BanditPlan, build: buildBandit},
 	}
 }
 
