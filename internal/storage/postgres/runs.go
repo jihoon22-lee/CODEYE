@@ -225,7 +225,9 @@ func (s *Store) Retry(ctx context.Context, actor, id string, expected int64) (Ru
 		if unsafe {
 			return r, domain.ErrConflict
 		}
-		if _, err = tx.Exec(ctx, "UPDATE tasks SET status='queued',version=version+1 WHERE run_id=$1", id); err != nil {
+		// The logical tasks restart: the previous attempt's reasons and times stay
+		// in task_executions and events, not on the queued task (stage is kept).
+		if _, err = tx.Exec(ctx, "UPDATE tasks SET status='queued',version=version+1,reason=NULL,started_at=NULL,finished_at=NULL WHERE run_id=$1", id); err != nil {
 			return r, err
 		}
 		_, err = tx.Exec(ctx, "UPDATE runs SET status='queued' WHERE id=$1", id)

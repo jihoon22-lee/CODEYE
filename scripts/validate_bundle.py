@@ -177,6 +177,21 @@ def check_observations(doc: dict) -> None:
         ensure(not any(ABSOLUTE.match(a) for a in e["command"]["argv"]) and "/" not in e["command"]["argv"][0], "Node path in command")
 
 
+def check_environment_example(doc: dict) -> None:
+    """Bind the W15 discovery examples to the fixture input bytes and evidence IDs."""
+    root = ROOT / "fixtures/w15-modules/input"
+    for r in doc.get("environment", {}).get("requirements", []):
+        src = r["source"]
+        sha = hashlib.sha256((root / src["path"]).read_bytes()).hexdigest()
+        ensure(sha == src["sha256"], "Environment requirement blob mismatch: " + src["path"])
+        binding = "\0".join([doc["snapshot_manifest_digest"], src["path"], sha, f'{src["start_line"]}:{src["end_line"]}'])
+        ensure(r["evidence_id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24], "Environment evidence ID mismatch")
+    for d in doc.get("documents", {}).get("items", []):
+        if d["sha256"] is not None:
+            body = (root / d["path"]).read_bytes()
+            ensure(hashlib.sha256(body).hexdigest() == d["sha256"] and len(body) == d["size_bytes"], "Document blob mismatch: " + d["path"])
+
+
 def check_review_example(doc: dict) -> None:
     """Bind the verifier example to its labelled, synthetic source fixture."""
     root = ROOT / "internal/worker/review/testdata/verify"
@@ -203,6 +218,85 @@ def check_review_example(doc: dict) -> None:
     verdict = doc["verifications"][0]
     callers = [catalog[ref] for ref in verdict["counterevidence_ids"]]
     ensure(verdict["verdict"] == "refuted" and any(e["path"] == "load.go" and e.get("origin") == "caller" for e in callers), "Missing fixture counterexample")
+
+
+SERVER_STAGES = ("source", "report")
+
+
+def stage_vocabulary() -> tuple[list[str], list[str], list[str]]:
+    """Task stage keys in domain.TaskStages order, the migration 0006 CHECK
+    values, and the progress.State values (W15, docs/37 §2)."""
+    go = (ROOT / "internal/domain/stage.go").read_text(encoding="utf-8")
+    consts = dict(re.findall(r'^\s*(Stage\w+)\s+Stage\s*=\s*"([a-z_]+)"', go, re.M))
+    listed = re.search(r"var TaskStages = \[\]Stage\{([^}]*)\}", go)
+    ensure(bool(consts) and listed is not None, "domain stage constants not found")
+    order = [consts[name.strip()] for name in listed.group(1).split(",") if name.strip()]
+    ensure(sorted(order) == sorted(consts.values()) and len(order) == len(set(order)), "TaskStages must list every stage once")
+    migrations = sorted((ROOT / "migrations/sql").glob("0006_*.sql"))
+    ensure(len(migrations) == 1, "Missing migration 0006")
+    check = re.search(r"stage IN \(([^)]*)\)", migrations[0].read_text(encoding="utf-8"))
+    ensure(check is not None, "Migration 0006 has no stage CHECK")
+    stored = re.findall(r"'([a-z_]+)'", check.group(1))
+    progress = (ROOT / "internal/progress/progress.go").read_text(encoding="utf-8")
+    states = re.findall(r'^\s*\w+\s+State\s*=\s*"([a-z_]+)"', progress, re.M)
+    return order, stored, states
+
+
+def check_stage_enums(api: dict, order: list[str], stored: list[str], states: list[str]) -> None:
+    """The OpenAPI stage vocabulary equals the Go domain, the 0006 CHECK and
+    the progress states; StageKey is source, task stages in order, report."""
+    ensure(sorted(api["TaskStage"]["enum"]) == sorted(order), "Stage enum mismatch: OpenAPI/domain")
+    ensure(sorted(stored) == sorted(order), "Stage enum mismatch: migration 0006/domain")
+    ensure(api["StageKey"]["enum"] == [SERVER_STAGES[0], *order, SERVER_STAGES[1]], "StageKey enum/order mismatch")
+    ensure(sorted(api["StageState"]["enum"]) == sorted(states) and len(states) == len(set(states)), "Stage state enum mismatch: OpenAPI/progress")
+    ensure(api["StageDetail"]["enum"] == ["recorded", "not_recorded"], "Stage detail enum mismatch")
+
+
+def check_stages(detail, stages: list, order: list[str]) -> None:
+    """Cross-field rules of a W15 stage list (project activity or run progress)."""
+    if detail != "recorded":
+        ensure(stages == [], "Unrecorded run lists stages")
+        return
+    keys = [s["key"] for s in stages]
+    ensure(len(keys) >= 2 and keys[0] == SERVER_STAGES[0] and keys[-1] == SERVER_STAGES[1], "Stages must start with source and end with report")
+    middle = keys[1:-1]
+    ensure(middle == [k for k in order if k in middle], "Task stages out of order or repeated")
+    ensure(all(k in middle for k in order if k not in ("build", "test")), "Missing task stage")
+    for s in stages:
+        ensure(s["reasons"] == sorted(set(s["reasons"])), "Stage reasons must be sorted and distinct")
+        ensure(s["finished"] == s["succeeded"] + sum(s["counts"].values()), "Stage finished count mismatch")
+        if s["key"] in SERVER_STAGES:
+            ensure(s["planned"] is None and s["finished"] == 0, "Server-derived stage carries task counts")
+            continue
+        planned = s["planned"]
+        if s["state"] == "plan_pending":
+            ensure(planned is None and s["finished"] == 0, "Pending plan with a denominator")
+        if s["state"] == "no_tasks":
+            ensure(planned == 0, "Empty stage with planned tasks")
+        if planned is not None:
+            ensure(s["finished"] <= planned, "More finished than planned")
+        if s["state"] in ("waiting", "running", "plan_pending", "no_tasks"):
+            ensure(s["finished_at"] is None, "Open stage has an end time")
+        if s["state"] == "succeeded":
+            ensure(not s["counts"] and (planned is None or s["succeeded"] == planned), "Succeeded stage with failures")
+
+
+def check_activity(doc: dict, order: list[str]) -> None:
+    """Cross-field rules of a project activity (W15, docs/37 §4)."""
+    ensure((doc["run"] is None) == (doc["detail"] is None), "Activity detail must be null exactly without a run")
+    if doc["run"] is None:
+        ensure(doc["stages"] == [] and doc["other_active_runs"] == 0 and doc["waiting_reason"] is None and doc["last_event_at"] is None, "Activity data without a run")
+        return
+    ensure(doc["waiting_reason"] is None or doc["run"]["status"] == "queued", "Waiting reason for a run that is not queued")
+    check_stages(doc["detail"], doc["stages"], order)
+
+
+def api_validator(name: str) -> Draft202012Validator:
+    """A JSON Schema validator for components/schemas/<name> of api/openapi.yaml."""
+    document = yaml_file(ROOT / "api/openapi.yaml")
+    root = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$ref": "#/components/schemas/" + name, "components": document["components"]}
+    Draft202012Validator.check_schema(root)
+    return Draft202012Validator(root, format_checker=FormatChecker())
 
 
 def resolve_pointer(document, pointer: str):
@@ -306,6 +400,16 @@ def main() -> None:
     api = yaml_file(ROOT / "api/openapi.yaml")["components"]["schemas"]
     for field, name in (("run_status", "RunStatus"), ("attempt_status", "AttemptStatus"), ("cleanup_state", "CleanupState")):
         ensure(set(state[field]["enum"]) == set(api[name]["enum"]), "State/API enum mismatch: " + field)
+    stage_order, stored_stages, stage_states = stage_vocabulary()
+    check_stage_enums(api, stage_order, stored_stages, stage_states)
+    events = yaml_file(ROOT / "api/openapi.yaml")["paths"]["/api/v1/attempts/{attempt_id}/events"]["post"]
+    payloads = events["requestBody"]["content"]["application/json"]["schema"]["properties"]["payload"]["oneOf"]
+    created = [p for p in payloads if p.get("required") == ["key", "required"]]
+    ensure(len(created) == 1 and created[0]["properties"]["stage"]["allOf"] == [{"$ref": "#/components/schemas/TaskStage"}], "task_created stage must use TaskStage")
+    activity = json_file(ROOT / "examples/project-activity.json")
+    activity_validator = api_validator("ProjectActivity")
+    activity_validator.validate(activity)
+    check_activity(activity, stage_order)
     validators["snapshot-manifest.schema.json"].validate(json_file(ROOT / "examples/snapshot-manifest.json"))
     validators["snapshot-manifest.schema.json"].validate(json_file(ROOT / "examples/snapshot-manifest-git.json"))
     plan = json_file(ROOT / "examples/plan.json")
@@ -331,6 +435,10 @@ def main() -> None:
     review_validator = validators["review-record.schema.json"]
     review_validator.validate(review)
     check_review_example(review)
+    for name in ("examples/environment.json", "examples/environment-documents.json"):
+        environment = json_file(ROOT / name)
+        validators["environment.schema.json"].validate(environment)
+        check_environment_example(environment)
     ensure(plan["run_id"] == report["run_id"], "Example run mismatch")
     plan_tasks = {task["id"]: task for task in plan["tasks"]}
     ensure(set(plan_tasks) == {task["id"] for task in report["tasks"]}, "Plan/report task mismatch")
@@ -428,10 +536,23 @@ def main() -> None:
     bad = copy.deepcopy(review)
     bad["evidence"][0]["text"] = "raw source"
     expect_invalid("source text in review record", review_validator.validate, bad)
+    bad = copy.deepcopy(activity)
+    bad["stages"][3]["counts"]["timed_out"] = 0
+    expect_invalid("zero stage count", activity_validator.validate, bad)
+    bad = copy.deepcopy(activity)
+    bad["stages"][3]["reasons"] = ["tool_failed", "handler_error"]
+    expect_invalid("unsorted stage reasons", lambda doc: check_activity(doc, stage_order), bad)
+    bad = copy.deepcopy(activity)
+    bad["detail"] = None
+    expect_invalid("stage detail without run", lambda doc: check_activity(doc, stage_order), bad)
+    bad = copy.deepcopy(api)
+    bad["TaskStage"] = {"enum": [*stage_order, "lint"]}
+    expect_invalid("stage enum drift", lambda doc: check_stage_enums(doc, stage_order, stored_stages, stage_states), bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
-    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 11 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 12 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
-    print("PASS: 22 negative cases; example policy timing; prompt manifest")
+    print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
+    print("PASS: 26 negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 

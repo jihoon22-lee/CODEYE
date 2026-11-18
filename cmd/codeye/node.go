@@ -16,6 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/agent"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	workerrun "github.com/jihoon22-lee/CODEYE/internal/worker/run"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
@@ -130,11 +131,20 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 
 // workerHandlers registers the handlers of this build. Production without
 // W08 has none, so the worker advertises no capability and is never leased.
+// The deep-review profile is discovery (env.discover, docs.discover) →
+// go vet → review roles. Discovery observes only the operator-configured go
+// executable the go-vet handler uses. The test-only fixture handler is left
+// unwrapped.
 func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
 	hs, missing := builtin.Handlers(ctx, builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, ProbeDir: h.ScratchRoot}, runner)
 	for i, handler := range hs {
 		if handler.Info().Name == "go-vet" {
-			hs[i] = review.Handler{Static: handler, Caller: opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}}
+			reviewed := review.Handler{Static: handler, Caller: opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}}
+			wrapped, err := discovery.Wrap(reviewed, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: h.GoExecutable}})
+			if err != nil {
+				return nil, nil, err
+			}
+			hs[i] = wrapped
 		}
 	}
 	var codes []string

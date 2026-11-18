@@ -436,3 +436,49 @@ func TestFailedTasksUploadManifestWithoutFinalizing(t *testing.T) {
 	in.Close()
 	<-done
 }
+
+// W15: the planned stage travels as the optional task_created "stage"; a task
+// without one omits the field (stored without a stage, never inferred).
+func TestTaskCreatedCarriesPlannedStage(t *testing.T) {
+	e := newEnv(t)
+	fa, in, done, _ := startWorker(t, &testHandler{script: "true", tasks: []analysis.TaskSpec{
+		{Key: "t.vet", Required: true, Stage: domain.StageStaticAnalysis},
+		{Key: "t.legacy", Required: true},
+	}})
+	fa.hello(e)
+	fa.conn.Send(localJob(e))
+	if c := waitComplete(t, fa); c.Outcome != "succeeded" {
+		t.Fatalf("complete %+v", c)
+	}
+	fa.mu.Lock()
+	var payloads []string
+	for _, m := range fa.msgs {
+		if v, ok := m.(*workerproto.Event); ok && v.Kind == nodeproto.EventTaskCreated {
+			payloads = append(payloads, string(v.Payload))
+		}
+	}
+	fa.mu.Unlock()
+	want := []string{`{"key":"t.vet","required":true,"stage":"static_analysis"}`, `{"key":"t.legacy","required":true}`}
+	if strings.Join(payloads, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("task_created payloads\n got %v\nwant %v", payloads, want)
+	}
+	in.Close()
+	<-done
+}
+
+// An unknown stage is a handler error before any task is declared.
+func TestUnknownStageFailsBeforeTaskCreated(t *testing.T) {
+	e := newEnv(t)
+	fa, in, done, _ := startWorker(t, &testHandler{script: "true", tasks: []analysis.TaskSpec{{Key: "t.one", Required: true, Stage: "lint"}}})
+	fa.hello(e)
+	fa.conn.Send(localJob(e))
+	c := waitComplete(t, fa)
+	if c.Outcome != "failed" || c.Reason == nil || *c.Reason != "handler_error" {
+		t.Fatalf("complete %+v", c)
+	}
+	if kinds := strings.Join(fa.kinds(), ","); strings.Contains(kinds, "event:task_created") {
+		t.Fatalf("declared a task with an unknown stage: %s", kinds)
+	}
+	in.Close()
+	<-done
+}

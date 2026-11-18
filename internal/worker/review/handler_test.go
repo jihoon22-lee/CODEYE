@@ -118,3 +118,19 @@ func TestLiveQualityRoles(t *testing.T) {
 		t.Logf("documents=%v actual facts=%d candidates=%d validated references; snapshot=%s", docs, len(r.Facts), len(r.Candidates), j.Snapshot.Digest)
 	}
 }
+
+// W15 display stages (docs/37 §2): the review-v1 context role reads
+// documents, investigation and verification are code review. The static
+// handler's own stages are kept.
+func TestPlanStages(t *testing.T) {
+	plan, err := Handler{Static: stubStatic{}}.Plan(t.Context(), analysis.Job{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]domain.Stage{"static": "", "review.context": domain.StageDocuments, "review.investigate": domain.StageCodeReview, "review.verify": domain.StageCodeReview}
+	for _, p := range plan {
+		if s, ok := want[p.Key]; !ok || s != p.Stage {
+			t.Fatalf("%s stage %q", p.Key, p.Stage)
+		}
+	}
+}

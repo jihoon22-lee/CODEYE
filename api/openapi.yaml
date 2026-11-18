@@ -629,6 +629,11 @@ paths:
                       properties:
                         key: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,63}$'}
                         required: {type: boolean}
+                        stage:
+                          description: >-
+                            W15 선택 필드. 없으면 단계 없이 저장한다(추정하지 않음). 알 수 없는 값·빈 문자열은 422.
+                            key 재사용 시 생략은 저장값 유지, 다른 값은 409, 단계 없이 저장된 task에는 한 번 기록한다.
+                          allOf: [{$ref: '#/components/schemas/TaskStage'}]
                     - type: object
                       additionalProperties: false
                       required: [task_id, expected_version, status, reason]
@@ -876,6 +881,7 @@ components:
             run의 progress.waiting_reason으로 따로 보고한다.
           items: {enum: [source_access_unverified, execution_unavailable, report_unavailable]}
         last_run:
+          description: 가장 최근에 요청한 run(R0 의미 유지). 대표 run은 activity.run이다.
           oneOf:
             - type: 'null'
             - type: object
@@ -883,6 +889,99 @@ components:
               properties:
                 id: {type: string}
                 status: {$ref: '#/components/schemas/RunStatus'}
+        activity: {$ref: '#/components/schemas/ProjectActivity'}
+    TaskStage:
+      description: >-
+        task가 계획 시 기록하는 표시 단계(W15, docs/37 §2). domain.Stage와 migration 0006 CHECK와 같다.
+        source/report는 서버 기록에서 계산하며 task 단계가 아니다.
+      enum: [environment, documents, static_analysis, code_review, build, test]
+    StageKey:
+      description: 화면 단계. source, task 단계(environment, documents, build, test, static_analysis, code_review 순), report 순으로 반환한다.
+      enum: [source, environment, documents, build, test, static_analysis, code_review, report]
+    StageState:
+      description: >-
+        plan_pending(계획 미확정), no_tasks(계획 확정·해당 task 없음), waiting(모두 queued/blocked),
+        running(시작·종료 기록이 있고 미종료 task가 남음), succeeded(모두 성공), skipped(성공 없이 모두
+        skipped_policy/unsupported), failed(성공 없이 모두 failed/timed_out/budget_exhausted),
+        cancelled(모두 cancelled), partial(종료됐지만 위 어느 것도 아님).
+      enum: [plan_pending, no_tasks, waiting, running, succeeded, skipped, failed, cancelled, partial]
+    StageDetail:
+      description: recorded는 모든 task에 단계 기록이 있음. not_recorded는 단계 없는 task(W15 이전 워커·R0)가 있어 stages가 비어 있음.
+      enum: [recorded, not_recorded]
+    StageView:
+      type: object
+      additionalProperties: false
+      required: [key, state, planned, finished, succeeded, counts, reasons, started_at, finished_at]
+      properties:
+        key: {$ref: '#/components/schemas/StageKey'}
+        state: {$ref: '#/components/schemas/StageState'}
+        planned:
+          type: [integer, 'null']
+          minimum: 0
+          description: 현재 attempt가 계획을 확정한(running에 도달한) 뒤에만 task 수. source/report는 항상 null.
+        finished: {type: integer, minimum: 0, description: 종료 상태 task 수(성공 포함)}
+        succeeded: {type: integer, minimum: 0}
+        counts:
+          type: object
+          description: 0이 아닌 성공 외 종료 상태별 건수
+          additionalProperties: false
+          properties:
+            failed: {type: integer, minimum: 1}
+            timed_out: {type: integer, minimum: 1}
+            cancelled: {type: integer, minimum: 1}
+            unsupported: {type: integer, minimum: 1}
+            skipped_policy: {type: integer, minimum: 1}
+            budget_exhausted: {type: integer, minimum: 1}
+        reasons:
+          type: array
+          description: >-
+            종료된 task의 사유 코드(중복 제거·정렬). model_source_not_approved(정책 제외), no_documents,
+            no_tool_observations, no_environment_gap(검토 대상 없음) 등. source/report는 attempt 완료 사유·게시 거부 사유.
+          items: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+        started_at: {type: [string, 'null'], format: date-time, description: 서버가 수용한 DB 시각(현재 attempt)}
+        finished_at: {type: [string, 'null'], format: date-time, description: 모든 task가 종료됐을 때의 마지막 종료 DB 시각}
+    ProjectActivity:
+      type: object
+      additionalProperties: false
+      description: >-
+        W15 프로젝트 진행 요약. 대표 run은 실행·취소 처리 중(preparing, running, finalizing, cancel_requested,
+        cancelling), recovery_required, queued, 종료 순, 같은 그룹에서 requested_at 내림차순, run ID 내림차순이다.
+        목록과 상세는 같은 저장소 집계를 쓴다. 권한 없는 프로젝트는 응답에 나타나지 않는다.
+      required: [run, other_active_runs, detail, stages, waiting_reason, last_report, last_event_at, checked_at]
+      properties:
+        run:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [id, status, requested_at]
+              properties:
+                id: {type: string}
+                status: {$ref: '#/components/schemas/RunStatus'}
+                requested_at: {type: string, format: date-time}
+        other_active_runs: {type: integer, minimum: 0, description: 대표 run을 뺀 종료되지 않은 run 수}
+        detail:
+          description: run이 null이면 null
+          oneOf:
+            - type: 'null'
+            - {$ref: '#/components/schemas/StageDetail'}
+        stages: {type: array, items: {$ref: '#/components/schemas/StageView'}, description: run이 없거나 not_recorded이면 빈 배열}
+        waiting_reason:
+          type: [string, 'null']
+          description: 대표 run이 queued일 때만 run progress.waiting_reason과 같은 저장소 계산 값. 그 외 null.
+        last_report:
+          description: 프로젝트에서 가장 최근에 게시된 보고서. run·revision에 고정한다.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [run_id, revision, published_at]
+              properties:
+                run_id: {type: string}
+                revision: {type: integer, minimum: 1}
+                published_at: {type: string, format: date-time}
+        last_event_at: {type: [string, 'null'], format: date-time, description: 대표 run의 마지막 수용 이벤트 DB 시각}
+        checked_at: {type: string, format: date-time, description: 서버가 읽은 시각. 생성 응답은 서버 시계, 조회는 DB 시각.}
     SessionView:
       type: object
       required: [user_id, csrf_token, expires_at]
@@ -922,7 +1021,11 @@ components:
           type: object
           required: [stage, plan_revision, completed_tasks, total_tasks, estimated_percent, waiting_reason]
           properties:
-            stage: {type: string}
+            stage: {type: string, description: run 상태와 같다(R0 의미 유지). 세부 단계는 stages.}
+            detail: {$ref: '#/components/schemas/StageDetail'}
+            stages: {type: array, items: {$ref: '#/components/schemas/StageView'}, description: 프로젝트 activity.stages와 같은 집계(W15). not_recorded이면 빈 배열.}
+            last_event_at: {type: [string, 'null'], format: date-time}
+            checked_at: {type: string, format: date-time}
             plan_revision: {type: [integer, 'null'], minimum: 1}
             completed_tasks: {type: integer, minimum: 0}
             total_tasks: {type: [integer, 'null'], minimum: 0}

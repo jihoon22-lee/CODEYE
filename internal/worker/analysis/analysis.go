@@ -44,6 +44,9 @@ type TaskSpec struct {
 	Key      string // stable, ^[a-z][a-z0-9_.-]{0,63}$
 	Required bool   // required_for_verdict
 	Title    string
+	// Stage is the display stage (docs/37 §2) sent with task_created. Empty
+	// means "not recorded"; the server never infers it from Key.
+	Stage domain.Stage
 }
 
 // Execution is one executor.Runner.Run call made by a handler. Name is stable

@@ -30,5 +30,6 @@ R0는 개인 모드의 Go 분석·승인된 모델 검토·근거 보고서까�
 | 입력과 실행 | [W04 소스 사본](25-w04-source.md) · [W05 실행기](26-w05-native.md) · [W06 노드 프로토콜](28-w06-node-protocol.md) · [W06 런타임](28-w06-agent-runtime.md) · [W07 워커 풀](30-w07-scheduler.md) |
 | 분석과 게시 | [W08 Go vet](29-w08-go-vet.md) · [W09 보고서 게시](31-w09-report.md) · [W10 OpenCode](32-w10-opencode.md) · [QA 예산 relay](r0-openai-gateway.md) |
 | 검토와 검증 | [W11 맥락·후보](33-w11-context-review.md) · [W12 반증](34-w12-verifier.md) · [W13 근거 화면](35-w13-evidence-report.md) · [W14 품질 회귀](36-r0-pilot.md) |
+| R1 탐색과 진행 | [W15 모듈·문서·환경 탐색과 단계 표시](37-w15-discovery-and-progress.md) |
 
 HTTP 경로의 구현 표시는 [OpenAPI](../api/openapi.yaml)에 있다. 기계 판독 계약은 [schemas](../schemas), 입력·출력 예시는 [examples](../examples), 활성 모델 지침은 [R0 팩](../prompts/review-v1/pack.yaml)에서 찾을 수 있다.

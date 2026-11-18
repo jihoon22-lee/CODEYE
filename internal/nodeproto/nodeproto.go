@@ -289,10 +289,15 @@ type SnapshotFixedPayload struct {
 }
 
 // TaskCreatedPayload declares a task. Key is unique per run; on a retried run
-// the same key returns the existing task (its current version).
+// the same key returns the existing task (its current version). Stage is the
+// optional display stage (domain.Stage, docs/37 §2); pre-W15 workers omit it
+// and the task is stored without one. On key reuse an omitted stage keeps the
+// stored one, a stage for a task stored without one is recorded once, and a
+// different stage is a conflict.
 type TaskCreatedPayload struct {
-	Key      string `json:"key"`
-	Required bool   `json:"required"`
+	Key      string  `json:"key"`
+	Required bool    `json:"required"`
+	Stage    *string `json:"stage,omitempty"`
 }
 
 // TaskStatusPayload moves a task. ExpectedVersion is the task version.

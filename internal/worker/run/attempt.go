@@ -309,14 +309,20 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 	}
 	seen := map[string]bool{}
 	for _, s := range specs {
-		if !nodeproto.ValidTaskKey(s.Key) || seen[s.Key] {
+		// An unknown stage is a handler bug; "" is sent as no stage (not recorded).
+		if !nodeproto.ValidTaskKey(s.Key) || seen[s.Key] || (s.Stage != "" && !s.Stage.Valid()) {
 			return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil
 		}
 		seen[s.Key] = true
 	}
 	tasks := make([]*taskRun, 0, len(specs))
 	for _, s := range specs {
-		resp, err := w.event(a, nodeproto.EventTaskCreated, nodeproto.TaskCreatedPayload{Key: s.Key, Required: s.Required}, "")
+		payload := nodeproto.TaskCreatedPayload{Key: s.Key, Required: s.Required}
+		if s.Stage != "" {
+			stage := string(s.Stage)
+			payload.Stage = &stage
+		}
+		resp, err := w.event(a, nodeproto.EventTaskCreated, payload, "")
 		if err != nil || resp.TaskID == nil {
 			return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil
 		}

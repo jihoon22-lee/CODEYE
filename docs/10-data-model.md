@@ -80,7 +80,7 @@ queue는 상태·우선순위·available_at, lease는 expires_at, finding은 pro
 서술 재생성은 원래 run 결과를 변조하지 않고 새 report revision을 만든다. 다른 모델·지침으로 재검토하면 새 run 또는 명시된 review revision과 그 근거를 남긴다. 사용자의 disposition은 보고서 출판 당시 값과 현재 값을 분리해 볼 수 있게 한다. 감사 가능한 과거 보고서를 현재 상태로 조용히 덮어쓰지 않는다.
 
 
-## 9. R0에 적용한 저장 계약
+## 9. 적용한 저장 계약
 
 | Migration | 책임 | 근거 |
 |---|---|---|
@@ -89,5 +89,6 @@ queue는 상태·우선순위·available_at, lease는 expires_at, finding은 pro
 | 0003 | 노드·자격증명·lease·claim·자원 예약, 스냅샷 위치와 산출물 | [노드 프로토콜](28-w06-node-protocol.md) |
 | 0004 | 워커 풀 정책·자동 증감·공정 배정 | [워커 풀](30-w07-scheduler.md) |
 | 0005 | attempt와 입력 digest에 묶인 불변 보고서 리비전·게시 | [보고서 게시](31-w09-report.md) |
+| 0006 | task 표시 단계(한 번만 기록), 서버가 수용한 task 시작·종료 DB 시각, 실행 수명 이벤트 부분 색인. 기존 행은 backfill하지 않음 | [W15 단계 기록](37-w15-discovery-and-progress.md) |
 
 W15의 단계 요약은 서버가 수용한 실행 기록에서 파생한다. 같은 표시 단계를 여러 task가 공유할 수 있으며, 예전 attempt의 결과는 그 시도의 이력에 속한다. 모델 호출 여부와 실행 단계의 종료는 별도 사실로 보존한다. [단계 집계 계약](11-api-and-events.md)

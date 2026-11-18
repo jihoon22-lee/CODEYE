@@ -27,7 +27,7 @@ R0의 두 에이전트 시험은 한 머신에서 별도 node identity로 먼저
 
 | ID | 작업 | 선행 | 완료 조건 |
 |---|---|---|---|
-| W15 | 모듈·문서·환경 탐색과 프로젝트별 단계 표시 | W14 | 고정 입력에서 모듈별 환경·문서 근거 수집, 역할별 지침 검증, 저장된 단계로 목록과 상세를 갱신하는 첫 수직 경로 |
+| W15 | 모듈·문서·환경 탐색과 프로젝트별 단계 표시 — [1단계 구현](37-w15-discovery-and-progress.md) | W14 | 고정 입력에서 모듈별 환경·문서 근거 수집, 역할별 지침 검증, 저장된 단계로 목록과 상세를 갱신하는 첫 수직 경로 |
 | W16 | C/C++ 분석 팩 | W15 | compile DB path mapping, 생성 헤더·flags, 부분 TU 범위, clang/cppcheck 정규화 |
 | W17 | Python 분석 팩 | W15 | Ruff+타입 검사+보안/오류 흐름, interpreter/stub/import 공백 표시 |
 | W18 | JS/TS 분석 팩 | W15 | tsconfig/workspace/Node, type-aware lint, async·경계 검토 |

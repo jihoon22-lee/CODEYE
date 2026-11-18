@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.codeye.invalid/v0.1/environment.schema.json",
+  "title": "CODEYE module, environment and document discovery (W15)",
+  "description": "application/vnd.codeye.environment+json. Written without a model by env.discover (kind environment) and docs.discover (kind documents) from the verified snapshot manifest. Node observations come only from operator-configured tool probes of the attempt. Document content is never stored. Cross-field rules (sorting, evidence ID binding, verdict recomputation, read budget totals) are enforced by internal/worker/discovery/envdoc.Validate.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "kind", "snapshot_manifest_digest", "run_id", "attempt_id", "scope", "modules", "limitations"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"enum": ["environment", "documents"]},
+    "snapshot_manifest_digest": {"$ref": "#/$defs/digest"},
+    "run_id": {"$ref": "#/$defs/uuid"}, "attempt_id": {"$ref": "#/$defs/uuid"},
+    "scope": {"$ref": "#/$defs/scope"},
+    "modules": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/module"}},
+    "environment": {"$ref": "#/$defs/environment"},
+    "documents": {"$ref": "#/$defs/documents"},
+    "limitations": {"$ref": "#/$defs/codes"}
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "environment"}}},
+     "then": {"required": ["environment"], "not": {"required": ["documents"]}},
+     "else": {"required": ["documents"], "not": {"required": ["environment"]}}}
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+    "codes": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/code"}},
+    "path": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)[^:\\\\\\u0000-\\u001f\\u007f]+(?<!/)$"},
+    "dir": {"anyOf": [{"const": "."}, {"$ref": "#/$defs/path"}]},
+    "paths": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/path"}},
+    "ecosystem": {"enum": ["cpp", "go", "javascript", "python", "rust"]},
+    "module_id": {"type": "string", "pattern": "^(cpp|go|javascript|python|rust):.+$", "maxLength": 4200},
+    "tool": {"enum": ["c_cpp_compiler", "cmake", "go", "node", "python", "rust"]},
+    "nullable_string": {"type": ["string", "null"]},
+    "scope": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "paths"],
+      "properties": {"kind": {"enum": ["full", "paths"]}, "paths": {"$ref": "#/$defs/paths", "maxItems": 100}},
+      "if": {"properties": {"kind": {"const": "full"}}},
+      "then": {"properties": {"paths": {"maxItems": 0}}},
+      "else": {"properties": {"paths": {"minItems": 1}}}
+    },
+    "module": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "ecosystem", "path", "manifests", "excluded_paths", "in_scope"],
+      "properties": {
+        "id": {"$ref": "#/$defs/module_id"}, "ecosystem": {"$ref": "#/$defs/ecosystem"}, "path": {"$ref": "#/$defs/dir"},
+        "manifests": {"$ref": "#/$defs/paths", "minItems": 1}, "excluded_paths": {"$ref": "#/$defs/paths"}, "in_scope": {"type": "boolean"}
+      }
+    },
+    "environment": {
+      "type": "object", "additionalProperties": false, "required": ["manifests", "requirements", "observations", "verdicts"],
+      "properties": {
+        "manifests": {"type": "array", "items": {"$ref": "#/$defs/manifest_read"}},
+        "requirements": {"type": "array", "items": {"$ref": "#/$defs/requirement"}},
+        "observations": {"type": "array", "maxItems": 6, "items": {"$ref": "#/$defs/observation"}},
+        "verdicts": {"type": "array", "items": {"$ref": "#/$defs/verdict"}}
+      }
+    },
+    "manifest_read": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256", "status"],
+      "properties": {"path": {"$ref": "#/$defs/path"}, "sha256": {"$ref": "#/$defs/digest"},
+        "status": {"enum": ["parsed", "no_requirement_parser", "malformed", "not_utf8", "too_large"]}}
+    },
+    "location": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256", "start_line", "end_line"],
+      "properties": {"path": {"$ref": "#/$defs/path"}, "sha256": {"$ref": "#/$defs/digest"},
+        "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}}
+    },
+    "requirement": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "module", "tool", "kind", "constraint", "comparison", "source", "evidence_id"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z_]+@.+$"},
+        "module": {"$ref": "#/$defs/module_id"}, "tool": {"$ref": "#/$defs/tool"},
+        "kind": {"enum": ["go_directive", "go_toolchain", "go_work_directive", "go_work_toolchain", "engines_node", "requires_python", "python_requires", "python_version_file", "rust_version", "rust_toolchain_channel", "cmake_minimum_required"]},
+        "constraint": {"type": "string", "maxLength": 256},
+        "comparison": {"enum": ["minimum", "preferred_minimum", "prefix", "unsupported"]},
+        "source": {"$ref": "#/$defs/location"},
+        "evidence_id": {"type": "string", "pattern": "^ev_[0-9a-f]{24}$"}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"enum": ["go_directive", "go_toolchain", "go_work_directive", "go_work_toolchain"]}}}, "then": {"properties": {"tool": {"const": "go"}}}},
+        {"if": {"properties": {"kind": {"const": "engines_node"}}}, "then": {"properties": {"tool": {"const": "node"}}}},
+        {"if": {"properties": {"kind": {"enum": ["requires_python", "python_requires", "python_version_file"]}}}, "then": {"properties": {"tool": {"const": "python"}}}},
+        {"if": {"properties": {"kind": {"enum": ["rust_version", "rust_toolchain_channel"]}}}, "then": {"properties": {"tool": {"const": "rust"}}}},
+        {"if": {"properties": {"kind": {"const": "cmake_minimum_required"}}}, "then": {"properties": {"tool": {"const": "cmake"}}}}
+      ]
+    },
+    "observation": {
+      "type": "object", "additionalProperties": false, "required": ["tool", "status", "version", "detail", "execution"],
+      "properties": {
+        "tool": {"$ref": "#/$defs/tool"},
+        "status": {"enum": ["observed", "not_probed", "not_found", "probe_failed"]},
+        "version": {"type": ["string", "null"], "pattern": "^[0-9]+(\\.[0-9]+){0,3}((rc|beta)[0-9]+)?$"},
+        "detail": {"anyOf": [{"$ref": "#/$defs/code"}, {"type": "null"}]},
+        "execution": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9_.-]{0,63}$"}
+      },
+      "allOf": [
+        {"if": {"properties": {"status": {"const": "observed"}}}, "then": {"properties": {"version": {"type": "string"}}}, "else": {"properties": {"version": {"type": "null"}}}},
+        {"if": {"properties": {"status": {"const": "probe_failed"}}}, "then": {"properties": {"detail": {"type": "string"}}}, "else": {"properties": {"detail": {"type": "null"}}}},
+        {"if": {"properties": {"status": {"const": "not_probed"}}}, "then": {"properties": {"execution": {"type": "null"}}}}
+      ]
+    },
+    "verdict": {
+      "type": "object", "additionalProperties": false, "required": ["module", "tool", "requirement", "status", "reason"],
+      "properties": {
+        "module": {"$ref": "#/$defs/module_id"}, "tool": {"$ref": "#/$defs/tool"},
+        "requirement": {"$ref": "#/$defs/nullable_string"},
+        "status": {"enum": ["satisfied", "mismatch", "unknown"]},
+        "reason": {"enum": ["not_declared", "declaration_unreadable", "not_observed", "unsupported_constraint", null]}
+      },
+      "allOf": [
+        {"if": {"properties": {"status": {"const": "unknown"}}},
+         "then": {"properties": {"reason": {"type": "string"}}},
+         "else": {"properties": {"reason": {"type": "null"}, "requirement": {"type": "string"}}}},
+        {"if": {"properties": {"reason": {"enum": ["not_declared", "declaration_unreadable"]}}}, "then": {"properties": {"requirement": {"type": "null"}}}},
+        {"if": {"properties": {"reason": {"enum": ["not_observed", "unsupported_constraint"]}}}, "then": {"properties": {"requirement": {"type": "string"}}}}
+      ]
+    },
+    "documents": {
+      "type": "object", "additionalProperties": false, "required": ["budget", "items", "modules", "overlapping_guidance"],
+      "properties": {
+        "budget": {
+          "type": "object", "additionalProperties": false, "required": ["total_bytes", "per_document_bytes", "max_documents", "read_bytes"],
+          "properties": {"total_bytes": {"type": "integer", "minimum": 1}, "per_document_bytes": {"type": "integer", "minimum": 1},
+            "max_documents": {"type": "integer", "minimum": 1, "maximum": 1000}, "read_bytes": {"type": "integer", "minimum": 0}}
+        },
+        "items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/document"}},
+        "modules": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/module_documents"}},
+        "overlapping_guidance": {"type": "array", "items": {"$ref": "#/$defs/overlap"}}
+      }
+    },
+    "document": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "applies_to", "class", "status", "reason", "size_bytes", "sha256", "line_count"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"}, "applies_to": {"$ref": "#/$defs/dir"},
+        "class": {"enum": ["readme", "agent_instructions", "design", "contributing", "other"]},
+        "status": {"enum": ["selected", "budget_exceeded", "excluded", "unreadable"]},
+        "reason": {"anyOf": [{"$ref": "#/$defs/code"}, {"type": "null"}]},
+        "size_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "sha256": {"anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+        "line_count": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "allOf": [
+        {"if": {"properties": {"status": {"const": "selected"}}},
+         "then": {"properties": {"reason": {"type": "null"}, "line_count": {"type": "integer"}, "sha256": {"type": "string"}, "size_bytes": {"type": "integer"}}},
+         "else": {"properties": {"reason": {"type": "string"}, "line_count": {"type": "null"}}}},
+        {"if": {"properties": {"status": {"const": "budget_exceeded"}}}, "then": {"properties": {"reason": {"enum": ["document_too_large", "read_budget_exhausted"]}, "sha256": {"type": "string"}}}},
+        {"if": {"properties": {"status": {"const": "unreadable"}}}, "then": {"properties": {"reason": {"enum": ["not_utf8", "contains_nul"]}, "sha256": {"type": "string"}}}}
+      ]
+    },
+    "module_documents": {
+      "type": "object", "additionalProperties": false, "required": ["module", "state", "own", "inherited"],
+      "properties": {"module": {"$ref": "#/$defs/module_id"}, "state": {"enum": ["own", "inherited", "none"]},
+        "own": {"$ref": "#/$defs/paths"}, "inherited": {"$ref": "#/$defs/paths"}},
+      "allOf": [
+        {"if": {"properties": {"state": {"const": "own"}}}, "then": {"properties": {"own": {"minItems": 1}}}},
+        {"if": {"properties": {"state": {"const": "inherited"}}}, "then": {"properties": {"own": {"maxItems": 0}, "inherited": {"minItems": 1}}}},
+        {"if": {"properties": {"state": {"const": "none"}}}, "then": {"properties": {"own": {"maxItems": 0}, "inherited": {"maxItems": 0}}}}
+      ]
+    },
+    "overlap": {
+      "type": "object", "additionalProperties": false, "required": ["path", "documents", "assessment"],
+      "properties": {"path": {"$ref": "#/$defs/dir"}, "documents": {"$ref": "#/$defs/paths", "minItems": 2},
+        "assessment": {"const": "not_assessed_without_model"}}
+    }
+  }
+}

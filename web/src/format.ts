@@ -38,3 +38,30 @@ export function describeError(error: unknown): ErrorText {
     : t.errors.unknown;
   return { message: byStatus, detail, requestId };
 }
+
+const pad = (n: number) => String(n).padStart(2, '0');
+// Local wall-clock text for "last confirmed" and stage times.
+export function formatClock(d: Date): string {
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+export function formatInstant(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${formatClock(d)}`;
+}
+
+// "icon label" for a run status; an unrecognised status keeps its raw value visible and is never read as success.
+export function runStatusText(status: string): string {
+  if (!isKnownRunStatus(status)) return `${t.runStatusUnknownIcon} ${t.runStatusRaw(t.runs.statusUnknown, shorten(status, 32))}`;
+  return `${t.runStatusIcons[status] ?? t.runStatusUnknownIcon} ${t.runs.statusLabels[status]}`;
+}
+
+export const STAGE_ORDER = ['source', 'environment', 'documents', 'build', 'test', 'static_analysis', 'code_review', 'report'];
+export const stageName = (key: string): string =>
+  Object.hasOwn(t.stages.names, key) ? t.stages.names[key]! : t.stages.unknownName(shorten(key, 40));
+export const stageStateText = (state: string): string =>
+  Object.hasOwn(t.stages.states, state) ? t.stages.states[state]! : t.stages.unknownState(shorten(state, 40));
+export function orderStages<T extends { key: string }>(stages: T[]): T[] {
+  const rank = (k: string) => { const i = STAGE_ORDER.indexOf(k); return i < 0 ? STAGE_ORDER.length : i; };
+  return stages.map((s, i) => ({ s, i })).sort((a, b) => rank(a.s.key) - rank(b.s.key) || a.i - b.i).map(x => x.s);
+}

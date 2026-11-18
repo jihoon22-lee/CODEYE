@@ -128,7 +128,7 @@ func (h *Handler) Plan(ctx context.Context, job analysis.Job) ([]analysis.TaskSp
 	}
 	out := make([]analysis.TaskSpec, 0, len(planned))
 	for _, p := range planned {
-		out = append(out, analysis.TaskSpec{Key: p.Key, Required: true, Title: p.Title})
+		out = append(out, analysis.TaskSpec{Key: p.Key, Required: true, Title: p.Title, Stage: domain.StageStaticAnalysis})
 	}
 	return out, nil
 }
