@@ -110,7 +110,10 @@ func TestClassifyStderrOnCapturedBytes(t *testing.T) {
 		"check-findings": func(f StderrFacts) bool {
 			return !f.Dependency && !f.LockMissing && !f.BuildScript && !f.Toolchain && !f.Linker && f.Other == 0
 		},
-		"check-typeerr": func(f StderrFacts) bool { return f.CompileError },
+		"check-typeerr":      func(f StderrFacts) bool { return f.CompileError },
+		"check-lockoutdated": func(f StderrFacts) bool { return f.LockOutdated && !f.LockMissing },
+		"check-manifestbad":  func(f StderrFacts) bool { return f.ManifestInvalid && !f.Dependency },
+		"check-toonew":       func(f StderrFacts) bool { return f.Toolchain && !f.ManifestInvalid },
 	} {
 		if f := ClassifyStderr(readTestdata(t, name+".stderr")); !check(f) {
 			t.Errorf("%s: %+v", name, f)

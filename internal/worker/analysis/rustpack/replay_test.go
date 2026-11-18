@@ -309,6 +309,9 @@ func TestReplayOutcomeTable(t *testing.T) {
 		{"build script fails", "buildfail", "check-buildfail", KindCheck, domain.TaskFailed, ReasonBuildScript, obsdoc.ExitExecutionError, nil, true, nil},
 		{"offline dependency missing", "nodeps", "check-nodeps", KindCheck, domain.TaskFailed, ReasonDependency, obsdoc.ExitConfigurationError, nil, false, nil},
 		{"lock file missing", "missinglock", "check-missinglock", KindCheck, domain.TaskFailed, ReasonLockMissing, obsdoc.ExitConfigurationError, nil, false, nil},
+		{"lock file outdated", "lockoutdated", "check-lockoutdated", KindCheck, domain.TaskFailed, ReasonLockOutdated, obsdoc.ExitConfigurationError, nil, false, nil},
+		{"manifest does not parse", "manifestbad", "check-manifestbad", KindCheck, domain.TaskFailed, ReasonManifestInvalid, obsdoc.ExitConfigurationError, nil, false, nil},
+		{"toolchain too old for rust-version", "toonew", "check-toonew", KindCheck, domain.TaskFailed, ReasonToolchain, obsdoc.ExitConfigurationError, nil, false, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			x := replayCase(t, tc.kind, tc.fixture, tc.capture, nil)

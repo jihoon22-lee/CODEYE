@@ -500,9 +500,11 @@ func TestRealWorkspaceDrift(t *testing.T) {
 func TestRealConfigurationErrors(t *testing.T) {
 	for _, tc := range []struct {
 		fixture, capName, reason string
-	}{{"nodeps", "check-nodeps", ReasonDependency}, {"missinglock", "check-missinglock", ReasonLockMissing}} {
+	}{{"nodeps", "check-nodeps", ReasonDependency}, {"missinglock", "check-missinglock", ReasonLockMissing}, {"lockoutdated", "check-lockoutdated", ReasonLockOutdated},
+		{"manifestbad", "check-manifestbad", ReasonManifestInvalid}, {"toonew", "check-toonew", ReasonToolchain}} {
 		t.Run(tc.fixture, func(t *testing.T) {
 			res, doc, _, fx, a := realRun(t, KindCheck, tc.fixture, "cargo-check", tc.capName, domain.Scope{}, nil)
+			// the capture is named after the case; the mutation of the lock file is checked below
 			if res.Status != domain.TaskFailed || res.Reason != tc.reason || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError || doc.Coverage.ProcessedPaths != nil {
 				t.Fatalf("status %s/%s %+v", res.Status, res.Reason, doc.Outcome)
 			}
@@ -521,6 +523,9 @@ func TestRealConfigurationErrors(t *testing.T) {
 			}
 			if _, err := os.Stat(filepath.Join(fx.Job.Snapshot.WorkspaceDir, "Cargo.lock")); tc.fixture == "missinglock" && err == nil {
 				t.Fatal("Cargo.lock was generated")
+			}
+			if b, err := os.ReadFile(filepath.Join(fx.Job.Snapshot.WorkspaceDir, "Cargo.lock")); tc.fixture == "lockoutdated" && (err != nil || !bytes.Contains(b, []byte(`version = "0.1.0"`))) {
+				t.Fatal("Cargo.lock was updated")
 			}
 			_ = a
 		})

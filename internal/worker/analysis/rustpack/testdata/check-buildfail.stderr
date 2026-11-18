@@ -5,6 +5,6 @@ Caused by:
   process didn't exit successfully: `[REDACTED]/target/debug/build/buildfail-026fb22c04bb4356/build-script-build` (exit status: 101)
   --- stderr
 
-  thread 'main' (1799284) panicked at build.rs:2:5:
+  thread 'main' (1836735) panicked at build.rs:2:5:
   build script failed on purpose
   note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

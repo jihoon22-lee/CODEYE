@@ -454,7 +454,7 @@ func ClassifyStderr(stderr []byte) StderrFacts {
 		switch {
 		case strings.Contains(l, "cannot create the lock file") && strings.Contains(l, "--locked"):
 			f.LockMissing = true
-		case strings.Contains(l, "needs to be updated but --locked was passed"):
+		case strings.Contains(l, "needs to be updated but --locked was passed"), strings.Contains(l, "cannot update the lock file") && strings.Contains(l, "--locked"):
 			f.LockOutdated = true
 		case strings.Contains(l, "no matching package named"), strings.Contains(l, "failed to select a version for"), strings.Contains(l, "failed to get `"),
 			strings.Contains(l, "failed to load source for dependency"), strings.Contains(l, "unable to get packages from source"),
@@ -463,11 +463,14 @@ func ClassifyStderr(stderr []byte) StderrFacts {
 			f.Dependency = true
 		case strings.Contains(l, "linker `") && strings.Contains(l, "not found"):
 			f.Linker = true
-		case strings.Contains(l, "failed to parse manifest"), strings.Contains(l, "could not find `Cargo.toml`"), strings.Contains(l, "failed to load manifest for"):
+		case strings.Contains(l, "failed to parse manifest"), strings.Contains(l, "could not find `Cargo.toml`"), strings.Contains(l, "failed to load manifest for"),
+			strings.HasPrefix(strings.TrimSpace(l), "--> ") && strings.Contains(l, "Cargo.toml:"):
+			// TOML syntax errors point into the manifest: " --> Cargo.toml:1:9".
 			f.ManifestInvalid = true
 		case strings.Contains(l, "failed to run custom build command"):
 			f.BuildScript = true
-		case strings.Contains(l, "requires rustc ") && strings.Contains(l, "or newer"), strings.Contains(l, "is required, but it is not available"),
+		case strings.Contains(l, "requires rustc ") && strings.Contains(l, "or newer"), strings.Contains(l, "is not supported by the following packages"),
+			strings.Contains(l, "is required, but it is not available"),
 			strings.Contains(l, "feature `") && strings.Contains(l, "is required"), strings.Contains(l, "can't find crate for `std`"), strings.Contains(l, "can't find crate for `core`"):
 			f.Toolchain = true
 		case strings.HasPrefix(l, "error: could not compile "):
