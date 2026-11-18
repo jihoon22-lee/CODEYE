@@ -82,7 +82,7 @@ type Analyzer interface {
 |---|---|---|---|
 | `node` | `--node /abs/node` | `--version` | 한 줄 `v<major>.<minor>.<patch>`(각 1~4자리) → `<major>.<minor>.<patch>`. pre-release·nightly·여러 줄은 거부 |
 
-- `go`는 표에 넣지 않는다. 기존 `--go`와 `GoExecutable`을 그대로 쓴다. go vet 요청 바이트 고정과 W08 경로를 바꾸지 않기 위해서다. python toolchain은 아직 없다. W17이 필요하면 표에 추가한다.
+- `go`는 표에 넣지 않는다. 기존 `--go`와 `GoExecutable`을 그대로 쓴다. go vet 요청 바이트 고정과 W08 경로를 바꾸지 않기 위해서다. python toolchain은 아직 없다. W17의 mypy·bandit은 운영자 venv의 절대 `#!` interpreter로 실행되므로 필요하지 않았다([W17](42-w17-python-pack.md)).
 - **이름은 예약어다.** toolchain 이름은 분석기 도구 이름으로 쓸 수 없고, env.discover 런타임 도구 이름(`go`·`node`·`python` 등)이어야 한다(`TestToolchainNamesAreReserved`).
 - **hello**: toolchain 경로는 분석기 도구와 같은 hello 맵 `analyzer_tools`에 예약 이름으로 들어간다(`{"node": "/abs/node", "staticcheck": "/abs/staticcheck"}`). hello 필드를 새로 만들지 않는 가장 작은 변경이다. agent는 같은 절대 경로 검사를 한다. 이 빌드의 toolchain 이름은 알려진 이름이므로 `unknown_tool`이 되지 않는다. 플래그 목록은 `builtin.ToolchainFlags()`이고 `codeye --help`에 `[--node /abs/node]`가 있다.
 - **검증**: 워커 시작 시 toolchain마다 한 번 한다. 절대 경로이고 실행 가능한 일반 파일인지 확인한 뒤 executor로 `<node> --version`을 도구 probe와 같은 규칙으로 실행한다. 규칙은 새 probe 디렉터리, `PATH=<해석한 실행 파일의 디렉터리>`, `LANG=C.UTF-8`(Windows는 `SystemRoot` 추가), 30초, 출력 64 KiB다. 정리 불확실, 0이 아닌 종료, 잘린 출력, 인식하지 못한 버전은 실패다. 성공하면 검증된 핸들 `pack.Toolchain{Name, Executable, Dir, Version}`이 된다. `Executable`은 운영자 경로, `Dir`은 해석한 실행 파일의 디렉터리, `Version`은 probe가 읽은 값이다.
@@ -141,7 +141,7 @@ type Analyzer interface {
 
 - **범위에 모듈이 없는 생태계는 작업을 계획하지 않는다.** 다른 생태계의 분석기가 자리 작업을 계획해 실패를 만들지 않는다. go vet은 팩 멤버로서 Go 소스가 범위에 없으면 아무것도 계획하지 않는다. R0의 필수 자리 작업(`no_go_files`, `scope_has_no_go_packages`)은 composite에서 사라졌다.
 - **분석할 수 없는 소스는 그 생태계의 팩이 보인다.** Go 소스가 범위에 있는데 go.mod가 없거나 패키지를 만들 수 없으면 go vet은 기존 자리 작업(`unsupported`, `go_module_missing` 등)을 그대로 계획한다. 다른 팩도 자기 생태계의 소스를 분석할 수 없으면 같은 방식으로 보이는 작업을 계획한다.
-- **범위의 생태계에 분석기가 없으면 공백 작업 하나를 계획한다.** composite가 생태계마다 `pack-gap.<생태계>` 작업을 만든다. 이 작업은 필수가 아니고 단계는 `static_analysis`다. 프로세스 없이 `unsupported`(`analyzer_pack_missing`)로 끝나고 not-run envelope(분석기 ID `<생태계>.none`, 도구 `none`, `files_in_scope`=해당 소스 수)를 쓴다. 단계 표시는 그 사유를 보인다. 예: Python만 있는 스냅샷은 `static_analysis`가 `skipped`(`analyzer_pack_missing`)다. 보고서에는 `static_analysis_gap:<생태계>` 제약과 not-run 도구 행이 남고 상태는 `partial`이다. 필수 작업으로 세지 않으므로 `required_task_not_succeeded`가 되지 않는다. 분석하지 않은 소스를 0건 통과로 보이지 않기 위해 보고서는 완료가 아니다.
+- **범위의 생태계에 분석기가 없으면 공백 작업 하나를 계획한다.** composite가 생태계마다 `pack-gap.<생태계>` 작업을 만든다. 이 작업은 필수가 아니고 단계는 `static_analysis`다. 프로세스 없이 `unsupported`(`analyzer_pack_missing`)로 끝나고 not-run envelope(분석기 ID `<생태계>.none`, 도구 `none`, `files_in_scope`=해당 소스 수)를 쓴다. 단계 표시는 그 사유를 보인다. 예: JavaScript만 있는 스냅샷은 `static_analysis`가 `skipped`(`analyzer_pack_missing`)다(W17부터 Python은 공백이 아니다). 보고서에는 `static_analysis_gap:<생태계>` 제약과 not-run 도구 행이 남고 상태는 `partial`이다. 필수 작업으로 세지 않으므로 `required_task_not_succeeded`가 되지 않는다. 분석하지 않은 소스를 0건 통과로 보이지 않기 위해 보고서는 완료가 아니다.
 - **지원 언어 소스가 하나도 없으면** 분석기 작업이 없다. 단계는 `no_tasks`이고 보고서는 `static_analysis_not_planned` 제약과 함께 `partial`이다.
 - **"범위에 있다"의 정의는 하나다**: `pack.SourceFiles`. 범위 안의 포함 파일 중 소스 확장자(Go `.go`, Python `.py`·`.pyi`, JS/TS `.js`·`.jsx`·`.mjs`·`.cjs`·`.ts`·`.tsx`·`.mts`·`.cts`, Rust `.rs`, C/C++ `.c`·`.cc`·`.cpp`·`.cxx`·`.h`·`.hh`·`.hpp`·`.hxx` 등)를 센다. 숨김 디렉터리, `testdata`, `vendor`, `node_modules` 아래 파일은 세지 않는다. build 파일만으로는(Makefile, package.json, pyproject.toml) 생태계가 범위에 들어오지 않는다. Makefile이 있는 Go 저장소에 C/C++ 공백이 생기지 않게 하기 위해서다. 모듈 판단은 각 팩이 한다.
 - **분석기가 있는지는 카탈로그가 정한다.** 생태계의 멤버(설정된 분석기든 미설정 대역이든)가 하나라도 있으면 공백 작업을 만들지 않는다. 그 생태계는 그 팩이 계획한다. 팩은 카탈로그에 자기 항목만 추가하면 된다. `any` 생태계 분석기(W21 구조·비밀정보)는 언어 공백을 메우지 않는다.
@@ -387,7 +387,7 @@ go test -count=1 -run TestRealStaticcheck ./internal/worker/analysis/staticcheck
 - R1 해석의 호출자 확장은 Go 코드에서만 동작한다(W15). 다른 언어 팩이 해석 입력을 쓰려면 코드 창 선택을 확인해야 한다.
 - 공백 판단은 소스 확장자 기준이다(§2.8). 확장자가 없는 스크립트나 생성 파일은 세지 않는다. 범위에 소스가 있어도 그 생태계의 팩이 모듈을 찾지 못하면 그 팩이 보이는 작업을 계획해야 한다. composite는 이를 강제하지 않는다.
 - 탐색 probe는 범위 안 생태계의 도구만 기록한다. `any` 생태계 도구(W21)는 항상 기록된다.
-- 공유 toolchain은 `node` 하나다(§2.4.1). 이 빌드에는 node가 필요한 분석기가 없어서 `--node`는 탐색 관측에만 쓰인다. node 자식 프로세스(worker thread, 언어 서버, telemetry)의 정리와 환경은 각 팩이 측정해야 한다. Windows에서 실제 node probe를 실행하지 않았다.
+- 공유 toolchain은 `node` 하나다(§2.4.1). W17부터 pyright가 node를 interpreter로 쓴다([W17](42-w17-python-pack.md)). 그 전에는 `--node`가 탐색 관측에만 쓰였다. node 자식 프로세스(worker thread, 언어 서버, telemetry)의 정리와 환경은 각 팩이 측정해야 한다. Windows에서 실제 node probe를 실행하지 않았다.
 - `tool_processed_files` 합집합은 처리 수가 있는 모든 행이 같은 수의 경로를 줄 때만 쓴다. 그렇지 않으면 합계로 돌아간다.
 - 보고서 builder 버전은 `4`다(§5.1의 `rule_context`와 관찰 `suppressed`). builder 3 이하의 go vet 외 분석기 행은 문맥을 모르므로, 그 기준과 비교한 사라진 finding은 해결되지 않는다(`rule_context_unknown`). W19 이전에 게시된 staticcheck 보고서는 없다.
 - 규칙 문맥은 분석기 단위로 비교한다. 같은 분석기의 행이 여럿(모듈별 task)이면 모든 행의 문맥 집합이 같아야 한다. 한 모듈의 설정만 바뀌어도 그 분석기의 모든 사라진 finding이 `rule_context_changed`가 된다.
