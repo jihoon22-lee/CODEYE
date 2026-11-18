@@ -1078,6 +1078,22 @@ def make_validators():
     return {name: Draft202012Validator(schema, registry=registry, format_checker=FormatChecker()) for name, schema in schemas.items()}
 
 
+def check_r1_corpus() -> None:
+    """W24 보류 corpus의 구조·위치·digest·누설을 도구 없이 확인하고 봉인 digest와 대조한다."""
+    import subprocess
+
+    corpus = ROOT / "fixtures/r1-quality/corpus.py"
+    env = {"PATH": os.environ.get("PATH", ""), "LANG": "C.UTF-8"}
+    result = subprocess.run([sys.executable, "-I", str(corpus), "validate"], capture_output=True, text=True, timeout=300, env=env)
+    tail = " | ".join((result.stdout + result.stderr).strip().splitlines()[-5:])
+    ensure(result.returncode == 0, "R1 corpus validate failed: " + tail)
+    out = subprocess.run([sys.executable, "-I", str(corpus), "digest"], capture_output=True, text=True, timeout=300, env=env)
+    ensure(out.returncode == 0 and out.stdout.split(), "R1 corpus digest failed")
+    sealed = "ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4"
+    ensure(out.stdout.split()[-1] == sealed, "R1 holdout corpus digest differs from the sealed digest; a changed holdout needs a new seal recorded in docs/16")
+    print(f"PASS: W24 R1 holdout corpus (structure, locations, digests, leakage scan; sealed digest {sealed[:12]})")
+
+
 def main() -> None:
     link_count = 0
     ignored = {".git", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
@@ -1106,6 +1122,7 @@ def main() -> None:
     check_stage_enums(api, stage_order, stored_stages, stage_states)
     check_w22_contracts()
     check_w23_contracts(json_file(ROOT / "examples/report-go-vet.json"))
+    check_r1_corpus()
     events = yaml_file(ROOT / "api/openapi.yaml")["paths"]["/api/v1/attempts/{attempt_id}/events"]["post"]
     payloads = events["requestBody"]["content"]["application/json"]["schema"]["properties"]["payload"]["oneOf"]
     created = [p for p in payloads if p.get("required") == ["key", "required"]]
