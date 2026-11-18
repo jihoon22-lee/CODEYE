@@ -309,6 +309,12 @@ export const ko = {
       toolchain_not_configured: '이 분석 도구가 필요로 하는 언어 toolchain이 노드에 지정되지 않아 실행하지 않음 (미지원)',
       repository_code_not_allowed: '저장소 코드(build script·설정 프로그램·plugin)를 실행해야 하는 분석인데 노드 운영자가 이 소스에 허가하지 않아 실행하지 않음 (미지원)',
       analyzer_pack_missing: '범위에 이 언어의 소스가 있으나 이 노드에 그 언어의 분석기가 없음 (정적 분석 공백, 0건 통과 아님)',
+      // W17 Python 팩 (docs/42)
+      no_analyzable_python_files: '범위에 Python 소스가 있으나 제외 디렉터리(가상환경·숨김·vendor 등) 안에만 있어 분석할 파일이 없음 (미실행, 0건 통과 아님)',
+      source_syntax_errors: '구문 오류로 도구가 분석하지 못한 파일이 있어 작업을 실패로 기록함 (구문 오류는 결함 관찰이 아님)',
+      tool_file_errors: '도구가 일부 파일을 읽거나 해석하지 못해 작업을 실패로 기록함',
+      tool_config_unavailable: 'CODEYE 관리 도구 설정을 작업 공간 기준으로 만들 수 없어 실행하지 않음',
+      nested_module_name_unsupported: '하위 모듈 디렉터리 이름에 도구의 제외 목록이 나눠 읽는 문자(쉼표·glob 문자)가 있어 실행을 거부함',
     } as Record<string, string>,
     reasonLabel: (label: string) => `사유: ${label}`,
     finishedOfPlanned: (finished: number, planned: number) => `${finished}/${planned} 종료`,

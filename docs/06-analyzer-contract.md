@@ -13,7 +13,7 @@ R0의 제품 어댑터는 [오프라인 Go vet](29-w08-go-vet.md)다. W19에서 
 | 대상 | 기본 어댑터 후보 | 추가 깊이/선택 | 주의 |
 |---|---|---|---|
 | C/C++ | clang-tidy, Clang Static Analyzer, Cppcheck | 컴파일 경고, 승인된 CTU, 복잡도/중복 | compile DB·헤더·매크로·ABI에 따라 분석 범위가 달라짐 |
-| Python | Ruff, Pyright 또는 mypy, Bandit | 일부 Pylint 의미 규칙·모듈 의존 구조 | 타입 정보 부족은 별도 표시. Pyright/mypy 모두 실행은 명시 선택 |
+| Python | Ruff(기준, W17 구현), Pyright 또는 mypy·Bandit(추가 깊이, W17 구현) | 일부 Pylint 의미 규칙·모듈 의존 구조 | 타입 정보 부족은 별도 표시. Pyright/mypy 모두 실행은 명시 선택(`--python-both-type-checkers`). ruff S 규칙은 bandit과 중복이라 제외, 타입 검사기의 ruff 중복 검사도 제외([W17 §7](42-w17-python-pack.md#7-엔진-중복과-제외)) |
 | JS/TS | TypeScript compiler, ESLint 및 타입 인지 규칙 | dependency-cruiser, 승인된 로컬 Semgrep 규칙 | Node·tsconfig·프로젝트 서비스가 맞아야 함. JS config는 실행 가능 코드 |
 | Go | go vet(기준, 구현), Staticcheck(추가 깊이, W19 구현) | 소유권/취소 관련 선택 검사·패키지 구조 | tags·CGO·toolchain·target 기록. wrapper 내부 같은 엔진 중복 금지. go vet과 같은 구성을 보는 Staticcheck 검사는 제외([§9](39-r1-analyzer-packs.md#9-go-vet과-staticcheck-서로-다른-엔진과-중복)) |
 | Rust | cargo check/clippy | 선택 lint group·unsafe 경계의 LLM 검토 | features·target·build script·proc macro에 따라 결과 달라짐 |

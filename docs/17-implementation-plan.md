@@ -29,7 +29,7 @@ R0의 두 에이전트 시험은 한 머신에서 별도 node identity로 먼저
 |---|---|---|---|
 | W15 | 모듈·문서·환경 탐색과 프로젝트별 단계 표시 — [구현](37-w15-discovery-and-progress.md) | W14 | 고정 입력에서 모듈별 환경·문서 근거 수집, 역할별 지침 검증, 저장된 단계로 목록과 상세를 갱신하는 첫 수직 경로 |
 | W16 | C/C++ 분석 팩 | W15 | compile DB path mapping, 생성 헤더·flags, 부분 TU 범위, clang/cppcheck 정규화 |
-| W17 | Python 분석 팩 | W15 | Ruff+타입 검사+보안/오류 흐름, interpreter/stub/import 공백 표시 |
+| W17 | Python 분석 팩 — [구현](42-w17-python-pack.md) | W15 | Ruff+타입 검사+보안/오류 흐름, interpreter/stub/import 공백 표시 |
 | W18 | JS/TS 분석 팩 | W15 | tsconfig/workspace/Node, type-aware lint, async·경계 검토 |
 | W19 | Go 분석 팩 — [팩 계약·Staticcheck 구현](39-r1-analyzer-packs.md) | W15 | vet/Staticcheck, tags/CGO, context·goroutine·오류 경로. W16~W21이 쓰는 분석기 팩 계약(저장소 코드 실행 허가, 분석기 공백, 비교의 규칙 문맥·소스 안 억제) 포함 |
 | W20 | Rust 분석 팩 | W15 | check/clippy, features/target, build script 신뢰, unsafe·panic 검토 |
