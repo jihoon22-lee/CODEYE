@@ -19,6 +19,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -70,8 +71,13 @@ var Flags = []string{"--noEmit", "--pretty", "false", "--incremental", "false", 
 	"--noUnusedLocals", "false", "--noUnusedParameters", "false", "--noFallthroughCasesInSwitch", "false"}
 
 // CheckArgs is the check argv after the script for a module-relative
-// tsconfig path.
+// tsconfig path. The path is always "./"-prefixed: a repository-derived
+// argv element never starts with "-" (tsc takes no "--" end of options,
+// TS5023, measured).
 func CheckArgs(project string) []string {
+	if !strings.HasPrefix(project, "./") {
+		project = "./" + project
+	}
 	return append(append([]string{}, Flags...), "-p", project)
 }
 
@@ -244,12 +250,10 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		return write(assemble(in))
 	}
 	in.Chains = []jsts.ConfigChain{chain}
-	switch {
-	case chain.Outside:
-		in.Policy = ReasonConfigOutside
-		return write(assemble(in))
-	case jsts.ForeignNodeModules(workspace, mod.Dir):
+	if in.Policy, in.PolicyOptions = jsts.ChainPolicy(chain, workspace); in.Policy == "" && jsts.ForeignNodeModules(workspace, mod.Dir) {
 		in.Policy = ReasonForeignNodeModules
+	}
+	if in.Policy != "" {
 		return write(assemble(in))
 	}
 	in.Roots = roots
@@ -299,6 +303,23 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 					break
 				}
 				p.Shown = shown
+				// The effective configuration is checked before tsc
+				// reads a source: no write option, no host path.
+				w, o, err := jsts.CheckEffective(res.Stdout.Data, path.Dir(p.Config))
+				_, outsideRoots := p.rootFiles()
+				switch {
+				case err != nil:
+					in.Policy, in.PolicyOptions = ReasonWriteOption, []string{"show_config_unreadable"}
+				case len(w) > 0:
+					in.Policy, in.PolicyOptions = ReasonWriteOption, w
+				case len(o) > 0:
+					in.Policy, in.PolicyOptions = ReasonConfigOutside, o
+				case outsideRoots > 0:
+					in.Policy = ReasonFilesOutside
+				}
+				if in.Policy != "" {
+					break
+				}
 				if p.Ref == 0 && (!shown.HasFiles || len(shown.Files) == 0) && len(chain.References) > 0 {
 					// Solution-style config: check the referenced
 					// projects of this module one by one.
@@ -319,8 +340,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 							in.Integrity = true
 							return write(assemble(in))
 						}
-						if rc.Outside {
-							in.Policy = ReasonConfigOutside
+						if in.Policy, in.PolicyOptions = jsts.ChainPolicy(rc, workspace); in.Policy != "" {
 							return write(assemble(in))
 						}
 						in.Chains = append(in.Chains, rc)

@@ -296,39 +296,129 @@ func AssertNoNodePaths(t *testing.T, raw []byte, paths ...string) {
 	}
 }
 
-// Capture writes the streams and exit code of the executions named exec
-// (with CODEYE_W18_CAPTURE set) as <name>.stdout|stderr|exit; with several
-// executions of that name the later ones get .<n> suffixes. Captures must
-// hold no node path.
-func Capture(t *testing.T, name, exec string, res analysis.TaskResult) {
+// Capture writes every execution of a task run (with CODEYE_W18_CAPTURE
+// set) as <name>.<execution>.stdout|stderr|exit and the execution order as
+// <name>.order, the input of NewReplay. Captures must hold no node path.
+func Capture(t *testing.T, name string, res analysis.TaskResult) {
 	t.Helper()
 	dir := os.Getenv(EnvCapture)
 	if dir == "" {
 		return
 	}
-	n := 0
+	var order []string
 	for _, e := range res.Executions {
-		if e.Name != exec {
-			continue
-		}
-		stem := name
-		if n > 0 {
-			stem += "." + strconv.Itoa(n)
-		}
-		n++
+		order = append(order, e.Name)
 		code := "none"
 		if e.Result.ExitCode != nil {
 			code = strconv.Itoa(*e.Result.ExitCode)
 		}
 		for suffix, data := range map[string][]byte{".stdout": e.Result.Stdout.Data, ".stderr": e.Result.Stderr.Data, ".exit": []byte(code + "\n")} {
 			if bytes.Contains(data, []byte("/home/")) || bytes.Contains(data, []byte("/tmp/")) || bytes.Contains(data, []byte(`\Users\`)) {
-				t.Fatalf("capture %s%s holds a node path:\n%s", stem, suffix, data)
+				t.Fatalf("capture %s.%s%s holds a node path:\n%s", name, e.Name, suffix, data)
 			}
-			if err := os.WriteFile(filepath.Join(dir, stem+suffix), data, 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, name+"."+e.Name+suffix), data, 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
+	if err := os.WriteFile(filepath.Join(dir, name+".order"), []byte(strings.Join(order, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Recorded is one captured execution.
+type Recorded struct {
+	Name           string
+	Stdout, Stderr []byte
+	Exit           int
+}
+
+// LoadCapture reads testdata/<name>.order and its executions.
+func LoadCapture(t *testing.T, name string) []Recorded {
+	t.Helper()
+	read := func(file string) []byte {
+		b, err := os.ReadFile(filepath.Join("testdata", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	var out []Recorded
+	for _, exec := range strings.Fields(string(read(name + ".order"))) {
+		code, err := strconv.Atoi(strings.TrimSpace(string(read(name + "." + exec + ".exit"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, Recorded{Name: exec, Stdout: read(name + "." + exec + ".stdout"), Stderr: read(name + "." + exec + ".stderr"), Exit: code})
+	}
+	return out
+}
+
+// Replay answers the executions of one task run from a capture, in order,
+// and records every spec so tests can check argv, cwd, environment and
+// limits. Match (optional) checks each spec against its recorded step;
+// Mutate alters a result.
+type Replay struct {
+	T      *testing.T
+	Steps  []Recorded
+	Match  func(step Recorded, spec executor.Spec) bool
+	Mutate func(step Recorded, r *executor.Result)
+	Specs  []executor.Spec
+}
+
+// Run implements executor.Runner.
+func (r *Replay) Run(_ context.Context, spec executor.Spec) executor.Result {
+	r.Specs = append(r.Specs, spec)
+	i := len(r.Specs) - 1
+	if i >= len(r.Steps) {
+		r.T.Errorf("replay: unexpected execution %d %v", i, spec.Args)
+		return executor.Result{Status: executor.StatusStartFailed, Cleanup: executor.CleanupNotStarted}
+	}
+	step := r.Steps[i]
+	if r.Match != nil && !r.Match(step, spec) {
+		r.T.Errorf("replay: execution %d does not match %s: %v", i, step.Name, spec.Args)
+	}
+	keys := make([]string, 0, len(spec.Env))
+	for k := range spec.Env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	code := step.Exit
+	res := executor.Result{Status: executor.StatusExited, Cleanup: executor.CleanupConfirmed, Containment: executor.ContainmentNone, ExitCode: &code,
+		Command: executor.CommandRecord{Executable: spec.Executable, Argv: append([]string{spec.Executable}, spec.Args...), Dir: analysis.RedactedMarker, EnvKeys: keys},
+		Stdout:  executor.Stream{Data: append([]byte{}, step.Stdout...), TotalBytes: int64(len(step.Stdout))},
+		Stderr:  executor.Stream{Data: append([]byte{}, step.Stderr...), TotalBytes: int64(len(step.Stderr))}}
+	if r.Mutate != nil {
+		r.Mutate(step, &res)
+	}
+	return res
+}
+
+// FakeTools lays out an operator tool directory without any code that runs
+// (replay tests never start a process): node_modules with eslint 10.15.0,
+// @eslint/js 10.0.1, typescript-eslint 8.73.0 and typescript 6.0.3, as
+// package.json files and empty entry scripts, plus a node toolchain handle.
+// It returns the eslint and tsc entry scripts.
+func FakeTools(t *testing.T) (eslintJS, tscJS string, node pack.Toolchain) {
+	t.Helper()
+	root := t.TempDir()
+	nm := filepath.Join(root, "node_modules")
+	WriteTree(t, nm, map[string]string{
+		"eslint/package.json":             "{\"name\":\"eslint\",\"version\":\"10.15.0\",\"main\":\"./lib/api.js\"}\n",
+		"eslint/lib/api.js":               "",
+		"eslint/bin/eslint.js":            "#!/usr/bin/env node\n",
+		"@eslint/js/package.json":         "{\"name\":\"@eslint/js\",\"version\":\"10.0.1\",\"main\":\"./src/index.js\"}\n",
+		"@eslint/js/src/index.js":         "",
+		"typescript-eslint/package.json":  "{\"name\":\"typescript-eslint\",\"version\":\"8.73.0\",\"main\":\"dist/index.js\"}\n",
+		"typescript-eslint/dist/index.js": "",
+		"typescript/package.json":         "{\"name\":\"typescript\",\"version\":\"6.0.3\",\"main\":\"./lib/typescript.js\"}\n",
+		"typescript/lib/typescript.js":    "",
+		"typescript/bin/tsc":              "#!/usr/bin/env node\n",
+	})
+	bin := filepath.Join(root, "node", "bin")
+	WriteTree(t, bin, map[string]string{"node": ""})
+	return filepath.Join(nm, "eslint", "bin", "eslint.js"), filepath.Join(nm, "typescript", "bin", "tsc"),
+		pack.Toolchain{Name: "node", Executable: filepath.Join(bin, "node"), Dir: bin, Version: "24.18.0"}
 }
 
 // Rules counts observations per rule id.

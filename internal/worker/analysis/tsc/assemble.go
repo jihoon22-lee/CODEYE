@@ -25,7 +25,8 @@ const (
 	ReasonSnapshotIntegrity    = "snapshot_integrity_failed"
 	ReasonNotRun               = "tsc_not_run"
 	ReasonWorkspaceDrift       = "workspace_drift"
-	ReasonConfigOutside        = "tsconfig_outside_snapshot"
+	ReasonConfigOutside        = jsts.ReasonConfigOutside
+	ReasonWriteOption          = jsts.ReasonWriteOption
 	ReasonForeignNodeModules   = "node_modules_outside_snapshot"
 	ReasonFilesOutside         = "program_files_outside_snapshot"
 	ReasonOutputTruncated      = "output_truncated"
@@ -68,6 +69,7 @@ type assembleInput struct {
 	Mask                    func(string) string
 	Cancelled, Integrity    bool
 	Policy                  string
+	PolicyOptions           []string
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -130,7 +132,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	notRun := func(status domain.TaskStatus, reason string) obsdoc.Document {
 		doc.Outcome = obsdoc.Outcome{TaskStatus: status, Reason: ptr(reason), ExitClass: obsdoc.ExitNotRun}
 		doc.Coverage.ProcessedPaths = []string{}
-		doc.Limitations = append(limitations, reason)
+		doc.Limitations = append(append(limitations, reason), jsts.OptionLimitations(in.PolicyOptions)...)
 		return doc
 	}
 	if in.Integrity {
@@ -220,8 +222,17 @@ func assemble(in assembleInput) obsdoc.Document {
 		}
 		sha := obsdoc.SHA256Hex(r.Stdout.Data)
 		for _, rec := range st.Records {
-			text := mask(rec.Text)
+			// No host path is quoted: masked roots, then any quoted
+			// absolute path left; a config file outside the workspace is
+			// never echoed (docs/43 §3.2).
+			text := jsts.WithholdHostPaths(mask(rec.Text))
 			if rec.File == "" || isConfigFile(rec.File) {
+				if rec.File != "" {
+					if _, ok := jsts.StripWorkspace(rec.File, in.Module.Dir, in.Roots); !ok {
+						text = "diagnostic in a configuration file outside the workspace (text withheld)"
+						outsideFiles++
+					}
+				}
 				te := obsdoc.ToolError{Execution: exec, Kind: "config", Unit: "program", Message: "TS" + strconv.Itoa(rec.Code) + ": " + text}
 				switch {
 				case jsts.IsGap(rec.Code):

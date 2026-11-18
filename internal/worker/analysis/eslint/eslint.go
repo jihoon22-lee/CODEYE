@@ -242,12 +242,14 @@ func (a *Analyzer) Selection() []string {
 // CheckArgs is the lint argv after the script: the managed configuration and
 // an empty suppressions file in task scratch, no config lookup, no inline
 // configuration, json to stdout (the envelope binds observations to the
-// recorded stdout stream), then the module-relative paths.
+// recorded stdout stream), then "--" and the module-relative paths, each
+// "./"-prefixed: a repository-derived argv element is never parsed as an
+// option (a bare "--help.ts" prints the help, measured).
 func CheckArgs(configPath, suppressionsPath string, patterns []string) []string {
 	args := []string{"--no-config-lookup", "-c", configPath, "--no-inline-config", "--suppressions-location", suppressionsPath,
-		"--no-warn-ignored", "--no-error-on-unmatched-pattern", "--format", "json"}
+		"--no-warn-ignored", "--no-error-on-unmatched-pattern", "--format", "json", "--"}
 	for _, p := range patterns {
-		if strings.HasPrefix(p, "-") {
+		if p != "." && !strings.HasPrefix(p, "./") {
 			p = "./" + p
 		}
 		args = append(args, p)
@@ -331,12 +333,12 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		for _, f := range chain.Files {
 			watched = append(watched, f.Path)
 		}
-		switch {
-		case chain.Outside:
-			in.Policy = ReasonConfigOutside
-			return write(assemble(in))
-		case jsts.ForeignNodeModules(workspace, mod.Dir):
+		// typescript-eslint reads the same chain as tsc: write options and
+		// host paths are refused before ESLint runs (docs/43 §3.2).
+		if in.Policy, in.PolicyOptions = jsts.ChainPolicy(chain, workspace); in.Policy == "" && jsts.ForeignNodeModules(workspace, mod.Dir) {
 			in.Policy = ReasonForeignNodeModules
+		}
+		if in.Policy != "" {
 			return write(assemble(in))
 		}
 	}

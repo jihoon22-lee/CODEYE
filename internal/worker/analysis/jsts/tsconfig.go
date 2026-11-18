@@ -103,10 +103,23 @@ type ConfigChain struct {
 	References []string
 	// Packages are package-name extends specifiers.
 	Packages []string
-	// Outside reports an extends or reference that leaves the snapshot
-	// (absolute or escaping path); the tool would read a file CODEYE cannot
-	// bind to the manifest.
-	Outside bool
+	// Outside reports an option whose path leaves the snapshot (absolute or
+	// escaping after cleaning): extends, references, files, include,
+	// exclude, baseUrl, rootDir, rootDirs, typeRoots, path-like types,
+	// paths; the tool would read a host file CODEYE cannot bind to the
+	// manifest. OutsideOptions name them (names only, never values).
+	Outside        bool
+	OutsideOptions []string
+	// WriteOptions name the options that can make tsc write a file under
+	// the adapter flags: generateTrace (writes even with --noEmit,
+	// measured), generateCpuProfile (no command-line off value), and the
+	// emit paths (outDir, declarationDir, outFile, tsBuildInfoFile) when
+	// they leave the snapshot.
+	WriteOptions []string
+	// Paths are the snapshot-relative directories the path options name
+	// (the part before any glob); adapters check them for symlinks leaving
+	// the workspace copy.
+	Paths []string
 	// Unreadable reports a config whose bytes are not the manifest's or that
 	// is not JSONC (tsc reports the syntax error itself).
 	Unreadable bool
@@ -157,16 +170,19 @@ func ReadChain(snapshotDir string, files map[string]source.Entry, cfg string) (C
 			}
 		}
 		dir := path.Dir(p)
+		if c.checkOptions(StripJSONC(b), dir, path.Dir(cfg)) != nil {
+			c.Unreadable = true
+		}
 		for _, x := range ext {
 			x = strings.ReplaceAll(x, `\`, "/")
 			switch {
 			case x == "":
-			case strings.HasPrefix(x, "/") || (len(x) > 1 && x[1] == ':'):
-				c.Outside = true
+			case isAbs(x):
+				c.outside("extends")
 			case strings.HasPrefix(x, "./") || strings.HasPrefix(x, "../"):
 				target, ok := local(dir, x)
 				if !ok {
-					c.Outside = true
+					c.outside("extends")
 					continue
 				}
 				if _, in := files[target]; !in && !strings.HasSuffix(target, ".json") {
@@ -184,13 +200,13 @@ func ReadChain(snapshotDir string, files map[string]source.Entry, cfg string) (C
 			if x == "" {
 				continue
 			}
-			if strings.HasPrefix(x, "/") || (len(x) > 1 && x[1] == ':') {
-				c.Outside = true
+			if isAbs(x) {
+				c.outside("references")
 				continue
 			}
 			target, ok := local(dir, x)
 			if !ok {
-				c.Outside = true
+				c.outside("references")
 				continue
 			}
 			if _, isFile := files[target]; !isFile || !strings.HasSuffix(target, ".json") {
@@ -210,6 +226,9 @@ func ReadChain(snapshotDir string, files map[string]source.Entry, cfg string) (C
 	}
 	sort.Slice(c.Files, func(i, j int) bool { return c.Files[i].Path < c.Files[j].Path })
 	sort.Strings(c.Packages)
+	c.OutsideOptions = uniq(c.OutsideOptions)
+	c.WriteOptions = uniq(c.WriteOptions)
+	c.Paths = uniq(c.Paths)
 	return c, nil
 }
 

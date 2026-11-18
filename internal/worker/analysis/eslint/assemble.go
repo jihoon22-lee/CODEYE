@@ -25,7 +25,8 @@ const (
 	ReasonSnapshotIntegrity    = "snapshot_integrity_failed"
 	ReasonNotRun               = "eslint_not_run"
 	ReasonWorkspaceDrift       = "workspace_drift"
-	ReasonConfigOutside        = "tsconfig_outside_snapshot"
+	ReasonConfigOutside        = jsts.ReasonConfigOutside
+	ReasonWriteOption          = jsts.ReasonWriteOption
 	ReasonForeignNodeModules   = "node_modules_outside_snapshot"
 	ReasonOutputTruncated      = "output_truncated"
 	ReasonOutputUnparsed       = "output_unparsed"
@@ -72,6 +73,7 @@ type assembleInput struct {
 	Mask                    func(string) string
 	Cancelled, Integrity    bool
 	Policy                  string
+	PolicyOptions           []string
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -184,7 +186,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	notRun := func(status domain.TaskStatus, reason, class string) obsdoc.Document {
 		doc.Outcome = obsdoc.Outcome{TaskStatus: status, Reason: ptr(reason), ExitClass: class}
 		doc.Coverage.ProcessedPaths = []string{}
-		doc.Limitations = append(limitations, reason)
+		doc.Limitations = append(append(limitations, reason), jsts.OptionLimitations(in.PolicyOptions)...)
 		return doc
 	}
 	if in.Integrity {
@@ -274,7 +276,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		}
 		state := FileClean
 		for _, m := range r.Messages {
-			text := mask(m.Text)
+			text := jsts.WithholdHostPaths(mask(m.Text))
 			switch {
 			case m.Fatal && in.Typed && strings.Contains(m.Text, outsideProgram):
 				state = FileOutsideTSConfig
@@ -289,7 +291,7 @@ func assemble(in assembleInput) obsdoc.Document {
 				continue
 			case m.RuleID == "codeye/program-diagnostics":
 				code, scope, body, ok := parseProgramDiagnostic(m.Text)
-				te := obsdoc.ToolError{Execution: execCheck, Kind: "config", Unit: "program", Message: mask(body)}
+				te := obsdoc.ToolError{Execution: execCheck, Kind: "config", Unit: "program", Message: jsts.WithholdHostPaths(mask(body))}
 				if scope == "file" {
 					te.Unit, te.Path, te.Line, te.Column = rel, ptr(rel), m.Line, m.Col
 				}
