@@ -21,8 +21,8 @@ import (
 // or cause class (model), the canonical snapshot paths, the cited symbols,
 // a normalized code-context hash when a producer supplies one, and a
 // normalized condition class. Line numbers, columns, snapshot/run/attempt
-// IDs, model-written titles, verifier categories and evidence order are never
-// inputs, so a line move or a reworded title keeps the fingerprint. The
+// IDs, model-written titles and evidence order are never inputs, so a line
+// move or a reworded title keeps the fingerprint. The
 // project and source variant are the namespace in which fingerprints are
 // compared (comparison and dispositions are per project, baselines per source
 // variant); they are not hashed, so the same identity is used on every branch.
