@@ -1,0 +1,5 @@
+{
+  "name": "w18-fixture",
+  "private": true,
+  "workspaces": ["packages/*"]
+}

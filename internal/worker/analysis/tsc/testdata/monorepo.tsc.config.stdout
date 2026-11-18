@@ -1,0 +1,32 @@
+{
+    "compilerOptions": {
+        "target": "es2022",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "lib": [
+            "es2022"
+        ],
+        "strict": true,
+        "skipLibCheck": true,
+        "plugins": [
+            {
+                "name": "w18-marker-plugin"
+            }
+        ],
+        "noEmit": true,
+        "incremental": false,
+        "composite": false,
+        "ignoreDeprecations": "6.0",
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "noFallthroughCasesInSwitch": false
+    },
+    "files": [
+        "./src/index.ts",
+        "./src/suppressed.ts",
+        "./src/util.ts"
+    ],
+    "include": [
+        "src"
+    ]
+}
