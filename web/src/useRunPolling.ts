@@ -3,7 +3,7 @@ import { ApiError, type Api, type RunAck, type RunView } from './api';
 import { isTerminalRun } from './format';
 import { createPoller, type Poller } from './poller';
 
-const retryable = (error: unknown) => {
+export const retryable = (error: unknown) => {
   if (!(error instanceof ApiError)) return false;
   if (error.kind === 'network' || error.kind === 'invalid_response') return true;
   return error.retryable && ![401, 403, 404].includes(error.status);
@@ -13,17 +13,21 @@ export function useRunPolling(api: Api, runId: string) {
   const [run, setRun] = useState<RunView | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [stopped, setStopped] = useState(false);
+  // Client time of the last successful response: shown as "last confirmed" when a later poll fails.
+  const [confirmedAt, setConfirmedAt] = useState<Date | null>(null);
   const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && document.visibilityState === 'hidden');
   const poller = useRef<Poller<RunView> | null>(null);
 
   useEffect(() => {
     setRun(null);
+    setConfirmedAt(null);
     setError(null);
     setStopped(false);
     const p = createPoller<RunView>({
       fetch: signal => api.getRun(runId, signal),
       onData: value => {
         setError(null);
+        setConfirmedAt(new Date());
         // A slow older response must not overwrite a newer state.
         setRun(prev => (prev && prev.id === value.id && prev.version > value.version ? prev : value));
         if (isTerminalRun(value.status)) setStopped(true);
@@ -62,5 +66,5 @@ export function useRunPolling(api: Api, runId: string) {
     else p.start();
   }, []);
 
-  return { run, error, stopped, hidden, applyAck, refresh };
+  return { run, error, stopped, hidden, confirmedAt, applyAck, refresh };
 }
