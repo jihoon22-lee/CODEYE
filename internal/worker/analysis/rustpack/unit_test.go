@@ -256,7 +256,7 @@ func TestPlanModules(t *testing.T) {
 			[]string{"cargo-check@."}, [][]string{{"."}}},
 		{"root detection does not depend on sort order", map[string]string{"Cargo.toml": "x", "src/lib.rs": rs, "-x/Cargo.toml": "x", "-x/src/lib.rs": rs}, domain.Scope{},
 			[]string{"cargo-check@."}, [][]string{{"."}}},
-		{"independent crates",map[string]string{"a/Cargo.toml": "x", "a/src/lib.rs": rs, "b/Cargo.toml": "x", "b/src/lib.rs": rs}, domain.Scope{},
+		{"independent crates", map[string]string{"a/Cargo.toml": "x", "a/src/lib.rs": rs, "b/Cargo.toml": "x", "b/src/lib.rs": rs}, domain.Scope{},
 			[]string{"cargo-check.m01@a", "cargo-check.m02@b"}, [][]string{{"."}, {"."}}},
 		{"vendored, target, hidden and testdata are not modules", map[string]string{"Cargo.toml": "x", "src/lib.rs": rs, "vendor/dep/Cargo.toml": "x", "vendor/dep/src/lib.rs": rs, "target/debug/x.rs": rs, ".hidden/Cargo.toml": "x", "testdata/Cargo.toml": "x"}, domain.Scope{},
 			[]string{"cargo-check@."}, [][]string{{"."}}},
