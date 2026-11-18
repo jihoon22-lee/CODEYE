@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""CI smoke for the W24 evaluation runner and scoring (no product run, no tool, no model).
+
+Fixture reports are synthetic report documents bound to real corpus cases plus one
+real tools-condition report captured from the dry run (testdata/r1_eval). Run:
+python3 -m unittest discover -s scripts -p test_r1_eval.py -v
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPTS))
+import r1_eval  # noqa: E402
+import r1_score  # noqa: E402
+
+CORPUS = r1_eval.Corpus()
+TESTDATA = SCRIPTS / "testdata/r1_eval"
+
+
+def finding(fid, path, start, end, validation="supported", producer="model", title="A finding title", symbol=None):
+    loc = {"snapshot_id": "snap", "path": path, "start_line": start, "end_line": end}
+    if symbol:
+        loc["symbol"] = symbol
+    return {"id": fid, "title": title, "category": "correctness", "severity": "medium", "validation": validation,
+            "disposition": "open", "locations": [loc], "evidence": [], "claims": [], "conditions": [],
+            "observation_ids": ["obs_1"] if producer == "tool" else [],
+            "fingerprint": "fp2:" + fid.ljust(64, "0")[:64],
+            "fingerprint_basis": {"producer": producer}}
+
+
+def report(findings, ai="performed", exposed=2):
+    actionable = sum(f["validation"] in ("supported", "reproduced") for f in findings)
+    return {"status": "partial", "findings": findings, "tasks": [{"id": "t", "key": "review.investigate", "status": "succeeded", "reason": None}],
+            "summary": {"total_findings": len(findings), "actionable_findings": actionable,
+                        "pending_candidates": sum(f["validation"] in ("unreviewed", "inconclusive") for f in findings),
+                        "refuted_findings": sum(f["validation"] == "refuted" for f in findings), "priorities": []},
+            "coverage": {"ai_review": {"status": ai}, "review_calls": [], "llm_exposed_files": exposed}, "limitations": []}
+
+
+def make_batch(root, name, rows, reports, *, dry_run=False, labels=(), condition="review", pack="review-r1"):
+    batch = Path(root) / name
+    (batch / "reports").mkdir(parents=True)
+    manifest = {"schema": r1_eval.MANIFEST_SCHEMA, "batch": name, "condition": condition, "dry_run": dry_run,
+                "corpus": {"digest": CORPUS.digest}, "pack": {"id": pack, "version": "x"} if pack else None,
+                "holdout": {"labels": list(labels)}, "budget": None}
+    (batch / "manifest.json").write_text(json.dumps(manifest))
+    with open(batch / "rows.jsonl", "w") as f:
+        for row in rows:
+            case = CORPUS.by_id[row["case"]]
+            full = {"repeat": 1, "status": "partial", "invalid": None, "documented": False, "ai_review": "performed",
+                    "llm_exposed_files": 2, "wall_s": 10.0, "review_calls": [], "usage": {}, **row}
+            full.setdefault("key", r1_eval.key_of(row["case"], row["variant"], full["repeat"]))
+            for k in ("language", "kind", "category", "detection"):
+                full.setdefault(k, case[k])
+            f.write(json.dumps(full) + "\n")
+            if full["key"] in reports:
+                (batch / "reports" / (full["key"] + ".json")).write_text(json.dumps(reports[full["key"]]))
+    return batch
+
+
+class StatisticsTests(unittest.TestCase):
+    def test_wilson_reference_values(self):
+        self.assertIsNone(r1_score.wilson(0, 0))
+        self.assertEqual(r1_score.wilson(0, 10), [0.0, 0.2775])
+        self.assertEqual(r1_score.wilson(5, 10), [0.2366, 0.7634])
+        self.assertEqual(r1_score.wilson(10, 10), [0.7225, 1.0])
+        p = r1_score.proportion(3, 4, unjudged=2)
+        self.assertEqual((p["rate"], p["unjudged"]), (0.75, 2))
+
+    def test_map_range_follows_the_diff(self):
+        before = "a\nb\nc\nd\n"
+        after = "a\nx\ny\nb\nc\nd\n"
+        self.assertEqual(r1_score.map_range(before, after, 3, 3), (5, 5))
+        case = CORPUS.by_id["R1-GO-06"]
+        tg = r1_score.targets(CORPUS, case, "after")
+        self.assertEqual(tg[0]["kind"], "after_mapped")
+        after_text = CORPUS.render(case, "after")["counters.go"].split("\n")
+        self.assertIn("func (c *Counters) Add", after_text[tg[0]["start_line"] - 1])
+
+
+class SelectionTests(unittest.TestCase):
+    def test_stratified_sample_is_seeded_and_covers_strata(self):
+        chosen, record = r1_eval.select(CORPUS, sample=20, seed=3)
+        again, _ = r1_eval.select(CORPUS, sample=20, seed=3)
+        other, _ = r1_eval.select(CORPUS, sample=20, seed=4)
+        self.assertEqual([c["id"] for c in chosen], [c["id"] for c in again])
+        self.assertNotEqual([c["id"] for c in chosen], [c["id"] for c in other])
+        self.assertEqual(len(chosen), 20)
+        strata = record["strata"]
+        self.assertEqual(sum(s["selected"] for s in strata.values()), 20)
+        self.assertTrue(all(s["selected"] >= 1 for s in strata.values()), strata)  # 18 strata, sample 20
+        small, record = r1_eval.select(CORPUS, sample=5, seed=1, languages={"go"})
+        self.assertEqual(len(small), 5)
+        self.assertEqual({c["language"] for c in small}, {"go"})
+        self.assertEqual(len(r1_eval.select(CORPUS)[0]), 55)
+
+    def test_variant_plan_and_repeats(self):
+        chosen = [CORPUS.by_id["R1-GO-06"], CORPUS.by_id["R1-GO-10"]]
+        plan = r1_eval.variant_plan(CORPUS, chosen)
+        self.assertEqual([(c["id"], v, r) for c, v, r in plan],
+                         [("R1-GO-06", "before", 1), ("R1-GO-06", "after", 1), ("R1-GO-10", "before", 1)])
+        plan = r1_eval.variant_plan(CORPUS, chosen, {"before"}, repeat=3, repeat_cases={"R1-GO-10"})
+        self.assertEqual([(c["id"], r) for c, _, r in plan], [("R1-GO-06", 1), ("R1-GO-10", 1), ("R1-GO-10", 2), ("R1-GO-10", 3)])
+
+
+class PlannerTests(unittest.TestCase):
+    def test_constants_estimate_and_refusals(self):
+        plan = r1_eval.variant_plan(CORPUS, [CORPUS.by_id["R1-GO-06"]] * 5)
+        est = r1_eval.estimate("review-r1", plan)
+        self.assertEqual(est["variants"], 10)
+        self.assertTrue(est["basis"].startswith("constants:"))
+        self.assertEqual(est["upper"]["calls"], 55)  # 5 roles x 10 variants x 1.1
+        self.assertAlmostEqual(est["upper"]["ledger_microusd"], 10 * 5 * 1.1 * 22_148 * 1.5, delta=2)
+        self.assertLess(est["expected"]["ledger_microusd"], est["upper"]["ledger_microusd"])
+        report = {"remaining_microusd": 3_000_000, "max_requests": 200, "requests": 63, "halted": False}
+        self.assertEqual(r1_eval.budget_gate(est, report, 1_000_000, 5), [])
+        report["remaining_microusd"] = 2_500_000
+        self.assertEqual(len(r1_eval.budget_gate(est, report, 1_000_000, 5)), 1)  # 1.83 USD > 2.5 - 1.0
+        report.update(remaining_microusd=9_000_000, requests=150)
+        self.assertIn("requests", r1_eval.budget_gate(est, report, 1_000_000, 5)[0])
+        report.update(requests=0, halted=True)
+        self.assertEqual(r1_eval.budget_gate(est, report, 1_000_000, 5), ["relay_halted"])
+
+    def test_history_from_a_batch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [{"case": "R1-GO-06", "variant": "before",
+                     "ledger": {"requests": [{"role": "investigate", "input_bytes": 15000, "usage": None},
+                                             {"role": "verify", "input_bytes": 21000, "usage": None}]}},
+                    {"case": "R1-GO-06", "variant": "after", "ledger": {"requests": [{"role": "investigate", "input_bytes": 9000}]}}]
+            batch = make_batch(tmp, "h", rows, {}, dry_run=True)
+            hist = r1_eval.history_profile([batch], "review-r1")
+            self.assertEqual(hist["calls_per_variant"], {"investigate": 1.0, "verify": 0.5})
+            self.assertEqual(hist["input_bytes_max"]["verify"], 21000)
+            plan = r1_eval.variant_plan(CORPUS, [CORPUS.by_id["R1-GO-06"]])
+            est = r1_eval.estimate("review-r1", plan, history=hist)
+            self.assertEqual(est["per_call_microusd"]["verify"], int(21000 / 3 * 5 + 600 * 10))
+            self.assertIsNone(r1_eval.history_profile([batch], "review-v1"))
+
+
+class RegistryTests(unittest.TestCase):
+    def test_label_prior_real_revisions_only(self):
+        with tempfile.TemporaryDirectory() as root:
+            entry = {"pack_id": "review-r1", "pack_digest": "a" * 64, "corpus_digest": CORPUS.digest,
+                     "condition": "review", "first_run_at": "t1", "dry_run": True}
+            self.assertTrue(r1_eval.register(root, entry))
+            self.assertFalse(r1_eval.register(root, dict(entry, first_run_at="t2")))  # append once
+            entries = r1_eval.registry_entries(root)
+            self.assertEqual(r1_eval.holdout_labels(entries, "review-r1", "b" * 64, CORPUS.digest), ([], []))
+            r1_eval.register(root, dict(entry, dry_run=False))
+            entries = r1_eval.registry_entries(root)
+            self.assertEqual(r1_eval.holdout_labels(entries, "review-r1", "b" * 64, CORPUS.digest),
+                             ([r1_eval.HOLDOUT_LABEL], ["a" * 64]))
+            self.assertEqual(r1_eval.holdout_labels(entries, "review-r1", "a" * 64, CORPUS.digest), ([], []))
+            self.assertEqual(r1_eval.holdout_labels(entries, "review-v1", "b" * 64, CORPUS.digest), ([], []))
+            self.assertEqual(len(Path(root, r1_eval.REGISTRY).read_text().splitlines()), 2)
+
+    def test_ledger_delta_attributes_blocks_and_refusals(self):
+        records = [{"type": "reserve", "id": "1", "role_hint": "investigate", "input_bytes": 10, "message_count": 2,
+                    "reserved_microusd": 900},
+                   {"type": "settle", "id": "1", "status": "ok", "charged_microusd": 100, "usage": {"prompt_tokens": 3}},
+                   {"type": "blocked", "role_hint": "verify", "matches": ["X/token/0"], "match_count": 1},
+                   {"type": "refused", "code": "budget_exhausted"},
+                   {"type": "reserve", "id": "2", "role_hint": "verify", "input_bytes": 20, "reserved_microusd": 700}]
+        d = r1_eval.ledger_delta(records)
+        self.assertEqual(d["charged_microusd"], 800)  # the pending reservation counts in full
+        self.assertEqual([q["status"] for q in d["requests"]], ["ok", "pending"])
+        self.assertEqual(d["blocked"][0]["role"], "verify")
+        self.assertEqual(d["refused"], ["budget_exhausted"])
+
+
+class ScoringTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        rows = [{"case": "R1-GO-06", "variant": "before"}, {"case": "R1-GO-06", "variant": "after"},
+                {"case": "R1-GO-10", "variant": "before"}, {"case": "R1-GO-01", "variant": "before"},
+                {"case": "R1-GO-02", "variant": "before", "invalid": "blocked_answer_leak"}]
+        reports = {
+            "R1-GO-06.before.1": report([finding("f1", "counters.go", 23, 23, producer="tool", validation="unreviewed"),
+                                         finding("f2", "counters.go", 22, 25),
+                                         finding("f3", "middleware.go", 5, 6, validation="inconclusive")]),
+            "R1-GO-06.after.1": report([finding("g1", "counters.go", 23, 24)]),
+            "R1-GO-10.before.1": report([finding("n1", "poller.go", 40, 41, title="Poller leaks")]),
+            "R1-GO-01.before.1": report([]),
+            "R1-GO-02.before.1": report([finding("x", "manifest.go", 30, 30)]),
+        }
+        self.batch = make_batch(self.tmp.name, "b1", rows, reports)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def template(self):
+        return r1_score.judgment_template(self.batch, CORPUS)
+
+    def test_template_prefills_auto_matches_only(self):
+        t = self.template()
+        keys = [i["key"] for i in t["items"]]
+        self.assertNotIn("R1-GO-02.before.1", keys)  # invalid rows are not judged
+        items = {i["key"]: i for i in t["items"]}
+        auto = {f["finding_id"]: f["auto_match"] for f in items["R1-GO-06.before.1"]["findings"]}
+        self.assertEqual(auto["f1"]["kind"], "positive")
+        self.assertIsNone(auto["f3"])
+        self.assertEqual(items["R1-GO-06.after.1"]["findings"][0]["auto_match"]["kind"], "after_mapped")
+        self.assertEqual(items["R1-GO-10.before.1"]["findings"][0]["auto_match"]["kind"], "suspect")
+        self.assertTrue(all(f["verdict"] is None for i in t["items"] for f in i["findings"]))
+
+    def metrics(self, judgment_files=()):
+        manifest, rows, reports = r1_score.load_batch(self.batch)
+        judgments, conflicts, _ = r1_score.load_judgments(judgment_files)
+        return r1_score.batch_metrics(manifest, rows, reports, judgments, CORPUS, batch_dir=self.batch), conflicts
+
+    def test_unjudged_items_are_counted_not_scored(self):
+        m, _ = self.metrics()
+        recall = m["metrics"]["known_defect_recall"]
+        # GO-06 before has unjudged findings -> unjudged; GO-01 before has no finding -> determinable miss.
+        self.assertEqual((recall["k"], recall["n"], recall["unjudged"]), (0, 1, 1))
+        self.assertEqual(m["excluded"], {"blocked_answer_leak": 1})
+        s = m["structural"]
+        self.assertEqual((s["auto_location_hit_before"]["k"], s["auto_location_hit_before"]["n"]), (1, 2))
+        self.assertEqual(s["auto_location_reflag_after"]["k"], 1)
+        self.assertEqual(s["auto_suspect_flag_normal"]["k"], 1)
+        self.assertEqual(s["auto_duplicate_candidates"]["findings"], 1)  # f2 overlaps f1
+
+    def test_judged_metrics_and_conflicts(self):
+        t = self.template()
+        for item in t["items"]:
+            for f in item["findings"]:
+                if f["finding_id"] == "f2":
+                    f.update(verdict="valid_actionable", matches_label=True)
+                elif f["finding_id"] == "g1":
+                    f.update(verdict="false_positive", matches_label=True)
+                elif f["finding_id"] == "n1":
+                    f.update(verdict="false_positive", matches_label=False)
+        a = Path(self.tmp.name, "a.json")
+        a.write_text(json.dumps(dict(t, judge="coordinator")))
+        m, _ = self.metrics([a])
+        mm = m["metrics"]
+        self.assertEqual((mm["known_defect_recall"]["k"], mm["known_defect_recall"]["n"]), (1, 2))
+        self.assertEqual((mm["known_defect_recall_model_findings"]["k"], mm["known_defect_recall_model_findings"]["n"]), (1, 2))
+        self.assertEqual((mm["same_defect_reflag_after"]["k"], mm["same_defect_reflag_after"]["n"]), (1, 1))
+        fp = mm["false_positive_rate"]["actionable_findings"]
+        self.assertEqual((fp["tricky_normal"]["k"], fp["after"]["k"], fp["combined"]["n"]), (1, 1, 2))
+        self.assertEqual((mm["actionable_precision"]["k"], mm["actionable_precision"]["n"]), (1, 3))
+        self.assertEqual(m["breakdown"]["language"]["go"]["known_defect_recall"]["k"], 1)
+        # A second judge disagreeing on f2 makes it unjudged rather than picking a side.
+        t2 = json.loads(a.read_text())
+        for item in t2["items"]:
+            for f in item["findings"]:
+                if f["finding_id"] == "f2":
+                    f["verdict"] = "insufficient_evidence"
+        b = Path(self.tmp.name, "b.json")
+        b.write_text(json.dumps(t2))
+        m, conflicts = self.metrics([a, b])
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(m["metrics"]["known_defect_recall"]["unjudged"], 1)
+
+    def test_variance_and_independence(self):
+        rows = [{"case": "R1-GO-06", "variant": "before", "repeat": 1}, {"case": "R1-GO-06", "variant": "before", "repeat": 2}]
+        reports = {"R1-GO-06.before.1": report([finding("a", "counters.go", 23, 23)]),
+                   "R1-GO-06.before.2": report([])}
+        batch = make_batch(self.tmp.name, "rep", rows, reports, labels=[r1_eval.HOLDOUT_LABEL])
+        manifest, rows_, reports_ = r1_score.load_batch(batch)
+        m = r1_score.batch_metrics(manifest, rows_, reports_, {}, CORPUS)
+        item = m["variance"]["items"][0]
+        self.assertEqual((item["repeats"], item["auto_location_hit_agreement"], item["fingerprint_jaccard_mean"]), (2, 0.5, 0.0))
+        result = {"batches": [m, m], "comparison": {"independent": False, "not_independent_because": ["rep"]}}
+        self.assertIn("independent comparison: False", r1_score.render_table(result))
+
+
+class RealReportTests(unittest.TestCase):
+    """A real tools-condition report (go vet + staticcheck, captured from the W24 dry run) re-checked against
+    freshly materialized corpus inputs: evidence validity and auto-matching on real bytes."""
+
+    def test_captured_report(self):
+        rows = [json.loads(l) for l in (TESTDATA / "rows.jsonl").read_text().splitlines() if l.strip()]
+        with tempfile.TemporaryDirectory() as tmp:
+            batch = Path(tmp) / "captured"
+            (batch / "reports").mkdir(parents=True)
+            (batch / "manifest.json").write_text((TESTDATA / "manifest.json").read_text())
+            (batch / "rows.jsonl").write_text((TESTDATA / "rows.jsonl").read_text())
+            for row in rows:
+                src = TESTDATA / "reports" / (row["key"] + ".json")
+                (batch / "reports" / src.name).write_text(src.read_text())
+            manifest, rows_, reports = r1_score.load_batch(batch)
+            ev = r1_score.evidence_validity(batch, rows_, reports, CORPUS)
+            self.assertEqual(ev["failures"], [])
+            self.assertEqual(ev["input_mismatches"], [])
+            self.assertEqual(ev["reports_checked"], len(rows))
+            m = r1_score.batch_metrics(manifest, rows_, reports, {}, CORPUS, batch_dir=batch)
+            self.assertGreaterEqual(m["structural"]["auto_location_hit_before"]["k"], 1)
+            t = r1_score.judgment_template(batch, CORPUS)
+            self.assertTrue(any(f["producer"] == "tool" for i in t["items"] for f in i["findings"]))
+
+
+class ReaderTests(unittest.TestCase):
+    def test_sheets_hide_labels_and_scoring_needs_answers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [{"case": "R1-GO-06", "variant": "before"}, {"case": "R1-GO-10", "variant": "before"}]
+            reports = {"R1-GO-06.before.1": report([finding("f", "counters.go", 23, 23)], ai="not_performed", exposed=0),
+                       "R1-GO-10.before.1": report([])}
+            batch = make_batch(tmp, "r", rows, reports)
+            out = Path(tmp) / "reading"
+            r1_score.reader_sheets(batch, CORPUS, 2, 0, out)
+            sheets = sorted((out / "sheets").glob("S??.json"))
+            self.assertEqual(len(sheets), 2)
+            for s in (out / "sheets").iterdir():
+                text = s.read_text()
+                self.assertNotIn("R1-GO", text)
+                self.assertNotIn(CORPUS.by_id["R1-GO-06"]["label"]["trigger"][:40], text)
+            key = json.loads((out / "answer-key.json").read_text())
+            self.assertEqual(r1_score.reader_score(out / "answer-key.json", [])["status"], "not_measured")
+            defect = next(s for s in key["sheets"] if s["expected"] == "labelled_defect")
+            self.assertIn("ai_review:not_performed", defect["unanalysed_scope"])
+            normal = next(s for s in key["sheets"] if s["expected"] == "no_labelled_defect")
+            answers = {"sheets": [{"sheet_id": defect["sheet_id"], "risks": [{"path": "counters.go", "line": 23, "condition": "x"}],
+                                   "unanalysed_scope": ["AI review was not performed"], "next_action": "x", "seconds": 100,
+                                   "questions_asked": 1, "graded": {"condition_correct": [True], "next_action_correct": False}},
+                                  {"sheet_id": normal["sheet_id"], "risks": [], "unanalysed_scope": [], "seconds": 60,
+                                   "questions_asked": 0}]}
+            a = Path(tmp) / "answers.json"
+            a.write_text(json.dumps(answers))
+            res = r1_score.reader_score(out / "answer-key.json", [a])
+            self.assertEqual(res["status"], "measured")
+            self.assertEqual((res["defect_location_found"]["k"], res["false_alarm_on_counterevidence"]["k"]), (1, 0))
+            self.assertEqual((res["condition_correct_graded"]["k"], res["next_action_correct_graded"]["k"]), (1, 0))
+            self.assertEqual(res["seconds_median"], 80)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -109,7 +109,9 @@ FORBIDDEN_NORMALIZATION = "codeye-words-v1"
 FORBIDDEN_MAX_BYTES = 16 << 20
 BLOCKED_STATUS = "blocked_answer_leak"
 MAX_RECORDED_MATCHES = 16
-ROLE_HINT = re.compile(r"\ARole: ([a-z]{1,32})\n")
+# CODEYE prompts carry "Role: <role>" on its own line (opencode.Prompt); OpenCode puts the
+# attached identity file before it. Review input is JSON, so input text cannot start a line here.
+ROLE_HINT = re.compile(r"^Role: ([a-z]{1,32})$", re.M)
 # Test-only upstream: an explicit loopback URL, nothing else.
 TEST_UPSTREAM = re.compile(r"\Ahttp://127\.0\.0\.1:([0-9]{1,5})/?\Z")
 TEST_UPSTREAM_KIND = "test-loopback"
@@ -360,7 +362,7 @@ class Ledger:
     # -- transactions ------------------------------------------------------
     def reserve(self, *, model: str, reserved_microusd: int, input_bytes: int,
                 input_token_bound: int, message_count: int, output_cap: int,
-                dropped_keys: list[str]) -> str:
+                dropped_keys: list[str], role_hint: str | None = None) -> str:
         with self._locked() as records:
             state = self._state(records)
             refused = None
@@ -380,7 +382,7 @@ class Ledger:
                           "model": model, "reserved_microusd": reserved_microusd,
                           "input_bytes": input_bytes, "input_token_bound": input_token_bound,
                           "message_count": message_count, "output_cap": output_cap,
-                          "dropped_keys": dropped_keys})
+                          "dropped_keys": dropped_keys, "role_hint": role_hint})
             return rid
 
     def settle(self, rid: str, *, status: str, charged_microusd: int, usage: dict | None,
@@ -897,17 +899,12 @@ class Gateway:
         except ValueError:
             raise RequestRejected(400, "invalid_json") from None
         prepared = build_upstream_request(request, self.model, self.max_input_bytes)
+        texts = [m["content"] for m in prepared["payload"]["input"]]
+        hint = next((m.group(1) for m in map(ROLE_HINT.search, texts) if m), None)
         if self.forbidden is not None:
             # Scan exactly the text that would be forwarded, one message at a time.
-            texts = [m["content"] for m in prepared["payload"]["input"]]
             found = self.forbidden.matches(texts)
             if found:
-                hint = None
-                for text in texts:
-                    match = ROLE_HINT.match(text)
-                    if match:
-                        hint = match.group(1)
-                        break
                 self.ledger.block(matches=found, match_count=len(found), input_bytes=prepared["input_bytes"],
                                   message_count=prepared["message_count"], role_hint=hint)
                 self.log({"event": "blocked", "status": BLOCKED_STATUS, "match_count": len(found), "role_hint": hint})
@@ -920,7 +917,7 @@ class Gateway:
                     model=self.model, reserved_microusd=prepared["reserved_microusd"],
                     input_bytes=prepared["input_bytes"], input_token_bound=prepared["input_token_bound"],
                     message_count=prepared["message_count"], output_cap=prepared["output_cap"],
-                    dropped_keys=prepared["dropped_keys"])
+                    dropped_keys=prepared["dropped_keys"], role_hint=hint)
             except BudgetRefused as refused:
                 self.log({"event": "refused", "code": refused.code,
                           "reserved_microusd": prepared["reserved_microusd"]})
