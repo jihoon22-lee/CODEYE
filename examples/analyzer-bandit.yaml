@@ -1,0 +1,33 @@
+# W17 Python 팩 bandit 어댑터 서술(보안 깊이). 구현: internal/worker/analysis/python, 근거: docs/42-w17-python-pack.md.
+# bandit 1.9.4는 결과가 있으면 exit 1, 없으면 exit 0, 사용법 오류는 exit 2다. 구문 오류 파일은 exit 코드를 바꾸지 않는다(측정).
+# 실행은 세 번이다: bandit.version, bandit.check(# nosec 존중, JSON을 scratch 파일로 -o), bandit.check-ignore-nosec(모든 결과, CSV stdout).
+# JSON 보고서는 -n 0이어도 "code"에 원본 소스 줄을 담으므로 수집 stream에 두지 않는다. 처리 파일(metrics)·파일 오류(errors)·억제 존중 결과는
+# scratch JSON에서, 관찰과 원시 참조는 소스 줄이 없는 CSV stdout에서 읽는다. --ini(빈 [bandit])는 저장소 .bandit을 대신한다(overridden).
+schema_version: '0.1'
+id: python.bandit
+languages: [python]
+planned_platforms: [linux, windows]
+availability: verified  # Linux bandit 1.9.4 실행으로 검증. Windows는 단위 테스트만 실행.
+version_contract: bandit-1.9-fixture-tested
+analysis_scope: [syntax, intraprocedural]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${bandit}'
+  argv: ['--version']
+execute:
+  executable: '${bandit}'
+  argv: [-r, -f, csv, -q, --ini, '${scratch}/cfg/bandit.ini', --skip, 'B101,B105,B106,B107,B613', -x, '${exclusions}', --ignore-nosec, '--', '${targets}']
+  cwd: '${workspace}/${module_dir}'
+  timeout_seconds: 900
+  stdout_max_bytes: 33554432
+  env_allowlist: [PATH, LANG, SystemRoot, PYTHONDONTWRITEBYTECODE, PYTHONNOUSERSITE, PYTHONSAFEPATH]
+exit_codes:
+  clean: [0]
+  findings: [1]
+  error: [2]
+parser:
+  id: bandit-csv-v1
+  format: text
+  input: stdout-artifact

@@ -432,11 +432,21 @@ def run(base, root, env, *, browser=False):
         staticcheck = os.environ.get("CODEYE_TEST_STATICCHECK", "")
         tool_args = ["--staticcheck", staticcheck] if staticcheck else []
         # The shared node toolchain (docs/39 §2.4.1) is probed at worker
-        # startup when CODEYE_TEST_NODE names it; no analyzer of this build
-        # needs it yet, so only its startup codes are checked.
+        # startup when CODEYE_TEST_NODE names it; only pyright (W17) needs it
+        # and the Go fixture plans no Python task, so only startup codes are
+        # checked.
         node_toolchain = os.environ.get("CODEYE_TEST_NODE", "")
         if node_toolchain:
             tool_args += ["--node", node_toolchain]
+        # W17: the Python tools named by CODEYE_TEST_RUFF/MYPY/PYRIGHT/BANDIT are
+        # probed at worker startup (the Go fixture plans no Python task); both
+        # type checkers need the explicit choice (docs/42 §5).
+        python_tools = {t: os.environ.get("CODEYE_TEST_" + t.upper(), "") for t in ("ruff", "mypy", "pyright", "bandit")}
+        python_tools = {t: p for t, p in python_tools.items() if p and (t != "pyright" or node_toolchain)}
+        for tool, path in python_tools.items():
+            tool_args += ["--" + tool, path]
+        if "mypy" in python_tools and "pyright" in python_tools:
+            tool_args.append("--python-both-type-checkers")
         production = services.enter_context(service(
             [binary, "agent", "--controller", origin, "--state-dir", directory / "go-agent",
              "--name", "go-smoke", "--enroll-token-file", go_token, "--source-root", f"{go_root}={go_source}",
@@ -539,6 +549,9 @@ def run(base, root, env, *, browser=False):
         assert all(f"{t}:not_configured" in agent_log for t in ("lizard", "jscpd", "gitl" "eaks")), "W21 startup codes not in the agent log"
         if node_toolchain:
             assert not any(f"node:{r}" in agent_log for r in ("invalid_config", "probe_failed", "unknown_tool")), "node toolchain rejected"
+        for tool in ("ruff", "mypy", "pyright", "bandit"):
+            assert (f"{tool}:not_configured" in agent_log) == (tool not in python_tools), f"{tool} startup code"
+            assert not any(f"{tool}:{r}" in agent_log for r in ("invalid_config", "probe_failed", "unknown_tool", "toolchain_unavailable")), f"{tool} rejected at startup"
         assert all(o["raw_message"] is None for o in code_free["observations"])
         assert any(o["raw_message"] and o["evidence_state"] == "verified_against_source_manifest"
                    for o in full["observations"])

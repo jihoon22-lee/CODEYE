@@ -1,0 +1,3 @@
+[project]
+name = "w17-imports"
+requires-python = ">=3.12"
