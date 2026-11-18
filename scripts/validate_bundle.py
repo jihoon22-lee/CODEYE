@@ -321,6 +321,75 @@ def check_w19_contracts(validators: dict) -> int:
     return negatives
 
 
+def go_string_slice(path: Path, name: str) -> list:
+    match = re.search(r"^var " + name + r" = \[\]string\{(.*?)\}$", path.read_text(encoding="utf-8"), re.M | re.S)
+    ensure(match is not None, "Missing Go []string " + name + " in " + str(path))
+    return re.findall(r'"([^"]*)"', match.group(1))
+
+
+def check_w18_contracts(validators: dict) -> int:
+    """W18 JS/TS pack: the ESLint and tsc descriptors and their real envelope examples.
+
+    Returns the number of negative cases."""
+    negatives = 0
+    envelope_validator = validators["analyzer-observations.schema.json"]
+
+    def both(doc):
+        envelope_validator.validate(doc)
+        check_analyzer_observations(doc)
+
+    eslint = yaml_file(ROOT / "examples/analyzer-eslint.yaml")
+    tsc = yaml_file(ROOT / "examples/analyzer-tsc.yaml")
+    for descriptor in (eslint, tsc):
+        validators["analyzer.schema.json"].validate(descriptor)
+        check_analyzer(descriptor)
+        ensure(descriptor["executes_repository_code"] is False and descriptor["network_policy"] == "none", "W18 tasks never execute repository code")
+        ensure(descriptor["execute"]["executable"] == "${node}", "W18 tools run through the shared node toolchain, never their #! line")
+        ensure(descriptor["execute"]["env_allowlist"] == ["PATH", "LANG", "SystemRoot"], "W18 environment allowlist changed")
+    ensure(eslint["exit_codes"] == {"clean": [0], "findings": [1], "error": [2]}, "eslint exit-code contract changed")
+    ensure(tsc["exit_codes"] == {"clean": [0], "findings": [2], "error": [1]}, "tsc exit-code contract changed")
+    argv = eslint["execute"]["argv"]
+    for flag in ("--no-config-lookup", "--no-inline-config", "--suppressions-location", "--"):
+        ensure(flag in argv, "eslint argv must hold " + flag)
+    ensure(argv.index("--") == len(argv) - 2, "eslint positionals follow --")
+    flags = go_string_slice(ROOT / "internal/worker/analysis/tsc/tsc.go", "Flags")
+    ensure(tsc["execute"]["argv"][1:-2] == flags, "Descriptor argv differs from tsc.Flags")
+    ensure("--build" not in flags and "-b" not in flags and tsc["execute"]["argv"][-1].startswith("./"), "tsc: --noEmit, never --build, ./ project path")
+
+    base = json_file(ROOT / "examples/observations-eslint.json")
+    both(base)
+    ensure(base["analyzer"] == {"id": "javascript.eslint", "ecosystem": "javascript", "required": True}, "javascript.eslint is the ecosystem baseline")
+    rp = base["rule_pack"]
+    ensure(rp["repository_config"] == "overridden" and rp["config_files"] == [] and rp["source_suppressions"] == "disabled" and rp["unreported_suppression_rules"] == [],
+           "eslint rule context: managed config overrides the repository's, directives are disabled")
+    ensure("--no-inline-config" in rp["selection"] and "repository_eslint_config_not_loaded" in base["limitations"], "eslint selection records the disabled directives")
+    ensure(base["outcome"]["exit_class"] == "success_with_findings" and executions_exit(base, "eslint.check") == 1, "ESLint example is the exit-1 findings run")
+    ensure(all(o["raw_ref"]["stream"] == "stdout" and o["raw_ref"]["json_pointer"] for o in base["observations"]), "ESLint observations point into stdout JSON")
+    checker = json_file(ROOT / "examples/observations-tsc.json")
+    both(checker)
+    ensure(checker["analyzer"] == {"id": "javascript.tsc", "ecosystem": "javascript", "required": False}, "javascript.tsc is extra depth")
+    rp = checker["rule_pack"]
+    ensure(rp["repository_config"] == "honored" and rp["config_files"] and rp["source_suppressions"] == "honored" and rp["unreported_suppression_rules"] == [],
+           "tsc rule context: tsconfig chain honored and enumerated, @ts-ignore/@ts-expect-error honored")
+    ensure(checker["outcome"]["exit_class"] == "success_with_findings" and executions_exit(checker, "tsc.check") == 2, "tsc example is the exit-2 findings run")
+    ensure([e["name"] for e in checker["executions"]] == ["tsc.version", "tsc.config", "tsc.check"], "tsc shows the effective config before the check")
+
+    def case(name, doc, edit):
+        nonlocal negatives
+        bad = copy.deepcopy(doc)
+        edit(bad)
+        expect_invalid(name, both, bad)
+        negatives += 1
+
+    case("eslint suppressed under disabled directives", base, lambda d: d["observations"][0].update(suppressed=True))
+    case("eslint config files under overridden configuration", base, lambda d: d["rule_pack"].update(config_files=[{"path": "eslint.config.js", "sha256": "a" * 64}]))
+    case("eslint observation outside stdout", base, lambda d: d["observations"][0]["raw_ref"].update(stream="stderr"))
+    case("tsc unreported suppression rules under honored", checker, lambda d: d["rule_pack"].update(unreported_suppression_rules=["TS2322"]))
+    case("tsc success without processed files", checker, lambda d: d["coverage"].update(processed_paths=[]))
+    case("tsc host path in target", checker, lambda d: d["target"]["properties"].update(tsconfig="/home/u/tsconfig.json"))
+    return negatives
+
+
 def executions_exit(doc: dict, name: str):
     return next(e["exit_code"] for e in doc["executions"] if e["name"] == name)
 
@@ -575,24 +644,38 @@ def compact_json(text: str) -> bytes:
     return "".join(out).encode("utf-8")
 
 
-def r1_pack() -> tuple[dict, dict]:
+# Language guides of review-r1 follow the snapshot's in-scope source
+# ecosystems (W24 rc2, A29). The w15 example snapshot has Go source only;
+# TestR1ExampleRecords checks that selection against the worker.
+R1_LANGUAGES = ("cpp", "go", "javascript", "python", "rust")
+R1_EXAMPLE_LANGUAGES = ("go",)
+
+
+def r1_pack(languages=R1_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
     """The review-r1 candidate pack: identity, files and per-role digests
-    (review-v1 algorithm over pack.yaml and the role's selected files)."""
+    (review-v1 algorithm over pack.yaml and the role's selected files) for
+    the given in-scope ecosystems."""
     pack_file = ROOT / "prompts/review-r1/pack.yaml"
     pack = yaml_file(pack_file)
     ensure(pack["id"] == "review-r1" and pack["status"] == "candidate-not-promoted" and pack["schema_version"] == "0.2", "review-r1 pack identity")
     ensure(tuple(pack["roles"]) == R1_STAGES, "review-r1 roles")
+    ensure(tuple(pack["languages"]) == R1_LANGUAGES and all(f == f"languages/{eco}.md" for eco, f in pack["languages"].items()), "review-r1 language guides")
+    for guide in pack["languages"].values():
+        ensure(within_root(pack_file.parent / guide).is_file(), "Missing review-r1 prompt: " + guide)
+    selected = [pack["languages"][eco] for eco in sorted(set(languages)) if eco in pack["languages"]]
     roles = {}
     for role, file in pack["roles"].items():
-        names = sorted({"pack.yaml", pack["core"], file, pack["domains"], *pack["languages"].values()})
+        names = sorted({"pack.yaml", pack["core"], file, pack["domains"], *selected})
         digest = hashlib.sha256()
         for relative in names:
             path = within_root(pack_file.parent / relative)
             ensure(path.is_file(), "Missing review-r1 prompt: " + relative)
             digest.update(relative.encode("utf-8") + b"\0" + path.read_bytes() + b"\0")
         roles[role] = {"files": names, "digest": digest.hexdigest()}
+    # The domain pack and the Go guide are copies of review-v1's; the other
+    # guides are review-r1's own.
     v1 = ROOT / "prompts/review-v1"
-    for shared in [pack["domains"], *pack["languages"].values()]:
+    for shared in [pack["domains"], pack["languages"]["go"]]:
         ensure((pack_file.parent / shared).read_bytes() == (v1 / shared).read_bytes(), "review-r1 copy differs from review-v1: " + shared)
     return pack, roles
 
@@ -1146,6 +1229,7 @@ def main() -> None:
     check_observations(observations)
     w19_negatives = check_w19_contracts(validators)
     print(f"PASS: W19 analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {w19_negatives} negative cases)")
+    print(f"PASS: W18 JS/TS pack contracts (eslint and tsc descriptors, real envelope examples; {check_w18_contracts(validators)} negative cases)")
     w20_negatives = check_w20_rust_pack(validators)
     print(f"PASS: W20 Rust pack contracts (cargo check and clippy descriptors, real envelope examples; {w20_negatives} negative cases)")
     print(f"PASS: W21 structure and secrets pack contracts (lizard, jscpd, gitleaks descriptors and real envelopes; {check_w21_contracts(validators)} negative cases)")
@@ -1318,6 +1402,7 @@ def main() -> None:
         ("review-r1 fabricated evidence", "investigate", lambda d: d["candidates"][0]["evidence_ids"].append(fake_id), None),
         ("review-r1 scope generalization", "documents", set_key("contracts", ".", 1, "applies_to"), None),
         ("review-r1 pack digest drift", "verify", set_key("calls", "0" * 64, 0, "pack_sha256"), None),
+        ("review-r1 language guide outside the selection", "investigate", lambda d: d["calls"][0]["pack_files"].insert(3, "languages/python.md"), None),
         ("review-r1 altered upstream candidate", "verify", lambda d: d["candidates"][0].update(title=d["candidates"][0]["title"] + "!"), None),
         ("review-r1 model reproduction verdict", "verify", set_key("verifications", "reproduced", 0, "verdict"), review_validator.validate),
         ("review-r1 source text", "investigate", lambda d: d["evidence"][0].update(text="raw source"), review_validator.validate),
@@ -1347,7 +1432,7 @@ def main() -> None:
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
     print(f"PASS: {27 + len(r1_negative)} negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
-    print("review-r1 candidate pack (not promoted):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in r1_roles.items()))
+    print(f"review-r1 candidate pack {r1_pack_doc['version']} (not promoted; Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in r1_roles.items()))
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 
 

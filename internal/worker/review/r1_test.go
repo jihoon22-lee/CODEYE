@@ -85,7 +85,7 @@ func TestR1RolesAcceptValidOutputs(t *testing.T) {
 	}
 	env := readR1(t, j, "environment")
 	if len(env.EnvironmentNotes) != 1 || env.EnvironmentNotes[0].Module != "go:svc/b" || env.Upstream[0].Source != "env.discover" || env.Upstream[0].State != record.UpstreamAccepted ||
-		env.Pack.ID != "review-r1" || env.Calls[0].PackID != "review-r1" || env.Calls[0].PackVersion != "2.0.0-rc1" {
+		env.Pack.ID != "review-r1" || env.Calls[0].PackID != "review-r1" || env.Calls[0].PackVersion != "2.0.0-rc2" {
 		t.Fatalf("environment %+v", env)
 	}
 	docs := readR1(t, j, "documents")

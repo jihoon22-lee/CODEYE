@@ -1,6 +1,7 @@
-// Package reviewpackr1 embeds the R1 candidate review pack (W15 phase 2). It
-// is selected only by the node operator (codeye agent --review-pack
-// review-r1); review-v1 stays the default and is not affected by this pack.
+// Package reviewpackr1 embeds the R1 candidate review pack (W15 phase 2,
+// revised in W24). It is selected only by the node operator (codeye agent
+// --review-pack review-r1); review-v1 stays the default and is not affected
+// by this pack.
 package reviewpackr1
 
 import (
@@ -11,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -27,6 +29,27 @@ var roleFiles = map[string]string{
 	"investigate": "investigate.md",
 	"interpret":   "interpret-diagnostics.md",
 	"verify":      "verify.md",
+}
+
+// languageFiles are the language guides by source ecosystem (the envdoc and
+// obsdoc ecosystem names that pack.InScope returns); pack.yaml lists the same
+// map.
+var languageFiles = map[string]string{
+	"cpp":        "languages/cpp.md",
+	"go":         "languages/go.md",
+	"javascript": "languages/javascript.md",
+	"python":     "languages/python.md",
+	"rust":       "languages/rust.md",
+}
+
+// Languages returns the ecosystems that have a language guide, sorted.
+func Languages() []string {
+	out := make([]string, 0, len(languageFiles))
+	for eco := range languageFiles {
+		out = append(out, eco)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Selection is the instruction text of one role with the pack identity and
@@ -62,8 +85,14 @@ func Identity() (id, version string, err error) {
 	return id, version, nil
 }
 
-// For returns the instructions of one R1 role.
-func For(role string) (Selection, error) {
+// For returns the instructions of one R1 role for a snapshot whose in-scope
+// source ecosystems are ecosystems (as pack.InScope returns them; docs/39
+// §2.8). Only the guides of those ecosystems are selected, after the core,
+// role and domain files in ascending ecosystem order; an ecosystem without a
+// guide adds nothing, so a snapshot with no supported ecosystem in scope gets
+// no language guide. The digest covers pack.yaml and exactly the selected
+// files.
+func For(role string, ecosystems []string) (Selection, error) {
 	f, ok := roleFiles[role]
 	if !ok {
 		return Selection{}, fmt.Errorf("unknown review role")
@@ -72,7 +101,12 @@ func For(role string) (Selection, error) {
 	if err != nil {
 		return Selection{}, err
 	}
-	ordered := []string{"00-core.md", f, "domains.md", "languages/go.md"}
+	ordered := []string{"00-core.md", f, "domains.md"}
+	for _, eco := range Languages() {
+		if slices.Contains(ecosystems, eco) {
+			ordered = append(ordered, languageFiles[eco])
+		}
+	}
 	names := append([]string{"pack.yaml"}, ordered...)
 	sort.Strings(names)
 	h := sha256.New()

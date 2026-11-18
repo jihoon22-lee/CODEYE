@@ -14,7 +14,7 @@ R0의 제품 어댑터는 [오프라인 Go vet](29-w08-go-vet.md)다. W19에서 
 |---|---|---|---|
 | C/C++ | clang-tidy, Clang Static Analyzer, Cppcheck | 컴파일 경고, 승인된 CTU, 복잡도/중복 | compile DB·헤더·매크로·ABI에 따라 분석 범위가 달라짐 |
 | Python | Ruff, Pyright 또는 mypy, Bandit | 일부 Pylint 의미 규칙·모듈 의존 구조 | 타입 정보 부족은 별도 표시. Pyright/mypy 모두 실행은 명시 선택 |
-| JS/TS | TypeScript compiler, ESLint 및 타입 인지 규칙 | dependency-cruiser, 승인된 로컬 Semgrep 규칙 | Node·tsconfig·프로젝트 서비스가 맞아야 함. JS config는 실행 가능 코드 |
+| JS/TS | ESLint 구문 규칙(기준, W18 구현), tsc·ESLint 타입 인지 규칙(추가 깊이, W18 구현) | dependency-cruiser, 승인된 로컬 Semgrep 규칙 | Node·tsconfig·프로젝트 서비스가 맞아야 함. JS config는 실행 가능 코드라 관리 설정만 사용. node_modules 없는 스냅샷의 타입 정보 공백은 진단 보류([W18](43-w18-js-ts-pack.md)) |
 | Go | go vet(기준, 구현), Staticcheck(추가 깊이, W19 구현) | 소유권/취소 관련 선택 검사·패키지 구조 | tags·CGO·toolchain·target 기록. wrapper 내부 같은 엔진 중복 금지. go vet과 같은 구성을 보는 Staticcheck 검사는 제외([§9](39-r1-analyzer-packs.md#9-go-vet과-staticcheck-서로-다른-엔진과-중복)) |
 | Rust | cargo check(기준, W20 구현), clippy(추가 깊이, W20 구현) | allow-by-default unsafe·panic review lint(구현)·unsafe 경계의 LLM 검토 | 모든 작업이 build script·proc macro·저장소 Cargo 설정을 실행하므로 노드 허가가 있어야 함. features·target은 기본값·host 하나로 기록. clippy 작업은 `clippy::` 진단만 남겨 rustc 진단 중복 제거([§4](44-w20-rust-pack.md#4-cargo-check와-clippy-서로-다른-작업과-중복)) |
 | 공통 | 승인된 로컬 패턴 규칙, Gitleaks(비밀값, W21 구현), 구조/복잡도 추출 | jscpd(중복, W21 구현)·Lizard(복잡도, W21 구현)·언어별 심볼/의존 그래프 | CVE 검사 아님. 구조 지표는 임계값을 넘은 측정값으로만 남고 finding·결함 수가 되지 않음. 비밀값은 값·일부·hash 없이 규칙·위치만 남기고 모델 입력에서 뺌. 복잡도는 Lizard, 중복은 jscpd만 잼([docs/45](45-w21-structure-secrets-pack.md)) |

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -135,13 +136,12 @@ func maxScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Rep
 	}
 }
 
-// A synthetic worst case: many modules with unmet requirements, many large
-// guidance documents and Go files full of characters JSON escapes (<, >, &),
-// many observations and maximal role outputs. Every request still fits
-// PromptBudget because each role trims its excerpts first and records it.
-func TestR1RequestSizeWorstCase(t *testing.T) {
+// worstCaseJob is the synthetic worst case: many modules with unmet
+// requirements, many large guidance documents and Go files full of
+// characters JSON escapes (<, >, &). extra adds files to the tree.
+func worstCaseJob(t *testing.T, extra func(root string)) analysis.Job {
 	line := "\tif a < b && c > d { p := &q; _ = p } // <tag> & \"quoted\" \\ text\n"
-	j := w15Job(t, func(root string) {
+	return w15Job(t, func(root string) {
 		for m := range 12 {
 			dir := fmt.Sprintf("mod%02d", m)
 			writeFile(t, root, dir+"/go.mod", fmt.Sprintf("module example.test/%s\n\ngo 1.40\n\ntoolchain go1.41.0\n", dir))
@@ -151,22 +151,35 @@ func TestR1RequestSizeWorstCase(t *testing.T) {
 			writeFile(t, root, dir+"/lib.go", "package main\n\nfunc helper(a, b, c, d int) {\n"+strings.Repeat(line, 150)+"}\n")
 			writeFile(t, root, dir+"/lib_test.go", "package main\n\nimport \"testing\"\n\nfunc TestHelper(t *testing.T) {\n\thelper(1, 2, 3, 4)\n"+strings.Repeat(line, 100)+"}\n")
 		}
-	})
-	obs := func(j analysis.Job) []govet.Observation {
-		var out []govet.Observation
-		for _, e := range j.Snapshot.Manifest.Entries {
-			if !strings.HasSuffix(e.Path, "/lib.go") {
-				continue
-			}
-			for k := range 2 {
-				p := e.Path
-				out = append(out, govet.Observation{ID: fmt.Sprintf("obs_%020x", len(out)+1), Tool: govet.AnalyzerID, RuleID: "printf", RawMessage: strings.Repeat("message <with> & escapes ", 20),
-					Path: &p, Location: &govet.ObsLocation{Path: p, StartLine: 5 + k*40, StartCol: 1, EndLine: 5 + k*40, EndCol: 2, ColumnUnit: "byte", BlobSHA256: e.SHA256},
-					LocationState: govet.LocationResolved, RawRef: govet.RawRef{Execution: "go.vet", Stream: "stdout", StreamSHA256: strings.Repeat("b", 64), JSONPointer: "/x/printf/0", ByteStart: 0, ByteEnd: 1}})
-			}
+		if extra != nil {
+			extra(root)
 		}
-		return out
+	})
+}
+
+// worstCaseObservations are many go vet observations with long messages.
+func worstCaseObservations(j analysis.Job) []govet.Observation {
+	var out []govet.Observation
+	for _, e := range j.Snapshot.Manifest.Entries {
+		if !strings.HasSuffix(e.Path, "/lib.go") {
+			continue
+		}
+		for k := range 2 {
+			p := e.Path
+			out = append(out, govet.Observation{ID: fmt.Sprintf("obs_%020x", len(out)+1), Tool: govet.AnalyzerID, RuleID: "printf", RawMessage: strings.Repeat("message <with> & escapes ", 20),
+				Path: &p, Location: &govet.ObsLocation{Path: p, StartLine: 5 + k*40, StartCol: 1, EndLine: 5 + k*40, EndCol: 2, ColumnUnit: "byte", BlobSHA256: e.SHA256},
+				LocationState: govet.LocationResolved, RawRef: govet.RawRef{Execution: "go.vet", Stream: "stdout", StreamSHA256: strings.Repeat("b", 64), JSONPointer: "/x/printf/0", ByteStart: 0, ByteEnd: 1}})
+		}
 	}
+	return out
+}
+
+// The synthetic worst case with many observations and maximal role
+// outputs. Every request still fits PromptBudget because each role trims
+// its excerpts first and records it.
+func TestR1RequestSizeWorstCase(t *testing.T) {
+	j := worstCaseJob(t, nil)
+	obs := worstCaseObservations
 	f := &r1Caller{script: maxScript(t)}
 	plan, res := runR1(t, j, vetStub{obs: obs}, f, "1.27.4")
 	for _, p := range plan {
@@ -184,6 +197,65 @@ func TestR1RequestSizeWorstCase(t *testing.T) {
 	v := readR1(t, j, "verify")
 	if len(v.Candidates) != 6 {
 		t.Fatalf("verify candidates %d", len(v.Candidates))
+	}
+}
+
+// W24 rc2: the same worst case with source of all five ecosystems in scope,
+// so every request carries the five language guides (about 7.4 KB more
+// instructions than the Go guide alone). Every request still fits
+// PromptBudget and no role fails for size. The verifier may then carry fewer
+// than the six maximal candidates: the record keeps all six, every candidate
+// it could not send is unreviewed with verification_budget_exceeded, and the
+// required verify task fails with review_input_incomplete instead of
+// succeeding.
+func TestR1RequestSizeWorstCaseAllLanguages(t *testing.T) {
+	j := worstCaseJob(t, func(root string) {
+		for _, name := range []string{"native/codec.cc", "tools/gen.py", "web/app.ts", "crate/src/lib.rs"} {
+			writeFile(t, root, name, "x\n")
+		}
+	})
+	f := &r1Caller{script: maxScript(t)}
+	plan, res := runR1(t, j, vetStub{obs: worstCaseObservations}, f, "1.27.4")
+	for _, p := range plan {
+		r := res[p.Key]
+		if (strings.HasPrefix(p.Key, "review.") && p.Key != "review.verify" && r.Status != domain.TaskSucceeded) || r.Reason == reasonInputTooLarge {
+			t.Fatalf("%s %+v", p.Key, r)
+		}
+	}
+	sizes := maxPrompt(f)
+	t.Logf("largest all-language worst-case request per role (bytes): %v", sizes)
+	for _, role := range []string{"environment", "documents", "investigate", "interpret", "verify"} {
+		if sizes[role] == 0 || sizes[role] > PromptBudget {
+			t.Fatalf("%s request %d", role, sizes[role])
+		}
+	}
+	for _, stage := range record.R1Stages {
+		for _, c := range readR1(t, j, stage).Calls {
+			if len(guideFiles(c.PackFiles)) != 5 {
+				t.Fatalf("%s pack_files %v", stage, c.PackFiles)
+			}
+		}
+	}
+	v := readR1(t, j, "verify")
+	if len(v.Candidates) != 6 || len(v.Verifications) != 6 {
+		t.Fatalf("verify candidates %d, verifications %d", len(v.Candidates), len(v.Verifications))
+	}
+	dropped := 0
+	for _, x := range v.Verifications {
+		if slices.Contains(x.Limitations, limVerifyBudget) {
+			dropped++
+			if x.Verdict != record.VerdictUnreviewed {
+				t.Fatalf("budget-dropped candidate %s verdict %s", x.CandidateID, x.Verdict)
+			}
+		}
+	}
+	t.Logf("verify: %d of 6 maximal candidates left unreviewed for the budget", dropped)
+	vr := res["review.verify"]
+	switch {
+	case dropped == 0 && vr.Status != domain.TaskSucceeded:
+		t.Fatalf("verify %+v", vr)
+	case dropped > 0 && (vr.Status != domain.TaskFailed || vr.Reason != "review_input_incomplete" || !slices.Contains(v.Limitations, limVerifyBudget)):
+		t.Fatalf("verify %+v, limitations %v", vr, v.Limitations)
 	}
 }
 

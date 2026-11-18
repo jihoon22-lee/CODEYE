@@ -83,11 +83,12 @@ func unionManifest(t *testing.T, docs ...map[string]any) []byte {
 				}
 			}
 		}
-		// W21: repository configuration files a tool read (rule context).
+		// Honored repository config files are bound to the manifest too (W18).
 		if rp, ok := d["rule_pack"].(map[string]any); ok {
-			if cf, ok := rp["config_files"].([]any); ok {
-				for _, c := range cf {
-					paths[c.(map[string]any)["path"].(string)] = c.(map[string]any)["sha256"].(string)
+			if cfgs, ok := rp["config_files"].([]any); ok {
+				for _, c := range cfgs {
+					cm := c.(map[string]any)
+					paths[cm["path"].(string)] = cm["sha256"].(string)
 				}
 			}
 		}

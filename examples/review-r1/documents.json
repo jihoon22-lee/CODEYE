@@ -2,7 +2,7 @@
   "schema_version": "0.2",
   "pack": {
     "id": "review-r1",
-    "version": "2.0.0-rc1"
+    "version": "2.0.0-rc2"
   },
   "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
   "run_id": "0195f3a0-0000-7000-8000-000000000025",
@@ -98,8 +98,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review-r1",
-      "pack_version": "2.0.0-rc1",
-      "pack_sha256": "cefc4582810f68cb2b4196ef5c23093e1694b9ea91c8dd0a058bb6198916d4e8",
+      "pack_version": "2.0.0-rc2",
+      "pack_sha256": "a42ead60396dd73b92521c1ce60ca5ce2293e687ce5858b1b6ad7aef409b7593",
       "pack_files": [
         "00-core.md",
         "documents.md",
@@ -107,8 +107,8 @@
         "languages/go.md",
         "pack.yaml"
       ],
-      "request_sha256": "1414c2345c72528050ef640a11661dc11d3dbf18e4121abc51891cc83f773bd5",
-      "request_bytes": 12052,
+      "request_sha256": "7d1ea2d2966312e2beee7c238ba9eed67a55a52e01a71e75210eb1d6996337ea",
+      "request_bytes": 12078,
       "usage": {
         "input": 2539,
         "output": 50
