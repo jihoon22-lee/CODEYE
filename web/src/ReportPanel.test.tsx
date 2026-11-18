@@ -35,6 +35,7 @@ function doc() {
         category: 'correctness',
         severity: 'low',
         validation: 'inconclusive',
+        disposition: 'open',
         severity_reason: '미검토 영향',
         impact: '합계가 달라짐',
         conditions: [{ statement: '입력 한 개' }],

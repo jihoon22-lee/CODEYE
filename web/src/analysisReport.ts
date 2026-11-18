@@ -9,6 +9,10 @@ export type Evidence = {
 };
 export type Finding = {
   id: string;
+  // W23 fp2 identity; absent in code-free exports and in reports before builder 3.
+  fingerprint: string | null;
+  // The disposition stamped at publication (immutable); the current one comes from the comparison.
+  disposition: string;
   title: string;
   category: string;
   severity: string;
@@ -103,6 +107,8 @@ function finding(v: unknown): Finding {
   const f = object(v);
   return {
     id: str(f.id),
+    fingerprint: nullable(f.fingerprint),
+    disposition: str(f.disposition),
     title: str(f.title),
     category: str(f.category),
     severity: str(f.severity),
