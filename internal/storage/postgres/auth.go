@@ -252,8 +252,9 @@ func (s *Store) ExchangeLaunchTokenFrom(ctx context.Context, client, tokenSHA256
 			Scan(&user, &issuer, &purpose); err != nil {
 			return Session{}, err
 		}
-		var enabled, named bool
-		if err := tx.QueryRow(ctx, "SELECT disabled_at IS NULL,username IS NOT NULL FROM users WHERE id=$1 FOR SHARE", user).Scan(&enabled, &named); err != nil {
+		var enabled bool
+		var username *string
+		if err := tx.QueryRow(ctx, "SELECT disabled_at IS NULL,username FROM users WHERE id=$1 FOR SHARE", user).Scan(&enabled, &username); err != nil {
 			return Session{}, err
 		}
 		if !enabled {
@@ -269,10 +270,17 @@ func (s *Store) ExchangeLaunchTokenFrom(ctx context.Context, client, tokenSHA256
 		}
 		// A session from an account-creation or reset link can only set the
 		// password until it has (whatever the account flag says later).
-		required := named && purpose != linkLogin
+		required := username != nil && purpose != linkLogin
 		sess, err := insertSession(ctx, tx, user, sessionTokenSHA256, ttl, issuer, required)
 		if err != nil {
 			return Session{}, err
+		}
+		// A link is the way back in for a name kept locked by guesses from
+		// many addresses: signing in with one clears the name's count.
+		if username != nil {
+			if err := clearAccountThrottle(ctx, tx, *username); err != nil {
+				return Session{}, err
+			}
 		}
 		detail := loginDetail(MethodLaunchLink, client)
 		detail["link_purpose"] = purpose

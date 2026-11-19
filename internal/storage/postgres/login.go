@@ -29,10 +29,13 @@ import (
 //     address for 15 minutes after the last one.
 //   - account: the username alone. 50 failures (from any addresses) lock the
 //     name everywhere for 15 minutes after the last one, doubling with each
-//     further failure up to 4 hours. A client with no failures of its own
+//     further failure up to 1 hour. A client with no failures of its own
 //     meets this lock only at that count. Once a name reached 50 its count
 //     is kept until 24 hours pass without a failure, so the lock keeps
-//     growing instead of starting over every 15 minutes.
+//     growing instead of starting over every 15 minutes. Recovery does not
+//     wait for the attacker to stop: a successful login-link exchange, an
+//     administrator's reset and the operator's password set clear the
+//     name's count in their own transaction.
 //
 // A lock is derived from (failures, last_failure_at); nothing stores an end
 // time, so giving a count back can never leave a stale lock. A row whose last
@@ -49,7 +52,7 @@ const (
 	throttleBase     = 30 * time.Second
 	throttleMax      = 15 * time.Minute
 	throttleDecay    = 15 * time.Minute
-	accountLockMax   = 4 * time.Hour
+	accountLockMax   = time.Hour
 	accountQuiet     = 24 * time.Hour
 	reapBatch        = 100
 )
@@ -250,6 +253,24 @@ func countFailures(ctx context.Context, tx pgx.Tx, keys []throttleKey, now time.
 					THEN $6::bigint ELSE $4::bigint END)*interval '1 millisecond' THEN 1 ELSE auth_throttle.failures+1 END,
 				last_failure_at=$3, lock_audited=false`,
 			k.scope, k.hmac, now, throttleDecay.Milliseconds(), accountThreshold, accountQuiet.Milliseconds()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// clearAccountThrottle ends the name's account-wide count and lock, in the
+// caller's transaction (which holds the user row). It is the recovery path
+// for a name kept locked by guesses from many addresses: the user signs in
+// with a login link, or an administrator or the operator sets the password.
+// The pair and client counts of the guessing addresses stay.
+func clearAccountThrottle(ctx context.Context, tx pgx.Tx, username string) error {
+	keys, err := throttleKeys(ctx, tx, username, "")
+	if err != nil {
+		return err
+	}
+	for _, k := range keys {
+		if _, err := tx.Exec(ctx, "DELETE FROM auth_throttle WHERE scope=$1 AND key_hmac=$2", k.scope, k.hmac); err != nil {
 			return err
 		}
 	}

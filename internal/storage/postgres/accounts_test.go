@@ -311,7 +311,7 @@ func TestConcurrentGuessesAllCount(t *testing.T) {
 }
 
 // TC-149: once a name reached 50 failures, its lock grows (15 minutes,
-// doubling to 4 hours) and the count is kept until 24 hours pass without a
+// doubling to 1 hour) and the count is kept until 24 hours pass without a
 // failure, so a spread-out guesser does not get 50 more every 15 minutes.
 // Until 50, a clean address is not blocked; after a quiet day the name
 // starts over.
@@ -337,8 +337,8 @@ func TestAccountLockGrowsAfterThreshold(t *testing.T) {
 		}
 	}
 	wantLock(throttleMax-time.Minute, throttleMax)
-	// Each further failure after a lock ends doubles the next lock, up to 4h.
-	for _, next := range []time.Duration{30 * time.Minute, time.Hour, 2 * time.Hour, 4 * time.Hour, 4 * time.Hour} {
+	// Each further failure after a lock ends doubles the next lock, up to 1h.
+	for _, next := range []time.Duration{30 * time.Minute, time.Hour, time.Hour} {
 		ageAccount(t, s, accountLockMax) // the current lock has ended
 		fail()
 		ageAccount(t, s, throttleDecay) // past the short window: not forgotten
@@ -353,6 +353,74 @@ func TestAccountLockGrowsAfterThreshold(t *testing.T) {
 	ageAccount(t, s, accountQuiet)
 	if _, err := login(s, "dana", testPassword, "203.0.113.77"); err != nil {
 		t.Fatalf("after a quiet day: %v", err)
+	}
+}
+
+// TC-149: recovery from an account-wide lock does not wait for the
+// guesser. A successful login-link exchange, an administrator's reset and
+// the operator's password set each clear the name's count in their own
+// transaction; the guessing addresses keep their pair counts.
+func TestAccountLockClearedByRecovery(t *testing.T) {
+	s := fastStore(t)
+	ctx := context.Background()
+	admin := newAccount(t, s, OperatorPrincipal(), "root", true)
+	erin := newAccount(t, s, OperatorPrincipal(), "erin", false)
+	round := 0
+	lock := func() {
+		t.Helper()
+		round++
+		for i := 0; i < accountThreshold; i++ {
+			addr := fmt.Sprintf("10.%d.%d.1", round, i)
+			if _, err := login(s, "erin", "wrong password value", addr); !errors.Is(err, domain.ErrUnauthenticated) {
+				t.Fatalf("round %d failure %d: %v", round, i, err)
+			}
+		}
+		var th *ThrottledError
+		if _, err := login(s, "erin", testPassword, "203.0.113.1"); !errors.As(err, &th) {
+			t.Fatalf("round %d: name not locked: %v", round, err)
+		}
+	}
+	accountRows := func() int { return countWhere(t, s, "scope='account' AND failures>0") }
+
+	lock()
+	token := domain.Digest([]byte("recovery link"))
+	if err := s.IssueLaunchToken(ctx, erin.ID, token, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ExchangeLaunchTokenFrom(ctx, "203.0.113.2", token, domain.Digest([]byte("recovery session")), time.Hour); err != nil {
+		t.Fatalf("link exchange while locked: %v", err)
+	}
+	if n := accountRows(); n != 0 {
+		t.Fatalf("link exchange left %d account rows", n)
+	}
+	if _, err := login(s, "erin", testPassword, "203.0.113.3"); err != nil {
+		t.Fatalf("password login after the link: %v", err)
+	}
+	if n := countWhere(t, s, "scope='pair'"); n != accountThreshold {
+		t.Fatalf("guessing pairs kept: %d", n)
+	}
+
+	lock()
+	if _, err := s.ResetPassword(ctx, UserPrincipal(admin.ID), erin.ID, domain.Digest([]byte("reset link")), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if n := accountRows(); n != 0 {
+		t.Fatalf("administrator reset left %d account rows", n)
+	}
+
+	lock()
+	h, err := account.Derive("operator chosen passphrase", s.kdfIterations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetPassword(ctx, erin.ID, h, false); err != nil {
+		t.Fatal(err)
+	}
+	if n := accountRows(); n != 0 {
+		t.Fatalf("operator password set left %d account rows", n)
+	}
+	if _, err := login(s, "erin", "operator chosen passphrase", "203.0.113.4"); err != nil {
+		t.Fatalf("login after the operator's set: %v", err)
 	}
 }
 
