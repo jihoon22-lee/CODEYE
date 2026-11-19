@@ -162,6 +162,11 @@ func (s *Store) SetPoolPolicy(ctx context.Context, u PoolPolicyUpdate) (PoolPoli
 				return result{}, err
 			}
 			next.CreatedAt = &created
+			e := principalAudit(OperatorPrincipal(), AuditPoolPolicySet).target("pool", poolID).
+				with(map[string]any{"pool": u.Name, "policy_revision": next.Revision, "min_workers": next.MinWorkers, "max_workers": next.MaxWorkers})
+			if err := writeAudit(ctx, tx, e); err != nil {
+				return result{}, err
+			}
 		}
 		next.PoolName = u.Name
 		warnings := []string{}
@@ -269,8 +274,12 @@ func (s *Store) SetSchedulerLimits(ctx context.Context, global, project *int) (S
 			return l, nil
 		}
 		next.Revision++
-		_, err := tx.Exec(ctx, "UPDATE scheduler_limits SET global_max_running=$1,project_max_running=$2,revision=$3,updated_at=clock_timestamp() WHERE singleton",
-			next.GlobalMaxRunning, next.ProjectMaxRunning, next.Revision)
-		return next, err
+		if _, err := tx.Exec(ctx, "UPDATE scheduler_limits SET global_max_running=$1,project_max_running=$2,revision=$3,updated_at=clock_timestamp() WHERE singleton",
+			next.GlobalMaxRunning, next.ProjectMaxRunning, next.Revision); err != nil {
+			return next, err
+		}
+		e := principalAudit(OperatorPrincipal(), AuditSchedulerLimitsSet).target("scheduler", "limits").
+			with(map[string]any{"global_max_running": next.GlobalMaxRunning, "project_max_running": next.ProjectMaxRunning, "revision": next.Revision})
+		return next, writeAudit(ctx, tx, e)
 	})
 }

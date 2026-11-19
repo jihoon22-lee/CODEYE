@@ -79,7 +79,9 @@ func (s *Store) IssueEnrollmentToken(ctx context.Context, pool string, roots []s
 				return t, err
 			}
 		}
-		return t, nil
+		e := principalAudit(OperatorPrincipal(), AuditEnrollTokenCreated).target("enrollment_token", t.ID).
+			with(map[string]any{"pool": pool, "source_root_ids": t.SourceRootIDs, "expires_at": t.ExpiresAt.UTC()})
+		return t, writeAudit(ctx, tx, e)
 	})
 }
 
@@ -100,8 +102,10 @@ func (s *Store) RevokeEnrollmentToken(ctx context.Context, id string) error {
 		if used != nil {
 			return false, domain.ErrConflict
 		}
-		_, err := tx.Exec(ctx, "UPDATE node_enrollment_tokens SET revoked_at=clock_timestamp() WHERE id=$1", id)
-		return true, err
+		if _, err := tx.Exec(ctx, "UPDATE node_enrollment_tokens SET revoked_at=clock_timestamp() WHERE id=$1", id); err != nil {
+			return false, err
+		}
+		return true, writeAudit(ctx, tx, principalAudit(OperatorPrincipal(), AuditEnrollTokenRevoked).target("enrollment_token", id))
 	})
 	return err
 }
@@ -146,8 +150,12 @@ func (s *Store) EnrollNode(ctx context.Context, in Enrollment) (NodeIdentity, er
 			n.ID, n.PoolID, tokenID, name, in.SecretSHA256, in.OS, in.Arch, in.Protocol); err != nil {
 			return n, err
 		}
-		_, err = tx.Exec(ctx, "INSERT INTO node_source_roots(node_id,source_root_id) SELECT $1,source_root_id FROM node_enrollment_token_roots WHERE token_id=$2", n.ID, tokenID)
-		return n, err
+		if _, err = tx.Exec(ctx, "INSERT INTO node_source_roots(node_id,source_root_id) SELECT $1,source_root_id FROM node_enrollment_token_roots WHERE token_id=$2", n.ID, tokenID); err != nil {
+			return n, err
+		}
+		e := auditEntry{kind: ActorNode, node: n.ID, action: AuditNodeEnrolled}.target("node", n.ID).
+			with(map[string]any{"name": name, "os": in.OS, "arch": in.Arch, "protocol_version": in.Protocol})
+		return n, writeAudit(ctx, tx, e)
 	})
 }
 
@@ -183,8 +191,10 @@ func (s *Store) RevokeNode(ctx context.Context, id string) error {
 		if _, err := tx.Exec(ctx, "UPDATE nodes SET revoked_at=clock_timestamp() WHERE id=$1", id); err != nil {
 			return false, err
 		}
-		_, err := tx.Exec(ctx, "UPDATE workers SET state='stopped',state_since=clock_timestamp() WHERE node_id=$1 AND state NOT IN ('stopped','failed')", id)
-		return true, err
+		if _, err := tx.Exec(ctx, "UPDATE workers SET state='stopped',state_since=clock_timestamp() WHERE node_id=$1 AND state NOT IN ('stopped','failed')", id); err != nil {
+			return false, err
+		}
+		return true, writeAudit(ctx, tx, principalAudit(OperatorPrincipal(), AuditNodeRevoked).target("node", id))
 	})
 	return err
 }

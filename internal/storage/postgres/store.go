@@ -15,7 +15,12 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-type Store struct{ pool *pgxpool.Pool }
+// Store is the PostgreSQL persistence. iterations is the password
+// derivation cost (process configuration, not shared state).
+type Store struct {
+	pool       *pgxpool.Pool
+	iterations int
+}
 
 // Open requires an explicit URL and never applies migrations.
 func Open(ctx context.Context, dsn string) (*Store, error) {
