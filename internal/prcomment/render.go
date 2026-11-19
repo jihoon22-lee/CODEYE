@@ -153,9 +153,11 @@ func Render(in Input) string {
 			b.WriteString("\n")
 		}
 		inF, inO := s.Findings.InChanges(), s.Observations.InChanges()
-		fmt.Fprintf(&b, msg("rest")+"\n\n", inF-shownF, inO-shownO, s.Findings.PreExisting(), s.Observations.PreExisting())
 		if inF+inO == 0 {
 			b.WriteString(msg("none_in_changes") + "\n\n")
+			fmt.Fprintf(&b, msg("elsewhere")+"\n\n", s.Findings.PreExisting(), s.Observations.PreExisting())
+		} else {
+			fmt.Fprintf(&b, msg("rest")+"\n\n", inF-shownF, inO-shownO, s.Findings.PreExisting(), s.Observations.PreExisting())
 		}
 	}
 	if gaps := gapLines(r); len(gaps) > 0 {

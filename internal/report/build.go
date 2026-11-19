@@ -381,15 +381,9 @@ func Build(in Input, reg *Registry) (Report, error) {
 	// change a limitation, note, count, status or verdict.
 	composeSections(&r, in, states, keys, rm != nil)
 	// The pull-request section counts changed files sent to the model only
-	// when a model review task ran: a run without a model (or whose source
-	// may not go to it) says so instead of "0 of N sent".
-	reviewRan := false
-	for _, k := range keys {
-		if st := states[k]; strings.HasPrefix(k, "review.") && st != nil && st.facts.Status != "unsupported" && st.facts.Status != "skipped_policy" {
-			reviewRan = true
-		}
-	}
-	r.PullRequest = pullRequestSection(&r, in.PullRequest, index.entries, sentPaths(states, roleRecordKeys(states)), reviewRan)
+	// when the run sent the model a request: a run without a model (whose
+	// records hold calls with no request) says so instead of "0 of N sent".
+	r.PullRequest = pullRequestSection(&r, in.PullRequest, index.entries, sentPaths(states, roleRecordKeys(states)), modelRequested(r.Coverage.ReviewCalls))
 	if err := ValidateReport(r); err != nil {
 		return Report{}, err
 	}

@@ -109,3 +109,31 @@ func TestPullRequestSectionClassifiesTheChanges(t *testing.T) {
 		t.Fatal("a branch run's summary names a pull request")
 	}
 }
+
+// With model calls the section counts the changed files the review records
+// show as sent and lists the rest; without calls it does not count at all.
+func TestPullRequestSectionCountsSentFilesOnlyWithModelCalls(t *testing.T) {
+	states, base := exampleRoleStages(t)
+	r, _, _ := compose(states, base)
+	sent := sentPaths(states, roleRecordKeys(states))
+	var seen string
+	for p := range sent {
+		if seen == "" || p < seen {
+			seen = p
+		}
+	}
+	if seen == "" || len(r.Coverage.ReviewCalls) == 0 {
+		t.Fatal("the role records sent nothing")
+	}
+	pin := testPin(domain.PullRequestFile{Path: seen, Status: "modified"}, domain.PullRequestFile{Path: "never/sent.go", Status: "added"})
+	if !modelRequested(r.Coverage.ReviewCalls) || modelRequested([]ReviewCall{{Role: "investigate", Outcome: "model_not_configured"}}) {
+		t.Fatal("modelRequested does not follow the request digests")
+	}
+	s := pullRequestSection(&r, pin, map[string]string{seen: "x"}, sent, modelRequested(r.Coverage.ReviewCalls))
+	if s.Review.SentToModel == nil || *s.Review.SentToModel != 1 || s.Review.NotSentTotal != 1 || len(s.Review.NotSent) != 1 || s.Review.NotSent[0] != "never/sent.go" {
+		t.Fatalf("review %+v", s.Review)
+	}
+	if s := pullRequestSection(&r, pin, nil, sent, false); s.Review.SentToModel != nil || s.Review.NotSentTotal != 0 || len(s.Review.NotSent) != 0 {
+		t.Fatalf("no calls: review %+v", s.Review)
+	}
+}

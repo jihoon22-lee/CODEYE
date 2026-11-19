@@ -40,3 +40,24 @@ func TestRenderedTextHasNoLiveMentionOrReference(t *testing.T) {
 		}
 	}
 }
+
+// Nothing in the changes: the comment says so (not "결함 없음") and gives the
+// counts of the existing code alone, without a "그 밖에" for listed items.
+func TestRenderedCommentWithNothingInTheChanges(t *testing.T) {
+	r, err := report.Unmarshal(prReport(t, headA))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := r.PullRequest
+	s.Findings.ChangedFileOtherLines += s.Findings.ChangedLines + s.Findings.ChangedFile
+	s.Observations.Elsewhere += s.Observations.ChangedLines + s.Observations.ChangedFile
+	s.Findings.ChangedLines, s.Findings.ChangedFile, s.Observations.ChangedLines, s.Observations.ChangedFile = 0, 0, 0, 0
+	s.Items = []report.PullRequestItem{}
+	body := Render(Input{ProjectID: project, RunID: runA, Version: 100, Pin: pin(headA, true), Report: &r})
+	if !strings.Contains(body, msg("none_in_changes")) || strings.Contains(body, "그 밖에 변경 부분") || strings.Contains(body, "#### "+msg("findings")) {
+		t.Fatalf("comment:\n%s", body)
+	}
+	if want := "변경 밖(기존 코드)에는 발견 "; !strings.Contains(body, want) {
+		t.Fatalf("comment lacks %q:\n%s", want, body)
+	}
+}

@@ -167,8 +167,7 @@ func scopeRank(s string) int {
 
 // pullRequestSection builds the section of a pull-request run (nil
 // otherwise). sent are the snapshot paths the model review records show as
-// sent, reviewRan whether a model review task ran (not unsupported or
-// skipped by policy).
+// sent, reviewRan whether the run sent the model a request (modelRequested).
 func pullRequestSection(r *Report, pin *domain.PullRequest, inSnapshot map[string]string, sent map[string]bool, reviewRan bool) *PullRequestSection {
 	if pin == nil {
 		return nil
@@ -317,4 +316,16 @@ func pullRequestParas(r Report, l Locale) []string {
 	}
 	out = append(out, tf(l, "pr.counts", s.Findings.InChanges(), s.Observations.InChanges(), s.Findings.PreExisting(), s.Observations.PreExisting()))
 	return append(out, l.Label("pr.depth"))
+}
+
+// modelRequested is whether any recorded review call carried a request. A
+// run without a model records its calls as model_not_configured with no
+// request.
+func modelRequested(calls []ReviewCall) bool {
+	for _, c := range calls {
+		if c.RequestDigest != "" {
+			return true
+		}
+	}
+	return false
 }
