@@ -113,6 +113,17 @@ def main() -> None:
            and unscreened["secrets"]["model_input"] == "not_screened"
            and any(g["code"] == "model_input_not_screened" for g in unscreened["gaps"])
            and any(f["id"].startswith("review_s") for f in unscreened["findings"]), "Unscreened slice report without its slices or its not-screened state")
+    # The same fixture after a secrets scan that ran but failed: review still runs on the read
+    # filters alone, nothing is skipped for the screen and the report says the input was not screened.
+    unusable = json_file(ROOT / "internal/report/testdata/report-screen-unusable.json")
+    validators["report.schema.json"].validate(unusable)
+    check_report(unusable, coverage_root)
+    unusable_tasks = {t["key"]: t for t in unusable["tasks"]}
+    ensure(unusable["secrets"]["model_input"] == "not_screened" and unusable["secrets"]["task_keys"] == ["gitleaks"]
+           and unusable_tasks["gitleaks"]["status"] == "failed"
+           and unusable["coverage"]["ai_review"]["status"] == "performed"
+           and not any(t["reason"] == "secret_screen_failed" for t in unusable["tasks"])
+           and any(g["code"] == "model_input_not_screened" for g in unusable["gaps"]), "Unusable-screen report skipped review or lost its not-screened state")
     published = json_file(ROOT / "examples/report-go-vet.json")
     validators["report.schema.json"].validate(published)
     check_report(published, ROOT / "fixtures/go-vet")

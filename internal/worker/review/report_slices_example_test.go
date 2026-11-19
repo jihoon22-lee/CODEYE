@@ -153,6 +153,66 @@ func TestReportSlicesUnscreened(t *testing.T) {
 	writeOrCompare(t, r, "../../report/testdata/report-unscreened.json")
 }
 
+// TC-199: a secrets task that ran but whose result is unusable (here a
+// failed scan, as after workspace drift) is no screen. The whole-run roles,
+// the scope and the slices run and are accepted, no review task is skipped
+// for the screen, the records say model_input_not_secret_screened, the
+// report's secrets section is not_screened with the gap
+// model_input_not_screened, and its sentence names the secrets task with its
+// state and reason instead of saying the scan did not run. The report is
+// stored as internal/report/testdata/report-screen-unusable.json, which the
+// schema check (validate_bundle.py) and the web parser read too.
+func TestReportSlicesSecretScreenUnusable(t *testing.T) {
+	j := coverageJob(t)
+	j.RunID, j.AttemptID = "0195f3a0-0000-7000-8000-000000000901", "0195f3a0-0000-7000-8000-000000000902"
+	gl := gitleaks.Descriptor()
+	static, err := pack.NewComposite(
+		exampleMember{d: govet.Descriptor(), plan: govet.Plan, run: func(j analysis.Job, task pack.Task) analysis.TaskResult { return exampleVet(t, j, task) }},
+		exampleMember{d: gl, plan: gitleaks.Plan, run: func(j analysis.Job, task pack.Task) analysis.TaskResult {
+			return exampleFailure(t, j, gl, task, "8.30.1", "workspace_drift", "")
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := sliceReport(t, j, static, record.DefaultMaxCalls, &exampleIDs{n: 0x402})
+	if r.Secrets == nil || r.Secrets.ModelInput != report.ScreenNotScreened || r.Coverage.AIReview.Status != report.ModelPerformed {
+		t.Fatalf("secrets %+v ai review %+v", r.Secrets, r.Coverage.AIReview)
+	}
+	reviewed := 0
+	for _, task := range r.Tasks {
+		if !strings.HasPrefix(task.Key, "review.") {
+			continue
+		}
+		if task.Status == string(domain.TaskSkippedPolicy) && deref(task.Reason) == "secret_screen_failed" {
+			t.Fatalf("%s skipped: %s", task.Key, deref(task.Reason))
+		}
+		if task.Status == string(domain.TaskSucceeded) {
+			reviewed++
+		}
+	}
+	if l := r.CodeReview.Ledger; reviewed < 3 || l == nil || l.Scope.Result != "accepted" {
+		t.Fatalf("reviewed %d ledger %+v", reviewed, r.CodeReview.Ledger)
+	}
+	gaps := map[string]bool{}
+	for _, g := range r.Gaps {
+		gaps[g.Code] = true
+	}
+	if !gaps["model_input_not_screened"] {
+		t.Fatalf("gaps %+v", r.Gaps)
+	}
+	md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
+	if !strings.Contains(md, "탐지 작업 gitl"+"eaks의 결과를 쓸 수 없어") || !strings.Contains(md, "기본 읽기 필터") || strings.Contains(md, "탐지 작업이 실행되지 않아") {
+		t.Fatal("the secrets section does not name the unusable scan")
+	}
+	for _, name := range []string{"investigate", "verify", "investigate.s001"} {
+		rec, err := os.ReadFile(rolePath(j, name))
+		if err != nil || !strings.Contains(string(rec), limNotSecretScreened) {
+			t.Fatalf("%s record: %v", name, err)
+		}
+	}
+	writeOrCompare(t, r, "../../report/testdata/report-screen-unusable.json")
+}
+
 // TC-169: beyond 32 slices the files are counted per module as not planned,
 // shown as a gap, and the report validates.
 func TestReportSlicesNotPlanned(t *testing.T) {

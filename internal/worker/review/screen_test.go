@@ -185,11 +185,12 @@ func plantedJob(t *testing.T) (analysis.Job, string) {
 	return j, value
 }
 
-// The secrets screen is three-way (screen.go). Not run (the stand-in's
-// not_run envelope): the role pack runs unscreened and every record says so. Ran but
-// unusable (a failed scan, or no envelope at all, also what a role would
-// see if it ever ran before the secrets task): every role is skipped with
-// secret_screen_failed and no request is made.
+// Without a usable screen (screen.go) the role pack runs on the read filters
+// alone: not run (the stand-in's not_run envelope) and ran but unusable (a
+// failed scan, or no envelope at all, also what a role would see if it ever
+// ran before the secrets task) are one case. No role is skipped, the file
+// reaches the model, every record says model_input_not_secret_screened and
+// no model input carries that code.
 func TestRolePackSecretScreenCases(t *testing.T) {
 	for _, mode := range []string{"not_run", "failed", "missing"} {
 		t.Run(mode, func(t *testing.T) {
@@ -200,16 +201,10 @@ func TestRolePackSecretScreenCases(t *testing.T) {
 			}
 			f := &roleCaller{script: script}
 			plan, res := runRole(t, j, screenStub{mode: mode}, f, "1.27.4")
-			if mode != "not_run" {
-				if len(f.requests) != 0 {
-					t.Fatalf("%d model requests after an unusable scan", len(f.requests))
+			for _, p := range plan {
+				if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status == domain.TaskSkippedPolicy {
+					t.Fatalf("%s skipped: %+v", p.Key, res[p.Key])
 				}
-				for _, p := range plan {
-					if strings.HasPrefix(p.Key, "review.") && (res[p.Key].Status != domain.TaskSkippedPolicy || res[p.Key].Reason != reasonSecretScreenFailed) {
-						t.Fatalf("%s: %+v", p.Key, res[p.Key])
-					}
-				}
-				return
 			}
 			sent := false
 			for _, q := range f.requests {
@@ -231,8 +226,8 @@ func TestRolePackSecretScreenCases(t *testing.T) {
 }
 
 // The legacy pack (review-v1) applies the same screen: its corpus leaves
-// the reported file out, an unusable scan skips the role without a request,
-// and an unscreened corpus is recorded (never in the pinned model input).
+// the reported file out, and an unscreened corpus (no scan run, or an
+// unusable one) is sent and recorded (never in the pinned model input).
 func TestLegacyPackSecretScreen(t *testing.T) {
 	for _, mode := range []string{"", "not_run", "failed", "missing"} {
 		t.Run("mode="+mode, func(t *testing.T) {
@@ -252,13 +247,6 @@ func TestLegacyPackSecretScreen(t *testing.T) {
 				}
 			}
 			res := h.Run(t.Context(), j, analysis.TaskSpec{Key: "review.context"}, nil)
-			switch mode {
-			case "failed", "missing":
-				if res.Status != domain.TaskSkippedPolicy || res.Reason != reasonSecretScreenFailed || len(f.requests) != 0 {
-					t.Fatalf("%+v requests %d", res, len(f.requests))
-				}
-				return
-			}
 			if res.Status != domain.TaskSucceeded || len(f.requests) != 1 {
 				t.Fatalf("%+v requests %d", res, len(f.requests))
 			}

@@ -15,28 +15,27 @@ import (
 // of the static composite (an analyzer of purpose secrets, docs/ANALYZERS.md#분석기-목적) runs
 // before every review role (the worker runs tasks in plan order and the
 // review handlers append their roles after the static plan), so its
-// envelope is terminal when a role reads it. Three cases:
+// envelope is terminal when a role reads it. Two outcomes:
 //
-//   - not run (the stand-in's unsupported/not_run envelope, or no secrets
-//     task planned): inputs are sent unscreened and the record says so
-//     (model_input_not_secret_screened), never silently;
-//   - ran but unusable (failed, timed out, cancelled, partial parse, a
-//     missing or invalid envelope): fail closed, the role is skipped with
-//     secret_screen_failed and nothing reaches a model;
 //   - succeeded with a complete parse: every file it reported is withheld
-//     from every excerpt (secret_files_withheld).
+//     from every excerpt (secret_files_withheld);
+//   - anything else (no secrets task planned, the stand-in's
+//     unsupported/not_run envelope, or a task that ran but whose result is
+//     unusable: failed, timed out, cancelled, partial parse, a missing or
+//     invalid envelope): inputs are sent through the read filters only
+//     (sensitive-value patterns, withheld files) and the record says so
+//     (model_input_not_secret_screened), never silently. The report shows
+//     the secrets task's own status and reason next to that state.
 type screenState int
 
 const (
 	screenUnscreened screenState = iota
 	screenApplied
-	screenFailed
 )
 
 const (
-	limNotSecretScreened     = "model_input_not_secret_screened"
-	limSecretWithheld        = "secret_files_withheld"
-	reasonSecretScreenFailed = "secret_screen_failed"
+	limNotSecretScreened = "model_input_not_secret_screened"
+	limSecretWithheld    = "secret_files_withheld"
 )
 
 type secretScreen struct {
@@ -56,7 +55,6 @@ func screenSecrets(ctx context.Context, static analysis.Handler, j analysis.Job)
 	}
 	plan, err := static.Plan(ctx, j)
 	if err != nil {
-		out.state = screenFailed
 		return out
 	}
 	var names []string
@@ -94,8 +92,9 @@ func screenSecrets(ctx context.Context, static analysis.Handler, j analysis.Job)
 			// Without descriptors only a readable envelope names its analyzer.
 			continue
 		case err != nil || !d.Analyzer.IsSecrets():
-			out.state = screenFailed
-			return out
+			// Unusable: the inputs stay unscreened (no file is withheld on a
+			// partial result).
+			return secretScreen{withheld: map[string]bool{}}
 		case d.Outcome.TaskStatus == domain.TaskUnsupported && d.Outcome.ExitClass == obsdoc.ExitNotRun:
 			notRun = true
 		case d.Outcome.TaskStatus == domain.TaskSucceeded && !d.Outcome.PartialParse && d.Parse.OK:
@@ -109,8 +108,7 @@ func screenSecrets(ctx context.Context, static analysis.Handler, j analysis.Job)
 				}
 			}
 		default:
-			out.state = screenFailed
-			return out
+			return secretScreen{withheld: map[string]bool{}}
 		}
 	}
 	if applied && !notRun {

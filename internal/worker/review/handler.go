@@ -64,10 +64,6 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 		return result(domain.TaskUnsupported, "model_not_configured")
 	}
 	screen := screenSecrets(ctx, h.Static, j)
-	if screen.state == screenFailed {
-		// The secrets task ran but its result is unusable (screen.go).
-		return result(domain.TaskSkippedPolicy, reasonSecretScreenFailed)
-	}
 	if role == "verify" {
 		return h.verify(ctx, j, runner, screen)
 	}

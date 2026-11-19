@@ -459,6 +459,8 @@ func (c sectionContext) screen() string {
 			continue
 		}
 		if st.facts.Reason != nil && *st.facts.Reason == "secret_screen_failed" {
+			// Runs of earlier workers skipped review when the secrets result
+			// was unusable; current workers review unscreened instead.
 			return ScreenFailed
 		}
 		var lims []string

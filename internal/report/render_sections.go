@@ -424,7 +424,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 	// Secrets.
 	sc := r.Secrets
 	sb := secBlock{ID: SectionSecrets, Title: title(SectionSecrets), State: states[SectionSecrets]}
-	sb.Parts = append(sb.Parts, secPart{Paras: []string{stageLine(l, sc.Stage), l.Label("secrets.lead"), lab(l, "secrets.model_input", sc.ModelInput)}, Counts: countsOf(l, SectionSecrets, overviewCounts(r, SectionSecrets), countOrder[SectionSecrets])})
+	sb.Parts = append(sb.Parts, secPart{Paras: []string{stageLine(l, sc.Stage), l.Label("secrets.lead"), v.modelInputText(sc)}, Counts: countsOf(l, SectionSecrets, overviewCounts(r, SectionSecrets), countOrder[SectionSecrets])})
 	sb.Parts = append(sb.Parts, v.tasksPart(l.Label("secrets.tasks"), sc.TaskKeys))
 	dt := &secTable{Head: []string{l.Label("col.rule"), l.Label("col.location"), l.Label("col.evidence_state"), l.Label("col.finding")}, ObservationIDs: []string{}}
 	for _, x := range sc.Detections {
@@ -570,6 +570,29 @@ func overviewCounts(r Report, key string) map[string]int {
 		}
 	}
 	return nil
+}
+
+// modelInputText is the secrets section's sentence on how model inputs were
+// screened. Inputs left unscreened because a secrets task ran but its result
+// is unusable name that task with its state and reason; review then still
+// ran on the read filters alone. Every other state keeps its fixed sentence.
+func (v secView) modelInputText(sc *SecretsSection) string {
+	l := v.L
+	if sc.ModelInput == ScreenNotScreened {
+		for _, k := range sc.TaskKeys {
+			for _, x := range v.R.Tasks {
+				if x.Key != k || x.Status == string(domain.TaskSucceeded) || x.Status == string(domain.TaskUnsupported) {
+					continue
+				}
+				reason := "-"
+				if x.Reason != nil {
+					reason = reasonText(l, *x.Reason)
+				}
+				return tf(l, "secrets.model_input.not_screened_unusable", x.Key, lab(l, "task_status", x.Status), reason)
+			}
+		}
+	}
+	return lab(l, "secrets.model_input", sc.ModelInput)
 }
 
 // tasksPart lists the tasks of a section with their state and reason.
