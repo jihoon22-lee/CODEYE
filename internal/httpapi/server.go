@@ -28,6 +28,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/artifactstore"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
+	"github.com/jihoon22-lee/CODEYE/internal/prcomment"
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 	"github.com/jihoon22-lee/CODEYE/internal/reportsvc"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
@@ -100,6 +101,9 @@ type Store interface {
 	ExportReport(ctx context.Context, actor, runID string, revision int, ex postgres.ReportExport) (postgres.ReportRecord, error)
 	ListReports(ctx context.Context, actor, runID string) ([]postgres.ReportSummary, error)
 	reportsvc.Store
+	// Pull-request comments (personal mode).
+	prcomment.Store
+	PullRequestCommentPreview(ctx context.Context, actor, runID string, revision int) (postgres.CommentPreview, error)
 	// Comparison and finding reviews.
 	LoadComparison(ctx context.Context, actor, runID string, revision int, baselineRun string, baselineRevision int) (postgres.ComparisonData, error)
 	DefaultBaseline(ctx context.Context, actor, runID string) (*postgres.BaselineRef, error)
@@ -170,7 +174,9 @@ type Server struct {
 	sweepEvery time.Duration
 	scaleEvery time.Duration
 
-	publisher    *reportsvc.Publisher
+	publisher *reportsvc.Publisher
+	// commenter posts the pull-request comments (personal mode only).
+	commenter    *prcomment.Poster
 	publishEvery time.Duration
 	publishKick  chan struct{}
 
@@ -275,6 +281,9 @@ func New(cfg Config, store Store) (*Server, error) {
 	if s.artifacts != nil {
 		s.publisher = &reportsvc.Publisher{Store: store, Artifacts: s.artifacts, Registry: report.DefaultRegistry(), Log: s.log}
 		s.publishKick = make(chan struct{}, 1)
+		if s.personal != nil {
+			s.commenter = &prcomment.Poster{Store: store, GitHub: s.personal.gitHub, Log: s.log}
+		}
 	}
 	if cfg.WebDir != "" {
 		if root, err := os.OpenRoot(cfg.WebDir); err == nil {

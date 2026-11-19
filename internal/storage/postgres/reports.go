@@ -287,6 +287,11 @@ func (s *Store) PublishReport(ctx context.Context, in ReportPublication) (Report
 		if err != nil {
 			return out{}, err
 		}
+		// A pull-request run that asked for a comment queues it with the
+		// report (the outbox the controller's poster works through).
+		if err = queuePullRequestComment(ctx, tx, in.RunID, rec.Revision); err != nil {
+			return out{}, err
+		}
 		payload := map[string]any{"report_id": rec.ID, "revision": rec.Revision, "status": rec.Status, "quality_verdict": rec.QualityVerdict, "body_sha256": rec.BodySHA256, "attempt_id": a.ID}
 		if r.Status == domain.RunCancelRequested {
 			if err = transitionRun(ctx, tx, &r, domain.RunCancelling, "run.status", map[string]any{"status": domain.RunCancelling}); err != nil {
