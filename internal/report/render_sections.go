@@ -22,6 +22,9 @@ type secView struct {
 	view
 	Sections []secBlock
 	Appendix []secPart
+	// Summary selects the summary layout (render_summary.go): the appendix
+	// is Appendix instead of the full record tables.
+	Summary bool
 }
 
 // secBlock is one top-level section.
@@ -41,6 +44,8 @@ type secPart struct {
 	Table    *secTable
 	List     []secItem
 	Findings []Finding
+	// Cards are the short finding cards of the summary layout.
+	Cards []secCard
 	// Empty is shown instead of an empty table, list or finding list;
 	// ShowEmpty is set when the part has none of them.
 	Empty     string
@@ -53,6 +58,15 @@ type secTable struct {
 	// ObservationIDs, when set, name the observation of each row (HTML row
 	// id and data-observation).
 	ObservationIDs []string
+	// RowIDs, when set, are the HTML row ids of the summary layout's rows
+	// (a finding or a detection the overview links to).
+	RowIDs []string
+}
+
+// secCard is one finding of the summary layout: its title and a few lines.
+type secCard struct {
+	ID, Title string
+	Lines     []secItem
 }
 
 // secCell is plain text or a code span; Anchor links to an in-page id.
@@ -785,6 +799,7 @@ func mdPart(p func(...string), part secPart, l Locale) {
 	for _, f := range part.Findings {
 		mdFinding(p, f, "#### ")
 	}
+	mdCards(p, part.Cards)
 	if part.ShowEmpty {
 		p(mdText(part.Empty))
 		p()
@@ -828,12 +843,13 @@ nav ol{columns:2}
 </table>
 <p class="banner" role="status">{{.Banner}}</p>
 <nav aria-label="{{.L.Label "overview_sections"}}"><ol>{{range .Sections}}<li><a href="#{{.ID}}">{{.Title}}</a>{{if .State}} — {{.State}}{{end}}</li>{{end}}<li><a href="#appendix">{{.L.Label "section.appendix"}}</a></li></ol></nav>
-{{$l := .L}}{{range .Sections}}<section id="{{.ID}}" data-section="{{.ID}}">
+{{$l := .L}}{{if .Summary}}<p class="banner" role="note">{{.L.Label "summary.layout_note"}}</p>
+{{end}}{{range .Sections}}<section id="{{.ID}}" data-section="{{.ID}}">
 <h2>{{.Title}}</h2>
 {{range .Parts}}{{template "part" (pair $l .)}}{{end}}</section>
 {{end}}<section id="appendix">
 <h2>{{.L.Label "section.appendix"}}</h2>
-<p>{{.L.Label "appendix.lead"}}</p>
+{{if .Summary}}{{range .Appendix}}{{template "part" (pair $l .)}}{{end}}{{else}}<p>{{.L.Label "appendix.lead"}}</p>
 <h3>{{.L.Label "ai_review"}}</h3>
 <p>상태: <code data-field="ai_review">{{.R.Coverage.AIReview.Status}}</code> {{with .R.Coverage.AIReview.Reason}}<code>{{.}}</code>{{end}}</p>
 {{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code> · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침{{if .PackID}} <code>{{.PackID}}@{{.PackVersion}}</code>{{end}} <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
@@ -860,7 +876,7 @@ nav ol{columns:2}
 {{end}}</table></div>
 <h3>{{.L.Label "limitations"}}</h3>
 <ul>{{range .Limitations}}<li>{{.}}</li>{{end}}</ul>
-</section>
+{{end}}</section>
 <p>digest sha256: <code>{{.Digest}}</code></p>
 </body>
 </html>
@@ -871,7 +887,7 @@ nav ol{columns:2}
 {{range .Counts}}<tr><td>{{.Label}}</td><td data-count="{{.Name}}">{{.Value}}</td></tr>
 {{end}}</table>
 {{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table><tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}</tr>
-{{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}</tr>
+{{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}</tr>
 {{end}}</table></div>
 {{end}}{{if .List}}<ul>{{range .List}}<li>{{if .Link}}<a href="#{{.Link}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}{{range .Codes}} <code>{{.}}</code>{{end}}</li>{{end}}</ul>
 {{end}}{{range .Findings}}<section class="finding" id="{{.ID}}" data-finding="{{.ID}}">
@@ -891,6 +907,9 @@ nav ol{columns:2}
 {{range .Verification}}<li>verification: {{.}}</li>{{end}}
 {{range .Limitations}}<li>limitation: {{.}}</li>{{end}}
 </ul></section>
+{{end}}{{range .Cards}}<section class="finding" id="{{.ID}}" data-finding="{{.ID}}">
+<h4>{{.Title}}</h4>
+<ul>{{range .Lines}}<li>{{.Text}}{{range .Codes}} <code>{{.}}</code>{{end}}</li>{{end}}</ul></section>
 {{end}}{{if .ShowEmpty}}<p>{{.Empty}}</p>
 {{end}}{{end}}{{end}}`))
 

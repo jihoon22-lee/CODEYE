@@ -51,14 +51,21 @@ func TestRealReportRenders(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := Digest(raw)
-	md := RenderMarkdown(r, digest, Korean)
-	if bytes.Contains(md, []byte("%!")) {
-		t.Fatal("format error in the rendering")
-	}
-	t.Logf("builder %s: markdown %d lines", r.Builder.Version, strings.Count(string(md), "\n"))
-	if out := os.Getenv("CODEYE_REAL_REPORT_OUT"); out != "" {
-		if err := os.WriteFile(out, md, 0o600); err != nil {
+	for _, detail := range []string{DetailSummary, DetailFull} {
+		md := RenderMarkdownAt(r, digest, Korean, detail)
+		html, err := RenderHTMLAt(r, digest, Korean, detail)
+		if err != nil {
 			t.Fatal(err)
+		}
+		if bytes.Contains(md, []byte("%!")) || bytes.Contains(html, []byte("%!")) {
+			t.Fatalf("format error in the %s rendering", detail)
+		}
+		checkInPageLinks(t, html)
+		t.Logf("builder %s, %s: markdown %d lines, html %d bytes", r.Builder.Version, detail, strings.Count(string(md), "\n"), len(html))
+		if out := os.Getenv("CODEYE_REAL_REPORT_OUT"); out != "" {
+			if err := os.WriteFile(out+"."+detail+".md", md, 0o600); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 }

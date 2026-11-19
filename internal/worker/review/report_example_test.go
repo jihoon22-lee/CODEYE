@@ -557,7 +557,7 @@ func exampleMarkdown(t *testing.T, r report.Report) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	md := string(report.RenderMarkdown(r, report.Digest(b), report.Korean))
+	md := string(report.RenderMarkdownAt(r, report.Digest(b), report.Korean, report.DetailSummary))
 	title, rest, ok := strings.Cut(md, "\n")
 	if !ok {
 		t.Fatal("rendered markdown has no title line")

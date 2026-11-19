@@ -74,7 +74,7 @@ func TestReportSlicesExample(t *testing.T) {
 		t.Fatal(err)
 	}
 	pretty.WriteByte('\n')
-	md := string(report.RenderMarkdown(r, report.Digest(raw), report.Korean))
+	md := string(report.RenderMarkdownAt(r, report.Digest(raw), report.Korean, report.DetailSummary))
 	title, rest, _ := strings.Cut(md, "\n")
 	files := map[string][]byte{sliceExampleJSON: pretty.Bytes(), sliceExampleMD: []byte(title + "\n\n" + sliceExampleBanner + rest)}
 	if os.Getenv("CODEYE_UPDATE_EXAMPLES") == "1" {
