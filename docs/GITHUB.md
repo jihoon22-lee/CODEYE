@@ -74,9 +74,11 @@ github: no token (sign in with `gh auth login` or set GH_TOKEN, then run codeye 
 
 `GET /api/v1/setup`의 `github`는 token이 있는지(`token`), 계정, 출처(`GH_TOKEN`·`GITHUB_TOKEN`·`gh`)와 이유만 싣는다. token 자체는 설정 파일, 명령 인자, 로그, 보고서, 감사 기록, 데이터베이스 어디에도 들어가지 않는다. 설정에 `"github": {"enabled": false}`를 두면 발견을 끈다(공개 저장소만, pull request는 token 없이 공개 저장소만 확인).
 
+**오프라인 모드**(`"offline": true`, [운영](OPERATIONS.md#오프라인-모드))에서는 GitHub을 쓰지 않는다. 환경변수·gh에서 token을 찾지 않고(`gh auth token`을 실행하지 않는다) 이전에 저장한 `github.json`을 지우며, github.com은 기본 Git 호스트가 아니다. `git_hosts`에 github.com을 적어도 token은 보내지 않는다. pull request 주소는 `codeye up`과 `POST /projects/{id}/runs`가 거부한다(`PULL_REQUEST_UNSUPPORTED`). controller는 GitHub API를 부르지 않는다(pull request 확인·댓글 미리보기·게시 없음). `codeye up` 출력은 `github: off (offline mode) - ...`, `GET /setup`의 `github`는 `enabled: false`, `reason: "offline_mode"`다. 사내 Git 호스트용 credential은 지원하지 않는다(그 호스트는 인증 없이 읽을 수 있어야 한다).
+
 token을 쓰는 곳은 둘이다.
 
-- **Git fetch**: 에이전트는 파일 경로(`--git-credential-file`)만 받고, 워커가 fetch마다 파일을 읽어 github.com 요청에만 HTTP header로 넣는다. header는 git 환경변수(`GIT_CONFIG_COUNT`, `http.https://github.com/.extraHeader`)로 전달하므로 URL, argv, 작업 사본, snapshot에 남지 않는다. 분석기와 모델 프로세스는 이 파일과 값을 받지 않는다.
+- **Git fetch**: 에이전트는 파일 경로(`--git-credential-file`)만 받고, 워커가 fetch마다 파일을 읽어 github.com 요청에만 HTTP header로 넣는다. header는 git 환경변수(`GIT_CONFIG_COUNT`, `http.https://github.com/.extraHeader`)로 전달하므로 URL, argv, 작업 사본, snapshot에 남지 않는다. `ca_bundle`이 있으면 같은 git 프로세스 환경에 `GIT_SSL_CAINFO`·`SSL_CERT_FILE`도 들어간다([사내 CA](OPERATIONS.md#사내-ca)). 분석기와 모델 프로세스는 이 파일과 값을 받지 않는다.
 - **GitHub API**: controller와 `codeye up`이 pull request 확인과 댓글 게시에 쓴다. 요청마다 파일을 다시 읽으므로 token이 바뀌어도 다시 시작할 필요가 없다. redirect를 따라가지 않고, 다음 page 주소가 API와 다른 origin이면 쓰지 않는다.
 
 ## pull request 분석

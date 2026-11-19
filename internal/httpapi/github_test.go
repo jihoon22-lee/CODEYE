@@ -166,6 +166,26 @@ func TestPullRequestRunsOverHTTP(t *testing.T) {
 	sched["run"].(map[string]any)["pull_request"] = map[string]any{"number": 7}
 	e.do("POST", "/api/v1/projects/"+p+"/schedules", sched, opts{cookie: u.cookie, csrf: u.csrf, idem: domain.NewID()}).want(t, 422, "VALIDATION_FAILED")
 
+	// Offline mode (the setup summary `codeye up` wrote): the pull request is
+	// refused before any GitHub call, and the preview asks GitHub nothing.
+	if err := os.MkdirAll(filepath.Join(state, "run"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(state, "run", PersonalSetupFile), []byte(`{"schema_version":"0.1","model":null,"git":false,"git_hosts":[],"offline":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	calls := len(fake.Requests())
+	if r := run(u, p, runBody(map[string]any{"number": 7}), 422, "PULL_REQUEST_UNSUPPORTED"); !strings.Contains(string(r.raw), "offline mode") {
+		t.Fatalf("offline refusal %s", r.raw)
+	}
+	e.do("GET", "/api/v1/runs/"+on.body["id"].(string)+"/pull-request-comment", nil, u.o()).want(t, 200, "")
+	if n := len(fake.Requests()); n != calls {
+		t.Fatalf("%d GitHub calls offline", n-calls)
+	}
+	if err := os.Remove(filepath.Join(state, "run", PersonalSetupFile)); err != nil {
+		t.Fatal(err)
+	}
+
 	// Every API call carried the stored token; no answer or log line did.
 	for _, rq := range fake.Requests() {
 		if !rq.Authorized {

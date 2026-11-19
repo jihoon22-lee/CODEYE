@@ -80,6 +80,7 @@ jobs:
         run: |
           python -m unittest discover -s scripts -p test_model_budget_relay.py -v
           python -m unittest discover -s scripts -p test_quality_eval.py -v
+          python -m unittest discover -s scripts -p test_offline_pack.py -v
           python scripts/validate_bundle.py
           python -m unittest discover -s fixtures/cleanup -p 'test_*.py' -v
           python fixtures/regression/corpus.py --check
@@ -122,3 +123,5 @@ jobs:
       - run: npm --prefix web ci
       - run: npm --prefix web test
       - run: npm --prefix web run build
+      # The built web app must load nothing from an external host (offline pack).
+      - run: python3 scripts/offline_pack.py check-web web/dist

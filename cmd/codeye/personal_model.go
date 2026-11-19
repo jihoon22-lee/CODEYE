@@ -53,7 +53,13 @@ func modelAgentArgs(cfg *personal.Config, layout personal.Layout) []string {
 // key. A failed probe is reported and does not stop `up`: static analysis
 // runs, and the report says why model review was not performed.
 func setupPersonalModel(ctx context.Context, cfg *personal.Config, layout personal.Layout, noProbe bool, out io.Writer) *personal.ResolvedModel {
-	setup, err := personal.WriteModelSecretFromEnv(layout, os.Getenv)
+	// Offline, a key from the environment is for a provider's public endpoint:
+	// it is neither stored nor used, and the key file stays as it is.
+	var setup personal.ModelSetup
+	var err error
+	if !cfg.Offline {
+		setup, err = personal.WriteModelSecretFromEnv(layout, os.Getenv)
+	}
 	switch {
 	case err != nil:
 		fmt.Fprintln(out, "model: cannot store the API key:", err)
@@ -64,6 +70,9 @@ func setupPersonalModel(ctx context.Context, cfg *personal.Config, layout person
 	switch {
 	case err != nil:
 		fmt.Fprintln(out, "model: not configured -", err, "- model review is skipped, static analysis runs")
+		return nil
+	case m == nil && cfg.Offline:
+		fmt.Fprintf(out, "model: none (offline mode: write %s with an internal endpoint in base_url, docs/OPERATIONS.md) - static analysis only\n", layout.ModelSecret())
 		return nil
 	case m == nil:
 		fmt.Fprintln(out, "model: none (set OPENAI_API_KEY, ANTHROPIC_API_KEY or OPENCODE_API_KEY and run codeye up again) - static analysis only")

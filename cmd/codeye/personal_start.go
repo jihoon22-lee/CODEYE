@@ -357,7 +357,7 @@ func ensurePoolWorkers(ctx context.Context, s *postgres.Store, cfg *personal.Con
 // directory (no key, no token).
 func writePersonalSetup(cfg *personal.Config, layout personal.Layout, m *personal.ResolvedModel, gh personal.GitHubSetup) error {
 	st := httpapi.PersonalSetup{SchemaVersion: "0.1", Git: cfg.Agent.Git != "" && len(cfg.GitHosts) > 0, GitHosts: append([]string{}, cfg.GitHosts...), BackupDir: backupDirOf(cfg),
-		GitHub: setupGitHubOf(gh)}
+		GitHub: setupGitHubOf(gh), Offline: cfg.Offline}
 	if m != nil {
 		st.Model = &httpapi.SetupModel{ID: m.ID, Probe: personal.ModelProbeResult(layout, m)}
 	}
@@ -576,6 +576,12 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	// A project folder must not hold CODEYE's own data, however it was
 	// registered.
 	args = append(args, "--protected-dir", layout.Root, "--protected-dir", backupDirOf(cfg))
+	if cfg.Offline {
+		args = append(args, "--offline")
+	}
+	if cfg.CABundle != "" {
+		args = append(args, "--ca-bundle", cfg.CABundle)
+	}
 	if a.Git != "" && len(cfg.GitHosts) > 0 {
 		args = append(args, "--git", a.Git)
 		for _, h := range cfg.GitHosts {

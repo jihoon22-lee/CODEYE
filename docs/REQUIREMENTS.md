@@ -148,7 +148,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 개인 모드에도 
 | REQ-022 | durable queue·lease/fencing·취소·복구·다시 시도(`POST /runs/{id}/retry`)는 구현. `recovery_required` run의 다시 시도는 미구현([API](API.md#다시-시도)) |
 | REQ-024 | 승인된 HTTPS 호스트의 공개 Git 저장소 읽기는 구현(개인 모드는 주소 하나로, 브랜치를 비우면 기본 브랜치). 개인 모드는 github.com token을 자동으로 찾아 비공개 저장소를 읽고, pull request 주소를 분석하며, 켠 경우 결과 댓글 하나를 게시한다(구현). GHES 실기, 서버 모드의 credential, App·webhook·댓글 명령은 설계 계약(미구현) |
 | REQ-025 | 연결 진단과 권한 부여 가이드는 설계 계약(미구현) |
-| REQ-030 | 외부 다운로드·모델 fallback을 하지 않는 실행 경로는 구현. 폐쇄망 배포와 검증은 미실행 |
+| REQ-030 | 외부 다운로드·모델 fallback을 하지 않는 실행 경로, 폐쇄망 배포팩(`scripts/offline_pack.py`), 오프라인 모드(`offline`), 사내 CA(`ca_bundle`), doctor 오프라인 점검은 구현. 사설 CA·로컬 미러·network namespace로 확인했고 실제 폐쇄망·RHEL 8.10은 미실행 |
 | REQ-031 | 코드 포함/미포함 내보내기와 요청마다의 열람 권한 확인은 구현. 여러 사용자 사이의 접근 제어는 다중 사용자 작업에 속함 |
 
 ## 분석 프로필

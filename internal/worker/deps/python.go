@@ -147,9 +147,10 @@ func pythonEnv(exe string) map[string]string {
 	return vars
 }
 
-// uvEnv is the environment of uv: it never downloads an interpreter.
-func uvEnv(uv string) map[string]string {
-	vars := map[string]string{"PATH": filepath.Dir(uv), "LANG": "C.UTF-8", "UV_PYTHON_DOWNLOADS": "never", "NO_COLOR": "1"}
+// uvEnv is the environment of uv: it never downloads an interpreter, and
+// trusts bundle when one is set.
+func uvEnv(uv, bundle string) map[string]string {
+	vars := executor.AddCAEnv(map[string]string{"PATH": filepath.Dir(uv), "LANG": "C.UTF-8", "UV_PYTHON_DOWNLOADS": "never", "NO_COLOR": "1"}, bundle)
 	if runtime.GOOS == "windows" {
 		if v := os.Getenv("SystemRoot"); v != "" {
 			vars["SystemRoot"] = v
@@ -279,7 +280,7 @@ func (PythonFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		status, reason := StopOutcome(env.Stop())
 		return fail(status, depdoc.StateFailed, reason)
 	}
-	pyVars := pythonEnv(cfg.Python)
+	pyVars := executor.AddCAEnv(pythonEnv(cfg.Python), cfg.CABundle)
 	res, ok := env.Exec(ctx, "python.version", spec(cfg.Python, pyVars, nil, "-I", "-S", "-c", pyVersionScript))
 	if !ok {
 		return stopped()
@@ -290,7 +291,7 @@ func (PythonFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		return fail(domain.TaskFailed, depdoc.StateFailed, depdoc.ReasonToolchainUnavailable)
 	}
 	if cfg.UV != "" {
-		res, ok = env.Exec(ctx, "uv.version", spec(cfg.UV, uvEnv(cfg.UV), nil, "--version"))
+		res, ok = env.Exec(ctx, "uv.version", spec(cfg.UV, uvEnv(cfg.UV, cfg.CABundle), nil, "--version"))
 		if !ok {
 			return stopped()
 		}
@@ -334,7 +335,7 @@ func (PythonFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		args := []string{"export", "--frozen", "--offline", "--no-config", "--project", filepath.Join(job.Snapshot.WorkspaceDir, filepath.FromSlash(m.Dir)),
 			"--format", "requirements-txt", "--all-extras", "--all-groups", "--no-emit-project", "--no-emit-workspace", "--no-emit-local",
 			"--no-header", "--no-annotate", "--cache-dir", filepath.Join(env.TaskDir, "uv-export-cache")}
-		res, ok = env.Exec(ctx, "uv.export", spec(cfg.UV, uvEnv(cfg.UV), nil, args...))
+		res, ok = env.Exec(ctx, "uv.export", spec(cfg.UV, uvEnv(cfg.UV, cfg.CABundle), nil, args...))
 		if !ok {
 			return stopped()
 		}
@@ -432,6 +433,10 @@ func (PythonFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		if meta, ok := readTreeMeta(final, minor); ok {
 			return meta.outcome(out, path.Join(pythonCacheDir, "trees", key), LimPyTreeReused)
 		}
+	}
+	if cfg.Offline && cfg.PipIndexURL == "" {
+		// PyPI is the built-in default; a tree prepared earlier is still read.
+		return fail(domain.TaskSkippedPolicy, depdoc.StateSkipped, depdoc.ReasonOfflineNoRegistry)
 	}
 	var tree string
 	if key != "" {
@@ -586,7 +591,7 @@ func (p pyInstall) run(ctx context.Context, tree string, reqs []requirement) (tr
 		var vars map[string]string
 		var args []string
 		if p.cfg.UV != "" {
-			exe, vars = p.cfg.UV, uvEnv(p.cfg.UV)
+			exe, vars = p.cfg.UV, uvEnv(p.cfg.UV, p.cfg.CABundle)
 			args = []string{"pip", "install", "--target", site, "--python", p.cfg.Python, "--no-build", "--no-config", "--no-progress", "--color", "never",
 				"--cache-dir", downloads, "-r", list}
 		} else {

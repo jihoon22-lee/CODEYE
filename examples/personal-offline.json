@@ -1,0 +1,26 @@
+{
+  "schema_version": "0.1",
+  "state_dir": "/home/user/.local/state/codeye",
+  "offline": true,
+  "ca_bundle": "/etc/pki/tls/certs/ca-bundle.crt",
+  "git_hosts": ["git.corp.example"],
+  "database": {
+    "mode": "managed",
+    "postgres_bin_dir": "/usr/pgsql-17/bin"
+  },
+  "source_roots": [
+    {"label": "work", "path": "/home/user/src"}
+  ],
+  "agent": {
+    "max_workers": 2,
+    "go_mod_cache": "/home/user/go/pkg/mod",
+    "dependencies": {
+      "go_proxy": "https://mirror.corp.example/go",
+      "go_sumdb": "off",
+      "go_private": "git.corp.example",
+      "npm_registry": "https://mirror.corp.example/npm/",
+      "pip_index_url": "https://mirror.corp.example/pypi/simple"
+    }
+  },
+  "backup_dir": "/home/user/codeye-backups"
+}

@@ -23,7 +23,8 @@ import (
 const usage = `CODEYE control plane
 Usage:
   codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
-  codeye tools [--config PATH] [--json]   (the tools found on this machine, what is missing and how to add it)
+  codeye tools [--config PATH] [--json | --checklist]   (the tools found on this machine, what is missing and how to add it; --checklist: offline preparation)
+  codeye version [--json]
   codeye model probe [--config PATH] [--timeout 180s] [--json]
   codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH] [--timeout 180s] [--json]
   codeye migrate
@@ -38,7 +39,7 @@ Usage:
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
   codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--personal [--state-dir DIR]]
                [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]]   (required for a non-loopback --listen)
-` + nodeAdminUsage + `  codeye up [PATH|URL] [--config PATH] [--postgres-bin-dir DIR] [--no-open] [--no-probe]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH or a repository URL)
+` + nodeAdminUsage + `  codeye up [PATH|URL] [--config PATH] [--postgres-bin-dir DIR] [--offline] [--no-open] [--no-probe]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH or a repository URL)
   codeye up https://github.com/OWNER/REPO/pull/N [--comment[=false]] [--dry-run-comment] [--comment-wait DURATION]   (analyzes a pull request; --comment posts one result comment and is remembered; --dry-run-comment prints it without posting)
   codeye open [--config PATH] [--no-open]   (a new signed-in browser link)
   codeye start [--config PATH]      (personal mode without a project or browser)
@@ -47,7 +48,7 @@ Usage:
   codeye backup [--config PATH] [--output DIR] [--format text|json]   (default output: <backup_dir>/codeye-<UTC>)
   codeye restore [--config PATH] --from DIR [--format text|json]   (new empty database and state_dir only)
   codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
-               [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
+               [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ... [--git-credential-file PATH]] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
                [--cppcheck /abs/cppcheck] [--clang-tidy /abs/clang-tidy]
                [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit] [--advertise-without-baseline]
                [--eslint /abs/eslint/bin/eslint.js] [--tsc /abs/typescript/bin/tsc]
@@ -55,6 +56,7 @@ Usage:
                [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]
                [--repo-code-source-root ID ...] [--project-analysis-policy] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
                [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1] [--review-max-calls 15..207]
+               [--offline] [--ca-bundle /abs/ca-bundle.pem]   (offline: no built-in public registry or model endpoint; the CA bundle the fetch, Git and model processes trust)
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema, except that personal mode with database.mode managed migrates on up/start after saving a pg_dump copy.
 Login links: codeye login-link and codeye start write them to a 0600 file; codeye up and codeye open print them and open the browser.
 Passwords are read from --password-file (mode 0600) or standard input (echo off on a Linux terminal), never from arguments.

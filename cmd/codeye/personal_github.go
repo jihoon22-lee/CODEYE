@@ -32,6 +32,8 @@ func setupPersonalGitHub(ctx context.Context, cfg *personal.Config, layout perso
 	switch {
 	case err != nil:
 		fmt.Fprintln(out, "github:", err)
+	case st.Reason == personal.GitHubOffline:
+		fmt.Fprintln(out, "github: off (offline mode) - no token is looked up or used, github.com is not a Git host, no pull requests")
 	case !st.Enabled:
 		fmt.Fprintln(out, "github: off (github.enabled false) - public repositories only, no pull-request comments")
 	case st.Available && st.Login != "":
@@ -53,7 +55,7 @@ func setupPersonalGitHub(ctx context.Context, cfg *personal.Config, layout perso
 // discovery is on, whether or not a token was found, so a token appearing or
 // going away later does not restart the agent.
 func gitHubCredentialArgs(cfg *personal.Config, layout personal.Layout) []string {
-	if !cfg.GitHub.On() || cfg.Agent.Git == "" || !slices.Contains(cfg.GitHosts, github.Host) {
+	if !cfg.GitHub.On() || cfg.Offline || cfg.Agent.Git == "" || !slices.Contains(cfg.GitHosts, github.Host) {
 		return nil
 	}
 	return []string{"--git-credential-file", layout.GitHubSecret()}

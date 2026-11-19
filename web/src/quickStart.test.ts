@@ -132,6 +132,14 @@ describe('better results', () => {
       { key: 'tool:go', text: t.improve.packageManager('go') },
       { key: 'dependency_registry', text: t.improve.registry },
     ]);
+    // Offline without an internal mirror: name the mirror settings, never "turn fetching on".
+    const offline = [
+      gap('dependencies_not_prepared', 'deps.go', 'offline_no_registry_configured', 'environment'),
+      gap('dependencies_not_prepared', 'deps.python', 'offline_no_registry_configured', 'environment'),
+    ];
+    expect(improvementHints(offline, SETUP, project(choices))).toEqual([
+      { key: 'dependency_offline', text: t.improve.offlineRegistry },
+    ]);
     // A missing go analyzer tool and a missing go package manager are one install.
     const withTool = { ...SETUP, tools: { detected_at: null, tools: [{ name: 'go', status: 'not_found', version: null, path: null, hint: 'install go 1.27', reason: null }] } };
     expect(improvementHints([gap('task_unsupported', 'go-vet', 'tool_not_configured'), notPrepared[0]!], withTool, project(choices))).toEqual([

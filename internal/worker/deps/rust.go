@@ -104,6 +104,11 @@ func (RustFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 			return fail(domain.TaskSkippedPolicy, depdoc.StateSkipped, depdoc.ReasonNoDependencies)
 		}
 	}
+	if cfg.Offline {
+		// cargo's registry is crates.io unless a repository's own Cargo
+		// configuration replaces it; CODEYE has no crate mirror setting.
+		return fail(domain.TaskSkippedPolicy, depdoc.StateSkipped, depdoc.ReasonOfflineNoRegistry)
+	}
 	cache := env.CacheDir(RustCacheKey)
 	if os.MkdirAll(cache, 0o700) != nil {
 		return fail(domain.TaskFailed, depdoc.StateFailed, depdoc.ReasonCacheQuotaExceeded)
@@ -114,7 +119,7 @@ func (RustFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 	}
 	workspace := job.Snapshot.WorkspaceDir
 	moduleDir := filepath.Join(workspace, filepath.FromSlash(m.Dir))
-	vars := cargo.FetchEnv(cache, target, "")
+	vars := executor.AddCAEnv(cargo.FetchEnv(cache, target, ""), cfg.CABundle)
 	spec := func(exe string, args ...string) executor.Spec {
 		return executor.Spec{Executable: exe, Args: args, WorkspaceRoot: workspace, Dir: moduleDir,
 			ProtectedRoots: []string{job.Snapshot.SnapshotDir}, Env: vars, Redact: []string{cfg.CacheRoot}}

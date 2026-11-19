@@ -81,7 +81,7 @@ func TestGoPrivateModuleNotFetched(t *testing.T) {
 
 func TestRegistryProxiesAndPatterns(t *testing.T) {
 	for in, want := range map[string]string{"": DefaultGoProxy, "https://a,direct": "https://a", "https://a|https://b,off": "https://a,https://b", "direct": "", "off": ""} {
-		if got := strings.Join(registryProxies(in), ","); got != want {
+		if got := strings.Join(registryProxies(in, false), ","); got != want {
 			t.Errorf("registryProxies(%q) = %q, want %q", in, got, want)
 		}
 	}

@@ -107,6 +107,8 @@ type ConfigEdit struct {
 	AddRoot *SourceRoot
 	// PostgresBinDir sets database.postgres_bin_dir.
 	PostgresBinDir string
+	// Offline sets "offline": true (codeye up --offline).
+	Offline bool
 }
 
 // EditFile applies e to the file at path, validates the result like Load and
@@ -131,6 +133,11 @@ func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
 		dir, _ := json.Marshal(e.PostgresBinDir)
 		db["postgres_bin_dir"] = dir
 		if err := doc.set("database", db); err != nil {
+			return nil, err
+		}
+	}
+	if e.Offline {
+		if err := doc.set("offline", true); err != nil {
 			return nil, err
 		}
 	}

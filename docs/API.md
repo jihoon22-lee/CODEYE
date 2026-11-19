@@ -201,7 +201,7 @@
 - 개인 모드(`mode: "personal"`): `model`은 `{configured, id, probe}`(키 없음, probe는 `verified`·`failed`·`not_probed`), `git`은 `{available, hosts}`, `readable_folders`는 이 사용자에게 허가된 root의 절대 경로, `tools`는 `codeye up`이 찾은 도구(`<state_dir>/tools.json`, [schema](../schemas/tools.schema.json))다. 기록이 아직 없으면 `git`·`tools`가 `null`이다.
 - 서버 모드(`mode: "server"`): controller는 노드마다 다른 이 정보를 모르므로 `model`·`git`·`tools`가 `null`이고 `readable_folders`가 비어 있다.
 - `analysis_defaults`는 `{local, git}`의 기본 분석 선택이다.
-- `github`(개인 모드)은 `{enabled, host, token, account, source, reason}`이다. token 자체는 싣지 않는다. `token`은 저장된 token이 있는지, `account`는 그 token의 GitHub 계정, `source`는 `GH_TOKEN`·`GITHUB_TOKEN`·`gh`, `reason`은 token이 없거나 계정을 모르는 이유(`no_token`, `token_refused`, `github_unavailable` 등)다. 서버 모드와 이전 설정 요약은 `null`이다.
+- `github`(개인 모드)은 `{enabled, host, token, account, source, reason}`이다. token 자체는 싣지 않는다. `token`은 저장된 token이 있는지, `account`는 그 token의 GitHub 계정, `source`는 `GH_TOKEN`·`GITHUB_TOKEN`·`gh`, `reason`은 token이 없거나 계정을 모르는 이유(`no_token`, `token_refused`, `github_unavailable`, 오프라인 모드면 `offline_mode`(이때 `enabled`는 false) 등)다. 서버 모드와 이전 설정 요약은 `null`이다.
 
 ## 실행 조회와 진행
 

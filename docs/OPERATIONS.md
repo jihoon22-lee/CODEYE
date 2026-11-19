@@ -1,6 +1,6 @@
 # 배포와 운영
 
-한 머신에서 CODEYE를 Native로 운영하는 개인 모드의 계약과, 아직 구현하지 않은 서버·노드·폐쇄망 배포의 설계 계약을 적는다. 사용자용 절차는 [사용 안내서](GUIDE.md)에 있다. 보안 경계와 보관·삭제 정책은 [보안](SECURITY.md), 실행기와 워커 정책은 [실행](EXECUTION.md)에 있다.
+한 머신에서 CODEYE를 Native로 운영하는 개인 모드의 계약, 폐쇄망 배포팩과 오프라인 모드, 아직 구현하지 않은 서버·노드 배포의 설계 계약을 적는다. 사용자용 절차는 [사용 안내서](GUIDE.md)에 있다. 보안 경계와 보관·삭제 정책은 [보안](SECURITY.md), 실행기와 워커 정책은 [실행](EXECUTION.md)에 있다.
 
 | 범위 | 상태 |
 |---|---|
@@ -10,7 +10,8 @@
 | 백업·복원 | DB와 확정 산출물을 같은 논리 시점으로 묶는다. 빈 대상에만 복원하고 이전 lease를 살리지 않는다 |
 | `codeye doctor` | 호스트·도구·DB 진단. 도구는 에이전트가 쓰는 탐색과 같은 방법으로 찾는다. `--config`를 주면 저장 영역 사용량·상한, 최신 백업 나이, start/stop 상태 일관성을 더한다 |
 | `codeye tools` | 이 머신에서 찾은 도구, 없는 도구, 추가 방법을 표로 보인다 |
-| 서버 배포, 다중 노드, 폐쇄망 배포팩 | 설계 계약(미구현). 마지막 두 절 |
+| 폐쇄망 배포팩, 오프라인 모드, 사내 CA | 묶음 스크립트·`offline`·`ca_bundle`·doctor 점검 구현. 사설 CA·로컬 미러·network namespace로 검증했고 실제 폐쇄망·RHEL 8.10은 실행하지 않았다. [마지막 절](#폐쇄망-배포팩) |
+| 서버 배포, 다중 노드 | 설계 계약(미구현). [서버·노드 배포](#서버노드-배포-설계-계약-미구현) |
 
 관련 요구사항: REQ-018(자원 제한), REQ-021(drain), REQ-022(lease·fencing·복구), NFR-003(재시작 뒤 복구), NFR-006(loopback 개인 모드, 민감값), NFR-007(산출물 hash). 수용 시험 TC-124~127, TC-32, TC-170~175는 [시험](TESTING.md)에 있다.
 
@@ -93,10 +94,10 @@ codeye serve --listen 0.0.0.0:8443 --tls-cert /etc/codeye/tls/cert.pem --tls-key
 ## codeye tools
 
 ```text
-codeye tools [--config PATH] [--json]
+codeye tools [--config PATH] [--json | --checklist]
 ```
 
-이 머신에서 CODEYE가 쓸 수 있는 도구를 찾아 표로 보인다. 찾은 도구는 경로·버전을, 없는 도구는 한 줄 추가 방법을 보인다. `--json`은 같은 결과를 [tools schema](../schemas/tools.schema.json)의 문서로 낸다. `--config`(또는 기본 설정 파일)의 `agent.go`·`agent.tools`·`agent.model.opencode`는 탐색보다 우선하고, 설정 파일 없이도 동작한다. 설정이 있고 그 `state_dir`가 이미 있으면 결과를 `<state_dir>/tools.json`에 쓴다. 그 밖에는 아무것도 만들거나 설치하지 않는다. 탐색 규칙은 [도구 찾기](ANALYZERS.md#도구-찾기)다. 종료 코드는 도구가 없어도 0이고, 설정 오류만 2다.
+이 머신에서 CODEYE가 쓸 수 있는 도구를 찾아 표로 보인다. 찾은 도구는 경로·버전을, 없는 도구는 한 줄 추가 방법을 보인다. `--json`은 같은 결과를 [tools schema](../schemas/tools.schema.json)의 문서로 낸다. `--config`(또는 기본 설정 파일)의 `agent.go`·`agent.tools`·`agent.model.opencode`는 탐색보다 우선하고, 설정 파일 없이도 동작한다. 설정이 있고 그 `state_dir`가 이미 있으면 결과를 `<state_dir>/tools.json`에 쓴다. 그 밖에는 아무것도 만들거나 설치하지 않는다. 탐색 규칙은 [도구 찾기](ANALYZERS.md#도구-찾기)다. 종료 코드는 도구가 없어도 0이고, 설정 오류만 2다. `--checklist`는 폐쇄망용 Markdown 점검표다([분석 도구 옮기기](#분석-도구-옮기기)).
 
 ```text
 TOOL         STATUS  VERSION   WHERE / HOW TO ADD
@@ -154,7 +155,9 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `database.mode` | `managed` | `managed`(상태 디렉터리의 PostgreSQL, [관리형 PostgreSQL](#관리형-postgresql)) 또는 `external`(`CODEYE_DATABASE_URL`) |
 | `database.postgres_bin_dir` | 빈 값 | managed: 처음 찾는 곳이다. 적은 디렉터리에 필요한 프로그램이 없으면 다른 곳을 찾지 않고 오류다. external: `pg_dump`·`pg_restore`가 있는 절대 경로. PATH에서 찾지 않는다. 백업·복원에 필요하다 |
 | `source_roots[]` | 없음(0~32개). 홈 디렉터리는 적지 않아도 root `home`이다(설정에 쓰지 않는다. 적은 root가 홈을 덮거나 홈이 상태 디렉터리 안이면 더하지 않는다) | `label`(1~100자, 앞뒤 공백 없음), 절대 `path`. label과 path는 서로 유일해야 한다. root는 `state_dir` 안이면 안 된다(홈처럼 `state_dir`를 품는 root는 된다. 그 안의 데이터 폴더를 품는 프로젝트는 거부한다). 선택 `repository_code`·`model_review`는 받기만 하고 개인 모드에서는 쓰지 않는다. 프로젝트별 분석 선택이 정한다([안내서](GUIDE.md#프로젝트별-분석-선택)) |
-| `git_hosts` | `["github.com"]`(필드가 없을 때) | 서로 다른 DNS 호스트 이름(선택 포트) 0~16개, 소문자로 바꾼다. `up`·`start`가 호스트마다 provider를 등록하고(`github.com`은 `github`, 그 밖은 `ghes`) 찾은 git과 함께 에이전트에 `--git`·`--git-host`로 넘긴다. 빈 목록이면 Git 주소를 받지 않는다 |
+| `offline` | false | true면 [오프라인 모드](#오프라인-모드). `codeye up --offline`이 이 값을 저장한다 |
+| `ca_bundle` | 빈 값 | 시스템 CA와 사내 CA를 합친 PEM 파일의 절대 경로([사내 CA](#사내-ca)) |
+| `git_hosts` | `["github.com"]`(필드가 없을 때, 오프라인이면 `[]`) | 서로 다른 DNS 호스트 이름(선택 포트) 0~16개, 소문자로 바꾼다. `up`·`start`가 호스트마다 provider를 등록하고(`github.com`은 `github`, 그 밖은 `ghes`) 찾은 git과 함께 에이전트에 `--git`·`--git-host`로 넘긴다. 빈 목록이면 Git 주소를 받지 않는다 |
 | `agent.name` | `personal` | 100자 이하 |
 | `agent.max_workers` | min(4, 논리 CPU 수/2), 최소 1 | 1~16. 에이전트는 `--autoscale --max-workers N`으로 시작하고, `up`·`start`가 `default` 풀의 최대 워커 수를 같은 값으로 둔다 |
 | `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록 |
@@ -176,7 +179,7 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 ## up, open, start, stop, status
 
 ```text
-codeye up     [PATH | GIT-URL] [--config PATH] [--postgres-bin-dir DIR] [--no-open]
+codeye up     [PATH | GIT-URL] [--config PATH] [--postgres-bin-dir DIR] [--no-open] [--offline]
 codeye open   [--config PATH] [--no-open]
 codeye start  [--config PATH]
 codeye stop   [--config PATH] [--format text|json]
@@ -386,7 +389,7 @@ manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exp
 
 ## 서버·노드 배포 (설계 계약, 미구현)
 
-이 절과 다음 절은 설계다. 이 빌드에는 구현도 시험도 없다.
+이 절은 설계다. 이 빌드에는 구현도 시험도 없다.
 
 - controller는 단일 활성 인스턴스로 시작한다. DB와 artifact store를 지정하고 노드 에이전트를 운영자가 직접 설치한다. 서버가 노드에 SSH하지 않는다. 에이전트는 서버에서 작업을 받아 간다.
 - Windows Service나 승인된 작업 실행 방식, Linux systemd/사용자 service 등 로그아웃 뒤에도 지속 실행되는 방법을 환경에 맞게 선택한다.
@@ -397,9 +400,122 @@ manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exp
 - 백업·복구 목표 시간은 실제 데이터 규모를 측정한 뒤 정한다. 복구 시험은 프로젝트·run·report·evidence 링크·ACL·예약 중복 방지를 확인한다. 개인 모드에서 구현한 같은 시점 백업과 lease 비복원 규칙을 서버에도 적용한다.
 - 다중 사용자 권한과 감사 운영은 [보안](SECURITY.md)의 설계 계약을 따른다.
 
-## 폐쇄망 배포팩 (설계 계약, 미구현)
+## 폐쇄망 배포팩
 
-- 버전·hash가 고정된 서비스 바이너리, 웹 자산, DB migration, 규칙팩, 도구 manifest를 제공한다. 폰트·아이콘·JS·CSS·차트에 외부 CDN 의존성을 두지 않는다. 도구 바이너리 재배포가 불가하면 사내 미러에서 설치할 경로와 검증 정보를 제공한다.
-- 분석기 catalog, 언어 toolchain, 프로젝트 의존성 mirror는 구분한다. 미러에 없는 버전은 unavailable로 표시하고 외부 다운로드로 해결하지 않는다. CA 검증을 끄는 방식으로 연결 문제를 감추지 않는다.
-- 설정의 `.invalid` 주소와 예시 경로는 실제 운영 정보로 교체하되 Git에 secret을 올리지 않는다.
-- 외부 telemetry·업데이트·원격 규칙 다운로드·공유는 기본 차단한다.
+인터넷이 없는 머신에 CODEYE를 묶음 하나로 옮겨 설치하고, 오프라인 모드로 CODEYE가 스스로 외부에 접속하지 않게 한다. 묶음을 만드는 것은 별도 명령이 아닌 저장소 스크립트 [scripts/offline_pack.py](../scripts/offline_pack.py)다. 묶음은 연결된 빌드 머신에서 저장소와 Go·Node로 만들고 설치 머신에서는 실행하지 않으므로 `codeye` 실행 파일에 넣을 이유가 없다(A47). 새 서비스나 설치 프로그램은 없다. 풀어 놓은 디렉터리가 곧 설치다.
+
+```text
+python3 scripts/offline_pack.py build [--out .codeye/pack] [--goos linux] [--goarch amd64] [--skip-web-build] [--allow-dirty]
+python3 scripts/offline_pack.py verify codeye-VERSION-linux-amd64.tar.gz | 풀어 놓은 디렉터리
+python3 scripts/offline_pack.py check-web web/dist
+```
+
+- `build`는 `npm --prefix web run build`(생략 가능), `CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.buildVersion=… -X main.buildCommit=… -X main.buildTime=…"`, 웹 외부 주소 검사, 파일 hash, 묶음 쓰기 순이다. 작업 트리에 커밋하지 않은 변경이 있으면 `--allow-dirty` 없이는 만들지 않는다(그때 버전에 `-dirty`가 붙고 MANIFEST의 `dirty`가 true다).
+- 버전은 `git describe --tags --always --dirty`, 빌드 시각은 commit 시각(`SOURCE_DATE_EPOCH`가 있으면 그것)이다.
+- **재현성.** 같은 commit·같은 Go·Node 버전·같은 `web/node_modules`에서 두 번 만든 묶음은 바이트가 같다(이 머신에서 새로 clone한 사본으로 두 번 만들어 sha256이 같음을 확인했다). `--skip-web-build`로 만들면 웹을 만든 Node 버전을 모르므로 MANIFEST의 `node_version`이 null이 되어 바이트가 다르다. 항목 정렬, 모든 항목의 mtime을 빌드 시각으로, uid/gid 0, gzip 헤더의 시각 0·파일 이름 없음으로 쓴다. Go 버전, Node·Vite 버전, 의존성 잠금이 다르면 실행 파일·웹 산출물 바이트가 달라질 수 있고 그것까지 고정하지 않는다. 서명은 없다. 무결성은 sha256으로만 확인한다.
+
+### 배포팩 내용
+
+`codeye-VERSION-OS-ARCH.tar.gz`(최상위 디렉터리 하나)와 옆의 `.tar.gz.sha256`이다. linux/amd64 묶음은 약 8.2 MB(풀면 약 23 MB, 그중 실행 파일이 22 MB)다.
+
+| 파일 | 내용 |
+|---|---|
+| `codeye` | 정적 링크 실행 파일(CGO 없음). `file`은 statically linked, `ldd`는 not a dynamic executable이고 ELF에 interpreter·dynamic section이 없다. build가 이를 검사해 동적이면 실패한다 |
+| `web/dist/` | 빌드된 웹 화면. 외부 주소를 불러오지 않는다(아래) |
+| `docs/GUIDE.md`, `docs/OPERATIONS.md` | 사용 안내서와 이 문서 |
+| `examples/personal-offline.json` | 오프라인 설정 예시(`*.corp.example` 주소, 실제 주소 아님) |
+| `INSTALL.md` | 설치 절차(확인, 놓을 곳, 설정, 점검, 실행) |
+| `MANIFEST.json` | `name`, `version`, `commit`, `dirty`, `build_time`, `os`, `arch`, `go_version`, `node_version`, `cgo_enabled`, `linking`, `embedded`, `not_included`, `files[]`(경로·크기·sha256·mode) |
+| `SHA256SUMS` | 모든 파일과 MANIFEST.json의 sha256(`sha256sum -c`로 확인) |
+
+- **실행 파일에 들어 있는 것.** DB migration(`internal/storage/migrations`)과 검토 지침 팩(`prompts/review-r1`, `prompts/review-v1`)은 Go embed로 실행 파일 안에 있다. MANIFEST의 `embedded`가 migration마다 이름·sha256, 지침 팩마다 id·version·파일 수·sha256을 적는다. `codeye version [--json]`이 실행 파일의 버전·commit·빌드 시각·Go 버전·OS/arch·최신 migration 번호를 보인다.
+- **파일로 싣는 것.** 웹 화면, 문서, 설정 예시. `codeye`는 옆의 `web/dist`를 쓴다.
+- **싣지 않는 것**(`not_included`). 분석 도구, 언어 toolchain, PostgreSQL, OpenCode, 프로젝트 의존성. 운영자가 따로 옮긴다([분석 도구 옮기기](#분석-도구-옮기기)).
+- **웹 화면이 외부를 부르지 않음.** 응답의 CSP가 `default-src 'self'`라 브라우저가 다른 출처를 불러오지 않는다. 그와 별도로 `check-web`이 `web/dist`의 HTML·CSS·JS에서 `http(s)://`·`//host` 형태의 주소와 원격 source map을 찾아, 식별자·문구로만 쓰이는 주소(`www.w3.org`, `json-schema.org`, React 오류 안내 주소, `codeye.invalid`, 입력란 예시 `https://github.com/owner/repo`) 밖의 것이 있으면 실패한다. CI의 웹 작업이 빌드 뒤 이 검사를 실행하고, `scripts/test_offline_pack.py`가 글꼴·CDN·`@import`·`url()`·`fetch`·원격 source map 각각이 실패하는지 시험한다.
+
+설치는 묶음 안의 `INSTALL.md`를 따른다: `sha256sum -c *.tar.gz.sha256` → 풀기 → `sha256sum -c SHA256SUMS` → `./codeye version` → 설정 → `./codeye tools --checklist` → `./codeye doctor --config …` → `./codeye up --offline 폴더`.
+
+### 오프라인 모드
+
+설정 `"offline": true` 또는 `codeye up --offline`(처음 한 번 주면 설정 파일에 `"offline": true`로 저장된다)이다. 에이전트는 `--offline`으로 받는다. 오프라인 모드가 바꾸는 것:
+
+| 대상 | 오프라인이 아닐 때 | 오프라인 |
+|---|---|---|
+| Go 모듈 | `go_proxy`, 없으면 사용자 `go env`의 GOPROXY, 없으면 `proxy.golang.org`. checksum DB 기본 `sum.golang.org` | 설정·사용자 `go env`가 정한 proxy만 쓴다. 없으면 운영자 모듈 캐시(`agent.go_mod_cache`)만 읽고, 캐시에 없는 모듈은 `failed`(`offline_no_registry_configured`)이고 `failed_items`에 모듈 이름이 남는다. 캐시도 없으면 받지 않는다(`skipped_policy`, 같은 이유). `go_sumdb`를 정하지 않았으면 `GOSUMDB=off`(go.sum이 여전히 검증하며, go.sum에 없는 hash는 `go_sum_incomplete`). `go_proxy: "off"`이면 받기를 시작하지 않고 같은 이유다 |
+| npm·pnpm·yarn | `npm_registry`, 없으면 사용자 npm 설정, 없으면 `registry.npmjs.org` | 설정이나 사용자 npm 설정의 레지스트리가 없으면 설치하지 않는다(`offline_no_registry_configured`) |
+| Python | `pip_index_url`, 없으면 PyPI | `pip_index_url`이 없으면 받지 않는다(같은 이유) |
+| Rust | crates.io 또는 저장소 Cargo 설정의 레지스트리 | 받지 않는다(같은 이유). cargo에는 CODEYE의 미러 설정이 없다 |
+| Git | `git_hosts` 기본 `["github.com"]` | `git_hosts`를 적지 않으면 빈 목록이라 Git 주소를 받지 않는다. github.com을 넣지 않는다 |
+| GitHub | 환경변수·gh에서 token을 찾아 `GET /user`로 확인, pull request·결과 댓글에 GitHub API | token을 찾지 않고(`gh auth token`도 실행하지 않는다) 저장된 token을 지운다. github.com을 `git_hosts`에 적어도 token을 보내지 않는다. pull request 주소는 거부한다. controller는 GitHub API를 부르지 않는다. `up` 출력 `github: off (offline mode)`, `GET /setup`의 `github.reason`은 `offline_mode`, doctor의 `github_api` 목적지는 `offline_mode`다. 사내 Git 호스트용 credential은 범위 밖이다([GitHub](GITHUB.md#github-token)) |
+| 모델 | 키 파일·환경변수 키·OpenCode `auth.json`, 공급자 공개 endpoint | `base_url`(사내 endpoint)이 있는 키 파일이나 relay만 쓴다. `base_url` 없는 키 파일은 쓰지 않고 이유를 출력한다. 환경변수의 키는 저장하지도 쓰지도 않는다. OpenCode `auth.json`을 찾지 않는다. 키 없는 공급자 모델은 쓰지 않는다. 모델 검토의 이유는 `model_endpoint_not_configured`다 |
+
+- 도구 탐지는 원래 이 머신의 파일과 `--version` 실행만 한다. 오프라인 모드와 관계없이 네트워크를 쓰지 않는다.
+- CODEYE에는 telemetry·업데이트 확인·원격 규칙 다운로드가 없다. 웹 화면도 외부를 부르지 않는다.
+- OpenCode(1.19.5)는 플러그인을 꺼도 시작할 때마다 npm 레지스트리에 `GET /@opencode-ai%2fplugin`을 보낸다(측정). CODEYE는 OpenCode 실행 환경에 `npm_config_registry=http://127.0.0.1:9/`를 넣어 이 요청을 loopback의 닫힌 포트로 보낸다. 요청은 즉시 실패하고 검토는 계속된다. 오프라인이 아닐 때도 같다. 그 밖에 OpenCode가 하는 일은 아래 측정 범위만 안다. 자동 업데이트·모델 목록 받기·공유·기본 플러그인은 원래 끈다([검토](REVIEW.md)).
+- **여전히 나갈 수 있는 것.** 저장소 코드 실행이 허가된 프로젝트의 build script·proc macro·설정 프로그램(Native 실행이라 OS 수준으로 막지 않는다), ESLint 설정이 불러오는 plugin이 스스로 하는 접속, 운영자가 설정한 미러·endpoint·Git 호스트. 확실히 막으려면 OS 방화벽이나 네트워크 정책을 둔다.
+
+### 미러
+
+언어별 미러 주소는 `agent.dependencies`에 적는다. 인증정보가 든 URL은 설정 오류다.
+
+| 생태계 | 설정 | 미러가 줄 것 |
+|---|---|---|
+| Go | `go_proxy`(예: `https://mirror.corp.example/go`), 필요하면 `go_sumdb`(사내 sumdb 또는 `off`), `go_private`·`go_noproxy`·`go_nosumdb` | GOPROXY 프로토콜(`/<module>/@v/list`, `.info`, `.mod`, `.zip`). 정적 파일로 충분하다 |
+| npm·pnpm·yarn 1 | `npm_registry`(예: `https://mirror.corp.example/npm/`) | npm 레지스트리 문서와 tarball. lockfile의 `resolved`가 공개 레지스트리를 가리킬 때 관리자마다 어떻게 받는지는 시험하지 않았다(시험한 lockfile은 미러 주소였다) |
+| Python | `pip_index_url`(예: `https://mirror.corp.example/pypi/simple`) | PEP 503 simple index와 wheel(소스 배포판은 쓰지 않는다) |
+| Rust | 없음 | 오프라인에서 받지 않는다. 사내 레지스트리 설정은 아직 없다 |
+| Git | `git_hosts`(예: `["git.corp.example"]`) | smart HTTP(`git http-backend` 등). CODEYE는 `--depth=1`로 받으므로 dumb HTTP는 쓸 수 없다. 공개 저장소처럼 인증 없이 읽을 수 있어야 한다 |
+
+Go만 미러가 없어도 쓸 수 있는 길이 있다. 연결된 머신에서 `go mod download`로 채운 모듈 캐시를 옮겨 `agent.go_mod_cache`에 적으면 그 캐시를 읽기 전용 file proxy로 쓴다.
+
+### 사내 모델 endpoint
+
+OpenAI 호환 사내 endpoint는 키 파일 `<state_dir>/secrets/model.json`(0600)에 `base_url`로 적는다. `codeye up`이 그 endpoint로 probe 한 번을 보낸다(모델 호출이 비용이 드는 곳이면 그만큼 든다).
+
+```json
+{"schema_version": "0.1", "provider": "openai", "api_key": "...", "base_url": "https://llm.corp.example/v1"}
+```
+
+relay(`agent.model.relay_file`)를 쓰면 relay의 upstream이 사내 endpoint여야 한다. 오프라인 모드는 relay가 어디로 보내는지 검사하지 않는다.
+
+### 사내 CA
+
+`"ca_bundle": "/절대/경로.pem"`은 사내 CA를 신뢰하게 한다. 시스템 CA와 사내 CA를 합친 PEM 파일을 준다(RHEL은 `/etc/pki/tls/certs/ca-bundle.crt`가 `update-ca-trust` 뒤의 합본이다). 에이전트는 `--ca-bundle`로 받고 시작할 때 파일을 읽어 인증서가 하나도 없거나 8 MiB를 넘으면 시작하지 않는다. 인증서 검증을 끄는 설정은 없고 두지 않는다.
+
+CODEYE는 자식 프로세스 환경에 다섯 변수를 같은 파일로 넣는다. 의존성 받기(go, npm·pnpm·yarn, pip·uv, cargo), 소스 확보의 git, 모델 검토의 OpenCode가 받는다. CODEYE 프로세스 자신은 미러·모델에 직접 TLS로 접속하지 않는다.
+
+| 변수 | 읽는 도구 | 확인 |
+|---|---|---|
+| `SSL_CERT_FILE` | Go(`go mod download`), OpenSSL을 쓰는 도구, uv | 시스템 CA를 **대신**한다. 그래서 합본이어야 한다 |
+| `NODE_EXTRA_CA_CERTS` | npm, pnpm, yarn, OpenCode(Bun) | 기본 CA에 **더한다** |
+| `GIT_SSL_CAINFO` | git | |
+| `PIP_CERT` | pip | |
+| `CARGO_HTTP_CAINFO` | cargo | 오프라인에서는 cargo가 받지 않으므로 시험하지 않았다 |
+
+`scripts/offline_smoke.py`가 각 도구를 사설 CA의 HTTPS 미러에 대고 변수 있이·없이 실행해, 있으면 성공하고 없으면 인증서 검증 오류로 실패함을 확인한다(결과는 [시험](TESTING.md)의 TC-243).
+
+### 오프라인 준비 점검
+
+`codeye doctor --config PATH`는 `offline` 절을 더한다(텍스트 출력은 "Offline readiness"). 오프라인 모드가 꺼져 있어도 보인다. 실패해도 종료 코드를 바꾸지 않는다.
+
+- `enabled`, `ca_bundle`(`status`가 `not_configured`, `available`(`certificates`에 인증서 수), `unavailable`(`ca_bundle_unreadable`: 읽을 수 없거나 인증서가 없음)).
+- `destinations[]`: 이 설정으로 CODEYE가 접속할 곳마다 `kind`(`go_proxy`·`go_sumdb`·`npm_registry`·`pip_index`·`crates_registry`·`git_host`·`github_api`·`model_endpoint`), `value`, `origin`(`config`·`user_go_env`·`user_npm_config`·`model_key_file`·`relay_file`·`builtin_default`·`none`), 접속하지 않으면 `reason`. 오프라인인데 `builtin_default`가 남으면 그것이 공개 서비스다.
+- `postgres`: 관리형 DB에 쓸 PostgreSQL 프로그램(`initdb`, `pg_ctl`, `postgres`, `pg_dump`, `pg_restore`, `psql`)을 찾았는지와 버전.
+- `languages[]`: Go·Python·JS/TS·Rust·C/C++·공통·모델마다 없는 도구와 의존성 준비 상태.
+
+schema는 [doctor schema](../schemas/doctor.schema.json)의 `offline`, 예시는 [examples/doctor.json](../examples/doctor.json)이다.
+
+### 분석 도구 옮기기
+
+분석 도구는 묶음에 없다. 연결된 머신에서 같은 OS/arch로 받은 것을 옮기거나 사내 미러에서 설치한다. 놓을 곳은 [도구 찾기](ANALYZERS.md#도구-찾기)의 도구 prefix `~/.local/share/codeye-tools`(`bin`, `go/bin`, `node/node_modules`, `cpp/bin`)와 PATH이고, 다른 곳이면 `agent.tools`에 절대 경로를 적는다.
+
+`codeye tools --checklist [--config PATH]`는 Markdown 점검표를 낸다. 도구마다 찾았는지, 버전과 CODEYE가 시험한 계열(`tested 2026.2` 등), 없으면 폐쇄망에서 옮기는 방법(예: `uv tool install mypy --index-url <internal index>`, `npm install --prefix ~/.local/share/codeye-tools/node --registry <internal registry> typescript`, Rust standalone installer)을 적는다. 도구를 옮긴 뒤 다시 실행해 빈 칸을 지운다. `--json`과 함께 쓸 수 없다. `gh`는 선택이며 온라인에서만 쓴다(오프라인 모드는 GitHub을 쓰지 않으므로 옮기지 않아도 된다).
+
+- Python 도구의 venv를 다른 경로로 복사하면 옛 interpreter 경로를 가리켜 거부된다. 사내 index로 그 머신에서 `uv tool install`한다.
+- 시험한 계열과 다른 버전도 쓰지만 보고서와 점검표가 "시험하지 않은 버전"으로 표시한다.
+
+### 확인한 것과 확인하지 않은 것
+
+`scripts/offline_smoke.py --pack 묶음 --postgres-bin-dir DIR`(Linux, root 불필요, 수동 실행·CI 밖)이 묶음을 빈 디렉터리에 풀고 그 실행 파일만으로, 새 HOME·설정·상태 디렉터리로 실행한다. 전체를 새 user·network namespace(`unshare -rn`, loopback만 있음)에서 돌려 외부 접속이 즉시 실패하게 하고, `strace -f -e trace=connect`로 모든 connect를, resolv.conf의 nameserver 주소를 namespace의 loopback에 붙인 DNS 기록기로 모든 이름 조회를 기록한다. 결과는 [시험](TESTING.md)의 TC-240~245와 [변경 이력](../CHANGELOG.md)에 있다.
+
+확인하지 않은 것: 실제 폐쇄망, RHEL 8.10(가장 오래된 사용자 영역은 빈 chroot에서 실행 파일을 띄운 것뿐이다), 회사 CA·미러(사설 CA와 로컬 HTTPS 서버로 흉내 냈다), cargo의 CA, macOS·Windows 묶음, 서명.

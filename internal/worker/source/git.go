@@ -28,6 +28,9 @@ type GitOptions struct {
 	// Timeout is the deadline for the whole acquisition (every git command and the
 	// local extraction work share it), at most 10 minutes.
 	Timeout time.Duration
+	// CABundle is the PEM file git trusts for the host's TLS
+	// (GIT_SSL_CAINFO and SSL_CERT_FILE); "" keeps git's own store.
+	CABundle string
 	// Token authenticates the HTTPS requests to AllowedHost of this one
 	// acquisition (personal mode's GitHub token). It reaches git only as an
 	// Authorization header in the process environment
@@ -60,6 +63,7 @@ func (w *capWriter) Write(b []byte) (int, error) {
 
 type gitRunner struct {
 	executable, repo, home string
+	caBundle               string
 	fileTransport          bool
 	// authHeader is the http.extraHeader for authHost ("" for none).
 	authHeader, authHost string
@@ -102,6 +106,10 @@ func (g gitRunner) run(ctx context.Context, input io.Reader, max int64, args ...
 		if v, ok := os.LookupEnv(key); ok {
 			cmd.Env = append(cmd.Env, key+"="+v)
 		}
+	}
+	if g.caBundle != "" {
+		// GIT_SSL_CAINFO for every TLS backend git's curl may use.
+		cmd.Env = append(cmd.Env, "GIT_SSL_CAINFO="+g.caBundle, "SSL_CERT_FILE="+g.caBundle)
 	}
 	if g.authHeader != "" {
 		// Command-scope configuration through the environment: the header
@@ -263,7 +271,7 @@ func AcquireGit(ctx context.Context, repository, branch, dataRoot string, limits
 	if os.Mkdir(gitDir, 0700) != nil || os.Mkdir(home, 0700) != nil {
 		return Snapshot{}, ErrUnavailable
 	}
-	runner := gitRunner{executable: options.Executable, repo: gitDir, home: home, fileTransport: local, fetchLimit: softFetchLimit(limits)}
+	runner := gitRunner{executable: options.Executable, repo: gitDir, home: home, caBundle: options.CABundle, fileTransport: local, fetchLimit: softFetchLimit(limits)}
 	if options.Token != "" && !local {
 		runner.authHeader = "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:"+options.Token))
 		runner.authHost = strings.ToLower(options.AllowedHost)

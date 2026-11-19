@@ -48,6 +48,15 @@ type PersonalSetup struct {
 	// GitHub is the GitHub connection `codeye up` found; nil from older
 	// setups.
 	GitHub *SetupGitHub `json:"github,omitempty"`
+	// Offline is the configuration's offline mode: the controller makes no
+	// GitHub API call (no pull-request pin, preview lookup or comment).
+	Offline bool `json:"offline,omitempty"`
+}
+
+// offline reports the installation's offline mode from the setup summary.
+func (p *Personal) offline() bool {
+	s := p.readSetup()
+	return s != nil && s.Offline
 }
 
 // SetupGitHub is personal mode's GitHub connection: whether discovery is on,

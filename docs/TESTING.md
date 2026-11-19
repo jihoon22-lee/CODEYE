@@ -328,7 +328,7 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
-| TC-30 | **설계(미구현)**: 폐쇄망 배포팩. 폐쇄망에서 없는 패키지·모델·외부 CDN 요청 | 외부 fallback 없음, 명확한 부분 실패, UI는 로컬 자산 사용 | REQ-030 |
+| TC-30 | 폐쇄망 배포팩. 폐쇄망에서 없는 패키지·모델·외부 CDN 요청 | 외부 fallback 없음, 명확한 부분 실패, UI는 로컬 자산 사용. **부분 실행**: TC-240~245가 사설 CA·로컬 미러·network namespace로 확인한다. 실제 폐쇄망·RHEL 8.10·회사 CA와 미러에서는 실행하지 않았다 | REQ-030 |
 | TC-32 | DB+artifact backup 복원 | 근거·ACL·예약 중복·lease 재조정 정상 | NFR-002,003,006,007 |
 | TC-124 | 저장 영역(snapshot·workspace·cache·logs·artifacts) 상한에 도달한 노드·설치, 실행 중 attempt, 상한 없는 heartbeat | 새 claim만 거절하고(204) 대기 사유는 `storage_quota_exceeded`다. 실행 중 attempt와 확정 산출물·보고서는 그대로다. 자동 삭제는 없다. 상한이 없으면 heartbeat 필드를 보내지 않는다. 측정값과 적용 근거(노드 heartbeat·DB 집계)를 구분해 표시한다. | REQ-018; NFR-007 |
 | TC-125 | `codeye start`·`stop`·`status`: 실행 중 작업의 drain, drain 시간 초과, stale 기록·재사용 pid·기록 없는 에이전트·포트 점유, 설정 오류 | drain은 실행 작업을 끝낸 뒤 추가 claim 없이 종료한다. 시간 초과는 취소하고 정리를 확인한다. 불확실하면 `recovery_required`다. 기록과 시작 시각이 다른 프로세스에는 신호를 보내지 않는다. 상태 파일은 0600·0700이고 DB URL과 장기 secret이 없다. | REQ-021,022; NFR-006 |
@@ -340,6 +340,12 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-173 | `codeye stop` 뒤 `codeye up`, 정지 상태의 `codeye backup`(설정에 `backup_dir` 없음), 새 `state_dir`로의 `codeye restore` | stop의 `database`는 `stopped`이고 그 cluster의 PostgreSQL 프로세스가 없다. 다시 up하면 초기화·사용자 생성 없이 같은 프로젝트가 보인다. 백업은 `<state_dir>-backups` 아래에 세트를 만들고 띄운 PostgreSQL을 다시 멈춘다. 비밀번호는 `postgres/password` 밖의 상태 파일에 없다. 복원은 새 상태 디렉터리에 cluster를 만들고 복원하며 그 뒤 up이 새 노드로 시작한다(복원은 수동 실행으로 확인, smoke에는 없다). | NFR-003,006 |
 | TC-174 | PostgreSQL 프로그램 디렉터리: 16·17·13 설치, 프로그램이 빠진 디렉터리, 명시한 틀린 경로, 아무것도 없음, 주 버전 16 데이터 디렉터리와 17 프로그램, `PG_VERSION` 없는 비어 있지 않은 디렉터리 | 명시가 없으면 가장 높은 주 버전(14 이상), 데이터 디렉터리가 있으면 그 버전을 고른다. 플래그가 설정보다 먼저다. 명시한 경로가 조건을 채우지 않으면 다른 곳을 찾지 않고 그 경로와 이유를 말한다. 없으면 설치 방법·`postgres_bin_dir`·`external`을 알리는 오류다. 다른 주 버전 데이터 디렉터리와 정체 모를 디렉터리는 거부한다. | REQ-004; NFR-006 |
 | TC-175 | `{"schema_version":"0.1"}`만 있는 설정, `up`의 설정 편집(필드 순서·기본값·잘못된 결과), 기본 포트 7331을 다른 프로그램이 쓰는 상태, 설정에 적은 포트를 다른 프로그램이 쓰는 상태 | 기본값은 관리형 DB, `$XDG_STATE_HOME/codeye`(없으면 `~/.local/state/codeye`), root 없음이다. 편집은 다른 필드와 순서를 보존하고 기본값을 쓰지 않으며, 검증을 통과하지 못하면 파일을 바꾸지 않는다. 기본 포트가 쓰이면 7332 이후 빈 포트로 띄우고 `stop`·`status`·`open`이 그 주소를 쓴다. 적은 포트가 쓰이면 시작하지 않는다(포트 이동은 수동 실행으로 확인). | REQ-001; NFR-006 |
+| TC-240 | `offline_pack.py build`를 두 번, `verify`에 바뀐·빠진·더해진 파일, ELF 프로그램 헤더(interpreter·dynamic·없음) | 같은 commit에서 묶음 바이트가 같다(이 머신 sha256 일치). 묶음은 정적 실행 파일·`web/dist`·문서·설정 예시·INSTALL.md·MANIFEST.json·SHA256SUMS이고 `sha256sum -c`가 통과한다. verify는 세 변경을 모두 보고한다. 동적 실행 파일은 묶지 않는다(`scripts/test_offline_pack.py`, 수동 build) | REQ-030; NFR-007 |
+| TC-241 | 웹 산출물의 외부 글꼴·CDN script·CSS `@import`·`url()`·`fetch`·원격 source map, 식별자·문구 주소, 빌드된 `web/dist` | 외부 load마다 실패하고 식별자·문구 주소는 통과한다. 빌드된 화면은 통과한다(CI 웹 작업의 `check-web`, `scripts/test_offline_pack.py`) | REQ-030 |
+| TC-242 | `offline: true`·`up --offline`: git_hosts 없음, Go proxy 없음·캐시 있음·없음·`off`·사내 proxy, npm·pip·cargo 미러 없음, `base_url` 없는 키 파일, 환경변수 키, 키 없는 모델, relay | 설정에 저장되고 에이전트가 `--offline`을 받는다. git_hosts는 빈 목록이다. Go는 운영자 캐시만 읽거나 사내 proxy만 쓰고 그 밖은 `offline_no_registry_configured`, GOSUMDB는 `off`다. 다른 생태계는 받지 않는다. 모델은 `base_url`이나 relay만 쓰고 환경변수 키는 키 파일을 바꾸지 않는다(`TestOfflineConfiguration`, `TestEditFileSetsOffline`, `TestOfflineModelNeedsAnEndpoint`, `TestPersonalAgentArgvOffline`, `TestPersonalOfflineExampleParses`, `TestSetupPersonalModelOfflineKeepsKeyFile`, `TestOfflineGo*`, `TestOfflineJSAndPythonAndRustNeedARegistry`, `TestOfflineNeedsAConfiguredEndpoint`, `TestManagedOpenCodePinsTheNpmRegistry`). GitHub은 꺼진다: token을 찾지 않고(gh·환경변수를 묻지 않음) 저장된 token을 지우며, 에이전트에 credential 파일을 주지 않고, pull request 주소를 `up`과 API가 거부하며 controller가 GitHub을 부르지 않는다(`TestSetupGitHubOfflineLooksUpNothing`, `TestOfflineTurnsGitHubOff`, `TestPullRequestRunsOverHTTP`의 오프라인 단계) | REQ-030; NFR-006 |
+| TC-243 | `ca_bundle`: 상대 경로, 인증서 없는 파일, 사설 CA HTTPS 미러에 go·git·npm·pnpm·yarn·pip·uv·OpenCode를 CA 변수 있이·없이 | 설정·에이전트가 잘못된 파일을 거부한다. 다섯 변수가 같은 파일을 가리킨다. 변수가 있으면 성공하고 없으면 인증서 검증 오류다. OpenCode는 `NODE_EXTRA_CA_CERTS`만, `SSL_CERT_FILE`만으로도 성공한다. git은 CA 변수와 GitHub header를 함께 환경으로 받고 token은 argv에 없다(`TestCheckCABundle`, `TestCAEnvNamesOneBundleForEveryTool`, `TestGitCommandsTrustTheConfiguredCABundle`, `TestGitGetsTheCABundleAndTheTokenTogether`, `scripts/offline_smoke.py`). cargo는 실행하지 않았다 | REQ-030; NFR-006 |
+| TC-244 | `doctor --config`의 `offline`: 오프라인 켬·끔, 미러·사용자 go env·npm 설정·기본값, CA 상태, PostgreSQL 프로그램, 언어별 빠진 도구. `tools --checklist` | 접속할 곳마다 출처와 받지 않는 이유가 있고 schema(if/then)가 조합을 강제한다. 점검표는 모든 도구에 옮기는 방법과 시험한 계열을 적는다(`TestOfflineReadiness`, `TestChecklistCoversEveryTool`, `validate_bundle.py`의 doctor 음성 사례) | REQ-030 |
+| TC-245 | 묶음을 빈 디렉터리에 풀고 그 실행 파일만으로, 새 HOME·설정·상태, network namespace(loopback만)와 connect·DNS 기록: 모듈 캐시에 있는 Go 프로젝트, 없는 프로젝트, 사설 CA 미러·가짜 모델 upstream(TLS)으로 Go·Python·JS 프로젝트와 Git 주소, doctor·점검표·웹 화면 | 캐시 프로젝트는 `prepared`, 없는 프로젝트는 `offline_no_registry_configured`다. 미러 단계는 미러에서 받고 모델 검토가 사내 endpoint로 `performed`다. loopback 밖 connect와 DNS 조회가 없다. 웹 화면은 묶음의 `index.html`이다(`scripts/offline_smoke.py`, 수동·CI 밖, Linux) | REQ-030; NFR-001,006 |
 
 개인 모드 운영 계약은 [운영](OPERATIONS.md)에 있다. `up`·`start`·`stop`·`status`·백업·복원 시험은 Linux 전용이다. 브라우저 자동 열기(`xdg-open`·`wslview`·`explorer.exe`)는 시험하지 않았다(열기 프로그램 선택 순서만 단위 시험). 여러 사용자 운영의 수용(장애 훈련, 권한 철회, 품질 baseline)은 아직 TC가 없으며 [로드맵](ROADMAP.md)의 운영 수용 작업에서 정한다.
 
@@ -391,7 +397,7 @@ TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력
 | REQ-026 | REVIEW | TC-12,34,170,171,172 |
 | REQ-027 | REVIEW, EVALUATION | TC-33,97,100 |
 | REQ-028,029 | ARCHITECTURE, REPORT | TC-14,31 |
-| REQ-030 | SECURITY, OPERATIONS | TC-30,170 |
+| REQ-030 | SECURITY, OPERATIONS | TC-30,170,240~245 |
 | REQ-031 | REPORT, SECURITY | TC-15,31 |
 | REQ-032,033 | REQUIREMENTS | TC-35 |
 | NFR-001,009 | EXECUTION, OPERATIONS | TC-17,18,23 |
@@ -480,7 +486,17 @@ python3 fixtures/regression/corpus.py --check                       # 회귀 집
 python3 -m unittest discover -s fixtures/cleanup -p 'test_*.py' -v  # 합성 결함 전후
 python3 -m unittest discover -s scripts -p test_model_budget_relay.py -v
 python3 -m unittest discover -s scripts -p test_quality_eval.py -v
+python3 -m unittest discover -s scripts -p test_offline_pack.py -v  # 배포팩 재현·검증·웹 외부 주소(TC-240·241)
 ```
+
+배포팩 전체 경로(TC-245, Linux, 수동):
+
+```sh
+python3 scripts/offline_pack.py build
+python3 scripts/offline_smoke.py --pack .codeye/pack/codeye-VERSION-linux-amd64.tar.gz --postgres-bin-dir DIR
+```
+
+필요: `unshare`(비특권 user namespace), `strace`, `ip`, `openssl`, `git`, node와 npm, go와 그 모듈 캐시의 `github.com/google/uuid@v1.6.0`·`github.com/spf13/pflag@v1.0.6`(미러 내용을 이 캐시에서 복사한다), PostgreSQL 프로그램. OpenCode·pnpm·yarn·uv가 있으면 그 CA 확인도 한다. 이 머신의 결과는 [변경 이력](../CHANGELOG.md)에 있다. 모델 호출·외부 다운로드가 없다. `test_postgres.py`에 넣지 않았다.
 
 ### CI가 실행하는 것
 
@@ -488,9 +504,9 @@ python3 -m unittest discover -s scripts -p test_quality_eval.py -v
 
 | 작업 | 실행 내용 |
 |---|---|
-| Linux / PostgreSQL / contracts (ubuntu-24.04) | Go 1.27.4·Python 3.14.4·Node 24.18.0. 웹 빌드, Playwright Chromium 설치, `gofmt`·`go vet`, `scripts/test_postgres.py --nodes --web --scheduler --personal`, scripts 단위 시험, `validate_bundle.py`, cleanup fixture 시험, `fixtures/regression/corpus.py --check`, CLI 빌드 |
+| Linux / PostgreSQL / contracts (ubuntu-24.04) | Go 1.27.4·Python 3.14.4·Node 24.18.0. 웹 빌드, Playwright Chromium 설치, `gofmt`·`go vet`, `scripts/test_postgres.py --nodes --web --scheduler --personal`, scripts 단위 시험(배포팩 `test_offline_pack.py` 포함), `validate_bundle.py`, cleanup fixture 시험, `fixtures/regression/corpus.py --check`, CLI 빌드 |
 | Windows / Go unit tests (windows-2025) | `go test -count=1 ./...`, `go vet`, CLI 빌드만. DB 통합·smoke·실도구 시험은 없다 |
-| Web / tests and build | `npm ci`, `npm test`, `npm run build` |
+| Web / tests and build | `npm ci`, `npm test`, `npm run build`, 빌드한 화면의 외부 주소 검사(`offline_pack.py check-web web/dist`) |
 
 CI 러너에는 go vet 말고 분석 도구가 없어 실도구 시험은 skip되고 재생 시험만 돈다. Windows CI의 단위 시험은 Windows 11의 NativeExecutor·DB·전체 플랫폼 수용 시험을 대신하지 않는다.
 

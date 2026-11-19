@@ -103,6 +103,15 @@ type Config struct {
 	PipIndexURL     string
 	PythonConsumers bool
 
+	// Offline: no built-in public default applies (proxy.golang.org,
+	// sum.golang.org, npm's and yarn's registries, PyPI, crates.io). A fetch
+	// uses only the operator's module cache and the registries set above;
+	// with none it ends offline_no_registry_configured. Rust has no
+	// registry setting, so its fetch never runs offline.
+	Offline bool
+	// CABundle is the PEM file every fetch process trusts (executor.CAEnv).
+	CABundle string
+
 	ModuleTimeout    time.Duration
 	TotalTimeout     time.Duration
 	MaxDownloadBytes int64

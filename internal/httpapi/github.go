@@ -27,6 +27,10 @@ func (p *Personal) gitHubCredentialFile() string {
 // (read now, so a refreshed or removed token takes effect without a
 // restart; anonymous without one) and its account login ("" when unknown).
 func (p *Personal) gitHub() (*github.Client, string) {
+	if p.offline() {
+		// No client: the comment poster records no_token and makes no call.
+		return nil, ""
+	}
 	base := p.GitHubAPI
 	if base == "" {
 		base = github.APIBase()
@@ -47,6 +51,10 @@ func (p *Personal) gitHub() (*github.Client, string) {
 func (s *Server) pinPullRequest(q *request, project string, ref domain.PullRequestRef) (domain.PullRequest, bool) {
 	if s.personal == nil {
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_UNSUPPORTED", "pull-request analysis is available in personal mode (codeye up); this controller has no GitHub connection", false)
+		return domain.PullRequest{}, false
+	}
+	if s.personal.offline() {
+		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_UNSUPPORTED", "offline mode does not use GitHub: pull requests cannot be analyzed", false)
 		return domain.PullRequest{}, false
 	}
 	ctx, cancel := q.ctx()

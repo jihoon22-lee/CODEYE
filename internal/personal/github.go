@@ -38,6 +38,10 @@ const (
 	TokenFromGH          = "gh"
 )
 
+// GitHubOffline is GitHubSetup.Reason in offline mode: no token is looked
+// up or used and github.com is not a Git host (docs/OPERATIONS.md#오프라인-모드).
+const GitHubOffline = "offline_mode"
+
 // GitHubEnv is what token discovery reads besides the configuration; tests
 // replace it so they never see the machine's real login.
 type GitHubEnv struct {
@@ -111,7 +115,7 @@ type GitHubSetup struct {
 // off, or no token found, the file is removed so a token the user signed out
 // of is not used any more.
 func SetupGitHub(ctx context.Context, cfg *Config, layout Layout, env GitHubEnv) (GitHubSetup, error) {
-	st := GitHubSetup{Enabled: cfg.GitHub.On(), Host: github.Host}
+	st := GitHubSetup{Enabled: cfg.GitHub.On() && !cfg.Offline, Host: github.Host}
 	remove := func() error {
 		if err := os.Remove(layout.GitHubSecret()); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return errors.New("cannot remove " + layout.GitHubSecret())
@@ -119,6 +123,11 @@ func SetupGitHub(ctx context.Context, cfg *Config, layout Layout, env GitHubEnv)
 		return nil
 	}
 	if !st.Enabled {
+		if cfg.Offline {
+			// Neither the environment nor gh is asked, and a token stored
+			// before is removed so nothing reads it.
+			st.Reason = GitHubOffline
+		}
 		return st, remove()
 	}
 	get := env.Getenv

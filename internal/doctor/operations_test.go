@@ -173,7 +173,8 @@ func TestOperationsStorageBackupAndProcesses(t *testing.T) {
 	if err := plain.Write(&out, "json"); err != nil || strings.Contains(out.String(), "operations") {
 		t.Fatalf("operations without --config: %v", err)
 	}
-	full := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Personal: cfg, Detect: detectedTools("ruff")}, runner)
+	menv := personal.ModelEnv{Getenv: func(string) string { return "" }, Home: t.TempDir()}
+	full := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Personal: cfg, Detect: detectedTools("ruff"), ModelEnv: &menv}, runner)
 	out.Reset()
 	if err := full.Write(&out, "json"); err != nil || !strings.Contains(out.String(), `"operations"`) {
 		t.Fatalf("operations missing: %v", err)

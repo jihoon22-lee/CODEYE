@@ -71,7 +71,10 @@ const (
 
 // Failure reasons shared by the ecosystems.
 const (
-	ReasonRegistryUnreachable         = "registry_unreachable"
+	ReasonRegistryUnreachable = "registry_unreachable"
+	// ReasonOfflineNoRegistry: offline mode, and neither a registry the
+	// operator set nor the operator's cache holds what the fetch needs.
+	ReasonOfflineNoRegistry           = "offline_no_registry_configured"
 	ReasonToolchainUnavailable        = "toolchain_unavailable"
 	ReasonPackageManagerNotConfigured = "package_manager_not_configured"
 	ReasonTimeout                     = "timeout"

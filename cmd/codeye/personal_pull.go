@@ -52,6 +52,11 @@ func pullRequestTarget(cfg *personal.Config, target string) (*upTarget, bool, er
 	if !ok {
 		return nil, false, nil
 	}
+	if cfg.Offline {
+		// The pin, the changed files and the comment come from the GitHub
+		// API, which offline mode does not reach.
+		return nil, true, errors.New("offline mode does not use GitHub: pull requests cannot be analyzed (analyze a folder or a repository of a host in git_hosts)")
+	}
 	t, err := gitTarget(cfg, repo)
 	if err != nil {
 		return nil, true, err

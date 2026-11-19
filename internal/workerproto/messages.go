@@ -115,6 +115,14 @@ type Hello struct {
 	// baseline analyzer is usable; its tasks end unsupported (personal mode).
 	AdvertiseWithoutBaseline bool `json:"advertise_without_baseline,omitempty"`
 
+	// Offline is the node operator's offline mode (codeye agent --offline,
+	// docs/OPERATIONS.md#오프라인-모드): no built-in public registry, checksum
+	// database or model endpoint is used.
+	Offline bool `json:"offline,omitempty"`
+	// CABundle is the PEM file the processes that reach a registry, a Git
+	// host or the model endpoint trust (--ca-bundle).
+	CABundle string `json:"ca_bundle,omitempty"`
+
 	// Dependencies is the node operator's dependency fetch configuration
 	// (--dependency-fetch and its options, docs/ARCHITECTURE.md#의존성-준비);
 	// absent when the operator did not turn fetching on.

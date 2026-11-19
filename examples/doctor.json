@@ -189,5 +189,137 @@
       "agent": "not_recorded",
       "issues": []
     }
+  },
+  "offline": {
+    "enabled": true,
+    "ca_bundle": {
+      "status": "available",
+      "certificates": 146
+    },
+    "destinations": [
+      {
+        "kind": "go_proxy",
+        "value": "https://mirror.corp.example/go",
+        "origin": "config"
+      },
+      {
+        "kind": "go_sumdb",
+        "origin": "none",
+        "reason": "checksum_database_off"
+      },
+      {
+        "kind": "npm_registry",
+        "value": "https://mirror.corp.example/npm/",
+        "origin": "user_npm_config"
+      },
+      {
+        "kind": "pip_index",
+        "origin": "none",
+        "reason": "offline_no_registry_configured"
+      },
+      {
+        "kind": "crates_registry",
+        "origin": "none",
+        "reason": "offline_no_registry_configured"
+      },
+      {
+        "kind": "git_host",
+        "value": "git.corp.example",
+        "origin": "config"
+      },
+      {
+        "kind": "github_api",
+        "origin": "none",
+        "reason": "offline_mode"
+      },
+      {
+        "kind": "model_endpoint",
+        "value": "https://llm.corp.example/v1",
+        "origin": "model_key_file"
+      }
+    ],
+    "postgres": {
+      "status": "found",
+      "version": "17.10",
+      "source": "database.postgres_bin_dir",
+      "programs": [
+        {
+          "name": "initdb",
+          "status": "found"
+        },
+        {
+          "name": "pg_ctl",
+          "status": "found"
+        },
+        {
+          "name": "postgres",
+          "status": "found"
+        },
+        {
+          "name": "pg_dump",
+          "status": "found"
+        },
+        {
+          "name": "pg_restore",
+          "status": "found"
+        },
+        {
+          "name": "psql",
+          "status": "found"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "language": "go",
+        "status": "ready",
+        "missing": [],
+        "dependencies": "internal_registry"
+      },
+      {
+        "language": "python",
+        "status": "partial",
+        "missing": [
+          "bandit",
+          "dependency_source"
+        ],
+        "dependencies": "none"
+      },
+      {
+        "language": "javascript",
+        "status": "ready",
+        "missing": [],
+        "dependencies": "internal_registry"
+      },
+      {
+        "language": "rust",
+        "status": "partial",
+        "missing": [
+          "dependency_source"
+        ],
+        "dependencies": "none"
+      },
+      {
+        "language": "cpp",
+        "status": "unavailable",
+        "missing": [
+          "cppcheck",
+          "clang-tidy"
+        ],
+        "dependencies": "not_fetched"
+      },
+      {
+        "language": "common",
+        "status": "ready",
+        "missing": [],
+        "dependencies": "not_fetched"
+      },
+      {
+        "language": "model",
+        "status": "ready",
+        "missing": [],
+        "dependencies": "not_fetched"
+      }
+    ]
   }
 }

@@ -1952,7 +1952,7 @@ components:
         github:
           description: >-
             개인 모드의 GitHub 연결. enabled는 설정 github.enabled, token은 저장된 token이 있는지, account는 그 token의 계정(GitHub에
-            닿지 못하면 null), source는 GH_TOKEN·GITHUB_TOKEN·gh 중 출처, reason은 token이 없거나 계정을 모르는 이유(no_token,
+            닿지 못하면 null), source는 GH_TOKEN·GITHUB_TOKEN·gh 중 출처, reason은 token이 없거나 계정을 모르는 이유(no_token, offline_mode(오프라인 모드, enabled false),
             token_refused, github_unavailable 등)다. 서버 모드와 이전 설정 요약은 null
           oneOf:
             - type: 'null'

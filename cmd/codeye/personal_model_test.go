@@ -107,6 +107,47 @@ func TestSetupPersonalModelProbesOnce(t *testing.T) {
 	}
 }
 
+// Offline, an API key in the environment does not replace the key file (or
+// create one) and is not used.
+func TestSetupPersonalModelOfflineKeepsKeyFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Linux paths")
+	}
+	base := t.TempDir()
+	state := filepath.Join(base, "state")
+	cfg, err := personal.Parse([]byte(`{"schema_version":"0.1","state_dir":"`+state+`","offline":true,"database":{"mode":"external"},"source_roots":[{"label":"w","path":"/srv/src"}]}`), knownTools())
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout := personal.Layout{Root: state}
+	personalModelEnv = func() personal.ModelEnv { return personal.ModelEnv{Home: filepath.Join(base, "home")} }
+	t.Cleanup(func() { personalModelEnv = personal.SystemModelEnv })
+	t.Setenv("OPENAI_API_KEY", "sk-test-env-0123456789")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("OPENCODE_API_KEY", "")
+	var out bytes.Buffer
+	if m := setupPersonalModel(context.Background(), cfg, layout, true, &out); m != nil {
+		t.Fatalf("offline with no key file: %v", m)
+	}
+	if _, err := os.Stat(layout.ModelSecret()); !os.IsNotExist(err) || strings.Contains(out.String(), "stored") || !strings.Contains(out.String(), "offline mode") {
+		t.Fatalf("stat %v\n%s", err, out.String())
+	}
+	if err := os.MkdirAll(filepath.Dir(layout.ModelSecret()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	before := []byte(`{"schema_version":"0.1","provider":"openai","api_key":"sk-file-0123456789"}` + "\n")
+	if err := os.WriteFile(layout.ModelSecret(), before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if m := setupPersonalModel(context.Background(), cfg, layout, true, &out); m != nil {
+		t.Fatalf("a key file without base_url is used offline: %v", m)
+	}
+	if after, _ := os.ReadFile(layout.ModelSecret()); !bytes.Equal(after, before) || !strings.Contains(out.String(), "no base_url") {
+		t.Fatalf("key file changed or wrong message:\n%s\n%s", after, out.String())
+	}
+}
+
 // The probe names the provider, model and OpenCode release and, when it
 // fails, the stage and reason; an untested release is said so.
 func TestModelProbeOutput(t *testing.T) {

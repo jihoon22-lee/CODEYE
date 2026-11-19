@@ -21,8 +21,8 @@
 | GitHub 연결(App) | 없음 |
 | PR·댓글 분석(App) | GitHub 연결(App) |
 | 다중 노드 검증 | 없음. GitHub 연결·PR·댓글 분석과 병행 |
-| 폐쇄망 배포팩 | 다중 노드 검증 |
-| 운영 수용 | PR·댓글 분석, 폐쇄망 배포팩 |
+| 폐쇄망 실기 확인 | 다중 노드 검증 |
+| 운영 수용 | PR·댓글 분석, 폐쇄망 실기 확인 |
 
 ## 여러 사용자·GitHub 연동·분산 운영
 
@@ -67,18 +67,16 @@ GitHub 연결·PR·댓글 분석과 병행한다. 실제 여러 물리 머신에
 
 개발 머신에서 검증할 수 없는 것: 여러 물리 노드, 실제 NFS, 실제 network partition.
 
-### 폐쇄망 배포팩
+### 폐쇄망 실기 확인
 
-내부 미러와 CA만 쓰는 배포 묶음을 만든다. 계약은 [운영](OPERATIONS.md)에 있다.
+배포팩·오프라인 모드·사내 CA는 구현했다([운영](OPERATIONS.md#폐쇄망-배포팩), [변경 기록](../CHANGELOG.md)). 개발 머신에서는 사설 CA·로컬 미러·network namespace로만 확인했다. 남은 것은 실제 환경이 있어야 하는 일이다.
 
 완료 조건:
-- 버전·hash가 고정된 서비스 바이너리·웹 자산·DB migration·규칙 팩·도구 manifest. manifest에 OS/arch·빌드 ABI·toolchain·DB·모델 adapter 버전을 적는다.
-- 외부 fallback 없음: 미러에 없는 버전은 unavailable로 표시하고 외부 다운로드·telemetry·외부 모델로 해결하지 않는다. CA 검증을 끄지 않는다(TC-30).
-- UI는 로컬 자산만 쓴다(외부 CDN 폰트·아이콘·JS·CSS 없음).
-- 분석기 catalog, 언어 toolchain, 프로젝트 의존성 mirror를 구분한다.
-- RHEL 8 대상의 glibc·시스템 라이브러리 호환을 실제로 확인한다. 최신 빌드 머신에서 컴파일됐다는 사실로 가정하지 않는다.
+- 내부 미러와 회사 CA가 있는 RHEL 8.10에서 묶음을 풀고 `codeye up --offline`으로 다섯 언어 프로젝트를 분석한다. 실행 파일은 정적이지만 PostgreSQL·분석 도구·OpenCode의 glibc·시스템 라이브러리 호환은 그 머신에서 확인한다.
+- 실제 폐쇄망에서 방화벽 기록으로 CODEYE·OpenCode·도구가 설정 밖으로 접속하지 않음을 확인한다(TC-30).
+- 사내 레지스트리 설정이 없는 cargo의 미러 경로와 CA(`CARGO_HTTP_CAINFO`) 확인. 사내 서명 체계에 맞춘 묶음 서명.
 
-개발 머신에서 검증할 수 없는 것: 내부 미러와 CA가 있는 RHEL 8.10.
+개발 머신에서 검증할 수 없는 것: 실제 폐쇄망, RHEL 8.10, 회사 CA·미러.
 
 ### 운영 수용
 

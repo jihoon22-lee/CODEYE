@@ -150,5 +150,14 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 		"OPENCODE_DISABLE_LSP_DOWNLOAD": "1", "OPENCODE_DISABLE_MODELS_FETCH": "1",
 		"OPENCODE_DISABLE_PROJECT_CONFIG": "1", "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1",
 		"OPENCODE_DISABLE_CLAUDE_CODE": "1",
+		// OpenCode asks the npm registry for its plugin package on every
+		// start, plugins off or not (measured with 1.19.5). The managed
+		// profile needs no package, so the lookup goes to a closed loopback
+		// port instead of registry.npmjs.org or an internal mirror.
+		"npm_config_registry": OpenCodeNpmRegistry,
 	}
 }
+
+// OpenCodeNpmRegistry is the npm registry of the managed OpenCode profile: a
+// loopback port nothing listens on (discard), so the lookup fails at once.
+const OpenCodeNpmRegistry = "http://127.0.0.1:9/"

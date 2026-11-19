@@ -19,6 +19,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 	"github.com/jihoon22-lee/CODEYE/internal/quota"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
@@ -115,6 +116,13 @@ type Config struct {
 	// --yarn); PipIndexURL is --pip-index-url.
 	PackageManagers map[string]string
 	PipIndexURL     string
+	// Offline (--offline) keeps the workers off every built-in public
+	// default: registries, checksum database, model endpoint
+	// (docs/OPERATIONS.md#오프라인-모드).
+	Offline bool
+	// CABundle (--ca-bundle) is the PEM file the fetch, Git and model
+	// processes trust; it must parse as PEM certificates at start.
+	CABundle string
 	// AnalyzerTools are absolute analyzer tool paths by tool name, one
 	// agent flag per tool (--staticcheck PATH, docs/ANALYZERS.md), and the shared
 	// toolchains under their reserved names (--node PATH, docs/ANALYZERS.md#도구-경로). The
@@ -258,6 +266,14 @@ func New(cfg Config) (*Agent, error) {
 	}
 	if !domain.ValidPackageIndexURL(cfg.PipIndexURL) {
 		return nil, &ExitError{ExitUsage, "--pip-index-url must be one http(s) URL without credentials"}
+	}
+	if cfg.CABundle != "" {
+		if !filepath.IsAbs(cfg.CABundle) {
+			return nil, &ExitError{ExitUsage, "--ca-bundle must be an absolute path"}
+		}
+		if _, err := executor.CheckCABundle(cfg.CABundle); err != nil {
+			return nil, &ExitError{ExitUsage, "--ca-bundle: " + err.Error()}
+		}
 	}
 	for _, p := range cfg.PackageManagers {
 		if p != "" && !filepath.IsAbs(p) {

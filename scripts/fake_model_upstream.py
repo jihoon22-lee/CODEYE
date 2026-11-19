@@ -19,6 +19,8 @@ exhaust a small ledger cap quickly), `fail` (HTTP 500, charged in full by the re
 A request with `"stream": true` (OpenCode's OpenAI provider called directly, without
 the relay) gets the same reply as a Responses event stream; its `input` content
 may be a list of `input_text` parts.
+`--tls-cert CERT --tls-key KEY` serves HTTPS (an internal endpoint behind a private
+CA, docs/OPERATIONS.md#사내-ca); the key and certificate are the caller's test files.
 `--echo-text TEXT` appends an operator-chosen text to every investigate candidate
 title, to see whether a model's own words reach the verify request (the relay's
 `--allow-model-echo` path). The text comes from the operator, never from labels.
@@ -33,6 +35,7 @@ import json
 import os
 import re
 import signal
+import ssl
 import sys
 import threading
 import time
@@ -255,7 +258,12 @@ def main(argv=None) -> int:
     parser.add_argument("--mode", choices=("normal", "expensive", "fail", "unauthorized"), default="normal")
     parser.add_argument("--dump", type=Path, help="write every received payload here (dry-run analysis only)")
     parser.add_argument("--echo-text", help="append this operator text to investigate candidate titles")
+    parser.add_argument("--tls-cert", type=Path, help="serve HTTPS with this certificate chain (PEM)")
+    parser.add_argument("--tls-key", type=Path, help="the private key of --tls-cert (PEM)")
     args = parser.parse_args(argv)
+    if (args.tls_cert is None) != (args.tls_key is None):
+        print("--tls-cert and --tls-key go together", file=sys.stderr)
+        return 2
     if args.ready_file.exists():
         print("ready file exists", file=sys.stderr)
         return 2
@@ -263,6 +271,10 @@ def main(argv=None) -> int:
         args.dump.mkdir(mode=0o700, parents=True, exist_ok=True)
     fake = FakeUpstream(args.mode, args.dump, args.echo_text)
     server = make_server(fake)
+    if args.tls_cert is not None:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(args.tls_cert, args.tls_key)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     stop = threading.Event()
 
     def _shutdown(signum, frame):
