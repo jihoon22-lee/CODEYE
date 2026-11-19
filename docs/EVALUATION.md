@@ -147,6 +147,11 @@
 - 실행: `CODEYE_PILOT_RELAY_FILE`에 relay ready file을, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정하고 `python3 scripts/test_postgres.py --pilot`을 실행한다. 실제 모델 요청을 보낸다.
 - 대상 한정: `CODEYE_PILOT_CASES`에 `Q01-before,Q01-after,...,w15,w12-close,pilot,git`처럼 쉼표로 준다. 비우면 합성 쌍 전체, 고정 공개 커밋, 공개 HTTPS `main`을 실행한다. 고정 입력 `w15`·`w12-close`는 명시할 때만 들어간다.
 - 팩: `CODEYE_PILOT_REVIEW_PACK`(비우면 에이전트 기본값 `review-r1`).
+- 모듈 단위 slice: `CODEYE_PILOT_GITLEAKS`(gitleaks 절대 경로, slice는 완료된 비밀값 선별이 있어야 실행된다)와 `CODEYE_PILOT_REVIEW_MAX_CALLS`(비우면 에이전트 기본값 33)를 에이전트에 넘긴다. `CODEYE_PILOT_LEDGER`를 주면 그 relay 장부도 검사한다. 실행 뒤 `check_coverage`가 다음을 확인하고 결과를 `coverage-check.json`에 남긴다. 하나라도 어긋나면 실행이 실패한다.
+  - 파일럿이 아닌 사례에는 slice task가 없고, review-r1 호출의 지침 팩 digest가 Go 단독 선택의 고정값이다.
+  - 파일럿은 `completed`이고 AI 검토가 `performed`다. 검토 기록의 호출 합계가 상한 이하이고, 기록 없이 실패한 검토 task가 없다(그 호출은 합계에 들어가지 않는다). 범위 산출물의 상한이 설정과 같다. `budget_exhausted` slice에는 기록이 없다. overview와 slice의 investigate가 같은 파일을 보내지 않는다. 보고서의 `llm_exposed_files`가 overview가 보낸 파일 수보다 크다.
+  - relay 장부에 `refused`·`blocked` 요청이 없다.
+- 비용 없는 dry run: `python3 scripts/regression_pilot.py --dry-run --relay-file R --ledger L --results DIR --cases ... [--gitleaks P] [--max-calls N] [--build-root SRC] [--no-coverage-check]`. 장부 header가 `test-loopback`(relay `--test-upstream`)이 아니면 거부한다. 웹 빌드와 브라우저 내보내기는 하지 않는다. `--build-root`로 다른 checkout의 바이너리를 만들어 기준으로 삼고, `--compare-dumps BASE CAND`가 두 가짜 upstream `--dump` 디렉터리의 요청을 실행마다 다른 ID를 바꾼 뒤 다중집합으로 비교한다.
 - 에이전트 두 대는 같은 호스트에서 풀 최소·최대 0과 2로 돈다. 합성 사례와 공개 사본의 트리 해시를 실행 전후에 대조한다.
 - 감사: `python3 scripts/regression_pilot.py --audit-results "$CODEYE_PILOT_RESULTS"`가 보관된 보고서를 원본과 다시 대조한다(구조·통계·스냅샷, 주장과 근거의 파일 위치·줄 범위·blob SHA). Git 입력의 commit 객체가 로컬에 있어야 한다. 이 검사는 주장 자체가 옳다는 보증과 구분한다.
 - 두 결과 비교: `python3 scripts/pack_compare.py A_DIR B_DIR --judgments FILE`. 보관 결과만 읽고 모델 요청을 보내지 않는다. 구조 지표는 보고서에서, 결함 판정은 스냅샷 밖 판정 파일에서 읽는다. 판정은 평가자의 라벨이며 측정된 precision이 아니다.
@@ -261,6 +266,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 
 - 기대값: 이력에 같은 변형이 있으면 그 변형의 역할별 호출 수, 없으면 이력의 변형당 평균(이력이 없으면 상수표) × 호출당 비용.
 - 상한: 팩의 모든 역할이 변형마다 한 번 호출된다고 본다(이력에 그 변형의 호출 수가 더 많으면 그 수). 형식 복구 10%를 더하고 호출당 비용에 여유 계수 1.5를 곱한다(`--margin`).
+- review-r1에서 이력의 그 변형 호출 수가 역할 수보다 많으면 모듈 단위 slice가 계획된 변형이다. slice는 남은 호출이 있는 동안 승인되므로 형식 복구가 많으면 attempt 상한까지 쓸 수 있다. 이 변형의 상한은 `--review-max-calls`(기본 33, 에이전트에 그대로 넘긴다)회 × investigate·verify 중 비싼 호출당 비용 × 여유 계수다. 이력이 없는 변형은 slice 여부를 알 수 없으므로 같은 표본의 capture dry run을 먼저 돌려 이력으로 준다([검토](REVIEW.md#모듈-단위-검토-분할)).
 - `--history DIR`은 manifest의 팩 id(review-v1은 `codeye.review`)로 같은 팩의 batch만 쓴다. 쓸 수 있는 행이 없으면 상수표로 돌아가지 않고 오류로 끝난다.
 - 호출당 비용의 출처 우선순위: (1) 실제 batch 이력이면 역할별 usage 평균 × relay 단가(입력 5, 출력 10 microUSD/token), (2) dry run 이력이면 역할별 최대 요청 바이트 ÷ 3(바이트당 토큰) × 5 + 출력 600 토큰 × 10, (3) 상수표(`quality_eval.py`의 `CONSTANTS`). 상수표는 단일 파일 Go 입력에서 나온 값이라 다파일·다언어 사례에서는 작을 수 있다.
 - 바이트당 3토큰과 여유 계수 1.5는 실측에 맞춘 값이 아닌 보수적 근사다. 실제 batch의 usage를 이력으로 주면 그 값을 쓴다.

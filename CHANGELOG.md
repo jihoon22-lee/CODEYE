@@ -4,6 +4,14 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — 모듈 단위 검토 분할
+
+- overview가 보내지 못한 코드·테스트 파일을 모듈 단위 slice(`review.investigate.sNNN`, `review.verify.sNNN`, 최대 32개)로 검토한다. 계획은 manifest·scope·상수로만 정하고, `review.scope`가 overview가 실제로 보낸 파일을 빼고 범위 산출물(`application/vnd.codeye.review-scope+json` 0.1)을 쓴다. slice 기록은 schema 0.3이다. 지침 문구는 바뀌지 않았고 slice 요청의 지침 hash는 overview와 같다.
+- attempt당 모델 호출 상한 `codeye agent --review-max-calls`(기본 33, 15~207), Hello `review_max_calls`, 개인 설정 `agent.model.review_max_calls`. 전체 역할 다섯 개가 먼저 실행되고(최대 15회), slice는 남은 호출이 6 이상일 때 차례로 승인된다. 거절된 slice는 `budget_exhausted`(`review_budget_exhausted`)다.
+- slice는 완료된 비밀값 선별이 있을 때만 실행한다(`secret_screen_unavailable`). gitleaks는 지원 언어 소스가 없어도 안내 문서·모듈 manifest 같은 모델 입력 파일이 범위에 있으면 계획된다.
+- `scripts/regression_pilot.py`가 gitleaks 경로와 호출 상한을 에이전트에 넘기고 slice 조건을 검사하며, `--dry-run`(시험 장부의 relay만)과 `--compare-dumps`를 갖는다. `scripts/quality_eval.py`의 상한 추정은 slice가 있는 변형을 호출 상한까지로 본다.
+- 확인 환경: Linux, Go 1.27.4, PostgreSQL 17.10(임시 cluster), gitleaks 8.30.1, OpenCode 1.19.5와 가짜 upstream(`--test-upstream`). 실모델 호출은 하지 않았다. 보고서는 아직 slice 기록과 범위 산출물을 해석하지 않는다(모듈별 검토 장부는 보고서 재구성 뒤).
+
 ### 변경
 
 - **문서 통합 (#37)**: 번호를 붙인 단계별 문서 50개를 주제별 문서 16개(`docs/`)와 이 변경 이력으로 바꿨다. 주제 문서에는 현재 유효한 계약과 운영 규칙만 두고, 코드에서 문서를 가리키는 참조는 절 anchor까지 검증한다.

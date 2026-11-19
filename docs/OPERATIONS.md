@@ -103,7 +103,7 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로 |
 | `agent.tools` | 빈 값 | 이 빌드의 분석기·toolchain 플래그 이름(`staticcheck`, `node`, `ruff` 등)을 키로, 실행 파일의 절대 경로를 값으로. 모르는 이름은 거부한다 |
 | `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행 |
-| `agent.model` | 없음 | `opencode`(절대 경로), `name`(`PROVIDER/MODEL`, 공백 없음), 선택 `relay_file`(절대 경로), `review_pack`(`review-r1` 기본·`review-v1` 이전 팩) |
+| `agent.model` | 없음 | `opencode`(절대 경로), `name`(`PROVIDER/MODEL`, 공백 없음), 선택 `relay_file`(절대 경로), `review_pack`(`review-r1` 기본·`review-v1` 이전 팩), `review_max_calls`(15~207, 비우면 33: attempt마다 review-r1 모델 호출 상한, `--review-max-calls`) |
 | `quota.*_bytes` | 0(상한 없음) | `snapshot`·`workspace`·`cache`·`logs`·`artifacts`, 음수 거부 |
 | `backup_dir` | 빈 값 | 절대 경로. `state_dir` 안이거나 `state_dir`를 포함하면 거부 |
 | `stop.drain_timeout_seconds` | 300 | 1~86400 |

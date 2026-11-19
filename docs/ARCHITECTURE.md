@@ -438,6 +438,7 @@ task key와 단계의 대응:
 | `docs.discover`, `review.documents`, `review.context`(review-v1) | `documents` |
 | 분석기 task(go vet 등) | `static_analysis` |
 | `review.investigate`, `review.interpret`, `review.verify` | `code_review` |
+| `review.scope`, `review.investigate.sNNN`, `review.verify.sNNN`(모듈 단위 slice, [검토](REVIEW.md#모듈-단위-검토-분할)) | `code_review` |
 
 ### task 단계의 상태
 
@@ -473,8 +474,12 @@ task key와 단계의 대응:
 | `no_documents` | 스냅샷 범위에 문서가 없어 문서 역할 생략 | 아니오 | 아니오 |
 | `no_tool_observations` | 해석할 도구 관찰이 없어 진단 해석 생략 | 아니오 | 아니오 |
 | `no_environment_gap` | 모든 선언이 관측과 일치해 환경 해석 생략 | 아니오 | 아니오 |
+| `no_review_scope` | slice에 보낼 파일이 남지 않음(overview가 보냈거나 모두 보류·읽기 불가) | 아니오 | 아니오 |
+| `secret_screen_unavailable` | 완료된 비밀값 선별이 없어 범위와 slice를 보내지 않음(정책 제외) | 아니오 | 예 |
 
-필수 여부는 계획 때 정한다. 역할별 필수 규칙은 [검토](REVIEW.md)에 있다.
+필수 여부는 계획 때 정한다. 역할별 필수 규칙은 [검토](REVIEW.md)에 있다. 호출 상한으로 거절된 slice는 `budget_exhausted`(`review_budget_exhausted`)이고 다른 성공 task와 함께 있으면 단계를 `partial`로 남긴다. slice는 판정 필수가 아니므로 run 상태에는 영향이 없다.
+
+모듈 단위 slice는 한 attempt 안에서 호출 상한을 나눠 쓴다. 계수는 attempt scratch의 파일 하나이고 worker가 task를 차례로 실행한다는 전제에 기댄다. 전역·프로세스 간 상태가 없으므로 다중 노드 확장에 영향이 없다. 한 attempt 안에서 slice를 병렬로 실행하려면 그 attempt의 task가 공유하는 계수가 필요하다.
 
 ### 단계 기록 규칙
 

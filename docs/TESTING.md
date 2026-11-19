@@ -155,6 +155,21 @@
 | TC-128 | review-r1 2.0.0. 거부된 출력 뒤 JSON 아닌 복구 응답, JSON 아닌 응답 연속 두 번, 두 번 거부, verify에서 관찰 ID가 섞인 항목·관찰 ID만으로 지지한 항목·유효 근거 옆의 지어낸 ID, 후속 호출 timeout, 3회 호출 기록의 보고서 경로 | JSON 아닌 응답은 복구와 별도로 한 번 재시도하고 앞 오류 코드를 유지한다(단계당 최대 3회). 연속 두 번이나 두 번 거부면 2회에서 실패하고 격리한다. 요청의 관찰 ID만 빼고도 판정 규칙을 통과하는 항목만 받아들이고 `evidence_id_dropped`를 남긴다. 지어낸 ID는 거부한다. 후속 호출 실패는 수락한 판정을 유지하고 나머지를 격리한다. 3회 호출 기록이 보고서 검증과 두 schema를 통과한다. 합성 입력만 쓴다. | REQ-011,013; NFR-008 |
 | TC-129 | review-r1 2.0.0 기본 팩. 팩 미지정·`review-v1`·모르는 팩의 에이전트·워커·개인 설정, 기본 회귀 집합(`fixtures/regression/`)의 실모델 실행(**실모델**) | 미지정이면 r1의 다섯 역할을 계획하고 `review-v1`은 세 역할, 모르는 팩은 사용 오류다. v1 요청 바이트는 그대로다. 회귀 실행은 [평가](EVALUATION.md)의 사전 기준으로 판정하고 차단 조건이 없어야 한다. 품질 우월의 근거가 아니다. | REQ-010,027; NFR-007,010; TC-100 |
 
+모듈 단위 검토 분할([모델 검토](REVIEW.md#모듈-단위-검토-분할)):
+
+| TC | 조건 | 기대 결과 | 요구 |
+|---|---|---|---|
+| TC-160 | 지원 언어 소스 없이 문서·manifest만 있는 스냅샷, 모델 입력이 될 파일이 없는 스냅샷, 범위 밖 파일, gitleaks 미설정 | 모델 입력 파일(지원 언어 소스·안내 문서·모듈 manifest)이 범위에 있으면 gitleaks를 계획하고 아니면 계획하지 않는다. 미설정이면 `unsupported`(`tool_not_configured`)로 공백이 보인다. 비밀값 작업만 있는 보고서도 `static_analysis_not_planned`다. | REQ-009; NFR-008 |
+| TC-161 | 무작위 트리와 항목 순서, 400파일 한도 사례, `fixtures/modules/coverage/input` | 적격 파일마다 overview 접두·slice·계획 안 함 중 정확히 한 곳이다. slice는 8개·12,000바이트(상한 기준)·모듈 8개 이하이고 32개를 넘지 않으며, 순회 순서로 너비가 깊이보다 먼저다. 항목 순서가 바뀌어도 계획이 같다. coverage fixture의 계획은 입력 밖의 기대값(`expected-plan.json`)과 같다. | REQ-009,027 |
+| TC-162 | 0~4,000바이트의 무작위 파일(JSON이 escape하는 문자·제어 문자·다바이트 문자) | 파일 상한 `min(2400, 6 × size + 2)`는 실제 JSON 발췌 바이트보다 작지 않다. | REQ-009 |
+| TC-163 | 회귀 집합과 기존 fixture처럼 모든 적격 파일이 overview에 들어가는 저장소 | slice와 `review.scope`를 계획하지 않는다. 계획·요청 바이트·기록이 이전과 같다(`TestGoReviewInputsUnchanged`의 요청 hash 줄, `TestRolePackExampleRecords`, `TestLegacyPackIsPinned`). | REQ-009,027; NFR-007 |
+| TC-164 | 기록 0.3과 범위 산출물 0.1: slice 없는 0.3, slice 있는 0.2, 범위 밖 key, 모듈 9개, interpret 단계·후보, 0.2 기록의 slice upstream, 두 곳에 있는 파일, 정렬되지 않은 `offered`, `offered`와 다른 `covered_by_overview`, 모듈 수 불일치, 미선별 산출물, 상한 208 | Go decoder와 JSON schema·`validate_bundle.py`가 모두 거부한다. 0.2 기록의 바이트는 그대로다. 예시는 coverage fixture로 다시 만든 바이트와 같다. | REQ-011,027 |
+| TC-165 | 상한 15·33·207, task마다 1회와 3회 호출하는 가짜 upstream | 계획 key는 상한과 무관하다. attempt의 호출은 상한 이하다. 승인된 slice는 계획의 앞부분이고 각자 남은 호출이 6 이상일 때 승인됐다. 거절된 slice와 짝 verify는 호출·기록 없이 `budget_exhausted`(`review_budget_exhausted`)다. 1회 호출이면 최악 사례 사전 승인보다 많은 slice가 실행된다. | REQ-012,027; NFR-007 |
+| TC-166 | 비밀값 작업 없음·미실행·실패·완료(보고된 파일이 slice에 있음), 판단 순서 | 완료된 선별이 없으면 `review.scope`와 모든 slice가 `secret_screen_unavailable`이고 요청이 없다. 전체 역할은 기존 규칙을 따른다. 보고된 파일은 범위 산출물에서 `withheld`이고 어떤 요청에도 없다. 파일이 남지 않은 slice는 상한이 다해도 `no_review_scope`다. 승인 없음 → 미선별 → 범위 산출물 없음(`dependency_failed`) 순서다. | REQ-009; NFR-008 |
+| TC-167 | coverage fixture와 다섯 언어 최악 사례, 상한 207 | 어떤 코드·테스트 파일도 두 investigate 요청에 가지 않는다. slice 요청의 지침은 overview와 바이트가 같다. slice 기록은 0.3이고 범위 산출물에 묶인다. run이 보낸 파일 수가 overview보다 많다. 다섯 언어 최악 사례의 모든 slice 요청이 40,000바이트 안이고 다섯 언어 지침을 싣는다. | REQ-009,027 |
+| TC-168 | 진행 단계, 실제 worker(상한 15, slice 요청 중 취소), 노드 프로토콜과 PostgreSQL | `no_review_scope`는 단계를 낮추지 않고 `budget_exhausted`·`secret_screen_unavailable`은 `code_review`를 `partial`로 남긴다. 실제 worker는 15회 이하로 끝나고 보고서가 만들어지며 AI 검토는 수행이다. 취소는 정리를 확인하고 이후 slice 요청이 없다. 서버는 slice key와 queued·running에서의 `budget_exhausted`를 받고, 계획 revision은 1이며, slice 실행 중 취소로 run이 `cancelled`가 된다. | REQ-012,018; NFR-006 |
+| TC-169 | 보고서 코드 검토 절의 모듈별 검토 장부(보고서 재구성 뒤) | 예약. 장부 합계와 `llm_exposed_files`가 기록과 맞는다. | REQ-012,027 |
+
 역할·입력·복구 규칙은 [모델 검토](REVIEW.md)에 있다.
 
 ## 보고서·화면
