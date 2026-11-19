@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,6 +75,15 @@ type Config struct {
 	GoPrivate string
 	GoNoProxy string
 	GoNoSumDB string
+
+	// Python fetch (python.go): the operator's interpreter (--python), uv
+	// (--uv, used instead of pip when set), the package index
+	// (--pip-index-url, "" = PyPI), and whether mypy or pyright is usable on
+	// this node (nothing else reads the prepared packages).
+	Python          string
+	UV              string
+	PipIndexURL     string
+	PythonConsumers bool
 
 	ModuleTimeout    time.Duration
 	TotalTimeout     time.Duration
@@ -133,7 +143,16 @@ type Fetcher interface {
 }
 
 // Fetchers are this build's fetchers in plan order.
-func Fetchers() []Fetcher { return []Fetcher{GoFetcher{}} }
+func Fetchers() []Fetcher { return []Fetcher{GoFetcher{}, PythonFetcher{}} }
+
+// ManagerFlags are the agent flags (--<name> PATH) of the package managers
+// this build's fetchers run, sorted. They travel in the hello's
+// dependencies.package_managers; go is the --go toolchain.
+func ManagerFlags() []string {
+	out := append([]string{}, PythonManagers...)
+	sort.Strings(out)
+	return out
+}
 
 // Handler wraps an inner handler with the dependency tasks.
 type Handler struct {
@@ -268,11 +287,12 @@ func (e *Env) CacheDir(key string) string {
 	return filepath.Join(e.Config.CacheRoot, filepath.FromSlash(key))
 }
 
-// Exec runs one process with the task's remaining time and, when watch is
-// set, stops it once that directory grew past the download allowance. The
-// streams are stored as an execution of the task. ok is false when the
-// process did not exit on its own; Stop then says why.
-func (e *Env) Exec(ctx context.Context, name string, spec executor.Spec, watch string) (executor.Result, bool) {
+// Exec runs one process with the task's remaining time and, when watch
+// names directories, stops it once they grew together past the download
+// allowance ("" entries are ignored). The streams are stored as an
+// execution of the task. ok is false when the process did not exit on its
+// own; Stop then says why.
+func (e *Env) Exec(ctx context.Context, name string, spec executor.Spec, watch ...string) (executor.Result, bool) {
 	e.stop = ""
 	left := time.Until(e.deadline)
 	if left <= 0 {
@@ -299,10 +319,11 @@ func (e *Env) Exec(ctx context.Context, name string, spec executor.Spec, watch s
 	defer cancel()
 	var over atomic.Bool
 	done, watching := make(chan struct{}), make(chan struct{})
-	if watch == "" {
+	watched := slices.DeleteFunc(slices.Clone(watch), func(d string) bool { return d == "" })
+	if len(watched) == 0 {
 		close(watching)
 	} else {
-		base, every := dirBytes(watch), pollEvery
+		base, every := dirBytes(watched...), pollEvery
 		go func() {
 			// Exec returns only after the watcher stopped walking the cache.
 			defer close(watching)
@@ -313,7 +334,7 @@ func (e *Env) Exec(ctx context.Context, name string, spec executor.Spec, watch s
 				case <-done:
 					return
 				case <-t.C:
-					if dirBytes(watch)-base > e.downloadLeft {
+					if dirBytes(watched...)-base > e.downloadLeft {
 						over.Store(true)
 						cancel()
 						return
@@ -545,17 +566,19 @@ func sortedUnique(in []string) []string {
 	return out
 }
 
-// dirBytes sums regular file sizes under dir (links are not followed); a
-// missing directory is empty.
-func dirBytes(dir string) int64 {
+// dirBytes sums regular file sizes under the directories (links are not
+// followed); a missing directory is empty.
+func dirBytes(dirs ...string) int64 {
 	var n int64
-	_ = filepath.WalkDir(dir, func(_ string, d os.DirEntry, err error) error {
-		if err == nil && d.Type().IsRegular() {
-			if info, e := d.Info(); e == nil {
-				n += info.Size()
+	for _, dir := range dirs {
+		_ = filepath.WalkDir(dir, func(_ string, d os.DirEntry, err error) error {
+			if err == nil && d.Type().IsRegular() {
+				if info, e := d.Info(); e == nil {
+					n += info.Size()
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
+	}
 	return n
 }
