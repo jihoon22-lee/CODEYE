@@ -75,6 +75,9 @@ func toolsCommand(ctx context.Context, args []string, out, stderr io.Writer) int
 		fmt.Fprintln(stderr, "cannot write the result")
 		return 1
 	}
+	if cfg != nil && !cfg.Agent.AutoDetectEnabled() {
+		fmt.Fprintln(out, "agent.auto_detect is false: the agent uses only the tools set in agent.*")
+	}
 	return 0
 }
 
