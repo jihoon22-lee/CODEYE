@@ -298,11 +298,15 @@ func (e *Env) Exec(ctx context.Context, name string, spec executor.Spec, watch s
 	rctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var over atomic.Bool
-	done := make(chan struct{})
-	if watch != "" {
-		base := dirBytes(watch)
+	done, watching := make(chan struct{}), make(chan struct{})
+	if watch == "" {
+		close(watching)
+	} else {
+		base, every := dirBytes(watch), pollEvery
 		go func() {
-			t := time.NewTicker(pollEvery)
+			// Exec returns only after the watcher stopped walking the cache.
+			defer close(watching)
+			t := time.NewTicker(every)
 			defer t.Stop()
 			for {
 				select {
@@ -320,6 +324,7 @@ func (e *Env) Exec(ctx context.Context, name string, spec executor.Spec, watch s
 	}
 	res := e.runner.Run(rctx, spec)
 	close(done)
+	<-watching
 	if x, err := analysis.WriteExecution(e.execDir, name, res); err == nil {
 		e.executions = append(e.executions, x)
 	}
