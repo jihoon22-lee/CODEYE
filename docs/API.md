@@ -4,9 +4,9 @@
 
 ## 구현 범위
 
-- OpenAPI operation의 `x-codeye-status`가 `implemented-`로 시작하면 서버가 실제로 제공한다. 그 밖의 operation은 설계 계약(미구현)이다. 현재 미구현 operation은 풀 관리(`/api/v1/admin/pools/{pool_id}`)와 Git webhook 수신(`/api/v1/providers/{provider_id}/webhook`)이다.
+- OpenAPI operation의 `x-codeye-status`가 `implemented`이면 서버가 실제로 제공한다. 그 밖의 operation은 설계 계약(미구현)이다. 현재 미구현 operation은 풀 관리(`/api/v1/admin/pools/{pool_id}`)와 Git webhook 수신(`/api/v1/providers/{provider_id}/webhook`)이다.
 - 서버가 등록한 라우트와 OpenAPI의 구현 operation이 같은지 [`internal/httpapi/contract_test.go`](../internal/httpapi/contract_test.go)가 확인한다. 라우트 표는 [`internal/httpapi/api.go`](../internal/httpapi/api.go)와 [`node.go`](../internal/httpapi/node.go)에 있다.
-- 사용자 인증은 세션 cookie뿐이며, 세션은 일회용 로그인 링크나 사용자 이름·비밀번호로 만든다. 사용자 Bearer 토큰(`UserBearer`)은 구현하지 않았다. loopback이 아닌 주소는 TLS로만 받는다([보안](SECURITY.md#네트워크와-브라우저)). 계정·구성원·감사 기록의 웹 화면은 아직 없고 API와 운영자 CLI만 있다.
+- 사용자 인증은 세션 cookie뿐이며, 세션은 일회용 로그인 링크나 사용자 이름·비밀번호로 만든다. 사용자 Bearer 토큰(`UserBearer`)은 구현하지 않았다. loopback이 아닌 주소는 TLS로만 받는다([보안](SECURITY.md#네트워크와-브라우저)). 계정·구성원·감사 기록은 웹 화면과 CLI에서 다룬다.
 - 설계 계약(미구현) 사용자 API: 프로젝트 설정 변경, 연결 진단·브랜치 조회, 같은 입력 재시도, 개별 task·로그 조회(로그는 상태 이벤트와 별도의 byte/record cursor로 가져오는 설계), 첫 발견 시각 이력, 판정 일괄 적용, 풀·노드 관리 웹 API. 풀·노드 관리는 운영자 CLI를 쓴다([운영](OPERATIONS.md)).
 
 ## 공통 규칙
