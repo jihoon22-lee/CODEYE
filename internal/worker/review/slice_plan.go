@@ -59,8 +59,12 @@ type plannedFile struct {
 	Rank             string // record.Ranks
 	Observations     int    // non-metric tool diagnostics located in the file
 	Severity         int    // highest record.SeverityRank of those diagnostics
-	group            int    // index of the module in the visit order
-	pos              int    // position in the module's rank order
+	// Tier is the pull-request tier (tierChanged for every file of a run
+	// without a pull request) and Change its label (changed, neighbor, "").
+	Tier   int
+	Change string
+	group  int // index of the module in the visit order
+	pos    int // position in the module's rank order
 }
 
 // reviewSlice is one filled slot: up to sliceMaxFiles files and
@@ -69,8 +73,9 @@ type reviewSlice struct {
 	Key     string   // s001..s096
 	Modules []string // sorted module IDs
 	Files   []plannedFile
-	// Class and Rank are those of the slot's first (highest-priority) file.
-	Class, Rank string
+	// Class, Rank and Change are those of the slot's first
+	// (highest-priority) file.
+	Class, Rank, Change string
 }
 
 // slotTaskKeys are the investigate and verify task keys of a slot.
@@ -129,10 +134,24 @@ func slotSlack(n int) int { return max(2, (n+7)/8) }
 // may offer more than P when a file of P was unreadable), so no file is
 // reviewed twice.
 func planSlices(m source.Manifest, scope domain.Scope, rule record.SecondaryRule) slicePlan {
-	g := planCodeGroups(m, scope, rule)
+	return planSlicesFor(m, scope, rule, nil)
+}
+
+// planSlicesFor is planSlices of a pull-request run (changed not nil, see
+// planCodeGroupsFor): the overview prefix takes the changed files first and
+// the slots are packed changed files first, then their neighbors.
+func planSlicesFor(m source.Manifest, scope domain.Scope, rule record.SecondaryRule, changed []string) slicePlan {
+	g := planCodeGroupsFor(m, scope, rule, changed)
 	var plan slicePlan
+	position := map[string]int{}
+	for _, k := range g.order {
+		for i, e := range g.files[k] {
+			position[e.Path] = i
+		}
+	}
 	file := func(gi, pos int, key string, e source.Entry) plannedFile {
-		f := plannedFile{Path: e.Path, SHA256: e.SHA256, Module: moduleID(key), Size: *e.Size, Bound: excerptBound(*e.Size), Class: record.ClassPrimary, group: gi, pos: pos}
+		f := plannedFile{Path: e.Path, SHA256: e.SHA256, Module: moduleID(key), Size: *e.Size, Bound: excerptBound(*e.Size), Class: record.ClassPrimary, group: gi, pos: pos,
+			Tier: g.tierOf(e.Path), Change: g.change(e.Path)}
 		if seg := g.secondary[e.Path]; seg != "" {
 			f.Class, f.Secondary = record.ClassSecondary, record.ReasonSecondaryPath+":"+seg
 		}
@@ -148,16 +167,17 @@ func planSlices(m source.Manifest, scope domain.Scope, rule record.SecondaryRule
 		index[k] = gi
 	}
 	remain, open := roleMaxCodeBytes, true
-	for _, order := range g.phases() {
+	for _, ph := range g.phases() {
 		more := open
 		for round := 0; more; round++ {
 			progressed := false
-			for _, k := range order {
-				if round >= len(g.files[k]) {
+			for _, k := range ph.order {
+				if round >= len(ph.files[k]) {
 					continue
 				}
 				progressed = true
-				f := file(index[k], round, k, g.files[k][round])
+				e := ph.files[k][round]
+				f := file(index[k], position[e.Path], k, e)
 				if len(plan.Overview) >= roleMaxCodeFiles || remain < 128 || f.Bound > remain {
 					open = false
 					break
@@ -254,6 +274,7 @@ func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 	type chunk struct {
 		files      []plannedFile
 		bytes      int
+		tier       int
 		class      string
 		rank       int
 		sev, count int
@@ -265,6 +286,8 @@ func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 		sort.SliceStable(list, func(a, b int) bool {
 			x, y := list[a], list[b]
 			switch {
+			case x.Tier != y.Tier:
+				return x.Tier < y.Tier
 			case x.Class != y.Class:
 				return x.Class == record.ClassPrimary
 			case record.RankIndex(x.Rank) != record.RankIndex(y.Rank):
@@ -289,7 +312,7 @@ func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 		runs := make([]run, len(list))
 		for i := len(list) - 1; i >= 0; i-- {
 			runs[i] = run{1, list[i].Bound}
-			if i+1 < len(list) && path.Dir(list[i+1].Path) == path.Dir(list[i].Path) && list[i+1].Class == list[i].Class && list[i+1].Rank == list[i].Rank {
+			if i+1 < len(list) && path.Dir(list[i+1].Path) == path.Dir(list[i].Path) && list[i+1].Tier == list[i].Tier && list[i+1].Class == list[i].Class && list[i+1].Rank == list[i].Rank {
 				runs[i].files += runs[i+1].files
 				runs[i].bytes += runs[i+1].bytes
 			}
@@ -299,13 +322,13 @@ func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 			weight[gi][f.Class] += f.Bound
 			newDir := level == packStrict && i > 0 && path.Dir(list[i-1].Path) != path.Dir(f.Path)
 			newRank := level != packAnyRank && cur.rank != record.RankIndex(f.Rank)
-			if len(cur.files) > 0 && (len(cur.files) >= sliceMaxFiles || cur.bytes+f.Bound > sliceMaxBytes || cur.class != f.Class || newRank ||
+			if len(cur.files) > 0 && (len(cur.files) >= sliceMaxFiles || cur.bytes+f.Bound > sliceMaxBytes || cur.tier != f.Tier || cur.class != f.Class || newRank ||
 				(newDir && (len(cur.files)+runs[i].files > sliceMaxFiles || cur.bytes+runs[i].bytes > sliceMaxBytes))) {
 				chunks[gi] = append(chunks[gi], cur)
 				cur = chunk{}
 			}
 			if len(cur.files) == 0 {
-				cur.class, cur.rank = f.Class, record.RankIndex(f.Rank)
+				cur.tier, cur.class, cur.rank = f.Tier, f.Class, record.RankIndex(f.Rank)
 			}
 			cur.files = append(cur.files, f)
 			cur.bytes += f.Bound
@@ -327,6 +350,8 @@ func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 	better := func(a, b int) bool {
 		x, y := chunks[a][head[a]], chunks[b][head[b]]
 		switch {
+		case x.tier != y.tier:
+			return x.tier < y.tier
 		case x.class != y.class:
 			return x.class == record.ClassPrimary
 		case x.rank != y.rank:
@@ -350,7 +375,7 @@ func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 	}
 	var out []reviewSlice
 	var cur []plannedFile
-	used, class, rank := 0, "", 0
+	used, tier, class, rank := 0, 0, "", 0
 	modules := func(list []plannedFile) []string {
 		var ms []string
 		for _, f := range list {
@@ -365,7 +390,7 @@ func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 		if len(cur) == 0 {
 			return
 		}
-		out = append(out, reviewSlice{Key: sliceKey(len(out)), Modules: modules(cur), Files: cur, Class: class, Rank: record.Ranks[rank]})
+		out = append(out, reviewSlice{Key: sliceKey(len(out)), Modules: modules(cur), Files: cur, Class: class, Rank: record.Ranks[rank], Change: cur[0].Change})
 		cur, used = nil, 0
 	}
 	for {
@@ -381,12 +406,12 @@ func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 		c := chunks[best][head[best]]
 		head[best]++
 		picks[best][c.class]++
-		if len(cur) > 0 && (c.class != class || len(cur)+len(c.files) > sliceMaxFiles || used+c.bytes > sliceMaxBytes ||
+		if len(cur) > 0 && (c.tier != tier || c.class != class || len(cur)+len(c.files) > sliceMaxFiles || used+c.bytes > sliceMaxBytes ||
 			len(modules(append(slices.Clip(cur), c.files...))) > record.MaxSliceModules) {
 			closeSlot()
 		}
 		if len(cur) == 0 {
-			class, rank = c.class, c.rank
+			tier, class, rank = c.tier, c.class, c.rank
 		}
 		cur = append(cur, c.files...)
 		used += c.bytes

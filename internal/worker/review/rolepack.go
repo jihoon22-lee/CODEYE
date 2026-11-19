@@ -116,7 +116,7 @@ func (h RoleHandler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskS
 		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "독립 코드 검토", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.interpret", Required: false, Title: "정적 진단 해석", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview})
-	sp := planSlices(j.Snapshot.Manifest, j.Scope, h.secondary())
+	sp := planSlicesFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j))
 	if sp.Slots == 0 {
 		return plan, nil
 	}

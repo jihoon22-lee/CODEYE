@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000604` rev `1` |
-| digest | `507331f68342` |
+| digest | `db6b40d149bb` |
 | status | `partial` |
 | quality\_verdict | `inconclusive` 품질 판정은 안전 인증이 아니다\. |
 | run | `0195f3a0-0000-7000-8000-000000000601` |
@@ -423,4 +423,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 - 범위에 이 언어의 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않았다\. \(python\)
 - upstream\_interpret\_skipped
 
-digest sha256: `507331f6834207d6edaa4216a62a4680aaeb70ac2a26ce4d213980802af5738a`
+digest sha256: `db6b40d149bb34d1ff2a08898abe8ac841ff025eebcd8a71cd2ac728d4c1e9c5`
