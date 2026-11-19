@@ -168,7 +168,10 @@ func ValidCode(s string) bool { return code.MatchString(s) }
 type Expect struct {
 	Snapshot, RunID, AttemptID string
 	Stage                      string // empty accepts any stage
-	Lookup                     func(path string) (sha256 string, ok bool)
+	// Slice is the review slice key (s001..s032) of a slice record (schema
+	// 0.3); empty for every other record, which then must carry no slice.
+	Slice  string
+	Lookup func(path string) (sha256 string, ok bool)
 }
 
 var errInvalid = errors.New("review record invalid")

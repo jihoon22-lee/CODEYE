@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.codeye.invalid/v0.1/review-record.schema.json",
   "title": "CODEYE review stage record",
-  "description": "application/vnd.codeye.review+json. schema_version 0.1: review-v1 context, investigation and verifier records with cumulative call metadata (unchanged). schema_version 0.2: one review-r1 stage record (environment, documents, investigate, interpret, verify; the default pack since 2.0.0) with only its own calls (at most 3: the request, one repair, one retry of a reply that was not JSON); every upstream input is bound by the SHA-256 of the artifact bytes it read. The Go decoder (internal/worker/review/record) is authoritative: it additionally checks evidence IDs against the snapshot, the path rules of evidence kinds (code: a Go, Python, JS/TS, Rust or C/C++ source extension; test: that ecosystem's test path; config: a build manifest), scope rules, JSON-encoded text sizes (400 bytes for 0.2 model text) and execution claims.",
+  "description": "application/vnd.codeye.review+json. schema_version 0.1: review-v1 context, investigation and verifier records with cumulative call metadata (unchanged). schema_version 0.3: a review-r1 record of one review slice (review.investigate.sNNN, review.verify.sNNN): 0.2 plus the required slice {key, modules}; a slice investigate also names review.scope upstream, a slice verify its own slice's investigate record and review.scope, and it carries investigate candidates only. schema_version 0.2: one review-r1 stage record (environment, documents, investigate, interpret, verify; the default pack since 2.0.0) with only its own calls (at most 3: the request, one repair, one retry of a reply that was not JSON); every upstream input is bound by the SHA-256 of the artifact bytes it read. The Go decoder (internal/worker/review/record) is authoritative: it additionally checks evidence IDs against the snapshot, the path rules of evidence kinds (code: a Go, Python, JS/TS, Rust or C/C++ source extension; test: that ecosystem's test path; config: a build manifest), scope rules, JSON-encoded text sizes (400 bytes for 0.2 model text) and execution claims.",
   "type": "object",
   "required": ["schema_version"],
-  "properties": {"schema_version": {"enum": ["0.1", "0.2"]}},
+  "properties": {"schema_version": {"enum": ["0.1", "0.2", "0.3"]}},
   "if": {"properties": {"schema_version": {"const": "0.1"}}},
   "then": {"$ref": "#/$defs/record_v1"},
   "else": {"$ref": "#/$defs/record_r1"},
@@ -36,7 +36,8 @@
       "type": "object", "additionalProperties": false,
       "required": ["schema_version", "pack", "snapshot_manifest_digest", "run_id", "attempt_id", "stage", "outcome", "upstream", "evidence", "observations", "limitations", "calls"],
       "properties": {
-        "schema_version": {"const":"0.2"},
+        "schema_version": {"enum":["0.2","0.3"]},
+        "slice": {"type":"object","additionalProperties":false,"required":["key","modules"],"properties":{"key":{"type":"string","pattern":"^s(00[1-9]|0[12][0-9]|03[0-2])$"},"modules":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","pattern":"^(cpp|go|javascript|python|rust):(\\.|[^:\\u0000-\\u001f]+)$"}}}},
         "pack": {"type":"object","additionalProperties":false,"required":["id","version"],"properties":{"id":{"$ref":"#/$defs/pack_id"},"version":{"$ref":"#/$defs/version"}}},
         "snapshot_manifest_digest": {"$ref":"#/$defs/digest"},
         "run_id": {"$ref":"#/$defs/uuid"}, "attempt_id": {"$ref":"#/$defs/uuid"},
@@ -57,6 +58,9 @@
         "calls": {"type":"array","maxItems":3,"items":{"$ref":"#/$defs/r1_call"}}
       },
       "allOf": [
+        {"if":{"properties":{"schema_version":{"const":"0.3"}}},
+         "then":{"required":["slice"],"properties":{"stage":{"enum":["investigate","verify"]},"candidates":{"items":{"properties":{"origin":{"const":"investigate"}}}}}},
+         "else":{"not":{"required":["slice"]},"properties":{"upstream":{"items":{"properties":{"source":{"not":{"pattern":"^review\\.(scope|investigate\\.s[0-9]{3})$"}}}}}}}},
         {"if":{"properties":{"outcome":{"const":"failed"}}},
          "then":{"required":["failure_reason"],"not":{"anyOf":[{"required":["environment_notes"]},{"required":["contracts"]},{"required":["conflicts"]},{"required":["questions"]},{"required":["instruction_notes"]},{"required":["interpretation_limits"]}]},"properties":{"verifications":{"items":{"properties":{"verdict":{"const":"unreviewed"}}}},"calls":{"items":{"properties":{"outcome":{"not":{"const":"accepted"}}}}}}},
          "else":{"not":{"required":["failure_reason"]}}},
@@ -68,13 +72,13 @@
                  "properties":{"observations":{"maxItems":0},"upstream":{"items":{"properties":{"source":{"const":"docs.discover"}}}},"calls":{"items":{"properties":{"role":{"const":"documents"}}}}}}},
         {"if":{"properties":{"stage":{"const":"investigate"}}},
          "then":{"not":{"anyOf":[{"required":["environment_notes"]},{"required":["contracts"]},{"required":["conflicts"]},{"required":["questions"]},{"required":["instruction_notes"]},{"required":["interpretation_limits"]},{"required":["verifications"]}]},
-                 "properties":{"observations":{"maxItems":0},"candidates":{"maxItems":4,"items":{"properties":{"origin":{"const":"investigate"}}}},"upstream":{"items":{"properties":{"source":{"enum":["review.environment","review.documents"]}}}},"calls":{"items":{"properties":{"role":{"const":"investigate"}}}}}}},
+                 "properties":{"observations":{"maxItems":0},"candidates":{"maxItems":4,"items":{"properties":{"origin":{"const":"investigate"}}}},"upstream":{"items":{"properties":{"source":{"enum":["review.environment","review.documents","review.scope"]}}}},"calls":{"items":{"properties":{"role":{"const":"investigate"}}}}}}},
         {"if":{"properties":{"stage":{"const":"interpret"}}},
          "then":{"not":{"anyOf":[{"required":["environment_notes"]},{"required":["contracts"]},{"required":["conflicts"]},{"required":["questions"]},{"required":["instruction_notes"]},{"required":["verifications"]}]},
                  "properties":{"observations":{"minItems":1},"candidates":{"maxItems":2,"items":{"properties":{"origin":{"const":"interpret"}}}},"upstream":{"items":{"properties":{"source":{"pattern":"^go-vet"}}}},"calls":{"items":{"properties":{"role":{"const":"interpret"}}}}}}},
         {"if":{"properties":{"stage":{"const":"verify"}}},
          "then":{"not":{"anyOf":[{"required":["environment_notes"]},{"required":["contracts"]},{"required":["conflicts"]},{"required":["questions"]},{"required":["instruction_notes"]},{"required":["interpretation_limits"]}]},
-                 "properties":{"upstream":{"items":{"properties":{"source":{"enum":["review.documents","review.investigate","review.interpret"]}}}},"calls":{"items":{"properties":{"role":{"const":"verify"}}}}}}}
+                 "properties":{"upstream":{"items":{"properties":{"source":{"anyOf":[{"enum":["review.documents","review.investigate","review.interpret","review.scope"]},{"pattern":"^review\\.investigate\\.s[0-9]{3}$"}]}}}},"calls":{"items":{"properties":{"role":{"const":"verify"}}}}}}}
       ]
     },
     "digest": {"type":"string","pattern":"^[0-9a-f]{64}$"},

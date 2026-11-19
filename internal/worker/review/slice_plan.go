@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
@@ -21,7 +22,7 @@ const (
 	sliceMaxBytes = roleMaxCodeBytes
 	// MaxSlices bounds the slice tasks of one run; files beyond it are not
 	// planned (review_slice_limit).
-	MaxSlices = 32
+	MaxSlices = record.MaxSlices
 	// limSliceLimit marks eligible files left out because MaxSlices slices
 	// were already planned.
 	limSliceLimit = "review_slice_limit"

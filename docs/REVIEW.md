@@ -201,6 +201,10 @@ context·investigate·verify가 같은 코퍼스를 쓴다. 순위가 낮은 것
 - 보내기 전에 메시지 바이트를 재고, 넘으면 발췌를 뒤에서부터 줄이고 `review_input_trimmed`를 남긴다. 최소 발췌로도 넘으면 task는 `failed`(`review_input_too_large`)다.
 - 예산이 모자라면 목록 뒤쪽이 먼저 빠진다. 첫 순회에서 생태계 이름 순으로 뒤인 언어의 발췌가 여기에 해당한다. 다섯 생태계가 모두 범위에 있으면 언어 지침이 커져 코드 발췌가 줄고, 최대 길이 후보가 많은 verify는 일부 후보를 보내지 못할 수 있다. 요청 한도와 역할별 지침 구성의 변경은 소유자 결정이다.
 
+## 모듈 단위 검토 분할
+
+overview 조사(`review.investigate`)가 보내지 못하는 코드·테스트 파일을 모듈 단위 slice로 나누어 slice마다 조사·검증 한 쌍(`review.investigate.sNNN`, `review.verify.sNNN`)으로 검토한다. 계획은 manifest·scope·상수로만 정하고, 호출 상한 안에서 slice를 차례로 허용한다.
+
 ## 모델 입력의 비밀값 선별
 
 검토 역할은 정적 분석 계획의 비밀값 분석 task가 끝난 뒤 실행된다. 각 역할은 시작할 때 그 결과를 읽는다([`screen.go`](../internal/worker/review/screen.go)). 비밀값 분석기 자체는 [분석기](ANALYZERS.md), 비밀정보 정책은 [보안](SECURITY.md)에 있다.

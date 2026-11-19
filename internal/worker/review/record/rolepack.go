@@ -19,6 +19,10 @@ import (
 // the artifact bytes it read.
 const (
 	SchemaVersionRole = "0.2"
+	// SchemaVersionSlice is a role record of one review slice
+	// (review.investigate.sNNN, review.verify.sNNN): 0.2 plus the required
+	// slice reference. Every other role record stays 0.2, byte for byte.
+	SchemaVersionSlice = "0.3"
 
 	StageEnvironment = "environment"
 	StageDocuments   = "documents"
@@ -150,14 +154,24 @@ type RoleCall struct {
 	OutputErrors  []string `json:"output_errors"`
 }
 
+// SliceRef names the review slice of a 0.3 record and the modules its
+// files belong to.
+type SliceRef struct {
+	Key     string   `json:"key"`
+	Modules []string `json:"modules"`
+}
+
 // RoleRecord is one stage artifact of the role pack.
 type RoleRecord struct {
-	Schema           string                `json:"schema_version"`
-	Pack             PackRef               `json:"pack"`
-	Snapshot         string                `json:"snapshot_manifest_digest"`
-	RunID            string                `json:"run_id"`
-	AttemptID        string                `json:"attempt_id"`
-	Stage            string                `json:"stage"`
+	Schema    string  `json:"schema_version"`
+	Pack      PackRef `json:"pack"`
+	Snapshot  string  `json:"snapshot_manifest_digest"`
+	RunID     string  `json:"run_id"`
+	AttemptID string  `json:"attempt_id"`
+	Stage     string  `json:"stage"`
+	// Slice is set on 0.3 records only (nil is omitted, so 0.2 bytes do not
+	// change).
+	Slice            *SliceRef             `json:"slice,omitempty"`
 	Outcome          string                `json:"outcome"`
 	FailureReason    string                `json:"failure_reason,omitempty"`
 	Upstream         []Upstream            `json:"upstream"`
@@ -268,9 +282,19 @@ func MarshalRole(r RoleRecord, want Expect) ([]byte, error) {
 // Model content is checked again with the worker's rules, so a decoder never
 // accepts what the worker would have rejected.
 func ValidateRole(r RoleRecord, want Expect) error {
-	switch {
-	case r.Schema != SchemaVersionRole:
+	switch r.Schema {
+	case SchemaVersionRole:
+		if r.Slice != nil || want.Slice != "" {
+			return invalid("slice reference on a whole-run record")
+		}
+	case SchemaVersionSlice:
+		if err := checkSlice(r, want); err != nil {
+			return err
+		}
+	default:
 		return invalid("schema_version")
+	}
+	switch {
 	case !slices.Contains(RoleStages, r.Stage) || (want.Stage != "" && want.Stage != r.Stage):
 		return invalid("stage")
 	case !packID.MatchString(r.Pack.ID) || !version.MatchString(r.Pack.Version):
@@ -331,6 +355,77 @@ func ValidateRole(r RoleRecord, want Expect) error {
 // analyzerSource marks the interpret stage's upstream rule in roleSources.
 const analyzerSource = "(analyzer task)"
 
+// Review slices (docs/REVIEW.md#모듈-단위-검토-분할).
+const (
+	// TaskScope is the review.scope task: it fixes the slice inputs and
+	// makes no model call.
+	TaskScope = "review.scope"
+	// MaxSliceModules bounds the modules of one slice (a slice holds at most
+	// eight files).
+	MaxSliceModules = 8
+)
+
+var sliceKey = regexp.MustCompile(`^s(00[1-9]|0[12][0-9]|03[0-2])$`)
+
+// ValidSliceKey accepts s001..s032.
+func ValidSliceKey(k string) bool { return sliceKey.MatchString(k) }
+
+// SliceTask splits a slice task key (review.investigate.s001,
+// review.verify.s001) into its stage and slice key.
+func SliceTask(key string) (stage, slice string, ok bool) {
+	rest, found := strings.CutPrefix(key, "review.")
+	if !found {
+		return "", "", false
+	}
+	stage, slice, found = strings.Cut(rest, ".")
+	if !found || (stage != StageInvestigate && stage != StageVerify) || !ValidSliceKey(slice) {
+		return "", "", false
+	}
+	return stage, slice, true
+}
+
+// ValidModuleRef accepts a module ID <ecosystem>:<dir>.
+func ValidModuleRef(id string) bool {
+	_, dir, _ := strings.Cut(id, ":")
+	return moduleRef.MatchString(id) && (dir == "." || domain.ValidateEvidencePath(dir) == nil)
+}
+
+// checkSlice validates the slice reference of a 0.3 record: an investigate
+// or verify stage of the expected slice, with one to MaxSliceModules sorted
+// distinct module IDs.
+func checkSlice(r RoleRecord, want Expect) error {
+	s := r.Slice
+	switch {
+	case s == nil || s.Modules == nil:
+		return invalid("slice record without its slice")
+	case r.Stage != StageInvestigate && r.Stage != StageVerify:
+		return invalid("slice stage")
+	case !ValidSliceKey(s.Key) || s.Key != want.Slice:
+		return invalid("slice key")
+	case len(s.Modules) == 0 || len(s.Modules) > MaxSliceModules || !slices.IsSorted(s.Modules):
+		return invalid("slice modules")
+	}
+	for i, m := range s.Modules {
+		if !ValidModuleRef(m) || (i > 0 && s.Modules[i-1] == m) {
+			return invalid("slice module")
+		}
+	}
+	return nil
+}
+
+// upstreamSources are the sources a record's stage may name: a slice
+// investigate also reads review.scope; a slice verify reads the documents
+// record, its own slice's investigate record and review.scope.
+func upstreamSources(r RoleRecord) []string {
+	if r.Slice == nil {
+		return roleSources[r.Stage]
+	}
+	if r.Stage == StageInvestigate {
+		return []string{"review.environment", "review.documents", TaskScope}
+	}
+	return []string{"review.documents", "review.investigate." + r.Slice.Key, TaskScope}
+}
+
 // AnalyzerTaskKey reports whether key can name an analyzer task: a valid
 // task key outside the discovery tasks and the review.* roles.
 func AnalyzerTaskKey(key string) bool {
@@ -341,7 +436,7 @@ func checkUpstream(r RoleRecord) error {
 	seen := map[string]bool{}
 	for _, u := range r.Upstream {
 		allowed := false
-		for _, s := range roleSources[r.Stage] {
+		for _, s := range upstreamSources(r) {
 			allowed = allowed || u.Source == s || (s == analyzerSource && AnalyzerTaskKey(u.Source))
 		}
 		if !allowed || seen[u.Source] {
@@ -515,7 +610,8 @@ func checkStageContent(r RoleRecord, catalog map[string]Excerpt, observations ma
 		}
 	}
 	if r.Stage == StageVerify {
-		if counts[StageInterpret] > 2 || counts[StageInvestigate] > 4 {
+		// A slice verify checks its own slice's investigate candidates only.
+		if counts[StageInterpret] > 2 || counts[StageInvestigate] > 4 || (r.Slice != nil && counts[StageInterpret] > 0) {
 			return invalid("verify candidates")
 		}
 		reviewed := 0
