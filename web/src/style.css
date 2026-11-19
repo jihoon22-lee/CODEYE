@@ -143,3 +143,14 @@ thead { background: #f1f5f8; }
 .report-section .section-counts { margin-block: 8px; }
 .model-note { border-left: 3px solid #4f5b66; padding-inline-start: 10px; font-style: italic; }
 button.link { background: none; border: 0; padding: 0; color: #245b7a; text-decoration: underline; text-underline-offset: 3px; font: inherit; cursor: pointer; }
+
+/* --- accounts, members, administration --- */
+.account { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.account button[aria-current='page'], .tabs button[aria-current='page'] { background: #245b7a; color: white; border-color: #245b7a; }
+.badge.role-badge { font-size: 13px; margin: 2px 4px 2px 0; padding: 2px 8px; }
+.tabs { margin-top: 24px; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 16px; }
+.field input[type='password'], .field input[type='datetime-local'], .field input[type='text'] { width: 100%; padding: 6px 10px; border: 1px solid #8fa2b2; border-radius: 6px; min-height: 40px; font: inherit; }
+.one-time { border: 2px solid #b37420; }
+td .actions { margin-top: 0; }
+td [role='group'] p { margin: 0 0 6px; }
