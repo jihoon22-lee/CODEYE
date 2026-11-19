@@ -13,16 +13,19 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// GET /runs/{id}/report?revision=N&format=json|markdown|html&include_code=true|false
+// GET /runs/{id}/report?revision=N&format=json|markdown|html&include_code=true|false&detail=summary|full
 //
 // The stored report is canonical JSON with code (tool messages). The default
 // export is code-free; include_code=true returns the full evidence to the same
 // project readers. Markdown and HTML are rendered at request time from the
-// stored bytes (never rebuilt from the run). ETag is the sha256 of the bytes sent.
+// stored bytes (never rebuilt from the run), by default as the summary
+// (long lists grouped and cut, docs/REPORT.md#내보내기-상세도); detail=full
+// prints every row. JSON is always complete, so detail does not change it.
+// ETag is the sha256 of the bytes sent.
 func (s *Server) getReport(q *request) {
 	query := q.r.URL.Query()
 	for k := range query {
-		if k != "revision" && k != "format" && k != "include_code" {
+		if k != "revision" && k != "format" && k != "include_code" && k != "detail" {
 			writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", "unknown query parameter", false)
 			return
 		}
@@ -51,6 +54,14 @@ func (s *Server) getReport(q *request) {
 		includeCode = true
 	default:
 		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", "include_code must be true or false", false)
+		return
+	}
+	detail := query.Get("detail")
+	if detail == "" {
+		detail = report.DetailSummary
+	}
+	if !report.ValidDetail(detail) {
+		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", "detail must be summary or full", false)
 		return
 	}
 	ctx, cancel := q.ctx()
@@ -86,15 +97,18 @@ func (s *Server) getReport(q *request) {
 	if !includeCode {
 		name += "-nocode"
 	}
+	if detail == report.DetailFull {
+		name += "-full"
+	}
 	switch format {
 	case report.FormatJSON:
 		h.Set("Content-Type", "application/json; charset=utf-8")
 	case report.FormatMarkdown:
-		body = report.RenderMarkdown(doc, digest, report.Korean)
+		body = report.RenderMarkdownAt(doc, digest, report.Korean, detail)
 		h.Set("Content-Type", "text/markdown; charset=utf-8")
 		h.Set("Content-Disposition", `attachment; filename="`+name+`.md"`)
 	case report.FormatHTML:
-		if body, err = report.RenderHTML(doc, digest, report.Korean); err != nil {
+		if body, err = report.RenderHTMLAt(doc, digest, report.Korean, detail); err != nil {
 			writeError(q.w, q.r, http.StatusInternalServerError, "REPORT_INVALID", "the report could not be rendered", false)
 			return
 		}

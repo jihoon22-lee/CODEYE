@@ -159,13 +159,13 @@ describe('better results', () => {
     expect(improvementHints(js, { ...SETUP, tools: null }, project(choices)).map(h => h.key)).toEqual(['tool:npm', 'tool:pnpm', 'tool:yarn']);
     // The record names the manager the lockfile chose: only that one is said.
     const chose = (manager: string) => [{ task: 'deps.javascript', manager } as Dependency];
-    expect(improvementHints(js, managers, project(choices), chose('yarn'))).toEqual([
+    expect(improvementHints(js, managers, project(choices), null, chose('yarn'))).toEqual([
       { key: 'tool:yarn', text: t.improve.tool('yarn', 'npm install yarn@1') },
     ]);
-    expect(improvementHints(js, { ...SETUP, tools: null }, project(choices), chose('pnpm')).map(h => h.key)).toEqual(['tool:pnpm']);
+    expect(improvementHints(js, { ...SETUP, tools: null }, project(choices), null, chose('pnpm')).map(h => h.key)).toEqual(['tool:pnpm']);
     // Without node the managers cannot run: node is the missing piece.
     const noNode = { ...managers, tools: { detected_at: null, tools: managers.tools.tools.map(x => x.name === 'node' ? { ...x, status: 'not_found', path: null } : x) } };
-    expect(improvementHints(js, noNode, project(choices), chose('pnpm'))).toEqual([
+    expect(improvementHints(js, noNode, project(choices), null, chose('pnpm'))).toEqual([
       { key: 'tool:node', text: t.improve.packageManager('node') },
     ]);
   });

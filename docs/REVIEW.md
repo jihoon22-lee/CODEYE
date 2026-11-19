@@ -204,27 +204,41 @@ context·investigate·verify가 같은 코퍼스를 쓴다. 순위가 낮은 것
 
 ## 모듈 단위 검토 분할
 
-overview 조사(`review.investigate`)가 보내지 못하는 코드·테스트 파일을 모듈 단위 slice로 나누어 slice마다 조사·검증 한 쌍(`review.investigate.sNNN`, `review.verify.sNNN`)으로 검토한다. 계획은 manifest·scope·상수로만 정하고, 호출 상한 안에서 slice를 차례로 허용한다. 구현은 [`slice_plan.go`](../internal/worker/review/slice_plan.go)(계획)와 [`slice_run.go`](../internal/worker/review/slice_run.go)(실행)이다.
+overview 조사(`review.investigate`)가 보내지 못하는 코드·테스트 파일을 slot(slice)에 나누어 slot마다 조사·검증 한 쌍(`review.investigate.sNNN`, `review.verify.sNNN`)으로 검토한다. 계획은 manifest·scope·상수로 slot 수만 정하고, 정적 분석 뒤에 실행되는 `review.scope`가 [검토 우선순위](#검토-우선순위)대로 파일을 slot에 채운다. 호출 상한 안에서 slot을 차례로 허용한다. 구현은 [`slice_plan.go`](../internal/worker/review/slice_plan.go)(계획·채우기)와 [`slice_run.go`](../internal/worker/review/slice_run.go)(실행)이다.
 
 | task | 단계 | 판정 필수 | 모델 호출 | 내용 |
 |---|---|---|---|---|
 | 전체 역할 다섯 개 | 위 표 | 위 표 | 위 표 | 바뀌지 않는다. overview verify는 계속 interpret 후보도 검증한다 |
-| `review.scope` | `code_review` | 아니오 | 없음 | slice가 하나 이상일 때만 계획한다. overview가 실제로 보낸 파일을 빼고 범위 산출물을 쓴다 |
-| `review.investigate.sNNN` | `code_review` | 아니오 | 1~3 | slice 하나의 코드·테스트 발췌로 조사한다 |
-| `review.verify.sNNN` | `code_review` | 아니오 | 0~3 | 같은 slice investigate의 후보만 검증한다 |
+| `review.scope` | `code_review` | 아니오 | 없음 | slot이 하나 이상일 때만 계획한다. overview가 실제로 보낸 파일을 빼고 남은 파일을 우선순위대로 slot에 채워 범위 산출물을 쓴다 |
+| `review.investigate.sNNN` | `code_review` | 아니오 | 1~3 | slot 하나의 코드·테스트 발췌로 조사한다 |
+| `review.verify.sNNN` | `code_review` | 아니오 | 0~3 | 같은 slot investigate의 후보만 검증한다 |
 
-slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 저장소는 모두 `partial`이 되어 run 상태가 의미를 잃는다. 검토하지 못한 범위는 범위 산출물과 slice task 상태로 남는다. 진행 단계에서는 `no_review_scope`만 단계를 낮추지 않고, 상한으로 거절된 slice나 선별이 없어 건너뛴 slice는 `code_review` 단계를 `partial`로 남긴다([구조](ARCHITECTURE.md#표시-단계와-task-단계)).
+slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 저장소는 모두 `partial`이 되어 run 상태가 의미를 잃는다. 검토하지 못한 범위는 범위 산출물과 slice task 상태로 남는다. `review.scope`가 채우지 않은 slot은 호출 없이 `skipped_policy`(`no_review_scope`)로 끝난다. 진행 단계에서는 `no_review_scope`만 단계를 낮추지 않고, 상한으로 거절된 slice나 선별이 없어 건너뛴 slice는 `code_review` 단계를 `partial`로 남긴다([구조](ARCHITECTURE.md#표시-단계와-task-단계)).
 
 ### 계획
 
 - 모듈 단위는 overview 코퍼스의 묶음과 같다(위 [코드 발췌](#코드-발췌review-r1-investigate)). Go는 가장 깊은 go.mod 디렉터리, 다른 언어는 같은 생태계 manifest가 있는 가장 깊은 디렉터리, 없으면 `.`이다. ID는 `<ecosystem>:<dir>`이고, 범위 산출물의 `discovered`는 모듈 탐색이 같은 ID를 찾았는지 표시한다.
 - 파일 상한 `c(f) = min(2400, 6 × size + 2)`. JSON 인코딩은 바이트 하나를 최대 6바이트(`\u00XX`)로 바꾸고 따옴표 두 개가 붙으므로 실제 발췌 바이트보다 작지 않다.
 - overview 접두 P: 모든 파일을 상한 크기로 두고 overview의 순회(묶음 순서, 묶음 안 순위)를 그대로 흉내 낸다. 고른 파일이 8개 미만이고 남은 예산이 128바이트 이상이며 상한이 남은 예산에 들어가는 동안 파일이 P에 들어간다. 처음 들어가지 않는 파일에서 P가 끝난다. overview는 같은 순서로 파일을 보고 상한보다 많이 쓰지 않으므로 P의 파일을 반드시 낸다.
-- 남은 파일은 묶음마다 순위대로 연속 조각(8개·12,000바이트 이하, 상한 기준)으로 자른다. 작은 묶음은 통째로 한 조각이다. 조각은 순회마다(모든 묶음의 첫 조각, 그다음 둘째 조각) 묶음 순서로 나오고, 이웃한 조각은 한도 안에서 한 slice를 같이 쓴다(slice당 모듈 8개 이하). 그래서 너비가 깊이보다 먼저다.
-- slice는 32개(`s001`~`s032`)까지다. 그 뒤의 파일은 계획하지 않고 모듈별로 세며 `review_slice_limit`을 남긴다.
+- 계획은 slot 수만 정한다. 남은 파일을 manifest만으로 아는 사실(경로 분류, 진입점·소스·테스트)로 [우선순위](#검토-우선순위)대로 묶어 본 수에 여유(묶음 8개마다 하나, 최소 둘)를 더한다. 실행 때 도구 진단이 순서를 바꾸면 진단이 있는 파일이 따로 묶여 묶음 수가 늘 수 있기 때문이다. 그래도 모자라면 `review.scope`는 같은 순서를 유지한 채 묶음 경계를 푼다: 먼저 디렉터리 규칙을, 그다음 순위 경계를 푼다(slot의 순위는 첫 파일의 순위다). 경계를 풀어도 담을 수 없으면(파일이 상한 96개 slot보다 많으면) 경계를 지킨 묶음의 앞 slot만 채운다. 상한 96 아래에서는 이렇게 해서 계획 밖 파일이 생기지 않는다(`TestSlotSlackCoversRunTimeOrder`: 임의 트리 약 3,000개, 파일의 30%에 진단, 모듈 일부에 실패한 분석기, 일부 생성 파일).
+- slot은 96개(`s001`~`s096`)까지다. slot이 모두 차면 남은 파일은 모듈별로 세며(주요·부차를 나누어) `review_slice_limit`을 남긴다.
 - 모든 적격 파일이 overview에 들어가는 저장소는 slice가 없다. 계획·요청 바이트·기록이 이전과 같다(회귀 집합과 작은 fixture 전부).
 - 계획은 manifest, scope, 상수로만 정하고 호출 상한을 쓰지 않는다. 재시도는 모든 task 행을 queued로 되돌리고 남은 task가 있으면 완료하지 않으므로, 상한에 따라 task key가 달라지면 고아 task가 생긴다.
-- 계획 순서는 전체 역할 다섯, `review.scope`, slice 쌍이다. 모든 task가 run이 `running`이 되기 전에 만들어지므로 계획 revision은 1이고 가중치를 선언하지 않는다(진행 기준 `task_count`).
+- 계획 순서는 전체 역할 다섯, `review.scope`, slot 쌍이다. 모든 task가 run이 `running`이 되기 전에 만들어지므로 계획 revision은 1이고 가중치를 선언하지 않는다(진행 기준 `task_count`).
+
+### 검토 우선순위
+
+`review.scope`는 정적 분석이 끝난 뒤 실행되므로 도구 진단을 안다. overview가 보낸 파일을 뺀 나머지를 다음 순서로 slot에 채운다. 채우기는 `packSlots`([`slice_plan.go`](../internal/worker/review/slice_plan.go)), 분류 규칙은 [`priority.go`](../internal/worker/review/record/priority.go)다. 결과는 결정적이며 마지막 동률은 경로 순이다.
+
+1. **분류.** 주요(`primary`) 파일이 부차(`secondary`) 파일보다 먼저다. 부차 파일은 디렉터리 경로에 부차 경로 조각이 있거나(대소문자 무시, `tests/data`처럼 `/`가 든 조각은 연속한 디렉터리) 발췌 첫 10줄에 생성 파일 표지(`Code generated` … `DO NOT EDIT`, `@generated`)가 있는 파일이다. 기본 조각은 `fixtures`, `testdata`, `test-data`, `tests/data`, `examples`, `samples`, `demo`, `vendor`, `third_party`, `node_modules`, `generated`, `gen`, `mocks`, `__snapshots__`, `dist`, `build`이다. `build`와 `dist`는 `.go` 파일에 적용하지 않는다(Go 패키지 이름일 수 있다). 모듈 디렉터리가 부차 경로 아래면 모듈도 부차다. 파일마다 이유(`secondary_path:<조각>`, `generated_file`)가 범위 산출물에 남는다.
+2. **순위.** 같은 분류 안에서 비지표 도구 진단이 있는 파일(`tool_observations`: 가장 높은 심각도, 그다음 진단 수 순), 필수 분석 task가 성공하지 않은 모듈의 파일(`analyzer_not_succeeded`), 진입점(`entry_point`: Go는 `main.go`, 다른 언어는 overview 코퍼스의 진입점 규칙), 그 밖의 소스(`source`), 테스트(`test`) 순이다. 구조·중복 지표와 억제된 진단은 세지 않는다. 심각도는 도구의 원래 값을 `high`(critical·fatal·error·high), `medium`(warning·warn·medium·moderate), `low`(그 밖과 값 없음), `ignored`(ignored·none·off)로 묶는다. 진단은 overview interpret과 같은 검증된 읽기로 분석 산출물에서 읽고, 읽을 수 없는 산출물은 아무것도 더하지 않는다.
+3. **응집.** 모듈마다 위 순서, 디렉터리, 코퍼스 순위 순으로 파일을 늘어놓고 연속 조각(8개·12,000바이트, 상한 기준)으로 자른다. 한 조각은 한 분류·한 순위이고, 현재 조각에서 끝낼 수 없는 디렉터리는 새 조각에서 시작한다. 그래서 slot은 되도록 한 모듈·한 디렉터리다.
+4. **모듈 사이.** 다음 조각은 모든 모듈의 맨 앞 조각 가운데 분류·순위·심각도·진단 수가 가장 앞선 것이다. 같으면 그 분류의 첫 조각을 아직 받지 않은 모듈이 먼저이고, 그다음 그 분류의 바이트가 큰 모듈이 비례해 더 많이 받는다(받은 조각당 바이트가 가장 큰 모듈). 큰 모듈이 먼저 많이 받되 두 번째 주요 모듈이 굶지 않는다.
+5. **합치기.** 같은 분류의 이웃한 조각은 한도 안에서 slot 하나를 같이 쓴다(모듈 8개 이하). 작은 모듈이 slot을 하나씩 차지하지 않는다.
+
+- overview 조사도 같은 분류를 따른다. 코퍼스는 주요 묶음과 주요 파일을 먼저 순회하고, 주요 파일이 다 나간 뒤에야 부차 묶음을 연다. 묶음 안에서 부차 파일은 주요 파일 뒤다. overview 접두 P의 계산도 같은 순회를 흉내 낸다. 부차 파일이 없는 저장소는 순서가 이전과 같아 overview 요청이 바뀌지 않는다(회귀 집합, `TestGoReviewInputsUnchanged`).
+- 규칙은 한 곳(`record.DefaultSecondary`)에 있고 worker의 `RoleHandler.Secondary`로 바꿀 수 있다. 운영자 설정 항목은 아직 없다. 실행에 쓴 규칙은 범위 산출물 `priority.secondary`에 남는다.
+- 보고서(builder 8)의 [장부](REPORT.md#모듈별-검토-장부)는 주요 파일 중 상한에 막힌 파일(`files_budget_exhausted`)과 slot이 남지 않은 파일(`files_not_planned`), 부차 파일 중 보내지 못한 파일(`files_secondary_not_reached`)을 따로 센다.
 
 ### 호출 상한과 승인
 
@@ -232,14 +246,15 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 - 기본 99는 중간 규모 저장소의 대부분을 기본 설정으로 검토하기 위한 값이다(처음 기본값 33은 유료 회귀 실행에서 파일럿 Go 모듈 67개 파일 중 34개를 28회 호출로 검토했다). 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 상한을 낮춘다. 15는 전체 역할만 실행하고 slice를 승인하지 않는다([안내서](GUIDE.md)).
 - 전체 역할 다섯 개는 최대 15회(5 × 3)를 쓰고 잘리지 않는다. 그래서 최솟값이 15다. 전체 역할이 모든 slice보다 먼저 실행되므로 그 몫을 따로 예약할 필요가 없다.
 - 계수는 attempt 안에서만 한다. attempt 하나는 worker 프로세스 하나이고 task를 차례로 실행한다. 모든 role-pack 호출은 보내기 전에 attempt scratch의 계수 파일에 한 줄을 쓴다. 계수를 쓰지 못한 호출은 보내지 않는다(`review_call_count_failed`). 전역 상태나 프로세스 사이 상태는 없다. 한 attempt 안에서 slice를 병렬로 실행하려면 공유 계수가 필요하다.
+- 최댓값 207은 전체 역할 15회와 slot 96개마다 두 번(investigate·verify 한 번씩, 형식 복구가 없을 때)이다. 복구가 많으면 207에서도 96개를 다 승인하지 못할 수 있다.
 - 승인은 계획 순서대로, 실제 사용량으로 한다. slice k의 investigate를 시작하기 전에 `상한 − 사용한 호출 ≥ 6`(investigate·verify 한 쌍의 최악 3 + 3)이면 승인한다. 처음 거절된 slice와 그 뒤의 모든 slice는 호출과 기록 없이 `budget_exhausted`(`review_budget_exhausted`)로 끝나고 짝 verify도 같다. 결정은 attempt scratch에 남기고 verify가 따른다.
 - 그래서 attempt의 호출은 상한을 넘지 않는다. 최악 사례로 미리 승인하면 상한의 세 분의 이가 버려지지만, 실제 사용량으로 승인하면 모델이 형식 복구를 많이 할수록 승인되는 마지막 slice가 run마다 달라질 수 있다. 승인 결과는 slice task 상태로 보인다.
 
 | 상한 | 한 번에 끝나는 task(1회) | 모든 task가 3회 | 최악 사례 사전 승인 |
 |---|---|---|---|
-| 15 | coverage fixture의 slice 7개 중 3개 | 0개 | 0개 |
-| 99 | 7개 모두 | 7개 모두 | 7개 모두 |
-| 207 | 7개 모두 | 7개 모두 | 7개 |
+| 15 | coverage fixture의 slot 8개 중 채운 6개 가운데 3개 | 0개 | 0개 |
+| 99 | 6개 모두 | 6개 모두 | 6개 모두 |
+| 207 | 6개 모두 | 6개 모두 | 6개 모두 |
 
 (`TestSliceAdmissionKeepsTheCeiling`, [`fixtures/modules/slices/input`](../fixtures/modules/slices/input). environment는 차이가 없어 호출하지 않는다.)
 
@@ -247,16 +262,17 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 - `review.scope`와 slice는 전체 역할과 같은 선별 규칙을 따른다. 선별이 끝났으면 보고된 파일을 `withheld`로 빼고, 선별이 계획되지 않았거나 실행되지 않았으면(gitleaks 미설정) 기본 읽기 필터만 거친 입력으로 실행한다. 이때 범위 산출물은 `screen: not_screened`이고 범위 산출물과 모든 slice 기록이 `model_input_not_secret_screened`를 싣는다. 보고서는 비밀정보 절 `model_input`을 미선별로 보이고 공백 `model_input_not_screened`를 남긴다. 선별이 실행됐지만 결과를 쓸 수 없어도 같은 미선별 입력으로 실행하되, 읽을 수 있는 결과가 보고한 파일은 계속 `withheld`로 뺀다.
 - 선별은 task마다 시작할 때 다시 읽는다. slice 발췌도 같은 읽기 경로를 지나므로 보류 파일과 민감값 패턴 필터를 똑같이 받는다.
-- slice task의 판단 순서: 모델 전송 허가 → 범위 산출물을 읽을 수 있음(아니면 `dependency_failed`) → 보낼 파일이 남음(아니면 `no_review_scope`) → 호출 상한. 보낼 파일이 없는 slice는 상한이 다해도 `no_review_scope`다.
+- slice task의 판단 순서: 모델 전송 허가 → 범위 산출물을 읽을 수 있음(아니면 `dependency_failed`) → `review.scope`가 채운 slot이고 보낼 파일이 남음(아니면 `no_review_scope`) → 호출 상한. 보낼 파일이 없는 slot은 상한이 다해도 `no_review_scope`다.
 
 ### 범위 산출물
 
-`review.scope`는 모델을 호출하지 않는다. overview investigate 기록(수락이든 실패든, 요청을 보냈을 때)의 context 발췌에서 overview가 실제로 보낸 코드·테스트 파일을 읽고, 계획의 모든 파일을 선별과 읽기 필터로 다시 확인한 뒤 산출물 하나를 role `other`, media type `application/vnd.codeye.review-scope+json`으로 올린다. [스키마](../schemas/review-scope.schema.json) · [예시](../examples/review-r1/slices/scope.json)
+`review.scope`는 모델을 호출하지 않는다. overview investigate 기록(수락이든 실패든, 요청을 보냈을 때)의 context 발췌에서 overview가 실제로 보낸 코드·테스트 파일을 읽고, 계획의 모든 파일을 선별과 읽기 필터로 다시 확인하고, 분석 산출물의 진단으로 우선순위를 매겨 slot을 채운 뒤 산출물 하나를 role `other`, media type `application/vnd.codeye.review-scope+json`으로 올린다. [스키마](../schemas/review-scope.schema.json) · [예시](../examples/review-r1/slices/scope.json)
 
-- 필드: `schema_version`(0.1), `kind`(`review_scope`), `pack`, `snapshot_manifest_digest`, `run_id`, `attempt_id`, `screen`(`applied` 또는 `not_screened`. `not_screened`이면 `limitations`에 `model_input_not_secret_screened`가 있다), `budget`(`max_calls`, `max_request_bytes`, `whole_run_max_calls` 15, `slice_reserve_calls` 6, `calls_before_slices`, `admission` `sequential_reserve`), `limits`, `upstream`(overview investigate 기록의 SHA-256), `modules[]`(`id`, `discovered`, `files_eligible`, `files_not_planned`), `overview`(`files`: P와 32개 뒤에서 overview가 보낸 파일, `offered`: overview가 보낸 경로), `slices[]`(`key`, `investigate_task`, `verify_task`, `modules`, `files`), `limitations`.
-- 파일마다 `path`, `sha256`, `module`, `bound_bytes`, `planned_lines`, `planned_bytes`, `total_lines`, `state`. 상태는 `planned`(slice가 보낸다), `covered_by_overview`(overview가 보냈다), `withheld`(선별이 보류), `unreadable`(UTF-8 아님·NUL·민감값 패턴·빈 파일), `overview_not_sent`(P에 있지만 overview가 보내지 않음: 요청을 줄였거나 보내기 전에 실패)다. 적격 파일은 모두 정확히 한 곳에 있다. 계획하지 않은 파일은 목록 대신 모듈별 `files_not_planned`로 센다.
+- 필드(schema 0.2): `schema_version`(0.2), `kind`(`review_scope`), `pack`, `snapshot_manifest_digest`, `run_id`, `attempt_id`, `screen`(`applied` 또는 `not_screened`. `not_screened`이면 `limitations`에 `model_input_not_secret_screened`가 있다), `budget`(`max_calls`, `max_request_bytes`, `whole_run_max_calls` 15, `slice_reserve_calls` 6, `calls_before_slices`, `admission` `sequential_reserve`), `limits`(`max_slices` 96, 계획이 만든 `slots`), `priority`(`order` `primary_first_observations_first`, `secondary`: 쓴 `segments`와 `not_for_go`), `upstream`(overview investigate 기록의 SHA-256), `modules[]`(`id`, `discovered`, `class`, `files_eligible`, `files_secondary`, `files_not_planned`, `files_secondary_not_planned`), `overview`(`files`: P와 그 밖에서 overview가 보낸 파일, `offered`: overview가 보낸 경로), `slices[]`(채운 slot만 차례로: `key`, `investigate_task`, `verify_task`, 첫 파일의 `class`·`rank`, `modules`, `files`), `excluded`(slot에 넣지 않은 `withheld`·`unreadable` 파일), `limitations`.
+- 파일마다 `path`, `sha256`, `module`, `bound_bytes`, `planned_lines`, `planned_bytes`, `total_lines`, `state`, `class`, `rank`, 부차 파일의 `secondary`(이유), 진단이 있는 파일의 `observations`(수)·`severity`(가장 높은 값). 상태는 `planned`(slot이 보낸다), `covered_by_overview`(overview가 보냈다), `withheld`(선별이 보류), `unreadable`(UTF-8 아님·NUL·민감값 패턴·빈 파일), `overview_not_sent`(P에 있지만 overview가 보내지 않음: 요청을 줄였거나 보내기 전에 실패)다. 적격 파일은 모두 정확히 한 곳에 있다. slot이 남지 않은 파일은 목록 대신 모듈별 `files_not_planned`로 센다.
+- schema 0.1(계획 때 정한 slice, 32개까지, 분류 없음)은 이전 worker의 산출물을 읽기 위해 계속 해석한다. 0.1에서는 slice가 `covered_by_overview`·`withheld`·`unreadable` 파일도 가질 수 있다. worker는 0.2만 쓴다.
 - 승인된 slice 목록은 산출물에 없다. 산출물은 어떤 slice도 실행되기 전에 쓰이고 승인은 실행 중에 차례로 정해지므로, 승인 결과는 slice task 상태(`budget_exhausted`/`review_budget_exhausted`)에서 읽는다.
-- decoder(`record.DecodeScope`)는 경로와 blob을 스냅샷 manifest와 대조하고, 모듈별 수, `covered_by_overview`와 `offered`의 일치, 파일 중복을 검사한다.
+- decoder(`record.DecodeScope`)는 경로와 blob을 스냅샷 manifest와 대조하고, 모듈별 수, `covered_by_overview`와 `offered`의 일치, 파일 중복을 검사한다. 0.2에서는 채운 slot이 `slots` 이하인지, 파일 분류가 기록된 규칙과 맞는지, slot 순서가 우선순위를 따르는지(주요 slot이 부차 slot보다 앞)도 본다.
 
 ### slice 요청과 기록
 
@@ -265,7 +281,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 - slice verify는 자기 slice investigate의 후보만 받는다(interpret 후보 없음). upstream은 `review.documents`, `review.investigate.sNNN`, `review.scope`다.
 - 기록은 schema 0.3이다(아래 [검토 기록](#검토-기록)). [investigate 예시](../examples/review-r1/slices/investigate.s001.json) · [verify 예시](../examples/review-r1/slices/verify.s001.json)
 - 다섯 언어가 모두 범위에 있는 최악 사례에서도 slice 요청은 40,000바이트 안이다(`TestSliceRequestSizeWorstCaseAllLanguages`).
-- 보고서(builder 6)는 0.3 기록과 범위 산출물을 읽는다. slice 후보는 `review_sNNN_<후보>` 발견이 되고, 코드 분석 절의 [모듈별 검토 장부](REPORT.md#모듈별-검토-장부)가 모듈마다 모델에 보낸 파일과 보내지 못한 이유(상한·비밀값·계획 밖 등)를 센다. 모델에 보낸 범위는 검증된 범위가 아니다. `ai_review`는 필수 역할만 본다.
+- 보고서(builder 6부터)는 0.3 기록과 범위 산출물을 읽는다. builder 8은 schema 0.2 산출물의 분류도 읽는다. slice 후보는 `review_sNNN_<후보>` 발견이 되고, 코드 분석 절의 [모듈별 검토 장부](REPORT.md#모듈별-검토-장부)가 모듈마다 모델에 보낸 파일과 보내지 못한 이유(상한·비밀값·계획 밖 등)를 센다. 모델에 보낸 범위는 검증된 범위가 아니다. `ai_review`는 필수 역할만 본다.
 
 ## 모델 입력의 비밀값 선별
 
@@ -416,7 +432,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 
 ### schema 0.3(review-r1 slice)
 
-- slice 기록(`review.investigate.sNNN`, `review.verify.sNNN`)만 쓴다. 0.2에 필수 `slice`(`key` `s001`~`s032`, `modules` 1~8개)를 더한 것이다. 단계는 investigate·verify뿐이다.
+- slice 기록(`review.investigate.sNNN`, `review.verify.sNNN`)만 쓴다. 0.2에 필수 `slice`(`key` `s001`~`s096`, `modules` 1~8개)를 더한 것이다. 단계는 investigate·verify뿐이다.
 - slice investigate의 upstream은 `review.scope`도 이름으로 가질 수 있고, slice verify는 `review.investigate.sNNN`과 `review.scope`를 가진다. slice verify의 후보는 investigate 후보뿐이다.
 - 0.2 기록에는 `slice`가 없고 `review.scope`·slice upstream을 가질 수 없다. `slice`는 생략 가능 필드라 0.2 기록의 바이트는 그대로다(`TestRolePackExampleRecords`).
 - decoder는 기록의 slice key와 단계가 task key와 같은지 확인한다(`record.Expect.Slice`).

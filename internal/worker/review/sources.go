@@ -173,21 +173,31 @@ func groupKey(dir, eco string) string { return dir + "\x00" + eco }
 // round: the first group of each ecosystem (ecosystem names sorted), then
 // the second of each, and so on; an ecosystem's groups go by directory. So
 // the first round reaches every language in scope before a second module of
-// any language, and a Go-only snapshot keeps the sorted module order.
-func groupOrder(byModule map[string][]source.Entry) []string {
-	per := map[string][]string{}
-	for _, k := range sortedKeys(byModule) {
-		eco := "go"
-		if _, e, ok := strings.Cut(k, "\x00"); ok {
-			eco = e
-		}
-		per[eco] = append(per[eco], k)
-	}
+// any language, and a Go-only snapshot keeps the sorted module order. The
+// groups of secondary modules (test input, examples, third-party material:
+// record.SecondaryRule) follow every primary group, in the same order among
+// themselves.
+func groupOrder(byModule map[string][]source.Entry, secondary func(string) bool) []string {
 	var out []string
-	for i := 0; len(out) < len(byModule); i++ {
-		for _, eco := range sortedKeys(per) {
-			if i < len(per[eco]) {
-				out = append(out, per[eco][i])
+	for _, want := range []bool{false, true} {
+		per := map[string][]string{}
+		n := 0
+		for _, k := range sortedKeys(byModule) {
+			if secondary(k) != want {
+				continue
+			}
+			eco := "go"
+			if _, e, ok := strings.Cut(k, "\x00"); ok {
+				eco = e
+			}
+			per[eco] = append(per[eco], k)
+			n++
+		}
+		for i, start := 0, len(out); len(out)-start < n; i++ {
+			for _, eco := range sortedKeys(per) {
+				if i < len(per[eco]) {
+					out = append(out, per[eco][i])
+				}
 			}
 		}
 	}

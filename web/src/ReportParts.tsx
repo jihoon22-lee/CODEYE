@@ -265,7 +265,13 @@ export function ReportExports({ report }: { report: AnalysisReport }) {
             {format.toUpperCase()}
           </a>
         ))}
+        {['markdown', 'html'].map((format) => (
+          <a key={format + '-full'} download href={reportURL(report.runID, format, includeCode, report.revision, 'full')}>
+            {t.exportFull(format.toUpperCase())}
+          </a>
+        ))}
       </div>
+      <p className="small">{t.exportNote}</p>
     </section>
   );
 }

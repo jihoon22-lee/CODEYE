@@ -11,9 +11,7 @@
   "slice": {
     "key": "s001",
     "modules": [
-      "go:api",
-      "javascript:web",
-      "python:worker"
+      "go:store"
     ]
   },
   "outcome": "accepted",
@@ -31,35 +29,53 @@
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "34955b5da54f8966f14b250b4e31e68fe16b050a268eda52ce559254430116b7"
+      "sha256": "f9028c1151124ce54ce5051f840b4c058263fc473ea4ab636e6008f36aac8536"
     }
   ],
   "evidence": [
     {
-      "id": "ev_2236532578dae124cc0404a5",
-      "path": "api/handler_test.go",
-      "sha256": "ca753b233587c9ff67892275eeac14362812d2b12209298a73bd67464a0dadf6",
+      "id": "ev_c108cc196202f680c7a2526a",
+      "path": "store/codec.go",
+      "sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
       "start_line": 1,
-      "end_line": 14,
-      "kind": "test",
+      "end_line": 50,
+      "kind": "code",
       "origin": "context"
     },
     {
-      "id": "ev_ba864736a08d6b38355965e6",
-      "path": "web/src/client.test.ts",
-      "sha256": "4b5b43662ca67931839c33e50b342dfef70b3bf86f2b32e2b30beecfb307c077",
+      "id": "ev_da3c6e51a48679aa9bb0e1f7",
+      "path": "store/compact.go",
+      "sha256": "9ef0eca20bf12061ae2ba03f38fb9f80ed32c06bcec3fc20ddb98cd99950834b",
       "start_line": 1,
-      "end_line": 5,
-      "kind": "test",
+      "end_line": 50,
+      "kind": "code",
       "origin": "context"
     },
     {
-      "id": "ev_d9605f1e29ebc405033ad49a",
-      "path": "worker/tests/test_jobs.py",
-      "sha256": "2a7781c4489492f2d2d0994b5625851427affcdab579ef6f45bc22d4e304f8ee",
+      "id": "ev_3f8c86b27641f9ab13366997",
+      "path": "store/cursor.go",
+      "sha256": "b307d1f015fdc13f26705796d2322bec07cb8dd601edc08e2c8e6903437ef44b",
       "start_line": 1,
-      "end_line": 5,
-      "kind": "test",
+      "end_line": 50,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_fb559547c244fdada77e0be9",
+      "path": "store/delete.go",
+      "sha256": "e255a7f3035e20a9b0e4963822b7dc87600b48cc4c0051c18f7be3fec2e31340",
+      "start_line": 1,
+      "end_line": 50,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_bc7f4f502e13fc86cf42cf0a",
+      "path": "store/encode.go",
+      "sha256": "eb60ec8caf4fda328a1e59584a3a508ef5b17ff0ae5a5a5cd358ba25f5cabae8",
+      "start_line": 1,
+      "end_line": 50,
+      "kind": "code",
       "origin": "context"
     },
     {
@@ -81,12 +97,13 @@
       "improvement": "주소를 검사한다.",
       "counterpoint": "기본값이 항상 채워질 수 있다.",
       "evidence_ids": [
-        "ev_2236532578dae124cc0404a5"
+        "ev_c108cc196202f680c7a2526a"
       ],
       "origin": "investigate"
     }
   ],
   "limitations": [
+    "excerpt_only",
     "files_outside_review_context"
   ],
   "calls": [
@@ -106,10 +123,10 @@
         "languages/python.md",
         "pack.yaml"
       ],
-      "request_sha256": "08d47fe835ae5fdc7a180e541736304fe1b6c53689d0f33c51a729f8e00f52c0",
-      "request_bytes": 17140,
+      "request_sha256": "ac8c364e721399493131380d0077887ee7f72bb81f3f961f071605ac6426cf45",
+      "request_bytes": 23193,
       "usage": {
-        "input": 4507,
+        "input": 10560,
         "output": 50
       },
       "attempt": 1,

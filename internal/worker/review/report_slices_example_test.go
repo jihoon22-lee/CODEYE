@@ -74,7 +74,7 @@ func TestReportSlicesExample(t *testing.T) {
 		t.Fatal(err)
 	}
 	pretty.WriteByte('\n')
-	md := string(report.RenderMarkdown(r, report.Digest(raw), report.Korean))
+	md := string(report.RenderMarkdownAt(r, report.Digest(raw), report.Korean, report.DetailSummary))
 	title, rest, _ := strings.Cut(md, "\n")
 	files := map[string][]byte{sliceExampleJSON: pretty.Bytes(), sliceExampleMD: []byte(title + "\n\n" + sliceExampleBanner + rest)}
 	if os.Getenv("CODEYE_UPDATE_EXAMPLES") == "1" {
@@ -213,11 +213,11 @@ func TestReportSlicesSecretScreenUnusable(t *testing.T) {
 	writeOrCompare(t, r, "../../report/testdata/report-screen-unusable.json")
 }
 
-// TC-169: beyond 32 slices the files are counted per module as not planned,
-// shown as a gap, and the report validates.
+// TC-169: beyond the 96 slots the files are counted per module as not
+// planned, shown as a gap, and the report validates.
 func TestReportSlicesNotPlanned(t *testing.T) {
 	tree := map[string]string{"go.mod": "module sample.test/big\n\ngo 1.23\n", "README.md": "# Big\n"}
-	for i := range 200 {
+	for i := range 600 {
 		tree[fmt.Sprintf("p/f%03d.go", i)] = "package p\n\n" + strings.Repeat("// filler line for the slice bound\n", 80)
 	}
 	j := treeJob(t, tree)

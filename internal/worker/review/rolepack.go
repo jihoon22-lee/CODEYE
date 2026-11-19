@@ -72,9 +72,20 @@ type RoleHandler struct {
 	// decides which review slices are admitted at run time and never the
 	// plan.
 	MaxCalls int
+	// Secondary is the path rule of test input, examples and third-party
+	// material (docs/REVIEW.md#검토-우선순위); nil means
+	// record.DefaultSecondary. It orders the overview's files and the slots.
+	Secondary *record.SecondaryRule
 }
 
 var _ analysis.Handler = RoleHandler{}
+
+func (h RoleHandler) secondary() record.SecondaryRule {
+	if h.Secondary == nil {
+		return record.DefaultSecondary
+	}
+	return *h.Secondary
+}
 
 func (h RoleHandler) Info() analysis.HandlerInfo { return h.Static.Info() }
 
@@ -88,8 +99,9 @@ func (h RoleHandler) maxCalls() int {
 // Plan appends the five roles of the role pack. The documents role is required only when
 // the manifest has guidance documents in scope; environment and interpret
 // roles are optional. When the overview investigate cannot offer every
-// eligible code file, review.scope and one investigate/verify pair per slice
-// follow (planSlices), all optional for the verdict. The slices come after
+// eligible code file, review.scope and one investigate/verify pair per slot
+// follow (planSlices: the plan fixes how many slots exist, review.scope
+// fills them at run time), all optional for the verdict. The slices come after
 // every whole-run role, so the whole-run roles' calls are always spent
 // before any slice is admitted.
 func (h RoleHandler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec, error) {
@@ -104,16 +116,16 @@ func (h RoleHandler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskS
 		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "독립 코드 검토", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.interpret", Required: false, Title: "정적 진단 해석", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview})
-	sp := planSlices(j.Snapshot.Manifest, j.Scope)
-	if len(sp.Slices) == 0 {
+	sp := planSlices(j.Snapshot.Manifest, j.Scope, h.secondary())
+	if sp.Slots == 0 {
 		return plan, nil
 	}
 	plan = append(plan, analysis.TaskSpec{Key: record.TaskScope, Required: false, Title: "모듈별 검토 범위", Stage: domain.StageCodeReview})
-	for _, s := range sp.Slices {
-		inv, ver := s.TaskKeys()
+	for i := range sp.Slots {
+		inv, ver := slotTaskKeys(sliceKey(i))
 		plan = append(plan,
-			analysis.TaskSpec{Key: inv, Required: false, Title: "모듈별 코드 검토 " + s.Key, Stage: domain.StageCodeReview},
-			analysis.TaskSpec{Key: ver, Required: false, Title: "모듈별 후보 검증 " + s.Key, Stage: domain.StageCodeReview})
+			analysis.TaskSpec{Key: inv, Required: false, Title: "모듈별 코드 검토 " + sliceKey(i), Stage: domain.StageCodeReview},
+			analysis.TaskSpec{Key: ver, Required: false, Title: "모듈별 후보 검증 " + sliceKey(i), Stage: domain.StageCodeReview})
 	}
 	return plan, nil
 }

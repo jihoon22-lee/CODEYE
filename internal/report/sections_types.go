@@ -465,25 +465,38 @@ type ReviewLedger struct {
 	// Status is complete, partial or overview_only.
 	Status  string         `json:"status"`
 	Modules []LedgerModule `json:"modules"`
+	// PrimarySlotsBudgetExhausted counts the filled slots of primary files
+	// whose investigate the call ceiling refused (builder 8 with a schema 0.2
+	// scope artifact): about two calls each would review them.
+	PrimarySlotsBudgetExhausted int `json:"primary_slots_budget_exhausted,omitempty"`
 }
 
 // LedgerModule is one module of the scope artifact. Every eligible file is
 // counted once: sent to the model, withheld (secret screen), unreadable,
-// budget exhausted (its slice was refused), not planned (beyond the slice
-// limit) or not sent (any other reason: the overview did not send it, its
-// slice failed or was skipped).
+// budget exhausted (a primary file whose slot was refused), not planned (a
+// primary file no slot was left for), secondary not reached (a secondary
+// file whose slot was refused or that no slot was left for) or not sent
+// (any other reason: the overview did not send it, its slot failed or was
+// skipped).
 type LedgerModule struct {
-	ModuleID             string `json:"module_id"`
-	Discovered           bool   `json:"discovered"`
-	FilesEligible        int    `json:"files_eligible"`
-	FilesSentToModel     int    `json:"files_sent_to_model"`
-	BytesSent            int    `json:"bytes_sent"`
-	FilesTruncated       int    `json:"files_truncated"`
-	FilesWithheld        int    `json:"files_withheld"`
-	FilesUnreadable      int    `json:"files_unreadable"`
-	FilesBudgetExhausted int    `json:"files_budget_exhausted"`
-	FilesNotPlanned      int    `json:"files_not_planned"`
-	FilesNotSent         int    `json:"files_not_sent"`
+	ModuleID   string `json:"module_id"`
+	Discovered bool   `json:"discovered"`
+	// Class is the module's class (primary, secondary); FilesSecondary and
+	// FilesSecondarySent count its secondary files and those sent. The three
+	// come with builder 8 from a schema 0.2 scope artifact.
+	Class                    string `json:"class,omitempty"`
+	FilesSecondary           int    `json:"files_secondary,omitempty"`
+	FilesSecondarySent       int    `json:"files_secondary_sent,omitempty"`
+	FilesSecondaryNotReached int    `json:"files_secondary_not_reached,omitempty"`
+	FilesEligible            int    `json:"files_eligible"`
+	FilesSentToModel         int    `json:"files_sent_to_model"`
+	BytesSent                int    `json:"bytes_sent"`
+	FilesTruncated           int    `json:"files_truncated"`
+	FilesWithheld            int    `json:"files_withheld"`
+	FilesUnreadable          int    `json:"files_unreadable"`
+	FilesBudgetExhausted     int    `json:"files_budget_exhausted"`
+	FilesNotPlanned          int    `json:"files_not_planned"`
+	FilesNotSent             int    `json:"files_not_sent"`
 	// FilesWithCompletedReview are the sent files whose review reached an
 	// accepted verify record (the whole-run verify for the overview's files,
 	// the slice's verify for a slice's).

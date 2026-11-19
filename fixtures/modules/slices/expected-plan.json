@@ -31,19 +31,6 @@
     {
       "key": "s001",
       "modules": [
-        "go:api",
-        "javascript:web",
-        "python:worker"
-      ],
-      "files": [
-        "api/handler_test.go",
-        "web/src/client.test.ts",
-        "worker/tests/test_jobs.py"
-      ]
-    },
-    {
-      "key": "s002",
-      "modules": [
         "go:store"
       ],
       "files": [
@@ -55,7 +42,7 @@
       ]
     },
     {
-      "key": "s003",
+      "key": "s002",
       "modules": [
         "go:store"
       ],
@@ -68,7 +55,7 @@
       ]
     },
     {
-      "key": "s004",
+      "key": "s003",
       "modules": [
         "go:store"
       ],
@@ -81,7 +68,7 @@
       ]
     },
     {
-      "key": "s005",
+      "key": "s004",
       "modules": [
         "go:store"
       ],
@@ -94,7 +81,7 @@
       ]
     },
     {
-      "key": "s006",
+      "key": "s005",
       "modules": [
         "go:store"
       ],
@@ -107,15 +94,28 @@
       ]
     },
     {
-      "key": "s007",
+      "key": "s006",
       "modules": [
-        "go:store"
+        "go:api",
+        "go:store",
+        "javascript:web"
       ],
       "files": [
         "store/sync.go",
         "store/tombstone.go",
         "store/txn.go",
-        "store/wal.go"
+        "store/wal.go",
+        "api/handler_test.go",
+        "web/src/client.test.ts"
+      ]
+    },
+    {
+      "key": "s007",
+      "modules": [
+        "python:worker"
+      ],
+      "files": [
+        "worker/tests/test_jobs.py"
       ]
     }
   ],

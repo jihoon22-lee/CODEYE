@@ -172,16 +172,32 @@ def slice_examples() -> dict:
     return {name: (ROOT / "examples/review-r1/slices" / (name + ".json")).read_text(encoding="utf-8") for name in SLICE_EXAMPLE_FILES}
 
 
+def secondary_segment(rule: dict, path: str):
+    """The secondary-path segment of the rule a file path's directories
+    match (case-insensitive; a segment with / matches consecutive
+    directories; not_for_go segments skip .go files), or None. Mirrors
+    record.SecondaryRule.Match."""
+    dirs = path.lower().split("/")[:-1]
+    for seg in rule["segments"]:
+        if path.endswith(".go") and seg in rule["not_for_go"]:
+            continue
+        parts = seg.split("/")
+        if any(dirs[i:i + len(parts)] == parts for i in range(len(dirs) - len(parts) + 1)):
+            return seg
+    return None
+
+
 def check_scope_artifact(scope: dict) -> None:
     """The scope artifact rules the schema cannot express: blobs of the
     fixture, every eligible file in exactly one place, covered_by_overview
-    exactly for the files the overview sent, per-module counts and slice
-    keys in plan order."""
+    exactly for the files the overview sent, per-module counts, slot keys in
+    order within the plan's slots, file classes from the recorded rule and
+    primary slots before secondary ones (docs/REVIEW.md#검토-우선순위)."""
     root = ROOT / "fixtures/modules/slices/input"
     offered = scope["overview"]["offered"]
     ensure(offered == sorted(offered), "scope offered files are not sorted")
     placed = {}
-    files = list(scope["overview"]["files"]) + [f for s in scope["slices"] for f in s["files"]]
+    files = list(scope["overview"]["files"]) + [f for s in scope["slices"] for f in s["files"]] + list(scope.get("excluded", []))
     for f in files:
         ensure(f["path"] not in placed, "scope file in two places: " + f["path"])
         placed[f["path"]] = f
@@ -196,6 +212,21 @@ def check_scope_artifact(scope: dict) -> None:
         key = f"s{i + 1:03d}"
         ensure(s["key"] == key and s["investigate_task"] == "review.investigate." + key and s["verify_task"] == "review.verify." + key, "scope slice keys out of order")
         ensure({f["module"] for f in s["files"]} <= set(s["modules"]), "scope slice file outside its modules: " + key)
+    if scope["schema_version"] == "0.1":
+        return
+    ensure(len(scope["slices"]) <= scope["limits"]["slots"], "scope fills more slots than the plan made")
+    rule = scope["priority"]["secondary"]
+    for f in files:
+        seg = secondary_segment(rule, f["path"])
+        want = "secondary_path:" + seg if seg else f.get("secondary") if f.get("secondary") == "generated_file" else None
+        ensure(f.get("secondary") == want and (f["class"] == "secondary") == (want is not None), "scope file class differs from the rule: " + f["path"])
+    for m in scope["modules"]:
+        own = [f for f in files if f["module"] == m["id"]]
+        ensure(m["files_secondary"] >= sum(1 for f in own if f["class"] == "secondary") and m["files_secondary_not_planned"] <= min(m["files_secondary"], m["files_not_planned"]), "scope module secondary count: " + m["id"])
+    classes = [s["class"] for s in scope["slices"]]
+    ensure(classes == sorted(classes, key=lambda c: c == "secondary"), "scope secondary slot before a primary one")
+    for s in scope["slices"]:
+        ensure(s["class"] == s["files"][0]["class"] and s["rank"] == s["files"][0]["rank"] and all(f["class"] == s["class"] for f in s["files"]), "scope slot class differs from its files: " + s["key"])
 
 
 def check_slice_examples(raw: dict, validators: dict) -> int:
@@ -247,7 +278,7 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
     negative = [
         case("slice record without slice", lambda d: d["investigate.s001"].pop("slice")),
         case("0.2 record with a slice", lambda d: d["investigate.s001"].update(schema_version="0.2")),
-        case("slice key outside s001..s032", lambda d: d["verify.s001"]["slice"].update(key="s033")),
+        case("slice key outside s001..s096", lambda d: d["verify.s001"]["slice"].update(key="s097")),
         case("slice of nine modules", lambda d: d["investigate.s001"]["slice"].update(modules=[f"go:m{i}" for i in range(9)])),
         case("slice verify given an interpret candidate", lambda d: d["verify.s001"]["candidates"][0].update(origin="interpret")),
         case("slice interpret record", lambda d: d["investigate.s001"].update(stage="interpret")),
@@ -261,6 +292,16 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
         case("scope not_screened without its limitation", lambda d: d["scope"].update(screen="not_screened")),
         case("scope ceiling above 207", lambda d: d["scope"]["budget"].update(max_calls=208)),
         case("scope slice out of order", lambda d: d["scope"]["slices"].reverse()),
+        case("scope slot key beyond s096", lambda d: d["scope"]["slices"][0].update(key="s097")),
+        case("scope fills more slots than planned", lambda d: d["scope"]["limits"].update(slots=len(d["scope"]["slices"]) - 1)),
+        case("scope slot limit other than 96", lambda d: d["scope"]["limits"].update(max_slices=32)),
+        case("scope without its priority rule", lambda d: d["scope"].pop("priority")),
+        case("scope secondary file without a reason", lambda d: first_file(d).update({"class": "secondary"})),
+        case("scope primary file below a secondary path", lambda d: d["scope"]["priority"]["secondary"]["segments"].append("store")),
+        case("scope rank outside the enum", lambda d: first_file(d).update(rank="core")),
+        case("scope severity without observations", lambda d: first_file(d).update(severity="high")),
+        case("scope planned file in the excluded list", lambda d: d["scope"]["excluded"].append(dict(d["scope"]["slices"][-1]["files"].pop(), state="planned"))),
+        case("scope 0.1 shape labelled 0.2", lambda d: [d["scope"].pop("priority"), d["scope"].pop("excluded"), d["scope"].update(schema_version="0.1")]),
     ]
     for name, d in negative:
         expect_invalid(name, check, d)

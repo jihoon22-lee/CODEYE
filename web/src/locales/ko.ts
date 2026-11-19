@@ -70,6 +70,13 @@ export const ko = {
     after: '설치한 뒤 터미널에서 codeye up을 다시 실행하고 "다시 시도"를 누르세요.',
     model: '모델 키를 설정하세요: OPENAI_API_KEY, ANTHROPIC_API_KEY 또는 OPENCODE_API_KEY를 설정하고 codeye up을 다시 실행하면 모델 검토를 합니다.',
     budget: '모델 호출 상한 때문에 검토하지 못한 파일이 있습니다. 설정의 agent.model.review_max_calls(15~207, 기본 99)를 올리고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
+    // From the ledger: the calls this run used and the ceiling that admits every refused slot
+    // (each slot one investigate and one verify call, without format repair).
+    budgetCalls: (used: number, slots: number, needed: number) =>
+      `모델 호출 상한 때문에 주요 파일의 slot ${slots}개를 검토하지 못했습니다. 이번 실행은 호출 ${used}회를 썼고, 남은 slot을 모두 검토하려면 상한이 ${needed}회 이상이어야 합니다(형식 복구가 없을 때). 설정의 agent.model.review_max_calls를 ${needed} 이상으로 올리고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
+    budgetCallsMax: (used: number, slots: number, needed: number) =>
+      `모델 호출 상한 때문에 주요 파일의 slot ${slots}개를 검토하지 못했습니다. 이번 실행은 호출 ${used}회를 썼고, 남은 slot을 모두 검토하려면 약 ${needed}회가 필요해 최댓값 207로도 다 검토하지 못합니다. 설정의 agent.model.review_max_calls를 207로 올리고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
+    notPlanned: (n: number) => `slot 상한(96개) 밖이라 계획하지 않은 주요 파일 ${n}개는 호출 상한을 올려도 검토되지 않습니다.`,
     buildScripts: (tasks: string) => `이 프로젝트에서 "저장소의 빌드 스크립트 실행"을 켜면 ${tasks}도 실행합니다.`,
     buildScriptsCrates: (tasks: string) => `이 프로젝트에서 "저장소의 빌드 스크립트 실행"을 켜면 분석 전에 Rust crate를 받아 두고 ${tasks}도 실행합니다.`,
     buildScriptsAction: '켜고 다시 시도',

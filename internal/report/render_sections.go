@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +23,9 @@ type secView struct {
 	view
 	Sections []secBlock
 	Appendix []secPart
+	// Summary selects the summary layout (render_summary.go): the appendix
+	// is Appendix instead of the full record tables.
+	Summary bool
 }
 
 // secBlock is one top-level section.
@@ -41,6 +45,8 @@ type secPart struct {
 	Table    *secTable
 	List     []secItem
 	Findings []Finding
+	// Cards are the short finding cards of the summary layout.
+	Cards []secCard
 	// Empty is shown instead of an empty table, list or finding list;
 	// ShowEmpty is set when the part has none of them.
 	Empty     string
@@ -53,6 +59,15 @@ type secTable struct {
 	// ObservationIDs, when set, name the observation of each row (HTML row
 	// id and data-observation).
 	ObservationIDs []string
+	// RowIDs, when set, are the HTML row ids of the summary layout's rows
+	// (a finding or a detection the overview links to).
+	RowIDs []string
+}
+
+// secCard is one finding of the summary layout: its title and a few lines.
+type secCard struct {
+	ID, Title string
+	Lines     []secItem
 }
 
 // secCell is plain text or a code span; Anchor links to an in-page id.
@@ -83,6 +98,17 @@ func lab(l Locale, prefix, c string) string {
 }
 
 func tf(l Locale, key string, args ...any) string { return fmt.Sprintf(l.Label(key), args...) }
+
+// attentionText is the sentence of an attention item. A template without a
+// verb (model_review_not_performed carries a count of 1 that means "present")
+// is used as is: Sprintf would append %!(EXTRA int=1) for the unused count.
+func attentionText(l Locale, code string, count int) string {
+	tmpl := l.Label("attention." + code)
+	if !strings.Contains(tmpl, "%") {
+		return tmpl
+	}
+	return fmt.Sprintf(tmpl, count)
+}
 
 func optText(p *string, def string) string {
 	if p == nil {
@@ -134,8 +160,9 @@ var countOrder = map[string][]string{
 	SectionStaticAnalysis: {"tools", "succeeded", "not_succeeded", "observations", "findings", "actionable", "pending"},
 	SectionMetrics:        {"tools", "observations", "metrics"},
 	SectionSecrets:        {"tools", "detections", "files"},
-	SectionCodeReview:     {"calls", "files_sent_to_model", "files_not_sent_to_model", "findings", "actionable", "pending", "refuted"},
-	SectionGaps:           {"gaps"},
+	SectionCodeReview: {"calls", "files_sent_to_model", "files_not_sent_to_model", "primary_modules", "primary_files", "primary_files_sent_to_model",
+		"secondary_files", "secondary_files_not_reached", "findings", "actionable", "pending", "refuted"},
+	SectionGaps: {"gaps"},
 }
 
 // dependencyPart is the dependency table: one row per deps.* task with what
@@ -254,7 +281,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 	ov.Parts = append(ov.Parts, secPart{Heading: l.Label("overview_sections"), Table: t})
 	var attention []secItem
 	for _, a := range r.Overview.Attention {
-		attention = append(attention, secItem{Text: tf(l, "attention."+a.Code, a.Count) + " " + tf(l, "attention_see", title(a.Section)), Link: a.Section})
+		attention = append(attention, secItem{Text: attentionText(l, a.Code, a.Count) + " " + tf(l, "attention_see", title(a.Section)), Link: a.Section})
 	}
 	ov.Parts = append(ov.Parts, listPart(l.Label("overview_attention"), attention, l.Label("overview_no_attention")))
 	if len(r.Summary.Priorities) > 0 {
@@ -562,12 +589,25 @@ func ledgerParts(l Locale, x ReviewLedger) []secPart {
 	mt := &secTable{Head: []string{l.Label("col.module"), l.Label("col.discovered"), l.Label("col.eligible"), l.Label("col.sent"), l.Label("col.bytes_sent"),
 		l.Label("col.truncated"), l.Label("col.withheld"), l.Label("col.unreadable"), l.Label("col.budget_exhausted"), l.Label("col.not_planned"),
 		l.Label("col.not_sent"), l.Label("col.completed")}}
+	// Builder 8 classes each module and counts its secondary files: the
+	// class and the secondary files left out within the ceiling get a column
+	// so that each row adds up to the eligible files.
+	classes := ledgerClasses(&x)
+	if classes {
+		mt.Head = slices.Insert(mt.Head, 1, l.Label("col.module_class"))
+		mt.Head = slices.Insert(mt.Head, 11, l.Label("col.secondary_not_reached"))
+	}
 	var order []string
 	slicesOf := map[string]LedgerSlice{}
 	modulesOf := map[string][]string{}
 	for _, m := range x.Modules {
-		mt.Rows = append(mt.Rows, []secCell{code(m.ModuleID), txt(lab(l, "discovered", strconv.FormatBool(m.Discovered))), num(m.FilesEligible), num(m.FilesSentToModel), num(m.BytesSent), num(m.FilesTruncated),
-			num(m.FilesWithheld), num(m.FilesUnreadable), num(m.FilesBudgetExhausted), num(m.FilesNotPlanned), num(m.FilesNotSent), num(m.FilesWithCompletedReview)})
+		row := []secCell{code(m.ModuleID), txt(lab(l, "discovered", strconv.FormatBool(m.Discovered))), num(m.FilesEligible), num(m.FilesSentToModel), num(m.BytesSent), num(m.FilesTruncated),
+			num(m.FilesWithheld), num(m.FilesUnreadable), num(m.FilesBudgetExhausted), num(m.FilesNotPlanned), num(m.FilesNotSent), num(m.FilesWithCompletedReview)}
+		if classes {
+			row = slices.Insert(row, 1, txt(lab(l, "class", m.Class)))
+			row = slices.Insert(row, 11, num(m.FilesSecondaryNotReached))
+		}
+		mt.Rows = append(mt.Rows, row)
 		for _, s := range m.Slices {
 			if _, ok := slicesOf[s.TaskKey]; !ok {
 				order = append(order, s.TaskKey)
@@ -773,6 +813,7 @@ func mdPart(p func(...string), part secPart, l Locale) {
 	for _, f := range part.Findings {
 		mdFinding(p, f, "#### ")
 	}
+	mdCards(p, part.Cards)
 	if part.ShowEmpty {
 		p(mdText(part.Empty))
 		p()
@@ -816,12 +857,13 @@ nav ol{columns:2}
 </table>
 <p class="banner" role="status">{{.Banner}}</p>
 <nav aria-label="{{.L.Label "overview_sections"}}"><ol>{{range .Sections}}<li><a href="#{{.ID}}">{{.Title}}</a>{{if .State}} — {{.State}}{{end}}</li>{{end}}<li><a href="#appendix">{{.L.Label "section.appendix"}}</a></li></ol></nav>
-{{$l := .L}}{{range .Sections}}<section id="{{.ID}}" data-section="{{.ID}}">
+{{$l := .L}}{{if .Summary}}<p class="banner" role="note">{{.L.Label "summary.layout_note"}}</p>
+{{end}}{{range .Sections}}<section id="{{.ID}}" data-section="{{.ID}}">
 <h2>{{.Title}}</h2>
 {{range .Parts}}{{template "part" (pair $l .)}}{{end}}</section>
 {{end}}<section id="appendix">
 <h2>{{.L.Label "section.appendix"}}</h2>
-<p>{{.L.Label "appendix.lead"}}</p>
+{{if .Summary}}{{range .Appendix}}{{template "part" (pair $l .)}}{{end}}{{else}}<p>{{.L.Label "appendix.lead"}}</p>
 <h3>{{.L.Label "ai_review"}}</h3>
 <p>상태: <code data-field="ai_review">{{.R.Coverage.AIReview.Status}}</code> {{with .R.Coverage.AIReview.Reason}}<code>{{.}}</code>{{end}}</p>
 {{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code> · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침{{if .PackID}} <code>{{.PackID}}@{{.PackVersion}}</code>{{end}} <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
@@ -848,7 +890,7 @@ nav ol{columns:2}
 {{end}}</table></div>
 <h3>{{.L.Label "limitations"}}</h3>
 <ul>{{range .Limitations}}<li>{{.}}</li>{{end}}</ul>
-</section>
+{{end}}</section>
 <p>digest sha256: <code>{{.Digest}}</code></p>
 </body>
 </html>
@@ -859,7 +901,7 @@ nav ol{columns:2}
 {{range .Counts}}<tr><td>{{.Label}}</td><td data-count="{{.Name}}">{{.Value}}</td></tr>
 {{end}}</table>
 {{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table><tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}</tr>
-{{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}</tr>
+{{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}</tr>
 {{end}}</table></div>
 {{end}}{{if .List}}<ul>{{range .List}}<li>{{if .Link}}<a href="#{{.Link}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}{{range .Codes}} <code>{{.}}</code>{{end}}</li>{{end}}</ul>
 {{end}}{{range .Findings}}<section class="finding" id="{{.ID}}" data-finding="{{.ID}}">
@@ -879,6 +921,9 @@ nav ol{columns:2}
 {{range .Verification}}<li>verification: {{.}}</li>{{end}}
 {{range .Limitations}}<li>limitation: {{.}}</li>{{end}}
 </ul></section>
+{{end}}{{range .Cards}}<section class="finding" id="{{.ID}}" data-finding="{{.ID}}">
+<h4>{{.Title}}</h4>
+<ul>{{range .Lines}}<li>{{.Text}}{{range .Codes}} <code>{{.}}</code>{{end}}</li>{{end}}</ul></section>
 {{end}}{{if .ShowEmpty}}<p>{{.Empty}}</p>
 {{end}}{{end}}{{end}}`))
 

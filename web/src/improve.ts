@@ -1,6 +1,7 @@
 import type { AnalysisChoices, Project, Setup } from './api';
 import type { Dependency } from './reportSections';
 import { ko as t } from './locales/ko';
+import type { Ledger } from './reportSections';
 
 export type Gap = { section: string; code: string; subject: string | null; detail: string | null };
 
@@ -29,9 +30,11 @@ const codeOf = (detail: string) => detail.split(':')[0];
 // improvementHints turns a report's gaps into the few actions that would fill them: install a
 // missing tool or package manager, set a model key, raise the call ceiling, reach the
 // dependency registry, or turn on a project choice or node switch. Gaps
-// without a known remedy are left to the report's own gap list. dependencies are the
-// report's dependency tasks: a JS task's record names the manager its lockfile chose.
-export function improvementHints(gaps: Gap[], setup: Setup | null, project: Project, dependencies: Dependency[] = []): Hint[] {
+// without a known remedy are left to the report's own gap list. The review
+// ledger, when the report has one, says how many calls the refused slots need.
+// dependencies are the report's dependency tasks: a JS task's record names the
+// manager its lockfile chose.
+export function improvementHints(gaps: Gap[], setup: Setup | null, project: Project, ledger: Ledger | null = null, dependencies: Dependency[] = []): Hint[] {
   const out: Hint[] = [];
   const seen = new Set<string>();
   const push = (h: Hint) => { if (!seen.has(h.key)) { seen.add(h.key); out.push(h); } };
@@ -50,7 +53,10 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
     } else if (detail === 'model_not_configured') {
       push({ key: 'model', text: t.improve.model });
     } else if (g.code === 'review_scope_budget_exhausted') {
-      push({ key: 'budget', text: t.improve.budget });
+      push(budgetHint(ledger));
+    } else if (g.code === 'review_scope_not_planned' && ledger) {
+      const n = ledger.modules.filter((m) => m.cls !== 'secondary').reduce((s, m) => s + m.notPlanned, 0);
+      if (n > 0) push({ key: 'not_planned', text: t.improve.notPlanned(n) });
     } else if (detail === 'repository_code_not_allowed' && g.subject) {
       if (!blocked.includes(taskOf(g.subject))) blocked.push(taskOf(g.subject));
     } else if (detail === 'model_source_not_approved') {
@@ -105,4 +111,25 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
     push({ key: 'send_source', text: t.improve.sendSource, turnOn: 'send_source_to_model' });
   }
   return out;
+}
+
+// The largest call ceiling (docs/REVIEW.md#호출-상한과-승인).
+export const MAX_REVIEW_CALLS = 207;
+
+// budgetHint: a slot is admitted while at least 6 calls are left, and each
+// admitted slot uses 2 without format repair, so the run's used calls, 2 for
+// every refused slot but the last and 6 for that one admit them all. The
+// refused slots are the ledger's count of primary ones (builder 8) or, for an
+// earlier builder, its refused investigate tasks.
+function budgetHint(ledger: Ledger | null): Hint {
+  if (!ledger || ledger.callsUsed === null) return { key: 'budget', text: t.improve.budget };
+  let slots = ledger.primarySlotsRefused;
+  if (slots === 0) {
+    const refused = new Set<string>();
+    for (const m of ledger.modules) for (const x of m.slices) if (/^review\.investigate\.s\d{3}$/.test(x.task) && x.status === 'budget_exhausted') refused.add(x.task);
+    slots = refused.size;
+  }
+  if (slots === 0) return { key: 'budget', text: t.improve.budget };
+  const needed = ledger.callsUsed + 2 * (slots - 1) + 6;
+  return { key: 'budget', text: needed > MAX_REVIEW_CALLS ? t.improve.budgetCallsMax(ledger.callsUsed, slots, needed) : t.improve.budgetCalls(ledger.callsUsed, slots, needed) };
 }

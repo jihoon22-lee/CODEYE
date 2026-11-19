@@ -11,11 +11,11 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000650",
+      "id": "0195f3a0-0000-7000-8000-000000000654",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "1080faf08998310ed7ca44204e39a4edcd327cf041df60faa8998a3a11c366c4",
-      "size_bytes": 15714,
+      "sha256": "7ae1aa6b6b6f0b8317a4b79c82961f2133d76f20825b4b06ee589c0972ecc5c7",
+      "size_bytes": 16503,
       "task_key": null
     },
     {
@@ -370,12 +370,12 @@
       "task_key": "review.verify"
     },
     {
-      "decoder": "application/vnd.codeye.review-scope+json;schema_version=0.1",
+      "decoder": "application/vnd.codeye.review-scope+json;schema_version=0.2",
       "id": "0195f3a0-0000-7000-8000-00000000063b",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "94763c41ae4879ae557eac023826a72f9e5f6d7042cbb8f3999ae4a4234dfc8c",
-      "size_bytes": 10712,
+      "sha256": "e0ed4354a3a0de8ccf8b17da9b88c700e6ccfc592b6fd36e26858e664df9f235",
+      "size_bytes": 12721,
       "task_key": "review.scope"
     },
     {
@@ -383,8 +383,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000063d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "14b07efe36c3c7858a0879770caef8c42e051dddb7c75d7891e5bca676ebced3",
-      "size_bytes": 2531,
+      "sha256": "2889c89a67002b31a6c6aac852ca50743dcf56ce53c62311a7acf18ff8a806f1",
+      "size_bytes": 2897,
       "task_key": "review.investigate.s001"
     },
     {
@@ -392,8 +392,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000063f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "a209f8b54e6add9dd21b4b85abfb7cdd95e4005f5d362f70c2ed9511713f8251",
-      "size_bytes": 3171,
+      "sha256": "6fac9d3fa6ab6bc85769012a1864d8d9849f07001ccd209f4308d72fdcbfe1ec",
+      "size_bytes": 3521,
       "task_key": "review.verify.s001"
     },
     {
@@ -401,8 +401,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000641",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "5642553d03bf20663ab24d8e26405dc73c87b4eb74761a8384ae181562e47bef",
-      "size_bytes": 2696,
+      "sha256": "9253280ab05a1fb7e27ba876d5161f2ae5920273b728595ba73fc54ea72259ac",
+      "size_bytes": 2889,
       "task_key": "review.investigate.s002"
     },
     {
@@ -410,8 +410,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000643",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "964e0a9918ecbd2eaa5c10cf943fbd39022be1d2dbc9e6f22abe8258281de53f",
-      "size_bytes": 3321,
+      "sha256": "21f85c99def0a3f7fe2184d6e7d79c41816c63c4664ae08a28b77f15774f1c47",
+      "size_bytes": 3513,
       "task_key": "review.verify.s002"
     },
     {
@@ -419,7 +419,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000645",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "9e757b6e67a4fed51842b5562b23138fb811e600a9bb52e14996ba135d1f5f63",
+      "sha256": "ac5a0a56656534d455060d504077179310d9a2ad9b9b15267321790221068835",
       "size_bytes": 2891,
       "task_key": "review.investigate.s003"
     },
@@ -428,7 +428,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000647",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "5bdc2c89414d7b5fa7152032badd1ef0c769f998b26789dd487da0be9b665771",
+      "sha256": "8a86a815d89516a00ac9c0b4f8a599c2e2de4fb2c4bbdd48423757278de6ca90",
       "size_bytes": 3515,
       "task_key": "review.verify.s003"
     }
@@ -443,17 +443,17 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "0f8f9b5f5fc26de451e029b4fdc5c759755d6006546b8c40763be31ba49245e5",
+    "input_digest": "b22fb8bb0947a678a102efc7e2e4124091043464947460160321fc686e2eb9fd",
     "result_manifest_artifact_id": null,
-    "version": "7"
+    "version": "8"
   },
   "code_review": {
     "accepted_calls": 10,
     "calls": 10,
-    "exposed_files": 23,
+    "exposed_files": 26,
     "finding_ids": [
-      "review_s001_investigate_1",
       "review_investigate_1",
+      "review_s001_investigate_1",
       "review_s002_investigate_1",
       "review_s003_investigate_1"
     ],
@@ -465,18 +465,46 @@
       "max_request_bytes": 40000,
       "modules": [
         {
-          "bytes_sent": 945,
+          "bytes_sent": 678,
+          "class": "primary",
           "discovered": true,
-          "files_budget_exhausted": 0,
+          "files_budget_exhausted": 1,
           "files_eligible": 3,
           "files_not_planned": 0,
           "files_not_sent": 0,
-          "files_sent_to_model": 3,
+          "files_sent_to_model": 2,
           "files_truncated": 0,
           "files_unreadable": 0,
-          "files_with_completed_review": 3,
+          "files_with_completed_review": 2,
           "files_withheld": 0,
           "module_id": "go:api",
+          "slices": [
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.investigate.s006"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.verify.s006"
+            }
+          ]
+        },
+        {
+          "bytes_sent": 20815,
+          "class": "primary",
+          "discovered": true,
+          "files_budget_exhausted": 13,
+          "files_eligible": 30,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_sent_to_model": 17,
+          "files_truncated": 17,
+          "files_unreadable": 0,
+          "files_with_completed_review": 17,
+          "files_withheld": 0,
+          "module_id": "go:store",
           "slices": [
             {
               "reason": null,
@@ -487,23 +515,7 @@
               "reason": null,
               "status": "succeeded",
               "task_key": "review.verify.s001"
-            }
-          ]
-        },
-        {
-          "bytes_sent": 13501,
-          "discovered": true,
-          "files_budget_exhausted": 19,
-          "files_eligible": 30,
-          "files_not_planned": 0,
-          "files_not_sent": 0,
-          "files_sent_to_model": 11,
-          "files_truncated": 11,
-          "files_unreadable": 0,
-          "files_with_completed_review": 11,
-          "files_withheld": 0,
-          "module_id": "go:store",
-          "slices": [
+            },
             {
               "reason": null,
               "status": "succeeded",
@@ -553,73 +565,66 @@
               "reason": "review_budget_exhausted",
               "status": "budget_exhausted",
               "task_key": "review.verify.s006"
-            },
-            {
-              "reason": "review_budget_exhausted",
-              "status": "budget_exhausted",
-              "task_key": "review.investigate.s007"
-            },
-            {
-              "reason": "review_budget_exhausted",
-              "status": "budget_exhausted",
-              "task_key": "review.verify.s007"
             }
           ]
         },
         {
-          "bytes_sent": 559,
+          "bytes_sent": 394,
+          "class": "primary",
           "discovered": true,
-          "files_budget_exhausted": 0,
+          "files_budget_exhausted": 1,
           "files_eligible": 3,
           "files_not_planned": 0,
           "files_not_sent": 0,
-          "files_sent_to_model": 3,
+          "files_sent_to_model": 2,
           "files_truncated": 0,
           "files_unreadable": 0,
-          "files_with_completed_review": 3,
+          "files_with_completed_review": 2,
           "files_withheld": 0,
           "module_id": "javascript:web",
           "slices": [
             {
-              "reason": null,
-              "status": "succeeded",
-              "task_key": "review.investigate.s001"
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.investigate.s006"
             },
             {
-              "reason": null,
-              "status": "succeeded",
-              "task_key": "review.verify.s001"
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.verify.s006"
             }
           ]
         },
         {
-          "bytes_sent": 635,
+          "bytes_sent": 546,
+          "class": "primary",
           "discovered": true,
-          "files_budget_exhausted": 0,
+          "files_budget_exhausted": 1,
           "files_eligible": 3,
           "files_not_planned": 0,
           "files_not_sent": 0,
-          "files_sent_to_model": 3,
+          "files_sent_to_model": 2,
           "files_truncated": 0,
           "files_unreadable": 0,
-          "files_with_completed_review": 3,
+          "files_with_completed_review": 2,
           "files_withheld": 0,
           "module_id": "python:worker",
           "slices": [
             {
-              "reason": null,
-              "status": "succeeded",
-              "task_key": "review.investigate.s001"
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.investigate.s006"
             },
             {
-              "reason": null,
-              "status": "succeeded",
-              "task_key": "review.verify.s001"
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.verify.s006"
             }
           ]
         }
       ],
-      "request_bytes_sent": 190850,
+      "primary_slots_budget_exhausted": 3,
+      "request_bytes_sent": 205632,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -630,7 +635,7 @@
     "pack": "role",
     "pack_id": "review-r1",
     "pack_version": "2.0.0",
-    "request_bytes": 190850,
+    "request_bytes": 205632,
     "roles": [
       {
         "key": "review.investigate",
@@ -651,17 +656,18 @@
     ],
     "stage": {
       "counts": {
-        "budget_exhausted": 8,
-        "skipped_policy": 1
+        "budget_exhausted": 6,
+        "skipped_policy": 7
       },
       "reasons": [
+        "no_review_scope",
         "no_tool_observations",
         "review_budget_exhausted"
       ],
       "stage": "code_review",
       "state": "partial",
       "succeeded": 9,
-      "tasks": 18
+      "tasks": 22
     }
   },
   "coverage": {
@@ -713,9 +719,21 @@
         },
         {
           "key": "review.investigate.s007",
-          "reason": "review_budget_exhausted",
-          "result": "not_succeeded",
-          "task_status": "budget_exhausted"
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s008",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s009",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
         },
         {
           "key": "review.scope",
@@ -757,9 +775,21 @@
         },
         {
           "key": "review.verify.s007",
-          "reason": "review_budget_exhausted",
-          "result": "not_succeeded",
-          "task_status": "budget_exhausted"
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s008",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s009",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
         }
       ],
       "reason": null,
@@ -783,7 +813,7 @@
       "status": "performed"
     },
     "inventory_files": 44,
-    "llm_exposed_files": 23,
+    "llm_exposed_files": 26,
     "notes": [
       "inventory_counts_all_included_files",
       "tests_not_planned",
@@ -841,7 +871,7 @@
         "pack_id": "review-r1",
         "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
         "pack_version": "2.0.0",
-        "request_sha256": "37daed14df4afe7c46a8d8fcab34f1a898db787ce68968c76dfcca5911114554",
+        "request_sha256": "a8248b20b768e0d14abfb278e2fe9de7284d73faf185ed0c6ba39e6b584e0167",
         "role": "investigate",
         "task_key": "review.investigate.s001"
       },
@@ -852,7 +882,7 @@
         "pack_id": "review-r1",
         "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
         "pack_version": "2.0.0",
-        "request_sha256": "e439206d5c8720c602f249fe1953e5c0f1b9e74f77a9b65b532381476daa0ab3",
+        "request_sha256": "2a7f578ca81bf12675d6e48c939a298647765fe59eb7341e131d4b4c6ae2c9b9",
         "role": "verify",
         "task_key": "review.verify.s001"
       },
@@ -863,7 +893,7 @@
         "pack_id": "review-r1",
         "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
         "pack_version": "2.0.0",
-        "request_sha256": "0b12f8b612f60541707b66b95bbe1fbaca6da7ef4448d2c625f9790a48cf384a",
+        "request_sha256": "7700f87a352f0f87b72707d40d52e85b384a6a9127ae2e6a0c860635d2caa3b7",
         "role": "investigate",
         "task_key": "review.investigate.s002"
       },
@@ -874,7 +904,7 @@
         "pack_id": "review-r1",
         "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
         "pack_version": "2.0.0",
-        "request_sha256": "7443f1f1e8dc0f238a7c9a1ed640e7583fa097e54e25bc522cc680ef9b4f342d",
+        "request_sha256": "2a0d5bd06fcb1363fa5fc5b133ad6b22fd2f33ecefbfa8097e954e2ad04f6095",
         "role": "verify",
         "task_key": "review.verify.s002"
       },
@@ -885,7 +915,7 @@
         "pack_id": "review-r1",
         "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
         "pack_version": "2.0.0",
-        "request_sha256": "a40094f029fb4294d925c25164453fa58e55dd829a7bfd8166554fea08780a9f",
+        "request_sha256": "85314ded1ad90b7f5b21afd1b5f19e52ae7df61b2bca26ba032a80c76f181446",
         "role": "investigate",
         "task_key": "review.investigate.s003"
       },
@@ -896,7 +926,7 @@
         "pack_id": "review-r1",
         "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
         "pack_version": "2.0.0",
-        "request_sha256": "cc492da94a862f6dfd3b59697d4eb6ea4aa5cdcc909b04c302a0b425ded72487",
+        "request_sha256": "245f7fc622848fa4503537effe91317dae4f2b2db877b4d831a716d5c5cca9cc",
         "role": "verify",
         "task_key": "review.verify.s003"
       }
@@ -1837,89 +1867,6 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_1e0dc6fad5ef460d4a8467a8"
-          ],
-          "kind": "inferred"
-        },
-        {
-          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
-          "evidence_ids": [
-            "ev_1e0dc6fad5ef460d4a8467a8"
-          ],
-          "kind": "inferred"
-        }
-      ],
-      "conditions": [
-        {
-          "evidence_ids": [
-            "ev_1e0dc6fad5ef460d4a8467a8"
-          ],
-          "statement": "주소가 비어 있는 경우",
-          "status": "assumed"
-        }
-      ],
-      "counterevidence_ids": [],
-      "disposition": "open",
-      "evidence": [
-        {
-          "blob_sha256": "ca753b233587c9ff67892275eeac14362812d2b12209298a73bd67464a0dadf6",
-          "description": "고정 스냅샷의 test 발췌 위치",
-          "id": "ev_1e0dc6fad5ef460d4a8467a8",
-          "kind": "code",
-          "location": {
-            "end_line": 14,
-            "path": "api/handler_test.go",
-            "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
-            "start_line": 1
-          }
-        }
-      ],
-      "fingerprint": "fp2:11b687bfb932cdb4623572cdf83f5879e7ba12df53898cf62f273a4e8a822cf7",
-      "fingerprint_basis": {
-        "analyzer": "review",
-        "context": "unavailable",
-        "move_key": "",
-        "paths": [
-          "api/handler_test.go"
-        ],
-        "producer": "model",
-        "rule": "candidate:error_handling",
-        "scheme": "fp2",
-        "symbols": []
-      },
-      "id": "review_s001_investigate_1",
-      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
-      "limitations": [
-        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
-      ],
-      "locations": [
-        {
-          "end_line": 14,
-          "path": "api/handler_test.go",
-          "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
-          "start_line": 1
-        }
-      ],
-      "observation_ids": [],
-      "recommendation": {
-        "summary": "주소를 검사한다.",
-        "tradeoffs": []
-      },
-      "schema_version": "0.1",
-      "severity": "medium",
-      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
-      "title": "설정 주소 검증 누락",
-      "validation": "inconclusive",
-      "verification": [
-        "Forward의 호출자와 결제 경로를 읽는다."
-      ]
-    },
-    {
-      "category": "error_handling",
-      "claims": [
-        {
-          "assertion": "설정 주소 검증 누락",
-          "evidence_ids": [
             "ev_7598f744a473d4f167c7b428"
           ],
           "kind": "inferred"
@@ -2053,7 +2000,7 @@
         "scheme": "fp2",
         "symbols": []
       },
-      "id": "review_s002_investigate_1",
+      "id": "review_s001_investigate_1",
       "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
       "limitations": [
         "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
@@ -2086,14 +2033,14 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_29e943f148fb75179ee04eba"
+            "ev_65c77e2ba5d5936bf32aa304"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
           "evidence_ids": [
-            "ev_29e943f148fb75179ee04eba"
+            "ev_65c77e2ba5d5936bf32aa304"
           ],
           "kind": "inferred"
         }
@@ -2101,7 +2048,7 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_29e943f148fb75179ee04eba"
+            "ev_65c77e2ba5d5936bf32aa304"
           ],
           "statement": "주소가 비어 있는 경우",
           "status": "assumed"
@@ -2111,25 +2058,108 @@
       "disposition": "open",
       "evidence": [
         {
-          "blob_sha256": "eb60ec8caf4fda328a1e59584a3a508ef5b17ff0ae5a5a5cd358ba25f5cabae8",
+          "blob_sha256": "bb412f06b5b14efeaa375079e027df3bd5d6c4e766872e647d93c10e96702db7",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_29e943f148fb75179ee04eba",
+          "id": "ev_65c77e2ba5d5936bf32aa304",
           "kind": "code",
           "location": {
             "end_line": 50,
-            "path": "store/encode.go",
+            "path": "store/evict.go",
             "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
             "start_line": 1
           }
         }
       ],
-      "fingerprint": "fp2:4f94e127ea6b0b33088b6decb8717c4241bde1f3b3eb8f9e37e8260ab92df8c8",
+      "fingerprint": "fp2:31d743675a0aeb8c5e3db16f91e979e2a63fa8496c2ea56283ab93f2a19d7a04",
       "fingerprint_basis": {
         "analyzer": "review",
         "context": "unavailable",
         "move_key": "",
         "paths": [
-          "store/encode.go"
+          "store/evict.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s002_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 50,
+          "path": "store/evict.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_6c80c76724ad1562986f1a02"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_6c80c76724ad1562986f1a02"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_6c80c76724ad1562986f1a02"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "e82c4becf3a698055808aa588af80f546006489117fc6f71e3f9f5071dad823e",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_6c80c76724ad1562986f1a02",
+          "kind": "code",
+          "location": {
+            "end_line": 50,
+            "path": "store/journal.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:f523b9cdf37d293756977bb59e61a8096d7109f2b057c8c0a1dc97190198b022",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "store/journal.go"
         ],
         "producer": "model",
         "rule": "candidate:error_handling",
@@ -2144,7 +2174,7 @@
       "locations": [
         {
           "end_line": 50,
-          "path": "store/encode.go",
+          "path": "store/journal.go",
           "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
           "start_line": 1
         }
@@ -2211,7 +2241,25 @@
       "code": "review_scope_budget_exhausted",
       "detail": null,
       "section": "code_review",
+      "subject": "go:api"
+    },
+    {
+      "code": "review_scope_budget_exhausted",
+      "detail": null,
+      "section": "code_review",
       "subject": "go:store"
+    },
+    {
+      "code": "review_scope_budget_exhausted",
+      "detail": null,
+      "section": "code_review",
+      "subject": "javascript:web"
+    },
+    {
+      "code": "review_scope_budget_exhausted",
+      "detail": null,
+      "section": "code_review",
+      "subject": "python:worker"
     },
     {
       "code": "tests_not_run",
@@ -2258,7 +2306,7 @@
     "attention": [
       {
         "code": "review_scope_not_sent",
-        "count": 19,
+        "count": 16,
         "section": "code_review"
       },
       {
@@ -2268,7 +2316,7 @@
       },
       {
         "code": "analysis_gaps",
-        "count": 9,
+        "count": 12,
         "section": "gaps"
       }
     ],
@@ -2334,8 +2382,8 @@
         "counts": {
           "actionable": 0,
           "calls": 10,
-          "files_not_sent_to_model": 19,
-          "files_sent_to_model": 20,
+          "files_not_sent_to_model": 16,
+          "files_sent_to_model": 23,
           "findings": 4,
           "pending": 4,
           "refuted": 0
@@ -2345,7 +2393,7 @@
       },
       {
         "counts": {
-          "gaps": 9
+          "gaps": 12
         },
         "key": "gaps",
         "state": null
@@ -2527,8 +2575,8 @@
     "actionable_findings": 0,
     "pending_candidates": 4,
     "priorities": [
-      "review_s001_investigate_1",
       "review_investigate_1",
+      "review_s001_investigate_1",
       "review_s002_investigate_1",
       "review_s003_investigate_1"
     ],
@@ -2660,9 +2708,23 @@
     {
       "id": "0195f3a0-0000-7000-8000-00000000064e",
       "key": "review.investigate.s007",
-      "reason": "review_budget_exhausted",
+      "reason": "no_review_scope",
       "required_for_verdict": false,
-      "status": "budget_exhausted"
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000650",
+      "key": "review.investigate.s008",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000652",
+      "key": "review.investigate.s009",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-00000000063a",
@@ -2723,9 +2785,23 @@
     {
       "id": "0195f3a0-0000-7000-8000-00000000064f",
       "key": "review.verify.s007",
-      "reason": "review_budget_exhausted",
+      "reason": "no_review_scope",
       "required_for_verdict": false,
-      "status": "budget_exhausted"
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000651",
+      "key": "review.verify.s008",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000653",
+      "key": "review.verify.s009",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
     }
   ]
 }
