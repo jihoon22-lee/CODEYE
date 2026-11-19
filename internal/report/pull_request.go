@@ -8,7 +8,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// Pull-request focus (docs/REPORT.md#pull-request-분석, builder 9): a run of a
+// Pull-request focus (docs/REPORT.md#pull-request-보고서, builder 9): a run of a
 // pull request analyzes the whole snapshot, and the report says how much of
 // the pull request the review saw and which findings and tool diagnostics
 // lie in its changes, apart from the pre-existing ones elsewhere. The
@@ -167,8 +167,9 @@ func scopeRank(s string) int {
 
 // pullRequestSection builds the section of a pull-request run (nil
 // otherwise). sent are the snapshot paths the model review records show as
-// sent, reviewPlanned whether the run planned model review.
-func pullRequestSection(r *Report, pin *domain.PullRequest, inSnapshot map[string]string, sent map[string]bool, reviewPlanned bool) *PullRequestSection {
+// sent, reviewRan whether a model review task ran (not unsupported or
+// skipped by policy).
+func pullRequestSection(r *Report, pin *domain.PullRequest, inSnapshot map[string]string, sent map[string]bool, reviewRan bool) *PullRequestSection {
 	if pin == nil {
 		return nil
 	}
@@ -194,7 +195,7 @@ func pullRequestSection(r *Report, pin *domain.PullRequest, inSnapshot map[strin
 		if _, ok := inSnapshot[f.Path]; ok {
 			s.Review.InSnapshot++
 		}
-		if reviewPlanned && !sent[f.Path] {
+		if reviewRan && !sent[f.Path] {
 			notSent = append(notSent, f.Path)
 		}
 	}
@@ -207,7 +208,7 @@ func pullRequestSection(r *Report, pin *domain.PullRequest, inSnapshot map[strin
 		s.LineBasis = LineBasisMixed
 	}
 	s.Review.NotSent = []string{}
-	if reviewPlanned {
+	if reviewRan {
 		n := s.Review.Reviewable - len(notSent)
 		s.Review.SentToModel = &n
 		sort.Strings(notSent)

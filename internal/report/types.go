@@ -31,7 +31,7 @@ const (
 	// counts, the slots of primary files the ceiling refused, the code review
 	// overview's primary and secondary counts and the
 	// review_primary_not_sent attention. Version 9 writes the pull_request
-	// section of a pull-request run (docs/REPORT.md#pull-request-분석) and
+	// section of a pull-request run (docs/REPORT.md#pull-request-보고서) and
 	// its pull_request_focus note; a report of any other run is the same as
 	// version 8 wrote it.
 	BuilderVersion = "9"

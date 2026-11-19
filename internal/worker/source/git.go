@@ -294,6 +294,8 @@ func AcquireGit(ctx context.Context, repository, branch, dataRoot string, limits
 			}
 			return Snapshot{}, ErrInvalid
 		}
+	} else {
+		s.Manifest.SourceRef = ref
 	}
 	if _, err = run(nil, 8192, "init", "--bare", "--template="); err != nil {
 		return Snapshot{}, err

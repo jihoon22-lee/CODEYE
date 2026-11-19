@@ -39,8 +39,23 @@ func TestGitFetchesThePullRequestHead(t *testing.T) {
 		t.Fatal(err)
 	}
 	cleanupSnapshot(t, s)
-	if s.Manifest.SourceSHA != head || s.Manifest.SourceBranch != "" || find(s, "b.txt").SHA256 == "" {
-		t.Fatalf("sha %s branch %q entries %v", s.Manifest.SourceSHA, s.Manifest.SourceBranch, s.Manifest.Entries)
+	if s.Manifest.SourceSHA != head || s.Manifest.SourceBranch != "" || s.Manifest.SourceRef != "refs/pull/7/head" || find(s, "b.txt").SHA256 == "" {
+		t.Fatalf("sha %s branch %q ref %q entries %v", s.Manifest.SourceSHA, s.Manifest.SourceBranch, s.Manifest.SourceRef, s.Manifest.Entries)
+	}
+	// The stored manifest is one the report builder accepts.
+	raw, err := os.ReadFile(s.ManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeManifest(raw); err != nil {
+		t.Fatalf("pull-request manifest refused: %v", err)
+	}
+	for _, bad := range []Manifest{{SourceBranch: "main", SourceRef: "refs/pull/7/head"}, {}, {SourceRef: "refs/heads/main"}, {SourceRef: "refs/pull/0/head"}} {
+		m := s.Manifest
+		m.SourceBranch, m.SourceRef = bad.SourceBranch, bad.SourceRef
+		if validateManifest(m) == nil {
+			t.Errorf("manifest with branch %q ref %q accepted", bad.SourceBranch, bad.SourceRef)
+		}
 	}
 }
 

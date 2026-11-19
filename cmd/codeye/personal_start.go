@@ -331,7 +331,11 @@ func ensureGitProviders(ctx context.Context, s *postgres.Store, cfg *personal.Co
 			return fmt.Errorf("cannot register the Git host %s: %w", h, err)
 		}
 		if created {
-			fmt.Fprintf(out, "registered the Git host %s (public repositories)\n", h)
+			what := "public repositories"
+			if h == "github.com" && cfg.GitHub.On() {
+				what = "public repositories, and private ones the GitHub token can read"
+			}
+			fmt.Fprintf(out, "registered the Git host %s (%s)\n", h, what)
 		}
 	}
 	return nil
