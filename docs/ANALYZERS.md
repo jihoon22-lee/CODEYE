@@ -777,7 +777,7 @@ ruff(기준), mypy·pyright(타입 검사, 서로 대안), bandit(보안)이다.
 
 네 도구 모두 `repository_config=overridden`, `config_files=[]`다. 저장소 설정 값은 경로를 정하지 못하며 쓰기 위치(캐시, 보고서, bandit JSON, pyright 설정·빈 venv)는 모두 task scratch다.
 
-mypy·bandit 스크립트는 운영자 venv의 절대 `#!` interpreter로 실행한다(`#!` 검사는 Unix에서만). 환경에는 `PYTHONDONTWRITEBYTECODE=1`·`PYTHONNOUSERSITE=1`·`PYTHONSAFEPATH=1`을 둔다. mypy는 `--no-site-packages`라 설치 패키지를 묻지 않는다. 이 attempt가 Python 패키지를 받았으면 대신 `--python-executable`로 task scratch의 가짜 venv(운영자 `--python`을 가리키는 `bin/python`과 받은 트리의 site-packages)를 준다. mypy는 그 interpreter를 `-I`로 한 번 실행해 검색 경로를 묻는다. 받은 트리의 시작 hook(`*.pth`, `sitecustomize`)은 받을 때 지웠다([Python 의존성 받기](#python-의존성-받기)). pyright는 공유 node toolchain이 진입 스크립트를 실행한다. 네 도구 모두 PATH에서 찾는 보조 프로그램이 없다.
+mypy·bandit 스크립트는 운영자 venv의 절대 `#!` interpreter로 실행한다(`#!` 검사는 Unix에서만). 환경에는 `PYTHONDONTWRITEBYTECODE=1`·`PYTHONNOUSERSITE=1`·`PYTHONSAFEPATH=1`을 둔다. mypy는 `--no-site-packages`라 설치 패키지를 묻지 않는다. 이 attempt가 Python 패키지를 받았으면 대신 `--python-executable`로 task scratch의 가짜 venv(운영자 `--python`을 가리키는 `bin/python`과 받은 트리의 site-packages)를 준다. mypy는 그 interpreter로 자기 `pyinfo.py`를 한 번 실행해 검색 경로를 묻는다(`PYTHONSAFEPATH=1`, 실행 환경의 `PYTHONNOUSERSITE=1`). 그 실행은 `site`를 거치므로 site-packages의 `*.pth`를 처리한다. 받은 트리의 시작 hook(`*.pth`, `sitecustomize`)은 받을 때 지웠다([Python 의존성 받기](#python-의존성-받기)). pyright는 공유 node toolchain이 진입 스크립트를 실행한다. 네 도구 모두 PATH에서 찾는 보조 프로그램이 없다.
 
 ### 대상 Python 버전
 
@@ -841,7 +841,7 @@ ruff S 규칙은 bandit 검사를 다시 구현한 것이라 고르지 않는다
 
 ### import·stub 공백
 
-검사기는 패키지를 설치하지 않는다. 같은 attempt의 `deps.python` 기록이 쓸 수 있으면 그 트리를 읽는다([Python 의존성 받기](#python-의존성-받기)). 해결되지 않은 import는 결함이 아니라 범위 공백이다. 두 검사기 모두 해결되지 않은 모듈을 `Any`로 다뤄 후속 오류를 내지 않으므로 후속 오류를 따로 거르지 않는다. 받은 트리가 없으면 타입 검사기 task에 `third_party_packages_not_installed`가 붙고, 있으면 `third_party_packages_prepared`(일부만 받았으면 `third_party_packages_partially_prepared`)다. 프로젝트 venv를 쓰는 방식은 저장소 코드 실행이라 두지 않았다.
+검사기는 패키지를 설치하지 않는다. 같은 attempt의 `deps.python` 기록이 쓸 수 있으면 그 트리를 읽는다([Python 의존성 받기](#python-의존성-받기)). 해결되지 않은 import는 결함이 아니라 범위 공백이다. 두 검사기 모두 해결되지 않은 모듈을 `Any`로 다루지만 후속 오류가 없지는 않다. 해결되지 않은 decorator가 만드는 생성자를 모르면 그 호출이 오류가 된다(attrs 클래스의 `call-arg`·`reportCallIssue`, 실측). 후속 오류를 따로 거르지 않으므로 받기를 켜는 것이 해결책이다. 받은 트리가 없으면 타입 검사기 task에 `third_party_packages_not_installed`가 붙고, 있으면 `third_party_packages_prepared`(일부만 받았으면 `third_party_packages_partially_prepared`)다. 프로젝트 venv를 쓰는 방식은 저장소 코드 실행이라 두지 않았다.
 
 | 도구 | 진단 | coverage 단위 | 제약 |
 |---|---|---|---|
