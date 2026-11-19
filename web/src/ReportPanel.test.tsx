@@ -79,6 +79,9 @@ describe('published report', () => {
     );
     fireEvent.click(screen.getByRole('checkbox', { name: '코드 포함' }));
     expect(link.getAttribute('href')).toContain('include_code=true&revision=2');
+    // The summary view by default; the full one asks for detail=full.
+    expect(link.getAttribute('href')).not.toContain('detail=');
+    expect(screen.getByRole('link', { name: 'HTML 전체' }).getAttribute('href')).toContain('format=html&include_code=true&revision=2&detail=full');
   });
   it('rejects another run, malformed counts, and demonstration records', () => {
     expect(() => parseAnalysisReport(doc(), 'other')).toThrow();

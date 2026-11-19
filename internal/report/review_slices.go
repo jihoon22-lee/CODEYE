@@ -17,7 +17,12 @@ import (
 
 // LedgerSince is the first builder version that reads review slices: their
 // records, findings and calls, the scope artifact and the ledger.
-const LedgerSince = 6
+// PrioritySince is the first that reads a schema 0.2 scope artifact (slots
+// filled by review priority) and gives the ledger rows a class.
+const (
+	LedgerSince   = 6
+	PrioritySince = 8
+)
 
 // Ledger statuses.
 const (
@@ -53,11 +58,23 @@ func (SliceReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte
 }
 
 // ScopeDecoder validates the review scope artifact of review.scope against
-// the attempt and the snapshot manifest.
-type ScopeDecoder struct{}
+// the attempt and the snapshot manifest. PlannedScopeDecoder reads the
+// earlier schema 0.1 (plan-time slices) an older worker writes.
+type (
+	ScopeDecoder        struct{}
+	PlannedScopeDecoder struct{}
+)
 
 func (ScopeDecoder) Key() DecoderKey {
 	return DecoderKey{MediaType: record.ScopeMediaType, SchemaVersion: record.ScopeSchemaVersion}
+}
+
+func (PlannedScopeDecoder) Key() DecoderKey {
+	return DecoderKey{MediaType: record.ScopeMediaType, SchemaVersion: record.ScopeSchemaPlanned}
+}
+
+func (PlannedScopeDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
+	return ScopeDecoder{}.Decode(ctx, art, body)
 }
 
 func (ScopeDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
@@ -205,9 +222,22 @@ func (c sectionContext) ledger() *ReviewLedger {
 	}
 
 	if doc != nil {
+		// A schema 0.2 artifact says each file's class; the ledger then
+		// tells primary files the ceiling refused (budget exhausted, not
+		// planned) from secondary files it did not reach.
+		classes := !doc.Planned()
 		rows := map[string]*LedgerModule{}
 		for _, m := range doc.Modules {
-			rows[m.ID] = &LedgerModule{ModuleID: m.ID, Discovered: m.Discovered, FilesEligible: m.FilesEligible, FilesNotPlanned: m.FilesNotPlanned, Slices: []LedgerSlice{}}
+			row := &LedgerModule{ModuleID: m.ID, Discovered: m.Discovered, FilesEligible: m.FilesEligible, FilesNotPlanned: m.FilesNotPlanned, Slices: []LedgerSlice{}}
+			if classes {
+				row.Class, row.FilesSecondary = m.Class, m.FilesSecondary
+				row.FilesNotPlanned, row.FilesSecondaryNotReached = m.FilesNotPlanned-m.FilesSecondaryNotPlanned, m.FilesSecondaryNotPlanned
+			}
+			rows[m.ID] = row
+		}
+		exhausted := func(slice string) bool {
+			st := c.states["review.investigate."+slice]
+			return slice != "" && st != nil && st.facts.Status == string(domain.TaskBudgetExhausted)
 		}
 		count := func(f record.ScopeFile, slice string) {
 			row := rows[f.Module]
@@ -225,12 +255,16 @@ func (c sectionContext) ledger() *ReviewLedger {
 				if roleAccepted(c.states[verify]) {
 					row.FilesWithCompletedReview++
 				}
+				if f.Class == record.ClassSecondary {
+					row.FilesSecondarySent++
+				}
 			case f.State == record.FileWithheld:
 				row.FilesWithheld++
 			case f.State == record.FileUnreadable:
 				row.FilesUnreadable++
-			case slice != "" && f.State == record.FilePlanned && c.states["review.investigate."+slice] != nil &&
-				c.states["review.investigate."+slice].facts.Status == string(domain.TaskBudgetExhausted):
+			case f.State == record.FilePlanned && exhausted(slice) && f.Class == record.ClassSecondary:
+				row.FilesSecondaryNotReached++
+			case f.State == record.FilePlanned && exhausted(slice):
 				row.FilesBudgetExhausted++
 			default:
 				row.FilesNotSent++
@@ -239,9 +273,15 @@ func (c sectionContext) ledger() *ReviewLedger {
 		for _, f := range doc.Overview.Files {
 			count(f, "")
 		}
+		for _, f := range doc.Excluded {
+			count(f, "")
+		}
 		for _, s := range doc.Slices {
 			for _, f := range s.Files {
 				count(f, s.Key)
+			}
+			if classes && s.Class == record.ClassPrimary && exhausted(s.Key) {
+				l.PrimarySlotsBudgetExhausted++
 			}
 			for _, m := range s.Modules {
 				for _, k := range []string{s.InvestigateTask, s.VerifyTask} {
@@ -287,6 +327,33 @@ func ledgerTotals(l *ReviewLedger) (sent, notSent int) {
 	return sent, notSent
 }
 
+// ledgerClasses reports a ledger whose rows carry a class (builder 8 from a
+// schema 0.2 scope artifact).
+func ledgerClasses(l *ReviewLedger) bool {
+	return len(l.Modules) > 0 && l.Modules[0].Class != ""
+}
+
+// classTotals sums the rows by file class: the primary modules, the primary
+// files and those sent, the secondary files and those the review did not
+// reach within the ceiling.
+type classTotals struct {
+	PrimaryModules, PrimaryFiles, PrimarySent, SecondaryFiles, SecondaryNotReached int
+}
+
+func ledgerClassTotals(l *ReviewLedger) classTotals {
+	var t classTotals
+	for _, m := range l.Modules {
+		if m.Class == record.ClassPrimary {
+			t.PrimaryModules++
+		}
+		t.PrimaryFiles += m.FilesEligible - m.FilesSecondary
+		t.PrimarySent += m.FilesSentToModel - m.FilesSecondarySent
+		t.SecondaryFiles += m.FilesSecondary
+		t.SecondaryNotReached += m.FilesSecondaryNotReached
+	}
+	return t
+}
+
 // ledgerGaps are the gap entries of the scope the review did not send or
 // did not finish: per module and kind, and the scope task itself.
 func ledgerGaps(l *ReviewLedger, add func(section, code string, subject, detail *string)) {
@@ -297,7 +364,7 @@ func ledgerGaps(l *ReviewLedger, add func(section, code string, subject, detail 
 		for _, g := range []struct {
 			code string
 			n    int
-		}{{"review_scope_budget_exhausted", m.FilesBudgetExhausted}, {"review_scope_not_planned", m.FilesNotPlanned},
+		}{{"review_scope_budget_exhausted", m.FilesBudgetExhausted}, {"review_scope_not_planned", m.FilesNotPlanned}, {"review_scope_secondary_not_reached", m.FilesSecondaryNotReached},
 			{"review_scope_withheld", m.FilesWithheld}, {"review_scope_unreadable", m.FilesUnreadable}, {"review_scope_not_sent", m.FilesNotSent}} {
 			if g.n > 0 {
 				add(SectionCodeReview, g.code, strPtr(m.ModuleID), nil)
@@ -391,9 +458,17 @@ func validateLedger(r Report) error {
 			return invalidf("ledger module %s is invalid or out of order", m.ModuleID)
 		}
 		prev = m.ModuleID
-		counts := []int{m.FilesSentToModel, m.BytesSent, m.FilesTruncated, m.FilesWithheld, m.FilesUnreadable, m.FilesBudgetExhausted, m.FilesNotPlanned, m.FilesNotSent, m.FilesWithCompletedReview}
+		counts := []int{m.FilesSentToModel, m.BytesSent, m.FilesTruncated, m.FilesWithheld, m.FilesUnreadable, m.FilesBudgetExhausted, m.FilesNotPlanned, m.FilesNotSent, m.FilesWithCompletedReview,
+			m.FilesSecondary, m.FilesSecondarySent, m.FilesSecondaryNotReached}
+		classed := m.Class != ""
+		if classed != (n >= PrioritySince && ledgerClasses(l)) || (classed && m.Class != record.ClassPrimary && m.Class != record.ClassSecondary) ||
+			(!classed && m.FilesSecondary+m.FilesSecondarySent+m.FilesSecondaryNotReached != 0) ||
+			(classed && (m.FilesSecondary > m.FilesEligible || m.FilesSecondarySent > min(m.FilesSentToModel, m.FilesSecondary) ||
+				m.FilesSecondaryNotReached > m.FilesSecondary-m.FilesSecondarySent || (m.Class == record.ClassSecondary && m.FilesSecondary != m.FilesEligible))) {
+			return invalidf("ledger module %s class is invalid", m.ModuleID)
+		}
 		if slices.Min(counts) < 0 || m.FilesEligible < 1 ||
-			m.FilesSentToModel+m.FilesWithheld+m.FilesUnreadable+m.FilesBudgetExhausted+m.FilesNotPlanned+m.FilesNotSent != m.FilesEligible ||
+			m.FilesSentToModel+m.FilesWithheld+m.FilesUnreadable+m.FilesBudgetExhausted+m.FilesNotPlanned+m.FilesSecondaryNotReached+m.FilesNotSent != m.FilesEligible ||
 			m.FilesTruncated > m.FilesSentToModel || m.FilesWithCompletedReview > m.FilesSentToModel || (m.FilesSentToModel == 0 && m.BytesSent != 0) {
 			return invalidf("ledger module %s files do not add up", m.ModuleID)
 		}
@@ -407,6 +482,21 @@ func validateLedger(r Report) error {
 		if m.FilesBudgetExhausted > 0 && !exhausted {
 			return invalidf("ledger module %s counts budget-exhausted files without such a slice", m.ModuleID)
 		}
+	}
+	// Refused primary slots: only with classes, at most the refused slot
+	// investigations, and some when primary files were refused.
+	refused, primaryRefused := 0, 0
+	for _, t := range r.Tasks {
+		if stage, _, ok := record.SliceTask(t.Key); ok && stage == record.StageInvestigate && t.Status == string(domain.TaskBudgetExhausted) {
+			refused++
+		}
+	}
+	for _, m := range l.Modules {
+		primaryRefused += m.FilesBudgetExhausted
+	}
+	if l.PrimarySlotsBudgetExhausted < 0 || l.PrimarySlotsBudgetExhausted > refused || (l.PrimarySlotsBudgetExhausted > 0 && !ledgerClasses(l)) ||
+		(ledgerClasses(l) && (primaryRefused > 0) != (l.PrimarySlotsBudgetExhausted > 0)) {
+		return invalidf("ledger refused primary slots are invalid")
 	}
 	if ledgerStatus(*l, r.Tasks) != l.Status {
 		return invalidf("ledger status differs from its rows")

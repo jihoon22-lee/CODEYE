@@ -150,7 +150,7 @@ def main() -> None:
         review_validator.validate(doc)
     check_role_pack_examples(role_docs, role_raw, role_pack_doc, role_files)
     slice_negatives = check_slice_examples(slice_examples(), validators)
-    print(f"PASS: review slices (scope artifact 0.1 and slice records 0.3 bound to the coverage fixture; {slice_negatives} negative cases)")
+    print(f"PASS: review slices (scope artifact 0.2 and slice records 0.3 bound to the coverage fixture; {slice_negatives} negative cases)")
     # review-r1 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
     retried = copy.deepcopy(role_docs["verify"])
@@ -368,7 +368,7 @@ def main() -> None:
         {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome", "pack_id", "pack_version")}
         for stage in ROLE_STAGES for call in role_docs[stage]["calls"]]
     validators["report.schema.json"].validate(role_calls)
-    # The largest call ceiling (207: five whole-run roles and 32 slice pairs of up to three calls each) fits the report; more do not.
+    # The largest call ceiling (207: five whole-run roles and 96 slots of two calls each) fits the report; more do not.
     most = copy.deepcopy(role_calls)
     most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(207)]
     validators["report.schema.json"].validate(most)

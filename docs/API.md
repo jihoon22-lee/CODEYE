@@ -347,7 +347,9 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `revision` | 1 이상 정수 | 최신 리비전 |
 | `format` | `json`, `markdown`, `html` | `json` |
 | `include_code` | `true`, `false` | `false`(코드 미포함) |
+| `detail` | `summary`, `full` | `summary`(요약 보기) |
 
+- `detail`은 Markdown·HTML의 상세도다([내보내기 상세도](REPORT.md#내보내기-상세도)). `summary`는 값이 큰 절부터 놓고 긴 목록을 묶어 앞의 몇 개만 보인다. `full`은 모든 행을 싣는다. JSON은 언제나 전체이므로 `detail`이 바뀌어도 같은 바이트다. 다른 값은 400이다.
 - 다른 query parameter는 400이다. 프로젝트 구성원이 아니면 404이고, 권한은 요청마다 확인한다.
 - 성공한 요청마다 본문을 보내기 전에 `report.exported` 감사 행(형식, 코드 포함 여부, run·revision)을 쓰고, 쓰지 못하면 503이다. 웹 화면의 보고서 조회도 이 경로(JSON, 코드 포함)를 쓰므로 볼 때마다 행이 남는다([결정](DECISIONS.md) A35).
 - 저장된 본문을 엄격하게 다시 해석·검증하고 저장된 SHA-256과 대조한다. 실패하면 500 `REPORT_INVALID`이며 본문을 보내지 않는다.
@@ -360,7 +362,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `X-CODEYE-Include-Code` | `true` 또는 `false` |
 | `ETag` | 실제로 보낸 응답 바이트의 SHA-256 |
 | `Content-Type` | `application/json`, `text/markdown`, `text/html`(모두 `charset=utf-8`) |
-| `Content-Disposition` | Markdown·HTML은 첨부 파일 `codeye-report-<run>-r<N>[-nocode].md|.html` |
+| `Content-Disposition` | Markdown·HTML은 첨부 파일 `codeye-report-<run>-r<N>[-nocode][-full].md|.html` |
 | `Content-Security-Policy` | HTML은 스크립트·외부 로딩을 막는 보고서 전용 정책 |
 
 관리 서버에는 snapshot 파일 본문이 없으므로 `include_code=true`도 코드 발췌를 주지 않는다. 저장된 도구 메시지와 검토 문구를 준다.

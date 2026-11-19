@@ -182,36 +182,41 @@ var pinnedGoRole = map[string][]string{
 	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "environment e44b353d678a2b55 0f35e48b1837906c", "documents 6cd0e37915e181ac 96f75808572d08e4", "investigate 0811ea5731925461 0abc469c5f262c1d", "verify 1237fcad33c639ca e0f027c525ea4547"},
 	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment e44b353d678a2b55 025087360cbe1b62", "documents 6cd0e37915e181ac 1c7ade98e8c6af78", "investigate 0811ea5731925461 507e8ddbf32be184", "interpret 7031ffa47de47a37 6c30210249e618c0", "verify 1237fcad33c639ca 739ea4868928c8e1"},
 	// The worst case has more code than the overview offers, so it plans
-	// review.scope and ten slices. Its go vet stand-in is no secrets screen:
-	// the whole-run requests stay as they were, and the slices run unscreened
-	// (their records say model_input_not_secret_screened) with the same
-	// requests as behind a completed screen that withholds nothing.
+	// review.scope and nine slots: the seven the plan-time packing needs and
+	// two of slack, which review.scope leaves empty. Its go vet stand-in is
+	// no secrets screen: the whole-run requests stay as they were, and the
+	// slots run unscreened (their records say
+	// model_input_not_secret_screened) with the same requests as behind a
+	// completed screen that withholds nothing. The slot requests follow the
+	// review priority: the files with go vet diagnostics come first.
 	"modules-worst": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/",
 		"review.scope succeeded/",
-		"review.investigate.s001 succeeded/", "review.verify.s001 succeeded/", "review.investigate.s002 succeeded/", "review.verify.s002 succeeded/", "review.investigate.s003 succeeded/", "review.verify.s003 succeeded/", "review.investigate.s004 succeeded/", "review.verify.s004 succeeded/", "review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/", "review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 succeeded/", "review.verify.s008 succeeded/", "review.investigate.s009 succeeded/", "review.verify.s009 succeeded/", "review.investigate.s010 succeeded/", "review.verify.s010 succeeded/",
+		"review.investigate.s001 succeeded/", "review.verify.s001 succeeded/", "review.investigate.s002 succeeded/", "review.verify.s002 succeeded/",
+		"review.investigate.s003 succeeded/", "review.verify.s003 succeeded/", "review.investigate.s004 succeeded/", "review.verify.s004 succeeded/",
+		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
+		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
+		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
 		"environment e44b353d678a2b55 a26534f4af3e1545", "documents 6cd0e37915e181ac 8d417c5a891273d2", "investigate 0811ea5731925461 4164875e5225f917", "interpret 7031ffa47de47a37 0ba79c5a6cd9bbf3", "verify 1237fcad33c639ca 11e709f191c805fa",
-		"investigate 0811ea5731925461 0230103a64b4f629", "verify 1237fcad33c639ca 918cf1817e0dbc0c", "investigate 0811ea5731925461 e94e03021a3d0014", "verify 1237fcad33c639ca 397ec23c578ff138",
-		"investigate 0811ea5731925461 0e1cf93437f0f7de", "verify 1237fcad33c639ca 7ca3104f8841d0e6", "investigate 0811ea5731925461 f20763b374cce1f5", "verify 1237fcad33c639ca 1c1d0eabbd7b895a",
-		"investigate 0811ea5731925461 cda1131e3caa5a7d", "verify 1237fcad33c639ca 8f6f7c11ecdc2fee", "investigate 0811ea5731925461 fe80c514c44d1b5e", "verify 1237fcad33c639ca 32ddd0eae6007e35",
-		"investigate 0811ea5731925461 cd4116252bb5622a", "verify 1237fcad33c639ca b7644da7839ba1bd", "investigate 0811ea5731925461 4404598010e25840", "verify 1237fcad33c639ca b7dfa8adeb020346",
-		"investigate 0811ea5731925461 0473de8e53d975db", "verify 1237fcad33c639ca c7310f7b18225e0f", "investigate 0811ea5731925461 8ddaf8993b5bdc01", "verify 1237fcad33c639ca 632777bcd35aec7c"},
+		"investigate 0811ea5731925461 2bcd0f8700b89737", "verify 1237fcad33c639ca 1e0b3bf55f240a5a", "investigate 0811ea5731925461 3b87f684621ff34c", "verify 1237fcad33c639ca 0d99b05c7e7f51df",
+		"investigate 0811ea5731925461 360f2ee9ae2d69af", "verify 1237fcad33c639ca 7e1901d8a090ab12", "investigate 0811ea5731925461 3afca3570b302a87", "verify 1237fcad33c639ca 9b0b4be18897149f",
+		"investigate 0811ea5731925461 5d014697e0b54014", "verify 1237fcad33c639ca b8fe29c64fa3881a", "investigate 0811ea5731925461 c9494c60bcbeb2c9", "verify 1237fcad33c639ca cf20fd606eed6738",
+		"investigate 0811ea5731925461 0a1345f0a1616ef1", "verify 1237fcad33c639ca e6fe2f48261ec762"},
 	// The worst case behind a completed secrets screen at the default
 	// ceiling: the whole-run requests are those of modules-worst except
-	// interpret (it also lists the secrets task), and every slice request
+	// interpret (it also lists the secrets task), and every slot request
 	// carries the overview's investigate and verify instructions.
 	"modules-worst-screened": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/",
 		"review.scope succeeded/",
 		"review.investigate.s001 succeeded/", "review.verify.s001 succeeded/", "review.investigate.s002 succeeded/", "review.verify.s002 succeeded/",
 		"review.investigate.s003 succeeded/", "review.verify.s003 succeeded/", "review.investigate.s004 succeeded/", "review.verify.s004 succeeded/",
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
-		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 succeeded/", "review.verify.s008 succeeded/",
-		"review.investigate.s009 succeeded/", "review.verify.s009 succeeded/", "review.investigate.s010 succeeded/", "review.verify.s010 succeeded/",
+		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
+		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
 		"environment e44b353d678a2b55 a26534f4af3e1545", "documents 6cd0e37915e181ac 8d417c5a891273d2", "investigate 0811ea5731925461 4164875e5225f917", "interpret 7031ffa47de47a37 71915d5d7b19dc70", "verify 1237fcad33c639ca 11e709f191c805fa",
-		"investigate 0811ea5731925461 0230103a64b4f629", "verify 1237fcad33c639ca 918cf1817e0dbc0c", "investigate 0811ea5731925461 e94e03021a3d0014", "verify 1237fcad33c639ca 397ec23c578ff138",
-		"investigate 0811ea5731925461 0e1cf93437f0f7de", "verify 1237fcad33c639ca 7ca3104f8841d0e6", "investigate 0811ea5731925461 f20763b374cce1f5", "verify 1237fcad33c639ca 1c1d0eabbd7b895a",
-		"investigate 0811ea5731925461 cda1131e3caa5a7d", "verify 1237fcad33c639ca 8f6f7c11ecdc2fee", "investigate 0811ea5731925461 fe80c514c44d1b5e", "verify 1237fcad33c639ca 32ddd0eae6007e35",
-		"investigate 0811ea5731925461 cd4116252bb5622a", "verify 1237fcad33c639ca b7644da7839ba1bd", "investigate 0811ea5731925461 4404598010e25840", "verify 1237fcad33c639ca b7dfa8adeb020346",
-		"investigate 0811ea5731925461 0473de8e53d975db", "verify 1237fcad33c639ca c7310f7b18225e0f", "investigate 0811ea5731925461 8ddaf8993b5bdc01", "verify 1237fcad33c639ca 632777bcd35aec7c"},
+		"investigate 0811ea5731925461 2bcd0f8700b89737", "verify 1237fcad33c639ca 1e0b3bf55f240a5a", "investigate 0811ea5731925461 3b87f684621ff34c", "verify 1237fcad33c639ca 0d99b05c7e7f51df",
+		"investigate 0811ea5731925461 360f2ee9ae2d69af", "verify 1237fcad33c639ca 7e1901d8a090ab12", "investigate 0811ea5731925461 3afca3570b302a87", "verify 1237fcad33c639ca 9b0b4be18897149f",
+		"investigate 0811ea5731925461 5d014697e0b54014", "verify 1237fcad33c639ca b8fe29c64fa3881a", "investigate 0811ea5731925461 c9494c60bcbeb2c9", "verify 1237fcad33c639ca cf20fd606eed6738",
+		"investigate 0811ea5731925461 0a1345f0a1616ef1", "verify 1237fcad33c639ca e6fe2f48261ec762"},
 }
 
 func TestGoReviewInputsUnchanged(t *testing.T) {

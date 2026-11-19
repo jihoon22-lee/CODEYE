@@ -396,7 +396,20 @@ func TestReportAPIFormatsAndACL(t *testing.T) {
 			t.Fatal("ETag must identify the rendered representation")
 		}
 	}
-	for _, bad := range []string{"?format=pdf", "?revision=0", "?include_code=yes", "?other=1"} {
+	// The Markdown and HTML exports are the summary by default; detail=full
+	// prints every row (docs/REPORT.md#내보내기-상세도). JSON ignores it.
+	note := "요약 보기다"
+	fullMD := e.do("GET", base+"?format=markdown&detail=full", nil, u).want(t, 200, "")
+	if !strings.Contains(string(md.raw), note) || strings.Contains(string(fullMD.raw), note) || !strings.Contains(fullMD.header.Get("Content-Disposition"), "-full.md") {
+		t.Fatalf("markdown detail levels: %v", fullMD.header)
+	}
+	if summary := e.do("GET", base+"?format=markdown&detail=summary", nil, u).want(t, 200, ""); string(summary.raw) != string(md.raw) {
+		t.Fatal("detail=summary differs from the default")
+	}
+	if j := e.do("GET", base+"?detail=full", nil, u).want(t, 200, ""); string(j.raw) != string(def.raw) {
+		t.Fatal("detail changed the JSON export")
+	}
+	for _, bad := range []string{"?format=pdf", "?revision=0", "?include_code=yes", "?other=1", "?format=markdown&detail=all"} {
 		e.do("GET", base+bad, nil, u).want(t, 400, "INVALID_REQUEST")
 	}
 	e.do("GET", base+"?revision=2", nil, u).want(t, 404, "NOT_FOUND")

@@ -29,10 +29,13 @@ describe('analysis sections', () => {
     expect(r.sections).not.toBeNull();
     const { container } = render(<ReportDocument report={r} />);
     const article = screen.getByRole('article', { name: t.title });
-    // The overview comes before every section.
+    // The overview comes before every section; the sections come in order of
+    // value (docs/REPORT.md#내보내기-상세도), each one of the stored blocks.
     const overview = within(article).getByRole('heading', { name: t.sections.overview });
     const details = Array.from(article.querySelectorAll('details.report-section[id]'));
-    expect(details.map((d) => d.id)).toEqual(doc.overview.sections.map((x: { key: string }) => 'report-section-' + x.key));
+    const order = ['code_review', 'static_analysis', 'metrics', 'secrets', 'environment', 'documents', 'gaps'];
+    expect(details.map((d) => d.id)).toEqual(order.map((k) => 'report-section-' + k));
+    expect([...order].sort()).toEqual(doc.overview.sections.map((x: { key: string }) => x.key).sort());
     for (const d of details) expect(overview.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The summary row the browser test reads.
     const total = Array.from(container.querySelectorAll('.report-counts > div')).find((x) => x.querySelector('dt')?.textContent === t.counts.total);
@@ -48,14 +51,27 @@ describe('analysis sections', () => {
     }
     // States are text with an icon, never color alone.
     expect(within(article).getAllByText(/△ 일부 수행/).length).toBeGreaterThan(0);
-    // A tool that did not run is not zero diagnostics.
-    const jscpd = within(article).getAllByText('jscpd').map((x) => x.closest('tr')!).find((tr) => tr.cells.length === 9)!;
+    // A tool that did not run is not zero diagnostics, in the analyzer table
+    // and in the per-task table behind the static section's disclosure.
+    const jscpdRow = () => within(article).getAllByText(/^jscpd/).map((x) => x.closest('tr')!).filter(Boolean);
+    expect(jscpdRow().some((tr) => tr.cells.length === 6 && tr.textContent!.includes(t.sections.notRun))).toBe(true);
+    const staticSection = container.querySelector('#report-section-static_analysis') as HTMLElement;
+    const all = staticSection.querySelector('details.report-more') as HTMLDetailsElement;
+    all.open = true;
+    fireEvent(all, new Event('toggle'));
+    const jscpd = jscpdRow().find((tr) => tr.cells.length === 9)!;
     expect(jscpd.textContent).toContain(t.sections.notRun);
     expect(jscpd.textContent).not.toMatch(/\b0\b.*규칙/);
     // Model interpretation is labeled with its role.
     expect(within(article).getAllByText(t.sections.model('review.documents')).length).toBe(1);
     expect(within(article).getByText(/하위 호출이 실패하면 최대 3번 재시도한다/)).toBeTruthy();
-    // Each finding is listed once, in the static or the code review section.
+    // Each finding is listed once, in the static or the code review section
+    // (with every disclosure open).
+    for (const more of Array.from(container.querySelectorAll('details.report-more')) as HTMLDetailsElement[]) {
+      if (more.open) continue;
+      more.open = true;
+      fireEvent(more, new Event('toggle'));
+    }
     expect(container.querySelectorAll('details.finding-card').length).toBe(doc.findings.length);
     // The overview lists the summary's priority findings in order.
     const priorities = Array.from(container.querySelectorAll('.report-priorities > li')).map((li) => li.textContent ?? '');
@@ -186,15 +202,30 @@ describe('analysis sections', () => {
     for (const m of doc.code_review.ledger.modules) {
       const row = Array.from(table.querySelectorAll('tbody tr')).find((tr) => tr.querySelector('code')?.textContent === m.module_id)!;
       const cells = Array.from(row.querySelectorAll('td')).map((td) => td.textContent);
-      expect(cells.slice(2)).toEqual([m.files_eligible, m.files_sent_to_model, m.bytes_sent, m.files_truncated, m.files_withheld, m.files_unreadable,
-        m.files_budget_exhausted, m.files_not_planned, m.files_not_sent, m.files_with_completed_review].map(String));
+      // Builder 8: the class after the module, the secondary files left out
+      // within the ceiling after the files not planned.
+      expect(cells[1]).toBe(t.sections.ledger.classes[m.class]);
+      expect(cells.slice(3)).toEqual([m.files_eligible, m.files_sent_to_model, m.bytes_sent, m.files_truncated, m.files_withheld, m.files_unreadable,
+        m.files_budget_exhausted, m.files_not_planned, m.files_secondary_not_reached ?? 0, m.files_not_sent, m.files_with_completed_review].map(String));
     }
+    expect(within(section).getByText(t.sections.ledger.refusedSlots(doc.code_review.ledger.primary_slots_budget_exhausted))).toBeTruthy();
+    // The slots fold into runs of one state; every slice task is behind the disclosure.
+    expect(within(section).getByText(t.sections.ledger.slotSpan('s001', 's003', 3))).toBeTruthy();
+    expect(within(section).queryByText('review.investigate.s004')).toBeNull();
+    const more = within(section).getByText(t.sections.ledger.allModules(doc.code_review.ledger.modules.length)).closest('details') as HTMLDetailsElement;
+    more.open = true;
+    fireEvent(more, new Event('toggle'));
     expect(within(section).getAllByText('review.investigate.s004').length).toBe(1);
     expect(within(section).getByText(t.sections.ledger.calls(String(doc.code_review.ledger.calls_used), String(doc.code_review.ledger.max_calls)))).toBeTruthy();
     expect(section.textContent).not.toMatch(/검증된 범위입니다|verified/);
     // Slice findings are listed once, in the code review section.
     const slice = doc.findings.filter((f: { id: string }) => f.id.startsWith('review_s')).length;
     expect(slice).toBeGreaterThan(0);
+    const other = section.querySelector('details.report-more:not([open])') as HTMLDetailsElement | null;
+    if (other) {
+      other.open = true;
+      fireEvent(other, new Event('toggle'));
+    }
     expect(section.querySelectorAll('details.finding-card').length).toBe(doc.code_review.finding_ids.length);
   });
 

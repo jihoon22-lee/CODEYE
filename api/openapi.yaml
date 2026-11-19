@@ -440,6 +440,7 @@ paths:
         - {name: revision, in: query, schema: {type: integer, minimum: 1, maximum: 1000000}}
         - {name: format, in: query, schema: {enum: [json, markdown, html], default: json}}
         - {name: include_code, in: query, schema: {type: boolean, default: false}}
+        - {name: detail, in: query, description: 'Markdown·HTML의 상세도(docs/REPORT.md#내보내기-상세도). summary는 긴 목록을 묶고 앞의 몇 개만 보이며 값이 큰 절부터 놓는다. full은 모든 행을 싣는다. JSON은 언제나 전체이므로 바뀌지 않는다.', schema: {enum: [summary, full], default: summary}}
       responses:
         '200':
           description: 검증된 보고서. X-CODEYE-Report-SHA256은 같은 내보내기 옵션의 JSON 해시이고 ETag는 요청 형식의 응답 해시다.

@@ -301,19 +301,32 @@ func overviewOf(r Report) Overview {
 	if cr := r.CodeReview; cr != nil {
 		fs := ComputeSummary(findingsOf(r, cr.FindingIDs), nil)
 		n := map[string]int{"calls": cr.Calls, "findings": fs.TotalFindings, "actionable": fs.ActionableFindings, "pending": fs.PendingCandidates, "refuted": fs.RefutedFindings}
-		notSent := 0
+		notSent, primaryNotSent := 0, -1
 		if l := cr.Ledger; l != nil && len(l.Modules) > 0 {
 			// The reviewed scope is what was sent to the model, never verified
 			// scope; the rest of the eligible files was not sent.
 			n["files_sent_to_model"], notSent = ledgerTotals(l)
 			n["files_not_sent_to_model"] = notSent
+			if t := ledgerClassTotals(l); ledgerClasses(l) && t.SecondaryFiles > 0 {
+				// The rows say which files are the project's own: the
+				// overview counts those apart from test input, examples and
+				// generated files. Without secondary files the totals above
+				// already are the primary ones.
+				n["primary_modules"], n["primary_files"], n["primary_files_sent_to_model"] = t.PrimaryModules, t.PrimaryFiles, t.PrimarySent
+				n["secondary_files"], n["secondary_files_not_reached"] = t.SecondaryFiles, t.SecondaryNotReached
+				primaryNotSent = t.PrimaryFiles - t.PrimarySent
+			}
 		}
 		line(SectionCodeReview, &cr.Stage, n)
 		need("0", SectionCodeReview, "actionable_findings", fs.ActionableFindings)
 		if r.Coverage.AIReview.Status != AIReviewPerformed {
 			need("5", SectionCodeReview, "model_review_not_performed", 1)
 		}
-		need("5", SectionCodeReview, "review_scope_not_sent", notSent)
+		if primaryNotSent >= 0 {
+			need("5", SectionCodeReview, "review_primary_not_sent", primaryNotSent)
+		} else {
+			need("5", SectionCodeReview, "review_scope_not_sent", notSent)
+		}
 		need("6", SectionCodeReview, "pending_candidates", fs.PendingCandidates)
 	}
 	line(SectionGaps, nil, map[string]int{"gaps": len(r.Gaps)})

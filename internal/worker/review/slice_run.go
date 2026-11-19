@@ -8,12 +8,15 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	rolepack "github.com/jihoon22-lee/CODEYE/prompts/review-r1"
 )
 
@@ -78,10 +81,13 @@ func callsUsed(j analysis.Job) (int, error) {
 	return bytes.Count(b, []byte("\n")), nil
 }
 
-// scopeTask is review.scope: no model call. It reads the overview
-// investigate's record (the files it actually sent), checks every file of
-// the plan against the secrets screen and the read filters, and writes the
-// scope artifact the slices run from.
+// scopeTask is review.scope: no model call. It runs after static analysis
+// and the whole-run roles. It reads the overview investigate's record (the
+// files it actually sent) and the analyzers' observations, checks every file
+// beyond the overview against the secrets screen and the read filters, fills
+// the planned slots in priority order (packSlots,
+// docs/REVIEW.md#검토-우선순위) and writes the scope artifact the slots run
+// from.
 func (s *roleStage) scopeTask() analysis.TaskResult {
 	sel, err := rolepack.For(record.StageInvestigate, languagesInScope(s.j))
 	if err != nil {
@@ -91,36 +97,53 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 	if err != nil {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
-	plan := planSlices(s.j.Snapshot.Manifest, s.j.Scope)
+	rule := s.h.secondary()
+	plan := planSlices(s.j.Snapshot.Manifest, s.j.Scope, rule)
 	offered, up := s.overviewOffered()
 	sent := map[string]bool{}
 	for _, p := range offered {
 		sent[p] = true
 	}
 	files := s.entries()
-	inspect := func(f plannedFile, state string) (record.ScopeFile, error) {
-		sf := record.ScopeFile{Path: f.Path, SHA256: f.SHA256, Module: f.Module, BoundBytes: f.Bound, State: state}
+	facts := s.priorityFacts(files)
+	// inspect reads the file's excerpt as a review would and settles its
+	// state and its place: a generated header makes it secondary, its tool
+	// diagnostics or a failed analyzer of its module raise its rank.
+	inspect := func(f *plannedFile, state string) (record.ScopeFile, error) {
 		e, ok := files[f.Path]
 		if !ok || e.SHA256 != f.SHA256 {
-			return sf, errSnapshotIntegrity
+			return record.ScopeFile{}, errSnapshotIntegrity
 		}
+		if n := facts.observations[f.Path]; n > 0 {
+			f.Rank, f.Observations, f.Severity = record.RankToolObservations, n, facts.severity[f.Path]
+		} else if facts.failed[f.Module] {
+			f.Rank = record.RankAnalyzerNotSucceeded
+		}
+		sf := record.ScopeFile{Path: f.Path, SHA256: f.SHA256, Module: f.Module, BoundBytes: f.Bound, State: state}
 		if s.secretFiles()[f.Path] {
 			sf.State = record.FileWithheld
-			return sf, nil
-		}
-		x, total, ok, err := s.excerpt(e, windowKind(f.Path), "context", 1, 50, roleMaxCodeFile)
-		if err != nil {
-			return sf, err
-		}
-		switch {
-		case ok:
-			sf.PlannedLines, sf.PlannedBytes, sf.TotalLines = x.End, record.JSONLen(x.Text), total
-		case !sent[f.Path]:
-			// Not UTF-8, NUL bytes, a sensitive pattern or no text.
-			sf.State = record.FileUnreadable
+		} else {
+			x, total, ok, err := s.excerpt(e, windowKind(f.Path), "context", 1, 50, roleMaxCodeFile)
+			if err != nil {
+				return record.ScopeFile{}, err
+			}
+			switch {
+			case ok:
+				sf.PlannedLines, sf.PlannedBytes, sf.TotalLines = x.End, record.JSONLen(x.Text), total
+				if f.Class == record.ClassPrimary && record.GeneratedHeader([]byte(x.Text)) {
+					f.Class, f.Secondary = record.ClassSecondary, record.ReasonGeneratedFile
+				}
+			case !sent[f.Path]:
+				// Not UTF-8, NUL bytes, a sensitive pattern or no text.
+				sf.State = record.FileUnreadable
+			}
 		}
 		if sent[f.Path] {
 			sf.State = record.FileCoveredByOverview
+		}
+		sf.Class, sf.Rank, sf.Secondary, sf.Observations = f.Class, f.Rank, f.Secondary, f.Observations
+		if f.Observations > 0 {
+			sf.Severity = record.SeverityNames[f.Severity]
 		}
 		return sf, nil
 	}
@@ -128,41 +151,63 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Screen: screenOf(s.screen),
 		Budget: record.ScopeBudget{MaxCalls: s.h.maxCalls(), MaxRequestBytes: PromptBudget, WholeRunMaxCalls: record.WholeRunMaxCalls, SliceReserveCalls: record.SliceReserveCalls,
 			CallsBeforeSlices: min(used, record.WholeRunMaxCalls), Admission: record.AdmissionSequentialReserve},
-		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: 50, MaxSlices: MaxSlices},
+		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: 50, MaxSlices: MaxSlices, Slots: plan.Slots},
+		Priority: record.ScopePriority{Order: record.PriorityOrder, Secondary: rule},
 		Upstream: []record.Upstream{up}, Modules: []record.ScopeModule{}, Overview: record.ScopeOverview{Files: []record.ScopeFile{}, Offered: nonNilList(offered)},
-		Slices: []record.ScopeSlice{}, Limitations: s.screenLimitation([]string{})}
+		Slices: []record.ScopeSlice{}, Excluded: []record.ScopeFile{}, Limitations: s.screenLimitation([]string{})}
+	secondary := map[string]int{}
+	count := func(sf record.ScopeFile) {
+		if sf.Class == record.ClassSecondary {
+			secondary[sf.Module]++
+		}
+	}
 	for _, f := range plan.Overview {
-		sf, err := inspect(f, record.FileOverviewNotSent)
+		sf, err := inspect(&f, record.FileOverviewNotSent)
 		if err != nil {
 			return result(domain.TaskFailed, "review_input_unavailable")
 		}
 		doc.Overview.Files = append(doc.Overview.Files, sf)
+		count(sf)
 	}
-	for _, sl := range plan.Slices {
-		inv, ver := sl.TaskKeys()
-		out := record.ScopeSlice{Key: sl.Key, InvestigateTask: inv, VerifyTask: ver, Modules: sl.Modules, Files: []record.ScopeFile{}}
-		for _, f := range sl.Files {
-			sf, err := inspect(f, record.FilePlanned)
-			if err != nil {
-				return result(domain.TaskFailed, "review_input_unavailable")
-			}
-			out.Files = append(out.Files, sf)
+	// The files beyond the prefix: those the overview sent after all are
+	// covered by it, withheld and unreadable files take no slot, the rest
+	// fill the slots.
+	inspected := map[string]record.ScopeFile{}
+	var candidates []plannedFile
+	for _, f := range plan.Rest {
+		sf, err := inspect(&f, record.FilePlanned)
+		if err != nil {
+			return result(domain.TaskFailed, "review_input_unavailable")
 		}
-		doc.Slices = append(doc.Slices, out)
+		count(sf)
+		switch sf.State {
+		case record.FileCoveredByOverview:
+			doc.Overview.Files = append(doc.Overview.Files, sf)
+		case record.FileWithheld, record.FileUnreadable:
+			doc.Excluded = append(doc.Excluded, sf)
+		default:
+			inspected[f.Path] = sf
+			candidates = append(candidates, f)
+		}
 	}
-	// A file past the slice limit the overview sent after all is covered
-	// by the overview; the rest are counted per module as not planned.
-	notPlanned := map[string]int{}
-	for _, f := range plan.NotPlanned {
-		if !sent[f.Path] {
-			notPlanned[f.Module]++
+	notPlanned, secondaryNotPlanned := map[string]int{}, map[string]int{}
+	for i, sl := range fillSlots(candidates, plan.Slots) {
+		if i >= plan.Slots {
+			for _, f := range sl.Files {
+				notPlanned[f.Module]++
+				if f.Class == record.ClassSecondary {
+					secondaryNotPlanned[f.Module]++
+					secondary[f.Module]--
+				}
+			}
 			continue
 		}
-		sf, err := inspect(f, record.FileCoveredByOverview)
-		if err != nil {
-			return result(domain.TaskFailed, "review_input_unavailable")
+		inv, ver := sl.TaskKeys()
+		out := record.ScopeSlice{Key: sl.Key, InvestigateTask: inv, VerifyTask: ver, Class: sl.Class, Rank: sl.Rank, Modules: sl.Modules, Files: []record.ScopeFile{}}
+		for _, f := range sl.Files {
+			out.Files = append(out.Files, inspected[f.Path])
 		}
-		doc.Overview.Files = append(doc.Overview.Files, sf)
+		doc.Slices = append(doc.Slices, out)
 	}
 	discovered := map[string]bool{}
 	mods, _ := discovery.DetectModules(s.j.Snapshot.Manifest, envdoc.Scope{Kind: "full", Paths: []string{}})
@@ -170,7 +215,8 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		discovered[m.ID] = true
 	}
 	for _, g := range plan.Groups {
-		doc.Modules = append(doc.Modules, record.ScopeModule{ID: g.Module, Discovered: discovered[g.Module], FilesEligible: g.Eligible, FilesNotPlanned: notPlanned[g.Module]})
+		doc.Modules = append(doc.Modules, record.ScopeModule{ID: g.Module, Discovered: discovered[g.Module], Class: rule.ModuleClass(g.Module), FilesEligible: g.Eligible,
+			FilesSecondary: secondary[g.Module] + secondaryNotPlanned[g.Module], FilesNotPlanned: notPlanned[g.Module], FilesSecondaryNotPlanned: secondaryNotPlanned[g.Module]})
 		if notPlanned[g.Module] > 0 {
 			doc.Limitations = addLim(doc.Limitations, limSliceLimit)
 		}
@@ -180,6 +226,48 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		return result(domain.TaskFailed, "review_record_failed")
 	}
 	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: doc.Limitations}
+}
+
+// priorityInputs are what the analyzers say about the files: per path the
+// non-metric diagnostics located in it and their highest severity rank, and
+// the modules (<ecosystem>:<dir>) of required analyzer tasks that did not
+// succeed.
+type priorityInputs struct {
+	observations map[string]int
+	severity     map[string]int
+	failed       map[string]bool
+}
+
+// priorityFacts reads every planned analyzer task's observations artifact
+// (the same validated read as the interpret role; an unreadable artifact
+// adds nothing). Suppressed diagnostics and metrics never count.
+func (s *roleStage) priorityFacts(files map[string]source.Entry) priorityInputs {
+	in := priorityInputs{observations: map[string]int{}, severity: map[string]int{}, failed: map[string]bool{}}
+	plan, err := s.h.Static.Plan(s.ctx, s.j)
+	if err != nil {
+		return in
+	}
+	for _, t := range plan {
+		if !record.AnalyzerTaskKey(t.Key) {
+			continue
+		}
+		sum, _, reason := s.readToolDoc(t.Key, files)
+		if reason != "" {
+			continue
+		}
+		if t.Required && sum.TaskStatus != string(domain.TaskSucceeded) && sum.Ecosystem != "" && sum.Ecosystem != "any" {
+			in.failed[sum.Ecosystem+":"+sum.Module] = true
+		}
+		for _, o := range sum.Observations {
+			if o.Location == nil {
+				continue
+			}
+			p := o.Location.Path
+			in.observations[p]++
+			in.severity[p] = max(in.severity[p], record.SeverityRank(o.Severity))
+		}
+	}
+	return in
 }
 
 // screenOf is the scope artifact's screen state.
@@ -266,6 +354,11 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 	}
 	i := slices.IndexFunc(doc.Slices, func(sl record.ScopeSlice) bool { return sl.Key == key })
 	if i < 0 {
+		// A planned slot review.scope did not fill: every file found a
+		// place in an earlier slot, the overview or the excluded list.
+		if n, err := strconv.Atoi(strings.TrimPrefix(key, "s")); err == nil && record.ValidSliceKey(key) && n <= doc.Limits.Slots {
+			return result(domain.TaskSkippedPolicy, domain.ReasonNoReviewScope)
+		}
 		return result(domain.TaskSkippedPolicy, reasonDependency)
 	}
 	s.slice, s.scopeUp = &doc.Slices[i], up
