@@ -28,7 +28,7 @@
 | [`review-v1`](../prompts/review-v1/pack.yaml) | `codeye.review` 1.0.0 | 이전 팩. 이전 기록을 읽고 같은 조건으로 재현할 때만 명시해서 고른다 | `0.1` | context, investigate, verify |
 
 - 지침 개정은 기본 팩 하나에만 한다. 개정의 검증 절차는 [평가](EVALUATION.md)에 있다. 두 팩을 나란히 비교하는 일은 새 팩 id로 기본값을 바꿀 때만 한다.
-- review-v1 디렉터리와 id는 지우거나 바꾸지 않는다. 기존 기록이 v1의 팩 id·digest로 해석되고, `TestReviewV1IsPinned`가 v1의 역할별 digest·지침 해시·계획 key·발췌 선택·정규화한 요청 해시를 고정한다. v1 요청 바이트를 바꾸는 변경은 시험 갱신이 아니라 승격 근거가 필요한 지침 변경이다.
+- review-v1 디렉터리와 id는 지우거나 바꾸지 않는다. 기존 기록이 v1의 팩 id·digest로 해석되고, `TestLegacyPackIsPinned`가 v1의 역할별 digest·지침 해시·계획 key·발췌 선택·정규화한 요청 해시를 고정한다. v1 요청 바이트를 바꾸는 변경은 시험 갱신이 아니라 승격 근거가 필요한 지침 변경이다.
 - review-v1에는 synthesize·report 지침과 Go 이외 언어 지침 파일이 있지만 선택되지 않는다. v1은 언어와 무관하게 공통·역할·영역·Go 지침만 붙인다. 보고서는 Go가 만들므로 종합·보고 역할에 모델을 호출하지 않는다.
 
 ### 팩 구성과 digest
@@ -117,7 +117,7 @@
 
 모든 발췌는 고정 스냅샷의 manifest 항목(크기·SHA-256)과 대조해 읽는다. 512 KiB를 넘는 파일, UTF-8이 아니거나 NUL을 포함한 파일, 민감값 패턴에 걸린 파일, 비밀값 선별이 보류한 파일은 발췌하지 않는다. 구문 분석기는 쓰지 않고, 발췌는 줄 단위다. 근거 ID는 manifest digest, 스냅샷 상대 경로, blob SHA-256, 행 범위에서 결정된다(`record.ExcerptID`).
 
-review-r1의 한도는 발췌 텍스트를 JSON으로 인코딩한 바이트로 센다(`encoding/json`은 `<`·`>`·`&`를 6바이트로 바꾼다). 상수는 [`r1_inputs.go`](../internal/worker/review/r1_inputs.go), review-v1 코퍼스 상수는 [`context.go`](../internal/worker/review/context.go)에 있다.
+review-r1의 한도는 발췌 텍스트를 JSON으로 인코딩한 바이트로 센다(`encoding/json`은 `<`·`>`·`&`를 6바이트로 바꾼다). 상수는 [`rolepack_inputs.go`](../internal/worker/review/rolepack_inputs.go), review-v1 코퍼스 상수는 [`context.go`](../internal/worker/review/context.go)에 있다.
 
 ### 종류 판별과 제외 디렉터리
 
@@ -184,7 +184,7 @@ context·investigate·verify가 같은 코퍼스를 쓴다. 순위가 낮은 것
 
 - 한 요청에 파일 최대 6개, 파일당 최대 50줄, 코드 파일당 3,200바이트·문서당 1,200바이트, 합계 12,000바이트다.
 - 문서를 하나도 고르지 못하면 `no_document_in_selected_context`, 상한 때문에 빠진 후보가 있으면 `files_outside_review_context`를 남긴다. 진입점·소스가 먼저 차므로 테스트는 자주 빠진다.
-- Go 파일·README/AGENTS·go.mod의 순위와 포함 규칙은 고정이다. 기존 Go 입력의 요청 바이트는 `TestReviewV1IsPinned`와 `TestW24GoReviewInputsUnchanged`가 고정한다.
+- Go 파일·README/AGENTS·go.mod의 순위와 포함 규칙은 고정이다. 기존 Go 입력의 요청 바이트는 `TestLegacyPackIsPinned`와 `TestGoReviewInputsUnchanged`가 고정한다.
 
 ### 요청 크기
 
@@ -238,7 +238,7 @@ context·investigate·verify가 같은 코퍼스를 쓴다. 순위가 낮은 것
 
 ## 복구 경로
 
-review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`record.R1MaxCalls = 3`)다.
+review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`record.RoleMaxCalls = 3`)다.
 
 1. **형식 복구.** 출력이 JSON이지만 계약·근거 검사에서 거부되면, 고정 오류 코드만 담은 복구 요청을 한 번 보낸다. verify는 거부된 후보, 허용된 근거와 오류 코드만 다시 보낸다.
 2. **JSON이 아닌 응답의 재시도.** JSON이 아닌 응답은 항목에 대해 아무 정보도 주지 않는다. 형식 복구 기회를 쓰지 않고 한 번 더 요청한다. 재시도 요청은 같은 입력에 복구 규칙과 오류 코드 `output_not_json`을 담은 `repair` 블록을 붙인다. 앞서 복구 요청이 있었으면 그 오류 코드(verify는 후보별 오류)를 유지하고 `output_not_json`을 더한다.
@@ -304,7 +304,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 
 - 메타데이터와 모델의 판정문·근거 참조만 담는다. 발췌의 원문(`text`), 원시 프롬프트, 내부 추론, 프로세스 출력은 저장하지 않는다.
 - 근거(`evidence`)는 `id`, `path`, `sha256`, `start_line`, `end_line`, `kind`, 선택 `origin`과 `symbol`을 가진다. `kind`는 0.1이 code·test·document·config, 0.2가 code·test·document·manifest(환경 요구 원문)다. `origin`은 0.1이 context·caller·test, 0.2는 여기에 observation(해석 창)을 더한다. document·manifest 근거에는 origin이 없다.
-- decoder(`record.Decode`, `record.DecodeR1`)는 기록을 그 attempt의 run ID·attempt ID·snapshot manifest digest·단계와 대조한다. 근거마다 ID가 (snapshot digest, 경로, blob SHA-256, 행 범위)에서 다시 계산되는지, 경로가 manifest에 있고 blob이 같은지 확인한다. 모든 참조는 그 기록의 근거 목록 안에 있어야 한다. 허위 경로·행·blob·근거 ID, 다른 run·attempt·snapshot의 기록은 거부된다.
+- decoder(`record.Decode`, `record.DecodeRole`)는 기록을 그 attempt의 run ID·attempt ID·snapshot manifest digest·단계와 대조한다. 근거마다 ID가 (snapshot digest, 경로, blob SHA-256, 행 범위)에서 다시 계산되는지, 경로가 manifest에 있고 blob이 같은지 확인한다. 모든 참조는 그 기록의 근거 목록 안에 있어야 한다. 허위 경로·행·blob·근거 ID, 다른 run·attempt·snapshot의 기록은 거부된다.
 - 사용량이 없으면 `null`이다. 요청을 만들기 전에 실패하면 요청 digest가 빈 문자열일 수 있다.
 - 실패한 기록은 시도한 호출, 준 입력, 앞 단계 상태를 남기고 모델 내용은 격리한다. 수락됐다가 버려진 호출의 `outcome`은 `result_discarded`다. verify가 실패하면 후보는 모두 `unreviewed`로 남는다.
 - 보고서가 검토 완료로 판단하려면 DB task 성공과 검증된 역할 기록을 함께 확인한다.
@@ -343,5 +343,5 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 - 호출자 확장은 Go만 한다. Go가 아닌 후보의 파일 간 결함은 발췌에 들어간 범위에서만 보인다.
 - 실행·재현 주장 거부와 민감값 패턴은 정규식이다. 다른 표현을 모두 잡지 못한다.
 - 미완료가 사라진다는 보장은 없다. 끝내 검증되지 않은 후보는 `unreviewed`로 격리하고 task는 실패한다.
-- `r1Rules`는 "근거·관찰 ID"를 인용하라고 하고 verify 계약은 "근거 ID"만 말한다. 이 어긋남은 구조(관찰 ID 처리 규칙)로 막았고, 문구 정리는 다음 지침 개정에서 독립 작성자가 판단한다.
+- `roleRules`는 "근거·관찰 ID"를 인용하라고 하고 verify 계약은 "근거 ID"만 말한다. 이 어긋남은 구조(관찰 ID 처리 규칙)로 막았고, 문구 정리는 다음 지침 개정에서 독립 작성자가 판단한다.
 - 모델의 자신감과 서술은 측정된 정확도가 아니다. 품질은 [평가](EVALUATION.md)의 판정과 지표로만 말한다.

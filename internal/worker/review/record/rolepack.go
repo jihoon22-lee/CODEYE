@@ -11,14 +11,14 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// R1 records (schema 0.2) are written by the review-r1 pack (W15, default
-// since 2.0.0). They share the media type with 0.1 records; a report registry
+// Role records (schema 0.2) are written by the role pack (review-r1, the
+// default pack). They share the media type with 0.1 records; a report registry
 // selects the decoder by schema_version, so 0.1 records keep their exact
-// rules above. Unlike 0.1 records, an R1 record is not cumulative: it holds
+// rules above. Unlike 0.1 records, a role record is not cumulative: it holds
 // only its own stage's calls and binds every upstream input by the SHA-256 of
 // the artifact bytes it read.
 const (
-	SchemaVersionR1 = "0.2"
+	SchemaVersionRole = "0.2"
 
 	StageEnvironment = "environment"
 	StageDocuments   = "documents"
@@ -36,18 +36,19 @@ const (
 	// or reproducing a defect. The platform rejects it (heuristic check).
 	LimExecutionClaim = "execution_claim_rejected"
 
-	r1MaxEvidence     = 40
-	r1MaxObservations = 16
-	// r1MaxText bounds the JSON-encoded size of one R1 model text field, so a
-	// downstream request carrying it keeps within the request budget.
-	r1MaxText = 400
-	// R1MaxCalls bounds the calls of one stage: the first request, one
+	roleMaxEvidence     = 40
+	roleMaxObservations = 16
+	// roleMaxText bounds the JSON-encoded size of one role-pack model text
+	// field, so a downstream request carrying it keeps within the request
+	// budget.
+	roleMaxText = 400
+	// RoleMaxCalls bounds the calls of one stage: the first request, one
 	// repair of rejected output and one retry of a reply that was not JSON.
-	R1MaxCalls = 3
+	RoleMaxCalls = 3
 )
 
-// R1Stages in plan order.
-var R1Stages = []string{StageEnvironment, StageDocuments, StageInvestigate, StageInterpret, StageVerify}
+// RoleStages in plan order.
+var RoleStages = []string{StageEnvironment, StageDocuments, StageInvestigate, StageInterpret, StageVerify}
 
 // PackRef identifies the instruction pack a record was produced with.
 type PackRef struct {
@@ -56,7 +57,7 @@ type PackRef struct {
 }
 
 // Upstream is one input of a stage: a platform discovery or tool artifact or
-// an earlier R1 stage record. SHA256 is the artifact bytes read (accepted).
+// an earlier role record. SHA256 is the artifact bytes read (accepted).
 type Upstream struct {
 	Source string `json:"source"`
 	State  string `json:"state"`
@@ -122,18 +123,18 @@ type InterpretationLimit struct {
 	Statement      string   `json:"statement"`
 }
 
-// R1Candidate keeps the 0.1 candidate fields (so verification and report
+// RoleCandidate keeps the 0.1 candidate fields (so verification and report
 // findings work unchanged) with its origin stage and, for interpret, the
 // tool observations it is linked to.
-type R1Candidate struct {
+type RoleCandidate struct {
 	Candidate
 	Origin         string   `json:"origin"`
 	ObservationIDs []string `json:"observation_ids,omitempty"`
 }
 
-// R1Call is one model request of the stage. OutputErrors are the fixed
+// RoleCall is one model request of the stage. OutputErrors are the fixed
 // platform codes the output of this call was rejected with.
-type R1Call struct {
+type RoleCall struct {
 	Role          string   `json:"role"`
 	Model         string   `json:"model"`
 	Version       string   `json:"opencode_version"`
@@ -149,8 +150,8 @@ type R1Call struct {
 	OutputErrors  []string `json:"output_errors"`
 }
 
-// R1Record is one R1 stage artifact.
-type R1Record struct {
+// RoleRecord is one stage artifact of the role pack.
+type RoleRecord struct {
 	Schema           string                `json:"schema_version"`
 	Pack             PackRef               `json:"pack"`
 	Snapshot         string                `json:"snapshot_manifest_digest"`
@@ -167,29 +168,29 @@ type R1Record struct {
 	Conflicts        []Conflict            `json:"conflicts,omitempty"`
 	Questions        []Question            `json:"questions,omitempty"`
 	InstructionNotes []InstructionNote     `json:"instruction_notes,omitempty"`
-	Candidates       []R1Candidate         `json:"candidates,omitempty"`
+	Candidates       []RoleCandidate       `json:"candidates,omitempty"`
 	Limits           []InterpretationLimit `json:"interpretation_limits,omitempty"`
 	Verifications    []Verification        `json:"verifications,omitempty"`
 	Limitations      []string              `json:"limitations"`
-	Calls            []R1Call              `json:"calls"`
+	Calls            []RoleCall            `json:"calls"`
 }
 
 // Accepted reports whether the record carries an accepted stage result.
-func (r R1Record) Accepted() bool { return r.Outcome == OutcomeAccepted }
+func (r RoleRecord) Accepted() bool { return r.Outcome == OutcomeAccepted }
 
 var (
-	r1CandidateID = regexp.MustCompile(`^(investigate|interpret)_[1-4]$`)
-	moduleRef     = regexp.MustCompile(`^(cpp|go|javascript|python|rust):(\.|[^:\x00-\x1f]+)$`)
-	requirementID = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}@[^@\x00-\x1f]+$`)
-	observationID = regexp.MustCompile(`^obs_[0-9a-f]{20}$`)
-	taskKey       = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
-	packID        = regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`)
-	r1Kinds       = map[string]bool{"code": true, "test": true, "document": true, "manifest": true}
-	r1Origins     = map[string]bool{"": true, "context": true, "caller": true, "test": true, "observation": true}
+	roleCandidateID = regexp.MustCompile(`^(investigate|interpret)_[1-4]$`)
+	moduleRef       = regexp.MustCompile(`^(cpp|go|javascript|python|rust):(\.|[^:\x00-\x1f]+)$`)
+	requirementID   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}@[^@\x00-\x1f]+$`)
+	observationID   = regexp.MustCompile(`^obs_[0-9a-f]{20}$`)
+	taskKey         = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
+	packID          = regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`)
+	roleKinds       = map[string]bool{"code": true, "test": true, "document": true, "manifest": true}
+	roleOrigins     = map[string]bool{"": true, "context": true, "caller": true, "test": true, "observation": true}
 	// Upstream sources each stage may name. Interpret names analyzer tasks:
 	// any task key outside the discovery and review namespaces (docs/ANALYZERS.md);
 	// the report binds each to that task's accepted observations artifact.
-	r1Sources = map[string][]string{
+	roleSources = map[string][]string{
 		StageEnvironment: {"env.discover"},
 		StageDocuments:   {"docs.discover"},
 		StageInvestigate: {"review.environment", "review.documents"},
@@ -208,10 +209,10 @@ var executionClaim = regexp.MustCompile(`(재현|실행|통과)(됨|된 것|되�
 // reproduction the platform never performed.
 func ClaimsExecution(s string) bool { return executionClaim.MatchString(s) }
 
-// R1Text bounds one R1 model text field (JSON-encoded size, credentials,
+// RoleText bounds one role-pack model text field (JSON-encoded size, credentials,
 // execution claims).
-func R1Text(s string) bool {
-	return SafeText(s) && JSONLen(s) <= r1MaxText && !ClaimsExecution(s)
+func RoleText(s string) bool {
+	return SafeText(s) && JSONLen(s) <= roleMaxText && !ClaimsExecution(s)
 }
 
 // JSONLen is the size of s encoded as a JSON string by encoding/json
@@ -236,24 +237,24 @@ func DocumentDir(p string) string {
 	return d
 }
 
-// DecodeR1 strictly parses and validates an R1 record.
-func DecodeR1(body []byte, want Expect) (R1Record, error) {
-	var r R1Record
+// DecodeRole strictly parses and validates a role record.
+func DecodeRole(body []byte, want Expect) (RoleRecord, error) {
+	var r RoleRecord
 	if len(body) > MaxBytes {
-		return R1Record{}, invalid("record too large")
+		return RoleRecord{}, invalid("record too large")
 	}
 	if err := domain.DecodeStrict(body, &r); err != nil {
-		return R1Record{}, invalid("not strict JSON: %v", err)
+		return RoleRecord{}, invalid("not strict JSON: %v", err)
 	}
-	if err := ValidateR1(r, want); err != nil {
-		return R1Record{}, err
+	if err := ValidateRole(r, want); err != nil {
+		return RoleRecord{}, err
 	}
 	return r, nil
 }
 
-// MarshalR1 validates before encoding.
-func MarshalR1(r R1Record, want Expect) ([]byte, error) {
-	if err := ValidateR1(r, want); err != nil {
+// MarshalRole validates before encoding.
+func MarshalRole(r RoleRecord, want Expect) ([]byte, error) {
+	if err := ValidateRole(r, want); err != nil {
 		return nil, err
 	}
 	b, err := json.Marshal(r)
@@ -263,14 +264,14 @@ func MarshalR1(r R1Record, want Expect) ([]byte, error) {
 	return b, nil
 }
 
-// ValidateR1 checks an R1 record against the attempt and snapshot manifest.
+// ValidateRole checks a role record against the attempt and snapshot manifest.
 // Model content is checked again with the worker's rules, so a decoder never
 // accepts what the worker would have rejected.
-func ValidateR1(r R1Record, want Expect) error {
+func ValidateRole(r RoleRecord, want Expect) error {
 	switch {
-	case r.Schema != SchemaVersionR1:
+	case r.Schema != SchemaVersionRole:
 		return invalid("schema_version")
-	case !slices.Contains(R1Stages, r.Stage) || (want.Stage != "" && want.Stage != r.Stage):
+	case !slices.Contains(RoleStages, r.Stage) || (want.Stage != "" && want.Stage != r.Stage):
 		return invalid("stage")
 	case !packID.MatchString(r.Pack.ID) || !version.MatchString(r.Pack.Version):
 		return invalid("pack identity")
@@ -280,7 +281,7 @@ func ValidateR1(r R1Record, want Expect) error {
 		return invalid("record belongs to another snapshot or attempt")
 	case r.Upstream == nil || r.Evidence == nil || r.Observations == nil || r.Limitations == nil || r.Calls == nil:
 		return invalid("missing list")
-	case len(r.Evidence) > r1MaxEvidence || len(r.Observations) > r1MaxObservations:
+	case len(r.Evidence) > roleMaxEvidence || len(r.Observations) > roleMaxObservations:
 		return invalid("input size")
 	case !codes(r.Limitations):
 		return invalid("limitations")
@@ -302,7 +303,7 @@ func ValidateR1(r R1Record, want Expect) error {
 	}
 	catalog := map[string]Excerpt{}
 	for _, e := range r.Evidence {
-		if err := checkR1Excerpt(e, r.Snapshot, want.Lookup); err != nil {
+		if err := checkRoleExcerpt(e, r.Snapshot, want.Lookup); err != nil {
 			return err
 		}
 		if _, dup := catalog[e.ID]; dup {
@@ -324,10 +325,10 @@ func ValidateR1(r R1Record, want Expect) error {
 	if err := checkStageContent(r, catalog, observations); err != nil {
 		return err
 	}
-	return checkR1Calls(r)
+	return checkRoleCalls(r)
 }
 
-// analyzerSource marks the interpret stage's upstream rule in r1Sources.
+// analyzerSource marks the interpret stage's upstream rule in roleSources.
 const analyzerSource = "(analyzer task)"
 
 // AnalyzerTaskKey reports whether key can name an analyzer task: a valid
@@ -336,11 +337,11 @@ func AnalyzerTaskKey(key string) bool {
 	return taskKey.MatchString(key) && key != "env.discover" && key != "docs.discover" && !strings.HasPrefix(key, "review.")
 }
 
-func checkUpstream(r R1Record) error {
+func checkUpstream(r RoleRecord) error {
 	seen := map[string]bool{}
 	for _, u := range r.Upstream {
 		allowed := false
-		for _, s := range r1Sources[r.Stage] {
+		for _, s := range roleSources[r.Stage] {
 			allowed = allowed || u.Source == s || (s == analyzerSource && AnalyzerTaskKey(u.Source))
 		}
 		if !allowed || seen[u.Source] {
@@ -363,11 +364,11 @@ func checkUpstream(r R1Record) error {
 	return nil
 }
 
-func checkR1Excerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)) error {
+func checkRoleExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)) error {
 	switch {
 	case domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.SHA256) || e.Start < 1 || e.End < e.Start || e.End-e.Start+1 > 80:
 		return invalid("evidence location")
-	case !r1Kinds[e.Kind] || !r1Origins[e.Origin] || e.Text != "" || (e.Symbol != "" && !symbol.MatchString(e.Symbol)):
+	case !roleKinds[e.Kind] || !roleOrigins[e.Origin] || e.Text != "" || (e.Symbol != "" && !symbol.MatchString(e.Symbol)):
 		return invalid("evidence attributes")
 	case (e.Kind == "code" || e.Kind == "test") && SourceKind(e.Path) != e.Kind:
 		return invalid("evidence kind")
@@ -408,7 +409,7 @@ func docsCover(ids []string, catalog map[string]Excerpt, scope string) bool {
 	return true
 }
 
-func checkStageContent(r R1Record, catalog map[string]Excerpt, observations map[string]ObservationRef) error {
+func checkStageContent(r RoleRecord, catalog map[string]Excerpt, observations map[string]ObservationRef) error {
 	empty := func(n ...int) bool {
 		for _, v := range n {
 			if v != 0 {
@@ -445,7 +446,7 @@ func checkStageContent(r R1Record, catalog map[string]Excerpt, observations map[
 	}
 	for _, n := range r.EnvironmentNotes {
 		if !moduleRef.MatchString(n.Module) || n.RequirementIDs == nil || n.EvidenceIDs == nil || len(n.RequirementIDs) > 4 ||
-			!R1Text(n.AffectedChecks) || !R1Text(n.StillCheckable) || !R1Text(n.NeededObservation) {
+			!RoleText(n.AffectedChecks) || !RoleText(n.StillCheckable) || !RoleText(n.NeededObservation) {
 			return invalid("environment note")
 		}
 		_, dir, _ := strings.Cut(n.Module, ":")
@@ -465,12 +466,12 @@ func checkStageContent(r R1Record, catalog map[string]Excerpt, observations map[
 		}
 	}
 	for _, c := range r.Contracts {
-		if !R1Text(c.Statement) || !ValidScopePath(c.AppliesTo) || !refs(c.EvidenceIDs, catalog, 4, "document") || !docsCover(c.EvidenceIDs, catalog, c.AppliesTo) {
+		if !RoleText(c.Statement) || !ValidScopePath(c.AppliesTo) || !refs(c.EvidenceIDs, catalog, 4, "document") || !docsCover(c.EvidenceIDs, catalog, c.AppliesTo) {
 			return invalid("contract")
 		}
 	}
 	for _, c := range r.Conflicts {
-		if !R1Text(c.Summary) || !R1Text(c.Impact) || !ValidScopePath(c.Scope) || !refs(c.FirstEvidence, catalog, 3, "document") || !refs(c.SecondEvidence, catalog, 3, "document") ||
+		if !RoleText(c.Summary) || !RoleText(c.Impact) || !ValidScopePath(c.Scope) || !refs(c.FirstEvidence, catalog, 3, "document") || !refs(c.SecondEvidence, catalog, 3, "document") ||
 			!docsCover(c.FirstEvidence, catalog, c.Scope) || !docsCover(c.SecondEvidence, catalog, c.Scope) {
 			return invalid("conflict")
 		}
@@ -483,19 +484,19 @@ func checkStageContent(r R1Record, catalog map[string]Excerpt, observations map[
 		}
 	}
 	for _, q := range r.Questions {
-		if !R1Text(q.Question) || !ValidScopePath(q.AppliesTo) || !refs(q.EvidenceIDs, catalog, 4, "document") || !docsCover(q.EvidenceIDs, catalog, q.AppliesTo) {
+		if !RoleText(q.Question) || !ValidScopePath(q.AppliesTo) || !refs(q.EvidenceIDs, catalog, 4, "document") || !docsCover(q.EvidenceIDs, catalog, q.AppliesTo) {
 			return invalid("question")
 		}
 	}
 	for _, n := range r.InstructionNotes {
-		if !R1Text(n.Note) || !refs(n.EvidenceIDs, catalog, 3, "document") {
+		if !RoleText(n.Note) || !refs(n.EvidenceIDs, catalog, 3, "document") {
 			return invalid("instruction note")
 		}
 	}
 	counts := map[string]int{}
 	for _, c := range r.Candidates {
 		counts[c.Origin]++
-		if c.ID != fmt.Sprintf("%s_%d", c.Origin, counts[c.Origin]) || !r1CandidateID.MatchString(c.ID) {
+		if c.ID != fmt.Sprintf("%s_%d", c.Origin, counts[c.Origin]) || !roleCandidateID.MatchString(c.ID) {
 			return invalid("candidate id")
 		}
 		if (r.Stage == StageInvestigate || r.Stage == StageInterpret) && c.Origin != r.Stage {
@@ -539,7 +540,7 @@ func checkStageContent(r R1Record, catalog map[string]Excerpt, observations map[
 		}
 	}
 	for _, l := range r.Limits {
-		if !R1Text(l.Statement) || len(l.ObservationIDs) == 0 || len(l.ObservationIDs) > 4 {
+		if !RoleText(l.Statement) || len(l.ObservationIDs) == 0 || len(l.ObservationIDs) > 4 {
 			return invalid("interpretation limit")
 		}
 		for i, id := range l.ObservationIDs {
@@ -551,13 +552,13 @@ func checkStageContent(r R1Record, catalog map[string]Excerpt, observations map[
 	return nil
 }
 
-// CandidateTextOK bounds the prose of an R1 candidate.
+// CandidateTextOK bounds the prose of a role-pack candidate.
 func CandidateTextOK(c Candidate) bool {
-	return R1Text(c.Title) && R1Text(c.Condition) && R1Text(c.Impact) && R1Text(c.Improvement) && R1Text(c.Counterpoint)
+	return RoleText(c.Title) && RoleText(c.Condition) && RoleText(c.Impact) && RoleText(c.Improvement) && RoleText(c.Counterpoint)
 }
 
-func checkR1Calls(r R1Record) error {
-	if len(r.Calls) > R1MaxCalls {
+func checkRoleCalls(r RoleRecord) error {
+	if len(r.Calls) > RoleMaxCalls {
 		return invalid("too many calls")
 	}
 	accepted := false

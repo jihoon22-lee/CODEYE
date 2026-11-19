@@ -10,10 +10,10 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
-	reviewpackr1 "github.com/jihoon22-lee/CODEYE/prompts/review-r1"
+	rolepack "github.com/jihoon22-lee/CODEYE/prompts/review-r1"
 )
 
-// guideTitles are the first lines of the review-r1 language guides.
+// guideTitles are the first lines of the role pack's language guides.
 var guideTitles = map[string]string{
 	"cpp":        "# C/C++ 검토 팩\n",
 	"go":         "# Go 검토 팩\n",
@@ -64,12 +64,12 @@ func treeJob(t *testing.T, tree map[string]string) analysis.Job {
 	return analysis.Job{RunID: domain.NewID(), AttemptID: domain.NewID(), Epoch: 1, Profile: "deep-review", Snapshot: s, Scratch: t.TempDir(), Scope: domain.Scope{Kind: "full"}, AllowModelReview: true}
 }
 
-// W24 rc2: every R1 role gets the language guides of the snapshot's
+// Every role-pack role gets the language guides of the snapshot's
 // in-scope source ecosystems, by the analyzer packs' rule (pack.InScope,
 // docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백: source extensions, outside data and vendored directories,
 // within the scope; build files alone do not count), in sorted order, and
 // none when no supported ecosystem is in scope.
-func TestR1LanguageGuidesFollowInScopeEcosystems(t *testing.T) {
+func TestRolePackLanguageGuidesFollowInScopeEcosystems(t *testing.T) {
 	polyglot := func(root string) {
 		writeFile(t, root, "tools/gen.py", "print('x')\n")
 		writeFile(t, root, "native/src/lib.rs", "pub fn f() {}\n")
@@ -100,14 +100,14 @@ func TestR1LanguageGuidesFollowInScopeEcosystems(t *testing.T) {
 		{"no supported ecosystem in scope", nil, domain.Scope{Kind: "paths", Paths: []string{"docs"}}, nil},
 	}
 	for _, c := range cases {
-		j := w15Job(t, c.change)
+		j := modulesJob(t, c.change)
 		j.Scope = c.scope
-		for _, role := range reviewpackr1.Roles {
-			s := &r1Stage{h: R1Handler{Caller: &r1Caller{}}, ctx: t.Context(), j: j, role: role}
+		for _, role := range rolepack.Roles {
+			s := &roleStage{h: RoleHandler{Caller: &roleCaller{}}, ctx: t.Context(), j: j, role: role}
 			if r := s.begin(nil); r != nil {
 				t.Fatalf("%s %s: %+v", c.name, role, r)
 			}
-			want, err := reviewpackr1.For(role, c.want)
+			want, err := rolepack.For(role, c.want)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -121,28 +121,28 @@ func TestR1LanguageGuidesFollowInScopeEcosystems(t *testing.T) {
 
 // Every source ecosystem the analyzer packs know (obsdoc.Ecosystems; "any"
 // is language independent) has a guide, so the selection never drops one.
-func TestR1EveryLanguageEcosystemHasAGuide(t *testing.T) {
+func TestRolePackEveryLanguageEcosystemHasAGuide(t *testing.T) {
 	var langs []string
 	for _, eco := range obsdoc.Ecosystems {
 		if eco != "any" {
 			langs = append(langs, eco)
 		}
 	}
-	if !slices.Equal(reviewpackr1.Languages(), langs) {
-		t.Fatalf("guides %v, analyzer ecosystems %v", reviewpackr1.Languages(), langs)
+	if !slices.Equal(rolepack.Languages(), langs) {
+		t.Fatalf("guides %v, analyzer ecosystems %v", rolepack.Languages(), langs)
 	}
 }
 
 // The review record shows the language files each call used (pack_files)
 // and the request carries exactly those guides: a Go, Python and Rust
 // snapshot through all five roles.
-func TestR1RecordsShowLanguageGuides(t *testing.T) {
-	j := w15Job(t, func(root string) {
+func TestRoleRecordsShowLanguageGuides(t *testing.T) {
+	j := modulesJob(t, func(root string) {
 		writeFile(t, root, "tools/gen.py", "print('x')\n")
 		writeFile(t, root, "native/src/lib.rs", "pub fn f() {}\n")
 	})
-	f := &r1Caller{script: validScript(t)}
-	plan, res := runR1(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
+	f := &roleCaller{script: validScript(t)}
+	plan, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	for _, p := range plan {
 		if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status != domain.TaskSucceeded {
 			t.Fatalf("%s %+v", p.Key, res[p.Key])
@@ -150,15 +150,15 @@ func TestR1RecordsShowLanguageGuides(t *testing.T) {
 	}
 	want := []string{"go", "python", "rust"}
 	calls := 0
-	for _, stage := range record.R1Stages {
-		for _, c := range readR1(t, j, stage).Calls {
+	for _, stage := range record.RoleStages {
+		for _, c := range readRole(t, j, stage).Calls {
 			calls++
 			if got := guideFiles(c.PackFiles); !slices.Equal(got, guidePaths(want)) {
 				t.Fatalf("%s pack_files %v", stage, c.PackFiles)
 			}
 		}
 	}
-	if calls != len(record.R1Stages) || len(f.requests) != calls {
+	if calls != len(record.RoleStages) || len(f.requests) != calls {
 		t.Fatalf("calls %d, requests %d", calls, len(f.requests))
 	}
 	for _, q := range f.requests {
@@ -168,10 +168,10 @@ func TestR1RecordsShowLanguageGuides(t *testing.T) {
 }
 
 // A Python-only snapshot gets the Python guide alone and no Go guide, and
-// since W24 phase 2c every code role reaches the model with Python code:
-// investigate and verify run (they failed with review_input_unavailable and
-// were skipped while code excerpts were Go only).
-func TestR1PythonOnlySnapshotGetsThePythonGuide(t *testing.T) {
+// every code role reaches the model with Python code: investigate and verify
+// run (they would fail with review_input_unavailable and be skipped if code
+// excerpts were Go only).
+func TestRolePackPythonOnlySnapshotGetsThePythonGuide(t *testing.T) {
 	j := treeJob(t, map[string]string{
 		"README.md":         "# Tool\n\nRun the tool with a configuration file.\n",
 		"pyproject.toml":    "[project]\nname = \"tool\"\n",
@@ -182,21 +182,21 @@ func TestR1PythonOnlySnapshotGetsThePythonGuide(t *testing.T) {
 	if got := languagesInScope(j); !slices.Equal(got, []string{"python"}) {
 		t.Fatalf("ecosystems %v", got)
 	}
-	f := &r1Caller{script: maxScript(t)}
-	_, res := runR1(t, j, vetStub{}, f, "1.27.4")
+	f := &roleCaller{script: maxScript(t)}
+	_, res := runRole(t, j, vetStub{}, f, "1.27.4")
 	for _, key := range []string{"review.documents", "review.investigate", "review.verify"} {
 		if res[key].Status != domain.TaskSucceeded {
 			t.Fatalf("%s %+v", key, res[key])
 		}
 	}
 	for _, stage := range []string{"documents", "investigate", "verify"} {
-		calls := readR1(t, j, stage).Calls
+		calls := readRole(t, j, stage).Calls
 		if len(calls) != 1 || !slices.Equal(guideFiles(calls[0].PackFiles), []string{"languages/python.md"}) {
 			t.Fatalf("%s calls %+v", stage, calls)
 		}
 	}
 	var paths []string
-	for _, e := range readR1(t, j, "investigate").Evidence {
+	for _, e := range readRole(t, j, "investigate").Evidence {
 		if e.Kind != "document" {
 			paths = append(paths, e.Path+":"+e.Kind)
 		}

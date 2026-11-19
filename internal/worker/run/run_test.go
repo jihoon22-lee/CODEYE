@@ -412,7 +412,7 @@ func TestPinnedRetryNeverReacquires(t *testing.T) {
 	<-done
 }
 
-// W09: a failed attempt whose tasks actually ran still uploads the result
+// A failed attempt whose tasks actually ran still uploads the result
 // manifest (real task states, streams), never advances to finalizing and
 // stays failed.
 func TestFailedTasksUploadManifestWithoutFinalizing(t *testing.T) {
@@ -442,7 +442,7 @@ func TestFailedTasksUploadManifestWithoutFinalizing(t *testing.T) {
 	<-done
 }
 
-// W15: the planned stage travels as the optional task_created "stage"; a task
+// The planned stage travels as the optional task_created "stage"; a task
 // without one omits the field (stored without a stage, never inferred).
 func TestTaskCreatedCarriesPlannedStage(t *testing.T) {
 	e := newEnv(t)

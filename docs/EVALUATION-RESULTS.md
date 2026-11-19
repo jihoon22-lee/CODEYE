@@ -12,7 +12,7 @@
 
 #### 13.1 review-r1 rc2의 R0 회귀
 
-docs/37 §11의 rc1 결과를 기준으로, 실행 전에 회귀 조건 넷을 적어 두었다. 대상은 R0 쌍 Q01·Q03·Q05·Q08·Q10, W15 입력, `w12-close`이고 실행은 `test_postgres.py --r0-pilot`(go vet만)이다. review-v1은 다시 돌리지 않았다. 지침과 Go 요청 바이트가 고정돼 있으므로(`TestReviewV1IsPinned`, `TestW24GoReviewInputsUnchanged`) W15의 v1 결과가 그대로 기준이다.
+docs/37 §11의 rc1 결과를 기준으로, 실행 전에 회귀 조건 넷을 적어 두었다. 대상은 R0 쌍 Q01·Q03·Q05·Q08·Q10, W15 입력, `w12-close`이고 실행은 `test_postgres.py --r0-pilot`(go vet만)이다. review-v1은 다시 돌리지 않았다. 지침과 Go 요청 바이트가 고정돼 있으므로(`TestLegacyPackIsPinned`, `TestGoReviewInputsUnchanged`) W15의 v1 결과가 그대로 기준이다.
 
 | 조건 | rc2 | rc1(W15) |
 |---|---|---|
@@ -102,7 +102,7 @@ review-r1은 `candidate-not-promoted`로 둔다. 기본 팩 변경은 소유자�
 
 - **보류 평가.** W24 1회차 보류 비교에서 r1 rc2는 v1보다 나쁘지 않았다. 점추정으로는 recall, 수정 후 오탐, 비용 모두 r1이 앞섰다. 다만 모든 차이가 구간 안에 있으므로 r1이 더 낫다고 단정하지 않는다. 판정은 팩을 가린 개발 에이전트가 했고 사람의 판정이 아니다.
 - **하나로 합친 이유.** 두 팩을 기본 후보로 나란히 두면 지침을 바꿀 때마다 두 팩을 따로 고치고 비교해야 한다. 기본 팩 하나만 개정하고 회귀 검증한다.
-- **v1을 지우지 않은 이유.** R0·W15·W24 기록은 v1의 팩 id·digest로 해석된다. `TestReviewV1IsPinned`가 그 요청 바이트를 고정한다. v1 파일과 검증기(docs/34)는 바꾸지 않았다.
+- **v1을 지우지 않은 이유.** R0·W15·W24 기록은 v1의 팩 id·digest로 해석된다. `TestLegacyPackIsPinned`가 그 요청 바이트를 고정한다. v1 파일과 검증기(docs/34)는 바꾸지 않았다.
 - **이름을 유지한 이유.** 디렉터리와 id는 `review-r1` 그대로다. 이름을 바꾸면 기존 기록의 팩 대조(`review_pack_mismatch`)와 운영자 설정이 깨진다.
 
 ### 5. 검증
@@ -111,19 +111,19 @@ review-r1은 `candidate-not-promoted`로 둔다. 기본 팩 변경은 소유자�
 
 | 시험 | 확인 내용 |
 |---|---|
-| `TestR1VerifyNonJSONRepairGetsRetry` | 거부 1건 → JSON 아닌 복구 응답 → 재시도. 3번째 호출로 검증되고 격리가 없다. 재시도 요청은 앞 항목 오류 코드를 담는다 |
-| `TestR1VerifyDropsNonEvidenceID` | 관찰 ID가 섞인 판단 보류 항목은 한 번에 수락된다(`evidence_id_dropped`). 판정의 근거 목록에 관찰 ID가 없다 |
-| `TestR1VerifyTwoNonJSONRepliesFail` | JSON 아닌 응답 두 번이면 2회 호출 뒤 `review_output_invalid`이고 모든 후보가 `unreviewed`다 |
-| `TestR1RoleNonJSONRepairGetsRetry` | documents 역할: 거부 → JSON 아닌 복구 → 정상 응답이 3번째에 수락되고 재시도는 앞 오류 코드를 유지한다 |
-| `TestR1RoleNonJSONTwiceFails` | environment 역할: JSON 아닌 응답 두 번이면 2회에서 실패한다 |
-| `TestR1VerifyFabricatedIDBesideValidIsRepaired` | 유효한 근거 옆의 지어낸 `ev_` ID는 빼지 않고 거부해 형식 복구로 보낸다. 판정에 지어낸 ID가 남지 않는다 |
-| `TestR1VerifyLaterCallFailureKeepsAccepted` | 후속 호출 timeout은 수락한 판정을 유지하고 나머지를 격리한다(`review_output_incomplete`, `verification_call_failed`). 첫 호출 timeout은 단계 전체 실패다 |
-| `TestReviewR1ThroughTheWorkerAndReport/verify_retry` | 실제 worker와 기본 보고서 registry: verify 3회 호출(관찰 ID 제거·거부 → JSON 아님 → 수락) 기록이 보고서까지 가고 보고서 검증을 통과한다 |
+| `TestRoleVerifyNonJSONRepairGetsRetry` | 거부 1건 → JSON 아닌 복구 응답 → 재시도. 3번째 호출로 검증되고 격리가 없다. 재시도 요청은 앞 항목 오류 코드를 담는다 |
+| `TestRoleVerifyDropsNonEvidenceID` | 관찰 ID가 섞인 판단 보류 항목은 한 번에 수락된다(`evidence_id_dropped`). 판정의 근거 목록에 관찰 ID가 없다 |
+| `TestRoleVerifyTwoNonJSONRepliesFail` | JSON 아닌 응답 두 번이면 2회 호출 뒤 `review_output_invalid`이고 모든 후보가 `unreviewed`다 |
+| `TestRoleNonJSONRepairGetsRetry` | documents 역할: 거부 → JSON 아닌 복구 → 정상 응답이 3번째에 수락되고 재시도는 앞 오류 코드를 유지한다 |
+| `TestRoleNonJSONTwiceFails` | environment 역할: JSON 아닌 응답 두 번이면 2회에서 실패한다 |
+| `TestRoleVerifyFabricatedIDBesideValidIsRepaired` | 유효한 근거 옆의 지어낸 `ev_` ID는 빼지 않고 거부해 형식 복구로 보낸다. 판정에 지어낸 ID가 남지 않는다 |
+| `TestRoleVerifyLaterCallFailureKeepsAccepted` | 후속 호출 timeout은 수락한 판정을 유지하고 나머지를 격리한다(`review_output_incomplete`, `verification_call_failed`). 첫 호출 timeout은 단계 전체 실패다 |
+| `TestRolePackThroughTheWorkerAndReport/verify_retry` | 실제 worker와 기본 보고서 registry: verify 3회 호출(관찰 ID 제거·거부 → JSON 아님 → 수락) 기록이 보고서까지 가고 보고서 검증을 통과한다 |
 | `validate_bundle.py` | 3회 호출 r1 기록은 기록 schema를 통과하고 4회·attempt 4는 거부된다. 보고서 schema는 review_calls 15개를 받고 16개를 거부한다 |
-| `TestR1FabricatedEvidenceIsQuarantined` | 두 번 거부되면 종전처럼 2회에서 실패한다(변경 없음) |
+| `TestRolePackFabricatedEvidenceIsQuarantined` | 두 번 거부되면 종전처럼 2회에서 실패한다(변경 없음) |
 | `TestWorkerHandlersComposeDiscovery`·`TestWorkerHandlersSelectReviewPack` | 팩을 지정하지 않은 워커는 r1의 다섯 역할을 계획한다. `review-v1`을 지정하면 세 역할, 모르는 팩은 거부한다 |
-| `TestDefaultPackSelection`·`TestGoSelectionDigestsPinned`·`TestR1ExampleRecords` | 팩 신원(2.0.0, default), 역할 digest, 예시 기록 |
-| `TestReviewV1IsPinned` | v1 요청 바이트 불변 |
+| `TestDefaultPackSelection`·`TestGoSelectionDigestsPinned`·`TestRolePackExampleRecords` | 팩 신원(2.0.0, default), 역할 digest, 예시 기록 |
+| `TestLegacyPackIsPinned` | v1 요청 바이트 불변 |
 
 첫 커밋의 새 시험 셋(재시도 2개, ID 제거 1개)은 변경 전 코드에서 실패하고 변경 후 통과함을 확인했다. 모든 시험은 합성 입력과 scripted caller를 쓰고 보류 사례의 내용을 담지 않는다.
 

@@ -1,4 +1,4 @@
-package reviewpackr1
+package rolepack
 
 import (
 	"bufio"
@@ -70,16 +70,16 @@ func TestDefaultPackSelection(t *testing.T) {
 		}
 	}
 	if _, err := For("context", []string{"go"}); err == nil {
-		t.Fatal("review-v1 role accepted by the R1 pack")
+		t.Fatal("legacy-pack role accepted by the role pack")
 	}
-	// The shared domain pack and the Go guide are copies of review-v1's.
-	// The other guides are R1's own (v1's differ, and v1 has no
-	// javascript.md).
+	// The shared domain pack and the Go guide are copies of the legacy
+	// pack's. The other guides are the role pack's own (the legacy pack's
+	// differ, and it has no javascript.md).
 	for _, name := range []string{"domains.md", "languages/go.md"} {
 		a, _ := os.ReadFile(name)
 		b, _ := os.ReadFile("../review-v1/" + name)
 		if len(a) == 0 || !bytes.Equal(a, b) {
-			t.Fatalf("%s differs from review-v1", name)
+			t.Fatalf("%s differs from the legacy pack", name)
 		}
 	}
 }
@@ -186,9 +186,9 @@ func mustEmbedded(t *testing.T, name string) []byte {
 	return b
 }
 
-// The Go-only selection (the w15 snapshot of examples/review-r1) is pinned
-// with scripts/validate_bundle.py and the example records: changing an
-// instruction byte changes them together.
+// The Go-only selection (the modules fixture snapshot of examples/review-r1)
+// is pinned with scripts/validate_bundle.py and the example records:
+// changing an instruction byte changes them together.
 func TestGoSelectionDigestsPinned(t *testing.T) {
 	want := map[string]string{
 		"environment": "da9c21fe08efaab7c307490102e69d35fc732f4d57a5faf2da9d2681768cfa3e",
@@ -205,9 +205,10 @@ func TestGoSelectionDigestsPinned(t *testing.T) {
 	}
 }
 
-// No instruction file refers to an evaluation or test case: R0 case IDs,
-// work-item or acceptance IDs, fixture paths, or names from the W12 and W15
-// fixtures. rc1's investigate example carried an R0 answer (docs/EVALUATION.md#회귀-집합-실행).
+// No instruction file refers to an evaluation or test case: regression case
+// IDs, build-stage or acceptance IDs, fixture paths, or names from the review
+// fixtures. An earlier investigate example carried a regression answer
+// (docs/EVALUATION.md#회귀-집합-실행).
 func TestNoCaseSpecificText(t *testing.T) {
 	banned := regexp.MustCompile(`\bQ\d{2}\b|\bR0\b|\bW\d{2}\b|\bTC-\d+|(?i:fixture|corpus|holdout|svc/|example\.test|w12-close|gateway)|\bCharge\b|\bForward\b|\bNormalize\b`)
 	n := 0

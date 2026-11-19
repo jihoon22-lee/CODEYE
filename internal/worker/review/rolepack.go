@@ -21,21 +21,21 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
-	reviewpackr1 "github.com/jihoon22-lee/CODEYE/prompts/review-r1"
+	rolepack "github.com/jihoon22-lee/CODEYE/prompts/review-r1"
 )
 
 // Review packs a node operator may select (codeye agent --review-pack).
-// review-r1 is the default; review-v1 is kept so earlier runs can be
-// reproduced and their records read.
+// The role pack (review-r1) is the default; the legacy pack (review-v1) is
+// kept so earlier runs can be reproduced and their records read.
 const (
-	PackV1 = "review-v1"
-	PackR1 = "review-r1"
+	PackLegacy = "review-v1"
+	PackRole   = "review-r1"
 )
 
 // ValidPack reports whether name selects a known review pack.
-func ValidPack(name string) bool { return name == PackV1 || name == PackR1 }
+func ValidPack(name string) bool { return name == PackLegacy || name == PackRole }
 
-// PromptBudget bounds the full message text of one review-r1 request
+// PromptBudget bounds the full message text of one role-pack request
 // (opencode.Prompt: instructions, contract, repair rules, input and wrapper).
 // The QA relay accepts 49152 UTF-8 bytes of message text per request; the
 // remainder is left for the OpenCode client's own messages.
@@ -44,7 +44,7 @@ const PromptBudget = 40000
 // repairReserve keeps room for a repair request (rules and error codes).
 const repairReserve = 3072
 
-// Task reasons and limitation codes of review-r1.
+// Task reasons and limitation codes of the role pack.
 const (
 	ReasonNoDocuments       = "no_documents"
 	ReasonDocsNotSelected   = "documents_not_selected"
@@ -55,29 +55,28 @@ const (
 	reasonRecordMissing     = "record_missing"
 	reasonRecordInvalid     = "record_invalid"
 	limInputTrimmed         = "review_input_trimmed"
-	// code_excerpts_go_only (rc1/rc2 code context of Go files only) is no
-	// longer written since W24 phase 2c; the report still names it for
-	// earlier records.
+	// code_excerpts_go_only (code context of Go files only) is no longer
+	// written; the report still names it for earlier records.
 )
 
-// R1Handler composes the static analyzer with the review-r1 candidate roles
-// (W15 phase 2). Planning reads only the manifest; every role reads only
-// platform artifacts of this attempt and accepted earlier R1 records, each
-// validated again. Model output never decides a task status, a platform
+// RoleHandler composes the static analyzer with the candidate roles of the
+// role pack (review-r1). Planning reads only the manifest; every role reads
+// only platform artifacts of this attempt and accepted earlier role records,
+// each validated again. Model output never decides a task status, a platform
 // verdict or a reproduction.
-type R1Handler struct {
+type RoleHandler struct {
 	Static analysis.Handler
 	Caller Caller
 }
 
-var _ analysis.Handler = R1Handler{}
+var _ analysis.Handler = RoleHandler{}
 
-func (h R1Handler) Info() analysis.HandlerInfo { return h.Static.Info() }
+func (h RoleHandler) Info() analysis.HandlerInfo { return h.Static.Info() }
 
-// Plan appends the five R1 roles. The documents role is required only when
+// Plan appends the five roles of the role pack. The documents role is required only when
 // the manifest has guidance documents in scope; environment and interpret
 // roles are optional.
-func (h R1Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec, error) {
+func (h RoleHandler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec, error) {
 	plan, err := h.Static.Plan(ctx, j)
 	if err != nil {
 		return nil, err
@@ -91,12 +90,12 @@ func (h R1Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpe
 		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview}), nil
 }
 
-func (h R1Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
+func (h RoleHandler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	role, ok := strings.CutPrefix(t.Key, "review.")
 	if !ok {
 		return h.Static.Run(ctx, j, t, runner)
 	}
-	if !slices.Contains(reviewpackr1.Roles, role) {
+	if !slices.Contains(rolepack.Roles, role) {
 		return result(domain.TaskFailed, reasonUnknownRole)
 	}
 	if !j.AllowModelReview {
@@ -105,7 +104,7 @@ func (h R1Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec,
 	if ctx.Err() != nil {
 		return result(domain.TaskCancelled, "cancelled")
 	}
-	s := &r1Stage{h: h, ctx: ctx, j: j, runner: runner, role: role, screen: screenSecrets(ctx, h.Static, j)}
+	s := &roleStage{h: h, ctx: ctx, j: j, runner: runner, role: role, screen: screenSecrets(ctx, h.Static, j)}
 	if s.screen.state == screenFailed {
 		// The secrets task ran but its result is unusable: nothing of the
 		// snapshot may reach a model unscreened.
@@ -124,27 +123,27 @@ func (h R1Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec,
 	return s.verify()
 }
 
-// r1Stage is one R1 role run.
-type r1Stage struct {
-	h      R1Handler
+// roleStage is one role run of the role pack.
+type roleStage struct {
+	h      RoleHandler
 	ctx    context.Context
 	j      analysis.Job
 	runner executor.Runner
 	role   string
-	pack   reviewpackr1.Selection
-	rec    record.R1Record
+	pack   rolepack.Selection
+	rec    record.RoleRecord
 	// screen is the secrets screen of the run's model inputs (screen.go).
 	screen secretScreen
 }
 
 // begin loads the pack and the record skeleton; a nil caller is reported
 // only after the skip rules, which need no model.
-func (s *r1Stage) begin(upstream []record.Upstream) *analysis.TaskResult {
+func (s *roleStage) begin(upstream []record.Upstream) *analysis.TaskResult {
 	if s.h.Caller == nil {
 		r := result(domain.TaskUnsupported, "model_not_configured")
 		return &r
 	}
-	sel, err := reviewpackr1.For(s.role, languagesInScope(s.j))
+	sel, err := rolepack.For(s.role, languagesInScope(s.j))
 	if err != nil {
 		r := result(domain.TaskFailed, "review_pack_invalid")
 		return &r
@@ -153,16 +152,16 @@ func (s *r1Stage) begin(upstream []record.Upstream) *analysis.TaskResult {
 	if upstream == nil {
 		upstream = []record.Upstream{}
 	}
-	s.rec = record.R1Record{Schema: record.SchemaVersionR1, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
+	s.rec = record.RoleRecord{Schema: record.SchemaVersionRole, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
 		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Stage: s.role, Outcome: record.OutcomeAccepted, Upstream: upstream,
-		Evidence: []record.Excerpt{}, Observations: []record.ObservationRef{}, Limitations: []string{}, Calls: []record.R1Call{}}
+		Evidence: []record.Excerpt{}, Observations: []record.ObservationRef{}, Limitations: []string{}, Calls: []record.RoleCall{}}
 	return nil
 }
 
 // screenLimitation is added when the record is written, after the model
 // input was built: the record and the report say the inputs were not
 // screened for secrets; the model input stays as it was.
-func (s *r1Stage) screenLimitation(lims []string) []string {
+func (s *roleStage) screenLimitation(lims []string) []string {
 	if s.screen.state == screenUnscreened {
 		return addLim(lims, limNotSecretScreened)
 	}
@@ -177,7 +176,7 @@ func languagesInScope(j analysis.Job) []string {
 	return pack.InScope(j.Snapshot.Manifest, j.Scope)
 }
 
-func (s *r1Stage) setEvidence(list []record.Excerpt) {
+func (s *roleStage) setEvidence(list []record.Excerpt) {
 	s.rec.Evidence = make([]record.Excerpt, len(list))
 	for i, e := range list {
 		e.Text = ""
@@ -185,23 +184,23 @@ func (s *r1Stage) setEvidence(list []record.Excerpt) {
 	}
 }
 
-func (s *r1Stage) instructions(contract string) string {
-	return s.pack.Text + "\n" + contract + r1Rules
+func (s *roleStage) instructions(contract string) string {
+	return s.pack.Text + "\n" + contract + roleRules
 }
 
-const r1Rules = "\nUse only the provided input. No code execution, test runs, reproduction or external access: never claim any. Cite only evidence and observation IDs given in this input; add no paths, line numbers or other fields. Keep every text field under 120 characters of concise Korean prose."
+const roleRules = "\nUse only the provided input. No code execution, test runs, reproduction or external access: never claim any. Cite only evidence and observation IDs given in this input; add no paths, line numbers or other fields. Keep every text field under 120 characters of concise Korean prose."
 
-const r1RepairRules = "\nFormat repair: your previous output was rejected with the platform error codes in input.repair.output_errors. Return the complete result again in the same contract, citing only IDs from this input."
+const roleRepairRules = "\nFormat repair: your previous output was rejected with the platform error codes in input.repair.output_errors. Return the complete result again in the same contract, citing only IDs from this input."
 
-// r1Repair is the only feedback a repair request carries: fixed codes.
-type r1Repair struct {
+// roleRepair is the only feedback a repair request carries: fixed codes.
+type roleRepair struct {
 	OutputErrors []string `json:"output_errors"`
 }
 
 // fits reports whether the request text fits the budget, keeping room for
 // one repair request when reserve is set.
-func (s *r1Stage) fits(instructions string, input []byte, reserve bool) (int, bool) {
-	n := len(opencode.Prompt(opencode.Request{Role: s.role, Instructions: instructions + r1RepairRules, Input: input}))
+func (s *roleStage) fits(instructions string, input []byte, reserve bool) (int, bool) {
+	n := len(opencode.Prompt(opencode.Request{Role: s.role, Instructions: instructions + roleRepairRules, Input: input}))
 	if reserve {
 		n += repairReserve
 	}
@@ -213,11 +212,11 @@ func (s *r1Stage) fits(instructions string, input []byte, reserve bool) (int, bo
 // result aside until it returns none. A model failure fails the task with
 // the client's reason; an output still invalid after the repair fails it
 // with review_output_invalid and no model content is kept.
-func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error), parse func(json.RawMessage) []string) *analysis.TaskResult {
+func (s *roleStage) exchange(contract string, input func(*roleRepair) ([]byte, error), parse func(json.RawMessage) []string) *analysis.TaskResult {
 	instructions := s.instructions(contract)
-	var repair *r1Repair
+	var repair *roleRepair
 	repaired, retried := false, false
-	for attempt := 1; attempt <= record.R1MaxCalls; attempt++ {
+	for attempt := 1; attempt <= record.RoleMaxCalls; attempt++ {
 		if s.ctx.Err() != nil {
 			return s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
@@ -227,7 +226,7 @@ func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error
 		}
 		text := instructions
 		if repair != nil {
-			text += r1RepairRules
+			text += roleRepairRules
 		}
 		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: query, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
 		size := len(opencode.Prompt(q))
@@ -235,7 +234,7 @@ func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error
 			return s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
-		call := record.R1Call{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,
+		call := record.RoleCall{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,
 			PackFiles: s.pack.Files, RequestDigest: reply.RequestDigest, RequestBytes: size, Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
 		if reply.Reason != "" && reply.Reason != "model_output_invalid" {
 			call.Outcome = reply.Reason
@@ -266,7 +265,7 @@ func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error
 			}
 			retried = true
 			if repair != nil {
-				repair = &r1Repair{OutputErrors: addLim(append([]string{}, repair.OutputErrors...), errs...)}
+				repair = &roleRepair{OutputErrors: addLim(append([]string{}, repair.OutputErrors...), errs...)}
 				continue
 			}
 		} else {
@@ -275,7 +274,7 @@ func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error
 			}
 			repaired = true
 		}
-		repair = &r1Repair{OutputErrors: call.OutputErrors}
+		repair = &roleRepair{OutputErrors: call.OutputErrors}
 	}
 	return s.fail(result(domain.TaskFailed, reasonOutputInvalid))
 }
@@ -283,7 +282,7 @@ func (s *r1Stage) exchange(contract string, input func(*r1Repair) ([]byte, error
 // noteExecutionClaim records at stage level that the platform rejected a
 // model claim of running or reproducing something, so an evaluation can count
 // it without reading every call.
-func (s *r1Stage) noteExecutionClaim(c record.R1Call) {
+func (s *roleStage) noteExecutionClaim(c record.RoleCall) {
 	if slices.Contains(c.OutputErrors, "execution_claim") {
 		s.rec.Limitations = addLim(s.rec.Limitations, record.LimExecutionClaim)
 	}
@@ -291,7 +290,7 @@ func (s *r1Stage) noteExecutionClaim(c record.R1Call) {
 
 // fail keeps the attempted calls, the inputs given and the upstream states
 // in a failed record; model content is quarantined (not kept).
-func (s *r1Stage) fail(res analysis.TaskResult) *analysis.TaskResult {
+func (s *roleStage) fail(res analysis.TaskResult) *analysis.TaskResult {
 	r := s.rec
 	r.Limitations = s.screenLimitation(r.Limitations)
 	r.Outcome, r.FailureReason = record.OutcomeFailed, res.Reason
@@ -307,13 +306,13 @@ func (s *r1Stage) fail(res analysis.TaskResult) *analysis.TaskResult {
 			r.Verifications[i] = unreviewed(c.ID, record.LimNotCompleted)
 		}
 	}
-	r.Calls = append([]record.R1Call{}, r.Calls...)
+	r.Calls = append([]record.RoleCall{}, r.Calls...)
 	for i := range r.Calls {
 		if r.Calls[i].Outcome == callAccepted {
 			r.Calls[i].Outcome = callDiscarded
 		}
 	}
-	if art, err := persistR1(s.j, r); err == nil {
+	if art, err := persistRole(s.j, r); err == nil {
 		res.Artifacts = append(res.Artifacts, art)
 	} else {
 		res.Limitations = addLim(res.Limitations, "review_record_failed")
@@ -322,22 +321,22 @@ func (s *r1Stage) fail(res analysis.TaskResult) *analysis.TaskResult {
 }
 
 // finish writes the accepted record.
-func (s *r1Stage) finish() analysis.TaskResult {
+func (s *roleStage) finish() analysis.TaskResult {
 	s.rec.Limitations = s.screenLimitation(addLim(s.rec.Limitations))
-	art, err := persistR1(s.j, s.rec)
+	art, err := persistRole(s.j, s.rec)
 	if err != nil {
 		return result(domain.TaskFailed, "review_record_failed")
 	}
 	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: s.rec.Limitations}
 }
 
-func r1Path(j analysis.Job, stage string) string {
+func rolePath(j analysis.Job, stage string) string {
 	return filepath.Join(j.Scratch, "review.r1."+stage+".json")
 }
 
-func expectR1(j analysis.Job, stage string) record.Expect {
+func expectRole(j analysis.Job, stage string) record.Expect {
 	e := expect(j, stage)
-	// R1 manifest evidence (requirement sources) may lie outside a paths
+	// Role-pack manifest evidence (requirement sources) may lie outside a paths
 	// scope: discovery reads a module's manifest when the scope touches it.
 	index := map[string]string{}
 	for _, en := range j.Snapshot.Manifest.Entries {
@@ -349,12 +348,12 @@ func expectR1(j analysis.Job, stage string) record.Expect {
 	return e
 }
 
-func persistR1(j analysis.Job, r record.R1Record) (analysis.ArtifactFile, error) {
-	b, err := record.MarshalR1(r, expectR1(j, r.Stage))
+func persistRole(j analysis.Job, r record.RoleRecord) (analysis.ArtifactFile, error) {
+	b, err := record.MarshalRole(r, expectRole(j, r.Stage))
 	if err != nil {
 		return analysis.ArtifactFile{}, err
 	}
-	p := r1Path(j, r.Stage)
+	p := rolePath(j, r.Stage)
 	if err = os.WriteFile(p, bytes.TrimSpace(b), 0600); err != nil {
 		return analysis.ArtifactFile{}, err
 	}
@@ -379,19 +378,19 @@ func readBounded(p string, max int64) ([]byte, error) {
 	return b, nil
 }
 
-// prior reads an earlier R1 stage record of this attempt. A missing record is
+// prior reads an earlier role record of this attempt. A missing record is
 // explained by the stage's own skip rule when it applies.
-func (s *r1Stage) prior(stage string) (record.R1Record, record.Upstream) {
+func (s *roleStage) prior(stage string) (record.RoleRecord, record.Upstream) {
 	u := record.Upstream{Source: "review." + stage}
-	b, err := readBounded(r1Path(s.j, stage), record.MaxBytes)
+	b, err := readBounded(rolePath(s.j, stage), record.MaxBytes)
 	if err != nil {
 		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordMissing
 		if reason := s.skipReason(stage); reason != "" {
 			u.State, u.Reason = record.UpstreamSkipped, reason
 		}
-		return record.R1Record{}, u
+		return record.RoleRecord{}, u
 	}
-	r, err := record.DecodeR1(b, expectR1(s.j, stage))
+	r, err := record.DecodeRole(b, expectRole(s.j, stage))
 	switch {
 	case err != nil:
 		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordInvalid
@@ -401,12 +400,12 @@ func (s *r1Stage) prior(stage string) (record.R1Record, record.Upstream) {
 		u.State, u.SHA256 = record.UpstreamAccepted, digestOf(b)
 		return r, u
 	}
-	return record.R1Record{}, u
+	return record.RoleRecord{}, u
 }
 
 // skipReason recomputes why a stage finished without a record, using the
 // same platform inputs and rules the stage used.
-func (s *r1Stage) skipReason(stage string) string {
+func (s *roleStage) skipReason(stage string) string {
 	switch stage {
 	case record.StageEnvironment:
 		_, reason := s.environmentFacts()
@@ -430,7 +429,7 @@ func upstreamLimitation(u record.Upstream) string {
 	return "upstream_" + name + "_" + u.State
 }
 
-func (s *r1Stage) noteUpstream(us ...record.Upstream) {
+func (s *roleStage) noteUpstream(us ...record.Upstream) {
 	for _, u := range us {
 		if l := upstreamLimitation(u); l != "" {
 			s.rec.Limitations = addLim(s.rec.Limitations, l)
@@ -464,7 +463,7 @@ func textErrors(texts ...string) []string {
 		switch {
 		case record.ClaimsExecution(t):
 			errs = addLim(errs, "execution_claim")
-		case !record.R1Text(t):
+		case !record.RoleText(t):
 			errs = addLim(errs, "text_invalid")
 		}
 	}

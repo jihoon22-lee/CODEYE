@@ -22,17 +22,17 @@ import (
 // report JSON and none of their HTML and Markdown renderings.
 // Set CODEYE_TEST_LIZARD, CODEYE_TEST_JSCPD, CODEYE_TEST_NODE and
 // CODEYE_TEST_GITLEAKS.
-func TestW21PackWithRealTools(t *testing.T) {
+func TestStructureSecretsPackWithRealTools(t *testing.T) {
 	tools := map[string]string{"lizard": os.Getenv("CODEYE_TEST_LIZARD"), "jscpd": os.Getenv("CODEYE_TEST_JSCPD"), "node": os.Getenv("CODEYE_TEST_NODE"), "gitl" + "eaks": os.Getenv("CODEYE_TEST_GITL" + "EAKS")}
 	for k, v := range tools {
 		if v == "" {
-			t.Skipf("set the W21 tool variables to run the real end-to-end test (%s missing)", k)
+			t.Skipf("set the structure and secrets tool variables to run the real end-to-end test (%s missing)", k)
 		}
 	}
 	secret := anypacktest.Secret(t)
 	branches := ""
 	for i := 1; i <= 16; i++ {
-		branches += "    if v == " + itoaW21(i) + ":\n        return " + itoaW21(i) + "\n"
+		branches += "    if v == " + itoa(i) + ":\n        return " + itoa(i) + "\n"
 	}
 	block := "function alpha(items, token) {\n  const key = \"" + secret + "\";\n  let total = 0;\n  for (const item of items) {\n    if (item.active && item.value > 10) {\n      total += item.value * 2;\n    } else if (item.value < 0) {\n      total -= item.value;\n    } else {\n      total += 1;\n    }\n  }\n  const label = \"total:\" + total + \":\" + key.length;\n  console.log(label, token);\n  return { total, label, count: items.length };\n}\nmodule.exports = { alpha };\n"
 	r := runPackFiles(t, map[string]string{
@@ -81,7 +81,7 @@ func TestW21PackWithRealTools(t *testing.T) {
 		t.Fatalf("secrets envelope %+v %v", d.Outcome, d.Limitations)
 	}
 	for i, b := range r.uploads {
-		anypacktest.AssertAbsent(t, secret, "upload "+itoaW21(i), b)
+		anypacktest.AssertAbsent(t, secret, "upload "+itoa(i), b)
 	}
 	anypacktest.AssertTreeAbsent(t, secret, r.scratch)
 	for _, include := range []bool{true, false} {
@@ -115,7 +115,7 @@ func TestW21PackWithRealTools(t *testing.T) {
 	t.Logf("tools %v; %d observations, %d findings", probed, len(rep.Observations), len(rep.Findings))
 }
 
-func itoaW21(n int) string {
+func itoa(n int) string {
 	b, _ := json.Marshal(n)
 	return string(b)
 }

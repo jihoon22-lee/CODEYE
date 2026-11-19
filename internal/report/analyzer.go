@@ -35,9 +35,9 @@ const (
 var rawSeverityPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,31}$`)
 
 // AnalyzerDecoder decodes the generic analyzer observations envelope of the
-// R1 packs (obsdoc, kind analyzer_observations). Observations become report
+// analyzer packs (obsdoc, kind analyzer_observations). Observations become report
 // observations; resolved ones verified against the source manifest, not
-// suppressed in source and not structure metrics (W21) become tool-reported
+// suppressed in source and not structure metrics become tool-reported
 // findings that stay unreviewed
 // (pending, never actionable without review). The row records the
 // envelope's rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제). Only observations identical in analyzer, rule, location
@@ -157,7 +157,7 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 	}
 	// Processed files count only for a task the controller accepted as
 	// succeeded, or one that ran nothing (known zero). The paths themselves
-	// (W23: locations inspected again) are recorded only for an accepted
+	// (locations inspected again) are recorded only for an accepted
 	// success.
 	if paths := d.Coverage.ProcessedPaths; paths != nil && (accepted || d.Outcome.ExitClass == obsdoc.ExitNotRun) {
 		n := len(paths)

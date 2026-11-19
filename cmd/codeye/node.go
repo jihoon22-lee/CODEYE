@@ -59,7 +59,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	modelRelay := fs.String("model-relay-file", "", "")
 	// The review pack is a node operator setting only; runs and profiles
 	// cannot select it. The default is review-r1 (the role pack); review-v1 is the legacy pack.
-	reviewPack := fs.String("review-pack", review.PackR1, "")
+	reviewPack := fs.String("review-pack", review.PackRole, "")
 	fs.Var(&modelRoots, "model-source-root", "")
 	// The repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가) is a node operator setting
 	// per local source root, like the model-source grant; nothing in a run
@@ -203,7 +203,7 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
 	pack := h.ReviewPack
 	if pack == "" {
-		pack = review.PackR1
+		pack = review.PackRole
 	}
 	if !review.ValidPack(pack) {
 		// No silent fallback to the default pack.
@@ -215,8 +215,8 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 		if handler.Info().Name == analyzerpack.CompositeName {
 			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}
 			var reviewed analysis.Handler = review.Handler{Static: handler, Caller: caller}
-			if pack == review.PackR1 {
-				reviewed = review.R1Handler{Static: handler, Caller: caller}
+			if pack == review.PackRole {
+				reviewed = review.RoleHandler{Static: handler, Caller: caller}
 			}
 			observer := discovery.ProbeObserver{GoExecutable: h.GoExecutable, Analyzers: builtin.Probes(cfg), Toolchains: builtin.ToolchainProbes(cfg)}
 			wrapped, err := discovery.Wrap(reviewed, discovery.Config{Observer: observer})

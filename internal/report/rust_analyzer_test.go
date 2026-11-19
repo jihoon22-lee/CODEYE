@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// W20: the real cargo check and clippy envelopes (examples/observations-
+// The real cargo check and clippy envelopes (examples/observations-
 // cargo-check.json, observations-clippy.json, captured from cargo 1.99.1 and
 // clippy 0.1.99) decode through the generic analyzer decoder like the other
 // packs'. The rule context honors the repository configuration and in-source
@@ -40,7 +40,7 @@ func TestAnalyzerDecoderRustPack(t *testing.T) {
 		if x.Validation != "unreviewed" || x.Severity != "low" || x.Disposition != "open" || !ValidFingerprint(x.Fingerprint) || x.FingerprintBasis == nil {
 			t.Fatalf("tool finding %+v", x)
 		}
-		// W23 identity: the shared ToolFingerprint with the analyzer ID.
+		// Finding identity: the shared ToolFingerprint with the analyzer ID.
 		basis := x.FingerprintBasis
 		if basis.Analyzer != "rust.cargocheck" && basis.Analyzer != "rust.clippy" || basis.Producer != ProducerTool {
 			t.Fatalf("fingerprint basis %+v", basis)

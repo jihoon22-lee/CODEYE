@@ -18,46 +18,46 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// W24 phase 2c: review input selection for C/C++, Python, JS/TS and Rust.
-// The fixtures are fixtures/w24-review-inputs/<ecosystem>, written for these
-// tests (no evaluation case).
+// Review input selection for C/C++, Python, JS/TS and Rust. The fixtures
+// are fixtures/w24-review-inputs/<ecosystem>, written for these tests (no
+// evaluation case).
 
-const w24Fixtures = "../../../fixtures/w24-review-inputs"
+const langFixtures = "../../../fixtures/w24-review-inputs"
 
 type sel struct {
 	path, kind string
 }
 
-// w24Case is one language fixture: the review-v1 corpus it must select (in
-// order; every file whole from line 1), the review-r1 code excerpts in
+// langCase is one language fixture: the legacy-pack corpus it must select
+// (in order; every file whole from line 1), the role-pack code excerpts in
 // order, and the source line of the synthetic analyzer observation.
-type w24Case struct {
+type langCase struct {
 	eco         string
-	v1          []sel
-	r1          []sel
+	legacy      []sel
+	role        []sel
 	obsPath     string
 	obsLine     int
 	modulesWant []string
 }
 
-var w24Cases = []w24Case{
+var langCases = []langCase{
 	{eco: "cpp",
-		v1: []sel{{"src/main.cc", "code"}, {"README.md", "document"}, {"include/ring.h", "code"}, {"src/ring.cc", "code"}, {"CMakeLists.txt", "config"}, {"tests/ring_test.cc", "test"}},
-		r1: []sel{{"src/main.cc", "code"}, {"include/ring.h", "code"}, {"src/ring.cc", "code"}, {"tests/ring_test.cc", "test"}}, obsPath: "src/ring.cc", obsLine: 8},
+		legacy: []sel{{"src/main.cc", "code"}, {"README.md", "document"}, {"include/ring.h", "code"}, {"src/ring.cc", "code"}, {"CMakeLists.txt", "config"}, {"tests/ring_test.cc", "test"}},
+		role:   []sel{{"src/main.cc", "code"}, {"include/ring.h", "code"}, {"src/ring.cc", "code"}, {"tests/ring_test.cc", "test"}}, obsPath: "src/ring.cc", obsLine: 8},
 	{eco: "python",
-		v1: []sel{{"app/__main__.py", "code"}, {"README.md", "document"}, {"app/__init__.py", "code"}, {"app/store.py", "code"}, {"pyproject.toml", "config"}, {"tests/test_store.py", "test"}},
-		r1: []sel{{"app/__main__.py", "code"}, {"app/__init__.py", "code"}, {"app/store.py", "code"}, {"tests/test_store.py", "test"}}, obsPath: "app/store.py", obsLine: 16},
+		legacy: []sel{{"app/__main__.py", "code"}, {"README.md", "document"}, {"app/__init__.py", "code"}, {"app/store.py", "code"}, {"pyproject.toml", "config"}, {"tests/test_store.py", "test"}},
+		role:   []sel{{"app/__main__.py", "code"}, {"app/__init__.py", "code"}, {"app/store.py", "code"}, {"tests/test_store.py", "test"}}, obsPath: "app/store.py", obsLine: 16},
 	{eco: "javascript",
-		v1: []sel{{"src/index.ts", "code"}, {"README.md", "document"}, {"src/queue.ts", "code"}, {"package.json", "config"}, {"tsconfig.json", "config"}, {"src/queue.test.ts", "test"}},
-		r1: []sel{{"src/index.ts", "code"}, {"src/queue.ts", "code"}, {"src/queue.test.ts", "test"}}, obsPath: "src/queue.ts", obsLine: 29},
+		legacy: []sel{{"src/index.ts", "code"}, {"README.md", "document"}, {"src/queue.ts", "code"}, {"package.json", "config"}, {"tsconfig.json", "config"}, {"src/queue.test.ts", "test"}},
+		role:   []sel{{"src/index.ts", "code"}, {"src/queue.ts", "code"}, {"src/queue.test.ts", "test"}}, obsPath: "src/queue.ts", obsLine: 29},
 	{eco: "rust",
-		v1: []sel{{"src/lib.rs", "code"}, {"src/main.rs", "code"}, {"README.md", "document"}, {"src/parse.rs", "code"}, {"Cargo.toml", "config"}, {"tests/parse.rs", "test"}},
-		r1: []sel{{"src/lib.rs", "code"}, {"src/main.rs", "code"}, {"src/parse.rs", "code"}, {"tests/parse.rs", "test"}}, obsPath: "src/parse.rs", obsLine: 11},
+		legacy: []sel{{"src/lib.rs", "code"}, {"src/main.rs", "code"}, {"README.md", "document"}, {"src/parse.rs", "code"}, {"Cargo.toml", "config"}, {"tests/parse.rs", "test"}},
+		role:   []sel{{"src/lib.rs", "code"}, {"src/main.rs", "code"}, {"src/parse.rs", "code"}, {"tests/parse.rs", "test"}}, obsPath: "src/parse.rs", obsLine: 11},
 }
 
-func w24Job(t *testing.T, eco string) analysis.Job {
+func langJob(t *testing.T, eco string) analysis.Job {
 	t.Helper()
-	return dirJob(t, filepath.Join(w24Fixtures, eco))
+	return dirJob(t, filepath.Join(langFixtures, eco))
 }
 
 // lineCount is the number of lines of a snapshot file.
@@ -72,7 +72,7 @@ func lineCount(t *testing.T, j analysis.Job, p string) int {
 
 // langStub is a static composite with one analyzer of the fixture's
 // ecosystem ("lint": an observation at path:line and one on the module's
-// manifest) and, when secrets is set, the W21 secrets task: "hit" reports
+// manifest) and, when secrets is set, the secrets task: "hit" reports
 // secretPath, "failed" and "missing" are unusable scans (screen.go).
 type langStub struct {
 	eco, path       string
@@ -83,10 +83,10 @@ type langStub struct {
 	withoutManifest bool
 }
 
-const w24SecretAnalyzer = "any.gitl" + "eaks"
+const langSecretAnalyzer = "any.gitl" + "eaks"
 
 func (s langStub) Descriptors() []pack.Descriptor {
-	return []pack.Descriptor{{ID: s.eco + ".lint", Name: "lint", Ecosystem: s.eco}, {ID: w24SecretAnalyzer, Name: "secrets", Ecosystem: "any"}}
+	return []pack.Descriptor{{ID: s.eco + ".lint", Name: "lint", Ecosystem: s.eco}, {ID: langSecretAnalyzer, Name: "secrets", Ecosystem: "any"}}
 }
 
 func (langStub) Info() analysis.HandlerInfo {
@@ -111,7 +111,7 @@ func (s langStub) Run(_ context.Context, j analysis.Job, t analysis.TaskSpec, _ 
 	}
 	id, eco := s.eco+".lint", s.eco
 	if t.Key == "secrets" {
-		id, eco = w24SecretAnalyzer, "any"
+		id, eco = langSecretAnalyzer, "any"
 	}
 	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: eco}, obsdoc.Component{ID: t.Key, Version: "1"}, obsdoc.Component{ID: t.Key + "-stub", Version: "1"}, t.Key, j.Snapshot.Digest)
 	doc.Module.Dir, doc.Tool.Name = ".", t.Key
@@ -159,19 +159,19 @@ func (s langStub) Run(_ context.Context, j analysis.Job, t analysis.TaskSpec, _ 
 	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}}
 }
 
-func (c w24Case) stub() langStub {
+func (c langCase) stub() langStub {
 	manifest := map[string]string{"cpp": "CMakeLists.txt", "python": "pyproject.toml", "javascript": "package.json", "rust": "Cargo.toml"}[c.eco]
 	return langStub{eco: c.eco, path: c.obsPath, line: c.obsLine, manifest: manifest}
 }
 
-// review-v1 corpus on each language fixture: entry points, the README,
+// The legacy-pack corpus on each language fixture: entry points, the README,
 // sources, manifests, tests, each whole from line 1 within the unchanged
 // budgets; deterministic across acquisitions. The three roles then run and
 // every record decodes against the snapshot (evidence IDs, kinds by path).
-func TestW24V1CorpusPerLanguage(t *testing.T) {
-	for _, c := range w24Cases {
+func TestLegacyCorpusPerLanguage(t *testing.T) {
+	for _, c := range langCases {
 		t.Run(c.eco, func(t *testing.T) {
-			j := w24Job(t, c.eco)
+			j := langJob(t, c.eco)
 			corpus, err := buildCorpus(j.Snapshot, j.Scope)
 			if err != nil {
 				t.Fatal(err)
@@ -183,16 +183,16 @@ func TestW24V1CorpusPerLanguage(t *testing.T) {
 					t.Fatalf("excerpt %+v", e)
 				}
 			}
-			if !slices.Equal(got, c.v1) || corpus.Eligible != len(c.v1) || corpus.Documents != 1 || len(corpus.Limitations) != 0 {
-				t.Fatalf("v1 corpus %v eligible=%d docs=%d lims=%v", got, corpus.Eligible, corpus.Documents, corpus.Limitations)
+			if !slices.Equal(got, c.legacy) || corpus.Eligible != len(c.legacy) || corpus.Documents != 1 || len(corpus.Limitations) != 0 {
+				t.Fatalf("legacy corpus %v eligible=%d docs=%d lims=%v", got, corpus.Eligible, corpus.Documents, corpus.Limitations)
 			}
 			// Deterministic: two acquisitions with the same identity send the
 			// same bytes.
-			first, second := v1Requests(t, fixIdentity(w24Job(t, c.eco))), v1Requests(t, fixIdentity(w24Job(t, c.eco)))
+			first, second := legacyRequests(t, fixIdentity(langJob(t, c.eco))), legacyRequests(t, fixIdentity(langJob(t, c.eco)))
 			if len(first) != 3 || !slices.Equal(first, second) {
-				t.Fatalf("v1 requests %v / %v", first, second)
+				t.Fatalf("legacy requests %v / %v", first, second)
 			}
-			f := v1Generic(t)
+			f := legacyGeneric(t)
 			_, r := runStages(t, j, f)
 			if r.Status != domain.TaskSucceeded {
 				t.Fatalf("verify %+v", r)
@@ -205,7 +205,7 @@ func TestW24V1CorpusPerLanguage(t *testing.T) {
 			v := readVerify(t, j, r)
 			if len(v.Candidates) != 1 || len(v.Verifications) != 1 || record.SourceEcosystem(evidencePath(v.Evidence, v.Candidates[0].Evidence[0])) != c.eco ||
 				!slices.Contains(v.Limitations, limExpansionGoOnly) || !slices.Contains(v.Limitations, limNoSymbol) {
-				t.Fatalf("v1 verify record %+v", v)
+				t.Fatalf("legacy verify record %+v", v)
 			}
 		})
 	}
@@ -220,18 +220,18 @@ func evidencePath(list []record.Excerpt, id string) string {
 	return ""
 }
 
-// review-r1 on each language-only snapshot: investigate gets code excerpts
+// The role pack on each language-only snapshot: investigate gets code excerpts
 // of that language (round-robin over its module, first lines of each file),
 // interpret a line window around the analyzer observation and none on the
 // manifest, and verify runs on the candidates without Go caller expansion.
 // Records decode, the language guide is that language's alone, and the
 // requests are the same bytes across acquisitions.
-func TestW24R1InputsPerLanguage(t *testing.T) {
-	for _, c := range w24Cases {
+func TestRolePackInputsPerLanguage(t *testing.T) {
+	for _, c := range langCases {
 		t.Run(c.eco, func(t *testing.T) {
-			j := w24Job(t, c.eco)
-			f := &r1Caller{script: maxScript(t)}
-			plan, res := runR1(t, j, c.stub(), f, "1.27.4")
+			j := langJob(t, c.eco)
+			f := &roleCaller{script: maxScript(t)}
+			plan, res := runRole(t, j, c.stub(), f, "1.27.4")
 			for _, p := range plan {
 				if r := res[p.Key]; strings.HasPrefix(p.Key, "review.") && r.Status != domain.TaskSucceeded && !(p.Key == "review.environment" && r.Reason == ReasonNoEnvironmentGap) {
 					t.Fatalf("%s %+v", p.Key, r)
@@ -239,7 +239,7 @@ func TestW24R1InputsPerLanguage(t *testing.T) {
 			}
 			var inv investigateInput
 			var interp interpretInput
-			var ver r1VerifyInput
+			var ver roleVerifyInput
 			for _, q := range f.requests {
 				checkGuides(t, q.Role, q.Instructions, []string{c.eco})
 				switch q.Role {
@@ -248,7 +248,7 @@ func TestW24R1InputsPerLanguage(t *testing.T) {
 				case "interpret":
 					interp = decodeAs[interpretInput](t, q)
 				case "verify":
-					ver = decodeAs[r1VerifyInput](t, q)
+					ver = decodeAs[roleVerifyInput](t, q)
 				}
 			}
 			var got []sel
@@ -258,7 +258,7 @@ func TestW24R1InputsPerLanguage(t *testing.T) {
 					t.Fatalf("investigate excerpt %+v", e)
 				}
 			}
-			if !slices.Equal(got, c.r1) || !slices.Equal(inv.Scope.Modules, []string{"."}) || slices.Contains(inv.Scope.Limitations, "code_excerpts_go_only") {
+			if !slices.Equal(got, c.role) || !slices.Equal(inv.Scope.Modules, []string{"."}) || slices.Contains(inv.Scope.Limitations, "code_excerpts_go_only") {
 				t.Fatalf("investigate excerpts %v modules %v lims %v", got, inv.Scope.Modules, inv.Scope.Limitations)
 			}
 			// interpret: a window around the source observation, none on the
@@ -279,7 +279,7 @@ func TestW24R1InputsPerLanguage(t *testing.T) {
 				}
 			}
 			if len(interp.Observations) != 2 || window.Path != c.obsPath || window.Origin != "observation" || window.Kind != "code" ||
-				window.Start != max(1, c.obsLine-r1WindowRadius) || window.End != min(total, window.Start+2*r1WindowRadius) {
+				window.Start != max(1, c.obsLine-roleWindowRadius) || window.End != min(total, window.Start+2*roleWindowRadius) {
 				t.Fatalf("interpret observations %+v window %+v", interp.Observations, window)
 			}
 			// verify: the four investigate candidates and the interpret
@@ -295,11 +295,11 @@ func TestW24R1InputsPerLanguage(t *testing.T) {
 					}
 				}
 			}
-			for _, stage := range record.R1Stages {
+			for _, stage := range record.RoleStages {
 				if res["review."+stage].Status != domain.TaskSucceeded {
 					continue // environment: no declared requirement to compare
 				}
-				rec := readR1(t, j, stage)
+				rec := readRole(t, j, stage)
 				if slices.Contains(rec.Limitations, "code_excerpts_go_only") {
 					t.Fatalf("%s limitations %v", stage, rec.Limitations)
 				}
@@ -309,7 +309,7 @@ func TestW24R1InputsPerLanguage(t *testing.T) {
 					}
 				}
 			}
-			v := readR1(t, j, "verify")
+			v := readRole(t, j, "verify")
 			if len(v.Verifications) != 5 || !slices.Contains(v.Limitations, limExpansionGoOnly) || !slices.Contains(v.Limitations, limNoSymbol) {
 				t.Fatalf("verify record %d verifications, limitations %v", len(v.Verifications), v.Limitations)
 			}
@@ -318,22 +318,22 @@ func TestW24R1InputsPerLanguage(t *testing.T) {
 					t.Fatalf("unreviewed %+v", x)
 				}
 			}
-			first := r1Requests(t, fixIdentity(w24Job(t, c.eco)), c.stub(), maxScript(t))
-			second := r1Requests(t, fixIdentity(w24Job(t, c.eco)), c.stub(), maxScript(t))
+			first := roleRequests(t, fixIdentity(langJob(t, c.eco)), c.stub(), maxScript(t))
+			second := roleRequests(t, fixIdentity(langJob(t, c.eco)), c.stub(), maxScript(t))
 			if !slices.Equal(first, second) {
-				t.Fatalf("r1 requests differ across acquisitions:\n%v\n%v", first, second)
+				t.Fatalf("role-pack requests differ across acquisitions:\n%v\n%v", first, second)
 			}
 		})
 	}
 }
 
-// A polyglot snapshot: the review-r1 code corpus reaches every ecosystem in
+// A polyglot snapshot: the role-pack code corpus reaches every ecosystem in
 // its first round (groupOrder), and each file is grouped under the module
 // root of its own ecosystem.
-func TestW24R1PolyglotRoundRobin(t *testing.T) {
+func TestRolePackPolyglotRoundRobin(t *testing.T) {
 	tree := map[string]string{}
-	for _, c := range w24Cases {
-		dir := filepath.Join(w24Fixtures, c.eco)
+	for _, c := range langCases {
+		dir := filepath.Join(langFixtures, c.eco)
 		err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err
@@ -350,7 +350,7 @@ func TestW24R1PolyglotRoundRobin(t *testing.T) {
 	tree["go.mod"] = "module example.test/poly\n\ngo 1.23\n"
 	tree["main.go"] = "package main\n\nfunc main() {}\n"
 	j := treeJob(t, tree)
-	s := &r1Stage{h: R1Handler{Caller: &r1Caller{}}, ctx: t.Context(), j: j, role: "investigate"}
+	s := &roleStage{h: RoleHandler{Caller: &roleCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
 	code, lims, err := s.codeCorpus()
 	if err != nil {
 		t.Fatal(err)
@@ -362,7 +362,7 @@ func TestW24R1PolyglotRoundRobin(t *testing.T) {
 	if !slices.Equal(first, []string{"cpp/src/main.cc", "main.go", "javascript/src/index.ts", "python/app/__main__.py", "rust/src/lib.rs"}) {
 		t.Fatalf("first round %v", first)
 	}
-	if len(code) != r1MaxCodeFiles || !slices.Contains(lims, "files_outside_review_context") {
+	if len(code) != roleMaxCodeFiles || !slices.Contains(lims, "files_outside_review_context") {
 		t.Fatalf("corpus %d files, limitations %v", len(code), lims)
 	}
 	if got := s.otherModuleDirs(code); !slices.Equal(got, []string{"cpp", "javascript", "python", "rust"}) {
@@ -376,7 +376,7 @@ func TestW24R1PolyglotRoundRobin(t *testing.T) {
 // a manifest counts only for an ecosystem with source in scope. The paths
 // are ones the snapshot keeps, so the review rule (not acquisition) decides.
 // Go keeps its own rules: internal/build is Go source.
-func TestW24ExclusionsHonoured(t *testing.T) {
+func TestReviewInputExclusionsHonoured(t *testing.T) {
 	own := map[string]string{
 		"README.md":           "# Mixed\n\nTools in several languages.\n",
 		"go.mod":              "module example.test/mixed\n\ngo 1.23\n",
@@ -417,14 +417,14 @@ func TestW24ExclusionsHonoured(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c.Eligible != len(own) || !slices.Contains(c.Limitations, limExcludedSource) {
-		t.Fatalf("v1 eligible %d, want %d; limitations %v", c.Eligible, len(own), c.Limitations)
+		t.Fatalf("legacy eligible %d, want %d; limitations %v", c.Eligible, len(own), c.Limitations)
 	}
 	for _, e := range c.Excerpts {
 		if _, ok := own[e.Path]; !ok {
-			t.Fatalf("v1 excerpt of %s", e.Path)
+			t.Fatalf("legacy excerpt of %s", e.Path)
 		}
 	}
-	s := &r1Stage{h: R1Handler{Caller: &r1Caller{}}, ctx: t.Context(), j: j, role: "investigate"}
+	s := &roleStage{h: RoleHandler{Caller: &roleCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
 	code, lims, err := s.codeCorpus()
 	if err != nil {
 		t.Fatal(err)
@@ -436,11 +436,11 @@ func TestW24ExclusionsHonoured(t *testing.T) {
 	slices.Sort(paths)
 	if !slices.Equal(paths, []string{"app/main.py", "app/util.py", "crate/src/lib.rs", "internal/build/b.go", "native/main.cc", "web/index.js"}) || slices.Contains(lims, "files_outside_review_context") ||
 		!slices.Contains(lims, limExcludedSource) {
-		t.Fatalf("r1 code corpus %v limitations %v", paths, lims)
+		t.Fatalf("role-pack code corpus %v limitations %v", paths, lims)
 	}
 	for _, p := range excluded {
 		if r, _ := priority(p, newOtherScope(j.Snapshot.Manifest, j.Scope)); r != 5 {
-			t.Fatalf("v1 priority of %s is %d", p, r)
+			t.Fatalf("legacy priority of %s is %d", p, r)
 		}
 	}
 
@@ -463,15 +463,15 @@ func TestW24ExclusionsHonoured(t *testing.T) {
 	}
 }
 
-// The W21 secrets screen covers the new inputs: on a Python-only snapshot a
+// The secrets screen covers the other languages' inputs: on a Python-only snapshot a
 // file the secrets task reports reaches no request of either pack (code
 // context, observation window, verification), and an unusable scan sends
 // nothing at all.
-func TestW24SecretScreenOnPython(t *testing.T) {
+func TestSecretScreenOnPython(t *testing.T) {
 	value := "deploy-token-" + strings.Repeat("p4", 10) // not a Sensitive shape
 	planted := func(t *testing.T) analysis.Job {
-		j := w24Job(t, "python")
-		b, err := os.ReadFile(filepath.Join(w24Fixtures, "python", "app", "store.py"))
+		j := langJob(t, "python")
+		b, err := os.ReadFile(filepath.Join(langFixtures, "python", "app", "store.py"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -488,17 +488,17 @@ func TestW24SecretScreenOnPython(t *testing.T) {
 		tree["app/store.py"] = string(b) + "\nDEPLOY_TOKEN = \"" + value + "\"\n"
 		return treeJob(t, tree)
 	}
-	stub := w24Cases[1].stub()
+	stub := langCases[1].stub()
 	for _, mode := range []string{"hit", "failed", "missing"} {
 		t.Run(mode, func(t *testing.T) {
 			stub.secrets, stub.secretPath = mode, "app/store.py"
-			// review-r1
+			// Role pack.
 			j := planted(t)
-			f := &r1Caller{script: maxScript(t)}
-			plan, res := runR1(t, j, stub, f, "1.27.4")
+			f := &roleCaller{script: maxScript(t)}
+			plan, res := runRole(t, j, stub, f, "1.27.4")
 			if mode != "hit" {
 				if len(f.requests) != 0 {
-					t.Fatalf("%d r1 requests after an unusable scan", len(f.requests))
+					t.Fatalf("%d role-pack requests after an unusable scan", len(f.requests))
 				}
 				for _, p := range plan {
 					if strings.HasPrefix(p.Key, "review.") && (res[p.Key].Status != domain.TaskSkippedPolicy || res[p.Key].Reason != reasonSecretScreenFailed) {
@@ -511,11 +511,11 @@ func TestW24SecretScreenOnPython(t *testing.T) {
 				}
 				for _, q := range f.requests {
 					if strings.Contains(string(q.Input), value) {
-						t.Fatalf("r1 %s request holds the planted value", q.Role)
+						t.Fatalf("role-pack %s request holds the planted value", q.Role)
 					}
 				}
 				for _, stage := range []string{"investigate", "interpret", "verify"} {
-					rec := readR1(t, j, stage)
+					rec := readRole(t, j, stage)
 					for _, e := range rec.Evidence {
 						if e.Path == "app/store.py" {
 							t.Fatalf("%s evidence on the withheld file", stage)
@@ -526,9 +526,9 @@ func TestW24SecretScreenOnPython(t *testing.T) {
 					}
 				}
 			}
-			// review-v1
+			// Legacy pack.
 			j = planted(t)
-			fv := v1Generic(t)
+			fv := legacyGeneric(t)
 			h := Handler{Static: stub, Caller: fv}
 			for _, task := range []string{"lint", "secrets"} {
 				h.Run(t.Context(), j, analysis.TaskSpec{Key: task}, nil)
@@ -536,17 +536,17 @@ func TestW24SecretScreenOnPython(t *testing.T) {
 			r := h.Run(t.Context(), j, analysis.TaskSpec{Key: "review.context"}, nil)
 			if mode != "hit" {
 				if r.Status != domain.TaskSkippedPolicy || r.Reason != reasonSecretScreenFailed || len(fv.requests) != 0 {
-					t.Fatalf("v1 %+v requests %d", r, len(fv.requests))
+					t.Fatalf("legacy %+v requests %d", r, len(fv.requests))
 				}
 				return
 			}
 			rec, err := readRecord(j, "context")
 			if r.Status != domain.TaskSucceeded || err != nil || !slices.Contains(rec.Limitations, limSecretWithheld) || strings.Contains(string(fv.requests[0].Input), value) {
-				t.Fatalf("v1 %+v %v limitations %v", r, err, rec.Limitations)
+				t.Fatalf("legacy %+v %v limitations %v", r, err, rec.Limitations)
 			}
 			for _, e := range rec.Evidence {
 				if e.Path == "app/store.py" {
-					t.Fatal("v1 evidence on the withheld file")
+					t.Fatal("legacy evidence on the withheld file")
 				}
 			}
 		})
@@ -556,7 +556,7 @@ func TestW24SecretScreenOnPython(t *testing.T) {
 // record's source extensions are pack.SourceFiles' (the analyzer packs'
 // definition of an ecosystem in scope), checked over a list of candidate
 // extensions in both directions.
-func TestW24SourceExtensionsMatchPack(t *testing.T) {
+func TestReviewSourceExtensionsMatchPack(t *testing.T) {
 	exts := []string{".go", ".py", ".pyi", ".pyw", ".pyx", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".vue", ".svelte", ".rs",
 		".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ipp", ".inl", ".m", ".mm", ".cu", ".java", ".kt", ".rb", ".php", ".cs", ".swift", ".scala",
 		".GO", ".Py", ".CPP", ".md", ".toml", ".json", ""}
@@ -575,11 +575,11 @@ func TestW24SourceExtensionsMatchPack(t *testing.T) {
 }
 
 // Source the review rule leaves out is never silent: a Python project whose
-// only source lies below build/ gives review-v1 a document-only corpus and
-// review-r1 no code context, and both say why
-// (source_in_excluded_directories). investigate fails, as before for any
-// snapshot without reviewable code, instead of reviewing nothing.
-func TestW24ExcludedSourceIsExplained(t *testing.T) {
+// only source lies below build/ gives the legacy pack a document-only corpus
+// and the role pack no code context, and both say why
+// (source_in_excluded_directories). investigate fails, as for any snapshot
+// without reviewable code, instead of reviewing nothing.
+func TestExcludedSourceIsExplained(t *testing.T) {
 	j := treeJob(t, map[string]string{
 		"README.md":          "# Gen\n\nGenerated package.\n",
 		"pyproject.toml":     "[project]\nname = \"gen\"\n",
@@ -598,14 +598,14 @@ func TestW24ExcludedSourceIsExplained(t *testing.T) {
 		kinds = append(kinds, e.Path+":"+e.Kind)
 	}
 	if !slices.Equal(kinds, []string{"README.md:document", "pyproject.toml:config"}) || !slices.Contains(c.Limitations, limExcludedSource) {
-		t.Fatalf("v1 corpus %v limitations %v", kinds, c.Limitations)
+		t.Fatalf("legacy corpus %v limitations %v", kinds, c.Limitations)
 	}
-	f := &r1Caller{script: maxScript(t)}
-	_, res := runR1(t, j, vetStub{}, f, "1.27.4")
+	f := &roleCaller{script: maxScript(t)}
+	_, res := runRole(t, j, vetStub{}, f, "1.27.4")
 	if r := res["review.investigate"]; r.Status != domain.TaskFailed || r.Reason != "review_input_unavailable" {
 		t.Fatalf("investigate %+v", r)
 	}
-	if rec := readR1(t, j, "investigate"); !slices.Contains(rec.Limitations, limExcludedSource) {
+	if rec := readRole(t, j, "investigate"); !slices.Contains(rec.Limitations, limExcludedSource) {
 		t.Fatalf("investigate limitations %v", rec.Limitations)
 	}
 	for _, q := range f.requests {
@@ -618,7 +618,7 @@ func TestW24ExcludedSourceIsExplained(t *testing.T) {
 // Barrel files: a JS/TS index file is an entry point only in its module root
 // or that root's src, so nested re-export index files rank as ordinary
 // sources (deeper ones last) in both packs.
-func TestW24BarrelIndexIsNotAnEntryPoint(t *testing.T) {
+func TestBarrelIndexIsNotAnEntryPoint(t *testing.T) {
 	tree := map[string]string{
 		"package.json":        "{\"name\": \"barrels\"}\n",
 		"src/index.ts":        "export * from \"./a/index.js\";\n",
@@ -634,7 +634,7 @@ func TestW24BarrelIndexIsNotAnEntryPoint(t *testing.T) {
 	o := newOtherScope(j.Snapshot.Manifest, j.Scope)
 	for p, want := range map[string]int{"src/index.ts": 0, "pkgs/p/index.js": 0, "src/a/index.ts": 2, "src/real.ts": 2} {
 		if r, _ := priority(p, o); r != want {
-			t.Fatalf("v1 rank of %s is %d, want %d", p, r, want)
+			t.Fatalf("legacy rank of %s is %d, want %d", p, r, want)
 		}
 	}
 	c, err := buildCorpus(j.Snapshot, j.Scope)
@@ -646,9 +646,9 @@ func TestW24BarrelIndexIsNotAnEntryPoint(t *testing.T) {
 		got = append(got, e.Path)
 	}
 	if !slices.Equal(got, []string{"src/index.ts", "pkgs/p/index.js", "src/real.ts", "src/util.ts", "src/a/index.ts", "src/b/index.ts"}) {
-		t.Fatalf("v1 corpus %v", got)
+		t.Fatalf("legacy corpus %v", got)
 	}
-	s := &r1Stage{h: R1Handler{Caller: &r1Caller{}}, ctx: t.Context(), j: j, role: "investigate"}
+	s := &roleStage{h: RoleHandler{Caller: &roleCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
 	code, _, err := s.codeCorpus()
 	if err != nil {
 		t.Fatal(err)
@@ -660,6 +660,6 @@ func TestW24BarrelIndexIsNotAnEntryPoint(t *testing.T) {
 	// Groups "." and "pkgs/p" alternate; within "." the root index, then
 	// src/real.ts and src/util.ts before any nested index file.
 	if !slices.Equal(got, []string{"src/index.ts", "pkgs/p/index.js", "src/real.ts", "src/util.ts"}) {
-		t.Fatalf("r1 corpus %v", got)
+		t.Fatalf("role-pack corpus %v", got)
 	}
 }

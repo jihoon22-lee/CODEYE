@@ -1,8 +1,7 @@
-// Package reviewpackr1 embeds the default review pack (W15 phase 2, revised
-// in W24, default since 2.0.0). The node operator may select the legacy
-// review-v1 instead (codeye agent --review-pack review-v1); review-v1 is not
-// affected by this pack.
-package reviewpackr1
+// Package rolepack embeds the role pack (review-r1), the default review
+// pack. The node operator may select the legacy pack instead (codeye agent
+// --review-pack review-v1); the legacy pack is not affected by this pack.
+package rolepack
 
 import (
 	"bufio"
@@ -20,7 +19,7 @@ import (
 //go:embed pack.yaml *.md languages/*.md
 var files embed.FS
 
-// Roles are the R1 model roles in plan order.
+// Roles are the model roles of the role pack in plan order.
 var Roles = []string{"environment", "documents", "investigate", "interpret", "verify"}
 
 var roleFiles = map[string]string{
@@ -53,7 +52,7 @@ func Languages() []string {
 }
 
 // Selection is the instruction text of one role with the pack identity and
-// the digest over pack.yaml and the selected files (review-v1 algorithm:
+// the digest over pack.yaml and the selected files (the legacy pack's algorithm:
 // sha256 over path NUL content NUL in UTF-8 path order).
 type Selection struct {
 	ID, Version string
@@ -85,7 +84,7 @@ func Identity() (id, version string, err error) {
 	return id, version, nil
 }
 
-// For returns the instructions of one R1 role for a snapshot whose in-scope
+// For returns the instructions of one role for a snapshot whose in-scope
 // source ecosystems are ecosystems (as pack.InScope returns them; docs/ANALYZERS.md
 // §2.8). Only the guides of those ecosystems are selected, after the core,
 // role and domain files in ascending ecosystem order; an ecosystem without a

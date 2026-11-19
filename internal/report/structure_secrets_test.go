@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// W21 (docs/ANALYZERS.md): the real lizard 1.26.1, jscpd 5.4.3 and gitleaks 8.30.1
-// envelopes (examples/observations-{lizard,jscpd,gitleaks}.json) through
-// the generic decoder.
+// The real lizard 1.26.1, jscpd 5.4.3 and gitleaks 8.30.1 envelopes
+// (docs/ANALYZERS.md; examples/observations-{lizard,jscpd,gitleaks}.json)
+// through the generic decoder.
 
 func readExample(t *testing.T, name string) map[string]any {
 	t.Helper()
@@ -25,7 +25,7 @@ func readExample(t *testing.T, name string) map[string]any {
 	return d
 }
 
-func w21Report(t *testing.T) Report {
+func metricsReport(t *testing.T) Report {
 	t.Helper()
 	f := analyzerFixture(t, nil,
 		taskSpec{key: "lizard", status: "succeeded", doc: readExample(t, "lizard")},
@@ -38,8 +38,8 @@ func w21Report(t *testing.T) Report {
 // numbers, never findings, candidates or actionable counts; the summary
 // shows them apart. TC-118: secret detections are unreviewed low security
 // findings whose text, identity and evidence hold the fixed template only.
-func TestW21MetricsAreNotFindings(t *testing.T) {
-	r := w21Report(t)
+func TestMetricsAreNotFindings(t *testing.T) {
+	r := metricsReport(t)
 	s := r.Summary
 	if s.RawObservations != 2+1+4 || s.MetricObservations != 3 || s.TotalFindings != 4 || s.PendingCandidates != 4 || s.ActionableFindings != 0 || s.UnresolvedObservations != 0 {
 		t.Fatalf("summary %+v limitations %v", s, r.Limitations)
@@ -87,8 +87,8 @@ func TestW21MetricsAreNotFindings(t *testing.T) {
 
 // The three formats show the metric count once, as "not defects"; the
 // code-free export keeps the numbers and drops the messages.
-func TestW21MetricsRendered(t *testing.T) {
-	r := w21Report(t)
+func TestMetricsRendered(t *testing.T) {
+	r := metricsReport(t)
 	b, _ := Marshal(r)
 	digest := Digest(b)
 	html, err := RenderHTML(r, digest, Korean)
@@ -131,8 +131,8 @@ func TestW21MetricsRendered(t *testing.T) {
 }
 
 // A report whose finding cites a metric observation is invalid.
-func TestW21ValidateRejectsMetricFinding(t *testing.T) {
-	r := w21Report(t)
+func TestValidateRejectsMetricFinding(t *testing.T) {
+	r := metricsReport(t)
 	for _, o := range r.Observations {
 		if o.Metric != nil {
 			r.Findings[0].ObservationIDs = append(r.Findings[0].ObservationIDs, o.ID)
@@ -142,7 +142,7 @@ func TestW21ValidateRejectsMetricFinding(t *testing.T) {
 	if err := ValidateReport(r); err == nil || !strings.Contains(err.Error(), "metric") {
 		t.Fatalf("metric finding accepted: %v", err)
 	}
-	r = w21Report(t)
+	r = metricsReport(t)
 	for i := range r.Observations {
 		if r.Observations[i].Metric != nil {
 			r.Observations[i].Metric.Value = 1
@@ -157,7 +157,7 @@ func TestW21ValidateRejectsMetricFinding(t *testing.T) {
 // Two detections of one rule in one file are two findings with one
 // fingerprint (rule, path, fixed template): the report is valid, and the
 // identity is ambiguous, so no review disposition carries to either.
-func TestW21SameRuleTwiceInOneFile(t *testing.T) {
+func TestSecretSameRuleTwiceInOneFile(t *testing.T) {
 	doc := readExample(t, "gitl"+"eaks")
 	obs := doc["observations"].([]any)
 	var dup map[string]any
@@ -196,7 +196,7 @@ func TestW21SameRuleTwiceInOneFile(t *testing.T) {
 // changed under the tool: source_drift) is counted unresolved like any
 // observation and keeps the verdict inconclusive: its evidence did not
 // check out, whatever the observation measures (A28).
-func TestW21UnresolvedMetricIsInconclusive(t *testing.T) {
+func TestUnresolvedMetricIsInconclusive(t *testing.T) {
 	doc := readExample(t, "lizard")
 	o := doc["observations"].([]any)[0].(map[string]any)
 	o["location"], o["location_state"] = nil, "source_drift"
@@ -216,7 +216,7 @@ func TestW21UnresolvedMetricIsInconclusive(t *testing.T) {
 // is a recorded context with no file: the digest of the empty list and no
 // paths. The stored revision reads back (the JSON form omits the empty
 // path list) and its key differs from a context with an ignore file.
-func TestW21HonoredWithoutConfigFilesReadsBack(t *testing.T) {
+func TestHonoredWithoutConfigFilesReadsBack(t *testing.T) {
 	doc := readExample(t, "gitl"+"eaks")
 	doc["rule_pack"].(map[string]any)["config_files"] = []any{}
 	f := analyzerFixture(t, nil, taskSpec{key: "gitl" + "eaks", status: "succeeded", doc: doc})
@@ -225,7 +225,7 @@ func TestW21HonoredWithoutConfigFilesReadsBack(t *testing.T) {
 	if rc == nil || rc.Config != ConfigRecorded || len(rc.ConfigPaths) != 0 || rc.ConfigDigest != ConfigDigest(nil) || !rc.Known() {
 		t.Fatalf("rule context %+v", rc)
 	}
-	if rc.Key() == toolRow(w21Report(t), "gitl"+"eaks").RuleContext.Key() {
+	if rc.Key() == toolRow(metricsReport(t), "gitl"+"eaks").RuleContext.Key() {
 		t.Fatal("an ignore file did not change the rule context key")
 	}
 	for _, include := range []bool{true, false} {

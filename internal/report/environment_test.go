@@ -15,7 +15,7 @@ import (
 )
 
 // addDiscovery appends succeeded env.discover/docs.discover tasks with the
-// artifacts the W15 worker uploads. edit may alter the environment document.
+// artifacts the discovery worker uploads. edit may alter the environment document.
 func addDiscovery(t *testing.T, f *fixture, edit func(*envdoc.Document), probe *analysis.ManifestExecution) {
 	t.Helper()
 	m, err := source.DecodeManifest(f.in.SourceManifest)
@@ -77,7 +77,7 @@ func addDiscovery(t *testing.T, f *fixture, edit func(*envdoc.Document), probe *
 	f.setManifest(t, rm)
 }
 
-// The W15 discovery tasks are required and succeed without contributing
+// The discovery tasks are required and succeed without contributing
 // findings. Without a decoder the builder reports their artifacts as missing
 // and unrecognized and marks the result incomplete; with EnvironmentDecoder
 // the report is the same as the go-vet-only report apart from the task and
@@ -102,7 +102,7 @@ func TestDiscoveryArtifactsDecodeWithoutChangingTheReport(t *testing.T) {
 		t.Fatalf("decoded=%d tasks=%d", decoded, len(r.Tasks))
 	}
 
-	// Why internal/report changed: the R0 registry flags both tasks.
+	// A registry without EnvironmentDecoder flags both tasks.
 	old, err := NewRegistry(GoVetDecoder{}, ReviewDecoder{})
 	if err != nil {
 		t.Fatal(err)
@@ -110,11 +110,11 @@ func TestDiscoveryArtifactsDecodeWithoutChangingTheReport(t *testing.T) {
 	r = build(t, f.in, old)
 	for _, l := range []string{LimArtifactMissing + ":" + envdoc.TaskEnvironment, LimUnrecognizedArtifact + ":" + envdoc.TaskDocuments} {
 		if !has(r.Limitations, l) {
-			t.Fatalf("R0 registry: %s not reported in %v", l, r.Limitations)
+			t.Fatalf("registry without EnvironmentDecoder: %s not reported in %v", l, r.Limitations)
 		}
 	}
 	if r.Coverage.ToolProcessedFiles != nil {
-		t.Fatal("R0 registry kept processed files known")
+		t.Fatal("registry without EnvironmentDecoder kept processed files known")
 	}
 }
 

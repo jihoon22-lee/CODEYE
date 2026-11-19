@@ -182,7 +182,7 @@ func within(root, p string) bool {
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-// sourceReason maps W04 errors to reason codes 1:1 by their text.
+// sourceReason maps source acquisition errors to reason codes 1:1 by their text.
 func sourceReason(err error) string {
 	for _, e := range []error{source.ErrUnavailable, source.ErrUnstable, source.ErrLimit, source.ErrUnsupported, source.ErrIntegrity} {
 		if errors.Is(err, e) {
@@ -352,7 +352,7 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 	outcome, reason := decideOutcome(tasks)
 	if outcome == nodeproto.OutcomeFailed {
 		// Tasks ran but none succeeded: still upload the result manifest so the
-		// controller can report the real task states, raw streams and gaps (W09).
+		// controller can report the real task states, raw streams and gaps.
 		// The run is not advanced to finalizing; an upload failure only drops
 		// the manifest, never changes the failed outcome.
 		cleanup, _ := w.cleanupState(a)

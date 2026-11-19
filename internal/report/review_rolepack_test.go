@@ -12,17 +12,17 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// r1Stages decodes the five review-r1 example records (examples/review-r1,
-// written by the worker for the w15 fixture with a scripted caller) the way
-// the builder does, and adds the discovery and go-vet tasks they cite.
-// required follows the R1 plan: documents (eligible documents exist),
+// exampleRoleStages decodes the five role-pack example records
+// (examples/review-r1, written by the worker for the modules fixture with a
+// scripted caller) the way the builder does, and adds the discovery and
+// go-vet tasks they cite. required follows the role-pack plan: documents (eligible documents exist),
 // investigate and verify.
-func r1Stages(t *testing.T) (map[string]*taskState, Report) {
+func exampleRoleStages(t *testing.T) (map[string]*taskState, Report) {
 	t.Helper()
 	bodies := map[string][]byte{}
 	source := &SourceIndex{entries: map[string]string{}}
-	var recs []record.R1Record
-	for _, stage := range record.R1Stages {
+	var recs []record.RoleRecord
+	for _, stage := range record.RoleStages {
 		raw, err := os.ReadFile("../../examples/review-r1/" + stage + ".json")
 		if err != nil {
 			t.Fatal(err)
@@ -32,7 +32,7 @@ func r1Stages(t *testing.T) (map[string]*taskState, Report) {
 			t.Fatal(err)
 		}
 		bodies[stage] = b.Bytes()
-		var r record.R1Record
+		var r record.RoleRecord
 		if err := json.Unmarshal(b.Bytes(), &r); err != nil {
 			t.Fatal(err)
 		}
@@ -44,17 +44,17 @@ func r1Stages(t *testing.T) (map[string]*taskState, Report) {
 	required := map[string]bool{"documents": true, "investigate": true, "verify": true}
 	states := map[string]*taskState{}
 	var obs []Observation
-	for i, stage := range record.R1Stages {
+	for i, stage := range record.RoleStages {
 		key := "review." + stage
 		task := TaskFacts{Key: key, Status: "succeeded", Required: required[stage]}
 		ctx := DecodeContext{Source: source, Snapshot: SnapshotFacts{ManifestDigest: recs[i].Snapshot}, RunID: recs[i].RunID, AttemptID: recs[i].AttemptID, Task: task}
 		art := ArtifactRef{Role: "other", MediaType: record.MediaType, SHA256: domain.Digest(bodies[stage])}
-		c, err := (R1ReviewDecoder{}).Decode(ctx, art, bodies[stage])
+		c, err := (RoleReviewDecoder{}).Decode(ctx, art, bodies[stage])
 		if err != nil {
 			t.Fatal(stage, err)
 		}
 		if _, err := (ReviewDecoder{}).Decode(ctx, art, bodies[stage]); err == nil {
-			t.Fatal("the R0 decoder accepted a review-r1 record")
+			t.Fatal("the legacy decoder accepted a role-pack record")
 		}
 		states[key] = &taskState{facts: task, review: c.Review.Accepted, reviewResult: c.Review, decodedSHA: map[string]string{record.MediaType: art.SHA256}}
 		// The cited discovery and go vet artifacts, as the builder accepted them.
@@ -84,7 +84,7 @@ func r1Stages(t *testing.T) (map[string]*taskState, Report) {
 
 func compose(states map[string]*taskState, r Report) (Report, AIReview, []string) {
 	lim := newSet()
-	composeR1Reviews(&r, states, lim)
+	composeRoleReviews(&r, states, lim)
 	return r, decideAIReview(states), lim.list()
 }
 
@@ -99,8 +99,8 @@ func taskKeys(l []AIReviewTask) []string {
 // The required review roles come from the planned tasks: documents,
 // investigate and verify here; environment and interpret are listed as
 // optional and never counted.
-func TestR1RequiredRolesFromPlan(t *testing.T) {
-	states, base := r1Stages(t)
+func TestRequiredRolesFromPlan(t *testing.T) {
+	states, base := exampleRoleStages(t)
 	r, ai, lim := compose(states, base)
 	if ai.Status != AIReviewPerformed || ai.Reason != nil || len(lim) != 0 {
 		t.Fatalf("ai %+v limitations %v", ai, lim)
@@ -137,7 +137,7 @@ func TestR1RequiredRolesFromPlan(t *testing.T) {
 
 	// Optional roles that were skipped keep their reason and do not count;
 	// the verdict still rests on the required roles.
-	states, base = r1Stages(t)
+	states, base = exampleRoleStages(t)
 	states["review.interpret"].facts.Status = "skipped_policy"
 	reason := "no_tool_observations"
 	states["review.interpret"].facts.Reason = &reason
@@ -149,7 +149,7 @@ func TestR1RequiredRolesFromPlan(t *testing.T) {
 	}
 
 	// Without documents the documents role is not required.
-	states, base = r1Stages(t)
+	states, base = exampleRoleStages(t)
 	states["review.documents"].facts.Required = false
 	_, ai, _ = compose(states, base)
 	if got := taskKeys(ai.RequiredTasks); ai.Status != AIReviewPerformed || !slices.Equal(got, []string{"review.investigate=accepted", "review.verify=accepted"}) {
@@ -159,7 +159,7 @@ func TestR1RequiredRolesFromPlan(t *testing.T) {
 
 // A plan without a required review task is not_performed, however many
 // optional roles succeeded or were skipped.
-func TestR1NoRequiredReviewTaskIsNotPerformed(t *testing.T) {
+func TestRolePackNoRequiredReviewTaskIsNotPerformed(t *testing.T) {
 	no := "no_environment_gap"
 	states := map[string]*taskState{
 		"review.environment": {facts: TaskFacts{Key: "review.environment", Status: "skipped_policy", Reason: &no}},
@@ -179,16 +179,16 @@ func TestR1NoRequiredReviewTaskIsNotPerformed(t *testing.T) {
 	}
 }
 
-// R0 plans keep the three fixed roles, including not_planned rows, and no
+// Legacy-pack plans keep the three fixed roles, including not_planned rows, and no
 // optional list.
-func TestR0ReviewRolesUnchanged(t *testing.T) {
+func TestLegacyReviewRolesUnchanged(t *testing.T) {
 	ai := decideAIReview(map[string]*taskState{"review.investigate": {facts: TaskFacts{Key: "review.investigate", Status: "succeeded", Required: true}, review: true}})
 	if got := taskKeys(ai.RequiredTasks); ai.Status != AIReviewPartial || ai.OptionalTasks != nil || !slices.Equal(got, []string{"review.context=not_planned", "review.investigate=accepted", "review.verify=not_planned"}) {
 		t.Fatalf("%s %v %v", ai.Status, got, ai.OptionalTasks)
 	}
 	for _, x := range ai.RequiredTasks {
 		if x.Reason != nil {
-			t.Fatalf("R0 row with a reason %+v", x)
+			t.Fatalf("legacy row with a reason %+v", x)
 		}
 	}
 }
@@ -196,13 +196,13 @@ func TestR0ReviewRolesUnchanged(t *testing.T) {
 // The builder keeps a stage only if it joins what the report accepted: the
 // upstream artifacts it cites, the go vet observations and, for verify, the
 // candidates of the accepted upstream stages.
-func TestR1LineageRejected(t *testing.T) {
+func TestRoleLineageRejected(t *testing.T) {
 	cases := map[string]struct {
 		edit func(map[string]*taskState, *Report)
 		key  string
 	}{
 		"altered upstream candidate": {func(s map[string]*taskState, _ *Report) {
-			s["review.investigate"].reviewResult.R1.Candidates[0].Title += "!"
+			s["review.investigate"].reviewResult.Role.Candidates[0].Title += "!"
 		}, "review.verify"},
 		"other discovery artifact": {func(s map[string]*taskState, _ *Report) {
 			s[envdoc.TaskDocuments].decodedSHA[envdoc.MediaType] = domain.Digest([]byte("other"))
@@ -211,11 +211,11 @@ func TestR1LineageRejected(t *testing.T) {
 		"upstream stage failed": {func(s map[string]*taskState, _ *Report) {
 			s["review.documents"].facts.Status = "failed"
 		}, "review.investigate"},
-		"v1 record in an r1 plan": {func(s map[string]*taskState, _ *Report) {
+		"legacy record in a role-pack plan": {func(s map[string]*taskState, _ *Report) {
 			s["review.investigate"].reviewResult = &ReviewResult{Accepted: true, Record: &record.Record{}}
 		}, "review.investigate"},
 		"verify relabels upstream evidence": {func(s map[string]*taskState, _ *Report) {
-			ev := s["review.verify"].reviewResult.R1.Evidence
+			ev := s["review.verify"].reviewResult.Role.Evidence
 			for i := range ev {
 				if ev[i].Origin == "context" {
 					ev[i].Origin = "caller"
@@ -227,7 +227,7 @@ func TestR1LineageRejected(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			states, base := r1Stages(t)
+			states, base := exampleRoleStages(t)
 			c.edit(states, &base)
 			r, ai, lim := compose(states, base)
 			if !has(lim, LimReviewLineage+":"+c.key) && !has(lim, LimReviewPackMismatch+":"+c.key) {
@@ -245,22 +245,23 @@ func TestR1LineageRejected(t *testing.T) {
 	}
 }
 
-// A review-r1 record attached to an R0 plan is not read as a v1 record.
-func TestR1RecordInR0PlanRejected(t *testing.T) {
-	states, _ := r1Stages(t)
-	r0 := map[string]*taskState{}
+// A role-pack record attached to a legacy-pack plan is not read as a legacy
+// record.
+func TestRoleRecordInLegacyPlanRejected(t *testing.T) {
+	states, _ := exampleRoleStages(t)
+	legacy := map[string]*taskState{}
 	for _, k := range RequiredReviewTasks {
 		if st := states[k]; st != nil {
-			r0[k] = st
+			legacy[k] = st
 		}
 	}
 	lim := newSet()
 	var r Report
-	composeReviews(&r, r0, lim)
+	composeReviews(&r, legacy, lim)
 	if !has(lim.list(), LimReviewPackMismatch+":review.investigate") || len(r.Findings) != 0 {
 		t.Fatalf("limitations %v findings %d", lim.list(), len(r.Findings))
 	}
-	if ai := decideAIReview(r0); ai.Status == AIReviewPerformed {
+	if ai := decideAIReview(legacy); ai.Status == AIReviewPerformed {
 		t.Fatalf("%+v", ai)
 	}
 }

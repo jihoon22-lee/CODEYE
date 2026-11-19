@@ -19,23 +19,23 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// Bounds of the review-r1 inputs, in JSON-encoded bytes of excerpt text
+// Bounds of the role-pack inputs, in JSON-encoded bytes of excerpt text
 // (encoding/json escapes <, > and & to six bytes). Every request must also
 // fit PromptBudget; roles trim excerpts to fit and record it.
 const (
-	r1MaxCodeFiles    = 8
-	r1MaxCodeFile     = 2400
-	r1MaxCodeBytes    = 12000
-	r1MaxDocs         = 8
-	r1MaxDocBytes     = 2000
-	r1MaxDocLines     = 40
-	r1MaxDocsBytes    = 10000
-	r1MaxRequirements = 16
-	r1MaxObservations = 8
-	r1MaxTools        = 8
-	r1MaxWindows      = 4
-	r1WindowRadius    = 10
-	r1MaxWindowBytes  = 1600
+	roleMaxCodeFiles    = 8
+	roleMaxCodeFile     = 2400
+	roleMaxCodeBytes    = 12000
+	roleMaxDocs         = 8
+	roleMaxDocBytes     = 2000
+	roleMaxDocLines     = 40
+	roleMaxDocsBytes    = 10000
+	roleMaxRequirements = 16
+	roleMaxObservations = 8
+	roleMaxTools        = 8
+	roleMaxWindows      = 4
+	roleWindowRadius    = 10
+	roleMaxWindowBytes  = 1600
 )
 
 func normalizedScope(s domain.Scope) domain.Scope {
@@ -45,7 +45,7 @@ func normalizedScope(s domain.Scope) domain.Scope {
 	return s
 }
 
-func (s *r1Stage) entries() map[string]source.Entry {
+func (s *roleStage) entries() map[string]source.Entry {
 	out := map[string]source.Entry{}
 	for _, e := range s.j.Snapshot.Manifest.Entries {
 		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil {
@@ -57,7 +57,7 @@ func (s *r1Stage) entries() map[string]source.Entry {
 
 // readLines returns lines start..end (1-based, inclusive) of a verified
 // snapshot blob, or ok=false when the blob is not safe model input.
-func (s *r1Stage) readLines(e source.Entry, start, end int) (string, int, bool, error) {
+func (s *roleStage) readLines(e source.Entry, start, end int) (string, int, bool, error) {
 	if *e.Size > maxFileBytes || domain.ValidateEvidencePath(e.Path) != nil {
 		return "", 0, false, nil
 	}
@@ -88,11 +88,11 @@ func (s *r1Stage) readLines(e source.Entry, start, end int) (string, int, bool, 
 // secretFiles are the files the secrets screen withholds from every model
 // input of the stage (screen.go): code context, documents, observation
 // windows and verification expansions.
-func (s *r1Stage) secretFiles() map[string]bool { return s.screen.withheld }
+func (s *roleStage) secretFiles() map[string]bool { return s.screen.withheld }
 
 // excerpt builds a bounded excerpt of up to maxLines lines and maxBytes of
 // JSON-encoded text from line start. total is the file's line count.
-func (s *r1Stage) excerpt(e source.Entry, kind, origin string, start, maxLines, maxBytes int) (x record.Excerpt, total int, ok bool, err error) {
+func (s *roleStage) excerpt(e source.Entry, kind, origin string, start, maxLines, maxBytes int) (x record.Excerpt, total int, ok bool, err error) {
 	text, total, ok, err := s.readLines(e, start, start+maxLines-1)
 	if err != nil || !ok {
 		return record.Excerpt{}, total, false, err
@@ -117,7 +117,7 @@ func (s *r1Stage) excerpt(e source.Entry, kind, origin string, start, maxLines, 
 
 // withText re-reads the text of record excerpts from the snapshot, checking
 // each excerpt's ID binding again.
-func (s *r1Stage) withText(list []record.Excerpt) ([]record.Excerpt, error) {
+func (s *roleStage) withText(list []record.Excerpt) ([]record.Excerpt, error) {
 	files := s.entries()
 	out := make([]record.Excerpt, 0, len(list))
 	for _, x := range list {
@@ -142,7 +142,7 @@ var errSnapshotIntegrity = os.ErrInvalid
 
 // ---- discovery artifacts -------------------------------------------------
 
-func (s *r1Stage) discoveryDoc(kind string) (envdoc.Document, record.Upstream) {
+func (s *roleStage) discoveryDoc(kind string) (envdoc.Document, record.Upstream) {
 	src := map[string]string{envdoc.KindEnvironment: envdoc.TaskEnvironment, envdoc.KindDocuments: envdoc.TaskDocuments}[kind]
 	u := record.Upstream{Source: src}
 	b, err := readBounded(discovery.ArtifactPath(s.j.Scratch, kind), envdoc.MaxBytes)
@@ -168,7 +168,7 @@ type envFacts struct {
 
 // environmentFacts loads env.discover's artifact and the skip rule: no model
 // call when every declared requirement is satisfied.
-func (s *r1Stage) environmentFacts() (envFacts, string) {
+func (s *roleStage) environmentFacts() (envFacts, string) {
 	d, u := s.discoveryDoc(envdoc.KindEnvironment)
 	f := envFacts{doc: d, upstream: u}
 	if u.State != record.UpstreamAccepted || d.Environment == nil {
@@ -199,7 +199,7 @@ var docOrder = map[string]int{envdoc.ClassAgent: 0, envdoc.ClassReadme: 1, envdo
 // documentFacts applies the documents role's skip rules: no guidance
 // document in scope (no_documents), discovery unavailable (dependency_failed)
 // or none of them selected under the read budget (documents_not_selected).
-func (s *r1Stage) documentFacts() (docFacts, string) {
+func (s *roleStage) documentFacts() (docFacts, string) {
 	if len(discovery.EligibleDocuments(s.j.Snapshot.Manifest, s.j.Scope)) == 0 {
 		return docFacts{}, ReasonNoDocuments
 	}
@@ -260,7 +260,7 @@ type toolDoc struct {
 
 // readToolDoc reads and validates one analyzer task's observations artifact:
 // the generic envelope at obsdoc.ArtifactPath, else a go vet v0.1 document.
-func (s *r1Stage) readToolDoc(key string, files map[string]source.Entry) (toolSummary, []byte, string) {
+func (s *roleStage) readToolDoc(key string, files map[string]source.Entry) (toolSummary, []byte, string) {
 	if b, err := readBounded(obsdoc.ArtifactPath(s.j.Scratch, key), obsdoc.MaxBytes); err == nil {
 		lookup := func(p string) (string, bool) { e, ok := files[p]; return e.SHA256, ok }
 		d, err := obsdoc.Decode(b, obsdoc.Expect{TaskKey: key, Snapshot: s.j.Snapshot.Digest, Lookup: lookup})
@@ -277,7 +277,7 @@ func (s *r1Stage) readToolDoc(key string, files map[string]source.Entry) (toolSu
 			if o.Suppressed {
 				continue
 			}
-			// A structure metric (W21) is no defect candidate: the envelope's
+			// A structure metric is no defect candidate: the envelope's
 			// metrics_not_defects limitation is all the model sees of it.
 			if o.Metric != nil {
 				continue
@@ -319,7 +319,7 @@ func (s *r1Stage) readToolDoc(key string, files map[string]source.Entry) (toolSu
 }
 
 // toolFacts reads every planned analyzer task's observations artifact.
-func (s *r1Stage) toolFacts() ([]toolDoc, int, string) {
+func (s *roleStage) toolFacts() ([]toolDoc, int, string) {
 	plan, err := s.h.Static.Plan(s.ctx, s.j)
 	if err != nil {
 		return nil, 0, reasonDependency
@@ -366,7 +366,7 @@ func goIgnored(p string) bool {
 // file of another ecosystem to its deepest build manifest directory of that
 // ecosystem, and modules are visited ecosystem by ecosystem (sources.go,
 // groupOrder). Every excerpt is the first lines of its file.
-func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
+func (s *roleStage) codeCorpus() ([]record.Excerpt, []string, error) {
 	files := s.entries()
 	scope := normalizedScope(s.j.Scope)
 	var modules []string
@@ -435,17 +435,17 @@ func (s *r1Stage) codeCorpus() ([]record.Excerpt, []string, error) {
 		})
 	}
 	var out []record.Excerpt
-	remain := r1MaxCodeBytes
-	for round := 0; len(out) < r1MaxCodeFiles && remain >= 128; round++ {
+	remain := roleMaxCodeBytes
+	for round := 0; len(out) < roleMaxCodeFiles && remain >= 128; round++ {
 		progressed := false
 		for _, m := range order {
-			if round >= len(byModule[m]) || len(out) >= r1MaxCodeFiles || remain < 128 {
+			if round >= len(byModule[m]) || len(out) >= roleMaxCodeFiles || remain < 128 {
 				continue
 			}
 			progressed = true
 			e := byModule[m][round]
 			kind := windowKind(e.Path)
-			x, total, ok, err := s.excerpt(e, kind, "context", 1, 50, min(r1MaxCodeFile, remain))
+			x, total, ok, err := s.excerpt(e, kind, "context", 1, 50, min(roleMaxCodeFile, remain))
 			if err != nil {
 				return nil, nil, err
 			}
@@ -495,8 +495,8 @@ type toolInput struct {
 }
 
 // observationWindows builds the interpret inputs: tool states, up to
-// r1MaxObservations observations and code windows around their locations.
-func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, []record.ObservationRef, []record.Excerpt, []string, error) {
+// roleMaxObservations observations and code windows around their locations.
+func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, []record.ObservationRef, []record.Excerpt, []string, error) {
 	files := s.entries()
 	var tools []toolInput
 	var all []toolObservation
@@ -512,7 +512,7 @@ func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, [
 				toolLims = append(toolLims, l)
 			}
 		}
-		if len(tools) >= r1MaxTools {
+		if len(tools) >= roleMaxTools {
 			lims = append(lims, "tools_outside_interpret_input")
 			continue
 		}
@@ -541,8 +541,8 @@ func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, [
 		}
 		return x.ID < y.ID
 	})
-	if len(all) > r1MaxObservations {
-		all = all[:r1MaxObservations]
+	if len(all) > roleMaxObservations {
+		all = all[:roleMaxObservations]
 		lims = append(lims, "observations_outside_interpret_input")
 	}
 	var obs []obsInput
@@ -575,13 +575,13 @@ func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, [
 			switch {
 			case covered != "":
 				in.EvidenceIDs = []string{covered}
-			case len(windows) >= r1MaxWindows:
+			case len(windows) >= roleMaxWindows:
 				lims = append(lims, "observation_context_outside_input")
 			case windowKind(l.Path) != "" && files[l.Path].Size != nil:
 				// A line window around the location in any source language
 				// (no parser); other files (manifests, configuration) get none.
 				kind := windowKind(l.Path)
-				x, _, ok, err := s.excerpt(files[l.Path], kind, "observation", max(1, l.StartLine-r1WindowRadius), 2*r1WindowRadius+1, r1MaxWindowBytes)
+				x, _, ok, err := s.excerpt(files[l.Path], kind, "observation", max(1, l.StartLine-roleWindowRadius), 2*roleWindowRadius+1, roleMaxWindowBytes)
 				if err != nil {
 					return nil, nil, nil, nil, nil, err
 				}
@@ -598,21 +598,21 @@ func (s *r1Stage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, [
 }
 
 // documentExcerpts reads the selected guidance documents within the bounds.
-func (s *r1Stage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, []string, error) {
+func (s *roleStage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, []string, error) {
 	files := s.entries()
 	var out []record.Excerpt
 	var lims []string
-	remain := r1MaxDocsBytes
+	remain := roleMaxDocsBytes
 	for _, d := range selected {
 		e, ok := files[d.Path]
 		if !ok || e.SHA256 != *d.SHA256 {
 			return nil, nil, errSnapshotIntegrity
 		}
-		if len(out) >= r1MaxDocs || remain < 128 {
+		if len(out) >= roleMaxDocs || remain < 128 {
 			lims = append(lims, "documents_outside_review_input")
 			continue
 		}
-		x, _, ok, err := s.excerpt(e, "document", "", 1, r1MaxDocLines, min(r1MaxDocBytes, remain))
+		x, _, ok, err := s.excerpt(e, "document", "", 1, roleMaxDocLines, min(roleMaxDocBytes, remain))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -631,7 +631,7 @@ func (s *r1Stage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, []s
 
 // existingDir reports whether p is "." or a directory holding an included
 // file of the snapshot (a path a contract can apply to).
-func (s *r1Stage) existingDir(p string) bool {
+func (s *roleStage) existingDir(p string) bool {
 	if p == "." {
 		return true
 	}

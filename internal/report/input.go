@@ -71,14 +71,14 @@ type Input struct {
 	Snapshot SnapshotFacts
 	Attempt  AttemptFacts
 	Tasks    []TaskFacts
-	// SourceManifest are the W04 manifest bytes (sha256 == Snapshot.ManifestDigest).
+	// SourceManifest are the snapshot manifest bytes (sha256 == Snapshot.ManifestDigest).
 	SourceManifest []byte
 	// ResultManifest is the attempt's result_manifest artifact, nil if none.
 	ResultManifest *ArtifactRef
 	Artifacts      []ArtifactRef
 	Bodies         map[string][]byte
-	// Reviews are the project's latest human dispositions per fingerprint
-	// (W23). Build stamps those in effect at Now on matching findings.
+	// Reviews are the project's latest human dispositions per fingerprint.
+	// Build stamps those in effect at Now on matching findings.
 	Reviews []ReviewFact
 }
 
@@ -130,7 +130,7 @@ func deref(p *string) string {
 	return *p
 }
 
-// --- decoder registry (W12/W13 extension seam) -------------------------------
+// --- decoder registry (extension seam) ---------------------------------------
 
 // DecoderKey selects the artifacts a decoder owns: media type and the
 // document's top-level schema_version, and its "kind" when Kind is not empty.
@@ -185,7 +185,7 @@ type Contribution struct {
 	Observations []Observation
 	Findings     []Finding
 	Tool         *ToolCoverage
-	// Review is set only by review decoders (W12/W13). Accepted means the
+	// Review is set only by review decoders. Accepted means the
 	// decoder validated the review result bytes against the evidence catalog.
 	Review      *ReviewResult
 	Limitations []string
@@ -195,8 +195,8 @@ type Contribution struct {
 type ReviewResult struct {
 	Accepted bool
 	Record   *record.Record
-	// R1 is set instead of Record for review-r1 (schema 0.2) records.
-	R1 *record.R1Record
+	// Role is set instead of Record for role-pack (schema 0.2) records.
+	Role *record.RoleRecord
 }
 
 // ArtifactDecoder turns one verified artifact into a contribution. Decode must
@@ -232,10 +232,10 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 }
 
 // DefaultRegistry handles tool observations (go vet v0.1 and the generic
-// analyzer envelope, docs/ANALYZERS.md), snapshot-bound review records and W15
+// analyzer envelope, docs/ANALYZERS.md), snapshot-bound review records and
 // discovery documents.
 func DefaultRegistry() *Registry {
-	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, R1ReviewDecoder{}, EnvironmentDecoder{})
+	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, RoleReviewDecoder{}, EnvironmentDecoder{})
 	if err != nil {
 		panic(err)
 	}

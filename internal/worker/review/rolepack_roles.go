@@ -18,7 +18,7 @@ var errTooLarge = errors.New(reasonInputTooLarge)
 
 // fitExcerpts keeps the longest prefix of list (at least keep items) whose
 // request, including a possible repair, fits PromptBudget.
-func (s *r1Stage) fitExcerpts(instructions string, keep int, list []record.Excerpt, build func([]record.Excerpt) ([]byte, error)) ([]record.Excerpt, bool, error) {
+func (s *roleStage) fitExcerpts(instructions string, keep int, list []record.Excerpt, build func([]record.Excerpt) ([]byte, error)) ([]record.Excerpt, bool, error) {
 	for n := len(list); n >= keep; n-- {
 		b, err := build(list[:n])
 		if err != nil {
@@ -31,7 +31,7 @@ func (s *r1Stage) fitExcerpts(instructions string, keep int, list []record.Excer
 	return nil, false, errTooLarge
 }
 
-func (s *r1Stage) inputFailure(err error) analysis.TaskResult {
+func (s *roleStage) inputFailure(err error) analysis.TaskResult {
 	if errors.Is(err, errTooLarge) {
 		return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 	}
@@ -70,10 +70,10 @@ type envInput struct {
 	Observations []envdoc.Observation `json:"observations"`
 	Verdicts     []envdoc.Verdict     `json:"verdicts"`
 	Limitations  []string             `json:"limitations"`
-	Repair       *r1Repair            `json:"repair,omitempty"`
+	Repair       *roleRepair          `json:"repair,omitempty"`
 }
 
-func (s *r1Stage) environment() analysis.TaskResult {
+func (s *roleStage) environment() analysis.TaskResult {
 	f, reason := s.environmentFacts()
 	if reason != "" {
 		return result(domain.TaskSkippedPolicy, reason)
@@ -106,7 +106,7 @@ func (s *r1Stage) environment() analysis.TaskResult {
 		if !slices.Contains(gaps, r.Module) {
 			continue
 		}
-		if len(excerpts) >= r1MaxRequirements {
+		if len(excerpts) >= roleMaxRequirements {
 			s.rec.Limitations = addLim(s.rec.Limitations, "requirements_outside_input")
 			break
 		}
@@ -226,7 +226,7 @@ func (s *r1Stage) environment() analysis.TaskResult {
 		}
 		return errs
 	}
-	input := func(r *r1Repair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *roleRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
 	if r := s.exchange(contract, input, parse); r != nil {
 		return *r
 	}
@@ -263,7 +263,7 @@ type docsInput struct {
 	Modules     []envdoc.ModuleDocs `json:"modules"`
 	Overlapping []envdoc.Overlap    `json:"overlapping_guidance"`
 	Limitations []string            `json:"limitations"`
-	Repair      *r1Repair           `json:"repair,omitempty"`
+	Repair      *roleRepair         `json:"repair,omitempty"`
 }
 
 type docsOutput struct {
@@ -273,7 +273,7 @@ type docsOutput struct {
 	InstructionNotes []record.InstructionNote `json:"instruction_notes"`
 }
 
-func (s *r1Stage) documents() analysis.TaskResult {
+func (s *roleStage) documents() analysis.TaskResult {
 	f, reason := s.documentFacts()
 	if reason != "" {
 		return result(domain.TaskSkippedPolicy, reason)
@@ -391,7 +391,7 @@ func (s *r1Stage) documents() analysis.TaskResult {
 		return errs
 	}
 	in = withDocuments(sent)
-	input := func(r *r1Repair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *roleRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
 	if r := s.exchange(docsContract, input, parse); r != nil {
 		return *r
 	}
@@ -437,11 +437,11 @@ type investigateInput struct {
 	Scope       investigateScope   `json:"scope"`
 	Documents   documentsHandoff   `json:"documents"`
 	Environment environmentHandoff `json:"environment"`
-	Repair      *r1Repair          `json:"repair,omitempty"`
+	Repair      *roleRepair        `json:"repair,omitempty"`
 }
 
 // cited returns the document excerpts an accepted documents record cites.
-func citedDocuments(docs record.R1Record) []record.Excerpt {
+func citedDocuments(docs record.RoleRecord) []record.Excerpt {
 	ids := map[string]bool{}
 	add := func(list []string) {
 		for _, id := range list {
@@ -467,7 +467,7 @@ func citedDocuments(docs record.R1Record) []record.Excerpt {
 	return out
 }
 
-func (s *r1Stage) investigate() analysis.TaskResult {
+func (s *roleStage) investigate() analysis.TaskResult {
 	envRec, uEnv := s.prior(record.StageEnvironment)
 	docRec, uDoc := s.prior(record.StageDocuments)
 	if r := s.begin([]record.Upstream{uEnv, uDoc}); r != nil {
@@ -524,7 +524,7 @@ func (s *r1Stage) investigate() analysis.TaskResult {
 	in.Scope.Excerpts = sent
 	s.setEvidence(append(append([]record.Excerpt{}, sent...), docEv...))
 	catalog := catalogOf(s.rec.Evidence)
-	var candidates []record.R1Candidate
+	var candidates []record.RoleCandidate
 	parse := func(raw json.RawMessage) []string {
 		var out struct {
 			Candidates []record.Candidate `json:"candidates"`
@@ -536,21 +536,21 @@ func (s *r1Stage) investigate() analysis.TaskResult {
 		if len(out.Candidates) > 4 {
 			errs = addLim(errs, "too_many_items")
 		}
-		var list []record.R1Candidate
+		var list []record.RoleCandidate
 		for i, c := range out.Candidates {
 			if c.ID != "" {
 				errs = addLim(errs, "item_schema_invalid")
 			}
 			errs = addLim(errs, candidateErrors(c, catalog)...)
 			c.ID = fmt.Sprintf("investigate_%d", i+1)
-			list = append(list, record.R1Candidate{Candidate: c, Origin: record.StageInvestigate})
+			list = append(list, record.RoleCandidate{Candidate: c, Origin: record.StageInvestigate})
 		}
 		if len(errs) == 0 {
 			candidates = list
 		}
 		return errs
 	}
-	input := func(r *r1Repair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *roleRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
 	if r := s.exchange(investigateContract, input, parse); r != nil {
 		return *r
 	}
@@ -591,7 +591,7 @@ type interpretInput struct {
 		Excerpts    []record.Excerpt `json:"excerpts"`
 		Limitations []string         `json:"limitations"`
 	} `json:"scope"`
-	Repair *r1Repair `json:"repair,omitempty"`
+	Repair *roleRepair `json:"repair,omitempty"`
 }
 
 type hypothesis struct {
@@ -604,7 +604,7 @@ type hypothesis struct {
 	Evidence       []string `json:"evidence_ids"`
 }
 
-func (s *r1Stage) interpret() analysis.TaskResult {
+func (s *roleStage) interpret() analysis.TaskResult {
 	docs, _, reason := s.toolFacts()
 	if reason != "" {
 		return result(domain.TaskSkippedPolicy, reason)
@@ -661,7 +661,7 @@ func (s *r1Stage) interpret() analysis.TaskResult {
 	for _, o := range in.Observations {
 		given[o.ID] = o
 	}
-	var candidates []record.R1Candidate
+	var candidates []record.RoleCandidate
 	var limits []record.InterpretationLimit
 	obsErrs := func(ids []string) []string {
 		if len(ids) == 0 || len(ids) > 4 {
@@ -692,7 +692,7 @@ func (s *r1Stage) interpret() analysis.TaskResult {
 		if len(out.Hypotheses)+len(out.Limits) == 0 {
 			errs = addLim(errs, "no_items")
 		}
-		var list []record.R1Candidate
+		var list []record.RoleCandidate
 		for i, h := range out.Hypotheses {
 			c := record.Candidate{Title: h.Title, Condition: h.Condition, Impact: h.Impact, Improvement: h.Improvement, Counterpoint: h.Counterpoint, Evidence: h.Evidence}
 			errs = addLim(errs, candidateErrors(c, catalog)...)
@@ -707,7 +707,7 @@ func (s *r1Stage) interpret() analysis.TaskResult {
 				errs = addLim(errs, "evidence_not_at_observation")
 			}
 			c.ID = fmt.Sprintf("interpret_%d", i+1)
-			list = append(list, record.R1Candidate{Candidate: c, Origin: record.StageInterpret, ObservationIDs: h.ObservationIDs})
+			list = append(list, record.RoleCandidate{Candidate: c, Origin: record.StageInterpret, ObservationIDs: h.ObservationIDs})
 		}
 		for _, l := range out.Limits {
 			errs = addLim(errs, textErrors(l.Statement)...)
@@ -718,7 +718,7 @@ func (s *r1Stage) interpret() analysis.TaskResult {
 		}
 		return errs
 	}
-	input := func(r *r1Repair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *roleRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
 	if r := s.exchange(interpretContract, input, parse); r != nil {
 		return *r
 	}

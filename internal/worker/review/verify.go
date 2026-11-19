@@ -388,7 +388,7 @@ func checkModel(m modelVerification, catalog map[string]Excerpt) (Verification, 
 		bad("item_schema_invalid")
 	}
 	if v.Verdict == "reproduced" {
-		// Only a platform execution artifact can reproduce; W12 has none.
+		// Only a platform execution artifact can reproduce; verification has none.
 		v.Verdict = record.VerdictInconclusive
 		v.Limitations = []string{record.LimReproductionRejected}
 	}
