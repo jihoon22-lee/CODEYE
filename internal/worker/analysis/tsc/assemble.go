@@ -224,7 +224,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		for _, rec := range st.Records {
 			// No host path is quoted: masked roots, then any quoted
 			// absolute path left; a config file outside the workspace is
-			// never echoed (docs/43 §3.2).
+			// never echoed (docs/ANALYZERS.md#저장소-코드와-tsconfig-검사).
 			text := jsts.WithholdHostPaths(mask(rec.Text))
 			if rec.File == "" || isConfigFile(rec.File) {
 				if rec.File != "" {

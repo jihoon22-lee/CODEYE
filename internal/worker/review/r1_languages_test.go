@@ -66,7 +66,7 @@ func treeJob(t *testing.T, tree map[string]string) analysis.Job {
 
 // W24 rc2: every R1 role gets the language guides of the snapshot's
 // in-scope source ecosystems, by the analyzer packs' rule (pack.InScope,
-// docs/39 §2.8: source extensions, outside data and vendored directories,
+// docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백: source extensions, outside data and vendored directories,
 // within the scope; build files alone do not count), in sorted order, and
 // none when no supported ecosystem is in scope.
 func TestR1LanguageGuidesFollowInScopeEcosystems(t *testing.T) {

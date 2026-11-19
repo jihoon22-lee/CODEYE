@@ -12,7 +12,7 @@ import (
 // without the repository-code grant. It is generated per task into task
 // scratch, outside the snapshot, and loads @eslint/js and typescript-eslint
 // by the absolute entry files of the operator's tool directory, so no module
-// is resolved from the project or its ancestors (docs/43 §2).
+// is resolved from the project or its ancestors (docs/ANALYZERS.md#jsts-실행).
 
 var (
 	jsGlobs = []string{"**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"}

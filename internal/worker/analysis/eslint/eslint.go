@@ -1,4 +1,4 @@
-// Package eslint is the ESLint part of the W18 JS/TS pack (docs/43). It has
+// Package eslint is the ESLint part of the W18 JS/TS pack (docs/ANALYZERS.md). It has
 // two analyzers on the one operator tool (--eslint):
 //
 //   - javascript.eslint, the ecosystem's baseline (required): syntactic
@@ -9,7 +9,7 @@
 //     rules (promises, any at boundaries) on TS modules with a tsconfig.json.
 //     A missing dependency makes type information incomplete; the run then
 //     fails with the gap recorded and withholds every type-aware diagnostic
-//     (measured: they follow from the missing types, docs/43 §4).
+//     (measured: they follow from the missing types, docs/ANALYZERS.md#의존성-공백).
 //
 // Both run the operator's eslint entry script through the shared node
 // toolchain with a CODEYE-managed configuration in task scratch,
@@ -334,7 +334,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			watched = append(watched, f.Path)
 		}
 		// typescript-eslint reads the same chain as tsc: write options and
-		// host paths are refused before ESLint runs (docs/43 §3.2).
+		// host paths are refused before ESLint runs (docs/ANALYZERS.md#저장소-코드와-tsconfig-검사).
 		if in.Policy, in.PolicyOptions = jsts.ChainPolicy(chain, workspace); in.Policy == "" && jsts.ForeignNodeModules(workspace, mod.Dir) {
 			in.Policy = ReasonForeignNodeModules
 		}

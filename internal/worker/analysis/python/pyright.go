@@ -19,7 +19,7 @@ import (
 )
 
 // pyright identity: an extra-depth type checker, the alternative of mypy,
-// run by the shared node toolchain (docs/39 §2.4.1).
+// run by the shared node toolchain (docs/ANALYZERS.md#공유-interpreter-toolchain).
 const (
 	PyrightID             = "python.pyright"
 	PyrightName           = "pyright"
@@ -43,7 +43,7 @@ const (
 
 // PyrightRuleOverrides turn off the rules that report the same construct
 // as a selected ruff rule on the same line (measured with pyright 1.1.414
-// and ruff 0.16.3, docs/42 §7): reportUndefinedVariable F821,
+// and ruff 0.16.3, docs/ANALYZERS.md#python-엔진-중복): reportUndefinedVariable F821,
 // reportRedeclaration F811, reportAssertAlwaysTrue F631,
 // reportUnusedExpression B015/B018, reportUnsupportedDunderAll PLE0604.
 var PyrightRuleOverrides = []string{"reportAssertAlwaysTrue", "reportRedeclaration", "reportUndefinedVariable", "reportUnsupportedDunderAll", "reportUnusedExpression"}

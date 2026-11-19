@@ -51,7 +51,7 @@ func snapshotJobs(t *testing.T, files map[string]string) (analysis.Job, analysis
 	return jobs[0], jobs[1]
 }
 
-// docs/39 §3: with only --go configured, the composite's go-vet tasks are
+// docs/ANALYZERS.md#go-vet: with only --go configured, the composite's go-vet tasks are
 // the W08 handler's (same keys, specs and v0.1 document bytes); staticcheck
 // adds its own tasks after them and never changes go vet's.
 func TestGoVetUnchangedInComposite(t *testing.T) {

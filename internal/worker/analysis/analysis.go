@@ -30,7 +30,7 @@ type Job struct {
 	// AllowRepositoryCode is the node operator's explicit grant to run
 	// repository-controlled code (build scripts, configuration programs,
 	// plugins, proc macros) for this job's source (--repo-code-source-root,
-	// docs/39 §2.7). Only node configuration and the job set it; nothing in
+	// docs/ANALYZERS.md#저장소-코드-실행-허가). Only node configuration and the job set it; nothing in
 	// the snapshot or its configuration can.
 	AllowRepositoryCode bool
 	RunID, AttemptID    string
@@ -50,7 +50,7 @@ type TaskSpec struct {
 	Key      string // stable, ^[a-z][a-z0-9_.-]{0,63}$
 	Required bool   // required_for_verdict
 	Title    string
-	// Stage is the display stage (docs/37 §2) sent with task_created. Empty
+	// Stage is the display stage (docs/ARCHITECTURE.md#표시-단계와-task-단계) sent with task_created. Empty
 	// means "not recorded"; the server never infers it from Key.
 	Stage domain.Stage
 	// Weight is the optional estimate weight (1..1000) sent with task_created

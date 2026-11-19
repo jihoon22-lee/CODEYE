@@ -14,7 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// The generic analyzer envelope (docs/39) decoded from the real staticcheck
+// The generic analyzer envelope (docs/ANALYZERS.md) decoded from the real staticcheck
 // 2026.2.2 document (examples/observations-staticcheck.json) next to the real
 // go vet document. Only snapshot bindings are re-pointed to a manifest made
 // for the test.
@@ -314,7 +314,7 @@ func TestAnalyzerDecoderStaticcheckFindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	// CODEYE_W19_REPORT_DUMP=DIR writes both projections for the JSON Schema
-	// check of docs/39 §10 (schemas/report.schema.json via validate_bundle).
+	// check of docs/ANALYZERS.md#실제-도구-시험과-출력-캡처 (schemas/report.schema.json via validate_bundle).
 	if dir := os.Getenv("CODEYE_W19_REPORT_DUMP"); dir != "" {
 		full, err := Marshal(r)
 		if err != nil {

@@ -27,7 +27,7 @@ const ProbeTimeout = 30 * time.Second
 
 // Script is an operator-installed Node tool: the absolute entry script of an
 // npm package (--<tool>), run as <node> <script> <args> with PATH set to the
-// node directory only (docs/39 §2.4.1), never through its #! line.
+// node directory only (docs/ANALYZERS.md#공유-interpreter-toolchain), never through its #! line.
 type Script struct {
 	// Path is the operator's absolute path (argv[1]); Resolved is the
 	// symlink-resolved file; Package is the npm package directory that
@@ -253,7 +253,7 @@ func StripWorkspace(p, moduleDir string, roots []string) (string, bool) {
 // module directory to the filesystem root. Module resolution of tsc and of
 // typescript-eslint walks these directories; one outside the snapshot would
 // silently feed dependency code from another location into the analysis,
-// so the adapters refuse to run (docs/43 §3).
+// so the adapters refuse to run (docs/ANALYZERS.md#저장소-코드와-tsconfig-검사).
 func ForeignNodeModules(workspace, moduleDir string) bool {
 	d := filepath.Join(workspace, filepath.FromSlash(moduleDir))
 	for {

@@ -321,7 +321,7 @@ func withReview(t *testing.T, statuses map[string]string) *fixture {
 	return f
 }
 
-// TC-69 (W19, docs/39 §2.8): a report that would be completed is partial
+// TC-69 (W19, docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백): a report that would be completed is partial
 // when the run had a static analysis gap (a pack-gap task, not required) or
 // planned no analyzer task at all. Neither is counted as a required task.
 func TestStaticAnalysisGapMakesTheReportPartial(t *testing.T) {

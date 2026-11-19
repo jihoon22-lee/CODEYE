@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// W23 fingerprint identity (docs/40 §2).
+// W23 fingerprint identity (docs/REPORT.md#발견-식별-fp2).
 
 func TestToolFingerprintIgnoresPositions(t *testing.T) {
 	base, b := ToolFingerprint("go.vet", "lostcancel", "pkg/a.go", "", "this return statement may be reached without using the cancel var defined on line 12")

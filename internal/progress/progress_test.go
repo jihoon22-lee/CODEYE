@@ -120,7 +120,7 @@ func TestPlannedOnlyWhenPlanFixed(t *testing.T) {
 	}
 }
 
-// Every state of the docs/37 §2 table for one task stage.
+// Every state of the docs/ARCHITECTURE.md#표시-단계와-task-단계 table for one task stage.
 func TestTaskStageStates(t *testing.T) {
 	sa := domain.StageStaticAnalysis
 	q, b, r := domain.TaskQueued, domain.TaskBlocked, domain.TaskRunning

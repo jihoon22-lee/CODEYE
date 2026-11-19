@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// W16 C/C++ pack (docs/41): both tools are single native executables that
+// W16 C/C++ pack (docs/ANALYZERS.md): both tools are single native executables that
 // need no shared toolchain; neither runs a compiler or build system.
 
 type cppProber interface {

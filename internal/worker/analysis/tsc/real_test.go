@@ -18,7 +18,7 @@ import (
 // Real tsc tests run only with CODEYE_TEST_TSC and CODEYE_TEST_NODE (CI has
 // no Node tools). CODEYE_W18_CAPTURE=DIR also writes the redacted tsc.check
 // (and tsc.config) streams and exit code of each case to DIR, which is how
-// testdata/*.stdout|stderr|exit were captured (docs/43 §8):
+// testdata/*.stdout|stderr|exit were captured (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처):
 //
 //	CODEYE_W18_CAPTURE=$PWD/internal/worker/analysis/tsc/testdata \
 //	  go test -count=1 -run TestRealTsc ./internal/worker/analysis/tsc/
@@ -35,7 +35,7 @@ const (
 	fixClean       = "export function add(a: number, b: number): number {\n  return a + b;\n}\n"
 	fixConfig      = "{\"compilerOptions\":{" + opts + "},\"include\":[\"src\"]}\n"
 	// a missing package, a callback whose parameter type follows from it and
-	// an independent type error: all withheld in a gap run (docs/43 §4).
+	// an independent type error: all withheld in a gap run (docs/ANALYZERS.md#의존성-공백).
 	fixGap    = "import { z } from \"zod\";\n\nexport const schema = z.object({ name: z.string() });\n\nexport const names = schema.parse({}).items.map((x) => x.name);\n\nexport const n: number = \"x\";\n"
 	fixSyntax = "export const = 1;\n"
 	// solution-style config (files: [] plus references), the Vite layout.
@@ -243,7 +243,7 @@ func TestRealTscPolicyRefusals(t *testing.T) {
 	}
 }
 
-// Evidence for docs/43 §3: tsc does not load tsconfig language-service
+// Evidence for docs/ANALYZERS.md#저장소-코드와-tsconfig-검사: tsc does not load tsconfig language-service
 // plugins (they belong to tsserver). tsc runs directly on a project whose
 // node_modules holds a plugin that would leave a marker.
 func TestRealTscDoesNotLoadTSConfigPlugins(t *testing.T) {

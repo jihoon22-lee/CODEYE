@@ -196,7 +196,7 @@ def w23_history(session, project_id, first_run, first_report, go_source, origina
 
 
 def w21_secrets(session, cli, services, children, directory, binary, origin, user, node_env, sql_env, scalar):
-    """W21 (TC-119, docs/45) through the agent, the controller and PostgreSQL
+    """W21 (TC-119, docs/ANALYZERS.md) through the agent, the controller and PostgreSQL
     with the real lizard, jscpd (on node) and gitleaks: the structure metrics
     are no findings, the secret generated here is an unreviewed detection, and
     its value is in no uploaded artifact (streams included), report revision,
@@ -431,7 +431,7 @@ def run(base, root, env, *, browser=False):
         # and finishes unsupported/tool_not_configured.
         staticcheck = os.environ.get("CODEYE_TEST_STATICCHECK", "")
         tool_args = ["--staticcheck", staticcheck] if staticcheck else []
-        # The shared node toolchain (docs/39 §2.4.1) is probed at worker
+        # The shared node toolchain (docs/ANALYZERS.md#공유-interpreter-toolchain) is probed at worker
         # startup when CODEYE_TEST_NODE names it; only pyright (W17) needs it
         # and the Go fixture plans no Python task, so only startup codes are
         # checked.
@@ -440,7 +440,7 @@ def run(base, root, env, *, browser=False):
             tool_args += ["--node", node_toolchain]
         # W17: the Python tools named by CODEYE_TEST_RUFF/MYPY/PYRIGHT/BANDIT are
         # probed at worker startup (the Go fixture plans no Python task); both
-        # type checkers need the explicit choice (docs/42 §5).
+        # type checkers need the explicit choice (docs/ANALYZERS.md#타입-검사기-선택).
         python_tools = {t: os.environ.get("CODEYE_TEST_" + t.upper(), "") for t in ("ruff", "mypy", "pyright", "bandit")}
         python_tools = {t: p for t, p in python_tools.items() if p and (t != "pyright" or node_toolchain)}
         for tool, path in python_tools.items():
@@ -466,10 +466,10 @@ def run(base, root, env, *, browser=False):
             data = (directory / "artifacts" / key).read_bytes()
             assert hashlib.sha256(data).hexdigest() == key.split("/")[-1]
             observation_docs.append(json.loads(data))
-        # go vet keeps its v0.1 document; staticcheck writes the generic envelope (docs/39).
+        # go vet keeps its v0.1 document; staticcheck writes the generic envelope (docs/ANALYZERS.md).
         vet_docs = [d for d in observation_docs if d.get("kind") == "go_vet_observations"]
         sc_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.staticcheck"]
-        # W21 (docs/45): lizard, jscpd and gitleaks are planned for every
+        # W21 (docs/ANALYZERS.md): lizard, jscpd and gitleaks are planned for every
         # project; this node has none of their tools, so each is a visible
         # not_run stand-in.
         w21_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["ecosystem"] == "any"]

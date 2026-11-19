@@ -41,7 +41,7 @@ func verdictOf(d *envdoc.Document, module, tool string) *envdoc.Verdict {
 	return nil
 }
 
-// docs/39 §2.4: a configured shared toolchain is a runtime observation like
+// docs/ANALYZERS.md#도구-경로: a configured shared toolchain is a runtime observation like
 // go, probed with its version argv through the executor (PATH is its own
 // directory); unset it stays not_probed and nothing is started.
 func TestToolchainObservedAsRuntime(t *testing.T) {
@@ -154,7 +154,7 @@ func TestToolchainNeededByAnalyzerEcosystem(t *testing.T) {
 	}
 }
 
-// docs/39 §2.4: a tool run by an interpreter toolchain is probed as
+// docs/ANALYZERS.md#도구-경로: a tool run by an interpreter toolchain is probed as
 // <interpreter> <tool path> <args> with PATH set to the interpreter's
 // directory, never through the script's #! line; without the interpreter
 // nothing is started.

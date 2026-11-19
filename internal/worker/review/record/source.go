@@ -13,7 +13,7 @@ import (
 
 // sourceExtensions are the extensions that make a path source of a language
 // ecosystem: the analyzer packs' definition of an ecosystem in scope
-// (pack.SourceFiles, docs/39 §2.8). A review test keeps the two equal.
+// (pack.SourceFiles, docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백). A review test keeps the two equal.
 var sourceExtensions = map[string]string{
 	".go": "go",
 	".py": "python", ".pyi": "python",
@@ -33,7 +33,7 @@ func SourceEcosystem(p string) string {
 // manifests are the build manifests a review-v1 corpus may carry as config
 // excerpts, by lower-cased base name. compile_commands.json is not one: it
 // is generated build output that usually holds absolute paths of the machine
-// that wrote it, and the C/C++ pack already reads it as data (docs/41).
+// that wrote it, and the C/C++ pack already reads it as data (docs/ANALYZERS.md).
 var manifests = map[string]string{
 	"go.mod":         "go",
 	"pyproject.toml": "python", "setup.cfg": "python",

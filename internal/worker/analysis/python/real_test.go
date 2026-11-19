@@ -15,7 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// Real-tool tests (docs/42 §10). Each is skipped unless its tool is named
+// Real-tool tests (docs/ANALYZERS.md#importstub-공백). Each is skipped unless its tool is named
 // by CODEYE_TEST_RUFF, CODEYE_TEST_MYPY, CODEYE_TEST_BANDIT or
 // CODEYE_TEST_PYRIGHT (+ CODEYE_TEST_NODE). The fixture projects are in
 // fixtures/w17-python/. With CODEYE_W17_CAPTURE=<dir> the tool streams are
@@ -60,7 +60,7 @@ func runReal(t *testing.T, a planner, fixtureName, key string, extra ...string) 
 	t.Helper()
 	r := runWith(t, a, fixtureName, key, &executor.Executor{}, extra...)
 	for i, res := range r.rr.results {
-		// docs/39 §11: no tool leaves a background child (daemon, worker
+		// docs/ANALYZERS.md#실행-규칙: no tool leaves a background child (daemon, worker
 		// process, telemetry) behind; cleanup is confirmed for every run.
 		if res.Cleanup != executor.CleanupConfirmed || res.LeftoverKilled {
 			t.Fatalf("execution %d cleanup %s leftover %v", i, res.Cleanup, res.LeftoverKilled)
@@ -279,7 +279,7 @@ func TestRealRuffNestedModules(t *testing.T) {
 	}
 }
 
-// docs/42 §7: the overlap fixture's constructs are ruff findings; the
+// docs/ANALYZERS.md#python-엔진-중복: the overlap fixture's constructs are ruff findings; the
 // type checkers' same checks are disabled (see the mypy and pyright tests).
 func TestRealRuffOverlap(t *testing.T) {
 	checkRuffOverlap(t, runReal(t, newRuffT(t), "overlap", "ruff"))

@@ -11,7 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// Secret screening of model inputs (W21, docs/45 §보안). The secrets task
+// Secret screening of model inputs (W21, docs/ANALYZERS.md §보안). The secrets task
 // of the static composite (an analyzer obsdoc.IsSecretAnalyzer names) runs
 // before every review role (the worker runs tasks in plan order and the
 // review handlers append their roles after the static plan), so its

@@ -13,7 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/schedule"
 )
 
-// W22 schedules (docs/09 §8, REQ-023, TC-25). A schedule stores a cron
+// W22 schedules (docs/EXECUTION.md#예약, REQ-023, TC-25). A schedule stores a cron
 // expression with an IANA time zone and a run request; the controller's
 // reconcile loop materializes due occurrences as UTC rows keyed by
 // (schedule_id, scheduled_for) and enqueues their runs through enqueueTx, the

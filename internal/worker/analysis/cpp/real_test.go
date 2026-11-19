@@ -17,7 +17,7 @@ import (
 // Real-tool tests (TC-105..TC-107). They skip unless CODEYE_TEST_CPPCHECK
 // (cppcheck 2.22.x) or CODEYE_TEST_CLANG_TIDY (clang-tidy 23.1.x) names an
 // operator-installed binary. With CODEYE_W16_CAPTURE=<dir> they write the
-// check streams the replay tests read (docs/41 §9):
+// check streams the replay tests read (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처):
 //
 //	CODEYE_TEST_CPPCHECK=$HOME/.local/share/codeye-tools/cpp/bin/cppcheck \
 //	CODEYE_TEST_CLANG_TIDY=$HOME/.local/share/codeye-tools/cpp/bin/clang-tidy \
@@ -254,7 +254,7 @@ func TestRealProbes(t *testing.T) {
 	}
 }
 
-// Engine overlap (docs/41 §7), measured on fixtures/w16-cpp/overlap: the
+// Engine overlap (docs/ANALYZERS.md#cc-엔진-중복), measured on fixtures/w16-cpp/overlap: the
 // baseline cppcheck and clang-tidy are different engines and both run. A
 // clang-tidy check that reported only constructs cppcheck also reported on
 // the same lines is not selected; a kept check that overlaps has a variant

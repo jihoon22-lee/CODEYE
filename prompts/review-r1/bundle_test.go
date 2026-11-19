@@ -207,7 +207,7 @@ func TestGoSelectionDigestsPinned(t *testing.T) {
 
 // No instruction file refers to an evaluation or test case: R0 case IDs,
 // work-item or acceptance IDs, fixture paths, or names from the W12 and W15
-// fixtures. rc1's investigate example carried an R0 answer (docs/37 §11).
+// fixtures. rc1's investigate example carried an R0 answer (docs/EVALUATION.md#회귀-집합-실행).
 func TestNoCaseSpecificText(t *testing.T) {
 	banned := regexp.MustCompile(`\bQ\d{2}\b|\bR0\b|\bW\d{2}\b|\bTC-\d+|(?i:fixture|corpus|holdout|svc/|example\.test|w12-close|gateway)|\bCharge\b|\bForward\b|\bNormalize\b`)
 	n := 0

@@ -393,7 +393,7 @@ func TestFindLinker(t *testing.T) {
 	}
 }
 
-// docs/44 §5: the rule context lists the Cargo configuration, the lint
+// docs/ANALYZERS.md#rust-규칙-문맥과-억제: the rule context lists the Cargo configuration, the lint
 // tables and (clippy) clippy.toml of the snapshot, and is unknown when cargo
 // can also read configuration outside it.
 func TestRuleConfig(t *testing.T) {

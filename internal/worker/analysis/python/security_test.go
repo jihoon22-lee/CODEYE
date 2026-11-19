@@ -13,7 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// Security rules of the pack (docs/42 §9): repository configuration is
+// Security rules of the pack (docs/ANALYZERS.md#python-입력-보호): repository configuration is
 // hostile data, repository-derived argv elements never read as options,
 // captured streams carry no source lines, and diagnostics of files outside
 // the attempt workspace are dropped.

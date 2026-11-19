@@ -359,7 +359,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	}
 	// A type-aware run whose program misses a dependency, or whose
 	// configuration did not load, has incomplete types: every type-aware
-	// diagnostic may follow from that (measured, docs/43 §4), so none is an
+	// diagnostic may follow from that (measured, docs/ANALYZERS.md#의존성-공백), so none is an
 	// observation. They stay in stdout and are listed as withheld.
 	if in.Typed && (gap || config) {
 		addLim(&limitations, "diagnostics_withheld_incomplete_types")

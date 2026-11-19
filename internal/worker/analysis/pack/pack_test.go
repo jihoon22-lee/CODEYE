@@ -242,7 +242,7 @@ func readEnvelope(t *testing.T, j analysis.Job, res analysis.TaskResult, key str
 	return doc
 }
 
-// TC-103: the repository-code grant (docs/39 §2.7) is enforced once in
+// TC-103: the repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가) is enforced once in
 // Composite.Run before dispatch. A task declared to run repository code
 // ends unsupported/repository_code_not_allowed without the grant: no process
 // started, the analyzer never called, a not-run envelope with zero processed

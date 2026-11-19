@@ -1,4 +1,4 @@
-// Package python is the W17 Python analyzer pack (docs/42). It runs the
+// Package python is the W17 Python analyzer pack (docs/ANALYZERS.md). It runs the
 // operator-installed ruff (the required baseline), mypy or pyright (type
 // checking) and bandit (security) natively through the W05 runner in the
 // attempt workspace copy and records each task in the generic observations
@@ -70,7 +70,7 @@ const (
 )
 
 // File unit states (coverage.units). Import gaps are counted in the same
-// map, by the diagnostics that report them (docs/42 §5).
+// map, by the diagnostics that report them (docs/ANALYZERS.md#타입-검사기-선택).
 const (
 	UnitAnalyzedClean        = "analyzed_clean"
 	UnitAnalyzedWithFindings = "analyzed_with_findings"
@@ -95,7 +95,7 @@ const (
 	LimDefaultContext       = "single_target_python_version"
 	// LimBothTypeCheckers: the operator selected both type checkers; where
 	// both run, their findings on one construct are separate observations
-	// (docs/42 §5).
+	// (docs/ANALYZERS.md#타입-검사기-선택).
 	LimBothTypeCheckers = "python_type_checkers_both_selected"
 	// LimOutsideDropped: the tool reported diagnostics or errors for files
 	// outside the attempt workspace (its own stubs, a path a configuration
@@ -114,7 +114,7 @@ type Config struct {
 	// BothTypeCheckers is set on mypy and pyright when the operator selected
 	// both (--mypy, --pyright and --python-both-type-checkers): their tasks
 	// then carry LimBothTypeCheckers. It records the selection, not that the
-	// other checker is usable; that task reports its own outcome (docs/42 §5).
+	// other checker is usable; that task reports its own outcome (docs/ANALYZERS.md#타입-검사기-선택).
 	BothTypeCheckers bool
 	Timeout          time.Duration
 	StdoutLimit      int64
@@ -150,7 +150,7 @@ func newBase(d pack.Descriptor, cfg Config) (base, error) {
 			return base{}, fmt.Errorf("%s needs the validated %s toolchain", d.Tool, d.Interpreter)
 		}
 		// The interpreter runs the package's entry script, never a shell or
-		// .cmd shim (docs/39 §2.4.1).
+		// .cmd shim (docs/ANALYZERS.md#공유-interpreter-toolchain).
 		if ext := strings.ToLower(filepath.Ext(resolved)); ext != ".js" && ext != ".cjs" && ext != ".mjs" {
 			return base{}, fmt.Errorf("%s path must be the package's JS entry script", d.Tool)
 		}

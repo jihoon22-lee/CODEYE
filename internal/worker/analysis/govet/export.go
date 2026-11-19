@@ -13,7 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// This file exposes the go vet handler as a pack.Analyzer (docs/39) and the
+// This file exposes the go vet handler as a pack.Analyzer (docs/ANALYZERS.md) and the
 // Go plumbing other Go analyzers share with it (W19 staticcheck). The
 // wrappers do not change go vet behavior: Plan and Run are the handler's.
 
@@ -27,7 +27,7 @@ import (
 // the child start. os.UserConfigDir reads XDG_CONFIG_HOME on Unix except
 // darwin; on Windows the executor passes no AppData, so the config dir is
 // unknown and telemetry is off; darwin has no override and is not covered
-// (docs/39 §8.2).
+// (docs/ANALYZERS.md#go-공통-환경과-빌드-문맥).
 func DisableTelemetry(env map[string]string, dir string) error {
 	switch runtime.GOOS {
 	case "windows", "darwin", "ios", "plan9":
@@ -51,7 +51,7 @@ func Descriptor() pack.Descriptor {
 
 // Plan is go vet's tool-independent planner as a pack member: the handler's
 // plan with scope, except that a snapshot or scope without Go source plans
-// nothing (docs/39 §2.8). The R0 placeholder stays only when Go source is in
+// nothing (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백). The R0 placeholder stays only when Go source is in
 // scope but no module or package can be analyzed (go_module_missing,
 // scope_has_no_go_packages): that is a real gap of this ecosystem.
 func Plan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {

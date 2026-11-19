@@ -1,5 +1,5 @@
 // Package anypack holds the parts the W21 analyzers of ecosystem "any"
-// share (lizard complexity, jscpd duplication, gitleaks secrets; docs/45):
+// share (lizard complexity, jscpd duplication, gitleaks secrets; docs/ANALYZERS.md):
 // selecting the snapshot files of the run scope, planning one task over
 // them, starting the operator tool through the executor with an explicit
 // environment, resolving tool positions against the snapshot manifest and
@@ -152,7 +152,7 @@ func RecordExclusions(doc *obsdoc.Document, excluded int) []string {
 
 // LanguageInScope reports whether source of a supported language ecosystem
 // is in scope. The "any" analyzers extend a code review: a snapshot without
-// supported source keeps planning no analyzer task (docs/39 §2.8).
+// supported source keeps planning no analyzer task (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백).
 func LanguageInScope(job analysis.Job) bool {
 	return len(pack.InScope(job.Snapshot.Manifest, job.Scope)) > 0
 }
@@ -201,7 +201,7 @@ func Plan(job analysis.Job, d pack.Descriptor, title string, files []source.Entr
 }
 
 // Tool is an operator-installed tool: its absolute path and, for a script,
-// the validated interpreter toolchain that runs it (docs/39 §2.4.1).
+// the validated interpreter toolchain that runs it (docs/ANALYZERS.md#공유-interpreter-toolchain).
 type Tool struct {
 	Executable  string
 	Resolved    string

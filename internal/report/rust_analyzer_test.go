@@ -12,7 +12,7 @@ import (
 // cargo-check.json, observations-clippy.json, captured from cargo 1.99.1 and
 // clippy 0.1.99) decode through the generic analyzer decoder like the other
 // packs'. The rule context honors the repository configuration and in-source
-// suppressions (docs/44 §5).
+// suppressions (docs/ANALYZERS.md#rust-규칙-문맥과-억제).
 
 func rustDoc(t *testing.T, name string) map[string]any {
 	t.Helper()
@@ -98,7 +98,7 @@ func TestAnalyzerDecoderRustUnenumeratedConfig(t *testing.T) {
 }
 
 // A task the node did not run (no repository-code grant) is a not-run row with
-// a known zero: its findings are never inspected (docs/39 §2.7).
+// a known zero: its findings are never inspected (docs/ANALYZERS.md#저장소-코드-실행-허가).
 func TestAnalyzerDecoderRustNotRun(t *testing.T) {
 	d := rustDoc(t, "cargo-check")
 	d["adapter"] = map[string]any{"id": "codeye-not-run", "version": "1"}

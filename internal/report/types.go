@@ -18,7 +18,7 @@ const (
 	SchemaVersion = "0.1"
 	BuilderID     = "codeye-report"
 	// BuilderVersion 4 (W19) adds the tool rows' rule_context and the
-	// observations' suppressed flag (docs/39 §5.1, docs/40 §3.3).
+	// observations' suppressed flag (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태).
 	BuilderVersion = "4"
 )
 
@@ -122,7 +122,7 @@ type Summary struct {
 	HiddenFindings int `json:"hidden_findings,omitempty"`
 
 	// MetricObservations counts the observations of RawObservations that
-	// are structure metrics (W21, docs/45: complexity, duplication). They
+	// are structure metrics (W21, docs/ANALYZERS.md: complexity, duplication). They
 	// are never findings, candidates or actionable; omitted when zero.
 	MetricObservations int `json:"metric_observations,omitempty"`
 }
@@ -198,7 +198,7 @@ type ToolCoverage struct {
 	// adapter does not record them (and in revisions before builder 3).
 	ProcessedPaths []string `json:"processed_paths,omitempty"`
 	// RuleContext is the rule pack and configuration the tool ran with
-	// (builder 4, docs/39 §5.1). A comparison resolves a vanished finding only
+	// (builder 4, docs/ANALYZERS.md#규칙-문맥과-소스-안-억제). A comparison resolves a vanished finding only
 	// when it is known and equal on both sides. Omitted in revisions before
 	// builder 4; RuleContextOf synthesizes go vet's.
 	RuleContext *RuleContext `json:"rule_context,omitempty"`
@@ -269,14 +269,14 @@ type Observation struct {
 	// in-source suppression (builder 4). It is never a finding; a comparison
 	// uses it to tell "suppressed" from "fixed".
 	Suppressed bool `json:"suppressed,omitempty"`
-	// Metric marks a structure measurement over its threshold (W21, docs/45),
+	// Metric marks a structure measurement over its threshold (W21, docs/ANALYZERS.md),
 	// never a defect: it is never a finding. Its numbers hold no code, so
 	// the code-free export keeps them.
 	Metric *ObservationMetric `json:"metric,omitempty"`
 }
 
 // ObservationMetric is the measured value of a metric observation (the
-// envelope's metric, docs/45).
+// envelope's metric, docs/ANALYZERS.md).
 type ObservationMetric struct {
 	Name      string `json:"name"`
 	Value     int    `json:"value"`

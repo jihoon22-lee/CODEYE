@@ -18,7 +18,7 @@ import (
 // A compile_commands.json is data written on the original build machine. It
 // is mapped onto the attempt workspace here and never executed: the entry's
 // compiler is only a driver name that tells the tool the language mode, and
-// every flag passes an allowlist (docs/41 §3).
+// every flag passes an allowlist (docs/ANALYZERS.md#compile-db-매핑).
 
 // Entry exclusion reasons (counted per compile DB entry).
 const (

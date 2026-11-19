@@ -1,4 +1,4 @@
-// Package lizard is the W21 complexity adapter (docs/45). It runs the
+// Package lizard is the W21 complexity adapter (docs/ANALYZERS.md). It runs the
 // operator-installed lizard natively through the W05 runner in the attempt
 // workspace copy over the planned source files and records functions whose
 // cyclomatic complexity reaches the rule pack threshold as metric

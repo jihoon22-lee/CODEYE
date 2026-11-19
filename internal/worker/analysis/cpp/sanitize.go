@@ -25,7 +25,7 @@ import (
 //
 // The tool process can still read any file the node account can read; only
 // persistence is prevented, and a diagnostic located in a workspace file can
-// still carry a value computed from such a file (docs/41 §8).
+// still carry a value computed from such a file (docs/ANALYZERS.md#작업-사본-밖-파일-내용의-저장-차단).
 
 // LimOutsideDropped: diagnostics located outside the workspace copy were
 // removed from the stored streams and the envelope.

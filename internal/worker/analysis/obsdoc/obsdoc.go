@@ -1,5 +1,5 @@
 // Package obsdoc is the generic analyzer observations envelope shared by the
-// R1 analyzer packs (W16-W21, docs/39). One document describes one analyzer
+// R1 analyzer packs (W16-W21, docs/ANALYZERS.md). One document describes one analyzer
 // task: which tool ran where, how each execution ended, what the parser read
 // and which raw tool diagnostics it kept. It is I/O free so the worker, the
 // review-r1 roles and the report decoder validate the same bytes with the
@@ -35,7 +35,7 @@ const (
 	MaxBytes = 16 << 20
 )
 
-// Exit classes (docs/06 §6). not_run: no tool execution was attempted.
+// Exit classes (docs/ANALYZERS.md#종료-등급과-결과). not_run: no tool execution was attempted.
 const (
 	ExitSuccessWithoutFindings = "success_without_findings"
 	ExitSuccessWithFindings    = "success_with_findings"
@@ -58,7 +58,7 @@ const (
 )
 
 // Rule pack handling of repository configuration and in-source suppressions
-// (docs/39 §5.1 rule context). A pack that honors repository configuration
+// (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제 rule context). A pack that honors repository configuration
 // records the files the tool read in RulePack.ConfigFiles; one that cannot
 // enumerate them records null, and its vanished findings are never
 // resolved. A pack whose tool hides suppressed diagnostics records honored;
@@ -285,7 +285,7 @@ type Observation struct {
 	Suppressed bool `json:"suppressed"`
 	// Metric, when set, makes the observation a structure or duplication
 	// measurement that reached the rule pack's reporting threshold (W21,
-	// docs/45), not a diagnostic of a defect: it is never active (Active), a
+	// docs/ANALYZERS.md), not a diagnostic of a defect: it is never active (Active), a
 	// finding, a defect count or model review input. Absent on diagnostics.
 	Metric *Metric `json:"metric,omitempty"`
 }
@@ -310,7 +310,7 @@ var MetricUnits = []string{"count", "lines", "tokens"}
 // SecretAnalyzers are the analyzers whose observations locate a credential
 // in the snapshot (W21 gitleaks). No consumer attaches a code excerpt of
 // such a location, and their messages are fixed templates without secret
-// material (docs/45).
+// material (docs/ANALYZERS.md).
 var SecretAnalyzers = []string{"any.gitleaks"}
 
 // IsSecretAnalyzer reports an analyzer of SecretAnalyzers.

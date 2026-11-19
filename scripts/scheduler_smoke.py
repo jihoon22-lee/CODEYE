@@ -57,7 +57,7 @@ def run(base, root, env):
     user = json.loads(cli("user", "create", "--name", "Scheduler fixture"))["id"]
     source_id = json.loads(cli("source-root", "add", "--label", "scheduler-smoke", "--path", source))["id"]
     cli("source-root", "grant", "--root", source_id, "--user", user)
-    # 정책: 전역 3, 프로젝트별 기본 1(docs/09), pool default min0/max2, 짧은 유휴·쿨다운(시험 시간 단축).
+    # 정책: 전역 3, 프로젝트별 기본 1(docs/EXECUTION.md), pool default min0/max2, 짧은 유휴·쿨다운(시험 시간 단축).
     cli("scheduler", "set", "--global-max-running", "3")
     cli("pool", "set", "--name", "default", "--min-workers", "0", "--max-workers", "2",
         "--idle-timeout-seconds", "2", "--scale-up-cooldown-seconds", "0", "--scale-down-cooldown-seconds", "0")

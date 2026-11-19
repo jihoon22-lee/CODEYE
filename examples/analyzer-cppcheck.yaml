@@ -1,4 +1,4 @@
-# W16 C/C++ 팩 기준 분석기(Required) cppcheck 어댑터 서술. 구현: internal/worker/analysis/cpp, 근거: docs/41-w16-cpp-pack.md.
+# W16 C/C++ 팩 기준 분석기(Required) cppcheck 어댑터 서술. 구현: internal/worker/analysis/cpp, 근거: docs/ANALYZERS.md.
 # cppcheck 2.22.0 --error-exitcode=2는 <error> 레코드(심각도 무관, missingInclude 같은 범위 레코드 포함)가 하나라도 있으면 exit 2, 없으면 0이다. 실행마다 쓰는 checkersReport 요약 레코드는 세지 않는다.
 # exit 2만으로 발견을 판정하지 않는다. 범위 레코드는 도구 오류·제약이고, 관찰 여부는 stderr XML(version 2) parser가 결정한다.
 # exit 1은 사용법 오류·입력 없음("cppcheck: error:"), 그 밖의 종료와 signal은 실패다.

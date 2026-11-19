@@ -1,5 +1,5 @@
-"""W24 scoring: auto-match pre-fill, judgment templates, docs/16 metrics with Wilson intervals,
-variance across repeats, and report-reading sheets (docs/46 §6-8).
+"""W24 scoring: auto-match pre-fill, judgment templates, docs/EVALUATION.md metrics with Wilson intervals,
+variance across repeats, and report-reading sheets (docs/EVALUATION.md#채점).
 
 Rules that keep the numbers honest:
 - An auto-match (location overlap or symbol) is a pre-fill for the judge, never a verdict.
@@ -198,7 +198,7 @@ def judgment_template(batch, corpus, slack=2):
                       "findings": findings})
     return {"schema": JUDGMENT_SCHEMA, "version": 1, "batch": manifest["batch"],
             "corpus_digest": manifest["corpus"]["digest"], "judge": None, "verdicts": list(VERDICTS),
-            "instructions": ("Set verdict to one of `verdicts` per finding (docs/16 §3) and matches_label to true "
+            "instructions": ("Set verdict to one of `verdicts` per finding (docs/EVALUATION.md#정답-라벨) and matches_label to true "
                              "when the finding states the labelled cause and condition (wording may differ). "
                              "auto_match is a location pre-fill, not a verdict. Leave null when not judged."),
             "items": items}
@@ -481,8 +481,8 @@ def score(batches, judgment_files, corpus, line_slack=2):
                          "not_independent_because": labelled,
                          "answer_blocking_modes": modes,
                          "note": ("A comparison is independent only when no batch is a dry run and no pack digest "
-                                  "is labelled holdout_seen_by_prior_revision (docs/46 §4). Review batches with "
-                                  "different answer_blocking modes exclude different variants (docs/46 §3.4).")}
+                                  "is labelled holdout_seen_by_prior_revision (docs/EVALUATION.md#holdout-등록부). Review batches with "
+                                  "different answer_blocking modes exclude different variants (docs/EVALUATION.md#정답-차단).")}
     out["report_reading"] = {"status": "not_measured",
                              "reason": "report-reading answers are scored separately with `r1_eval.py reader-score`"}
     return out
@@ -543,7 +543,7 @@ def render_table(result):
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------- report reading (docs/16 §7)
+# ---------------------------------------------------------------- report reading (docs/EVALUATION.md#보고서-읽기-평가)
 
 SHEET_QUESTIONS = [
     "이 보고서에서 가장 중요한 위험 3개를 고르고, 각각의 발생 조건과 근거 위치(경로:줄)를 적으세요.",

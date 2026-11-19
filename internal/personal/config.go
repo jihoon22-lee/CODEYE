@@ -1,4 +1,4 @@
-// Package personal runs CODEYE on one machine (W25, docs/47): one JSON
+// Package personal runs CODEYE on one machine (W25, docs/OPERATIONS.md): one JSON
 // configuration file, a 0700 state directory, one loopback controller and one
 // local node agent started, stopped and inspected by `codeye start|stop|status`.
 //
@@ -31,7 +31,7 @@ const (
 	DatabaseExternal = "external"
 )
 
-// Config is the personal configuration (docs/47 §2). Unknown fields are
+// Config is the personal configuration (docs/OPERATIONS.md#개인-모드-설정-파일). Unknown fields are
 // rejected; paths must be absolute and clean.
 type Config struct {
 	SchemaVersion string       `json:"schema_version"`
@@ -60,14 +60,14 @@ type SourceRoot struct {
 	Label string `json:"label"`
 	Path  string `json:"path"`
 	// RepositoryCode grants analyzers that execute repository code
-	// (docs/39 §2.7) for this root. Default false.
+	// (docs/ANALYZERS.md#저장소-코드-실행-허가) for this root. Default false.
 	RepositoryCode bool `json:"repository_code,omitempty"`
 	// ModelReview approves sending this root's code to the configured model
 	// (agent.model). Default false.
 	ModelReview bool `json:"model_review,omitempty"`
 }
 
-// Agent configures the local node agent (codeye agent flags, docs/28).
+// Agent configures the local node agent (codeye agent flags, docs/EXECUTION.md).
 type Agent struct {
 	Name                   string            `json:"name,omitempty"`
 	MaxWorkers             int               `json:"max_workers,omitempty"`

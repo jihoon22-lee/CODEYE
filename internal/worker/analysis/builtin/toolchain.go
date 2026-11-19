@@ -17,7 +17,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// Shared toolchains (docs/39 §2.4) are interpreters or runtimes that
+// Shared toolchains (docs/ANALYZERS.md#도구-경로) are interpreters or runtimes that
 // analyzer tools of several packs need (node for pyright, tsc, eslint,
 // jscpd). Each has one agent flag (--<name> /abs/path), one version probe
 // and one validated handle; packs declare the need in

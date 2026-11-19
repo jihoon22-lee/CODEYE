@@ -1,0 +1,296 @@
+# 배포와 운영
+
+한 머신에서 CODEYE를 Native로 운영하는 개인 모드의 계약과, 아직 구현하지 않은 서버·노드·폐쇄망 배포의 설계 계약을 적는다. 사용자용 절차는 [사용 안내서](GUIDE.md)에 있다. 보안 경계와 보관·삭제 정책은 [보안](SECURITY.md), 실행기와 워커 정책은 [실행](EXECUTION.md)에 있다.
+
+| 범위 | 상태 |
+|---|---|
+| `codeye start`·`stop`·`status`(개인 모드) | Linux에서 구현·검증. Windows는 빌드되며 명시적 미지원 오류를 낸다 |
+| 데이터베이스 | 운영자가 준비한 PostgreSQL(`CODEYE_DATABASE_URL`)만 구현. 관리형(번들) PostgreSQL은 구현하지 않았다 |
+| 저장 영역 상한 | snapshot·workspace·cache·logs·artifacts. 새 작업만 거절하고 지우지 않는다 |
+| 백업·복원 | DB와 확정 산출물을 같은 논리 시점으로 묶는다. 빈 대상에만 복원하고 이전 lease를 살리지 않는다 |
+| `codeye doctor` | 호스트·도구·DB 진단. `--config`를 주면 저장 영역 사용량·상한, 최신 백업 나이, start/stop 상태 일관성을 더한다 |
+| 서버 배포, 다중 노드, 폐쇄망 배포팩 | 설계 계약(미구현). 마지막 두 절 |
+
+관련 요구사항: REQ-018(자원 제한), REQ-021(drain), REQ-022(lease·fencing·복구), NFR-003(재시작 뒤 복구), NFR-006(loopback 개인 모드, 민감값), NFR-007(산출물 hash). 수용 시험 TC-124~127과 TC-32는 [시험](TESTING.md)에 있다.
+
+## 지원 범위
+
+Docker·Podman·Kubernetes는 필요 조건이 아니다. 아래는 실제로 실행해 본 범위다. 적지 않은 조합은 확인하지 않았다.
+
+| 대상 | 확인한 것 | 확인하지 않은 것 |
+|---|---|---|
+| Linux(WSL2, 커널 6.18), PostgreSQL 17.10, Go 1.27.4, Node 24.18.0 | 개인 모드 전체 경로(start·stop·status·backup·restore·doctor), 백업·복원 시험, Go 시험 전체 | — |
+| Ubuntu 24.04 CI 러너 | Go 시험 전체(임시 PostgreSQL 포함), vet, 웹 시험·빌드, 개인 모드 smoke. DB는 러너에 설치된 PostgreSQL을 쓴다 | 백업·복원 시험(TC-32)과 smoke는 PostgreSQL 17.10에서만 실행했다 |
+| RHEL 8.10 | — | 실행하지 않았다. 커널(4.18 기반)이 `pidfd_open`을 제공하는지 확인하지 않았다. 제공하지 않으면 `stop`은 신호를 보내지 않고 `action=not_signalled_unsupported`, 결과 `recovery_required`다. 같은 pid를 쓰는 다른 프로세스에 신호가 가지 않게 하려는 선택이다 |
+| Windows | CI(Windows Server 2025)는 Go 단위 시험·vet·빌드만 실행한다. `GOOS=windows go vet ./...`가 통과한다. `doctor`는 동작하며 `processes.status=unsupported`를 낸다 | `start`·`stop`·`status`·`backup`·`restore`는 `codeye start/stop/status manage processes on Linux only …` 오류와 종료 코드 1로 끝난다. Windows 11의 Native 실행기(Job Object) 수용 시험은 실행하지 않았다. PostgreSQL이 필요한 시험은 Windows 작업에서 건너뛴다 |
+| macOS | — | 빌드와 실행을 확인하지 않았다 |
+
+- 개인 모드의 프로세스 관리는 `pidfd_open`(Linux 5.3 이상), `flock`, `setsid`, `SIGUSR1`(drain)·`SIGTERM`(취소)을 쓴다.
+- Go 서비스 바이너리와 정적 웹 파일을 배포하되 분석 도구 런타임은 별도다. cgo나 동적 라이브러리를 쓰면 대상 glibc·시스템 라이브러리 호환성을 실제로 확인해야 한다. 최신 빌드 머신에서 컴파일됐다는 사실만으로 RHEL 8 호환을 가정하지 않는다.
+- 시스템 서비스 등록(systemd, Windows Service)과 로그아웃 뒤 유지는 없다. 개인 모드 프로세스는 setsid로 터미널과 분리될 뿐이다.
+
+## 구성 요소와 수동 실행
+
+`codeye start`는 아래 명령을 묶은 것이다. 개별 실행도 같은 계약을 따른다.
+
+```text
+codeye migrate                                   # schema 적용. start·serve는 migrate하지 않는다
+codeye user create [--name NAME]                 # 사용자는 CLI로만 만든다
+codeye source-root add --label LABEL --path ABSOLUTE_DIR
+codeye source-root grant --root ROOT_ID --user USER_ID
+codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
+codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331]
+codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s]
+codeye node token create --pool NAME [--source-root ID[,ID...]] [--output .codeye/enroll-token] [--ttl 10m]
+codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--autoscale --max-workers N] ...
+```
+
+- `serve`는 controller API, 노드 프로토콜(등록·claim·lease·산출물), 풀 자동 증감, 프로젝트 예약을 실행한다. loopback이 아닌 주소는 거부한다. 등록된 노드가 없으면 run은 `queued`로 남고 `waiting_reason`이 `execution_unavailable`이다.
+- 로그인 링크와 등록 토큰은 0600 파일에만 쓴다. 표준 출력에는 토큰을 쓰지 않는다. DB에는 SHA-256만 저장한다.
+- 에이전트의 옵션 전체는 `codeye --help`에 있다. 풀의 최소·최대와 전역 상한은 `codeye pool set`, `codeye scheduler set`으로 조정한다. 노드 철회는 `codeye node revoke --id NODE_ID`다.
+- 한 머신 밖의 노드를 쓰는 배포는 검증하지 않았다([서버·노드 배포](#서버노드-배포-설계-계약-미구현)).
+
+## codeye doctor
+
+```text
+codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
+```
+
+호스트·도구·디스크·DB를 검사한다. 실제 모델 요청은 하지 않는다. 모델 연결은 `codeye model probe`(실제 추론을 요청하므로 비용이 들 수 있다)로 확인한다. [schema](../schemas/doctor.schema.json)와 [합성 예시](../examples/doctor.json)가 있다. 예시는 현재 머신의 실측 결과가 아니다.
+
+**검사 항목(13개).** `host`, `work_disk`, 도구 probe 여덟 개(`git`, `go`, `node`, `python`(실행명 `python3`), `c_cpp`(`cc`), `rust`(`rustc`), `postgres_client`(`psql`), `opencode_cli`), `database`, `model`, `process_control`. `schema_version`은 `0.1`이다. host에는 OS·arch·논리 CPU와, Linux에서는 RAM·디스크 관측치를 기록한다. Linux 외의 RAM·디스크 관측은 구현하지 않아 null이며 자원 한도를 적용한다는 뜻이 아니다.
+
+| 상태 | 뜻 |
+|---|---|
+| `available` | 해당 probe 범위를 확인했다 |
+| `unavailable` | 실패했거나 실행할 수 없다 |
+| `not_configured` | DB 설정(`CODEYE_DATABASE_URL`)이 없다 |
+| `unverified` | 계약이나 능력을 확인하지 않았다 |
+
+- `version_only`는 버전 문자열만 확인했다는 뜻이다. 언어 어댑터 지원, 분석 품질, OS 호환성 인증이 아니다. Python은 `python3`, C/C++는 `cc`만 찾는다. 다른 실행명, MSVC, 별도 toolchain profile 탐지는 하지 않는다.
+- `model`과 `process_control`은 doctor가 확인하지 않는 항목이라 항상 `unverified`다.
+- **종료 코드.** 0은 모든 항목이 `available`, 1은 `available`이 아닌 항목이 있음, 2는 사용법·출력 오류다. 위 두 항목이 고정으로 `unverified`이므로 현재 빌드의 `doctor`는 다른 항목이 모두 정상이어도 1로 끝난다. 이 값은 분석 run 상태와 무관하다.
+- `--timeout`은 probe별 제한이며 기본 5초, 최대 1분이다. 여러 probe를 순서대로 실행하므로 전체 시간 제한은 아니다.
+- 작업 디스크 probe는 `--work-dir`를 만들고 임시 파일 쓰기, sync, 읽기, 삭제를 확인한다. 분석 대상 프로젝트 경로를 지정하지 않는다. 같은 경로의 기존 파일을 덮어쓰지 않는다.
+- 도구는 PATH에서 찾은 실행 파일을 argv로 호출한다. 임시 cwd/home, 제한된 환경, 8 KiB 출력 상한을 쓰고 계정 credential을 상속하지 않는다. 실행 파일 자체는 운영자가 신뢰하는 설치여야 한다. 이는 OS 샌드박스가 아니다.
+- 원시 stdout/stderr, 실행 경로, DSN, 비밀번호를 결과에 넣지 않는다. 버전은 숫자 부분만 기록하고 실패는 고정 reason으로 표시한다. timeout은 종료를 확정하지 않고 `recovery_required`다. probe의 process group 중지는 실행기의 취소 계약을 대체하지 않는다.
+- **DB 검사.** `CODEYE_DATABASE_URL`에 명시한 PostgreSQL URL만 검사한다. argv에 URL을 넣는 옵션은 없다. URL에는 host·user·database가 필요하고 `sslmode`, `sslrootcert`만 허용한다. 기본 TLS는 verify-full이며 `sslmode=disable`은 `127.0.0.1`/`::1`만 허용한다. 인증정보는 psql 자식 환경에만 전달하고 사용자 psqlrc, PGSERVICE, 기존 PGPASS, 운영 DB 환경을 상속하지 않는다. `psql -X -w`로 비대화형 읽기 쿼리 `SELECT current_setting('server_version')`만 수행한다. psql이 없으면 명확히 실패한다. TCP 포트가 열렸다는 이유로 DB 정상이라고 표시하지 않는다. DB 생성과 migration은 하지 않는다.
+
+**`--config` 운영 점검.** 개인 모드 설정 경로를 주면 선택 필드 `operations`가 붙는다. `--config`가 없으면 출력에 이 필드가 없다. 종료 코드 규칙은 같다. 화면은 아직 이 값을 표시하지 않는다.
+
+- `storage[]`: 다섯 영역마다 `status`(`within_limit`·`over_limit`·`no_limit`·`unmeasured`), `bytes`, `limit_bytes`, `filesystem_available_bytes`(statfs, Linux 외 null), `incomplete`, `enforcement`(`claim_refusal_node_heartbeat`·`claim_refusal_database_accounting`).
+- `backup`: `backup_dir`의 가장 최근 완성 세트(manifest 형식이 맞는 것). `status`는 `not_configured`·`none`·`unreadable`·`recent`·`stale`(7일 초과)이고 `latest`, `created_at`, `age_seconds`가 붙는다. 세트 검증(hash)은 하지 않는다. 검증은 restore가 한다.
+- `processes`: [프로세스 상태 일관성](#프로세스-상태-일관성) 검사. `status`는 `consistent`·`inconsistent`·`unsupported`, 역할별 상태, `issues`다. start·stop이 진행 중이면 `operation_in_progress`이고 에이전트 lock은 확인하지 않는다.
+
+schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasured`면 `bytes`가 null, `consistent`면 문제 없음 등)은 `if/then`으로 묶었다. 웹의 Ajv strict 검증기도 이 schema로 생성한다.
+
+## 개인 모드 설정 파일
+
+기본 경로는 `$XDG_CONFIG_HOME/codeye/personal.json`(Go `os.UserConfigDir`)이다. 모든 개인 모드 명령은 `--config PATH`를 받는다. 형식은 JSON 하나다. 알 수 없는 필드, 뒤에 붙은 값, 상대 경로, 정리되지 않은 경로는 거부한다. 오류 메시지에는 설정 경로나 거부된 값을 넣지 않는다. 예시는 [examples/personal.json](../examples/personal.json)이고, 이 빌드의 도구 이름으로 읽힌다는 시험이 있다. 코드는 [internal/personal/config.go](../internal/personal/config.go)다.
+
+| 필드 | 기본값 | 검증 |
+|---|---|---|
+| `schema_version` | (필수) | `"0.1"` |
+| `state_dir` | (필수) | 절대 경로. 0700으로 만들고, 소유자가 다르거나 symlink면 거부한다. source root와 서로 포함하면 안 된다 |
+| `listen` | `127.0.0.1:7331` | loopback 주소와 0이 아닌 포트만 |
+| `web_dir` | 빈 값(API만) | 빌드된 `web/dist`의 절대 경로 |
+| `database.mode` | (필수) | `external`만 구현. `managed`는 `not implemented` 오류 |
+| `database.postgres_bin_dir` | 빈 값 | `pg_dump`·`pg_restore`가 있는 절대 경로. PATH에서 찾지 않는다. 백업·복원에 필요하다 |
+| `source_roots[]` | (1~32개) | `label`(1~100자, 앞뒤 공백 없음), 절대 `path`. label과 path는 서로 유일해야 한다. 선택 `repository_code`(저장소 코드 실행 허가), `model_review`(모델 전송 승인, `agent.model` 필요). 둘 다 기본 false |
+| `agent.name` | `personal` | 100자 이하 |
+| `agent.max_workers` | 1 | 1~16. 에이전트는 `--autoscale --max-workers N`으로 시작한다 |
+| `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록 |
+| `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로 |
+| `agent.tools` | 빈 값 | 이 빌드의 분석기·toolchain 플래그 이름(`staticcheck`, `node`, `ruff` 등)을 키로, 실행 파일의 절대 경로를 값으로. 모르는 이름은 거부한다 |
+| `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행 |
+| `agent.model` | 없음 | `opencode`(절대 경로), `name`(`PROVIDER/MODEL`, 공백 없음), 선택 `relay_file`(절대 경로), `review_pack`(`review-r1` 기본·`review-v1` 이전 팩) |
+| `quota.*_bytes` | 0(상한 없음) | `snapshot`·`workspace`·`cache`·`logs`·`artifacts`, 음수 거부 |
+| `backup_dir` | 빈 값 | 절대 경로. `state_dir` 안이거나 `state_dir`를 포함하면 거부 |
+| `stop.drain_timeout_seconds` | 300 | 1~86400 |
+| `stop.cancel_timeout_seconds` | 90 | 45~3600 |
+
+- 설정과 상태 디렉터리에는 DB URL이나 토큰을 쓰지 않는다. DB 연결은 실행할 때의 환경변수 `CODEYE_DATABASE_URL`만 쓴다. `codeye` 프로세스 환경에 `PG*` 변수가 있으면 DB 열기를 거부한다(fail closed).
+- 설정에는 Git 저장소 필드가 없다. `codeye start`가 띄운 에이전트에는 `--git`·`--git-host`가 전달되지 않으므로 로컬 폴더 프로젝트만 처리한다. Git 입력은 에이전트를 직접 띄워야 한다([Git 연결](GITHUB.md)).
+
+## start, stop, status
+
+```text
+codeye start  [--config PATH]
+codeye stop   [--config PATH] [--format text|json]
+codeye status [--config PATH] [--format text|json]
+```
+
+### 상태 디렉터리
+
+배치는 모두 0700 디렉터리, 0600 파일이다.
+
+| 경로 | 내용 |
+|---|---|
+| `run/controller.json`, `run/agent.json` | pid, 프로세스 시작 시각(`/proc/PID/stat` starttime), 실행 파일, 기록 시각 |
+| `run/enroll-token` | 일회용 등록 토큰. 등록·heartbeat 확인 직후, 그리고 실패한 start의 끝에 지운다 |
+| `personal.json` | 개인 사용자 ID |
+| `login-link` | 일회용 로그인 링크(만료 시각 포함) |
+| `personal.lock` | start·stop·backup·restore의 상호 배제 |
+| `logs/controller.log`, `logs/agent.log` | 자식 프로세스 출력(O_APPEND) |
+| `agent/` | 에이전트 상태 디렉터리(journal, node.json, 작업 사본) |
+| `artifacts/` | controller 산출물 저장소 |
+
+### start
+
+개인 lock을 잡고 상태를 검사한다([일관성](#프로세스-상태-일관성)). 둘 다 실행 중이면 그대로 종료 코드 0이다. 하나만 실행 중이거나 기록 없는 프로세스가 lock·포트를 쥐고 있으면 거부한다. 기록의 프로세스가 끝났거나 pid가 다른 프로세스로 재사용됐으면 기록만 지운다(신호 없음). 그 뒤 순서는 다음과 같다.
+
+1. schema가 이 바이너리의 migration(현재 9)과 같은지 확인한다. 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. start는 migration을 하지 않는다.
+2. 개인 사용자를 만들거나 다시 쓴다. 설정의 source root를 label로 등록하고 사용자에게 허가한다. 같은 label이 다른 경로로 등록돼 있으면 거부한다. `quota.artifacts_bytes`를 `scheduler_limits.artifact_quota_bytes`에 반영한다(0이면 제거).
+3. 등록이 필요한지 정한다. 처음 시작했거나, 노드가 철회됐거나, DB가 노드를 모르거나(복원 뒤), source root 집합이 바뀌었으면 다시 등록한다. 다시 등록하기 전에 에이전트 journal에 끝나지 않은 작업이 없는지 확인한다. 이전 노드는 철회하고, 이전 `agent/`는 `agent.retired-<ns>`로 이름만 바꾼다(삭제하지 않는다). 등록 토큰은 10분짜리 일회용이며 0600 파일로만 전달한다.
+4. `codeye serve`를 setsid로 띄운다. 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다.
+5. `codeye agent`를 띄운다. 환경은 PATH·LANG뿐이며 DB 정보가 없다. argv는 설정에서 만든다(source root 허가, 도구, 모델, `--storage-quota`, `--storage-log-dir`). `node.json`이 생기고 DB에 신선한 heartbeat가 올 때까지 120초를 기다린다.
+6. 실패하면 이미 띄운 프로세스를 역순으로 SIGTERM하고 45초 기다린다. 끝나지 않은 프로세스의 기록은 지우지 않는다.
+
+성공하면 새 로그인 링크를 쓴다.
+
+### stop
+
+신호는 pidfd로 보낸다. pidfd를 연 뒤 그 프로세스의 시작 시각이 기록과 같은지 확인하고 `pidfd_send_signal`을 호출한다. 그래서 재사용된 pid의 다른 프로세스에는 신호가 가지 않는다. 강제 종료(SIGKILL)는 하지 않는다.
+
+1. 에이전트에 SIGUSR1(drain)을 보낸다. 에이전트는 새 claim을 멈추고 유휴 워커를 정리한다. 실행 중인 attempt는 끝까지 수행해 결과를 보고한 뒤 스스로 종료한다(exit 0).
+2. `stop.drain_timeout_seconds` 안에 끝나지 않으면 SIGTERM을 보낸다. 에이전트는 실행 중인 작업을 취소하고 하위 프로세스 정리를 확인한다. 그 attempt는 `failed`(`agent_shutdown`)로 끝나고 run도 `failed`다. 성공으로 바꾸지 않고 자동으로 다시 대기열에 넣지 않는다. 다시 분석하려면 새 run을 요청한다.
+3. 에이전트가 끝나면 에이전트 journal을 읽어 정리를 판정한다(`agent_cleanup`: `confirmed`·`uncertain`). 그다음 controller에 SIGTERM을 보낸다.
+4. 결과는 `stopped`, `not_running`, `recovery_required`, `failed` 중 하나다. 다음이면 `recovery_required`다: 에이전트가 `cancel_timeout_seconds` 뒤에도 실행 중(이때 controller는 남겨 정리 보고를 받을 수 있게 한다), journal 판정 `uncertain`, 이 노드의 attempt가 DB에서 아직 `leased`·`recovery_required`. controller가 멈추지 않으면 `failed`다. 종료 코드 0은 `stopped`·`not_running`일 때뿐이다.
+
+JSON 출력은 `outcome`, `processes[]`(`state_before`, `action`, `state_after`), `in_flight_at_stop`, `attempts_after_stop`, `agent_cleanup`, `notes`를 담는다. DB가 없으면 진행 중 작업을 읽지 못했다고 `notes`에 적는다.
+
+### status
+
+프로세스별 상태, controller `/ready`, DB 연결, 노드 ID와 heartbeat 신선도, 워커 상태별 수, 이 노드의 진행 중 attempt, 저장 영역을 보여 준다. 상태는 `running`·`stopped`·`degraded`이며 `degraded`면 종료 코드 1이다. 다른 start·stop이 lock을 쥐고 있으면 `operation_in_progress`를 보고하고 에이전트 lock은 확인하지 않는다.
+
+### 프로세스 상태 일관성
+
+`start`·`status`·`doctor --config`는 기록, 살아 있는 프로세스, 에이전트 상태 lock(`agent/agent.lock`), listen 주소를 대조한다.
+
+| 문제 | 뜻 |
+|---|---|
+| `stale_record` | 기록의 프로세스가 끝났거나 pid가 재사용됐다(`exited`·`pid_reused`) |
+| `agent_running_without_record` | 기록 없는 프로세스가 에이전트 lock을 쥐고 있다 |
+| `listen_in_use_without_record` | 기록 없는 프로세스가 listen 주소를 쓰고 있다 |
+| `partially_running` | controller와 에이전트 중 하나만 실행 중이다 |
+| `record_unreadable` | 기록이나 lock을 읽지 못했다 |
+
+기록되지 않은 프로세스에는 어떤 명령도 신호를 보내지 않는다.
+
+## 저장 영역과 상한
+
+| 영역 | 측정 대상 | 적용 근거 |
+|---|---|---|
+| `snapshot` | `agent/data/acquire-*`(그 안의 `workspace` 제외) | 에이전트가 직접 잰다. heartbeat `storage_quota_exceeded` |
+| `workspace` | `agent/data/acquire-*/workspace`, `agent/data/ws-*` | 같음 |
+| `cache` | `agent/workers`(워커 home·scratch), `agent.go_mod_cache` | 같음 |
+| `logs` | `state_dir/logs` | 같음(`--storage-log-dir`) |
+| `artifacts` | controller 산출물 | DB 집계. `artifacts`에서 sha256마다 한 번 센 크기 합 |
+
+- 측정은 symlink를 따라가지 않고 파일 자체 크기를 센다. 읽지 못한 항목이 있으면 `incomplete`로 표시한다.
+- 에이전트는 30초마다 잰다. 사용량이 상한 이상인 영역을 heartbeat에 보낸다. 상한이 없으면 필드를 보내지 않아 heartbeat 바이트가 바뀌지 않는다. 그 사이의 사용량은 반영되지 않는다.
+- **거절 지점.** `ClaimAttempt` 트랜잭션 안에서 판정한다. 노드가 보고한 영역이 하나라도 있으면 그 노드는 새 claim을 받지 않는다(204). `artifact_quota_bytes`가 있고 확정 산출물 합이 그 이상이면 어떤 노드도 새 claim을 받지 않는다. 대기 중인 run의 `progress.waiting_reason`은 `storage_quota_exceeded`다. 기존 검사(`request_unavailable`부터 `project_limit`까지) 뒤의 순서는 `pool_paused` → 전역 상한 `capacity_full` → 산출물 상한 또는 "여유 있는 호환 노드가 모두 저장 상한"이면 `storage_quota_exceeded` → 그 밖의 여유 부족 `capacity_full`이다.
+- **보호.** 실행 중인 attempt는 중단하지 않는다. 그래서 그 attempt의 업로드로 상한을 넘을 수 있다. 확정된 산출물과 보고서는 지우지 않는다.
+- **구현하지 않은 것.** 오래된 파일부터 지우는 정리, 정리 후보 목록(dry run), 보존 기간·참조 기반 정리, 참조 없는 임시 업로드 정리는 없다. 참조·pin·보존 규칙 없이 지우면 근거를 잃기 때문이다. 공간을 비우는 일은 운영자가 한다. 보관·삭제 정책의 제안은 [보안](SECURITY.md)에 있다.
+- **측정과 적용의 구분.** `status`는 영역별 `basis`(`node_heartbeat`·`database_accounting`)를 보여 준다. `doctor`는 디렉터리를 지금 직접 재므로 적용 값과 다를 수 있다. 특히 artifacts의 디렉터리 크기와 DB 집계는 다르다.
+- 상한 조정: 설정을 바꾸고 `codeye stop`·`codeye start`. 운영자 CLI `codeye scheduler set --artifact-quota-bytes N`(0이면 제거)도 있다.
+
+저장은 [migration 0009](../migrations/sql/0009_storage_quota.sql)의 `nodes.storage_quota_exceeded`(영역 배열, 기본 빈 배열)와 `scheduler_limits.artifact_quota_bytes`(NULL 또는 양수)를 쓴다.
+
+## 백업과 복원
+
+```text
+codeye backup  [--config PATH] [--output DIR] [--format text|json]
+codeye restore [--config PATH] --from DIR [--format text|json]
+```
+
+백업은 전체 세트만 만든다. 증분, 압축, 암호화, 보존 개수, 자동 예약 백업은 없다. 백업 디렉터리 보호(권한·위치·외부 보관)는 운영자 책임이다. dump에는 프로젝트 이름·경로·보고서 같은 운영 데이터가 들어 있다. 인증정보 값은 없고 세션·토큰은 hash로만 저장된다. 코드는 [internal/backup](../internal/backup/backup.go), [internal/pgtool](../internal/pgtool/pgtool.go)다.
+
+### 백업
+
+출력 디렉터리는 없거나 비어 있어야 한다. `--output`이 없으면 `<backup_dir>/codeye-<UTC 시각>`이다. 실행 중에도(온라인) 정지 뒤에도 만들 수 있다. 개인 lock을 잡으므로 start·stop·restore와 겹치지 않는다.
+
+1. `REPEATABLE READ READ ONLY` 트랜잭션을 열고 `pg_export_snapshot()`으로 snapshot ID를 얻는다. 같은 snapshot에서 migration 버전, 서버 버전, 확정 산출물 목록(`finalized`이고 저장 키가 있는 행의 sha256·크기), 표별 행 수를 읽는다.
+2. 트랜잭션을 연 채 `pg_dump --format=custom --no-owner --no-privileges --snapshot=ID --schema=<현재 schema> --file=database.dump`를 실행한다. 파일은 미리 0600으로 만든다. `pg_dump` 주 버전이 서버보다 낮으면 거부한다.
+3. 목록의 각 내용을 산출물 저장소에서 복사하며 다시 hash한다. sha256과 크기가 DB와 다르면 실패한다.
+4. `artifacts.json`(정렬된 sha256·크기 목록)을 쓰고, 마지막에 `manifest.json`을 쓴다. manifest가 없으면 완성되지 않은 세트다. 실패하면 출력 디렉터리 내용을 지운다.
+
+**같은 논리 시점.** dump와 산출물 목록은 같은 DB snapshot에서 나온다. 산출물은 내용 주소(sha256)이고 확정 뒤 바뀌지 않는다. 그래서 snapshot 뒤에 복사해도 같은 바이트이며, 복사할 때 hash로 확인한다. snapshot 뒤에 확정된 산출물은 세트에 들어가지 않고 그 산출물을 가리키는 행도 dump에 없다. 확정되지 않은 업로드는 백업하지 않는다. DB 잠금이나 정지 강제는 개인 사용 중 백업을 막아 채택하지 않았다. 정지 뒤 백업을 권장한다.
+
+manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exported_snapshot`), `migration_version`, `codeye_binary_migrations`, `postgres_server_version`, `pg_dump_version`, `database`(파일·형식·sha256·크기), `artifacts`(목록 파일 hash, 수, 바이트, 내용 없는 행 수), `rows`, `personal_user_id`. 호스트·사용자·DB 이름·비밀번호·URL은 넣지 않는다. 모든 파일은 0600, 디렉터리는 0700이다.
+
+**인증정보.** `pg_dump`·`pg_restore`는 `database.postgres_bin_dir`에서만 찾는다. argv에는 플래그와 파일 경로만 들어간다. 연결 정보는 자식 환경의 `PGHOST`·`PGPORT`·`PGUSER`·`PGPASSWORD`·`PGDATABASE`·`PGSSLMODE`·`PGSSLROOTCERT`로만 전달한다. `PGPASSFILE=/dev/null`로 사용자 `.pgpass`를 읽지 않게 하고, cwd는 임시 디렉터리다. 오류 문구의 비밀번호는 `[REDACTED]`로 바꾼다. URL 규칙은 controller와 같다(loopback만 `sslmode=disable`, 그 외 `verify-full`).
+
+### 복원 전 검증
+
+- 대상 설치가 실행 중이거나 불일치하면 거부한다. 대상 `state_dir`에 `agent/node.json`이나 `personal.json`이 있으면 거부한다. 새 `state_dir`가 필요하다.
+- 세트 검증: manifest를 엄격하게 읽고 형식을 확인한다. dump와 목록의 hash·크기, 목록 정렬, 각 내용의 hash·크기, 총계를 확인한다. 하나라도 다르면 대상에 아무것도 쓰지 않는다.
+- manifest의 migration 버전이 이 바이너리보다 높으면 거부한다. 낮으면 복원 뒤 start가 `codeye migrate`를 요구한다.
+- 대상 DB의 현재 schema에 표가 하나라도 있으면 거부한다(`not empty`). 대상 산출물 디렉터리에 파일이 있으면 거부한다. 병합이나 덮어쓰기는 ID 충돌과 근거 혼합 위험이 있어 하지 않는다.
+
+### 복원과 fencing
+
+1. 내용을 산출물 저장소의 쓰기 경로(`artifactstore.Put`)로 넣는다.
+2. `pg_restore --list` 결과에서 `SCHEMA public`·`COMMENT ON SCHEMA public` 항목을 뺀다. 그 목록으로 `pg_restore --use-list --exit-on-error --single-transaction --no-owner --no-privileges`를 실행한다.
+3. 복원된 행 수가 manifest와 같은지 비교한다. 확정 산출물 행마다 내용이 있는지 다시 hash해 확인한다.
+4. **fence.** 한 트랜잭션에서 모든 노드를 철회하고 그 워커를 `stopped`로 둔다. 모든 세션을 철회하고, 쓰지 않은 로그인 토큰을 사용 처리하고, 쓰지 않은 등록 토큰을 철회한다. `leased` attempt는 lease를 지금으로 끝낸 뒤 기존 만료 경로(`ExpireAttempt`)로 `recovery_required`로 둔다. 예약은 유지한다. 대기 중인 run, 예약, 이미 만든 예약 회차는 그대로라서 같은 회차가 다시 만들어지지 않는다.
+5. `personal.json`에 manifest의 사용자 ID를 쓴다.
+
+실패하면 대상 산출물 디렉터리를 비운다. `pg_restore`가 성공한 뒤의 실패라면 DB를 지우고 다시 만들라고 출력한다(복원 명령은 DB를 지우지 않는다).
+
+복원 뒤 `codeye start`는 새 노드로 등록한다. 이전 노드 credential과 세션은 거부된다. 이전 epoch의 lease 갱신은 `ErrStaleAttempt`다. 복원 시점에 실행 중이던 run은 `recovery_required`로 남는다. 철회된 노드만 정리를 확인할 수 있어서, 이 run이 쥔 예약을 푸는 운영자 명령은 아직 없다. 전역 상한이 막히면 `codeye scheduler set --global-max-running N`으로 늘린다. 정지 뒤에 백업하면 이 경우가 생기지 않는다.
+
+## 관측성
+
+**측정 대상(설계 계약).** 웹/API 지연, queue wait, active/idle/draining workers, capacity 부족 이유, attempt retry, stale write 거부, tool failure/parser failure, 모델 latency/429/timeouts, artifact queue/용량, 보고서 생성 실패를 측정한다. endpoint별 모델 사용량은 공급자가 제공한 값과 추정치를 구분한다. 코드·프롬프트 전문을 일반 운영 로그에 넣지 않는다.
+
+**지금 구현된 것.** 메트릭 수집·내보내기 endpoint는 없다. 운영자가 볼 수 있는 값은 다음이다.
+
+- `codeye status`와 `GET /api/v1/ready`(DB 연결, schema 상태, 503 사유 `database_unavailable`·`schema_outdated`·`schema_newer`·`schema_inconsistent`).
+- run의 이벤트와 진행률, `waiting_reason`(`execution_unavailable`, `pool_paused`, `capacity_full`, `project_limit`, `storage_quota_exceeded` 등), 노드 heartbeat와 워커 상태(`codeye node list`, `codeye pool list`).
+- 모든 응답의 `X-Request-ID`, `state_dir/logs/controller.log`·`agent.log`. 로그와 출력에 DB 비밀번호와 토큰은 나오지 않는다.
+
+## 운영 상황별 대응
+
+| 상황 | 기본 조치 | 구현 |
+|---|---|---|
+| 모델 응답 실패 | 도구 결과 보존, 모델 재시도 한도, partial 보고서 | 구현([검토](REVIEW.md)) |
+| node offline | 새 배정 중지, lease fence, recovery_required 확인 | 구현(lease 만료·epoch fencing). 한 머신에서만 시험했다 |
+| DB unavailable | 신규 요청 503, 에이전트는 lease 안전 정책으로 중단 | 구현(API 503 `UNAVAILABLE`, lease 갱신 실패 시 lease 만료 전에 취소) |
+| NFS 지연 | acquire timeout, 원본 불안정/권한 구분, 서버 전체 block 금지 | 소스 확보 timeout은 구현. NFS 실기는 검증하지 않았다 |
+| tool version 변경 | capability 갱신, 계약 시험 후 catalog revision | 설계 계약 |
+| max worker 축소 | drain, 진행 작업 강제 종료하지 않음 | 구현 |
+| artifact quota 초과 | 신규 생성 제한, 참조 없는 임시 업로드 정리 | 새 작업 거절은 구현. 임시 업로드 정리는 미구현 |
+| stop이 `recovery_required` | `status`·로그 확인 후 `codeye stop` 반복. 프로세스를 강제 종료하지 않는다 | 구현 |
+| 복원 직후 `recovery_required` run | 새 run으로 다시 요청 | 구현. 예약 해제 명령은 없다 |
+
+## 배포 전 점검
+
+- 인증과 접근: 브라우저 세션, Host/Origin 검사, loopback 한정. 서버 배포의 TLS 필수 검사는 설계 계약이다([보안](SECURITY.md)).
+- source root 권한과 `repository_code`·`model_review` 허가를 root마다 의도대로 정했다.
+- 도구 사용 조건과 Native 신뢰 범위, timeout과 취소, 자원 reserve(`max_workers`, 머신에 남길 CPU·메모리).
+- 모델 한도와 외부 통신 금지. 모델 설정이 없으면 모델 검토가 실행되지 않는다.
+- 백업 복원을 실제로 해 보았다. `backup_dir` 보호를 정했다.
+- 내보내기에서 코드 발췌와 비밀값이 빠지는지 확인했다.
+- `codeye doctor --config PATH`로 도구·DB·저장 상한을 확인했다.
+- [예시 설정](../examples/platform.yaml)은 설계 예시이며 이 바이너리가 읽지 않는다. 출발점일 뿐이고 실제 머신 용량을 측정해 조정한다.
+
+## 서버·노드 배포 (설계 계약, 미구현)
+
+이 절과 다음 절은 설계다. 이 빌드에는 구현도 시험도 없다.
+
+- controller는 단일 활성 인스턴스로 시작한다. DB와 artifact store를 지정하고 노드 에이전트를 운영자가 직접 설치한다. 서버가 노드에 SSH하지 않는다. 에이전트는 서버에서 작업을 받아 간다.
+- Windows Service나 승인된 작업 실행 방식, Linux systemd/사용자 service 등 로그아웃 뒤에도 지속 실행되는 방법을 환경에 맞게 선택한다.
+- enrollment token은 짧은 수명의 1회용이며 node identity와 pool·신뢰 범위를 부여한다. 에이전트 업데이트는 drain → binary 교체 → protocol 확인 → 재등록 없이 복귀 순서를 따른다. 최소/최대 정책은 controller가 유지한다.
+- 배포 manifest에 실제 OS/arch, 빌드 ABI, toolchain, DB, 모델 adapter 버전을 고정한다.
+- 서버는 RHEL 8.10과 내부 미러·CA·NFS 조건을 우선 검증할 대상이다. 아직 실행하지 않았다.
+- 저장 위치: DB data, workspace, tool/runtime cache, 임시 결과는 로컬 디스크를 우선한다. NFS는 원본 source와 선택적 보관 산출물에 쓴다. DB data를 NFS로 옮기는 것은 별도 DB 운영 검증 없이 기본 지원하지 않는다. node cache를 공용 NFS에 두어 잠금·성능 문제가 생기는 것을 기본 설계로 삼지 않는다.
+- 백업·복구 목표 시간은 실제 데이터 규모를 측정한 뒤 정한다. 복구 시험은 프로젝트·run·report·evidence 링크·ACL·예약 중복 방지를 확인한다. 개인 모드에서 구현한 같은 시점 백업과 lease 비복원 규칙을 서버에도 적용한다.
+- 다중 사용자 권한과 감사 운영은 [보안](SECURITY.md)의 설계 계약을 따른다.
+
+## 폐쇄망 배포팩 (설계 계약, 미구현)
+
+- 버전·hash가 고정된 서비스 바이너리, 웹 자산, DB migration, 규칙팩, 도구 manifest를 제공한다. 폰트·아이콘·JS·CSS·차트에 외부 CDN 의존성을 두지 않는다. 도구 바이너리 재배포가 불가하면 사내 미러에서 설치할 경로와 검증 정보를 제공한다.
+- 분석기 catalog, 언어 toolchain, 프로젝트 의존성 mirror는 구분한다. 미러에 없는 버전은 unavailable로 표시하고 외부 다운로드로 해결하지 않는다. CA 검증을 끄는 방식으로 연결 문제를 감추지 않는다.
+- 설정의 `.invalid` 주소와 예시 경로는 실제 운영 정보로 교체하되 Git에 secret을 올리지 않는다.
+- 외부 telemetry·업데이트·원격 규칙 다운로드·공유는 기본 차단한다.

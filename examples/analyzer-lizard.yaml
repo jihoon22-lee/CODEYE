@@ -1,4 +1,4 @@
-# W21 구조 지표 팩 lizard 어댑터 서술. 구현: internal/worker/analysis/lizard, 근거: docs/45-w21-structure-secrets-pack.md.
+# W21 구조 지표 팩 lizard 어댑터 서술. 구현: internal/worker/analysis/lizard, 근거: docs/ANALYZERS.md.
 # lizard 1.26.1 --xml은 자체 경고 임계값과 관계없이 exit 0이다(측정). CODEYE가 CCN >= 16(lizard 기본 경고 "CCN > 15")인 함수만 지표 관찰로 남긴다.
 # 지표는 결함이 아니다: finding·결함 수·조치 수·모델 입력이 되지 않는다. -Eduplicate는 쓰지 않는다(중복은 jscpd 담당).
 # 입력은 CODEYE가 scratch에 쓴 파일 목록(--input_file)이다. 저장소 경로는 argv에 들어가지 않고 .gitignore·whitelizard.txt는 결과를 바꾸지 않는다.

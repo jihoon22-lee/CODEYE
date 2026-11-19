@@ -29,7 +29,7 @@ const (
 	DetailOutputUnrecognized = "output_unrecognized"
 	DetailNotExecutable      = "not_executable"
 	// DetailToolchainNotConfigured: the tool runs under a shared toolchain
-	// (docs/39 §2.4) the operator did not configure; nothing was started.
+	// (docs/ANALYZERS.md#도구-경로) the operator did not configure; nothing was started.
 	DetailToolchainNotConfigured = "toolchain_not_configured"
 	// DetailToolchainUnavailable: the configured toolchain path is not an
 	// executable file; nothing was started.
@@ -43,11 +43,11 @@ const (
 // Observed is the result of observing the node's tools for one attempt.
 type Observed struct {
 	Observations []envdoc.Observation
-	// AnalyzerTools are the analyzer tool observations (docs/39) of the
+	// AnalyzerTools are the analyzer tool observations (docs/ANALYZERS.md) of the
 	// ecosystems the requested runtime tools belong to.
 	AnalyzerTools []envdoc.AnalyzerTool
 	// Needed are runtime tools observed beyond the requested ones: shared
-	// toolchains (docs/39 §2.4) that an analyzer of a requested ecosystem
+	// toolchains (docs/ANALYZERS.md#도구-경로) that an analyzer of a requested ecosystem
 	// needs. Environment records them like the modules' runtimes.
 	Needed     []string
 	Executions []analysis.Execution

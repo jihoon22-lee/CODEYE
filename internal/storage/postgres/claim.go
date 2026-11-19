@@ -41,7 +41,7 @@ type candidate struct {
 	snapshotID   *string
 }
 
-// nodeView is a node's scheduling state. Accounting model (docs/09): CPU is a
+// nodeView is a node's scheduling state. Accounting model (docs/EXECUTION.md): CPU is a
 // policy budget (reported cores) minus all active reservations; memory and
 // disk are the host's observed free amounts (which already exclude running
 // processes) minus only the reservations made after the last heartbeat, which
@@ -273,7 +273,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 		if !n.lastBeatOK || active >= limit || !n.hasRoom() {
 			return none()
 		}
-		// Storage quota (W25, docs/47 §4): admission only. New attempts are
+		// Storage quota (W25, docs/OPERATIONS.md#저장-영역과-상한): admission only. New attempts are
 		// refused; running attempts and their uploads are never affected.
 		if len(n.quotaExceeded) > 0 {
 			return none()

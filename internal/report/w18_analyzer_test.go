@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// W18 (docs/43): the real ESLint and tsc envelopes (examples/, and the tsc
+// W18 (docs/ANALYZERS.md): the real ESLint and tsc envelopes (examples/, and the tsc
 // solution run with .rNN executions in testdata/) go through the analyzer
 // decoder: observations bound to the recorded stdout, unreviewed tool
 // findings with the shared ToolFingerprint, Required as recorded.

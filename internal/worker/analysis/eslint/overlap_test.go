@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// Engine overlap (docs/39 §6, docs/43 §6), measured on the real tools in one
+// Engine overlap (docs/ANALYZERS.md#탐색-probe, docs/ANALYZERS.md#jsts-엔진-중복), measured on the real tools in one
 // run of a module with both a TS and a JS copy of the same constructs:
 //   - in TS files the baseline leaves to tsc what tsc checks itself
 //     (typescript-eslint eslint-recommended turns off no-undef,

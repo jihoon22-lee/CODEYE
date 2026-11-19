@@ -80,7 +80,7 @@ func TestPlan(t *testing.T) {
 	}
 }
 
-// Descriptors (docs/39 §2.6): cppcheck is the one baseline analyzer of the
+// Descriptors (docs/ANALYZERS.md#기준-분석기와-추가-깊이): cppcheck is the one baseline analyzer of the
 // ecosystem, clang-tidy is extra depth; the tool names are the agent flags.
 func TestDescriptors(t *testing.T) {
 	cc, ct := CppcheckDescriptor(), ClangTidyDescriptor()

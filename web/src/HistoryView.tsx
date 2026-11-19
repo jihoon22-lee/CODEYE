@@ -6,7 +6,7 @@ import { newKey } from './idempotency';
 import { ko } from './locales/ko';
 import { retryable } from './useRunPolling';
 
-// W23 comparison header, per-finding comparison state and human review (docs/40).
+// W23 comparison header, per-finding comparison state and human review (docs/REPORT.md).
 // Every state, count and disposition shown is the server's; labels are text, never colour only.
 
 const t = ko.history;

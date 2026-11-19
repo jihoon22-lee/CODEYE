@@ -232,7 +232,7 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 }
 
 // DefaultRegistry handles tool observations (go vet v0.1 and the generic
-// analyzer envelope, docs/39), snapshot-bound review records and W15
+// analyzer envelope, docs/ANALYZERS.md), snapshot-bound review records and W15
 // discovery documents.
 func DefaultRegistry() *Registry {
 	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, R1ReviewDecoder{}, EnvironmentDecoder{})

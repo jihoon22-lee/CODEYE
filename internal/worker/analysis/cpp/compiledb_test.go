@@ -238,7 +238,7 @@ func TestSplitCommand(t *testing.T) {
 	}
 }
 
-// The committed fixture DB maps as docs/41 §3 states (also the expectation
+// The committed fixture DB maps as docs/ANALYZERS.md#compile-db-매핑 states (also the expectation
 // of fixtures/w16-cpp/expected.json).
 func TestFixtureCompileDB(t *testing.T) {
 	files := fixtureFiles(t)
@@ -262,7 +262,7 @@ func TestFixtureCompileDB(t *testing.T) {
 	}
 }
 
-// Security (docs/41 §3): clang expands any argv element that starts with "@"
+// Security (docs/ANALYZERS.md#compile-db-매핑): clang expands any argv element that starts with "@"
 // as a response file. A compile DB value in any position that the allowlist
 // keeps is validated, so no "@" element and no code-loading or toolchain
 // option reaches the CODEYE database; the entry's driver name is recorded

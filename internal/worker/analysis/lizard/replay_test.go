@@ -177,7 +177,7 @@ func TestReplaySkippedFile(t *testing.T) {
 }
 
 // Plans: one task over the supported source outside data directories; a
-// snapshot without supported language source plans nothing (docs/39 §2.8);
+// snapshot without supported language source plans nothing (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백);
 // a path scope keeps its roots.
 func TestPlan(t *testing.T) {
 	fx := anypacktest.New(t, "", fixtureFiles(anypacktest.Placeholder, false), domain.Scope{})

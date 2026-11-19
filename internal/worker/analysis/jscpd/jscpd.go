@@ -1,6 +1,6 @@
-// Package jscpd is the W21 duplication adapter (docs/45). It runs the
+// Package jscpd is the W21 duplication adapter (docs/ANALYZERS.md). It runs the
 // operator-installed jscpd entry script with the shared node toolchain
-// (<node> <run-jscpd.js> ..., PATH = the node directory only; docs/39
+// (<node> <run-jscpd.js> ..., PATH = the node directory only; docs/ANALYZERS.md
 // §2.4.1) in the attempt workspace copy over the planned source files and
 // records each duplicated block that reaches the rule pack thresholds as a
 // metric observation: maintainability information, never a finding or a

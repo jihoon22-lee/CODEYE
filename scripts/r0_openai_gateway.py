@@ -4,7 +4,7 @@
 This is NOT a CODEYE product component and not the product model path (D10).
 It exists only for a human-approved, budget-capped R0 OpenCode integration probe.
 
-Guarantees (see docs/r0-openai-gateway.md):
+Guarantees (see docs/EVALUATION.md):
 - Listens on 127.0.0.1 only, per-run random bearer token, no CORS, Origin rejected.
 - Rebuilds every upstream payload from text-only messages with a hard output cap.
 - Upstream is pinned to https://api.openai.com/v1/responses via http.client

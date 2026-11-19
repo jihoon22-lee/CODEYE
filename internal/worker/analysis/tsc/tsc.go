@@ -1,15 +1,15 @@
 // Package tsc is the TypeScript compiler part of the W18 JS/TS pack
-// (docs/43): an extra-depth analyzer (javascript.tsc) that type-checks each
+// (docs/ANALYZERS.md): an extra-depth analyzer (javascript.tsc) that type-checks each
 // JS/TS module with a tsconfig.json by running the operator's tsc entry
 // script through the shared node toolchain, in the attempt workspace copy,
 // with --noEmit and no incremental or composite outputs, so nothing is
 // written. tsc reads tsconfig as data and never loads the compiler plugins it
-// lists (measured, docs/43 §3): the task executes no repository code.
+// lists (measured, docs/ANALYZERS.md#저장소-코드와-tsconfig-검사): the task executes no repository code.
 //
 // A snapshot never holds node_modules. A program with an unresolved module or
 // type package is therefore the normal case; such a run fails with the gap
 // recorded and withholds every diagnostic, because type errors in it can
-// follow from the missing types alone (measured, docs/43 §4).
+// follow from the missing types alone (measured, docs/ANALYZERS.md#의존성-공백).
 package tsc
 
 import (
@@ -66,7 +66,7 @@ const (
 // the whole check at the options stage, from hiding the program; the options
 // still function in 6.0. The three lint-like checks are off because the
 // baseline ESLint reports the same constructs (@typescript-eslint/no-unused-vars,
-// no-fallthrough): one construct, one engine (docs/43 §5).
+// no-fallthrough): one construct, one engine (docs/ANALYZERS.md#jsts-규칙-문맥과-억제).
 var Flags = []string{"--noEmit", "--pretty", "false", "--incremental", "false", "--composite", "false", "--ignoreDeprecations", "6.0",
 	"--noUnusedLocals", "false", "--noUnusedParameters", "false", "--noFallthroughCasesInSwitch", "false"}
 

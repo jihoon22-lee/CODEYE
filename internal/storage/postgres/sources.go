@@ -204,7 +204,7 @@ type ProjectSummary struct {
 	// Activity is the representative run's stage view (W15). Store reads
 	// always fill it; a hand-built summary has CheckedAt zero.
 	Activity Activity
-	// representative is the run chosen per docs/37 §3 ("" without runs).
+	// representative is the run chosen per docs/ARCHITECTURE.md#대표-실행-선택 ("" without runs).
 	representative string
 }
 
@@ -215,14 +215,14 @@ type ProjectPage struct {
 }
 
 // nonTerminalRuns are the run states that can still change; activeRuns are
-// those executing or settling a cancellation (docs/37 §3 first group).
+// those executing or settling a cancellation (docs/ARCHITECTURE.md#대표-실행-선택 first group).
 const (
 	nonTerminalRuns = `('queued','preparing','running','finalizing','cancel_requested','cancelling','recovery_required')`
 	activeRuns      = `('preparing','running','finalizing','cancel_requested','cancelling')`
 )
 
 // projectSummarySQL selects the project, its latest run (last_run), the
-// representative run of docs/37 §3 (the best non-terminal run by group, then
+// representative run of docs/ARCHITECTURE.md#대표-실행-선택 (the best non-terminal run by group, then
 // requested_at desc, id desc; else the latest run, which then is terminal),
 // the count of the other non-terminal runs, the latest published report and
 // the read time. Each lateral is an indexed per-project lookup.

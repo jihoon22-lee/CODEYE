@@ -10,7 +10,7 @@ import (
 // W20 cargo check findings compare like the other packs'. The Rust rule
 // context honors the repository's Cargo configuration and in-source
 // #[allow]: a vanished finding is never resolved (a suppression hides the
-// diagnostic and nothing reports it, docs/44 §5), and a context that lists
+// diagnostic and nothing reports it, docs/ANALYZERS.md#rust-규칙-문맥과-억제), and a context that lists
 // the configuration files it read is compared by their digest.
 func rsContext(cfg string) report.RuleContext {
 	c := report.RuleContext{RulePack: "codeye-rust-cargo-check", RulePackVersion: "1", Selection: []string{"--workspace", "--all-targets"},

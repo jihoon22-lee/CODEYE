@@ -10,7 +10,7 @@ import (
 )
 
 // The Python version declaration is read with the env.discover rules
-// (docs/37, internal/worker/discovery requirements.go) so the version the
+// (docs/ARCHITECTURE.md, internal/worker/discovery requirements.go) so the version the
 // pack passes to the tools is the one the environment document reports.
 // Analyzer packs sit below discovery in the import graph (discovery's tests
 // build the analyzer catalog), so this is a rule-for-rule copy of the three

@@ -1,4 +1,4 @@
-// Package quota names CODEYE's storage areas (docs/15 §4, docs/47 §4) and
+// Package quota names CODEYE's storage areas (docs/OPERATIONS.md, docs/OPERATIONS.md#저장-영역과-상한) and
 // measures how many bytes each one holds on this host. It is shared by the
 // node agent (which reports areas over their limit), doctor and the personal
 // status command. It never deletes anything.

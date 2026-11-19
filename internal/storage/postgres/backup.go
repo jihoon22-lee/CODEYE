@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/migrations"
 )
 
-// W25 backup and restore support (docs/47 §5). The database dump and the
+// W25 backup and restore support (docs/OPERATIONS.md#백업과-복원). The database dump and the
 // artifact list come from ONE exported snapshot: WithBackupPoint holds a
 // REPEATABLE READ READ ONLY transaction, exports its snapshot for pg_dump
 // --snapshot and reads the finalized blobs in the same snapshot.
@@ -35,7 +35,7 @@ type BackupPoint struct {
 }
 
 // countedTables are compared between a backup point and the restored
-// database (docs/15 §7: projects, runs, reports, evidence, ACL, schedules).
+// database (docs/OPERATIONS.md: projects, runs, reports, evidence, ACL, schedules).
 var countedTables = []string{"users", "projects", "project_members", "source_roots", "source_root_grants", "runs", "attempts", "tasks", "events",
 	"artifacts", "evidence", "reports", "finding_reviews", "schedules", "schedule_occurrences", "nodes"}
 
@@ -157,7 +157,7 @@ type FenceReport struct {
 	UnfencedRemaining int64 `json:"leased_remaining"`
 }
 
-// FenceRestored makes a freshly restored database safe to serve (docs/47
+// FenceRestored makes a freshly restored database safe to serve (docs/OPERATIONS.md
 // §5.3). The backup is a past state, so nothing issued before it is trusted:
 //
 //   - every node is revoked: its secret, command cursor and leases belong to

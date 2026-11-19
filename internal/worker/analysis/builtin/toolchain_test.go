@@ -117,7 +117,7 @@ func runFakelint(t *testing.T, c *pack.Composite, allowCode bool) analysis.TaskR
 	return c.Run(context.Background(), j, analysis.TaskSpec{Key: "fakelint"}, nil)
 }
 
-// docs/39 §2.4 (TC-101): an analyzer that needs the node toolchain is built
+// docs/ANALYZERS.md#도구-경로 (TC-101): an analyzer that needs the node toolchain is built
 // only with a configured node that passed its startup version probe, and
 // then receives the validated handle; otherwise it is the NotConfigured
 // stand-in. Precedence: tool, toolchain not configured, toolchain

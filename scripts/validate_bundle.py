@@ -194,7 +194,7 @@ def check_observations(doc: dict) -> None:
 
 
 def check_analyzer_observations(doc: dict) -> None:
-    """Cross-field rules of the generic analyzer envelope (W19, docs/39; obsdoc.Validate)."""
+    """Cross-field rules of the generic analyzer envelope (W19, docs/ANALYZERS.md; obsdoc.Validate)."""
     observations = doc["observations"]
     parse, outcome, coverage = doc["parse"], doc["outcome"], doc["coverage"]
     ensure(parse["observations"] == len(observations), "Envelope observation count mismatch")
@@ -219,7 +219,7 @@ def check_analyzer_observations(doc: dict) -> None:
     processed = coverage["processed_paths"]
     if processed is not None:
         ensure(processed == sorted(set(processed)), "Processed paths must be sorted unique")
-    # Rule context (docs/39 §5.1): config files only when the tool honors
+    # Rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제): config files only when the tool honors
     # repository configuration; suppressed observations only when reported.
     rule_pack = doc["rule_pack"]
     config = rule_pack["config_files"]
@@ -341,7 +341,7 @@ def check_w17_python(validators: dict) -> None:
     ruff_ignore = go_string_constant(src / "ruff.go", "RuffIgnore")
     argv = descriptors["ruff"]["execute"]["argv"]
     ensure(argv[argv.index("--select") + 1] == ruff_rules and argv[argv.index("--ignore") + 1] == ruff_ignore, "ruff descriptor differs from RuffRules/RuffIgnore")
-    ensure(not any(r.startswith("S") for r in ruff_rules.split(",")), "ruff S rules re-implement bandit (docs/42 section 7)")
+    ensure(not any(r.startswith("S") for r in ruff_rules.split(",")), "ruff S rules re-implement bandit (docs/ANALYZERS.md#python-엔진-중복)")
     ensure({"--isolated", "--unfixable", "--"} <= set(argv), "ruff: isolated configuration, no fix edits in stdout, -- before targets")
     ensure("--config-file=" in descriptors["mypy"]["execute"]["argv"], "mypy runs with the CODEYE configuration only (plugins execute code)")
     bandit_argv = descriptors["bandit"]["execute"]["argv"]
@@ -388,7 +388,7 @@ W16_SOURCE = (".c", ".cc", ".cpp", ".cxx", ".c++")
 
 
 def check_w16_contracts(validators: dict) -> int:
-    """W16 C/C++ pack (docs/41): the cppcheck and clang-tidy descriptors, the real envelope examples bound to the
+    """W16 C/C++ pack (docs/ANALYZERS.md): the cppcheck and clang-tidy descriptors, the real envelope examples bound to the
     committed fixture bytes, the rule context, the single required baseline and the expected fixture outcomes.
 
     Returns the number of negative cases."""
@@ -564,7 +564,7 @@ def executions_exit(doc: dict, name: str):
 
 
 def check_w20_rust_pack(validators: dict) -> int:
-    """The cargo check and clippy descriptors and their real envelope examples (W20, docs/44).
+    """The cargo check and clippy descriptors and their real envelope examples (W20, docs/ANALYZERS.md).
 
     Returns the number of negative cases."""
     negatives = 0
@@ -636,7 +636,7 @@ def check_w20_rust_pack(validators: dict) -> int:
 
 
 def check_w21_contracts(validators: dict) -> int:
-    """W21 (docs/45): lizard, jscpd and gitleaks descriptors and real envelopes.
+    """W21 (docs/ANALYZERS.md): lizard, jscpd and gitleaks descriptors and real envelopes.
 
     Metric observations are measurements, never active observations or
     findings; secret detections carry the fixed message and no value or
@@ -901,7 +901,7 @@ SERVER_STAGES = ("source", "report")
 
 def stage_vocabulary() -> tuple[list[str], list[str], list[str]]:
     """Task stage keys in domain.TaskStages order, the migration 0006 CHECK
-    values, and the progress.State values (W15, docs/37 §2)."""
+    values, and the progress.State values (W15, docs/ARCHITECTURE.md#표시-단계와-task-단계)."""
     go = (ROOT / "internal/domain/stage.go").read_text(encoding="utf-8")
     consts = dict(re.findall(r'^\s*(Stage\w+)\s+Stage\s*=\s*"([a-z_]+)"', go, re.M))
     listed = re.search(r"var TaskStages = \[\]Stage\{([^}]*)\}", go)
@@ -958,7 +958,7 @@ def check_stages(detail, stages: list, order: list[str]) -> None:
 
 
 def check_activity(doc: dict, order: list[str]) -> None:
-    """Cross-field rules of a project activity (W15, docs/37 §4)."""
+    """Cross-field rules of a project activity (W15, docs/API.md)."""
     ensure((doc["run"] is None) == (doc["detail"] is None), "Activity detail must be null exactly without a run")
     if doc["run"] is None:
         ensure(doc["stages"] == [] and doc["other_active_runs"] == 0 and doc["waiting_reason"] is None and doc["last_event_at"] is None, "Activity data without a run")
@@ -1112,7 +1112,7 @@ def check_w22_contracts() -> None:
 
 
 def check_w23_contracts(published: dict) -> None:
-    """W23 run comparison and human finding reviews (docs/40).
+    """W23 run comparison and human finding reviews (docs/REPORT.md).
 
     Examples validate against OpenAPI; disposition/state/reason/match enums
     agree across OpenAPI, migration 0008, the report schema and the Go
@@ -1155,7 +1155,7 @@ def check_w23_contracts(published: dict) -> None:
         ensure(doc["counts"] == {s: states.count(s) for s in api["ComparisonState"]["enum"]}, "Counts are not recomputed from entries")
         ensure(len({e["fingerprint"] for e in doc["entries"]}) == len(doc["entries"]), "Duplicate comparison entry")
         by_fp = {e["fingerprint"]: e for e in doc["entries"]}
-        # W19: a resolved tool entry needs the same tool version and rule context on both sides (docs/40 §3.3).
+        # W19: a resolved tool entry needs the same tool version and rule context on both sides (docs/REPORT.md#항목-상태).
         rule_keys = {d["key"] for d in doc["differences"]}
         for e in doc["entries"]:
             ensure(e["state"] != "resolved_observed" or (e["producer"] == "tool" and e["current"] == [] and e["baseline"] and e["reason"] is None), "Resolved entry not observed by a tool")
@@ -1311,7 +1311,7 @@ def expect_invalid(name: str, function, data) -> None:
 
 
 def check_w25_doctor(validator, example) -> None:
-    """W25 (docs/47 §6): the operations section is optional and closed."""
+    """W25 (docs/OPERATIONS.md#codeye-doctor): the operations section is optional and closed."""
     ensure("operations" in example, "Doctor example lacks the W25 operations section")
     base = copy.deepcopy(example)
     del base["operations"]
@@ -1372,8 +1372,72 @@ def check_r1_corpus() -> None:
     out = subprocess.run([sys.executable, "-I", str(corpus), "digest"], capture_output=True, text=True, timeout=300, env=env)
     ensure(out.returncode == 0 and out.stdout.split(), "R1 corpus digest failed")
     sealed = "ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4"
-    ensure(out.stdout.split()[-1] == sealed, "R1 holdout corpus digest differs from the sealed digest; a changed holdout needs a new seal recorded in docs/16")
+    ensure(out.stdout.split()[-1] == sealed, "R1 holdout corpus digest differs from the sealed digest; a changed holdout needs a new seal recorded in docs/EVALUATION.md")
     print(f"PASS: W24 R1 holdout corpus (structure, locations, digests, leakage scan; sealed digest {sealed[:12]})")
+
+
+def heading_anchors(text: str) -> set:
+    """Anchors a Markdown renderer derives from the headings of a document."""
+    seen = {}
+    result = set()
+    fenced = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        match = None if fenced else re.match(r"#{1,6}\s+(.*?)\s*#*\s*$", line)
+        if not match:
+            continue
+        title = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", match.group(1))
+        slug = re.sub(r"[^\w\- ]", "", title.lower()).replace(" ", "-")
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        result.add(slug if count == 0 else f"{slug}-{count}")
+    return result
+
+
+# The holdout results are kept verbatim as recorded, so their wording is exempt.
+STAGE_LABEL_EXEMPT = {"docs/EVALUATION-RESULTS.md"}
+
+
+def check_doc_names(markdown_files) -> None:
+    """Documents are organized by topic: no numbered file names, no build-stage labels in the text."""
+    for path in markdown_files:
+        relative = path.relative_to(ROOT).as_posix()
+        if relative.startswith("docs/"):
+            ensure(not re.match(r"\d", path.name), "Numbered document name: " + relative)
+        if relative in STAGE_LABEL_EXEMPT or relative.startswith("fixtures/"):
+            continue
+        label = re.search(r"(?<![\w-])W[0-3]\d(?![\w-])", path.read_text(encoding="utf-8"))
+        ensure(label is None, "Build-stage label in " + relative + ": " + (label.group(0) if label else ""))
+
+
+def check_code_doc_refs() -> int:
+    """Source, schema and example files cite documents by path and section anchor; each must resolve."""
+    ignored = {".git", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
+    suffixes = {".go", ".py", ".ts", ".tsx", ".yaml", ".yml", ".json", ".sql", ".css", ".html"}
+    anchors = {}
+    count = 0
+    for directory, dirs, files in os.walk(ROOT):
+        dirs[:] = sorted(name for name in dirs if name not in ignored)
+        for name in sorted(files):
+            path = Path(directory) / name
+            if path.suffix not in suffixes:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for match in re.finditer(r"(?<![\w./-])docs/([A-Z][A-Z-]*\.md)(?:#([\w-]+))?", text):
+                doc = ROOT / "docs" / match.group(1)
+                where = str(path.relative_to(ROOT)) + ": " + match.group(0)
+                ensure(doc.is_file(), "Reference to a missing document in " + where)
+                if match.group(2):
+                    if doc not in anchors:
+                        anchors[doc] = heading_anchors(doc.read_text(encoding="utf-8"))
+                    ensure(match.group(2).lower() in anchors[doc], "Reference to a missing section in " + where)
+                count += 1
+    return count
 
 
 def main() -> None:
@@ -1383,16 +1447,23 @@ def main() -> None:
     for directory, dirs, files in os.walk(ROOT):
         dirs[:] = sorted(name for name in dirs if name not in ignored)
         markdown_files.extend(Path(directory) / name for name in sorted(files) if name.endswith(".md"))
+    anchors = {}
     for path in markdown_files:
         for match in re.finditer(r"\[[^\]]*\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
             target = match.group(1).strip().strip("<>")
-            if re.match(r"(?:https?://|mailto:|#)", target):
+            if re.match(r"(?:https?://|mailto:)", target):
                 continue
-            target = unquote(target.split("#", 1)[0])
-            if not target:
-                continue
-            ensure(within_root(path.parent / target).exists(), "Broken Markdown link in " + str(path) + ": " + target)
+            file_part, _, anchor = target.partition("#")
+            file_part = unquote(file_part)
+            linked = within_root(path.parent / file_part) if file_part else path
+            ensure(linked.exists(), "Broken Markdown link in " + str(path) + ": " + target)
+            if anchor and linked.suffix == ".md":
+                if linked not in anchors:
+                    anchors[linked] = heading_anchors(linked.read_text(encoding="utf-8"))
+                ensure(unquote(anchor).lower() in anchors[linked], "Broken Markdown anchor in " + str(path) + ": " + target)
             link_count += 1
+    check_doc_names(markdown_files)
+    code_refs = check_code_doc_refs()
     validators = make_validators()
     validators["doctor.schema.json"].validate(json_file(ROOT / "examples/doctor.json"))
     validators["state.schema.json"].validate(json_file(ROOT / "examples/state.json"))
@@ -1452,7 +1523,7 @@ def main() -> None:
     for doc in r1_docs.values():
         review_validator.validate(doc)
     check_review_r1_examples(r1_docs, r1_raw, r1_pack_doc, r1_roles)
-    # review-r1 2.0.0 (docs/49 §3): a stage keeps at most three calls (the
+    # review-r1 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
     retried = copy.deepcopy(r1_docs["verify"])
     first = retried["calls"][0]
@@ -1490,9 +1561,9 @@ def main() -> None:
         path = within_root(pack_file.parent / relative)
         ensure(path.is_file(), "Missing prompt: " + relative)
         digest.update(relative.encode("utf-8") + b"\0" + path.read_bytes() + b"\0")
-    required = set(re.findall(r"(?:REQ|NFR)-\d{3}", (ROOT / "docs/01-requirements.md").read_text(encoding="utf-8")))
+    required = set(re.findall(r"(?:REQ|NFR)-\d{3}", (ROOT / "docs/REQUIREMENTS.md").read_text(encoding="utf-8")))
     trace = set()
-    text = (ROOT / "docs/18-acceptance-and-traceability.md").read_text(encoding="utf-8")
+    text = (ROOT / "docs/TESTING.md").read_text(encoding="utf-8")
     for family, numbers in re.findall(r"(REQ|NFR)-(\d{3}(?:,\d{3})*)", text):
         trace.update(family + "-" + number for number in numbers.split(","))
     ensure(required.issubset(trace), "Unmapped requirements: " + str(sorted(required - trace)))
@@ -1657,6 +1728,7 @@ def main() -> None:
     bad["TaskStage"] = {"enum": [*stage_order, "lint"]}
     expect_invalid("stage enum drift", lambda doc: check_stage_enums(doc, stage_order, stored_stages, stage_states), bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
+    print(f"PASS: {code_refs} document references from source, schema and example files")
     print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 19 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")

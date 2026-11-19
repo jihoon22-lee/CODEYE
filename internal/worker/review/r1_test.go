@@ -29,7 +29,7 @@ func rows(plan []analysis.TaskSpec, res map[string]analysis.TaskResult) []taskRo
 	return out
 }
 
-// The R1 plan (docs/37 §6): discovery, static analysis, then the five roles
+// The R1 plan (docs/REVIEW.md): discovery, static analysis, then the five roles
 // with their stages; documents is required only with guidance documents in
 // scope.
 func TestR1PlanOrderStagesAndRequired(t *testing.T) {

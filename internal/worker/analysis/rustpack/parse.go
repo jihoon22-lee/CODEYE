@@ -61,7 +61,7 @@ type Rustc struct {
 }
 
 // ParseRustcVV reads `rustc -vV`; both the release and the host triple are
-// required (the triple pins the build target, docs/44).
+// required (the triple pins the build target, docs/ANALYZERS.md).
 func ParseRustcVV(stdout []byte) (Rustc, bool) {
 	var r Rustc
 	lines := strings.Split(strings.TrimSpace(string(stdout)), "\n")

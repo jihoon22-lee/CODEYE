@@ -14,7 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 )
 
-// TC-119 (docs/45): the production composition with the real lizard,
+// TC-119 (docs/ANALYZERS.md): the production composition with the real lizard,
 // jscpd (on node) and secrets tools through the real worker. The metrics
 // are never findings; the planted secret (generated now) is one unreviewed
 // security finding and appears in no uploaded artifact or stream, no

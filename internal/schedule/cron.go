@@ -1,11 +1,11 @@
 // Package schedule parses 5-field cron expressions and computes their
-// occurrences in an IANA time zone (W22, docs/09 §8, REQ-023). It is pure: it
+// occurrences in an IANA time zone (W22, docs/EXECUTION.md#예약, REQ-023). It is pure: it
 // never reads the process clock or the host's local zone; callers pass "now"
 // (the database clock). The time zone database is embedded (time/tzdata) so
 // hosts without a system zone database (Windows) still load IANA names;
 // time.LoadLocation prefers a system database when one exists.
 //
-// Daylight saving time policy (docs/38):
+// Daylight saving time policy (docs/API.md):
 //
 //   - An expression whose hour field covers every hour (0-23) runs in elapsed
 //     time: a local time skipped by a spring-forward gap does not occur, and a

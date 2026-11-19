@@ -54,7 +54,7 @@ const (
 	PackageUnknown               = "unknown"
 )
 
-// Exit classes (docs/06 §6). With -json, go vet exits 0 with or without
+// Exit classes (docs/ANALYZERS.md#종료-등급과-결과). With -json, go vet exits 0 with or without
 // findings, so the class comes from parsed stdout, not from the exit code.
 const (
 	ExitSuccessWithoutFindings = "success_without_findings"

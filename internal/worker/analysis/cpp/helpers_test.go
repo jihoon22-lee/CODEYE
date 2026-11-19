@@ -235,7 +235,7 @@ func assertNoNodePaths(t *testing.T, raw []byte, paths ...string) {
 }
 
 // captureStreams writes the check execution's streams to
-// CODEYE_W16_CAPTURE/<name>.{stdout,stderr,exit} (docs/41 §9): the replay
+// CODEYE_W16_CAPTURE/<name>.{stdout,stderr,exit} (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처): the replay
 // tests run the parsers on these committed bytes in CI.
 func captureStreams(t *testing.T, name string, res analysis.TaskResult, exec string) {
 	t.Helper()

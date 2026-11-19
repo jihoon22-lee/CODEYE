@@ -1,5 +1,5 @@
 // Package anypacktest holds the fixtures the W21 adapter tests share
-// (docs/45): a W04 snapshot with an attempt workspace, one task run through
+// (docs/ANALYZERS.md): a W04 snapshot with an attempt workspace, one task run through
 // a given runner, the envelope read back, tool executions replayed from
 // captured streams, and the generated fake secret with its leak checks. Only
 // tests import it.
@@ -242,7 +242,7 @@ func LoadCapture(t testing.TB, name string) Recorded {
 
 // Capture writes the streams and exit code of execution exec of res to
 // $CODEYE_W21_CAPTURE/<name>.* when that variable is set: how the
-// testdata/ captures of the replay tests were taken (docs/45). A capture
+// testdata/ captures of the replay tests were taken (docs/ANALYZERS.md). A capture
 // holding a node path or secret is refused.
 func Capture(t testing.TB, name, exec string, res analysis.TaskResult, secrets ...string) {
 	t.Helper()

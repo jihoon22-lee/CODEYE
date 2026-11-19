@@ -45,7 +45,7 @@ const (
 	LimTestsNotPerformed      = "required_tests_not_performed"
 	// LimStaticAnalysisGap (":<ecosystem>"): source of a language ecosystem
 	// was in scope and the worker had no analyzer for it (a pack-gap task,
-	// docs/39 §2.8). The report is partial; the gap is not a required task.
+	// docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백). The report is partial; the gap is not a required task.
 	LimStaticAnalysisGap = "static_analysis_gap"
 	// LimStaticAnalysisNotPlanned: the run planned no analyzer task at all
 	// (no supported language source in scope). The report is partial.
@@ -329,7 +329,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 			analyzerPlanned = true
 		}
 		// A static analysis gap is visible and makes the report partial
-		// without being counted as a required task (docs/39 §2.8).
+		// without being counted as a required task (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백).
 		if pack.Owns(pack.GapName, k) && st.facts.Reason != nil && *st.facts.Reason == pack.ReasonAnalyzerPackMissing {
 			lim.add(LimStaticAnalysisGap + ":" + strings.TrimPrefix(k, pack.GapName+"."))
 			incompleteResult = true

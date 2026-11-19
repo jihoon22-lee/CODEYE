@@ -141,7 +141,7 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 		FilesInScope: d.Coverage.GoFilesInScope, ProcessedFiles: d.Coverage.ProcessedGoFiles, IgnoredFiles: d.Coverage.IgnoredGoFiles, UnlistedFiles: d.Coverage.UnlistedGoFiles,
 		Packages: map[string]int{}, StderrFailures: len(d.StderrFailures), AnalyzerErrors: len(d.AnalyzerErrors), Limitations: []string{}}
 	// The v0.1 document has no rule pack (it stays byte-identical): the row
-	// carries the synthesized go vet context (docs/39 §5.1).
+	// carries the synthesized go vet context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제).
 	rc := GoVetRuleContext()
 	tc.RuleContext = &rc
 	for k, v := range d.Coverage.Packages {

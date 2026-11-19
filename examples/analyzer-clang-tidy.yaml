@@ -1,9 +1,9 @@
-# W16 C/C++ 팩 추가 깊이 분석기 clang-tidy 어댑터 서술(Clang Static Analyzer는 clang-analyzer-* 검사로만 실행). 구현: internal/worker/analysis/cpp, 근거: docs/41-w16-cpp-pack.md.
+# W16 C/C++ 팩 추가 깊이 분석기 clang-tidy 어댑터 서술(Clang Static Analyzer는 clang-analyzer-* 검사로만 실행). 구현: internal/worker/analysis/cpp, 근거: docs/ANALYZERS.md.
 # clang-tidy 23.1.5는 경고가 있어도 exit 0이다(WarningsAsErrors는 빈 값으로 고정). 그래서 findings는 종료 코드 범주가 아니다(빈 배열).
 # exit 1은 한 실행의 번역 단위 중 하나라도 compiler error가 있을 때다. 오류 수는 실행 안에서 누적되므로 단위별 실패는 stderr 누적 수의 증가로 정한다.
 # compile DB를 읽지 못한 "Running without flags."·사용법 오류·crash는 실패다. compile DB가 없으면 실행하지 않는다(unsupported/compile_db_missing).
 # --config가 저장소 .clang-tidy를 대체하고 --extra-arg-before=--no-default-config가 clang driver 설정 파일을 막는다(실측). argv의 위치 인자는 작업 사본의 절대 경로다.
-# 저장 전에 stdout의 소스 줄과 작업 사본 밖 위치의 진단을 지운다(docs/41 §8). 아래 '${config}'는 cpp.ClangTidyConfig()의 inline YAML이다.
+# 저장 전에 stdout의 소스 줄과 작업 사본 밖 위치의 진단을 지운다(docs/ANALYZERS.md#작업-사본-밖-파일-내용의-저장-차단). 아래 '${config}'는 cpp.ClangTidyConfig()의 inline YAML이다.
 schema_version: '0.1'
 id: cpp.clang_tidy
 languages: [c, cpp]

@@ -1,4 +1,4 @@
-// Package progress derives the per-stage display of one run (docs/37 §2)
+// Package progress derives the per-stage display of one run (docs/ARCHITECTURE.md#표시-단계와-task-단계)
 // from stored, structured facts only. It is pure: the store loads the facts in
 // one statement and both the project list and the run detail call Compute, so
 // the two views cannot disagree about the same facts. Model narratives, worker
@@ -19,7 +19,7 @@ const (
 	KeyReport = "report"
 )
 
-// State is a display stage state (docs/37 §2 table).
+// State is a display stage state (docs/ARCHITECTURE.md#표시-단계와-task-단계 table).
 type State string
 
 const (

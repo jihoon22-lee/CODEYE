@@ -1,5 +1,5 @@
 {
-  "description": "W16 (docs/41) expected outcomes of cppcheck 2.22 and clang-tidy 23.1 on variants of fixtures/w16-cpp/input. add/remove change the input before the snapshot; scope restricts the task. Observations are 'rule path:line', tool errors 'kind path:line'. Compared by internal/worker/analysis/cpp real (tools) and replay (captured streams) tests.",
+  "description": "W16 (docs/ANALYZERS.md) expected outcomes of cppcheck 2.22 and clang-tidy 23.1 on variants of fixtures/w16-cpp/input. add/remove change the input before the snapshot; scope restricts the task. Observations are 'rule path:line', tool errors 'kind path:line'. Compared by internal/worker/analysis/cpp real (tools) and replay (captured streams) tests.",
   "compile_db": {
     "entries": 6,
     "units": ["src/parse.cpp", "src/ring.c", "src/util.cpp"],

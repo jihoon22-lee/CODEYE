@@ -7,7 +7,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 )
 
-// w21Tools are the W21 any-ecosystem analyzer tools (docs/45): planned for
+// w21Tools are the W21 any-ecosystem analyzer tools (docs/ANALYZERS.md): planned for
 // every snapshot with language source, not_probed without their flags.
 var w21Tools = []string{"gitleaks", "jscpd", "lizard"}
 

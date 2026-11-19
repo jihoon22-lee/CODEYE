@@ -87,7 +87,7 @@ func scopeCovers(rel string, patterns []string) bool {
 // module is the directory of a Cargo.toml that has no Cargo.toml in an
 // ancestor directory (so a virtual workspace and its members are one module,
 // run with --workspace). A nested manifest that is not a workspace member is
-// not analyzed; its sources show as files_unlisted (docs/44 §3).
+// not analyzed; its sources show as files_unlisted (docs/ANALYZERS.md#rust-계획).
 func planModules(m source.Manifest, scope domain.Scope, name, title string) (planResult, error) {
 	var scopePaths []string
 	switch scope.Kind {

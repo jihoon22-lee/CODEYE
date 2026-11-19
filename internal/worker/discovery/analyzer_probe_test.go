@@ -52,7 +52,7 @@ func analyzerTool(t *testing.T, d *envdoc.Document, tool string) *envdoc.Analyze
 	return nil
 }
 
-// docs/39 discovery hook: env.discover probes every configured analyzer tool
+// docs/ANALYZERS.md discovery hook: env.discover probes every configured analyzer tool
 // of the snapshot's ecosystems with its version argv through the executor
 // (explicit environment, scratch cwd, timeout); unconfigured ones stay
 // not_probed and nothing is searched in PATH.

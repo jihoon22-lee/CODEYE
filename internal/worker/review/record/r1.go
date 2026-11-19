@@ -187,7 +187,7 @@ var (
 	r1Kinds       = map[string]bool{"code": true, "test": true, "document": true, "manifest": true}
 	r1Origins     = map[string]bool{"": true, "context": true, "caller": true, "test": true, "observation": true}
 	// Upstream sources each stage may name. Interpret names analyzer tasks:
-	// any task key outside the discovery and review namespaces (docs/39);
+	// any task key outside the discovery and review namespaces (docs/ANALYZERS.md);
 	// the report binds each to that task's accepted observations artifact.
 	r1Sources = map[string][]string{
 		StageEnvironment: {"env.discover"},

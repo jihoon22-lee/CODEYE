@@ -233,7 +233,7 @@ func (s *r1Stage) documentFacts() (docFacts, string) {
 
 // toolLocation and toolObservation are the analyzer-independent view of one
 // observation; toolSummary of one analyzer task (go vet v0.1 or the generic
-// envelope of docs/39).
+// envelope of docs/ANALYZERS.md).
 type toolLocation struct {
 	Path               string
 	StartLine, EndLine int
@@ -273,7 +273,7 @@ func (s *r1Stage) readToolDoc(key string, files map[string]source.Entry) (toolSu
 			// A diagnostic the tool reported as suppressed in source is the
 			// project's decision, not a candidate: it never reaches the model
 			// (the envelope's source_suppressed_observations limitation says
-			// some were left out) and never becomes a finding (docs/39 §5.1).
+			// some were left out) and never becomes a finding (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제).
 			if o.Suppressed {
 				continue
 			}

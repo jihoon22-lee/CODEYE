@@ -80,7 +80,7 @@ func (s *Store) CreateTask(ctx context.Context, o Ownership, required bool) (str
 
 // createTaskTx creates a task of the locked run. With a key, an existing task of
 // the run with that key (a retried run re-planning) is returned with its current
-// version. The display stage (docs/37 §2) and the estimate weight (W22) are
+// version. The display stage (docs/ARCHITECTURE.md#표시-단계와-task-단계) and the estimate weight (W22) are
 // fixed at the first record: an omitted value keeps the stored one, a
 // different value is ErrConflict (like required), and a value declared for a
 // task stored without one (an older record re-planned by a newer worker) is

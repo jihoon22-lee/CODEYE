@@ -13,7 +13,7 @@ import (
 )
 
 // tsconfig is JSONC data. CODEYE reads it, never executes it: compiler
-// plugins listed in it are ignored by tsc (measured, docs/43 §3).
+// plugins listed in it are ignored by tsc (measured, docs/ANALYZERS.md#저장소-코드와-tsconfig-검사).
 
 // StripJSONC removes comments and trailing commas outside strings, the two
 // JSONC extensions TypeScript accepts in tsconfig files.

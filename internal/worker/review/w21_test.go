@@ -16,7 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 )
 
-// w21Stub is the go vet stub plus the W21 envelopes (docs/45): "lizard"
+// w21Stub is the go vet stub plus the W21 envelopes (docs/ANALYZERS.md): "lizard"
 // with one complexity metric on gateway.go and the secrets task with one
 // detection on gateway.go, where the test planted a value the platform's
 // Sensitive pattern does not recognize. mode is the secrets task outcome:
@@ -105,7 +105,7 @@ func (w w21Stub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}}
 }
 
-// TC-118 (docs/45): a file a secret analyzer reported reaches no model
+// TC-118 (docs/ANALYZERS.md): a file a secret analyzer reported reaches no model
 // input: not as code context, not as an observation window of any tool and
 // not as a verification expansion. The detection itself (fixed message,
 // path, line) is interpreted; a structure metric never is.

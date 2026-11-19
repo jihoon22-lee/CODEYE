@@ -132,7 +132,7 @@ func TestReplayNoClones(t *testing.T) {
 }
 
 // The timing line of a long run stays in seconds: jscpd 5.4.3 printed
-// "time: 100.32s" for a 100-second scan (docs/45), never minutes.
+// "time: 100.32s" for a 100-second scan (docs/ANALYZERS.md), never minutes.
 func TestReplayLongRunTiming(t *testing.T) {
 	rec := anypacktest.LoadCapture(t, "noclones")
 	at := strings.Index(string(rec.Stdout), "time: ")

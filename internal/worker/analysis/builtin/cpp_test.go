@@ -11,7 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// W16 (docs/39 §2.6, docs/41 §2): cppcheck is the C/C++ baseline, so a node
+// W16 (docs/ANALYZERS.md#기준-분석기와-추가-깊이, docs/ANALYZERS.md#cc-팩): cppcheck is the C/C++ baseline, so a node
 // with only --cppcheck advertises deep-review; clang-tidy is extra depth and
 // alone advertises nothing. A configured path that is not a file is
 // invalid_config and the analyzer stays a member.

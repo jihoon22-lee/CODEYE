@@ -13,7 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// W17 (docs/42 §2): ruff is the Python baseline, so a node with only
+// W17 (docs/ANALYZERS.md#python-팩): ruff is the Python baseline, so a node with only
 // --ruff advertises deep-review.
 func TestRuffOnlyNodeAdvertisesDeepReview(t *testing.T) {
 	ruff := os.Getenv("CODEYE_TEST_RUFF")
@@ -27,7 +27,7 @@ func TestRuffOnlyNodeAdvertisesDeepReview(t *testing.T) {
 	}
 }
 
-// W17 (docs/42 §5): with both type checker paths (the agent accepted
+// W17 (docs/ANALYZERS.md#타입-검사기-선택): with both type checker paths (the agent accepted
 // --python-both-type-checkers) the selection is recorded on the checker
 // that runs even when the other cannot (pyright without --node ends
 // toolchain_not_configured).

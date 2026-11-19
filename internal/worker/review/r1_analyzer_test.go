@@ -15,7 +15,7 @@ import (
 )
 
 // packStub is a composite-like static handler: the go vet stub, then
-// staticcheck tasks writing generic envelopes (docs/39): "staticcheck" with
+// staticcheck tasks writing generic envelopes (docs/ANALYZERS.md): "staticcheck" with
 // one observation on gateway.go, "staticcheck.m01" not run (tool not
 // configured) and "staticcheck.m02" that writes nothing.
 type packStub struct{}

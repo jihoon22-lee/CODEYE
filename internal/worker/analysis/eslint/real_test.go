@@ -20,7 +20,7 @@ import (
 // Real ESLint tests run only with CODEYE_TEST_ESLINT and CODEYE_TEST_NODE
 // (CI has no Node tools). CODEYE_W18_CAPTURE=DIR also writes the redacted
 // eslint.check streams and exit code of each case to DIR, which is how
-// testdata/*.stdout|stderr|exit were captured (docs/43 §8):
+// testdata/*.stdout|stderr|exit were captured (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처):
 //
 //	CODEYE_W18_CAPTURE=$PWD/internal/worker/analysis/eslint/testdata \
 //	  go test -count=1 -run TestRealESLint ./internal/worker/analysis/eslint/
@@ -31,7 +31,7 @@ const (
 	pkgJSON   = "{\"name\":\"w18-case\",\"private\":true}\n"
 	fixClean  = "export function add(a, b) {\n  return a + b;\n}\n"
 	fixBroken = "export function broken( {\n  return 1;\n}\n"
-	// suppressions (docs/39 §5.1): an inline rule-off comment, a disable
+	// suppressions (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제): an inline rule-off comment, a disable
 	// line, a disable block and a bulk suppressions file in the module. The
 	// managed run turns all of them off, so every problem is reported.
 	fixSup     = "/* eslint no-unused-vars: off */\nexport function run(f) {\n  // eslint-disable-next-line no-empty\n  try { f(); } catch {}\n  const hidden = 1;\n  /* eslint-disable */\n  debugger;\n  /* eslint-enable */\n}\n"
@@ -176,7 +176,7 @@ func TestRealESLintParseError(t *testing.T) {
 	}
 }
 
-// TC-113 (docs/39 §5.1, per family on the real tool): eslint-disable
+// TC-113 (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, per family on the real tool): eslint-disable
 // comments, inline rule configuration and a repository
 // eslint-suppressions.json are all turned off by --no-inline-config and the
 // empty managed suppressions file. Every problem is an active observation,
@@ -245,7 +245,7 @@ func TestRealESLintTypedRefusesNodeModules(t *testing.T) {
 	jststest.ReadEnvelope(t, fx.Job, res)
 }
 
-// Evidence for docs/43 §3: typescript-eslint's parserOptions.project
+// Evidence for docs/ANALYZERS.md#저장소-코드와-tsconfig-검사: typescript-eslint's parserOptions.project
 // program does not load tsconfig language-service plugins. The module holds
 // a plugin that would leave a marker; ESLint runs directly (outside the
 // adapter, whose node_modules refusal would stop it) with the managed

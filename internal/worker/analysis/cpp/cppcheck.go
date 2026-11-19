@@ -20,7 +20,7 @@ import (
 // cppcheck identity: the baseline (required) C/C++ analyzer. It parses
 // translation units without build flags (tolerating unknown headers and
 // macros, unlike a compiler), so it is the one C/C++ tool a node can run on
-// every snapshot (docs/39 §2.6, docs/41 §2).
+// every snapshot (docs/ANALYZERS.md#기준-분석기와-추가-깊이, docs/ANALYZERS.md#cc-팩).
 const (
 	CppcheckID             = "cpp.cppcheck"
 	CppcheckName           = "cppcheck"
@@ -35,14 +35,14 @@ const (
 )
 
 // CppcheckSelection is the CODEYE rule selection: the error checks (always
-// on) plus warning, performance and portability; style is not run (docs/06
+// on) plus warning, performance and portability; style is not run (docs/ANALYZERS.md
 // §7). information and missingInclude are enabled for coverage only: their
 // records (missing headers, configuration limits, the active-checker count)
 // never become observations. The check level and platform are pinned so a
 // default change of the tool cannot change the rules silently. Inline
 // suppressions are not enabled (no --inline-suppr): every diagnostic is
 // reported, so source_suppressions is "disabled" (measured: with
-// --inline-suppr suppressed diagnostics vanish without any record, docs/41
+// --inline-suppr suppressed diagnostics vanish without any record, docs/ANALYZERS.md
 // §6).
 var CppcheckSelection = []string{"--enable=warning,performance,portability,information,missingInclude", "--check-level=normal", "--platform=native"}
 

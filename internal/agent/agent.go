@@ -59,7 +59,7 @@ type Config struct {
 	// SourceRoots is the private mapping source_root_id → absolute path.
 	SourceRoots map[string]string
 	// RepositoryCodeSourceRoots are the local source roots whose jobs may run
-	// repository-controlled code (--repo-code-source-root, docs/39 §2.7).
+	// repository-controlled code (--repo-code-source-root, docs/ANALYZERS.md#저장소-코드-실행-허가).
 	// Git sources never get the grant.
 	RepositoryCodeSourceRoots map[string]bool
 	// Workers is the static worker count (W06, default mode).
@@ -75,8 +75,8 @@ type Config struct {
 	GoExecutable  string
 	GoModCache    string
 	// AnalyzerTools are absolute analyzer tool paths by tool name, one
-	// agent flag per tool (--staticcheck PATH, docs/39), and the shared
-	// toolchains under their reserved names (--node PATH, docs/39 §2.4). The
+	// agent flag per tool (--staticcheck PATH, docs/ANALYZERS.md), and the shared
+	// toolchains under their reserved names (--node PATH, docs/ANALYZERS.md#도구-경로). The
 	// worker build decides which names it knows.
 	AnalyzerTools map[string]string
 	Limits        workerproto.Limits
@@ -91,7 +91,7 @@ type Config struct {
 	// the agent shuts down like on a signal and exits 0 when every cleanup is
 	// confirmed. A nil channel never drains.
 	Drain <-chan struct{}
-	// StorageQuota (W25, docs/47 §4) are node storage area limits in bytes
+	// StorageQuota (W25, docs/OPERATIONS.md#저장-영역과-상한) are node storage area limits in bytes
 	// (quota.NodeAreas). Areas at or over their limit are reported in the
 	// heartbeat (storage_quota_exceeded) and the controller refuses new
 	// claims for this node; running attempts are never interrupted.

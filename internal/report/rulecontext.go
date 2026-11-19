@@ -11,7 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 )
 
-// Rule context of a tool coverage row (W19, docs/39 §5.1, docs/40 §3.3):
+// Rule context of a tool coverage row (W19, docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태):
 // what decides which diagnostics a tool reports besides the code and the
 // tool version. A comparison may call a vanished tool finding
 // resolved_observed only when the rule context is known and equal on both

@@ -45,7 +45,7 @@ const (
 	EcoCpp        = "cpp"
 )
 
-// Observation statuses (docs/37 §5).
+// Observation statuses (docs/ARCHITECTURE.md#모듈환경문서-탐색).
 const (
 	ObsObserved    = "observed"
 	ObsNotProbed   = "not_probed"
@@ -62,7 +62,7 @@ const (
 	ReasonNotDeclared           = "not_declared"
 	ReasonNotObserved           = "not_observed"
 	ReasonUnsupportedConstraint = "unsupported_constraint"
-	// ReasonDeclarationUnreadable extends the docs/37 §5 reasons: no
+	// ReasonDeclarationUnreadable extends the docs/ARCHITECTURE.md#모듈환경문서-탐색 reasons: no
 	// requirement could be read because a manifest that may declare the tool
 	// is malformed, not UTF-8 or too large. Reporting not_declared there
 	// would be a false fact.
@@ -153,7 +153,7 @@ type Environment struct {
 	Requirements []Requirement  `json:"requirements"`
 	Observations []Observation  `json:"observations"`
 	Verdicts     []Verdict      `json:"verdicts"`
-	// AnalyzerTools are the node's analyzer tools (docs/39) for the
+	// AnalyzerTools are the node's analyzer tools (docs/ANALYZERS.md) for the
 	// in-scope ecosystems: probed when the operator configured them,
 	// not_probed otherwise. They are not compared with declarations.
 	// Absent in documents written before W19.

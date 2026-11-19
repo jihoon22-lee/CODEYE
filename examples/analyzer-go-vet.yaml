@@ -1,4 +1,4 @@
-# W08 빌트인 Go vet 어댑터 서술. 구현: internal/worker/analysis/govet, 근거: docs/29-w08-go-vet.md.
+# W08 빌트인 Go vet 어댑터 서술. 구현: internal/worker/analysis/govet, 근거: docs/ANALYZERS.md.
 # -json에서는 진단이 있어도 exit 0이므로 findings는 종료 코드 범주가 아니다(빈 배열).
 # 발견 여부는 stdout JSON parser가 결정하고, exit 1은 패키지 오류·설정 오류다.
 schema_version: '0.1'

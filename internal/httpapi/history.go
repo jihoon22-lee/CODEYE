@@ -14,7 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// W23 run comparison and human finding reviews (docs/40). Every route checks
+// W23 run comparison and human finding reviews (docs/REPORT.md). Every route checks
 // the project ACL in the store: readers (viewer included) see comparisons and
 // reviews; only the owner, managers and runners set dispositions.
 

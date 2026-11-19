@@ -12,7 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// W22 schedule API (docs/09 §8, docs/38). Members read; only managers create,
+// W22 schedule API (docs/EXECUTION.md#예약, docs/API.md). Members read; only managers create,
 // change and delete. Create takes Idempotency-Key; change and delete take
 // If-Match with the schedule version (ETag "N"). The run request has the
 // manual run request's contract and is re-authorized at every occurrence.

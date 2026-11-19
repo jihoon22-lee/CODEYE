@@ -15,7 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// A repository tsconfig chain is untrusted input (docs/43 §3.2). These run
+// A repository tsconfig chain is untrusted input (docs/ANALYZERS.md#저장소-코드와-tsconfig-검사). These run
 // in CI: a refused task starts no process, so the tools are fakes and the
 // runner fails the test when called.
 
@@ -139,7 +139,7 @@ func TestRepositoryArgvNeverAnOption(t *testing.T) {
 	}
 }
 
-// Evidence (real tsc, docs/43 §3.2): under the adapter flags, emit and
+// Evidence (real tsc, docs/ANALYZERS.md#저장소-코드와-tsconfig-검사): under the adapter flags, emit and
 // tsbuildinfo options naming a canary directory outside the project write
 // nothing; generateTrace does, which is why the adapter refuses it.
 func TestRealTscWriteOptionsCanary(t *testing.T) {

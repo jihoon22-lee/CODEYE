@@ -148,7 +148,7 @@ func TestReplayTscDamaged(t *testing.T) {
 	}
 }
 
-// docs/43 §3.2: a diagnostic about a file or a configuration file outside
+// docs/ANALYZERS.md#저장소-코드와-tsconfig-검사: a diagnostic about a file or a configuration file outside
 // the workspace is never echoed, and a quoted host path in a global
 // diagnostic is withheld; the run is refused as reading outside files.
 func TestReplayTscHostDiagnosticsWithheld(t *testing.T) {

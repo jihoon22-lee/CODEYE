@@ -36,7 +36,7 @@ func fakeRust(t *testing.T, withRustup bool) (dir string) {
 	return dir
 }
 
-// W20 (docs/44 §1): cargo is the Rust baseline analyzer, so a node with only
+// W20 (docs/ANALYZERS.md#rust-팩): cargo is the Rust baseline analyzer, so a node with only
 // --cargo (no --go) advertises deep-review. Its Go and clippy members are
 // visible unsupported stand-ins.
 func TestCargoAloneAdvertisesDeepReview(t *testing.T) {
@@ -100,7 +100,7 @@ func TestRustProxyIsNeitherUsedNorProbed(t *testing.T) {
 // With the real toolchain (CODEYE_TEST_CARGO, CODEYE_TEST_CLIPPY) the startup
 // probe makes both analyzers members, and the probe leaves nothing in the
 // probe directory (no detached child writes after the cleanup was confirmed,
-// the failure mode docs/39 §8.2 measured for go).
+// the failure mode docs/ANALYZERS.md#go-공통-환경과-빌드-문맥 measured for go).
 func TestHandlersProbeRealRustToolchain(t *testing.T) {
 	cargo, clippy := os.Getenv("CODEYE_TEST_CARGO"), os.Getenv("CODEYE_TEST_CLIPPY")
 	if cargo == "" || clippy == "" {

@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// Static analysis gaps (docs/39 §2.8). An ecosystem with source in scope but
+// Static analysis gaps (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백). An ecosystem with source in scope but
 // no analyzer of this build plans one visible, not-required gap task instead
 // of a placeholder of another ecosystem's analyzer.
 const (
@@ -58,7 +58,7 @@ func inScope(p string, scope domain.Scope) bool {
 // SourceFiles counts, per language ecosystem, the included manifest files in
 // scope with one of its source extensions, outside data and vendored
 // directories. It is the one definition of "the ecosystem is in scope" for
-// gap planning (docs/39 §2.8); a pack decides its own modules.
+// gap planning (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백); a pack decides its own modules.
 func SourceFiles(m source.Manifest, scope domain.Scope) map[string]int {
 	out := map[string]int{}
 	for _, e := range m.Entries {

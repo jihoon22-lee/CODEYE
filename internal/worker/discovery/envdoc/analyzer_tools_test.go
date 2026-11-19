@@ -14,7 +14,7 @@ func tools() []envdoc.AnalyzerTool {
 	}
 }
 
-// docs/39: analyzer_tools is additive (absent before W19) and records only
+// docs/ANALYZERS.md: analyzer_tools is additive (absent before W19) and records only
 // what a probe execution of this attempt showed.
 func TestAnalyzerToolsValidation(t *testing.T) {
 	in, env, _ := fixture(t)

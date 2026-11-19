@@ -4,7 +4,7 @@ import "slices"
 
 // GapCodes are the TypeScript diagnostics that say a module, type package or
 // project output the program needs is not available: dependency gaps, never
-// defects (docs/43 §4). A snapshot never holds node_modules, so they are the
+// defects (docs/ANALYZERS.md#의존성-공백). A snapshot never holds node_modules, so they are the
 // normal case for any project with dependencies. Measured with TypeScript
 // 6.0.3 (fixtures and the CODEYE web sources without node_modules): 2307,
 // 2591, 2593, 2688, 2875, 2882, 6305, 7026. The others are the same messages
