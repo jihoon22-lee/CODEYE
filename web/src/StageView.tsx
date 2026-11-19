@@ -1,6 +1,7 @@
-import { useId, useState } from 'react';
+import { Fragment, useId, useState, type ReactNode } from 'react';
 import type { Project, StageSummary, StageView } from './api';
 import { reportURL } from './analysisReport';
+import { Time } from './CopyText';
 import { formatClock, formatInstant, isTerminalRun, orderStages, runStatusText, shorten, stageName, stageStateText } from './format';
 import { ko as t } from './locales/ko';
 import { reportKo } from './locales/report-ko';
@@ -33,15 +34,16 @@ export function StageList({ summary, runStatus, confirmedAt }: { summary: StageS
     if (stages.length === 0) return <p>{s.noStages}</p>;
     return <ol className="plain stages">{stages.map(st => <StageItem key={st.key} stage={st} />)}</ol>;
   })();
-  const times = [
-    summary?.last_event_at ? s.lastEvent(formatInstant(summary.last_event_at)) : null,
-    summary?.checked_at ? s.checkedAt(formatInstant(summary.checked_at)) : null,
+  // Relative times read faster; the exact time stays in the title and the datetime attribute.
+  const times: ReactNode[] = [
+    summary?.last_event_at ? <>{s.lastEvent} <Time iso={summary.last_event_at} /></> : null,
+    summary?.checked_at ? <>{s.checkedAt} <Time iso={summary.checked_at} /></> : null,
     confirmedAt ? s.lastConfirmed(formatClock(confirmedAt)) : null,
   ].filter(x => x !== null);
   return <div className="stage-summary">
     <h4>{s.title}</h4>
     {body}
-    {times.length > 0 && <p className="small">{times.join(' · ')}</p>}
+    {times.length > 0 && <p className="small">{times.map((x, i) => <Fragment key={i}>{i > 0 && ' · '}{x}</Fragment>)}</p>}
   </div>;
 }
 

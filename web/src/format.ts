@@ -57,7 +57,8 @@ export function formatRelative(iso: string, now: Date): string {
   if (Number.isNaN(d.getTime())) return iso;
   const r = t.relative;
   const seconds = Math.round((now.getTime() - d.getTime()) / 1000);
-  if (seconds < 0) return formatInstant(iso);
+  // A minute of clock difference between server and browser still reads as now; later is shown as is.
+  if (seconds < -60) return formatInstant(iso);
   if (seconds < 45) return r.now;
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return r.minutes(minutes);

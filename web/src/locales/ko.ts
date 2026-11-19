@@ -234,7 +234,7 @@ export const ko = {
     percent: '진행률',
     percentUnknown: '아직 계산할 수 없음',
     waiting: '기다리는 이유',
-    verdict: '판정',
+    verdict: '품질 판정',
     verdictLabels: {
       attention_required: '확인이 필요한 항목 있음',
       no_actionable_findings: '조치할 항목 없음',
@@ -346,7 +346,7 @@ export const ko = {
     next: (at: string) => `다음 예정 ${at}`,
     nextNone: '다음 예정 없음',
     last: (at: string, state: string) => `마지막 예약 ${at} · ${state}`,
-    missedFrom: (at: string) => `서버가 멈춘 사이 ${at}부터의 예약은 실행하지 않았습니다.`,
+    missedFrom: (at: string) => `CODEYE가 꺼져 있던 사이 ${at}부터의 예약은 실행하지 않았습니다.`,
     pending: (at: string) => `${at} 예약이 이전 실행 종료를 기다리고 있습니다.`,
     states: {
       enqueued: '대기열에 넣음',
@@ -550,8 +550,8 @@ export const ko = {
     unrecordedWithStatus: (status: string) => `세부 단계 미기록 · 실행 상태: ${status}`,
     unknownDetail: (raw: string) => `세부 단계 기록 방식을 알 수 없음 (${raw})`,
     noStages: '표시할 단계가 없습니다.',
-    lastEvent: (v: string) => `마지막 변화 ${v}`,
-    checkedAt: (v: string) => `서버 확인 ${v}`,
+    lastEvent: '마지막 변화',
+    checkedAt: '서버 확인',
     lastConfirmed: (v: string) => `마지막 확인 ${v}`,
     // project list
     noRun: '아직 분석하지 않음',
@@ -961,7 +961,7 @@ export const ko = {
   // --- end of accounts ---
 
   // --- small shared pieces ---
-  copy: { button: '복사', done: '✓ 복사함', failed: '복사하지 못했습니다. 글자를 직접 선택해 복사하세요.', labelFor: (text: string) => `${text} 복사` },
+  copy: { button: '복사', done: '✓ 복사함', failedShort: '복사 안 됨', failed: '복사하지 못했습니다. 글자를 직접 선택해 복사하세요.', labelFor: (text: string) => `${text} 복사` },
   relative: { now: '방금', minutes: (n: number) => `${n}분 전`, hours: (n: number) => `${n}시간 전`, days: (n: number) => `${n}일 전` },
   pageTitle: (part: string) => `${part} · CODEYE`,
 
