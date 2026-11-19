@@ -281,6 +281,8 @@ func TestPythonDropsRequirementsWithoutWheels(t *testing.T) {
 		"pip":           {"ERROR: Could not find a version that satisfies the requirement mkautodoc==0.2.0 (from versions: none)\nERROR: No matching distribution found for mkautodoc==0.2.0\n", false, "mkautodoc", ReasonPyNoMatchingDistibution},
 		"pip transitive": {"ERROR: Could not find a version that satisfies the requirement mkautodoc==0.2.0 (from codeyetest) (from versions: none)\nERROR: No matching distribution found for mkautodoc==0.2.0\n",
 			false, "codeyetest", ReasonPyNoMatchingDistibution},
+		"uv not found": {"  × No solution found when resolving dependencies:\n  ╰─▶ Because codeyetest was not found in the package registry and you require\n      codeyetest==1.0, we can conclude that your requirements are unsatisfiable.\n",
+			true, "codeyetest", ReasonPyDependencyNotFound},
 	} {
 		t.Run(name, func(t *testing.T) {
 			job, _ := jobOf(t, map[string]string{"requirements.txt": "idna==3.10\nattrs==24.2.0\n" + tc.failed + "==1.0\n", "a.py": "import idna\n"})
@@ -321,6 +323,7 @@ func TestPythonFetchFailures(t *testing.T) {
 			depdoc.ReasonRegistryUnreachable},
 		"auth":     {"error: Failed to fetch: `https://pypi.example/simple/idna/`\n  Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi.example/simple/idna/)\n", ReasonPyRegistryAuthRequired},
 		"conflict": {"  × No solution found when resolving dependencies:\n  ╰─▶ Because you require idna==3.10 and idna==3.9, we can conclude that your requirements are unsatisfiable.\n", ReasonPyResolutionConflict},
+		"hash":     {"ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE.\n    idna==3.10 from https://files.example/idna-3.10-py3-none-any.whl:\n        Expected sha256 dddd\n             Got        eeee\n", ReasonPyHashMismatch},
 		"other":    {"error: something else\n", depdoc.ReasonFetchFailed},
 	}
 	for name, tc := range cases {

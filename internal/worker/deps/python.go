@@ -604,7 +604,8 @@ func (p pyInstall) run(ctx context.Context, tree string, reqs []requirement) (tr
 		if attempt > 0 {
 			name += ".r" + strconv.Itoa(attempt)
 		}
-		// The size cap counts the download cache and the tree being built.
+		// The size cap counts the download cache, the tree being built and
+		// (Exec adds it) the temp directory the installer unpacks in.
 		res, ok := p.env.Exec(ctx, name, p.spec(exe, vars, nil, args...), downloads, tree)
 		if !ok {
 			status, reason := StopOutcome(p.env.Stop())
