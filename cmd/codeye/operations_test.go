@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -70,6 +71,49 @@ func TestOperationsUsageErrors(t *testing.T) {
 	}
 }
 
+// TC-230: uninstall needs no configuration and removes only a unit that
+// codeye wrote; a missing unit is not an error.
+func TestServiceUninstallRemovesOnlyItsUnit(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("systemd user units are Linux only")
+	}
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	t.Setenv("PATH", t.TempDir()) // no systemctl: the file work only
+	dir := filepath.Join(home, "systemd", "user")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	uninstall := func(name string) int {
+		var out, errb bytes.Buffer
+		return run(ctx, []string{"service", "uninstall", "--name", name}, &out, &errb)
+	}
+	foreign := filepath.Join(dir, "other.service")
+	if err := os.WriteFile(foreign, []byte("[Unit]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := uninstall("other"); code != 1 {
+		t.Fatalf("foreign unit: exit %d", code)
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Fatal("a unit codeye did not write was removed")
+	}
+	ours := filepath.Join(dir, "codeye.service")
+	if err := os.WriteFile(ours, []byte(serviceUnit("/x/codeye", "/c.json", "/bin", time.Minute)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := uninstall("codeye"); code != 0 {
+		t.Fatalf("own unit: exit %d", code)
+	}
+	if _, err := os.Stat(ours); !os.IsNotExist(err) {
+		t.Fatal("own unit kept")
+	}
+	if code := uninstall("codeye"); code != 0 {
+		t.Fatalf("missing unit: exit %d", code)
+	}
+}
+
 // TC-229 (node only): a dry run lists old snapshot copies with no database
 // and changes nothing; --apply removes them.
 func TestCleanupNodeOnlyDryRunThenApply(t *testing.T) {
@@ -95,6 +139,13 @@ func TestCleanupNodeOnlyDryRunThenApply(t *testing.T) {
 	var rep cleanupReport
 	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
 		t.Fatal(err)
+	}
+	if runtime.GOOS != "linux" {
+		// The agent lock cannot be checked here: snapshot copies are kept.
+		if rep.NodeData == nil || len(rep.NodeData.Entries) != 0 || len(rep.Notes) == 0 {
+			t.Fatalf("dry run %s", out.String())
+		}
+		return
 	}
 	if rep.Applied || rep.Artifacts != nil || rep.NodeData == nil || len(rep.NodeData.Entries) != 1 || rep.NodeData.Entries[0].Kind != "snapshot" {
 		t.Fatalf("dry run %s", out.String())

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
@@ -13,7 +14,7 @@ import (
 
 // operationsUsage documents the operator commands for recovery, retention
 // and the user service.
-const operationsUsage = `  codeye run recover --id RUN_ID --confirm-cleanup   (a recovery_required run: you checked that none of its processes is left on the node)
+const operationsUsage = `  codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]   (a recovery_required run: you checked that none of its processes is left on the node)
   codeye cleanup [--config PATH | --artifact-dir DIR] [--agent-state-dir DIR] [--older-than 30d] [--apply] [--format text|json]   (dry run unless --apply)
   codeye service install|uninstall|print [--config PATH] [--name codeye]   (systemd user unit running codeye start/stop, Linux)
 `
@@ -41,10 +42,11 @@ func runOperations(ctx context.Context, args []string, out, stderr io.Writer) (c
 // actor operator_cli). The work is queued again on behalf of the run's
 // requester.
 func runRecover(ctx context.Context, args []string, out, stderr io.Writer) int {
-	var id string
+	var id, config string
 	var confirmed bool
 	if !parse("run recover", args, stderr, func(fs *flag.FlagSet) {
 		fs.StringVar(&id, "id", "", "")
+		fs.StringVar(&config, "config", "", "")
 		fs.BoolVar(&confirmed, "confirm-cleanup", false, "")
 	}) || id == "" {
 		fmt.Fprintln(stderr, "--id is required")
@@ -58,7 +60,30 @@ func runRecover(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "--confirm-cleanup is required: first check on the run's node that no process of its attempt is left (codeye status, ps), then confirm")
 		return 2
 	}
-	return withStore(ctx, stderr, func(ctx context.Context, s *postgres.Store) int {
+	with := withStore
+	if config != "" || os.Getenv("CODEYE_DATABASE_URL") == "" {
+		// Personal mode (--config, or the default configuration when no
+		// database URL is set): the installation's own database.
+		with = func(ctx context.Context, stderr io.Writer, f func(context.Context, *postgres.Store) int) int {
+			args := []string{}
+			if config != "" {
+				args = append(args, "--config", config)
+			}
+			cfg, layout, ok := loadPersonalConfig("run recover", args, stderr, nil)
+			if !ok {
+				return 2
+			}
+			store, db, err := personalStore(ctx, cfg, layout, stderr)
+			if err != nil {
+				fmt.Fprintln(stderr, "database unavailable:", err)
+				return 1
+			}
+			defer stopStartedDB(db)
+			defer store.Close()
+			return f(ctx, store)
+		}
+	}
+	return with(ctx, stderr, func(ctx context.Context, s *postgres.Store) int {
 		rec, err := s.ConfirmRecovery(ctx, postgres.OperatorPrincipal(), id)
 		switch {
 		case errors.Is(err, domain.ErrConflict):

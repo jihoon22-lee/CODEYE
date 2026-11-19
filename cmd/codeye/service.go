@@ -29,6 +29,40 @@ import (
 
 var serviceName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
 
+// unitMarker starts every unit this command writes; install replaces and
+// uninstall removes only such files.
+const unitMarker = "# Written by codeye service install."
+
+// serviceUninstall disables and stops the unit, then removes its file.
+func serviceUninstall(ctx context.Context, name string, out, stderr io.Writer) int {
+	dir, err := userUnitDir()
+	if err != nil {
+		fmt.Fprintln(stderr, "cannot find the user configuration directory")
+		return 1
+	}
+	file := filepath.Join(dir, name+".service")
+	existing, err := os.ReadFile(file)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		fmt.Fprintln(out, "no unit", file)
+		return 0
+	case err != nil:
+		fmt.Fprintln(stderr, "cannot read", file)
+		return 1
+	case !strings.HasPrefix(string(existing), unitMarker):
+		fmt.Fprintln(stderr, file, "was not written by codeye; not removed")
+		return 1
+	}
+	systemctl(ctx, out, "disable", "--now", name+".service")
+	if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintln(stderr, "cannot remove", file)
+		return 1
+	}
+	systemctl(ctx, out, "daemon-reload")
+	fmt.Fprintln(out, "removed", file)
+	return 0
+}
+
 // serviceUnit is the unit text. exe and config are absolute; path is the
 // PATH codeye start resolves the tools and PostgreSQL programs with (a
 // user manager does not read the login shell's PATH).
@@ -38,7 +72,7 @@ func serviceUnit(exe, config, path string, stop time.Duration) string {
 		return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%", "$", "$$").Replace(s) + `"`
 	}
 	env := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%", "$", "$$").Replace(path)
-	return "# Written by codeye service install. Remove with codeye service uninstall.\n" +
+	return unitMarker + " Remove with codeye service uninstall.\n" +
 		"[Unit]\n" +
 		"Description=CODEYE personal mode (PostgreSQL, controller, agent)\n" +
 		"\n" +
@@ -78,6 +112,18 @@ func serviceCommand(ctx context.Context, args []string, out, stderr io.Writer) i
 	}) {
 		return 2
 	}
+	if !serviceName.MatchString(name) {
+		fmt.Fprintln(stderr, "--name must be lower-case letters, digits and dashes")
+		return 2
+	}
+	if runtime.GOOS != "linux" {
+		fmt.Fprintln(stderr, "codeye service writes a systemd user unit and works on Linux only")
+		return 1
+	}
+	if action == "uninstall" {
+		// Removing the unit needs no configuration (it may be gone already).
+		return serviceUninstall(ctx, name, out, stderr)
+	}
 	config, err := personalConfigPath(config)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -88,14 +134,6 @@ func serviceCommand(ctx context.Context, args []string, out, stderr io.Writer) i
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
-	}
-	if !serviceName.MatchString(name) {
-		fmt.Fprintln(stderr, "--name must be lower-case letters, digits and dashes")
-		return 2
-	}
-	if runtime.GOOS != "linux" {
-		fmt.Fprintln(stderr, "codeye service writes a systemd user unit and works on Linux only")
-		return 1
 	}
 	exe, err := os.Executable()
 	if err == nil {
@@ -119,21 +157,11 @@ func serviceCommand(ctx context.Context, args []string, out, stderr io.Writer) i
 		return 1
 	}
 	file := filepath.Join(dir, name+".service")
-	if action == "uninstall" {
-		systemctl(ctx, out, "disable", "--now", name+".service")
-		if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
-			fmt.Fprintln(stderr, "cannot remove", file)
-			return 1
-		}
-		systemctl(ctx, out, "daemon-reload")
-		fmt.Fprintln(out, "removed", file)
-		return 0
-	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		fmt.Fprintln(stderr, "cannot create", dir)
 		return 1
 	}
-	if existing, err := os.ReadFile(file); err == nil && !strings.HasPrefix(string(existing), "# Written by codeye service install.") {
+	if existing, err := os.ReadFile(file); err == nil && !strings.HasPrefix(string(existing), unitMarker) {
 		fmt.Fprintln(stderr, file, "exists and was not written by codeye; not replaced")
 		return 1
 	}

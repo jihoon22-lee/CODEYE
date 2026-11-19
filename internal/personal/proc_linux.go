@@ -60,8 +60,12 @@ func (l Layout) Lock() (func(), error) {
 // AgentLockHeld reports whether some process holds the agent's state lock
 // (<agent>/agent.lock, internal/agent). It is probed with a non-blocking lock
 // that is released at once; a missing lock file means no agent ever ran.
-func (l Layout) AgentLockHeld() (bool, error) {
-	f, err := os.OpenFile(filepath.Join(l.AgentDir(), "agent.lock"), os.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+func (l Layout) AgentLockHeld() (bool, error) { return AgentStateLocked(l.AgentDir()) }
+
+// AgentStateLocked reports whether an agent runs with stateDir as its
+// --state-dir (it holds <stateDir>/agent.lock).
+func AgentStateLocked(stateDir string) (bool, error) {
+	f, err := os.OpenFile(filepath.Join(stateDir, "agent.lock"), os.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}

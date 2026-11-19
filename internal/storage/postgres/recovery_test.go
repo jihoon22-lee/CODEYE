@@ -85,7 +85,7 @@ func TestConfirmRecoveryReleasesAndRequeues(t *testing.T) {
 	}
 }
 
-// A node that reports snapshot_unavailable for a pinned retry no longer
+// TC-228: a node that reports snapshot_unavailable for a pinned retry no longer
 // holds the snapshot: the next retry acquires anew instead of returning to
 // that node.
 func TestSnapshotUnavailableDropsTheLocation(t *testing.T) {

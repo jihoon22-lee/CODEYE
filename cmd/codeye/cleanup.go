@@ -277,6 +277,21 @@ func cleanNode(stateDir, retiredOf string, olderThan time.Duration, apply bool, 
 		}
 		entries = append(entries, retired...)
 	}
+	// A running attempt works inside its snapshot copy (acquire-*/workspace)
+	// and the journal does not name that directory: while the agent runs (or
+	// when that cannot be told), snapshot copies are left alone.
+	if running, err := personal.AgentStateLocked(stateDir); running || err != nil {
+		kept := entries[:0]
+		for _, e := range entries {
+			if e.Kind != retention.KindSnapshot {
+				kept = append(kept, e)
+			}
+		}
+		if len(kept) < len(entries) {
+			rep.Notes = append(rep.Notes, "the agent is running (or its lock cannot be checked): snapshot copies are kept; stop the agent to remove them")
+		}
+		entries = kept
+	}
 	retention.Sort(entries)
 	n := &nodeDataCleanup{Entries: entries}
 	if n.Entries == nil {
