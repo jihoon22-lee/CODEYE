@@ -428,7 +428,7 @@ export const ko = {
       program_files_outside_snapshot: 'tsconfig 프로그램이 스냅샷 밖 파일을 포함해 실행하지 않음 (정책 제외)',
       no_input_files: 'tsconfig가 이 모듈의 파일을 하나도 선택하지 않음 (미지원, 0건 통과 아님)',
       no_analyzable_files: '검사된 파일이 없음 (미지원, 0건 통과 아님)',
-      parse_errors: '구문을 해석하지 못한 파일이 있어 실패로 기록함 (나머지 관찰은 보존)',
+      parse_errors: '해석할 수 있는 파일이 없어 검사하지 못함 (일부 파일만 해석하지 못하면 그 파일만 빼고 결과를 냄)',
       syntax_errors: '구문 오류로 tsc가 타입 검사 전에 멈춤 (실패)',
       source_suppressions_not_disabled: '원본 억제 지시문을 끈 실행에서 억제된 메시지가 나와 결과를 신뢰하지 않음 (실패)',
       eslint_failed: 'eslint가 비정상 종료함 (crash·설정 오류, 실패)',

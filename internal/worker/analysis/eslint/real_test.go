@@ -158,9 +158,10 @@ func TestRealESLintClean(t *testing.T) {
 	}
 }
 
-// A file ESLint cannot parse is a fatal message (exit 1): the task fails
-// with parse_errors, the other file's observations are kept (partial parse)
-// and no file is claimed as processed.
+// A file ESLint cannot parse is a fatal message (exit 1): ESLint lints the
+// other file, so the task succeeds with that file's observations, the parse
+// error as the broken file's observation, the broken file left out of the
+// processed files and unparsable_files_not_analyzed (TC-202).
 func TestRealESLintParseError(t *testing.T) {
 	a := newReal(t, false)
 	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixBroken, "ok.js": "const unused = 1;\n"}), domain.Scope{})
@@ -168,12 +169,31 @@ func TestRealESLintParseError(t *testing.T) {
 	jststest.Capture(t, "parse-error", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	check := res.Executions[len(res.Executions)-1]
-	if res.Status != domain.TaskFailed || res.Reason != ReasonParseErrors || !doc.Outcome.PartialParse || *check.Result.ExitCode != 1 {
+	checkParseError(t, res, doc, *check.Result.ExitCode)
+
+	// With no parsable file nothing was linted: the task fails.
+	fx = packtest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixBroken}), domain.Scope{})
+	res = packtest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
+	doc, _ = jststest.ReadEnvelope(t, fx.Job, res)
+	if res.Status != domain.TaskFailed || res.Reason != ReasonParseErrors || doc.Coverage.ProcessedPaths != nil || len(packtest.Rules(doc)) != 1 {
+		t.Fatalf("only a broken file: %s/%s %+v rules %v", res.Status, res.Reason, doc.Coverage, packtest.Rules(doc))
+	}
+}
+
+func checkParseError(t *testing.T, res analysis.TaskResult, doc obsdoc.Document, exit int) {
+	t.Helper()
+	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || doc.Outcome.PartialParse || exit != 1 {
 		t.Fatalf("parse error %s/%s %+v", res.Status, res.Reason, doc.Outcome)
 	}
-	if len(doc.ToolErrors) != 1 || doc.ToolErrors[0].Kind != "parse" || *doc.ToolErrors[0].Path != "index.js" || packtest.Rules(doc)["no-unused-vars"] != 1 ||
-		doc.Coverage.ProcessedPaths != nil || doc.Coverage.Units[FileParseError] != 1 {
-		t.Fatalf("tool errors %+v coverage %+v", doc.ToolErrors, doc.Coverage)
+	var parse []obsdoc.Observation
+	for _, o := range doc.Observations {
+		if o.RuleID == ParseErrorRule {
+			parse = append(parse, o)
+		}
+	}
+	if len(doc.ToolErrors) != 0 || len(parse) != 1 || *parse[0].Path != "index.js" || parse[0].LocationState != obsdoc.LocationResolved || packtest.Rules(doc)["no-unused-vars"] != 1 ||
+		!slices.Equal(doc.Coverage.ProcessedPaths, []string{"ok.js"}) || doc.Coverage.Units[FileParseError] != 1 || !slices.Contains(doc.Limitations, LimUnparsable) {
+		t.Fatalf("tool errors %+v observations %+v coverage %+v limitations %v", doc.ToolErrors, doc.Observations, doc.Coverage, doc.Limitations)
 	}
 }
 
