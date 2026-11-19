@@ -99,7 +99,7 @@ func (w secretsStub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpe
 }
 
 func coverageJob(t *testing.T) analysis.Job {
-	return dirJob(t, "../../../fixtures/modules/coverage/input")
+	return dirJob(t, "../../../fixtures/modules/slices/input")
 }
 
 // coverageScript answers every role validly on any corpus with one call.

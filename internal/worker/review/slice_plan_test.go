@@ -321,7 +321,7 @@ func TestSmallRepositoriesPlanNoSlices(t *testing.T) {
 
 // coveragePlanFile is the slice plan of the coverage fixture, kept outside
 // its input.
-const coveragePlanFile = "../../../fixtures/modules/coverage/expected-plan.json"
+const coveragePlanFile = "../../../fixtures/modules/slices/expected-plan.json"
 
 type expectedPlan struct {
 	Description string              `json:"description"`
@@ -345,7 +345,7 @@ type expectedPlanSlice struct {
 // TC-161: the coverage fixture (Go, Python and JS/TS modules and one Go
 // module of 30 files) plans the overview prefix, then slices round by round.
 func TestCoverageFixturePlan(t *testing.T) {
-	j := dirJob(t, "../../../fixtures/modules/coverage/input")
+	j := dirJob(t, "../../../fixtures/modules/slices/input")
 	plan := planSlices(j.Snapshot.Manifest, j.Scope)
 	checkPlan(t, j.Snapshot.Manifest, j.Scope, plan)
 	paths := func(list []plannedFile) []string {
@@ -355,7 +355,7 @@ func TestCoverageFixturePlan(t *testing.T) {
 		}
 		return out
 	}
-	got := expectedPlan{Description: "Slice plan of fixtures/modules/coverage/input (docs/TESTING.md, TC-161): the overview prefix the overview investigate is certain to offer, then the slices that hold the other eligible files under the same caps.",
+	got := expectedPlan{Description: "Slice plan of fixtures/modules/slices/input (docs/TESTING.md, TC-161): the overview prefix the overview investigate is certain to offer, then the slices that hold the other eligible files under the same caps.",
 		Overview: paths(plan.Overview), Slices: []expectedPlanSlice{}, NotPlanned: paths(plan.NotPlanned)}
 	for _, g := range plan.Groups {
 		got.Modules = append(got.Modules, expectedModule{Module: g.Module, Eligible: g.Eligible})

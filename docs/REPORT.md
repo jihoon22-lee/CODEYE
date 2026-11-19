@@ -114,7 +114,7 @@ builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단�
 
 **비밀값 선별 상태.** builder 6부터 비밀정보 절의 `model_input`에 `screened`(완료된 탐지로 걸렀고 뺀 파일 없음)가 있다. builder 5는 이 경우를 `not_screened`로 읽었다.
 
-예시는 [`examples/report-slices.json`](../examples/report-slices.json)과 [`examples/report-slices.md`](../examples/report-slices.md)이다. `fixtures/modules/coverage/input`을 호출 상한 15로 실행해(작업마다 대본 응답 1회, 모델 호출 없음) slice 3개가 승인되고 4개가 `budget_exhausted`로 끝난 합성 예시이며, 생성 시험은 [`report_slices_example_test.go`](../internal/worker/review/report_slices_example_test.go)다.
+예시는 [`examples/report-slices.json`](../examples/report-slices.json)과 [`examples/report-slices.md`](../examples/report-slices.md)이다. `fixtures/modules/slices/input`을 호출 상한 15로 실행해(작업마다 대본 응답 1회, 모델 호출 없음) slice 3개가 승인되고 4개가 `budget_exhausted`로 끝난 합성 예시이며, 생성 시험은 [`report_slices_example_test.go`](../internal/worker/review/report_slices_example_test.go)다.
 
 ## 상태와 판정
 

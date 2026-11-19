@@ -12,7 +12,7 @@ import (
 )
 
 // sliceExampleDir holds the review.scope artifact and the first slice's two
-// records the worker writes for fixtures/modules/coverage/input behind a
+// records the worker writes for fixtures/modules/slices/input behind a
 // clean secrets scan with the one-call script (coverageScript), indented
 // like the stage examples. CODEYE_UPDATE_EXAMPLES=1 rewrites them;
 // otherwise a regenerated run must match byte for byte.
