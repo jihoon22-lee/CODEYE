@@ -169,6 +169,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 - 실행은 argv 배열, cwd, 명시 환경변수, 제한시간, 출력 상한으로 정한다. 사용자 값과 셸 문자열을 이어 붙이지 않는다. 환경은 상속하지 않는다. 공통값은 `PATH`(해석한 도구 또는 interpreter 디렉터리 하나), `LANG=C.UTF-8`, Windows의 `SystemRoot`이고, executor가 실행별 `HOME`·임시 디렉터리를 더한다.
 - 원본 사용자 경로와 스냅샷에서 실행하지 않는다. cwd는 attempt 작업 사본(또는 scratch의 빈 디렉터리)이고 스냅샷 디렉터리와 운영자 캐시는 보호 경로다. 캐시·설정·보고서 파일은 task scratch `analyzers/<key>/`(go vet은 `go-vet/<key>/`)에 둔다.
 - 실행 전에 도구가 읽는 manifest 파일(`go.mod`, `Cargo.toml` 등)을 manifest SHA-256과 대조한다. 실행 뒤 작업 사본이 manifest와 다르면 `workspace_drift`로 실패하고 그 파일의 관찰은 위치를 연결하지 않는다.
+- 한 attempt의 작업은 작업 사본 하나를 차례로 쓴다. 워커는 작업이 끝날 때마다 사본을 스냅샷 내용으로 되돌린다. 바뀐 manifest 파일(크기·수정 시각·권한, Linux에서는 inode·ctime이 다르면 내용 hash로 확인)은 스냅샷에서 다시 쓰고, manifest에 없는 파일·디렉터리는 지운다. manifest에 없는 데이터 이름(숨김 이름·`node_modules`·`vendor`·`testdata`, 분석기가 소스로 보지 않는 이름)은 남기고 그 안을 읽지 않는다. 준비한 의존성이 그곳에 있다. 그 작업의 결과에는 `workspace_restored_after_task`·`workspace_leftovers_removed`가 남고, 되돌리지 못하면 `workspace_restore_failed`가 남는다. 그래서 한 작업이 남긴 파일(build script가 고쳐 쓴 소스, 생성물)이 뒤 작업의 `workspace_drift`가 되지 않는다. 자기 실행 중에 사본을 바꾼 작업은 여전히 `workspace_drift`로 실패한다.
 - 저장소에서 온 위치 인자는 옵션으로 읽히지 않게 한다. `--` 뒤에 두거나, `./` 접두를 붙이거나, 절대 경로로 바꾸거나, scratch 목록 파일로만 넘긴다.
 - 작업 사본 절대 경로는 executor 마스킹으로 기록 stream과 명령에서 `[REDACTED]`가 된다. 구조화 산출물에는 노드 절대 경로와 환경변수 값을 넣지 않는다. result manifest에는 실행 파일 base name만 남는다.
 - 도구의 백그라운드 자식(데몬, telemetry, 언어 서버)은 팩마다 측정하고 끈다. executor는 setsid로 프로세스 그룹을 벗어난 자손을 추적하지 않으므로 정리 확인이 자손 전체를 보장하지 않는다.
@@ -195,7 +196,8 @@ envelope의 `outcome.exit_class`는 다음 중 하나다.
 - 출력이 잘리면 `output_truncated`, 해석하지 못하면 `output_unparsed`다. 일부를 읽었으면 `partial_parse=true`로 두고 이미 읽은 관찰은 보존한다. **parse 실패를 빈 결과로 바꾸지 않는다.** 알 수 없는 필드·빠진 필드·잘못된 타입은 형태 오류다.
 - 정리 불확실은 `failed`/`cleanup_uncertain`, 취소는 `cancelled`, 시간 초과는 `timed_out`이다. 성공으로 바꾸지 않는다.
 - 실패한 작업은 처리 파일을 주장하지 않는다(`processed_paths=null`).
-- 구문·타입·의존 오류처럼 분석하지 못한 단위는 관찰이 아니라 `tool_errors`다. 성공 envelope에는 tool error가 없어야 한다.
+- 타입·의존 오류처럼 분석하지 못한 단위는 관찰이 아니라 `tool_errors`다. 성공 envelope에는 tool error가 없어야 한다.
+- 파일마다 따로 해석하는 도구(Python 네 도구, ESLint)는 구문 분석하지 못한 파일을 빼고 나머지를 분석한다. 그 파일은 처리 파일에 없고(`syntax_error`·`parse_error` 단위) 제약 `unparsable_files_not_analyzed`가 남으며, 도구가 위치를 주면 구문 오류가 그 파일의 관찰 하나가 된다. 해석할 수 있는 파일이 없을 때만 실패다. 프로그램·번역 단위·패키지 전체를 함께 검사하는 도구(tsc, C/C++, go vet·Staticcheck, cargo)의 단위 오류는 그대로 실패다.
 
 ### 관찰과 위치
 
@@ -833,13 +835,15 @@ ruff S 규칙은 bandit 검사를 다시 구현한 것이라 고르지 않는다
 | ruff | 0 + 레코드 없음 / 1 + 레코드 | 성공. 처리 파일은 `ruff.files` 실행의 `--show-files` 목록 |
 | ruff | 0·1이 레코드와 어긋남 / 2 | `exit_status_mismatch` / `ruff_failed` |
 | mypy | 0 + 오류 없음 / 1 + 오류(blocking·구문 없음) | 성공. 처리 파일은 `--lineprecision-report`의 모듈과 계획 파일 대조 |
-| mypy | 2 + 구문 오류 / 2 그 밖 | `source_syntax_errors` / `mypy_failed` |
+| mypy | 2 + 구문 오류 | 그 파일을 빼고 다시 실행(`mypy.check.r01`…, 최대 32회). 다시 실행할 수 없으면 `source_syntax_errors`, 제한시간이 다하면 `timed_out`(`mypy_reruns_time_limit_reached`) |
+| mypy | 2 그 밖 | `mypy_failed` |
 | pyright | 0·1이 summary 오류 수와 맞음 | 성공. `filesAnalyzed`가 계획 파일 수와 같을 때만 처리 파일 인정 |
 | pyright | 2·3·4 | `pyright_failed` |
 | bandit | 두 실행 모두 0 + 결과 없음 / 1 + 결과 | 성공. 처리 파일은 scratch JSON `metrics`에서 `errors` 파일을 뺀 `.py` |
 | bandit | 결과와 어긋남 / 2 | `exit_status_mismatch` / `bandit_failed` |
 
-- 구문 오류(ruff `invalid-syntax`, mypy `syntax`, pyright 규칙 없는 오류, bandit 구문 오류)는 그 파일의 tool error다. `syntax_error` 단위로 세고 task는 `source_syntax_errors`로 실패한다.
+- 구문 오류(ruff `invalid-syntax`·`E999`·`E902`, mypy `syntax`, pyright 규칙 없는 오류, bandit `errors` 항목)가 난 파일은 `syntax_error` 단위로 세고 처리 파일에서 빼며 제약 `unparsable_files_not_analyzed`를 남긴다. 나머지 파일의 결과로 작업은 성공한다. 위치가 있는 구문 오류는 파일마다 첫 하나가 관찰이다(ruff·mypy는 그 규칙, pyright는 `syntax`). 줄 끝을 넘는 열은 줄 끝으로 맞춘다. bandit은 위치를 주지 않아 관찰이 없다. 네 도구 모두 그 파일 이름을 대상 속성 `unparsable_files`(정렬, 쉼표 구분, 256바이트를 넘는 나머지는 `+N more`)에 적는다.
+- mypy는 첫 구문 오류에서 멈추므로(exit 2, 레코드 하나) 보고된 파일을 목록에서 빼고 다시 실행한다. 첫 실행과 재실행은 작업 제한시간 하나를 나눠 쓰며 재실행은 남은 시간만 받는다. 남은 시간이 없으면 재실행을 시작하지 않고 찾은 구문 오류를 남긴 채 `timed_out`이다. 재실행은 빠진 파일의 모듈을 scratch 설정의 모듈 절(`follow_imports = skip`)로 건너뛴다. 남은 파일이 그 모듈을 import하면 mypy가 같은 구문 오류에서 다시 멈추기 때문이다(실측). 구문 오류에서 멈추는 실행은 빠르므로(실측: 파일 세 개, 첫 실행과 재실행 두 번이 약 1초) 미리 다른 parser로 거르지 않는다. 그래서 구문 오류 파일이 32개를 넘으면 작업은 `source_syntax_errors`로 실패한다. 다른 parser의 문법 판정이 mypy 대상 버전의 판정과 다를 수 있기 때문이다.
 - 계획했지만 도구가 처리 목록에 넣지 않은 파일은 `files_unlisted`·`not_analyzed`와 `planned_files_not_processed`로 남는다. ruff 기본 제외(`build`, `dist` 등)에 걸린 계획 파일도 여기에 든다.
 - 열은 ruff code point, pyright 0부터의 UTF-16, mypy(`--no-native-parser`)·bandit UTF-8 바이트이며 모두 byte 열로 바꾼다. bandit `issue_severity`는 `raw_severity`로만 남는다.
 
@@ -929,7 +933,7 @@ tsc와 type-aware 작업은 실행 전에 tsconfig 체인 전체(루트, 로컬 
 
 | 도구 | 종료 코드 | 판정 |
 |---|---|---|
-| eslint | 0 오류 없음, 1 오류 메시지(치명 구문 오류 포함), 2 crash·설정 오류·대상 없음 | exit 0인데 오류가 있거나 exit 1인데 오류가 없으면 `exit_status_mismatch`. 2와 "Oops! Something went wrong!"는 `eslint_failed` |
+| eslint | 0 오류 없음, 1 오류 메시지(치명 구문 오류 포함), 2 crash·설정 오류·대상 없음 | exit 0인데 오류가 있거나 exit 1인데 오류가 없으면 `exit_status_mismatch`. 2와 "Oops! Something went wrong!"는 `eslint_failed`. 해석하지 못한 파일(치명 메시지)은 `parse-error` 관찰 하나와 `parse_error` 단위, 제약 `unparsable_files_not_analyzed`이고 나머지 파일로 성공한다. 해석한 파일이 없으면 `parse_errors` |
 | tsc | 0 진단 없음, 2 진단 있음(`--noEmit`), 1 명령행 오류·설정 로드 실패 | 레코드 유무와 0/2가 어긋나면 `exit_status_mismatch`. 그 밖은 `tsc_failed` |
 
 - 파일 상태: eslint는 `linted_clean`·`linted_with_findings`·`parse_error`·`outside_tsconfig_program`·`not_linted`·`unknown`, tsc는 `checked`·`not_verified`·`dependency_gap`·`outside_tsconfig_program`이다. tsc의 `files_in_scope`는 모듈의 JS/TS 파일 수이고 프로그램 루트가 아닌 파일은 건너뜀으로 센다.
@@ -1160,9 +1164,9 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 
 ### 모델 입력의 비밀값 선별
 
-검토 역할은 모델 입력을 만들기 전에 비밀값 분석기(`purpose=secrets`인 descriptor와 envelope)의 envelope로 파일을 거른다. `review-r1`과 `review-v1` 두 검토 팩 모두 같은 규칙(`internal/worker/review/screen.go`)이며, 세 경우(실행 안 됨 → 선별 없이 보내고 `model_input_not_secret_screened`, 실행했으나 쓸 수 없음 → 모든 역할 `skipped_policy`/`secret_screen_failed`, 완전한 성공 → 탐지 파일을 모든 발췌에서 빼고 `secret_files_withheld`)의 처리는 [검토](REVIEW.md)가 정한다. 분석기 쪽에서 지켜야 할 것은 다음과 같다.
+검토 역할은 모델 입력을 만들기 전에 비밀값 분석기(`purpose=secrets`인 descriptor와 envelope)의 envelope로 파일을 거른다. `review-r1`과 `review-v1` 두 검토 팩 모두 같은 규칙(`internal/worker/review/screen.go`)이며, 세 경우(실행 안 됨 → 선별 없이 보내고 `model_input_not_secret_screened`, 실행했으나 쓸 수 없음 → 실행 안 됨과 같이 보내되 읽을 수 있는 결과가 보고한 파일은 빼고 `model_input_not_secret_screened`, 완전한 성공 → 탐지 파일을 모든 발췌에서 빼고 `secret_files_withheld`)의 처리는 [검토](REVIEW.md)가 정한다. 분석기 쪽에서 지켜야 할 것은 다음과 같다.
 
-- "실행 안 됨"은 비밀값 작업이 계획에 없거나, `unsupported`이면서 `not_run`인 envelope(도구 미설정 등)일 때뿐이다. 계획에 있는데 envelope가 없거나 무효이면 실패로 본다. 워커는 계획 순서대로 작업을 하나씩 실행하고 검토 역할은 정적 계획 뒤에 붙으므로 검토가 읽을 때 비밀값 작업은 끝나 있다.
+- "실행 안 됨"은 비밀값 작업이 계획에 없거나, `unsupported`이면서 `not_run`인 envelope(도구 미설정 등)일 때뿐이다. 계획에 있는데 envelope가 없거나 무효이면 쓸 수 없는 결과로 본다. 실패·부분 envelope라도 해석되면 그 관찰 경로는 모델 입력에서 뺀다. 워커는 계획 순서대로 작업을 하나씩 실행하고 검토 역할은 정적 계획 뒤에 붙으므로 검토가 읽을 때 비밀값 작업은 끝나 있다.
 - "완전한 성공"은 `succeeded`, 부분 파싱 아님, parse OK다. 이때 탐지 파일에 위치한 다른 도구 관찰은 규칙과 위치만 보내고 문구를 뺀다. 하드코딩 암호 규칙처럼 문구가 값을 인용할 수 있기 때문이다.
 - review-r1 역할은 선별을 언어 지침 선택과 요청 작성보다 먼저 한다. review-v1의 고정 요청 바이트는 바뀌지 않으며 선별은 corpus에서 파일을 빼는 방식으로만 반영된다.
 

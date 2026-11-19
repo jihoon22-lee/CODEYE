@@ -407,7 +407,7 @@ export const ko = {
       clang_tidy_not_run: 'clang-tidy 실행이 모두 수행되지 않아 결과를 만들지 못함',
       // Python 팩 (docs/ANALYZERS.md)
       no_analyzable_python_files: '범위에 Python 소스가 있으나 제외 디렉터리(가상환경·숨김·vendor 등) 안에만 있어 분석할 파일이 없음 (미실행, 0건 통과 아님)',
-      source_syntax_errors: '구문 오류로 도구가 분석하지 못한 파일이 있어 작업을 실패로 기록함 (구문 오류는 결함 관찰이 아님)',
+      source_syntax_errors: '구문 오류 파일을 빼고 mypy를 다시 실행할 수 없어 타입 검사를 하지 못함 (다른 도구는 구문 오류 파일만 빼고 결과를 냄)',
       tool_file_errors: '도구가 일부 파일을 읽거나 해석하지 못해 작업을 실패로 기록함',
       tool_config_unavailable: 'CODEYE 관리 도구 설정을 작업 공간 기준으로 만들 수 없어 실행하지 않음',
       nested_module_name_unsupported: '하위 모듈 디렉터리 이름에 도구의 제외 목록이 나눠 읽는 문자(쉼표·glob 문자)가 있어 실행을 거부함',
@@ -428,7 +428,7 @@ export const ko = {
       program_files_outside_snapshot: 'tsconfig 프로그램이 스냅샷 밖 파일을 포함해 실행하지 않음 (정책 제외)',
       no_input_files: 'tsconfig가 이 모듈의 파일을 하나도 선택하지 않음 (미지원, 0건 통과 아님)',
       no_analyzable_files: '검사된 파일이 없음 (미지원, 0건 통과 아님)',
-      parse_errors: '구문을 해석하지 못한 파일이 있어 실패로 기록함 (나머지 관찰은 보존)',
+      parse_errors: '해석할 수 있는 파일이 없어 검사하지 못함 (일부 파일만 해석하지 못하면 그 파일만 빼고 결과를 냄)',
       syntax_errors: '구문 오류로 tsc가 타입 검사 전에 멈춤 (실패)',
       source_suppressions_not_disabled: '원본 억제 지시문을 끈 실행에서 억제된 메시지가 나와 결과를 신뢰하지 않음 (실패)',
       eslint_failed: 'eslint가 비정상 종료함 (crash·설정 오류, 실패)',

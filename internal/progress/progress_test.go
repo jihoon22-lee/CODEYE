@@ -403,7 +403,7 @@ func TestReviewSlicesInCodeReviewStage(t *testing.T) {
 	for _, c := range []struct {
 		status domain.TaskStatus
 		reason string
-	}{{domain.TaskBudgetExhausted, "review_budget_exhausted"}, {domain.TaskSkippedPolicy, "secret_screen_failed"}} {
+	}{{domain.TaskBudgetExhausted, "review_budget_exhausted"}, {domain.TaskSkippedPolicy, "model_source_not_approved"}} {
 		tasks := append([]Task{}, base...)
 		tasks[5], tasks[6] = task(cr, c.status, c.reason), task(cr, c.status, c.reason)
 		run.Tasks = tasks
@@ -412,7 +412,7 @@ func TestReviewSlicesInCodeReviewStage(t *testing.T) {
 			t.Fatalf("%s %+v", c.reason, s)
 		}
 	}
-	if !domain.NothingToReview(domain.ReasonNoReviewScope) || domain.NothingToReview("review_budget_exhausted") || domain.NothingToReview("secret_screen_failed") {
+	if !domain.NothingToReview(domain.ReasonNoReviewScope) || domain.NothingToReview("review_budget_exhausted") || domain.NothingToReview("model_source_not_approved") {
 		t.Fatal("nothing-to-review set")
 	}
 }

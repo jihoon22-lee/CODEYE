@@ -497,12 +497,19 @@ func TestSecretScreenOnPython(t *testing.T) {
 			f := &roleCaller{script: maxScript(t)}
 			plan, res := runRole(t, j, stub, f, "1.27.4")
 			if mode != "hit" {
-				if len(f.requests) != 0 {
-					t.Fatalf("%d role-pack requests after an unusable scan", len(f.requests))
+				// An unusable scan is no screen: the roles run on the read
+				// filters alone and every record says so.
+				if len(f.requests) == 0 {
+					t.Fatal("no role-pack request after an unusable scan")
 				}
 				for _, p := range plan {
-					if strings.HasPrefix(p.Key, "review.") && (res[p.Key].Status != domain.TaskSkippedPolicy || res[p.Key].Reason != reasonSecretScreenFailed) {
-						t.Fatalf("%s %+v", p.Key, res[p.Key])
+					if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status == domain.TaskSkippedPolicy {
+						t.Fatalf("%s skipped: %+v", p.Key, res[p.Key])
+					}
+				}
+				for _, stage := range []string{"investigate", "interpret", "verify"} {
+					if rec := readRole(t, j, stage); !slices.Contains(rec.Limitations, limNotSecretScreened) || slices.Contains(rec.Limitations, limSecretWithheld) {
+						t.Fatalf("%s limitations %v", stage, rec.Limitations)
 					}
 				}
 			} else {
@@ -535,8 +542,9 @@ func TestSecretScreenOnPython(t *testing.T) {
 			}
 			r := h.Run(t.Context(), j, analysis.TaskSpec{Key: "review.context"}, nil)
 			if mode != "hit" {
-				if r.Status != domain.TaskSkippedPolicy || r.Reason != reasonSecretScreenFailed || len(fv.requests) != 0 {
-					t.Fatalf("legacy %+v requests %d", r, len(fv.requests))
+				rec, err := readRecord(j, "context")
+				if r.Status != domain.TaskSucceeded || err != nil || len(fv.requests) != 1 || !slices.Contains(rec.Limitations, limNotSecretScreened) {
+					t.Fatalf("legacy %+v %v requests %d", r, err, len(fv.requests))
 				}
 				return
 			}

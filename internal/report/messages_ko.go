@@ -384,6 +384,11 @@ var koSectionLabels = map[string]string{
 	"secrets.model_input.screen_failed":  "탐지 결과를 쓸 수 없어 모델 검토에 코드를 보내지 않았다.",
 	"secrets.model_input.no_model_input": "이 실행은 모델에 코드를 보내지 않았다.",
 
+	// A secrets task ran but its result is unusable: review ran on the read
+	// filters alone (screen_failed is the state of earlier revisions, when
+	// review was skipped instead).
+	"secrets.model_input.not_screened_unusable": "탐지 작업 %s의 결과를 쓸 수 없어(%s: %s) 모델 입력을 비밀값 기준으로 다 거르지 못했다. 그 결과가 보고한 파일은 뺐고, 나머지 모델 입력은 기본 읽기 필터(민감값 모양·보류 파일)만 거쳤다.",
+
 	"review.pack.role":             "검토 팩: %s(역할 팩)",
 	"review.pack.legacy":           "검토 팩: %s(이전 팩)",
 	"review.pack.none":             "이 실행에는 모델 검토 작업이 계획되지 않았다. 코드 분석은 도구 진단만으로 이뤄졌다.",

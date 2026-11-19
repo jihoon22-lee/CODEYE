@@ -50,6 +50,15 @@ const (
 	FileUnknown         = "unknown"
 )
 
+// ParseErrorRule is the rule of the observation for a file ESLint could not
+// parse (a fatal message has no rule); the file is left out of the
+// processed files and the task records LimUnparsable.
+const ParseErrorRule = "parse-error"
+
+// LimUnparsable: files ESLint could not parse were left out (unit
+// parse_error); the task reports everything else it linted.
+const LimUnparsable = "unparsable_files_not_analyzed"
+
 // outsideProgram is the fatal parser message for a TS file the module's
 // tsconfig does not include (typescript-eslint 8.73, parserOptions.project).
 const outsideProgram = "was not found in any of the provided project(s)"
@@ -254,6 +263,28 @@ func assemble(in assembleInput) obsdoc.Document {
 	suppressedActive, gap, config, parseErr, configReported := false, false, false, false, false
 	errorsN := 0
 	ordinals := map[string]int{}
+	var parseObs []obsdoc.Observation
+	parseSeen := map[string]bool{}
+	observe := func(toolPath, rel, rule, cat string, m message, text string) obsdoc.Observation {
+		pathPtr, loc, lstate := in.Resolver.Resolve(toolPath, m.Line, m.Col, m.EndLine, m.EndCol)
+		startText := mask(rel + ":" + strconv.Itoa(m.Line) + ":" + strconv.Itoa(m.Col))
+		endText := mask(rel + ":" + strconv.Itoa(m.EndLine) + ":" + strconv.Itoa(m.EndCol))
+		tuple := strings.Join([]string{rel, rule, startText, endText, text}, "\x00")
+		ordinal := ordinals[tuple]
+		ordinals[tuple]++
+		sev := "error"
+		if m.Severity == 1 {
+			sev = "warning"
+		}
+		o := obsdoc.Observation{ID: obsdoc.ObservationID(id, in.Module.Dir, rel, rule, startText, endText, text, ordinal), RuleID: rule,
+			Category: cat, RawSeverity: ptr(sev), RawMessage: text, Path: pathPtr, Location: loc, LocationState: lstate, Related: []obsdoc.Related{},
+			RawRef: obsdoc.RawRef{Execution: execCheck, Stream: "stdout", StreamSHA256: stdoutSHA, RecordIndex: m.Index, JSONPointer: m.Pointer, ByteStart: m.ByteStart, ByteEnd: m.ByteEnd},
+			Unit:   rel, SuggestedFixes: m.Fixes}
+		if o.RawMessage == "" {
+			o.RawMessage = "(empty message)"
+		}
+		return o
+	}
 	toolError := func(te obsdoc.ToolError) {
 		if len(doc.ToolErrors) < 200 {
 			doc.ToolErrors = append(doc.ToolErrors, te)
@@ -286,7 +317,9 @@ func assemble(in assembleInput) obsdoc.Document {
 			case m.Fatal && in.Typed && strings.Contains(m.Text, outsideProgram):
 				state = FileOutsideTSConfig
 				continue
-			case m.Fatal && in.Typed && strings.Contains(m.Text, tsconfigUnparsed):
+			case m.Fatal && in.Typed && (strings.Contains(m.Text, tsconfigUnparsed) || strings.Contains(m.Text, "parserOptions")):
+				// Any other parser-options message is about the program too,
+				// never a syntax error of the file.
 				// The tsconfig did not load (measured: an unresolved
 				// package extends, TS6053): a configuration error of the
 				// program, not a parse error of the file.
@@ -298,9 +331,14 @@ func assemble(in assembleInput) obsdoc.Document {
 				}
 				continue
 			case m.Fatal:
+				// ESLint lints the other files: the file it cannot parse is
+				// left out and its parse error is the file's observation.
 				parseErr = true
 				state = FileParseError
-				toolError(obsdoc.ToolError{Execution: execCheck, Kind: "parse", Unit: rel, Message: text, Path: ptr(rel), Line: m.Line, Column: m.Col})
+				if !parseSeen[rel] {
+					parseSeen[rel] = true
+					parseObs = append(parseObs, observe(r.FilePath, rel, ParseErrorRule, "correctness", m, text))
+				}
 				continue
 			case m.RuleID == "":
 				addLim(&limitations, "tool_notices")
@@ -331,24 +369,7 @@ func assemble(in assembleInput) obsdoc.Document {
 				addLim(&limitations, "tool_notices")
 				continue
 			}
-			pathPtr, loc, lstate := in.Resolver.Resolve(r.FilePath, m.Line, m.Col, m.EndLine, m.EndCol)
-			startText := mask(rel + ":" + strconv.Itoa(m.Line) + ":" + strconv.Itoa(m.Col))
-			endText := mask(rel + ":" + strconv.Itoa(m.EndLine) + ":" + strconv.Itoa(m.EndCol))
-			tuple := strings.Join([]string{rel, m.RuleID, startText, endText, text}, "\x00")
-			ordinal := ordinals[tuple]
-			ordinals[tuple]++
-			sev := "error"
-			if m.Severity == 1 {
-				sev = "warning"
-			}
-			o := obsdoc.Observation{ID: obsdoc.ObservationID(id, in.Module.Dir, rel, m.RuleID, startText, endText, text, ordinal), RuleID: m.RuleID,
-				Category: category(m.RuleID), RawSeverity: ptr(sev), RawMessage: text, Path: pathPtr, Location: loc, LocationState: lstate, Related: []obsdoc.Related{},
-				RawRef: obsdoc.RawRef{Execution: execCheck, Stream: "stdout", StreamSHA256: stdoutSHA, RecordIndex: m.Index, JSONPointer: m.Pointer, ByteStart: m.ByteStart, ByteEnd: m.ByteEnd},
-				Unit:   rel, SuggestedFixes: m.Fixes}
-			if o.RawMessage == "" {
-				o.RawMessage = "(empty message)"
-			}
-			cands = append(cands, o)
+			cands = append(cands, observe(r.FilePath, rel, m.RuleID, category(m.RuleID), m, text))
 			withheld = append(withheld, obsdoc.ToolError{Execution: execCheck, Kind: "withheld", Unit: rel, Message: m.RuleID + ": " + text, Path: ptr(rel), Line: m.Line, Column: m.Col})
 			if state == FileClean {
 				state = FileWithFindings
@@ -370,6 +391,10 @@ func assemble(in assembleInput) obsdoc.Document {
 		cands = nil
 	}
 	doc.Observations = append(doc.Observations, cands...)
+	doc.Observations = append(doc.Observations, parseObs...)
+	if parseErr {
+		addLim(&limitations, LimUnparsable)
+	}
 	for _, o := range doc.Observations {
 		if o.LocationState != obsdoc.LocationResolved {
 			addLim(&limitations, "unresolved_observation_location")
@@ -484,7 +509,8 @@ func assemble(in assembleInput) obsdoc.Document {
 	if gap {
 		fail(domain.TaskFailed, ReasonDependency, obsdoc.ExitConfigurationError)
 	}
-	if parseErr {
+	if parseErr && in.Check != nil && parsed && len(processed) == 0 {
+		// No file ESLint was given could be parsed: nothing was linted.
 		fail(domain.TaskFailed, ReasonParseErrors, obsdoc.ExitExecutionError)
 	}
 	if in.Check != nil && parsed && len(processed) == 0 {

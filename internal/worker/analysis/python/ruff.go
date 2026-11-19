@@ -308,12 +308,9 @@ func (ruffRun) assemble(rc *runCtx) obsdoc.Document {
 		}
 		ref := obsdoc.RawRef{Execution: execRuffAll, Stream: "stdout", StreamSHA256: stdoutSHA, RecordIndex: d.el.Index, ByteStart: d.el.Start, ByteEnd: d.el.End}
 		if ruffSyntax(d.code) {
-			// A file ruff could not parse is a tool error, not a defect
-			// observation; the task cannot succeed (docs/ANALYZERS.md#python-규칙-팩).
-			bd.toolError(execRuffAll, "syntax", d.file, d.row, d.col, d.msg)
-			if rel, ok := bd.toolPath(d.file); ok {
-				syntax[rel] = true
-			}
+			// A file ruff could not parse or read is left out; its first such
+			// diagnostic is the file's observation (docs/ANALYZERS.md#python-결과-판정).
+			bd.unparsable(syntax, d.code, d.sev, d.msg, d.file, &place{StartLine: d.row, StartCol: d.col, EndLine: d.erow, EndCol: d.ecol, Unit: unitRune}, ref)
 			continue
 		}
 		if d.notebook {

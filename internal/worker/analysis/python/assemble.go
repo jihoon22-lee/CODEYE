@@ -1,6 +1,8 @@
 package python
 
 import (
+	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -208,8 +210,57 @@ func (bd *builder) observe(rule, category, severity, message, file string, pl pl
 	}
 }
 
-// toolError records a unit the tool could not analyze (a syntax error, an
-// unreadable file). It is never an observation of the code.
+// unparsable records a file the tool could not parse or read. The file is
+// marked in syntax (a syntax_error unit, never processed; the task records
+// unparsable_files_not_analyzed instead of failing). With a position (pl,
+// ruff, mypy and pyright report one) the first such diagnostic of the file is
+// kept as an observation: a module that does not parse is a defect of the
+// code, and the parser's follow-on errors in the same file add nothing.
+func (bd *builder) unparsable(syntax map[string]bool, rule, severity, message, file string, pl *place, ref obsdoc.RawRef) {
+	rel, ok := bd.toolPath(file)
+	if !ok || rel == "." {
+		if file != "" && !ok {
+			bd.outside++
+		}
+		return
+	}
+	first := !syntax[rel]
+	syntax[rel] = true
+	if first && pl != nil {
+		pl.Clamp = true
+		bd.observe(rule, "correctness", severity, message, file, *pl, ref, false)
+	}
+}
+
+// unparsableList names the unparsable files (sorted, comma-separated) within
+// the 256-byte property limit; the files that do not fit are counted as
+// "+N more".
+func unparsableList(files map[string]bool) string {
+	names := slices.Sorted(maps.Keys(files))
+	out := ""
+	for i, n := range names {
+		next := n
+		if out != "" {
+			next = out + ", " + n
+		}
+		rest := ""
+		if i < len(names)-1 {
+			rest = fmt.Sprintf(", +%d more", len(names)-1-i)
+		}
+		if len(next)+len(rest) > 256 || !obsdoc.SafeText(n, 256) || strings.ContainsAny(n, ",\n") {
+			if out == "" {
+				return fmt.Sprintf("+%d more", len(names))
+			}
+			return out + fmt.Sprintf(", +%d more", len(names)-i)
+		}
+		out = next
+	}
+	return out
+}
+
+// toolError records a unit the tool could not analyze for a reason that is
+// not the code's (a configuration or a run that blocks). It is never an
+// observation of the code.
 func (bd *builder) toolError(execution, kind, file string, line, col int, message string) {
 	te := obsdoc.ToolError{Execution: execution, Kind: kind, Message: bd.rc.mask(message), Line: max(line, 0), Column: max(col, 0)}
 	rel, ok := bd.toolPath(file)
@@ -271,8 +322,11 @@ func (bd *builder) finish(processed []string, syntaxFiles map[string]bool) obsdo
 		}
 	}
 	if len(syntaxFiles) > 0 {
+		// The files the tool could not parse are not analyzed and are never
+		// processed files; everything else it analyzed stands.
 		doc.Coverage.Units[UnitSyntaxError] += len(syntaxFiles)
-		bd.fail(domain.TaskFailed, ReasonSyntaxErrors, obsdoc.ExitExecutionError)
+		bd.limit(LimUnparsable)
+		doc.Target.Properties[PropUnparsableFiles] = unparsableList(syntaxFiles)
 	}
 	if bd.reason == "" && processed == nil {
 		bd.fail(domain.TaskFailed, ReasonProcessedMismatch, obsdoc.ExitExecutionError)

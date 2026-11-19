@@ -57,8 +57,10 @@ const (
 	ReasonOutputTruncated      = "output_truncated"
 	ReasonOutputUnparsed       = "output_unparsed"
 	ReasonExitMismatch         = "exit_status_mismatch"
-	ReasonSyntaxErrors         = "source_syntax_errors"
-	ReasonFileErrors           = "tool_file_errors"
+	// ReasonSyntaxErrors: mypy stopped at a syntax error it could not be run
+	// past (the file is not one of the listed files, or the rerun bound was
+	// reached). Other unparsable files are a limitation, not a failure.
+	ReasonSyntaxErrors = "source_syntax_errors"
 	// ReasonUnsafeModuleName: a nested module directory name holds a
 	// character the tool's exclusion list would split or expand (",", glob
 	// metacharacters); the task refuses instead of mis-excluding files.
@@ -101,6 +103,16 @@ const (
 	// outside the attempt workspace (its own stubs, a path a configuration
 	// pointed to); they are dropped with their text and only counted.
 	LimOutsideDropped = "diagnostics_outside_workspace_dropped"
+	// LimUnparsable: files the tool could not parse or read were left out
+	// (coverage unit syntax_error); the task reports everything else it
+	// analyzed (docs/ANALYZERS.md#python-결과-판정).
+	LimUnparsable = "unparsable_files_not_analyzed"
+	// PropUnparsableFiles is the target property that names those files
+	// (bandit reports them without a position, so no observation does).
+	PropUnparsableFiles = "unparsable_files"
+	// LimMypyRerunsTimedOut: the task's time limit ran out before mypy could
+	// be rerun without the unparsable files found so far.
+	LimMypyRerunsTimedOut = "mypy_reruns_time_limit_reached"
 )
 
 // Config selects one operator-installed tool. Nothing is searched in PATH
@@ -312,6 +324,15 @@ type runCtx struct {
 	refused string
 	drift   map[string]bool
 	texts   *texts
+	// checks are the names of a tool's check executions in run order when
+	// it runs more than one (mypy's reruns without unparsable files).
+	checks []string
+	// deadline, when set, bounds every execution that starts after it is
+	// set (mypy's reruns share the task's one time limit).
+	deadline time.Time
+	// budgetSpent: a run that the tool needed was not started because the
+	// deadline had passed.
+	budgetSpent bool
 }
 
 // toolRun is the tool-specific part of a task: the executions after the
@@ -398,10 +419,19 @@ func (rc *runCtx) exec(name string, args []string, stdin []byte) *executor.Resul
 		rc.cancelled, rc.stopped = true, true
 		return nil
 	}
+	timeout := rc.b.cfg.Timeout
+	if !rc.deadline.IsZero() {
+		left := time.Until(rc.deadline)
+		if left <= 0 {
+			rc.budgetSpent, rc.stopped = true, true
+			return nil
+		}
+		timeout = min(timeout, left)
+	}
 	exe, argv := rc.b.command(args)
 	redact := append(govet.RedactForms(rc.roots), rc.taskDir)
 	spec := executor.Spec{Executable: exe, Args: argv, WorkspaceRoot: rc.workspace, Dir: rc.moduleAbs, ProtectedRoots: []string{rc.job.Snapshot.SnapshotDir},
-		TempParent: rc.dirs["tmp"], Env: rc.b.env(rc.extraEnv), Stdin: stdin, Timeout: rc.b.cfg.Timeout,
+		TempParent: rc.dirs["tmp"], Env: rc.b.env(rc.extraEnv), Stdin: stdin, Timeout: timeout,
 		StdoutLimit: rc.b.cfg.StdoutLimit, StderrLimit: rc.b.cfg.StderrLimit, Redact: redact}
 	res := rc.runner.Run(rc.ctx, spec)
 	e, err := analysis.WriteExecution(rc.dirs["exec"], name, res)

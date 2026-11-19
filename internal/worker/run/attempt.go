@@ -19,6 +19,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
@@ -45,6 +46,9 @@ type attempt struct {
 	snapshotID string
 	scratch    string
 	workspace  string // attempt workspace to remove after the attempt
+	// guard restores the workspace to the snapshot after every task; nil
+	// when it could not record the clone (tasks then check drift alone).
+	guard *source.WorkspaceGuard
 
 	recMu    sync.Mutex
 	recorded map[string][]executor.Result // task key → runner results
@@ -293,6 +297,9 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 		return nodeproto.OutcomeFailed, nodeproto.ReasonSnapshotUnavailable, nil
 	}
 	a.snapshotID = *resp.SnapshotID
+	if g, err := source.NewWorkspaceGuard(a.snapshot, a.snapshot.WorkspaceDir, pack.DataDir); err == nil {
+		a.guard = g
+	}
 
 	handler, ok := w.registry.Lookup(nodeproto.AnalysisCapability(job.Profile))
 	if !ok {
@@ -455,6 +462,7 @@ func (w *worker) runTask(a *attempt, h analysis.Handler, job analysis.Job, t *ta
 	t.started = true
 	runner := &journalRunner{w: w, a: a, task: t.spec.Key, taskID: t.taskID}
 	res := safeRun(a.ctx, h, job, t.spec, runner)
+	res.Limitations = append(res.Limitations, w.restoreWorkspace(a)...)
 	t.result = res
 	status, reason := w.verifyTaskResult(a, t.spec.Key, res)
 	t.manifest, status, reason = w.manifestForTask(a, t, status, reason, res)
@@ -463,6 +471,38 @@ func (w *worker) runTask(a *attempt, h analysis.Handler, job analysis.Job, t *ta
 		return
 	}
 	_ = w.setTask(a, t, status, reason)
+}
+
+// Limitations of the task after which the workspace was restored: it left
+// changed or missing manifest files, or unlisted files outside data
+// directories, or the restore itself failed.
+const (
+	LimWorkspaceRestored     = "workspace_restored_after_task"
+	LimWorkspaceLeftovers    = "workspace_leftovers_removed"
+	LimWorkspaceRestoreError = "workspace_restore_failed"
+)
+
+// restoreWorkspace puts the attempt workspace back to the snapshot after a
+// task, so what one task's tools or build scripts changed or left behind
+// never reaches the next task (source.WorkspaceGuard). It returns the
+// limitations of the task that ran. A failed restore leaves the copy as it
+// is; every later task's own drift check still sees the difference.
+func (w *worker) restoreWorkspace(a *attempt) []string {
+	if a.guard == nil || a.ctx.Err() != nil {
+		return nil
+	}
+	res, err := a.guard.Restore(a.ctx)
+	var lims []string
+	if len(res.Restored) > 0 {
+		lims = append(lims, LimWorkspaceRestored)
+	}
+	if len(res.Removed) > 0 {
+		lims = append(lims, LimWorkspaceLeftovers)
+	}
+	if err != nil && a.ctx.Err() == nil {
+		lims = append(lims, LimWorkspaceRestoreError)
+	}
+	return lims
 }
 
 // verifyTaskResult never lets a handler claim success the recorded
