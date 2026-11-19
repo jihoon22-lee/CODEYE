@@ -28,13 +28,18 @@ import (
 //   - client: the address alone. 100 failures (over any names) lock the
 //     address for 15 minutes after the last one.
 //   - account: the username alone. 50 failures (from any addresses) lock the
-//     name everywhere for 15 minutes after the last one. A client with no
-//     failures of its own meets this lock only at that count.
+//     name everywhere for 15 minutes after the last one, doubling with each
+//     further failure up to 4 hours. A client with no failures of its own
+//     meets this lock only at that count. Once a name reached 50 its count
+//     is kept until 24 hours pass without a failure, so the lock keeps
+//     growing instead of starting over every 15 minutes.
 //
 // A lock is derived from (failures, last_failure_at); nothing stores an end
 // time, so giving a count back can never leave a stale lock. A row whose last
-// failure is older than 15 minutes counts as zero and is reaped. An attempt
-// is counted before the password is derived (parallel guesses all count); a
+// failure is older than its decay window (15 minutes; 24 hours for a name at
+// or past 50) counts as zero and is reaped. An attempt is counted before the
+// password is derived, under a per-key transaction advisory lock, so
+// parallel guesses all count and at most the threshold reach the KDF. A
 // success deletes its pair and gives the one count back on client and
 // account.
 const (
@@ -44,8 +49,25 @@ const (
 	throttleBase     = 30 * time.Second
 	throttleMax      = 15 * time.Minute
 	throttleDecay    = 15 * time.Minute
+	accountLockMax   = 4 * time.Hour
+	accountQuiet     = 24 * time.Hour
 	reapBatch        = 100
 )
+
+// lockClass is the first key of the advisory lock taken on a throttle key
+// (pg_advisory_xact_lock(class, hashtext(key))), one class per scope, rising
+// in lock order. The two-key lock space is separate from the migration
+// lock's single key.
+func (k throttleKey) lockClass() int32 {
+	switch k.scope {
+	case scopeAccount:
+		return 0x43590101
+	case scopeClient:
+		return 0x43590102
+	default:
+		return 0x43590103
+	}
+}
 
 // Throttle scopes (auth_throttle.scope). Rows of one transaction are always
 // locked in this order: account, client, pair.
@@ -93,10 +115,18 @@ func (k throttleKey) lockFor(failures int) time.Duration {
 		}
 	case scopeAccount:
 		if failures >= accountThreshold {
-			return throttleMax
+			return min(throttleMax<<min(failures-accountThreshold, 10), accountLockMax)
 		}
 	}
 	return 0
+}
+
+// decayFor is how long after its last failure a count is forgotten.
+func (k throttleKey) decayFor(failures int) time.Duration {
+	if k.scope == scopeAccount && failures >= accountThreshold {
+		return accountQuiet
+	}
+	return throttleDecay
 }
 
 type throttleState struct {
@@ -143,12 +173,21 @@ func throttleKeys(ctx context.Context, tx pgx.Tx, username, client string) ([]th
 	return keys, nil
 }
 
-// lockThrottle locks the existing rows of keys (in the given order) and
-// returns their state with the database time. A key without a row, or with
-// only decayed failures, has zero failures. No row is created here, so a
-// refused request leaves nothing behind.
+// lockThrottle takes the advisory lock of every key (in the given order,
+// account -> client -> pair, so two requests never wait on each other in a
+// cycle) and then reads the existing rows. The advisory lock is what
+// serializes a key that has no row yet: without it parallel first attempts
+// would all read "no row" and all reach the KDF. It is held to the end of the
+// transaction, which also counts. A key without a row, or with only decayed
+// failures, has zero failures. No row is created here, so a refused request
+// leaves nothing behind. The database time is read after the locks.
 func lockThrottle(ctx context.Context, tx pgx.Tx, keys []throttleKey) ([]throttleState, time.Time, error) {
 	var now time.Time
+	for _, k := range keys {
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1::int4,hashtext($2))", k.lockClass(), k.hmac); err != nil {
+			return nil, now, err
+		}
+	}
 	if err := tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now); err != nil {
 		return nil, now, err
 	}
@@ -160,7 +199,7 @@ func lockThrottle(ctx context.Context, tx pgx.Tx, keys []throttleKey) ([]throttl
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, now, err
 		}
-		if err == nil && now.Sub(st.last) >= throttleDecay {
+		if err == nil && now.Sub(st.last) >= k.decayFor(st.failures) {
 			st.failures = 0
 		}
 		out = append(out, st)
@@ -201,14 +240,16 @@ func refuseIfLocked(ctx context.Context, tx pgx.Tx, states []throttleState, now 
 }
 
 // countFailures adds one failure to every key, one upsert per key in the
-// keys' order (a count whose last failure is older than the decay window
-// restarts at 1).
+// keys' order (a count whose last failure is older than its decay window,
+// by decayFor's rule, restarts at 1).
 func countFailures(ctx context.Context, tx pgx.Tx, keys []throttleKey, now time.Time) error {
 	for _, k := range keys {
 		if _, err := tx.Exec(ctx, `INSERT INTO auth_throttle(scope,key_hmac,failures,last_failure_at) VALUES($1,$2,1,$3)
 			ON CONFLICT(scope,key_hmac) DO UPDATE SET
-				failures=CASE WHEN auth_throttle.last_failure_at <= $3::timestamptz-$4*interval '1 millisecond' THEN 1 ELSE auth_throttle.failures+1 END,
-				last_failure_at=$3, lock_audited=false`, k.scope, k.hmac, now, throttleDecay.Milliseconds()); err != nil {
+				failures=CASE WHEN auth_throttle.last_failure_at <= $3::timestamptz-(CASE WHEN auth_throttle.scope='account' AND auth_throttle.failures>=$5::int
+					THEN $6::bigint ELSE $4::bigint END)*interval '1 millisecond' THEN 1 ELSE auth_throttle.failures+1 END,
+				last_failure_at=$3, lock_audited=false`,
+			k.scope, k.hmac, now, throttleDecay.Milliseconds(), accountThreshold, accountQuiet.Milliseconds()); err != nil {
 			return err
 		}
 	}
@@ -235,13 +276,15 @@ func giveBack(ctx context.Context, tx pgx.Tx, keys []throttleKey) error {
 }
 
 // reapThrottle deletes up to reapBatch rows whose last failure is older than
-// the decay window (they count as zero). It is one statement of its own, run
-// after a counted failure; rows another transaction holds are skipped, so
-// several controllers can reap at once. A failed reap is left to the next.
+// their decay window (they count as zero). It is one statement of its own,
+// run after a counted failure; rows another transaction holds are skipped,
+// so several controllers can reap at once. A failed reap is left to the next.
 func (s *Store) reapThrottle(ctx context.Context) {
 	_, _ = s.pool.Exec(ctx, `DELETE FROM auth_throttle WHERE (scope,key_hmac) IN (
 		SELECT scope,key_hmac FROM auth_throttle WHERE last_failure_at < clock_timestamp()-$1*interval '1 millisecond'
-		ORDER BY last_failure_at LIMIT $2 FOR UPDATE SKIP LOCKED)`, throttleDecay.Milliseconds(), reapBatch)
+			AND NOT (scope='account' AND failures>=$3 AND last_failure_at >= clock_timestamp()-$4*interval '1 millisecond')
+		ORDER BY last_failure_at LIMIT $2 FOR UPDATE SKIP LOCKED)`,
+		throttleDecay.Milliseconds(), reapBatch, accountThreshold, accountQuiet.Milliseconds())
 }
 
 // credential is a user's stored verifier as read before derivation.
