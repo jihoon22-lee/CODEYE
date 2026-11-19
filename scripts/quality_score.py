@@ -500,7 +500,8 @@ def fmt(p):
 
 def render_table(result):
     bs = result["batches"]
-    head = "| metric | " + " | ".join(f"{b['condition']}:{b['pack'] or 'analyzers'}{' (dry)' if b['dry_run'] else ''}"
+    # Columns are named by batch: runs of the same instructions before and after a change share a condition.
+    head = "| metric | " + " | ".join(f"{b['batch']} ({b['condition']}{', dry' if b['dry_run'] else ''})"
                                       for b in bs) + " |"
     lines = [head, "|---" * (len(bs) + 1) + "|"]
     rows = [("known-defect recall (judged)", lambda b: fmt(b["metrics"]["known_defect_recall"])),

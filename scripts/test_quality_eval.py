@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
@@ -20,6 +21,7 @@ import quality_score  # noqa: E402
 
 CORPUS = quality_eval.Corpus()
 TESTDATA = SCRIPTS / "testdata/quality_eval"
+PACK_ID = "review"
 
 
 def finding(fid, path, start, end, validation="supported", producer="model", title="A finding title", symbol=None):
@@ -42,7 +44,7 @@ def report(findings, ai="performed", exposed=2):
             "coverage": {"ai_review": {"status": ai}, "review_calls": [], "llm_exposed_files": exposed}, "limitations": []}
 
 
-def make_batch(root, name, rows, reports, *, dry_run=False, labels=(), condition="review", pack="review-r1"):
+def make_batch(root, name, rows, reports, *, dry_run=False, labels=(), condition="review", pack=PACK_ID):
     batch = Path(root) / name
     (batch / "reports").mkdir(parents=True)
     manifest = {"schema": quality_eval.MANIFEST_SCHEMA, "batch": name, "condition": condition, "dry_run": dry_run,
@@ -111,7 +113,7 @@ class SelectionTests(unittest.TestCase):
 class PlannerTests(unittest.TestCase):
     def test_constants_estimate_and_refusals(self):
         plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["HOLD-GO-06"]] * 5)
-        est = quality_eval.estimate("review-r1", plan)
+        est = quality_eval.estimate(plan)
         self.assertEqual(est["variants"], 10)
         self.assertTrue(est["basis"].startswith("constants:"))
         self.assertEqual(est["upper"]["calls"], 55)  # 5 roles x 10 variants x 1.1
@@ -133,28 +135,30 @@ class PlannerTests(unittest.TestCase):
                                              {"role": "verify", "input_bytes": 21000, "usage": None}]}},
                     {"case": "HOLD-GO-06", "variant": "after", "ledger": {"requests": [{"role": "investigate", "input_bytes": 9000}]}}]
             batch = make_batch(tmp, "h", rows, {}, dry_run=True)
-            hist = quality_eval.history_profile([batch], "review-r1")
+            with mock.patch.object(quality_eval, "pack_tree", return_value={"id": PACK_ID}):
+                hist = quality_eval.history_profile([batch])
             self.assertEqual(hist["calls_per_variant"], {"investigate": 1.0, "verify": 0.5})
             self.assertEqual(hist["input_bytes_max"]["verify"], 21000)
             plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["HOLD-GO-06"]])
-            est = quality_eval.estimate("review-r1", plan, history=hist)
+            est = quality_eval.estimate(plan, history=hist)
             self.assertEqual(est["per_call_microusd"]["verify"], int(21000 / 3 * 5 + 600 * 10))
-            with self.assertRaises(SystemExit):  # another pack's batch is not history
-                quality_eval.history_profile([batch], "review-v1")
-            self.assertIsNone(quality_eval.history_profile([], "review-v1"))
-            v1 = make_batch(tmp, "v1", rows[:1], {}, dry_run=True, pack="codeye.review")  # review-v1's pack id
-            self.assertEqual(quality_eval.history_profile([v1], "review-v1")["variants"], 1)
+            self.assertIsNone(quality_eval.history_profile([]))
+            tools = make_batch(tmp, "tools", rows[:1], {}, condition="tools", pack=None)
+            with mock.patch.object(quality_eval, "pack_tree", return_value={"id": PACK_ID}):
+                with self.assertRaises(SystemExit):  # a batch without the review pack is not history
+                    quality_eval.history_profile([tools])
 
     def test_variant_with_slices_is_bounded_by_the_ceiling(self):
-        # A variant whose history made more calls than review-r1 has roles planned
+        # A variant whose history made more calls than the pack has roles planned
         # module slices: with repairs it may use the whole per-attempt ceiling.
         with tempfile.TemporaryDirectory() as tmp:
             sliced = [{"role": r, "input_bytes": 20000} for r in ("documents", "investigate", "verify") + ("investigate", "verify") * 3]
             rows = [{"case": "HOLD-GO-06", "variant": "before", "ledger": {"requests": sliced}},
                     {"case": "HOLD-GO-06", "variant": "after", "ledger": {"requests": sliced[:3]}}]
-            hist = quality_eval.history_profile([make_batch(tmp, "h", rows, {}, dry_run=True)], "review-r1")
+            with mock.patch.object(quality_eval, "pack_tree", return_value={"id": PACK_ID}):
+                hist = quality_eval.history_profile([make_batch(tmp, "h", rows, {}, dry_run=True)])
             plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["HOLD-GO-06"]])
-            est = quality_eval.estimate("review-r1", plan, history=hist, max_calls=40)
+            est = quality_eval.estimate(plan, history=hist, max_calls=40)
             per_call = est["per_call_microusd"]
             self.assertEqual(est["max_calls"], 40)
             self.assertEqual(est["expected"]["calls"], 12)
@@ -191,7 +195,7 @@ class RegressionPilotCoverageTests(unittest.TestCase):
             status = "budget_exhausted" if key in exhausted else "succeeded"
             tasks += [{"key": f"review.{s}.{key}", "status": status, "reason": None} for s in ("investigate", "verify")]
         regression = {"case": "Q01-before", "tasks": [{"key": k, "status": "succeeded", "reason": None} for k in regression_tasks],
-                      "review_pack": "review-r1", "review_calls": [{"role": "investigate", "pack_sha256": self.digests["investigate"]}]}
+                      "review_calls": [{"role": "investigate", "pack_sha256": self.digests["investigate"]}]}
         return [regression, {"case": "pilot", "status": "completed", "ai_review": "performed", "tasks": tasks}]
 
     def check(self, rows, exposed=12, max_calls=99, ledger=None, calls_used=9, ledger_sent=5, required=(), limitations=(), calls=()):
@@ -282,7 +286,7 @@ class ReviewOutcomeTests(unittest.TestCase):
                                             ("review.verify", "skipped_policy", "secret_screen_failed")])
         self.assertEqual(quality_eval.review_outcome(screened), "secret_screen_failed")
         self.assertEqual(quality_eval.review_outcome(report("performed", [("review.verify", "succeeded", None)])), "performed")
-        tools = report("not_performed", [("review.context", "skipped_policy", "model_source_not_approved")])
+        tools = report("not_performed", [("review.environment", "skipped_policy", "model_source_not_approved")])
         self.assertEqual(quality_eval.review_outcome(tools), "model_source_not_approved")
         other = report("not_performed", [("review.investigate", "failed", "review_input_unavailable")])
         self.assertEqual(quality_eval.review_outcome(other), "review_input_unavailable")
@@ -325,18 +329,18 @@ class CaptureListTests(unittest.TestCase):
 class RegistryTests(unittest.TestCase):
     def test_label_prior_real_revisions_only(self):
         with tempfile.TemporaryDirectory() as root:
-            entry = {"pack_id": "review-r1", "pack_digest": "a" * 64, "corpus_digest": CORPUS.digest,
+            entry = {"pack_id": PACK_ID, "pack_digest": "a" * 64, "corpus_digest": CORPUS.digest,
                      "condition": "review", "first_run_at": "t1", "dry_run": True}
             self.assertTrue(quality_eval.register(root, entry))
             self.assertFalse(quality_eval.register(root, dict(entry, first_run_at="t2"))) # append once
             entries = quality_eval.registry_entries(root)
-            self.assertEqual(quality_eval.holdout_labels(entries, "review-r1", "b" * 64, CORPUS.digest), ([], []))
+            self.assertEqual(quality_eval.holdout_labels(entries, PACK_ID, "b" * 64, CORPUS.digest), ([], []))
             quality_eval.register(root, dict(entry, dry_run=False))
             entries = quality_eval.registry_entries(root)
-            self.assertEqual(quality_eval.holdout_labels(entries, "review-r1", "b" * 64, CORPUS.digest),
+            self.assertEqual(quality_eval.holdout_labels(entries, PACK_ID, "b" * 64, CORPUS.digest),
                              ([quality_eval.HOLDOUT_LABEL], ["a" * 64]))
-            self.assertEqual(quality_eval.holdout_labels(entries, "review-r1", "a" * 64, CORPUS.digest), ([], []))
-            self.assertEqual(quality_eval.holdout_labels(entries, "review-v1", "b" * 64, CORPUS.digest), ([], []))
+            self.assertEqual(quality_eval.holdout_labels(entries, PACK_ID, "a" * 64, CORPUS.digest), ([], []))
+            self.assertEqual(quality_eval.holdout_labels(entries, "analyzers", "b" * 64, CORPUS.digest), ([], []))  # another pack id
             self.assertEqual(len(Path(root, quality_eval.REGISTRY).read_text().splitlines()), 2)
 
     def test_ledger_delta_attributes_blocks_and_refusals(self):
@@ -405,7 +409,7 @@ class ScoringTests(unittest.TestCase):
         keep("HOLD-GO-01.before.1", "investigate", [{"path": "README.md", "kind": "document"}])
         # prepared but never answered: a blocked call and a stage without calls are not exposure
         keep("HOLD-GO-01.before.1", "verify", [{"path": "manifest.go", "kind": "code"}], outcome="model_unavailable")
-        keep("HOLD-GO-01.before.1", "context", [{"path": "load.go", "kind": "code"}], outcome=None)
+        keep("HOLD-GO-01.before.1", "documents", [{"path": "load.go", "kind": "code"}], outcome=None)
         s = self.metrics()[0]["structural"]
         self.assertEqual(s["model_saw_snapshot_files"]["k"], 4)
         self.assertEqual((s["model_saw_code"]["k"], s["model_saw_code"]["n"]), (1, 4))
@@ -526,7 +530,7 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(len(sheets), 2)
             for s in (out / "sheets").iterdir():
                 text = s.read_text()
-                self.assertNotIn("R1-GO", text)
+                self.assertNotIn("HOLD-GO", text)
                 self.assertNotIn(CORPUS.by_id["HOLD-GO-06"]["label"]["trigger"][:40], text)
             key = json.loads((out / "answer-key.json").read_text())
             self.assertEqual(quality_score.reader_score(out / "answer-key.json", [])["status"], "not_measured")

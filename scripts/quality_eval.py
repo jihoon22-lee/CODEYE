@@ -4,7 +4,7 @@
 Subcommands:
   plan        stratified selection and call/cost estimate; no product run
   run         run one batch: --condition tools (analyzers only, no model) or
-              --condition review (the full pipeline with --pack review-v1|review-r1)
+              --condition review (the full pipeline with the review instructions)
   score       judged metrics with Wilson intervals, side by side over batches (quality_score.py)
   allow-text  tool messages of a tools batch and instruction envelopes of a capture dry run,
               for an explicit `corpus.py forbidden --allow-text`
@@ -48,9 +48,8 @@ sys.path.insert(0, str(SCRIPTS))
 
 CORPUS_DIR = ROOT / "fixtures/quality-holdout"
 GATEWAY = SCRIPTS / "model_budget_relay.py"
-PACKS = ("review-v1", "review-r1")
-PACK_ROLES = {"review-v1": ("context", "investigate", "verify"),
-              "review-r1": ("environment", "documents", "investigate", "interpret", "verify")}
+PACK = "review"
+PACK_ROLES = ("environment", "documents", "investigate", "interpret", "verify")
 MANIFEST_SCHEMA = "codeye-quality-eval-manifest"
 REGISTRY = "holdout-registry.jsonl"
 HOLDOUT_LABEL = "holdout_seen_by_prior_revision"
@@ -59,15 +58,12 @@ BUDGET_REFUSALS = ("budget_exhausted", "request_limit_reached", "relay_halted")
 PRICE_IN, PRICE_OUT = 5, 10
 
 # Planner fallback when no history directory is given (docs/EVALUATION.md#표본과-예산). Source: docs/EVALUATION.md#회귀-집합-실행,
-# TC-100 on the Go pairs and the module input (11 inputs per pack, single-file Go excerpts, reasoning low).
+# TC-100 on the Go pairs and the module input (11 inputs, single-file Go excerpts, reasoning low).
 CONSTANTS = {
-    "review-v1": {"source": "docs/EVALUATION.md#회귀-집합-실행 TC-100: 11 inputs, 32 calls, ledger 0.789 USD",
-                  "calls_per_variant": {"context": 11 / 11, "investigate": 11 / 11, "verify": 10 / 11},
-                  "ledger_microusd_per_call": 24_656, "input_tokens_per_call": 4_283, "output_tokens_per_call": 324},
-    "review-r1": {"source": "docs/EVALUATION.md#회귀-집합-실행 TC-100: 11 inputs, 27 calls, ledger 0.598 USD",
-                  "calls_per_variant": {"environment": 1 / 11, "documents": 7 / 11, "investigate": 11 / 11,
-                                        "interpret": 0 / 11, "verify": 8 / 11},
-                  "ledger_microusd_per_call": 22_148, "input_tokens_per_call": 3_872, "output_tokens_per_call": 279},
+    "source": "docs/EVALUATION.md#회귀-집합-실행 TC-100: 11 inputs, 27 calls, ledger 0.598 USD",
+    "calls_per_variant": {"environment": 1 / 11, "documents": 7 / 11, "investigate": 11 / 11,
+                          "interpret": 0 / 11, "verify": 8 / 11},
+    "ledger_microusd_per_call": 22_148, "input_tokens_per_call": 3_872, "output_tokens_per_call": 279,
 }
 DEFAULTS = {"margin": 1.5, "repair_rate": 0.1, "reserve_usd": "1.00", "request_reserve": 5,
             "bytes_per_token": 3.0, "output_tokens_upper": 600, "review_max_calls": 99}
@@ -183,12 +179,12 @@ def key_of(case_id, variant, repeat):
     return f"{case_id}.{variant}.{repeat}"
 
 
-# ---------------------------------------------------------------- packs, registry
+# ---------------------------------------------------------------- pack, registry
 
-def pack_tree(pack):
-    """Identity of a review pack as checked out: id, version, status and a tree digest
+def pack_tree():
+    """Identity of the review pack as checked out: id, version, status and a tree digest
     (sha256 over every file, sorted, path NUL content NUL)."""
-    directory = ROOT / "prompts" / pack
+    directory = ROOT / "prompts" / PACK
     digest = hashlib.sha256()
     for path in sorted(p for p in directory.rglob("*") if p.is_file()):
         rel = path.relative_to(directory).as_posix()
@@ -199,7 +195,7 @@ def pack_tree(pack):
             key, _, value = line.partition(":")
             if key in ("id", "version", "status", "schema_version"):
                 meta[key] = value.strip().strip("'\"")
-    return {"id": meta.get("id", pack), "version": meta.get("version"), "status": meta.get("status"),
+    return {"id": meta.get("id", PACK), "version": meta.get("version"), "status": meta.get("status"),
             "tree_digest": digest.hexdigest()}
 
 
@@ -225,7 +221,7 @@ def registry_entries(results_root):
 
 
 def holdout_labels(entries, pack_id, pack_digest, corpus_digest):
-    """Prior *real* (non-dry-run) revisions of the same pack seen on this corpus."""
+    """Prior *real* (non-dry-run) revisions of the pack seen on this corpus."""
     prior = sorted({e["pack_digest"] for e in entries
                     if e["pack_id"] == pack_id and e["corpus_digest"] == corpus_digest
                     and e["pack_digest"] != pack_digest and not e.get("dry_run")})
@@ -290,14 +286,14 @@ def ledger_delta(records):
 
 # ---------------------------------------------------------------- planner
 
-def history_profile(dirs, pack):
-    """Per-role calls per variant and request sizes from saved batch dirs of this pack (rows.jsonl).
+def history_profile(dirs):
+    """Per-role calls per variant and request sizes from saved batch dirs of the review pack (rows.jsonl).
 
-    Batches are matched by the pack id of prompts/<pack> (review-v1 is `codeye.review`). Given
-    directories without a usable row of this pack are an error, never a silent constants fallback."""
+    Batches are matched by the pack id of prompts/review. Given directories without a usable row
+    of this pack are an error, never a silent constants fallback."""
     if not dirs:
         return None
-    pack_id = pack_tree(pack)["id"]
+    pack_id = pack_tree()["id"]
     variants, calls, sizes, usage = 0, Counter(), defaultdict(list), defaultdict(list)
     per_key = {}
     for d in dirs:
@@ -319,7 +315,7 @@ def history_profile(dirs, pack):
                         usage[q["role"]].append((u["prompt_tokens"], u.get("completion_tokens") or 0))
             per_key[(row["case"], row["variant"])] = roles
     if not variants:
-        raise SystemExit(f"--history: no valid rows of pack {pack} ({pack_id}) in " + ", ".join(map(str, dirs)))
+        raise SystemExit(f"--history: no valid rows of pack {pack_id} in " + ", ".join(map(str, dirs)))
     return {"variants": variants, "calls_per_variant": {r: calls[r] / variants for r in calls},
             "input_bytes_max": {r: max(v) for r, v in sizes.items()},
             "input_bytes_mean": {r: sum(v) / len(v) for r, v in sizes.items()},
@@ -327,7 +323,7 @@ def history_profile(dirs, pack):
             "per_key": per_key, "dirs": [str(d) for d in dirs]}
 
 
-def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAULTS["repair_rate"],
+def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAULTS["repair_rate"],
              max_calls=DEFAULTS["review_max_calls"]):
     """Calls and conservative ledger cost for a review batch.
 
@@ -338,15 +334,15 @@ def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate
     each at the per-call cost times margin. Per-call cost: history usage when real, else
     request bytes / bytes_per_token input tokens and output_tokens_upper output tokens at the
     relay's worst-case prices, else CONSTANTS.
-    review-r1 module slices (docs/REVIEW.md#모듈-단위-검토-분할): a variant whose history made
+    Module slices (docs/REVIEW.md#모듈-단위-검토-분할): a variant whose history made
     more calls than the pack has roles planned slices; slices are admitted while calls are
     left, so with repairs it can use the whole per-attempt ceiling. Its upper is max_calls
     calls at the dearest per-call cost of investigate and verify. A variant without history is
     estimated as above (the constants are single-file inputs without slices); run the capture
     dry run with the same selection first.
     """
-    roles = PACK_ROLES[pack]
-    base = CONSTANTS[pack]
+    roles = PACK_ROLES
+    base = CONSTANTS
     rates = dict(base["calls_per_variant"])
     basis = "constants:" + base["source"]
     per_call = {r: base["ledger_microusd_per_call"] for r in roles}
@@ -371,7 +367,7 @@ def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate
         counts = {r: seen.get(r, 0) for r in roles} if seen is not None else {r: rates.get(r, 0) for r in roles}
         expected_calls += sum(counts.values())
         expected_cost += sum(counts[r] * per_call[r] for r in roles)
-        if pack == "review-r1" and seen is not None and sum(seen.values()) > len(roles):
+        if seen is not None and sum(seen.values()) > len(roles):
             upper_calls += max_calls
             upper_cost += max_calls * max(per_call["investigate"], per_call["verify"]) * margin
             continue
@@ -379,7 +375,7 @@ def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate
             count = max(1, seen.get(r, 0)) if seen is not None else 1
             upper_calls += count * (1 + repair_rate)
             upper_cost += count * (1 + repair_rate) * per_call[r] * margin
-    return {"pack": pack, "variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,
+    return {"variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,
             "per_call_microusd": per_call, "calls_per_variant": rates,
             "expected": {"calls": round(expected_calls, 1), "ledger_microusd": int(expected_cost)},
             "upper": {"calls": int(upper_calls + 0.999), "ledger_microusd": int(upper_cost)}}
@@ -610,8 +606,6 @@ def run_batch(args):
 
     corpus = Corpus()
     review = args.condition == "review"
-    if review and args.pack not in PACKS:
-        raise SystemExit("--condition review needs --pack review-v1|review-r1")
     if not os.path.isabs(args.go) or not os.access(args.go, os.X_OK):
         raise SystemExit("--go must be an absolute executable path")
     tools = tool_specs(args.tool)
@@ -628,10 +622,10 @@ def run_batch(args):
     if not plan:
         raise SystemExit("no case variant selected")
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    name = args.batch or f"{args.condition}-{args.pack if review else 'analyzers'}-{stamp}"
+    name = args.batch or f"{args.condition}-{stamp}"
     batch = results_root / name
     batch.mkdir(mode=0o700)
-    pack = pack_tree(args.pack) if review else None
+    pack = pack_tree() if review else None
     relay, report_before, est, forbidden = None, None, None, None
     upstream = None
     if review:
@@ -655,8 +649,8 @@ def run_batch(args):
             raise SystemExit("answer blocking is not active: the relay process must have loaded this "
                              "--forbidden-phrases file for the current corpus digest")
         forbidden["allow_model_echo"] = bool(active[-1].get("allow_model_echo"))
-        history = history_profile([Path(h) for h in args.history or []], args.pack)
-        est = estimate(args.pack, plan, history=history, margin=args.margin, max_calls=args.review_max_calls)
+        history = history_profile([Path(h) for h in args.history or []])
+        est = estimate(plan, history=history, margin=args.margin, max_calls=args.review_max_calls)
         refusal = budget_gate(est, report_before, parse_usd(args.reserve_usd), args.request_reserve)
         write_json(batch / "plan.json", {"estimate": est, "refusal": refusal, "selection": selection})
         if refusal:
@@ -728,9 +722,8 @@ def run_batch(args):
                     out += ["--repo-code-source-root", root_id]
                 if review:
                     out += ["--model-source-root", root_id, "--opencode", args.opencode, "--model", args.model,
-                            "--model-relay-file", args.relay_file, "--review-pack", args.pack]
-                    if args.pack == "review-r1":
-                        out += ["--review-max-calls", str(args.review_max_calls)]
+                            "--model-relay-file", args.relay_file,
+                            "--review-max-calls", str(args.review_max_calls)]
                 return out
 
             concurrency = 1 if review else max(1, args.agents * args.max_workers)
@@ -784,7 +777,7 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
     reserve = parse_usd(args.reserve_usd) if review else 0
     est_one = None
     if review:
-        est_one = estimate(args.pack, plan[:1], history=history_profile([Path(h) for h in args.history or []], args.pack),
+        est_one = estimate(plan[:1], history=history_profile([Path(h) for h in args.history or []]),
                            margin=args.margin, max_calls=args.review_max_calls)["upper"]
     deadline = time.monotonic() + args.timeout
     while queue or inflight:
@@ -950,20 +943,18 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("plan", help="selection and estimate only")
     add_selection(p)
-    p.add_argument("--pack", choices=PACKS, required=True)
-    p.add_argument("--history", action="append", help="saved batch dir of the same pack (repeatable)")
+    p.add_argument("--history", action="append", help="saved review batch dir (repeatable)")
     p.add_argument("--ledger", help="relay ledger to check the estimate against (read only)")
     p.add_argument("--margin", type=float, default=DEFAULTS["margin"])
     p.add_argument("--review-max-calls", type=int, default=DEFAULTS["review_max_calls"],
-                   help="the agents' model call ceiling per attempt (review-r1, codeye agent --review-max-calls)")
+                   help="the agents' model call ceiling per attempt (codeye agent --review-max-calls)")
     p.add_argument("--reserve-usd", default=DEFAULTS["reserve_usd"])
     p.add_argument("--request-reserve", type=int, default=DEFAULTS["request_reserve"])
     r = sub.add_parser("run", help="run one batch through a real controller and agents")
     add_selection(r)
     r.add_argument("--condition", choices=("tools", "review"), required=True)
-    r.add_argument("--pack", choices=PACKS)
     r.add_argument("--results-root", required=True, help="stable directory above every batch (holds the registry)")
-    r.add_argument("--batch", help="batch directory name (default condition-pack-UTC)")
+    r.add_argument("--batch", help="batch directory name (default condition-UTC)")
     r.add_argument("--go", required=True, help="absolute go toolchain (--go)")
     r.add_argument("--go-mod-cache")
     r.add_argument("--tool", action="append", help="analyzer tool or shared toolchain flag NAME=/abs/path (repeatable)")
@@ -982,7 +973,7 @@ def main(argv=None):
     r.add_argument("--history", action="append")
     r.add_argument("--margin", type=float, default=DEFAULTS["margin"])
     r.add_argument("--review-max-calls", type=int, default=DEFAULTS["review_max_calls"],
-                   help="the agents' model call ceiling per attempt (review-r1, codeye agent --review-max-calls)")
+                   help="the agents' model call ceiling per attempt (codeye agent --review-max-calls)")
     r.add_argument("--reserve-usd", default=DEFAULTS["reserve_usd"])
     r.add_argument("--request-reserve", type=int, default=DEFAULTS["request_reserve"])
     r.add_argument("--dry-run", action="store_true", help="the relay uses --test-upstream (labelled, never evaluation)")
@@ -1019,8 +1010,8 @@ def main(argv=None):
                                    sample=args.sample, seed=args.seed)
         plan = variant_plan(corpus, chosen, set(args.variants.split(",")) if args.variants else None, args.repeat,
                             set(args.repeat_cases.split(",")) if args.repeat_cases else None)
-        history = history_profile([Path(h) for h in args.history or []], args.pack)
-        est = estimate(args.pack, plan, history=history, margin=args.margin, max_calls=args.review_max_calls)
+        history = history_profile([Path(h) for h in args.history or []])
+        est = estimate(plan, history=history, margin=args.margin, max_calls=args.review_max_calls)
         out = {"selection": selection, "variants": [key_of(c["id"], v, r) for c, v, r in plan], "estimate": est}
         if args.ledger:
             report = ledger_report(args.ledger)
@@ -1036,8 +1027,8 @@ def main(argv=None):
                     raise SystemExit(f"--condition review needs --{flag.replace('_', '-')}")
             if not os.path.isabs(args.opencode):
                 raise SystemExit("--opencode must be absolute")
-        elif args.pack or args.relay_file or args.ledger or args.dry_run or args.plant_leak:
-            raise SystemExit("--condition tools runs no model: drop --pack/--relay-file/--ledger/--dry-run/--plant-leak")
+        elif args.relay_file or args.ledger or args.dry_run or args.plant_leak:
+            raise SystemExit("--condition tools runs no model: drop --relay-file/--ledger/--dry-run/--plant-leak")
         run_batch(args)
         return 0
     import quality_score

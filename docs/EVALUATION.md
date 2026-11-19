@@ -166,7 +166,7 @@
 | 하위 명령 | 역할 |
 |---|---|
 | `plan` | 층별 표본 선택과 호출·비용 추정만. 제품을 실행하지 않는다. `--ledger`를 주면 거절 판단까지 한다(거절이면 종료 코드 1) |
-| `run` | batch 하나 실행. `--condition tools`(분석기만) 또는 `--condition review --pack review-r1|review-v1` |
+| `run` | batch 하나 실행. `--condition tools`(분석기만) 또는 `--condition review`(제품 전체 경로) |
 | `score` | 판정 지표와 Wilson 구간, batch 나란히 비교 |
 | `allow-text` | tools batch의 도구 메시지와 capture dry run의 envelope를 허용 텍스트로 모은다 |
 | `capture-list` | 아무것도 막지 않는 감시용 목록(`purpose: envelope_capture`). 시험용 upstream 전용 |
@@ -185,7 +185,7 @@
 | 조건 | 실행 | 모델 | 대상 |
 |---|---|---|---|
 | `tools` | 분석기만. agent에 모델 설정을 주지 않는다 | 없음. 검토 task는 `skipped_policy`(`model_source_not_approved`) | 보통 corpus 전체 |
-| `review` | 제품 전체 경로. `--pack`을 agent의 `--review-pack`으로 준다 | 운영자가 시작한 relay | 표본 |
+| `review` | 제품 전체 경로. 기본 검토 지침(`prompts/review`)을 쓴다 | 운영자가 시작한 relay | 표본 |
 
 - 사례 변형마다 `corpus.py materialize`로 무작위 이름의 디렉터리에 입력만 만든다. 프로젝트 이름도 무작위(`eval-<hex>`)다. 사례 ID·변형 이름·라벨은 스냅샷에 들어가지 않는다. README 포함 여부는 corpus 순서로 고정(짝수 번째 사례)이고 모든 batch가 같은 선택을 쓴다.
 - 분석기 플래그는 `--tool NAME=/abs/path`로 받아 agent에 `--NAME PATH`로 넘긴다. 값이 없는 agent 옵션(예: `python-both-type-checkers`)은 `--agent-flag NAME`으로 준다. 둘 다 manifest에 남고 tools 조건의 holdout digest에 들어간다. 이 빌드가 모르는 이름이면 agent가 사용 오류로 끝나고 runner가 멈춘다. 새 분석기 팩이 생기면 runner를 고치지 않고 플래그만 더한다. 분석기 공백은 보고서의 task(`pack-gap.<생태계>`, `tool_not_configured` 등)에서 읽는다.
@@ -198,7 +198,7 @@
 
 batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay token은 넣지 않고, 경로는 `~` 기준 상대 경로로 적는다.
 
-- 팩 id·version·status, `prompts/<팩>` 트리 digest, 보고서 `review_calls`에서 관측한 역할별 `pack_sha256`
+- 팩 id·version·status, `prompts/review` 트리 digest, 보고서 `review_calls`에서 관측한 역할별 `pack_sha256`
 - corpus digest, 모델 id와 OpenCode 버전, checkout commit과 수정 여부, OS·Python
 - 분석기 실행 파일의 SHA-256, 보고서에서 관측한 분석기별 도구 버전, 저장소 코드 허가, toolchain 경로
 - 장부의 시작·끝 상태와 batch 차감, 예약·여유, 계획 추정, 정답 목록 SHA-256·항목 수·허용 텍스트
@@ -223,7 +223,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 2. `quality_eval.py capture-list --output FILE`로 감시용 목록을 만든다. relay는 `--test-upstream`일 때만 이 목록으로 시작하고, runner도 dry run이 아니면 거부한다.
 3. 가짜 upstream(`--dump DIR`)과 감시용 목록으로 review dry run을 돌린다. 모든 역할의 요청이 막히지 않고 dump에 남는다.
 4. `quality_eval.py allow-text --tools-batch B --request-dump DIR --output FILE`가 도구 메시지·규칙 ID와 envelope(system 메시지와 `<review-input>`을 뺀 user 텍스트)를 모은다. review input은 가져오지 않는다.
-5. `corpus.py forbidden --allow-text prompts/review-v1 --allow-text prompts/review-r1 --allow-text FILE`로 목록을 만든다.
+5. `corpus.py forbidden --allow-text prompts/review --allow-text FILE`로 목록을 만든다.
 
 제품 코드·지침·분석기 구성이 바뀌면 envelope와 도구 진단도 바뀐다. 유료 batch 직전에 같은 checkout으로 목록을 다시 만든다.
 
@@ -268,8 +268,8 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 
 - 기대값: 이력에 같은 변형이 있으면 그 변형의 역할별 호출 수, 없으면 이력의 변형당 평균(이력이 없으면 상수표) × 호출당 비용.
 - 상한: 팩의 모든 역할이 변형마다 한 번 호출된다고 본다(이력에 그 변형의 호출 수가 더 많으면 그 수). 형식 복구 10%를 더하고 호출당 비용에 여유 계수 1.5를 곱한다(`--margin`).
-- review-r1에서 이력의 그 변형 호출 수가 역할 수보다 많으면 모듈 단위 slice가 계획된 변형이다. slice는 남은 호출이 있는 동안 승인되므로 형식 복구가 많으면 attempt 상한까지 쓸 수 있다. 이 변형의 상한은 `--review-max-calls`(기본 99, 에이전트에 그대로 넘긴다)회 × investigate·verify 중 비싼 호출당 비용 × 여유 계수다. 이력이 없는 변형은 slice 여부를 알 수 없으므로 같은 표본의 capture dry run을 먼저 돌려 이력으로 준다([검토](REVIEW.md#모듈-단위-검토-분할)).
-- `--history DIR`은 manifest의 팩 id(review-v1은 `codeye.review`)로 같은 팩의 batch만 쓴다. 쓸 수 있는 행이 없으면 상수표로 돌아가지 않고 오류로 끝난다.
+- 이력의 그 변형 호출 수가 역할 수보다 많으면 모듈 단위 slice가 계획된 변형이다. slice는 남은 호출이 있는 동안 승인되므로 형식 복구가 많으면 attempt 상한까지 쓸 수 있다. 이 변형의 상한은 `--review-max-calls`(기본 99, 에이전트에 그대로 넘긴다)회 × investigate·verify 중 비싼 호출당 비용 × 여유 계수다. 이력이 없는 변형은 slice 여부를 알 수 없으므로 같은 표본의 capture dry run을 먼저 돌려 이력으로 준다([검토](REVIEW.md#모듈-단위-검토-분할)).
+- `--history DIR`은 manifest의 팩 id가 `prompts/review`의 id와 같은 batch만 쓴다. 쓸 수 있는 행이 없으면 상수표로 돌아가지 않고 오류로 끝난다.
 - 호출당 비용의 출처 우선순위: (1) 실제 batch 이력이면 역할별 usage 평균 × relay 단가(입력 5, 출력 10 microUSD/token), (2) dry run 이력이면 역할별 최대 요청 바이트 ÷ 3(바이트당 토큰) × 5 + 출력 600 토큰 × 10, (3) 상수표(`quality_eval.py`의 `CONSTANTS`). 상수표는 단일 파일 Go 입력에서 나온 값이라 다파일·다언어 사례에서는 작을 수 있다.
 - 바이트당 3토큰과 여유 계수 1.5는 실측에 맞춘 값이 아닌 보수적 근사다. 실제 batch의 usage를 이력으로 주면 그 값을 쓴다.
 
@@ -307,7 +307,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 
 ### 단위 시험
 
-`scripts/test_model_budget_relay.py`(relay)와 `scripts/test_quality_eval.py`(runner·채점)는 모델·키·네트워크 없이 돌고, CI의 문서 계약 단계가 `python -m unittest discover`로 실행한다. 실행: `python3 -m unittest discover -s scripts -p 'test_r0_*.py' -v`, `python3 -m unittest discover -s scripts -p 'test_quality_eval.py' -v`. dry run은 runner·relay·채점 경로가 동작한다는 근거일 뿐이고 가짜 upstream의 위치 대조·검토 수·차감에는 품질 의미가 없다.
+`scripts/test_model_budget_relay.py`(relay)와 `scripts/test_quality_eval.py`(runner·채점)는 모델·키·네트워크 없이 돌고, CI의 문서 계약 단계가 `python -m unittest discover`로 실행한다. 실행: `python3 -m unittest discover -s scripts -p 'test_quality_eval.py' -v`. dry run은 runner·relay·채점 경로가 동작한다는 근거일 뿐이고 가짜 upstream의 위치 대조·검토 수·차감에는 품질 의미가 없다.
 
 ## 유료 batch 절차
 
@@ -323,7 +323,6 @@ TOOLS=(--go "$GO" --tool staticcheck="$STATICCHECK" --tool cargo="$CARGO" --tool
        --tool node="$NODE" --tool eslint="$ESLINT_JS" --tool tsc="$TSC_JS")
 REVIEW=(--opencode "$OPENCODE" --model codeye-gateway/gpt-6.2-sol)
 SEL=(--sample N --seed S)   # 표본. 5단계 plan으로 예산 안인지 확인한다
-PACK=review-r1
 
 # 1. tools(모델 없음): 전체와 비교용 표본
 python3 scripts/quality_eval.py run --condition tools --results-root "$R" --batch tools-all "${TOOLS[@]}" --max-workers 3
@@ -341,14 +340,14 @@ env -u OPENAI_API_KEY python3 scripts/model_budget_relay.py --ready-file "$R/cap
   --test-upstream "http://127.0.0.1:$PORT" &
 CAP_RELAY_PID=$!
 until [ -s "$R/cap/relay.json" ]; do sleep 0.2; done
-python3 scripts/quality_eval.py run --condition review --pack $PACK --dry-run --results-root "$R" \
-  --batch capture-$PACK "${SEL[@]}" --relay-file "$R/cap/relay.json" --ledger "$R/cap/ledger.jsonl" \
+python3 scripts/quality_eval.py run --condition review --dry-run --results-root "$R" \
+  --batch capture "${SEL[@]}" --relay-file "$R/cap/relay.json" --ledger "$R/cap/ledger.jsonl" \
   --forbidden-phrases "$R/capture-list.json" "${TOOLS[@]}" "${REVIEW[@]}"
 kill $CAP_RELAY_PID $FAKE_PID
 
 # 3. 정답 목록. 출력의 dropped.in_allowed_text에서 허용 텍스트가 뺀 라벨 표현을 확인한다.
 python3 scripts/quality_eval.py allow-text --tools-batch "$R/tools-all" --request-dump "$R/cap/dump" --output "$R/allow.txt"
-python3 -I fixtures/quality-holdout/corpus.py forbidden --allow-text prompts/review-v1 --allow-text prompts/review-r1 \
+python3 -I fixtures/quality-holdout/corpus.py forbidden --allow-text prompts/review \
   --allow-text "$R/allow.txt" --output "$R/forbidden.json"
 
 # 4. 실제 relay(운영자 셸, 키는 이 프로세스만 읽는다). --allow-model-echo는 선택이다.
@@ -359,20 +358,20 @@ until [ -s "$READY" ]; do sleep 0.2; done
 RELAY=(--relay-file "$READY" --ledger "$LEDGER" --forbidden-phrases "$R/forbidden.json")
 
 # 5. 계획과 장부 확인(거절이면 종료 코드 1, 출력의 refusal에 사유)
-python3 scripts/quality_eval.py plan --pack $PACK "${SEL[@]}" --history "$R/capture-$PACK" --ledger "$LEDGER"
+python3 scripts/quality_eval.py plan "${SEL[@]}" --history "$R/capture" --ledger "$LEDGER"
 
 # 6. 유료 batch
-python3 scripts/quality_eval.py run --condition review --pack $PACK --results-root "$R" --batch paid-$PACK \
-  "${SEL[@]}" --history "$R/capture-$PACK" "${RELAY[@]}" "${TOOLS[@]}" "${REVIEW[@]}"
+python3 scripts/quality_eval.py run --condition review --results-root "$R" --batch paid \
+  "${SEL[@]}" --history "$R/capture" "${RELAY[@]}" "${TOOLS[@]}" "${REVIEW[@]}"
 
 # 7. 판정과 채점: 각 batch의 judgments-template.json을 채운 뒤
-python3 scripts/quality_eval.py score "$R/tools-sel" "$R/paid-$PACK" \
+python3 scripts/quality_eval.py score "$R/tools-sel" "$R/paid" \
   --judgments J1.json [--judgments J2.json] --output "$R/score.json"
-python3 scripts/quality_eval.py reader "$R/paid-$PACK" --sample 6 --seed S --output "$R/reading-$PACK"
+python3 scripts/quality_eval.py reader "$R/paid" --sample 6 --seed S --output "$R/reading"
 ```
 
 - 2단계 capture는 유료 batch와 같은 `SEL`로 돌린다. 시험 장부의 요청 상한(기본 200건) 안에 들어가야 한다. 넘으면 언어마다 새 시험 relay를 쓴다.
-- 두 팩을 비교할 때(새 팩 id로 기본값을 바꿀 때만): 2단계 capture와 5~6단계를 팩마다 한다. 상한 호출이 큰 팩을 먼저 실행하고, 끝난 뒤의 장부로 둘째 팩을 다시 계획한다. 거절이면 둘째 팩을 실행하지 않는다. 시작 전 남은 요청이 적으면 `남은 요청 − 첫 팩 기대 호출 − 5 ≥ 둘째 팩 상한 호출`이 되는 표본을 고른다.
+- 지침 개정 전후를 비교할 때: 개정 전 checkout(baseline)과 개정 뒤 checkout(candidate)에서 같은 표본으로 2단계 capture와 5~6단계를 각각 하고(`--batch capture-baseline`, `--batch paid-baseline`처럼 이름으로 구분한다), 7단계 `score`에 두 batch를 나란히 준다. 상한 호출이 큰 쪽을 먼저 실행하고, 끝난 뒤의 장부로 다른 쪽을 다시 계획한다. 거절이면 다른 쪽을 실행하지 않는다. 시작 전 남은 요청이 적으면 `남은 요청 − 먼저 실행한 쪽 기대 호출 − 5 ≥ 다른 쪽 상한 호출`이 되는 표본을 고른다.
 - 결과 수치와 판단은 [평가 결과](EVALUATION-RESULTS.md)에 쓰고 batch 디렉터리는 저장소 밖에 둔다.
 
 ## 예산 relay와 장부
