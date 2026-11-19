@@ -76,13 +76,13 @@ ALTER TABLE users
 -- 로그인 제한(재설계)
 -- ---------------------------------------------------------------------------
 
--- 잠금 시각을 저장하지 않고 (failures, last_failure_at)에서 계산한다. 감쇠 시간(15분, 50회에 이른 이름은
--- 24시간)이 지난 행은 0회와 같으며 저장 계층이 지운다. 키는 auth_secrets.throttle_key의 HMAC이다.
---   pair: 제출된 사용자 이름과 client 주소의 쌍. account: 사용자 이름(존재 여부와 무관). client: 주소.
+-- 지연 종료 시각을 저장하지 않고 (failures, last_failure_at)에서 계산한다. 마지막 실패에서 15분이
+-- 지난 행은 0회와 같으며 저장 계층이 지운다. 키는 auth_secrets.throttle_key의 HMAC이다.
+--   pair: 제출된 사용자 이름(존재 여부와 무관)과 client 주소의 쌍. client: 주소.
 DROP TABLE auth_throttle;
 
 CREATE TABLE auth_throttle (
-    scope           text        NOT NULL CHECK (scope IN ('pair', 'account', 'client')),
+    scope           text        NOT NULL CHECK (scope IN ('pair', 'client')),
     key_hmac        text        NOT NULL CHECK (key_hmac ~ '^[0-9a-f]{64}$'),
     failures        integer     NOT NULL CHECK (failures >= 0),
     last_failure_at timestamptz NOT NULL,

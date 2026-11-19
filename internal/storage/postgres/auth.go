@@ -278,13 +278,6 @@ func (s *Store) ExchangeLaunchTokenFrom(ctx context.Context, client, tokenSHA256
 		if err != nil {
 			return Session{}, err
 		}
-		// A link is the way back in for a name kept locked by guesses from
-		// many addresses: signing in with one clears the name's count.
-		if username != nil {
-			if err := clearAccountThrottle(ctx, tx, *username); err != nil {
-				return Session{}, err
-			}
-		}
 		detail := loginDetail(MethodLaunchLink, client)
 		detail["link_purpose"] = purpose
 		detail["link_issued_by"] = ActorOperator

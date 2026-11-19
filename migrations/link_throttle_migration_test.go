@@ -11,7 +11,7 @@ import (
 // issuer and purpose, a session's issuer, and a session gaining a password
 // requirement are immutable; the reset record has both its time and administrator or
 // neither; the audit vocabulary is still closed. The old counters are gone and the new table takes the
-// three login scopes with a required last failure time and no stored lock
+// two login scopes (pair, client) with a required last failure time and no stored lock
 // end. A 0010 binary refuses the result.
 // TC-153
 func TestLinkThrottleMigration(t *testing.T) {
@@ -66,10 +66,11 @@ func TestLinkThrottleMigration(t *testing.T) {
 		t.Fatalf("stored lock end remains: %d %v", cols, err)
 	}
 	insert = "INSERT INTO auth_throttle(scope,key_hmac,failures,last_failure_at) VALUES($1,$2,$3,now())"
-	for _, scope := range []string{"pair", "account", "client"} {
+	for _, scope := range []string{"pair", "client"} {
 		mustExec(t, ctx, c, insert, scope, digest('b'), 1)
 	}
 	execState(t, ctx, c, "23514", insert, "user", digest('c'), 1)
+	execState(t, ctx, c, "23514", insert, "account", digest('c'), 1)
 	execState(t, ctx, c, "23514", insert, "pair", digest('c'), -1)
 	execState(t, ctx, c, "23502", "INSERT INTO auth_throttle(scope,key_hmac,failures) VALUES('pair',$1,1)", digest('d'))
 	if !relationExists(t, ctx, c, schema, "auth_throttle_last_failure_idx") {

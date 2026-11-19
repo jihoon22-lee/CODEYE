@@ -521,7 +521,7 @@ task key와 단계의 대응:
 | [0008](../migrations/sql/0008_finding_reviews.sql) | `finding_reviews` | fingerprint별 사람 판정 version(이유 필수, 만료, 경로 범위, 멱등 키, 수정·삭제·truncate 거부) |
 | [0009](../migrations/sql/0009_storage_quota.sql) | `nodes.storage_quota_exceeded`(영역 배열, 기본 빈 배열), `scheduler_limits.artifact_quota_bytes`(NULL 또는 양수) | 저장 영역 상한. 기존 행은 "한도 없음·초과 없음"으로 읽힌다. |
 | [0010](../migrations/sql/0010_accounts_and_audit.sql) | `users.username`(대소문자 무시 유일, 한 번 정하면 불변)·`is_admin`·`must_change_password`·`password_kdf`·`password_iterations`·`password_salt`·`password_hash`·`password_set_at`, `auth_secrets`(설치별 제한 키 한 행, 불변), `auth_throttle`, `audit_events`(추가 전용, 수정·삭제·truncate 거부) | 로컬 계정과 관리자, DB에 둔 로그인 제한, 통합 감사 기록. 기존 사용자는 사용자 이름·비밀번호 없는 비관리자 로그인 링크 사용자로 남는다. |
-| [0011](../migrations/sql/0011_link_attribution_and_throttle.sql) | `auth_launch_tokens.issued_by`·`purpose`(불변), `auth_sessions.link_issued_by`(불변)·`password_required`(true→false만), `users.password_reset_at`·`password_reset_by`(둘 다 있거나 둘 다 없음), `auth_throttle` 재생성(scope `pair`·`account`·`client`, 잠금 종료 시각 없음, `last_failure_at` 색인), 감사 action 추가 | 로그인 링크 발급자와 재설정 알림, (이름, 주소) 쌍 중심 로그인 제한. 발급자를 모르는 쓰지 않은 이전 링크는 끝내고 이전 카운터는 버린다. |
+| [0011](../migrations/sql/0011_link_attribution_and_throttle.sql) | `auth_launch_tokens.issued_by`·`purpose`(불변), `auth_sessions.link_issued_by`(불변)·`password_required`(true→false만), `users.password_reset_at`·`password_reset_by`(둘 다 있거나 둘 다 없음), `auth_throttle` 재생성(scope `pair`·`client`, 지연 종료 시각 없음, `last_failure_at` 색인), 감사 action 추가 | 로그인 링크 발급자와 재설정 알림, (이름, 주소) 쌍 중심 로그인 제한. 발급자를 모르는 쓰지 않은 이전 링크는 끝내고 이전 카운터는 버린다. |
 
 migration 이력은 `codeye_schema_migrations(version, name, checksum, applied_at)`다. 0006~0010은 기존 행을 바꾸지 않는다(0010은 새 열의 기본값만 채운다). 0011은 쓰지 않은 로그인 링크를 끝내고 로그인 제한 카운터를 버린다.
 
@@ -588,7 +588,7 @@ migration 이력은 `codeye_schema_migrations(version, name, checksum, applied_a
 - 주 쓰기 경로는 project → run → attempt → task 순서로 잠근다. 권한 변경과 mutation은 project 잠금으로 직렬화한다. 읽기와 워커 갱신은 공유 project 잠금을 써서 다른 run 사이의 불필요한 직렬화를 줄인다.
 - 배정은 `scheduler_limits` → 노드 행 → (후보별) project → run → 워커·예약 순서다. 같은 방향이므로 교착이 생기지 않는다([실행](EXECUTION.md)).
 - 계정 변경은 활성 관리자 행 전체(id 순, FOR UPDATE; 관리자를 없앨 수 있는 비활성화·해제·지정) 또는 호출 관리자 행(FOR SHARE; 그 밖의 관리자 작업) → 대상 사용자 행 → 세션·로그인 링크 → 감사 행 순서다.
-- 로그인은 트랜잭션을 둘로 나눈다. 앞 트랜잭션은 키마다 트랜잭션 advisory lock과 이미 있는 제한 행을 이름 → 주소 → (이름, 주소) 쌍 순서로 잠그고 잠금을 확인한 뒤 같은 순서로 실패를 센다(행이 없으면 upsert로 만든다). KDF 계산은 트랜잭션 밖에서 한다. 뒤 트랜잭션은 사용자 행 → 세션 → 제한 행 순서다. 로그인 링크 교환은 사용자(FOR SHARE) → 토큰 → 세션이고 제한 행은 별도 트랜잭션에서만 잠근다. 비밀번호 변경의 저장 트랜잭션은 사용자(FOR UPDATE) → 세션 → 제한 행이다. 오래된 제한 행 삭제는 어느 트랜잭션에도 속하지 않는 한 문장이며 잠긴 행을 건너뛴다(`SKIP LOCKED`).
+- 로그인은 트랜잭션을 둘로 나눈다. 앞 트랜잭션은 키마다 트랜잭션 advisory lock과 이미 있는 제한 행을 주소 → (이름, 주소) 쌍 순서로 잠그고 잠금을 확인한 뒤 같은 순서로 실패를 센다(행이 없으면 upsert로 만든다). KDF 계산은 트랜잭션 밖에서 한다. 뒤 트랜잭션은 사용자 행 → 세션 → 제한 행 순서다. 로그인 링크 교환은 사용자(FOR SHARE) → 토큰 → 세션이고 제한 행은 별도 트랜잭션에서만 잠근다. 비밀번호 변경의 저장 트랜잭션은 사용자(FOR UPDATE) → 세션 → 제한 행이다. 오래된 제한 행 삭제는 어느 트랜잭션에도 속하지 않는 한 문장이며 잠긴 행을 건너뛴다(`SKIP LOCKED`).
 - 구성원 변경은 project(FOR UPDATE) → 사용자(FOR SHARE) → `project_members` → 감사 행이다.
 - 감사 행은 그 변경의 트랜잭션 안에서 마지막에 쓴다. 감사 표는 다른 행을 잠그지 않는 추가 전용 표다.
 - 쿼리·잠금 제한시간으로 대기를 제한한다. 풀·상태를 프로세스 전역 map에 두지 않는다.

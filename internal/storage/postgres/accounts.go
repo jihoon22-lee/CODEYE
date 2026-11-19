@@ -245,8 +245,7 @@ func (s *Store) SetAdmin(ctx context.Context, by Principal, id string, admin boo
 
 // SetPassword is the operator's password set (CLI "user passwd"): the
 // verifier is derived by the caller, every session of the user is revoked.
-// The user must have a username. The name's account-wide login throttle
-// is cleared.
+// The user must have a username.
 func (s *Store) SetPassword(ctx context.Context, id string, h account.Hash, mustChange bool) (User, error) {
 	if !validIDs(id) {
 		return User{}, domain.ErrInvalid
@@ -259,9 +258,6 @@ func (s *Store) SetPassword(ctx context.Context, id string, h account.Hash, must
 		}
 		if username == nil || !enabled {
 			return User{}, domain.ErrConflict
-		}
-		if err := clearAccountThrottle(ctx, tx, *username); err != nil {
-			return User{}, err
 		}
 		if err := storeHash(ctx, tx, id, &h, mustChange); err != nil {
 			return User{}, err
@@ -297,9 +293,8 @@ var (
 // is flagged must_change_password and the link's session is gated to the
 // password change on its own. An administrator's reset is recorded on the user (time
 // and administrator) for the session view, and the link records its issuer, so
-// whoever signs in with it is attributed. The name's account-wide login
-// throttle is cleared. A user without a username is ErrResetNeedsUsername;
-// an administrator's own reset is ErrSelfReset.
+// whoever signs in with it is attributed. A user without a username is
+// ErrResetNeedsUsername; an administrator's own reset is ErrSelfReset.
 func (s *Store) ResetPassword(ctx context.Context, by Principal, id, tokenSHA256 string, ttl time.Duration) (User, error) {
 	if !validIDs(id) || !hexDigest.MatchString(tokenSHA256) || ttl < time.Second || ttl > maxLaunchTTL {
 		return User{}, domain.ErrInvalid
@@ -321,9 +316,6 @@ func (s *Store) ResetPassword(ctx context.Context, by Principal, id, tokenSHA256
 		}
 		if username == nil {
 			return User{}, ErrResetNeedsUsername
-		}
-		if err := clearAccountThrottle(ctx, tx, *username); err != nil {
-			return User{}, err
 		}
 		if err := storeHash(ctx, tx, id, nil, true); err != nil {
 			return User{}, err
