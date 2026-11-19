@@ -61,4 +61,14 @@ func TestFixtureModes(t *testing.T) {
 	if r[0].Status != domain.TaskCancelled || len(r[0].Executions) != 1 || r[0].Executions[0].Result.Cleanup != executor.CleanupConfirmed {
 		t.Fatalf("sleep %+v", r)
 	}
+	// pause works the given seconds, then succeeds; a bad count falls back to 15.
+	start := time.Now()
+	if r := runAll(t, ctx, job(t, "pause\n1")); r[0].Status != domain.TaskSucceeded || time.Since(start) < time.Second {
+		t.Fatalf("pause %+v after %s", r, time.Since(start))
+	}
+	for _, text := range []string{"pause", "pause\n0", "pause\n601", "pause\n1; rm -rf /"} {
+		if n := pauseSeconds(job(t, text)); n != 15 {
+			t.Errorf("%q: %d", text, n)
+		}
+	}
 }
