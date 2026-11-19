@@ -158,6 +158,7 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
                                               "questions": ("question",), "instruction_notes": ("note",)})
     texts += [limit["statement"] for limit in report["code_review"]["interpretation_limits"]]
     check_ledger(report)
+    check_dependencies(report)
     ensure(not free or all(text == TEXT_OMITTED for text in texts), "Code-free export carries model text")
     # Section evidence resolves in the snapshot named by the report.
     for block in ("environment", "documents"):
@@ -172,6 +173,37 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
                  for entry in entries if isinstance(entry, dict)
                  for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids") for i in entry.get(key, [])]
         ensure(set(cited) <= set(catalog), "Section statement cites evidence the section does not carry")
+
+
+DEPS_TASK = re.compile(r"^deps\.(go|rust|javascript|python)(\.m[0-9]{2,3})?$")
+# Skip reasons that mean there was nothing to fetch (internal/domain/stage.go NothingToFetch).
+NOTHING_TO_FETCH = {"no_dependencies", "vendored_dependencies", "no_dependency_consumer", "dependency_consumers_not_allowed"}
+
+
+def check_dependencies(report: dict) -> None:
+    """The dependency rows of builder 7 (docs/REPORT.md#의존성-목록; internal/report/dependencies.go)."""
+    tasks = {t["key"]: t for t in report["tasks"]}
+    keys = sorted(k for k in tasks if DEPS_TASK.match(k))
+    rows = report["environment"].get("dependencies")
+    ensure((rows is not None) == bool(keys), "Dependency rows present without deps tasks, or missing for them")
+    ensure(not keys or int(report["builder"]["version"]) >= 7, "Dependency rows in a revision before builder 7")
+    if rows is None:
+        return
+    ensure([r["task_key"] for r in rows] == keys, "Dependency rows differ from the deps tasks or are out of order")
+    for row in rows:
+        task = tasks[row["task_key"]]
+        ensure(row["task_status"] == task["status"] and row["task_reason"] == task["reason"], "Dependency row differs from its task: " + row["task_key"])
+        accepted = row["result"] == "accepted"
+        ensure(accepted == (row["state"] is not None), "Dependency row facts without an accepted record")
+        if accepted:
+            ensure((row["state"] == "prepared") == (task["status"] == "succeeded"), "Dependency row state differs from its task status")
+            ensure(row["module"] == row["ecosystem"] + ":" + row["path"], "Dependency row module ID differs from its path")
+    counts = next(s for s in report["overview"]["sections"] if s["key"] == "environment")["counts"]
+    ensure(counts.get("dependencies") == len(rows) and counts.get("dependencies_prepared") == sum(r["task_status"] == "succeeded" for r in rows),
+           "Overview dependency counts differ from the rows")
+    gaps = {g["subject"] for g in report.get("gaps", []) if g["code"] == "dependencies_not_prepared"}
+    expected = {r["task_key"] for r in rows if r["task_status"] != "succeeded" and not (r["task_status"] == "skipped_policy" and r["task_reason"] in NOTHING_TO_FETCH)}
+    ensure(gaps == expected, "Dependency gaps differ from the rows that did not prepare")
 
 
 SLICE_TASK = re.compile(r"^review\.(investigate|verify)\.(s0(?:0[1-9]|[12][0-9]|3[0-2]))$")

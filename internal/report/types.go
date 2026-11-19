@@ -23,7 +23,10 @@ const (
 	// earlier field keeps its shape and meaning. Version 6 reads the review
 	// slices (docs/REPORT.md#모듈별-검토-장부): their records and findings, the
 	// scope artifact, the code review ledger and the review calls' task_key.
-	BuilderVersion = "6"
+	// Version 7 reads the dependency records of the deps.* tasks: the
+	// environment section's optional dependencies list, its counts and the
+	// dependency gaps (docs/REPORT.md#분석-범위와-한계).
+	BuilderVersion = "7"
 )
 
 // Report statuses (schemas/report.schema.json).

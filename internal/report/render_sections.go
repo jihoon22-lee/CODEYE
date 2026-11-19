@@ -129,13 +129,62 @@ func countsOf(l Locale, section string, counts map[string]int, order []string) [
 
 // countOrder is the display order of each section's overview counts.
 var countOrder = map[string][]string{
-	SectionEnvironment:    {"modules", "requirements", "satisfied", "mismatch", "unknown", "notes"},
+	SectionEnvironment:    {"modules", "requirements", "satisfied", "mismatch", "unknown", "dependencies", "dependencies_prepared", "notes"},
 	SectionDocuments:      {"documents", "read", "not_read", "modules_without_documents", "contracts", "conflicts", "questions", "instruction_notes"},
 	SectionStaticAnalysis: {"tools", "succeeded", "not_succeeded", "observations", "findings", "actionable", "pending"},
 	SectionMetrics:        {"tools", "observations", "metrics"},
 	SectionSecrets:        {"tools", "detections", "files"},
 	SectionCodeReview:     {"calls", "files_sent_to_model", "files_not_sent_to_model", "findings", "actionable", "pending", "refuted"},
 	SectionGaps:           {"gaps"},
+}
+
+// dependencyPart is the dependency table: one row per deps.* task with what
+// it prepared, or why not.
+func dependencyPart(l Locale, deps []EnvDependency) secPart {
+	t := &secTable{Head: []string{l.Label("col.module"), l.Label("col.manager"), l.Label("col.state"), l.Label("col.prepared"), l.Label("col.reason"), l.Label("col.limitations")}}
+	for _, d := range deps {
+		module, manager, state, counts := d.TaskKey, "-", lab(l, "task_status", d.TaskStatus), "-"
+		if d.Module != nil {
+			module = *d.Module
+		}
+		if d.Manager != nil {
+			manager = *d.Manager
+			if d.ManagerVersion != nil {
+				manager += " " + *d.ManagerVersion
+			}
+		}
+		if d.State != nil {
+			state = lab(l, "dep_state", *d.State)
+		}
+		if d.Prepared != nil {
+			counts = strconv.Itoa(*d.Prepared)
+			if d.Declared != nil {
+				counts += "/" + strconv.Itoa(*d.Declared)
+			}
+			if d.Failed != nil && *d.Failed > 0 {
+				counts += " " + tf(l, "dep_failed", *d.Failed)
+			}
+		}
+		reason := "-"
+		switch {
+		case d.Reason != nil:
+			reason = reasonText(l, *d.Reason)
+		case d.TaskReason != nil:
+			reason = reasonText(l, *d.TaskReason)
+		case d.Result != DiscoveryAccepted:
+			reason = lab(l, "result", d.Result)
+		}
+		var lims []string
+		for _, c := range d.Limitations {
+			lims = append(lims, l.Code(c))
+		}
+		lim := "-"
+		if len(lims) > 0 {
+			lim = strings.Join(lims, "; ")
+		}
+		t.Rows = append(t.Rows, []secCell{code(module), code(manager), txt(state), txt(counts), txt(reason), txt(lim)})
+	}
+	return secPart{Heading: l.Label("env.dependencies"), Table: t}
 }
 
 func modelPart(l Locale, m ModelInterpretation) secPart {
@@ -258,6 +307,9 @@ func newSecView(r Report, digest string, l Locale) secView {
 			}
 			env.Parts = append(env.Parts, listPart(l.Label("env.limitations"), items, ""))
 		}
+	}
+	if len(e.Dependencies) > 0 {
+		env.Parts = append(env.Parts, dependencyPart(l, e.Dependencies))
 	}
 	mp := modelPart(l, e.Model)
 	if e.Model.State == ModelPerformed {

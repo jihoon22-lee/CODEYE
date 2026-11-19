@@ -43,6 +43,7 @@ func (c sectionContext) gaps() []Gap {
 		for _, l := range e.Limitations {
 			add(SectionEnvironment, "discovery_limitation", nil, strPtr(l))
 		}
+		c.dependencyGaps(add)
 		modelGap(SectionEnvironment, e.Model)
 	}
 	if d := r.Documents; d != nil {
@@ -224,6 +225,14 @@ func overviewOf(r Report) Overview {
 				n["mismatch"]++
 			default:
 				n["unknown"]++
+			}
+		}
+		if len(e.Dependencies) > 0 {
+			n["dependencies"], n["dependencies_prepared"] = len(e.Dependencies), 0
+			for _, d := range e.Dependencies {
+				if d.TaskStatus == "succeeded" {
+					n["dependencies_prepared"]++
+				}
 			}
 		}
 		line(SectionEnvironment, &e.Stage, n)
