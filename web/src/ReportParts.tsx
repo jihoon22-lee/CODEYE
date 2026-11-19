@@ -9,10 +9,14 @@ import { reportKo as t } from './locales/report-ko';
 export function label(labels: Record<string, string>, key: string) {
   return Object.hasOwn(labels, key) ? labels[key] : key;
 }
+// A reason code ("code" or "code:detail") in words: the report's wording, else the stage
+// wording the run page uses, else the code itself.
 export function explainReason(value: string) {
   const [code, ...detail] = value.split(':');
-  if (!code || !Object.hasOwn(t.reasons, code)) return value;
-  return [t.reasons[code], ...detail].join(' · ');
+  if (!code) return value;
+  const text = Object.hasOwn(t.reasons, code) ? t.reasons[code] : Object.hasOwn(ko.stages.reasonLabels, code) ? ko.stages.reasonLabels[code] : null;
+  if (text == null) return value;
+  return [text, ...detail].join(' · ');
 }
 export function TextList({ values }: { values: string[] }) {
   return (
@@ -23,17 +27,34 @@ export function TextList({ values }: { values: string[] }) {
     </ul>
   );
 }
+// A finding a reader can scan: the title, severity and validation as words, and where; once
+// opened, the impact and the fix first, then the conditions and how to check, with the claims
+// and evidence behind their own disclosure.
 function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null; history?: ReactNode }) {
+  const known = (labels: Record<string, string>, key: string) => (Object.hasOwn(labels, key) ? key : 'unknown');
   return (
-    <details className="finding-card">
+    <details className={'finding-card sev-' + known(t.severity, f.severity)}>
       <summary>
         <strong>{f.title}</strong>
         <span>
-          {label(t.validation, f.validation)} · {label(t.severity, f.severity)}
-          {badge && <> · {badge}</>}
+          <span className={'pill sev sev-' + known(t.severity, f.severity)}>{t.severityBadge(label(t.severity, f.severity))}</span>
+          <span className={'pill val val-' + known(t.validation, f.validation)}>{label(t.validation, f.validation)}</span>
+          {badge && <span className="pill tone-plain">{badge}</span>}
+          {f.locations.length > 0 && (
+            <span className="where">
+              {f.locations[0]}
+              {f.locations.length > 1 && t.morePlaces(f.locations.length - 1)}
+            </span>
+          )}
         </span>
       </summary>
       {history}
+      <dl className="key">
+        <dt>{t.impact}</dt>
+        <dd>{f.impact}</dd>
+        <dt>{t.recommendation}</dt>
+        <dd>{f.recommendation}</dd>
+      </dl>
       <dl>
         <dt>{t.conditions}</dt>
         <dd>
@@ -41,15 +62,19 @@ function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null;
         </dd>
         <dt>{t.severityReason}</dt>
         <dd>{f.severityReason}</dd>
-        <dt>{t.impact}</dt>
-        <dd>{f.impact}</dd>
-        <dt>{t.recommendation}</dt>
-        <dd>{f.recommendation}</dd>
         <dt>{t.verification}</dt>
         <dd>
           <TextList values={f.verification} />
         </dd>
       </dl>
+      {f.limitations.length > 0 && (
+        <>
+          <h6>{t.limitations}</h6>
+          <TextList values={f.limitations} />
+        </>
+      )}
+      <details className="finding-evidence">
+      <summary>{t.evidenceToggle(f.evidence.length)}</summary>
       {f.claims.map((claim, i) => (
         <p key={i}>
           <strong>
@@ -84,12 +109,7 @@ function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null;
           </li>
         ))}
       </ul>
-      {f.limitations.length > 0 && (
-        <>
-          <h6>{t.limitations}</h6>
-          <TextList values={f.limitations} />
-        </>
-      )}
+      </details>
     </details>
   );
 }
@@ -169,6 +189,25 @@ export function FindingList({ findings, history, empty }: { findings: Finding[];
         </section>
       ))}
     </>
+  );
+}
+
+// Verdict states the quality verdict in words with what it means; the model review state follows.
+export function Verdict({ report }: { report: AnalysisReport }) {
+  const known = Object.hasOwn(t.verdictLead, report.verdict);
+  return (
+    <div className={'verdict v-' + (known ? report.verdict : 'unknown')}>
+      <span className="icon" aria-hidden="true">
+        {known ? t.verdictIcon[report.verdict] : '?'}
+      </span>
+      <div>
+        <strong>{label(ko.runs.verdictLabels, report.verdict)}</strong>
+        <p>{known ? t.verdictLead[report.verdict] : t.verdictUnknown}</p>
+        <p className="small">
+          {t.coverage} {label(t.ai, report.aiReview)}
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -254,9 +293,9 @@ export function ReportTasks({ report }: { report: AnalysisReport }) {
 export function ReportExports({ report }: { report: AnalysisReport }) {
   const [includeCode, setIncludeCode] = useState(false);
   return (
-    <section>
+    <section className="exports">
       <h5>{t.exports}</h5>
-      <label>
+      <label className="inline">
         <input type="checkbox" checked={includeCode} onChange={(e) => setIncludeCode(e.target.checked)} /> {t.include}
       </label>
       <div className="actions">

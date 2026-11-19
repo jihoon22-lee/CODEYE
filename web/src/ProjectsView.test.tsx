@@ -27,7 +27,7 @@ describe('projects', () => {
     renderApp();
     await flush();
     const item = screen.getByRole('button', { name: /sample/ });
-    expect(item.textContent).toContain('팀 저장소 루트 / team/service');
+    expect(item.textContent).toContain('팀 저장소 루트/team/service');
     fireEvent.click(item);
     expect(screen.getByRole('heading', { name: 'sample' })).toBeTruthy();
     expect(screen.getByText(t.projects.sourceStatuses.declared_unverified!)).toBeTruthy();
@@ -213,15 +213,16 @@ describe('starting a run', () => {
     expect(screen.queryByText(t.runs.statusLabels.completed!)).toBeNull();
   });
 
-  it('opens the project last run from its recorded id', async () => {
+  it('opens the project last run from its recorded id when the project is selected', async () => {
     const { calls } = renderApp(backend({ 'GET /api/v1/projects': () => json(200, { items: [{ ...PROJECT, last_run: { id: 'run1', status: 'queued' } }], next_cursor: null }) }));
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: /sample/ }));
     expect(runCalls(calls)).toHaveLength(0);
-    click(t.projects.lastRunOpen);
+    fireEvent.click(screen.getByRole('button', { name: /sample/ }));
     await flush();
     expect(runCalls(calls)).toHaveLength(1);
     expect(screen.getByText(t.runs.statusLabels.queued!)).toBeTruthy();
+    // The latest run is already shown: no button to open it.
+    expect(screen.queryByRole('button', { name: t.projects.lastRunOpen })).toBeNull();
   });
 });
 

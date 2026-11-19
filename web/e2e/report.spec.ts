@@ -18,8 +18,8 @@ test('published report exposes the same counts, evidence and revision in the bro
     await more.click();
     await expect.poll(() => entries.count()).toBeGreaterThan(previous);
   }
+  // Selecting the project opens its latest run and the report.
   await target.click();
-  await page.getByRole('button', {name:'마지막 실행 상태 보기'}).click();
   const report = page.getByRole('article', {name:'분석 보고서'});
   await expect(report).toBeVisible();
   const response = await page.request.get('/api/v1/runs/' + id + '/report?format=json&include_code=true');
@@ -52,10 +52,13 @@ test('published report exposes the same counts, evidence and revision in the bro
     const more = report.locator('details.report-more:not([open]) > summary');
     while (await more.count() > 0) await more.first().click();
     const item = doc.findings[0];
-    await report.locator('details.finding-card summary').getByText(item.title, {exact:true}).first().click();
-    await expect(report.getByText(item.impact, {exact:true}).first()).toBeVisible();
+    const card = report.locator('details.finding-card').filter({has: page.locator('summary > strong').getByText(item.title, {exact:true})}).first();
+    await card.locator('summary').first().click();
+    await expect(card.getByText(item.impact, {exact:true}).first()).toBeVisible();
+    // The claims and evidence sit behind the card's own disclosure.
+    await card.locator('details.finding-evidence > summary').click();
     const first = item.evidence.find((entry: { location?: unknown }) => entry.location);
-    if (first) await expect(report.locator('[id]').filter({hasText:first.location.path}).first()).toBeVisible();
+    if (first) await expect(card.locator('[id]').filter({hasText:first.location.path}).first()).toBeVisible();
   }
   for (const format of ['json','markdown','html']) {
     const ref = await report.getByRole('link', {name:format.toUpperCase(),exact:true}).getAttribute('href');
