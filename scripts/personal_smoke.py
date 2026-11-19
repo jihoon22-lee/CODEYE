@@ -92,10 +92,19 @@ def run(base, root, env, probe_env):
     # start detaches the controller and agent (setsid): stop them even when an assertion fails.
     launched = []
 
+    # The fixture handler stands in for analyzers only on a node without any
+    # baseline analyzer; start takes go from PATH when agent.go is not set, so
+    # the fixture installation runs without the Go toolchain directory on PATH.
+    go_dir = str(Path(go).parent)
+    no_go_path = os.pathsep.join(p for p in env["PATH"].split(os.pathsep) if p != go_dir)
+
     def cli(exe, *args, db, expect=0, timeout=120, extra_env=None):
         if args[0] == "start":
             launched.append((exe, args[2], db))
-        result = subprocess.run([exe, *map(str, args)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db], **(extra_env or {})),
+        extra = dict(extra_env or {})
+        if exe == fixture:
+            extra.setdefault("PATH", no_go_path)
+        result = subprocess.run([exe, *map(str, args)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db], **extra),
                                 capture_output=True, text=True, timeout=timeout)
         text = result.stdout + result.stderr
         assert password not in text and urls[db] not in text, f"{args[0]}: credential 노출"
