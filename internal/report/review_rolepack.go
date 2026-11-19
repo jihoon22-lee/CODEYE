@@ -1,4 +1,4 @@
-// R1ReviewDecoder validates review-r1 stage records (schema 0.2); the
+// RoleReviewDecoder validates role-pack stage records (schema 0.2); the
 // lineage between stages, upstream artifacts and tool observations is
 // checked when the report is composed, after every artifact was decoded.
 package report
@@ -14,29 +14,29 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// Limitation codes of review-r1 composition.
+// Limitation codes of role-pack composition.
 const (
 	LimReviewLineage      = "review_lineage_mismatch"
 	LimReviewPackMismatch = "review_pack_mismatch"
 )
 
-type R1ReviewDecoder struct{}
+type RoleReviewDecoder struct{}
 
-func (R1ReviewDecoder) Key() DecoderKey {
-	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersionR1}
+func (RoleReviewDecoder) Key() DecoderKey {
+	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersionRole}
 }
 
-func (R1ReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
+func (RoleReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
 	stage, ok := strings.CutPrefix(ctx.Task.Key, "review.")
-	if !ok || !slices.Contains(record.R1Stages, stage) || art.Role != "other" {
+	if !ok || !slices.Contains(record.RoleStages, stage) || art.Role != "other" {
 		return Contribution{}, invalidf("review-r1 record attached to unexpected task or role")
 	}
-	r, err := record.DecodeR1(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest,
+	r, err := record.DecodeRole(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest,
 		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Lookup: ctx.Source.Lookup})
 	if err != nil {
 		return Contribution{}, err
 	}
-	return Contribution{Review: &ReviewResult{Accepted: r.Accepted(), R1: &r}, Limitations: r.Limitations}, nil
+	return Contribution{Review: &ReviewResult{Accepted: r.Accepted(), Role: &r}, Limitations: r.Limitations}, nil
 }
 
 // upstreamMedia is the artifact media type each upstream source must match.
@@ -50,13 +50,13 @@ func upstreamMedia(source string) string {
 	return analysis.MediaObservations
 }
 
-// r1Accepted reports a stage whose accepted record the report keeps.
-func r1Accepted(st *taskState) bool {
-	return st != nil && !st.rejected && st.facts.Status == string(domain.TaskSucceeded) && st.reviewResult != nil && st.reviewResult.R1 != nil && st.reviewResult.R1.Accepted()
+// roleAccepted reports a stage whose accepted record the report keeps.
+func roleAccepted(st *taskState) bool {
+	return st != nil && !st.rejected && st.facts.Status == string(domain.TaskSucceeded) && st.reviewResult != nil && st.reviewResult.Role != nil && st.reviewResult.Role.Accepted()
 }
 
-// r1Lineage checks one record against the artifacts the report accepted.
-func r1Lineage(rec *record.R1Record, states map[string]*taskState, obs map[string]Observation) bool {
+// roleLineage checks one record against the artifacts the report accepted.
+func roleLineage(rec *record.RoleRecord, states map[string]*taskState, obs map[string]Observation) bool {
 	up := map[string]record.Upstream{}
 	for _, u := range rec.Upstream {
 		up[u.Source] = u
@@ -65,10 +65,10 @@ func r1Lineage(rec *record.R1Record, states map[string]*taskState, obs map[strin
 			if st == nil || st.rejected || st.decodedSHA[upstreamMedia(u.Source)] != u.SHA256 {
 				return false
 			}
-			if strings.HasPrefix(u.Source, "review.") && !r1Accepted(st) {
+			if strings.HasPrefix(u.Source, "review.") && !roleAccepted(st) {
 				return false
 			}
-		} else if strings.HasPrefix(u.Source, "review.") && r1Accepted(st) {
+		} else if strings.HasPrefix(u.Source, "review.") && roleAccepted(st) {
 			// The stage ignored an accepted upstream result.
 			return false
 		}
@@ -82,7 +82,7 @@ func r1Lineage(rec *record.R1Record, states map[string]*taskState, obs map[strin
 	if rec.Stage != record.StageVerify {
 		return true
 	}
-	var want []record.R1Candidate
+	var want []record.RoleCandidate
 	// One excerpt ID (bound to path, blob and range) may reach verify from
 	// both stages with a different origin label (context vs observation);
 	// verify must carry one of the upstream variants unchanged.
@@ -92,7 +92,7 @@ func r1Lineage(rec *record.R1Record, states map[string]*taskState, obs map[strin
 		if !ok || u.State != record.UpstreamAccepted {
 			continue
 		}
-		prior := states["review."+stage].reviewResult.R1
+		prior := states["review."+stage].reviewResult.Role
 		want = append(want, prior.Candidates...)
 		for _, e := range prior.Evidence {
 			evidence[e.ID] = append(evidence[e.ID], e)
@@ -109,36 +109,36 @@ func r1Lineage(rec *record.R1Record, states map[string]*taskState, obs map[strin
 	return true
 }
 
-func nonNilCandidates(l []record.R1Candidate) []record.R1Candidate {
+func nonNilCandidates(l []record.RoleCandidate) []record.RoleCandidate {
 	if l == nil {
-		return []record.R1Candidate{}
+		return []record.RoleCandidate{}
 	}
 	return l
 }
 
-// composeR1Reviews joins the review-r1 stage records: lineage, call
+// composeRoleReviews joins the role-pack stage records: lineage, call
 // provenance (with the pack identity), exposed files and findings. Findings
 // carry verifier verdicts only from a succeeded verify task with an accepted
 // record; otherwise the accepted candidates stay unreviewed.
-func composeR1Reviews(r *Report, states map[string]*taskState, limits *stringSet) {
+func composeRoleReviews(r *Report, states map[string]*taskState, limits *stringSet) {
 	obs := map[string]Observation{}
 	for _, o := range r.Observations {
 		obs[o.ID] = o
 	}
 	for k, st := range states {
-		if strings.HasPrefix(k, "review.") && st.reviewResult != nil && st.reviewResult.R1 == nil && !st.rejected {
+		if strings.HasPrefix(k, "review.") && st.reviewResult != nil && st.reviewResult.Role == nil && !st.rejected {
 			st.rejected = true
 			limits.add(LimReviewPackMismatch + ":" + k)
 		}
 	}
 	exposed, known := map[string]bool{}, true
-	for _, stage := range record.R1Stages {
+	for _, stage := range record.RoleStages {
 		key := "review." + stage
 		st := states[key]
 		if st == nil {
 			continue
 		}
-		if st.rejected || st.reviewResult == nil || st.reviewResult.R1 == nil {
+		if st.rejected || st.reviewResult == nil || st.reviewResult.Role == nil {
 			// A task that ran a model call without a usable record leaves the
 			// exposure unknown; skipped and unsupported tasks sent nothing.
 			if s := st.facts.Status; s != string(domain.TaskSkippedPolicy) && s != string(domain.TaskUnsupported) {
@@ -146,8 +146,8 @@ func composeR1Reviews(r *Report, states map[string]*taskState, limits *stringSet
 			}
 			continue
 		}
-		rec := st.reviewResult.R1
-		if !r1Lineage(rec, states, obs) {
+		rec := st.reviewResult.Role
+		if !roleLineage(rec, states, obs) {
 			st.rejected = true
 			limits.add(LimReviewLineage + ":" + key)
 			known = false
@@ -169,11 +169,11 @@ func composeR1Reviews(r *Report, states map[string]*taskState, limits *stringSet
 		n := len(exposed)
 		r.Coverage.LLMExposedFiles = &n
 	}
-	var candidates []record.R1Candidate
+	var candidates []record.RoleCandidate
 	verdicts := map[string]record.Verification{}
 	evidence := map[string]record.Excerpt{}
-	if v := states["review.verify"]; r1Accepted(v) {
-		rec := v.reviewResult.R1
+	if v := states["review.verify"]; roleAccepted(v) {
+		rec := v.reviewResult.Role
 		candidates = rec.Candidates
 		for _, x := range rec.Verifications {
 			verdicts[x.CandidateID] = x
@@ -183,9 +183,9 @@ func composeR1Reviews(r *Report, states map[string]*taskState, limits *stringSet
 		}
 	} else {
 		for _, stage := range []string{record.StageInvestigate, record.StageInterpret} {
-			if st := states["review."+stage]; r1Accepted(st) {
-				candidates = append(candidates, st.reviewResult.R1.Candidates...)
-				for _, e := range st.reviewResult.R1.Evidence {
+			if st := states["review."+stage]; roleAccepted(st) {
+				candidates = append(candidates, st.reviewResult.Role.Candidates...)
+				for _, e := range st.reviewResult.Role.Evidence {
 					evidence[e.ID] = e
 				}
 			}

@@ -37,7 +37,7 @@ var Korean = Locale{
 		"verdict_note":       "품질 판정은 안전 인증이 아니다.",
 		"code_excerpt_none":  "코드 발췌 없음: controller는 snapshot 원본을 보관하지 않는다. 위치와 blob hash로 snapshot 코드를 확인한다.",
 		"ai_review_optional": "선택 검토 작업(판정에 필요하지 않으며 수행으로 세지 않음)",
-		// W21 (docs/ANALYZERS.md): structure metrics and secret detection.
+		// Structure metrics and secret detection (docs/ANALYZERS.md).
 		"metric_observations": "그중 구조 지표(결함 아님)",
 		"metric_marker":       "구조 지표, 결함 아님",
 	},
@@ -77,7 +77,7 @@ var Korean = Locale{
 		"verification_call_failed":       "후속 검증 호출이 실패해 일부 후보를 검증하지 못했다(미검토). 앞서 수락한 판정은 유지했다.",
 		"code_excerpts_go_only":          "코드 발췌는 Go 파일만 사용했다.",
 		"execution_claim_rejected":       "실행·재현을 주장한 모델 서술을 거부했다.",
-		// W21 (docs/ANALYZERS.md): structure, duplication and secrets pack.
+		// Structure, duplication and secrets pack (docs/ANALYZERS.md).
 		"metrics_not_defects":                "구조 지표(복잡도·중복)는 임계값 초과 측정값이며 결함 근거가 아니다.",
 		"function_end_lines_not_recorded":    "lizard: 함수 끝 줄을 기록하지 않아 시작 줄만 위치로 쓴다.",
 		"in_source_suppressions_honored":     "소스 안의 도구 억제 주석을 도구가 적용했다.",
@@ -99,7 +99,7 @@ var Korean = Locale{
 		"model_input_not_secret_screened":    "비밀값 탐지가 실행되지 않아 모델 입력을 비밀값 기준으로 거르지 않았다.",
 		"secret_files_withheld":              "비밀값이 탐지된 파일은 모델 입력에서 뺐다.",
 		"secret_screen_failed":               "비밀값 탐지 결과를 쓸 수 없어 모델 검토를 건너뛰었다(코드 미전송).",
-		// W24 2c (docs/REVIEW.md, docs/REVIEW.md): review inputs of five languages.
+		// Review inputs of five languages (docs/REVIEW.md).
 		"source_in_excluded_directories": "숨김·vendor·testdata·node_modules와 build·dist·target 같은 산출물·의존성 디렉터리 아래 소스는 모델 입력에서 뺐다.",
 	},
 }

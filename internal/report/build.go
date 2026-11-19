@@ -15,7 +15,7 @@ import (
 )
 
 // RequiredReviewTasks are the model review task keys every current profile
-// requires (W11/W12 plan them). The requirement is met only when the DB task
+// requires (the legacy review handler plans them). The requirement is met only when the DB task
 // row succeeded and a registered decoder accepted that task's result bytes.
 var RequiredReviewTasks = []string{"review.context", "review.investigate", "review.verify"}
 
@@ -64,7 +64,7 @@ type taskState struct {
 	review       bool
 	reviewResult *ReviewResult
 	// decodedSHA is the SHA-256 of each accepted artifact by media type; an
-	// R1 record binds its upstream inputs to these digests.
+	// role record binds its upstream inputs to these digests.
 	decodedSHA map[string]string
 }
 
@@ -264,8 +264,8 @@ func Build(in Input, reg *Registry) (Report, error) {
 		}
 		r.Artifacts = append(r.Artifacts, item)
 	}
-	if r1Planned(states) {
-		composeR1Reviews(&r, states, lim)
+	if rolePackPlanned(states) {
+		composeRoleReviews(&r, states, lim)
 	} else {
 		composeReviews(&r, states, lim)
 	}
@@ -584,12 +584,12 @@ func checkContribution(c Contribution, obsSeen, findSeen map[string]bool, arts m
 }
 
 // requiredReviewKeys derives the review tasks the verdict needs from the
-// planned tasks. A plan with a review-r1 role key requires exactly its
+// planned tasks. A plan with a role-pack role key requires exactly its
 // review.* tasks with required_for_verdict; the others are optional. Any
-// other plan (R0/review-v1 records, or no review task) is read with the three
-// roles of the time, listing the ones not planned.
-func requiredReviewKeys(states map[string]*taskState) (required, optional []string, r1 bool) {
-	if !r1Planned(states) {
+// other plan (legacy-pack records, or no review task) is read with the
+// three legacy roles, listing the ones not planned.
+func requiredReviewKeys(states map[string]*taskState) (required, optional []string, rolePack bool) {
+	if !rolePackPlanned(states) {
 		return RequiredReviewTasks, nil, false
 	}
 	var keys []string
@@ -599,7 +599,7 @@ func requiredReviewKeys(states map[string]*taskState) (required, optional []stri
 		}
 	}
 	order := map[string]int{}
-	for i, stage := range record.R1Stages {
+	for i, stage := range record.RoleStages {
 		order["review."+stage] = i
 	}
 	sort.Slice(keys, func(a, b int) bool {
@@ -623,8 +623,9 @@ func requiredReviewKeys(states map[string]*taskState) (required, optional []stri
 	return required, optional, true
 }
 
-// r1Planned reports a plan with a review-r1 role that review-v1 never plans.
-func r1Planned(states map[string]*taskState) bool {
+// rolePackPlanned reports a plan with a role-pack role the legacy pack never
+// plans.
+func rolePackPlanned(states map[string]*taskState) bool {
 	for _, k := range []string{"review.environment", "review.documents", "review.interpret"} {
 		if states[k] != nil {
 			return true
@@ -633,7 +634,7 @@ func r1Planned(states map[string]*taskState) bool {
 	return false
 }
 
-func reviewItem(k string, st *taskState, r1 bool) (AIReviewTask, bool) {
+func reviewItem(k string, st *taskState, rolePack bool) (AIReviewTask, bool) {
 	item := AIReviewTask{Key: k}
 	if st == nil {
 		item.Result = "not_planned"
@@ -641,12 +642,12 @@ func reviewItem(k string, st *taskState, r1 bool) (AIReviewTask, bool) {
 	}
 	s := st.facts.Status
 	item.TaskStatus = &s
-	if r1 && st.facts.Reason != nil {
+	if rolePack && st.facts.Reason != nil {
 		reason := *st.facts.Reason
 		item.Reason = &reason
 	}
 	switch {
-	case r1 && st.facts.Status == string(domain.TaskSkippedPolicy):
+	case rolePack && st.facts.Status == string(domain.TaskSkippedPolicy):
 		item.Result = "skipped"
 	case st.facts.Status != string(domain.TaskSucceeded):
 		item.Result = "not_succeeded"
@@ -663,10 +664,10 @@ func reviewItem(k string, st *taskState, r1 bool) (AIReviewTask, bool) {
 
 func decideAIReview(states map[string]*taskState) AIReview {
 	out := AIReview{RequiredTasks: []AIReviewTask{}}
-	required, optional, r1 := requiredReviewKeys(states)
+	required, optional, rolePack := requiredReviewKeys(states)
 	accepted, planned := 0, 0
 	for _, k := range required {
-		item, ok := reviewItem(k, states[k], r1)
+		item, ok := reviewItem(k, states[k], rolePack)
 		if states[k] != nil {
 			planned++
 		}
@@ -676,7 +677,7 @@ func decideAIReview(states map[string]*taskState) AIReview {
 		out.RequiredTasks = append(out.RequiredTasks, item)
 	}
 	for _, k := range optional {
-		item, _ := reviewItem(k, states[k], r1)
+		item, _ := reviewItem(k, states[k], rolePack)
 		out.OptionalTasks = append(out.OptionalTasks, item)
 	}
 	reason := func(s string) *string { return &s }

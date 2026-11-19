@@ -19,7 +19,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// fakeCaller is a controlled stand-in for the W10 OpenCode caller. It never
+// fakeCaller is a controlled stand-in for the OpenCode caller. It never
 // starts a process or contacts a model; replies are scripted per call.
 type fakeCaller struct {
 	t        *testing.T
@@ -109,7 +109,7 @@ func verifyJob(t *testing.T, docs bool) analysis.Job {
 	return analysis.Job{RunID: domain.NewID(), AttemptID: domain.NewID(), Epoch: 1, Snapshot: s, Scratch: t.TempDir(), Scope: domain.Scope{Kind: "full"}, AllowModelReview: true}
 }
 
-// leakCandidates is the scripted W11 path: one fact and n candidates citing
+// leakCandidates is the scripted investigation path: one fact and n candidates citing
 // store.go, the declaration of Open.
 func leakCandidates(n int) func(int, opencode.Request) (opencode.Reply, bool) {
 	return func(_ int, q opencode.Request) (opencode.Reply, bool) {
@@ -212,7 +212,7 @@ func (stubStatic) Run(context.Context, analysis.Job, analysis.TaskSpec, executor
 	return analysis.TaskResult{Status: domain.TaskSucceeded}
 }
 
-// TC-10/TC-87: deferred cleanup in a caller outside the W11 excerpt window is
+// TC-10/TC-87: deferred cleanup in a caller outside the investigation excerpt window is
 // selected by the platform; a refutation citing it retracts the candidate,
 // and the refuted candidate and its evidence stay in the record.
 func TestVerifyCounterexampleRetractsCandidate(t *testing.T) {
@@ -536,7 +536,8 @@ func TestExpansionScopeAndBounds(t *testing.T) {
 	}
 }
 
-// TestLiveVerifier seeds a deliberately false, narrowly scoped W11 candidate.
+// TestLiveVerifier seeds a deliberately false, narrowly scoped investigation
+// candidate.
 // The verifier alone calls the explicitly configured hosted model.
 func TestLiveVerifier(t *testing.T) {
 	relay := os.Getenv("CODEYE_TEST_REVIEW_RELAY")

@@ -14,12 +14,12 @@ import (
 	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review-v1"
 )
 
-// W15 phase 2 keeps review-v1 byte-identical: the default pack, its
-// per-role digests and texts, the corpus it selects and every request it
-// sends are pinned to the values captured at 5ff38e6 before the R1 candidate
-// pack was added. A change here is a change of the active pack and needs the
-// promotion evidence of docs/EVALUATION.md#지침-개정과-회귀-검증, not a test update.
-func TestReviewV1IsPinned(t *testing.T) {
+// The legacy pack (review-v1) stays byte-identical: its per-role digests and
+// texts, the corpus it selects and every request it sends are pinned to the
+// values captured at 5ff38e6, before the role pack was added. A change here
+// is a change of a pack in use and needs the promotion evidence of
+// docs/EVALUATION.md#지침-개정과-회귀-검증, not a test update.
+func TestLegacyPackIsPinned(t *testing.T) {
 	sum := func(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 	packs := map[string][2]string{
 		"context":     {"89d35b04633d2dca52d22e89f52b6187dc43001396622616622f1fdfaec7b43b", "568d07f905398919a3c43d68a0fd4ab81bd99f7a55d57f1341e500821934cb39"},
@@ -36,7 +36,7 @@ func TestReviewV1IsPinned(t *testing.T) {
 		}
 	}
 
-	// The default handler plans the three R0 roles.
+	// The legacy handler plans its three roles.
 	plan, err := Handler{Static: stubStatic{}}.Plan(t.Context(), analysis.Job{})
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestReviewV1IsPinned(t *testing.T) {
 	}
 	wantSel := []sel{{"README.md", "document", 1, 1}, {"load.go", "code", 1, 50}, {"store.go", "code", 1, 9}, {"go.mod", "config", 1, 3}, {"store_test.go", "test", 1, 50}}
 	if !slices.Equal(got, wantSel) || c.Eligible != 5 || c.Documents != 1 || !slices.Equal(c.Limitations, []string{"excerpt_only"}) {
-		t.Fatalf("v1 corpus selection changed: %+v eligible=%d docs=%d lims=%v", got, c.Eligible, c.Documents, c.Limitations)
+		t.Fatalf("legacy corpus selection changed: %+v eligible=%d docs=%d lims=%v", got, c.Eligible, c.Documents, c.Limitations)
 	}
 
 	// Every request of the three roles: role, instructions and input bytes.
@@ -91,7 +91,7 @@ func TestReviewV1IsPinned(t *testing.T) {
 		}
 		sent = append(sent, pinnedRequest{q.Role, sum([]byte(q.Instructions)), sum([]byte(input))})
 	}
-	if !slices.Equal(sent, pinnedV1Requests) {
+	if !slices.Equal(sent, pinnedLegacyRequests) {
 		for _, s := range sent {
 			t.Logf("%s instructions=%s input=%s", s.role, s.instructions, s.input)
 		}
@@ -101,7 +101,7 @@ func TestReviewV1IsPinned(t *testing.T) {
 
 type pinnedRequest struct{ role, instructions, input string }
 
-var pinnedV1Requests = []pinnedRequest{
+var pinnedLegacyRequests = []pinnedRequest{
 	{"context", "355003a09ceebfb77f7d7ebaaa0b27b398bf5fb41c5e24312e500f48006c6a7f", "c4f238509f331b3b0f8d718615010678e6c65a6a9abece75da90ca03e215289a"},
 	{"investigate", "5320a19e77e14cdf757a23c85833e0d0d223045d07dfcffe5d0031a91210557e", "9cf48984575970c8b6fc75eda1c5758c5113fd591e6d3943be40e5cec59ba7ae"},
 	{"verify", "bdd78ed463a1e7f88ac48f9c1852d228e5a23c51693b9f518b3c08388b79f51f", "8faef9e813c42d578f7ddea6241c430a4632738c66b7d29004ee595e0f624913"},

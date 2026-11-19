@@ -83,7 +83,7 @@ func unionManifest(t *testing.T, docs ...map[string]any) []byte {
 				}
 			}
 		}
-		// Honored repository config files are bound to the manifest too (W18).
+		// Honored repository config files are bound to the manifest too.
 		if rp, ok := d["rule_pack"].(map[string]any); ok {
 			if cfgs, ok := rp["config_files"].([]any); ok {
 				for _, c := range cfgs {
@@ -101,7 +101,7 @@ func unionManifest(t *testing.T, docs ...map[string]any) []byte {
 				}
 			}
 		}
-		// Repository configuration a pack honored (W16: the compile DB) is
+		// Repository configuration a pack honored (the C/C++ compile DB) is
 		// bound to its manifest digest.
 		if rp, ok := d["rule_pack"].(map[string]any); ok {
 			if files, ok := rp["config_files"].([]any); ok {
@@ -251,7 +251,7 @@ func TestAnalyzerDecoderStaticcheckFindings(t *testing.T) {
 			t.Fatalf("tool finding %+v", x)
 		}
 		if strings.HasPrefix(x.Title, "go.staticcheck") {
-			// W23 identity: the shared ToolFingerprint, never a decoder hash.
+			// Finding identity: the shared ToolFingerprint, never a decoder hash.
 			want, basis := ToolFingerprint("go.staticcheck", x.FingerprintBasis.Rule, x.Locations[0].Path, "", strings.TrimPrefix(x.Title, "go.staticcheck "+x.FingerprintBasis.Rule+": "))
 			if len(x.Title) < 160 && (x.Fingerprint != want || x.FingerprintBasis.Analyzer != "go.staticcheck" || x.FingerprintBasis.Producer != ProducerTool || x.FingerprintBasis.MoveKey != basis.MoveKey) {
 				t.Fatalf("staticcheck fingerprint %s %+v", x.Fingerprint, x.FingerprintBasis)

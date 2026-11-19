@@ -11,7 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 )
 
-// Rule context of a tool coverage row (W19, docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태):
+// Rule context of a tool coverage row (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태):
 // what decides which diagnostics a tool reports besides the code and the
 // tool version. A comparison may call a vanished tool finding
 // resolved_observed only when the rule context is known and equal on both
@@ -21,7 +21,7 @@ const (
 	// configuration or the tool has none. recorded: the tool honors it and
 	// the files it read are recorded (ConfigPaths, ConfigDigest); with no
 	// file read ConfigPaths is absent and ConfigDigest is the digest of the
-	// empty list (W21: gitleaks without a .gitleaksignore).
+	// empty list (gitleaks without a .gitleaksignore).
 	// unrecorded: the tool honors it but the pack could not enumerate the
 	// files; the context is unknown.
 	ConfigNotRead    = "not_read"

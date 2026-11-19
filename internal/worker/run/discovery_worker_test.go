@@ -20,7 +20,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
-// W15 through the real worker: the deep-review composition (discovery →
+// Discovery through the real worker: the deep-review composition (discovery →
 // go vet → review roles) on the fixture repository with the actual Go
 // toolchain. Discovery runs first, its probe execution is recorded cleanly
 // (so the worker keeps the success), and the svc/b mismatch verdict agrees

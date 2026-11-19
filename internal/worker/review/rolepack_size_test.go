@@ -21,7 +21,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-func maxPrompt(f *r1Caller) map[string]int {
+func maxPrompt(f *roleCaller) map[string]int {
 	out := map[string]int{}
 	for _, q := range f.requests {
 		out[q.Role] = max(out[q.Role], len(opencode.Prompt(q)))
@@ -29,11 +29,11 @@ func maxPrompt(f *r1Caller) map[string]int {
 	return out
 }
 
-// Every R1 request must fit the QA relay (49152 bytes of message text) with
-// room for the client's own messages: PromptBudget is 40000 bytes. The w15
+// Every role-pack request must fit the QA relay (49152 bytes of message text) with
+// room for the client's own messages: PromptBudget is 40000 bytes. The modules
 // fixture's requests, including a repair request, stay under it.
-func TestR1RequestSizeOnFixture(t *testing.T) {
-	j := w15Job(t, nil)
+func TestRolePackRequestSizeOnFixture(t *testing.T) {
+	j := modulesJob(t, nil)
 	script := validScript(t)
 	valid := script["documents"]
 	script["documents"] = func(n int, q opencode.Request) opencode.Reply {
@@ -42,20 +42,20 @@ func TestR1RequestSizeOnFixture(t *testing.T) {
 		}
 		return valid(n, q)
 	}
-	f := &r1Caller{script: script}
-	_, res := runR1(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
+	f := &roleCaller{script: script}
+	_, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	if res["review.verify"].Status != domain.TaskSucceeded || f.calls("documents") != 2 {
 		t.Fatal(res)
 	}
 	sizes := maxPrompt(f)
-	t.Logf("largest w15 fixture request per role (bytes): %v", sizes)
+	t.Logf("largest modules fixture request per role (bytes): %v", sizes)
 	for role, n := range sizes {
 		if n > PromptBudget {
 			t.Fatalf("%s request %d > %d", role, n, PromptBudget)
 		}
 	}
-	for _, stage := range record.R1Stages {
-		for _, c := range readR1(t, j, stage).Calls {
+	for _, stage := range record.RoleStages {
+		for _, c := range readRole(t, j, stage).Calls {
 			if c.RequestBytes <= 0 || c.RequestBytes > PromptBudget {
 				t.Fatalf("%s recorded request_bytes %d", stage, c.RequestBytes)
 			}
@@ -69,7 +69,7 @@ func longText(prefix string) string {
 	for record.JSONLen(s) > 400 {
 		s = s[:len(s)-3]
 	}
-	if !record.R1Text(s) {
+	if !record.RoleText(s) {
 		panic("longText not accepted")
 	}
 	return s
@@ -141,7 +141,7 @@ func maxScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Rep
 // characters JSON escapes (<, >, &). extra adds files to the tree.
 func worstCaseJob(t *testing.T, extra func(root string)) analysis.Job {
 	line := "\tif a < b && c > d { p := &q; _ = p } // <tag> & \"quoted\" \\ text\n"
-	return w15Job(t, func(root string) {
+	return modulesJob(t, func(root string) {
 		for m := range 12 {
 			dir := fmt.Sprintf("mod%02d", m)
 			writeFile(t, root, dir+"/go.mod", fmt.Sprintf("module example.test/%s\n\ngo 1.40\n\ntoolchain go1.41.0\n", dir))
@@ -177,11 +177,11 @@ func worstCaseObservations(j analysis.Job) []govet.Observation {
 // The synthetic worst case with many observations and maximal role
 // outputs. Every request still fits PromptBudget because each role trims
 // its excerpts first and records it.
-func TestR1RequestSizeWorstCase(t *testing.T) {
+func TestRolePackRequestSizeWorstCase(t *testing.T) {
 	j := worstCaseJob(t, nil)
 	obs := worstCaseObservations
-	f := &r1Caller{script: maxScript(t)}
-	plan, res := runR1(t, j, vetStub{obs: obs}, f, "1.27.4")
+	f := &roleCaller{script: maxScript(t)}
+	plan, res := runRole(t, j, vetStub{obs: obs}, f, "1.27.4")
 	for _, p := range plan {
 		if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status != domain.TaskSucceeded {
 			t.Fatalf("%s %+v", p.Key, res[p.Key])
@@ -194,7 +194,7 @@ func TestR1RequestSizeWorstCase(t *testing.T) {
 			t.Fatalf("%s request %d", role, sizes[role])
 		}
 	}
-	v := readR1(t, j, "verify")
+	v := readRole(t, j, "verify")
 	if len(v.Candidates) != 6 {
 		t.Fatalf("verify candidates %d", len(v.Candidates))
 	}
@@ -257,10 +257,10 @@ func polyglotObservations(j analysis.Job) []govet.Observation {
 // unreviewed with verification_budget_exceeded, and the required verify task
 // fails with review_input_incomplete instead of succeeding. It returns the
 // stage records, the largest request per role and the dropped count.
-func allLanguagesRun(t *testing.T, j analysis.Job, obs func(analysis.Job) []govet.Observation) (map[string]record.R1Record, map[string]int, int) {
+func allLanguagesRun(t *testing.T, j analysis.Job, obs func(analysis.Job) []govet.Observation) (map[string]record.RoleRecord, map[string]int, int) {
 	t.Helper()
-	f := &r1Caller{script: maxScript(t)}
-	plan, res := runR1(t, j, vetStub{obs: obs}, f, "1.27.4")
+	f := &roleCaller{script: maxScript(t)}
+	plan, res := runRole(t, j, vetStub{obs: obs}, f, "1.27.4")
 	for _, p := range plan {
 		r := res[p.Key]
 		if (strings.HasPrefix(p.Key, "review.") && p.Key != "review.verify" && r.Status != domain.TaskSucceeded) || r.Reason == reasonInputTooLarge {
@@ -273,9 +273,9 @@ func allLanguagesRun(t *testing.T, j analysis.Job, obs func(analysis.Job) []gove
 			t.Fatalf("%s request %d", role, sizes[role])
 		}
 	}
-	recs := map[string]record.R1Record{}
-	for _, stage := range record.R1Stages {
-		recs[stage] = readR1(t, j, stage)
+	recs := map[string]record.RoleRecord{}
+	for _, stage := range record.RoleStages {
+		recs[stage] = readRole(t, j, stage)
 	}
 	v := recs["verify"]
 	if len(v.Candidates) != 6 || len(v.Verifications) != 6 {
@@ -300,13 +300,13 @@ func allLanguagesRun(t *testing.T, j analysis.Job, obs func(analysis.Job) []gove
 	return recs, sizes, dropped
 }
 
-// W24: the worst case with source of all five ecosystems in scope, so every
+// The worst case with source of all five ecosystems in scope, so every
 // request carries the five language guides (about 7.4 KB more instructions
-// than the Go guide alone). "tiny" is the rc2 case (a one-line file of each
-// other language); "large" gives every language three maximal modules and
-// an observation, so code excerpts, windows and candidates of several
-// languages reach the roles (W24 phase 2c).
-func TestR1RequestSizeWorstCaseAllLanguages(t *testing.T) {
+// than the Go guide alone). "tiny" has a one-line file of each other
+// language; "large" gives every language three maximal modules and an
+// observation, so code excerpts, windows and candidates of several languages
+// reach the roles.
+func TestRolePackRequestSizeWorstCaseAllLanguages(t *testing.T) {
 	cases := []struct {
 		name string
 		tree func(root string)
@@ -331,7 +331,7 @@ func TestR1RequestSizeWorstCaseAllLanguages(t *testing.T) {
 				}
 			}
 			t.Logf("investigate code excerpts %d (limitations %v), verify: %d of 6 maximal candidates left unreviewed for the budget", code, recs["investigate"].Limitations, dropped)
-			for _, stage := range record.R1Stages {
+			for _, stage := range record.RoleStages {
 				for _, call := range recs[stage].Calls {
 					if len(guideFiles(call.PackFiles)) != 5 {
 						t.Fatalf("%s pack_files %v", stage, call.PackFiles)
@@ -357,7 +357,7 @@ func TestR1RequestSizeWorstCaseAllLanguages(t *testing.T) {
 				windows[record.SourceEcosystem(e.Path)] = true
 			}
 			t.Logf("investigate languages %v, interpret window languages %v", sortedKeys(langs), sortedKeys(windows))
-			if len(langs) < 3 || len(recs["interpret"].Evidence) != r1MaxWindows || len(windows) < 2 {
+			if len(langs) < 3 || len(recs["interpret"].Evidence) != roleMaxWindows || len(windows) < 2 {
 				t.Fatalf("investigate languages %v, interpret windows %v", langs, recs["interpret"].Evidence)
 			}
 		})
@@ -383,7 +383,7 @@ func TestTC97DocumentContentCannotChangeRequestConfig(t *testing.T) {
 	}
 	exe := filepath.Join(t.TempDir(), "opencode")
 	capture := func(agents string) captured {
-		j := w15Job(t, func(root string) { writeFile(t, root, "AGENTS.md", agents) })
+		j := modulesJob(t, func(root string) { writeFile(t, root, "AGENTS.md", agents) })
 		var c captured
 		runner := runnerFunc(func(_ context.Context, s executor.Spec) executor.Result {
 			code := 0
@@ -403,7 +403,7 @@ func TestTC97DocumentContentCannotChangeRequestConfig(t *testing.T) {
 			return ok
 		})
 		cfg := opencode.Config{Executable: exe, Model: "opencode/fixture", Timeout: time.Minute}
-		h, err := discovery.Wrap(R1Handler{Static: vetStub{}, Caller: cfg}, discovery.Config{})
+		h, err := discovery.Wrap(RoleHandler{Static: vetStub{}, Caller: cfg}, discovery.Config{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// W23 fingerprint identity (docs/REPORT.md#발견-식별-fp2).
+// Fingerprint identity (docs/REPORT.md#발견-식별-fp2).
 
 func TestToolFingerprintIgnoresPositions(t *testing.T) {
 	base, b := ToolFingerprint("go.vet", "lostcancel", "pkg/a.go", "", "this return statement may be reached without using the cancel var defined on line 12")
@@ -39,7 +39,7 @@ func TestToolFingerprintIgnoresPositions(t *testing.T) {
 	}
 }
 
-// TC-09/W23: the identity of a model candidate comes from the evidence the
+// TC-09: the identity of a model candidate comes from the evidence the
 // platform fixed, not from the model's wording or citation order.
 func TestModelFingerprintStableAcrossTitles(t *testing.T) {
 	compose := func(edit func(states map[string]*taskState)) Finding {
@@ -96,7 +96,7 @@ func TestModelFingerprintStableAcrossTitles(t *testing.T) {
 	}
 }
 
-// Security review W23-1: a disposition never hides an ambiguous or weak match.
+// Security review: a disposition never hides an ambiguous or weak match.
 func TestDispositionNeverCarriesToAmbiguousOrWeakMatch(t *testing.T) {
 	strong := &FingerprintBasis{Producer: ProducerTool, Analyzer: "go.vet", Rule: "printf", Paths: []string{"a.go"}}
 	weak := &FingerprintBasis{Producer: ProducerModel, Analyzer: AnalyzerReview, Rule: CauseCandidate + ":correctness", Paths: []string{"a.go"}}
@@ -211,7 +211,7 @@ func TestBuildStampsPublicationDisposition(t *testing.T) {
 	}
 }
 
-// Security review W23-2: the code-free export carries no fingerprint, basis
+// Security review: the code-free export carries no fingerprint, basis
 // or move key (unkeyed digests over code-derived inputs).
 func TestCodeFreeExportHasNoIdentity(t *testing.T) {
 	v := int64(1)

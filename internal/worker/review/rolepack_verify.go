@@ -10,21 +10,21 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// The R1 verifier keeps the review-v1 verification semantics (per-candidate
-// acceptance, one bounded repair of the rejected candidates, quarantine as
-// unreviewed, reproduction claims downgraded, success without a call when
-// there is no candidate) over the accepted candidates of investigate and
-// interpret. Since 2.0.0 a reply that is not JSON at all gets one retry of
-// its own (it does not use up the repair; at most record.R1MaxCalls calls);
-// an entry whose only defect is citing observation IDs of the request among
-// its evidence is accepted without them when the rest still meets its
-// verdict's rule (evidence_id_dropped on the call); and a later call that
-// fails keeps the verdicts already accepted (verification_call_failed).
-const r1VerifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_..."],"counterevidence_ids":["ev_..."],"unresolved_assumptions":["..."],"next_verification":["..."]}]}, ignoring any wider output examples. Return exactly one entry per candidate in input. Before deciding, read the caller and test excerpts (origin caller/test) for guards, deferred cleanup or ownership transfer that would invalidate the candidate, and keep each documents contract to its applies_to path. supported needs a code or test evidence ID and at least one valid condition; refuted needs counterevidence IDs and invalid conditions; otherwise use inconclusive with unresolved assumptions. Nothing was executed: never claim reproduction, test results or runtime output. Cite only evidence IDs given in scope; do not add paths, line numbers or other fields. Give 1-3 next_verification items that are reading or review steps, not commands.`
+// The role-pack verifier keeps the legacy pack's verification semantics
+// (per-candidate acceptance, one bounded repair of the rejected candidates,
+// quarantine as unreviewed, reproduction claims downgraded, success without
+// a call when there is no candidate) over the accepted candidates of
+// investigate and interpret. A reply that is not JSON at all gets one retry
+// of its own (it does not use up the repair; at most record.RoleMaxCalls
+// calls); an entry whose only defect is citing observation IDs of the
+// request among its evidence is accepted without them when the rest still
+// meets its verdict's rule (evidence_id_dropped on the call); and a later
+// call that fails keeps the verdicts already accepted (verification_call_failed).
+const roleVerifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_..."],"counterevidence_ids":["ev_..."],"unresolved_assumptions":["..."],"next_verification":["..."]}]}, ignoring any wider output examples. Return exactly one entry per candidate in input. Before deciding, read the caller and test excerpts (origin caller/test) for guards, deferred cleanup or ownership transfer that would invalidate the candidate, and keep each documents contract to its applies_to path. supported needs a code or test evidence ID and at least one valid condition; refuted needs counterevidence IDs and invalid conditions; otherwise use inconclusive with unresolved assumptions. Nothing was executed: never claim reproduction, test results or runtime output. Cite only evidence IDs given in scope; do not add paths, line numbers or other fields. Give 1-3 next_verification items that are reading or review steps, not commands.`
 
-const r1VerifyRepairRules = "\nFormat repair: your previous output for the candidates listed in input.repair was rejected with the listed platform error codes. Return a verifications entry only for those candidates, citing only IDs from scope.excerpts; accepted_evidence_ids lists every valid ID."
+const roleVerifyRepairRules = "\nFormat repair: your previous output for the candidates listed in input.repair was rejected with the listed platform error codes. Return a verifications entry only for those candidates, citing only IDs from scope.excerpts; accepted_evidence_ids lists every valid ID."
 
-type r1VerifyInput struct {
+type roleVerifyInput struct {
 	Scope struct {
 		Snapshot    string           `json:"snapshot_manifest_digest"`
 		Excerpts    []record.Excerpt `json:"excerpts"`
@@ -32,7 +32,7 @@ type r1VerifyInput struct {
 	} `json:"scope"`
 	Contracts    []record.Contract       `json:"contracts"`
 	Observations []record.ObservationRef `json:"observations"`
-	Candidates   []record.R1Candidate    `json:"candidates"`
+	Candidates   []record.RoleCandidate  `json:"candidates"`
 	Repair       *repairInput            `json:"repair,omitempty"`
 }
 
@@ -49,7 +49,7 @@ func verificationClaimsExecution(v record.Verification) bool {
 	return false
 }
 
-func (s *r1Stage) verify() analysis.TaskResult {
+func (s *roleStage) verify() analysis.TaskResult {
 	docRec, uDoc := s.prior(record.StageDocuments)
 	invRec, uInv := s.prior(record.StageInvestigate)
 	intRec, uInt := s.prior(record.StageInterpret)
@@ -60,7 +60,7 @@ func (s *r1Stage) verify() analysis.TaskResult {
 		return *r
 	}
 	s.noteUpstream(uDoc, uInv, uInt)
-	var candidates []record.R1Candidate
+	var candidates []record.RoleCandidate
 	var context []record.Excerpt
 	seen := map[string]bool{}
 	addEvidence := func(list []record.Excerpt) {
@@ -133,9 +133,9 @@ func (s *r1Stage) verify() analysis.TaskResult {
 	// contracts go first; then candidates are verified as a prefix (investigate
 	// before interpret) and the rest stay unreviewed with a limitation. Every
 	// sent candidate keeps all excerpts it cites.
-	in := r1VerifyInput{Observations: s.rec.Observations}
+	in := roleVerifyInput{Observations: s.rec.Observations}
 	in.Scope.Snapshot = s.j.Snapshot.Digest
-	instructions := s.instructions(r1VerifyContract)
+	instructions := s.instructions(roleVerifyContract)
 	var sent []record.Excerpt
 	verified := 0
 	fitted := false
@@ -231,7 +231,7 @@ func (s *r1Stage) verify() analysis.TaskResult {
 	for _, o := range in.Observations {
 		observationIDs[o.ID] = true
 	}
-	for attempt := 1; attempt <= record.R1MaxCalls && len(pending) > 0; attempt++ {
+	for attempt := 1; attempt <= record.RoleMaxCalls && len(pending) > 0; attempt++ {
 		if s.ctx.Err() != nil {
 			return *s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
@@ -243,7 +243,7 @@ func (s *r1Stage) verify() analysis.TaskResult {
 		}
 		text := instructions
 		if repair != nil {
-			text += r1VerifyRepairRules
+			text += roleVerifyRepairRules
 		}
 		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: query, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
 		size := len(opencode.Prompt(q))
@@ -251,7 +251,7 @@ func (s *r1Stage) verify() analysis.TaskResult {
 			return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
-		call := record.R1Call{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,
+		call := record.RoleCall{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,
 			PackFiles: s.pack.Files, RequestDigest: reply.RequestDigest, RequestBytes: size, Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
 		if reply.Reason != "" && reply.Reason != "model_output_invalid" {
 			call.Outcome = reply.Reason
@@ -311,7 +311,7 @@ func (s *r1Stage) verify() analysis.TaskResult {
 			retried = true
 		} else {
 			if repaired {
-				var next []record.R1Candidate
+				var next []record.RoleCandidate
 				for _, p := range pending {
 					if _, ok := accepted[p.ID]; !ok {
 						next = append(next, p)
@@ -328,7 +328,7 @@ func (s *r1Stage) verify() analysis.TaskResult {
 				prior[item.ID] = item.Errors
 			}
 		}
-		var next []record.R1Candidate
+		var next []record.RoleCandidate
 		repair = &repairInput{OutputErrors: nonNil(outputErrs), Candidates: []repairItem{}, AcceptedIDs: ids}
 		for _, p := range pending {
 			if _, ok := accepted[p.ID]; ok {

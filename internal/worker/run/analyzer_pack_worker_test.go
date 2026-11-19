@@ -40,15 +40,15 @@ type packRun struct {
 	stages map[string]domain.Stage
 	report report.Report
 	// uploads are every artifact body and protocol message the fake agent
-	// received, and scratch the worker scratch root (W21 leak checks).
+	// received, and scratch the worker scratch root (secret leak checks).
 	uploads [][]byte
 	scratch string
-	// blobs are the bytes of every uploaded artifact (W16 leak checks).
+	// blobs are the bytes of every uploaded artifact (canary leak checks).
 	blobs [][]byte
 }
 
 // runPack runs the production deep-review composition (discovery → the
-// analyzer composite → review-v1 roles) through the real worker on a small
+// analyzer composite → legacy-pack roles) through the real worker on a small
 // Go module with a go vet and a staticcheck finding.
 func runPack(t *testing.T, tools map[string]string) packRun {
 	return runPackFiles(t, map[string]string{
@@ -87,7 +87,7 @@ func goOnlyCatalog(t *testing.T, c *pack.Composite) *pack.Composite {
 	return g
 }
 
-// goAndAnyCatalog is goOnlyCatalog plus the any-ecosystem (W21) members.
+// goAndAnyCatalog is goOnlyCatalog plus the any-ecosystem members.
 func goAndAnyCatalog(t *testing.T, c *pack.Composite) *pack.Composite {
 	t.Helper()
 	var members []pack.Analyzer
@@ -289,7 +289,7 @@ func TestAnalyzerPackWithoutStaticcheck(t *testing.T) {
 			t.Fatalf("staticcheck manifest task %+v", task)
 		}
 	}
-	at := withoutW21Tools(t, analyzerTools(r.envs))
+	at := withoutAnyEcosystemTools(t, analyzerTools(r.envs))
 	if len(at) != 1 || at[0].Tool != "staticcheck" || at[0].Status != envdoc.ObsNotProbed {
 		t.Fatalf("analyzer tools %+v", at)
 	}
@@ -332,14 +332,14 @@ func TestAnalyzerPackWithRealStaticcheck(t *testing.T) {
 	if !rules["SA1000"] || d.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || !slices.Equal(d.Coverage.ProcessedPaths, []string{"lib/lib.go", "main.go"}) {
 		t.Fatalf("staticcheck envelope rules %v outcome %+v coverage %+v", rules, d.Outcome, d.Coverage)
 	}
-	at := withoutW21Tools(t, analyzerTools(r.envs))
+	at := withoutAnyEcosystemTools(t, analyzerTools(r.envs))
 	if len(at) != 1 || at[0].Status != envdoc.ObsObserved || at[0].Version == nil || at[0].Execution == nil {
 		t.Fatalf("analyzer tools %+v", at)
 	}
 	t.Logf("staticcheck %s: %d observations, rules %v", *at[0].Version, len(d.Observations), rules)
 }
 
-// TC-69 (W19, docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백): snapshots without Go through the worker on a
+// TC-69 (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백): snapshots without Go through the worker on a
 // node with --go only. go vet plans nothing (no required placeholder), so
 // nothing fails for an ecosystem that is not there. A snapshot of an
 // ecosystem without a pack has a visible gap instead: one not-required
@@ -348,7 +348,7 @@ func TestAnalyzerPackWithRealStaticcheck(t *testing.T) {
 // static_analysis_gap:<ecosystem> and a not-run tool row, never
 // required_task_not_succeeded, verdict inconclusive. The gap case runs a
 // synthetic Go-only catalog (goOnlyCatalog) so it does not depend on which
-// packs this build has (Python has had a pack since W17, see
+// packs this build has (Python has a pack, see
 // TestPythonSnapshotWithoutRuff). A snapshot with no supported language
 // source plans no analyzer task in the production catalog: the stage has no
 // tasks and the report is partial with static_analysis_not_planned.
@@ -366,13 +366,13 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 		{"python without a pack", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
 			[]string{"pack-gap.python"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:python",
 			[]string{"python.none=not_run"}, goOnlyCatalog},
-		// W21 (docs/ANALYZERS.md): the any-ecosystem analyzers plan for a snapshot
+		// The any-ecosystem analyzers (docs/ANALYZERS.md) plan for a snapshot
 		// with language source and, without their tool flags, add
 		// not-required tool_not_configured tasks and not-run tool rows
 		// before the gap task.
 		{"python without a pack, with the any-ecosystem analyzers", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
-			append(w21StaticTasks(), "pack-gap.python"), progress.Skipped, []string{"analyzer_pack_missing", "tool_not_configured"}, "static_analysis_gap:python",
-			append(w21NotRunRows(), "python.none=not_run"), goAndAnyCatalog},
+			append(anyEcosystemTasks(), "pack-gap.python"), progress.Skipped, []string{"analyzer_pack_missing", "tool_not_configured"}, "static_analysis_gap:python",
+			append(anyEcosystemNotRunRows(), "python.none=not_run"), goAndAnyCatalog},
 		{"no supported language", map[string]string{"README.md": "# docs\n", "docs/guide.md": "guide\n", "Makefile": "all:\n"},
 			nil, progress.NoTasks, []string{}, "static_analysis_not_planned", nil, nil},
 	} {

@@ -28,21 +28,21 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
-// r1Scripted answers every review-r1 role from the request input alone
+// roleScripted answers every role-pack role from the request input alone
 // (first gap requirement, first code excerpt, first observation, every
 // candidate). Only the model is scripted; it never starts a process or
 // contacts a model. With retry, verify takes three calls: the first trims an
 // observation ID beside valid evidence for the first candidate and rejects
 // the second (a fabricated ID only), the repair reply is not JSON, and the
 // retry is valid.
-type r1Scripted struct {
+type roleScripted struct {
 	mu      sync.Mutex
 	roles   []string
 	retry   bool
 	verifyN int
 }
 
-func (f *r1Scripted) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
+func (f *roleScripted) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
 	f.mu.Lock()
 	f.roles = append(f.roles, q.Role)
 	f.mu.Unlock()
@@ -130,7 +130,7 @@ func (f *r1Scripted) Review(_ context.Context, _ executor.Runner, q opencode.Req
 	return reply
 }
 
-func copyW15(t *testing.T, dst string) {
+func copyModulesFixture(t *testing.T, dst string) {
 	t.Helper()
 	fixture, _ := filepath.Abs("../../../fixtures/w15-modules/input")
 	err := filepath.WalkDir(fixture, func(p string, d fs.DirEntry, err error) error {
@@ -187,12 +187,12 @@ func reportInput(t *testing.T, fa *fakeAgent, m analysis.ResultManifest, manifes
 	return in
 }
 
-// W15 phase 2 through the real worker: discovery → actual go vet → the five
-// review-r1 roles with a scripted model, then the report built from the
+// The role pack through the real worker: discovery → actual go vet → the
+// five roles with a scripted model, then the report built from the
 // uploaded artifacts with the default registry. "vet finding" adds one file
 // to the root module so go vet reports a real observation and the interpret
 // role, its observation links and the report lineage run on real data.
-func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
+func TestRolePackThroughTheWorkerAndReport(t *testing.T) {
 	goExe := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
@@ -210,8 +210,8 @@ func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 		{name: "vet finding", extra: vetFinding,
 			interpret: "review.interpret=succeeded", calls: "environment,documents,investigate,interpret,verify",
 			optional: []string{"review.environment=accepted", "review.interpret=accepted"}, findings: []string{"review_interpret_1=inconclusive", "review_investigate_1=inconclusive"}},
-		// review-r1 2.0.0 (docs/REVIEW.md#복구-경로): a three-call verifier record reaches
-		// the report and validates.
+		// Recovery path (docs/REVIEW.md#복구-경로): a three-call verifier record
+		// reaches the report and validates.
 		{name: "verify retry", extra: vetFinding, retry: true,
 			interpret: "review.interpret=succeeded", calls: "environment,documents,investigate,interpret,verify,verify,verify",
 			optional: []string{"review.environment=accepted", "review.interpret=accepted"}, findings: []string{"review_interpret_1=inconclusive", "review_investigate_1=inconclusive"}},
@@ -222,7 +222,7 @@ func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 			if err := os.Remove(filepath.Join(e.src, "main.go")); err != nil {
 				t.Fatal(err)
 			}
-			copyW15(t, e.src)
+			copyModulesFixture(t, e.src)
 			for name, body := range tc.extra {
 				if err := os.WriteFile(filepath.Join(e.src, name), []byte(body), 0o600); err != nil {
 					t.Fatal(err)
@@ -232,8 +232,8 @@ func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			caller := &r1Scripted{retry: tc.retry}
-			h, err := discovery.Wrap(review.R1Handler{Static: vet, Caller: caller}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
+			caller := &roleScripted{retry: tc.retry}
+			h, err := discovery.Wrap(review.RoleHandler{Static: vet, Caller: caller}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -332,7 +332,7 @@ func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
 			}
 			for _, call := range r.Coverage.ReviewCalls {
-				if call.PackID != review.PackR1 || call.PackVersion != "2.0.0" {
+				if call.PackID != review.PackRole || call.PackVersion != "2.0.0" {
 					t.Fatalf("call %+v", call)
 				}
 			}
@@ -346,7 +346,7 @@ func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 				if !slices.Equal(outcomes, []string{"accepted", "output_rejected", "accepted"}) {
 					t.Fatalf("verify calls %v", outcomes)
 				}
-				var rec record.R1Record
+				var rec record.RoleRecord
 				for cid, body := range fa.artifacts {
 					if fa.media[cid] == "application/vnd.codeye.review+json" && strings.Contains(string(body), `"stage":"verify"`) {
 						if err := json.Unmarshal(body, &rec); err != nil {

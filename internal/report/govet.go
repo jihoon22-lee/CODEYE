@@ -47,7 +47,7 @@ const (
 	textOmitted          = "원문 생략(코드 미포함 내보내기)."
 )
 
-// GoVetDecoder decodes the W08 go vet observations artifact.
+// GoVetDecoder decodes the go vet observations artifact (v0.1).
 type GoVetDecoder struct{}
 
 func (GoVetDecoder) Key() DecoderKey {
@@ -162,7 +162,7 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 	return out, nil
 }
 
-// Validate the W08 cross-field contract before using an artifact for coverage
+// Validate the go vet document's cross-field contract before using an artifact for coverage
 // or a verdict. A well-formed envelope alone cannot attest to a clean run.
 func validateGoVetDocument(d *govet.Document, acceptedStatus string) error {
 	if !d.Outcome.TaskStatus.Terminal() || len(d.Observations) != d.Parse.Observations || d.Observations == nil || d.Inventory == nil || d.Executions == nil || d.Coverage.Packages == nil {

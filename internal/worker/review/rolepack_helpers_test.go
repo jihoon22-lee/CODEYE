@@ -20,9 +20,9 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// w15Job acquires fixtures/w15-modules/input (optionally changed) as an
+// modulesJob acquires fixtures/w15-modules/input (optionally changed) as an
 // immutable snapshot.
-func w15Job(t *testing.T, change func(root string)) analysis.Job {
+func modulesJob(t *testing.T, change func(root string)) analysis.Job {
 	t.Helper()
 	root := t.TempDir()
 	fixture, err := filepath.Abs("../../../fixtures/w15-modules/input")
@@ -127,16 +127,16 @@ func gatewayObservation(j analysis.Job) []govet.Observation {
 		RawRef: govet.RawRef{Execution: "go.vet", Stream: "stdout", StreamSHA256: strings.Repeat("a", 64), JSONPointer: "/example.test~1w15/unusedresult/0", ByteStart: 0, ByteEnd: 10}, PackageKey: "example.test/w15"}}
 }
 
-// r1Caller scripts the model per role; n counts calls of that role. It never
+// roleCaller scripts the model per role; n counts calls of that role. It never
 // starts a process or contacts a model.
-type r1Caller struct {
+type roleCaller struct {
 	mu       sync.Mutex
 	requests []opencode.Request
 	byRole   map[string]int
 	script   map[string]func(n int, q opencode.Request) opencode.Reply
 }
 
-func (f *r1Caller) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
+func (f *roleCaller) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.byRole == nil {
@@ -159,7 +159,7 @@ func (f *r1Caller) Review(_ context.Context, _ executor.Runner, q opencode.Reque
 	return r
 }
 
-func (f *r1Caller) calls(role string) int {
+func (f *roleCaller) calls(role string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.byRole[role]
@@ -200,7 +200,8 @@ func excerptID(list []record.Excerpt, p string) string {
 	return ""
 }
 
-// validScript returns valid outputs for every R1 role on the w15 fixture.
+// validScript returns valid outputs for every role-pack role on the modules
+// fixture.
 func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Reply {
 	return map[string]func(int, opencode.Request) opencode.Reply{
 		"environment": func(_ int, q opencode.Request) opencode.Reply {
@@ -247,7 +248,7 @@ func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.R
 				"limits": []map[string]any{}})
 		},
 		"verify": func(_ int, q opencode.Request) opencode.Reply {
-			in := decodeAs[r1VerifyInput](t, q)
+			in := decodeAs[roleVerifyInput](t, q)
 			var out []map[string]any
 			for _, c := range in.Candidates {
 				out = append(out, verdict(c.ID, "inconclusive", func(m map[string]any) {
@@ -262,11 +263,11 @@ func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.R
 	}
 }
 
-// runR1 plans and runs the deep-review composition (discovery → static →
-// review-r1) with an injected node observation.
-func runR1(t *testing.T, j analysis.Job, static analysis.Handler, caller Caller, goVersion string) ([]analysis.TaskSpec, map[string]analysis.TaskResult) {
+// runRole plans and runs the deep-review composition (discovery → static →
+// role pack) with an injected node observation.
+func runRole(t *testing.T, j analysis.Job, static analysis.Handler, caller Caller, goVersion string) ([]analysis.TaskSpec, map[string]analysis.TaskResult) {
 	t.Helper()
-	h, err := discovery.Wrap(R1Handler{Static: static, Caller: caller}, discovery.Config{Observer: discovery.StaticObserver{Versions: map[string]string{"go": goVersion}}})
+	h, err := discovery.Wrap(RoleHandler{Static: static, Caller: caller}, discovery.Config{Observer: discovery.StaticObserver{Versions: map[string]string{"go": goVersion}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,16 +282,16 @@ func runR1(t *testing.T, j analysis.Job, static analysis.Handler, caller Caller,
 	return plan, out
 }
 
-func readR1(t *testing.T, j analysis.Job, stage string) record.R1Record {
+func readRole(t *testing.T, j analysis.Job, stage string) record.RoleRecord {
 	t.Helper()
-	b, err := os.ReadFile(r1Path(j, stage))
+	b, err := os.ReadFile(rolePath(j, stage))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(b), `"text":`) {
 		t.Fatal("record stores source text")
 	}
-	r, err := record.DecodeR1(b, expectR1(j, stage))
+	r, err := record.DecodeRole(b, expectRole(j, stage))
 	if err != nil {
 		t.Fatal(stage, err)
 	}

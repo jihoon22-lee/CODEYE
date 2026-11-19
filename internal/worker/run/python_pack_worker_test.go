@@ -25,12 +25,12 @@ var pythonFiles = map[string]string{
 	"README.md": "# app\n",
 }
 
-// TC-108 (W17, docs/ANALYZERS.md#python-팩): the Python pack replaces the W19
+// TC-108 (docs/ANALYZERS.md#python-팩): the Python pack replaces the
 // pack-gap.python gap. On a node with --go only, a Python snapshot plans the
 // pack's tasks: the ruff baseline is required and unsupported
 // (tool_not_configured), so the report is partial with a required task that
 // did not succeed; mypy, pyright and bandit are visible not-required
-// unsupported tasks; no gap task is planned. The W21 analyzers plan their
+// unsupported tasks; no gap task is planned. The any-ecosystem analyzers plan their
 // not-required tool_not_configured tasks after them.
 func TestPythonSnapshotWithoutRuff(t *testing.T) {
 	r := runPackFiles(t, pythonFiles, nil)
@@ -45,9 +45,9 @@ func TestPythonSnapshotWithoutRuff(t *testing.T) {
 			t.Fatalf("required flag %+v", task)
 		}
 	}
-	// The W21 any-ecosystem analyzers (docs/ANALYZERS.md) also plan, not required.
+	// The any-ecosystem analyzers (docs/ANALYZERS.md) also plan, not required.
 	pyKeys := []string{"ruff", "mypy", "pyright", "bandit"}
-	if !slices.Equal(static, append(slices.Clone(pyKeys), w21StaticTasks()...)) {
+	if !slices.Equal(static, append(slices.Clone(pyKeys), anyEcosystemTasks()...)) {
 		t.Fatalf("static tasks %v (all %v)", static, rows)
 	}
 	for _, k := range pyKeys {

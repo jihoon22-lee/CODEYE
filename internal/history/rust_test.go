@@ -7,7 +7,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 )
 
-// W20 cargo check findings compare like the other packs'. The Rust rule
+// Cargo check findings compare like the other packs'. The Rust rule
 // context honors the repository's Cargo configuration and in-source
 // #[allow]: a vanished finding is never resolved (a suppression hides the
 // diagnostic and nothing reports it, docs/ANALYZERS.md#rust-규칙-문맥과-억제), and a context that lists

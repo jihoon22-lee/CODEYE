@@ -134,7 +134,7 @@ func ValidateReport(r Report) error {
 			if suppressed[id] {
 				return invalidf("finding %s is built from a suppressed observation", f.ID)
 			}
-			// A structure metric is never defect evidence (W21, docs/ANALYZERS.md).
+			// A structure metric is never defect evidence (docs/ANALYZERS.md).
 			if metrics[id] {
 				return invalidf("finding %s is built from a metric observation", f.ID)
 			}

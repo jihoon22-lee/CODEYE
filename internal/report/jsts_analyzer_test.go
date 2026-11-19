@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// W18 (docs/ANALYZERS.md): the real ESLint and tsc envelopes (examples/, and the tsc
-// solution run with .rNN executions in testdata/) go through the analyzer
+// The real ESLint and tsc envelopes (docs/ANALYZERS.md; examples/, and the
+// tsc solution run with .rNN executions in testdata/) go through the analyzer
 // decoder: observations bound to the recorded stdout, unreviewed tool
 // findings with the shared ToolFingerprint, Required as recorded.
 
-func readW18Doc(t *testing.T, path string) map[string]any {
+func readAnalyzerDoc(t *testing.T, path string) map[string]any {
 	t.Helper()
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -25,10 +25,10 @@ func readW18Doc(t *testing.T, path string) map[string]any {
 	return d
 }
 
-func TestAnalyzerDecoderW18JSTS(t *testing.T) {
-	es := taskSpec{key: "eslint.m02", status: "succeeded", required: true, doc: readW18Doc(t, "../../examples/observations-eslint.json")}
-	tc := taskSpec{key: "tsc.m01", status: "succeeded", required: false, doc: readW18Doc(t, "../../examples/observations-tsc.json")}
-	sol := taskSpec{key: "tsc.m02", status: "succeeded", required: false, doc: readW18Doc(t, "testdata/tsc-solution.json")}
+func TestAnalyzerDecoderJSTS(t *testing.T) {
+	es := taskSpec{key: "eslint.m02", status: "succeeded", required: true, doc: readAnalyzerDoc(t, "../../examples/observations-eslint.json")}
+	tc := taskSpec{key: "tsc.m01", status: "succeeded", required: false, doc: readAnalyzerDoc(t, "../../examples/observations-tsc.json")}
+	sol := taskSpec{key: "tsc.m02", status: "succeeded", required: false, doc: readAnalyzerDoc(t, "testdata/tsc-solution.json")}
 	sol.doc["module"].(map[string]any)["dir"] = "."
 	f := analyzerFixture(t, nil, es, tc, sol)
 	r := build(t, f.in, DefaultRegistry())
@@ -70,7 +70,7 @@ func TestAnalyzerDecoderW18JSTS(t *testing.T) {
 		t.Fatalf("limitations %v", r.Limitations)
 	}
 	// A Required mismatch between the task and the envelope is rejected.
-	bad := taskSpec{key: "eslint.m02", status: "succeeded", required: false, doc: readW18Doc(t, "../../examples/observations-eslint.json")}
+	bad := taskSpec{key: "eslint.m02", status: "succeeded", required: false, doc: readAnalyzerDoc(t, "../../examples/observations-eslint.json")}
 	r = build(t, analyzerFixture(t, nil, bad).in, DefaultRegistry())
 	if !has(r.Limitations, "artifact_rejected:eslint.m02") || len(r.Observations) != 0 {
 		t.Fatalf("required mismatch accepted: %v", r.Limitations)

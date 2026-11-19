@@ -1,5 +1,5 @@
 // Package history compares two published report revisions of one project
-// and overlays human dispositions (W23, docs/REPORT.md). It is pure: the caller
+// and overlays human dispositions (docs/REPORT.md). It is pure: the caller
 // loads the immutable report bodies, the run facts and the review rows. Every
 // state and count is derived from those structured records; no model text is
 // read.
@@ -44,7 +44,7 @@ const (
 	// A model that does not raise a candidate again has not observed that
 	// it was fixed: model candidates are never resolved_observed.
 	ReasonModelAbsence = "model_absence_not_observation"
-	// W19 rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태). A tool finding is
+	// Rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태). A tool finding is
 	// resolved only when its rule pack and selection and the handling of
 	// repository configuration and in-source suppressions are known and
 	// equal on both sides.

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// W24 phase 2c: excerpt kinds by path, for every review ecosystem. Go keeps
+// Excerpt kinds by path, for every review ecosystem. Go keeps
 // its rules (a directory never makes a Go test).
 func TestSourceKinds(t *testing.T) {
 	cases := map[string]string{
@@ -41,7 +41,7 @@ func TestExcerptKindsOfOtherLanguages(t *testing.T) {
 	ex := func(p, kind, origin string, end int) Excerpt {
 		return Excerpt{ID: ExcerptID(snapshot, p, sha, 1, end), Path: p, SHA256: sha, Start: 1, End: end, Kind: kind, Origin: origin}
 	}
-	v1 := []struct {
+	legacy := []struct {
 		e  Excerpt
 		ok bool
 	}{
@@ -55,12 +55,12 @@ func TestExcerptKindsOfOtherLanguages(t *testing.T) {
 		{ex("Makefile", "config", "context", 3), false},
 		{ex("app/store.py", "config", "context", 3), false},
 	}
-	for _, c := range v1 {
+	for _, c := range legacy {
 		if err := checkExcerpt(c.e, snapshot, lookup); (err == nil) != c.ok {
-			t.Errorf("v1 %s %s: %v", c.e.Path, c.e.Kind, err)
+			t.Errorf("legacy %s %s: %v", c.e.Path, c.e.Kind, err)
 		}
 	}
-	r1 := []struct {
+	role := []struct {
 		e  Excerpt
 		ok bool
 	}{
@@ -72,9 +72,9 @@ func TestExcerptKindsOfOtherLanguages(t *testing.T) {
 		{ex("src/queue.ts", "test", "context", 40), false},
 		{ex("package.json", "code", "context", 8), false},
 	}
-	for _, c := range r1 {
-		if err := checkR1Excerpt(c.e, snapshot, lookup); (err == nil) != c.ok {
-			t.Errorf("r1 %s %s/%s: %v", c.e.Path, c.e.Kind, c.e.Origin, err)
+	for _, c := range role {
+		if err := checkRoleExcerpt(c.e, snapshot, lookup); (err == nil) != c.ok {
+			t.Errorf("role %s %s/%s: %v", c.e.Path, c.e.Kind, c.e.Origin, err)
 		}
 	}
 }

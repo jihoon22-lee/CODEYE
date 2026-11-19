@@ -1,5 +1,5 @@
 // Package record defines the structured review artifact v0.1 shared by the
-// review worker (W11/W12) and report decoders (W09/W13). It performs no I/O
+// review worker and the report decoders. It performs no I/O
 // and imports no process or model code, so a report decoder can validate an
 // uploaded artifact against the snapshot manifest alone.
 package record
@@ -32,7 +32,8 @@ const (
 	VerdictUnreviewed = "unreviewed"
 
 	// LimReproductionRejected marks a model reproduction claim the platform
-	// downgraded to inconclusive: W12 has no execution evidence.
+	// downgraded to inconclusive: verification runs nothing, so it has no
+	// execution evidence.
 	LimReproductionRejected = "reproduction_claim_rejected"
 	LimQuarantined          = "verification_quarantined"
 	LimNotCompleted         = "verification_not_completed"
@@ -74,7 +75,7 @@ type Usage struct {
 
 // Call is the provenance of one model request. It never holds the prompt,
 // raw output, private reasoning or credentials. Attempt/Outcome are absent in
-// records written before W12.
+// older records, which still decode.
 type Call struct {
 	Role          string   `json:"role"`
 	Model         string   `json:"model"`
@@ -121,7 +122,7 @@ type Record struct {
 }
 
 // Accepted reports whether the record carries an accepted model result.
-// Records written before W12 have no outcome and were only written on success.
+// Older records have no outcome and were only written on success.
 func (r Record) Accepted() bool {
 	return r.Outcome == OutcomeAccepted || (r.Outcome == "" && r.Stage != "verify")
 }
@@ -297,7 +298,7 @@ func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)
 	case domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.SHA256) || e.Start < 1 || e.End < e.Start:
 		return invalid("evidence location")
 	// Kinds follow the path rules of source.go: code is source of a review
-	// ecosystem (a Go test file stays acceptable as code, as before W24),
+	// ecosystem (a Go test file stays acceptable as code, so older records still decode),
 	// test a test path and config a build manifest.
 	case e.End-e.Start+1 > 60 || (e.Kind == "code" && SourceEcosystem(e.Path) == "") ||
 		(e.Kind == "test" && SourceKind(e.Path) != "test") ||
@@ -379,7 +380,7 @@ func codes(list []string) bool {
 }
 
 // CheckVerification enforces the verdict rules. Only the platform may set
-// unreviewed; reproduced never appears because W12 has no execution evidence.
+// unreviewed; reproduced never appears because verification has no execution evidence.
 func CheckVerification(v Verification, catalog map[string]Excerpt) error {
 	lists := [][]string{v.ValidConditions, v.InvalidConditions, v.SupportingEvidence, v.Counterevidence, v.UnresolvedAssumptions, v.NextVerification}
 	for _, l := range lists {
@@ -462,7 +463,7 @@ func checkCalls(r Record, stage int) error {
 		if (okCall || c.Version != "") && !version.MatchString(c.Version) {
 			return invalid("model client version")
 		}
-		// A local preflight refusal can occur before W10 composes a request.
+		// A local preflight refusal can occur before the model client composes a request.
 		if (okCall || c.RequestDigest != "" || c.Usage != nil) && !hex64.MatchString(c.RequestDigest) {
 			return invalid("request digest")
 		}

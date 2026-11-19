@@ -45,8 +45,8 @@ func inScope(name string, scope domain.Scope) bool {
 }
 
 // priority ranks a corpus candidate: entry points, documents, sources,
-// manifests, tests. The Go, README/AGENTS and go.mod rules are those of W11;
-// the other ecosystems in scope follow otherPriority (sources.go, W24).
+// manifests, tests. The Go, README/AGENTS and go.mod rules stay fixed; the
+// other ecosystems in scope follow otherPriority (sources.go).
 func priority(name string, others otherScope) (rank int, kind string) {
 	base := strings.ToLower(path.Base(name))
 	switch {

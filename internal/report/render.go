@@ -58,7 +58,7 @@ func newView(r Report, digest string, l Locale) view {
 		{"refuted_findings", "기각(refuted)", strconv.Itoa(s.RefutedFindings)},
 	}
 	if s.MetricObservations > 0 {
-		// W21 (docs/ANALYZERS.md): structure metrics are a subset of the raw
+		// Structure metrics (docs/ANALYZERS.md) are a subset of the raw
 		// observations, shown apart and never as defects.
 		v.Counts = append(v.Counts, countRow{"metric_observations", l.Label("metric_observations"), strconv.Itoa(s.MetricObservations)})
 	}

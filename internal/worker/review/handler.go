@@ -46,8 +46,8 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 	if err != nil {
 		return nil, err
 	}
-	// review-v1 context reads documents and code; it is shown with the
-	// documents stage. Investigation and verification are code review.
+	// The legacy pack's context role reads documents and code; it is shown
+	// with the documents stage. Investigation and verification are code review.
 	return append(plan, analysis.TaskSpec{Key: "review.context", Required: true, Title: "프로젝트 맥락 검토", Stage: domain.StageDocuments},
 		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "코드 근거와 반례 검토", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview}), nil
