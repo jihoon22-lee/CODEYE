@@ -815,7 +815,7 @@ def compact_json(text: str) -> bytes:
 
 # Language guides of review-r1 follow the snapshot's in-scope source
 # ecosystems (W24 rc2, A29). The w15 example snapshot has Go source only;
-# TestR1ExampleRecords checks that selection against the worker.
+# TestRolePackExampleRecords checks that selection against the worker.
 R1_LANGUAGES = ("cpp", "go", "javascript", "python", "rust")
 R1_EXAMPLE_LANGUAGES = ("go",)
 

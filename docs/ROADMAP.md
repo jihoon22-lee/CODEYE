@@ -60,7 +60,7 @@
 분석기 팩이 반복하는 처리(도구 경로·버전 probe, 관리 설정 생성, 위치 인자 처리, 작업 사본 밖 결과 제거, 규칙 문맥 기록, 실행 결과 판정)를 공유 helper로 모으고, 지나치게 큰 파일(예: `internal/agent/agent.go`, `cmd/codeye/personal.go`, `internal/report/build.go`, `internal/worker/analysis/cpp/compiledb.go`, `scripts/validate_bundle.py`)을 책임별로 나눈다. 동작은 바꾸지 않는다.
 
 완료 조건:
-- 같은 입력에서 보고서 JSON·Markdown·HTML과 모델 요청(프롬프트) 바이트가 변경 전과 같다. `TestReviewV1IsPinned`와 Go 요청 캡처 비교 같은 기존 고정 시험이 그대로 통과하고, 각 분석기 팩의 재생 시험 산출물(envelope·보고서)도 바이트 비교한다.
+- 같은 입력에서 보고서 JSON·Markdown·HTML과 모델 요청(프롬프트) 바이트가 변경 전과 같다. `TestLegacyPackIsPinned`와 Go 요청 캡처 비교 같은 기존 고정 시험이 그대로 통과하고, 각 분석기 팩의 재생 시험 산출물(envelope·보고서)도 바이트 비교한다.
 - 공개 API·schema·CLI 플래그·DB migration이 바뀌지 않는다.
 - Linux 전체 시험(`scripts/test_postgres.py --web --nodes --scheduler --personal`), Windows Go 단위 시험, 웹 시험이 통과한다.
 
@@ -89,7 +89,7 @@
 
 ### 검토 범위 확대
 
-지금 모델 검토는 한 run에서 적은 수의 파일만 본다. `review-r1` 조사 역할은 코드 파일 최대 8개·12,000바이트(`r1MaxCodeFiles`·`r1MaxCodeBytes`, [`internal/worker/review/r1_inputs.go`](../internal/worker/review/r1_inputs.go)), `review-v1` 코퍼스는 최대 6개(`maxFiles`, [`internal/worker/review/context.go`](../internal/worker/review/context.go))이고, 요청마다 40,000바이트 한도(`PromptBudget`, [`internal/worker/review/r1.go`](../internal/worker/review/r1.go))가 있다. 모듈 단위로 나누어 검토해 모델이 저장소의 더 많은 부분을 보게 한다.
+지금 모델 검토는 한 run에서 적은 수의 파일만 본다. `review-r1` 조사 역할은 코드 파일 최대 8개·12,000바이트(`roleMaxCodeFiles`·`roleMaxCodeBytes`, [`internal/worker/review/rolepack_inputs.go`](../internal/worker/review/rolepack_inputs.go)), `review-v1` 코퍼스는 최대 6개(`maxFiles`, [`internal/worker/review/context.go`](../internal/worker/review/context.go))이고, 요청마다 40,000바이트 한도(`PromptBudget`, [`internal/worker/review/rolepack.go`](../internal/worker/review/rolepack.go))가 있다. 모듈 단위로 나누어 검토해 모델이 저장소의 더 많은 부분을 보게 한다.
 
 완료 조건:
 - 모듈마다 검토 task를 계획하고, 각 task의 입력 범위(모듈·파일·바이트)와 잘린 범위를 기록한다.
