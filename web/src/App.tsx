@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AdminView } from './AdminView';
 import type { Api } from './api';
+import type { DeepLink } from './deepLink';
 import { DoctorView } from './DoctorView';
 import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
@@ -10,10 +11,10 @@ import type { SessionController, SessionState } from './session';
 import { SignInForm } from './SignInForm';
 
 type View = 'projects' | 'doctor' | 'account' | 'admin';
-type Props = { api: Api; controller: SessionController; idempotency: Idempotency };
+type Props = { api: Api; controller: SessionController; idempotency: Idempotency; link?: DeepLink };
 type Authenticated = Extract<SessionState, { status: 'authenticated' }>;
 
-export function App({ api, controller, idempotency }: Props) {
+export function App({ api, controller, idempotency, link }: Props) {
   const session = useSyncExternalStore(controller.subscribe, controller.getState);
   const [view, setView] = useState<View>('projects');
   const [passwordSet, setPasswordSet] = useState(false);
@@ -52,7 +53,7 @@ export function App({ api, controller, idempotency }: Props) {
             {!forced && <p><button type="button" onClick={() => go('projects')}>{t.accounts.password.back}</button></p>}
           </>
           : shown === 'admin' ? <AdminView api={api} controller={controller} me={signedIn.userId} />
-          : <ProjectsView api={api} userId={signedIn.userId} idempotency={idempotency} />}
+          : <ProjectsView api={api} userId={signedIn.userId} idempotency={idempotency} link={link} />}
       </div>
     </main>
   </>;

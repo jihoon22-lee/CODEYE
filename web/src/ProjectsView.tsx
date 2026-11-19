@@ -5,6 +5,7 @@ import { createPoller, type Poller } from './poller';
 import { LastReportLink, ProjectActivity } from './StageView';
 import { retryable } from './useRunPolling';
 import type { Idempotency } from './idempotency';
+import type { DeepLink } from './deepLink';
 import { ko as t } from './locales/ko';
 import { ProjectForm } from './ProjectForm';
 import { ErrorNote, RunPanel } from './RunPanel';
@@ -12,7 +13,7 @@ import { SchedulePanel } from './SchedulePanel';
 import { MembersPanel } from './MembersPanel';
 import { ProjectAudit } from './ProjectAudit';
 
-type Props = { api: Api; userId: string; idempotency: Idempotency };
+type Props = { api: Api; userId: string; idempotency: Idempotency; link?: DeepLink };
 
 type Lookup<T> = { loading: boolean; items: T[]; error: ErrorText | null };
 const initial = { loading: true, items: [], error: null };
@@ -53,7 +54,7 @@ export function mergeFirstPage(prev: Project[], first: Project[]): Project[] {
   return [...first, ...prev.filter(p => !ids.has(p.id))];
 }
 
-export function ProjectsView({ api, userId, idempotency }: Props) {
+export function ProjectsView({ api, userId, idempotency, link }: Props) {
   const roots = useLookup<SourceRoot>(useCallback(signal => api.listSourceRoots(signal), [api]));
   const providers = useLookup<Provider>(useCallback(signal => api.listProviders(signal), [api]));
   const [projects, setProjects] = useState<Project[]>([]);
@@ -61,7 +62,8 @@ export function ProjectsView({ api, userId, idempotency }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ErrorText | null>(null);
   const [lastOk, setLastOk] = useState<Date | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A deep link (codeye up) opens its project once it is in the list.
+  const [selectedId, setSelectedId] = useState<string | null>(link?.project ?? null);
   const [reloads, setReloads] = useState(0);
   const latest = useRef<Project[]>([]);
   const poller = useRef<Poller<ProjectPage> | null>(null);
@@ -151,14 +153,15 @@ export function ProjectsView({ api, userId, idempotency }: Props) {
         <ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={project => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); }} />
       </section>
     </div>
-    {selected && <ProjectDetail key={selected.id} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)} />}
+    {selected && <ProjectDetail key={selected.id} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)}
+      initialRun={link?.project === selected.id ? link.run : null} />}
   </>;
 }
 
 type DetailTab = 'run' | 'members' | 'audit';
 
-function ProjectDetail({ api, userId, project, idempotency, source, onRunChange }: { api: Api; userId: string; project: Project; idempotency: Idempotency; source: string; onRunChange: () => void }) {
-  const [openRun, setOpenRun] = useState<string | null>(null);
+function ProjectDetail({ api, userId, project, idempotency, source, onRunChange, initialRun }: { api: Api; userId: string; project: Project; idempotency: Idempotency; source: string; onRunChange: () => void; initialRun: string | null }) {
+  const [openRun, setOpenRun] = useState<string | null>(initialRun);
   const [chosen, setChosen] = useState<DetailTab>('run');
   // The audit tab exists only for the owner and managers; a lost role falls back to the run tab.
   const tabs: DetailTab[] = project.can_manage ? ['run', 'members', 'audit'] : ['run', 'members'];
