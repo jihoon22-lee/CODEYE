@@ -455,6 +455,9 @@ func (s *Store) ChangePassword(ctx context.Context, in PasswordChange) (Session,
 		if err := storeHash(ctx, tx, in.UserID, &h, false); err != nil {
 			return Session{}, err
 		}
+		if err := retireLaunchTokens(ctx, tx, in.UserID); err != nil {
+			return Session{}, err
+		}
 		tag, err := tx.Exec(ctx, "UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE user_id=$1 AND id<>$2 AND revoked_at IS NULL", in.UserID, in.SessionID)
 		if err != nil {
 			return Session{}, err
@@ -469,6 +472,14 @@ func (s *Store) ChangePassword(ctx context.Context, in PasswordChange) (Session,
 		e := userAudit(ctx, in.UserID, AuditPasswordChanged).target("user", in.UserID).with(map[string]any{"sessions_revoked": tag.RowsAffected()})
 		return sess, writeAudit(ctx, tx, e)
 	})
+}
+
+// retireLaunchTokens ends every unused login link of user (marked used): a
+// password change, set or reset must not leave an older link that still
+// signs in. Call it with the user row locked and before issuing a new link.
+func retireLaunchTokens(ctx context.Context, tx pgx.Tx, user string) error {
+	_, err := tx.Exec(ctx, "UPDATE auth_launch_tokens SET used_at=clock_timestamp() WHERE user_id=$1 AND used_at IS NULL AND expires_at>clock_timestamp()", user)
+	return err
 }
 
 // storeHash writes (or with h nil clears) the user's verifier.

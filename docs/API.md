@@ -47,7 +47,7 @@
 
 - `POST /session/password` `{current_password?, new_password}`(CSRF 필요). 비밀번호가 있는 사용자(`has_password: true`)는 `current_password`가 필수다(없으면 400). 비밀번호가 없는 사용자는 세션만으로 처음 정한다.
 - 새 비밀번호가 규칙(12~256자, 사용자 이름·표시 이름과 다름, 한 문자 반복 아님)을 어기면 422 `VALIDATION_FAILED`이고 시도로 세지 않는다. 현재 비밀번호가 틀리면 403 `PASSWORD_INCORRECT`이고 로그인 실패 한도에 센다(넘으면 429). 사용자 이름이 없는 사용자, 확인 뒤 비밀번호가 바뀐 경우는 409다.
-- 성공하면 200 `SessionView`(`must_change_password: false`, `has_password: true`)이고 그 사용자의 다른 세션은 모두 폐기된다. 이 세션과 cookie는 그대로다.
+- 성공하면 200 `SessionView`(`must_change_password: false`, `has_password: true`)이고 그 사용자의 다른 세션과 쓰지 않은 로그인 링크는 모두 끝난다. 이 세션과 cookie는 그대로다.
 - `must_change_password`가 true인 세션은 `GET/DELETE /session`과 `POST /session/password`만 쓸 수 있다. 다른 사용자 경로(이벤트 스트림 포함)는 403 `PASSWORD_CHANGE_REQUIRED`다.
 
 ### CSRF
@@ -391,7 +391,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `POST /admin/users` | `{username, display_name?, is_admin?}` | 201 `{user, login_link}`+`Location`. 비밀번호 없는 계정(`must_change_password: true`)과 일회용 로그인 링크. 쓰인 이름 409 |
 | `POST /admin/users/{id}/disable` | — | 200 `UserView`. 모든 세션 폐기. 마지막 활성 관리자 409. 이미 비활성이면 변경 없이 200 |
 | `PUT /admin/users/{id}/admin` | `{is_admin}` | 200 `UserView`. 마지막 활성 관리자 해제·비활성 사용자 지정 409 |
-| `POST /admin/users/{id}/password-reset` | — | 200 `{user, login_link}`. 비밀번호 삭제, 모든 세션 폐기, 새 로그인 링크. 자기 자신 409, 비활성 404 |
+| `POST /admin/users/{id}/password-reset` | — | 200 `{user, login_link}`. 비밀번호 삭제, 모든 세션과 이전 로그인 링크 폐기, 새 로그인 링크. 자기 자신 409, 비활성 404 |
 | `GET /admin/source-roots` | — | `{items: [{id, label, created_at, grants: [{user_id, username, granted_at}]}]}`. 서버 경로는 없다 |
 | `PUT/DELETE /admin/source-roots/{rid}/grants/{uid}` | — | 204. 이미 그 상태면 변경 없이 204 |
 | `GET /admin/providers` | — | `{items: [{id, kind, host, api_url}]}` |

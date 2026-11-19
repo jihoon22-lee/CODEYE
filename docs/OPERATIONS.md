@@ -84,6 +84,7 @@ codeye serve --listen 0.0.0.0:8443 --tls-cert /etc/codeye/tls/cert.pem --tls-key
 - `--public-origin`은 사용자가 브라우저에 입력하는 `https://HOST[:PORT]`다. path·query·사용자 정보는 받지 않는다. Host 허용 목록과 Origin 비교, 로그인 링크가 이 값을 쓴다. 인증서의 이름이 이 host와 맞아야 브라우저가 연결한다.
 - TLS 1.2 이상, HTTP/1.1이다. 세션 cookie는 `__Host-codeye_session`(Secure)이고 HSTS(`max-age=31536000`)를 보낸다. 같은 포트로 평문 HTTP 요청을 보내면 API를 주지 않는다.
 - 인증서 갱신은 재시작으로 반영한다.
+- Host 검사는 노드 경로에도 적용되므로 노드 에이전트도 `--controller https://HOST[:PORT]`(public origin)로 접속한다. 에이전트가 사설 CA나 자체 서명 인증서를 신뢰하게 하는 설정은 시험하지 않았다.
 - TLS를 앞단 reverse proxy에서 종료하는 배포는 지원하지 않는다. 서버가 forwarded 헤더를 읽지 않아 접속 주소별 로그인 제한과 Origin·Host 검사가 맞지 않는다.
 - 개인 모드(`codeye start`)의 `listen`은 계속 loopback만 받는다. TLS 수신은 `serve`를 직접 실행하는 배포의 기능이다.
 - `codeye login-link --origin`은 `https://HOST[:PORT]`도 받는다(TLS 서버의 public origin을 준다).

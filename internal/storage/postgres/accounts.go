@@ -255,6 +255,9 @@ func (s *Store) SetPassword(ctx context.Context, id string, h account.Hash, must
 		if err := storeHash(ctx, tx, id, &h, mustChange); err != nil {
 			return User{}, err
 		}
+		if err := retireLaunchTokens(ctx, tx, id); err != nil {
+			return User{}, err
+		}
 		tag, err := tx.Exec(ctx, "UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE user_id=$1 AND revoked_at IS NULL", id)
 		if err != nil {
 			return User{}, err
@@ -295,6 +298,9 @@ func (s *Store) ResetPassword(ctx context.Context, by Principal, id, tokenSHA256
 		}
 		tag, err := tx.Exec(ctx, "UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE user_id=$1 AND revoked_at IS NULL", id)
 		if err != nil {
+			return User{}, err
+		}
+		if err := retireLaunchTokens(ctx, tx, id); err != nil {
 			return User{}, err
 		}
 		if err := insertLaunchToken(ctx, tx, id, tokenSHA256, ttl); err != nil {

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/account"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
@@ -174,7 +175,13 @@ func TestPasswordChangeResetAndPendingGate(t *testing.T) {
 	// Reset: password cleared, every session gone, a new single-use link.
 	e.do("POST", "/api/v1/admin/users/"+admin.id+"/password-reset", nil, admin.o()).want(t, 409, "CONFLICT")
 	e.do("POST", "/api/v1/admin/users/"+carolID+"/password-reset", nil, carol.o()).want(t, 403, "FORBIDDEN")
+	// A login link issued before the reset does not survive it.
+	stale := NewToken()
+	if err := e.store.IssueLaunchToken(context.Background(), carolID, TokenHash(stale), 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
 	r = e.do("POST", "/api/v1/admin/users/"+carolID+"/password-reset", nil, admin.o()).want(t, 200, "")
+	e.do("POST", "/api/v1/session", map[string]string{"launch_token": stale}, opts{}).want(t, 401, "UNAUTHENTICATED")
 	for _, u := range []user{carol, second} {
 		e.do("GET", "/api/v1/session", nil, u.o()).want(t, 401, "UNAUTHENTICATED")
 	}
