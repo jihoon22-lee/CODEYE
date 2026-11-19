@@ -434,7 +434,7 @@ func TestTC97DocumentContentCannotChangeRequestConfig(t *testing.T) {
 	if !reflect.DeepEqual(normal(a.run), normal(b.run)) || !reflect.DeepEqual(normal(a.version), normal(b.version)) {
 		t.Fatalf("request configuration depends on document content:\n%+v\n%+v", normal(a.run), normal(b.run))
 	}
-	if a.run.OpenCodeModel != "opencode/fixture" || a.run.OpenCodeRelay != nil || a.run.Env != nil || a.instructions != b.instructions {
+	if a.run.OpenCodeModel != "opencode/fixture" || a.run.OpenCodeProvider != nil || a.run.Env != nil || a.instructions != b.instructions {
 		t.Fatal("managed profile or instructions changed")
 	}
 	start, end := strings.Index(a.prompt, "<review-input>"), strings.LastIndex(a.prompt, "</review-input>")

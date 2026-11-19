@@ -1,6 +1,7 @@
 import type { SessionInfo } from './accounts';
 import type { Api } from './api';
 import { ApiError } from './api';
+import { deepLinkFragment } from './deepLink';
 
 export type AnonymousReason = 'none' | 'launch_rejected' | 'expired' | 'logged_out';
 // Who is signed in, from the server's SessionView. The CSRF token is not part of it.
@@ -35,15 +36,16 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
 const MIN_RECHECK_MS = 30_000;
 
 // A launch link carries a single-use secret in the URL fragment (#launch=...). It is read
-// once and the fragment is removed from the address bar and history entry before any
-// network call is made. The secret is never stored, logged or rendered.
+// once and removed from the address bar and history entry before any network call is
+// made; only a deep link (#project=...&run=..., deepLink.ts) is kept. The secret is never
+// stored, logged or rendered.
 export function takeLaunchToken(env: Env): string | null {
   const hash = env.location.hash;
   if (!hash.startsWith('#')) return null;
   const params = new URLSearchParams(hash.slice(1));
   if (!params.has('launch')) return null;
   const token = params.get('launch');
-  env.history.replaceState(env.history.state, '', env.location.pathname + env.location.search);
+  env.history.replaceState(env.history.state, '', env.location.pathname + env.location.search + deepLinkFragment(params));
   return token && token.length <= 4096 ? token : null;
 }
 

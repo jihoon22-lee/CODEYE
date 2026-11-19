@@ -57,6 +57,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	modelExe := fs.String("opencode", "", "")
 	modelName := fs.String("model", "", "")
 	modelRelay := fs.String("model-relay-file", "", "")
+	// The provider API key is read by workers from this file at each model
+	// call; it is never an argument (docs/REVIEW.md#모델-설정).
+	modelCredential := fs.String("model-credential-file", "", "")
+	modelTimeout := fs.Duration("model-timeout", opencode.DefaultTimeout, "")
 	// The review pack is a node operator setting only; runs and profiles
 	// cannot select it. The default is review-r1 (the role pack); review-v1 is the legacy pack.
 	reviewPack := fs.String("review-pack", review.PackRole, "")
@@ -87,6 +91,9 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// mypy and pyright are alternative Python type checkers (docs/ANALYZERS.md#타입-검사기-선택):
 	// configuring both runs both only when the operator says so.
 	bothTypeCheckers := fs.Bool("python-both-type-checkers", false, "")
+	// Personal mode: take analysis work even without a usable baseline
+	// analyzer; the tasks of unusable tools are recorded unsupported.
+	advertiseAlways := fs.Bool("advertise-without-baseline", false, "")
 	fs.Var(&roots, "source-root", "")
 	fs.Var(&gitHosts, "git-host", "")
 	// Storage quota (docs/OPERATIONS.md#저장-영역과-상한): AREA=BYTES for snapshot, workspace,
@@ -166,12 +173,13 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
 		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
-		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ReviewPack: *reviewPack, ReviewMaxCalls: *reviewMaxCalls,
+		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewPack: *reviewPack, ReviewMaxCalls: *reviewMaxCalls,
 		RepositoryCodeSourceRoots: codeApproved,
 		StorageQuota:              limits,
 		StorageLogDir:             *storageLogDir,
 		Log:                       stderr,
 	}
+	cfg.AdvertiseWithoutBaseline = *advertiseAlways
 	// SIGUSR1 (codeye stop) drains: no new claims, running work
 	// finishes, then a clean exit.
 	drain, stopDrain := drainSignal()
@@ -199,7 +207,9 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 
 // workerHandlers registers the handlers of this build. Without a usable
 // baseline analyzer (go vet needs --go, ruff needs --ruff) the worker
-// advertises no capability and is never leased. The deep-review profile is
+// advertises no capability and is never leased, unless the operator asked for
+// it with --advertise-without-baseline (then the tasks of unusable tools end
+// unsupported). The deep-review profile is
 // discovery (env.discover, docs.discover) → the analyzer composite (go vet,
 // staticcheck, ruff, mypy, pyright, bandit in catalog order; unconfigured
 // tools plan unsupported tasks) → review roles. Discovery observes the configured go and shared
@@ -218,10 +228,15 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 		return nil, nil, errors.New("review call ceiling out of range")
 	}
 	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot, ToolPath: h.ToolPath}
+	cfg.AdvertiseWithoutBaseline = h.AdvertiseWithoutBaseline
 	hs, missing := builtin.Handlers(ctx, cfg, runner)
 	for i, handler := range hs {
 		if handler.Info().Name == analyzerpack.CompositeName {
-			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}
+			timeout := opencode.DefaultTimeout
+			if h.ModelTimeoutSeconds > 0 {
+				timeout = time.Duration(h.ModelTimeoutSeconds) * time.Second
+			}
+			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, CredentialFile: h.ModelCredentialFile, Timeout: timeout}
 			var reviewed analysis.Handler = review.Handler{Static: handler, Caller: caller}
 			if pack == review.PackRole {
 				reviewed = review.RoleHandler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}

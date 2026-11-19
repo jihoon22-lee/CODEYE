@@ -16,7 +16,7 @@
 |---|---|---|---|
 | TC-01 | 설명 없는 Git/local 프로젝트 등록 | 필수 추가 문서 없이 요청 가능, 자동 탐색 및 추정 표시 | REQ-001,004,005 |
 | TC-05 | monorepo·문서 없음·문서 충돌·버전 불일치 | 모듈별 사실/추론·제약 기록, 가능한 분석 계속 | REQ-001,004,005 |
-| TC-36 | Native doctor 실행, 도구 없음·실패·출력 초과·timeout | OS/arch와 실제 버전만 기록, 실패/미검증 구분, bounded probe, secret 상속·원시 출력 노출 없음 | REQ-004,030; NFR-001,006 |
+| TC-36 | Native doctor 실행, 도구 없음·실패·출력 초과·timeout | OS/arch와 실제 버전만 기록, 실패/미검증 구분, bounded probe, secret 상속·원시 출력 노출 없음. 도구는 에이전트와 같은 탐색으로 찾고 JSON 보고서에 경로가 없다 | REQ-004,030; NFR-001,006 |
 | TC-37 | DB 미설정·정상·잘못된 인증·없는 DB·허용되지 않은 TLS 설정 | 인증 query 성공만 available, 고정 실패 reason, credential argv/결과 비노출, 설정 없는 네트워크 호출 없음 | REQ-030; NFR-006 |
 | TC-39 | 웹에서 doctor JSON 읽기, 손상·미지원 schema·중복 ID·파일 교체 | 실제 결과만 표시, 오류와 미검증을 성공으로 바꾸지 않음, 파일 서버 전송 없음, 최신 선택 유지 | REQ-013,030; NFR-006 |
 | TC-96 | 루트와 중첩 모듈의 버전 요구가 다르고 노드 관측이 한 모듈에만 맞음 | 모듈별 요구·관측·적용 범위·근거가 분리된다. 모델이 없어도 사실과 미확인 값이 남는다. | REQ-004,005,006 |
@@ -158,6 +158,19 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 
 분석기 계약과 도구별 규칙은 [분석기](ANALYZERS.md)에 있다. 실도구 시험은 도구 경로 환경변수가 있을 때만 실행하고, CI에서는 캡처한 실제 출력을 재생하는 시험이 같은 판정 경로를 검사한다([시험 실행 방법](#시험-실행-방법)).
 
+## 도구 탐지
+
+도구를 찾는 규칙은 [도구 찾기](ANALYZERS.md#도구-찾기)다. 시험은 임시 디렉터리에 만든 가짜 도구 트리(버전 명령에 답하는 셸 스크립트)로 하므로 이 머신에 무엇이 설치되어 있는지와 무관하다. 실제 머신 시험은 `CODEYE_TEST_REAL_TOOLS=all`(또는 쉼표로 나눈 도구 이름)을 줄 때만 돈다.
+
+| TC | 조건 | 기대 결과 | 요구 |
+|---|---|---|---|
+| TC-176 | 모든 도구를 문서가 정한 위치에 둔 가짜 머신: PATH, `~/.local/bin`, `~/.opencode/bin`, CODEYE 도구 접두사(`bin`, `cpp/bin`, `go/bin`), `node_modules`의 진입 스크립트(도구 접두사와 node 설치 옆), rustup 기본 toolchain과 PATH의 rustup proxy, PATH의 npm shim | 18개 도구가 각 위치에서 경로·버전·`source`와 함께 `found`다. cargo·clippy는 proxy가 아닌 toolchain 디렉터리, JS 도구는 shim이 아닌 진입 스크립트다. 빈 머신은 모든 도구가 `not_found`이고 추가 방법이 있으며 쓸 수 있다고 세지 않는다 | REQ-004,030 |
+| TC-177 | 버전 처리: 시험한 계열 밖 버전, 알아볼 수 없는 출력, 앞 후보가 실패, 여러 후보 중 시험한 계열, proxy만 있는 cargo, node 없는 JS 도구, 명시 경로(쓸 수 없는 경우 포함) | 계열 밖은 쓰고 `tool_version_untested`를 기록한다. 알아볼 수 없는 후보는 건너뛰고 다음 후보를 쓰며, 남은 것이 없으면 `unusable`과 이유·`tried`다. 시험한 계열 후보가 우선한다. proxy와 node 없음은 `unusable`이다. 명시 경로는 유일한 후보이며 실패해도 다른 것으로 바꾸지 않는다. `agent.auto_detect=false`면 탐색하지 않는다 | REQ-004,030 |
+| TC-178 | 탐색 결과와 명시 설정을 합친 에이전트 인자: mypy와 pyright 둘 다·하나·명시 설정만, 쓸 수 없는 탐색 결과, 명시 go와 모듈 캐시, 모듈 캐시가 없는 디렉터리·상대 경로·파일 | 명시 값이 항상 우선하고 쓸 수 없는 탐색 결과는 넘기지 않는다. `--python-both-type-checkers`는 두 검사기가 모두 있을 때만 붙어 에이전트의 일관성 검사를 통과한다. `go env GOMODCACHE`는 실제 절대 디렉터리일 때만 `--go-mod-cache`가 된다. `tools.json`은 0600으로 쓰고 읽으며 다른 schema 버전·모르는 필드는 거부한다 | REQ-004,030 |
+| TC-179 | `codeye tools`(표·`--json`·설정 오류·없는 상태 디렉터리)와 `tools.json`·`examples/tools.json` schema, builtin의 `CheckTool`(모양 규칙·버전·시험한 계열) | 표는 찾은 것·없는 것·추가 방법을 보이고 `--json`은 schema를 통과한다. 상태 디렉터리가 없으면 아무것도 만들지 않는다. 도구 이름마다 시험한 계열이 있고, env shebang·proxy·node 없음은 분석기가 거부하는 이유 그대로 나온다 | REQ-004,030 |
+| TC-180 | `codeye doctor` 종료 코드: 도구 하나도 없음, 기준 분석기만 있음, `external` 모드에서 DB 없음, 관리형 모드에서 DB 설정 없음, DB 주소가 있는데 질의 실패, 설정에 적은 도구가 쓸 수 없음, 작업 디스크 쓰기 불가, 탐색된 도구가 쓸 수 없음 | 중요한 항목(`checks[].blocking`)만 1이다. 없는 선택 도구·psql·DB 미설정은 상태만 표시하고 0이다. `model`·`process_control` 항목과 그 사유 값이 없고 JSON 보고서에 경로가 없다. schema·예시·`validate_bundle`이 같은 계약이다 | REQ-004,030 |
+| TC-181 | 도구가 하나도 없는 노드(`--advertise-without-baseline`)와 기본 노드, 도구를 탐색해 넘긴 노드의 Go·Python·JS 실행 | 기본 노드는 광고하지 않는다. 플래그를 준 노드는 광고하고 모든 도구 작업을 `unsupported`(`tool_not_configured`)로 기록하며 run이 부분 보고서로 끝난다. 탐색 결과를 넘긴 노드는 의존성이 있는 Go 모듈(모듈 캐시)과 Python·JS를 분석하고 `tool_not_configured`가 없다 | REQ-004,030; TC-80 |
+
 ## 모델 검토
 
 | TC | 조건 | 기대 결과 | 요구 |
@@ -167,7 +180,7 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-12 | 모델 timeout·JSON 오류·permission ask | 제한 재시도 후 partial, 도구 기반 보고서 열람 가능 | REQ-012,013,026; NFR-008,010 |
 | TC-16 | 문서 prompt injection이 토큰/권한 상승 요구 | 실행 정책 유지, secret 미노출, 공격 자료로만 취급 | REQ-009,010,011 |
 | TC-34 | 원격 OpenCode가 다른 workspace를 봄 | marker/hash 불일치 거부, 다른 개인 경로 fallback 없음 | REQ-026 |
-| TC-38 | OpenCode CLI만 설치되고 모델 연결이 확인되지 않은 doctor | version_only, 모델·workspace·취소는 unverified, 모델 호출/자동 fallback 없음 | REQ-026,030 |
+| TC-38 | OpenCode CLI만 설치되고 모델 연결이 확인되지 않은 doctor | `opencode_cli`는 version_only, doctor는 모델·workspace·취소를 항목으로 두지 않고(연결은 `codeye model probe`) 모델을 호출하지 않으며 자동 fallback도 없음 | REQ-026,030 |
 | TC-76 | **실모델**. `codeye model probe`가 관리형 OpenCode 프로세스와 승인된 모델로 합성 입력을 보냄 | 작업별 확인값 일치, verified=true, cleanup=confirmed | REQ-026,030; NFR-006,008,010 |
 | TC-77 | 설치된 OpenCode CLI에 로컬 합성 응답이 read 도구를 요청(`scripts/test_opencode_policy.py`) | 광고한 도구 0개, 실제 tool_use/read는 error, 파일 내용이 모델로 전달되지 않음. 어댑터 회귀 시험에서 같은 이벤트는 policy_blocked | REQ-026,030; NFR-006,008,010 |
 | TC-78 | **실모델**. 실제 요청이 relay 장부에 예약된 뒤 컨텍스트 취소 | OS 프로세스 트리 정리 확인, cancelled. 이미 전송된 공급자 추론은 청구될 수 있어 장부에 사용량 또는 보수적인 예약을 유지 | REQ-026,030; NFR-006,008,010 |
@@ -198,6 +211,14 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-169 | 코드 분석 절의 모듈별 검토 장부: coverage fixture를 상한 15로 실행한 보고서(`examples/report-slices.json`), 장부·slice 발견·호출 `task_key`를 하나씩 어긴 보고서, builder 5 리비전, 비밀정보 검사가 없는 기본 상한 실행(`internal/report/testdata/report-unscreened.json`), 범위 계획 밖 파일이 생기는 200개 Go 파일 저장소 | slice 기록과 범위 산출물을 거부 없이 읽는다. slice 발견은 `review_sNNN_<후보>`로 코드 분석 분할에 들어간다. 모듈 행의 여섯 수 합이 대상 파일 수이고, 보낸 파일 합은 `llm_exposed_files` 이하이며 overview보다 많다. `calls_used`는 실제 호출 수(10)이고 상한 이하다. 상한으로 거절된 slice의 파일이 `files_budget_exhausted`와 공백 `review_scope_budget_exhausted`로 보인다. Go 검증·JSON schema·`validate_bundle.py`·웹 파서가 어긴 보고서를 거부하고, builder 5 리비전은 장부 없이 유효하다. 코드 미포함 projection은 장부를 바꾸지 않는다. Markdown·HTML·웹 화면이 같은 수를 보인다. 검사가 없어도 범위 산출물이 수락되고 모든 모듈 행과 slice 발견이 보이며, `model_input`은 `not_screened`이고 공백 `model_input_not_screened`가 보인다. 계획 밖 파일은 `files_not_planned`와 공백 `review_scope_not_planned`로 보인다. | REQ-012,027 |
 
 역할·입력·복구 규칙은 [모델 검토](REVIEW.md)에 있다.
+
+모델 설정([모델 검토](REVIEW.md#모델-설정)):
+
+| TC | 조건 | 기대 결과 | 요구 |
+|---|---|---|---|
+| TC-182 | 모델 ID(`openai/…`, `vendor/model` 중첩, 공백·`..`·대문자 provider), relay 프로필, 키 파일 provider, 키 파일 형식(CODEYE·OpenCode `auth.json`의 api·oauth 항목, 다른 provider, 권한 0644, 여러 줄 키, 모르는 필드, 없는 파일), 호출 사이에 바뀐 키 | `PROVIDER/MODEL`만 받고 `codeye-gateway/*`는 relay에만 쓴다. relay의 `OPENCODE_CONFIG_CONTENT`는 바이트가 이전과 같다. 키는 호출마다 다시 읽고, 쓸 수 없는 키 파일이면 요청 없이 `unsupported`(`model_credential_unavailable`)다. 키는 프로필에만 있고 기록된 명령·표준 출력에서 가려진다(`TestProviderKeyOnlyInProfile`, `TestCredentialReadAtCallTime`). | REQ-026,030; NFR-006 |
+| TC-183 | 개인 모드: 키 환경변수(`OPENAI_API_KEY` 등) 하나, 같은 키 재기록, 상태 키 파일·`agent.model.credential_file`·OpenCode `auth.json`의 순서, 이름 없는 설정·이름만 있는 설정·OpenCode 설정의 `model`, 키 없는 provider, OpenCode 없음, `model_review: false`인 root | 키 파일은 0600(디렉터리 0700)이고 같은 키면 다시 쓰지 않는다. 기본 모델은 `openai/gpt-6.2-sol`이다. 에이전트 인자에는 키 파일 경로만 있고, `model_review: false`가 아닌 root만 `--model-source-root`를 받는다. 모델을 정하지 못하면 모델 없이 시작한다. probe 기록에 키가 없다(`TestModelSecretFromEnvironment`, `TestModelResolutionOrder`, `TestPersonalModelFromSecret`). | REQ-026; NFR-006 |
+| TC-184 | 실제 OpenCode와 가짜 upstream(OpenAI provider에 `base_url`만 바꿈)으로 개인 모드 start → `codeye model probe` → 로컬 Go 프로젝트 run. 같은 키 파일을 401 upstream으로 바꾼 run, `--version`만 1.99.0인 wrapper로 재시작한 run(`scripts/test_postgres.py --personal-model`) | probe가 provider·모델·버전과 성공을 출력하고 검토 단계가 수락돼 `ai_review: performed`다. 401이면 probe가 `FAILED at request: model_auth_failed`이고 run은 정적 분석을 마치며 보고서(JSON·Markdown)가 미수행과 사유를 적는다. wrapper run은 검토를 수행하고 한계 `opencode_version_untested`를 싣는다. 키가 키 파일 밖의 상태 파일·로그·산출물·보고서·DB dump·CLI 출력·모든 프로세스 argv에 없다. 가짜 upstream 결과는 경로 검증이며 검토 품질의 근거가 아니다. | REQ-026; NFR-006,008 |
 
 ## 보고서·화면
 
@@ -264,8 +285,14 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-125 | `codeye start`·`stop`·`status`: 실행 중 작업의 drain, drain 시간 초과, stale 기록·재사용 pid·기록 없는 에이전트·포트 점유, 설정 오류 | drain은 실행 작업을 끝낸 뒤 추가 claim 없이 종료한다. 시간 초과는 취소하고 정리를 확인한다. 불확실하면 `recovery_required`다. 기록과 시작 시각이 다른 프로세스에는 신호를 보내지 않는다. 상태 파일은 0600·0700이고 DB URL과 장기 secret이 없다. | REQ-021,022; NFR-006 |
 | TC-126 | `codeye doctor --config`: 상한 초과 영역, 백업 없음·오래됨·읽을 수 없음, 불일치 상태, 진행 중 start/stop | 선택 필드 `operations`만 더하고 기존 check는 같다. schema가 상태와 필드 조합을 강제한다. | REQ-018; NFR-006 |
 | TC-127 | 개인 사용 경로: 시작, 프로젝트 추가, Go 분석, 정지, 백업, 새 DB·산출물 디렉터리로 복원, 복원본 시작, 보고서·근거 확인 | 모든 단계가 실제 바이너리로 끝난다. 복원본의 보고서·근거 hash·사람 판정이 원본과 같다. 안내서의 명령은 모두 실행한 것이다. | REQ-012; NFR-003 |
+| TC-170 | 설정 파일도 DB도 없는 상태에서 `codeye up --no-open <Go 폴더>`(PostgreSQL 프로그램은 PATH 탐색), 환경에 `CODEYE_DATABASE_URL`·`PGHOST`·`PGPASSWORD` | `schema_version`과 `source_roots`만 담은 0600 설정 파일이 생긴다. 상태 디렉터리에 cluster가 초기화되고(비밀번호 파일 0600) 127.0.0.1의 55432 이상 포트에서 뜬다. schema가 만들어지고 프로젝트가 등록되고 run이 보고서와 함께 끝난다. 출력에 환경 변수를 무시했다는 알림과 `#launch=…&project=…&run=…` 링크가 있고 DB URL·셸의 비밀번호는 없다. `status`의 `database.postgres`는 `running`이다. | REQ-001,004; NFR-006 |
+| TC-171 | TC-170이 출력한 링크를 Chromium으로 연다 | 한 번에 로그인되고 주소에 토큰이 남지 않으며 `project`만 남는다. 그 프로젝트와 현재 실행이 열려 있고 보고서를 연다. 세션 만료는 6일 뒤보다 늦다(7일). 웹 단위 시험: 깊은 링크는 canonical UUID인 `project`·`run`만 남기고 나머지는 지운다. | REQ-001; NFR-006 |
+| TC-172 | 실행 중에 다른 폴더로 `codeye up`, 설정의 root 아래 폴더, 상태 디렉터리를 포함하는 폴더, Git URL | 새 폴더는 root로 설정에 더해지고 에이전트가 drain 뒤 다시 등록되며 그 run도 보고서로 끝난다. root 아래 폴더는 그 root와 상대 경로를 쓰고 설정을 바꾸지 않는다. 데이터 디렉터리를 포함하는 폴더는 거부한다. Git URL은 아무것도 쓰거나 띄우지 않고 clone 안내와 종료 코드 2다. | REQ-001,015 |
+| TC-173 | `codeye stop` 뒤 `codeye up`, 정지 상태의 `codeye backup`(설정에 `backup_dir` 없음), 새 `state_dir`로의 `codeye restore` | stop의 `database`는 `stopped`이고 그 cluster의 PostgreSQL 프로세스가 없다. 다시 up하면 초기화·사용자 생성 없이 같은 프로젝트가 보인다. 백업은 `<state_dir>-backups` 아래에 세트를 만들고 띄운 PostgreSQL을 다시 멈춘다. 비밀번호는 `postgres/password` 밖의 상태 파일에 없다. 복원은 새 상태 디렉터리에 cluster를 만들고 복원하며 그 뒤 up이 새 노드로 시작한다(복원은 수동 실행으로 확인, smoke에는 없다). | NFR-003,006 |
+| TC-174 | PostgreSQL 프로그램 디렉터리: 16·17·13 설치, 프로그램이 빠진 디렉터리, 명시한 틀린 경로, 아무것도 없음, 주 버전 16 데이터 디렉터리와 17 프로그램, `PG_VERSION` 없는 비어 있지 않은 디렉터리 | 명시가 없으면 가장 높은 주 버전(14 이상), 데이터 디렉터리가 있으면 그 버전을 고른다. 플래그가 설정보다 먼저다. 명시한 경로가 조건을 채우지 않으면 다른 곳을 찾지 않고 그 경로와 이유를 말한다. 없으면 설치 방법·`postgres_bin_dir`·`external`을 알리는 오류다. 다른 주 버전 데이터 디렉터리와 정체 모를 디렉터리는 거부한다. | REQ-004; NFR-006 |
+| TC-175 | `{"schema_version":"0.1"}`만 있는 설정, `up`의 설정 편집(필드 순서·기본값·잘못된 결과), 기본 포트 7331을 다른 프로그램이 쓰는 상태, 설정에 적은 포트를 다른 프로그램이 쓰는 상태 | 기본값은 관리형 DB, `$XDG_STATE_HOME/codeye`(없으면 `~/.local/state/codeye`), root 없음이다. 편집은 다른 필드와 순서를 보존하고 기본값을 쓰지 않으며, 검증을 통과하지 못하면 파일을 바꾸지 않는다. 기본 포트가 쓰이면 7332 이후 빈 포트로 띄우고 `stop`·`status`·`open`이 그 주소를 쓴다. 적은 포트가 쓰이면 시작하지 않는다(포트 이동은 수동 실행으로 확인). | REQ-001; NFR-006 |
 
-개인 모드 운영 계약은 [운영](OPERATIONS.md)에 있다. `start`·`stop`·`status`·백업·복원 시험은 Linux 전용이다. 여러 사용자 운영의 수용(장애 훈련, 권한 철회, 품질 baseline)은 아직 TC가 없으며 [로드맵](ROADMAP.md)의 운영 수용 작업에서 정한다.
+개인 모드 운영 계약은 [운영](OPERATIONS.md)에 있다. `up`·`start`·`stop`·`status`·백업·복원 시험은 Linux 전용이다. 브라우저 자동 열기(`xdg-open`·`wslview`·`explorer.exe`)는 시험하지 않았다(열기 프로그램 선택 순서만 단위 시험). 여러 사용자 운영의 수용(장애 훈련, 권한 철회, 품질 baseline)은 아직 TC가 없으며 [로드맵](ROADMAP.md)의 운영 수용 작업에서 정한다.
 
 ## 연동
 
@@ -297,17 +324,17 @@ TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력
 | REQ-022,035 | ARCHITECTURE, EXECUTION, API | TC-18,21,22,23 |
 | REQ-023 | EXECUTION | TC-25 |
 | REQ-024,025 | GITHUB | TC-27,28,29 |
-| REQ-026 | REVIEW | TC-12,34 |
+| REQ-026 | REVIEW | TC-12,34,170,171,172 |
 | REQ-027 | REVIEW, EVALUATION | TC-33,97,100 |
 | REQ-028,029 | ARCHITECTURE, REPORT | TC-14,31 |
-| REQ-030 | SECURITY, OPERATIONS | TC-30 |
+| REQ-030 | SECURITY, OPERATIONS | TC-30,170 |
 | REQ-031 | REPORT, SECURITY | TC-15,31 |
 | REQ-032,033 | REQUIREMENTS | TC-35 |
 | NFR-001,009 | EXECUTION, OPERATIONS | TC-17,18,23 |
 | NFR-002,003 | EXECUTION, API, OPERATIONS | TC-21,23,25,32 |
 | NFR-004,005 | REPORT | TC-26, [UI 성능](#고위험-시나리오) |
-| NFR-006,007 | ARCHITECTURE, SECURITY | TC-02,15,22,31,32 |
-| NFR-008,010 | REVIEW, EVALUATION | TC-11,12,24,33 |
+| NFR-006,007 | ARCHITECTURE, SECURITY | TC-02,15,22,31,32,170,171,172 |
+| NFR-008,010 | REVIEW, EVALUATION | TC-11,12,24,33,172 |
 
 주요 문서 열의 이름은 `docs/` 아래 같은 이름의 `.md` 파일이다. 이 표는 요구별 대표 시험이며, 나머지 연결은 영역별 표의 요구 열에 있다.
 
@@ -374,7 +401,10 @@ python3 scripts/test_postgres.py --web --nodes --scheduler --personal
 - `--web`: 실제 `codeye serve`에 대한 브라우저 smoke(Playwright·Chromium).
 - `--nodes`: 서로 다른 노드 신원 두 개의 Linux Native 수용 시험. `CODEYE_TEST_STATICCHECK`·`CODEYE_TEST_NODE`·`CODEYE_TEST_RUFF` 등 도구 변수가 있으면 실제 도구로도 실행하고, 없으면 해당 smoke를 SKIP으로 출력한다.
 - `--scheduler`: 별도 DB에서 실제 controller·autoscaler와 `-tags codeye_fixture`로 빌드한 agent·worker(TC-71~75). fixture handler는 시험용이며 분석 결과가 아니다.
+- `--personal`: 개인 모드 start/status/stop, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32), 관리형 PostgreSQL의 `codeye up` 경로(TC-170~173, 웹 빌드가 있으면 TC-171의 Chromium 확인 포함). 관리형 cluster는 PATH의 PostgreSQL 프로그램으로 만든다. Linux 전용이며 모델 호출·다운로드가 없다.
+
 - `--personal`: 개인 모드 start/status/stop, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32). Linux 전용이며 모델 호출·다운로드가 없다.
+- `--personal-model`: 개인 모드 모델 설정(TC-184). 실제 OpenCode(`~/.opencode/bin/opencode` 또는 `CODEYE_TEST_OPENCODE_BIN`)와 가짜 upstream을 쓰며 유료 호출이 없다. `CODEYE_SMOKE_REAL_MODEL_CREDENTIAL`에 0600 키 파일(`base_url` 없음)을 주면 그 키로 첫 단계(probe와 run 하나, 호출 상한 15)만 실행한다(**실모델**, 비용 발생, relay 장부를 거치지 않으므로 비용은 따로 기록한다).
 - `--smokes-only`: Go 시험을 건너뛰고 고른 smoke만 다시 돌린다. 이때 마지막 줄은 저장 통합 시험을 실행했다고 주장하지 않는다.
 - `--pilot`: **실모델** 파일럿. 실제 모델 요청을 보낸다. 고정 OpenCode와 승인된 relay가 필요하다. `CODEYE_PILOT_RELAY_FILE`에 relay descriptor, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정한다. `CODEYE_PILOT_CASES`(예: `Q01-before,pilot`)로 대상을, `CODEYE_PILOT_REVIEW_PACK`으로 검토 팩을 고른다(기본 `review-r1`). 보관된 결과는 `python3 scripts/regression_pilot.py --audit-results "$CODEYE_PILOT_RESULTS"`로 다시 대조한다. 이 대조는 위치·줄 범위·blob SHA의 참조 검사이며 주장이 옳다는 보증이 아니다. Git 시험에 기록된 commit 객체가 로컬에 있어야 한다.
 

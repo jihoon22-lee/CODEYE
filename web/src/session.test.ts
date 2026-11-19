@@ -36,6 +36,22 @@ describe('takeLaunchToken', () => {
     expect(takeLaunchToken(other)).toBeNull();
     expect(other.history.replaceState).not.toHaveBeenCalled();
   });
+  it('keeps only a deep link (project, run) after the token is removed', () => {
+    const project = '11111111-2222-4333-8444-555555555555';
+    const run = '66666666-7777-4888-8999-aaaaaaaaaaaa';
+    const urls: (string | URL | null | undefined)[] = [];
+    const env = {
+      location: { hash: `#launch=tok&project=${project}&run=${run}&x=1`, pathname: '/', search: '' },
+      history: { state: null, replaceState: vi.fn((_s: unknown, _t: string, url?: string | URL | null) => { urls.push(url); }) },
+    };
+    expect(takeLaunchToken(env)).toBe('tok');
+    expect(urls).toEqual([`/#project=${project}&run=${run}`]);
+    // A malformed project ID is not a deep link: the fragment is cleared.
+    const bad = { ...env, location: { hash: '#launch=tok&project=../x&run=y', pathname: '/', search: '' } };
+    urls.length = 0;
+    expect(takeLaunchToken(bad)).toBe('tok');
+    expect(urls).toEqual(['/']);
+  });
   it('still clears the fragment when the token is empty or absurdly long, and returns null', () => {
     for (const hash of ['#launch=', `#launch=${'a'.repeat(5000)}`]) {
       const env = fakeEnv(hash);

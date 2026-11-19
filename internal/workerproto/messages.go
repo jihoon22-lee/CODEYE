@@ -76,9 +76,16 @@ type Hello struct {
 	ReviewPack string `json:"review_pack,omitempty"`
 	// ReviewMaxCalls is the node operator's model call ceiling per review
 	// attempt; 0 means the default (docs/REVIEW.md#모듈-단위-검토-분할).
-	ReviewMaxCalls int    `json:"review_max_calls,omitempty"`
+	ReviewMaxCalls int `json:"review_max_calls,omitempty"`
+	// ModelName is PROVIDER/MODEL.
 	ModelName      string `json:"model_name,omitempty"`
 	ModelRelayFile string `json:"model_relay_file,omitempty"`
+	// ModelCredentialFile is the file the worker reads the provider's API
+	// key from at every model call (docs/REVIEW.md#모델-설정); the key itself
+	// never travels in the hello.
+	ModelCredentialFile string `json:"model_credential_file,omitempty"`
+	// ModelTimeoutSeconds bounds one model call; 0 means the default (180).
+	ModelTimeoutSeconds int `json:"model_timeout_seconds,omitempty"`
 	Header
 	Protocol      string `json:"protocol"`
 	WorkerID      string `json:"worker_id"`
@@ -94,6 +101,10 @@ type Hello struct {
 	AnalyzerTools      map[string]string `json:"analyzer_tools,omitempty"`
 	ToolPath           string            `json:"tool_path"`
 	LeaseMarginSeconds int               `json:"lease_margin_seconds"`
+
+	// AdvertiseWithoutBaseline: advertise the analysis capability even when no
+	// baseline analyzer is usable; its tasks end unsupported (personal mode).
+	AdvertiseWithoutBaseline bool `json:"advertise_without_baseline,omitempty"`
 }
 
 // AttemptRef identifies the attempt a message belongs to.

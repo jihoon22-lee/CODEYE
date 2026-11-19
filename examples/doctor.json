@@ -21,58 +21,112 @@
     },
     {
       "id": "git",
-      "status": "unverified",
-      "reason": "version_unrecognized"
+      "status": "available",
+      "reason": "version_only",
+      "version": "2.53.0"
     },
     {
       "id": "go",
-      "status": "unverified",
-      "reason": "version_unrecognized"
+      "status": "available",
+      "reason": "version_only",
+      "version": "1.27.4"
     },
     {
       "id": "node",
-      "status": "unverified",
-      "reason": "version_unrecognized"
-    },
-    {
-      "id": "python",
-      "status": "unverified",
-      "reason": "version_unrecognized"
-    },
-    {
-      "id": "c_cpp",
-      "status": "unverified",
-      "reason": "version_unrecognized"
+      "status": "available",
+      "reason": "version_only",
+      "version": "24.18.0"
     },
     {
       "id": "rust",
-      "status": "unverified",
-      "reason": "version_unrecognized"
+      "status": "unavailable",
+      "reason": "executable_missing"
     },
     {
       "id": "postgres_client",
-      "status": "unverified",
-      "reason": "version_unrecognized"
+      "status": "available",
+      "reason": "version_only",
+      "version": "17.10"
     },
     {
       "id": "opencode_cli",
-      "status": "unverified",
-      "reason": "version_unrecognized"
+      "status": "available",
+      "reason": "version_only",
+      "version": "1.19.5"
+    },
+    {
+      "id": "analyzers",
+      "status": "available",
+      "reason": "baseline_analyzer_usable"
+    },
+    {
+      "id": "configured_tools",
+      "status": "available",
+      "reason": "configured_tools_usable"
     },
     {
       "id": "database",
       "status": "not_configured",
       "reason": "database_url_missing"
+    }
+  ],
+  "tools": [
+    {
+      "name": "go",
+      "status": "found",
+      "version": "1.27.4",
+      "version_tested": true,
+      "source": "PATH"
     },
     {
-      "id": "model",
-      "status": "unverified",
-      "reason": "adapter_contract_pending_w10"
+      "name": "git",
+      "status": "found",
+      "version": "2.53.0",
+      "version_tested": true,
+      "source": "PATH"
     },
     {
-      "id": "process_control",
-      "status": "unverified",
-      "reason": "native_executor_pending_w05"
+      "name": "node",
+      "status": "found",
+      "version": "24.18.0",
+      "version_tested": true,
+      "source": "PATH"
+    },
+    {
+      "name": "opencode",
+      "status": "found",
+      "version": "1.19.5",
+      "version_tested": true,
+      "source": "~/.opencode/bin"
+    },
+    {
+      "name": "staticcheck",
+      "status": "found",
+      "version": "2026.2.2",
+      "version_tested": true,
+      "source": "codeye-tools/go/bin"
+    },
+    {
+      "name": "ruff",
+      "status": "found",
+      "version": "0.15.2",
+      "version_tested": false,
+      "source": "~/.local/bin"
+    },
+    {
+      "name": "cppcheck",
+      "status": "not_found",
+      "version_tested": false
+    },
+    {
+      "name": "gitleaks",
+      "status": "unusable",
+      "version_tested": false
+    },
+    {
+      "name": "cargo",
+      "status": "not_found",
+      "version_tested": false
     }
   ],
   "operations": {

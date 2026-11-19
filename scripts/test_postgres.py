@@ -89,7 +89,7 @@ def main():
                                     cwd=ROOT, env=env, capture_output=True, timeout=60)
             report = json.loads(result.stdout)
             check = next(c for c in report["checks"] if c["id"] == "database")
-            assert result.returncode == 1 and check["status"] == "available", "진단 상태 불일치"
+            assert result.returncode == 0 and check["status"] == "available", "진단 상태 불일치"
             assert password not in result.stdout.decode() and password not in result.stderr.decode(), "credential 노출"
             from jsonschema import Draft202012Validator
             Draft202012Validator(json.loads((ROOT / "schemas/doctor.schema.json").read_text())).validate(report)
@@ -111,6 +111,9 @@ def main():
             if "--personal" in sys.argv[1:]:
                 import personal_smoke
                 personal_smoke.run(base, ROOT, env, probe_env)
+            if "--personal-model" in sys.argv[1:]:
+                import personal_model_smoke
+                personal_model_smoke.run(base, ROOT, env, probe_env)
             if "--pilot" in sys.argv[1:]:
                 import regression_pilot
                 regression_pilot.run(base, ROOT, env)

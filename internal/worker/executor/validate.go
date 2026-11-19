@@ -172,11 +172,11 @@ func prepare(spec Spec) (*prepared, *specError) {
 	if serr != nil {
 		return nil, serr
 	}
-	if spec.OpenCodeModel != "" || spec.OpenCodeRelay != nil {
-		if !spec.OpenCodeRelay.valid(spec.OpenCodeModel) {
+	if spec.OpenCodeModel != "" || spec.OpenCodeProvider != nil {
+		if !validOpenCode(spec.OpenCodeModel, spec.OpenCodeProvider) {
 			return nil, reject("invalid_opencode_model", "invalid model identifier")
 		}
-		for key, value := range managedOpenCodeEnv(spec.OpenCodeModel, spec.OpenCodeRelay) {
+		for key, value := range managedOpenCodeEnv(spec.OpenCodeModel, spec.OpenCodeProvider) {
 			env[key] = value
 		}
 	}
@@ -332,6 +332,9 @@ func secretValues(spec Spec) []string {
 	}
 	for _, v := range spec.Redact {
 		add(v)
+	}
+	if spec.OpenCodeProvider != nil {
+		add(spec.OpenCodeProvider.APIKey)
 	}
 	for _, i := range spec.SensitiveArgs {
 		if i >= 0 && i < len(spec.Args) {

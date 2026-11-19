@@ -2,7 +2,7 @@
 
 확정된 제품 결정(D), 설계 기본안과 구현 결정(A), 아직 확인할 환경 정보, 결정을 바꾸는 절차를 모은다. ID는 바꾸지 않는다. 각 결정은 영향 받는 요구 ID([요구사항](REQUIREMENTS.md))와 수용 시험 ID([시험](TESTING.md))를 적는다.
 
-날짜: A11~A13의 2026-11-17은 원래 결정 기록의 날짜다. A14~A34의 날짜는 결정을 처음 기록한 커밋의 날짜(기록일, 커밋 기준)다.
+날짜: A11~A13의 2026-11-17은 원래 결정 기록의 날짜다. A14 이후의 날짜는 결정을 처음 기록한 커밋의 날짜(기록일, 커밋 기준)다.
 
 ## 제품 결정
 
@@ -49,9 +49,9 @@
 
 ## 저장과 API
 
-**A14 — 저장 불변조건.** (기록 2026-11-18) pgx/v5 5.13.0과 내장 SQL migration을 사용한다. migration은 명시적 `codeye migrate`로만 실행하고 checksum·동시 적용·rollback을 검증한다. attempt는 leased/recovery_required/released, cleanup은 pending/uncertain/confirmed다. 만료/불확실 cleanup은 소유 슬롯을 유지하며 확인 후 failed로 정리한다. 명시적 failed/cancelled 재시도는 보관 snapshot과 확인된 cleanup만 허용한다. 동일 완료 receipt 재전송은 새 결과를 게시하지 않는다. event sequence와 entity version을 구분하고 task_executions로 재시도 전 이력을 보존한다. 성공 보고서 게시 게이트(A09)와 자원 admission(A18)은 이 저장 계층 위에 있다. 오류·호환·migration 세부는 [아키텍처](ARCHITECTURE.md)를 따른다.
+**A14 — 저장 불변조건.** (기록 2026-11-18) pgx/v5 5.13.0과 내장 SQL migration을 사용한다. migration은 명시적 `codeye migrate`로만 실행하고 checksum·동시 적용·rollback을 검증한다(개인 모드의 관리형 PostgreSQL은 `up`·`start`가 사본을 쓴 뒤 적용한다, A38). attempt는 leased/recovery_required/released, cleanup은 pending/uncertain/confirmed다. 만료/불확실 cleanup은 소유 슬롯을 유지하며 확인 후 failed로 정리한다. 명시적 failed/cancelled 재시도는 보관 snapshot과 확인된 cleanup만 허용한다. 동일 완료 receipt 재전송은 새 결과를 게시하지 않는다. event sequence와 entity version을 구분하고 task_executions로 재시도 전 이력을 보존한다. 성공 보고서 게시 게이트(A09)와 자원 admission(A18)은 이 저장 계층 위에 있다. 오류·호환·migration 세부는 [아키텍처](ARCHITECTURE.md)를 따른다.
 
-**A15 — 개인 모드 인증.** (기록 2026-11-18) loopback 전용 `codeye serve`를 제공한다. controller+agent를 함께 띄우는 `start`는 별도 supervisor 명령이다(A32에서 구현). CLI에서 발급하는 일회용 launch link는 0600 파일에 저장하며 DB에는 token hash만 보관한다. 세션 cookie·same-origin Host/Origin·CSRF를 강제하고 비구성원은 404로 존재를 숨긴다. migration 0002는 forward migration이며 배포/doctor에서 자동 적용하지 않는다. source 접근은 declared_unverified이고 worker 연결 전 queued를 성공으로 바꾸지 않는다. 브라우저 CSP 호환을 위해 JSON validator는 빌드 시 생성한다. [API](API.md)를 따른다.
+**A15 — 개인 모드 인증.** (기록 2026-11-18) loopback 전용 `codeye serve`를 제공한다. controller+agent를 함께 띄우는 `start`는 별도 supervisor 명령이다(A32에서 구현). CLI에서 발급하는 일회용 launch link는 0600 파일에 저장하며 DB에는 token hash만 보관한다(`codeye up`·`open`은 터미널에 출력한다, A38). 세션 cookie·same-origin Host/Origin·CSRF를 강제하고 비구성원은 404로 존재를 숨긴다. migration 0002는 forward migration이며 배포/doctor에서 자동 적용하지 않는다. source 접근은 declared_unverified이고 worker 연결 전 queued를 성공으로 바꾸지 않는다. 브라우저 CSP 호환을 위해 JSON validator는 빌드 시 생성한다. [API](API.md)를 따른다.
 
 ## 소스와 실행
 
@@ -77,7 +77,7 @@
 **A32 — 개인 패키징과 운영.** (기록 2026-11-19) REQ-018/021/022, NFR-003/006/007과 TC-124~127, TC-32에 대해 다음을 확정한다.
 
 1. **프로세스 관리.** `codeye start`가 controller와 로컬 에이전트를 setsid로 띄우고 pid와 프로세스 시작 시각을 0600 기록에 남긴다. 신호는 pidfd를 연 뒤 시작 시각이 같을 때만 보낸다. pid가 재사용된 다른 프로세스에 신호가 가지 않게 하기 위해서다. pidfd가 없는 커널에서는 신호를 보내지 않고 `recovery_required`로 남긴다. 강제 종료는 하지 않는다. systemd·Windows Service 등록은 OS마다 달라 하지 않았다. Windows는 빌드되며 명시적 미지원 오류를 낸다.
-2. **데이터베이스.** 운영자가 준비한 PostgreSQL(`CODEYE_DATABASE_URL`)만 구현했다. 관리형 모드를 넣으면 initdb·포트·버전 업그레이드·데이터 디렉터리 백업 책임이 CODEYE로 넘어온다. 그래서 설정에 이름만 두고 거부한다. start는 migration을 하지 않는다. schema 변경은 운영자가 백업한 뒤 `codeye migrate`로만 한다.
+2. **데이터베이스.** 운영자가 준비한 PostgreSQL(`CODEYE_DATABASE_URL`)만 구현했다. 관리형 모드를 넣으면 initdb·포트·버전 업그레이드·데이터 디렉터리 백업 책임이 CODEYE로 넘어온다. 그래서 설정에 이름만 두고 거부한다. start는 migration을 하지 않는다. schema 변경은 운영자가 백업한 뒤 `codeye migrate`로만 한다. (A38에서 관리형 모드를 구현해 기본으로 바꿨다. external 모드는 이 규칙 그대로다.)
 3. **정지.** drain(SIGUSR1) → 시간 초과 때 취소(SIGTERM) → 에이전트 journal로 정리 판정 → controller 정지 순서다. 에이전트가 끝나지 않으면 controller를 남긴다. 그래야 정리 보고를 계속 받을 수 있다. 취소된 run은 에이전트 종료의 기존 의미대로 `failed`(`agent_shutdown`)다. 자동으로 다시 대기열에 넣지 않았다. 그 판단은 재시도가 이전 attempt 결과를 덮지 않는 규칙(REQ-035)과 함께 정해야 한다.
 4. **저장 상한.** 적용은 claim 트랜잭션 한 지점이다. 노드 영역은 controller가 노드 파일시스템을 볼 수 없어서 에이전트가 재고 heartbeat로 보고한다. artifacts는 controller 저장소의 원천인 DB에서 sha256마다 한 번 센 크기 합으로 정한다. 자동 삭제는 하지 않는다. 참조·pin·보존 규칙 없이 지우면 근거를 잃기 때문이다. 정리 정책은 후속이다.
 5. **백업 일관성.** export한 DB snapshot 하나에서 dump와 확정 산출물 목록을 함께 얻는다. 산출물은 내용 주소이고 확정 뒤 바뀌지 않는다. 그래서 복사 시점이 달라도 hash로 같은 바이트임을 확인할 수 있다. DB 잠금이나 정지 강제는 개인 사용 중 백업을 막아 채택하지 않았다. 다만 정지 뒤 백업을 권장한다.
@@ -85,6 +85,19 @@
 7. **진단.** doctor는 선택 필드 `operations`만 더한다. `schema_version`은 0.1 그대로이고 `--config` 없는 출력은 바뀌지 않는다.
 
 [운영](OPERATIONS.md) · [사용 안내서](GUIDE.md)
+
+**A38 — `codeye up`과 관리형 PostgreSQL 기본.** (기록 2026-11-19) REQ-001/004/015, NFR-003/006과 TC-170~175에 대해 다음을 확정한다. A32의 2와 A14·A15의 일부를 개인 모드에서 바꾼다.
+
+1. **한 명령으로 시작.** 소유자가 아직 제품을 써 보지 못했고, 첫 보고서까지 사람이 하는 단계(PostgreSQL 준비·URL export·설정 작성·migrate·start·링크 파일 열기·root와 경로 입력)가 많았다. `codeye up [PATH]`이 설정 파일 생성, PostgreSQL, schema, controller·에이전트, 프로젝트 등록과 분석 요청, 로그인된 브라우저까지 한다. `start`·`stop`·`status`는 같은 핵심을 쓰고, 이미 실행 중인 프로세스는 그대로 쓴다. 에이전트 argv가 설정과 달라지면(새 root) drain으로 실행 중인 작업을 끝내게 한 뒤 다시 띄운다. drain 시간 안에 끝나지 않으면 취소하지 않고 다시 하라고 알린다. 실행 중인 분석을 버리지 않기 위해서다.
+2. **관리형 PostgreSQL이 기본.** `database.mode`를 비우면 `managed`다. 설치된 프로그램(주 버전 14 이상)으로 `<state_dir>/postgres/data`에 cluster를 만들고 127.0.0.1의 빈 포트에서 scram-sha-256으로만 받는다. PostgreSQL을 내려받거나 시스템 서비스를 바꾸지 않는다. 명시한 프로그램 디렉터리가 조건을 채우지 않으면 다른 곳으로 넘어가지 않고 오류다. 사용자가 고른 경로를 조용히 바꾸지 않기 위해서다. 데이터 디렉터리와 주 버전이 다른 프로그램은 거부한다(pg_upgrade는 하지 않는다. 백업·복원이 길이다). external 모드는 이전과 같다. A32 2의 우려(초기화·포트·버전·백업 책임)는 위 규칙과 기존 백업·복원으로 다룬다.
+3. **비밀번호는 상태 디렉터리에.** 생성 비밀번호를 `<state_dir>/postgres/password`(0600, 0700 디렉터리)에 둔다. "상태 디렉터리에 DB 인증정보를 두지 않는다"(A32)를 관리형 모드에서 바꾼다. 그 비밀번호는 이 상태 디렉터리의 cluster에만 쓰이고, 그 cluster의 데이터 파일이 이미 같은 디렉터리에 있어 파일을 읽을 수 있는 사람은 비밀번호 없이도 데이터를 읽는다. 비밀번호를 사람이 관리하게 하는 대안은 다시 수동 단계를 만든다. controller에는 환경변수로만 주고 설정·로그·출력에는 쓰지 않는다. `codeye` 사용자는 cluster superuser다(전용 cluster라 권한을 나누는 이득이 작다).
+4. **schema 자동 적용.** 관리형 모드의 `up`·`start`는 이전 버전 schema에 migration을 적용한다. 데이터가 있으면 먼저 `pg_dump --format=custom` 사본을 백업 디렉터리에 쓰고, 사본이 실패하면 아무것도 바꾸지 않는다. 바이너리보다 새 schema와 불일치 schema는 거부한다. 사본은 같은 시점 백업 세트(A32 5)가 아니라 되돌림용 dump다. 백업 세트의 snapshot 쿼리가 이전 schema를 가정할 수 없기 때문이다. external 모드는 계속 `codeye migrate`만 schema를 바꾼다.
+5. **`PG*` 변수 허용.** 관리형 모드는 셸의 `PG*` 변수와 `CODEYE_DATABASE_URL`을 프로세스에서 지우고 알린다. 저장 계층의 fail closed는 그대로라서 지운 뒤에야 연결한다. 셸 설정 때문에 시작하지 못하는 일을 없앤다.
+6. **링크 출력과 7일 세션.** `up`·`open`은 일회용 로그인 링크(10분, 한 번)를 터미널에 출력하고 브라우저를 연다. 파일을 찾아 여는 단계를 없앴다. 토큰이 터미널 기록에 남지만 한 번 쓰면 무효이고 10분 뒤 만료된다. 링크 파일(`start`, `login-link`)은 그대로다. 개인 모드 controller(`serve --personal`)의 세션은 7일(저장 계층 상한)이다. 서버 모드는 12시간 그대로다.
+7. **포트와 경로.** `listen`을 적지 않았으면 7331이 쓰일 때 7340까지 다음 빈 포트를 쓰고 controller 기록에 남긴다. 적은 주소는 바꾸지 않는다. `up PATH`는 PATH를 root로 설정 파일에 더하거나(폴더 이름 label) 이미 있는 root 아래 상대 경로로 쓴다. 상태·백업 디렉터리를 포함하는 폴더는 거부한다. 설정 파일은 `up`이 다루는 필드만 고치고 기본값을 쓰지 않는다. 다른 필드와 순서를 보존한다. 깊은 링크(`#project=…&run=…`)는 웹 앱이 canonical UUID인 두 키만 남긴다.
+8. **도구와 모델의 자리.** `up`은 에이전트 argv를 만들기 전에 탐지된 도구를 적용하는 함수(`applyDetectedTools`)와 모델을 준비하는 함수(`prepareModel`)를 부른다. 지금 앞의 것은 설정에 없는 Go toolchain만 PATH에서 채우고, 뒤의 것은 `agent.model` 유무를 알린다. 설정이 항상 우선한다.
+
+[운영](OPERATIONS.md#관리형-postgresql) · [사용 안내서](GUIDE.md#첫-시작)
 
 ## 진행 단계 기록
 
@@ -240,6 +253,20 @@
 8. **장부의 수.** `calls_used`는 기록 합이 아니라 범위 산출물의 `calls_before_slices`(attempt 호출 기록에서 셈)에 slice 기록의 호출을 더한다. 기록 없이 실패한 전체 역할의 호출도 들어가므로, 상한 대비 사용량을 보고서만으로 확인할 수 있다. slice 기록 없이 호출했을 수 있는 task가 있으면 `null`이다. 모듈 행의 파일은 보냄·비밀값 제외·읽을 수 없음·상한 초과·계획 밖·그 밖의 미전송 중 한 곳에만 센다. 장부와 화면은 이 범위를 "모델에 보냄"으로만 부르고 검증 범위라고 하지 않는다.
 
 [모델 검토](REVIEW.md#모듈-단위-검토-분할) · [분석기](ANALYZERS.md)
+
+**A39 — API 키 하나로 모델 설정.** (기록 2026-11-19) REQ-026/030, NFR-006/008과 TC-182~184에 대해 다음을 확정한다. 소유자는 OpenAI API 키(`OPENAI_API_KEY`)와 `gpt-6.2-sol`을 OpenCode로 쓰려 하고, 그 전까지 제품의 실모델 경로는 QA 예산 relay로만 실행됐다.
+
+1. **일반 공급자.** 모델은 (provider ID, API 키, 선택 endpoint)인 공급자 하나로 부른다. 예산 relay는 그 한 사례(`codeye-gateway`, OpenAI 호환 패키지, 고정 한도)이고 relay 프로필의 `OPENCODE_CONFIG_CONTENT`는 바이트가 이전과 같다(`TestRelayProfileUnchanged`). 회귀 파일럿과 평가 스크립트의 relay 경로를 바꾸지 않기 위해서다. 모델 ID는 `PROVIDER/MODEL`이면 받는다.
+2. **키는 파일, 호출마다 읽는다.** 실행기는 OpenCode에 실행별 HOME을 주고 `*API_KEY*`·`OPENAI_*`·`OPENCODE_*` 환경변수를 거른다. 그래서 키는 relay token과 같은 자리(`OPENCODE_CONFIG_CONTENT`의 provider `options.apiKey`)로만 들어가고 기록에서 가린다. 에이전트·워커에는 키 파일 경로만 간다(argv·Hello·로그에 키 없음). 키를 에이전트 환경변수로 넘기는 안은 모든 자식 프로세스 환경과 진단 출력에 퍼질 수 있어 택하지 않았다. 호출마다 읽으므로 키 교체가 재시작 없이 적용된다. OpenCode 프로세스의 환경에는 키가 있다(같은 사용자는 `/proc/PID/environ`으로 읽을 수 있다). relay token과 같은 수준이고 개인 모드에서는 받아들인다.
+3. **개인 모드의 기본값.** 키는 `agent.model.credential_file`, `<state_dir>/secrets/model.json`(0600, `codeye up`이 `OPENAI_API_KEY`·`ANTHROPIC_API_KEY`·`OPENCODE_API_KEY`에서 쓴다), OpenCode `auth.json`의 `api` 항목 순으로 찾는다. 모델은 `agent.model.name`, OpenCode 설정의 `model`, provider별 기본값(OpenAI `gpt-6.2-sol`) 순이다. 설정 파일에는 키를 두지 않는다. 설정 파일은 예시로 복사·공유되기 쉽고, 상태 디렉터리는 이미 0700이며 백업에 들어가지 않는다.
+4. **개인 모드에서는 모델 검토를 기본으로 허가한다.** 모델이 설정되면 개인 사용자의 모든 로컬 source root가 `--model-source-root`를 받고, `model_review: false`인 root만 뺀다. 개인 모드의 사용자는 자기 키로 자기 코드를 보내는 한 사람이다. 루트마다 허가를 적게 하면 키를 넣어도 검토가 실행되지 않아 사용자가 원인을 찾기 어렵다. 서버 모드는 그대로 운영자의 명시 허가다. 프로젝트별 선택이 들어오면 이 기본값 하나를 그 설정으로 바꾼다.
+5. **OpenCode 버전은 막지 않는다.** 시험한 1.19.5가 아닌 릴리스도 실행하고 기록·보고서에 `opencode_version_untested`를 남긴다. 릴리스 형식이 아닌 `--version` 응답만 거부한다. OpenCode는 자주 갱신되고, 사용을 막기보다 한계를 기록하는 쪽이 지금의 제품 방향이다. 응답 수집 규칙(이벤트 형식, workspace 확인)은 그대로라 형식이 바뀐 릴리스는 `model_output_invalid`로 드러난다.
+6. **모델은 항상 선언한다.** OpenCode 1.19.5의 오프라인 모델 목록에 `gpt-6.2-sol`이 없고 목록 갱신은 꺼져 있다(`OPENCODE_DISABLE_MODELS_FETCH`). 그래서 provider의 `models`에 모델을 선언한다. 목록에 있는 모델은 목록의 한도·추론 정보를 유지하는 것을 확인했다. 목록에 없는 모델은 기본값(추론 표시 없음, 출력 한도는 OpenCode 기본)으로 간다.
+7. **실패해도 분석은 계속.** 모델 실패는 오류 이벤트의 HTTP 상태로 `model_auth_failed`·`model_not_found`·`model_rate_limited`·`model_unavailable`로 나누고, 키 파일을 쓸 수 없으면 `unsupported`(`model_credential_unavailable`)다. 시작 전 확인(`codeye model probe`)이 실패해도 시작을 막지 않는다. 정적 분석은 끝나고 보고서가 검토 미수행과 사유를 적는다. 다른 모델로 자동 전환하지 않는다(REQ-030).
+8. **제한시간 180초.** 호출당 기본을 75초에서 180초로 올리고 1초~30분을 받는다. 추론 모델이 40 KB 안팎의 요청에 답하는 시간을 75초가 덮지 못할 수 있어서다. 측정값이 아니라 추정이며 실제 호출 시간을 보고 다시 정한다.
+9. **확인한 범위.** OpenCode 1.19.5가 이 설정으로 OpenAI Responses API에 스트리밍 요청(`POST {base_url}/responses`, `Authorization` 헤더)을 보내고, 가짜 upstream의 답으로 검토 단계가 수락되는 것까지 확인했다. OpenAI가 이 요청과 모델 ID를 받는지는 확인하지 않았다(유료 호출은 소유자 예산의 장부로 한 번 한다).
+
+[모델 검토](REVIEW.md#모델-설정) · [운영](OPERATIONS.md)
 
 ## 품질 평가
 

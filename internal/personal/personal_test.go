@@ -38,21 +38,23 @@ func TestParseDefaultsAndStrictness(t *testing.T) {
 		t.Fatal(c.Origin())
 	}
 	for name, raw := range map[string]string{
-		"unknown field":      cfg(state, `,"secret_token":"x"`),
-		"bad schema":         strings.Replace(cfg(state, ""), `"0.1"`, `"9.9"`, 1),
-		"relative state":     cfg("state", ""),
-		"public listen":      cfg(state, `,"listen":"0.0.0.0:7331"`),
-		"no port":            cfg(state, `,"listen":"127.0.0.1:0"`),
-		"managed db":         strings.Replace(cfg(state, ""), `"external"`, `"managed"`, 1),
-		"unknown tool":       cfg(state, `,"agent":{"tools":{"cppcheck2":"/x"}}`),
-		"relative tool":      cfg(state, `,"agent":{"tools":{"ruff":"ruff"}}`),
-		"negative quota":     cfg(state, `,"quota":{"logs_bytes":-1}`),
-		"model review alone": strings.Replace(cfg(state, ""), `"label":"work"`, `"label":"work","model_review":true`, 1),
-		"short cancel":       cfg(state, `,"stop":{"cancel_timeout_seconds":5}`),
-		"low call ceiling":   cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":14}}`),
-		"high call ceiling":  cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":208}}`),
-		"backup in state":    cfg(state, `,"backup_dir":`+q(filepath.Join(state, "b"))),
-		"trailing":           cfg(state, "") + "{}",
+		"unknown field":     cfg(state, `,"secret_token":"x"`),
+		"bad schema":        strings.Replace(cfg(state, ""), `"0.1"`, `"9.9"`, 1),
+		"relative state":    cfg("state", ""),
+		"public listen":     cfg(state, `,"listen":"0.0.0.0:7331"`),
+		"no port":           cfg(state, `,"listen":"127.0.0.1:0"`),
+		"unknown db mode":   strings.Replace(cfg(state, ""), `"external"`, `"sqlite"`, 1),
+		"unknown tool":      cfg(state, `,"agent":{"tools":{"cppcheck2":"/x"}}`),
+		"relative tool":     cfg(state, `,"agent":{"tools":{"ruff":"ruff"}}`),
+		"negative quota":    cfg(state, `,"quota":{"logs_bytes":-1}`),
+		"model name space":  cfg(state, `,"agent":{"model":{"name":"openai/gpt 6"}}`),
+		"model timeout":     cfg(state, `,"agent":{"model":{"timeout_seconds":1801}}`),
+		"relay and key":     cfg(state, `,"agent":{"model":{"relay_file":"/r","credential_file":"/k"}}`),
+		"short cancel":      cfg(state, `,"stop":{"cancel_timeout_seconds":5}`),
+		"low call ceiling":  cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":14}}`),
+		"high call ceiling": cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":208}}`),
+		"backup in state":   cfg(state, `,"backup_dir":`+q(filepath.Join(state, "b"))),
+		"trailing":          cfg(state, "") + "{}",
 	} {
 		if _, err := Parse([]byte(raw), tools); err == nil {
 			t.Errorf("%s accepted", name)

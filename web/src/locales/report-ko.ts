@@ -24,6 +24,16 @@ export const reportKo = {
     secret_columns_not_recorded: '비밀값 탐지는 줄 범위만 기록했습니다(도구의 열 위치가 첫 줄 뒤에서 어긋남).',
     history_not_scanned: '비밀값은 작업 사본만 검사했고 git 이력은 검사하지 않았습니다.',
     model_input_not_secret_screened: '비밀값 탐지가 실행되지 않아 모델 입력을 비밀값 기준으로 거르지 않았습니다.',
+    // Model call outcomes (docs/REVIEW.md).
+    opencode_version_untested: '시험하지 않은 OpenCode 버전으로 모델을 호출했습니다.',
+    model_not_configured: '모델이 설정되지 않아 모델 검토를 하지 않았습니다.',
+    model_credential_unavailable: '모델 API 키 파일이 없거나 읽을 수 없어 모델을 호출하지 않았습니다.',
+    model_auth_failed: '모델 공급자가 API 키를 거부했습니다(인증 실패).',
+    model_not_found: '모델 공급자에 그 모델이 없습니다.',
+    model_unavailable: '모델 공급자가 응답하지 않았거나 오류를 냈습니다.',
+    model_timeout: '모델 호출이 제한시간 안에 끝나지 않았습니다.',
+    model_rate_limited: '모델 공급자의 사용량 제한에 걸렸습니다.',
+    opencode_version_unsupported: 'OpenCode 실행 파일이 버전을 알 수 없는 값으로 답했습니다.',
     secret_files_withheld: '비밀값이 탐지된 파일은 모델 입력에서 뺐습니다.',
     data_directories_excluded: '숨김·testdata·vendor·node_modules 아래 파일은 측정하지 않았습니다.',
     // Task reasons and discovery limitations the analysis sections show.

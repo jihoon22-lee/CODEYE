@@ -24,7 +24,7 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 
 ### 네트워크와 브라우저
 
-수신 방식은 두 가지다. loopback 주소는 평문 HTTP로 받을 수 있다(개인 모드). 그 밖의 주소(`0.0.0.0`, `[::]`, LAN 주소)는 `codeye serve --tls-cert --tls-key --public-origin`을 모두 줄 때만 받고, 하나라도 없으면 서버가 시작하지 않는다. 서버 코드도 TLS가 없으면 loopback이 아닌 listener를 거부하므로 비 loopback 주소에서 평문 HTTP가 나가는 경로는 없다. 개인 모드 설정(`codeye start`)은 계속 loopback만 받는다.
+수신 방식은 두 가지다. loopback 주소는 평문 HTTP로 받을 수 있다(개인 모드). 그 밖의 주소(`0.0.0.0`, `[::]`, LAN 주소)는 `codeye serve --tls-cert --tls-key --public-origin`을 모두 줄 때만 받고, 하나라도 없으면 서버가 시작하지 않는다. 서버 코드도 TLS가 없으면 loopback이 아닌 listener를 거부하므로 비 loopback 주소에서 평문 HTTP가 나가는 경로는 없다. 개인 모드 설정(`codeye up`·`codeye start`)은 계속 loopback만 받는다.
 
 | 항목 | loopback(평문) | TLS |
 |---|---|---|
@@ -88,7 +88,7 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 - 마지막 활성 관리자는 비활성화하거나 관리자 역할을 거둘 수 없다. 검사는 활성 관리자 행 전체를 id 순으로 `FOR UPDATE` 잠근 같은 트랜잭션에서 하므로, 두 관리자가 동시에 서로를 내려도 한 명은 남는다.
 - 관리자 경로는 API 계층에서 세션의 관리자 여부를 확인하고, 저장 계층이 같은 트랜잭션에서 다시 확인한다(그 사이 역할을 잃었으면 403).
 - 비활성화는 되돌리는 경로가 없다. 비활성화와 재설정은 세션을 같은 트랜잭션에서 폐기하므로 이후 요청과 열린 이벤트 스트림의 다음 poll이 401·`closed`(`unauthenticated`)가 된다.
-- 개인 모드(`codeye start`)의 사용자는 관리자다([결정](DECISIONS.md) A36).
+- 개인 모드(`codeye up`·`codeye start`)의 사용자는 관리자다([결정](DECISIONS.md) A36). 개인 모드 브라우저 세션은 7일이다(A38).
 
 ### 노드와 에이전트
 
@@ -109,8 +109,8 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 
 ### 로컬 상태와 백업
 
-- 상태 디렉터리는 0700, 파일은 0600이다. 소유자가 다르거나 symlink인 상태 디렉터리는 거부한다. 설정과 상태 디렉터리에는 DB URL이나 토큰을 쓰지 않는다.
-- DB 연결은 실행 환경의 `CODEYE_DATABASE_URL`로만 받는다. 환경에 `PG*` 변수가 있으면 DB 열기를 거부한다(fail closed). 자식 프로세스(`pg_dump` 등)에는 연결 정보를 argv가 아닌 환경으로만 전달하고 오류 문구의 비밀번호를 `[REDACTED]`로 바꾼다.
+- 상태 디렉터리는 0700, 파일은 0600이다. 소유자가 다르거나 symlink인 상태 디렉터리는 거부한다. 설정에는 DB URL이나 토큰을 쓰지 않는다. 상태 디렉터리에서 비밀값을 담는 파일은 관리형 PostgreSQL의 생성 비밀번호 `postgres/password`(0600)뿐이다(A38). 그 cluster는 127.0.0.1에서만 받고 scram-sha-256으로 인증하며 socket은 상태 디렉터리 안에 둔다.
+- external 모드의 DB 연결은 실행 환경의 `CODEYE_DATABASE_URL`로만 받는다. 환경에 `PG*` 변수가 있으면 DB 열기를 거부한다(fail closed). 관리형 모드는 그 변수들을 프로세스에서 지우고 알린 뒤 자기 cluster에만 연결한다. `codeye up`·`open`은 일회용 로그인 링크를 터미널에 출력한다. 자식 프로세스(`pg_dump` 등)에는 연결 정보를 argv가 아닌 환경으로만 전달하고 오류 문구의 비밀번호를 `[REDACTED]`로 바꾼다.
 - 신호는 기록한 프로세스 ID와 시작 시각이 같은 프로세스에만 보낸다. 기록 없는 프로세스에는 어떤 명령도 신호를 보내지 않는다. 강제 종료(SIGKILL)는 하지 않는다.
 - 백업 세트는 DB dump를 담으므로 프로젝트·경로·보고서 같은 운영 데이터가 들어 있다. 인증정보 값은 없고 세션·토큰은 hash로만 저장된다. 세트 보호는 운영자 책임이다. 복원은 이전 노드·세션·쓰지 않은 토큰을 무효로 하고 lease를 되살리지 않는다([운영](OPERATIONS.md)).
 
@@ -136,12 +136,12 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 
 | 자격증명 | 지금 |
 |---|---|
-| DB | 실행 환경의 `CODEYE_DATABASE_URL`. 설정·상태 디렉터리·로그에 쓰지 않는다. loopback만 `sslmode=disable`, 그 외 `verify-full` |
+| DB | managed: 생성 비밀번호를 `state_dir/postgres/password`(0600)에 두고 controller에는 환경으로만 준다. external: 실행 환경의 `CODEYE_DATABASE_URL`. 둘 다 설정·로그에 쓰지 않는다. loopback만 `sslmode=disable`, 그 외 `verify-full` |
 | 사용자 세션·로그인 링크 | 0600 파일과 hash 저장([위](#네트워크와-브라우저)) |
 | 사용자 비밀번호 | PBKDF2 verifier만 저장([로그인과 제한](#로그인과-제한)). 평문은 저장·기록하지 않는다 |
 | TLS 키 | 운영자가 준 파일 경로. group·other 접근 불가 mode만 받는다. 내용은 오류 문구에 넣지 않는다 |
 | 노드 | 일회용 등록 토큰과 노드 credential. 0600 파일, hash 저장 |
-| 모델 | OpenCode CLI 설정 또는 승인된 로컬 relay 파일의 경로만 설정에 둔다. 값을 CODEYE 설정에 쓰지 않는다 |
+| 모델 | API 키는 키 파일(개인 모드 `<state_dir>/secrets/model.json` 0600, `agent.model.credential_file`, OpenCode `auth.json`)에만 두고, 설정·인자에는 그 경로나 relay 파일 경로만 둔다. 워커가 호출마다 읽어 OpenCode 프로필로만 넘기고 기록에서 가린다([검토](REVIEW.md#모델-설정)) |
 | Git | 공개 HTTPS 저장소만 가져온다. 비공개 저장소 credential 전달은 구현하지 않았다. 사용자 Git 설정과 credential helper를 차단한다 |
 | GitHub App key, 게시 credential | 설계 계약(미구현, [Git 연결](GITHUB.md)) |
 
@@ -156,7 +156,7 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 - **제외 정책.** 어느 깊이에서든 `.git`, `.codeye`, `node_modules`, `__pycache__`를 제외한다. credential 디렉터리(`.ssh`, `.aws`, `.gnupg`, `.docker`, `.kube`, `.azure`, `.gcloud`)와 비밀 파일 이름(`.env`와 `.env.*`(단 `.env.example`·`.env.sample`은 유지), `*.pem`, `*.key`, SSH 개인키, `.npmrc`, `.netrc`, `.git-credentials`, `.pypirc`, `.pgpass`, `*.tfstate`, `*.tfvars`, 인증서 저장소 등)을 기본으로 제외한다. 선택한 트리의 최상위에서 `build`, `dist`, `target`, `venv`, `.venv`도 제외한다. 소스 패키지 이름(`internal/credentials`, `internal/build`)은 유지한다. 제외 목록은 [소스 확보 구현](../internal/worker/source)이 기준이다.
 - **보고서의 코드 조각**은 소스와 같은 민감도다. 기본 내보내기는 코드 발췌를 뺀다. "코드 포함"은 같은 프로젝트의 읽기 권한자에게만 열린다.
 - **저장소 코드 실행 허가.** 저장소가 정한 코드(build script, 설정 프로그램, plugin, proc macro)를 실행하는 분석 작업은 노드 운영자가 source root마다 준 허가(`repository_code`)가 있을 때만 실행한다. 허가가 없으면 프로세스를 시작하지 않고 미지원으로 끝난다. Git 소스는 허가를 받지 않는다. 스냅샷과 저장소 설정은 이 값을 올릴 수 없다. 프로젝트 단위·revision 기반 실행 권한 저장소는 구현하지 않았다(설계 계약).
-- **모델 전송 승인.** root마다 `model_review`로 승인한 코드만 모델에 보낸다. 기본은 보내지 않음이다. 모델 설정이 없으면 다른 모델이나 인터넷 서비스로 우회하지 않고 모델 검토를 건너뛴 것으로 보고서에 표시한다.
+- **모델 전송 승인.** 서버 모드는 노드 운영자가 root마다 승인한 코드만 모델에 보낸다(기본은 보내지 않음). 개인 모드는 모델이 설정되면 개인 사용자의 로컬 root를 기본으로 승인하고 `model_review: false`인 root만 뺀다(A39). 모델 설정이 없으면 다른 모델이나 인터넷 서비스로 우회하지 않고 모델 검토를 건너뛴 것으로 보고서에 표시한다.
 - **네트워크.** 설정된 Git host, 모델 endpoint, mirror, CA만 쓴다. 소스 확보는 승인된 HTTPS host에서 redirect, URL userinfo, SSH, `git://`, 알려지지 않은 host를 거부한다. 도구에는 가능한 곳에서 오프라인 옵션을 준다(예: cargo `--offline`). 그러나 Native 실행에서 프로세스 전체의 네트워크를 OS 수준으로 차단하지는 않는다. 환경변수만으로 OS 수준 차단을 달성했다고 표시하지 않는다. 필요하면 OS 방화벽 등 운영자 통제를 둔다. 폐쇄망의 외부 telemetry·업데이트·원격 규칙 다운로드·공유 차단은 설계 계약이다([운영](OPERATIONS.md)).
 
 ## 보관과 삭제 (제안, 미구현)

@@ -14,9 +14,10 @@ import (
 )
 
 // `codeye backup` and `codeye restore` (docs/OPERATIONS.md#백업과-복원) for a personal
-// installation: the database is CODEYE_DATABASE_URL, the artifact store is
-// <state_dir>/artifacts and pg_dump/pg_restore come from
-// database.postgres_bin_dir.
+// installation: the database is the managed cluster (started for the
+// command when it is stopped) or CODEYE_DATABASE_URL, the artifact store is
+// <state_dir>/artifacts, and pg_dump/pg_restore come from the managed
+// cluster's binaries or database.postgres_bin_dir.
 
 func personalBackup(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var output, format string
@@ -28,11 +29,7 @@ func personalBackup(ctx context.Context, args []string, out, stderr io.Writer) i
 		return 2
 	}
 	if output == "" {
-		if cfg.BackupDir == "" {
-			fmt.Fprintln(stderr, "--output is required when backup_dir is not configured")
-			return 2
-		}
-		output = filepath.Join(cfg.BackupDir, "codeye-"+time.Now().UTC().Format("20060102T150405Z"))
+		output = filepath.Join(backupDirOf(cfg), "codeye-"+time.Now().UTC().Format("20060102T150405Z"))
 	}
 	abs, err := filepath.Abs(output)
 	if err != nil {
@@ -59,13 +56,14 @@ func personalBackup(ctx context.Context, args []string, out, stderr io.Writer) i
 	}
 	opCtx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	store, err := personalStore(opCtx)
+	store, db, err := personalStore(opCtx, cfg, layout, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "database unavailable:", err)
 		return 1
 	}
+	defer stopStartedDB(db)
 	defer store.Close()
-	m, err := backup.Create(opCtx, store, backup.Options{DatabaseURL: os.Getenv("CODEYE_DATABASE_URL"), PostgresBinDir: cfg.Database.PostgresBinDir,
+	m, err := backup.Create(opCtx, store, backup.Options{DatabaseURL: os.Getenv("CODEYE_DATABASE_URL"), PostgresBinDir: db.binDir,
 		ArtifactDir: layout.ArtifactDir(), Output: abs, PersonalUserID: user})
 	if err != nil {
 		fmt.Fprintln(stderr, "backup failed:", err)
@@ -113,7 +111,7 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 		return 1
 	}
 	defer unlock()
-	state := layout.Inspect(cfg.Listen, true)
+	state := layout.Inspect(probedListen(cfg), true)
 	if state.Running(personal.RoleController) || state.Running(personal.RoleAgent) || len(state.Issues) > 0 {
 		fmt.Fprintln(stderr, "the target installation is running or inconsistent; run codeye stop and check codeye status first")
 		return 1
@@ -133,14 +131,15 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 	}
 	opCtx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	store, err := personalStore(opCtx)
+	store, db, err := personalStore(opCtx, cfg, layout, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "database unavailable:", err)
 		return 1
 	}
+	defer stopStartedDB(db)
 	defer store.Close()
 	rep, err := backup.Restore(opCtx, store, v, backup.RestoreOptions{DatabaseURL: os.Getenv("CODEYE_DATABASE_URL"),
-		PostgresBinDir: cfg.Database.PostgresBinDir, ArtifactDir: layout.ArtifactDir()})
+		PostgresBinDir: db.binDir, ArtifactDir: layout.ArtifactDir()})
 	if err != nil {
 		fmt.Fprintln(stderr, "restore failed:", err)
 		return 1
@@ -160,6 +159,13 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 	fmt.Fprintf(out, "  verified: dump and %d artifact contents by sha256; every restored artifact row has its bytes\n", rep.Blobs)
 	fmt.Fprintf(out, "  rows: projects %d, runs %d, reports %d, evidence %d, finding reviews %d, schedules %d\n", rep.Rows["projects"], rep.Rows["runs"], rep.Rows["reports"], rep.Rows["evidence"], rep.Rows["finding_reviews"], rep.Rows["schedules"])
 	fmt.Fprintf(out, "  fenced: %d nodes revoked, %d sessions revoked, %d leased attempts -> recovery_required (%d reservations kept)\n", f.NodesRevoked, f.SessionsRevoked, f.AttemptsFenced, f.ReservationsHeld)
-	fmt.Fprintln(out, "next: codeye start (the local agent enrolls as a new node)")
+	fmt.Fprintln(out, "next: codeye up (the local agent enrolls as a new node)")
 	return 0
+}
+
+// stopStartedDB stops a managed server that this command started.
+func stopStartedDB(db *personalDB) {
+	if db != nil && db.started {
+		_ = db.stop(context.Background())
+	}
 }

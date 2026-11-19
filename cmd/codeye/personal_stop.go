@@ -43,7 +43,11 @@ type stopReport struct {
 	InFlight     []attemptReport `json:"in_flight_at_stop"`
 	AttemptsNow  []attemptReport `json:"attempts_after_stop"`
 	AgentCleanup string          `json:"agent_cleanup"`
-	Notes        []string        `json:"notes"`
+	// Database is what happened to the managed PostgreSQL: stopped,
+	// not_running, left_running (a CODEYE process still runs), stop_failed;
+	// external for database.mode external.
+	Database string   `json:"database"`
+	Notes    []string `json:"notes"`
 }
 
 func attemptReports(in []postgres.AttemptState) []attemptReport {
@@ -70,8 +74,8 @@ func personalStop(ctx context.Context, args []string, out, stderr io.Writer) int
 		return 1
 	}
 	defer unlock()
-	rep := stopReport{InFlight: []attemptReport{}, AttemptsNow: []attemptReport{}, Notes: []string{}, AgentCleanup: "not_applicable"}
-	state := layout.Inspect(cfg.Listen, true)
+	rep := stopReport{InFlight: []attemptReport{}, AttemptsNow: []attemptReport{}, Notes: []string{}, AgentCleanup: "not_applicable", Database: "external"}
+	state := layout.Inspect(probedListen(cfg), true)
 	for _, issue := range state.Issues {
 		switch issue {
 		case personal.IssueAgentWithoutRecord:
@@ -83,6 +87,12 @@ func personalStop(ctx context.Context, args []string, out, stderr io.Writer) int
 	// The database is optional for stop: without it the in-flight work is
 	// unknown, which the report says.
 	var store *postgres.Store
+	dctx, dcancel := context.WithTimeout(ctx, 30*time.Second)
+	db, dberr := personalDatabase(dctx, cfg, layout, dbOptions{notices: stderr})
+	dcancel()
+	if dberr != nil {
+		rep.Notes = append(rep.Notes, "database: "+dberr.Error())
+	}
 	if os.Getenv("CODEYE_DATABASE_URL") != "" {
 		sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		store, err = openStore(sctx)
@@ -92,7 +102,11 @@ func personalStop(ctx context.Context, args []string, out, stderr io.Writer) int
 		}
 	}
 	if store != nil {
-		defer store.Close()
+		defer func() {
+			if store != nil {
+				store.Close()
+			}
+		}()
 	} else {
 		rep.Notes = append(rep.Notes, "database unavailable: in-flight attempts were not read")
 	}
@@ -185,12 +199,40 @@ func personalStop(ctx context.Context, args []string, out, stderr io.Writer) int
 	}
 	rep.Processes = append(rep.Processes, cp)
 
+	// 3. The managed PostgreSQL, only when no CODEYE process is left.
+	pgFailed := false
+	if db != nil && db.managed {
+		switch {
+		case !db.running:
+			rep.Database = "not_running"
+		case !agentStopped || cp.After == personal.ProcRunning:
+			rep.Database = "left_running"
+		default:
+			if store != nil {
+				store.Close()
+				store = nil
+			}
+			pctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			if err := db.stop(pctx); err != nil {
+				rep.Database = "stop_failed"
+				rep.Notes = append(rep.Notes, "PostgreSQL did not stop: "+err.Error())
+				pgFailed = true
+			} else {
+				rep.Database = "stopped"
+				anyRunning = true
+			}
+			cancel()
+		}
+	}
+
 	switch {
 	case !agentStopped:
 		rep.Outcome = stopRecoveryRequired
 	case cp.After == personal.ProcRunning:
 		rep.Outcome = stopFailed
 		rep.Notes = append(rep.Notes, "the controller did not stop; it was not killed")
+	case pgFailed:
+		rep.Outcome = stopFailed
 	case rep.AgentCleanup == "uncertain":
 		rep.Outcome = stopRecoveryRequired
 	case activeAttempts(rep.AttemptsNow):
@@ -206,6 +248,9 @@ func personalStop(ctx context.Context, args []string, out, stderr io.Writer) int
 	} else {
 		for _, p := range rep.Processes {
 			fmt.Fprintf(out, "%-10s %-12s -> %-12s action=%s\n", p.Role, p.Before, p.After, p.Action)
+		}
+		if rep.Database != "external" {
+			fmt.Fprintf(out, "%-10s %s\n", "postgres", rep.Database)
 		}
 		for _, a := range rep.AttemptsNow {
 			fmt.Fprintf(out, "attempt %s run %s: %s cleanup=%s run=%s\n", a.ID, a.RunID, a.Status, a.Cleanup, a.RunStatus)

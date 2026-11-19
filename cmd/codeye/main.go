@@ -34,6 +34,9 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if args[0] == "model" {
 		return modelCommand(ctx, args[1:], out, stderr)
 	}
+	if args[0] == "tools" {
+		return toolsCommand(ctx, args[1:], out, stderr)
+	}
 	if code, ok := runPersonal(ctx, args, out, stderr); ok {
 		return code
 	}
@@ -78,6 +81,13 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 			return 2
 		}
 		opts.Personal = cfg
+		if cfg.Managed() {
+			// The managed cluster's URL when it runs (it is not started here).
+			layout := completeConfig(cfg)
+			if _, err := personalDatabase(ctx, cfg, layout, dbOptions{notices: stderr}); err == nil {
+				opts.DatabaseURL = os.Getenv("CODEYE_DATABASE_URL")
+			}
+		}
 	}
 	report := doctor.Collect(ctx, opts, doctor.NativeRunner{})
 	if err := report.Write(out, *format); err != nil {

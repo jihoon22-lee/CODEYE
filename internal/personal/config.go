@@ -1,11 +1,12 @@
 // Package personal runs CODEYE on one machine (docs/OPERATIONS.md): one JSON
 // configuration file, a 0700 state directory, one loopback controller and one
-// local node agent started, stopped and inspected by `codeye start|stop|status`.
+// local node agent started, stopped and inspected by `codeye up|start|stop|status`.
 //
-// It never stores the database URL or any token in the state directory or
-// the configuration: the operator provides CODEYE_DATABASE_URL in the
-// environment, and the one-time enrollment token lives in a 0600 file only
-// until the local agent has enrolled.
+// With database.mode "managed" (the default) CODEYE runs its own PostgreSQL
+// cluster in the state directory and keeps its generated password there
+// (0600). With "external" the operator provides CODEYE_DATABASE_URL in the
+// environment and no database credential is stored. The one-time enrollment
+// token lives in a 0600 file only until the local agent has enrolled.
 package personal
 
 import (
@@ -21,6 +22,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -29,7 +31,10 @@ const SchemaVersion = "0.1"
 
 // Database modes.
 const (
-	// DatabaseExternal: the operator provides CODEYE_DATABASE_URL (default).
+	// DatabaseManaged: CODEYE initializes and runs PostgreSQL in
+	// <state_dir>/postgres (default).
+	DatabaseManaged = "managed"
+	// DatabaseExternal: the operator provides CODEYE_DATABASE_URL.
 	DatabaseExternal = "external"
 )
 
@@ -46,13 +51,24 @@ type Config struct {
 	Quota         Quota        `json:"quota"`
 	BackupDir     string       `json:"backup_dir,omitempty"`
 	Stop          Stop         `json:"stop"`
+
+	// listenSet records whether listen was written in the file (a default
+	// listen address may move to the next free port).
+	listenSet bool
 }
+
+// ListenExplicit reports whether the configuration file sets listen.
+func (c *Config) ListenExplicit() bool { return c.listenSet }
+
+// Managed reports whether CODEYE runs its own PostgreSQL.
+func (c *Config) Managed() bool { return c.Database.Mode == DatabaseManaged }
 
 // Database selects how the controller reaches PostgreSQL.
 type Database struct {
 	Mode string `json:"mode"`
-	// PostgresBinDir holds pg_dump and pg_restore (backup, restore). They are
-	// never searched in PATH.
+	// PostgresBinDir holds the PostgreSQL programs. In external mode it is
+	// where backup and restore find pg_dump and pg_restore (never in PATH);
+	// in managed mode it is the first place searched (docs/OPERATIONS.md).
 	PostgresBinDir string `json:"postgres_bin_dir,omitempty"`
 }
 
@@ -64,9 +80,10 @@ type SourceRoot struct {
 	// RepositoryCode grants analyzers that execute repository code
 	// (docs/ANALYZERS.md#저장소-코드-실행-허가) for this root. Default false.
 	RepositoryCode bool `json:"repository_code,omitempty"`
-	// ModelReview approves sending this root's code to the configured model
-	// (agent.model). Default false.
-	ModelReview bool `json:"model_review,omitempty"`
+	// ModelReview approves sending this root's code to the configured model.
+	// Unset means approved whenever a model is configured (agent.model or a
+	// model credential); false keeps this root's code away from the model.
+	ModelReview *bool `json:"model_review,omitempty"`
 }
 
 // Agent configures the local node agent (codeye agent flags, docs/EXECUTION.md).
@@ -79,15 +96,30 @@ type Agent struct {
 	Tools                  map[string]string `json:"tools,omitempty"`
 	PythonBothTypeCheckers bool              `json:"python_both_type_checkers,omitempty"`
 	Model                  *Model            `json:"model,omitempty"`
+	// AutoDetect turns the tool detection off when false (docs/ANALYZERS.md#도구-찾기);
+	// absent or true means detect. agent.go, agent.tools and the other fields
+	// above always win over what detection finds.
+	AutoDetect *bool `json:"auto_detect,omitempty"`
 }
 
-// Model is the optional review model (an approved relay file or OpenCode).
-// Without it the review stage is skipped, never replaced by another model.
+// AutoDetectEnabled reports whether tools are detected on start.
+func (a Agent) AutoDetectEnabled() bool { return a.AutoDetect == nil || *a.AutoDetect }
+
+// Model is the optional review model (docs/REVIEW.md#모델-설정). Every field
+// may be empty: the API key comes from a credential file (credential_file,
+// <state>/secrets/model.json or OpenCode's auth.json), the model from
+// name or the provider's default, OpenCode from ~/.opencode/bin or PATH.
+// Without any model the review stage is skipped, never replaced by another model.
 type Model struct {
-	OpenCode   string `json:"opencode"`
-	Name       string `json:"name"`
-	RelayFile  string `json:"relay_file,omitempty"`
-	ReviewPack string `json:"review_pack,omitempty"`
+	OpenCode string `json:"opencode,omitempty"`
+	// Name is PROVIDER/MODEL, or a model name of the credential's provider.
+	Name string `json:"name,omitempty"`
+	// CredentialFile is a CODEYE model credential or an OpenCode auth.json.
+	CredentialFile string `json:"credential_file,omitempty"`
+	RelayFile      string `json:"relay_file,omitempty"`
+	// TimeoutSeconds bounds one model call (default 180, 1..1800).
+	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
+	ReviewPack     string `json:"review_pack,omitempty"`
 	// ReviewMaxCalls is the model call ceiling per review attempt
 	// (codeye agent --review-max-calls); 0 means the default.
 	ReviewMaxCalls int `json:"review_max_calls,omitempty"`
@@ -161,6 +193,18 @@ func DefaultPath() (string, error) {
 	return filepath.Join(dir, "codeye", "personal.json"), nil
 }
 
+// DefaultStateDir is $XDG_STATE_HOME/codeye, or ~/.local/state/codeye.
+func DefaultStateDir() (string, error) {
+	if x := os.Getenv("XDG_STATE_HOME"); x != "" && filepath.IsAbs(x) {
+		return filepath.Join(filepath.Clean(x), "codeye"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || !filepath.IsAbs(home) {
+		return "", errors.New("cannot determine the home directory; set state_dir")
+	}
+	return filepath.Join(filepath.Clean(home), ".local", "state", "codeye"), nil
+}
+
 // Load reads and validates path. knownTools are the analyzer tool and
 // toolchain flag names of this build (agent.tools keys).
 func Load(path string, knownTools []string) (*Config, error) {
@@ -226,9 +270,17 @@ func (c *Config) validate(knownTools []string) error {
 	if c.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("schema_version must be %q", SchemaVersion)
 	}
+	if c.StateDir == "" {
+		dir, err := DefaultStateDir()
+		if err != nil {
+			return err
+		}
+		c.StateDir = dir
+	}
 	if !absClean(c.StateDir) {
 		return errors.New("state_dir must be an absolute, clean path")
 	}
+	c.listenSet = c.Listen != ""
 	if c.Listen == "" {
 		c.Listen = DefaultListen
 	}
@@ -239,18 +291,19 @@ func (c *Config) validate(knownTools []string) error {
 	if c.WebDir != "" && !absClean(c.WebDir) {
 		return errors.New("web_dir must be an absolute, clean path")
 	}
+	if c.Database.Mode == "" {
+		c.Database.Mode = DatabaseManaged
+	}
 	switch c.Database.Mode {
-	case DatabaseExternal:
-	case "managed":
-		return errors.New("database.mode \"managed\" is not implemented (only \"external\" is supported)")
+	case DatabaseManaged, DatabaseExternal:
 	default:
-		return errors.New(`database.mode must be "external"`)
+		return errors.New(`database.mode must be "managed" (default) or "external"`)
 	}
 	if c.Database.PostgresBinDir != "" && !absClean(c.Database.PostgresBinDir) {
 		return errors.New("database.postgres_bin_dir must be an absolute, clean path")
 	}
-	if len(c.SourceRoots) == 0 || len(c.SourceRoots) > maxSourceRoots {
-		return fmt.Errorf("source_roots needs 1..%d entries", maxSourceRoots)
+	if len(c.SourceRoots) > maxSourceRoots {
+		return fmt.Errorf("source_roots has at most %d entries", maxSourceRoots)
 	}
 	labels, paths := map[string]bool{}, map[string]bool{}
 	for _, r := range c.SourceRoots {
@@ -265,9 +318,6 @@ func (c *Config) validate(knownTools []string) error {
 			return errors.New("source_roots labels and paths must be unique")
 		}
 		labels[label], paths[r.Path] = true, true
-		if r.ModelReview && c.Agent.Model == nil {
-			return errors.New("source_roots[].model_review needs agent.model")
-		}
 		if within(r.Path, c.StateDir) || within(c.StateDir, r.Path) {
 			return errors.New("a source root and state_dir must not contain each other")
 		}
@@ -310,11 +360,22 @@ func (c *Config) validate(knownTools []string) error {
 		}
 	}
 	if m := a.Model; m != nil {
-		if !absClean(m.OpenCode) || m.Name == "" || strings.ContainsAny(m.Name, " \t\r\n") {
-			return errors.New("agent.model needs an absolute opencode path and a PROVIDER/MODEL name")
+		if m.OpenCode != "" && !absClean(m.OpenCode) {
+			return errors.New("agent.model.opencode must be an absolute, clean path")
 		}
-		if m.RelayFile != "" && !absClean(m.RelayFile) {
-			return errors.New("agent.model.relay_file must be an absolute, clean path")
+		if m.Name != "" && !executor.ValidOpenCodeModel(m.Name) && (strings.Contains(m.Name, "/") || !executor.ValidOpenCodeModel("p/"+m.Name)) {
+			return errors.New("agent.model.name must be PROVIDER/MODEL or a model name (no spaces)")
+		}
+		for name, p := range map[string]string{"agent.model.relay_file": m.RelayFile, "agent.model.credential_file": m.CredentialFile} {
+			if p != "" && !absClean(p) {
+				return fmt.Errorf("%s must be an absolute, clean path", name)
+			}
+		}
+		if m.RelayFile != "" && m.CredentialFile != "" {
+			return errors.New("agent.model.relay_file and agent.model.credential_file are alternatives")
+		}
+		if m.TimeoutSeconds < 0 || m.TimeoutSeconds > 1800 {
+			return errors.New("agent.model.timeout_seconds must be 1..1800 (0 = 180)")
 		}
 		if m.ReviewPack != "" && m.ReviewPack != "review-r1" && m.ReviewPack != "review-v1" {
 			return errors.New("agent.model.review_pack must be review-r1 (default) or review-v1 (legacy)")

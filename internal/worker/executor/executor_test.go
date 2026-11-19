@@ -398,6 +398,33 @@ func TestRedaction(t *testing.T) {
 	}
 }
 
+// A model provider's API key reaches the process only through
+// OPENCODE_CONFIG_CONTENT: never argv, and it is masked in everything the
+// executor records even when the process prints its environment.
+func TestProviderKeyOnlyInProfile(t *testing.T) {
+	ws := newWorkspace(t)
+	const key = "sk-test-provider-key-0123456789"
+	spec := helperSpec(t, ws, "env")
+	spec.OpenCodeModel = "openai/gpt-6.2-sol"
+	spec.OpenCodeProvider = &ModelProvider{ID: "openai", APIKey: key}
+	res := run(t, spec)
+	requireClean(t, res, StatusExited)
+	meta, _ := json.Marshal(res)
+	for _, blob := range [][]byte{meta, res.Stdout.Data, res.Stderr.Data} {
+		if bytes.Contains(blob, []byte(key)) {
+			t.Fatalf("key leaked: %s", blob)
+		}
+	}
+	if !bytes.Contains(res.Stdout.Data, []byte(`OPENCODE_CONFIG_CONTENT=`)) || !bytes.Contains(res.Stdout.Data, []byte(redactedMarker)) {
+		t.Fatalf("the profile did not reach the process masked: %s", res.Stdout.Data)
+	}
+	for _, a := range res.Command.Argv {
+		if strings.Contains(a, "sk-test") {
+			t.Fatal(res.Command.Argv)
+		}
+	}
+}
+
 func TestEnforcedResourcesUnsupported(t *testing.T) {
 	ws := newWorkspace(t)
 	spec := helperSpec(t, ws, "cwd")

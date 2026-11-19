@@ -1,4 +1,4 @@
-// Package opencode runs the supported OpenCode CLI in a fresh QA workspace.
+// Package opencode runs the OpenCode CLI in a fresh workspace per request.
 // Only the digest marker and the caller's bounded input are visible to the model.
 package opencode
 
@@ -21,19 +21,38 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
+// Version is the OpenCode release this build was tested with. Other
+// releases run too; their calls carry the opencode_version_untested limitation.
 const Version = "1.19.5"
 const maxInput = 64 << 10
 const maxOutput = 64 << 10
 
-var identifier = regexp.MustCompile(`^opencode/[a-z0-9][a-z0-9.-]{0,100}$`)
+// DefaultTimeout bounds one model call (the agent's --model-timeout default).
+const DefaultTimeout = 180 * time.Second
 
-// Config is supplied by the operator, never by a project. This version supports
-// the explicit OpenCode Zen provider. Empty configuration makes no requests.
+// MaxTimeout is the longest accepted per-call limit.
+const MaxTimeout = 30 * time.Minute
+
+// LimVersionUntested marks records whose calls went through an OpenCode
+// release other than Version.
+const LimVersionUntested = "opencode_version_untested"
+
+// releaseVersion is the shape of `opencode --version`; anything else is not
+// an OpenCode release this adapter can talk to.
+var releaseVersion = regexp.MustCompile(`^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}([-+.][0-9A-Za-z.-]{1,40})?$`)
+
+// Config is supplied by the operator, never by a project. Empty
+// configuration makes no requests.
 type Config struct {
 	Executable string
-	Model      string
-	Timeout    time.Duration
-	RelayFile  string
+	// Model is PROVIDER/MODEL; codeye-gateway/* needs RelayFile.
+	Model   string
+	Timeout time.Duration
+	// RelayFile is the budgeted QA relay's descriptor.
+	RelayFile string
+	// CredentialFile holds the provider's API key (a CODEYE model credential
+	// or an OpenCode auth.json); it is read at every call.
+	CredentialFile string
 }
 
 type Request struct {
@@ -65,8 +84,48 @@ type packet struct {
 	Result         json.RawMessage `json:"result"`
 }
 
+// Provider is the provider part of the model ID.
+func (cfg Config) Provider() string {
+	p, _, _ := strings.Cut(cfg.Model, "/")
+	return p
+}
+
 func (cfg Config) valid() bool {
-	return filepath.IsAbs(cfg.Executable) && ((cfg.RelayFile == "" && identifier.MatchString(cfg.Model)) || (filepath.IsAbs(cfg.RelayFile) && (cfg.Model == "codeye-gateway/gpt-6.2-sol" || cfg.Model == "codeye-gateway/gpt-6.1-sol"))) && cfg.Timeout > 0 && cfg.Timeout <= 10*time.Minute
+	if !filepath.IsAbs(cfg.Executable) || !executor.ValidOpenCodeModel(cfg.Model) || cfg.Timeout <= 0 || cfg.Timeout > MaxTimeout {
+		return false
+	}
+	gateway := cfg.Provider() == executor.GatewayProvider
+	switch {
+	case cfg.RelayFile != "":
+		return gateway && cfg.CredentialFile == "" && filepath.IsAbs(cfg.RelayFile) &&
+			(cfg.Model == "codeye-gateway/gpt-6.2-sol" || cfg.Model == "codeye-gateway/gpt-6.1-sol")
+	case cfg.CredentialFile != "":
+		return !gateway && filepath.IsAbs(cfg.CredentialFile)
+	}
+	return !gateway
+}
+
+// VersionUntested reports whether v, a release OpenCode reported, is not
+// the tested one.
+func VersionUntested(v string) bool { return v != "" && v != Version }
+
+// provider reads this call's credential; nil when the model needs none.
+func (cfg Config) provider() (*executor.ModelProvider, string) {
+	switch {
+	case cfg.RelayFile != "":
+		relay, err := readRelay(cfg.RelayFile)
+		if err != nil || executor.GatewayProvider+"/"+relay.Model != cfg.Model {
+			return nil, "model_relay_unavailable"
+		}
+		return executor.RelayProvider(relay), ""
+	case cfg.CredentialFile != "":
+		p, err := ReadCredential(cfg.CredentialFile, cfg.Provider())
+		if err != nil {
+			return nil, ReasonCredentialUnavailable
+		}
+		return p, ""
+	}
+	return nil, ""
 }
 
 func outcome(r executor.Result) string {
@@ -140,14 +199,16 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 	spec := executor.Spec{Executable: cfg.Executable, Args: []string{"--version"}, WorkspaceRoot: dir, Dir: dir,
 		TempParent: q.Scratch, ProtectedRoots: q.ProtectedRoots, OpenCodeModel: cfg.Model,
 		Timeout: min(cfg.Timeout, 8*time.Second), StdoutLimit: 256, StderrLimit: 4096}
-	if cfg.RelayFile != "" {
-		relay, err := readRelay(cfg.RelayFile)
-		if err != nil || "codeye-gateway/"+relay.Model != cfg.Model {
-			reply.Reason = "model_relay_unavailable"
-			return
-		}
-		spec.OpenCodeRelay = relay
-		spec.Redact = []string{relay.Token}
+	// The credential is read now, for this call only: a key rotated or
+	// removed between calls takes effect at the next call.
+	provider, why := cfg.provider()
+	if why != "" {
+		reply.Reason = why
+		return
+	}
+	if provider != nil {
+		spec.OpenCodeProvider = provider
+		spec.Redact = []string{provider.APIKey}
 	}
 	run := runner.Run(ctx, spec)
 	reply.Cleanup, reply.Reason = run.Cleanup, outcome(run)
@@ -155,7 +216,7 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 		return
 	}
 	reply.Version = strings.TrimSpace(string(run.Stdout.Data))
-	if reply.Version != Version {
+	if !releaseVersion.MatchString(reply.Version) {
 		reply.Version = ""
 		reply.Reason = "opencode_version_unsupported"
 		return
@@ -172,6 +233,10 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) && reply.Cleanup != executor.CleanupUncertain {
 			reply.Reason = "model_timeout"
+			return
+		}
+		if reply.Reason == "model_unavailable" && run.Cleanup == executor.CleanupConfirmed {
+			reply.Reason = providerFailure(run.Stdout.Data)
 		}
 		return
 	}
@@ -194,6 +259,48 @@ func providerLimited(stderr []byte) bool {
 		}
 	}
 	return false
+}
+
+// Provider failure reasons read from OpenCode's error event.
+const (
+	ReasonAuthFailed    = "model_auth_failed"
+	ReasonModelNotFound = "model_not_found"
+)
+
+// providerFailure classifies a failed `opencode run` by its JSON error event
+// (HTTP status and error name only; the provider's message is not kept).
+func providerFailure(stdout []byte) string {
+	for line := range bytes.Lines(stdout) {
+		if reason := errorEventReason(line); reason != "" {
+			return reason
+		}
+	}
+	return "model_unavailable"
+}
+
+// errorEventReason is "" when line is not an error event.
+func errorEventReason(line []byte) string {
+	var event struct {
+		Type  string `json:"type"`
+		Error struct {
+			Name string `json:"name"`
+			Data struct {
+				StatusCode int `json:"statusCode"`
+			} `json:"data"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(line, &event) != nil || event.Type != "error" {
+		return ""
+	}
+	switch {
+	case event.Error.Data.StatusCode == 401 || event.Error.Data.StatusCode == 403 || event.Error.Name == "ProviderAuthError":
+		return ReasonAuthFailed
+	case event.Error.Data.StatusCode == 404 || event.Error.Name == "ProviderModelNotFoundError" || event.Error.Name == "ModelNotFoundError":
+		return ReasonModelNotFound
+	case event.Error.Data.StatusCode == 429:
+		return "model_rate_limited"
+	}
+	return "model_unavailable"
 }
 
 func collect(raw []byte, proof string) (json.RawMessage, *Usage, string) {
@@ -220,7 +327,7 @@ func collect(raw []byte, proof string) (json.RawMessage, *Usage, string) {
 			return nil, nil, "policy_blocked"
 		}
 		if event.Type == "error" {
-			return nil, nil, "model_unavailable"
+			return nil, nil, errorEventReason(line)
 		}
 		if event.Session != event.Part.Session || event.Part.Message == "" || finish {
 			return nil, nil, "model_output_invalid"

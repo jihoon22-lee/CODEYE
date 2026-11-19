@@ -571,5 +571,41 @@ def check_doctor_operations(validator, example) -> None:
     bad = copy.deepcopy(example)
     bad["operations"]["processes"]["controller"] = "alive"
     cases.append(("unknown process state", bad))
+    bad = copy.deepcopy(example)
+    bad["tools"][0]["path"] = "/home/user/.local/bin/go"
+    cases.append(("tool path in the doctor report", bad))
+    bad = copy.deepcopy(example)
+    bad["checks"] = [c for c in bad["checks"] if c["id"] != "database"] + [{"id": "model", "status": "unverified", "reason": "adapter_contract_pending_w10"}]
+    cases.append(("a check that is no longer reported", bad))
+    for name, data in cases:
+        expect_invalid(name, validator.validate, data)
+
+
+def check_tools_contract(validator, example) -> None:
+    """The tool detection document (docs/ANALYZERS.md#도구-찾기) matches the Go tool list
+    and ties each status to the fields it needs."""
+    names = [t["name"] for t in example["tools"]]
+    go = (ROOT / "internal/toolfind/detect.go").read_text(encoding="utf-8")
+    declared = re.findall(r'^\t"([a-z-]+)":\s+\{kind', go, re.M)
+    ensure(sorted(names) == sorted(declared), "tools example and toolfind specs list different tools")
+    cases = []
+    bad = copy.deepcopy(example)
+    bad["tools"][0]["status"] = "not_found"
+    cases.append(("not found with a path", bad))
+    bad = copy.deepcopy(example)
+    del bad["tools"][0]["path"]
+    cases.append(("found without a path", bad))
+    bad = copy.deepcopy(example)
+    bad["tools"][0]["path"] = "bin/go"
+    cases.append(("relative tool path", bad))
+    bad = copy.deepcopy(example)
+    bad["tools"] = bad["tools"][1:]
+    cases.append(("missing tool entry", bad))
+    bad = copy.deepcopy(example)
+    bad["tools"][5].pop("hint")
+    cases.append(("unusable without a hint", bad))
+    bad = copy.deepcopy(example)
+    bad["tools"][0]["notes"] = ["other"]
+    cases.append(("unknown note", bad))
     for name, data in cases:
         expect_invalid(name, validator.validate, data)

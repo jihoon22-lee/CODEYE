@@ -4,6 +4,37 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — `codeye up`과 관리형 PostgreSQL
+
+- **`codeye up [PATH]`**: 설정 파일이 없으면 `schema_version`만 담아 만들고, PostgreSQL을 상태 디렉터리에 초기화해 띄우고, schema를 만들거나 맞추고, controller와 에이전트를 시작한다. PATH를 주면 그 폴더를 source root로 설정에 더하고(이미 있는 root 안이면 그 root와 상대 경로) 프로젝트를 등록하고 분석을 요청한다. 일회용 로그인 링크(프로젝트와 실행으로 가는 `#project=…&run=…` 포함)를 출력하고 브라우저를 연다(WSL은 `wslview`·`explorer.exe`). 이미 실행 중이면 바뀐 것만 반영한다. 에이전트 설정이 바뀌면 drain 뒤 다시 띄운다. Git URL은 아직 받지 않고 clone 안내를 낸다. `codeye open`은 새 링크만 발급하고 연다.
+- **관리형 PostgreSQL(기본 `database.mode`)**: 설치된 PostgreSQL 14 이상(`--postgres-bin-dir`·`database.postgres_bin_dir`·`CODEYE_POSTGRES_BIN_DIR`·PATH·`/usr/lib/postgresql/*/bin` 등)으로 `<state_dir>/postgres/data`에 cluster를 만들고 127.0.0.1의 빈 포트(55432부터), scram-sha-256, 생성 비밀번호(`postgres/password`, 0600)로 띄운다. 데이터가 있는 이전 schema는 `pg_dump` 사본을 먼저 쓰고 자동 migration한다. 셸의 `PG*` 변수와 `CODEYE_DATABASE_URL`은 무시하고 알린다. `stop`이 PostgreSQL도 멈추고(`database` 필드), `status`가 상태·포트·버전을 보이고, `backup`·`restore`가 그 cluster를 쓴다(멈춰 있으면 그 동안만 띄운다). 프로그램이 없거나 데이터 디렉터리와 주 버전이 다르면 할 일을 알리는 오류다. external 모드는 그대로다.
+- 설정 기본값: `state_dir` `~/.local/state/codeye`, `source_roots` 비어도 됨, `web_dir` 실행 파일 옆 `web/dist`, 백업 위치 `<state_dir>-backups`. `listen`을 적지 않았으면 7331이 쓰일 때 7340까지 다음 빈 포트를 쓴다.
+- 개인 모드 controller(`codeye serve --personal`)의 브라우저 세션은 7일이다.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10(관리형 cluster와 smoke의 임시 서버), Node 24.18.0, Playwright Chromium. 임시 설정·상태 디렉터리로 `up` → Go 분석 보고서 → 출력 링크로 Chromium 로그인 → `stop`(PostgreSQL 정지) → `backup` → `up` 재사용 → 새 상태 디렉터리로 `restore` → `up`을 실행했다. 브라우저 자동 열기 프로그램은 실행하지 않았다.
+
+### 추가 — 도구 자동 탐지
+
+- **도구 탐지**(`internal/toolfind`): go, git, node, OpenCode와 분석기 도구 열네 개를 사용자의 PATH, `~/.local/bin`, `~/go/bin`, `/usr/local/go/bin`, `~/.opencode/bin`, CODEYE 도구 접두사 `~/.local/share/codeye-tools/{bin,cpp/bin,go/bin}`에서 찾는다. JS 도구(pyright, eslint, tsc, jscpd)는 `node_modules`의 진입 스크립트(도구 접두사와 찾은 node 옆, PATH의 npm shim은 가리키는 스크립트로 푼다), cargo·clippy는 `~/.rustup/settings.toml`의 기본 toolchain(없으면 나머지 toolchain)의 실제 바이너리를 쓰고 rustup proxy는 쓰지 않는다. 후보마다 에이전트가 시작할 때 하는 검증과 같은 것(`builtin.CheckTool`: 분석기 생성의 모양 규칙과 버전 probe)을 하므로 찾은 도구는 에이전트가 받아들이는 도구다. 상태는 `found`·`not_found`·`unusable`이고 경로, 버전, 시험한 계열 여부, 찾은 위치, 이유, 한 줄 추가 방법을 기록한다. 시험한 계열 밖의 버전은 `tool_version_untested`로 기록하고 쓴다. 찾은 go의 `go env GOMODCACHE`를 모듈 캐시로 넘기고(go vet은 `GOPROXY=off`), mypy와 pyright가 모두 있으면 `--python-both-type-checkers`를 함께 준다. 명시 설정은 항상 우선한다. 결과는 `<state_dir>/tools.json`([schema](schemas/tools.schema.json), [예시](examples/tools.json))이다.
+- **`codeye tools [--config PATH] [--json]`**: 찾은 것·없는 것·추가 방법의 표를 보인다. 설정 파일이 없어도 동작하고 아무것도 설치하지 않는다.
+- **`agent.auto_detect`**: 개인 모드 설정. `false`이면 탐색하지 않고 명시 설정만 쓴다.
+- **`--advertise-without-baseline`**(에이전트 플래그, worker hello `advertise_without_baseline`, `builtin.Config.AdvertiseWithoutBaseline`): 기준 분석기가 하나도 없어도 분석 capability를 광고한다. 쓸 수 없는 도구의 작업은 `unsupported`로 기록되고 run은 부분 보고서로 끝난다. 기본은 꺼져 있다.
+- 확인 환경: Linux, 이 머신의 `~/.local/share/codeye-tools`·`~/.local/bin`·`~/.rustup`·`~/.opencode`. 가짜 도구 트리 단위 시험과 실제 머신 시험(`CODEYE_TEST_REAL_TOOLS=all`), 탐색 결과를 넘긴 개인 모드의 Go(모듈 캐시의 의존성 포함)·Python·JS 분석에서 `tool_not_configured`가 없음을 확인했다.
+
+### 변경 — `codeye doctor`
+
+- 도구를 PATH 조회 대신 도구 탐지로 찾는다. 에이전트가 쓸 도구와 같은 결과이고, JSON 보고서의 `tools` 배열(경로 없음)과 텍스트의 도구 표로 보인다.
+- 항상 `unverified`이던 `model`·`process_control` 항목과 사유 값 `adapter_contract_pending_w10`·`native_executor_pending_w05`·`runtime_process_control_not_probed`를 없앴다. `python`·`c_cpp`(PATH의 `python3`·`cc`) 항목도 에이전트가 쓰지 않으므로 없앴다. `analyzers`(기준 분석기가 하나라도 쓸 수 있는가)와 `configured_tools`(설정에 적은 도구가 쓸 수 있는가)가 생겼다.
+- 종료 코드는 이 모드에서 중요한 항목(`checks[].blocking`)이 실패했을 때만 1이다. 이전에는 늘 1이었다.
+
+### 추가 — API 키로 모델 설정
+
+- **일반 모델 공급자**: 모델 ID는 `PROVIDER/MODEL`이면 받는다(이전에는 `opencode/*`와 QA relay만). 워커가 API 키 파일을 모델 호출마다 읽어 `OPENCODE_CONFIG_CONTENT`의 provider 설정으로만 넘기고 기록에서 가린다. 에이전트 `--model-credential-file`, `--model-timeout`(기본 180초, 이전 75초 고정), Hello `model_credential_file`·`model_timeout_seconds`. 키 파일은 CODEYE 형식(`provider`, `api_key`, 선택 `base_url`·`openai_compatible`) 또는 OpenCode `auth.json`의 `api` 항목이다. QA relay는 이 공급자의 한 사례이고 프로필 바이트는 그대로다.
+- **개인 모드**: `agent.model` 없이도 `<state_dir>/secrets/model.json`이나 OpenCode `auth.json`의 키로 모델을 쓴다. 기본 모델은 OpenAI `gpt-6.2-sol`, Anthropic `claude-opus-5-5`, OpenCode Zen `gpt-6.1-sol`이고 `agent.model.name`으로 바꾼다. `agent.model`의 `opencode`·`name`은 선택이 됐고 `credential_file`·`timeout_seconds`가 생겼다. 모델이 설정되면 로컬 source root의 모델 검토를 기본으로 허가한다(`model_review: false`로 뺀다). `personal.WriteModelSecretFromEnv`가 `OPENAI_API_KEY`·`ANTHROPIC_API_KEY`·`OPENCODE_API_KEY`에서 키 파일을 쓴다(`codeye up`이 부른다).
+- **OpenCode 버전**: 시험한 1.19.5가 아닌 릴리스도 실행하고 기록·보고서 한계에 `opencode_version_untested`를 남긴다.
+- **`codeye model probe`**: 인자 없이 개인 설정의 모델을 확인하고 provider·모델·OpenCode 버전, 성공 또는 실패한 단계와 사유를 사람이 읽는 문장으로 출력한다(`--json`, `--credential-file`). 실패 사유는 `model_auth_failed`·`model_not_found`·`model_rate_limited`·`model_credential_unavailable`로 나뉘고 보고서가 한국어로 설명한다. 확인이 실패해도 분석은 실행된다.
+- `scripts/fake_model_upstream.py`가 OpenCode의 OpenAI provider가 직접 보내는 스트리밍 Responses 요청과 `probe` 역할에 답하고, `--mode unauthorized`(401)를 갖는다. `scripts/test_postgres.py --personal-model`이 실제 OpenCode와 가짜 upstream으로 개인 모드 모델 경로 전체를 확인한다.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10(임시 cluster), OpenCode 1.19.5, 가짜 upstream. 실모델 호출은 하지 않았다. OpenAI가 `gpt-6.2-sol` 요청을 받는지는 확인하지 않았다.
+
 ### 추가
 
 - **분석 종류별 절**: 보고서가 종합, 환경 분석, 문서 분석, 정적 분석(언어·도구별), 구조·중복 지표, 비밀정보(값 없음), 코드 분석(모델 검토), 분석 공백 순의 절로 나뉜다. 선택 최상위 블록으로 더했고 기존 필드는 바이트 단위로 같다(report 패키지 시험 입력 84개를 이전 builder 출력과 대조). 보고서 builder는 5이며, 모든 관찰과 발견이 한 절에 한 번씩 들어가는지를 저장·조회 검증이 확인한다. 상태·품질 판정 규칙은 그대로다. 모델 문장은 수락된 역할 기록에서만 오고 "모델 해석"으로 표시하며 코드 미포함 내보내기에서는 생략한다. Markdown·HTML·웹 화면은 같은 수를 보이고, 절이 없는 이전 리비전은 이전 평면 배치로 보인다. "이전 실행과 비교"는 웹 화면에만 있다. 분석기 envelope와 descriptor에 분석기 목적(`analyzer.purpose`: 지표·비밀정보)을 기록해 어느 절로 갈지 정한다. [`examples/report.json`](examples/report.json)과 [`examples/report.md`](examples/report.md)는 실제 worker 파이프라인과 대본 모델 응답으로 다시 만들었다(합성 예시, 실모델 호출 없음).
@@ -48,7 +79,6 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - 검토 팩 ID `review-r1`·`review-v1`과 그 디렉터리: 저장된 기록이 팩 ID와 digest로 해석된다.
 - `migrations/sql/`: 적용된 migration은 checksum으로 대조한다.
 - fixture 입력 안의 파일·매크로 이름, 보류 집합 `fixtures/r1-quality/`, 보류 평가 결과 문서: 도구 출력 캡처와 봉인 digest가 그 내용을 고정한다.
-- 진단 사유 값 `adapter_contract_pending_w10`: API로 나가는 값이다.
 
 ## 개인 실용판 — 2026-11-19
 
