@@ -26,7 +26,7 @@ import (
 type screenStub struct{ mode string }
 
 func (screenStub) Descriptors() []pack.Descriptor {
-	return []pack.Descriptor{{ID: "go.vet", Name: "go-vet"}, {ID: "any.lizard", Name: "lizard"}, {ID: "any.gitl" + "eaks", Name: secretsTaskKey}}
+	return []pack.Descriptor{{ID: "go.vet", Name: "go-vet"}, {ID: "any.lizard", Name: "lizard", Purpose: obsdoc.PurposeMetrics}, {ID: "any.gitl" + "eaks", Name: secretsTaskKey, Purpose: obsdoc.PurposeSecrets}}
 }
 
 const secretsTaskKey = "secrets"
@@ -50,14 +50,14 @@ func (w screenStub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec
 	if t.Key == secretsTaskKey && w.mode == "missing" {
 		return analysis.TaskResult{Status: domain.TaskFailed, Reason: "handler_error"}
 	}
-	id, rule, msg, category := "any.lizard", "cyclomatic_complexity", "Forward(...) at gateway.go:10: NCSS 5, CCN 17", "maintainability"
+	id, rule, msg, category, purpose := "any.lizard", "cyclomatic_complexity", "Forward(...) at gateway.go:10: NCSS 5, CCN 17", "maintainability", obsdoc.PurposeMetrics
 	var metric *obsdoc.Metric
 	if t.Key == secretsTaskKey {
-		id, rule, msg, category = "any.gitl"+"eaks", "aws-access-token", "secret detected by gitl"+"eaks rule aws-access-token (value withheld)", "security"
+		id, rule, msg, category, purpose = "any.gitl"+"eaks", "aws-access-token", "secret detected by gitl"+"eaks rule aws-access-token (value withheld)", "security", obsdoc.PurposeSecrets
 	} else {
 		metric = &obsdoc.Metric{Name: "cyclomatic_complexity", Value: 17, Threshold: 16, Unit: "count"}
 	}
-	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: "any"}, obsdoc.Component{ID: t.Key, Version: "1"}, obsdoc.Component{ID: t.Key + "-stub", Version: "1"}, t.Key, j.Snapshot.Digest)
+	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: "any", Purpose: purpose}, obsdoc.Component{ID: t.Key, Version: "1"}, obsdoc.Component{ID: t.Key + "-stub", Version: "1"}, t.Key, j.Snapshot.Digest)
 	doc.Module.Dir, doc.Tool.Name = ".", t.Key
 	version := "1.0.0"
 	doc.Tool.Version, doc.Tool.VersionTested = &version, true

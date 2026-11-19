@@ -10,6 +10,7 @@ planned_platforms: [linux, windows]
 availability: verified  # Linux gitleaks 8.30.1 실행으로 검증. Windows는 단위·replay 테스트만 실행.
 version_contract: gitleaks-8.30-fixture-tested
 analysis_scope: [text]
+purpose: secrets  # docs/ANALYZERS.md#분석기-목적; envelope analyzer.purpose와 같다
 executes_repository_code: false
 requires_build: false
 network_policy: none

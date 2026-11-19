@@ -19,7 +19,9 @@ const (
 	BuilderID     = "codeye-report"
 	// BuilderVersion 4 adds the tool rows' rule_context and the
 	// observations' suppressed flag (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태).
-	BuilderVersion = "4"
+	// Version 5 adds the per-analysis sections (docs/REPORT.md#분석-종류별-절); every
+	// earlier field keeps its shape and meaning.
+	BuilderVersion = "5"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -68,6 +70,18 @@ type Report struct {
 	Observations   []Observation `json:"observations"`
 	Findings       []Finding     `json:"findings"`
 	Limitations    []string      `json:"limitations"`
+
+	// Per-analysis sections (builder 5, sections_types.go). Absent in
+	// earlier revisions, which renderers show with the flat layout.
+	Overview       *Overview              `json:"overview,omitempty"`
+	Environment    *EnvironmentSection    `json:"environment,omitempty"`
+	Documents      *DocumentsSection      `json:"documents,omitempty"`
+	StaticAnalysis *StaticAnalysisSection `json:"static_analysis,omitempty"`
+	Metrics        *MetricsSection        `json:"metrics,omitempty"`
+	Secrets        *SecretsSection        `json:"secrets,omitempty"`
+	CodeReview     *CodeReviewSection     `json:"code_review,omitempty"`
+	// Gaps is omitted when empty; the overview's gap line carries its count.
+	Gaps []Gap `json:"gaps,omitempty"`
 }
 
 // Builder identifies the code and input that produced the report.

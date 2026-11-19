@@ -8,6 +8,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -34,6 +35,13 @@ type taskState struct {
 	// decodedSHA is the SHA-256 of each accepted artifact by media type; an
 	// role record binds its upstream inputs to these digests.
 	decodedSHA map[string]string
+	// What the sections read of the accepted contributions: the analyzer
+	// identity, the tool row, the discovery document and the IDs of the tool
+	// findings this task's artifacts produced.
+	analyzer     *AnalyzerIdentity
+	tool         *ToolCoverage
+	discovery    *envdoc.Document
+	toolFindings []string
 }
 
 // Build validates the input and produces the report. Every refusal wraps
@@ -196,6 +204,17 @@ func Build(in Input, reg *Registry) (Report, error) {
 				}
 				for _, f := range c.Findings {
 					findSeen[f.ID] = true
+					st.toolFindings = append(st.toolFindings, f.ID)
+				}
+				if c.Analyzer != nil {
+					st.analyzer = c.Analyzer
+				}
+				if c.Tool != nil {
+					tool := *c.Tool
+					st.tool = &tool
+				}
+				if c.Discovery != nil {
+					st.discovery = c.Discovery
 				}
 				r.Observations = append(r.Observations, c.Observations...)
 				r.Findings = append(r.Findings, c.Findings...)
@@ -341,6 +360,9 @@ func Build(in Input, reg *Registry) (Report, error) {
 	r.QualityVerdict = DecideVerdict(r.Status, r.Summary, r.Coverage.AIReview.Status)
 	r.Coverage.Notes = notes.list()
 	r.Limitations = lim.list()
+	// The sections read the finished report and the task states; they never
+	// change a limitation, note, count, status or verdict.
+	composeSections(&r, in, states, keys, rm != nil)
 	if err := ValidateReport(r); err != nil {
 		return Report{}, err
 	}
@@ -376,6 +398,9 @@ func checkInput(in Input) error {
 		seenID[t.ID], seenKey[t.Key] = true, true
 		if st := domain.TaskStatus(t.Status); !st.Valid() || !st.Terminal() {
 			return invalidf("task %s is not terminal", t.Key)
+		}
+		if t.Stage != "" && !domain.Stage(t.Stage).Valid() {
+			return invalidf("task %s stage is unknown", t.Key)
 		}
 	}
 	seenArt := map[string]bool{}

@@ -1,4 +1,6 @@
 // Validate the projection used by the report view before rendering any model or tool text.
+import { parseSections, type Sections } from './reportSections';
+
 export type Evidence = {
   id: string;
   kind: string;
@@ -53,6 +55,8 @@ export type AnalysisReport = {
   };
   // Observations of counts.raw that are structure metrics (omitted as 0).
   metricObservations: number;
+  // Finding IDs to look at first (summary.priorities), in the builder's order.
+  priorities: string[];
   scope: {
     inventory: number | null;
     processed: number | null;
@@ -69,6 +73,9 @@ export type AnalysisReport = {
   observations: Observation[];
   tasks: Task[];
   limitations: string[];
+  // Analysis sections; null for revisions published before they existed,
+  // which keep the flat layout.
+  sections: Sections | null;
 };
 
 const invalid = (): never => {
@@ -173,7 +180,9 @@ export function parseAnalysisReport(
     };
   });
   const metricObservations = s.metric_observations == null ? 0 : count(s.metric_observations);
+  const priorities = array(s.priorities ?? [], str);
   if (
+    !priorities.every((id) => findings.some((f) => f.id === id)) ||
     findings.length !== counts.total ||
     counts.raw !== observations.length ||
     metricObservations !== observations.filter((o) => o.metric !== null).length
@@ -207,6 +216,7 @@ export function parseAnalysisReport(
     aiReview: str(object(object(r.coverage).ai_review).status),
     counts,
     metricObservations,
+    priorities,
     findings,
     observations,
     tasks: array(r.tasks, (v) => {
@@ -218,6 +228,12 @@ export function parseAnalysisReport(
       };
     }),
     limitations: array(r.limitations, str),
+    sections: parseSections(
+      r,
+      observations.map((o) => o.id),
+      findings.map((f) => f.id),
+      counts.total,
+    ),
   };
 }
 

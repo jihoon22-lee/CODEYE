@@ -252,6 +252,13 @@ def secrets_pack(session, cli, services, children, directory, binary, origin, us
     schema = validate_bundle.make_validators()["report.schema.json"]
     schema.validate(full)
     schema.validate(code_free)
+    # Sections: the metrics and secrets sections hold those observations, and each
+    # detection keeps its location and links to its unreviewed tool finding.
+    from bundle_checks.report import check_sections
+    for doc in (full, code_free):
+        check_sections(doc, source)
+    assert sum(len(g["observation_ids"]) for g in full["metrics"]["metrics"]) == 2, full["metrics"]
+    assert full["secrets"]["task_keys"] == ["gitl" "eaks"] and all(d["finding_id"] for d in full["secrets"]["detections"]), full["secrets"]
     rows = {row["task_key"]: row for row in full["coverage"]["tools"]}
     assert (rows["lizard"]["exit_class"], rows["jscpd"]["exit_class"], rows["gitl" + "eaks"]["exit_class"]) == (
         "success_without_findings", "success_without_findings", "success_with_findings"), rows
@@ -565,6 +572,18 @@ def run(base, root, env, *, browser=False):
         schema = validate_bundle.make_validators()["report.schema.json"]
         schema.validate(code_free)
         schema.validate(full)
+        # Analysis sections of the real report: one partition, evidence bound to the
+        # source, and the same stage states as the run's stage display.
+        from bundle_checks.report import check_sections
+        for doc in (full, code_free):
+            check_sections(doc, go_source)
+        assert full["overview"] == code_free["overview"], (full["overview"], code_free["overview"])
+        section_tools = {t["task_key"]: t for language in full["static_analysis"]["languages"] for t in language["tools"]}
+        assert all(section_tools[k]["task_status"] == "unsupported" and section_tools[k]["exit_class"] == "not_run"
+                   for k in ("lizard", "jscpd", "gitl" "eaks")), section_tools
+        for key in ("environment", "static_analysis", "code_review"):
+            assert full[key]["stage"]["state"] == go_stages[key]["state"], (key, full[key]["stage"], go_stages[key])
+        assert full["code_review"]["finding_ids"] == [] and full["documents"]["model"]["state"] == "not_performed", full["code_review"]
         for fmt in ("markdown", "html"):
             with session.client.open(origin + "/api/v1/" + path + "&format=" + fmt, timeout=5) as response:
                 rendered = response.read()

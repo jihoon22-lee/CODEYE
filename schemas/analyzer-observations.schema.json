@@ -10,7 +10,8 @@
     "analyzer": {"type": "object", "additionalProperties": false, "required": ["id", "ecosystem", "required"], "properties": {
       "id": {"type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+$"},
       "ecosystem": {"enum": ["any", "cpp", "go", "javascript", "python", "rust"]},
-      "required": {"type": "boolean"}}},
+      "required": {"type": "boolean"},
+      "purpose": {"enum": ["metrics", "secrets"], "description": "docs/ANALYZERS.md#분석기-목적: metrics는 모든 관찰이 metric을 갖는 구조·중복 측정, secrets는 비밀값 위치(metric 없음)다. 없으면 진단(diagnostics)이다. 소비자는 도구 이름 대신 이 값으로 지표·비밀정보 분석기를 가린다."}}},
     "adapter": {"$ref": "#/$defs/component"},
     "parser": {"$ref": "#/$defs/component"},
     "task_key": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
