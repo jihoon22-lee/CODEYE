@@ -19,8 +19,10 @@ jobs:
   native-linux:
     name: Linux / PostgreSQL / contracts
     runs-on: ubuntu-24.04
-    # The test browser install alone takes 7-8 minutes on the hosted runner;
-    # with the integration and race tests the job ran at 14-15 minutes.
+    # Installing the test browser and its OS packages took 7-8 minutes on the
+    # hosted runner; with the integration and race tests the job ran at 14-15
+    # minutes. The browser download is cached by Playwright version, so a cache
+    # hit installs only the OS packages.
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -42,9 +44,23 @@ jobs:
         run: |
           npm --prefix web ci
           npm --prefix web run build
+      - name: Read test browser version
+        id: playwright
+        run: echo "version=$(node -p "require('./web/package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+      - name: Cache test browser download
+        id: browser-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - name: Install test browser
+        if: steps.browser-cache.outputs.cache-hit != 'true'
         working-directory: web
         run: npx playwright install --with-deps chromium
+      - name: Install test browser OS dependencies
+        if: steps.browser-cache.outputs.cache-hit == 'true'
+        working-directory: web
+        run: npx playwright install-deps chromium
       - name: Prepare test dependencies
         run: |
           python -m pip install -r scripts/requirements.txt
