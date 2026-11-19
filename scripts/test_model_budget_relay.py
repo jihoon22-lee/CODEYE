@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Local-simulation tests for scripts/r0_openai_gateway.py.
+"""Local-simulation tests for scripts/model_budget_relay.py.
 
 No network and no billable calls: the upstream is a local fake OpenAI server on
 127.0.0.1 reached through the in-process _connection_factory hook, and the real
 HTTPS constructor is replaced by a recorder. A fake API key canary is used; the
 real OPENAI_API_KEY is scrubbed from every child environment.
 
-Run: python3 -m unittest discover -s scripts -p 'test_r0_*.py' -v
+Run: python3 -m unittest discover -s scripts -p test_model_budget_relay.py -v
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ import unittest
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
-import r0_openai_gateway as g  # noqa: E402
+import model_budget_relay as g  # noqa: E402
 
 CANARY_KEY = "sk-test-CANARY-" + "x" * 24
 MODEL = "gpt-6.2-sol"
@@ -53,7 +53,7 @@ def child_env(**extra):
 class FakeOpenAI:
     def __init__(self):
         self.mode = "ok"
-        self.text = None  # W24 echo tests: replace the assistant answer text
+        self.text = None  # echo tests: replace the assistant answer text
         self.calls = []
         self.release = threading.Event()
         self.received = threading.Event()
@@ -281,7 +281,7 @@ class PolicyTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 class LedgerTests(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.TemporaryDirectory(prefix="r0-ledger-")
+        self.dir = tempfile.TemporaryDirectory(prefix="relay-ledger-")
         self.path = os.path.join(self.dir.name, "ledger.jsonl")
 
     def tearDown(self):
@@ -382,7 +382,7 @@ class LedgerTests(unittest.TestCase):
     def test_concurrent_processes_never_exceed_cap(self):
         g.Ledger(self.path, cap_microusd=21_500).close()
         code = (
-            "import sys; sys.path.insert(0, sys.argv[1]); import r0_openai_gateway as g\n"
+            "import sys; sys.path.insert(0, sys.argv[1]); import model_budget_relay as g\n"
             "l = g.Ledger(sys.argv[2]); n = 0\n"
             "while True:\n"
             "    try:\n"
@@ -408,7 +408,7 @@ class GatewayHTTPTests(unittest.TestCase):
     statuses: list[int] = []
 
     def setUp(self):
-        self.dir = tempfile.TemporaryDirectory(prefix="r0-gw-")
+        self.dir = tempfile.TemporaryDirectory(prefix="relay-gw-")
         self.fake = FakeOpenAI()
         self.ledger = g.Ledger(os.path.join(self.dir.name, "ledger.jsonl"), cap_microusd=2_000_000)
         self.events = []
@@ -609,7 +609,7 @@ class GatewayHTTPTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 HARNESS = (
     "import sys, http.client\n"
-    "sys.path.insert(0, sys.argv[1]); import r0_openai_gateway as g\n"
+    "sys.path.insert(0, sys.argv[1]); import model_budget_relay as g\n"
     "def nonet(t): raise RuntimeError('network disabled in test')\n"
     "g.OpenAIUpstream._https = staticmethod(nonet)\n"
     "port = int(sys.argv[2])\n"
@@ -619,7 +619,7 @@ HARNESS = (
 
 class ProcessTests(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.TemporaryDirectory(prefix="r0-proc-")
+        self.dir = tempfile.TemporaryDirectory(prefix="relay-proc-")
         self.ledger = os.path.join(self.dir.name, "ledger.jsonl")
         self.fake = FakeOpenAI()
         self.processes = []
@@ -656,7 +656,7 @@ class ProcessTests(unittest.TestCase):
 
     def cli(self, *args, key=None):
         env = child_env(OPENAI_API_KEY=key) if key else child_env()
-        return subprocess.run([sys.executable, str(SCRIPTS / "r0_openai_gateway.py"), *args],
+        return subprocess.run([sys.executable, str(SCRIPTS / "model_budget_relay.py"), *args],
                               env=env, capture_output=True, timeout=30)
 
     def post(self, info, body):
@@ -745,7 +745,7 @@ class ProcessTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# W24: answer blocking, durable refusals, loopback-only test upstream
+# Answer blocking, durable refusals, loopback-only test upstream
 # ---------------------------------------------------------------------------
 def forbidden_doc(entries):
     return {"schema": g.FORBIDDEN_SCHEMA, "version": g.FORBIDDEN_VERSION, "normalization": g.FORBIDDEN_NORMALIZATION,
@@ -761,7 +761,7 @@ PLANTED = forbidden_doc([
 
 class AnswerBlockingTests(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.TemporaryDirectory(prefix="r1-block-")
+        self.dir = tempfile.TemporaryDirectory(prefix="relay-block-")
         self.fake = FakeOpenAI()
         self.ledger = g.Ledger(os.path.join(self.dir.name, "ledger.jsonl"), cap_microusd=2_000_000, upstream_kind="openai")
         self.phrases = g.ForbiddenPhrases(json.dumps(PLANTED).encode())
@@ -854,7 +854,7 @@ class ModelEchoTests(unittest.TestCase):
     """--allow-model-echo: ids the relay itself returned in an upstream answer may come back."""
 
     def setUp(self):
-        self.dir = tempfile.TemporaryDirectory(prefix="r1-echo-")
+        self.dir = tempfile.TemporaryDirectory(prefix="relay-echo-")
         self.fake = FakeOpenAI()
         self.ledger = g.Ledger(os.path.join(self.dir.name, "ledger.jsonl"), cap_microusd=2_000_000, upstream_kind="openai")
         self.phrases = g.ForbiddenPhrases(json.dumps(PLANTED).encode())
@@ -909,7 +909,7 @@ class ModelEchoTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             g.Gateway(model=MODEL, ledger=self.ledger, token="t", upstream=None, allow_model_echo=True)
         ready = os.path.join(self.dir.name, "ready.json")
-        result = subprocess.run([sys.executable, str(SCRIPTS / "r0_openai_gateway.py"), "--ready-file", ready,
+        result = subprocess.run([sys.executable, str(SCRIPTS / "model_budget_relay.py"), "--ready-file", ready,
                                  "--ledger", os.path.join(self.dir.name, "other.jsonl"), "--model", MODEL,
                                  "--allow-model-echo", "--test-upstream", f"http://127.0.0.1:{self.fake.port}"],
                                 capture_output=True, env=child_env(), timeout=30)
@@ -925,7 +925,7 @@ class CorpusListTests(unittest.TestCase):
         import runpy
         corpus_py = SCRIPTS.parent / "fixtures/r1-quality/corpus.py"
         corpus = runpy.run_path(str(corpus_py))
-        with tempfile.TemporaryDirectory(prefix="r1-forbidden-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="relay-forbidden-") as tmp:
             out = os.path.join(tmp, "forbidden.json")
             result = subprocess.run([sys.executable, "-I", str(corpus_py), "forbidden", "--output", out],
                                     capture_output=True, timeout=120, env=child_env())
@@ -955,7 +955,7 @@ class CorpusListTests(unittest.TestCase):
 
 class TestUpstreamTests(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.TemporaryDirectory(prefix="r1-testup-")
+        self.dir = tempfile.TemporaryDirectory(prefix="relay-testup-")
         self.ledger = os.path.join(self.dir.name, "ledger.jsonl")
         self.fake = FakeOpenAI()
         self.processes = []
@@ -1008,7 +1008,7 @@ class TestUpstreamTests(unittest.TestCase):
         self.assertEqual(self.fake.calls[0]["path"], g.UPSTREAM_PATH)
         for blob in (out, err, json.dumps(self.fake.calls).encode(), Path(self.ledger).read_bytes()):
             self.assertNotIn(CANARY_KEY.encode(), blob)
-        report = json.loads(subprocess.run([sys.executable, str(SCRIPTS / "r0_openai_gateway.py"), "--ledger", self.ledger,
+        report = json.loads(subprocess.run([sys.executable, str(SCRIPTS / "model_budget_relay.py"), "--ledger", self.ledger,
                                             "--report"], capture_output=True, env=child_env(), timeout=30).stdout)
         self.assertEqual((report["upstream"], report["settled_by_status"]), ("test-loopback", {"ok": 1}))
         # A real relay never adopts a test ledger.

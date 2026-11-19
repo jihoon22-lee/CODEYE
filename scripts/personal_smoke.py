@@ -1,4 +1,4 @@
-"""W25 개인 모드 수용 시험(TC-125, TC-127, TC-32): start/status/stop, 백업·복원, 복원본 재시작.
+"""개인 모드 수용 시험(TC-125, TC-127, TC-32): start/status/stop, 백업·복원, 복원본 재시작.
 
 scripts/test_postgres.py --personal 이 임시 PostgreSQL 안에 데이터베이스 셋을 만들어 실행한다.
 A: 실제 Go 분석(go vet) → 정지 → 백업 → 비어 있지 않은 대상 복원 거절 → B에 복원 → B 시작·보고서·증거·새 분석.
@@ -232,7 +232,7 @@ def run(base, root, env, probe_env):
         stopped = json.loads(cli(binary, "stop", "--config", cfg_b, "--format", "json", db="personal_b", timeout=200).stdout)
         assert stopped["outcome"] == "stopped", stopped
         no_secrets(state_b, [restored_session.token])
-        print("PASS: W25 개인 모드 start/status/stop·실제 Go 분석·온라인/정지 백업·비어 있지 않은 대상 거절·복원·새 노드·보고서와 증거 hash·새 분석")
+        print("PASS: 개인 모드 start/status/stop·실제 Go 분석·온라인/정지 백업·비어 있지 않은 대상 거절·복원·새 노드·보고서와 증거 hash·새 분석")
 
         # C: 진행 중 작업이 drain 시간을 넘기면 취소하고 정리를 확인한다(시험용 handler).
         fsrc = directory / "fixture-src"
@@ -281,7 +281,7 @@ def run(base, root, env, probe_env):
         assert old["status"] in ("failed", "cancelled"), old
         stopped = json.loads(cli(fixture, "stop", "--config", cfg_c, "--format", "json", db="personal_c", timeout=200).stdout)
         assert stopped["outcome"] == "stopped", stopped
-        print("PASS: W25 drain 시간 초과 취소·정리 확인·남은 프로세스 없음·재사용 pid 기록 미신호·재시작 (시험용 handler)")
+        print("PASS: drain 시간 초과 취소·정리 확인·남은 프로세스 없음·재사용 pid 기록 미신호·재시작 (시험용 handler)")
 
         # TC-124: an artifact quota already reached refuses new work with a structured
         # reason; the finished report stays readable and nothing is deleted.
@@ -319,8 +319,8 @@ def run(base, root, env, probe_env):
         stopped = json.loads(cli(fixture, "stop", "--config", cfg_c, "--format", "json", db="personal_c", timeout=200).stdout)
         assert stopped["outcome"] == "stopped" and stopped["in_flight_at_stop"] == [], stopped
         no_secrets(state_c, [fixture_session.token, fresh.token])
-        print("PASS: W25 산출물·노드 저장 영역(logs) 상한 도달 시 새 작업 거절(storage_quota_exceeded)·기존 보고서 유지")
-        print("PASS: W25 상태 디렉터리 전체에 DB 인증정보 없음·로그에 로그인 토큰 없음·기본 설정 경로")
+        print("PASS: 산출물·노드 저장 영역(logs) 상한 도달 시 새 작업 거절(storage_quota_exceeded)·기존 보고서 유지")
+        print("PASS: 상태 디렉터리 전체에 DB 인증정보 없음·로그에 로그인 토큰 없음·기본 설정 경로")
     finally:
         for exe, cfg, db in launched:
             subprocess.run([exe, "stop", "--config", str(cfg)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db]),

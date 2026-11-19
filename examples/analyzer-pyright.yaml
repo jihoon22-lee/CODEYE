@@ -1,4 +1,4 @@
-# W17 Python 팩 pyright 어댑터 서술(추가 깊이, mypy와 대안). 구현: internal/worker/analysis/python, 근거: docs/ANALYZERS.md.
+# Python 팩 pyright 어댑터 서술(추가 깊이, mypy와 대안). 구현: internal/worker/analysis/python, 근거: docs/ANALYZERS.md.
 # pyright 1.1.414는 공유 node toolchain(--node)이 패키지의 JS 진입 스크립트를 실행한다(docs/ANALYZERS.md#공유-interpreter-toolchain). PATH는 node 디렉터리 하나뿐이다.
 # --outputjson은 오류가 없으면 exit 0, 오류가 있으면 exit 1, 치명 오류 2, 설정 오류 3, 잘못된 CLI 4다(측정).
 # -p는 task scratch의 CODEYE pyrightconfig.json이며 저장소 pyrightconfig.json·[tool.pyright]를 대신한다(overridden). 빈 scratch venv를 지정해

@@ -6,7 +6,7 @@ import { ko as t } from './locales/ko';
 import { ErrorNote } from './RunPanel';
 import { retryable } from './useRunPolling';
 
-// W22 project schedules: members see them, managers (can_manage) create and delete.
+// Project schedules: members see them, managers (can_manage) create and delete.
 // Every value shown comes from the schedule API; the next time is the server's.
 
 const label = (labels: Record<string, string>, raw: string) => (Object.hasOwn(labels, raw) ? labels[raw]! : t.schedules.unknown(shorten(raw, 40)));

@@ -33,7 +33,7 @@ export type Project = {
   source_status: string;
   capability_gaps: string[];
   last_run: { id: string; status: string } | null;
-  // Optional: servers before W15 do not send it (docs/API.md).
+  // Optional: older servers do not send it (docs/API.md).
   activity?: ProjectActivity;
 };
 export type ProjectPage = { items: Project[]; next_cursor: string | null };
@@ -68,7 +68,7 @@ export type ProjectActivity = Omit<StageSummary, 'detail'> & {
   waiting_reason?: string | null; // only when the representative run is queued
   last_report: { run_id: string; revision: number; published_at: string } | null;
 };
-// One plan revision after the first: a task added after the plan was fixed (W22).
+// One plan revision after the first: a task added after the plan was fixed.
 export type PlanChange = { revision: number; reason: string; stage: string | null; weight: number; planned_weight: number; recorded_at: string | null };
 export type RunProgress = {
   stage: string;
@@ -77,22 +77,22 @@ export type RunProgress = {
   total_tasks: number | null;
   estimated_percent: number | null;
   waiting_reason: string | null;
-  // Optional W15 additions; undefined when the server predates them (treated as not recorded).
+  // Optional additions; undefined when the server predates them (treated as not recorded).
   stages?: StageSummary;
-  // Optional W22 additions: the weighted plan behind estimated_percent and why its denominator changed.
+  // Optional additions: the weighted plan behind estimated_percent and why its denominator changed.
   planned_weight?: number | null;
   finished_weight?: number | null;
   weight_basis?: string | null; // task_count | declared | mixed (open string)
   plan_changes?: PlanChange[];
 };
-// Why the run exists (W22). kind is an open string; schedule runs name their occurrence.
+// Why the run exists. kind is an open string; schedule runs name their occurrence.
 export type RunTrigger = { kind: string; schedule_id?: string; scheduled_for?: string };
 export type RunView = {
   id: string;
   project_id: string;
   status: string; // open string: an unrecognised value must reach the UI as "unknown"
   version: number;
-  // W22: the run's event sequence when the view was read; the event stream cursor. Absent before W22.
+  // The run's event sequence when the view was read; the event stream cursor. Absent on servers without streaming.
   event_sequence?: number;
   trigger?: RunTrigger;
   snapshot_id: string | null;
@@ -105,7 +105,7 @@ export const RUN_BODY = { profile: 'deep-review', source_policy: 'latest_at_acqu
 
 export type CreateProjectBody = { name?: string; source: Source };
 
-// ---- W22 schedules (members list; managers create and delete) ----
+// ---- schedules (members list; managers create and delete) ----
 export type ScheduleOccurrence = { scheduled_for: string; state: string; reason: string | null; missed_from: string | null; decided_at: string; run_id: string | null };
 export type Schedule = {
   id: string;
@@ -229,7 +229,7 @@ export function createApi(options: ApiOptions = {}) {
     listSchedules: (projectId: string, signal?: AbortSignal) => json({ method: 'GET', path: schedules(projectId), signal }, parseScheduleList),
     createSchedule: (projectId: string, body: CreateScheduleBody, idempotencyKey: string) =>
       json({ method: 'POST', path: schedules(projectId), body, headers: { 'Idempotency-Key': idempotencyKey } }, parseSchedule),
-    // W23: the comparison of one published revision with its baseline, and human finding reviews.
+    // The comparison of one published revision with its baseline, and human finding reviews.
     getComparison: (id: string, revision: number, signal?: AbortSignal) =>
       json({ method: 'GET', path: comparisonURL(id, revision), signal }, v => parseComparison(v, id, revision)),
     // version: the fingerprint's current review version (If-Match), or null for its first review (If-None-Match: *).

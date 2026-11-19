@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""기존 서비스와 분리된 임시 Native PostgreSQL에서 W01 통합 테스트."""
+"""기존 서비스와 분리된 임시 Native PostgreSQL에서 통합 테스트."""
 from contextlib import contextmanager
 import json
 import sys
@@ -21,7 +21,7 @@ def temporary_postgres(base):
 
     Yields (url, env, probe_env): env is os.environ without PG* variables plus
     GOTOOLCHAIN=local; probe_env adds libpq variables for psql. The server is
-    stopped on exit. Shared by this smoke and scripts/r1_eval.py (W24).
+    stopped on exit. Shared by this smoke and scripts/quality_eval.py.
     """
     password = secrets.token_hex(24)
     password_file = base / "password"
@@ -73,7 +73,7 @@ def main():
         with temporary_postgres(base) as (url, env, probe_env):
             password = url.split(":", 2)[2].split("@", 1)[0]
             env["CODEYE_TEST_DATABASE_URL"] = url
-            # --smokes-only (W25): skip the Go suite to rerun only the selected smokes; the
+            # --smokes-only: skip the Go suite to rerun only the selected smokes; the
             # final line then does not claim the storage integration tests ran.
             go_suite = "--smokes-only" not in sys.argv[1:]
             if go_suite:
@@ -112,8 +112,8 @@ def main():
                 import personal_smoke
                 personal_smoke.run(base, ROOT, env, probe_env)
             if "--r0-pilot" in sys.argv[1:]:
-                import r0_pilot
-                r0_pilot.run(base, ROOT, env)
+                import regression_pilot
+                regression_pilot.run(base, ROOT, env)
             if go_suite:
                 print("PASS: Native PostgreSQL migration·저장 통합·인증/query·CLI 재적용·JSON schema·비밀값 미노출")
             else:

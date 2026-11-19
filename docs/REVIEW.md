@@ -57,7 +57,7 @@
 | `codeye agent --review-pack` | 기본 `review-r1`. `review-r1`·`review-v1`만 받는다. 다른 값은 사용 오류(종료 코드 2)이며 기본값으로 바꾸지 않는다 |
 | 워커 Hello `review_pack` | 비어 있으면 `review-r1`. 모르는 값이면 워커가 시작하지 않는다 |
 | 개인 설정 `agent.model.review_pack` | 비우면 `review-r1`. 다른 값은 설정 오류([사용 안내](GUIDE.md)) |
-| `scripts/r0_pilot.py`의 `CODEYE_R0_REVIEW_PACK` | 비우면 에이전트 기본값(`review-r1`) |
+| `scripts/regression_pilot.py`의 `CODEYE_R0_REVIEW_PACK` | 비우면 에이전트 기본값(`review-r1`) |
 | `scripts/validate_bundle.py` | review-r1 `pack.yaml`의 `status: default`를 확인한다 |
 | 보고서 | 계획에 있는 역할 key로 해석한다. review-v1 계획은 세 역할로 읽는다 |
 

@@ -2,7 +2,7 @@
 
 이 문서는 CODEYE의 분석·검토 품질을 재는 방법을 정한다. 원칙과 지표, 회귀 집합과 보류 집합, 평가 runner, 유료 batch 절차, 예산 relay와 장부, 지침 개정 규칙을 다룬다. 결과 수치는 이 문서에 쓰지 않는다. 실행 결과는 [평가 결과](EVALUATION-RESULTS.md)에만 둔다.
 
-- 구현: 회귀 집합 [`fixtures/r0-quality`](../fixtures/r0-quality/corpus.json), 실행 틀 [`scripts/eval_harness.py`](../scripts/eval_harness.py), 회귀 실행 [`scripts/r0_pilot.py`](../scripts/r0_pilot.py), 평가 runner [`scripts/r1_eval.py`](../scripts/r1_eval.py), 채점 [`scripts/r1_score.py`](../scripts/r1_score.py), 두 결과 비교 [`scripts/w15_pack_compare.py`](../scripts/w15_pack_compare.py), 예산 relay [`scripts/r0_openai_gateway.py`](../scripts/r0_openai_gateway.py)
+- 구현: 회귀 집합 [`fixtures/r0-quality`](../fixtures/r0-quality/corpus.json), 실행 틀 [`scripts/eval_harness.py`](../scripts/eval_harness.py), 회귀 실행 [`scripts/regression_pilot.py`](../scripts/regression_pilot.py), 평가 runner [`scripts/quality_eval.py`](../scripts/quality_eval.py), 채점 [`scripts/quality_score.py`](../scripts/quality_score.py), 두 결과 비교 [`scripts/pack_compare.py`](../scripts/pack_compare.py), 예산 relay [`scripts/model_budget_relay.py`](../scripts/model_budget_relay.py)
 - 요구사항: REQ-010/011/013/027, NFR-007/008/010([요구사항](REQUIREMENTS.md))
 - 수용 시험: TC-100, TC-120~122, TC-128, TC-129([시험](TESTING.md))
 - 검토 역할·입력·출력 규칙: [모델 검토](REVIEW.md)
@@ -19,7 +19,7 @@
 
 | 범위 | 상태 |
 |---|---|
-| 회귀 집합과 실행(`r0_pilot.py`), 보류 집합과 봉인 검사, 평가 runner(`tools`·`review` 조건, 정답 차단, holdout 등록부, 표본·예산 계획과 거절, 판정 양식, 판정 지표와 Wilson 구간, 반복 분산, 보고서 읽기 과제와 채점기), 예산 relay | 구현 |
+| 회귀 집합과 실행(`regression_pilot.py`), 보류 집합과 봉인 검사, 평가 runner(`tools`·`review` 조건, 정답 차단, holdout 등록부, 표본·예산 계획과 거절, 판정 양식, 판정 지표와 Wilson 구간, 반복 분산, 보고서 읽기 과제와 채점기), 예산 relay | 구현 |
 | 아래 데이터셋 표 중 저장소에 corpus가 없는 집합(실제 결함 수정, 레거시 프로젝트, 별도 공격/장애 corpus) | 평가 기준(설계). 공격/장애 경계는 단위 시험이 덮는다 |
 | 도구만·모델 맥락만·도구+모델·도구+모델+반증의 네 갈래 비교 | 평가 기준(설계). runner 조건은 `tools`와 `review` 둘이다 |
 | reversal quality 지표, CPU/RAM·캐시 기록 | 평가 기준(설계). 채점기가 내지 않는다. 철회 경로는 회귀 집합의 반례 입력에서 사람이 판정한다 |
@@ -49,7 +49,7 @@
 - 사례 필드: `id`, `split`, `family`, `contract`, `imports`, `before`, `after`, `check`, `label`. 모든 함수에 짧은 공개 계약 주석이 있다. corpus 순서로 짝수 번째 사례에는 같은 계약을 담은 README를 붙인다.
 - 실행 입력에는 평가 라벨, 전후 구분, 확인용 테스트가 들어가지 않는다. 사례는 무작위 이름의 디렉터리에 만든다.
 - 각 원래 구현은 별도 계약 시험에서 실패하고 수정 구현은 통과한다. `python3 fixtures/r0-quality/corpus.py --check`가 모델 없이 이 계약 시험을 실행한다.
-- 고정 입력(`scripts/r0_pilot.py`의 `FIXED_INPUTS`와 기본 입력):
+- 고정 입력(`scripts/regression_pilot.py`의 `FIXED_INPUTS`와 기본 입력):
   - `w15`: [`fixtures/w15-modules/input`](../fixtures/w15-modules/input). 루트 안내가 있는 저장소에 하위 모듈 둘(문서 없는 모듈, 루트와 상충하는 안내와 노드보다 높은 Go 버전 요구를 가진 모듈), 읽기 예산을 넘는 설계 문서, 권한 변경을 요구하는 에이전트 지침을 담는다. 정답 [`expected.json`](../fixtures/w15-modules/expected.json)은 입력 밖에 있다. 평가 스냅샷에서는 개발 에이전트용 경고 주석 한 줄을 뺀다.
   - `w12-close`: [`internal/worker/review/testdata/verify`](../internal/worker/review/testdata/verify). 상위 호출자가 자원을 닫는 반례로, 검증 역할의 철회 경로를 따로 채점한다.
   - `pilot`: 공개 CODEYE의 고정 커밋 사본. `git`: 공개 CODEYE HTTPS `main`(Git 소스이므로 모델 검토는 정책 제외로 끝나는 것이 정상이다).
@@ -89,7 +89,7 @@
 | false-positive rate | 정상 사례 변형, after 변형, 둘을 합친 것 | `false_positive` finding이 있는 변형. 범위는 actionable finding(`supported`·`reproduced`, open)과 모든 finding 두 가지. 알려지지 않은 코드 전체를 정상 분모로 쓰지 않는다 |
 | actionable precision | 판정된 actionable finding | `valid_actionable`(엄격), `valid_*`(넓게). 미판정은 제외하고 수를 따로 낸다 |
 | evidence validity | 게시 보고서 | `validate_bundle.check_report`로 새로 만든 입력과 대조해 통과한 보고서. 근거·claim 수를 함께 센다 |
-| unsupported assertions | 판정된 finding / 구조 | `insufficient_evidence` 비율. 구조로는 실행 근거 없는 `reproduced`, 검증기가 거부한 출력의 오류 분류(꾸민 근거·범위 일반화·실행 주장, `w15_pack_compare.structural`), 통계 불일치 보고서 |
+| unsupported assertions | 판정된 finding / 구조 | `insufficient_evidence` 비율. 구조로는 실행 근거 없는 `reproduced`, 검증기가 거부한 출력의 오류 분류(꾸민 근거·범위 일반화·실행 주장, `pack_compare.structural`), 통계 불일치 보고서 |
 | duplicate burden | 판정된 finding / 구조 | `duplicate` 수. 구조로는 같은 변형에서 위치가 겹치는 finding 수 |
 | reversal quality(설계) | 반례가 있는 후보 | 유효한 반대 근거로 철회한 수/반례 수, 실제 결함을 유지한 수. 채점기가 내지 않으며 사람이 판정한다 |
 | report usefulness | 보고서 읽기 과제 | 영향·조건·수정/확인 방법을 독자가 정확히 찾는지(아래 보고서 읽기 평가) |
@@ -148,13 +148,13 @@
 - 대상 한정: `CODEYE_R0_CASES`에 `Q01-before,Q01-after,...,w15,w12-close,pilot,git`처럼 쉼표로 준다. 비우면 합성 쌍 전체, 고정 공개 커밋, 공개 HTTPS `main`을 실행한다. 고정 입력 `w15`·`w12-close`는 명시할 때만 들어간다.
 - 팩: `CODEYE_R0_REVIEW_PACK`(비우면 에이전트 기본값 `review-r1`).
 - 에이전트 두 대는 같은 호스트에서 풀 최소·최대 0과 2로 돈다. 합성 사례와 공개 사본의 트리 해시를 실행 전후에 대조한다.
-- 감사: `python3 scripts/r0_pilot.py --audit-results "$CODEYE_R0_RESULTS"`가 보관된 보고서를 원본과 다시 대조한다(구조·통계·스냅샷, 주장과 근거의 파일 위치·줄 범위·blob SHA). Git 입력의 commit 객체가 로컬에 있어야 한다. 이 검사는 주장 자체가 옳다는 보증과 구분한다.
-- 두 결과 비교: `python3 scripts/w15_pack_compare.py A_DIR B_DIR --judgments FILE`. 보관 결과만 읽고 모델 요청을 보내지 않는다. 구조 지표는 보고서에서, 결함 판정은 스냅샷 밖 판정 파일에서 읽는다. 판정은 평가자의 라벨이며 측정된 precision이 아니다.
+- 감사: `python3 scripts/regression_pilot.py --audit-results "$CODEYE_R0_RESULTS"`가 보관된 보고서를 원본과 다시 대조한다(구조·통계·스냅샷, 주장과 근거의 파일 위치·줄 범위·blob SHA). Git 입력의 commit 객체가 로컬에 있어야 한다. 이 검사는 주장 자체가 옳다는 보증과 구분한다.
+- 두 결과 비교: `python3 scripts/pack_compare.py A_DIR B_DIR --judgments FILE`. 보관 결과만 읽고 모델 요청을 보내지 않는다. 구조 지표는 보고서에서, 결함 판정은 스냅샷 밖 판정 파일에서 읽는다. 판정은 평가자의 라벨이며 측정된 precision이 아니다.
 - 결과 디렉터리와 판정은 저장소 밖 비공개 경로에 둔다. 결과 요약은 [평가 결과](EVALUATION-RESULTS.md)에 쓴다.
 
 ## 평가 runner
 
-[`scripts/r1_eval.py`](../scripts/r1_eval.py)는 보류 집합을 실제 controller·agent·분석기·OpenCode·relay 경로로 실행하고 결과를 보관한다. 채점은 [`scripts/r1_score.py`](../scripts/r1_score.py)가 한다. runner는 모델 키를 읽지 않고 relay를 시작하지 않는다.
+[`scripts/quality_eval.py`](../scripts/quality_eval.py)는 보류 집합을 실제 controller·agent·분석기·OpenCode·relay 경로로 실행하고 결과를 보관한다. 채점은 [`scripts/quality_score.py`](../scripts/quality_score.py)가 한다. runner는 모델 키를 읽지 않고 relay를 시작하지 않는다.
 
 | 하위 명령 | 역할 |
 |---|---|
@@ -169,9 +169,9 @@
 | 부분 | 위치 | 역할 |
 |---|---|---|
 | 정답 목록 | `fixtures/r1-quality/corpus.py forbidden` | 라벨 문구 n-gram과 고유 토큰 중 어떤 입력에도 나오지 않는 것을 JSON으로 내보낸다 |
-| relay 차단 | `scripts/r0_openai_gateway.py --forbidden-phrases FILE [--allow-model-echo]` | 목록 항목이 든 요청을 예약·전달 없이 막는다 |
-| 시험용 upstream | `--test-upstream http://127.0.0.1:PORT`, [`scripts/r1_fake_upstream.py`](../scripts/r1_fake_upstream.py) | dry run 전용 loopback 가짜. 키를 읽지 않는다. `--echo-text`는 운영자가 정한 문장을 investigate 후보 제목에 붙이고, `--dump DIR`은 요청을 저장한다 |
-| 공용 실행 틀 | `scripts/eval_harness.py`, `scripts/test_postgres.py`의 `temporary_postgres` | 임시 PostgreSQL, 제품 빌드, controller·agent, 보고서 조회. 회귀 실행(`r0_pilot.py`)도 같은 코드를 쓴다 |
+| relay 차단 | `scripts/model_budget_relay.py --forbidden-phrases FILE [--allow-model-echo]` | 목록 항목이 든 요청을 예약·전달 없이 막는다 |
+| 시험용 upstream | `--test-upstream http://127.0.0.1:PORT`, [`scripts/fake_model_upstream.py`](../scripts/fake_model_upstream.py) | dry run 전용 loopback 가짜. 키를 읽지 않는다. `--echo-text`는 운영자가 정한 문장을 investigate 후보 제목에 붙이고, `--dump DIR`은 요청을 저장한다 |
+| 공용 실행 틀 | `scripts/eval_harness.py`, `scripts/test_postgres.py`의 `temporary_postgres` | 임시 PostgreSQL, 제품 빌드, controller·agent, 보고서 조회. 회귀 실행(`regression_pilot.py`)도 같은 코드를 쓴다 |
 
 ### 조건
 
@@ -213,9 +213,9 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 **허용 텍스트 만들기.** 모델에 가는 텍스트 중 입력이 아닌 것은 지침 팩(`prompts/`), 도구 진단, envelope(OpenCode 시스템 프롬프트와 Go 코드의 역할 계약) 세 가지다. envelope는 저장소 파일이 아니므로 dry run 요청에서 모은다.
 
 1. `run --condition tools`로 도구 진단을 모은다.
-2. `r1_eval.py capture-list --output FILE`로 감시용 목록을 만든다. relay는 `--test-upstream`일 때만 이 목록으로 시작하고, runner도 dry run이 아니면 거부한다.
+2. `quality_eval.py capture-list --output FILE`로 감시용 목록을 만든다. relay는 `--test-upstream`일 때만 이 목록으로 시작하고, runner도 dry run이 아니면 거부한다.
 3. 가짜 upstream(`--dump DIR`)과 감시용 목록으로 review dry run을 돌린다. 모든 역할의 요청이 막히지 않고 dump에 남는다.
-4. `r1_eval.py allow-text --tools-batch B --request-dump DIR --output FILE`가 도구 메시지·규칙 ID와 envelope(system 메시지와 `<review-input>`을 뺀 user 텍스트)를 모은다. review input은 가져오지 않는다.
+4. `quality_eval.py allow-text --tools-batch B --request-dump DIR --output FILE`가 도구 메시지·규칙 ID와 envelope(system 메시지와 `<review-input>`을 뺀 user 텍스트)를 모은다. review input은 가져오지 않는다.
 5. `corpus.py forbidden --allow-text prompts/review-v1 --allow-text prompts/review-r1 --allow-text FILE`로 목록을 만든다.
 
 제품 코드·지침·분석기 구성이 바뀌면 envelope와 도구 진단도 바뀐다. 유료 batch 직전에 같은 checkout으로 목록을 다시 만든다.
@@ -262,7 +262,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 - 기대값: 이력에 같은 변형이 있으면 그 변형의 역할별 호출 수, 없으면 이력의 변형당 평균(이력이 없으면 상수표) × 호출당 비용.
 - 상한: 팩의 모든 역할이 변형마다 한 번 호출된다고 본다(이력에 그 변형의 호출 수가 더 많으면 그 수). 형식 복구 10%를 더하고 호출당 비용에 여유 계수 1.5를 곱한다(`--margin`).
 - `--history DIR`은 manifest의 팩 id(review-v1은 `codeye.review`)로 같은 팩의 batch만 쓴다. 쓸 수 있는 행이 없으면 상수표로 돌아가지 않고 오류로 끝난다.
-- 호출당 비용의 출처 우선순위: (1) 실제 batch 이력이면 역할별 usage 평균 × relay 단가(입력 5, 출력 10 microUSD/token), (2) dry run 이력이면 역할별 최대 요청 바이트 ÷ 3(바이트당 토큰) × 5 + 출력 600 토큰 × 10, (3) 상수표(`r1_eval.py`의 `CONSTANTS`). 상수표는 단일 파일 Go 입력에서 나온 값이라 다파일·다언어 사례에서는 작을 수 있다.
+- 호출당 비용의 출처 우선순위: (1) 실제 batch 이력이면 역할별 usage 평균 × relay 단가(입력 5, 출력 10 microUSD/token), (2) dry run 이력이면 역할별 최대 요청 바이트 ÷ 3(바이트당 토큰) × 5 + 출력 600 토큰 × 10, (3) 상수표(`quality_eval.py`의 `CONSTANTS`). 상수표는 단일 파일 Go 입력에서 나온 값이라 다파일·다언어 사례에서는 작을 수 있다.
 - 바이트당 3토큰과 여유 계수 1.5는 실측에 맞춘 값이 아닌 보수적 근사다. 실제 batch의 usage를 이력으로 주면 그 값을 쓴다.
 
 **거절.**
@@ -292,14 +292,14 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 ### 보고서 읽기 평가
 
 - 독자에게 중요한 위험 3개, 각 발생 조건, 근거 위치, 분석하지 못한 범위, 다음 조치를 찾게 한다. 답의 정확성, 추가 질문 수, 소요 시간을 잰다. 차트 수나 문장 길이는 대리 지표가 아니다. 모호한 심각도, 중복, 수치 불일치, 과장된 단정은 결함으로 기록한다.
-- `r1_eval.py reader BATCH --sample N --seed S --output DIR`는 무효가 아닌 첫 반복 보고서에서 kind·변형별로 고르게 N개를 뽑아 과제 `sheets/Snn.json`과 보고서 사본 `sheets/Snn-report.json`을 만든다. 파일 이름과 내용에 사례 ID·라벨이 없다.
+- `quality_eval.py reader BATCH --sample N --seed S --output DIR`는 무효가 아닌 첫 반복 보고서에서 kind·변형별로 고르게 N개를 뽑아 과제 `sheets/Snn.json`과 보고서 사본 `sheets/Snn-report.json`을 만든다. 파일 이름과 내용에 사례 ID·라벨이 없다.
 - `answer-key.json`은 평가자용이다. before 변형은 라벨 조건·영향·위치와 참고 조치, 그 밖은 "라벨 결함 없음"과 반례 위치를 담는다. 분석하지 못한 범위는 보고서 구조(미지원·생략·실패 task, 제약 코드, `ai_review`, `llm_exposed_files`)에서 만든다.
 - `reader-score --key K --answers A ...`는 결함 위치를 상위 3개 위험에서 찾은 비율, 반례 위치를 결함으로 지목한 비율, 공백 범위 재현율, 사람이 채점한 조건·조치 정답률(`graded`), 시간 중앙값, 추가 질문 평균을 낸다.
 - 답이 없으면 결과는 `not_measured`다. 모델로 독자를 흉내 내지 않는다.
 
 ### 단위 시험
 
-`scripts/test_r0_openai_gateway.py`(relay)와 `scripts/test_r1_eval.py`(runner·채점)는 모델·키·네트워크 없이 돌고, CI의 문서 계약 단계가 `python -m unittest discover`로 실행한다. 실행: `python3 -m unittest discover -s scripts -p 'test_r0_*.py' -v`, `python3 -m unittest discover -s scripts -p 'test_r1_eval.py' -v`. dry run은 runner·relay·채점 경로가 동작한다는 근거일 뿐이고 가짜 upstream의 위치 대조·검토 수·차감에는 품질 의미가 없다.
+`scripts/test_model_budget_relay.py`(relay)와 `scripts/test_quality_eval.py`(runner·채점)는 모델·키·네트워크 없이 돌고, CI의 문서 계약 단계가 `python -m unittest discover`로 실행한다. 실행: `python3 -m unittest discover -s scripts -p 'test_r0_*.py' -v`, `python3 -m unittest discover -s scripts -p 'test_quality_eval.py' -v`. dry run은 runner·relay·채점 경로가 동작한다는 근거일 뿐이고 가짜 upstream의 위치 대조·검토 수·차감에는 품질 의미가 없다.
 
 ## 유료 batch 절차
 
@@ -318,49 +318,49 @@ SEL=(--sample N --seed S)   # 표본. 5단계 plan으로 예산 안인지 확인
 PACK=review-r1
 
 # 1. tools(모델 없음): 전체와 비교용 표본
-python3 scripts/r1_eval.py run --condition tools --results-root "$R" --batch tools-all "${TOOLS[@]}" --max-workers 3
-python3 scripts/r1_eval.py run --condition tools --results-root "$R" --batch tools-sel "${SEL[@]}" "${TOOLS[@]}"
+python3 scripts/quality_eval.py run --condition tools --results-root "$R" --batch tools-all "${TOOLS[@]}" --max-workers 3
+python3 scripts/quality_eval.py run --condition tools --results-root "$R" --batch tools-sel "${SEL[@]}" "${TOOLS[@]}"
 
 # 2. envelope 수집 dry run(가짜 upstream, 시험 장부, 키 없음). 이 batch가 계획 이력도 된다.
-python3 scripts/r1_eval.py capture-list --output "$R/capture-list.json"
+python3 scripts/quality_eval.py capture-list --output "$R/capture-list.json"
 mkdir -p "$R/cap"
-env -u OPENAI_API_KEY python3 scripts/r1_fake_upstream.py --ready-file "$R/cap/fake.json" --dump "$R/cap/dump" &
+env -u OPENAI_API_KEY python3 scripts/fake_model_upstream.py --ready-file "$R/cap/fake.json" --dump "$R/cap/dump" &
 FAKE_PID=$!
 until [ -s "$R/cap/fake.json" ]; do sleep 0.2; done
 PORT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["port"])' "$R/cap/fake.json")
-env -u OPENAI_API_KEY python3 scripts/r0_openai_gateway.py --ready-file "$R/cap/relay.json" \
+env -u OPENAI_API_KEY python3 scripts/model_budget_relay.py --ready-file "$R/cap/relay.json" \
   --ledger "$R/cap/ledger.jsonl" --model gpt-6.2-sol --forbidden-phrases "$R/capture-list.json" \
   --test-upstream "http://127.0.0.1:$PORT" &
 CAP_RELAY_PID=$!
 until [ -s "$R/cap/relay.json" ]; do sleep 0.2; done
-python3 scripts/r1_eval.py run --condition review --pack $PACK --dry-run --results-root "$R" \
+python3 scripts/quality_eval.py run --condition review --pack $PACK --dry-run --results-root "$R" \
   --batch capture-$PACK "${SEL[@]}" --relay-file "$R/cap/relay.json" --ledger "$R/cap/ledger.jsonl" \
   --forbidden-phrases "$R/capture-list.json" "${TOOLS[@]}" "${REVIEW[@]}"
 kill $CAP_RELAY_PID $FAKE_PID
 
 # 3. 정답 목록. 출력의 dropped.in_allowed_text에서 허용 텍스트가 뺀 라벨 표현을 확인한다.
-python3 scripts/r1_eval.py allow-text --tools-batch "$R/tools-all" --request-dump "$R/cap/dump" --output "$R/allow.txt"
+python3 scripts/quality_eval.py allow-text --tools-batch "$R/tools-all" --request-dump "$R/cap/dump" --output "$R/allow.txt"
 python3 -I fixtures/r1-quality/corpus.py forbidden --allow-text prompts/review-v1 --allow-text prompts/review-r1 \
   --allow-text "$R/allow.txt" --output "$R/forbidden.json"
 
 # 4. 실제 relay(운영자 셸, 키는 이 프로세스만 읽는다). --allow-model-echo는 선택이다.
 READY="$R/relay-$(date +%s).json"
-python3 scripts/r0_openai_gateway.py --ready-file "$READY" --ledger "$LEDGER" \
+python3 scripts/model_budget_relay.py --ready-file "$READY" --ledger "$LEDGER" \
   --model gpt-6.2-sol --forbidden-phrases "$R/forbidden.json" [--allow-model-echo] &
 until [ -s "$READY" ]; do sleep 0.2; done
 RELAY=(--relay-file "$READY" --ledger "$LEDGER" --forbidden-phrases "$R/forbidden.json")
 
 # 5. 계획과 장부 확인(거절이면 종료 코드 1, 출력의 refusal에 사유)
-python3 scripts/r1_eval.py plan --pack $PACK "${SEL[@]}" --history "$R/capture-$PACK" --ledger "$LEDGER"
+python3 scripts/quality_eval.py plan --pack $PACK "${SEL[@]}" --history "$R/capture-$PACK" --ledger "$LEDGER"
 
 # 6. 유료 batch
-python3 scripts/r1_eval.py run --condition review --pack $PACK --results-root "$R" --batch paid-$PACK \
+python3 scripts/quality_eval.py run --condition review --pack $PACK --results-root "$R" --batch paid-$PACK \
   "${SEL[@]}" --history "$R/capture-$PACK" "${RELAY[@]}" "${TOOLS[@]}" "${REVIEW[@]}"
 
 # 7. 판정과 채점: 각 batch의 judgments-template.json을 채운 뒤
-python3 scripts/r1_eval.py score "$R/tools-sel" "$R/paid-$PACK" \
+python3 scripts/quality_eval.py score "$R/tools-sel" "$R/paid-$PACK" \
   --judgments J1.json [--judgments J2.json] --output "$R/score.json"
-python3 scripts/r1_eval.py reader "$R/paid-$PACK" --sample 6 --seed S --output "$R/reading-$PACK"
+python3 scripts/quality_eval.py reader "$R/paid-$PACK" --sample 6 --seed S --output "$R/reading-$PACK"
 ```
 
 - 2단계 capture는 유료 batch와 같은 `SEL`로 돌린다. 시험 장부의 요청 상한(기본 200건) 안에 들어가야 한다. 넘으면 언어마다 새 시험 relay를 쓴다.
@@ -369,7 +369,7 @@ python3 scripts/r1_eval.py reader "$R/paid-$PACK" --sample 6 --seed S --output "
 
 ## 예산 relay와 장부
 
-[`scripts/r0_openai_gateway.py`](../scripts/r0_openai_gateway.py)는 사람이 승인한 실모델 평가에서 유료 모델 호출 상한을 강제하는 QA 전용 보조 도구다. 제품 런타임·CI 의존성이 아니다. 모델 연결 방식(허용된 OpenCode 우선, 자동 fallback 금지)을 바꾸지 않는다. 제품 쪽 relay 파일 사용은 [모델 검토](REVIEW.md)에 있다. 이 저장소의 시험은 과금 호출을 하지 않는다.
+[`scripts/model_budget_relay.py`](../scripts/model_budget_relay.py)는 사람이 승인한 실모델 평가에서 유료 모델 호출 상한을 강제하는 QA 전용 보조 도구다. 제품 런타임·CI 의존성이 아니다. 모델 연결 방식(허용된 OpenCode 우선, 자동 fallback 금지)을 바꾸지 않는다. 제품 쪽 relay 파일 사용은 [모델 검토](REVIEW.md)에 있다. 이 저장소의 시험은 과금 호출을 하지 않는다.
 
 ### 키 취급
 
@@ -381,7 +381,7 @@ python3 scripts/r1_eval.py reader "$R/paid-$PACK" --sample 6 --seed S --output "
 ### 시작
 
 ```bash
-python3 scripts/r0_openai_gateway.py \
+python3 scripts/model_budget_relay.py \
   --ready-file "$DIR/ready-$(date +%s).json" \
   --ledger "$LEDGER" \
   --model gpt-6.2-sol            # --budget-usd 기본 9.99, 그 이하만 허용
@@ -401,8 +401,8 @@ python3 scripts/r0_openai_gateway.py \
 - 상한은 장부 하나에 걸린다(`HARD_CAP_MICROUSD = 9_990_000`, 모든 relay 프로세스 합계 USD 9.99). 장부를 잃거나 새 경로를 쓰면 새 USD 9.99 예산이 생기므로, 예산 보장은 같은 장부 파일을 유지하는 운영 절차에 의존한다. 예산 기간마다 영구 경로의 장부 하나를 쓰고(`/tmp` 같은 휘발 경로 금지), 소유자 승인 없이 새 장부를 만들지 않는다.
 - ready file은 반드시 새 경로여야 한다(이미 있으면 종료 코드 2). 0600으로 원자적으로 만들고 내용은 `{"base_url":"http://127.0.0.1:PORT/v1","token":"...","model":"gpt-6.2-sol","pid":N}`이다. SIGTERM/SIGINT 정상 종료 시 삭제한다. SIGKILL 뒤 남은 파일은 무효 token을 담으므로 지운 뒤 새 경로로 다시 시작한다.
 - OpenCode는 OpenAI 호환 provider의 `baseURL`·`apiKey`에 ready file의 `base_url`·`token`을, 모델 ID에 `model`을 쓴다. CODEYE에서는 `--model codeye-gateway/<model> --model-relay-file READY`로 고른다.
-- 보고: `python3 scripts/r0_openai_gateway.py --ledger PATH --report`(키 불필요).
-- 정지 해제: `python3 scripts/r0_openai_gateway.py --ledger PATH --clear-halt "검토 내용"`. 장부에 감사 기록을 더할 뿐 상한·청구액은 바꾸지 않는다. 원인을 확인한 사람만 실행한다. 원인을 고치지 않고 해제하면 실패 차감이 계속 쌓인다.
+- 보고: `python3 scripts/model_budget_relay.py --ledger PATH --report`(키 불필요).
+- 정지 해제: `python3 scripts/model_budget_relay.py --ledger PATH --clear-halt "검토 내용"`. 장부에 감사 기록을 더할 뿐 상한·청구액은 바꾸지 않는다. 원인을 확인한 사람만 실행한다. 원인을 고치지 않고 해제하면 실패 차감이 계속 쌓인다.
 - 실행이 끝나면 정산 대기 0건을 확인한 뒤 relay를 종료한다. 공급자 청구서는 장부와 별개다.
 
 ### 로컬 경계

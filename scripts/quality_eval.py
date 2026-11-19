@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""W24 R1 quality evaluation runner (docs/EVALUATION.md).
+"""Quality evaluation runner (docs/EVALUATION.md).
 
 Subcommands:
   plan        stratified selection and call/cost estimate; no product run
   run         run one batch: --condition tools (analyzers only, no model) or
               --condition review (the full pipeline with --pack review-v1|review-r1)
-  score       judged metrics with Wilson intervals, side by side over batches (r1_score.py)
+  score       judged metrics with Wilson intervals, side by side over batches (quality_score.py)
   allow-text  tool messages of a tools batch and instruction envelopes of a capture dry run,
               for an explicit `corpus.py forbidden --allow-text`
   capture-list  sentinel answer list (blocks nothing) for that capture dry run; test upstream only
@@ -47,7 +47,7 @@ ROOT = SCRIPTS.parent
 sys.path.insert(0, str(SCRIPTS))
 
 CORPUS_DIR = ROOT / "fixtures/r1-quality"
-GATEWAY = SCRIPTS / "r0_openai_gateway.py"
+GATEWAY = SCRIPTS / "model_budget_relay.py"
 PACKS = ("review-v1", "review-r1")
 PACK_ROLES = {"review-v1": ("context", "investigate", "verify"),
               "review-r1": ("environment", "documents", "investigate", "interpret", "verify")}
@@ -55,11 +55,11 @@ MANIFEST_SCHEMA = "codeye-r1-eval-manifest"
 REGISTRY = "holdout-registry.jsonl"
 HOLDOUT_LABEL = "holdout_seen_by_prior_revision"
 BUDGET_REFUSALS = ("budget_exhausted", "request_limit_reached", "relay_halted")
-# Relay settlement prices (microUSD per token; r0_openai_gateway.PRICE_INPUT_WORST / PRICE_OUTPUT).
+# Relay settlement prices (microUSD per token; model_budget_relay.PRICE_INPUT_WORST / PRICE_OUTPUT).
 PRICE_IN, PRICE_OUT = 5, 10
 
 # Planner fallback when no history directory is given (docs/EVALUATION.md#표본과-예산). Source: docs/EVALUATION.md#회귀-집합-실행,
-# TC-100 on R0 Go pairs + W15 (11 inputs per pack, single-file Go excerpts, reasoning low).
+# TC-100 on the Go pairs and the module input (11 inputs per pack, single-file Go excerpts, reasoning low).
 CONSTANTS = {
     "review-v1": {"source": "docs/EVALUATION.md#회귀-집합-실행 TC-100: 11 inputs, 32 calls, ledger 0.789 USD",
                   "calls_per_variant": {"context": 11 / 11, "investigate": 11 / 11, "verify": 10 / 11},
@@ -106,7 +106,7 @@ class Corpus:
         return self.module["materialize"](destination, case, variant, documented)
 
     def documented(self, case):
-        """README per case, fixed by corpus order (every other case, as in R0), the same for every batch."""
+        """README per case, fixed by corpus order (every other case, as in the regression pilot), the same for every batch."""
         return self.cases.index(case) % 2 == 0
 
 
@@ -426,7 +426,7 @@ def records_of(batch, key):
 
 
 def review_outcome(report):
-    """Why model review did or did not run, from task states only. A failed secret screen (W21:
+    """Why model review did or did not run, from task states only. A failed secret screen (:
     every review role skipped_policy/secret_screen_failed) is a platform policy outcome, not a
     model failure, and is reported as its own value."""
     review = [t for t in report["tasks"] if str(t.get("key", "")).startswith("review.")]
@@ -569,7 +569,7 @@ def classify_blocks(blocks, records, phrases_file):
     """A block whose every matched entry also occurs in the run's own model output is a model echo
     (the model wrote label-like words that a later role would receive); anything else came from the
     request inputs or instructions. Both make the variant invalid; they are reported separately."""
-    import r0_openai_gateway as gateway
+    import model_budget_relay as gateway
     phrases = gateway.load_forbidden(phrases_file)
     echoed = set(phrases.matches(model_texts(records)))
     for b in blocks:
@@ -588,7 +588,7 @@ def echo_audit(requests, records, phrases_file):
         truncated |= (q.get("echo_match_count") or 0) > len(q.get("echo_matches") or [])
     if not ids:
         return []
-    import r0_openai_gateway as gateway
+    import model_budget_relay as gateway
     own = set(gateway.load_forbidden(phrases_file).matches(model_texts(records)))
     return sorted(ids - own) + (["<truncated>"] if truncated else [])
 
@@ -692,7 +692,7 @@ def run_batch(args):
     manifest["holdout"]["registered"] = register(results_root, reg_entry)
     write_json(batch / "manifest.json", manifest)
 
-    with tempfile.TemporaryDirectory(prefix="codeye-r1-eval-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="codeye-eval-") as tmp:
         base = Path(tmp)
         source = base / "source"
         source.mkdir()
@@ -722,7 +722,7 @@ def run_batch(args):
 
             concurrency = 1 if review else max(1, args.agents * args.max_workers)
             with Cluster(base, binary, env, source, agent_args=agent_args, agents=args.agents,
-                         max_workers=args.max_workers, label="R1 evaluation inputs") as cluster:
+                         max_workers=args.max_workers, label="evaluation inputs") as cluster:
                 stopped = execute(cluster, corpus, plan, batch, args, review, source, concurrency,
                                   keep_review_artifacts, tree_digest)
     rows = read_rows(batch)
@@ -753,8 +753,8 @@ def run_batch(args):
     manifest["finished_at"] = now()
     manifest["counts"] = dict(Counter("invalid:" + r["invalid"] if r.get("invalid") else r["status"] for r in rows))
     write_json(batch / "manifest.json", manifest)
-    import r1_score
-    write_json(batch / "judgments-template.json", r1_score.judgment_template(batch, corpus))
+    import quality_score
+    write_json(batch / "judgments-template.json", quality_score.judgment_template(batch, corpus))
     print(json.dumps({"batch": str(batch), "rows": len(rows), "counts": manifest["counts"], "stopped": stopped},
                      ensure_ascii=False))
     return batch
@@ -907,7 +907,7 @@ def capture_list(output, corpus):
     """Sentinel answer list for a dry run that records instruction envelopes (`--request-dump` of
     the fake upstream): it blocks nothing, so every role's request reaches the dump. The relay and
     `run` accept it only with the test upstream."""
-    import r0_openai_gateway as gateway
+    import model_budget_relay as gateway
     doc = {"schema": gateway.FORBIDDEN_SCHEMA, "version": gateway.FORBIDDEN_VERSION,
            "normalization": gateway.FORBIDDEN_NORMALIZATION, "purpose": gateway.FORBIDDEN_CAPTURE,
            "corpus_digest": corpus.digest,
@@ -978,7 +978,7 @@ def main(argv=None):
     a = sub.add_parser("allow-text", help="tool messages and instruction envelopes that may reach the model")
     a.add_argument("--tools-batch", type=Path, action="append", default=[])
     a.add_argument("--request-dump", type=Path, action="append", default=[],
-                   help="r1_fake_upstream.py --dump directory of a clean dry run")
+                   help="fake_model_upstream.py --dump directory of a clean dry run")
     a.add_argument("--output", type=Path, required=True)
     cl = sub.add_parser("capture-list", help="sentinel answer list for an envelope-capture dry run")
     cl.add_argument("--output", type=Path, required=True, help="new file")
@@ -1023,13 +1023,13 @@ def main(argv=None):
             raise SystemExit("--condition tools runs no model: drop --pack/--relay-file/--ledger/--dry-run/--plant-leak")
         run_batch(args)
         return 0
-    import r1_score
+    import quality_score
     if args.command == "score":
-        result = r1_score.score(args.batches, args.judgments, Corpus(), line_slack=args.line_slack)
+        result = quality_score.score(args.batches, args.judgments, Corpus(), line_slack=args.line_slack)
         text = json.dumps(result, ensure_ascii=False, indent=1, sort_keys=True)
         if args.output:
             args.output.write_text(text + "\n")
-        print(r1_score.render_table(result))
+        print(quality_score.render_table(result))
         return 0
     if args.command == "allow-text":
         allow_text(args.output, args.tools_batch, args.request_dump)
@@ -1038,10 +1038,10 @@ def main(argv=None):
         capture_list(args.output, Corpus())
         return 0
     if args.command == "reader":
-        r1_score.reader_sheets(args.batch, Corpus(), args.sample, args.seed, args.output)
+        quality_score.reader_sheets(args.batch, Corpus(), args.sample, args.seed, args.output)
         return 0
     if args.command == "reader-score":
-        result = r1_score.reader_score(args.key, args.answers)
+        result = quality_score.reader_score(args.key, args.answers)
         text = json.dumps(result, ensure_ascii=False, indent=1, sort_keys=True)
         if args.output:
             args.output.write_text(text + "\n")

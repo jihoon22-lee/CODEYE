@@ -21,7 +21,7 @@
     "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}},
     "counterevidence_ids": {"$ref": "#/$defs/ids"},
     "observation_ids": {"$ref": "#/$defs/ids"},
-    "fingerprint": {"type": "string", "description": "W23 이후(builder 3) fp2:<sha256>. 이전 revision의 값은 저장된 형식 그대로 둔다(비교 불가)."},
+    "fingerprint": {"type": "string", "description": "fp2:<sha256>. 이전 revision의 값은 저장된 형식 그대로 둔다(비교 불가)."},
     "fingerprint_basis": {"$ref": "#/$defs/fingerprintBasis"},
     "disposition_version": {"type": "integer", "minimum": 1, "description": "게시 시점에 적용한 사람 검토 version. disposition이 open이면 없다."},
     "recommendation": {"type": "object", "additionalProperties": false, "required": ["summary", "tradeoffs"], "properties": {"summary": {"type": "string", "minLength": 1}, "tradeoffs": {"$ref": "#/$defs/strings"}}},

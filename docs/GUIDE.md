@@ -163,7 +163,7 @@ re-enrolling the local agent: the configured source roots changed (previous stat
 ```
 
 - `opencode`는 설치한 OpenCode CLI의 절대 경로다. `name`은 그 CLI에 구성된 모델 이름이다.
-- `relay_file`은 승인된 로컬 relay를 쓸 때만 넣는다. 이 저장소의 `scripts/r0_openai_gateway.py`는 예산 상한을 강제하는 QA 전용 relay이며 제품 구성요소가 아니다. 사용법은 그 파일의 머리말과 `--help`에 있다.
+- `relay_file`은 승인된 로컬 relay를 쓸 때만 넣는다. 이 저장소의 `scripts/model_budget_relay.py`는 예산 상한을 강제하는 QA 전용 relay이며 제품 구성요소가 아니다. 사용법은 그 파일의 머리말과 `--help`에 있다.
 - `model_review: true`인 root의 코드만 모델에 보낸다. 기본은 보내지 않음이다. 비밀값으로 선별된 파일은 보내지 않는다.
 - `review_pack`의 기본은 `review-r1`이다. 비워 두면 `review-r1`을 쓴다. `review-v1`은 이전 기록을 같은 조건으로 재현할 때만 고른다([검토](REVIEW.md)).
 - 모델 연결은 먼저 `codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH]`로 확인한다. 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다. `codeye doctor`는 모델을 호출하지 않는다.
