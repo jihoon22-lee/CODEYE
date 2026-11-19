@@ -8,7 +8,7 @@ import (
 )
 
 // sliceExample reads examples/report-slices.json (the builder's output for
-// fixtures/modules/coverage/input under call ceiling 15,
+// fixtures/modules/slices/input under call ceiling 15,
 // internal/worker/review/report_slices_example_test.go) as a product report.
 func sliceExample(t *testing.T) Report {
 	t.Helper()

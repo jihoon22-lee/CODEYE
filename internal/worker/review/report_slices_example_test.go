@@ -21,7 +21,7 @@ import (
 
 // The review slice report example (examples/report-slices.json and .md,
 // docs/REPORT.md#모듈별-검토-장부) is the builder's output for
-// fixtures/modules/coverage/input under the smallest call ceiling (15): the
+// fixtures/modules/slices/input under the smallest call ceiling (15): the
 // real discovery and role-pack handlers run in process with a scripted
 // model caller that answers every task with one call (no model is
 // contacted), a clean synthetic secrets screen and a go vet stand-in without
@@ -34,7 +34,7 @@ const (
 	sliceExampleCap  = 15
 )
 
-const sliceExampleBanner = "> **합성 예시.** 아래는 `fixtures/modules/coverage/input`에 대해 CODEYE의 탐색·검토 역할과 모듈 단위 검토 분할을 호출 상한 15로 실제로 실행하고 보고서 builder가 만든 출력이다. 모델 응답은 미리 정한 스크립트(작업마다 호출 1회)이며 모델을 부르지 않았다. 비밀값 탐지는 탐지 없는 합성 결과이고 정적 분석 도구는 실행하지 않았다. 사용자 프로젝트의 결함 발견 결과가 아니다. 기계 판독 원본은 [report-slices.json](report-slices.json)이다.\n"
+const sliceExampleBanner = "> **합성 예시.** 아래는 `fixtures/modules/slices/input`에 대해 CODEYE의 탐색·검토 역할과 모듈 단위 검토 분할을 호출 상한 15로 실제로 실행하고 보고서 builder가 만든 출력이다. 모델 응답은 미리 정한 스크립트(작업마다 호출 1회)이며 모델을 부르지 않았다. 비밀값 탐지는 탐지 없는 합성 결과이고 정적 분석 도구는 실행하지 않았다. 사용자 프로젝트의 결함 발견 결과가 아니다. 기계 판독 원본은 [report-slices.json](report-slices.json)이다.\n"
 
 // TC-169 (docs/REPORT.md#모듈별-검토-장부).
 func TestReportSlicesExample(t *testing.T) {

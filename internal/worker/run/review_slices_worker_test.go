@@ -137,7 +137,7 @@ func (f *sliceScripted) Review(ctx context.Context, _ executor.Runner, q opencod
 
 func copyCoverageFixture(t *testing.T, dst string) {
 	t.Helper()
-	fixture, _ := filepath.Abs("../../../fixtures/modules/coverage/input")
+	fixture, _ := filepath.Abs("../../../fixtures/modules/slices/input")
 	err := filepath.WalkDir(fixture, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err

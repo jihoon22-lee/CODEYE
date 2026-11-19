@@ -161,7 +161,7 @@ def check_role_pack_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> 
 
 
 # The slice examples (docs/REVIEW.md#모듈-단위-검토-분할): the review.scope
-# artifact and the first slice's records of fixtures/modules/coverage/input,
+# artifact and the first slice's records of fixtures/modules/slices/input,
 # written by TestSliceExampleRecords. That snapshot has Go, JavaScript and
 # Python source.
 SLICE_EXAMPLE_LANGUAGES = ("go", "javascript", "python")
@@ -177,7 +177,7 @@ def check_scope_artifact(scope: dict) -> None:
     fixture, every eligible file in exactly one place, covered_by_overview
     exactly for the files the overview sent, per-module counts and slice
     keys in plan order."""
-    root = ROOT / "fixtures/modules/coverage/input"
+    root = ROOT / "fixtures/modules/slices/input"
     offered = scope["overview"]["offered"]
     ensure(offered == sorted(offered), "scope offered files are not sorted")
     placed = {}
@@ -209,7 +209,7 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
         scope = docs["scope"]
         scope_v.validate(scope)
         check_scope_artifact(scope)
-        root = ROOT / "fixtures/modules/coverage/input"
+        root = ROOT / "fixtures/modules/slices/input"
         entry = scope["slices"][0]
         for name in ("investigate.s001", "verify.s001"):
             doc = docs[name]

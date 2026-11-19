@@ -241,7 +241,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 | 99 | 7개 모두 | 7개 모두 | 7개 모두 |
 | 207 | 7개 모두 | 7개 모두 | 7개 |
 
-(`TestSliceAdmissionKeepsTheCeiling`, [`fixtures/modules/coverage/input`](../fixtures/modules/coverage/input). environment는 차이가 없어 호출하지 않는다.)
+(`TestSliceAdmissionKeepsTheCeiling`, [`fixtures/modules/slices/input`](../fixtures/modules/slices/input). environment는 차이가 없어 호출하지 않는다.)
 
 ### 비밀값 선별과 판단 순서
 
