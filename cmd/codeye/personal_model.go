@@ -53,10 +53,12 @@ func modelAgentArgs(cfg *personal.Config, layout personal.Layout) []string {
 // key. A failed probe is reported and does not stop `up`: static analysis
 // runs, and the report says why model review was not performed.
 func setupPersonalModel(ctx context.Context, cfg *personal.Config, layout personal.Layout, noProbe bool, out io.Writer) *personal.ResolvedModel {
-	setup, err := personal.WriteModelSecretFromEnv(layout, os.Getenv)
-	if cfg.Offline {
-		// A key from the environment is for a provider's public endpoint.
-		setup, err = personal.ModelSetup{}, nil
+	// Offline, a key from the environment is for a provider's public endpoint:
+	// it is neither stored nor used, and the key file stays as it is.
+	var setup personal.ModelSetup
+	var err error
+	if !cfg.Offline {
+		setup, err = personal.WriteModelSecretFromEnv(layout, os.Getenv)
 	}
 	switch {
 	case err != nil:
