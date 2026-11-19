@@ -150,6 +150,7 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 	tr := newTree(t)
 	usrbin := tr.pathDir(t, "usr/bin")
 	script(t, filepath.Join(usrbin, "git"), "git version 2.53.0")
+	script(t, filepath.Join(usrbin, "gh"), "gh version 2.86.0 (2026-02-14)")
 	// go must sit in a GOROOT.
 	goroot := filepath.Join(tr.home, "goroot")
 	if err := os.MkdirAll(filepath.Join(goroot, "src", "runtime"), 0o755); err != nil {
@@ -206,6 +207,7 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 	want := map[string]struct{ path, version, source string }{
 		"go":          {filepath.Join(goroot, "bin", "go"), "1.27.4", SourcePath},
 		"git":         {filepath.Join(usrbin, "git"), "2.53.0", SourcePath},
+		"gh":          {filepath.Join(usrbin, "gh"), "2.86.0", SourcePath},
 		"node":        {filepath.Join(nodeBin, "node"), "24.18.0", SourcePath},
 		"opencode":    {filepath.Join(tr.home, ".opencode", "bin", "opencode"), "1.19.5", "~/.opencode/bin"},
 		"ruff":        {filepath.Join(tr.home, ".local", "bin", "ruff"), "0.16.3", "~/.local/bin"},

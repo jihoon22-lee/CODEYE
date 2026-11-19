@@ -91,8 +91,9 @@ type running struct {
 func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, o bringUpOptions, out, stderr io.Writer) (*running, int) {
 	// Detected tools and the model complete the configuration before the
 	// agent argv is built and compared with a running agent's.
-	applyDetectedTools(ctx, cfg, out)
+	tools := applyDetectedTools(ctx, cfg, out)
 	model := setupPersonalModel(ctx, cfg, layout, o.noProbe, out)
+	gh := setupPersonalGitHub(ctx, cfg, layout, tools, out)
 	opCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	db, err := personalDatabase(opCtx, cfg, layout, dbOptions{start: true, flagBinDir: o.postgresBinDir, notices: out})
@@ -182,7 +183,7 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 	if err := ensurePoolWorkers(opCtx, store, cfg); err != nil {
 		return fail(err)
 	}
-	if err := writePersonalSetup(cfg, layout, model); err != nil {
+	if err := writePersonalSetup(cfg, layout, model, gh); err != nil {
 		fmt.Fprintln(out, "note: cannot write", httpapi.PersonalSetupFile, "- the web UI shows the setup as unknown:", err)
 	}
 	res := &running{store: store, db: db, user: user, roots: roots}
@@ -249,7 +250,7 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 	}
 	if !ctrlUp {
 		ctrlArgs := []string{"serve", "--personal", "--state-dir", layout.Root, "--listen", cfg.Listen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}
-		ctrlEnv := append(childEnv("PATH", "HOME", "LANG", "TZ"), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
+		ctrlEnv := append(childEnv(append([]string{"PATH", "HOME", "LANG", "TZ"}, fixtureControllerEnv...)...), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
 		cmd, rec, err := personal.Spawn(personal.RoleController, exe, ctrlArgs, ctrlEnv, layout.Root, layout.LogFile(personal.RoleController))
 		if err != nil {
 			if cmd != nil {
@@ -330,7 +331,11 @@ func ensureGitProviders(ctx context.Context, s *postgres.Store, cfg *personal.Co
 			return fmt.Errorf("cannot register the Git host %s: %w", h, err)
 		}
 		if created {
-			fmt.Fprintf(out, "registered the Git host %s (public repositories)\n", h)
+			what := "public repositories"
+			if h == "github.com" && cfg.GitHub.On() {
+				what = "public repositories, and private ones the GitHub token can read"
+			}
+			fmt.Fprintf(out, "registered the Git host %s (%s)\n", h, what)
 		}
 	}
 	return nil
@@ -348,9 +353,11 @@ func ensurePoolWorkers(ctx context.Context, s *postgres.Store, cfg *personal.Con
 }
 
 // writePersonalSetup records for the controller what the web app shows on
-// the first screen: the model, Git and the backup directory (no key).
-func writePersonalSetup(cfg *personal.Config, layout personal.Layout, m *personal.ResolvedModel) error {
-	st := httpapi.PersonalSetup{SchemaVersion: "0.1", Git: cfg.Agent.Git != "" && len(cfg.GitHosts) > 0, GitHosts: append([]string{}, cfg.GitHosts...), BackupDir: backupDirOf(cfg)}
+// the first screen: the model, Git, the GitHub account and the backup
+// directory (no key, no token).
+func writePersonalSetup(cfg *personal.Config, layout personal.Layout, m *personal.ResolvedModel, gh personal.GitHubSetup) error {
+	st := httpapi.PersonalSetup{SchemaVersion: "0.1", Git: cfg.Agent.Git != "" && len(cfg.GitHosts) > 0, GitHosts: append([]string{}, cfg.GitHosts...), BackupDir: backupDirOf(cfg),
+		GitHub: setupGitHubOf(gh)}
 	if m != nil {
 		st.Model = &httpapi.SetupModel{ID: m.ID, Probe: personal.ModelProbeResult(layout, m)}
 	}
@@ -574,6 +581,7 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 		for _, h := range cfg.GitHosts {
 			args = append(args, "--git-host", h)
 		}
+		args = append(args, gitHubCredentialArgs(cfg, layout)...)
 	}
 	if a.Go != "" {
 		args = append(args, "--go", a.Go)

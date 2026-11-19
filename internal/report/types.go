@@ -30,8 +30,11 @@ const (
 	// docs/REVIEW.md#검토-우선순위): the ledger rows' class and secondary
 	// counts, the slots of primary files the ceiling refused, the code review
 	// overview's primary and secondary counts and the
-	// review_primary_not_sent attention.
-	BuilderVersion = "8"
+	// review_primary_not_sent attention. Version 9 writes the pull_request
+	// section of a pull-request run (docs/REPORT.md#pull-request-보고서) and
+	// its pull_request_focus note; a report of any other run is the same as
+	// version 8 wrote it.
+	BuilderVersion = "9"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -92,6 +95,9 @@ type Report struct {
 	CodeReview     *CodeReviewSection     `json:"code_review,omitempty"`
 	// Gaps is omitted when empty; the overview's gap line carries its count.
 	Gaps []Gap `json:"gaps,omitempty"`
+	// PullRequest is the pull-request block of a pull-request run (builder
+	// 9, pull_request.go); absent for every other run.
+	PullRequest *PullRequestSection `json:"pull_request,omitempty"`
 }
 
 // Builder identifies the code and input that produced the report.

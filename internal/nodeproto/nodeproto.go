@@ -242,6 +242,10 @@ type Job struct {
 	Source    JobSource               `json:"source"`
 	Snapshot  *JobSnapshot            `json:"snapshot"`
 	Resources Resources               `json:"resources"`
+	// PullRequest is set only for a pull-request run of a Git source: the
+	// worker fetches its head commit and reviews its changed files first
+	// (docs/GITHUB.md). Absent for every other run.
+	PullRequest *domain.PullRequestJob `json:"pull_request,omitempty"`
 }
 
 // ClaimResponse is the 200 body. 204 (no body) means nothing claimable.

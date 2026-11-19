@@ -56,6 +56,13 @@ const (
 	// PriorityOrder names the order review.scope fills the slots in
 	// (docs/REVIEW.md#검토-우선순위).
 	PriorityOrder = "primary_first_observations_first"
+	// PriorityPullRequestFirst is the order of a pull-request run: the
+	// changed files first, then the files in their directories, each tier in
+	// PriorityOrder.
+	PriorityPullRequestFirst = "pull_request_changed_first"
+	// Pull-request labels of a scope file and slot.
+	PullRequestChanged  = "changed"
+	PullRequestNeighbor = "neighbor"
 	// The secrets screen the scope and its slices ran with: applied (a
 	// completed screen withheld its files) or not_screened (no secrets task
 	// ran; the inputs went through the read filters only and every record
@@ -155,6 +162,10 @@ type ScopeFile struct {
 	// file; Severity is the highest of them (SeverityNames).
 	Observations int    `json:"observations,omitempty"`
 	Severity     string `json:"severity,omitempty"`
+	// PullRequest is changed or neighbor for a file of a pull-request run
+	// the pull request changes or that sits beside one (order
+	// pull_request_changed_first); absent otherwise.
+	PullRequest string `json:"pull_request,omitempty"`
 }
 
 // ScopeOverview is the overview prefix and the code and test files the
@@ -169,13 +180,15 @@ type ScopeOverview struct {
 // ScopeSlice is one filled slot, in slot order. Class and Rank are those of
 // its first file.
 type ScopeSlice struct {
-	Key             string      `json:"key"`
-	InvestigateTask string      `json:"investigate_task"`
-	VerifyTask      string      `json:"verify_task"`
-	Class           string      `json:"class"`
-	Rank            string      `json:"rank"`
-	Modules         []string    `json:"modules"`
-	Files           []ScopeFile `json:"files"`
+	Key             string `json:"key"`
+	InvestigateTask string `json:"investigate_task"`
+	VerifyTask      string `json:"verify_task"`
+	Class           string `json:"class"`
+	Rank            string `json:"rank"`
+	// PullRequest is the pull-request label of its files (one per slot).
+	PullRequest string      `json:"pull_request,omitempty"`
+	Modules     []string    `json:"modules"`
+	Files       []ScopeFile `json:"files"`
 }
 
 // ScopeDoc is the review scope artifact (schema 0.2 shape).
@@ -378,7 +391,8 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 		(!planned && (l.Slots < 1 || l.Slots > MaxSlices)) {
 		return invalid("limits")
 	}
-	if !planned && (d.Priority.Order != PriorityOrder || !d.Priority.Secondary.Valid()) {
+	pullRequest := d.Priority.Order == PriorityPullRequestFirst
+	if !planned && ((d.Priority.Order != PriorityOrder && !pullRequest) || !d.Priority.Secondary.Valid()) {
 		return invalid("priority rule")
 	}
 	if planned && (d.Priority.Order != "" || len(d.Excluded) != 0) {
@@ -427,6 +441,9 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 		if err := checkPriority(f, planned, d.Priority.Secondary); err != nil {
 			return err
 		}
+		if f.PullRequest != "" && (!pullRequest || (f.PullRequest != PullRequestChanged && f.PullRequest != PullRequestNeighbor)) {
+			return invalid("scope file pull_request")
+		}
 		if sha, ok := want.Lookup(f.Path); !ok || sha != f.SHA256 {
 			return invalid("scope file not in snapshot")
 		}
@@ -464,7 +481,7 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 			len(s.Modules) == 0 || len(s.Modules) > MaxSliceModules || !slices.IsSorted(s.Modules) {
 			return invalid("slice %d", i+1)
 		}
-		if planned != (s.Class == "" && s.Rank == "") || (!planned && (s.Class != s.Files[0].Class || s.Rank != s.Files[0].Rank)) {
+		if planned != (s.Class == "" && s.Rank == "") || (!planned && (s.Class != s.Files[0].Class || s.Rank != s.Files[0].Rank || s.PullRequest != s.Files[0].PullRequest)) {
 			return invalid("slice %d priority", i+1)
 		}
 		used := map[string]bool{}
@@ -475,6 +492,9 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 			}
 			if !planned && f.Class != s.Class {
 				return invalid("slice %d mixes classes", i+1)
+			}
+			if f.PullRequest != s.PullRequest {
+				return invalid("slice %d mixes pull-request tiers", i+1)
 			}
 			used[f.Module] = true
 			bytes += f.BoundBytes

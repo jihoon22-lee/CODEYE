@@ -43,12 +43,13 @@ go           found    1.27.4    /usr/local/go/bin/go
 opencode     missing  -         not found - install OpenCode (`curl -fsSL https://opencode.ai/install | bash`) or set `agent.model.opencode`
 go module cache: ~/go/pkg/mod; python type checkers: mypy and pyright both run
 model: none (set OPENAI_API_KEY, ANTHROPIC_API_KEY or OPENCODE_API_KEY and run codeye up again) - static analysis only
+github: signed in as octocat on github.com (token from gh) - private repositories and pull requests you can read
 initialized a PostgreSQL 17.10 cluster in /home/user/.local/state/codeye/postgres/data (binaries: /usr/lib/postgresql/17/bin)
 PostgreSQL 17.10 started on 127.0.0.1:55432 (log /home/user/.local/state/codeye/logs/postgres.log)
-database schema created (migration 11)
+database schema created (migration 12)
 created the personal user 2ce93dc8-…
 registered source root "home" (f655c03e-…)
-registered the Git host github.com (public repositories)
+registered the Git host github.com (public repositories, and private ones the GitHub token can read)
 CODEYE is running at http://127.0.0.1:7331 (controller pid 4101, agent pid 4113); logs in /home/user/.local/state/codeye/logs
 registered project "myproject" (/home/user/src/myproject)
 queued an analysis of "myproject" (run 4699c64a-…); the browser shows its progress and the report
@@ -87,10 +88,40 @@ Open CODEYE (signed in; the link works once, within 10 minutes):
 ```
 
 - 받는 주소는 `https://HOST/OWNER/REPO`다(`https://`는 생략해도 된다). 허용 호스트는 설정의 `git_hosts`이고 기본은 `["github.com"]`이다. `git`이 없으면 주소를 받지 않고 그렇다고 알린다.
-- 비공개 저장소는 아직 지원하지 않는다. 인증을 요구하는 주소(비공개이거나 없는 저장소)는 소스 확보가 "저장소를 인증 없이 읽을 수 없음"으로 실패한다. 호스트에 닿지 못하면 "Git 호스트에 연결하지 못함"이다.
+- **비공개 github.com 저장소**는 GitHub token이 있으면 그대로 읽는다. `codeye up`이 `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token` 순으로 찾아 `github:` 줄에 계정과 출처만 보인다(token은 출력하지 않는다). `gh auth login`을 해 두었으면 할 일이 없다. token이 없거나 그 token으로 읽을 수 없는 주소(없는 저장소 포함)는 소스 확보가 "저장소를 읽을 권한이 없음"으로 실패한다. 호스트에 닿지 못하면 "Git 호스트에 연결하지 못함"이다. 끄려면 설정에 `"github": {"enabled": false}`를 둔다([GitHub token](GITHUB.md#github-token)). 다른 호스트에는 token을 보내지 않는다.
 - 저장소의 빌드 스크립트(`cargo check` 등)는 기본으로 실행하지 않는다([프로젝트별 분석 선택](#프로젝트별-분석-선택)).
 - `web/dist`가 없으면 화면 없이 API만 뜨고 `web UI not built - run …`을 출력한다.
 - 개인 사용자는 관리자다. 사용자 이름과 비밀번호 없이 로그인 링크로 들어간다. 관리자 역할은 계정과 source root 허가를 다룰 뿐 프로젝트 권한은 아니며, 개인 사용자는 자기가 등록한 프로젝트의 소유자다. 다른 사람과 함께 쓰는 배포는 [계정과 관리자 CLI](OPERATIONS.md#계정과-관리자-cli)와 [TLS 수신](OPERATIONS.md#tls-수신)을 본다.
+
+**pull request**는 그 주소를 준다. 변경 파일을 먼저 검토하고 보고서가 변경 부분과 기존 코드를 나눈다.
+
+```sh
+codeye up https://github.com/OWNER/REPO/pull/123
+codeye up --comment https://github.com/OWNER/REPO/pull/123          # 결과 댓글 하나를 남긴다(프로젝트마다 기억)
+codeye up --dry-run-comment https://github.com/OWNER/REPO/pull/123  # 게시하지 않고 댓글 본문만 출력
+```
+
+실제 출력(공개 저장소 `spf13/cobra`의 fork pull request, 모델 없음, `--dry-run-comment`. 도구 표를 빼고 계정 이름을 바꿨으며 ID·링크 토큰만 줄였다):
+
+```text
+github: signed in as octocat on github.com (token from gh) - private repositories and pull requests you can read
+registered project "cobra" (https://github.com/spf13/cobra)
+queued an analysis of pull request #2580 of spf13/cobra (feat/completion-install from A-RYAN-1/cobra, head 75f6f3e, base main adbc881, 7 changed files; comment: dry run (nothing is posted)) (run 2a2fccd3-…)
+…
+waiting for the report of run 2a2fccd3-… to preview its pull-request comment (nothing is posted)...
+
+----- pull-request comment preview (not posted) -----
+<!-- codeye:pull-request-comment project=42d3ea27-… -->
+<!-- codeye:publication run=2a2fccd3-… version=1795110153725612 head=75f6f3e9b1ebb7ee0f89fd91cc3ebc5e49036a89 -->
+### CODEYE 분석 결과
+…
+----- end of preview -----
+```
+
+- 받는 주소는 github.com의 `…/pull/N`(과 `…/pull/N/files` 같은 탭 주소)다. 비공개 저장소의 pull request는 token이 있어야 한다.
+- run은 그때의 head SHA를 고정해 분석한다. 새 push 뒤 같은 명령을 다시 하면 새 head로 새 run을 만들고, 비교 기준은 같은 pull request의 이전 run이다.
+- 결과 댓글은 기본으로 꺼져 있다. `--comment`(화면은 "고급"의 "pull request에 결과 댓글 남기기")로 켜면 그 프로젝트의 다음 pull request run에도 남긴다. `--comment=false`로 끈다. 댓글은 pull request마다 하나이고 새 run이 같은 댓글을 고친다. 게시가 실패해도 분석 결과는 그대로이고 실행 화면에 댓글 상태와 이유가 나온다. 댓글에는 코드·도구 원문·비밀정보를 싣지 않는다([결과 댓글](GITHUB.md#결과-댓글)).
+- `--dry-run-comment`는 아무것도 게시하지 않고 보고서를 기다려(`--comment-wait`, 기본 1시간) 댓글 본문을 출력한다. 화면에서는 실행 화면의 pull request 줄에서 "미리 보기"를 누른다.
 
 `codeye status`로 상태를 본다. `postgres running port=…`가 관리형 PostgreSQL이다.
 
@@ -134,7 +165,7 @@ restarting the agent: its configuration changed (running work finishes first, up
 re-enrolling the local agent: the configured source roots changed (previous state kept in /…/state/agent.retired-…)
 ```
 
-화면에서는 "분석할 코드"의 **폴더 경로 또는 Git 주소** 입력란에 절대 경로나 저장소 주소를 붙여넣고 **분석**을 누른다. 프로젝트를 등록하고(같은 폴더·저장소면 그 프로젝트를 쓴다) 분석을 요청한 뒤 바로 그 실행 화면으로 간다. 분석이 아직 진행 중이면 새로 요청하지 않고 그 실행을 보여 준다. 접힌 **고급**에는 이름, 브랜치(`…/tree/브랜치` 주소면 채워진다), 아래의 두 선택이 있다. source root를 골라 상대 경로로 등록하는 이전 양식은 "등록된 폴더(소스 루트)에서 골라 등록" 아래에 있다. 등록한 프로젝트는 입력란 아래 "프로젝트 목록"에 카드로 보이고, 카드를 고르면 그 프로젝트의 최근 실행과 보고서가 열린다. 프로젝트 설명이나 요구사항 문서는 필요 없다. CODEYE가 문서·환경·소스를 직접 조사한다.
+화면에서는 "분석할 코드"의 **폴더 경로 또는 Git 주소** 입력란에 절대 경로나 저장소 주소를 붙여넣고 **분석**을 누른다. 프로젝트를 등록하고(같은 폴더·저장소면 그 프로젝트를 쓴다) 분석을 요청한 뒤 바로 그 실행 화면으로 간다. 분석이 아직 진행 중이면 새로 요청하지 않고 그 실행을 보여 준다. 접힌 **고급**에는 이름, 브랜치(`…/tree/브랜치` 주소면 채워진다), 아래의 선택이 있다. pull request 주소(`…/pull/N`)를 넣으면 "pull request에 결과 댓글 남기기"도 있다. source root를 골라 상대 경로로 등록하는 이전 양식은 "등록된 폴더(소스 루트)에서 골라 등록" 아래에 있다. 등록한 프로젝트는 입력란 아래 "프로젝트 목록"에 카드로 보이고, 카드를 고르면 그 프로젝트의 최근 실행과 보고서가 열린다. 프로젝트 설명이나 요구사항 문서는 필요 없다. CODEYE가 문서·환경·소스를 직접 조사한다.
 
 ### 프로젝트별 분석 선택
 
@@ -166,7 +197,7 @@ codeye tools
 - **대기 사유**: 시작하지 않은 run에는 이유가 표시된다. 저장 공간 상한에 걸리면 "저장 공간 상한에 도달해 새 작업을 시작하지 않습니다"가 나온다([저장 공간](#저장-공간)).
 - 실행을 취소하면 실행 중인 도구 프로세스를 정리하고 정리 결과를 확인한 뒤 취소로 표시한다. 확인하지 못하면 "정리 확인 필요"(`recovery_required`)로 남는다.
 - **다시 시도**: 실패·일부 완료·취소된 실행에 "다시 시도" 버튼이 있다. 고정한 입력이 노드에 남아 있는 실패·취소 실행은 같은 입력으로 다시 하고, 그 밖(소스 확보 실패, 도구를 설치하거나 선택을 바꾼 뒤)에는 소스를 다시 받아 새 실행을 시작한다. 화면은 그 실행을 따라간다. `recovery_required`는 다시 시도하지 못한다.
-- 소스를 읽지 못한 실행은 이유를 보여 준다. 예: "저장소를 인증 없이 읽을 수 없음 — 비공개 저장소는 아직 지원하지 않습니다".
+- 소스를 읽지 못한 실행은 이유를 보여 준다. 예: "저장소를 읽을 권한이 없음 — 비공개 github.com 저장소는 gh auth login(또는 GH_TOKEN) 뒤 codeye up을 다시 하면 읽습니다".
 
 ## 보고서 읽기
 

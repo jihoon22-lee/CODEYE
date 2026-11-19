@@ -36,7 +36,12 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 255,
-      "description": "Git only: the requested branch name. Never a URL, remote name or credential."
+      "description": "Git only: the requested branch name (or the default branch). Never a URL, remote name or credential. A pull-request snapshot has source_ref instead."
+    },
+    "source_ref": {
+      "type": "string",
+      "pattern": "^refs/pull/[1-9][0-9]{0,9}/head$",
+      "description": "Git only, pull-request snapshots: the fetched ref refs/pull/N/head of the base repository. Exactly one of source_branch and source_ref is present."
     },
     "requested_at": {
       "type": "string",
@@ -164,14 +169,35 @@
       "then": {
         "required": [
           "source_sha",
-          "source_branch",
           "requested_at"
         ],
         "properties": {
           "consistency": {
             "const": "git_commit"
           }
-        }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "source_branch"
+            ],
+            "not": {
+              "required": [
+                "source_ref"
+              ]
+            }
+          },
+          {
+            "required": [
+              "source_ref"
+            ],
+            "not": {
+              "required": [
+                "source_branch"
+              ]
+            }
+          }
+        ]
       },
       "else": {
         "properties": {
@@ -189,6 +215,11 @@
             {
               "required": [
                 "source_branch"
+              ]
+            },
+            {
+              "required": [
+                "source_ref"
               ]
             },
             {

@@ -285,6 +285,11 @@ paths:
         같은 actor·project·Idempotency-Key와 같은 body(정규화 JSON digest)는 같은 run을 202로 반환한다.
         다른 body는 409 IDEMPOTENCY_CONFLICT. viewer는 403, 프로젝트 비구성원은 404다.
         worker가 없는 빌드에서 run은 queued에 머문다.
+        pull_request가 있으면(개인 모드, github.com 저장소 프로젝트) controller가 GitHub API로 base/head SHA, head 저장소,
+        변경 파일과 변경 줄을 확인해 run에 한 번 고정한다(docs/GITHUB.md#pull-request-분석). idempotency 비교는 보낸 body로만 한다.
+        서버 모드·다른 host의 프로젝트는 422 PULL_REQUEST_UNSUPPORTED, GitHub이 보여 주지 않는 pull request는 422
+        PULL_REQUEST_NOT_FOUND, 거부된 token은 422 GITHUB_TOKEN_REFUSED, 권한 없음은 422 GITHUB_FORBIDDEN,
+        rate limit은 503 GITHUB_RATE_LIMITED(retryable), 연결 실패는 502 GITHUB_UNAVAILABLE이다.
       parameters:
         - {$ref: '#/components/parameters/IdempotencyKey'}
         - {$ref: '#/components/parameters/CSRF'}
@@ -300,15 +305,19 @@ paths:
                 profile: {enum: [deep-review, with-tests, focused]}
                 source_policy: {const: latest_at_acquire}
                 scope: {$ref: '#/components/schemas/Scope'}
+                pull_request: {$ref: '#/components/schemas/PullRequestRef'}
       responses:
         '202':
-          description: 영속 큐 등록 완료. 소스는 acquire에서 고정한다.
+          description: 영속 큐 등록 완료. 소스는 acquire에서 고정한다(pull request run은 고정한 head SHA).
           headers:
             Location: {schema: {type: string}}
           content:
             application/json:
               schema: {$ref: '#/components/schemas/RunAck'}
         '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/projects/{project_id}:
     parameters:
@@ -422,6 +431,7 @@ paths:
         첫 화면이 쓰는 설치 정보. 개인 모드(mode personal)는 설정된 모델(키는 없다)과 마지막 확인 결과, git과 Git host,
         경로로 분석할 수 있는 폴더(readable_folders), 찾은 도구(<state>/tools.json, schemas/tools.schema.json)를 돌려준다.
         서버 모드 controller는 노드마다 다른 이 정보를 모르므로 model, git, tools가 null이고 readable_folders가 비어 있다.
+        github는 codeye up이 찾은 GitHub 연결(token 유무·계정·출처)이며 token 자체는 싣지 않는다. 서버 모드와 이전 설정 요약은 null.
       responses:
         '200':
           description: 설치 정보
@@ -493,6 +503,27 @@ paths:
                           run_id: {type: string}
                           revision: {type: integer, minimum: 1}
                           url: {type: string}
+        '404': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/runs/{run_id}/pull-request-comment:
+    parameters:
+      - {$ref: '#/components/parameters/RunId'}
+    get:
+      operationId: previewPullRequestComment
+      x-codeye-status: implemented
+      description: >-
+        프로젝트 읽기 권한(viewer 포함, 비구성원 404)으로 pull request run이 남기는(또는 남길) 결과 댓글을 게시하지 않고 렌더링한다.
+        보고서 revision(기본 최신)으로 만들고, 개인 모드에서는 GitHub에 현재 head를 물어 head가 바뀌었으면 그 사실을 적는다.
+        pull request run이 아니면 404 NOT_A_PULL_REQUEST_RUN이다(docs/GITHUB.md#결과-댓글).
+      parameters:
+        - {name: revision, in: query, schema: {type: integer, minimum: 1, maximum: 1000000}}
+      responses:
+        '200':
+          description: 댓글 미리 보기
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PullRequestCommentPreview'}
+        '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/runs/{run_id}/comparison:
@@ -1590,10 +1621,13 @@ components:
         fetch_dependencies는 분석 전에 모듈 의존성을 레지스트리에서 받아도 되는지이며 선택 필드다.
         없으면 true이고 false일 때만 저장한다. 노드 운영자 스위치(--dependency-fetch)도 켜져 있어야 하며
         이것은 모든 노드에서 같다(docs/ARCHITECTURE.md#의존성-준비).
+        comment_on_pull_request는 pull request run이 결과 댓글을 남길지의 기억된 선택이며 선택 필드다. 없으면 false이고
+        true일 때만 저장한다(docs/GITHUB.md#결과-댓글).
       properties:
         send_source_to_model: {type: boolean}
         run_build_scripts: {type: boolean}
         fetch_dependencies: {type: boolean, default: true}
+        comment_on_pull_request: {type: boolean, default: false}
     ProjectCreate:
       type: object
       additionalProperties: false
@@ -1915,6 +1949,81 @@ components:
         tools:
           description: 개인 모드가 찾은 도구(schemas/tools.schema.json). 아직 없거나 서버 모드면 null
           type: [object, 'null']
+        github:
+          description: >-
+            개인 모드의 GitHub 연결. enabled는 설정 github.enabled, token은 저장된 token이 있는지, account는 그 token의 계정(GitHub에
+            닿지 못하면 null), source는 GH_TOKEN·GITHUB_TOKEN·gh 중 출처, reason은 token이 없거나 계정을 모르는 이유(no_token,
+            token_refused, github_unavailable 등)다. 서버 모드와 이전 설정 요약은 null
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [enabled, host, token, account, source, reason]
+              properties:
+                enabled: {type: boolean}
+                host: {type: string}
+                token: {type: boolean}
+                account: {type: [string, 'null']}
+                source: {enum: [GH_TOKEN, GITHUB_TOKEN, gh, null]}
+                reason: {type: [string, 'null']}
+    PullRequestRef:
+      type: object
+      additionalProperties: false
+      required: [number]
+      description: >-
+        분석할 pull request. number는 프로젝트 저장소의 pull request 번호다. comment는 이 run이 결과 댓글을 남길지이며 없으면
+        프로젝트 분석 선택의 comment_on_pull_request를 따른다. 예약 run은 pull_request를 받지 않는다.
+      properties:
+        number: {type: integer, minimum: 1, maximum: 1000000000}
+        comment: {type: boolean}
+    RunPullRequest:
+      type: object
+      additionalProperties: false
+      required: [number, url, repository, title, base_ref, base_sha, head_ref, head_sha, head_repository, changed_files, resolved_at, comment]
+      description: run을 대기열에 넣을 때 고정한 pull request와 결과 댓글 상태
+      properties:
+        number: {type: integer, minimum: 1}
+        url: {type: string}
+        repository: {type: string, description: HOST/OWNER/REPO}
+        title: {type: string}
+        base_ref: {type: string}
+        base_sha: {type: string, pattern: '^([0-9a-f]{40}|[0-9a-f]{64})$'}
+        head_ref: {type: string}
+        head_sha: {type: string, pattern: '^([0-9a-f]{40}|[0-9a-f]{64})$'}
+        head_repository: {type: string, description: head 저장소 OWNER/REPO(fork면 base와 다르다). GitHub이 알려 주지 않으면 빈 문자열}
+        changed_files: {type: integer, minimum: 0}
+        resolved_at: {type: string, format: date-time}
+        comment: {$ref: '#/components/schemas/PullRequestCommentState'}
+    PullRequestCommentState:
+      type: object
+      additionalProperties: false
+      required: [requested, state, attempts, next_attempt_at, reason, url, updated_at]
+      description: >-
+        결과 댓글 상태. not_requested는 댓글을 요청하지 않은 run, waiting_for_report는 보고서 게시 전, pending은 게시 대기(재시도 포함,
+        next_attempt_at), posted는 게시됨(url), superseded는 같은 pull request의 더 늦은 run이 이미 댓글을 썼거나 댓글이 더 새 run의
+        것이라 덮지 않음, failed는 끝난 실패(reason: github_forbidden, github_unauthorized, github_not_found, github_token_missing 등)다.
+        게시 실패는 분석 결과를 바꾸지 않는다.
+      properties:
+        requested: {type: boolean}
+        state: {enum: [not_requested, waiting_for_report, pending, posted, superseded, failed]}
+        attempts: {type: integer, minimum: 0}
+        next_attempt_at: {type: [string, 'null'], format: date-time}
+        reason: {type: [string, 'null']}
+        url: {type: [string, 'null']}
+        updated_at: {type: [string, 'null'], format: date-time}
+    PullRequestCommentPreview:
+      type: object
+      additionalProperties: false
+      required: [run_id, report_revision, format, body, head_sha, current_head_sha, head_moved, comment]
+      properties:
+        run_id: {type: string}
+        report_revision: {type: [integer, 'null'], minimum: 1, description: 렌더링에 쓴 보고서 revision. 보고서 전이면 null}
+        format: {const: markdown}
+        body: {type: string, maxLength: 60000, description: 게시할 댓글 본문(숨은 marker 포함). 코드·도구 원문·비밀정보를 싣지 않는다}
+        head_sha: {type: string, description: 분석한(고정한) head}
+        current_head_sha: {type: [string, 'null'], description: GitHub이 지금 알려 주는 head. 닿지 못하면 null}
+        head_moved: {type: boolean}
+        comment: {$ref: '#/components/schemas/PullRequestCommentState'}
     RunAck:
       type: object
       required: [id, status, version, url]
@@ -2083,6 +2192,7 @@ components:
         trigger: {$ref: '#/components/schemas/RunTrigger'}
         snapshot_id: {type: [string, 'null']}
         quality_verdict: {enum: [attention_required, no_actionable_findings, inconclusive, null]}
+        pull_request: {$ref: '#/components/schemas/RunPullRequest', description: pull request run에만 있다}
         report:
           type: [object, 'null']
           required: [revision, status, sha256, url]

@@ -60,7 +60,14 @@ func (w *worker) acquire(a *attempt) string {
 			break
 		}
 		a.anyProc.Store(true)
-		s, err = source.AcquireGit(a.ctx, job.Source.RepositoryURL, job.Source.Branch, w.hello.DataRoot, w.limits(), source.GitOptions{Executable: w.hello.GitExecutable, AllowedHost: job.Source.AllowedHost, AllowedLocalRoot: job.Source.AllowedLocalRoot, Timeout: 10 * time.Minute})
+		opts := source.GitOptions{Executable: w.hello.GitExecutable, AllowedHost: job.Source.AllowedHost, AllowedLocalRoot: job.Source.AllowedLocalRoot, Timeout: 10 * time.Minute,
+			Token: source.ReadHostToken(w.hello.GitCredentialFile, job.Source.AllowedHost)}
+		branch := job.Source.Branch
+		if pr := job.PullRequest; pr != nil {
+			// A pull request names its own head; the project's branch is not fetched.
+			opts.PullRequest, opts.ExpectSHA, branch = pr.Number, pr.HeadSHA, ""
+		}
+		s, err = source.AcquireGit(a.ctx, job.Source.RepositoryURL, branch, w.hello.DataRoot, w.limits(), opts)
 		reason = sourceReason(err)
 	default:
 		err, reason = source.ErrUnsupported, nodeproto.ReasonSourceUnsupported

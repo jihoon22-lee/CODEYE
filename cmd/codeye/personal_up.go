@@ -20,6 +20,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/httpapi"
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
+	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
 // `codeye up [PATH|URL]` (docs/GUIDE.md): from nothing to a signed-in
@@ -36,12 +37,16 @@ const upRunBody = `{"profile":"deep-review","source_policy":"latest_at_acquire",
 func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var configFlag, binDir string
 	var noOpen, noProbe bool
+	pull := pullOptions{wait: time.Hour}
 	target, rest := splitTarget(args)
 	if !parse("up", rest, stderr, func(fs *flag.FlagSet) {
 		fs.StringVar(&configFlag, "config", "", "")
 		fs.StringVar(&binDir, "postgres-bin-dir", "", "")
 		fs.BoolVar(&noOpen, "no-open", false, "")
 		fs.BoolVar(&noProbe, "no-probe", false, "")
+		fs.Var(&pull.comment, "comment", "")
+		fs.BoolVar(&pull.dryRunComment, "dry-run-comment", false, "")
+		fs.DurationVar(&pull.wait, "comment-wait", time.Hour, "")
 	}) {
 		return 2
 	}
@@ -92,7 +97,17 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	defer unlock()
 	var proj *upTarget
+	pr, isPR, perr := pullRequestTarget(cfg, target)
+	if (pull.comment.set || pull.dryRunComment) && !isPR {
+		fmt.Fprintln(stderr, "--comment and --dry-run-comment need a pull-request address: codeye up https://github.com/OWNER/REPO/pull/NUMBER")
+		return 2
+	}
 	switch {
+	case isPR:
+		if proj, err = pr, perr; err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
 	case target != "" && isGitURL(target):
 		if proj, err = gitTarget(cfg, target); err != nil {
 			fmt.Fprintln(stderr, err)
@@ -121,16 +136,22 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	opCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	fragment := url.Values{}
+	runID := ""
 	if proj != nil {
-		projectID, runID, err := analyzeTarget(opCtx, up, cfg, proj, out)
+		projectID, run, err := analyzeTarget(opCtx, up, cfg, layout, proj, pull, out)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
+		runID = run
 		fragment.Set("project", projectID)
 		fragment.Set("run", runID)
 	}
-	return signIn(opCtx, up.store, up.user, cfg.Origin(), fragment, noOpen, out, stderr)
+	code = signIn(opCtx, up.store, up.user, cfg.Origin(), fragment, noOpen, out, stderr)
+	if code != 0 || !pull.dryRunComment {
+		return code
+	}
+	return printCommentPreview(ctx, up.store, layout, up.user, runID, pull.wait, out, stderr)
 }
 
 func personalOpen(ctx context.Context, args []string, out, stderr io.Writer) int {
@@ -196,7 +217,7 @@ func signIn(ctx context.Context, s *postgres.Store, user, origin string, fragmen
 func splitTarget(args []string) (string, []string) {
 	var target string
 	var rest []string
-	valueFlags := map[string]bool{"-config": true, "--config": true, "-postgres-bin-dir": true, "--postgres-bin-dir": true}
+	valueFlags := map[string]bool{"-config": true, "--config": true, "-postgres-bin-dir": true, "--postgres-bin-dir": true, "-comment-wait": true, "--comment-wait": true}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
@@ -244,12 +265,17 @@ func isGitURL(s string) bool {
 type upTarget struct {
 	path, rootPath, relative string
 	repoURL, branch, host    string
+	// pullRequest is the pull-request number of a /pull/N address.
+	pullRequest int
 }
 
 func (t *upTarget) git() bool { return t.repoURL != "" }
 
 // shown is how messages name the target.
 func (t *upTarget) shown() string {
+	if t.pullRequest > 0 {
+		return fmt.Sprintf("%s/pull/%d", t.repoURL, t.pullRequest)
+	}
 	if t.git() {
 		if t.branch != "" {
 			return t.repoURL + " (branch " + t.branch + ")"
@@ -257,6 +283,14 @@ func (t *upTarget) shown() string {
 		return t.repoURL
 	}
 	return t.path
+}
+
+// repoURLOrPath names the project (not the pull request) of the target.
+func (t *upTarget) repoURLOrPath() string {
+	if t.pullRequest > 0 {
+		return t.repoURL
+	}
+	return t.shown()
 }
 
 // gitTarget validates a repository argument: an HTTPS URL of a host in
@@ -351,8 +385,9 @@ func uniqueLabel(cfg *personal.Config, base string) string {
 }
 
 // analyzeTarget finds the project of the target folder or repository (or
-// registers it) and queues a run, unless one is still queued or running.
-func analyzeTarget(ctx context.Context, up *running, cfg *personal.Config, t *upTarget, out io.Writer) (string, string, error) {
+// registers it) and queues a run, unless one is still queued or running. A
+// pull request always gets a new run on the head GitHub shows now.
+func analyzeTarget(ctx context.Context, up *running, cfg *personal.Config, layout personal.Layout, t *upTarget, pull pullOptions, out io.Writer) (string, string, error) {
 	var src domain.Source
 	var name string
 	if t.git() {
@@ -399,7 +434,7 @@ func analyzeTarget(ctx context.Context, up *running, cfg *personal.Config, t *up
 		projectID, name = project.ID, project.Name
 		// A queued or executing run is shown instead of queueing another; a
 		// cancelling or recovery_required run gets a new run beside it.
-		if lr := project.LastRun; lr != nil && slices.Contains([]domain.RunStatus{domain.RunQueued, domain.RunPreparing, domain.RunRunning, domain.RunFinalizing}, lr.Status) {
+		if lr := project.LastRun; t.pullRequest == 0 && lr != nil && slices.Contains([]domain.RunStatus{domain.RunQueued, domain.RunPreparing, domain.RunRunning, domain.RunFinalizing}, lr.Status) {
 			fmt.Fprintf(out, "project %q (%s): its analysis is already %s (run %s)\n", name, t.shown(), lr.Status, lr.ID)
 			return projectID, lr.ID, nil
 		}
@@ -409,7 +444,11 @@ func analyzeTarget(ctx context.Context, up *running, cfg *personal.Config, t *up
 			return "", "", fmt.Errorf("cannot register the project: %w", err)
 		}
 		projectID, name = p.ID, p.Name
-		fmt.Fprintf(out, "registered project %q (%s)\n", name, t.shown())
+		fmt.Fprintf(out, "registered project %q (%s)\n", name, t.repoURLOrPath())
+	}
+	if t.pullRequest > 0 {
+		run, err := queuePullRequest(ctx, up, layout, projectID, t, pull, out)
+		return projectID, run, err
 	}
 	run, err := up.store.Enqueue(ctx, up.user, projectID, "up-"+domain.NewID(), json.RawMessage(upRunBody))
 	if err != nil {
@@ -424,10 +463,12 @@ func analyzeTarget(ctx context.Context, up *running, cfg *personal.Config, t *up
 // was found and what is missing, and records the result in the state
 // directory. Explicit agent settings always win; agent.auto_detect false
 // turns detection off.
-func applyDetectedTools(ctx context.Context, cfg *personal.Config, out io.Writer) {
-	if _, err := prepareTools(ctx, cfg, out); err != nil {
+func applyDetectedTools(ctx context.Context, cfg *personal.Config, out io.Writer) toolfind.Result {
+	res, err := prepareTools(ctx, cfg, out)
+	if err != nil {
 		fmt.Fprintln(out, "tool detection:", err)
 	}
+	return res
 }
 
 // openBrowser opens url in the desktop browser and names the program used

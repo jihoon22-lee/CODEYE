@@ -85,6 +85,9 @@ type Input struct {
 	// Reviews are the project's latest human dispositions per fingerprint.
 	// Build stamps those in effect at Now on matching findings.
 	Reviews []ReviewFact
+	// PullRequest is the pin of a pull-request run (nil for every other
+	// run): the report then carries the pull_request section.
+	PullRequest *domain.PullRequest
 }
 
 // MaxDecodedBytes bounds the artifact bytes the publisher loads for decoding.
@@ -125,6 +128,12 @@ func InputDigest(in Input) string {
 		w("artifact", a.ID, a.Role, a.MediaType, a.SHA256, strconv.FormatInt(a.SizeBytes, 10))
 	}
 	writeReviews(w, in.Reviews)
+	if in.PullRequest != nil {
+		// Only pull-request runs have this line, so every other input keeps
+		// its digest.
+		raw, _ := in.PullRequest.Marshal()
+		w("pull_request", domain.Digest(raw))
+	}
 	return domain.Digest([]byte(b.String()))
 }
 

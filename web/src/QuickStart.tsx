@@ -16,6 +16,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
   const [name, setName] = useState('');
   const [branch, setBranch] = useState<string | null>(null); // null: follow the address
   const [touched, setTouched] = useState<Partial<AnalysisChoices>>({});
+  const [comment, setComment] = useState<boolean | null>(null); // null: the project's remembered choice
   const [error, setError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<ErrorText | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -25,6 +26,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
   const kind = parsed?.kind ?? 'local';
   const choices = choicesFor(kind, setup, touched);
   const shownBranch = branch ?? (parsed?.kind === 'git' ? parsed.branch ?? '' : '');
+  const pullRequest = parsed?.kind === 'git' ? parsed.pullRequest ?? null : null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -40,7 +42,16 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
       const project = await api.createProject(body);
       const active = project.activity?.run;
       let runId: string;
-      if (active && !isTerminalRun(active.status)) {
+      if (target.kind === 'git' && target.pullRequest) {
+        // A pull request always gets a new run on its current head; an explicit comment
+        // choice is remembered for the project.
+        if (comment !== null && project.can_manage && project.analysis && (project.analysis.comment_on_pull_request ?? false) !== comment) {
+          await api.setProjectAnalysis(project.id, { ...project.analysis, comment_on_pull_request: comment });
+        }
+        const ack = await api.createPullRequestRun(project.id, idempotency.keyFor(userId, project.id), target.pullRequest, comment);
+        idempotency.complete(userId, project.id);
+        runId = ack.id;
+      } else if (active && !isTerminalRun(active.status)) {
         runId = active.id;
       } else {
         const ack = await api.createRun(project.id, idempotency.keyFor(userId, project.id));
@@ -51,6 +62,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
       setName('');
       setBranch(null);
       setTouched({});
+      setComment(null);
       onStarted(project, runId);
     } catch (e) {
       setServerError(describeError(e));
@@ -87,6 +99,10 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
       {box('send_source_to_model', q.sendSource, q.sendSourceHelp)}
       {box('run_build_scripts', q.runBuildScripts, q.runBuildScriptsHelp)}
       {box('fetch_dependencies', q.fetchDependencies, q.fetchDependenciesHelp)}
+      {pullRequest !== null && <div className="field">
+        <label className="inline"><input type="checkbox" checked={comment ?? false} aria-describedby={`${uid}-comment-help`} onChange={e => setComment(e.target.checked)} /> {t.pullRequest.commentBox}</label>
+        <small id={`${uid}-comment-help`} className="small">{t.pullRequest.commentHelp}</small>
+      </div>}
     </details>
     <button type="submit" className="primary" disabled={submitting} aria-busy={submitting}>{submitting ? q.submitting : q.submit}</button>
     {serverError && <ErrorNote error={serverError} />}

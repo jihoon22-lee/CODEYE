@@ -77,7 +77,7 @@ var auditDetailKeys = map[string]bool{
 	"expires_at": true, "epoch": true, "route": true, "global_max_running": true, "project_max_running": true,
 	"artifact_quota_bytes": true, "min_workers": true, "max_workers": true, "policy_revision": true,
 	"run_id": true, "protocol_version": true, "os": true, "arch": true,
-	"link_issued_by": true, "link_purpose": true,
+	"link_issued_by": true, "link_purpose": true, "pull_request": true,
 }
 
 const maxAuditString = 200

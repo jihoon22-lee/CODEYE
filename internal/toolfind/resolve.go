@@ -133,6 +133,9 @@ type Resolved struct {
 	// where it handles git sources and the model.
 	Git      string
 	OpenCode string
+	// GH is the GitHub CLI personal mode asks for a token; it has no
+	// setting and no agent flag.
+	GH string
 	// Sources tells per tool name whether the value is SourceConfig or the
 	// detected location.
 	Sources map[string]string
@@ -158,9 +161,10 @@ func Resolve(res Result, ex Explicit) Resolved {
 	r.Go = pick("go", ex.Go)
 	r.Git = pick("git", ex.Git)
 	r.OpenCode = pick("opencode", ex.OpenCode)
+	r.GH = pick("gh", "")
 	for _, name := range Names() {
 		switch name {
-		case "go", "git", "opencode":
+		case "go", "git", "gh", "opencode":
 			continue
 		}
 		if p := pick(name, ex.Tools[name]); p != "" {

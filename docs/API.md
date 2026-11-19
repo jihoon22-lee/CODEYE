@@ -89,9 +89,10 @@
 | 413 | `PAYLOAD_TOO_LARGE` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` |
 | 429 | `RATE_LIMITED`(`retryable=true`, `Retry-After`, `details.retry_after_seconds`): 로그인과 비밀번호 변경의 실패 한도 |
-| 422 | `VALIDATION_FAILED`(의미 제약), `SOURCE_UNSUPPORTED`(ssh·scp·`git://`), `ATTACHMENTS_UNSUPPORTED`, 노드 `INTEGRITY_MISMATCH`·`PROTOCOL_UNSUPPORTED` |
+| 422 | `VALIDATION_FAILED`(의미 제약), `SOURCE_UNSUPPORTED`(ssh·scp·`git://`), `ATTACHMENTS_UNSUPPORTED`, 노드 `INTEGRITY_MISMATCH`·`PROTOCOL_UNSUPPORTED`, pull request run의 `PULL_REQUEST_UNSUPPORTED`·`PULL_REQUEST_NOT_FOUND`·`GITHUB_TOKEN_REFUSED`·`GITHUB_FORBIDDEN`([pull request run](#pull-request-run)) |
 | 500 | `INTERNAL`, `REPORT_INVALID`(저장된 보고서가 검증에 실패) |
-| 503 | `UNAVAILABLE`(`retryable=true`). DB 오류 뒤에는 202를 반환하지 않는다. 이벤트 스트림 상한 초과도 503이다. |
+| 502 | `GITHUB_UNAVAILABLE`(`retryable=true`): pull request를 확인할 GitHub API에 닿지 못함 |
+| 503 | `UNAVAILABLE`(`retryable=true`). DB 오류 뒤에는 202를 반환하지 않는다. 이벤트 스트림 상한 초과도 503이다. `GITHUB_RATE_LIMITED`(`retryable=true`)는 GitHub API rate limit 소진이다. |
 
 - 프로젝트 구성원이 아니면 403이 아니라 404다(존재 비노출). 관리자도 같다. 구성원의 역할 부족만 403이다. 권한이 철회되면 그 뒤 요청은 404다.
 - 상태를 바꾼 요청의 감사 기록을 쓰지 못하면 변경은 커밋되지 않고 503이다.
@@ -140,6 +141,7 @@
 | `POST /runs/{id}/retry` | 소유자·manager·runner(+CSRF) | 202 `{id, status, version, url, retry}`+`Location`([다시 시도](#다시-시도)) |
 | `GET /runs/{id}/report`, `GET /runs/{id}/reports` | 구성원 | [보고서 경로](#보고서-경로) |
 | `GET /runs/{id}/comparison` | 구성원 | [비교와 판정 경로](#비교와-판정-경로) |
+| `GET /runs/{id}/pull-request-comment` | 구성원 | pull request run의 결과 댓글을 게시하지 않고 렌더링한 미리 보기([pull request run](#pull-request-run)) |
 | `GET/POST /projects/{id}/finding-reviews` | 구성원 / 소유자·manager·runner | [비교와 판정 경로](#비교와-판정-경로) |
 | `GET/POST /projects/{id}/schedules`, `PATCH/DELETE /projects/{id}/schedules/{sid}` | 구성원 / 소유자·manager | [예약](#예약) |
 | `/nodes/…`, `/attempts/…` | 노드 Bearer | [노드 API 요약](#노드-api-요약) |
@@ -151,7 +153,7 @@
 - **local_path(개인 모드)**: 절대 경로의 폴더. 서버가 symlink를 풀고 허가된 root 중 가장 긴 root 아래의 상대 경로로 바꾼다. 개인 모드는 홈 디렉터리를 기본 root(`home`)로 둔다. 없는 폴더는 422 `FOLDER_NOT_FOUND`, root 밖은 422 `FOLDER_NOT_READABLE`(터미널의 `codeye up <경로>`가 root를 더한다), 상대 경로로 쓸 수 없는 이름(`:` 등)은 422 `FOLDER_NAME_UNSUPPORTED`다. 서버 모드는 422 `LOCAL_PATH_UNSUPPORTED`다.
 - **CODEYE 데이터 폴더(개인 모드)**: 프로젝트 폴더가 상태 디렉터리나 백업 디렉터리를 품거나 그 안에 있으면, `local_path`든 root와 상대 경로든 symlink를 푼 뒤 422 `FOLDER_HOLDS_CODEYE_DATA`다. `message`는 문제의 두 폴더를 적고 프로젝트가 든 하위 폴더를 고르라고 안내한다. 노드도 소스를 확보하기 전에 같은 검사를 하고 실패 사유는 `source_holds_codeye_data`다.
 - **같은 소스(개인 모드)**: 같은 root와 경로, 또는 같은 provider와 저장소 주소(대소문자, 끝의 `/`·`.git` 무시)의 프로젝트가 이미 있으면 새로 만들지 않고 200과 그 프로젝트를 준다.
-- **git 소스**: 승인된 provider와 `https://<provider host>/<owner>/<repo>[.git]`. 브랜치는 선택이며 `git check-ref-format`의 부분집합을 만족해야 한다. 비우면 소스를 확보할 때마다 저장소의 기본 브랜치(`git ls-remote --symref … HEAD`)를 쓰고 보고서 입력에 그 브랜치와 커밋을 남긴다. ssh·scp·`git://`는 422 `SOURCE_UNSUPPORTED`다. 비공개 Git 인증은 아직 없다. 인증을 요구하는 저장소(비공개이거나 없는 저장소)는 실행이 `source_auth_required`, 호스트에 닿지 못하면 `source_unreachable`로 실패한다.
+- **git 소스**: 승인된 provider와 `https://<provider host>/<owner>/<repo>[.git]`. 브랜치는 선택이며 `git check-ref-format`의 부분집합을 만족해야 한다. 비우면 소스를 확보할 때마다 저장소의 기본 브랜치(`git ls-remote --symref … HEAD`)를 쓰고 보고서 입력에 그 브랜치와 커밋을 남긴다. ssh·scp·`git://`는 422 `SOURCE_UNSUPPORTED`다. 개인 모드는 github.com에 한해 `codeye up`이 찾은 token으로 비공개 저장소를 읽는다([GitHub token](GITHUB.md#github-token)). 그 밖의 인증은 없다. 인증을 요구하는 저장소(token이 없거나 읽을 수 없는 비공개 저장소, 없는 저장소)는 실행이 `source_auth_required`, 호스트에 닿지 못하면 `source_unreachable`로 실패한다.
 - **analysis**: `{send_source_to_model, run_build_scripts, fetch_dependencies?}`. 앞의 둘은 있어야 한다(아니면 422 `VALIDATION_FAILED`). 없으면 소스 종류의 기본값이다. 로컬 폴더는 둘 다 `true`, Git 저장소는 `send_source_to_model: true`, `run_build_scripts: false`다. `fetch_dependencies`는 선택이고 없으면 `true`다(두 종류 모두). 설정에는 `false`일 때만 쓴다. 이 선택은 노드 운영자 스위치(`--dependency-fetch`)와 함께 모든 노드에서 의존성 받기를 정한다([의존성 준비](ARCHITECTURE.md#의존성-준비)). 설정의 `analysis`에 저장하고 응답의 `analysis`로 보인다. `--project-analysis-policy`로 띄운 노드(개인 모드)는 로컬·Git 모두 이 선택을 따른다. 그 밖의 노드는 운영자의 root별 허가(`--model-source-root`·`--repo-code-source-root`)를 따른다. `PUT /projects/{id}/analysis`가 바꾸고(설정의 나머지는 그대로, 새 revision, `project.revised` 감사), 그 뒤의 run이 새 선택을 따른다.
 - 등록은 소스 위치의 선언이며 형식과 권한만 검사한다. 서버는 등록 시 파일 시스템·네트워크에 접근하지 않는다. 경로 정규화와 symlink·junction 경계는 워커가 소스를 확보할 때 검사한다([실행](EXECUTION.md)). 이름이 없으면 경로 마지막 구간, root label, 저장소 이름 순으로 정한다. 저장되는 설정 revision 1은 `{"config_version":1,"source":…,"description"?}`이다.
 - 프로젝트 응답의 `source_status`는 등록만 확인한 소스이므로 `declared_unverified`다. `capability_gaps`는 `source_access_unverified`(항상), `execution_unavailable`(철회되지 않은 등록 노드가 없음), `report_unavailable`(게시된 보고서가 없음)이다. 실행별 배치 가능 여부는 대기 사유로 따로 보고한다.
@@ -169,6 +171,7 @@
 - 요청은 영속 큐에 들어가고 202를 반환한다. 202는 실행이 시작됐다는 뜻이 아니다. 등록된 노드가 없으면 run은 `queued`에 머물고 `waiting_reason`이 `execution_unavailable`이다.
 - 배정 시점(claim)에 서버가 요청자의 권한을 다시 확인한다.
 - 수동 새로 분석과 다시 시도는 별도 동작이다([다시 시도](#다시-시도)).
+- `pull_request: {number, comment?}`를 더하면 pull request run이다([pull request run](#pull-request-run)).
 - 취소 재호출은 멱등이며 이미 종료된 run은 현재 상태를 반환한다. 취소 응답이 202여도 실제 프로세스가 끝났다는 뜻이 아니다. 정리 확인 절차는 [실행](EXECUTION.md)에 있다.
 
 ### 다시 시도
@@ -179,13 +182,26 @@
 - `retry: "new_run"`: 그 밖에는 저장된 같은 요청으로 새 run을 만든다. 소스를 다시 확보한다(소스 확보 실패, 도구를 설치하거나 분석 선택을 바꾼 뒤의 부분 완료). 같은 run version에 대한 반복 요청은 같은 새 run을 준다. 응답과 `Location`은 새 run이다.
 - 아직 끝나지 않았거나 `recovery_required`인 run은 409 `RUN_NOT_FINISHED`, viewer는 403이다. 어느 경우든 성공하면 `run.requested` 감사(`trigger: "retry"`)를 남긴다. 클라이언트는 응답의 run을 따라간다.
 
+### pull request run
+
+개인 모드에서 github.com 저장소 프로젝트는 `{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"full"},"pull_request":{"number":7,"comment":true}}`처럼 pull request 하나를 분석한다. 동작과 근거는 [GitHub 연결](GITHUB.md#pull-request-분석)에 있다.
+
+- controller가 저장된 GitHub token으로 pull request의 base/head SHA, head 저장소(fork), 변경 파일과 변경 줄을 읽어 run에 한 번 고정한다(`runs.pull_request`, 바꾸지 않는다). 노드는 `refs/pull/N/head`를 받아 고정한 head SHA를 분석한다. 202 뒤에 head가 움직여도 이 run은 고정한 head다.
+- `comment`는 이 run이 결과 댓글을 남길지다. 없으면 프로젝트 `analysis.comment_on_pull_request`(기본 `false`)를 따른다. 화면과 `codeye up --comment`는 값을 보낸 뒤 `PUT /projects/{id}/analysis`로 기억시킨다.
+- idempotency 비교는 보낸 body로만 한다. 같은 키의 반복은 GitHub에 다시 묻지 않고 같은 run을 준다. 새 push 뒤의 새 분석은 새 키(새 run)다.
+- 거절: 서버 모드나 github.com이 아닌 프로젝트는 422 `PULL_REQUEST_UNSUPPORTED`, GitHub이 보여 주지 않는 번호(없음, token 없이 읽을 수 없는 비공개 저장소)는 422 `PULL_REQUEST_NOT_FOUND`, 거부된 token은 422 `GITHUB_TOKEN_REFUSED`, 권한 부족은 422 `GITHUB_FORBIDDEN`, rate limit은 503 `GITHUB_RATE_LIMITED`, 연결 실패는 502 `GITHUB_UNAVAILABLE`이다. 예약은 `pull_request`를 받지 않는다(422 `VALIDATION_FAILED`).
+- `GET /runs/{id}`의 `pull_request`가 고정한 값과 댓글 상태(`comment.state`: `not_requested`·`waiting_for_report`·`pending`·`posted`·`superseded`·`failed`, `reason`, `url`, `attempts`, `next_attempt_at`)다. pull request run이 아니면 필드가 없다.
+- `GET /runs/{id}/pull-request-comment[?revision=N]`은 게시할(또는 게시한) 댓글 본문을 렌더링해 `{run_id, report_revision, format:"markdown", body, head_sha, current_head_sha, head_moved, comment}`로 준다. GitHub에 쓰지 않는다. pull request run이 아니면 404 `NOT_A_PULL_REQUEST_RUN`이다.
+- 보고서에는 `pull_request` 절이 생긴다([보고서](REPORT.md#pull-request-보고서)). 결과 댓글 게시는 보고서 게시와 별개라 실패해도 run 상태와 보고서를 바꾸지 않는다.
+
 ### 설치 정보
 
-`GET /setup`은 첫 화면이 쓰는 `{mode, model, git, readable_folders, analysis_defaults, tools}`다([schema](../api/openapi.yaml)의 `Setup`).
+`GET /setup`은 첫 화면이 쓰는 `{mode, model, git, readable_folders, analysis_defaults, tools, github}`다([schema](../api/openapi.yaml)의 `Setup`).
 
 - 개인 모드(`mode: "personal"`): `model`은 `{configured, id, probe}`(키 없음, probe는 `verified`·`failed`·`not_probed`), `git`은 `{available, hosts}`, `readable_folders`는 이 사용자에게 허가된 root의 절대 경로, `tools`는 `codeye up`이 찾은 도구(`<state_dir>/tools.json`, [schema](../schemas/tools.schema.json))다. 기록이 아직 없으면 `git`·`tools`가 `null`이다.
 - 서버 모드(`mode: "server"`): controller는 노드마다 다른 이 정보를 모르므로 `model`·`git`·`tools`가 `null`이고 `readable_folders`가 비어 있다.
 - `analysis_defaults`는 `{local, git}`의 기본 분석 선택이다.
+- `github`(개인 모드)은 `{enabled, host, token, account, source, reason}`이다. token 자체는 싣지 않는다. `token`은 저장된 token이 있는지, `account`는 그 token의 GitHub 계정, `source`는 `GH_TOKEN`·`GITHUB_TOKEN`·`gh`, `reason`은 token이 없거나 계정을 모르는 이유(`no_token`, `token_refused`, `github_unavailable` 등)다. 서버 모드와 이전 설정 요약은 `null`이다.
 
 ## 실행 조회와 진행
 
@@ -203,6 +219,7 @@
 | `progress.detail`, `stages`, `last_event_at`, `checked_at` | [단계 집계](#단계-집계). `checked_at`은 서버가 집계한 시각이다. |
 | `progress.plan_revision`, `planned_weight`, `finished_weight`, `weight_basis`, `estimated_percent`, `plan_changes` | [계획 revision과 가중 진행률](#계획-revision과-가중-진행률) |
 | `progress.waiting_reason` | [대기 사유](#대기-사유). `queued`일 때만 값이 있다. |
+| `pull_request` | pull request run에만 있다. 고정한 pull request와 결과 댓글 상태([pull request run](#pull-request-run)) |
 
 ### 단계 집계
 

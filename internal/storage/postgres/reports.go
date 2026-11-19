@@ -60,6 +60,8 @@ type Publication struct {
 	// Reviews are the project's latest human review per fingerprint;
 	// the builder stamps those in effect at publication.
 	Reviews []FindingReview
+	// PullRequest is the pin of a pull-request run, nil otherwise.
+	PullRequest *domain.PullRequest
 }
 
 const pendingReportsSQL = `SELECT r.id::text FROM runs r
@@ -102,9 +104,16 @@ func (s *Store) LoadPublication(ctx context.Context, runID string) (Publication,
 		if r.SnapshotID == nil {
 			return p, domain.ErrConflict
 		}
-		var request []byte
-		if err = tx.QueryRow(ctx, "SELECT request FROM runs WHERE id=$1", runID).Scan(&request); err != nil {
+		var request, pin []byte
+		if err = tx.QueryRow(ctx, "SELECT request,pull_request FROM runs WHERE id=$1", runID).Scan(&request, &pin); err != nil {
 			return p, err
+		}
+		if pin != nil {
+			pr, err := domain.ParsePullRequest(pin)
+			if err != nil {
+				return p, domain.ErrInvalid
+			}
+			p.PullRequest = &pr
 		}
 		var req struct {
 			Profile string `json:"profile"`
@@ -276,6 +285,11 @@ func (s *Store) PublishReport(ctx context.Context, in ReportPublication) (Report
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING `+reportColumns,
 			in.ReportID, r.ProjectID, in.RunID, in.Revision, a.ID, in.Epoch, in.ResultManifestID, in.InputDigest, in.SchemaVersion, in.BuilderVersion, in.Status, in.QualityVerdict, in.Body, domain.Digest(in.Body)))
 		if err != nil {
+			return out{}, err
+		}
+		// A pull-request run that asked for a comment queues it with the
+		// report (the outbox the controller's poster works through).
+		if err = queuePullRequestComment(ctx, tx, in.RunID, rec.Revision); err != nil {
 			return out{}, err
 		}
 		payload := map[string]any{"report_id": rec.ID, "revision": rec.Revision, "status": rec.Status, "quality_verdict": rec.QualityVerdict, "body_sha256": rec.BodySHA256, "attempt_id": a.ID}

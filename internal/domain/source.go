@@ -268,6 +268,9 @@ type RunRequest struct {
 	Profile      string `json:"profile"`
 	SourcePolicy string `json:"source_policy"`
 	Scope        Scope  `json:"scope"`
+	// PullRequest makes the run analyze a pull request of the project's
+	// GitHub repository; the server pins it (PullRequest) before queueing.
+	PullRequest *PullRequestRef `json:"pull_request,omitempty"`
 }
 
 // Scope selects what part of the source a run covers.
@@ -318,6 +321,9 @@ func (r RunRequest) Validate() error {
 		}
 	default:
 		return invalidf("scope kind must be full or paths")
+	}
+	if r.PullRequest != nil {
+		return r.PullRequest.Validate()
 	}
 	return nil
 }

@@ -48,6 +48,10 @@ type Job struct {
 	// Scratch is the attempt-private writable directory; every file a
 	// handler returns (execution streams, artifacts) must live inside it.
 	Scratch string
+	// PullRequest is the pull request of a pull-request run: the review
+	// takes its changed files first (docs/REVIEW.md#검토-우선순위). nil for
+	// every other run.
+	PullRequest *domain.PullRequestJob
 }
 
 // TaskSpec is one planned task.

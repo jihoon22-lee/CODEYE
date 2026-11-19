@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `7ec47130f4fb` |
+| digest | `fcf50e6cfdb1` |
 | status | `partial` |
 | quality\_verdict | `attention_required` 품질 판정은 안전 인증이 아니다\. |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -427,4 +427,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 - 비밀값이 탐지된 파일은 모델 입력에서 뺐다\.
 - tools\_outside\_interpret\_input
 
-digest sha256: `7ec47130f4fb423cc61965d15ec196a2684e7902ba27870cdae61582cb8d4b04`
+digest sha256: `fcf50e6cfdb1b4ce15f9adb28c880787e7fcc9d498c7f60b9ddd48bd3cae495b`

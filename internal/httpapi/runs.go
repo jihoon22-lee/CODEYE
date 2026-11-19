@@ -52,9 +52,21 @@ func (s *Server) createRun(q *request) {
 		s.storeError(q, err)
 		return
 	}
-	ctx, cancel := q.ctx()
-	defer cancel()
-	run, err := s.store.Enqueue(ctx, q.session.UserID, q.params[0], key, body)
+	var run postgres.Run
+	var err error
+	if req.PullRequest != nil {
+		pin, ok := s.pinPullRequest(q, q.params[0], *req.PullRequest)
+		if !ok {
+			return
+		}
+		ctx, cancel := q.ctx()
+		defer cancel()
+		run, err = s.store.EnqueuePullRequest(ctx, q.session.UserID, q.params[0], key, body, pin)
+	} else {
+		ctx, cancel := q.ctx()
+		defer cancel()
+		run, err = s.store.Enqueue(ctx, q.session.UserID, q.params[0], key, body)
+	}
 	if err != nil {
 		if errors.Is(err, domain.ErrConflict) {
 			writeError(q.w, q.r, http.StatusConflict, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different body", false)
@@ -119,6 +131,8 @@ type runView struct {
 	QualityVerdict *string        `json:"quality_verdict"`
 	Report         *runReportView `json:"report"`
 	Progress       progressView   `json:"progress"`
+	// PullRequest is set for a pull-request run only.
+	PullRequest *pullRequestView `json:"pull_request,omitempty"`
 }
 
 // runReportView points at the newest published report revision. Its quality
@@ -145,8 +159,9 @@ func (s *Server) getRun(q *request) {
 // same document.
 func runViewOf(v postgres.RunView) runView {
 	out := runView{ID: v.ID, ProjectID: v.ProjectID, Status: string(v.Status), Version: v.Version, EventSequence: v.EventSequence, SnapshotID: v.SnapshotID,
-		Trigger:  triggerView{Kind: postgres.TriggerManual},
-		Progress: progressView{Stage: string(v.Status), CompletedTasks: v.CompletedTasks, LastEventAt: v.Stages.LastEventAt, CheckedAt: v.Stages.CheckedAt}}
+		Trigger:     triggerView{Kind: postgres.TriggerManual},
+		Progress:    progressView{Stage: string(v.Status), CompletedTasks: v.CompletedTasks, LastEventAt: v.Stages.LastEventAt, CheckedAt: v.Stages.CheckedAt},
+		PullRequest: pullRequestViewOf(v.PullRequest)}
 	if o := v.Origin; o != nil {
 		id, at := o.ScheduleID, o.ScheduledFor
 		out.Trigger = triggerView{Kind: postgres.TriggerSchedule, ScheduleID: &id, ScheduledFor: &at}

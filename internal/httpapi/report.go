@@ -177,6 +177,7 @@ func (s *Server) publishLoop(ctx context.Context) {
 		} else if n > 0 {
 			s.log.Info("report reconcile", "published", n)
 		}
+		s.postComments(ctx)
 		select {
 		case <-ctx.Done():
 			return

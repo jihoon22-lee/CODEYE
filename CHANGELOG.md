@@ -4,6 +4,17 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — GitHub token, pull request 분석, 결과 댓글(개인 모드)
+
+- **token**: `codeye up`이 `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token --hostname github.com` 순으로 github.com token을 찾아 `GET /user`로 확인하고 `<state>/secrets/github.json`(0600)에 둔다. 출력과 `GET /setup`의 `github`는 있음·계정·출처·이유만 보인다. 설정 `"github": {"enabled": false}`가 끈다. 워커는 파일 경로(`--git-credential-file`)만 받아 github.com fetch의 HTTP header로만 보낸다(git 환경변수, argv·URL·작업 사본에 없음). 비공개 github.com 저장소를 읽는다([GitHub token](docs/GITHUB.md#github-token), A46).
+- **pull request 분석**: `codeye up https://github.com/OWNER/REPO/pull/N`과 화면 입력란. controller가 base/head SHA, head 저장소(fork), 변경 파일·상태·변경 줄을 run에 한 번 고정하고(`runs.pull_request`, migration 12, `POST /projects/{id}/runs`의 `pull_request: {number, comment?}`), 워커가 `refs/pull/N/head`를 받아 고정 SHA를 확인한다. snapshot manifest는 branch 대신 `source_ref`를 싣는다. 새 push 뒤 다시 주면 새 run이고 비교 기준은 같은 pull request의 이전 run이다([pull request 분석](docs/GITHUB.md#pull-request-분석)).
+- **검토 순서**: pull request run은 변경 파일, 같은 폴더 파일, 나머지 순서가 A45의 분류·순위보다 앞선다. 삭제 파일은 검토하지 않는다. 범위 산출물 order `pull_request_changed_first`, 파일 label `changed`·`neighbor`. pull request가 아닌 run의 계획과 요청 바이트는 그대로다(기존 계획·요청 바이트 고정 시험 통과. 회귀 집합 dry run은 실행하지 않았다)([검토 우선순위](docs/REVIEW.md#검토-우선순위)).
+- **보고서 builder 9**: `pull_request` 절이 발견·도구 진단을 변경된 줄·변경 파일·변경 파일의 다른 줄·그 밖으로 나누고(patch가 없으면 파일 단위), 요약이 pull request·SHA·모델에 보낸 변경 파일 수를 말하며 "저장소의 나머지는 같은 깊이로 검토하지 않았을 수 있다"고 쓴다([pull request 보고서](docs/REPORT.md#pull-request-보고서), [예시](examples/report-pull-request.json)).
+- **결과 댓글**: 선택(기본 끔, `codeye up --comment`, 화면 "고급"의 체크, 프로젝트별 `analysis.comment_on_pull_request`). 보고서 게시 transaction의 outbox를 controller가 lease로 게시한다. token 계정의 marker 댓글 하나를 고치고, publication version으로 더 새 결과를 덮지 않으며(`superseded`), rate limit·연결 실패는 1분부터 30분까지 6번 다시 시도한다. 실패는 run의 댓글 상태(`GET /runs/{id}`의 `pull_request.comment`)로만 남는다. 본문은 구조화된 보고서에서만 만들고 코드·도구 원문·비밀정보를 싣지 않으며 `&`를 먼저 escape하고 mention·issue 참조·자동 링크를 끊는다. 미리 보기는 `codeye up --dry-run-comment`와 `GET /runs/{id}/pull-request-comment`(화면의 "미리 보기")이고 GitHub에 쓰지 않는다([결과 댓글](docs/GITHUB.md#결과-댓글)).
+- **서버 모드**: 바뀌지 않는다. token을 찾지 않고 pull request 요청은 `PULL_REQUEST_UNSUPPORTED`다. 여러 사람이 쓰는 설치의 계획은 GitHub App과 webhook이고 polling은 만들지 않았다.
+- **고침**: 시험 안 된 경로에서 찾은 것. pull request snapshot의 manifest에 branch가 없어 보고서가 `report_input_invalid`로 거부되던 것(`source_ref` 추가), 모델이 없는 pull request run의 요약이 "변경 파일 7개 중 0개를 모델에 보냈다"고 쓰던 것(정적 분석만 거쳤다고 쓴다), 도구 표에 gh가 더해져 묶음 검사가 위치로 고른 항목이 바뀐 것.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10, gh(snap), 임시 설정·상태·데이터 디렉터리, 모델 없음. 가짜 GitHub API(`scripts/fake_github.py`)와 Git 미러로 `--comment`(댓글 하나 게시), 새 push 뒤 같은 댓글 갱신, `--dry-run-comment`(쓰기 요청 0), token이 `secrets/github.json`에만 있음을 확인했다(`scripts/personal_smoke.py`). 실제 GitHub에서는 읽기만 했다. 비공개 저장소 하나를 gh token으로 가져와 분석했고(소스 확보 성공, 커밋 고정), 공개 `spf13/cobra` pull request #2580(fork, 변경 파일 7)을 `--dry-run-comment`로 분석해 댓글 본문을 출력했다. 두 run 뒤 상태·설정 디렉터리 1,935개 파일 중 token이 있는 파일은 `secrets/github.json` 하나였다. 가짜 모델 upstream으로 같은 저장소의 기본 브랜치(`adbc881`, pull request의 base)와 #2580을 분석하면 overview 요청의 파일 8개 중 변경 파일이 1개에서 7개 중 6개(변경된 Go 파일 전부, 나머지 1개는 문서)로 바뀌었고, 변경 파일이 slice 1~3에 흩어지던 것이 overview로 모였다. 가짜 upstream의 결과는 경로 검증이며 검토 품질의 근거가 아니다. 실제 pull request에는 댓글을 게시하지 않았다.
+
 ### 바뀜 — 웹 화면 다듬기
 
 - **시각 체계**: 색·글자·간격 토큰과 단추·입력·카드·상태 표지·표·펼침 요소의 공통 모양을 스타일시트 하나에 정했다(새 의존성 없음). 상태는 기호·글자·색을 함께 쓴다. 대비는 색 값으로 계산해 글자 4.5:1, 입력 테두리·초점 3:1 이상이다([접근성](docs/REPORT.md#접근성)).
