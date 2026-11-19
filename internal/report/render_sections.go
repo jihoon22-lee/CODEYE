@@ -84,6 +84,17 @@ func lab(l Locale, prefix, c string) string {
 
 func tf(l Locale, key string, args ...any) string { return fmt.Sprintf(l.Label(key), args...) }
 
+// attentionText is the sentence of an attention item. A template without a
+// verb (model_review_not_performed carries a count of 1 that means "present")
+// is used as is: Sprintf would append %!(EXTRA int=1) for the unused count.
+func attentionText(l Locale, code string, count int) string {
+	tmpl := l.Label("attention." + code)
+	if !strings.Contains(tmpl, "%") {
+		return tmpl
+	}
+	return fmt.Sprintf(tmpl, count)
+}
+
 func optText(p *string, def string) string {
 	if p == nil {
 		return def
@@ -254,7 +265,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 	ov.Parts = append(ov.Parts, secPart{Heading: l.Label("overview_sections"), Table: t})
 	var attention []secItem
 	for _, a := range r.Overview.Attention {
-		attention = append(attention, secItem{Text: tf(l, "attention."+a.Code, a.Count) + " " + tf(l, "attention_see", title(a.Section)), Link: a.Section})
+		attention = append(attention, secItem{Text: attentionText(l, a.Code, a.Count) + " " + tf(l, "attention_see", title(a.Section)), Link: a.Section})
 	}
 	ov.Parts = append(ov.Parts, listPart(l.Label("overview_attention"), attention, l.Label("overview_no_attention")))
 	if len(r.Summary.Priorities) > 0 {

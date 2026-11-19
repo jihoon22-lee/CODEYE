@@ -17,7 +17,14 @@ import (
 // as a product report: the stored example only differs in its demo flag.
 func exampleReport(t *testing.T) Report {
 	t.Helper()
-	raw, err := os.ReadFile("../../examples/report.json")
+	return storedExample(t, "../../examples/report.json")
+}
+
+// storedExample reads a stored example report (demo: true) as a product
+// report.
+func storedExample(t *testing.T, path string) Report {
+	t.Helper()
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
