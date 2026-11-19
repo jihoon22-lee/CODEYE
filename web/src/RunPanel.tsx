@@ -9,6 +9,7 @@ import { ko as t } from './locales/ko';
 import type { StreamMode } from './runStream';
 import { StageList } from './StageView';
 import { useRunPolling } from './useRunPolling';
+import { PullRequestPanel } from './PullRequestPanel';
 
 export function ErrorNote({ error }: { error: ErrorText }) {
   return <p role="alert" className="error">{error.message}{error.detail ? <> {error.detail}</> : null}{error.requestId ? <small> {t.errors.requestId(error.requestId)}</small> : null}</p>;
@@ -87,6 +88,7 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
         : <p className={`badge ${isKnownRunStatus(status) ? `s-${status}` : 's-unknown'}`}><strong>{runStatusLabel(status)}</strong></p>}
     </div>
     {status !== null && !isKnownRunStatus(status) && <p className="notice">{t.runs.statusUnknownNote} <code>{shorten(status, 40)}</code></p>}
+    {run?.pull_request && <PullRequestPanel api={api} runId={runId} pr={run.pull_request} hasReport={!!run.reportRevision} />}
     {run && <RunDetails run={run} confirmedAt={error !== null ? confirmedAt : null} />}
     {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}
       extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project, report.sections?.codeReview.ledger ?? null, report.sections?.environment.dependencies ?? [])} runId={runId} canRun={canRun} onRetried={onRetried} />} />}
