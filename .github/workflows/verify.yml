@@ -60,7 +60,11 @@ jobs:
       - name: Install test browser OS dependencies
         if: steps.browser-cache.outputs.cache-hit == 'true'
         working-directory: web
-        run: npx playwright install-deps chromium
+        # The runner's package index can be stale; refresh it so the OS
+        # packages of the cached browser can be fetched.
+        run: |
+          sudo apt-get update
+          npx playwright install-deps chromium
       - name: Prepare test dependencies
         run: |
           python -m pip install -r scripts/requirements.txt
