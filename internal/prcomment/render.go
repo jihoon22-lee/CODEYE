@@ -280,10 +280,13 @@ func short(sha string) string {
 }
 
 var (
-	codeSpan  = regexp.MustCompile("`[^`]*`")
-	fence     = regexp.MustCompile("(?s)```.*?(```|$)")
-	mention   = regexp.MustCompile(`@([A-Za-z0-9])`)
-	issueRef  = regexp.MustCompile(`#([0-9])`)
+	codeSpan = regexp.MustCompile("`[^`]*`")
+	fence    = regexp.MustCompile("(?s)```.*?(```|$)")
+	mention  = regexp.MustCompile(`@([A-Za-z0-9])`)
+	issueRef = regexp.MustCompile(`#([0-9])`)
+	// GH-123 is an issue reference too; URLs and www. addresses autolink.
+	ghRef     = regexp.MustCompile(`(?i)\b(gh)-([0-9])`)
+	autolink  = regexp.MustCompile(`(?i)(https?:|www)(//|\.)`)
 	spaceRuns = regexp.MustCompile(`\s+`)
 )
 
@@ -305,11 +308,16 @@ func oneLine(s string) string {
 }
 
 // plain neutralizes text outside code spans: HTML (and so the hidden
-// markers), mentions, issue references and markdown emphasis.
+// markers), mentions, issue references, links and markdown emphasis. "&"
+// is escaped first, so a character reference such as &#64; or &commat;
+// shows as text and cannot become a mention or a reference after the
+// other replacements.
 func plain(s string) string {
-	s = strings.NewReplacer("<", "&lt;", ">", "&gt;", "`", "'", "*", "\\*", "_", "\\_", "[", "\\[", "]", "\\]", "|", "\\|").Replace(s)
+	s = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "`", "'", "*", "\\*", "_", "\\_", "[", "\\[", "]", "\\]", "|", "\\|").Replace(s)
 	s = mention.ReplaceAllString(s, "@⁠$1")
-	return issueRef.ReplaceAllString(s, "#⁠$1")
+	s = issueRef.ReplaceAllString(s, "#⁠$1")
+	s = ghRef.ReplaceAllString(s, "${1}⁠-$2")
+	return autolink.ReplaceAllString(s, "$1⁠$2")
 }
 
 // code is a code span for a path or rule; backticks and line breaks in it
