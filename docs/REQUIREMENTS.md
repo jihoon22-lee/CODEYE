@@ -145,8 +145,8 @@ API 권한·프로젝트 소유권·노드 식별·lease는 개인 모드에도 
 | REQ-017 | 가중 진행률은 구현. 잔여 시간 범위는 제공하지 않음 |
 | REQ-018 | 작업·노드·pool·전역 자원 상한과 relay의 모델 예산은 구현. endpoint별 모델 동시 요청 상한(`model_max_inflight`)과 전역 모델 semaphore는 설계 계약(미구현)([실행](EXECUTION.md)) |
 | REQ-019 | 등록·능력 배정은 구현. 한 머신의 두 노드 신원으로만 시험했고 여러 물리 머신은 미검증 |
-| REQ-022 | durable queue·lease/fencing·취소·복구는 구현. 같은 입력 재시도 API는 설계 계약(미구현)([API](API.md)) |
-| REQ-024 | 승인된 HTTPS 호스트의 공개 Git 저장소 읽기는 구현(비공개 저장소 credential, GHES 실기는 미구현·미검증). App·PR·댓글은 설계 계약(미구현) |
+| REQ-022 | durable queue·lease/fencing·취소·복구·다시 시도(`POST /runs/{id}/retry`)는 구현. `recovery_required` run의 다시 시도는 미구현([API](API.md#다시-시도)) |
+| REQ-024 | 승인된 HTTPS 호스트의 공개 Git 저장소 읽기는 구현(개인 모드는 주소 하나로, 브랜치를 비우면 기본 브랜치. 비공개 저장소 credential, GHES 실기는 미구현·미검증). App·PR·댓글은 설계 계약(미구현) |
 | REQ-025 | 연결 진단과 권한 부여 가이드는 설계 계약(미구현) |
 | REQ-030 | 외부 다운로드·모델 fallback을 하지 않는 실행 경로는 구현. 폐쇄망 배포와 검증은 미실행 |
 | REQ-031 | 코드 포함/미포함 내보내기와 요청마다의 열람 권한 확인은 구현. 여러 사용자 사이의 접근 제어는 다중 사용자 작업에 속함 |

@@ -3,7 +3,7 @@
 scripts/test_postgres.py --personal 이 임시 PostgreSQL 안에 데이터베이스 셋을 만들어 실행한다.
 A: 실제 Go 분석(go vet) → 정지 → 백업 → 비어 있지 않은 대상 복원 거절 → B에 복원 → B 시작·보고서·증거·새 분석.
 C: 시험용 handler(-tags codeye_fixture) sleep 작업 중 정지 → drain 시간 초과 → 취소·정리 확인.
-관리형 `codeye up`(TC-170~173)과 쉬운 시작(TC-185~188): 홈 아래 폴더, Git 주소(시험 빌드의 file:// 미러),
+관리형 `codeye up`(TC-170~173)과 경로·Git 주소 입력(TC-187~188): 홈 아래 폴더, Git 주소(시험 빌드의 file:// 미러),
 데이터 폴더 거절, 브라우저의 한 칸 입력·개선 안내·다시 시도·도구 화면.
 Linux 전용이다. 모델 호출·네트워크 다운로드는 없다.
 """
@@ -339,7 +339,7 @@ def run(base, root, env, probe_env):
             subprocess.run([exe, "stop", "--config", str(cfg)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db]),
                            capture_output=True, timeout=200)
     managed(base, root, env, directory, source)
-    easy(root, env, directory, fixture)
+    paths_and_git(root, env, directory, fixture)
 
 
 def bare_repository(mirror, host_path, files):
@@ -357,13 +357,13 @@ def bare_repository(mirror, host_path, files):
     subprocess.run(["git", "clone", "-q", "--bare", str(work), str(target)], env=genv, check=True, capture_output=True, timeout=30)
 
 
-def easy(root, env, directory, fixture):
+def paths_and_git(root, env, directory, fixture):
     """TC-185~188: a folder path and a GitHub address from one field, retry, tools, hints.
 
     The fixture build reads CODEYE_TEST_GIT_MIRROR: https://github.com/O/R is fetched from
     MIRROR/github.com/O/R.git over file:// (no network in CI). The real GitHub check is manual.
     """
-    home = directory / "easy"
+    home = directory / "paths"
     home.mkdir(mode=0o700)
     binary = home / "codeye"
     shutil.copy2(fixture, binary)
@@ -434,7 +434,7 @@ def easy(root, env, directory, fixture):
             if rust:
                 benv["CODEYE_TEST_PERSONAL_BUILD_HINT"] = "1"
             subprocess.run(["npm", "run", "test:e2e", "--", "personal.spec.ts", "--global-timeout=600000"], cwd=root / "web", check=True, timeout=660, env=benv)
-        print("PASS: 개인 모드 쉬운 시작(홈 아래 폴더·Git 주소 기본 브랜치·프로젝트별 분석 선택·데이터 폴더 거절·도구·다시 시도·개선 안내)")
+        print("PASS: 개인 모드 경로·Git 주소 입력(홈 아래 폴더·Git 주소 기본 브랜치·프로젝트별 분석 선택·데이터 폴더 거절·도구·다시 시도·개선 안내)")
     finally:
         subprocess.run([binary, "stop"], cwd=home, env=menv, capture_output=True, timeout=300)
 

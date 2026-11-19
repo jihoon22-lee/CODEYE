@@ -152,11 +152,15 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 
 ## 소스와 네트워크
 
-- **소스 경계.** path traversal, symlink/junction, archive traversal, source-root 밖 접근, 대소문자 충돌을 검사한다. source root는 열린 디렉터리 핸들에서 하위 경로를 해석한다. 플랫폼 data root는 승인된 source root 전체의 바깥에 둔다.
+- **소스 경계.** path traversal, symlink/junction, archive traversal, source-root 밖 접근, 대소문자 충돌을 검사한다. source root는 열린 디렉터리 핸들에서 하위 경로를 해석한다. 플랫폼 data root는 확보하는 프로젝트 폴더의 바깥에 두고, 그 폴더를 품어서도 안 된다(이전에는 승인된 root 전체의 바깥이었다. 개인 모드의 홈 root가 상태 디렉터리를 품기 때문에 바꿨다. A40). 실행기의 보호 경로도 root 전체가 아닌 프로젝트 폴더다.
+- **CODEYE 데이터 폴더.** 개인 모드에서는 상태 디렉터리(DB 비밀번호, 모델 키, 스냅샷)나 백업 디렉터리를 품거나 그 안에 있는 프로젝트 폴더를 받지 않는다. 등록할 때 controller가 symlink를 푼 경로로 검사하고(`local_path`든 root와 상대 경로든 422 `FOLDER_HOLDS_CODEYE_DATA`), 소스를 확보하기 전에 에이전트가 다시 검사한다(`--protected-dir`, 실패 사유 `source_holds_codeye_data`). 그래서 어떤 경로로 등록된 프로젝트도 그 데이터를 snapshot·모델 입력에 넣지 않는다.
 - **제외 정책.** 어느 깊이에서든 `.git`, `.codeye`, `node_modules`, `__pycache__`를 제외한다. credential 디렉터리(`.ssh`, `.aws`, `.gnupg`, `.docker`, `.kube`, `.azure`, `.gcloud`)와 비밀 파일 이름(`.env`와 `.env.*`(단 `.env.example`·`.env.sample`은 유지), `*.pem`, `*.key`, SSH 개인키, `.npmrc`, `.netrc`, `.git-credentials`, `.pypirc`, `.pgpass`, `*.tfstate`, `*.tfvars`, 인증서 저장소 등)을 기본으로 제외한다. 선택한 트리의 최상위에서 `build`, `dist`, `target`, `venv`, `.venv`도 제외한다. 소스 패키지 이름(`internal/credentials`, `internal/build`)은 유지한다. 제외 목록은 [소스 확보 구현](../internal/worker/source)이 기준이다.
 - **보고서의 코드 조각**은 소스와 같은 민감도다. 기본 내보내기는 코드 발췌를 뺀다. "코드 포함"은 같은 프로젝트의 읽기 권한자에게만 열린다.
-- **저장소 코드 실행 허가.** 저장소가 정한 코드(build script, 설정 프로그램, plugin, proc macro)를 실행하는 분석 작업은 노드 운영자가 source root마다 준 허가(`repository_code`)가 있을 때만 실행한다. 허가가 없으면 프로세스를 시작하지 않고 미지원으로 끝난다. Git 소스는 허가를 받지 않는다. 스냅샷과 저장소 설정은 이 값을 올릴 수 없다. 프로젝트 단위·revision 기반 실행 권한 저장소는 구현하지 않았다(설계 계약).
-- **모델 전송 승인.** 서버 모드는 노드 운영자가 root마다 승인한 코드만 모델에 보낸다(기본은 보내지 않음). 개인 모드는 모델이 설정되면 개인 사용자의 로컬 root를 기본으로 승인하고 `model_review: false`인 root만 뺀다(A39). 모델 설정이 없으면 다른 모델이나 인터넷 서비스로 우회하지 않고 모델 검토를 건너뛴 것으로 보고서에 표시한다.
+- **저장소 코드 실행 허가.** 저장소가 정한 코드(build script, 설정 프로그램, plugin, proc macro)를 실행하는 분석 작업은 허가가 있을 때만 실행한다. 허가가 없으면 프로세스를 시작하지 않고 미지원으로 끝난다. 스냅샷·저장소 설정·run 요청은 이 값을 올릴 수 없다.
+  - 서버 모드: 노드 운영자가 source root마다 준 허가(`--repo-code-source-root`)다. Git 소스는 허가를 받지 않는다.
+  - 개인 모드(A40): 프로젝트의 분석 선택 "저장소의 빌드 스크립트 실행"(`analysis.run_build_scripts`)이다. **기본값이 바뀌었다.** 로컬 폴더 프로젝트는 기본 켬이다(이전에는 root마다 `repository_code: true`를 적어야 했다). 내 폴더의 코드는 이미 내 권한으로 실행할 수 있는 내 코드라고 본다. Git 저장소 프로젝트는 기본 끔이고, 프로젝트 관리자가 켜면 그 저장소의 코드가 사용자의 권한으로 이 컴퓨터에서 실행된다(Native 실행이며 격리가 없다). 선택은 프로젝트 설정 revision에 남고 바꾸면 `project.revised` 감사가 남는다.
+- **모델 전송 승인.** 서버 모드는 노드 운영자가 root마다 승인한 코드만 모델에 보낸다(기본은 보내지 않음). 개인 모드는 프로젝트의 분석 선택 "소스를 모델에 보냄"(`analysis.send_source_to_model`)이 정하고 로컬 폴더·Git 저장소 모두 기본 켬이다(A40, A39의 root 단위 기본 허가와 `model_review`를 대신한다). **Git 저장소의 소스도 이제 기본으로 모델에 간다**(이전에는 Git 소스를 모델에 보낼 방법이 없었다). 보내는 곳은 사용자가 키를 둔 모델 공급자 하나다. 모델 설정이 없으면 다른 모델이나 인터넷 서비스로 우회하지 않고 모델 검토를 건너뛴 것으로 보고서에 표시한다.
+- **공개 Git 저장소만.** 개인 모드의 Git 주소는 `git_hosts`(기본 `github.com`)의 HTTPS 저장소만 받고 credential을 보내지 않는다. 인증을 요구하는 저장소는 `source_auth_required`로 실패하며 사용자 credential helper나 다른 경로로 재시도하지 않는다.
 - **네트워크.** 설정된 Git host, 모델 endpoint, mirror, CA만 쓴다. 소스 확보는 승인된 HTTPS host에서 redirect, URL userinfo, SSH, `git://`, 알려지지 않은 host를 거부한다. 도구에는 가능한 곳에서 오프라인 옵션을 준다(예: cargo `--offline`). 그러나 Native 실행에서 프로세스 전체의 네트워크를 OS 수준으로 차단하지는 않는다. 환경변수만으로 OS 수준 차단을 달성했다고 표시하지 않는다. 필요하면 OS 방화벽 등 운영자 통제를 둔다. 폐쇄망의 외부 telemetry·업데이트·원격 규칙 다운로드·공유 차단은 설계 계약이다([운영](OPERATIONS.md)).
 
 ## 보관과 삭제 (제안, 미구현)

@@ -71,7 +71,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 - `--mypy`와 `--pyright`를 함께 주면서 `--python-both-type-checkers`가 없거나, 이 플래그만 있고 두 경로가 다 없으면 agent는 사용법 오류(exit 2)로 시작하지 않는다.
 - agent는 값을 worker hello로 넘긴다. `go_executable`, `go_mod_cache`, `tool_path`, 그리고 `analyzer_tools`(도구 이름 → 경로, 공유 toolchain은 예약 이름 `node`로 같은 맵에 들어감)다. 이 빌드가 모르는 도구 이름은 `unknown_tool`로 보고하고 실행하지 않는다.
 
-개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`, `source_roots[].repository_code`가 위 플래그가 된다([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
+개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`가 위 플래그가 된다. 저장소 코드 실행은 개인 모드에서 프로젝트별 선택이다(`source_roots[].repository_code`는 쓰이지 않는다, A40)([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
 
 ### 도구 찾기
 
@@ -309,7 +309,7 @@ deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 �
 
 정적 분석도 저장소가 정한 코드를 실행할 수 있다(JS 설정 파일, build script, compiler plugin, proc macro, configure 단계). 이런 작업은 노드 운영자가 명시적으로 허가한 소스에서만 실행한다(결정 A23, [결정](DECISIONS.md)).
 
-- **허가**: `codeye agent --repo-code-source-root ID`(반복 가능, 개인 모드 `source_roots[].repository_code`). ID는 같은 agent의 `--source-root` 매핑이 있어야 하며 없으면 옵션 오류다. agent는 그 local source root의 job에만 `allow_repository_code=true`를 보낸다. Git 소스는 허가를 받지 않는다. 워커는 `analysis.Job.AllowRepositoryCode`로 받는다. 스냅샷·저장소 설정·run 요청은 이 값을 올릴 수 없다.
+- **허가**: `codeye agent --repo-code-source-root ID`(반복 가능, 개인 모드 `source_roots[].repository_code`). ID는 같은 agent의 `--source-root` 매핑이 있어야 하며 없으면 옵션 오류다. agent는 그 local source root의 job에만 `allow_repository_code=true`를 보낸다. Git 소스는 허가를 받지 않는다. `--project-analysis-policy` 노드(개인 모드)는 root 허가 대신 job의 프로젝트 분석 선택 `run_build_scripts`를 로컬·Git 모두에 쓴다(로컬 폴더 기본 켬, Git 저장소 기본 끔). 워커는 `analysis.Job.AllowRepositoryCode`로 받는다. 스냅샷·저장소 설정·run 요청은 이 값을 올릴 수 없다.
 - **선언**: `pack.Task.RepositoryCode`. `Plan`이 manifest와 scope만으로 정하므로 대역도 같은 선언을 계획한다. 한 도구가 두 방식을 함께 계획할 수 있다. `Run`은 `Plan`이 선언한 것보다 더 실행하지 않는다. false로 선언한 작업이 실행 중 저장소 코드 경로로 넘어가는 대체 경로는 금지다.
 - **집행**: `Composite.Run`이 dispatch 전에 한 번 검사한다. 선언은 소유 분석기의 계획에서 다시 얻는다. 허가가 없으면 분석기를 호출하지 않고 `unsupported`(`repository_code_not_allowed`)로 끝내며 not-run envelope를 쓴다. 허가가 있어 프로세스를 실행한 작업에는 `repository_code_executed` 제약을 남긴다.
 - **우선순위**: 허가 검사가 도구 검사보다 먼저다. 허가가 없으면 도구가 없어도 사유는 `repository_code_not_allowed`이고 도구 사유는 제약으로 남는다.

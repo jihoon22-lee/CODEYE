@@ -5,6 +5,7 @@ GitHub.com은 소유자가 실제로 쓸 일급 대상이다. GitHub Enterprise 
 | 기능 | 상태 |
 |---|---|
 | 승인한 HTTPS 호스트의 Git 브랜치 가져오기와 commit SHA 고정 | 구현. 공개 GitHub 저장소에서 실행해 확인했다. GHES 호스트는 실제 인스턴스로 시험하지 않았다 |
+| 개인 모드의 Git 주소(`codeye up https://github.com/OWNER/REPO`, 화면의 입력란) | 구현. 브랜치를 비우면 기본 브랜치다. 공개 GitHub 저장소로 확인했다 |
 | provider 등록(`codeye provider add`) | 구현. 종류·호스트·선택 API URL을 저장할 뿐 API로 연결을 확인하지 않는다 |
 | GitHub App 설치, 연결 상태 진단, 권한 진단 | 설계 계약(미구현) |
 | webhook 수신, PR 이벤트와 댓글 명령 | 설계 계약(미구현) |
@@ -15,7 +16,17 @@ GitHub.com은 소유자가 실제로 쓸 일급 대상이다. GitHub Enterprise 
 
 ## 현재 동작하는 것
 
-Git 소스는 다음 조건으로 동작한다.
+**개인 모드**에서는 준비가 필요 없다. `codeye up`이 git을 찾아 에이전트에 넘기고, 설정의 `git_hosts`(기본 `["github.com"]`)마다 provider를 등록한다(`github.com`은 `github`, 그 밖은 `ghes`). 그다음 주소만 준다.
+
+```sh
+codeye up https://github.com/OWNER/REPO                # 기본 브랜치
+codeye up https://github.com/OWNER/REPO/tree/release   # 그 브랜치
+codeye up github.com/OWNER/REPO                        # https://를 붙인다
+```
+
+화면의 "폴더 경로 또는 Git 주소" 입력란에 같은 주소를 붙여넣어도 된다. 같은 저장소를 다시 주면 그 프로젝트에 새 분석을 요청한다. Git 저장소의 프로젝트는 소스를 모델에 보내고(기본 켬), 저장소의 빌드 스크립트·`cargo check`처럼 저장소 코드를 실행하는 분석은 기본으로 하지 않는다. 그 분석이 빠진 보고서의 "더 나은 결과를 얻으려면"에서 "저장소의 빌드 스크립트 실행"을 켜고 다시 시도한다. 비공개 저장소는 아직 지원하지 않는다. 인증을 요구하는 주소는 소스 확보가 "저장소를 인증 없이 읽을 수 없음"(`source_auth_required`)으로 실패한다.
+
+**서버 모드**에서는 다음 조건으로 동작한다.
 
 1. provider를 등록한다. `github`은 호스트가 `github.com`이어야 하고, `ghes`는 호스트 이름과 선택 `--api-url https://HOST/api/v3`를 받는다. API URL은 저장만 하고 아직 쓰지 않는다.
 
@@ -23,17 +34,17 @@ Git 소스는 다음 조건으로 동작한다.
    codeye provider add --kind github --host github.com
    ```
 
-2. 에이전트에 Git 실행 파일과 허용 호스트를 준다. `codeye start`의 개인 모드 설정에는 이 필드가 없으므로 에이전트를 직접 띄운다([운영](OPERATIONS.md)). 에이전트는 `--git`과 `--git-host`가 모두 있을 때만 `source:git:<host>` 능력을 알린다.
+2. 에이전트에 Git 실행 파일과 허용 호스트를 준다([운영](OPERATIONS.md)). 에이전트는 `--git`과 `--git-host`가 모두 있을 때만 `source:git:<host>` 능력을 알린다.
 
    ```sh
    codeye agent --controller URL --state-dir DIR --git /abs/git --git-host github.com ...
    ```
 
-3. 프로젝트의 소스를 Git으로 등록한다. 형식은 승인된 provider의 `https://<provider host>/<owner>/<repo>[.git]`와 branch(check-ref-format 부분집합)다. 등록은 형식과 권한만 검사하고 서버는 네트워크에 접근하지 않는다. 분석 요청 뒤 워커가 가져온다.
+3. 프로젝트의 소스를 Git으로 등록한다. 형식은 승인된 provider의 `https://<provider host>/<owner>/<repo>[.git]`와 선택 branch(check-ref-format 부분집합, 비우면 기본 브랜치)다. 등록은 형식과 권한만 검사하고 서버는 네트워크에 접근하지 않는다. 분석 요청 뒤 워커가 가져온다.
 
 동작 규칙:
 
-- 운영자가 승인한 HTTPS host와 branch만 받아 실제 fetch 시점의 commit SHA를 고정한다. 이후 브랜치가 움직여도 이미 확보한 snapshot은 바뀌지 않는다.
+- 운영자가 승인한 HTTPS host와 branch만 받아 실제 fetch 시점의 commit SHA를 고정한다. branch가 비어 있으면 fetch 직전에 `git ls-remote --symref … HEAD`로 기본 브랜치를 정하고 manifest의 `source_branch`에 남긴다. 이후 브랜치가 움직여도 이미 확보한 snapshot은 바뀌지 않는다.
 - URL의 userinfo·query·fragment, SSH, `git://`, 알려지지 않은 host, redirect는 허용하지 않는다.
 - 임시 bare 저장소에서 fetch → rev-parse → ls-tree → cat-file을 argv로 실행한다. snapshot과 workspace에 `.git`을 넣지 않고 checkout, hooks, smudge/clean filter, export-ignore를 쓰지 않는다. Git 사용자·system 설정과 credential helper를 차단한다. 받은 객체는 `transfer.fsckObjects`/`fetch.fsckObjects`로 검사해 변조된 트리를 거부한다.
 - manifest에는 요청한 branch(`source_branch`)와 요청 시각(`requested_at`)이 남고 URL·remote 이름·credential은 들어가지 않는다. provider repository ID는 manifest에 아직 없다.
