@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -16,10 +17,16 @@ import (
 )
 
 // Store is the PostgreSQL persistence. iterations is the password
-// derivation cost (process configuration, not shared state).
+// derivation cost and kdf bounds concurrent derivations on this process's
+// CPUs (process configuration, not shared state: each controller limits its
+// own CPU).
 type Store struct {
 	pool       *pgxpool.Pool
 	iterations int
+
+	kdfMu   sync.Mutex
+	kdf     chan struct{}
+	kdfWait time.Duration
 }
 
 // Open requires an explicit URL and never applies migrations.

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"math"
+	"runtime"
 	"strings"
 	"time"
 
@@ -295,11 +296,17 @@ type PasswordLogin struct {
 // wrong password) is ErrUnauthenticated after one derivation with the
 // current parameters; a throttled login is *ThrottledError before any
 // derivation. Each outcome is audited; if the audit row cannot be written
-// the login fails with ErrUnavailable.
+// the login fails with ErrUnavailable. With every derivation slot busy for
+// the whole wait the login is ErrUnavailable and nothing is counted.
 func (s *Store) PasswordLogin(ctx context.Context, in PasswordLogin) (Session, error) {
 	if !hexDigest.MatchString(in.SessionTokenSHA256) || in.TTL < time.Second || in.TTL > maxSessionTTL || in.Username == "" || len(in.Username) > 256 || len(in.Password) > 4*account.MaxPasswordLength {
 		return Session{}, domain.ErrInvalid
 	}
+	release, err := s.acquireKDF(ctx)
+	if err != nil {
+		return Session{}, err
+	}
+	defer release()
 	name, nameErr := account.NormalizeUsername(in.Username)
 	type gate struct {
 		wait time.Duration
@@ -444,6 +451,12 @@ func (s *Store) ChangePassword(ctx context.Context, in PasswordChange) (Session,
 	if !validIDs(in.SessionID, in.UserID) || len(in.Current) > 4*account.MaxPasswordLength {
 		return Session{}, domain.ErrInvalid
 	}
+	// One slot covers verifying the current password and deriving the new one.
+	release, err := s.acquireKDF(ctx)
+	if err != nil {
+		return Session{}, err
+	}
+	defer release()
 	type gate struct {
 		wait time.Duration
 		keys []throttleKey
@@ -568,4 +581,44 @@ func (s *Store) SetPasswordIterations(n int) {
 	if n >= account.MinIterations {
 		s.iterations = n
 	}
+}
+
+// defaultKDFWait is how long a login or password change waits for a free
+// derivation slot before it is refused as unavailable.
+const defaultKDFWait = 3 * time.Second
+
+// acquireKDF takes one of the process's derivation slots (runtime.NumCPU()
+// by default) for a whole verify-and-derive step. When no slot frees within
+// the wait the request fails with ErrUnavailable (HTTP 503) before anything
+// is counted or audited, so a flood of password attempts queues on the CPUs
+// instead of starving every other request.
+func (s *Store) acquireKDF(ctx context.Context) (func(), error) {
+	s.kdfMu.Lock()
+	if s.kdf == nil {
+		s.kdf, s.kdfWait = make(chan struct{}, runtime.NumCPU()), defaultKDFWait
+	}
+	slots, wait := s.kdf, s.kdfWait
+	s.kdfMu.Unlock()
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case slots <- struct{}{}:
+		return func() { <-slots }, nil
+	case <-timer.C:
+		return nil, domain.ErrUnavailable
+	case <-ctx.Done():
+		return nil, domain.ErrUnavailable
+	}
+}
+
+// SetKDFLimit sets the number of concurrent derivations and the wait for a
+// slot (defaults runtime.NumCPU() and 3s). Slots held under an earlier limit
+// are released to that limit.
+func (s *Store) SetKDFLimit(slots int, wait time.Duration) {
+	if slots < 1 || wait <= 0 {
+		return
+	}
+	s.kdfMu.Lock()
+	s.kdf, s.kdfWait = make(chan struct{}, slots), wait
+	s.kdfMu.Unlock()
 }

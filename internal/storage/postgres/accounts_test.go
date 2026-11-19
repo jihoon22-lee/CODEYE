@@ -602,3 +602,43 @@ func TestAuditDetailAllowlist(t *testing.T) {
 		}
 	}
 }
+
+// TC-149: password work waits for one of the process's derivation slots. A
+// login or password change that finds none within the wait is unavailable
+// and counts nothing; when a slot frees the same request succeeds.
+func TestDerivationSlotsBoundPasswordWork(t *testing.T) {
+	s := fastStore(t)
+	ctx := context.Background()
+	erin := newAccount(t, s, OperatorPrincipal(), "erin", false)
+	s.SetKDFLimit(1, 50*time.Millisecond)
+	release, err := s.acquireKDF(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if _, err := login(s, "erin", "wrong password value", "198.51.100.4"); !errors.Is(err, domain.ErrUnavailable) {
+		t.Fatalf("login with no free slot: %v", err)
+	}
+	if waited := time.Since(start); waited < 50*time.Millisecond || waited > 5*time.Second {
+		t.Fatalf("waited %v", waited)
+	}
+	if _, err := s.ChangePassword(ctx, PasswordChange{SessionID: domain.NewID(), UserID: erin.ID, Current: testPassword, New: "another long passphrase"}); !errors.Is(err, domain.ErrUnavailable) {
+		t.Fatalf("change with no free slot: %v", err)
+	}
+	if n := countWhere(t, s, "true"); n != 0 {
+		t.Fatalf("refused work counted %d rows", n)
+	}
+	if n := len(auditRows(t, s, AuditLoginFailed)); n != 0 {
+		t.Fatalf("refused work audited %d rows", n)
+	}
+	release()
+	if _, err := login(s, "erin", testPassword, "198.51.100.4"); err != nil {
+		t.Fatalf("login after the slot frees: %v", err)
+	}
+	// Slots are given back: many logins in a row on one slot all pass.
+	for i := 0; i < 5; i++ {
+		if _, err := login(s, "erin", testPassword, "198.51.100.4"); err != nil {
+			t.Fatalf("login %d: %v", i, err)
+		}
+	}
+}
