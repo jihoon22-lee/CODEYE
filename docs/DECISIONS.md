@@ -216,6 +216,20 @@
 [분석기](ANALYZERS.md)
 
 
+**A43 — Rust와 JS/TS 의존성 받기.** (기록 2026-11-19) REQ-012/014/015, NFR-006과 TC-200~205에 대해 다음을 확정한다. A42의 틀을 그대로 쓴다.
+
+1. **Rust는 공유 `CARGO_HOME`.** `cargo fetch --locked --target <host>`로 레지스트리 crate를 공유 캐시(`rust/cargo`)에 받고 cargo check·clippy는 그 `CARGO_HOME`을 `--offline`으로 읽는다. `Cargo.lock`이 없으면 `generate-lockfile`로 만든 것을 task 디렉터리에 두고 분석기가 실행하는 동안만 사본에 놓는다. 실행 사본에 남기면 작업 사이 되돌리기가 지우고, 뒤 작업이 manifest에 없는 파일을 보게 되기 때문이다.
+2. **Rust 받기는 빌드 스크립트 허가를 따른다.** cargo는 받는 동안 저장소 `.cargo/config.toml`을 읽고, 받은 crate를 쓰는 분석기는 build script를 실행한다. 허가 없이 받으면 쓰지 않을 crate를 받는 셈이다. 그래서 허가가 없으면 아무것도 시작하지 않는다(`dependency_consumers_not_allowed`, 받을 것 없음과 같이 성공 취급).
+3. **JS/TS는 attempt 사본에 설치한다.** tsc와 typescript-eslint는 `node_modules` 배치로 모듈을 푼다. 공유 캐시를 직접 읽게 하는 방법이 없으므로 다운로드 캐시만 공유하고(`javascript/{npm,pnpm,yarn}`) 트리는 실행 사본에 만들어 attempt와 함께 지운다. 기록의 `installed_dirs`가 그 트리를 적고, 분석기는 적힌 실제 디렉터리만 받아들인다. 출처를 manifest에 묶을 수 없는 다른 `node_modules`는 전처럼 거부한다.
+4. **JS/TS 받기는 빌드 스크립트 허가와 무관하다.** lifecycle script와 pnpmfile을 끄고 실행하므로 저장소 코드를 실행하지 않는다. 허가에 묶으면 Git 저장소는 기본으로 받지 않게 되어 받기의 목적이 없어진다.
+5. **관리자는 lockfile로 고른다.** lockfile이 정한 버전을 그대로 설치해야 결과가 저장소와 같다. 여러 lockfile은 `packageManager`가 정한다. yarn 2 이상과 bun은 받지 않는다(`lockfile_format_unsupported`). 시험하지 않은 형식을 다른 관리자로 설치하면 lockfile과 다른 트리가 되기 때문이다. lockfile이 없으면 npm으로 버전을 고르고 그렇다고 기록한다.
+6. **관리자 릴리스와 위치는 운영자 것.** pnpm은 `packageManager`가 적은 릴리스를 모든 명령에서 내려받아 실행한다(실측). 그것을 끄고, 설치 위치·캐시·로그·레지스트리·proxy를 명령줄로 정한다. 명령줄이 `pnpm-workspace.yaml`·`.npmrc`보다 이기는 것을 실측했다. 저장소 `.npmrc`·`.yarnrc`는 비밀 파일 규칙으로 스냅샷에 없다.
+7. **밖을 가리키는 링크는 지운다.** `file:`·`link:` 의존성은 작업 사본 밖을 가리키는 링크가 될 수 있고, 타입 검사기가 그것을 따라 호스트 파일을 읽는다. 설치 전체를 버리지 않고 그 링크만 지우고 기록한다. 나머지 의존성으로 분석하는 쪽이 사용자에게 낫기 때문이다. 복사·hard link로 들어온 내용은 따로 다루지 않는다(타입 검사기만 읽고 보고서·모델 입력에 들어가지 않는다).
+8. **패키지 관리자는 도구 표에 둔다.** npm·pnpm·yarn은 분석기가 아니지만 같은 탐지·검증(`<node> <script> --version`)과 플래그(`--npm`·`--pnpm`·`--yarn`)를 쓴다. 따로 두면 설치 안내와 "도구" 화면이 두 갈래가 된다.
+9. **버전 고정 공백은 받았을 때만.** 받기 전에 건너뛴 기록은 `pinned=false`이지만 이번에 버전을 고른 것이 아니다. 공백 `dependency_versions_not_pinned`는 `prepared`·`partial` 기록에만 단다. 저장된 보고서 바이트가 아니라 새로 만드는 보고서의 공백만 바뀌므로 builder 버전은 그대로다.
+
+[아키텍처](ARCHITECTURE.md#의존성-준비) · [Rust 받기](ANALYZERS.md#rust-의존성-받기) · [JS/TS 받기](ANALYZERS.md#jsts-의존성-받기)
+
 **A42 — 의존성 받기.** (기록 2026-11-19) REQ-004/014/015, NFR-006과 TC-194~199에 대해 다음을 확정한다.
 
 1. **받아서 분석한다.** 분석기가 import를 풀지 못하면 타입 검사가 실패하고(`dependency_unavailable`) 그 모듈의 정적 분석은 비어 있다. 운영자가 미리 캐시를 채우게 하는 대신 분석 전에 모듈마다 의존성을 받는다. 분석기는 그 뒤에도 오프라인(`GOPROXY=off`)으로 실행하고 받은 캐시만 읽는다. 받는 단계와 읽는 단계를 나눠, 받기가 실패해도 분석기의 실행 경로와 실패 사유는 받기가 없을 때와 같다.

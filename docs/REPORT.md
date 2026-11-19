@@ -126,7 +126,7 @@ builder 7부터 환경 절은 `deps.*` task마다 한 행(`environment.dependenc
 - 공백(`gaps`, 절 `environment`):
   - `dependencies_not_prepared`: 성공하지 않은 의존성 task. 받을 것이 없어 건너뛴 task는 넣지 않는다. `subject`는 task key, `detail`은 사유다.
   - `dependencies_not_fetched`: 분석기 task가 `dependency_unavailable`로 끝났는데 그 생태계의 의존성 task가 없다(의존성 받기가 꺼져 있었다). `subject`는 분석기 task key다.
-  - `dependency_versions_not_pinned`: lockfile이 버전을 고정하지 않아 받는 도구가 버전을 골랐다.
+  - `dependency_versions_not_pinned`: lockfile이 버전을 고정하지 않아 받는 도구가 버전을 골랐다. 받은 것이 있는 기록(`prepared`·`partial`)에만 단다. 받기 전에 건너뛴 기록은 `pinned`가 false여도 달지 않는다.
 - 판정 규칙은 바뀌지 않는다. 의존성 task는 필수가 아니므로 실패해도 그것만으로 보고서가 `partial`이 되지 않는다. 의존성이 없어 분석기가 실패하면 그 분석기 task가 판정에 반영된다.
 - Markdown·HTML은 환경 절에 모듈·받는 도구·결과·받은 수·사유·한계 표를 보인다.
 

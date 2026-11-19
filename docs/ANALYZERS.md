@@ -58,36 +58,39 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--advertise-without-baseline` | 기준 분석기가 하나도 쓸 수 없어도 분석 capability를 광고. 기본은 광고하지 않음([광고 규칙](#빌트인-카탈로그와-capability-광고)) | 모든 분석기 |
 | `--eslint /abs/node_modules/eslint/bin/eslint.js` | JS 진입 스크립트. 같은 도구 `node_modules`에 `@eslint/js`·`typescript-eslint`가 있어야 함 | ESLint 기준·type-aware |
 | `--tsc /abs/node_modules/typescript/bin/tsc` | JS 진입 스크립트 | tsc |
-| `--cargo /abs/<toolchain>/bin/cargo` | toolchain의 실제 cargo(rustup proxy 거부) | cargo check |
+| `--cargo /abs/<toolchain>/bin/cargo` | toolchain의 실제 cargo(rustup proxy 거부) | cargo check, `deps.rust` |
 | `--clippy /abs/<toolchain>/bin/cargo-clippy` | cargo와 같은 디렉터리의 `cargo-clippy` | clippy |
 | `--lizard /abs/lizard` | 설치된 실행 파일 | lizard |
 | `--jscpd /abs/node_modules/jscpd/run-jscpd.js` | JS 진입 스크립트(`node_modules/.bin` shim 거부) | jscpd |
 | `--gitleaks /abs/gitleaks` | 실행 파일 | gitleaks |
+| `--npm /abs/node_modules/npm/bin/npm-cli.js`, `--pnpm /abs/node_modules/pnpm/bin/pnpm.cjs`, `--yarn /abs/node_modules/yarn/bin/yarn.js` | JS 진입 스크립트. `--node`가 있어야 함. 분석기가 아니라 받는 도구다 | `deps.javascript` |
 | `--toolchain-path PATH` | 절대 디렉터리 목록, 기본 `/usr/bin:/bin`. 분석기는 보조 프로그램 조회에만 쓴다(Rust 링커 `cc`) | cargo check, clippy |
 | `--repo-code-source-root ID` (반복) | 저장소 코드 실행 허가. 같은 agent의 `--source-root ID=...`가 있어야 함 | 저장소 코드를 실행하는 작업 |
 | `--dependency-fetch` | 의존성 받기 운영자 스위치. 기본 꺼짐, 개인 모드는 켬. 프로젝트 선택 `fetch_dependencies`도 켜져 있어야 함([의존성 준비](ARCHITECTURE.md#의존성-준비)) | `deps.*` |
 | `--dependency-cache-dir DIR` | 받은 의존성의 공유 캐시. 기본 `<state-dir>/cache/deps`(개인 모드는 `state_dir/cache/deps`를 준다) | `deps.*`, 받은 캐시를 읽는 분석기 |
 | `--dependency-timeout D`, `--dependency-total-timeout D`, `--dependency-max-bytes N` | 모듈당 제한시간(10분), attempt 합계(20분), 내려받기 크기 상한(2 GiB) | `deps.*` |
 | `--go-proxy`, `--go-sumdb`, `--go-private`, `--go-noproxy`, `--go-nosumdb` | Go 모듈 받기의 `GOPROXY`·`GOSUMDB`·`GOPRIVATE`·`GONOPROXY`·`GONOSUMDB`. 비우면 Go 기본값([Go 의존성 받기](#go-의존성-받기)) | `deps.go` |
+| `--npm-registry URL` | npm·pnpm·yarn이 쓸 레지스트리. 인증정보 없는 http(s) URL만. 비우면 npm은 `https://registry.npmjs.org/`, yarn은 `https://registry.yarnpkg.com`([JS/TS 의존성 받기](#jsts-의존성-받기)) | `deps.javascript` |
 
 - 도구 플래그는 분석기 카탈로그에서 자동으로 만든다(`builtin.ToolFlags()`, `builtin.ToolchainFlags()`). 플래그 이름은 Descriptor의 `Tool`이고 `--eslint` 하나가 두 분석기에 쓰인다.
 - 모든 경로는 절대 경로다. PATH를 검색하지 않고, 내려받지 않으며, 다른 위치로 대체하지 않는다. 셸·`.cmd` shim은 받지 않는다.
 - `--mypy`와 `--pyright`를 함께 주면서 `--python-both-type-checkers`가 없거나, 이 플래그만 있고 두 경로가 다 없으면 agent는 사용법 오류(exit 2)로 시작하지 않는다.
 - agent는 값을 worker hello로 넘긴다. `go_executable`, `go_mod_cache`, `tool_path`, `analyzer_tools`(도구 이름 → 경로, 공유 toolchain은 예약 이름 `node`로 같은 맵에 들어감), 그리고 스위치가 켜졌을 때만 `dependencies`(캐시 root, 예산, Go 받기 설정)다. 이 빌드가 모르는 도구 이름은 `unknown_tool`로 보고하고 실행하지 않는다.
 
-개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`, `agent.dependencies`(`enabled` 기본 켜짐, `cache_dir`, `go_proxy`, `go_sumdb`, `go_private`, `go_noproxy`, `go_nosumdb`, `timeout_seconds`, `total_timeout_seconds`, `max_download_bytes`)가 위 플래그가 된다. 저장소 코드 실행은 개인 모드에서 프로젝트별 선택이다(`source_roots[].repository_code`는 쓰이지 않는다, A40)([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
+개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`, `agent.dependencies`(`enabled` 기본 켜짐, `cache_dir`, `go_proxy`, `go_sumdb`, `go_private`, `go_noproxy`, `go_nosumdb`, `npm_registry`, `timeout_seconds`, `total_timeout_seconds`, `max_download_bytes`)가 위 플래그가 된다. 저장소 코드 실행은 개인 모드에서 프로젝트별 선택이다(`source_roots[].repository_code`는 쓰이지 않는다, A40)([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
 
 ### 도구 찾기
 
 개인 모드는 도구 경로를 손으로 적지 않아도 된다. 시작할 때마다 `internal/toolfind`가 이 머신의 도구를 찾고, 위 플래그가 될 값을 정한다. `codeye tools`가 같은 탐색을 하고 표로 보여 준다([운영](OPERATIONS.md#codeye-tools)). 서버·노드 에이전트를 직접 띄울 때는 탐색이 없고 위 플래그만 쓴다.
 
-**찾는 대상.** go, git, node, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, eslint, tsc, jscpd, cargo, clippy). 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
+**찾는 대상.** go, git, node, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, eslint, tsc, jscpd, cargo, clippy)와 JS 패키지 관리자(npm, pnpm, yarn)다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
 
 **찾는 위치.** 순서대로 사용자의 `PATH`, `~/.local/bin`, `~/go/bin`, `/usr/local/go/bin`과 시스템 디렉터리, `~/.opencode/bin`, CODEYE 도구 접두사 `~/.local/share/codeye-tools/{bin,cpp/bin,go/bin}`이다. 모양이 정해진 도구는 다음처럼 찾는다.
 
 | 도구 | 찾는 방법 |
 |---|---|
 | pyright, eslint, tsc, jscpd | node가 읽을 진입 스크립트 파일(`pyright/index.js`, `eslint/bin/eslint.js`, `typescript/bin/tsc`, `jscpd/run-jscpd.js`)을 `node_modules` 디렉터리에서 찾는다. 디렉터리는 `~/.local/share/codeye-tools/node/node_modules`, `~/.local/share/codeye-tools/node_modules`, 찾은 node의 `<prefix>/lib/node_modules`, `~/.npm-global/lib/node_modules`, 시스템 `node_modules`다. `PATH`의 npm shim은 가리키는 진입 스크립트로 풀어서 쓴다. shim 자체는 쓰지 않는다. eslint는 같은 `node_modules`에 `@eslint/js`·`typescript-eslint`·`typescript`가 있어야 한다. |
+| npm, pnpm, yarn | 위 JS 도구와 같은 `node_modules` 디렉터리에서 `npm/bin/npm-cli.js`(node 설치에 함께 온다), `pnpm/bin/pnpm.cjs`, `yarn/bin/yarn.js`를 찾는다. corepack shim과 `.cmd`·셸 shim은 쓰지 않는다. 검증은 `<node> <script> --version`이다. |
 | cargo, clippy | `~/.rustup/settings.toml`의 `default_toolchain`, 이어서 나머지 toolchain의 `toolchains/<이름>/bin/cargo`. clippy는 선택한 cargo와 같은 디렉터리의 `cargo-clippy`만 쓴다. `~/.cargo/bin`의 rustup proxy는 [거부 규칙](#도구와-rustup-proxy-거부)대로 쓰지 않는다. |
 | mypy, bandit, lizard | 첫 줄이 절대 경로 interpreter인 스크립트여야 한다. `#!/usr/bin/env`인 후보는 다음 후보로 넘어간다. |
 | go | 실행 파일이 GOROOT의 `bin/go`여야 한다. |
@@ -108,6 +111,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 
 - **Go 모듈 캐시.** 찾은 go의 `go env GOMODCACHE`(사용자의 실제 환경 기준)가 실제 디렉터리이면 `--go-mod-cache`로 넘긴다. go vet은 `GOPROXY=off`로 실행하므로 의존성이 있는 모듈은 이 캐시가 있어야 분석된다. 캐시는 저장 영역 상한의 `cache` 영역에 센다([운영](OPERATIONS.md#저장-영역과-상한)). 명시한 `agent.go_mod_cache`가 있으면 그것이 우선한다. 의존성 받기를 켜면 의존성은 이 캐시가 아니라 받기 캐시에서 읽고, 이 캐시는 받기의 첫 출처가 된다([Go 의존성 받기](#go-의존성-받기)).
 - **Go 받기 설정.** 같은 go로 `go env -json GOPROXY GOSUMDB GOPRIVATE GONOPROXY GONOSUMDB`를 읽어 Go 기본값과 다른 값만 `tools.json`의 `go_settings`에 남기고, 설정 파일이 비워 둔 `agent.dependencies`의 Go 값을 채운다. 의존성 받기가 꺼져 있으면 채우지 않는다.
+- **npm 레지스트리.** 찾은 npm으로 사용자의 실제 환경에서 `npm config get registry`를 읽어, npm 기본값과 다르고 인증정보가 없으면 `tools.json`의 `npm_registry`에 남기고 설정 파일이 비워 둔 `agent.dependencies.npm_registry`를 채운다. 인증정보가 든 값은 버린다(공개 레지스트리로 받는다).
 - **Python 타입 검사기.** 결과 도구 집합에 mypy와 pyright가 모두 있으면 `--python-both-type-checkers`를 함께 준다([타입 검사기 선택](#타입-검사기-선택)). 하나만 있으면 주지 않는다. 에이전트의 검사는 그대로이며(둘 다 있으면서 플래그가 없거나 그 반대면 사용법 오류), 개인 모드는 값을 정할 때 그 규칙을 맞춘다.
 
 결과는 `<state_dir>/tools.json`에 쓴다([schema](../schemas/tools.schema.json), [예시](../examples/tools.json)). 탐색 결과와 명시 설정을 합친 에이전트 인자는 `toolfind.Resolve`가 만든다. 명시 값이 있으면 그 값이, 없으면 `found` 도구의 경로가 쓰이며 쓸 수 없는 탐색 결과는 넘기지 않는다.
@@ -909,7 +913,7 @@ tsc:    <node> <tsc> --noEmit --pretty false --incremental false --composite fal
 - **ESLint 설정.** 저장소 `eslint.config.*`·`.eslintrc.*`는 실행 가능한 JS이므로 `--no-config-lookup -c <관리 설정>`으로 읽지 않는다. 관리 설정은 `@eslint/js`·`typescript-eslint`를 eslint와 같은 도구 `node_modules`의 절대 진입 경로로 `require`하고 저장소 `node_modules`에서 plugin·parser를 찾지 않는다. `repository_config=overridden`과 `repository_eslint_config_not_loaded`를 기록한다. 저장소 설정을 따르는 실행은 구현하지 않았으므로 저장소가 정한 규칙·plugin 결과는 보이지 않는다. `.eslintignore`는 eslint 10이 읽지 않으며 `eslintignore_unsupported`로 남긴다. `package.json`의 `eslintConfig`는 flat config가 읽지 않고, cwd의 `eslint-suppressions.json`은 관리 경로가 대신한다.
 - **tsc.** `tsconfig.json`은 JSONC 데이터로 읽는다. tsc와 typescript-eslint `parserOptions.project` 프로그램은 tsconfig 언어 서비스 `plugins`를 읽지 않는다. `NODE_ENV`는 넘기지 않는다.
 - **type-aware.** 관리 설정의 `project`는 `./tsconfig.json`, `tsconfigRootDir`는 모듈 디렉터리다. 절대 작업 경로의 `(`·`[`·`*`를 typescript-eslint가 glob으로 확장하므로 상대 경로를 쓴다. projectService 방식은 쓰지 않는다.
-- **의존성 코드.** 모듈 경로나 그 상위에 `node_modules`가 있으면 tsc와 type-aware 작업은 실행 전에 `skipped_policy`(`node_modules_outside_snapshot`)다. 출처를 manifest에 묶을 수 없기 때문이다. 기준선은 모듈 해석을 하지 않으므로 계속 실행한다.
+- **의존성 코드.** 모듈 경로나 그 상위에 `node_modules`가 있으면 tsc와 type-aware 작업은 실행 전에 `skipped_policy`(`node_modules_outside_snapshot`)다. 출처를 manifest에 묶을 수 없기 때문이다. 예외는 이번 attempt의 `deps.javascript` 기록이 `installed_dirs`로 적은 디렉터리이며, 링크가 아닌 실제 디렉터리일 때만 받아들인다([JS/TS 의존성 받기](#jsts-의존성-받기)). 기준선은 모듈 해석을 하지 않으므로 계속 실행한다.
 
 tsc와 type-aware 작업은 실행 전에 tsconfig 체인 전체(루트, 로컬 `extends`, `references`)를 검사한다. 기록에는 옵션 이름만 남긴다(`tsconfig_option_<snake_name>`).
 
@@ -926,7 +930,25 @@ tsc와 type-aware 작업은 실행 전에 tsconfig 체인 전체(루트, 로컬 
 - type-aware 작업은 관리 규칙 `codeye/program-diagnostics`로 프로그램의 설정·전역 진단과 파일별 공백 코드를 보고받는다. 공백이나 설정 오류가 있으면 모든 진단을 보류한다(`diagnostics_withheld_incomplete_types`). tsconfig가 로드되지 않으면("Unable to parse the specified 'tsconfig' file") 구문 오류가 아니라 `tsconfig_invalid`로 세고 진단을 보류한다.
 - tsconfig 프로그램 밖 TS 파일은 type-aware 작업에서 `outside_tsconfig_program`(건너뜀)이다.
 - 구문 오류는 tsc가 타입 검사 전에 멈추므로 `syntax_errors`로 실패하고 구문 진단만 tool error로 남긴다.
-- 의존성을 설치하지 않으므로 외부 패키지를 import하는 TS 모듈의 tsc·type-aware 결과는 대부분 공백(실패)이고 기준선만 결과를 낸다.
+- 의존성 받기가 꺼져 있으면 외부 패키지를 import하는 TS 모듈의 tsc·type-aware 결과는 대부분 공백(실패)이고 기준선만 결과를 낸다. 받은 뒤에도 빌드 산출물을 가리키는 import(자기 패키지의 `..`·`dist`)나 선언하지 않은 `@types`는 공백으로 남는다(빌드는 하지 않는다).
+
+### JS/TS 의존성 받기
+
+`deps.javascript`·`deps.javascript.mNN` task가 설치 루트마다 의존성을 이번 attempt의 실행 사본에 설치한다([의존성 준비](ARCHITECTURE.md#의존성-준비)).
+
+- **설치 루트.** JS/TS 모듈마다 자기 디렉터리나 상위에서 가장 가까운 lockfile 디렉터리(workspace 루트가 멤버를 맡는다), lockfile이 없으면 가장 바깥 `package.json` 디렉터리다(`jsts.InstallRoots`). 루트 디렉터리는 접미사가 없고 나머지는 경로 순서로 `.m01`...이다. tsc·type-aware ESLint가 같은 계획으로 자기 모듈의 기록을 찾는다. 계획 입력은 manifest뿐이다.
+- **관리자 선택.** 설치 루트의 lockfile로 고른다: `pnpm-lock.yaml` → pnpm, `yarn.lock`(`# yarn lockfile v1`) → yarn 1, `npm-shrinkwrap.json`·`package-lock.json` → npm, lockfile 없음 → npm(`npm install --no-package-lock --no-save`, 한계 `dependency_versions_not_pinned`). 여러 관리자의 lockfile이 있으면 `package.json`의 `packageManager`가, 없으면 위 순서의 첫째가 정하고 `multiple_lockfiles`를 남긴다. yarn 2 이상(`__metadata:`)과 bun lockfile은 `unsupported`/`lockfile_format_unsupported`다. tsconfig가 있는 모듈이 없거나 tsc·type-aware ESLint를 쓸 수 없으면 `no_dependency_consumer`, 받을 패키지가 없으면 `no_dependencies`다.
+- **명령.** `<node> <entry script>`로 실행한다. 먼저 `--version`(pnpm은 `--config.pm-on-fail=ignore --version`), 그다음 설치다.
+  - npm: `ci`(lockfile 없으면 `install --no-package-lock --no-save`) `--ignore-scripts --no-bin-links --no-audit --no-fund --include=dev --include=optional --include=peer --engine-strict=false --prefer-offline --prefix <루트> --cache <캐시> --logs-dir <task>/npm-logs --userconfig <빈 파일> --globalconfig <빈 파일> --registry <레지스트리> --proxy=null --https-proxy=null --install-links=false --git=git`.
+  - pnpm: `install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --prefer-offline --dir <루트> --modules-dir node_modules --virtual-store-dir node_modules/.pnpm --store-dir <캐시>`와 `lockfile-dir`(루트), `cache-dir`·`state-dir`·`global-dir`(task 디렉터리), `registry`, `proxy=false`·`https-proxy=false`, 릴리스 전환 끄기(`pm-on-fail=ignore`, `manage-package-manager-versions=false`), `side-effects-cache=false`, `verify-deps-before-run=false`.
+  - yarn 1: `install --frozen-lockfile --ignore-scripts --no-bin-links --non-interactive --ignore-engines --prefer-offline --modules-folder <루트>/node_modules --cache-folder <캐시> --registry <레지스트리>`.
+- **환경.** `PATH`는 node 디렉터리뿐, `LANG`, `CI=true`, `NO_UPDATE_NOTIFIER=1`. `HOME`은 executor의 실행별 디렉터리라 사용자 `~/.npmrc`(토큰)를 읽지 않는다. pnpm은 `pnpm_config_pm_on_fail=ignore`와 `manage_package_manager_versions=false`도 받는다. pnpm 11은 `--version`을 포함한 모든 명령에서 `packageManager`가 적은 릴리스로 바꾸고 내려받는다(실측). 위 값이 그것을 막는다. yarn은 `YARN_IGNORE_PATH=1`로 `.yarnrc`의 `yarn-path`를 실행하지 않는다.
+- **위치 고정.** 저장소 `.npmrc`·`.yarnrc`·`.yarnrc.yml`은 비밀 파일 규칙으로 스냅샷에 들어오지 않는다. pnpm은 `pnpm-workspace.yaml`과 `package.json`에서도 설정을 읽으므로 위치·레지스트리·proxy를 명령줄로 정하고, 명령줄 값이 두 파일보다 이기는 것을 실측했다(npm 11.16, pnpm 11.28, yarn 1.22). 그래서 쓰기는 설치 루트의 `node_modules`, 공유 캐시(`javascript/{npm,pnpm,yarn}`), task 디렉터리 안에 머문다.
+- **트리.** 설치가 끝나면 설치 루트 아래의 `node_modules`(멤버 포함, `node_modules` 안으로 내려가지 않음, 최대 256)를 `installed_dirs`에 적는다. 한 번 더 훑어 작업 사본과 패키지 캐시 밖을 가리키는 링크(`file:`·`link:` 의존성, junction 포함)를 지우고 `dropped_inputs`(사유 `link_outside_workspace`, 최대 64)와 한계 `links_outside_workspace_removed`로 남긴다. 나머지 설치는 그대로 쓴다. 실패·중단·drift인 설치는 트리를 지우고 `installed_dirs`를 남기지 않는다. 트리는 attempt 실행 사본과 함께 지워진다.
+- **분석기.** tsc·type-aware ESLint는 기록이 `prepared`·`partial`이고 `installed_dirs`가 있으면 그 디렉터리를 받아들이고 `type_check_without_dependencies` 대신 `dependencies_prepared`(`partial`이면 `dependencies_partially_prepared`)를 남긴다. 기록에 없는 `node_modules`나 링크인 `node_modules`는 전과 같이 거부한다. gitleaks는 설치 트리를 건너뛰고(pnpm 배치의 링크 때문에 걸어 다니기 검사가 실패하지 않도록) jscpd·lizard는 manifest 파일만 읽으므로 설치 트리를 세지 않는다.
+- **사유.** `lockfile_outdated`(frozen lockfile이 package.json과 맞지 않음), `lockfile_version_unsupported`, `lockfile_format_unsupported`, `manifest_invalid`, `dependency_not_found`(레지스트리에 없음, `failed_items`에 이름), `registry_auth_required`, `registry_unreachable`, `snapshot_integrity_failed`, `workspace_drift`, `toolchain_unavailable`(버전을 읽을 수 없음), `package_manager_not_configured`(`--node`나 관리자 스크립트 없음, corepack shim)와 공통 사유.
+- **한계.** 인증이 필요한 레지스트리는 지원하지 않는다. 사용자 npm 설정의 레지스트리에 인증정보가 있으면 쓰지 않는다. `HTTP_PROXY` 같은 환경변수 proxy는 넘기지 않는다. yarn 1은 proxy를 지우는 명령줄 값이 없다(`.yarnrc`가 스냅샷에 없으므로 저장소가 정할 수는 없다). git 의존성은 PATH에 git이 없어 실패한다. lockfile이 루트를 맡지만 workspace 멤버가 아닌 하위 패키지(예: `examples/*`)는 설치되지 않아 그 모듈의 tsc는 공백으로 남는다. pnpm `configDependencies`는 pnpm이 설치 전에 받는다(스크립트는 실행하지 않는다).
+- **설치 패키지의 쓰임.** 설치한 패키지는 타입 검사기(tsc·type-aware ESLint)만 읽는다. 스냅샷의 일부가 아니므로 그 파일 내용은 보고서의 코드 발췌나 모델 입력에 들어가지 않는다(진단 메시지가 의존성의 타입 이름을 담을 수는 있다). 프로젝트 밖을 가리키는 `file:` 의존성은 따로 다루지 않는다. npm은 `--install-links=false`로 링크가 되어 위 링크 정리가 지우지만, pnpm·yarn이 복사하거나 hard link로 넣은 내용은 그대로 남는다.
 
 ### JS/TS 규칙 문맥과 억제
 
@@ -1001,7 +1023,19 @@ rustc는 build script와 proc macro를 링크하려고 `cc`를 PATH에서 찾는
 
 ### 오프라인 의존성
 
-`CARGO_HOME`은 scratch의 빈 디렉터리이고 cargo는 오프라인에서도 여기에 캐시를 쓴다. 운영자 레지스트리 캐시를 주는 방식은 없다. 의존성은 (1) 경로 의존성, (2) 저장소가 `cargo vendor`로 둔 소스와 그 source replacement 설정(`[source.crates-io] replace-with`)으로만 구한다. 스냅샷 안 디렉터리로의 source replacement는 자료로 허용한다. 저장소의 `[registries]`·`[net]`·`[http]`가 네트워크를 가리켜도 `--offline`과 `CARGO_NET_OFFLINE=true`가 막는다. 레지스트리 의존성의 소스가 없으면 `dependency_unavailable`이고 아무것도 내려받지 않는다. `offline_scratch_cargo_home`을 항상 남긴다.
+의존성 받기가 없으면 `CARGO_HOME`은 scratch의 빈 디렉터리이고 cargo는 오프라인에서도 여기에 캐시를 쓴다. 운영자 레지스트리 캐시를 주는 방식은 없다. 의존성은 (1) 경로 의존성, (2) 저장소가 `cargo vendor`로 둔 소스와 그 source replacement 설정(`[source.crates-io] replace-with`)으로만 구한다. `deps.rust`가 받았으면 그 `CARGO_HOME`을 쓴다([Rust 의존성 받기](#rust-의존성-받기)). 스냅샷 안 디렉터리로의 source replacement는 자료로 허용한다. 저장소의 `[registries]`·`[net]`·`[http]`가 네트워크를 가리켜도 `--offline`과 `CARGO_NET_OFFLINE=true`가 막는다. 레지스트리 의존성의 소스가 없으면 `dependency_unavailable`이고 아무것도 내려받지 않는다. 받은 crate가 없을 때 `offline_scratch_cargo_home`을 남긴다.
+
+### Rust 의존성 받기
+
+`deps.rust`·`deps.rust.mNN` task가 cargo check와 같은 모듈 계획으로 모듈마다 crate를 받는다([의존성 준비](ARCHITECTURE.md#의존성-준비)). cargo check·clippy는 그 뒤에도 `--offline`·`CARGO_NET_OFFLINE=true`로 실행하고 받은 `CARGO_HOME`만 읽는다.
+
+- **허가.** cargo는 받는 동안 저장소 Cargo 설정(`.cargo/config.toml`)을 읽고, 받은 crate를 쓰는 cargo check·clippy는 build script를 실행한다. 그래서 저장소 코드 실행 허가(개인 모드는 프로젝트의 "저장소의 빌드 스크립트 실행")가 없으면 아무것도 시작하지 않고 `skipped_policy`/`dependency_consumers_not_allowed`다. `--cargo`가 없으면 `package_manager_not_configured`, cargo check를 쓸 수 없으면 `no_dependency_consumer`, source replacement로 vendor 디렉터리를 쓰면 `vendored_dependencies`, `Cargo.lock`에 레지스트리·git crate가 없으면 `no_dependencies`다.
+- **명령.** 실행 사본의 모듈 디렉터리에서 `rustc -vV`, `cargo --version`, (`Cargo.lock`이 없을 때) `cargo generate-lockfile`, `cargo fetch --locked --target <host>`. 환경은 cargo check와 같고(`RUSTUP_TOOLCHAIN` 없이 운영자 toolchain, task별 `CARGO_TARGET_DIR`) `CARGO_HOME=<받기 캐시>/rust/cargo`이며 `CARGO_NET_OFFLINE`만 뺀다.
+- **lockfile 없음.** `generate-lockfile`이 버전을 고른다(한계 `dependency_versions_not_pinned`). 만든 `Cargo.lock`은 task 디렉터리에 옮겨 두고 실행 사본에서는 지운다. cargo check·clippy는 실행하는 동안만 그 파일을 모듈 디렉터리에 두고(`--locked`가 읽는다) 끝나면 지운다. 파일이 없으면 기록을 쓰지 않은 것처럼 실행한다.
+- **캐시.** 공유 캐시 key `rust/cargo`. 레지스트리 색인·crate 파일·푼 소스가 크기 상한과 cache 저장 영역에 센다. 받은 뒤 `Cargo.toml`·`Cargo.lock`이 바뀌었으면 `workspace_drift`다.
+- **분석기.** cargo check·clippy는 기록이 `prepared`·`partial`이면 그 `CARGO_HOME`을 쓰고 `offline_scratch_cargo_home` 대신 `dependencies_prepared`(`partial`이면 `dependencies_partially_prepared`)를 남긴다.
+- **사유.** `lockfile_outdated`(`--locked`인데 lockfile을 고쳐야 함), `manifest_invalid`, `dependency_not_found`, `registry_auth_required`, `registry_unreachable`, `toolchain_unavailable`, `snapshot_integrity_failed`, `workspace_drift`와 공통 사유.
+- **한계.** 공유 `CARGO_HOME`은 cargo check·clippy가 build script를 실행하는 동안 읽기 전용으로 보호되지 않는다. executor의 보호 root는 cwd·실행 파일 위치만 검사하고 쓰기를 막지 않으므로, 한 저장소의 build script가 다른 저장소가 읽을 crate 소스를 바꿀 수 있다. 저장소 코드 실행 허가는 그 위험까지 받아들이는 선택이다. 인증이 필요한 레지스트리는 지원하지 않는다.
 
 ### Rust 계획
 
@@ -1155,6 +1189,7 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 - argv(범위 루트마다): `dir --no-banner --no-color --log-level info --redact=100 --config <scratch>/analyzers/gitleaks/codeye-gitleaks.toml --gitleaks-ignore-path <scratch>/analyzers/gitleaks/ignore --ignore-gitleaks-allow --max-archive-depth 0 --max-decode-depth 5 --exit-code 3 --report-format template --report-template <scratch>/analyzers/gitleaks/report.tmpl --report-path - -- ./<root>`. 보고서는 stdout으로 받는다. 기본 JSON 보고서의 `Match`·`Line`은 가려도 주변 텍스트를 담을 수 있어 쓰지 않는다.
 - CODEYE 설정은 기본 규칙 확장(`[extend] useDefault = true`)이고 `--config`가 저장소 `.gitleaks.toml`을 대신한다. 사본 밖 `[extend] path`도 따라가지 않는다.
 - 인라인 `gitleaks:allow`는 무시한다(`source_suppressions=disabled`).
+- 실행 전에 범위 루트에 링크가 없는지 걸어서 확인한다. 이번 attempt의 `deps.javascript`가 `installed_dirs`로 적은 실제 디렉터리는 건너뛴다(설치 트리는 스냅샷 파일이 아니고, pnpm 배치는 링크를 쓴다). gitleaks 기본 allowlist가 `node_modules`를 읽지 않는다.
 - **`.gitleaksignore`는 따른다.** gitleaks는 검사 루트의 `.gitleaksignore`를 항상 읽고 끌 수 없으므로 `repository_config=honored`이고 그 파일을 `config_files`에 넣는다. 스냅샷 사본에서 미리 읽어, `:`로 나눈 필드 중 하나라도 `/`·`\`로 시작하거나 `..` 구간·NUL이 있으면 gitleaks를 시작하지 않는다. 결과는 `failed`/`repository_config_rejected`와 `rejected_option_gitleaksignore`이며 항목 값은 기록하지 않는다.
 - 기본 전역 allowlist(이미지·글꼴·문서 확장자, `go.mod`·`go.sum`, `vendor/modules.txt`·일부 vendor 경로, `node_modules`, lock 파일 등)에 걸린 파일은 gitleaks가 읽지 않으므로 `processed_paths`에서 뺀다(`skipped_default_allowlist`).
 - 이진 파일도 검사하지만 UTF-8 텍스트가 아닌 파일은 처리 파일로 주장하지 않는다(`binary_files_not_claimed_processed`). 압축은 풀지 않고(depth 0) 인코딩된 값은 5단계까지 해독한다. git 이력은 검사하지 않는다(`history_not_scanned`).

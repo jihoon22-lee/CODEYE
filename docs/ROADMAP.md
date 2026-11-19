@@ -18,8 +18,7 @@
 
 | 작업 | 선행 |
 |---|---|
-| Rust·JS/TS 의존성 받기 | 없음 |
-| Python 의존성 받기 | Rust·JS/TS 의존성 받기 |
+| Python 의존성 받기 | 없음 |
 | GitHub 연결 | 없음 |
 | PR·댓글 분석 | GitHub 연결 |
 | 다중 노드 검증 | 없음. GitHub 연결·PR·댓글 분석과 병행 |
@@ -30,10 +29,8 @@
 
 ### 다른 언어의 의존성 받기
 
-Go의 의존성 받기([의존성 준비](ARCHITECTURE.md#의존성-준비))와 같은 틀에 생태계별 받기와 분석기 연결만 더한다.
+Go·Rust·JS/TS의 의존성 받기([의존성 준비](ARCHITECTURE.md#의존성-준비))와 같은 틀에 생태계별 받기와 분석기 연결만 더한다.
 
-- Rust: 가장 바깥 `Cargo.toml`마다 `cargo fetch --locked`(lockfile이 없으면 먼저 만들고 `dependency_versions_not_pinned`). 저장소 코드 실행 허가가 없어 cargo check가 거부되는 프로젝트는 받지 않는다(`dependency_consumers_not_allowed`). cargo check·clippy가 받은 `CARGO_HOME`을 오프라인으로 읽는다.
-- JS/TS: lockfile에 맞는 npm·pnpm·yarn을 lifecycle script 없이 실행하고 tsc·type-aware ESLint가 그 `node_modules`를 읽는다. 받는 도구 경로는 탐지가 찾는다.
 - Python: wheel만 받아(`--only-binary`, 빌드 없음) mypy·pyright가 그 디렉터리를 읽는다. wheel이 없는 패키지는 빼고 `partial`이다.
 - 완료 조건: 생태계마다 가짜 runner 시험(argv·환경·cwd 고정), 분석기 연결 시험, `CODEYE_TEST_DEPS_NETWORK=1` 실제 받기 시험, 공개 저장소 하나의 받기 끔·켬 보고서 비교.
 
