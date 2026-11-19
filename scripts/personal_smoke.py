@@ -332,8 +332,11 @@ def run(base, root, env, probe_env):
 def managed(base, root, env, directory, source):
     """TC-170~173: codeye up with no configuration file and the managed PostgreSQL.
 
-    The PostgreSQL binaries come from PATH discovery (no flag, no config). The
-    harness database URL and PG* variables in the environment are ignored.
+    A fresh HOME without XDG variables: the configuration and the state go to
+    their default paths and no command gets --config. The PostgreSQL binaries
+    come from PATH discovery (no flag, no config). The harness database URL
+    and PG* variables in the environment are ignored. A stub $BROWSER records
+    the link it is asked to open.
     """
     home = directory / "managed"
     home.mkdir(mode=0o700)
@@ -343,10 +346,16 @@ def managed(base, root, env, directory, source):
     if (root / "web/dist/index.html").exists():
         (home / "web").mkdir()
         (home / "web/dist").symlink_to(root / "web/dist", target_is_directory=True)
-    config = home / "config/personal.json"
-    state = home / "state-home/codeye"
-    menv = {k: v for k, v in env.items() if k != "CODEYE_DATABASE_URL"}
-    menv.update(XDG_STATE_HOME=str(home / "state-home"), CODEYE_DATABASE_URL=env["CODEYE_DATABASE_URL"],
+    user_home = home / "h"
+    user_home.mkdir(mode=0o700)
+    config = user_home / ".config/codeye/personal.json"
+    state = user_home / ".local/state/codeye"
+    opened = home / "browser-link"
+    stub = home / "stub-browser"
+    stub.write_text(f'#!/bin/sh\nprintf "%s\\n" "$1" > {opened}\n')
+    stub.chmod(0o700)
+    menv = {k: v for k, v in env.items() if k not in ("CODEYE_DATABASE_URL", "XDG_CONFIG_HOME", "XDG_STATE_HOME")}
+    menv.update(HOME=str(user_home), CODEYE_DATABASE_URL=env["CODEYE_DATABASE_URL"], BROWSER=str(stub),
                 PGPASSWORD="ignored-by-managed-mode", PGHOST="/nonexistent")
     second = home / "src-b"
     (second / "pkg").mkdir(parents=True)
@@ -382,51 +391,54 @@ def managed(base, root, env, directory, source):
 
     try:
         # TC-170: no configuration, no database: one command to a queued run and a signed-in link.
-        first = cli("up", "--config", config, "--no-open", source / "hello").stdout
-        for want in ("wrote a new configuration", "initialized a PostgreSQL", "database schema created", "created the personal user",
-                     "registered project \"hello\"", "queued an analysis", "note: ignoring CODEYE_DATABASE_URL, PGHOST, PGPASSWORD"):
+        first = cli("up", source / "hello").stdout
+        for want in ("wrote a new configuration: " + str(config), "initialized a PostgreSQL", "database schema created", "created the personal user",
+                     "registered project \"hello\"", "queued an analysis", "note: ignoring CODEYE_DATABASE_URL, PGHOST, PGPASSWORD",
+                     "opened the browser with " + str(stub)):
             assert want in first, (want, first)
         written = json.loads(config.read_text())
         assert set(written) == {"schema_version", "source_roots"} and written["source_roots"][0]["path"] == str(source / "hello"), written
         assert stat.S_IMODE(config.stat().st_mode) == 0o600 and stat.S_IMODE((state / "postgres/password").stat().st_mode) == 0o600
-        link, origin = link_of(first)
-        assert "&project=" in link and "&run=" in link, link
-        run_a = link.rsplit("&run=", 1)[1]
-        status = json.loads(cli("status", "--config", config, "--format", "json").stdout)
+        up_link, origin = link_of(first)
+        assert "&project=" in up_link and "&run=" in up_link, up_link
+        assert wait_for("브라우저 stub 호출", lambda: opened.exists() and opened.read_text().strip(), 10) == up_link
+        run_a = up_link.rsplit("&run=", 1)[1]
+        status = json.loads(cli("status", "--format", "json").stdout)
         assert status["state"] == "running" and status["database"]["postgres"] == "running", status
         assert status["database"]["port"] >= 55432, status
-        if (home / "web/dist").exists():
-            # TC-171: the printed link signs the browser in and opens the project's run and report.
-            link_file = home / "up-link"
-            link_file.write_text(link + "\n")
-            link_file.chmod(0o600)
-            subprocess.run(["npm", "run", "test:e2e", "--", "up.spec.ts"], cwd=root / "web", check=True, timeout=180,
-                           env=dict(env, CODEYE_TEST_BASE_URL=origin, CODEYE_TEST_UP_LINK_FILE=str(link_file), CODEYE_TEST_UP_PROJECT="hello"))
-            link, _ = link_of(cli("open", "--config", config, "--no-open").stdout)
+        # A separate link for the API checks: the up link stays unused for the browser.
+        link, _ = link_of(cli("open", "--no-open").stdout)
         session = Session(state, origin, link)
         assert session.request("GET", "session")["expires_at"] > time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 6 * 86400)), "7일 세션 아님"
         finished(session, run_a)
+        if (home / "web/dist").exists():
+            # TC-171: the printed link signs the browser in and opens the project's run and report.
+            link_file = home / "up-link"
+            link_file.write_text(up_link + "\n")
+            link_file.chmod(0o600)
+            subprocess.run(["npm", "run", "test:e2e", "--", "up.spec.ts"], cwd=root / "web", check=True, timeout=180,
+                           env=dict(env, CODEYE_TEST_BASE_URL=origin, CODEYE_TEST_UP_LINK_FILE=str(link_file), CODEYE_TEST_UP_PROJECT="hello"))
 
         # TC-172: another folder while running: new source root, the agent drains and re-enrolls.
-        again = cli("up", "--config", config, "--no-open", second).stdout
+        again = cli("up", "--no-open", second).stdout
         assert "added source root \"src-b\"" in again and "restarting the agent" in again and "re-enrolling the local agent" in again, again
         link_b, _ = link_of(again)
         finished(Session(state, origin, link_b), link_b.rsplit("&run=", 1)[1])
 
         # TC-173: stop also stops PostgreSQL; up reuses the cluster; backup needs no configuration.
-        stopped = json.loads(cli("stop", "--config", config, "--format", "json").stdout)
+        stopped = json.loads(cli("stop", "--format", "json").stdout)
         assert stopped["outcome"] == "stopped" and stopped["database"] == "stopped", stopped
         assert not postgres_processes(), "정지 뒤 PostgreSQL이 남음"
-        reused = cli("up", "--config", config, "--no-open").stdout
+        reused = cli("up", "--no-open").stdout
         assert "initialized" not in reused and "created the personal user" not in reused and "PostgreSQL" in reused, reused
         link, origin = link_of(reused)
         names = {p["name"] for p in Session(state, origin, link).request("GET", "projects?limit=100")["items"]}
         assert names == {"hello", "src-b"}, names
-        stopped = json.loads(cli("stop", "--config", config, "--format", "json").stdout)
+        stopped = json.loads(cli("stop", "--format", "json").stdout)
         assert stopped["outcome"] == "stopped" and stopped["database"] == "stopped", stopped
-        made = cli("backup", "--config", config, "--format", "json").stdout
+        made = cli("backup", "--format", "json").stdout
         out = Path(json.loads(made)["output"])
-        assert out.parent == home / "state-home/codeye-backups" and (out / "manifest.json").exists(), made
+        assert out.parent == user_home / ".local/state/codeye-backups" and (out / "manifest.json").exists(), made
         assert not postgres_processes(), "백업이 띄운 PostgreSQL이 남음"
         # Only the generated password file holds the database credential.
         password = (state / "postgres/password").read_text().strip()
@@ -435,4 +447,4 @@ def managed(base, root, env, directory, source):
                 assert password.encode() not in path.read_bytes(), f"DB 비밀번호가 다른 파일에 있음: {path.relative_to(state)}"
         print("PASS: codeye up 관리형 PostgreSQL(설정 없음→보고서·로그인 링크·7일 세션)·실행 중 새 폴더·stop이 PostgreSQL 정지·재사용·설정 없는 백업")
     finally:
-        subprocess.run([binary, "stop", "--config", str(config)], cwd=home, env=menv, capture_output=True, timeout=300)
+        subprocess.run([binary, "stop"], cwd=home, env=menv, capture_output=True, timeout=300)

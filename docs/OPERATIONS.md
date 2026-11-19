@@ -201,7 +201,7 @@ codeye status [--config PATH] [--format text|json]
 2. PATH를 절대 경로로 바꾸고 symlink를 푼다. 상태 디렉터리나 백업 디렉터리를 포함하거나 그 안이면 거부한다. 설정의 root 안이면 가장 긴 root와 그 아래 상대 경로를 쓴다. 아니면 PATH 자체를 root(label은 폴더 이름, 겹치면 `-2`, `-3`…)로 설정에 더한다.
 3. Go toolchain이 설정에 없으면 PATH의 `go`(symlink를 푼 절대 경로)를 쓴다. 설정 파일에는 쓰지 않는다.
 4. start와 같다. 이미 실행 중이면 바뀐 것만 반영한다.
-5. PATH가 있으면 그 root·상대 경로의 프로젝트를 찾고 없으면 등록한다(이름은 폴더 이름). 그 프로젝트의 마지막 run이 끝나지 않았으면 그 run을, 아니면 새 run(`deep-review`, `latest_at_acquire`, 전체 범위)을 쓴다.
+5. PATH가 있으면 그 root·상대 경로의 프로젝트를 찾고 없으면 등록한다(이름은 폴더 이름). 그 프로젝트의 마지막 run이 대기·실행 중(`queued`·`preparing`·`running`·`finalizing`)이면 그 run을, 아니면(끝났거나 취소 중이거나 `recovery_required`) 새 run(`deep-review`, `latest_at_acquire`, 전체 범위)을 쓴다. 설정의 root 경로가 없어졌으면 시작은 하고 그 root의 프로젝트는 분석할 수 없다고 알린다.
 6. 일회용 로그인 링크(10분)를 발급해 출력한다. PATH가 있으면 `&project=<ID>&run=<ID>`를 붙인다. `--no-open`이 없으면 브라우저로 연다: `$BROWSER`, WSL(`WSL_DISTRO_NAME` 또는 `/proc/sys/kernel/osrelease`의 `microsoft`)이면 `wslview`·`explorer.exe`, 그다음 `xdg-open` 중 PATH에 있는 첫 프로그램을 띄우고 기다리지 않는다. 열지 못해도 실패가 아니다.
 
 `codeye open`은 controller가 실행 중일 때 6단계만 한다.

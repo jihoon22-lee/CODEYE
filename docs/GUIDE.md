@@ -30,29 +30,29 @@ codeye up ~/src/myproject
 2. PostgreSQL을 찾아 상태 디렉터리의 `postgres/data`에 cluster를 만들고 127.0.0.1의 빈 포트(55432부터)로 띄운다. 비밀번호는 만들어 `postgres/password`(0600)에 둔다. 셸의 `PG*` 변수와 `CODEYE_DATABASE_URL`은 무시하고 그렇다고 알린다.
 3. schema를 만든다. 데이터가 있는 DB의 schema가 이전 버전이면 먼저 `pg_dump` 사본을 백업 디렉터리에 쓰고 migration을 적용한다.
 4. controller(`127.0.0.1:7331`, 쓰이고 있으면 7340까지 다음 빈 포트)와 로컬 에이전트를 띄운다.
-5. 경로를 그 폴더 자체를 root로 하는 source root로 설정에 더하고, 프로젝트로 등록하고, 분석을 요청한다. 이미 등록한 폴더면 그 프로젝트에 새 분석을 요청한다(분석이 아직 진행 중이면 그것을 보여 준다).
+5. 경로를 그 폴더 자체를 root로 하는 source root로 설정에 더하고, 프로젝트로 등록하고, 분석을 요청한다. 이미 등록한 폴더면 그 프로젝트에 새 분석을 요청한다(분석이 아직 대기·실행 중이면 그것을 보여 준다).
 6. 로그인된 주소를 출력하고 브라우저로 연다. WSL에서는 `wslview` 또는 `explorer.exe`로 Windows 브라우저를 연다. 그 주소는 해당 프로젝트와 실행 화면으로 바로 간다.
 
-실제 출력(임시 설정·상태 디렉터리, `--postgres-bin-dir`를 준 첫 실행):
+첫 실행의 출력(실제 실행의 출력에서 경로·ID·pid만 예시로 바꿨다):
 
 ```text
-wrote a new configuration: /tmp/codeye-up-e2e/config/personal.json
-saved database.postgres_bin_dir in /tmp/codeye-up-e2e/config/personal.json
-added source root "go-vet" (/tmp/codeye-up-e2e/proj/go-vet) to /tmp/codeye-up-e2e/config/personal.json
-Go toolchain: /home/jihoon/.local/lib/codeye-go-1.27.4/bin/go (from PATH)
+wrote a new configuration: /home/user/.config/codeye/personal.json
+added source root "myproject" (/home/user/src/myproject) to /home/user/.config/codeye/personal.json
+Go toolchain: /usr/local/go/bin/go (from PATH)
 no review model configured (agent.model): reports hold static analysis only
-initialized a PostgreSQL 17.10 cluster in /tmp/codeye-up-e2e/state-home/codeye/postgres/data (binaries: /home/jihoon/.local/share/sooljang/pgenv/bin)
-PostgreSQL 17.10 started on 127.0.0.1:55432 (log /tmp/codeye-up-e2e/state-home/codeye/logs/postgres.log)
+initialized a PostgreSQL 17.10 cluster in /home/user/.local/state/codeye/postgres/data (binaries: /usr/lib/postgresql/17/bin)
+PostgreSQL 17.10 started on 127.0.0.1:55432 (log /home/user/.local/state/codeye/logs/postgres.log)
 database schema created (migration 11)
 created the personal user 72a98f0a-…
-registered source root "go-vet" (291c5233-…)
-CODEYE is running at http://127.0.0.1:7331 (controller pid 1005835, agent pid 1005847); logs in /tmp/codeye-up-e2e/state-home/codeye/logs
-registered project "go-vet" (/tmp/codeye-up-e2e/proj/go-vet)
-queued an analysis of "go-vet" (run 268871fd-…); the browser shows its progress and the report
+registered source root "myproject" (291c5233-…)
+CODEYE is running at http://127.0.0.1:7331 (controller pid 4101, agent pid 4113); logs in /home/user/.local/state/codeye/logs
+registered project "myproject" (/home/user/src/myproject)
+queued an analysis of "myproject" (run 268871fd-…); the browser shows its progress and the report
 
 Open CODEYE (signed in; the link works once, within 10 minutes):
   http://127.0.0.1:7331/#launch=…&project=acbb2f35-…&run=268871fd-…
 
+opened the browser with xdg-open
 The browser stays signed in for 7 days. New link: codeye open. Stop: codeye stop.
 ```
 
