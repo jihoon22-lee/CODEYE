@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -111,62 +112,149 @@ func TestPasswordLoginOutcomesAreIndistinguishable(t *testing.T) {
 	}
 }
 
-// TC-149
-func TestLoginThrottleByAccountAndAddress(t *testing.T) {
+// TC-149: the hard lock is on the (name, address) pair. Five failures lock
+// that pair whether or not the name exists; the same name from another
+// address and another name from the same address still sign in.
+func TestLoginThrottlePairLock(t *testing.T) {
 	s := fastStore(t)
-	ctx := context.Background()
 	newAccount(t, s, OperatorPrincipal(), "bob", false)
-	// Five failures lock the account whether or not it exists; the sixth is
-	// refused before any derivation, for the right password too.
+	newAccount(t, s, OperatorPrincipal(), "alice", false)
+	const guesser, clean = "198.51.100.7", "203.0.113.9"
 	for _, name := range []string{"bob", "ghost"} {
-		for i := 0; i < accountThreshold; i++ {
-			if _, err := login(s, name, "wrong password value", "198.51.100.7"); !errors.Is(err, domain.ErrUnauthenticated) {
+		for i := 0; i < pairThreshold; i++ {
+			if _, err := login(s, name, "wrong password value", guesser); !errors.Is(err, domain.ErrUnauthenticated) {
 				t.Fatalf("%s attempt %d: %v", name, i, err)
 			}
 		}
 		var th *ThrottledError
-		if _, err := login(s, name, testPassword, "203.0.113.9"); !errors.As(err, &th) || th.RetryAfterSeconds() < 1 || th.RetryAfterSeconds() > int(throttleBase.Seconds())+1 {
-			t.Fatalf("%s locked: %v", name, err)
+		if _, err := login(s, name, testPassword, guesser); !errors.As(err, &th) || th.RetryAfterSeconds() < 1 || th.RetryAfterSeconds() > int(throttleBase.Seconds())+1 {
+			t.Fatalf("%s locked from the guessing address: %v", name, err)
 		}
-		if _, err := login(s, name, testPassword, "203.0.113.9"); !errors.As(err, &th) {
-			t.Fatalf("%s still locked: %v", name, err)
+		if _, err := login(s, strings.ToUpper(name), testPassword, guesser); !errors.As(err, &th) {
+			t.Fatalf("%s still locked (any case): %v", name, err)
 		}
 	}
 	if n := len(auditRows(t, s, AuditLoginThrottled)); n != 2 {
 		t.Fatalf("one throttled row per lock, got %d", n)
 	}
-	// After the lock lapses one more attempt is allowed and a failure locks
-	// again for twice as long.
-	if _, err := s.pool.Exec(ctx, "UPDATE auth_throttle SET locked_until=clock_timestamp()-interval '1 second' WHERE scope='account'"); err != nil {
+	if _, err := login(s, "bob", testPassword, clean); err != nil {
+		t.Fatalf("same name from a clean address: %v", err)
+	}
+	if _, err := login(s, "alice", testPassword, guesser); err != nil {
+		t.Fatalf("another name from the guessing address: %v", err)
+	}
+	// A refused attempt writes no row: the counts stay as they were.
+	before := throttleRows(t, s)
+	var th *ThrottledError
+	if _, err := login(s, "bob", "wrong password value", guesser); !errors.As(err, &th) {
 		t.Fatal(err)
 	}
-	if _, err := login(s, "bob", "wrong password value", "203.0.113.9"); !errors.Is(err, domain.ErrUnauthenticated) {
+	if after := throttleRows(t, s); after != before {
+		t.Fatalf("refused attempt changed the counters: %q -> %q", before, after)
+	}
+	// After the lock lapses one more attempt is allowed; a failure locks again
+	// for twice as long.
+	age(t, s, scopePair, throttleBase+time.Second)
+	if _, err := login(s, "bob", "wrong password value", guesser); !errors.Is(err, domain.ErrUnauthenticated) {
+		t.Fatal(err)
+	}
+	if _, err := login(s, "bob", testPassword, guesser); !errors.As(err, &th) || th.RetryAfterSeconds() <= int(throttleBase.Seconds()) {
+		t.Fatalf("backoff: %v", err)
+	}
+	// The count is past the threshold and the lock has lapsed: a success
+	// clears the pair, and the next login is not refused.
+	age(t, s, scopePair, 2*throttleBase+time.Second)
+	if _, err := login(s, "bob", testPassword, guesser); err != nil {
+		t.Fatalf("success after the lock lapsed: %v", err)
+	}
+	if _, err := login(s, "bob", testPassword, guesser); err != nil {
+		t.Fatalf("login after a success is refused: %v", err)
+	}
+	if n := countWhere(t, s, "scope='pair'"); n != 1 {
+		t.Fatalf("only ghost's pair remains, got %d pair rows", n)
+	}
+}
+
+// TC-149: one address spraying names meets the client cap only at 100
+// failures, and until then other people behind that address sign in. A
+// success just under the cap does not leave the address locked.
+func TestLoginThrottleSharedAddress(t *testing.T) {
+	s := fastStore(t)
+	newAccount(t, s, OperatorPrincipal(), "alice", false)
+	const shared, other = "2001:db8:1:2::/64", "192.0.2.50"
+	for i := 0; i < clientThreshold-1; i++ {
+		if _, err := login(s, fmt.Sprintf("spray%03d", i), "wrong password value", shared); !errors.Is(err, domain.ErrUnauthenticated) {
+			t.Fatalf("spray %d: %v", i, err)
+		}
+	}
+	// 99 failures: alice's correct password from the shared address works,
+	// twice (the success gives its count back, so it lands on 99, not 100).
+	for i := 0; i < 2; i++ {
+		if _, err := login(s, "alice", testPassword, shared); err != nil {
+			t.Fatalf("alice behind a busy address (%d): %v", i, err)
+		}
+	}
+	if _, err := login(s, "spray-last", "wrong password value", shared); !errors.Is(err, domain.ErrUnauthenticated) {
 		t.Fatal(err)
 	}
 	var th *ThrottledError
-	if _, err := login(s, "bob", testPassword, "203.0.113.9"); !errors.As(err, &th) || th.RetryAfterSeconds() <= int(throttleBase.Seconds()) {
-		t.Fatalf("backoff: %v", err)
+	if _, err := login(s, "alice", testPassword, shared); !errors.As(err, &th) || th.RetryAfter < throttleMax-time.Minute {
+		t.Fatalf("address cap: %v", err)
 	}
-	// A success clears the account counter.
-	if _, err := s.pool.Exec(ctx, "UPDATE auth_throttle SET locked_until=NULL WHERE scope='account'"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := login(s, "bob", testPassword, "203.0.113.9"); err != nil {
-		t.Fatal(err)
-	}
-	var left int
-	if err := s.pool.QueryRow(ctx, "SELECT count(*) FROM auth_throttle WHERE scope='account' AND failures>0").Scan(&left); err != nil || left != 1 {
-		t.Fatalf("only ghost keeps failures: %d %v", left, err)
-	}
-	// One address spraying many names is locked at the client threshold.
-	for i := 0; i < clientThreshold; i++ {
-		_, _ = login(s, "spray"+strings.Repeat("x", i%3)+string(rune('a'+i)), "wrong password value", "2001:db8::/64")
-	}
-	if _, err := login(s, "bob", testPassword, "2001:db8::/64"); !errors.As(err, &th) {
-		t.Fatalf("address lock: %v", err)
-	}
-	if _, err := login(s, "bob", testPassword, "192.0.2.50"); err != nil {
+	if _, err := login(s, "alice", testPassword, other); err != nil {
 		t.Fatalf("other address: %v", err)
+	}
+}
+
+// TC-149: a name is locked everywhere only at 50 failures from any
+// addresses; below that, its owner signs in from a clean address. A refused
+// attempt from a new address leaves no row for that address.
+func TestLoginThrottleAccountWide(t *testing.T) {
+	s := fastStore(t)
+	newAccount(t, s, OperatorPrincipal(), "carol", false)
+	const clean = "203.0.113.200"
+	for i := 0; i < accountThreshold-1; i++ {
+		addr := fmt.Sprintf("198.51.100.%d", i/(pairThreshold-1))
+		if _, err := login(s, "carol", "wrong password value", addr); !errors.Is(err, domain.ErrUnauthenticated) {
+			t.Fatalf("trickle %d from %s: %v", i, addr, err)
+		}
+	}
+	if _, err := login(s, "carol", testPassword, clean); err != nil {
+		t.Fatalf("owner after 49 failures elsewhere: %v", err)
+	}
+	if _, err := login(s, "carol", "wrong password value", "198.51.100.99"); !errors.Is(err, domain.ErrUnauthenticated) {
+		t.Fatal(err)
+	}
+	before := throttleRows(t, s)
+	var th *ThrottledError
+	if _, err := login(s, "carol", testPassword, "203.0.113.201"); !errors.As(err, &th) || th.RetryAfter < throttleMax-time.Minute {
+		t.Fatalf("account-wide lock at 50: %v", err)
+	}
+	if after := throttleRows(t, s); after != before {
+		t.Fatalf("refused attempt from a new address wrote rows: %q -> %q", before, after)
+	}
+	rows := auditRows(t, s, AuditLoginThrottled)
+	if len(rows) != 1 || rows[0]["detail"].(map[string]any)["scope"] != scopeAccount {
+		t.Fatalf("throttled rows %v", rows)
+	}
+}
+
+// TC-149: rows whose last failure is older than the decay window are
+// reaped by the next counted failure; recent rows stay.
+func TestLoginThrottleRowsAreReaped(t *testing.T) {
+	s := fastStore(t)
+	for i := 0; i < 3; i++ {
+		_, _ = login(s, fmt.Sprintf("old%d", i), "wrong password value", "198.51.100.1")
+	}
+	age(t, s, "", throttleDecay+time.Minute)
+	if _, err := login(s, "fresh", "wrong password value", "198.51.100.2"); !errors.Is(err, domain.ErrUnauthenticated) {
+		t.Fatal(err)
+	}
+	if old := countWhere(t, s, "last_failure_at < clock_timestamp()-interval '15 minutes'"); old != 0 {
+		t.Fatalf("%d decayed rows left", old)
+	}
+	if n := countWhere(t, s, "true"); n != 3 { // fresh: account, client, pair
+		t.Fatalf("recent rows %d", n)
 	}
 }
 
@@ -180,7 +268,7 @@ func TestConcurrentGuessesAllCount(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := login(s, "carol", "wrong password value", "")
+			_, err := login(s, "carol", "wrong password value", "198.51.100.3")
 			results <- err
 		}()
 	}
@@ -198,8 +286,37 @@ func TestConcurrentGuessesAllCount(t *testing.T) {
 			t.Fatalf("unexpected %v", err)
 		}
 	}
-	if wrong != accountThreshold || throttled != 12-accountThreshold {
+	if wrong != pairThreshold || throttled != 12-pairThreshold {
 		t.Fatalf("parallel guesses got %d derivations and %d refusals", wrong, throttled)
+	}
+}
+
+// throttleRows is the counter state, for "nothing changed" checks.
+func throttleRows(t *testing.T, s *Store) string {
+	t.Helper()
+	var out string
+	if err := s.pool.QueryRow(context.Background(),
+		"SELECT coalesce(string_agg(scope||':'||key_hmac||':'||failures||':'||last_failure_at::text, ',' ORDER BY scope,key_hmac),'') FROM auth_throttle").Scan(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func countWhere(t *testing.T, s *Store, where string) int {
+	t.Helper()
+	var n int
+	if err := s.pool.QueryRow(context.Background(), "SELECT count(*) FROM auth_throttle WHERE "+where).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// age moves the last failure of every row of scope ("" for all) back by d.
+func age(t *testing.T, s *Store, scope string, d time.Duration) {
+	t.Helper()
+	if _, err := s.pool.Exec(context.Background(), "UPDATE auth_throttle SET last_failure_at=last_failure_at-$2*interval '1 millisecond' WHERE $1='' OR scope=$1",
+		scope, d.Milliseconds()); err != nil {
+		t.Fatal(err)
 	}
 }
 

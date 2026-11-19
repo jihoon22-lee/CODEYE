@@ -225,11 +225,11 @@ func (s *Store) ExchangeLaunchTokenFrom(ctx context.Context, client, tokenSHA256
 			if err != nil {
 				return false, err
 			}
-			states, now, err := lockThrottle(ctx, tx, keys)
-			if err != nil {
+			var now time.Time
+			if err := tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now); err != nil {
 				return false, err
 			}
-			if err := countFailures(ctx, tx, states, now); err != nil {
+			if err := countFailures(ctx, tx, keys, now); err != nil {
 				return false, err
 			}
 		}
@@ -237,6 +237,9 @@ func (s *Store) ExchangeLaunchTokenFrom(ctx context.Context, client, tokenSHA256
 	})
 	if aerr != nil {
 		return Session{}, aerr
+	}
+	if client != "" {
+		s.reapThrottle(ctx)
 	}
 	return Session{}, domain.ErrNotFound
 }
