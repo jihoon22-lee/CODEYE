@@ -195,7 +195,7 @@ type AIReview struct {
 	Reason        *string        `json:"reason"`
 	RequiredTasks []AIReviewTask `json:"required_tasks"`
 	// OptionalTasks are planned review tasks not required for the verdict
-	// (role-pack environment/interpret, documents without documents). They
+	// (environment/interpret, documents without documents). They
 	// are listed with their outcome and reason and never count as performed.
 	OptionalTasks []AIReviewTask `json:"optional_tasks,omitempty"`
 }
@@ -207,7 +207,7 @@ type AIReviewTask struct {
 	Key        string  `json:"key"`
 	TaskStatus *string `json:"task_status"`
 	Result     string  `json:"result"`
-	// Reason is the task's reason code (role-pack plans only).
+	// Reason is the task's reason code (every plan).
 	Reason *string `json:"reason,omitempty"`
 }
 

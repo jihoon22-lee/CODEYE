@@ -332,7 +332,7 @@ func TestSmallRepositoriesPlanNoSlices(t *testing.T) {
 		if plan.Slots != 0 || len(plan.Slices) != 0 || len(plan.NotPlanned) != 0 {
 			t.Errorf("%s: %d slices", name, len(plan.Slices))
 		}
-		specs, err := RoleHandler{Static: stubStatic{}}.Plan(t.Context(), j)
+		specs, err := Handler{Static: stubStatic{}}.Plan(t.Context(), j)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -91,13 +91,13 @@ func (packStub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r 
 // a missing envelope is an unavailable upstream, never zero findings, and a
 // diagnostic the tool reported as suppressed in source never reaches the
 // model (only the limitation that some were left out does).
-func TestRolePackInterpretReadsGenericEnvelope(t *testing.T) {
+func TestReviewInterpretReadsGenericEnvelope(t *testing.T) {
 	j := modulesJob(t, nil)
 	script := validScript(t)
 	script["interpret"] = func(int, opencode.Request) opencode.Reply {
 		return asJSON(map[string]any{"hypotheses": []any{}, "limits": []any{}})
 	}
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	_, res := runRole(t, j, packStub{}, f, "1.27.4")
 	if res["staticcheck"].Status != domain.TaskSucceeded || res["staticcheck.m01"].Status != domain.TaskUnsupported {
 		t.Fatalf("static tasks %+v %+v", res["staticcheck"], res["staticcheck.m01"])
@@ -133,7 +133,7 @@ func TestRolePackInterpretReadsGenericEnvelope(t *testing.T) {
 	if !slices.Equal(keys, []string{"go-vet/unusedresult", "staticcheck/SA4006"}) {
 		t.Fatalf("observations %v", keys)
 	}
-	rec := readRole(t, j, "interpret")
+	rec := readRecord(t, j, "interpret")
 	states := map[string]string{}
 	for _, u := range rec.Upstream {
 		states[u.Source] = u.State + "/" + u.Reason

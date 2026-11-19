@@ -12,18 +12,18 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// exampleRoleStages decodes the five role-pack example records
-// (examples/review-r1, written by the worker for the modules fixture with a
+// exampleStages decodes the five review example records
+// (examples/review, written by the worker for the modules fixture with a
 // scripted caller) the way the builder does, and adds the discovery and
-// go-vet tasks they cite. required follows the role-pack plan: documents (eligible documents exist),
+// go-vet tasks they cite. required follows the review plan: documents (eligible documents exist),
 // investigate and verify.
-func exampleRoleStages(t *testing.T) (map[string]*taskState, Report) {
+func exampleStages(t *testing.T) (map[string]*taskState, Report) {
 	t.Helper()
 	bodies := map[string][]byte{}
 	source := &SourceIndex{entries: map[string]string{}}
-	var recs []record.RoleRecord
-	for _, stage := range record.RoleStages {
-		raw, err := os.ReadFile("../../examples/review-r1/" + stage + ".json")
+	var recs []record.Record
+	for _, stage := range record.Stages {
+		raw, err := os.ReadFile("../../examples/review/" + stage + ".json")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -32,7 +32,7 @@ func exampleRoleStages(t *testing.T) (map[string]*taskState, Report) {
 			t.Fatal(err)
 		}
 		bodies[stage] = b.Bytes()
-		var r record.RoleRecord
+		var r record.Record
 		if err := json.Unmarshal(b.Bytes(), &r); err != nil {
 			t.Fatal(err)
 		}
@@ -44,12 +44,12 @@ func exampleRoleStages(t *testing.T) (map[string]*taskState, Report) {
 	required := map[string]bool{"documents": true, "investigate": true, "verify": true}
 	states := map[string]*taskState{}
 	var obs []Observation
-	for i, stage := range record.RoleStages {
+	for i, stage := range record.Stages {
 		key := "review." + stage
 		task := TaskFacts{Key: key, Status: "succeeded", Required: required[stage]}
 		ctx := DecodeContext{Source: source, Snapshot: SnapshotFacts{ManifestDigest: recs[i].Snapshot}, RunID: recs[i].RunID, AttemptID: recs[i].AttemptID, Task: task}
 		art := ArtifactRef{Role: "other", MediaType: record.MediaType, SHA256: domain.Digest(bodies[stage])}
-		c, err := (RoleReviewDecoder{}).Decode(ctx, art, bodies[stage])
+		c, err := (ReviewDecoder{}).Decode(ctx, art, bodies[stage])
 		if err != nil {
 			t.Fatal(stage, err)
 		}
@@ -81,7 +81,7 @@ func exampleRoleStages(t *testing.T) (map[string]*taskState, Report) {
 
 func compose(states map[string]*taskState, r Report) (Report, AIReview, []string) {
 	lim := newSet()
-	composeRoleReviews(&r, states, lim)
+	composeReviews(&r, states, lim)
 	return r, decideAIReview(states), lim.list()
 }
 
@@ -97,7 +97,7 @@ func taskKeys(l []AIReviewTask) []string {
 // investigate and verify here; environment and interpret are listed as
 // optional and never counted.
 func TestRequiredRolesFromPlan(t *testing.T) {
-	states, base := exampleRoleStages(t)
+	states, base := exampleStages(t)
 	r, ai, lim := compose(states, base)
 	if ai.Status != AIReviewPerformed || ai.Reason != nil || len(lim) != 0 {
 		t.Fatalf("ai %+v limitations %v", ai, lim)
@@ -112,7 +112,7 @@ func TestRequiredRolesFromPlan(t *testing.T) {
 		t.Fatalf("calls %d exposed %v", len(r.Coverage.ReviewCalls), r.Coverage.LLMExposedFiles)
 	}
 	for _, c := range r.Coverage.ReviewCalls {
-		if c.PackID != "review-r1" || c.PackVersion != "2.0.0" || len(c.PackDigest) != 64 {
+		if c.PackID != "review" || c.PackVersion != "2.0.0" || len(c.PackDigest) != 64 {
 			t.Fatalf("call %+v", c)
 		}
 	}
@@ -134,7 +134,7 @@ func TestRequiredRolesFromPlan(t *testing.T) {
 
 	// Optional roles that were skipped keep their reason and do not count;
 	// the verdict still rests on the required roles.
-	states, base = exampleRoleStages(t)
+	states, base = exampleStages(t)
 	states["review.interpret"].facts.Status = "skipped_policy"
 	reason := "no_tool_observations"
 	states["review.interpret"].facts.Reason = &reason
@@ -146,7 +146,7 @@ func TestRequiredRolesFromPlan(t *testing.T) {
 	}
 
 	// Without documents the documents role is not required.
-	states, base = exampleRoleStages(t)
+	states, base = exampleStages(t)
 	states["review.documents"].facts.Required = false
 	_, ai, _ = compose(states, base)
 	if got := taskKeys(ai.RequiredTasks); ai.Status != AIReviewPerformed || !slices.Equal(got, []string{"review.investigate=accepted", "review.verify=accepted"}) {
@@ -156,7 +156,7 @@ func TestRequiredRolesFromPlan(t *testing.T) {
 
 // A plan without a required review task is not_performed, however many
 // optional roles succeeded or were skipped.
-func TestRolePackNoRequiredReviewTaskIsNotPerformed(t *testing.T) {
+func TestNoRequiredReviewTaskIsNotPerformed(t *testing.T) {
 	no := "no_environment_gap"
 	states := map[string]*taskState{
 		"review.environment": {facts: TaskFacts{Key: "review.environment", Status: "skipped_policy", Reason: &no}},
@@ -179,13 +179,13 @@ func TestRolePackNoRequiredReviewTaskIsNotPerformed(t *testing.T) {
 // The builder keeps a stage only if it joins what the report accepted: the
 // upstream artifacts it cites, the go vet observations and, for verify, the
 // candidates of the accepted upstream stages.
-func TestRoleLineageRejected(t *testing.T) {
+func TestReviewLineageRejected(t *testing.T) {
 	cases := map[string]struct {
 		edit func(map[string]*taskState, *Report)
 		key  string
 	}{
 		"altered upstream candidate": {func(s map[string]*taskState, _ *Report) {
-			s["review.investigate"].reviewResult.Role.Candidates[0].Title += "!"
+			s["review.investigate"].reviewResult.Record.Candidates[0].Title += "!"
 		}, "review.verify"},
 		"other discovery artifact": {func(s map[string]*taskState, _ *Report) {
 			s[envdoc.TaskDocuments].decodedSHA[envdoc.MediaType] = domain.Digest([]byte("other"))
@@ -195,7 +195,7 @@ func TestRoleLineageRejected(t *testing.T) {
 			s["review.documents"].facts.Status = "failed"
 		}, "review.investigate"},
 		"verify relabels upstream evidence": {func(s map[string]*taskState, _ *Report) {
-			ev := s["review.verify"].reviewResult.Role.Evidence
+			ev := s["review.verify"].reviewResult.Record.Evidence
 			for i := range ev {
 				if ev[i].Origin == "context" {
 					ev[i].Origin = "caller"
@@ -207,7 +207,7 @@ func TestRoleLineageRejected(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			states, base := exampleRoleStages(t)
+			states, base := exampleStages(t)
 			c.edit(states, &base)
 			r, ai, lim := compose(states, base)
 			if !has(lim, LimReviewLineage+":"+c.key) {

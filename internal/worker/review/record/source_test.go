@@ -54,7 +54,7 @@ func TestExcerptKindsOfOtherLanguages(t *testing.T) {
 		{ex("package.json", "code", "context", 8), false},
 	}
 	for _, c := range role {
-		if err := checkRoleExcerpt(c.e, snapshot, lookup); (err == nil) != c.ok {
+		if err := checkExcerpt(c.e, snapshot, lookup); (err == nil) != c.ok {
 			t.Errorf("role %s %s/%s: %v", c.e.Path, c.e.Kind, c.e.Origin, err)
 		}
 	}

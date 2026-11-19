@@ -61,7 +61,7 @@ func TestReviewInputsOfPythonThroughTheWorkerAndReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := discovery.Wrap(review.RoleHandler{Static: static, Caller: &roleScripted{}}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
+	h, err := discovery.Wrap(review.Handler{Static: static, Caller: &roleScripted{}}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
 	if err != nil {
 		t.Fatal(err)
 	}

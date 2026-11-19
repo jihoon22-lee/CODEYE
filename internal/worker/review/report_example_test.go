@@ -34,7 +34,7 @@ import (
 
 // The report example (examples/report.json, examples/report.md) is the
 // builder's own output for fixtures/modules/input: the real discovery and
-// role-pack handlers run in process with a scripted model caller (no model
+// review handlers run in process with a scripted model caller (no model
 // is contacted) and synthetic analyzer results, so every analysis section is
 // populated. The analyzer diagnostics, the metric and the secret detection
 // are synthetic: no tool ran and the fixture holds no secret. Identities and
@@ -441,7 +441,7 @@ func exampleScript(t *testing.T) map[string]func(int, opencode.Request) opencode
 			"limits": []map[string]any{{"observation_ids": []string{other.ID}, "statement": "Normalize의 호출자와 비교 용도가 입력에 없어 진단의 영향을 판단할 수 없다."}}})
 	}
 	s["verify"] = func(_ int, q opencode.Request) opencode.Reply {
-		in := decodeAs[roleVerifyInput](t, q)
+		in := decodeAs[verifyInput](t, q)
 		var out []map[string]any
 		for _, c := range in.Candidates {
 			if strings.HasPrefix(c.ID, "interpret") {
@@ -570,12 +570,12 @@ func TestReportExample(t *testing.T) {
 	j.RunID, j.AttemptID = "0195f3a0-0000-7000-8000-000000000501", "0195f3a0-0000-7000-8000-000000000502"
 	pinExampleSnapshot(t, &j)
 	ids := &exampleIDs{n: 2}
-	caller := &roleCaller{script: exampleScript(t)}
+	caller := &scriptedCaller{script: exampleScript(t)}
 	// The dependency tasks run against scripted go commands: the root module
 	// is prepared, svc/a cannot reach its registry, svc/b names no
 	// dependency.
 	j.AllowDependencyFetch = true
-	fetched, err := deps.Wrap(RoleHandler{Static: exampleStatic(t), Caller: caller}, deps.Config{CacheRoot: filepath.Join(t.TempDir(), "deps"), GoExecutable: "/opt/go/bin/go"}, deps.Fetchers()...)
+	fetched, err := deps.Wrap(Handler{Static: exampleStatic(t), Caller: caller}, deps.Config{CacheRoot: filepath.Join(t.TempDir(), "deps"), GoExecutable: "/opt/go/bin/go"}, deps.Fetchers()...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,7 +595,7 @@ func TestReportExample(t *testing.T) {
 		}
 		results[task.Key] = h.Run(t.Context(), j, task, runner)
 	}
-	if b, err := os.ReadFile(rolePath(j, "verify")); err == nil && os.Getenv("EXAMPLE_DEBUG") != "" {
+	if b, err := os.ReadFile(recordPath(j, "verify")); err == nil && os.Getenv("EXAMPLE_DEBUG") != "" {
 		t.Logf("%s", b)
 	}
 	in := exampleInput(t, j, h, plan, results, ids)

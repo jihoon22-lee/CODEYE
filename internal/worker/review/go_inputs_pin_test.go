@@ -77,17 +77,17 @@ var goBuildFilesTree = map[string]string{
 
 func pinHash(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:])[:16] }
 
-// roleRequests runs every role-pack role and hashes every request.
-func roleRequests(t *testing.T, j analysis.Job, static analysis.Handler, script map[string]func(int, opencode.Request) opencode.Reply) []string {
+// reviewRequests runs every review role and hashes every request.
+func reviewRequests(t *testing.T, j analysis.Job, static analysis.Handler, script map[string]func(int, opencode.Request) opencode.Reply) []string {
 	t.Helper()
-	return roleRequestsWith(t, j, RoleHandler{Static: static}, script)
+	return reviewRequestsWith(t, j, Handler{Static: static}, script)
 }
 
-// roleRequestsWith is roleRequests with a configured role handler (call
+// reviewRequestsWith is reviewRequests with a configured role handler (call
 // ceiling); slices the ceiling refuses end budget_exhausted.
-func roleRequestsWith(t *testing.T, j analysis.Job, rh RoleHandler, script map[string]func(int, opencode.Request) opencode.Reply) []string {
+func reviewRequestsWith(t *testing.T, j analysis.Job, rh Handler, script map[string]func(int, opencode.Request) opencode.Reply) []string {
 	t.Helper()
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	rh.Caller = f
 	plan, res := runRoleWith(t, j, rh, "1.27.4")
 	for _, p := range plan {
@@ -174,7 +174,7 @@ func goPinJobs(t *testing.T) map[string]analysis.Job {
 	}
 }
 
-var pinnedGoRole = map[string][]string{
+var pinnedGo = map[string][]string{
 	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "environment e44b353d678a2b55 0f35e48b1837906c", "documents 6cd0e37915e181ac 96f75808572d08e4", "investigate 0811ea5731925461 0abc469c5f262c1d", "verify 1237fcad33c639ca e0f027c525ea4547"},
 	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment e44b353d678a2b55 025087360cbe1b62", "documents 6cd0e37915e181ac 1c7ade98e8c6af78", "investigate 0811ea5731925461 507e8ddbf32be184", "interpret 7031ffa47de47a37 6c30210249e618c0", "verify 1237fcad33c639ca 739ea4868928c8e1"},
 	// The worst case has more code than the overview offers, so it plans
@@ -216,25 +216,25 @@ var pinnedGoRole = map[string][]string{
 }
 
 func TestGoReviewInputsUnchanged(t *testing.T) {
-	gotRole := map[string][]string{
-		"modules":        roleRequests(t, fixIdentity(modulesJob(t, nil)), vetStub{obs: gatewayObservation}, validScript(t)),
-		"modules-worst":  roleRequests(t, fixIdentity(worstCaseJob(t, nil)), vetStub{obs: worstCaseObservations}, maxScript(t)),
-		"go-build-files": roleRequests(t, fixIdentity(treeJob(t, goBuildFilesTree)), vetStub{}, goBuildFilesScript(t)),
-		"modules-worst-screened": roleRequestsWith(t, fixIdentity(worstCaseJob(t, nil)),
-			RoleHandler{Static: secretsStub{obs: worstCaseObservations}, MaxCalls: DefaultMaxCalls}, maxScript(t)),
+	got := map[string][]string{
+		"modules":        reviewRequests(t, fixIdentity(modulesJob(t, nil)), vetStub{obs: gatewayObservation}, validScript(t)),
+		"modules-worst":  reviewRequests(t, fixIdentity(worstCaseJob(t, nil)), vetStub{obs: worstCaseObservations}, maxScript(t)),
+		"go-build-files": reviewRequests(t, fixIdentity(treeJob(t, goBuildFilesTree)), vetStub{}, goBuildFilesScript(t)),
+		"modules-worst-screened": reviewRequestsWith(t, fixIdentity(worstCaseJob(t, nil)),
+			Handler{Static: secretsStub{obs: worstCaseObservations}, MaxCalls: DefaultMaxCalls}, maxScript(t)),
 	}
 	if os.Getenv("CODEYE_PRINT_PINS") == "1" {
-		for _, name := range sortedKeys(gotRole) {
-			t.Logf("role %q: %q,", name, gotRole[name])
+		for _, name := range sortedKeys(got) {
+			t.Logf("role %q: %q,", name, got[name])
 		}
 	}
-	for name, want := range pinnedGoRole {
-		if !slices.Equal(gotRole[name], want) {
-			t.Errorf("review requests on %s changed:\n got %q\nwant %q", name, gotRole[name], want)
+	for name, want := range pinnedGo {
+		if !slices.Equal(got[name], want) {
+			t.Errorf("review requests on %s changed:\n got %q\nwant %q", name, got[name], want)
 		}
 	}
-	if len(pinnedGoRole) != len(gotRole) {
-		t.Fatalf("pins cover %d/%d fixtures", len(pinnedGoRole), len(gotRole))
+	if len(pinnedGo) != len(got) {
+		t.Fatalf("pins cover %d/%d fixtures", len(pinnedGo), len(got))
 	}
 }
 

@@ -20,7 +20,7 @@ func requiredReviewKeys(states map[string]*taskState) (required, optional []stri
 		}
 	}
 	order := map[string]int{}
-	for i, stage := range record.RoleStages {
+	for i, stage := range record.Stages {
 		order["review."+stage] = i
 	}
 	sort.Slice(keys, func(a, b int) bool {

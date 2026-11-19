@@ -10,16 +10,16 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
-	rolepack "github.com/jihoon22-lee/CODEYE/prompts/review-r1"
+	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review"
 )
 
-// exampleDir holds the five role-pack stage records the worker writes for
+// exampleDir holds the five review stage records the worker writes for
 // fixtures/modules/input with the scripted caller (validScript) and one
 // synthetic go vet observation. They are indented copies of the exact record
 // bytes (json.Compact restores them), so an upstream sha256 of a review stage
 // is the digest of its compacted sibling. CODEYE_UPDATE_EXAMPLES=1 rewrites
 // them; otherwise a regenerated run must match byte for byte.
-const exampleDir = "../../../examples/review-r1"
+const exampleDir = "../../../examples/review"
 
 // Fixed identities make the run reproducible (source_fixed_at changes the
 // real snapshot digest on every acquisition).
@@ -29,10 +29,10 @@ const (
 	exampleAttempt  = "0195f3a0-0000-7000-8000-000000000026"
 )
 
-func TestRolePackExampleRecords(t *testing.T) {
+func TestReviewExampleRecords(t *testing.T) {
 	j := modulesJob(t, nil)
 	j.Snapshot.Digest, j.RunID, j.AttemptID = exampleSnapshot, exampleRun, exampleAttempt
-	f := &roleCaller{script: validScript(t)}
+	f := &scriptedCaller{script: validScript(t)}
 	plan, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	for _, r := range rows(plan, res) {
 		if r.status != "succeeded" {
@@ -49,7 +49,7 @@ func TestRolePackExampleRecords(t *testing.T) {
 	}
 	stages := []string{"environment", "documents", "investigate", "interpret", "verify"}
 	for _, stage := range stages {
-		raw := mustRead(t, rolePath(j, stage))
+		raw := mustRead(t, recordPath(j, stage))
 		var pretty bytes.Buffer
 		if err := json.Indent(&pretty, raw, "", "  "); err != nil {
 			t.Fatal(err)
@@ -76,8 +76,8 @@ func TestRolePackExampleRecords(t *testing.T) {
 		if err := json.Compact(&compact, have); err != nil || !bytes.Equal(compact.Bytes(), raw) {
 			t.Fatalf("%s does not compact to the record bytes", path)
 		}
-		rec := readRole(t, j, stage)
-		sel, err := rolepack.For(stage, []string{"go"})
+		rec := readRecord(t, j, stage)
+		sel, err := reviewpack.For(stage, []string{"go"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -90,7 +90,7 @@ func TestRolePackExampleRecords(t *testing.T) {
 			}
 		}
 		for _, u := range rec.Upstream {
-			if p, ok := strings.CutPrefix(u.Source, "review."); ok && u.State == "accepted" && u.SHA256 != domain.Digest(mustRead(t, rolePath(j, p))) {
+			if p, ok := strings.CutPrefix(u.Source, "review."); ok && u.State == "accepted" && u.SHA256 != domain.Digest(mustRead(t, recordPath(j, p))) {
 				t.Fatalf("%s upstream %s sha", stage, u.Source)
 			}
 		}

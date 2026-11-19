@@ -1,7 +1,6 @@
-// Package rolepack embeds the role pack (review-r1), the default review
-// pack. The node operator may select the legacy pack instead (codeye agent
-// --review-pack review-v1); the legacy pack is not affected by this pack.
-package rolepack
+// Package reviewpack embeds the review instructions: pack.yaml, the common
+// core, the language guides and one file per model role.
+package reviewpack
 
 import (
 	"bufio"
@@ -19,7 +18,7 @@ import (
 //go:embed pack.yaml *.md languages/*.md
 var files embed.FS
 
-// Roles are the model roles of the role pack in plan order.
+// Roles are the model roles of the review in plan order.
 var Roles = []string{"environment", "documents", "investigate", "interpret", "verify"}
 
 var roleFiles = map[string]string{
@@ -52,8 +51,8 @@ func Languages() []string {
 }
 
 // Selection is the instruction text of one role with the pack identity and
-// the digest over pack.yaml and the selected files (the legacy pack's algorithm:
-// sha256 over path NUL content NUL in UTF-8 path order).
+// the digest over pack.yaml and the selected files (sha256 over path NUL
+// content NUL in UTF-8 path order).
 type Selection struct {
 	ID, Version string
 	Text        string

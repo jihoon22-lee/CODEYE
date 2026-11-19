@@ -324,7 +324,7 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 			}
 			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, CredentialFile: h.ModelCredentialFile, Timeout: timeout,
 				Offline: h.Offline, CABundle: h.CABundle}
-			reviewed := review.RoleHandler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
+			reviewed := review.Handler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
 			// Dependency tasks run after discovery and before the analyzers;
 			// review plans only through the static handler and never sees them.
 			fetched, err := deps.Wrap(reviewed, depCfg, deps.Fetchers()...)

@@ -14,7 +14,7 @@ import (
 // field (strict decoding). Each
 // attempt's codes are recorded, the record keeps no rejected note and the
 // downstream role learns only that the stage failed.
-func TestRolePackEnvironmentOutputRules(t *testing.T) {
+func TestReviewEnvironmentOutputRules(t *testing.T) {
 	cases := map[string]struct {
 		note func(own envReqInput) map[string]any
 		code string
@@ -52,9 +52,9 @@ func TestRolePackEnvironmentOutputRules(t *testing.T) {
 				note["affected_checks"], note["still_checkable"], note["needed_observation"] = "svc/b의 go vet을 수행할 수 없다.", "다른 모듈은 검사할 수 있다.", "go 1.30 이상 관측"
 				return asJSON(map[string]any{"notes": []map[string]any{note}})
 			}
-			f := &roleCaller{script: script}
+			f := &scriptedCaller{script: script}
 			_, res := runRole(t, j, vetStub{}, f, "1.27.4")
-			env := readRole(t, j, "environment")
+			env := readRecord(t, j, "environment")
 			if res["review.environment"].Status != domain.TaskFailed || env.Accepted() || len(env.EnvironmentNotes) != 0 || len(env.Calls) != 2 {
 				t.Fatalf("%+v %+v", res["review.environment"], env)
 			}
@@ -65,7 +65,7 @@ func TestRolePackEnvironmentOutputRules(t *testing.T) {
 				t.Fatalf("non-strict output accepted: %+v", env.Calls[0])
 			}
 			// Downstream sees the failure, never the rejected notes.
-			if inv := readRole(t, j, "investigate"); !slices.Contains(inv.Limitations, "upstream_environment_failed") || res["env.discover"].Status != domain.TaskSucceeded {
+			if inv := readRecord(t, j, "investigate"); !slices.Contains(inv.Limitations, "upstream_environment_failed") || res["env.discover"].Status != domain.TaskSucceeded {
 				t.Fatalf("investigate %v", inv.Limitations)
 			}
 		})

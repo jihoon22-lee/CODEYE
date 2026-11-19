@@ -71,7 +71,7 @@ type envInput struct {
 	Observations []envdoc.Observation `json:"observations"`
 	Verdicts     []envdoc.Verdict     `json:"verdicts"`
 	Limitations  []string             `json:"limitations"`
-	Repair       *roleRepair          `json:"repair,omitempty"`
+	Repair       *outputRepair        `json:"repair,omitempty"`
 }
 
 func (s *roleStage) environment() analysis.TaskResult {
@@ -227,7 +227,7 @@ func (s *roleStage) environment() analysis.TaskResult {
 		}
 		return errs
 	}
-	input := func(r *roleRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
 	if r := s.exchange(contract, input, parse); r != nil {
 		return *r
 	}
@@ -264,7 +264,7 @@ type docsInput struct {
 	Modules     []envdoc.ModuleDocs `json:"modules"`
 	Overlapping []envdoc.Overlap    `json:"overlapping_guidance"`
 	Limitations []string            `json:"limitations"`
-	Repair      *roleRepair         `json:"repair,omitempty"`
+	Repair      *outputRepair       `json:"repair,omitempty"`
 }
 
 type docsOutput struct {
@@ -392,7 +392,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 		return errs
 	}
 	in = withDocuments(sent)
-	input := func(r *roleRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
 	if r := s.exchange(docsContract, input, parse); r != nil {
 		return *r
 	}
@@ -438,11 +438,11 @@ type investigateInput struct {
 	Scope       investigateScope   `json:"scope"`
 	Documents   documentsHandoff   `json:"documents"`
 	Environment environmentHandoff `json:"environment"`
-	Repair      *roleRepair        `json:"repair,omitempty"`
+	Repair      *outputRepair      `json:"repair,omitempty"`
 }
 
 // cited returns the document excerpts an accepted documents record cites.
-func citedDocuments(docs record.RoleRecord) []record.Excerpt {
+func citedDocuments(docs record.Record) []record.Excerpt {
 	ids := map[string]bool{}
 	add := func(list []string) {
 		for _, id := range list {
@@ -544,10 +544,10 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	in.Scope.Excerpts = sent
 	s.setEvidence(append(append([]record.Excerpt{}, sent...), docEv...))
 	catalog := catalogOf(s.rec.Evidence)
-	var candidates []record.RoleCandidate
+	var candidates []record.Candidate
 	parse := func(raw json.RawMessage) []string {
 		var out struct {
-			Candidates []record.Candidate `json:"candidates"`
+			Candidates []record.CandidateText `json:"candidates"`
 		}
 		if errs := decodeOutput(raw, &out, "candidates"); errs != nil {
 			return errs
@@ -556,21 +556,21 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		if len(out.Candidates) > 4 {
 			errs = addLim(errs, "too_many_items")
 		}
-		var list []record.RoleCandidate
+		var list []record.Candidate
 		for i, c := range out.Candidates {
 			if c.ID != "" {
 				errs = addLim(errs, "item_schema_invalid")
 			}
 			errs = addLim(errs, candidateErrors(c, catalog)...)
 			c.ID = fmt.Sprintf("investigate_%d", i+1)
-			list = append(list, record.RoleCandidate{Candidate: c, Origin: record.StageInvestigate})
+			list = append(list, record.Candidate{CandidateText: c, Origin: record.StageInvestigate})
 		}
 		if len(errs) == 0 {
 			candidates = list
 		}
 		return errs
 	}
-	input := func(r *roleRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
 	if r := s.exchange(investigateContract, input, parse); r != nil {
 		return *r
 	}
@@ -578,7 +578,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	return s.finish()
 }
 
-func candidateErrors(c record.Candidate, catalog map[string]record.Excerpt) []string {
+func candidateErrors(c record.CandidateText, catalog map[string]record.Excerpt) []string {
 	errs := textErrors(c.Title, c.Condition, c.Impact, c.Improvement, c.Counterpoint)
 	errs = addLim(errs, idErrors(c.Evidence, catalog, 6, "code", "test", "document")...)
 	code := false
@@ -611,7 +611,7 @@ type interpretInput struct {
 		Excerpts    []record.Excerpt `json:"excerpts"`
 		Limitations []string         `json:"limitations"`
 	} `json:"scope"`
-	Repair *roleRepair `json:"repair,omitempty"`
+	Repair *outputRepair `json:"repair,omitempty"`
 }
 
 type hypothesis struct {
@@ -681,7 +681,7 @@ func (s *roleStage) interpret() analysis.TaskResult {
 	for _, o := range in.Observations {
 		given[o.ID] = o
 	}
-	var candidates []record.RoleCandidate
+	var candidates []record.Candidate
 	var limits []record.InterpretationLimit
 	obsErrs := func(ids []string) []string {
 		if len(ids) == 0 || len(ids) > 4 {
@@ -712,9 +712,9 @@ func (s *roleStage) interpret() analysis.TaskResult {
 		if len(out.Hypotheses)+len(out.Limits) == 0 {
 			errs = addLim(errs, "no_items")
 		}
-		var list []record.RoleCandidate
+		var list []record.Candidate
 		for i, h := range out.Hypotheses {
-			c := record.Candidate{Title: h.Title, Condition: h.Condition, Impact: h.Impact, Improvement: h.Improvement, Counterpoint: h.Counterpoint, Evidence: h.Evidence}
+			c := record.CandidateText{Title: h.Title, Condition: h.Condition, Impact: h.Impact, Improvement: h.Improvement, Counterpoint: h.Counterpoint, Evidence: h.Evidence}
 			errs = addLim(errs, candidateErrors(c, catalog)...)
 			errs = addLim(errs, obsErrs(h.ObservationIDs)...)
 			at := false
@@ -727,7 +727,7 @@ func (s *roleStage) interpret() analysis.TaskResult {
 				errs = addLim(errs, "evidence_not_at_observation")
 			}
 			c.ID = fmt.Sprintf("interpret_%d", i+1)
-			list = append(list, record.RoleCandidate{Candidate: c, Origin: record.StageInterpret, ObservationIDs: h.ObservationIDs})
+			list = append(list, record.Candidate{CandidateText: c, Origin: record.StageInterpret, ObservationIDs: h.ObservationIDs})
 		}
 		for _, l := range out.Limits {
 			errs = addLim(errs, textErrors(l.Statement)...)
@@ -738,7 +738,7 @@ func (s *roleStage) interpret() analysis.TaskResult {
 		}
 		return errs
 	}
-	input := func(r *roleRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
 	if r := s.exchange(interpretContract, input, parse); r != nil {
 		return *r
 	}

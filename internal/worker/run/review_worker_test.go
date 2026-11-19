@@ -28,7 +28,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
-// roleScripted answers every role-pack role from the request input alone
+// roleScripted answers every review role from the request input alone
 // (first gap requirement, first code excerpt, first observation, every
 // candidate). Only the model is scripted; it never starts a process or
 // contacts a model. With retry, verify takes three calls: the first trims an
@@ -187,12 +187,12 @@ func reportInput(t *testing.T, fa *fakeAgent, m analysis.ResultManifest, manifes
 	return in
 }
 
-// The role pack through the real worker: discovery → actual go vet → the
+// The review through the real worker: discovery → actual go vet → the
 // five roles with a scripted model, then the report built from the
 // uploaded artifacts with the default registry. "vet finding" adds one file
 // to the root module so go vet reports a real observation and the interpret
 // role, its observation links and the report lineage run on real data.
-func TestRolePackThroughTheWorkerAndReport(t *testing.T) {
+func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 	goExe := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
@@ -233,7 +233,7 @@ func TestRolePackThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			caller := &roleScripted{retry: tc.retry}
-			h, err := discovery.Wrap(review.RoleHandler{Static: vet, Caller: caller}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
+			h, err := discovery.Wrap(review.Handler{Static: vet, Caller: caller}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -332,7 +332,7 @@ func TestRolePackThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
 			}
 			for _, call := range r.Coverage.ReviewCalls {
-				if call.PackID != "review-r1" || call.PackVersion != "2.0.0" {
+				if call.PackID != "review" || call.PackVersion != "2.0.0" {
 					t.Fatalf("call %+v", call)
 				}
 			}
@@ -346,7 +346,7 @@ func TestRolePackThroughTheWorkerAndReport(t *testing.T) {
 				if !slices.Equal(outcomes, []string{"accepted", "output_rejected", "accepted"}) {
 					t.Fatalf("verify calls %v", outcomes)
 				}
-				var rec record.RoleRecord
+				var rec record.Record
 				for cid, body := range fa.artifacts {
 					if fa.media[cid] == "application/vnd.codeye.review+json" && strings.Contains(string(body), `"stage":"verify"`) {
 						if err := json.Unmarshal(body, &rec); err != nil {
@@ -387,7 +387,7 @@ func TestRolePackThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
-			if !strings.Contains(md, "review-r1@2.0.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
+			if !strings.Contains(md, "review@2.0.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
 				t.Fatalf("markdown lacks the pack or the optional row:\n%s", md)
 			}
 		})

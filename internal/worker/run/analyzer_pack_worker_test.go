@@ -48,7 +48,7 @@ type packRun struct {
 }
 
 // runPack runs the production deep-review composition (discovery → the
-// analyzer composite → legacy-pack roles) through the real worker on a small
+// analyzer composite → review roles) through the real worker on a small
 // Go module with a go vet and a staticcheck finding.
 func runPack(t *testing.T, tools map[string]string) packRun {
 	return runPackFiles(t, map[string]string{
@@ -137,7 +137,7 @@ func runPackCatalog(t *testing.T, files map[string]string, tools map[string]stri
 	if catalog != nil {
 		c = catalog(t, c)
 	}
-	h, err := discovery.Wrap(review.RoleHandler{Static: c}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
+	h, err := discovery.Wrap(review.Handler{Static: c}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -84,7 +84,7 @@ func TestExpansionScopeAndBounds(t *testing.T) {
 	j := verifyJob(t, false)
 	catalog := wholeExcerpts(t, j, "store.go")
 	store := catalog[0]
-	cands := []Candidate{{ID: "candidate_1", Evidence: []string{store.ID}}}
+	cands := []CandidateText{{ID: "candidate_1", Evidence: []string{store.ID}}}
 	extra, lims, err := expand(t.Context(), j.Snapshot, j.Scope, catalog, cands)
 	if err != nil || len(extra) != 2 || slices.Contains(lims, limNoCallers) {
 		t.Fatal(extra, lims, err)
@@ -100,7 +100,7 @@ func TestExpansionScopeAndBounds(t *testing.T) {
 		t.Fatal(extra, lims, err)
 	}
 	// No declared function in cited code: nothing to expand.
-	extra, lims, _ = expand(t.Context(), j.Snapshot, j.Scope, catalog, []Candidate{{ID: "candidate_1", Evidence: []string{"ev_unknown"}}})
+	extra, lims, _ = expand(t.Context(), j.Snapshot, j.Scope, catalog, []CandidateText{{ID: "candidate_1", Evidence: []string{"ev_unknown"}}})
 	if len(extra) != 0 || !slices.Contains(lims, limNoSymbol) {
 		t.Fatal(extra, lims)
 	}

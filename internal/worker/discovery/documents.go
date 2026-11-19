@@ -49,7 +49,7 @@ func depth(p string) int { return strings.Count(p, "/") }
 // docs.discover may read in this scope: included regular files of a guidance
 // class inside the scope. Sizes, budget and content checks are decided when
 // the documents are read, so a run can still select none of them. The
-// role pack planner uses it to decide whether the documents role is required.
+// review planner uses it to decide whether the documents role is required.
 func EligibleDocuments(m source.Manifest, scope domain.Scope) []string {
 	s, ok := normalScope(scope)
 	if !ok {

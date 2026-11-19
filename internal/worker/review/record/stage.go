@@ -11,14 +11,11 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// Role records (schema 0.2) are written by the role pack (review-r1, the
-// default pack). They share the media type with 0.1 records; a report registry
-// selects the decoder by schema_version, so 0.1 records keep their exact
-// rules above. Unlike 0.1 records, a role record is not cumulative: it holds
-// only its own stage's calls and binds every upstream input by the SHA-256 of
-// the artifact bytes it read.
+// Review stage records (schema 0.2) are written by the review roles. A
+// record is not cumulative: it holds only its own stage's calls and binds
+// every upstream input by the SHA-256 of the artifact bytes it read.
 const (
-	SchemaVersionRole = "0.2"
+	SchemaVersion = "0.2"
 	// SchemaVersionSlice is a role record of one review slice
 	// (review.investigate.sNNN, review.verify.sNNN): 0.2 plus the required
 	// slice reference. Every other role record stays 0.2, byte for byte.
@@ -40,19 +37,19 @@ const (
 	// or reproducing a defect. The platform rejects it (heuristic check).
 	LimExecutionClaim = "execution_claim_rejected"
 
-	roleMaxEvidence     = 40
-	roleMaxObservations = 16
-	// roleMaxText bounds the JSON-encoded size of one role-pack model text
+	maxEvidence     = 40
+	maxObservations = 16
+	// maxText bounds the JSON-encoded size of one review model text
 	// field, so a downstream request carrying it keeps within the request
 	// budget.
-	roleMaxText = 400
+	maxText = 400
 	// RoleMaxCalls bounds the calls of one stage: the first request, one
 	// repair of rejected output and one retry of a reply that was not JSON.
 	RoleMaxCalls = 3
 )
 
-// RoleStages in plan order.
-var RoleStages = []string{StageEnvironment, StageDocuments, StageInvestigate, StageInterpret, StageVerify}
+// Stages in plan order.
+var Stages = []string{StageEnvironment, StageDocuments, StageInvestigate, StageInterpret, StageVerify}
 
 // PackRef identifies the instruction pack a record was produced with.
 type PackRef struct {
@@ -127,18 +124,18 @@ type InterpretationLimit struct {
 	Statement      string   `json:"statement"`
 }
 
-// RoleCandidate keeps the 0.1 candidate fields (so verification and report
+// Candidate keeps the 0.1 candidate fields (so verification and report
 // findings work unchanged) with its origin stage and, for interpret, the
 // tool observations it is linked to.
-type RoleCandidate struct {
-	Candidate
+type Candidate struct {
+	CandidateText
 	Origin         string   `json:"origin"`
 	ObservationIDs []string `json:"observation_ids,omitempty"`
 }
 
-// RoleCall is one model request of the stage. OutputErrors are the fixed
+// Call is one model request of the stage. OutputErrors are the fixed
 // platform codes the output of this call was rejected with.
-type RoleCall struct {
+type Call struct {
 	Role          string   `json:"role"`
 	Model         string   `json:"model"`
 	Version       string   `json:"opencode_version"`
@@ -161,8 +158,8 @@ type SliceRef struct {
 	Modules []string `json:"modules"`
 }
 
-// RoleRecord is one stage artifact of the role pack.
-type RoleRecord struct {
+// Record is one stage artifact of the review.
+type Record struct {
 	Schema    string  `json:"schema_version"`
 	Pack      PackRef `json:"pack"`
 	Snapshot  string  `json:"snapshot_manifest_digest"`
@@ -182,29 +179,29 @@ type RoleRecord struct {
 	Conflicts        []Conflict            `json:"conflicts,omitempty"`
 	Questions        []Question            `json:"questions,omitempty"`
 	InstructionNotes []InstructionNote     `json:"instruction_notes,omitempty"`
-	Candidates       []RoleCandidate       `json:"candidates,omitempty"`
+	Candidates       []Candidate           `json:"candidates,omitempty"`
 	Limits           []InterpretationLimit `json:"interpretation_limits,omitempty"`
 	Verifications    []Verification        `json:"verifications,omitempty"`
 	Limitations      []string              `json:"limitations"`
-	Calls            []RoleCall            `json:"calls"`
+	Calls            []Call                `json:"calls"`
 }
 
 // Accepted reports whether the record carries an accepted stage result.
-func (r RoleRecord) Accepted() bool { return r.Outcome == OutcomeAccepted }
+func (r Record) Accepted() bool { return r.Outcome == OutcomeAccepted }
 
 var (
-	roleCandidateID = regexp.MustCompile(`^(investigate|interpret)_[1-4]$`)
+	candidateIDRule = regexp.MustCompile(`^(investigate|interpret)_[1-4]$`)
 	moduleRef       = regexp.MustCompile(`^(cpp|go|javascript|python|rust):(\.|[^:\x00-\x1f]+)$`)
 	requirementID   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}@[^@\x00-\x1f]+$`)
 	observationID   = regexp.MustCompile(`^obs_[0-9a-f]{20}$`)
 	taskKey         = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
 	packID          = regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`)
-	roleKinds       = map[string]bool{"code": true, "test": true, "document": true, "manifest": true}
-	roleOrigins     = map[string]bool{"": true, "context": true, "caller": true, "test": true, "observation": true}
+	kinds           = map[string]bool{"code": true, "test": true, "document": true, "manifest": true}
+	origins         = map[string]bool{"": true, "context": true, "caller": true, "test": true, "observation": true}
 	// Upstream sources each stage may name. Interpret names analyzer tasks:
 	// any task key outside the discovery and review namespaces (docs/ANALYZERS.md);
 	// the report binds each to that task's accepted observations artifact.
-	roleSources = map[string][]string{
+	stageSources = map[string][]string{
 		StageEnvironment: {"env.discover"},
 		StageDocuments:   {"docs.discover"},
 		StageInvestigate: {"review.environment", "review.documents"},
@@ -223,10 +220,10 @@ var executionClaim = regexp.MustCompile(`(재현|실행|통과)(됨|된 것|되�
 // reproduction the platform never performed.
 func ClaimsExecution(s string) bool { return executionClaim.MatchString(s) }
 
-// RoleText bounds one role-pack model text field (JSON-encoded size, credentials,
+// ModelText bounds one review model text field (JSON-encoded size, credentials,
 // execution claims).
-func RoleText(s string) bool {
-	return SafeText(s) && JSONLen(s) <= roleMaxText && !ClaimsExecution(s)
+func ModelText(s string) bool {
+	return SafeText(s) && JSONLen(s) <= maxText && !ClaimsExecution(s)
 }
 
 // JSONLen is the size of s encoded as a JSON string by encoding/json
@@ -251,24 +248,24 @@ func DocumentDir(p string) string {
 	return d
 }
 
-// DecodeRole strictly parses and validates a role record.
-func DecodeRole(body []byte, want Expect) (RoleRecord, error) {
-	var r RoleRecord
+// Decode strictly parses and validates a role record.
+func Decode(body []byte, want Expect) (Record, error) {
+	var r Record
 	if len(body) > MaxBytes {
-		return RoleRecord{}, invalid("record too large")
+		return Record{}, invalid("record too large")
 	}
 	if err := domain.DecodeStrict(body, &r); err != nil {
-		return RoleRecord{}, invalid("not strict JSON: %v", err)
+		return Record{}, invalid("not strict JSON: %v", err)
 	}
-	if err := ValidateRole(r, want); err != nil {
-		return RoleRecord{}, err
+	if err := Validate(r, want); err != nil {
+		return Record{}, err
 	}
 	return r, nil
 }
 
-// MarshalRole validates before encoding.
-func MarshalRole(r RoleRecord, want Expect) ([]byte, error) {
-	if err := ValidateRole(r, want); err != nil {
+// Marshal validates before encoding.
+func Marshal(r Record, want Expect) ([]byte, error) {
+	if err := Validate(r, want); err != nil {
 		return nil, err
 	}
 	b, err := json.Marshal(r)
@@ -278,12 +275,12 @@ func MarshalRole(r RoleRecord, want Expect) ([]byte, error) {
 	return b, nil
 }
 
-// ValidateRole checks a role record against the attempt and snapshot manifest.
+// Validate checks a role record against the attempt and snapshot manifest.
 // Model content is checked again with the worker's rules, so a decoder never
 // accepts what the worker would have rejected.
-func ValidateRole(r RoleRecord, want Expect) error {
+func Validate(r Record, want Expect) error {
 	switch r.Schema {
-	case SchemaVersionRole:
+	case SchemaVersion:
 		if r.Slice != nil || want.Slice != "" {
 			return invalid("slice reference on a whole-run record")
 		}
@@ -295,7 +292,7 @@ func ValidateRole(r RoleRecord, want Expect) error {
 		return invalid("schema_version")
 	}
 	switch {
-	case !slices.Contains(RoleStages, r.Stage) || (want.Stage != "" && want.Stage != r.Stage):
+	case !slices.Contains(Stages, r.Stage) || (want.Stage != "" && want.Stage != r.Stage):
 		return invalid("stage")
 	case !packID.MatchString(r.Pack.ID) || !version.MatchString(r.Pack.Version):
 		return invalid("pack identity")
@@ -305,7 +302,7 @@ func ValidateRole(r RoleRecord, want Expect) error {
 		return invalid("record belongs to another snapshot or attempt")
 	case r.Upstream == nil || r.Evidence == nil || r.Observations == nil || r.Limitations == nil || r.Calls == nil:
 		return invalid("missing list")
-	case len(r.Evidence) > roleMaxEvidence || len(r.Observations) > roleMaxObservations:
+	case len(r.Evidence) > maxEvidence || len(r.Observations) > maxObservations:
 		return invalid("input size")
 	case !codes(r.Limitations):
 		return invalid("limitations")
@@ -327,7 +324,7 @@ func ValidateRole(r RoleRecord, want Expect) error {
 	}
 	catalog := map[string]Excerpt{}
 	for _, e := range r.Evidence {
-		if err := checkRoleExcerpt(e, r.Snapshot, want.Lookup); err != nil {
+		if err := checkExcerpt(e, r.Snapshot, want.Lookup); err != nil {
 			return err
 		}
 		if _, dup := catalog[e.ID]; dup {
@@ -349,10 +346,10 @@ func ValidateRole(r RoleRecord, want Expect) error {
 	if err := checkStageContent(r, catalog, observations); err != nil {
 		return err
 	}
-	return checkRoleCalls(r)
+	return checkCalls(r)
 }
 
-// analyzerSource marks the interpret stage's upstream rule in roleSources.
+// analyzerSource marks the interpret stage's upstream rule in stageSources.
 const analyzerSource = "(analyzer task)"
 
 // Review slices (docs/REVIEW.md#모듈-단위-검토-분할).
@@ -393,7 +390,7 @@ func ValidModuleRef(id string) bool {
 // checkSlice validates the slice reference of a 0.3 record: an investigate
 // or verify stage of the expected slice, with one to MaxSliceModules sorted
 // distinct module IDs.
-func checkSlice(r RoleRecord, want Expect) error {
+func checkSlice(r Record, want Expect) error {
 	s := r.Slice
 	switch {
 	case s == nil || s.Modules == nil:
@@ -416,9 +413,9 @@ func checkSlice(r RoleRecord, want Expect) error {
 // upstreamSources are the sources a record's stage may name: a slice
 // investigate also reads review.scope; a slice verify reads the documents
 // record, its own slice's investigate record and review.scope.
-func upstreamSources(r RoleRecord) []string {
+func upstreamSources(r Record) []string {
 	if r.Slice == nil {
-		return roleSources[r.Stage]
+		return stageSources[r.Stage]
 	}
 	if r.Stage == StageInvestigate {
 		return []string{"review.environment", "review.documents", TaskScope}
@@ -433,7 +430,7 @@ func AnalyzerTaskKey(key string) bool {
 	return taskKey.MatchString(key) && key != "env.discover" && key != "docs.discover" && !strings.HasPrefix(key, "review.") && !strings.HasPrefix(key, "deps.")
 }
 
-func checkUpstream(r RoleRecord) error {
+func checkUpstream(r Record) error {
 	seen := map[string]bool{}
 	for _, u := range r.Upstream {
 		allowed := false
@@ -460,11 +457,11 @@ func checkUpstream(r RoleRecord) error {
 	return nil
 }
 
-func checkRoleExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)) error {
+func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)) error {
 	switch {
 	case domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.SHA256) || e.Start < 1 || e.End < e.Start || e.End-e.Start+1 > 80:
 		return invalid("evidence location")
-	case !roleKinds[e.Kind] || !roleOrigins[e.Origin] || e.Text != "" || (e.Symbol != "" && !symbol.MatchString(e.Symbol)):
+	case !kinds[e.Kind] || !origins[e.Origin] || e.Text != "" || (e.Symbol != "" && !symbol.MatchString(e.Symbol)):
 		return invalid("evidence attributes")
 	case (e.Kind == "code" || e.Kind == "test") && SourceKind(e.Path) != e.Kind:
 		return invalid("evidence kind")
@@ -505,7 +502,7 @@ func docsCover(ids []string, catalog map[string]Excerpt, scope string) bool {
 	return true
 }
 
-func checkStageContent(r RoleRecord, catalog map[string]Excerpt, observations map[string]ObservationRef) error {
+func checkStageContent(r Record, catalog map[string]Excerpt, observations map[string]ObservationRef) error {
 	empty := func(n ...int) bool {
 		for _, v := range n {
 			if v != 0 {
@@ -542,7 +539,7 @@ func checkStageContent(r RoleRecord, catalog map[string]Excerpt, observations ma
 	}
 	for _, n := range r.EnvironmentNotes {
 		if !moduleRef.MatchString(n.Module) || n.RequirementIDs == nil || n.EvidenceIDs == nil || len(n.RequirementIDs) > 4 ||
-			!RoleText(n.AffectedChecks) || !RoleText(n.StillCheckable) || !RoleText(n.NeededObservation) {
+			!ModelText(n.AffectedChecks) || !ModelText(n.StillCheckable) || !ModelText(n.NeededObservation) {
 			return invalid("environment note")
 		}
 		_, dir, _ := strings.Cut(n.Module, ":")
@@ -562,12 +559,12 @@ func checkStageContent(r RoleRecord, catalog map[string]Excerpt, observations ma
 		}
 	}
 	for _, c := range r.Contracts {
-		if !RoleText(c.Statement) || !ValidScopePath(c.AppliesTo) || !refs(c.EvidenceIDs, catalog, 4, "document") || !docsCover(c.EvidenceIDs, catalog, c.AppliesTo) {
+		if !ModelText(c.Statement) || !ValidScopePath(c.AppliesTo) || !refs(c.EvidenceIDs, catalog, 4, "document") || !docsCover(c.EvidenceIDs, catalog, c.AppliesTo) {
 			return invalid("contract")
 		}
 	}
 	for _, c := range r.Conflicts {
-		if !RoleText(c.Summary) || !RoleText(c.Impact) || !ValidScopePath(c.Scope) || !refs(c.FirstEvidence, catalog, 3, "document") || !refs(c.SecondEvidence, catalog, 3, "document") ||
+		if !ModelText(c.Summary) || !ModelText(c.Impact) || !ValidScopePath(c.Scope) || !refs(c.FirstEvidence, catalog, 3, "document") || !refs(c.SecondEvidence, catalog, 3, "document") ||
 			!docsCover(c.FirstEvidence, catalog, c.Scope) || !docsCover(c.SecondEvidence, catalog, c.Scope) {
 			return invalid("conflict")
 		}
@@ -580,25 +577,25 @@ func checkStageContent(r RoleRecord, catalog map[string]Excerpt, observations ma
 		}
 	}
 	for _, q := range r.Questions {
-		if !RoleText(q.Question) || !ValidScopePath(q.AppliesTo) || !refs(q.EvidenceIDs, catalog, 4, "document") || !docsCover(q.EvidenceIDs, catalog, q.AppliesTo) {
+		if !ModelText(q.Question) || !ValidScopePath(q.AppliesTo) || !refs(q.EvidenceIDs, catalog, 4, "document") || !docsCover(q.EvidenceIDs, catalog, q.AppliesTo) {
 			return invalid("question")
 		}
 	}
 	for _, n := range r.InstructionNotes {
-		if !RoleText(n.Note) || !refs(n.EvidenceIDs, catalog, 3, "document") {
+		if !ModelText(n.Note) || !refs(n.EvidenceIDs, catalog, 3, "document") {
 			return invalid("instruction note")
 		}
 	}
 	counts := map[string]int{}
 	for _, c := range r.Candidates {
 		counts[c.Origin]++
-		if c.ID != fmt.Sprintf("%s_%d", c.Origin, counts[c.Origin]) || !roleCandidateID.MatchString(c.ID) {
+		if c.ID != fmt.Sprintf("%s_%d", c.Origin, counts[c.Origin]) || !candidateIDRule.MatchString(c.ID) {
 			return invalid("candidate id")
 		}
 		if (r.Stage == StageInvestigate || r.Stage == StageInterpret) && c.Origin != r.Stage {
 			return invalid("candidate origin")
 		}
-		if !CandidateTextOK(c.Candidate) || !refs(c.Evidence, catalog, 6, "code", "test", "document") || !hasKind(c.Evidence, catalog, "code") {
+		if !CandidateTextOK(c.CandidateText) || !refs(c.Evidence, catalog, 6, "code", "test", "document") || !hasKind(c.Evidence, catalog, "code") {
 			return invalid("candidate %s", c.ID)
 		}
 		if (c.Origin == StageInterpret) != (len(c.ObservationIDs) > 0) || len(c.ObservationIDs) > 4 {
@@ -637,7 +634,7 @@ func checkStageContent(r RoleRecord, catalog map[string]Excerpt, observations ma
 		}
 	}
 	for _, l := range r.Limits {
-		if !RoleText(l.Statement) || len(l.ObservationIDs) == 0 || len(l.ObservationIDs) > 4 {
+		if !ModelText(l.Statement) || len(l.ObservationIDs) == 0 || len(l.ObservationIDs) > 4 {
 			return invalid("interpretation limit")
 		}
 		for i, id := range l.ObservationIDs {
@@ -649,12 +646,12 @@ func checkStageContent(r RoleRecord, catalog map[string]Excerpt, observations ma
 	return nil
 }
 
-// CandidateTextOK bounds the prose of a role-pack candidate.
-func CandidateTextOK(c Candidate) bool {
-	return RoleText(c.Title) && RoleText(c.Condition) && RoleText(c.Impact) && RoleText(c.Improvement) && RoleText(c.Counterpoint)
+// CandidateTextOK bounds the prose of a review candidate.
+func CandidateTextOK(c CandidateText) bool {
+	return ModelText(c.Title) && ModelText(c.Condition) && ModelText(c.Impact) && ModelText(c.Improvement) && ModelText(c.Counterpoint)
 }
 
-func checkRoleCalls(r RoleRecord) error {
+func checkCalls(r Record) error {
 	if len(r.Calls) > RoleMaxCalls {
 		return invalid("too many calls")
 	}

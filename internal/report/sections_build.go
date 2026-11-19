@@ -91,8 +91,8 @@ func (c sectionContext) discovery(key string) (string, *envdoc.Document) {
 	return DiscoveryMissing, nil
 }
 
-// model tells whether the role-pack role key ran and its record was kept.
-func (c sectionContext) model(key string) (ModelInterpretation, *record.RoleRecord) {
+// model tells whether the review role key ran and its record was kept.
+func (c sectionContext) model(key string) (ModelInterpretation, *record.Record) {
 	m := ModelInterpretation{TaskKey: key, State: ModelNotPerformed}
 	st := c.states[key]
 	if st != nil {
@@ -111,17 +111,17 @@ func (c sectionContext) model(key string) (ModelInterpretation, *record.RoleReco
 		m.Reason = strPtr(reason)
 	case st.rejected:
 		m.Reason = strPtr("result_rejected")
-	case !roleAccepted(st):
+	case !reviewAccepted(st):
 		m.Reason = strPtr("result_missing")
 	default:
 		m.State = ModelPerformed
-		return m, st.reviewResult.Role
+		return m, st.reviewResult.Record
 	}
 	return m, nil
 }
 
 // evidenceOf carries the catalog entries the section's statements cite.
-func evidenceOf(rec *record.RoleRecord, lists ...[]string) []SectionEvidence {
+func evidenceOf(rec *record.Record, lists ...[]string) []SectionEvidence {
 	out := []SectionEvidence{}
 	if rec == nil {
 		return out
@@ -170,7 +170,7 @@ func (c sectionContext) environment() *EnvironmentSection {
 		}
 		s.Limitations = append(s.Limitations, doc.Limitations...)
 	}
-	var rec *record.RoleRecord
+	var rec *record.Record
 	if deps := c.dependencies(); len(deps) > 0 {
 		s.Dependencies = deps
 	}
@@ -206,7 +206,7 @@ func (c sectionContext) documents() *DocumentsSection {
 		}
 		s.Limitations = append(s.Limitations, doc.Limitations...)
 	}
-	var rec *record.RoleRecord
+	var rec *record.Record
 	s.Model, rec = c.model("review.documents")
 	var cited [][]string
 	if rec != nil {
@@ -467,8 +467,8 @@ func (c sectionContext) screen() string {
 		switch rr := st.reviewResult; {
 		case rr == nil || st.rejected:
 			continue
-		case rr.Role != nil:
-			lims, decoded = rr.Role.Limitations, decoded || len(rr.Role.Calls) > 0
+		case rr.Record != nil:
+			lims, decoded = rr.Record.Limitations, decoded || len(rr.Record.Calls) > 0
 		}
 		withheld = withheld || slices.Contains(lims, "secret_files_withheld")
 		unscreened = unscreened || slices.Contains(lims, "model_input_not_secret_screened")
@@ -523,10 +523,10 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 		bytes := 0
 		for _, k := range c.keys {
 			st := c.states[k]
-			if !strings.HasPrefix(k, "review.") || st.rejected || st.reviewResult == nil || st.reviewResult.Role == nil {
+			if !strings.HasPrefix(k, "review.") || st.rejected || st.reviewResult == nil || st.reviewResult.Record == nil {
 				continue
 			}
-			for _, call := range st.reviewResult.Role.Calls {
+			for _, call := range st.reviewResult.Record.Calls {
 				bytes += call.RequestBytes
 			}
 		}
@@ -543,8 +543,8 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 			s.FindingIDs = append(s.FindingIDs, f.ID)
 		}
 	}
-	if st := c.states["review.interpret"]; roleAccepted(st) {
-		for _, l := range st.reviewResult.Role.Limits {
+	if st := c.states["review.interpret"]; reviewAccepted(st) {
+		for _, l := range st.reviewResult.Record.Limits {
 			s.Limits = append(s.Limits, InterpretationLimit{ObservationIDs: append([]string{}, l.ObservationIDs...), Statement: l.Statement})
 		}
 	}

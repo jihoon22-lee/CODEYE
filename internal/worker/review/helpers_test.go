@@ -128,16 +128,16 @@ func gatewayObservation(j analysis.Job) []govet.Observation {
 		RawRef: govet.RawRef{Execution: "go.vet", Stream: "stdout", StreamSHA256: strings.Repeat("a", 64), JSONPointer: "/example.test~1w15/unusedresult/0", ByteStart: 0, ByteEnd: 10}, PackageKey: "example.test/w15"}}
 }
 
-// roleCaller scripts the model per role; n counts calls of that role. It never
+// scriptedCaller scripts the model per role; n counts calls of that role. It never
 // starts a process or contacts a model.
-type roleCaller struct {
+type scriptedCaller struct {
 	mu       sync.Mutex
 	requests []opencode.Request
 	byRole   map[string]int
 	script   map[string]func(n int, q opencode.Request) opencode.Reply
 }
 
-func (f *roleCaller) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
+func (f *scriptedCaller) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.byRole == nil {
@@ -160,7 +160,7 @@ func (f *roleCaller) Review(_ context.Context, _ executor.Runner, q opencode.Req
 	return r
 }
 
-func (f *roleCaller) calls(role string) int {
+func (f *scriptedCaller) calls(role string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.byRole[role]
@@ -201,7 +201,7 @@ func excerptID(list []record.Excerpt, p string) string {
 	return ""
 }
 
-// validScript returns valid outputs for every role-pack role on the modules
+// validScript returns valid outputs for every review role on the modules
 // fixture.
 func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Reply {
 	return map[string]func(int, opencode.Request) opencode.Reply{
@@ -249,7 +249,7 @@ func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.R
 				"limits": []map[string]any{}})
 		},
 		"verify": func(_ int, q opencode.Request) opencode.Reply {
-			in := decodeAs[roleVerifyInput](t, q)
+			in := decodeAs[verifyInput](t, q)
 			var out []map[string]any
 			for _, c := range in.Candidates {
 				out = append(out, verdict(c.ID, "inconclusive", func(m map[string]any) {
@@ -268,18 +268,18 @@ func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.R
 // review.scope or a slice task).
 func wholeRunRole(key string) bool {
 	role, ok := strings.CutPrefix(key, "review.")
-	return ok && slices.Contains(record.RoleStages, role)
+	return ok && slices.Contains(record.Stages, role)
 }
 
 // runRole plans and runs the deep-review composition (discovery → static →
-// role pack) with an injected node observation.
+// review) with an injected node observation.
 func runRole(t *testing.T, j analysis.Job, static analysis.Handler, caller Caller, goVersion string) ([]analysis.TaskSpec, map[string]analysis.TaskResult) {
 	t.Helper()
-	return runRoleWith(t, j, RoleHandler{Static: static, Caller: caller}, goVersion)
+	return runRoleWith(t, j, Handler{Static: static, Caller: caller}, goVersion)
 }
 
 // runRoleWith is runRole with a configured role handler (call ceiling).
-func runRoleWith(t *testing.T, j analysis.Job, rh RoleHandler, goVersion string) ([]analysis.TaskSpec, map[string]analysis.TaskResult) {
+func runRoleWith(t *testing.T, j analysis.Job, rh Handler, goVersion string) ([]analysis.TaskSpec, map[string]analysis.TaskResult) {
 	t.Helper()
 	h, err := discovery.Wrap(rh, discovery.Config{Observer: discovery.StaticObserver{Versions: map[string]string{"go": goVersion}}})
 	if err != nil {
@@ -296,16 +296,16 @@ func runRoleWith(t *testing.T, j analysis.Job, rh RoleHandler, goVersion string)
 	return plan, out
 }
 
-func readRole(t *testing.T, j analysis.Job, stage string) record.RoleRecord {
+func readRecord(t *testing.T, j analysis.Job, stage string) record.Record {
 	t.Helper()
-	b, err := os.ReadFile(rolePath(j, stage))
+	b, err := os.ReadFile(recordPath(j, stage))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(b), `"text":`) {
 		t.Fatal("record stores source text")
 	}
-	r, err := record.DecodeRole(b, expectRole(j, stage))
+	r, err := record.Decode(b, expectStage(j, stage))
 	if err != nil {
 		t.Fatal(stage, err)
 	}

@@ -125,7 +125,7 @@ func TestPullRequestChangedFilesFirst(t *testing.T) {
 	}
 }
 
-// A pull-request run end to end through the role pack: the overview
+// A pull-request run end to end through the review: the overview
 // investigate request offers the changed files first, review.scope records
 // the pull-request order and labels (and the decoder accepts them), and no
 // file is sent twice.
@@ -135,8 +135,8 @@ func TestPullRequestRunReviewsChangedFilesFirst(t *testing.T) {
 	last := base.Rest[len(base.Rest)-1].Path
 	changed := []string{last}
 	j.PullRequest = &domain.PullRequestJob{Number: 7, BaseSHA: strings.Repeat("1", 40), HeadSHA: strings.Repeat("2", 40), Changed: changed}
-	f := &roleCaller{script: coverageScript(t)}
-	runRoleWith(t, j, RoleHandler{Static: secretsStub{}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+	f := &scriptedCaller{script: coverageScript(t)}
+	runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
 	var first []string
 	seen := map[string]bool{}
 	for _, q := range f.requests {

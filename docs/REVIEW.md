@@ -361,7 +361,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 | 보내지 못한 verify 후보 | `failed`(`review_input_incomplete`) |
 | 출력 무효(복구 뒤에도) | `failed`(`review_output_invalid`), v1 context·investigate는 `review_evidence_invalid` |
 | verify 일부 판정만 유효 | `failed`(`review_output_incomplete`) |
-| 지침 팩을 읽지 못함 | `failed`(`review_pack_invalid`) |
+| 지침 팩을 읽지 못함 | `failed`(`review_instructions_invalid`) |
 | 기록을 쓰지 못함 | `failed`(`review_record_failed`) |
 
 시험하지 않은 OpenCode 릴리스로 호출한 단계는 실행하고, 그 기록의 `limitations`에 `opencode_version_untested`를 남긴다(보고서 한계에 나온다). 모델 호출이 실패해도 정적 분석·탐색 task는 그대로 끝나고, 보고서는 `ai_review: not_performed`와 각 검토 task의 사유 코드를 싣는다.

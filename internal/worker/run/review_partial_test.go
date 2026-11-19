@@ -44,7 +44,7 @@ func TestReviewTimeoutPreservesStaticObservationsInPartialManifest(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fa, in, done, _ := startWorker(t, review.RoleHandler{Static: h, Caller: &timeoutVerifier{}})
+	fa, in, done, _ := startWorker(t, review.Handler{Static: h, Caller: &timeoutVerifier{}})
 	defer func() {
 		in.Close()
 		if code := <-done; code != 0 {
@@ -86,7 +86,7 @@ func TestReviewTimeoutPreservesStaticObservationsInPartialManifest(t *testing.T)
 			static = json.Unmarshal(body, &o) == nil && o.Outcome.Status == "succeeded"
 		}
 		if fa.roles[id] == "other" {
-			var r record.RoleRecord
+			var r record.Record
 			if json.Unmarshal(body, &r) == nil && r.Stage == "verify" {
 				failed = !r.Accepted() && r.FailureReason == "model_timeout" && len(r.Verifications) == len(r.Candidates) && len(r.Verifications) > 0 &&
 					r.Verifications[0].Verdict == record.VerdictUnreviewed

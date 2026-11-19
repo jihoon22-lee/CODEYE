@@ -49,7 +49,7 @@ type Excerpt struct {
 	Text string `json:"text,omitempty"`
 }
 
-type Candidate struct {
+type CandidateText struct {
 	ID           string   `json:"id,omitempty"`
 	Title        string   `json:"title"`
 	Condition    string   `json:"condition"`

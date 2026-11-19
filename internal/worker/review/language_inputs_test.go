@@ -159,17 +159,17 @@ func (c langCase) stub() langStub {
 	return langStub{eco: c.eco, path: c.obsPath, line: c.obsLine, manifest: manifest}
 }
 
-// The role pack on each language-only snapshot: investigate gets code excerpts
+// The review on each language-only snapshot: investigate gets code excerpts
 // of that language (round-robin over its module, first lines of each file),
 // interpret a line window around the analyzer observation and none on the
 // manifest, and verify runs on the candidates without Go caller expansion.
 // Records decode, the language guide is that language's alone, and the
 // requests are the same bytes across acquisitions.
-func TestRolePackInputsPerLanguage(t *testing.T) {
+func TestReviewInputsPerLanguage(t *testing.T) {
 	for _, c := range langCases {
 		t.Run(c.eco, func(t *testing.T) {
 			j := langJob(t, c.eco)
-			f := &roleCaller{script: maxScript(t)}
+			f := &scriptedCaller{script: maxScript(t)}
 			plan, res := runRole(t, j, c.stub(), f, "1.27.4")
 			for _, p := range plan {
 				if r := res[p.Key]; strings.HasPrefix(p.Key, "review.") && r.Status != domain.TaskSucceeded && !(p.Key == "review.environment" && r.Reason == ReasonNoEnvironmentGap) {
@@ -178,7 +178,7 @@ func TestRolePackInputsPerLanguage(t *testing.T) {
 			}
 			var inv investigateInput
 			var interp interpretInput
-			var ver roleVerifyInput
+			var ver verifyInput
 			for _, q := range f.requests {
 				checkGuides(t, q.Role, q.Instructions, []string{c.eco})
 				switch q.Role {
@@ -187,7 +187,7 @@ func TestRolePackInputsPerLanguage(t *testing.T) {
 				case "interpret":
 					interp = decodeAs[interpretInput](t, q)
 				case "verify":
-					ver = decodeAs[roleVerifyInput](t, q)
+					ver = decodeAs[verifyInput](t, q)
 				}
 			}
 			var got []sel
@@ -234,11 +234,11 @@ func TestRolePackInputsPerLanguage(t *testing.T) {
 					}
 				}
 			}
-			for _, stage := range record.RoleStages {
+			for _, stage := range record.Stages {
 				if res["review."+stage].Status != domain.TaskSucceeded {
 					continue // environment: no declared requirement to compare
 				}
-				rec := readRole(t, j, stage)
+				rec := readRecord(t, j, stage)
 				if slices.Contains(rec.Limitations, "code_excerpts_go_only") {
 					t.Fatalf("%s limitations %v", stage, rec.Limitations)
 				}
@@ -248,7 +248,7 @@ func TestRolePackInputsPerLanguage(t *testing.T) {
 					}
 				}
 			}
-			v := readRole(t, j, "verify")
+			v := readRecord(t, j, "verify")
 			if len(v.Verifications) != 5 || !slices.Contains(v.Limitations, limExpansionGoOnly) || !slices.Contains(v.Limitations, limNoSymbol) {
 				t.Fatalf("verify record %d verifications, limitations %v", len(v.Verifications), v.Limitations)
 			}
@@ -257,19 +257,19 @@ func TestRolePackInputsPerLanguage(t *testing.T) {
 					t.Fatalf("unreviewed %+v", x)
 				}
 			}
-			first := roleRequests(t, fixIdentity(langJob(t, c.eco)), c.stub(), maxScript(t))
-			second := roleRequests(t, fixIdentity(langJob(t, c.eco)), c.stub(), maxScript(t))
+			first := reviewRequests(t, fixIdentity(langJob(t, c.eco)), c.stub(), maxScript(t))
+			second := reviewRequests(t, fixIdentity(langJob(t, c.eco)), c.stub(), maxScript(t))
 			if !slices.Equal(first, second) {
-				t.Fatalf("role-pack requests differ across acquisitions:\n%v\n%v", first, second)
+				t.Fatalf("review requests differ across acquisitions:\n%v\n%v", first, second)
 			}
 		})
 	}
 }
 
-// A polyglot snapshot: the role-pack code corpus reaches every ecosystem in
+// A polyglot snapshot: the review code corpus reaches every ecosystem in
 // its first round (groupOrder), and each file is grouped under the module
 // root of its own ecosystem.
-func TestRolePackPolyglotRoundRobin(t *testing.T) {
+func TestReviewPolyglotRoundRobin(t *testing.T) {
 	tree := map[string]string{}
 	for _, c := range langCases {
 		dir := filepath.Join(langFixtures, c.eco)
@@ -289,7 +289,7 @@ func TestRolePackPolyglotRoundRobin(t *testing.T) {
 	tree["go.mod"] = "module example.test/poly\n\ngo 1.23\n"
 	tree["main.go"] = "package main\n\nfunc main() {}\n"
 	j := treeJob(t, tree)
-	s := &roleStage{h: RoleHandler{Caller: &roleCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
+	s := &roleStage{h: Handler{Caller: &scriptedCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
 	code, lims, err := s.codeCorpus()
 	if err != nil {
 		t.Fatal(err)
@@ -311,7 +311,7 @@ func TestRolePackPolyglotRoundRobin(t *testing.T) {
 
 // Exclusions: below the analyzer packs' data directories (hidden, testdata,
 // vendor, node_modules) and below build output, dependency and third-party
-// directories at any depth, no non-Go file is review input, in either pack;
+// directories at any depth, no non-Go file is review input;
 // a manifest counts only for an ecosystem with source in scope. The paths
 // are ones the snapshot keeps, so the review rule (not acquisition) decides.
 // Go keeps its own rules: internal/build is Go source.
@@ -351,7 +351,7 @@ func TestReviewInputExclusionsHonoured(t *testing.T) {
 			t.Fatalf("the snapshot dropped %s; the test would not exercise the review rule", p)
 		}
 	}
-	s := &roleStage{h: RoleHandler{Caller: &roleCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
+	s := &roleStage{h: Handler{Caller: &scriptedCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
 	code, lims, err := s.codeCorpus()
 	if err != nil {
 		t.Fatal(err)
@@ -397,13 +397,13 @@ func TestSecretScreenOnPython(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			stub.secrets, stub.secretPath = mode, "app/store.py"
 			j := planted(t)
-			f := &roleCaller{script: maxScript(t)}
+			f := &scriptedCaller{script: maxScript(t)}
 			plan, res := runRole(t, j, stub, f, "1.27.4")
 			if mode != "hit" {
 				// An unusable scan is no screen: the roles run on the read
 				// filters alone and every record says so.
 				if len(f.requests) == 0 {
-					t.Fatal("no role-pack request after an unusable scan")
+					t.Fatal("no review request after an unusable scan")
 				}
 				for _, p := range plan {
 					if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status == domain.TaskSkippedPolicy {
@@ -411,7 +411,7 @@ func TestSecretScreenOnPython(t *testing.T) {
 					}
 				}
 				for _, stage := range []string{"investigate", "interpret", "verify"} {
-					if rec := readRole(t, j, stage); !slices.Contains(rec.Limitations, limNotSecretScreened) || slices.Contains(rec.Limitations, limSecretWithheld) {
+					if rec := readRecord(t, j, stage); !slices.Contains(rec.Limitations, limNotSecretScreened) || slices.Contains(rec.Limitations, limSecretWithheld) {
 						t.Fatalf("%s limitations %v", stage, rec.Limitations)
 					}
 				}
@@ -421,11 +421,11 @@ func TestSecretScreenOnPython(t *testing.T) {
 				}
 				for _, q := range f.requests {
 					if strings.Contains(string(q.Input), value) {
-						t.Fatalf("role-pack %s request holds the planted value", q.Role)
+						t.Fatalf("review %s request holds the planted value", q.Role)
 					}
 				}
 				for _, stage := range []string{"investigate", "interpret", "verify"} {
-					rec := readRole(t, j, stage)
+					rec := readRecord(t, j, stage)
 					for _, e := range rec.Evidence {
 						if e.Path == "app/store.py" {
 							t.Fatalf("%s evidence on the withheld file", stage)
@@ -475,12 +475,12 @@ func TestExcludedSourceIsExplained(t *testing.T) {
 	if got := languagesInScope(j); !slices.Equal(got, []string{"python"}) {
 		t.Fatalf("ecosystems %v", got)
 	}
-	f := &roleCaller{script: maxScript(t)}
+	f := &scriptedCaller{script: maxScript(t)}
 	_, res := runRole(t, j, vetStub{}, f, "1.27.4")
 	if r := res["review.investigate"]; r.Status != domain.TaskFailed || r.Reason != "review_input_unavailable" {
 		t.Fatalf("investigate %+v", r)
 	}
-	if rec := readRole(t, j, "investigate"); !slices.Contains(rec.Limitations, limExcludedSource) {
+	if rec := readRecord(t, j, "investigate"); !slices.Contains(rec.Limitations, limExcludedSource) {
 		t.Fatalf("investigate limitations %v", rec.Limitations)
 	}
 	for _, q := range f.requests {
@@ -506,7 +506,7 @@ func TestBarrelIndexIsNotAnEntryPoint(t *testing.T) {
 		tree["src/"+d+"/index.ts"] = "export * from \"./" + d + ".js\";\n"
 	}
 	j := treeJob(t, tree)
-	s := &roleStage{h: RoleHandler{Caller: &roleCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
+	s := &roleStage{h: Handler{Caller: &scriptedCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
 	code, _, err := s.codeCorpus()
 	if err != nil {
 		t.Fatal(err)

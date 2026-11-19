@@ -52,7 +52,7 @@ func rustFixture(t *testing.T, name string) map[string]string {
 }
 
 // runRustPack runs the production deep-review composition (discovery → the
-// analyzer composite → legacy-pack roles) through the real worker on a Rust
+// analyzer composite → review roles) through the real worker on a Rust
 // snapshot. goExe is configured because go vet is the only other baseline
 // analyzer; the snapshot has no Go, so go vet plans nothing. allow is the
 // node operator's repository-code grant for the job's source.
@@ -80,7 +80,7 @@ func runRustPack(t *testing.T, files map[string]string, tools map[string]string,
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := discovery.Wrap(review.RoleHandler{Static: c}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
+	h, err := discovery.Wrap(review.Handler{Static: c}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
 	if err != nil {
 		t.Fatal(err)
 	}

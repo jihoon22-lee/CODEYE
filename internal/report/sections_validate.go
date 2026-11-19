@@ -233,7 +233,7 @@ func validStage(st SectionStage) error {
 func validateModelSections(r Report) error {
 	free := !r.Export.IncludeCode
 	// Model statements come from accepted records, whose text already passed
-	// record.RoleText; a secret-like value is rejected here as well.
+	// record.ModelText; a secret-like value is rejected here as well.
 	text := func(s string) bool { return s != "" && (!free || s == textOmitted) && !record.Sensitive([]byte(s)) }
 	model := func(m ModelInterpretation, outputs int) error {
 		if (m.State != ModelPerformed && m.State != ModelNotPerformed) || (m.Reason == nil) != (m.State == ModelPerformed) || (m.State != ModelPerformed && outputs != 0) {

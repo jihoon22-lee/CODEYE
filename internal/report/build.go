@@ -258,7 +258,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 		}
 		r.Artifacts = append(r.Artifacts, item)
 	}
-	composeRoleReviews(&r, states, lim)
+	composeReviews(&r, states, lim)
 	applyDispositions(&r, in.Reviews, in.Now)
 	sortReport(&r)
 
@@ -374,7 +374,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	// The pull-request section counts changed files sent to the model only
 	// when the run sent the model a request: a run without a model (whose
 	// records hold calls with no request) says so instead of "0 of N sent".
-	r.PullRequest = pullRequestSection(&r, in.PullRequest, index.entries, sentPaths(states, roleRecordKeys(states)), modelRequested(r.Coverage.ReviewCalls))
+	r.PullRequest = pullRequestSection(&r, in.PullRequest, index.entries, sentPaths(states, reviewRecordKeys(states)), modelRequested(r.Coverage.ReviewCalls))
 	if err := ValidateReport(r); err != nil {
 		return Report{}, err
 	}

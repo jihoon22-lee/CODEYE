@@ -1,4 +1,4 @@
-package rolepack
+package reviewpack
 
 import (
 	"bufio"
@@ -45,7 +45,7 @@ func guidesOf(files []string) []string {
 
 func TestDefaultPackSelection(t *testing.T) {
 	id, version, err := Identity()
-	if err != nil || id != "review-r1" || version != "2.0.0" {
+	if err != nil || id != "review" || version != "2.0.0" {
 		t.Fatal(id, version, err)
 	}
 	pack, err := os.ReadFile("pack.yaml")
@@ -176,16 +176,16 @@ func mustEmbedded(t *testing.T, name string) []byte {
 	return b
 }
 
-// The Go-only selection (the modules fixture snapshot of examples/review-r1)
+// The Go-only selection (the modules fixture snapshot of examples/review)
 // is pinned with scripts/validate_bundle.py and the example records:
 // changing an instruction byte changes them together.
 func TestGoSelectionDigestsPinned(t *testing.T) {
 	want := map[string]string{
-		"environment": "da9c21fe08efaab7c307490102e69d35fc732f4d57a5faf2da9d2681768cfa3e",
-		"documents":   "42c12bd1d7e62d456d72f6b5af7caed424977dca248ee4f3014dbe5cf98b0d6a",
-		"investigate": "2df8621fe980f31a57d0a1dc8ca698fa05585ea36361bba20ee3c4f31a1be0e7",
-		"interpret":   "9fdac5c6493f275c7ef17058ef4228176281eb6efbf3a88729138df168929921",
-		"verify":      "b5a7cc45e05d4df310c6311ab1ae496a72b6f1ac7d51848e5a59edfd9d4d98b0",
+		"environment": "cfb76d320b8c7ca02ddd783226bb8295c23967ada17813facf0b590dd19f847a",
+		"documents":   "f0367ce17908e65c5e7f382ee1cd708e03ffdd34932067d42fcff7cae5d5f0a7",
+		"investigate": "6f6633fc548de8bf3b5ac2fa3f55b6247f1e685da466a62876e189f034b78bc0",
+		"interpret":   "5bc7a9ae016e7a07585ac7c156250156dc857934283dbdd2e3b255b72f93d322",
+		"verify":      "a00e5558f1200d2adb89e28e7fb65f1d7268a32479692e14f4c2d5478ce92d36",
 	}
 	for _, role := range Roles {
 		s, err := For(role, []string{"go"})

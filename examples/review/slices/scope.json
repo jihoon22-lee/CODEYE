@@ -2,7 +2,7 @@
   "schema_version": "0.2",
   "kind": "review_scope",
   "pack": {
-    "id": "review-r1",
+    "id": "review",
     "version": "2.0.0"
   },
   "snapshot_manifest_digest": "5555555555555555555555555555555555555555555555555555555555555555",
@@ -56,7 +56,7 @@
     {
       "source": "review.investigate",
       "state": "accepted",
-      "sha256": "108fd53bf8cabe5f577dbd786840f1a50495de7027c9b1892e5e614f5959067f"
+      "sha256": "581e6969b03881794dfbf9be5aa01333bf5bee9bcd5814348e5bd74e9d394292"
     }
   ],
   "modules": [

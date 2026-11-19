@@ -27,7 +27,7 @@ func (a *httpAttempt) moveWith(key, status, reason string) {
 }
 
 // sliceTasks creates the plan of a run with two review slices: the five
-// whole-run roles (required as the role pack declares them), review.scope
+// whole-run roles (required as the review declares them), review.scope
 // and the slice pairs, all before the run reaches running.
 func (a *httpAttempt) sliceTasks() []string {
 	a.e.t.Helper()

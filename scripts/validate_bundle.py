@@ -26,7 +26,7 @@ except ImportError as exc:
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
 from bundle_checks.report import check_analyzer, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_environment_example, check_role_pack_examples, check_slice_examples, role_pack, slice_examples
+from bundle_checks.review import ROLE_STAGES, check_environment_example, check_stage_examples, check_slice_examples, pack_selection, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_source_names, heading_anchors
 
@@ -155,15 +155,15 @@ def main() -> None:
     check_python_pack(validators)
     print(f"PASS: structure and secrets pack contracts (lizard, jscpd, gitleaks descriptors and real envelopes; {check_structure_pack_contracts(validators)} negative cases)")
     review_validator = validators["review-record.schema.json"]
-    role_pack_doc, role_files = role_pack()
-    role_raw = {stage: (ROOT / "examples/review-r1" / (stage + ".json")).read_text(encoding="utf-8") for stage in ROLE_STAGES}
+    pack_doc, role_files = pack_selection()
+    role_raw = {stage: (ROOT / "examples/review" / (stage + ".json")).read_text(encoding="utf-8") for stage in ROLE_STAGES}
     role_docs = {stage: json.loads(text) for stage, text in role_raw.items()}
     for doc in role_docs.values():
         review_validator.validate(doc)
-    check_role_pack_examples(role_docs, role_raw, role_pack_doc, role_files)
+    check_stage_examples(role_docs, role_raw, pack_doc, role_files)
     slice_negatives = check_slice_examples(slice_examples(), validators)
     print(f"PASS: review slices (scope artifact 0.2 and slice records 0.3 bound to the coverage fixture; {slice_negatives} negative cases)")
-    # review-r1 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
+    # Review 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
     retried = copy.deepcopy(role_docs["verify"])
     first = retried["calls"][0]
@@ -173,10 +173,10 @@ def main() -> None:
     review_validator.validate(retried)
     too_many = copy.deepcopy(retried)
     too_many["calls"].append(dict(first, attempt=4))
-    expect_invalid("review-r1 stage with four calls", review_validator.validate, too_many)
+    expect_invalid("review stage with four calls", review_validator.validate, too_many)
     fourth = copy.deepcopy(retried)
     fourth["calls"][2]["attempt"] = 4
-    expect_invalid("review-r1 call attempt 4", review_validator.validate, fourth)
+    expect_invalid("review call attempt 4", review_validator.validate, fourth)
     dependencies = json_file(ROOT / "examples/dependencies.json")
     validators["dependencies.schema.json"].validate(dependencies)
     for name, edit in {
@@ -210,7 +210,7 @@ def main() -> None:
         ensure(0 <= pool["min_workers"] <= pool["max_workers"], "Invalid pool bounds")
     project = yaml_file(ROOT / "examples/project.yaml")
     ensure(project["analysis"]["profile"] == "deep-review", "Unexpected example default profile")
-    pack_file = ROOT / "prompts/review-r1/pack.yaml"
+    pack_file = ROOT / "prompts/review/pack.yaml"
     pack = yaml_file(pack_file)
     pack_paths = ["pack.yaml", pack["core"], pack["domains"], *pack["roles"].values(), *pack["languages"].values()]
     digest = hashlib.sha256()
@@ -389,7 +389,7 @@ def main() -> None:
     def role_case(stage, edit, check):
         docs = copy.deepcopy(role_docs)
         edit(docs[stage])
-        return lambda _: check(docs[stage]) if check else check_role_pack_examples(docs, role_raw, role_pack_doc, role_files)
+        return lambda _: check(docs[stage]) if check else check_stage_examples(docs, role_raw, pack_doc, role_files)
 
     def set_key(key, value, index=0, field=None):
         def edit(doc):
@@ -401,19 +401,19 @@ def main() -> None:
 
     fake_id = "ev_" + "0" * 24
     role_negative = [
-        ("review-r1 fabricated evidence", "investigate", lambda d: d["candidates"][0]["evidence_ids"].append(fake_id), None),
-        ("review-r1 scope generalization", "documents", set_key("contracts", ".", 1, "applies_to"), None),
-        ("review-r1 pack digest drift", "verify", set_key("calls", "0" * 64, 0, "pack_sha256"), None),
-        ("review-r1 language guide outside the selection", "investigate", lambda d: d["calls"][0]["pack_files"].insert(3, "languages/python.md"), None),
-        ("review-r1 altered upstream candidate", "verify", lambda d: d["candidates"][0].update(title=d["candidates"][0]["title"] + "!"), None),
-        ("review-r1 model reproduction verdict", "verify", set_key("verifications", "reproduced", 0, "verdict"), review_validator.validate),
-        ("review-r1 source text", "investigate", lambda d: d["evidence"][0].update(text="raw source"), review_validator.validate),
-        ("review-r1 platform verdict in environment output", "environment", lambda d: d["environment_notes"][0].update(status="satisfied"), review_validator.validate),
-        ("review-r1 interpret candidate without observation", "interpret", lambda d: d["candidates"][0].pop("observation_ids"), review_validator.validate),
-        ("review-r1 failed record keeps accepted call", "documents", lambda d: [d.update(outcome="failed", failure_reason="model_timeout")] + [d.pop(k) for k in ("contracts", "conflicts", "questions", "instruction_notes")], review_validator.validate),
-        ("review-r1 investigate given raw tool observations", "investigate", lambda d: d.update(observations=docs_obs), review_validator.validate),
-        ("review-r1 source range outside the file", "investigate", lambda d: d["evidence"][0].update(end_line=100000), None),
-        ("review-r1 unknown counterevidence", "verify", lambda d: d["verifications"][0].update(counterevidence_ids=[fake_id]), None),
+        ("review fabricated evidence", "investigate", lambda d: d["candidates"][0]["evidence_ids"].append(fake_id), None),
+        ("review scope generalization", "documents", set_key("contracts", ".", 1, "applies_to"), None),
+        ("review pack digest drift", "verify", set_key("calls", "0" * 64, 0, "pack_sha256"), None),
+        ("review language guide outside the selection", "investigate", lambda d: d["calls"][0]["pack_files"].insert(3, "languages/python.md"), None),
+        ("review altered upstream candidate", "verify", lambda d: d["candidates"][0].update(title=d["candidates"][0]["title"] + "!"), None),
+        ("review model reproduction verdict", "verify", set_key("verifications", "reproduced", 0, "verdict"), review_validator.validate),
+        ("review source text", "investigate", lambda d: d["evidence"][0].update(text="raw source"), review_validator.validate),
+        ("review platform verdict in environment output", "environment", lambda d: d["environment_notes"][0].update(status="satisfied"), review_validator.validate),
+        ("review interpret candidate without observation", "interpret", lambda d: d["candidates"][0].pop("observation_ids"), review_validator.validate),
+        ("review failed record keeps accepted call", "documents", lambda d: [d.update(outcome="failed", failure_reason="model_timeout")] + [d.pop(k) for k in ("contracts", "conflicts", "questions", "instruction_notes")], review_validator.validate),
+        ("review investigate given raw tool observations", "investigate", lambda d: d.update(observations=docs_obs), review_validator.validate),
+        ("review source range outside the file", "investigate", lambda d: d["evidence"][0].update(end_line=100000), None),
+        ("review unknown counterevidence", "verify", lambda d: d["verifications"][0].update(counterevidence_ids=[fake_id]), None),
     ]
     docs_obs = copy.deepcopy(role_docs["interpret"]["observations"])
     for name, stage, edit, check in role_negative:
@@ -438,7 +438,7 @@ def main() -> None:
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
     print(f"PASS: {25 + len(section_cases) + len(role_negative)} negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
-    print(f"review-r1 default pack {role_pack_doc['version']} (Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in role_files.items()))
+    print(f"review instructions {pack_doc['version']} (Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in role_files.items()))
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 
 

@@ -1,7 +1,7 @@
 {
   "schema_version": "0.2",
   "pack": {
-    "id": "review-r1",
+    "id": "review",
     "version": "2.0.0"
   },
   "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
@@ -62,9 +62,9 @@
       "role": "interpret",
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
-      "pack_id": "review-r1",
+      "pack_id": "review",
       "pack_version": "2.0.0",
-      "pack_sha256": "9fdac5c6493f275c7ef17058ef4228176281eb6efbf3a88729138df168929921",
+      "pack_sha256": "5bc7a9ae016e7a07585ac7c156250156dc857934283dbdd2e3b255b72f93d322",
       "pack_files": [
         "00-core.md",
         "domains.md",

@@ -12,7 +12,7 @@ import (
 
 // Review input selection for the source ecosystems besides Go. Go files,
 // README/AGENTS documents and go.mod keep their own rules byte for byte
-// (priority in context.go, codeCorpus and goIgnored in rolepack_inputs.go);
+// (codeCorpus and goIgnored in inputs.go);
 // this file only decides the C/C++, Python, JS/TS and Rust files.
 // Classification is by path (record/source.go): no file is parsed.
 
@@ -121,7 +121,7 @@ func (m otherModules) owner(eco, p string) string {
 	return best
 }
 
-// groupKey is the round-robin group of a non-Go file in the role-pack code corpus:
+// groupKey is the round-robin group of a non-Go file in the review code corpus:
 // its module root and ecosystem. A Go module's key is its bare directory
 // (codeCorpus); a NUL never occurs in a snapshot path.
 func groupKey(dir, eco string) string { return dir + "\x00" + eco }
@@ -161,7 +161,7 @@ func groupOrder(byModule map[string][]source.Entry, secondary func(string) bool)
 	return out
 }
 
-// otherRank is the role-pack code corpus rank of a non-Go file within its group
+// otherRank is the review code corpus rank of a non-Go file within its group
 // (Go: main.go 0, other 1, tests 2).
 func otherRank(p string, roots otherModules) int {
 	switch {

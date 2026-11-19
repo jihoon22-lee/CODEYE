@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `345dcb5a3dc4` |
+| digest | `d8ceab308a09` |
 | status | `partial` |
 | quality\_verdict | `attention_required` 품질 판정은 안전 인증이 아니다\. |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -76,7 +76,7 @@
 
 상태\: ✓ 성공 · 작업 3개 중 3개 성공
 
-검토 팩\: review\-r1@2\.0\.0
+검토 팩\: review@2\.0\.0
 
 모델 호출 5회, 그중 수락 5회\(환경·문서 역할 호출 포함, 전체 합계\)\.
 
@@ -412,7 +412,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 실행 기록 31개\(exited 31\)\.
 
-산출물 83개, 합계 69235바이트\.
+산출물 83개, 합계 69205바이트\.
 
 작업·실행·산출물의 전체 목록과 개별 진단은 전체 보기\(detail\=full\)와 JSON 내보내기에 있다\.
 
@@ -427,4 +427,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 - 비밀값이 탐지된 파일은 모델 입력에서 뺐다\.
 - tools\_outside\_interpret\_input
 
-digest sha256: `345dcb5a3dc4e9f3ce28d0c2f413944342dce782f733f895de0e079c824f6dc7`
+digest sha256: `d8ceab308a09d34d1804fefd6c7d6b78398c81e43eb0abcc2221401db6bf10dc`

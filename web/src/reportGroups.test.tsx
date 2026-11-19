@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, within } from '@testing-library/react';
 import sectioned from '../../examples/report.json';
 import withSlices from '../../examples/report-slices.json';
-import scope from '../../examples/review-r1/slices/scope.json';
+import scope from '../../examples/review/slices/scope.json';
 import { parseAnalysisReport } from './analysisReport';
 import { improvementHints } from './improve';
 import { ko } from './locales/ko';

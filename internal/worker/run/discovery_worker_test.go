@@ -57,7 +57,7 @@ func TestDiscoveryTasksThroughTheWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := discovery.Wrap(review.RoleHandler{Static: vet}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
+	h, err := discovery.Wrap(review.Handler{Static: vet}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
 	if err != nil {
 		t.Fatal(err)
 	}

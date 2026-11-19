@@ -63,7 +63,7 @@ type SecondaryRule struct {
 }
 
 // DefaultSecondary is the rule the worker and the report use unless the
-// node operator configures another (review.RoleHandler.Secondary).
+// node operator configures another (review.Handler.Secondary).
 var DefaultSecondary = SecondaryRule{
 	Segments: []string{"fixtures", "testdata", "test-data", "tests/data", "examples", "samples", "demo", "vendor", "third_party",
 		"node_modules", "generated", "gen", "mocks", "__snapshots__", "dist", "build"},

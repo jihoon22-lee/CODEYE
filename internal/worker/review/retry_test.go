@@ -14,7 +14,7 @@ const fixtureObservation = "obs_0123456789abcdef0123"
 
 func notJSON() opencode.Reply { return opencode.Reply{Reason: "model_output_invalid"} }
 
-func inconclusiveFor(c record.RoleCandidate, ids ...string) map[string]any {
+func inconclusiveFor(c record.Candidate, ids ...string) map[string]any {
 	return verdict(c.ID, "inconclusive", func(m map[string]any) {
 		m["category"], m["severity_reason"], m["impact"] = "error_handling", "재시도 범위가 문서 계약과 어긋날 수 있다.", "실패 처리 방식이 모듈 안내와 다를 수 있다."
 		m["next_verification"] = []string{"호출자와 실패 경로를 읽는다."}
@@ -26,11 +26,11 @@ func inconclusiveFor(c record.RoleCandidate, ids ...string) map[string]any {
 // A verifier repair that comes back as non-JSON gets one retry of its own:
 // the candidate rejected in the first call is verified by the third call
 // instead of being quarantined, and the retry carries the earlier item codes.
-func TestRoleVerifyNonJSONRepairGetsRetry(t *testing.T) {
+func TestVerifyNonJSONRepairGetsRetry(t *testing.T) {
 	j := modulesJob(t, nil)
 	script := validScript(t)
 	script["verify"] = func(n int, q opencode.Request) opencode.Reply {
-		in := decodeAs[roleVerifyInput](t, q)
+		in := decodeAs[verifyInput](t, q)
 		switch n {
 		case 1:
 			var out []map[string]any
@@ -57,12 +57,12 @@ func TestRoleVerifyNonJSONRepairGetsRetry(t *testing.T) {
 			return asJSON(map[string]any{"verifications": out})
 		}
 	}
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	_, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	if r := res["review.verify"]; r.Status != domain.TaskSucceeded || f.calls("verify") != 3 {
 		t.Fatalf("verify %+v calls=%d", r, f.calls("verify"))
 	}
-	v := readRole(t, j, "verify")
+	v := readRecord(t, j, "verify")
 	if len(v.Calls) != 3 || v.Calls[0].Outcome != callAccepted || v.Calls[1].Outcome != callRejected || !slices.Equal(v.Calls[1].OutputErrors, []string{"output_not_json"}) || v.Calls[2].Outcome != callAccepted {
 		t.Fatalf("calls %+v", v.Calls)
 	}
@@ -83,7 +83,7 @@ func TestRoleVerifyNonJSONRepairGetsRetry(t *testing.T) {
 			verifyReqs = append(verifyReqs, q)
 		}
 	}
-	retry := decodeAs[roleVerifyInput](t, verifyReqs[2])
+	retry := decodeAs[verifyInput](t, verifyReqs[2])
 	if retry.Repair == nil || !slices.Equal(retry.Repair.OutputErrors, []string{"output_not_json"}) || len(retry.Repair.Candidates) != 1 ||
 		retry.Repair.Candidates[0].ID != "interpret_1" || !slices.Contains(retry.Repair.Candidates[0].Errors, "evidence_id_unknown") ||
 		len(retry.Candidates) != 1 || !strings.Contains(verifyReqs[2].Instructions, "Format repair") {
@@ -94,11 +94,11 @@ func TestRoleVerifyNonJSONRepairGetsRetry(t *testing.T) {
 // An entry whose only defect is a non-evidence ID (an observation ID in the
 // evidence list) is accepted without it when the rest meets its verdict's
 // rule; the call records evidence_id_dropped and no repair is sent.
-func TestRoleVerifyDropsNonEvidenceID(t *testing.T) {
+func TestVerifyDropsNonEvidenceID(t *testing.T) {
 	j := modulesJob(t, nil)
 	script := validScript(t)
 	script["verify"] = func(_ int, q opencode.Request) opencode.Reply {
-		in := decodeAs[roleVerifyInput](t, q)
+		in := decodeAs[verifyInput](t, q)
 		var out []map[string]any
 		for _, c := range in.Candidates {
 			ids := []string{c.Evidence[0]}
@@ -109,12 +109,12 @@ func TestRoleVerifyDropsNonEvidenceID(t *testing.T) {
 		}
 		return asJSON(map[string]any{"verifications": out})
 	}
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	_, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	if r := res["review.verify"]; r.Status != domain.TaskSucceeded || f.calls("verify") != 1 {
 		t.Fatalf("verify %+v calls=%d", r, f.calls("verify"))
 	}
-	v := readRole(t, j, "verify")
+	v := readRecord(t, j, "verify")
 	if v.Calls[0].Outcome != callAccepted || !slices.Equal(v.Calls[0].OutputErrors, []string{"evidence_id_dropped"}) {
 		t.Fatalf("call %+v", v.Calls[0])
 	}
@@ -126,16 +126,16 @@ func TestRoleVerifyDropsNonEvidenceID(t *testing.T) {
 }
 
 // Two non-JSON replies end the verifier after two calls; nothing is invented.
-func TestRoleVerifyTwoNonJSONRepliesFail(t *testing.T) {
+func TestVerifyTwoNonJSONRepliesFail(t *testing.T) {
 	j := modulesJob(t, nil)
 	script := validScript(t)
 	script["verify"] = func(int, opencode.Request) opencode.Reply { return notJSON() }
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	_, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	if r := res["review.verify"]; r.Status != domain.TaskFailed || r.Reason != reasonOutputInvalid || f.calls("verify") != 2 {
 		t.Fatalf("verify %+v calls=%d", r, f.calls("verify"))
 	}
-	v := readRole(t, j, "verify")
+	v := readRecord(t, j, "verify")
 	for _, x := range v.Verifications {
 		if x.Verdict != record.VerdictUnreviewed {
 			t.Fatalf("%+v", v.Verifications)
@@ -146,8 +146,8 @@ func TestRoleVerifyTwoNonJSONRepliesFail(t *testing.T) {
 // The other roles: a rejected output, then a non-JSON repair, then a valid
 // output is accepted on the third call; the retry keeps the repair's codes.
 // Two rejected outputs still fail after two calls
-// (TestRolePackFabricatedEvidenceIsQuarantined).
-func TestRoleNonJSONRepairGetsRetry(t *testing.T) {
+// (TestReviewFabricatedEvidenceIsQuarantined).
+func TestNonJSONRepairGetsRetry(t *testing.T) {
 	j := modulesJob(t, nil)
 	script := validScript(t)
 	valid := script["documents"]
@@ -162,12 +162,12 @@ func TestRoleNonJSONRepairGetsRetry(t *testing.T) {
 			return valid(n, q)
 		}
 	}
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	_, res := runRole(t, j, vetStub{}, f, "1.27.4")
 	if r := res["review.documents"]; r.Status != domain.TaskSucceeded || f.calls("documents") != 3 {
 		t.Fatalf("documents %+v calls=%d", r, f.calls("documents"))
 	}
-	docs := readRole(t, j, "documents")
+	docs := readRecord(t, j, "documents")
 	if !docs.Accepted() || len(docs.Calls) != 3 || docs.Calls[2].Outcome != callAccepted || docs.Calls[2].Attempt != 3 {
 		t.Fatalf("documents record %+v", docs.Calls)
 	}
@@ -184,11 +184,11 @@ func TestRoleNonJSONRepairGetsRetry(t *testing.T) {
 }
 
 // A non-JSON first reply is retried once; two non-JSON replies fail.
-func TestRoleNonJSONTwiceFails(t *testing.T) {
+func TestNonJSONTwiceFails(t *testing.T) {
 	j := modulesJob(t, nil)
 	script := validScript(t)
 	script["environment"] = func(int, opencode.Request) opencode.Reply { return notJSON() }
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	_, res := runRole(t, j, vetStub{}, f, "1.27.4")
 	if r := res["review.environment"]; r.Status != domain.TaskFailed || r.Reason != reasonOutputInvalid || f.calls("environment") != 2 {
 		t.Fatalf("environment %+v calls=%d", r, f.calls("environment"))
@@ -197,11 +197,11 @@ func TestRoleNonJSONTwiceFails(t *testing.T) {
 
 // Only observation IDs of the request are trimmed: a fabricated evidence ID
 // beside a valid one keeps the entry rejected, and the repair verifies it.
-func TestRoleVerifyFabricatedIDBesideValidIsRepaired(t *testing.T) {
+func TestVerifyFabricatedIDBesideValidIsRepaired(t *testing.T) {
 	j := modulesJob(t, nil)
 	script := validScript(t)
 	script["verify"] = func(n int, q opencode.Request) opencode.Reply {
-		in := decodeAs[roleVerifyInput](t, q)
+		in := decodeAs[verifyInput](t, q)
 		var out []map[string]any
 		for _, c := range in.Candidates {
 			ids := []string{c.Evidence[0]}
@@ -212,12 +212,12 @@ func TestRoleVerifyFabricatedIDBesideValidIsRepaired(t *testing.T) {
 		}
 		return asJSON(map[string]any{"verifications": out})
 	}
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	_, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	if r := res["review.verify"]; r.Status != domain.TaskSucceeded || f.calls("verify") != 2 {
 		t.Fatalf("verify %+v calls=%d", r, f.calls("verify"))
 	}
-	v := readRole(t, j, "verify")
+	v := readRecord(t, j, "verify")
 	if slices.Contains(v.Calls[0].OutputErrors, "evidence_id_dropped") || !slices.Contains(v.Calls[0].OutputErrors, "evidence_id_unknown") {
 		t.Fatalf("first call %+v", v.Calls[0])
 	}
@@ -231,14 +231,14 @@ func TestRoleVerifyFabricatedIDBesideValidIsRepaired(t *testing.T) {
 // A later verify call that fails (here a timeout) keeps the verdict already
 // accepted; the other candidate is quarantined and the task is incomplete.
 // A failing first call still fails the whole stage.
-func TestRoleVerifyLaterCallFailureKeepsAccepted(t *testing.T) {
+func TestVerifyLaterCallFailureKeepsAccepted(t *testing.T) {
 	j := modulesJob(t, nil)
 	script := validScript(t)
 	script["verify"] = func(n int, q opencode.Request) opencode.Reply {
 		if n > 1 {
 			return opencode.Reply{Reason: "model_timeout"}
 		}
-		in := decodeAs[roleVerifyInput](t, q)
+		in := decodeAs[verifyInput](t, q)
 		var out []map[string]any
 		for _, c := range in.Candidates {
 			if c.Origin == "interpret" {
@@ -249,12 +249,12 @@ func TestRoleVerifyLaterCallFailureKeepsAccepted(t *testing.T) {
 		}
 		return asJSON(map[string]any{"verifications": out})
 	}
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	_, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	if r := res["review.verify"]; r.Status != domain.TaskFailed || r.Reason != "review_output_incomplete" || f.calls("verify") != 2 {
 		t.Fatalf("verify %+v calls=%d", r, f.calls("verify"))
 	}
-	v := readRole(t, j, "verify")
+	v := readRecord(t, j, "verify")
 	if len(v.Calls) != 2 || v.Calls[1].Outcome != "model_timeout" || !slices.Contains(v.Limitations, "verification_call_failed") || !slices.Contains(v.Limitations, record.LimQuarantined) {
 		t.Fatalf("record %+v %v", v.Calls, v.Limitations)
 	}
@@ -264,7 +264,7 @@ func TestRoleVerifyLaterCallFailureKeepsAccepted(t *testing.T) {
 
 	j = modulesJob(t, nil)
 	script["verify"] = func(int, opencode.Request) opencode.Reply { return opencode.Reply{Reason: "model_timeout"} }
-	f = &roleCaller{script: script}
+	f = &scriptedCaller{script: script}
 	_, res = runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	if r := res["review.verify"]; r.Status != domain.TaskTimedOut || f.calls("verify") != 1 {
 		t.Fatalf("first-call timeout %+v calls=%d", r, f.calls("verify"))

@@ -1,4 +1,4 @@
-"""Review record, environment example and role pack checks."""
+"""Review record, environment example and review instruction checks."""
 
 from __future__ import annotations
 
@@ -49,24 +49,24 @@ def compact_json(text: str) -> bytes:
     return "".join(out).encode("utf-8")
 
 
-# Language guides of review-r1 follow the snapshot's in-scope source
-# ecosystems (A29). The example snapshot has Go source only;
-# TestRolePackExampleRecords checks that selection against the worker.
+# Language guides follow the snapshot's in-scope source ecosystems (A29).
+# The example snapshot has Go source only; TestReviewExampleRecords checks
+# that selection against the worker.
 ROLE_LANGUAGES = ("cpp", "go", "javascript", "python", "rust")
 ROLE_EXAMPLE_LANGUAGES = ("go",)
 
 
-def role_pack(languages=ROLE_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
-    """The review-r1 default pack: identity, files and per-role digests
-    (review-v1 algorithm over pack.yaml and the role's selected files) for
-    the given in-scope ecosystems."""
-    pack_file = ROOT / "prompts/review-r1/pack.yaml"
+def pack_selection(languages=ROLE_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
+    """The review instructions: identity, files and per-role digests (sha256
+    over pack.yaml and the role's selected files) for the given in-scope
+    ecosystems."""
+    pack_file = ROOT / "prompts/review/pack.yaml"
     pack = yaml_file(pack_file)
-    ensure(pack["id"] == "review-r1" and pack["status"] == "default" and pack["schema_version"] == "0.2", "review-r1 pack identity")
-    ensure(tuple(pack["roles"]) == ROLE_STAGES, "review-r1 roles")
-    ensure(tuple(pack["languages"]) == ROLE_LANGUAGES and all(f == f"languages/{eco}.md" for eco, f in pack["languages"].items()), "review-r1 language guides")
+    ensure(pack["id"] == "review" and pack["status"] == "default" and pack["schema_version"] == "0.2", "review pack identity")
+    ensure(tuple(pack["roles"]) == ROLE_STAGES, "review roles")
+    ensure(tuple(pack["languages"]) == ROLE_LANGUAGES and all(f == f"languages/{eco}.md" for eco, f in pack["languages"].items()), "review language guides")
     for guide in pack["languages"].values():
-        ensure(within_root(pack_file.parent / guide).is_file(), "Missing review-r1 prompt: " + guide)
+        ensure(within_root(pack_file.parent / guide).is_file(), "Missing review prompt: " + guide)
     selected = [pack["languages"][eco] for eco in sorted(set(languages)) if eco in pack["languages"]]
     roles = {}
     for role, file in pack["roles"].items():
@@ -74,57 +74,61 @@ def role_pack(languages=ROLE_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
         digest = hashlib.sha256()
         for relative in names:
             path = within_root(pack_file.parent / relative)
-            ensure(path.is_file(), "Missing review-r1 prompt: " + relative)
+            ensure(path.is_file(), "Missing review prompt: " + relative)
             digest.update(relative.encode("utf-8") + b"\0" + path.read_bytes() + b"\0")
         roles[role] = {"files": names, "digest": digest.hexdigest()}
     return pack, roles
 
 
-def check_role_pack_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None:
-    """Bind the review-r1 stage examples to the w15 fixture bytes, the pack
+# scripts/test_quality_eval.py imports the selection under this name.
+role_pack = pack_selection
+
+
+def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None:
+    """Bind the review stage examples to the fixture bytes, the pack
     files, each other (upstream SHA-256, candidates) and the scope rules."""
     root = ROOT / "fixtures/modules/input"
     first = docs["environment"]
     for stage in ROLE_STAGES:
         doc = docs[stage]
-        ensure(doc["stage"] == stage and doc["pack"] == {"id": pack["id"], "version": pack["version"]}, "review-r1 stage or pack: " + stage)
-        ensure(all(doc[k] == first[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id")), "review-r1 examples of different attempts")
+        ensure(doc["stage"] == stage and doc["pack"] == {"id": pack["id"], "version": pack["version"]}, "review stage or pack: " + stage)
+        ensure(all(doc[k] == first[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id")), "review examples of different attempts")
         catalog = {}
         for e in doc["evidence"]:
             body = (root / e["path"]).read_bytes()
             sha = hashlib.sha256(body).hexdigest()
-            ensure(sha == e["sha256"] and 1 <= e["start_line"] <= e["end_line"] <= len(body.splitlines()), "review-r1 evidence blob or range: " + e["path"])
+            ensure(sha == e["sha256"] and 1 <= e["start_line"] <= e["end_line"] <= len(body.splitlines()), "review evidence blob or range: " + e["path"])
             binding = "\0".join([doc["snapshot_manifest_digest"], e["path"], sha, f'{e["start_line"]}:{e["end_line"]}'])
-            ensure(e["id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24] and e["id"] not in catalog, "review-r1 evidence ID")
+            ensure(e["id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24] and e["id"] not in catalog, "review evidence ID")
             catalog[e["id"]] = e
         cited = []
         for key in ("environment_notes", "contracts", "conflicts", "questions", "instruction_notes", "candidates", "verifications"):
             for item in doc.get(key, []):
                 for field in ("evidence_ids", "first_evidence_ids", "second_evidence_ids", "supporting_evidence_ids", "counterevidence_ids"):
                     cited.extend(item.get(field, []))
-        ensure(all(ref in catalog for ref in cited), "review-r1 cites evidence it was not given: " + stage)
+        ensure(all(ref in catalog for ref in cited), "review cites evidence it was not given: " + stage)
         # A rule of a sub-directory is never generalized to a parent scope.
         def covers(ids, scope):
             dirs = [str(PurePosixPath(catalog[i]["path"]).parent) for i in ids]
             return all(d == "." or scope == d or scope.startswith(d + "/") for d in dirs)
         for c in doc.get("contracts", []) + doc.get("questions", []):
-            ensure(covers(c["evidence_ids"], c["applies_to"]), "review-r1 scope generalized: " + c["applies_to"])
+            ensure(covers(c["evidence_ids"], c["applies_to"]), "review scope generalized: " + c["applies_to"])
         for c in doc.get("conflicts", []):
-            ensure(covers(c["first_evidence_ids"] + c["second_evidence_ids"], c["scope"]), "review-r1 conflict scope generalized")
+            ensure(covers(c["first_evidence_ids"] + c["second_evidence_ids"], c["scope"]), "review conflict scope generalized")
         observations = {o["id"] for o in doc["observations"]}
         for c in doc.get("candidates", []):
-            ensure(set(c.get("observation_ids", [])) <= observations, "review-r1 candidate cites an unknown observation")
+            ensure(set(c.get("observation_ids", [])) <= observations, "review candidate cites an unknown observation")
         for call in doc["calls"]:
-            ensure(call["role"] == stage and call["pack_files"] == roles[stage]["files"] and call["pack_sha256"] == roles[stage]["digest"], "review-r1 call pack digest: " + stage)
-            ensure(call["pack_id"] == pack["id"] and call["pack_version"] == pack["version"], "review-r1 call pack identity")
+            ensure(call["role"] == stage and call["pack_files"] == roles[stage]["files"] and call["pack_sha256"] == roles[stage]["digest"], "review call pack digest: " + stage)
+            ensure(call["pack_id"] == pack["id"] and call["pack_version"] == pack["version"], "review call pack identity")
         for u in doc["upstream"]:
             if u["state"] == "accepted" and u["source"].startswith("review."):
                 sibling = u["source"][len("review."):]
-                ensure(hashlib.sha256(compact_json(raw[sibling])).hexdigest() == u["sha256"], "review-r1 upstream digest: " + u["source"])
+                ensure(hashlib.sha256(compact_json(raw[sibling])).hexdigest() == u["sha256"], "review upstream digest: " + u["source"])
     verify = docs["verify"]
     upstream = docs["investigate"].get("candidates", []) + docs["interpret"].get("candidates", [])
     ensure(verify.get("candidates", []) == upstream, "verify candidates differ from the accepted upstream candidates")
-    ensure([c["id"] for c in verify.get("candidates", [])] == [v["candidate_id"] for v in verify.get("verifications", [])], "review-r1 verification coverage")
+    ensure([c["id"] for c in verify.get("candidates", [])] == [v["candidate_id"] for v in verify.get("verifications", [])], "review verification coverage")
 
 
 # The slice examples (docs/REVIEW.md#모듈-단위-검토-분할): the review.scope
@@ -136,7 +140,7 @@ SLICE_EXAMPLE_FILES = ("scope", "investigate.s001", "verify.s001")
 
 
 def slice_examples() -> dict:
-    return {name: (ROOT / "examples/review-r1/slices" / (name + ".json")).read_text(encoding="utf-8") for name in SLICE_EXAMPLE_FILES}
+    return {name: (ROOT / "examples/review/slices" / (name + ".json")).read_text(encoding="utf-8") for name in SLICE_EXAMPLE_FILES}
 
 
 def secondary_segment(rule: dict, path: str):
@@ -201,7 +205,7 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
 
     record_v, scope_v = validators["review-record.schema.json"], validators["review-scope.schema.json"]
     docs = {name: json.loads(text) for name, text in raw.items()}
-    pack, roles = role_pack(SLICE_EXAMPLE_LANGUAGES)
+    pack, roles = pack_selection(SLICE_EXAMPLE_LANGUAGES)
 
     def check(docs: dict) -> None:
         scope = docs["scope"]

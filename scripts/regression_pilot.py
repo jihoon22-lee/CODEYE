@@ -185,9 +185,9 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
     fake's interpret reply then has no item to give. Any other cause still
     fails, and a paid run gets no exception. Returns the failures and the
     pilot's numbers."""
-    from bundle_checks.review import role_pack
+    from bundle_checks.review import pack_selection
 
-    _, roles = role_pack(("go",))
+    _, roles = pack_selection(("go",))
     test = _test_ledger(ledger)
     failures, pilot = [], None
     for row in rows:

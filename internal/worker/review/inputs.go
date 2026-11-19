@@ -18,7 +18,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// Bounds of the role-pack inputs, in JSON-encoded bytes of excerpt text
+// Bounds of the review inputs, in JSON-encoded bytes of excerpt text
 // (encoding/json escapes <, > and & to six bytes). Every request must also
 // fit PromptBudget; roles trim excerpts to fit and record it.
 const (
@@ -30,7 +30,7 @@ const (
 	roleMaxDocLines     = 40
 	roleMaxDocsBytes    = 10000
 	roleMaxRequirements = 16
-	roleMaxObservations = 8
+	maxObservations     = 8
 	roleMaxTools        = 8
 	roleMaxWindows      = 4
 	roleWindowRadius    = 10
@@ -439,7 +439,7 @@ type toolInput struct {
 }
 
 // observationWindows builds the interpret inputs: tool states, up to
-// roleMaxObservations observations and code windows around their locations.
+// maxObservations observations and code windows around their locations.
 func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput, []record.ObservationRef, []record.Excerpt, []string, error) {
 	files := s.entries()
 	var tools []toolInput
@@ -485,8 +485,8 @@ func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput,
 		}
 		return x.ID < y.ID
 	})
-	if len(all) > roleMaxObservations {
-		all = all[:roleMaxObservations]
+	if len(all) > maxObservations {
+		all = all[:maxObservations]
 		lims = append(lims, "observations_outside_interpret_input")
 	}
 	var obs []obsInput

@@ -22,7 +22,7 @@ import (
 // The review slice report example (examples/report-slices.json and .md,
 // docs/REPORT.md#모듈별-검토-장부) is the builder's output for
 // fixtures/modules/slices/input under the smallest call ceiling (15): the
-// real discovery and role-pack handlers run in process with a scripted
+// real discovery and review handlers run in process with a scripted
 // model caller that answers every task with one call (no model is
 // contacted), a clean synthetic secrets screen and a go vet stand-in without
 // diagnostics. Three slices are admitted and the other four end
@@ -42,8 +42,8 @@ func TestReportSlicesExample(t *testing.T) {
 	j.RunID, j.AttemptID = "0195f3a0-0000-7000-8000-000000000601", "0195f3a0-0000-7000-8000-000000000602"
 	pinExampleSnapshot(t, &j)
 	ids := &exampleIDs{n: 0x102}
-	caller := &roleCaller{script: coverageScript(t)}
-	h, err := discovery.Wrap(RoleHandler{Static: sliceExampleStatic(t), Caller: caller, MaxCalls: sliceExampleCap}, discovery.Config{Observer: exampleObserver{t: t}})
+	caller := &scriptedCaller{script: coverageScript(t)}
+	h, err := discovery.Wrap(Handler{Static: sliceExampleStatic(t), Caller: caller, MaxCalls: sliceExampleCap}, discovery.Config{Observer: exampleObserver{t: t}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,12 +90,12 @@ func TestReportSlicesExample(t *testing.T) {
 	}
 }
 
-// sliceReport runs the role pack with the slices on j through the report
+// sliceReport runs the review with the slices on j through the report
 // builder.
 func sliceReport(t *testing.T, j analysis.Job, static analysis.Handler, maxCalls int, ids *exampleIDs) report.Report {
 	t.Helper()
 	pinExampleSnapshot(t, &j)
-	h, err := discovery.Wrap(RoleHandler{Static: static, Caller: &roleCaller{script: coverageScript(t)}, MaxCalls: maxCalls}, discovery.Config{Observer: exampleObserver{t: t}})
+	h, err := discovery.Wrap(Handler{Static: static, Caller: &scriptedCaller{script: coverageScript(t)}, MaxCalls: maxCalls}, discovery.Config{Observer: exampleObserver{t: t}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestReportSlicesSecretScreenUnusable(t *testing.T) {
 		t.Fatal("the secrets section does not name the unusable scan")
 	}
 	for _, name := range []string{"investigate", "verify", "investigate.s001"} {
-		rec, err := os.ReadFile(rolePath(j, name))
+		rec, err := os.ReadFile(recordPath(j, name))
 		if err != nil || !strings.Contains(string(rec), limNotSecretScreened) {
 			t.Fatalf("%s record: %v", name, err)
 		}

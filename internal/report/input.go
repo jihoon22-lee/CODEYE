@@ -227,7 +227,7 @@ type AnalyzerIdentity struct {
 // ReviewResult is a decoded model review artifact of one task.
 type ReviewResult struct {
 	Accepted bool
-	Role     *record.RoleRecord
+	Record   *record.Record
 }
 
 // ArtifactDecoder turns one verified artifact into a contribution. Decode must
@@ -266,7 +266,7 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 // analyzer envelope, docs/ANALYZERS.md), snapshot-bound review records and
 // discovery documents.
 func DefaultRegistry() *Registry {
-	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, RoleReviewDecoder{}, SliceReviewDecoder{}, ScopeDecoder{}, PlannedScopeDecoder{}, EnvironmentDecoder{}, DependenciesDecoder{})
+	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, SliceReviewDecoder{}, ScopeDecoder{}, PlannedScopeDecoder{}, EnvironmentDecoder{}, DependenciesDecoder{})
 	if err != nil {
 		panic(err)
 	}
