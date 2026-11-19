@@ -7,7 +7,8 @@ import (
 
 // EnvironmentDecoder validates the discovery artifacts of env.discover and
 // docs.discover against the attempt and the snapshot manifest. They add no
-// observation, finding or tool coverage to the report. Without a decoder the
+// observation, finding or tool coverage to the report; the accepted document
+// feeds the environment and documents sections. Without a decoder the
 // builder would count those succeeded required tasks as missing their
 // artifact (artifact_missing, incomplete result) and flag the media type as
 // unrecognized, downgrading every report of a run with discovery.
@@ -49,5 +50,5 @@ func (EnvironmentDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte
 			}
 		}
 	}
-	return Contribution{}, nil
+	return Contribution{Discovery: &d}, nil
 }

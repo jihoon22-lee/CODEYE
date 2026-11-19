@@ -39,6 +39,8 @@ type PublicationTask struct {
 	Required         bool
 	Reason           *string
 	ExecutionOrdinal int64
+	// Stage is the stored task stage; nil for a task recorded without one.
+	Stage *string
 }
 
 // Publication is everything the report service loads for one run.
@@ -124,14 +126,14 @@ func (s *Store) LoadPublication(ctx context.Context, runID string) (Publication,
 			Scan(&a.ID, &a.Number, &a.Epoch, &a.Status, &a.Cleanup, &a.CompletionStatus, &a.CompletionReason, &a.ResultManifestID); err != nil {
 			return p, err
 		}
-		rows, err := tx.Query(ctx, `SELECT t.id::text,t.key,t.status,t.required_for_verdict,t.reason,COALESCE((SELECT max(e.ordinal) FROM task_executions e WHERE e.attempt_id=$2 AND e.task_id=t.id),0)
+		rows, err := tx.Query(ctx, `SELECT t.id::text,t.key,t.status,t.required_for_verdict,t.reason,COALESCE((SELECT max(e.ordinal) FROM task_executions e WHERE e.attempt_id=$2 AND e.task_id=t.id),0),t.stage
 			FROM tasks t WHERE t.run_id=$1 ORDER BY t.id`, runID, a.ID)
 		if err != nil {
 			return p, err
 		}
 		p.Tasks, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (PublicationTask, error) {
 			var t PublicationTask
-			err := row.Scan(&t.ID, &t.Key, &t.Status, &t.Required, &t.Reason, &t.ExecutionOrdinal)
+			err := row.Scan(&t.ID, &t.Key, &t.Status, &t.Required, &t.Reason, &t.ExecutionOrdinal, &t.Stage)
 			return t, err
 		})
 		if err != nil {

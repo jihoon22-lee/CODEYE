@@ -1,0 +1,420 @@
+package report
+
+// Per-analysis sections (docs/REPORT.md#분석-종류별-절). Builder 5 adds them to every report it
+// builds; earlier revisions carry none and keep the flat layout. Sections
+// reference observations and findings by ID and carry computed counts; the
+// pre-existing fields keep their exact shape and meaning, and the summary,
+// status and verdict never depend on a section.
+
+// SectionsSince is the first builder version whose reports carry the
+// sections. A revision of an earlier builder must carry none.
+const SectionsSince = 5
+
+// Section keys in reading order. The overview has one line per key.
+const (
+	SectionEnvironment    = "environment"
+	SectionDocuments      = "documents"
+	SectionStaticAnalysis = "static_analysis"
+	SectionMetrics        = "metrics"
+	SectionSecrets        = "secrets"
+	SectionCodeReview     = "code_review"
+	SectionGaps           = "gaps"
+	// SectionReport is the gap section of facts that concern the whole run
+	// (result manifest, tests).
+	SectionReport = "report"
+)
+
+// SectionKeys lists the overview lines in reading order.
+var SectionKeys = []string{SectionEnvironment, SectionDocuments, SectionStaticAnalysis, SectionMetrics, SectionSecrets, SectionCodeReview, SectionGaps}
+
+// StateNotRecorded is the section state of a run whose tasks carry no stage
+// record (docs/ARCHITECTURE.md#표시-단계와-task-단계 detail not_recorded). Every other state is a
+// display stage state of internal/progress.
+const StateNotRecorded = "not_recorded"
+
+// Analyzer purposes (the envelope's analyzer.purpose, docs/ANALYZERS.md#분석기-목적).
+const (
+	PurposeDiagnostics = "diagnostics"
+	PurposeMetrics     = "metrics"
+	PurposeSecrets     = "secrets"
+)
+
+// Discovery results of an environment or documents section: whether the
+// platform discovery document of that kind reached the report.
+const (
+	DiscoveryAccepted     = "accepted"
+	DiscoveryNotPlanned   = "not_planned"
+	DiscoveryNotSucceeded = "not_succeeded"
+	DiscoveryMissing      = "result_missing"
+	DiscoveryRejected     = "result_rejected"
+)
+
+// Model interpretation states of a section.
+const (
+	ModelPerformed    = "performed"
+	ModelNotPerformed = "not_performed"
+)
+
+// Secret screening of model inputs as the review records state it.
+const (
+	ScreenWithheld    = "withheld"
+	ScreenNotScreened = "not_screened"
+	ScreenFailed      = "screen_failed"
+	ScreenNoModel     = "no_model_input"
+)
+
+// SectionStage is the display stage state of the tasks a section covers,
+// computed with the run screen's classifier (progress.TaskStage) so the
+// report and the run detail cannot disagree about the same tasks.
+type SectionStage struct {
+	// Stage is the task stage the tasks belong to (domain.TaskStages).
+	Stage string `json:"stage"`
+	// State is a progress state, or not_recorded when a task of the run has
+	// no stage record.
+	State     string         `json:"state"`
+	Tasks     int            `json:"tasks"`
+	Succeeded int            `json:"succeeded"`
+	Counts    map[string]int `json:"counts"`
+	Reasons   []string       `json:"reasons"`
+}
+
+// ModelInterpretation tells whether the model role of a section ran and was
+// accepted. Reason is a code and is null only when the role was performed.
+type ModelInterpretation struct {
+	TaskKey    string  `json:"task_key"`
+	State      string  `json:"state"`
+	TaskStatus *string `json:"task_status"`
+	Reason     *string `json:"reason"`
+}
+
+// SectionEvidence is a snapshot excerpt a model statement of the section
+// cites: the role record's catalog entry, bound to path, blob and lines.
+type SectionEvidence struct {
+	ID         string `json:"id"`
+	Kind       string `json:"kind"`
+	Path       string `json:"path"`
+	StartLine  int    `json:"start_line"`
+	EndLine    int    `json:"end_line"`
+	BlobSHA256 string `json:"blob_sha256"`
+}
+
+// Overview is the 종합 section: one line per section and what to look at
+// first. It is a pure function of the other sections (overviewOf).
+type Overview struct {
+	Sections  []OverviewSection `json:"sections"`
+	Attention []Attention       `json:"attention"`
+}
+
+// OverviewSection is one section line: its state (null for the gap list)
+// and its headline numbers, named per section.
+type OverviewSection struct {
+	Key    string         `json:"key"`
+	State  *string        `json:"state"`
+	Counts map[string]int `json:"counts"`
+}
+
+// Attention is one item to look at first, in priority order.
+type Attention struct {
+	Section string `json:"section"`
+	Code    string `json:"code"`
+	Count   int    `json:"count"`
+}
+
+// --- 환경 분석 -----------------------------------------------------------------
+
+type EnvironmentSection struct {
+	Stage     SectionStage `json:"stage"`
+	Discovery string       `json:"discovery"`
+	// Lists of the accepted env.discover document; empty without one.
+	Modules       []EnvModule       `json:"modules"`
+	Manifests     []EnvManifest     `json:"manifests"`
+	Requirements  []EnvRequirement  `json:"requirements"`
+	Observed      []EnvObserved     `json:"observed"`
+	Verdicts      []EnvVerdict      `json:"verdicts"`
+	AnalyzerTools []EnvAnalyzerTool `json:"analyzer_tools"`
+	Limitations   []string          `json:"limitations"`
+	// Model is the review.environment role; Notes are its accepted output.
+	Model    ModelInterpretation `json:"model"`
+	Notes    []EnvNote           `json:"notes"`
+	Evidence []SectionEvidence   `json:"evidence"`
+}
+
+type EnvModule struct {
+	ID        string `json:"id"`
+	Ecosystem string `json:"ecosystem"`
+	Path      string `json:"path"`
+	InScope   bool   `json:"in_scope"`
+}
+
+type EnvManifest struct {
+	Path   string `json:"path"`
+	Status string `json:"status"`
+}
+
+// EnvRequirement is a version or tool requirement the project declares.
+// Constraint is the declared text; the code-free export keeps it only when
+// it is version-constraint text (requirementConstraintPattern).
+type EnvRequirement struct {
+	ID         string  `json:"id"`
+	Module     string  `json:"module"`
+	Tool       string  `json:"tool"`
+	Kind       string  `json:"kind"`
+	Constraint *string `json:"constraint"`
+	Comparison string  `json:"comparison"`
+	Path       string  `json:"path"`
+	StartLine  int     `json:"start_line"`
+	EndLine    int     `json:"end_line"`
+}
+
+// EnvObserved is what the node reported for one runtime tool.
+type EnvObserved struct {
+	Tool    string  `json:"tool"`
+	Status  string  `json:"status"`
+	Version *string `json:"version"`
+	Detail  *string `json:"detail"`
+}
+
+// EnvVerdict is the platform comparison of a requirement (or its absence)
+// with the observation: satisfied, mismatch or unknown with a reason.
+type EnvVerdict struct {
+	Module      string  `json:"module"`
+	Tool        string  `json:"tool"`
+	Requirement *string `json:"requirement"`
+	Status      string  `json:"status"`
+	Reason      *string `json:"reason"`
+}
+
+type EnvAnalyzerTool struct {
+	Tool      string   `json:"tool"`
+	Analyzers []string `json:"analyzers"`
+	Status    string   `json:"status"`
+	Version   *string  `json:"version"`
+	Detail    *string  `json:"detail"`
+}
+
+// EnvNote is model interpretation (review.environment), shown labeled.
+type EnvNote struct {
+	Module            string   `json:"module"`
+	RequirementIDs    []string `json:"requirement_ids"`
+	EvidenceIDs       []string `json:"evidence_ids"`
+	AffectedChecks    string   `json:"affected_checks"`
+	StillCheckable    string   `json:"still_checkable"`
+	NeededObservation string   `json:"needed_observation"`
+}
+
+// --- 문서 분석 -----------------------------------------------------------------
+
+type DocumentsSection struct {
+	Stage     SectionStage `json:"stage"`
+	Discovery string       `json:"discovery"`
+	// Budget is null without an accepted docs.discover document.
+	Budget      *DocBudget   `json:"budget"`
+	Items       []DocItem    `json:"items"`
+	Modules     []DocModule  `json:"modules"`
+	Overlaps    []DocOverlap `json:"overlaps"`
+	Limitations []string     `json:"limitations"`
+	// Model is the review.documents role; the lists below are its accepted
+	// output (model interpretation).
+	Model            ModelInterpretation  `json:"model"`
+	Contracts        []DocContract        `json:"contracts"`
+	Conflicts        []DocConflict        `json:"conflicts"`
+	Questions        []DocQuestion        `json:"questions"`
+	InstructionNotes []DocInstructionNote `json:"instruction_notes"`
+	Evidence         []SectionEvidence    `json:"evidence"`
+}
+
+type DocBudget struct {
+	TotalBytes       int64 `json:"total_bytes"`
+	PerDocumentBytes int64 `json:"per_document_bytes"`
+	MaxDocuments     int   `json:"max_documents"`
+	ReadBytes        int64 `json:"read_bytes"`
+}
+
+type DocItem struct {
+	Path      string  `json:"path"`
+	Class     string  `json:"class"`
+	AppliesTo string  `json:"applies_to"`
+	Status    string  `json:"status"`
+	Reason    *string `json:"reason"`
+	SizeBytes *int64  `json:"size_bytes"`
+	LineCount *int    `json:"line_count"`
+}
+
+type DocModule struct {
+	Module    string   `json:"module"`
+	State     string   `json:"state"`
+	Own       []string `json:"own"`
+	Inherited []string `json:"inherited"`
+}
+
+type DocOverlap struct {
+	Path       string   `json:"path"`
+	Documents  []string `json:"documents"`
+	Assessment string   `json:"assessment"`
+}
+
+type DocContract struct {
+	Statement   string   `json:"statement"`
+	AppliesTo   string   `json:"applies_to"`
+	EvidenceIDs []string `json:"evidence_ids"`
+}
+
+type DocConflict struct {
+	Scope          string   `json:"scope"`
+	Summary        string   `json:"summary"`
+	Impact         string   `json:"impact"`
+	FirstEvidence  []string `json:"first_evidence_ids"`
+	SecondEvidence []string `json:"second_evidence_ids"`
+}
+
+type DocQuestion struct {
+	Question    string   `json:"question"`
+	AppliesTo   string   `json:"applies_to"`
+	EvidenceIDs []string `json:"evidence_ids"`
+}
+
+type DocInstructionNote struct {
+	Note        string   `json:"note"`
+	EvidenceIDs []string `json:"evidence_ids"`
+}
+
+// --- 정적 분석 -----------------------------------------------------------------
+
+// StaticAnalysisSection lists every static_analysis task by language
+// (ecosystem) and tool. Its stage state is the whole static_analysis stage,
+// as on the run screen; metric and secret observations of a tool are in
+// their own sections and only counted here.
+type StaticAnalysisSection struct {
+	Stage     SectionStage     `json:"stage"`
+	Languages []StaticLanguage `json:"languages"`
+}
+
+// StaticLanguage groups tools by envelope ecosystem; Ecosystem is null for
+// tasks without an accepted envelope (no ecosystem is inferred from a key).
+type StaticLanguage struct {
+	Ecosystem *string      `json:"ecosystem"`
+	Tools     []StaticTool `json:"tools"`
+}
+
+// StaticTool is one analyzer task. ObservationIDs are its diagnostic
+// observations and FindingIDs its tool findings (the partition members);
+// Result says whether its envelope reached the report.
+type StaticTool struct {
+	TaskKey        string      `json:"task_key"`
+	Required       bool        `json:"required"`
+	TaskStatus     string      `json:"task_status"`
+	TaskReason     *string     `json:"task_reason"`
+	Result         string      `json:"result"`
+	Analyzer       *string     `json:"analyzer"`
+	Purpose        *string     `json:"purpose"`
+	Tool           *string     `json:"tool"`
+	ToolVersion    *string     `json:"tool_version"`
+	ExitClass      *string     `json:"exit_class"`
+	PartialParse   bool        `json:"partial_parse"`
+	FilesInScope   *int        `json:"files_in_scope"`
+	ProcessedFiles *int        `json:"processed_files"`
+	RulePack       *string     `json:"rule_pack"`
+	ObservationIDs []string    `json:"observation_ids"`
+	FindingIDs     []string    `json:"finding_ids"`
+	Rules          []RuleTally `json:"rules"`
+	Suppressed     int         `json:"suppressed"`
+	Unresolved     int         `json:"unresolved"`
+	// Counts of this task's observations shown in the metrics and secrets
+	// sections.
+	MetricObservations int `json:"metric_observations"`
+	SecretObservations int `json:"secret_observations"`
+}
+
+// RuleTally counts a tool's diagnostic observations of one rule and raw
+// severity (null: the tool gave none or a free-text grade).
+type RuleTally struct {
+	RuleID      string  `json:"rule_id"`
+	RawSeverity *string `json:"raw_severity"`
+	Count       int     `json:"count"`
+}
+
+// --- 구조·중복 지표 ----------------------------------------------------------
+
+// MetricsSection holds the structure measurements over their thresholds.
+// They are never defects. TaskKeys are the analyzer tasks of purpose
+// metrics; Stage is their state with the stage classifier.
+type MetricsSection struct {
+	Stage    SectionStage  `json:"stage"`
+	TaskKeys []string      `json:"task_keys"`
+	Metrics  []MetricGroup `json:"metrics"`
+}
+
+type MetricGroup struct {
+	Name           string   `json:"name"`
+	Unit           string   `json:"unit"`
+	Thresholds     []int    `json:"thresholds"`
+	MaxValue       int      `json:"max_value"`
+	ObservationIDs []string `json:"observation_ids"`
+}
+
+// --- 비밀정보 ------------------------------------------------------------------
+
+// SecretsSection lists secret detections. No value, part or hash of a
+// secret is stored anywhere; a detection is a rule and a location.
+type SecretsSection struct {
+	Stage      SectionStage      `json:"stage"`
+	TaskKeys   []string          `json:"task_keys"`
+	Detections []SecretDetection `json:"detections"`
+	// ModelInput is how review inputs were screened, as the accepted review
+	// records and task reasons state it.
+	ModelInput string `json:"model_input"`
+}
+
+type SecretDetection struct {
+	ObservationID string  `json:"observation_id"`
+	TaskKey       string  `json:"task_key"`
+	RuleID        string  `json:"rule_id"`
+	Path          *string `json:"path"`
+	StartLine     int     `json:"start_line"`
+	EndLine       int     `json:"end_line"`
+	EvidenceState string  `json:"evidence_state"`
+	// FindingID is the tool finding of this detection (listed in the static
+	// analysis section), null when the location was not verified.
+	FindingID *string `json:"finding_id"`
+}
+
+// --- 코드 분석(모델 검토) -------------------------------------------------------
+
+// CodeReviewSection is the model code review: pack, roles, calls, what the
+// model saw, the candidates and their verification outcome.
+type CodeReviewSection struct {
+	Stage SectionStage `json:"stage"`
+	// Pack is "role", "legacy" or "none" (no review task planned).
+	Pack        string  `json:"pack"`
+	PackID      *string `json:"pack_id"`
+	PackVersion *string `json:"pack_version"`
+	// Roles are the code_review stage review tasks with their result.
+	Roles         []AIReviewTask `json:"roles"`
+	Calls         int            `json:"calls"`
+	AcceptedCalls int            `json:"accepted_calls"`
+	// RequestBytes is the sum of the recorded model request sizes (prompt
+	// bytes, not source bytes); null when a record does not state them.
+	RequestBytes   *int     `json:"request_bytes"`
+	ExposedFiles   *int     `json:"exposed_files"`
+	InventoryFiles int      `json:"inventory_files"`
+	FindingIDs     []string `json:"finding_ids"`
+	// Limits are the interpret role's statements about tool observations it
+	// could not relate to code (model interpretation).
+	Limits []InterpretationLimit `json:"interpretation_limits"`
+}
+
+type InterpretationLimit struct {
+	ObservationIDs []string `json:"observation_ids"`
+	Statement      string   `json:"statement"`
+}
+
+// --- 분석 공백 -----------------------------------------------------------------
+
+// Gap is one thing that was not analyzed or only partly: the section, a
+// code, what it concerns (task key, module, path, tool) and a detail code.
+type Gap struct {
+	Section string  `json:"section"`
+	Code    string  `json:"code"`
+	Subject *string `json:"subject"`
+	Detail  *string `json:"detail"`
+}

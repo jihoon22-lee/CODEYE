@@ -86,7 +86,7 @@ type langStub struct {
 const langSecretAnalyzer = "any.gitl" + "eaks"
 
 func (s langStub) Descriptors() []pack.Descriptor {
-	return []pack.Descriptor{{ID: s.eco + ".lint", Name: "lint", Ecosystem: s.eco}, {ID: langSecretAnalyzer, Name: "secrets", Ecosystem: "any"}}
+	return []pack.Descriptor{{ID: s.eco + ".lint", Name: "lint", Ecosystem: s.eco}, {ID: langSecretAnalyzer, Name: "secrets", Ecosystem: "any", Purpose: obsdoc.PurposeSecrets}}
 }
 
 func (langStub) Info() analysis.HandlerInfo {
@@ -109,11 +109,11 @@ func (s langStub) Run(_ context.Context, j analysis.Job, t analysis.TaskSpec, _ 
 	for _, e := range j.Snapshot.Manifest.Entries {
 		sha[e.Path] = e.SHA256
 	}
-	id, eco := s.eco+".lint", s.eco
+	id, eco, purpose := s.eco+".lint", s.eco, ""
 	if t.Key == "secrets" {
-		id, eco = langSecretAnalyzer, "any"
+		id, eco, purpose = langSecretAnalyzer, "any", obsdoc.PurposeSecrets
 	}
-	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: eco}, obsdoc.Component{ID: t.Key, Version: "1"}, obsdoc.Component{ID: t.Key + "-stub", Version: "1"}, t.Key, j.Snapshot.Digest)
+	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: eco, Purpose: purpose}, obsdoc.Component{ID: t.Key, Version: "1"}, obsdoc.Component{ID: t.Key + "-stub", Version: "1"}, t.Key, j.Snapshot.Digest)
 	doc.Module.Dir, doc.Tool.Name = ".", t.Key
 	version := "1.0.0"
 	doc.Tool.Version, doc.Tool.VersionTested = &version, true

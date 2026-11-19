@@ -136,3 +136,10 @@ thead { background: #f1f5f8; }
 .stages { padding: 0; }
 .stage { margin: 6px 0; }
 .stage-toggle { text-align: left; }
+
+/* --- report analysis sections (docs/REPORT.md#분석-종류별-절) --- */
+.report-section { border-top: 1px solid #dce2e8; padding-block: 2px; }
+.report-section > summary { font-size: 1.05rem; }
+.report-section .section-counts { margin-block: 8px; }
+.model-note { border-left: 3px solid #4f5b66; padding-inline-start: 10px; font-style: italic; }
+button.link { background: none; border: 0; padding: 0; color: #245b7a; text-decoration: underline; text-underline-offset: 3px; font: inherit; cursor: pointer; }

@@ -131,7 +131,24 @@ type Analyzer struct {
 	// Required is the descriptor rule: baseline analyzers are
 	// required_for_verdict, extra-depth analyzers are not.
 	Required bool `json:"required"`
+	// Purpose is what the analyzer's observations are
+	// (docs/ANALYZERS.md#분석기-목적): PurposeMetrics (structure measurements, every
+	// observation carries a metric) or PurposeSecrets (credential locations,
+	// no metric). Absent means diagnostics, so the envelopes of the other
+	// analyzers keep their bytes. Consumers read it instead of naming tools.
+	Purpose string `json:"purpose,omitempty"`
 }
+
+// Analyzer purposes. Diagnostics, the default, is written as an absent field.
+const (
+	PurposeMetrics = "metrics"
+	PurposeSecrets = "secrets"
+)
+
+// IsSecrets reports an analyzer whose observations locate credentials. No
+// consumer attaches a code excerpt of such a location, and its messages are
+// fixed templates without secret material (docs/ANALYZERS.md).
+func (a Analyzer) IsSecrets() bool { return a.Purpose == PurposeSecrets }
 
 // Component is a versioned adapter or parser implementation.
 type Component struct {
@@ -306,15 +323,6 @@ type Metric struct {
 
 // MetricUnits are the units a metric may count.
 var MetricUnits = []string{"count", "lines", "tokens"}
-
-// SecretAnalyzers are the analyzers whose observations locate a credential
-// in the snapshot (gitleaks). No consumer attaches a code excerpt of
-// such a location, and their messages are fixed templates without secret
-// material (docs/ANALYZERS.md).
-var SecretAnalyzers = []string{"any.gitleaks"}
-
-// IsSecretAnalyzer reports an analyzer of SecretAnalyzers.
-func IsSecretAnalyzer(id string) bool { return slices.Contains(SecretAnalyzers, id) }
 
 // ToolError is a tool-reported failure to analyze (type error, missing
 // dependency, load failure). It is not an observation of the code.
@@ -512,6 +520,8 @@ func Validate(d Document, want Expect) error {
 		return invalid("schema_version or kind")
 	case !AnalyzerIDPattern.MatchString(d.Analyzer.ID) || len(d.Analyzer.ID) > 64 || !slices.Contains(Ecosystems, d.Analyzer.Ecosystem):
 		return invalid("analyzer identity")
+	case d.Analyzer.Purpose != "" && d.Analyzer.Purpose != PurposeMetrics && d.Analyzer.Purpose != PurposeSecrets:
+		return invalid("analyzer purpose")
 	case !componentID.MatchString(d.Adapter.ID) || !componentID.MatchString(d.Parser.ID) || d.Adapter.Version == "" || d.Parser.Version == "" || len(d.Adapter.Version) > 32 || len(d.Parser.Version) > 32:
 		return invalid("adapter or parser identity")
 	case !analysis.ValidTaskKey(d.TaskKey) || (want.TaskKey != "" && d.TaskKey != want.TaskKey):
@@ -766,6 +776,11 @@ func checkObservations(d Document, execs map[string]Execution, lookup func(strin
 			return invalid("observation %s is suppressed without reported source suppressions", o.ID)
 		case o.Metric != nil && (!code.MatchString(o.Metric.Name) || !slices.Contains(MetricUnits, o.Metric.Unit) || o.Metric.Threshold < 0 || o.Metric.Value < o.Metric.Threshold || o.Suppressed):
 			return invalid("observation %s metric", o.ID)
+		case (d.Analyzer.Purpose == PurposeMetrics) != (o.Metric != nil) && (d.Analyzer.Purpose != "" || o.Metric == nil):
+			// A metrics analyzer reports only metrics and a secrets analyzer
+			// none; an envelope without a purpose may carry metrics (written
+			// before the purpose was recorded).
+			return invalid("observation %s does not match the analyzer purpose", o.ID)
 		}
 		for _, r := range o.Related {
 			if !SafeText(r.RawMessage, 8192) || !checkPlace(r.Path, r.Location, r.LocationState, lookup) {
