@@ -68,7 +68,7 @@ const card = (findingID: string) => {
   return el;
 };
 
-describe('W23 comparison contract parsing', () => {
+describe('comparison contract parsing', () => {
   it('parses the repository comparison example', () => {
     const c = parseComparison(example, RUN, example.revision);
     expect(c.baseline).toMatchObject({ runID: example.baseline!.run_id, revision: 1, selection: 'default' });
@@ -98,7 +98,7 @@ describe('W23 comparison contract parsing', () => {
   });
 });
 
-describe('W23 report history view', () => {
+describe('report history view', () => {
   it('shows the baseline, state counts in text, baseline-only entries and hides reviewed findings only from the list', () => {
     const c = parseComparison(example, RUN, example.revision);
     show(c);

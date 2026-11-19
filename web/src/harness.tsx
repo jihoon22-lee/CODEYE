@@ -40,7 +40,7 @@ export function backend(over: Partial<Record<string, Override>> = {}): Handler {
 
 export function renderApp(handler: Handler = backend(), options: { hash?: string; eventSource?: EventSourceFactory } = {}) {
   const m = mockFetch(handler);
-  // jsdom has no EventSource: without a fake the app polls, as before W22.
+  // jsdom has no EventSource: without a fake the app polls, as before the stream existed.
   const api = createApi({ fetch: m.fetch, eventSource: options.eventSource ?? null });
   const replaceState = vi.fn();
   const controller = createSessionController(api, {

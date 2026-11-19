@@ -7,7 +7,7 @@ import schedules from '../../examples/schedules.json';
 
 const rejection = async (promise: Promise<unknown>) => promise.then(() => null, (e: unknown) => e as ApiError);
 
-describe('W22 contract parsing', () => {
+describe('run progress contract parsing', () => {
   it('parses the repository RunView example with trigger, event_sequence and plan changes', () => {
     const v = parseRun(runProgress);
     expect(v.event_sequence).toBe(22);
@@ -16,7 +16,7 @@ describe('W22 contract parsing', () => {
     expect(v.progress.plan_changes).toEqual([{ revision: 2, reason: 'task_added', stage: 'code_review', weight: 3, planned_weight: 11, recorded_at: '2026-11-18T03:00:20Z' }]);
   });
 
-  it('keeps pre-W22 run views valid (fields absent, not invented)', () => {
+  it('keeps run views without progress fields valid (fields absent, not invented)', () => {
     const v = parseRun(runView());
     expect(v.event_sequence).toBeUndefined();
     expect(v.trigger).toBeUndefined();

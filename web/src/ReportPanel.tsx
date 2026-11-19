@@ -95,7 +95,7 @@ function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null;
   );
 }
 
-// W23: the comparison of this revision and the reviews of its findings, when loaded.
+// The comparison of this revision and the reviews of its findings, when loaded.
 export type ReportHistory = { load: ComparisonLoad; api: Api; reload: () => void };
 
 export function ReportDocument({ report, history }: { report: AnalysisReport; history?: ReportHistory }) {

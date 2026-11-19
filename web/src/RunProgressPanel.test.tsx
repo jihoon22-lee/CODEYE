@@ -17,7 +17,7 @@ const running = (seq: number, version: number, progress: Record<string, unknown>
   { status: 'running', version, event_sequence: seq, trigger: { kind: 'schedule', schedule_id: 's1', scheduled_for: '2026-11-18T03:00:00Z' } },
   { stage: 'running', plan_revision: 1, completed_tasks: 1, total_tasks: 4, estimated_percent: 25, planned_weight: 4, finished_weight: 1, weight_basis: 'mixed', plan_changes: [], waiting_reason: null, ...progress });
 
-describe('run panel over the event stream (W22)', () => {
+describe('run panel over the event stream', () => {
   async function started(handler = backend({ 'GET /api/v1/runs/run1': () => json(200, running(3, 2)) })) {
     const app = renderApp(handler, { eventSource: FakeEventSource.factory });
     await flush();
@@ -94,7 +94,7 @@ const SCHEDULE = {
   pending_occurrence: null,
 };
 
-describe('schedules (W22)', () => {
+describe('schedules', () => {
   async function opened(over: Parameters<typeof backend>[0]) {
     const app = renderApp(backend(over));
     await flush();

@@ -1,4 +1,4 @@
-// Run status over the W22 event stream (GET /runs/{id}/events) with polling as the fallback.
+// Run status over the event stream (GET /runs/{id}/events) with polling as the fallback.
 //
 // The stream is an invalidation channel: event rows only move the cursor, and the
 // state shown is always a whole run view (the run.view event or GET /runs/{id}),
@@ -139,7 +139,7 @@ export function createRunStream(o: RunStreamOptions) {
       inflight = null;
       deliver(view);
       if (stopped) return; // terminal
-      if (view.event_sequence === undefined) { startPolling('polling'); return; } // server without W22 streams
+      if (view.event_sequence === undefined) { startPolling('polling'); return; } // server without streams
       openStream(view.event_sequence);
     }, error => {
       if (stopped || controller !== inflight || controller.signal.aborted) return;

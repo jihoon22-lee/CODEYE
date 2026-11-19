@@ -89,7 +89,7 @@ describe('published report', () => {
       parseAnalysisReport({ ...doc(), demo: true }, 'run1'),
     ).toThrow();
   });
-  // W21 (docs/ANALYZERS.md): a structure metric is counted apart, marked as no defect,
+  // (docs/ANALYZERS.md) a structure metric is counted apart, marked as no defect,
   // and the summary count must match the observations that carry one.
   it('shows structure metrics apart from findings and rejects a count that does not match', () => {
     const metricDoc = () => ({

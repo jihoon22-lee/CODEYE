@@ -18,7 +18,7 @@ export const reportKo = {
       '검토 단계 사이의 후보 또는 호출 기록이 일치하지 않습니다.',
     model_source_not_approved: '이 소스의 모델 전송을 승인하지 않았습니다.',
     analysis_artifact_missing: '확인에 필요한 분석 산출물이 누락됐습니다.',
-    // W21 (docs/ANALYZERS.md): structure metrics and secret detection.
+    // (docs/ANALYZERS.md) structure metrics and secret detection.
     metrics_not_defects: '구조 지표(복잡도·중복)는 임계값을 넘은 측정값이며 결함 근거가 아닙니다.',
     secret_values_withheld: '비밀값과 그 일부·해시는 저장하지 않고 규칙과 위치만 남겼습니다.',
     secret_columns_not_recorded: '비밀값 탐지는 줄 범위만 기록했습니다(도구의 열 위치가 첫 줄 뒤에서 어긋남).',
@@ -26,11 +26,11 @@ export const reportKo = {
     model_input_not_secret_screened: '비밀값 탐지가 실행되지 않아 모델 입력을 비밀값 기준으로 거르지 않았습니다.',
     secret_files_withheld: '비밀값이 탐지된 파일은 모델 입력에서 뺐습니다.',
     data_directories_excluded: '숨김·testdata·vendor·node_modules 아래 파일은 측정하지 않았습니다.',
-    // W24 2c: review inputs of five languages.
+    // Review inputs of five languages.
     source_in_excluded_directories:
       '숨김·vendor·testdata·node_modules와 build·dist·target 같은 산출물·의존성 디렉터리 아래 소스는 모델 입력에서 뺐습니다.',
   } as Record<string, string>,
-  // W21: metric observations are counted apart and never as findings.
+  // Metric observations are counted apart and never as findings.
   metricObservations: '그중 구조 지표(결함 아님)',
   metricMarker: (value: number, threshold: number) => `구조 지표, 결함 아님: ${value} ≥ ${threshold}`,
   metrics: {
