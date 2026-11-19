@@ -62,6 +62,10 @@ func TestUpGitTarget(t *testing.T) {
 			t.Errorf("%s: %v", in, err)
 		}
 	}
+	// The command itself manages processes and exists on Linux only.
+	if runtime.GOOS != "linux" {
+		return
+	}
 	var out, errb bytes.Buffer
 	code := personalUp(context.Background(), []string{"--config", filepath.Join(dir, "p.json"), "git@github.com:o/r.git"}, &out, &errb)
 	if code != 2 || !strings.Contains(errb.String(), "only HTTPS") {
