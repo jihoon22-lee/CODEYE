@@ -250,7 +250,7 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 	}
 	if !ctrlUp {
 		ctrlArgs := []string{"serve", "--personal", "--state-dir", layout.Root, "--listen", cfg.Listen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}
-		ctrlEnv := append(childEnv("PATH", "HOME", "LANG", "TZ"), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
+		ctrlEnv := append(childEnv(append([]string{"PATH", "HOME", "LANG", "TZ"}, fixtureControllerEnv...)...), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
 		cmd, rec, err := personal.Spawn(personal.RoleController, exe, ctrlArgs, ctrlEnv, layout.Root, layout.LogFile(personal.RoleController))
 		if err != nil {
 			if cmd != nil {
