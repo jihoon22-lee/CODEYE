@@ -38,10 +38,17 @@ const (
 	ReasonPyResolutionConflict    = "resolution_conflict"
 	ReasonPyRegistryAuthRequired  = "registry_auth_required"
 	ReasonPyLockfileUnsupported   = "lockfile_format_unsupported"
-	ReasonPyHashMismatch          = "checksum_mismatch"
+	ReasonPyHashMismatch          = "hash_mismatch"
 	ReasonPyProjectUnreadable     = "pyproject_unreadable"
 	ReasonPyLockExportFailed      = "lockfile_export_failed"
+	// ReasonPyTooManyRequirements: pyproject.toml expands past
+	// pyprojectRequirementLimit requirements (include-group fan-out).
+	ReasonPyTooManyRequirements = "too_many_requirements"
 )
+
+// pyprojectRequirementLimit bounds what the pyproject reader expands; the
+// embedded script carries the same number.
+const pyprojectRequirementLimit = 10000
 
 // Inputs the Python fetch leaves out (dropped_inputs reasons).
 const (
@@ -157,8 +164,12 @@ const pyVersionScript = `import sys; print("%d.%d.%d" % sys.version_info[:3])`
 // library's TOML parser (-I -S: no site-packages, nothing of the project is
 // imported) and prints the static requirements: [project] dependencies,
 // every optional dependency group and every PEP 735 dependency group with
-// include-group expanded.
+// include-group expanded. Each group is expanded once and the reader stops
+// with too_many_requirements past pyprojectRequirementLimit requirements.
 const pyprojectScript = `import json, sys
+LIMIT = 10000
+class TooMany(Exception):
+    pass
 def main():
     try:
         import tomllib
@@ -171,6 +182,8 @@ def main():
     out = {"project": False, "dynamic": [], "requirements": [], "invalid": 0, "poetry": False}
     def add(v):
         if isinstance(v, str):
+            if len(out["requirements"]) >= LIMIT:
+                raise TooMany()
             out["requirements"].append(v)
         else:
             out["invalid"] += 1
@@ -190,22 +203,38 @@ def main():
                     add(v)
     groups = d.get("dependency-groups", {})
     if isinstance(groups, dict):
-        def expand(name, seen):
-            if name in seen or not isinstance(groups.get(name), list):
+        memo = {}
+        def expand(name, stack):
+            if name in memo:
+                return memo[name]
+            if name in stack or not isinstance(groups.get(name), list):
                 out["invalid"] += 1
-                return
+                return []
+            got = []
             for v in groups[name]:
                 if isinstance(v, dict) and isinstance(v.get("include-group"), str):
-                    expand(v["include-group"], seen | {name})
+                    got.extend(expand(v["include-group"], stack | {name}))
+                elif isinstance(v, str):
+                    got.append(v)
                 else:
-                    add(v)
+                    out["invalid"] += 1
+                if len(got) > LIMIT:
+                    raise TooMany()
+            memo[name] = got
+            return got
         for k in sorted(groups):
-            expand(k, frozenset())
+            for v in expand(k, frozenset()):
+                add(v)
     tool = d.get("tool")
     if isinstance(tool, dict) and isinstance(tool.get("poetry"), dict) and "dependencies" in tool["poetry"]:
         out["poetry"] = True
     return out
-print(json.dumps(main()))
+def guarded():
+    try:
+        return main()
+    except (TooMany, RecursionError):
+        return {"error": "too_many_requirements"}
+print(json.dumps(guarded()))
 `
 
 type pyprojectFacts struct {
@@ -338,6 +367,9 @@ func (PythonFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 				return stopped()
 			}
 			var facts pyprojectFacts
+			if exitedZero(res) && json.Unmarshal(res.Stdout.Data, &facts) == nil && facts.Error == ReasonPyTooManyRequirements {
+				return fail(domain.TaskFailed, depdoc.StateFailed, ReasonPyTooManyRequirements)
+			}
 			if !exitedZero(res) || json.Unmarshal(res.Stdout.Data, &facts) != nil || facts.Error != "" {
 				in.drop(pp, ReasonPyProjectUnreadable)
 			} else {

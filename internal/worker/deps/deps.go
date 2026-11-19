@@ -288,8 +288,8 @@ func (e *Env) CacheDir(key string) string {
 }
 
 // Exec runs one process with the task's remaining time and, when watch
-// names directories, stops it once they grew together past the download
-// allowance ("" entries are ignored). The streams are stored as an
+// names directories, stops it once they and the process temp directory
+// grew together past the download allowance ("" entries are ignored). The streams are stored as an
 // execution of the task. ok is false when the process did not exit on its
 // own; Stop then says why.
 func (e *Env) Exec(ctx context.Context, name string, spec executor.Spec, watch ...string) (executor.Result, bool) {
@@ -320,6 +320,10 @@ func (e *Env) Exec(ctx context.Context, name string, spec executor.Spec, watch .
 	var over atomic.Bool
 	done, watching := make(chan struct{}), make(chan struct{})
 	watched := slices.DeleteFunc(slices.Clone(watch), func(d string) bool { return d == "" })
+	if len(watched) > 0 && !slices.Contains(watched, spec.TempParent) {
+		// Installers unpack and build in the process temp directory.
+		watched = append(watched, spec.TempParent)
+	}
 	if len(watched) == 0 {
 		close(watching)
 	} else {

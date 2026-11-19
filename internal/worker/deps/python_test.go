@@ -3,12 +3,14 @@ package deps
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
@@ -409,7 +411,18 @@ func TestPythonSkipsAndUnsupported(t *testing.T) {
 			}
 		})
 	}
-	job, _ := jobOf(t, map[string]string{"requirements.txt": "idna\n", "a.py": ""})
+	// A pyproject that expands past the bound ends this module's fetch
+	// before anything is installed.
+	job, _ := jobOf(t, map[string]string{"pyproject.toml": "[dependency-groups]\n", "a.py": ""})
+	ps := &pyScript{facts: `{"error":"too_many_requirements"}`}
+	res := pyHandler(t, Config{}).Run(context.Background(), job, analysis.TaskSpec{Key: "deps.python"}, &fakeRunner{fn: ps.run})
+	if res.Status != domain.TaskFailed || res.Reason != ReasonPyTooManyRequirements || ps.calls != 0 {
+		t.Fatalf("too many requirements %+v", res)
+	}
+	if rec := readRecord(t, job, "deps.python"); rec.State != depdoc.StateFailed || *rec.Reason != ReasonPyTooManyRequirements {
+		t.Fatalf("record %+v", rec)
+	}
+	job, _ = jobOf(t, map[string]string{"requirements.txt": "idna\n", "a.py": ""})
 	h := pyHandler(t, Config{})
 	h.cfg.Python = ""
 	if res := h.Run(context.Background(), job, analysis.TaskSpec{Key: "deps.python"}, &fakeRunner{fn: (&pyScript{}).run}); res.Status != domain.TaskUnsupported || res.Reason != depdoc.ReasonPackageManagerNotConfigured {
@@ -486,5 +499,32 @@ python = "^3.10"
 	want := []string{"certifi", "httpcore==1.*", "h2>=3,<5", "ruff==0.12.11", "pytest", "ruff==0.12.11"}
 	if !facts.Project || !slices.Equal(facts.Requirements, want) || !slices.Equal(facts.Dynamic, []string{"version"}) || !facts.Poetry || facts.Invalid != 0 {
 		t.Fatalf("facts %+v", facts)
+	}
+	// Groups that each include the previous one twice double 40 times: the
+	// reader expands every group once and stops at the bound instead.
+	var fan strings.Builder
+	fan.WriteString("[dependency-groups]\ng0 = [\"a\"]\n")
+	for i := 1; i <= 40; i++ {
+		fmt.Fprintf(&fan, "g%d = [{include-group = \"g%d\"}, {include-group = \"g%d\"}]\n", i, i-1, i-1)
+	}
+	cycle := "[dependency-groups]\na = [\"x\", {include-group = \"b\"}]\nb = [{include-group = \"a\"}]\n"
+	for name, c := range map[string]struct {
+		toml, err string
+		reqs      int
+	}{"fan-out": {fan.String(), ReasonPyTooManyRequirements, 0}, "cycle": {cycle, "", 1}} {
+		cmd := exec.Command(py, "-I", "-S", "-c", pyprojectScript)
+		cmd.Stdin = strings.NewReader(c.toml)
+		start := time.Now()
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var f pyprojectFacts
+		if err := json.Unmarshal(out, &f); err != nil || f.Error != c.err || len(f.Requirements) != c.reqs || time.Since(start) > 20*time.Second {
+			t.Fatalf("%s: %s %v", name, out, err)
+		}
+	}
+	if !strings.Contains(pyprojectScript, fmt.Sprintf("LIMIT = %d\n", pyprojectRequirementLimit)) {
+		t.Fatal("the script's bound differs from pyprojectRequirementLimit")
 	}
 }
