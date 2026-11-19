@@ -84,7 +84,9 @@ func setupPersonalModel(ctx context.Context, cfg *personal.Config, layout person
 	}
 	r := probeModel(ctx, m.Caller())
 	fmt.Fprint(out, r.text())
-	_ = personal.RecordModelProbe(layout, m, r.Verified, r.Reason)
+	if err := personal.RecordModelProbe(layout, m, r.Verified, r.Reason); err != nil {
+		fmt.Fprintln(out, "model: cannot record the probe result (the next codeye up probes again):", err)
+	}
 	return m
 }
 

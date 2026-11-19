@@ -399,5 +399,8 @@ func RecordModelProbe(layout Layout, m *ResolvedModel, verified bool, reason str
 	if err != nil {
 		return err
 	}
+	if err := os.MkdirAll(layout.RunDir(), 0o700); err != nil {
+		return err
+	}
 	return writePrivate(layout.ModelProbeRecord(), data)
 }

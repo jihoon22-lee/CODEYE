@@ -12,6 +12,10 @@ base_url만 바꾼 가짜 upstream(scripts/fake_model_upstream.py)이다. 모델
 3. --version만 다른 값을 답하는 OpenCode wrapper로 재시작 → 검토는 실행되고 기록·보고서에
    opencode_version_untested가 남는다.
 매 단계 키가 키 파일 밖(state·로그·산출물·보고서·DB dump·프로세스 argv)에 없는지 확인한다.
+
+CODEYE_SMOKE_REAL_MODEL_CREDENTIAL=PATH(0600 CODEYE 키 파일, base_url 없음)를 주면 가짜 upstream
+대신 그 키로 1단계만 실행한다(**실모델, 비용 발생**, 호출 상한 15). 키 파일은 agent.model.credential_file로
+가리키기만 하고 복사하지 않으며, 끝에 같은 키 미노출 검사를 한다.
 """
 import json
 import os
@@ -26,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from personal_smoke import Session, free_port, wait_for  # noqa: E402
 
 KEY = "sk-codeye-smoke-" + os.urandom(12).hex()
+REAL = os.environ.get("CODEYE_SMOKE_REAL_MODEL_CREDENTIAL", "")
 
 
 def fake_upstream(root, directory, name, mode):
@@ -37,6 +42,9 @@ def fake_upstream(root, directory, name, mode):
 
 
 def run(base, root, env, probe_env):
+    global KEY
+    if REAL:
+        KEY = json.loads(Path(REAL).read_text())["api_key"]
     opencode = os.environ.get("CODEYE_TEST_OPENCODE_BIN") or str(Path.home() / ".opencode/bin/opencode")
     if not Path(opencode).is_file():
         raise SystemExit("OpenCode 실행 파일이 없습니다(CODEYE_TEST_OPENCODE_BIN)")
@@ -59,8 +67,11 @@ def run(base, root, env, probe_env):
             raise RuntimeError(f"{' '.join(map(str, args[:2]))} 종료 코드 {result.returncode} (기대 {expect}): {text[-3000:]}")
         return result
 
-    good, good_port = fake_upstream(root, directory, "fake-ok", "normal")
-    bad, bad_port = fake_upstream(root, directory, "fake-401", "unauthorized")
+    fakes = []
+    if not REAL:
+        good, good_port = fake_upstream(root, directory, "fake-ok", "normal")
+        bad, bad_port = fake_upstream(root, directory, "fake-401", "unauthorized")
+        fakes = [good, bad]
     state = directory / "state"
     source = directory / "src"
     (source / "ledger").mkdir(parents=True)
@@ -74,6 +85,8 @@ def run(base, root, env, probe_env):
     doc = {"schema_version": "0.1", "state_dir": str(state), "listen": f"127.0.0.1:{port}", "database": {"mode": "external"},
            "source_roots": [{"label": "work", "path": str(source)}],
            "agent": {"go": shutil.which("go"), "max_workers": 1}}
+    if REAL:
+        doc["agent"]["model"] = {"credential_file": REAL, "review_max_calls": 15}
     cfg.write_text(json.dumps(doc))
     cfg.chmod(0o600)
     (state / "secrets").mkdir(parents=True, mode=0o700)
@@ -84,7 +97,8 @@ def run(base, root, env, probe_env):
                                       "base_url": f"http://127.0.0.1:{port}/v1"}) + "\n")
         secret.chmod(0o600)
 
-    write_secret(good_port)
+    if not REAL:
+        write_secret(good_port)
     origin = f"http://127.0.0.1:{port}"
     seen_argv = []
 
@@ -143,6 +157,12 @@ def run(base, root, env, probe_env):
         assert accepted and all(t["result"] == "accepted" for t in ai["required_tasks"]), ai
         assert "opencode_version_untested" not in report["limitations"], report["limitations"]
         print(f"  모델 검토 수행: run {view['status']}, 수락 {accepted}")
+        if REAL:
+            cli("stop", "--config", cfg)
+            checked = no_key_on_disk()
+            print(f"  키 미노출: 상태 파일 {checked}개·DB dump·보고서·CLI 출력·프로세스 인자 {len(seen_argv)}건 확인")
+            print("PASS: 실모델 개인 모드 모델 검토(키 파일 하나)")
+            return
 
         # 2. 키 거부: 재시작 없이 다음 호출부터 401. 정적 분석은 계속, 보고서가 사유를 적는다.
         write_secret(bad_port)
@@ -182,7 +202,7 @@ def run(base, root, env, probe_env):
     finally:
         if (state / "run/controller.json").exists() or (state / "run/agent.json").exists():
             subprocess.run([str(binary), "stop", "--config", str(cfg)], cwd=directory, env=run_env, capture_output=True, timeout=200)
-        for p in (good, bad):
+        for p in fakes:
             p.send_signal(signal.SIGTERM)
             p.wait(timeout=10)
 

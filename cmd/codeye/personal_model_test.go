@@ -59,6 +59,51 @@ func TestPersonalModelFromSecret(t *testing.T) {
 	}
 }
 
+// The model step of `codeye up` stores the key from the environment, probes
+// once, and does not probe again (no second paid call) until the
+// configuration changes, even before the state tree exists.
+func TestSetupPersonalModelProbesOnce(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("shell script stands in for OpenCode")
+	}
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	exe := filepath.Join(home, ".opencode", "bin", "opencode")
+	calls := filepath.Join(base, "calls")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\necho x >> " + calls + "\nif [ \"$1\" = --version ]; then echo " + opencode.Version + "; exit 0; fi\n" +
+		"echo '{\"type\":\"error\",\"sessionID\":\"s\",\"error\":{\"name\":\"APIError\",\"data\":{\"statusCode\":401}}}'\nexit 1\n"
+	if err := os.WriteFile(exe, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	state := filepath.Join(base, "state")
+	cfg, err := personal.Parse([]byte(`{"schema_version":"0.1","state_dir":"`+state+`","database":{"mode":"external"},"source_roots":[{"label":"w","path":"/srv/src"}]}`), knownTools())
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout := personal.Layout{Root: state}
+	personalModelEnv = func() personal.ModelEnv { return personal.ModelEnv{Home: home} }
+	t.Cleanup(func() { personalModelEnv = personal.SystemModelEnv })
+	const key = "sk-test-up-0123456789"
+	t.Setenv("OPENAI_API_KEY", key)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("OPENCODE_API_KEY", "")
+	var out bytes.Buffer
+	m := setupPersonalModel(context.Background(), cfg, layout, false, &out)
+	first, _ := os.ReadFile(calls)
+	if m == nil || m.ID != "openai/gpt-6.2-sol" || !strings.Contains(out.String(), "stored the openai API key from OPENAI_API_KEY") ||
+		!strings.Contains(out.String(), "FAILED at request: model_auth_failed") || len(first) == 0 || strings.Contains(out.String(), key) {
+		t.Fatalf("%v\n%s", m, out.String())
+	}
+	out.Reset()
+	setupPersonalModel(context.Background(), cfg, layout, false, &out)
+	if again, _ := os.ReadFile(calls); len(again) != len(first) || strings.Contains(out.String(), "model probe") || strings.Contains(out.String(), "stored") {
+		t.Fatalf("probed again without a change:\n%s", out.String())
+	}
+}
+
 // The probe names the provider, model and OpenCode release and, when it
 // fails, the stage and reason; an untested release is said so.
 func TestModelProbeOutput(t *testing.T) {

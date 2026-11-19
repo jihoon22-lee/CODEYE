@@ -383,7 +383,7 @@ python3 scripts/test_postgres.py --web --nodes --scheduler --personal
 - `--nodes`: 서로 다른 노드 신원 두 개의 Linux Native 수용 시험. `CODEYE_TEST_STATICCHECK`·`CODEYE_TEST_NODE`·`CODEYE_TEST_RUFF` 등 도구 변수가 있으면 실제 도구로도 실행하고, 없으면 해당 smoke를 SKIP으로 출력한다.
 - `--scheduler`: 별도 DB에서 실제 controller·autoscaler와 `-tags codeye_fixture`로 빌드한 agent·worker(TC-71~75). fixture handler는 시험용이며 분석 결과가 아니다.
 - `--personal`: 개인 모드 start/status/stop, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32). Linux 전용이며 모델 호출·다운로드가 없다.
-- `--personal-model`: 개인 모드 모델 설정(TC-172). 실제 OpenCode(`~/.opencode/bin/opencode` 또는 `CODEYE_TEST_OPENCODE_BIN`)와 가짜 upstream을 쓰며 유료 호출이 없다.
+- `--personal-model`: 개인 모드 모델 설정(TC-172). 실제 OpenCode(`~/.opencode/bin/opencode` 또는 `CODEYE_TEST_OPENCODE_BIN`)와 가짜 upstream을 쓰며 유료 호출이 없다. `CODEYE_SMOKE_REAL_MODEL_CREDENTIAL`에 0600 키 파일(`base_url` 없음)을 주면 그 키로 첫 단계(probe와 run 하나, 호출 상한 15)만 실행한다(**실모델**, 비용 발생, relay 장부를 거치지 않으므로 비용은 따로 기록한다).
 - `--smokes-only`: Go 시험을 건너뛰고 고른 smoke만 다시 돌린다. 이때 마지막 줄은 저장 통합 시험을 실행했다고 주장하지 않는다.
 - `--pilot`: **실모델** 파일럿. 실제 모델 요청을 보낸다. 고정 OpenCode와 승인된 relay가 필요하다. `CODEYE_PILOT_RELAY_FILE`에 relay descriptor, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정한다. `CODEYE_PILOT_CASES`(예: `Q01-before,pilot`)로 대상을, `CODEYE_PILOT_REVIEW_PACK`으로 검토 팩을 고른다(기본 `review-r1`). 보관된 결과는 `python3 scripts/regression_pilot.py --audit-results "$CODEYE_PILOT_RESULTS"`로 다시 대조한다. 이 대조는 위치·줄 범위·blob SHA의 참조 검사이며 주장이 옳다는 보증이 아니다. Git 시험에 기록된 commit 객체가 로컬에 있어야 한다.
 
