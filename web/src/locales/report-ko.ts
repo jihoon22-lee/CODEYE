@@ -81,6 +81,7 @@ export const reportKo = {
     registry_auth_required: '의존성 저장소가 인증을 요구했습니다(인증이 필요한 저장소는 지원하지 않습니다).',
     multiple_lockfiles: '여러 패키지 관리자의 lockfile이 있어 package.json의 packageManager(없으면 정해진 순서의 첫째)를 썼습니다.',
     links_outside_workspace_removed: '설치된 node_modules에서 작업 사본 밖을 가리키는 링크(file:·link: 의존성)를 지웠습니다.',
+    local_dependency_outside_project: '프로젝트 밖 경로를 가리키는 로컬 의존성(file:·link:·portal:)이 있어 설치하지 않았습니다.',
     link_outside_workspace: '작업 사본 밖을 가리켜 지운 링크.',
     snapshot_integrity_failed: '스냅샷 파일이 기록된 해시와 달라 받지 않았습니다.',
     workspace_drift: '받는 동안 manifest나 lockfile이 바뀌어 결과를 버렸습니다.',

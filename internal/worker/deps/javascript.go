@@ -38,6 +38,11 @@ const (
 	LimLinksOutsideRemoved = "links_outside_workspace_removed"
 	// ReasonLinkOutsideWorkspace is the dropped_inputs reason of such a link.
 	ReasonLinkOutsideWorkspace = "link_outside_workspace"
+	// ReasonLocalDependencyOutside: a package.json or the lockfile names a
+	// file:, link: or portal: dependency outside the snapshot; the package
+	// manager would install into that directory, so the install does not
+	// run. failed_items names the dependencies.
+	ReasonLocalDependencyOutside = "local_dependency_outside_project"
 )
 
 // maxDroppedLinks bounds the removed links one record lists.
@@ -219,6 +224,18 @@ func (JSFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 	}
 	if !hasPkg {
 		return fail(domain.TaskFailed, depdoc.StateFailed, ReasonManifestInvalid)
+	}
+	// A file:, link: or portal: dependency outside the snapshot would make
+	// the package manager install into that directory: nothing runs.
+	if outside := localDepsOutside(files, read, root.Dir, mgr.name, lock); len(outside) > 0 {
+		for i, name := range outside {
+			if i == depdoc.MaxFailedItems {
+				break
+			}
+			out.FailedItems = append(out.FailedItems, depdoc.Failed{Name: name, Reason: ReasonLocalDependencyOutside})
+		}
+		out.Counts.Failed = len(out.FailedItems)
+		return fail(domain.TaskSkippedPolicy, depdoc.StateSkipped, ReasonLocalDependencyOutside)
 	}
 	declared, counted := countPackages(mgr.name, lock, pkgJSON)
 	if counted {
@@ -491,6 +508,101 @@ func installedTrees(workspace, dir string) ([]string, bool) {
 	})
 	sort.Strings(out)
 	return out, err == nil
+}
+
+var localSpec = regexp.MustCompile(`(?:^|[\s"'@])(file|link|portal):([^\s"',}]+)`)
+
+// escapes reports whether a local dependency path, relative to the
+// snapshot directory base, leaves the snapshot (absolute, a drive, ~ or ..).
+func escapes(base, p string) bool {
+	p = strings.TrimPrefix(p, "//")
+	if p == "" || strings.HasPrefix(p, "/") || strings.HasPrefix(p, "\\") || strings.HasPrefix(p, "~") || (len(p) > 1 && p[1] == ':') {
+		return true
+	}
+	j := path.Clean(path.Join(base, strings.ReplaceAll(p, "\\", "/")))
+	return j == ".." || strings.HasPrefix(j, "../")
+}
+
+// localDepsOutside names the file:, link: and portal: dependencies of the
+// install root that resolve outside the snapshot: the dependency fields of
+// every package.json at or below the install root, and the lockfile's
+// local entries (npm packages keys and resolved links, pnpm importers,
+// yarn entries).
+func localDepsOutside(files map[string]source.Entry, read func(string) ([]byte, bool), rootDir, manager string, lock []byte) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(name string) {
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	for rel := range files {
+		if path.Base(rel) != "package.json" || !(rootDir == "." || strings.HasPrefix(rel, rootDir+"/")) {
+			continue
+		}
+		b, ok := read(rel)
+		if !ok {
+			continue
+		}
+		var p struct {
+			Dependencies, DevDependencies, OptionalDependencies, PeerDependencies map[string]any
+		}
+		if json.Unmarshal(b, &p) != nil {
+			continue
+		}
+		dir := path.Dir(rel)
+		for _, m := range []map[string]any{p.Dependencies, p.DevDependencies, p.OptionalDependencies, p.PeerDependencies} {
+			for name, v := range m {
+				spec, _ := v.(string)
+				for _, prefix := range []string{"file:", "link:", "portal:"} {
+					if strings.HasPrefix(spec, prefix) && escapes(dir, strings.TrimPrefix(spec, prefix)) {
+						add(name)
+					}
+				}
+			}
+		}
+	}
+	switch {
+	case lock == nil:
+	case manager == ManagerNpm:
+		var l struct {
+			Packages map[string]struct {
+				Resolved string `json:"resolved"`
+				Link     bool   `json:"link"`
+			} `json:"packages"`
+		}
+		if json.Unmarshal(lock, &l) == nil {
+			for key, e := range l.Packages {
+				if key != "" && escapes(rootDir, key) {
+					add(key)
+				}
+				if e.Link && e.Resolved != "" && escapes(rootDir, e.Resolved) {
+					add(strings.TrimPrefix(key, "node_modules/"))
+				}
+			}
+		}
+	default:
+		// pnpm resolves link:/file: against the importer that names it;
+		// other entries (and yarn) against the install root.
+		importer, inImporters := rootDir, false
+		for _, line := range strings.Split(string(lock), "\n") {
+			line = strings.TrimRight(line, "\r")
+			if line != "" && !strings.HasPrefix(line, " ") {
+				inImporters, importer = line == "importers:", rootDir
+			} else if inImporters && strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "   ") && strings.HasSuffix(line, ":") {
+				importer = path.Join(rootDir, strings.Trim(strings.TrimSuffix(strings.TrimSpace(line), ":"), "'\""))
+			}
+			for _, m := range localSpec.FindAllStringSubmatch(line, -1) {
+				if p := strings.Trim(m[2], "'\":"); escapes(importer, p) {
+					// The lockfile line names the spec, not always the package.
+					add(m[1] + ":" + p)
+				}
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // sweepForeignLinks walks the installed trees (not following links) and
