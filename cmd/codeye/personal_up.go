@@ -20,6 +20,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/httpapi"
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
+	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
 // `codeye up [PATH|URL]` (docs/GUIDE.md): from nothing to a signed-in
@@ -424,10 +425,12 @@ func analyzeTarget(ctx context.Context, up *running, cfg *personal.Config, t *up
 // was found and what is missing, and records the result in the state
 // directory. Explicit agent settings always win; agent.auto_detect false
 // turns detection off.
-func applyDetectedTools(ctx context.Context, cfg *personal.Config, out io.Writer) {
-	if _, err := prepareTools(ctx, cfg, out); err != nil {
+func applyDetectedTools(ctx context.Context, cfg *personal.Config, out io.Writer) toolfind.Result {
+	res, err := prepareTools(ctx, cfg, out)
+	if err != nil {
 		fmt.Fprintln(out, "tool detection:", err)
 	}
+	return res
 }
 
 // openBrowser opens url in the desktop browser and names the program used

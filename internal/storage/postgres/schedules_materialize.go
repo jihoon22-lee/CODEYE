@@ -248,7 +248,7 @@ func (m *materializer) enqueue(at time.Time, missedFrom *time.Time, promote bool
 	// The key contains spaces, which the HTTP Idempotency-Key header rejects,
 	// so a manual request can never take a scheduled run's slot.
 	key := "schedule " + m.id + " " + strconv.FormatInt(at.Unix(), 10)
-	r, err := enqueueTx(m.ctx, m.tx, m.actor, m.project, key, m.run, &RunOrigin{ScheduleID: m.id, ScheduledFor: at})
+	r, err := enqueueTx(m.ctx, m.tx, m.actor, m.project, key, m.run, &RunOrigin{ScheduleID: m.id, ScheduledFor: at}, nil)
 	if err != nil {
 		return err
 	}

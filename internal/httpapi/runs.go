@@ -52,9 +52,21 @@ func (s *Server) createRun(q *request) {
 		s.storeError(q, err)
 		return
 	}
-	ctx, cancel := q.ctx()
-	defer cancel()
-	run, err := s.store.Enqueue(ctx, q.session.UserID, q.params[0], key, body)
+	var run postgres.Run
+	var err error
+	if req.PullRequest != nil {
+		pin, ok := s.pinPullRequest(q, q.params[0], *req.PullRequest)
+		if !ok {
+			return
+		}
+		ctx, cancel := q.ctx()
+		defer cancel()
+		run, err = s.store.EnqueuePullRequest(ctx, q.session.UserID, q.params[0], key, body, pin)
+	} else {
+		ctx, cancel := q.ctx()
+		defer cancel()
+		run, err = s.store.Enqueue(ctx, q.session.UserID, q.params[0], key, body)
+	}
 	if err != nil {
 		if errors.Is(err, domain.ErrConflict) {
 			writeError(q.w, q.r, http.StatusConflict, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different body", false)

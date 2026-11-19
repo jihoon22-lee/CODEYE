@@ -21,8 +21,12 @@ type Personal struct {
 	// StateDir is the installation's state directory. The tool detection
 	// (tools.json) and the setup summary (run/personal-setup.json) are read
 	// from it on each request, because `codeye up` rewrites them while the
-	// controller keeps running; no project may contain it.
+	// controller keeps running; no project may contain it. The GitHub token
+	// (secrets/github.json) is read from it for each GitHub API call.
 	StateDir string
+	// GitHubAPI is the GitHub REST API base; "" is github.APIBase() (tests
+	// point it at a fake).
+	GitHubAPI string
 }
 
 // PersonalSetupFile is the setup summary `codeye up`/`start` writes under
@@ -41,6 +45,22 @@ type PersonalSetup struct {
 	GitHosts []string `json:"git_hosts"`
 	// BackupDir is where backups go; no project may contain it.
 	BackupDir string `json:"backup_dir,omitempty"`
+	// GitHub is the GitHub connection `codeye up` found; nil from older
+	// setups.
+	GitHub *SetupGitHub `json:"github,omitempty"`
+}
+
+// SetupGitHub is personal mode's GitHub connection: whether discovery is on,
+// whether a token is stored and whose it is. It never holds the token.
+type SetupGitHub struct {
+	Enabled bool   `json:"enabled"`
+	Host    string `json:"host"`
+	Token   bool   `json:"token"`
+	Account string `json:"account,omitempty"`
+	// Source is GH_TOKEN, GITHUB_TOKEN or gh.
+	Source string `json:"source,omitempty"`
+	// Reason is why no token is available, or why the account is unknown.
+	Reason string `json:"reason,omitempty"`
 }
 
 // SetupModel is the configured review model.
@@ -89,6 +109,25 @@ type setupView struct {
 	ReadableFolders  []string         `json:"readable_folders"`
 	AnalysisDefaults analysisDefaults `json:"analysis_defaults"`
 	Tools            *toolfind.Result `json:"tools"`
+	// GitHub is personal mode's GitHub connection (no token), null in
+	// server mode or before `codeye up` recorded it.
+	GitHub *setupGitHubView `json:"github"`
+}
+
+type setupGitHubView struct {
+	Enabled bool    `json:"enabled"`
+	Host    string  `json:"host"`
+	Token   bool    `json:"token"`
+	Account *string `json:"account"`
+	Source  *string `json:"source"`
+	Reason  *string `json:"reason"`
+}
+
+func optString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // analysisDefaults are the analysis choices of a project that records none,
@@ -127,6 +166,9 @@ func (s *Server) getSetup(q *request) {
 			v.Model = &setupModelView{Configured: true, ID: &id, Probe: &probe}
 		}
 		v.Git = &setupGitView{Available: st.Git, Hosts: st.GitHosts}
+		if g := st.GitHub; g != nil {
+			v.GitHub = &setupGitHubView{Enabled: g.Enabled, Host: g.Host, Token: g.Token, Account: optString(g.Account), Source: optString(g.Source), Reason: optString(g.Reason)}
+		}
 	}
 	if s.personal.StateDir != "" {
 		if res, err := toolfind.Read(filepath.Join(s.personal.StateDir, toolfind.FileName)); err == nil {

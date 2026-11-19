@@ -105,7 +105,7 @@ func (s *Server) createProject(q *request) {
 	if in.Analysis != nil && string(in.Analysis) != "null" {
 		choices, err := domain.ParseAnalysisChoices(in.Analysis)
 		if err != nil {
-			writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "analysis needs the booleans send_source_to_model and run_build_scripts (fetch_dependencies is optional)", false)
+			writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "analysis needs the booleans send_source_to_model and run_build_scripts (fetch_dependencies and comment_on_pull_request are optional)", false)
 			return
 		}
 		reg.Analysis = &choices
@@ -233,7 +233,7 @@ func (s *Server) putProjectAnalysis(q *request) {
 	}
 	c, err := domain.ParseAnalysisChoices(raw)
 	if err != nil {
-		writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "analysis needs the booleans send_source_to_model and run_build_scripts (fetch_dependencies is optional)", false)
+		writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "analysis needs the booleans send_source_to_model and run_build_scripts (fetch_dependencies and comment_on_pull_request are optional)", false)
 		return
 	}
 	ctx, cancel := q.ctx()

@@ -57,6 +57,8 @@ type Config struct {
 	// repositories, no credentials). Absent means ["github.com"]; [] turns
 	// Git sources off.
 	GitHosts []string `json:"git_hosts,omitempty"`
+	// GitHub is the token discovery of github.com (docs/GITHUB.md).
+	GitHub GitHub `json:"github"`
 
 	// listenSet records whether listen was written in the file (a default
 	// listen address may move to the next free port).

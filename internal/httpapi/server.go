@@ -65,6 +65,7 @@ type Store interface {
 	ListProjects(ctx context.Context, actor, cursor string, limit int) (postgres.ProjectPage, error)
 	GetProjectSummary(ctx context.Context, actor, id string) (postgres.ProjectSummary, error)
 	Enqueue(ctx context.Context, actor, project, key string, body json.RawMessage) (postgres.Run, error)
+	EnqueuePullRequest(ctx context.Context, actor, project, key string, body json.RawMessage, pin domain.PullRequest) (postgres.Run, error)
 	GetRunView(ctx context.Context, actor, id string) (postgres.RunView, error)
 	CancelRun(ctx context.Context, actor, id string) (postgres.Run, bool, error)
 	SetProjectAnalysis(ctx context.Context, actor, id string, c domain.AnalysisChoices) (int64, error)

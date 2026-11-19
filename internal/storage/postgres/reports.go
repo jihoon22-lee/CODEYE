@@ -60,6 +60,8 @@ type Publication struct {
 	// Reviews are the project's latest human review per fingerprint;
 	// the builder stamps those in effect at publication.
 	Reviews []FindingReview
+	// PullRequest is the pin of a pull-request run, nil otherwise.
+	PullRequest *domain.PullRequest
 }
 
 const pendingReportsSQL = `SELECT r.id::text FROM runs r
@@ -102,9 +104,16 @@ func (s *Store) LoadPublication(ctx context.Context, runID string) (Publication,
 		if r.SnapshotID == nil {
 			return p, domain.ErrConflict
 		}
-		var request []byte
-		if err = tx.QueryRow(ctx, "SELECT request FROM runs WHERE id=$1", runID).Scan(&request); err != nil {
+		var request, pin []byte
+		if err = tx.QueryRow(ctx, "SELECT request,pull_request FROM runs WHERE id=$1", runID).Scan(&request, &pin); err != nil {
 			return p, err
+		}
+		if pin != nil {
+			pr, err := domain.ParsePullRequest(pin)
+			if err != nil {
+				return p, domain.ErrInvalid
+			}
+			p.PullRequest = &pr
 		}
 		var req struct {
 			Profile string `json:"profile"`
