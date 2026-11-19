@@ -29,6 +29,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -95,19 +96,30 @@ func ParseVersion(stdout []byte) (string, bool) {
 func VersionTested(v string) bool { return pack.SeriesTested(v, TestedSeries) }
 
 // Descriptor is gitleaks' pack identity: an extra-depth analyzer of every
-// supported language snapshot (ecosystem any).
+// snapshot with model input in scope (ecosystem any, Plan).
 func Descriptor() pack.Descriptor {
 	return pack.Descriptor{ID: AnalyzerID, Name: Name, Ecosystem: "any", Required: false, Tool: Tool, VersionArgs: []string{"version"}, ParseVersion: ParseVersion}
 }
 
 // Plan is the tool-independent planner: one task "gitleaks" over every
 // included regular file in scope (configuration, documents and data
-// included; gitleaks' own global allowlist decides what it skips).
+// included; gitleaks' own global allowlist decides what it skips). Unlike
+// the other analyzers of ecosystem "any" it is not gated on supported
+// language source: it is planned whenever a file some review role may send
+// to a model is in scope (envdoc.ModelInputPath: supported source, a
+// guidance document or a module manifest), because its result screens every
+// model input (docs/REVIEW.md#모델-입력의-비밀값-선별). Without a configured
+// gitleaks the task still exists and ends unsupported (tool_not_configured),
+// so the missing screen is visible.
 func Plan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return anypack.Plan(job, Descriptor(), "secrets: credential patterns (gitleaks)", anypack.Files(job, nil, false)), nil
+	files := anypack.Files(job, nil, false)
+	if !slices.ContainsFunc(files, func(e source.Entry) bool { return envdoc.ModelInputPath(e.Path) }) {
+		return nil, nil
+	}
+	return anypack.PlanTask(job, Descriptor(), "secrets: credential patterns (gitleaks)", files), nil
 }
 
 // AllowlistPaths are the global allowlist path patterns of the gitleaks

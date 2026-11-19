@@ -7,6 +7,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
@@ -293,7 +294,9 @@ func Build(in Input, reg *Registry) (Report, error) {
 	analyzerPlanned := false
 	for _, k := range keys {
 		st := states[k]
-		if record.AnalyzerTaskKey(k) {
+		// The secrets task screens model inputs and is planned for a
+		// snapshot of documents alone; it is no static analysis of the code.
+		if record.AnalyzerTaskKey(k) && !obsdoc.IsSecretTask(k) {
 			analyzerPlanned = true
 		}
 		// A static analysis gap is visible and makes the report partial

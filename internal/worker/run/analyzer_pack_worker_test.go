@@ -350,8 +350,9 @@ func TestAnalyzerPackWithRealStaticcheck(t *testing.T) {
 // synthetic Go-only catalog (goOnlyCatalog) so it does not depend on which
 // packs this build has (Python has a pack, see
 // TestPythonSnapshotWithoutRuff). A snapshot with no supported language
-// source plans no analyzer task in the production catalog: the stage has no
-// tasks and the report is partial with static_analysis_not_planned.
+// source plans no code analyzer task in the production catalog, only the
+// secrets task over its documents: the report is partial with
+// static_analysis_not_planned.
 func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -373,8 +374,11 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 		{"python without a pack, with the any-ecosystem analyzers", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
 			append(anyEcosystemTasks(), "pack-gap.python"), progress.Skipped, []string{"analyzer_pack_missing", "tool_not_configured"}, "static_analysis_gap:python",
 			append(anyEcosystemNotRunRows(), "python.none=not_run"), goAndAnyCatalog},
+		// TC-160: the secrets task is planned for documents alone (here not
+		// configured, so unsupported and visible), and the report still says
+		// no static analysis of the code was planned.
 		{"no supported language", map[string]string{"README.md": "# docs\n", "docs/guide.md": "guide\n", "Makefile": "all:\n"},
-			nil, progress.NoTasks, []string{}, "static_analysis_not_planned", nil, nil},
+			[]string{"gitleaks"}, progress.Skipped, []string{"tool_not_configured"}, "static_analysis_not_planned", []string{"any.gitleaks=not_run"}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := runPackCatalog(t, tc.files, nil, tc.catalog)

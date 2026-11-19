@@ -17,7 +17,9 @@ import (
 
 // The production deep-review handler is discovery → the analyzer composite
 // (go vet, then staticcheck and the Python pack planned unsupported when
-// their tools are not given) → review roles. The go-vet and review task specs are unchanged.
+// their tools are not given; the secrets task because go.mod is model input
+// the environment role may quote) → review roles. The go-vet and review task
+// specs are unchanged.
 func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 	exe := "go"
 	if runtime.GOOS == "windows" {
@@ -54,7 +56,7 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 		}
 	}
 	// No pack in the hello: the default pack, review-r1, plans its five roles.
-	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.verify=code_review"}
+	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "gitleaks=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.verify=code_review"}
 	if len(keys) != len(want) {
 		t.Fatalf("plan %v", keys)
 	}
@@ -99,7 +101,7 @@ func TestWorkerHandlersSelectReviewPack(t *testing.T) {
 	for _, p := range plan {
 		keys = append(keys, p.Key+"="+string(p.Stage))
 	}
-	want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis review.environment=environment review.documents=documents review.investigate=code_review review.interpret=code_review review.verify=code_review"
+	want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis gitleaks=static_analysis review.environment=environment review.documents=documents review.investigate=code_review review.interpret=code_review review.verify=code_review"
 	if strings.Join(keys, " ") != want {
 		t.Fatalf("plan %v", keys)
 	}
@@ -115,7 +117,7 @@ func TestWorkerHandlersSelectReviewPack(t *testing.T) {
 	for _, p := range plan {
 		keys = append(keys, p.Key+"="+string(p.Stage))
 	}
-	if want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis review.context=documents review.investigate=code_review review.verify=code_review"; strings.Join(keys, " ") != want {
+	if want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis gitleaks=static_analysis review.context=documents review.investigate=code_review review.verify=code_review"; strings.Join(keys, " ") != want {
 		t.Fatalf("legacy plan %v", keys)
 	}
 }

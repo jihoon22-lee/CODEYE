@@ -316,6 +316,18 @@ var SecretAnalyzers = []string{"any.gitleaks"}
 // IsSecretAnalyzer reports an analyzer of SecretAnalyzers.
 func IsSecretAnalyzer(id string) bool { return slices.Contains(SecretAnalyzers, id) }
 
+// SecretTaskNames are the task names of SecretAnalyzers (pack descriptor
+// names). A secrets task screens model inputs and is planned whenever model
+// input is in scope, so it never counts as a planned static analysis of the
+// code (the report's static_analysis_not_planned).
+var SecretTaskNames = []string{"gitleaks"}
+
+// IsSecretTask reports a task key owned by a secrets analyzer (the name or
+// name.<suffix>, as pack.Owns).
+func IsSecretTask(key string) bool {
+	return slices.ContainsFunc(SecretTaskNames, func(n string) bool { return key == n || strings.HasPrefix(key, n+".") })
+}
+
 // ToolError is a tool-reported failure to analyze (type error, missing
 // dependency, load failure). It is not an observation of the code.
 type ToolError struct {

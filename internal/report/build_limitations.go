@@ -25,8 +25,9 @@ const (
 	// was in scope and the worker had no analyzer for it (a pack-gap task,
 	// docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백). The report is partial; the gap is not a required task.
 	LimStaticAnalysisGap = "static_analysis_gap"
-	// LimStaticAnalysisNotPlanned: the run planned no analyzer task at all
-	// (no supported language source in scope). The report is partial.
+	// LimStaticAnalysisNotPlanned: the run planned no analyzer task besides
+	// the secrets task (no supported language source in scope). The report is
+	// partial.
 	LimStaticAnalysisNotPlanned = "static_analysis_not_planned"
 	NoteInventoryAllLanguages   = "inventory_counts_all_included_files"
 	NoteToolFilesUnknown        = "tool_processed_files_unknown"
