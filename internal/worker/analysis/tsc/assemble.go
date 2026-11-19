@@ -71,6 +71,9 @@ type assembleInput struct {
 	Cancelled, Integrity    bool
 	Policy                  string
 	PolicyOptions           []string
+	// Dependencies is the limitation of a run that read the dependencies
+	// this attempt installed (jsts.PreparedTrees); "" without them.
+	Dependencies string
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -119,6 +122,9 @@ func assemble(in assembleInput) obsdoc.Document {
 	doc.Target.Properties = map[string]string{"node": in.NodeVersion, "tsconfig": "tsconfig.json"}
 	doc.Coverage.Unit = "file"
 	limitations := []string{"type_check_without_dependencies"}
+	if in.Dependencies != "" {
+		limitations = []string{in.Dependencies}
+	}
 	if in.Module.Implicit {
 		limitations = append(limitations, "no_package_json_module")
 	}

@@ -127,6 +127,16 @@ func useDetectedTools(cfg *personal.Config, res toolfind.Result) {
 			}
 		}
 	}
+	// The JS package managers use the user's own npm registry unless the
+	// configuration names one.
+	if res.NpmRegistry != "" && a.DependenciesEnabled() {
+		if a.Dependencies == nil {
+			a.Dependencies = &personal.Dependencies{}
+		}
+		if a.Dependencies.NpmRegistry == "" {
+			a.Dependencies.NpmRegistry = res.NpmRegistry
+		}
+	}
 }
 
 // prepareTools is the start-up step of personal mode: detect the tools

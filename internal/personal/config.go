@@ -139,6 +139,14 @@ type Dependencies struct {
 	TimeoutSeconds      int   `json:"timeout_seconds,omitempty"`
 	TotalTimeoutSeconds int   `json:"total_timeout_seconds,omitempty"`
 	MaxDownloadBytes    int64 `json:"max_download_bytes,omitempty"`
+	// NpmRegistry is the registry of npm, pnpm and yarn (--npm-registry).
+	// Unset, it comes from the user's own npm configuration when tools are
+	// detected; otherwise the package managers' default applies.
+	NpmRegistry string `json:"npm_registry,omitempty"`
+	// PipIndexURL is the Python package index (--pip-index-url; default
+	// PyPI). The interpreter and uv are agent.tools.python and
+	// agent.tools.uv.
+	PipIndexURL string `json:"pip_index_url,omitempty"`
 }
 
 // DependenciesEnabled reports whether the local agent fetches dependencies.
@@ -426,6 +434,12 @@ func (c *Config) validate(knownTools []string) error {
 			if domain.GoSettingCarriesCredentials(v) {
 				return fmt.Errorf("agent.dependencies.%s must not carry credentials (user:token@ in a URL)", name)
 			}
+		}
+		if !domain.ValidRegistryURL(d.NpmRegistry) {
+			return errors.New("agent.dependencies.npm_registry must be an http(s) URL without credentials")
+		}
+		if !domain.ValidPackageIndexURL(d.PipIndexURL) {
+			return errors.New("agent.dependencies.pip_index_url must be one http(s) URL without credentials (user:token@)")
 		}
 		if d.TimeoutSeconds < 0 || d.TotalTimeoutSeconds < 0 || d.MaxDownloadBytes < 0 {
 			return errors.New("agent.dependencies limits must not be negative")

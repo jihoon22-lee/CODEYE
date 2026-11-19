@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -99,6 +100,14 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	depTimeout := fs.Duration("dependency-timeout", 0, "")
 	depTotal := fs.Duration("dependency-total-timeout", 0, "")
 	depMax := fs.Int64("dependency-max-bytes", 0, "")
+	npmRegistry := fs.String("npm-registry", "", "")
+	// Package managers of the dependency fetch (--npm, --pnpm, --yarn,
+	// --python, --uv; deps.ManagerFlags) and the Python package index.
+	managerFlags := map[string]*string{}
+	for _, name := range deps.ManagerFlags() {
+		managerFlags[name] = fs.String(name, "", "")
+	}
+	pipIndex := fs.String("pip-index-url", "", "")
 	// One flag per analyzer tool of this build (--staticcheck PATH) and per
 	// shared toolchain (--node PATH, docs/ANALYZERS.md#도구-경로). Both travel in the hello's
 	// analyzer_tools map; toolchain names are reserved there.
@@ -201,6 +210,13 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	cfg.DependencyFetch, cfg.DependencyCacheDir, cfg.GoProxy = *depFetch, *depCache, *goProxy
 	cfg.GoSumDB, cfg.GoPrivate, cfg.GoNoProxy, cfg.GoNoSumDB = *goSumDB, *goPrivate, *goNoProxy, *goNoSumDB
 	cfg.DependencyTimeout, cfg.DependencyTotalTimeout, cfg.DependencyMaxBytes = *depTimeout, *depTotal, *depMax
+	cfg.NpmRegistry = *npmRegistry
+	cfg.PackageManagers, cfg.PipIndexURL = map[string]string{}, *pipIndex
+	for name, v := range managerFlags {
+		if *v != "" {
+			cfg.PackageManagers[name] = *v
+		}
+	}
 	cfg.ProjectAnalysisPolicy = *projectPolicy
 	for _, d := range protectedDirs {
 		if !filepath.IsAbs(d) {
@@ -228,6 +244,24 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		return agent.ExitRuntime
 	}
 	return agent.ExitOK
+}
+
+// pythonConsumers reports whether mypy or pyright is configured and usable
+// (not among the unavailable analyzers).
+func pythonConsumers(cfg builtin.Config, missing []builtin.Unavailable) bool {
+	for _, name := range []string{python.MypyName, python.PyrightName} {
+		tool := python.MypyTool
+		if name == python.PyrightName {
+			tool = python.PyrightTool
+		}
+		if cfg.Tools[tool] == "" {
+			continue
+		}
+		if !slices.ContainsFunc(missing, func(u builtin.Unavailable) bool { return u.Name == name }) {
+			return true
+		}
+	}
+	return false
 }
 
 func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
@@ -268,9 +302,28 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 			GoSumDB: d.GoSumDB, GoPrivate: d.GoPrivate, GoNoProxy: d.GoNoProxy, GoNoSumDB: d.GoNoSumDB,
 			ModuleTimeout: time.Duration(d.ModuleTimeoutS) * time.Second, TotalTimeout: time.Duration(d.TotalTimeoutS) * time.Second,
 			MaxDownloadBytes: d.MaxDownloadBytes, CacheQuotaBytes: d.CacheQuotaBytes}
+		// cargo and node are toolchains of the analyzers; the package
+		// managers travel in dependencies.package_managers.
+		pm := d.PackageManagers
+		depCfg.CargoExecutable, depCfg.NodeExecutable, depCfg.NpmRegistry = h.AnalyzerTools["cargo"], h.AnalyzerTools["node"], d.NpmRegistry
+		depCfg.NpmScript, depCfg.PnpmScript, depCfg.YarnScript = pm["npm"], pm["pnpm"], pm["yarn"]
+		// Python: the interpreter and uv, and the index; mypy asks the same
+		// interpreter for a prepared tree's search paths.
+		depCfg.Python, depCfg.UV, depCfg.PipIndexURL = pm["python"], pm["uv"], d.PipIndexURL
+		cfg.DependencyPython = depCfg.Python
 	}
 	cfg.AdvertiseWithoutBaseline = h.AdvertiseWithoutBaseline
 	hs, missing := builtin.Handlers(ctx, cfg, runner)
+	// Fetched dependencies are only worth fetching for an analyzer that
+	// reads them: cargo check for crates, tsc or type-aware ESLint for
+	// node_modules, mypy or pyright for Python packages.
+	unusable := map[string]bool{}
+	for _, m := range missing {
+		unusable[m.Name] = true
+	}
+	depCfg.RustConsumer = !unusable["cargo-check"]
+	depCfg.JSConsumer = !unusable["tsc"] || !unusable["eslint-typed"]
+	depCfg.PythonConsumers = pythonConsumers(cfg, missing)
 	for i, handler := range hs {
 		if handler.Info().Name == analyzerpack.CompositeName {
 			timeout := opencode.DefaultTimeout

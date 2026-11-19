@@ -97,7 +97,7 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 | acquire | snapshot, source SHA, manifest | 접근 실패·불안정 복사면 failed | 구현 |
 | discover | 모듈 지도·환경 사실·문서 맥락 | 문서 없음은 정상, 읽지 못한 범위만 표시 | 구현 |
 | plan | task 목록(key·필수 여부·단계·가중치) | 미지원 검사를 숨기지 않고 사유 기록 | 구현(DAG 필드는 일부) |
-| prepare | 실행 사본·런타임·도구 manifest, 모듈별 의존성 기록 | 의존성 준비 실패는 그 task만 끝내고 분석 계속 | Go 의존성 받기 구현, 다른 언어 의존성·빌드는 설계 계약(미구현) |
+| prepare | 실행 사본·런타임·도구 manifest, 모듈별 의존성 기록 | 의존성 준비 실패는 그 task만 끝내고 분석 계속 | Go·Rust·JS/TS·Python 의존성 받기 구현, C/C++ 의존성과 빌드는 설계 계약(미구현) |
 | analyze | 도구 observation, 맥락 중심 가설 | task별 제한시간과 부분 실패 | 구현 |
 | verify | 지지·기각·보류와 반대 근거 | 예산 종료 시 미검증 유지 | 구현 |
 | synthesize | finding group, risk·coverage | 무효 증거를 참조한 결론은 게시하지 않음 | 구현 |
@@ -328,7 +328,7 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 
 ### 프로젝트 환경 준비
 
-Go 모듈 의존성 받기는 구현했다([의존성 준비](#의존성-준비)). 그 밖의 의존성 설치·빌드·테스트 실행은 설계 계약(미구현)이다.
+Go 모듈, Rust crate, JS/TS 패키지, Python 패키지(wheel만) 의존성 받기는 구현했다([의존성 준비](#의존성-준비)). 그 밖의 의존성 설치·빌드·테스트 실행은 설계 계약(미구현)이다.
 
 - 프로젝트 요구 환경, 확보한 환경, 차이, 분석 영향을 따로 저장한다. 모노레포는 모듈별로 다른 언어·버전을 허용한다. 같은 프로젝트의 두 버전 환경을 전역 PATH 수정으로 충돌시키지 않는다.
 - 버전 선택 우선순위는 명시된 프로젝트 제약 → lockfile → 검출된 호환 런타임 → 운영자 카탈로그다. 적합한 버전이 없으면 임의 최신 버전으로 바꾸지 않는다. 버전이 맞지 않아도 가능한 텍스트 검사는 계속하되 의미 분석·테스트의 유효 범위를 표시한다.
@@ -418,23 +418,23 @@ Go 모듈 의존성 받기는 구현했다([의존성 준비](#의존성-준비)
 
 ## 의존성 준비
 
-분석기가 대상 프로젝트의 의존성을 읽어야 진짜 분석이 된다(Go의 타입 검사 등). 의존성 준비는 모듈마다 의존성을 내려받아 공유 캐시에 두고, 분석기가 그 캐시를 읽게 한다. [`internal/worker/deps`](../internal/worker/deps/deps.go)가 계획·실행하고 [`depdoc`](../internal/worker/deps/depdoc/depdoc.go)가 기록을 검증한다. 생태계별 받는 방법은 [분석기](ANALYZERS.md#go-의존성-받기)에 있다.
+분석기가 대상 프로젝트의 의존성을 읽어야 진짜 분석이 된다(Go·Rust·TS·Python의 타입 검사 등). 의존성 준비는 모듈마다 의존성을 내려받아 공유 캐시에 두거나(Go, Rust, 버전이 고정된 Python), 이번 attempt에 설치하고(JS/TS 실행 사본의 `node_modules`, 고정되지 않은 Python 트리), 분석기가 그것을 읽게 한다. [`internal/worker/deps`](../internal/worker/deps/deps.go)가 계획·실행하고 [`depdoc`](../internal/worker/deps/depdoc/depdoc.go)가 기록을 검증한다. 생태계별 받는 방법과 한계는 분석기 문서의 [의존성 준비](ANALYZERS.md#의존성-준비) 장에 있다.
 
 ### 선택과 계획
 
 - 프로젝트 선택 `fetch_dependencies`(기본 켜짐, 웹 "고급"의 "의존성 받기")와 노드 운영자 스위치(`--dependency-fetch`)가 둘 다 켜져야 계획한다. 개인 모드는 스위치를 켠다. 서버 모드 노드는 기본 꺼짐이다. 저장된 선택에 필드가 없으면 켜짐으로 읽고, 꺼짐일 때만 저장한다.
 - 꺼져 있으면 `deps.*` task를 하나도 계획하지 않는다. 계획·보고서는 선택이 없던 때와 같다.
 - `deps.Wrap`은 탐색 wrapper 안, 검토 wrapper 밖에 놓인다. 검토 역할은 정적 handler의 계획만 보므로 `deps.*` task를 보지 않는다.
-- task key는 `deps.<ecosystem>`과 `deps.<ecosystem>.mNN`이다. 접미사는 그 생태계 분석기의 모듈 key 접미사와 같다(Go는 go vet의 모듈 계획을 그대로 쓴다). 그래서 받는 작업 디렉터리와 분석기 작업 디렉터리가 같다.
+- task key는 `deps.<ecosystem>`과 `deps.<ecosystem>.mNN`이다. 접미사는 그 생태계 분석기의 모듈 key 접미사와 같다(Go는 go vet, Rust는 cargo check, Python은 mypy·pyright의 모듈 계획을 그대로 쓴다. JS/TS는 lockfile이 있는 설치 루트마다 하나이고 tsc·type-aware ESLint가 같은 계획으로 기록을 찾는다). 그래서 받는 작업 디렉터리와 분석기 작업 디렉터리가 같다.
 - task는 단계 `environment`, `required=false`, 가중치 없음이다. 계획 입력은 manifest뿐이다.
 - 분석기 팩 이름 `deps`는 예약돼 있고, 내부 handler가 `deps.` key를 계획하면 계획 전체를 거부한다.
 
 ### 실행
 
-- 받기는 실행 사본(workspace)의 모듈 디렉터리에서 executor(argv·cwd·환경변수·제한시간)로 실행한다. 원본 경로와 snapshot에서는 실행하지 않고 둘 다 보호 root다.
+- 받기는 실행 사본(workspace)의 모듈 디렉터리 또는 task의 빈 작업 디렉터리(Python)에서 executor(argv·cwd·환경변수·제한시간)로 실행한다. 원본 경로와 snapshot에서는 실행하지 않고 둘 다 보호 root다.
 - 받은 의존성은 노드 캐시(`--dependency-cache-dir`, 기본 에이전트 `<state-dir>/cache/deps`, 개인 모드 `state_dir/cache/deps`)에 둔다. 개인 모드의 위치는 에이전트 디렉터리 밖이라 에이전트가 다시 등록돼도 남는다. 생태계별 하위 디렉터리를 run과 attempt가 공유한다. attempt별 파일(사본 manifest, 실행 로그, 기록)은 `<scratch>/deps/<key>/` 아래에 있고 attempt scratch와 함께 지워진다.
 - 레지스트리는 argv·환경변수로 정한다. executor는 네트워크를 막거나 허용 목록으로 제한하지 않는다. 받는 도구가 다른 주소로 접속하지 않는다는 것은 도구 설정에 기대며 플랫폼이 강제하지 않는다.
-- 저장소 코드(빌드 스크립트·lifecycle script)를 실행하지 않는다. 그런 실행은 별도 선택 `run_build_scripts`의 몫이다([분석기](ANALYZERS.md#저장소-코드-실행-허가)).
+- 저장소 코드(빌드 스크립트·lifecycle script)를 실행하지 않는다. 그런 실행은 별도 선택 `run_build_scripts`의 몫이다([분석기](ANALYZERS.md#저장소-코드-실행-허가)). `deps.rust`는 cargo가 저장소 Cargo 설정을 읽고, 받은 crate를 쓰는 cargo check·clippy가 build script를 실행하므로 그 허가가 있을 때만 받는다. JS/TS 설치는 lifecycle script를 끄고 실행하므로 허가와 무관하다.
 - 느리거나 실패하는 레지스트리는 그 task만 끝낸다. 분석기와 검토는 계속 실행하고 부족한 입력은 보고서 공백으로 남는다.
 
 ### 예산
@@ -443,7 +443,7 @@ Go 모듈 의존성 받기는 구현했다([의존성 준비](#의존성-준비)
 |---|---|---|
 | 모듈당 제한시간 | 10분(`--dependency-timeout`) | `timed_out`/`timeout` |
 | attempt 합계 | 20분(`--dependency-total-timeout`). 사용량은 `<scratch>/deps/budget.used`에 task마다 한 줄로 더한다 | 남은 시간이 없으면 실행하지 않고 `budget_exhausted`/`dependency_budget_exhausted`. 남은 시간이 모듈 제한보다 짧으면 그 시간이 제한이 되고 넘으면 같은 사유다 |
-| 내려받기 크기 | 2 GiB(`--dependency-max-bytes`), 생태계 캐시 디렉터리 전체 크기를 2초마다 잰다 | 실행을 멈추고 `budget_exhausted`/`download_limit_exceeded` |
+| 내려받기 크기 | 2 GiB(`--dependency-max-bytes`), 받는 도구가 쓰는 디렉터리(생태계 캐시, Python은 만드는 트리)와 실행의 임시 디렉터리 크기의 합을 2초마다 잰다 | 실행을 멈추고 `budget_exhausted`/`download_limit_exceeded` |
 | cache 저장 영역 | 노드 `cache` 저장 영역 상한([운영](OPERATIONS.md#저장-영역과-상한)) | 이미 차 있으면 `budget_exhausted`/`dependency_cache_full`. 남은 공간이 크기 제한보다 작으면 그 공간이 크기 제한이 된다 |
 
 크기 제한은 주기적으로 재는 soft 제한이다. 한 번의 측정 간격만큼 넘을 수 있고, 같은 캐시를 쓰는 다른 워커의 내려받기도 함께 센다.
@@ -454,23 +454,25 @@ Go 모듈 의존성 받기는 구현했다([의존성 준비](#의존성-준비)
 |---|---|---|
 | 모두 받음 | `succeeded` | `prepared` |
 | 받을 것이 없음(`no_dependencies`, `vendored_dependencies`, `no_dependency_consumer`, `dependency_consumers_not_allowed`) | `skipped_policy` | `skipped` |
-| 받으면 안 되는 입력(Go `replace_outside_snapshot`) | `skipped_policy` | `skipped` |
+| 받으면 안 되는 입력(Go `replace_outside_snapshot`, JS/TS `local_dependency_outside_project`) | `skipped_policy` | `skipped` |
+| 받지 않는 형식(yarn 2 이상·bun lockfile `lockfile_format_unsupported`) | `unsupported` | `skipped` |
 | 일부만 받음 | `failed` | `partial` |
 | 제한시간 | `timed_out` | `failed` |
 | 크기·cache·합계 예산 | `budget_exhausted` | `failed` 또는 `skipped` |
 | 취소 | `cancelled` | `failed` |
 | 그 밖의 실패 | `failed`(받는 도구가 없으면 `unsupported`/`package_manager_not_configured`) | `failed` |
 
-- 공통 사유: `registry_unreachable`, `toolchain_unavailable`, `package_manager_not_configured`, `timeout`, `cancelled`, `download_limit_exceeded`, `dependency_budget_exhausted`, `dependency_cache_full`, `dependency_fetch_failed`, `dependency_record_failed`, `cleanup_uncertain`, `output_truncated`. 생태계별 사유는 [분석기](ANALYZERS.md#go-의존성-받기)에 있다.
+- 공통 사유: `registry_unreachable`, `toolchain_unavailable`, `package_manager_not_configured`, `timeout`, `cancelled`, `download_limit_exceeded`, `dependency_budget_exhausted`, `dependency_cache_full`, `dependency_fetch_failed`, `dependency_record_failed`, `cleanup_uncertain`, `output_truncated`. 생태계별 사유는 분석기 문서의 [Go](ANALYZERS.md#go-의존성-받기), [Rust](ANALYZERS.md#rust-의존성-받기), [JS/TS](ANALYZERS.md#jsts-의존성-받기), [Python](ANALYZERS.md#python-의존성-받기) 절에 있다.
 - 받을 것이 없는 사유는 [진행 단계 판정](#진행-단계-판정)에서 성공과 같이 다룬다. 환경 단계를 낮추지 않는다.
 - 실행이 깨끗하게 끝나지 않은 성공은 워커가 받지 않는다.
 
 ### 의존성 기록
 
 - task마다 상태와 관계없이 `<scratch>/deps/<key>/dependencies.json` 하나를 쓰고 role `other`로 올린다. media type `application/vnd.codeye.dependencies+json`, `schema_version` `0.1`, `kind` `dependencies`. [schema](../schemas/dependencies.schema.json), [예시](../examples/dependencies.json).
-- 필드: snapshot digest, run·attempt, `task_key`, `module`(ID·생태계·경로), `manager`(이름·버전), `lockfile`(경로·sha256), `pinned`, `state`, `reason`, `task_status`, `counts`(declared·prepared·failed), `cache`(kind `shared`·`attempt`·`none`, 공유면 `key`), `dropped_inputs`, `failed_items`(최대 50), `limitations`. 절대 경로와 시각은 넣지 않는다.
+- 필드: snapshot digest, run·attempt, `task_key`, `module`(ID·생태계·경로), `manager`(이름·버전), `lockfile`(경로·sha256), `pinned`, `state`, `reason`, `task_status`, `counts`(declared·prepared·failed), `cache`(kind `shared`·`attempt`·`none`, 공유면 `key`), `installed_dirs`(JS/TS 설치가 실행 사본에 만든 `node_modules`, kind `attempt`일 때만), `dropped_inputs`, `failed_items`(최대 50), `limitations`. 절대 경로와 시각은 넣지 않는다.
 - 규칙: `succeeded`는 `prepared`이고 사유가 없다. 다른 상태는 사유가 있다. `skipped_policy`는 `skipped`다. `shared`는 `key`가 있고 key의 생태계가 모듈과 같다.
-- 분석기는 자기 run에서 기록을 다시 읽어 검증한다. 같은 snapshot·attempt·모듈이고 `prepared` 또는 `partial`이며 공유 캐시를 가리킬 때만 그 캐시를 쓴다. 기록이 없거나 쓸 수 없으면 의존성 준비가 없던 때와 같은 경로를 탄다.
+- 분석기는 자기 run에서 기록을 다시 읽어 검증한다. 같은 snapshot·attempt·모듈이고 `prepared` 또는 `partial`일 때만 쓴다. Go·Rust는 공유 캐시를 가리킬 때만 쓴다. Python은 공유 트리와 attempt 트리(`<scratch>/deps/<key>/tree`, 버전이 고정되지 않은 요구사항) 모두 쓴다. JS/TS는 kind `attempt`이고 `installed_dirs`가 있을 때 그 디렉터리만 받아들인다. 기록이 없거나 쓸 수 없으면 의존성 준비가 없던 때와 같은 경로를 탄다.
+- 실행 사본에 설치한 `node_modules`는 attempt 실행 사본과 함께 지워진다. 실패·중단한 설치는 그 자리에서 지우고 `installed_dirs`를 남기지 않는다.
 - 보고서는 `DependenciesDecoder`로 기록을 검증하고 환경 절의 `dependencies`로 보인다([보고서](REPORT.md#분석-범위와-한계)). 관찰·결함·도구 coverage에는 더하지 않는다.
 
 

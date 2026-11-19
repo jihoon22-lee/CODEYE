@@ -246,7 +246,13 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		return write(assemble(in))
 	}
 	in.Chains = []jsts.ConfigChain{chain}
-	if in.Policy, in.PolicyOptions = jsts.ChainPolicy(chain, workspace); in.Policy == "" && jsts.ForeignNodeModules(workspace, mod.Dir) {
+	// The node_modules this attempt's deps.javascript task installed are the
+	// module's dependency code; any other node_modules on the way up is not.
+	trees, lim, prepared := jsts.PreparedTrees(job, mod.Dir)
+	if prepared {
+		in.Dependencies = lim
+	}
+	if in.Policy, in.PolicyOptions = jsts.ChainPolicy(chain, workspace); in.Policy == "" && jsts.ForeignNodeModulesExcept(workspace, mod.Dir, trees) {
 		in.Policy = ReasonForeignNodeModules
 	}
 	if in.Policy != "" {

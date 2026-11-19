@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -32,6 +33,10 @@ const (
 
 	// MaxFailedItems bounds the names listed in failed_items.
 	MaxFailedItems = 50
+	// MaxInstalledDirs bounds installed_dirs.
+	MaxInstalledDirs = 256
+	// InstalledDirName is the only directory name installed_dirs holds.
+	InstalledDirName = "node_modules"
 )
 
 // Record states.
@@ -110,6 +115,12 @@ type Record struct {
 	DroppedInputs []Dropped `json:"dropped_inputs"`
 	FailedItems   []Failed  `json:"failed_items"`
 	Limitations   []string  `json:"limitations"`
+	// InstalledDirs are the snapshot-relative node_modules directories a
+	// JS/TS fetch built in the attempt's workspace copy (cache kind
+	// attempt), sorted. The tsc and type-aware ESLint tasks accept exactly
+	// these as the module's dependency code. Absent for every other
+	// ecosystem.
+	InstalledDirs []string `json:"installed_dirs,omitempty"`
 }
 
 // Module is the analyzer module the dependencies belong to; Path is the
@@ -277,7 +288,44 @@ func Validate(r Record, want Expect) error {
 			return invalid("limitation")
 		}
 	}
+	if err := validInstalled(r); err != nil {
+		return err
+	}
 	return nil
+}
+
+// validInstalled checks installed_dirs: JS/TS records only, an attempt
+// cache, node_modules directories at or below the module directory,
+// sorted and unique.
+func validInstalled(r Record) error {
+	if len(r.InstalledDirs) == 0 {
+		if r.InstalledDirs != nil {
+			return invalid("installed_dirs must be absent when empty")
+		}
+		return nil
+	}
+	if r.Module.Ecosystem != "javascript" || r.Cache.Kind != CacheAttempt || len(r.InstalledDirs) > MaxInstalledDirs {
+		return invalid("installed_dirs")
+	}
+	if !slices.IsSorted(r.InstalledDirs) || len(slices.Compact(slices.Clone(r.InstalledDirs))) != len(r.InstalledDirs) {
+		return invalid("installed_dirs must be sorted and unique")
+	}
+	for _, d := range r.InstalledDirs {
+		if domain.ValidateEvidencePath(d) != nil || path.Base(d) != InstalledDirName || !under(path.Dir(d), r.Module.Path) {
+			return invalid("installed dir")
+		}
+		for _, seg := range strings.Split(path.Dir(d), "/") {
+			if seg == InstalledDirName {
+				return invalid("installed dir nested in another")
+			}
+		}
+	}
+	return nil
+}
+
+// under reports whether snapshot-relative p is dir or below it.
+func under(p, dir string) bool {
+	return dir == "." || p == dir || strings.HasPrefix(p, dir+"/")
 }
 
 // Marshal validates and encodes a record canonically.
@@ -317,6 +365,13 @@ func (r Record) Usable() bool {
 	return (r.State == StatePrepared || r.State == StatePartial) && r.Cache.Kind == CacheShared && r.Cache.Key != nil
 }
 
+// TreeUsable reports whether analyzers should read the dependency trees
+// the record lists: some or all dependencies were installed into this
+// attempt's workspace copy (installed_dirs).
+func (r Record) TreeUsable() bool {
+	return (r.State == StatePrepared || r.State == StatePartial) && r.Cache.Kind == CacheAttempt && len(r.InstalledDirs) > 0
+}
+
 // ReadForModule reads the record a dependency task of this attempt wrote for
 // the module at moduleDir and validates it again. ok is false when there is
 // no record (the fetch was off or not planned), it does not decode, or it
@@ -332,6 +387,34 @@ func ReadForModule(scratch, key, ecosystem, moduleDir string, want Expect) (Reco
 		return Record{}, false
 	}
 	return r, true
+}
+
+// InstalledTrees lists the installed_dirs of every usable JS/TS record this
+// attempt wrote (TreeUsable), validated again. Tools that walk the
+// workspace tree skip exactly these directories.
+func InstalledTrees(scratch string, want Expect) []string {
+	entries, err := os.ReadDir(filepath.Join(scratch, "deps"))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		key := e.Name()
+		if !e.IsDir() || !ValidTaskKey(key) || (key != TaskPrefix+"javascript" && !strings.HasPrefix(key, TaskPrefix+"javascript.")) {
+			continue
+		}
+		w := want
+		w.TaskKey = key
+		b, err := readBounded(Path(scratch, key))
+		if err != nil {
+			continue
+		}
+		if r, err := Decode(b, w); err == nil && r.TreeUsable() {
+			out = append(out, r.InstalledDirs...)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 func readBounded(p string) ([]byte, error) {

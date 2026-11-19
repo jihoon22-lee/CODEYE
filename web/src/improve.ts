@@ -1,4 +1,5 @@
 import type { AnalysisChoices, Project, Setup } from './api';
+import type { Dependency } from './reportSections';
 import { ko as t } from './locales/ko';
 import type { Ledger } from './reportSections';
 
@@ -15,6 +16,12 @@ const taskOf = (subject: string) => subject.replace(/\.m\d+$/, '');
 const toolOf = (subject: string) => TOOL_OF[taskOf(subject)] ?? taskOf(subject);
 
 const MISSING_TOOL = new Set(['tool_not_configured', 'tool_unavailable']);
+// The tools a dependency task of an ecosystem fetches with (the tool table's names).
+const PACKAGE_MANAGERS: Record<string, string[]> = { go: ['go'], rust: ['cargo'], javascript: ['npm', 'pnpm', 'yarn'] };
+// The JS package managers are entry scripts run by node.
+const JS_RUNTIME = 'node';
+// Tasks whose build-script grant also lets deps.rust fetch the crates they read.
+const RUST_TASKS = new Set(['cargo-check', 'clippy']);
 // A dependency task (deps.go, deps.go.m02) names its ecosystem second.
 const ecosystemOf = (subject: string) => taskOf(subject).split('.')[1] ?? taskOf(subject);
 // A reason may carry a detail after a colon.
@@ -25,7 +32,9 @@ const codeOf = (detail: string) => detail.split(':')[0];
 // dependency registry, or turn on a project choice or node switch. Gaps
 // without a known remedy are left to the report's own gap list. The review
 // ledger, when the report has one, says how many calls the refused slots need.
-export function improvementHints(gaps: Gap[], setup: Setup | null, project: Project, ledger: Ledger | null = null): Hint[] {
+// dependencies are the report's dependency tasks: a JS task's record names the
+// manager its lockfile chose.
+export function improvementHints(gaps: Gap[], setup: Setup | null, project: Project, ledger: Ledger | null = null, dependencies: Dependency[] = []): Hint[] {
   const out: Hint[] = [];
   const seen = new Set<string>();
   const push = (h: Hint) => { if (!seen.has(h.key)) { seen.add(h.key); out.push(h); } };
@@ -56,9 +65,21 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
       if (!unresolved.includes(taskOf(g.subject))) unresolved.push(taskOf(g.subject));
     } else if (g.code === 'dependencies_not_prepared' && codeOf(detail) === 'package_manager_not_configured' && g.subject) {
       // The same key as a missing analyzer tool of that name, so installing go is said once.
-      const name = ecosystemOf(g.subject);
-      const tool = setup?.tools?.tools.find(x => x.name === name);
-      push({ key: `tool:${name}`, text: tool?.hint ? t.improve.tool(name, tool.hint) : t.improve.packageManager(name) });
+      const ecosystem = ecosystemOf(g.subject);
+      const status = (n: string) => setup?.tools?.tools.find(x => x.name === n)?.status;
+      let names = PACKAGE_MANAGERS[ecosystem] ?? [ecosystem];
+      if (ecosystem === 'javascript') {
+        // Name the missing piece: node when detection did not find it, else the manager the
+        // record chose (by lockfile), else the managers this computer lacks.
+        const chosen = dependencies.find(d => d.task === g.subject)?.manager;
+        if (setup?.tools && status(JS_RUNTIME) !== 'found') names = [JS_RUNTIME];
+        else if (chosen && names.includes(chosen)) names = [chosen];
+      }
+      const missing = names.filter(n => status(n) !== 'found');
+      for (const name of missing.length > 0 ? missing : names) {
+        const tool = setup?.tools?.tools.find(x => x.name === name);
+        push({ key: `tool:${name}`, text: tool?.hint ? t.improve.tool(name, tool.hint) : t.improve.packageManager(name) });
+      }
     } else if (g.code === 'dependencies_not_prepared' && codeOf(detail) === 'registry_unreachable') {
       push({ key: 'dependency_registry', text: t.improve.registry });
     }
@@ -67,7 +88,9 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
     const tasks = blocked.join(', ');
     // In personal mode the project's own choice decides; elsewhere the node operator's grant.
     if (personal && project.analysis && !project.analysis.run_build_scripts) {
-      push({ key: 'build_scripts', text: t.improve.buildScripts(tasks), turnOn: 'run_build_scripts' });
+      // With dependency fetching on, the same grant lets deps.rust fetch the crates first.
+      const crates = project.analysis.fetch_dependencies && blocked.some(b => RUST_TASKS.has(b));
+      push({ key: 'build_scripts', text: crates ? t.improve.buildScriptsCrates(tasks) : t.improve.buildScripts(tasks), turnOn: 'run_build_scripts' });
     } else if (!personal) {
       push({ key: 'build_scripts', text: t.improve.operatorGrant(tasks) });
     }

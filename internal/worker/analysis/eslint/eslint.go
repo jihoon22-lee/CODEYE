@@ -331,7 +331,13 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 		// typescript-eslint reads the same chain as tsc: write options and
 		// host paths are refused before ESLint runs (docs/ANALYZERS.md#저장소-코드와-tsconfig-검사).
-		if in.Policy, in.PolicyOptions = jsts.ChainPolicy(chain, workspace); in.Policy == "" && jsts.ForeignNodeModules(workspace, mod.Dir) {
+		// The node_modules this attempt's deps.javascript task installed
+		// are the module's dependency code; any other is not.
+		trees, lim, prepared := jsts.PreparedTrees(job, mod.Dir)
+		if prepared {
+			in.Dependencies = lim
+		}
+		if in.Policy, in.PolicyOptions = jsts.ChainPolicy(chain, workspace); in.Policy == "" && jsts.ForeignNodeModulesExcept(workspace, mod.Dir, trees) {
 			in.Policy = ReasonForeignNodeModules
 		}
 		if in.Policy != "" {

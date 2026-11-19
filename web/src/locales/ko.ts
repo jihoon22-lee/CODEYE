@@ -78,6 +78,7 @@ export const ko = {
       `모델 호출 상한 때문에 주요 파일의 slot ${slots}개를 검토하지 못했습니다. 이번 실행은 호출 ${used}회를 썼고, 남은 slot을 모두 검토하려면 약 ${needed}회가 필요해 최댓값 207로도 다 검토하지 못합니다. 설정의 agent.model.review_max_calls를 207로 올리고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
     notPlanned: (n: number) => `slot 상한(96개) 밖이라 계획하지 않은 주요 파일 ${n}개는 호출 상한을 올려도 검토되지 않습니다.`,
     buildScripts: (tasks: string) => `이 프로젝트에서 "저장소의 빌드 스크립트 실행"을 켜면 ${tasks}도 실행합니다.`,
+    buildScriptsCrates: (tasks: string) => `이 프로젝트에서 "저장소의 빌드 스크립트 실행"을 켜면 분석 전에 Rust crate를 받아 두고 ${tasks}도 실행합니다.`,
     buildScriptsAction: '켜고 다시 시도',
     sendSource: '이 프로젝트에서 "소스를 모델에 보냄"을 켜면 모델 검토를 합니다.',
     sendSourceAction: '켜고 다시 시도',
@@ -86,10 +87,14 @@ export const ko = {
     fetchDependenciesAction: '의존성 받기 켜고 다시 시도',
     dependencySwitch: (tasks: string) => `${tasks}는 프로젝트가 쓰는 외부 라이브러리를 찾지 못했습니다. 이 프로젝트의 "의존성 받기"는 켜져 있지만 이 컴퓨터의 설정에서 꺼져 있습니다. 설정의 agent.dependencies.enabled를 true로 바꾸고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
     dependencyOperator: (tasks: string) => `${tasks}는 프로젝트가 쓰는 외부 라이브러리를 찾지 못했습니다. 노드 운영자가 에이전트를 --dependency-fetch로 시작해야 분석 전에 의존성을 받습니다.`,
-    packageManager: (ecosystem: string) => ecosystem === 'go'
+    packageManager: (name: string) => name === 'go'
       ? 'go: 의존성을 받을 go toolchain이 없습니다. go를 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.'
-      : `${ecosystem}: 의존성을 받을 패키지 관리자가 없습니다. 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
-    registry: '의존성 저장소(Go 모듈 proxy 등)에 연결하지 못해 의존성을 받지 못했습니다. 네트워크와 프록시 설정(설정의 agent.dependencies.go_proxy)을 확인하고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
+      : name === 'cargo'
+        ? 'cargo: crate를 받을 Rust toolchain이 없습니다. rustup으로 stable toolchain을 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.'
+        : name === 'node'
+          ? 'node: JS/TS 패키지 관리자를 실행할 Node.js가 없습니다. Node.js를 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.'
+          : `${name}: 이 프로젝트의 의존성을 받을 패키지 관리자가 없습니다. 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
+    registry: '의존성 저장소(Go 모듈 proxy, crates.io, npm 레지스트리, Python 패키지 index 등)에 연결하지 못해 의존성을 받지 못했습니다. 네트워크와 설정의 agent.dependencies.go_proxy·npm_registry·pip_index_url을 확인하고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
     sending: '바꾸는 중…',
     needsManager: '프로젝트 관리자만 바꿀 수 있습니다.',
   },
@@ -508,6 +513,18 @@ export const ko = {
       dependency_cache_full: '의존성 저장 영역(cache)이 상한에 닿아 받지 않음',
       dependency_fetch_failed: '의존성 받기가 실패함',
       dependency_record_failed: '의존성 받기 기록을 쓰지 못함 (실패)',
+      // Python 의존성 받기 (deps.python)
+      dynamic_dependencies_not_read: 'pyproject.toml의 의존성이 dynamic이라 빌드 없이 읽을 수 없어 받지 않음 (미지원)',
+      no_binary_distribution: 'wheel이 없는 패키지를 빼고 받음 (일부만 받음)',
+      no_matching_distribution: 'pip이 맞는 wheel을 찾지 못한 패키지를 빼고 받음 (일부만 받음)',
+      dependency_not_found: '패키지 저장소에 없는 의존성이 있음',
+      resolution_conflict: '요구사항끼리 버전이 맞지 않아 설치할 조합이 없음 (실패)',
+      registry_auth_required: '패키지 저장소가 인증을 요구함 (인증이 필요한 저장소는 미지원)',
+      lockfile_format_unsupported: '읽지 않는 lockfile 형식(yarn 2 이상, bun, poetry.lock, Pipfile 등)만 있어 받지 않음 (미지원)',
+      hash_mismatch: '받은 패키지의 hash가 요구사항과 다름 (실패)',
+      pyproject_unreadable: 'pyproject.toml을 읽지 못함',
+      too_many_requirements: 'pyproject.toml을 펼친 요구사항이 10,000개를 넘어 받지 않음 (실패)',
+      lockfile_export_failed: 'uv.lock에서 요구사항을 꺼내지 못함 (실패)',
     } as Record<string, string>,
     reasonLabel: (label: string) => `사유: ${label}`,
     finishedOfPlanned: (finished: number, planned: number) => `${finished}/${planned} 종료`,

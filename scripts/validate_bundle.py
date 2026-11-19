@@ -177,6 +177,16 @@ def main() -> None:
         bad = copy.deepcopy(dependencies)
         edit(bad)
         expect_invalid("dependency record " + name, validators["dependencies.schema.json"].validate, bad)
+    js_dependencies = json_file(ROOT / "examples/dependencies-javascript.json")
+    validators["dependencies.schema.json"].validate(js_dependencies)
+    for name, edit in {
+        "installed_dirs in a shared cache": lambda d: d.update(cache={"kind": "shared", "key": "javascript/pnpm"}),
+        "installed_dirs of another ecosystem": lambda d: d.update(module={"ecosystem": "rust", "id": "rust:web", "path": "web"}, task_key="deps.rust.m01"),
+        "installed dir not node_modules": lambda d: d.update(installed_dirs=["web/vendor"]),
+    }.items():
+        bad = copy.deepcopy(js_dependencies)
+        edit(bad)
+        expect_invalid("dependency record " + name, validators["dependencies.schema.json"].validate, bad)
     for name in ("examples/environment.json", "examples/environment-documents.json"):
         environment = json_file(ROOT / name)
         validators["environment.schema.json"].validate(environment)

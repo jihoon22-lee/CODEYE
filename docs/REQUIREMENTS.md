@@ -140,7 +140,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 개인 모드에도 
 | REQ-002 | 개인 모드의 owner·프로젝트 ACL과 source root grant는 구현. 여러 사용자 계정과 역할 운영은 설계 계약(미구현) |
 | REQ-004 | 모듈·런타임 버전 선언·문서·노드 관측은 구현. include·define, 가상환경·stub, features 같은 추가 빌드 조건 수집은 설계 계약(미구현)([아키텍처](ARCHITECTURE.md)) |
 | REQ-006 | 분석기 팩이 task마다 대상 범위와 판정 필수 여부(`required_for_verdict`)를 계획. 예산·완료 기준을 갖는 완전한 계획 DAG는 설계 계약(미구현)([아키텍처](ARCHITECTURE.md)) |
-| REQ-014 | 정적 검사와 Go 모듈 의존성 받기(분석 전, 저장소 코드 실행 없음)는 구현([의존성 준비](ARCHITECTURE.md#의존성-준비)). 다른 언어의 의존성 받기와 빌드·기존 테스트 실행은 설계 계약(미구현) |
+| REQ-014 | 정적 검사와 Go 모듈·Rust crate·JS/TS 패키지·Python 패키지(wheel만) 의존성 받기(분석 전, 저장소 코드 실행 없음, Rust는 저장소 코드 실행 허가가 있을 때만)는 구현([의존성 준비](ARCHITECTURE.md#의존성-준비)). C/C++ 의존성 받기와 빌드·기존 테스트 실행은 설계 계약(미구현) |
 | REQ-016 | 단계·상태·대기 사유·경과 표시는 구현. 개별 task 로그 조회 API는 설계 계약(미구현)([API](API.md)) |
 | REQ-017 | 가중 진행률은 구현. 잔여 시간 범위는 제공하지 않음 |
 | REQ-018 | 작업·노드·pool·전역 자원 상한과 relay의 모델 예산은 구현. endpoint별 모델 동시 요청 상한(`model_max_inflight`)과 전역 모델 semaphore는 설계 계약(미구현)([실행](EXECUTION.md)) |

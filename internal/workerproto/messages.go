@@ -132,6 +132,16 @@ type Dependencies struct {
 	MaxDownloadBytes int64  `json:"max_download_bytes"`
 	// CacheQuotaBytes is the cache storage area limit (0 = none).
 	CacheQuotaBytes int64 `json:"cache_quota_bytes"`
+	// NpmRegistry is the registry URL of npm, pnpm and yarn ("" = npm's,
+	// or yarn's for yarn).
+	NpmRegistry string `json:"npm_registry,omitempty"`
+
+	// PackageManagers are the operator's package manager paths by flag name
+	// (deps.ManagerFlags: npm, pnpm, python, uv, yarn); a fetcher without its manager
+	// ends package_manager_not_configured.
+	PackageManagers map[string]string `json:"package_managers,omitempty"`
+	// PipIndexURL is the Python package index (--pip-index-url, "" = PyPI).
+	PipIndexURL string `json:"pip_index_url,omitempty"`
 }
 
 // AttemptRef identifies the attempt a message belongs to.

@@ -130,10 +130,15 @@ type Config struct {
 	// at construction, for the system linker `cc` that rustc needs to link
 	// build scripts and proc macros; the absolute result is passed as the
 	// target linker and the list is never given to the child as PATH.
-	ToolPath    string
-	Timeout     time.Duration
-	StdoutLimit int64
-	StderrLimit int64
+	ToolPath string
+	// DependencyCacheRoot is the node's shared dependency cache. When this
+	// attempt's deps.rust task fetched the module's crates there (its record
+	// says so), the task reads that CARGO_HOME instead of an empty scratch
+	// one; it stays offline.
+	DependencyCacheRoot string
+	Timeout             time.Duration
+	StdoutLimit         int64
+	StderrLimit         int64
 }
 
 // Analyzer is the configured cargo check or clippy adapter.
@@ -425,7 +430,24 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		return executor.Spec{Executable: exe, Args: args, WorkspaceRoot: workspace, Dir: moduleDir, ProtectedRoots: protected, TempParent: dirs["tmp"],
 			Env: maps.Clone(env), Timeout: a.cfg.Timeout, StdoutLimit: a.cfg.StdoutLimit, StderrLimit: a.cfg.StderrLimit, Redact: redact}
 	}
-	env := a.env(dirs["cargo-home"], dirs["target"], "")
+	cargoHome := dirs["cargo-home"]
+	if dep, ok := a.preparedCrates(job, mod.Key, d.Name, mod.Dir); ok {
+		ready := true
+		if dep.lockfile != "" {
+			// The module has no Cargo.lock; the one deps.rust generated
+			// pins what it fetched, and --locked reads it.
+			remove, err := placeLockfile(dep.lockfile, moduleDir)
+			if err != nil {
+				ready = false
+			} else {
+				defer remove()
+			}
+		}
+		if ready {
+			cargoHome, in.Dependencies = dep.home, dep.limitation
+		}
+	}
+	env := a.env(cargoHome, dirs["target"], "")
 	type step struct {
 		name string
 		exe  string
@@ -462,7 +484,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		case execRustc:
 			var r Rustc
 			if r, ok = ParseRustcVV(res.Stdout.Data); ok && pack.ExitedZero(&res) {
-				env = a.env(dirs["cargo-home"], dirs["target"], r.Host)
+				env = a.env(cargoHome, dirs["target"], r.Host)
 			}
 		case execCargo:
 			_, ok = ParseCargoVersion(res.Stdout.Data)

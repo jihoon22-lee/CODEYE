@@ -21,7 +21,7 @@ func buildPython(ctx context.Context, cfg Config, runner executor.Runner, d pack
 	if exe == "" {
 		return unavailable(d.Name, "not_configured", "", pack.ReasonToolNotConfigured)
 	}
-	pc := python.Config{Executable: exe, Node: node}
+	pc := python.Config{Executable: exe, Node: node, DependencyCacheRoot: cfg.DependencyCacheRoot, Interpreter: cfg.DependencyPython}
 	if d.ID == python.MypyID || d.ID == python.PyrightID {
 		pc.BothTypeCheckers = cfg.Tools[python.MypyTool] != "" && cfg.Tools[python.PyrightTool] != ""
 	}

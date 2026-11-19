@@ -178,8 +178,46 @@ func TestDependenciesNotFetchedGap(t *testing.T) {
 		t.Fatalf("gap although a deps task ran: %+v", g)
 	}
 	pinned := false
-	r.Environment.Dependencies = []EnvDependency{{TaskKey: "deps.go", TaskStatus: "succeeded", Ecosystem: &goEco, Pinned: &pinned}}
+	prepared := "prepared"
+	r.Environment.Dependencies = []EnvDependency{{TaskKey: "deps.go", TaskStatus: "succeeded", Ecosystem: &goEco, Pinned: &pinned, State: &prepared}}
 	if g := collect([]string{"deps.go", "go-vet"}); len(g) != 1 || g[0].Code != GapVersionsNotPinned {
 		t.Fatalf("gaps %+v", g)
+	}
+	// A task skipped before it read the lockfile fetched nothing: no
+	// versions were picked.
+	skipped, notAllowed, rustEco := "skipped", "dependency_consumers_not_allowed", "rust"
+	r.Environment.Dependencies = []EnvDependency{{TaskKey: "deps.rust", TaskStatus: "skipped_policy", TaskReason: &notAllowed, Ecosystem: &rustEco, Pinned: &pinned, State: &skipped}}
+	for _, g := range collect([]string{"deps.rust"}) {
+		if g.Code == GapVersionsNotPinned || g.Code == GapDependenciesNotPrepared {
+			t.Fatalf("skipped task gap %s", g.Code)
+		}
+	}
+}
+
+// A Python type checker that left imports unresolved because no package was
+// installed is the same gap; one that read prepared packages, or that had
+// nothing unresolved, is not.
+func TestDependenciesNotFetchedGapPython(t *testing.T) {
+	py := "python"
+	r := &Report{Environment: &EnvironmentSection{}, StaticAnalysis: &StaticAnalysisSection{Languages: []StaticLanguage{
+		{Ecosystem: &py, Tools: []StaticTool{{TaskKey: "mypy"}, {TaskKey: "pyright"}, {TaskKey: "ruff"}}}}},
+		Coverage: Coverage{Tools: []ToolCoverage{
+			{TaskKey: "mypy", Packages: map[string]int{"import_unresolved": 3}, Limitations: []string{"imports_unresolved", "third_party_packages_not_installed"}},
+			{TaskKey: "pyright", Packages: map[string]int{"import_unresolved": 2}, Limitations: []string{"imports_unresolved", "third_party_packages_prepared"}},
+			{TaskKey: "ruff", Packages: map[string]int{}, Limitations: []string{}},
+		}}}
+	collect := func(keys []string) []Gap {
+		var out []Gap
+		sectionContext{r: r, keys: keys}.dependencyGaps(func(section, code string, subject, detail *string) {
+			out = append(out, Gap{Section: section, Code: code, Subject: subject, Detail: detail})
+		})
+		return out
+	}
+	g := collect([]string{"mypy", "pyright", "ruff"})
+	if len(g) != 1 || g[0].Code != GapDependenciesNotFetched || *g[0].Subject != "mypy" || *g[0].Detail != "imports_unresolved" {
+		t.Fatalf("gaps %+v", g)
+	}
+	if g := collect([]string{"deps.python", "mypy", "pyright"}); len(g) != 0 {
+		t.Fatalf("gap although a deps task ran: %+v", g)
 	}
 }

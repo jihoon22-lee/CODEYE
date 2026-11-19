@@ -25,3 +25,18 @@ func GoSettingCarriesCredentials(value string) bool {
 	}
 	return false
 }
+
+// ValidRegistryURL reports whether a package registry setting is empty or
+// an absolute http(s) URL on one line without userinfo. A credential is
+// never carried into configuration, flags or the worker hello; registries
+// that need one are not supported.
+func ValidRegistryURL(value string) bool {
+	if value == "" {
+		return true
+	}
+	if len(value) > 2048 || strings.ContainsAny(value, "\x00\n\r\t @") {
+		return false
+	}
+	u, err := url.Parse(value)
+	return err == nil && u.User == nil && u.Host != "" && (u.Scheme == "https" || u.Scheme == "http")
+}
