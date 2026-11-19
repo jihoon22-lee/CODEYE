@@ -53,6 +53,10 @@ JSON·Markdown·자체 포함 HTML은 같은 리비전의 같은 projection에�
 
 실행 기록은 절대 경로를 싣지 않는다. 검증이 cwd는 작업공간 상대 경로(또는 `[REDACTED]`)인지, argv에 절대 경로가 없는지 확인한다.
 
+## 분석 종류별 절
+
+(작성 중)
+
 관찰은 원시 산출물에 묶인다. `raw_ref`는 그 task 실행의 원시 stream 산출물 ID, SHA-256, stream 순번, JSON pointer, 바이트 범위를 가리킨다. 위치는 도구가 확정한 줄 범위를 쓰고, 경로와 blob hash가 snapshot manifest와 일치할 때만 `evidence_state`가 `verified_against_source_manifest`다. 일치하지 않으면 `source_manifest_mismatch`, 확인할 수 없으면 `unresolved`이며 그 위치는 발견에 연결하지 않는다. `location_state`는 분석기 decoder가 준 값을 그대로 싣는다([분석기](ANALYZERS.md)).
 
 ## 상태와 판정

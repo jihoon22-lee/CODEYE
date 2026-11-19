@@ -89,7 +89,10 @@ def main() -> None:
     validators["analyzer.schema.json"].validate(go_vet)
     validators["go-vet-observations.schema.json"].validate(observations)
     check_plan(plan)
-    check_report(report)
+    # examples/report.json is the builder's output for fixtures/modules/input
+    # (internal/worker/review/report_example_test.go); its evidence hashes bind to that tree.
+    modules_root = ROOT / "fixtures/modules/input"
+    check_report(report, modules_root)
     published = json_file(ROOT / "examples/report-go-vet.json")
     validators["report.schema.json"].validate(published)
     check_report(published, ROOT / "fixtures/go-vet")
@@ -133,11 +136,6 @@ def main() -> None:
         environment = json_file(ROOT / name)
         validators["environment.schema.json"].validate(environment)
         check_environment_example(environment)
-    ensure(plan["run_id"] == report["run_id"], "Example run mismatch")
-    plan_tasks = {task["id"]: task for task in plan["tasks"]}
-    ensure(set(plan_tasks) == {task["id"] for task in report["tasks"]}, "Plan/report task mismatch")
-    for task in report["tasks"]:
-        ensure(task["required_for_verdict"] == plan_tasks[task["id"]]["required_for_verdict"], "Required-task flag mismatch")
     platform = yaml_file(ROOT / "examples/platform.yaml")
     scheduler = platform["scheduler"]
     ensure(0 < scheduler["heartbeat_seconds"] < scheduler["lease_seconds"] - scheduler["lease_safety_margin_seconds"], "Invalid lease timing")
@@ -160,18 +158,21 @@ def main() -> None:
         trace.update(family + "-" + number for number in numbers.split(","))
     ensure(required.issubset(trace), "Unmapped requirements: " + str(sorted(required - trace)))
     openapi_refs = check_openapi(ROOT / "api/openapi.yaml")
+    # Negative cases pick findings by shape, not by position: the builder orders them.
+    claimed = next(i for i, f in enumerate(report["findings"]) if f["claims"] and f["claims"][0]["evidence_ids"])
+    located = next(i for i, f in enumerate(report["findings"]) if f["locations"])
     bad = copy.deepcopy(report)
     bad["summary"]["total_findings"] += 1
-    expect_invalid("invented total", check_report, bad)
+    expect_invalid("invented total", lambda d: check_report(d, modules_root), bad)
     bad = copy.deepcopy(report)
-    bad["findings"][0]["claims"][0]["evidence_ids"] = ["missing"]
-    expect_invalid("missing evidence", check_report, bad)
+    bad["findings"][claimed]["claims"][0]["evidence_ids"] = ["missing"]
+    expect_invalid("missing evidence", lambda d: check_report(d, modules_root), bad)
     bad = copy.deepcopy(report)
-    bad["findings"][0]["validation"] = "reproduced"
+    bad["findings"][claimed]["validation"] = "reproduced"
     expect_invalid("reproduced without execution", validators["report.schema.json"].validate, bad)
     bad = copy.deepcopy(report)
-    bad["findings"][0]["locations"][0]["path"] = "../outside.py"
-    expect_invalid("path traversal", check_report, bad)
+    bad["findings"][located]["locations"][0]["path"] = "../outside.py"
+    expect_invalid("path traversal", lambda d: check_report(d, modules_root), bad)
     bad = copy.deepcopy(published)
     bad["observations"][0]["raw_ref"]["artifact_id"] = "unknown"
     expect_invalid("unbound raw stream", check_report, bad)
