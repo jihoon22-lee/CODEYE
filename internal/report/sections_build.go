@@ -476,10 +476,12 @@ func (c sectionContext) screen() string {
 		unscreened = unscreened || slices.Contains(lims, "model_input_not_secret_screened")
 	}
 	switch {
+	case unscreened:
+		// Not screened wins over withheld: a failed or partial secrets
+		// result withholds what it reported but screened nothing else.
+		return ScreenNotScreened
 	case withheld:
 		return ScreenWithheld
-	case unscreened:
-		return ScreenNotScreened
 	case !decoded:
 		return ScreenNoModel
 	}

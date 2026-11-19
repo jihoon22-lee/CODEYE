@@ -297,7 +297,7 @@ export const reportKo = {
     } as Record<string, string>,
     // A secrets task ran but its result is unusable: review ran on the read filters alone.
     modelInputUnusable: (task: string, status: string, reason: string) =>
-      `탐지 작업 ${task}의 결과를 쓸 수 없어(${status}: ${reason}) 모델 입력을 비밀값 기준으로 거르지 않았습니다. 모델 입력은 기본 읽기 필터(민감값 모양·보류 파일)만 거쳤습니다.`,
+      `탐지 작업 ${task}의 결과를 쓸 수 없어(${status}: ${reason}) 모델 입력을 비밀값 기준으로 다 거르지 못했습니다. 그 결과가 보고한 파일은 뺐고, 나머지 모델 입력은 기본 읽기 필터(민감값 모양·보류 파일)만 거쳤습니다.`,
     noPack: '이 실행에는 모델 검토 작업이 계획되지 않았습니다. 코드 분석은 도구 진단만으로 이뤄졌습니다.',
     pack: (id: string) => `검토 팩 ${id}`,
     callsLine: (calls: number, accepted: number) => `모델 호출 ${calls}회, 그중 수락 ${accepted}회(환경·문서 역할 호출 포함, 전체 합계)`,

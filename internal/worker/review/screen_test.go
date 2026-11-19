@@ -21,7 +21,8 @@ import (
 // detection on gateway.go, where the test planted a value the platform's
 // Sensitive pattern does not recognize. mode is the secrets task outcome:
 // "" a complete successful scan, "not_run" the not-configured stand-in,
-// "failed" a failed scan, "missing" no envelope at all. Descriptors names
+// "failed" a failed scan, "missing" no envelope at all, "partial" a scan
+// that failed after reporting the detection (partial parse). Descriptors names
 // the analyzers as the production composite does.
 type screenStub struct{ mode string }
 
@@ -85,7 +86,12 @@ func (w screenStub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec
 	}
 	doc.Coverage.ProcessedPaths = []string{p}
 	doc.Parse.OK = true
-	if t.Key == secretsTaskKey && w.mode != "" {
+	if t.Key == secretsTaskKey && w.mode == "partial" {
+		reason := "scan_incomplete"
+		doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskFailed, Reason: &reason, ExitClass: obsdoc.ExitExecutionError, PartialParse: true}
+		doc.Coverage.ProcessedPaths = nil
+		doc.Parse.OK = false
+	} else if t.Key == secretsTaskKey && w.mode != "" {
 		doc.Observations = []obsdoc.Observation{}
 		doc.Parse.OK = false
 		if w.mode == "failed" {
@@ -266,5 +272,69 @@ func TestLegacyPackSecretScreen(t *testing.T) {
 				t.Fatalf("unscreened corpus: gateway %v limitations %v", hasGateway, rec.Limitations)
 			}
 		})
+	}
+}
+
+// A secrets scan that failed after reporting a detection (partial parse) is
+// no screen, but what it reported is not thrown away: the flagged file
+// reaches no model input in either pack, the other files are sent, and the
+// records carry model_input_not_secret_screened (and secret_files_withheld).
+func TestPartialSecretScanStillWithholdsFlaggedFiles(t *testing.T) {
+	j, value := plantedJob(t)
+	script := validScript(t)
+	script["interpret"] = func(int, opencode.Request) opencode.Reply {
+		return asJSON(map[string]any{"hypotheses": []any{}, "limits": []any{}})
+	}
+	f := &roleCaller{script: script}
+	// The scripted investigate answer cites the withheld file, so that role
+	// fails on its own output (and verify follows); every role was asked.
+	runRole(t, j, screenStub{mode: "partial"}, f, "1.27.4")
+	for _, role := range []string{"environment", "documents", "investigate", "interpret"} {
+		if f.calls(role) == 0 {
+			t.Fatalf("%s was not asked after a partial scan", role)
+		}
+	}
+	other := false
+	for _, q := range f.requests {
+		if strings.Contains(string(q.Input), value) {
+			t.Fatalf("%s request holds the flagged file's value", q.Role)
+		}
+		other = other || strings.Contains(string(q.Input), "svc/b/charge.go")
+	}
+	if !other {
+		t.Fatal("the files the scan did not flag were not sent")
+	}
+	for _, role := range []string{"investigate", "interpret"} {
+		rec := readRole(t, j, role)
+		if !slices.Contains(rec.Limitations, limNotSecretScreened) || !slices.Contains(rec.Limitations, limSecretWithheld) {
+			t.Fatalf("%s limitations %v", role, rec.Limitations)
+		}
+		for _, e := range rec.Evidence {
+			if e.Path == "gateway.go" {
+				t.Fatalf("%s evidence on the flagged file", role)
+			}
+		}
+	}
+	// The legacy pack.
+	j, value = plantedJob(t)
+	lf := &roleCaller{script: map[string]func(int, opencode.Request) opencode.Reply{"context": func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeInput(t, q)
+		return ok(map[string]any{"facts": []any{map[string]any{"kind": "observed", "statement": "게이트웨이는 실패한 호출을 다시 시도한다.", "evidence_ids": []string{in.Scope.Excerpts[0].ID}}}})
+	}}}
+	h := Handler{Static: screenStub{mode: "partial"}, Caller: lf}
+	lplan, err := h.Plan(t.Context(), j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range lplan {
+		if !strings.HasPrefix(p.Key, "review.") {
+			h.Run(t.Context(), j, p, nil)
+		}
+	}
+	r := h.Run(t.Context(), j, analysis.TaskSpec{Key: "review.context"}, nil)
+	rec, err := readRecord(j, "context")
+	if r.Status != domain.TaskSucceeded || err != nil || len(lf.requests) != 1 || strings.Contains(string(lf.requests[0].Input), value) ||
+		!slices.Contains(rec.Limitations, limNotSecretScreened) || !slices.Contains(rec.Limitations, limSecretWithheld) {
+		t.Fatalf("legacy %+v %v limitations %v", r, err, rec.Limitations)
 	}
 }

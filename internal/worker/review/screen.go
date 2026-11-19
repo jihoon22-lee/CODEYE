@@ -22,10 +22,14 @@ import (
 //   - anything else (no secrets task planned, the stand-in's
 //     unsupported/not_run envelope, or a task that ran but whose result is
 //     unusable: failed, timed out, cancelled, partial parse, a missing or
-//     invalid envelope): inputs are sent through the read filters only
+//     invalid envelope): inputs are sent through the read filters
 //     (sensitive-value patterns, withheld files) and the record says so
-//     (model_input_not_secret_screened), never silently. The report shows
-//     the secrets task's own status and reason next to that state.
+//     (model_input_not_secret_screened), never silently. What a secrets
+//     result did report is still withheld: the files of a completed scan,
+//     and the observation paths of a failed or partial envelope that still
+//     decodes (bound to the manifest). Only a result nothing can be read
+//     from withholds nothing. The report shows the secrets task's own status
+//     and reason next to that state.
 type screenState int
 
 const (
@@ -73,7 +77,17 @@ func screenSecrets(ctx context.Context, static analysis.Handler, j analysis.Job)
 		}
 	}
 	lookup := func(p string) (string, bool) { s, ok := index[p]; return s, ok }
-	applied, notRun := false, false
+	applied, notRun, unusable := false, false, false
+	withhold := func(d obsdoc.Document) {
+		for _, o := range d.Observations {
+			if o.Path != nil {
+				out.withheld[*o.Path] = true
+			}
+			if o.Location != nil {
+				out.withheld[o.Location.Path] = true
+			}
+		}
+	}
 	for _, t := range plan {
 		if !record.AnalyzerTaskKey(t.Key) {
 			continue
@@ -92,26 +106,22 @@ func screenSecrets(ctx context.Context, static analysis.Handler, j analysis.Job)
 			// Without descriptors only a readable envelope names its analyzer.
 			continue
 		case err != nil || !d.Analyzer.IsSecrets():
-			// Unusable: the inputs stay unscreened (no file is withheld on a
-			// partial result).
-			return secretScreen{withheld: map[string]bool{}}
+			// Nothing can be read from it: unscreened, with what other
+			// secrets results reported still withheld.
+			unusable = true
 		case d.Outcome.TaskStatus == domain.TaskUnsupported && d.Outcome.ExitClass == obsdoc.ExitNotRun:
 			notRun = true
 		case d.Outcome.TaskStatus == domain.TaskSucceeded && !d.Outcome.PartialParse && d.Parse.OK:
 			applied = true
-			for _, o := range d.Observations {
-				if o.Path != nil {
-					out.withheld[*o.Path] = true
-				}
-				if o.Location != nil {
-					out.withheld[o.Location.Path] = true
-				}
-			}
+			withhold(d)
 		default:
-			return secretScreen{withheld: map[string]bool{}}
+			// Failed or partial but readable: unscreened, and every file it
+			// did report is withheld all the same.
+			unusable = true
+			withhold(d)
 		}
 	}
-	if applied && !notRun {
+	if applied && !notRun && !unusable {
 		out.state = screenApplied
 	}
 	return out
