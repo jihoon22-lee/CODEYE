@@ -90,3 +90,29 @@ func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
 		t.Fatal("server-mode node followed the project's choices")
 	}
 }
+
+// Fetching dependencies needs the operator's switch and the project's
+// choice, on every node; a job without choices keeps the default (on).
+func TestDependencyFetchNeedsSwitchAndChoice(t *testing.T) {
+	root := domain.NewID()
+	on, off := domain.AnalysisChoices{FetchDependencies: true}, domain.AnalysisChoices{SendSourceToModel: true}
+	for _, tc := range []struct {
+		fetch, policy bool
+		choices       *domain.AnalysisChoices
+		want          bool
+	}{
+		{true, true, &on, true}, {true, true, &off, false}, {true, true, nil, true},
+		{true, false, &on, true}, {true, false, &off, false}, {true, false, nil, true},
+		{false, true, &on, false}, {false, false, nil, false},
+	} {
+		ag := Agent{cfg: Config{SourceRoots: map[string]string{root: t.TempDir()}, DependencyFetch: tc.fetch, ProjectAnalysisPolicy: tc.policy}}
+		for _, kind := range []string{"local", "git"} {
+			a := activeAttempt{}
+			a.job.Source = nodeproto.JobSource{Kind: kind, SourceRootID: root}
+			a.job.Analysis = tc.choices
+			if j := ag.buildJob(&a); j.AllowDependencyFetch != tc.want {
+				t.Errorf("%s switch=%v policy=%v choices=%v: fetch %v", kind, tc.fetch, tc.policy, tc.choices, j.AllowDependencyFetch)
+			}
+		}
+	}
+}

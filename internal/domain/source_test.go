@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -141,6 +142,41 @@ func TestSplitRepositoryURL(t *testing.T) {
 	}
 }
 
+// fetch_dependencies is optional everywhere (absent = on) and stored only
+// when off, so a record written now still decodes for a reader that knows
+// only the first two fields.
+func TestFetchDependenciesChoice(t *testing.T) {
+	for _, kind := range []SourceKind{SourceLocal, SourceGit} {
+		if !DefaultAnalysisChoices(kind).FetchDependencies || !AnalysisChoicesOf(nil, kind).FetchDependencies {
+			t.Fatalf("%s: default off", kind)
+		}
+	}
+	two := `{"send_source_to_model":true,"run_build_scripts":false}`
+	if c, err := ParseAnalysisChoices([]byte(two)); err != nil || !c.FetchDependencies {
+		t.Fatalf("absent field: %+v %v", c, err)
+	}
+	if c, err := ParseAnalysisChoices([]byte(`{"send_source_to_model":true,"run_build_scripts":false,"fetch_dependencies":false}`)); err != nil || c.FetchDependencies {
+		t.Fatalf("stored off: %+v %v", c, err)
+	}
+	var job AnalysisChoices
+	if err := json.Unmarshal([]byte(two), &job); err != nil || !job.FetchDependencies || !job.SendSourceToModel {
+		t.Fatalf("lenient decode: %+v %v", job, err)
+	}
+	on, _ := json.Marshal(AnalysisChoices{SendSourceToModel: true, FetchDependencies: true}.Stored())
+	off, _ := json.Marshal(AnalysisChoices{SendSourceToModel: true}.Stored())
+	if string(on) != `{"run_build_scripts":false,"send_source_to_model":true}` || string(off) != `{"fetch_dependencies":false,"run_build_scripts":false,"send_source_to_model":true}` {
+		t.Fatalf("stored forms %s %s", on, off)
+	}
+	// An older strict reader of the first two fields reads the stored form.
+	var old struct {
+		SendSourceToModel *bool `json:"send_source_to_model"`
+		RunBuildScripts   *bool `json:"run_build_scripts"`
+	}
+	if err := DecodeStrict(on, &old); err != nil || old.SendSourceToModel == nil || old.RunBuildScripts == nil {
+		t.Fatalf("older reader: %v", err)
+	}
+}
+
 func TestAnalysisChoices(t *testing.T) {
 	if c := AnalysisChoicesOf(nil, SourceLocal); !c.SendSourceToModel || !c.RunBuildScripts {
 		t.Fatalf("absent, local = %+v", c)
@@ -155,7 +191,8 @@ func TestAnalysisChoices(t *testing.T) {
 	if c := AnalysisChoicesOf([]byte(`{"send_source_to_model":true}`), SourceLocal); c != (AnalysisChoices{}) {
 		t.Fatalf("an undecodable object must turn both off, got %+v", c)
 	}
-	for _, raw := range []string{`{}`, `{"send_source_to_model":true}`, `{"send_source_to_model":true,"run_build_scripts":true,"x":1}`, `{"send_source_to_model":"yes","run_build_scripts":true}`} {
+	for _, raw := range []string{`{}`, `{"send_source_to_model":true}`, `{"send_source_to_model":true,"run_build_scripts":true,"x":1}`, `{"send_source_to_model":"yes","run_build_scripts":true}`,
+		`{"send_source_to_model":true,"run_build_scripts":true,"fetch_dependencies":"no"}`} {
 		if _, err := ParseAnalysisChoices([]byte(raw)); !errors.Is(err, ErrInvalid) {
 			t.Errorf("ParseAnalysisChoices(%s) = %v", raw, err)
 		}
