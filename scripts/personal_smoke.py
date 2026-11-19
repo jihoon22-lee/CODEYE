@@ -42,11 +42,12 @@ def wait_for(description, probe, timeout=120):
 class Session:
     """The browser's calls: launch-token login, CSRF header, Origin."""
 
-    def __init__(self, state_dir, origin):
+    def __init__(self, state_dir, origin, link=None):
         self.origin = origin
         self.client = build_opener(HTTPCookieProcessor(CookieJar()))
         self.csrf = None
-        self.token = (state_dir / "login-link").read_text().strip().split("#launch=", 1)[1]
+        link = link or (state_dir / "login-link").read_text().strip()
+        self.token = link.split("#launch=", 1)[1].split("&", 1)[0]
         self.csrf = self.request("POST", "session", {"launch_token": self.token})["csrf_token"]
 
     def request(self, method, path, payload=None, headers=None, raw=False):
@@ -91,10 +92,19 @@ def run(base, root, env, probe_env):
     # start detaches the controller and agent (setsid): stop them even when an assertion fails.
     launched = []
 
+    # The fixture handler stands in for analyzers only on a node without any
+    # baseline analyzer; start takes go from PATH when agent.go is not set, so
+    # the fixture installation runs without the Go toolchain directory on PATH.
+    go_dir = str(Path(go).parent)
+    no_go_path = os.pathsep.join(p for p in env["PATH"].split(os.pathsep) if p != go_dir)
+
     def cli(exe, *args, db, expect=0, timeout=120, extra_env=None):
         if args[0] == "start":
             launched.append((exe, args[2], db))
-        result = subprocess.run([exe, *map(str, args)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db], **(extra_env or {})),
+        extra = dict(extra_env or {})
+        if exe == fixture:
+            extra.setdefault("PATH", no_go_path)
+        result = subprocess.run([exe, *map(str, args)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db], **extra),
                                 capture_output=True, text=True, timeout=timeout)
         text = result.stdout + result.stderr
         assert password not in text and urls[db] not in text, f"{args[0]}: credential 노출"
@@ -325,3 +335,125 @@ def run(base, root, env, probe_env):
         for exe, cfg, db in launched:
             subprocess.run([exe, "stop", "--config", str(cfg)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db]),
                            capture_output=True, timeout=200)
+    managed(base, root, env, directory, source)
+
+
+def managed(base, root, env, directory, source):
+    """TC-170~173: codeye up with no configuration file and the managed PostgreSQL.
+
+    A fresh HOME without XDG variables: the configuration and the state go to
+    their default paths and no command gets --config. The PostgreSQL binaries
+    come from PATH discovery (no flag, no config). The harness database URL
+    and PG* variables in the environment are ignored. A stub $BROWSER records
+    the link it is asked to open.
+    """
+    home = directory / "managed"
+    home.mkdir(mode=0o700)
+    # A copy next to a web/dist link: up finds the web app next to its executable.
+    binary = home / "codeye"
+    shutil.copy2(base / "codeye", binary)
+    if (root / "web/dist/index.html").exists():
+        (home / "web").mkdir()
+        (home / "web/dist").symlink_to(root / "web/dist", target_is_directory=True)
+    user_home = home / "h"
+    user_home.mkdir(mode=0o700)
+    config = user_home / ".config/codeye/personal.json"
+    state = user_home / ".local/state/codeye"
+    opened = home / "browser-link"
+    stub = home / "stub-browser"
+    stub.write_text(f'#!/bin/sh\nprintf "%s\\n" "$1" > {opened}\n')
+    stub.chmod(0o700)
+    menv = {k: v for k, v in env.items() if k not in ("CODEYE_DATABASE_URL", "XDG_CONFIG_HOME", "XDG_STATE_HOME")}
+    menv.update(HOME=str(user_home), CODEYE_DATABASE_URL=env["CODEYE_DATABASE_URL"], BROWSER=str(stub),
+                PGPASSWORD="ignored-by-managed-mode", PGHOST="/nonexistent")
+    second = home / "src-b"
+    (second / "pkg").mkdir(parents=True)
+    (second / "go.mod").write_text("module example.com/b\n\ngo 1.22\n")
+    (second / "pkg/b.go").write_text('package pkg\n\nimport "fmt"\n\nfunc B() { fmt.Println("%d", "x") }\n')
+
+    def cli(*args, expect=0, timeout=300):
+        result = subprocess.run([binary, *map(str, args)], cwd=home, env=menv, capture_output=True, text=True, timeout=timeout)
+        text = result.stdout + result.stderr
+        assert env["CODEYE_DATABASE_URL"] not in text and "ignored-by-managed-mode" not in text, f"{args[0]}: credential 노출"
+        if expect is not None and result.returncode != expect:
+            raise RuntimeError(f"{args[0]} 종료 코드 {result.returncode} (기대 {expect}): {text[-3000:]}")
+        return result
+
+    def link_of(text):
+        line = next(line.strip() for line in text.splitlines() if "#launch=" in line)
+        return line, line.split("/#", 1)[0]
+
+    def finished(session, run_id):
+        view = session.finished(run_id, timeout=300)
+        assert view["status"] in ("partial", "completed") and view["report"], view
+        return view
+
+    def postgres_processes():
+        found = []
+        for proc in Path("/proc").iterdir():
+            try:
+                if proc.name.isdigit() and str(state / "postgres/data").encode() in (proc / "cmdline").read_bytes():
+                    found.append(proc.name)
+            except OSError:
+                pass
+        return found
+
+    try:
+        # TC-170: no configuration, no database: one command to a queued run and a signed-in link.
+        first = cli("up", source / "hello").stdout
+        for want in ("wrote a new configuration: " + str(config), "initialized a PostgreSQL", "database schema created", "created the personal user",
+                     "registered project \"hello\"", "queued an analysis", "note: ignoring CODEYE_DATABASE_URL, PGHOST, PGPASSWORD",
+                     "opened the browser with " + str(stub)):
+            assert want in first, (want, first)
+        written = json.loads(config.read_text())
+        assert set(written) == {"schema_version", "source_roots"} and written["source_roots"][0]["path"] == str(source / "hello"), written
+        assert stat.S_IMODE(config.stat().st_mode) == 0o600 and stat.S_IMODE((state / "postgres/password").stat().st_mode) == 0o600
+        up_link, origin = link_of(first)
+        assert "&project=" in up_link and "&run=" in up_link, up_link
+        assert wait_for("브라우저 stub 호출", lambda: opened.exists() and opened.read_text().strip(), 10) == up_link
+        run_a = up_link.rsplit("&run=", 1)[1]
+        status = json.loads(cli("status", "--format", "json").stdout)
+        assert status["state"] == "running" and status["database"]["postgres"] == "running", status
+        assert status["database"]["port"] >= 55432, status
+        # A separate link for the API checks: the up link stays unused for the browser.
+        link, _ = link_of(cli("open", "--no-open").stdout)
+        session = Session(state, origin, link)
+        assert session.request("GET", "session")["expires_at"] > time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 6 * 86400)), "7일 세션 아님"
+        finished(session, run_a)
+        if (home / "web/dist").exists():
+            # TC-171: the printed link signs the browser in and opens the project's run and report.
+            link_file = home / "up-link"
+            link_file.write_text(up_link + "\n")
+            link_file.chmod(0o600)
+            subprocess.run(["npm", "run", "test:e2e", "--", "up.spec.ts"], cwd=root / "web", check=True, timeout=180,
+                           env=dict(env, CODEYE_TEST_BASE_URL=origin, CODEYE_TEST_UP_LINK_FILE=str(link_file), CODEYE_TEST_UP_PROJECT="hello"))
+
+        # TC-172: another folder while running: new source root, the agent drains and re-enrolls.
+        again = cli("up", "--no-open", second).stdout
+        assert "added source root \"src-b\"" in again and "restarting the agent" in again and "re-enrolling the local agent" in again, again
+        link_b, _ = link_of(again)
+        finished(Session(state, origin, link_b), link_b.rsplit("&run=", 1)[1])
+
+        # TC-173: stop also stops PostgreSQL; up reuses the cluster; backup needs no configuration.
+        stopped = json.loads(cli("stop", "--format", "json").stdout)
+        assert stopped["outcome"] == "stopped" and stopped["database"] == "stopped", stopped
+        assert not postgres_processes(), "정지 뒤 PostgreSQL이 남음"
+        reused = cli("up", "--no-open").stdout
+        assert "initialized" not in reused and "created the personal user" not in reused and "PostgreSQL" in reused, reused
+        link, origin = link_of(reused)
+        names = {p["name"] for p in Session(state, origin, link).request("GET", "projects?limit=100")["items"]}
+        assert names == {"hello", "src-b"}, names
+        stopped = json.loads(cli("stop", "--format", "json").stdout)
+        assert stopped["outcome"] == "stopped" and stopped["database"] == "stopped", stopped
+        made = cli("backup", "--format", "json").stdout
+        out = Path(json.loads(made)["output"])
+        assert out.parent == user_home / ".local/state/codeye-backups" and (out / "manifest.json").exists(), made
+        assert not postgres_processes(), "백업이 띄운 PostgreSQL이 남음"
+        # Only the generated password file holds the database credential.
+        password = (state / "postgres/password").read_text().strip()
+        for path in state.rglob("*"):
+            if path.is_file() and not path.is_symlink() and path != state / "postgres/password":
+                assert password.encode() not in path.read_bytes(), f"DB 비밀번호가 다른 파일에 있음: {path.relative_to(state)}"
+        print("PASS: codeye up 관리형 PostgreSQL(설정 없음→보고서·로그인 링크·7일 세션)·실행 중 새 폴더·stop이 PostgreSQL 정지·재사용·설정 없는 백업")
+    finally:
+        subprocess.run([binary, "stop"], cwd=home, env=menv, capture_output=True, timeout=300)

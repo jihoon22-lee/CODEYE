@@ -4,8 +4,8 @@
   "listen": "127.0.0.1:7331",
   "web_dir": "/opt/codeye/web/dist",
   "database": {
-    "mode": "external",
-    "postgres_bin_dir": "/usr/pgsql-17/bin"
+    "mode": "managed",
+    "postgres_bin_dir": "/usr/lib/postgresql/17/bin"
   },
   "source_roots": [
     {"label": "work", "path": "/home/user/src"}

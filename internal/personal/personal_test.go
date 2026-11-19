@@ -43,7 +43,7 @@ func TestParseDefaultsAndStrictness(t *testing.T) {
 		"relative state":     cfg("state", ""),
 		"public listen":      cfg(state, `,"listen":"0.0.0.0:7331"`),
 		"no port":            cfg(state, `,"listen":"127.0.0.1:0"`),
-		"managed db":         strings.Replace(cfg(state, ""), `"external"`, `"managed"`, 1),
+		"unknown db mode":    strings.Replace(cfg(state, ""), `"external"`, `"sqlite"`, 1),
 		"unknown tool":       cfg(state, `,"agent":{"tools":{"cppcheck2":"/x"}}`),
 		"relative tool":      cfg(state, `,"agent":{"tools":{"ruff":"ruff"}}`),
 		"negative quota":     cfg(state, `,"quota":{"logs_bytes":-1}`),

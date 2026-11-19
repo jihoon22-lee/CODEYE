@@ -4,6 +4,14 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — `codeye up`과 관리형 PostgreSQL
+
+- **`codeye up [PATH]`**: 설정 파일이 없으면 `schema_version`만 담아 만들고, PostgreSQL을 상태 디렉터리에 초기화해 띄우고, schema를 만들거나 맞추고, controller와 에이전트를 시작한다. PATH를 주면 그 폴더를 source root로 설정에 더하고(이미 있는 root 안이면 그 root와 상대 경로) 프로젝트를 등록하고 분석을 요청한다. 일회용 로그인 링크(프로젝트와 실행으로 가는 `#project=…&run=…` 포함)를 출력하고 브라우저를 연다(WSL은 `wslview`·`explorer.exe`). 이미 실행 중이면 바뀐 것만 반영한다. 에이전트 설정이 바뀌면 drain 뒤 다시 띄운다. Git URL은 아직 받지 않고 clone 안내를 낸다. `codeye open`은 새 링크만 발급하고 연다.
+- **관리형 PostgreSQL(기본 `database.mode`)**: 설치된 PostgreSQL 14 이상(`--postgres-bin-dir`·`database.postgres_bin_dir`·`CODEYE_POSTGRES_BIN_DIR`·PATH·`/usr/lib/postgresql/*/bin` 등)으로 `<state_dir>/postgres/data`에 cluster를 만들고 127.0.0.1의 빈 포트(55432부터), scram-sha-256, 생성 비밀번호(`postgres/password`, 0600)로 띄운다. 데이터가 있는 이전 schema는 `pg_dump` 사본을 먼저 쓰고 자동 migration한다. 셸의 `PG*` 변수와 `CODEYE_DATABASE_URL`은 무시하고 알린다. `stop`이 PostgreSQL도 멈추고(`database` 필드), `status`가 상태·포트·버전을 보이고, `backup`·`restore`가 그 cluster를 쓴다(멈춰 있으면 그 동안만 띄운다). 프로그램이 없거나 데이터 디렉터리와 주 버전이 다르면 할 일을 알리는 오류다. external 모드는 그대로다.
+- 설정 기본값: `state_dir` `~/.local/state/codeye`, `source_roots` 비어도 됨, `web_dir` 실행 파일 옆 `web/dist`, 백업 위치 `<state_dir>-backups`. `listen`을 적지 않았으면 7331이 쓰일 때 7340까지 다음 빈 포트를 쓴다.
+- 개인 모드 controller(`codeye serve --personal`)의 브라우저 세션은 7일이다.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10(관리형 cluster와 smoke의 임시 서버), Node 24.18.0, Playwright Chromium. 임시 설정·상태 디렉터리로 `up` → Go 분석 보고서 → 출력 링크로 Chromium 로그인 → `stop`(PostgreSQL 정지) → `backup` → `up` 재사용 → 새 상태 디렉터리로 `restore` → `up`을 실행했다. 브라우저 자동 열기 프로그램은 실행하지 않았다.
+
 ### 추가
 
 - **분석 종류별 절**: 보고서가 종합, 환경 분석, 문서 분석, 정적 분석(언어·도구별), 구조·중복 지표, 비밀정보(값 없음), 코드 분석(모델 검토), 분석 공백 순의 절로 나뉜다. 선택 최상위 블록으로 더했고 기존 필드는 바이트 단위로 같다(report 패키지 시험 입력 84개를 이전 builder 출력과 대조). 보고서 builder는 5이며, 모든 관찰과 발견이 한 절에 한 번씩 들어가는지를 저장·조회 검증이 확인한다. 상태·품질 판정 규칙은 그대로다. 모델 문장은 수락된 역할 기록에서만 오고 "모델 해석"으로 표시하며 코드 미포함 내보내기에서는 생략한다. Markdown·HTML·웹 화면은 같은 수를 보이고, 절이 없는 이전 리비전은 이전 평면 배치로 보인다. "이전 실행과 비교"는 웹 화면에만 있다. 분석기 envelope와 descriptor에 분석기 목적(`analyzer.purpose`: 지표·비밀정보)을 기록해 어느 절로 갈지 정한다. [`examples/report.json`](examples/report.json)과 [`examples/report.md`](examples/report.md)는 실제 worker 파이프라인과 대본 모델 응답으로 다시 만들었다(합성 예시, 실모델 호출 없음).

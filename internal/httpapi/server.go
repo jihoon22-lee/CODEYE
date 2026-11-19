@@ -139,6 +139,11 @@ type Config struct {
 // DefaultSessionTTL is the absolute browser session lifetime.
 const DefaultSessionTTL = 12 * time.Hour
 
+// PersonalSessionTTL is the session lifetime of the personal-mode controller
+// (`codeye serve --personal`, started by `codeye up`): one user on their own
+// machine signs in once a week.
+const PersonalSessionTTL = 7 * 24 * time.Hour
+
 // Server is the HTTP handler.
 type Server struct {
 	store Store

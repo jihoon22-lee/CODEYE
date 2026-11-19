@@ -618,11 +618,11 @@ migration 이력은 `codeye_schema_migrations(version, name, checksum, applied_a
 
 ### 연결과 migration
 
-- 운영자는 CODEYE 전용 DB와 schema owner 계정을 준비하고 `CODEYE_DATABASE_URL`을 프로세스 환경으로 전달한다. DSN을 명령행 인자나 저장소에 넣지 않는다.
+- 운영자는 CODEYE 전용 DB와 schema owner 계정을 준비하고 `CODEYE_DATABASE_URL`을 프로세스 환경으로 전달한다. DSN을 명령행 인자나 저장소에 넣지 않는다. 개인 모드의 관리형 PostgreSQL은 CODEYE가 상태 디렉터리에 cluster를 만들고 같은 환경변수로 controller에 전달한다([운영](OPERATIONS.md#관리형-postgresql)).
 - 연결 URL에는 host·user·database가 있어야 한다. TLS 기본은 `verify-full`이고 평문은 literal loopback만 허용한다. 승인된 root CA는 URL의 `sslrootcert`로 지정한다.
 - 저장 계층은 연결에 영향을 주는 `PGHOST`, `PGSERVICE`, `PGPASSWORD`, `PGOPTIONS` 등의 libpq 환경변수가 있으면 거부한다. Windows 설치 경로 `PGROOT`·`PGBIN`은 연결 변수가 아니므로 허용한다. psql 설정, 개인 client certificate, passfile을 자동으로 쓰지 않는다.
 - 원시 DSN과 SQL 오류 detail은 CLI·API 공개 오류로 보내지 않는다.
-- `codeye migrate`만 schema를 바꾼다. `doctor`와 저장 서비스 Open은 migration을 호출하지 않는다. `migrate`는 최대 1분 안에 전용 DB의 public schema에 적용하며, DB·사용자 권한을 자동 생성·변경하지 않는다.
+- `codeye migrate`와 관리형 PostgreSQL의 `codeye up`·`start`(데이터가 있으면 먼저 `pg_dump` 사본을 쓴다)만 schema를 바꾼다. `doctor`, `serve`와 저장 서비스 Open은 migration을 호출하지 않는다. `migrate`는 최대 1분 안에 전용 DB의 public schema에 적용하며, DB·사용자 권한을 자동 생성·변경하지 않는다.
 - migration은 바이너리에 내장한 SQL을 READ COMMITTED 트랜잭션 하나와 `pg_advisory_xact_lock`으로 적용한다. 같은 DB의 동시 적용은 잠금으로 직렬화되고, 실패하면 전체 rollback된다.
 - 적용 이력과 바이너리 SQL의 checksum이 다르거나, 바이너리가 모르는 미래 버전이 있거나, 이력 중간에 빠진 버전이 있으면 멈춘다. 새 migration을 적용한 DB에서 구버전 바이너리는 `migrate`와 `serve`를 거부한다(`ErrUnknownVersion`).
 - 이미 공유·적용한 migration 파일은 수정하지 않고 다음 번호로 바꾼다. 각 파일은 BEGIN/COMMIT 없이 비한정 이름(current schema)을 쓴다.

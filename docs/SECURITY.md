@@ -24,7 +24,7 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 
 ### 네트워크와 브라우저
 
-수신 방식은 두 가지다. loopback 주소는 평문 HTTP로 받을 수 있다(개인 모드). 그 밖의 주소(`0.0.0.0`, `[::]`, LAN 주소)는 `codeye serve --tls-cert --tls-key --public-origin`을 모두 줄 때만 받고, 하나라도 없으면 서버가 시작하지 않는다. 서버 코드도 TLS가 없으면 loopback이 아닌 listener를 거부하므로 비 loopback 주소에서 평문 HTTP가 나가는 경로는 없다. 개인 모드 설정(`codeye start`)은 계속 loopback만 받는다.
+수신 방식은 두 가지다. loopback 주소는 평문 HTTP로 받을 수 있다(개인 모드). 그 밖의 주소(`0.0.0.0`, `[::]`, LAN 주소)는 `codeye serve --tls-cert --tls-key --public-origin`을 모두 줄 때만 받고, 하나라도 없으면 서버가 시작하지 않는다. 서버 코드도 TLS가 없으면 loopback이 아닌 listener를 거부하므로 비 loopback 주소에서 평문 HTTP가 나가는 경로는 없다. 개인 모드 설정(`codeye up`·`codeye start`)은 계속 loopback만 받는다.
 
 | 항목 | loopback(평문) | TLS |
 |---|---|---|
@@ -88,7 +88,7 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 - 마지막 활성 관리자는 비활성화하거나 관리자 역할을 거둘 수 없다. 검사는 활성 관리자 행 전체를 id 순으로 `FOR UPDATE` 잠근 같은 트랜잭션에서 하므로, 두 관리자가 동시에 서로를 내려도 한 명은 남는다.
 - 관리자 경로는 API 계층에서 세션의 관리자 여부를 확인하고, 저장 계층이 같은 트랜잭션에서 다시 확인한다(그 사이 역할을 잃었으면 403).
 - 비활성화는 되돌리는 경로가 없다. 비활성화와 재설정은 세션을 같은 트랜잭션에서 폐기하므로 이후 요청과 열린 이벤트 스트림의 다음 poll이 401·`closed`(`unauthenticated`)가 된다.
-- 개인 모드(`codeye start`)의 사용자는 관리자다([결정](DECISIONS.md) A36).
+- 개인 모드(`codeye up`·`codeye start`)의 사용자는 관리자다([결정](DECISIONS.md) A36). 개인 모드 브라우저 세션은 7일이다(A38).
 
 ### 노드와 에이전트
 
@@ -109,8 +109,8 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 
 ### 로컬 상태와 백업
 
-- 상태 디렉터리는 0700, 파일은 0600이다. 소유자가 다르거나 symlink인 상태 디렉터리는 거부한다. 설정과 상태 디렉터리에는 DB URL이나 토큰을 쓰지 않는다.
-- DB 연결은 실행 환경의 `CODEYE_DATABASE_URL`로만 받는다. 환경에 `PG*` 변수가 있으면 DB 열기를 거부한다(fail closed). 자식 프로세스(`pg_dump` 등)에는 연결 정보를 argv가 아닌 환경으로만 전달하고 오류 문구의 비밀번호를 `[REDACTED]`로 바꾼다.
+- 상태 디렉터리는 0700, 파일은 0600이다. 소유자가 다르거나 symlink인 상태 디렉터리는 거부한다. 설정에는 DB URL이나 토큰을 쓰지 않는다. 상태 디렉터리에서 비밀값을 담는 파일은 관리형 PostgreSQL의 생성 비밀번호 `postgres/password`(0600)뿐이다(A38). 그 cluster는 127.0.0.1에서만 받고 scram-sha-256으로 인증하며 socket은 상태 디렉터리 안에 둔다.
+- external 모드의 DB 연결은 실행 환경의 `CODEYE_DATABASE_URL`로만 받는다. 환경에 `PG*` 변수가 있으면 DB 열기를 거부한다(fail closed). 관리형 모드는 그 변수들을 프로세스에서 지우고 알린 뒤 자기 cluster에만 연결한다. `codeye up`·`open`은 일회용 로그인 링크를 터미널에 출력한다. 자식 프로세스(`pg_dump` 등)에는 연결 정보를 argv가 아닌 환경으로만 전달하고 오류 문구의 비밀번호를 `[REDACTED]`로 바꾼다.
 - 신호는 기록한 프로세스 ID와 시작 시각이 같은 프로세스에만 보낸다. 기록 없는 프로세스에는 어떤 명령도 신호를 보내지 않는다. 강제 종료(SIGKILL)는 하지 않는다.
 - 백업 세트는 DB dump를 담으므로 프로젝트·경로·보고서 같은 운영 데이터가 들어 있다. 인증정보 값은 없고 세션·토큰은 hash로만 저장된다. 세트 보호는 운영자 책임이다. 복원은 이전 노드·세션·쓰지 않은 토큰을 무효로 하고 lease를 되살리지 않는다([운영](OPERATIONS.md)).
 
@@ -136,7 +136,7 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 
 | 자격증명 | 지금 |
 |---|---|
-| DB | 실행 환경의 `CODEYE_DATABASE_URL`. 설정·상태 디렉터리·로그에 쓰지 않는다. loopback만 `sslmode=disable`, 그 외 `verify-full` |
+| DB | managed: 생성 비밀번호를 `state_dir/postgres/password`(0600)에 두고 controller에는 환경으로만 준다. external: 실행 환경의 `CODEYE_DATABASE_URL`. 둘 다 설정·로그에 쓰지 않는다. loopback만 `sslmode=disable`, 그 외 `verify-full` |
 | 사용자 세션·로그인 링크 | 0600 파일과 hash 저장([위](#네트워크와-브라우저)) |
 | 사용자 비밀번호 | PBKDF2 verifier만 저장([로그인과 제한](#로그인과-제한)). 평문은 저장·기록하지 않는다 |
 | TLS 키 | 운영자가 준 파일 경로. group·other 접근 불가 mode만 받는다. 내용은 오류 문구에 넣지 않는다 |

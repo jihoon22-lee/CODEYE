@@ -1,11 +1,12 @@
 // Package personal runs CODEYE on one machine (docs/OPERATIONS.md): one JSON
 // configuration file, a 0700 state directory, one loopback controller and one
-// local node agent started, stopped and inspected by `codeye start|stop|status`.
+// local node agent started, stopped and inspected by `codeye up|start|stop|status`.
 //
-// It never stores the database URL or any token in the state directory or
-// the configuration: the operator provides CODEYE_DATABASE_URL in the
-// environment, and the one-time enrollment token lives in a 0600 file only
-// until the local agent has enrolled.
+// With database.mode "managed" (the default) CODEYE runs its own PostgreSQL
+// cluster in the state directory and keeps its generated password there
+// (0600). With "external" the operator provides CODEYE_DATABASE_URL in the
+// environment and no database credential is stored. The one-time enrollment
+// token lives in a 0600 file only until the local agent has enrolled.
 package personal
 
 import (
@@ -29,7 +30,10 @@ const SchemaVersion = "0.1"
 
 // Database modes.
 const (
-	// DatabaseExternal: the operator provides CODEYE_DATABASE_URL (default).
+	// DatabaseManaged: CODEYE initializes and runs PostgreSQL in
+	// <state_dir>/postgres (default).
+	DatabaseManaged = "managed"
+	// DatabaseExternal: the operator provides CODEYE_DATABASE_URL.
 	DatabaseExternal = "external"
 )
 
@@ -46,13 +50,24 @@ type Config struct {
 	Quota         Quota        `json:"quota"`
 	BackupDir     string       `json:"backup_dir,omitempty"`
 	Stop          Stop         `json:"stop"`
+
+	// listenSet records whether listen was written in the file (a default
+	// listen address may move to the next free port).
+	listenSet bool
 }
+
+// ListenExplicit reports whether the configuration file sets listen.
+func (c *Config) ListenExplicit() bool { return c.listenSet }
+
+// Managed reports whether CODEYE runs its own PostgreSQL.
+func (c *Config) Managed() bool { return c.Database.Mode == DatabaseManaged }
 
 // Database selects how the controller reaches PostgreSQL.
 type Database struct {
 	Mode string `json:"mode"`
-	// PostgresBinDir holds pg_dump and pg_restore (backup, restore). They are
-	// never searched in PATH.
+	// PostgresBinDir holds the PostgreSQL programs. In external mode it is
+	// where backup and restore find pg_dump and pg_restore (never in PATH);
+	// in managed mode it is the first place searched (docs/OPERATIONS.md).
 	PostgresBinDir string `json:"postgres_bin_dir,omitempty"`
 }
 
@@ -161,6 +176,18 @@ func DefaultPath() (string, error) {
 	return filepath.Join(dir, "codeye", "personal.json"), nil
 }
 
+// DefaultStateDir is $XDG_STATE_HOME/codeye, or ~/.local/state/codeye.
+func DefaultStateDir() (string, error) {
+	if x := os.Getenv("XDG_STATE_HOME"); x != "" && filepath.IsAbs(x) {
+		return filepath.Join(filepath.Clean(x), "codeye"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || !filepath.IsAbs(home) {
+		return "", errors.New("cannot determine the home directory; set state_dir")
+	}
+	return filepath.Join(filepath.Clean(home), ".local", "state", "codeye"), nil
+}
+
 // Load reads and validates path. knownTools are the analyzer tool and
 // toolchain flag names of this build (agent.tools keys).
 func Load(path string, knownTools []string) (*Config, error) {
@@ -226,9 +253,17 @@ func (c *Config) validate(knownTools []string) error {
 	if c.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("schema_version must be %q", SchemaVersion)
 	}
+	if c.StateDir == "" {
+		dir, err := DefaultStateDir()
+		if err != nil {
+			return err
+		}
+		c.StateDir = dir
+	}
 	if !absClean(c.StateDir) {
 		return errors.New("state_dir must be an absolute, clean path")
 	}
+	c.listenSet = c.Listen != ""
 	if c.Listen == "" {
 		c.Listen = DefaultListen
 	}
@@ -239,18 +274,19 @@ func (c *Config) validate(knownTools []string) error {
 	if c.WebDir != "" && !absClean(c.WebDir) {
 		return errors.New("web_dir must be an absolute, clean path")
 	}
+	if c.Database.Mode == "" {
+		c.Database.Mode = DatabaseManaged
+	}
 	switch c.Database.Mode {
-	case DatabaseExternal:
-	case "managed":
-		return errors.New("database.mode \"managed\" is not implemented (only \"external\" is supported)")
+	case DatabaseManaged, DatabaseExternal:
 	default:
-		return errors.New(`database.mode must be "external"`)
+		return errors.New(`database.mode must be "managed" (default) or "external"`)
 	}
 	if c.Database.PostgresBinDir != "" && !absClean(c.Database.PostgresBinDir) {
 		return errors.New("database.postgres_bin_dir must be an absolute, clean path")
 	}
-	if len(c.SourceRoots) == 0 || len(c.SourceRoots) > maxSourceRoots {
-		return fmt.Errorf("source_roots needs 1..%d entries", maxSourceRoots)
+	if len(c.SourceRoots) > maxSourceRoots {
+		return fmt.Errorf("source_roots has at most %d entries", maxSourceRoots)
 	}
 	labels, paths := map[string]bool{}, map[string]bool{}
 	for _, r := range c.SourceRoots {
