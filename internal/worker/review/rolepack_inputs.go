@@ -371,16 +371,17 @@ func goIgnored(p string) bool {
 // ecosystem, and modules are visited ecosystem by ecosystem (sources.go,
 // groupOrder). Every excerpt is the first lines of its file.
 func (s *roleStage) codeCorpus() ([]record.Excerpt, []string, error) {
-	g := planCodeGroups(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary())
-	byModule, eligible, lims := g.files, g.eligible, append([]string{}, g.lims...)
+	g := planCodeGroupsFor(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary(), changedPaths(s.j))
+	eligible, lims := g.eligible, append([]string{}, g.lims...)
 	var out []record.Excerpt
 	remain := roleMaxCodeBytes
 	// Secondary modules (test input, examples) only get rounds once the
 	// primary modules have no file left.
-	for _, order := range g.phases() {
+	for _, ph := range g.phases() {
+		byModule := ph.files
 		for round := 0; len(out) < roleMaxCodeFiles && remain >= 128; round++ {
 			progressed := false
-			for _, m := range order {
+			for _, m := range ph.order {
 				if round >= len(byModule[m]) || len(out) >= roleMaxCodeFiles || remain < 128 {
 					continue
 				}

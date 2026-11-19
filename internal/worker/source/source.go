@@ -71,11 +71,14 @@ type Manifest struct {
 	SourceSHA     string `json:"source_sha,omitempty"`
 	// Git only: the requested branch name and when the acquisition was requested.
 	// They never hold a URL, remote name or credential.
-	SourceBranch string    `json:"source_branch,omitempty"`
-	RequestedAt  time.Time `json:"requested_at,omitzero"`
-	FixedAt      time.Time `json:"source_fixed_at"`
-	Entries      []Entry   `json:"entries"`
-	Limitations  []string  `json:"limitations"`
+	SourceBranch string `json:"source_branch,omitempty"`
+	// SourceRef is the fetched ref of a pull-request snapshot
+	// (refs/pull/N/head) in place of a branch: a Git snapshot has exactly one.
+	SourceRef   string    `json:"source_ref,omitempty"`
+	RequestedAt time.Time `json:"requested_at,omitzero"`
+	FixedAt     time.Time `json:"source_fixed_at"`
+	Entries     []Entry   `json:"entries"`
+	Limitations []string  `json:"limitations"`
 }
 
 // Snapshot.Digest is the SHA-256 of the exact stored manifest.json bytes, which are
@@ -502,6 +505,7 @@ func DecodeManifest(b []byte) (Manifest, error) {
 var (
 	hashPattern   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	shaPattern    = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
+	pullRef       = regexp.MustCompile(`^refs/pull/[1-9][0-9]{0,9}/head$`)
 	entryKinds    = map[string]bool{"file": true, "directory": true, "symlink": true, "special": true, "submodule": true, "lfs_pointer": true}
 	excludeReason = map[string]bool{"": true, "generated_or_cache": true, "credential_directory": true, "secret_file_policy": true, "link_not_followed": true, "special_file_not_copied": true, "submodule_not_acquired": true}
 	limitations   = map[string]bool{"local_copy_is_not_atomic": true, "excluded_links_and_special_files_are_not_analyzed": true, "submodule_objects_not_acquired": true, "lfs_objects_not_acquired": true}
@@ -514,11 +518,12 @@ func validateManifest(m Manifest) error {
 	}
 	switch m.Kind {
 	case "local":
-		if m.Consistency != "stable_copy_best_effort" || m.SourceSHA != "" || m.SourceBranch != "" || !m.RequestedAt.IsZero() {
+		if m.Consistency != "stable_copy_best_effort" || m.SourceSHA != "" || m.SourceBranch != "" || m.SourceRef != "" || !m.RequestedAt.IsZero() {
 			return ErrIntegrity
 		}
 	case "git":
-		if m.Consistency != "git_commit" || !shaPattern.MatchString(m.SourceSHA) || m.SourceBranch == "" || len(m.SourceBranch) > 255 || m.RequestedAt.IsZero() {
+		if m.Consistency != "git_commit" || !shaPattern.MatchString(m.SourceSHA) || (m.SourceBranch == "") == (m.SourceRef == "") || len(m.SourceBranch) > 255 ||
+			(m.SourceRef != "" && !pullRef.MatchString(m.SourceRef)) || m.RequestedAt.IsZero() {
 			return ErrIntegrity
 		}
 	default:

@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// TC-229 (controller part): retention lists only raw roles of finished runs
+// TC-248 (controller part): retention lists only raw roles of finished runs
 // older than the age; a content shared with a newer present row is not
 // freed; applying marks the rows once, writes one audit row, keeps reports,
 // and backup and the artifact quota stop counting the removed contents.

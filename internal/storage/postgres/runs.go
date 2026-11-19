@@ -111,8 +111,51 @@ func (s *Store) Enqueue(ctx context.Context, actor, project, key string, body js
 		return Run{}, domain.ErrInvalid
 	}
 	return transaction(ctx, s, func(tx pgx.Tx) (Run, error) {
-		return enqueueTx(ctx, tx, actor, project, key, canonical, nil)
+		return enqueueTx(ctx, tx, actor, project, key, canonical, nil, nil)
 	})
+}
+
+// EnqueuePullRequest is Enqueue for a pull-request run: body is the client
+// request (it names the pull request; the idempotency digest is of body)
+// and pin the pull request the caller resolved through the provider API
+// (domain.PullRequest), stored once in runs.pull_request. The project's
+// current source must be the pin's Git repository; anything else is
+// ErrInvalid. A replay with the same key and body returns the existing run
+// and its original pin.
+func (s *Store) EnqueuePullRequest(ctx context.Context, actor, project, key string, body json.RawMessage, pin domain.PullRequest) (Run, error) {
+	if !validIDs(actor, project) || strings.TrimSpace(key) == "" || len(key) > 200 || pin.Validate() != nil {
+		return Run{}, domain.ErrInvalid
+	}
+	canonical, err := domain.CanonicalJSON(body)
+	if err != nil {
+		return Run{}, domain.ErrInvalid
+	}
+	stored, err := pin.Marshal()
+	if err != nil {
+		return Run{}, domain.ErrInvalid
+	}
+	return transaction(ctx, s, func(tx pgx.Tx) (Run, error) {
+		return enqueueTx(ctx, tx, actor, project, key, canonical, nil, stored)
+	})
+}
+
+// pullRequestMatchesSource reports whether the pin belongs to the project's
+// current Git source (host and OWNER/REPO, ignoring case and .git).
+func pullRequestMatchesSource(ctx context.Context, tx pgx.Tx, project string, pin json.RawMessage) (bool, error) {
+	var raw []byte
+	if err := tx.QueryRow(ctx, "SELECT pr.config->'source' FROM projects p JOIN project_revisions pr ON pr.project_id=p.id AND pr.revision=p.current_revision WHERE p.id=$1", project).Scan(&raw); err != nil {
+		return false, err
+	}
+	src, err := domain.ParseSource(raw)
+	if err != nil || src.Kind != domain.SourceGit {
+		return false, nil
+	}
+	p, err := domain.ParsePullRequest(pin)
+	if err != nil {
+		return false, nil
+	}
+	host, err := domain.RepositoryHost(src.RepositoryURL)
+	return err == nil && strings.EqualFold(host, p.Host) && strings.EqualFold(domain.RepositoryPath(src.RepositoryURL), p.Repository), nil
 }
 
 // RunOrigin is the schedule occurrence a run was requested for. A run
@@ -128,7 +171,7 @@ type RunOrigin struct {
 // (project, actor, key) with the same body returns the existing run; another
 // body is ErrConflict. origin binds a scheduled run to its occurrence row,
 // which must already exist in tx.
-func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canonical json.RawMessage, origin *RunOrigin) (Run, error) {
+func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canonical json.RawMessage, origin *RunOrigin, pin json.RawMessage) (Run, error) {
 	digest := domain.Digest(canonical)
 	if err := requireProject(ctx, tx, actor, project, false, true); err != nil {
 		return Run{}, err
@@ -144,6 +187,27 @@ func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canon
 	if err != pgx.ErrNoRows {
 		return Run{}, err
 	}
+	// A request that names a pull request needs its pin, and a pin needs a
+	// request of the same pull request.
+	var named struct {
+		PullRequest *domain.PullRequestRef `json:"pull_request"`
+	}
+	if json.Unmarshal(canonical, &named) != nil || (named.PullRequest != nil) != (pin != nil) {
+		return Run{}, domain.ErrInvalid
+	}
+	var pinText *string
+	if pin != nil {
+		if p, err := domain.ParsePullRequest(pin); err != nil || p.Number != named.PullRequest.Number {
+			return Run{}, domain.ErrInvalid
+		}
+		if ok, err := pullRequestMatchesSource(ctx, tx, project, pin); err != nil {
+			return Run{}, err
+		} else if !ok {
+			return Run{}, domain.ErrInvalid
+		}
+		t := string(pin)
+		pinText = &t
+	}
 	var scheduleID *string
 	var scheduledFor *time.Time
 	payload := map[string]any{"status": domain.RunQueued, "trigger": TriggerManual}
@@ -153,8 +217,8 @@ func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canon
 		payload["trigger"], payload["schedule_id"], payload["scheduled_for"] = TriggerSchedule, origin.ScheduleID, at
 	}
 	// The canonical request is stored so a claim can build the job from it.
-	r, err := readRun(tx.QueryRow(ctx, "INSERT INTO runs(id,project_id,actor_id,idempotency_key,request_digest,project_revision,status,request,schedule_id,scheduled_for) SELECT $1,id,$2,$3,$4,current_revision,'queued',$6::text::jsonb,$7,$8 FROM projects WHERE id=$5 RETURNING "+runColumns,
-		domain.NewID(), actor, key, digest, project, string(canonical), scheduleID, scheduledFor))
+	r, err := readRun(tx.QueryRow(ctx, "INSERT INTO runs(id,project_id,actor_id,idempotency_key,request_digest,project_revision,status,request,schedule_id,scheduled_for,pull_request) SELECT $1,id,$2,$3,$4,current_revision,'queued',$6::text::jsonb,$7,$8,$9::text::jsonb FROM projects WHERE id=$5 RETURNING "+runColumns,
+		domain.NewID(), actor, key, digest, project, string(canonical), scheduleID, scheduledFor, pinText))
 	if err != nil {
 		return Run{}, err
 	}
@@ -171,6 +235,11 @@ func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canon
 	detail := map[string]any{"profile": truncateAudit(req.Profile), "scope_kind": truncateAudit(req.Scope.Kind), "trigger": payload["trigger"]}
 	if origin != nil {
 		detail["schedule_id"] = origin.ScheduleID
+	}
+	if pin != nil {
+		if p, err := domain.ParsePullRequest(pin); err == nil {
+			detail["pull_request"] = p.Number
+		}
 	}
 	return r, writeAudit(ctx, tx, userAudit(ctx, actor, AuditRunRequested).target("run", r.ID).in(project).with(detail))
 }
@@ -384,8 +453,8 @@ func (s *Store) RetryRun(ctx context.Context, actor, id string) (Run, string, er
 			e := userAudit(ctx, actor, AuditRunRequested).target("run", r.ID).in(r.ProjectID).with(map[string]any{"trigger": "retry", "status": string(r.Status)})
 			return result{r, RetrySameRun}, writeAudit(ctx, tx, e)
 		}
-		var request []byte
-		if err := tx.QueryRow(ctx, "SELECT request FROM runs WHERE id=$1", r.ID).Scan(&request); err != nil {
+		var request, pin []byte
+		if err := tx.QueryRow(ctx, "SELECT request,pull_request FROM runs WHERE id=$1", r.ID).Scan(&request, &pin); err != nil {
 			return result{run: r}, err
 		}
 		if request == nil {
@@ -396,7 +465,9 @@ func (s *Store) RetryRun(ctx context.Context, actor, id string) (Run, string, er
 		if err != nil {
 			return result{run: r}, domain.ErrConflict
 		}
-		next, err := enqueueTx(ctx, tx, actor, r.ProjectID, "retry:"+r.ID+":"+strconv.FormatInt(r.Version, 10), canonical, nil)
+		// A pull-request run runs again on the same pinned head; a new head
+		// is a new request of the pull request.
+		next, err := enqueueTx(ctx, tx, actor, r.ProjectID, "retry:"+r.ID+":"+strconv.FormatInt(r.Version, 10), canonical, nil, pin)
 		return result{next, RetryNewRun}, err
 	})
 	return out.run, out.how, err

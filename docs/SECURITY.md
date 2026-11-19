@@ -142,13 +142,15 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 | TLS 키 | 운영자가 준 파일 경로. group·other 접근 불가 mode만 받는다. 내용은 오류 문구에 넣지 않는다 |
 | 노드 | 일회용 등록 토큰과 노드 credential. 0600 파일, hash 저장 |
 | 모델 | API 키는 키 파일(개인 모드 `<state_dir>/secrets/model.json` 0600, `agent.model.credential_file`, OpenCode `auth.json`)에만 두고, 설정·인자에는 그 경로나 relay 파일 경로만 둔다. 워커가 호출마다 읽어 OpenCode 프로필로만 넘기고 기록에서 가린다([검토](REVIEW.md#모델-설정)) |
-| Git | 공개 HTTPS 저장소만 가져온다. 비공개 저장소 credential 전달은 구현하지 않았다. 사용자 Git 설정과 credential helper를 차단한다 |
-| GitHub App key, 게시 credential | 설계 계약(미구현, [Git 연결](GITHUB.md)) |
+| Git | 사용자 Git 설정과 credential helper를 차단한다. 개인 모드의 github.com token(`GH_TOKEN`·`GITHUB_TOKEN`·`gh auth token`에서 찾는다)은 `<state_dir>/secrets/github.json`(0600)에만 두고 에이전트에는 그 경로만 준다. 워커가 fetch마다 읽어 github.com 요청에만 git 환경변수의 HTTP header로 넘긴다. URL·argv·작업 사본·snapshot·분석기·모델 입력에는 없다. 다른 호스트에는 보내지 않는다([GitHub token](GITHUB.md#github-token)) |
+| GitHub API(개인 모드) | 같은 token 파일을 controller와 `codeye up`이 요청마다 읽어 pull request 확인과 결과 댓글에만 쓴다. redirect를 따르지 않고 다른 origin의 page 주소를 쓰지 않는다. `GET /setup`은 token 유무·계정·출처만 보인다. 댓글은 token 계정의 권한으로 게시되므로 기본으로 꺼져 있고 사용자가 켠다([결과 댓글](GITHUB.md#결과-댓글)) |
+| GitHub App key, 서버 모드 게시 credential | 설계 계약(미구현, [Git 연결](GITHUB.md#다중-사용자-설치-설계-계약)) |
 
 - 일시 credential은 만료와 삭제를 확인한다. 개인 모드는 권한을 제한한 파일, 서버 모드는 운영자 secret store를 선택한다(서버 모드는 설계 계약).
 - 비밀정보 검사 결과는 매칭 값 전체를 보존하지 않는다. 비밀값 자체와 그 일부·hash는 DB, 로그, 보고서, 내보내기, 웹, 모델 입력 어디에도 저장하지 않는다. 마스킹된 유형·위치·제거/회전 방향만 제공한다. 실제 인증 가능성을 확인하려고 외부 서비스에 토큰을 쓰지 않는다. 비밀값이 탐지된 파일은 모델 입력에서 뺀다([분석기](ANALYZERS.md)).
 - 도구의 원시 stdout/stderr 산출물에 비밀값이 있을 수 있으므로 저장 전에 마스킹하고, 도구가 비밀값을 출력하지 않도록 출력 형식을 고정한다.
 - 명령 기록에는 secret 값을 마스킹한다.
+- pull request 댓글은 외부에 공개되는 출력이다. 코드 인용, 도구 원문, 증거, 비밀정보를 싣지 않고, 모델 문장은 첫 줄만 쓰며 `&`를 먼저 escape해 mention·issue 참조·자동 링크·HTML이 살아나지 않게 한다. 숨은 marker는 token 계정이 쓴 댓글에서만 믿는다.
 
 ## 소스와 네트워크
 
@@ -160,14 +162,16 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
   - 서버 모드: 노드 운영자가 source root마다 준 허가(`--repo-code-source-root`)다. Git 소스는 허가를 받지 않는다.
   - 개인 모드(A40): 프로젝트의 분석 선택 "저장소의 빌드 스크립트 실행"(`analysis.run_build_scripts`)이다. **기본값이 바뀌었다.** 로컬 폴더 프로젝트는 기본 켬이다(이전에는 root마다 `repository_code: true`를 적어야 했다). 내 폴더의 코드는 이미 내 권한으로 실행할 수 있는 내 코드라고 본다. Git 저장소 프로젝트는 기본 끔이고, 프로젝트 관리자가 켜면 그 저장소의 코드가 사용자의 권한으로 이 컴퓨터에서 실행된다(Native 실행이며 격리가 없다). 선택은 프로젝트 설정 revision에 남고 바꾸면 `project.revised` 감사가 남는다.
 - **모델 전송 승인.** 서버 모드는 노드 운영자가 root마다 승인한 코드만 모델에 보낸다(기본은 보내지 않음). 개인 모드는 프로젝트의 분석 선택 "소스를 모델에 보냄"(`analysis.send_source_to_model`)이 정하고 로컬 폴더·Git 저장소 모두 기본 켬이다(A40, A39의 root 단위 기본 허가와 `model_review`를 대신한다). **Git 저장소의 소스도 이제 기본으로 모델에 간다**(이전에는 Git 소스를 모델에 보낼 방법이 없었다). 보내는 곳은 사용자가 키를 둔 모델 공급자 하나다. 모델 설정이 없으면 다른 모델이나 인터넷 서비스로 우회하지 않고 모델 검토를 건너뛴 것으로 보고서에 표시한다.
-- **공개 Git 저장소만.** 개인 모드의 Git 주소는 `git_hosts`(기본 `github.com`)의 HTTPS 저장소만 받고 credential을 보내지 않는다. 인증을 요구하는 저장소는 `source_auth_required`로 실패하며 사용자 credential helper나 다른 경로로 재시도하지 않는다.
-- **네트워크.** 설정된 Git host, 모델 endpoint, mirror, CA만 쓴다. 소스 확보는 승인된 HTTPS host에서 redirect, URL userinfo, SSH, `git://`, 알려지지 않은 host를 거부한다. 도구에는 가능한 곳에서 오프라인 옵션을 준다(예: cargo `--offline`). 그러나 Native 실행에서 프로세스 전체의 네트워크를 OS 수준으로 차단하지는 않는다. 환경변수만으로 OS 수준 차단을 달성했다고 표시하지 않는다. 필요하면 OS 방화벽 등 운영자 통제를 둔다. 폐쇄망의 외부 telemetry·업데이트·원격 규칙 다운로드·공유 차단은 설계 계약이다([운영](OPERATIONS.md)).
+- **Git credential은 github.com token 하나.** 개인 모드의 Git 주소는 `git_hosts`(기본 `github.com`)의 HTTPS 저장소만 받는다. github.com에는 찾은 token이 있을 때만 그것을 보내고 다른 호스트에는 아무 credential도 보내지 않는다. 인증을 요구하는 저장소는 `source_auth_required`로 실패하며 사용자 credential helper나 다른 경로로 재시도하지 않는다. 오프라인 모드에서는 token을 찾지도 보내지도 않는다(github.com도 기본 호스트가 아니다). 사내 Git 호스트용 credential은 아직 없다.
+- **네트워크.** 설정된 Git host, 모델 endpoint, mirror, CA만 쓴다. 소스 확보는 승인된 HTTPS host에서 redirect, URL userinfo, SSH, `git://`, 알려지지 않은 host를 거부한다. 도구에는 가능한 곳에서 오프라인 옵션을 준다(예: cargo `--offline`). 그러나 Native 실행에서 프로세스 전체의 네트워크를 OS 수준으로 차단하지는 않는다. 환경변수만으로 OS 수준 차단을 달성했다고 표시하지 않는다. 필요하면 OS 방화벽 등 운영자 통제를 둔다. CODEYE에는 telemetry·업데이트 확인·원격 규칙 다운로드가 없다.
+- **오프라인 모드.** `offline: true`이면 공개 레지스트리·github.com·공급자 공개 모델 endpoint를 기본값으로 쓰지 않는다. 운영자가 적은 미러·Git 호스트·`base_url`만 쓰고, 없으면 받지 않거나 검토하지 않은 이유를 보고서에 남긴다(`offline_no_registry_configured`, `model_endpoint_not_configured`). 환경변수의 모델 키는 공개 endpoint용이라 저장하지 않는다. 저장소 코드 실행이 허가된 build script 등은 이 설정과 무관하게 접속할 수 있다. 측정한 접속과 남은 경로는 [운영](OPERATIONS.md#오프라인-모드)에 있다.
+- **사내 CA.** `ca_bundle`은 신뢰할 CA를 더하는 설정일 뿐이다. 인증서 검증을 끄거나 약하게 하는 설정은 두지 않는다. `SSL_CERT_FILE`은 시스템 CA를 대신하므로 합본을 준다([사내 CA](OPERATIONS.md#사내-ca)).
 - **의존성 받기.** 켜면(기본) 분석 전에 노드가 운영자 `GOPROXY`(기본 `https://proxy.golang.org`)와 checksum DB(기본 `sum.golang.org`)에 접속해 대상 프로젝트가 적은 모듈을 받는다. 그래서 모듈 이름과 버전이 그 서비스에 알려진다. 운영자의 `GOPRIVATE`·`GONOPROXY`·`GONOSUMDB`에 맞는 비공개 모듈은 묻지 않고, VCS에서 직접 받지 않는다(`GOVCS=*:off`). 받은 파일은 go.sum으로 검증하고 저장소 코드는 실행하지 않는다. 받는 주소는 운영자 설정이며 사용자·저장소의 `.netrc`·`GOFLAGS`·`go.work` 같은 설정은 쓰지 않는다(`GOENV=off`, `GOWORK=off`, 실행별 `HOME`, 실행기의 환경 필터). 다른 주소로 접속하지 않는다는 것은 도구 설정에 기대며 OS 수준으로 막지 않는다. Rust는 crates.io(또는 저장소 Cargo 설정이 정한 레지스트리)에서 `Cargo.lock`의 crate를 받고, 저장소 코드 실행 허가가 있을 때만 받는다. 공유 `CARGO_HOME`은 build script 실행 중 쓰기에서 보호되지 않는다([Rust 받기](ANALYZERS.md#rust-의존성-받기)). JS/TS는 운영자 레지스트리(`--npm-registry`, 기본 `registry.npmjs.org`)에서 lockfile의 패키지를 lifecycle script 없이 실행 사본에 설치하고, 설치 위치·캐시·proxy를 명령줄로 정하며 작업 사본 밖을 가리키는 링크를 지운다([JS/TS 받기](ANALYZERS.md#jsts-의존성-받기)). 프로젝트마다 "의존성 받기"를 끄거나 노드에서 `--dependency-fetch`를 주지 않으면 접속하지 않는다([의존성 준비](ARCHITECTURE.md#의존성-준비)).
 - **Python 패키지 받기.** 같은 스위치로 노드가 운영자 index(`--pip-index-url`, 기본 PyPI)에서 대상 프로젝트가 적은 패키지를 받는다. 패키지 이름·버전이 index에 알려진다. wheel만 받고(`--only-binary=:all:`, uv `--no-build`) 저장소의 `setup.py`·build backend를 실행하지 않는다. 저장소가 적은 `--index-url`·`--extra-index-url`·`--find-links`, editable·로컬·VCS 요구사항은 따르지 않는다. 직접 URL 요구사항(`name @ https://...`)은 pip처럼 그 주소에서 받는다. pip은 `--isolated`, uv는 `--no-config`라 사용자·저장소 설정 파일을 읽지 않는다. 받은 트리의 `*.pth`·`sitecustomize`는 지운다. mypy가 받은 트리를 읽을 때 운영자 interpreter로 mypy의 `pyinfo.py`를 한 번 실행해 검색 경로를 묻는다(`PYTHONSAFEPATH=1`, `PYTHONNOUSERSITE=1`). 그 실행은 `site`·`sysconfig`만 import하고 받은 패키지는 import하지 않는다([Python 의존성 받기](ANALYZERS.md#python-의존성-받기), A44).
 
 ## 보관과 삭제
 
-자동 삭제는 없다. 저장 상한은 새 작업만 거절한다. 운영자가 `codeye cleanup`(기본 dry run, `--apply`로 적용)으로 오래된 원시 증거와 노드 사본을 지운다([보존 정리](OPERATIONS.md#보존-정리), A47).
+자동 삭제는 없다. 저장 상한은 새 작업만 거절한다. 운영자가 `codeye cleanup`(기본 dry run, `--apply`로 적용)으로 오래된 원시 증거와 노드 사본을 지운다([보존 정리](OPERATIONS.md#보존-정리), A49).
 
 - **지금 지우는 것.** 끝난 run의 원시 산출물 내용(`stdout`·`stderr`·`raw_output`·`other`), 노드의 오래된 snapshot·작업 사본, 은퇴한 에이전트 디렉터리. 기준(`--older-than`, 기본 30일, 최소 1시간)은 한 값이다.
 - **남기는 것.** 보고서, 관찰, manifest, run·이벤트·사람 판정, 감사 기록. 감사 표는 append-only이고 정리 자체를 `storage.retention_applied`로 남긴다.
@@ -187,7 +191,7 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 감사 기록은 `audit_events` 표 하나다(migration 0010). 행은 추가만 되며 UPDATE·DELETE·TRUNCATE를 trigger가 막는다. 열은 DB 시각(`occurred_at`), 행위자 종류(`actor_kind`: `user`, `operator_cli`, `node`, `system`, `anonymous`), 행위자 사용자·노드, 닫힌 목록의 `action`, 대상(`target_type`, `target_id`), 프로젝트, 요청 ID(`X-Request-ID`), 작은 `detail` 객체(4096바이트 이하)다.
 
 - **같은 트랜잭션.** 상태를 바꾸는 기록은 그 변경과 같은 트랜잭션에서 쓴다. 감사 행을 쓰지 못하면 변경도 커밋되지 않고 요청은 503이다. 보고서 내보내기는 본문을 보내기 전에 기록하며, 기록에 실패하면 본문을 보내지 않는다. 로그인 실패·제한처럼 변경이 없는 사건은 그 사건만 따로 기록하고, 기록 실패는 요청 실패(503)다.
-- **detail 허용 목록.** detail은 코드에 적힌 key만 받고 값은 짧은 문자열·수·불리언·null·짧은 문자열 목록이다. 비밀번호, 토큰, secret, 소스 본문, 서버 경로, 모델 입력·추론, 판정 사유 본문은 key가 없어 저장할 수 없다(시도하면 요청이 실패한다). 로그인 기록의 `client_address`는 IPv4 주소 또는 IPv6 /64다.
+- **detail 허용 목록.** detail은 코드에 적힌 key만 받고(pull request run의 `run.requested`는 번호 `pull_request`만 더한다) 값은 짧은 문자열·수·불리언·null·짧은 문자열 목록이다. 비밀번호, 토큰, secret, 소스 본문, 서버 경로, 모델 입력·추론, 판정 사유 본문은 key가 없어 저장할 수 없다(시도하면 요청이 실패한다). 로그인 기록의 `client_address`는 IPv4 주소 또는 IPv6 /64다.
 - **읽기.** `GET /audit`(관리자, 전체)과 `GET /projects/{id}/audit`(그 프로젝트의 manager·소유자, 그 프로젝트 행만). 시각·행위자·action·프로젝트로 거르고 id 내림차순 keyset으로 읽는다.
 - **로그인 제한 기록.** 잠금 하나에 `auth.login_throttled` 한 행만 남긴다(대량 시도 때 기록이 끝없이 늘지 않게). detail의 `scope`는 지연된 카운터(`pair`, `client`)다. 이후 거절은 세지 않는다.
 - **노드 프로토콜.** heartbeat·claim·이벤트·산출물 같은 노드 쓰기는 run·attempt·task 이벤트 이력이 기록이고 감사 행을 따로 쓰지 않는다. 노드 등록·철회·등록 토큰과 오래된 epoch 거부(`attempt.stale_rejected`)는 감사 행을 쓴다.

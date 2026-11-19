@@ -78,6 +78,10 @@ func testedTable() map[string]testedInfo {
 	}
 }
 
+// TestedSeries is the release series the parser of tool (a catalog tool
+// name, a shared toolchain or "go") was checked against; "" when there is none.
+func TestedSeries(tool string) string { return testedTable()[tool].series }
+
 // CheckTool validates the path configured for tool in cfg (cfg.GoExecutable
 // for "go", cfg.Tools[tool] otherwise) and returns its version. The shared
 // toolchain a tool needs (node) and the go toolchain Staticcheck needs are

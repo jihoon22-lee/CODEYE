@@ -577,6 +577,35 @@ def check_doctor_operations(validator, example) -> None:
     bad = copy.deepcopy(example)
     bad["checks"] = [c for c in bad["checks"] if c["id"] != "database"] + [{"id": "model", "status": "unverified", "reason": "adapter_contract_pending_w10"}]
     cases.append(("a check that is no longer reported", bad))
+    # The offline readiness section (docs/OPERATIONS.md#오프라인-준비-점검) is optional and closed.
+    ensure("offline" in example, "Doctor example lacks the offline readiness section")
+    base = copy.deepcopy(example)
+    del base["offline"]
+    validator.validate(base)
+    bad = copy.deepcopy(example)
+    bad["offline"]["destinations"][1]["value"] = "sum.golang.org"
+    cases.append(("a destination of origin none with a value", bad))
+    bad = copy.deepcopy(example)
+    del bad["offline"]["destinations"][0]["value"]
+    cases.append(("a configured destination without a value", bad))
+    bad = copy.deepcopy(example)
+    bad["offline"]["destinations"][0]["value"] = "https://user:token@mirror.corp.example/go"
+    cases.append(("a destination carrying a credential", bad))
+    bad = copy.deepcopy(example)
+    bad["offline"]["ca_bundle"]["path"] = "/etc/pki/ca.pem"
+    cases.append(("a CA bundle path in the report", bad))
+    bad = copy.deepcopy(example)
+    bad["offline"]["ca_bundle"] = {"status": "unavailable"}
+    cases.append(("an unavailable bundle without a reason", bad))
+    bad = copy.deepcopy(example)
+    bad["offline"]["languages"][0]["missing"] = ["staticcheck"]
+    cases.append(("a ready language with something missing", bad))
+    bad = copy.deepcopy(example)
+    bad["offline"]["languages"][1]["missing"] = []
+    cases.append(("a partial language with nothing missing", bad))
+    bad = copy.deepcopy(example)
+    bad["offline"]["postgres"]["programs"].pop()
+    cases.append(("a PostgreSQL program left out", bad))
     for name, data in cases:
         expect_invalid(name, validator.validate, data)
 
@@ -605,7 +634,7 @@ def check_tools_contract(validator, example) -> None:
     bad["tools"] = bad["tools"][1:]
     cases.append(("missing tool entry", bad))
     bad = copy.deepcopy(example)
-    bad["tools"][5].pop("hint")
+    next(t for t in bad["tools"] if t["status"] == "unusable").pop("hint")
     cases.append(("unusable without a hint", bad))
     bad = copy.deepcopy(example)
     bad["tools"][0]["notes"] = ["other"]

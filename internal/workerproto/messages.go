@@ -4,7 +4,11 @@
 // credential: the worker never sees the node secret, DSN or tokens.
 package workerproto
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+)
 
 // Protocol is the version string exchanged in hello/ready.
 const Protocol = "codeye-worker/0.1"
@@ -86,6 +90,11 @@ type Hello struct {
 	ModelCredentialFile string `json:"model_credential_file,omitempty"`
 	// ModelTimeoutSeconds bounds one model call; 0 means the default (180).
 	ModelTimeoutSeconds int `json:"model_timeout_seconds,omitempty"`
+	// GitCredentialFile is the file the worker reads a Git host token from
+	// for one fetch of that host (personal mode's GitHub token,
+	// docs/GITHUB.md); the token never travels in the hello, and analyzers
+	// and the model never see it.
+	GitCredentialFile string `json:"git_credential_file,omitempty"`
 	Header
 	Protocol      string `json:"protocol"`
 	WorkerID      string `json:"worker_id"`
@@ -105,6 +114,14 @@ type Hello struct {
 	// AdvertiseWithoutBaseline: advertise the analysis capability even when no
 	// baseline analyzer is usable; its tasks end unsupported (personal mode).
 	AdvertiseWithoutBaseline bool `json:"advertise_without_baseline,omitempty"`
+
+	// Offline is the node operator's offline mode (codeye agent --offline,
+	// docs/OPERATIONS.md#오프라인-모드): no built-in public registry, checksum
+	// database or model endpoint is used.
+	Offline bool `json:"offline,omitempty"`
+	// CABundle is the PEM file the processes that reach a registry, a Git
+	// host or the model endpoint trust (--ca-bundle).
+	CABundle string `json:"ca_bundle,omitempty"`
 
 	// Dependencies is the node operator's dependency fetch configuration
 	// (--dependency-fetch and its options, docs/ARCHITECTURE.md#의존성-준비);
@@ -200,6 +217,8 @@ type Job struct {
 	// RunVersion is the run version after claim (expected_version of the first
 	// run_advance).
 	RunVersion int64 `json:"run_version"`
+	// PullRequest is the pull request of a Git job (nodeproto.Job).
+	PullRequest *domain.PullRequestJob `json:"pull_request,omitempty"`
 }
 
 // ReplyError carries a stable code only.

@@ -96,6 +96,7 @@ export const ko = {
           ? 'node: JS/TS 패키지 관리자를 실행할 Node.js가 없습니다. Node.js를 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.'
           : `${name}: 이 프로젝트의 의존성을 받을 패키지 관리자가 없습니다. 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
     registry: '의존성 저장소(Go 모듈 proxy, crates.io, npm 레지스트리, Python 패키지 index 등)에 연결하지 못해 의존성을 받지 못했습니다. 네트워크와 설정의 agent.dependencies.go_proxy·npm_registry·pip_index_url을 확인하고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
+    offlineRegistry: '오프라인 모드라 공개 저장소에서 의존성을 받지 않았고, 사내 미러가 설정되지 않았거나 노드의 캐시에 없었습니다. 설정의 agent.dependencies.go_proxy·npm_registry·pip_index_url에 사내 미러 주소를 적거나(Go는 agent.go_mod_cache에 모듈을 미리 받아 둘 수 있습니다) codeye up을 다시 실행한 뒤 다시 시도하세요.',
     sending: '바꾸는 중…',
     needsManager: '프로젝트 관리자만 바꿀 수 있습니다.',
     command: 'codeye up',
@@ -415,13 +416,14 @@ export const ko = {
     } as Record<string, string>,
     count: (label: string, n: number) => `${label} ${n}건`,
     reasonLabels: {
-      source_auth_required: '저장소를 인증 없이 읽을 수 없음 — 비공개 저장소는 아직 지원하지 않습니다 (주소가 맞는지도 확인하세요)',
+      source_auth_required: '저장소를 읽을 권한이 없음 — 비공개 github.com 저장소는 gh auth login(또는 GH_TOKEN) 뒤 codeye up을 다시 하면 읽습니다 (주소가 맞는지도 확인하세요)',
       source_unreachable: 'Git 호스트에 연결하지 못함 — 네트워크를 확인하고 다시 시도하세요',
       source_unavailable: '소스를 읽지 못함 — 폴더가 있는지, 읽을 수 있는지 확인하세요',
       source_holds_codeye_data: '이 폴더는 CODEYE 데이터 폴더를 품고 있거나 그 안에 있어 읽지 않음 — 프로젝트가 든 하위 폴더를 고르세요',
       model_source_not_approved: '이 프로젝트는 소스를 모델에 보내지 않도록 설정되어 제외됨 (정책 제외, 모델 검토 성공으로 세지 않음)',
       model_not_configured: '모델이 설정되지 않아 모델 검토를 하지 않음 (안내서의 "모델 설정")',
       model_credential_unavailable: '모델 API 키 파일이 없거나 읽을 수 없어 호출하지 않음 (미지원)',
+      model_endpoint_not_configured: '오프라인 모드라 공개 주소로는 모델을 호출하지 않음 — 모델 키 파일의 base_url에 사내 주소를 적으세요 (미지원)',
       model_auth_failed: '모델 공급자가 API 키를 거부함 (인증 실패, codeye model probe로 확인)',
       model_not_found: '모델 공급자에 그 모델이 없음 (agent.model.name 확인)',
       model_unavailable: '모델 공급자가 응답하지 않았거나 오류를 냄',
@@ -521,6 +523,7 @@ export const ko = {
       no_dependency_consumer: '받은 의존성을 쓸 분석기가 없어 받지 않음 (할 일 없음, 실패 아님)',
       dependency_consumers_not_allowed: '의존성을 쓸 분석기가 빌드 스크립트 실행 허가가 없어 실행되지 않으므로 받지 않음 (할 일 없음, 실패 아님)',
       registry_unreachable: '의존성 저장소(registry·proxy)에 연결하지 못함 — 네트워크와 agent.dependencies.go_proxy를 확인하세요',
+      offline_no_registry_configured: '오프라인 모드라 공개 저장소에서 받지 않음 — 설정된 사내 미러나 노드 캐시에 받을 것이 없음',
       module_not_on_proxy: 'Go 모듈 proxy에 없는 모듈이 있음 (비공개 모듈이거나 이름이 틀렸을 수 있음)',
       checksum_mismatch: '받은 모듈의 checksum이 go.sum과 다름 (실패)',
       go_sum_incomplete: 'go.sum에 빠진 항목이 있어 오프라인 분석기가 그 모듈을 확인할 수 없음',
@@ -969,6 +972,40 @@ export const ko = {
     },
   },
   // --- end of accounts ---
+
+  // --- pull requests (docs/GITHUB.md#pull-request-분석): run line, result comment, preview ---
+  pullRequest: {
+    label: 'pull request',
+    line: (n: number, repo: string) => `pull request #${n} (${repo})`,
+    commits: (head: string, headSHA: string, base: string, baseSHA: string) => `${head} ${headSHA} → ${base} ${baseSHA}를 분석합니다.`,
+    fork: (repo: string) => `head 저장소: ${repo}.`,
+    files: (n: number) => `변경 파일 ${n}개를 먼저 검토하고, 저장소의 나머지는 같은 깊이로 검토하지 않을 수 있습니다.`,
+    comment: '결과 댓글',
+    commentStates: {
+      not_requested: '남기지 않음',
+      waiting_for_report: '보고서를 기다리는 중',
+      pending: '게시 대기(실패하면 다시 시도)',
+      posted: '게시함',
+      superseded: '더 새 실행의 댓글이 있어 덮지 않음',
+      failed: '게시하지 못함',
+    } as Record<string, string>,
+    openComment: '댓글 보기',
+    preview: '미리 보기',
+    previewNote: '아래는 이 실행이 pull request에 남기는(또는 남길) 댓글입니다. 미리 보기는 아무것도 게시하지 않습니다.',
+    headMoved: (sha: string) => `분석 뒤 pull request의 head가 ${sha}로 바뀌었습니다.`,
+    commentBox: 'pull request에 결과 댓글 남기기',
+    commentHelp: '보고서가 나오면 GitHub token 계정으로 댓글 하나를 남기고, 같은 pull request를 다시 분석하면 그 댓글을 고칩니다. 코드는 싣지 않습니다. 이 프로젝트의 선택으로 기억합니다.',
+    errors: {
+      PULL_REQUEST_UNSUPPORTED: 'pull request는 개인 모드의 github.com 저장소에서만 분석할 수 있습니다.',
+      PULL_REQUEST_NOT_FOUND: 'GitHub이 그 pull request를 보여 주지 않습니다. 비공개 저장소라면 터미널에서 gh auth login 뒤 codeye up을 다시 실행하세요.',
+      GITHUB_TOKEN_REFUSED: 'GitHub이 저장된 token을 거부했습니다. gh auth login으로 다시 로그인하고 codeye up을 실행하세요.',
+      GITHUB_FORBIDDEN: '이 GitHub token으로는 그 pull request를 읽을 수 없습니다.',
+      GITHUB_RATE_LIMITED: 'GitHub API 사용 한도에 걸렸습니다. 잠시 뒤 다시 시도하세요.',
+      GITHUB_UNAVAILABLE: 'GitHub API에 연결하지 못했습니다. 네트워크를 확인하고 다시 시도하세요.',
+      NOT_A_PULL_REQUEST_RUN: '이 실행은 pull request를 분석하지 않습니다.',
+    } as Record<string, string>,
+  },
+  // --- end of pull requests ---
 
   // --- small shared pieces ---
   copy: { button: '복사', done: '✓ 복사함', failedShort: '복사 안 됨', failed: '복사하지 못했습니다. 글자를 직접 선택해 복사하세요.', labelFor: (text: string) => `${text} 복사` },

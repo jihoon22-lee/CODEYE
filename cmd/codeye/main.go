@@ -34,6 +34,9 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if args[0] == "model" {
 		return modelCommand(ctx, args[1:], out, stderr)
 	}
+	if args[0] == "version" {
+		return versionCommand(args[1:], out, stderr)
+	}
 	if args[0] == "tools" {
 		return toolsCommand(ctx, args[1:], out, stderr)
 	}

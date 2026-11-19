@@ -82,6 +82,8 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
       }
     } else if (g.code === 'dependencies_not_prepared' && codeOf(detail) === 'registry_unreachable') {
       push({ key: 'dependency_registry', text: t.improve.registry });
+    } else if (g.code === 'dependencies_not_prepared' && codeOf(detail) === 'offline_no_registry_configured') {
+      push({ key: 'dependency_offline', text: t.improve.offlineRegistry });
     }
   }
   if (blocked.length > 0) {

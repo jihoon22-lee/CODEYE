@@ -6,11 +6,11 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ### 추가 — 여러 노드 검증과 운영 수용
 
-- **정리 확인**: `recovery_required` run을 사람이 "노드에 남은 프로세스가 없음"을 확인한 뒤 끝낸다. API `POST /runs/{id}/recover`(`{"confirm_cleanup": true}`), 운영자 CLI `codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]`(개인 모드는 설정의 DB), 웹의 확인 상자와 단추. 한 트랜잭션에서 attempt `released`·`confirmed`, 예약 해제, run `failed`(`operator_confirmed`), 감사 `run.recovery_confirmed`이고 이어서 다시 시도처럼 대기열에 넣는다(신선한 노드가 snapshot을 가질 때만 같은 run)([정리 확인](docs/API.md#정리-확인), A46).
-- **보존 정리**: `codeye cleanup --older-than 30d`가 기본 dry run이고 `--apply`일 때만 끝난 run의 오래된 원시 산출물(`stdout`·`stderr`·`raw_output`·`other`) 내용을 지운다. 행·hash·보고서·관찰·감사는 남고 run 화면에 "원시 증거가 삭제됨"이 보인다. 노드 상태 디렉터리의 끝난 작업 사본도 정리하되 에이전트가 실행 중이면(또는 확인할 수 없으면) snapshot은 건너뛴다([보존 정리](docs/OPERATIONS.md#보존-정리), A47).
-- **사용자 서비스**: `codeye service install|uninstall|print`가 systemd 사용자 unit(`codeye start`/`stop`)을 쓴다. install은 enable만 하고, uninstall은 설정 없이 자기가 쓴 unit만 지운다([사용자 서비스](docs/OPERATIONS.md#사용자-서비스), A48).
-- **고침**: drain 중인 노드가 자동 증감 계획에 남아 `start_worker`를 받고 그 노드의 예산을 시작 제한시간(90초) 동안 잡던 것. drain 중인 에이전트는 정적 scaling과 분석 능력 없음을 알린다(A49). `service uninstall`이 설정 파일을 요구하던 것, 보존 정리가 실행 중 attempt가 쓰는 snapshot을 지울 수 있던 것, 개인 모드에서 `run recover`가 DB를 찾지 못하던 것.
-- **여러 노드 smoke**(`scripts/test_postgres.py --multinode`, TC-231~235, CI 작업 `native-multinode`): 한 WSL2 호스트에서 `codeye serve` 하나와 노드 신원 8개(각자 상태 디렉터리·도구·source root). 장애는 SIGSTOP/SIGKILL과 로컬 TCP 프록시 차단이다. 이 호스트에서 전체 116~125초, 모두 통과. 표는 첫 측정이고 다시 실행한 값도 그 근처였다(사망 → `recovery_required` 32~34초, 다시 빌드는 build cache에 따라 1.3~7.5초).
+- **정리 확인**: `recovery_required` run을 사람이 "노드에 남은 프로세스가 없음"을 확인한 뒤 끝낸다. API `POST /runs/{id}/recover`(`{"cleanup_confirmed": true}`), 운영자 CLI `codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]`(개인 모드는 설정의 DB), 웹의 확인 상자와 단추. 한 트랜잭션에서 attempt `released`·`confirmed`, 예약 해제, run `failed`(`operator_confirmed`), 감사 `run.recovery_confirmed`이고 이어서 다시 시도처럼 대기열에 넣는다(신선한 노드가 snapshot을 가질 때만 같은 run). pull request run은 고정한 pull request(head SHA·변경 파일)와 댓글 선택을 그대로 가진 채 다시 들어간다([정리 확인](docs/API.md#정리-확인), A48, migration 13).
+- **보존 정리**: `codeye cleanup --older-than 30d`가 기본 dry run이고 `--apply`일 때만 끝난 run의 오래된 원시 산출물(`stdout`·`stderr`·`raw_output`·`other`) 내용을 지운다. 행·hash·보고서·관찰·감사는 남고 run 화면에 "원시 증거가 삭제됨"이 보인다. 노드 상태 디렉터리의 끝난 작업 사본도 정리하되 에이전트가 실행 중이면(또는 확인할 수 없으면) snapshot은 건너뛴다([보존 정리](docs/OPERATIONS.md#보존-정리), A49).
+- **사용자 서비스**: `codeye service install|uninstall|print`가 systemd 사용자 unit(`codeye start`/`stop`)을 쓴다. install은 enable만 하고, uninstall은 설정 없이 자기가 쓴 unit만 지운다([사용자 서비스](docs/OPERATIONS.md#사용자-서비스), A50). 세 명령 모두 네트워크를 쓰지 않아 오프라인 모드에서도 같고, 운영 훈련 D7·D9는 오프라인 모드 설치에서 실행한다.
+- **고침**: drain 중인 노드가 자동 증감 계획에 남아 `start_worker`를 받고 그 노드의 예산을 시작 제한시간(90초) 동안 잡던 것. drain 중인 에이전트는 정적 scaling과 분석 능력 없음을 알린다(A51). `service uninstall`이 설정 파일을 요구하던 것, 보존 정리가 실행 중 attempt가 쓰는 snapshot을 지울 수 있던 것, 개인 모드에서 `run recover`가 DB를 찾지 못하던 것.
+- **여러 노드 smoke**(`scripts/test_postgres.py --multinode`, TC-250~254, CI 작업 `native-multinode`): 한 WSL2 호스트에서 `codeye serve` 하나와 노드 신원 8개(각자 상태 디렉터리·도구·source root). 장애는 SIGSTOP/SIGKILL과 로컬 TCP 프록시 차단이다. 이 호스트에서 전체 116~125초, 모두 통과. 표는 첫 측정이고 다시 실행한 값도 그 근처였다(사망 → `recovery_required` 32~34초, 다시 빌드는 build cache에 따라 1.3~7.5초).
 
   | 시나리오 | 한 일 | 관찰 | 시간 |
   |---|---|---|---|
@@ -20,7 +20,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
   | S4 drain | 작업 중 SIGUSR1 | 하던 일 첫 attempt로 끝, 새 run `no_capable_node`, 그 노드에 `start_worker` 없음, 종료 코드 0 | 15.0초 |
   | S5 에이전트 갱신 | `-trimpath`로 다시 빌드(hash 다름), 같은 상태 디렉터리로 시작 | 같은 node ID, `node.enrolled` 감사 없음, 대기 run을 받아 끝 | 빌드 7.5초, 시작 → 끝 5.2초 |
 
-- **운영 훈련**(`scripts/test_postgres.py --ops-drill`, TC-236): 자기 PostgreSQL cluster를 띄워 그것만 멈춘다. 이 호스트에서 약 9분이라 CI에는 넣지 않았다. 마지막 두 번 모두 통과(D9의 지금 형태는 마지막 실행).
+- **운영 훈련**(`scripts/test_postgres.py --ops-drill`, TC-255): 자기 PostgreSQL cluster를 띄워 그것만 멈춘다. 이 호스트에서 약 9분이라 CI에는 넣지 않았다. 마지막 두 번 모두 통과(D9의 지금 형태는 마지막 실행).
 
   | 훈련 | 한 일 | 관찰 | 시간 |
   |---|---|---|---|
@@ -35,9 +35,31 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
   | D8 권한 회수 | 구성원 제거, 사용자 비활성화, 노드 철회 | 열린 SSE가 0.5초 안에 `access_revoked`·`unauthenticated`로 닫힘, 다음 요청 404·401, 철회 4.9초 뒤 에이전트 종료 코드 4, 남은 프로세스 없음, 정리 확인 뒤 새 run | 38초 |
   | D9 보존 정리 | 끝난 run의 산출물을 40일 전으로 돌린 뒤 `codeye cleanup --config` dry run → `--apply` → dry run | dry run은 원시 행 6개(풀 내용 2개)를 보이고 바꾸지 않음, 적용 뒤 파일 1개 삭제, 1개 남김(`kept_files`: 빈 내용이거나 그 사이 다시 참조됨. 어느 쪽인지는 구분하지 않았다), 같은 보고서, 감사 `storage.retention_applied` 한 건, `raw_evidence_removed_at`, 다시 dry run 0건 | 0.1초 |
 
-- **활성 controller는 하나다.** 두 controller를 같은 DB에 띄우는 구성은 지원하지 않고 시험하지 않았다. 여러 물리 노드, NFS, 실제 네트워크 분할, RHEL 8.10, 회사 SSO, GHES는 이 호스트에서 확인할 수 없다([로드맵](docs/ROADMAP.md#다중-노드-검증)).
+- **활성 controller는 하나다.** 두 controller를 같은 DB에 띄우는 구성은 지원하지 않고 시험하지 않았다. 여러 물리 노드, NFS, 실제 네트워크 분할, RHEL 8.10, 회사 SSO, GHES는 이 호스트에서 확인할 수 없다([로드맵](docs/ROADMAP.md#실제-환경에서만-검증할-수-있는-것)).
 - 사용자 systemd(WSL2): install(enable) → start 1.3초 running, stop 0.7초(PostgreSQL도 멈춤), uninstall.
 - 확인 환경: Linux(WSL2, 6.18), Go 1.27.4, PostgreSQL 17.10, Python 3.14.4. 시간은 이 호스트의 측정값이며 보장값이 아니다. 실모델 호출은 하지 않았다.
+
+### 추가 — GitHub token, pull request 분석, 결과 댓글(개인 모드)
+
+- **token**: `codeye up`이 `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token --hostname github.com` 순으로 github.com token을 찾아 `GET /user`로 확인하고 `<state>/secrets/github.json`(0600)에 둔다. 출력과 `GET /setup`의 `github`는 있음·계정·출처·이유만 보인다. 설정 `"github": {"enabled": false}`가 끈다. 워커는 파일 경로(`--git-credential-file`)만 받아 github.com fetch의 HTTP header로만 보낸다(git 환경변수, argv·URL·작업 사본에 없음). 비공개 github.com 저장소를 읽는다([GitHub token](docs/GITHUB.md#github-token), A46).
+- **pull request 분석**: `codeye up https://github.com/OWNER/REPO/pull/N`과 화면 입력란. controller가 base/head SHA, head 저장소(fork), 변경 파일·상태·변경 줄을 run에 한 번 고정하고(`runs.pull_request`, migration 12, `POST /projects/{id}/runs`의 `pull_request: {number, comment?}`), 워커가 `refs/pull/N/head`를 받아 고정 SHA를 확인한다. snapshot manifest는 branch 대신 `source_ref`를 싣는다. 새 push 뒤 다시 주면 새 run이고 비교 기준은 같은 pull request의 이전 run이다([pull request 분석](docs/GITHUB.md#pull-request-분석)).
+- **검토 순서**: pull request run은 변경 파일, 같은 폴더 파일, 나머지 순서가 A45의 분류·순위보다 앞선다. 삭제 파일은 검토하지 않는다. 범위 산출물 order `pull_request_changed_first`, 파일 label `changed`·`neighbor`. pull request가 아닌 run의 계획과 요청 바이트는 그대로다(기존 계획·요청 바이트 고정 시험 통과. 회귀 집합 dry run은 실행하지 않았다)([검토 우선순위](docs/REVIEW.md#검토-우선순위)).
+- **보고서 builder 9**: `pull_request` 절이 발견·도구 진단을 변경된 줄·변경 파일·변경 파일의 다른 줄·그 밖으로 나누고(patch가 없으면 파일 단위), 요약이 pull request·SHA·모델에 보낸 변경 파일 수를 말하며 "저장소의 나머지는 같은 깊이로 검토하지 않았을 수 있다"고 쓴다([pull request 보고서](docs/REPORT.md#pull-request-보고서), [예시](examples/report-pull-request.json)).
+- **결과 댓글**: 선택(기본 끔, `codeye up --comment`, 화면 "고급"의 체크, 프로젝트별 `analysis.comment_on_pull_request`). 보고서 게시 transaction의 outbox를 controller가 lease로 게시한다. token 계정의 marker 댓글 하나를 고치고, publication version으로 더 새 결과를 덮지 않으며(`superseded`), rate limit·연결 실패는 1분부터 30분까지 6번 다시 시도한다. 실패는 run의 댓글 상태(`GET /runs/{id}`의 `pull_request.comment`)로만 남는다. 본문은 구조화된 보고서에서만 만들고 코드·도구 원문·비밀정보를 싣지 않으며 `&`를 먼저 escape하고 mention·issue 참조·자동 링크를 끊는다. 미리 보기는 `codeye up --dry-run-comment`와 `GET /runs/{id}/pull-request-comment`(화면의 "미리 보기")이고 GitHub에 쓰지 않는다([결과 댓글](docs/GITHUB.md#결과-댓글)).
+- **서버 모드**: 바뀌지 않는다. token을 찾지 않고 pull request 요청은 `PULL_REQUEST_UNSUPPORTED`다. 여러 사람이 쓰는 설치의 계획은 GitHub App과 webhook이고 polling은 만들지 않았다.
+- **고침**: 시험 안 된 경로에서 찾은 것. pull request snapshot의 manifest에 branch가 없어 보고서가 `report_input_invalid`로 거부되던 것(`source_ref` 추가), 모델이 없는 pull request run의 요약이 "변경 파일 7개 중 0개를 모델에 보냈다"고 쓰던 것(정적 분석만 거쳤다고 쓴다), 도구 표에 gh가 더해져 묶음 검사가 위치로 고른 항목이 바뀐 것.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10, gh(snap), 임시 설정·상태·데이터 디렉터리, 모델 없음. 가짜 GitHub API(`scripts/fake_github.py`)와 Git 미러로 `--comment`(댓글 하나 게시), 새 push 뒤 같은 댓글 갱신, `--dry-run-comment`(쓰기 요청 0), token이 `secrets/github.json`에만 있음을 확인했다(`scripts/personal_smoke.py`). 실제 GitHub에서는 읽기만 했다. 비공개 저장소 하나를 gh token으로 가져와 분석했고(소스 확보 성공, 커밋 고정), 공개 `spf13/cobra` pull request #2580(fork, 변경 파일 7)을 `--dry-run-comment`로 분석해 댓글 본문을 출력했다. 두 run 뒤 상태·설정 디렉터리 1,935개 파일 중 token이 있는 파일은 `secrets/github.json` 하나였다. 가짜 모델 upstream으로 같은 저장소의 기본 브랜치(`adbc881`, pull request의 base)와 #2580을 분석하면 overview 요청의 파일 8개 중 변경 파일이 1개에서 7개 중 6개(변경된 Go 파일 전부, 나머지 1개는 문서)로 바뀌었고, 변경 파일이 slice 1~3에 흩어지던 것이 overview로 모였다. 가짜 upstream의 결과는 경로 검증이며 검토 품질의 근거가 아니다. 실제 pull request에는 댓글을 게시하지 않았다.
+
+### 추가 — 폐쇄망 배포팩, 오프라인 모드, 사내 CA
+
+- **배포팩**: `scripts/offline_pack.py build`가 정적 링크 실행 파일(CGO 없음, interpreter·dynamic section이 있으면 실패), `web/dist`, 사용 안내서·운영 문서, 오프라인 설정 예시, `INSTALL.md`, `MANIFEST.json`(버전·commit·빌드 시각·OS/arch·Go·Node 버전, 실행 파일에 든 migration·지침 팩의 hash, 모든 파일의 sha256), `SHA256SUMS`를 묶음 하나(linux/amd64 약 8 MB)로 만든다. 같은 commit·toolchain이면 바이트가 같다. `verify`가 바뀐·빠진·더해진 파일을 찾는다. `codeye version [--json]`을 더했다. 분석 도구·PostgreSQL·OpenCode는 싣지 않는다([배포팩](docs/OPERATIONS.md#폐쇄망-배포팩), A47).
+- **웹 화면 외부 주소 검사**: `check-web`이 빌드된 화면의 외부 글꼴·CDN·`@import`·`url()`·`fetch`·원격 source map을 찾으면 실패한다. CI 웹 작업이 실행한다.
+- **오프라인 모드**: `"offline": true` 또는 `codeye up --offline`. 적지 않은 공개 proxy·레지스트리·index·crates.io를 쓰지 않고(`offline_no_registry_configured`), Go는 운영자 모듈 캐시나 사내 proxy만 쓰며 checksum DB를 정하지 않았으면 끈다. `git_hosts` 기본이 빈 목록이다. 모델은 `base_url`(사내 endpoint)이 있는 키 파일·relay만 쓰고(`model_endpoint_not_configured`), 환경변수의 키를 저장하지 않으며 OpenCode `auth.json`을 찾지 않는다. OpenCode가 시작할 때 묻는 npm 레지스트리 조회는 오프라인 여부와 관계없이 loopback의 닫힌 포트로 보낸다.
+- **사내 CA**: `"ca_bundle"`(합본 PEM)을 go·npm·pnpm·yarn·pip·uv·cargo·git·OpenCode에 `SSL_CERT_FILE`·`NODE_EXTRA_CA_CERTS`·`GIT_SSL_CAINFO`·`PIP_CERT`·`CARGO_HTTP_CAINFO`로 준다. 에이전트는 시작할 때 파일을 검사한다. 검증을 끄는 설정은 없다.
+- **점검**: `codeye doctor --config`의 `offline` 절("Offline readiness")이 접속할 곳과 출처·받지 않는 이유, CA 상태, PostgreSQL 프로그램, 언어별 빠진 도구를 보인다. `codeye tools --checklist`가 폐쇄망용 도구 점검표(시험한 계열, 옮기는 방법)를 낸다.
+- **GitHub과 함께**: 오프라인 모드에서는 GitHub token을 찾지 않고(`gh auth token` 실행 없음) 저장된 token을 지우며, pull request 주소를 거부하고 controller가 GitHub API를 부르지 않는다. `up` 출력·`GET /setup`(`github.reason: offline_mode`)·doctor(`github_api` 목적지)가 이를 말한다. git fetch는 CA 변수와 GitHub header를 함께 받는다. 점검표에 `gh`(선택, 온라인 전용)가 있다.
+- **고침**: 오프라인에서 환경변수의 API 키가 키 파일을 덮어쓰던 것(배포팩 smoke가 찾았다).
+- 확인 환경: Linux(WSL2, Ubuntu 26.04, glibc 2.43), Go 1.27.4, Node 24.18.0, PostgreSQL 17.10, OpenCode 1.19.5. `scripts/offline_smoke.py`가 묶음을 빈 디렉터리에 풀어 그 실행 파일만으로, 새 HOME·설정·상태로 network namespace(loopback만) 안에서 실행했다. 모듈 캐시에 있는 Go 프로젝트는 `prepared`, 없는 프로젝트는 `offline_no_registry_configured`였다. 사설 CA의 HTTPS 미러(Go proxy·PyPI simple·npm·`git http-backend`)와 TLS로 띄운 가짜 모델 upstream으로 Go·Python·JS 의존성을 미러에서 받고 Git 주소 프로젝트를 확보했으며 모델 검토가 사내 endpoint로 `performed`였다(모델 호출·외부 다운로드 없음). 모든 connect(strace)와 DNS 조회(기록기, 자체 확인 포함)를 기록했고 loopback 밖으로 나간 것은 없었다. go·git·npm·pnpm·yarn·pip·uv·OpenCode는 CA 변수가 있으면 성공하고 없으면 인증서 검증 오류였다. 실행 파일은 빈 chroot(libc 없음)에서도 뜬다. 실제 폐쇄망, RHEL 8.10, 회사 CA·미러, cargo의 CA는 확인하지 않았다.
 
 ### 바뀜 — 웹 화면 다듬기
 

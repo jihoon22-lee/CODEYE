@@ -1,6 +1,6 @@
 # 배포와 운영
 
-한 머신에서 CODEYE를 Native로 운영하는 개인 모드의 계약과, 아직 구현하지 않은 서버·노드·폐쇄망 배포의 설계 계약을 적는다. 사용자용 절차는 [사용 안내서](GUIDE.md)에 있다. 보안 경계와 보관·삭제 정책은 [보안](SECURITY.md), 실행기와 워커 정책은 [실행](EXECUTION.md)에 있다.
+한 머신에서 CODEYE를 Native로 운영하는 개인 모드의 계약, controller와 여러 노드 에이전트의 운영과 장애 대응, 폐쇄망 배포팩과 오프라인 모드, 아직 구현하지 않은 여러 머신 배포 묶음의 설계 계약을 적는다. 사용자용 절차는 [사용 안내서](GUIDE.md)에 있다. 보안 경계와 보관·삭제 정책은 [보안](SECURITY.md), 실행기와 워커 정책은 [실행](EXECUTION.md)에 있다.
 
 | 범위 | 상태 |
 |---|---|
@@ -10,11 +10,12 @@
 | 백업·복원 | DB와 확정 산출물을 같은 논리 시점으로 묶는다. 빈 대상에만 복원하고 이전 lease를 살리지 않는다 |
 | `codeye doctor` | 호스트·도구·DB 진단. 도구는 에이전트가 쓰는 탐색과 같은 방법으로 찾는다. `--config`를 주면 저장 영역 사용량·상한, 최신 백업 나이, start/stop 상태 일관성을 더한다 |
 | `codeye tools` | 이 머신에서 찾은 도구, 없는 도구, 추가 방법을 표로 보인다 |
-| `codeye run recover`, `codeye cleanup`, `codeye service` | 정리 확인([runbook](#장애-대응-runbook)), [보존 정리](#보존-정리)(기본 dry run), [사용자 서비스](#사용자-서비스)(systemd 사용자 unit, Linux) |
-| 여러 노드 | 한 호스트의 노드 신원 여럿으로 배정·사망·분할·drain·갱신을 시험했다([실행](EXECUTION.md#여러-노드에서-확인한-것)). 여러 물리 노드는 검증하지 않았다 |
-| 서버 배포(여러 머신의 노드), 폐쇄망 배포팩 | 설계 계약(미구현). 마지막 두 절 |
+| `codeye run recover`, `codeye cleanup`, `codeye service` | 정리 확인([runbook](#장애-대응-runbook)), [보존 정리](#보존-정리)(기본 dry run), [사용자 서비스](#사용자-서비스)(systemd 사용자 unit, Linux). 셋 다 네트워크를 쓰지 않아 오프라인 모드에서도 같다 |
+| 여러 노드 | controller 하나와 노드 에이전트 여럿(`codeye serve`·`codeye agent`, 등록 token). 한 호스트의 노드 신원 여럿으로 배정·사망·분할·drain·갱신을 시험했다([실행](EXECUTION.md#여러-노드에서-확인한-것)). 여러 물리 머신은 검증하지 않았다 |
+| 폐쇄망 배포팩, 오프라인 모드, 사내 CA | 묶음 스크립트·`offline`·`ca_bundle`·doctor 점검 구현. 사설 CA·로컬 미러·network namespace로 검증했고 실제 폐쇄망·RHEL 8.10은 실행하지 않았다. [마지막 절](#폐쇄망-배포팩) |
+| 서버 배포 묶음(여러 머신의 설치·서비스 관리) | 설계 계약(미구현). [서버·노드 배포](#서버노드-배포) |
 
-관련 요구사항: REQ-018(자원 제한), REQ-021(drain), REQ-022(lease·fencing·복구), NFR-003(재시작 뒤 복구), NFR-006(loopback 개인 모드, 민감값), NFR-007(산출물 hash). 수용 시험 TC-124~127, TC-32, TC-170~175, TC-227~236은 [시험](TESTING.md)에 있다.
+관련 요구사항: REQ-018(자원 제한), REQ-021(drain), REQ-022(lease·fencing·복구), NFR-003(재시작 뒤 복구), NFR-006(loopback 개인 모드, 민감값), NFR-007(산출물 hash). 수용 시험 TC-124~127, TC-32, TC-170~175, TC-246~255은 [시험](TESTING.md)에 있다.
 
 ## 지원 범위
 
@@ -53,7 +54,7 @@ codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--auto
 - `serve --listen`이 loopback이 아니면 `--tls-cert`, `--tls-key`, `--public-origin`이 모두 있어야 한다. 하나라도 빠지면 종료 코드 2로 시작하지 않는다. 셋 중 일부만 주는 것도 loopback에서 같은 오류다. [TLS 수신](#tls-수신)을 본다.
 - 로그인 링크와 등록 토큰은 0600 파일에만 쓴다. 표준 출력에는 토큰을 쓰지 않는다. DB에는 SHA-256만 저장한다.
 - 에이전트의 옵션 전체는 `codeye --help`에 있다. 풀의 최소·최대와 전역 상한은 `codeye pool set`, `codeye scheduler set`으로 조정한다. 노드 철회는 `codeye node revoke --id NODE_ID`다.
-- 한 머신 밖의 노드를 쓰는 배포는 검증하지 않았다([서버·노드 배포](#서버노드-배포-설계-계약-미구현)).
+- 한 머신 밖의 노드를 쓰는 배포는 검증하지 않았다([서버·노드 배포](#서버노드-배포)).
 
 ### 계정과 관리자 CLI
 
@@ -95,10 +96,10 @@ codeye serve --listen 0.0.0.0:8443 --tls-cert /etc/codeye/tls/cert.pem --tls-key
 ## codeye tools
 
 ```text
-codeye tools [--config PATH] [--json]
+codeye tools [--config PATH] [--json | --checklist]
 ```
 
-이 머신에서 CODEYE가 쓸 수 있는 도구를 찾아 표로 보인다. 찾은 도구는 경로·버전을, 없는 도구는 한 줄 추가 방법을 보인다. `--json`은 같은 결과를 [tools schema](../schemas/tools.schema.json)의 문서로 낸다. `--config`(또는 기본 설정 파일)의 `agent.go`·`agent.tools`·`agent.model.opencode`는 탐색보다 우선하고, 설정 파일 없이도 동작한다. 설정이 있고 그 `state_dir`가 이미 있으면 결과를 `<state_dir>/tools.json`에 쓴다. 그 밖에는 아무것도 만들거나 설치하지 않는다. 탐색 규칙은 [도구 찾기](ANALYZERS.md#도구-찾기)다. 종료 코드는 도구가 없어도 0이고, 설정 오류만 2다.
+이 머신에서 CODEYE가 쓸 수 있는 도구를 찾아 표로 보인다. 찾은 도구는 경로·버전을, 없는 도구는 한 줄 추가 방법을 보인다. `--json`은 같은 결과를 [tools schema](../schemas/tools.schema.json)의 문서로 낸다. `--config`(또는 기본 설정 파일)의 `agent.go`·`agent.tools`·`agent.model.opencode`는 탐색보다 우선하고, 설정 파일 없이도 동작한다. 설정이 있고 그 `state_dir`가 이미 있으면 결과를 `<state_dir>/tools.json`에 쓴다. 그 밖에는 아무것도 만들거나 설치하지 않는다. 탐색 규칙은 [도구 찾기](ANALYZERS.md#도구-찾기)다. 종료 코드는 도구가 없어도 0이고, 설정 오류만 2다. `--checklist`는 폐쇄망용 Markdown 점검표다([분석 도구 옮기기](#분석-도구-옮기기)).
 
 ```text
 TOOL         STATUS  VERSION   WHERE / HOW TO ADD
@@ -156,7 +157,9 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `database.mode` | `managed` | `managed`(상태 디렉터리의 PostgreSQL, [관리형 PostgreSQL](#관리형-postgresql)) 또는 `external`(`CODEYE_DATABASE_URL`) |
 | `database.postgres_bin_dir` | 빈 값 | managed: 처음 찾는 곳이다. 적은 디렉터리에 필요한 프로그램이 없으면 다른 곳을 찾지 않고 오류다. external: `pg_dump`·`pg_restore`가 있는 절대 경로. PATH에서 찾지 않는다. 백업·복원에 필요하다 |
 | `source_roots[]` | 없음(0~32개). 홈 디렉터리는 적지 않아도 root `home`이다(설정에 쓰지 않는다. 적은 root가 홈을 덮거나 홈이 상태 디렉터리 안이면 더하지 않는다) | `label`(1~100자, 앞뒤 공백 없음), 절대 `path`. label과 path는 서로 유일해야 한다. root는 `state_dir` 안이면 안 된다(홈처럼 `state_dir`를 품는 root는 된다. 그 안의 데이터 폴더를 품는 프로젝트는 거부한다). 선택 `repository_code`·`model_review`는 받기만 하고 개인 모드에서는 쓰지 않는다. 프로젝트별 분석 선택이 정한다([안내서](GUIDE.md#프로젝트별-분석-선택)) |
-| `git_hosts` | `["github.com"]`(필드가 없을 때) | 서로 다른 DNS 호스트 이름(선택 포트) 0~16개, 소문자로 바꾼다. `up`·`start`가 호스트마다 provider를 등록하고(`github.com`은 `github`, 그 밖은 `ghes`) 찾은 git과 함께 에이전트에 `--git`·`--git-host`로 넘긴다. 빈 목록이면 Git 주소를 받지 않는다 |
+| `offline` | false | true면 [오프라인 모드](#오프라인-모드). `codeye up --offline`이 이 값을 저장한다 |
+| `ca_bundle` | 빈 값 | 시스템 CA와 사내 CA를 합친 PEM 파일의 절대 경로([사내 CA](#사내-ca)) |
+| `git_hosts` | `["github.com"]`(필드가 없을 때, 오프라인이면 `[]`) | 서로 다른 DNS 호스트 이름(선택 포트) 0~16개, 소문자로 바꾼다. `up`·`start`가 호스트마다 provider를 등록하고(`github.com`은 `github`, 그 밖은 `ghes`) 찾은 git과 함께 에이전트에 `--git`·`--git-host`로 넘긴다. 빈 목록이면 Git 주소를 받지 않는다 |
 | `agent.name` | `personal` | 100자 이하 |
 | `agent.max_workers` | min(4, 논리 CPU 수/2), 최소 1 | 1~16. 에이전트는 `--autoscale --max-workers N`으로 시작하고, `up`·`start`가 `default` 풀의 최대 워커 수를 같은 값으로 둔다 |
 | `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록 |
@@ -178,7 +181,7 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 ## up, open, start, stop, status
 
 ```text
-codeye up     [PATH | GIT-URL] [--config PATH] [--postgres-bin-dir DIR] [--no-open]
+codeye up     [PATH | GIT-URL] [--config PATH] [--postgres-bin-dir DIR] [--no-open] [--offline]
 codeye open   [--config PATH] [--no-open]
 codeye start  [--config PATH]
 codeye stop   [--config PATH] [--format text|json]
@@ -212,7 +215,7 @@ codeye status [--config PATH] [--format text|json]
 
 개인 lock을 잡는다. 관리형 모드면 PostgreSQL을 띄운다([관리형 PostgreSQL](#관리형-postgresql)). 상태를 검사한다([일관성](#프로세스-상태-일관성)). 기록 없는 프로세스가 에이전트 lock이나 설정에 적은 `listen` 포트를 쥐고 있으면 거부한다. `listen`을 적지 않았고 기본 포트를 다른 프로그램이 쓰면 7340까지 다음 빈 포트를 쓴다. 기록의 프로세스가 끝났거나 pid가 다른 프로세스로 재사용됐으면 기록만 지운다(신호 없음). 그 뒤 순서는 다음과 같다. controller와 에이전트 중 이미 실행 중인 것은 그대로 쓴다. 둘 다 실행 중이고 에이전트 argv가 설정과 같으면 아무것도 띄우지 않고 종료 코드 0이다.
 
-1. schema가 이 바이너리의 migration(현재 12)과 같은지 확인한다. external 모드에서 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. 관리형 모드에서 이전 버전이면 migration을 적용한다. 이미 적용된 migration이 있으면(데이터가 있으면) 먼저 `pg_dump --format=custom`으로 `<백업 디렉터리>/codeye-pre-migrate-<UTC>/database.dump`(0600)를 쓰고, 실패하면 아무것도 바꾸지 않고 끝난다. 바이너리보다 새 schema나 불일치는 거부한다.
+1. schema가 이 바이너리의 migration(현재 13)과 같은지 확인한다. external 모드에서 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. 관리형 모드에서 이전 버전이면 migration을 적용한다. 이미 적용된 migration이 있으면(데이터가 있으면) 먼저 `pg_dump --format=custom`으로 `<백업 디렉터리>/codeye-pre-migrate-<UTC>/database.dump`(0600)를 쓰고, 실패하면 아무것도 바꾸지 않고 끝난다. 바이너리보다 새 schema나 불일치는 거부한다.
 2. 개인 사용자를 만들거나 다시 쓴다. 개인 사용자는 관리자다(이전 버전에서 만든 사용자는 이때 관리자로 지정되고 감사 기록이 남는다). 설정의 source root를 label로 등록하고 사용자에게 허가한다. 같은 label이 다른 경로로 등록돼 있으면 거부한다. `quota.artifacts_bytes`를 `scheduler_limits.artifact_quota_bytes`에 반영한다(0이면 제거).
 3. 등록이 필요한지 정한다. 처음 시작했거나, 노드가 철회됐거나, DB가 노드를 모르거나(복원 뒤), source root 집합이 바뀌었으면 다시 등록한다. 다시 등록하기 전에 에이전트 journal에 끝나지 않은 작업이 없는지 확인한다. 이전 노드는 철회하고, 이전 `agent/`는 `agent.retired-<ns>`로 이름만 바꾼다(삭제하지 않는다). 등록 토큰은 10분짜리 일회용이며 0600 파일로만 전달한다.
 4. `codeye serve --personal --state-dir <state_dir>`을 setsid로 띄운다(브라우저 세션 7일, 경로로 등록·`GET /setup`·데이터 폴더 검사에 상태 디렉터리를 쓴다). 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다. 기록에 listen 주소를 남긴다.
@@ -363,13 +366,13 @@ manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exp
 
 ## 장애 대응 runbook
 
-상황마다 운영자가 보는 것, 할 일, 확인 방법을 적는다. "훈련" 열은 `scripts/test_postgres.py --ops-drill`(TC-236)과 `--multinode`(TC-231~235)가 한 WSL2 호스트에서 실제로 해 본 것이고, 시간은 그 호스트의 측정값이다(보장값이 아니다).
+상황마다 운영자가 보는 것, 할 일, 확인 방법을 적는다. "훈련" 열은 `scripts/test_postgres.py --ops-drill`(TC-255)과 `--multinode`(TC-250~254)가 한 WSL2 호스트에서 실제로 해 본 것이고, 시간은 그 호스트의 측정값이다(보장값이 아니다).
 
 | 상황 | 보이는 것 | 할 일 | 확인 | 훈련 |
 |---|---|---|---|---|
 | 모델 endpoint 실패 | `codeye model probe`가 `FAILED at request: …`. run은 정적 분석을 마치고 `partial`, 보고서의 모델 검토가 `not_performed`와 사유(`model_unavailable`·`model_timeout`·`model_auth_failed` 등, Markdown에 문장) | 공급자 상태·키 파일·`base_url`을 고친다. 재시작은 필요 없다(키 파일은 호출마다 읽는다). 고친 뒤 다시 시도 | `model probe`가 `OK`, 다음 run의 모델 검토가 `performed` | D1: HTTP 500을 OpenCode가 호출 제한시간까지 재시도해 사유는 `model_timeout`, 제한시간 60초에서 run 136초 |
-| 노드 offline(사망) | `codeye node list`의 `last_heartbeat_at`이 20초보다 오래됨, 그 노드만 할 수 있는 run은 `node_stale`·`no_capable_node`로 대기. 실행 중이던 run은 lease 만료 뒤 `recovery_required` | 노드가 돌아오면 기다린다(에이전트가 정리 보고를 보내 run이 `failed`가 되고 다시 시도할 수 있다). 돌아오지 않으면 그 노드에 그 run의 프로세스(`codeye worker`와 자식)가 없는지 확인한 뒤 `codeye run recover --id RUN_ID --confirm-cleanup`(또는 실행 화면의 확인 상자와 "정리 확인 후 다시 실행") | 출력의 `retry`가 `same_run`·`new_run`이고 그 run이 끝난다. 감사 `run.recovery_confirmed` | D2·TC-232: SIGKILL 뒤 `recovery_required` 34~35초, 확인 뒤 다른 노드에서 끝남 |
-| 노드와 controller 사이 연결 끊김 | 노드 stale, 노드 로그 `heartbeat_failed`·`lease_lost`. run은 `recovery_required` | 연결을 복구한다. 노드가 돌아오면 정리 보고로 run이 `failed`가 된다. 같은 run은 그 사이 다른 노드에서 실행되지 않는다 | 노드 로그 `cleanup_reported accepted=true`, run `failed`, `POST /runs/{id}/retry`로 다시 실행 | TC-233: 차단 → `lease_lost` 19초, 복구 → `failed` 1초 미만 |
+| 노드 offline(사망) | `codeye node list`의 `last_heartbeat_at`이 20초보다 오래됨, 그 노드만 할 수 있는 run은 `node_stale`·`no_capable_node`로 대기. 실행 중이던 run은 lease 만료 뒤 `recovery_required` | 노드가 돌아오면 기다린다(에이전트가 정리 보고를 보내 run이 `failed`가 되고 다시 시도할 수 있다). 돌아오지 않으면 그 노드에 그 run의 프로세스(`codeye worker`와 자식)가 없는지 확인한 뒤 `codeye run recover --id RUN_ID --confirm-cleanup`(또는 실행 화면의 확인 상자와 "정리 확인 후 다시 실행") | 출력의 `retry`가 `same_run`·`new_run`이고 그 run이 끝난다. 감사 `run.recovery_confirmed` | D2·TC-251: SIGKILL 뒤 `recovery_required` 34~35초, 확인 뒤 다른 노드에서 끝남 |
+| 노드와 controller 사이 연결 끊김 | 노드 stale, 노드 로그 `heartbeat_failed`·`lease_lost`. run은 `recovery_required` | 연결을 복구한다. 노드가 돌아오면 정리 보고로 run이 `failed`가 된다. 같은 run은 그 사이 다른 노드에서 실행되지 않는다 | 노드 로그 `cleanup_reported accepted=true`, run `failed`, `POST /runs/{id}/retry`로 다시 실행 | TC-252: 차단 → `lease_lost` 19초, 복구 → `failed` 1초 미만 |
 | DB unavailable | `GET /api/v1/ready`가 503 `database_unavailable`, 화면·API가 503. 노드 로그 `heartbeat_failed reply_code=unavailable` | PostgreSQL을 되살린다. controller·에이전트는 재시작하지 않아도 다시 연결한다. lease 여유(20초)보다 오래 끊겼으면 진행 중 작업은 에이전트가 멈췄고 DB가 돌아온 뒤 `failed`가 된다 | `/ready` 200, `codeye doctor`의 database `available`, 정합성 질의(아래) 0건, 새 run이 끝남 | D3: 8초 중단은 작업이 그대로 끝남. 40초 중단은 `lease_lost` 20초, DB 복귀 뒤 4.7초에 `failed` |
 | 도구 버전이 바뀜·도구가 사라짐 | 비교의 차이 행 `tool:<analyzer>:version`. 사라진 도구의 작업은 `unsupported`(`tool_not_configured`), 그 진단은 `absent_unverified`(사유 `check_failed`)이며 `resolved_observed`가 아니다 | 의도한 변경이면 둔다. 아니면 에이전트의 도구 경로를 고치고 다시 띄운다 | `codeye tools`·`doctor`의 도구 버전, 다음 비교 | D4: ruff 0.16.3→0.16.4 차이 행, ruff를 뺀 run의 진단 1건 `absent_unverified` |
 | 작업 중 max workers 축소 | `codeye pool list`의 `capacity_state=over_target_draining`, `drain_worker` 명령 | 기다린다. 실행 중 작업은 끝까지 돈다. 급하면 run을 취소한다(강제 종료는 없다) | 상태가 `healthy`, 워커 수 ≤ 새 상한, 취소 명령 없음 | D5: 축소 0.4초 뒤 drain, 두 run 모두 첫 attempt로 끝남 |
@@ -377,7 +380,7 @@ manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exp
 | 실행 중 백업을 복원함 | 복원본에서 그 run이 `recovery_required`(fence `runs_recovery_required`) | 원본 설치가 멈췄는지 확인한 뒤 정리를 확인한다(`codeye run recover --id RUN_ID --confirm-cleanup --config PATH`, 복원본의 설정) | 새 run이 끝나고 예약이 풀림 | D7: 백업 0.1~0.3초, 복원 0.2~0.4초(작은 데이터), CLI로 확인 뒤 새 run |
 | 사용자 비활성화·구성원 제거 | `codeye user disable`, `DELETE /projects/{id}/members/{user}` | — | 다음 요청이 401(비활성)·404(구성원 아님), 열린 SSE는 `event: closed`(`unauthenticated`·`access_revoked`) | D8: 두 stream이 0.5초 안에 닫힘 |
 | 노드 철회 | `codeye node revoke --id NODE_ID`. 실행 중 에이전트는 작업을 취소하고 종료 코드 4로 끝난다 | 그 노드의 run은 정리 보고를 못 보내므로 `recovery_required`로 남는다. 노드 프로세스가 끝났는지 확인하고 정리를 확인한다 | `node list`의 `revoked_at`, run이 다시 실행됨 | D8: 철회 4.9초 뒤 종료 코드 4, 남은 프로세스 없음 |
-| 에이전트 갱신 | — | `SIGUSR1`(개인 모드는 `codeye stop`)로 drain → 종료(코드 0) → 바이너리 교체 → 같은 `--state-dir`·`--controller`로 시작. 등록 token은 필요 없다 | `node list`의 같은 `id`와 `protocol_version`, 새 run을 받음 | TC-235: 다시 빌드 7.5초, 시작 → run 끝 5.2초 |
+| 에이전트 갱신 | — | `SIGUSR1`(개인 모드는 `codeye stop`)로 drain → 종료(코드 0) → 바이너리 교체 → 같은 `--state-dir`·`--controller`로 시작. 등록 token은 필요 없다 | `node list`의 같은 `id`와 `protocol_version`, 새 run을 받음 | TC-254: 다시 빌드 7.5초, 시작 → run 끝 5.2초 |
 | stop이 `recovery_required` | `codeye stop`의 `outcome` | `status`·로그 확인 후 `codeye stop` 반복. 프로세스를 강제 종료하지 않는다. 끝내 남은 run은 위 "노드 offline"처럼 정리를 확인한다 | `status`가 `stopped` | TC-125 |
 | NFS 지연 | 소스 확보 timeout, `source_unstable` | 원본 경로·권한을 확인한다 | 다음 run의 확보 | 실제 NFS는 시험하지 않았다 |
 
@@ -391,7 +394,7 @@ SELECT count(*) FROM runs r WHERE r.status='running'
  AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.status='leased');
 ```
 
-**하지 않는 것.** 두 controller를 같은 DB에 띄우지 않는다(지원하지 않음, A49). 정리를 확인하지 못한 run을 시간이 지났다고 다시 실행하지 않는다. 노드 프로세스를 원격으로 죽이지 않는다(SSH 없음).
+**하지 않는 것.** 두 controller를 같은 DB에 띄우지 않는다(지원하지 않음, A51). 정리를 확인하지 못한 run을 시간이 지났다고 다시 실행하지 않는다. 노드 프로세스를 원격으로 죽이지 않는다(SSH 없음).
 
 ## 보존 정리
 
@@ -407,7 +410,7 @@ codeye cleanup [--config PATH | --artifact-dir DIR] [--agent-state-dir DIR] [--o
 | controller 호스트 | `--artifact-dir DIR`와 `CODEYE_DATABASE_URL` |
 | 노드 | `--agent-state-dir DIR`. DB가 필요 없다 |
 
-- **산출물.** 끝난 run(`completed`·`partial`·`failed`·`cancelled`)의 기준보다 오래된 원시 역할 `stdout`·`stderr`·`raw_output`·`other`의 내용만 지운다. 행은 남기고 `content_removed_at`을 적은 뒤(한 번만, migration 0012), 커밋된 다음 남은 행이 참조하지 않는 파일만 지운다. 빈 내용은 지우지 않는다. 감사 `storage.retention_applied`(행위자 `operator_cli`)가 개수·바이트·기준 일수를 남긴다.
+- **산출물.** 끝난 run(`completed`·`partial`·`failed`·`cancelled`)의 기준보다 오래된 원시 역할 `stdout`·`stderr`·`raw_output`·`other`의 내용만 지운다. 행은 남기고 `content_removed_at`을 적은 뒤(한 번만, migration 0013), 커밋된 다음 남은 행이 참조하지 않는 파일만 지운다. 빈 내용은 지우지 않는다. 감사 `storage.retention_applied`(행위자 `operator_cli`)가 개수·바이트·기준 일수를 남긴다.
 - **노드 데이터.** 기준보다 오래된 snapshot 사본(`data/acquire-*`)과 작업 사본(`data/ws-*`), 은퇴한 에이전트 디렉터리. journal에서 끝나지 않은 attempt의 작업 사본은 지우지 않는다. 에이전트가 실행 중이면(state lock) snapshot 사본은 남긴다. 실행 중인 attempt가 그 안에서 일할 수 있기 때문이다. symlink는 따라가지 않는다. 고정 snapshot 재시도가 지운 사본을 찾으면 `snapshot_unavailable`로 끝나고 다음 재시도는 소스를 다시 받는다.
 - **남기는 것.** 보고서(저장된 바이트로 그대로 열린다), 관찰(`observations`), `source_manifest`·`result_manifest`, run·이벤트·사람 판정, 감사 행(append-only라 정리 대상이 아니다).
 - **보이는 것.** 지운 run의 `GET /runs/{id}`에 `raw_evidence_removed_at`이 생기고 실행 화면이 "원시 증거가 삭제됨"을 보인다. 백업은 지운 내용을 담지 않고 "내용 없는 행"으로 센다. 산출물 상한은 지운 내용을 세지 않는다.
@@ -436,9 +439,9 @@ Linux의 systemd 사용자 인스턴스에 개인 모드 unit을 둔다. `print`
 - `codeye doctor --config PATH`로 도구·DB·저장 상한을 확인했다.
 - [예시 설정](../examples/platform.yaml)은 설계 예시이며 이 바이너리가 읽지 않는다. 출발점일 뿐이고 실제 머신 용량을 측정해 조정한다.
 
-## 서버·노드 배포 (설계 계약, 미구현)
+## 서버·노드 배포
 
-이 절과 다음 절은 설계다. 이 빌드에는 구현도 시험도 없다.
+controller 하나와 노드 에이전트(`codeye serve`·`codeye agent`, 등록·heartbeat·lease·drain·재등록 없는 갱신)는 구현됐고 한 호스트의 노드 신원 여럿으로 시험했다([runbook](#장애-대응-runbook), [실행](EXECUTION.md#여러-노드에서-확인한-것)). 여러 머신에 설치·등록하는 묶음과 아래의 나머지는 설계이고 실제 여러 머신에서 실행하지 않았다.
 
 - controller는 단일 활성 인스턴스로 시작한다. DB와 artifact store를 지정하고 노드 에이전트를 운영자가 직접 설치한다. 서버가 노드에 SSH하지 않는다. 에이전트는 서버에서 작업을 받아 간다.
 - Windows Service나 승인된 작업 실행 방식, Linux systemd 등 로그아웃 뒤에도 지속 실행되는 방법을 환경에 맞게 선택한다. 개인 모드에는 [사용자 서비스](#사용자-서비스)가 있다.
@@ -449,9 +452,122 @@ Linux의 systemd 사용자 인스턴스에 개인 모드 unit을 둔다. `print`
 - 백업·복구 목표 시간은 실제 데이터 규모를 측정한 뒤 정한다. 복구 시험은 프로젝트·run·report·evidence 링크·ACL·예약 중복 방지를 확인한다. 개인 모드에서 구현한 같은 시점 백업과 lease 비복원 규칙을 서버에도 적용한다.
 - 다중 사용자 권한과 감사 운영은 [보안](SECURITY.md)의 설계 계약을 따른다.
 
-## 폐쇄망 배포팩 (설계 계약, 미구현)
+## 폐쇄망 배포팩
 
-- 버전·hash가 고정된 서비스 바이너리, 웹 자산, DB migration, 규칙팩, 도구 manifest를 제공한다. 폰트·아이콘·JS·CSS·차트에 외부 CDN 의존성을 두지 않는다. 도구 바이너리 재배포가 불가하면 사내 미러에서 설치할 경로와 검증 정보를 제공한다.
-- 분석기 catalog, 언어 toolchain, 프로젝트 의존성 mirror는 구분한다. 미러에 없는 버전은 unavailable로 표시하고 외부 다운로드로 해결하지 않는다. CA 검증을 끄는 방식으로 연결 문제를 감추지 않는다.
-- 설정의 `.invalid` 주소와 예시 경로는 실제 운영 정보로 교체하되 Git에 secret을 올리지 않는다.
-- 외부 telemetry·업데이트·원격 규칙 다운로드·공유는 기본 차단한다.
+인터넷이 없는 머신에 CODEYE를 묶음 하나로 옮겨 설치하고, 오프라인 모드로 CODEYE가 스스로 외부에 접속하지 않게 한다. 묶음을 만드는 것은 별도 명령이 아닌 저장소 스크립트 [scripts/offline_pack.py](../scripts/offline_pack.py)다. 묶음은 연결된 빌드 머신에서 저장소와 Go·Node로 만들고 설치 머신에서는 실행하지 않으므로 `codeye` 실행 파일에 넣을 이유가 없다(A47). 새 서비스나 설치 프로그램은 없다. 풀어 놓은 디렉터리가 곧 설치다.
+
+```text
+python3 scripts/offline_pack.py build [--out .codeye/pack] [--goos linux] [--goarch amd64] [--skip-web-build] [--allow-dirty]
+python3 scripts/offline_pack.py verify codeye-VERSION-linux-amd64.tar.gz | 풀어 놓은 디렉터리
+python3 scripts/offline_pack.py check-web web/dist
+```
+
+- `build`는 `npm --prefix web run build`(생략 가능), `CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.buildVersion=… -X main.buildCommit=… -X main.buildTime=…"`, 웹 외부 주소 검사, 파일 hash, 묶음 쓰기 순이다. 작업 트리에 커밋하지 않은 변경이 있으면 `--allow-dirty` 없이는 만들지 않는다(그때 버전에 `-dirty`가 붙고 MANIFEST의 `dirty`가 true다).
+- 버전은 `git describe --tags --always --dirty`, 빌드 시각은 commit 시각(`SOURCE_DATE_EPOCH`가 있으면 그것)이다.
+- **재현성.** 같은 commit·같은 Go·Node 버전·같은 `web/node_modules`에서 두 번 만든 묶음은 바이트가 같다(이 머신에서 새로 clone한 사본으로 두 번 만들어 sha256이 같음을 확인했다). `--skip-web-build`로 만들면 웹을 만든 Node 버전을 모르므로 MANIFEST의 `node_version`이 null이 되어 바이트가 다르다. 항목 정렬, 모든 항목의 mtime을 빌드 시각으로, uid/gid 0, gzip 헤더의 시각 0·파일 이름 없음으로 쓴다. Go 버전, Node·Vite 버전, 의존성 잠금이 다르면 실행 파일·웹 산출물 바이트가 달라질 수 있고 그것까지 고정하지 않는다. 서명은 없다. 무결성은 sha256으로만 확인한다.
+
+### 배포팩 내용
+
+`codeye-VERSION-OS-ARCH.tar.gz`(최상위 디렉터리 하나)와 옆의 `.tar.gz.sha256`이다. linux/amd64 묶음은 약 8.2 MB(풀면 약 23 MB, 그중 실행 파일이 22 MB)다.
+
+| 파일 | 내용 |
+|---|---|
+| `codeye` | 정적 링크 실행 파일(CGO 없음). `file`은 statically linked, `ldd`는 not a dynamic executable이고 ELF에 interpreter·dynamic section이 없다. build가 이를 검사해 동적이면 실패한다 |
+| `web/dist/` | 빌드된 웹 화면. 외부 주소를 불러오지 않는다(아래) |
+| `docs/GUIDE.md`, `docs/OPERATIONS.md` | 사용 안내서와 이 문서 |
+| `examples/personal-offline.json` | 오프라인 설정 예시(`*.corp.example` 주소, 실제 주소 아님) |
+| `INSTALL.md` | 설치 절차(확인, 놓을 곳, 설정, 점검, 실행) |
+| `MANIFEST.json` | `name`, `version`, `commit`, `dirty`, `build_time`, `os`, `arch`, `go_version`, `node_version`, `cgo_enabled`, `linking`, `embedded`, `not_included`, `files[]`(경로·크기·sha256·mode) |
+| `SHA256SUMS` | 모든 파일과 MANIFEST.json의 sha256(`sha256sum -c`로 확인) |
+
+- **실행 파일에 들어 있는 것.** DB migration(`internal/storage/migrations`)과 검토 지침 팩(`prompts/review-r1`, `prompts/review-v1`)은 Go embed로 실행 파일 안에 있다. MANIFEST의 `embedded`가 migration마다 이름·sha256, 지침 팩마다 id·version·파일 수·sha256을 적는다. `codeye version [--json]`이 실행 파일의 버전·commit·빌드 시각·Go 버전·OS/arch·최신 migration 번호를 보인다.
+- **파일로 싣는 것.** 웹 화면, 문서, 설정 예시. `codeye`는 옆의 `web/dist`를 쓴다.
+- **싣지 않는 것**(`not_included`). 분석 도구, 언어 toolchain, PostgreSQL, OpenCode, 프로젝트 의존성. 운영자가 따로 옮긴다([분석 도구 옮기기](#분석-도구-옮기기)).
+- **웹 화면이 외부를 부르지 않음.** 응답의 CSP가 `default-src 'self'`라 브라우저가 다른 출처를 불러오지 않는다. 그와 별도로 `check-web`이 `web/dist`의 HTML·CSS·JS에서 `http(s)://`·`//host` 형태의 주소와 원격 source map을 찾아, 식별자·문구로만 쓰이는 주소(`www.w3.org`, `json-schema.org`, React 오류 안내 주소, `codeye.invalid`, 입력란 예시 `https://github.com/owner/repo`) 밖의 것이 있으면 실패한다. CI의 웹 작업이 빌드 뒤 이 검사를 실행하고, `scripts/test_offline_pack.py`가 글꼴·CDN·`@import`·`url()`·`fetch`·원격 source map 각각이 실패하는지 시험한다.
+
+설치는 묶음 안의 `INSTALL.md`를 따른다: `sha256sum -c *.tar.gz.sha256` → 풀기 → `sha256sum -c SHA256SUMS` → `./codeye version` → 설정 → `./codeye tools --checklist` → `./codeye doctor --config …` → `./codeye up --offline 폴더`.
+
+### 오프라인 모드
+
+설정 `"offline": true` 또는 `codeye up --offline`(처음 한 번 주면 설정 파일에 `"offline": true`로 저장된다)이다. 에이전트는 `--offline`으로 받는다. 오프라인 모드가 바꾸는 것:
+
+| 대상 | 오프라인이 아닐 때 | 오프라인 |
+|---|---|---|
+| Go 모듈 | `go_proxy`, 없으면 사용자 `go env`의 GOPROXY, 없으면 `proxy.golang.org`. checksum DB 기본 `sum.golang.org` | 설정·사용자 `go env`가 정한 proxy만 쓴다. 없으면 운영자 모듈 캐시(`agent.go_mod_cache`)만 읽고, 캐시에 없는 모듈은 `failed`(`offline_no_registry_configured`)이고 `failed_items`에 모듈 이름이 남는다. 캐시도 없으면 받지 않는다(`skipped_policy`, 같은 이유). `go_sumdb`를 정하지 않았으면 `GOSUMDB=off`(go.sum이 여전히 검증하며, go.sum에 없는 hash는 `go_sum_incomplete`). `go_proxy: "off"`이면 받기를 시작하지 않고 같은 이유다 |
+| npm·pnpm·yarn | `npm_registry`, 없으면 사용자 npm 설정, 없으면 `registry.npmjs.org` | 설정이나 사용자 npm 설정의 레지스트리가 없으면 설치하지 않는다(`offline_no_registry_configured`) |
+| Python | `pip_index_url`, 없으면 PyPI | `pip_index_url`이 없으면 받지 않는다(같은 이유) |
+| Rust | crates.io 또는 저장소 Cargo 설정의 레지스트리 | 받지 않는다(같은 이유). cargo에는 CODEYE의 미러 설정이 없다 |
+| Git | `git_hosts` 기본 `["github.com"]` | `git_hosts`를 적지 않으면 빈 목록이라 Git 주소를 받지 않는다. github.com을 넣지 않는다 |
+| GitHub | 환경변수·gh에서 token을 찾아 `GET /user`로 확인, pull request·결과 댓글에 GitHub API | token을 찾지 않고(`gh auth token`도 실행하지 않는다) 저장된 token을 지운다. github.com을 `git_hosts`에 적어도 token을 보내지 않는다. pull request 주소는 거부한다. controller는 GitHub API를 부르지 않는다. `up` 출력 `github: off (offline mode)`, `GET /setup`의 `github.reason`은 `offline_mode`, doctor의 `github_api` 목적지는 `offline_mode`다. 사내 Git 호스트용 credential은 범위 밖이다([GitHub](GITHUB.md#github-token)) |
+| 모델 | 키 파일·환경변수 키·OpenCode `auth.json`, 공급자 공개 endpoint | `base_url`(사내 endpoint)이 있는 키 파일이나 relay만 쓴다. `base_url` 없는 키 파일은 쓰지 않고 이유를 출력한다. 환경변수의 키는 저장하지도 쓰지도 않는다. OpenCode `auth.json`을 찾지 않는다. 키 없는 공급자 모델은 쓰지 않는다. 모델 검토의 이유는 `model_endpoint_not_configured`다 |
+
+- 도구 탐지는 원래 이 머신의 파일과 `--version` 실행만 한다. 오프라인 모드와 관계없이 네트워크를 쓰지 않는다.
+- CODEYE에는 telemetry·업데이트 확인·원격 규칙 다운로드가 없다. 웹 화면도 외부를 부르지 않는다.
+- OpenCode(1.19.5)는 플러그인을 꺼도 시작할 때마다 npm 레지스트리에 `GET /@opencode-ai%2fplugin`을 보낸다(측정). CODEYE는 OpenCode 실행 환경에 `npm_config_registry=http://127.0.0.1:9/`를 넣어 이 요청을 loopback의 닫힌 포트로 보낸다. 요청은 즉시 실패하고 검토는 계속된다. 오프라인이 아닐 때도 같다. 그 밖에 OpenCode가 하는 일은 아래 측정 범위만 안다. 자동 업데이트·모델 목록 받기·공유·기본 플러그인은 원래 끈다([검토](REVIEW.md)).
+- **여전히 나갈 수 있는 것.** 저장소 코드 실행이 허가된 프로젝트의 build script·proc macro·설정 프로그램(Native 실행이라 OS 수준으로 막지 않는다), ESLint 설정이 불러오는 plugin이 스스로 하는 접속, 운영자가 설정한 미러·endpoint·Git 호스트. 확실히 막으려면 OS 방화벽이나 네트워크 정책을 둔다.
+
+### 미러
+
+언어별 미러 주소는 `agent.dependencies`에 적는다. 인증정보가 든 URL은 설정 오류다.
+
+| 생태계 | 설정 | 미러가 줄 것 |
+|---|---|---|
+| Go | `go_proxy`(예: `https://mirror.corp.example/go`), 필요하면 `go_sumdb`(사내 sumdb 또는 `off`), `go_private`·`go_noproxy`·`go_nosumdb` | GOPROXY 프로토콜(`/<module>/@v/list`, `.info`, `.mod`, `.zip`). 정적 파일로 충분하다 |
+| npm·pnpm·yarn 1 | `npm_registry`(예: `https://mirror.corp.example/npm/`) | npm 레지스트리 문서와 tarball. lockfile의 `resolved`가 공개 레지스트리를 가리킬 때 관리자마다 어떻게 받는지는 시험하지 않았다(시험한 lockfile은 미러 주소였다) |
+| Python | `pip_index_url`(예: `https://mirror.corp.example/pypi/simple`) | PEP 503 simple index와 wheel(소스 배포판은 쓰지 않는다) |
+| Rust | 없음 | 오프라인에서 받지 않는다. 사내 레지스트리 설정은 아직 없다 |
+| Git | `git_hosts`(예: `["git.corp.example"]`) | smart HTTP(`git http-backend` 등). CODEYE는 `--depth=1`로 받으므로 dumb HTTP는 쓸 수 없다. 공개 저장소처럼 인증 없이 읽을 수 있어야 한다 |
+
+Go만 미러가 없어도 쓸 수 있는 길이 있다. 연결된 머신에서 `go mod download`로 채운 모듈 캐시를 옮겨 `agent.go_mod_cache`에 적으면 그 캐시를 읽기 전용 file proxy로 쓴다.
+
+### 사내 모델 endpoint
+
+OpenAI 호환 사내 endpoint는 키 파일 `<state_dir>/secrets/model.json`(0600)에 `base_url`로 적는다. `codeye up`이 그 endpoint로 probe 한 번을 보낸다(모델 호출이 비용이 드는 곳이면 그만큼 든다).
+
+```json
+{"schema_version": "0.1", "provider": "openai", "api_key": "...", "base_url": "https://llm.corp.example/v1"}
+```
+
+relay(`agent.model.relay_file`)를 쓰면 relay의 upstream이 사내 endpoint여야 한다. 오프라인 모드는 relay가 어디로 보내는지 검사하지 않는다.
+
+### 사내 CA
+
+`"ca_bundle": "/절대/경로.pem"`은 사내 CA를 신뢰하게 한다. 시스템 CA와 사내 CA를 합친 PEM 파일을 준다(RHEL은 `/etc/pki/tls/certs/ca-bundle.crt`가 `update-ca-trust` 뒤의 합본이다). 에이전트는 `--ca-bundle`로 받고 시작할 때 파일을 읽어 인증서가 하나도 없거나 8 MiB를 넘으면 시작하지 않는다. 인증서 검증을 끄는 설정은 없고 두지 않는다.
+
+CODEYE는 자식 프로세스 환경에 다섯 변수를 같은 파일로 넣는다. 의존성 받기(go, npm·pnpm·yarn, pip·uv, cargo), 소스 확보의 git, 모델 검토의 OpenCode가 받는다. CODEYE 프로세스 자신은 미러·모델에 직접 TLS로 접속하지 않는다.
+
+| 변수 | 읽는 도구 | 확인 |
+|---|---|---|
+| `SSL_CERT_FILE` | Go(`go mod download`), OpenSSL을 쓰는 도구, uv | 시스템 CA를 **대신**한다. 그래서 합본이어야 한다 |
+| `NODE_EXTRA_CA_CERTS` | npm, pnpm, yarn, OpenCode(Bun) | 기본 CA에 **더한다** |
+| `GIT_SSL_CAINFO` | git | |
+| `PIP_CERT` | pip | |
+| `CARGO_HTTP_CAINFO` | cargo | 오프라인에서는 cargo가 받지 않으므로 시험하지 않았다 |
+
+`scripts/offline_smoke.py`가 각 도구를 사설 CA의 HTTPS 미러에 대고 변수 있이·없이 실행해, 있으면 성공하고 없으면 인증서 검증 오류로 실패함을 확인한다(결과는 [시험](TESTING.md)의 TC-243).
+
+### 오프라인 준비 점검
+
+`codeye doctor --config PATH`는 `offline` 절을 더한다(텍스트 출력은 "Offline readiness"). 오프라인 모드가 꺼져 있어도 보인다. 실패해도 종료 코드를 바꾸지 않는다.
+
+- `enabled`, `ca_bundle`(`status`가 `not_configured`, `available`(`certificates`에 인증서 수), `unavailable`(`ca_bundle_unreadable`: 읽을 수 없거나 인증서가 없음)).
+- `destinations[]`: 이 설정으로 CODEYE가 접속할 곳마다 `kind`(`go_proxy`·`go_sumdb`·`npm_registry`·`pip_index`·`crates_registry`·`git_host`·`github_api`·`model_endpoint`), `value`, `origin`(`config`·`user_go_env`·`user_npm_config`·`model_key_file`·`relay_file`·`builtin_default`·`none`), 접속하지 않으면 `reason`. 오프라인인데 `builtin_default`가 남으면 그것이 공개 서비스다.
+- `postgres`: 관리형 DB에 쓸 PostgreSQL 프로그램(`initdb`, `pg_ctl`, `postgres`, `pg_dump`, `pg_restore`, `psql`)을 찾았는지와 버전.
+- `languages[]`: Go·Python·JS/TS·Rust·C/C++·공통·모델마다 없는 도구와 의존성 준비 상태.
+
+schema는 [doctor schema](../schemas/doctor.schema.json)의 `offline`, 예시는 [examples/doctor.json](../examples/doctor.json)이다.
+
+### 분석 도구 옮기기
+
+분석 도구는 묶음에 없다. 연결된 머신에서 같은 OS/arch로 받은 것을 옮기거나 사내 미러에서 설치한다. 놓을 곳은 [도구 찾기](ANALYZERS.md#도구-찾기)의 도구 prefix `~/.local/share/codeye-tools`(`bin`, `go/bin`, `node/node_modules`, `cpp/bin`)와 PATH이고, 다른 곳이면 `agent.tools`에 절대 경로를 적는다.
+
+`codeye tools --checklist [--config PATH]`는 Markdown 점검표를 낸다. 도구마다 찾았는지, 버전과 CODEYE가 시험한 계열(`tested 2026.2` 등), 없으면 폐쇄망에서 옮기는 방법(예: `uv tool install mypy --index-url <internal index>`, `npm install --prefix ~/.local/share/codeye-tools/node --registry <internal registry> typescript`, Rust standalone installer)을 적는다. 도구를 옮긴 뒤 다시 실행해 빈 칸을 지운다. `--json`과 함께 쓸 수 없다. `gh`는 선택이며 온라인에서만 쓴다(오프라인 모드는 GitHub을 쓰지 않으므로 옮기지 않아도 된다).
+
+- Python 도구의 venv를 다른 경로로 복사하면 옛 interpreter 경로를 가리켜 거부된다. 사내 index로 그 머신에서 `uv tool install`한다.
+- 시험한 계열과 다른 버전도 쓰지만 보고서와 점검표가 "시험하지 않은 버전"으로 표시한다.
+
+### 확인한 것과 확인하지 않은 것
+
+`scripts/offline_smoke.py --pack 묶음 --postgres-bin-dir DIR`(Linux, root 불필요, 수동 실행·CI 밖)이 묶음을 빈 디렉터리에 풀고 그 실행 파일만으로, 새 HOME·설정·상태 디렉터리로 실행한다. 전체를 새 user·network namespace(`unshare -rn`, loopback만 있음)에서 돌려 외부 접속이 즉시 실패하게 하고, `strace -f -e trace=connect`로 모든 connect를, resolv.conf의 nameserver 주소를 namespace의 loopback에 붙인 DNS 기록기로 모든 이름 조회를 기록한다. 결과는 [시험](TESTING.md)의 TC-240~245와 [변경 이력](../CHANGELOG.md)에 있다.
+
+확인하지 않은 것: 실제 폐쇄망, RHEL 8.10(가장 오래된 사용자 영역은 빈 chroot에서 실행 파일을 띄운 것뿐이다), 회사 CA·미러(사설 CA와 로컬 HTTPS 서버로 흉내 냈다), cargo의 CA, macOS·Windows 묶음, 서명.

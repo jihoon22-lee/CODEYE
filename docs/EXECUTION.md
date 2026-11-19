@@ -224,7 +224,7 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 - heartbeat는 관측한 워커 상태, 실제 여유 메모리(`MemAvailable`), state 파일시스템의 여유 disk, CPU 수, 능력, 명령 cursor, 정리 보고를 보낸다. 자동 모드는 `worker_scaling: controller`와 `max_workers`를, 저장 상한이 있으면 상한에 걸린 영역을 함께 보낸다. drain 중인 자동 모드 에이전트는 `worker_scaling`을 보내지 않는다(static). 그래서 controller의 증감 계획에서 빠지고 시작 명령을 받지 않는다.
 - 능력:
   - `analysis:<profile>`은 준비된 워커가 `ready`에서 알린 handler에서만 만든다. handler가 없으면 claim을 보내지 않고 `no_analysis_handler`를 기록한다. drain 중에는 알리지 않는다.
-  - 워커는 기준 분석기(언어별 필수 분석기)가 하나라도 쓸 수 있을 때만 `analysis:deep-review` handler를 알린다(`--advertise-without-baseline`이면 항상). 도구는 배정 기준이 아니다. 도구가 하나도 없는 노드는 일을 받지 않지만, 다른 언어의 도구만 있는 노드는 run을 받아 없는 도구의 작업을 `unsupported`(`tool_not_configured`)로 끝낸다. 같은 root를 맡는 노드에는 같은 도구를 둔다(A49).
+  - 워커는 기준 분석기(언어별 필수 분석기)가 하나라도 쓸 수 있을 때만 `analysis:deep-review` handler를 알린다(`--advertise-without-baseline`이면 항상). 도구는 배정 기준이 아니다. 도구가 하나도 없는 노드는 일을 받지 않지만, 다른 언어의 도구만 있는 노드는 run을 받아 없는 도구의 작업을 `unsupported`(`tool_not_configured`)로 끝낸다. 같은 root를 맡는 노드에는 같은 도구를 둔다(A51).
   - `source:local:<id>`는 `--source-root` 매핑이 있는 root만 알린다.
   - `source:git:<host>`는 `--git`과 `--git-host`가 모두 있을 때만 알린다.
   - 능력 목록은 최대 128개다.
@@ -439,7 +439,7 @@ claim 응답의 job:
 - `recovery_required` run은 자동으로 다시 `queued`가 되거나 다른 노드에 배정되지 않는다.
 - 소유 노드가 `confirmed` 정리 결과(heartbeat `cleanup_reports` 또는 `/cleanup`)를 보고하면 attempt는 `released`, run은 `failed`가 되고 예약을 해제한다. `uncertain` 보고는 정보로만 받고 상태를 바꾸지 않는다(`uncertain_not_applied`).
 - 네트워크 분할에서 이전 프로세스가 실제로 살아 있을 수 있다. fencing은 데이터 게시를 막을 뿐 OS 실행을 멈추지 않는다. 읽기 전용 검사도 중복 자원 비용이 생길 수 있다. 부작용이 있을 수 있는 build·test는 종료 증거가 없으면 `recovery_required`에서 운영자 판단이나 노드 복귀를 기다린다. 분할된 에이전트는 자기 watchdog(lease − 여유 = 20초)으로 작업을 먼저 멈추고, 연결이 돌아오면 정리 보고로 run을 `failed`로 끝낸다.
-- 노드가 돌아오지 않으면(사망·철회·복원 fence) 사람이 정리를 확인한다. `POST /runs/{id}/recover`(`{"cleanup_confirmed": true}`, 프로젝트 실행 권한) 또는 `codeye run recover --id RUN_ID --confirm-cleanup`이 attempt를 `released`·`confirmed`로 두고 예약을 풀고 run을 `failed`로 바꾼 뒤(이벤트 `attempt.cleanup_confirmed`, 사유 `operator_confirmed`, 감사 `run.recovery_confirmed`) [다시 시도](API.md#다시-시도) 규칙으로 다시 넣는다. 확인 없이 시간이 지났다는 이유로 정리를 깨끗하다고 보지 않는다(A46). 확인하기 전에 노드에서 그 run의 프로세스(워커 `codeye worker`와 그 자식)가 없는지 본다.
+- 노드가 돌아오지 않으면(사망·철회·복원 fence) 사람이 정리를 확인한다. `POST /runs/{id}/recover`(`{"cleanup_confirmed": true}`, 프로젝트 실행 권한) 또는 `codeye run recover --id RUN_ID --confirm-cleanup`이 attempt를 `released`·`confirmed`로 두고 예약을 풀고 run을 `failed`로 바꾼 뒤(이벤트 `attempt.cleanup_confirmed`, 사유 `operator_confirmed`, 감사 `run.recovery_confirmed`) [다시 시도](API.md#다시-시도) 규칙으로 다시 넣는다. 확인 없이 시간이 지났다는 이유로 정리를 깨끗하다고 보지 않는다(A48). 확인하기 전에 노드에서 그 run의 프로세스(워커 `codeye worker`와 그 자식)가 없는지 본다.
 
 ### 장애 처리
 
@@ -570,7 +570,7 @@ codeye serve --reconcile-interval 5s
 
 ## 여러 노드에서 확인한 것
 
-`scripts/test_postgres.py --multinode`(`scripts/multinode_smoke.py`)가 한 WSL2 호스트(Linux 6.18, PostgreSQL 17.10)에서 실제 `codeye serve`와 노드 신원 8개(각자 상태 디렉터리·도구·source root)를 띄워 확인한다. 장애는 SIGSTOP/SIGKILL과 로컬 TCP 프록시 차단으로 만든다. controller는 `[::1]:P`에서만 듣고 분할 대상 노드만 `127.0.0.1:P`의 프록시로 붙는다(둘 다 loopback Host 허용 목록에 있다). root·Docker·네트워크 namespace는 쓰지 않는다. 오래 걸리는 작업은 시험용 handler(`-tags codeye_fixture`의 `sleep`·`pause`)이고, 배정 시험의 분석은 실제 go vet이다.
+`scripts/test_postgres.py --multinode`(`scripts/multinode_smoke.py`)가 한 WSL2 호스트(Linux 6.18, PostgreSQL 17.10)에서 실제 `codeye serve`와 노드 신원 8개(각자 상태 디렉터리·도구·source root)를 띄워 확인한다. 장애는 SIGSTOP/SIGKILL과 로컬 TCP 프록시 차단으로 만든다. controller는 `[::1]:P`에서만 듣고 분할 대상 노드만 `127.0.0.1:P`의 프록시로 붙는다(둘 다 loopback Host 허용 목록에 있다). IPv6 loopback이 없으면 controller는 `127.0.0.1:P`, 프록시는 `127.0.0.2:P`에서 듣고 같은 길이의 Host 값으로 바꿔 넘긴다(`CODEYE_TEST_MULTINODE_IPV4=1`로 강제, 이 호스트에서 두 방식 모두 통과). root·Docker·네트워크 namespace는 쓰지 않는다. 오래 걸리는 작업은 시험용 handler(`-tags codeye_fixture`의 `sleep`·`pause`)이고, 배정 시험의 분석은 실제 go vet이다.
 
 | 시나리오 | 확인한 것 | 이 호스트의 측정값 |
 |---|---|---|
@@ -583,8 +583,8 @@ codeye serve --reconcile-interval 5s
 
 - 전체 smoke는 이 호스트에서 약 2분이다(빌드 포함, `--smokes-only`).
 - 시각은 측정값이며 보장값이 아니다. 노드 stale(20초)과 lease(30초)·sweep(5초)·에이전트 여유(10초)가 결정한다.
-- **활성 controller는 하나다.** 두 controller를 같은 DB에 띄우는 구성은 지원하지 않고 시험하지 않는다(A49).
-- 실제 환경에서만 검증할 수 있는 것은 [로드맵](ROADMAP.md#다중-노드-검증)에 있다.
+- **활성 controller는 하나다.** 두 controller를 같은 DB에 띄우는 구성은 지원하지 않고 시험하지 않는다(A51).
+- 실제 환경에서만 검증할 수 있는 것은 [로드맵](ROADMAP.md#실제-환경에서만-검증할-수-있는-것)에 있다.
 
 ## 예약
 

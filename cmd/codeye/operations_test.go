@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// TC-230: the user unit runs codeye start/stop with the absolute
+// TC-249: the user unit runs codeye start/stop with the absolute
 // executable and configuration, the explicit PATH, oneshot with
 // RemainAfterExit (codeye start exits after spawning) and a stop budget
 // covering the drain and the cancellation; systemd specials are escaped.
@@ -71,13 +71,17 @@ func TestOperationsUsageErrors(t *testing.T) {
 	}
 }
 
-// TC-227: without CODEYE_DATABASE_URL and without a personal configuration,
+// TC-246: without CODEYE_DATABASE_URL and without a personal configuration,
 // run recover stops with a hint and creates no configuration, state or
 // database (an operator who forgot the URL must not get a new install).
 func TestRunRecoverWithoutDatabaseCreatesNothing(t *testing.T) {
 	cfgHome, stateHome := t.TempDir(), t.TempDir()
 	t.Setenv("CODEYE_DATABASE_URL", "")
+	// os.UserConfigDir reads XDG_CONFIG_HOME on Linux, AppData on Windows
+	// and HOME elsewhere: all point at the empty directory.
 	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	t.Setenv("AppData", cfgHome)
+	t.Setenv("HOME", cfgHome)
 	t.Setenv("XDG_STATE_HOME", stateHome)
 	var out, stderr bytes.Buffer
 	code := runRecover(context.Background(), []string{"--id", "00000000-0000-4000-8000-000000000001", "--confirm-cleanup"}, &out, &stderr)
@@ -91,7 +95,7 @@ func TestRunRecoverWithoutDatabaseCreatesNothing(t *testing.T) {
 	}
 }
 
-// TC-230: uninstall needs no configuration and removes only a unit that
+// TC-249: uninstall needs no configuration and removes only a unit that
 // codeye wrote; a missing unit is not an error.
 func TestServiceUninstallRemovesOnlyItsUnit(t *testing.T) {
 	if runtime.GOOS != "linux" {
@@ -134,7 +138,7 @@ func TestServiceUninstallRemovesOnlyItsUnit(t *testing.T) {
 	}
 }
 
-// TC-229 (node only): a dry run lists old snapshot copies with no database
+// TC-248 (node only): a dry run lists old snapshot copies with no database
 // and changes nothing; --apply removes them.
 func TestCleanupNodeOnlyDryRunThenApply(t *testing.T) {
 	state := t.TempDir()

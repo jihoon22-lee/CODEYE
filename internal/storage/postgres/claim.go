@@ -36,10 +36,12 @@ type candidate struct {
 	// the first key of the round-robin order (fairness).
 	dispatchedAt pgtype.Timestamptz
 	request      domain.RunRequest
-	source       domain.Source
-	analysis     domain.AnalysisChoices
-	gitHost      string
-	snapshotID   *string
+	// pullRequest is the pin of a pull-request run, nil otherwise.
+	pullRequest *domain.PullRequest
+	source      domain.Source
+	analysis    domain.AnalysisChoices
+	gitHost     string
+	snapshotID  *string
 }
 
 // nodeView is a node's scheduling state. Accounting model (docs/EXECUTION.md): CPU is a
@@ -143,7 +145,7 @@ func loadNode(ctx context.Context, tx pgx.Tx, id string, lock bool) (nodeView, *
 }
 
 const candidateSQL = `SELECT r.id::text,r.project_id::text,r.actor_id::text,r.request,pr.config->'source',pr.config->'analysis',r.snapshot_id::text,s.manifest_digest,r.created_at,
-	coalesce(pd.last_dispatched_at,'-infinity'::timestamptz)
+	coalesce(pd.last_dispatched_at,'-infinity'::timestamptz),r.pull_request
 	FROM runs r
 	JOIN projects p ON p.id=r.project_id AND p.deleted_at IS NULL
 	JOIN project_revisions pr ON pr.project_id=r.project_id AND pr.revision=r.project_revision
@@ -163,14 +165,26 @@ const projectActiveSQL = `(SELECT count(*) FROM capacity_reservations c JOIN att
 
 func scanCandidate(row pgx.Row) (candidate, bool, error) {
 	var c candidate
-	var req, src, analysis []byte
+	var req, src, analysis, pin []byte
 	var manifest *string
-	if err := row.Scan(&c.runID, &c.projectID, &c.actorID, &req, &src, &analysis, &c.snapshotID, &manifest, &c.createdAt, &c.dispatchedAt); err != nil {
+	if err := row.Scan(&c.runID, &c.projectID, &c.actorID, &req, &src, &analysis, &c.snapshotID, &manifest, &c.createdAt, &c.dispatchedAt, &pin); err != nil {
 		return c, false, err
+	}
+	// A pull-request run without a pin that decodes (or a pin without the
+	// request naming it) is never dispatched.
+	if pin != nil {
+		p, err := domain.ParsePullRequest(pin)
+		if err != nil {
+			return c, false, nil
+		}
+		c.pullRequest = &p
 	}
 	// A stored request or source that does not decode under the current rules
 	// is never dispatched (it stays queued; it is not reinterpreted).
 	if domain.DecodeStrict(req, &c.request) != nil || c.request.Validate() != nil || src == nil {
+		return c, false, nil
+	}
+	if (c.request.PullRequest != nil) != (c.pullRequest != nil) || (c.pullRequest != nil && c.pullRequest.Number != c.request.PullRequest.Number) {
 		return c, false, nil
 	}
 	parsed, err := domain.ParseSource(src)
@@ -484,6 +498,9 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 		resp.Job.Source = nodeproto.JobSource{Kind: "local", SourceRootID: c.source.SourceRootID, RelativePath: c.source.RelativePath}
 	case domain.SourceGit:
 		resp.Job.Source = nodeproto.JobSource{Kind: "git", RepositoryURL: c.source.RepositoryURL, Branch: c.source.Branch, Host: c.gitHost}
+		if c.pullRequest != nil {
+			resp.Job.PullRequest = c.pullRequest.Job()
+		}
 	}
 	if r.SnapshotID != nil {
 		snap := nodeproto.JobSnapshot{ID: *r.SnapshotID}

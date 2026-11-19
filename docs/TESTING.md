@@ -39,7 +39,7 @@
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
 | TC-02 | **일부**(여러 사용자 계정 사이의 격리는 설계(미구현)). OS 계정은 읽지만 웹 사용자는 권한 없는 경로 | 등록·목록·보고서·SSE 모두 접근 거부 | REQ-002,015; NFR-006,007 |
-| TC-31 | **일부**(회사 SSO·GitHub App 권한 철회는 미실행). 권한 철회/삭제·code-free export | source/report/SSE 차단, export 내용과 metadata 민감값 제거. 구성원 제거와 사용자 비활성화가 열린 SSE를 `access_revoked`·`unauthenticated`로 닫고 다음 요청이 404·401인 것, 노드 철회가 실행 중 에이전트를 종료 코드 4로 끝내는 것은 TC-236 D8이 실행한다 | REQ-028,029,031; NFR-006,007 |
+| TC-31 | **일부**(회사 SSO·GitHub App 권한 철회는 미실행). 권한 철회/삭제·code-free export | source/report/SSE 차단, export 내용과 metadata 민감값 제거. 구성원 제거와 사용자 비활성화가 열린 SSE를 `access_revoked`·`unauthenticated`로 닫고 다음 요청이 404·401인 것, 노드 철회가 실행 중 에이전트를 종료 코드 4로 끝내는 것은 TC-255 D8이 실행한다 | REQ-028,029,031; NFR-006,007 |
 | TC-46 | loopback 강제, Host/Origin/CSRF 거부 | 요청 거부 | NFR-006 |
 | TC-47 | 일회용 launch token, 동시 교환·비활성화, 세션 만료/폐기 | 한 번만 교환되고 만료·폐기 뒤 거부 | REQ-002; NFR-006 |
 | TC-48 | 설명 없는 local/Git 선언 등록, root grant | 등록 성공, 소스 미검증 표시 | REQ-001,002,005 |
@@ -106,8 +106,8 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 |---|---|---|---|
 | TC-19 | min0/max2, 작업 유입 후 유휴 | 0→최대2→0, agent/controller는 살아 있음 | REQ-020,021 |
 | TC-20 | busy3 상태에서 max1로 축소 | 작업 강제 종료 없이 drain, 새 작업 제한 | REQ-020,021 |
-| TC-21 | **한 호스트**(여러 물리 머신은 미실행). 두 agent가 같은 run을 동시에 claim | 한 활성 epoch만 소유, 노드/전역 예산 중복 차감 없음. 동시 claim은 TC-60, 한 호스트의 노드 신원 8개 배정·대기·사망·분할·drain·갱신은 TC-231~235가 실행한다 | REQ-018,019,022,035; NFR-002,003 |
-| TC-22 | **한 호스트**(여러 물리 머신의 실제 network partition은 미실행). node partition 후 오래된 complete 도착 | lease fence 409, 최신 보고서 미덮어쓰기. 로컬 TCP 프록시 차단과 SIGSTOP·SIGKILL로 TC-232·TC-233이 실행한다(늦은 complete 409, 새 attempt 결과 유지, 중복 실행 없음) | REQ-022,035; NFR-006,007 |
+| TC-21 | **한 호스트**(여러 물리 머신은 미실행). 두 agent가 같은 run을 동시에 claim | 한 활성 epoch만 소유, 노드/전역 예산 중복 차감 없음. 동시 claim은 TC-60, 한 호스트의 노드 신원 8개 배정·대기·사망·분할·drain·갱신은 TC-250~254가 실행한다 | REQ-018,019,022,035; NFR-002,003 |
+| TC-22 | **한 호스트**(여러 물리 머신의 실제 network partition은 미실행). node partition 후 오래된 complete 도착 | lease fence 409, 최신 보고서 미덮어쓰기. 로컬 TCP 프록시 차단과 SIGSTOP·SIGKILL로 TC-251·TC-252이 실행한다(늦은 complete 409, 새 attempt 결과 유지, 중복 실행 없음) | REQ-022,035; NFR-006,007 |
 | TC-23 | controller/agent 재시작·PID 재사용 | journal/DB reconciliation, 중복 워커 방지, 다른 PID 오살 없음 | REQ-022,035; NFR-001,002,003,009 |
 | TC-24 | **설계(미구현)**: endpoint별 모델 동시 요청 상한과 수요 기반 증감([실행](EXECUTION.md)). 모델 endpoint 포화·CPU 여유 | 모델 동시 제한 유지, 가능한 CPU task는 진행, 과도한 worker 증가 억제 | REQ-018,019; NFR-008,010 |
 | TC-59 | 일회용 등록, 철회·만료 | 사용자와 노드 credential 분리 | REQ-019; NFR-006 |
@@ -122,15 +122,15 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-73 | 전역·프로젝트·pool·노드 자원 상한 | 공정 배정과 대기 사유 | REQ-016,018,019,020 |
 | TC-74 | agent 강제 종료·재시작, controller 재시작 | 명령 중복 적용 방지 | REQ-021,022 |
 | TC-75 | lease 만료 후 늦은 complete | 409, 정리 확인 후 예약 해제 | REQ-022,035 |
-| TC-227 | `recovery_required` run의 정리 확인: 다른 상태의 run, 본문 없음·`false`·`{}`·다른 필드, 실행 권한 없는 사용자, 운영자 CLI(`--confirm-cleanup` 없음·있음), 확인 두 번, 웹 확인 상자 | 확인 없이는 400(본문 없음 415)·CLI 종료 코드 2이고 아무것도 바뀌지 않는다. 확인하면 한 트랜잭션에서 attempt `released`·`confirmed`, 예약 해제, run `failed`(사유 `operator_confirmed`), 감사 `run.recovery_confirmed`(사용자 또는 `operator_cli`)다. 신선한 노드가 snapshot을 가지면 같은 run, 아니면 새 run이 202로 대기열에 들어가고 운영자 경로의 재시도는 요청자 대신(`system`)이다. 두 번째 확인은 409 `RUN_NOT_RECOVERY_REQUIRED`다. 웹은 상자를 체크해야 단추가 켜진다(`TestConfirmRecoveryReleasesAndRequeues`, DB URL·설정이 없으면 아무것도 만들지 않고 종료 코드 2인 `TestRunRecoverWithoutDatabaseCreatesNothing`, `TestRecoverRunNeedsTheStatedConfirmation`, `isolation_test.go`의 `runs.recover`, `web/src/PersonalStart.test.tsx`) | REQ-021,022; NFR-003 |
-| TC-228 | 고정 snapshot 재시도: snapshot을 가진 노드가 stale·철회됨, 노드가 `snapshot_unavailable`로 끝냄 | stale·철회 노드의 위치는 보유로 세지 않아 새 run이 된다. `snapshot_unavailable`은 그 노드의 위치 기록을 지운다(`TestConfirmRecoveryReleasesAndRequeues`, `TestSnapshotUnavailableDropsTheLocation`) | REQ-003,035 |
-| TC-231 | 한 호스트의 노드 신원 여럿: go 있는 노드, go 없이 다른 기준 분석기만 있는 노드, 도구 없는 노드, root·Git host가 다른 노드, 아무도 못 하는 run | run은 root·Git host·analysis 능력이 맞는 노드만 받는다. go 없는 노드의 Go 작업은 `unsupported`(`tool_not_configured`)이고 run은 `completed`가 아니다. 도구 없는 노드는 root를 맡아도 능력을 알리지 않는다. 못 하는 run은 `no_capable_node`로 대기하다 능력 있는 노드가 등록되면 시작한다(`scripts/multinode_smoke.py` S1, 실제 go vet) | REQ-002,018,019 |
-| TC-232 | 작업 중 노드의 에이전트·워커·작업 프로세스 SIGKILL | 20초 뒤 노드 stale, lease 만료 뒤 `recovery_required`(cleanup `uncertain`), 자동 재배정 없음. 죽은 노드 자격·옛 epoch의 complete는 409와 `attempt.stale_rejected`. 프로세스가 없음을 확인한 뒤 사용자가 정리를 확인하면 새 run이 다른 노드에서 끝나고, 그 뒤의 옛 complete도 409이며 새 결과가 바뀌지 않는다. 같은 상태로 다시 띄운 에이전트는 옛 attempt를 정리 보고하고 새 일을 받는다(S2) | REQ-021,022,035; NFR-003 |
-| TC-233 | 한 노드만 지나는 로컬 TCP 프록시 차단(분할) 뒤 복구, lease 안의 8초 SIGSTOP | 분할 동안 같은 run을 다른 노드가 실행하지 않는다. 에이전트가 lease 여유에서 `lease_lost`로 작업을 멈추고 복구 뒤 정리 보고로 run `failed`, 늦은 complete 409, 같은 노드가 다시 일을 받는다. 짧은 정지는 상태를 바꾸지 않는다(같은 attempt·epoch 1로 끝)(S3) | REQ-022,035; NFR-003 |
-| TC-234 | 자동 모드 노드의 drain(SIGUSR1) 중 새 run | 하던 일은 첫 attempt로 끝나고 새 run은 `no_capable_node`로 대기하며 그 노드에 `start_worker`가 가지 않는다. drain heartbeat는 static 증감·analysis 능력 없음이고, 에이전트는 종료 코드 0이다(S4, `TestDrainingAgentLeavesTheScalingPlan`) | REQ-020,021 |
-| TC-235 | 에이전트 갱신: drain → 종료 → 다시 빌드한 바이너리(hash 다름)를 같은 상태 디렉터리로 시작 | 같은 node ID·비밀값, `node.enrolled` 감사 없음, protocol `0.1`, controller 증감으로 복귀해 대기 run을 끝낸다(S5) | REQ-019,021; NFR-003 |
+| TC-246 | `recovery_required` run의 정리 확인: 다른 상태의 run, 본문 없음·`false`·`{}`·다른 필드, 실행 권한 없는 사용자, 운영자 CLI(`--confirm-cleanup` 없음·있음), 확인 두 번, 웹 확인 상자 | 확인 없이는 400(본문 없음 415)·CLI 종료 코드 2이고 아무것도 바뀌지 않는다. 확인하면 한 트랜잭션에서 attempt `released`·`confirmed`, 예약 해제, run `failed`(사유 `operator_confirmed`), 감사 `run.recovery_confirmed`(사용자 또는 `operator_cli`)다. 신선한 노드가 snapshot을 가지면 같은 run, 아니면 새 run이 202로 대기열에 들어가고 운영자 경로의 재시도는 요청자 대신(`system`)이다. 두 번째 확인은 409 `RUN_NOT_RECOVERY_REQUIRED`다. 웹은 상자를 체크해야 단추가 켜진다(`TestConfirmRecoveryReleasesAndRequeues`, pull request run이 고정값·댓글 선택을 그대로 갖고 다시 들어가는 `TestRecoveredPullRequestRunKeepsItsPin`, DB URL·설정이 없으면 아무것도 만들지 않고 종료 코드 2인 `TestRunRecoverWithoutDatabaseCreatesNothing`, `TestRecoverRunNeedsTheStatedConfirmation`, `isolation_test.go`의 `runs.recover`, `web/src/PersonalStart.test.tsx`) | REQ-021,022; NFR-003 |
+| TC-247 | 고정 snapshot 재시도: snapshot을 가진 노드가 stale·철회됨, 노드가 `snapshot_unavailable`로 끝냄 | stale·철회 노드의 위치는 보유로 세지 않아 새 run이 된다. `snapshot_unavailable`은 그 노드의 위치 기록을 지운다(`TestConfirmRecoveryReleasesAndRequeues`, `TestSnapshotUnavailableDropsTheLocation`) | REQ-003,035 |
+| TC-250 | 한 호스트의 노드 신원 여럿: go 있는 노드, go 없이 다른 기준 분석기만 있는 노드, 도구 없는 노드, root·Git host가 다른 노드, 아무도 못 하는 run | run은 root·Git host·analysis 능력이 맞는 노드만 받는다. go 없는 노드의 Go 작업은 `unsupported`(`tool_not_configured`)이고 run은 `completed`가 아니다. 도구 없는 노드는 root를 맡아도 능력을 알리지 않는다. 못 하는 run은 `no_capable_node`로 대기하다 능력 있는 노드가 등록되면 시작한다(`scripts/multinode_smoke.py` S1, 실제 go vet) | REQ-002,018,019 |
+| TC-251 | 작업 중 노드의 에이전트·워커·작업 프로세스 SIGKILL | 20초 뒤 노드 stale, lease 만료 뒤 `recovery_required`(cleanup `uncertain`), 자동 재배정 없음. 죽은 노드 자격·옛 epoch의 complete는 409와 `attempt.stale_rejected`. 프로세스가 없음을 확인한 뒤 사용자가 정리를 확인하면 새 run이 다른 노드에서 끝나고, 그 뒤의 옛 complete도 409이며 새 결과가 바뀌지 않는다. 같은 상태로 다시 띄운 에이전트는 옛 attempt를 정리 보고하고 새 일을 받는다(S2) | REQ-021,022,035; NFR-003 |
+| TC-252 | 한 노드만 지나는 로컬 TCP 프록시 차단(분할) 뒤 복구, lease 안의 8초 SIGSTOP | 분할 동안 같은 run을 다른 노드가 실행하지 않는다. 에이전트가 lease 여유에서 `lease_lost`로 작업을 멈추고 복구 뒤 정리 보고로 run `failed`, 늦은 complete 409, 같은 노드가 다시 일을 받는다. 짧은 정지는 상태를 바꾸지 않는다(같은 attempt·epoch 1로 끝)(S3) | REQ-022,035; NFR-003 |
+| TC-253 | 자동 모드 노드의 drain(SIGUSR1) 중 새 run | 하던 일은 첫 attempt로 끝나고 새 run은 `no_capable_node`로 대기하며 그 노드에 `start_worker`가 가지 않는다. drain heartbeat는 static 증감·analysis 능력 없음이고, 에이전트는 종료 코드 0이다(S4, `TestDrainingAgentLeavesTheScalingPlan`) | REQ-020,021 |
+| TC-254 | 에이전트 갱신: drain → 종료 → 다시 빌드한 바이너리(hash 다름)를 같은 상태 디렉터리로 시작 | 같은 node ID·비밀값, `node.enrolled` 감사 없음, protocol `0.1`, controller 증감으로 복귀해 대기 run을 끝낸다(S5) | REQ-019,021; NFR-003 |
 
-노드 수용 시험(TC-59~65)은 전용 빌드의 시험용 handler로 프로토콜과 OS 동작을 검사한다. 한 머신에서 별도 노드 신원 둘로 실행하며 여러 물리 머신·NFS·network partition 보증을 대신하지 않는다. TC-231~235도 한 WSL2 호스트에서 실행한다. 측정값은 [실행](EXECUTION.md#여러-노드에서-확인한-것)에 있다.
+노드 수용 시험(TC-59~65)은 전용 빌드의 시험용 handler로 프로토콜과 OS 동작을 검사한다. 한 머신에서 별도 노드 신원 둘로 실행하며 여러 물리 머신·NFS·network partition 보증을 대신하지 않는다. TC-250~254도 한 WSL2 호스트에서 실행한다. 측정값은 [실행](EXECUTION.md#여러-노드에서-확인한-것)에 있다.
 
 ## 분석기
 
@@ -335,11 +335,11 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
-| TC-30 | **설계(미구현)**: 폐쇄망 배포팩. 폐쇄망에서 없는 패키지·모델·외부 CDN 요청 | 외부 fallback 없음, 명확한 부분 실패, UI는 로컬 자산 사용 | REQ-030 |
-| TC-32 | **개인 모드 규모**(실제 데이터 규모의 목표 시간은 미측정). DB+artifact backup 복원 | 근거·ACL·예약 중복·lease 재조정 정상. 실행 중 온라인 백업을 복원하면 그 run이 `recovery_required`이고 정리 확인 뒤 새 run이 끝나는 것은 TC-236 D7이 실행한다 | NFR-002,003,006,007 |
-| TC-229 | `codeye cleanup`: 기본 dry run, `--apply`, 1시간 미만 기준, 끝나지 않은 run, 원시가 아닌 역할, 다른 행이 같은 내용을 참조, 열린 journal attempt의 작업 사본, symlink, 은퇴한 에이전트 디렉터리 | dry run은 아무것도 바꾸지 않는다. 적용하면 끝난 run의 오래된 `stdout`·`stderr`·`raw_output`·`other` 내용에 `content_removed_at`을 적고 감사 `storage.retention_applied` 한 건을 쓴 뒤 참조가 남지 않은 파일만 지운다. 보고서·관찰·manifest·감사 행은 그대로이고 run 화면에 "원시 증거가 삭제됨"이 보인다. 백업·산출물 상한은 지운 내용을 세지 않는다(`TestRetentionMarksOldRawArtifactsOfFinishedRuns`, `retention_test.go`, `TestCleanupNodeOnlyDryRunThenApply`) | REQ-018; NFR-006,007 |
-| TC-230 | `codeye service print·install·uninstall`(throwaway 이름, 임시 설정, WSL2 사용자 systemd) | unit은 절대 경로·명시적 PATH·oneshot·`RemainAfterExit`·정지 시간을 담고 systemd 특수 문자를 escape한다. install은 enable만 하고, `systemctl --user start`가 `codeye start`를, stop이 `codeye stop`을 실행해 상태가 `running`·`stopped`로 바뀐다. journal에 로그인 토큰이 없다. uninstall은 설정 없이 CODEYE가 쓴 unit만 지운다(`TestServiceUnitText`, `TestServiceUninstallRemovesOnlyItsUnit`, 수동 실행). 재부팅·로그아웃 뒤 유지는 시험하지 않았다 | NFR-003 |
-| TC-236 | 운영 훈련(`scripts/ops_drill.py`): D1 모델 endpoint HTTP 500, D2 노드 offline, D3 DB 짧은 중단·lease보다 긴 중단, D4 도구 버전 변경·사라짐, D5 작업 중 max workers 축소, D6 산출물 상한, D7 실행 중 백업·복원, D8 권한 회수, D9 보존 정리(개인 모드) | 훈련마다 한 일·관찰·통과 여부·시간을 표로 남긴다. 기대: 정적 결과와 모델 검토 미수행 사유(D1), 운영자 CLI 정리 확인과 이어 실행(D2), 중단 중 503·복구 뒤 작업 계속 또는 정리 보고로 `failed`와 정합성 검사 0건(D3), 비교의 버전 차이 행과 `resolved_observed` 0(D4), drain만 하고 취소 없음(D5), 새 작업만 대기(D6), 같은 보고서와 정리 확인 뒤 새 run(D7), 즉시 접근 차단(D8), dry run은 아무것도 바꾸지 않고 적용 뒤 같은 보고서·감사 한 건·"원시 증거가 삭제됨"(D9). 결과는 [운영](OPERATIONS.md#장애-대응-runbook)과 [변경 이력](../CHANGELOG.md)에 있다 | REQ-018,021,022,028; NFR-002,003,006 |
+| TC-30 | 폐쇄망 배포팩. 폐쇄망에서 없는 패키지·모델·외부 CDN 요청 | 외부 fallback 없음, 명확한 부분 실패, UI는 로컬 자산 사용. **부분 실행**: TC-240~245가 사설 CA·로컬 미러·network namespace로 확인한다. 실제 폐쇄망·RHEL 8.10·회사 CA와 미러에서는 실행하지 않았다 | REQ-030 |
+| TC-32 | **개인 모드 규모**(실제 데이터 규모의 목표 시간은 미측정). DB+artifact backup 복원 | 근거·ACL·예약 중복·lease 재조정 정상. 실행 중 온라인 백업을 복원하면 그 run이 `recovery_required`이고 정리 확인 뒤 새 run이 끝나는 것은 TC-255 D7이 실행한다 | NFR-002,003,006,007 |
+| TC-248 | `codeye cleanup`: 기본 dry run, `--apply`, 1시간 미만 기준, 끝나지 않은 run, 원시가 아닌 역할, 다른 행이 같은 내용을 참조, 열린 journal attempt의 작업 사본, symlink, 은퇴한 에이전트 디렉터리 | dry run은 아무것도 바꾸지 않는다. 적용하면 끝난 run의 오래된 `stdout`·`stderr`·`raw_output`·`other` 내용에 `content_removed_at`을 적고 감사 `storage.retention_applied` 한 건을 쓴 뒤 참조가 남지 않은 파일만 지운다. 보고서·관찰·manifest·감사 행은 그대로이고 run 화면에 "원시 증거가 삭제됨"이 보인다. 백업·산출물 상한은 지운 내용을 세지 않는다(`TestRetentionMarksOldRawArtifactsOfFinishedRuns`, `retention_test.go`, `TestCleanupNodeOnlyDryRunThenApply`) | REQ-018; NFR-006,007 |
+| TC-249 | `codeye service print·install·uninstall`(throwaway 이름, 임시 설정, WSL2 사용자 systemd) | unit은 절대 경로·명시적 PATH·oneshot·`RemainAfterExit`·정지 시간을 담고 systemd 특수 문자를 escape한다. install은 enable만 하고, `systemctl --user start`가 `codeye start`를, stop이 `codeye stop`을 실행해 상태가 `running`·`stopped`로 바뀐다. journal에 로그인 토큰이 없다. uninstall은 설정 없이 CODEYE가 쓴 unit만 지운다(`TestServiceUnitText`, `TestServiceUninstallRemovesOnlyItsUnit`, 수동 실행). 재부팅·로그아웃 뒤 유지는 시험하지 않았다 | NFR-003 |
+| TC-255 | 운영 훈련(`scripts/ops_drill.py`): D1 모델 endpoint HTTP 500, D2 노드 offline, D3 DB 짧은 중단·lease보다 긴 중단, D4 도구 버전 변경·사라짐, D5 작업 중 max workers 축소, D6 산출물 상한, D7 실행 중 백업·복원, D8 권한 회수, D9 보존 정리(개인 모드) | 훈련마다 한 일·관찰·통과 여부·시간을 표로 남긴다. 기대: 정적 결과와 모델 검토 미수행 사유(D1), 운영자 CLI 정리 확인과 이어 실행(D2), 중단 중 503·복구 뒤 작업 계속 또는 정리 보고로 `failed`와 정합성 검사 0건(D3), 비교의 버전 차이 행과 `resolved_observed` 0(D4), drain만 하고 취소 없음(D5), 새 작업만 대기(D6), 같은 보고서와 정리 확인 뒤 새 run(D7), 즉시 접근 차단(D8), dry run은 아무것도 바꾸지 않고 적용 뒤 같은 보고서·감사 한 건·"원시 증거가 삭제됨"(D9). 결과는 [운영](OPERATIONS.md#장애-대응-runbook)과 [변경 이력](../CHANGELOG.md)에 있다 | REQ-018,021,022,028; NFR-002,003,006 |
 | TC-124 | 저장 영역(snapshot·workspace·cache·logs·artifacts) 상한에 도달한 노드·설치, 실행 중 attempt, 상한 없는 heartbeat | 새 claim만 거절하고(204) 대기 사유는 `storage_quota_exceeded`다. 실행 중 attempt와 확정 산출물·보고서는 그대로다. 자동 삭제는 없다. 상한이 없으면 heartbeat 필드를 보내지 않는다. 측정값과 적용 근거(노드 heartbeat·DB 집계)를 구분해 표시한다. | REQ-018; NFR-007 |
 | TC-125 | `codeye start`·`stop`·`status`: 실행 중 작업의 drain, drain 시간 초과, stale 기록·재사용 pid·기록 없는 에이전트·포트 점유, 설정 오류 | drain은 실행 작업을 끝낸 뒤 추가 claim 없이 종료한다. 시간 초과는 취소하고 정리를 확인한다. 불확실하면 `recovery_required`다. 기록과 시작 시각이 다른 프로세스에는 신호를 보내지 않는다. 상태 파일은 0600·0700이고 DB URL과 장기 secret이 없다. | REQ-021,022; NFR-006 |
 | TC-126 | `codeye doctor --config`: 상한 초과 영역, 백업 없음·오래됨·읽을 수 없음, 불일치 상태, 진행 중 start/stop | 선택 필드 `operations`만 더하고 기존 check는 같다. schema가 상태와 필드 조합을 강제한다. | REQ-018; NFR-006 |
@@ -350,8 +350,14 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-173 | `codeye stop` 뒤 `codeye up`, 정지 상태의 `codeye backup`(설정에 `backup_dir` 없음), 새 `state_dir`로의 `codeye restore` | stop의 `database`는 `stopped`이고 그 cluster의 PostgreSQL 프로세스가 없다. 다시 up하면 초기화·사용자 생성 없이 같은 프로젝트가 보인다. 백업은 `<state_dir>-backups` 아래에 세트를 만들고 띄운 PostgreSQL을 다시 멈춘다. 비밀번호는 `postgres/password` 밖의 상태 파일에 없다. 복원은 새 상태 디렉터리에 cluster를 만들고 복원하며 그 뒤 up이 새 노드로 시작한다(복원은 수동 실행으로 확인, smoke에는 없다). | NFR-003,006 |
 | TC-174 | PostgreSQL 프로그램 디렉터리: 16·17·13 설치, 프로그램이 빠진 디렉터리, 명시한 틀린 경로, 아무것도 없음, 주 버전 16 데이터 디렉터리와 17 프로그램, `PG_VERSION` 없는 비어 있지 않은 디렉터리 | 명시가 없으면 가장 높은 주 버전(14 이상), 데이터 디렉터리가 있으면 그 버전을 고른다. 플래그가 설정보다 먼저다. 명시한 경로가 조건을 채우지 않으면 다른 곳을 찾지 않고 그 경로와 이유를 말한다. 없으면 설치 방법·`postgres_bin_dir`·`external`을 알리는 오류다. 다른 주 버전 데이터 디렉터리와 정체 모를 디렉터리는 거부한다. | REQ-004; NFR-006 |
 | TC-175 | `{"schema_version":"0.1"}`만 있는 설정, `up`의 설정 편집(필드 순서·기본값·잘못된 결과), 기본 포트 7331을 다른 프로그램이 쓰는 상태, 설정에 적은 포트를 다른 프로그램이 쓰는 상태 | 기본값은 관리형 DB, `$XDG_STATE_HOME/codeye`(없으면 `~/.local/state/codeye`), root 없음이다. 편집은 다른 필드와 순서를 보존하고 기본값을 쓰지 않으며, 검증을 통과하지 못하면 파일을 바꾸지 않는다. 기본 포트가 쓰이면 7332 이후 빈 포트로 띄우고 `stop`·`status`·`open`이 그 주소를 쓴다. 적은 포트가 쓰이면 시작하지 않는다(포트 이동은 수동 실행으로 확인). | REQ-001; NFR-006 |
+| TC-240 | `offline_pack.py build`를 두 번, `verify`에 바뀐·빠진·더해진 파일, ELF 프로그램 헤더(interpreter·dynamic·없음) | 같은 commit에서 묶음 바이트가 같다(이 머신 sha256 일치). 묶음은 정적 실행 파일·`web/dist`·문서·설정 예시·INSTALL.md·MANIFEST.json·SHA256SUMS이고 `sha256sum -c`가 통과한다. verify는 세 변경을 모두 보고한다. 동적 실행 파일은 묶지 않는다(`scripts/test_offline_pack.py`, 수동 build) | REQ-030; NFR-007 |
+| TC-241 | 웹 산출물의 외부 글꼴·CDN script·CSS `@import`·`url()`·`fetch`·원격 source map, 식별자·문구 주소, 빌드된 `web/dist` | 외부 load마다 실패하고 식별자·문구 주소는 통과한다. 빌드된 화면은 통과한다(CI 웹 작업의 `check-web`, `scripts/test_offline_pack.py`) | REQ-030 |
+| TC-242 | `offline: true`·`up --offline`: git_hosts 없음, Go proxy 없음·캐시 있음·없음·`off`·사내 proxy, npm·pip·cargo 미러 없음, `base_url` 없는 키 파일, 환경변수 키, 키 없는 모델, relay | 설정에 저장되고 에이전트가 `--offline`을 받는다. git_hosts는 빈 목록이다. Go는 운영자 캐시만 읽거나 사내 proxy만 쓰고 그 밖은 `offline_no_registry_configured`, GOSUMDB는 `off`다. 다른 생태계는 받지 않는다. 모델은 `base_url`이나 relay만 쓰고 환경변수 키는 키 파일을 바꾸지 않는다(`TestOfflineConfiguration`, `TestEditFileSetsOffline`, `TestOfflineModelNeedsAnEndpoint`, `TestPersonalAgentArgvOffline`, `TestPersonalOfflineExampleParses`, `TestSetupPersonalModelOfflineKeepsKeyFile`, `TestOfflineGo*`, `TestOfflineJSAndPythonAndRustNeedARegistry`, `TestOfflineNeedsAConfiguredEndpoint`, `TestManagedOpenCodePinsTheNpmRegistry`). GitHub은 꺼진다: token을 찾지 않고(gh·환경변수를 묻지 않음) 저장된 token을 지우며, 에이전트에 credential 파일을 주지 않고, pull request 주소를 `up`과 API가 거부하며 controller가 GitHub을 부르지 않는다(`TestSetupGitHubOfflineLooksUpNothing`, `TestOfflineTurnsGitHubOff`, `TestPullRequestRunsOverHTTP`의 오프라인 단계) | REQ-030; NFR-006 |
+| TC-243 | `ca_bundle`: 상대 경로, 인증서 없는 파일, 사설 CA HTTPS 미러에 go·git·npm·pnpm·yarn·pip·uv·OpenCode를 CA 변수 있이·없이 | 설정·에이전트가 잘못된 파일을 거부한다. 다섯 변수가 같은 파일을 가리킨다. 변수가 있으면 성공하고 없으면 인증서 검증 오류다. OpenCode는 `NODE_EXTRA_CA_CERTS`만, `SSL_CERT_FILE`만으로도 성공한다. git은 CA 변수와 GitHub header를 함께 환경으로 받고 token은 argv에 없다(`TestCheckCABundle`, `TestCAEnvNamesOneBundleForEveryTool`, `TestGitCommandsTrustTheConfiguredCABundle`, `TestGitGetsTheCABundleAndTheTokenTogether`, `scripts/offline_smoke.py`). cargo는 실행하지 않았다 | REQ-030; NFR-006 |
+| TC-244 | `doctor --config`의 `offline`: 오프라인 켬·끔, 미러·사용자 go env·npm 설정·기본값, CA 상태, PostgreSQL 프로그램, 언어별 빠진 도구. `tools --checklist` | 접속할 곳마다 출처와 받지 않는 이유가 있고 schema(if/then)가 조합을 강제한다. 점검표는 모든 도구에 옮기는 방법과 시험한 계열을 적는다(`TestOfflineReadiness`, `TestChecklistCoversEveryTool`, `validate_bundle.py`의 doctor 음성 사례) | REQ-030 |
+| TC-245 | 묶음을 빈 디렉터리에 풀고 그 실행 파일만으로, 새 HOME·설정·상태, network namespace(loopback만)와 connect·DNS 기록: 모듈 캐시에 있는 Go 프로젝트, 없는 프로젝트, 사설 CA 미러·가짜 모델 upstream(TLS)으로 Go·Python·JS 프로젝트와 Git 주소, doctor·점검표·웹 화면 | 캐시 프로젝트는 `prepared`, 없는 프로젝트는 `offline_no_registry_configured`다. 미러 단계는 미러에서 받고 모델 검토가 사내 endpoint로 `performed`다. loopback 밖 connect와 DNS 조회가 없다. 웹 화면은 묶음의 `index.html`이다(`scripts/offline_smoke.py`, 수동·CI 밖, Linux) | REQ-030; NFR-001,006 |
 
-개인 모드 운영 계약은 [운영](OPERATIONS.md)에 있다. `up`·`start`·`stop`·`status`·백업·복원 시험은 Linux 전용이다. 브라우저 자동 열기(`xdg-open`·`wslview`·`explorer.exe`)는 시험하지 않았다(열기 프로그램 선택 순서만 단위 시험). 장애 훈련과 권한 철회는 한 호스트의 TC-236이 실행한다. NFS 지연, 실제 데이터 규모의 백업·복원 목표 시간, 회사 SSO·GitHub App 권한 철회, 품질 baseline은 TC가 없으며 [로드맵](ROADMAP.md)의 운영 수용 작업에 남아 있다.
+개인 모드 운영 계약은 [운영](OPERATIONS.md)에 있다. `up`·`start`·`stop`·`status`·백업·복원 시험은 Linux 전용이다. 브라우저 자동 열기(`xdg-open`·`wslview`·`explorer.exe`)는 시험하지 않았다(열기 프로그램 선택 순서만 단위 시험). 장애 훈련과 권한 철회는 한 호스트의 TC-255이 실행한다. NFS 지연, 실제 데이터 규모의 백업·복원 목표 시간, 회사 SSO·GitHub App 권한 철회, 품질 baseline은 TC가 없으며 [로드맵](ROADMAP.md)의 운영 수용 작업에 남아 있다.
 
 ## 연동
 
@@ -359,10 +365,25 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 |---|---|---|---|
 | TC-27 | **설계(미구현)**: GitHub App 연결 상태. webhook이 없지만 repository readable | 수동/예약 사용 가능, PR 기능만 연결 미완료 | REQ-024,025 |
 | TC-28 | **설계(미구현)**: webhook·댓글 명령. 잘못된 HMAC·중복 delivery·무권한 mention | 요청 차단/멱등 처리, 승인된 사용자만 실행 | REQ-024,025 |
-| TC-29 | **설계(미구현)**: PR 결과 댓글. PR head 변경 후 이전 결과 완료·댓글 API 실패 | stale 표기, 최신 댓글 미덮어쓰기, outbox만 재시도 | REQ-024,025 |
+| TC-29 | **일부**(개인 모드의 결과 댓글은 TC-228·235, App 경로는 설계): PR 결과 댓글. PR head 변경 후 이전 결과 완료·댓글 API 실패 | stale 표기, 최신 댓글 미덮어쓰기, outbox만 재시도 | REQ-024,025 |
 | TC-35 | 문서·코드·서비스 설정의 기능 검토 | 기존 CI 연결 및 초기 CVE 기능이 없음 | REQ-032,033 |
 
-TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력으로 지금도 동작한다. 연결 상태 표시와 PR 기능은 없다. 연결 계약은 [GitHub 연결](GITHUB.md)에 있다.
+TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력으로 지금도 동작한다. App의 연결 상태 표시와 이벤트는 없다. 개인 모드의 token·pull request·결과 댓글은 아래 TC-227~236이다. 연결 계약은 [GitHub 연결](GITHUB.md)에 있다.
+
+개인 모드의 GitHub token, pull request, 결과 댓글([GitHub 연결](GITHUB.md), [pull request 보고서](REPORT.md#pull-request-보고서), A46):
+
+| TC | 조건 | 기대 결과 | 요구 |
+|---|---|---|---|
+| TC-227 | 가짜 GitHub API와 Git 미러, `GH_TOKEN`, `codeye up --comment …/pull/7`(fork head, 삭제 파일 하나, 변경 줄의 go vet 진단과 기존 코드의 진단) | `up`이 계정·출처와 고정한 head·base·fork를 출력하고 선택을 기억한다. run의 `pull_request`와 보고서 `inputs.commit_sha`가 고정 head다. 보고서 절은 삭제 파일 1, 검토 대상 1, 줄 기준이고 진단을 변경된 줄과 기존 코드로 나눈다. Markdown 요약이 pull request와 "같은 깊이로 검토하지 않았을 수 있다"를 말한다. 댓글 하나가 게시되고 `GET /setup`의 `github`에 token이 없다(`scripts/personal_smoke.py`) | REQ-024 |
+| TC-228 | TC-227 뒤 새 push(ref 이동), 같은 주소로 다시 `up` | 새 head의 새 run, 같은 댓글 하나가 새 head로 고쳐진다. 비교 기준은 이전 run이다(`scripts/personal_smoke.py`) | REQ-024 |
+| TC-229 | `--dry-run-comment`, 그 뒤 상태 디렉터리 전체 | GitHub 쓰기 요청 0, 댓글 미리 보기 출력, 기억한 선택 유지. 모든 GitHub 요청에 token이 있고, token은 `secrets/github.json`(0600)에만 있다(`scripts/personal_smoke.py`) | REQ-024; NFR-006 |
+| TC-230 | token 발견 순서, 거부된 token, GitHub에 닿지 못함, 발견 끔, 여러 줄 token, gh 없음 | 순서대로 고르고 거부된 token과 이전 파일을 지운다. 닿지 못하면 token을 두고 계정을 모른다. 끄면 파일이 없다(`TestSetupGitHubDiscoversStoresAndRemoves`, `TestGitHubConfigField`) | REQ-024; NFR-006 |
+| TC-231 | API client: page 넘김, fork·파일 상태, 짧은 목록, 오류 종류(401·403·404·429·5xx), 다른 origin의 다음 page, redirect, patch의 변경 줄 | 고정값이 정확하고 잘린 목록을 표시한다. token은 API host 밖으로 가지 않는다(`TestResolvePaginatesAndKeepsTheForkAndTheFileStatuses`, `TestResolveMarksAShortListingTruncated`, `TestErrorKinds`, `TestTokenStaysOnTheAPIHost`, `TestChangedLines`) | REQ-024; NFR-006 |
+| TC-232 | `refs/pull/N/head` 가져오기, ref가 움직인 뒤 고정 SHA, 고정 없음·브랜치와 함께, token 전달 | 고정 SHA를 확보하고 ref가 움직여도 그 SHA다. token은 git 환경변수의 header로만 가고 argv·URL·작업 사본에 없다(`TestGitFetchesThePullRequestHead`, `TestGitPullRequestThatMovedFetchesThePinnedCommit`, `TestGitPullRequestNeedsAPinnedHeadAndNoBranch`, `TestGitTokenTravelsInTheEnvironmentOnly`, `TestReadHostToken`) | REQ-024; NFR-006 |
+| TC-233 | HTTP: 서버 모드, 개인 모드 run 보기·미리 보기, 브랜치 run, 기억·명시 댓글, GitHub 404·429·403·401, 번호 0, 다른 host, 예약, 격리 표의 새 경로 | 정한 코드로 거절하고 미리 보기는 쓰지 않는다. 비구성원은 404다(`TestPullRequestRunsOverHTTP`, 격리 표 `runs.pull_request_comment`) | REQ-024,025 |
+| TC-234 | 저장: 고정 값 한 번 쓰기, job의 pull request, outbox 대기·lease·끝·다시 대기, 새 run 게시 뒤 이전 run | 고정 값은 바뀌지 않고 lease는 한 번에 하나다. 더 늦은 run이 게시했으면 이전 run은 `superseded`다(`TestPullRequestRunPinAndJob`, `TestPullRequestCommentOutbox`) | REQ-024 |
+| TC-235 | 게시: 댓글 하나 유지, push 뒤 갱신, DB와 marker의 더 새 version, 남이 붙인 marker, 실패 종류와 재시도, 본문의 mention·참조·문자 참조·URL·code | 하나만 남고 되돌아가지 않는다. 남의 댓글은 고치지 않는다. 본문에 살아 있는 mention·참조·링크·코드가 없다(`TestPosterKeepsOneCommentAndNeverGoesBack`, `TestPosterFailuresAreRecorded`, `TestPublicationMarkerRoundTrip`, `TestRenderedTextHasNoLiveMentionOrReference`, `TestRenderedCommentWithNothingInTheChanges`) | REQ-024; NFR-006 |
+| TC-236 | 검토 순서: 변경 파일·같은 폴더·나머지, 삭제 파일, 범위 산출물 label, 역할 팩 끝까지, pull request가 아닌 run의 계획, 보고서 절의 분류와 예시 | 변경 파일이 overview와 첫 slot에 먼저 오고 pull request가 아닌 run은 이전과 같다. 보고서 예시(`examples/report-pull-request.json`)가 schema를 지킨다(`TestPullRequestChangedFilesFirst`, `TestPullRequestRunReviewsChangedFilesFirst`, `TestScopePullRequestLabels`, `TestPullRequestSectionClassifiesTheChanges`, `TestPullRequestSectionCountsSentFilesOnlyWithModelCalls`, `validate_bundle.py`) | REQ-009,012,024 |
 
 ## 요구사항 추적표
 
@@ -382,11 +403,11 @@ TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력
 | REQ-020,021 | EXECUTION | TC-19,20 |
 | REQ-022,035 | ARCHITECTURE, EXECUTION, API | TC-18,21,22,23 |
 | REQ-023 | EXECUTION | TC-25 |
-| REQ-024,025 | GITHUB | TC-27,28,29 |
+| REQ-024,025 | GITHUB | TC-27,28,29, TC-227~236 |
 | REQ-026 | REVIEW | TC-12,34,170,171,172 |
 | REQ-027 | REVIEW, EVALUATION | TC-33,97,100 |
 | REQ-028,029 | ARCHITECTURE, REPORT | TC-14,31 |
-| REQ-030 | SECURITY, OPERATIONS | TC-30,170 |
+| REQ-030 | SECURITY, OPERATIONS | TC-30,170,240~245 |
 | REQ-031 | REPORT, SECURITY | TC-15,31 |
 | REQ-032,033 | REQUIREMENTS | TC-35 |
 | NFR-001,009 | EXECUTION, OPERATIONS | TC-17,18,23 |
@@ -399,7 +420,7 @@ TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력
 
 ## 고위험 시나리오
 
-**Lease partition:** A가 실행 중인 상태에서 controller 통신을 끊는다. agent가 마지막 갱신 뒤 안전 여유 안에 새 task를 멈추는지 확인한다. 종료 불확실한 test를 자동 중복 실행하지 않는지 확인한다. A의 이전 epoch 완료 요청은 거부되고 새 attempt 결과는 유지돼야 한다. 한 호스트에서는 로컬 TCP 프록시 차단·SIGSTOP·SIGKILL로 TC-232·TC-233이 실행한다. 여러 물리 머신에서의 시험은 다중 노드 검증 작업에 남아 있다.
+**Lease partition:** A가 실행 중인 상태에서 controller 통신을 끊는다. agent가 마지막 갱신 뒤 안전 여유 안에 새 task를 멈추는지 확인한다. 종료 불확실한 test를 자동 중복 실행하지 않는지 확인한다. A의 이전 epoch 완료 요청은 거부되고 새 attempt 결과는 유지돼야 한다. 한 호스트에서는 로컬 TCP 프록시 차단·SIGSTOP·SIGKILL로 TC-251·TC-252이 실행한다. 여러 물리 머신에서의 시험은 다중 노드 검증 작업에 남아 있다.
 
 **취소:** worker→shell→test→자식 프로세스 구조를 만든다. 정상 종료, 응답 없는 자식, agent crash, PID 재사용을 각각 시험한다. 종료된 process group/Job의 결과와 cleanup 상태를 검증하며 로그만 보고 성공 처리하지 않는다.
 
@@ -465,8 +486,8 @@ python3 scripts/test_postgres.py --web --nodes --scheduler --personal
 - `--personal`: 개인 모드 start/status/stop, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32), 관리형 PostgreSQL의 `codeye up` 경로(TC-170~173, 웹 빌드가 있으면 TC-171의 Chromium 확인 포함), 경로·Git 주소 입력(TC-187, 웹 빌드가 있으면 TC-188의 Chromium 확인 포함, cargo가 있으면 빌드 스크립트 안내까지). 관리형 cluster는 PATH의 PostgreSQL 프로그램으로 만든다. Linux 전용이며 모델 호출·다운로드가 없다.
 
 - `--personal-model`: 개인 모드 모델 설정(TC-184). 실제 OpenCode(`~/.opencode/bin/opencode` 또는 `CODEYE_TEST_OPENCODE_BIN`)와 가짜 upstream을 쓰며 유료 호출이 없다. `CODEYE_SMOKE_REAL_MODEL_CREDENTIAL`에 0600 키 파일(`base_url` 없음)을 주면 그 키로 첫 단계(probe와 run 하나, 호출 상한 15)만 실행한다(**실모델**, 비용 발생, relay 장부를 거치지 않으므로 비용은 따로 기록한다).
-- `--multinode`: 별도 DB에서 한 호스트의 노드 신원 8개로 능력 배정·대기·노드 사망·분할·drain·에이전트 갱신(TC-231~235). 실제 go vet과 시험용 handler를 쓰고 `git`이 필요하다. ruff가 PATH에 없으면 "go 없는 노드"는 `--advertise-without-baseline`으로 띄운다. Linux 전용이며 이 호스트에서 약 2분이다.
-- `--ops-drill`: 운영 훈련 D1~D9(TC-236). 자기 PostgreSQL cluster를 띄워 그것만 멈춘다(`pg_ctl` 필요). D1은 OpenCode가 없으면, D4는 ruff가 없으면 `NOT RUN`으로 기록한다. 이 호스트에서 약 9분(그중 D1이 4분여)이라 CI에서는 실행하지 않는다.
+- `--multinode`: 별도 DB에서 한 호스트의 노드 신원 8개로 능력 배정·대기·노드 사망·분할·drain·에이전트 갱신(TC-250~254). 실제 go vet과 시험용 handler를 쓰고 `git`이 필요하다. ruff가 PATH에 없으면 "go 없는 노드"는 `--advertise-without-baseline`으로 띄운다. Linux 전용이며 이 호스트에서 약 2분이다.
+- `--ops-drill`: 운영 훈련 D1~D9(TC-255). 자기 PostgreSQL cluster를 띄워 그것만 멈춘다(`pg_ctl` 필요). D1은 OpenCode가 없으면, D4는 ruff가 없으면 `NOT RUN`으로 기록한다. 이 호스트에서 약 9분(그중 D1이 4분여)이라 CI에서는 실행하지 않는다.
 - `--smokes-only`: Go 시험을 건너뛰고 고른 smoke만 다시 돌린다. 이때 마지막 줄은 저장 통합 시험을 실행했다고 주장하지 않는다.
 - `--pilot`: **실모델** 파일럿. 실제 모델 요청을 보낸다. 고정 OpenCode와 승인된 relay가 필요하다. `CODEYE_PILOT_RELAY_FILE`에 relay descriptor, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정한다. `CODEYE_PILOT_CASES`(예: `Q01-before,pilot`)로 대상을, `CODEYE_PILOT_REVIEW_PACK`으로 검토 팩을 고른다(기본 `review-r1`). 보관된 결과는 `python3 scripts/regression_pilot.py --audit-results "$CODEYE_PILOT_RESULTS"`로 다시 대조한다. 이 대조는 위치·줄 범위·blob SHA의 참조 검사이며 주장이 옳다는 보증이 아니다. Git 시험에 기록된 commit 객체가 로컬에 있어야 한다.
 
@@ -477,7 +498,17 @@ python3 fixtures/regression/corpus.py --check                       # 회귀 집
 python3 -m unittest discover -s fixtures/cleanup -p 'test_*.py' -v  # 합성 결함 전후
 python3 -m unittest discover -s scripts -p test_model_budget_relay.py -v
 python3 -m unittest discover -s scripts -p test_quality_eval.py -v
+python3 -m unittest discover -s scripts -p test_offline_pack.py -v  # 배포팩 재현·검증·웹 외부 주소(TC-240·241)
 ```
+
+배포팩 전체 경로(TC-245, Linux, 수동):
+
+```sh
+python3 scripts/offline_pack.py build
+python3 scripts/offline_smoke.py --pack .codeye/pack/codeye-VERSION-linux-amd64.tar.gz --postgres-bin-dir DIR
+```
+
+필요: `unshare`(비특권 user namespace), `strace`, `ip`, `openssl`, `git`, node와 npm, go와 그 모듈 캐시의 `github.com/google/uuid@v1.6.0`·`github.com/spf13/pflag@v1.0.6`(미러 내용을 이 캐시에서 복사한다), PostgreSQL 프로그램. OpenCode·pnpm·yarn·uv가 있으면 그 CA 확인도 한다. 이 머신의 결과는 [변경 이력](../CHANGELOG.md)에 있다. 모델 호출·외부 다운로드가 없다. `test_postgres.py`에 넣지 않았다.
 
 ### CI가 실행하는 것
 
@@ -485,10 +516,10 @@ python3 -m unittest discover -s scripts -p test_quality_eval.py -v
 
 | 작업 | 실행 내용 |
 |---|---|
-| Linux / PostgreSQL / contracts (ubuntu-24.04) | Go 1.27.4·Python 3.14.4·Node 24.18.0. 웹 빌드, Playwright Chromium 설치, `gofmt`·`go vet`, `scripts/test_postgres.py --nodes --web --scheduler --personal`, scripts 단위 시험, `validate_bundle.py`, cleanup fixture 시험, `fixtures/regression/corpus.py --check`, CLI 빌드 |
-| Linux / several nodes on one host (ubuntu-24.04) | `scripts/test_postgres.py --smokes-only --multinode`(TC-231~235). 개발 호스트에서 약 2분이라 Linux 작업의 25분 예산과 나누어 따로 돈다. 러너에는 ruff가 없어 "go 없는 노드"를 `--advertise-without-baseline`으로 띄운다. 호스팅 러너의 소요 시간은 아직 측정하지 않았다 |
+| Linux / PostgreSQL / contracts (ubuntu-24.04) | Go 1.27.4·Python 3.14.4·Node 24.18.0. 웹 빌드, Playwright Chromium 설치, `gofmt`·`go vet`, `scripts/test_postgres.py --nodes --web --scheduler --personal`, scripts 단위 시험(배포팩 `test_offline_pack.py` 포함), `validate_bundle.py`, cleanup fixture 시험, `fixtures/regression/corpus.py --check`, CLI 빌드 |
+| Linux / several nodes on one host (ubuntu-24.04) | `scripts/test_postgres.py --smokes-only --multinode`(TC-250~254). 개발 호스트에서 약 2분이라 Linux 작업의 25분 예산과 나누어 따로 돈다. 러너에는 ruff가 없어 "go 없는 노드"를 `--advertise-without-baseline`으로 띄운다. IPv6 loopback이 없으면 IPv4 loopback(`127.0.0.1`·`127.0.0.2`)으로 바꿔 실행한다. 호스팅 러너에서는 아직 실행하지 않아 소요 시간을 모른다 |
 | Windows / Go unit tests (windows-2025) | `go test -count=1 ./...`, `go vet`, CLI 빌드만. DB 통합·smoke·실도구 시험은 없다 |
-| Web / tests and build | `npm ci`, `npm test`, `npm run build` |
+| Web / tests and build | `npm ci`, `npm test`, `npm run build`, 빌드한 화면의 외부 주소 검사(`offline_pack.py check-web web/dist`) |
 
 CI 러너에는 go vet 말고 분석 도구가 없어 실도구 시험은 skip되고 재생 시험만 돈다. Windows CI의 단위 시험은 Windows 11의 NativeExecutor·DB·전체 플랫폼 수용 시험을 대신하지 않는다.
 

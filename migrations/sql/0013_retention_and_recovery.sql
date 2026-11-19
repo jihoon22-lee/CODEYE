@@ -1,6 +1,6 @@
 -- CODEYE: 원시 산출물 보존 정리 표시와 운영자의 recovery 확인.
 --
--- 0001~0011과 같은 규칙: BEGIN/COMMIT 없음, 비한정 이름(current_schema), 외래키는 ON DELETE RESTRICT,
+-- 0001~0012와 같은 규칙: BEGIN/COMMIT 없음, 비한정 이름(current_schema), 외래키는 ON DELETE RESTRICT,
 -- 트리거는 NEW/OLD/TG_*만 사용한다. 기존 행은 바꾸지 않는다.
 
 -- ---------------------------------------------------------------------------

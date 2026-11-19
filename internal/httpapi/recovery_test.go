@@ -8,7 +8,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// TC-227 over HTTP: the confirmation must be stated in the body; only a
+// TC-246 over HTTP: the confirmation must be stated in the body; only a
 // recovery_required run is accepted; the answer names the run that runs
 // again and the attempt whose cleanup was confirmed.
 func TestRecoverRunNeedsTheStatedConfirmation(t *testing.T) {

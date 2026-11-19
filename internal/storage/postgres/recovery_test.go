@@ -24,7 +24,7 @@ func (e *nodeEnv) expiredOnNode(n testNode, key string) (Run, Ownership) {
 	return r, o
 }
 
-// TC-227: the operator path for a recovery_required run. Only that state is
+// TC-246: the operator path for a recovery_required run. Only that state is
 // accepted; a non-member cannot; the confirmation releases the attempt and
 // its reservation, fails the run with reason operator_confirmed and writes
 // run.recovery_confirmed with the actor, then queues the work again (on the
@@ -85,7 +85,7 @@ func TestConfirmRecoveryReleasesAndRequeues(t *testing.T) {
 	}
 }
 
-// TC-228: a node that reports snapshot_unavailable for a pinned retry no longer
+// TC-247: a node that reports snapshot_unavailable for a pinned retry no longer
 // holds the snapshot: the next retry acquires anew instead of returning to
 // that node.
 func TestSnapshotUnavailableDropsTheLocation(t *testing.T) {

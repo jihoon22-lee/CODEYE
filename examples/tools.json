@@ -26,6 +26,14 @@
       "source": "PATH"
     },
     {
+      "name": "gh",
+      "status": "found",
+      "path": "/snap/bin/gh",
+      "version": "2.86.0",
+      "version_tested": true,
+      "source": "PATH"
+    },
+    {
       "name": "node",
       "status": "found",
       "path": "/home/user/.local/bin/node",

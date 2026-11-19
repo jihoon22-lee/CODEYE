@@ -140,7 +140,7 @@ func (p *Publisher) PublishRun(ctx context.Context, runID string) (Outcome, erro
 		Snapshot: report.SnapshotFacts{ID: pub.Snapshot.ID, ManifestDigest: *pub.Snapshot.ManifestDigest, Consistency: pub.Snapshot.Consistency, SourceSHA: pub.Snapshot.SourceSHA},
 		Attempt: report.AttemptFacts{ID: a.ID, Number: a.Number, Epoch: a.Epoch, Cleanup: a.Cleanup, Reason: a.CompletionReason,
 			CompletionStatus: "not_recorded"},
-		SourceManifest: src, Bodies: map[string][]byte{}}
+		SourceManifest: src, Bodies: map[string][]byte{}, PullRequest: pub.PullRequest}
 	if a.CompletionStatus != nil {
 		in.Attempt.CompletionStatus = *a.CompletionStatus
 	}

@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// TC-229: while an agent holds its state lock, a running attempt may work
+// TC-248: while an agent holds its state lock, a running attempt may work
 // inside an old snapshot copy, so cleanup keeps every snapshot copy (and
 // says so) but still removes a finished workspace.
 func TestCleanupKeepsSnapshotsWhileTheAgentRuns(t *testing.T) {

@@ -98,7 +98,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
 	rule := s.h.secondary()
-	plan := planSlices(s.j.Snapshot.Manifest, s.j.Scope, rule)
+	plan := planSlicesFor(s.j.Snapshot.Manifest, s.j.Scope, rule, changedPaths(s.j))
 	offered, up := s.overviewOffered()
 	sent := map[string]bool{}
 	for _, p := range offered {
@@ -141,7 +141,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		if sent[f.Path] {
 			sf.State = record.FileCoveredByOverview
 		}
-		sf.Class, sf.Rank, sf.Secondary, sf.Observations = f.Class, f.Rank, f.Secondary, f.Observations
+		sf.Class, sf.Rank, sf.Secondary, sf.Observations, sf.PullRequest = f.Class, f.Rank, f.Secondary, f.Observations, f.Change
 		if f.Observations > 0 {
 			sf.Severity = record.SeverityNames[f.Severity]
 		}
@@ -152,7 +152,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		Budget: record.ScopeBudget{MaxCalls: s.h.maxCalls(), MaxRequestBytes: PromptBudget, WholeRunMaxCalls: record.WholeRunMaxCalls, SliceReserveCalls: record.SliceReserveCalls,
 			CallsBeforeSlices: min(used, record.WholeRunMaxCalls), Admission: record.AdmissionSequentialReserve},
 		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: 50, MaxSlices: MaxSlices, Slots: plan.Slots},
-		Priority: record.ScopePriority{Order: record.PriorityOrder, Secondary: rule},
+		Priority: record.ScopePriority{Order: priorityOrder(s.j), Secondary: rule},
 		Upstream: []record.Upstream{up}, Modules: []record.ScopeModule{}, Overview: record.ScopeOverview{Files: []record.ScopeFile{}, Offered: nonNilList(offered)},
 		Slices: []record.ScopeSlice{}, Excluded: []record.ScopeFile{}, Limitations: s.screenLimitation([]string{})}
 	secondary := map[string]int{}
@@ -203,7 +203,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 			continue
 		}
 		inv, ver := sl.TaskKeys()
-		out := record.ScopeSlice{Key: sl.Key, InvestigateTask: inv, VerifyTask: ver, Class: sl.Class, Rank: sl.Rank, Modules: sl.Modules, Files: []record.ScopeFile{}}
+		out := record.ScopeSlice{Key: sl.Key, InvestigateTask: inv, VerifyTask: ver, Class: sl.Class, Rank: sl.Rank, PullRequest: sl.Change, Modules: sl.Modules, Files: []record.ScopeFile{}}
 		for _, f := range sl.Files {
 			out.Files = append(out.Files, inspected[f.Path])
 		}
@@ -432,4 +432,22 @@ func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 		remain -= record.JSONLen(x.Text)
 	}
 	return out, addLim(nil, lims...), nil
+}
+
+// changedPaths are the files a pull-request run changes that exist at its
+// head commit (sorted), nil for any other run: the review takes them first
+// (planCodeGroupsFor).
+func changedPaths(j analysis.Job) []string {
+	if j.PullRequest == nil {
+		return nil
+	}
+	return append([]string{}, j.PullRequest.Changed...)
+}
+
+// priorityOrder is the order the scope artifact records.
+func priorityOrder(j analysis.Job) string {
+	if j.PullRequest != nil {
+		return record.PriorityPullRequestFirst
+	}
+	return record.PriorityOrder
 }

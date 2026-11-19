@@ -86,6 +86,9 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	maxWorkers := fs.Int("max-workers", 2, "")
 	toolPath := fs.String("toolchain-path", "/usr/bin:/bin", "")
 	git := fs.String("git", "", "")
+	// A Git host token file (personal mode's GitHub token): workers read it
+	// for a fetch of its host; the token is never an argument.
+	gitCredential := fs.String("git-credential-file", "", "")
 	goExe := fs.String("go", "", "")
 	goModCache := fs.String("go-mod-cache", "", "")
 	// Dependency fetching (docs/ARCHITECTURE.md#의존성-준비): the operator's
@@ -108,6 +111,9 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		managerFlags[name] = fs.String(name, "", "")
 	}
 	pipIndex := fs.String("pip-index-url", "", "")
+	// Offline mode and the internal CA (docs/OPERATIONS.md#오프라인-모드).
+	offline := fs.Bool("offline", false, "")
+	caBundle := fs.String("ca-bundle", "", "")
 	// One flag per analyzer tool of this build (--staticcheck PATH) and per
 	// shared toolchain (--node PATH, docs/ANALYZERS.md#도구-경로). Both travel in the hello's
 	// analyzer_tools map; toolchain names are reserved there.
@@ -199,7 +205,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	cfg := agent.Config{
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
-		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
+		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GitCredentialFile: *gitCredential, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
 		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewPack: *reviewPack, ReviewMaxCalls: *reviewMaxCalls,
 		RepositoryCodeSourceRoots: codeApproved,
 		StorageQuota:              limits,
@@ -212,6 +218,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	cfg.DependencyTimeout, cfg.DependencyTotalTimeout, cfg.DependencyMaxBytes = *depTimeout, *depTotal, *depMax
 	cfg.NpmRegistry = *npmRegistry
 	cfg.PackageManagers, cfg.PipIndexURL = map[string]string{}, *pipIndex
+	cfg.Offline, cfg.CABundle = *offline, *caBundle
 	for name, v := range managerFlags {
 		if *v != "" {
 			cfg.PackageManagers[name] = *v
@@ -301,7 +308,7 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 		depCfg = deps.Config{CacheRoot: d.CacheRoot, AgentStateDir: d.AgentStateDir, GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, GoProxy: d.GoProxy,
 			GoSumDB: d.GoSumDB, GoPrivate: d.GoPrivate, GoNoProxy: d.GoNoProxy, GoNoSumDB: d.GoNoSumDB,
 			ModuleTimeout: time.Duration(d.ModuleTimeoutS) * time.Second, TotalTimeout: time.Duration(d.TotalTimeoutS) * time.Second,
-			MaxDownloadBytes: d.MaxDownloadBytes, CacheQuotaBytes: d.CacheQuotaBytes}
+			MaxDownloadBytes: d.MaxDownloadBytes, CacheQuotaBytes: d.CacheQuotaBytes, Offline: h.Offline, CABundle: h.CABundle}
 		// cargo and node are toolchains of the analyzers; the package
 		// managers travel in dependencies.package_managers.
 		pm := d.PackageManagers
@@ -330,7 +337,8 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 			if h.ModelTimeoutSeconds > 0 {
 				timeout = time.Duration(h.ModelTimeoutSeconds) * time.Second
 			}
-			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, CredentialFile: h.ModelCredentialFile, Timeout: timeout}
+			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, CredentialFile: h.ModelCredentialFile, Timeout: timeout,
+				Offline: h.Offline, CABundle: h.CABundle}
 			var reviewed analysis.Handler = review.Handler{Static: handler, Caller: caller}
 			if pack == review.PackRole {
 				reviewed = review.RoleHandler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}

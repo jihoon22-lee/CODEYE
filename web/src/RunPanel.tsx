@@ -10,6 +10,7 @@ import type { StreamMode } from './runStream';
 import { StageList } from './StageView';
 import { CopyText } from './CopyText';
 import { useRunPolling } from './useRunPolling';
+import { PullRequestPanel } from './PullRequestPanel';
 
 export function ErrorNote({ error }: { error: ErrorText }) {
   return <p role="alert" className="error">{error.message}{error.detail ? <> {error.detail}</> : null}{error.requestId ? <small> {t.errors.requestId(error.requestId)}</small> : null}</p>;
@@ -107,6 +108,7 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
       </p>
     </div>
     {status !== null && !isKnownRunStatus(status) && <p className="notice">{t.runs.statusUnknownNote} <code>{shorten(status, 40)}</code></p>}
+    {run?.pull_request && <PullRequestPanel api={api} runId={runId} pr={run.pull_request} hasReport={!!run.reportRevision} />}
     {run && <RunDetails run={run} confirmedAt={error !== null ? confirmedAt : null} />}
     {!run && <dl><dt>{t.runs.id}</dt><dd><code>{runId}</code></dd>{version !== null && <><dt>{t.runs.version}</dt><dd>{version}</dd></>}</dl>}
     {error !== null && <p role="alert" className="error">{stopped ? t.runs.pollStopped : t.runs.pollError} {describeError(error).message}</p>}

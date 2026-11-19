@@ -30,7 +30,7 @@ func makeDir(t *testing.T, dir string, files map[string]string, at time.Time) {
 	})
 }
 
-// TC-229 (node part): old snapshot copies and workspaces are listed with
+// TC-248 (node part): old snapshot copies and workspaces are listed with
 // their size; a recent one, a workspace of an attempt still open in the
 // journal, other names and links are not; retired agent directories next to
 // the agent directory are listed; removal works on read-only copies.

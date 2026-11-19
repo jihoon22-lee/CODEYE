@@ -78,7 +78,13 @@ func randomTree(r *rand.Rand) map[string]int64 {
 // checkPlan asserts the partition and cap invariants of a slice plan.
 func checkPlan(t *testing.T, m source.Manifest, scope domain.Scope, plan slicePlan) {
 	t.Helper()
-	g := planCodeGroups(m, scope, record.DefaultSecondary)
+	checkPlanFor(t, m, scope, nil, plan)
+}
+
+// checkPlanFor is checkPlan of a pull-request run's plan (changed paths).
+func checkPlanFor(t *testing.T, m source.Manifest, scope domain.Scope, changed []string, plan slicePlan) {
+	t.Helper()
+	g := planCodeGroupsFor(m, scope, record.DefaultSecondary, changed)
 	seen := map[string]string{}
 	add := func(where string, files []plannedFile) {
 		for _, f := range files {
@@ -128,12 +134,12 @@ func checkPlan(t *testing.T, m source.Manifest, scope domain.Scope, plan slicePl
 	// The overview prefix is codeCorpus's round-robin order with every file
 	// at its bound.
 	var rr []string
-	for _, order := range g.phases() {
+	for _, ph := range g.phases() {
 		for round := 0; ; round++ {
 			progressed := false
-			for _, k := range order {
-				if round < len(g.files[k]) {
-					rr = append(rr, g.files[k][round].Path)
+			for _, k := range ph.order {
+				if round < len(ph.files[k]) {
+					rr = append(rr, ph.files[k][round].Path)
 					progressed = true
 				}
 			}
@@ -150,8 +156,9 @@ func checkPlan(t *testing.T, m source.Manifest, scope domain.Scope, plan slicePl
 }
 
 // checkSlots asserts what every packing keeps: slot keys in order, the caps,
-// one class per slot, primary slots before secondary ones and, within a
-// class, slots in rank order.
+// one class and pull-request tier per slot, tiers in order and, within a
+// tier, primary slots before secondary ones and, within a class, slots in
+// rank order.
 func checkSlots(t *testing.T, list []reviewSlice) {
 	t.Helper()
 	for i, s := range list {
@@ -171,8 +178,20 @@ func checkSlots(t *testing.T, list []reviewSlice) {
 			len(modules) > record.MaxSliceModules || s.Rank != s.Files[0].Rank {
 			t.Fatalf("slice %+v (%d bytes)", s, bytes)
 		}
+		for _, f := range s.Files {
+			if f.Tier != s.Files[0].Tier {
+				t.Fatalf("slot %s mixes pull-request tiers", s.Key)
+			}
+		}
 		if i > 0 {
 			p := list[i-1]
+			if p.Files[0].Tier > s.Files[0].Tier {
+				t.Fatalf("slot %s (%q) after %s (%q)", s.Key, s.Change, p.Key, p.Change)
+			}
+			// Class and rank order hold within a pull-request tier.
+			if p.Files[0].Tier != s.Files[0].Tier {
+				continue
+			}
 			if p.Class == record.ClassSecondary && s.Class == record.ClassPrimary || p.Class == s.Class && record.RankIndex(p.Rank) > record.RankIndex(s.Rank) {
 				t.Fatalf("slot %s (%s %s) after %s (%s %s)", s.Key, s.Class, s.Rank, p.Key, p.Class, p.Rank)
 			}

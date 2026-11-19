@@ -299,8 +299,10 @@ func loadSide(ctx context.Context, tx pgx.Tx, run string, revision int) (Compari
 
 // defaultBaseline is the newest earlier run of the same project with the same
 // source variant (the run's project-revision source: Git repository+branch or
-// root+path), the same profile and scope, and a completed or partial report
-// written with fp2 fingerprints; its newest such revision. nil when none.
+// root+path), the same profile and scope, the same pull request (or none on
+// both sides: a branch run never compares with a pull-request run), and a
+// completed or partial report written with fp2 fingerprints; its newest such
+// revision. nil when none.
 func defaultBaseline(ctx context.Context, tx pgx.Tx, run string) (*BaselineRef, error) {
 	var ref BaselineRef
 	err := tx.QueryRow(ctx, `SELECT b.id::text, p.revision FROM runs c
@@ -310,6 +312,7 @@ func defaultBaseline(ctx context.Context, tx pgx.Tx, run string) (*BaselineRef, 
 		JOIN reports p ON p.run_id=b.id
 		WHERE c.id=$1 AND br.config->'source' = cr.config->'source'
 		  AND b.request->'profile' = c.request->'profile' AND b.request->'scope' = c.request->'scope'
+		  AND (b.pull_request->'number') IS NOT DISTINCT FROM (c.pull_request->'number')
 		  AND p.status IN ('completed','partial') AND p.builder_version ~ '^[0-9]{1,6}$' AND p.builder_version::int >= $2
 		ORDER BY b.created_at DESC, b.id DESC, p.revision DESC LIMIT 1`, run, FingerprintBuilderSince).Scan(&ref.RunID, &ref.Revision)
 	if errors.Is(err, pgx.ErrNoRows) {

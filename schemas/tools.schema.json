@@ -48,8 +48,8 @@
     },
     "tools": {
       "type": "array",
-      "minItems": 23,
-      "maxItems": 23,
+      "minItems": 24,
+      "maxItems": 24,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -63,6 +63,7 @@
             "enum": [
               "go",
               "git",
+              "gh",
               "node",
               "opencode",
               "staticcheck",

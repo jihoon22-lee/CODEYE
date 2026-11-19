@@ -104,7 +104,7 @@
 1. **입력은 하나.** `codeye up`과 첫 화면은 절대 경로나 공개 Git 주소 하나를 받는다. 화면의 입력란은 `/`로 시작하면 폴더, 그 밖에는 저장소 주소로 읽고(`https://`가 없으면 붙인다) `…/tree/BRANCH`의 브랜치를 쓴다. 등록 뒤 바로 run을 요청하고 그 실행 화면으로 간다. 진행 중인 run이 있으면 그것을 연다. 같은 폴더·저장소(대소문자, 끝의 `/`·`.git` 무시)는 같은 프로젝트다(`POST /projects`가 200). source root를 고르는 양식은 접어 둔다.
 2. **홈이 기본 root.** 화면에서 경로를 받으려면 controller가 그 경로를 허가된 root에 대응시켜야 한다. 그래서 개인 모드는 홈 디렉터리를 설정에 쓰지 않는 root `home`으로 둔다. 다른 곳은 지금처럼 터미널의 `up`이 root로 더한다. 화면이 root를 만들게 하지 않은 것은 root 추가가 에이전트 재등록(drain)을 부르기 때문이다. 홈 root는 상태 디렉터리를 품으므로 (a) 설정 규칙을 "root가 `state_dir` 안이면 안 된다"로 줄이고, (b) 소스 확보의 data root 조건을 "승인된 root 전체 밖"에서 "확보하는 프로젝트 폴더 밖이고 그것을 품지 않음"으로, 실행기의 보호 경로를 root에서 프로젝트 폴더로 바꿨다. 대신 (c) 상태·백업 디렉터리를 품거나 그 안에 있는 프로젝트 폴더를 controller가 등록 때(어느 형식이든, symlink를 푼 뒤 `FOLDER_HOLDS_CODEYE_DATA`) 거절하고, 에이전트가 소스 확보 전에(`--protected-dir`, `source_holds_codeye_data`) 다시 거절한다. 등록을 우회한 프로젝트도 데이터 폴더를 읽지 못하게 하기 위해 두 곳에 둔다.
 3. **기본 브랜치.** Git 브랜치는 선택이다. 비어 있으면 확보할 때마다 `git ls-remote --symref … HEAD`로 정하고 manifest의 `source_branch`에 남긴다. 등록 때 정해 저장하지 않은 것은 등록이 네트워크에 접근하지 않는 규칙(서버는 선언만 검사)을 지키고, 기본 브랜치가 바뀐 저장소를 따라가기 위해서다. 비교 기준은 프로젝트 소스 선언이 같으면 같다.
-4. **공개 저장소만.** credential을 보내지 않는다. 인증을 요구하는 응답(`could not read Username`, `Repository not found`, 401/403 등)은 `source_auth_required`, 연결 실패는 `source_unreachable`로 나눠 화면이 이유를 말하게 한다. GitHub는 없는 저장소와 비공개 저장소를 구별해 주지 않으므로 두 경우가 같은 사유다.
+4. **공개 저장소만(그 뒤 A46에서 github.com token을 더했다).** credential을 보내지 않는다. 인증을 요구하는 응답(`could not read Username`, `Repository not found`, 401/403 등)은 `source_auth_required`, 연결 실패는 `source_unreachable`로 나눠 화면이 이유를 말하게 한다. GitHub는 없는 저장소와 비공개 저장소를 구별해 주지 않으므로 두 경우가 같은 사유다.
 5. **프로젝트별 분석 선택.** `analysis = {send_source_to_model, run_build_scripts}`를 프로젝트 설정 JSON에 둔다(설정 revision이 이미 있으므로 migration이 없다). claim이 run의 고정된 revision에서 읽어 job에 싣고, `--project-analysis-policy`로 뜬 노드(개인 모드)는 로컬·Git 모두 그 선택만 따른다. A39 4의 "모든 로컬 root에 모델 허가"와 root의 `model_review`·`repository_code`를 대신한다. 서버 모드 노드는 바뀌지 않는다(운영자의 root별 허가). 기본값은 소스 종류로 정한다. 로컬 폴더는 둘 다 켬이다. 사용자 자신의 코드이고, 꺼 두면 Rust·C/C++의 기준 분석이 빠진 보고서가 먼저 나온다. Git 저장소는 모델 전송 켬, 빌드 스크립트 끔이다. 남의 저장소 코드를 사용자 권한으로 격리 없이 실행하는 일은 사용자가 그 저장소를 보고 고르게 한다. 모델 전송은 사용자가 키를 둔 공급자 하나로만 가므로 켠다. 빠진 분석은 보고서의 "더 나은 결과를 얻으려면"에서 "켜고 다시 시도"로 바로 바꾼다(`PUT /projects/{id}/analysis`, 새 revision과 `project.revised` 감사).
 6. **다시 시도.** `POST /runs/{id}/retry`는 고정 입력을 노드가 갖고 있고 정리가 확인된 failed·cancelled run을 같은 run으로(기존 `Retry`), 그 밖의 끝난 run은 저장된 요청으로 새 run을 만든다(키 `retry:<run>:<version>`이라 같은 요청의 반복은 같은 run). 프로젝트 설정이 run의 revision 뒤에 바뀌었으면 새 선택을 따르도록 새 run이다. `recovery_required`는 다시 시도하지 않는다(정리를 확인할 경로가 먼저 필요하다. 열린 항목).
 7. **설치 정보와 안내.** `GET /setup`이 모델(키 없이 ID와 마지막 확인 결과), git과 호스트, 읽을 수 있는 폴더, 찾은 도구(`tools.json`)를 준다. 노드마다 다른 정보라 서버 모드는 null이다. 도구 화면은 진단 파일 업로드 대신 이것을 보인다. "더 나은 결과를 얻으려면"은 보고서의 구조화된 공백(`gaps`의 code·detail·subject)에서만 만든다. 모델 서술을 쓰지 않는다.
@@ -115,27 +115,27 @@
 
 ## 여러 노드와 운영 수용
 
-**A46 — 사람의 정리 확인으로 `recovery_required`를 끝낸다.** (기록 2026-11-20) REQ-021/022, NFR-003과 TC-227·TC-228에 대해 다음을 확정한다. A32 6과 A40 6의 열린 항목을 닫는다.
+**A48 — 사람의 정리 확인으로 `recovery_required`를 끝낸다.** (기록 2026-11-20) REQ-021/022, NFR-003과 TC-246·TC-247에 대해 다음을 확정한다. A32 6과 A40 6의 열린 항목을 닫는다.
 
 1. **증거는 사람의 확인이다.** 노드가 정리를 확인하지 못한 attempt(노드 사망·철회·복원 fence, 확인할 수 없는 프로세스 그룹)는 시간이 지나도 깨끗한 것으로 바꾸지 않는다. `POST /runs/{id}/recover`(본문 `{"cleanup_confirmed": true}`만 받는다)와 `codeye run recover --id RUN --confirm-cleanup`이 "그 attempt의 프로세스가 노드에 남지 않았다"는 확인을 받는다. 확인이 없으면 API는 400, CLI는 종료 코드 2다. 한 트랜잭션이 attempt를 `released`·`confirmed`로 두고 예약을 풀고 남은 task를 닫고 run을 `failed`로 바꾼다(이벤트 `attempt.cleanup_confirmed`, 사유 `operator_confirmed`). 같은 트랜잭션에 `run.recovery_confirmed` 감사 행을 쓴다. 누가 언제 확인했는지가 증거다.
 2. **누가 확인하나.** 그 프로젝트를 실행할 수 있는 사용자(재시도와 같은 권한)와 운영자 CLI다. 개인 모드 사용자가 직접 정리할 수 없으면 쓸 수 없는 제품이 되므로 관리자 전용으로 두지 않았다. 웹은 확인 상자를 체크해야 단추가 켜진다.
 3. **확인 뒤 다시 실행.** 확인 뒤 기존 재시도 규칙(A40 6)으로 다시 넣는다. 고정 snapshot을 heartbeat가 신선한 노드가 갖고 있으면 같은 run, 아니면 같은 요청의 새 run이다. 운영자 CLI는 요청자 대신 넣는다(감사 행위자 `system`). 요청자가 권한을 잃었으면 확인은 남고 run은 보통의 `failed`이며 출력이 `not_queued`와 사유를 적는다.
 4. **재시도의 snapshot 보유.** 재시도가 snapshot을 "가진 노드"로 세는 것은 철회되지 않고 heartbeat가 신선한(`NodeStaleAfter`) 노드뿐이다. 죽은 노드에 묶인 같은 run은 영원히 대기하기 때문이다. 노드가 고정 snapshot을 읽지 못하고 `snapshot_unavailable`로 끝내면 그 노드의 위치 기록을 지운다.
 
-대안으로 일정 시간 뒤 자동 해제, 노드 재등록 때 자동 해제를 검토했다. 둘 다 확인되지 않은 정리를 깨끗하다고 간주해 같은 작업이 두 번 실행될 수 있어 채택하지 않았다. migration 0012가 감사 action을 더한다. [실행](EXECUTION.md#장애-처리) · [API](API.md#정리-확인)
+대안으로 일정 시간 뒤 자동 해제, 노드 재등록 때 자동 해제를 검토했다. 둘 다 확인되지 않은 정리를 깨끗하다고 간주해 같은 작업이 두 번 실행될 수 있어 채택하지 않았다. migration 0013이 감사 action을 더한다. [실행](EXECUTION.md#장애-처리) · [API](API.md#정리-확인)
 
-**A47 — 보존 정리(retention).** (기록 2026-11-20) REQ-018, NFR-006/007과 TC-229에 대해 다음을 확정한다. A32 4의 "정리 정책은 후속"을 닫는다.
+**A49 — 보존 정리(retention).** (기록 2026-11-20) REQ-018, NFR-006/007과 TC-248에 대해 다음을 확정한다. A32 4의 "정리 정책은 후속"을 닫는다.
 
 1. **명시적 명령, 기본은 dry run.** `codeye cleanup --older-than 30d`가 지울 것을 보여 주고 `--apply`가 있을 때만 지운다. 자동·예약 정리는 없다. 기준은 1시간보다 짧을 수 없다.
 2. **지우는 것.** 끝난 run(`completed`·`partial`·`failed`·`cancelled`)의 오래된 원시 산출물 역할 `stdout`·`stderr`·`raw_output`·`other`의 내용, 노드의 오래된 snapshot 사본(`acquire-*`)·작업 사본(`ws-*`, 열린 journal attempt 것은 제외)·은퇴한 에이전트 디렉터리(`agent.retired-*`)다. 보고서, 관찰(`observations`), manifest, DB 행은 남긴다. 보고서는 저장된 바이트로 그대로 열린다.
-3. **지운 사실을 남긴다.** 행을 지우지 않고 `artifacts.content_removed_at`(한 번만 설정, migration 0012)을 적는다. 한 건의 `storage.retention_applied` 감사 행이 개수·바이트·기준 일수를 담는다. 실행 화면과 `GET /runs/{id}`의 `raw_evidence_removed_at`이 "원시 증거가 삭제됨"을 알린다. 파일은 DB가 커밋된 뒤, 남은 행이 참조하지 않을 때만 지운다. 백업과 산출물 상한은 지운 내용을 세지 않는다.
+3. **지운 사실을 남긴다.** 행을 지우지 않고 `artifacts.content_removed_at`(한 번만 설정, migration 0013)을 적는다. 한 건의 `storage.retention_applied` 감사 행이 개수·바이트·기준 일수를 담는다. 실행 화면과 `GET /runs/{id}`의 `raw_evidence_removed_at`이 "원시 증거가 삭제됨"을 알린다. 파일은 DB가 커밋된 뒤, 남은 행이 참조하지 않을 때만 지운다. 백업과 산출물 상한은 지운 내용을 세지 않는다.
 4. **감사 기록은 지우지 않는다.** 감사 표는 append-only(TC-153)이고 정리 자체가 감사 대상이라 보존 정리 대상에서 뺐다.
 
 대안인 상한 도달 때 오래된 것부터 자동 삭제는 사용자가 모르는 사이 근거가 사라지므로 채택하지 않았다. [운영](OPERATIONS.md#보존-정리) · [보안](SECURITY.md#보관과-삭제)
 
-**A48 — 로그아웃 뒤 지속 실행은 systemd 사용자 unit.** (기록 2026-11-20) NFR-003과 TC-230에 대해 정한다. A32 1의 "systemd 등록은 하지 않았다"를 Linux에서 바꾼다. `codeye service install`이 `~/.config/systemd/user/<name>.service`에 `codeye start`·`codeye stop`을 실행하는 oneshot unit(`RemainAfterExit=yes`, 절대 경로, 명시적 PATH, 정지 시간 = drain + 취소 + 60초)을 쓰고 `systemctl --user enable`을 실행한다. 바로 시작하지 않는 것은 이미 `codeye up`으로 띄운 설치를 unit 밖에서 한 번 더 띄우지 않기 위해서다(시작은 `systemctl --user start`). `uninstall`은 설정 없이 동작하고 CODEYE가 쓴 unit만 지운다. `up --no-open` 대신 `start`를 쓰는 것은 로그인 링크가 journal에 남지 않게 하기 위해서다. 로그아웃 뒤 유지는 `loginctl enable-linger`가 필요하며 CODEYE가 바꾸지 않는다. root 권한의 시스템 unit과 Windows Service는 만들지 않는다. 재부팅·로그아웃 뒤 실제 유지는 시험하지 않았다. [운영](OPERATIONS.md#사용자-서비스)
+**A50 — 로그아웃 뒤 지속 실행은 systemd 사용자 unit.** (기록 2026-11-20) NFR-003과 TC-249에 대해 정한다. A32 1의 "systemd 등록은 하지 않았다"를 Linux에서 바꾼다. `codeye service install`이 `~/.config/systemd/user/<name>.service`에 `codeye start`·`codeye stop`을 실행하는 oneshot unit(`RemainAfterExit=yes`, 절대 경로, 명시적 PATH, 정지 시간 = drain + 취소 + 60초)을 쓰고 `systemctl --user enable`을 실행한다. 바로 시작하지 않는 것은 이미 `codeye up`으로 띄운 설치를 unit 밖에서 한 번 더 띄우지 않기 위해서다(시작은 `systemctl --user start`). `uninstall`은 설정 없이 동작하고 CODEYE가 쓴 unit만 지운다. `up --no-open` 대신 `start`를 쓰는 것은 로그인 링크가 journal에 남지 않게 하기 위해서다. 로그아웃 뒤 유지는 `loginctl enable-linger`가 필요하며 CODEYE가 바꾸지 않는다. root 권한의 시스템 unit과 Windows Service는 만들지 않는다. 재부팅·로그아웃 뒤 실제 유지는 시험하지 않았다. [운영](OPERATIONS.md#사용자-서비스)
 
-**A49 — 여러 노드 운영의 범위.** (기록 2026-11-20) REQ-018/019/021/022, NFR-002/003과 TC-21·TC-22·TC-231~235에 대해 다음을 확정한다.
+**A51 — 여러 노드 운영의 범위.** (기록 2026-11-20) REQ-018/019/021/022, NFR-002/003과 TC-21·TC-22·TC-250~254에 대해 다음을 확정한다.
 
 1. **도구는 배정 기준이 아니다.** 배정은 `analysis:<profile>`, `source:local:<root>`(등록 token의 root 허가 포함), `source:git:<host>`, 고정 snapshot 위치만 본다. 노드는 기준 분석기가 하나라도 쓸 수 있을 때만 `analysis:deep-review`를 알린다(`--advertise-without-baseline` 예외). 그래서 도구가 하나도 없는 노드는 일을 받지 않지만, Python 도구만 있는 노드는 Go 프로젝트를 받아 Go 작업을 `unsupported`(`tool_not_configured`)로 끝낸다. 언어·도구 단위 배정은 능력 이름과 claim 조건을 넓혀야 하고, 한 run이 여러 언어를 가지므로 "할 수 있는 노드"의 정의가 정해지지 않았다. 운영자는 같은 root를 맡는 노드에 같은 도구를 둔다. 빠진 도구는 보고서와 비교에서 성공으로 보이지 않는다.
 2. **drain 중인 노드는 증감 계획에서 빠진다.** drain 중인 에이전트는 heartbeat에서 `worker_scaling`을 static으로, `analysis:*` 능력을 비워 보낸다. 고치기 전에는 controller가 drain 중인 노드에 `start_worker`를 계획했고, 노드가 적용하지 않은 그 시작이 `StartTimeout`(90초) 동안 pool 예산을 쥐었다. 대기 run의 사유는 다른 노드가 없으면 `no_capable_node`다.
@@ -284,6 +284,18 @@
 
 [모델 검토](REVIEW.md#검토-우선순위) · [보고서](REPORT.md#내보내기-상세도)
 
+**A46 — 개인 모드의 GitHub token, pull request 분석, 결과 댓글.** (기록 2026-11-20) REQ-024/025, NFR-006과 TC-227~236에 대해 다음을 확정한다. 소유자는 GitHub App을 등록하지 않고 자기 컴퓨터에서 비공개 저장소와 pull request를 분석하고 결과를 pull request에 남기려 한다.
+
+1. **설정 없는 token.** 개인 모드의 `codeye up`이 `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token --hostname github.com` 순으로 token을 찾고 `GET /user`로 확인해 `<state>/secrets/github.json`(0600)에 둔다. 모델 키(A39 3)와 같은 자리와 규칙이다. 설정 파일·argv·로그·보고서·감사 detail·DB에는 넣지 않고, `up` 출력과 `GET /setup`은 있음·계정·출처·이유만 보인다. 이미 로그인한 gh를 그대로 쓰면 사용자가 할 일이 없고, App 등록은 한 사람의 컴퓨터에 과하다. `"github": {"enabled": false}`가 발견을 끈다. 서버 모드는 token을 찾지 않는다(아래 6).
+2. **token은 github.com과 두 경로에만.** 워커는 파일 경로만 받고 fetch마다 읽어 github.com 요청의 HTTP header로만 보낸다. header는 git 환경변수(`GIT_CONFIG_COUNT`의 `http.https://github.com/.extraHeader`)로 가서 URL·argv·작업 사본에 남지 않는다. credential helper를 여는 안은 사용자 설정의 helper를 부르게 되고 A16의 "사용자 Git 설정 차단"과 맞지 않아 택하지 않았다. API client는 redirect를 따르지 않고 다른 origin의 page 주소를 쓰지 않는다. 분석기와 모델은 token을 받지 않는다.
+3. **pull request는 run에 한 번 고정한다.** controller가 run을 넣을 때 GitHub API로 base/head SHA, head 저장소, 변경 파일·상태·변경 줄을 읽어 `runs.pull_request`(migration 12, jsonb, 바꾸지 않음)에 쓴다. 노드는 `refs/pull/N/head`를 받아 고정 SHA를 확인한다. 노드가 GitHub API를 부르게 하면 token이 API용으로도 노드에 가고 run의 사실이 attempt마다 달라질 수 있다. idempotency digest는 보낸 body만 다룬다(같은 키의 반복이 GitHub 상태에 따라 충돌로 바뀌지 않게).
+4. **변경 파일이 먼저, 전체를 같은 깊이로 봤다고 하지 않는다.** 검토 순서에서 tier(변경 → 같은 폴더 → 나머지)를 A45의 분류·순위보다 앞에 둔다. 그래서 pull request가 fixtures의 파일만 바꿨어도 그 파일이 먼저다. pull request가 아닌 run은 tier가 없고 계획이 이전과 같다(slice 계획 시험이 확인한다. 회귀 집합의 요청 dump 비교는 이 변경에서 실행하지 않았다). 보고서 builder 9는 `pull_request` 절에서 발견·진단을 변경된 줄·변경 파일·기존 코드로 나누고, patch가 없는 파일은 파일 단위로 센다고 적는다. 요약은 "저장소의 나머지는 같은 깊이로 검토하지 않았을 수 있다"고 쓴다.
+5. **결과 댓글은 선택, 하나, 되돌아가지 않음.** 기본 끔이고 프로젝트마다 기억한다(`analysis.comment_on_pull_request`). 보고서 게시 transaction이 outbox 행을 만들고 controller가 lease로 게시한다. 댓글은 token 계정이 쓴 marker 댓글 하나를 고친다(다른 사람이 붙인 marker는 무시). publication version은 run 생성 시각(마이크로초)이고, 같은 pull request의 더 늦은 run이 게시했거나 GitHub의 댓글 version이 더 크면 `superseded`다. 실패는 run의 댓글 상태로만 남고 분석 상태를 바꾸지 않는다. 본문은 구조화된 보고서에서만 만들고 코드·도구 원문·증거·비밀정보를 싣지 않으며, `&`를 먼저 escape하고 mention·issue 참조·자동 링크를 끊는다. dry run(`--dry-run-comment`, 화면의 미리 보기)은 같은 렌더러로 GitHub에 쓰지 않는다.
+6. **서버 모드는 그대로.** 여러 사람이 쓰는 설치의 계획은 GitHub App과 webhook이다. 한 사람의 token을 서버가 모든 사용자에게 쓰게 하면 권한 경계가 그 사람의 권한이 된다. 서버 모드의 pull request 요청은 `PULL_REQUEST_UNSUPPORTED`다. pull request를 주기적으로 확인하는 polling은 만들지 않았다. 새 push는 사용자가 다시 요청하고, 그 run의 비교 기준은 같은 pull request의 이전 run이다.
+7. **fork의 pull request.** 개인 모드에서는 사용자가 주소를 직접 주므로 외부 fork도 같은 정책으로 분석한다. 저장소 코드를 실행하는 분석은 Git 프로젝트에서 기본 끔(A40 5)이라 자동으로 실행되지 않는다. App의 자동 이벤트에 대한 "fork는 Native 실행을 자동 승인하지 않음"(로드맵)은 그대로다.
+
+[GitHub 연결](GITHUB.md) · [보고서](REPORT.md#pull-request-보고서) · [모델 검토](REVIEW.md#검토-우선순위) · [보안](SECURITY.md)
+
 
 **A42 — 의존성 받기.** (기록 2026-11-19) REQ-004/014/015, NFR-006과 TC-194~199에 대해 다음을 확정한다.
 
@@ -426,6 +438,22 @@
 8. **migration 0010.** 기존 사용자는 이름·비밀번호 없는 비관리자 로그인 링크 사용자로 남는다(backfill 없음). 사용자 이름은 한 번 정하면 바꿀 수 없다(감사 기록과 제한 키의 의미를 고정).
 
 [보안](SECURITY.md) · [API](API.md)
+
+## 폐쇄망 배포
+
+**A47 — 폐쇄망 배포팩과 오프라인 모드.** (기록 2026-11-20) REQ-030, NFR-001/006과 TC-30, TC-240~245에 대해 다음을 확정한다.
+
+1. **묶음은 저장소 스크립트다.** `scripts/offline_pack.py`가 만든다. `codeye pack` 명령은 두지 않는다. 묶음은 저장소·Go·Node가 있는 연결된 머신에서만 만들 수 있고, 설치 머신의 실행 파일이 자기를 다시 묶을 일이 없다. 명령으로 두면 실행 파일에 빌드 절차와 웹 빌드 호출이 들어간다. 설치 프로그램은 두지 않는다. 풀어 놓은 디렉터리가 설치이고 `codeye`는 원래 옆의 `web/dist`를 찾는다.
+2. **migration과 지침 팩은 실행 파일 안에.** 이미 embed되어 있으므로 파일로 따로 싣지 않는다. 실행 파일과 어긋날 사본을 만들지 않기 위해서다. 대신 MANIFEST의 `embedded`에 이름과 hash를 적어 무엇이 들어 있는지 밝힌다. 웹·문서·설정 예시는 파일이다.
+3. **정적 링크를 검사한다.** `CGO_ENABLED=0`으로 만들고 ELF에 interpreter·dynamic section이 있으면 묶지 않는다. 그래서 실행 파일은 대상의 glibc와 무관하다(빈 chroot에서 실행을 확인). RHEL 8.10 실기 확인은 남는다. 분석 도구·PostgreSQL·OpenCode의 호환은 이것과 별개다.
+4. **재현은 싼 만큼.** 항목 순서·시각·소유자·gzip 헤더를 고정해 같은 commit·같은 toolchain이면 같은 바이트가 되게 했다. Go·Node 버전과 `node_modules`까지 고정하는 빌드 환경은 만들지 않는다. 서명은 없고 sha256만 준다. 사내 서명 체계에 맞출 일이다.
+5. **오프라인은 기본값만 바꾼다.** `offline: true`는 새 정책 엔진이 아니라, 운영자가 적지 않은 곳(공개 proxy·레지스트리·index·crates.io·github.com·공급자 공개 endpoint·`auth.json`·환경변수 키)을 기본값에서 빼는 스위치다. 운영자가 적은 미러·호스트·`base_url`은 그대로 쓴다. 빠진 곳은 시작하지 않은 작업(`skipped_policy`·`unsupported`)으로 보고서에 남는다(`offline_no_registry_configured`, `model_endpoint_not_configured`). 운영자 모듈 캐시만 읽은 Go 받기에서 캐시에 없는 모듈은 받기를 시도한 것이므로 `failed`이고 같은 사유이며, 그 모듈 이름이 `failed_items`에 남아 운영자가 캐시에 더할 것을 안다. Go는 운영자 모듈 캐시를 미러 없이 쓰는 길로 남기고, checksum DB를 정하지 않았으면 끈다(go.sum이 검증하고 go.sum에 없는 hash는 실패). OS 수준 차단은 하지 않는다(Native 실행, [보안](SECURITY.md#소스와-네트워크)).
+6. **OpenCode의 레지스트리 조회는 loopback으로.** OpenCode 1.19.5는 플러그인을 꺼도 시작할 때 npm 레지스트리를 묻는다. 끄는 설정이 없어 `npm_config_registry`를 loopback의 닫힌 포트로 둔다. 오프라인이 아닐 때도 같다. 조회가 실패해도 검토 호출이 끝까지 진행됨을 확인했다.
+7. **CA는 파일 하나, 변수 다섯.** 도구마다 CA 설정이 달라 같은 파일을 `SSL_CERT_FILE`·`NODE_EXTRA_CA_CERTS`·`GIT_SSL_CAINFO`·`PIP_CERT`·`CARGO_HTTP_CAINFO`로 준다. `SSL_CERT_FILE`이 시스템 CA를 대신하므로 합본을 요구한다. 시스템 CA를 CODEYE가 읽어 합치는 안은 OS마다 위치가 달라 채택하지 않았다. 검증을 끄는 설정은 두지 않는다. 에이전트는 시작할 때 파일에 인증서가 있는지 확인한다.
+8. **도구는 싣지 않는다.** 라이선스·크기·OS별 빌드가 도구마다 다르다. `codeye tools --checklist`가 없는 도구와 옮기는 방법을 보인다.
+9. **오프라인에서 GitHub은 꺼진다.** A46의 token 발견(환경변수·`gh auth token`)과 GitHub API(pull request 확인·댓글)는 공개 서비스로 가는 길이라 오프라인 모드에서는 실행하지 않는다. 저장된 token도 지운다. `git_hosts`에 github.com을 적은 경우에도 token을 보내지 않는다. 오프라인을 고른 설치가 그 사실을 모르고 github.com에 접속하지 않게, 켜는 길을 두지 않았다. 사내 Git 호스트(GHES 등)용 credential은 범위 밖이며 그 호스트는 인증 없이 읽을 수 있어야 한다. git fetch는 CA 변수와 GitHub header를 같은 프로세스 환경으로 함께 받는다(둘 다 argv·URL·작업 사본에 없음).
+
+[운영](OPERATIONS.md#폐쇄망-배포팩) · [보안](SECURITY.md#소스와-네트워크)
 
 ## 확인할 환경 정보
 

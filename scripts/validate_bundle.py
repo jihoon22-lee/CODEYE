@@ -81,7 +81,13 @@ def main() -> None:
     activity_validator.validate(activity)
     check_activity(activity, stage_order)
     validators["snapshot-manifest.schema.json"].validate(json_file(ROOT / "examples/snapshot-manifest.json"))
-    validators["snapshot-manifest.schema.json"].validate(json_file(ROOT / "examples/snapshot-manifest-git.json"))
+    git_manifest = json_file(ROOT / "examples/snapshot-manifest-git.json")
+    validators["snapshot-manifest.schema.json"].validate(git_manifest)
+    # A pull-request snapshot names its ref instead of a branch: exactly one of the two.
+    pull_manifest = {k: v for k, v in git_manifest.items() if k != "source_branch"} | {"source_ref": "refs/pull/7/head"}
+    validators["snapshot-manifest.schema.json"].validate(pull_manifest)
+    for bad in (pull_manifest | {"source_branch": "main"}, {k: v for k, v in pull_manifest.items() if k != "source_ref"}, pull_manifest | {"source_ref": "refs/heads/main"}):
+        ensure(not validators["snapshot-manifest.schema.json"].is_valid(bad), "snapshot manifest must have exactly one of source_branch and source_ref")
     plan = json_file(ROOT / "examples/plan.json")
     report = json_file(ROOT / "examples/report.json")
     analyzer = yaml_file(ROOT / "examples/analyzer-ruff.yaml")
@@ -124,6 +130,15 @@ def main() -> None:
            and unusable["coverage"]["ai_review"]["status"] == "performed"
            and not any(t["reason"] == "secret_screen_failed" for t in unusable["tasks"])
            and any(g["code"] == "model_input_not_screened" for g in unusable["gaps"]), "Unusable-screen report skipped review or lost its not-screened state")
+    pull_request = json_file(ROOT / "examples/report-pull-request.json")
+    validators["report.schema.json"].validate(pull_request)
+    pr = pull_request["pull_request"]
+    ensure(pr["files_listed"] == pr["files_removed"] + pr["review"]["reviewable"]
+           and len(pr["items"]) == sum(pr[k]["changed_lines"] + pr[k]["changed_file"] for k in ("findings", "observations"))
+           and all(i["scope"] in ("changed_lines", "changed_file") for i in pr["items"]), "Pull-request report counts are inconsistent")
+    bad = copy.deepcopy(pull_request)
+    bad["pull_request"]["items"][0]["scope"] = "elsewhere"
+    expect_invalid("pull-request item outside the changes", validators["report.schema.json"].validate, bad)
     published = json_file(ROOT / "examples/report-go-vet.json")
     validators["report.schema.json"].validate(published)
     check_report(published, ROOT / "fixtures/go-vet")

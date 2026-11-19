@@ -41,22 +41,32 @@ def log(message):
 
 
 class Proxy:
-    """127.0.0.1:port → [::1]:port for one node's controller URL.
+    """listen:port → upstream:port for one node's controller URL.
+
+    With IPv6 loopback the controller listens on [::1]:P and the proxy on
+    127.0.0.1:P; both are Host values the controller accepts. Without it the
+    controller listens on 127.0.0.1:P and the proxy on 127.0.0.2:P (all of
+    127/8 is loopback on Linux), and the proxy rewrites the request's
+    "Host: 127.0.0.2:" to the same-length "Host: 127.0.0.1:".
 
     cut() is a partition: new connections are accepted and held, open ones
     stop forwarding (requests hang until the client's own timeout).
     restore() closes everything cut and forwards again.
     """
 
-    def __init__(self, port):
-        self.port = port
+    def __init__(self, port, listen="127.0.0.1", upstream="::1"):
+        self.port, self.upstream = port, upstream
+        self.rewrite = None
+        if listen != "127.0.0.1":
+            self.rewrite = (f"Host: {listen}:".encode(), f"Host: {upstream}:".encode())
+            assert len(self.rewrite[0]) == len(self.rewrite[1])
         self.lock = threading.Lock()
         self.cut_now = False
         self.open = []
         self.poisoned = []
         self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.listener.bind(("127.0.0.1", port))
+        self.listener.bind((listen, port))
         self.listener.listen(64)
         threading.Thread(target=self._accept, daemon=True).start()
 
@@ -71,7 +81,7 @@ class Proxy:
                     self.poisoned.append([client])
                     continue
             try:
-                upstream = socket.create_connection(("::1", self.port), timeout=5)
+                upstream = socket.create_connection((self.upstream, self.port), timeout=5)
                 upstream.settimeout(None)
             except OSError:
                 client.close()
@@ -79,18 +89,42 @@ class Proxy:
             pair = [client, upstream]
             with self.lock:
                 self.open.append(pair)
-            for src, dst in ((client, upstream), (upstream, client)):
-                threading.Thread(target=self._pump, args=(pair, src, dst), daemon=True).start()
+            for src, dst, rewrite in ((client, upstream, self.rewrite), (upstream, client, None)):
+                threading.Thread(target=self._pump, args=(pair, src, dst, rewrite), daemon=True).start()
 
-    def _pump(self, pair, src, dst):
+    def _pump(self, pair, src, dst, rewrite):
+        # held: the end of the last chunk when it could be the start of a
+        # Host line split across reads; sent with the next chunk or after a
+        # short wait.
+        held = b""
         try:
             while True:
-                data = src.recv(65536)
-                if not data:
-                    break
+                if held:
+                    src.settimeout(0.2)
+                try:
+                    data = src.recv(65536)
+                except socket.timeout:
+                    data, flush = b"", True
+                else:
+                    flush = False
+                    if not data:
+                        if held:
+                            dst.sendall(held)
+                        break
+                finally:
+                    src.settimeout(None)
+                data = held + data
+                held = b""
+                if rewrite:
+                    data = data.replace(*rewrite)
+                    if not flush:
+                        for n in range(len(rewrite[0]) - 1, 0, -1):
+                            if data.endswith(rewrite[0][:n]):
+                                data, held = data[:-n], data[-n:]
+                                break
                 with self.lock:
                     dropped = self.cut_now or any(pair is p for p in self.poisoned)
-                if not dropped:
+                if not dropped and data:
                     dst.sendall(data)
         except OSError:
             pass
@@ -275,22 +309,43 @@ def scenarios(base, root, env):
     cli("pool", "set", "--name", "default", "--min-workers", "0", "--max-workers", "8",
         "--idle-timeout-seconds", "2", "--scale-up-cooldown-seconds", "0", "--scale-down-cooldown-seconds", "0")
 
-    # controller는 [::1]:P에서만 듣는다. 분할 대상 노드만 127.0.0.1:P(프록시)로 붙는다.
+    # controller는 [::1]:P에서만 듣고 분할 대상 노드만 127.0.0.1:P(프록시)로 붙는다.
+    # IPv6 loopback이 없으면(또는 CODEYE_TEST_MULTINODE_IPV4=1) controller는 127.0.0.1:P,
+    # 프록시는 127.0.0.2:P다(Proxy 설명).
+    ipv6 = os.environ.get("CODEYE_TEST_MULTINODE_IPV4") != "1" and socket.has_ipv6
+    port = None
     for _ in range(20):
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
-            port = sock.getsockname()[1]
+            candidate = sock.getsockname()[1]
         try:
-            with socket.socket(socket.AF_INET6) as sock6:
-                sock6.bind(("::1", port))
+            if ipv6:
+                with socket.socket(socket.AF_INET6) as sock6:
+                    sock6.bind(("::1", candidate))
+            else:
+                with socket.socket() as sock2:
+                    sock2.bind(("127.0.0.2", candidate))
+            port = candidate
             break
         except OSError:
+            if ipv6:
+                with socket.socket(socket.AF_INET6) as probe:
+                    try:
+                        probe.bind(("::1", 0))
+                    except OSError:
+                        ipv6 = False  # no IPv6 loopback on this host
             continue
-    origin = f"http://[::1]:{port}"
-    proxied = f"http://127.0.0.1:{port}"
+    if port is None:
+        raise AssertionError("no loopback port pair for the controller and the proxy")
+    if ipv6:
+        controller_host, proxy_host, origin = "::1", "127.0.0.1", f"http://[::1]:{port}"
+    else:
+        controller_host, proxy_host, origin = "127.0.0.1", "127.0.0.2", f"http://127.0.0.1:{port}"
+    log(f"loopback: controller {origin}, proxy {proxy_host}:{port}")
+    proxied = f"http://{proxy_host}:{port}"
     session = Session(origin)
     node_env = {key: env[key] for key in ("PATH", "LANG") if key in env}
-    serve_argv = [binary, "serve", "--listen", f"[::1]:{port}", "--artifact-dir", directory / "artifacts",
+    serve_argv = [binary, "serve", "--listen", origin.removeprefix("http://"), "--artifact-dir", directory / "artifacts",
                   "--reconcile-interval", "500ms"]
 
     def ready():
@@ -349,7 +404,7 @@ def scenarios(base, root, env):
             services.callback(cleanup)
             return child
 
-        proxy = Proxy(port)
+        proxy = Proxy(port, listen=proxy_host, upstream=controller_host)
         services.callback(proxy.close)
         controller = spawn(serve_argv, env, directory / "controller.log")
         children = [controller]

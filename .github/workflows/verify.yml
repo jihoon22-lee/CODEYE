@@ -80,6 +80,7 @@ jobs:
         run: |
           python -m unittest discover -s scripts -p test_model_budget_relay.py -v
           python -m unittest discover -s scripts -p test_quality_eval.py -v
+          python -m unittest discover -s scripts -p test_offline_pack.py -v
           python scripts/validate_bundle.py
           python -m unittest discover -s fixtures/cleanup -p 'test_*.py' -v
           python fixtures/regression/corpus.py --check
@@ -92,7 +93,8 @@ jobs:
     # The several-node smoke (scripts/multinode_smoke.py) took about two
     # minutes on the WSL2 development host. It waits out real leases (30 s)
     # and runs in a job of its own so it does not use the Linux job's
-    # 25-minute budget.
+    # 25-minute budget. Without IPv6 loopback it falls back to 127.0.0.1 and
+    # 127.0.0.2 (both paths pass on the development host).
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -148,3 +150,5 @@ jobs:
       - run: npm --prefix web ci
       - run: npm --prefix web test
       - run: npm --prefix web run build
+      # The built web app must load nothing from an external host (offline pack).
+      - run: python3 scripts/offline_pack.py check-web web/dist

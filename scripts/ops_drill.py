@@ -550,7 +550,9 @@ def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
 
     try:
         # D7 실행 중 백업과 새 상태 복원.
-        with drill("D7 실행 중 백업·복원", "작업 실행 중 온라인 백업 → 새 DB·state에 복원 → 복원본 시작") as r:
+        # The restored installation B runs in offline mode, so its start,
+        # codeye run recover and codeye cleanup (D9) are offline-mode runs.
+        with drill("D7 실행 중 백업·복원", "작업 실행 중 온라인 백업 → 새 DB·state에 복원 → 복원본을 오프라인 모드로 시작") as r:
             for db in ("pa", "pb"):
                 cluster.create(db)
             fsrc = directory / "psrc"
@@ -559,7 +561,7 @@ def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
             fx_agent = {"auto_detect": False}
             stop_cfg = {"drain_timeout_seconds": 2, "cancel_timeout_seconds": 60}
             cfg_a, state_a, origin_a, _ = config("pa", [("fixture", fsrc)], agent=fx_agent, stop=stop_cfg)
-            cfg_b, state_b, origin_b, _ = config("pb", [("fixture", fsrc)], agent=fx_agent, stop=stop_cfg)
+            cfg_b, state_b, origin_b, _ = config("pb", [("fixture", fsrc)], agent=fx_agent, stop=stop_cfg, offline=True)
             pcli(fixture, "migrate", db="pa", path=no_go_path)
             pcli(fixture, "start", "--config", cfg_a, db="pa", path=no_go_path)
             sa = PSession(state_a, origin_a)
@@ -598,12 +600,12 @@ def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
             assert fresh["status"] in ("partial", "completed"), fresh
             assert at_restore == "recovery_required" and how in ("new_run", "same_run") and follow["status"] in ("partial", "completed"), (at_restore, how, follow)
             r["observed"] = (f"online backup {t_backup:.1f}s (consistency {made['manifest']['consistency']}), restore {t_restore:.1f}s fence {fence}; "
-                             f"same report summary and artifacts; the in-flight run was {at_restore} → codeye run recover --config {how} → {follow['status']}; new run {fresh['status']}")
+                             f"same report summary and artifacts; restored installation in offline mode; the in-flight run was {at_restore} → codeye run recover --config {how} → {follow['status']}; new run {fresh['status']}")
 
         # D9 보존 정리: every finished run's artifacts are made 40 days old (created_at
         # is immutable, so as the throwaway cluster's superuser with triggers off).
         # All runs share the fixture's outputs, so only aging all of them frees files.
-        with drill("D9 보존 정리(개인 모드)", "끝난 run의 산출물을 40일 전으로 돌린 뒤 codeye cleanup --config dry run → --apply → 다시 dry run") as r:
+        with drill("D9 보존 정리(개인 모드)", "오프라인 모드 설치에서 끝난 run의 산출물을 40일 전으로 돌린 뒤 codeye cleanup --config dry run → --apply → 다시 dry run") as r:
             finished = "SELECT id FROM runs WHERE status IN ('completed','partial','failed','cancelled')"
             raw = int(cluster.scalar("pb", "SELECT count(*) FROM artifacts WHERE role IN ('stdout','stderr','raw_output','other') AND finalized "
                                            f"AND storage_key IS NOT NULL AND content_removed_at IS NULL AND run_id IN ({finished})"))

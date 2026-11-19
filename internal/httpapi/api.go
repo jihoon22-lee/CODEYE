@@ -109,6 +109,7 @@ func (s *Server) apiRoutes() []route {
 		r("GET", "runs/{id}/report", "runs.report", true, false, (*Server).getReport).audits(postgres.AuditReportExported),
 		r("GET", "runs/{id}/reports", "runs.reports", true, false, (*Server).listReports),
 		r("GET", "runs/{id}/comparison", "runs.comparison", true, false, (*Server).getComparison),
+		r("GET", "runs/{id}/pull-request-comment", "runs.pull_request_comment", true, false, (*Server).previewPullRequestComment),
 		r("GET", "projects/{id}/finding-reviews", "finding_reviews.list", true, false, (*Server).listFindingReviews),
 		r("POST", "projects/{id}/finding-reviews", "finding_reviews.create", true, true, (*Server).setFindingReview).audits(postgres.AuditFindingReviewRecorded),
 		r("GET", "admin/users", "admin.users.list", true, false, (*Server).adminListUsers).admins(),

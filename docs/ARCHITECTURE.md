@@ -268,7 +268,7 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 
 ### manifest와 입력 digest
 
-[manifest schema](../schemas/snapshot-manifest.schema.json)는 상대 경로·종류·크기(또는 null)·SHA-256·mode·encoding 힌트·제외 이유·source SHA·(Git) `source_branch`와 `requested_at`·고정 시각(`source_fixed_at`)·`limitations`를 정의한다. [로컬 예시](../examples/snapshot-manifest.json)와 [Git 예시](../examples/snapshot-manifest-git.json)는 합성 값이다.
+[manifest schema](../schemas/snapshot-manifest.schema.json)는 상대 경로·종류·크기(또는 null)·SHA-256·mode·encoding 힌트·제외 이유·source SHA·(Git) `source_branch`(pull request는 대신 `source_ref`)와 `requested_at`·고정 시각(`source_fixed_at`)·`limitations`를 정의한다. [로컬 예시](../examples/snapshot-manifest.json)와 [Git 예시](../examples/snapshot-manifest-git.json)는 합성 값이다.
 
 - manifest에는 원본 절대 경로, URL, remote 이름, clone credential을 넣지 않는다. provider repository ID도 manifest에는 없다.
 - `manifest.json`은 전체 manifest의 canonical JSON(키 정렬, 공백 없음)이다.
@@ -586,6 +586,8 @@ task key와 단계의 대응:
 | [0009](../migrations/sql/0009_storage_quota.sql) | `nodes.storage_quota_exceeded`(영역 배열, 기본 빈 배열), `scheduler_limits.artifact_quota_bytes`(NULL 또는 양수) | 저장 영역 상한. 기존 행은 "한도 없음·초과 없음"으로 읽힌다. |
 | [0010](../migrations/sql/0010_accounts_and_audit.sql) | `users.username`(대소문자 무시 유일, 한 번 정하면 불변)·`is_admin`·`must_change_password`·`password_kdf`·`password_iterations`·`password_salt`·`password_hash`·`password_set_at`, `auth_secrets`(설치별 제한 키 한 행, 불변), `auth_throttle`, `audit_events`(추가 전용, 수정·삭제·truncate 거부) | 로컬 계정과 관리자, DB에 둔 로그인 제한, 통합 감사 기록. 기존 사용자는 사용자 이름·비밀번호 없는 비관리자 로그인 링크 사용자로 남는다. |
 | [0011](../migrations/sql/0011_link_attribution_and_throttle.sql) | `auth_launch_tokens.issued_by`·`purpose`(불변), `auth_sessions.link_issued_by`(불변)·`password_required`(true→false만), `users.password_reset_at`·`password_reset_by`(둘 다 있거나 둘 다 없음), `auth_throttle` 재생성(scope `pair`·`client`, 지연 종료 시각 없음, `last_failure_at` 색인), 감사 action 추가 | 로그인 링크 발급자와 재설정 알림, (이름, 주소) 쌍 중심 로그인 제한. 발급자를 모르는 쓰지 않은 이전 링크는 끝내고 이전 카운터는 버린다. |
+| [0012](../migrations/sql/0012_pull_request_runs.sql) | `runs.pull_request`(만들 때 한 번만), `pull_request_comments` | pull request run의 고정값(base/head SHA, 변경 파일과 줄 범위, 댓글 선택)과 결과 댓글 게시 outbox. 기존 행은 바꾸지 않는다. |
+| [0013](../migrations/sql/0013_retention_and_recovery.sql) | `artifacts.content_removed_at`(한 번만), `artifacts_content_present_idx`, 감사 action `run.recovery_confirmed`·`storage.retention_applied` | 보존 정리가 원시 산출물 내용을 지운 표시와 사람의 정리 확인. 기존 행은 바꾸지 않는다. |
 
 migration 이력은 `codeye_schema_migrations(version, name, checksum, applied_at)`다. 0006~0010은 기존 행을 바꾸지 않는다(0010은 새 열의 기본값만 채운다). 0011은 쓰지 않은 로그인 링크를 끝내고 로그인 제한 카운터를 버린다.
 

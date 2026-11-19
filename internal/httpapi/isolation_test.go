@@ -51,6 +51,9 @@ type isoWorld struct {
 	// accepting is set while building a request the actor may make (a
 	// refused request does not use up an unreviewed finding).
 	accepting bool
+	// prRun is a pull-request run in a second project with the same members
+	// (made on first use).
+	prRun string
 }
 
 func (w *isoWorld) name(prefix string) string {
@@ -172,11 +175,12 @@ func isoCases() map[string]isoCase {
 		}},
 		"runs.recover": {need: runnerRole, ok: 202, ids: func(w *isoWorld) []string { return []string{w.recoveryRequiredRun()} },
 			body: func(*isoWorld) any { return map[string]bool{"cleanup_confirmed": true} }},
-		"setup.get":            {need: signedIn, ok: 200},
-		"runs.report":          {need: viewerRole, ok: 200, ids: isoRun, query: "?format=json&include_code=true"},
-		"runs.reports":         {need: viewerRole, ok: 200, ids: isoRun},
-		"runs.comparison":      {need: viewerRole, ok: 200, ids: isoRun},
-		"finding_reviews.list": {need: viewerRole, ok: 200, ids: isoProject},
+		"setup.get":                 {need: signedIn, ok: 200},
+		"runs.report":               {need: viewerRole, ok: 200, ids: isoRun, query: "?format=json&include_code=true"},
+		"runs.reports":              {need: viewerRole, ok: 200, ids: isoRun},
+		"runs.comparison":           {need: viewerRole, ok: 200, ids: isoRun},
+		"runs.pull_request_comment": {need: viewerRole, ok: 200, ids: func(w *isoWorld) []string { return []string{w.pullRequestRun()} }},
+		"finding_reviews.list":      {need: viewerRole, ok: 200, ids: isoProject},
 		"finding_reviews.create": {need: runnerRole, ok: 201, ids: isoProject,
 			opts: func(_ *isoWorld, o opts) opts { o.idem, o.ifNoneMatch = domain.NewID(), "*"; return o },
 			body: func(w *isoWorld) any {

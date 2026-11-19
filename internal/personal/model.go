@@ -123,6 +123,10 @@ type ResolvedModel struct {
 	// Notice explains a problem that will make model calls fail (for
 	// example no API key for the provider); the agent still starts.
 	Notice string
+	// Offline and CABundle are the configuration's offline mode and CA
+	// bundle; model calls follow them (opencode.Config).
+	Offline  bool
+	CABundle string
 }
 
 // Provider is the provider part of ID.
@@ -133,7 +137,8 @@ func (m *ResolvedModel) Provider() string {
 
 // Caller is the worker-side call configuration of m.
 func (m *ResolvedModel) Caller() opencode.Config {
-	return opencode.Config{Executable: m.OpenCode, Model: m.ID, RelayFile: m.RelayFile, CredentialFile: m.CredentialFile, Timeout: m.Timeout}
+	return opencode.Config{Executable: m.OpenCode, Model: m.ID, RelayFile: m.RelayFile, CredentialFile: m.CredentialFile, Timeout: m.Timeout,
+		Offline: m.Offline, CABundle: m.CABundle}
 }
 
 // ResolveModel decides the local agent's model. It returns (nil, nil) when
@@ -151,7 +156,8 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 	if m == nil {
 		m = &Model{}
 	}
-	res := &ResolvedModel{RelayFile: m.RelayFile, Timeout: opencode.DefaultTimeout, ReviewPack: m.ReviewPack, ReviewMaxCalls: m.ReviewMaxCalls}
+	res := &ResolvedModel{RelayFile: m.RelayFile, Timeout: opencode.DefaultTimeout, ReviewPack: m.ReviewPack, ReviewMaxCalls: m.ReviewMaxCalls,
+		Offline: cfg.Offline, CABundle: cfg.CABundle}
 	if m.TimeoutSeconds > 0 {
 		res.Timeout = time.Duration(m.TimeoutSeconds) * time.Second
 	}
@@ -183,7 +189,9 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 		case err != nil && !errors.Is(err, fs.ErrNotExist):
 			return nil, fmt.Errorf("%s: %w", layout.ModelSecret(), err)
 		}
-		if res.CredentialFile == "" {
+		// Offline, OpenCode's own login is not read: its entries name no
+		// endpoint, so they would reach the provider's public one.
+		if res.CredentialFile == "" && !cfg.Offline {
 			auth := env.OpenCodeAuthFile()
 			if found := authProvider(auth, provider); found != "" {
 				res.CredentialFile, res.Source, provider = auth, ModelSourceOpenCode, found
@@ -195,6 +203,16 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 			return nil, nil
 		}
 		res.Source = ModelSourceNone
+	}
+	if cfg.Offline {
+		switch res.Source {
+		case ModelSourceNone:
+			return nil, errors.New("offline mode needs a model key file with base_url (an internal endpoint); a model without a key answers from a public endpoint")
+		case ModelSourceConfig, ModelSourceSecret:
+			if !credentialHasEndpoint(res.CredentialFile, provider) {
+				return nil, errors.New("offline mode: the model key file has no base_url; add the internal endpoint (an OpenAI-compatible URL) as base_url")
+			}
+		}
 	}
 	if provider == "" {
 		return nil, errors.New("agent.model.name must be PROVIDER/MODEL when no API key is configured")
@@ -272,6 +290,13 @@ func credentialProvider(path string) (string, error) {
 		return "", errors.New("the model credential is not usable (mode 0600, schema_version \"0.1\", a one-line api_key, an http(s) base_url)")
 	}
 	return c.Provider, nil
+}
+
+// credentialHasEndpoint reports whether the credential at path names its
+// endpoint (base_url) for provider.
+func credentialHasEndpoint(path, provider string) bool {
+	p, err := opencode.ReadCredential(path, provider)
+	return err == nil && p.BaseURL != ""
 }
 
 // authProvider is the provider whose OpenCode auth.json entry is an API

@@ -37,7 +37,7 @@ func SystemEnv() Env {
 	home, _ := os.UserHomeDir()
 	e := Env{Home: home, Path: filepath.SplitList(os.Getenv("PATH")), Getenv: os.Getenv}
 	if runtime.GOOS != "windows" {
-		e.SystemDirs = []string{"/usr/local/go/bin", "/usr/local/bin", "/usr/bin", "/bin"}
+		e.SystemDirs = []string{"/usr/local/go/bin", "/usr/local/bin", "/usr/bin", "/bin", "/snap/bin"}
 		e.SystemModuleDirs = []string{"/usr/local/lib/node_modules", "/usr/lib/node_modules"}
 	}
 	return e
