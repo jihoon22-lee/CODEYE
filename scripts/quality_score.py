@@ -27,7 +27,7 @@ VERDICTS = ("valid_actionable", "valid_informational", "false_positive", "duplic
 VALID = ("valid_actionable", "valid_informational")
 ACTIONABLE = ("supported", "reproduced")
 PENDING = ("unreviewed", "inconclusive")
-JUDGMENT_SCHEMA = "codeye-r1-judgments"
+JUDGMENT_SCHEMA = "codeye-quality-judgments"
 Z95 = 1.959963984540054
 
 
@@ -585,7 +585,7 @@ def reader_sheets(batch, corpus, sample, seed, output):
         for g in order:
             if groups[g] and len(picked) < sample:
                 picked.append(groups[g].pop())
-    key = {"schema": "codeye-r1-reader-key", "version": 1, "batch": manifest["batch"], "seed": seed, "sheets": []}
+    key = {"schema": "codeye-quality-reader-key", "version": 1, "batch": manifest["batch"], "seed": seed, "sheets": []}
     for i, row in enumerate(picked, 1):
         sheet_id = f"S{i:02d}"
         report = reports[row["key"]]

@@ -49,7 +49,7 @@
  "condition": "tools",
  "corpus": {
   "cases": 55,
-  "digest": "ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4"
+  "digest": "99904b7bdf1239eb3f0732a465a43ec51ff735594f15f23af11ec701bbc424be"
  },
  "counts": {
   "partial": 100
@@ -65,7 +65,7 @@
  "max_workers": 3,
  "model": null,
  "notes": [
-  "trimmed copy of the W24 tools dry run for the CI scoring smoke (3 of 100 rows)"
+  "trimmed copy of a tools-condition dry run for the CI scoring smoke (3 of 100 rows)"
  ],
  "os": {
   "machine": "x86_64",
@@ -75,7 +75,7 @@
  "pack": null,
  "planted_leak": null,
  "repeat": 1,
- "schema": "codeye-r1-eval-manifest",
+ "schema": "codeye-quality-eval-manifest",
  "selection": {
   "cases": null,
   "kinds": null,
@@ -154,9 +154,9 @@
  "stopped": null,
  "upstream": null,
  "variants": [
-  "R1-GO-06.after.1",
-  "R1-GO-06.before.1",
-  "R1-GO-09.before.1"
+  "HOLD-GO-06.after.1",
+  "HOLD-GO-06.before.1",
+  "HOLD-GO-09.before.1"
  ],
  "version": 1
 }

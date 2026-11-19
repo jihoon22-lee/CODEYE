@@ -20,7 +20,7 @@ relay started with `--test-upstream` (ledger upstream `test-loopback`); their
 results are labelled and never count as evaluation.
 
 Labels stay outside the analysed snapshots: inputs are materialized by
-fixtures/r1-quality/corpus.py into opaque directories; results, judgment
+fixtures/quality-holdout/corpus.py into opaque directories; results, judgment
 templates and answer keys live under --results-root.
 """
 from __future__ import annotations
@@ -46,12 +46,12 @@ SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent
 sys.path.insert(0, str(SCRIPTS))
 
-CORPUS_DIR = ROOT / "fixtures/r1-quality"
+CORPUS_DIR = ROOT / "fixtures/quality-holdout"
 GATEWAY = SCRIPTS / "model_budget_relay.py"
 PACKS = ("review-v1", "review-r1")
 PACK_ROLES = {"review-v1": ("context", "investigate", "verify"),
               "review-r1": ("environment", "documents", "investigate", "interpret", "verify")}
-MANIFEST_SCHEMA = "codeye-r1-eval-manifest"
+MANIFEST_SCHEMA = "codeye-quality-eval-manifest"
 REGISTRY = "holdout-registry.jsonl"
 HOLDOUT_LABEL = "holdout_seen_by_prior_revision"
 BUDGET_REFUSALS = ("budget_exhausted", "request_limit_reached", "relay_halted")
@@ -88,7 +88,7 @@ def write_json(path, value):
 # ---------------------------------------------------------------- corpus
 
 class Corpus:
-    """fixtures/r1-quality/corpus.py loaded in-process (stdlib only)."""
+    """fixtures/quality-holdout/corpus.py loaded in-process (stdlib only)."""
 
     def __init__(self, directory=CORPUS_DIR):
         self.module = runpy.run_path(str(directory / "corpus.py"))

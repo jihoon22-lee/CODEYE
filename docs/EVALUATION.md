@@ -57,15 +57,16 @@
 
 ### 보류 집합과 봉인
 
-보류 집합은 `fixtures/r1-quality/`의 다언어 corpus다. C/C++·Python·JS/TS·Go·Rust 언어마다 결함 쌍 9개와 까다로운 정상 사례 2개, 총 55개 사례(변형 100개)다. 사례는 실제 toolchain으로 수정 전 실패·수정 후 통과(정상 사례는 통과)를 확인했고, 정답 문구가 분석 입력에 들어가지 않는지 자동 검사한다. 지침 작성자가 읽지 않는 자료이므로 이 문서는 사례 내용을 담지 않는다.
+보류 집합은 `fixtures/quality-holdout/`의 다언어 corpus다. C/C++·Python·JS/TS·Go·Rust 언어마다 결함 쌍 9개와 까다로운 정상 사례 2개, 총 55개 사례(변형 100개)다. 사례는 실제 toolchain으로 수정 전 실패·수정 후 통과(정상 사례는 통과)를 확인했고, 정답 문구가 분석 입력에 들어가지 않는지 자동 검사한다. 지침 작성자가 읽지 않는 자료이므로 이 문서는 사례 내용을 담지 않는다.
 
 봉인 기록은 이곳에 둔다. 보류 집합을 바꾸면 새 digest와 날짜, 바꾼 이유를 이 표에 더하고 [`scripts/validate_bundle.py`](../scripts/validate_bundle.py)의 `sealed` 값을 같은 커밋에서 바꾼다.
 
 | 봉인 | corpus digest(SHA-256) | 비고 |
 |---|---|---|
-| 현재 | `ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4` | 지침 조정에 쓰지 않았고, 작성자는 지침과 과거 모델 결과를 읽지 않았다 |
+| 현재 | `99904b7bdf1239eb3f0732a465a43ec51ff735594f15f23af11ec701bbc424be` | 사례 ID와 디렉터리 이름만 바꾼 뒤의 값이다. 사례 내용과 변형별 입력 digest는 그대로이고, corpus digest가 사례 ID를 포함하므로 값이 달라졌다 |
+| 이름 변경 전 | `ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4` | 지침 조정에 쓰지 않았고, 작성자는 지침과 과거 모델 결과를 읽지 않았다. 첫 보류 평가가 이 값으로 실행됐다 |
 
-- 확인: `python3 scripts/validate_bundle.py`가 `python3 -I fixtures/r1-quality/corpus.py validate`와 `... digest`를 실행해 구조·위치·digest·누설 검사와 봉인 digest 일치를 확인한다. 불일치면 실패한다.
+- 확인: `python3 scripts/validate_bundle.py`가 `python3 -I fixtures/quality-holdout/corpus.py validate`와 `... digest`를 실행해 구조·위치·digest·누설 검사와 봉인 digest 일치를 확인한다. 불일치면 실패한다.
 - 봉인을 바꾸면 이전 봉인으로 얻은 결과와 새 결과는 다른 집합의 결과다. 같은 표에서 비교하지 않는다.
 
 ## 정답 라벨
@@ -133,11 +134,11 @@
 
 ## 보류 독립성
 
-- 지침(프롬프트) 작성자는 [평가 결과](EVALUATION-RESULTS.md)와 `fixtures/r1-quality/`를 읽지 않는다. 저장소 밖 평가 결과 디렉터리, 판정 양식, answer key도 읽지 않는다. 그 경로를 지나는 검색도 하지 않는다.
+- 지침(프롬프트) 작성자는 [평가 결과](EVALUATION-RESULTS.md)와 `fixtures/quality-holdout/`를 읽지 않는다. 저장소 밖 평가 결과 디렉터리, 판정 양식, answer key도 읽지 않는다. 그 경로를 지나는 검색도 하지 않는다.
 - 보류 사례나 결과를 본 사람(조정자)은 지침 문구를 쓰지 않는다. 결과에서 알게 된 실패는 지침 문구를 그 사례에 맞추지 않고, 가능하면 구조(플랫폼 검사)로 막는다.
 - 지침 작성 지시에 보류 결과에서 얻은 관찰을 옮기지 않는다. 옮겼다면 그 사실을 결과와 함께 기록한다.
 - 결과는 [평가 결과](EVALUATION-RESULTS.md)에만 둔다. 다른 문서, 코드 주석, 지침, 커밋 메시지에 결과 수치나 사례 내용을 옮기지 않는다.
-- holdout 등록부(아래)가 같은 팩 id의 이전 digest 실행을 표시한다. 현재 기본 팩 `review-r1`은 같은 팩 id의 다른 digest가 현재 보류 집합으로 실행된 적이 있으므로 이후 실행은 `holdout_seen_by_prior_revision`으로 표시된다. 현재 기본 팩의 독립 보류 평가에는 새 사례(새 봉인)가 필요하다.
+- holdout 등록부(아래)가 같은 팩 id의 이전 digest 실행을 표시한다. 현재 보류 집합은 이미 한 번 평가에 쓰였다([평가 결과](EVALUATION-RESULTS.md)). 그 평가는 사례 ID를 바꾸기 전 corpus digest로 등록됐으므로 등록부가 이를 자동으로 연결하지 않는다. 같은 사례로 하는 이후 평가는 독립 비교가 아니고, 독립 보류 평가에는 새 사례(새 봉인)가 필요하다.
 
 ## 회귀 집합 실행
 
@@ -174,7 +175,7 @@
 
 | 부분 | 위치 | 역할 |
 |---|---|---|
-| 정답 목록 | `fixtures/r1-quality/corpus.py forbidden` | 라벨 문구 n-gram과 고유 토큰 중 어떤 입력에도 나오지 않는 것을 JSON으로 내보낸다 |
+| 정답 목록 | `fixtures/quality-holdout/corpus.py forbidden` | 라벨 문구 n-gram과 고유 토큰 중 어떤 입력에도 나오지 않는 것을 JSON으로 내보낸다 |
 | relay 차단 | `scripts/model_budget_relay.py --forbidden-phrases FILE [--allow-model-echo]` | 목록 항목이 든 요청을 예약·전달 없이 막는다 |
 | 시험용 upstream | `--test-upstream http://127.0.0.1:PORT`, [`scripts/fake_model_upstream.py`](../scripts/fake_model_upstream.py) | dry run 전용 loopback 가짜. 키를 읽지 않는다. `--echo-text`는 운영자가 정한 문장을 investigate 후보 제목에 붙이고, `--dump DIR`은 요청을 저장한다 |
 | 공용 실행 틀 | `scripts/eval_harness.py`, `scripts/test_postgres.py`의 `temporary_postgres` | 임시 PostgreSQL, 제품 빌드, controller·agent, 보고서 조회. 회귀 실행(`regression_pilot.py`)도 같은 코드를 쓴다 |
@@ -347,7 +348,7 @@ kill $CAP_RELAY_PID $FAKE_PID
 
 # 3. 정답 목록. 출력의 dropped.in_allowed_text에서 허용 텍스트가 뺀 라벨 표현을 확인한다.
 python3 scripts/quality_eval.py allow-text --tools-batch "$R/tools-all" --request-dump "$R/cap/dump" --output "$R/allow.txt"
-python3 -I fixtures/r1-quality/corpus.py forbidden --allow-text prompts/review-v1 --allow-text prompts/review-r1 \
+python3 -I fixtures/quality-holdout/corpus.py forbidden --allow-text prompts/review-v1 --allow-text prompts/review-r1 \
   --allow-text "$R/allow.txt" --output "$R/forbidden.json"
 
 # 4. 실제 relay(운영자 셸, 키는 이 프로세스만 읽는다). --allow-model-echo는 선택이다.

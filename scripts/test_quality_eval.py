@@ -76,7 +76,7 @@ class StatisticsTests(unittest.TestCase):
         before = "a\nb\nc\nd\n"
         after = "a\nx\ny\nb\nc\nd\n"
         self.assertEqual(quality_score.map_range(before, after, 3, 3), (5, 5))
-        case = CORPUS.by_id["R1-GO-06"]
+        case = CORPUS.by_id["HOLD-GO-06"]
         tg = quality_score.targets(CORPUS, case, "after")
         self.assertEqual(tg[0]["kind"], "after_mapped")
         after_text = CORPUS.render(case, "after")["counters.go"].split("\n")
@@ -100,17 +100,17 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(len(quality_eval.select(CORPUS)[0]), 55)
 
     def test_variant_plan_and_repeats(self):
-        chosen = [CORPUS.by_id["R1-GO-06"], CORPUS.by_id["R1-GO-10"]]
+        chosen = [CORPUS.by_id["HOLD-GO-06"], CORPUS.by_id["HOLD-GO-10"]]
         plan = quality_eval.variant_plan(CORPUS, chosen)
         self.assertEqual([(c["id"], v, r) for c, v, r in plan],
-                         [("R1-GO-06", "before", 1), ("R1-GO-06", "after", 1), ("R1-GO-10", "before", 1)])
-        plan = quality_eval.variant_plan(CORPUS, chosen, {"before"}, repeat=3, repeat_cases={"R1-GO-10"})
-        self.assertEqual([(c["id"], r) for c, _, r in plan], [("R1-GO-06", 1), ("R1-GO-10", 1), ("R1-GO-10", 2), ("R1-GO-10", 3)])
+                         [("HOLD-GO-06", "before", 1), ("HOLD-GO-06", "after", 1), ("HOLD-GO-10", "before", 1)])
+        plan = quality_eval.variant_plan(CORPUS, chosen, {"before"}, repeat=3, repeat_cases={"HOLD-GO-10"})
+        self.assertEqual([(c["id"], r) for c, _, r in plan], [("HOLD-GO-06", 1), ("HOLD-GO-10", 1), ("HOLD-GO-10", 2), ("HOLD-GO-10", 3)])
 
 
 class PlannerTests(unittest.TestCase):
     def test_constants_estimate_and_refusals(self):
-        plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["R1-GO-06"]] * 5)
+        plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["HOLD-GO-06"]] * 5)
         est = quality_eval.estimate("review-r1", plan)
         self.assertEqual(est["variants"], 10)
         self.assertTrue(est["basis"].startswith("constants:"))
@@ -128,15 +128,15 @@ class PlannerTests(unittest.TestCase):
 
     def test_history_from_a_batch(self):
         with tempfile.TemporaryDirectory() as tmp:
-            rows = [{"case": "R1-GO-06", "variant": "before",
+            rows = [{"case": "HOLD-GO-06", "variant": "before",
                      "ledger": {"requests": [{"role": "investigate", "input_bytes": 15000, "usage": None},
                                              {"role": "verify", "input_bytes": 21000, "usage": None}]}},
-                    {"case": "R1-GO-06", "variant": "after", "ledger": {"requests": [{"role": "investigate", "input_bytes": 9000}]}}]
+                    {"case": "HOLD-GO-06", "variant": "after", "ledger": {"requests": [{"role": "investigate", "input_bytes": 9000}]}}]
             batch = make_batch(tmp, "h", rows, {}, dry_run=True)
             hist = quality_eval.history_profile([batch], "review-r1")
             self.assertEqual(hist["calls_per_variant"], {"investigate": 1.0, "verify": 0.5})
             self.assertEqual(hist["input_bytes_max"]["verify"], 21000)
-            plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["R1-GO-06"]])
+            plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["HOLD-GO-06"]])
             est = quality_eval.estimate("review-r1", plan, history=hist)
             self.assertEqual(est["per_call_microusd"]["verify"], int(21000 / 3 * 5 + 600 * 10))
             with self.assertRaises(SystemExit):  # another pack's batch is not history
@@ -150,10 +150,10 @@ class PlannerTests(unittest.TestCase):
         # module slices: with repairs it may use the whole per-attempt ceiling.
         with tempfile.TemporaryDirectory() as tmp:
             sliced = [{"role": r, "input_bytes": 20000} for r in ("documents", "investigate", "verify") + ("investigate", "verify") * 3]
-            rows = [{"case": "R1-GO-06", "variant": "before", "ledger": {"requests": sliced}},
-                    {"case": "R1-GO-06", "variant": "after", "ledger": {"requests": sliced[:3]}}]
+            rows = [{"case": "HOLD-GO-06", "variant": "before", "ledger": {"requests": sliced}},
+                    {"case": "HOLD-GO-06", "variant": "after", "ledger": {"requests": sliced[:3]}}]
             hist = quality_eval.history_profile([make_batch(tmp, "h", rows, {}, dry_run=True)], "review-r1")
-            plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["R1-GO-06"]])
+            plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["HOLD-GO-06"]])
             est = quality_eval.estimate("review-r1", plan, history=hist, max_calls=40)
             per_call = est["per_call_microusd"]
             self.assertEqual(est["max_calls"], 40)
@@ -257,18 +257,18 @@ class EchoAuditTests(unittest.TestCase):
         import model_budget_relay as gateway
         doc = {"schema": gateway.FORBIDDEN_SCHEMA, "version": gateway.FORBIDDEN_VERSION,
                "normalization": gateway.FORBIDDEN_NORMALIZATION, "corpus_digest": CORPUS.digest,
-               "entries": [{"id": "R1-GO-01/token/3", "mode": "words", "text": "goroutine leak"},
-                           {"id": "R1-GO-08/token/0", "mode": "subword", "text": "shadowed"}]}
+               "entries": [{"id": "HOLD-GO-01/token/3", "mode": "words", "text": "goroutine leak"},
+                           {"id": "HOLD-GO-08/token/0", "mode": "subword", "text": "shadowed"}]}
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "f.json"
             path.write_text(json.dumps(doc))
             records = [{"candidates": [{"title": "Goroutine leak when the reader stops", "id": "c1"}]}]
-            ok = [{"role": "verify", "echo_matches": ["R1-GO-01/token/3"], "echo_match_count": 1}]
+            ok = [{"role": "verify", "echo_matches": ["HOLD-GO-01/token/3"], "echo_match_count": 1}]
             self.assertEqual(quality_eval.echo_audit(ok, records, path), [])
             self.assertEqual(quality_eval.echo_audit([{"role": "verify"}], records, path), [])
-            other = [{"role": "verify", "echo_matches": ["R1-GO-08/token/0"], "echo_match_count": 1}]
-            self.assertEqual(quality_eval.echo_audit(other, records, path), ["R1-GO-08/token/0"])  # another variant's words
-            cut = [{"role": "verify", "echo_matches": ["R1-GO-01/token/3"], "echo_match_count": 20}]
+            other = [{"role": "verify", "echo_matches": ["HOLD-GO-08/token/0"], "echo_match_count": 1}]
+            self.assertEqual(quality_eval.echo_audit(other, records, path), ["HOLD-GO-08/token/0"])  # another variant's words
+            cut = [{"role": "verify", "echo_matches": ["HOLD-GO-01/token/3"], "echo_match_count": 20}]
             self.assertEqual(quality_eval.echo_audit(cut, records, path), ["<truncated>"])
 
 
@@ -316,7 +316,7 @@ class CaptureListTests(unittest.TestCase):
             quality_eval.capture_list(out, CORPUS)
             phrases = gateway.load_forbidden(str(out))
             self.assertEqual((phrases.purpose, phrases.corpus_digest), (gateway.FORBIDDEN_CAPTURE, CORPUS.digest))
-            texts = [t for v in ("before", "after") for t in CORPUS.render(CORPUS.by_id["R1-GO-06"], v).values()]
+            texts = [t for v in ("before", "after") for t in CORPUS.render(CORPUS.by_id["HOLD-GO-06"], v).values()]
             self.assertEqual(phrases.matches(texts), [])
             with self.assertRaises(FileExistsError):
                 quality_eval.capture_list(out, CORPUS)
@@ -356,17 +356,17 @@ class RegistryTests(unittest.TestCase):
 class ScoringTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        rows = [{"case": "R1-GO-06", "variant": "before"}, {"case": "R1-GO-06", "variant": "after"},
-                {"case": "R1-GO-10", "variant": "before"}, {"case": "R1-GO-01", "variant": "before"},
-                {"case": "R1-GO-02", "variant": "before", "invalid": "blocked_answer_leak"}]
+        rows = [{"case": "HOLD-GO-06", "variant": "before"}, {"case": "HOLD-GO-06", "variant": "after"},
+                {"case": "HOLD-GO-10", "variant": "before"}, {"case": "HOLD-GO-01", "variant": "before"},
+                {"case": "HOLD-GO-02", "variant": "before", "invalid": "blocked_answer_leak"}]
         reports = {
-            "R1-GO-06.before.1": report([finding("f1", "counters.go", 23, 23, producer="tool", validation="unreviewed"),
+            "HOLD-GO-06.before.1": report([finding("f1", "counters.go", 23, 23, producer="tool", validation="unreviewed"),
                                          finding("f2", "counters.go", 22, 25),
                                          finding("f3", "middleware.go", 5, 6, validation="inconclusive")]),
-            "R1-GO-06.after.1": report([finding("g1", "counters.go", 23, 24)]),
-            "R1-GO-10.before.1": report([finding("n1", "poller.go", 40, 41, title="Poller leaks")]),
-            "R1-GO-01.before.1": report([]),
-            "R1-GO-02.before.1": report([finding("x", "manifest.go", 30, 30)]),
+            "HOLD-GO-06.after.1": report([finding("g1", "counters.go", 23, 24)]),
+            "HOLD-GO-10.before.1": report([finding("n1", "poller.go", 40, 41, title="Poller leaks")]),
+            "HOLD-GO-01.before.1": report([]),
+            "HOLD-GO-02.before.1": report([finding("x", "manifest.go", 30, 30)]),
         }
         self.batch = make_batch(self.tmp.name, "b1", rows, reports)
 
@@ -379,13 +379,13 @@ class ScoringTests(unittest.TestCase):
     def test_template_prefills_auto_matches_only(self):
         t = self.template()
         keys = [i["key"] for i in t["items"]]
-        self.assertNotIn("R1-GO-02.before.1", keys)  # invalid rows are not judged
+        self.assertNotIn("HOLD-GO-02.before.1", keys)  # invalid rows are not judged
         items = {i["key"]: i for i in t["items"]}
-        auto = {f["finding_id"]: f["auto_match"] for f in items["R1-GO-06.before.1"]["findings"]}
+        auto = {f["finding_id"]: f["auto_match"] for f in items["HOLD-GO-06.before.1"]["findings"]}
         self.assertEqual(auto["f1"]["kind"], "positive")
         self.assertIsNone(auto["f3"])
-        self.assertEqual(items["R1-GO-06.after.1"]["findings"][0]["auto_match"]["kind"], "after_mapped")
-        self.assertEqual(items["R1-GO-10.before.1"]["findings"][0]["auto_match"]["kind"], "suspect")
+        self.assertEqual(items["HOLD-GO-06.after.1"]["findings"][0]["auto_match"]["kind"], "after_mapped")
+        self.assertEqual(items["HOLD-GO-10.before.1"]["findings"][0]["auto_match"]["kind"], "suspect")
         self.assertTrue(all(f["verdict"] is None for i in t["items"] for f in i["findings"]))
 
     def metrics(self, judgment_files=()):
@@ -400,18 +400,18 @@ class ScoringTests(unittest.TestCase):
             d.mkdir(parents=True, exist_ok=True)
             (d / f"review.{stage}-0.json").write_text(json.dumps(
                 {"stage": stage, "calls": [{"outcome": outcome}] if outcome else [], "evidence": evidence}))
-        keep("R1-GO-06.before.1", "investigate", [{"path": "counters.go", "kind": "code"},
+        keep("HOLD-GO-06.before.1", "investigate", [{"path": "counters.go", "kind": "code"},
                                                   {"path": "README.md", "kind": "document"}])
-        keep("R1-GO-01.before.1", "investigate", [{"path": "README.md", "kind": "document"}])
+        keep("HOLD-GO-01.before.1", "investigate", [{"path": "README.md", "kind": "document"}])
         # prepared but never answered: a blocked call and a stage without calls are not exposure
-        keep("R1-GO-01.before.1", "verify", [{"path": "manifest.go", "kind": "code"}], outcome="model_unavailable")
-        keep("R1-GO-01.before.1", "context", [{"path": "load.go", "kind": "code"}], outcome=None)
+        keep("HOLD-GO-01.before.1", "verify", [{"path": "manifest.go", "kind": "code"}], outcome="model_unavailable")
+        keep("HOLD-GO-01.before.1", "context", [{"path": "load.go", "kind": "code"}], outcome=None)
         s = self.metrics()[0]["structural"]
         self.assertEqual(s["model_saw_snapshot_files"]["k"], 4)
         self.assertEqual((s["model_saw_code"]["k"], s["model_saw_code"]["n"]), (1, 4))
         self.assertEqual((s["labelled_file_in_investigate"]["k"], s["labelled_file_in_investigate"]["n"]), (1, 2))
-        self.assertIn("R1-GO-01.before.1", s["no_code_variants"])
-        self.assertNotIn("R1-GO-06.before.1", s["no_code_variants"])
+        self.assertIn("HOLD-GO-01.before.1", s["no_code_variants"])
+        self.assertNotIn("HOLD-GO-06.before.1", s["no_code_variants"])
 
     def test_unjudged_items_are_counted_not_scored(self):
         m, _ = self.metrics()
@@ -459,9 +459,9 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(m["metrics"]["known_defect_recall"]["unjudged"], 1)
 
     def test_variance_and_independence(self):
-        rows = [{"case": "R1-GO-06", "variant": "before", "repeat": 1}, {"case": "R1-GO-06", "variant": "before", "repeat": 2}]
-        reports = {"R1-GO-06.before.1": report([finding("a", "counters.go", 23, 23)]),
-                   "R1-GO-06.before.2": report([])}
+        rows = [{"case": "HOLD-GO-06", "variant": "before", "repeat": 1}, {"case": "HOLD-GO-06", "variant": "before", "repeat": 2}]
+        reports = {"HOLD-GO-06.before.1": report([finding("a", "counters.go", 23, 23)]),
+                   "HOLD-GO-06.before.2": report([])}
         batch = make_batch(self.tmp.name, "rep", rows, reports, labels=[quality_eval.HOLDOUT_LABEL])
         manifest, rows_, reports_ = quality_score.load_batch(batch)
         m = quality_score.batch_metrics(manifest, rows_, reports_, {}, CORPUS)
@@ -498,7 +498,7 @@ class RealReportTests(unittest.TestCase):
     def test_recorded_rule_context_needs_only_a_digest(self):
         # internal/report/validate.go: paths are omitted when the tool read no file (gitleaks).
         from validate_bundle import check_report
-        key = "R1-GO-06.before.1"
+        key = "HOLD-GO-06.before.1"
         row = next(json.loads(l) for l in (TESTDATA / "rows.jsonl").read_text().splitlines() if key in l)
         report = json.loads((TESTDATA / "reports" / (key + ".json")).read_text())
         context = {"rule_pack": "codeye-secrets-gitleaks", "rule_pack_version": "1", "selection": [],
@@ -516,9 +516,9 @@ class RealReportTests(unittest.TestCase):
 class ReaderTests(unittest.TestCase):
     def test_sheets_hide_labels_and_scoring_needs_answers(self):
         with tempfile.TemporaryDirectory() as tmp:
-            rows = [{"case": "R1-GO-06", "variant": "before"}, {"case": "R1-GO-10", "variant": "before"}]
-            reports = {"R1-GO-06.before.1": report([finding("f", "counters.go", 23, 23)], ai="not_performed", exposed=0),
-                       "R1-GO-10.before.1": report([])}
+            rows = [{"case": "HOLD-GO-06", "variant": "before"}, {"case": "HOLD-GO-10", "variant": "before"}]
+            reports = {"HOLD-GO-06.before.1": report([finding("f", "counters.go", 23, 23)], ai="not_performed", exposed=0),
+                       "HOLD-GO-10.before.1": report([])}
             batch = make_batch(tmp, "r", rows, reports)
             out = Path(tmp) / "reading"
             quality_score.reader_sheets(batch, CORPUS, 2, 0, out)
@@ -527,7 +527,7 @@ class ReaderTests(unittest.TestCase):
             for s in (out / "sheets").iterdir():
                 text = s.read_text()
                 self.assertNotIn("R1-GO", text)
-                self.assertNotIn(CORPUS.by_id["R1-GO-06"]["label"]["trigger"][:40], text)
+                self.assertNotIn(CORPUS.by_id["HOLD-GO-06"]["label"]["trigger"][:40], text)
             key = json.loads((out / "answer-key.json").read_text())
             self.assertEqual(quality_score.reader_score(out / "answer-key.json", [])["status"], "not_measured")
             defect = next(s for s in key["sheets"] if s["expected"] == "labelled_defect")

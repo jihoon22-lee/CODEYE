@@ -14,14 +14,14 @@ def check_holdout_corpus() -> None:
     """보류 corpus의 구조·위치·digest·누설을 도구 없이 확인하고 봉인 digest와 대조한다."""
     import subprocess
 
-    corpus = ROOT / "fixtures/r1-quality/corpus.py"
+    corpus = ROOT / "fixtures/quality-holdout/corpus.py"
     env = {"PATH": os.environ.get("PATH", ""), "LANG": "C.UTF-8"}
     result = subprocess.run([sys.executable, "-I", str(corpus), "validate"], capture_output=True, text=True, timeout=300, env=env)
     tail = " | ".join((result.stdout + result.stderr).strip().splitlines()[-5:])
     ensure(result.returncode == 0, "holdout corpus validate failed: " + tail)
     out = subprocess.run([sys.executable, "-I", str(corpus), "digest"], capture_output=True, text=True, timeout=300, env=env)
     ensure(out.returncode == 0 and out.stdout.split(), "holdout corpus digest failed")
-    sealed = "ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4"
+    sealed = "99904b7bdf1239eb3f0732a465a43ec51ff735594f15f23af11ec701bbc424be"
     ensure(out.stdout.split()[-1] == sealed, "holdout corpus digest differs from the sealed digest; a changed holdout needs a new seal recorded in docs/EVALUATION.md")
     print(f"PASS: holdout corpus (structure, locations, digests, leakage scan; sealed digest {sealed[:12]})")
 
