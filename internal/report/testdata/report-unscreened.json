@@ -1,0 +1,1989 @@
+{
+  "artifacts": [
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000706",
+      "media_type": "application/vnd.codeye.source-manifest+json",
+      "role": "source_manifest",
+      "sha256": "22d1b9e3af626ed1380a0a5502e8ab3793d98308932434fa65f21d9c12ee059a",
+      "size_bytes": 7829,
+      "task_key": null
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000743",
+      "media_type": "application/vnd.codeye.result-manifest+json",
+      "role": "result_manifest",
+      "sha256": "239f5797d193c2ceb0d2bd978d0ea92c4df19d6b784706cfda6eeb71a3091d20",
+      "size_bytes": 12902,
+      "task_key": null
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations",
+      "id": "0195f3a0-0000-7000-8000-00000000071c",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "b65a119bccda754ae0649457a2cbe10c4f4fa2ed1f47f78707788a11323de3f1",
+      "size_bytes": 3072,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations",
+      "id": "0195f3a0-0000-7000-8000-000000000726",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "7e43e3f99236081c27d2744661f70cee0538f6c612276f8507cc27eeeb4cab5e",
+      "size_bytes": 3543,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
+      "id": "0195f3a0-0000-7000-8000-000000000728",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "9d629182f29f5a0387d35216ff9f77ccb514ea65481d01d73d51a5dfb7fbcd70",
+      "size_bytes": 1142,
+      "task_key": "pack-gap.javascript"
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
+      "id": "0195f3a0-0000-7000-8000-00000000072a",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "35b911b36d5ad38dc68eba6d2b2adda2c3a662d8f24d67f62e2dba36080c1a3f",
+      "size_bytes": 1130,
+      "task_key": "pack-gap.python"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000708",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000070a",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "c9fd9ccb6682c54b5fcb0363757b6c6873564e7c067f70b3b5581b611528b9f4",
+      "size_bytes": 7,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000070c",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "55f4221aa0e36b70cbfc65ccc26728d31f6510eb1ead635badc007cdb5cd2bed",
+      "size_bytes": 7,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000070e",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "53199309ddfb6ea7ecdc24c7731f535dc3d6bba2e8f053b895b78b967b84c534",
+      "size_bytes": 9,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000714",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000716",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "45f63a941a43b0e40cbf0c7ca3e31910f84485b8eef76ee82896dd3db4669835",
+      "size_bytes": 48,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000718",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "2bb15386bcd126dd898bf42f627459520bad3125c5aa674aff9d30c0df2a247e",
+      "size_bytes": 43,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000071a",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000071e",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000720",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "81d503b47847a8767cdc5b2fa8af2c93a59e41b3c34fee26cf3751deaa976803",
+      "size_bytes": 50,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000722",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "c698b07632921ba3ff4259f687a08a9785232f4b62da15e201652d42714d095a",
+      "size_bytes": 45,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000724",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000709",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000070b",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000070d",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000070f",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000715",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000717",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000719",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000071b",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000071f",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000721",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000723",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000725",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": "application/vnd.codeye.environment+json;schema_version=0.1",
+      "id": "0195f3a0-0000-7000-8000-000000000710",
+      "media_type": "application/vnd.codeye.environment+json",
+      "role": "other",
+      "sha256": "7949e6c522e3790e4c3574f182871d3c505e52dfe1708d3e531f0344c45847c8",
+      "size_bytes": 3950,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": "application/vnd.codeye.environment+json;schema_version=0.1",
+      "id": "0195f3a0-0000-7000-8000-000000000712",
+      "media_type": "application/vnd.codeye.environment+json",
+      "role": "other",
+      "sha256": "0ced2244179d928a7fe73a6c2dfa91a3c9a4e9b5ae904d1dc2ec053f756fab72",
+      "size_bytes": 1463,
+      "task_key": "docs.discover"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "id": "0195f3a0-0000-7000-8000-00000000072c",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "f51d61858d08867bb578ba4103cb722b9f63cb0ce1080fa3b14f13eb221bef61",
+      "size_bytes": 4232,
+      "task_key": "review.environment"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "id": "0195f3a0-0000-7000-8000-00000000072e",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "2eb6454ff5caa3ec8582d3837942a1736d9fac35fab15adb15d70b6dc9658e77",
+      "size_bytes": 1380,
+      "task_key": "review.documents"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "id": "0195f3a0-0000-7000-8000-000000000730",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "660352748457ec9b0bb3d85b991ef6e973a5db0b268e12515c17cc5b37e6436d",
+      "size_bytes": 3354,
+      "task_key": "review.investigate"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "id": "0195f3a0-0000-7000-8000-000000000733",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "90dd75be6ab616e8012b065c2bf58214e31c4323d3fd32b62e0afb9ab3c79ccd",
+      "size_bytes": 4090,
+      "task_key": "review.verify"
+    }
+  ],
+  "attempt": {
+    "cleanup_state": "confirmed",
+    "completion_status": "partial",
+    "id": "0195f3a0-0000-7000-8000-000000000702",
+    "lease_epoch": 1,
+    "number": 1,
+    "reason": null
+  },
+  "builder": {
+    "id": "codeye-report",
+    "input_digest": "f29dd6ef179389b62c9908e1e10a1ad6da85d33faea8b9fe252f77dfc64834ef",
+    "result_manifest_artifact_id": null,
+    "version": "6"
+  },
+  "code_review": {
+    "accepted_calls": 4,
+    "calls": 4,
+    "exposed_files": 11,
+    "finding_ids": [
+      "review_investigate_1"
+    ],
+    "interpretation_limits": [],
+    "inventory_files": 44,
+    "ledger": {
+      "calls_used": 4,
+      "max_calls": null,
+      "max_request_bytes": null,
+      "modules": [],
+      "request_bytes_sent": 70783,
+      "scope": {
+        "key": "review.scope",
+        "reason": "secret_screen_unavailable",
+        "result": "skipped",
+        "task_status": "skipped_policy"
+      },
+      "status": "overview_only"
+    },
+    "pack": "role",
+    "pack_id": "review-r1",
+    "pack_version": "2.0.0",
+    "request_bytes": 70783,
+    "roles": [
+      {
+        "key": "review.investigate",
+        "result": "accepted",
+        "task_status": "succeeded"
+      },
+      {
+        "key": "review.interpret",
+        "reason": "no_tool_observations",
+        "result": "skipped",
+        "task_status": "skipped_policy"
+      },
+      {
+        "key": "review.verify",
+        "result": "accepted",
+        "task_status": "succeeded"
+      }
+    ],
+    "stage": {
+      "counts": {
+        "skipped_policy": 16
+      },
+      "reasons": [
+        "no_tool_observations",
+        "secret_screen_unavailable"
+      ],
+      "stage": "code_review",
+      "state": "partial",
+      "succeeded": 2,
+      "tasks": 18
+    }
+  },
+  "coverage": {
+    "ai_review": {
+      "optional_tasks": [
+        {
+          "key": "review.environment",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.interpret",
+          "reason": "no_tool_observations",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s001",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s002",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s003",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s004",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s005",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s006",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s007",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.scope",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s001",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s002",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s003",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s004",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s005",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s006",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s007",
+          "reason": "secret_screen_unavailable",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        }
+      ],
+      "reason": null,
+      "required_tasks": [
+        {
+          "key": "review.documents",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.investigate",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.verify",
+          "result": "accepted",
+          "task_status": "succeeded"
+        }
+      ],
+      "status": "performed"
+    },
+    "inventory_files": 44,
+    "llm_exposed_files": 11,
+    "notes": [
+      "inventory_counts_all_included_files",
+      "tests_not_planned",
+      "tool_reported_zero_is_not_clean"
+    ],
+    "review_calls": [
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "4ff052a3f276969278c1d1f93010103b013187d0260ecf5ce717fb9a1f7c746e",
+        "pack_version": "2.0.0",
+        "request_sha256": "fff68652a2ea96a1969d921b1b4714bb9233a8cafccc61c918e88dd98b8e6ad3",
+        "role": "environment",
+        "task_key": "review.environment"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "d0cdbb4ee15ac315dd2958e24878be7beb9ed3df0a3619596e0cd61249e095d2",
+        "pack_version": "2.0.0",
+        "request_sha256": "bf52196ea063ffa54ddaea6c12002d300e0ea4ab9651527e03c00d756ac4ca51",
+        "role": "documents",
+        "task_key": "review.documents"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "7e613a74b00f349cead135cd23b46f5d4b6dc916f67deede408e7abdae76e906",
+        "role": "investigate",
+        "task_key": "review.investigate"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "23272acf25df8e6af6b124e2d69cfadf346f7b9cabaec7fc1e3a54755178ed59",
+        "role": "verify",
+        "task_key": "review.verify"
+      }
+    ],
+    "scope_mode": "full",
+    "test_status": "not_run",
+    "tool_processed_files": 33,
+    "tools": [
+      {
+        "analyzer": "go.vet",
+        "analyzer_errors": 0,
+        "exit_class": "success_without_findings",
+        "files_in_scope": 3,
+        "ignored_files": 0,
+        "limitations": [
+          "default_build_context_only"
+        ],
+        "packages": {
+          "analyzed_clean": 1
+        },
+        "partial_parse": false,
+        "processed_files": 3,
+        "processed_paths": [
+          "api/handler.go",
+          "api/handler_test.go",
+          "api/main.go"
+        ],
+        "rule_context": {
+          "config": "not_read",
+          "repository_config": "none",
+          "rule_pack": "codeye-go-vet-default",
+          "rule_pack_version": "1",
+          "selection": [],
+          "source_suppressions": "none"
+        },
+        "stderr_failures": 0,
+        "task_key": "go-vet.m01",
+        "tool_version": "go1.27.4",
+        "unlisted_files": 0
+      },
+      {
+        "analyzer": "go.vet",
+        "analyzer_errors": 0,
+        "exit_class": "success_without_findings",
+        "files_in_scope": 30,
+        "ignored_files": 0,
+        "limitations": [
+          "default_build_context_only"
+        ],
+        "packages": {
+          "analyzed_clean": 1
+        },
+        "partial_parse": false,
+        "processed_files": 30,
+        "processed_paths": [
+          "store/bucket.go",
+          "store/cache.go",
+          "store/codec.go",
+          "store/compact.go",
+          "store/cursor.go",
+          "store/delete.go",
+          "store/encode.go",
+          "store/evict.go",
+          "store/flush.go",
+          "store/get.go",
+          "store/index.go",
+          "store/iter.go",
+          "store/journal.go",
+          "store/lock.go",
+          "store/merge.go",
+          "store/meta.go",
+          "store/open.go",
+          "store/page.go",
+          "store/put.go",
+          "store/range.go",
+          "store/recover.go",
+          "store/scan.go",
+          "store/segment.go",
+          "store/snapshot.go",
+          "store/split.go",
+          "store/stats.go",
+          "store/sync.go",
+          "store/tombstone.go",
+          "store/txn.go",
+          "store/wal.go"
+        ],
+        "rule_context": {
+          "config": "not_read",
+          "repository_config": "none",
+          "rule_pack": "codeye-go-vet-default",
+          "rule_pack_version": "1",
+          "selection": [],
+          "source_suppressions": "none"
+        },
+        "stderr_failures": 0,
+        "task_key": "go-vet.m02",
+        "tool_version": "go1.27.4",
+        "unlisted_files": 0
+      },
+      {
+        "analyzer": "javascript.none",
+        "analyzer_errors": 0,
+        "exit_class": "not_run",
+        "files_in_scope": 3,
+        "ignored_files": 0,
+        "limitations": [
+          "analyzer_pack_missing"
+        ],
+        "packages": {},
+        "partial_parse": false,
+        "processed_files": 0,
+        "rule_context": {
+          "config": "not_read",
+          "repository_config": "none",
+          "rule_pack": "none",
+          "rule_pack_version": "1",
+          "selection": [],
+          "source_suppressions": "none"
+        },
+        "stderr_failures": 0,
+        "task_key": "pack-gap.javascript",
+        "tool_version": null,
+        "unlisted_files": 0
+      },
+      {
+        "analyzer": "python.none",
+        "analyzer_errors": 0,
+        "exit_class": "not_run",
+        "files_in_scope": 3,
+        "ignored_files": 0,
+        "limitations": [
+          "analyzer_pack_missing"
+        ],
+        "packages": {},
+        "partial_parse": false,
+        "processed_files": 0,
+        "rule_context": {
+          "config": "not_read",
+          "repository_config": "none",
+          "rule_pack": "none",
+          "rule_pack_version": "1",
+          "selection": [],
+          "source_suppressions": "none"
+        },
+        "stderr_failures": 0,
+        "task_key": "pack-gap.python",
+        "tool_version": null,
+        "unlisted_files": 0
+      }
+    ]
+  },
+  "created_at": "2026-11-18T00:10:00Z",
+  "demo": true,
+  "documents": {
+    "budget": {
+      "max_documents": 1000,
+      "per_document_bytes": 32768,
+      "read_bytes": 168,
+      "total_bytes": 262144
+    },
+    "conflicts": [],
+    "contracts": [
+      {
+        "applies_to": ".",
+        "evidence_ids": [
+          "ev_54f17c93b602e2fab96fa1c3"
+        ],
+        "statement": "서비스는 설정을 읽어 요청을 처리한다."
+      }
+    ],
+    "discovery": "accepted",
+    "evidence": [
+      {
+        "blob_sha256": "80743a2e9629fa73cd272759bddaa6e2afc0cced627ecb524371a839e853f448",
+        "end_line": 4,
+        "id": "ev_54f17c93b602e2fab96fa1c3",
+        "kind": "document",
+        "path": "README.md",
+        "start_line": 1
+      }
+    ],
+    "instruction_notes": [],
+    "items": [
+      {
+        "applies_to": ".",
+        "class": "readme",
+        "line_count": 4,
+        "path": "README.md",
+        "reason": null,
+        "size_bytes": 168,
+        "status": "selected"
+      }
+    ],
+    "limitations": [],
+    "model": {
+      "reason": null,
+      "state": "performed",
+      "task_key": "review.documents",
+      "task_status": "succeeded"
+    },
+    "modules": [
+      {
+        "inherited": [
+          "README.md"
+        ],
+        "module": "go:api",
+        "own": [],
+        "state": "inherited"
+      },
+      {
+        "inherited": [
+          "README.md"
+        ],
+        "module": "go:store",
+        "own": [],
+        "state": "inherited"
+      },
+      {
+        "inherited": [
+          "README.md"
+        ],
+        "module": "javascript:web",
+        "own": [],
+        "state": "inherited"
+      },
+      {
+        "inherited": [
+          "README.md"
+        ],
+        "module": "python:worker",
+        "own": [],
+        "state": "inherited"
+      }
+    ],
+    "overlaps": [],
+    "questions": [],
+    "stage": {
+      "counts": {},
+      "reasons": [],
+      "stage": "documents",
+      "state": "succeeded",
+      "succeeded": 2,
+      "tasks": 2
+    }
+  },
+  "environment": {
+    "analyzer_tools": [
+      {
+        "analyzers": [
+          "any.gitleaks"
+        ],
+        "detail": null,
+        "status": "observed",
+        "tool": "gitleaks",
+        "version": "8.30.1"
+      },
+      {
+        "analyzers": [
+          "any.jscpd"
+        ],
+        "detail": null,
+        "status": "not_probed",
+        "tool": "jscpd",
+        "version": null
+      },
+      {
+        "analyzers": [
+          "any.lizard"
+        ],
+        "detail": null,
+        "status": "observed",
+        "tool": "lizard",
+        "version": "1.26.1"
+      },
+      {
+        "analyzers": [
+          "go.staticcheck"
+        ],
+        "detail": null,
+        "status": "observed",
+        "tool": "staticcheck",
+        "version": "2026.2.2"
+      }
+    ],
+    "discovery": "accepted",
+    "evidence": [
+      {
+        "blob_sha256": "424d740d3aa6c332df4f856843ec40be8cb54df088a5cb4506019517b06c67a1",
+        "end_line": 4,
+        "id": "ev_6081e869aacc33711a9b4f0d",
+        "kind": "manifest",
+        "path": "web/package.json",
+        "start_line": 4
+      },
+      {
+        "blob_sha256": "5390cff5df26984bc4b3cf3eb92a1fdf4d6c9722c46ada9b3dd83faea1802600",
+        "end_line": 3,
+        "id": "ev_b360495bff3f00f683c6df1a",
+        "kind": "manifest",
+        "path": "worker/pyproject.toml",
+        "start_line": 3
+      }
+    ],
+    "limitations": [
+      "tool_not_probed"
+    ],
+    "manifests": [
+      {
+        "path": "api/go.mod",
+        "status": "parsed"
+      },
+      {
+        "path": "store/go.mod",
+        "status": "parsed"
+      },
+      {
+        "path": "web/package.json",
+        "status": "parsed"
+      },
+      {
+        "path": "worker/pyproject.toml",
+        "status": "parsed"
+      }
+    ],
+    "model": {
+      "reason": null,
+      "state": "performed",
+      "task_key": "review.environment",
+      "task_status": "succeeded"
+    },
+    "modules": [
+      {
+        "ecosystem": "go",
+        "id": "go:api",
+        "in_scope": true,
+        "path": "api"
+      },
+      {
+        "ecosystem": "go",
+        "id": "go:store",
+        "in_scope": true,
+        "path": "store"
+      },
+      {
+        "ecosystem": "javascript",
+        "id": "javascript:web",
+        "in_scope": true,
+        "path": "web"
+      },
+      {
+        "ecosystem": "python",
+        "id": "python:worker",
+        "in_scope": true,
+        "path": "worker"
+      }
+    ],
+    "notes": [
+      {
+        "affected_checks": "a가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+        "evidence_ids": [
+          "ev_6081e869aacc33711a9b4f0d"
+        ],
+        "module": "javascript:web",
+        "needed_observation": "c가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+        "requirement_ids": [
+          "engines_node@web/package.json"
+        ],
+        "still_checkable": "b가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"
+      },
+      {
+        "affected_checks": "a가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+        "evidence_ids": [
+          "ev_b360495bff3f00f683c6df1a"
+        ],
+        "module": "python:worker",
+        "needed_observation": "c가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+        "requirement_ids": [
+          "requires_python@worker/pyproject.toml"
+        ],
+        "still_checkable": "b가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"
+      }
+    ],
+    "observed": [
+      {
+        "detail": null,
+        "status": "observed",
+        "tool": "go",
+        "version": "1.27.4"
+      },
+      {
+        "detail": null,
+        "status": "not_probed",
+        "tool": "node",
+        "version": null
+      },
+      {
+        "detail": null,
+        "status": "not_probed",
+        "tool": "python",
+        "version": null
+      }
+    ],
+    "requirements": [
+      {
+        "comparison": "minimum",
+        "constraint": ">=20",
+        "end_line": 4,
+        "id": "engines_node@web/package.json",
+        "kind": "engines_node",
+        "module": "javascript:web",
+        "path": "web/package.json",
+        "start_line": 4,
+        "tool": "node"
+      },
+      {
+        "comparison": "minimum",
+        "constraint": "1.23",
+        "end_line": 3,
+        "id": "go_directive@api/go.mod",
+        "kind": "go_directive",
+        "module": "go:api",
+        "path": "api/go.mod",
+        "start_line": 3,
+        "tool": "go"
+      },
+      {
+        "comparison": "minimum",
+        "constraint": "1.23",
+        "end_line": 3,
+        "id": "go_directive@store/go.mod",
+        "kind": "go_directive",
+        "module": "go:store",
+        "path": "store/go.mod",
+        "start_line": 3,
+        "tool": "go"
+      },
+      {
+        "comparison": "minimum",
+        "constraint": ">=3.11",
+        "end_line": 3,
+        "id": "requires_python@worker/pyproject.toml",
+        "kind": "requires_python",
+        "module": "python:worker",
+        "path": "worker/pyproject.toml",
+        "start_line": 3,
+        "tool": "python"
+      }
+    ],
+    "stage": {
+      "counts": {},
+      "reasons": [],
+      "stage": "environment",
+      "state": "succeeded",
+      "succeeded": 2,
+      "tasks": 2
+    },
+    "verdicts": [
+      {
+        "module": "go:api",
+        "reason": null,
+        "requirement": "go_directive@api/go.mod",
+        "status": "satisfied",
+        "tool": "go"
+      },
+      {
+        "module": "go:store",
+        "reason": null,
+        "requirement": "go_directive@store/go.mod",
+        "status": "satisfied",
+        "tool": "go"
+      },
+      {
+        "module": "javascript:web",
+        "reason": "not_observed",
+        "requirement": "engines_node@web/package.json",
+        "status": "unknown",
+        "tool": "node"
+      },
+      {
+        "module": "python:worker",
+        "reason": "not_observed",
+        "requirement": "requires_python@worker/pyproject.toml",
+        "status": "unknown",
+        "tool": "python"
+      }
+    ]
+  },
+  "executions": [
+    {
+      "argv": [
+        "gitleaks",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "env.discover/gitleaks.version",
+      "name": "gitleaks.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000070b",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000070a",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-000000000707/1",
+      "task_key": "env.discover"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "env.discover/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000709",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000708",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-000000000707/1",
+      "task_key": "env.discover"
+    },
+    {
+      "argv": [
+        "lizard",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "env.discover/lizard.version",
+      "name": "lizard.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000070d",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000070c",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-000000000707/1",
+      "task_key": "env.discover"
+    },
+    {
+      "argv": [
+        "staticcheck",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "env.discover/staticcheck.version",
+      "name": "staticcheck.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000070f",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000070e",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-000000000707/1",
+      "task_key": "env.discover"
+    },
+    {
+      "argv": [
+        "go",
+        "list",
+        "-e",
+        "-json",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m01/go.list",
+      "name": "go.list",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000719",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000718",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-000000000713/1",
+      "task_key": "go-vet.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "mod",
+        "edit",
+        "-json"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m01/go.modedit",
+      "name": "go.modedit",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000717",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000716",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-000000000713/1",
+      "task_key": "go-vet.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m01/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000715",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000714",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-000000000713/1",
+      "task_key": "go-vet.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "vet",
+        "-json",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m01/go.vet",
+      "name": "go.vet",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000071b",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000071a",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-000000000713/1",
+      "task_key": "go-vet.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "list",
+        "-e",
+        "-json",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m02/go.list",
+      "name": "go.list",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000723",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000722",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-00000000071d/1",
+      "task_key": "go-vet.m02"
+    },
+    {
+      "argv": [
+        "go",
+        "mod",
+        "edit",
+        "-json"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m02/go.modedit",
+      "name": "go.modedit",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000721",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000720",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-00000000071d/1",
+      "task_key": "go-vet.m02"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m02/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000071f",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000071e",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-00000000071d/1",
+      "task_key": "go-vet.m02"
+    },
+    {
+      "argv": [
+        "go",
+        "vet",
+        "-json",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m02/go.vet",
+      "name": "go.vet",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000725",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000724",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000702/0195f3a0-0000-7000-8000-00000000071d/1",
+      "task_key": "go-vet.m02"
+    }
+  ],
+  "export": {
+    "include_code": true
+  },
+  "findings": [
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_7598f744a473d4f167c7b428"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_7598f744a473d4f167c7b428"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_7598f744a473d4f167c7b428"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "053e0c3191066ffd4e58976387606574b28f45f6b4826e506e1dcc677d2eca0d",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_7598f744a473d4f167c7b428",
+          "kind": "code",
+          "location": {
+            "end_line": 12,
+            "path": "api/main.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:45b06f5ccc250e128e61ff06e619d9817940ac3ba08ec426e0929567c552c93f",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "api/main.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 12,
+          "path": "api/main.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "code": "discovery_limitation",
+      "detail": "tool_not_probed",
+      "section": "environment",
+      "subject": null
+    },
+    {
+      "code": "verdict_unknown",
+      "detail": "not_observed",
+      "section": "environment",
+      "subject": "javascript:web node"
+    },
+    {
+      "code": "verdict_unknown",
+      "detail": "not_observed",
+      "section": "environment",
+      "subject": "python:worker python"
+    },
+    {
+      "code": "task_unsupported",
+      "detail": "analyzer_pack_missing",
+      "section": "static_analysis",
+      "subject": "pack-gap.javascript"
+    },
+    {
+      "code": "task_unsupported",
+      "detail": "analyzer_pack_missing",
+      "section": "static_analysis",
+      "subject": "pack-gap.python"
+    },
+    {
+      "code": "not_planned",
+      "detail": null,
+      "section": "metrics",
+      "subject": null
+    },
+    {
+      "code": "model_input_not_screened",
+      "detail": null,
+      "section": "secrets",
+      "subject": null
+    },
+    {
+      "code": "not_planned",
+      "detail": null,
+      "section": "secrets",
+      "subject": null
+    },
+    {
+      "code": "review_scope_skipped",
+      "detail": "secret_screen_unavailable",
+      "section": "code_review",
+      "subject": "review.scope"
+    },
+    {
+      "code": "tests_not_run",
+      "detail": null,
+      "section": "report",
+      "subject": null
+    }
+  ],
+  "id": "0195f3a0-0000-7000-8000-000000000704",
+  "inputs": {
+    "commit_sha": null,
+    "description": "승인된 로컬 경로를 복사해 고정한 snapshot이다(안정 복사 best effort).",
+    "manifest_sha256": "22d1b9e3af626ed1380a0a5502e8ab3793d98308932434fa65f21d9c12ee059a",
+    "profile": "deep-review",
+    "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+    "source_kind": "local"
+  },
+  "limitations": [
+    "caller_expansion_go_only",
+    "caller_expansion_package_functions_only",
+    "controller_holds_no_snapshot_bytes",
+    "excerpt_only",
+    "files_outside_review_context",
+    "model_input_not_secret_screened",
+    "no_symbol_for_expansion",
+    "static_analysis_gap:javascript",
+    "static_analysis_gap:python",
+    "upstream_interpret_skipped"
+  ],
+  "metrics": {
+    "metrics": [],
+    "stage": {
+      "counts": {},
+      "reasons": [],
+      "stage": "static_analysis",
+      "state": "no_tasks",
+      "succeeded": 0,
+      "tasks": 0
+    },
+    "task_keys": []
+  },
+  "observations": [],
+  "overview": {
+    "attention": [
+      {
+        "code": "pending_candidates",
+        "count": 1,
+        "section": "code_review"
+      },
+      {
+        "code": "analysis_gaps",
+        "count": 10,
+        "section": "gaps"
+      }
+    ],
+    "sections": [
+      {
+        "counts": {
+          "mismatch": 0,
+          "modules": 4,
+          "notes": 2,
+          "requirements": 4,
+          "satisfied": 2,
+          "unknown": 2
+        },
+        "key": "environment",
+        "state": "succeeded"
+      },
+      {
+        "counts": {
+          "conflicts": 0,
+          "contracts": 1,
+          "documents": 1,
+          "instruction_notes": 0,
+          "modules_without_documents": 0,
+          "not_read": 0,
+          "questions": 0,
+          "read": 1
+        },
+        "key": "documents",
+        "state": "succeeded"
+      },
+      {
+        "counts": {
+          "actionable": 0,
+          "findings": 0,
+          "not_succeeded": 2,
+          "observations": 0,
+          "pending": 0,
+          "succeeded": 2,
+          "tools": 4
+        },
+        "key": "static_analysis",
+        "state": "partial"
+      },
+      {
+        "counts": {
+          "metrics": 0,
+          "observations": 0,
+          "tools": 0
+        },
+        "key": "metrics",
+        "state": "no_tasks"
+      },
+      {
+        "counts": {
+          "detections": 0,
+          "files": 0,
+          "tools": 0
+        },
+        "key": "secrets",
+        "state": "no_tasks"
+      },
+      {
+        "counts": {
+          "actionable": 0,
+          "calls": 4,
+          "findings": 1,
+          "pending": 1,
+          "refuted": 0
+        },
+        "key": "code_review",
+        "state": "partial"
+      },
+      {
+        "counts": {
+          "gaps": 10
+        },
+        "key": "gaps",
+        "state": null
+      }
+    ]
+  },
+  "quality_verdict": "inconclusive",
+  "revision": 1,
+  "run_id": "0195f3a0-0000-7000-8000-000000000701",
+  "schema_version": "0.1",
+  "secrets": {
+    "detections": [],
+    "model_input": "not_screened",
+    "stage": {
+      "counts": {},
+      "reasons": [],
+      "stage": "static_analysis",
+      "state": "no_tasks",
+      "succeeded": 0,
+      "tasks": 0
+    },
+    "task_keys": []
+  },
+  "static_analysis": {
+    "languages": [
+      {
+        "ecosystem": "go",
+        "tools": [
+          {
+            "analyzer": "go.vet",
+            "exit_class": "success_without_findings",
+            "files_in_scope": 3,
+            "finding_ids": [],
+            "metric_observations": 0,
+            "observation_ids": [],
+            "partial_parse": false,
+            "processed_files": 3,
+            "purpose": "diagnostics",
+            "required": true,
+            "result": "accepted",
+            "rule_pack": "codeye-go-vet-default@1",
+            "rules": [],
+            "secret_observations": 0,
+            "suppressed": 0,
+            "task_key": "go-vet.m01",
+            "task_reason": null,
+            "task_status": "succeeded",
+            "tool": "go",
+            "tool_version": "go1.27.4",
+            "unresolved": 0
+          },
+          {
+            "analyzer": "go.vet",
+            "exit_class": "success_without_findings",
+            "files_in_scope": 30,
+            "finding_ids": [],
+            "metric_observations": 0,
+            "observation_ids": [],
+            "partial_parse": false,
+            "processed_files": 30,
+            "purpose": "diagnostics",
+            "required": true,
+            "result": "accepted",
+            "rule_pack": "codeye-go-vet-default@1",
+            "rules": [],
+            "secret_observations": 0,
+            "suppressed": 0,
+            "task_key": "go-vet.m02",
+            "task_reason": null,
+            "task_status": "succeeded",
+            "tool": "go",
+            "tool_version": "go1.27.4",
+            "unresolved": 0
+          }
+        ]
+      },
+      {
+        "ecosystem": "javascript",
+        "tools": [
+          {
+            "analyzer": "javascript.none",
+            "exit_class": "not_run",
+            "files_in_scope": 3,
+            "finding_ids": [],
+            "metric_observations": 0,
+            "observation_ids": [],
+            "partial_parse": false,
+            "processed_files": 0,
+            "purpose": "diagnostics",
+            "required": false,
+            "result": "accepted",
+            "rule_pack": "none@1",
+            "rules": [],
+            "secret_observations": 0,
+            "suppressed": 0,
+            "task_key": "pack-gap.javascript",
+            "task_reason": "analyzer_pack_missing",
+            "task_status": "unsupported",
+            "tool": "none",
+            "tool_version": null,
+            "unresolved": 0
+          }
+        ]
+      },
+      {
+        "ecosystem": "python",
+        "tools": [
+          {
+            "analyzer": "python.none",
+            "exit_class": "not_run",
+            "files_in_scope": 3,
+            "finding_ids": [],
+            "metric_observations": 0,
+            "observation_ids": [],
+            "partial_parse": false,
+            "processed_files": 0,
+            "purpose": "diagnostics",
+            "required": false,
+            "result": "accepted",
+            "rule_pack": "none@1",
+            "rules": [],
+            "secret_observations": 0,
+            "suppressed": 0,
+            "task_key": "pack-gap.python",
+            "task_reason": "analyzer_pack_missing",
+            "task_status": "unsupported",
+            "tool": "none",
+            "tool_version": null,
+            "unresolved": 0
+          }
+        ]
+      }
+    ],
+    "stage": {
+      "counts": {
+        "unsupported": 2
+      },
+      "reasons": [
+        "analyzer_pack_missing"
+      ],
+      "stage": "static_analysis",
+      "state": "partial",
+      "succeeded": 2,
+      "tasks": 4
+    }
+  },
+  "status": "partial",
+  "summary": {
+    "actionable_findings": 0,
+    "pending_candidates": 1,
+    "priorities": [
+      "review_investigate_1"
+    ],
+    "raw_observations": 0,
+    "refuted_findings": 0,
+    "total_findings": 1,
+    "unresolved_observations": 0
+  },
+  "tasks": [
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000711",
+      "key": "docs.discover",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000707",
+      "key": "env.discover",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000713",
+      "key": "go-vet.m01",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000071d",
+      "key": "go-vet.m02",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000727",
+      "key": "pack-gap.javascript",
+      "reason": "analyzer_pack_missing",
+      "required_for_verdict": false,
+      "status": "unsupported"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000729",
+      "key": "pack-gap.python",
+      "reason": "analyzer_pack_missing",
+      "required_for_verdict": false,
+      "status": "unsupported"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000072d",
+      "key": "review.documents",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000072b",
+      "key": "review.environment",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000731",
+      "key": "review.interpret",
+      "reason": "no_tool_observations",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000072f",
+      "key": "review.investigate",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000735",
+      "key": "review.investigate.s001",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000737",
+      "key": "review.investigate.s002",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000739",
+      "key": "review.investigate.s003",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000073b",
+      "key": "review.investigate.s004",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000073d",
+      "key": "review.investigate.s005",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000073f",
+      "key": "review.investigate.s006",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000741",
+      "key": "review.investigate.s007",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000734",
+      "key": "review.scope",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000732",
+      "key": "review.verify",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000736",
+      "key": "review.verify.s001",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000738",
+      "key": "review.verify.s002",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000073a",
+      "key": "review.verify.s003",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000073c",
+      "key": "review.verify.s004",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000073e",
+      "key": "review.verify.s005",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000740",
+      "key": "review.verify.s006",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000742",
+      "key": "review.verify.s007",
+      "reason": "secret_screen_unavailable",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    }
+  ]
+}

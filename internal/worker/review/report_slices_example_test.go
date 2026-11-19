@@ -3,6 +3,7 @@ package review
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -92,6 +93,114 @@ func TestReportSlicesExample(t *testing.T) {
 		if !bytes.Equal(have, b) {
 			t.Fatalf("%s differs from the regenerated example; rerun with CODEYE_UPDATE_EXAMPLES=1 and review the diff", p)
 		}
+	}
+}
+
+// sliceReport runs the role pack with the slices on j through the report
+// builder.
+func sliceReport(t *testing.T, j analysis.Job, static analysis.Handler, maxCalls int, ids *exampleIDs) report.Report {
+	t.Helper()
+	pinExampleSnapshot(t, &j)
+	h, err := discovery.Wrap(RoleHandler{Static: static, Caller: &roleCaller{script: coverageScript(t)}, MaxCalls: maxCalls}, discovery.Config{Observer: exampleObserver{t: t}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := h.Plan(t.Context(), j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := map[string]analysis.TaskResult{}
+	for _, task := range plan {
+		results[task.Key] = h.Run(t.Context(), j, task, nil)
+	}
+	r, err := report.Build(exampleInput(t, j, h, plan, results, ids), report.DefaultRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// TC-169: without a completed secrets scan no slice runs. The ledger has
+// the scope task skipped (secret_screen_unavailable), no module row and
+// status overview_only, and the gap list says so. The report is stored as
+// internal/report/testdata/report-unscreened.json, which the schema check
+// (validate_bundle.py) and the web parser read too.
+func TestReportSlicesUnscreened(t *testing.T) {
+	j := coverageJob(t)
+	j.RunID, j.AttemptID = "0195f3a0-0000-7000-8000-000000000701", "0195f3a0-0000-7000-8000-000000000702"
+	static, err := pack.NewComposite(exampleMember{d: govet.Descriptor(), plan: govet.Plan, run: func(j analysis.Job, task pack.Task) analysis.TaskResult { return exampleVet(t, j, task) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := sliceReport(t, j, static, record.DefaultMaxCalls, &exampleIDs{n: 0x202})
+	l := r.CodeReview.Ledger
+	if l == nil || l.Scope.Result != "skipped" || deref(l.Scope.Reason) != "secret_screen_unavailable" || len(l.Modules) != 0 || l.Status != report.LedgerOverviewOnly ||
+		l.MaxCalls != nil || r.Secrets.ModelInput != report.ScreenNotScreened {
+		t.Fatalf("ledger %+v model input %s", l, r.Secrets.ModelInput)
+	}
+	gaps := map[string]bool{}
+	for _, g := range r.Gaps {
+		gaps[g.Code] = true
+	}
+	if !gaps["review_scope_skipped"] || !gaps["model_input_not_screened"] {
+		t.Fatalf("gaps %+v", r.Gaps)
+	}
+	for _, f := range r.Findings {
+		if strings.HasPrefix(f.ID, "review_s") {
+			t.Fatalf("slice finding %s without a screen", f.ID)
+		}
+	}
+	writeOrCompare(t, r, "../../report/testdata/report-unscreened.json")
+}
+
+// TC-169: beyond 32 slices the files are counted per module as not planned,
+// shown as a gap, and the report validates.
+func TestReportSlicesNotPlanned(t *testing.T) {
+	tree := map[string]string{"go.mod": "module sample.test/big\n\ngo 1.23\n", "README.md": "# Big\n"}
+	for i := range 200 {
+		tree[fmt.Sprintf("p/f%03d.go", i)] = "package p\n\n" + strings.Repeat("// filler line for the slice bound\n", 80)
+	}
+	j := treeJob(t, tree)
+	j.RunID, j.AttemptID = "0195f3a0-0000-7000-8000-000000000801", "0195f3a0-0000-7000-8000-000000000802"
+	r := sliceReport(t, j, sliceExampleStatic(t), 15, &exampleIDs{n: 0x302})
+	l := r.CodeReview.Ledger
+	if l == nil || len(l.Modules) != 1 || l.Modules[0].FilesNotPlanned == 0 || l.Modules[0].FilesBudgetExhausted == 0 || l.Status != report.LedgerPartial {
+		t.Fatalf("ledger %+v", l)
+	}
+	found := false
+	for _, g := range r.Gaps {
+		found = found || (g.Code == "review_scope_not_planned" && deref(g.Subject) == l.Modules[0].ModuleID)
+	}
+	if !found {
+		t.Fatalf("gaps %+v", r.Gaps)
+	}
+	if _, err := report.Marshal(r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeOrCompare stores r (demo) at p, or compares with the stored file.
+func writeOrCompare(t *testing.T, r report.Report, p string) {
+	t.Helper()
+	raw, err := report.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = bytes.Replace(raw, []byte(`"demo":false`), []byte(`"demo":true`), 1)
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, raw, "", "  "); err != nil {
+		t.Fatal(err)
+	}
+	pretty.WriteByte('\n')
+	if os.Getenv("CODEYE_UPDATE_EXAMPLES") == "1" {
+		if err := os.WriteFile(p, pretty.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	have, err := os.ReadFile(p)
+	if err != nil || !bytes.Equal(have, pretty.Bytes()) {
+		t.Fatalf("%s differs from the regenerated report; rerun with CODEYE_UPDATE_EXAMPLES=1 (%v)", p, err)
 	}
 }
 

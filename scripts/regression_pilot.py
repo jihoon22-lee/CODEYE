@@ -308,6 +308,9 @@ def run(base, root, env, web=True, coverage_check=True):
             # 비밀정보 선별이 있어야 모듈 단위 slice가 실행된다. 호출 상한은 시도마다 적용된다.
             *(["--gitleaks", os.environ["CODEYE_PILOT_GITLEAKS"]] if os.environ.get("CODEYE_PILOT_GITLEAKS") else []),
             *(["--review-max-calls", os.environ["CODEYE_PILOT_REVIEW_MAX_CALLS"]] if os.environ.get("CODEYE_PILOT_REVIEW_MAX_CALLS") else []),
+            # 파일럿 사본의 Python·JS 모듈은 ruff·eslint가 판정에 필요하다. name=path를 공백으로
+            # 구분해 주면 에이전트 플래그 --name path가 된다(예: ruff=/abs/ruff node=/abs/node).
+            *[a for spec in os.environ.get("CODEYE_PILOT_TOOLS", "").split() for a in ("--" + spec.partition("=")[0], spec.partition("=")[2])],
         ]
 
     if web:
@@ -524,7 +527,8 @@ def dry_run(args, root):
     env = dict(os.environ, CODEYE_PILOT_RELAY_FILE=str(args.relay_file), CODEYE_PILOT_RESULTS=str(args.results),
                CODEYE_PILOT_CASES=args.cases, CODEYE_PILOT_LEDGER=str(args.ledger))
     env.pop("OPENAI_API_KEY", None)
-    for key, value in (("CODEYE_PILOT_GITLEAKS", args.gitleaks), ("CODEYE_PILOT_REVIEW_MAX_CALLS", args.max_calls)):
+    for key, value in (("CODEYE_PILOT_GITLEAKS", args.gitleaks), ("CODEYE_PILOT_REVIEW_MAX_CALLS", args.max_calls),
+                       ("CODEYE_PILOT_TOOLS", " ".join(args.tool or []))):
         env.pop(key, None)
         if value:
             env[key] = str(value)
@@ -553,6 +557,7 @@ if __name__ == "__main__":
     parser.add_argument("--results", type=Path)
     parser.add_argument("--cases", default="")
     parser.add_argument("--gitleaks")
+    parser.add_argument("--tool", action="append", help="agent tool flag as name=path, e.g. ruff=/abs/ruff (repeatable)")
     parser.add_argument("--max-calls", type=int)
     parser.add_argument("--build-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--no-coverage-check", action="store_true", help="baseline build without slices")

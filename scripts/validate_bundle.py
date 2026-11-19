@@ -99,6 +99,12 @@ def main() -> None:
     coverage_root = ROOT / "fixtures/modules/coverage/input"
     validators["report.schema.json"].validate(slices_report)
     check_report(slices_report, coverage_root)
+    # The same fixture without a secrets scan: review.scope skipped, a ledger without rows (overview_only).
+    unscreened = json_file(ROOT / "internal/report/testdata/report-unscreened.json")
+    validators["report.schema.json"].validate(unscreened)
+    check_report(unscreened, coverage_root)
+    ensure(unscreened["code_review"]["ledger"]["status"] == "overview_only" and not unscreened["code_review"]["ledger"]["modules"]
+           and any(g["code"] == "review_scope_skipped" for g in unscreened["gaps"]), "Unscreened slice report without its ledger state")
     published = json_file(ROOT / "examples/report-go-vet.json")
     validators["report.schema.json"].validate(published)
     check_report(published, ROOT / "fixtures/go-vet")

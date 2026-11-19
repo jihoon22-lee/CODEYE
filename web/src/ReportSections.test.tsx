@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import sectioned from '../../examples/report.json';
 import flat from '../../examples/report-go-vet.json';
 import withSlices from '../../examples/report-slices.json';
+import unscreened from '../../internal/report/testdata/report-unscreened.json';
 import { parseAnalysisReport } from './analysisReport';
 import { ReportDocument } from './ReportPanel';
 import { reportKo as t } from './locales/report-ko';
@@ -13,8 +14,9 @@ afterEach(cleanup);
 // examples/report.json is the builder's output for fixtures/modules/input
 // (internal/worker/review/report_example_test.go), stored with demo: true;
 // examples/report-go-vet.json is a revision published before the sections.
-function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.json'): Record<string, any> {
-  const doc = structuredClone(name === 'report.json' ? sectioned : name === 'report-slices.json' ? withSlices : flat) as Record<string, any>;
+function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.json' | 'report-unscreened.json'): Record<string, any> {
+  const docs = { 'report.json': sectioned, 'report-go-vet.json': flat, 'report-slices.json': withSlices, 'report-unscreened.json': unscreened };
+  const doc = structuredClone(docs[name]) as Record<string, any>;
   doc.demo = false;
   return doc;
 }
@@ -152,5 +154,21 @@ describe('analysis sections', () => {
       edit(d);
       expect(() => parseAnalysisReport(d, d.run_id), name).toThrow();
     }
+  });
+
+  // internal/report/testdata/report-unscreened.json: the same fixture without
+  // a secrets scan (internal/worker/review/report_slices_example_test.go).
+  it('says that no module was reviewed without a secrets screen', () => {
+    const doc = example('report-unscreened.json');
+    const r = parseAnalysisReport(doc, doc.run_id);
+    const ledger = r.sections!.codeReview.ledger!;
+    expect(ledger.modules).toEqual([]);
+    expect(ledger.status).toBe('overview_only');
+    const { container } = render(<ReportDocument report={r} />);
+    const section = container.querySelector('#report-section-code_review') as HTMLElement;
+    expect(within(section).getByText(t.sections.ledger.status.overview_only)).toBeTruthy();
+    expect(within(section).getByText(t.sections.ledger.none)).toBeTruthy();
+    const gaps = container.querySelector('#report-section-gaps') as HTMLElement;
+    expect(within(gaps).getByText(t.sections.gapLabels.review_scope_skipped)).toBeTruthy();
   });
 });
