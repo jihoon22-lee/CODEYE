@@ -150,7 +150,8 @@ func dependencyPart(l Locale, deps []EnvDependency) secPart {
 		if d.Manager != nil {
 			manager = *d.Manager
 			if d.ManagerVersion != nil {
-				manager += " " + *d.ManagerVersion
+				// go reports "go1.27.4": show "go 1.27.4", not the name twice.
+				manager += " " + strings.TrimPrefix(*d.ManagerVersion, *d.Manager)
 			}
 		}
 		if d.State != nil {

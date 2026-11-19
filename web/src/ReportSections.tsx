@@ -180,7 +180,8 @@ function DependencyBlock({ dependencies }: { dependencies: Dependency[] }) {
         head={[s.col.module, l.col.manager, l.col.state, l.col.prepared, s.col.reason, l.col.limitations]}
         rows={dependencies.map((x) => [
           <code key="m">{name(x)}</code>,
-          x.manager === null ? '—' : <code key="g">{x.manager + (x.managerVersion ? ' ' + x.managerVersion : '')}</code>,
+          // go reports "go1.27.4": show "go 1.27.4", not the name twice.
+          x.manager === null ? '—' : <code key="g">{x.manager + (x.managerVersion ? ' ' + (x.managerVersion.startsWith(x.manager) ? x.managerVersion.slice(x.manager.length) : x.managerVersion) : '')}</code>,
           x.state === null ? label(s.taskStatus, x.status) : label(l.state, x.state),
           prepared(x),
           reason(x),

@@ -143,9 +143,9 @@ describe('analysis sections', () => {
     const table = Array.from(section.querySelectorAll('table')).find((x) => x.querySelector('th')?.textContent === t.sections.col.module && x.textContent!.includes(d.col.manager))!;
     const cells = Array.from(table.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
     expect(cells).toEqual([
-      ['go:.', 'go go1.27.4', d.state.prepared, '6/6', '—', t.reasons.dependencies_prepared],
-      ['go:svc/a', 'go go1.27.4', d.state.partial, '3/4 ' + d.failed(1), t.reasons.module_not_on_proxy, t.reasons.dependencies_partially_prepared + ' ' + t.reasons.dependency_versions_not_pinned],
-      ['go:svc/b', 'go go1.27.4', d.state.skipped, '0/0', t.reasons.no_dependencies, '—'],
+      ['go:.', 'go 1.27.4', d.state.prepared, '6/6', '—', t.reasons.dependencies_prepared],
+      ['go:svc/a', 'go 1.27.4', d.state.partial, '3/4 ' + d.failed(1), t.reasons.module_not_on_proxy, t.reasons.dependencies_partially_prepared + ' ' + t.reasons.dependency_versions_not_pinned],
+      ['go:svc/b', 'go 1.27.4', d.state.skipped, '0/0', t.reasons.no_dependencies, '—'],
       ['deps.go.m03', '—', t.sections.taskStatus.failed, '—', d.record.result_missing, '—'],
     ]);
     const failed = within(section).getByRole('heading', { name: d.failedItems }).nextElementSibling!;
