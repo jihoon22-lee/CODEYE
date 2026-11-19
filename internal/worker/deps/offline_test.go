@@ -61,6 +61,27 @@ func TestOfflineGoReadsOnlyTheOperatorCache(t *testing.T) {
 	}
 }
 
+// The go command stops before listing modules when a go.mod of the graph is
+// missing from the operator's cache (what go 1.27 prints): the module it
+// names is still a failed item, so the operator knows what to add.
+func TestOfflineGoNamesTheModuleMissingBeforeTheList(t *testing.T) {
+	job, _ := jobOf(t, map[string]string{"go.mod": goMod, "go.sum": goSum, "main.go": "package main\n"})
+	operator := t.TempDir()
+	writeTree(t, operator, map[string]string{"cache/download/example.com/other/@v/v1.0.0.mod": "module example.com/other\n"})
+	r := &fakeRunner{fn: goScript(func(context.Context, executor.Spec) executor.Result {
+		return exited(1, "", "go: github.com/spf13/pflag@v1.0.6: reading file:///x/github.com/spf13/pflag/@v/v1.0.6.mod: no such file or directory\n"+
+			"go: /abs/path@v1: ignored\n")
+	})}
+	res := handler(t, Config{Offline: true, GoModCache: operator}).Run(context.Background(), job, analysis.TaskSpec{Key: "deps.go"}, r)
+	if res.Status != domain.TaskFailed || res.Reason != depdoc.ReasonOfflineNoRegistry {
+		t.Fatalf("result = %s/%s", res.Status, res.Reason)
+	}
+	rec := readRecord(t, job, "deps.go")
+	if len(rec.FailedItems) != 1 || rec.FailedItems[0].Name != "github.com/spf13/pflag@v1.0.6" || rec.FailedItems[0].Reason != ReasonGoModuleNotOnProxy {
+		t.Fatalf("failed items %+v", rec.FailedItems)
+	}
+}
+
 // Offline with an internal proxy: it is used as written with the operator's
 // checksum database, and its own failures keep their reason.
 func TestOfflineGoUsesTheInternalProxy(t *testing.T) {

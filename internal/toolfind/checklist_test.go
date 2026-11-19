@@ -2,6 +2,7 @@ package toolfind
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,13 +17,14 @@ func TestChecklistCoversEveryTool(t *testing.T) {
 		}
 		res.Tools = append(res.Tools, Tool{Name: name, Status: NotFound})
 	}
-	res.Tools[0] = Tool{Name: "go", Status: Found, Path: "/home/u/go/bin/go", Version: "1.27.4", VersionTested: true}
+	home := t.TempDir()
+	res.Tools[0] = Tool{Name: "go", Status: Found, Path: filepath.Join(home, "go", "bin", "go"), Version: "1.27.4", VersionTested: true}
 	var out bytes.Buffer
-	if err := WriteChecklist(&out, res, "/home/u"); err != nil {
+	if err := WriteChecklist(&out, res, home); err != nil {
 		t.Fatal(err)
 	}
 	text := out.String()
-	for _, want := range []string{"- [x] go: 1.27.4 (tested 1.27) - ~/go/bin/go\n", "- [ ] staticcheck: missing (tested 2026.2) - copy the staticcheck binary", "- [ ] opencode: missing (tested 1.19.5)", "1 found, 22 missing, 0 unusable."} {
+	for _, want := range []string{"- [x] go: 1.27.4 (tested 1.27) - ~" + filepath.Join(string(filepath.Separator)+"go", "bin", "go") + "\n", "- [ ] staticcheck: missing (tested 2026.2) - copy the staticcheck binary", "- [ ] opencode: missing (tested 1.19.5)", "1 found, 22 missing, 0 unusable."} {
 		if !strings.Contains(text, want) {
 			t.Errorf("checklist lacks %q:\n%s", want, text)
 		}

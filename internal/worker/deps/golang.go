@@ -293,6 +293,11 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		return fail(domain.TaskFailed, depdoc.StateFailed, ReasonWorkspaceDrift)
 	}
 	if !exitedZero(res) {
+		if len(out.FailedItems) == 0 {
+			// The go command stops before listing any module when a go.mod
+			// of the graph is missing; its error names the module.
+			out.FailedItems = stderrModules(res.Stderr.Data)
+		}
 		reason := classifyGo(string(res.Stderr.Data) + "\n" + failedText(failed))
 		for i := range out.FailedItems {
 			out.FailedItems[i].Reason = classifyGo(out.FailedItems[i].Reason)
@@ -371,6 +376,30 @@ func parseDownload(stdout []byte) (bool, []goDownload, []depdoc.Failed) {
 		}
 	}
 	return true, items, failed
+}
+
+// stderrModules reads "go: PATH@VERSION: error" lines of go command output
+// as failed items (at most the record's limit), the error text as reason.
+func stderrModules(stderr []byte) []depdoc.Failed {
+	var out []depdoc.Failed
+	seen := map[string]bool{}
+	for _, line := range strings.Split(string(stderr), "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "go: ")
+		if !ok {
+			continue
+		}
+		name, text, ok := strings.Cut(rest, ": ")
+		at := strings.LastIndex(name, "@")
+		if !ok || at <= 0 || at == len(name)-1 || strings.ContainsAny(name, " \t\\") || filepath.IsAbs(name) || len(name) > 512 || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, depdoc.Failed{Name: name, Reason: text})
+		if len(out) == depdoc.MaxFailedItems {
+			break
+		}
+	}
+	return out
 }
 
 func failedText(failed []depdoc.Failed) string {
