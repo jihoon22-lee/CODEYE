@@ -23,6 +23,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -417,6 +418,13 @@ func (c *Config) validate(knownTools []string) error {
 		for name, v := range map[string]string{"go_proxy": d.GoProxy, "go_sumdb": d.GoSumDB, "go_private": d.GoPrivate, "go_noproxy": d.GoNoProxy, "go_nosumdb": d.GoNoSumDB} {
 			if strings.ContainsAny(v, "\x00\n\r") || len(v) > 2048 {
 				return fmt.Errorf("agent.dependencies.%s must be one line", name)
+			}
+		}
+		// A credential in a proxy URL would reach the agent's arguments
+		// and the worker hello; authenticated proxies are not supported.
+		for name, v := range map[string]string{"go_proxy": d.GoProxy, "go_sumdb": d.GoSumDB} {
+			if domain.GoSettingCarriesCredentials(v) {
+				return fmt.Errorf("agent.dependencies.%s must not carry credentials (user:token@ in a URL)", name)
 			}
 		}
 		if d.TimeoutSeconds < 0 || d.TotalTimeoutSeconds < 0 || d.MaxDownloadBytes < 0 {

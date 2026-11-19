@@ -1907,7 +1907,7 @@ components:
           type: object
           additionalProperties: false
           required: [local, git]
-          description: 분석 선택을 기록하지 않은 프로젝트의 기본값. 로컬 폴더는 둘 다 true, Git 저장소는 run_build_scripts가 false다
+          description: 분석 선택을 기록하지 않은 프로젝트의 기본값. 로컬 폴더는 모두 true, Git 저장소는 run_build_scripts만 false다(fetch_dependencies는 둘 다 true)
           properties:
             local: {$ref: '#/components/schemas/AnalysisChoices'}
             git: {$ref: '#/components/schemas/AnalysisChoices'}

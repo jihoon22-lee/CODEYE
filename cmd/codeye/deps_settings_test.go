@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
@@ -26,5 +27,17 @@ func TestDetectedGoSettingsFillDependencyOptions(t *testing.T) {
 	useDetectedTools(cfg, res)
 	if d := cfg.Agent.Dependencies; d.GoPrivate != "" {
 		t.Fatalf("filled although fetching is off: %+v", d)
+	}
+}
+
+// A proxy URL with a credential is refused in the configuration, without
+// repeating the value.
+func TestDependencyProxyCredentialRefused(t *testing.T) {
+	for _, field := range []string{"go_proxy", "go_sumdb"} {
+		raw := `{"schema_version":"0.1","state_dir":"/srv/codeye/state","agent":{"dependencies":{"` + field + `":"https://user:s3cret@proxy.example"}}}`
+		_, err := personal.Parse([]byte(raw), knownTools())
+		if err == nil || strings.Contains(err.Error(), "s3cret") || !strings.Contains(err.Error(), field) {
+			t.Fatalf("%s: %v", field, err)
+		}
 	}
 }

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
 // goModCache asks the Go toolchain for its module cache with the user's real
@@ -97,6 +99,16 @@ func settingsOf(v map[string]string) GoSettings {
 	}
 	if s.GoNoSumDB == s.GoPrivate {
 		s.GoNoSumDB = ""
+	}
+	// A proxy or checksum database reached with a credential in its URL is
+	// not carried (the credential would land in tools.json, the agent's
+	// arguments and the worker hello). "off" fetches nothing rather than
+	// falling back to the public proxy the user did not choose.
+	if domain.GoSettingCarriesCredentials(s.GoProxy) {
+		s.GoProxy = "off"
+	}
+	if domain.GoSettingCarriesCredentials(s.GoSumDB) {
+		s.GoSumDB = "off"
 	}
 	return s
 }

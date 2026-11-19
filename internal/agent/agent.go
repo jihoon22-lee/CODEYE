@@ -238,6 +238,10 @@ func New(cfg Config) (*Agent, error) {
 	if cfg.DependencyTimeout < 0 || cfg.DependencyTotalTimeout < 0 || cfg.DependencyMaxBytes < 0 {
 		return nil, &ExitError{ExitUsage, "dependency limits must not be negative"}
 	}
+	// The value is not echoed: it would be the credential.
+	if domain.GoSettingCarriesCredentials(cfg.GoProxy) || domain.GoSettingCarriesCredentials(cfg.GoSumDB) {
+		return nil, &ExitError{ExitUsage, "--go-proxy and --go-sumdb must not carry credentials"}
+	}
 	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}

@@ -16,4 +16,10 @@ func TestGoSettingsKeepOnlyUserChanges(t *testing.T) {
 	if got := settingsOf(map[string]string{"GOPRIVATE": "a\nb"}); got.GoPrivate != "" {
 		t.Fatalf("multi-line value kept: %+v", got)
 	}
+	// A credential in the URL is never carried; the fetch asks no registry
+	// rather than the public proxy the user did not choose.
+	got = settingsOf(map[string]string{"GOPROXY": "https://user:token@goproxy.example,direct", "GOSUMDB": "sum.example+k https://u:p@sum.example"})
+	if got.GoProxy != "off" || got.GoSumDB != "off" {
+		t.Fatalf("credential carried: %+v", got)
+	}
 }

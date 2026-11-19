@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -88,6 +89,18 @@ func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
 	a.job.Analysis = &both
 	if j := ag.buildJob(&a); j.AllowModelReview || j.AllowRepositoryCode {
 		t.Fatal("server-mode node followed the project's choices")
+	}
+}
+
+// A proxy URL with a credential is a usage error that does not repeat it.
+func TestDependencyProxyCredentialRefused(t *testing.T) {
+	for _, cfg := range []Config{{GoProxy: "https://user:s3cret@proxy.example"}, {GoSumDB: "sum+k https://u:s3cret@sum.example"}} {
+		cfg.ControllerURL, cfg.StateDir, cfg.Workers, cfg.DependencyFetch = "http://127.0.0.1:1", t.TempDir(), 1, true
+		_, err := New(cfg)
+		var exit *ExitError
+		if !errors.As(err, &exit) || exit.Code != ExitUsage || strings.Contains(exit.Msg, "s3cret") {
+			t.Fatalf("credential proxy: %v", err)
+		}
 	}
 }
 
