@@ -219,17 +219,35 @@ func personalUser(ctx context.Context, s *postgres.Store, layout personal.Layout
 		if !active {
 			return "", errors.New("the personal user in personal.json does not exist in this database or is disabled; restore the matching backup or use a fresh state_dir")
 		}
-		return id.UserID, nil
+		return id.UserID, ensurePersonalAdmin(ctx, s, id.UserID)
 	}
-	user, err := s.CreateUserNamed(ctx, "personal")
+	u, err := s.CreateAccount(ctx, postgres.OperatorPrincipal(), postgres.NewAccount{DisplayName: "personal", IsAdmin: true})
 	if err != nil {
 		return "", fmt.Errorf("cannot create the personal user: %w", err)
 	}
+	user := u.ID
 	if err := layout.WriteIdentity(user); err != nil {
 		return "", errors.New("cannot store personal.json")
 	}
 	fmt.Fprintln(out, "created the personal user", user)
 	return user, nil
+}
+
+// ensurePersonalAdmin makes the single personal-mode user an administrator
+// (so it sees the account screens). An installation from before the role
+// existed is promoted once; the change is audited as the operator.
+func ensurePersonalAdmin(ctx context.Context, s *postgres.Store, user string) error {
+	u, err := s.FindUser(ctx, user)
+	if err != nil {
+		return fmt.Errorf("cannot read the personal user: %w", err)
+	}
+	if u.IsAdmin {
+		return nil
+	}
+	if _, err := s.SetAdmin(ctx, postgres.OperatorPrincipal(), user, true); err != nil {
+		return fmt.Errorf("cannot make the personal user an administrator: %w", err)
+	}
+	return nil
 }
 
 // rootGrant is one configured source root resolved to its database ID.

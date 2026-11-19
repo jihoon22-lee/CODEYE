@@ -168,7 +168,14 @@ func (s *Store) SetFindingReview(ctx context.Context, actor, project string, in 
 			return out{}, err
 		}
 		rec, err := pgx.CollectExactlyOneRow(rows, scanReview)
-		return out{rec: rec, created: true}, err
+		if err != nil {
+			return out{}, err
+		}
+		// The reason text is the reviewer's own words; the audit row keeps the
+		// decision, not the prose.
+		e := userAudit(ctx, actor, AuditFindingReviewRecorded).target("finding_review", rec.ID).in(project).with(map[string]any{
+			"fingerprint": rec.Fingerprint, "disposition": rec.Disposition, "revision": rec.ReportRevision, "run_id": rec.RunID, "finding_id": truncateAudit(rec.FindingID)})
+		return out{rec: rec, created: true}, writeAudit(ctx, tx, e)
 	})
 	return res.rec, res.created, err
 }

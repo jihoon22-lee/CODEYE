@@ -157,8 +157,21 @@ func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canon
 	if err != nil {
 		return Run{}, err
 	}
-	err = appendEvent(ctx, tx, &r, "run.queued", payload, false)
-	return r, err
+	if err = appendEvent(ctx, tx, &r, "run.queued", payload, false); err != nil {
+		return r, err
+	}
+	var req struct {
+		Profile string `json:"profile"`
+		Scope   struct {
+			Kind string `json:"kind"`
+		} `json:"scope"`
+	}
+	_ = json.Unmarshal(canonical, &req)
+	detail := map[string]any{"profile": truncateAudit(req.Profile), "scope_kind": truncateAudit(req.Scope.Kind), "trigger": payload["trigger"]}
+	if origin != nil {
+		detail["schedule_id"] = origin.ScheduleID
+	}
+	return r, writeAudit(ctx, tx, userAudit(ctx, actor, AuditRunRequested).target("run", r.ID).in(project).with(detail))
 }
 
 // Run triggers (RunView.Origin, run.queued payload).
@@ -253,8 +266,11 @@ func (s *Store) CancelRun(ctx context.Context, actor, id string) (Run, bool, err
 			}
 			next = domain.RunCancelled
 		}
-		err = transitionRun(ctx, tx, &r, next, "run.cancel_requested", map[string]any{"status": next})
-		return result{run: r, changed: true}, err
+		if err = transitionRun(ctx, tx, &r, next, "run.cancel_requested", map[string]any{"status": next}); err != nil {
+			return result{run: r}, err
+		}
+		e := userAudit(ctx, actor, AuditRunCancelRequested).target("run", r.ID).in(r.ProjectID).with(map[string]any{"status": string(next)})
+		return result{run: r, changed: true}, writeAudit(ctx, tx, e)
 	})
 	return out.run, out.changed, err
 }

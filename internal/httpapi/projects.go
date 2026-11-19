@@ -26,6 +26,11 @@ type projectView struct {
 	CapabilityGaps []string        `json:"capability_gaps"`
 	LastRun        *runRef         `json:"last_run"`
 	Activity       activityView    `json:"activity"`
+	// Role is the caller's role (owner, manager, runner, viewer); CanRun and
+	// CanManage follow from it. The API enforces them on every request.
+	Role      string `json:"role"`
+	CanRun    bool   `json:"can_run"`
+	CanManage bool   `json:"can_manage"`
 }
 
 func viewOf(p postgres.ProjectSummary, gaps []string) projectView {
@@ -34,7 +39,13 @@ func viewOf(p postgres.ProjectSummary, gaps []string) projectView {
 		gaps = append(gaps, string(domain.GapReportUnavailable))
 	}
 	v := projectView{ID: p.ID, Name: p.Name, Source: p.Source, Revision: p.Revision,
-		SourceStatus: "declared_unverified", CapabilityGaps: gaps, Activity: activityOf(p.Activity)}
+		SourceStatus: "declared_unverified", CapabilityGaps: gaps, Activity: activityOf(p.Activity), Role: p.Role}
+	switch p.Role {
+	case postgres.RoleOwner, string(domain.RoleManager):
+		v.CanRun, v.CanManage = true, true
+	case string(domain.RoleRunner):
+		v.CanRun = true
+	}
 	if v.Source == nil {
 		v.Source = json.RawMessage("null")
 	}
@@ -96,7 +107,7 @@ func (s *Server) createProject(q *request) {
 	}
 	q.w.Header().Set("Location", apiPrefix+"/projects/"+p.ID)
 	// A new project has no run: an empty activity checked now (server clock).
-	created := postgres.ProjectSummary{ID: p.ID, Name: p.Name, Revision: p.Revision, Source: cfg.Source,
+	created := postgres.ProjectSummary{ID: p.ID, Name: p.Name, Revision: p.Revision, Source: cfg.Source, Role: postgres.RoleOwner,
 		Activity: postgres.Activity{CheckedAt: time.Now().UTC()}}
 	writeJSON(q.w, http.StatusCreated, viewOf(created, gaps))
 }

@@ -35,20 +35,59 @@ Docker·Podman·Kubernetes는 필요 조건이 아니다. 아래는 실제로 �
 
 ```text
 codeye migrate                                   # schema 적용. start·serve는 migrate하지 않는다
-codeye user create [--name NAME]                 # 사용자는 CLI로만 만든다
+codeye user create [--name NAME] [--username NAME [--password-file PATH]] [--admin]   # 첫 관리자는 CLI로 만든다
 codeye source-root add --label LABEL --path ABSOLUTE_DIR
 codeye source-root grant --root ROOT_ID --user USER_ID
 codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
-codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331]
+codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
 codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s]
+             [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]]
 codeye node token create --pool NAME [--source-root ID[,ID...]] [--output .codeye/enroll-token] [--ttl 10m]
 codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--autoscale --max-workers N] ...
 ```
 
-- `serve`는 controller API, 노드 프로토콜(등록·claim·lease·산출물), 풀 자동 증감, 프로젝트 예약을 실행한다. loopback이 아닌 주소는 거부한다. 등록된 노드가 없으면 run은 `queued`로 남고 `waiting_reason`이 `execution_unavailable`이다.
+- `serve`는 controller API, 노드 프로토콜(등록·claim·lease·산출물), 풀 자동 증감, 프로젝트 예약을 실행한다. 등록된 노드가 없으면 run은 `queued`로 남고 `waiting_reason`이 `execution_unavailable`이다.
+- `serve --listen`이 loopback이 아니면 `--tls-cert`, `--tls-key`, `--public-origin`이 모두 있어야 한다. 하나라도 빠지면 종료 코드 2로 시작하지 않는다. 셋 중 일부만 주는 것도 loopback에서 같은 오류다. [TLS 수신](#tls-수신)을 본다.
 - 로그인 링크와 등록 토큰은 0600 파일에만 쓴다. 표준 출력에는 토큰을 쓰지 않는다. DB에는 SHA-256만 저장한다.
 - 에이전트의 옵션 전체는 `codeye --help`에 있다. 풀의 최소·최대와 전역 상한은 `codeye pool set`, `codeye scheduler set`으로 조정한다. 노드 철회는 `codeye node revoke --id NODE_ID`다.
 - 한 머신 밖의 노드를 쓰는 배포는 검증하지 않았다([서버·노드 배포](#서버노드-배포-설계-계약-미구현)).
+
+### 계정과 관리자 CLI
+
+운영자 CLI는 `CODEYE_DATABASE_URL`로 DB에 직접 접근하며 감사 기록에는 행위자 `operator_cli`로 남는다. 사용자는 `--id USER_ID` 또는 `--username NAME` 중 하나로 가리킨다.
+
+```text
+codeye user create --username admin --admin --name "운영 담당"   # 비밀번호를 터미널에서 두 번 입력
+codeye user create --username dana --password-file ./dana.pw     # 파일은 group·other 접근 불가(0600·0400)
+codeye user passwd --username dana [--must-change]                # 새 비밀번호, 그 사용자의 모든 세션 폐기
+codeye user list                                                  # {"items":[…]}. hash는 출력하지 않는다
+codeye user admin --username dana --set | --unset
+codeye user disable --username dana                               # 모든 세션 폐기, 되돌릴 수 없음
+codeye user create [--name NAME]                                  # 사용자 이름 없는 로그인 링크 전용 사용자
+```
+
+- 비밀번호는 인자·환경변수로 받지 않는다. 터미널이면 입력을 숨기고 두 번 확인한다(Linux). 터미널이 아니면 표준 입력의 첫 줄, 또는 `--password-file`의 첫 줄을 읽는다. 비밀번호 파일은 일반 파일이어야 하고 group·other가 접근할 수 없어야 한다. 출력과 오류 문구에는 비밀번호를 넣지 않는다.
+- `user create --username`은 비밀번호를 요구한다. 비밀번호 없이 사용자 이름만 가진 계정을 만들고 링크를 주려면 관리자 API(`POST /admin/users`)를 쓴다.
+- 마지막 활성 관리자는 `user disable`, `user admin --unset`이 종료 코드 1로 거부한다.
+- 관리자 역할은 프로젝트를 열지 않는다. 운영자가 다른 사람의 프로젝트를 봐야 하면 프로젝트 manager가 구성원으로 추가한다.
+- 관리자 API의 사용자 생성·재설정이 주는 로그인 링크는 응답에만 있다. 관리자는 메신저 등 신뢰하는 경로로 사용자에게 전달하고, 10분 안에 쓰이지 않으면 다시 재설정한다.
+
+### TLS 수신
+
+LAN 등 loopback이 아닌 주소로 받으려면 `serve`가 TLS를 직접 종료한다.
+
+```text
+codeye serve --listen 0.0.0.0:8443 --tls-cert /etc/codeye/tls/cert.pem --tls-key /etc/codeye/tls/key.pem --public-origin https://codeye.example:8443
+```
+
+- `--tls-cert`는 PEM 인증서 체인, `--tls-key`는 그 개인키다. 키 파일 mode가 group·other에 열려 있으면(예: 0640) 시작하지 않는다. 인증서·키를 읽지 못한 오류 문구는 파일 내용을 담지 않는다.
+- `--public-origin`은 사용자가 브라우저에 입력하는 `https://HOST[:PORT]`다. path·query·사용자 정보는 받지 않는다. Host 허용 목록과 Origin 비교, 로그인 링크가 이 값을 쓴다. 인증서의 이름이 이 host와 맞아야 브라우저가 연결한다.
+- TLS 1.2 이상, HTTP/1.1이다. 세션 cookie는 `__Host-codeye_session`(Secure)이고 HSTS(`max-age=31536000`)를 보낸다. 같은 포트로 평문 HTTP 요청을 보내면 API를 주지 않는다.
+- 인증서 갱신은 재시작으로 반영한다.
+- Host 검사는 노드 경로에도 적용되므로 노드 에이전트도 `--controller https://HOST[:PORT]`(public origin)로 접속한다. 에이전트가 사설 CA나 자체 서명 인증서를 신뢰하게 하는 설정은 시험하지 않았다.
+- TLS를 앞단 reverse proxy에서 종료하는 배포는 지원하지 않는다. 서버가 forwarded 헤더를 읽지 않아 접속 주소별 로그인 제한과 Origin·Host 검사가 맞지 않는다.
+- 개인 모드(`codeye start`)의 `listen`은 계속 loopback만 받는다. TLS 수신은 `serve`를 직접 실행하는 배포의 기능이다.
+- `codeye login-link --origin`은 `https://HOST[:PORT]`도 받는다(TLS 서버의 public origin을 준다).
 
 ## codeye doctor
 
@@ -139,8 +178,8 @@ codeye status [--config PATH] [--format text|json]
 
 개인 lock을 잡고 상태를 검사한다([일관성](#프로세스-상태-일관성)). 둘 다 실행 중이면 그대로 종료 코드 0이다. 하나만 실행 중이거나 기록 없는 프로세스가 lock·포트를 쥐고 있으면 거부한다. 기록의 프로세스가 끝났거나 pid가 다른 프로세스로 재사용됐으면 기록만 지운다(신호 없음). 그 뒤 순서는 다음과 같다.
 
-1. schema가 이 바이너리의 migration(현재 9)과 같은지 확인한다. 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. start는 migration을 하지 않는다.
-2. 개인 사용자를 만들거나 다시 쓴다. 설정의 source root를 label로 등록하고 사용자에게 허가한다. 같은 label이 다른 경로로 등록돼 있으면 거부한다. `quota.artifacts_bytes`를 `scheduler_limits.artifact_quota_bytes`에 반영한다(0이면 제거).
+1. schema가 이 바이너리의 migration(현재 10)과 같은지 확인한다. 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. start는 migration을 하지 않는다.
+2. 개인 사용자를 만들거나 다시 쓴다. 개인 사용자는 관리자다(이전 버전에서 만든 사용자는 이때 관리자로 지정되고 감사 기록이 남는다). 설정의 source root를 label로 등록하고 사용자에게 허가한다. 같은 label이 다른 경로로 등록돼 있으면 거부한다. `quota.artifacts_bytes`를 `scheduler_limits.artifact_quota_bytes`에 반영한다(0이면 제거).
 3. 등록이 필요한지 정한다. 처음 시작했거나, 노드가 철회됐거나, DB가 노드를 모르거나(복원 뒤), source root 집합이 바뀌었으면 다시 등록한다. 다시 등록하기 전에 에이전트 journal에 끝나지 않은 작업이 없는지 확인한다. 이전 노드는 철회하고, 이전 `agent/`는 `agent.retired-<ns>`로 이름만 바꾼다(삭제하지 않는다). 등록 토큰은 10분짜리 일회용이며 0600 파일로만 전달한다.
 4. `codeye serve`를 setsid로 띄운다. 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다.
 5. `codeye agent`를 띄운다. 환경은 PATH·LANG뿐이며 DB 정보가 없다. argv는 설정에서 만든다(source root 허가, 도구, 모델, `--storage-quota`, `--storage-log-dir`). `node.json`이 생기고 DB에 신선한 heartbeat가 올 때까지 120초를 기다린다.
@@ -266,7 +305,7 @@ manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exp
 
 ## 배포 전 점검
 
-- 인증과 접근: 브라우저 세션, Host/Origin 검사, loopback 한정. 서버 배포의 TLS 필수 검사는 설계 계약이다([보안](SECURITY.md)).
+- 인증과 접근: 브라우저 세션, Host/Origin 검사, loopback이 아니면 TLS 필수, 첫 관리자와 사용자 계정, 프로젝트 구성원([보안](SECURITY.md)).
 - source root 권한과 `repository_code`·`model_review` 허가를 root마다 의도대로 정했다.
 - 도구 사용 조건과 Native 신뢰 범위, timeout과 취소, 자원 reserve(`max_workers`, 머신에 남길 CPU·메모리).
 - 모델 한도와 외부 통신 금지. 모델 설정이 없으면 모델 검토가 실행되지 않는다.

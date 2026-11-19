@@ -204,7 +204,7 @@ func TestLoginLinkFile(t *testing.T) {
 			t.Fatal("symlink target overwritten")
 		}
 	}
-	for _, origin := range []string{"https://127.0.0.1:7444", "http://evil.example:7444", "http://127.0.0.1", "http://127.0.0.1:7444/path"} {
+	for _, origin := range []string{"https://codeye.example/path", "https://user@codeye.example", "https://CODEYE.example:443", "ftp://127.0.0.1:7444", "http://evil.example:7444", "http://127.0.0.1", "http://127.0.0.1:7444/path"} {
 		if code, _, _ := cli(t, "login-link", "--user", user, "--output", filepath.Join(dir, "x"), "--origin", origin); code != 1 {
 			t.Fatalf("origin %q accepted", origin)
 		}
