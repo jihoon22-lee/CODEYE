@@ -104,7 +104,7 @@ builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단�
 | `status` | `complete`(모든 대상 파일을 보냈고 검증 역할까지 마쳤다), `overview_only`(성공한 slice investigate가 없다), 그 밖은 `partial` |
 | `modules[]` | 범위 산출물의 모듈마다 한 행(모듈 ID 순) |
 
-모듈 행은 `module_id`, `discovered`(모듈 탐색이 같은 ID를 찾았는지), `files_eligible`과 그 파일을 한 번씩 나눈 수 `files_sent_to_model`·`files_withheld`(비밀값 탐지)·`files_unreadable`·`files_budget_exhausted`(호출 상한으로 거절된 slot의 주요 파일)·`files_not_planned`(slot이 남지 않은 주요 파일)·`files_secondary_not_reached`(builder 8: 거절됐거나 slot이 남지 않은 부차 파일)·`files_not_sent`(그 밖: overview가 보내지 못했거나 slot이 실패·생략됨)를 싣는다. 일곱 수의 합은 `files_eligible`이다. builder 8은 schema 0.2 범위 산출물에서 `class`(`primary`·`secondary`, 모든 행에 함께 있다), `files_secondary`(부차 경로·생성 파일 수), `files_secondary_sent`(그중 보낸 파일)도 싣고 0인 수는 생략한다. 부차 모듈의 대상 파일은 모두 부차다. 장부의 `primary_slots_budget_exhausted`는 호출 상한으로 거절된 주요 파일 slot 수다(보통 slot마다 호출 2회). 주요 파일의 `files_budget_exhausted`가 있으면 반드시 있고, 분류가 없는 장부에는 없다. 파일은 수락된 검토 기록 하나라도 그 파일의 발췌를 보냈으면 보낸 것으로 센다. verify가 반대 근거로 보낸 시험 파일 발췌도 들어가므로, 상한으로 거절된 slice의 파일도 보낸 쪽에 들 수 있다. `bytes_sent`는 실제 요청의 발췌가 아니라 보낸 파일의 범위 산출물 계획 바이트(첫 50줄, 파일당 2,400바이트 이하)의 합이고, `files_truncated`는 발췌가 파일 끝까지 닿지 않은 보낸 파일, `files_with_completed_review`는 보낸 파일 중 검증 역할 기록까지 수락된 파일(overview 파일은 전체 verify, slice 파일은 그 slice의 verify)이다. `slices[]`는 그 모듈 파일을 가진 slice task마다 `task_key`·`status`·`reason`이며 task 행과 같아야 한다.
+모듈 행은 `module_id`, `discovered`(모듈 탐색이 같은 ID를 찾았는지), `files_eligible`과 그 파일을 한 번씩 나눈 수 `files_sent_to_model`·`files_withheld`(비밀값 탐지)·`files_unreadable`·`files_budget_exhausted`(호출 상한으로 거절된 slot의 주요 파일)·`files_not_planned`(slot이 남지 않은 주요 파일)·`files_secondary_not_reached`(builder 8: 거절됐거나 slot이 남지 않은 부차 파일)·`files_not_sent`(그 밖: overview가 보내지 못했거나 slot이 실패·생략됨)를 싣는다. 일곱 수의 합은 `files_eligible`이다. builder 8은 schema 0.2 범위 산출물에서 `class`(`primary`·`secondary`, 모든 행에 함께 있다), `files_secondary`(부차 경로·생성 파일 수), `files_secondary_sent`(그중 보낸 파일)도 싣고 0인 수는 생략한다. 부차 모듈의 대상 파일은 모두 부차다. 장부의 `primary_slots_budget_exhausted`는 호출 상한으로 거절된 주요 파일 slot 수다(보통 slot마다 호출 2회). 주요 파일의 `files_budget_exhausted`가 있으면 반드시 있고, 분류가 없는 장부에는 없다. 파일은 수락된 검토 기록 하나라도 그 파일의 발췌를 보냈으면 보낸 것으로 센다. verify가 반대 근거로 보낸 시험 파일 발췌도 들어가므로, 상한으로 거절된 slice의 파일도 보낸 쪽에 들 수 있다. `bytes_sent`는 실제 요청의 발췌가 아니라 보낸 파일의 범위 산출물 계획 바이트(첫 50줄, 파일당 2,400바이트 이하)의 합이고, `files_truncated`는 발췌가 파일 끝까지 닿지 않은 보낸 파일, `files_with_completed_review`는 보낸 파일 중 검증 역할 기록까지 수락된 파일(overview 파일은 전체 verify, slice 파일은 그 slice의 verify)이다. `slices[]`는 그 모듈 파일을 가진 slice task마다 `task_key`·`status`·`reason`이며 task 행과 같아야 한다. 분류가 있는 장부의 표(세 형식과 웹)는 모듈 뒤에 분류 열, 미계획 뒤에 "부차 경로·예산 밖"(`files_secondary_not_reached`) 열을 더해 행의 합이 대상 수와 맞게 보인다. 분류가 없는 장부의 표는 그대로다.
 
 **모델에 보낸 범위는 검증된 범위가 아니다.** 장부는 무엇을 모델에 보냈는지만 센다. 모델이 본 파일에도 후보로 지목되지 않은 결함이 있을 수 있고, 화면과 내보내기는 이 범위를 "모델에 보냄"으로만 부른다.
 
@@ -508,6 +508,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 - 그 아래 "이전 실행과 비교"를 화면에서만 보인다. 저장 문서와 내보내기에는 없다.
 - 분석 종류마다 `details` 요소 하나다. 제목 옆에 단계 상태를 글자와 기호로 붙이고, 먼저 볼 것이 가리키는 절은 처음부터 열어 둔다. 절 안의 수 목록은 종합 블록의 수 그대로다. 모델 문장은 "모델 해석" 표시와 역할 이름을 붙인 별도 상자에 둔다. 실행하지 않은 도구는 "실행하지 않음"으로 보인다.
 - 정적 분석과 코드 분석 절은 아래와 같은 발견 목록(category 묶음, 검색, 숨김 판정 체크박스)을 그 절의 발견으로 보인다. 부록에는 모델 호출 목록, 분석 범위 수, task 표, 원시 관찰, 한계 문구를 둔다.
+- 화면은 [요약 보기](#내보내기-상세도)와 같은 순서와 묶음이다([`reportGroups.ts`](../web/src/reportGroups.ts)). 종합에 같은 종합 문장을 보이고, 정적 분석은 언어마다 분석기 표와 규칙 표, 장부는 주요 모듈 행·부차 모듈 합계 행·slot 구간, 지표는 큰 값 열, 공백은 절·공백·세부별 묶음이다. 코드 분석 절은 주요 경로의 지지·재현 발견을 먼저 보인다. 개별 진단·작업별 표·도구 발견, 그 밖의 검토 발견, 모든 장부 행과 slice 작업, 부차 경로의 환경·문서 행과 비밀정보 탐지, 모든 공백 행은 "전체 목록" 펼침 요소 뒤에 있고 펼칠 때만 그린다(키보드로 열 수 있는 `summary`). 경로 판단의 부차 경로 규칙은 범위 산출물 예시가 기록한 규칙과 같은지 시험한다. 실제 자체 분석 보고서(관찰 1,553개)는 처음 화면에 표 행 449개다.
 - 해석기([`reportSections.ts`](../web/src/reportSections.ts))는 일곱 블록이 모두 있는지, 관찰·발견의 분할, 절별 발견 수의 합, 공백 수를 확인한다. 어긋나면 보고서 전체를 "응답 형식 오류"로 거부한다.
 
 절이 없는 이전 리비전은 아래 평면 배치로 보인다.
@@ -516,7 +517,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 - 발견은 category별로 묶고, 항목이 둘 이상이면 제목·영향·영역 이름으로 거른다. 각 항목은 펼침 요소이며 제목 옆에 검증 상태·심각도·비교 상태·현재 판정을 글자로 붙인다. 펼치면 발생 조건, 심각도 이유, 영향, 개선, 확인 방법, 주장(관찰·추론 구분)과 근거 링크, 근거 목록(반대 근거 표시, snapshot 경로와 줄 범위 또는 산출물 ID), 한계를 보인다. 근거 링크는 같은 발견 안의 근거 위치로 이동한다.
 - 현재 판정이 `accepted_risk`·`false_positive`·`suppressed`인 항목은 목록에서만 빼고 체크박스로 다시 보이게 한다. 집계에는 남는다. 서버 집계는 `fixed_by_user`도 숨김으로 세지만 목록은 이 항목을 계속 보여준다.
 - task 표와 원시 관찰 목록을 펼쳐 볼 수 있다.
-- JSON·Markdown·HTML 내보내기 링크는 표시 중인 리비전에 고정된다. "코드 포함" 체크박스는 기본 꺼짐이다.
+- JSON·Markdown·HTML 내보내기 링크는 표시 중인 리비전에 고정된다. "코드 포함" 체크박스는 기본 꺼짐이다. Markdown·HTML은 요약 보기이고 "Markdown 전체"·"HTML 전체"가 `detail=full`이다.
 
 ### 비교와 판정 화면
 

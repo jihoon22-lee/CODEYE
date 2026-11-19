@@ -150,7 +150,7 @@ def main() -> None:
         review_validator.validate(doc)
     check_role_pack_examples(role_docs, role_raw, role_pack_doc, role_files)
     slice_negatives = check_slice_examples(slice_examples(), validators)
-    print(f"PASS: review slices (scope artifact 0.1 and slice records 0.3 bound to the coverage fixture; {slice_negatives} negative cases)")
+    print(f"PASS: review slices (scope artifact 0.2 and slice records 0.3 bound to the coverage fixture; {slice_negatives} negative cases)")
     # review-r1 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
     retried = copy.deepcopy(role_docs["verify"])
