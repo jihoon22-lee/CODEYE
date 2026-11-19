@@ -199,34 +199,49 @@ func TestSelectedSubdirectoryAndDotBothOpenThroughTheApprovedRoot(t *testing.T) 
 	}
 }
 
-func TestDataRootMustBeOutsideTheWholeApprovedRoot(t *testing.T) {
+func TestDataRootMustBeOutsideTheProject(t *testing.T) {
 	base := t.TempDir()
 	approved := filepath.Join(base, "approved")
 	put(t, approved, "proj/a.txt", "a")
 	for name, data := range map[string]string{
-		"beside the project, inside the root": filepath.Join(approved, "data"),
-		"inside the project":                  filepath.Join(approved, "proj", "data"),
-		"the root itself":                     approved,
-		"a parent of the root":                base,
-		"relative":                            "data",
-		"empty":                               "",
+		"inside the project":   filepath.Join(approved, "proj", "data"),
+		"the project itself":   filepath.Join(approved, "proj"),
+		"the root itself":      approved,
+		"a parent of the root": base,
+		"relative":             "data",
+		"empty":                "",
 	} {
 		_, err := AcquireLocal(context.Background(), approved, "proj", data, DefaultLimits())
 		if !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: got %v", name, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(approved, "data")); !os.IsNotExist(err) {
-		t.Error("data directory created inside the approved root")
+	if _, err := os.Stat(filepath.Join(approved, "proj", "data")); !os.IsNotExist(err) {
+		t.Error("data directory created inside the project")
+	}
+	// Beside the project under the same root (a personal state directory
+	// under a $HOME root): the copy holds the project only.
+	beside := filepath.Join(approved, ".state", "data")
+	s, err := AcquireLocal(context.Background(), approved, "proj", beside, DefaultLimits())
+	if err != nil {
+		t.Fatalf("data root beside the project: %v", err)
+	}
+	cleanupSnapshot(t, s)
+	if find(s, "a.txt").SHA256 == "" || len(s.Manifest.Entries) != 1 {
+		t.Fatal(s.Manifest.Entries)
+	}
+	// The whole root as the project still refuses a data root inside it.
+	if _, err := AcquireLocal(context.Background(), approved, ".", beside, DefaultLimits()); !errors.Is(err, ErrInvalid) {
+		t.Errorf("data root inside a root-level project: %v", err)
 	}
 	for _, rel := range []string{".", "./proj"} {
 		if _, err := AcquireLocal(context.Background(), ".", rel, filepath.Join(base, "data"), DefaultLimits()); !errors.Is(err, ErrInvalid) {
 			t.Errorf("relative approved root with %q: %v", rel, err)
 		}
 	}
-	// A symlink alias of the approved root is resolved before the comparison.
+	// A symlink alias of the project is resolved before the comparison.
 	alias := filepath.Join(base, "alias")
-	if err := os.Symlink(approved, alias); err == nil {
+	if err := os.Symlink(filepath.Join(approved, "proj"), alias); err == nil {
 		if _, err := AcquireLocal(context.Background(), approved, "proj", filepath.Join(alias, "data"), DefaultLimits()); !errors.Is(err, ErrInvalid) {
 			t.Errorf("symlinked data root: %v", err)
 		}

@@ -14,6 +14,9 @@ func TestParseSourceAccepts(t *testing.T) {
 		`{"kind":"local","source_root_id":"` + rootID + `","relative_path":"svc/api"}`:                                               {Kind: SourceLocal, SourceRootID: rootID, RelativePath: "svc/api"},
 		`{"kind":"git","provider_id":"` + rootID + `","repository_url":"https://github.com/o/r.git","branch":"main"}`:                {Kind: SourceGit, ProviderID: rootID, RepositoryURL: "https://github.com/o/r.git", Branch: "main"},
 		`{"kind":"git","provider_id":"` + rootID + `","repository_url":"https://ghe.example:8443/team/repo","branch":"release/1.2"}`: {Kind: SourceGit, ProviderID: rootID, RepositoryURL: "https://ghe.example:8443/team/repo", Branch: "release/1.2"},
+		// No branch (or an empty one): the repository's default branch.
+		`{"kind":"git","provider_id":"` + rootID + `","repository_url":"https://github.com/o/r"}`:             {Kind: SourceGit, ProviderID: rootID, RepositoryURL: "https://github.com/o/r"},
+		`{"kind":"git","provider_id":"` + rootID + `","repository_url":"https://github.com/o/r","branch":""}`: {Kind: SourceGit, ProviderID: rootID, RepositoryURL: "https://github.com/o/r"},
 	}
 	for raw, want := range cases {
 		got, err := ParseSource([]byte(raw))
@@ -45,7 +48,6 @@ func TestParseSourceRejects(t *testing.T) {
 		git("https://github.com/o/r/tree/main", "main"),
 		git("https://github.com/o/../r", "main"),
 		git("https://127.0.0.1/o/r", "main"),
-		git("https://github.com/o/r", ""),
 		git("https://github.com/o/r", "a..b"),
 		git("https://github.com/o/r", "-x"),
 		git("https://github.com/o/r", "x.lock"),
@@ -113,5 +115,45 @@ func TestParseRunRequest(t *testing.T) {
 		strings.Repeat(`a","`, 100) + `b"]}}`
 	if _, err := ParseRunRequest([]byte(many)); !errors.Is(err, ErrInvalid) {
 		t.Errorf("101 scope paths accepted")
+	}
+}
+
+func TestSplitRepositoryURL(t *testing.T) {
+	cases := map[string][2]string{
+		"https://github.com/o/r":                    {"https://github.com/o/r", ""},
+		" https://github.com/o/r/ ":                 {"https://github.com/o/r", ""},
+		"https://github.com/o/r.git":                {"https://github.com/o/r.git", ""},
+		"github.com/o/r":                            {"https://github.com/o/r", ""},
+		"https://github.com/o/r/tree/main":          {"https://github.com/o/r", "main"},
+		"https://github.com/o/r/tree/release/1.2/":  {"https://github.com/o/r", "release/1.2"},
+		"https://ghe.example:8443/team/repo/tree/x": {"https://ghe.example:8443/team/repo", "x"},
+	}
+	for in, want := range cases {
+		u, b, err := SplitRepositoryURL(in)
+		if err != nil || u != want[0] || b != want[1] {
+			t.Errorf("SplitRepositoryURL(%q) = %q, %q, %v; want %q, %q", in, u, b, err, want[0], want[1])
+		}
+	}
+	for _, in := range []string{"https://github.com/o", "https://github.com/o/r/blob/main/x.go", "http://github.com/o/r", "https://github.com/o/r/tree/a..b", "git@github.com:o/r.git", "/home/u/src"} {
+		if _, _, err := SplitRepositoryURL(in); err == nil {
+			t.Errorf("SplitRepositoryURL(%q) accepted", in)
+		}
+	}
+}
+
+func TestAnalysisChoices(t *testing.T) {
+	if c := AnalysisChoicesOf(nil); c != DefaultAnalysisChoices || !c.SendSourceToModel || !c.RunBuildScripts {
+		t.Fatalf("absent = %+v", c)
+	}
+	if c := AnalysisChoicesOf([]byte(`{"send_source_to_model":false,"run_build_scripts":true}`)); c.SendSourceToModel || !c.RunBuildScripts {
+		t.Fatalf("stored = %+v", c)
+	}
+	if c := AnalysisChoicesOf([]byte(`{"send_source_to_model":true}`)); c != (AnalysisChoices{}) {
+		t.Fatalf("an undecodable object must turn both off, got %+v", c)
+	}
+	for _, raw := range []string{`{}`, `{"send_source_to_model":true}`, `{"send_source_to_model":true,"run_build_scripts":true,"x":1}`, `{"send_source_to_model":"yes","run_build_scripts":true}`} {
+		if _, err := ParseAnalysisChoices([]byte(raw)); !errors.Is(err, ErrInvalid) {
+			t.Errorf("ParseAnalysisChoices(%s) = %v", raw, err)
+		}
 	}
 }

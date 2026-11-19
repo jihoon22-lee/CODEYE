@@ -29,6 +29,13 @@ var (
 	ErrUnsupported      = errors.New("source_unsupported")
 	ErrRecoveryRequired = errors.New("recovery_required")
 	ErrIntegrity        = errors.New("snapshot_integrity_failed")
+	// ErrAuthRequired: the Git host refused to serve the repository without
+	// credentials (a private or nonexistent repository). It also matches
+	// ErrUnavailable.
+	ErrAuthRequired = errors.New("source_auth_required")
+	// ErrUnreachable: the Git host could not be reached (name resolution,
+	// connection, TLS). It also matches ErrUnavailable.
+	ErrUnreachable = errors.New("source_unreachable")
 )
 
 type Limits struct {

@@ -111,16 +111,20 @@ func acquireLocalHooks(ctx context.Context, approvedRoot, relative, dataRoot str
 		return Snapshot{}, ErrInvalid
 	}
 	// Friendly validation first; the confinement below does not trust its result.
-	if _, err := ResolveLocal(approvedRoot, relative); err != nil {
+	project, err := ResolveLocal(approvedRoot, relative)
+	if err != nil {
 		return Snapshot{}, err
 	}
 	resolvedApproved, err := filepath.EvalSymlinks(approvedRoot)
 	if err != nil {
 		return Snapshot{}, ErrUnavailable
 	}
-	// Platform storage must be outside the entire approved source root, not merely
-	// outside the selected project, and is resolved through existing symlinked ancestors.
-	dataRoot, err = outsideSource(dataRoot, resolvedApproved)
+	// Platform storage must be outside the selected project (and must not
+	// contain it), resolved through existing symlinked ancestors. It may lie
+	// elsewhere under the approved root: a personal installation keeps its
+	// state under $HOME, which is itself a readable root. The copy below never
+	// leaves the project directory.
+	dataRoot, err = outsideSource(dataRoot, project)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -130,7 +134,7 @@ func acquireLocalHooks(ctx context.Context, approvedRoot, relative, dataRoot str
 	if dataRoot, err = filepath.EvalSymlinks(dataRoot); err != nil {
 		return Snapshot{}, ErrUnavailable
 	}
-	if within(resolvedApproved, dataRoot) || within(dataRoot, resolvedApproved) {
+	if within(project, dataRoot) || within(dataRoot, project) {
 		return Snapshot{}, ErrInvalid
 	}
 	if hooks.afterResolve != nil {

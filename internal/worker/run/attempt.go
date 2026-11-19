@@ -184,7 +184,7 @@ func within(root, p string) bool {
 
 // sourceReason maps source acquisition errors to reason codes 1:1 by their text.
 func sourceReason(err error) string {
-	for _, e := range []error{source.ErrUnavailable, source.ErrUnstable, source.ErrLimit, source.ErrUnsupported, source.ErrIntegrity} {
+	for _, e := range []error{source.ErrAuthRequired, source.ErrUnreachable, source.ErrUnavailable, source.ErrUnstable, source.ErrLimit, source.ErrUnsupported, source.ErrIntegrity} {
 		if errors.Is(err, e) {
 			return e.Error()
 		}

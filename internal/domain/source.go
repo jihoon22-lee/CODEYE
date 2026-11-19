@@ -96,6 +96,10 @@ func (s Source) Validate() error {
 		if _, err := RepositoryHost(s.RepositoryURL); err != nil {
 			return err
 		}
+		if s.Branch == "" {
+			// The repository's default branch, resolved when the snapshot is taken.
+			return nil
+		}
 		return ValidateBranchName(s.Branch)
 	default:
 		return invalidf("source kind must be git or local")
@@ -173,6 +177,53 @@ func ValidateHost(h string) error {
 		return invalidf("host must be a DNS name, not an IP literal")
 	}
 	return nil
+}
+
+// SplitRepositoryURL turns what a user pastes into a repository URL and a
+// branch: "host/owner/repo" gets https://, a trailing slash is dropped and
+// a browser address of a branch (https://HOST/OWNER/REPO/tree/BRANCH) is
+// split into the repository and the branch ("" when the address names none).
+// The result is validated like a declared source.
+func SplitRepositoryURL(raw string) (string, string, error) {
+	raw = strings.TrimSpace(raw)
+	if !strings.Contains(raw, "://") && !strings.Contains(raw, "@") && strings.Count(raw, "/") >= 2 {
+		raw = "https://" + raw
+	}
+	branch := ""
+	if u, err := url.Parse(raw); err == nil && u.Scheme == "https" && u.RawQuery == "" && u.Fragment == "" {
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		if len(parts) > 3 && parts[2] == "tree" {
+			branch = strings.Join(parts[3:], "/")
+			parts = parts[:2]
+		}
+		if len(parts) == 2 {
+			u.Path = "/" + strings.Join(parts, "/")
+			raw = u.String()
+		}
+	}
+	if _, err := RepositoryHost(raw); err != nil {
+		return "", "", err
+	}
+	if branch != "" {
+		if err := ValidateBranchName(branch); err != nil {
+			return "", "", err
+		}
+	}
+	return raw, branch, nil
+}
+
+// SameSource reports whether a and b declare the same source: the same
+// root and relative path, or the same provider, branch and repository (the
+// URL compared without case, a trailing slash or .git).
+func SameSource(a, b Source) bool {
+	if a.Kind != b.Kind {
+		return false
+	}
+	if a.Kind == SourceLocal {
+		return a.SourceRootID == b.SourceRootID && a.RelativePath == b.RelativePath
+	}
+	repo := func(u string) string { return strings.ToLower(strings.TrimSuffix(strings.TrimSuffix(u, "/"), ".git")) }
+	return a.ProviderID == b.ProviderID && a.Branch == b.Branch && repo(a.RepositoryURL) == repo(b.RepositoryURL)
 }
 
 // RepositoryName returns the last path segment of a validated repository URL
