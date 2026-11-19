@@ -180,26 +180,41 @@ codeye tools
 
 비교와 판정의 계약은 [보고서](REPORT.md)에 있다.
 
+## 모델 설정
+
+모델 검토에는 OpenCode(`~/.opencode/bin/opencode`)와 API 키 하나만 있으면 된다. OpenAI 키를 쓰는 예:
+
+```bash
+export OPENAI_API_KEY=sk-...      # 이미 ~/.bashrc에 있으면 그대로 둔다
+codeye up
+```
+
+- `codeye up`은 `OPENAI_API_KEY`(또는 `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY`)를 `<state_dir>/secrets/model.json`(본인만 읽을 수 있는 파일)에 저장하고, 모델 `openai/gpt-6.2-sol`로 한 번 시험 호출(`codeye model probe`)한 뒤 결과를 보여 준다. 키를 바꾼 뒤 다시 `codeye up`을 하면 새 키로 다시 시험한다.
+- 키는 이 파일에만 남는다. 로그·보고서·화면·프로세스 인자에는 나오지 않는다. 키를 지우려면 그 파일을 지운다.
+- 모델을 바꾸려면 설정에 `"agent": {"model": {"name": "gpt-6.1-sol"}}`처럼 이름만 적는다(`PROVIDER/MODEL`도 된다). OpenCode에 `opencode auth login`으로 API 키를 넣어 두었다면 환경변수 없이 그 키를 쓴다.
+- 시험 호출이 실패해도 분석은 실행된다. 보고서의 코드 분석 절에 모델 검토를 하지 못한 이유(예: "모델 공급자가 API 키를 거부했다")가 나온다. 언제든 `codeye model probe`로 다시 확인한다. 실제 추론을 한 번 요청하므로 비용이 조금 든다.
+- 모델이 설정되면 등록한 로컬 폴더의 코드를 모델에 보낸다. 특정 폴더를 빼려면 그 source root에 `"model_review": false`를 적는다. 비밀값으로 선별된 파일은 보내지 않는다.
+- OpenAI 호환 서버(사내 게이트웨이, 로컬 추론 서버)를 쓰려면 `model.json`에 `"base_url": "https://…/v1"`을 더한다. chat completions만 지원하는 서버면 `"openai_compatible": true`도 더한다([검토](REVIEW.md#모델-설정)).
+
 ## 모델 검토 설정
 
 모델 설정이 없으면 문서·코드의 모델 검토 단계는 실행하지 않는다. 보고서에는 "모델 검토 미수행"으로 나온다. 다른 모델이나 인터넷 서비스로 자동 전환하지 않는다.
 
-승인된 모델을 쓰려면 설정에 다음 두 가지를 넣는다. **(`codeye start`가 이 설정으로 모델을 호출하는 경로는 시험하지 않았다. 설정 검증과 에이전트 인자 연결만 시험했다.)**
+`agent.model`의 모든 항목은 선택이다. 위 [모델 설정](#모델-설정)만으로 충분하다.
 
 ```json
 "agent": {
-  "model": {"opencode": "/opt/opencode/bin/opencode", "name": "PROVIDER/MODEL",
-            "relay_file": "/home/user/.config/codeye/relay.json", "review_pack": "review-r1"}
-},
-"source_roots": [{"label": "work", "path": "/home/user/src", "model_review": true}]
+  "model": {"name": "openai/gpt-6.2-sol", "opencode": "/home/user/.opencode/bin/opencode",
+            "credential_file": "/home/user/.config/codeye/model.json", "timeout_seconds": 180,
+            "review_pack": "review-r1", "review_max_calls": 99}
+}
 ```
 
-- `opencode`는 설치한 OpenCode CLI의 절대 경로다. `name`은 그 CLI에 구성된 모델 이름이다.
+- `opencode`를 비우면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`를 쓴다. `name`을 비우면 키 provider의 기본 모델이다. `credential_file`은 키 파일을 다른 곳에 둘 때만 적는다. `timeout_seconds`는 모델 호출 한 번의 제한시간이다(기본 180).
 - `relay_file`은 승인된 로컬 relay를 쓸 때만 넣는다. 이 저장소의 `scripts/model_budget_relay.py`는 예산 상한을 강제하는 QA 전용 relay이며 제품 구성요소가 아니다. 사용법은 그 파일의 머리말과 `--help`에 있다.
-- `model_review: true`인 root의 코드만 모델에 보낸다. 기본은 보내지 않음이다. 비밀값으로 선별된 파일은 보내지 않는다.
 - `review_pack`의 기본은 `review-r1`이다. 비워 두면 `review-r1`을 쓴다. `review-v1`은 이전 기록을 같은 조건으로 재현할 때만 고른다([검토](REVIEW.md)).
 - `review_max_calls`는 run 하나(시도 하나)가 쓸 수 있는 모델 호출 수의 상한이다. 비우면 99이고 15~207을 받는다. 처음 다섯 역할이 최대 15회를 쓰고, 남은 호출로 overview가 보내지 못한 파일을 모듈 단위로 더 검토한다. 기본값으로 중간 규모 저장소의 대부분이 모델에 간다. 비용: 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 `review_max_calls`를 낮춘다(예: 33). 15는 처음 다섯 역할만 실행하고 모듈 단위 추가 검토를 하지 않는다. 비밀값 선별(`agent.tools.gitleaks`)이 있으면 선별된 파일을 빼고 보내고, 없으면 기본 민감값 패턴 필터만 거쳐 보내며 보고서에 "비밀값 미선별"이 표시된다([검토](REVIEW.md#모듈-단위-검토-분할)).
-- 모델 연결은 먼저 `codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH]`로 확인한다. 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다. `codeye doctor`는 모델을 호출하지 않는다.
+- 모델 연결은 `codeye model probe`(개인 설정의 모델) 또는 `codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`로 확인한다. 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다. `codeye doctor`는 모델을 호출하지 않는다.
 
 ## 저장 공간
 

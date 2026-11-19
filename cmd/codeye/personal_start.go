@@ -61,6 +61,8 @@ func personalStart(ctx context.Context, args []string, out, stderr io.Writer) in
 type bringUpOptions struct {
 	// postgresBinDir is `codeye up --postgres-bin-dir`.
 	postgresBinDir string
+	// noProbe is `codeye up --no-probe`: the model connection is not tried.
+	noProbe bool
 }
 
 // running is a started or reused personal installation.
@@ -88,7 +90,7 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 	// Detected tools and the model complete the configuration before the
 	// agent argv is built and compared with a running agent's.
 	applyDetectedTools(ctx, cfg, out)
-	prepareModel(cfg, out)
+	setupPersonalModel(ctx, cfg, layout, o.noProbe, out)
 	opCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	db, err := personalDatabase(opCtx, cfg, layout, dbOptions{start: true, flagBinDir: o.postgresBinDir, notices: out})
@@ -504,9 +506,6 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 		if r.RepositoryCode {
 			args = append(args, "--repo-code-source-root", r.ID)
 		}
-		if r.ModelReview {
-			args = append(args, "--model-source-root", r.ID)
-		}
 	}
 	if a.Go != "" {
 		args = append(args, "--go", a.Go)
@@ -525,18 +524,9 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	if a.PythonBothTypeCheckers {
 		args = append(args, "--python-both-type-checkers")
 	}
-	if m := a.Model; m != nil {
-		args = append(args, "--opencode", m.OpenCode, "--model", m.Name)
-		if m.RelayFile != "" {
-			args = append(args, "--model-relay-file", m.RelayFile)
-		}
-		if m.ReviewPack != "" {
-			args = append(args, "--review-pack", m.ReviewPack)
-		}
-		if m.ReviewMaxCalls != 0 {
-			args = append(args, "--review-max-calls", strconv.Itoa(m.ReviewMaxCalls))
-		}
-	}
+	// The model, its credential file and the per-root model-review grants
+	// (personal_model.go).
+	args = append(args, modelAgentArgs(cfg, layout, roots)...)
 	limits := cfg.Quota.NodeLimits()
 	areas := make([]string, 0, len(limits))
 	for area := range limits {

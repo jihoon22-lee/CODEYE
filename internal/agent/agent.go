@@ -45,6 +45,11 @@ func (e *ExitError) Error() string { return e.Msg }
 // Config of one agent.
 type Config struct {
 	ModelExecutable, ModelName, ModelRelayFile string
+	// ModelCredentialFile is where workers read the provider API key at each
+	// model call (--model-credential-file).
+	ModelCredentialFile string
+	// ModelTimeout bounds one model call (--model-timeout); 0 means 180 s.
+	ModelTimeout time.Duration
 	// ReviewPack selects the review instruction pack of this node's workers:
 	// "review-r1" (default when empty) or the legacy "review-v1", kept so
 	// earlier runs can be reproduced.
@@ -200,7 +205,13 @@ func New(cfg Config) (*Agent, error) {
 	} else if !record.ValidMaxCalls(cfg.ReviewMaxCalls) {
 		return nil, &ExitError{ExitUsage, "--review-max-calls must be between 15 and 207"}
 	}
-	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.ModelExecutable, cfg.ModelRelayFile} {
+	if cfg.ModelRelayFile != "" && cfg.ModelCredentialFile != "" {
+		return nil, &ExitError{ExitUsage, "--model-relay-file and --model-credential-file are alternatives"}
+	}
+	if cfg.ModelTimeout < 0 || cfg.ModelTimeout > 30*time.Minute || (cfg.ModelTimeout != 0 && cfg.ModelTimeout < time.Second) {
+		return nil, &ExitError{ExitUsage, "--model-timeout must be between 1s and 30m"}
+	}
+	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}

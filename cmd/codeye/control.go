@@ -24,7 +24,8 @@ const usage = `CODEYE control plane
 Usage:
   codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
   codeye tools [--config PATH] [--json]   (the tools found on this machine, what is missing and how to add it)
-  codeye model probe--executable PATH --model PROVIDER/MODEL [--relay-file PATH] [--timeout 75s]
+  codeye model probe [--config PATH] [--timeout 180s] [--json]
+  codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH] [--timeout 180s] [--json]
   codeye migrate
   codeye user create [--name NAME] [--username NAME [--password-file PATH]] [--admin]
   codeye user passwd (--id USER_ID | --username NAME) [--password-file PATH] [--must-change]
@@ -37,7 +38,7 @@ Usage:
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
   codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--personal]
                [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]]   (required for a non-loopback --listen)
-` + nodeAdminUsage + `  codeye up [PATH] [--config PATH] [--postgres-bin-dir DIR] [--no-open]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH)
+` + nodeAdminUsage + `  codeye up [PATH] [--config PATH] [--postgres-bin-dir DIR] [--no-open] [--no-probe]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH)
   codeye open [--config PATH] [--no-open]   (a new signed-in browser link)
   codeye start [--config PATH]      (personal mode without a project or browser)
   codeye stop [--config PATH] [--format text|json]

@@ -57,6 +57,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	modelExe := fs.String("opencode", "", "")
 	modelName := fs.String("model", "", "")
 	modelRelay := fs.String("model-relay-file", "", "")
+	// The provider API key is read by workers from this file at each model
+	// call; it is never an argument (docs/REVIEW.md#모델-설정).
+	modelCredential := fs.String("model-credential-file", "", "")
+	modelTimeout := fs.Duration("model-timeout", opencode.DefaultTimeout, "")
 	// The review pack is a node operator setting only; runs and profiles
 	// cannot select it. The default is review-r1 (the role pack); review-v1 is the legacy pack.
 	reviewPack := fs.String("review-pack", review.PackRole, "")
@@ -169,7 +173,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
 		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
-		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ReviewPack: *reviewPack, ReviewMaxCalls: *reviewMaxCalls,
+		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewPack: *reviewPack, ReviewMaxCalls: *reviewMaxCalls,
 		RepositoryCodeSourceRoots: codeApproved,
 		StorageQuota:              limits,
 		StorageLogDir:             *storageLogDir,
@@ -228,7 +232,11 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 	hs, missing := builtin.Handlers(ctx, cfg, runner)
 	for i, handler := range hs {
 		if handler.Info().Name == analyzerpack.CompositeName {
-			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}
+			timeout := opencode.DefaultTimeout
+			if h.ModelTimeoutSeconds > 0 {
+				timeout = time.Duration(h.ModelTimeoutSeconds) * time.Second
+			}
+			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, CredentialFile: h.ModelCredentialFile, Timeout: timeout}
 			var reviewed analysis.Handler = review.Handler{Static: handler, Caller: caller}
 			if pack == review.PackRole {
 				reviewed = review.RoleHandler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}

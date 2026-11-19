@@ -266,6 +266,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 			return *s.fail(result(domain.TaskFailed, reasonCallCountFailed))
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
+		s.rec.Limitations = noteVersion(s.rec.Limitations, reply)
 		call := record.RoleCall{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,
 			PackFiles: s.pack.Files, RequestDigest: reply.RequestDigest, RequestBytes: size, Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
 		if reply.Reason != "" && reply.Reason != "model_output_invalid" {

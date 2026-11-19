@@ -193,6 +193,7 @@ func (h Handler) verify(ctx context.Context, j analysis.Job, runner executor.Run
 		}
 		reply := h.Caller.Review(ctx, runner, opencode.Request{Role: "verify", Scratch: j.Scratch, SnapshotDigest: c.Snapshot,
 			Instructions: text, Input: query, ProtectedRoots: []string{j.Snapshot.SnapshotDir}})
+		rec.Limitations = noteVersion(rec.Limitations, reply)
 		call := Provenance{Role: "verify", Model: reply.Model, Version: reply.Version, PackDigest: pack.Digest, PackFiles: pack.Files,
 			RequestDigest: reply.RequestDigest, Usage: usage(reply.Usage), Attempt: attempt}
 		if reply.Reason != "" && reply.Reason != "model_output_invalid" {

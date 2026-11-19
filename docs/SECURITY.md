@@ -141,7 +141,7 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 | 사용자 비밀번호 | PBKDF2 verifier만 저장([로그인과 제한](#로그인과-제한)). 평문은 저장·기록하지 않는다 |
 | TLS 키 | 운영자가 준 파일 경로. group·other 접근 불가 mode만 받는다. 내용은 오류 문구에 넣지 않는다 |
 | 노드 | 일회용 등록 토큰과 노드 credential. 0600 파일, hash 저장 |
-| 모델 | OpenCode CLI 설정 또는 승인된 로컬 relay 파일의 경로만 설정에 둔다. 값을 CODEYE 설정에 쓰지 않는다 |
+| 모델 | API 키는 키 파일(개인 모드 `<state_dir>/secrets/model.json` 0600, `agent.model.credential_file`, OpenCode `auth.json`)에만 두고, 설정·인자에는 그 경로나 relay 파일 경로만 둔다. 워커가 호출마다 읽어 OpenCode 프로필로만 넘기고 기록에서 가린다([검토](REVIEW.md#모델-설정)) |
 | Git | 공개 HTTPS 저장소만 가져온다. 비공개 저장소 credential 전달은 구현하지 않았다. 사용자 Git 설정과 credential helper를 차단한다 |
 | GitHub App key, 게시 credential | 설계 계약(미구현, [Git 연결](GITHUB.md)) |
 
@@ -156,7 +156,7 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 - **제외 정책.** 어느 깊이에서든 `.git`, `.codeye`, `node_modules`, `__pycache__`를 제외한다. credential 디렉터리(`.ssh`, `.aws`, `.gnupg`, `.docker`, `.kube`, `.azure`, `.gcloud`)와 비밀 파일 이름(`.env`와 `.env.*`(단 `.env.example`·`.env.sample`은 유지), `*.pem`, `*.key`, SSH 개인키, `.npmrc`, `.netrc`, `.git-credentials`, `.pypirc`, `.pgpass`, `*.tfstate`, `*.tfvars`, 인증서 저장소 등)을 기본으로 제외한다. 선택한 트리의 최상위에서 `build`, `dist`, `target`, `venv`, `.venv`도 제외한다. 소스 패키지 이름(`internal/credentials`, `internal/build`)은 유지한다. 제외 목록은 [소스 확보 구현](../internal/worker/source)이 기준이다.
 - **보고서의 코드 조각**은 소스와 같은 민감도다. 기본 내보내기는 코드 발췌를 뺀다. "코드 포함"은 같은 프로젝트의 읽기 권한자에게만 열린다.
 - **저장소 코드 실행 허가.** 저장소가 정한 코드(build script, 설정 프로그램, plugin, proc macro)를 실행하는 분석 작업은 노드 운영자가 source root마다 준 허가(`repository_code`)가 있을 때만 실행한다. 허가가 없으면 프로세스를 시작하지 않고 미지원으로 끝난다. Git 소스는 허가를 받지 않는다. 스냅샷과 저장소 설정은 이 값을 올릴 수 없다. 프로젝트 단위·revision 기반 실행 권한 저장소는 구현하지 않았다(설계 계약).
-- **모델 전송 승인.** root마다 `model_review`로 승인한 코드만 모델에 보낸다. 기본은 보내지 않음이다. 모델 설정이 없으면 다른 모델이나 인터넷 서비스로 우회하지 않고 모델 검토를 건너뛴 것으로 보고서에 표시한다.
+- **모델 전송 승인.** 서버 모드는 노드 운영자가 root마다 승인한 코드만 모델에 보낸다(기본은 보내지 않음). 개인 모드는 모델이 설정되면 개인 사용자의 로컬 root를 기본으로 승인하고 `model_review: false`인 root만 뺀다(A39). 모델 설정이 없으면 다른 모델이나 인터넷 서비스로 우회하지 않고 모델 검토를 건너뛴 것으로 보고서에 표시한다.
 - **네트워크.** 설정된 Git host, 모델 endpoint, mirror, CA만 쓴다. 소스 확보는 승인된 HTTPS host에서 redirect, URL userinfo, SSH, `git://`, 알려지지 않은 host를 거부한다. 도구에는 가능한 곳에서 오프라인 옵션을 준다(예: cargo `--offline`). 그러나 Native 실행에서 프로세스 전체의 네트워크를 OS 수준으로 차단하지는 않는다. 환경변수만으로 OS 수준 차단을 달성했다고 표시하지 않는다. 필요하면 OS 방화벽 등 운영자 통제를 둔다. 폐쇄망의 외부 telemetry·업데이트·원격 규칙 다운로드·공유 차단은 설계 계약이다([운영](OPERATIONS.md)).
 
 ## 보관과 삭제 (제안, 미구현)

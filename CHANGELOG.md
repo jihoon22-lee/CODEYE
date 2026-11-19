@@ -26,6 +26,15 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - 항상 `unverified`이던 `model`·`process_control` 항목과 사유 값 `adapter_contract_pending_w10`·`native_executor_pending_w05`·`runtime_process_control_not_probed`를 없앴다. `python`·`c_cpp`(PATH의 `python3`·`cc`) 항목도 에이전트가 쓰지 않으므로 없앴다. `analyzers`(기준 분석기가 하나라도 쓸 수 있는가)와 `configured_tools`(설정에 적은 도구가 쓸 수 있는가)가 생겼다.
 - 종료 코드는 이 모드에서 중요한 항목(`checks[].blocking`)이 실패했을 때만 1이다. 이전에는 늘 1이었다.
 
+### 추가 — API 키로 모델 설정
+
+- **일반 모델 공급자**: 모델 ID는 `PROVIDER/MODEL`이면 받는다(이전에는 `opencode/*`와 QA relay만). 워커가 API 키 파일을 모델 호출마다 읽어 `OPENCODE_CONFIG_CONTENT`의 provider 설정으로만 넘기고 기록에서 가린다. 에이전트 `--model-credential-file`, `--model-timeout`(기본 180초, 이전 75초 고정), Hello `model_credential_file`·`model_timeout_seconds`. 키 파일은 CODEYE 형식(`provider`, `api_key`, 선택 `base_url`·`openai_compatible`) 또는 OpenCode `auth.json`의 `api` 항목이다. QA relay는 이 공급자의 한 사례이고 프로필 바이트는 그대로다.
+- **개인 모드**: `agent.model` 없이도 `<state_dir>/secrets/model.json`이나 OpenCode `auth.json`의 키로 모델을 쓴다. 기본 모델은 OpenAI `gpt-6.2-sol`, Anthropic `claude-opus-5-5`, OpenCode Zen `gpt-6.1-sol`이고 `agent.model.name`으로 바꾼다. `agent.model`의 `opencode`·`name`은 선택이 됐고 `credential_file`·`timeout_seconds`가 생겼다. 모델이 설정되면 로컬 source root의 모델 검토를 기본으로 허가한다(`model_review: false`로 뺀다). `personal.WriteModelSecretFromEnv`가 `OPENAI_API_KEY`·`ANTHROPIC_API_KEY`·`OPENCODE_API_KEY`에서 키 파일을 쓴다(`codeye up`이 부른다).
+- **OpenCode 버전**: 시험한 1.19.5가 아닌 릴리스도 실행하고 기록·보고서 한계에 `opencode_version_untested`를 남긴다.
+- **`codeye model probe`**: 인자 없이 개인 설정의 모델을 확인하고 provider·모델·OpenCode 버전, 성공 또는 실패한 단계와 사유를 사람이 읽는 문장으로 출력한다(`--json`, `--credential-file`). 실패 사유는 `model_auth_failed`·`model_not_found`·`model_rate_limited`·`model_credential_unavailable`로 나뉘고 보고서가 한국어로 설명한다. 확인이 실패해도 분석은 실행된다.
+- `scripts/fake_model_upstream.py`가 OpenCode의 OpenAI provider가 직접 보내는 스트리밍 Responses 요청과 `probe` 역할에 답하고, `--mode unauthorized`(401)를 갖는다. `scripts/test_postgres.py --personal-model`이 실제 OpenCode와 가짜 upstream으로 개인 모드 모델 경로 전체를 확인한다.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10(임시 cluster), OpenCode 1.19.5, 가짜 upstream. 실모델 호출은 하지 않았다. OpenAI가 `gpt-6.2-sol` 요청을 받는지는 확인하지 않았다.
+
 ### 추가
 
 - **분석 종류별 절**: 보고서가 종합, 환경 분석, 문서 분석, 정적 분석(언어·도구별), 구조·중복 지표, 비밀정보(값 없음), 코드 분석(모델 검토), 분석 공백 순의 절로 나뉜다. 선택 최상위 블록으로 더했고 기존 필드는 바이트 단위로 같다(report 패키지 시험 입력 84개를 이전 builder 출력과 대조). 보고서 builder는 5이며, 모든 관찰과 발견이 한 절에 한 번씩 들어가는지를 저장·조회 검증이 확인한다. 상태·품질 판정 규칙은 그대로다. 모델 문장은 수락된 역할 기록에서만 오고 "모델 해석"으로 표시하며 코드 미포함 내보내기에서는 생략한다. Markdown·HTML·웹 화면은 같은 수를 보이고, 절이 없는 이전 리비전은 이전 평면 배치로 보인다. "이전 실행과 비교"는 웹 화면에만 있다. 분석기 envelope와 descriptor에 분석기 목적(`analyzer.purpose`: 지표·비밀정보)을 기록해 어느 절로 갈지 정한다. [`examples/report.json`](examples/report.json)과 [`examples/report.md`](examples/report.md)는 실제 worker 파이프라인과 대본 모델 응답으로 다시 만들었다(합성 예시, 실모델 호출 없음).

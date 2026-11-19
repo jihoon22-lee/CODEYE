@@ -34,12 +34,13 @@ const upRunBody = `{"profile":"deep-review","source_policy":"latest_at_acquire",
 
 func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var configFlag, binDir string
-	var noOpen bool
+	var noOpen, noProbe bool
 	target, rest := splitTarget(args)
 	if !parse("up", rest, stderr, func(fs *flag.FlagSet) {
 		fs.StringVar(&configFlag, "config", "", "")
 		fs.StringVar(&binDir, "postgres-bin-dir", "", "")
 		fs.BoolVar(&noOpen, "no-open", false, "")
+		fs.BoolVar(&noProbe, "no-probe", false, "")
 	}) {
 		return 2
 	}
@@ -103,7 +104,7 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 		}
 		layout = completeConfig(cfg)
 	}
-	up, code := bringUp(ctx, cfg, layout, bringUpOptions{postgresBinDir: binDir}, out, stderr)
+	up, code := bringUp(ctx, cfg, layout, bringUpOptions{postgresBinDir: binDir, noProbe: noProbe}, out, stderr)
 	if up == nil {
 		return code
 	}
@@ -370,15 +371,6 @@ func analyzeTarget(ctx context.Context, up *running, t *upTarget, out io.Writer)
 func applyDetectedTools(ctx context.Context, cfg *personal.Config, out io.Writer) {
 	if _, err := prepareTools(ctx, cfg, out); err != nil {
 		fmt.Fprintln(out, "tool detection:", err)
-	}
-}
-
-// prepareModel sets up the review model of the agent. The model comes from
-// agent.model; without it the review stage is recorded as skipped and the
-// static analysis runs.
-func prepareModel(cfg *personal.Config, out io.Writer) {
-	if cfg.Agent.Model == nil {
-		fmt.Fprintln(out, "no review model configured (agent.model): reports hold static analysis only")
 	}
 }
 

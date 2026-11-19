@@ -109,6 +109,7 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 	reply := h.Caller.Review(ctx, runner, opencode.Request{Role: role, Scratch: j.Scratch, SnapshotDigest: c.Snapshot,
 		Instructions: pack.Text + "\n" + contract + "\nUse only the provided excerpts. Review ordinary software behavior and maintainability. No code execution, test generation or external access. Cite only evidence IDs given in scope. Write concise Korean prose.",
 		Input:        query, ProtectedRoots: []string{j.Snapshot.SnapshotDir}})
+	rec.Limitations = noteVersion(rec.Limitations, reply)
 	call := Provenance{Role: role, Model: reply.Model, Version: reply.Version, PackDigest: pack.Digest, PackFiles: pack.Files, RequestDigest: reply.RequestDigest, Usage: usage(reply.Usage), Attempt: 1, Outcome: record.OutcomeAccepted}
 	res := result(domain.TaskSucceeded, "")
 	if reply.Reason != "" {
@@ -140,7 +141,7 @@ func failure(reply opencode.Reply) analysis.TaskResult {
 		return result(domain.TaskCancelled, reply.Reason)
 	case "model_timeout":
 		return result(domain.TaskTimedOut, reply.Reason)
-	case "model_not_configured", "opencode_version_unsupported":
+	case "model_not_configured", "opencode_version_unsupported", opencode.ReasonCredentialUnavailable:
 		return result(domain.TaskUnsupported, reply.Reason)
 	case "policy_blocked":
 		return result(domain.TaskSkippedPolicy, reply.Reason)
@@ -148,6 +149,15 @@ func failure(reply opencode.Reply) analysis.TaskResult {
 	return result(domain.TaskFailed, reply.Reason)
 }
 func safeText(s string) bool { return record.SafeText(s) }
+
+// noteVersion adds opencode_version_untested when reply came through an
+// OpenCode release other than the tested one.
+func noteVersion(lims []string, reply opencode.Reply) []string {
+	if opencode.VersionUntested(reply.Version) {
+		return addLim(lims, opencode.LimVersionUntested)
+	}
+	return lims
+}
 func accept(role string, raw json.RawMessage, r *Record) error {
 	bad := errors.New("invalid model evidence")
 	catalog := map[string]Excerpt{}

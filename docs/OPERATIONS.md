@@ -162,6 +162,20 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행. 탐색은 둘 다 찾으면 켠다 |
 | `agent.auto_detect` | true | `false`이면 도구를 탐색하지 않고 위 명시 설정만 쓴다 |
 | `agent.model` | 없음 | `opencode`(절대 경로), `name`(`PROVIDER/MODEL`, 공백 없음), 선택 `relay_file`(절대 경로), `review_pack`(`review-r1` 기본·`review-v1` 이전 팩), `review_max_calls`(15~207, 비우면 99: attempt마다 review-r1 모델 호출 상한, `--review-max-calls`) |
+
+| `state_dir` | (필수) | 절대 경로. 0700으로 만들고, 소유자가 다르거나 symlink면 거부한다. source root와 서로 포함하면 안 된다 |
+| `listen` | `127.0.0.1:7331` | loopback 주소와 0이 아닌 포트만 |
+| `web_dir` | 빈 값(API만) | 빌드된 `web/dist`의 절대 경로 |
+| `database.mode` | (필수) | `external`만 구현. `managed`는 `not implemented` 오류 |
+| `database.postgres_bin_dir` | 빈 값 | `pg_dump`·`pg_restore`가 있는 절대 경로. PATH에서 찾지 않는다. 백업·복원에 필요하다 |
+| `source_roots[]` | (1~32개) | `label`(1~100자, 앞뒤 공백 없음), 절대 `path`. label과 path는 서로 유일해야 한다. 선택 `repository_code`(저장소 코드 실행 허가, 기본 false), `model_review`(모델 전송 승인: 비우면 모델이 설정됐을 때 허가, `false`면 이 root는 보내지 않음) |
+| `agent.name` | `personal` | 100자 이하 |
+| `agent.max_workers` | 1 | 1~16. 에이전트는 `--autoscale --max-workers N`으로 시작한다 |
+| `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록 |
+| `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로 |
+| `agent.tools` | 빈 값 | 이 빌드의 분석기·toolchain 플래그 이름(`staticcheck`, `node`, `ruff` 등)을 키로, 실행 파일의 절대 경로를 값으로. 모르는 이름은 거부한다 |
+| `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행 |
+| `agent.model` | 없음(키 파일만으로도 모델을 쓴다) | 모든 항목 선택. `opencode`(절대 경로, 비우면 `~/.opencode/bin/opencode` 다음 PATH), `name`(`PROVIDER/MODEL` 또는 키 provider의 모델 이름, 비우면 provider 기본값), `credential_file`(절대 경로, CODEYE 키 파일 또는 OpenCode `auth.json`), `relay_file`(절대 경로, `credential_file`과 함께 쓰지 않음), `timeout_seconds`(1~1800, 비우면 180), `review_pack`(`review-r1` 기본·`review-v1` 이전 팩), `review_max_calls`(15~207, 비우면 99: attempt마다 review-r1 모델 호출 상한, `--review-max-calls`). 해석 순서는 [검토](REVIEW.md#모델-설정) |
 | `quota.*_bytes` | 0(상한 없음) | `snapshot`·`workspace`·`cache`·`logs`·`artifacts`, 음수 거부 |
 | `backup_dir` | 빈 값(백업은 `<state_dir>-backups`에 만든다) | 절대 경로. `state_dir` 안이거나 `state_dir`를 포함하면 거부 |
 | `stop.drain_timeout_seconds` | 300 | 1~86400 |
@@ -169,6 +183,10 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 
 - 설정에는 DB URL이나 토큰을 쓰지 않는다. external 모드의 DB 연결은 실행할 때의 환경변수 `CODEYE_DATABASE_URL`만 쓰고, `codeye` 프로세스 환경에 `PG*` 변수가 있으면 DB 열기를 거부한다(fail closed). 관리형 모드의 비밀번호는 상태 디렉터리의 `postgres/password`에만 있다.
 - 설정에는 Git 저장소 필드가 없다. `codeye up`·`start`가 띄운 에이전트에는 `--git`·`--git-host`가 전달되지 않으므로 로컬 폴더 프로젝트만 처리한다. Git 입력은 에이전트를 직접 띄워야 한다([Git 연결](GITHUB.md)).
+
+- 설정과 상태 디렉터리에는 DB URL이나 토큰을 쓰지 않는다. DB 연결은 실행할 때의 환경변수 `CODEYE_DATABASE_URL`만 쓴다. `codeye` 프로세스 환경에 `PG*` 변수가 있으면 DB 열기를 거부한다(fail closed).
+- 모델 API 키는 설정 파일에 쓰지 않는다. `<state_dir>/secrets/model.json`(0600, 디렉터리 `secrets/` 0700)이나 `agent.model.credential_file`, 사용자의 OpenCode `auth.json`에서 워커가 모델을 호출할 때마다 읽는다. 에이전트 인자에는 키 파일 경로만 있다. 백업은 산출물과 DB만 담으므로 키 파일은 백업에 들어가지 않는다. 복원한 설치에서는 키를 다시 둔다(`codeye up`).
+- 설정에는 Git 저장소 필드가 없다. `codeye start`가 띄운 에이전트에는 `--git`·`--git-host`가 전달되지 않으므로 로컬 폴더 프로젝트만 처리한다. Git 입력은 에이전트를 직접 띄워야 한다([Git 연결](GITHUB.md)).
 
 ## up, open, start, stop, status
 
@@ -198,6 +216,8 @@ codeye status [--config PATH] [--format text|json]
 | `logs/controller.log`, `logs/agent.log` | 자식 프로세스 출력(O_APPEND) |
 | `agent/` | 에이전트 상태 디렉터리(journal, node.json, 작업 사본) |
 | `artifacts/` | controller 산출물 저장소 |
+| `secrets/model.json` | 모델 API 키 파일(`codeye up`이 환경변수에서 쓴다). 워커의 모델 호출만 읽는다 |
+| `run/model-probe.json` | 마지막 모델 확인의 설정 지문(모델 ID·경로·키 파일 시각과 크기)과 결과. 키에서 나온 값은 없다 |
 
 ### start
 
@@ -209,6 +229,10 @@ codeye status [--config PATH] [--format text|json]
 4. `codeye serve --personal`을 setsid로 띄운다(브라우저 세션 7일). 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다. 기록에 listen 주소를 남긴다.
 5. `codeye agent`를 띄운다. 환경은 PATH·LANG뿐이며 DB 정보가 없다. argv는 설정에서 만든다(source root 허가, 도구, 모델, `--storage-quota`, `--storage-log-dir`). 기록에 등록 토큰 플래그를 뺀 argv를 남긴다. `node.json`이 생기고 DB에 신선한 heartbeat가 올 때까지 120초를 기다린다. 실행 중인 에이전트의 기록 argv가 설정에서 만든 argv와 다르면(예: source root 추가) drain을 요청해 실행 중인 작업을 끝내게 하고(`stop.drain_timeout_seconds`까지), 끝나면 3단계부터 다시 띄운다. 그 안에 끝나지 않으면 취소하지 않고 오류로 끝난다. 에이전트는 작업을 마친 뒤 스스로 종료한다.
 6. 실패하면 이 명령이 띄운 프로세스를 역순으로 SIGTERM하고 45초 기다린다. 끝나지 않은 프로세스의 기록은 지우지 않는다. 이 명령이 띄운 관리형 PostgreSQL은 다른 CODEYE 프로세스가 없으면 다시 멈춘다.
+
+4. `codeye serve`를 setsid로 띄운다. 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다.
+5. `codeye agent`를 띄운다. 환경은 PATH·LANG뿐이며 DB 정보가 없다. argv는 설정에서 만든다(source root 허가, 도구, 모델, `--storage-quota`, `--storage-log-dir`). 모델은 [검토](REVIEW.md#모델-설정)의 순서로 정하고, 정해지면 `--opencode`·`--model`·`--model-credential-file`(키 파일 경로)과 `model_review: false`가 아닌 모든 root의 `--model-source-root`를 넘긴다. 모델을 정하지 못하면 모델 플래그 없이 띄운다. `node.json`이 생기고 DB에 신선한 heartbeat가 올 때까지 120초를 기다린다.
+6. 실패하면 이미 띄운 프로세스를 역순으로 SIGTERM하고 45초 기다린다. 끝나지 않은 프로세스의 기록은 지우지 않는다.
 
 성공하면 새 로그인 링크를 `login-link`에 쓴다.
 

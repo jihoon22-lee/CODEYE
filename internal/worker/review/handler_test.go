@@ -90,6 +90,27 @@ func TestExcludedModelAndMissingContext(t *testing.T) {
 	}
 }
 
+// A missing credential is "not configured" (unsupported), a rejected key a
+// failure; calls through another OpenCode release are marked untested.
+func TestModelOutcomeMapping(t *testing.T) {
+	for reason, want := range map[string]domain.TaskStatus{
+		opencode.ReasonCredentialUnavailable: domain.TaskUnsupported, "model_not_configured": domain.TaskUnsupported,
+		opencode.ReasonAuthFailed: domain.TaskFailed, opencode.ReasonModelNotFound: domain.TaskFailed, "model_timeout": domain.TaskTimedOut,
+	} {
+		if got := failure(opencode.Reply{Reason: reason}); got.Status != want || got.Reason != reason {
+			t.Errorf("%s: %+v", reason, got)
+		}
+	}
+	if got := noteVersion([]string{"a"}, opencode.Reply{Version: "1.20.0"}); len(got) != 2 || got[1] != opencode.LimVersionUntested {
+		t.Fatal(got)
+	}
+	for _, v := range []string{opencode.Version, ""} {
+		if got := noteVersion(nil, opencode.Reply{Version: v}); len(got) != 0 {
+			t.Fatal(v, got)
+		}
+	}
+}
+
 func TestLiveQualityRoles(t *testing.T) {
 	relay := os.Getenv("CODEYE_TEST_REVIEW_RELAY")
 	if relay == "" {

@@ -302,6 +302,13 @@ export const ko = {
     count: (label: string, n: number) => `${label} ${n}건`,
     reasonLabels: {
       model_source_not_approved: '소스의 모델 전송이 승인되지 않아 제외됨 (정책 제외, 모델 검토 성공으로 세지 않음)',
+      model_not_configured: '모델이 설정되지 않아 모델 검토를 하지 않음 (안내서의 "모델 설정")',
+      model_credential_unavailable: '모델 API 키 파일이 없거나 읽을 수 없어 호출하지 않음 (미지원)',
+      model_auth_failed: '모델 공급자가 API 키를 거부함 (인증 실패, codeye model probe로 확인)',
+      model_not_found: '모델 공급자에 그 모델이 없음 (agent.model.name 확인)',
+      model_unavailable: '모델 공급자가 응답하지 않았거나 오류를 냄',
+      model_timeout: '모델 호출이 제한시간 안에 끝나지 않음 (agent.model.timeout_seconds)',
+      model_rate_limited: '모델 공급자의 사용량 제한에 걸림',
       no_documents: '스냅샷 범위에 문서가 없어 문서 검토를 생략함 (모델 검토 성공으로 세지 않음)',
       no_tool_observations: '해석할 도구 관찰이 없어 진단 해석을 생략함 (모델 검토 성공으로 세지 않음)',
       no_environment_gap: '환경 선언과 관측이 모두 일치해 환경 해석을 생략함 (모델 검토 성공으로 세지 않음)',
