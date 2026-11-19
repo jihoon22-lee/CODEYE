@@ -1,6 +1,6 @@
 # HTTP API와 이벤트
 
-관리 서버(`codeye serve`, 개인 모드 `codeye start`의 controller)가 제공하는 HTTP API와 실행 이벤트 스트림의 규칙이다. 필드와 응답 형식의 기계 판독 기준은 [`api/openapi.yaml`](../api/openapi.yaml)이다. 이 문서는 필드를 되풀이하지 않고 OpenAPI가 표현하지 못하는 규칙을 적는다. 보고서 내용·비교 상태·판정 적용 규칙과 화면은 [보고서와 화면](REPORT.md), 노드 프로토콜의 lease·fencing·완료 절차는 [실행](EXECUTION.md), 위협 모델과 비밀정보 정책은 [보안](SECURITY.md)에 있다.
+관리 서버(`codeye serve`, 개인 모드 `codeye up`·`codeye start`의 controller)가 제공하는 HTTP API와 실행 이벤트 스트림의 규칙이다. 필드와 응답 형식의 기계 판독 기준은 [`api/openapi.yaml`](../api/openapi.yaml)이다. 이 문서는 필드를 되풀이하지 않고 OpenAPI가 표현하지 못하는 규칙을 적는다. 보고서 내용·비교 상태·판정 적용 규칙과 화면은 [보고서와 화면](REPORT.md), 노드 프로토콜의 lease·fencing·완료 절차는 [실행](EXECUTION.md), 위협 모델과 비밀정보 정책은 [보안](SECURITY.md)에 있다.
 
 ## 구현 범위
 
@@ -30,9 +30,11 @@
 
 ### 일회용 로그인 링크
 
-- `codeye start`, `codeye serve --user`, `codeye login-link`가 일회용 launch token(32 byte 난수, base64url 43자, 10분, 한 번만 교환)을 발급해 `<origin>/#launch=<token>` 링크를 0600 파일에 쓴다. 토큰은 출력하지 않고 DB에는 SHA-256만 저장한다. CLI 사용법은 [사용 안내](GUIDE.md)에 있다.
+- `codeye start`, `codeye serve --user`, `codeye login-link`가 일회용 launch token(32 byte 난수, base64url 43자, 10분, 한 번만 교환)을 발급해 `<origin>/#launch=<token>` 링크를 0600 파일에 쓴다. 개인 모드의 `codeye up`·`codeye open`은 같은 링크를 터미널에 출력하고 브라우저로 연다(A38). DB에는 SHA-256만 저장한다. CLI 사용법은 [사용 안내](GUIDE.md)에 있다.
+- `codeye up PATH`의 링크는 토큰 뒤에 깊은 링크 `&project=<ID>&run=<ID>`를 붙인다. 웹 앱은 토큰을 지울 때 이 두 키(canonical UUID)만 fragment에 남기고 그 프로젝트와 실행을 연다.
 - 관리자 API의 사용자 생성과 비밀번호 재설정도 같은 링크를 응답의 `login_link`로 한 번 준다([계정과 관리자](#계정과-관리자)). origin은 TLS 서버면 public origin, 아니면 요청의 loopback origin이다.
 - 토큰은 URL fragment에 있으므로 HTTP 요청·서버 로그에 실리지 않는다. 웹 앱은 fragment를 읽은 즉시 주소창에서 지우고 `POST /session`으로 교환한다.
+- 세션 수명은 12시간이다. 개인 모드 controller(`codeye serve --personal`, `up`·`start`가 띄운다)는 7일이다(저장 계층의 상한과 같다).
 
 ### 세션
 

@@ -264,8 +264,14 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-125 | `codeye start`·`stop`·`status`: 실행 중 작업의 drain, drain 시간 초과, stale 기록·재사용 pid·기록 없는 에이전트·포트 점유, 설정 오류 | drain은 실행 작업을 끝낸 뒤 추가 claim 없이 종료한다. 시간 초과는 취소하고 정리를 확인한다. 불확실하면 `recovery_required`다. 기록과 시작 시각이 다른 프로세스에는 신호를 보내지 않는다. 상태 파일은 0600·0700이고 DB URL과 장기 secret이 없다. | REQ-021,022; NFR-006 |
 | TC-126 | `codeye doctor --config`: 상한 초과 영역, 백업 없음·오래됨·읽을 수 없음, 불일치 상태, 진행 중 start/stop | 선택 필드 `operations`만 더하고 기존 check는 같다. schema가 상태와 필드 조합을 강제한다. | REQ-018; NFR-006 |
 | TC-127 | 개인 사용 경로: 시작, 프로젝트 추가, Go 분석, 정지, 백업, 새 DB·산출물 디렉터리로 복원, 복원본 시작, 보고서·근거 확인 | 모든 단계가 실제 바이너리로 끝난다. 복원본의 보고서·근거 hash·사람 판정이 원본과 같다. 안내서의 명령은 모두 실행한 것이다. | REQ-012; NFR-003 |
+| TC-170 | 설정 파일도 DB도 없는 상태에서 `codeye up --no-open <Go 폴더>`(PostgreSQL 프로그램은 PATH 탐색), 환경에 `CODEYE_DATABASE_URL`·`PGHOST`·`PGPASSWORD` | `schema_version`과 `source_roots`만 담은 0600 설정 파일이 생긴다. 상태 디렉터리에 cluster가 초기화되고(비밀번호 파일 0600) 127.0.0.1의 55432 이상 포트에서 뜬다. schema가 만들어지고 프로젝트가 등록되고 run이 보고서와 함께 끝난다. 출력에 환경 변수를 무시했다는 알림과 `#launch=…&project=…&run=…` 링크가 있고 DB URL·셸의 비밀번호는 없다. `status`의 `database.postgres`는 `running`이다. | REQ-001,004; NFR-006 |
+| TC-171 | TC-170이 출력한 링크를 Chromium으로 연다 | 한 번에 로그인되고 주소에 토큰이 남지 않으며 `project`만 남는다. 그 프로젝트와 현재 실행이 열려 있고 보고서를 연다. 세션 만료는 6일 뒤보다 늦다(7일). 웹 단위 시험: 깊은 링크는 canonical UUID인 `project`·`run`만 남기고 나머지는 지운다. | REQ-001; NFR-006 |
+| TC-172 | 실행 중에 다른 폴더로 `codeye up`, 설정의 root 아래 폴더, 상태 디렉터리를 포함하는 폴더, Git URL | 새 폴더는 root로 설정에 더해지고 에이전트가 drain 뒤 다시 등록되며 그 run도 보고서로 끝난다. root 아래 폴더는 그 root와 상대 경로를 쓰고 설정을 바꾸지 않는다. 데이터 디렉터리를 포함하는 폴더는 거부한다. Git URL은 아무것도 쓰거나 띄우지 않고 clone 안내와 종료 코드 2다. | REQ-001,015 |
+| TC-173 | `codeye stop` 뒤 `codeye up`, 정지 상태의 `codeye backup`(설정에 `backup_dir` 없음), 새 `state_dir`로의 `codeye restore` | stop의 `database`는 `stopped`이고 그 cluster의 PostgreSQL 프로세스가 없다. 다시 up하면 초기화·사용자 생성 없이 같은 프로젝트가 보인다. 백업은 `<state_dir>-backups` 아래에 세트를 만들고 띄운 PostgreSQL을 다시 멈춘다. 비밀번호는 `postgres/password` 밖의 상태 파일에 없다. 복원은 새 상태 디렉터리에 cluster를 만들고 복원하며 그 뒤 up이 새 노드로 시작한다(복원은 수동 실행으로 확인, smoke에는 없다). | NFR-003,006 |
+| TC-174 | PostgreSQL 프로그램 디렉터리: 16·17·13 설치, 프로그램이 빠진 디렉터리, 명시한 틀린 경로, 아무것도 없음, 주 버전 16 데이터 디렉터리와 17 프로그램, `PG_VERSION` 없는 비어 있지 않은 디렉터리 | 명시가 없으면 가장 높은 주 버전(14 이상), 데이터 디렉터리가 있으면 그 버전을 고른다. 플래그가 설정보다 먼저다. 명시한 경로가 조건을 채우지 않으면 다른 곳을 찾지 않고 그 경로와 이유를 말한다. 없으면 설치 방법·`postgres_bin_dir`·`external`을 알리는 오류다. 다른 주 버전 데이터 디렉터리와 정체 모를 디렉터리는 거부한다. | REQ-004; NFR-006 |
+| TC-175 | `{"schema_version":"0.1"}`만 있는 설정, `up`의 설정 편집(필드 순서·기본값·잘못된 결과), 기본 포트 7331을 다른 프로그램이 쓰는 상태, 설정에 적은 포트를 다른 프로그램이 쓰는 상태 | 기본값은 관리형 DB, `$XDG_STATE_HOME/codeye`(없으면 `~/.local/state/codeye`), root 없음이다. 편집은 다른 필드와 순서를 보존하고 기본값을 쓰지 않으며, 검증을 통과하지 못하면 파일을 바꾸지 않는다. 기본 포트가 쓰이면 7332 이후 빈 포트로 띄우고 `stop`·`status`·`open`이 그 주소를 쓴다. 적은 포트가 쓰이면 시작하지 않는다(포트 이동은 수동 실행으로 확인). | REQ-001; NFR-006 |
 
-개인 모드 운영 계약은 [운영](OPERATIONS.md)에 있다. `start`·`stop`·`status`·백업·복원 시험은 Linux 전용이다. 여러 사용자 운영의 수용(장애 훈련, 권한 철회, 품질 baseline)은 아직 TC가 없으며 [로드맵](ROADMAP.md)의 운영 수용 작업에서 정한다.
+개인 모드 운영 계약은 [운영](OPERATIONS.md)에 있다. `up`·`start`·`stop`·`status`·백업·복원 시험은 Linux 전용이다. 브라우저 자동 열기(`xdg-open`·`wslview`·`explorer.exe`)는 시험하지 않았다(열기 프로그램 선택 순서만 단위 시험). 여러 사용자 운영의 수용(장애 훈련, 권한 철회, 품질 baseline)은 아직 TC가 없으며 [로드맵](ROADMAP.md)의 운영 수용 작업에서 정한다.
 
 ## 연동
 
@@ -374,7 +380,7 @@ python3 scripts/test_postgres.py --web --nodes --scheduler --personal
 - `--web`: 실제 `codeye serve`에 대한 브라우저 smoke(Playwright·Chromium).
 - `--nodes`: 서로 다른 노드 신원 두 개의 Linux Native 수용 시험. `CODEYE_TEST_STATICCHECK`·`CODEYE_TEST_NODE`·`CODEYE_TEST_RUFF` 등 도구 변수가 있으면 실제 도구로도 실행하고, 없으면 해당 smoke를 SKIP으로 출력한다.
 - `--scheduler`: 별도 DB에서 실제 controller·autoscaler와 `-tags codeye_fixture`로 빌드한 agent·worker(TC-71~75). fixture handler는 시험용이며 분석 결과가 아니다.
-- `--personal`: 개인 모드 start/status/stop, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32). Linux 전용이며 모델 호출·다운로드가 없다.
+- `--personal`: 개인 모드 start/status/stop, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32), 관리형 PostgreSQL의 `codeye up` 경로(TC-170~173, 웹 빌드가 있으면 TC-171의 Chromium 확인 포함). 관리형 cluster는 PATH의 PostgreSQL 프로그램으로 만든다. Linux 전용이며 모델 호출·다운로드가 없다.
 - `--smokes-only`: Go 시험을 건너뛰고 고른 smoke만 다시 돌린다. 이때 마지막 줄은 저장 통합 시험을 실행했다고 주장하지 않는다.
 - `--pilot`: **실모델** 파일럿. 실제 모델 요청을 보낸다. 고정 OpenCode와 승인된 relay가 필요하다. `CODEYE_PILOT_RELAY_FILE`에 relay descriptor, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정한다. `CODEYE_PILOT_CASES`(예: `Q01-before,pilot`)로 대상을, `CODEYE_PILOT_REVIEW_PACK`으로 검토 팩을 고른다(기본 `review-r1`). 보관된 결과는 `python3 scripts/regression_pilot.py --audit-results "$CODEYE_PILOT_RESULTS"`로 다시 대조한다. 이 대조는 위치·줄 범위·blob SHA의 참조 검사이며 주장이 옳다는 보증이 아니다. Git 시험에 기록된 commit 객체가 로컬에 있어야 한다.
 
