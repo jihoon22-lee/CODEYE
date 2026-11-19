@@ -12,7 +12,7 @@ import (
 )
 
 // Secret screening of model inputs (docs/ANALYZERS.md §보안). The secrets task
-// of the static composite (an analyzer obsdoc.IsSecretAnalyzer names) runs
+// of the static composite (an analyzer of purpose secrets, docs/ANALYZERS.md#분석기-목적) runs
 // before every review role (the worker runs tasks in plan order and the
 // review handlers append their roles after the static plan), so its
 // envelope is terminal when a role reads it. Three cases:
@@ -63,7 +63,7 @@ func screenSecrets(ctx context.Context, static analysis.Handler, j analysis.Job)
 	lister, known := static.(descriptorLister)
 	if known {
 		for _, d := range lister.Descriptors() {
-			if obsdoc.IsSecretAnalyzer(d.ID) {
+			if d.Purpose == obsdoc.PurposeSecrets {
 				names = append(names, d.Name)
 			}
 		}
@@ -90,10 +90,10 @@ func screenSecrets(ctx context.Context, static analysis.Handler, j analysis.Job)
 			d, err = obsdoc.Decode(b, obsdoc.Expect{TaskKey: t.Key, Snapshot: j.Snapshot.Digest, Lookup: lookup})
 		}
 		switch {
-		case !known && (err != nil || !obsdoc.IsSecretAnalyzer(d.Analyzer.ID)):
+		case !known && (err != nil || !d.Analyzer.IsSecrets()):
 			// Without descriptors only a readable envelope names its analyzer.
 			continue
-		case err != nil || !obsdoc.IsSecretAnalyzer(d.Analyzer.ID):
+		case err != nil || !d.Analyzer.IsSecrets():
 			out.state = screenFailed
 			return out
 		case d.Outcome.TaskStatus == domain.TaskUnsupported && d.Outcome.ExitClass == obsdoc.ExitNotRun:

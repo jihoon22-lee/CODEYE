@@ -298,7 +298,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 
 | 필드 | 내용 |
 |---|---|
-| `analyzer` | `id`, `ecosystem`, `required` |
+| `analyzer` | `id`, `ecosystem`, `required`, 선택 `purpose`([분석기 목적](#분석기-목적)) |
 | `adapter`, `parser` | 구현 ID와 버전 |
 | `task_key`, `snapshot_manifest_digest` | 소비자가 신뢰하는 task와 스냅샷에 묶음 |
 | `module` | 스냅샷 상대 `dir`과 생태계 이름(`name`) |
@@ -322,6 +322,21 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 - `suppressed=true`는 `source_suppressions=reported`일 때만 허용한다. `unreported_suppression_rules`는 정렬·중복 없는 규칙 ID 목록이며 `reported`가 아니면 `[]`다.
 - `config_files`는 `repository_config=honored`가 아니면 빈 목록이다. `honored`이면 null(열거하지 못함) 또는 경로 순으로 정렬된 중복 없는 256개 이하 목록이고, 각 SHA-256은 manifest의 그 파일과 같아야 한다.
 - 지표는 `unit`이 `count`·`lines`·`tokens` 중 하나이고 `value >= threshold`이며 억제될 수 없다.
+- `analyzer.purpose`가 `metrics`이면 모든 관찰이 지표이고, `secrets`이면 지표 관찰이 없다.
+
+### 분석기 목적
+
+`analyzer.purpose`는 분석기 관찰이 무엇인지를 envelope에 적는다. 소비자(보고서 builder, 모델 입력의 비밀값 선별)는 도구 이름 목록 대신 이 값으로 지표·비밀값 분석기를 가린다.
+
+| 값 | 뜻 | 분석기 |
+|---|---|---|
+| (없음) | 진단. 결함 후보가 될 수 있는 도구 진단 | 나머지 모든 분석기 |
+| `metrics` | 구조·중복 측정. 모든 관찰이 `metric`을 갖는다 | lizard, jscpd |
+| `secrets` | 비밀값 위치. 지표 관찰이 없고 문구는 고정 템플릿이다 | gitleaks |
+
+- 값은 `pack.Descriptor.Purpose`에서 오며 같은 분석기의 모든 envelope(설정되지 않은 도구의 `not_run` envelope 포함)에 같은 값이 들어간다. 그래서 관찰이 없어도 보고서가 그 작업을 지표·비밀정보 절에 놓을 수 있다.
+- 진단 분석기는 필드를 쓰지 않는다. 다른 분석기 envelope의 바이트는 바뀌지 않는다. 이 필드 이전에 쓴 envelope는 진단으로 읽고, 그 안의 지표 관찰은 그대로 지표다.
+- 서술 파일(`examples/analyzer-*.yaml`)의 `purpose`는 envelope 값과 같아야 한다(`validate_bundle`이 확인).
 
 ### 보고서로 옮기는 규칙
 
@@ -1105,11 +1120,11 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 - fingerprint는 `report.ToolFingerprint(analyzer, rule, path, "", 고정 문구)`다. 비밀값 hash를 쓰지 않는다. 같은 파일에서 같은 규칙이 두 번 탐지되면 fingerprint가 같은 finding 두 개가 되고, 사람 판정은 이월되지 않으며, run 비교는 `ambiguous`로 표시한다.
 - 보고서에는 코드 발췌가 없다. lizard 산출물은 함수 이름·줄·지표, jscpd 산출물은 경로·줄 범위만 담는다.
 - 비밀값 finding 위치의 `blob_sha256`은 파일 전체 hash이며 스냅샷 manifest에도 이미 있다. 짧은 비밀값 한 줄만 담은 파일은 내용을 추측해 대조할 수 있다. 코드 제외 내보내기에서도 지우지 않는다.
-- `obsdoc.SecretAnalyzers`(`any.gitleaks`)가 비밀값 분석기를 판별한다.
+- 비밀값 분석기는 envelope의 `analyzer.purpose=secrets`로 판별한다([분석기 목적](#분석기-목적)). 도구 이름 목록을 두지 않는다.
 
 ### 모델 입력의 비밀값 선별
 
-검토 역할은 모델 입력을 만들기 전에 비밀값 분석기(`obsdoc.SecretAnalyzers`)의 envelope로 파일을 거른다. `review-r1`과 `review-v1` 두 검토 팩 모두 같은 규칙(`internal/worker/review/screen.go`)이며, 세 경우(실행 안 됨 → 선별 없이 보내고 `model_input_not_secret_screened`, 실행했으나 쓸 수 없음 → 모든 역할 `skipped_policy`/`secret_screen_failed`, 완전한 성공 → 탐지 파일을 모든 발췌에서 빼고 `secret_files_withheld`)의 처리는 [검토](REVIEW.md)가 정한다. 분석기 쪽에서 지켜야 할 것은 다음과 같다.
+검토 역할은 모델 입력을 만들기 전에 비밀값 분석기(`purpose=secrets`인 descriptor와 envelope)의 envelope로 파일을 거른다. `review-r1`과 `review-v1` 두 검토 팩 모두 같은 규칙(`internal/worker/review/screen.go`)이며, 세 경우(실행 안 됨 → 선별 없이 보내고 `model_input_not_secret_screened`, 실행했으나 쓸 수 없음 → 모든 역할 `skipped_policy`/`secret_screen_failed`, 완전한 성공 → 탐지 파일을 모든 발췌에서 빼고 `secret_files_withheld`)의 처리는 [검토](REVIEW.md)가 정한다. 분석기 쪽에서 지켜야 할 것은 다음과 같다.
 
 - "실행 안 됨"은 비밀값 작업이 계획에 없거나, `unsupported`이면서 `not_run`인 envelope(도구 미설정 등)일 때뿐이다. 계획에 있는데 envelope가 없거나 무효이면 실패로 본다. 워커는 계획 순서대로 작업을 하나씩 실행하고 검토 역할은 정적 계획 뒤에 붙으므로 검토가 읽을 때 비밀값 작업은 끝나 있다.
 - "완전한 성공"은 `succeeded`, 부분 파싱 아님, parse OK다. 이때 탐지 파일에 위치한 다른 도구 관찰은 규칙과 위치만 보내고 문구를 뺀다. 하드코딩 암호 규칙처럼 문구가 값을 인용할 수 있기 때문이다.

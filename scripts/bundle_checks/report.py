@@ -152,6 +152,11 @@ def check_analyzer_observations(doc: dict) -> None:
     ensure(parse["unresolved_observations"] == sum(1 for o in observations if o["location_state"] != "resolved"), "Envelope unresolved count mismatch")
     ensure(len({o["id"] for o in observations}) == len(observations), "Duplicate envelope observation id")
     ensure(doc["limitations"] == sorted(set(doc["limitations"])), "Envelope limitations must be sorted unique codes")
+    # Analyzer purpose (docs/ANALYZERS.md#분석기-목적): a metrics envelope holds only metrics, a
+    # secrets envelope none; without a purpose the analyzer is diagnostics.
+    purpose = doc["analyzer"].get("purpose")
+    ensure(purpose != "metrics" or all("metric" in o for o in observations), "Metrics analyzer with a diagnostic observation")
+    ensure(purpose != "secrets" or not any("metric" in o for o in observations), "Secrets analyzer with a metric observation")
     executions = {e["name"]: e for e in doc["executions"]}
     ensure(len(executions) == len(doc["executions"]), "Duplicate envelope execution")
     for o in observations:
