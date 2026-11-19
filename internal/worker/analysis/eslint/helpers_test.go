@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 )
 
 // newReal configures the operator eslint (CODEYE_TEST_ESLINT) on the node
@@ -20,6 +21,6 @@ func newReal(t *testing.T, typed bool) *Analyzer {
 }
 
 // nodePaths are the host paths no structured output may hold.
-func nodePaths(a *Analyzer, fx jststest.Fixture) []string {
+func nodePaths(a *Analyzer, fx packtest.Fixture) []string {
 	return []string{fx.Base, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.SnapshotDir, a.plugins.dir, a.script.Node.Dir, a.script.Resolved}
 }

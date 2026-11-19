@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -55,8 +56,8 @@ func caseFiles(extra map[string]string) map[string]string {
 // and snapshot are unchanged and no node path is recorded.
 func TestRealESLintMonorepo(t *testing.T) {
 	base, typed := newReal(t, false), newReal(t, true)
-	fx := jststest.NewFixture(t, filepath.Join(t.TempDir(), "공백 & (dir)"), jststest.MonorepoFiles(t, 4), domain.Scope{})
-	before, snapBefore := jststest.TreeHash(t, fx.SourceRoot), jststest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
+	fx := packtest.NewFixture(t, filepath.Join(t.TempDir(), "공백 & (dir)"), jststest.MonorepoFiles(t, 4), domain.Scope{})
+	before, snapBefore := packtest.TreeHash(t, fx.SourceRoot), packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
 	tasks, err := base.Plan(context.Background(), fx.Job)
 	if err != nil || len(tasks) != 3 {
 		t.Fatalf("baseline plan %v %+v", err, tasks)
@@ -78,7 +79,7 @@ func TestRealESLintMonorepo(t *testing.T) {
 			[]string{"@typescript-eslint/no-explicit-any", "@typescript-eslint/no-unused-vars", "prefer-const"}, []string{"packages/app/src/index.ts", "packages/app/src/suppressed.ts", "packages/app/src/util.ts"}},
 	}
 	for _, c := range cases {
-		res := jststest.RunTask(t, c.a, fx.Job, c.key, &executor.Executor{})
+		res := packtest.RunTask(t, c.a, fx.Job, c.key, &executor.Executor{})
 		jststest.Capture(t, c.capture, res)
 		doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
 		if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || doc.Outcome.PartialParse {
@@ -88,7 +89,7 @@ func TestRealESLintMonorepo(t *testing.T) {
 		if check.Name != execCheck || check.Result.ExitCode == nil || *check.Result.ExitCode != 1 || len(check.Result.Stderr.Data) != 0 {
 			t.Fatalf("%s: eslint must exit 1 with findings and a clean stderr: %+v", c.key, check.Result)
 		}
-		rules := jststest.Rules(doc)
+		rules := packtest.Rules(doc)
 		for _, r := range c.rules {
 			if rules[r] == 0 {
 				t.Fatalf("%s: rule %s missing: %v", c.key, r, rules)
@@ -121,19 +122,19 @@ func TestRealESLintMonorepo(t *testing.T) {
 		if c.key == "eslint" && !slices.Contains(doc.Limitations, "no_package_json_module") && doc.Module.Name != "w18-fixture" {
 			t.Fatalf("root module %+v %v", doc.Module, doc.Limitations)
 		}
-		jststest.AssertNoNodePaths(t, raw, nodePaths(c.a, fx)...)
+		packtest.AssertNoNodePaths(t, raw, nodePaths(c.a, fx)...)
 	}
 	if _, err := os.Stat(filepath.Join(fx.Job.Snapshot.WorkspaceDir, "packages", "lib", "CONFIG_LOADED")); err == nil {
 		t.Fatal("the repository eslint.config.js was executed")
 	}
-	if jststest.TreeHash(t, fx.SourceRoot) != before || jststest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
+	if packtest.TreeHash(t, fx.SourceRoot) != before || packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
 		t.Fatal("source or snapshot changed")
 	}
 	// Same input, fresh attempt: IDs are content derived.
-	fx2 := jststest.NewFixture(t, "", jststest.MonorepoFiles(t, 4), domain.Scope{})
+	fx2 := packtest.NewFixture(t, "", jststest.MonorepoFiles(t, 4), domain.Scope{})
 	d1, _ := jststest.ReadEnvelope(t, fx.Job, analysis.TaskResult{Artifacts: []analysis.ArtifactFile{{Role: analysis.RoleObservations, MediaType: analysis.MediaObservations,
 		Path: obsdoc.ArtifactPath(fx.Job.Scratch, "eslint.m02")}}})
-	d2, _ := jststest.ReadEnvelope(t, fx2.Job, jststest.RunTask(t, base, fx2.Job, "eslint.m02", &executor.Executor{}))
+	d2, _ := jststest.ReadEnvelope(t, fx2.Job, packtest.RunTask(t, base, fx2.Job, "eslint.m02", &executor.Executor{}))
 	if len(d1.Observations) != len(d2.Observations) {
 		t.Fatal("observation count differs between runs")
 	}
@@ -146,8 +147,8 @@ func TestRealESLintMonorepo(t *testing.T) {
 
 func TestRealESLintClean(t *testing.T) {
 	a := newReal(t, false)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixClean}), domain.Scope{})
-	res := jststest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixClean}), domain.Scope{})
+	res := packtest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
 	jststest.Capture(t, "clean", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	check := res.Executions[len(res.Executions)-1]
@@ -162,15 +163,15 @@ func TestRealESLintClean(t *testing.T) {
 // and no file is claimed as processed.
 func TestRealESLintParseError(t *testing.T) {
 	a := newReal(t, false)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixBroken, "ok.js": "const unused = 1;\n"}), domain.Scope{})
-	res := jststest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixBroken, "ok.js": "const unused = 1;\n"}), domain.Scope{})
+	res := packtest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
 	jststest.Capture(t, "parse-error", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	check := res.Executions[len(res.Executions)-1]
 	if res.Status != domain.TaskFailed || res.Reason != ReasonParseErrors || !doc.Outcome.PartialParse || *check.Result.ExitCode != 1 {
 		t.Fatalf("parse error %s/%s %+v", res.Status, res.Reason, doc.Outcome)
 	}
-	if len(doc.ToolErrors) != 1 || doc.ToolErrors[0].Kind != "parse" || *doc.ToolErrors[0].Path != "index.js" || jststest.Rules(doc)["no-unused-vars"] != 1 ||
+	if len(doc.ToolErrors) != 1 || doc.ToolErrors[0].Kind != "parse" || *doc.ToolErrors[0].Path != "index.js" || packtest.Rules(doc)["no-unused-vars"] != 1 ||
 		doc.Coverage.ProcessedPaths != nil || doc.Coverage.Units[FileParseError] != 1 {
 		t.Fatalf("tool errors %+v coverage %+v", doc.ToolErrors, doc.Coverage)
 	}
@@ -183,11 +184,11 @@ func TestRealESLintParseError(t *testing.T) {
 // suppressedMessages stays empty and the rule pack records disabled.
 func TestRealESLintSuppressionsDisabled(t *testing.T) {
 	a := newReal(t, false)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixSup, "eslint-suppressions.json": fixSupFile}), domain.Scope{})
-	res := jststest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixSup, "eslint-suppressions.json": fixSupFile}), domain.Scope{})
+	res := packtest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
 	jststest.Capture(t, "suppressions", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
-	rules := jststest.Rules(doc)
+	rules := packtest.Rules(doc)
 	if res.Status != domain.TaskSucceeded || rules["no-empty"] != 1 || rules["no-unused-vars"] != 1 || rules["no-debugger"] != 1 {
 		t.Fatalf("suppressions %s/%s rules %v errors %+v", res.Status, res.Reason, rules, doc.ToolErrors)
 	}
@@ -206,13 +207,13 @@ func TestRealESLintSuppressionsDisabled(t *testing.T) {
 // tool error and withholds every type-aware diagnostic.
 func TestRealESLintTypedDependencyGap(t *testing.T) {
 	base, typed := newReal(t, false), newReal(t, true)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixGapTSConfig, "src/main.ts": fixGapMain}), domain.Scope{})
-	res := jststest.RunTask(t, base, fx.Job, "eslint", &executor.Executor{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixGapTSConfig, "src/main.ts": fixGapMain}), domain.Scope{})
+	res := packtest.RunTask(t, base, fx.Job, "eslint", &executor.Executor{})
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithoutFindings {
 		t.Fatalf("baseline %s/%s %+v %+v", res.Status, res.Reason, doc.Outcome, doc.Observations)
 	}
-	res = jststest.RunTask(t, typed, fx.Job, "eslint-typed", &executor.Executor{})
+	res = packtest.RunTask(t, typed, fx.Job, "eslint-typed", &executor.Executor{})
 	jststest.Capture(t, "typed-gap", res)
 	doc, _ = jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonDependency || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError || len(doc.Observations) != 0 {
@@ -235,10 +236,10 @@ func TestRealESLintTypedDependencyGap(t *testing.T) {
 // resolution would feed repository dependency code into the program.
 func TestRealESLintTypedRefusesNodeModules(t *testing.T) {
 	typed := newReal(t, true)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixGapTSConfig, "src/main.ts": "export const one = 1;\n"}), domain.Scope{})
-	jststest.WriteTree(t, fx.Job.Snapshot.WorkspaceDir, map[string]string{"node_modules/zod/package.json": "{\"name\":\"zod\"}\n"})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixGapTSConfig, "src/main.ts": "export const one = 1;\n"}), domain.Scope{})
+	packtest.WriteTree(t, fx.Job.Snapshot.WorkspaceDir, map[string]string{"node_modules/zod/package.json": "{\"name\":\"zod\"}\n"})
 	runner := &jststest.MutatingRunner{Inner: &executor.Executor{}}
-	res := jststest.RunTask(t, typed, fx.Job, "eslint-typed", runner)
+	res := packtest.RunTask(t, typed, fx.Job, "eslint-typed", runner)
 	if res.Status != domain.TaskSkippedPolicy || res.Reason != ReasonForeignNodeModules || len(runner.Specs) != 0 {
 		t.Fatalf("node_modules %s/%s specs %d", res.Status, res.Reason, len(runner.Specs))
 	}
@@ -253,7 +254,7 @@ func TestRealESLintTypedRefusesNodeModules(t *testing.T) {
 func TestRealESLintTypedDoesNotLoadTSConfigPlugins(t *testing.T) {
 	typed := newReal(t, true)
 	dir := t.TempDir()
-	jststest.WriteTree(t, dir, map[string]string{
+	packtest.WriteTree(t, dir, map[string]string{
 		"package.json":  pkgJSON,
 		"tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"plugins\":[{\"name\":\"marker-plugin\"}]},\"include\":[\"src\"]}\n",
 		"src/main.ts":   "export const one: number = 1;\n",
@@ -309,13 +310,13 @@ func TestRealESLintDamagedOutput(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"index.js": "const unused = 1;\n"}), domain.Scope{})
+			fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"index.js": "const unused = 1;\n"}), domain.Scope{})
 			runner := &jststest.MutatingRunner{Inner: &executor.Executor{}, Mutate: func(s executor.Spec, r *executor.Result) {
 				if isCheck(s) {
 					c.mutate(r)
 				}
 			}}
-			res := jststest.RunTask(t, a, fx.Job, "eslint", runner)
+			res := packtest.RunTask(t, a, fx.Job, "eslint", runner)
 			doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 			if res.Status != domain.TaskFailed || res.Reason != c.reason || doc.Outcome.PartialParse != c.partial || doc.Parse.OK || doc.Coverage.ProcessedPaths != nil {
 				t.Fatalf("%s: %s/%s %+v parse %+v", c.name, res.Status, res.Reason, doc.Outcome, doc.Parse)
@@ -326,10 +327,10 @@ func TestRealESLintDamagedOutput(t *testing.T) {
 
 func TestRealESLintCancelAndTimeout(t *testing.T) {
 	a := newReal(t, false)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixClean}), domain.Scope{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixClean}), domain.Scope{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	res := jststest.RunTaskCtx(t, ctx, a, fx.Job, "eslint", &executor.Executor{})
+	res := packtest.RunTaskCtx(t, ctx, a, fx.Job, "eslint", &executor.Executor{})
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskCancelled || doc.Outcome.ExitClass != obsdoc.ExitCancelled {
 		t.Fatalf("cancelled %s %+v", res.Status, doc.Outcome)
@@ -338,8 +339,8 @@ func TestRealESLintCancelAndTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fx2 := jststest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixClean}), domain.Scope{})
-	res = jststest.RunTask(t, short, fx2.Job, "eslint", &executor.Executor{})
+	fx2 := packtest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixClean}), domain.Scope{})
+	res = packtest.RunTask(t, short, fx2.Job, "eslint", &executor.Executor{})
 	doc, _ = jststest.ReadEnvelope(t, fx2.Job, res)
 	if res.Status != domain.TaskTimedOut || doc.Outcome.ExitClass != obsdoc.ExitTimeout {
 		t.Fatalf("timeout %s %+v", res.Status, doc.Outcome)
@@ -367,8 +368,8 @@ func TestRealESLintTypedProgramDiagnostics(t *testing.T) {
 		{"package-extends", "{\"extends\":\"@tsconfig/strictest/tsconfig.json\",\"compilerOptions\":{\"lib\":[\"ES2022\"]},\"include\":[\"src\"]}\n",
 			domain.TaskFailed, ReasonConfig, "diagnostics_withheld_incomplete_types"},
 	} {
-		fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/main.ts": main}), domain.Scope{})
-		res := jststest.RunTask(t, typed, fx.Job, "eslint-typed", &executor.Executor{})
+		fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/main.ts": main}), domain.Scope{})
+		res := packtest.RunTask(t, typed, fx.Job, "eslint-typed", &executor.Executor{})
 		jststest.Capture(t, "typed-"+c.name, res)
 		doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 		if res.Status != c.status || res.Reason != c.reason || !slices.Contains(doc.Limitations, c.lim) {

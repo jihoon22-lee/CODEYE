@@ -10,17 +10,18 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-func monorepo(t *testing.T) jststest.Fixture {
+func monorepo(t *testing.T) packtest.Fixture {
 	files := jststest.MonorepoFiles(t, 4)
 	files["packages/app/testdata/x/package.json"] = "{}\n"
 	files["packages/app/node_modules/dep/index.js"] = "module.exports = 1;\n"
 	files["packages/app/.cache/c.js"] = "1;\n"
-	return jststest.NewFixture(t, "", files, domain.Scope{})
+	return packtest.NewFixture(t, "", files, domain.Scope{})
 }
 
 // PackageModules restates the JavaScript module discovery (discovery
@@ -74,7 +75,7 @@ func TestModulesPlanAndScope(t *testing.T) {
 		t.Fatal("unknown scope accepted")
 	}
 	// Without a root package.json the root is implicit.
-	fx2 := jststest.NewFixture(t, "", map[string]string{"a.js": "1;\n", "pkg/package.json": "{}\n", "pkg/b.ts": "1;\n"}, domain.Scope{})
+	fx2 := packtest.NewFixture(t, "", map[string]string{"a.js": "1;\n", "pkg/package.json": "{}\n", "pkg/b.ts": "1;\n"}, domain.Scope{})
 	mods, _ = jsts.Modules(fx2.Job.Snapshot.Manifest, domain.Scope{})
 	if len(mods) != 2 || !mods[0].Implicit || !slices.Equal(mods[0].Nested, []string{"pkg"}) {
 		t.Fatalf("implicit %+v", mods)
@@ -82,7 +83,7 @@ func TestModulesPlanAndScope(t *testing.T) {
 }
 
 func TestResolverColumns(t *testing.T) {
-	fx := jststest.NewFixture(t, "", map[string]string{"package.json": "{}\n", "a.ts": "\ufeffconst 한 = \"😀\"; x;\n"}, domain.Scope{})
+	fx := packtest.NewFixture(t, "", map[string]string{"package.json": "{}\n", "a.ts": "\ufeffconst 한 = \"😀\"; x;\n"}, domain.Scope{})
 	files := jsts.Included(fx.Job.Snapshot.Manifest)
 	r := &jsts.Resolver{SnapshotDir: fx.Job.Snapshot.SnapshotDir, ModuleDir: ".", Roots: jsts.Roots(fx.Job.Snapshot.WorkspaceDir), Files: files}
 	// UTF-16 column 14 is "x" (the BOM is not a column): 한 is 1 unit/3
@@ -97,7 +98,7 @@ func TestResolverColumns(t *testing.T) {
 }
 
 func TestReadChainJSONCAndOptions(t *testing.T) {
-	fx := jststest.NewFixture(t, "", map[string]string{
+	fx := packtest.NewFixture(t, "", map[string]string{
 		"tsconfig.base.json":     "{\n  // comment, \"quoted // not a comment\"\n  \"compilerOptions\": {\"strict\": true, \"paths\": {\"@/*\": [\"./src/*\"],},},\n}\n",
 		"app/tsconfig.json":      "{\"extends\": \"../tsconfig.base.json\", \"include\": [\"src/**/*\"], \"references\": [{\"path\": \"./node\"}]}\n",
 		"app/node/tsconfig.json": "{\"extends\": [\"@tsconfig/node20\"], \"compilerOptions\": {\"outDir\": \"./dist\"}}\n",
@@ -173,7 +174,7 @@ func TestScriptValidation(t *testing.T) {
 		}
 	}
 	shim := filepath.Join(filepath.Dir(eslint), "eslint.sh")
-	jststest.WriteTree(t, filepath.Dir(shim), map[string]string{"eslint.sh": "#!/bin/sh\n", "wrapper": "#!/bin/sh\nexec node x\n"})
+	packtest.WriteTree(t, filepath.Dir(shim), map[string]string{"eslint.sh": "#!/bin/sh\n", "wrapper": "#!/bin/sh\nexec node x\n"})
 	for _, p := range []string{shim, filepath.Join(filepath.Dir(shim), "wrapper")} {
 		if _, err := jsts.NewScript(p, "eslint", node); err == nil {
 			t.Fatalf("accepted shim %s", p)

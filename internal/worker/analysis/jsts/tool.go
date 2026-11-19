@@ -273,22 +273,6 @@ func WriteExecution(dir, name string, r executor.Result) (analysis.Execution, er
 	return analysis.WriteExecution(dir, name, r)
 }
 
-// Stoppable reports a result after which a task runs nothing more.
-func Stoppable(r *executor.Result) bool {
-	return r.Cleanup == executor.CleanupUncertain || r.Status == executor.StatusCancelled || r.Status == executor.StatusTimedOut ||
-		r.Status == executor.StatusRejected || r.Status == executor.StatusUnsupported || r.Status == executor.StatusStartFailed
-}
-
-// ExitedZero reports a clean exit 0.
-func ExitedZero(r *executor.Result) bool {
-	return r != nil && r.Status == executor.StatusExited && r.ExitCode != nil && *r.ExitCode == 0
-}
-
-// StreamsComplete reports both streams captured whole.
-func StreamsComplete(r *executor.Result) bool {
-	return r != nil && !r.Stdout.Truncated && !r.Stdout.Incomplete && !r.Stderr.Truncated && !r.Stderr.Incomplete
-}
-
 // maxFile bounds a workspace file read for drift checks.
 const maxFile = 64 << 20
 

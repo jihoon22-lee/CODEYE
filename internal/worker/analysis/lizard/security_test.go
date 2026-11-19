@@ -9,6 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack/anypacktest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -35,7 +36,7 @@ func TestRealLizardHostileNamesAndLinks(t *testing.T) {
 	canary := anypacktest.Secret(t)
 	target := anypacktest.Canary(t, canary)
 	fx := anypacktest.NewLinked(t, hostileFiles(), map[string]string{"src/leak.py": target, "linked": filepath.Dir(target)}, domain.Scope{})
-	res := anypacktest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
 	doc, raw := anypacktest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || !slices.Equal(doc.Coverage.ProcessedPaths, []string{"--help/a.py", "-x.py", "src/--version.go"}) {
 		t.Fatalf("%s/%s %+v %+v", res.Status, res.Reason, doc.Coverage, doc.ToolErrors)

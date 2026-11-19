@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack/anypacktest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -49,11 +50,11 @@ func realRun(t *testing.T, files map[string][]byte) realResult {
 		t.Fatal(err)
 	}
 	fx := anypacktest.New(t, filepath.Join(t.TempDir(), "공백 & (dir)"), files, domain.Scope{})
-	before, snapBefore := anypacktest.TreeHash(t, fx.SourceRoot), anypacktest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
+	before, snapBefore := packtest.TreeHash(t, fx.SourceRoot), packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
 	rr := &recordingRunner{inner: &executor.Executor{}}
-	res := anypacktest.RunTask(t, a, fx.Job, Name, rr)
+	res := packtest.RunTask(t, a, fx.Job, Name, rr)
 	doc, raw := anypacktest.ReadEnvelope(t, fx.Job, res)
-	if anypacktest.TreeHash(t, fx.SourceRoot) != before || anypacktest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
+	if packtest.TreeHash(t, fx.SourceRoot) != before || packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
 		t.Fatal("lizard changed the source or the snapshot")
 	}
 	return realResult{fx: fx, res: res, doc: doc, raw: raw, specs: rr.specs}

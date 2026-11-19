@@ -1,16 +1,14 @@
 // Package jststest holds the test fixtures the tsc and ESLint adapters
 // share: operator tool paths from CODEYE_TEST_* (real-tool tests skip
-// without them; CI has no Node tools), a snapshot with a cloned attempt
-// workspace, tree hashes, a result-mutating runner, envelope decoding and
-// the capture of real tool streams into testdata. It is imported by tests
-// only.
+// without them; CI has no Node tools), fake tool packages, a
+// result-mutating runner, envelope decoding and the capture of real tool
+// streams into testdata; snapshots, task runs and tree hashes come from
+// packtest. It is imported by tests only.
 package jststest
 
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,13 +20,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nativepath"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
 // Env names the operator tool paths of the real-tool tests.
@@ -97,20 +94,6 @@ func Tsc(t *testing.T) string { return toolPath(t, EnvTsc, "typescript/bin/tsc (
 // ESLint is the operator's eslint/bin/eslint.js from CODEYE_TEST_ESLINT.
 func ESLint(t *testing.T) string { return toolPath(t, EnvESLint, "eslint/bin/eslint.js (10.15.x)") }
 
-// WriteTree writes files (slash paths) below root.
-func WriteTree(t *testing.T, root string, files map[string]string) {
-	t.Helper()
-	for rel, body := range files {
-		p := filepath.Join(root, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 // ReadTree reads every regular file below dir as slash path -> content.
 func ReadTree(t *testing.T, dir string) map[string]string {
 	t.Helper()
@@ -140,82 +123,6 @@ func MonorepoFiles(t *testing.T, depth int) map[string]string {
 	return ReadTree(t, filepath.Join(strings.Repeat("../", depth)+"fixtures", "js-ts", "input"))
 }
 
-// TreeHash digests every path, mode and regular file content below root.
-func TreeHash(t *testing.T, root string) string {
-	t.Helper()
-	var lines []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(root, p)
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		line := filepath.ToSlash(rel) + "|" + info.Mode().String()
-		if d.Type().IsRegular() {
-			b, err := os.ReadFile(p)
-			if err != nil {
-				return err
-			}
-			sum := sha256.Sum256(b)
-			line += "|" + hex.EncodeToString(sum[:])
-		}
-		lines = append(lines, line)
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sort.Strings(lines)
-	h := sha256.New()
-	for _, l := range lines {
-		h.Write([]byte(l + "\n"))
-	}
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-// Fixture is a snapshot of files with a cloned attempt workspace.
-type Fixture struct {
-	Base, SourceRoot string
-	Job              analysis.Job
-}
-
-// NewFixture acquires a snapshot of files under base (a temp dir when
-// empty) and clones an attempt workspace like the worker.
-func NewFixture(t *testing.T, base string, files map[string]string, scope domain.Scope) Fixture {
-	t.Helper()
-	if base == "" {
-		base = t.TempDir()
-	}
-	src, data, scratch := filepath.Join(base, "source"), filepath.Join(base, "data"), filepath.Join(base, "scratch")
-	WriteTree(t, src, files)
-	for _, d := range []string{data, scratch} {
-		if err := os.MkdirAll(d, 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ctx := context.Background()
-	snap, err := source.AcquireLocal(ctx, src, ".", data, source.DefaultLimits())
-	if err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
-	loaded, err := source.Load(ctx, snap.Root, snap.Digest)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	ws := filepath.Join(data, "attempt-workspace")
-	if err := source.CloneWorkspace(ctx, loaded, ws); err != nil {
-		t.Fatalf("clone: %v", err)
-	}
-	loaded.WorkspaceDir = ws
-	if scope.Kind == "" {
-		scope.Kind = "full"
-	}
-	return Fixture{Base: base, SourceRoot: src, Job: analysis.Job{RunID: "run-1", AttemptID: "attempt-1", Epoch: 1, Profile: "deep-review", Scope: scope, Snapshot: loaded, Scratch: scratch}}
-}
-
 // MutatingRunner wraps a runner, records the specs and lets a test alter a
 // result.
 type MutatingRunner struct {
@@ -238,63 +145,7 @@ func (m *MutatingRunner) Run(ctx context.Context, spec executor.Spec) executor.R
 // the contract checks.
 func ReadEnvelope(t *testing.T, job analysis.Job, res analysis.TaskResult) (obsdoc.Document, []byte) {
 	t.Helper()
-	if len(res.Artifacts) != 1 || res.Artifacts[0].Role != analysis.RoleObservations || res.Artifacts[0].MediaType != analysis.MediaObservations {
-		t.Fatalf("observations artifact missing: %+v", res)
-	}
-	raw, err := os.ReadFile(res.Artifacts[0].Path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	key := filepath.Base(filepath.Dir(res.Artifacts[0].Path))
-	doc, err := obsdoc.Decode(raw, pack.Expect(job, key))
-	if err != nil {
-		t.Fatalf("envelope invalid: %v\n%s", err, raw)
-	}
-	if dump := os.Getenv("CODEYE_JSTS_DUMP"); dump != "" {
-		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + key + ".json"
-		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return doc, raw
-}
-
-// RunTask plans with plan and runs the task keyed key.
-func RunTask(t *testing.T, a pack.Analyzer, job analysis.Job, key string, runner executor.Runner) analysis.TaskResult {
-	t.Helper()
-	return RunTaskCtx(t, context.Background(), a, job, key, runner)
-}
-
-// RunTaskCtx is RunTask with a run context.
-func RunTaskCtx(t *testing.T, ctx context.Context, a pack.Analyzer, job analysis.Job, key string, runner executor.Runner) analysis.TaskResult {
-	t.Helper()
-	tasks, err := a.Plan(context.Background(), job)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, task := range tasks {
-		if task.Spec.Key == key {
-			return a.Run(ctx, job, task.Spec, runner)
-		}
-	}
-	t.Fatalf("task %s not planned: %+v", key, tasks)
-	return analysis.TaskResult{}
-}
-
-// AssertNoNodePaths fails when raw holds any of the node paths.
-func AssertNoNodePaths(t *testing.T, raw []byte, paths ...string) {
-	t.Helper()
-	s := string(raw)
-	for _, p := range paths {
-		if p == "" {
-			continue
-		}
-		for _, f := range []string{p, filepath.ToSlash(p)} {
-			if strings.Contains(s, f) {
-				t.Fatalf("structured output contains node path %q", f)
-			}
-		}
-	}
+	return packtest.ReadEnvelope(t, job, res, "CODEYE_JSTS_DUMP")
 }
 
 // Capture writes every execution of a task run (with CODEYE_JSTS_CAPTURE
@@ -404,7 +255,7 @@ func FakeTools(t *testing.T) (eslintJS, tscJS string, node pack.Toolchain) {
 	t.Helper()
 	root := t.TempDir()
 	nm := filepath.Join(root, "node_modules")
-	WriteTree(t, nm, map[string]string{
+	packtest.WriteTree(t, nm, map[string]string{
 		"eslint/package.json":             "{\"name\":\"eslint\",\"version\":\"10.15.0\",\"main\":\"./lib/api.js\"}\n",
 		"eslint/lib/api.js":               "",
 		"eslint/bin/eslint.js":            "#!/usr/bin/env node\n",
@@ -417,7 +268,7 @@ func FakeTools(t *testing.T) (eslintJS, tscJS string, node pack.Toolchain) {
 		"typescript/bin/tsc":              "#!/usr/bin/env node\n",
 	})
 	bin := filepath.Join(root, "node", "bin")
-	WriteTree(t, bin, map[string]string{"node": ""})
+	packtest.WriteTree(t, bin, map[string]string{"node": ""})
 	return filepath.Join(nm, "eslint", "bin", "eslint.js"), filepath.Join(nm, "typescript", "bin", "tsc"),
 		pack.Toolchain{Name: "node", Executable: filepath.Join(bin, "node"), Dir: bin, Version: "24.18.0"}
 }
@@ -435,13 +286,4 @@ func EnvAllowlisted(env map[string]string) bool {
 	_, path := env["PATH"]
 	_, lang := env["LANG"]
 	return path && lang && len(env) <= want
-}
-
-// Rules counts observations per rule id.
-func Rules(doc obsdoc.Document) map[string]int {
-	out := map[string]int{}
-	for _, o := range doc.Observations {
-		out[o.RuleID]++
-	}
-	return out
 }

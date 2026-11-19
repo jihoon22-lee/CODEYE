@@ -9,6 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -149,7 +150,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		limitations = append(limitations, "workspace_drift")
 	}
 	toolOK := false
-	if in.Version != nil && jsts.ExitedZero(in.Version) {
+	if in.Version != nil && pack.ExitedZero(in.Version) {
 		if v, ok := ParseVersion(in.Version.Stdout.Data); ok {
 			toolOK = true
 			doc.Tool.Version, doc.Tool.VersionTested = ptr(v), VersionTested(v)
@@ -197,7 +198,7 @@ func assemble(in assembleInput) obsdoc.Document {
 			return
 		}
 		all = append(all, r)
-		if !jsts.StreamsComplete(r) {
+		if !pack.StreamsComplete(r) {
 			truncated = true
 		}
 		st := parseDiagnostics(r.Stdout.Data)
@@ -291,9 +292,9 @@ func assemble(in assembleInput) obsdoc.Document {
 			suffix = ".r" + pad2(p.Ref)
 		}
 		if p.ConfigRun != nil {
-			if jsts.ExitedZero(p.ConfigRun) {
+			if pack.ExitedZero(p.ConfigRun) {
 				all = append(all, p.ConfigRun)
-				if !jsts.StreamsComplete(p.ConfigRun) {
+				if !pack.StreamsComplete(p.ConfigRun) {
 					truncated = true
 				}
 				if _, ok := parseShowConfig(p.ConfigRun.Stdout.Data); !ok {

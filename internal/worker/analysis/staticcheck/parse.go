@@ -8,6 +8,8 @@ import (
 	"io"
 	"regexp"
 	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 )
 
 // Parser identity (staticcheck -f json, one JSON object per line).
@@ -76,34 +78,6 @@ type stream struct {
 	DecodeError   string
 }
 
-func skipSpace(b []byte, i int64) int64 {
-	for i < int64(len(b)) {
-		switch b[i] {
-		case ' ', '\t', '\r', '\n':
-			i++
-		default:
-			return i
-		}
-	}
-	return i
-}
-
-func classifyDecodeError(err error) string {
-	var syn *json.SyntaxError
-	var typ *json.UnmarshalTypeError
-	switch {
-	case errors.Is(err, io.ErrUnexpectedEOF):
-		return "unexpected_eof"
-	case errors.As(err, &syn):
-		return "syntax_error"
-	case errors.As(err, &typ):
-		return "type_error"
-	case strings.HasPrefix(err.Error(), "json: unknown field"):
-		return "unknown_field"
-	}
-	return "decode_error"
-}
-
 func (p *position) valid() bool {
 	return p != nil && p.File != nil && p.Line != nil && p.Column != nil && *p.Line >= 0 && *p.Column >= 0
 }
@@ -116,7 +90,7 @@ func parseStream(stdout []byte) stream {
 	var out stream
 	dec := json.NewDecoder(bytes.NewReader(stdout))
 	for {
-		start := skipSpace(stdout, dec.InputOffset())
+		start := pack.SkipSpace(stdout, dec.InputOffset())
 		if start >= int64(len(stdout)) {
 			return out
 		}
@@ -125,7 +99,7 @@ func parseStream(stdout []byte) stream {
 			if errors.Is(err, io.EOF) {
 				return out
 			}
-			out.DecodeError = classifyDecodeError(err)
+			out.DecodeError = pack.ClassifyDecodeError(err)
 			out.UnparsedBytes = int64(len(stdout)) - start
 			return out
 		}

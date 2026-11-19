@@ -9,6 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -40,7 +41,7 @@ func replayFiles(t *testing.T, name string) map[string]string {
 func replayRun(t *testing.T, name, key string, mutate func(jststest.Recorded, *executor.Result)) (*jststest.Replay, obsdoc.Document) {
 	t.Helper()
 	a := fakeAnalyzer(t)
-	fx := jststest.NewFixture(t, "", replayFiles(t, name), domain.Scope{})
+	fx := packtest.NewFixture(t, "", replayFiles(t, name), domain.Scope{})
 	r := &jststest.Replay{T: t, Steps: jststest.LoadCapture(t, name), Mutate: mutate, Match: func(step jststest.Recorded, s executor.Spec) bool {
 		switch {
 		case step.Name == execVersion:
@@ -50,9 +51,9 @@ func replayRun(t *testing.T, name, key string, mutate func(jststest.Recorded, *e
 		}
 		return !slices.Contains(s.Args, "--showConfig") && slices.Contains(s.Args, "--noEmit")
 	}}
-	res := jststest.RunTask(t, a, fx.Job, key, r)
+	res := packtest.RunTask(t, a, fx.Job, key, r)
 	doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
-	jststest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
+	packtest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
 	for _, s := range r.Specs {
 		p := s.Args[slices.Index(s.Args, "-p")+1:]
 		if s.Args[1] != "--version" && (len(p) == 0 || !strings.HasPrefix(p[0], "./")) || s.Env["PATH"] != a.script.Node.Dir || !jststest.EnvAllowlisted(s.Env) ||

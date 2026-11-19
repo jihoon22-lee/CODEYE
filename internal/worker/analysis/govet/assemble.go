@@ -7,6 +7,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -64,14 +65,6 @@ type assembleInput struct {
 func execSummary(name string, r *executor.Result) ExecSummary {
 	return ExecSummary{Name: name, Status: r.Status, Reason: r.Reason, ExitCode: r.ExitCode, Cleanup: r.Cleanup,
 		Command: analysis.CommandFor(r.Command), Stdout: streamRef(r.Stdout), Stderr: streamRef(r.Stderr)}
-}
-
-func exitedZero(r *executor.Result) bool {
-	return r != nil && r.Status == executor.StatusExited && r.ExitCode != nil && *r.ExitCode == 0
-}
-
-func streamsComplete(r *executor.Result) bool {
-	return r != nil && !r.Stdout.Truncated && !r.Stdout.Incomplete && !r.Stderr.Truncated && !r.Stderr.Incomplete
 }
 
 // stripWorkspace maps a tool path to a snapshot-relative path. Workspace
@@ -222,7 +215,7 @@ func assemble(in assembleInput) Document {
 	versionOK := false
 	if in.Version != nil {
 		doc.Executions = append(doc.Executions, execSummary(execVersion, in.Version))
-		if exitedZero(in.Version) {
+		if pack.ExitedZero(in.Version) {
 			if v, platform, ok := parseVersion(in.Version.Stdout.Data); ok {
 				toolVersion, doc.ToolVersion, doc.Platform, versionOK = ptr(v), ptr(v), ptr(platform), true
 				if !versionTested(v) {
@@ -238,7 +231,7 @@ func assemble(in assembleInput) Document {
 	var escapes []string
 	if in.ModEdit != nil {
 		doc.Executions = append(doc.Executions, execSummary(execModEdit, in.ModEdit))
-		if exitedZero(in.ModEdit) && streamsComplete(in.ModEdit) {
+		if pack.ExitedZero(in.ModEdit) && pack.StreamsComplete(in.ModEdit) {
 			if modPath, targets, ok := parseModEdit(in.ModEdit.Stdout.Data); ok {
 				modOK = true
 				doc.Module.Path = modPath
@@ -260,7 +253,7 @@ func assemble(in assembleInput) Document {
 		doc.Executions = append(doc.Executions, execSummary(execList, in.List))
 		stream = parseListStream(in.List.Stdout.Data)
 		doc.Parse.ListUnparsedBytes, doc.Parse.ListDecodeError = stream.UnparsedBytes, stream.DecodeError
-		listOK = exitedZero(in.List) && streamsComplete(in.List) && stream.UnparsedBytes == 0
+		listOK = pack.ExitedZero(in.List) && pack.StreamsComplete(in.List) && stream.UnparsedBytes == 0
 		for _, p := range stream.Packages {
 			ps := &PackageScope{ImportPath: p.ImportPath, GoFiles: []string{}, IgnoredGoFiles: []string{}, Errors: []string{}}
 			if dir, ok := in.strip(p.Dir, false); ok && p.Dir != "" {
@@ -435,7 +428,7 @@ func assemble(in assembleInput) Document {
 		}
 	}
 
-	vetComplete := exitedZero(in.Vet) && streamsComplete(in.Vet) && vetParsed && len(vs.AnalyzerErrors) == 0
+	vetComplete := pack.ExitedZero(in.Vet) && pack.StreamsComplete(in.Vet) && vetParsed && len(vs.AnalyzerErrors) == 0
 	for _, p := range order {
 		if p.State != "" {
 			continue
@@ -456,7 +449,7 @@ func assemble(in assembleInput) Document {
 	if listOK {
 		for _, f := range in.ScopeGoFiles {
 			if !listed[f] {
-				unlisted[dirOf(f)] = append(unlisted[dirOf(f)], f)
+				unlisted[pack.DirOf(f)] = append(unlisted[pack.DirOf(f)], f)
 				doc.Coverage.UnlistedGoFiles++
 			}
 		}
@@ -573,7 +566,7 @@ func assemble(in assembleInput) Document {
 		// matched none: vet ran on nothing, which is not a clean result.
 		fail(domain.TaskUnsupported, ReasonNoPackages, ExitConfigurationError)
 	}
-	if in.Vet != nil && !streamsComplete(in.Vet) || in.List != nil && !streamsComplete(in.List) {
+	if in.Vet != nil && !pack.StreamsComplete(in.Vet) || in.List != nil && !pack.StreamsComplete(in.List) {
 		fail(domain.TaskFailed, ReasonOutputTruncated, ExitExecutionError)
 	}
 	if in.Vet != nil && !vetParsed || in.List != nil && stream.UnparsedBytes > 0 {
@@ -582,7 +575,7 @@ func assemble(in assembleInput) Document {
 	if typecheck || doc.Coverage.Packages[PackageFailedTypecheck] > 0 {
 		fail(domain.TaskFailed, ReasonPackageErrors, ExitExecutionError)
 	}
-	if in.Vet != nil && !exitedZero(in.Vet) {
+	if in.Vet != nil && !pack.ExitedZero(in.Vet) {
 		fail(domain.TaskFailed, ReasonVetFailed, ExitExecutionError)
 	}
 	if !listOK || doc.Coverage.Packages[PackageLoadError] > 0 {

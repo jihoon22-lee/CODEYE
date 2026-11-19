@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 )
 
 // Parser identity: the clang-tidy 23 diagnostic stream on stdout (header
@@ -269,4 +271,4 @@ func ParseClangTidyVersion(stdout []byte) (string, bool) {
 const ClangTidyTestedRelease = "23.1"
 
 // ClangTidyVersionTested reports a version of the tested series.
-func ClangTidyVersionTested(v string) bool { return strings.HasPrefix(v, ClangTidyTestedRelease+".") }
+func ClangTidyVersionTested(v string) bool { return pack.SeriesTested(v, ClangTidyTestedRelease) }

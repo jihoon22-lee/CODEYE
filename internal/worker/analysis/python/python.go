@@ -285,10 +285,6 @@ func (b *base) Probe(ctx context.Context, runner executor.Runner, dir string) (s
 	return v, nil
 }
 
-func failed(reason string, limitations ...string) analysis.TaskResult {
-	return analysis.TaskResult{Status: domain.TaskFailed, Reason: reason, Limitations: append([]string{}, limitations...)}
-}
-
 // runCtx is one task run: its plan, scratch, the executions so far and the
 // facts the assembler reads.
 type runCtx struct {
@@ -331,31 +327,31 @@ type toolRun interface {
 func (b *base) run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner, t toolRun) analysis.TaskResult {
 	ps, err := planTasks(b.desc, job)
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	p := findPlanned(ps, task.Key)
 	if p == nil {
-		return failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
+		return pack.Failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
 	}
 	if p.Module.Placeholder {
 		return pack.NotRun(job, b.desc, p.Task, ReasonNoAnalyzableFiles)
 	}
 	if !filepath.IsAbs(job.Scratch) || !filepath.IsAbs(job.Snapshot.WorkspaceDir) || !filepath.IsAbs(job.Snapshot.SnapshotDir) {
-		return failed(analysis.ReasonHandlerError, "invalid_job_paths")
+		return pack.Failed(analysis.ReasonHandlerError, "invalid_job_paths")
 	}
 	taskDir := filepath.Join(job.Scratch, "analyzers", p.Task.Spec.Key)
 	if err := os.MkdirAll(filepath.Dir(taskDir), 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	if err := os.Mkdir(taskDir, 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	rc := &runCtx{ctx: ctx, job: job, b: b, runner: runner, p: p, taskDir: taskDir, dirs: map[string]string{}, files: includedFiles(job.Snapshot.Manifest),
 		workspace: job.Snapshot.WorkspaceDir, results: map[string]*executor.Result{}, extraEnv: map[string]string{}}
 	for _, d := range []string{"exec", "tmp", "cache", "cfg", "report"} {
 		rc.dirs[d] = filepath.Join(taskDir, d)
 		if err := os.Mkdir(rc.dirs[d], 0o700); err != nil {
-			return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		}
 	}
 	rc.roots = []string{rc.workspace}
@@ -370,7 +366,7 @@ func (b *base) run(ctx context.Context, job analysis.Job, task analysis.TaskSpec
 	if r := rc.exec(b.desc.Name+".version", b.desc.VersionArgs, nil); r != nil {
 		// An unidentified tool is never run on the code: the parsers are
 		// pinned to the tested version's output format.
-		if _, ok := b.desc.ParseVersion(r.Stdout.Data); ok && exitedZero(r) {
+		if _, ok := b.desc.ParseVersion(r.Stdout.Data); ok && pack.ExitedZero(r) {
 			t.execute(rc)
 		}
 	}
@@ -415,30 +411,10 @@ func (rc *runCtx) exec(name string, args []string, stdin []byte) *executor.Resul
 	}
 	rc.executions = append(rc.executions, e)
 	rc.results[name] = &e.Result
-	if stoppable(&e.Result) {
+	if pack.Stoppable(&e.Result) {
 		rc.stopped = true
 	}
 	return &e.Result
-}
-
-func stoppable(r *executor.Result) bool {
-	return r.Cleanup == executor.CleanupUncertain || r.Status == executor.StatusCancelled || r.Status == executor.StatusTimedOut ||
-		r.Status == executor.StatusRejected || r.Status == executor.StatusUnsupported || r.Status == executor.StatusStartFailed
-}
-
-func exitedZero(r *executor.Result) bool {
-	return r != nil && r.Status == executor.StatusExited && r.ExitCode != nil && *r.ExitCode == 0
-}
-
-func exitCode(r *executor.Result) int {
-	if r == nil || r.Status != executor.StatusExited || r.ExitCode == nil {
-		return -1
-	}
-	return *r.ExitCode
-}
-
-func streamsComplete(r *executor.Result) bool {
-	return r != nil && !r.Stdout.Truncated && !r.Stdout.Incomplete && !r.Stderr.Truncated && !r.Stderr.Incomplete
 }
 
 // masker replaces node paths (workspace, scratch, snapshot root, the tool,
@@ -484,7 +460,7 @@ func workspaceDrift(workspace string, files map[string]source.Entry, moduleDir s
 	root, err := os.OpenRoot(workspace)
 	if err != nil {
 		for p := range files {
-			if underDir(p, moduleDir) {
+			if pack.UnderDir(p, moduleDir) {
 				drift[p] = true
 			}
 		}
@@ -492,7 +468,7 @@ func workspaceDrift(workspace string, files map[string]source.Entry, moduleDir s
 	}
 	defer root.Close()
 	for p, e := range files {
-		if !underDir(p, moduleDir) || !(isSource(p) || moduleManifest(filepath.Base(p))) {
+		if !pack.UnderDir(p, moduleDir) || !(isSource(p) || moduleManifest(filepath.Base(p))) {
 			continue
 		}
 		b, err := root.ReadFile(filepath.FromSlash(p))

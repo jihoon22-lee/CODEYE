@@ -12,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -306,7 +307,7 @@ func TestReplayFailuresAreNeverSuccess(t *testing.T) {
 func TestReplayVersionContract(t *testing.T) {
 	files := caseFiles(t, loadExpected(t).Cases["with_generated_header"])
 	okCC := captures(t, "with_generated_header", CppcheckTool)
-	fake := fakeTool(t, "cppcheck")
+	fake := packtest.FakeExecutable(t, "cppcheck")
 	a, _ := NewCppcheck(Config{Executable: fake})
 	for _, tc := range []struct {
 		version string

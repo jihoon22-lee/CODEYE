@@ -10,6 +10,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -43,8 +44,8 @@ func TestRealVetFindingsExitZero(t *testing.T) {
 	// Spaces and non-ASCII in every node path (data root, workspace, scratch).
 	base := filepath.Join(t.TempDir(), "공백 & (dir)")
 	fx := newFixture(t, base, probeFiles(), domain.Scope{})
-	before := treeHash(t, fx.SourceRoot)
-	snapBefore := treeHash(t, fx.Job.Snapshot.SnapshotDir)
+	before := packtest.TreeHash(t, fx.SourceRoot)
+	snapBefore := packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
 	h := newHandler(t, Config{})
 	runner := &mutatingRunner{inner: &executor.Executor{}}
 	results := runAll(t, h, fx.Job, runner)
@@ -146,7 +147,7 @@ func TestRealVetFindingsExitZero(t *testing.T) {
 		}
 	}
 	assertNoNodePaths(t, raw, base, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.SnapshotDir, h.goroot)
-	if treeHash(t, fx.SourceRoot) != before || treeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
+	if packtest.TreeHash(t, fx.SourceRoot) != before || packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
 		t.Fatal("original source or snapshot changed")
 	}
 	if len(doc.WorkspaceDrift) != 0 {

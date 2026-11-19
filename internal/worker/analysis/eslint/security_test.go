@@ -8,6 +8,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -38,8 +39,8 @@ func TestTypedTsconfigChainRefused(t *testing.T) {
 		{"{\"include\":[\"/home/canary-secret/**/*.ts\"]}\n", ReasonConfigOutside, "tsconfig_option_include"},
 		{"{\"compilerOptions\":{\"typeRoots\":[\"../canary-secret\"]},\"include\":[\"src\"]}\n", ReasonConfigOutside, "tsconfig_option_type_roots"},
 	} {
-		fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/main.ts": "export const one = 1;\n"}), domain.Scope{})
-		res := jststest.RunTask(t, a, fx.Job, "eslint-typed", neverRunner{t})
+		fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/main.ts": "export const one = 1;\n"}), domain.Scope{})
+		res := packtest.RunTask(t, a, fx.Job, "eslint-typed", neverRunner{t})
 		doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
 		if res.Status != domain.TaskSkippedPolicy || res.Reason != c.reason || !slices.Contains(doc.Limitations, c.limitation) || strings.Contains(string(raw), "canary-secret") {
 			t.Fatalf("%s/%s %v", res.Status, res.Reason, doc.Limitations)
@@ -62,8 +63,8 @@ func TestRealESLintOptionLikeFileNames(t *testing.T) {
 	a := newReal(t, false)
 	files := caseFiles(map[string]string{"--help.ts": "export const a = 1;\nconst unused = 2;\n", "-x.js": "const unused = 1;\n"})
 	for _, scope := range []domain.Scope{{Kind: "full"}, {Kind: "paths", Paths: []string{"--help.ts", "-x.js"}}} {
-		fx := jststest.NewFixture(t, "", files, scope)
-		res := jststest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
+		fx := packtest.NewFixture(t, "", files, scope)
+		res := packtest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
 		doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 		if res.Status != domain.TaskSucceeded || !slices.Equal(doc.Coverage.ProcessedPaths, []string{"--help.ts", "-x.js"}) || len(doc.Observations) != 2 {
 			t.Fatalf("%s: %s/%s %+v %+v", scope.Kind, res.Status, res.Reason, doc.Coverage, doc.Observations)

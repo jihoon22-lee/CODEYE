@@ -338,26 +338,17 @@ func (a *Analyzer) Probe(ctx context.Context, runner executor.Runner, dir string
 	return v, nil
 }
 
-func failed(reason string, limitations ...string) analysis.TaskResult {
-	return analysis.TaskResult{Status: domain.TaskFailed, Reason: reason, Limitations: append([]string{}, limitations...)}
-}
-
-func stoppable(r *executor.Result) bool {
-	return r.Cleanup == executor.CleanupUncertain || r.Status == executor.StatusCancelled || r.Status == executor.StatusTimedOut ||
-		r.Status == executor.StatusRejected || r.Status == executor.StatusUnsupported || r.Status == executor.StatusStartFailed
-}
-
 // Run executes one cargo check or clippy task.
 func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	d := a.kind.descriptor()
 	pr, err := planModules(job.Snapshot.Manifest, job.Scope, d.Name, a.kind.title())
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	if pr.Placeholder != "" {
 		tasks, err := planTasks(ctx, a.kind, job)
 		if err != nil || len(tasks) != 1 || tasks[0].Spec.Key != task.Key {
-			return failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
+			return pack.Failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
 		}
 		return pack.NotRun(job, d, tasks[0], pr.Placeholder)
 	}
@@ -368,23 +359,23 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 	}
 	if mod == nil {
-		return failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
+		return pack.Failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
 	}
 	if !filepath.IsAbs(job.Scratch) || !filepath.IsAbs(job.Snapshot.WorkspaceDir) || !filepath.IsAbs(job.Snapshot.SnapshotDir) {
-		return failed(analysis.ReasonHandlerError, "invalid_job_paths")
+		return pack.Failed(analysis.ReasonHandlerError, "invalid_job_paths")
 	}
 	taskDir := filepath.Join(job.Scratch, "analyzers", mod.Key)
 	if err := os.MkdirAll(filepath.Dir(taskDir), 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	if err := os.Mkdir(taskDir, 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	dirs := map[string]string{}
 	for _, n := range []string{"exec", "cargo-home", "target", "tmp"} {
 		dirs[n] = filepath.Join(taskDir, n)
 		if err := os.Mkdir(dirs[n], 0o700); err != nil {
-			return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		}
 	}
 	files := govet.IncludedFiles(job.Snapshot.Manifest)
@@ -410,7 +401,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	for p := range files {
 		if path.Base(p) == "rust-toolchain.toml" || path.Base(p) == "rust-toolchain" {
-			if underDir(p, mod.Dir) || underDir(mod.Dir, dirOf(p)) {
+			if pack.UnderDir(p, mod.Dir) || pack.UnderDir(mod.Dir, pack.DirOf(p)) {
 				// Real toolchain binaries are named by the operator; the
 				// repository's choice is only recorded (docs/ANALYZERS.md#rust-환경).
 				in.ExtraLimitations = append(in.ExtraLimitations, "rust_toolchain_file_ignored")
@@ -461,7 +452,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			break
 		}
 		in.Executions = append(in.Executions, e)
-		if stoppable(&res) {
+		if pack.Stoppable(&res) {
 			break
 		}
 		// An unidentified tool is never run on the code: the parser is pinned
@@ -470,7 +461,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		switch s.name {
 		case execRustc:
 			var r Rustc
-			if r, ok = ParseRustcVV(res.Stdout.Data); ok && exitedZero(&res) {
+			if r, ok = ParseRustcVV(res.Stdout.Data); ok && pack.ExitedZero(&res) {
 				env = a.env(dirs["cargo-home"], dirs["target"], r.Host)
 			}
 		case execCargo:
@@ -480,7 +471,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		default:
 			ok = true
 		}
-		if !ok || (!exitedZero(&res) && s.name != execCheck && s.name != execClippy) {
+		if !ok || (!pack.ExitedZero(&res) && s.name != execCheck && s.name != execClippy) {
 			break
 		}
 	}
@@ -502,7 +493,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	if len(mod.Patterns) != 1 || mod.Patterns[0] != "." {
 		patterns := mod.Patterns
-		in.OutOfScope = func(rel string) bool { return !scopeCovers(relTo(rel, mod.Dir), patterns) }
+		in.OutOfScope = func(rel string) bool { return !scopeCovers(pack.RelTo(rel, mod.Dir), patterns) }
 	}
 	doc := assemble(in)
 	if writeFailed {
@@ -550,7 +541,7 @@ func driftInput(p string) bool {
 	case strings.HasSuffix(p, ".rs"), base == "Cargo.toml", base == "Cargo.lock", base == "clippy.toml", base == ".clippy.toml":
 		return true
 	}
-	return (base == "config.toml" || base == "config") && path.Base(dirOf(p)) == ".cargo"
+	return (base == "config.toml" || base == "config") && path.Base(pack.DirOf(p)) == ".cargo"
 }
 
 // workspaceDrift compares the module's inputs in the workspace with the
@@ -560,7 +551,7 @@ func workspaceDrift(workspace string, files map[string]source.Entry, mod string)
 	root, err := os.OpenRoot(workspace)
 	if err != nil {
 		for p := range files {
-			if underDir(p, mod) && driftInput(p) {
+			if pack.UnderDir(p, mod) && driftInput(p) {
 				drift[p] = true
 			}
 		}
@@ -568,7 +559,7 @@ func workspaceDrift(workspace string, files map[string]source.Entry, mod string)
 	}
 	defer root.Close()
 	for p, e := range files {
-		if !underDir(p, mod) || !driftInput(p) {
+		if !pack.UnderDir(p, mod) || !driftInput(p) {
 			continue
 		}
 		b, err := readRootFile(root, p)
@@ -642,7 +633,7 @@ var lintsSection = regexp.MustCompile(`(?m)^\s*(?:\[(?:workspace\.)?lints\b|(?:w
 func ruleConfig(k Kind, files map[string]source.Entry, mod, workspace string, read func(string) ([]byte, bool)) (cfg []obsdoc.ConfigFile, known, external bool) {
 	set := map[string]string{}
 	add := func(p string) { set[p] = files[p].SHA256 }
-	for dir := mod; ; dir = dirOf(dir) {
+	for dir := mod; ; dir = pack.DirOf(dir) {
 		for _, n := range []string{".cargo/config.toml", ".cargo/config"} {
 			if p := govet.JoinRel(dir, n); files[p].SHA256 != "" {
 				add(p)
@@ -655,9 +646,9 @@ func ruleConfig(k Kind, files map[string]source.Entry, mod, workspace string, re
 	for p := range files {
 		base := path.Base(p)
 		switch {
-		case k == KindClippy && (base == "clippy.toml" || base == ".clippy.toml") && (underDir(p, mod) || underDir(mod, dirOf(p))):
+		case k == KindClippy && (base == "clippy.toml" || base == ".clippy.toml") && (pack.UnderDir(p, mod) || pack.UnderDir(mod, pack.DirOf(p))):
 			add(p)
-		case base == "Cargo.toml" && underDir(p, mod):
+		case base == "Cargo.toml" && pack.UnderDir(p, mod):
 			if b, ok := read(p); ok && lintsSection.Match(b) {
 				add(p)
 			}

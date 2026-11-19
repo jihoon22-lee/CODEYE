@@ -119,10 +119,10 @@ func cppcheckBase(job analysis.Job, key string, l layout) obsdoc.Document {
 func (a *Cppcheck) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	tasks, err := PlanCppcheck(ctx, job)
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	if !slices.ContainsFunc(tasks, func(t pack.Task) bool { return t.Spec.Key == task.Key }) {
-		return failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
+		return pack.Failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
 	}
 	l, _ := layoutOf(job)
 	s, bad := newSession(job, task.Key, a.t, "$CPPCHECK")
@@ -136,7 +136,7 @@ func (a *Cppcheck) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		if !ok {
 			return notRun(s, doc, domain.TaskFailed, ReasonSnapshotIntegrity, obsdoc.ExitNotRun)
 		}
-		m, err := MapDBs(l.DBs, data, l.Files, func(rel string) bool { return inScope(rel, job.Scope) })
+		m, err := MapDBs(l.DBs, data, l.Files, func(rel string) bool { return pack.PathInScope(rel, job.Scope) })
 		if err != nil {
 			return notRun(s, doc, domain.TaskFailed, ReasonCompileDBUnreadable, obsdoc.ExitNotRun)
 		}
@@ -155,7 +155,7 @@ func (a *Cppcheck) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		b, err := RenderDB(s.workspace, in.Mapping.Units)
 		input = filepath.Join(s.workDir, CompileDBName)
 		if err != nil || analysis.WriteFileExclusive(input, b) != nil {
-			return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		}
 		input = "--project=" + input
 	} else {
@@ -165,7 +165,7 @@ func (a *Cppcheck) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 		input = filepath.Join(s.workDir, "files.txt")
 		if analysis.WriteFileExclusive(input, []byte(list.String())) != nil {
-			return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		}
 		input = "--file-list=" + input
 	}
@@ -192,7 +192,7 @@ func (a *Cppcheck) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Executions: in.Executions, Limitations: []string{"execution_write_failed"}}
 		}
 		in.Executions = append(in.Executions, e)
-		if stoppable(res) {
+		if pack.Stoppable(res) {
 			break
 		}
 		if st.name == execCppcheckVersion {
@@ -578,7 +578,7 @@ func assembleCppcheck(doc obsdoc.Document, in ccInput) obsdoc.Document {
 	if len(doc.WorkspaceDrift) > 0 {
 		o.fail(domain.TaskFailed, ReasonWorkspaceDrift, obsdoc.ExitExecutionError)
 	}
-	if in.Check != nil && !streamsComplete(in.Check) {
+	if in.Check != nil && !pack.StreamsComplete(in.Check) {
 		o.fail(domain.TaskFailed, ReasonOutputTruncated, obsdoc.ExitExecutionError)
 	}
 	if in.Check != nil && (exit != 0 && exit != 2 || len(out.Fatal) > 0) {

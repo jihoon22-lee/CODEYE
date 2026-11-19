@@ -13,6 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -35,12 +36,12 @@ func realRun(t *testing.T, kind Kind, name, key, capName string, scope domain.Sc
 	}
 	fx := newFixture(t, "", files, scope, true)
 	a := newReal(t, kind)
-	res := runTask(t, a, fx.Job, key, &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, key, &executor.Executor{})
 	if capName != "" {
 		capture(t, capName, fx.Job, key, res, a)
 	}
 	doc, raw := readEnvelope(t, fx.Job, res)
-	assertNoNodePaths(t, raw, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.SnapshotDir, fx.Job.Snapshot.Root, fx.SourceRoot, a.tcDir, a.cargo, a.linker, os.TempDir())
+	packtest.AssertNoNodePaths(t, raw, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.SnapshotDir, fx.Job.Snapshot.Root, fx.SourceRoot, a.tcDir, a.cargo, a.linker, os.TempDir())
 	return res, doc, raw, fx, a
 }
 
@@ -70,10 +71,10 @@ func TestRealCargoCheckFindings(t *testing.T) {
 	testToolchain(t)
 	files := fixtureFiles(t, "findings")
 	fx := newFixture(t, filepath.Join(t.TempDir(), "공백 & (dir)"), files, domain.Scope{}, true)
-	before, snapBefore := treeHash(t, fx.SourceRoot), treeHash(t, fx.Job.Snapshot.SnapshotDir)
+	before, snapBefore := packtest.TreeHash(t, fx.SourceRoot), packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
 	a := newReal(t, KindCheck)
 	mr := &mutatingRunner{inner: &executor.Executor{}}
-	res := runTask(t, a, fx.Job, "cargo-check", mr)
+	res := packtest.RunTask(t, a, fx.Job, "cargo-check", mr)
 	capture(t, "check-findings", fx.Job, "cargo-check", res, a)
 	doc, raw := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || doc.Outcome.PartialParse || !doc.Parse.OK {
@@ -86,7 +87,7 @@ func TestRealCargoCheckFindings(t *testing.T) {
 	if main.Result.ExitCode == nil || *main.Result.ExitCode != 0 {
 		t.Fatalf("warnings must exit 0: %+v", main.Result)
 	}
-	if got, want := ruleCount(doc), map[string]int{"unused_imports": 1, "unused_variables": 3}; len(got) != len(want) || got["unused_imports"] != 1 || got["unused_variables"] != 3 {
+	if got, want := packtest.Rules(doc), map[string]int{"unused_imports": 1, "unused_variables": 3}; len(got) != len(want) || got["unused_imports"] != 1 || got["unused_variables"] != 3 {
 		t.Fatalf("rules %v, want %v (the #[allow]ed variable must not appear)", got, want)
 	}
 	for _, o := range doc.Observations {
@@ -109,7 +110,7 @@ func TestRealCargoCheckFindings(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("tail diagnostic missing: %v", ruleCount(doc))
+		t.Fatalf("tail diagnostic missing: %v", packtest.Rules(doc))
 	}
 	if !slices.Equal(doc.Coverage.ProcessedPaths, []string{"src/lib.rs", "src/main.rs", "tests/it.rs"}) || *doc.Coverage.FilesInScope != 3 || doc.Coverage.FilesUnlisted != 0 ||
 		doc.Coverage.Units[CrateAnalyzedWithFindings] != 1 || doc.Coverage.Unit != "crate" {
@@ -150,13 +151,13 @@ func TestRealCargoCheckFindings(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(fx.Job.Snapshot.WorkspaceDir, "target")); err == nil {
 		t.Fatal("target directory was created in the workspace copy")
 	}
-	assertNoNodePaths(t, raw, filepath.Dir(fx.SourceRoot), fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.SnapshotDir, a.tcDir, a.cargo, a.linker)
-	if treeHash(t, fx.SourceRoot) != before || treeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
+	packtest.AssertNoNodePaths(t, raw, filepath.Dir(fx.SourceRoot), fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.SnapshotDir, a.tcDir, a.cargo, a.linker)
+	if packtest.TreeHash(t, fx.SourceRoot) != before || packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
 		t.Fatal("source or snapshot changed")
 	}
 	// Same input, fresh attempt: IDs are content derived.
 	fx2 := newFixture(t, "", files, domain.Scope{}, true)
-	doc2, _ := readEnvelope(t, fx2.Job, runTask(t, a, fx2.Job, "cargo-check", &executor.Executor{}))
+	doc2, _ := readEnvelope(t, fx2.Job, packtest.RunTask(t, a, fx2.Job, "cargo-check", &executor.Executor{}))
 	if len(doc2.Observations) != len(doc.Observations) {
 		t.Fatalf("rerun observations %d vs %d", len(doc2.Observations), len(doc.Observations))
 	}
@@ -184,7 +185,7 @@ func TestRealClippyFindings(t *testing.T) {
 	files := fixtureFiles(t, "findings")
 	fx := newFixture(t, "", files, domain.Scope{}, true)
 	a := newReal(t, KindClippy)
-	res := runTask(t, a, fx.Job, "clippy", &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, "clippy", &executor.Executor{})
 	capture(t, "clippy-findings", fx.Job, "clippy", res, a)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || !doc.Parse.OK {
@@ -193,7 +194,7 @@ func TestRealClippyFindings(t *testing.T) {
 	if !slices.Equal(execNames(doc), []string{execRustc, execCargo, execClippyV, execClippy}) {
 		t.Fatalf("executions %v", execNames(doc))
 	}
-	rules := ruleCount(doc)
+	rules := packtest.Rules(doc)
 	want := map[string]int{"clippy::len_zero": 1, "clippy::ptr_arg": 1, "clippy::missing_safety_doc": 1, "clippy::undocumented_unsafe_blocks": 1, "clippy::panic_in_result_fn": 1, "clippy::todo": 1}
 	for r, n := range want {
 		if rules[r] != n {
@@ -226,10 +227,10 @@ func TestRealClippyRustcOverlapIsTheCheckTask(t *testing.T) {
 	files := fixtureFiles(t, "findings")
 	fxA := newFixture(t, "", files, domain.Scope{}, true)
 	check := newReal(t, KindCheck)
-	docCheck, _ := readEnvelope(t, fxA.Job, runTask(t, check, fxA.Job, "cargo-check", &executor.Executor{}))
+	docCheck, _ := readEnvelope(t, fxA.Job, packtest.RunTask(t, check, fxA.Job, "cargo-check", &executor.Executor{}))
 	fxB := newFixture(t, "", files, domain.Scope{}, true)
 	clippy := newReal(t, KindClippy)
-	res := runTask(t, clippy, fxB.Job, "clippy", &executor.Executor{})
+	res := packtest.RunTask(t, clippy, fxB.Job, "clippy", &executor.Executor{})
 	var raw []byte
 	for _, e := range res.Executions {
 		if e.Name == execClippy {
@@ -377,7 +378,7 @@ func TestRealWorkspace(t *testing.T) {
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings {
 		t.Fatalf("status %s/%s errors %+v", res.Status, res.Reason, doc.ToolErrors)
 	}
-	if got := ruleCount(doc); len(got) != 1 || got["unused_variables"] != 1 || *doc.Observations[0].Path != "crates/app/src/lib.rs" || doc.Observations[0].Unit != "app" {
+	if got := packtest.Rules(doc); len(got) != 1 || got["unused_variables"] != 1 || *doc.Observations[0].Path != "crates/app/src/lib.rs" || doc.Observations[0].Unit != "app" {
 		t.Fatalf("rules %v obs %+v", got, doc.Observations)
 	}
 	if !slices.Equal(doc.Coverage.ProcessedPaths, []string{"crates/app/src/lib.rs", "crates/core/src/lib.rs"}) || doc.Coverage.Units[CrateAnalyzedWithFindings] != 1 || doc.Coverage.Units[CrateAnalyzedClean] != 1 {
@@ -468,7 +469,7 @@ func TestRealMissingLinker(t *testing.T) {
 		t.Fatal(err)
 	}
 	fx := newFixture(t, "", fixtureFiles(t, "buildscript"), domain.Scope{}, true)
-	res := runTask(t, a, fx.Job, "cargo-check", &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, "cargo-check", &executor.Executor{})
 	capture(t, "check-nolinker", fx.Job, "cargo-check", res, a)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonLinker || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError || doc.Coverage.ProcessedPaths != nil {
@@ -544,7 +545,7 @@ func TestRealTimeoutAndCancel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := runTask(t, a, fx.Job, "cargo-check", &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, "cargo-check", &executor.Executor{})
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskTimedOut || res.Reason != ReasonTimeout || doc.Outcome.ExitClass != obsdoc.ExitTimeout || doc.Coverage.ProcessedPaths != nil {
 		t.Fatalf("timeout: %s/%s %+v", res.Status, res.Reason, doc.Outcome)

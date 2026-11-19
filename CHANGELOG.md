@@ -7,8 +7,10 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 ### 변경
 
 - **문서 통합 (#37)**: 번호를 붙인 단계별 문서 50개를 주제별 문서 16개(`docs/`)와 이 변경 이력으로 바꿨다. 주제 문서에는 현재 유효한 계약과 운영 규칙만 두고, 코드에서 문서를 가리키는 참조는 절 anchor까지 검증한다.
-- **단계 이름 제거**: 코드 주석, 파일·시험·식별자 이름, CLI 문구, 스크립트·fixture 디렉터리 이름, 시험용 환경변수에서 구현 단계 번호를 뺐다. 예산 relay는 `scripts/model_budget_relay.py`, 평가 runner는 `scripts/quality_eval.py`, 회귀 집합은 `fixtures/regression/`이다. `scripts/validate_bundle.py`가 단계 표기가 다시 들어오는 것을 막는다.
+- **단계 이름 제거 (#38)**: 코드 주석, 파일·시험·식별자 이름, CLI 문구, 스크립트·fixture 디렉터리 이름, 시험용 환경변수에서 구현 단계 번호를 뺐다. 예산 relay는 `scripts/model_budget_relay.py`, 평가 runner는 `scripts/quality_eval.py`, 회귀 집합은 `fixtures/regression/`이다. `scripts/validate_bundle.py`가 단계 표기가 다시 들어오는 것을 막는다.
 - OpenAPI의 구현 표시는 `x-codeye-status: implemented` 하나다.
+- **리팩토링**: 분석기 팩이 각자 갖고 있던 실행 결과 판정·경로·JSON 스트림·버전 계열 도우미를 `internal/worker/analysis/pack`으로, 시험 도우미를 `pack/packtest`로 모았다. 한 파일에 여러 일이 섞여 있던 `agent.go`, `personal.go`, `build.go`, `api.go`, `compiledb.go`와 저장 계층의 스케줄러·claim·예약 파일을 같은 패키지 안에서 나눴다. `scripts/validate_bundle.py`는 진입점과 `scripts/bundle_checks/` 모듈로 나눴다. 동작은 바꾸지 않았다(시험 805개 동일, 실제 분석 도구 시험 통과).
+- CI가 시험용 브라우저 다운로드를 캐시한다.
 
 ### 수정
 

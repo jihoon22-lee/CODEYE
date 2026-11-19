@@ -148,7 +148,7 @@ func (pyrightRun) execute(rc *runCtx) {
 	var list bytes.Buffer
 	for _, f := range m.Files {
 		// "./" keeps a name like -x.py from reading as an option.
-		list.WriteString("./" + relTo(f, m.Dir))
+		list.WriteString("./" + pack.RelTo(f, m.Dir))
 		list.WriteByte('\n')
 	}
 	// The files are read from stdin ("-"): no argv length limit, and only
@@ -275,7 +275,7 @@ func (pyrightRun) assemble(rc *runCtx) obsdoc.Document {
 		// The summary must agree with the diagnostics; pyright exits 1
 		// iff it reported an error (warnings exit 0).
 		consistent := shapeOK && *summary.ErrorCount == counts["error"] && *summary.WarningCount == counts["warning"] && *summary.InformationCount == counts["information"]
-		switch code := exitCode(r); {
+		switch code := pack.ExitCode(r); {
 		case r.Status != executor.StatusExited:
 		case code == 0 || code == 1:
 			if !consistent || (code == 1) != (counts["error"] > 0) {

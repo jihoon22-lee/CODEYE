@@ -35,30 +35,12 @@ func buildESLint(typed bool) buildFunc {
 			name, newA = eslint.TypedName, eslint.NewTyped
 		}
 		a, err := newA(eslint.Config{Script: cfg.Tools[eslint.Tool], Node: toolchains["node"]})
-		if err != nil {
-			return unavailable(name, "invalid_config", err.Error(), pack.ReasonToolUnavailable)
-		}
-		if runner == nil || cfg.ProbeDir == "" {
-			return unavailable(name, "probe_failed", "no runner or probe dir", pack.ReasonToolUnavailable)
-		}
-		if _, err := a.Probe(ctx, runner, cfg.ProbeDir); err != nil {
-			return unavailable(name, "probe_failed", err.Error(), pack.ReasonToolUnavailable)
-		}
-		return built{analyzer: a}
+		return probeBuilt(ctx, cfg, runner, name, a, err)
 	}
 }
 
 // buildTsc configures the tsc analyzer and runs its version probe.
 func buildTsc(ctx context.Context, cfg Config, runner executor.Runner, _ *govet.Handler, toolchains map[string]pack.Toolchain) built {
 	a, err := tsc.New(tsc.Config{Script: cfg.Tools[tsc.Tool], Node: toolchains["node"]})
-	if err != nil {
-		return unavailable(tsc.Name, "invalid_config", err.Error(), pack.ReasonToolUnavailable)
-	}
-	if runner == nil || cfg.ProbeDir == "" {
-		return unavailable(tsc.Name, "probe_failed", "no runner or probe dir", pack.ReasonToolUnavailable)
-	}
-	if _, err := a.Probe(ctx, runner, cfg.ProbeDir); err != nil {
-		return unavailable(tsc.Name, "probe_failed", err.Error(), pack.ReasonToolUnavailable)
-	}
-	return built{analyzer: a}
+	return probeBuilt(ctx, cfg, runner, tsc.Name, a, err)
 }

@@ -17,10 +17,7 @@ func buildCargoCheck(ctx context.Context, cfg Config, runner executor.Runner, _ 
 		return unavailable(rustpack.CheckName, "not_configured", "", pack.ReasonToolNotConfigured)
 	}
 	a, err := rustpack.New(rustpack.KindCheck, rustpack.Config{Cargo: exe, ToolPath: cfg.ToolPath})
-	if err != nil {
-		return unavailable(rustpack.CheckName, "invalid_config", err.Error(), pack.ReasonToolUnavailable)
-	}
-	return probeRust(ctx, cfg, runner, rustpack.CheckName, a)
+	return probeBuilt(ctx, cfg, runner, rustpack.CheckName, a, err)
 }
 
 // buildClippy configures the Rust extra-depth analyzer from --clippy (the
@@ -35,20 +32,7 @@ func buildClippy(ctx context.Context, cfg Config, runner executor.Runner, _ *gov
 		return unavailable(rustpack.ClippyName, "toolchain_not_configured", "clippy needs --cargo", pack.ReasonToolchainNotConfigured)
 	}
 	a, err := rustpack.New(rustpack.KindClippy, rustpack.Config{Cargo: cargo, Clippy: exe, ToolPath: cfg.ToolPath})
-	if err != nil {
-		return unavailable(rustpack.ClippyName, "invalid_config", err.Error(), pack.ReasonToolUnavailable)
-	}
-	return probeRust(ctx, cfg, runner, rustpack.ClippyName, a)
-}
-
-func probeRust(ctx context.Context, cfg Config, runner executor.Runner, name string, a *rustpack.Analyzer) built {
-	if runner == nil || cfg.ProbeDir == "" {
-		return unavailable(name, "probe_failed", "no runner or probe dir", pack.ReasonToolUnavailable)
-	}
-	if _, err := a.Probe(ctx, runner, cfg.ProbeDir); err != nil {
-		return unavailable(name, "probe_failed", err.Error(), pack.ReasonToolUnavailable)
-	}
-	return built{analyzer: a}
+	return probeBuilt(ctx, cfg, runner, rustpack.ClippyName, a, err)
 }
 
 // guardRustProbes keeps env.discover from executing a Rust tool path the pack

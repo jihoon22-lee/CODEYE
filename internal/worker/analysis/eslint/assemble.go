@@ -9,6 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -208,7 +209,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	}
 
 	toolOK := false
-	if in.Version != nil && jsts.ExitedZero(in.Version) {
+	if in.Version != nil && pack.ExitedZero(in.Version) {
 		if v, ok := ParseVersion(in.Version.Stdout.Data); ok {
 			toolOK = true
 			doc.Tool.Version, doc.Tool.VersionTested = ptr(v), VersionTested(v)
@@ -460,7 +461,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	if len(doc.WorkspaceDrift) > 0 {
 		fail(domain.TaskFailed, ReasonWorkspaceDrift, obsdoc.ExitExecutionError)
 	}
-	if in.Check != nil && !jsts.StreamsComplete(in.Check) {
+	if in.Check != nil && !pack.StreamsComplete(in.Check) {
 		fail(domain.TaskFailed, ReasonOutputTruncated, obsdoc.ExitExecutionError)
 	}
 	switch {

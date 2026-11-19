@@ -9,6 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -66,10 +67,6 @@ type assembleInput struct {
 	Cancelled, Integrity               bool
 	ExtraLimitations                   []string
 	WorkspaceRoots                     []string
-}
-
-func streamsComplete(r *executor.Result) bool {
-	return r != nil && !r.Stdout.Truncated && !r.Stdout.Incomplete && !r.Stderr.Truncated && !r.Stderr.Incomplete
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -197,7 +194,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	}
 
 	goOK, toolOK := false, false
-	if in.GoVersion != nil && exitedZero(in.GoVersion) {
+	if in.GoVersion != nil && pack.ExitedZero(in.GoVersion) {
 		if v, platform, ok := govet.ParseGoVersion(in.GoVersion.Stdout.Data); ok {
 			goOK = true
 			doc.Target.Platform = ptr(platform)
@@ -210,7 +207,7 @@ func assemble(in assembleInput) obsdoc.Document {
 			}
 		}
 	}
-	if in.Version != nil && exitedZero(in.Version) {
+	if in.Version != nil && pack.ExitedZero(in.Version) {
 		if v, ok := ParseVersion(in.Version.Stdout.Data); ok {
 			toolOK = true
 			doc.Tool.Version, doc.Tool.VersionTested = ptr(v), VersionTested(v)
@@ -221,7 +218,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	}
 	modOK := false
 	var escapes []string
-	if in.ModEdit != nil && exitedZero(in.ModEdit) && streamsComplete(in.ModEdit) {
+	if in.ModEdit != nil && pack.ExitedZero(in.ModEdit) && pack.StreamsComplete(in.ModEdit) {
 		if modPath, targets, ok := govet.ParseModEdit(in.ModEdit.Stdout.Data); ok {
 			modOK = true
 			doc.Module.Name = modPath
@@ -257,7 +254,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	listed := map[string]bool{}
 	if in.List != nil {
 		packages, unparsed, _ := govet.ParseList(in.List.Stdout.Data)
-		listOK = exitedZero(in.List) && streamsComplete(in.List) && unparsed == 0
+		listOK = pack.ExitedZero(in.List) && pack.StreamsComplete(in.List) && unparsed == 0
 		for _, p := range packages {
 			ps := &pkgState{ImportPath: p.ImportPath}
 			if dir, ok := govet.StripWorkspace(p.Dir, in.ModuleDir, in.WorkspaceRoots, false); ok && p.Dir != "" {
@@ -358,7 +355,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		if p := byFile[rel]; p != nil {
 			return p
 		}
-		return byDir[dirOf(rel)]
+		return byDir[pack.DirOf(rel)]
 	}
 	rs := &resolver{in: in, cache: map[string][3]any{}}
 	withFindings := map[*pkgState]bool{}
@@ -453,7 +450,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	// Complete: the exit status agrees with the records (-fail=all: exit 1
 	// iff a problem was reported), streams are whole and every record parsed.
 	consistent := (exit == 0 && len(st.Records) == 0) || (exit == 1 && len(st.Records) > 0)
-	checkComplete := in.Check != nil && consistent && streamsComplete(in.Check) && parsed && !fatal && !compile
+	checkComplete := in.Check != nil && consistent && pack.StreamsComplete(in.Check) && parsed && !fatal && !compile
 	for _, p := range pkgs {
 		if p.State != "" {
 			continue
@@ -471,7 +468,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	if listOK {
 		for _, f := range in.ScopeGoFiles {
 			if !listed[f] {
-				unlisted[dirOf(f)] = true
+				unlisted[pack.DirOf(f)] = true
 				doc.Coverage.FilesUnlisted++
 			}
 		}
@@ -571,13 +568,13 @@ func assemble(in assembleInput) obsdoc.Document {
 		// matched none: staticcheck ran on nothing, which is not clean.
 		fail(domain.TaskUnsupported, ReasonNoPackages, obsdoc.ExitConfigurationError)
 	}
-	if in.Check != nil && !streamsComplete(in.Check) || in.List != nil && !streamsComplete(in.List) {
+	if in.Check != nil && !pack.StreamsComplete(in.Check) || in.List != nil && !pack.StreamsComplete(in.List) {
 		fail(domain.TaskFailed, ReasonOutputTruncated, obsdoc.ExitExecutionError)
 	}
 	if in.Check != nil && !parsed {
 		fail(domain.TaskFailed, ReasonOutputUnparsed, obsdoc.ExitExecutionError)
 	}
-	if in.List != nil && !listOK && exitedZero(in.List) {
+	if in.List != nil && !listOK && pack.ExitedZero(in.List) {
 		fail(domain.TaskFailed, ReasonOutputUnparsed, obsdoc.ExitExecutionError)
 	}
 	if compile || doc.Coverage.Units[PackageFailedTypecheck] > 0 {

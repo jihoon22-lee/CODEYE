@@ -11,6 +11,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
@@ -43,16 +44,6 @@ func goIgnoredDir(seg string) bool {
 	return seg == "vendor" || seg == "testdata" || strings.HasPrefix(seg, ".") || strings.HasPrefix(seg, "_")
 }
 
-func dirOf(p string) string {
-	d := path.Dir(p)
-	if d == "" {
-		return "."
-	}
-	return d
-}
-
-func underDir(p, dir string) bool { return dir == "." || p == dir || strings.HasPrefix(p, dir+"/") }
-
 func skippedPath(p, base string) bool {
 	rel := p
 	if base != "." {
@@ -75,7 +66,7 @@ func moduleDirs(files map[string]source.Entry) []string {
 		if path.Base(p) != "go.mod" || skippedPath(p, ".") {
 			continue
 		}
-		dirs = append(dirs, dirOf(p))
+		dirs = append(dirs, pack.DirOf(p))
 	}
 	sort.Strings(dirs)
 	return dirs
@@ -85,7 +76,7 @@ func moduleDirs(files map[string]source.Entry) []string {
 func owningModule(p string, modules []string) (string, bool) {
 	best, found := "", false
 	for _, m := range modules {
-		if underDir(p, m) && (!found || len(m) > len(best)) {
+		if pack.UnderDir(p, m) && (!found || len(m) > len(best)) {
 			best, found = m, true
 		}
 	}
@@ -99,16 +90,6 @@ func hasGoFiles(files map[string]source.Entry) bool {
 		}
 	}
 	return false
-}
-
-func relTo(p, dir string) string {
-	if dir == "." {
-		return p
-	}
-	if p == dir {
-		return "."
-	}
-	return strings.TrimPrefix(p, dir+"/")
 }
 
 // planTasks is deterministic for a given manifest and scope; Run re-derives it.
@@ -155,10 +136,10 @@ func planTasks(m source.Manifest, scope domain.Scope) ([]plannedTask, error) {
 			if !ok {
 				continue
 			}
-			rel := relTo(p, mod)
+			rel := pack.RelTo(p, mod)
 			switch {
 			case isFile && strings.HasSuffix(p, ".go"):
-				d := relTo(dirOf(p), mod)
+				d := pack.RelTo(pack.DirOf(p), mod)
 				if d == "." {
 					add(mod, ".")
 				} else {
@@ -209,7 +190,7 @@ func planTasks(m source.Manifest, scope domain.Scope) ([]plannedTask, error) {
 
 // patternCovers reports whether a module-relative Go file is inside the patterns.
 func patternCovers(rel string, patterns []string) bool {
-	dir := dirOf(rel)
+	dir := pack.DirOf(rel)
 	for _, p := range patterns {
 		switch {
 		case p == "./...":
@@ -220,7 +201,7 @@ func patternCovers(rel string, patterns []string) bool {
 			}
 		case strings.HasSuffix(p, "/..."):
 			base := strings.TrimSuffix(strings.TrimPrefix(p, "./"), "/...")
-			if underDir(dir, base) {
+			if pack.UnderDir(dir, base) {
 				return true
 			}
 		default:
@@ -238,7 +219,7 @@ func patternCovers(rel string, patterns []string) bool {
 func goFilesInScope(files map[string]source.Entry, modules []string, mod string, patterns []string) []string {
 	var out []string
 	for p := range files {
-		if !strings.HasSuffix(p, ".go") || !underDir(p, mod) {
+		if !strings.HasSuffix(p, ".go") || !pack.UnderDir(p, mod) {
 			continue
 		}
 		if owner, _ := owningModule(p, modules); owner != mod {
@@ -247,7 +228,7 @@ func goFilesInScope(files map[string]source.Entry, modules []string, mod string,
 		if base := path.Base(p); strings.HasPrefix(base, "_") || strings.HasPrefix(base, ".") {
 			continue // the go command ignores these file names
 		}
-		if skippedPath(p, mod) || !patternCovers(relTo(p, mod), patterns) {
+		if skippedPath(p, mod) || !patternCovers(pack.RelTo(p, mod), patterns) {
 			continue
 		}
 		out = append(out, p)

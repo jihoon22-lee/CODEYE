@@ -214,15 +214,11 @@ func (a *Analyzer) Probe(ctx context.Context, runner executor.Runner, dir string
 	return v, nil
 }
 
-func failed(reason string, limitations ...string) analysis.TaskResult {
-	return analysis.TaskResult{Status: domain.TaskFailed, Reason: reason, Limitations: append([]string{}, limitations...)}
-}
-
 // Run executes one staticcheck task.
 func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	tasks, err := plan(job)
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	var pt *pack.Task
 	for i := range tasks {
@@ -231,23 +227,23 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 	}
 	if pt == nil {
-		return failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
+		return pack.Failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
 	}
 	if !filepath.IsAbs(job.Scratch) || !filepath.IsAbs(job.Snapshot.WorkspaceDir) || !filepath.IsAbs(job.Snapshot.SnapshotDir) {
-		return failed(analysis.ReasonHandlerError, "invalid_job_paths")
+		return pack.Failed(analysis.ReasonHandlerError, "invalid_job_paths")
 	}
 	taskDir := filepath.Join(job.Scratch, "analyzers", pt.Spec.Key)
 	if err := os.MkdirAll(filepath.Dir(taskDir), 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	if err := os.Mkdir(taskDir, 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	dirs := map[string]string{}
 	for _, d := range []string{"exec", "gocache", "gopath", "cache", "tmp"} {
 		dirs[d] = filepath.Join(taskDir, d)
 		if err := os.Mkdir(dirs[d], 0o700); err != nil {
-			return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		}
 	}
 	files := govet.IncludedFiles(job.Snapshot.Manifest)
@@ -276,7 +272,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	for p := range files {
 		switch {
-		case path.Base(p) == "go.work" && underDir(pt.Module, dirOf(p)):
+		case path.Base(p) == "go.work" && pack.UnderDir(pt.Module, pack.DirOf(p)):
 			in.ExtraLimitations = append(in.ExtraLimitations, "go_work_ignored")
 		case p == govet.JoinRel(pt.Module, "vendor/modules.txt"):
 			in.ExtraLimitations = append(in.ExtraLimitations, "vendor_directory_used")
@@ -308,7 +304,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	env := a.env(dirs["gocache"], dirs["gopath"], modcache, dirs["cache"])
 	if err := govet.DisableTelemetry(env, filepath.Join(taskDir, "config")); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	spec := func(exe string, args ...string) executor.Spec {
 		return executor.Spec{Executable: exe, Args: args, WorkspaceRoot: workspace, Dir: filepath.Join(workspace, filepath.FromSlash(pt.Module)),
@@ -342,24 +338,24 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			break
 		}
 		in.Executions = append(in.Executions, e)
-		if stoppable(&res) {
+		if pack.Stoppable(&res) {
 			break
 		}
 		// An unidentified go or staticcheck is never run on the code: the
 		// parser is pinned to the version's output format.
 		if s.name == execGoVersion {
-			if _, _, ok := govet.ParseGoVersion(res.Stdout.Data); !ok || !exitedZero(&res) {
+			if _, _, ok := govet.ParseGoVersion(res.Stdout.Data); !ok || !pack.ExitedZero(&res) {
 				break
 			}
 		}
 		if s.name == execVersion {
-			if _, ok := ParseVersion(res.Stdout.Data); !ok || !exitedZero(&res) {
+			if _, ok := ParseVersion(res.Stdout.Data); !ok || !pack.ExitedZero(&res) {
 				break
 			}
 		}
 		if s.name == execModEdit {
 			_, targets, ok := govet.ParseModEdit(res.Stdout.Data)
-			if !ok || !exitedZero(&res) || len(govet.EscapingReplaces(targets, pt.Module)) > 0 {
+			if !ok || !pack.ExitedZero(&res) || len(govet.EscapingReplaces(targets, pt.Module)) > 0 {
 				break
 			}
 		}
@@ -396,25 +392,4 @@ var Selection = []string{"-checks", Checks, "-tests=true", "-show-ignored"}
 // CheckArgs is the staticcheck argv after the executable.
 func CheckArgs(patterns []string) []string {
 	return append(append([]string{"-f", "json"}, Selection...), patterns...)
-}
-
-func stoppable(r *executor.Result) bool {
-	return r.Cleanup == executor.CleanupUncertain || r.Status == executor.StatusCancelled || r.Status == executor.StatusTimedOut ||
-		r.Status == executor.StatusRejected || r.Status == executor.StatusUnsupported || r.Status == executor.StatusStartFailed
-}
-
-func exitedZero(r *executor.Result) bool {
-	return r != nil && r.Status == executor.StatusExited && r.ExitCode != nil && *r.ExitCode == 0
-}
-
-func dirOf(p string) string {
-	d := path.Dir(p)
-	if d == "" {
-		return "."
-	}
-	return d
-}
-
-func underDir(p, dir string) bool {
-	return dir == "." || p == dir || len(p) > len(dir) && p[:len(dir)+1] == dir+"/"
 }

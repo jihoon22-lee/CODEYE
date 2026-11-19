@@ -91,13 +91,12 @@ func cleanScope(s string) string {
 // DataDir reports a path segment treated as data or vendored code (hidden
 // directories, testdata, vendor, node_modules), as pack.SourceFiles does.
 func DataDir(seg string) bool {
-	return strings.HasPrefix(seg, ".") || seg == "testdata" || seg == "vendor" || seg == "node_modules"
+	return pack.DataDir(seg)
 }
 
 // UnderDataDir reports a path with a data directory segment above it.
 func UnderDataDir(p string) bool {
-	segs := strings.Split(p, "/")
-	return slices.ContainsFunc(segs[:len(segs)-1], DataDir)
+	return pack.UnderDataDir(p)
 }
 
 // Files lists the included regular files of the manifest in the job scope
@@ -425,30 +424,6 @@ func (r *Run) Finish(doc obsdoc.Document) analysis.TaskResult {
 	return res
 }
 
-// Stoppable reports a result after which no further execution may start.
-func Stoppable(r *executor.Result) bool {
-	return r == nil || r.Cleanup == executor.CleanupUncertain || r.Status == executor.StatusCancelled || r.Status == executor.StatusTimedOut ||
-		r.Status == executor.StatusRejected || r.Status == executor.StatusUnsupported || r.Status == executor.StatusStartFailed
-}
-
-// ExitedZero reports a clean exit 0.
-func ExitedZero(r *executor.Result) bool {
-	return r != nil && r.Status == executor.StatusExited && r.ExitCode != nil && *r.ExitCode == 0
-}
-
-// ExitCode is the exit code of an exited process, else -1.
-func ExitCode(r *executor.Result) int {
-	if r != nil && r.Status == executor.StatusExited && r.ExitCode != nil {
-		return *r.ExitCode
-	}
-	return -1
-}
-
-// StreamsComplete reports streams read to EOF within their limits.
-func StreamsComplete(r *executor.Result) bool {
-	return r != nil && !r.Stdout.Truncated && !r.Stdout.Incomplete && !r.Stderr.Truncated && !r.Stderr.Incomplete
-}
-
 // Outcome accumulates the task outcome: the first failure recorded wins.
 type Outcome struct {
 	Status domain.TaskStatus
@@ -722,10 +697,6 @@ func ExecutionsOf(list []analysis.Execution) []obsdoc.Execution {
 	}
 	return out
 }
-
-// SeriesTested reports a version of the tested release series ("1.26" for
-// 1.26.x).
-func SeriesTested(version, series string) bool { return strings.HasPrefix(version, series+".") }
 
 // Ptr returns a pointer to v.
 func Ptr[T any](v T) *T { return &v }

@@ -10,6 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/tsc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
@@ -47,16 +48,16 @@ func replayFiles(t *testing.T, name string) map[string]string {
 	return nil
 }
 
-func replayRun(t *testing.T, name string, typed bool, key string, mutate func(jststest.Recorded, *executor.Result)) (*Analyzer, jststest.Fixture, *jststest.Replay, obsdoc.Document) {
+func replayRun(t *testing.T, name string, typed bool, key string, mutate func(jststest.Recorded, *executor.Result)) (*Analyzer, packtest.Fixture, *jststest.Replay, obsdoc.Document) {
 	t.Helper()
 	a := fakeAnalyzer(t, typed)
-	fx := jststest.NewFixture(t, "", replayFiles(t, name), domain.Scope{})
+	fx := packtest.NewFixture(t, "", replayFiles(t, name), domain.Scope{})
 	r := &jststest.Replay{T: t, Steps: jststest.LoadCapture(t, name), Mutate: mutate, Match: func(step jststest.Recorded, s executor.Spec) bool {
 		return (step.Name == execVersion) == slices.Equal(s.Args[1:], []string{"--version"})
 	}}
-	res := jststest.RunTask(t, a, fx.Job, key, r)
+	res := packtest.RunTask(t, a, fx.Job, key, r)
 	doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
-	jststest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
+	packtest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
 	return a, fx, r, doc
 }
 
@@ -84,7 +85,7 @@ func TestReplayESLintCaptures(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, fx, r, doc := replayRun(t, c.name, c.typed, c.key, nil)
-			got := jststest.Rules(doc)
+			got := packtest.Rules(doc)
 			if doc.Outcome.TaskStatus != c.status || (c.reason != "" && *doc.Outcome.Reason != c.reason) || !mapsEqual(got, c.rules) {
 				t.Fatalf("%s: %+v rules %v errors %+v", c.name, doc.Outcome, got, doc.ToolErrors)
 			}
@@ -112,7 +113,7 @@ func mapsEqual(a, b map[string]int) bool {
 // PATH = the node directory and LANG only, in the module directory of the
 // workspace copy, the managed configuration in task scratch loading only
 // absolute tool-directory modules, and "--" before the positionals.
-func checkSpecs(t *testing.T, a *Analyzer, fx jststest.Fixture, specs []executor.Spec) {
+func checkSpecs(t *testing.T, a *Analyzer, fx packtest.Fixture, specs []executor.Spec) {
 	t.Helper()
 	for _, s := range specs {
 		if s.Executable != a.script.Node.Executable || s.Args[0] != a.script.Path || s.Env["PATH"] != a.script.Node.Dir || !jststest.EnvAllowlisted(s.Env) || s.Env["LANG"] != "C.UTF-8" ||
@@ -150,10 +151,10 @@ func TestReplayOverlapTsc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fx := jststest.NewFixture(t, "", replayFiles(t, "overlap-tsc"), domain.Scope{})
-	res := jststest.RunTask(t, tc, fx.Job, "tsc", &jststest.Replay{T: t, Steps: jststest.LoadCapture(t, "overlap-tsc")})
+	fx := packtest.NewFixture(t, "", replayFiles(t, "overlap-tsc"), domain.Scope{})
+	res := packtest.RunTask(t, tc, fx.Job, "tsc", &jststest.Replay{T: t, Steps: jststest.LoadCapture(t, "overlap-tsc")})
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
-	if got := jststest.Rules(doc); !mapsEqual(got, map[string]int{"TS2304": 1, "TS2393": 2}) {
+	if got := packtest.Rules(doc); !mapsEqual(got, map[string]int{"TS2304": 1, "TS2393": 2}) {
 		t.Fatalf("tsc rules %v", got)
 	}
 }
