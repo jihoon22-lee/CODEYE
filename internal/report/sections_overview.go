@@ -138,6 +138,9 @@ func (c sectionContext) gaps() []Gap {
 		if cr.Pack != "none" && cr.ExposedFiles == nil {
 			add(SectionCodeReview, "exposure_unknown", nil, nil)
 		}
+		if cr.Ledger != nil {
+			ledgerGaps(cr.Ledger, add)
+		}
 	}
 	sort.SliceStable(out, func(a, b int) bool {
 		x, y := out[a], out[b]
@@ -289,11 +292,19 @@ func overviewOf(r Report) Overview {
 	if cr := r.CodeReview; cr != nil {
 		fs := ComputeSummary(findingsOf(r, cr.FindingIDs), nil)
 		n := map[string]int{"calls": cr.Calls, "findings": fs.TotalFindings, "actionable": fs.ActionableFindings, "pending": fs.PendingCandidates, "refuted": fs.RefutedFindings}
+		notSent := 0
+		if l := cr.Ledger; l != nil && len(l.Modules) > 0 {
+			// The reviewed scope is what was sent to the model, never verified
+			// scope; the rest of the eligible files was not sent.
+			n["files_sent_to_model"], notSent = ledgerTotals(l)
+			n["files_not_sent_to_model"] = notSent
+		}
 		line(SectionCodeReview, &cr.Stage, n)
 		need("0", SectionCodeReview, "actionable_findings", fs.ActionableFindings)
 		if r.Coverage.AIReview.Status != AIReviewPerformed {
 			need("5", SectionCodeReview, "model_review_not_performed", 1)
 		}
+		need("5", SectionCodeReview, "review_scope_not_sent", notSent)
 		need("6", SectionCodeReview, "pending_candidates", fs.PendingCandidates)
 	}
 	line(SectionGaps, nil, map[string]int{"gaps": len(r.Gaps)})

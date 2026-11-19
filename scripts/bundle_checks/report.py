@@ -157,6 +157,7 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
     texts += statements(report["documents"], {"contracts": ("statement",), "conflicts": ("summary", "impact"),
                                               "questions": ("question",), "instruction_notes": ("note",)})
     texts += [limit["statement"] for limit in report["code_review"]["interpretation_limits"]]
+    check_ledger(report)
     ensure(not free or all(text == TEXT_OMITTED for text in texts), "Code-free export carries model text")
     # Section evidence resolves in the snapshot named by the report.
     for block in ("environment", "documents"):
@@ -171,6 +172,52 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
                  for entry in entries if isinstance(entry, dict)
                  for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids") for i in entry.get(key, [])]
         ensure(set(cited) <= set(catalog), "Section statement cites evidence the section does not carry")
+
+
+SLICE_TASK = re.compile(r"^review\.(investigate|verify)\.(s0(?:0[1-9]|[12][0-9]|3[0-2]))$")
+SLICE_FINDING = re.compile(r"^review_(s[0-9]{3})_")
+LEDGER_FILE_COUNTS = ("files_sent_to_model", "files_withheld", "files_unreadable", "files_budget_exhausted", "files_not_planned", "files_not_sent")
+
+
+def check_ledger(report: dict) -> None:
+    """The review slice rules of builder 6 (docs/REPORT.md#모듈별-검토-장부; internal/report/review_slices.go)."""
+    builder = int(report["builder"]["version"])
+    tasks = {t["key"]: t for t in report["tasks"]}
+    for call in report["coverage"].get("review_calls", []):
+        if "task_key" in call:
+            match = SLICE_TASK.match(call["task_key"])
+            stage = match.group(1) if match else call["task_key"].removeprefix("review.")
+            ensure(builder >= 6 and call["task_key"] in tasks and stage == call["role"], "Review call names a task it does not belong to")
+    for finding in report["findings"]:
+        match = SLICE_FINDING.match(finding["id"])
+        ensure(not match or (builder >= 6 and "review.investigate." + match.group(1) in tasks), "Slice finding of a slice that was not planned")
+    ledger = report["code_review"].get("ledger")
+    ensure((ledger is not None) == (builder >= 6 and "review.scope" in tasks), "Ledger presence differs from the review.scope task")
+    if ledger is None:
+        return
+    scope = tasks["review.scope"]
+    ensure(ledger["scope"]["task_status"] == scope["status"] and ledger["scope"].get("reason") == scope["reason"], "Ledger scope differs from its task")
+    ensure((ledger["max_calls"] is None) == (ledger["scope"]["result"] != "accepted") and (ledger["modules"] == [] or ledger["max_calls"] is not None), "Ledger budget without its scope artifact")
+    ensure(ledger["calls_used"] is None or ledger["calls_used"] >= len(report["coverage"].get("review_calls", [])), "Ledger counts fewer calls than the report lists")
+    ensure(ledger["request_bytes_sent"] in (None, report["code_review"]["request_bytes"]), "Ledger request bytes differ from the code review section")
+    ids = [m["module_id"] for m in ledger["modules"]]
+    ensure(ids == sorted(set(ids)), "Ledger modules repeated or out of order")
+    for module in ledger["modules"]:
+        ensure(sum(module[k] for k in LEDGER_FILE_COUNTS) == module["files_eligible"], "Ledger module files do not add up: " + module["module_id"])
+        ensure(module["files_truncated"] <= module["files_sent_to_model"] and module["files_with_completed_review"] <= module["files_sent_to_model"], "Ledger module counts beyond its sent files")
+        for entry in module["slices"]:
+            task = tasks.get(entry["task_key"])
+            ensure(task is not None and task["status"] == entry["status"] and task["reason"] == entry["reason"], "Ledger slice differs from its task: " + entry["task_key"])
+        ensure(module["files_budget_exhausted"] == 0 or any(e["status"] == "budget_exhausted" for e in module["slices"]), "Ledger budget-exhausted files without such a slice")
+    complete = bool(ledger["modules"]) and all(m["files_with_completed_review"] == m["files_eligible"] for m in ledger["modules"])
+    ran = any(SLICE_TASK.match(k) and k.startswith("review.investigate.") and t["status"] == "succeeded" for k, t in tasks.items())
+    ensure(ledger["status"] == ("complete" if complete else "partial" if ran else "overview_only"), "Ledger status differs from its rows")
+    counts = next(s for s in report["overview"]["sections"] if s["key"] == "code_review")["counts"]
+    if ledger["modules"]:
+        sent = sum(m["files_sent_to_model"] for m in ledger["modules"])
+        ensure(counts.get("files_sent_to_model") == sent and counts.get("files_not_sent_to_model") == sum(m["files_eligible"] for m in ledger["modules"]) - sent,
+               "Overview code review scope differs from the ledger")
+        ensure(sent <= (report["coverage"]["llm_exposed_files"] if report["coverage"]["llm_exposed_files"] is not None else sent), "Ledger sends more files than the report exposed")
 
 
 def check_analyzer(descriptor: dict) -> None:

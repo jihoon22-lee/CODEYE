@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `9883124ca3d4` |
+| digest | `31f5a97ccecd` |
 | status | `partial` |
 | quality\_verdict | `attention_required` 품질 판정은 안전 인증이 아니다\. |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -619,4 +619,4 @@
 - 비밀값이 탐지된 파일은 모델 입력에서 뺐다\.
 - tools\_outside\_interpret\_input
 
-digest sha256: `9883124ca3d47b57802514afa80e506ac624939b79f8f8d6b90cb73b563e3af5`
+digest sha256: `31f5a97ccecd8fadda8537d07f6bd99db1e3b5992fa50a888408703fa1a78893`

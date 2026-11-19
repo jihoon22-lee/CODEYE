@@ -10,7 +10,7 @@ CODEYE 보고서가 지금 담는 내용, 발견 항목을 읽는 방법, 웹 �
 |---|---|
 | `schema_version` | `0.1`. 새 필드는 모두 선택 필드로 추가했다. |
 | `demo` | 제품이 게시한 보고서는 항상 `false`다. [`examples/report.json`](../examples/report.json)은 현재 builder가 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이고, [`examples/report-go-vet.json`](../examples/report-go-vet.json)은 builder 1 시절의 실제 코드 미포함 내보내기다(분석 종류별 절 없음). |
-| `builder.id` / `builder.version` | `codeye-report` / `5`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를, 버전 5부터 [분석 종류별 절](#분석-종류별-절)을 기록한다. |
+| `builder.id` / `builder.version` | `codeye-report` / `6`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를, 버전 5부터 [분석 종류별 절](#분석-종류별-절)을, 버전 6부터 [모듈 단위 검토 분할](#모듈별-검토-장부)의 기록·발견·장부와 `review_calls[].task_key`를 기록한다. |
 | `builder.input_digest` | builder 입력(run·snapshot·attempt 사실, task 행, 결과 manifest, 산출물 행, 게시 시점 판정 집합, builder ID·버전·스키마 버전)의 SHA-256. 보고서 ID·리비전·생성 시각은 넣지 않는다. |
 | `export.include_code` | 저장본은 `true`다. 코드 미포함 내보내기는 같은 저장본의 projection이며 `false`다. |
 
@@ -66,7 +66,7 @@ builder 5부터 보고서는 위 필드에 더해 분석 종류마다 한 블록
 | 4 | 정적 분석 | `static_analysis` | 생태계(`languages[].ecosystem`)별, 그 안에서 분석기 task별 한 행: 목적, 작업 상태·사유, 결과 수락 여부, exit class, 규칙 팩, 범위·처리 파일 수, 규칙별 관찰 수, 관찰·발견 ID |
 | 5 | 구조·중복 지표 | `metrics` | 지표 분석기 task와 지표별 묶음(이름·단위·임계값·최댓값·관찰 ID) |
 | 6 | 비밀정보 | `secrets` | 비밀정보 분석기 task, 탐지마다 규칙·위치·근거 상태·관찰 ID·도구 발견 ID, 모델 입력에서 비밀값을 걸렀는지(`model_input`) |
-| 7 | 코드 분석(모델 검토) | `code_review` | 지침 팩, 역할별 결과, 호출 수·수락 수·요청 바이트, 모델에 노출한 파일 수, 해석 한계, 모델 후보 발견 ID |
+| 7 | 코드 분석(모델 검토) | `code_review` | 지침 팩, 역할별 결과, 호출 수·수락 수·요청 바이트, 모델에 노출한 파일 수, 해석 한계, 모델 후보 발견 ID, slice가 계획된 실행이면 [모듈별 검토 장부](#모듈별-검토-장부)(`ledger`) |
 | 8 | 분석 공백 | `gaps` | 분석하지 못했거나 일부만 분석한 범위(`section`, `code`, 선택 `subject`·`detail`). 비어 있으면 생략한다. |
 
 "이전 실행과 비교"는 저장 문서의 절이 아니다. 비교는 요청마다 계산하므로([run 비교](#run-비교)) 웹 화면만 종합 아래에 그 결과를 따로 보여주고, 내보내기에는 넣지 않는다.
@@ -84,6 +84,37 @@ builder 5부터 보고서는 위 필드에 더해 분석 종류마다 한 블록
 **코드 미포함.** projection은 모델 문장을 모두 생략 문구로 바꾸고, 모듈 요구의 제약 문자열은 버전 제약 형식일 때만 남긴다. 경로·줄 번호·코드·수·blob hash는 남는다. 비밀정보 탐지는 처음부터 값과 그 일부·hash를 싣지 않는다.
 
 예시는 [`examples/report.json`](../examples/report.json)과 [`examples/report.md`](../examples/report.md)이다. `fixtures/modules/input`을 대상으로 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이며, 생성 시험은 [`report_example_test.go`](../internal/worker/review/report_example_test.go)다.
+
+### 모듈별 검토 장부
+
+builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단위-검토-분할)의 산출물을 읽는다. slice 기록(review 기록 0.3)은 자기 slice task에 붙은 것만 받고, 검토 범위 산출물(`application/vnd.codeye.review-scope+json` 0.1)은 `review.scope`에 붙은 것만 받는다. 둘 다 attempt·snapshot manifest와 대조하며, slice 기록의 단계 연결은 전체 역할과 같은 규칙에 범위 산출물 digest를 더해 확인한다. slice verify는 자기 slice investigate의 후보만 이어받는다.
+
+- **발견.** slice 후보는 `review_sNNN_<후보 ID>`(예: `review_s002_investigate_1`)로 코드 분석 절의 발견 분할에 들어간다. 판정은 같은 slice의 verify 기록에서만 온다. 계획되지 않은 slice 키의 발견은 검증에서 거부한다.
+- **호출과 노출.** `review_calls[]`는 builder 6부터 호출이 든 검토 task(`task_key`, 전체 역할 또는 slice)를 싣고 최대 207개(호출 상한의 최댓값)다. `llm_exposed_files`는 같은 뜻(모델에 보낸 서로 다른 경로 수)이며 slice 기록도 센다. 예산 소진·정책 제외·미지원 task는 보낸 것이 없다. `ai_review`는 필수 task만 본다.
+- **역할과 장부.** 코드 분석 절의 `roles`는 전체 역할만 싣는다. `review.scope`와 slice task는 장부에 있다.
+
+`code_review.ledger`는 `review.scope`가 계획된 실행(overview 밖 파일이 있는 계획)에만 있다. slice가 없는 계획이나 builder 5 이하 리비전에는 없다.
+
+| 필드 | 뜻 |
+|---|---|
+| `scope` | `review.scope` task와 결과. 범위 산출물을 받았으면 `accepted`, 아니면 작업 상태·사유(예: `skipped` / `secret_screen_unavailable`) |
+| `max_calls`, `max_request_bytes` | 범위 산출물이 기록한 attempt 호출 상한과 요청 크기 상한. 산출물이 없으면 `null` |
+| `calls_used` | slice 앞 호출 수(범위 산출물의 `calls_before_slices`, attempt 호출 기록에서 셈. 기록 없이 실패한 전체 역할 호출도 들어간다)와 slice 기록의 호출 합. 범위 산출물이 없으면 전체 역할 기록에서 센다. 호출했을 수 있는 검토 task에 쓸 수 있는 기록이 없으면 `null` |
+| `request_bytes_sent` | 모든 검토 기록의 요청 크기 합(프롬프트 바이트). 같은 조건에서 `null`이며, 값이 있으면 `code_review.request_bytes`와 같다 |
+| `status` | `complete`(모든 대상 파일을 보냈고 검증 역할까지 마쳤다), `overview_only`(성공한 slice investigate가 없다), 그 밖은 `partial` |
+| `modules[]` | 범위 산출물의 모듈마다 한 행(모듈 ID 순) |
+
+모듈 행은 `module_id`, `discovered`(모듈 탐색이 같은 ID를 찾았는지), `files_eligible`과 그 파일을 한 번씩 나눈 수 `files_sent_to_model`·`files_withheld`(비밀값 탐지)·`files_unreadable`·`files_budget_exhausted`(호출 상한으로 거절된 slice)·`files_not_planned`(slice 수 상한 밖)·`files_not_sent`(그 밖: overview가 보내지 못했거나 slice가 실패·생략됨)를 싣는다. 여섯 수의 합은 `files_eligible`이다. `bytes_sent`는 보낸 파일의 발췌 크기(범위 산출물의 계획 바이트), `files_truncated`는 발췌가 파일 끝까지 닿지 않은 보낸 파일, `files_with_completed_review`는 보낸 파일 중 검증 역할 기록까지 수락된 파일(overview 파일은 전체 verify, slice 파일은 그 slice의 verify)이다. `slices[]`는 그 모듈 파일을 가진 slice task마다 `task_key`·`status`·`reason`이며 task 행과 같아야 한다.
+
+**모델에 보낸 범위는 검증된 범위가 아니다.** 장부는 무엇을 모델에 보냈는지만 센다. 모델이 본 파일에도 후보로 지목되지 않은 결함이 있을 수 있고, 화면과 내보내기는 이 범위를 "모델에 보냄"으로만 부른다.
+
+**종합과 공백.** 장부에 모듈 행이 있으면 종합의 코드 분석 줄에 `files_sent_to_model`과 `files_not_sent_to_model`(대상 파일 − 보낸 파일)이 더해지고, 보내지 못한 파일이 있으면 먼저 볼 항목 `review_scope_not_sent`가 생긴다. 분석 공백에는 모듈마다 `review_scope_budget_exhausted`·`review_scope_not_planned`·`review_scope_withheld`·`review_scope_unreadable`·`review_scope_not_sent`(대상 모듈 ID), 범위 산출물을 받지 못했으면 `review_scope_<결과>`(`review.scope`, 사유)가 들어간다.
+
+**검증.** 장부는 builder 6 이상이고 `review.scope` task가 있을 때만 있어야 하며, 있으면 반드시 있어야 한다. 모듈 행의 합, 보낸 파일 이하인 잘림·검증 완료 수, 상한 초과 파일이 있으면 그런 slice가 있을 것, 상태가 행과 task 행에서 다시 계산한 값과 같을 것, `calls_used`가 `review_calls` 수 이상일 것, 호출의 `task_key`가 같은 역할의 계획된 task일 것을 저장 시와 조회 시에 확인한다. 장부는 모듈 ID·task 키·코드·수만 담으므로 코드 미포함 projection에서도 그대로다. 세 형식과 웹 화면은 장부의 같은 수를 보인다.
+
+**비밀값 선별 상태.** builder 6부터 비밀정보 절의 `model_input`에 `screened`(완료된 탐지로 걸렀고 뺀 파일 없음)가 있다. builder 5는 이 경우를 `not_screened`로 읽었다.
+
+예시는 [`examples/report-slices.json`](../examples/report-slices.json)과 [`examples/report-slices.md`](../examples/report-slices.md)이다. `fixtures/modules/coverage/input`을 호출 상한 15로 실행해(작업마다 대본 응답 1회, 모델 호출 없음) slice 3개가 승인되고 4개가 `budget_exhausted`로 끝난 합성 예시이며, 생성 시험은 [`report_slices_example_test.go`](../internal/worker/review/report_slices_example_test.go)다.
 
 ## 상태와 판정
 

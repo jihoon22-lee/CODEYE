@@ -264,7 +264,11 @@ func exampleVet(t *testing.T, j analysis.Job, task pack.Task) analysis.TaskResul
 	key := task.Spec.Key
 	version := "go1.27.4"
 	platform := "linux/amd64"
-	mod := map[string]string{".": "example.test/w15", "svc/a": "example.test/w15/svc/a", "svc/b": "example.test/w15/svc/b"}[task.Module]
+	mod, ok := map[string]string{".": "example.test/w15", "svc/a": "example.test/w15/svc/a", "svc/b": "example.test/w15/svc/b"}[task.Module]
+	if !ok {
+		// A module of the slice example (fixtures/modules/coverage/input).
+		mod = "example.test/coverage/" + task.Module
+	}
 	d := govet.Document{SchemaVersion: govet.DocumentSchemaVersion, Kind: govet.DocumentKind, AnalyzerID: govet.AnalyzerID, AdapterVersion: govet.AdapterVersion,
 		ParserID: govet.ParserID, ParserVersion: govet.ParserVersion, TaskKey: key, ManifestDigest: j.Snapshot.Digest, Module: govet.ModuleRef{Dir: task.Module, Path: mod},
 		Patterns: append([]string{}, task.Patterns...), ToolVersion: &version, Platform: &platform, Inventory: []govet.PackageScope{}, Coverage: govet.Coverage{Packages: map[string]int{}},

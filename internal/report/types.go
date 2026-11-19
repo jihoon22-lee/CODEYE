@@ -20,8 +20,10 @@ const (
 	// BuilderVersion 4 adds the tool rows' rule_context and the
 	// observations' suppressed flag (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태).
 	// Version 5 adds the per-analysis sections (docs/REPORT.md#분석-종류별-절); every
-	// earlier field keeps its shape and meaning.
-	BuilderVersion = "5"
+	// earlier field keeps its shape and meaning. Version 6 reads the review
+	// slices (docs/REPORT.md#모듈별-검토-장부): their records and findings, the
+	// scope artifact, the code review ledger and the review calls' task_key.
+	BuilderVersion = "6"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -153,6 +155,9 @@ type ReviewCall struct {
 	// record the pack identity; legacy-pack (0.1) calls leave them out.
 	PackID      string `json:"pack_id,omitempty"`
 	PackVersion string `json:"pack_version,omitempty"`
+	// TaskKey is the review task whose record holds the call (builder 6,
+	// role-pack records): a whole-run role or a slice task.
+	TaskKey string `json:"task_key,omitempty"`
 }
 
 type Coverage struct {

@@ -43,6 +43,8 @@ type taskState struct {
 	tool         *ToolCoverage
 	discovery    *envdoc.Document
 	toolFindings []string
+	// scope is the accepted review scope artifact (review.scope).
+	scope *record.ScopeDoc
 }
 
 // Build validates the input and produces the report. Every refusal wraps
@@ -216,6 +218,9 @@ func Build(in Input, reg *Registry) (Report, error) {
 				}
 				if c.Discovery != nil {
 					st.discovery = c.Discovery
+				}
+				if c.Scope != nil {
+					st.scope = c.Scope
 				}
 				r.Observations = append(r.Observations, c.Observations...)
 				r.Findings = append(r.Findings, c.Findings...)

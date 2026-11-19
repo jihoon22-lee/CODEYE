@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
-import type { ModelState, SectionStage, Sections } from './reportSections';
+import type { Ledger, ModelState, SectionStage, Sections } from './reportSections';
 import { ComparisonSection } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
@@ -98,6 +98,61 @@ function ObservationTable({ ids, byID }: { ids: string[]; byID: Map<string, Obse
         ];
       })}
     />
+  );
+}
+
+// LedgerBlock is the per-module review ledger: what of each module's code
+// and test files was sent to the model (not verified scope) and why the rest
+// was not, then the slice tasks with the modules they hold.
+function LedgerBlock({ ledger }: { ledger: Ledger }) {
+  const l = s.ledger;
+  const n = (v: number | null) => (v === null ? l.unknown : String(v));
+  const slices = new Map<string, { status: string; reason: string | null; modules: string[] }>();
+  for (const m of ledger.modules) {
+    for (const x of m.slices) {
+      const row = slices.get(x.task) ?? { status: x.status, reason: x.reason, modules: [] };
+      row.modules.push(m.id);
+      slices.set(x.task, row);
+    }
+  }
+  return (
+    <>
+      <h6>{l.heading}</h6>
+      <p>{l.lead}</p>
+      <ul>
+        <li>{label(l.status, ledger.status)}</li>
+        <li>
+          {l.scope} <code>{ledger.scope.key}</code> {label(s.taskStatus, ledger.scope.status ?? '')}
+          {ledger.scope.reason ? ' — ' + explainReason(ledger.scope.reason) : ''}
+        </li>
+        <li>{l.calls(n(ledger.callsUsed), n(ledger.maxCalls))}</li>
+        <li>{l.bytes(n(ledger.requestBytesSent), n(ledger.maxRequestBytes))}</li>
+      </ul>
+      <Table
+        head={[s.col.module, l.col.discovered, l.col.eligible, l.col.sent, l.col.bytesSent, l.col.truncated, l.col.withheld, l.col.unreadable, l.col.budgetExhausted, l.col.notPlanned, l.col.notSent, l.col.completed]}
+        rows={ledger.modules.map((m) => [
+          <code key="m">{m.id}</code>,
+          m.discovered ? l.discovered : l.notDiscovered,
+          m.eligible,
+          m.sent,
+          m.bytesSent,
+          m.truncated,
+          m.withheld,
+          m.unreadable,
+          m.budgetExhausted,
+          m.notPlanned,
+          m.notSent,
+          m.completed,
+        ])}
+        empty={l.none}
+      />
+      <Table
+        head={[l.col.task, s.col.status, l.col.reason, l.col.modules]}
+        rows={[...slices.entries()]
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([k, x]) => [<code key="k">{k}</code>, label(s.taskStatus, x.status), x.reason ? explainReason(x.reason) : '—', <code key="m">{x.modules.join(', ')}</code>])}
+      />
+    </>
   );
 }
 
@@ -360,6 +415,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
             <Table head={[s.col.role, s.col.status, s.col.result]} rows={cr.roles.map((x) => [<code key="k">{x.key}</code>, label(s.taskStatus, x.status ?? ''), x.result])} />
           </>
         )}
+        {cr.ledger && <LedgerBlock ledger={cr.ledger} />}
         <h6>{s.reviewFindings}</h6>
         <FindingList findings={pick(report.findings, cr.findings)} history={history} empty={s.noFindings} />
         {cr.limits.length > 0 && (

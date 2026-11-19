@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -133,7 +134,7 @@ var countOrder = map[string][]string{
 	SectionStaticAnalysis: {"tools", "succeeded", "not_succeeded", "observations", "findings", "actionable", "pending"},
 	SectionMetrics:        {"tools", "observations", "metrics"},
 	SectionSecrets:        {"tools", "detections", "files"},
-	SectionCodeReview:     {"calls", "findings", "actionable", "pending", "refuted"},
+	SectionCodeReview:     {"calls", "files_sent_to_model", "files_not_sent_to_model", "findings", "actionable", "pending", "refuted"},
 	SectionGaps:           {"gaps"},
 }
 
@@ -460,6 +461,9 @@ func newSecView(r Report, digest string, l Locale) secView {
 		}
 		cb.Parts = append(cb.Parts, secPart{Heading: l.Label("review.roles"), Table: rt})
 	}
+	if c.Ledger != nil {
+		cb.Parts = append(cb.Parts, ledgerParts(l, *c.Ledger)...)
+	}
 	cb.Parts = append(cb.Parts, secPart{Heading: l.Label("review.findings"), Findings: pick(c.FindingIDs), Empty: l.Label("review.no_findings")})
 	if len(c.Limits) > 0 {
 		lp := secPart{Heading: l.Label("review.limits"), Model: tf(l, "model.performed_observations", "review.interpret")}
@@ -489,6 +493,47 @@ func newSecView(r Report, digest string, l Locale) secView {
 		}
 	}
 	return v
+}
+
+// ledgerParts render the code review ledger: its header, one row per module
+// and the slice tasks with the modules they hold.
+func ledgerParts(l Locale, x ReviewLedger) []secPart {
+	unknown := l.Label("unknown")
+	scope := lab(l, "task_status", optText(x.Scope.TaskStatus, "-"))
+	if x.Scope.Reason != nil {
+		scope += " — " + reasonText(l, *x.Scope.Reason)
+	}
+	head := secPart{Heading: l.Label("ledger.heading"), Paras: []string{l.Label("ledger.lead"), l.Label("ledger.status." + x.Status),
+		tf(l, "ledger.scope", x.Scope.Key, scope), tf(l, "ledger.calls", optInt(x.CallsUsed, unknown), optInt(x.MaxCalls, unknown)),
+		tf(l, "ledger.bytes", optInt(x.RequestBytesSent, unknown), optInt(x.MaxRequestBytes, unknown))}}
+	mt := &secTable{Head: []string{l.Label("col.module"), l.Label("col.discovered"), l.Label("col.eligible"), l.Label("col.sent"), l.Label("col.bytes_sent"),
+		l.Label("col.truncated"), l.Label("col.withheld"), l.Label("col.unreadable"), l.Label("col.budget_exhausted"), l.Label("col.not_planned"),
+		l.Label("col.not_sent"), l.Label("col.completed")}}
+	var order []string
+	slicesOf := map[string]LedgerSlice{}
+	modulesOf := map[string][]string{}
+	for _, m := range x.Modules {
+		mt.Rows = append(mt.Rows, []secCell{code(m.ModuleID), txt(lab(l, "discovered", strconv.FormatBool(m.Discovered))), num(m.FilesEligible), num(m.FilesSentToModel), num(m.BytesSent), num(m.FilesTruncated),
+			num(m.FilesWithheld), num(m.FilesUnreadable), num(m.FilesBudgetExhausted), num(m.FilesNotPlanned), num(m.FilesNotSent), num(m.FilesWithCompletedReview)})
+		for _, s := range m.Slices {
+			if _, ok := slicesOf[s.TaskKey]; !ok {
+				order = append(order, s.TaskKey)
+				slicesOf[s.TaskKey] = s
+			}
+			modulesOf[s.TaskKey] = append(modulesOf[s.TaskKey], m.ModuleID)
+		}
+	}
+	sort.Strings(order)
+	st := &secTable{Head: []string{l.Label("col.task"), l.Label("col.status"), l.Label("col.reason"), l.Label("col.modules")}}
+	for _, k := range order {
+		s := slicesOf[k]
+		reason := "-"
+		if s.Reason != nil {
+			reason = reasonText(l, *s.Reason)
+		}
+		st.Rows = append(st.Rows, []secCell{code(k), txt(lab(l, "task_status", s.Status)), txt(reason), code(strings.Join(modulesOf[k], ", "))})
+	}
+	return []secPart{head, {Heading: l.Label("ledger.modules"), Table: mt, Empty: l.Label("ledger.none")}, {Heading: l.Label("ledger.slices"), Table: st, Empty: l.Label("ledger.none")}}
 }
 
 func detectionPlace(l Locale, x SecretDetection) string {

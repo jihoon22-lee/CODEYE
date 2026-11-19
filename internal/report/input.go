@@ -200,6 +200,9 @@ type Contribution struct {
 	// Discovery is the accepted env.discover/docs.discover document; only
 	// the sections read it.
 	Discovery *envdoc.Document
+	// Scope is the accepted review scope artifact of review.scope; only the
+	// code review ledger reads it.
+	Scope *record.ScopeDoc
 }
 
 // AnalyzerIdentity is the decoded envelope identity of one analyzer task.
@@ -252,7 +255,7 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 // analyzer envelope, docs/ANALYZERS.md), snapshot-bound review records and
 // discovery documents.
 func DefaultRegistry() *Registry {
-	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, RoleReviewDecoder{}, EnvironmentDecoder{})
+	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, RoleReviewDecoder{}, SliceReviewDecoder{}, ScopeDecoder{}, EnvironmentDecoder{})
 	if err != nil {
 		panic(err)
 	}

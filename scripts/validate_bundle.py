@@ -93,6 +93,12 @@ def main() -> None:
     # (internal/worker/review/report_example_test.go); its evidence hashes bind to that tree.
     modules_root = ROOT / "fixtures/modules/input"
     check_report(report, modules_root)
+    # examples/report-slices.json is the builder's output for fixtures/modules/coverage/input
+    # under call ceiling 15 (internal/worker/review/report_slices_example_test.go): review slices and the ledger.
+    slices_report = json_file(ROOT / "examples/report-slices.json")
+    coverage_root = ROOT / "fixtures/modules/coverage/input"
+    validators["report.schema.json"].validate(slices_report)
+    check_report(slices_report, coverage_root)
     published = json_file(ROOT / "examples/report-go-vet.json")
     validators["report.schema.json"].validate(published)
     check_report(published, ROOT / "fixtures/go-vet")
@@ -239,6 +245,34 @@ def main() -> None:
     bad = copy.deepcopy(published)
     bad["gaps"] = []
     expect_invalid("flat revision with a sections block", lambda d: check_report(d, ROOT / "fixtures/go-vet"), bad)
+    # Review slices and the ledger (docs/REPORT.md#모듈별-검토-장부).
+    ensure("ledger" in slices_report["code_review"] and "ledger" not in report["code_review"], "Ledger presence of the report examples")
+    store = lambda d: next(m for m in d["code_review"]["ledger"]["modules"] if m["module_id"] == "go:store")
+    ledger_cases = {
+        "ledger files that do not add up": lambda d: store(d).update(files_sent_to_model=store(d)["files_sent_to_model"] + 1),
+        "ledger status not following its rows": lambda d: d["code_review"]["ledger"].update(status="complete"),
+        "ledger dropped while review.scope ran": lambda d: d["code_review"].pop("ledger"),
+        "ledger slice differs from its task": lambda d: store(d)["slices"][0].update(status="failed"),
+        "ledger counts fewer calls than listed": lambda d: d["code_review"]["ledger"].update(calls_used=1),
+        "ledger request bytes differ": lambda d: d["code_review"]["ledger"].update(request_bytes_sent=1),
+        "review call naming another role's task": lambda d: d["coverage"]["review_calls"][0].update(task_key="review.verify.s001"),
+        "slice finding of an unplanned slice": lambda d: [f.update(id="review_s031_x") for f in d["findings"] if f["id"].startswith("review_s001_")],
+        "overview scope not from the ledger": lambda d: next(s for s in d["overview"]["sections"] if s["key"] == "code_review")["counts"].update(files_sent_to_model=0),
+    }
+    for name, edit in ledger_cases.items():
+        bad = copy.deepcopy(slices_report)
+        edit(bad)
+        expect_invalid(name, lambda d: check_report(d, coverage_root), bad)
+    for name, edit in {"ledger with an invalid ceiling": lambda d: d["code_review"]["ledger"].update(max_calls=14),
+                       "ledger with an unknown status": lambda d: d["code_review"]["ledger"].update(status="verified"),
+                       "review call with an invalid task key": lambda d: d["coverage"]["review_calls"][0].update(task_key="review.scope")}.items():
+        bad = copy.deepcopy(slices_report)
+        edit(bad)
+        expect_invalid(name, validators["report.schema.json"].validate, bad)
+    bad = copy.deepcopy(report)
+    bad["builder"]["version"] = "5"
+    bad["coverage"]["review_calls"][0]["task_key"] = "review.environment"
+    expect_invalid("builder-5 revision with a review call task key", lambda d: check_report(d, modules_root), bad)
     bad = copy.deepcopy(plan)
     bad["tasks"][0]["depends_on"] = [bad["tasks"][-1]["id"]]
     expect_invalid("cyclic plan", check_plan, bad)
@@ -297,12 +331,12 @@ def main() -> None:
         {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome", "pack_id", "pack_version")}
         for stage in ROLE_STAGES for call in role_docs[stage]["calls"]]
     validators["report.schema.json"].validate(role_calls)
-    # Five review-r1 stages of up to three calls each fit the report; more do not.
+    # The largest call ceiling (207: five whole-run roles and 32 slice pairs of up to three calls each) fits the report; more do not.
     most = copy.deepcopy(role_calls)
-    most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(15)]
+    most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(207)]
     validators["report.schema.json"].validate(most)
     most["coverage"]["review_calls"].append(dict(role_calls["coverage"]["review_calls"][0]))
-    expect_invalid("report with 16 review calls", validators["report.schema.json"].validate, most)
+    expect_invalid("report with 208 review calls", validators["report.schema.json"].validate, most)
     role_calls["coverage"]["review_calls"][0]["pack_version"] = "2.0.0 rc1"
     expect_invalid("invalid report pack version", validators["report.schema.json"].validate, role_calls)
 

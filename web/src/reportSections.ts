@@ -74,9 +74,77 @@ export type Sections = {
     roles: { key: string; status: string | null; result: string; reason: string | null }[];
     findings: string[];
     limits: { statement: string; observations: string[] }[];
+    // The per-module review ledger (builder 6), null when no slice was planned.
+    ledger: Ledger | null;
   };
   gaps: { section: string; code: string; subject: string | null; detail: string | null }[];
 };
+
+export type LedgerModule = {
+  id: string;
+  discovered: boolean;
+  eligible: number;
+  sent: number;
+  bytesSent: number;
+  truncated: number;
+  withheld: number;
+  unreadable: number;
+  budgetExhausted: number;
+  notPlanned: number;
+  notSent: number;
+  completed: number;
+  slices: { task: string; status: string; reason: string | null }[];
+};
+
+export type Ledger = {
+  scope: { key: string; status: string | null; result: string; reason: string | null };
+  maxCalls: number | null;
+  maxRequestBytes: number | null;
+  callsUsed: number | null;
+  requestBytesSent: number | null;
+  status: string;
+  modules: LedgerModule[];
+};
+
+function parseLedger(v: unknown): Ledger | null {
+  if (v == null) return null;
+  const l = object(v);
+  const s = object(l.scope);
+  const out: Ledger = {
+    scope: { key: str(s.key), status: nullable(s.task_status), result: str(s.result), reason: nullable(s.reason) },
+    maxCalls: optCount(l.max_calls),
+    maxRequestBytes: optCount(l.max_request_bytes),
+    callsUsed: optCount(l.calls_used),
+    requestBytesSent: optCount(l.request_bytes_sent),
+    status: str(l.status),
+    modules: array(l.modules, (m) => {
+      const x = object(m);
+      return {
+        id: str(x.module_id),
+        discovered: bool(x.discovered),
+        eligible: count(x.files_eligible),
+        sent: count(x.files_sent_to_model),
+        bytesSent: count(x.bytes_sent),
+        truncated: count(x.files_truncated),
+        withheld: count(x.files_withheld),
+        unreadable: count(x.files_unreadable),
+        budgetExhausted: count(x.files_budget_exhausted),
+        notPlanned: count(x.files_not_planned),
+        notSent: count(x.files_not_sent),
+        completed: count(x.files_with_completed_review),
+        slices: array(x.slices, (e) => {
+          const y = object(e);
+          return { task: str(y.task_key), status: str(y.status), reason: nullable(y.reason) };
+        }),
+      };
+    }),
+  };
+  // Each module's files are counted once.
+  for (const m of out.modules) {
+    if (m.sent + m.withheld + m.unreadable + m.budgetExhausted + m.notPlanned + m.notSent !== m.eligible || m.completed > m.sent) invalid();
+  }
+  return out;
+}
 
 const invalid = (): never => {
   throw new TypeError('invalid report');
@@ -311,6 +379,7 @@ export function parseSections(
         const x = object(v);
         return { statement: str(x.statement), observations: array(x.observation_ids, str) };
       }),
+      ledger: parseLedger(cr.ledger),
     },
     gaps: array(r.gaps ?? [], (v) => {
       const x = object(v);
@@ -330,5 +399,12 @@ export function parseSections(
   const sectionCount = (key: string, name: string) => out.overview.find((s) => s.key === key)?.counts[name] ?? invalid();
   if (sectionCount('static_analysis', 'findings') + sectionCount('code_review', 'findings') !== totalFindings) invalid();
   if (sectionCount('gaps', 'gaps') !== out.gaps.length) invalid();
+  const ledger = out.codeReview.ledger;
+  if (ledger !== null && ledger.modules.length > 0) {
+    // The overview's reviewed scope is the ledger's: files sent to the model.
+    const sent = ledger.modules.reduce((n, m) => n + m.sent, 0);
+    const eligible = ledger.modules.reduce((n, m) => n + m.eligible, 0);
+    if (sectionCount('code_review', 'files_sent_to_model') !== sent || sectionCount('code_review', 'files_not_sent_to_model') !== eligible - sent) invalid();
+  }
   return out;
 }
