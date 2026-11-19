@@ -178,8 +178,18 @@ func TestDependenciesNotFetchedGap(t *testing.T) {
 		t.Fatalf("gap although a deps task ran: %+v", g)
 	}
 	pinned := false
-	r.Environment.Dependencies = []EnvDependency{{TaskKey: "deps.go", TaskStatus: "succeeded", Ecosystem: &goEco, Pinned: &pinned}}
+	prepared := "prepared"
+	r.Environment.Dependencies = []EnvDependency{{TaskKey: "deps.go", TaskStatus: "succeeded", Ecosystem: &goEco, Pinned: &pinned, State: &prepared}}
 	if g := collect([]string{"deps.go", "go-vet"}); len(g) != 1 || g[0].Code != GapVersionsNotPinned {
 		t.Fatalf("gaps %+v", g)
+	}
+	// A task skipped before it read the lockfile fetched nothing: no
+	// versions were picked.
+	skipped, notAllowed, rustEco := "skipped", "dependency_consumers_not_allowed", "rust"
+	r.Environment.Dependencies = []EnvDependency{{TaskKey: "deps.rust", TaskStatus: "skipped_policy", TaskReason: &notAllowed, Ecosystem: &rustEco, Pinned: &pinned, State: &skipped}}
+	for _, g := range collect([]string{"deps.rust"}) {
+		if g.Code == GapVersionsNotPinned || g.Code == GapDependenciesNotPrepared {
+			t.Fatalf("skipped task gap %s", g.Code)
+		}
 	}
 }

@@ -94,7 +94,10 @@ func (c sectionContext) dependencyGaps(add func(section, code string, subject, d
 		if d.TaskStatus != string(domain.TaskSucceeded) && !nothing {
 			add(SectionEnvironment, GapDependenciesNotPrepared, strPtr(d.TaskKey), d.TaskReason)
 		}
-		if d.Pinned != nil && !*d.Pinned || hasCode(d.Limitations, depdoc.LimVersionsNotPinned) {
+		// Versions are "picked this time" only when something was fetched:
+		// a task skipped before it read the lockfile records pinned false.
+		fetchedAny := d.State != nil && (*d.State == depdoc.StatePrepared || *d.State == depdoc.StatePartial)
+		if fetchedAny && (d.Pinned != nil && !*d.Pinned || hasCode(d.Limitations, depdoc.LimVersionsNotPinned)) {
 			add(SectionEnvironment, GapVersionsNotPinned, strPtr(d.TaskKey), nil)
 		}
 	}
