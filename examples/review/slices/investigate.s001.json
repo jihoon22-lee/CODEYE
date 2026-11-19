@@ -19,17 +19,17 @@
     {
       "source": "review.environment",
       "state": "accepted",
-      "sha256": "59f60b25f17d2081885a7f3d76d824d4380e8d4102d311773b49fba3ef9fa86c"
+      "sha256": "5cd07e6b04801b4637aea64837480e3a402da629d889ce4dd8d669b1dea08fe9"
     },
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "63f7e55a80211b8456a0d14f00928c1e91ddc44bf87fd1ecc4412d4ac576183a"
+      "sha256": "d2bff47a7f52109ebc062d8409d565c96d2e20f12363a4b49059bf44b739a2c6"
     },
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "d4716c71f3cbbf1a8d7d1bb8041edc56129e317b539787ef85f59bc1598da96c"
+      "sha256": "14f887b48b112fca7a1ceb02a95d2441a52efe9ef1ad2c1a145c1df7b38f8c10"
     }
   ],
   "evidence": [
@@ -113,7 +113,7 @@
       "opencode_version": "1.19.5",
       "pack_id": "review",
       "pack_version": "2.0.0",
-      "pack_sha256": "79c8ebadf3ddbe6e7433fa0efd833cd1259a82e4f55a19b0bdbefd487095cfcc",
+      "pack_sha256": "9f5b70b0bb0b40915c873798f05207077025eca919e21a5bd5726fd00c17fcf6",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -123,8 +123,8 @@
         "languages/python.md",
         "pack.yaml"
       ],
-      "request_sha256": "ac8c364e721399493131380d0077887ee7f72bb81f3f961f071605ac6426cf45",
-      "request_bytes": 23193,
+      "request_sha256": "cbb08f237503c4e6241f700a6f22f7e38c760932e2484cb046749359a9f042ec",
+      "request_bytes": 23183,
       "usage": {
         "input": 10560,
         "output": 50

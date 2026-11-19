@@ -13,17 +13,17 @@
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "d2444baf140ccb74fa9b8b8b2a25e572ccea5ab65ce9e7db991b9570991e2e91"
+      "sha256": "8c31f1e9edebf2871e8ceaee64c3e5227caf08ba59c2729fa424a8d434eca8dd"
     },
     {
       "source": "review.investigate",
       "state": "accepted",
-      "sha256": "de0e6c44a2c3ba9170186a0d6ce94dd8d6763406241f8e870ab9acdd47759be0"
+      "sha256": "df722ff0857b9e83eb254ebc6e255cd6e08c1501124192abd4a7591814b58bb7"
     },
     {
       "source": "review.interpret",
       "state": "accepted",
-      "sha256": "67ef9166b3be01c5e642396e95f79f57b852450d4fdae4c910b659c681409861"
+      "sha256": "51502d391ae128c03416517913cf0fce632f4a92bb9477bbd6a141493ebb65a9"
     }
   ],
   "evidence": [
@@ -177,7 +177,7 @@
       "opencode_version": "1.19.5",
       "pack_id": "review",
       "pack_version": "2.0.0",
-      "pack_sha256": "a00e5558f1200d2adb89e28e7fb65f1d7268a32479692e14f4c2d5478ce92d36",
+      "pack_sha256": "341a3ded2a1fee8b7e55c97e4ab4dd14cea8cd44b6772ecb6ffa3f6c8408b042",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -185,8 +185,8 @@
         "pack.yaml",
         "verify.md"
       ],
-      "request_sha256": "cdec3c01254cdc08ac13127e533470242a28018a41c91ecd0b524eb1118c0e0e",
-      "request_bytes": 14704,
+      "request_sha256": "8985bc5ce208e669e2fc42ce0ccbed5fd2abe04a23af2d4194489335eeb4857e",
+      "request_bytes": 14694,
       "usage": {
         "input": 4879,
         "output": 50

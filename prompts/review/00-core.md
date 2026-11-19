@@ -1,4 +1,4 @@
-# CODEYE Review Pack r1 후보 — 공통 지침
+# CODEYE 코드 검토 — 공통 지침
 
 ## 임무
 

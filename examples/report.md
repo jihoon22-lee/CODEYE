@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `d8ceab308a09` |
+| digest | `4153a5d0a1f8` |
 | status | `partial` |
 | quality\_verdict | `attention_required` 품질 판정은 안전 인증이 아니다\. |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -80,7 +80,7 @@
 
 모델 호출 5회, 그중 수락 5회\(환경·문서 역할 호출 포함, 전체 합계\)\.
 
-모델 요청 크기 합계 61504바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
+모델 요청 크기 합계 61454바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
 
 모델에 보낸 파일 6개 / snapshot 파일 10개\.
 
@@ -427,4 +427,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 - 비밀값이 탐지된 파일은 모델 입력에서 뺐다\.
 - tools\_outside\_interpret\_input
 
-digest sha256: `d8ceab308a09d34d1804fefd6c7d6b78398c81e43eb0abcc2221401db6bf10dc`
+digest sha256: `4153a5d0a1f817fad27b8c9a2686bd468acf48d469d467c21c799f3fbe3b9114`

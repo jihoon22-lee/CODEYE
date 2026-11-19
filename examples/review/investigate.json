@@ -13,12 +13,12 @@
     {
       "source": "review.environment",
       "state": "accepted",
-      "sha256": "e3b536a19e3a2c7dc46a96b17dc3b78c935c862af76ba2d8fddedb71c10dd92c"
+      "sha256": "0e7c192ea664f83f3085e7ccb00f632c9352b27bb4973b74cf5b26cef86285b3"
     },
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "d2444baf140ccb74fa9b8b8b2a25e572ccea5ab65ce9e7db991b9570991e2e91"
+      "sha256": "8c31f1e9edebf2871e8ceaee64c3e5227caf08ba59c2729fa424a8d434eca8dd"
     }
   ],
   "evidence": [
@@ -92,7 +92,7 @@
       "opencode_version": "1.19.5",
       "pack_id": "review",
       "pack_version": "2.0.0",
-      "pack_sha256": "6f6633fc548de8bf3b5ac2fa3f55b6247f1e685da466a62876e189f034b78bc0",
+      "pack_sha256": "dd822bc381885cd3d30272b49a5c31249b6f6ad74bd4a569ecce0231dd832d81",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -100,8 +100,8 @@
         "languages/go.md",
         "pack.yaml"
       ],
-      "request_sha256": "ab608de38e7082af5d4a81ad9214c58d57ff8174ffa689197587f2a4e1218622",
-      "request_bytes": 12290,
+      "request_sha256": "136a414ba8d8c5aadd20e8cc2dfbfc3677794ac17f98c35d2e7b51f64dd86bab",
+      "request_bytes": 12280,
       "usage": {
         "input": 3401,
         "output": 50

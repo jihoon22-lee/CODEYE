@@ -56,7 +56,7 @@
     {
       "source": "review.investigate",
       "state": "accepted",
-      "sha256": "581e6969b03881794dfbf9be5aa01333bf5bee9bcd5814348e5bd74e9d394292"
+      "sha256": "4dcb31cce169a407700df594467364dc8d6fee5ed8ae7f6165a8918975edf495"
     }
   ],
   "modules": [

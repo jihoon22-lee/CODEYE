@@ -181,11 +181,11 @@ func mustEmbedded(t *testing.T, name string) []byte {
 // changing an instruction byte changes them together.
 func TestGoSelectionDigestsPinned(t *testing.T) {
 	want := map[string]string{
-		"environment": "cfb76d320b8c7ca02ddd783226bb8295c23967ada17813facf0b590dd19f847a",
-		"documents":   "f0367ce17908e65c5e7f382ee1cd708e03ffdd34932067d42fcff7cae5d5f0a7",
-		"investigate": "6f6633fc548de8bf3b5ac2fa3f55b6247f1e685da466a62876e189f034b78bc0",
-		"interpret":   "5bc7a9ae016e7a07585ac7c156250156dc857934283dbdd2e3b255b72f93d322",
-		"verify":      "a00e5558f1200d2adb89e28e7fb65f1d7268a32479692e14f4c2d5478ce92d36",
+		"environment": "ac3da059a7fd12bbba9c509ed2e8e8001a0d503f7e587482b9e01b64b73e5e28",
+		"documents":   "fd045083f15afc63f2c62693e70e478325094b4851263c62e6f156448801ff71",
+		"investigate": "dd822bc381885cd3d30272b49a5c31249b6f6ad74bd4a569ecce0231dd832d81",
+		"interpret":   "fc6bb92311068dbeff34bcf2da829ef8b72b2e87f22f53d8f7e05356d70555cf",
+		"verify":      "341a3ded2a1fee8b7e55c97e4ab4dd14cea8cd44b6772ecb6ffa3f6c8408b042",
 	}
 	for _, role := range Roles {
 		s, err := For(role, []string{"go"})
