@@ -358,9 +358,6 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 		if r.RepositoryCode {
 			args = append(args, "--repo-code-source-root", r.ID)
 		}
-		if r.ModelReview {
-			args = append(args, "--model-source-root", r.ID)
-		}
 	}
 	if a.Go != "" {
 		args = append(args, "--go", a.Go)
@@ -379,18 +376,9 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	if a.PythonBothTypeCheckers {
 		args = append(args, "--python-both-type-checkers")
 	}
-	if m := a.Model; m != nil {
-		args = append(args, "--opencode", m.OpenCode, "--model", m.Name)
-		if m.RelayFile != "" {
-			args = append(args, "--model-relay-file", m.RelayFile)
-		}
-		if m.ReviewPack != "" {
-			args = append(args, "--review-pack", m.ReviewPack)
-		}
-		if m.ReviewMaxCalls != 0 {
-			args = append(args, "--review-max-calls", strconv.Itoa(m.ReviewMaxCalls))
-		}
-	}
+	// The model, its credential file and the per-root model-review grants
+	// (personal_model.go).
+	args = append(args, modelAgentArgs(cfg, layout, roots)...)
 	limits := cfg.Quota.NodeLimits()
 	areas := make([]string, 0, len(limits))
 	for area := range limits {

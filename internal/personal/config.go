@@ -21,6 +21,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -64,9 +65,10 @@ type SourceRoot struct {
 	// RepositoryCode grants analyzers that execute repository code
 	// (docs/ANALYZERS.md#저장소-코드-실행-허가) for this root. Default false.
 	RepositoryCode bool `json:"repository_code,omitempty"`
-	// ModelReview approves sending this root's code to the configured model
-	// (agent.model). Default false.
-	ModelReview bool `json:"model_review,omitempty"`
+	// ModelReview approves sending this root's code to the configured model.
+	// Unset means approved whenever a model is configured (agent.model or a
+	// model credential); false keeps this root's code away from the model.
+	ModelReview *bool `json:"model_review,omitempty"`
 }
 
 // Agent configures the local node agent (codeye agent flags, docs/EXECUTION.md).
@@ -81,13 +83,21 @@ type Agent struct {
 	Model                  *Model            `json:"model,omitempty"`
 }
 
-// Model is the optional review model (an approved relay file or OpenCode).
-// Without it the review stage is skipped, never replaced by another model.
+// Model is the optional review model (docs/REVIEW.md#모델-설정). Every field
+// may be empty: the API key comes from a credential file (credential_file,
+// <state>/secrets/model.json or OpenCode's auth.json), the model from
+// name or the provider's default, OpenCode from ~/.opencode/bin or PATH.
+// Without any model the review stage is skipped, never replaced by another model.
 type Model struct {
-	OpenCode   string `json:"opencode"`
-	Name       string `json:"name"`
-	RelayFile  string `json:"relay_file,omitempty"`
-	ReviewPack string `json:"review_pack,omitempty"`
+	OpenCode string `json:"opencode,omitempty"`
+	// Name is PROVIDER/MODEL, or a model name of the credential's provider.
+	Name string `json:"name,omitempty"`
+	// CredentialFile is a CODEYE model credential or an OpenCode auth.json.
+	CredentialFile string `json:"credential_file,omitempty"`
+	RelayFile      string `json:"relay_file,omitempty"`
+	// TimeoutSeconds bounds one model call (default 180, 1..1800).
+	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
+	ReviewPack     string `json:"review_pack,omitempty"`
 	// ReviewMaxCalls is the model call ceiling per review attempt
 	// (codeye agent --review-max-calls); 0 means the default.
 	ReviewMaxCalls int `json:"review_max_calls,omitempty"`
@@ -265,9 +275,6 @@ func (c *Config) validate(knownTools []string) error {
 			return errors.New("source_roots labels and paths must be unique")
 		}
 		labels[label], paths[r.Path] = true, true
-		if r.ModelReview && c.Agent.Model == nil {
-			return errors.New("source_roots[].model_review needs agent.model")
-		}
 		if within(r.Path, c.StateDir) || within(c.StateDir, r.Path) {
 			return errors.New("a source root and state_dir must not contain each other")
 		}
@@ -310,11 +317,22 @@ func (c *Config) validate(knownTools []string) error {
 		}
 	}
 	if m := a.Model; m != nil {
-		if !absClean(m.OpenCode) || m.Name == "" || strings.ContainsAny(m.Name, " \t\r\n") {
-			return errors.New("agent.model needs an absolute opencode path and a PROVIDER/MODEL name")
+		if m.OpenCode != "" && !absClean(m.OpenCode) {
+			return errors.New("agent.model.opencode must be an absolute, clean path")
 		}
-		if m.RelayFile != "" && !absClean(m.RelayFile) {
-			return errors.New("agent.model.relay_file must be an absolute, clean path")
+		if m.Name != "" && !executor.ValidOpenCodeModel(m.Name) && (strings.Contains(m.Name, "/") || !executor.ValidOpenCodeModel("p/"+m.Name)) {
+			return errors.New("agent.model.name must be PROVIDER/MODEL or a model name (no spaces)")
+		}
+		for name, p := range map[string]string{"agent.model.relay_file": m.RelayFile, "agent.model.credential_file": m.CredentialFile} {
+			if p != "" && !absClean(p) {
+				return fmt.Errorf("%s must be an absolute, clean path", name)
+			}
+		}
+		if m.RelayFile != "" && m.CredentialFile != "" {
+			return errors.New("agent.model.relay_file and agent.model.credential_file are alternatives")
+		}
+		if m.TimeoutSeconds < 0 || m.TimeoutSeconds > 1800 {
+			return errors.New("agent.model.timeout_seconds must be 1..1800 (0 = 180)")
 		}
 		if m.ReviewPack != "" && m.ReviewPack != "review-r1" && m.ReviewPack != "review-v1" {
 			return errors.New("agent.model.review_pack must be review-r1 (default) or review-v1 (legacy)")
