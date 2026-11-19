@@ -161,7 +161,7 @@ func TestRealESLintClean(t *testing.T) {
 // A file ESLint cannot parse is a fatal message (exit 1): ESLint lints the
 // other file, so the task succeeds with that file's observations, the parse
 // error as the broken file's observation, the broken file left out of the
-// processed files and unparsable_files_not_analyzed (TC-202).
+// processed files and unparsable_files_not_analyzed (TC-193).
 func TestRealESLintParseError(t *testing.T) {
 	a := newReal(t, false)
 	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"index.js": fixBroken, "ok.js": "const unused = 1;\n"}), domain.Scope{})

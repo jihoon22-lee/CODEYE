@@ -324,7 +324,7 @@ func TestReplayMypyUnparsableFiles(t *testing.T) {
 
 // mypy's reruns without the unparsable files share the task's one time
 // limit: a rerun gets only what is left, and when nothing is left the task
-// times out with the syntax errors found so far (TC-201).
+// times out with the syntax errors found so far (TC-192).
 func TestReplayMypyRerunsShareTimeLimit(t *testing.T) {
 	const limit = 2 * time.Second
 	dir := t.TempDir()

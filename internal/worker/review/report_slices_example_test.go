@@ -153,7 +153,7 @@ func TestReportSlicesUnscreened(t *testing.T) {
 	writeOrCompare(t, r, "../../report/testdata/report-unscreened.json")
 }
 
-// TC-199: a secrets task that ran but whose result is unusable (here a
+// TC-190: a secrets task that ran but whose result is unusable (here a
 // failed scan, as after workspace drift) is no screen. The whole-run roles,
 // the scope and the slices run and are accepted, no review task is skipped
 // for the screen, the records say model_input_not_secret_screened, the

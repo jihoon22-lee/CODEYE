@@ -278,7 +278,8 @@ func TestLegacyPackSecretScreen(t *testing.T) {
 // A secrets scan that failed after reporting a detection (partial parse) is
 // no screen, but what it reported is not thrown away: the flagged file
 // reaches no model input in either pack, the other files are sent, and the
-// records carry model_input_not_secret_screened (and secret_files_withheld).
+// records carry model_input_not_secret_screened (and secret_files_withheld)
+// (TC-190).
 func TestPartialSecretScanStillWithholdsFlaggedFiles(t *testing.T) {
 	j, value := plantedJob(t)
 	script := validScript(t)

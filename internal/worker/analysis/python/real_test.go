@@ -257,7 +257,7 @@ func checkRuffSyntaxError(t *testing.T, r realRun) {
 	checkUnparsable(t, r, "invalid-syntax", []string{"ok.py"}, "broken.py")
 }
 
-// TC-200: two unparsable files (a syntax error and Python 2 print) next to a
+// TC-191: two unparsable files (a syntax error and Python 2 print) next to a
 // healthy file with a real finding: the finding stands, each broken file is
 // one syntax observation and a syntax_error unit.
 func TestRealRuffUnparsableFiles(t *testing.T) {
@@ -400,7 +400,7 @@ func checkMypySyntaxError(t *testing.T, r realRun) {
 	wantExecutions(t, r.doc, "mypy.version", "mypy.check", "mypy.check.r01")
 }
 
-// TC-200 for mypy: one rerun per unparsable file, then the type check of the
+// TC-191 for mypy: one rerun per unparsable file, then the type check of the
 // rest with its real finding.
 func TestRealMypyUnparsableFiles(t *testing.T) {
 	checkMypyUnparsable(t, runReal(t, newMypyT(t), "syntaxmix", "mypy"))
@@ -542,7 +542,7 @@ func checkPyrightSyntaxError(t *testing.T, a *Pyright, r realRun) {
 	checkUnparsable(t, r, PyrightSyntaxRule, []string{"ok.py"}, "broken.py")
 }
 
-// TC-200 for pyright: it checks every file in one run; the parser errors of
+// TC-191 for pyright: it checks every file in one run; the parser errors of
 // each broken file become one observation, the rest stands.
 func TestRealPyrightUnparsableFiles(t *testing.T) {
 	a := newPyrightT(t)
@@ -645,7 +645,7 @@ func checkBanditSyntaxError(t *testing.T, r realRun) {
 	checkUnparsable(t, r, "", []string{"ok.py"}, "broken.py")
 }
 
-// TC-200 for bandit.
+// TC-191 for bandit.
 func TestRealBanditUnparsableFiles(t *testing.T) {
 	checkBanditUnparsable(t, runReal(t, newBanditT(t), "syntaxmix", "bandit"))
 }

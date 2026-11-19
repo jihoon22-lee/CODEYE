@@ -65,7 +65,7 @@ func (leftoverHandler) Run(ctx context.Context, job analysis.Job, task analysis.
 	return out
 }
 
-// TC-198: a task that rewrites a manifest file and leaves files behind does
+// TC-189: a task that rewrites a manifest file and leaves files behind does
 // not fail the next task that reads the whole tree: the worker restores the
 // workspace to the snapshot after every task and names the task that left
 // changes. A manifest file a task changes during its own run is still that

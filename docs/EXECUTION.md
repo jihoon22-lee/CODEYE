@@ -259,7 +259,7 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 2. 소스 확보, 또는 고정 snapshot이면 `Load`+`CloneWorkspace`. 고정 snapshot은 다시 가져오지 않는다. 보유하지 않으면 `snapshot_unavailable`이다.
 3. intent done → `source_manifest` artifact → `snapshot_fixed` 이벤트.
 4. `Plan` → `task_created` × n → `run_advance running`.
-5. task마다 `running` → handler 실행 → stdout·stderr·artifact 업로드 → 종료 상태.
+5. task마다 `running` → handler 실행 → 작업 사본을 스냅샷 내용으로 되돌림 → stdout·stderr·artifact 업로드 → 종료 상태. 되돌리기는 바뀐 manifest 파일을 스냅샷에서 다시 쓰고 manifest에 없는 항목(숨김 이름·`node_modules`·`vendor`·`testdata` 제외)을 지운다. 바꾼 것이 있으면 그 task에 `workspace_restored_after_task`·`workspace_leftovers_removed`, 실패하면 `workspace_restore_failed`를 남긴다([분석기](ANALYZERS.md#실행-규칙)).
 6. 취소·lease 상실이 없을 때만 `run_advance finalizing` → `result_manifest` artifact → `complete`.
 
 ### runner 감싸기

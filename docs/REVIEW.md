@@ -98,7 +98,7 @@
 | `no_documents` | 스냅샷 범위에 문서가 없어 문서 역할 생략 | 아니오 |
 | `no_tool_observations` | 해석할 도구 관찰이 없어 진단 해석 생략 | 아니오 |
 | `no_environment_gap` | 모든 선언이 관측과 일치해 환경 해석 생략 | 아니오 |
-| `secret_screen_failed` | 비밀값 분석이 실행됐지만 결과를 쓸 수 없음(아래 비밀값 선별) | 아니오 |
+| `secret_screen_failed` | 이전 worker만 쓴 사유: 비밀값 분석이 실행됐지만 결과를 쓸 수 없어 검토를 건너뜀. 지금은 미선별로 검토한다(아래 비밀값 선별) | 아니오 |
 | `no_review_scope` | slice의 파일을 overview가 이미 보냈거나 모두 보류·읽기 불가([모듈 단위 검토 분할](#모듈-단위-검토-분할)) | 아니오 |
 
 필수 여부는 계획 시 정한다. 문서가 없어 생략한 문서 역할을 모델 검토 성공으로 세지 않는다. 필수 모델 작업이 실패했으면 도구 결과가 남아도 검토 전체를 완료로 올리지 않는다. 진행 단계 판정에서 이 생략을 어떻게 셈하는지는 [구조](ARCHITECTURE.md)에 있다.
@@ -245,9 +245,9 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ### 비밀값 선별과 판단 순서
 
-- `review.scope`와 slice는 전체 역할과 같은 선별 규칙을 따른다. 선별이 끝났으면 보고된 파일을 `withheld`로 빼고, 선별이 계획되지 않았거나 실행되지 않았으면(gitleaks 미설정) 기본 읽기 필터만 거친 입력으로 실행한다. 이때 범위 산출물은 `screen: not_screened`이고 범위 산출물과 모든 slice 기록이 `model_input_not_secret_screened`를 싣는다. 보고서는 비밀정보 절 `model_input`을 미선별로 보이고 공백 `model_input_not_screened`를 남긴다. 선별이 실행됐지만 결과를 쓸 수 없으면 `skipped_policy`(`secret_screen_failed`)이고 요청을 보내지 않는다.
+- `review.scope`와 slice는 전체 역할과 같은 선별 규칙을 따른다. 선별이 끝났으면 보고된 파일을 `withheld`로 빼고, 선별이 계획되지 않았거나 실행되지 않았으면(gitleaks 미설정) 기본 읽기 필터만 거친 입력으로 실행한다. 이때 범위 산출물은 `screen: not_screened`이고 범위 산출물과 모든 slice 기록이 `model_input_not_secret_screened`를 싣는다. 보고서는 비밀정보 절 `model_input`을 미선별로 보이고 공백 `model_input_not_screened`를 남긴다. 선별이 실행됐지만 결과를 쓸 수 없어도 같은 미선별 입력으로 실행하되, 읽을 수 있는 결과가 보고한 파일은 계속 `withheld`로 뺀다.
 - 선별은 task마다 시작할 때 다시 읽는다. slice 발췌도 같은 읽기 경로를 지나므로 보류 파일과 민감값 패턴 필터를 똑같이 받는다.
-- slice task의 판단 순서: 모델 전송 허가 → 선별 결과를 쓸 수 있음(아니면 `secret_screen_failed`) → 범위 산출물을 읽을 수 있음(아니면 `dependency_failed`) → 보낼 파일이 남음(아니면 `no_review_scope`) → 호출 상한. 보낼 파일이 없는 slice는 상한이 다해도 `no_review_scope`다.
+- slice task의 판단 순서: 모델 전송 허가 → 범위 산출물을 읽을 수 있음(아니면 `dependency_failed`) → 보낼 파일이 남음(아니면 `no_review_scope`) → 호출 상한. 보낼 파일이 없는 slice는 상한이 다해도 `no_review_scope`다.
 
 ### 범위 산출물
 
@@ -274,7 +274,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 | 비밀값 task 결과 | 처리 |
 |---|---|
 | 계획되지 않았거나 미실행(`unsupported`/`not_run`) | 선별 없이 보낸다. 기록과 보고서에 `model_input_not_secret_screened`를 남긴다. 조용히 넘어가지 않는다 |
-| 실행됐지만 쓸 수 없음(실패, 시간 초과, 취소, 부분 파싱, 산출물 누락·무효) | fail closed. 역할을 `skipped_policy`(`secret_screen_failed`)로 끝내고 어떤 요청도 보내지 않는다 |
+| 실행됐지만 쓸 수 없음(실패, 시간 초과, 취소, 부분 파싱, 산출물 누락·무효) | 검토를 건너뛰지 않는다. 지금까지 읽은 결과와 해석되는 실패·부분 envelope의 관찰 경로가 가리키는 파일은 계속 뺀다(`secret_files_withheld`). 나머지는 기본 읽기 필터만 거쳐 보내고 `model_input_not_secret_screened`를 남긴다. 아무것도 읽을 수 없을 때만 빼는 파일이 없다. 보고서는 미선별과 쓸 수 없던 작업·사유를 적는다 |
 | 완전한 파싱으로 성공 | 보고된 파일을 모든 발췌(코드 문맥, 문서, 관찰 창, 검증 확장)에서 뺀다. `secret_files_withheld`를 남긴다 |
 
 - 모든 발췌는 같은 읽기 경로(`readLines`, review-v1은 `buildScreenedCorpus`)를 지나므로 새 입력 종류도 같은 선별을 받는다.
@@ -323,7 +323,6 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 | 상황 | task 상태(사유) |
 |---|---|
 | 모델 전송 미승인 | `skipped_policy`(`model_source_not_approved`) |
-| 비밀값 선별 결과를 쓸 수 없음 | `skipped_policy`(`secret_screen_failed`) |
 | slice에 보낼 파일이 없음 | `skipped_policy`(`no_review_scope`) |
 | 호출 상한으로 slice 거절 | `budget_exhausted`(`review_budget_exhausted`) |
 | 호출 계수를 쓰거나 읽지 못함 | `failed`(`review_call_count_failed`) |
