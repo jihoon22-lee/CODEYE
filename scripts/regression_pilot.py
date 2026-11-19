@@ -173,8 +173,11 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
     are expected rather than failures, and are listed in dry_run_expected: a
     review task the fake upstream's reply fails (review_output_invalid; its
     exposure is then unknown) and a required analyzer this host has not
-    configured (tool_not_configured). Any other cause still fails, and a
-    paid run gets no exception. Returns the failures and the pilot's numbers."""
+    configured (tool_not_configured). The two usually come together: with the
+    pilot's analyzers missing, review.interpret gets no observation, and the
+    fake's interpret reply then has no item to give. Any other cause still
+    fails, and a paid run gets no exception. Returns the failures and the
+    pilot's numbers."""
     from bundle_checks.review import role_pack
 
     _, roles = role_pack(("go",))
