@@ -4,6 +4,16 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — 폐쇄망 배포팩, 오프라인 모드, 사내 CA
+
+- **배포팩**: `scripts/offline_pack.py build`가 정적 링크 실행 파일(CGO 없음, interpreter·dynamic section이 있으면 실패), `web/dist`, 사용 안내서·운영 문서, 오프라인 설정 예시, `INSTALL.md`, `MANIFEST.json`(버전·commit·빌드 시각·OS/arch·Go·Node 버전, 실행 파일에 든 migration·지침 팩의 hash, 모든 파일의 sha256), `SHA256SUMS`를 묶음 하나(linux/amd64 약 8 MB)로 만든다. 같은 commit·toolchain이면 바이트가 같다. `verify`가 바뀐·빠진·더해진 파일을 찾는다. `codeye version [--json]`을 더했다. 분석 도구·PostgreSQL·OpenCode는 싣지 않는다([배포팩](docs/OPERATIONS.md#폐쇄망-배포팩), A47).
+- **웹 화면 외부 주소 검사**: `check-web`이 빌드된 화면의 외부 글꼴·CDN·`@import`·`url()`·`fetch`·원격 source map을 찾으면 실패한다. CI 웹 작업이 실행한다.
+- **오프라인 모드**: `"offline": true` 또는 `codeye up --offline`. 적지 않은 공개 proxy·레지스트리·index·crates.io를 쓰지 않고(`offline_no_registry_configured`), Go는 운영자 모듈 캐시나 사내 proxy만 쓰며 checksum DB를 정하지 않았으면 끈다. `git_hosts` 기본이 빈 목록이다. 모델은 `base_url`(사내 endpoint)이 있는 키 파일·relay만 쓰고(`model_endpoint_not_configured`), 환경변수의 키를 저장하지 않으며 OpenCode `auth.json`을 찾지 않는다. OpenCode가 시작할 때 묻는 npm 레지스트리 조회는 오프라인 여부와 관계없이 loopback의 닫힌 포트로 보낸다.
+- **사내 CA**: `"ca_bundle"`(합본 PEM)을 go·npm·pnpm·yarn·pip·uv·cargo·git·OpenCode에 `SSL_CERT_FILE`·`NODE_EXTRA_CA_CERTS`·`GIT_SSL_CAINFO`·`PIP_CERT`·`CARGO_HTTP_CAINFO`로 준다. 에이전트는 시작할 때 파일을 검사한다. 검증을 끄는 설정은 없다.
+- **점검**: `codeye doctor --config`의 `offline` 절("Offline readiness")이 접속할 곳과 출처·받지 않는 이유, CA 상태, PostgreSQL 프로그램, 언어별 빠진 도구를 보인다. `codeye tools --checklist`가 폐쇄망용 도구 점검표(시험한 계열, 옮기는 방법)를 낸다.
+- **고침**: 오프라인에서 환경변수의 API 키가 키 파일을 덮어쓰던 것(배포팩 smoke가 찾았다).
+- 확인 환경: Linux(WSL2, Ubuntu 26.04, glibc 2.43), Go 1.27.4, Node 24.18.0, PostgreSQL 17.10, OpenCode 1.19.5. `scripts/offline_smoke.py`가 묶음을 빈 디렉터리에 풀어 그 실행 파일만으로, 새 HOME·설정·상태로 network namespace(loopback만) 안에서 실행했다. 모듈 캐시에 있는 Go 프로젝트는 `prepared`, 없는 프로젝트는 `offline_no_registry_configured`였다. 사설 CA의 HTTPS 미러(Go proxy·PyPI simple·npm·`git http-backend`)와 TLS로 띄운 가짜 모델 upstream으로 Go·Python·JS 의존성을 미러에서 받고 Git 주소 프로젝트를 확보했으며 모델 검토가 사내 endpoint로 `performed`였다(모델 호출·외부 다운로드 없음). 모든 connect(strace)와 DNS 조회(기록기, 자체 확인 포함)를 기록했고 loopback 밖으로 나간 것은 없었다. go·git·npm·pnpm·yarn·pip·uv·OpenCode는 CA 변수가 있으면 성공하고 없으면 인증서 검증 오류였다. 실행 파일은 빈 chroot(libc 없음)에서도 뜬다. 실제 폐쇄망, RHEL 8.10, 회사 CA·미러, cargo의 CA는 확인하지 않았다.
+
 ### 바뀜 — 웹 화면 다듬기
 
 - **시각 체계**: 색·글자·간격 토큰과 단추·입력·카드·상태 표지·표·펼침 요소의 공통 모양을 스타일시트 하나에 정했다(새 의존성 없음). 상태는 기호·글자·색을 함께 쓴다. 대비는 색 값으로 계산해 글자 4.5:1, 입력 테두리·초점 3:1 이상이다([접근성](docs/REPORT.md#접근성)).

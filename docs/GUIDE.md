@@ -338,6 +338,25 @@ next: codeye up (the local agent enrolls as a new node)
 
 복원은 세트의 hash부터 모두 확인한다. 이전 노드, 로그인 세션, 쓰지 않은 링크는 무효가 된다. 그래서 복원본의 `up`이 새 로그인 링크를 주고, 에이전트는 새 노드로 등록한다. 백업 때 실행 중이던 분석은 `recovery_required`로 남는다. 그 run은 다시 요청한다. 이 run이 쥔 예약을 풀어 주는 운영자 명령은 아직 없다([백업과 복원](OPERATIONS.md#백업과-복원)).
 
+## 인터넷 없는 머신
+
+연결된 머신에서 `python3 scripts/offline_pack.py build`로 만든 묶음(`codeye-VERSION-linux-amd64.tar.gz`)을 옮긴다. 묶음에는 실행 파일, 웹 화면, 문서, 설정 예시, `INSTALL.md`가 있고 분석 도구·PostgreSQL·OpenCode는 없다.
+
+```sh
+sha256sum -c codeye-VERSION-linux-amd64.tar.gz.sha256
+tar -xzf codeye-VERSION-linux-amd64.tar.gz && cd codeye-VERSION-linux-amd64
+sha256sum -c SHA256SUMS
+./codeye tools --checklist       # 없는 도구와 옮기는 방법
+./codeye doctor --config ~/.config/codeye/personal.json   # "Offline readiness"
+./codeye up --offline ~/src/my-project
+```
+
+- `--offline`은 설정에 `"offline": true`로 저장된다. 그 뒤로 CODEYE는 설정에 적은 미러·Git 호스트·모델 endpoint 밖으로 접속하지 않는다. 미러가 없는 의존성은 받지 않고 보고서에 `offline_no_registry_configured`로 남는다. Go는 `agent.go_mod_cache`에 옮겨 둔 모듈 캐시를 쓴다.
+- 모델 검토는 키 파일에 사내 endpoint(`base_url`)가 있을 때만 한다. 환경변수의 API 키는 쓰지 않는다.
+- 사내 CA가 있으면 시스템 CA와 합친 PEM 파일을 `ca_bundle`에 적는다. 인증서 검증을 끄지 않는다.
+
+미러 설정, CA, 점검 항목은 [운영](OPERATIONS.md#폐쇄망-배포팩)에 있다.
+
 ## 업그레이드 (설계 절차, 시험 안 함)
 
 이전 버전에서 올리는 절차 전체는 시험하지 못했다. 각 명령은 개별로 실행해 보았다.

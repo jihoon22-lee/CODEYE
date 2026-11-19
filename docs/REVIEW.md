@@ -344,6 +344,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 | 호출 계수를 쓰거나 읽지 못함 | `failed`(`review_call_count_failed`) |
 | 앞 역할 미수락 | `skipped_policy`(`dependency_failed`) |
 | 모델 미설정 | `unsupported`(`model_not_configured`) |
+| 오프라인 모드인데 사내 endpoint(`base_url`)가 없는 키·키 없는 공급자 모델 | `unsupported`(`model_endpoint_not_configured`) |
 | API 키 파일이 없음·다른 사용자가 읽을 수 있음·공급자 항목 없음 | `unsupported`(`model_credential_unavailable`) |
 | `--version` 응답이 OpenCode 릴리스 형식이 아님 | `unsupported`(`opencode_version_unsupported`) |
 | 공급자가 키를 거부(HTTP 401·403) | `failed`(`model_auth_failed`) |
@@ -397,6 +398,8 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 | `opencode`(OpenCode Zen) | `OPENCODE_API_KEY` | `gpt-6.1-sol` |
 
 - 키를 찾지 못하면 `agent.model`이 없을 때는 모델 없이 시작한다(검토 task `model_not_configured`). `agent.model`이 있는데 그 provider의 키가 없으면 모델 플래그는 넘기되 호출은 실패한다. 키 파일이 있으나 쓸 수 없거나(권한·형식), 기본 모델이 없는 provider에 이름이 없거나, OpenCode를 찾지 못하면 모델 없이 시작한다. 어느 경우든 정적 분석은 실행된다.
+- 오프라인 모드에서는 `base_url`이 있는 키 파일과 relay만 쓴다. 환경변수의 키는 저장하지 않고, OpenCode `auth.json`을 찾지 않는다([오프라인 모드](OPERATIONS.md#오프라인-모드)).
+- OpenCode는 플러그인을 꺼도 시작할 때 npm 레지스트리에 `@opencode-ai/plugin`을 묻는다(1.19.5 측정). CODEYE는 OpenCode 환경에 `npm_config_registry=http://127.0.0.1:9/`를 넣어 그 요청이 loopback에서 바로 실패하게 한다. `--ca-bundle`이 있으면 `NODE_EXTRA_CA_CERTS` 등 CA 변수도 넣는다.
 - `codeye model probe`가 같은 해석으로 확인한다. `codeye up`은 모델 설정(모델 ID, OpenCode 경로, 키 파일 경로와 수정 시각·크기)이 마지막 확인과 다를 때 한 번 확인하고 결과를 `<state_dir>/run/model-probe.json`에 둔다(키에서 나온 값은 없다).
 - 이 표의 기본값 중 `gpt-6.2-sol`은 OpenCode 1.19.5의 오프라인 모델 목록에 없다. OpenCode가 요청을 OpenAI Responses API(`POST {base_url}/responses`, 스트리밍)로 보내는 것은 가짜 upstream으로 확인했고, OpenAI가 이 요청을 받는지는 실제 확인 한 번으로만 알 수 있다.
 
