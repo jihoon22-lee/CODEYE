@@ -1,0 +1,171 @@
+{
+  "schema_version": "0.1",
+  "detected_at": "2026-11-19T09:30:00Z",
+  "go_mod_cache": "/home/user/go/pkg/mod",
+  "python_both_type_checkers": true,
+  "tools": [
+    {
+      "name": "go",
+      "status": "found",
+      "path": "/home/user/.local/bin/go",
+      "version": "1.27.4",
+      "version_tested": true,
+      "source": "~/.local/bin",
+      "tested_series": "1.27",
+      "resolved_path": "/home/user/.local/lib/go-1.27.4/bin/go"
+    },
+    {
+      "name": "git",
+      "status": "found",
+      "path": "/usr/bin/git",
+      "version": "2.53.0",
+      "version_tested": true,
+      "source": "PATH"
+    },
+    {
+      "name": "node",
+      "status": "found",
+      "path": "/home/user/.local/bin/node",
+      "version": "24.18.0",
+      "version_tested": true,
+      "source": "~/.local/bin"
+    },
+    {
+      "name": "opencode",
+      "status": "found",
+      "path": "/home/user/.opencode/bin/opencode",
+      "version": "1.19.5",
+      "version_tested": true,
+      "source": "~/.opencode/bin",
+      "tested_series": "1.19.5"
+    },
+    {
+      "name": "staticcheck",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/go/bin/staticcheck",
+      "version": "2026.2.2",
+      "version_tested": true,
+      "source": "codeye-tools/go/bin",
+      "tested_series": "2026.2"
+    },
+    {
+      "name": "gitleaks",
+      "status": "unusable",
+      "version_tested": false,
+      "tested_series": "8.30",
+      "reason": "gitleaks version output not recognized",
+      "tried": [
+        {
+          "path": "~/.local/bin/gitleaks",
+          "reason": "gitleaks version output not recognized"
+        }
+      ],
+      "hint": "download a release from https://github.com/gitleaks/gitleaks/releases into ~/.local/share/codeye-tools/bin or set `agent.tools.gitleaks`"
+    },
+    {
+      "name": "ruff",
+      "status": "found",
+      "path": "/home/user/.local/bin/ruff",
+      "version": "0.15.2",
+      "version_tested": false,
+      "source": "~/.local/bin",
+      "tested_series": "0.16",
+      "notes": [
+        "tool_version_untested"
+      ]
+    },
+    {
+      "name": "mypy",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/bin/mypy",
+      "version": "2.4.1",
+      "version_tested": true,
+      "source": "codeye-tools/bin",
+      "tested_series": "2.4"
+    },
+    {
+      "name": "pyright",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/node/node_modules/pyright/index.js",
+      "version": "1.1.414",
+      "version_tested": true,
+      "source": "codeye-tools/node",
+      "tested_series": "1.1.414"
+    },
+    {
+      "name": "bandit",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/bin/bandit",
+      "version": "1.9.4",
+      "version_tested": true,
+      "source": "codeye-tools/bin",
+      "tested_series": "1.9"
+    },
+    {
+      "name": "lizard",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/bin/lizard",
+      "version": "1.26.1",
+      "version_tested": true,
+      "source": "codeye-tools/bin",
+      "tested_series": "1.26"
+    },
+    {
+      "name": "cppcheck",
+      "status": "not_found",
+      "version_tested": false,
+      "hint": "`micromamba install -p ~/.local/share/codeye-tools/cpp cppcheck` (or `sudo apt install cppcheck`) or set `agent.tools.cppcheck`"
+    },
+    {
+      "name": "clang-tidy",
+      "status": "not_found",
+      "version_tested": false,
+      "hint": "`micromamba install -p ~/.local/share/codeye-tools/cpp clang-tools` (or `sudo apt install clang-tidy`) or set `agent.tools.clang-tidy`"
+    },
+    {
+      "name": "eslint",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/node/node_modules/eslint/bin/eslint.js",
+      "version": "10.15.0",
+      "version_tested": true,
+      "source": "codeye-tools/node",
+      "tested_series": "10.15"
+    },
+    {
+      "name": "tsc",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/node/node_modules/typescript/bin/tsc",
+      "version": "6.0.3",
+      "version_tested": true,
+      "source": "codeye-tools/node",
+      "tested_series": "6.0"
+    },
+    {
+      "name": "jscpd",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/node/node_modules/jscpd/run-jscpd.js",
+      "version": "5.4.3",
+      "version_tested": true,
+      "source": "codeye-tools/node",
+      "tested_series": "5.4"
+    },
+    {
+      "name": "cargo",
+      "status": "found",
+      "path": "/home/user/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+      "version": "1.99.1",
+      "version_tested": true,
+      "source": "rustup default",
+      "tested_series": "1.99"
+    },
+    {
+      "name": "clippy",
+      "status": "found",
+      "path": "/home/user/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo-clippy",
+      "version": "0.1.99",
+      "version_tested": true,
+      "source": "rustup default",
+      "tested_series": "0.1.99"
+    }
+  ]
+}
