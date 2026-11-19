@@ -325,7 +325,13 @@ func TestJSFetchArgvEnvAndRecord(t *testing.T) {
 			if !slices.Contains(args, cache) {
 				t.Fatalf("argv %v lacks the shared cache %s", args, cache)
 			}
-			if install.Dir != job.Snapshot.WorkspaceDir || strings.HasPrefix(install.Dir, src) || install.Env["PATH"] != filepath.Dir(cfg.NodeExecutable) {
+			// Windows may spell the same temp directory in its short and long form.
+			same := func(a, b string) bool {
+				ra, errA := filepath.EvalSymlinks(a)
+				rb, errB := filepath.EvalSymlinks(b)
+				return errA == nil && errB == nil && ra == rb
+			}
+			if !same(install.Dir, job.Snapshot.WorkspaceDir) || strings.HasPrefix(install.Dir, src) || !same(install.Env["PATH"], filepath.Dir(cfg.NodeExecutable)) {
 				t.Fatalf("cwd %s env %v", install.Dir, install.Env)
 			}
 			if (install.Env["YARN_IGNORE_PATH"] == "1") != (tc.manager == "yarn") {
