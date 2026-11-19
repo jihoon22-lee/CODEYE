@@ -87,7 +87,7 @@ type running struct {
 func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, o bringUpOptions, out, stderr io.Writer) (*running, int) {
 	// Detected tools and the model complete the configuration before the
 	// agent argv is built and compared with a running agent's.
-	applyDetectedTools(cfg, out)
+	applyDetectedTools(ctx, cfg, out)
 	prepareModel(cfg, out)
 	opCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -492,7 +492,10 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 		name = "personal"
 	}
 	args := []string{"agent", "--controller", cfg.Origin(), "--state-dir", layout.AgentDir(), "--name", name,
-		"--autoscale", "--max-workers", strconv.Itoa(a.MaxWorkers), "--toolchain-path", a.ToolchainPath}
+		"--autoscale", "--max-workers", strconv.Itoa(a.MaxWorkers), "--toolchain-path", a.ToolchainPath,
+		// A personal node takes work even when no analyzer is installed:
+		// the tasks of missing tools are recorded as unsupported.
+		"--advertise-without-baseline"}
 	if enroll {
 		args = append(args, "--enroll-token-file", layout.EnrollToken())
 	}

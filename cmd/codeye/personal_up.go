@@ -363,16 +363,13 @@ func analyzeTarget(ctx context.Context, up *running, t *upTarget, out io.Writer)
 }
 
 // applyDetectedTools fills the analyzer and toolchain paths the
-// configuration leaves empty; agent settings always win. The Go toolchain
-// is taken from PATH; other tools run only when agent.tools names them.
-func applyDetectedTools(cfg *personal.Config, out io.Writer) {
-	if cfg.Agent.Go == "" {
-		if p, err := exec.LookPath("go"); err == nil {
-			if real, err := filepath.EvalSymlinks(p); err == nil && filepath.IsAbs(real) {
-				cfg.Agent.Go = filepath.Clean(real)
-				fmt.Fprintln(out, "Go toolchain:", cfg.Agent.Go, "(from PATH)")
-			}
-		}
+// configuration leaves unset with the tools found on this machine, shows what
+// was found and what is missing, and records the result in the state
+// directory. Explicit agent settings always win; agent.auto_detect false
+// turns detection off.
+func applyDetectedTools(ctx context.Context, cfg *personal.Config, out io.Writer) {
+	if _, err := prepareTools(ctx, cfg, out); err != nil {
+		fmt.Fprintln(out, "tool detection:", err)
 	}
 }
 
