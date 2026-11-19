@@ -248,7 +248,8 @@ def run(base, root, env, probe_env):
         fsrc = directory / "fixture-src"
         fsrc.mkdir()
         (fsrc / "codeye-fixture-mode").write_text("sleep\n")
-        cfg_c, state_c, origin_c = config("c", free_port(), [("fixture", fsrc)],
+        # 시험용 handler는 실제 분석기가 없을 때만 선택되므로 도구 탐지를 끈다.
+        cfg_c, state_c, origin_c = config("c", free_port(), [("fixture", fsrc)], agent={"auto_detect": False},
                                          stop={"drain_timeout_seconds": 2, "cancel_timeout_seconds": 60})
         cli(fixture, "migrate", db="personal_c")
         cli(fixture, "start", "--config", cfg_c, db="personal_c", timeout=200)

@@ -198,7 +198,33 @@ func Handlers(ctx context.Context, cfg Config, runner executor.Runner) ([]analys
 	if err == nil && h != nil {
 		out = append(out, h)
 	}
-	return append(out, fixtureHandlers()...), missing
+	// One capability has one handler. A composite that is advertised although
+	// no baseline analyzer is usable would only record unsupported tasks, so a
+	// test build's fixture handler takes the capability in that case.
+	// Production builds have no fixture handler.
+	if fixtures := fixtureHandlers(); len(fixtures) > 0 && (len(out) == 0 || noBaseline(missing)) {
+		return fixtures, missing
+	}
+	return out, missing
+}
+
+// noBaseline reports whether every required analyzer is among the unusable ones.
+func noBaseline(missing []Unavailable) bool {
+	unusable := map[string]bool{}
+	for _, m := range missing {
+		unusable[m.Name] = true
+	}
+	required := 0
+	for _, e := range catalog() {
+		if !e.desc.Required {
+			continue
+		}
+		required++
+		if !unusable[e.desc.Name] {
+			return false
+		}
+	}
+	return required > 0
 }
 
 // ErrNoBaseline: no required analyzer is usable, so the node must not
