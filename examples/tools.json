@@ -2,6 +2,9 @@
   "schema_version": "0.1",
   "detected_at": "2026-11-19T09:30:00Z",
   "go_mod_cache": "/home/user/go/pkg/mod",
+  "go_settings": {
+    "goprivate": "git.example.com/team"
+  },
   "python_both_type_checkers": true,
   "tools": [
     {

@@ -36,6 +36,71 @@ func goModCache(ctx context.Context, env Env, goExe, dir string) string {
 	return ""
 }
 
+// GoSettings are the user's Go module download settings that differ from
+// Go's defaults. Only these five are read: they decide which registry, which
+// checksum database and which module paths are private.
+type GoSettings struct {
+	GoProxy   string `json:"goproxy,omitempty"`
+	GoSumDB   string `json:"gosumdb,omitempty"`
+	GoPrivate string `json:"goprivate,omitempty"`
+	GoNoProxy string `json:"gonoproxy,omitempty"`
+	GoNoSumDB string `json:"gonosumdb,omitempty"`
+}
+
+// Go's defaults; a value equal to them is not a user setting.
+const (
+	defaultGoProxy = "https://proxy.golang.org,direct"
+	defaultGoSumDB = "sum.golang.org"
+)
+
+// goSettings runs `go env -json` for the download settings in the user's
+// environment (their go env file and variables).
+func goSettings(ctx context.Context, env Env, goExe, dir string) GoSettings {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, goExe, "env", "-json", "GOPROXY", "GOSUMDB", "GOPRIVATE", "GONOPROXY", "GONOSUMDB")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local", "GOWORK=off", "GOFLAGS=")
+	cmd.WaitDelay = time.Second
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if cmd.Run() != nil {
+		return GoSettings{}
+	}
+	var v map[string]string
+	if json.Unmarshal(out.Bytes(), &v) != nil {
+		return GoSettings{}
+	}
+	return settingsOf(v)
+}
+
+// settingsOf keeps the values that differ from Go's defaults. GONOPROXY and
+// GONOSUMDB default to GOPRIVATE, so they are kept only when they differ
+// from it.
+func settingsOf(v map[string]string) GoSettings {
+	clean := func(s string) string {
+		s = strings.TrimSpace(s)
+		if strings.ContainsAny(s, "\x00\n\r") || len(s) > 2048 {
+			return ""
+		}
+		return s
+	}
+	s := GoSettings{GoProxy: clean(v["GOPROXY"]), GoSumDB: clean(v["GOSUMDB"]), GoPrivate: clean(v["GOPRIVATE"]), GoNoProxy: clean(v["GONOPROXY"]), GoNoSumDB: clean(v["GONOSUMDB"])}
+	if s.GoProxy == defaultGoProxy {
+		s.GoProxy = ""
+	}
+	if s.GoSumDB == defaultGoSumDB {
+		s.GoSumDB = ""
+	}
+	if s.GoNoProxy == s.GoPrivate {
+		s.GoNoProxy = ""
+	}
+	if s.GoNoSumDB == s.GoPrivate {
+		s.GoNoSumDB = ""
+	}
+	return s
+}
+
 // Resolved is the tool configuration of the agent: the explicit settings
 // where there are any, otherwise what detection found. It maps one-to-one onto
 // the agent flags and the personal configuration fields.

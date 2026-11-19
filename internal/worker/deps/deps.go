@@ -65,8 +65,15 @@ type Config struct {
 	// own module cache, read only as the first proxy (it is never written).
 	GoExecutable string
 	GoModCache   string
-	// GoProxy is the registry part of GOPROXY (default proxy.golang.org).
-	GoProxy string
+	// GoProxy is the registry part of GOPROXY (default proxy.golang.org);
+	// "direct" and "off" entries are dropped (no VCS access). GoSumDB,
+	// GoPrivate, GoNoProxy and GoNoSumDB are the operator's settings, passed
+	// as they are ("" = Go's defaults; GOSUMDB defaults to sum.golang.org).
+	GoProxy   string
+	GoSumDB   string
+	GoPrivate string
+	GoNoProxy string
+	GoNoSumDB string
 
 	ModuleTimeout    time.Duration
 	TotalTimeout     time.Duration
@@ -85,9 +92,6 @@ func (c Config) withDefaults() Config {
 	}
 	if c.MaxDownloadBytes <= 0 {
 		c.MaxDownloadBytes = DefaultMaxDownloadBytes
-	}
-	if c.GoProxy == "" {
-		c.GoProxy = DefaultGoProxy
 	}
 	return c
 }
@@ -276,6 +280,15 @@ func (e *Env) Exec(ctx context.Context, name string, spec executor.Spec, watch s
 		return executor.Result{}, false
 	}
 	spec.Timeout = min(left, e.Config.ModuleTimeout)
+	if spec.TempParent == "" {
+		// The process temp tree stays in the task directory, away from the
+		// protected snapshot whatever the system temp directory holds.
+		spec.TempParent = filepath.Join(e.TaskDir, "tmp")
+		if err := os.MkdirAll(spec.TempParent, 0o700); err != nil {
+			e.stop = string(executor.StatusRejected)
+			return executor.Result{}, false
+		}
+	}
 	if spec.StdoutLimit == 0 {
 		spec.StdoutLimit = stdoutLimit
 	}

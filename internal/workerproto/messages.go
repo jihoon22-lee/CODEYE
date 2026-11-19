@@ -119,8 +119,14 @@ type Dependencies struct {
 	// AgentStateDir locates the rest of the cache storage area for the
 	// quota check.
 	AgentStateDir string `json:"agent_state_dir"`
-	// GoProxy is the registry part of GOPROXY ("" = proxy.golang.org).
+	// GoProxy is the registry part of GOPROXY ("" = proxy.golang.org);
+	// GoSumDB, GoPrivate, GoNoProxy and GoNoSumDB are the operator's GOSUMDB,
+	// GOPRIVATE, GONOPROXY and GONOSUMDB ("" = Go's defaults).
 	GoProxy          string `json:"go_proxy,omitempty"`
+	GoSumDB          string `json:"go_sumdb,omitempty"`
+	GoPrivate        string `json:"go_private,omitempty"`
+	GoNoProxy        string `json:"go_noproxy,omitempty"`
+	GoNoSumDB        string `json:"go_nosumdb,omitempty"`
 	ModuleTimeoutS   int    `json:"module_timeout_s"`
 	TotalTimeoutS    int    `json:"total_timeout_s"`
 	MaxDownloadBytes int64  `json:"max_download_bytes"`

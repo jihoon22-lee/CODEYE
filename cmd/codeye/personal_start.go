@@ -589,8 +589,10 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 			if d.CacheDir != "" {
 				args = append(args, "--dependency-cache-dir", d.CacheDir)
 			}
-			if d.GoProxy != "" {
-				args = append(args, "--go-proxy", d.GoProxy)
+			for _, f := range []struct{ flag, value string }{{"--go-proxy", d.GoProxy}, {"--go-sumdb", d.GoSumDB}, {"--go-private", d.GoPrivate}, {"--go-noproxy", d.GoNoProxy}, {"--go-nosumdb", d.GoNoSumDB}} {
+				if f.value != "" {
+					args = append(args, f.flag, f.value)
+				}
 			}
 			if d.TimeoutSeconds > 0 {
 				args = append(args, "--dependency-timeout", strconv.Itoa(d.TimeoutSeconds)+"s")

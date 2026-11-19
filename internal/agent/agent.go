@@ -97,6 +97,10 @@ type Config struct {
 	DependencyFetch        bool
 	DependencyCacheDir     string
 	GoProxy                string
+	GoSumDB                string
+	GoPrivate              string
+	GoNoProxy              string
+	GoNoSumDB              string
 	DependencyTimeout      time.Duration
 	DependencyTotalTimeout time.Duration
 	DependencyMaxBytes     int64
@@ -300,6 +304,7 @@ func (ag *Agent) dependencies() *workerproto.Dependencies {
 		return nil
 	}
 	return &workerproto.Dependencies{CacheRoot: ag.dependencyCache(), AgentStateDir: ag.cfg.StateDir, GoProxy: ag.cfg.GoProxy,
+		GoSumDB: ag.cfg.GoSumDB, GoPrivate: ag.cfg.GoPrivate, GoNoProxy: ag.cfg.GoNoProxy, GoNoSumDB: ag.cfg.GoNoSumDB,
 		ModuleTimeoutS: int(ag.cfg.DependencyTimeout / time.Second), TotalTimeoutS: int(ag.cfg.DependencyTotalTimeout / time.Second),
 		MaxDownloadBytes: ag.cfg.DependencyMaxBytes, CacheQuotaBytes: ag.cfg.StorageQuota[quota.Cache]}
 }

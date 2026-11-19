@@ -95,6 +95,10 @@ type Result struct {
 	// GoModCache is the module cache of the Go toolchain found
 	// (`go env GOMODCACHE`); "" when there is no usable Go or no such directory.
 	GoModCache string `json:"go_mod_cache,omitempty"`
+	// GoSettings are the module download settings of the user's Go
+	// environment that differ from Go's defaults (`go env`); the dependency
+	// fetch follows them. Absent when the user changed none.
+	GoSettings *GoSettings `json:"go_settings,omitempty"`
 	// PythonBothTypeCheckers is true when mypy and pyright were both found:
 	// the agent then needs --python-both-type-checkers.
 	PythonBothTypeCheckers bool   `json:"python_both_type_checkers"`
@@ -161,6 +165,9 @@ type Options struct {
 	Runner executor.Runner
 	// GoEnv returns `go env GOMODCACHE`; nil runs the found go. Tests inject.
 	GoEnv func(ctx context.Context, goExe string) string
+	// GoSettingsEnv returns the user's module download settings; nil runs
+	// the found go. Tests inject.
+	GoSettingsEnv func(ctx context.Context, goExe string) GoSettings
 	// Now stamps the result; nil uses the clock.
 	Now func() time.Time
 }
@@ -222,6 +229,13 @@ func Detect(ctx context.Context, opts Options) Result {
 			if st, err := os.Stat(dir); err == nil && st.IsDir() {
 				res.GoModCache = dir
 			}
+		}
+		settings := opts.GoSettingsEnv
+		if settings == nil {
+			settings = func(ctx context.Context, exe string) GoSettings { return goSettings(ctx, env, exe, probeDir) }
+		}
+		if s := settings(ctx, t.Path); s != (GoSettings{}) {
+			res.GoSettings = &s
 		}
 	}
 	if opts.Explicit.GoModCache != "" {

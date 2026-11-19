@@ -123,8 +123,15 @@ type Dependencies struct {
 	// CacheDir is the shared dependency cache (default
 	// <state>/agent/cache/deps).
 	CacheDir string `json:"cache_dir,omitempty"`
-	// GoProxy is the Go module registry (default https://proxy.golang.org).
-	GoProxy string `json:"go_proxy,omitempty"`
+	// GoProxy, GoSumDB, GoPrivate, GoNoProxy and GoNoSumDB are the Go
+	// module download settings (GOPROXY, GOSUMDB, GOPRIVATE, GONOPROXY,
+	// GONOSUMDB). Unset ones come from the user's own `go env` when tools are
+	// detected; otherwise Go's public proxy and checksum database apply.
+	GoProxy   string `json:"go_proxy,omitempty"`
+	GoSumDB   string `json:"go_sumdb,omitempty"`
+	GoPrivate string `json:"go_private,omitempty"`
+	GoNoProxy string `json:"go_noproxy,omitempty"`
+	GoNoSumDB string `json:"go_nosumdb,omitempty"`
 	// TimeoutSeconds bounds one module (default 600), TotalTimeoutSeconds
 	// one run (default 1200), MaxDownloadBytes one module's download
 	// (default 2 GiB, soft).
@@ -398,8 +405,10 @@ func (c *Config) validate(knownTools []string) error {
 		if d.CacheDir != "" && !absClean(d.CacheDir) {
 			return errors.New("agent.dependencies.cache_dir must be an absolute, clean path")
 		}
-		if d.GoProxy != "" && !strings.HasPrefix(d.GoProxy, "https://") && !strings.HasPrefix(d.GoProxy, "http://") && !strings.HasPrefix(d.GoProxy, "file://") {
-			return errors.New("agent.dependencies.go_proxy must be an http(s):// or file:// URL")
+		for name, v := range map[string]string{"go_proxy": d.GoProxy, "go_sumdb": d.GoSumDB, "go_private": d.GoPrivate, "go_noproxy": d.GoNoProxy, "go_nosumdb": d.GoNoSumDB} {
+			if strings.ContainsAny(v, "\x00\n\r") || len(v) > 2048 {
+				return fmt.Errorf("agent.dependencies.%s must be one line", name)
+			}
 		}
 		if d.TimeoutSeconds < 0 || d.TotalTimeoutSeconds < 0 || d.MaxDownloadBytes < 0 {
 			return errors.New("agent.dependencies limits must not be negative")

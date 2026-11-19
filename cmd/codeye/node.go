@@ -92,6 +92,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	depFetch := fs.Bool("dependency-fetch", false, "")
 	depCache := fs.String("dependency-cache-dir", "", "")
 	goProxy := fs.String("go-proxy", "", "")
+	goSumDB := fs.String("go-sumdb", "", "")
+	goPrivate := fs.String("go-private", "", "")
+	goNoProxy := fs.String("go-noproxy", "", "")
+	goNoSumDB := fs.String("go-nosumdb", "", "")
 	depTimeout := fs.Duration("dependency-timeout", 0, "")
 	depTotal := fs.Duration("dependency-total-timeout", 0, "")
 	depMax := fs.Int64("dependency-max-bytes", 0, "")
@@ -195,6 +199,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	cfg.AdvertiseWithoutBaseline = *advertiseAlways
 	cfg.DependencyFetch, cfg.DependencyCacheDir, cfg.GoProxy = *depFetch, *depCache, *goProxy
+	cfg.GoSumDB, cfg.GoPrivate, cfg.GoNoProxy, cfg.GoNoSumDB = *goSumDB, *goPrivate, *goNoProxy, *goNoSumDB
 	cfg.DependencyTimeout, cfg.DependencyTotalTimeout, cfg.DependencyMaxBytes = *depTimeout, *depTotal, *depMax
 	cfg.ProjectAnalysisPolicy = *projectPolicy
 	for _, d := range protectedDirs {
@@ -260,6 +265,7 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 		}
 		cfg.DependencyCacheRoot = d.CacheRoot
 		depCfg = deps.Config{CacheRoot: d.CacheRoot, AgentStateDir: d.AgentStateDir, GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, GoProxy: d.GoProxy,
+			GoSumDB: d.GoSumDB, GoPrivate: d.GoPrivate, GoNoProxy: d.GoNoProxy, GoNoSumDB: d.GoNoSumDB,
 			ModuleTimeout: time.Duration(d.ModuleTimeoutS) * time.Second, TotalTimeout: time.Duration(d.TotalTimeoutS) * time.Second,
 			MaxDownloadBytes: d.MaxDownloadBytes, CacheQuotaBytes: d.CacheQuotaBytes}
 	}

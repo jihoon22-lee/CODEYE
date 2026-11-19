@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -31,6 +32,13 @@ const (
 	ReasonGoReplaceOutside   = "replace_outside_snapshot"
 	ReasonSnapshotIntegrity  = "snapshot_integrity_failed"
 	ReasonWorkspaceDrift     = "workspace_drift"
+	// ReasonPrivateModuleNotFetched: a module matched by GOPRIVATE/GONOPROXY
+	// is not in the operator's module cache, and no proxy may be asked for
+	// it (the fetch has no VCS access).
+	ReasonPrivateModuleNotFetched = "private_module_not_fetched"
+	// LimPrivateModulesSeeded: private modules came from the operator's
+	// module cache.
+	LimPrivateModulesSeeded = "private_modules_seeded"
 )
 
 // GoCacheKey is the Go module cache under the dependency cache root. The go
@@ -148,23 +156,54 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 	if os.MkdirAll(cache, 0o700) != nil {
 		return fail(domain.TaskFailed, depdoc.StateFailed, depdoc.ReasonCacheQuotaExceeded)
 	}
-	proxy := env.Config.GoProxy
-	if mc := env.Config.GoModCache; mc != "" {
-		// The operator's module cache is read first, as a file proxy; the
-		// go command never writes through a proxy.
-		if st, err := os.Stat(filepath.Join(mc, "cache", "download")); err == nil && st.IsDir() {
-			proxy = fileProxyURL(filepath.Join(mc, "cache", "download")) + "," + proxy
+	cfg := env.Config
+	proxy := registryProxies(cfg.GoProxy)
+	noProxy := cfg.GoNoProxy
+	if noProxy == "" {
+		noProxy = cfg.GoPrivate
+	}
+	if mc := cfg.GoModCache; mc != "" {
+		seed := filepath.Join(mc, "cache", "download")
+		if st, err := os.Stat(seed); err == nil && st.IsDir() {
+			// The operator's module cache is read first, as a file proxy;
+			// the go command never writes through a proxy. Private modules
+			// bypass every proxy, so the ones already in that cache are
+			// copied into this cache's download directory instead.
+			proxy = append([]string{fileProxyURL(seed)}, proxy...)
 			out.Limitations = append(out.Limitations, depdoc.LimSeededFromOperatorCache)
+			if noProxy != "" {
+				if n, err := copyPrivateModules(seed, filepath.Join(cache, "cache", "download"), noProxy); err != nil {
+					return fail(domain.TaskFailed, depdoc.StateFailed, analysis.ReasonHandlerError)
+				} else if n > 0 {
+					out.Limitations = append(out.Limitations, LimPrivateModulesSeeded)
+				}
+			}
 		}
 	}
-	goExe := env.Config.GoExecutable
+	goproxy := "off"
+	if len(proxy) > 0 {
+		goproxy = strings.Join(proxy, ",")
+	}
+	sumdb := cfg.GoSumDB
+	if sumdb == "" {
+		sumdb = "sum.golang.org"
+	}
+	goExe := cfg.GoExecutable
 	vars := map[string]string{
 		"PATH": filepath.Dir(goExe), "LANG": "C.UTF-8",
 		"GOENV": "off", "GOWORK": "off", "GOTOOLCHAIN": "local",
 		// The module cache stays writable so the node can remove it.
 		"GOFLAGS": "-mod=readonly -modcacherw", "CGO_ENABLED": "0",
-		"GOPROXY": proxy, "GOSUMDB": "sum.golang.org", "GOVCS": "*:off",
+		// No VCS access: a module that no proxy serves is not fetched.
+		"GOPROXY": goproxy, "GOSUMDB": sumdb, "GOVCS": "*:off",
 		"GOMODCACHE": cache, "GOCACHE": work["gocache"], "GOPATH": work["gopath"],
+	}
+	// The operator's private module paths are never asked of a public
+	// proxy or checksum database.
+	for k, v := range map[string]string{"GOPRIVATE": cfg.GoPrivate, "GONOPROXY": cfg.GoNoProxy, "GONOSUMDB": cfg.GoNoSumDB} {
+		if v != "" {
+			vars[k] = v
+		}
 	}
 	if runtime.GOOS == "windows" {
 		if v := os.Getenv("SystemRoot"); v != "" {
@@ -218,9 +257,13 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		return fail(domain.TaskSkippedPolicy, depdoc.StateSkipped, depdoc.ReasonNoDependencies)
 	}
 	out.CacheKind, out.CacheKey = depdoc.CacheShared, GoCacheKey
-	res, ok = env.Exec(ctx, "go.download", spec("mod", "download", "-json", "-modfile="+modCopy), filepath.Join(cache, "cache", "download"))
+	// The whole module cache is watched: the downloaded zips and the trees
+	// unpacked from them both count toward the size cap and the quota room.
+	res, ok = env.Exec(ctx, "go.download", spec("mod", "download", "-json", "-modfile="+modCopy), cache)
 	parsed, items, failed := parseDownload(res.Stdout.Data)
-	if parsed {
+	// A download that stopped before listing any module (an unreachable
+	// registry) leaves the module count unknown rather than zero.
+	if parsed && len(items) > 0 {
 		declared := len(items)
 		out.Counts = depdoc.Counts{Declared: &declared, Prepared: declared - len(failed), Failed: len(failed)}
 		out.FailedItems = failed
@@ -317,13 +360,15 @@ func classifyGo(text string) string {
 		return false
 	}
 	switch {
+	case has("govcs disallows", "disallowed by govcs", "is not allowed by govcs"):
+		return ReasonPrivateModuleNotFetched
 	case has("checksum mismatch", "security error"):
 		return ReasonGoChecksumMismatch
 	case has("missing go.sum entry"):
 		return ReasonGoSumIncomplete
 	case has("requires go >=", "gotoolchain=local", "toolchain not available"):
 		return depdoc.ReasonToolchainUnavailable
-	case has("dial tcp", "connection refused", "no such host", "i/o timeout", "network is unreachable", "tls handshake", "connection reset", "proxyconnect"):
+	case has("disabled by goproxy=off", "dial tcp", "connection refused", "no such host", "i/o timeout", "network is unreachable", "tls handshake", "connection reset", "proxyconnect"):
 		return depdoc.ReasonRegistryUnreachable
 	case has("404 not found", "410 gone", "not found:", "unknown revision", "invalid version", "no matching versions"):
 		return ReasonGoModuleNotOnProxy
@@ -345,4 +390,132 @@ func drifted(job analysis.Job, files map[string]source.Entry, dir string) bool {
 		}
 	}
 	return false
+}
+
+// registryProxies is the operator's GOPROXY list without "direct" and
+// "off": the fetch never runs a VCS command. Empty means Go's public proxy.
+func registryProxies(v string) []string {
+	if strings.TrimSpace(v) == "" {
+		return []string{DefaultGoProxy}
+	}
+	var out []string
+	for _, p := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == '|' }) {
+		p = strings.TrimSpace(p)
+		if p != "" && p != "direct" && p != "off" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// matchPrefixPatterns reports whether a leading run of the module path's
+// elements matches one of the comma-separated glob patterns, the GOPRIVATE
+// rule of the go command.
+func matchPrefixPatterns(patterns, target string) bool {
+	for _, p := range strings.Split(patterns, ",") {
+		p = strings.Trim(strings.TrimSpace(p), "/")
+		if p == "" {
+			continue
+		}
+		n := strings.Count(p, "/") + 1
+		elems := strings.Split(target, "/")
+		if len(elems) < n {
+			continue
+		}
+		if ok, err := path.Match(p, strings.Join(elems[:n], "/")); err == nil && ok {
+			return true
+		}
+	}
+	return false
+}
+
+// unescapeModulePath undoes the module cache's case encoding (!x = X).
+func unescapeModulePath(s string) (string, bool) {
+	var b strings.Builder
+	bang := false
+	for _, r := range s {
+		switch {
+		case bang:
+			if r < 'a' || r > 'z' {
+				return "", false
+			}
+			b.WriteRune(r - 'a' + 'A')
+			bang = false
+		case r == '!':
+			bang = true
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String(), !bang
+}
+
+// copyPrivateModules copies the download entries (.info, .mod, .zip,
+// .ziphash) of the operator cache's modules whose path matches patterns into
+// the dependency cache's download directory, without replacing a file that
+// is there. The go command reads its own download cache before any proxy,
+// and go.sum still verifies every copied module.
+func copyPrivateModules(seed, dst, patterns string) (int, error) {
+	copied := map[string]bool{}
+	err := filepath.WalkDir(seed, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		dir := filepath.Dir(p)
+		if filepath.Base(dir) != "@v" {
+			return nil
+		}
+		switch filepath.Ext(p) {
+		case ".info", ".mod", ".zip", ".ziphash":
+		default:
+			return nil
+		}
+		rel, err := filepath.Rel(seed, filepath.Dir(dir))
+		if err != nil {
+			return nil
+		}
+		mod, ok := unescapeModulePath(filepath.ToSlash(rel))
+		if !ok || !matchPrefixPatterns(patterns, mod) {
+			return nil
+		}
+		target := filepath.Join(dst, rel, "@v", filepath.Base(p))
+		if _, err := os.Lstat(target); err == nil {
+			return nil
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := copyFile(p, target); err != nil {
+			return err
+		}
+		copied[mod] = true
+		return nil
+	})
+	return len(copied), err
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	tmp := dst + ".codeye-tmp"
+	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, dst)
 }

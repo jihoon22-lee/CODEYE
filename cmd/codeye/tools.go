@@ -111,6 +111,22 @@ func useDetectedTools(cfg *personal.Config, res toolfind.Result) {
 	a.Go, a.Git, a.GoModCache = r.Go, r.Git, r.GoModCache
 	a.Tools = r.Tools
 	a.PythonBothTypeCheckers = r.PythonBothTypeCheckers
+	// The dependency fetch follows the user's own Go download settings
+	// unless the configuration names them.
+	if s := res.GoSettings; s != nil && a.DependenciesEnabled() {
+		if a.Dependencies == nil {
+			a.Dependencies = &personal.Dependencies{}
+		}
+		d := a.Dependencies
+		for _, f := range []struct {
+			dst *string
+			v   string
+		}{{&d.GoProxy, s.GoProxy}, {&d.GoSumDB, s.GoSumDB}, {&d.GoPrivate, s.GoPrivate}, {&d.GoNoProxy, s.GoNoProxy}, {&d.GoNoSumDB, s.GoNoSumDB}} {
+			if *f.dst == "" {
+				*f.dst = f.v
+			}
+		}
+	}
 }
 
 // prepareTools is the start-up step of personal mode: detect the tools
