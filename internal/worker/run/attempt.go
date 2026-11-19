@@ -309,7 +309,7 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 	if len(job.Scope) > 0 {
 		_ = json.Unmarshal(job.Scope, &scope)
 	}
-	ajob := analysis.Job{AllowModelReview: job.AllowModelReview, AllowRepositoryCode: job.AllowRepositoryCode, AllowDependencyFetch: job.AllowDependencyFetch, RunID: job.Attempt.RunID, AttemptID: id, Epoch: job.Attempt.Epoch, Profile: job.Profile, Scope: scope, Snapshot: a.snapshot, Scratch: a.scratch, PullRequest: job.PullRequest}
+	ajob := analysis.Job{AllowModelReview: job.AllowModelReview, AllowRepositoryCode: job.AllowRepositoryCode, ModelReviewWithheld: job.ModelReviewWithheld, RepositoryCodeWithheld: job.RepositoryCodeWithheld, AllowDependencyFetch: job.AllowDependencyFetch, RunID: job.Attempt.RunID, AttemptID: id, Epoch: job.Attempt.Epoch, Profile: job.Profile, Scope: scope, Snapshot: a.snapshot, Scratch: a.scratch, PullRequest: job.PullRequest}
 	specs, err := safePlan(a.ctx, handler, ajob)
 	if err != nil || len(specs) == 0 {
 		return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil

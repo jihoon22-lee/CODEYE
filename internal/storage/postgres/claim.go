@@ -75,13 +75,15 @@ func (n nodeView) eligible(c candidate) bool {
 	if !n.caps[nodeproto.AnalysisCapability(c.request.Profile)] {
 		return false
 	}
+	// A node on the controller's machine takes every approved root and host.
+	follows := n.caps[nodeproto.ControllerSourcesCapability]
 	switch c.source.Kind {
 	case domain.SourceLocal:
-		if !n.caps[nodeproto.LocalSourceCapability(c.source.SourceRootID)] || !n.roots[c.source.SourceRootID] {
+		if !follows && (!n.caps[nodeproto.LocalSourceCapability(c.source.SourceRootID)] || !n.roots[c.source.SourceRootID]) {
 			return false
 		}
 	case domain.SourceGit:
-		if c.gitHost == "" || !n.caps[nodeproto.GitSourceCapability(c.gitHost)] {
+		if c.gitHost == "" || (!follows && !n.caps[nodeproto.GitSourceCapability(c.gitHost)]) {
 			return false
 		}
 	default:
@@ -322,7 +324,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 				return ClaimResult{}, err
 			}
 			for _, c := range page {
-				resp, ok, err := claimCandidate(ctx, tx, c, node, worker)
+				resp, ok, err := claimCandidate(ctx, tx, c, node, worker, n.caps[nodeproto.ControllerSourcesCapability])
 				if err != nil {
 					return ClaimResult{}, err
 				}
@@ -418,7 +420,8 @@ func validIdemKey(k string) bool {
 
 // claimCandidate locks project -> run, re-checks the run and its actor, and
 // creates the lease. ok=false means the candidate is no longer claimable.
-func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker string) (*nodeproto.ClaimResponse, bool, error) {
+// follows is the node's ControllerSourcesCapability: it gets the root path.
+func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker string, follows bool) (*nodeproto.ClaimResponse, bool, error) {
 	var owner string
 	if err := tx.QueryRow(ctx, "SELECT owner_id::text FROM projects WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", c.projectID).Scan(&owner); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -446,10 +449,11 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 	}
 	reason := nodeproto.ReasonActorRevoked
 	if allowed && c.source.Kind == domain.SourceLocal {
-		// The requester must still hold the source-root grant the project was
-		// registered under (FOR SHARE: ordered against a concurrent revoke).
+		// The requester must still be allowed the source root the project was
+		// registered under, by grant or because it is open to everyone (FOR
+		// SHARE: ordered against a concurrent revoke or close).
 		var granted bool
-		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM source_root_grants WHERE source_root_id=$1 AND user_id=$2 FOR SHARE)", c.source.SourceRootID, r.ActorID).Scan(&granted); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT "+rootAllowedLockedSQL("$1", "$2"), c.source.SourceRootID, r.ActorID).Scan(&granted); err != nil {
 			return nil, false, err
 		}
 		if !granted {
@@ -493,11 +497,22 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 		Job: nodeproto.Job{Profile: c.request.Profile, Scope: c.request.Scope, Analysis: &c.analysis,
 			Resources: nodeproto.Resources{CPUMillis: ReserveCPUMillis, MemoryBytes: ReserveMemoryBytes, DiskBytes: ReserveDiskBytes}},
 	}
+	offer, err := analysisOffer(ctx, tx, owner)
+	if err != nil {
+		return nil, false, err
+	}
+	resp.Job.Offered = &offer
 	switch c.source.Kind {
 	case domain.SourceLocal:
 		resp.Job.Source = nodeproto.JobSource{Kind: "local", SourceRootID: c.source.SourceRootID, RelativePath: c.source.RelativePath}
+		if follows {
+			if err := tx.QueryRow(ctx, "SELECT path FROM source_roots WHERE id=$1", c.source.SourceRootID).Scan(&resp.Job.Source.RootPath); err != nil {
+				return nil, false, err
+			}
+		}
 	case domain.SourceGit:
 		resp.Job.Source = nodeproto.JobSource{Kind: "git", RepositoryURL: c.source.RepositoryURL, Branch: c.source.Branch, Host: c.gitHost}
+		resp.Job.GitCredentialUser = owner
 		if c.pullRequest != nil {
 			resp.Job.PullRequest = c.pullRequest.Job()
 		}

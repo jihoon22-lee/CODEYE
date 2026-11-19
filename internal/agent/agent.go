@@ -69,11 +69,22 @@ type Config struct {
 	// repository-controlled code (--repo-code-source-root, docs/ANALYZERS.md#저장소-코드-실행-허가).
 	// Git sources never get the grant.
 	RepositoryCodeSourceRoots map[string]bool
-	// ProjectAnalysisPolicy (--project-analysis-policy, personal mode) makes
-	// every job follow its project's analysis choices (nodeproto.Job.Analysis)
-	// for local and Git sources alike, instead of ModelSourceRoots and
-	// RepositoryCodeSourceRoots.
+	// ProjectAnalysisPolicy (--project-analysis-policy, the agent `codeye up`
+	// starts) makes every job follow its project's analysis choices
+	// (nodeproto.Job.Analysis) as far as the service offers them
+	// (nodeproto.Job.Offered), for local and Git sources alike. Without it
+	// ModelSourceRoots and RepositoryCodeSourceRoots are the upper bound and
+	// the project's choices and the offer can only narrow them.
 	ProjectAnalysisPolicy bool
+	// ControllerSources (--controller-sources, the agent `codeye up` starts
+	// on the controller's machine) advertises nodeproto.ControllerSourcesCapability:
+	// jobs for any source root the controller approves arrive with the
+	// root's path, and any Git host the controller approves is fetched.
+	ControllerSources bool
+	// GitCredentialDir (--git-credential-dir) holds one token file per user
+	// (<dir>/<user_id>.json); a Git job is fetched with the file of its
+	// nodeproto.Job.GitCredentialUser only. It replaces GitCredentialFile.
+	GitCredentialDir string
 	// ProtectedDirs (--protected-dir): a local project folder that contains
 	// or lies inside one of these is refused before acquisition, however
 	// the project was registered (personal mode: the state and backup
@@ -280,7 +291,10 @@ func New(cfg Config) (*Agent, error) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}
 	}
-	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile, cfg.GitCredentialFile} {
+	if cfg.GitCredentialDir != "" && cfg.GitCredentialFile != "" {
+		return nil, &ExitError{ExitUsage, "--git-credential-dir and --git-credential-file are alternatives"}
+	}
+	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile, cfg.GitCredentialFile, cfg.GitCredentialDir} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}

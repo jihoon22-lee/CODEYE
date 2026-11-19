@@ -35,9 +35,12 @@ func (s Stage) Valid() bool {
 // and are never counted as a successful model review.
 const (
 	ReasonModelSourceNotApproved = "model_source_not_approved"
-	ReasonNoDocuments            = "no_documents"
-	ReasonNoToolObservations     = "no_tool_observations"
-	ReasonNoEnvironmentGap       = "no_environment_gap"
+	// ReasonModelReviewNotOffered: the project chose the model review but the
+	// service administrator does not offer it to projects of other users.
+	ReasonModelReviewNotOffered = "model_review_not_offered"
+	ReasonNoDocuments           = "no_documents"
+	ReasonNoToolObservations    = "no_tool_observations"
+	ReasonNoEnvironmentGap      = "no_environment_gap"
 	// ReasonNoReviewScope: a review slice whose planned files the overview
 	// already sent, or that are all withheld or unreadable.
 	ReasonNoReviewScope = "no_review_scope"

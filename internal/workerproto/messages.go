@@ -207,6 +207,16 @@ type Job struct {
 	// third-party dependencies (the operator's --dependency-fetch and the
 	// project's fetch_dependencies choice). Absent means no fetching.
 	AllowDependencyFetch bool `json:"allow_dependency_fetch,omitempty"`
+	// ModelReviewWithheld and RepositoryCodeWithheld: the project chose the
+	// model or its build scripts and the node allows them, but the service
+	// does not offer them to the project's owner (the administrator's
+	// switches); the tasks record their own reason for it.
+	ModelReviewWithheld    bool `json:"model_review_withheld,omitempty"`
+	RepositoryCodeWithheld bool `json:"repository_code_withheld,omitempty"`
+	// GitCredentialFile is the token file of this job's Git fetch (the
+	// project owner's, docs/GITHUB.md#누구의-token인가); empty falls back to the
+	// hello's file.
+	GitCredentialFile string `json:"git_credential_file,omitempty"`
 	Header
 	Attempt   AttemptRef      `json:"attempt"`
 	Profile   string          `json:"profile"`

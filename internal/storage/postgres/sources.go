@@ -110,11 +110,13 @@ type SourceRootGrant struct {
 	GrantedAt time.Time
 }
 
-// SourceRootAccess is a root (label only, never its server path) with its grants.
+// SourceRootAccess is a root with its server path (administrators see it to
+// manage the folder), whether it is open to everyone, and its grants.
 type SourceRootAccess struct {
-	ID, Label string
-	CreatedAt time.Time
-	Grants    []SourceRootGrant
+	ID, Label, Path string
+	Everyone        bool
+	CreatedAt       time.Time
+	Grants          []SourceRootGrant
 }
 
 // ListSourceRootAccess is the administrator's view of every root and who
@@ -124,7 +126,7 @@ func (s *Store) ListSourceRootAccess(ctx context.Context, by Principal) ([]Sourc
 		if err := requireAdmin(ctx, tx, by); err != nil {
 			return nil, err
 		}
-		rows, err := tx.Query(ctx, `SELECT r.id::text,r.label,r.created_at,g.user_id::text,u.username,g.created_at FROM source_roots r
+		rows, err := tx.Query(ctx, `SELECT r.id::text,r.label,r.path,EXISTS(SELECT 1 FROM source_root_everyone e WHERE e.source_root_id=r.id),r.created_at,g.user_id::text,u.username,g.created_at FROM source_roots r
 			LEFT JOIN source_root_grants g ON g.source_root_id=r.id LEFT JOIN users u ON u.id=g.user_id
 			ORDER BY r.label,r.id,u.username NULLS LAST,g.user_id`)
 		if err != nil {
@@ -133,15 +135,16 @@ func (s *Store) ListSourceRootAccess(ctx context.Context, by Principal) ([]Sourc
 		defer rows.Close()
 		out := []SourceRootAccess{}
 		for rows.Next() {
-			var id, label string
+			var id, label, path string
+			var everyone bool
 			var created time.Time
 			var user, username *string
 			var granted *time.Time
-			if err := rows.Scan(&id, &label, &created, &user, &username, &granted); err != nil {
+			if err := rows.Scan(&id, &label, &path, &everyone, &created, &user, &username, &granted); err != nil {
 				return nil, err
 			}
 			if len(out) == 0 || out[len(out)-1].ID != id {
-				out = append(out, SourceRootAccess{ID: id, Label: label, CreatedAt: created.UTC(), Grants: []SourceRootGrant{}})
+				out = append(out, SourceRootAccess{ID: id, Label: label, Path: path, Everyone: everyone, CreatedAt: created.UTC(), Grants: []SourceRootGrant{}})
 			}
 			if user != nil && granted != nil {
 				last := &out[len(out)-1]
@@ -171,8 +174,7 @@ func (s *Store) ListSourceRoots(ctx context.Context, actor string) ([]SourceRoot
 	if !validIDs(actor) {
 		return nil, domain.ErrInvalid
 	}
-	rows, err := s.pool.Query(ctx, `SELECT r.id::text,r.label FROM source_roots r
-		JOIN source_root_grants g ON g.source_root_id=r.id WHERE g.user_id=$1 ORDER BY r.label`, actor)
+	rows, err := s.pool.Query(ctx, `SELECT r.id::text,r.label FROM source_roots r WHERE `+rootAllowedSQL("r.id", "$1::uuid")+` ORDER BY r.label`, actor)
 	if err != nil {
 		return nil, classify(err)
 	}
@@ -268,11 +270,13 @@ func (s *Store) RegisterProject(ctx context.Context, actor string, in ProjectReg
 		switch in.Source.Kind {
 		case domain.SourceLocal:
 			var label string
-			err := tx.QueryRow(ctx, `SELECT r.label FROM source_roots r
-				JOIN source_root_grants g ON g.source_root_id=r.id AND g.user_id=$2
-				WHERE r.id=$1 FOR SHARE OF g`, in.Source.SourceRootID, actor).Scan(&label)
+			var allowed bool
+			err := tx.QueryRow(ctx, `SELECT r.label,`+rootAllowedLockedSQL("r.id", "$2::uuid")+` FROM source_roots r WHERE r.id=$1`, in.Source.SourceRootID, actor).Scan(&label, &allowed)
 			if err != nil {
 				return Project{}, err
+			}
+			if !allowed {
+				return Project{}, domain.ErrNotFound
 			}
 			derived = label
 			if p := in.Source.RelativePath; p != "." {
@@ -339,6 +343,9 @@ type ProjectSummary struct {
 	HasReport bool
 	// Role is the reading actor's role: owner, manager, runner or viewer.
 	Role string
+	// OwnerID is the user who registered the project; its GitHub calls use
+	// that user's token only.
+	OwnerID string
 	// Activity is the representative run's stage view. Store reads
 	// always fill it; a hand-built summary has CheckedAt zero.
 	Activity Activity
@@ -367,7 +374,7 @@ const (
 const projectSummarySQL = `SELECT p.id::text,p.name,p.current_revision,r.config->'source',r.config->'analysis',p.created_at,lr.id::text,lr.status,
 	lp.run_id::text,lp.revision,lp.created_at,COALESCE(act.id,lr.id)::text,
 	(SELECT count(*) FROM runs o WHERE o.project_id=p.id AND o.status IN ` + nonTerminalRuns + `)-(CASE WHEN act.id IS NULL THEN 0 ELSE 1 END),
-	statement_timestamp()
+	statement_timestamp(),p.owner_id::text
 	FROM projects p
 	JOIN project_revisions r ON r.project_id=p.id AND r.revision=p.current_revision
 	LEFT JOIN LATERAL (SELECT id,status FROM runs WHERE project_id=p.id ORDER BY created_at DESC,id DESC LIMIT 1) lr ON true
@@ -395,7 +402,7 @@ func scanSummary(row pgx.Row) (ProjectSummary, time.Time, error) {
 		represents *string
 	)
 	if err := row.Scan(&p.ID, &p.Name, &p.Revision, &source, &analysis, &created, &lastID, &lastStat,
-		&reportRun, &reportRev, &reportAt, &represents, &p.Activity.OtherActiveRuns, &p.Activity.CheckedAt); err != nil {
+		&reportRun, &reportRev, &reportAt, &represents, &p.Activity.OtherActiveRuns, &p.Activity.CheckedAt, &p.OwnerID); err != nil {
 		return p, created, err
 	}
 	p.Activity.CheckedAt = p.Activity.CheckedAt.UTC()

@@ -40,7 +40,11 @@ const (
 	AuditSourceRootAdded       = "source_root.added"
 	AuditSourceRootGranted     = "source_root.granted"
 	AuditSourceRootRevoked     = "source_root.grant_revoked"
+	AuditSourceRootEveryone    = "source_root.everyone_set"
 	AuditProviderAdded         = "provider.added"
+	AuditServiceSettingsSet    = "service.settings_set"
+	AuditGitHubTokenSet        = "account.github_token_set"
+	AuditGitHubTokenRemoved    = "account.github_token_removed"
 	AuditProjectRegistered     = "project.registered"
 	AuditProjectRevised        = "project.revised"
 	AuditMemberSet             = "project.member_set"
@@ -81,6 +85,7 @@ var auditDetailKeys = map[string]bool{
 	"run_id": true, "protocol_version": true, "os": true, "arch": true,
 	"link_issued_by": true, "link_purpose": true, "pull_request": true,
 	"artifacts_removed": true, "bytes_removed": true, "older_than_days": true,
+	"everyone": true, "others_model_review": true, "others_build_scripts": true, "login": true,
 }
 
 const maxAuditString = 200

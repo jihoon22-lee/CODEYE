@@ -90,6 +90,9 @@ func (ag *Agent) capabilities() []string {
 	for id := range ag.cfg.SourceRoots {
 		set[nodeproto.LocalSourceCapability(id)] = true
 	}
+	if ag.cfg.ControllerSources {
+		set[nodeproto.ControllerSourcesCapability] = true
+	}
 	if ag.cfg.GitExecutable != "" {
 		for _, h := range ag.cfg.GitHosts {
 			set[nodeproto.GitSourceCapability(h)] = true

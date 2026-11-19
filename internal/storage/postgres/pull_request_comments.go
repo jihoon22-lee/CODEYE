@@ -39,10 +39,13 @@ type PullRequestComment struct {
 // request always has a higher version) and the report revision to render.
 type CommentJob struct {
 	RunID, ProjectID string
-	Pin              domain.PullRequest
-	Version          int64
-	Attempts         int
-	ReportRevision   int
+	// OwnerID is the project owner: the comment is posted with that user's
+	// GitHub token only.
+	OwnerID        string
+	Pin            domain.PullRequest
+	Version        int64
+	Attempts       int
+	ReportRevision int
 }
 
 // CommentOutcome is how one posting attempt ended. State pending with
@@ -80,7 +83,7 @@ func (s *Store) DuePullRequestComments(ctx context.Context, limit int, lease tim
 	return transaction(ctx, s, func(tx pgx.Tx) ([]CommentJob, error) {
 		rows, err := tx.Query(ctx, `UPDATE pull_request_comments c SET attempts=c.attempts+1,next_attempt_at=clock_timestamp()+$2*interval '1 millisecond',updated_at=clock_timestamp()
 			FROM runs r WHERE r.id=c.run_id AND c.run_id IN (SELECT run_id FROM pull_request_comments WHERE state='pending' AND next_attempt_at<=clock_timestamp() ORDER BY next_attempt_at LIMIT $1 FOR UPDATE SKIP LOCKED)
-			RETURNING c.run_id::text,c.project_id::text,r.pull_request,r.created_at,c.attempts,c.report_revision`, limit, lease.Milliseconds())
+			RETURNING c.run_id::text,c.project_id::text,(SELECT p.owner_id::text FROM projects p WHERE p.id=c.project_id),r.pull_request,r.created_at,c.attempts,c.report_revision`, limit, lease.Milliseconds())
 		if err != nil {
 			return nil, err
 		}
@@ -91,7 +94,7 @@ func (s *Store) DuePullRequestComments(ctx context.Context, limit int, lease tim
 			var raw []byte
 			var revision *int
 			var created time.Time
-			if err := rows.Scan(&j.RunID, &j.ProjectID, &raw, &created, &j.Attempts, &revision); err != nil {
+			if err := rows.Scan(&j.RunID, &j.ProjectID, &j.OwnerID, &raw, &created, &j.Attempts, &revision); err != nil {
 				return nil, err
 			}
 			j.Version = created.UnixMicro()
@@ -205,11 +208,13 @@ func loadRunPullRequest(ctx context.Context, tx pgx.Tx, runID string) (*RunPullR
 // one exists).
 type CommentPreview struct {
 	RunID, ProjectID string
-	Pin              domain.PullRequest
-	Version          int64
-	Comment          *PullRequestComment
-	ReportRevision   int
-	ReportBody       []byte
+	// OwnerID is the project owner (whose token reads the current head).
+	OwnerID        string
+	Pin            domain.PullRequest
+	Version        int64
+	Comment        *PullRequestComment
+	ReportRevision int
+	ReportBody     []byte
 }
 
 // PullRequestCommentPreview loads a pull-request run for an actor who may
@@ -252,6 +257,9 @@ func commentPreview(ctx context.Context, tx pgx.Tx, r Run, revision int) (Commen
 		return CommentPreview{}, domain.ErrUnsupported
 	}
 	out := CommentPreview{RunID: r.ID, ProjectID: r.ProjectID, Pin: pr.Pin, Version: r.CreatedAt.UnixMicro(), Comment: pr.Comment}
+	if err := tx.QueryRow(ctx, "SELECT owner_id::text FROM projects WHERE id=$1", r.ProjectID).Scan(&out.OwnerID); err != nil {
+		return CommentPreview{}, err
+	}
 	q := "SELECT revision,body FROM reports WHERE run_id=$1 ORDER BY revision DESC LIMIT 1"
 	args := []any{r.ID}
 	if revision > 0 {

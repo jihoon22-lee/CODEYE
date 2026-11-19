@@ -46,6 +46,10 @@ const (
 	// grant (docs/ANALYZERS.md#저장소-코드-실행-허가). It takes precedence over the not-configured
 	// reasons, which stay visible as limitations.
 	ReasonRepositoryCodeNotAllowed = "repository_code_not_allowed"
+	// ReasonRepositoryCodeNotOffered: the project chose to run build scripts
+	// but the service administrator does not offer that to projects of
+	// other users.
+	ReasonRepositoryCodeNotOffered = "repository_code_not_offered"
 	// LimRepositoryCodeExecuted marks a task that ran processes under the
 	// repository-code grant.
 	LimRepositoryCodeExecuted = "repository_code_executed"
@@ -365,7 +369,11 @@ func (c *Composite) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 		if nc, ok := m.(notConfigured); ok {
 			also = append(also, nc.reason)
 		}
-		return NotRun(job, m.Descriptor(), *t, ReasonRepositoryCodeNotAllowed, also...)
+		reason := ReasonRepositoryCodeNotAllowed
+		if job.RepositoryCodeWithheld {
+			reason = ReasonRepositoryCodeNotOffered
+		}
+		return NotRun(job, m.Descriptor(), *t, reason, also...)
 	}
 	r := m.Run(ctx, job, task, runner)
 	if len(r.Executions) > 0 {

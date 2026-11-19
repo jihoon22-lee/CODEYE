@@ -42,8 +42,7 @@ func (s *Store) GrantedRootPaths(ctx context.Context, actor string) ([]SourceRoo
 	if !validIDs(actor) {
 		return nil, domain.ErrInvalid
 	}
-	rows, err := s.pool.Query(ctx, `SELECT r.id::text,r.label,r.path FROM source_roots r
-		JOIN source_root_grants g ON g.source_root_id=r.id WHERE g.user_id=$1 ORDER BY r.label`, actor)
+	rows, err := s.pool.Query(ctx, `SELECT r.id::text,r.label,r.path FROM source_roots r WHERE `+rootAllowedSQL("r.id", "$1::uuid")+` ORDER BY r.label`, actor)
 	if err != nil {
 		return nil, classify(err)
 	}
