@@ -51,10 +51,14 @@ export function parseTarget(raw: string): { target: QuickTarget | null; error: s
 }
 
 // The analysis choices shown: the user's own once a box was touched, otherwise the defaults of
-// the target's kind (a folder: both on; a repository: build scripts off).
+// the target's kind (a folder: all on; a repository: build scripts off).
 export function choicesFor(kind: 'local' | 'git', setup: Setup | null, touched: Partial<AnalysisChoices>): AnalysisChoices {
-  const d = setup?.analysis_defaults[kind] ?? { send_source_to_model: true, run_build_scripts: kind === 'local' };
-  return { send_source_to_model: touched.send_source_to_model ?? d.send_source_to_model, run_build_scripts: touched.run_build_scripts ?? d.run_build_scripts };
+  const d = setup?.analysis_defaults[kind] ?? { send_source_to_model: true, run_build_scripts: kind === 'local', fetch_dependencies: true };
+  return {
+    send_source_to_model: touched.send_source_to_model ?? d.send_source_to_model,
+    run_build_scripts: touched.run_build_scripts ?? d.run_build_scripts,
+    fetch_dependencies: touched.fetch_dependencies ?? d.fetch_dependencies,
+  };
 }
 
 // quickBody builds the registration; a repository needs the provider of its host.

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
-import type { Ledger, ModelState, SectionStage, Sections } from './reportSections';
+import type { Dependency, Ledger, ModelState, SectionStage, Sections } from './reportSections';
 import { ComparisonSection } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
@@ -156,6 +156,54 @@ function LedgerBlock({ ledger }: { ledger: Ledger }) {
   );
 }
 
+// DependencyBlock is what each dependency task prepared before the analyzers ran,
+// or why it did not: the record's facts, or only the task's when the record is missing.
+function DependencyBlock({ dependencies }: { dependencies: Dependency[] }) {
+  const l = s.dependencies;
+  const name = (x: Dependency) => x.module ?? x.task;
+  const prepared = (x: Dependency) => {
+    if (x.prepared === null) return '—';
+    const n = x.declared === null ? String(x.prepared) : `${x.prepared}/${x.declared}`;
+    return x.failed !== null && x.failed > 0 ? `${n} ${l.failed(x.failed)}` : n;
+  };
+  const reason = (x: Dependency) => {
+    const code = x.reason ?? x.taskReason;
+    if (code !== null) return explainReason(code);
+    return x.result === 'accepted' ? '—' : label(l.record, x.result);
+  };
+  const failures = dependencies.flatMap((x) => x.failedItems.map((f) => ({ module: name(x), ...f })));
+  return (
+    <>
+      <h6>{l.heading}</h6>
+      <p>{l.lead}</p>
+      <Table
+        head={[s.col.module, l.col.manager, l.col.state, l.col.prepared, s.col.reason, l.col.limitations]}
+        rows={dependencies.map((x) => [
+          <code key="m">{name(x)}</code>,
+          x.manager === null ? '—' : <code key="g">{x.manager + (x.managerVersion ? ' ' + x.managerVersion : '')}</code>,
+          x.state === null ? label(s.taskStatus, x.status) : label(l.state, x.state),
+          prepared(x),
+          reason(x),
+          or(x.limitations.map(explainReason).join(' ')),
+        ])}
+      />
+      {failures.length > 0 && (
+        <>
+          <h6>{l.failedItems}</h6>
+          <ul>
+            {failures.map((f, i) => (
+              <li key={i}>
+                <code>{f.module}</code> <code>{f.name}</code>
+                {f.reason ? ' — ' + explainReason(f.reason) : ''}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </>
+  );
+}
+
 function pick(findings: Finding[], ids: string[]) {
   return findings.filter((f) => ids.includes(f.id));
 }
@@ -230,6 +278,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
             />
           </>
         )}
+        {e.dependencies.length > 0 && <DependencyBlock dependencies={e.dependencies} />}
         <h6>{s.notes}</h6>
         <ModelNote model={e.model} />
         {e.model.performed && (

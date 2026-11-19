@@ -9,7 +9,7 @@ const SETUP: Setup = {
   model: { configured: false, id: null, probe: null },
   git: { available: true, hosts: ['github.com'] },
   readable_folders: ['/home/me'],
-  analysis_defaults: { local: { send_source_to_model: true, run_build_scripts: true }, git: { send_source_to_model: true, run_build_scripts: false } },
+  analysis_defaults: { local: { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }, git: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true } },
   tools: { detected_at: null, tools: [{ name: 'cppcheck', status: 'not_found', version: null, path: null, hint: 'apt install cppcheck', reason: null }] },
 };
 const PROVIDERS = [{ id: 'gh', kind: 'github', host: 'github.com' }];
@@ -34,14 +34,19 @@ describe('the one field', () => {
   });
 
   it('defaults the analysis choices by kind until a box is touched', () => {
-    expect(choicesFor('local', SETUP, {})).toEqual({ send_source_to_model: true, run_build_scripts: true });
-    expect(choicesFor('git', SETUP, {})).toEqual({ send_source_to_model: true, run_build_scripts: false });
-    expect(choicesFor('git', SETUP, { run_build_scripts: true })).toEqual({ send_source_to_model: true, run_build_scripts: true });
-    expect(choicesFor('git', null, {})).toEqual({ send_source_to_model: true, run_build_scripts: false });
+    expect(choicesFor('local', SETUP, {})).toEqual({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true });
+    expect(choicesFor('git', SETUP, {})).toEqual({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true });
+    expect(choicesFor('git', SETUP, { run_build_scripts: true })).toEqual({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true });
+    expect(choicesFor('local', SETUP, { fetch_dependencies: false })).toEqual({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: false });
+    // Without the setup both kinds fetch dependencies.
+    expect(choicesFor('git', null, {})).toEqual({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true });
+    expect(choicesFor('local', null, {})).toEqual({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true });
+    const off = { ...SETUP, analysis_defaults: { ...SETUP.analysis_defaults, git: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: false } } };
+    expect(choicesFor('git', off, {}).fetch_dependencies).toBe(false);
   });
 
   it('builds the registration: a folder by path, a repository with the provider of its host', () => {
-    const on = { send_source_to_model: true, run_build_scripts: true };
+    const on = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: false };
     expect(quickBody({ kind: 'local', path: '/home/me/app' }, '', '', on, PROVIDERS, SETUP).body).toEqual({ analysis: on, local_path: '/home/me/app' });
     const repo = parseTarget('https://github.com/o/r/tree/dev').target!;
     expect(quickBody(repo, ' mine ', '', on, PROVIDERS, SETUP).body).toEqual({ name: 'mine', analysis: on, source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r', branch: 'dev' } });
@@ -68,7 +73,7 @@ describe('better results', () => {
       gap('review_scope_budget_exhausted', null, null, 'code_review'),
       gap('task_unsupported', 'cargo-check.m01', 'repository_code_not_allowed'),
       gap('tests_not_run', null, null, 'report'),
-    ], SETUP, project({ send_source_to_model: true, run_build_scripts: false }));
+    ], SETUP, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true }));
     expect(hints).toEqual([
       { key: 'tool:cppcheck', text: t.improve.tool('cppcheck', 'apt install cppcheck') },
       { key: 'tool:go', text: t.improve.toolGeneric('go') },
@@ -80,10 +85,51 @@ describe('better results', () => {
 
   it('offers the build-script switch only while it is off, and leaves a server-mode grant to the operator', () => {
     const blocked = [gap('task_unsupported', 'cargo-check', 'repository_code_not_allowed')];
-    expect(improvementHints(blocked, SETUP, project({ send_source_to_model: true, run_build_scripts: true }))).toEqual([]);
+    expect(improvementHints(blocked, SETUP, project({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }))).toEqual([]);
     expect(improvementHints(blocked, { ...SETUP, mode: 'server' }, project(undefined))).toEqual([{ key: 'build_scripts', text: t.improve.operatorGrant('cargo-check') }]);
     const withheld = [gap('role_skipped', 'review.interpret', 'model_source_not_approved', 'code_review')];
-    expect(improvementHints(withheld, SETUP, project({ send_source_to_model: false, run_build_scripts: true }))).toEqual([{ key: 'send_source', text: t.improve.sendSource, turnOn: 'send_source_to_model' }]);
+    expect(improvementHints(withheld, SETUP, project({ send_source_to_model: false, run_build_scripts: true, fetch_dependencies: true }))).toEqual([{ key: 'send_source', text: t.improve.sendSource, turnOn: 'send_source_to_model' }]);
     expect(improvementHints([gap('tests_not_run', null, null, 'report')], SETUP, project(undefined))).toEqual([]);
+  });
+
+  it('asks to fetch dependencies the analyzers could not resolve: the project choice, the node switch or the operator', () => {
+    const unresolved = [
+      gap('dependencies_not_fetched', 'go-vet', 'dependency_unavailable', 'environment'),
+      gap('dependencies_not_fetched', 'staticcheck.m02', 'dependency_unavailable', 'environment'),
+      gap('dependencies_not_fetched', 'staticcheck', 'dependency_unavailable', 'environment'),
+    ];
+    // The project's choice is off: turn it on and retry.
+    expect(improvementHints(unresolved, SETUP, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: false }))).toEqual([
+      { key: 'fetch_dependencies', text: t.improve.fetchDependencies('go-vet, staticcheck'), turnOn: 'fetch_dependencies' },
+    ]);
+    // The choice is on, so this computer's switch is off.
+    expect(improvementHints(unresolved, SETUP, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true }))).toEqual([
+      { key: 'fetch_dependencies', text: t.improve.dependencySwitch('go-vet, staticcheck') },
+    ]);
+    expect(improvementHints(unresolved, { ...SETUP, mode: 'server' }, project(undefined))).toEqual([
+      { key: 'fetch_dependencies', text: t.improve.dependencyOperator('go-vet, staticcheck') },
+    ]);
+  });
+
+  it('names the missing package manager once and the unreachable registry for dependencies not prepared', () => {
+    const notPrepared = [
+      gap('dependencies_not_prepared', 'deps.go', 'package_manager_not_configured', 'environment'),
+      gap('dependencies_not_prepared', 'deps.go.m02', 'package_manager_not_configured', 'environment'),
+      gap('dependencies_not_prepared', 'deps.go.m03', 'registry_unreachable', 'environment'),
+      gap('dependencies_not_prepared', 'deps.go.m04', 'registry_unreachable', 'environment'),
+      // Nothing to suggest for a checksum mismatch or an unpinned version.
+      gap('dependencies_not_prepared', 'deps.go.m05', 'checksum_mismatch', 'environment'),
+      gap('dependency_versions_not_pinned', 'deps.go', null, 'environment'),
+    ];
+    const choices = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true };
+    expect(improvementHints(notPrepared, SETUP, project(choices))).toEqual([
+      { key: 'tool:go', text: t.improve.packageManager('go') },
+      { key: 'dependency_registry', text: t.improve.registry },
+    ]);
+    // A missing go analyzer tool and a missing go package manager are one install.
+    const withTool = { ...SETUP, tools: { detected_at: null, tools: [{ name: 'go', status: 'not_found', version: null, path: null, hint: 'install go 1.27', reason: null }] } };
+    expect(improvementHints([gap('task_unsupported', 'go-vet', 'tool_not_configured'), notPrepared[0]!], withTool, project(choices))).toEqual([
+      { key: 'tool:go', text: t.improve.tool('go', 'install go 1.27') },
+    ]);
   });
 });
