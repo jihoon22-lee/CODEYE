@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -142,6 +144,9 @@ func checkUnparsable(t *testing.T, r realRun, syntaxRule string, processed []str
 		t.Fatalf("outcome %s/%s units %+v limitations %v tool errors %+v\n%s", r.res.Status, r.res.Reason, r.doc.Coverage.Units, r.doc.Limitations, r.doc.ToolErrors, r.raw)
 	}
 	wantProcessed(t, r.doc, processed...)
+	if got, want := r.doc.Target.Properties[PropUnparsableFiles], strings.Join(slices.Sorted(slices.Values(unparsable)), ", "); got != want {
+		t.Fatalf("property %s = %q, want %q", PropUnparsableFiles, got, want)
+	}
 	perFile := map[string]int{}
 	for _, o := range r.doc.Observations {
 		if syntaxRule != "" && o.RuleID == syntaxRule && o.Path != nil {

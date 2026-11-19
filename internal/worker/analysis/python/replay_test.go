@@ -3,6 +3,7 @@ package python
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -373,6 +374,29 @@ func TestReplayMypyRerunsShareTimeLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The unparsable_files property names the files in order and counts the
+// ones past its 256-byte limit.
+func TestUnparsableList(t *testing.T) {
+	files := map[string]bool{"b.py": true, "a.py": true}
+	if got := unparsableList(files); got != "a.py, b.py" {
+		t.Fatalf("%q", got)
+	}
+	for i := range 40 {
+		files[fmt.Sprintf("pkg/module_%02d.py", i)] = true
+	}
+	got := unparsableList(files)
+	if len(got) > 256 || !strings.HasPrefix(got, "a.py, b.py, pkg/module_00.py") || !strings.HasSuffix(got, " more") {
+		t.Fatalf("%d bytes: %q", len(got), got)
+	}
+	if got := unparsableList(map[string]bool{"x,y.py": true}); got != "+1 more" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestReplayMypyUnparsableImported(t *testing.T) {
+	checkMypyUnparsableImported(t, runReplay(t, MypyTool, "syntaximport", nil))
 }
 
 func TestReplayBanditUnparsableFiles(t *testing.T) {

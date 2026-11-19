@@ -415,6 +415,35 @@ func checkMypyUnparsable(t *testing.T, r realRun) {
 	}
 }
 
+// A healthy file that imports the unparsable one: the rerun skips that
+// module (follow_imports = skip in a scratch configuration) instead of
+// stopping at its syntax error again (TC-191).
+func TestRealMypyUnparsableImported(t *testing.T) {
+	checkMypyUnparsableImported(t, runReal(t, newMypyT(t), "syntaximport", "mypy"))
+}
+
+func checkMypyUnparsableImported(t *testing.T, r realRun) {
+	t.Helper()
+	checkUnparsable(t, r, "syntax", []string{"app.py"}, "broken.py")
+	wantExecutions(t, r.doc, "mypy.version", "mypy.check", "mypy.check.r01")
+	if got := findObs(r.doc, "return-value"); len(got) != 1 || *got[0].Path != "app.py" || got[0].Location.StartLine != 9 {
+		t.Fatalf("return-value on app.py:9: %+v", got)
+	}
+	if got := rulesOf(r.doc, false); len(got) != 2 {
+		t.Fatalf("rules %v: want only the syntax error and return-value", got)
+	}
+	var rerun []string
+	for _, s := range r.rr.specs {
+		if slices.ContainsFunc(s.Args, func(a string) bool { return strings.HasSuffix(a, "files.r01.txt") }) {
+			rerun = s.Args
+		}
+	}
+	i := slices.Index(rerun, "--config-file")
+	if i < 0 || i+1 >= len(rerun) || filepath.Base(rerun[i+1]) != "mypy.r01.ini" {
+		t.Fatalf("rerun argv %v: want the skip configuration", rerun)
+	}
+}
+
 func wantExecutions(t *testing.T, d obsdoc.Document, names ...string) {
 	t.Helper()
 	var got []string

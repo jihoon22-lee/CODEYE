@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -129,12 +130,32 @@ func usesSrc(moduleDir string, files []string) bool {
 }
 
 // MypyArgs is the mypy argv after the executable for a target minor; cache,
-// report and the file list live in task scratch.
-func MypyArgs(minor int, cacheDir, reportDir, filesList string) []string {
+// report and the file list live in task scratch. skipConfig, when set, is
+// the scratch configuration of a rerun that skips the unparsable modules.
+func MypyArgs(minor int, cacheDir, reportDir, filesList, skipConfig string) []string {
 	args := append([]string{}, MypySelection...)
 	args = append(args, "--python-version", "3."+strconv.Itoa(minor), "--platform", mypyPlatform(), "--cache-dir", cacheDir,
 		"-O", "json", "--lineprecision-report", reportDir)
+	if skipConfig != "" {
+		args = append(args, "--config-file", skipConfig)
+	}
 	return append(args, "@"+filesList)
+}
+
+// mypySkipModule is a module name a configuration section header can hold.
+var mypySkipModule = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
+
+// mypySkipConfig is the configuration of a rerun: only per-module sections
+// that make mypy skip the unparsable modules a remaining file imports
+// (follow_imports = skip; measured with 2.4.1, an import of a left-out
+// module otherwise stops the rerun at the same syntax error). The global
+// options stay the command line's.
+func mypySkipConfig(modules []string) []string {
+	lines := []string{"[mypy]"}
+	for _, mod := range modules {
+		lines = append(lines, "", "[mypy-"+mod+"]", "follow_imports = skip")
+	}
+	return lines
 }
 
 // MypyMaxReruns bounds the reruns without unparsable files: mypy stops at
@@ -157,6 +178,8 @@ func (mypyRun) execute(rc *runCtx) {
 		rc.extraEnv["MYPYPATH"] = filepath.Join(rc.moduleAbs, "src")
 	}
 	files := append([]string{}, m.Files...)
+	src := usesSrc(m.Dir, m.Files)
+	var skipped []string
 	// The first run and its reruns share the task's one time limit: each
 	// rerun gets only what is left.
 	rc.deadline = time.Now().Add(rc.b.cfg.Timeout)
@@ -176,8 +199,16 @@ func (mypyRun) execute(rc *runCtx) {
 			rc.writeFail = true
 			return
 		}
+		skipConfig := ""
+		if len(skipped) > 0 {
+			skipConfig = filepath.Join(rc.dirs["cfg"], fmt.Sprintf("mypy.r%02d.ini", i))
+			if err := writeLines(skipConfig, mypySkipConfig(skipped)); err != nil {
+				rc.writeFail = true
+				return
+			}
+		}
 		exec := mypyCheckName(i)
-		r := rc.exec(exec, MypyArgs(minor, rc.dirs["cache"], rc.dirs["report"], list), nil)
+		r := rc.exec(exec, MypyArgs(minor, rc.dirs["cache"], rc.dirs["report"], list, skipConfig), nil)
 		if r == nil {
 			return
 		}
@@ -201,6 +232,11 @@ func (mypyRun) execute(rc *runCtx) {
 			return
 		}
 		files = slices.DeleteFunc(files, func(f string) bool { return bad[f] })
+		for _, f := range slices.Sorted(maps.Keys(bad)) {
+			if mod := mypyModuleName(pack.RelTo(f, m.Dir), src); mypySkipModule.MatchString(mod) && !slices.Contains(skipped, mod) {
+				skipped = append(skipped, mod)
+			}
+		}
 		if len(files) == 0 {
 			return
 		}

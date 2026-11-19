@@ -1,6 +1,8 @@
 package python
 
 import (
+	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -230,6 +232,32 @@ func (bd *builder) unparsable(syntax map[string]bool, rule, severity, message, f
 	}
 }
 
+// unparsableList names the unparsable files (sorted, comma-separated) within
+// the 256-byte property limit; the files that do not fit are counted as
+// "+N more".
+func unparsableList(files map[string]bool) string {
+	names := slices.Sorted(maps.Keys(files))
+	out := ""
+	for i, n := range names {
+		next := n
+		if out != "" {
+			next = out + ", " + n
+		}
+		rest := ""
+		if i < len(names)-1 {
+			rest = fmt.Sprintf(", +%d more", len(names)-1-i)
+		}
+		if len(next)+len(rest) > 256 || !obsdoc.SafeText(n, 256) || strings.ContainsAny(n, ",\n") {
+			if out == "" {
+				return fmt.Sprintf("+%d more", len(names))
+			}
+			return out + fmt.Sprintf(", +%d more", len(names)-i)
+		}
+		out = next
+	}
+	return out
+}
+
 // toolError records a unit the tool could not analyze for a reason that is
 // not the code's (a configuration or a run that blocks). It is never an
 // observation of the code.
@@ -298,6 +326,7 @@ func (bd *builder) finish(processed []string, syntaxFiles map[string]bool) obsdo
 		// processed files; everything else it analyzed stands.
 		doc.Coverage.Units[UnitSyntaxError] += len(syntaxFiles)
 		bd.limit(LimUnparsable)
+		doc.Target.Properties[PropUnparsableFiles] = unparsableList(syntaxFiles)
 	}
 	if bd.reason == "" && processed == nil {
 		bd.fail(domain.TaskFailed, ReasonProcessedMismatch, obsdoc.ExitExecutionError)

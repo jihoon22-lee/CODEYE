@@ -842,8 +842,8 @@ ruff S 규칙은 bandit 검사를 다시 구현한 것이라 고르지 않는다
 | bandit | 두 실행 모두 0 + 결과 없음 / 1 + 결과 | 성공. 처리 파일은 scratch JSON `metrics`에서 `errors` 파일을 뺀 `.py` |
 | bandit | 결과와 어긋남 / 2 | `exit_status_mismatch` / `bandit_failed` |
 
-- 구문 오류(ruff `invalid-syntax`·`E999`·`E902`, mypy `syntax`, pyright 규칙 없는 오류, bandit `errors` 항목)가 난 파일은 `syntax_error` 단위로 세고 처리 파일에서 빼며 제약 `unparsable_files_not_analyzed`를 남긴다. 나머지 파일의 결과로 작업은 성공한다. 위치가 있는 구문 오류는 파일마다 첫 하나가 관찰이다(ruff·mypy는 그 규칙, pyright는 `syntax`). 줄 끝을 넘는 열은 줄 끝으로 맞춘다. bandit은 위치를 주지 않아 단위만 남는다.
-- mypy는 첫 구문 오류에서 멈추므로(exit 2, 레코드 하나) 보고된 파일을 목록에서 빼고 다시 실행한다. 첫 실행과 재실행은 작업 제한시간 하나를 나눠 쓰며 재실행은 남은 시간만 받는다. 남은 시간이 없으면 재실행을 시작하지 않고 찾은 구문 오류를 남긴 채 `timed_out`이다. 구문 오류 파일만 빠른 실행이라(실측: 재실행 3회 포함 약 1초) 미리 다른 parser로 거르지 않는다. 다른 parser의 문법 판정이 mypy 대상 버전의 판정과 다를 수 있기 때문이다.
+- 구문 오류(ruff `invalid-syntax`·`E999`·`E902`, mypy `syntax`, pyright 규칙 없는 오류, bandit `errors` 항목)가 난 파일은 `syntax_error` 단위로 세고 처리 파일에서 빼며 제약 `unparsable_files_not_analyzed`를 남긴다. 나머지 파일의 결과로 작업은 성공한다. 위치가 있는 구문 오류는 파일마다 첫 하나가 관찰이다(ruff·mypy는 그 규칙, pyright는 `syntax`). 줄 끝을 넘는 열은 줄 끝으로 맞춘다. bandit은 위치를 주지 않아 관찰이 없다. 네 도구 모두 그 파일 이름을 대상 속성 `unparsable_files`(정렬, 쉼표 구분, 256바이트를 넘는 나머지는 `+N more`)에 적는다.
+- mypy는 첫 구문 오류에서 멈추므로(exit 2, 레코드 하나) 보고된 파일을 목록에서 빼고 다시 실행한다. 첫 실행과 재실행은 작업 제한시간 하나를 나눠 쓰며 재실행은 남은 시간만 받는다. 남은 시간이 없으면 재실행을 시작하지 않고 찾은 구문 오류를 남긴 채 `timed_out`이다. 재실행은 빠진 파일의 모듈을 scratch 설정의 모듈 절(`follow_imports = skip`)로 건너뛴다. 남은 파일이 그 모듈을 import하면 mypy가 같은 구문 오류에서 다시 멈추기 때문이다(실측). 구문 오류에서 멈추는 실행은 빠르므로(실측: 파일 세 개, 첫 실행과 재실행 두 번이 약 1초) 미리 다른 parser로 거르지 않는다. 그래서 구문 오류 파일이 32개를 넘으면 작업은 `source_syntax_errors`로 실패한다. 다른 parser의 문법 판정이 mypy 대상 버전의 판정과 다를 수 있기 때문이다.
 - 계획했지만 도구가 처리 목록에 넣지 않은 파일은 `files_unlisted`·`not_analyzed`와 `planned_files_not_processed`로 남는다. ruff 기본 제외(`build`, `dist` 등)에 걸린 계획 파일도 여기에 든다.
 - 열은 ruff code point, pyright 0부터의 UTF-16, mypy(`--no-native-parser`)·bandit UTF-8 바이트이며 모두 byte 열로 바꾼다. bandit `issue_severity`는 `raw_severity`로만 남는다.
 

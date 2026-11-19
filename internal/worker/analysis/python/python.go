@@ -107,6 +107,9 @@ const (
 	// (coverage unit syntax_error); the task reports everything else it
 	// analyzed (docs/ANALYZERS.md#python-결과-판정).
 	LimUnparsable = "unparsable_files_not_analyzed"
+	// PropUnparsableFiles is the target property that names those files
+	// (bandit reports them without a position, so no observation does).
+	PropUnparsableFiles = "unparsable_files"
 	// LimMypyRerunsTimedOut: the task's time limit ran out before mypy could
 	// be rerun without the unparsable files found so far.
 	LimMypyRerunsTimedOut = "mypy_reruns_time_limit_reached"

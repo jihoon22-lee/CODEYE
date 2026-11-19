@@ -317,7 +317,9 @@ func assemble(in assembleInput) obsdoc.Document {
 			case m.Fatal && in.Typed && strings.Contains(m.Text, outsideProgram):
 				state = FileOutsideTSConfig
 				continue
-			case m.Fatal && in.Typed && strings.Contains(m.Text, tsconfigUnparsed):
+			case m.Fatal && in.Typed && (strings.Contains(m.Text, tsconfigUnparsed) || strings.Contains(m.Text, "parserOptions")):
+				// Any other parser-options message is about the program too,
+				// never a syntax error of the file.
 				// The tsconfig did not load (measured: an unresolved
 				// package extends, TS6053): a configuration error of the
 				// program, not a parse error of the file.
