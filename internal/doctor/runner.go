@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Command is for fixed, read-only doctor probes, not repository tasks (W05).
+// Command is for fixed, read-only doctor probes, not repository tasks.
 type Command struct {
 	Name    string
 	Args    []string

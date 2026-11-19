@@ -46,9 +46,9 @@ func sha(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// TestW06MigrationFromPopulatedW03Schema applies 0001-0002, fills rows the way
-// W02/W03 wrote them, then applies 0003 and checks the legacy data handling.
-func TestW06MigrationFromPopulatedW03Schema(t *testing.T) {
+// TestNodeMigrationFromPopulatedAuthSchema applies 0001-0002, fills rows the way
+// the earlier schema wrote them, then applies 0003 and checks the legacy data handling.
+func TestNodeMigrationFromPopulatedAuthSchema(t *testing.T) {
 	_, open := isolatedSchema(t)
 	ctx := testCtx(t)
 	c := open()
@@ -58,14 +58,14 @@ func TestW06MigrationFromPopulatedW03Schema(t *testing.T) {
 	user, project := newID(), newID()
 	mustExec(t, ctx, c, "INSERT INTO users(id) VALUES($1)", user)
 	mustExec(t, ctx, c, "WITH p AS (INSERT INTO projects(id,owner_id,name,current_revision) VALUES($1,$2,'p',1) RETURNING id) INSERT INTO project_revisions(project_id,revision,config,config_digest) SELECT id,1,'{}',$3 FROM p", project, user, digest('a'))
-	// W03 stored only the canonical request digest. One reconstructible body,
+	// The earlier schema stored only the canonical request digest. One reconstructible body,
 	// one scope=paths body that cannot be reconstructed.
 	known := `{"profile":"with-tests","scope":{"kind":"full"},"source_policy":"latest_at_acquire"}`
 	unknown := `{"profile":"deep-review","scope":{"kind":"paths","paths":["a"]},"source_policy":"latest_at_acquire"}`
 	knownRun, unknownRun := newID(), newID()
 	mustExec(t, ctx, c, "INSERT INTO runs(id,project_id,actor_id,idempotency_key,request_digest,project_revision,status) VALUES($1,$2,$3,'k1',$4,1,'queued')", knownRun, project, user, sha(known))
 	mustExec(t, ctx, c, "INSERT INTO runs(id,project_id,actor_id,idempotency_key,request_digest,project_revision,status) VALUES($1,$2,$3,'k2',$4,1,'queued')", unknownRun, project, user, sha(unknown))
-	// Legacy Git snapshot whose digest is a commit, and a W02 attempt with an
+	// Legacy Git snapshot whose digest is a commit, and an early attempt with an
 	// unregistered node ID.
 	gitSnap, localSnap := newID(), newID()
 	commit := randomHex(20)
@@ -93,7 +93,7 @@ func TestW06MigrationFromPopulatedW03Schema(t *testing.T) {
 	}
 	// Restored request is fixed once stored.
 	execState(t, ctx, c, SQLStateImmutable, "UPDATE runs SET request='{}' WHERE id=$1", knownRun)
-	// A new W06 git snapshot must carry the commit separately.
+	// A new git snapshot must carry the commit separately.
 	execState(t, ctx, c, "23514", "INSERT INTO snapshots(id,project_id,digest,consistency,manifest_digest) VALUES($1,$2,$3,'git_commit',$3)", newID(), project, digest('c'))
 	execState(t, ctx, c, "23514", "INSERT INTO snapshots(id,project_id,digest,consistency,manifest_digest) VALUES($1,$2,$3,'stable_copy_best_effort',$4)", newID(), project, digest('c'), digest('d'))
 	mustExec(t, ctx, c, "INSERT INTO snapshots(id,project_id,digest,consistency,manifest_digest,source_sha) VALUES($1,$2,$3,'git_commit',$3,$4)", newID(), project, digest('e'), commit)
@@ -105,7 +105,7 @@ func TestW06MigrationFromPopulatedW03Schema(t *testing.T) {
 	if err := c.QueryRow(ctx, "SELECT count(*) FROM scheduler_limits").Scan(&limits); err != nil || limits != 1 {
 		t.Fatalf("scheduler_limits rows %d %v", limits, err)
 	}
-	// Apply goes to the latest embedded version (W07 added 0004 after this test).
+	// Apply goes to the latest embedded version (later migrations add versions).
 	if latest, err := LatestVersion(); err != nil {
 		t.Fatal(err)
 	} else if h := historyRows(t, ctx, c); len(h) != latest {
@@ -117,8 +117,8 @@ func TestW06MigrationFromPopulatedW03Schema(t *testing.T) {
 	}
 }
 
-// The restore SQL must use exactly the canonical bytes W03 hashed.
-func TestW06RequestBackfillMatchesCanonicalForms(t *testing.T) {
+// The restore SQL must use exactly the canonical bytes the earlier schema hashed.
+func TestRequestBackfillMatchesCanonicalForms(t *testing.T) {
 	_, open := isolatedSchema(t)
 	ctx := testCtx(t)
 	c := open()
@@ -142,7 +142,7 @@ func TestW06RequestBackfillMatchesCanonicalForms(t *testing.T) {
 }
 
 // A failing statement inside 0003 rolls back the whole application.
-func TestW06MigrationFailureRollsBack(t *testing.T) {
+func TestNodeMigrationFailureRollsBack(t *testing.T) {
 	schema, open := isolatedSchema(t)
 	ctx := testCtx(t)
 	c := open()

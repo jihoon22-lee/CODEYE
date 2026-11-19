@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// TestW15MigrationLeavesLegacyTasksUnstaged applies 0001-0005, writes task rows
-// the way R0 workers did (with and without a key), then applies 0006: the rows
+// TestTaskStageMigrationLeavesLegacyTasksUnstaged applies 0001-0005, writes task rows
+// the way workers without stages did (with and without a key), then applies 0006: the rows
 // keep NULL stage and times and their versions (no backfill, no inference from
 // the key). The new stage is checked and immutable once set; an 0005 binary
 // refuses the result.
-func TestW15MigrationLeavesLegacyTasksUnstaged(t *testing.T) {
+func TestTaskStageMigrationLeavesLegacyTasksUnstaged(t *testing.T) {
 	schema, open := isolatedSchema(t)
 	ctx := testCtx(t)
 	c := open()

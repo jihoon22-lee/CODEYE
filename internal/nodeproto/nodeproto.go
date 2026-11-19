@@ -40,7 +40,7 @@ const (
 // MaxArtifactBytes is the largest single artifact upload.
 const MaxArtifactBytes = 64 << 20
 
-// Error codes added by the node protocol (W03 envelope).
+// Error codes of the node protocol (error envelope).
 const (
 	CodeNodeUnauthenticated = "NODE_UNAUTHENTICATED" // 401
 	CodeStaleAttempt        = "STALE_ATTEMPT"        // 409
@@ -122,15 +122,15 @@ type NodeHeartbeatRequest struct {
 	Capabilities        []string         `json:"capabilities"`
 	LastCommandSequence int64            `json:"last_command_sequence"`
 	CleanupReports      []CleanupReport  `json:"cleanup_reports"`
-	// WorkerScaling (W07, optional) is ScalingStatic (absent: the agent keeps
+	// WorkerScaling (optional) is ScalingStatic (absent: the agent keeps
 	// its own --workers N) or ScalingController (the agent starts and stops
 	// workers only on controller commands). Static agents omit it, so their
 	// heartbeat bytes are unchanged.
 	WorkerScaling string `json:"worker_scaling,omitempty"`
-	// MaxWorkers (W07) is the agent's local hard worker cap; required with
+	// MaxWorkers is the agent's local hard worker cap; required with
 	// ScalingController, absent otherwise.
 	MaxWorkers int `json:"max_workers,omitempty"`
-	// StorageQuotaExceeded (W25, optional) lists the node storage areas
+	// StorageQuotaExceeded (optional) lists the node storage areas
 	// (snapshot, workspace, cache, logs) at or over the operator's limit. The
 	// controller then creates no new attempt on this node. Agents without a
 	// quota omit it, so their heartbeat bytes are unchanged.
@@ -145,8 +145,8 @@ const (
 	MaxNodeWorkers = 64
 )
 
-// Command kinds. cancel_attempt is derived from run cancellation (W06);
-// start_worker/drain_worker/stop_worker are issued by the W07 autoscaler only
+// Command kinds. cancel_attempt is derived from run cancellation;
+// start_worker/drain_worker/stop_worker are issued by the autoscaler only
 // to nodes that declared ScalingController. drain_worker lets a busy worker
 // finish its attempt and then exit; stop_worker is sent only for idle workers.
 const (
@@ -295,13 +295,13 @@ type SnapshotFixedPayload struct {
 
 // TaskCreatedPayload declares a task. Key is unique per run; on a retried run
 // the same key returns the existing task (its current version). Stage is the
-// optional display stage (domain.Stage, docs/ARCHITECTURE.md#표시-단계와-task-단계); pre-W15 workers omit it
+// optional display stage (domain.Stage, docs/ARCHITECTURE.md#표시-단계와-task-단계); workers may omit it
 // and the task is stored without one. On key reuse an omitted stage keeps the
 // stored one, a stage for a task stored without one is recorded once, and a
-// different stage is a conflict. Weight (W22) is the optional estimate weight
+// different stage is a conflict. Weight is the optional estimate weight
 // 1..1000 of the task for the weighted progress (undeclared counts as 1); it
-// follows the same first-record rule as Stage. Controllers before W22 reject
-// the field, so the controller is upgraded before the workers.
+// follows the same first-record rule as Stage. Controllers that predate the field reject
+// it, so the controller is upgraded before the workers.
 type TaskCreatedPayload struct {
 	Key      string  `json:"key"`
 	Required bool    `json:"required"`
@@ -398,7 +398,7 @@ type CleanupRequest struct {
 	VerifiedAt   time.Time `json:"verified_at"`
 }
 
-// RunAck is the 202 body of complete and cleanup (W03 RunAck).
+// RunAck is the 202 body of complete and cleanup.
 type RunAck struct {
 	ID      string `json:"id"`
 	Status  string `json:"status"`
@@ -415,10 +415,10 @@ const (
 	WaitingNoCapableNode        = "no_capable_node"
 	WaitingCapacityFull         = "capacity_full"
 	WaitingSnapshotUnavailable  = "snapshot_unavailable"
-	WaitingRequestUnavailable   = "request_unavailable" // run created before W06 whose request body is unknown
-	WaitingProjectLimit         = "project_limit"       // W07: the project already runs project_max_running attempts
-	WaitingPoolPaused           = "pool_paused"         // W07: every capable node's pool has max_workers = 0
-	// W25: a storage quota is reached (the artifact store, or a storage area
+	WaitingRequestUnavailable   = "request_unavailable" // run created before requests were stored, whose request body is unknown
+	WaitingProjectLimit         = "project_limit"       // the project already runs project_max_running attempts
+	WaitingPoolPaused           = "pool_paused"         // every capable node's pool has max_workers = 0
+	// A storage quota is reached (the artifact store, or a storage area
 	// of every capable node that would otherwise have room).
 	WaitingStorageQuotaExceeded = "storage_quota_exceeded"
 )

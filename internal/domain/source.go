@@ -30,7 +30,7 @@ const (
 )
 
 // Source is a declared project source. Declaring a source never proves it is
-// reachable: access is checked only when W04 acquires a snapshot.
+// reachable: access is checked only when a snapshot is acquired.
 type Source struct {
 	Kind          SourceKind `json:"kind"`
 	ProviderID    string     `json:"provider_id,omitempty"`

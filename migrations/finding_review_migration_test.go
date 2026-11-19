@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-// TestW23MigrationAddsReviewsOnly applies 0001-0007 with a project and run,
+// TestFindingReviewMigrationAddsReviewsOnly applies 0001-0007 with a project and run,
 // then 0008: existing rows are untouched (0008 only adds finding_reviews), the
 // review constraints hold before any foreign key is consulted, a review must
 // name a published report, versions start at 1, and a 0007 binary refuses the
 // result. Immutability and the full write path are in the storage tests
-// (TestW23FindingReviews).
-func TestW23MigrationAddsReviewsOnly(t *testing.T) {
+// (TestFindingReviews).
+func TestFindingReviewMigrationAddsReviewsOnly(t *testing.T) {
 	schema, open := isolatedSchema(t)
 	ctx := testCtx(t)
 	c := open()
@@ -47,7 +47,7 @@ func TestW23MigrationAddsReviewsOnly(t *testing.T) {
 	review(SQLStateCounterDecrease, fp, 2, "suppressed", "이유", nil, nil)    // versions start at 1
 	review("23503", fp, 1, "suppressed", "이유", nil, nil)                    // a published report is required
 	if !relationExists(t, ctx, c, schema, "finding_reviews_run_idx") || !relationExists(t, ctx, c, schema, "finding_reviews_actor_idx") {
-		t.Fatal("W23 indexes missing")
+		t.Fatal("finding review indexes missing")
 	}
 	if err := applyFS(ctx, c, embeddedPrefix(t, 8), "m"); err != nil {
 		t.Fatalf("reapply: %v", err)

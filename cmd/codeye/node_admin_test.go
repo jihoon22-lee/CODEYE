@@ -124,11 +124,11 @@ func TestNodeTokenCreateWritesPrivateFile(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT global_max_running FROM scheduler_limits").Scan(&limit); err != nil || limit != 3 {
 		t.Fatalf("limit %d %v", limit, err)
 	}
-	// W07: the per-project limit alone; the global limit is kept.
+	// The per-project limit alone; the global limit is kept.
 	if code, _, out, stderr := admin(t, "scheduler", "set", "--project-max-running", "2"); code != 0 || !strings.Contains(out, `"project_max_running":2`) || !strings.Contains(out, `"global_max_running":3`) {
 		t.Fatal(out, stderr)
 	}
-	// W07 pool policy: unspecified fields keep their value; min>max refused;
+	// Pool policy: unspecified fields keep their value; min>max refused;
 	// stale --expect-revision refused; list shows the policy and scaler state.
 	code, _, out, stderr = admin(t, "pool", "set", "--name", "default", "--max-workers", "3", "--idle-timeout-seconds", "30")
 	if code != 0 || !strings.Contains(out, `"revision":2`) || !strings.Contains(out, `"max_workers":3`) || !strings.Contains(out, `"min_workers":0`) || !strings.Contains(out, `"idle_timeout_seconds":30`) {

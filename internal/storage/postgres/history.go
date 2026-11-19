@@ -13,7 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// W23 run comparison inputs and human finding reviews (migration 0008,
+// Run comparison inputs and human finding reviews (migration 0008,
 // docs/REPORT.md). Comparison is computed by internal/history from the immutable
 // report bodies loaded here; nothing derived is stored.
 

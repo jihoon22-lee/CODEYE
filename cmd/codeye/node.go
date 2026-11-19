@@ -25,7 +25,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
-// runNode handles `codeye agent` and `codeye worker` (W06). main.go calls it
+// runNode handles `codeye agent` and `codeye worker`. main.go calls it
 // before the control-plane commands; ok=false means "not a node command".
 func runNode(ctx context.Context, args []string, out, stderr io.Writer) (int, bool) {
 	if len(args) == 0 {
@@ -58,7 +58,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	modelName := fs.String("model", "", "")
 	modelRelay := fs.String("model-relay-file", "", "")
 	// The review pack is a node operator setting only; runs and profiles
-	// cannot select it. review-r1 is the W15 candidate, not the default.
+	// cannot select it. The default is review-r1 (the role pack); review-v1 is the legacy pack.
 	reviewPack := fs.String("review-pack", review.PackR1, "")
 	fs.Var(&modelRoots, "model-source-root", "")
 	// The repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가) is a node operator setting
@@ -88,7 +88,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	bothTypeCheckers := fs.Bool("python-both-type-checkers", false, "")
 	fs.Var(&roots, "source-root", "")
 	fs.Var(&gitHosts, "git-host", "")
-	// W25 storage quota (docs/OPERATIONS.md#저장-영역과-상한): AREA=BYTES for snapshot, workspace,
+	// Storage quota (docs/OPERATIONS.md#저장-영역과-상한): AREA=BYTES for snapshot, workspace,
 	// cache and logs; areas at their limit refuse new claims for this node.
 	fs.Var(&storageQuota, "storage-quota", "")
 	storageLogDir := fs.String("storage-log-dir", "", "")
@@ -100,7 +100,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid --review-pack; expected review-r1 (default) or review-v1 (legacy)")
 		return agent.ExitUsage
 	}
-	// --autoscale (W07) starts with zero workers and follows controller
+	// --autoscale starts with zero workers and follows controller
 	// commands; it excludes an explicit --workers (legacy static mode, the
 	// default). --max-workers only applies to --autoscale.
 	explicit := map[string]bool{}
@@ -167,7 +167,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		StorageLogDir:             *storageLogDir,
 		Log:                       stderr,
 	}
-	// W25: SIGUSR1 (codeye stop) drains: no new claims, running work
+	// SIGUSR1 (codeye stop) drains: no new claims, running work
 	// finishes, then a clean exit.
 	drain, stopDrain := drainSignal()
 	defer stopDrain()

@@ -201,7 +201,7 @@ type ProjectSummary struct {
 	LastRun  *RunRef
 	// HasReport is true once any run of the project has a published report.
 	HasReport bool
-	// Activity is the representative run's stage view (W15). Store reads
+	// Activity is the representative run's stage view. Store reads
 	// always fill it; a hand-built summary has CheckedAt zero.
 	Activity Activity
 	// representative is the run chosen per docs/ARCHITECTURE.md#대표-실행-선택 ("" without runs).
@@ -367,9 +367,9 @@ type RunView struct {
 	WaitingReason *string
 	// LatestReport is the newest published report revision, nil if none.
 	LatestReport *ReportSummary
-	// Stages is the W15 stage view, computed like the project activity.
+	// Stages is the stage view, computed like the project activity.
 	Stages RunStages
-	// Origin is the schedule occurrence the run was requested for (W22); nil
+	// Origin is the schedule occurrence the run was requested for; nil
 	// for a manual request.
 	Origin *RunOrigin
 }

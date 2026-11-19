@@ -684,8 +684,8 @@ func (s *Server) createRun(q *request) {
 	writeJSON(q.w, http.StatusAccepted, ack)
 }
 
-// progressView keeps the R0 fields (stage is the run status), adds the W15
-// stage view computed exactly like the project activity and the W22 plan
+// progressView keeps the run-status fields (stage is the run status), adds the
+// stage view computed exactly like the project activity and the plan
 // revision and weighted estimate (progress.Plan, same computation).
 type progressView struct {
 	Stage            string           `json:"stage"`
@@ -717,7 +717,7 @@ type planChangeView struct {
 }
 
 // triggerView says why a run exists: a manual request or a schedule
-// occurrence (W22).
+// occurrence.
 type triggerView struct {
 	Kind         string     `json:"kind"`
 	ScheduleID   *string    `json:"schedule_id,omitempty"`

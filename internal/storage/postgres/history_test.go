@@ -13,21 +13,21 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 )
 
-// W23 comparison inputs and finding reviews over real PostgreSQL (docs/REPORT.md).
+// Comparison inputs and finding reviews over real PostgreSQL (docs/REPORT.md).
 // Report bodies here are minimal structured reports (the real builder path
 // is exercised by the HTTP tests). Skips (NOT executed) without
 // CODEYE_TEST_DATABASE_URL.
 
 const vetMsg = `fmt.Printf format %d has arg "x" of wrong type string`
 
-func w23Finding(id, path string, line int) report.Finding {
+func reportFinding(id, path string, line int) report.Finding {
 	fp, b := report.ToolFingerprint("go.vet", "printf", path, "", vetMsg)
 	return report.Finding{ID: id, Fingerprint: fp, FingerprintBasis: &b, Severity: "low", Validation: "unreviewed", Category: "correctness", Disposition: "open",
 		Locations: []report.Location{{Path: path, StartLine: line, EndLine: line}}}
 }
 
-// w23Body is a structured report whose go-vet task ended with status.
-func w23Body(t *testing.T, run, builder, vetStatus string, processed []string, findings ...report.Finding) []byte {
+// reportBody is a structured report whose go-vet task ended with status.
+func reportBody(t *testing.T, run, builder, vetStatus string, processed []string, findings ...report.Finding) []byte {
 	t.Helper()
 	v, n := "go1.27.4", len(processed)
 	tc := report.ToolCoverage{TaskKey: "go-vet", Analyzer: "go.vet", ToolVersion: &v, ExitClass: "success_with_findings", ProcessedFiles: &n, ProcessedPaths: processed}
@@ -47,7 +47,7 @@ func w23Body(t *testing.T, run, builder, vetStatus string, processed []string, f
 }
 
 // runWithReport runs one go-vet attempt to finalizing and publishes body.
-func (e *w23) runWithReport(project, key, request, builder string, body func(run string) []byte) string {
+func (e *historyEnv) runWithReport(project, key, request, builder string, body func(run string) []byte) string {
 	e.t.Helper()
 	if _, err := e.s.Enqueue(e.ctx, e.user, project, key, json.RawMessage(request)); err != nil {
 		e.t.Fatal(err)
@@ -67,18 +67,18 @@ func (e *w23) runWithReport(project, key, request, builder string, body func(run
 	return run
 }
 
-type w23 struct {
-	*w06
+type historyEnv struct {
+	*nodeEnv
 	node testNode
 }
 
-func newW23(t *testing.T) *w23 {
-	e := &w23{w06: newW15(t)}
+func newHistoryEnv(t *testing.T) *historyEnv {
+	e := &historyEnv{nodeEnv: newStageEnv(t)}
 	e.node = e.enroll("a", e.root.ID)
 	return e
 }
 
-func (e *w23) compare(actor, run string, baseline string) (ComparisonData, history.Comparison) {
+func (e *historyEnv) compare(actor, run string, baseline string) (ComparisonData, history.Comparison) {
 	e.t.Helper()
 	d, err := e.s.LoadComparison(e.ctx, actor, run, 0, baseline, 0)
 	if err != nil {
@@ -110,26 +110,26 @@ func stateOf(t *testing.T, c history.Comparison, state string) history.Entry {
 
 const pathsScope = `{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"paths","paths":["cmd"]}}`
 
-func TestW23DefaultBaselineAndTC14(t *testing.T) {
-	e := newW23(t)
+func TestDefaultBaselineAndTC14(t *testing.T) {
+	e := newHistoryEnv(t)
 	p := e.project.ID
 	if FingerprintBuilderSince != report.FingerprintSince {
 		t.Fatal("builder version thresholds disagree")
 	}
-	clean := func(run string) []byte { return w23Body(t, run, "3", "succeeded", []string{"a.go"}) }
+	clean := func(run string) []byte { return reportBody(t, run, "3", "succeeded", []string{"a.go"}) }
 	found := func(run string) []byte {
-		return w23Body(t, run, "3", "succeeded", []string{"a.go"}, w23Finding("f-"+run[:8], "a.go", 5))
+		return reportBody(t, run, "3", "succeeded", []string{"a.go"}, reportFinding("f-"+run[:8], "a.go", 5))
 	}
 	legacy := e.runWithReport(p, "legacy", deepReview, "2", func(run string) []byte {
-		return w23Body(t, run, "2", "succeeded", []string{"a.go"}, w23Finding("f-"+run[:8], "a.go", 5))
+		return reportBody(t, run, "2", "succeeded", []string{"a.go"}, reportFinding("f-"+run[:8], "a.go", 5))
 	})
 	first := e.runWithReport(p, "first", deepReview, "3", found)
-	// The pre-W23 revision is never a default baseline.
+	// A revision without comparison inputs is never a default baseline.
 	if ref, err := e.s.DefaultBaseline(e.ctx, e.user, first); err != nil || ref != nil {
 		t.Fatalf("legacy chosen as baseline: %+v %v", ref, err)
 	}
 	// TC-14: this run's go vet failed, so the vanished finding is unverified.
-	failed := e.runWithReport(p, "failed", deepReview, "3", func(run string) []byte { return w23Body(t, run, "3", "failed", nil) })
+	failed := e.runWithReport(p, "failed", deepReview, "3", func(run string) []byte { return reportBody(t, run, "3", "failed", nil) })
 	d, c := e.compare(e.user, failed, "")
 	if d.Selection != BaselineDefault || d.Baseline.RunID != first || !c.Comparable {
 		t.Fatalf("baseline %+v", d.Baseline)
@@ -139,7 +139,7 @@ func TestW23DefaultBaselineAndTC14(t *testing.T) {
 	}
 	// Scope reduction: the run's own request (paths=cmd) does not cover a.go.
 	// It is not a default baseline candidate of a full run either.
-	narrow := e.runWithReport(p, "narrow", pathsScope, "3", func(run string) []byte { return w23Body(t, run, "3", "succeeded", []string{}) })
+	narrow := e.runWithReport(p, "narrow", pathsScope, "3", func(run string) []byte { return reportBody(t, run, "3", "succeeded", []string{}) })
 	if _, c := e.compare(e.user, narrow, first); *stateOf(t, c, history.StateAbsentUnverified).Reason != history.ReasonScopeReduced {
 		t.Fatal("scope reduction resolved the finding")
 	}
@@ -176,11 +176,11 @@ func TestW23DefaultBaselineAndTC14(t *testing.T) {
 	}
 }
 
-func TestW23FindingReviews(t *testing.T) {
-	e := newW23(t)
+func TestFindingReviews(t *testing.T) {
+	e := newHistoryEnv(t)
 	p := e.project.ID
-	f := w23Finding("f1", "a.go", 5)
-	run := e.runWithReport(p, "r1", deepReview, "3", func(run string) []byte { return w23Body(t, run, "3", "succeeded", []string{"a.go"}, f) })
+	f := reportFinding("f1", "a.go", 5)
+	run := e.runWithReport(p, "r1", deepReview, "3", func(run string) []byte { return reportBody(t, run, "3", "succeeded", []string{"a.go"}, f) })
 	verify := func(body []byte) error {
 		var r report.Report
 		if json.Unmarshal(body, &r) != nil {

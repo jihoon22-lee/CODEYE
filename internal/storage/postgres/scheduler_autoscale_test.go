@@ -12,14 +12,14 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// W07 scheduler and autoscaler storage tests on real PostgreSQL (isolated
+// Scheduler and autoscaler storage tests on real PostgreSQL (isolated
 // schema). Node agents are simulated by heartbeats here; the real agent and
 // worker processes are exercised by scripts/scheduler_smoke.py.
 
 func intp(v int) *int { return &v }
 
 // policy sets the default pool policy.
-func (e *w06) policy(u PoolPolicyUpdate) PoolPolicy {
+func (e *nodeEnv) policy(u PoolPolicyUpdate) PoolPolicy {
 	e.t.Helper()
 	if u.Name == "" {
 		u.Name = "default"
@@ -32,7 +32,7 @@ func (e *w06) policy(u PoolPolicyUpdate) PoolPolicy {
 }
 
 // ctlBeat sends a controller-scaled heartbeat with the given worker states.
-func (e *w06) ctlBeat(n testNode, maxWorkers int, cursor int64, caps []string, workers map[string]string) nodeproto.NodeHeartbeatResponse {
+func (e *nodeEnv) ctlBeat(n testNode, maxWorkers int, cursor int64, caps []string, workers map[string]string) nodeproto.NodeHeartbeatResponse {
 	e.t.Helper()
 	in := hb(nil, "", caps)
 	in.WorkerScaling, in.MaxWorkers, in.LastCommandSequence = nodeproto.ScalingController, maxWorkers, cursor
@@ -47,7 +47,7 @@ func (e *w06) ctlBeat(n testNode, maxWorkers int, cursor int64, caps []string, w
 	return e.beat(n, in)
 }
 
-func (e *w06) reconcile() PoolReconcile {
+func (e *nodeEnv) reconcile() PoolReconcile {
 	e.t.Helper()
 	return reconcileWith(e.t, e.s)
 }
@@ -74,7 +74,7 @@ func kinds(as []ScaleAction) map[string][]string {
 
 // finish completes an attempt as failed with confirmed cleanup (releases its
 // reservation) and reports its worker idle.
-func (e *w06) finish(n testNode, c *nodeproto.ClaimResponse) {
+func (e *nodeEnv) finish(n testNode, c *nodeproto.ClaimResponse) {
 	e.t.Helper()
 	reason := "test_done"
 	if _, err := e.s.CompleteAttempt(e.ctx, n.id, owner(n, c), Completion{Outcome: "failed", Cleanup: "confirmed", Reason: &reason}); err != nil {
@@ -85,7 +85,7 @@ func (e *w06) finish(n testNode, c *nodeproto.ClaimResponse) {
 // TC-71: min0/max2, demand arrives, then idle: 0 → 2 → 0 with pending starts
 // counted (no duplicate starts on repeat or after a controller restart).
 func TestTC71AutoscalerZeroToMaxToZero(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	e.projectLimit(3)
 	e.policy(PoolPolicyUpdate{MinWorkers: intp(0), MaxWorkers: intp(2), IdleTimeoutSeconds: intp(1), ScaleUpCooldownSeconds: intp(0), ScaleDownCooldownSeconds: intp(0)})
 	n := e.enroll("a", e.root.ID)
@@ -168,7 +168,7 @@ func restartStore(t *testing.T, s *Store) *Store {
 // TC-71: warm minimum, idle timeout and both cooldowns; a start that never
 // shows up stops counting after StartTimeout.
 func TestTC71WarmMinimumCooldownsAndStartTimeout(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	e.projectLimit(3)
 	e.policy(PoolPolicyUpdate{MinWorkers: intp(1), MaxWorkers: intp(3), IdleTimeoutSeconds: intp(1), ScaleUpCooldownSeconds: intp(3600), ScaleDownCooldownSeconds: intp(0)})
 	n := e.enroll("a", e.root.ID)
@@ -220,7 +220,7 @@ func TestTC71WarmMinimumCooldownsAndStartTimeout(t *testing.T) {
 // TC-72: busy 3 → max 1 drains without killing; new work is refused until
 // the pool is back under max; max 0 pauses.
 func TestTC72DrainWhenMaxFallsBelowBusy(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	e.projectLimit(5)
 	if _, err := e.s.SetSchedulerLimits(e.ctx, intp(5), nil); err != nil {
 		t.Fatal(err)
@@ -315,7 +315,7 @@ func TestTC72DrainWhenMaxFallsBelowBusy(t *testing.T) {
 
 // TC-73: per-project round-robin is the order, not only the cap.
 func TestTC73ProjectRoundRobinFairness(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	e.projectLimit(10)
 	other, err := e.s.RegisterProject(e.ctx, e.user, ProjectRegistration{Name: "other", Source: domain.Source{Kind: domain.SourceLocal, SourceRootID: e.root.ID, RelativePath: "b"}})
 	if err != nil {
@@ -344,7 +344,7 @@ func TestTC73ProjectRoundRobinFairness(t *testing.T) {
 // TC-73: project, global, pool and node budgets, and the autoscaler's demand
 // uses the claim gate (capability, root grant, requester permission).
 func TestTC73BudgetsAndDemandGate(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	e.policy(PoolPolicyUpdate{MaxWorkers: intp(4), ScaleUpCooldownSeconds: intp(0)})
 	n := e.enroll("a", e.root.ID)
 	caps := capable(e.root.ID)
@@ -404,7 +404,7 @@ func TestTC73BudgetsAndDemandGate(t *testing.T) {
 // TC-73: node max_workers and resources bound placement (degraded_capacity),
 // static nodes never receive scaling commands.
 func TestTC73NodeBudgetAndStaticNodes(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	e.projectLimit(5)
 	e.policy(PoolPolicyUpdate{MinWorkers: intp(1), MaxWorkers: intp(3), ScaleUpCooldownSeconds: intp(0)})
 	static := e.enroll("static", e.root.ID)
@@ -450,7 +450,7 @@ func TestTC73NodeBudgetAndStaticNodes(t *testing.T) {
 
 // Heartbeat scaling fields are validated; static is the default.
 func TestHeartbeatScalingValidation(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	for _, bad := range []nodeproto.NodeHeartbeatRequest{
 		func() nodeproto.NodeHeartbeatRequest { in := hb(nil, "", nil); in.WorkerScaling = "auto"; return in }(),
@@ -482,7 +482,7 @@ func TestHeartbeatScalingValidation(t *testing.T) {
 // A controller node may restart with a lower local cap or report extra idle workers.
 // Existing reservations continue to count against the new cap at claim time.
 func TestTC73ClaimHonoursReducedNodeCap(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	e.projectLimit(3)
 	e.policy(PoolPolicyUpdate{MaxWorkers: intp(3)})
 	n := e.enroll("ctl", e.root.ID)

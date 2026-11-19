@@ -4,5 +4,5 @@ package doctor
 
 import "os/exec"
 
-// Job Object/process containment is W05; timeout is never reported as clean.
+// Job Object/process containment is not available here; timeout is never reported as clean.
 func configureProcess(cmd *exec.Cmd) {}

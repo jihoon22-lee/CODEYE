@@ -220,7 +220,7 @@ func (ag *Agent) readWorker(w *workerProc) {
 			if w.att == nil && w.state == nodeproto.WorkerBusy {
 				w.state = nodeproto.WorkerIdle
 			}
-			// A drained worker exits once its attempt is done (W07 drain).
+			// A drained worker exits once its attempt is done (drain).
 			drained := w.draining && w.att == nil && !ag.shutting
 			ag.mu.Unlock()
 			if drained {
@@ -376,7 +376,7 @@ func (ag *Agent) readArtifact(w *workerProc, path string) ([]byte, error) {
 	return b, nil
 }
 
-// withinResolved compares after resolving symlinks on both sides (W04
+// withinResolved compares after resolving symlinks on both sides (snapshot acquisition
 // returns resolved snapshot roots; the state dir may sit behind a symlink).
 func withinResolved(root, p string) bool {
 	r, err1 := filepath.EvalSymlinks(root)

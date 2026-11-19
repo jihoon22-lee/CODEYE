@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// W25 operator queries for personal mode (codeye start/stop/status, doctor).
+// Operator queries for personal mode (codeye start/stop/status, doctor).
 // They are trusted CLI operations: no ACL, never exposed through the API.
 
 // SourceRootRecord is a source root with its server-local path (operator only).
@@ -35,7 +35,7 @@ func (s *Store) UserActive(ctx context.Context, user string) (bool, error) {
 	return active, classify(err)
 }
 
-// SetArtifactQuota sets the controller artifact store limit (W25; bytes <= 0
+// SetArtifactQuota sets the controller artifact store limit (bytes <= 0
 // removes it) and bumps the scheduler limits revision when it changed.
 func (s *Store) SetArtifactQuota(ctx context.Context, bytes int64) error {
 	var next *int64

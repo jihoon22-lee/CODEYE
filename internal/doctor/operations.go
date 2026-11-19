@@ -16,10 +16,10 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/quota"
 )
 
-// Operations is the optional W25 section of `codeye doctor --config` (docs/OPERATIONS.md
+// Operations is the optional section of `codeye doctor --config` (docs/OPERATIONS.md
 // §6): per-area storage use against the personal quota, the newest backup's
 // age and whether the start/stop state matches the running processes. It is
-// absent without --config, so the W01 report is unchanged.
+// absent without --config, so the base report is unchanged.
 type Operations struct {
 	Storage   []AreaStatus     `json:"storage"`
 	Backup    BackupStatus     `json:"backup"`

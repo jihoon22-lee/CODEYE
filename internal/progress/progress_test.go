@@ -230,7 +230,7 @@ func TestCancellationAndRecoveryKeepLastStages(t *testing.T) {
 	}
 }
 
-// R0 or pre-W15 tasks have no stage: nothing is inferred from keys or
+// Legacy tasks have no stage: nothing is inferred from keys or
 // statuses, and a single unrecorded task hides every stage.
 func TestLegacyTasksAreNotRecorded(t *testing.T) {
 	for _, tasks := range [][]Task{
@@ -296,7 +296,7 @@ func TestEmptyCollections(t *testing.T) {
 func seq(n int64) *int64 { return &n }
 func weight(n int) *int  { return &n }
 
-// W22 (REQ-017, TC-99): plan revision and weighted estimate.
+// REQ-017, TC-99: plan revision and weighted estimate.
 func TestPlanRevisionAndWeightedPercent(t *testing.T) {
 	sa, cr := domain.StageStaticAnalysis, domain.StageCodeReview
 	// Before the plan is fixed there is no revision, denominator or percent.

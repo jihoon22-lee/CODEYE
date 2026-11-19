@@ -12,7 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// W07 scheduler policy and autoscaler. Policy lives in append-only revision
+// Scheduler policy and autoscaler. Policy lives in append-only revision
 // rows (pool_policies); the autoscaler's per-pool decision state (epoch,
 // cooldown timestamps, last result) lives in pool_scaler_state so a
 // controller restart neither forgets cooldowns nor re-issues starts. Starts

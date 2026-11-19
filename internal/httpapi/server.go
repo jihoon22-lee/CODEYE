@@ -1,5 +1,5 @@
-// Package httpapi is the CODEYE control-plane HTTP API (W03 user subset and
-// W06 node protocol) and the same-origin static web host. It listens on
+// Package httpapi is the CODEYE control-plane HTTP API (user subset and
+// node protocol) and the same-origin static web host. It listens on
 // loopback only. Browser sessions come from single-use launch tokens; node
 // routes accept only a node Bearer secret (issued at enrollment) and reject
 // any Origin header. User Bearer tokens, LAN exposure and TLS are not
@@ -44,7 +44,7 @@ type Store interface {
 	Enqueue(ctx context.Context, actor, project, key string, body json.RawMessage) (postgres.Run, error)
 	GetRunView(ctx context.Context, actor, id string) (postgres.RunView, error)
 	CancelRun(ctx context.Context, actor, id string) (postgres.Run, bool, error)
-	// Run event stream and schedules (W22).
+	// Run event stream and schedules.
 	RunEvents(ctx context.Context, actor, id string, after int64, limit int) (postgres.EventPage, error)
 	ListSchedules(ctx context.Context, actor, project string) ([]postgres.Schedule, bool, error)
 	CreateSchedule(ctx context.Context, actor, project, key string, in postgres.ScheduleInput) (postgres.Schedule, error)
@@ -52,7 +52,7 @@ type Store interface {
 	DeleteSchedule(ctx context.Context, actor, project, id string, expected int64) error
 	MaterializeSchedules(ctx context.Context) ([]postgres.ScheduleDecision, error)
 
-	// Node protocol (W06).
+	// Node protocol.
 	EnrollNode(ctx context.Context, in postgres.Enrollment) (postgres.NodeIdentity, error)
 	AuthenticateNode(ctx context.Context, secretSHA256 string) (postgres.NodeIdentity, error)
 	NodeHeartbeat(ctx context.Context, node string, in nodeproto.NodeHeartbeatRequest) (nodeproto.NodeHeartbeatResponse, error)
@@ -64,15 +64,15 @@ type Store interface {
 	CompleteAttempt(ctx context.Context, node string, o postgres.Ownership, c postgres.Completion) (postgres.Run, error)
 	ConfirmCleanupNode(ctx context.Context, node string, o postgres.Ownership) (postgres.Run, error)
 	SweepExpiredAttempts(ctx context.Context) (int, error)
-	// Autoscaler (W07).
+	// Autoscaler.
 	ReconcilePools(ctx context.Context) ([]postgres.PoolReconcile, error)
 	NodesEnrolled(ctx context.Context) (bool, error)
 
-	// Reports (W09).
+	// Reports.
 	GetReport(ctx context.Context, actor, runID string, revision int) (postgres.ReportRecord, error)
 	ListReports(ctx context.Context, actor, runID string) ([]postgres.ReportSummary, error)
 	reportsvc.Store
-	// Comparison and finding reviews (W23).
+	// Comparison and finding reviews.
 	LoadComparison(ctx context.Context, actor, runID string, revision int, baselineRun string, baselineRevision int) (postgres.ComparisonData, error)
 	DefaultBaseline(ctx context.Context, actor, runID string) (*postgres.BaselineRef, error)
 	SetFindingReview(ctx context.Context, actor, project string, in postgres.ReviewRequest) (postgres.FindingReview, bool, error)
@@ -103,7 +103,7 @@ type Config struct {
 	// 2s; negative disables, for tests that drive the publisher directly).
 	// Publication needs ArtifactDir.
 	PublishInterval time.Duration
-	// Stream configures GET /runs/{id}/events (W22 SSE); zero fields take
+	// Stream configures GET /runs/{id}/events (SSE); zero fields take
 	// the defaults of StreamConfig.
 	Stream StreamConfig
 }

@@ -1,4 +1,4 @@
-// Package backup writes and restores a CODEYE backup set (W25, docs/OPERATIONS.md#백업과-복원):
+// Package backup writes and restores a CODEYE backup set (docs/OPERATIONS.md#백업과-복원):
 // a PostgreSQL dump and the finalized artifact contents of the SAME logical
 // point, plus a manifest with versions, hashes and the migration version.
 //

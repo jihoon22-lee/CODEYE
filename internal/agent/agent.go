@@ -62,9 +62,9 @@ type Config struct {
 	// repository-controlled code (--repo-code-source-root, docs/ANALYZERS.md#저장소-코드-실행-허가).
 	// Git sources never get the grant.
 	RepositoryCodeSourceRoots map[string]bool
-	// Workers is the static worker count (W06, default mode).
+	// Workers is the static worker count (default mode).
 	Workers int
-	// Autoscale (W07) starts with zero workers and starts/drains/stops
+	// Autoscale starts with zero workers and starts/drains/stops
 	// workers only on controller commands; MaxWorkers is then the local
 	// hard cap reported to the controller (1..16).
 	Autoscale     bool
@@ -86,12 +86,12 @@ type Config struct {
 	// Transcript, if set, records all worker IPC (tests).
 	Transcript io.Writer
 
-	// Drain (W25, personal stop) asks the agent to finish: no new claims and
+	// Drain (personal stop) asks the agent to finish: no new claims and
 	// no new workers; running attempts finish normally. Once nothing runs,
 	// the agent shuts down like on a signal and exits 0 when every cleanup is
 	// confirmed. A nil channel never drains.
 	Drain <-chan struct{}
-	// StorageQuota (W25, docs/OPERATIONS.md#저장-영역과-상한) are node storage area limits in bytes
+	// StorageQuota (docs/OPERATIONS.md#저장-영역과-상한) are node storage area limits in bytes
 	// (quota.NodeAreas). Areas at or over their limit are reported in the
 	// heartbeat (storage_quota_exceeded) and the controller refuses new
 	// claims for this node; running attempts are never interrupted.
@@ -995,7 +995,7 @@ func (ag *Agent) workerLost(w *workerProc, att *activeAttempt) {
 	ag.log("warn", "attempt_worker_lost", "attempt_id", att.lease.AttemptID, "cleanup_state", state)
 }
 
-// beginDrain (W25) stops claims and worker starts; idle workers are stopped
+// beginDrain stops claims and worker starts; idle workers are stopped
 // now, busy ones when their attempt ends (they are marked draining).
 func (ag *Agent) beginDrain() {
 	ag.mu.Lock()

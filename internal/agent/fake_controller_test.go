@@ -41,7 +41,7 @@ type fakeController struct {
 	hbCount    int
 	lastHB     nodeproto.NodeHeartbeatRequest
 
-	resendAll     bool // W07: resend every command regardless of the cursor (dedupe test)
+	resendAll     bool // resend every command regardless of the cursor (dedupe test)
 	hangAttemptHB bool // never answer attempt heartbeats (lease watchdog test)
 	refuseReports int  // refuse this many confirmed reports with "conflict" (attempt still leased)
 	leaseFor      time.Duration
@@ -88,7 +88,7 @@ func (f *fakeController) queueCommand(kind, attemptID string) {
 	f.commands = append(f.commands, nodeproto.Command{CommandID: domain.NewID(), Sequence: f.commandSeq, Kind: kind, AttemptID: &a})
 }
 
-// queueWorkerCommand queues start_worker/drain_worker/stop_worker (W07).
+// queueWorkerCommand queues start_worker/drain_worker/stop_worker.
 func (f *fakeController) queueWorkerCommand(kind, workerID string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

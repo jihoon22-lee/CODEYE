@@ -1,5 +1,5 @@
 // Package schedule parses 5-field cron expressions and computes their
-// occurrences in an IANA time zone (W22, docs/EXECUTION.md#예약, REQ-023). It is pure: it
+// occurrences in an IANA time zone (docs/EXECUTION.md#예약, REQ-023). It is pure: it
 // never reads the process clock or the host's local zone; callers pass "now"
 // (the database clock). The time zone database is embedded (time/tzdata) so
 // hosts without a system zone database (Windows) still load IANA names;

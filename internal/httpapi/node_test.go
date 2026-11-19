@@ -20,7 +20,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// W06 node routes over real HTTP and PostgreSQL. Skips (NOT executed) without
+// Node routes over real HTTP and PostgreSQL. Skips (NOT executed) without
 // CODEYE_TEST_DATABASE_URL.
 
 type nreq struct {
@@ -90,7 +90,7 @@ func (e *env) nodeFixture() nodeFixture {
 	e.t.Helper()
 	ctx := context.Background()
 	u := e.newUser()
-	root, err := e.store.AddSourceRoot(ctx, "work", "/srv/w06")
+	root, err := e.store.AddSourceRoot(ctx, "work", "/srv/work")
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestNodeHTTPVerticalPathToFinalizing(t *testing.T) {
 	if err := json.Unmarshal(cl.raw, &claim); err != nil {
 		t.Fatal(err)
 	}
-	if claim.Lease.RunID != runID || claim.Lease.LeaseEpoch != 1 || claim.Job.Source.Kind != "local" || claim.Job.Source.SourceRootID != f.root.ID || strings.Contains(string(cl.raw), "/srv/w06") {
+	if claim.Lease.RunID != runID || claim.Lease.LeaseEpoch != 1 || claim.Job.Source.Kind != "local" || claim.Job.Source.SourceRootID != f.root.ID || strings.Contains(string(cl.raw), "/srv/work") {
 		t.Fatalf("claim %s", cl.raw)
 	}
 	again := e.node("POST", claimPath, nodeproto.ClaimRequest{WorkerID: workers[0]}, nreq{secret: n.NodeSecret, header: map[string]string{"Idempotency-Key": "c1"}}).want(t, 200, "")
@@ -434,7 +434,7 @@ func TestServeSweepsExpiredLeases(t *testing.T) {
 	}
 }
 
-// W07: Serve's autoscaler loop turns queued demand for a controller-scaled
+// Serve's autoscaler loop turns queued demand for a controller-scaled
 // node (zero workers, probed capability) into a start_worker command that
 // the node receives over the real heartbeat route.
 func TestServeAutoscalerStartsWorkerForControllerNode(t *testing.T) {

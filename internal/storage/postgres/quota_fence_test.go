@@ -8,12 +8,12 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// TC-124 (W25, docs/OPERATIONS.md#저장-영역과-상한): a node storage area at its limit or the artifact
+// TC-124 (docs/OPERATIONS.md#저장-영역과-상한): a node storage area at its limit or the artifact
 // store at its limit refuses NEW attempts with storage_quota_exceeded; the
 // running attempt keeps its lease and can still upload; the artifact
 // accounting counts one content once.
-func TestW25StorageQuotaRefusesOnlyNewClaims(t *testing.T) {
-	e := newW06(t)
+func TestStorageQuotaRefusesOnlyNewClaims(t *testing.T) {
+	e := newNodeEnv(t)
 	e.projectLimit(5)
 	n := e.enroll("a", e.root.ID)
 	first := e.enqueue("first", deepReview)
@@ -105,13 +105,13 @@ func TestW25StorageQuotaRefusesOnlyNewClaims(t *testing.T) {
 	}
 }
 
-// TC-32 store part (W25, docs/OPERATIONS.md#복원과-fencing): FenceRestored revokes every node,
+// TC-32 store part (docs/OPERATIONS.md#복원과-fencing): FenceRestored revokes every node,
 // session and unused token, and fences a leased attempt whose lease has NOT
 // expired exactly like an expired one; the old ownership is never honoured
 // and a new node can work. The pg_dump/pg_restore round trip is
 // TestTC32BackupRestoreRoundTrip (internal/backup).
-func TestW25FenceRestoredNeverRevivesLeases(t *testing.T) {
-	e := newW06(t)
+func TestFenceRestoredNeverRevivesLeases(t *testing.T) {
+	e := newNodeEnv(t)
 	e.projectLimit(5)
 	n := e.enroll("old", e.root.ID)
 	e.idle(n)

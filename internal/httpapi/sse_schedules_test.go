@@ -21,7 +21,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// W22 SSE (TC-99 extension, TC-02/TC-31 for streams) and the schedule API
+// SSE (TC-99 extension, TC-02/TC-31 for streams) and the schedule API
 // over real HTTP and PostgreSQL. Skips (NOT executed) without
 // CODEYE_TEST_DATABASE_URL.
 
@@ -168,7 +168,7 @@ func (e *env) createRun(u user, project string) string {
 	return r.body["id"].(string)
 }
 
-// TC-99 (W22): the stream delivers stored events in sequence after the
+// TC-99: the stream delivers stored events in sequence after the
 // cursor with safe fields and the same run view as GET; Last-Event-ID wins
 // over the URL cursor on reconnect; heartbeats carry no id and no progress.
 func TestSSEDeliversRunEventsInSequence(t *testing.T) {
@@ -377,7 +377,7 @@ func TestSSEGapIsReported(t *testing.T) {
 
 // TC-02/TC-31 for streams: a stranger gets 404 before any stream, no session
 // is 401, logout and loss of membership close an open stream.
-// TC-99 (W22): events committed between a row batch and the run.view read
+// TC-99: events committed between a row batch and the run.view read
 // are sent as rows before that view, so a run.view never describes an
 // event_sequence beyond the rows the client has received.
 func TestSSEViewNeverAheadOfRows(t *testing.T) {

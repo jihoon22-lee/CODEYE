@@ -1,5 +1,5 @@
 // Package pgtool runs the operator's PostgreSQL client programs (pg_dump,
-// pg_restore) for W25 backup and restore. Programs come only from the
+// pg_restore) for backup and restore. Programs come only from the
 // configured binary directory (no PATH search, no download). Credentials are
 // passed in the child environment, never in argv, and never logged: errors
 // carry the program's last diagnostic line with the password redacted.

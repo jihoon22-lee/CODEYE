@@ -10,9 +10,9 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/reportsvc"
 )
 
-// W23 comparison and finding reviews over real HTTP and PostgreSQL with the
-// real report builder and publisher (go vet observations from the W08
-// example). Skips (NOT executed) without CODEYE_TEST_DATABASE_URL.
+// Comparison and finding reviews over real HTTP and PostgreSQL with the
+// real report builder and publisher (go vet observations from the
+// go vet example). Skips (NOT executed) without CODEYE_TEST_DATABASE_URL.
 
 func (e *env) publishRun(a attemptRun) {
 	e.t.Helper()
@@ -21,7 +21,7 @@ func (e *env) publishRun(a attemptRun) {
 	}
 }
 
-// observation edits of the W08 example (5 diagnostics in bad/).
+// observation edits of the go vet example (5 diagnostics in bad/).
 func dropObservation(rule, path string, line int) func(map[string]any) {
 	return func(doc map[string]any) {
 		var kept []any
@@ -105,7 +105,7 @@ func (e *env) comparison(u user, path string) comparison {
 	return c
 }
 
-func TestW23ComparisonAndReviewsOverHTTP(t *testing.T) {
+func TestComparisonAndReviewsOverHTTP(t *testing.T) {
 	e := newEnv(t)
 	base := e.drive(nil, driveOpts{taskStatus: "succeeded"})
 	e.publishRun(base)
@@ -273,7 +273,7 @@ func TestW23ComparisonAndReviewsOverHTTP(t *testing.T) {
 	e.do("GET", "/api/v1/runs/"+fixed.runID+"/comparison?baseline="+fixed.runID, nil, owner.o()).want(t, 422, "VALIDATION_FAILED")
 	e.do("GET", "/api/v1/runs/"+fixed.runID+"/comparison?baseline_revision=1", nil, owner.o()).want(t, 400, "INVALID_REQUEST")
 	e.do("GET", "/api/v1/runs/"+fixed.runID+"/comparison", nil, stranger.o()).want(t, 404, "NOT_FOUND")
-	// The code-free export carries no fingerprint (security review W23-2).
+	// The code-free export carries no fingerprint.
 	if free := e.do("GET", "/api/v1/runs/"+fixed.runID+"/report", nil, owner.o()).want(t, 200, ""); strings.Contains(string(free.raw), "fp2:") || strings.Contains(string(free.raw), "fingerprint") {
 		t.Fatalf("code-free export carries identity")
 	}

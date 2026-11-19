@@ -12,11 +12,11 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/progress"
 )
 
-// W15 stage display over real PostgreSQL (TC-98/TC-99). Skips (NOT executed)
+// Stage display over real PostgreSQL (TC-98/TC-99). Skips (NOT executed)
 // without CODEYE_TEST_DATABASE_URL.
 
-func newW15(t *testing.T) *w06 {
-	e := newW06(t)
+func newStageEnv(t *testing.T) *nodeEnv {
+	e := newNodeEnv(t)
 	ten := 10
 	if _, err := e.s.SetSchedulerLimits(e.ctx, &ten, &ten); err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ type plannedTask struct {
 type taskDecl struct{ key, stage string }
 
 // startRun claims the next queued run for worker and fixes a snapshot.
-func (e *w06) startRun(n testNode, worker string) (Ownership, string) {
+func (e *nodeEnv) startRun(n testNode, worker string) (Ownership, string) {
 	e.t.Helper()
 	c := e.claimOK(n, worker, domain.NewID())
 	o := owner(n, c)
@@ -50,9 +50,9 @@ func stagePtr(s string) *string {
 	return &s
 }
 
-// plan declares tasks (stage "" = omitted, like a pre-W15 worker) and, with
+// plan declares tasks (stage "" = omitted, like a worker that does not declare stages) and, with
 // run set, advances the run to running (the plan is fixed).
-func (e *w06) plan(n testNode, o Ownership, run bool, decls ...taskDecl) map[string]*plannedTask {
+func (e *nodeEnv) plan(n testNode, o Ownership, run bool, decls ...taskDecl) map[string]*plannedTask {
 	e.t.Helper()
 	out := map[string]*plannedTask{}
 	for _, d := range decls {
@@ -65,13 +65,13 @@ func (e *w06) plan(n testNode, o Ownership, run bool, decls ...taskDecl) map[str
 	return out
 }
 
-func (e *w06) move(n testNode, o Ownership, p *plannedTask, status, reason string) {
+func (e *nodeEnv) move(n testNode, o Ownership, p *plannedTask, status, reason string) {
 	e.t.Helper()
 	r := e.mustEvent(n, o, nodeproto.EventTaskStatus, nodeproto.TaskStatusPayload{TaskID: p.id, ExpectedVersion: p.version, Status: status, Reason: stagePtr(reason)})
 	p.version = *r.Version
 }
 
-func (e *w06) runStages(run string) RunStages {
+func (e *nodeEnv) runStages(run string) RunStages {
 	e.t.Helper()
 	v, err := e.s.GetRunView(e.ctx, e.user, run)
 	if err != nil {
@@ -80,7 +80,7 @@ func (e *w06) runStages(run string) RunStages {
 	return v.Stages
 }
 
-func (e *w06) activity(project string) Activity {
+func (e *nodeEnv) activity(project string) Activity {
 	e.t.Helper()
 	p, err := e.s.GetProjectSummary(e.ctx, e.user, project)
 	if err != nil {
@@ -114,7 +114,7 @@ func sameActivity(a, b Activity) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-func (e *w06) secondProject(name string) Project {
+func (e *nodeEnv) secondProject(name string) Project {
 	e.t.Helper()
 	p, err := e.s.RegisterProject(e.ctx, e.user, ProjectRegistration{Name: name, Source: domain.Source{Kind: domain.SourceLocal, SourceRootID: e.root.ID, RelativePath: "."}})
 	if err != nil {
@@ -123,7 +123,7 @@ func (e *w06) secondProject(name string) Project {
 	return p
 }
 
-func (e *w06) enqueueIn(project, key string) Run {
+func (e *nodeEnv) enqueueIn(project, key string) Run {
 	e.t.Helper()
 	r, err := e.s.Enqueue(e.ctx, e.user, project, key, json.RawMessage(deepReview))
 	if err != nil {
@@ -132,7 +132,7 @@ func (e *w06) enqueueIn(project, key string) Run {
 	return r
 }
 
-func (e *w06) publish(o Ownership, run, status string) {
+func (e *nodeEnv) publish(o Ownership, run, status string) {
 	e.t.Helper()
 	body := []byte(`{"run":"` + run + `"}`)
 	if _, _, err := e.s.PublishReport(e.ctx, ReportPublication{ReportID: domain.NewID(), RunID: run, AttemptID: o.AttemptID, Epoch: o.Epoch, InputDigest: domain.Digest(body),
@@ -141,7 +141,7 @@ func (e *w06) publish(o Ownership, run, status string) {
 	}
 }
 
-func (e *w06) resultManifest(o Ownership) *string {
+func (e *nodeEnv) resultManifest(o Ownership) *string {
 	var id *string
 	if err := e.s.pool.QueryRow(e.ctx, "SELECT result_manifest_id::text FROM attempts WHERE id=$1", o.AttemptID).Scan(&id); err != nil {
 		e.t.Fatal(err)
@@ -150,7 +150,7 @@ func (e *w06) resultManifest(o Ownership) *string {
 }
 
 // complete finishes the attempt as succeeded/partial with a result manifest.
-func (e *w06) complete(n testNode, o Ownership, outcome string) {
+func (e *nodeEnv) complete(n testNode, o Ownership, outcome string) {
 	e.t.Helper()
 	rm := e.artifact(n, o, "result_manifest", domain.Digest([]byte("result"+o.AttemptID)))
 	if _, err := e.s.CompleteAttempt(e.ctx, n.id, o, Completion{Outcome: outcome, Cleanup: "confirmed", ResultManifestID: &rm}); err != nil {
@@ -161,7 +161,7 @@ func (e *w06) complete(n testNode, o Ownership, outcome string) {
 // TC-98: two projects in different stages, one project with several runs, a
 // project without runs and a foreign project; list and detail agree.
 func TestTC98RepresentativeRunsAndStages(t *testing.T) {
-	e := newW15(t)
+	e := newStageEnv(t)
 	n1, n2 := e.enroll("a", e.root.ID), e.enroll("b", e.root.ID)
 	e.idle(n1)
 	e.idle(n2)
@@ -337,7 +337,7 @@ func TestTC98RepresentativeRunsAndStages(t *testing.T) {
 // TC-99: tool failure and success, policy exclusion versus no documents,
 // stage and time records from the database clock.
 func TestTC99MixedOutcomesAndExclusions(t *testing.T) {
-	e := newW15(t)
+	e := newStageEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
 	e.enqueue("r", deepReview)
@@ -405,7 +405,7 @@ func TestTC99MixedOutcomesAndExclusions(t *testing.T) {
 // are refused as stale and never change the stage view; a duplicate
 // client_event_id of the current attempt applies once.
 func TestTC99StaleReplayAndDuplicateEvents(t *testing.T) {
-	e := newW15(t)
+	e := newStageEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
 	r := e.enqueue("r", deepReview)
@@ -504,10 +504,10 @@ func TestTC99StaleReplayAndDuplicateEvents(t *testing.T) {
 	}
 }
 
-// TC-99: R0 / pre-W15 rows (no stage) stay unrecorded in list and detail;
+// TC-99: legacy rows (no stage) stay unrecorded in list and detail;
 // nothing is inferred from the task key.
 func TestTC99LegacyRunIsNotRecorded(t *testing.T) {
-	e := newW15(t)
+	e := newStageEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
 	e.enqueue("r", deepReview)

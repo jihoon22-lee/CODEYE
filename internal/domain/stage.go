@@ -2,7 +2,7 @@ package domain
 
 // Stage is the user-facing pipeline stage a planned task belongs to
 // (docs/ARCHITECTURE.md#표시-단계와-task-단계). The worker sets it at plan time; the server validates and
-// stores it once. Tasks recorded before W15 have no stage and are never
+// stores it once. Tasks recorded without a stage have none and are never
 // assigned one by inference.
 type Stage string
 

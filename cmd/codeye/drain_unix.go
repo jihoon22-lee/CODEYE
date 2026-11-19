@@ -9,7 +9,7 @@ import (
 )
 
 // drainSignal returns a channel closed when the agent receives SIGUSR1, the
-// drain request `codeye stop` sends (W25). stop releases the handler.
+// drain request `codeye stop` sends. stop releases the handler.
 func drainSignal() (<-chan struct{}, func()) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGUSR1)
