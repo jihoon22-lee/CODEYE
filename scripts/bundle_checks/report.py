@@ -198,7 +198,8 @@ def check_ledger(report: dict) -> None:
     scope = tasks["review.scope"]
     ensure(ledger["scope"]["task_status"] == scope["status"] and ledger["scope"].get("reason") == scope["reason"], "Ledger scope differs from its task")
     ensure((ledger["max_calls"] is None) == (ledger["scope"]["result"] != "accepted") and (ledger["modules"] == [] or ledger["max_calls"] is not None), "Ledger budget without its scope artifact")
-    ensure(ledger["calls_used"] is None or ledger["calls_used"] >= len(report["coverage"].get("review_calls", [])), "Ledger counts fewer calls than the report lists")
+    sent = sum(1 for c in report["coverage"].get("review_calls", []) if c.get("request_sha256"))
+    ensure(ledger["calls_used"] is None or ledger["calls_used"] >= sent, "Ledger counts fewer calls than the report lists (calls without a request were never sent)")
     ensure(ledger["request_bytes_sent"] in (None, report["code_review"]["request_bytes"]), "Ledger request bytes differ from the code review section")
     ids = [m["module_id"] for m in ledger["modules"]]
     ensure(ids == sorted(set(ids)), "Ledger modules repeated or out of order")
