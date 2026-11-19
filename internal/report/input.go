@@ -12,6 +12,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -47,12 +48,15 @@ type AttemptFacts struct {
 }
 
 // TaskFacts are a DB task row (the authority for status) plus the ordinal of
-// its execution row in this attempt (0 when the task never had one).
+// its execution row in this attempt (0 when the task never had one). Stage
+// is the stored task stage (tasks.stage); "" when the worker recorded none,
+// and it is never inferred from the key.
 type TaskFacts struct {
 	ID, Key, Status  string
 	Required         bool
 	Reason           *string
 	ExecutionOrdinal int64
+	Stage            string
 }
 
 // ArtifactRef is a finalized artifact row of the attempt.
@@ -109,7 +113,7 @@ func InputDigest(in Input) string {
 	tasks := append([]TaskFacts(nil), in.Tasks...)
 	sort.Slice(tasks, func(a, c int) bool { return tasks[a].ID < tasks[c].ID })
 	for _, t := range tasks {
-		w("task", t.ID, t.Key, t.Status, strconv.FormatBool(t.Required), deref(t.Reason), strconv.FormatInt(t.ExecutionOrdinal, 10))
+		w("task", t.ID, t.Key, t.Status, strconv.FormatBool(t.Required), deref(t.Reason), strconv.FormatInt(t.ExecutionOrdinal, 10), t.Stage)
 	}
 	if in.ResultManifest != nil {
 		w("result_manifest", in.ResultManifest.ID, in.ResultManifest.SHA256)
@@ -189,6 +193,19 @@ type Contribution struct {
 	// decoder validated the review result bytes against the evidence catalog.
 	Review      *ReviewResult
 	Limitations []string
+	// Analyzer is the envelope identity an analyzer decoder read (ecosystem
+	// and purpose); the sections group tool rows by it and never parse task
+	// keys or analyzer IDs. It adds nothing to the pre-existing fields.
+	Analyzer *AnalyzerIdentity
+	// Discovery is the accepted env.discover/docs.discover document; only
+	// the sections read it.
+	Discovery *envdoc.Document
+}
+
+// AnalyzerIdentity is the decoded envelope identity of one analyzer task.
+// Purpose is PurposeDiagnostics, PurposeMetrics or PurposeSecrets.
+type AnalyzerIdentity struct {
+	ID, Ecosystem, Purpose, Tool, RulePack string
 }
 
 // ReviewResult is a decoded model review artifact of one task.

@@ -312,6 +312,12 @@ func report(r Run) Stage {
 	return s
 }
 
+// TaskStage classifies the tasks of one task stage; fixed tells whether the
+// plan is fixed. Compute uses it for every task stage, and the report
+// builder for its sections, so a report and the run detail give the same
+// tasks the same state.
+func TaskStage(key string, tasks []Task, fixed bool) Stage { return taskStage(key, tasks, fixed) }
+
 func taskStage(key string, tasks []Task, fixed bool) Stage {
 	s := newStage(key)
 	if fixed {

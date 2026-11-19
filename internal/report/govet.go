@@ -159,6 +159,8 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 		}
 	}
 	out.Tool = &tc
+	// The v0.1 document is the go vet analyzer of the Go ecosystem.
+	out.Analyzer = &AnalyzerIdentity{ID: govet.AnalyzerID, Ecosystem: "go", Purpose: PurposeDiagnostics, Tool: "go", RulePack: rc.RulePack + "@" + rc.RulePackVersion}
 	return out, nil
 }
 
