@@ -17,7 +17,7 @@ import (
 )
 
 // Real-tool tests run only with CODEYE_TEST_CARGO / CODEYE_TEST_CLIPPY (CI has
-// no Rust toolchain). CODEYE_W20_CAPTURE=DIR also writes the redacted streams
+// no Rust toolchain). CODEYE_RUST_CAPTURE=DIR also writes the redacted streams
 // and dep-info of each case to DIR, which is how testdata/ was captured
 // (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처). The replay tests run the same fixtures in CI on those bytes.
 

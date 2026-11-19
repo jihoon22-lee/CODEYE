@@ -213,7 +213,7 @@ func readEnvelope(t *testing.T, job analysis.Job, res analysis.TaskResult) (obsd
 	if err != nil {
 		t.Fatalf("envelope invalid: %v\n%s", err, raw)
 	}
-	if dump := os.Getenv("CODEYE_W17_DUMP"); dump != "" {
+	if dump := os.Getenv("CODEYE_PYTHON_DUMP"); dump != "" {
 		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + key + ".json"
 		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
 			t.Fatal(err)

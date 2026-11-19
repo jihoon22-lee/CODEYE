@@ -174,7 +174,7 @@ func readDoc(t *testing.T, res analysis.TaskResult) (Document, []byte) {
 	if err := dec.Decode(&doc); err != nil {
 		t.Fatalf("decode doc: %v", err)
 	}
-	if dump := os.Getenv("CODEYE_W08_DUMP"); dump != "" {
+	if dump := os.Getenv("CODEYE_GOVET_DUMP"); dump != "" {
 		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + filepath.Base(filepath.Dir(res.Artifacts[0].Path)) + ".json"
 		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
 			t.Fatal(err)

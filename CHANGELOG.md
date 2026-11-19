@@ -6,7 +6,20 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ### 변경
 
-- 단계별로 번호를 붙인 문서를 주제별 문서(`docs/GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/ANALYZERS.md`, `docs/REVIEW.md`, `docs/REPORT.md`, `docs/API.md`, `docs/OPERATIONS.md`, `docs/SECURITY.md`, `docs/EVALUATION.md` 등)와 이 변경 이력으로 바꾼다. 작업 기록은 이 파일로 모으고, 주제 문서에는 현재 유효한 계약과 운영 규칙만 둔다.
+- **문서 통합 (#37)**: 번호를 붙인 단계별 문서 50개를 주제별 문서 16개(`docs/`)와 이 변경 이력으로 바꿨다. 주제 문서에는 현재 유효한 계약과 운영 규칙만 두고, 코드에서 문서를 가리키는 참조는 절 anchor까지 검증한다.
+- **단계 이름 제거**: 코드 주석, 파일·시험·식별자 이름, CLI 문구, 스크립트·fixture 디렉터리 이름, 시험용 환경변수에서 구현 단계 번호를 뺐다. 예산 relay는 `scripts/model_budget_relay.py`, 평가 runner는 `scripts/quality_eval.py`, 회귀 집합은 `fixtures/regression/`이다. `scripts/validate_bundle.py`가 단계 표기가 다시 들어오는 것을 막는다.
+- OpenAPI의 구현 표시는 `x-codeye-status: implemented` 하나다.
+
+### 수정
+
+- `codeye` 도움말의 에이전트 사용법에 빠져 있던 분석기 옵션(`--cppcheck`, `--clang-tidy`, `--eslint`, `--tsc`, `--lizard`, `--jscpd`, `--gitleaks`)을 넣었다.
+
+### 그대로 둔 이름
+
+- 검토 팩 ID `review-r1`·`review-v1`과 그 디렉터리: 저장된 기록이 팩 ID와 digest로 해석된다.
+- `migrations/sql/`: 적용된 migration은 checksum으로 대조한다.
+- fixture 입력 안의 파일·매크로 이름, 보류 집합 `fixtures/r1-quality/`, 보류 평가 결과 문서: 도구 출력 캡처와 봉인 digest가 그 내용을 고정한다.
+- 진단 사유 값 `adapter_contract_pending_w10`: API로 나가는 값이다.
 
 ## 개인 실용판 — 2026-11-19
 
@@ -83,7 +96,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - **OpenCode 연동 (#9)**: 관리형 OpenCode를 도구 없이, 승인된 모델과 제한된 예산으로 실행한다. 취소하면 프로세스 트리까지 정리하고 잘못된 출력은 게시하지 않는다. 예산 상한이 있는 로컬 relay(`scripts/model_budget_relay.py`)가 호출을 예약·정산한다. 상세는 `docs/REVIEW.md`.
 - **맥락·조사·반증 검토 (#10, #11)**: 맥락 수집, 독립 후보 조사, 반례 탐색과 근거 검증. 허위 경로·행·근거 ID와 모델이 단정한 재현·심각도는 거부하거나 미확정으로 남기고, 모델이 실패하면 도구 결과만으로 `partial` 보고서를 낸다.
 - **근거 보고서 화면 (#13, #14)**: 요약에서 영역, 후보, 스냅샷 파일과 줄 범위의 근거로 내려가며 반대 근거와 미확정 항목을 함께 본다.
-- **회귀 코퍼스와 파일럿 (#15)**: 결함·수정 쌍 10개의 계약 시험(`fixtures/r0-quality/corpus.py --check`)과 실제 프로젝트 파일럿 절차(`scripts/regression_pilot.py`).
+- **회귀 코퍼스와 파일럿 (#15)**: 결함·수정 쌍 10개의 계약 시험(`fixtures/regression/corpus.py --check`)과 실제 프로젝트 파일럿 절차(`scripts/regression_pilot.py`).
 
 ### 검증한 환경과 범위
 

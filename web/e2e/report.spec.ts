@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {
   const login = process.env.CODEYE_TEST_REPORT_LOGIN;
-  test.skip(!login, '실제 게시 보고서는 R0 파일럿에서 생성한다');
+  test.skip(!login, '실제 게시 보고서는 회귀 파일럿에서 생성한다');
   const project = process.env.CODEYE_TEST_REPORT_PROJECT!;
   const id = process.env.CODEYE_TEST_REPORT_ID!;
   await page.goto(readFileSync(login!, 'utf8').trim());

@@ -23,7 +23,7 @@ import (
 
 func cppFixture(t *testing.T, add map[string]string) map[string]string {
 	t.Helper()
-	root := filepath.Join("..", "..", "..", "fixtures", "w16-cpp", "input")
+	root := filepath.Join("..", "..", "..", "fixtures", "cpp", "input")
 	files := map[string]string{}
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {

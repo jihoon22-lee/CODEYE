@@ -20,8 +20,8 @@ import (
 
 // Replay tests run in CI without the Python tools: the tool executions
 // return the streams captured from ruff 0.16.3, mypy 2.4.1, pyright 1.1.414
-// and bandit 1.9.4 on the fixtures/w17-python projects (testdata/<tool>/).
-// The captures are taken by the real-tool tests with CODEYE_W17_CAPTURE set;
+// and bandit 1.9.4 on the fixtures/python projects (testdata/<tool>/).
+// The captures are taken by the real-tool tests with CODEYE_PYTHON_CAPTURE set;
 // the module directory is stored as @MODULE@ and the home directory as
 // @HOME@. Changing a fixture requires a new capture.
 
@@ -63,10 +63,10 @@ func argAfter(args []string, flag string) string {
 }
 
 // capture writes the streams of a real root-module run under
-// $CODEYE_W17_CAPTURE/<tool>/<fixture>.<execution>.*.
+// $CODEYE_PYTHON_CAPTURE/<tool>/<fixture>.<execution>.*.
 func capture(t *testing.T, fixtureName, key string, r realRun) {
 	t.Helper()
-	dir := os.Getenv("CODEYE_W17_CAPTURE")
+	dir := os.Getenv("CODEYE_PYTHON_CAPTURE")
 	if dir == "" || strings.Contains(key, ".") {
 		return
 	}

@@ -371,7 +371,7 @@ func TestRolePackRequestSizeWorstCaseAllLanguages(t *testing.T) {
 // or not. The document text reaches the model only as data inside
 // <review-input>.
 func TestTC97DocumentContentCannotChangeRequestConfig(t *testing.T) {
-	hostile, err := os.ReadFile("../../../fixtures/w15-modules/input/AGENTS.md")
+	hostile, err := os.ReadFile("../../../fixtures/modules/input/AGENTS.md")
 	if err != nil || !strings.Contains(string(hostile), "permission") {
 		t.Fatal("fixture missing", err)
 	}

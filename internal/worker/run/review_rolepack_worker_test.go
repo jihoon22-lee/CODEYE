@@ -132,7 +132,7 @@ func (f *roleScripted) Review(_ context.Context, _ executor.Runner, q opencode.R
 
 func copyModulesFixture(t *testing.T, dst string) {
 	t.Helper()
-	fixture, _ := filepath.Abs("../../../fixtures/w15-modules/input")
+	fixture, _ := filepath.Abs("../../../fixtures/modules/input")
 	err := filepath.WalkDir(fixture, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err

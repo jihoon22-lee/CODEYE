@@ -19,9 +19,9 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// fixtureDir is fixtures/w20-rust/<name> of the repository.
+// fixtureDir is fixtures/rust/<name> of the repository.
 func fixtureDir(name string) string {
-	return filepath.Join("..", "..", "..", "..", "fixtures", "w20-rust", name)
+	return filepath.Join("..", "..", "..", "..", "fixtures", "rust", name)
 }
 
 // fixtureFiles reads a fixture project into snapshot-relative files.
@@ -201,7 +201,7 @@ func readEnvelope(t *testing.T, job analysis.Job, res analysis.TaskResult) (obsd
 	if err != nil {
 		t.Fatalf("envelope invalid: %v\n%s", err, raw)
 	}
-	if dump := os.Getenv("CODEYE_W20_DUMP"); dump != "" {
+	if dump := os.Getenv("CODEYE_RUST_DUMP"); dump != "" {
 		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + key + ".json"
 		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
 			t.Fatal(err)

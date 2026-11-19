@@ -43,7 +43,7 @@ const (
 // MPI, padding, localizability), checks that report every use of a standard
 // function (DeprecatedOrUnsafeBufferHandling, mt-unsafe), bugprone checks
 // about naming, style or conversions that fire on most C code without a
-// defect, and the duplicates measured on fixtures/w16-cpp/overlap
+// defect, and the duplicates measured on fixtures/cpp/overlap
 // (TestRealEngineOverlap, docs/ANALYZERS.md#cc-엔진-중복): checks that reported only what the
 // baseline cppcheck also reported on the same lines (assert-side-effect,
 // suspicious-memset-usage, core.BitwiseShift, core.StackAddressEscape,

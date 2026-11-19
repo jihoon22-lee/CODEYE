@@ -21,7 +21,7 @@ DEV_AGENT_MARKER = "<!-- CODEYE test fixture (TC-97)."
 
 # Fixed repository inputs that are not the synthetic defect/fix pairs. The verifier
 # fixture is the caller-closes counterexample TC-100 scores separately.
-FIXED_INPUTS = {"w15": "fixtures/w15-modules/input", "w12-close": "internal/worker/review/testdata/verify"}
+FIXED_INPUTS = {"w15": "fixtures/modules/input", "w12-close": "internal/worker/review/testdata/verify"}
 
 
 def materialize_fixed_input(root, destination, label="w15"):
@@ -48,7 +48,7 @@ def materialize_fixed_input(root, destination, label="w15"):
 def audit_reports(output, root):
     from validate_bundle import check_report, make_validators
 
-    qa = root / "fixtures/r0-quality"
+    qa = root / "fixtures/regression"
     cases = json.loads((qa / "corpus.json").read_bytes())
     materialize = runpy.run_path(str(qa / "corpus.py"))["materialize"]
     schema = make_validators()["report.schema.json"]
@@ -121,8 +121,8 @@ def audit_reports(output, root):
 
 
 def run(base, root, env):
-    relay = Path(os.environ["CODEYE_R0_RELAY_FILE"]).resolve(strict=True)
-    output = Path(os.environ["CODEYE_R0_RESULTS"]).resolve()
+    relay = Path(os.environ["CODEYE_PILOT_RELAY_FILE"]).resolve(strict=True)
+    output = Path(os.environ["CODEYE_PILOT_RESULTS"]).resolve()
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     binary = base / "codeye"
     opencode = shutil.which("opencode")
@@ -133,12 +133,12 @@ def run(base, root, env):
     work.mkdir(mode=0o700)
     source = work / "source"
     source.mkdir()
-    qa = root / "fixtures/r0-quality"
+    qa = root / "fixtures/regression"
     materialize = runpy.run_path(str(qa / "corpus.py"))["materialize"]
     cases = json.loads((qa / "corpus.json").read_text())
     selected = (
-        os.environ.get("CODEYE_R0_CASES", "").split(",")
-        if os.environ.get("CODEYE_R0_CASES")
+        os.environ.get("CODEYE_PILOT_CASES", "").split(",")
+        if os.environ.get("CODEYE_PILOT_CASES")
         else None
     )
     dataset = []
@@ -177,7 +177,7 @@ def run(base, root, env):
             "--opencode", opencode,
             "--model", "codeye-gateway/gpt-6.2-sol",
             "--model-relay-file", relay,
-            *(["--review-pack", os.environ["CODEYE_R0_REVIEW_PACK"]] if os.environ.get("CODEYE_R0_REVIEW_PACK") else []),
+            *(["--review-pack", os.environ["CODEYE_PILOT_REVIEW_PACK"]] if os.environ.get("CODEYE_PILOT_REVIEW_PACK") else []),
         ]
 
     subprocess.run(["npm", "run", "build"], cwd=root / "web", check=True)
@@ -283,7 +283,7 @@ def run(base, root, env):
                         {k: v for k, v in t.items() if k in ("key", "status", "reason")}
                         for t in report["tasks"]
                     ],
-                    "review_pack": os.environ.get("CODEYE_R0_REVIEW_PACK", "review-r1"),
+                    "review_pack": os.environ.get("CODEYE_PILOT_REVIEW_PACK", "review-r1"),
                     "review_calls": [
                         {k: c.get(k) for k in ("role", "outcome", "pack_sha256")}
                         for c in report["coverage"].get("review_calls", [])

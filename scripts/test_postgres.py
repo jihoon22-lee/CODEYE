@@ -111,7 +111,7 @@ def main():
             if "--personal" in sys.argv[1:]:
                 import personal_smoke
                 personal_smoke.run(base, ROOT, env, probe_env)
-            if "--r0-pilot" in sys.argv[1:]:
+            if "--pilot" in sys.argv[1:]:
                 import regression_pilot
                 regression_pilot.run(base, ROOT, env)
             if go_suite:

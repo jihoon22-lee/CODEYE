@@ -2,7 +2,7 @@
 
 이 문서는 CODEYE의 분석·검토 품질을 재는 방법을 정한다. 원칙과 지표, 회귀 집합과 보류 집합, 평가 runner, 유료 batch 절차, 예산 relay와 장부, 지침 개정 규칙을 다룬다. 결과 수치는 이 문서에 쓰지 않는다. 실행 결과는 [평가 결과](EVALUATION-RESULTS.md)에만 둔다.
 
-- 구현: 회귀 집합 [`fixtures/r0-quality`](../fixtures/r0-quality/corpus.json), 실행 틀 [`scripts/eval_harness.py`](../scripts/eval_harness.py), 회귀 실행 [`scripts/regression_pilot.py`](../scripts/regression_pilot.py), 평가 runner [`scripts/quality_eval.py`](../scripts/quality_eval.py), 채점 [`scripts/quality_score.py`](../scripts/quality_score.py), 두 결과 비교 [`scripts/pack_compare.py`](../scripts/pack_compare.py), 예산 relay [`scripts/model_budget_relay.py`](../scripts/model_budget_relay.py)
+- 구현: 회귀 집합 [`fixtures/regression`](../fixtures/regression/corpus.json), 실행 틀 [`scripts/eval_harness.py`](../scripts/eval_harness.py), 회귀 실행 [`scripts/regression_pilot.py`](../scripts/regression_pilot.py), 평가 runner [`scripts/quality_eval.py`](../scripts/quality_eval.py), 채점 [`scripts/quality_score.py`](../scripts/quality_score.py), 두 결과 비교 [`scripts/pack_compare.py`](../scripts/pack_compare.py), 예산 relay [`scripts/model_budget_relay.py`](../scripts/model_budget_relay.py)
 - 요구사항: REQ-010/011/013/027, NFR-007/008/010([요구사항](REQUIREMENTS.md))
 - 수용 시험: TC-100, TC-120~122, TC-128, TC-129([시험](TESTING.md))
 - 검토 역할·입력·출력 규칙: [모델 검토](REVIEW.md)
@@ -44,13 +44,13 @@
 
 ### 회귀 집합
 
-[`fixtures/r0-quality/corpus.json`](../fixtures/r0-quality/corpus.json)의 Go 결함·수정 10쌍과 고정 입력이다. 모든 사례의 내용이 이미 점검되었으므로 회귀 집합으로만 쓴다(사례의 `split` 필드는 원래의 개발·보류 구분을 보존한다).
+[`fixtures/regression/corpus.json`](../fixtures/regression/corpus.json)의 Go 결함·수정 10쌍과 고정 입력이다. 모든 사례의 내용이 이미 점검되었으므로 회귀 집합으로만 쓴다(사례의 `split` 필드는 원래의 개발·보류 구분을 보존한다).
 
 - 사례 필드: `id`, `split`, `family`, `contract`, `imports`, `before`, `after`, `check`, `label`. 모든 함수에 짧은 공개 계약 주석이 있다. corpus 순서로 짝수 번째 사례에는 같은 계약을 담은 README를 붙인다.
 - 실행 입력에는 평가 라벨, 전후 구분, 확인용 테스트가 들어가지 않는다. 사례는 무작위 이름의 디렉터리에 만든다.
-- 각 원래 구현은 별도 계약 시험에서 실패하고 수정 구현은 통과한다. `python3 fixtures/r0-quality/corpus.py --check`가 모델 없이 이 계약 시험을 실행한다.
+- 각 원래 구현은 별도 계약 시험에서 실패하고 수정 구현은 통과한다. `python3 fixtures/regression/corpus.py --check`가 모델 없이 이 계약 시험을 실행한다.
 - 고정 입력(`scripts/regression_pilot.py`의 `FIXED_INPUTS`와 기본 입력):
-  - `w15`: [`fixtures/w15-modules/input`](../fixtures/w15-modules/input). 루트 안내가 있는 저장소에 하위 모듈 둘(문서 없는 모듈, 루트와 상충하는 안내와 노드보다 높은 Go 버전 요구를 가진 모듈), 읽기 예산을 넘는 설계 문서, 권한 변경을 요구하는 에이전트 지침을 담는다. 정답 [`expected.json`](../fixtures/w15-modules/expected.json)은 입력 밖에 있다. 평가 스냅샷에서는 개발 에이전트용 경고 주석 한 줄을 뺀다.
+  - `w15`: [`fixtures/modules/input`](../fixtures/modules/input). 루트 안내가 있는 저장소에 하위 모듈 둘(문서 없는 모듈, 루트와 상충하는 안내와 노드보다 높은 Go 버전 요구를 가진 모듈), 읽기 예산을 넘는 설계 문서, 권한 변경을 요구하는 에이전트 지침을 담는다. 정답 [`expected.json`](../fixtures/modules/expected.json)은 입력 밖에 있다. 평가 스냅샷에서는 개발 에이전트용 경고 주석 한 줄을 뺀다.
   - `w12-close`: [`internal/worker/review/testdata/verify`](../internal/worker/review/testdata/verify). 상위 호출자가 자원을 닫는 반례로, 검증 역할의 철회 경로를 따로 채점한다.
   - `pilot`: 공개 CODEYE의 고정 커밋 사본. `git`: 공개 CODEYE HTTPS `main`(Git 소스이므로 모델 검토는 정책 제외로 끝나는 것이 정상이다).
 - 탐지는 발생 조건과 잘못된 결과가 모두 맞아야 센다. 계약 밖 입력(예: 계약이 비어 있지 않은 입력이나 양의 분모를 명시한 경우)에 대한 경고는 수정 전 결함과 분리해 채점한다.
@@ -144,11 +144,11 @@
 회귀 실행은 실제 PostgreSQL 컨트롤러, 별도 신원의 에이전트 두 대, 제품 워커, 정적 분석, 모델 검토, 보고서 게시·조회, 브라우저 내보내기까지 제품 경로 전체를 쓴다.
 
 - 준비물: Go, PostgreSQL 도구(`initdb`, `pg_ctl`, `psql`), 잠금 파일대로 설치한 웹 의존성, Chromium, 고정 버전 OpenCode, 이미 시작한 예산 relay의 ready file. Go 도구는 설치된 로컬 모듈 캐시를 쓴다.
-- 실행: `CODEYE_R0_RELAY_FILE`에 relay ready file을, `CODEYE_R0_RESULTS`에 새 비공개 결과 디렉터리를 지정하고 `python3 scripts/test_postgres.py --r0-pilot`을 실행한다. 실제 모델 요청을 보낸다.
-- 대상 한정: `CODEYE_R0_CASES`에 `Q01-before,Q01-after,...,w15,w12-close,pilot,git`처럼 쉼표로 준다. 비우면 합성 쌍 전체, 고정 공개 커밋, 공개 HTTPS `main`을 실행한다. 고정 입력 `w15`·`w12-close`는 명시할 때만 들어간다.
-- 팩: `CODEYE_R0_REVIEW_PACK`(비우면 에이전트 기본값 `review-r1`).
+- 실행: `CODEYE_PILOT_RELAY_FILE`에 relay ready file을, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정하고 `python3 scripts/test_postgres.py --pilot`을 실행한다. 실제 모델 요청을 보낸다.
+- 대상 한정: `CODEYE_PILOT_CASES`에 `Q01-before,Q01-after,...,w15,w12-close,pilot,git`처럼 쉼표로 준다. 비우면 합성 쌍 전체, 고정 공개 커밋, 공개 HTTPS `main`을 실행한다. 고정 입력 `w15`·`w12-close`는 명시할 때만 들어간다.
+- 팩: `CODEYE_PILOT_REVIEW_PACK`(비우면 에이전트 기본값 `review-r1`).
 - 에이전트 두 대는 같은 호스트에서 풀 최소·최대 0과 2로 돈다. 합성 사례와 공개 사본의 트리 해시를 실행 전후에 대조한다.
-- 감사: `python3 scripts/regression_pilot.py --audit-results "$CODEYE_R0_RESULTS"`가 보관된 보고서를 원본과 다시 대조한다(구조·통계·스냅샷, 주장과 근거의 파일 위치·줄 범위·blob SHA). Git 입력의 commit 객체가 로컬에 있어야 한다. 이 검사는 주장 자체가 옳다는 보증과 구분한다.
+- 감사: `python3 scripts/regression_pilot.py --audit-results "$CODEYE_PILOT_RESULTS"`가 보관된 보고서를 원본과 다시 대조한다(구조·통계·스냅샷, 주장과 근거의 파일 위치·줄 범위·blob SHA). Git 입력의 commit 객체가 로컬에 있어야 한다. 이 검사는 주장 자체가 옳다는 보증과 구분한다.
 - 두 결과 비교: `python3 scripts/pack_compare.py A_DIR B_DIR --judgments FILE`. 보관 결과만 읽고 모델 요청을 보내지 않는다. 구조 지표는 보고서에서, 결함 판정은 스냅샷 밖 판정 파일에서 읽는다. 판정은 평가자의 라벨이며 측정된 precision이 아니다.
 - 결과 디렉터리와 판정은 저장소 밖 비공개 경로에 둔다. 결과 요약은 [평가 결과](EVALUATION-RESULTS.md)에 쓴다.
 

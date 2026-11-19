@@ -31,7 +31,7 @@ func TestOpenAPIImplementedOperationsMatchRoutes(t *testing.T) {
 			path, method = param.ReplaceAllString(m[1], "{id}"), ""
 		} else if m := methodLine.FindStringSubmatch(line); m != nil {
 			method = strings.ToUpper(m[1])
-		} else if st := strings.TrimSpace(line); strings.HasPrefix(st, "x-codeye-status: implemented-w") && path != "" && method != "" {
+		} else if st := strings.TrimSpace(line); st == "x-codeye-status: implemented" && path != "" && method != "" {
 			documented[method+" "+path] = true
 		}
 	}

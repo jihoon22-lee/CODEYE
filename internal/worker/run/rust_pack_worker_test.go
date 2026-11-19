@@ -28,10 +28,10 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
-// rustFixture reads fixtures/w20-rust/<name> into snapshot files.
+// rustFixture reads fixtures/rust/<name> into snapshot files.
 func rustFixture(t *testing.T, name string) map[string]string {
 	t.Helper()
-	root := filepath.Join("..", "..", "..", "fixtures", "w20-rust", name)
+	root := filepath.Join("..", "..", "..", "fixtures", "rust", name)
 	out := map[string]string{}
 	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {

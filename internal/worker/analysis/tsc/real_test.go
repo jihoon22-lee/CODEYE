@@ -16,11 +16,11 @@ import (
 )
 
 // Real tsc tests run only with CODEYE_TEST_TSC and CODEYE_TEST_NODE (CI has
-// no Node tools). CODEYE_W18_CAPTURE=DIR also writes the redacted tsc.check
+// no Node tools). CODEYE_JSTS_CAPTURE=DIR also writes the redacted tsc.check
 // (and tsc.config) streams and exit code of each case to DIR, which is how
 // testdata/*.stdout|stderr|exit were captured (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처):
 //
-//	CODEYE_W18_CAPTURE=$PWD/internal/worker/analysis/tsc/testdata \
+//	CODEYE_JSTS_CAPTURE=$PWD/internal/worker/analysis/tsc/testdata \
 //	  go test -count=1 -run TestRealTsc ./internal/worker/analysis/tsc/
 
 const (

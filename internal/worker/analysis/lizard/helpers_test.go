@@ -9,7 +9,7 @@ import (
 
 // Fixture sources stay generated strings: the replay tests use the same
 // files as the captures in testdata/ (taken by real_test.go with
-// CODEYE_W21_CAPTURE), with anypacktest.Placeholder where the real test
+// CODEYE_STRUCTURE_CAPTURE), with anypacktest.Placeholder where the real test
 // plants a generated secret as a default argument value.
 
 // branches writes n "if" statements of the language (CCN 1+n).

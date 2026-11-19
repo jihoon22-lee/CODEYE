@@ -19,10 +19,10 @@ import (
 )
 
 // Review input selection for C/C++, Python, JS/TS and Rust. The fixtures
-// are fixtures/w24-review-inputs/<ecosystem>, written for these tests (no
+// are fixtures/review-inputs/<ecosystem>, written for these tests (no
 // evaluation case).
 
-const langFixtures = "../../../fixtures/w24-review-inputs"
+const langFixtures = "../../../fixtures/review-inputs"
 
 type sel struct {
 	path, kind string

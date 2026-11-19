@@ -172,7 +172,7 @@ func ReadEnvelope(t testing.TB, job analysis.Job, res analysis.TaskResult) (obsd
 	if err != nil {
 		t.Fatalf("envelope invalid: %v\n%s", err, raw)
 	}
-	if dump := os.Getenv("CODEYE_W21_DUMP"); dump != "" {
+	if dump := os.Getenv("CODEYE_STRUCTURE_DUMP"); dump != "" {
 		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + key + ".json"
 		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
 			t.Fatal(err)
@@ -241,12 +241,12 @@ func LoadCapture(t testing.TB, name string) Recorded {
 }
 
 // Capture writes the streams and exit code of execution exec of res to
-// $CODEYE_W21_CAPTURE/<name>.* when that variable is set: how the
+// $CODEYE_STRUCTURE_CAPTURE/<name>.* when that variable is set: how the
 // testdata/ captures of the replay tests were taken (docs/ANALYZERS.md). A capture
 // holding a node path or secret is refused.
 func Capture(t testing.TB, name, exec string, res analysis.TaskResult, secrets ...string) {
 	t.Helper()
-	dir := os.Getenv("CODEYE_W21_CAPTURE")
+	dir := os.Getenv("CODEYE_STRUCTURE_CAPTURE")
 	if dir == "" {
 		return
 	}

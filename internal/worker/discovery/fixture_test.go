@@ -22,8 +22,8 @@ import (
 var updateExamples = flag.Bool("update-examples", false, "rewrite examples/environment*.json from the module fixture")
 
 const (
-	fixtureInput    = "../../../fixtures/w15-modules/input"
-	fixtureExpected = "../../../fixtures/w15-modules/expected.json"
+	fixtureInput    = "../../../fixtures/modules/input"
+	fixtureExpected = "../../../fixtures/modules/expected.json"
 )
 
 // volatile fields depend on the acquisition (digest), the attempt, or the

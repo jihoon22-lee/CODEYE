@@ -18,14 +18,14 @@ import (
 )
 
 // Real ESLint tests run only with CODEYE_TEST_ESLINT and CODEYE_TEST_NODE
-// (CI has no Node tools). CODEYE_W18_CAPTURE=DIR also writes the redacted
+// (CI has no Node tools). CODEYE_JSTS_CAPTURE=DIR also writes the redacted
 // eslint.check streams and exit code of each case to DIR, which is how
 // testdata/*.stdout|stderr|exit were captured (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처):
 //
-//	CODEYE_W18_CAPTURE=$PWD/internal/worker/analysis/eslint/testdata \
+//	CODEYE_JSTS_CAPTURE=$PWD/internal/worker/analysis/eslint/testdata \
 //	  go test -count=1 -run TestRealESLint ./internal/worker/analysis/eslint/
 
-// Fixture sources stay strings (or under fixtures/w18-js-ts) so the
+// Fixture sources stay strings (or under fixtures/js-ts) so the
 // repository's own lint never sees the intentionally defective code.
 const (
 	pkgJSON   = "{\"name\":\"w18-case\",\"private\":true}\n"

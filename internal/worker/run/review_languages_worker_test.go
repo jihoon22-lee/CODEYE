@@ -72,7 +72,7 @@ func (legacyScripted) Review(_ context.Context, _ executor.Runner, q opencode.Re
 
 // Review inputs of other languages through the real worker and the report
 // builder: a Python-only
-// snapshot (fixtures/w24-review-inputs/python) with the production analyzer
+// snapshot (fixtures/review-inputs/python) with the production analyzer
 // composite (no tool configured) and a scripted model. Both packs send
 // Python code to investigate and verify, and the report built from the
 // uploaded artifacts with the default registry accepts every review record
@@ -88,7 +88,7 @@ func TestReviewInputsOfPythonThroughTheWorkerAndReport(t *testing.T) {
 			if err := os.Remove(filepath.Join(e.src, "main.go")); err != nil {
 				t.Fatal(err)
 			}
-			fixture, _ := filepath.Abs("../../../fixtures/w24-review-inputs/python")
+			fixture, _ := filepath.Abs("../../../fixtures/review-inputs/python")
 			err := filepath.WalkDir(fixture, func(p string, d fs.DirEntry, err error) error {
 				if err != nil || d.IsDir() {
 					return err

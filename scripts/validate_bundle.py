@@ -394,7 +394,7 @@ def check_cpp_pack_contracts(validators: dict) -> int:
     Returns the number of negative cases."""
     negatives = 0
     package = ROOT / "internal/worker/analysis/cpp"
-    fixture = ROOT / "fixtures/w16-cpp"
+    fixture = ROOT / "fixtures/cpp"
     selection = go_string_slice(package / "cppcheck.go", "CppcheckSelection")
     checks = go_string_slice(package / "clangtidy.go", "ClangTidyChecks")
     cc = yaml_file(ROOT / "examples/analyzer-cppcheck.yaml")
@@ -748,7 +748,7 @@ def check_structure_pack_contracts(validators: dict) -> int:
 
 def check_environment_example(doc: dict) -> None:
     """Bind the discovery examples to the fixture input bytes and evidence IDs."""
-    root = ROOT / "fixtures/w15-modules/input"
+    root = ROOT / "fixtures/modules/input"
     for r in doc.get("environment", {}).get("requirements", []):
         src = r["source"]
         sha = hashlib.sha256((root / src["path"]).read_bytes()).hexdigest()
@@ -852,7 +852,7 @@ def role_pack(languages=ROLE_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
 def check_role_pack_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None:
     """Bind the review-r1 stage examples to the w15 fixture bytes, the pack
     files, each other (upstream SHA-256, candidates) and the scope rules."""
-    root = ROOT / "fixtures/w15-modules/input"
+    root = ROOT / "fixtures/modules/input"
     first = docs["environment"]
     for stage in ROLE_STAGES:
         doc = docs[stage]
@@ -1414,7 +1414,7 @@ def check_doc_names(markdown_files) -> None:
 
 def check_code_doc_refs() -> int:
     """Source, schema and example files cite documents by path and section anchor; each must resolve."""
-    ignored = {".git", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
+    ignored = {".git", ".claude", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
     suffixes = {".go", ".py", ".ts", ".tsx", ".yaml", ".yml", ".json", ".sql", ".css", ".html"}
     anchors = {}
     count = 0
@@ -1440,9 +1440,38 @@ def check_code_doc_refs() -> int:
     return count
 
 
+# Places where a build-stage label is data, not a name: applied migrations are
+# checksummed, fixture inputs are pinned by captured tool output, and the
+# holdout records are kept verbatim.
+STAGE_NAME_EXEMPT = ("fixtures/", "migrations/sql/", "scripts/testdata/", "docs/EVALUATION-RESULTS.md")
+
+
+def check_source_names() -> int:
+    """Source files are named and commented by what they do, not by the build stage that added them."""
+    ignored = {".git", ".claude", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
+    suffixes = {".go", ".py", ".ts", ".tsx", ".yaml", ".yml", ".json", ".css", ".html", ".sql"}
+    label = re.compile(r"(?<![\w-])W[0-3]\d(?![\w-])|CODEYE_(?:W\d\d|R\d)_")
+    count = 0
+    for directory, dirs, files in os.walk(ROOT):
+        dirs[:] = sorted(name for name in dirs if name not in ignored)
+        for name in sorted(files):
+            path = Path(directory) / name
+            relative = path.relative_to(ROOT).as_posix()
+            if path.suffix not in suffixes or relative.startswith(STAGE_NAME_EXEMPT) or name == "package-lock.json":
+                continue
+            ensure(not re.match(r"(?:w\d\d|r[0-2])[_-]", name), "Build-stage file name: " + relative)
+            try:
+                found = label.search(path.read_text(encoding="utf-8"))
+            except UnicodeDecodeError:
+                continue
+            ensure(found is None, "Build-stage label in " + relative + ": " + (found.group(0) if found else ""))
+            count += 1
+    return count
+
+
 def main() -> None:
     link_count = 0
-    ignored = {".git", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
+    ignored = {".git", ".claude", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
     markdown_files = []
     for directory, dirs, files in os.walk(ROOT):
         dirs[:] = sorted(name for name in dirs if name not in ignored)
@@ -1464,6 +1493,7 @@ def main() -> None:
             link_count += 1
     check_doc_names(markdown_files)
     code_refs = check_code_doc_refs()
+    named = check_source_names()
     validators = make_validators()
     validators["doctor.schema.json"].validate(json_file(ROOT / "examples/doctor.json"))
     validators["state.schema.json"].validate(json_file(ROOT / "examples/state.json"))
@@ -1729,6 +1759,7 @@ def main() -> None:
     expect_invalid("stage enum drift", lambda doc: check_stage_enums(doc, stage_order, stored_stages, stage_states), bad)
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
     print(f"PASS: {code_refs} document references from source, schema and example files")
+    print(f"PASS: {named} source files without build-stage labels")
     print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 19 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")

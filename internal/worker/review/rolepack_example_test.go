@@ -14,7 +14,7 @@ import (
 )
 
 // exampleDir holds the five role-pack stage records the worker writes for
-// fixtures/w15-modules/input with the scripted caller (validScript) and one
+// fixtures/modules/input with the scripted caller (validScript) and one
 // synthetic go vet observation. They are indented copies of the exact record
 // bytes (json.Compact restores them), so an upstream sha256 of a review stage
 // is the digest of its compacted sibling. CODEYE_UPDATE_EXAMPLES=1 rewrites

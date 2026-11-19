@@ -313,9 +313,9 @@ func TestAnalyzerDecoderStaticcheckFindings(t *testing.T) {
 	if _, err := RenderHTML(r, Digest(b), Korean); err != nil {
 		t.Fatal(err)
 	}
-	// CODEYE_W19_REPORT_DUMP=DIR writes both projections for the JSON Schema
+	// CODEYE_STATICCHECK_REPORT_DUMP=DIR writes both projections for the JSON Schema
 	// check of docs/ANALYZERS.md#실제-도구-시험과-출력-캡처 (schemas/report.schema.json via validate_bundle).
-	if dir := os.Getenv("CODEYE_W19_REPORT_DUMP"); dir != "" {
+	if dir := os.Getenv("CODEYE_STATICCHECK_REPORT_DUMP"); dir != "" {
 		full, err := Marshal(r)
 		if err != nil {
 			t.Fatal(err)

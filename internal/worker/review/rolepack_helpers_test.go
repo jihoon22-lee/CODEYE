@@ -20,12 +20,12 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// modulesJob acquires fixtures/w15-modules/input (optionally changed) as an
+// modulesJob acquires fixtures/modules/input (optionally changed) as an
 // immutable snapshot.
 func modulesJob(t *testing.T, change func(root string)) analysis.Job {
 	t.Helper()
 	root := t.TempDir()
-	fixture, err := filepath.Abs("../../../fixtures/w15-modules/input")
+	fixture, err := filepath.Abs("../../../fixtures/modules/input")
 	if err != nil {
 		t.Fatal(err)
 	}

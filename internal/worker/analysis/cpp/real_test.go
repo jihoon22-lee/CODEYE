@@ -16,12 +16,12 @@ import (
 
 // Real-tool tests (TC-105..TC-107). They skip unless CODEYE_TEST_CPPCHECK
 // (cppcheck 2.22.x) or CODEYE_TEST_CLANG_TIDY (clang-tidy 23.1.x) names an
-// operator-installed binary. With CODEYE_W16_CAPTURE=<dir> they write the
+// operator-installed binary. With CODEYE_CPP_CAPTURE=<dir> they write the
 // check streams the replay tests read (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처):
 //
 //	CODEYE_TEST_CPPCHECK=$HOME/.local/share/codeye-tools/cpp/bin/cppcheck \
 //	CODEYE_TEST_CLANG_TIDY=$HOME/.local/share/codeye-tools/cpp/bin/clang-tidy \
-//	CODEYE_W16_CAPTURE=$PWD/internal/worker/analysis/cpp/testdata \
+//	CODEYE_CPP_CAPTURE=$PWD/internal/worker/analysis/cpp/testdata \
 //	go test -count=1 -run 'TestReal' ./internal/worker/analysis/cpp/
 
 func optionalTool(env string) string {
@@ -109,7 +109,7 @@ func (r realRun) capture(t *testing.T, name string) {
 	}
 }
 
-// Every case of fixtures/w16-cpp/expected.json on the real tools.
+// Every case of fixtures/cpp/expected.json on the real tools.
 func TestRealFixtureCases(t *testing.T) {
 	ccPath, ctPath := optionalTool("CODEYE_TEST_CPPCHECK"), optionalTool("CODEYE_TEST_CLANG_TIDY")
 	if ccPath == "" && ctPath == "" {
@@ -254,7 +254,7 @@ func TestRealProbes(t *testing.T) {
 	}
 }
 
-// Engine overlap (docs/ANALYZERS.md#cc-엔진-중복), measured on fixtures/w16-cpp/overlap: the
+// Engine overlap (docs/ANALYZERS.md#cc-엔진-중복), measured on fixtures/cpp/overlap: the
 // baseline cppcheck and clang-tidy are different engines and both run. A
 // clang-tidy check that reported only constructs cppcheck also reported on
 // the same lines is not selected; a kept check that overlaps has a variant
@@ -266,7 +266,7 @@ func TestRealEngineOverlap(t *testing.T) {
 	if ccPath == "" || ctPath == "" {
 		t.Skip("set CODEYE_TEST_CPPCHECK and CODEYE_TEST_CLANG_TIDY to measure the engine overlap")
 	}
-	src, err := os.ReadFile("../../../../fixtures/w16-cpp/overlap/overlap.cpp")
+	src, err := os.ReadFile("../../../../fixtures/cpp/overlap/overlap.cpp")
 	if err != nil {
 		t.Fatal(err)
 	}

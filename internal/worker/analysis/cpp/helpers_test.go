@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	fixtureInput    = "../../../../fixtures/w16-cpp/input"
-	fixtureExpected = "../../../../fixtures/w16-cpp/expected.json"
+	fixtureInput    = "../../../../fixtures/cpp/input"
+	fixtureExpected = "../../../../fixtures/cpp/expected.json"
 	// generatedHeader is what the fixture's configure step would write.
 	generatedHeaderPath = "_build/gen/config.h"
 	generatedHeader     = "#ifndef W16_CONFIG_H\n#define W16_CONFIG_H\n#define W16_VERSION \"1.0\"\n#endif\n"
@@ -60,7 +60,7 @@ func newClangTidy(t *testing.T, batch int) *ClangTidy {
 	return a
 }
 
-// fixtureFiles reads fixtures/w16-cpp/input as a file map.
+// fixtureFiles reads fixtures/cpp/input as a file map.
 func fixtureFiles(t *testing.T) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -196,7 +196,7 @@ func readEnvelope(t *testing.T, job analysis.Job, res analysis.TaskResult) (obsd
 	if err != nil {
 		t.Fatalf("envelope invalid: %v\n%s", err, raw)
 	}
-	if dump := os.Getenv("CODEYE_W16_DUMP"); dump != "" {
+	if dump := os.Getenv("CODEYE_CPP_DUMP"); dump != "" {
 		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + key + ".json"
 		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
 			t.Fatal(err)
@@ -235,11 +235,11 @@ func assertNoNodePaths(t *testing.T, raw []byte, paths ...string) {
 }
 
 // captureStreams writes the check execution's streams to
-// CODEYE_W16_CAPTURE/<name>.{stdout,stderr,exit} (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처): the replay
+// CODEYE_CPP_CAPTURE/<name>.{stdout,stderr,exit} (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처): the replay
 // tests run the parsers on these committed bytes in CI.
 func captureStreams(t *testing.T, name string, res analysis.TaskResult, exec string) {
 	t.Helper()
-	dir := os.Getenv("CODEYE_W16_CAPTURE")
+	dir := os.Getenv("CODEYE_CPP_CAPTURE")
 	if dir == "" {
 		return
 	}
