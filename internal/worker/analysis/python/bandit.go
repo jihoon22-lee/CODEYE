@@ -297,7 +297,7 @@ func (banditRun) assemble(rc *runCtx) obsdoc.Document {
 		SourceSuppressions: obsdoc.SuppressReported, ConfigFiles: []obsdoc.ConfigFile{}, UnreportedSuppressionRules: []string{}}
 	bd := newBuilder(rc, obsdoc.Component{ID: BanditName, Version: BanditAdapterVersion}, obsdoc.Component{ID: BanditParserID, Version: BanditParserVersion}, rp)
 	bd.identify(seriesTested(BanditTestedSeries))
-	if v := rc.results[execBanditVersion]; v != nil && exitedZero(v) {
+	if v := rc.results[execBanditVersion]; v != nil && pack.ExitedZero(v) {
 		if py := banditParserPython(v.Stdout.Data); py != "" {
 			// bandit parses with its own interpreter; the module's target
 			// version is recorded but cannot be applied.
@@ -314,7 +314,7 @@ func (banditRun) assemble(rc *runCtx) obsdoc.Document {
 	var processed []string
 	if honoredRun != nil && honoredRun.Status == executor.StatusExited {
 		report = readBanditReport(filepath.Join(rc.dirs["report"], "bandit.json"))
-		switch code := exitCode(honoredRun); {
+		switch code := pack.ExitCode(honoredRun); {
 		case !report.ok:
 			bd.unparsed()
 		case len(honoredRun.Stdout.Data) > 0:
@@ -339,7 +339,7 @@ func (banditRun) assemble(rc *runCtx) obsdoc.Document {
 		if every.shape > 0 || every.unparsed > 0 || every.decode != "" {
 			bd.unparsed()
 		}
-		switch code := exitCode(allRun); {
+		switch code := pack.ExitCode(allRun); {
 		case (code == 0) == (every.records == 0) && (code == 0 || code == 1):
 		case code == 0 || code == 1:
 			bd.fail(domain.TaskFailed, ReasonExitMismatch, obsdoc.ExitExecutionError)

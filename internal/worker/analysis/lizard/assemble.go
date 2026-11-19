@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -276,7 +277,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		o.Fail(domain.TaskFailed, anypack.ReasonWorkspaceLink, obsdoc.ExitNotRun)
 	}
 	toolOK := false
-	if in.Version != nil && anypack.ExitedZero(in.Version) {
+	if in.Version != nil && pack.ExitedZero(in.Version) {
 		if v, ok := ParseVersion(in.Version.Stdout.Data); ok {
 			toolOK = true
 			doc.Tool.Version, doc.Tool.VersionTested = anypack.Ptr(v), VersionTested(v)
@@ -303,10 +304,10 @@ func assemble(in assembleInput) obsdoc.Document {
 		if !parseOK {
 			doc.Parse.UnparsedBytes = int64(len(in.Run.Stdout.Data))
 		}
-		if !anypack.StreamsComplete(in.Run) {
+		if !pack.StreamsComplete(in.Run) {
 			o.Fail(domain.TaskFailed, anypack.ReasonOutputTruncated, obsdoc.ExitExecutionError)
 		}
-		if anypack.ExitCode(in.Run) != 0 {
+		if pack.ExitCode(in.Run) != 0 {
 			// XML mode exits 0 on every completed run; anything else is a
 			// crash or a usage error.
 			o.Fail(domain.TaskFailed, ReasonFailed, obsdoc.ExitExecutionError)

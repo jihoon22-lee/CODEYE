@@ -178,21 +178,17 @@ func (a *Analyzer) Probe(ctx context.Context, runner executor.Runner, dir string
 	return v, nil
 }
 
-func failed(reason string, limitations ...string) analysis.TaskResult {
-	return analysis.TaskResult{Status: domain.TaskFailed, Reason: reason, Limitations: append([]string{}, limitations...)}
-}
-
 // Run executes one planned task: version, the effective configuration, then
 // the check of the tsconfig, or of each of its local referenced projects
 // when it is a solution-style config that selects no file itself.
 func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	mods, err := jsts.Modules(job.Snapshot.Manifest, job.Scope)
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	tasks, err := plan(job)
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	var pt *pack.Task
 	for i := range tasks {
@@ -201,7 +197,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 	}
 	if pt == nil {
-		return failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
+		return pack.Failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
 	}
 	var mod jsts.Module
 	for _, m := range mods {
@@ -210,20 +206,20 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 	}
 	if !filepath.IsAbs(job.Scratch) || !filepath.IsAbs(job.Snapshot.WorkspaceDir) || !filepath.IsAbs(job.Snapshot.SnapshotDir) {
-		return failed(analysis.ReasonHandlerError, "invalid_job_paths")
+		return pack.Failed(analysis.ReasonHandlerError, "invalid_job_paths")
 	}
 	taskDir := filepath.Join(job.Scratch, "analyzers", pt.Spec.Key)
 	if err := os.MkdirAll(filepath.Dir(taskDir), 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	if err := os.Mkdir(taskDir, 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	dirs := map[string]string{}
 	for _, d := range []string{"exec", "tmp"} {
 		dirs[d] = filepath.Join(taskDir, d)
 		if err := os.Mkdir(dirs[d], 0o700); err != nil {
-			return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		}
 	}
 	files := jsts.Included(job.Snapshot.Manifest)
@@ -278,11 +274,11 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			return &res, false
 		}
 		in.Executions = append(in.Executions, e)
-		return &res, !jsts.Stoppable(&res)
+		return &res, !pack.Stoppable(&res)
 	}
 	var ok bool
 	if in.Version, ok = run(execVersion, []string{"--version"}); ok {
-		if _, recognized := ParseVersion(in.Version.Stdout.Data); recognized && jsts.ExitedZero(in.Version) {
+		if _, recognized := ParseVersion(in.Version.Stdout.Data); recognized && pack.ExitedZero(in.Version) {
 			projects := []project{{Config: rootConfig, Arg: "tsconfig.json"}}
 			for i := 0; i < len(projects) && !writeFailed; i++ {
 				p := &projects[i]
@@ -297,7 +293,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 				}
 				p.ConfigRun = res
 				shown, parsed := parseShowConfig(res.Stdout.Data)
-				if !jsts.ExitedZero(res) || !parsed {
+				if !pack.ExitedZero(res) || !parsed {
 					// The config did not load: its stdout holds the
 					// diagnostics; no check runs under unknown options.
 					break

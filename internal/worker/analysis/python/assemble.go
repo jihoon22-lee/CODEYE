@@ -9,6 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -79,7 +80,7 @@ func (bd *builder) targetVersion(lo, hi int) int {
 // identify reads the version execution.
 func (bd *builder) identify(tested func(string) bool) {
 	r := bd.rc.results[bd.rc.b.desc.Name+".version"]
-	if r == nil || !exitedZero(r) {
+	if r == nil || !pack.ExitedZero(r) {
 		return
 	}
 	if v, ok := bd.rc.b.desc.ParseVersion(r.Stdout.Data); ok {
@@ -150,7 +151,7 @@ func (bd *builder) executions(names ...string) {
 		bd.fail(domain.TaskFailed, ReasonWorkspaceDrift, obsdoc.ExitExecutionError)
 	}
 	for _, r := range results {
-		if r != nil && !streamsComplete(r) {
+		if r != nil && !pack.StreamsComplete(r) {
 			bd.fail(domain.TaskFailed, ReasonOutputTruncated, obsdoc.ExitExecutionError)
 		}
 	}

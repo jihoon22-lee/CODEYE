@@ -25,6 +25,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -190,7 +191,7 @@ func (h *Handler) Probe(ctx context.Context, runner executor.Runner, dir string)
 	if res.Cleanup == executor.CleanupUncertain {
 		return "", errors.New("go version probe cleanup uncertain")
 	}
-	if !exitedZero(&res) {
+	if !pack.ExitedZero(&res) {
 		return "", fmt.Errorf("go version probe did not succeed: %s %s", res.Status, res.Reason)
 	}
 	v, _, ok := parseVersion(res.Stdout.Data)
@@ -198,10 +199,6 @@ func (h *Handler) Probe(ctx context.Context, runner executor.Runner, dir string)
 		return "", errors.New("go version output not recognized")
 	}
 	return v, nil
-}
-
-func failed(reason string, limitations ...string) analysis.TaskResult {
-	return analysis.TaskResult{Status: domain.TaskFailed, Reason: reason, Limitations: append([]string{}, limitations...)}
 }
 
 // ObservationsPath is where the go-vet task key writes its observations
@@ -215,7 +212,7 @@ func ObservationsPath(scratch, key string) string {
 func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	planned, err := planTasks(job.Snapshot.Manifest, job.Scope)
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	var pt *plannedTask
 	for i := range planned {
@@ -224,17 +221,17 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 		}
 	}
 	if pt == nil {
-		return failed(analysis.ReasonHandlerError, "unknown_task")
+		return pack.Failed(analysis.ReasonHandlerError, "unknown_task")
 	}
 	if !filepath.IsAbs(job.Scratch) || !filepath.IsAbs(job.Snapshot.WorkspaceDir) || !filepath.IsAbs(job.Snapshot.SnapshotDir) {
-		return failed(analysis.ReasonHandlerError, "invalid_job_paths")
+		return pack.Failed(analysis.ReasonHandlerError, "invalid_job_paths")
 	}
 	taskDir := filepath.Join(job.Scratch, "go-vet", pt.Key)
 	if err := os.MkdirAll(filepath.Dir(taskDir), 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	if err := os.Mkdir(taskDir, 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	files := includedFiles(job.Snapshot.Manifest)
 	modules := moduleDirs(files)
@@ -258,7 +255,7 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 		doc.Parse.OK = false
 		art, err := writeDoc(doc)
 		if err != nil {
-			return failed(analysis.ReasonHandlerError, "observations_write_failed")
+			return pack.Failed(analysis.ReasonHandlerError, "observations_write_failed")
 		}
 		return analysis.TaskResult{Status: domain.TaskUnsupported, Reason: analysis.ReasonAnalysisUnsupported, Artifacts: []analysis.ArtifactFile{art}, Limitations: []string{pt.Unsupported}}
 	}
@@ -274,7 +271,7 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 		doc.Parse.OK = false
 		art, werr := writeDoc(doc)
 		if werr != nil {
-			return failed(analysis.ReasonHandlerError, "observations_write_failed")
+			return pack.Failed(analysis.ReasonHandlerError, "observations_write_failed")
 		}
 		return analysis.TaskResult{Status: domain.TaskFailed, Reason: ReasonSnapshotIntegrity, Artifacts: []analysis.ArtifactFile{art}, Limitations: doc.Limitations}
 	}
@@ -292,7 +289,7 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 	for _, d := range []string{"exec", "gocache", "gopath", "tmp"} {
 		dirs[d] = filepath.Join(taskDir, d)
 		if err := os.Mkdir(dirs[d], 0o700); err != nil {
-			return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		}
 	}
 	modcache := h.modcache
@@ -314,7 +311,7 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 	}
 	env := h.env(dirs["gocache"], dirs["gopath"], modcache)
 	if err := DisableTelemetry(env, filepath.Join(taskDir, "config")); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	spec := func(args ...string) executor.Spec {
 		return executor.Spec{
@@ -341,10 +338,6 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 		executions = append(executions, e)
 		return &res, true
 	}
-	stoppable := func(r *executor.Result) bool {
-		return r.Cleanup == executor.CleanupUncertain || r.Status == executor.StatusCancelled || r.Status == executor.StatusTimedOut ||
-			r.Status == executor.StatusRejected || r.Status == executor.StatusUnsupported || r.Status == executor.StatusStartFailed
-	}
 	writeFailed := false
 	steps := []struct {
 		name string
@@ -366,7 +359,7 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 			writeFailed = true
 			break
 		}
-		if stoppable(res) {
+		if pack.Stoppable(res) {
 			break
 		}
 		if s.name == execModEdit {
@@ -374,7 +367,7 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 			// directory replace leaves the snapshot (the native go command
 			// would read that host path), or if it cannot be read.
 			_, targets, ok := parseModEdit(res.Stdout.Data)
-			if !ok || !exitedZero(res) || len(escapingReplaces(targets, pt.ModuleDir, in.Windows)) > 0 {
+			if !ok || !pack.ExitedZero(res) || len(escapingReplaces(targets, pt.ModuleDir, in.Windows)) > 0 {
 				break
 			}
 		}

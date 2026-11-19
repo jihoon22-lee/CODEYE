@@ -12,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -98,14 +99,6 @@ type assembleInput struct {
 	ConfigKnown                 bool
 	Linker                      bool
 	OutOfScope                  func(rel string) bool
-}
-
-func streamsComplete(r *executor.Result) bool {
-	return r != nil && !r.Stdout.Truncated && !r.Stdout.Incomplete && !r.Stderr.Truncated && !r.Stderr.Incomplete
-}
-
-func exitedZero(r *executor.Result) bool {
-	return r != nil && r.Status == executor.StatusExited && r.ExitCode != nil && *r.ExitCode == 0
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -435,8 +428,8 @@ func assemble(in assembleInput) obsdoc.Document {
 
 	// Identity.
 	rustcOK, cargoOK, clippyOK := false, false, in.Kind != KindClippy
-	if exitedZero(in.Rustc) {
-		if r, ok := ParseRustcVV(in.Rustc.Stdout.Data); ok && streamsComplete(in.Rustc) {
+	if pack.ExitedZero(in.Rustc) {
+		if r, ok := ParseRustcVV(in.Rustc.Stdout.Data); ok && pack.StreamsComplete(in.Rustc) {
 			rustcOK = true
 			doc.Target.Platform = ptr(r.Host)
 			doc.Target.Properties["rustc"] = r.Release
@@ -446,8 +439,8 @@ func assemble(in assembleInput) obsdoc.Document {
 		}
 	}
 	cargoVersion := ""
-	if exitedZero(in.Cargo) {
-		if v, ok := ParseCargoVersion(in.Cargo.Stdout.Data); ok && streamsComplete(in.Cargo) {
+	if pack.ExitedZero(in.Cargo) {
+		if v, ok := ParseCargoVersion(in.Cargo.Stdout.Data); ok && pack.StreamsComplete(in.Cargo) {
 			cargoOK, cargoVersion = true, v
 			rel, _, _ := strings.Cut(v, " ")
 			doc.Target.Properties["cargo"] = rel
@@ -459,8 +452,8 @@ func assemble(in assembleInput) obsdoc.Document {
 			}
 		}
 	}
-	if in.Kind == KindClippy && exitedZero(in.ClippyV) {
-		if v, ok := ParseClippyVersion(in.ClippyV.Stdout.Data); ok && streamsComplete(in.ClippyV) {
+	if in.Kind == KindClippy && pack.ExitedZero(in.ClippyV) {
+		if v, ok := ParseClippyVersion(in.ClippyV.Stdout.Data); ok && pack.StreamsComplete(in.ClippyV) {
 			clippyOK = true
 			doc.Tool.Version, doc.Tool.VersionTested = ptr(v), ClippyVersionTested(v)
 			if !doc.Tool.VersionTested {
@@ -751,7 +744,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	case facts.BuildScript:
 		fail(domain.TaskFailed, ReasonBuildScript, obsdoc.ExitExecutionError)
 	}
-	if in.Main != nil && !streamsComplete(in.Main) {
+	if in.Main != nil && !pack.StreamsComplete(in.Main) {
 		fail(domain.TaskFailed, ReasonOutputTruncated, obsdoc.ExitExecutionError)
 	}
 	if in.Main != nil && !parsed {

@@ -188,7 +188,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	if !in.ScratchFailed && !in.Linked {
 		env := a.env()
 		in.Version = r.Exec(ctx, runner, execVersion, r.Spec(a.tool, env, anypack.ProbeTimeout, 64<<10, 64<<10, "--version"))
-		if !anypack.Stoppable(in.Version) && anypack.ExitedZero(in.Version) {
+		if !pack.Stoppable(in.Version) && pack.ExitedZero(in.Version) {
 			if _, ok := ParseVersion(in.Version.Stdout.Data); ok {
 				in.Run = r.Exec(ctx, runner, execRun, r.Spec(a.tool, env, a.cfg.Timeout, a.cfg.StdoutLimit, a.cfg.StderrLimit, RunArgs(listPath)...))
 			}

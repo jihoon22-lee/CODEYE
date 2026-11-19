@@ -139,29 +139,25 @@ type session struct {
 	mask      func(string) string
 }
 
-func failed(reason string, limitations ...string) analysis.TaskResult {
-	return analysis.TaskResult{Status: domain.TaskFailed, Reason: reason, Limitations: append([]string{}, limitations...)}
-}
-
 func newSession(job analysis.Job, key string, t tool, placeholder string) (*session, *analysis.TaskResult) {
 	if !filepath.IsAbs(job.Scratch) || !filepath.IsAbs(job.Snapshot.WorkspaceDir) || !filepath.IsAbs(job.Snapshot.SnapshotDir) {
-		r := failed(analysis.ReasonHandlerError, "invalid_job_paths")
+		r := pack.Failed(analysis.ReasonHandlerError, "invalid_job_paths")
 		return nil, &r
 	}
 	taskDir := filepath.Join(job.Scratch, "analyzers", key)
 	if err := os.MkdirAll(filepath.Dir(taskDir), 0o700); err != nil {
-		r := failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		r := pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		return nil, &r
 	}
 	if err := os.Mkdir(taskDir, 0o700); err != nil {
-		r := failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		r := pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		return nil, &r
 	}
 	s := &session{job: job, t: t, taskDir: taskDir, execDir: filepath.Join(taskDir, "exec"), tmpDir: filepath.Join(taskDir, "tmp"),
 		workDir: filepath.Join(taskDir, "work"), cwdDir: filepath.Join(taskDir, "cwd"), workspace: job.Snapshot.WorkspaceDir}
 	for _, d := range []string{s.execDir, s.tmpDir, s.workDir, s.cwdDir} {
 		if err := os.Mkdir(d, 0o700); err != nil {
-			r := failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			r := pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 			return nil, &r
 		}
 	}
@@ -415,15 +411,6 @@ func exitedWith(r *executor.Result, codes ...int) bool {
 		}
 	}
 	return false
-}
-
-func streamsComplete(r *executor.Result) bool {
-	return r != nil && !r.Stdout.Truncated && !r.Stdout.Incomplete && !r.Stderr.Truncated && !r.Stderr.Incomplete
-}
-
-func stoppable(r *executor.Result) bool {
-	return r.Cleanup == executor.CleanupUncertain || r.Status == executor.StatusCancelled || r.Status == executor.StatusTimedOut ||
-		r.Status == executor.StatusRejected || r.Status == executor.StatusUnsupported || r.Status == executor.StatusStartFailed
 }
 
 // outcome collects the first failure by precedence.

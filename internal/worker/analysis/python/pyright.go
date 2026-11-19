@@ -275,7 +275,7 @@ func (pyrightRun) assemble(rc *runCtx) obsdoc.Document {
 		// The summary must agree with the diagnostics; pyright exits 1
 		// iff it reported an error (warnings exit 0).
 		consistent := shapeOK && *summary.ErrorCount == counts["error"] && *summary.WarningCount == counts["warning"] && *summary.InformationCount == counts["information"]
-		switch code := exitCode(r); {
+		switch code := pack.ExitCode(r); {
 		case r.Status != executor.StatusExited:
 		case code == 0 || code == 1:
 			if !consistent || (code == 1) != (counts["error"] > 0) {

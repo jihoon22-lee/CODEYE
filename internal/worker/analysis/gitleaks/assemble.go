@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -275,7 +276,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		o.Fail(domain.TaskFailed, analysis.ReasonHandlerError, obsdoc.ExitNotRun)
 	}
 	toolOK := false
-	if in.Version != nil && anypack.ExitedZero(in.Version) {
+	if in.Version != nil && pack.ExitedZero(in.Version) {
 		if v, ok := ParseVersion(in.Version.Stdout.Data); ok {
 			toolOK = true
 			doc.Tool.Version, doc.Tool.VersionTested = anypack.Ptr(v), VersionTested(v)
@@ -311,10 +312,10 @@ func assemble(in assembleInput) obsdoc.Document {
 		if st.Trailer != len(st.Findings) {
 			doc.Parse.DecodeError = "report trailer does not match the records"
 		}
-		if !anypack.StreamsComplete(res) {
+		if !pack.StreamsComplete(res) {
 			o.Fail(domain.TaskFailed, anypack.ReasonOutputTruncated, obsdoc.ExitExecutionError)
 		}
-		code := anypack.ExitCode(res)
+		code := pack.ExitCode(res)
 		switch {
 		case code == 1, lg.Other > 0:
 			// A fatal error, a skipped file or directory, or a partial scan

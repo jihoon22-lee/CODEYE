@@ -12,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -220,7 +221,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		o.Fail(domain.TaskUnsupported, anypack.ReasonNoAnalyzableFiles, obsdoc.ExitNotRun)
 	}
 	toolOK := false
-	if in.Version != nil && anypack.ExitedZero(in.Version) {
+	if in.Version != nil && pack.ExitedZero(in.Version) {
 		if v, ok := ParseVersion(in.Version.Stdout.Data); ok {
 			toolOK = true
 			doc.Tool.Version, doc.Tool.VersionTested = anypack.Ptr(v), VersionTested(v)
@@ -257,10 +258,10 @@ func assemble(in assembleInput) obsdoc.Document {
 		if noFiles {
 			lims = append(lims, LimNoFileReachedLimits)
 		}
-		if !anypack.StreamsComplete(in.Run) {
+		if !pack.StreamsComplete(in.Run) {
 			o.Fail(domain.TaskFailed, anypack.ReasonOutputTruncated, obsdoc.ExitExecutionError)
 		}
-		if anypack.ExitCode(in.Run) != 0 {
+		if pack.ExitCode(in.Run) != 0 {
 			// jscpd exits 0 with or without clones (no --exit-code and no
 			// --threshold); 1 is an error such as a missing path.
 			o.Fail(domain.TaskFailed, ReasonFailed, obsdoc.ExitExecutionError)
