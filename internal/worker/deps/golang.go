@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path"
@@ -164,7 +165,7 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 	}
 	if mc := cfg.GoModCache; mc != "" {
 		seed := filepath.Join(mc, "cache", "download")
-		if st, err := os.Stat(seed); err == nil && st.IsDir() {
+		if holdsModules(seed) {
 			// The operator's module cache is read first, as a file proxy;
 			// the go command never writes through a proxy. Private modules
 			// bypass every proxy, so the ones already in that cache are
@@ -300,6 +301,20 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 	}
 	out.Status, out.State = domain.TaskSucceeded, depdoc.StatePrepared
 	return out
+}
+
+// holdsModules reports whether a module download directory has at least one
+// module file to serve; a cache holding only lock files (which the offline
+// go command leaves behind) is no seed, and the record does not claim one.
+func holdsModules(dir string) bool {
+	found := errors.New("found")
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() && (strings.HasSuffix(p, ".mod") || strings.HasSuffix(p, ".zip")) {
+			return found
+		}
+		return nil
+	})
+	return errors.Is(err, found)
 }
 
 // protectedRoots are the read-only inputs of a fetch: the snapshot and the

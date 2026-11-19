@@ -173,9 +173,7 @@ func TestPlanOneTaskPerGoModuleBeforeTheAnalyzers(t *testing.T) {
 func TestGoFetchArgvEnvAndRecord(t *testing.T) {
 	job, src := jobOf(t, map[string]string{"go.mod": goMod, "go.sum": goSum, "main.go": "package main\n"})
 	operator := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(operator, "cache", "download"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	writeTree(t, operator, map[string]string{"cache/download/github.com/spf13/pflag/@v/v1.0.5.mod": "module github.com/spf13/pflag\n"})
 	h := handler(t, Config{GoModCache: operator})
 	r := &fakeRunner{fn: goScript(func(context.Context, executor.Spec) executor.Result { return exited(0, downloadJSON, "") })}
 	res := h.Run(context.Background(), job, analysis.TaskSpec{Key: "deps.go"}, r)

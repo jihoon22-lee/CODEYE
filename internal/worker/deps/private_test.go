@@ -49,6 +49,22 @@ func TestGoFetchFollowsTheOperatorsPrivateModules(t *testing.T) {
 	}
 }
 
+// An operator cache that holds only lock files (the offline go command
+// leaves them) serves nothing: no file proxy, no seed claimed.
+func TestOperatorCacheWithoutModulesIsNoSeed(t *testing.T) {
+	job, _ := jobOf(t, map[string]string{"go.mod": goMod, "go.sum": goSum, "main.go": "package main\n"})
+	operator := t.TempDir()
+	writeTree(t, operator, map[string]string{"cache/download/github.com/spf13/pflag/@v/v1.0.5.lock": ""})
+	r := &fakeRunner{fn: goScript(func(context.Context, executor.Spec) executor.Result { return exited(0, downloadJSON, "") })}
+	res := handler(t, Config{GoModCache: operator}).Run(context.Background(), job, analysis.TaskSpec{Key: "deps.go"}, r)
+	if res.Status != domain.TaskSucceeded || r.specs[2].Env["GOPROXY"] != DefaultGoProxy {
+		t.Fatalf("result %s GOPROXY %q", res.Status, r.specs[2].Env["GOPROXY"])
+	}
+	if rec := readRecord(t, job, "deps.go"); slices.Contains(rec.Limitations, "seeded_from_operator_cache") {
+		t.Fatalf("limitations %v", rec.Limitations)
+	}
+}
+
 func TestGoPrivateModuleNotFetched(t *testing.T) {
 	job, _ := jobOf(t, map[string]string{"go.mod": goMod, "go.sum": goSum, "main.go": "package main\n"})
 	r := &fakeRunner{fn: goScript(func(context.Context, executor.Spec) executor.Result {
