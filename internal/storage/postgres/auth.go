@@ -84,38 +84,41 @@ type Session struct {
 	// LinkIssuedBy is the administrator who issued the login link this
 	// session began from (nil: password login or an operator link).
 	LinkIssuedBy *string
-	// PasswordReset is the account's last password reset, nil if none.
+	// PasswordReset is the account's most recent administrator reset while
+	// it is within resetNoticeDays, nil otherwise.
 	PasswordReset *PasswordReset
 }
 
-// PasswordReset is the last reset of the session user's password as the
-// user is shown it. ByUserID nil means the operator CLI. SignInsSince counts
-// sessions created at or after the reset (the reset link's own sign-in
-// included). Acknowledging only marks it seen; the record stays.
+// resetNoticeDays is how many days after an administrator's password reset
+// the user's session view reports it. It is not dismissable: whoever holds
+// the account (an administrator who took it over included) could dismiss
+// it. The audit log stays the authoritative record.
+const resetNoticeDays = "30"
+
+// PasswordReset is the most recent administrator reset of the session
+// user's password: when, and by whom.
 type PasswordReset struct {
-	At           time.Time
-	ByUserID     *string
-	ByUsername   *string
-	SignInsSince int
-	Acknowledged bool
+	At         time.Time
+	ByUserID   string
+	ByUsername *string
 }
 
 const sessionSelect = `SELECT s.id::text,s.user_id::text,s.expires_at,u.username,u.display_name,u.is_admin,
 	u.must_change_password OR s.password_required,u.password_kdf IS NOT NULL,s.link_issued_by::text,
-	u.password_reset_at,u.password_reset_by::text,(SELECT username FROM users r WHERE r.id=u.password_reset_by),
-	CASE WHEN u.password_reset_at IS NULL THEN 0 ELSE (SELECT count(*) FROM auth_sessions x WHERE x.user_id=u.id AND x.created_at>=u.password_reset_at) END,
-	coalesce(u.password_reset_acknowledged_at>=u.password_reset_at,false)
-	FROM auth_sessions s JOIN users u ON u.id=s.user_id`
+	r.at,r.by_id,r.by_username
+	FROM auth_sessions s JOIN users u ON u.id=s.user_id
+	LEFT JOIN LATERAL (SELECT u.password_reset_at AS at,u.password_reset_by::text AS by_id,(SELECT username FROM users a WHERE a.id=u.password_reset_by) AS by_username
+		WHERE u.password_reset_at > clock_timestamp()-interval '` + resetNoticeDays + ` days') r ON true`
 
 func scanSession(row pgx.Row) (Session, error) {
 	var sess Session
-	var resetAt *time.Time
-	var reset PasswordReset
+	var at *time.Time
+	var by *string
+	var byName *string
 	err := row.Scan(&sess.ID, &sess.UserID, &sess.ExpiresAt, &sess.Username, &sess.DisplayName, &sess.IsAdmin, &sess.MustChangePassword, &sess.HasPassword,
-		&sess.LinkIssuedBy, &resetAt, &reset.ByUserID, &reset.ByUsername, &reset.SignInsSince, &reset.Acknowledged)
-	if err == nil && resetAt != nil {
-		reset.At = resetAt.UTC()
-		sess.PasswordReset = &reset
+		&sess.LinkIssuedBy, &at, &by, &byName)
+	if err == nil && at != nil && by != nil {
+		sess.PasswordReset = &PasswordReset{At: at.UTC(), ByUserID: *by, ByUsername: byName}
 	}
 	return sess, err
 }
@@ -349,31 +352,6 @@ func (s *Store) RevokeSession(ctx context.Context, id string) error {
 			return false, err
 		}
 		return true, writeAudit(ctx, tx, userAudit(ctx, user, AuditLogout).target("session", id))
-	})
-	return err
-}
-
-// AcknowledgePasswordReset marks the user's last password reset as seen.
-// The reset record (time, administrator, sign-ins since) stays readable; only
-// the "not yet acknowledged" state ends. With nothing to acknowledge it
-// changes nothing and writes no audit row.
-func (s *Store) AcknowledgePasswordReset(ctx context.Context, user string) error {
-	if !validIDs(user) {
-		return domain.ErrInvalid
-	}
-	_, err := transaction(ctx, s, func(tx pgx.Tx) (bool, error) {
-		var at time.Time
-		err := tx.QueryRow(ctx, `UPDATE users SET password_reset_acknowledged_at=clock_timestamp() WHERE id=$1 AND disabled_at IS NULL
-			AND password_reset_at IS NOT NULL AND (password_reset_acknowledged_at IS NULL OR password_reset_acknowledged_at<password_reset_at)
-			RETURNING password_reset_at`, user).Scan(&at)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		e := userAudit(ctx, user, AuditResetAcknowledged).target("user", user).with(map[string]any{"reset_at": at.UTC()})
-		return true, writeAudit(ctx, tx, e)
 	})
 	return err
 }

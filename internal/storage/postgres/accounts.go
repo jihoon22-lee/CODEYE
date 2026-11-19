@@ -295,8 +295,8 @@ var (
 // issues a single-use login link (tokenSHA256, ttl) in one transaction. The
 // user must then set a new password before doing anything else: the account
 // is flagged must_change_password and the link's session is gated to the
-// password change on its own. The reset is recorded on the user (time and
-// administrator) for the user to see, and the link records its issuer, so
+// password change on its own. An administrator's reset is recorded on the user (time
+// and administrator) for the session view, and the link records its issuer, so
 // whoever signs in with it is attributed. The name's account-wide login
 // throttle is cleared. A user without a username is ErrResetNeedsUsername;
 // an administrator's own reset is ErrSelfReset.
@@ -328,12 +328,12 @@ func (s *Store) ResetPassword(ctx context.Context, by Principal, id, tokenSHA256
 		if err := storeHash(ctx, tx, id, nil, true); err != nil {
 			return User{}, err
 		}
-		var resetBy any
+		// The user is shown an administrator's reset (the operator holds the
+		// database and is not a party the notice guards against).
 		if !by.operator {
-			resetBy = by.user
-		}
-		if _, err := tx.Exec(ctx, "UPDATE users SET password_reset_at=clock_timestamp(),password_reset_by=$2 WHERE id=$1", id, resetBy); err != nil {
-			return User{}, err
+			if _, err := tx.Exec(ctx, "UPDATE users SET password_reset_at=clock_timestamp(),password_reset_by=$2 WHERE id=$1", id, by.user); err != nil {
+				return User{}, err
+			}
 		}
 		tag, err := tx.Exec(ctx, "UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE user_id=$1 AND revoked_at IS NULL", id)
 		if err != nil {

@@ -9,8 +9,8 @@ import (
 // unused login link and a live session, then 0011: the link is retired (its
 // issuer is unknown), the session stays unattributed and ungated; link
 // issuer and purpose, a session's issuer, and a session gaining a password
-// requirement are immutable; the reset record keeps its form; the new audit
-// action is accepted. The old counters are gone and the new table takes the
+// requirement are immutable; the reset record has both its time and administrator or
+// neither; the audit vocabulary is still closed. The old counters are gone and the new table takes the
 // three login scopes with a required last failure time and no stored lock
 // end. A 0010 binary refuses the result.
 // TC-153
@@ -52,10 +52,10 @@ func TestLinkThrottleMigration(t *testing.T) {
 	execState(t, ctx, c, SQLStateImmutable, "UPDATE auth_sessions SET password_required=true WHERE id=$1", session)
 	mustExec(t, ctx, c, "UPDATE auth_sessions SET password_required=false WHERE id=$1", gatedSession)
 	execState(t, ctx, c, "23514", "UPDATE users SET password_reset_by=$2 WHERE id=$1", user, admin)
-	execState(t, ctx, c, "23514", "UPDATE users SET password_reset_acknowledged_at=now() WHERE id=$1", user)
-	mustExec(t, ctx, c, "UPDATE users SET password_reset_at=now(),password_reset_by=$2,password_reset_acknowledged_at=now() WHERE id=$1", user, admin)
+	execState(t, ctx, c, "23514", "UPDATE users SET password_reset_at=now() WHERE id=$1", user)
+	mustExec(t, ctx, c, "UPDATE users SET password_reset_at=now(),password_reset_by=$2 WHERE id=$1", user, admin)
 	insert := "INSERT INTO audit_events(actor_kind,actor_user_id,action) VALUES('user',$1,$2)"
-	mustExec(t, ctx, c, insert, user, "auth.password_reset_acknowledged")
+	mustExec(t, ctx, c, insert, user, "auth.password_reset")
 	execState(t, ctx, c, "23514", insert, user, "user.deleted")
 	var left int
 	if err := c.QueryRow(ctx, "SELECT count(*) FROM auth_throttle").Scan(&left); err != nil || left != 0 {

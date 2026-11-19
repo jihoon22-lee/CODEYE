@@ -458,7 +458,7 @@ def check_account_contracts() -> None:
         ("audit detail with a password", lambda d: d["audit"]["items"][2]["detail"].update(password="hunter2hunter2")),
         ("session without must_change_password", lambda d: d["session"].pop("must_change_password")),
         ("reset notice without its time", lambda d: d["session"]["password_reset"].pop("reset_at")),
-        ("reset notice by an unknown kind", lambda d: d["session"]["password_reset"].update(reset_by_kind="node")),
+        ("reset notice that can be dismissed", lambda d: d["session"]["password_reset"].update(acknowledged=True)),
         ("user view with a password hash", lambda d: d["created_user"]["user"].update(password_hash="00")),
         ("member role outside the vocabulary", lambda d: d["members"]["items"][1].update(role="admin")),
         ("viewer that can run", lambda d: d["project_role"].update(role="viewer")),

@@ -32,7 +32,6 @@ const (
 	AuditPasswordChangeFailed  = "auth.password_change_failed"
 	AuditPasswordSet           = "auth.password_set"
 	AuditPasswordReset         = "auth.password_reset"
-	AuditResetAcknowledged     = "auth.password_reset_acknowledged"
 	AuditLoginLinkIssued       = "auth.login_link_issued"
 	AuditUserCreated           = "user.created"
 	AuditUserDisabled          = "user.disabled"
@@ -78,7 +77,7 @@ var auditDetailKeys = map[string]bool{
 	"expires_at": true, "epoch": true, "route": true, "global_max_running": true, "project_max_running": true,
 	"artifact_quota_bytes": true, "min_workers": true, "max_workers": true, "policy_revision": true,
 	"run_id": true, "protocol_version": true, "os": true, "arch": true,
-	"link_issued_by": true, "link_purpose": true, "reset_at": true,
+	"link_issued_by": true, "link_purpose": true,
 }
 
 const maxAuditString = 200
@@ -293,8 +292,7 @@ func validAuditAction(a string) bool { return auditActions[a] }
 var auditActions = map[string]bool{
 	AuditLoginSucceeded: true, AuditLoginFailed: true, AuditLoginThrottled: true, AuditLogout: true,
 	AuditPasswordChanged: true, AuditPasswordChangeFailed: true, AuditPasswordSet: true, AuditPasswordReset: true,
-	AuditResetAcknowledged: true,
-	AuditLoginLinkIssued:   true, AuditUserCreated: true, AuditUserDisabled: true, AuditAdminGranted: true,
+	AuditLoginLinkIssued: true, AuditUserCreated: true, AuditUserDisabled: true, AuditAdminGranted: true,
 	AuditAdminRevoked: true, AuditSourceRootAdded: true, AuditSourceRootGranted: true, AuditSourceRootRevoked: true,
 	AuditProviderAdded: true, AuditProjectRegistered: true, AuditProjectRevised: true, AuditMemberSet: true,
 	AuditMemberRemoved: true, AuditRunRequested: true, AuditRunCancelRequested: true, AuditReportExported: true,

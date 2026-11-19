@@ -14,8 +14,8 @@ import (
 // CLI). The reset-link session is gated to the password change on its own,
 // even if the account flag were cleared. The sign-in row names the issuing
 // administrator, and so does every later row of that session. The user's
-// session view shows who reset the password, when, and the sign-ins since,
-// until acknowledged; the record stays after acknowledging.
+// session view shows who reset the password and when on every sign-in for
+// 30 days; there is no way to dismiss it.
 func TestAdminResetIsAttributedAndShown(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -86,30 +86,24 @@ func TestAdminResetIsAttributedAndShown(t *testing.T) {
 		t.Fatalf("operator link issuer %q %v", issuer, err)
 	}
 
-	// The owner signs in again (the second sign-in since the reset) and sees
-	// the notice; acknowledging keeps the record.
+	// The owner sees who reset the password and when, on every sign-in, for
+	// 30 days; nothing can dismiss it.
+	for i := 0; i < 3; i++ {
+		owner := e.loginPassword("victim", "taken over passphrase")
+		s = e.do("GET", "/api/v1/session", nil, owner.o()).want(t, 200, "")
+		n, _ := s.body["password_reset"].(map[string]any)
+		if n == nil || n["reset_by_user_id"] != adminID || n["reset_by_username"] != "root" || n["reset_at"] == nil || len(n) != 3 {
+			t.Fatalf("notice on sign-in %d: %s", i, s.raw)
+		}
+	}
 	owner := e.loginPassword("victim", "taken over passphrase")
-	s = e.do("GET", "/api/v1/session", nil, owner.o()).want(t, 200, "")
-	n, _ := s.body["password_reset"].(map[string]any)
-	if n == nil || n["reset_by_user_id"] != adminID || n["reset_by_username"] != "root" || n["reset_by_kind"] != "user" ||
-		n["sign_ins_since"] != float64(2) || n["acknowledged"] != false || n["reset_at"] == nil {
-		t.Fatalf("notice %s", s.raw)
+	if r := e.do("POST", "/api/v1/session/password-reset/acknowledge", nil, owner.o()); r.status != 404 {
+		t.Fatalf("a dismiss route exists: %d", r.status)
 	}
-	e.do("POST", "/api/v1/session/password-reset/acknowledge", nil, owner.o()).want(t, 204, "")
-	e.do("POST", "/api/v1/session/password-reset/acknowledge", nil, owner.o()).want(t, 204, "")
-	s = e.do("GET", "/api/v1/session", nil, owner.o()).want(t, 200, "")
-	n, _ = s.body["password_reset"].(map[string]any)
-	if n == nil || n["acknowledged"] != true || n["reset_by_user_id"] != adminID || n["sign_ins_since"] != float64(2) {
-		t.Fatalf("after acknowledging %s", s.raw)
+	if _, err := e.pool.Exec(ctx, "UPDATE users SET password_reset_at=password_reset_at-interval '31 days' WHERE id=$1", victimID); err != nil {
+		t.Fatal(err)
 	}
-	var acks int
-	if err := e.pool.QueryRow(ctx, "SELECT count(*) FROM audit_events WHERE action=$1 AND actor_user_id=$2", postgres.AuditResetAcknowledged, victimID).Scan(&acks); err != nil || acks != 1 {
-		t.Fatalf("acknowledgement rows %d %v", acks, err)
-	}
-	// The owner's own password session is not attributed to the administrator.
-	var later int
-	if err := e.pool.QueryRow(ctx, "SELECT count(*) FROM audit_events WHERE actor_user_id=$1 AND action=$2 AND detail ? 'link_issued_by'",
-		victimID, postgres.AuditResetAcknowledged).Scan(&later); err != nil || later != 0 {
-		t.Fatalf("password session rows carry a link issuer: %d %v", later, err)
+	if s := e.do("GET", "/api/v1/session", nil, owner.o()).want(t, 200, ""); s.body["password_reset"] != nil {
+		t.Fatalf("notice after 30 days: %s", s.raw)
 	}
 }

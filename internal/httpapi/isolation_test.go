@@ -110,12 +110,9 @@ func isoCases() map[string]isoCase {
 			}
 			return map[string]string{"launch_token": token}
 		}},
-		"session.get":      {need: signedIn, ok: 200},
-		"session.delete":   {need: signedIn, ok: 204, disposable: freshNamed},
-		"session.password": {need: signedIn, ok: 200, disposable: freshNamed, body: func(*isoWorld) any { return map[string]string{"new_password": "a long enough passphrase"} }},
-		"session.reset_acknowledge": {need: signedIn, ok: 204, disposable: func(w *isoWorld) user {
-			return w.resetSession(w.e.account(w.name("ack"), "a long enough passphrase", false))
-		}},
+		"session.get":       {need: signedIn, ok: 200},
+		"session.delete":    {need: signedIn, ok: 204, disposable: freshNamed},
+		"session.password":  {need: signedIn, ok: 200, disposable: freshNamed, body: func(*isoWorld) any { return map[string]string{"new_password": "a long enough passphrase"} }},
 		"source_roots.list": {need: signedIn, ok: 200},
 		"providers.list":    {need: signedIn, ok: 200},
 		"projects.list":     {need: signedIn, ok: 200},

@@ -10,11 +10,8 @@
     "has_password": true,
     "password_reset": {
       "reset_at": "2026-11-19T08:40:12Z",
-      "reset_by_kind": "user",
       "reset_by_user_id": "a1d0f6b2-58c4-4e7a-b9f3-0c2e6d8a4b11",
-      "reset_by_username": "root",
-      "sign_ins_since": 2,
-      "acknowledged": false
+      "reset_by_username": "root"
     }
   },
   "created_user": {

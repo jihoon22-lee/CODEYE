@@ -66,13 +66,11 @@ CREATE TRIGGER auth_sessions_origin_guard
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE users
-    -- 마지막 비밀번호 초기화 시각과 초기화한 관리자(NULL이면 운영자 CLI). 확인해도 지우지 않는다.
+    -- 관리자가 한 마지막 비밀번호 초기화의 시각과 그 관리자. 사용자의 세션 조회가 초기화 뒤 정해진 기간 동안
+    -- 보여 준다. 사용자가 지울 수 없다(계정을 넘겨받은 사람도 지우지 못하게). 권위 있는 기록은 감사 행이다.
     ADD COLUMN password_reset_at timestamptz NULL,
     ADD COLUMN password_reset_by uuid NULL REFERENCES users (id) ON DELETE RESTRICT,
-    -- 사용자가 마지막 초기화 알림을 확인한 시각. 화면은 이 시각이 초기화보다 이르면 알림을 띄운다.
-    ADD COLUMN password_reset_acknowledged_at timestamptz NULL,
-    ADD CONSTRAINT users_password_reset_by_needs_time CHECK (password_reset_by IS NULL OR password_reset_at IS NOT NULL),
-    ADD CONSTRAINT users_password_reset_ack_needs_time CHECK (password_reset_acknowledged_at IS NULL OR password_reset_at IS NOT NULL);
+    ADD CONSTRAINT users_password_reset_pair CHECK ((password_reset_at IS NULL) = (password_reset_by IS NULL));
 
 -- ---------------------------------------------------------------------------
 -- 로그인 제한(재설계)
@@ -104,7 +102,7 @@ ALTER TABLE audit_events DROP CONSTRAINT audit_events_action_check;
 ALTER TABLE audit_events ADD CONSTRAINT audit_events_action_check CHECK (action IN (
     'auth.login_succeeded', 'auth.login_failed', 'auth.login_throttled', 'auth.logout',
     'auth.password_changed', 'auth.password_change_failed', 'auth.password_set',
-    'auth.password_reset', 'auth.password_reset_acknowledged', 'auth.login_link_issued',
+    'auth.password_reset', 'auth.login_link_issued',
     'user.created', 'user.disabled', 'user.admin_granted', 'user.admin_revoked',
     'source_root.added', 'source_root.granted', 'source_root.grant_revoked', 'provider.added',
     'project.registered', 'project.revised', 'project.member_set', 'project.member_removed',

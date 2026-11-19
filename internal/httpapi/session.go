@@ -70,30 +70,23 @@ type sessionView struct {
 	IsAdmin            bool      `json:"is_admin"`
 	MustChangePassword bool      `json:"must_change_password"`
 	HasPassword        bool      `json:"has_password"`
-	// PasswordReset is the account's last password reset (null if none),
-	// for the screen to tell the user who reset it and when.
+	// PasswordReset is the account's most recent administrator reset for 30
+	// days after it (null otherwise), for the screen to tell the user who
+	// reset it and when. It cannot be dismissed.
 	PasswordReset *resetView `json:"password_reset"`
 }
 
 type resetView struct {
 	ResetAt         time.Time `json:"reset_at"`
-	ResetByKind     string    `json:"reset_by_kind"`
-	ResetByUserID   *string   `json:"reset_by_user_id"`
+	ResetByUserID   string    `json:"reset_by_user_id"`
 	ResetByUsername *string   `json:"reset_by_username"`
-	SignInsSince    int       `json:"sign_ins_since"`
-	Acknowledged    bool      `json:"acknowledged"`
 }
 
 func viewSession(sess postgres.Session, token string) sessionView {
 	v := sessionView{UserID: sess.UserID, CSRFToken: csrfToken(token), ExpiresAt: sess.ExpiresAt.UTC(), Username: sess.Username,
 		DisplayName: sess.DisplayName, IsAdmin: sess.IsAdmin, MustChangePassword: sess.MustChangePassword, HasPassword: sess.HasPassword}
 	if r := sess.PasswordReset; r != nil {
-		kind := postgres.ActorUser
-		if r.ByUserID == nil {
-			kind = postgres.ActorOperator
-		}
-		v.PasswordReset = &resetView{ResetAt: r.At, ResetByKind: kind, ResetByUserID: r.ByUserID, ResetByUsername: r.ByUsername,
-			SignInsSince: r.SignInsSince, Acknowledged: r.Acknowledged}
+		v.PasswordReset = &resetView{ResetAt: r.At, ResetByUserID: r.ByUserID, ResetByUsername: r.ByUsername}
 	}
 	return v
 }
@@ -166,18 +159,6 @@ func (s *Server) createSession(q *request) {
 
 func (s *Server) getSession(q *request) {
 	writeJSON(q.w, http.StatusOK, viewSession(q.session, q.cookie))
-}
-
-// POST /session/password-reset/acknowledge: the user has seen the notice of
-// the last password reset. The record stays in the session view.
-func (s *Server) acknowledgeReset(q *request) {
-	ctx, cancel := q.ctx()
-	defer cancel()
-	if err := s.store.AcknowledgePasswordReset(ctx, q.session.UserID); err != nil {
-		s.storeError(q, err)
-		return
-	}
-	q.w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) deleteSession(q *request) {
