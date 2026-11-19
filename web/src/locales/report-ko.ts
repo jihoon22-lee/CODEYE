@@ -73,6 +73,17 @@ export const reportKo = {
     dependency_versions_not_pinned: 'lockfile이 버전을 고정하지 않아 패키지 관리자가 이번 실행에서 버전을 골랐습니다. 다음 실행과 버전이 다를 수 있습니다.',
     dependencies_prepared: '이 실행에서 받은 의존성으로 분석했습니다.',
     dependencies_partially_prepared: '이 실행에서 일부만 받은 의존성으로 분석했습니다.',
+    lockfile_outdated: 'lockfile이 manifest(Cargo.toml·package.json)와 맞지 않아 고치지 않고 멈췄습니다.',
+    lockfile_format_unsupported: '이 lockfile 형식(yarn 2 이상, bun)은 받지 않습니다.',
+    lockfile_version_unsupported: '패키지 관리자가 이 lockfile 버전을 읽지 못했습니다.',
+    manifest_invalid: 'manifest(Cargo.toml·package.json)를 읽지 못했습니다.',
+    dependency_not_found: '저장소(registry)에 없는 의존성이 있습니다.',
+    registry_auth_required: '의존성 저장소가 인증을 요구했습니다(인증이 필요한 저장소는 지원하지 않습니다).',
+    multiple_lockfiles: '여러 패키지 관리자의 lockfile이 있어 package.json의 packageManager(없으면 정해진 순서의 첫째)를 썼습니다.',
+    links_outside_workspace_removed: '설치된 node_modules에서 작업 사본 밖을 가리키는 링크(file:·link: 의존성)를 지웠습니다.',
+    link_outside_workspace: '작업 사본 밖을 가리켜 지운 링크.',
+    snapshot_integrity_failed: '스냅샷 파일이 기록된 해시와 달라 받지 않았습니다.',
+    workspace_drift: '받는 동안 manifest나 lockfile이 바뀌어 결과를 버렸습니다.',
     // Review inputs of five languages.
     source_in_excluded_directories:
       '숨김·vendor·testdata·node_modules와 build·dist·target 같은 산출물·의존성 디렉터리 아래 소스는 모델 입력에서 뺐습니다.',

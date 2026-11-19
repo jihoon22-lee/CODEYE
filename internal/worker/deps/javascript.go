@@ -31,7 +31,17 @@ const (
 	// package managers; the one package.json names (packageManager), else
 	// the first of jsts.Lockfiles, was used.
 	LimMultipleLockfiles = "multiple_lockfiles"
+	// LimLinksOutsideRemoved: links in the installed trees that pointed
+	// outside the workspace copy and the package cache (file: and link:
+	// dependencies) were removed; dropped_inputs lists them (at most
+	// maxDroppedLinks).
+	LimLinksOutsideRemoved = "links_outside_workspace_removed"
+	// ReasonLinkOutsideWorkspace is the dropped_inputs reason of such a link.
+	ReasonLinkOutsideWorkspace = "link_outside_workspace"
 )
+
+// maxDroppedLinks bounds the removed links one record lists.
+const maxDroppedLinks = 64
 
 // JS/TS package managers and their shared download caches under the
 // dependency cache root. The node_modules trees themselves are built in
@@ -269,7 +279,7 @@ func (JSFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 	if lock == nil {
 		out.Limitations = append(out.Limitations, depdoc.LimVersionsNotPinned)
 	}
-	args := installArgs(mgr.name, lock != nil, cache, userRC, globalRC, cfg.NpmRegistry)
+	args := installArgs(mgr.name, lock != nil, installDirs{root: rootAbs, cache: cache, task: env.TaskDir, userRC: userRC, globalRC: globalRC}, cfg.NpmRegistry)
 	out.CacheKind = depdoc.CacheAttempt
 	res, ok = env.Exec(ctx, mgr.name+".install", spec(args...), cache)
 	installed, walked := installedTrees(workspace, root.Dir)
@@ -298,6 +308,23 @@ func (JSFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 	if !walked {
 		discard()
 		return fail(domain.TaskFailed, depdoc.StateFailed, analysis.ReasonHandlerError)
+	}
+	// file: and link: dependencies may point outside the workspace copy;
+	// the analyzers would then read host files. Such links are removed and
+	// recorded; the rest of the install stays usable.
+	removed, swept := sweepForeignLinks(workspace, installed, []string{workspace, cache})
+	if !swept {
+		discard()
+		return fail(domain.TaskFailed, depdoc.StateFailed, analysis.ReasonHandlerError)
+	}
+	if len(removed) > 0 {
+		out.Limitations = append(out.Limitations, LimLinksOutsideRemoved)
+		for i, p := range removed {
+			if i == maxDroppedLinks {
+				break
+			}
+			out.DroppedInputs = append(out.DroppedInputs, depdoc.Dropped{Path: p, Reason: ReasonLinkOutsideWorkspace})
+		}
 	}
 	if counted {
 		out.Counts.Prepared = declared
@@ -350,23 +377,60 @@ func jsEnv(manager, nodeDir string) map[string]string {
 	return vars
 }
 
+// Default registries when the operator names none (npm and pnpm share npm's).
+const (
+	defaultNpmRegistry  = "https://registry.npmjs.org/"
+	defaultYarnRegistry = "https://registry.yarnpkg.com"
+)
+
+// installDirs are the locations an install may write besides the install
+// root's node_modules, all pinned on the command line so a repository
+// .npmrc or .yarnrc cannot move them.
+type installDirs struct {
+	root     string // install root in the workspace copy
+	cache    string // shared download cache of the manager
+	task     string // the task's private directory
+	userRC   string // empty npm user configuration
+	globalRC string // empty npm global configuration
+}
+
 // installArgs is the install argv after the entry script. Lifecycle
 // scripts never run; the lockfile is never rewritten; the download cache
 // is the shared one; the user's and the global configuration are empty
-// files, the project's own .npmrc still applies (registry, scopes).
-func installArgs(manager string, locked bool, cache, userRC, globalRC, registry string) []string {
+// files. A repository .npmrc, .yarnrc or .yarnrc.yml never reaches the
+// workspace copy (the snapshot leaves them out as secret files), but
+// pnpm-workspace.yaml and package.json can carry pnpm settings; command
+// -line settings win over both (measured with npm 11, pnpm 11 and yarn
+// 1.22), so the project directory, node_modules, the virtual store, the
+// caches, logs and state, the registry and (npm, pnpm) the proxy are
+// CODEYE's.
+func installArgs(manager string, locked bool, d installDirs, registry string) []string {
 	var args []string
 	switch manager {
 	case ManagerPnpm:
-		// The flags repeat jsEnv's release pinning; the pnpmfile is
-		// repository code.
+		if registry == "" {
+			registry = defaultNpmRegistry
+		}
+		// The flags repeat jsEnv's release pinning; the pnpmfile (the
+		// project's and a configured global one) is repository code.
 		args = []string{"install", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--prefer-offline", "--reporter=append-only",
-			"--store-dir", cache, "--config.pm-on-fail=ignore", "--config.manage-package-manager-versions=false", "--config.package-manager-strict=false",
+			"--dir", d.root, "--modules-dir", "node_modules", "--virtual-store-dir", "node_modules/.pnpm", "--store-dir", d.cache,
+			"--config.lockfile-dir=" + d.root, "--config.cache-dir=" + filepath.Join(d.task, "pnpm-cache"), "--config.state-dir=" + filepath.Join(d.task, "pnpm-state"),
+			"--config.global-dir=" + filepath.Join(d.task, "pnpm-global"), "--config.registry=" + registry, "--config.proxy=false", "--config.https-proxy=false",
+			"--config.pm-on-fail=ignore", "--config.manage-package-manager-versions=false", "--config.package-manager-strict=false",
 			"--config.update-notifier=false", "--config.side-effects-cache=false", "--config.verify-deps-before-run=false"}
 	case ManagerYarn:
+		if registry == "" {
+			registry = defaultYarnRegistry
+		}
+		// yarn 1 reads its settings from .yarnrc only, which the snapshot
+		// leaves out; it has no command-line value that clears a proxy.
 		args = []string{"install", "--frozen-lockfile", "--ignore-scripts", "--no-bin-links", "--non-interactive", "--ignore-engines", "--prefer-offline",
-			"--no-progress", "--cache-folder", cache}
+			"--no-progress", "--modules-folder", filepath.Join(d.root, "node_modules"), "--cache-folder", d.cache, "--registry", registry}
 	default:
+		if registry == "" {
+			registry = defaultNpmRegistry
+		}
 		args = []string{"ci"}
 		if !locked {
 			args = []string{"install", "--no-package-lock", "--no-save"}
@@ -374,11 +438,9 @@ func installArgs(manager string, locked bool, cache, userRC, globalRC, registry 
 		// --git names no program: the PATH holds node only, so a git
 		// dependency fails instead of running a git a project .npmrc names.
 		args = append(args, "--ignore-scripts", "--no-bin-links", "--no-audit", "--no-fund", "--include=dev", "--include=optional", "--include=peer",
-			"--engine-strict=false", "--prefer-offline", "--no-update-notifier", "--no-progress", "--cache", cache, "--userconfig", userRC, "--globalconfig", globalRC,
-			"--git=git")
-	}
-	if registry != "" {
-		args = append(args, "--registry", registry)
+			"--engine-strict=false", "--prefer-offline", "--no-update-notifier", "--no-progress", "--prefix", d.root, "--cache", d.cache,
+			"--logs-dir", filepath.Join(d.task, "npm-logs"), "--userconfig", d.userRC, "--globalconfig", d.globalRC,
+			"--registry", registry, "--proxy=null", "--https-proxy=null", "--git=git")
 	}
 	return args
 }
@@ -427,6 +489,66 @@ func installedTrees(workspace, dir string) ([]string, bool) {
 	})
 	sort.Strings(out)
 	return out, err == nil
+}
+
+// sweepForeignLinks walks the installed trees (not following links) and
+// removes every link (a symlink, or a junction on Windows) whose target,
+// written or resolved, lies outside the allowed roots. It returns the
+// removed links (snapshot-relative, sorted); ok is false when a walk or a
+// removal failed.
+func sweepForeignLinks(workspace string, trees, allowed []string) (removed []string, ok bool) {
+	var roots []string
+	for _, r := range allowed {
+		roots = append(roots, filepath.Clean(r))
+		if res, err := filepath.EvalSymlinks(r); err == nil {
+			roots = append(roots, res)
+		}
+	}
+	inside := func(p string) bool {
+		for _, r := range roots {
+			if rel, err := filepath.Rel(r, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, t := range trees {
+		err := filepath.WalkDir(filepath.Join(workspace, filepath.FromSlash(t)), func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.Type()&(fs.ModeSymlink|fs.ModeIrregular) == 0 {
+				return nil
+			}
+			keep := false
+			if target, err := os.Readlink(p); err == nil {
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(p), target)
+				}
+				keep = inside(filepath.Clean(target))
+				if res, err := filepath.EvalSymlinks(p); keep && err == nil {
+					keep = inside(res)
+				}
+			}
+			if keep {
+				return nil
+			}
+			if err := os.Remove(p); err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(workspace, p)
+			if err != nil {
+				return err
+			}
+			removed = append(removed, filepath.ToSlash(rel))
+			return nil
+		})
+		if err != nil {
+			return removed, false
+		}
+	}
+	sort.Strings(removed)
+	return removed, true
 }
 
 // topLevelPackages counts the package directories directly in the

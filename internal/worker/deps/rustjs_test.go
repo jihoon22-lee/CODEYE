@@ -305,8 +305,21 @@ func TestJSFetchArgvEnvAndRecord(t *testing.T) {
 				t.Fatalf("install runs %s %v", install.Executable, install.Args)
 			}
 			args := install.Args[1:]
-			if !slices.Equal(args[:len(tc.wantArgs)], tc.wantArgs) || !slices.Contains(args, "--ignore-scripts") || !slices.Contains(args, "https://registry.example.test/") {
+			if !slices.Equal(args[:len(tc.wantArgs)], tc.wantArgs) || !slices.Contains(args, "--ignore-scripts") ||
+				!(slices.Contains(args, "https://registry.example.test/") || slices.Contains(args, "--config.registry=https://registry.example.test/")) {
 				t.Fatalf("argv %v", args)
+			}
+			// The locations a repository .npmrc or .yarnrc could move are pinned.
+			ws := job.Snapshot.WorkspaceDir
+			pinned := map[string][]string{
+				"npm":  {"--prefix", ws, "--logs-dir", "--proxy=null", "--https-proxy=null"},
+				"pnpm": {"--dir", ws, "--modules-dir", "--virtual-store-dir", "--config.lockfile-dir=" + ws, "--config.proxy=false"},
+				"yarn": {"--modules-folder", filepath.Join(ws, "node_modules"), "--cache-folder"},
+			}[tc.manager]
+			for _, a := range pinned {
+				if !slices.Contains(args, a) {
+					t.Fatalf("argv %v lacks %s", args, a)
+				}
 			}
 			cache := filepath.Join(h.cfg.CacheRoot, "javascript", tc.manager)
 			if !slices.Contains(args, cache) {
@@ -529,5 +542,45 @@ func TestInstalledTreesReadsUsableRecords(t *testing.T) {
 	other.AttemptID = "b"
 	if got := depdoc.InstalledTrees(scratch, other); len(got) != 0 {
 		t.Fatalf("another attempt's trees = %v", got)
+	}
+}
+
+// A link of the installed tree that leaves the workspace copy (a file: or
+// link: dependency) is removed and recorded; the install stays usable.
+func TestJSFetchRemovesLinksOutsideTheWorkspace(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory links need privileges on Windows")
+	}
+	job, _ := jsJob(t, map[string]string{"package.json": pkgJSON, "package-lock.json": npmLock, "tsconfig.json": "{}", "a.ts": ""})
+	outside := t.TempDir()
+	r := &fakeRunner{fn: jsScript(func(s executor.Spec) executor.Result {
+		nm := filepath.Join(s.Dir, "node_modules")
+		_ = os.Symlink(outside, filepath.Join(nm, "host"))
+		_ = os.Symlink("is-number", filepath.Join(nm, "alias"))
+		_ = os.Symlink("../../..", filepath.Join(nm, "is-number", "up"))
+		return exited(0, "", "")
+	})}
+	res := handler(t, jsTools(t)).Run(context.Background(), job, analysis.TaskSpec{Key: "deps.javascript"}, r)
+	if res.Status != domain.TaskSucceeded {
+		t.Fatalf("result %+v", res)
+	}
+	rec := readRecord(t, job, "deps.javascript")
+	var dropped []string
+	for _, d := range rec.DroppedInputs {
+		if d.Reason == ReasonLinkOutsideWorkspace {
+			dropped = append(dropped, d.Path)
+		}
+	}
+	if !slices.Equal(dropped, []string{"node_modules/host", "node_modules/is-number/up"}) || !slices.Contains(rec.Limitations, LimLinksOutsideRemoved) || !rec.TreeUsable() {
+		t.Fatalf("record %+v", rec)
+	}
+	nm := filepath.Join(job.Snapshot.WorkspaceDir, "node_modules")
+	for name, want := range map[string]bool{"host": false, "is-number/up": false, "alias": true} {
+		if _, err := os.Lstat(filepath.Join(nm, filepath.FromSlash(name))); (err == nil) != want {
+			t.Errorf("%s present=%v", name, err == nil)
+		}
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatal("the link target was removed")
 	}
 }
