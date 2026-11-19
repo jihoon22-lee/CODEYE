@@ -435,12 +435,14 @@ func installArgs(manager string, locked bool, d installDirs, registry string) []
 		if !locked {
 			args = []string{"install", "--no-package-lock", "--no-save"}
 		}
+		// --install-links=false keeps file: directory dependencies links,
+		// which the link sweep removes when they leave the workspace.
 		// --git names no program: the PATH holds node only, so a git
 		// dependency fails instead of running a git a project .npmrc names.
 		args = append(args, "--ignore-scripts", "--no-bin-links", "--no-audit", "--no-fund", "--include=dev", "--include=optional", "--include=peer",
 			"--engine-strict=false", "--prefer-offline", "--no-update-notifier", "--no-progress", "--prefix", d.root, "--cache", d.cache,
 			"--logs-dir", filepath.Join(d.task, "npm-logs"), "--userconfig", d.userRC, "--globalconfig", d.globalRC,
-			"--registry", registry, "--proxy=null", "--https-proxy=null", "--git=git")
+			"--registry", registry, "--proxy=null", "--https-proxy=null", "--install-links=false", "--git=git")
 	}
 	return args
 }
