@@ -185,6 +185,32 @@ func runViewOf(v postgres.RunView) runView {
 	return out
 }
 
+// retryAck is the runs.retry answer: the run that runs again (the same run
+// on its snapshot, or a new run of the project) and which of the two.
+type retryAck struct {
+	runAck
+	Retry string `json:"retry"`
+}
+
+// retryRun runs a finished run again (Store.RetryRun). The client follows
+// the returned run, which may be a new one.
+func (s *Server) retryRun(q *request) {
+	ctx, cancel := q.ctx()
+	defer cancel()
+	run, how, err := s.store.RetryRun(ctx, q.session.UserID, q.params[0])
+	if err != nil {
+		if errors.Is(err, domain.ErrConflict) {
+			writeError(q.w, q.r, http.StatusConflict, "RUN_NOT_FINISHED", "only a finished run can run again (failed, cancelled, partial or completed)", false)
+		} else {
+			s.storeError(q, err)
+		}
+		return
+	}
+	ack := ackOf(run)
+	q.w.Header().Set("Location", ack.URL)
+	writeJSON(q.w, http.StatusAccepted, retryAck{ack, how})
+}
+
 func (s *Server) cancelRun(q *request) {
 	ctx, cancel := q.ctx()
 	defer cancel()

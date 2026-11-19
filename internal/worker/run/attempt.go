@@ -184,7 +184,7 @@ func within(root, p string) bool {
 
 // sourceReason maps source acquisition errors to reason codes 1:1 by their text.
 func sourceReason(err error) string {
-	for _, e := range []error{source.ErrUnavailable, source.ErrUnstable, source.ErrLimit, source.ErrUnsupported, source.ErrIntegrity} {
+	for _, e := range []error{source.ErrHoldsProtected, source.ErrAuthRequired, source.ErrUnreachable, source.ErrUnavailable, source.ErrUnstable, source.ErrLimit, source.ErrUnsupported, source.ErrIntegrity} {
 		if errors.Is(err, e) {
 			return e.Error()
 		}
@@ -516,7 +516,10 @@ func (r *journalRunner) Run(ctx context.Context, spec executor.Spec) executor.Re
 	}
 	spec.ProtectedRoots = append(spec.ProtectedRoots, a.snapshot.SnapshotDir)
 	if a.job.Source.Kind == "local" && a.job.Source.ApprovedRoot != "" {
-		spec.ProtectedRoots = append(spec.ProtectedRoots, a.job.Source.ApprovedRoot)
+		// The user's own project folder: no tool runs in it or from it. The
+		// rest of the approved root is not the analyzed source (a $HOME root
+		// also holds the installed tools and CODEYE's state).
+		spec.ProtectedRoots = append(spec.ProtectedRoots, filepath.Join(a.job.Source.ApprovedRoot, filepath.FromSlash(a.job.Source.RelativePath)))
 	}
 	spec.TempParent = filepath.Join(a.scratch, "tmp")
 	spec.TaskID = r.taskID

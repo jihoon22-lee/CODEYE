@@ -122,6 +122,13 @@ type JobSource struct {
 	RepositoryURL string `json:"repository_url,omitempty"`
 	Branch        string `json:"branch,omitempty"`
 	AllowedHost   string `json:"allowed_host,omitempty"`
+	// AllowedLocalRoot lets a Git source be a file:// repository under this
+	// directory. Only test builds (codeye_fixture) set it.
+	AllowedLocalRoot string `json:"allowed_local_root,omitempty"`
+	// ProtectedDirs: a local project folder that contains or lies inside
+	// one of these is refused before acquisition (personal mode: the state
+	// and backup directories).
+	ProtectedDirs []string `json:"protected_dirs,omitempty"`
 }
 
 // JobSnapshot pins a retry to a cached snapshot. Root is "" when the agent
@@ -134,9 +141,13 @@ type JobSnapshot struct {
 
 // Job hands one claimed attempt to the worker.
 type Job struct {
+	// AllowModelReview: the job's source may be sent to the configured
+	// model (the operator's per-root grant, or the project's choice under
+	// --project-analysis-policy).
 	AllowModelReview bool `json:"allow_model_review,omitempty"`
-	// AllowRepositoryCode is the node operator's repository-code grant for
-	// the job's local source root (docs/ANALYZERS.md#저장소-코드-실행-허가). Absent means not granted.
+	// AllowRepositoryCode is the repository-code grant for the job
+	// (docs/ANALYZERS.md#저장소-코드-실행-허가): the operator's per-root grant, or the project's
+	// choice under --project-analysis-policy. Absent means not granted.
 	AllowRepositoryCode bool `json:"allow_repository_code,omitempty"`
 	Header
 	Attempt   AttemptRef      `json:"attempt"`

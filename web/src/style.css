@@ -86,6 +86,10 @@ button.item[aria-pressed='true'] { border-color: #245b7a; box-shadow: inset 0 0 
 fieldset { border: 1px solid #d8dfe6; border-radius: 8px; margin: 14px 0; }
 label.inline { display: inline-flex; align-items: center; gap: 6px; margin-right: 18px; font-weight: 400; }
 label.inline input { margin: 0; }
+.field label.inline input[type='checkbox'] { width: auto; padding: 0; }
+.improve ul { margin: 6px 0 0; padding-inline-start: 20px; }
+.improve li + li { margin-top: 6px; }
+tr.missing td { color: #7a4a10; }
 .file { display: block; font-weight: 600; }
 .file input { display: block; margin-top: 10px; max-width: 100%; font: inherit; }
 .file input::file-selector-button { background: #245b7a; color: white; border: 0; padding: 9px 14px; border-radius: 5px; margin-right: 12px; cursor: pointer; }

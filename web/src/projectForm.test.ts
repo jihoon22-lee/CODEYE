@@ -22,7 +22,9 @@ describe('validateProjectForm', () => {
     expect(local.body).toBeNull();
     expect(Object.keys(local.errors).sort()).toEqual(['relativePath', 'sourceRootId']);
     const remote = validateProjectForm({ ...git, providerId: '', repositoryUrl: '', branch: '' });
-    expect(Object.keys(remote.errors).sort()).toEqual(['branch', 'providerId', 'repositoryUrl']);
+    expect(Object.keys(remote.errors).sort()).toEqual(['providerId', 'repositoryUrl']);
+    // No branch: the repository's default branch.
+    expect(validateProjectForm({ ...git, branch: '' }).body).toEqual({ source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/org/repo.git' } });
   });
   it('rejects names over 200 characters', () => {
     expect(validateProjectForm({ ...base, name: 'x'.repeat(201) }).errors.name).toBeTruthy();

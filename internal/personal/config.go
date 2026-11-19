@@ -17,6 +17,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -51,6 +52,10 @@ type Config struct {
 	Quota         Quota        `json:"quota"`
 	BackupDir     string       `json:"backup_dir,omitempty"`
 	Stop          Stop         `json:"stop"`
+	// GitHosts are the HTTPS Git hosts projects may be fetched from (public
+	// repositories, no credentials). Absent means ["github.com"]; [] turns
+	// Git sources off.
+	GitHosts []string `json:"git_hosts,omitempty"`
 
 	// listenSet records whether listen was written in the file (a default
 	// listen address may move to the next free port).
@@ -77,21 +82,25 @@ type Database struct {
 type SourceRoot struct {
 	Label string `json:"label"`
 	Path  string `json:"path"`
-	// RepositoryCode grants analyzers that execute repository code
-	// (docs/ANALYZERS.md#저장소-코드-실행-허가) for this root. Default false.
-	RepositoryCode bool `json:"repository_code,omitempty"`
-	// ModelReview approves sending this root's code to the configured model.
-	// Unset means approved whenever a model is configured (agent.model or a
-	// model credential); false keeps this root's code away from the model.
-	ModelReview *bool `json:"model_review,omitempty"`
+	// RepositoryCode and ModelReview are accepted for older configurations
+	// and have no effect: in personal mode every project carries its own
+	// choices (run build scripts, send source to the model; both on unless
+	// the project turns them off).
+	RepositoryCode bool  `json:"repository_code,omitempty"`
+	ModelReview    *bool `json:"model_review,omitempty"`
+	// Implicit marks the $HOME root that personal mode adds when no
+	// configured root covers the home directory; it is never written to the file.
+	Implicit bool `json:"-"`
 }
 
 // Agent configures the local node agent (codeye agent flags, docs/EXECUTION.md).
 type Agent struct {
-	Name                   string            `json:"name,omitempty"`
-	MaxWorkers             int               `json:"max_workers,omitempty"`
-	ToolchainPath          string            `json:"toolchain_path,omitempty"`
-	Go                     string            `json:"go,omitempty"`
+	Name          string `json:"name,omitempty"`
+	MaxWorkers    int    `json:"max_workers,omitempty"`
+	ToolchainPath string `json:"toolchain_path,omitempty"`
+	Go            string `json:"go,omitempty"`
+	// Git is the git executable for Git sources (detected when unset).
+	Git                    string            `json:"git,omitempty"`
 	GoModCache             string            `json:"go_mod_cache,omitempty"`
 	Tools                  map[string]string `json:"tools,omitempty"`
 	PythonBothTypeCheckers bool              `json:"python_both_type_checkers,omitempty"`
@@ -175,7 +184,6 @@ type Stop struct {
 // Defaults.
 const (
 	DefaultListen         = "127.0.0.1:7331"
-	DefaultMaxWorkers     = 1
 	DefaultToolchainPath  = "/usr/bin:/bin"
 	DefaultDrainSeconds   = 300
 	DefaultCancelSeconds  = 90
@@ -183,6 +191,15 @@ const (
 	maxSourceRoots        = 32
 	maxAgentWorkersConfig = 16
 )
+
+// DefaultGitHosts are the Git hosts of a configuration without git_hosts.
+var DefaultGitHosts = []string{"github.com"}
+
+// DefaultMaxWorkers is the local worker cap when agent.max_workers is
+// unset: half the logical CPUs, between 1 and 4.
+func DefaultMaxWorkers() int {
+	return min(4, max(1, runtime.NumCPU()/2))
+}
 
 // DefaultPath is the configuration path used when --config is not given.
 func DefaultPath() (string, error) {
@@ -318,13 +335,16 @@ func (c *Config) validate(knownTools []string) error {
 			return errors.New("source_roots labels and paths must be unique")
 		}
 		labels[label], paths[r.Path] = true, true
-		if within(r.Path, c.StateDir) || within(c.StateDir, r.Path) {
-			return errors.New("a source root and state_dir must not contain each other")
+		// A root may contain the state directory ($HOME holds both); the
+		// agent copies one project at a time and refuses a project that
+		// contains its data. A root inside the state directory is refused.
+		if within(r.Path, c.StateDir) {
+			return errors.New("a source root must not be inside state_dir")
 		}
 	}
 	a := &c.Agent
 	if a.MaxWorkers == 0 {
-		a.MaxWorkers = DefaultMaxWorkers
+		a.MaxWorkers = DefaultMaxWorkers()
 	}
 	if a.MaxWorkers < 1 || a.MaxWorkers > maxAgentWorkersConfig {
 		return errors.New("agent.max_workers must be 1..16")
@@ -342,7 +362,7 @@ func (c *Config) validate(knownTools []string) error {
 			return errors.New("agent.toolchain_path entries must be absolute, clean paths")
 		}
 	}
-	for name, p := range map[string]string{"agent.go": a.Go, "agent.go_mod_cache": a.GoModCache} {
+	for name, p := range map[string]string{"agent.go": a.Go, "agent.git": a.Git, "agent.go_mod_cache": a.GoModCache} {
 		if p != "" && !absClean(p) {
 			return fmt.Errorf("%s must be an absolute, clean path", name)
 		}
@@ -395,6 +415,20 @@ func (c *Config) validate(knownTools []string) error {
 	if c.BackupDir != "" && (within(c.BackupDir, c.StateDir) || within(c.StateDir, c.BackupDir)) {
 		return errors.New("backup_dir and state_dir must not contain each other")
 	}
+	if c.GitHosts == nil {
+		c.GitHosts = append([]string{}, DefaultGitHosts...)
+	}
+	if len(c.GitHosts) > 16 {
+		return errors.New("git_hosts has at most 16 entries")
+	}
+	hosts := map[string]bool{}
+	for i, h := range c.GitHosts {
+		h = strings.ToLower(h)
+		if !validGitHost(h) || hosts[h] {
+			return errors.New("git_hosts entries must be unique DNS host names with an optional port (for example github.com)")
+		}
+		hosts[h], c.GitHosts[i] = true, h
+	}
 	if c.Stop.DrainTimeoutSeconds == 0 {
 		c.Stop.DrainTimeoutSeconds = DefaultDrainSeconds
 	}
@@ -405,6 +439,21 @@ func (c *Config) validate(knownTools []string) error {
 		return errors.New("stop.drain_timeout_seconds must be 1..86400 and stop.cancel_timeout_seconds 45..3600")
 	}
 	return nil
+}
+
+// validGitHost accepts a DNS host name with an optional port (no IP literal).
+func validGitHost(h string) bool {
+	return gitHost.MatchString(h) && !ipLiteral(h)
+}
+
+var gitHost = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?$`)
+
+func ipLiteral(h string) bool {
+	if i := strings.LastIndexByte(h, ':'); i >= 0 {
+		h = h[:i]
+	}
+	_, err := netip.ParseAddr(h)
+	return err == nil
 }
 
 // within reports whether p is base or below it.

@@ -50,7 +50,9 @@ func (w *worker) acquire(a *attempt) string {
 			reason = nodeproto.ReasonSnapshotIntegrityFailed
 		}
 	case job.Source.Kind == "local":
-		s, err = source.AcquireLocal(a.ctx, job.Source.ApprovedRoot, job.Source.RelativePath, w.hello.DataRoot, w.limits())
+		if err = source.CheckProtected(job.Source.ApprovedRoot, job.Source.RelativePath, job.Source.ProtectedDirs); err == nil {
+			s, err = source.AcquireLocal(a.ctx, job.Source.ApprovedRoot, job.Source.RelativePath, w.hello.DataRoot, w.limits())
+		}
 		reason = sourceReason(err)
 	case job.Source.Kind == "git":
 		if w.hello.GitExecutable == "" || job.Source.AllowedHost == "" {
@@ -58,7 +60,7 @@ func (w *worker) acquire(a *attempt) string {
 			break
 		}
 		a.anyProc.Store(true)
-		s, err = source.AcquireGit(a.ctx, job.Source.RepositoryURL, job.Source.Branch, w.hello.DataRoot, w.limits(), source.GitOptions{Executable: w.hello.GitExecutable, AllowedHost: job.Source.AllowedHost, Timeout: 10 * time.Minute})
+		s, err = source.AcquireGit(a.ctx, job.Source.RepositoryURL, job.Source.Branch, w.hello.DataRoot, w.limits(), source.GitOptions{Executable: w.hello.GitExecutable, AllowedHost: job.Source.AllowedHost, AllowedLocalRoot: job.Source.AllowedLocalRoot, Timeout: 10 * time.Minute})
 		reason = sourceReason(err)
 	default:
 		err, reason = source.ErrUnsupported, nodeproto.ReasonSourceUnsupported

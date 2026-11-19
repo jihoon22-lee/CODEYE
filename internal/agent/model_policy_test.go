@@ -52,3 +52,41 @@ func TestRepositoryCodeGrantIsSeparateFromAcquisition(t *testing.T) {
 		t.Fatalf("unmapped repository-code root: %v", err)
 	}
 }
+
+// Under --project-analysis-policy the project's own choices decide, for
+// local and Git sources alike; the per-root grants play no part.
+func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
+	root := domain.NewID()
+	both := domain.AnalysisChoices{SendSourceToModel: true, RunBuildScripts: true}
+	neither := domain.AnalysisChoices{}
+	for _, tc := range []struct {
+		kind     string
+		model    string
+		choices  *domain.AnalysisChoices
+		reviewed bool
+		code     bool
+	}{
+		{"local", "openai/m", &both, true, true},
+		{"git", "openai/m", &both, true, true},
+		{"git", "openai/m", &neither, false, false},
+		{"local", "openai/m", nil, true, true}, // a controller that sends no choices: the defaults
+		{"local", "", &both, true, true},       // no model: the review records model_not_configured
+	} {
+		ag := Agent{cfg: Config{SourceRoots: map[string]string{root: t.TempDir()}, ModelName: tc.model, ProjectAnalysisPolicy: true,
+			GitHosts: []string{"github.com"}}}
+		a := activeAttempt{}
+		a.job.Source = nodeproto.JobSource{Kind: tc.kind, SourceRootID: root, RepositoryURL: "https://github.com/o/r", Host: "github.com"}
+		a.job.Analysis = tc.choices
+		if j := ag.buildJob(&a); j.AllowModelReview != tc.reviewed || j.AllowRepositoryCode != tc.code {
+			t.Errorf("%s model=%q choices=%v: model %v, code %v", tc.kind, tc.model, tc.choices, j.AllowModelReview, j.AllowRepositoryCode)
+		}
+	}
+	// Without the flag the stored choices change nothing (server mode).
+	ag := Agent{cfg: Config{SourceRoots: map[string]string{root: t.TempDir()}, ModelName: "openai/m"}}
+	a := activeAttempt{}
+	a.job.Source = nodeproto.JobSource{Kind: "local", SourceRootID: root}
+	a.job.Analysis = &both
+	if j := ag.buildJob(&a); j.AllowModelReview || j.AllowRepositoryCode {
+		t.Fatal("server-mode node followed the project's choices")
+	}
+}

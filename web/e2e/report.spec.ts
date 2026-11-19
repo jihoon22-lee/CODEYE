@@ -20,7 +20,6 @@ test('published report exposes the same counts, evidence and revision in the bro
   }
   await target.click();
   await page.getByRole('button', {name:'마지막 실행 상태 보기'}).click();
-  await page.getByRole('button', {name:'보고서 열기'}).click();
   const report = page.getByRole('article', {name:'분석 보고서'});
   await expect(report).toBeVisible();
   const response = await page.request.get('/api/v1/runs/' + id + '/report?format=json&include_code=true');

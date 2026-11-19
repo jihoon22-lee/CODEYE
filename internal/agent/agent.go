@@ -68,6 +68,16 @@ type Config struct {
 	// repository-controlled code (--repo-code-source-root, docs/ANALYZERS.md#저장소-코드-실행-허가).
 	// Git sources never get the grant.
 	RepositoryCodeSourceRoots map[string]bool
+	// ProjectAnalysisPolicy (--project-analysis-policy, personal mode) makes
+	// every job follow its project's analysis choices (nodeproto.Job.Analysis)
+	// for local and Git sources alike, instead of ModelSourceRoots and
+	// RepositoryCodeSourceRoots.
+	ProjectAnalysisPolicy bool
+	// ProtectedDirs (--protected-dir): a local project folder that contains
+	// or lies inside one of these is refused before acquisition, however
+	// the project was registered (personal mode: the state and backup
+	// directories).
+	ProtectedDirs []string
 	// Workers is the static worker count (default mode).
 	Workers int
 	// Autoscale starts with zero workers and starts/drains/stops

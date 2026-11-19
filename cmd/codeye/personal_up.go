@@ -22,11 +22,12 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// `codeye up [PATH]` (docs/GUIDE.md): from nothing to a signed-in browser.
-// It writes a minimal configuration when there is none, runs the managed
-// PostgreSQL, the controller and the agent (reusing whatever already runs),
-// registers PATH as a project and queues its analysis, then prints a
-// single-use login link to that project and opens the browser.
+// `codeye up [PATH|URL]` (docs/GUIDE.md): from nothing to a signed-in
+// browser. It writes a minimal configuration when there is none, runs the
+// managed PostgreSQL, the controller and the agent (reusing whatever already
+// runs), registers the folder or Git repository as a project and queues its
+// analysis, then prints a single-use login link to that project and opens
+// the browser.
 // `codeye open` only issues and opens a new link.
 
 // upRunBody is the run request of `codeye up PATH` (the web app's default).
@@ -42,12 +43,6 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fs.BoolVar(&noOpen, "no-open", false, "")
 		fs.BoolVar(&noProbe, "no-probe", false, "")
 	}) {
-		return 2
-	}
-	if isGitURL(target) {
-		fmt.Fprintln(stderr, "Git URLs are not wired into codeye up yet. Clone the repository and analyze the folder:")
-		fmt.Fprintln(stderr, "  git clone "+target+" DIR && codeye up DIR")
-		fmt.Fprintln(stderr, "A Git project can also be registered in the web UI (프로젝트 등록 → Git) when an agent with --git runs; see docs/GITHUB.md.")
 		return 2
 	}
 	if binDir != "" {
@@ -97,7 +92,13 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	defer unlock()
 	var proj *upTarget
-	if target != "" {
+	switch {
+	case target != "" && isGitURL(target):
+		if proj, err = gitTarget(cfg, target); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+	case target != "":
 		if proj, cfg, err = resolveTarget(path, cfg, target, out); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -121,7 +122,7 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	defer cancel()
 	fragment := url.Values{}
 	if proj != nil {
-		projectID, runID, err := analyzeTarget(opCtx, up, proj, out)
+		projectID, runID, err := analyzeTarget(opCtx, up, cfg, proj, out)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -223,13 +224,56 @@ func splitTarget(args []string) (string, []string) {
 	return target, rest
 }
 
+// isGitURL reports whether the argument of `codeye up` names a repository
+// rather than a folder: a URL, an scp-like address, or HOST/OWNER/REPO that
+// is not an existing path.
 func isGitURL(s string) bool {
-	return strings.Contains(s, "://") || strings.HasPrefix(s, "git@")
+	if strings.Contains(s, "://") || strings.HasPrefix(s, "git@") {
+		return true
+	}
+	if _, err := os.Stat(s); err == nil {
+		return false
+	}
+	first, _, _ := strings.Cut(s, "/")
+	return strings.Count(strings.TrimSuffix(s, "/"), "/") >= 2 && strings.Contains(first, ".") && !strings.HasPrefix(s, ".")
 }
 
-// upTarget is the folder `codeye up PATH` analyzes.
+// upTarget is the folder or repository `codeye up` analyzes: a folder under
+// the source root at rootPath, or a repository (repoURL, branch "" for the
+// default branch) of an approved Git host.
 type upTarget struct {
-	path, label, relative string
+	path, rootPath, relative string
+	repoURL, branch, host    string
+}
+
+func (t *upTarget) git() bool { return t.repoURL != "" }
+
+// shown is how messages name the target.
+func (t *upTarget) shown() string {
+	if t.git() {
+		if t.branch != "" {
+			return t.repoURL + " (branch " + t.branch + ")"
+		}
+		return t.repoURL
+	}
+	return t.path
+}
+
+// gitTarget validates a repository argument: an HTTPS URL of a host in
+// git_hosts (a /tree/BRANCH browser address names the branch).
+func gitTarget(cfg *personal.Config, target string) (*upTarget, error) {
+	repo, branch, err := domain.SplitRepositoryURL(target)
+	if err != nil {
+		if errors.Is(err, domain.ErrUnsupported) {
+			return nil, errors.New("only HTTPS repository URLs are supported, for example https://github.com/OWNER/REPO")
+		}
+		return nil, errors.New("not a repository URL: use https://HOST/OWNER/REPO (optionally /tree/BRANCH)")
+	}
+	host, _ := domain.RepositoryHost(repo)
+	if !slices.Contains(cfg.GitHosts, host) {
+		return nil, fmt.Errorf("the Git host %s is not in git_hosts (default github.com); add it to the configuration to analyze its repositories", host)
+	}
+	return &upTarget{repoURL: repo, branch: branch, host: host}, nil
 }
 
 // resolveTarget maps PATH to a configured source root (the root itself or a
@@ -269,7 +313,7 @@ func resolveTarget(configPath string, cfg *personal.Config, target string, out i
 		best, rel = i, p
 	}
 	if best >= 0 {
-		return &upTarget{path: real, label: cfg.SourceRoots[best].Label, relative: rel}, cfg, nil
+		return &upTarget{path: real, rootPath: cfg.SourceRoots[best].Path, relative: rel}, cfg, nil
 	}
 	label := uniqueLabel(cfg, filepath.Base(real))
 	next, err := personal.EditFile(configPath, knownTools(), personal.ConfigEdit{AddRoot: &personal.SourceRoot{Label: label, Path: real}})
@@ -277,7 +321,7 @@ func resolveTarget(configPath string, cfg *personal.Config, target string, out i
 		return nil, nil, err
 	}
 	fmt.Fprintf(out, "added source root %q (%s) to %s\n", label, real, configPath)
-	return &upTarget{path: real, label: label, relative: "."}, next, nil
+	return &upTarget{path: real, rootPath: real, relative: "."}, next, nil
 }
 
 // pathWithin reports whether p is base or below it.
@@ -306,17 +350,31 @@ func uniqueLabel(cfg *personal.Config, base string) string {
 	return label
 }
 
-// analyzeTarget finds the project of the target folder (or registers it)
-// and queues a run, unless one is still queued or running.
-func analyzeTarget(ctx context.Context, up *running, t *upTarget, out io.Writer) (string, string, error) {
-	rootID := ""
-	for _, r := range up.roots {
-		if r.Label == t.label {
-			rootID = r.ID
+// analyzeTarget finds the project of the target folder or repository (or
+// registers it) and queues a run, unless one is still queued or running.
+func analyzeTarget(ctx context.Context, up *running, cfg *personal.Config, t *upTarget, out io.Writer) (string, string, error) {
+	var src domain.Source
+	var name string
+	if t.git() {
+		if cfg.Agent.Git == "" {
+			return "", "", errors.New("git was not found on this machine (see the tool table above); install git (Ubuntu: `sudo apt install git`) or set agent.git, then run codeye up again")
 		}
-	}
-	if rootID == "" {
-		return "", "", fmt.Errorf("source root %q is not registered", t.label)
+		p, _, err := up.store.EnsureProvider(ctx, t.host)
+		if err != nil {
+			return "", "", fmt.Errorf("cannot register the Git host %s: %w", t.host, err)
+		}
+		src = domain.Source{Kind: domain.SourceGit, ProviderID: p.ID, RepositoryURL: t.repoURL, Branch: t.branch}
+		name = domain.RepositoryName(t.repoURL)
+	} else {
+		for _, r := range up.roots {
+			if r.Path == t.rootPath {
+				src = domain.Source{Kind: domain.SourceLocal, SourceRootID: r.ID, RelativePath: t.relative}
+			}
+		}
+		if src.Kind == "" {
+			return "", "", fmt.Errorf("the source root of %s is not registered", t.path)
+		}
+		name = filepath.Base(t.path)
 	}
 	var project *postgres.ProjectSummary
 	for cursor := ""; project == nil; {
@@ -325,8 +383,8 @@ func analyzeTarget(ctx context.Context, up *running, t *upTarget, out io.Writer)
 			return "", "", fmt.Errorf("cannot list projects: %w", err)
 		}
 		for i, p := range page.Items {
-			var src domain.Source
-			if json.Unmarshal(p.Source, &src) == nil && src.Kind == domain.SourceLocal && src.SourceRootID == rootID && src.RelativePath == t.relative {
+			var have domain.Source
+			if json.Unmarshal(p.Source, &have) == nil && domain.SameSource(have, src) {
 				project = &page.Items[i]
 				break
 			}
@@ -336,24 +394,22 @@ func analyzeTarget(ctx context.Context, up *running, t *upTarget, out io.Writer)
 		}
 		cursor = page.NextCursor
 	}
-	var projectID, name string
+	var projectID string
 	if project != nil {
 		projectID, name = project.ID, project.Name
 		// A queued or executing run is shown instead of queueing another; a
 		// cancelling or recovery_required run gets a new run beside it.
 		if lr := project.LastRun; lr != nil && slices.Contains([]domain.RunStatus{domain.RunQueued, domain.RunPreparing, domain.RunRunning, domain.RunFinalizing}, lr.Status) {
-			fmt.Fprintf(out, "project %q (%s): its analysis is already %s (run %s)\n", name, t.path, lr.Status, lr.ID)
+			fmt.Fprintf(out, "project %q (%s): its analysis is already %s (run %s)\n", name, t.shown(), lr.Status, lr.ID)
 			return projectID, lr.ID, nil
 		}
 	} else {
-		name = filepath.Base(t.path)
-		p, err := up.store.RegisterProject(ctx, up.user, postgres.ProjectRegistration{Name: name,
-			Source: domain.Source{Kind: domain.SourceLocal, SourceRootID: rootID, RelativePath: t.relative}})
+		p, err := up.store.RegisterProject(ctx, up.user, postgres.ProjectRegistration{Name: name, Source: src})
 		if err != nil {
 			return "", "", fmt.Errorf("cannot register the project: %w", err)
 		}
 		projectID, name = p.ID, p.Name
-		fmt.Fprintf(out, "registered project %q (%s)\n", name, t.path)
+		fmt.Fprintf(out, "registered project %q (%s)\n", name, t.shown())
 	}
 	run, err := up.store.Enqueue(ctx, up.user, projectID, "up-"+domain.NewID(), json.RawMessage(upRunBody))
 	if err != nil {

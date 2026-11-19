@@ -157,6 +157,44 @@ func (s *Store) GetProject(ctx context.Context, actor, id string) (Project, erro
 		return p, nil
 	})
 }
+
+// SetProjectAnalysis records a project's analysis choices as a new revision
+// of its configuration (owner or manager); the rest of the configuration is
+// kept. Runs created afterwards follow the new choices.
+func (s *Store) SetProjectAnalysis(ctx context.Context, actor, id string, c domain.AnalysisChoices) (int64, error) {
+	if !validIDs(actor, id) {
+		return 0, domain.ErrInvalid
+	}
+	return transaction(ctx, s, func(tx pgx.Tx) (int64, error) {
+		if err := requireProject(ctx, tx, actor, id, true, false); err != nil {
+			return 0, err
+		}
+		var raw []byte
+		if err := tx.QueryRow(ctx, `SELECT r.config FROM projects p JOIN project_revisions r ON r.project_id=p.id AND r.revision=p.current_revision WHERE p.id=$1`, id).Scan(&raw); err != nil {
+			return 0, err
+		}
+		var config map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &config); err != nil || config == nil {
+			return 0, domain.ErrInvalid
+		}
+		choice, _ := json.Marshal(c)
+		config["analysis"] = choice
+		next, _ := json.Marshal(config)
+		canonical, digest, err := normalizeConfig(ctx, tx, next)
+		if err != nil {
+			return 0, err
+		}
+		var revision int64
+		if err := tx.QueryRow(ctx, "UPDATE projects SET current_revision=current_revision+1 WHERE id=$1 RETURNING current_revision", id).Scan(&revision); err != nil {
+			return 0, err
+		}
+		if _, err = tx.Exec(ctx, "INSERT INTO project_revisions(project_id,revision,config,config_digest) VALUES($1,$2,$3,$4)", id, revision, string(canonical), digest); err != nil {
+			return 0, err
+		}
+		return revision, writeAudit(ctx, tx, userAudit(ctx, actor, AuditProjectRevised).target("project", id).in(id).with(map[string]any{"revision": revision}))
+	})
+}
+
 func (s *Store) ReviseProject(ctx context.Context, actor, id string, expected int64, config json.RawMessage) (int64, error) {
 	if !validIDs(actor, id) || expected < 1 {
 		return 0, domain.ErrInvalid

@@ -4,6 +4,16 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — 경로·Git 주소 하나로 분석, 프로젝트별 분석 선택, 다시 시도
+
+- **Git 주소**: `codeye up https://github.com/OWNER/REPO`(`…/tree/BRANCH`, `https://` 생략 가능)가 프로젝트를 등록하고 분석을 요청한다. 브랜치를 비우면 확보할 때마다 원격의 기본 브랜치를 쓰고 manifest에 남긴다. `git_hosts`(기본 `["github.com"]`)마다 provider를 등록하고 찾은 git과 함께 에이전트에 넘긴다. 인증을 요구하는 저장소는 `source_auth_required`, 닿지 않는 호스트는 `source_unreachable`로 실패한다. 비공개 저장소는 지원하지 않는다.
+- **첫 화면**: 개인 모드에서 "폴더 경로 또는 Git 주소" 한 칸과 분석 버튼으로 등록·요청하고 바로 실행 화면으로 간다(같은 폴더·저장소는 같은 프로젝트, 진행 중인 실행은 그대로 연다). 고급(접힘)에 이름·브랜치·두 분석 선택이 있다. 게시된 보고서는 저절로 열린다. 실패·일부 완료·취소된 실행에 "다시 시도"가 있다. 보고서 위의 "더 나은 결과를 얻으려면"이 공백에서 없는 도구의 설치 방법, 모델 키, 호출 상한, 빌드 스크립트(켜고 다시 시도)를 안내한다. "도구" 메뉴가 찾은 도구·모델·Git·읽을 수 있는 폴더를 보인다(서버 모드는 진단 파일 보기 그대로).
+- **API**: `POST /projects`의 `local_path`(개인 모드, 절대 경로를 허가된 root에 대응)와 `analysis`, 같은 소스의 200 응답, `PUT /projects/{id}/analysis`, `POST /runs/{id}/retry`(`same_run`·`new_run`), `GET /setup`. Git `branch`는 선택이다. 노드 job에 `analysis`가 실리고 에이전트에 `--project-analysis-policy`·`--protected-dir`가 생겼다. migration은 없다(설정 JSON).
+- **프로젝트별 분석 선택**: "소스를 모델에 보냄"과 "저장소의 빌드 스크립트 실행"을 프로젝트마다 정하고 개인 모드 노드가 로컬·Git 모두 따른다. 기본값이 바뀌었다: 로컬 폴더는 둘 다 켬(이전에는 빌드 스크립트가 root별 허가로 기본 끔), Git 저장소는 모델 전송 켬(이전에는 보낼 방법이 없었다)·빌드 스크립트 끔. `source_roots[].model_review`·`repository_code`는 개인 모드에서 쓰이지 않는다. 서버 모드 노드는 운영자 허가 그대로다.
+- **홈 디렉터리 root와 데이터 폴더 경계**: 개인 모드는 홈을 설정에 쓰지 않는 root `home`으로 둔다. 상태·백업 디렉터리를 품거나 그 안에 있는 프로젝트 폴더는 어느 형식으로 등록하든 `FOLDER_HOLDS_CODEYE_DATA`(문제의 폴더를 적는다)로 거절하고 에이전트도 확보 전에 거절한다(`source_holds_codeye_data`). 소스 확보의 data root와 실행기 보호 경로는 root 전체가 아닌 프로젝트 폴더 기준이 됐다.
+- **기본값**: 개인 모드 `agent.max_workers`는 min(4, 논리 CPU/2)이다. 모델이 없으면 모델 검토 사유가 `model_not_configured`다(이전에는 `model_source_not_approved`로 보일 수 있었다).
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10, Node 24.18.0, Playwright Chromium, git 2.53.0, cargo 1.99.1. 임시 HOME에서 실제 공개 GitHub 저장소(BurntSushi/termcolor)를 `codeye up 주소`와 화면으로 분석했고(기본 브랜치 `master`의 커밋 고정, cargo check·clippy가 빌드 스크립트 끔으로 빠짐, 켜고 다시 시도하면 실행되어 오프라인 의존성 때문에 `dependency_unavailable`), 없는 저장소의 실패와 다시 시도를 화면에서 확인했다. CI는 시험 빌드의 file:// 미러를 쓴다. 실모델 호출은 하지 않았다.
+
 ### 추가 — `codeye up`과 관리형 PostgreSQL
 
 - **`codeye up [PATH]`**: 설정 파일이 없으면 `schema_version`만 담아 만들고, PostgreSQL을 상태 디렉터리에 초기화해 띄우고, schema를 만들거나 맞추고, controller와 에이전트를 시작한다. PATH를 주면 그 폴더를 source root로 설정에 더하고(이미 있는 root 안이면 그 root와 상대 경로) 프로젝트를 등록하고 분석을 요청한다. 일회용 로그인 링크(프로젝트와 실행으로 가는 `#project=…&run=…` 포함)를 출력하고 브라우저를 연다(WSL은 `wslview`·`explorer.exe`). 이미 실행 중이면 바뀐 것만 반영한다. 에이전트 설정이 바뀌면 drain 뒤 다시 띄운다. Git URL은 아직 받지 않고 clone 안내를 낸다. `codeye open`은 새 링크만 발급하고 연다.

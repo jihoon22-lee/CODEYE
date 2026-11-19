@@ -233,11 +233,15 @@ type Resources struct {
 
 // Job is the work description of a lease.
 type Job struct {
-	Profile   string       `json:"profile"`
-	Scope     domain.Scope `json:"scope"`
-	Source    JobSource    `json:"source"`
-	Snapshot  *JobSnapshot `json:"snapshot"`
-	Resources Resources    `json:"resources"`
+	Profile string       `json:"profile"`
+	Scope   domain.Scope `json:"scope"`
+	// Analysis are the project's analysis choices (defaults applied). A node
+	// started with --project-analysis-policy follows them; other nodes use
+	// their per-source-root grants. Absent from older controllers.
+	Analysis  *domain.AnalysisChoices `json:"analysis,omitempty"`
+	Source    JobSource               `json:"source"`
+	Snapshot  *JobSnapshot            `json:"snapshot"`
+	Resources Resources               `json:"resources"`
 }
 
 // ClaimResponse is the 200 body. 204 (no body) means nothing claimable.
@@ -425,8 +429,16 @@ const (
 
 // Completion/task reasons.
 const (
-	ReasonSnapshotUnavailable     = "snapshot_unavailable"
-	ReasonSourceUnavailable       = "source_unavailable"
+	ReasonSnapshotUnavailable = "snapshot_unavailable"
+	ReasonSourceUnavailable   = "source_unavailable"
+	// ReasonSourceAuthRequired: the Git host serves the repository only
+	// with credentials (private or nonexistent); none are sent.
+	ReasonSourceAuthRequired = "source_auth_required"
+	// ReasonSourceUnreachable: the Git host could not be reached.
+	ReasonSourceUnreachable = "source_unreachable"
+	// ReasonSourceHoldsCodeyeData: the local project folder contains, or
+	// lies inside, CODEYE's own state or backup directory.
+	ReasonSourceHoldsCodeyeData   = "source_holds_codeye_data"
 	ReasonSourceUnstable          = "source_unstable"
 	ReasonSourceLimitExceeded     = "source_limit_exceeded"
 	ReasonSourceUnsupported       = "source_unsupported"

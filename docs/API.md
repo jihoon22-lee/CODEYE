@@ -7,7 +7,7 @@
 - OpenAPI operation의 `x-codeye-status`가 `implemented`이면 서버가 실제로 제공한다. 그 밖의 operation은 설계 계약(미구현)이다. 현재 미구현 operation은 풀 관리(`/api/v1/admin/pools/{pool_id}`)와 Git webhook 수신(`/api/v1/providers/{provider_id}/webhook`)이다.
 - 서버가 등록한 라우트와 OpenAPI의 구현 operation이 같은지 [`internal/httpapi/contract_test.go`](../internal/httpapi/contract_test.go)가 확인한다. 라우트 표는 [`internal/httpapi/api.go`](../internal/httpapi/api.go)와 [`node.go`](../internal/httpapi/node.go)에 있다.
 - 사용자 인증은 세션 cookie뿐이며, 세션은 일회용 로그인 링크나 사용자 이름·비밀번호로 만든다. 사용자 Bearer 토큰(`UserBearer`)은 구현하지 않았다. loopback이 아닌 주소는 TLS로만 받는다([보안](SECURITY.md#네트워크와-브라우저)). 계정·구성원·감사 기록은 웹 화면과 CLI에서 다룬다.
-- 설계 계약(미구현) 사용자 API: 프로젝트 설정 변경, 연결 진단·브랜치 조회, 같은 입력 재시도, 개별 task·로그 조회(로그는 상태 이벤트와 별도의 byte/record cursor로 가져오는 설계), 첫 발견 시각 이력, 판정 일괄 적용, 풀·노드 관리 웹 API. 풀·노드 관리는 운영자 CLI를 쓴다([운영](OPERATIONS.md)).
+- 설계 계약(미구현) 사용자 API: 프로젝트 설정 변경(분석 선택 `PUT /projects/{id}/analysis`만 구현), 연결 진단·브랜치 조회, 개별 task·로그 조회(로그는 상태 이벤트와 별도의 byte/record cursor로 가져오는 설계), 첫 발견 시각 이력, 판정 일괄 적용, 풀·노드 관리 웹 API. 풀·노드 관리는 운영자 CLI를 쓴다([운영](OPERATIONS.md)).
 
 ## 공통 규칙
 
@@ -128,13 +128,16 @@
 | `POST /session/password` | 세션+CSRF(변경 대기 세션 포함) | [비밀번호 변경](#비밀번호-변경) |
 | `GET /source-roots` | 세션 | 이 사용자에게 허가된 root의 `{id, label}`만. 서버 경로는 보이지 않는다. |
 | `GET /providers` | 세션 | `{id, kind(github·ghes), host}` |
-| `POST /projects`, `GET /projects`, `GET /projects/{id}` | 세션(+CSRF) | 등록 201+`Location`, 허가된 목록·상세. 항목마다 호출자의 `role`(`owner`·`manager`·`runner`·`viewer`), `can_run`, `can_manage` |
+| `POST /projects`, `GET /projects`, `GET /projects/{id}` | 세션(+CSRF) | 등록 201+`Location`(개인 모드에서 같은 폴더·저장소면 200과 그 프로젝트), 허가된 목록·상세. 항목마다 호출자의 `role`(`owner`·`manager`·`runner`·`viewer`), `can_run`, `can_manage`, `analysis` |
+| `PUT /projects/{id}/analysis` | 소유자·manager(+CSRF) | 분석 선택을 바꾼 새 설정 revision. 200과 프로젝트([프로젝트 등록](#프로젝트-등록)) |
+| `GET /setup` | 세션 | 첫 화면의 설치 정보([설치 정보](#설치-정보)) |
 | `GET /projects/{id}/members`, `PUT/DELETE /projects/{id}/members/{uid}` | 소유자·manager | [구성원](#구성원) |
 | `GET /projects/{id}/audit` | 소유자·manager | 그 프로젝트의 감사 기록([계정과 관리자](#계정과-관리자)) |
 | `/admin/…`, `GET /audit` | 관리자 | [계정과 관리자](#계정과-관리자) |
 | `POST /projects/{id}/runs` | 소유자·manager·runner | 202 `{id, status, version, url}`+`Location` |
 | `GET /runs/{id}`, `GET /runs/{id}/events` | 구성원 | [실행 조회와 진행](#실행-조회와-진행), [실행 이벤트 스트림](#실행-이벤트-스트림) |
 | `POST /runs/{id}/cancel` | 소유자·manager·runner | 상태를 바꿨으면 202, 이미 종료·취소 중이면 200(현재 상태) |
+| `POST /runs/{id}/retry` | 소유자·manager·runner(+CSRF) | 202 `{id, status, version, url, retry}`+`Location`([다시 시도](#다시-시도)) |
 | `GET /runs/{id}/report`, `GET /runs/{id}/reports` | 구성원 | [보고서 경로](#보고서-경로) |
 | `GET /runs/{id}/comparison` | 구성원 | [비교와 판정 경로](#비교와-판정-경로) |
 | `GET/POST /projects/{id}/finding-reviews` | 구성원 / 소유자·manager·runner | [비교와 판정 경로](#비교와-판정-경로) |
@@ -143,9 +146,13 @@
 
 ## 프로젝트 등록
 
-- 본문은 `{name?, source, description?, attachment_ids?}`다. 첨부는 아직 받지 않는다(`attachment_ids`가 비어 있지 않으면 422 `ATTACHMENTS_UNSUPPORTED`). 빈 이름은 422다.
+- 본문은 `{name?, source | local_path, analysis?, description?, attachment_ids?}`다. `source`와 `local_path` 중 정확히 하나를 준다(둘 다·둘 다 없음은 400). 첨부는 아직 받지 않는다(`attachment_ids`가 비어 있지 않으면 422 `ATTACHMENTS_UNSUPPORTED`). 빈 이름은 422다.
 - **local 소스**: 이 사용자에게 허가된 source root와 상대 경로. 경로는 `.`이거나, 절대 경로·드라이브·역슬래시·`..`·빈 구간이 없어야 한다. 허가 없는 root는 404다.
-- **git 소스**: 승인된 provider와 `https://<provider host>/<owner>/<repo>[.git]`, `git check-ref-format`의 부분집합을 만족하는 브랜치. ssh·scp·`git://`는 422 `SOURCE_UNSUPPORTED`다. 비공개 Git 인증은 아직 없다.
+- **local_path(개인 모드)**: 절대 경로의 폴더. 서버가 symlink를 풀고 허가된 root 중 가장 긴 root 아래의 상대 경로로 바꾼다. 개인 모드는 홈 디렉터리를 기본 root(`home`)로 둔다. 없는 폴더는 422 `FOLDER_NOT_FOUND`, root 밖은 422 `FOLDER_NOT_READABLE`(터미널의 `codeye up <경로>`가 root를 더한다), 상대 경로로 쓸 수 없는 이름(`:` 등)은 422 `FOLDER_NAME_UNSUPPORTED`다. 서버 모드는 422 `LOCAL_PATH_UNSUPPORTED`다.
+- **CODEYE 데이터 폴더(개인 모드)**: 프로젝트 폴더가 상태 디렉터리나 백업 디렉터리를 품거나 그 안에 있으면, `local_path`든 root와 상대 경로든 symlink를 푼 뒤 422 `FOLDER_HOLDS_CODEYE_DATA`다. `message`는 문제의 두 폴더를 적고 프로젝트가 든 하위 폴더를 고르라고 안내한다. 노드도 소스를 확보하기 전에 같은 검사를 하고 실패 사유는 `source_holds_codeye_data`다.
+- **같은 소스(개인 모드)**: 같은 root와 경로, 또는 같은 provider와 저장소 주소(대소문자, 끝의 `/`·`.git` 무시)의 프로젝트가 이미 있으면 새로 만들지 않고 200과 그 프로젝트를 준다.
+- **git 소스**: 승인된 provider와 `https://<provider host>/<owner>/<repo>[.git]`. 브랜치는 선택이며 `git check-ref-format`의 부분집합을 만족해야 한다. 비우면 소스를 확보할 때마다 저장소의 기본 브랜치(`git ls-remote --symref … HEAD`)를 쓰고 보고서 입력에 그 브랜치와 커밋을 남긴다. ssh·scp·`git://`는 422 `SOURCE_UNSUPPORTED`다. 비공개 Git 인증은 아직 없다. 인증을 요구하는 저장소(비공개이거나 없는 저장소)는 실행이 `source_auth_required`, 호스트에 닿지 못하면 `source_unreachable`로 실패한다.
+- **analysis**: `{send_source_to_model, run_build_scripts}` 둘 다 있어야 한다(아니면 422 `VALIDATION_FAILED`). 없으면 소스 종류의 기본값이다. 로컬 폴더는 둘 다 `true`, Git 저장소는 `send_source_to_model: true`, `run_build_scripts: false`다. 설정의 `analysis`에 저장하고 응답의 `analysis`로 보인다. `--project-analysis-policy`로 띄운 노드(개인 모드)는 로컬·Git 모두 이 선택을 따른다. 그 밖의 노드는 운영자의 root별 허가(`--model-source-root`·`--repo-code-source-root`)를 따른다. `PUT /projects/{id}/analysis`가 바꾸고(설정의 나머지는 그대로, 새 revision, `project.revised` 감사), 그 뒤의 run이 새 선택을 따른다.
 - 등록은 소스 위치의 선언이며 형식과 권한만 검사한다. 서버는 등록 시 파일 시스템·네트워크에 접근하지 않는다. 경로 정규화와 symlink·junction 경계는 워커가 소스를 확보할 때 검사한다([실행](EXECUTION.md)). 이름이 없으면 경로 마지막 구간, root label, 저장소 이름 순으로 정한다. 저장되는 설정 revision 1은 `{"config_version":1,"source":…,"description"?}`이다.
 - 프로젝트 응답의 `source_status`는 등록만 확인한 소스이므로 `declared_unverified`다. `capability_gaps`는 `source_access_unverified`(항상), `execution_unavailable`(철회되지 않은 등록 노드가 없음), `report_unavailable`(게시된 보고서가 없음)이다. 실행별 배치 가능 여부는 대기 사유로 따로 보고한다.
 
@@ -161,8 +168,24 @@
 - 클라이언트는 raw shell 명령이나 임의 자격증명을 run 요청에 넣지 못한다. 프로젝트에 저장된 승인 설정을 서버가 해석한다.
 - 요청은 영속 큐에 들어가고 202를 반환한다. 202는 실행이 시작됐다는 뜻이 아니다. 등록된 노드가 없으면 run은 `queued`에 머물고 `waiting_reason`이 `execution_unavailable`이다.
 - 배정 시점(claim)에 서버가 요청자의 권한을 다시 확인한다.
-- 수동 새로 분석과 같은 입력 재시도는 별도 동작이다. 같은 입력 재시도 API는 설계 계약(미구현)이다.
+- 수동 새로 분석과 다시 시도는 별도 동작이다([다시 시도](#다시-시도)).
 - 취소 재호출은 멱등이며 이미 종료된 run은 현재 상태를 반환한다. 취소 응답이 202여도 실제 프로세스가 끝났다는 뜻이 아니다. 정리 확인 절차는 [실행](EXECUTION.md)에 있다.
+
+### 다시 시도
+
+`POST /runs/{id}/retry`는 끝난 run(`failed`·`cancelled`·`partial`·`completed`)을 다시 실행한다.
+
+- `retry: "same_run"`: `failed`·`cancelled` run의 스냅샷을 철회되지 않은 노드가 갖고 있고, 모든 attempt의 정리가 확인됐고, 그 뒤 프로젝트 설정이 바뀌지 않았으면 그 run 자체를 같은 스냅샷으로 다시 큐에 넣는다. 응답의 `id`는 같은 run이다.
+- `retry: "new_run"`: 그 밖에는 저장된 같은 요청으로 새 run을 만든다. 소스를 다시 확보한다(소스 확보 실패, 도구를 설치하거나 분석 선택을 바꾼 뒤의 부분 완료). 같은 run version에 대한 반복 요청은 같은 새 run을 준다. 응답과 `Location`은 새 run이다.
+- 아직 끝나지 않았거나 `recovery_required`인 run은 409 `RUN_NOT_FINISHED`, viewer는 403이다. 어느 경우든 성공하면 `run.requested` 감사(`trigger: "retry"`)를 남긴다. 클라이언트는 응답의 run을 따라간다.
+
+### 설치 정보
+
+`GET /setup`은 첫 화면이 쓰는 `{mode, model, git, readable_folders, analysis_defaults, tools}`다([schema](../api/openapi.yaml)의 `Setup`).
+
+- 개인 모드(`mode: "personal"`): `model`은 `{configured, id, probe}`(키 없음, probe는 `verified`·`failed`·`not_probed`), `git`은 `{available, hosts}`, `readable_folders`는 이 사용자에게 허가된 root의 절대 경로, `tools`는 `codeye up`이 찾은 도구(`<state_dir>/tools.json`, [schema](../schemas/tools.schema.json))다. 기록이 아직 없으면 `git`·`tools`가 `null`이다.
+- 서버 모드(`mode: "server"`): controller는 노드마다 다른 이 정보를 모르므로 `model`·`git`·`tools`가 `null`이고 `readable_folders`가 비어 있다.
+- `analysis_defaults`는 `{local, git}`의 기본 분석 선택이다.
 
 ## 실행 조회와 진행
 

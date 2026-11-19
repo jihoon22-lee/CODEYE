@@ -388,7 +388,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 ## 모델에 보낼 수 있는 소스
 
 - 모델 전송은 노드 운영자가 로컬 소스 루트마다 허용한다. `codeye agent --model-source-root ROOT_ID`(반복 가능)다.
-- 개인 모드에서는 모델이 설정되면 개인 사용자의 모든 로컬 소스 루트가 이 허가를 받는다. `source_roots[].model_review: false`인 루트만 뺀다. 개인 모드의 사용자는 자기 코드를 자기 키로 보내는 한 사람이기 때문이다. 프로젝트별 선택으로 바꿀 자리는 이 기본값 하나다.
+- 개인 모드에서는 프로젝트마다 고른다. 에이전트가 `--project-analysis-policy`로 뜨고, job에 실린 프로젝트의 분석 선택 `send_source_to_model`(로컬 폴더·Git 저장소 모두 기본 켬)이 모델 전송을 정한다. Git 저장소 프로젝트도 모델 검토를 받는다. `source_roots[].model_review`는 더 이상 쓰이지 않는다(A40). 모델이 설정되지 않았으면 선택과 관계없이 검토 단계가 `model_not_configured`로 끝난다.
 - 실제 모델을 쓰려면 에이전트에 `--opencode ABSOLUTE_PATH --model PROVIDER/MODEL`과 키 파일(`--model-credential-file`)을 준다. 예산 relay를 쓸 때는 `--model-relay-file ABSOLUTE_PATH`를 준다.
 - 일반 소스 매핑(`--source-root`)과 모델 전송 허가는 별개다. 허가가 없는 루트의 run은 모든 검토 task가 `model_source_not_approved`이고 정적 분석 결과만 남는다.
 - Git 소스는 모델에 보낼 수 없다. Git 취득 run의 검토 task는 항상 `model_source_not_approved`다. Git 소스의 개별 모델 전송 승인은 설계 계약(미구현)이다.

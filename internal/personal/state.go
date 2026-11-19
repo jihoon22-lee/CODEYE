@@ -193,6 +193,17 @@ func (l Layout) AgentNodeID() (string, error) {
 
 // writePrivate writes data to path with mode 0600 through a same-directory
 // rename (a symlink at path is replaced, never followed).
+// WriteRunFile replaces <state>/run/name with data (0600, atomically).
+func (l Layout) WriteRunFile(name string, data []byte) error {
+	if name == "" || filepath.Base(name) != name {
+		return errors.New("invalid run file name")
+	}
+	if err := os.MkdirAll(l.RunDir(), 0o700); err != nil {
+		return err
+	}
+	return writePrivate(filepath.Join(l.RunDir(), name), data)
+}
+
 func writePrivate(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*")

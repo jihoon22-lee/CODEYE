@@ -53,7 +53,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	// Do not echo rejected arguments: they may contain credentials.
 	fs.SetOutput(io.Discard)
-	var roots, gitHosts, modelRoots, codeRoots, storageQuota multiFlag
+	var roots, gitHosts, modelRoots, codeRoots, storageQuota, protectedDirs multiFlag
 	modelExe := fs.String("opencode", "", "")
 	modelName := fs.String("model", "", "")
 	modelRelay := fs.String("model-relay-file", "", "")
@@ -70,6 +70,11 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// per local source root, like the model-source grant; nothing in a run
 	// or its snapshot can raise it.
 	fs.Var(&codeRoots, "repo-code-source-root", "")
+	// Personal mode: each project's own analysis choices (send source to
+	// the model, run build scripts) decide instead of the two per-root grants.
+	projectPolicy := fs.Bool("project-analysis-policy", false, "")
+	// A local project folder holding one of these directories is refused.
+	fs.Var(&protectedDirs, "protected-dir", "")
 	controller := fs.String("controller", "", "")
 	stateDir := fs.String("state-dir", "", "")
 	name := fs.String("name", "", "")
@@ -180,6 +185,14 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		Log:                       stderr,
 	}
 	cfg.AdvertiseWithoutBaseline = *advertiseAlways
+	cfg.ProjectAnalysisPolicy = *projectPolicy
+	for _, d := range protectedDirs {
+		if !filepath.IsAbs(d) {
+			fmt.Fprintln(stderr, "invalid --protected-dir; expected an absolute path")
+			return 2
+		}
+		cfg.ProtectedDirs = append(cfg.ProtectedDirs, filepath.Clean(d))
+	}
 	// SIGUSR1 (codeye stop) drains: no new claims, running work
 	// finishes, then a clean exit.
 	drain, stopDrain := drainSignal()

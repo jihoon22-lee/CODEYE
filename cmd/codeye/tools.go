@@ -88,7 +88,7 @@ func explicitTools(cfg *personal.Config) toolfind.Explicit {
 		return toolfind.Explicit{}
 	}
 	a := cfg.Agent
-	ex := toolfind.Explicit{Go: a.Go, GoModCache: a.GoModCache, Tools: a.Tools}
+	ex := toolfind.Explicit{Go: a.Go, Git: a.Git, GoModCache: a.GoModCache, Tools: a.Tools}
 	if a.Model != nil {
 		ex.OpenCode = a.Model.OpenCode
 	}
@@ -108,7 +108,7 @@ var detectTools = func(ctx context.Context, cfg *personal.Config) toolfind.Resul
 func useDetectedTools(cfg *personal.Config, res toolfind.Result) {
 	r := toolfind.Resolve(res, explicitTools(cfg))
 	a := &cfg.Agent
-	a.Go, a.GoModCache = r.Go, r.GoModCache
+	a.Go, a.Git, a.GoModCache = r.Go, r.Git, r.GoModCache
 	a.Tools = r.Tools
 	a.PythonBothTypeCheckers = r.PythonBothTypeCheckers
 }

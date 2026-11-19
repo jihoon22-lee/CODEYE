@@ -125,9 +125,44 @@ func (g gitRunner) run(ctx context.Context, input io.Reader, max int64, args ...
 		return nil, ErrLimit
 	}
 	if err != nil {
-		return nil, ErrUnavailable
+		return nil, gitFailure(stderr.data)
 	}
 	return out.data, nil
+}
+
+// gitFailure classifies a failed git command by its diagnostics (LC_ALL=C,
+// so the messages are git's English ones). The diagnostics are not kept.
+func gitFailure(stderr []byte) error {
+	msg := strings.ToLower(string(stderr))
+	for _, s := range []string{"could not read username", "authentication failed", "terminal prompts disabled", "repository not found", "returned error: 401", "returned error: 403"} {
+		if strings.Contains(msg, s) {
+			return errors.Join(ErrAuthRequired, ErrUnavailable)
+		}
+	}
+	for _, s := range []string{"could not resolve host", "failed to connect", "connection refused", "connection timed out", "network is unreachable", "ssl certificate problem", "gnutls", "unable to access"} {
+		if strings.Contains(msg, s) {
+			return errors.Join(ErrUnreachable, ErrUnavailable)
+		}
+	}
+	return ErrUnavailable
+}
+
+// remoteDefaultBranch asks the remote which branch its HEAD names
+// (`git ls-remote --symref`): the branch an empty project branch means.
+func remoteDefaultBranch(run func(io.Reader, int64, ...string) ([]byte, error), location string) (string, error) {
+	out, err := run(nil, 64<<10, "ls-remote", "--symref", "--", location, "HEAD")
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		ref, target, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if ok && target == "HEAD" && strings.HasPrefix(ref, "ref: refs/heads/") {
+			if b := strings.TrimPrefix(ref, "ref: refs/heads/"); b != "" {
+				return b, nil
+			}
+		}
+	}
+	return "", ErrUnsupported
 }
 
 var objectID = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
@@ -159,7 +194,7 @@ func gitLocation(repository string, options GitOptions) (string, bool, error) {
 	return "", false, ErrUnsupported
 }
 func AcquireGit(ctx context.Context, repository, branch, dataRoot string, limits Limits, options GitOptions) (result Snapshot, returnErr error) {
-	if !limits.valid() || options.Timeout <= 0 || options.Timeout > 10*time.Minute || !filepath.IsAbs(options.Executable) || branch == "" || strings.HasPrefix(branch, "-") || strings.ContainsAny(branch, "\x00\r\n") {
+	if !limits.valid() || options.Timeout <= 0 || options.Timeout > 10*time.Minute || !filepath.IsAbs(options.Executable) || strings.HasPrefix(branch, "-") || strings.ContainsAny(branch, "\x00\r\n") {
 		return Snapshot{}, ErrInvalid
 	}
 	if options.AllowedLocalRoot != "" && !filepath.IsAbs(options.AllowedLocalRoot) {
@@ -188,7 +223,6 @@ func AcquireGit(ctx context.Context, repository, branch, dataRoot string, limits
 	if err != nil {
 		return Snapshot{}, err
 	}
-	s.Manifest.SourceBranch = branch
 	s.Manifest.RequestedAt = requestedAt
 	success := false
 	recovering := false
@@ -214,6 +248,16 @@ func AcquireGit(ctx context.Context, repository, branch, dataRoot string, limits
 		}
 		return out, err
 	}
+	if branch == "" {
+		// No branch: the remote's default branch, whose name the snapshot records.
+		if branch, err = remoteDefaultBranch(run, location); err != nil {
+			return Snapshot{}, err
+		}
+		if strings.HasPrefix(branch, "-") || strings.ContainsAny(branch, "\x00\r\n") || len(branch) > 255 {
+			return Snapshot{}, ErrUnsupported
+		}
+	}
+	s.Manifest.SourceBranch = branch
 	if _, err = run(nil, 8192, "check-ref-format", "refs/heads/"+branch); err != nil {
 		if errors.Is(err, ErrRecoveryRequired) {
 			return Snapshot{}, err

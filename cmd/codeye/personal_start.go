@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/agent"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/httpapi"
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
@@ -90,7 +92,7 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 	// Detected tools and the model complete the configuration before the
 	// agent argv is built and compared with a running agent's.
 	applyDetectedTools(ctx, cfg, out)
-	setupPersonalModel(ctx, cfg, layout, o.noProbe, out)
+	model := setupPersonalModel(ctx, cfg, layout, o.noProbe, out)
 	opCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	db, err := personalDatabase(opCtx, cfg, layout, dbOptions{start: true, flagBinDir: o.postgresBinDir, notices: out})
@@ -174,6 +176,15 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 	if err := store.SetArtifactQuota(opCtx, cfg.Quota.ArtifactsBytes); err != nil {
 		return fail("cannot apply the artifact quota:", err)
 	}
+	if err := ensureGitProviders(opCtx, store, cfg, out); err != nil {
+		return fail(err)
+	}
+	if err := ensurePoolWorkers(opCtx, store, cfg); err != nil {
+		return fail(err)
+	}
+	if err := writePersonalSetup(cfg, layout, model); err != nil {
+		fmt.Fprintln(out, "note: cannot write", httpapi.PersonalSetupFile, "- the web UI shows the setup as unknown:", err)
+	}
 	res := &running{store: store, db: db, user: user, roots: roots}
 	var agentRec, ctrlRec *personal.Record
 	for _, p := range state.Processes {
@@ -237,7 +248,7 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 		return nil, 1
 	}
 	if !ctrlUp {
-		ctrlArgs := []string{"serve", "--personal", "--listen", cfg.Listen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}
+		ctrlArgs := []string{"serve", "--personal", "--state-dir", layout.Root, "--listen", cfg.Listen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}
 		ctrlEnv := append(childEnv("PATH", "HOME", "LANG", "TZ"), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
 		cmd, rec, err := personal.Spawn(personal.RoleController, exe, ctrlArgs, ctrlEnv, layout.Root, layout.LogFile(personal.RoleController))
 		if err != nil {
@@ -268,7 +279,7 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 		res.controllerPID = rec.PID
 	}
 	if !agentUp {
-		cmd, arec, err := personal.Spawn(personal.RoleAgent, exe, agentArgv(cfg, layout, roots, enroll), childEnv("PATH", "LANG"), layout.Root, layout.LogFile(personal.RoleAgent))
+		cmd, arec, err := personal.Spawn(personal.RoleAgent, exe, agentArgv(cfg, layout, roots, enroll), childEnv(append([]string{"PATH", "LANG"}, fixtureAgentEnv...)...), layout.Root, layout.LogFile(personal.RoleAgent))
 		if err != nil {
 			if cmd != nil {
 				_ = cmd.Wait()
@@ -308,6 +319,46 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 		res.agentPID = arec.PID
 	}
 	return res, 0
+}
+
+// ensureGitProviders registers the configured Git hosts as providers, so
+// projects can be added by repository URL with nothing else set up.
+func ensureGitProviders(ctx context.Context, s *postgres.Store, cfg *personal.Config, out io.Writer) error {
+	for _, h := range cfg.GitHosts {
+		_, created, err := s.EnsureProvider(ctx, h)
+		if err != nil {
+			return fmt.Errorf("cannot register the Git host %s: %w", h, err)
+		}
+		if created {
+			fmt.Fprintf(out, "registered the Git host %s (public repositories)\n", h)
+		}
+	}
+	return nil
+}
+
+// ensurePoolWorkers lets the controller run as many attempts at once as the
+// local agent may start (agent.max_workers): the pool's max_workers follows
+// the configuration. An unchanged value appends no policy revision.
+func ensurePoolWorkers(ctx context.Context, s *postgres.Store, cfg *personal.Config) error {
+	n := cfg.Agent.MaxWorkers
+	if _, _, err := s.SetPoolPolicy(ctx, postgres.PoolPolicyUpdate{Name: "default", MaxWorkers: &n}); err != nil {
+		return fmt.Errorf("cannot set the worker pool size: %w", err)
+	}
+	return nil
+}
+
+// writePersonalSetup records for the controller what the web app shows on
+// the first screen: the model, Git and the backup directory (no key).
+func writePersonalSetup(cfg *personal.Config, layout personal.Layout, m *personal.ResolvedModel) error {
+	st := httpapi.PersonalSetup{SchemaVersion: "0.1", Git: cfg.Agent.Git != "" && len(cfg.GitHosts) > 0, GitHosts: append([]string{}, cfg.GitHosts...), BackupDir: backupDirOf(cfg)}
+	if m != nil {
+		st.Model = &httpapi.SetupModel{ID: m.ID, Probe: personal.ModelProbeResult(layout, m)}
+	}
+	raw, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	return layout.WriteRunFile(httpapi.PersonalSetupFile, append(raw, '\n'))
 }
 
 // Listen ports tried when the default is busy and listen is not configured.
@@ -402,8 +453,16 @@ type rootGrant struct {
 // source roots are immutable.
 func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *personal.Config, user string, out io.Writer) ([]rootGrant, error) {
 	var roots []rootGrant
-	for _, r := range cfg.SourceRoots {
+	for i := range cfg.SourceRoots {
+		r := cfg.SourceRoots[i]
 		rec, err := s.SourceRootByLabel(ctx, r.Label)
+		for n := 2; r.Implicit && err == nil && rec.Path != r.Path; n++ {
+			// The implicit home root keeps the first free label whose
+			// registered path is the home directory (the home directory moved).
+			r.Label = fmt.Sprintf("home-%d", n)
+			cfg.SourceRoots[i].Label = r.Label
+			rec, err = s.SourceRootByLabel(ctx, r.Label)
+		}
 		switch {
 		case errors.Is(err, domain.ErrNotFound):
 			if st, err := os.Stat(r.Path); err != nil || !st.IsDir() {
@@ -503,8 +562,17 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	}
 	for _, r := range roots {
 		args = append(args, "--source-root", r.ID+"="+r.Path)
-		if r.RepositoryCode {
-			args = append(args, "--repo-code-source-root", r.ID)
+	}
+	// Each project's own choices decide whether its source goes to the
+	// model and whether its build scripts run, for folders and Git alike.
+	args = append(args, "--project-analysis-policy")
+	// A project folder must not hold CODEYE's own data, however it was
+	// registered.
+	args = append(args, "--protected-dir", layout.Root, "--protected-dir", backupDirOf(cfg))
+	if a.Git != "" && len(cfg.GitHosts) > 0 {
+		args = append(args, "--git", a.Git)
+		for _, h := range cfg.GitHosts {
+			args = append(args, "--git-host", h)
 		}
 	}
 	if a.Go != "" {
@@ -524,9 +592,8 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	if a.PythonBothTypeCheckers {
 		args = append(args, "--python-both-type-checkers")
 	}
-	// The model, its credential file and the per-root model-review grants
-	// (personal_model.go).
-	args = append(args, modelAgentArgs(cfg, layout, roots)...)
+	// The model and its credential file (personal_model.go).
+	args = append(args, modelAgentArgs(cfg, layout)...)
 	limits := cfg.Quota.NodeLimits()
 	areas := make([]string, 0, len(limits))
 	for area := range limits {

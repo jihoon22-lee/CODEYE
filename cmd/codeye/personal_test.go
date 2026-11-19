@@ -30,7 +30,9 @@ func TestPersonalExampleConfigParses(t *testing.T) {
 }
 
 // Personal mode (docs/OPERATIONS.md#up-open-start-stop-status): codeye start turns the configuration into the agent's
-// argv: autoscale, per-root grants, tools, model and storage quota. No
+// argv: autoscale, roots, the per-project analysis policy, git, tools,
+// model and storage quota. The root-level repository_code and model_review
+// of older configurations no longer produce per-root grants. No
 // database URL or token value is ever in it (only the token file path).
 func TestPersonalAgentArgv(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -38,7 +40,7 @@ func TestPersonalAgentArgv(t *testing.T) {
 	}
 	raw := `{"schema_version":"0.1","state_dir":"/srv/codeye/state","database":{"mode":"external"},
 "source_roots":[{"label":"work","path":"/srv/src","repository_code":true,"model_review":true}],
-"agent":{"max_workers":3,"go":"/usr/local/go/bin/go","tools":{"staticcheck":"/opt/sc"},
+"agent":{"max_workers":3,"go":"/usr/local/go/bin/go","git":"/usr/bin/git","tools":{"staticcheck":"/opt/sc"},
 "model":{"opencode":"/opt/opencode","name":"provider/model-a","relay_file":"/srv/relay.json","review_pack":"review-r1","review_max_calls":50}},
 "quota":{"logs_bytes":100,"workspace_bytes":200,"artifacts_bytes":300}}`
 	cfg, err := personal.Parse([]byte(raw), knownTools())
@@ -51,9 +53,9 @@ func TestPersonalAgentArgv(t *testing.T) {
 	argv := agentArgv(cfg, layout, []rootGrant{{SourceRoot: cfg.SourceRoots[0], ID: "root-1"}}, true)
 	got := strings.Join(argv, " ")
 	want := "agent --controller http://127.0.0.1:7331 --state-dir /srv/codeye/state/agent --name personal --autoscale --max-workers 3 --toolchain-path /usr/bin:/bin --advertise-without-baseline" +
-		" --enroll-token-file /srv/codeye/state/run/enroll-token --source-root root-1=/srv/src --repo-code-source-root root-1" +
+		" --enroll-token-file /srv/codeye/state/run/enroll-token --source-root root-1=/srv/src --project-analysis-policy --protected-dir /srv/codeye/state --protected-dir /srv/codeye/state-backups --git /usr/bin/git --git-host github.com" +
 		" --go /usr/local/go/bin/go --staticcheck /opt/sc --opencode /opt/opencode --model provider/model-a --model-relay-file /srv/relay.json --review-pack review-r1 --review-max-calls 50" +
-		" --model-source-root root-1 --storage-quota logs=100 --storage-quota workspace=200 --storage-log-dir /srv/codeye/state/logs"
+		" --storage-quota logs=100 --storage-quota workspace=200 --storage-log-dir /srv/codeye/state/logs"
 	if got != want {
 		t.Fatalf("argv\n got %s\nwant %s", got, want)
 	}

@@ -393,6 +393,20 @@ func ModelProbeDue(layout Layout, m *ResolvedModel) bool {
 	return json.Unmarshal(raw, &p) != nil || p.Fingerprint != m.fingerprint()
 }
 
+// ModelProbeResult is the recorded probe outcome of m's configuration:
+// "verified", "failed", or "not_probed" when none matches it.
+func ModelProbeResult(layout Layout, m *ResolvedModel) string {
+	raw, err := os.ReadFile(layout.ModelProbeRecord())
+	var p modelProbe
+	if err != nil || json.Unmarshal(raw, &p) != nil || p.Fingerprint != m.fingerprint() {
+		return "not_probed"
+	}
+	if p.Verified {
+		return "verified"
+	}
+	return "failed"
+}
+
 // RecordModelProbe stores the outcome of a probe of m.
 func RecordModelProbe(layout Layout, m *ResolvedModel, verified bool, reason string) error {
 	data, err := json.Marshal(modelProbe{SchemaVersion: recordSchema, Fingerprint: m.fingerprint(), Verified: verified, Reason: reason})

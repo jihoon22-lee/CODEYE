@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Api, Project, ProjectPage, Provider, SourceRoot } from './api';
+import type { Api, Project, ProjectPage, Provider, Setup, SourceRoot } from './api';
+import { QuickStart } from './QuickStart';
 import { describeError, formatClock, isTerminalRun, roleLabel, shorten, type ErrorText } from './format';
 import { createPoller, type Poller } from './poller';
 import { LastReportLink, ProjectActivity } from './StageView';
@@ -57,6 +58,19 @@ export function mergeFirstPage(prev: Project[], first: Project[]): Project[] {
 export function ProjectsView({ api, userId, idempotency, link }: Props) {
   const roots = useLookup<SourceRoot>(useCallback(signal => api.listSourceRoots(signal), [api]));
   const providers = useLookup<Provider>(useCallback(signal => api.listProviders(signal), [api]));
+  // Personal mode offers the one-field start; the setup also feeds the improvement hints.
+  const setupLookup = useLookup<Setup>(useCallback(signal => api.getSetup(signal).then(s => [s]), [api]));
+  const setup = setupLookup.items[0] ?? null;
+  const personal = setup?.mode === 'personal';
+  // The run to open in the selected project: a deep link's, then the one the quick start requested.
+  const [opened, setOpened] = useState<{ project: string; run: string } | null>(link?.project && link.run ? { project: link.project, run: link.run } : null);
+  // After the quick start the run panel is brought into view (it sits below the forms).
+  const [started, setStarted] = useState(0);
+  useEffect(() => {
+    if (started === 0) return;
+    const id = setTimeout(() => document.getElementById('run-title')?.scrollIntoView?.({ block: 'start' }), 0);
+    return () => clearTimeout(id);
+  }, [started]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,17 +164,21 @@ export function ProjectsView({ api, userId, idempotency, link }: Props) {
       <section className="panel" aria-labelledby="create-title">
         <h2 id="create-title" className="visually-hidden">{p.createTitle}</h2>
         {(roots.error || providers.error) && <p role="alert" className="error">{p.lookupFailed} {(roots.error ?? providers.error)!.message}</p>}
-        <ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={project => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); }} />
+        {personal && <QuickStart api={api} userId={userId} idempotency={idempotency} setup={setup} providers={providers.items}
+          onStarted={(project, run) => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setOpened({ project: project.id, run }); setSelectedId(project.id); setStarted(n => n + 1); wake(); }} />}
+        {personal
+          ? <details><summary>{p.otherForm}</summary><ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={project => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); }} /></details>
+          : <ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={project => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); }} />}
       </section>
     </div>
-    {selected && <ProjectDetail key={selected.id} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)}
-      initialRun={link?.project === selected.id ? link.run : null} />}
+    {selected && <ProjectDetail key={`${selected.id}:${opened?.project === selected.id ? opened.run : ''}`} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)}
+      setup={setup} initialRun={opened?.project === selected.id ? opened.run : null} />}
   </>;
 }
 
 type DetailTab = 'run' | 'members' | 'audit';
 
-function ProjectDetail({ api, userId, project, idempotency, source, onRunChange, initialRun }: { api: Api; userId: string; project: Project; idempotency: Idempotency; source: string; onRunChange: () => void; initialRun: string | null }) {
+function ProjectDetail({ api, userId, project, idempotency, source, onRunChange, initialRun, setup }: { api: Api; userId: string; project: Project; idempotency: Idempotency; source: string; onRunChange: () => void; initialRun: string | null; setup: Setup | null }) {
   const [openRun, setOpenRun] = useState<string | null>(initialRun);
   const [chosen, setChosen] = useState<DetailTab>('run');
   // The audit tab exists only for the owner and managers; a lost role falls back to the run tab.
@@ -192,7 +210,7 @@ function ProjectDetail({ api, userId, project, idempotency, source, onRunChange,
       {tabs.map(x => <button key={x} type="button" aria-current={tab === x ? 'page' : undefined} onClick={() => setChosen(x)}>{t.accounts.tabs[x]}</button>)}
     </nav>
     {tab === 'run' && <>
-      <RunPanel api={api} userId={userId} project={project} idempotency={idempotency} openRunId={openRun} onRunChange={onRunChange} />
+      <RunPanel api={api} userId={userId} project={project} idempotency={idempotency} openRunId={openRun} onRunChange={onRunChange} setup={setup} />
       <SchedulePanel api={api} projectId={project.id} />
     </>}
     {tab === 'members' && <MembersPanel api={api} project={project} me={userId} onAccessChange={onRunChange} />}

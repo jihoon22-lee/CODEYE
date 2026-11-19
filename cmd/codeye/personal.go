@@ -97,10 +97,11 @@ func personalConfigPath(path string) (string, error) {
 
 // completeConfig fills what depends on this host and the running
 // installation: the controller's recorded address (when listen is not
-// configured it may have moved to a free port) and web_dir next to the
-// executable.
+// configured it may have moved to a free port), web_dir next to the
+// executable and the home directory as a readable folder.
 func completeConfig(cfg *personal.Config) personal.Layout {
 	layout := personal.Layout{Root: cfg.StateDir}
+	addHomeRoot(cfg)
 	if !cfg.ListenExplicit() {
 		if rec, err := layout.ReadRecord(personal.RoleController); err == nil && rec != nil && rec.Listen != "" {
 			cfg.Listen = rec.Listen
@@ -110,6 +111,34 @@ func completeConfig(cfg *personal.Config) personal.Layout {
 		cfg.WebDir = defaultWebDir()
 	}
 	return layout
+}
+
+// homeDir is the user's home directory (tests replace it).
+var homeDir = os.UserHomeDir
+
+// addHomeRoot adds $HOME as a readable folder of the personal user unless a
+// configured root already holds it, so any folder under the home directory
+// can be analyzed from the web UI by its path. The root is implicit: it is
+// not written to the configuration file. The state directory may lie inside
+// it; the agent refuses only a project that contains its data.
+func addHomeRoot(cfg *personal.Config) {
+	home, err := homeDir()
+	if err != nil || !filepath.IsAbs(home) {
+		return
+	}
+	if real, err := filepath.EvalSymlinks(home); err == nil {
+		home = real
+	}
+	home = filepath.Clean(home)
+	if home == string(filepath.Separator) || pathWithin(home, cfg.StateDir) || len(cfg.SourceRoots) >= 32 {
+		return
+	}
+	for _, r := range cfg.SourceRoots {
+		if r.Implicit || pathWithin(home, r.Path) {
+			return
+		}
+	}
+	cfg.SourceRoots = append(cfg.SourceRoots, personal.SourceRoot{Label: uniqueLabel(cfg, "home"), Path: home, Implicit: true})
 }
 
 // defaultWebDir is the built web app next to the executable: <exe dir>/web/dist
