@@ -7,7 +7,8 @@
 //
 //	snapshot   <state>/data/acquire-*/ except its workspace/ (copied source, manifest, git data)
 //	workspace  <state>/data/acquire-*/workspace and <state>/data/ws-* (attempt working copies)
-//	cache      <state>/workers/ (worker HOME, TMP and scratch: tool caches) and --go-mod-cache
+//	cache      <state>/workers/ (worker HOME, TMP and scratch: tool caches), <state>/cache/
+//	           (the shared dependency cache), --go-mod-cache and --dependency-cache-dir
 //	logs       the personal log directory (controller and agent logs)
 //	artifacts  the controller artifact store (serve --artifact-dir)
 package quota
@@ -52,8 +53,11 @@ func ValidArea(a string) bool { return ValidNodeArea(a) || a == Artifacts }
 type Layout struct {
 	AgentStateDir string
 	GoModCache    string
-	LogDir        string
-	ArtifactDir   string
+	// DependencyCache is the shared dependency cache (--dependency-cache-dir);
+	// the default <state>/cache is measured with AgentStateDir.
+	DependencyCache string
+	LogDir          string
+	ArtifactDir     string
 }
 
 // Usage is one area's measured size. Incomplete is set when some entry could
@@ -104,14 +108,18 @@ func Measure(l Layout, area string) (Usage, error) {
 			}
 		}
 	case Cache:
-		if l.AgentStateDir == "" && l.GoModCache == "" {
+		if l.AgentStateDir == "" && l.GoModCache == "" && l.DependencyCache == "" {
 			return u, ErrNotMeasured
 		}
+		var roots []string
 		if l.AgentStateDir != "" {
-			add(filepath.Join(l.AgentStateDir, "workers"), "")
+			roots = append(roots, filepath.Join(l.AgentStateDir, "workers"), filepath.Join(l.AgentStateDir, "cache"))
 		}
-		if l.GoModCache != "" {
-			add(l.GoModCache, "")
+		roots = append(roots, l.GoModCache, l.DependencyCache)
+		for i, r := range roots {
+			if r != "" && !nested(r, roots[:i]) {
+				add(r, "")
+			}
 		}
 	case Logs:
 		if l.LogDir == "" {
@@ -151,6 +159,20 @@ func Exceeded(l Layout, limits map[string]int64) ([]string, map[string]Usage) {
 	}
 	sort.Strings(out)
 	return out, usage
+}
+
+// nested reports whether p is one of roots or lies inside one, so a
+// directory configured inside another measured root is counted once.
+func nested(p string, roots []string) bool {
+	for _, r := range roots {
+		if r == "" {
+			continue
+		}
+		if rel, err := filepath.Rel(r, p); err == nil && (rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))) {
+			return true
+		}
+	}
+	return false
 }
 
 // dirSize sums regular-file and symlink sizes under path (Lstat; links are

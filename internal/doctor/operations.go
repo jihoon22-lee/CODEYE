@@ -73,6 +73,9 @@ func operations(cfg *personal.Config, now time.Time) *Operations {
 	layout := personal.Layout{Root: cfg.StateDir}
 	ops := &Operations{Storage: []AreaStatus{}}
 	l := quota.Layout{AgentStateDir: layout.AgentDir(), GoModCache: cfg.Agent.GoModCache, LogDir: layout.LogDir(), ArtifactDir: layout.ArtifactDir()}
+	if d := cfg.Agent.Dependencies; d != nil {
+		l.DependencyCache = d.CacheDir
+	}
 	for _, area := range quota.Areas {
 		a := AreaStatus{Area: area, Status: AreaNoLimit, Enforcement: "claim_refusal_node_heartbeat"}
 		if area == quota.Artifacts {

@@ -105,6 +105,27 @@ type Hello struct {
 	// AdvertiseWithoutBaseline: advertise the analysis capability even when no
 	// baseline analyzer is usable; its tasks end unsupported (personal mode).
 	AdvertiseWithoutBaseline bool `json:"advertise_without_baseline,omitempty"`
+
+	// Dependencies is the node operator's dependency fetch configuration
+	// (--dependency-fetch and its options, docs/ARCHITECTURE.md#의존성-준비);
+	// absent when the operator did not turn fetching on.
+	Dependencies *Dependencies `json:"dependencies,omitempty"`
+}
+
+// Dependencies configures the dependency tasks of a worker.
+type Dependencies struct {
+	// CacheRoot is the absolute shared dependency cache.
+	CacheRoot string `json:"cache_root"`
+	// AgentStateDir locates the rest of the cache storage area for the
+	// quota check.
+	AgentStateDir string `json:"agent_state_dir"`
+	// GoProxy is the registry part of GOPROXY ("" = proxy.golang.org).
+	GoProxy          string `json:"go_proxy,omitempty"`
+	ModuleTimeoutS   int    `json:"module_timeout_s"`
+	TotalTimeoutS    int    `json:"total_timeout_s"`
+	MaxDownloadBytes int64  `json:"max_download_bytes"`
+	// CacheQuotaBytes is the cache storage area limit (0 = none).
+	CacheQuotaBytes int64 `json:"cache_quota_bytes"`
 }
 
 // AttemptRef identifies the attempt a message belongs to.
@@ -149,6 +170,10 @@ type Job struct {
 	// (docs/ANALYZERS.md#저장소-코드-실행-허가): the operator's per-root grant, or the project's
 	// choice under --project-analysis-policy. Absent means not granted.
 	AllowRepositoryCode bool `json:"allow_repository_code,omitempty"`
+	// AllowDependencyFetch: the dependency tasks may fetch this job's
+	// third-party dependencies (the operator's --dependency-fetch and the
+	// project's fetch_dependencies choice). Absent means no fetching.
+	AllowDependencyFetch bool `json:"allow_dependency_fetch,omitempty"`
 	Header
 	Attempt   AttemptRef      `json:"attempt"`
 	Profile   string          `json:"profile"`

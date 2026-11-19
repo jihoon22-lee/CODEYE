@@ -13,22 +13,59 @@ type AnalysisChoices struct {
 	// RunBuildScripts lets analyzers that execute repository-controlled code
 	// (build scripts, cargo check) run (docs/ANALYZERS.md#저장소-코드-실행-허가).
 	RunBuildScripts bool `json:"run_build_scripts"`
+	// FetchDependencies lets the dependency tasks fetch the third-party
+	// dependencies the project's manifests and lockfiles name, so the
+	// analyzers that resolve imports can analyze
+	// (docs/ARCHITECTURE.md#의존성-준비). It also needs the node operator's
+	// switch (--dependency-fetch). Absent means on: older records and
+	// clients that do not know the field keep the default.
+	FetchDependencies bool `json:"fetch_dependencies"`
+}
+
+// UnmarshalJSON decodes a choices object leniently (the node job and older
+// controllers): an absent fetch_dependencies is on, absent booleans of the
+// other two are off as before.
+func (c *AnalysisChoices) UnmarshalJSON(raw []byte) error {
+	var in struct {
+		SendSourceToModel bool  `json:"send_source_to_model"`
+		RunBuildScripts   bool  `json:"run_build_scripts"`
+		FetchDependencies *bool `json:"fetch_dependencies"`
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return err
+	}
+	*c = AnalysisChoices{SendSourceToModel: in.SendSourceToModel, RunBuildScripts: in.RunBuildScripts, FetchDependencies: in.FetchDependencies == nil || *in.FetchDependencies}
+	return nil
+}
+
+// Stored is the form written into the project configuration: the field
+// added after the first two is stored only when it differs from its
+// default, so a reader that knows only the first two still decodes the
+// object.
+func (c AnalysisChoices) Stored() map[string]bool {
+	m := map[string]bool{"send_source_to_model": c.SendSourceToModel, "run_build_scripts": c.RunBuildScripts}
+	if !c.FetchDependencies {
+		m["fetch_dependencies"] = false
+	}
+	return m
 }
 
 // DefaultAnalysisChoices apply to a project that recorded none. A local
-// folder is the user's own code: both on. A Git repository may be anyone's:
-// its source goes to the model, but its build scripts do not run until the
-// project turns that on.
+// folder is the user's own code: everything on. A Git repository may be
+// anyone's: its source goes to the model and its dependencies are fetched,
+// but its build scripts do not run until the project turns that on.
 func DefaultAnalysisChoices(kind SourceKind) AnalysisChoices {
-	return AnalysisChoices{SendSourceToModel: true, RunBuildScripts: kind != SourceGit}
+	return AnalysisChoices{SendSourceToModel: true, RunBuildScripts: kind != SourceGit, FetchDependencies: true}
 }
 
-// ParseAnalysisChoices strictly decodes an "analysis" object; both fields
-// are required.
+// ParseAnalysisChoices strictly decodes an "analysis" object;
+// send_source_to_model and run_build_scripts are required,
+// fetch_dependencies is optional (absent = on).
 func ParseAnalysisChoices(raw []byte) (AnalysisChoices, error) {
 	var in struct {
 		SendSourceToModel *bool `json:"send_source_to_model"`
 		RunBuildScripts   *bool `json:"run_build_scripts"`
+		FetchDependencies *bool `json:"fetch_dependencies"`
 	}
 	if err := DecodeStrict(raw, &in); err != nil {
 		return AnalysisChoices{}, err
@@ -36,13 +73,13 @@ func ParseAnalysisChoices(raw []byte) (AnalysisChoices, error) {
 	if in.SendSourceToModel == nil || in.RunBuildScripts == nil {
 		return AnalysisChoices{}, invalidf("analysis needs send_source_to_model and run_build_scripts")
 	}
-	return AnalysisChoices{SendSourceToModel: *in.SendSourceToModel, RunBuildScripts: *in.RunBuildScripts}, nil
+	return AnalysisChoices{SendSourceToModel: *in.SendSourceToModel, RunBuildScripts: *in.RunBuildScripts, FetchDependencies: in.FetchDependencies == nil || *in.FetchDependencies}, nil
 }
 
 // AnalysisChoicesOf reads the stored "analysis" object of a project
 // configuration whose source is of kind; absent (or JSON null) yields the
 // defaults of that kind. A stored object that does not decode is treated as
-// both off.
+// everything off.
 func AnalysisChoicesOf(raw json.RawMessage, kind SourceKind) AnalysisChoices {
 	if len(raw) == 0 || string(raw) == "null" {
 		return DefaultAnalysisChoices(kind)

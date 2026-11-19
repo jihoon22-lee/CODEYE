@@ -109,6 +109,33 @@ type Agent struct {
 	// absent or true means detect. agent.go, agent.tools and the other fields
 	// above always win over what detection finds.
 	AutoDetect *bool `json:"auto_detect,omitempty"`
+	// Dependencies configures dependency fetching (codeye agent
+	// --dependency-fetch and its options, docs/ARCHITECTURE.md#의존성-준비).
+	// Absent means on with the defaults; each project can still turn it off.
+	Dependencies *Dependencies `json:"dependencies,omitempty"`
+}
+
+// Dependencies are the local agent's dependency fetch options. Zero values
+// are the defaults.
+type Dependencies struct {
+	// Enabled turns fetching off for every project when false.
+	Enabled *bool `json:"enabled,omitempty"`
+	// CacheDir is the shared dependency cache (default
+	// <state>/agent/cache/deps).
+	CacheDir string `json:"cache_dir,omitempty"`
+	// GoProxy is the Go module registry (default https://proxy.golang.org).
+	GoProxy string `json:"go_proxy,omitempty"`
+	// TimeoutSeconds bounds one module (default 600), TotalTimeoutSeconds
+	// one run (default 1200), MaxDownloadBytes one module's download
+	// (default 2 GiB, soft).
+	TimeoutSeconds      int   `json:"timeout_seconds,omitempty"`
+	TotalTimeoutSeconds int   `json:"total_timeout_seconds,omitempty"`
+	MaxDownloadBytes    int64 `json:"max_download_bytes,omitempty"`
+}
+
+// DependenciesEnabled reports whether the local agent fetches dependencies.
+func (a Agent) DependenciesEnabled() bool {
+	return a.Dependencies == nil || a.Dependencies.Enabled == nil || *a.Dependencies.Enabled
 }
 
 // AutoDetectEnabled reports whether tools are detected on start.
@@ -365,6 +392,17 @@ func (c *Config) validate(knownTools []string) error {
 	for name, p := range map[string]string{"agent.go": a.Go, "agent.git": a.Git, "agent.go_mod_cache": a.GoModCache} {
 		if p != "" && !absClean(p) {
 			return fmt.Errorf("%s must be an absolute, clean path", name)
+		}
+	}
+	if d := a.Dependencies; d != nil {
+		if d.CacheDir != "" && !absClean(d.CacheDir) {
+			return errors.New("agent.dependencies.cache_dir must be an absolute, clean path")
+		}
+		if d.GoProxy != "" && !strings.HasPrefix(d.GoProxy, "https://") && !strings.HasPrefix(d.GoProxy, "http://") && !strings.HasPrefix(d.GoProxy, "file://") {
+			return errors.New("agent.dependencies.go_proxy must be an http(s):// or file:// URL")
+		}
+		if d.TimeoutSeconds < 0 || d.TotalTimeoutSeconds < 0 || d.MaxDownloadBytes < 0 {
+			return errors.New("agent.dependencies limits must not be negative")
 		}
 	}
 	known := map[string]bool{}

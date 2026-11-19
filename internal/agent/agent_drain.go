@@ -55,7 +55,7 @@ func (ag *Agent) storageQuotaExceeded() []string {
 	if !ag.quotaChecked.IsZero() && time.Since(ag.quotaChecked) < storageMeasureEvery {
 		return ag.quotaExceeded
 	}
-	layout := quota.Layout{AgentStateDir: ag.cfg.StateDir, GoModCache: ag.cfg.GoModCache, LogDir: ag.cfg.StorageLogDir}
+	layout := quota.Layout{AgentStateDir: ag.cfg.StateDir, GoModCache: ag.cfg.GoModCache, DependencyCache: ag.cfg.DependencyCacheDir, LogDir: ag.cfg.StorageLogDir}
 	exceeded, _ := quota.Exceeded(layout, ag.cfg.StorageQuota)
 	if strings.Join(exceeded, ",") != strings.Join(ag.quotaExceeded, ",") {
 		if len(exceeded) > 0 {

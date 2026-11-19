@@ -19,6 +19,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 	analyzerpack "github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/deps"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	workerrun "github.com/jihoon22-lee/CODEYE/internal/worker/run"
@@ -86,6 +87,14 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	git := fs.String("git", "", "")
 	goExe := fs.String("go", "", "")
 	goModCache := fs.String("go-mod-cache", "", "")
+	// Dependency fetching (docs/ARCHITECTURE.md#의존성-준비): the operator's
+	// switch, the shared cache, the Go registry and the budgets.
+	depFetch := fs.Bool("dependency-fetch", false, "")
+	depCache := fs.String("dependency-cache-dir", "", "")
+	goProxy := fs.String("go-proxy", "", "")
+	depTimeout := fs.Duration("dependency-timeout", 0, "")
+	depTotal := fs.Duration("dependency-total-timeout", 0, "")
+	depMax := fs.Int64("dependency-max-bytes", 0, "")
 	// One flag per analyzer tool of this build (--staticcheck PATH) and per
 	// shared toolchain (--node PATH, docs/ANALYZERS.md#도구-경로). Both travel in the hello's
 	// analyzer_tools map; toolchain names are reserved there.
@@ -185,6 +194,8 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		Log:                       stderr,
 	}
 	cfg.AdvertiseWithoutBaseline = *advertiseAlways
+	cfg.DependencyFetch, cfg.DependencyCacheDir, cfg.GoProxy = *depFetch, *depCache, *goProxy
+	cfg.DependencyTimeout, cfg.DependencyTotalTimeout, cfg.DependencyMaxBytes = *depTimeout, *depTotal, *depMax
 	cfg.ProjectAnalysisPolicy = *projectPolicy
 	for _, d := range protectedDirs {
 		if !filepath.IsAbs(d) {
@@ -223,7 +234,8 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 // advertises no capability and is never leased, unless the operator asked for
 // it with --advertise-without-baseline (then the tasks of unusable tools end
 // unsupported). The deep-review profile is
-// discovery (env.discover, docs.discover) → the analyzer composite (go vet,
+// discovery (env.discover, docs.discover) → dependency tasks (deps.*, when
+// the operator and the project allow fetching) → the analyzer composite (go vet,
 // staticcheck, ruff, mypy, pyright, bandit in catalog order; unconfigured
 // tools plan unsupported tasks) → review roles. Discovery observes the configured go and shared
 // toolchains (--node) and every configured analyzer tool. The test-only fixture handler is left
@@ -241,6 +253,16 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 		return nil, nil, errors.New("review call ceiling out of range")
 	}
 	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot, ToolPath: h.ToolPath}
+	var depCfg deps.Config
+	if d := h.Dependencies; d != nil {
+		if !filepath.IsAbs(d.CacheRoot) {
+			return nil, nil, errors.New("dependency cache root must be absolute")
+		}
+		cfg.DependencyCacheRoot = d.CacheRoot
+		depCfg = deps.Config{CacheRoot: d.CacheRoot, AgentStateDir: d.AgentStateDir, GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, GoProxy: d.GoProxy,
+			ModuleTimeout: time.Duration(d.ModuleTimeoutS) * time.Second, TotalTimeout: time.Duration(d.TotalTimeoutS) * time.Second,
+			MaxDownloadBytes: d.MaxDownloadBytes, CacheQuotaBytes: d.CacheQuotaBytes}
+	}
 	cfg.AdvertiseWithoutBaseline = h.AdvertiseWithoutBaseline
 	hs, missing := builtin.Handlers(ctx, cfg, runner)
 	for i, handler := range hs {
@@ -254,8 +276,14 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 			if pack == review.PackRole {
 				reviewed = review.RoleHandler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
 			}
+			// Dependency tasks run after discovery and before the analyzers;
+			// review plans only through the static handler and never sees them.
+			fetched, err := deps.Wrap(reviewed, depCfg, deps.Fetchers()...)
+			if err != nil {
+				return nil, nil, err
+			}
 			observer := discovery.ProbeObserver{GoExecutable: h.GoExecutable, Analyzers: builtin.Probes(cfg), Toolchains: builtin.ToolchainProbes(cfg)}
-			wrapped, err := discovery.Wrap(reviewed, discovery.Config{Observer: observer})
+			wrapped, err := discovery.Wrap(fetched, discovery.Config{Observer: observer})
 			if err != nil {
 				return nil, nil, err
 			}

@@ -301,7 +301,7 @@ func (s *Store) RegisterProject(ctx context.Context, actor string, in ProjectReg
 		}
 		config := map[string]any{"config_version": 1, "source": in.Source}
 		if in.Analysis != nil {
-			config["analysis"] = *in.Analysis
+			config["analysis"] = in.Analysis.Stored()
 		}
 		if strings.TrimSpace(in.Description) != "" {
 			config["description"] = in.Description

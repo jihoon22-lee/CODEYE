@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/deps/depdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -98,6 +100,44 @@ func (h *Handler) GoRoot() string { return h.goroot }
 
 // ModCache returns the resolved operator module cache ("" if none).
 func (h *Handler) ModCache() string { return h.modcache }
+
+// Limitations of a run that read a dependency cache prepared in this attempt.
+const (
+	LimDependenciesPrepared          = "dependencies_prepared"
+	LimDependenciesPartiallyPrepared = "dependencies_partially_prepared"
+)
+
+// moduleCache is the module cache a Go analyzer task reads: the dependency
+// cache this attempt's deps.go task prepared for the module, or else the
+// operator's cache ("" = none). The record is read and validated again; no
+// record, an invalid one, or one that prepared nothing leaves today's cache.
+func (h *Handler) moduleCache(job analysis.Job, key, name, moduleDir string) (dir string, prepared bool, limitation string) {
+	if h.cfg.DependencyCacheRoot == "" || !filepath.IsAbs(h.cfg.DependencyCacheRoot) {
+		return h.modcache, false, ""
+	}
+	index := map[string]string{}
+	for _, e := range job.Snapshot.Manifest.Entries {
+		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" {
+			index[e.Path] = e.SHA256
+		}
+	}
+	want := depdoc.Expect{Snapshot: job.Snapshot.Digest, RunID: job.RunID, AttemptID: job.AttemptID, Lookup: func(p string) (string, bool) { s, ok := index[p]; return s, ok }}
+	rec, ok := depdoc.ReadForModule(job.Scratch, depdoc.TaskKey("go", strings.TrimPrefix(key, name)), "go", moduleDir, want)
+	if !ok || !rec.Usable() {
+		return h.modcache, false, ""
+	}
+	limitation = LimDependenciesPrepared
+	if rec.State != depdoc.StatePrepared {
+		limitation = LimDependenciesPartiallyPrepared
+	}
+	return filepath.Join(h.cfg.DependencyCacheRoot, filepath.FromSlash(*rec.Cache.Key)), true, limitation
+}
+
+// ModuleCache is moduleCache for the other Go analyzers: key is the task key
+// and name the analyzer's key name (staticcheck).
+func (h *Handler) ModuleCache(job analysis.Job, key, name, moduleDir string) (string, bool, string) {
+	return h.moduleCache(job, key, name, moduleDir)
+}
 
 // ResolvedGo returns the resolved go executable.
 func (h *Handler) ResolvedGo() string { return h.resolvedGo }
