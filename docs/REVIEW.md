@@ -100,7 +100,6 @@
 | `no_environment_gap` | 모든 선언이 관측과 일치해 환경 해석 생략 | 아니오 |
 | `secret_screen_failed` | 비밀값 분석이 실행됐지만 결과를 쓸 수 없음(아래 비밀값 선별) | 아니오 |
 | `no_review_scope` | slice의 파일을 overview가 이미 보냈거나 모두 보류·읽기 불가([모듈 단위 검토 분할](#모듈-단위-검토-분할)) | 아니오 |
-| `secret_screen_unavailable` | 완료된 비밀값 선별이 없어 `review.scope`와 slice를 보내지 않음 | 아니오 |
 
 필수 여부는 계획 시 정한다. 문서가 없어 생략한 문서 역할을 모델 검토 성공으로 세지 않는다. 필수 모델 작업이 실패했으면 도구 결과가 남아도 검토 전체를 완료로 올리지 않는다. 진행 단계 판정에서 이 생략을 어떻게 셈하는지는 [구조](ARCHITECTURE.md)에 있다.
 
@@ -229,7 +228,8 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ### 호출 상한과 승인
 
-- 단위는 모델 호출이고 attempt마다의 상한이다. `codeye agent --review-max-calls N`(기본 33, 15~207), Hello `review_max_calls`, 개인 설정 `agent.model.review_max_calls`로 정한다. run이나 profile로 바꿀 수 없다(팩 선택과 같다). review-r1에만 적용하고 review-v1은 그대로다.
+- 단위는 모델 호출이고 attempt마다의 상한이다. `codeye agent --review-max-calls N`(기본 99, 15~207), Hello `review_max_calls`, 개인 설정 `agent.model.review_max_calls`로 정한다. run이나 profile로 바꿀 수 없다(팩 선택과 같다). review-r1에만 적용하고 review-v1은 그대로다.
+- 기본 99는 중간 규모 저장소의 대부분을 기본 설정으로 검토하기 위한 값이다(처음 기본값 33은 유료 회귀 실행에서 파일럿 Go 모듈 67개 파일 중 34개를 28회 호출로 검토했다). 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 상한을 낮춘다. 15는 전체 역할만 실행하고 slice를 승인하지 않는다([안내서](GUIDE.md)).
 - 전체 역할 다섯 개는 최대 15회(5 × 3)를 쓰고 잘리지 않는다. 그래서 최솟값이 15다. 전체 역할이 모든 slice보다 먼저 실행되므로 그 몫을 따로 예약할 필요가 없다.
 - 계수는 attempt 안에서만 한다. attempt 하나는 worker 프로세스 하나이고 task를 차례로 실행한다. 모든 role-pack 호출은 보내기 전에 attempt scratch의 계수 파일에 한 줄을 쓴다. 계수를 쓰지 못한 호출은 보내지 않는다(`review_call_count_failed`). 전역 상태나 프로세스 사이 상태는 없다. 한 attempt 안에서 slice를 병렬로 실행하려면 공유 계수가 필요하다.
 - 승인은 계획 순서대로, 실제 사용량으로 한다. slice k의 investigate를 시작하기 전에 `상한 − 사용한 호출 ≥ 6`(investigate·verify 한 쌍의 최악 3 + 3)이면 승인한다. 처음 거절된 slice와 그 뒤의 모든 slice는 호출과 기록 없이 `budget_exhausted`(`review_budget_exhausted`)로 끝나고 짝 verify도 같다. 결정은 attempt scratch에 남기고 verify가 따른다.
@@ -238,22 +238,22 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 | 상한 | 한 번에 끝나는 task(1회) | 모든 task가 3회 | 최악 사례 사전 승인 |
 |---|---|---|---|
 | 15 | coverage fixture의 slice 7개 중 3개 | 0개 | 0개 |
-| 33 | 7개 모두 | 3개 | 3개 |
+| 99 | 7개 모두 | 7개 모두 | 7개 모두 |
 | 207 | 7개 모두 | 7개 모두 | 7개 |
 
 (`TestSliceAdmissionKeepsTheCeiling`, [`fixtures/modules/coverage/input`](../fixtures/modules/coverage/input). environment는 차이가 없어 호출하지 않는다.)
 
 ### 비밀값 선별과 판단 순서
 
-- slice는 저장소를 몇 배 더 보낸다. 그래서 `review.scope`와 모든 slice는 완료된 비밀값 선별이 있을 때만 실행한다. 선별이 계획되지 않았거나 미실행이거나 쓸 수 없으면 `skipped_policy`(`secret_screen_unavailable`)이고 요청을 보내지 않는다. 전체 역할은 기존 규칙(미선별 기록 또는 `secret_screen_failed`)을 따른다.
+- `review.scope`와 slice는 전체 역할과 같은 선별 규칙을 따른다. 선별이 끝났으면 보고된 파일을 `withheld`로 빼고, 선별이 계획되지 않았거나 실행되지 않았으면(gitleaks 미설정) 기본 읽기 필터만 거친 입력으로 실행한다. 이때 범위 산출물은 `screen: not_screened`이고 범위 산출물과 모든 slice 기록이 `model_input_not_secret_screened`를 싣는다. 보고서는 비밀정보 절 `model_input`을 미선별로 보이고 공백 `model_input_not_screened`를 남긴다. 선별이 실행됐지만 결과를 쓸 수 없으면 `skipped_policy`(`secret_screen_failed`)이고 요청을 보내지 않는다.
 - 선별은 task마다 시작할 때 다시 읽는다. slice 발췌도 같은 읽기 경로를 지나므로 보류 파일과 민감값 패턴 필터를 똑같이 받는다.
-- slice task의 판단 순서: 모델 전송 허가 → 선별 → 범위 산출물을 읽을 수 있음(아니면 `dependency_failed`) → 보낼 파일이 남음(아니면 `no_review_scope`) → 호출 상한. 보낼 파일이 없는 slice는 상한이 다해도 `no_review_scope`다.
+- slice task의 판단 순서: 모델 전송 허가 → 선별 결과를 쓸 수 있음(아니면 `secret_screen_failed`) → 범위 산출물을 읽을 수 있음(아니면 `dependency_failed`) → 보낼 파일이 남음(아니면 `no_review_scope`) → 호출 상한. 보낼 파일이 없는 slice는 상한이 다해도 `no_review_scope`다.
 
 ### 범위 산출물
 
 `review.scope`는 모델을 호출하지 않는다. overview investigate 기록(수락이든 실패든, 요청을 보냈을 때)의 context 발췌에서 overview가 실제로 보낸 코드·테스트 파일을 읽고, 계획의 모든 파일을 선별과 읽기 필터로 다시 확인한 뒤 산출물 하나를 role `other`, media type `application/vnd.codeye.review-scope+json`으로 올린다. [스키마](../schemas/review-scope.schema.json) · [예시](../examples/review-r1/slices/scope.json)
 
-- 필드: `schema_version`(0.1), `kind`(`review_scope`), `pack`, `snapshot_manifest_digest`, `run_id`, `attempt_id`, `screen`(`applied`), `budget`(`max_calls`, `max_request_bytes`, `whole_run_max_calls` 15, `slice_reserve_calls` 6, `calls_before_slices`, `admission` `sequential_reserve`), `limits`, `upstream`(overview investigate 기록의 SHA-256), `modules[]`(`id`, `discovered`, `files_eligible`, `files_not_planned`), `overview`(`files`: P와 32개 뒤에서 overview가 보낸 파일, `offered`: overview가 보낸 경로), `slices[]`(`key`, `investigate_task`, `verify_task`, `modules`, `files`), `limitations`.
+- 필드: `schema_version`(0.1), `kind`(`review_scope`), `pack`, `snapshot_manifest_digest`, `run_id`, `attempt_id`, `screen`(`applied` 또는 `not_screened`. `not_screened`이면 `limitations`에 `model_input_not_secret_screened`가 있다), `budget`(`max_calls`, `max_request_bytes`, `whole_run_max_calls` 15, `slice_reserve_calls` 6, `calls_before_slices`, `admission` `sequential_reserve`), `limits`, `upstream`(overview investigate 기록의 SHA-256), `modules[]`(`id`, `discovered`, `files_eligible`, `files_not_planned`), `overview`(`files`: P와 32개 뒤에서 overview가 보낸 파일, `offered`: overview가 보낸 경로), `slices[]`(`key`, `investigate_task`, `verify_task`, `modules`, `files`), `limitations`.
 - 파일마다 `path`, `sha256`, `module`, `bound_bytes`, `planned_lines`, `planned_bytes`, `total_lines`, `state`. 상태는 `planned`(slice가 보낸다), `covered_by_overview`(overview가 보냈다), `withheld`(선별이 보류), `unreadable`(UTF-8 아님·NUL·민감값 패턴·빈 파일), `overview_not_sent`(P에 있지만 overview가 보내지 않음: 요청을 줄였거나 보내기 전에 실패)다. 적격 파일은 모두 정확히 한 곳에 있다. 계획하지 않은 파일은 목록 대신 모듈별 `files_not_planned`로 센다.
 - 승인된 slice 목록은 산출물에 없다. 산출물은 어떤 slice도 실행되기 전에 쓰이고 승인은 실행 중에 차례로 정해지므로, 승인 결과는 slice task 상태(`budget_exhausted`/`review_budget_exhausted`)에서 읽는다.
 - decoder(`record.DecodeScope`)는 경로와 blob을 스냅샷 manifest와 대조하고, 모듈별 수, `covered_by_overview`와 `offered`의 일치, 파일 중복을 검사한다.
@@ -324,7 +324,6 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 |---|---|
 | 모델 전송 미승인 | `skipped_policy`(`model_source_not_approved`) |
 | 비밀값 선별 결과를 쓸 수 없음 | `skipped_policy`(`secret_screen_failed`) |
-| 완료된 선별 없이 `review.scope`·slice | `skipped_policy`(`secret_screen_unavailable`) |
 | slice에 보낼 파일이 없음 | `skipped_policy`(`no_review_scope`) |
 | 호출 상한으로 slice 거절 | `budget_exhausted`(`review_budget_exhausted`) |
 | 호출 계수를 쓰거나 읽지 못함 | `failed`(`review_call_count_failed`) |

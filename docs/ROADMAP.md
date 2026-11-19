@@ -14,29 +14,16 @@
 
 ## 순서
 
-정리 작업을 먼저 하고, 그다음 여러 사용자·GitHub 연동·분산 운영 작업을 한다. CODEYE는 사내 전용이 아니므로 개인 사용과 GitHub.com 연동을 실제로 쓸 수 있는 수준까지 만든다.
+다음 작업은 여러 사용자·GitHub 연동·분산 운영이다. CODEYE는 사내 전용이 아니므로 개인 사용과 GitHub.com 연동을 실제로 쓸 수 있는 수준까지 만든다.
 
 | 작업 | 선행 |
 |---|---|
-| 검토 범위 확대 | 없음 |
-| 다중 사용자·권한 | 정리 작업 전체 |
+| 다중 사용자·권한 | 없음 |
 | GitHub 연결 | 다중 사용자·권한 |
 | PR·댓글 분석 | GitHub 연결 |
 | 다중 노드 검증 | 다중 사용자·권한. GitHub 연결·PR·댓글 분석과 병행 |
 | 폐쇄망 배포팩 | 다중 노드 검증 |
 | 운영 수용 | PR·댓글 분석, 폐쇄망 배포팩 |
-
-## 정리 작업
-
-### 검토 범위 확대
-
-지금 모델 검토는 한 run에서 적은 수의 파일만 본다. `review-r1` 조사 역할은 코드 파일 최대 8개·12,000바이트(`roleMaxCodeFiles`·`roleMaxCodeBytes`, [`internal/worker/review/rolepack_inputs.go`](../internal/worker/review/rolepack_inputs.go)), `review-v1` 코퍼스는 최대 6개(`maxFiles`, [`internal/worker/review/context.go`](../internal/worker/review/context.go))이고, 요청마다 40,000바이트 한도(`PromptBudget`, [`internal/worker/review/rolepack.go`](../internal/worker/review/rolepack.go))가 있다. 모듈 단위로 나누어 검토해 모델이 저장소의 더 많은 부분을 보게 한다.
-
-완료 조건:
-- 모듈마다 검토 task를 계획하고, 각 task의 입력 범위(모듈·파일·바이트)와 잘린 범위를 기록한다.
-- 보고서와 범위 원장이 검토한 모듈·파일과 검토하지 않은 범위를 구분한다. 모델에 보낸 파일 수를 검증 범위라고 계산하지 않는다.
-- 호출 수·비용 상한을 실행 전에 정하고 초과하면 남은 모듈을 미검토로 남긴다.
-- 기본 회귀 집합으로 회귀를 확인하고, 품질 향상 주장은 새 보류 사례로만 한다.
 
 ## 여러 사용자·GitHub 연동·분산 운영
 
@@ -126,7 +113,6 @@ PR 이벤트와 권한 있는 사용자의 댓글 명령(`@codeye analyze`, `@co
 |---|---|
 | Git 입력은 모델 검토를 승인할 방법이 없다. 승인은 로컬 source root 단위(`ModelSourceRoots`)뿐이라 Git 저장소 분석은 정적 분석 결과만 나온다. | GitHub 연결 (저장소별 모델 전송 승인) |
 | 개인 모드 `codeye start`가 에이전트에 Git 실행 파일·허용 호스트를 넘기지 않는다. Git 프로젝트는 에이전트를 직접 띄워야 한다. | GitHub 연결 |
-| 모듈 단위 slice와 모듈별 검토 장부(호출 상한 기본 33)는 가짜 upstream dry run까지만 확인했다. 실모델 회귀 실행과 품질 비교(새 보류 사례) 전이다. | 검토 범위 확대 |
 | `codeye doctor`는 모델·프로세스 제어 항목이 항상 미검증이라 종료 코드가 늘 1이다. | 운영 수용 |
 | 재시도는 저장 계층에만 있고 API·CLI·화면에서 부를 수 없다. `recovery_required`를 되돌리는 경로도 없다. | 운영 수용 |
 | `with-tests`·`focused` 프로필은 API가 받지만 워커가 실행하지 않는다. 시험 상태는 항상 미실행이다. | 후속 선택 작업 |

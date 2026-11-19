@@ -191,7 +191,7 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 | `--repo-code-source-root ID` | 그 local source root에서 저장소 코드를 실행하는 분석 작업을 허가한다. ID는 `--source-root` 매핑이 있어야 한다([분석기](ANALYZERS.md)). |
 | `--opencode`, `--model`, `--model-relay-file`, `--model-source-root` | 모델 실행과 root별 모델 전송 승인([검토](REVIEW.md)). |
 | `--review-pack` | 검토 팩. 기본 `review-r1`, 이전 기록 재현용 `review-v1`. 다른 값이나 빈 값은 사용 오류이고 기본값으로 대체하지 않는다. run 요청으로는 바꿀 수 없다([검토](REVIEW.md)). |
-| `--review-max-calls N` | review-r1의 attempt당 모델 호출 상한(기본 33, 15~207). 범위 밖이면 사용 오류다. 전체 역할 다섯 개가 최대 15회를 쓰고 남은 호출로 모듈 단위 slice를 차례로 허용한다. Hello `review_max_calls`로 워커에 전달되고 run 요청으로는 바꿀 수 없다([검토](REVIEW.md#모듈-단위-검토-분할)). |
+| `--review-max-calls N` | review-r1의 attempt당 모델 호출 상한(기본 99, 15~207). 상한을 다 쓰면 기본값 33일 때의 약 세 배 비용이 든다([안내서](GUIDE.md)). 범위 밖이면 사용 오류다. 전체 역할 다섯 개가 최대 15회를 쓰고 남은 호출로 모듈 단위 slice를 차례로 허용한다. Hello `review_max_calls`로 워커에 전달되고 run 요청으로는 바꿀 수 없다([검토](REVIEW.md#모듈-단위-검토-분할)). |
 | `--storage-quota AREA=BYTES`, `--storage-log-dir` | 노드 저장 영역 상한(`snapshot`, `workspace`, `cache`, `logs`, 영역마다 한 번)([운영](OPERATIONS.md)). |
 
 - 거부된 인자 값은 출력하지 않는다(자격증명이 들어 있을 수 있다).

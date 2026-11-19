@@ -475,7 +475,6 @@ task key와 단계의 대응:
 | `no_tool_observations` | 해석할 도구 관찰이 없어 진단 해석 생략 | 아니오 | 아니오 |
 | `no_environment_gap` | 모든 선언이 관측과 일치해 환경 해석 생략 | 아니오 | 아니오 |
 | `no_review_scope` | slice에 보낼 파일이 남지 않음(overview가 보냈거나 모두 보류·읽기 불가) | 아니오 | 아니오 |
-| `secret_screen_unavailable` | 완료된 비밀값 선별이 없어 범위와 slice를 보내지 않음(정책 제외) | 아니오 | 예 |
 
 필수 여부는 계획 때 정한다. 역할별 필수 규칙은 [검토](REVIEW.md)에 있다. 호출 상한으로 거절된 slice는 `budget_exhausted`(`review_budget_exhausted`)이고 다른 성공 task와 함께 있으면 단계를 `partial`로 남긴다. slice는 판정 필수가 아니므로 run 상태에는 영향이 없다.
 

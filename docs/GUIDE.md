@@ -175,7 +175,7 @@ re-enrolling the local agent: the configured source roots changed (previous stat
 - `relay_file`은 승인된 로컬 relay를 쓸 때만 넣는다. 이 저장소의 `scripts/model_budget_relay.py`는 예산 상한을 강제하는 QA 전용 relay이며 제품 구성요소가 아니다. 사용법은 그 파일의 머리말과 `--help`에 있다.
 - `model_review: true`인 root의 코드만 모델에 보낸다. 기본은 보내지 않음이다. 비밀값으로 선별된 파일은 보내지 않는다.
 - `review_pack`의 기본은 `review-r1`이다. 비워 두면 `review-r1`을 쓴다. `review-v1`은 이전 기록을 같은 조건으로 재현할 때만 고른다([검토](REVIEW.md)).
-- `review_max_calls`는 run 하나(시도 하나)가 쓸 수 있는 모델 호출 수의 상한이다. 비우면 33이고 15~207을 받는다. 처음 다섯 역할이 최대 15회를 쓰고, 남은 호출로 overview가 보내지 못한 파일을 모듈 단위로 더 검토한다. 큰 저장소일수록 상한을 올리면 더 많은 파일이 모델에 가고 비용도 는다. 이 추가 검토는 비밀값 선별(`agent.tools.gitleaks`)이 설정되어 끝났을 때만 실행된다([검토](REVIEW.md#모듈-단위-검토-분할)).
+- `review_max_calls`는 run 하나(시도 하나)가 쓸 수 있는 모델 호출 수의 상한이다. 비우면 99이고 15~207을 받는다. 처음 다섯 역할이 최대 15회를 쓰고, 남은 호출로 overview가 보내지 못한 파일을 모듈 단위로 더 검토한다. 기본값으로 중간 규모 저장소의 대부분이 모델에 간다. 비용: 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 `review_max_calls`를 낮춘다(예: 33). 15는 처음 다섯 역할만 실행하고 모듈 단위 추가 검토를 하지 않는다. 비밀값 선별(`agent.tools.gitleaks`)이 있으면 선별된 파일을 빼고 보내고, 없으면 기본 민감값 패턴 필터만 거쳐 보내며 보고서에 "비밀값 미선별"이 표시된다([검토](REVIEW.md#모듈-단위-검토-분할)).
 - 모델 연결은 먼저 `codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH]`로 확인한다. 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다. `codeye doctor`는 모델을 호출하지 않는다.
 
 ## 저장 공간

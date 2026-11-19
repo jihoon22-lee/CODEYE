@@ -97,7 +97,7 @@ builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단�
 
 | 필드 | 뜻 |
 |---|---|
-| `scope` | `review.scope` task와 결과. 범위 산출물을 받았으면 `accepted`, 아니면 작업 상태·사유(예: `skipped` / `secret_screen_unavailable`) |
+| `scope` | `review.scope` task와 결과. 범위 산출물을 받았으면 `accepted`, 아니면 작업 상태·사유(예: `skipped` / `secret_screen_failed`) |
 | `max_calls`, `max_request_bytes` | 범위 산출물이 기록한 attempt 호출 상한과 요청 크기 상한. 산출물이 없으면 `null` |
 | `calls_used` | slice 앞 호출 수(범위 산출물의 `calls_before_slices`, attempt 호출 기록에서 셈. 기록 없이 실패한 전체 역할 호출도 들어간다)와 slice 기록의 호출 합. 범위 산출물이 없으면 전체 역할 기록에서 센다. 호출했을 수 있는 검토 task에 쓸 수 있는 기록이 없으면 `null` |
 | `request_bytes_sent` | 모든 검토 기록의 요청 크기 합(프롬프트 바이트). 같은 조건에서 `null`이며, 값이 있으면 `code_review.request_bytes`와 같다 |
