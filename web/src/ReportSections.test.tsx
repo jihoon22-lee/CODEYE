@@ -115,7 +115,7 @@ describe('analysis sections', () => {
   });
 
   // examples/report-slices.json is the builder's output for
-  // fixtures/modules/coverage/input under call ceiling 15
+  // fixtures/modules/slices/input under call ceiling 15
   // (internal/worker/review/report_slices_example_test.go).
   it('shows the per-module review ledger with the stored numbers and never calls the sent scope verified', () => {
     const doc = example('report-slices.json');

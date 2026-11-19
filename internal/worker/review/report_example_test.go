@@ -267,7 +267,7 @@ func exampleVet(t *testing.T, j analysis.Job, task pack.Task) analysis.TaskResul
 	platform := "linux/amd64"
 	mod, ok := map[string]string{".": "example.test/w15", "svc/a": "example.test/w15/svc/a", "svc/b": "example.test/w15/svc/b"}[task.Module]
 	if !ok {
-		// A module of the slice example (fixtures/modules/coverage/input).
+		// A module of the slice example (fixtures/modules/slices/input).
 		mod = "example.test/coverage/" + task.Module
 	}
 	d := govet.Document{SchemaVersion: govet.DocumentSchemaVersion, Kind: govet.DocumentKind, AnalyzerID: govet.AnalyzerID, AdapterVersion: govet.AdapterVersion,

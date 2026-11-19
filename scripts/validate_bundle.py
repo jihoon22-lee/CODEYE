@@ -94,10 +94,10 @@ def main() -> None:
     # (internal/worker/review/report_example_test.go); its evidence hashes bind to that tree.
     modules_root = ROOT / "fixtures/modules/input"
     check_report(report, modules_root)
-    # examples/report-slices.json is the builder's output for fixtures/modules/coverage/input
+    # examples/report-slices.json is the builder's output for fixtures/modules/slices/input
     # under call ceiling 15 (internal/worker/review/report_slices_example_test.go): review slices and the ledger.
     slices_report = json_file(ROOT / "examples/report-slices.json")
-    coverage_root = ROOT / "fixtures/modules/coverage/input"
+    coverage_root = ROOT / "fixtures/modules/slices/input"
     validators["report.schema.json"].validate(slices_report)
     check_report(slices_report, coverage_root)
     # The same fixture without a secrets scan at the default ceiling: the slices still run, and the
