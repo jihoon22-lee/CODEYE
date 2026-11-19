@@ -119,8 +119,13 @@ func isoCases() map[string]isoCase {
 		"projects.create": {need: rootHolder, ok: 201, body: func(w *isoWorld) any {
 			return map[string]any{"name": w.name("p"), "source": map[string]any{"kind": "local", "source_root_id": w.f.root.ID, "relative_path": "."}}
 		}},
-		"projects.get":   {need: viewerRole, ok: 200, ids: isoProject},
-		"members.list":   {need: managerRole, ok: 200, ids: isoProject},
+		"projects.get": {need: viewerRole, ok: 200, ids: isoProject},
+		"members.list": {need: managerRole, ok: 200, ids: isoProject},
+		"members.add": {need: managerRole, ok: 200, ids: isoProject, body: func(w *isoWorld) any {
+			name := w.name("u")
+			w.e.account(name, "", false)
+			return map[string]string{"username": name, "role": "runner"}
+		}},
 		"members.put":    {need: managerRole, ok: 200, ids: func(w *isoWorld) []string { return []string{w.f.projectID, w.namedUser()} }, body: func(*isoWorld) any { return map[string]string{"role": "viewer"} }},
 		"members.delete": {need: managerRole, ok: 204, ids: func(w *isoWorld) []string { return []string{w.f.projectID, w.member(domain.RoleViewer)} }},
 		"projects.audit": {need: managerRole, ok: 200, ids: isoProject},

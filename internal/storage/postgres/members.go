@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jihoon22-lee/CODEYE/internal/account"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
@@ -55,6 +56,22 @@ func (s *Store) PutMember(ctx context.Context, actor, project, user string, role
 	}
 	return transaction(ctx, s, func(tx pgx.Tx) (Member, error) {
 		return putMember(ctx, tx, actor, project, "id=$1", user, role)
+	})
+}
+
+// AddMemberByUsername is PutMember for the user with exactly that username
+// (case-insensitive, as stored). The caller's manager role is checked before
+// the lookup; an unknown, malformed or disabled username is ErrNotFound.
+func (s *Store) AddMemberByUsername(ctx context.Context, actor, project, username string, role domain.Role) (Member, error) {
+	if !validIDs(actor, project) || !role.Valid() {
+		return Member{}, domain.ErrInvalid
+	}
+	name, err := account.NormalizeUsername(username)
+	if err != nil {
+		name = "" // matches no user, after the role check
+	}
+	return transaction(ctx, s, func(tx pgx.Tx) (Member, error) {
+		return putMember(ctx, tx, actor, project, "username=$1", name, role)
 	})
 }
 

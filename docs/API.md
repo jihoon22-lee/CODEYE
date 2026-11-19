@@ -374,12 +374,13 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | 경로 | 본문 | 결과 |
 |---|---|---|
 | `GET /projects/{id}/members` | — | `{items}`. 소유자, manager, runner, viewer 순, 그 안에서 사용자 이름 순 |
+| `POST /projects/{id}/members` | `{username, role}` | 200 `Member`. 사용자 이름(대소문자 무시, 정확히 일치)으로 구성원을 추가하거나 역할을 바꾼다 |
 | `PUT /projects/{id}/members/{uid}` | `{role}` | 200 `Member`. 사용자 ID로 구성원을 추가하거나 역할을 바꾼다 |
 | `DELETE /projects/{id}/members/{uid}` | — | 204. 구성원이 아니었으면 아무것도 바꾸지 않고 204 |
 
 - 권한은 소유자와 manager다. viewer·runner 403, 비구성원(관리자 포함) 404.
 - `role`은 `manager`, `runner`, `viewer`이고 그 밖은 422다. 소유자는 바꾸거나 제거할 수 없다(409). 없거나 비활성인 사용자는 404다.
-- 사용자는 ID로만 가리킨다. 사용자 이름으로 찾는 프로젝트 경로를 두지 않아 manager가 사용자 이름의 존재를 알 수 없다. 사용자 ID는 관리자(`GET /admin/users`)가 알려 준다. 구성원 추가 화면의 사용자 찾기는 웹 화면 작업에서 정한다([결정](DECISIONS.md) A36).
+- 사용자 이름으로 추가할 때 역할 확인이 먼저라 viewer·runner는 이름의 존재와 무관하게 403이다. manager에게는 없는·비활성·형식이 틀린 이름이 모두 같은 404다. 검색이나 부분 일치는 없다([결정](DECISIONS.md) A36).
 - 변경과 감사 기록(`project.member_set`, `project.member_removed`, detail에 이전 역할)은 같은 트랜잭션이다. 제거된 사용자의 다음 요청은 404이고 열린 이벤트 스트림은 다음 poll에서 `closed`(`access_revoked`)로 끝난다.
 
 ## 계정과 관리자
@@ -431,4 +432,4 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 - 구버전 컨트롤러는 `task_created`의 `stage`·`weight`를 거부하므로 업그레이드할 때 컨트롤러를 워커보다 먼저 올린다.
 - 서버는 migration 이력이 바이너리의 최신과 정확히 같을 때만 시작한다. 더 새 schema의 DB에서 이전 바이너리는 시작하지 않는다(`schema_newer`). 운영 절차는 [운영](OPERATIONS.md)에 있다.
 
-관련 요구사항·수용 시험: REQ-013, REQ-016, REQ-017, REQ-022, REQ-023, NFR-003, NFR-004, TC-25(예약), TC-46~TC-52(loopback 보호, 일회용 토큰과 세션, 선언 등록, ACL 404/403, 멱등 202와 DB 실패 503, readiness, 정적 파일 경계), TC-99(단계 집계, SSE 순번 누락, 계획 분모 변경), TC-140~TC-155(경로별 격리와 감사, 비밀번호 로그인과 제한, 관리자, TLS). 요구사항 정의는 [요구사항](REQUIREMENTS.md), 수용 시험 정의는 [시험](TESTING.md)에 있다.
+관련 요구사항·수용 시험: REQ-013, REQ-016, REQ-017, REQ-022, REQ-023, NFR-003, NFR-004, TC-25(예약), TC-46~TC-52(loopback 보호, 일회용 토큰과 세션, 선언 등록, ACL 404/403, 멱등 202와 DB 실패 503, readiness, 정적 파일 경계), TC-99(단계 집계, SSE 순번 누락, 계획 분모 변경), TC-140~TC-157(경로별 격리와 감사, 비밀번호 로그인과 제한, 관리자, TLS, 재설정 기록, 이름으로 구성원 추가). 요구사항 정의는 [요구사항](REQUIREMENTS.md), 수용 시험 정의는 [시험](TESTING.md)에 있다.

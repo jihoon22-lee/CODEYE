@@ -59,9 +59,40 @@ func decodeRole(q *request) (domain.Role, bool) {
 	return role, true
 }
 
-// PUT /projects/{id}/members/{user_id} {role}: add or change a member. The
-// user is named by ID only; there is no lookup by username, so no project
-// route tells whether a username exists.
+// POST /projects/{id}/members {username, role}: add or change a member named
+// by exact username. Unknown and disabled usernames are the same 404 as a
+// project the caller cannot see; the role is checked first, so only a
+// project manager learns that a username exists.
+func (s *Server) addMember(q *request) {
+	body, ok := q.readBody()
+	if !ok {
+		return
+	}
+	var in struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+	}
+	if domain.DecodeStrict(body, &in) != nil || in.Username == "" || len(in.Username) > 256 {
+		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", `body must be {"username": string, "role": "manager"|"runner"|"viewer"}`, false)
+		return
+	}
+	role := domain.Role(in.Role)
+	if !role.Valid() {
+		writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "role must be manager, runner or viewer", false)
+		return
+	}
+	ctx, cancel := q.ctx()
+	defer cancel()
+	m, err := s.store.AddMemberByUsername(ctx, q.session.UserID, q.params[0], in.Username, role)
+	if err != nil {
+		s.storeError(q, err)
+		return
+	}
+	writeJSON(q.w, http.StatusOK, viewMember(m))
+}
+
+// PUT /projects/{id}/members/{user_id} {role}: add or change a member by
+// user ID.
 func (s *Server) putMember(q *request) {
 	role, ok := decodeRole(q)
 	if !ok {

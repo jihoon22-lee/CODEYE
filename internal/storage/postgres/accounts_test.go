@@ -465,6 +465,50 @@ func TestLastAdministratorStays(t *testing.T) {
 }
 
 // TC-152
+func TestAddMemberByUsername(t *testing.T) {
+	s := fastStore(t)
+	ctx := context.Background()
+	owner := newAccount(t, s, OperatorPrincipal(), "owner", false)
+	viewer := newAccount(t, s, OperatorPrincipal(), "viewer", false)
+	alice := newAccount(t, s, OperatorPrincipal(), "alice", false)
+	gone := newAccount(t, s, OperatorPrincipal(), "gone", false)
+	if err := s.DisableUser(ctx, gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.CreateProject(ctx, owner.ID, "proj", json.RawMessage(`{"source":{"kind":"local"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PutMember(ctx, owner.ID, p.ID, viewer.ID, domain.RoleViewer); err != nil {
+		t.Fatal(err)
+	}
+	m, err := s.AddMemberByUsername(ctx, owner.ID, p.ID, "Alice", domain.RoleRunner)
+	if err != nil || m.UserID != alice.ID || m.Role != "runner" {
+		t.Fatalf("add by username: %+v %v", m, err)
+	}
+	if m, err := s.AddMemberByUsername(ctx, owner.ID, p.ID, "alice", domain.RoleManager); err != nil || m.Role != "manager" {
+		t.Fatalf("change by username: %+v %v", m, err)
+	}
+	for _, c := range []struct {
+		actor, name string
+		want        error
+	}{
+		{owner.ID, "nobody", domain.ErrNotFound}, {owner.ID, "gone", domain.ErrNotFound},
+		{owner.ID, "not a name!", domain.ErrNotFound}, {owner.ID, "owner", domain.ErrConflict},
+		// A viewer is refused before the lookup: the answer is the same for
+		// an existing and a missing username.
+		{viewer.ID, "alice", domain.ErrForbidden}, {viewer.ID, "nobody", domain.ErrForbidden},
+	} {
+		if _, err := s.AddMemberByUsername(ctx, c.actor, p.ID, c.name, domain.RoleRunner); !errors.Is(err, c.want) {
+			t.Fatalf("%v: %v", c, err)
+		}
+	}
+	rows := auditRows(t, s, AuditMemberSet)
+	if len(rows) != 3 { // viewer, alice added, alice changed
+		t.Fatalf("member_set rows %d", len(rows))
+	}
+}
+
 func TestMembersAndAuditReads(t *testing.T) {
 	s := fastStore(t)
 	ctx := WithRequestID(context.Background(), "req_0123456789abcdef01234567")
