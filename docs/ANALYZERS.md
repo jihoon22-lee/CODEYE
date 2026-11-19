@@ -66,7 +66,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--toolchain-path PATH` | 절대 디렉터리 목록, 기본 `/usr/bin:/bin`. 분석기는 보조 프로그램 조회에만 쓴다(Rust 링커 `cc`) | cargo check, clippy |
 | `--repo-code-source-root ID` (반복) | 저장소 코드 실행 허가. 같은 agent의 `--source-root ID=...`가 있어야 함 | 저장소 코드를 실행하는 작업 |
 | `--dependency-fetch` | 의존성 받기 운영자 스위치. 기본 꺼짐, 개인 모드는 켬. 프로젝트 선택 `fetch_dependencies`도 켜져 있어야 함([의존성 준비](ARCHITECTURE.md#의존성-준비)) | `deps.*` |
-| `--dependency-cache-dir DIR` | 받은 의존성의 공유 캐시. 기본 `<state>/cache/deps` | `deps.*`, 받은 캐시를 읽는 분석기 |
+| `--dependency-cache-dir DIR` | 받은 의존성의 공유 캐시. 기본 `<state-dir>/cache/deps`(개인 모드는 `state_dir/cache/deps`를 준다) | `deps.*`, 받은 캐시를 읽는 분석기 |
 | `--dependency-timeout D`, `--dependency-total-timeout D`, `--dependency-max-bytes N` | 모듈당 제한시간(10분), attempt 합계(20분), 내려받기 크기 상한(2 GiB) | `deps.*` |
 | `--go-proxy`, `--go-sumdb`, `--go-private`, `--go-noproxy`, `--go-nosumdb` | Go 모듈 받기의 `GOPROXY`·`GOSUMDB`·`GOPRIVATE`·`GONOPROXY`·`GONOSUMDB`. 비우면 Go 기본값([Go 의존성 받기](#go-의존성-받기)) | `deps.go` |
 

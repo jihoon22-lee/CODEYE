@@ -432,7 +432,7 @@ Go 모듈 의존성 받기는 구현했다([의존성 준비](#의존성-준비)
 ### 실행
 
 - 받기는 실행 사본(workspace)의 모듈 디렉터리에서 executor(argv·cwd·환경변수·제한시간)로 실행한다. 원본 경로와 snapshot에서는 실행하지 않고 둘 다 보호 root다.
-- 받은 의존성은 노드 캐시 `<state>/cache/deps`(설정 `--dependency-cache-dir`)에 둔다. 생태계별 하위 디렉터리를 run과 attempt가 공유한다. attempt별 파일(사본 manifest, 실행 로그, 기록)은 `<scratch>/deps/<key>/` 아래에 있고 attempt scratch와 함께 지워진다.
+- 받은 의존성은 노드 캐시(`--dependency-cache-dir`, 기본 에이전트 `<state-dir>/cache/deps`, 개인 모드 `state_dir/cache/deps`)에 둔다. 개인 모드의 위치는 에이전트 디렉터리 밖이라 에이전트가 다시 등록돼도 남는다. 생태계별 하위 디렉터리를 run과 attempt가 공유한다. attempt별 파일(사본 manifest, 실행 로그, 기록)은 `<scratch>/deps/<key>/` 아래에 있고 attempt scratch와 함께 지워진다.
 - 레지스트리는 argv·환경변수로 정한다. executor는 네트워크를 막거나 허용 목록으로 제한하지 않는다. 받는 도구가 다른 주소로 접속하지 않는다는 것은 도구 설정에 기대며 플랫폼이 강제하지 않는다.
 - 저장소 코드(빌드 스크립트·lifecycle script)를 실행하지 않는다. 그런 실행은 별도 선택 `run_build_scripts`의 몫이다([분석기](ANALYZERS.md#저장소-코드-실행-허가)).
 - 느리거나 실패하는 레지스트리는 그 task만 끝낸다. 분석기와 검토는 계속 실행하고 부족한 입력은 보고서 공백으로 남는다.

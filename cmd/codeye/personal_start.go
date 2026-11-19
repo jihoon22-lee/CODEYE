@@ -584,11 +584,8 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	// Dependencies are fetched unless the configuration turns that off;
 	// each project's own choice still decides for its runs.
 	if a.DependenciesEnabled() {
-		args = append(args, "--dependency-fetch")
+		args = append(args, "--dependency-fetch", "--dependency-cache-dir", a.DependencyCache(layout))
 		if d := a.Dependencies; d != nil {
-			if d.CacheDir != "" {
-				args = append(args, "--dependency-cache-dir", d.CacheDir)
-			}
 			for _, f := range []struct{ flag, value string }{{"--go-proxy", d.GoProxy}, {"--go-sumdb", d.GoSumDB}, {"--go-private", d.GoPrivate}, {"--go-noproxy", d.GoNoProxy}, {"--go-nosumdb", d.GoNoSumDB}} {
 				if f.value != "" {
 					args = append(args, f.flag, f.value)

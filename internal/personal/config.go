@@ -145,6 +145,15 @@ func (a Agent) DependenciesEnabled() bool {
 	return a.Dependencies == nil || a.Dependencies.Enabled == nil || *a.Dependencies.Enabled
 }
 
+// DependencyCache is the shared dependency cache of the local agent: the
+// configured cache_dir, else the state directory's cache/deps.
+func (a Agent) DependencyCache(l Layout) string {
+	if d := a.Dependencies; d != nil && d.CacheDir != "" {
+		return d.CacheDir
+	}
+	return l.DependencyCacheDir()
+}
+
 // AutoDetectEnabled reports whether tools are detected on start.
 func (a Agent) AutoDetectEnabled() bool { return a.AutoDetect == nil || *a.AutoDetect }
 

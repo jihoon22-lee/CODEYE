@@ -291,7 +291,7 @@ JSON 출력은 `outcome`, `processes[]`(`state_before`, `action`, `state_after`)
 |---|---|---|
 | `snapshot` | `agent/data/acquire-*`(그 안의 `workspace` 제외) | 에이전트가 직접 잰다. heartbeat `storage_quota_exceeded` |
 | `workspace` | `agent/data/acquire-*/workspace`, `agent/data/ws-*` | 같음 |
-| `cache` | `agent/workers`(워커 home·scratch), `state_dir/cache`(받은 의존성 `cache/deps` 포함), 다른 곳에 둔 `agent.dependencies.cache_dir`, `agent.go_mod_cache`. 겹치는 디렉터리는 한 번만 센다 | 같음. 의존성 받기는 시작할 때 이 영역을 재고 남은 공간만큼만 받는다 |
+| `cache` | `agent/workers`(워커 home·scratch), `agent/cache`, 받은 의존성(`state_dir/cache/deps` 또는 `agent.dependencies.cache_dir`), `agent.go_mod_cache`. 겹치는 디렉터리는 한 번만 센다 | 같음. 의존성 받기는 시작할 때 이 영역을 재고 남은 공간만큼만 받는다 |
 | `logs` | `state_dir/logs` | 같음(`--storage-log-dir`) |
 | `artifacts` | controller 산출물 | DB 집계. `artifacts`에서 sha256마다 한 번 센 크기 합 |
 
