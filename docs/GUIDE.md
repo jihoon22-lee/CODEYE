@@ -351,7 +351,7 @@ sha256sum -c SHA256SUMS
 ./codeye up --offline ~/src/my-project
 ```
 
-- `--offline`은 설정에 `"offline": true`로 저장된다. 그 뒤로 CODEYE는 설정에 적은 미러·Git 호스트·모델 endpoint 밖으로 접속하지 않는다. 미러가 없는 의존성은 받지 않고 보고서에 `offline_no_registry_configured`로 남는다. Go는 `agent.go_mod_cache`에 옮겨 둔 모듈 캐시를 쓴다.
+- `--offline`은 설정에 `"offline": true`로 저장된다. 그 뒤로 CODEYE는 설정에 적은 미러·Git 호스트·모델 endpoint와 사용자의 `go env`·npm 설정이 정한 미러 밖으로 스스로 접속하지 않는다(저장소 빌드 스크립트 실행을 허가한 프로젝트의 스크립트는 예외다). 미러가 없는 의존성은 받지 않고 보고서에 `offline_no_registry_configured`로 남는다. Go는 `agent.go_mod_cache`에 옮겨 둔 모듈 캐시를 쓴다.
 - 모델 검토는 키 파일에 사내 endpoint(`base_url`)가 있을 때만 한다. 환경변수의 API 키는 쓰지 않는다.
 - 사내 CA가 있으면 시스템 CA와 합친 PEM 파일을 `ca_bundle`에 적는다. 인증서 검증을 끄지 않는다.
 

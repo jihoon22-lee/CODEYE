@@ -517,9 +517,15 @@ def inner(args) -> int:
         view, report = finished(session, run_id)
         d = deps(report, "deps.go")
         assert d and why(d) == "offline_no_registry_configured", d
+        missing_module = "@".join(GO_MIRRORED)
+        assert any(f["name"] == missing_module for f in d["failed_items"]), d["failed_items"]
         step("offline, module not in the cache", run=view["status"], deps_go=f"{d['task_status']}/{why(d)}", failed_items=[f["reason"] for f in d["failed_items"]])
         doctor1 = sh([exe, "doctor", "--config", config, "--format", "json", "--work-dir", work / "doctor-work"], env=env, check=False).stdout
         (work / "doctor-offline.json").write_text(doctor1)
+        # Offline with no mirror: no public default is left as a destination.
+        dests = json.loads(doctor1)["offline"]["destinations"]
+        assert dests and all(d["origin"] == "none" and d.get("reason") for d in dests), dests
+        step("doctor, offline without mirrors", destinations={d["kind"]: d["reason"] for d in dests})
         sh([exe, "stop", "--config", config], env=env, timeout=300)
 
         # 3. The internal mirror and endpoint behind a private CA.

@@ -477,7 +477,7 @@ review-r1의 `review.interpret` 역할은 계획된 분석기 task의 envelope�
 - 받을 것이 없음: `vendor/modules.txt`가 있으면 `vendored_dependencies`, `require`가 없으면 `no_dependencies`(둘 다 `skipped_policy`). 스냅샷 밖 `replace`는 go vet과 같이 `replace_outside_snapshot`이다.
 - 캐시: 공유 캐시 key `go/mod`. 모듈 zip과 푼 트리 모두 크기 상한과 cache 저장 영역에 센다.
 - 사유: `module_not_on_proxy`(일부 모듈만 실패하면 `partial`), `checksum_mismatch`, `go_sum_incomplete`(go.sum 사본이 받는 도중 바뀜. go.sum에 없는 항목이 있다는 뜻이고 go vet은 `-mod=readonly`로 실패한다), `go_mod_unreadable`, `snapshot_integrity_failed`, `workspace_drift`, `private_module_not_fetched`, `toolchain_unavailable`(go.mod가 노드 go보다 높은 버전 요구), `registry_unreachable`, `package_manager_not_configured`(`--go` 없음)와 공통 사유.
-- 오프라인 모드(`--offline`): 운영자 proxy가 없으면 운영자 모듈 캐시만 읽고, 캐시에 없는 모듈은 `offline_no_registry_configured`다. `go_proxy`가 `off`이면 받기를 시작하지 않고(`skipped_policy`) 같은 사유다. checksum DB를 정하지 않았으면 `GOSUMDB=off`다. JS/TS(레지스트리 없음), Python(index 없음), Rust(항상)도 오프라인에서는 받지 않고 같은 사유로 `skipped_policy`다([오프라인 모드](OPERATIONS.md#오프라인-모드)). `--ca-bundle`을 주면 모든 관리자 실행에 CA 변수가 붙는다([사내 CA](OPERATIONS.md#사내-ca)).
+- 오프라인 모드(`--offline`): 운영자 proxy가 없으면 운영자 모듈 캐시만 읽고, 캐시에 없는 모듈은 `failed`(`offline_no_registry_configured`, `failed_items`에 그 모듈과 `module_not_on_proxy`)다. 캐시도 proxy도 없으면 `skipped_policy`다. `go_proxy`가 `off`이면 받기를 시작하지 않고(`skipped_policy`) 같은 사유다. checksum DB를 정하지 않았으면 `GOSUMDB=off`다. JS/TS(레지스트리 없음), Python(index 없음), Rust(항상)도 오프라인에서는 받지 않고 같은 사유로 `skipped_policy`다([오프라인 모드](OPERATIONS.md#오프라인-모드)). `--ca-bundle`을 주면 모든 관리자 실행에 CA 변수가 붙는다([사내 CA](OPERATIONS.md#사내-ca)).
 - stderr는 사유를 정하는 데만 쓰고 받기 캐시 경로는 마스킹한다.
 
 ### Rust 의존성 받기

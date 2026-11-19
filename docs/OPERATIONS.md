@@ -412,11 +412,11 @@ python3 scripts/offline_pack.py check-web web/dist
 
 - `build`는 `npm --prefix web run build`(생략 가능), `CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.buildVersion=… -X main.buildCommit=… -X main.buildTime=…"`, 웹 외부 주소 검사, 파일 hash, 묶음 쓰기 순이다. 작업 트리에 커밋하지 않은 변경이 있으면 `--allow-dirty` 없이는 만들지 않는다(그때 버전에 `-dirty`가 붙고 MANIFEST의 `dirty`가 true다).
 - 버전은 `git describe --tags --always --dirty`, 빌드 시각은 commit 시각(`SOURCE_DATE_EPOCH`가 있으면 그것)이다.
-- **재현성.** 같은 commit·같은 Go·Node 버전·같은 `web/node_modules`에서 두 번 만든 묶음은 바이트가 같다(이 머신에서 두 번 만들어 sha256이 같음을 확인했다). 항목 정렬, 모든 항목의 mtime을 빌드 시각으로, uid/gid 0, gzip 헤더의 시각 0·파일 이름 없음으로 쓴다. Go 버전, Node·Vite 버전, 의존성 잠금이 다르면 실행 파일·웹 산출물 바이트가 달라질 수 있고 그것까지 고정하지 않는다. 서명은 없다. 무결성은 sha256으로만 확인한다.
+- **재현성.** 같은 commit·같은 Go·Node 버전·같은 `web/node_modules`에서 두 번 만든 묶음은 바이트가 같다(이 머신에서 새로 clone한 사본으로 두 번 만들어 sha256이 같음을 확인했다). `--skip-web-build`로 만들면 웹을 만든 Node 버전을 모르므로 MANIFEST의 `node_version`이 null이 되어 바이트가 다르다. 항목 정렬, 모든 항목의 mtime을 빌드 시각으로, uid/gid 0, gzip 헤더의 시각 0·파일 이름 없음으로 쓴다. Go 버전, Node·Vite 버전, 의존성 잠금이 다르면 실행 파일·웹 산출물 바이트가 달라질 수 있고 그것까지 고정하지 않는다. 서명은 없다. 무결성은 sha256으로만 확인한다.
 
 ### 배포팩 내용
 
-`codeye-VERSION-OS-ARCH.tar.gz`(최상위 디렉터리 하나)와 옆의 `.tar.gz.sha256`이다. linux/amd64 묶음은 약 8 MB(8,168,746 바이트, 풀면 약 23 MB. 대부분 실행 파일)다.
+`codeye-VERSION-OS-ARCH.tar.gz`(최상위 디렉터리 하나)와 옆의 `.tar.gz.sha256`이다. linux/amd64 묶음은 약 8.2 MB(풀면 약 23 MB, 그중 실행 파일이 22 MB)다.
 
 | 파일 | 내용 |
 |---|---|
@@ -441,7 +441,7 @@ python3 scripts/offline_pack.py check-web web/dist
 
 | 대상 | 오프라인이 아닐 때 | 오프라인 |
 |---|---|---|
-| Go 모듈 | `go_proxy`, 없으면 사용자 `go env`의 GOPROXY, 없으면 `proxy.golang.org`. checksum DB 기본 `sum.golang.org` | 설정·사용자 `go env`가 정한 proxy만 쓴다. 없으면 운영자 모듈 캐시(`agent.go_mod_cache`)만 읽고, 캐시에 없는 모듈은 `offline_no_registry_configured`다. `go_sumdb`를 정하지 않았으면 `GOSUMDB=off`(go.sum이 여전히 검증하며, go.sum에 없는 hash는 `go_sum_incomplete`). `go_proxy: "off"`이면 받기를 시작하지 않고 같은 이유다 |
+| Go 모듈 | `go_proxy`, 없으면 사용자 `go env`의 GOPROXY, 없으면 `proxy.golang.org`. checksum DB 기본 `sum.golang.org` | 설정·사용자 `go env`가 정한 proxy만 쓴다. 없으면 운영자 모듈 캐시(`agent.go_mod_cache`)만 읽고, 캐시에 없는 모듈은 `failed`(`offline_no_registry_configured`)이고 `failed_items`에 모듈 이름이 남는다. 캐시도 없으면 받지 않는다(`skipped_policy`, 같은 이유). `go_sumdb`를 정하지 않았으면 `GOSUMDB=off`(go.sum이 여전히 검증하며, go.sum에 없는 hash는 `go_sum_incomplete`). `go_proxy: "off"`이면 받기를 시작하지 않고 같은 이유다 |
 | npm·pnpm·yarn | `npm_registry`, 없으면 사용자 npm 설정, 없으면 `registry.npmjs.org` | 설정이나 사용자 npm 설정의 레지스트리가 없으면 설치하지 않는다(`offline_no_registry_configured`) |
 | Python | `pip_index_url`, 없으면 PyPI | `pip_index_url`이 없으면 받지 않는다(같은 이유) |
 | Rust | crates.io 또는 저장소 Cargo 설정의 레지스트리 | 받지 않는다(같은 이유). cargo에는 CODEYE의 미러 설정이 없다 |
