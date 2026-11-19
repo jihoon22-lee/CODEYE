@@ -454,7 +454,7 @@ Go 모듈, Rust crate, JS/TS 패키지 의존성 받기는 구현했다([의존�
 |---|---|---|
 | 모두 받음 | `succeeded` | `prepared` |
 | 받을 것이 없음(`no_dependencies`, `vendored_dependencies`, `no_dependency_consumer`, `dependency_consumers_not_allowed`) | `skipped_policy` | `skipped` |
-| 받으면 안 되는 입력(Go `replace_outside_snapshot`) | `skipped_policy` | `skipped` |
+| 받으면 안 되는 입력(Go `replace_outside_snapshot`, JS/TS `local_dependency_outside_project`) | `skipped_policy` | `skipped` |
 | 받지 않는 형식(yarn 2 이상·bun lockfile `lockfile_format_unsupported`) | `unsupported` | `skipped` |
 | 일부만 받음 | `failed` | `partial` |
 | 제한시간 | `timed_out` | `failed` |

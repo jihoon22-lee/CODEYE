@@ -105,7 +105,7 @@ type Config struct {
 	DependencyTotalTimeout time.Duration
 	DependencyMaxBytes     int64
 	// NpmRegistry (--npm-registry) is the registry every JS package manager
-	// of the dependency tasks uses ("" = theirs or the project's .npmrc).
+	// of the dependency tasks uses ("" = npm's, or yarn's for yarn).
 	NpmRegistry string
 	// AnalyzerTools are absolute analyzer tool paths by tool name, one
 	// agent flag per tool (--staticcheck PATH, docs/ANALYZERS.md), and the shared

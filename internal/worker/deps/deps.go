@@ -85,8 +85,8 @@ type Config struct {
 	// PnpmScript and YarnScript the package managers' entry scripts (--npm,
 	// --pnpm, --yarn), run as <node> <script>. JSConsumer: tsc or
 	// type-aware ESLint is usable on this node. NpmRegistry is the
-	// registry URL given to every JS package manager ("" = their default
-	// or the project's .npmrc).
+	// registry URL given to every JS package manager ("" = npm's, or
+	// yarn's for yarn).
 	NodeExecutable string
 	NpmScript      string
 	PnpmScript     string
