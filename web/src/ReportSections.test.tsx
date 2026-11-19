@@ -53,6 +53,11 @@ describe('analysis sections', () => {
     expect(within(article).getByText(/하위 호출이 실패하면 최대 3번 재시도한다/)).toBeTruthy();
     // Each finding is listed once, in the static or the code review section.
     expect(container.querySelectorAll('details.finding-card').length).toBe(doc.findings.length);
+    // The overview lists the summary's priority findings in order.
+    const priorities = Array.from(container.querySelectorAll('.report-priorities > li')).map((li) => li.textContent ?? '');
+    expect(priorities.length).toBe(doc.summary.priorities.length);
+    doc.summary.priorities.forEach((id: string, i: number) =>
+      expect(priorities[i].startsWith(doc.findings.find((f: { id: string }) => f.id === id).title)).toBe(true));
   });
 
   it('opens a section from the overview and moves focus to it from the keyboard', async () => {

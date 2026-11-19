@@ -49,7 +49,7 @@ test('published report exposes the same counts, evidence and revision in the bro
   }
   if (doc.findings.length) {
     const item = doc.findings[0];
-    await report.getByText(item.title, {exact:true}).first().click();
+    await report.locator('details.finding-card summary').getByText(item.title, {exact:true}).first().click();
     await expect(report.getByText(item.impact, {exact:true}).first()).toBeVisible();
     const first = item.evidence.find((entry: { location?: unknown }) => entry.location);
     if (first) await expect(report.locator('[id]').filter({hasText:first.location.path}).first()).toBeVisible();

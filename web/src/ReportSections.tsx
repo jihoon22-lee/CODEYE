@@ -425,7 +425,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         ) : (
           <ul>
             {sections.attention.map((a) => (
-              <li key={a.code}>
+              <li key={a.section + ':' + a.code}>
                 {(s.attentionText[a.code] ?? (() => a.code))(a.count)}{' '}
                 <button type="button" className="link" onClick={() => go(a.section)}>
                   {s.go(label(s.titles, a.section))}
@@ -433,6 +433,26 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               </li>
             ))}
           </ul>
+        )}
+        {report.priorities.length > 0 && (
+          <>
+            <h6>{s.priorities}</h6>
+            <ol className="report-priorities">
+              {report.priorities.map((id) => {
+                const f = report.findings.find((x) => x.id === id)!;
+                // A priority finding is listed in the code review or the static analysis section.
+                const section = sections.codeReview.findings.includes(id) ? 'code_review' : 'static_analysis';
+                return (
+                  <li key={id}>
+                    {f.title} — {label(t.validation, f.validation)} · {label(t.severity, f.severity)}{' '}
+                    <button type="button" className="link" onClick={() => go(section)}>
+                      {s.go(label(s.titles, section))}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </>
         )}
       </section>
       {history && <ComparisonSection load={history.load} reload={history.reload} />}

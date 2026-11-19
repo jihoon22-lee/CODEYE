@@ -170,6 +170,7 @@ export const reportKo = {
     attention: '먼저 볼 것',
     noAttention: '따로 주의할 항목이 없습니다. 각 절의 상태와 공백을 확인하세요.',
     go: (title: string) => `${title} 열기`,
+    priorities: '우선 확인할 발견',
     attentionText: {
       actionable_findings: (n: number) => `조치 항목 ${n}개가 있습니다.`,
       secrets_detected: (n: number) => `비밀정보로 보이는 값이 ${n}곳에서 탐지됐습니다.`,
