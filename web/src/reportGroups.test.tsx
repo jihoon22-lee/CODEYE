@@ -77,6 +77,32 @@ describe('summary grouping', () => {
     expect(facts.scope!.primarySent + facts.scope!.secondarySent).toBe(sent);
   });
 
+  // A builder 8 ledger with a secondary module (as in a repository with test
+  // input): it parses, the module goes into the sum row and its secondary
+  // files left out within the ceiling have their own column.
+  it('reads a ledger with a secondary module and sums it in one row', () => {
+    const doc = structuredClone(withSlices) as Record<string, any>;
+    const m = doc.code_review.ledger.modules.find((x: { module_id: string }) => x.module_id === 'go:store');
+    Object.assign(m, { class: 'secondary', files_secondary: m.files_eligible, files_secondary_sent: m.files_sent_to_model, files_secondary_not_reached: m.files_budget_exhausted, files_budget_exhausted: 0 });
+    const r = load(doc);
+    const ledger = r.sections!.codeReview.ledger!;
+    expect(ledger.modules.find((x) => x.id === 'go:store')).toMatchObject({ cls: 'secondary', secondary: 30, secondarySent: 17, secondaryNotReached: 13, budgetExhausted: 0 });
+    const f = overviewFacts(r, r.sections!);
+    expect(f.scope).toEqual({ primary: 9, primarySent: 6, secondary: 30, secondarySent: 17 });
+    const { container } = render(<ReportDocument report={r} />);
+    const section = container.querySelector('#report-section-code_review') as HTMLElement;
+    const row = within(section).getByText(t.sections.ledger.secondaryModules(1)).closest('tr')!;
+    expect(Array.from(row.querySelectorAll('td')).map((td) => td.textContent)).toEqual([
+      t.sections.ledger.secondaryModules(1), t.sections.ledger.classes.secondary, '—', '30', '17', '20815', '17', '0', '0', '0', '0', '13', '0', '17',
+    ]);
+    // The module table holds the primary modules and the sum row only.
+    expect(Array.from(row.closest('tbody')!.querySelectorAll('tr')).map((tr) => tr.cells[0].textContent)).toEqual(['go:api', 'javascript:web', 'python:worker', t.sections.ledger.secondaryModules(1)]);
+    // A secondary class with secondary counts on a builder 7 ledger is invalid.
+    const bad = structuredClone(doc);
+    for (const x of bad.code_review.ledger.modules) delete x.class;
+    expect(() => load(bad)).toThrow();
+  });
+
   // A slot is admitted while 6 calls are left and uses 2: the example used 10
   // of 15 and three primary slots were refused, so 10 + 2·2 + 6 = 20 admit them.
   it('says how many calls the refused slots need', () => {
