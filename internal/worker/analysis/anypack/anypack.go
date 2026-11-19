@@ -698,10 +698,6 @@ func ExecutionsOf(list []analysis.Execution) []obsdoc.Execution {
 	return out
 }
 
-// SeriesTested reports a version of the tested release series ("1.26" for
-// 1.26.x).
-func SeriesTested(version, series string) bool { return strings.HasPrefix(version, series+".") }
-
 // Ptr returns a pointer to v.
 func Ptr[T any](v T) *T { return &v }
 

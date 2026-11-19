@@ -86,7 +86,7 @@ func ParseVersion(stdout []byte) (string, bool) {
 }
 
 // VersionTested reports the pinned series.
-func VersionTested(v string) bool { return anypack.SeriesTested(v, TestedSeries) }
+func VersionTested(v string) bool { return pack.SeriesTested(v, TestedSeries) }
 
 // Descriptor is jscpd's pack identity: an extra-depth analyzer of every
 // supported language, run by the node toolchain.
