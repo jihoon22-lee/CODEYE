@@ -108,8 +108,6 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
     </div>
     {status !== null && !isKnownRunStatus(status) && <p className="notice">{t.runs.statusUnknownNote} <code>{shorten(status, 40)}</code></p>}
     {run && <RunDetails run={run} confirmedAt={error !== null ? confirmedAt : null} />}
-    {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}
-      extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project, report.sections?.codeReview.ledger ?? null, report.sections?.environment.dependencies ?? [])} runId={runId} canRun={canRun} onRetried={onRetried} />} />}
     {!run && <dl><dt>{t.runs.id}</dt><dd><code>{runId}</code></dd>{version !== null && <><dt>{t.runs.version}</dt><dd>{version}</dd></>}</dl>}
     {error !== null && <p role="alert" className="error">{stopped ? t.runs.pollStopped : t.runs.pollError} {describeError(error).message}</p>}
     <div className="actions">
@@ -119,6 +117,9 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
         ? <CancelControl api={api} runId={runId} status={status} onAck={applyAck} onForbidden={onRunChange} />
         : <p className="small">{t.accounts.cancelNotAllowed}</p>)}
     </div>
+    {/* The report comes after the run's actions (retry, cancel), which stay near its state. */}
+    {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}
+      extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project, report.sections?.codeReview.ledger ?? null, report.sections?.environment.dependencies ?? [])} runId={runId} canRun={canRun} onRetried={onRetried} />} />}
   </div>;
 }
 

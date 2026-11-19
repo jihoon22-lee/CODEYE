@@ -55,6 +55,9 @@
   line-height: 1.6;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
+  /* Korean wraps between words; long paths and identifiers still break where they must. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
   text-rendering: optimizeLegibility;
 }
 * { box-sizing: border-box; }
@@ -447,6 +450,7 @@ td [role='group'] p { margin: 0 0 6px; }
   dd { margin-bottom: var(--s2); }
   h1 { font-size: 25px; }
   .session { margin-left: 0; }
+  .quick-form > button[type='submit'] { padding: 8px 18px; }
   .report-section, .finding-card { padding: 0 var(--s3); }
   .report-section > summary, .finding-card > summary { margin: 0 calc(-1 * var(--s3)); padding-inline: var(--s3); }
 }
