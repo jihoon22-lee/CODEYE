@@ -2,8 +2,6 @@
 
 CODEYE 보고서가 지금 담는 내용, 발견 항목을 읽는 방법, 웹 화면과 표시 규칙, run 비교와 사람 판정, 내보내기와 접근성 요구를 다룬다. HTTP 경로·헤더·상태 코드와 진행 필드의 계산 규칙은 [API](API.md), 검토 역할과 지침 팩은 [검토](REVIEW.md), 분석기별 산출물과 규칙 문맥은 [분석기](ANALYZERS.md), 게시 전 실행·완료 절차는 [실행](EXECUTION.md)을 따른다.
 
-보고서를 분석 종류별 절로 다시 구성하는 작업이 다음에 예정되어 있다. 그 작업이 이 문서를 다시 쓴다. 아래 내용은 현재 구현을 기준으로 한다.
-
 ## 보고서 문서
 
 보고서는 run의 리비전마다 저장하는 구조화 JSON 한 벌이다. 형식의 기준은 [보고서 스키마](../schemas/report.schema.json)와 [발견 스키마](../schemas/finding.schema.json)이고 생성 코드는 [`internal/report`](../internal/report/build.go)다.
@@ -11,8 +9,8 @@ CODEYE 보고서가 지금 담는 내용, 발견 항목을 읽는 방법, 웹 �
 | 항목 | 현재 값과 규칙 |
 |---|---|
 | `schema_version` | `0.1`. 새 필드는 모두 선택 필드로 추가했다. |
-| `demo` | 제품이 게시한 보고서는 항상 `false`다. [`examples/report.json`](../examples/report.json)은 출력 구조를 설명하는 합성 예시(`demo: true`)이고, [`examples/report-go-vet.json`](../examples/report-go-vet.json)은 builder 1 시절의 실제 코드 미포함 내보내기다. 둘 다 현재 builder의 전체 형식이 아니다. |
-| `builder.id` / `builder.version` | `codeye-report` / `4`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를 기록한다. |
+| `demo` | 제품이 게시한 보고서는 항상 `false`다. [`examples/report.json`](../examples/report.json)은 현재 builder가 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이고, [`examples/report-go-vet.json`](../examples/report-go-vet.json)은 builder 1 시절의 실제 코드 미포함 내보내기다(분석 종류별 절 없음). |
+| `builder.id` / `builder.version` | `codeye-report` / `5`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를, 버전 5부터 [분석 종류별 절](#분석-종류별-절)을 기록한다. |
 | `builder.input_digest` | builder 입력(run·snapshot·attempt 사실, task 행, 결과 manifest, 산출물 행, 게시 시점 판정 집합, builder ID·버전·스키마 버전)의 SHA-256. 보고서 ID·리비전·생성 시각은 넣지 않는다. |
 | `export.include_code` | 저장본은 `true`다. 코드 미포함 내보내기는 같은 저장본의 projection이며 `false`다. |
 
@@ -50,14 +48,42 @@ JSON·Markdown·자체 포함 HTML은 같은 리비전의 같은 projection에�
 | `observations` | 원시 도구 진단. 뒤 단계가 고쳐 쓰지 않는다. |
 | `findings` | 발견 항목과 후보. [발견 항목 읽기](#발견-항목-읽기) |
 | `limitations` | 한계 코드 목록(`code` 또는 `code:detail`) |
+| `overview`, `environment`, `documents`, `static_analysis`, `metrics`, `secrets`, `code_review`, `gaps` | [분석 종류별 절](#분석-종류별-절)(builder 5부터) |
 
 실행 기록은 절대 경로를 싣지 않는다. 검증이 cwd는 작업공간 상대 경로(또는 `[REDACTED]`)인지, argv에 절대 경로가 없는지 확인한다.
 
+관찰은 원시 산출물에 묶인다. `raw_ref`는 그 task 실행의 원시 stream 산출물 ID, SHA-256, stream 순번, JSON pointer, 바이트 범위를 가리킨다. 위치는 도구가 확정한 줄 범위를 쓰고, 경로와 blob hash가 snapshot manifest와 일치할 때만 `evidence_state`가 `verified_against_source_manifest`다. 일치하지 않으면 `source_manifest_mismatch`, 확인할 수 없으면 `unresolved`이며 그 위치는 발견에 연결하지 않는다. `location_state`는 분석기 decoder가 준 값을 그대로 싣는다([분석기](ANALYZERS.md)).
+
 ## 분석 종류별 절
 
-(작성 중)
+builder 5부터 보고서는 위 필드에 더해 분석 종류마다 한 블록을 싣는다. 기존 필드(`observations`, `findings`, `coverage`, `summary`, `tasks`, `limitations`)의 모양과 값은 그대로이며 새 블록은 모두 선택 필드다. 블록은 관찰과 발견을 ID로만 가리키고 본문을 복사하지 않는다. builder 4 이하 리비전에는 블록이 없고 다시 빌드하지 않으며, 세 형식과 웹 화면은 그 리비전을 [이전 평면 배치](#markdown과-html-렌더링)로 보여준다.
 
-관찰은 원시 산출물에 묶인다. `raw_ref`는 그 task 실행의 원시 stream 산출물 ID, SHA-256, stream 순번, JSON pointer, 바이트 범위를 가리킨다. 위치는 도구가 확정한 줄 범위를 쓰고, 경로와 blob hash가 snapshot manifest와 일치할 때만 `evidence_state`가 `verified_against_source_manifest`다. 일치하지 않으면 `source_manifest_mismatch`, 확인할 수 없으면 `unresolved`이며 그 위치는 발견에 연결하지 않는다. `location_state`는 분석기 decoder가 준 값을 그대로 싣는다([분석기](ANALYZERS.md)).
+| 순서 | 절 | 블록 | 담는 것 |
+|---|---|---|---|
+| 1 | 종합 | `overview` | 절마다 단계 상태와 수(`sections[]`: `key`, `state`, `counts`), 먼저 볼 항목(`attention[]`: `section`, `code`, `count`) |
+| 2 | 환경 분석 | `environment` | 탐색 결과 수락 여부(`discovery`), 모듈·manifest, 모듈이 선언한 도구 요구, 노드가 관측한 도구·분석기 버전, 요구별 판정, 모델 해석(`model`, `notes`)과 그 근거 목록 |
+| 3 | 문서 분석 | `documents` | 문서 목록과 읽음·예산 초과·제외 상태, 읽기 예산, 모듈별 적용 문서, 겹치는 안내, 모델 해석(계약·충돌·질문·지침 메모)과 근거 목록 |
+| 4 | 정적 분석 | `static_analysis` | 생태계(`languages[].ecosystem`)별, 그 안에서 분석기 task별 한 행: 목적, 작업 상태·사유, 결과 수락 여부, exit class, 규칙 팩, 범위·처리 파일 수, 규칙별 관찰 수, 관찰·발견 ID |
+| 5 | 구조·중복 지표 | `metrics` | 지표 분석기 task와 지표별 묶음(이름·단위·임계값·최댓값·관찰 ID) |
+| 6 | 비밀정보 | `secrets` | 비밀정보 분석기 task, 탐지마다 규칙·위치·근거 상태·관찰 ID·도구 발견 ID, 모델 입력에서 비밀값을 걸렀는지(`model_input`) |
+| 7 | 코드 분석(모델 검토) | `code_review` | 지침 팩, 역할별 결과, 호출 수·수락 수·요청 바이트, 모델에 노출한 파일 수, 해석 한계, 모델 후보 발견 ID |
+| 8 | 분석 공백 | `gaps` | 분석하지 못했거나 일부만 분석한 범위(`section`, `code`, 선택 `subject`·`detail`). 비어 있으면 생략한다. |
+
+"이전 실행과 비교"는 저장 문서의 절이 아니다. 비교는 요청마다 계산하므로([run 비교](#run-비교)) 웹 화면만 종합 아래에 그 결과를 따로 보여주고, 내보내기에는 넣지 않는다.
+
+**분할.** 모든 관찰은 정적 분석·지표·비밀정보 중 정확히 한 절에 한 번 들어간다. 진단은 정적 분석 행, 지표 관찰은 지표 묶음, 비밀정보 분석기의 관찰은 탐지 목록이다. 모든 발견은 정적 분석(도구 발견)과 코드 분석(모델 후보) 중 정확히 한 곳에 들어간다. 비밀정보 탐지의 도구 발견은 정적 분석 쪽에 두고 탐지는 그 발견을 `finding_id`로 가리킨다. 두 절의 발견 집계를 같은 함수(`ComputeSummary`)로 계산해 더하면 `summary`와 같아야 한다. 정적 분석 행의 규칙별 수 합은 그 행의 관찰 수와 같고, 지표 묶음의 최댓값·임계값은 관찰에서 다시 계산한 값과 같아야 한다. 종합 블록은 다른 절에서 순수 함수로 다시 계산한 값과 같아야 한다. 검증(`ValidateReport`)이 저장 시와 조회 시에 이 규칙을 모두 확인한다.
+
+**분석기 목적.** 관찰이 어느 절에 들어갈지는 분석기 envelope의 `analyzer.purpose`(`metrics`, `secrets`, 없으면 진단)로 정한다([분석기](ANALYZERS.md#분석기-목적)). 생태계도 수락한 envelope의 `analyzer.ecosystem`에서 읽는다(go vet 문서는 `go`). 수락한 결과가 없는 task 행은 생태계를 모르므로 생태계 없는 묶음에 둔다.
+
+**단계 상태.** 절의 `stage`는 진행 화면과 같은 분류기(`progress.TaskStage`)로 task 행의 단계 열에서 계산한다. 값은 진행 단계 상태(`plan_pending`, `no_tasks`, `waiting`, `running`, `succeeded`, `skipped`, `failed`, `cancelled`, `partial`)와 같고, 단계별 상태 수(`counts`)·사유 코드(`reasons`)·task 수·성공 수를 함께 싣는다. 단계 열이 없는 task가 하나라도 있으면 `not_recorded`("세부 단계 미기록")다. 지표·비밀정보 절은 정적 분석 단계 중 그 목적의 task만 센다. 미실행·미지원·실패 task는 "실행하지 않음"이나 해당 상태로 보이고 0건으로 읽히지 않는다.
+
+**모델 해석.** 환경·문서·코드 분석 절의 모델 문장은 단계 연결 검사를 통과해 수락된 역할 기록에서 한 번씩만 가져온다. 역할이 수행되지 않았으면(`model.state: not_performed`와 사유 코드) 모델 문장은 하나도 없다. 문장은 그 절의 근거 목록(경로·줄 범위·blob SHA-256)에 있는 근거 ID만 인용할 수 있다. 화면과 내보내기는 이 문장에 "모델 해석"과 역할 이름을 붙여 플랫폼 판정과 구분한다. 모델 해석은 상태·수·판정의 원천이 아니다.
+
+**고정 문구.** 절의 제목·상태·수 이름·먼저 볼 항목 문장은 구조화 값에서 만든 템플릿이다. Go 렌더러는 [`messages_ko.go`](../internal/report/messages_ko.go), 웹은 [`report-ko.ts`](../web/src/locales/report-ko.ts)에 있으며 모르는 코드는 원문 그대로 보인다.
+
+**코드 미포함.** projection은 모델 문장을 모두 생략 문구로 바꾸고, 모듈 요구의 제약 문자열은 버전 제약 형식일 때만 남긴다. 경로·줄 번호·코드·수·blob hash는 남는다. 비밀정보 탐지는 처음부터 값과 그 일부·hash를 싣지 않는다.
+
+예시는 [`examples/report.json`](../examples/report.json)과 [`examples/report.md`](../examples/report.md)이다. `fixtures/modules/input`을 대상으로 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이며, 생성 시험은 [`report_example_test.go`](../internal/worker/review/report_example_test.go)다.
 
 ## 상태와 판정
 
@@ -147,10 +173,10 @@ JSON·Markdown·자체 포함 HTML은 같은 리비전의 같은 projection에�
 
 ### 현재 보고서에 없는 것
 
-- **환경·문서 탐색 결과.** `env.discover`와 `docs.discover`의 산출물은 `EnvironmentDecoder`([`environment.go`](../internal/report/environment.go))가 attempt·snapshot·probe 실행 기록과 대조해 검증만 한다. 관찰·발견·도구 행에 더하지 않고 보고서 절로 렌더링하지 않는다. 산출물 행과 task 상태·사유로만 보이며, 모듈별 선언·관측·판정과 문서 적용 범위는 보고서에서 읽을 수 없다. `coverage.environment` 요약도 없다.
+- **builder 4 이하 리비전의 탐색 결과.** `env.discover`와 `docs.discover`의 산출물은 `EnvironmentDecoder`([`environment.go`](../internal/report/environment.go))가 attempt·snapshot·probe 실행 기록과 대조해 검증한다. builder 5부터 그 결과가 환경 분석·문서 분석 절이 되지만, 이전 리비전은 다시 빌드하지 않으므로 산출물 행과 task 상태·사유로만 보인다. 관찰·발견·도구 행에 더하지 않는 것은 같다.
 - **코드 발췌.** 관리 서버에는 snapshot 파일 본문이 없어 보고서에 코드 발췌를 넣지 않는다. 노드 원본 경로에서 다시 읽지도 않는다. 위치와 blob SHA-256으로 snapshot 코드를 확인한다.
 - **테스트 실행 결과.** 위 `test_status`와 같다.
-- **영역별 절.** 발견은 `category`를 가질 뿐, 영역마다 수행한 검사·검토와 제한을 보여주는 절은 없다.
+- **결함 영역별 절.** 절은 분석 종류(환경·문서·정적 분석·지표·비밀정보·모델 검토)로 나눈다. 발견의 `category`(정확성·동시성 등) 축마다 수행한 검사와 제한을 보여주는 절은 없고, 발견 목록이 category로 묶일 뿐이다.
 - **Markdown·HTML의 일부 필드.** 두 형식은 도구 행의 `rule_context`, `hidden_findings`, 현재 판정을 렌더링하지 않는다. 판정은 게시 시점 값만 보인다. JSON과 [비교 응답](#run-비교)에서 읽는다.
 
 ## 발견 항목 읽기
@@ -211,12 +237,18 @@ JSON·Markdown·자체 포함 HTML은 같은 리비전의 같은 projection에�
 - 위치와 근거 위치의 심볼 이름을 지운다.
 - `fingerprint`, `fingerprint_basis`, `disposition_version`을 싣지 않는다. 키 없는 digest는 짧은 코드 줄을 추측해 맞춰 볼 수 있는 확인 수단이 되기 때문이다. 식별과 현재 판정은 프로젝트 권한을 검사하는 비교·판정 API로만 읽는다. 프로젝트별 키로 감싼 식별자는 키 수명 관리가 필요해 만들지 않았다.
 - 도구 행 `rule_context`의 `config_paths`·`config_digest`를 지운다. 설정 바이트의 digest도 같은 이유로 추측 확인 수단이 된다.
+- 분석 종류별 절의 모델 문장(환경 메모, 문서 계약·충돌·질문·지침 메모, 진단 해석의 한계)을 생략 문구로 바꾸고, 모듈 요구의 제약 문자열은 버전 제약 형식이 아니면 지운다([분석 종류별 절](#분석-종류별-절)).
 
-스키마의 code-free 규칙과 [`scripts/validate_bundle.py`](../scripts/validate_bundle.py)의 부정 사례가 마지막 두 규칙을 강제한다. 경로·줄 번호·규칙 ID·산출물 hash는 남는다. 비밀값과 그 일부·hash는 처음부터 저장하지 않는다([분석기](ANALYZERS.md)). 코드 포함 내보내기는 같은 프로젝트를 읽을 수 있는 사용자에게 저장된 도구 메시지·검토 문구·심볼을 그대로 준다. 내보내기 다운로드도 요청마다 프로젝트 권한을 검사한다.
+스키마의 code-free 규칙과 [`scripts/validate_bundle.py`](../scripts/validate_bundle.py)의 부정 사례가 식별·규칙 문맥 규칙을, `ValidateReport`가 절의 모델 문장 규칙을 강제한다. 경로·줄 번호·규칙 ID·산출물 hash는 남는다. 비밀값과 그 일부·hash는 처음부터 저장하지 않는다([분석기](ANALYZERS.md)). 코드 포함 내보내기는 같은 프로젝트를 읽을 수 있는 사용자에게 저장된 도구 메시지·검토 문구·심볼을 그대로 준다. 내보내기 다운로드도 요청마다 프로젝트 권한을 검사한다.
 
 ## Markdown과 HTML 렌더링
 
-두 형식은 같은 view 모델에서 만든다. 머리 표(리비전·digest·상태·판정·run·attempt·snapshot·커밋·프로필·생성 시각·내보내기 종류), 상태 배너, 요약 표, 우선 확인 목록, AI 검토(필수·선택 task와 모델 호출), 분석 범위와 도구 표, 작업 상태, 발견 항목, 원시 도구 관찰, 실행 기록, 산출물, 한계와 공백, projection JSON digest 순이다. 배너는 부분·실패·취소 결과임을 첫머리에 알린다. 항목이 없으면 "결함이 없다는 뜻이 아니다"를, 관찰이 없으면 "도구가 0건을 보고한 것과 분석하지 않은 범위는 다르다"를 함께 쓴다.
+두 형식은 같은 view 모델에서 만든다. 머리 표(리비전·digest·상태·판정·run·attempt·snapshot·커밋·프로필·생성 시각·내보내기 종류)와 상태 배너가 먼저 온다. 배너는 부분·실패·취소 결과임을 첫머리에 알린다.
+
+- **분석 종류별 절이 있는 리비전.** 종합(판정·요약 표·분석 종류별 상태 표·먼저 볼 것·우선 확인할 발견), 환경 분석, 문서 분석, 정적 분석(언어별 도구 표·진단·도구 발견), 구조·중복 지표, 비밀정보, 코드 분석(역할·모델 검토 발견·진단 해석의 한계), 분석 공백, 부록(AI 검토, 분석 범위, 작업 상태, 실행 기록, 산출물, 한계와 공백), projection JSON digest 순이다. 각 절은 첫 줄에 단계 상태와 task·성공 수를 쓰고, 표의 수는 종합 블록의 수와 같다. 모델 문장은 "모델 해석(역할)" 표시와 근거 ID를 붙여 쓴다. HTML은 절 목차와 절마다 `id`를 두고, 상태 표의 수 칸에 `data-count`를 붙인다.
+- **이전 리비전(builder 4 이하).** 요약 표, 우선 확인 목록, AI 검토(필수·선택 task와 모델 호출), 분석 범위와 도구 표, 작업 상태, 발견 항목, 원시 도구 관찰, 실행 기록, 산출물, 한계와 공백, projection JSON digest 순의 평면 배치다. 출력은 절 도입 전과 바이트 단위로 같다([`testdata`](../internal/report/testdata/report-go-vet.md)).
+
+항목이 없으면 "결함이 없다는 뜻이 아니다"를, 관찰이 없으면 "도구가 0건을 보고한 것과 분석하지 않은 범위는 다르다"를 함께 쓴다. 실행하지 않은 도구 행은 진단 수 대신 "실행하지 않음"을 쓴다.
 
 - **Markdown.** 모든 동적 값은 이스케이프한 평문이거나 코드 span이다. CommonMark 문장부호에 역슬래시, HTML 메타문자에 entity, 표의 `|`에 이스케이프를 붙이고 줄바꿈·제어 문자는 공백으로 바꾼다. 코드 span의 fence는 값 안의 가장 긴 backtick 연속보다 길다. 도구 문자열이 링크·이미지·HTML·표 구조를 만들 수 없다.
 - **HTML.** `html/template`의 문맥별 escaping을 쓴다. 스크립트·외부 이미지·폰트·CDN이 없고 링크는 같은 문서 안 fragment뿐이다. CSP(`default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`)를 응답 헤더와 `<meta>`에 함께 넣어 저장한 파일도 같은 정책을 갖는다. 긴 표와 코드는 가로 스크롤 영역에 둔다.
@@ -407,7 +439,17 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 
 종료된 실행에 게시 보고서가 있으면 "보고서 열기"로 최신 리비전의 코드 포함 JSON을 읽는다(같은 프로젝트 읽기 권한자 전용).
 
-- 품질 판정, AI 검토 상태, 집계(전체·조치·미확정·기각·원시 진단, 구조 지표가 있으면 그 수), 한계 문구, 분석 범위 수(모르면 "미확정"), 비교 절, 모델 호출 목록(역할·모델·OpenCode 버전·결과·지침 digest 앞부분), snapshot ID를 보인다. 모델이 본 파일 수를 계산할 수 없는 부분 실행은 미확인으로 표시한다.
+분석 종류별 절이 있는 리비전([`ReportSections.tsx`](../web/src/ReportSections.tsx)):
+
+- 종합이 먼저 온다. 품질 판정, 집계, 분석 종류별 상태 표(절 이름은 그 절을 여는 버튼), 먼저 볼 것(항목마다 해당 절을 여는 버튼), 우선 확인할 발견을 보인다. 버튼을 누르면 그 절이 열리고 절 제목으로 초점이 옮겨진다.
+- 그 아래 "이전 실행과 비교"를 화면에서만 보인다. 저장 문서와 내보내기에는 없다.
+- 분석 종류마다 `details` 요소 하나다. 제목 옆에 단계 상태를 글자와 기호로 붙이고, 먼저 볼 것이 가리키는 절은 처음부터 열어 둔다. 절 안의 수 목록은 종합 블록의 수 그대로다. 모델 문장은 "모델 해석" 표시와 역할 이름을 붙인 별도 상자에 둔다. 실행하지 않은 도구는 "실행하지 않음"으로 보인다.
+- 정적 분석과 코드 분석 절은 아래와 같은 발견 목록(category 묶음, 검색, 숨김 판정 체크박스)을 그 절의 발견으로 보인다. 부록에는 모델 호출 목록, 분석 범위 수, task 표, 원시 관찰, 한계 문구를 둔다.
+- 해석기([`reportSections.ts`](../web/src/reportSections.ts))는 일곱 블록이 모두 있는지, 관찰·발견의 분할, 절별 발견 수의 합, 공백 수를 확인한다. 어긋나면 보고서 전체를 "응답 형식 오류"로 거부한다.
+
+절이 없는 이전 리비전은 아래 평면 배치로 보인다.
+
+- 품질 판정, AI 검토 상태, 집계(전체·조치·미확정·기각·원시 진단, 구조 지표가 있으면 그 수), 한계 문구, 분석 범위 수(모르면 "미확정"), 화면 전용 비교 결과, 모델 호출 목록(역할·모델·OpenCode 버전·결과·지침 digest 앞부분), snapshot ID를 보인다. 모델이 본 파일 수를 계산할 수 없는 부분 실행은 미확인으로 표시한다.
 - 발견은 category별로 묶고, 항목이 둘 이상이면 제목·영향·영역 이름으로 거른다. 각 항목은 펼침 요소이며 제목 옆에 검증 상태·심각도·비교 상태·현재 판정을 글자로 붙인다. 펼치면 발생 조건, 심각도 이유, 영향, 개선, 확인 방법, 주장(관찰·추론 구분)과 근거 링크, 근거 목록(반대 근거 표시, snapshot 경로와 줄 범위 또는 산출물 ID), 한계를 보인다. 근거 링크는 같은 발견 안의 근거 위치로 이동한다.
 - 현재 판정이 `accepted_risk`·`false_positive`·`suppressed`인 항목은 목록에서만 빼고 체크박스로 다시 보이게 한다. 집계에는 남는다. 서버 집계는 `fixed_by_user`도 숨김으로 세지만 목록은 이 항목을 계속 보여준다.
 - task 표와 원시 관찰 목록을 펼쳐 볼 수 있다.
@@ -436,7 +478,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 다음은 화면·보고서 설계 목표이며 현재 구현되어 있지 않다.
 
 - **화면 구성.** 등록 연결 진단(브랜치 조회 포함), 프로젝트 개요, 영역별 분석, 운영자 노드·풀·모델·도구 설정 화면. 풀·노드 관리는 지금 운영자 CLI를 쓴다. 등록의 설명·첨부·관심 영역·테스트는 접힌 선택 항목으로 두며, 자동 탐색 결과를 고칠 수 있게 하되 매 실행 승인 폼을 강제하지 않는다.
-- **보고서 3단 구조.** 요약(분석 입력·SHA·시각·프로필·실행 상태, 우선 확인 3~5개, 신규·지속 항목, 필수 검사 실패, 분석 공백, 테스트 실행 여부), 영역별(정확성, 오류·취소, 동시성, 자원 수명, 데이터·인터페이스 계약, 소스 보안, 구조·유지보수성, 성능 구조, 테스트 공백 축마다 발견뿐 아니라 수행한 검사·검토와 제한을 표시하고 수행하지 않은 영역을 녹색으로 칠하지 않음), 개별 발견. 읽는 사람이 "지금 무엇을 해야 하나"를 알 수 있어야 한다. 이 구조는 예정된 분석 종류별 재구성에서 다시 정한다.
+- **결함 영역별 표시.** 정확성, 오류·취소, 동시성, 자원 수명, 데이터·인터페이스 계약, 소스 보안, 구조·유지보수성, 성능 구조, 테스트 공백 축마다 발견뿐 아니라 수행한 검사·검토와 제한을 표시하고 수행하지 않은 영역을 녹색으로 칠하지 않는다. 지금 보고서는 [분석 종류별 절](#분석-종류별-절)로 나누고 발견을 category로 묶을 뿐이다. 종합의 신규·지속 항목 수도 저장 문서에는 없고 화면의 비교 결과에서만 읽는다.
 - **코드 뷰.** 기본 코드 뷰는 분석한 snapshot이며 현재 브랜치의 최신 파일로 자동 연결하지 않는다. 파일·행·심볼·related flow를 연결하고 원시 진단과 해석을 펼친다. snapshot이 만료되면 source unavailable을 표시하고 다른 버전 소스로 대체하지 않는다. 흐름이 도구가 생성한 경로인지 모델이 추정한 경로인지 표시한다. 비밀정보 발견은 마스킹된 위치와 조치만 보여준다.
 - **데이터 기반 대체 서술.** 모델 서술 생성이 실패해도 데이터만으로 보고서를 열람할 수 있게 한다. 현재 보고서는 처음부터 모델 서술 생성 없이 구조화 데이터로 만든다.
 - **판정 일괄 적용, 판정 감사 이력 화면, 이동 후보 판정 이전, 첫 발견 시각.**
@@ -448,7 +490,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 - 색상 외에 글자·기호로 상태를 구분한다(NFR-005).
 - 모든 조작은 키보드로 할 수 있다. 펼침은 실제 버튼(`aria-expanded`)이나 `details` 요소를 쓰고, 양식은 native 요소를 쓴다. 본문 바로가기 링크를 둔다.
 - 상태 변화는 `role="status"`·`aria-live`로, 오류는 `role="alert"`로 알린다.
-- 긴 코드와 표는 가로 스크롤 영역에 둔다. 보고서의 발견은 검색어로 거를 수 있다.
+- 긴 코드와 표는 가로 스크롤 영역에 둔다. 보고서의 발견은 검색어로 거를 수 있다. 분석 종류별 절은 `details` 요소이고 종합의 절 버튼은 실제 버튼이다.
 - 조회 실패에는 재시도 경로를 둔다.
 - 화면과 HTML 내보내기는 외부 CDN·폰트를 쓰지 않는다. 첫 화면에는 차트 대신 실행 상태와 행동 우선순위를 둔다.
 
