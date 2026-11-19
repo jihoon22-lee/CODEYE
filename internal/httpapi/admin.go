@@ -182,13 +182,22 @@ func (s *Server) adminSetAdmin(q *request) {
 // POST /admin/users/{id}/password-reset: the password is cleared, every
 // session revoked and a single-use login link returned; the user then sets
 // a new password. An administrator's own password changes through
-// POST /session/password (409 here).
+// POST /session/password, and a user without a username has nothing to
+// reset (both 409 with their own message). Whoever signs in with the link is
+// attributed to this administrator, and the user sees the reset.
 func (s *Server) adminResetPassword(q *request) {
 	token := NewToken()
 	ctx, cancel := q.ctx()
 	defer cancel()
 	u, err := s.store.ResetPassword(ctx, q.principal(), q.params[0], TokenHash(token), launchTTL)
-	if err != nil {
+	switch {
+	case errors.Is(err, postgres.ErrSelfReset):
+		writeError(q.w, q.r, http.StatusConflict, "CONFLICT", "administrators change their own password with POST /session/password", false)
+		return
+	case errors.Is(err, postgres.ErrResetNeedsUsername):
+		writeError(q.w, q.r, http.StatusConflict, "CONFLICT", "the user has no username and so no password to reset; the operator issues login links with codeye login-link", false)
+		return
+	case err != nil:
 		s.storeError(q, err)
 		return
 	}

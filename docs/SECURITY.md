@@ -66,8 +66,10 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 | 동시 시도 | 실패는 KDF 계산 전에 먼저 센다(병렬 추측도 모두 센다). 성공하면 그 (이름, 주소) 쌍의 카운터를 지우고 이름·주소 카운터에서 방금 센 하나를 돌려준다. 그래서 성공이 잠금을 남기지 않는다 |
 | KDF 동시 계산 | 비밀번호 로그인과 변경은 프로세스마다 CPU 수만큼의 계산 자리 중 하나를 확인·계산 전체 동안 잡는다. 3초 안에 자리가 나지 않으면 503 `UNAVAILABLE`(`retryable=true`)이고 실패로 세지도 기록하지도 않는다. 자리는 controller 프로세스마다 따로이며(그 프로세스의 CPU를 지킨다) 전역 상태가 아니다 |
 | 비밀번호 변경 | `POST /session/password`. 비밀번호가 있으면 현재 비밀번호가 필요하고 틀리면 로그인 실패처럼 센다. 새 비밀번호 규칙을 먼저 검사한다. 성공하면 그 사용자의 다른 세션과 쓰지 않은 로그인 링크를 같은 트랜잭션에서 끝낸다. KDF 계산 뒤 저장 직전에 hash가 바뀌었으면(재설정·다른 변경) 409다 |
-| 비밀번호 변경 필요 | 관리자가 만든 계정과 재설정된 계정은 `must_change_password`다. 그 세션은 세션 조회·로그아웃·비밀번호 변경만 쓸 수 있고 다른 경로는 403 `PASSWORD_CHANGE_REQUIRED`다 |
-| 재설정 | 관리자 재설정은 비밀번호를 지우고 모든 세션과 이전에 발급한 쓰지 않은 로그인 링크를 끝낸 뒤 새 일회용 로그인 링크를 준다. 운영자 CLI의 비밀번호 설정도 세션과 링크를 끝낸다. 임시 비밀번호는 쓰지 않는다([결정](DECISIONS.md) A36) |
+| 비밀번호 변경 필요 | 관리자가 만든 계정과 재설정된 계정은 `must_change_password`다. 계정 생성·재설정 링크로 시작한 세션은 계정 표시와 별개로 그 세션에서 비밀번호를 정할 때까지 묶인다(`auth_sessions.password_required`). 묶인 세션은 세션 조회·로그아웃·비밀번호 변경만 쓸 수 있고 다른 경로는 403 `PASSWORD_CHANGE_REQUIRED`다 |
+| 재설정 | 관리자 재설정은 비밀번호를 지우고 모든 세션과 이전에 발급한 쓰지 않은 로그인 링크를 끝낸 뒤 새 일회용 로그인 링크를 준다. 사용자 이름이 없는 사용자(로그인 링크 전용)는 재설정할 비밀번호가 없어 409이고, 그런 사용자의 링크는 운영자 CLI만 발급한다. 운영자 CLI의 비밀번호 설정도 세션과 링크를 끝낸다. 임시 비밀번호는 쓰지 않는다([결정](DECISIONS.md) A36) |
+| 링크 발급자 | 로그인 링크마다 발급자(관리자 ID, 없으면 운영자 CLI)와 목적(`login`, `account_created`, `password_reset`)을 저장한다. `auth.login_succeeded`의 detail에 `link_issued_by`(관리자 ID 또는 `operator_cli`)와 `link_purpose`를 적는다. 관리자가 발급한 링크로 시작한 세션은 발급자를 세션 행에 지니고, 그 세션의 사용자가 남기는 모든 감사 행 detail에 `link_issued_by`가 붙는다 |
+| 재설정 알림 | 재설정 시각과 관리자를 사용자 행에 남긴다. 사용자의 `GET /session`은 `password_reset`(시각, 관리자 ID·이름 또는 운영자 CLI, 이후 로그인 수, 확인 여부)을 준다. 화면은 확인 전까지 "관리자 X가 T에 비밀번호를 초기화했습니다"를 보인다. `POST /session/password-reset/acknowledge`는 확인 표시만 하고(`auth.password_reset_acknowledged`) 기록은 지우지 않는다 |
 | 로그인 후 hash 확인 | 로그인 성공은 KDF 계산 뒤 사용자 행을 잠그고 hash가 그대로인지 다시 확인한 다음 세션을 만든다. 그 사이 변경·재설정·비활성화가 커밋되면 로그인은 실패한다 |
 | 비밀값 경로 | 비밀번호는 argv·환경변수·로그·감사 detail·오류 문구에 넣지 않는다. CLI는 터미널(입력 숨김, 두 번 입력), 표준 입력 한 줄, group·other가 접근할 수 없는 파일(`--password-file`)에서만 읽는다 |
 
@@ -82,6 +84,7 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 ### 계정과 관리자
 
 - 관리자(`is_admin`)는 전역 역할이다. 사용자 목록·생성·비활성화, 관리자 지정·해제, 비밀번호 재설정, source root 허가, provider·감사 기록 조회를 한다. **관리자 역할은 어떤 프로젝트도 열지 않는다.** 관리자도 프로젝트 구성원이 아니면 그 프로젝트·run·보고서·스트림에서 404를 받는다. 프로젝트 감사 기록도 프로젝트 manager의 권한이다.
+- **재설정하는 관리자는 그 계정을 넘겨받을 수 있다.** 재설정 링크를 자기가 쓰고 새 비밀번호를 정하면 그 사용자로서 사용자의 프로젝트를 연다. 이것은 막지 않는다(사용자별 장치 인증 없이는 막을 수 없다). 대신 링크 로그인과 그 세션의 모든 감사 행에 `link_issued_by`가 남고, 사용자는 다음 로그인에서 재설정 알림(누가·언제·이후 로그인 수)을 본다. 남는 한계: 넘겨받은 관리자가 로그아웃한 뒤 새 비밀번호로 다시 로그인한 세션은 링크로 시작하지 않아 `link_issued_by`가 붙지 않는다(그 로그인 행 앞의 재설정·링크 로그인 행이 출처다). 그 관리자가 사용자의 세션으로 알림을 확인 표시할 수도 있지만 기록은 남고 확인도 감사 행으로 남는다.
 - 첫 관리자는 운영자 CLI(`codeye user create --username … --admin`)로 만든다. HTTP에는 관리자를 처음 만드는 경로가 없다. 운영자 CLI는 DB에 직접 접근하는 운영자(감사 actor `operator_cli`)다.
 - 마지막 활성 관리자는 비활성화하거나 관리자 역할을 거둘 수 없다. 검사는 활성 관리자 행 전체를 id 순으로 `FOR UPDATE` 잠근 같은 트랜잭션에서 하므로, 두 관리자가 동시에 서로를 내려도 한 명은 남는다.
 - 관리자 경로는 API 계층에서 세션의 관리자 여부를 확인하고, 저장 계층이 같은 트랜잭션에서 다시 확인한다(그 사이 역할을 잃었으면 403).
@@ -187,7 +190,7 @@ action 목록(의미가 같은 이름은 묶음):
 
 | 묶음 | action |
 |---|---|
-| 인증 | `auth.login_succeeded`, `auth.login_failed`, `auth.login_throttled`, `auth.logout`, `auth.password_changed`, `auth.password_change_failed`, `auth.password_set`(운영자 CLI), `auth.password_reset`, `auth.login_link_issued`(운영자 CLI) |
+| 인증 | `auth.login_succeeded`, `auth.login_failed`, `auth.login_throttled`, `auth.logout`, `auth.password_changed`, `auth.password_change_failed`, `auth.password_set`(운영자 CLI), `auth.password_reset`, `auth.password_reset_acknowledged`, `auth.login_link_issued`(운영자 CLI) |
 | 계정 | `user.created`, `user.disabled`, `user.admin_granted`, `user.admin_revoked` |
 | 접근 | `source_root.added`, `source_root.granted`, `source_root.grant_revoked`, `provider.added` |
 | 프로젝트 | `project.registered`, `project.revised`, `project.member_set`, `project.member_removed` |
@@ -197,7 +200,7 @@ action 목록(의미가 같은 이름은 묶음):
 | 배치 한도 | `pool.policy_set`, `scheduler.limits_set`, `scheduler.artifact_quota_set` |
 | fencing | `attempt.stale_rejected` |
 
-목록은 migration 0010의 CHECK, 저장 계층 상수, OpenAPI `AuditAction`에 같게 적고 [`scripts/validate_bundle.py`](../scripts/validate_bundle.py)가 대조한다. 예약이 만든 run의 `run.requested`는 행위자 종류 `system`이고 예약의 actor를 사용자로 남긴다.
+목록은 migration(0010에서 만들고 0011이 늘린 CHECK), 저장 계층 상수, OpenAPI `AuditAction`에 같게 적고 [`scripts/validate_bundle.py`](../scripts/validate_bundle.py)가 대조한다. 예약이 만든 run의 `run.requested`는 행위자 종류 `system`이고 예약의 actor를 사용자로 남긴다.
 
 감사 행을 쓰지 않는 변경: 노드 프로토콜 쓰기(위), 보고서 게시·거부(run 이벤트 `report.published`·`report.rejected`), 노드 heartbeat가 보고한 정리 결과 중 오래된 attempt에 대한 것(응답 본문으로만 알린다), 복원 직후의 세션·토큰·노드 무효화(새 DB에 복원하는 운영자 명령 `codeye restore`의 일부다).
 

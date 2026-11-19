@@ -107,8 +107,12 @@ func classify(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, ErrIdempotencyConflict) {
-		return ErrIdempotencyConflict
+	// Store sentinels that carry a reason the API states; each wraps a
+	// domain class, so callers that only test the class still match.
+	for _, e := range []error{ErrIdempotencyConflict, ErrSelfReset, ErrResetNeedsUsername} {
+		if errors.Is(err, e) {
+			return e
+		}
 	}
 	for _, e := range []error{domain.ErrUnauthenticated, domain.ErrUnsupported, domain.ErrInvalid, domain.ErrForbidden, domain.ErrNotFound, domain.ErrConflict, domain.ErrStaleAttempt, domain.ErrUnavailable, domain.ErrMigration, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, e) {

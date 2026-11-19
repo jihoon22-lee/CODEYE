@@ -71,7 +71,8 @@
 | TC-152 | 구성원 추가·변경·제거와 소유자 대상, 감사 읽기 필터·pagination·권한, 감사 detail 허용 목록 | 소유자는 409. 감사 읽기는 관리자(전체)·manager(그 프로젝트)만이고 구성원이 아닌 관리자는 프로젝트 감사를 읽지 못한다. 허용 목록 밖 key나 비밀번호 같은 값은 쓰지 못한다 | REQ-002; NFR-006 |
 | TC-153 | migration 0010을 로그인 링크 사용자가 있는 0009 DB에 적용, 감사 행 수정·삭제·truncate, 0010 중간 실패 | 기존 사용자는 이름·비밀번호 없는 비관리자로 남아 로그인 링크로 들어간다. 제한 키는 하나이고 바꿀 수 없다. 감사 행은 수정·삭제·truncate할 수 없다. 실패하면 전체가 rollback된다 | NFR-003 |
 | TC-154 | `codeye user create/passwd/list/disable/admin`, `--password` 인자, 접근 가능한 비밀번호 파일, 약한 비밀번호, 중복 이름, 마지막 관리자 | 비밀번호는 표준 입력·0600 파일에서만 읽고 출력·감사 detail에 없다. 인자는 거부(2), 넓은 mode 파일 거부, 약한 비밀번호 2, 중복 1, 마지막 관리자 1. 변경마다 `operator_cli` 감사 행 | REQ-002; NFR-006 |
-| TC-155 | 계약 검사: 감사 action·행위자·대상 목록이 migration 0010·저장 계층·OpenAPI에서 같음, `examples/accounts.json`, 허용 detail key 이름 | `scripts/validate_bundle.py`가 대조하고 목록 차이·비밀번호 key·모르는 action·hash 필드 같은 부정 사례를 거부한다. 보조 검사이며 TC-140~TC-154를 대신하지 않는다 | NFR-006 |
+| TC-156 | 관리자 재설정의 기록과 표시: 이름 없는 사용자 재설정, 자기 재설정, 재설정 링크 세션(계정 표시를 지워도), 링크 로그인과 그 세션의 이후 행, 운영자 링크, 사용자의 세션 조회와 확인, 경로 표 전체를 재설정 링크 세션으로 요청 | 이름 없는 사용자와 자기 재설정은 각기 다른 문구의 409. 재설정 링크 세션은 계정 표시와 무관하게 비밀번호 변경 전까지 403 `PASSWORD_CHANGE_REQUIRED`. 로그인 행에 `link_issued_by`(관리자 ID)·`link_purpose`, 그 세션의 이후 모든 행에 `link_issued_by`. 운영자 링크는 `operator_cli`. 세션 조회의 `password_reset`이 관리자·시각·이후 로그인 수를 주고, 확인 뒤에도 남으며 확인은 한 번만 기록된다. 격리 표의 manager 세션이 재설정 링크로 시작해 그 세션이 쓴 모든 행이 관리자를 가리킨다 | REQ-002; NFR-006 |
+| TC-155 | 계약 검사: 감사 action·행위자·대상 목록이 migration(0010·0011)·저장 계층·OpenAPI에서 같음, `examples/accounts.json`, 허용 detail key 이름 | `scripts/validate_bundle.py`가 대조하고 목록 차이·비밀번호 key·모르는 action·hash 필드 같은 부정 사례를 거부한다. 보조 검사이며 TC-140~TC-154를 대신하지 않는다 | NFR-006 |
 
 TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한다. 웹 화면에서 역할에 따라 버튼을 숨기는 시험은 화면이 생길 때 더한다.
 

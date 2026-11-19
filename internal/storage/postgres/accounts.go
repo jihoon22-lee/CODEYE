@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -127,6 +128,12 @@ func (s *Store) CreateAccount(ctx context.Context, by Principal, in NewAccount) 
 	if in.LaunchTokenSHA256 != "" && (!hexDigest.MatchString(in.LaunchTokenSHA256) || in.LaunchTTL < time.Second || in.LaunchTTL > maxLaunchTTL) {
 		return User{}, domain.ErrInvalid
 	}
+	// An administrator's link for a new account gates its session to setting
+	// a password, which needs a username; login-link users are the
+	// operator's to create.
+	if in.LaunchTokenSHA256 != "" && !by.operator && username == nil {
+		return User{}, domain.ErrInvalid
+	}
 	return transaction(ctx, s, func(tx pgx.Tx) (User, error) {
 		if err := requireAdmin(ctx, tx, by); err != nil {
 			return User{}, err
@@ -152,7 +159,7 @@ func (s *Store) CreateAccount(ctx context.Context, by Principal, in NewAccount) 
 			return User{}, err
 		}
 		if in.LaunchTokenSHA256 != "" {
-			if err := insertLaunchToken(ctx, tx, id, in.LaunchTokenSHA256, in.LaunchTTL); err != nil {
+			if err := insertLaunchToken(ctx, tx, id, in.LaunchTokenSHA256, in.LaunchTTL, by, linkAccountCreated); err != nil {
 				return User{}, err
 			}
 		}
@@ -270,30 +277,54 @@ func (s *Store) SetPassword(ctx context.Context, id string, h account.Hash, must
 	})
 }
 
+// Reset refusals: both are ErrConflict for callers that only classify.
+var (
+	// ErrSelfReset: an administrator's own password changes through the
+	// session, not a reset.
+	ErrSelfReset = fmt.Errorf("%w: an administrator cannot reset their own password", domain.ErrConflict)
+	// ErrResetNeedsUsername: a user without a username has no password to
+	// reset; such users get login links from the operator CLI only.
+	ErrResetNeedsUsername = fmt.Errorf("%w: the user has no username", domain.ErrConflict)
+)
+
 // ResetPassword clears the user's password, revokes every session and
-// issues a single-use login link (tokenSHA256, ttl) in one transaction. A
-// user with a username must then set a new password before doing anything
-// else (must_change_password). An administrator resets others only; their
-// own password changes through the session (ErrConflict).
+// issues a single-use login link (tokenSHA256, ttl) in one transaction. The
+// user must then set a new password before doing anything else: the account
+// is flagged must_change_password and the link's session is gated to the
+// password change on its own. The reset is recorded on the user (time and
+// administrator) for the user to see, and the link records its issuer, so
+// whoever signs in with it is attributed. A user without a username is ErrResetNeedsUsername;
+// an administrator's own reset is ErrSelfReset.
 func (s *Store) ResetPassword(ctx context.Context, by Principal, id, tokenSHA256 string, ttl time.Duration) (User, error) {
 	if !validIDs(id) || !hexDigest.MatchString(tokenSHA256) || ttl < time.Second || ttl > maxLaunchTTL {
 		return User{}, domain.ErrInvalid
 	}
 	if !by.operator && by.user == id {
-		return User{}, domain.ErrConflict
+		return User{}, ErrSelfReset
 	}
 	return transaction(ctx, s, func(tx pgx.Tx) (User, error) {
 		if err := requireAdmin(ctx, tx, by); err != nil {
 			return User{}, err
 		}
 		var enabled bool
-		if err := tx.QueryRow(ctx, "SELECT disabled_at IS NULL FROM users WHERE id=$1 FOR UPDATE", id).Scan(&enabled); err != nil {
+		var username *string
+		if err := tx.QueryRow(ctx, "SELECT disabled_at IS NULL,username FROM users WHERE id=$1 FOR UPDATE", id).Scan(&enabled, &username); err != nil {
 			return User{}, err
 		}
 		if !enabled {
 			return User{}, domain.ErrNotFound
 		}
+		if username == nil {
+			return User{}, ErrResetNeedsUsername
+		}
 		if err := storeHash(ctx, tx, id, nil, true); err != nil {
+			return User{}, err
+		}
+		var resetBy any
+		if !by.operator {
+			resetBy = by.user
+		}
+		if _, err := tx.Exec(ctx, "UPDATE users SET password_reset_at=clock_timestamp(),password_reset_by=$2 WHERE id=$1", id, resetBy); err != nil {
 			return User{}, err
 		}
 		tag, err := tx.Exec(ctx, "UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE user_id=$1 AND revoked_at IS NULL", id)
@@ -303,7 +334,7 @@ func (s *Store) ResetPassword(ctx context.Context, by Principal, id, tokenSHA256
 		if err := retireLaunchTokens(ctx, tx, id); err != nil {
 			return User{}, err
 		}
-		if err := insertLaunchToken(ctx, tx, id, tokenSHA256, ttl); err != nil {
+		if err := insertLaunchToken(ctx, tx, id, tokenSHA256, ttl, by, linkPasswordReset); err != nil {
 			return User{}, err
 		}
 		e := principalAudit(by, AuditPasswordReset).target("user", id).with(map[string]any{"method": "login_link", "sessions_revoked": tag.RowsAffected()})

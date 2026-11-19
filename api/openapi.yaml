@@ -136,6 +136,18 @@ paths:
       responses:
         '204': {description: 세션 폐기와 cookie 삭제}
         default: {$ref: '#/components/responses/Error'}
+  /api/v1/session/password-reset/acknowledge:
+    post:
+      operationId: acknowledgePasswordReset
+      x-codeye-status: implemented
+      description: >-
+        세션 사용자가 마지막 비밀번호 초기화 알림을 봤다고 표시한다. 기록(시각·관리자·이후 로그인 수)은 남고 SessionView.password_reset.acknowledged만
+        true가 된다. 확인할 초기화가 없으면 아무것도 바꾸지 않고 204다. 감사 action auth.password_reset_acknowledged(확인할 것이 있었을 때).
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '204': {description: 확인함}
+        default: {$ref: '#/components/responses/Error'}
   /api/v1/session/password:
     post:
       operationId: changePassword
@@ -814,7 +826,10 @@ paths:
       description: >-
         비밀번호를 지우고 모든 세션과 이전에 발급한 쓰지 않은 로그인 링크를 끝낸 뒤 새 일회용 로그인 링크(10분)를 돌려준다. 사용자는 링크로 로그인해 새
         비밀번호를 정한다. 임시 비밀번호는 만들지 않는다. 자기 자신은 409(POST /session/password를 쓴다),
-        비활성 사용자는 404. 사용자 이름이 없는 사용자는 비밀번호가 없으므로 새 로그인 링크만 받는다.
+        사용자 이름이 없는 사용자도 409(비밀번호가 없다; 로그인 링크는 운영자 CLI만 발급한다), 비활성 사용자는 404.
+        이 링크로 시작한 세션은 그 세션에서 비밀번호를 정할 때까지 비밀번호 변경만 할 수 있고, 로그인 기록과 그 세션이 남기는 모든 감사 행에
+        detail.link_issued_by(이 관리자)가 붙는다. 사용자의 세션 조회는 password_reset으로 초기화 시각·관리자·이후 로그인 수를 보여 준다.
+        관리자는 이 링크로 그 계정을 넘겨받을 수 있다. 막지 않고 기록하고 사용자에게 보여 준다(docs/SECURITY.md).
         감사 action auth.password_reset.
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
@@ -824,7 +839,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/UserWithLink'}
-        '409': {$ref: '#/components/responses/Error'}
+        '409': {description: 'CONFLICT: 자기 자신의 초기화, 또는 사용자 이름이 없는 사용자(문구로 구분)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/admin/source-roots:
     get:
@@ -1598,7 +1613,7 @@ components:
         checked_at: {type: string, format: date-time, description: 서버가 읽은 시각. 생성 응답은 서버 시계, 조회는 DB 시각.}
     SessionView:
       type: object
-      required: [user_id, csrf_token, expires_at, username, display_name, is_admin, must_change_password, has_password]
+      required: [user_id, csrf_token, expires_at, username, display_name, is_admin, must_change_password, has_password, password_reset]
       properties:
         user_id: {type: string, format: uuid}
         csrf_token: {type: string}
@@ -1608,6 +1623,22 @@ components:
         is_admin: {type: boolean, description: 관리자 경로(/admin/…, /audit)를 쓸 수 있다. 프로젝트 권한은 주지 않는다.}
         must_change_password: {type: boolean, description: true면 POST /session/password와 로그아웃 밖의 경로가 403 PASSWORD_CHANGE_REQUIRED}
         has_password: {type: boolean, description: false면 POST /session/password에 current_password가 필요 없다}
+        password_reset:
+          description: >-
+            이 계정의 마지막 비밀번호 초기화(없으면 null). 화면은 acknowledged가 false인 동안 "관리자 X가 T에 비밀번호를 초기화했습니다"를 보인다.
+            확인 뒤에도 기록은 남는다.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [reset_at, reset_by_kind, reset_by_user_id, reset_by_username, sign_ins_since, acknowledged]
+              properties:
+                reset_at: {type: string, format: date-time}
+                reset_by_kind: {enum: [user, operator_cli], description: user는 관리자 API, operator_cli는 운영자 CLI}
+                reset_by_user_id: {type: [string, 'null'], format: uuid}
+                reset_by_username: {type: [string, 'null']}
+                sign_ins_since: {type: integer, minimum: 0, description: 초기화 시각 이후 만든 이 계정의 세션 수(초기화 링크의 로그인 포함)}
+                acknowledged: {type: boolean}
     ProjectRole:
       description: 호출자의 프로젝트 역할. owner는 프로젝트를 등록한 사용자이며 바꾸거나 제거할 수 없다.
       enum: [owner, manager, runner, viewer]
@@ -1667,6 +1698,7 @@ components:
         - auth.password_change_failed
         - auth.password_set
         - auth.password_reset
+        - auth.password_reset_acknowledged
         - auth.login_link_issued
         - user.created
         - user.disabled

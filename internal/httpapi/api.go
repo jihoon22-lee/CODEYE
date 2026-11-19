@@ -84,6 +84,7 @@ func (s *Server) apiRoutes() []route {
 		r("GET", "session", "session.get", true, false, (*Server).getSession).allowPending(),
 		r("DELETE", "session", "session.delete", true, false, (*Server).deleteSession).allowPending().audits(postgres.AuditLogout),
 		r("POST", "session/password", "session.password", true, true, (*Server).changePassword).allowPending().audits(postgres.AuditPasswordChanged),
+		r("POST", "session/password-reset/acknowledge", "session.reset_acknowledge", true, false, (*Server).acknowledgeReset).audits(postgres.AuditResetAcknowledged),
 		r("GET", "source-roots", "source_roots.list", true, false, (*Server).listSourceRoots),
 		r("GET", "providers", "providers.list", true, false, (*Server).listProviders),
 		r("GET", "projects", "projects.list", true, false, (*Server).listProjects),
@@ -215,6 +216,9 @@ func (s *Server) dispatch(rt route, q *request) {
 			return
 		}
 		q.session, q.cookie = sess, c.Value
+		// Audit rows of a session that began from an administrator's login
+		// link name that administrator.
+		q.r = q.r.WithContext(postgres.WithSession(q.r.Context(), sess))
 		if unsafeMethod(r.Method) {
 			got := r.Header.Get(csrfHeader)
 			if subtle.ConstantTimeCompare([]byte(got), []byte(csrfToken(c.Value))) != 1 {

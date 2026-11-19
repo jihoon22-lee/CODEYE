@@ -41,6 +41,7 @@ type Store interface {
 	ChangePassword(ctx context.Context, in postgres.PasswordChange) (postgres.Session, error)
 	SessionByTokenHash(ctx context.Context, tokenSHA256 string) (postgres.Session, error)
 	RevokeSession(ctx context.Context, id string) error
+	AcknowledgePasswordReset(ctx context.Context, user string) error
 	// Accounts and access (administrators; the store re-checks the role).
 	ListUsers(ctx context.Context, by postgres.Principal, cursor string, limit int) (postgres.UserPage, error)
 	CreateAccount(ctx context.Context, by postgres.Principal, in postgres.NewAccount) (postgres.User, error)

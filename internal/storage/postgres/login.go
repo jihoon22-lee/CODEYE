@@ -438,7 +438,7 @@ func (s *Store) PasswordLogin(ctx context.Context, in PasswordLogin) (Session, e
 				return result{}, err
 			}
 		}
-		sess, err := insertSession(ctx, tx, now.userID, in.SessionTokenSHA256, in.TTL)
+		sess, err := insertSession(ctx, tx, now.userID, in.SessionTokenSHA256, in.TTL, nil, false)
 		if err != nil {
 			return result{}, err
 		}
@@ -466,11 +466,12 @@ func loginDetail(method, client string) map[string]any {
 }
 
 // insertSession creates a session for user and reads it back with the user
-// fields the API returns.
-func insertSession(ctx context.Context, tx pgx.Tx, user, tokenSHA256 string, ttl time.Duration) (Session, error) {
+// fields the API returns. linkIssuedBy is the administrator whose login link
+// started it; passwordRequired gates it to the password change.
+func insertSession(ctx context.Context, tx pgx.Tx, user, tokenSHA256 string, ttl time.Duration, linkIssuedBy *string, passwordRequired bool) (Session, error) {
 	id := domain.NewID()
-	if _, err := tx.Exec(ctx, `INSERT INTO auth_sessions(id,user_id,token_sha256,expires_at)
-		VALUES($1,$2,$3,clock_timestamp()+$4*interval '1 millisecond')`, id, user, tokenSHA256, ttl.Milliseconds()); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO auth_sessions(id,user_id,token_sha256,expires_at,link_issued_by,password_required)
+		VALUES($1,$2,$3,clock_timestamp()+$4*interval '1 millisecond',$5,$6)`, id, user, tokenSHA256, ttl.Milliseconds(), linkIssuedBy, passwordRequired); err != nil {
 		return Session{}, err
 	}
 	return scanSession(tx.QueryRow(ctx, sessionSelect+" WHERE s.id=$1", id))
@@ -575,6 +576,10 @@ func (s *Store) ChangePassword(ctx context.Context, in PasswordChange) (Session,
 		}
 		tag, err := tx.Exec(ctx, "UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE user_id=$1 AND id<>$2 AND revoked_at IS NULL", in.UserID, in.SessionID)
 		if err != nil {
+			return Session{}, err
+		}
+		// This session has now set the password its link required.
+		if _, err := tx.Exec(ctx, "UPDATE auth_sessions SET password_required=false WHERE id=$1 AND user_id=$2 AND password_required", in.SessionID, in.UserID); err != nil {
 			return Session{}, err
 		}
 		if err := giveBack(ctx, tx, g.keys); err != nil {

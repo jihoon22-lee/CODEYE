@@ -20,8 +20,9 @@ const (
 	ActorAnonymous = "anonymous"
 )
 
-// Audit actions: the closed vocabulary of audit_events.action (migration
-// 0010 CHECK and OpenAPI AuditAction list the same values).
+// Audit actions: the closed vocabulary of audit_events.action (the CHECK of
+// the newest migration that sets it, and OpenAPI AuditAction, list the same
+// values).
 const (
 	AuditLoginSucceeded        = "auth.login_succeeded"
 	AuditLoginFailed           = "auth.login_failed"
@@ -31,6 +32,7 @@ const (
 	AuditPasswordChangeFailed  = "auth.password_change_failed"
 	AuditPasswordSet           = "auth.password_set"
 	AuditPasswordReset         = "auth.password_reset"
+	AuditResetAcknowledged     = "auth.password_reset_acknowledged"
 	AuditLoginLinkIssued       = "auth.login_link_issued"
 	AuditUserCreated           = "user.created"
 	AuditUserDisabled          = "user.disabled"
@@ -76,6 +78,7 @@ var auditDetailKeys = map[string]bool{
 	"expires_at": true, "epoch": true, "route": true, "global_max_running": true, "project_max_running": true,
 	"artifact_quota_bytes": true, "min_workers": true, "max_workers": true, "policy_revision": true,
 	"run_id": true, "protocol_version": true, "os": true, "arch": true,
+	"link_issued_by": true, "link_purpose": true, "reset_at": true,
 }
 
 const maxAuditString = 200
@@ -195,6 +198,10 @@ func checkAuditDetail(detail map[string]any) error {
 
 // writeAudit appends e in tx. The caller's change and its audit row commit
 // or roll back together; a failure here fails the change.
+//
+// A row whose actor is the signed-in user of a session that began from an
+// administrator's login link (WithSession) records that administrator as
+// "link_issued_by", whatever the action.
 func writeAudit(ctx context.Context, tx pgx.Tx, e auditEntry) error {
 	if err := checkAuditDetail(e.detail); err != nil {
 		return err
@@ -202,6 +209,14 @@ func writeAudit(ctx context.Context, tx pgx.Tx, e auditEntry) error {
 	detail := e.detail
 	if detail == nil {
 		detail = map[string]any{}
+	}
+	if o, ok := ctx.Value(sessionOriginKey{}).(sessionOrigin); ok && e.kind == ActorUser && e.user == o.user {
+		with := make(map[string]any, len(detail)+1)
+		for k, v := range detail {
+			with[k] = v
+		}
+		with["link_issued_by"] = o.issuer
+		detail = with
 	}
 	raw, err := json.Marshal(detail)
 	if err != nil {
@@ -278,7 +293,8 @@ func validAuditAction(a string) bool { return auditActions[a] }
 var auditActions = map[string]bool{
 	AuditLoginSucceeded: true, AuditLoginFailed: true, AuditLoginThrottled: true, AuditLogout: true,
 	AuditPasswordChanged: true, AuditPasswordChangeFailed: true, AuditPasswordSet: true, AuditPasswordReset: true,
-	AuditLoginLinkIssued: true, AuditUserCreated: true, AuditUserDisabled: true, AuditAdminGranted: true,
+	AuditResetAcknowledged: true,
+	AuditLoginLinkIssued:   true, AuditUserCreated: true, AuditUserDisabled: true, AuditAdminGranted: true,
 	AuditAdminRevoked: true, AuditSourceRootAdded: true, AuditSourceRootGranted: true, AuditSourceRootRevoked: true,
 	AuditProviderAdded: true, AuditProjectRegistered: true, AuditProjectRevised: true, AuditMemberSet: true,
 	AuditMemberRemoved: true, AuditRunRequested: true, AuditRunCancelRequested: true, AuditReportExported: true,

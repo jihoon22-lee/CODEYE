@@ -110,9 +110,12 @@ func isoCases() map[string]isoCase {
 			}
 			return map[string]string{"launch_token": token}
 		}},
-		"session.get":       {need: signedIn, ok: 200},
-		"session.delete":    {need: signedIn, ok: 204, disposable: freshNamed},
-		"session.password":  {need: signedIn, ok: 200, disposable: freshNamed, body: func(*isoWorld) any { return map[string]string{"new_password": "a long enough passphrase"} }},
+		"session.get":      {need: signedIn, ok: 200},
+		"session.delete":   {need: signedIn, ok: 204, disposable: freshNamed},
+		"session.password": {need: signedIn, ok: 200, disposable: freshNamed, body: func(*isoWorld) any { return map[string]string{"new_password": "a long enough passphrase"} }},
+		"session.reset_acknowledge": {need: signedIn, ok: 204, disposable: func(w *isoWorld) user {
+			return w.resetSession(w.e.account(w.name("ack"), "a long enough passphrase", false))
+		}},
 		"source_roots.list": {need: signedIn, ok: 200},
 		"providers.list":    {need: signedIn, ok: 200},
 		"projects.list":     {need: signedIn, ok: 200},
@@ -215,11 +218,18 @@ func newIsoWorld(t *testing.T) *isoWorld {
 	e.publishRun(a)
 	w := &isoWorld{e: e, f: a.f, run: a, actors: map[string]user{}, rank: map[string]int{}}
 	w.actors["owner"], w.rank["owner"] = a.f.user, 4
+	w.actors["admin"] = e.login(e.newAdminAccount("iso-admin"))
 	for name, role := range map[string]domain.Role{"viewer": domain.RoleViewer, "runner": domain.RoleRunner, "manager": domain.RoleManager} {
-		w.actors[name] = e.login(w.member(role))
+		id := w.member(role)
+		if name == "manager" {
+			// The manager's session begins from a reset link the administrator
+			// issued: every row it writes must name that administrator.
+			w.actors[name] = w.resetSession(id)
+		} else {
+			w.actors[name] = e.login(id)
+		}
 		w.rank[name] = map[domain.Role]int{domain.RoleViewer: 1, domain.RoleRunner: 2, domain.RoleManager: 3}[role]
 	}
-	w.actors["admin"] = e.login(e.newAdminAccount("iso-admin"))
 	w.actors["stranger"] = e.newUser()
 	full := e.do("GET", "/api/v1/runs/"+a.runID+"/report?include_code=true", nil, a.f.user.o()).want(t, 200, "")
 	seen := map[string]bool{}
@@ -231,6 +241,20 @@ func newIsoWorld(t *testing.T) *isoWorld {
 		}
 	}
 	return w
+}
+
+// resetSession is a session of user id that began from a password-reset
+// link issued by the world's administrator, after the forced password
+// change (so it is no longer gated).
+func (w *isoWorld) resetSession(id string) user {
+	e := w.e
+	r := e.do("POST", "/api/v1/admin/users/"+id+"/password-reset", nil, w.actors["admin"].o()).want(e.t, 200, "")
+	u, s := e.exchangeLink(r.body["login_link"].(map[string]any)["url"].(string))
+	if s.body["must_change_password"] != true {
+		e.t.Fatalf("reset-link session not gated: %s", s.raw)
+	}
+	e.do("POST", "/api/v1/session/password", map[string]string{"new_password": "the reset member passphrase"}, u.o()).want(e.t, 200, "")
+	return u
 }
 
 // TC-140: route × actor isolation and the audit row of every accepted
@@ -327,6 +351,19 @@ func TestRouteIsolationAndAuditTable(t *testing.T) {
 		if !covered[name] {
 			t.Errorf("isolation case %s matches no route", name)
 		}
+	}
+	// The manager's session began from the administrator's reset link: its
+	// sign-in row and every row it wrote over the whole table name the
+	// administrator.
+	var total, attributed int
+	var actions []string
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*),count(*) FILTER (WHERE detail->>'link_issued_by'=$2),array_agg(DISTINCT action)
+		FROM audit_events WHERE actor_user_id=$1 AND id >= (SELECT max(id) FROM audit_events WHERE action=$3 AND target_id=$1::text)`,
+		w.actors["manager"].id, w.actors["admin"].id, postgres.AuditPasswordReset).Scan(&total, &attributed, &actions); err != nil {
+		t.Fatal(err)
+	}
+	if total < 10 || attributed != total || !slices.Contains(actions, postgres.AuditLoginSucceeded) || !slices.Contains(actions, postgres.AuditMemberSet) {
+		t.Errorf("rows written by the reset-link session: %d, %d name the administrator (%v)", total, attributed, actions)
 	}
 }
 

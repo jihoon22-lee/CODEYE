@@ -367,16 +367,20 @@ def check_comparison_contracts(published: dict) -> None:
 
 def account_vocabulary() -> dict:
     """The audit action, actor kind and target type vocabularies as written in
-    migration 0010, the Go store (internal/storage/postgres/audit.go) and
-    OpenAPI (docs/SECURITY.md#감사), plus the Go detail-key allowlist."""
-    migrations = sorted((ROOT / "migrations/sql").glob("0010_*.sql"))
-    ensure(len(migrations) == 1, "Missing migration 0010")
-    sql = migrations[0].read_text(encoding="utf-8")
+    the migrations (the newest migration from 0010 on that sets each CHECK),
+    the Go store (internal/storage/postgres/audit.go) and OpenAPI
+    (docs/SECURITY.md#감사), plus the Go detail-key allowlist."""
+    migrations = sorted(p for p in (ROOT / "migrations/sql").glob("*.sql") if p.name[:4] >= "0010")
+    ensure(bool(migrations) and migrations[0].name.startswith("0010_"), "Missing migration 0010")
+    sources = [p.read_text(encoding="utf-8") for p in reversed(migrations)]
 
     def check_list(column: str) -> list[str]:
-        match = re.search(column + r" IN \((.*?)\)\)", sql, re.S)
-        ensure(match is not None, "Migration 0010 has no " + column + " CHECK")
-        return re.findall(r"'([a-z_.]+)'", match.group(1))
+        for sql in sources:
+            match = re.search(r"\b" + column + r" IN \((.*?)\)\)", sql, re.S)
+            if match is not None:
+                return re.findall(r"'([a-z_.]+)'", match.group(1))
+        ensure(False, "No migration has a " + column + " CHECK")
+        return []
 
     go = (ROOT / "internal/storage/postgres/audit.go").read_text(encoding="utf-8")
     consts = dict(re.findall(r'^\s*(Audit\w+)\s*=\s*"([a-z_.]+)"', go, re.M))
@@ -388,10 +392,10 @@ def account_vocabulary() -> dict:
     api = yaml_file(ROOT / "api/openapi.yaml")["components"]["schemas"]
     event = api["AuditEvent"]["properties"]
     return {
-        "actions": {"migration 0010": check_list("action"), "Go constants": list(consts.values()), "Go auditActions": allowed,
+        "actions": {"migrations": check_list("action"), "Go constants": list(consts.values()), "Go auditActions": allowed,
                     "OpenAPI AuditAction": api["AuditAction"]["enum"]},
-        "actors": {"migration 0010": check_list("actor_kind"), "Go constants": actors, "OpenAPI AuditEvent": event["actor_kind"]["enum"]},
-        "targets": {"migration 0010": check_list("target_type"), "OpenAPI AuditEvent": [t for t in event["target_type"]["enum"] if t is not None]},
+        "actors": {"migrations": check_list("actor_kind"), "Go constants": actors, "OpenAPI AuditEvent": event["actor_kind"]["enum"]},
+        "targets": {"migrations": check_list("target_type"), "OpenAPI AuditEvent": [t for t in event["target_type"]["enum"] if t is not None]},
         "detail_keys": set(re.findall(r'"([a-z_]+)":\s*true', keys.group(1))),
     }
 
@@ -402,7 +406,7 @@ def check_account_vocabulary(vocabulary: dict) -> None:
         reference = next(iter(lists.values()))
         for source, values in lists.items():
             ensure(len(values) == len(set(values)), f"Duplicate audit {name} in {source}")
-            ensure(set(values) == set(reference), f"Audit {name} differ: {source} vs migration 0010: {sorted(set(values) ^ set(reference))}")
+            ensure(set(values) == set(reference), f"Audit {name} differ: {source} vs migrations: {sorted(set(values) ^ set(reference))}")
     secret = re.compile(r"password|token|secret|hash|salt|prompt|reasoning|path$|^path")
     leaked = [key for key in vocabulary["detail_keys"] if secret.search(key) and key != "must_change_password"]
     ensure(not leaked, "Audit detail allowlist names a secret or path: " + ", ".join(sorted(leaked)))
@@ -411,7 +415,7 @@ def check_account_vocabulary(vocabulary: dict) -> None:
 def check_account_contracts() -> None:
     """Accounts, members and the audit log (docs/API.md#계정과-관리자): the
     example documents fit their OpenAPI schemas, the closed audit vocabulary
-    is the same in migration 0010, Go and OpenAPI, and every example audit
+    is the same in the migrations, Go and OpenAPI, and every example audit
     detail uses only allowlisted keys."""
     vocabulary = account_vocabulary()
     check_account_vocabulary(vocabulary)
@@ -453,6 +457,8 @@ def check_account_contracts() -> None:
         ("unknown audit action", lambda d: d["audit"]["items"][0].update(action="report.viewed")),
         ("audit detail with a password", lambda d: d["audit"]["items"][2]["detail"].update(password="hunter2hunter2")),
         ("session without must_change_password", lambda d: d["session"].pop("must_change_password")),
+        ("reset notice without its time", lambda d: d["session"]["password_reset"].pop("reset_at")),
+        ("reset notice by an unknown kind", lambda d: d["session"]["password_reset"].update(reset_by_kind="node")),
         ("user view with a password hash", lambda d: d["created_user"]["user"].update(password_hash="00")),
         ("member role outside the vocabulary", lambda d: d["members"]["items"][1].update(role="admin")),
         ("viewer that can run", lambda d: d["project_role"].update(role="viewer")),
@@ -470,7 +476,7 @@ def check_account_contracts() -> None:
         bad = copy.deepcopy(vocabulary)
         edit(bad)
         reject(name, check_account_vocabulary, bad)
-    print(f"PASS: account contracts ({len(vocabulary['actions']['migration 0010'])} audit actions across migration 0010, Go and OpenAPI; "
+    print(f"PASS: account contracts ({len(vocabulary['actions']['migrations'])} audit actions across migrations, Go and OpenAPI; "
           f"examples/accounts.json; {negatives} negative cases)")
 
 
