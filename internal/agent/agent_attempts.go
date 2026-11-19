@@ -184,6 +184,17 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 				job.Source.AllowedHost = strings.ToLower(h)
 			}
 		}
+		job.Source.RepositoryURL, job.Source.AllowedLocalRoot = testGitMirror(job.Source.RepositoryURL, job.Source.AllowedHost)
+	}
+	if ag.cfg.ProjectAnalysisPolicy {
+		// The project's own choices, for local and Git sources alike; a job
+		// from a controller that sends none gets the defaults.
+		choices := domain.DefaultAnalysisChoices
+		if j.Analysis != nil {
+			choices = *j.Analysis
+		}
+		job.AllowModelReview = choices.SendSourceToModel && ag.cfg.ModelName != ""
+		job.AllowRepositoryCode = choices.RunBuildScripts
 	}
 	if j.Snapshot != nil {
 		job.Snapshot = &workerproto.JobSnapshot{ID: j.Snapshot.ID, ManifestDigest: j.Snapshot.ManifestDigest, Root: ag.cache.get(j.Snapshot.ManifestDigest)}

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -288,24 +289,106 @@ func (s *Store) Retry(ctx context.Context, actor, id string, expected int64) (Ru
 		if r.Version != expected || r.SnapshotID == nil || (r.Status != domain.RunFailed && r.Status != domain.RunCancelled) {
 			return r, domain.ErrConflict
 		}
-		var unsafe bool
-		if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM attempts WHERE run_id=$1 AND (status!='released' OR cleanup_state!='confirmed'))", id).Scan(&unsafe); err != nil {
-			return r, err
-		}
-		if unsafe {
-			return r, domain.ErrConflict
-		}
-		// The logical tasks restart: the previous attempt's reasons and times stay
-		// in task_executions and events, not on the queued task (stage is kept).
-		if _, err = tx.Exec(ctx, "UPDATE tasks SET status='queued',version=version+1,reason=NULL,started_at=NULL,finished_at=NULL WHERE run_id=$1", id); err != nil {
-			return r, err
-		}
-		_, err = tx.Exec(ctx, "UPDATE runs SET status='queued' WHERE id=$1", id)
+		ok, err := pinnedRetryable(ctx, tx, r, false)
 		if err != nil {
 			return r, err
 		}
-		r.Status = domain.RunQueued
-		err = appendEvent(ctx, tx, &r, "run.retried", map[string]any{"snapshot_id": r.SnapshotID}, true)
-		return r, err
+		if !ok {
+			return r, domain.ErrConflict
+		}
+		return r, requeuePinned(ctx, tx, &r)
 	})
+}
+
+// pinnedRetryable reports whether the failed or cancelled run r (locked) can
+// run again on its own snapshot: every attempt is released with confirmed
+// cleanup and, when located is true, a node still holds the snapshot.
+func pinnedRetryable(ctx context.Context, tx pgx.Tx, r Run, located bool) (bool, error) {
+	if r.SnapshotID == nil || (r.Status != domain.RunFailed && r.Status != domain.RunCancelled) {
+		return false, nil
+	}
+	var unsafe, held bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attempts WHERE run_id=$1 AND (status!='released' OR cleanup_state!='confirmed')),
+		EXISTS(SELECT 1 FROM snapshot_locations l JOIN nodes n ON n.id=l.node_id WHERE l.snapshot_id=$2 AND n.revoked_at IS NULL)`, r.ID, *r.SnapshotID).Scan(&unsafe, &held); err != nil {
+		return false, err
+	}
+	return !unsafe && (held || !located), nil
+}
+
+// requeuePinned queues the locked run r again on its fixed snapshot.
+func requeuePinned(ctx context.Context, tx pgx.Tx, r *Run) error {
+	// The logical tasks restart: the previous attempt's reasons and times stay
+	// in task_executions and events, not on the queued task (stage is kept).
+	if _, err := tx.Exec(ctx, "UPDATE tasks SET status='queued',version=version+1,reason=NULL,started_at=NULL,finished_at=NULL WHERE run_id=$1", r.ID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, "UPDATE runs SET status='queued' WHERE id=$1", r.ID); err != nil {
+		return err
+	}
+	r.Status = domain.RunQueued
+	return appendEvent(ctx, tx, r, "run.retried", map[string]any{"snapshot_id": r.SnapshotID}, true)
+}
+
+// Ways RetryRun ran a run again.
+const (
+	// RetrySameRun: the failed or cancelled run itself was queued again on
+	// its fixed snapshot (Retry).
+	RetrySameRun = "same_run"
+	// RetryNewRun: a new run of the project with the same request was queued;
+	// it acquires the current source.
+	RetryNewRun = "new_run"
+)
+
+// RetryRun runs a finished run again for an actor who may run the project
+// (POST /runs/{id}/retry). A failed or cancelled run whose snapshot a node
+// still holds, with every attempt cleaned up, is queued again on that
+// snapshot (Retry). Any other failed, cancelled, partial or completed run
+// gets a new run with the same request: it acquires the source anew, which
+// is what a failed acquisition (an unreachable repository) or a partial
+// analysis after installing a tool needs. Repeating the call for the same
+// run version returns the same new run. A run that has not finished, or that
+// needs recovery, is ErrConflict. Both ways record run.requested.
+func (s *Store) RetryRun(ctx context.Context, actor, id string) (Run, string, error) {
+	if !validIDs(actor, id) {
+		return Run{}, "", domain.ErrInvalid
+	}
+	type result struct {
+		run Run
+		how string
+	}
+	out, err := transaction(ctx, s, func(tx pgx.Tx) (result, error) {
+		r, err := authorizeRun(ctx, tx, actor, id, true)
+		if err != nil {
+			return result{run: r}, err
+		}
+		switch r.Status {
+		case domain.RunFailed, domain.RunCancelled, domain.RunPartial, domain.RunCompleted:
+		default:
+			return result{run: r}, domain.ErrConflict
+		}
+		if ok, err := pinnedRetryable(ctx, tx, r, true); err != nil {
+			return result{run: r}, err
+		} else if ok {
+			if err := requeuePinned(ctx, tx, &r); err != nil {
+				return result{run: r}, err
+			}
+			e := userAudit(ctx, actor, AuditRunRequested).target("run", r.ID).in(r.ProjectID).with(map[string]any{"trigger": "retry", "status": string(r.Status)})
+			return result{r, RetrySameRun}, writeAudit(ctx, tx, e)
+		}
+		var request []byte
+		if err := tx.QueryRow(ctx, "SELECT request FROM runs WHERE id=$1", r.ID).Scan(&request); err != nil {
+			return result{run: r}, err
+		}
+		if request == nil {
+			// A run from before requests were stored cannot be repeated.
+			return result{run: r}, domain.ErrConflict
+		}
+		canonical, err := domain.CanonicalJSON(request)
+		if err != nil {
+			return result{run: r}, domain.ErrConflict
+		}
+		next, err := enqueueTx(ctx, tx, actor, r.ProjectID, "retry:"+r.ID+":"+strconv.FormatInt(r.Version, 10), canonical, nil)
+		return result{next, RetryNewRun}, err
+	})
+	return out.run, out.how, err
 }

@@ -17,11 +17,11 @@ var personalModelEnv = personal.SystemModelEnv
 
 // modelAgentArgs are the agent's model flags in personal mode: the model
 // resolved from agent.model and the credential files
-// (personal.ResolveModel), and --model-source-root for every root whose
-// model_review is not false. Without a usable model it returns no flags;
-// review tasks are then unsupported (model_not_configured) and static
-// analysis runs as usual.
-func modelAgentArgs(cfg *personal.Config, layout personal.Layout, roots []rootGrant) []string {
+// (personal.ResolveModel). Which projects' source the model may read is each
+// project's choice (--project-analysis-policy). Without a usable model it
+// returns no flags; review tasks are then unsupported (model_not_configured)
+// and static analysis runs as usual.
+func modelAgentArgs(cfg *personal.Config, layout personal.Layout) []string {
 	m, err := personal.ResolveModel(cfg, layout, personalModelEnv())
 	if err != nil || m == nil {
 		return nil
@@ -41,12 +41,6 @@ func modelAgentArgs(cfg *personal.Config, layout personal.Layout, roots []rootGr
 	}
 	if m.ReviewMaxCalls != 0 {
 		args = append(args, "--review-max-calls", strconv.Itoa(m.ReviewMaxCalls))
-	}
-	// Personal mode reviews the personal user's own local roots by default.
-	for _, r := range roots {
-		if r.ModelReview == nil || *r.ModelReview {
-			args = append(args, "--model-source-root", r.ID)
-		}
 	}
 	return args
 }

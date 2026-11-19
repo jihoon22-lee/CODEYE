@@ -37,6 +37,7 @@ type candidate struct {
 	dispatchedAt pgtype.Timestamptz
 	request      domain.RunRequest
 	source       domain.Source
+	analysis     domain.AnalysisChoices
 	gitHost      string
 	snapshotID   *string
 }
@@ -141,7 +142,7 @@ func loadNode(ctx context.Context, tx pgx.Tx, id string, lock bool) (nodeView, *
 	return n, revoked, err
 }
 
-const candidateSQL = `SELECT r.id::text,r.project_id::text,r.actor_id::text,r.request,pr.config->'source',r.snapshot_id::text,s.manifest_digest,r.created_at,
+const candidateSQL = `SELECT r.id::text,r.project_id::text,r.actor_id::text,r.request,pr.config->'source',pr.config->'analysis',r.snapshot_id::text,s.manifest_digest,r.created_at,
 	coalesce(pd.last_dispatched_at,'-infinity'::timestamptz)
 	FROM runs r
 	JOIN projects p ON p.id=r.project_id AND p.deleted_at IS NULL
@@ -162,9 +163,9 @@ const projectActiveSQL = `(SELECT count(*) FROM capacity_reservations c JOIN att
 
 func scanCandidate(row pgx.Row) (candidate, bool, error) {
 	var c candidate
-	var req, src []byte
+	var req, src, analysis []byte
 	var manifest *string
-	if err := row.Scan(&c.runID, &c.projectID, &c.actorID, &req, &src, &c.snapshotID, &manifest, &c.createdAt, &c.dispatchedAt); err != nil {
+	if err := row.Scan(&c.runID, &c.projectID, &c.actorID, &req, &src, &analysis, &c.snapshotID, &manifest, &c.createdAt, &c.dispatchedAt); err != nil {
 		return c, false, err
 	}
 	// A stored request or source that does not decode under the current rules
@@ -177,6 +178,7 @@ func scanCandidate(row pgx.Row) (candidate, bool, error) {
 		return c, false, nil
 	}
 	c.source = parsed
+	c.analysis = domain.AnalysisChoicesOf(analysis)
 	if parsed.Kind == domain.SourceGit {
 		host, err := domain.RepositoryHost(parsed.RepositoryURL)
 		if err != nil {
@@ -474,7 +476,7 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 	resp := &nodeproto.ClaimResponse{
 		Lease: nodeproto.Lease{RunID: r.ID, AttemptID: a.ID, WorkerID: worker, LeaseEpoch: a.Epoch, ExpiresAt: a.ExpiresAt.UTC(),
 			ProjectRevision: r.ProjectRevision, SnapshotID: r.SnapshotID, RunVersion: r.Version},
-		Job: nodeproto.Job{Profile: c.request.Profile, Scope: c.request.Scope,
+		Job: nodeproto.Job{Profile: c.request.Profile, Scope: c.request.Scope, Analysis: &c.analysis,
 			Resources: nodeproto.Resources{CPUMillis: ReserveCPUMillis, MemoryBytes: ReserveMemoryBytes, DiskBytes: ReserveDiskBytes}},
 	}
 	switch c.source.Kind {

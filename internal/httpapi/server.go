@@ -67,6 +67,9 @@ type Store interface {
 	Enqueue(ctx context.Context, actor, project, key string, body json.RawMessage) (postgres.Run, error)
 	GetRunView(ctx context.Context, actor, id string) (postgres.RunView, error)
 	CancelRun(ctx context.Context, actor, id string) (postgres.Run, bool, error)
+	RetryRun(ctx context.Context, actor, id string) (postgres.Run, string, error)
+	// GrantedRootPaths (personal mode): the actor's source roots with paths.
+	GrantedRootPaths(ctx context.Context, actor string) ([]postgres.SourceRootRecord, error)
 	// Run event stream and schedules.
 	RunEvents(ctx context.Context, actor, id string, after int64, limit int) (postgres.EventPage, error)
 	ListSchedules(ctx context.Context, actor, project string) ([]postgres.Schedule, bool, error)
@@ -134,6 +137,11 @@ type Config struct {
 	// Stream configures GET /runs/{id}/events (SSE); zero fields take
 	// the defaults of StreamConfig.
 	Stream StreamConfig
+	// Personal is set for the personal-mode controller (`codeye serve
+	// --personal`): POST /projects accepts an absolute local_path, a folder
+	// or repository given again opens its project, and GET /setup reports
+	// the model, Git and the detected tools. Nil is server mode.
+	Personal *Personal
 }
 
 // DefaultSessionTTL is the absolute browser session lifetime.
@@ -165,6 +173,8 @@ type Server struct {
 	publishKick  chan struct{}
 
 	stream StreamConfig
+	// personal is Config.Personal (nil in server mode).
+	personal *Personal
 	// streams counts open event streams in total and per session user (a
 	// per-process connection limit, not scheduling state); stopStreams ends
 	// them before a graceful shutdown.
@@ -210,6 +220,7 @@ func New(cfg Config, store Store) (*Server, error) {
 		sessionTTL:  cfg.SessionTTL,
 		log:         cfg.Logger,
 		stream:      cfg.Stream.withDefaults(),
+		personal:    cfg.Personal,
 		stopStreams: make(chan struct{}),
 		userStreams: map[string]int32{},
 	}

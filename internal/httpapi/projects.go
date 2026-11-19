@@ -18,14 +18,17 @@ type runRef struct {
 }
 
 type projectView struct {
-	ID             string          `json:"id"`
-	Name           string          `json:"name"`
-	Source         json.RawMessage `json:"source"`
-	Revision       int64           `json:"revision"`
-	SourceStatus   string          `json:"source_status"`
-	CapabilityGaps []string        `json:"capability_gaps"`
-	LastRun        *runRef         `json:"last_run"`
-	Activity       activityView    `json:"activity"`
+	ID     string          `json:"id"`
+	Name   string          `json:"name"`
+	Source json.RawMessage `json:"source"`
+	// Analysis are the project's analysis choices (defaults when none were
+	// recorded); personal-mode nodes follow them.
+	Analysis       domain.AnalysisChoices `json:"analysis"`
+	Revision       int64                  `json:"revision"`
+	SourceStatus   string                 `json:"source_status"`
+	CapabilityGaps []string               `json:"capability_gaps"`
+	LastRun        *runRef                `json:"last_run"`
+	Activity       activityView           `json:"activity"`
 	// Role is the caller's role (owner, manager, runner, viewer); CanRun and
 	// CanManage follow from it. The API enforces them on every request.
 	Role      string `json:"role"`
@@ -38,7 +41,7 @@ func viewOf(p postgres.ProjectSummary, gaps []string) projectView {
 	if !p.HasReport {
 		gaps = append(gaps, string(domain.GapReportUnavailable))
 	}
-	v := projectView{ID: p.ID, Name: p.Name, Source: p.Source, Revision: p.Revision,
+	v := projectView{ID: p.ID, Name: p.Name, Source: p.Source, Analysis: p.Analysis, Revision: p.Revision,
 		SourceStatus: "declared_unverified", CapabilityGaps: gaps, Activity: activityOf(p.Activity), Role: p.Role}
 	switch p.Role {
 	case postgres.RoleOwner, string(domain.RoleManager):
@@ -63,23 +66,58 @@ func (s *Server) createProject(q *request) {
 	var in struct {
 		Name          *string         `json:"name"`
 		Source        json.RawMessage `json:"source"`
+		LocalPath     *string         `json:"local_path"`
+		Analysis      json.RawMessage `json:"analysis"`
 		Description   *string         `json:"description"`
 		AttachmentIDs []string        `json:"attachment_ids"`
 	}
-	if domain.DecodeStrict(body, &in) != nil || in.Source == nil || string(in.Source) == "null" {
-		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", "body must be a project object with a source", false)
+	// Exactly one of source and local_path (an absolute folder, personal mode).
+	if domain.DecodeStrict(body, &in) != nil || (in.Source != nil && string(in.Source) != "null") == (in.LocalPath != nil) {
+		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", "body must be a project object with a source or a local_path", false)
 		return
 	}
 	if len(in.AttachmentIDs) > 0 {
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, "ATTACHMENTS_UNSUPPORTED", "attachments are not supported yet", false)
 		return
 	}
-	src, err := domain.ParseSource(in.Source)
-	if err != nil {
+	var src domain.Source
+	var err error
+	if in.LocalPath != nil {
+		if s.personal == nil {
+			writeError(q.w, q.r, http.StatusUnprocessableEntity, "LOCAL_PATH_UNSUPPORTED", "local_path is accepted by the personal-mode controller only; use source", false)
+			return
+		}
+		if src, err = s.localSource(q, *in.LocalPath); err != nil {
+			s.folderError(q, err)
+			return
+		}
+	} else if src, err = domain.ParseSource(in.Source); err != nil {
 		s.storeError(q, err)
 		return
 	}
 	reg := postgres.ProjectRegistration{Source: src}
+	if in.Analysis != nil && string(in.Analysis) != "null" {
+		choices, err := domain.ParseAnalysisChoices(in.Analysis)
+		if err != nil {
+			writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "analysis needs the booleans send_source_to_model and run_build_scripts", false)
+			return
+		}
+		reg.Analysis = &choices
+	}
+	if s.personal != nil {
+		// The same folder or repository again opens its project.
+		if p, found, ok := s.existingProject(q, src); !ok {
+			return
+		} else if found {
+			gaps, ok := s.executionGaps(q)
+			if !ok {
+				return
+			}
+			q.w.Header().Set("Location", apiPrefix+"/projects/"+p.ID)
+			writeJSON(q.w, http.StatusOK, viewOf(p, gaps))
+			return
+		}
+	}
 	if in.Name != nil {
 		if strings.TrimSpace(*in.Name) == "" {
 			writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "name must not be blank", false)
@@ -108,8 +146,34 @@ func (s *Server) createProject(q *request) {
 	q.w.Header().Set("Location", apiPrefix+"/projects/"+p.ID)
 	// A new project has no run: an empty activity checked now (server clock).
 	created := postgres.ProjectSummary{ID: p.ID, Name: p.Name, Revision: p.Revision, Source: cfg.Source, Role: postgres.RoleOwner,
-		Activity: postgres.Activity{CheckedAt: time.Now().UTC()}}
+		Analysis: domain.DefaultAnalysisChoices, Activity: postgres.Activity{CheckedAt: time.Now().UTC()}}
+	if reg.Analysis != nil {
+		created.Analysis = *reg.Analysis
+	}
 	writeJSON(q.w, http.StatusCreated, viewOf(created, gaps))
+}
+
+// existingProject finds a project the caller can see whose current source
+// is src. ok is false when the error response was written.
+func (s *Server) existingProject(q *request, src domain.Source) (postgres.ProjectSummary, bool, bool) {
+	ctx, cancel := q.ctx()
+	defer cancel()
+	for cursor := ""; ; {
+		page, err := s.store.ListProjects(ctx, q.session.UserID, cursor, 100)
+		if err != nil {
+			s.storeError(q, err)
+			return postgres.ProjectSummary{}, false, false
+		}
+		for _, p := range page.Items {
+			if sameSource(p.Source, src) {
+				return p, true, true
+			}
+		}
+		if page.NextCursor == "" {
+			return postgres.ProjectSummary{}, false, true
+		}
+		cursor = page.NextCursor
+	}
 }
 
 func (s *Server) listProjects(q *request) {

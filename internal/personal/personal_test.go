@@ -28,7 +28,8 @@ func TestParseDefaultsAndStrictness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Listen != DefaultListen || c.Agent.MaxWorkers != 1 || c.Stop.DrainTimeoutSeconds != DefaultDrainSeconds || c.Stop.CancelTimeoutSeconds != DefaultCancelSeconds || (runtime.GOOS != "windows" && c.Agent.ToolchainPath != DefaultToolchainPath) {
+	if c.Listen != DefaultListen || c.Agent.MaxWorkers != DefaultMaxWorkers() || c.Agent.MaxWorkers < 1 || c.Agent.MaxWorkers > 4 ||
+		len(c.GitHosts) != 1 || c.GitHosts[0] != "github.com" || c.Stop.DrainTimeoutSeconds != DefaultDrainSeconds || c.Stop.CancelTimeoutSeconds != DefaultCancelSeconds || (runtime.GOOS != "windows" && c.Agent.ToolchainPath != DefaultToolchainPath) {
 		t.Fatalf("defaults %+v", c)
 	}
 	if got := c.Quota.NodeLimits(); len(got) != 1 || got["workspace"] != 5 || c.Quota.Limit("artifacts") != 7 {
@@ -54,6 +55,10 @@ func TestParseDefaultsAndStrictness(t *testing.T) {
 		"low call ceiling":  cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":14}}`),
 		"high call ceiling": cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":208}}`),
 		"backup in state":   cfg(state, `,"backup_dir":`+q(filepath.Join(state, "b"))),
+		"git host IP":       cfg(state, `,"git_hosts":["127.0.0.1"]`),
+		"git host URL":      cfg(state, `,"git_hosts":["https://github.com"]`),
+		"git host twice":    cfg(state, `,"git_hosts":["github.com","GitHub.com"]`),
+		"relative git":      cfg(state, `,"agent":{"git":"git"}`),
 		"trailing":          cfg(state, "") + "{}",
 	} {
 		if _, err := Parse([]byte(raw), tools); err == nil {
@@ -62,10 +67,22 @@ func TestParseDefaultsAndStrictness(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// Source roots must not contain the state dir (or the reverse).
-	bad := `{"schema_version":"0.1","state_dir":` + q(state) + `,"database":{"mode":"external"},"source_roots":[{"label":"w","path":` + q(base) + `}]}`
+	// A source root may contain the state dir ($HOME holds both); a root
+	// inside the state dir is refused.
+	home := `{"schema_version":"0.1","state_dir":` + q(state) + `,"database":{"mode":"external"},"source_roots":[{"label":"w","path":` + q(base) + `}]}`
+	if _, err := Parse([]byte(home), tools); err != nil {
+		t.Fatalf("state_dir inside a source root refused: %v", err)
+	}
+	bad := `{"schema_version":"0.1","state_dir":` + q(state) + `,"database":{"mode":"external"},"source_roots":[{"label":"w","path":` + q(filepath.Join(state, "x")) + `}]}`
 	if _, err := Parse([]byte(bad), tools); err == nil {
-		t.Fatal("state_dir inside a source root accepted")
+		t.Fatal("a source root inside state_dir accepted")
+	}
+	// Explicit Git hosts are lowercased; [] turns Git sources off.
+	if c, err := Parse([]byte(cfg(state, `,"git_hosts":["GHE.example:8443"]`)), tools); err != nil || len(c.GitHosts) != 1 || c.GitHosts[0] != "ghe.example:8443" {
+		t.Fatalf("git hosts %v %v", c, err)
+	}
+	if c, err := Parse([]byte(cfg(state, `,"git_hosts":[]`)), tools); err != nil || len(c.GitHosts) != 0 {
+		t.Fatalf("no git hosts %v %v", c, err)
 	}
 }
 

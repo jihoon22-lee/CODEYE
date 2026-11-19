@@ -40,7 +40,7 @@ func TestPersonalModelFromSecret(t *testing.T) {
 	personalModelEnv = func() personal.ModelEnv { return personal.ModelEnv{Home: home} }
 	t.Cleanup(func() { personalModelEnv = personal.SystemModelEnv })
 	roots := []rootGrant{{SourceRoot: cfg.SourceRoots[0], ID: "root-1"}, {SourceRoot: cfg.SourceRoots[1], ID: "root-2"}}
-	if got := strings.Join(modelAgentArgs(cfg, layout, roots), " "); got != "" {
+	if got := strings.Join(modelAgentArgs(cfg, layout), " "); got != "" {
 		t.Fatalf("no key, no model flags: %s", got)
 	}
 	const key = "sk-test-start-0123456789"
@@ -53,8 +53,11 @@ func TestPersonalModelFromSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	argv := strings.Join(agentArgv(cfg, layout, roots, false), " ")
-	want := " --opencode " + exe + " --model openai/gpt-6.2-sol --model-credential-file " + layout.ModelSecret() + " --model-source-root root-1"
-	if !strings.Contains(argv, want) || strings.Contains(argv, "root-2 --") || strings.HasSuffix(argv, "root-2") || strings.Contains(argv, key) {
+	want := " --opencode " + exe + " --model openai/gpt-6.2-sol --model-credential-file " + layout.ModelSecret()
+	// Each project decides whether the model reads its source; no per-root
+	// grant is passed, and the root-level model_review is no longer read.
+	if !strings.Contains(argv, want) || !strings.Contains(argv, " --project-analysis-policy") || strings.Contains(argv, "--model-source-root") ||
+		strings.Contains(argv, "--repo-code-source-root") || strings.Contains(argv, key) {
 		t.Fatalf("argv %s\nwant %s", argv, want)
 	}
 }

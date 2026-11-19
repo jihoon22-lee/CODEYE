@@ -241,10 +241,17 @@ paths:
       operationId: createProject
       x-codeye-status: implemented
       description: >-
-        source 선언을 형식·권한(root grant, provider 존재·host 일치)만 검사해 저장한다. 파일 시스템이나
-        네트워크에 접근하지 않으므로 응답의 source_status는 declared_unverified다. 허가되지 않은 root와
-        없는 provider는 같은 404다. ssh/scp/git:// URL은 422 SOURCE_UNSUPPORTED,
-        attachment_ids가 있으면 422 ATTACHMENTS_UNSUPPORTED다.
+        source 선언을 형식·권한(root grant, provider 존재·host 일치)만 검사해 저장한다. 네트워크에 접근하지
+        않으므로 응답의 source_status는 declared_unverified다. 허가되지 않은 root와 없는 provider는 같은 404다.
+        ssh/scp/git:// URL은 422 SOURCE_UNSUPPORTED, attachment_ids가 있으면 422 ATTACHMENTS_UNSUPPORTED다.
+        git source의 branch를 비우면 저장소의 기본 브랜치를 쓴다(이름은 스냅샷에 기록한다).
+        analysis는 프로젝트의 분석 선택이며 없으면 둘 다 켜진 기본값이다. 개인 모드 노드(--project-analysis-policy)가
+        따르고, 서버 모드 노드는 source root별 운영자 허가를 쓴다.
+        개인 모드 controller(serve --personal)만 source 대신 local_path(절대 폴더 경로)를 받는다. 경로를 symlink까지
+        풀어 사용자에게 허가된 가장 긴 source root 아래 상대 경로로 바꾸고, 없거나 폴더가 아니면 422 FOLDER_NOT_FOUND,
+        어느 root에도 없으면 422 FOLDER_NOT_READABLE, 상태·백업 디렉터리를 담거나 그 안이면 422 FOLDER_HOLDS_CODEYE_DATA,
+        상대 경로로 쓸 수 없는 이름이면 422 FOLDER_NAME_UNSUPPORTED다. 서버 모드의 local_path는 422 LOCAL_PATH_UNSUPPORTED다.
+        개인 모드에서 같은 source의 프로젝트가 이미 있으면 새로 만들지 않고 그 프로젝트를 200으로 돌려준다.
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
       requestBody:
@@ -255,6 +262,13 @@ paths:
       responses:
         '201':
           description: 프로젝트 등록. 상세 설명은 필수가 아니다.
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '200':
+          description: 개인 모드에서 같은 source의 기존 프로젝트(새로 만들지 않음)
           headers:
             Location: {schema: {type: string}}
           content:
@@ -344,6 +358,51 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/RunAck'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/runs/{run_id}/retry:
+    parameters:
+      - {$ref: '#/components/parameters/RunId'}
+    post:
+      operationId: retryRun
+      x-codeye-status: implemented
+      description: >-
+        끝난 실행(failed, cancelled, partial, completed)을 다시 실행한다. failed·cancelled run의 스냅샷을 아직 노드가 갖고 있고
+        모든 attempt 정리가 확인됐으면 그 run을 같은 스냅샷으로 다시 큐에 넣는다(retry same_run). 그 밖에는 같은 요청으로 새 run을
+        만들어 소스를 다시 확보한다(retry new_run): 소스 확보 실패, 도구를 설치한 뒤의 partial 실행이 이 경우다. 같은 run version에
+        대한 반복 요청은 같은 새 run을 돌려준다. 아직 끝나지 않았거나 recovery_required인 run은 409 RUN_NOT_FINISHED,
+        viewer는 403이다. 두 경우 모두 run.requested 감사 기록을 남긴다. 클라이언트는 응답의 run을 따라간다.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '202':
+          description: 다시 실행할 run
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/RunAck'}
+                  - type: object
+                    required: [retry]
+                    properties:
+                      retry: {enum: [same_run, new_run]}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/setup:
+    get:
+      operationId: getSetup
+      x-codeye-status: implemented
+      description: >-
+        첫 화면이 쓰는 설치 정보. 개인 모드(mode personal)는 설정된 모델(키는 없다)과 마지막 확인 결과, git과 Git host,
+        경로로 분석할 수 있는 폴더(readable_folders), 찾은 도구(<state>/tools.json, schemas/tools.schema.json)를 돌려준다.
+        서버 모드 controller는 노드마다 다른 이 정보를 모르므로 model, git, tools가 null이고 readable_folders가 비어 있다.
+      responses:
+        '200':
+          description: 설치 정보
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Setup'}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/runs/{run_id}/report:
     parameters:
@@ -1473,12 +1532,12 @@ components:
       oneOf:
         - type: object
           additionalProperties: false
-          required: [kind, provider_id, repository_url, branch]
+          required: [kind, provider_id, repository_url]
           properties:
             kind: {const: git}
             provider_id: {type: string, format: uuid}
             repository_url: {type: string, pattern: '^https://', description: 'https://<provider host>/<owner>/<repo>[.git]; 자격증명·query·fragment 금지'}
-            branch: {type: string, minLength: 1, maxLength: 255}
+            branch: {type: string, maxLength: 255, description: 없거나 빈 값이면 저장소의 기본 브랜치. 저장할 때 빈 값은 생략한다}
         - type: object
           additionalProperties: false
           required: [kind, source_root_id, relative_path]
@@ -1493,21 +1552,38 @@ components:
       properties:
         kind: {enum: [full, paths]}
         paths: {type: array, items: {type: string}}
+    AnalysisChoices:
+      type: object
+      additionalProperties: false
+      required: [send_source_to_model, run_build_scripts]
+      description: >-
+        프로젝트의 분석 선택. send_source_to_model은 설정된 모델이 이 프로젝트의 소스를 읽어도 되는지,
+        run_build_scripts는 저장소 코드를 실행하는 분석기(build script, cargo check 등)를 돌려도 되는지다.
+        기록이 없으면 둘 다 true다. 개인 모드 노드가 따른다.
+      properties:
+        send_source_to_model: {type: boolean}
+        run_build_scripts: {type: boolean}
     ProjectCreate:
       type: object
       additionalProperties: false
-      required: [source]
+      description: source와 local_path 중 정확히 하나. local_path는 개인 모드 controller만 받는다.
+      oneOf:
+        - required: [source]
+        - required: [local_path]
       properties:
         name: {type: string, minLength: 1, maxLength: 200}
         source: {$ref: '#/components/schemas/Source'}
+        local_path: {type: string, minLength: 2, maxLength: 4096, pattern: '^/', description: 이 머신의 절대 폴더 경로(개인 모드)}
+        analysis: {$ref: '#/components/schemas/AnalysisChoices'}
         description: {type: string, maxLength: 20000}
         attachment_ids: {type: array, maxItems: 0, items: {type: string}, description: 미지원. 비어 있지 않으면 422}
     Project:
       type: object
-      required: [id, name, source, revision, source_status, capability_gaps, last_run, role, can_run, can_manage]
+      required: [id, name, source, analysis, revision, source_status, capability_gaps, last_run, role, can_run, can_manage]
       properties:
         id: {type: string}
         name: {type: string}
+        analysis: {$ref: '#/components/schemas/AnalysisChoices'}
         role: {$ref: '#/components/schemas/ProjectRole'}
         can_run: {type: boolean, description: 실행 요청·취소·사람 판정 가능(owner, manager, runner)}
         can_manage: {type: boolean, description: 예약·구성원·프로젝트 감사 기록(owner, manager)}
@@ -1769,6 +1845,38 @@ components:
         next_cursor: {type: [string, 'null'], description: 다음 페이지의 cursor(이 페이지 마지막 id). 마지막 페이지는 null}
     RunStatus:
       enum: [queued, preparing, running, finalizing, cancel_requested, cancelling, recovery_required, completed, partial, failed, cancelled]
+    Setup:
+      type: object
+      additionalProperties: false
+      required: [mode, model, git, readable_folders, analysis_defaults, tools]
+      properties:
+        mode: {enum: [personal, server]}
+        model:
+          description: 개인 모드의 리뷰 모델. 서버 모드는 null
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [configured, id, probe]
+              properties:
+                configured: {type: boolean}
+                id: {type: [string, 'null'], description: PROVIDER/MODEL}
+                probe: {enum: [verified, failed, not_probed, null], description: 이 설정으로 한 마지막 codeye model probe}
+        git:
+          description: 개인 모드에서 git 실행 파일과 허용 host. 설정 요약이 아직 없거나 서버 모드면 null
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [available, hosts]
+              properties:
+                available: {type: boolean}
+                hosts: {type: array, items: {type: string}}
+        readable_folders: {type: array, items: {type: string}, description: 개인 모드 사용자가 경로로 분석할 수 있는 폴더(허가된 source root 경로)}
+        analysis_defaults: {$ref: '#/components/schemas/AnalysisChoices'}
+        tools:
+          description: 개인 모드가 찾은 도구(schemas/tools.schema.json). 아직 없거나 서버 모드면 null
+          type: [object, 'null']
     RunAck:
       type: object
       required: [id, status, version, url]
@@ -2018,6 +2126,9 @@ components:
       properties:
         profile: {enum: [deep-review, with-tests, focused]}
         scope: {$ref: '#/components/schemas/Scope'}
+        analysis:
+          $ref: '#/components/schemas/AnalysisChoices'
+          description: 프로젝트의 분석 선택(기본값 적용). --project-analysis-policy 노드가 따른다. 이전 controller는 보내지 않는다.
         source:
           oneOf:
             - type: object
@@ -2028,11 +2139,11 @@ components:
                 source_root_id: {type: string, format: uuid}
                 relative_path: {type: string}
             - type: object
-              required: [kind, repository_url, branch, host]
+              required: [kind, repository_url, host]
               properties:
                 kind: {const: git}
                 repository_url: {type: string}
-                branch: {type: string}
+                branch: {type: string, description: 없으면 저장소의 기본 브랜치}
                 host: {type: string}
         snapshot:
           description: 고정 입력 재시도일 때만 존재. 노드는 보존 사본을 읽고 소스를 다시 확보하지 않는다.

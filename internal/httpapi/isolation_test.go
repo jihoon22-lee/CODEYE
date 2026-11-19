@@ -138,9 +138,17 @@ func isoCases() map[string]isoCase {
 			opts: func(_ *isoWorld, o opts) opts { o.ifMatch = `"1"`; return o }, body: func(*isoWorld) any { return map[string]any{"enabled": false} }},
 		"schedules.delete": {need: managerRole, ok: 204, ids: func(w *isoWorld) []string { return []string{w.f.projectID, w.schedule()} },
 			opts: func(_ *isoWorld, o opts) opts { o.ifMatch = `"1"`; return o }},
-		"runs.get":             {need: viewerRole, ok: 200, ids: isoRun},
-		"runs.events":          {need: viewerRole, ok: 200, ids: isoRun, stream: true},
-		"runs.cancel":          {need: runnerRole, ok: 202, ids: func(w *isoWorld) []string { return []string{w.e.createRun(w.f.user, w.f.projectID)} }},
+		"runs.get":    {need: viewerRole, ok: 200, ids: isoRun},
+		"runs.events": {need: viewerRole, ok: 200, ids: isoRun, stream: true},
+		"runs.cancel": {need: runnerRole, ok: 202, ids: func(w *isoWorld) []string { return []string{w.e.createRun(w.f.user, w.f.projectID)} }},
+		"runs.retry": {need: runnerRole, ok: 202, ids: func(w *isoWorld) []string {
+			id := w.e.createRun(w.f.user, w.f.projectID)
+			if _, _, err := w.e.store.CancelRun(context.Background(), w.f.user.id, id); err != nil {
+				w.e.t.Fatal(err)
+			}
+			return []string{id}
+		}},
+		"setup.get":            {need: signedIn, ok: 200},
 		"runs.report":          {need: viewerRole, ok: 200, ids: isoRun, query: "?format=json&include_code=true"},
 		"runs.reports":         {need: viewerRole, ok: 200, ids: isoRun},
 		"runs.comparison":      {need: viewerRole, ok: 200, ids: isoRun},

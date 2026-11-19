@@ -36,7 +36,7 @@ Usage:
   codeye source-root grant --root ROOT_ID --user USER_ID
   codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
-  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--personal]
+  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--personal [--state-dir DIR]]
                [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]]   (required for a non-loopback --listen)
 ` + nodeAdminUsage + `  codeye up [PATH] [--config PATH] [--postgres-bin-dir DIR] [--no-open] [--no-probe]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH)
   codeye open [--config PATH] [--no-open]   (a new signed-in browser link)
@@ -52,7 +52,7 @@ Usage:
                [--eslint /abs/eslint/bin/eslint.js] [--tsc /abs/typescript/bin/tsc]
                [--cargo /abs/toolchain/bin/cargo [--clippy /abs/toolchain/bin/cargo-clippy]]
                [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]
-               [--repo-code-source-root ID ...] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
+               [--repo-code-source-root ID ...] [--project-analysis-policy] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
                [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1] [--review-max-calls 15..207]
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema, except that personal mode with database.mode managed migrates on up/start after saving a pg_dump copy.
 Login links: codeye login-link and codeye start write them to a 0600 file; codeye up and codeye open print them and open the browser.
@@ -326,8 +326,10 @@ type serveConfig struct {
 	reconcile                     time.Duration
 	tlsCert, tlsKey, publicOrigin string
 	// personal: the controller of `codeye up`/`codeye start` (one user on
-	// this machine): browser sessions last httpapi.PersonalSessionTTL.
+	// this machine): browser sessions last httpapi.PersonalSessionTTL, and
+	// with stateDir it maps folder paths and reports the setup (httpapi.Personal).
 	personal bool
+	stateDir string
 }
 
 func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
@@ -344,6 +346,7 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fs.StringVar(&c.tlsKey, "tls-key", "", "")
 		fs.StringVar(&c.publicOrigin, "public-origin", "", "")
 		fs.BoolVar(&c.personal, "personal", false, "")
+		fs.StringVar(&c.stateDir, "state-dir", "", "")
 	}) {
 		return 2
 	}
@@ -376,6 +379,10 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "--artifact-dir must not be empty")
 		return 2
 	}
+	if c.stateDir != "" && (!c.personal || !filepath.IsAbs(c.stateDir)) {
+		fmt.Fprintln(stderr, "--state-dir is an absolute path and needs --personal")
+		return 2
+	}
 	if c.artifactDir, err = filepath.Abs(c.artifactDir); err != nil {
 		fmt.Fprintln(stderr, "--artifact-dir cannot be resolved")
 		return 2
@@ -406,6 +413,7 @@ func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig
 		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigin: c.publicOrigin}
 	if c.personal {
 		cfg.SessionTTL = httpapi.PersonalSessionTTL
+		cfg.Personal = &httpapi.Personal{StateDir: c.stateDir}
 	}
 	srv, err := httpapi.New(cfg, store)
 	if err != nil {

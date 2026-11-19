@@ -58,7 +58,7 @@ func (w *worker) acquire(a *attempt) string {
 			break
 		}
 		a.anyProc.Store(true)
-		s, err = source.AcquireGit(a.ctx, job.Source.RepositoryURL, job.Source.Branch, w.hello.DataRoot, w.limits(), source.GitOptions{Executable: w.hello.GitExecutable, AllowedHost: job.Source.AllowedHost, Timeout: 10 * time.Minute})
+		s, err = source.AcquireGit(a.ctx, job.Source.RepositoryURL, job.Source.Branch, w.hello.DataRoot, w.limits(), source.GitOptions{Executable: w.hello.GitExecutable, AllowedHost: job.Source.AllowedHost, AllowedLocalRoot: job.Source.AllowedLocalRoot, Timeout: 10 * time.Minute})
 		reason = sourceReason(err)
 	default:
 		err, reason = source.ErrUnsupported, nodeproto.ReasonSourceUnsupported

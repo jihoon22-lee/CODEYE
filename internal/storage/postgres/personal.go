@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,44 @@ import (
 
 // SourceRootRecord is a source root with its server-local path (operator only).
 type SourceRootRecord struct{ ID, Label, Path string }
+
+// EnsureProvider returns the provider of host, registering it (github for
+// github.com, ghes otherwise) when there is none. created reports a new row.
+func (s *Store) EnsureProvider(ctx context.Context, host string) (Provider, bool, error) {
+	host = strings.ToLower(host)
+	var p Provider
+	err := s.pool.QueryRow(ctx, "SELECT id::text,kind,host,coalesce(api_url,'') FROM providers WHERE host=$1 ORDER BY kind LIMIT 1", host).Scan(&p.ID, &p.Kind, &p.Host, &p.APIURL)
+	if err == nil {
+		return p, false, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return p, false, classify(err)
+	}
+	kind := "ghes"
+	if host == "github.com" {
+		kind = "github"
+	}
+	p, err = s.AddProvider(ctx, kind, host, "")
+	return p, err == nil, err
+}
+
+// GrantedRootPaths are the source roots granted to actor with their paths
+// (personal mode maps an absolute folder path onto them), ordered by label.
+func (s *Store) GrantedRootPaths(ctx context.Context, actor string) ([]SourceRootRecord, error) {
+	if !validIDs(actor) {
+		return nil, domain.ErrInvalid
+	}
+	rows, err := s.pool.Query(ctx, `SELECT r.id::text,r.label,r.path FROM source_roots r
+		JOIN source_root_grants g ON g.source_root_id=r.id WHERE g.user_id=$1 ORDER BY r.label`, actor)
+	if err != nil {
+		return nil, classify(err)
+	}
+	out, err := pgx.CollectRows(rows, pgx.RowToStructByPos[SourceRootRecord])
+	if out == nil {
+		out = []SourceRootRecord{}
+	}
+	return out, classify(err)
+}
 
 // SourceRootByLabel returns the source root registered under label.
 func (s *Store) SourceRootByLabel(ctx context.Context, label string) (SourceRootRecord, error) {

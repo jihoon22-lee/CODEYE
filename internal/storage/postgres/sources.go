@@ -230,6 +230,9 @@ type ProjectRegistration struct {
 	Name        string
 	Source      domain.Source
 	Description string
+	// Analysis are the project's analysis choices; nil records none (the
+	// defaults of domain.DefaultAnalysisChoices apply).
+	Analysis *domain.AnalysisChoices
 }
 
 const maxDescription = 20000
@@ -297,6 +300,9 @@ func (s *Store) RegisterProject(ctx context.Context, actor string, in ProjectReg
 			}
 		}
 		config := map[string]any{"config_version": 1, "source": in.Source}
+		if in.Analysis != nil {
+			config["analysis"] = *in.Analysis
+		}
 		if strings.TrimSpace(in.Description) != "" {
 			config["description"] = in.Description
 		}
@@ -325,6 +331,9 @@ type ProjectSummary struct {
 	Name     string
 	Revision int64
 	Source   json.RawMessage
+	// Analysis are the current revision's analysis choices (defaults when
+	// the configuration records none).
+	Analysis domain.AnalysisChoices
 	LastRun  *RunRef
 	// HasReport is true once any run of the project has a published report.
 	HasReport bool
@@ -355,7 +364,7 @@ const (
 // requested_at desc, id desc; else the latest run, which then is terminal),
 // the count of the other non-terminal runs, the latest published report and
 // the read time. Each lateral is an indexed per-project lookup.
-const projectSummarySQL = `SELECT p.id::text,p.name,p.current_revision,r.config->'source',p.created_at,lr.id::text,lr.status,
+const projectSummarySQL = `SELECT p.id::text,p.name,p.current_revision,r.config->'source',r.config->'analysis',p.created_at,lr.id::text,lr.status,
 	lp.run_id::text,lp.revision,lp.created_at,COALESCE(act.id,lr.id)::text,
 	(SELECT count(*) FROM runs o WHERE o.project_id=p.id AND o.status IN ` + nonTerminalRuns + `)-(CASE WHEN act.id IS NULL THEN 0 ELSE 1 END),
 	statement_timestamp()
@@ -377,6 +386,7 @@ func scanSummary(row pgx.Row) (ProjectSummary, time.Time, error) {
 		p          ProjectSummary
 		created    time.Time
 		source     []byte
+		analysis   []byte
 		lastID     *string
 		lastStat   *string
 		reportRun  *string
@@ -384,11 +394,12 @@ func scanSummary(row pgx.Row) (ProjectSummary, time.Time, error) {
 		reportAt   *time.Time
 		represents *string
 	)
-	if err := row.Scan(&p.ID, &p.Name, &p.Revision, &source, &created, &lastID, &lastStat,
+	if err := row.Scan(&p.ID, &p.Name, &p.Revision, &source, &analysis, &created, &lastID, &lastStat,
 		&reportRun, &reportRev, &reportAt, &represents, &p.Activity.OtherActiveRuns, &p.Activity.CheckedAt); err != nil {
 		return p, created, err
 	}
 	p.Activity.CheckedAt = p.Activity.CheckedAt.UTC()
+	p.Analysis = domain.AnalysisChoicesOf(analysis)
 	if reportRun != nil && reportRev != nil && reportAt != nil {
 		p.HasReport = true
 		p.Activity.LastReport = &ReportRef{RunID: *reportRun, Revision: *reportRev, PublishedAt: reportAt.UTC()}
