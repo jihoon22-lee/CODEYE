@@ -57,7 +57,7 @@ def without_clock(activity):
 
 
 def activity_agrees(session, project_id):
-    """W15 (TC-98): the project list, project detail and run detail show the
+    """TC-98: the project list, project detail and run detail show the
     same representative run and stages, and all match the OpenAPI contract."""
     import validate_bundle
     order = validate_bundle.stage_vocabulary()[0]
@@ -80,7 +80,7 @@ def activity_agrees(session, project_id):
 
 
 def stream_agrees(session, run_id):
-    """W22 (TC-99): the real run's event stream replays its stored events in
+    """TC-99: the real run's event stream replays its stored events in
     sequence with allowlisted fields only, then the same RunView as
     GET /runs/{id}; the plan fields follow the stored tasks."""
     import validate_bundle
@@ -138,8 +138,8 @@ def published_report(session, run_id):
     return state["report"] if state["status"] == "partial" else None
 
 
-def w23_history(session, project_id, first_run, first_report, go_source, original, publish):
-    """W23 (REQ-028, TC-14) with the real go vet worker: a review recorded on
+def comparison_history(session, project_id, first_run, first_report, go_source, original, publish):
+    """REQ-028, TC-14 with the real go vet worker: a review recorded on
     run 1 is stamped into run 2's publication; moved lines persist, a new
     diagnostic is new; the fixed diagnostic is resolved_observed only because
     go vet succeeded again and analyzed example.go. Schemas: OpenAPI."""
@@ -156,14 +156,14 @@ def w23_history(session, project_id, first_run, first_report, go_source, origina
     printf = [f for f in first_report["findings"] if f["fingerprint_basis"]["rule"] == "printf"]
     assert len(printf) == 1 and printf[0]["fingerprint"].startswith("fp2:"), first_report["findings"]
     original_fp = printf[0]["fingerprint"]
-    review = {"fingerprint": original_fp, "disposition": "accepted_risk", "reason": "W23 smoke: 의도된 형식 문자열",
+    review = {"fingerprint": original_fp, "disposition": "accepted_risk", "reason": "smoke: 의도된 형식 문자열",
               "run_id": first_run, "revision": 1, "finding_id": printf[0]["id"]}
     recorded = session.request("POST", f"projects/{project_id}/finding-reviews", review,
                                {"Idempotency-Key": str(uuid4()), "If-None-Match": "*"})
     assert recorded["version"] == 1 and recorded["disposition"] == "accepted_risk", recorded
 
     # Run 2: two lines inserted above the diagnostic and a second, different printf misuse.
-    (go_source / "example.go").write_text(original.replace("func Print()", "// W23: shifted\n//\nfunc Print()")
+    (go_source / "example.go").write_text(original.replace("func Print()", "// shifted\n//\nfunc Print()")
                                            + '\nfunc Count() { fmt.Printf("%s %s", "x") }\n')
     second = session.enqueue(project_id)
     assert publish(second)["revision"] == 1
@@ -192,11 +192,11 @@ def w23_history(session, project_id, first_run, first_report, go_source, origina
     c = compare(third, f"?baseline={first_run}")
     assert c["baseline"]["selection"] == "explicit" and c["counts"]["resolved_observed"] == 1 and c["counts"]["new"] == 1, c["counts"]
     (go_source / "example.go").write_text(original)
-    print("PASS: W23 실제 go vet 세 run 비교(줄 이동 persisting·새 진단 new·수정 resolved_observed)·게시 시점 판정·코드 제외 식별 없음")
+    print("PASS: 실제 go vet 세 run 비교(줄 이동 persisting·새 진단 new·수정 resolved_observed)·게시 시점 판정·코드 제외 식별 없음")
 
 
-def w21_secrets(session, cli, services, children, directory, binary, origin, user, node_env, sql_env, scalar):
-    """W21 (TC-119, docs/ANALYZERS.md) through the agent, the controller and PostgreSQL
+def secrets_pack(session, cli, services, children, directory, binary, origin, user, node_env, sql_env, scalar):
+    """TC-119, docs/ANALYZERS.md through the agent, the controller and PostgreSQL
     with the real lizard, jscpd (on node) and gitleaks: the structure metrics
     are no findings, the secret generated here is an unreviewed detection, and
     its value is in no uploaded artifact (streams included), report revision,
@@ -205,7 +205,7 @@ def w21_secrets(session, cli, services, children, directory, binary, origin, use
     names = ("lizard", "jscpd", "node", "gitl" + "eaks")
     tools = {name: os.environ.get("CODEYE_TEST_" + name.upper(), "") for name in names}
     if not all(tools.values()):
-        print("SKIP: W21 실도구 smoke (CODEYE_TEST_LIZARD·JSCPD·NODE·GITLEAKS 중 미설정)")
+        print("SKIP: 실도구 smoke (CODEYE_TEST_LIZARD·JSCPD·NODE·GITLEAKS 중 미설정)")
         return
     import base64
     import secrets as entropy
@@ -214,9 +214,9 @@ def w21_secrets(session, cli, services, children, directory, binary, origin, use
     forms = [f.encode() for f in (secret, body, body.lower())] + [secret.encode().hex().encode(), body.encode().hex().encode()]
 
     def absent(where, data):
-        assert not any(f in data for f in forms), "W21 비밀값 노출: " + where
+        assert not any(f in data for f in forms), "비밀값 노출: " + where
 
-    source = directory / "w21-project"
+    source = directory / "secrets-project"
     branches = "".join(f"    if v == {i}:\n        return {i}\n" for i in range(1, 17))
     block = ("function alpha(items, token) {\n  const key = \"" + secret + "\";\n  let total = 0;\n  for (const item of items) {\n"
              "    if (item.active && item.value > 10) {\n      total += item.value * 2;\n    } else if (item.value < 0) {\n"
@@ -229,19 +229,19 @@ def w21_secrets(session, cli, services, children, directory, binary, origin, use
     for rel, text in files.items():
         (source / rel).parent.mkdir(parents=True, exist_ok=True)
         (source / rel).write_text(text)
-    root_id = json.loads(cli("source-root", "add", "--label", "w21-smoke", "--path", source))["id"]
+    root_id = json.loads(cli("source-root", "add", "--label", "secrets-smoke", "--path", source))["id"]
     cli("source-root", "grant", "--root", root_id, "--user", user)
-    token = directory / "w21.token"
+    token = directory / "secrets.token"
     cli("node", "token", "create", "--pool", "default", "--source-root", root_id, "--output", token)
     tool_args = [arg for name in names for arg in ("--" + name, tools[name])]
-    state = directory / "w21-agent"
+    state = directory / "secrets-agent"
     children.append(services.enter_context(service(
-        [binary, "agent", "--controller", origin, "--state-dir", state, "--name", "w21-smoke", "--enroll-token-file", token,
+        [binary, "agent", "--controller", origin, "--state-dir", state, "--name", "secrets-smoke", "--enroll-token-file", token,
          "--source-root", f"{root_id}={source}", "--go", shutil.which("go"), *tool_args, "--autoscale", "--max-workers", "1"],
-        directory, node_env, directory / "w21.log")))
-    project = session.request("POST", "projects", {"name": "w21-secrets", "source": {"kind": "local", "source_root_id": root_id, "relative_path": "."}})
+        directory, node_env, directory / "secrets.log")))
+    project = session.request("POST", "projects", {"name": "secrets-pack", "source": {"kind": "local", "source_root_id": root_id, "relative_path": "."}})
     run_id = session.enqueue(project["id"])
-    revision = wait_for("W21 보고서 게시", lambda: published_report(session, run_id), children, timeout=240)
+    revision = wait_for("보고서 게시", lambda: published_report(session, run_id), children, timeout=240)
     assert revision["revision"] == 1
     path = f"runs/{run_id}/report?revision=1"
     full = session.request("GET", path + "&include_code=true")
@@ -279,7 +279,7 @@ def w21_secrets(session, cli, services, children, directory, binary, origin, use
     for item in sorted(state.rglob("*")):
         if item.is_file() and "data" not in item.relative_to(state).parts[:1]:
             absent("node state " + str(item.relative_to(state)), item.read_bytes())
-    for log in ("controller.log", "w21.log"):
+    for log in ("controller.log", "secrets.log"):
         absent(log, (directory / log).read_bytes())
     dump = shutil.which("pg_dump", path=sql_env.get("PATH"))
     assert dump, "pg_dump 없음: DB 행 확인 불가"
@@ -288,7 +288,7 @@ def w21_secrets(session, cli, services, children, directory, binary, origin, use
     assert b"COPY public.reports" in rows and len(rows) > 10000, "DB dump is not the run database"
     absent("DB rows", rows)
     assert all((source / rel).read_text() == text for rel, text in files.items())
-    print(f"PASS: W21 실제 lizard·jscpd·gitleaks run(지표 2개는 finding 아님, 비밀값 탐지 {len(detected)}개 미검토) — 산출물 {stored}개·보고서·내보내기·로그·DB 행·노드 scratch에 비밀값 없음")
+    print(f"PASS: 실제 lizard·jscpd·gitleaks run(지표 2개는 finding 아님, 비밀값 탐지 {len(detected)}개 미검토) — 산출물 {stored}개·보고서·내보내기·로그·DB 행·노드 scratch에 비밀값 없음")
 
 
 def stage_map(activity):
@@ -389,7 +389,7 @@ def run(base, root, env, *, browser=False):
         wait_for("실행 취소 확인", lambda: session.request("GET", lookup)["status"] == "cancelled", children)
         assert scalar(f"SELECT number || ':' || epoch || ':' || cleanup_state FROM attempts WHERE run_id='{run_id}'") == "1:1:confirmed"
         assert mode.read_text() == "sleep\n"
-        # W15: the real worker's planned stage is shown once the controller has
+        # The real worker's planned stage is shown once the controller has
         # settled the cancelled run's report (published or refused).
         def report_settled(run):
             return scalar(f"SELECT (SELECT count(*) FROM reports WHERE run_id='{run}')+(SELECT count(*) FROM report_rejections WHERE run_id='{run}')") != "0"
@@ -415,7 +415,7 @@ def run(base, root, env, *, browser=False):
         analysis = stages["static_analysis"]
         assert (analysis["state"], analysis["planned"], analysis["finished"], analysis["succeeded"]) == ("succeeded", 1, 1, 1), analysis
         assert stages["source"]["state"] == stages["report"]["state"] == "succeeded" and analysis["started_at"] and analysis["finished_at"], stages
-        print("PASS: W15 실제 워커 단계 기록·목록/상세/실행 상세 일치·취소 단계 (시험용 handler)")
+        print("PASS: 실제 워커 단계 기록·목록/상세/실행 상세 일치·취소 단계 (시험용 handler)")
         # 별도 root를 등록해 시험용 handler가 실제 분석 요청을 가져갈 수 없게 한다.
         go_source = directory / "go-project"
         shutil.copytree(root / "fixtures" / "go-vet", go_source)
@@ -426,19 +426,19 @@ def run(base, root, env, *, browser=False):
         cli("node", "token", "create", "--pool", "default", "--source-root", go_root, "--output", go_token)
         go_project = session.request("POST", "projects", {"name": "published-go-report", "source": {
             "kind": "local", "source_root_id": go_root, "relative_path": "."}})
-        # W19: staticcheck runs only when the operator names its binary
+        # Staticcheck runs only when the operator names its binary
         # (CODEYE_TEST_STATICCHECK, absolute); otherwise its task is planned
         # and finishes unsupported/tool_not_configured.
         staticcheck = os.environ.get("CODEYE_TEST_STATICCHECK", "")
         tool_args = ["--staticcheck", staticcheck] if staticcheck else []
         # The shared node toolchain (docs/ANALYZERS.md#공유-interpreter-toolchain) is probed at worker
-        # startup when CODEYE_TEST_NODE names it; only pyright (W17) needs it
+        # startup when CODEYE_TEST_NODE names it; only pyright needs it
         # and the Go fixture plans no Python task, so only startup codes are
         # checked.
         node_toolchain = os.environ.get("CODEYE_TEST_NODE", "")
         if node_toolchain:
             tool_args += ["--node", node_toolchain]
-        # W17: the Python tools named by CODEYE_TEST_RUFF/MYPY/PYRIGHT/BANDIT are
+        # The Python tools named by CODEYE_TEST_RUFF/MYPY/PYRIGHT/BANDIT are
         # probed at worker startup (the Go fixture plans no Python task); both
         # type checkers need the explicit choice (docs/ANALYZERS.md#타입-검사기-선택).
         python_tools = {t: os.environ.get("CODEYE_TEST_" + t.upper(), "") for t in ("ruff", "mypy", "pyright", "bandit")}
@@ -469,12 +469,12 @@ def run(base, root, env, *, browser=False):
         # go vet keeps its v0.1 document; staticcheck writes the generic envelope (docs/ANALYZERS.md).
         vet_docs = [d for d in observation_docs if d.get("kind") == "go_vet_observations"]
         sc_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.staticcheck"]
-        # W21 (docs/ANALYZERS.md): lizard, jscpd and gitleaks are planned for every
+        # (docs/ANALYZERS.md): lizard, jscpd and gitleaks are planned for every
         # project; this node has none of their tools, so each is a visible
         # not_run stand-in.
-        w21_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["ecosystem"] == "any"]
-        assert len(vet_docs) == 1 and len(sc_docs) == 1 and len(w21_docs) == 3 and len(observation_docs) == 5, [d.get("kind") for d in observation_docs]
-        assert all(d["outcome"]["exit_class"] == "not_run" and d["outcome"]["reason"] == "tool_not_configured" for d in w21_docs), [d["outcome"] for d in w21_docs]
+        structure_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["ecosystem"] == "any"]
+        assert len(vet_docs) == 1 and len(sc_docs) == 1 and len(structure_docs) == 3 and len(observation_docs) == 5, [d.get("kind") for d in observation_docs]
+        assert all(d["outcome"]["exit_class"] == "not_run" and d["outcome"]["reason"] == "tool_not_configured" for d in structure_docs), [d["outcome"] for d in structure_docs]
         doc, sc_doc = vet_docs[0], sc_docs[0]
         assert doc["analyzer_id"] == "go.vet"
         assert any(o["rule_id"] == "printf" and o["location"]["path"] == "example.go" for o in doc["observations"])
@@ -494,7 +494,7 @@ def run(base, root, env, *, browser=False):
             return state["report"] if state["status"] == "partial" else None
         revision = wait_for("실제 Go vet 보고서 게시", published, children)
         assert revision["revision"] == 1
-        # The product handlers declare a stage for every planned task (W15),
+        # The product handlers declare a stage for every planned task,
         # so the real run is recorded and list/detail agree.
         go_activity = activity_agrees(session, go_project["id"])
         assert go_activity["run"]["id"] == actual and go_activity["last_report"]["run_id"] == actual and go_activity["last_report"]["revision"] == 1
@@ -509,11 +509,11 @@ def run(base, root, env, *, browser=False):
         assert env_stage["reasons"] == ["model_source_not_approved"], go_stages
         static_stage = go_stages["static_analysis"]
         if staticcheck:
-            # The three W21 tasks without their tools keep the stage partial.
+            # The three tasks without their tools keep the stage partial.
             assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 3} and static_stage["succeeded"] == 2, static_stage
         else:
             # An analyzer without its tool is visible: go vet succeeded, staticcheck
-            # and the W21 tasks unsupported, so the stage is partial (never succeeded).
+            # and the tasks unsupported, so the stage is partial (never succeeded).
             assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 4}, static_stage
             assert static_stage["succeeded"] == 1, static_stage
         assert static_stage["reasons"] == ["tool_not_configured"], static_stage
@@ -522,9 +522,9 @@ def run(base, root, env, *, browser=False):
         assert go_stages["code_review"]["state"] == "skipped" and go_stages["code_review"]["reasons"] == ["model_source_not_approved"], go_stages
         assert go_stages["code_review"]["planned"] == 3, go_stages  # review-r1 investigate, interpret, verify
         assert go_stages["documents"]["succeeded"] == 1 and "model_source_not_approved" in go_stages["documents"]["reasons"], go_stages
-        print(f"PASS: W15 실제 Go run 단계 표시 detail={go_activity['detail']} (목록/상세 일치)")
+        print(f"PASS: 실제 Go run 단계 표시 detail={go_activity['detail']} (목록/상세 일치)")
         streamed, plan_revision = stream_agrees(session, actual)
-        print(f"PASS: W22 실제 Go run SSE {streamed}개 이벤트 순서 전달, run.view=GET, plan revision {plan_revision}")
+        print(f"PASS: 실제 Go run SSE {streamed}개 이벤트 순서 전달, run.view=GET, plan revision {plan_revision}")
         path = f"runs/{actual}/report?revision=1"
         code_free = session.request("GET", path)
         full = session.request("GET", path + "&include_code=true")
@@ -540,7 +540,7 @@ def run(base, root, env, *, browser=False):
         assert full["summary"]["pending_candidates"] > 0 and full["summary"]["actionable_findings"] == 0
         assert full["coverage"]["ai_review"]["status"] == "not_performed"
         assert full["quality_verdict"] == "inconclusive"
-        # W15: the real worker's discovery artifacts pass the report decoder.
+        # The real worker's discovery artifacts pass the report decoder.
         environment = [a for a in full["artifacts"] if a["media_type"] == "application/vnd.codeye.environment+json"]
         assert sorted(a["task_key"] for a in environment) == ["docs.discover", "env.discover"]
         assert all(a["decoder"] == "application/vnd.codeye.environment+json;schema_version=0.1" for a in environment)
@@ -552,7 +552,7 @@ def run(base, root, env, *, browser=False):
         # Startup codes of the worker (handler_unavailable) reach the agent log.
         agent_log = (directory / "go.log").read_text(errors="replace")
         assert ("staticcheck:not_configured" in agent_log) == (not staticcheck), "startup codes not in the agent log"
-        assert all(f"{t}:not_configured" in agent_log for t in ("lizard", "jscpd", "gitl" "eaks")), "W21 startup codes not in the agent log"
+        assert all(f"{t}:not_configured" in agent_log for t in ("lizard", "jscpd", "gitl" "eaks")), "startup codes not in the agent log"
         if node_toolchain:
             assert not any(f"node:{r}" in agent_log for r in ("invalid_config", "probe_failed", "unknown_tool")), "node toolchain rejected"
         for tool in ("ruff", "mypy", "pyright", "bandit"):
@@ -580,8 +580,8 @@ def run(base, root, env, *, browser=False):
             cli("login-link", "--user", user, "--output", browser_link, "--origin", origin)
             browser_smoke.published_report(root, env, origin, browser_link, "published-go-report", actual)
         print("PASS: 실제 워커→검증된 보고서 revision, 미실행 AI 검토, 코드 제외·포함과 3개 형식")
-        w23_history(session, go_project["id"], actual, full, go_source, original, lambda run: wait_for(
-            "W23 Go vet 보고서 게시", lambda: published_report(session, run), children, timeout=140))
+        comparison_history(session, go_project["id"], actual, full, go_source, original, lambda run: wait_for(
+            "Go vet 보고서 게시", lambda: published_report(session, run), children, timeout=140))
         print("PASS: 자동 증감 제품 워커·실제 Go vet·printf 관찰·산출물 무결성·원본 보존")
-        w21_secrets(session, cli, services, children, directory, binary, origin, user, node_env, sql_env, scalar)
+        secrets_pack(session, cli, services, children, directory, binary, origin, user, node_env, sql_env, scalar)
     print("PASS: 두 에이전트 등록·단일 attempt·취소 및 정리·후속 run 결과 접수 (시험용 handler)")

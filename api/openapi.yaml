@@ -7,11 +7,11 @@ info:
     `codeye serve`(loopback 전용 controller)가 실제로 제공하며 나머지는 아직 설계 계약이다
     (docs/API.md, docs/EXECUTION.md, docs/REPORT.md, docs/API.md, docs/REPORT.md). 운영 CRUD 전체는 docs/API.md에 따라 확장한다.
     의미 제약과 lease fencing은 JSON Schema 검증 외에 서버에서 검사한다.
-    W03 사용자 인증은 UserSession cookie뿐이다. UserBearer는 구현되지 않았다.
+    사용자 인증은 UserSession cookie뿐이다. UserBearer는 구현되지 않았다.
     상태 변경 요청(POST/PATCH/DELETE)은 Origin이 서버 origin과 정확히 같아야 하고,
     POST /session을 제외하면 X-CODEYE-CSRF header가 필요하다. Host는 loopback allowlist만 허용한다.
     모든 응답은 X-Request-ID header를 가지며 오류 envelope의 request_id와 같다.
-    W06 노드 경로(NodeBearer)는 cookie를 읽지 않고 CSRF를 쓰지 않으며 Origin header가 있으면 403으로 거부한다.
+    노드 경로(NodeBearer)는 cookie를 읽지 않고 CSRF를 쓰지 않으며 Origin header가 있으면 403으로 거부한다.
 servers:
   - url: http://127.0.0.1:7331
     description: 개인 Native 모드의 제안 포트
@@ -205,7 +205,7 @@ paths:
       description: >-
         같은 actor·project·Idempotency-Key와 같은 body(정규화 JSON digest)는 같은 run을 202로 반환한다.
         다른 body는 409 IDEMPOTENCY_CONFLICT. viewer는 403, 프로젝트 비구성원은 404다.
-        W03에는 worker가 없어 run은 queued에 머문다.
+        worker가 없는 빌드에서 run은 queued에 머문다.
       parameters:
         - {$ref: '#/components/parameters/IdempotencyKey'}
         - {$ref: '#/components/parameters/CSRF'}
@@ -333,7 +333,7 @@ paths:
                   formats: {type: array, items: {enum: [json, markdown, html]}}
                   default_include_code: {const: false}
                   default_baseline:
-                    description: W23 비교 화면의 기본 기준(getRunComparison 규칙). 없으면 null.
+                    description: 비교 화면의 기본 기준(getRunComparison 규칙). 없으면 null.
                     oneOf:
                       - type: 'null'
                       - type: object
@@ -646,7 +646,7 @@ paths:
       security: [{NodeBearer: []}]
       description: >-
         관측 워커·능력·가용량·명령 cursor를 보고한다. 보고한 워커는 등록·갱신되고 목록에 없는 이 노드의 워커는
-        stopped가 된다. cursor 이하 명령은 확인(ack) 처리한다. W06은 취소 요청된 run의 leased attempt마다
+        stopped가 된다. cursor 이하 명령은 확인(ack) 처리한다. 취소 요청된 run의 leased attempt마다
         cancel_attempt 명령 하나를 노드 행 잠금 아래에서 만든다(sequence = commit 순서). cleanup_reports의
         confirmed는 ConfirmCleanupNode로 처리하고, uncertain은 정보로만 받아 attempt를 recovery_required로 둔다.
       requestBody:
@@ -703,7 +703,7 @@ paths:
                   uniqueItems: true
                   items: {enum: [snapshot, workspace, cache, logs]}
                   description: >-
-                    W25. 노드가 직접 잰 저장 영역 중 설정한 상한에 도달한 영역(docs/OPERATIONS.md#저장-영역과-상한). 상한이 없으면 생략한다.
+                    노드가 직접 잰 저장 영역 중 설정한 상한에 도달한 영역(docs/OPERATIONS.md#저장-영역과-상한). 상한이 없으면 생략한다.
                     비어 있지 않으면 controller는 이 노드의 새 claim을 거절하고(204) 실행 중인 attempt와 확정된 산출물은
                     건드리지 않는다. 생략은 빈 목록과 같다.
       responses:
@@ -753,7 +753,7 @@ paths:
         능력(analysis:profile, source)·노드 source root 허가·요청자 실행 권한과 source root grant·snapshot 위치·
         예약 여유를 확인한 뒤 attempt(epoch+1)·예약·run 전이·attempt.leased 이벤트·멱등 응답을 함께 저장한다.
         마지막 heartbeat에서 idle로 보고된 워커만 claim할 수 있다. 같은 Idempotency-Key와 같은 worker는 저장된
-        200/204를 그대로 재전송하고 다른 worker는 409 IDEMPOTENCY_CONFLICT다. W25: 노드의 마지막 heartbeat가
+        200/204를 그대로 재전송하고 다른 worker는 409 IDEMPOTENCY_CONFLICT다. 노드의 마지막 heartbeat가
         storage_quota_exceeded를 보고했거나 scheduler_limits.artifact_quota_bytes에 확정 산출물 합(sha256별 한 번)이
         도달했으면 새 claim은 204다.
       parameters:
@@ -854,7 +854,7 @@ paths:
                         required: {type: boolean}
                         stage:
                           description: >-
-                            W15 선택 필드. 없으면 단계 없이 저장한다(추정하지 않음). 알 수 없는 값·빈 문자열은 422.
+                            선택 필드. 없으면 단계 없이 저장한다(추정하지 않음). 알 수 없는 값·빈 문자열은 422.
                             key 재사용 시 생략은 저장값 유지, 다른 값은 409, 단계 없이 저장된 task에는 한 번 기록한다.
                           allOf: [{$ref: '#/components/schemas/TaskStage'}]
                         weight:
@@ -862,7 +862,7 @@ paths:
                           minimum: 1
                           maximum: 1000
                           description: >-
-                            W22 선택 필드. 가중 진행률의 task 가중치이며 없으면 1로 센다(작업 수 기준). 범위 밖은 422.
+                            선택 필드. 가중 진행률의 task 가중치이며 없으면 1로 센다(작업 수 기준). 범위 밖은 422.
                             key 재사용 규칙은 stage와 같다(생략은 유지, 다른 값 409, 가중치 없이 저장된 task에는 한 번 기록).
                     - type: object
                       additionalProperties: false
@@ -962,7 +962,7 @@ paths:
       responses:
         '202':
           description: >-
-            결과 접수. 성공은 finalizing을 거쳐 W09 게시 트랜잭션에서 종결된다. confirmed이면 예약 해제, uncertain이면
+            결과 접수. 성공은 finalizing을 거쳐 게시 트랜잭션에서 종결된다. confirmed이면 예약 해제, uncertain이면
             recovery_required로 예약 유지. 같은 완료의 재전송은 같은 202.
           content:
             application/json:
@@ -1024,7 +1024,7 @@ paths:
         default: {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
-    UserBearer: {type: http, scheme: bearer, description: 미구현(향후 CLI/자동화용). W03 서버는 받지 않는다.}
+    UserBearer: {type: http, scheme: bearer, description: 미구현(향후 CLI/자동화용). 서버는 받지 않는다.}
     UserSession: {type: apiKey, in: cookie, name: codeye_session}
     NodeBearer: {type: http, scheme: bearer, description: '등록 응답의 node_secret(43자 base64url). 서버는 SHA-256만 저장한다. 철회된 노드는 401 NODE_UNAUTHENTICATED. 경로 node_id가 인증 노드와 다르거나 다른 노드의 attempt이면 404.'}
   parameters:
@@ -1036,12 +1036,12 @@ components:
   responses:
     Error:
       description: >-
-        인증·권한·검증·충돌·일시 오류. code와 retryable을 확인한다. W03 code:
+        인증·권한·검증·충돌·일시 오류. code와 retryable을 확인한다. 사용자 경로 code:
         INVALID_REQUEST(400), UNAUTHENTICATED(401), FORBIDDEN/HOST_REJECTED/ORIGIN_REJECTED/CSRF_REJECTED(403),
         NOT_FOUND(404), METHOD_NOT_ALLOWED(405), CONFLICT/IDEMPOTENCY_CONFLICT(409), PAYLOAD_TOO_LARGE(413),
         UNSUPPORTED_MEDIA_TYPE(415), VALIDATION_FAILED/SOURCE_UNSUPPORTED/ATTACHMENTS_UNSUPPORTED(422),
-        INTERNAL(500), UNAVAILABLE(503, retryable). W06 노드 code: NODE_UNAUTHENTICATED(401), STALE_ATTEMPT(409),
-        LENGTH_REQUIRED(411), INTEGRITY_MISMATCH/PROTOCOL_UNSUPPORTED(422). W22: If-Match 누락·형식 오류는 INVALID_REQUEST(400),
+        INTERNAL(500), UNAVAILABLE(503, retryable). 노드 code: NODE_UNAUTHENTICATED(401), STALE_ATTEMPT(409),
+        LENGTH_REQUIRED(411), INTEGRITY_MISMATCH/PROTOCOL_UNSUPPORTED(422). If-Match 누락·형식 오류는 INVALID_REQUEST(400),
         version 불일치는 CONFLICT(409).
       content:
         application/json:
@@ -1092,7 +1092,7 @@ components:
         name: {type: string, minLength: 1, maxLength: 200}
         source: {$ref: '#/components/schemas/Source'}
         description: {type: string, maxLength: 20000}
-        attachment_ids: {type: array, maxItems: 0, items: {type: string}, description: W03 미지원. 비어 있지 않으면 422}
+        attachment_ids: {type: array, maxItems: 0, items: {type: string}, description: 미지원. 비어 있지 않으면 422}
     Project:
       type: object
       required: [id, name, source, revision, source_status, capability_gaps, last_run]
@@ -1102,17 +1102,17 @@ components:
         source: {$ref: '#/components/schemas/Source'}
         revision: {type: integer, minimum: 1}
         source_status:
-          description: 선언만 저장됨. 실제 접근은 W04 acquire 전까지 확인하지 않는다.
+          description: 선언만 저장됨. 실제 접근은 acquire 전까지 확인하지 않는다.
           enum: [declared_unverified]
         capability_gaps:
           type: array
           description: >-
             source_access_unverified는 등록 시 소스 접근을 확인하지 않았음을 표시한다. report_unavailable은 이 프로젝트에 게시된 보고서가 없을 때 포함한다.
-            execution_unavailable은 철회되지 않은 등록 노드가 하나도 없을 때만 포함한다(W06). 특정 run의 배치 가능 여부는
+            execution_unavailable은 철회되지 않은 등록 노드가 하나도 없을 때만 포함한다. 특정 run의 배치 가능 여부는
             run의 progress.waiting_reason으로 따로 보고한다.
           items: {enum: [source_access_unverified, execution_unavailable, report_unavailable]}
         last_run:
-          description: 가장 최근에 요청한 run(R0 의미 유지). 대표 run은 activity.run이다.
+          description: 가장 최근에 요청한 run(기존 의미 유지). 대표 run은 activity.run이다.
           oneOf:
             - type: 'null'
             - type: object
@@ -1123,7 +1123,7 @@ components:
         activity: {$ref: '#/components/schemas/ProjectActivity'}
     TaskStage:
       description: >-
-        task가 계획 시 기록하는 표시 단계(W15, docs/ARCHITECTURE.md#표시-단계와-task-단계). domain.Stage와 migration 0006 CHECK와 같다.
+        task가 계획 시 기록하는 표시 단계(docs/ARCHITECTURE.md#표시-단계와-task-단계). domain.Stage와 migration 0006 CHECK와 같다.
         source/report는 서버 기록에서 계산하며 task 단계가 아니다.
       enum: [environment, documents, static_analysis, code_review, build, test]
     StageKey:
@@ -1137,7 +1137,7 @@ components:
         cancelled(모두 cancelled), partial(종료됐지만 위 어느 것도 아님).
       enum: [plan_pending, no_tasks, waiting, running, succeeded, skipped, failed, cancelled, partial]
     StageDetail:
-      description: recorded는 모든 task에 단계 기록이 있음. not_recorded는 단계 없는 task(W15 이전 워커·R0)가 있어 stages가 비어 있음.
+      description: recorded는 모든 task에 단계 기록이 있음. not_recorded는 단계 없는 task(단계 기록이 없는 이전 워커)가 있어 stages가 비어 있음.
       enum: [recorded, not_recorded]
     StageView:
       type: object
@@ -1175,7 +1175,7 @@ components:
       type: object
       additionalProperties: false
       description: >-
-        W15 프로젝트 진행 요약. 대표 run은 실행·취소 처리 중(preparing, running, finalizing, cancel_requested,
+        프로젝트 진행 요약. 대표 run은 실행·취소 처리 중(preparing, running, finalizing, cancel_requested,
         cancelling), recovery_required, queued, 종료 순, 같은 그룹에서 requested_at 내림차순, run ID 내림차순이다.
         목록과 상세는 같은 저장소 집계를 쓴다. 권한 없는 프로젝트는 응답에 나타나지 않는다.
       required: [run, other_active_runs, detail, stages, waiting_reason, last_report, last_event_at, checked_at]
@@ -1231,7 +1231,7 @@ components:
         version: {type: integer, minimum: 1}
         url: {type: string}
     RunTrigger:
-      description: run이 생긴 이유(W22). manual은 사용자 요청, schedule은 예약 occurrence다.
+      description: run이 생긴 이유. manual은 사용자 요청, schedule은 예약 occurrence다.
       oneOf:
         - type: object
           additionalProperties: false
@@ -1263,7 +1263,7 @@ components:
     RunEventData:
       type: object
       description: >-
-        SSE 이벤트 행의 data(W22). run_id·sequence·version(그 이벤트 뒤의 run version)·type·at(DB 시각)과 payload 중 허용된
+        SSE 이벤트 행의 data. run_id·sequence·version(그 이벤트 뒤의 run version)·type·at(DB 시각)과 payload 중 허용된
         구조화 필드만 담는다(status, task_id, key, required, stage, weight, reason, snapshot_id, attempt_id, epoch, report_id, revision,
         quality_verdict, closed_tasks, trigger, schedule_id, scheduled_for). 경로·로그·digest·노드/워커 식별자·자격증명은 보내지 않는다.
         type은 저장된 이벤트 종류(run.queued, attempt.leased, snapshot.fixed, task.created, task.status, run.status, report.published 등)다.
@@ -1280,7 +1280,7 @@ components:
     StreamControl:
       type: object
       additionalProperties: false
-      description: state.resync, closed, heartbeat 이벤트의 data(W22). heartbeat에는 reason이 없다.
+      description: state.resync, closed, heartbeat 이벤트의 data. heartbeat에는 reason이 없다.
       required: [run_id]
       properties:
         run_id: {type: string}
@@ -1385,7 +1385,7 @@ components:
           type: integer
           minimum: 0
           description: >-
-            W22. 이 응답을 읽기 시작할 때의 run 최신 event sequence. GET /runs/{run_id}/events의 cursor로 쓴다. 집계는 이 값 이후의
+            이 응답을 읽기 시작할 때의 run 최신 event sequence. GET /runs/{run_id}/events의 cursor로 쓴다. 집계는 이 값 이후의
             이벤트를 이미 반영했을 수 있으므로 클라이언트는 이벤트를 무효화 신호로 다루고 event_sequence가 작아지는 응답을 적용하지 않는다.
         trigger: {$ref: '#/components/schemas/RunTrigger'}
         snapshot_id: {type: [string, 'null']}
@@ -1402,16 +1402,16 @@ components:
           type: object
           required: [stage, plan_revision, completed_tasks, total_tasks, estimated_percent, planned_weight, finished_weight, weight_basis, plan_changes, waiting_reason]
           properties:
-            stage: {type: string, description: run 상태와 같다(R0 의미 유지). 세부 단계는 stages.}
+            stage: {type: string, description: run 상태와 같다(기존 의미 유지). 세부 단계는 stages.}
             detail: {$ref: '#/components/schemas/StageDetail'}
-            stages: {type: array, items: {$ref: '#/components/schemas/StageView'}, description: 프로젝트 activity.stages와 같은 집계(W15). not_recorded이면 빈 배열.}
+            stages: {type: array, items: {$ref: '#/components/schemas/StageView'}, description: 프로젝트 activity.stages와 같은 집계. not_recorded이면 빈 배열.}
             last_event_at: {type: [string, 'null'], format: date-time}
             checked_at: {type: string, format: date-time}
             plan_revision:
               type: [integer, 'null']
               minimum: 1
               description: >-
-                W22. 현재 attempt가 계획을 확정(running 도달)하면 1, 그 뒤 추가된 task마다 1씩 증가한다. 확정 전 null.
+                현재 attempt가 계획을 확정(running 도달)하면 1, 그 뒤 추가된 task마다 1씩 증가한다. 확정 전 null.
                 재시도한 run은 새 attempt가 다시 확정할 때 1부터 센다.
             completed_tasks: {type: integer, minimum: 0}
             total_tasks: {type: [integer, 'null'], minimum: 0}
@@ -1420,22 +1420,22 @@ components:
               minimum: 0
               maximum: 100
               description: >-
-                W22. 종료된 task 가중치 / 현재 revision의 계획 가중치 × 100(소수 첫째 자리). 계획 확정 전이나 계획 가중치가 0이면 null.
+                종료된 task 가중치 / 현재 revision의 계획 가중치 × 100(소수 첫째 자리). 계획 확정 전이나 계획 가중치가 0이면 null.
                 저장된 task 상태만 쓰며 heartbeat·모델 토큰·경과 시간은 근거가 아니다. task 작업량 추정이며 보고서 게시(report 단계)는 포함하지 않는다.
-            planned_weight: {type: [integer, 'null'], minimum: 0, description: W22. 현재 revision의 분모. 확정 전 null.}
-            finished_weight: {type: [integer, 'null'], minimum: 0, description: W22. 종료(성공·실패·제외 포함)된 task의 가중치 합. 확정 전 null.}
+            planned_weight: {type: [integer, 'null'], minimum: 0, description: 현재 revision의 분모. 확정 전 null.}
+            finished_weight: {type: [integer, 'null'], minimum: 0, description: 종료(성공·실패·제외 포함)된 task의 가중치 합. 확정 전 null.}
             weight_basis:
-              description: W22. task_count는 가중치를 선언한 task가 없어 작업 수 비율이라는 뜻이다. declared는 모두 선언, mixed는 일부 선언(미선언은 1).
+              description: task_count는 가중치를 선언한 task가 없어 작업 수 비율이라는 뜻이다. declared는 모두 선언, mixed는 일부 선언(미선언은 1).
               oneOf:
                 - type: 'null'
                 - enum: [task_count, declared, mixed]
-            plan_changes: {type: array, items: {$ref: '#/components/schemas/PlanChange'}, description: W22. 분모가 바뀐 이유. revision 2부터 순서대로.}
+            plan_changes: {type: array, items: {$ref: '#/components/schemas/PlanChange'}, description: 분모가 바뀐 이유. revision 2부터 순서대로.}
             waiting_reason:
               type: [string, 'null']
               description: >-
-                queued일 때만 구조화 데이터에서 계산한다(W06): request_unavailable(W06 이전 본문 미복원),
+                queued일 때만 구조화 데이터에서 계산한다: request_unavailable(본문 미복원),
                 execution_unavailable(철회되지 않은 등록 노드 없음), snapshot_unavailable, node_stale, no_capable_node
-                (분석 handler가 없는 제품 빌드 포함), capacity_full, project_limit(프로젝트 동시 실행 상한), pool_paused(모든 호환 pool 중지), storage_quota_exceeded(W25: 산출물 저장 상한 도달
+                (분석 handler가 없는 제품 빌드 포함), capacity_full, project_limit(프로젝트 동시 실행 상한), pool_paused(모든 호환 pool 중지), storage_quota_exceeded(산출물 저장 상한 도달
                 또는 여유가 있는 호환 노드가 모두 저장 영역 상한 도달). 호환 노드에 여유가 있으면 null. 그 외 상태는 null.
     Pool:
       type: object
@@ -1449,7 +1449,7 @@ components:
         observed_workers: {type: integer, minimum: 0}
         capacity_state: {enum: [healthy, degraded_capacity, over_target_draining, paused]}
     AttemptStatus:
-      description: W02 내부 저장 상태. enrollment/claim HTTP 구현은 W06에서 제공한다.
+      description: 내부 저장 상태. enrollment/claim HTTP는 노드 경로가 제공한다.
       enum: [leased, recovery_required, released]
     CleanupState:
       enum: [pending, uncertain, confirmed]

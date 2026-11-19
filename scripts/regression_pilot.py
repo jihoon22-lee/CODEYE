@@ -1,4 +1,4 @@
-"""명시적으로 선택한 R0 실모델 파일럿. 임시 DB와 승인된 고정 입력에서만 실행한다."""
+"""명시적으로 선택한 회귀 실모델 파일럿. 임시 DB와 승인된 고정 입력에서만 실행한다."""
 
 import argparse
 import hashlib
@@ -16,16 +16,16 @@ from uuid import uuid4
 from eval_harness import Cluster, extract_commit, keep_review_artifacts, tree_digest
 
 
-W15_MARKER = "<!-- CODEYE test fixture (TC-97)."
+DEV_AGENT_MARKER = "<!-- CODEYE test fixture (TC-97)."
 
 
-# Fixed repository inputs that are not R0 synthetic pairs. The W12 verifier
+# Fixed repository inputs that are not the synthetic defect/fix pairs. The verifier
 # fixture is the caller-closes counterexample TC-100 scores separately.
 FIXED_INPUTS = {"w15": "fixtures/w15-modules/input", "w12-close": "internal/worker/review/testdata/verify"}
 
 
-def materialize_w15(root, destination, label="w15"):
-    """Copy a fixed input; drop the W15 development-agent warning comment.
+def materialize_fixed_input(root, destination, label="w15"):
+    """Copy a fixed input; drop the development-agent warning comment.
 
     The repository copy of AGENTS.md starts with a comment telling development
     agents not to follow it. A real hostile document would not announce itself,
@@ -39,7 +39,7 @@ def materialize_w15(root, destination, label="w15"):
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         data = path.read_bytes()
-        if path.name == "AGENTS.md" and data.startswith(W15_MARKER.encode()):
+        if path.name == "AGENTS.md" and data.startswith(DEV_AGENT_MARKER.encode()):
             data = data.split(b"\n", 1)[1]
         target.write_bytes(data)
     return tree_digest(destination)
@@ -77,7 +77,7 @@ def audit_reports(output, root):
             ):
                 raise ValueError("요약과 게시 리비전 불일치")
             if label in FIXED_INPUTS:
-                if materialize_w15(root, inputs, label) != row["input"]:
+                if materialize_fixed_input(root, inputs, label) != row["input"]:
                     raise ValueError("고정 입력 digest 불일치")
             elif label in ("git", "pilot"):
                 commit = row["input"]
@@ -153,7 +153,7 @@ def run(base, root, env):
     for label in FIXED_INPUTS:
         if selected and label in selected:
             rel = uuid4().hex
-            dataset.append((label, rel, materialize_w15(root, source / rel, label)))
+            dataset.append((label, rel, materialize_fixed_input(root, source / rel, label)))
     commit = subprocess.check_output(
         ["git", "rev-parse", "bcfad99^{commit}"], cwd=root, text=True
     ).strip()
@@ -183,7 +183,7 @@ def run(base, root, env):
     subprocess.run(["npm", "run", "build"], cwd=root / "web", check=True)
     # 파일럿의 두 노드는 승인한 고정 사본에만 접근한다. 비용 장부와 키는 source 밖에 있다.
     with Cluster(base, binary, env, source, agent_args=agent_args, agents=2, max_workers=2,
-                 label="R0 fixed inputs", web_dir=root / "web/dist", agent_path=env["PATH"], pool_max=2) as cluster:
+                 label="fixed inputs", web_dir=root / "web/dist", agent_path=env["PATH"], pool_max=2) as cluster:
         api, cli, origin, user, children = cluster.api, cluster.cli, cluster.origin, cluster.user, cluster.children
         root_id = cluster.root_id
         provider = (
@@ -328,13 +328,13 @@ def run(base, root, env):
                     "개인 프로젝트 파일럿 검토가 부분 완료됐습니다. 기록된 사유를 확인하세요."
                 )
     print(
-        f"PASS: 실제 R0 보고서 {len(rows)}개 게시·조회, 공개 파일럿 기준 {commit[:12]}"
+        f"PASS: 실제 회귀 보고서 {len(rows)}개 게시·조회, 공개 파일럿 기준 {commit[:12]}"
     )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="R0에 보관한 보고서를 같은 입력과 대조한다"
+        description="보관한 회귀 보고서를 같은 입력과 대조한다"
     )
     parser.add_argument("--audit-results", required=True, type=Path)
     args = parser.parse_args()

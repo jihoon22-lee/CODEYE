@@ -107,11 +107,11 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
             raw = obs["raw_ref"]
             ensure(raw["artifact_id"] in rows, "Unbound raw reference")
             row = rows[raw["artifact_id"]]
-            # W19 analyzer documents may cite either recorded stream (cppcheck writes its XML to stderr).
+            # Analyzer documents may cite either recorded stream (cppcheck writes its XML to stderr).
             ensure(row["role"] in ("stdout", "stderr") and row["sha256"] == raw["sha256"] and row["task_key"] == obs["task_key"], "Incorrect raw stream")
             ensure(0 <= raw["byte_start"] <= raw["byte_end"] <= row["size_bytes"], "Raw byte range invalid")
             ensure((obs["raw_message"] is not None) == report["export"]["include_code"], "Export leaked or omitted diagnostic text")
-        # W19: a diagnostic the tool reported as suppressed in source never becomes a finding.
+        # A diagnostic the tool reported as suppressed in source never becomes a finding.
         suppressed = {o["id"] for o in observations if o.get("suppressed")}
         ensure(not any(suppressed & set(f.get("observation_ids", [])) for f in findings), "Finding built from a suppressed observation")
         if report["coverage"]["ai_review"]["status"] != "performed":
@@ -124,7 +124,7 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
         ensure(context["config"] == "recorded" or not recorded, "Rule context records configuration it did not read")
         ensure(include is not False or not recorded, "Code-free export carries rule-context configuration")
         # Same rule as internal/report/validate.go: a recorded context needs a digest; the paths list is
-        # omitted when the tool read no file (W21 gitleaks with only the built-in configuration).
+        # omitted when the tool read no file (gitleaks with only the built-in configuration).
         ensure(not (include and context["config"] == "recorded")
                or bool(re.fullmatch(r"[0-9a-f]{64}", str(context.get("config_digest", "")))),
                "Recorded rule context without digest")
@@ -160,7 +160,7 @@ ABSOLUTE = re.compile(r"^(?:/|\\|[A-Za-z]:[\\/])")
 
 
 def check_observations(doc: dict) -> None:
-    """Cross-field rules of the Go vet observations artifact (W08)."""
+    """Cross-field rules of the Go vet observations artifact ."""
     observations = doc["observations"]
     ensure(doc["parse"]["observations"] == len(observations), "Observation count mismatch")
     unresolved = sum(1 for o in observations if o["location_state"] != "resolved")
@@ -194,7 +194,7 @@ def check_observations(doc: dict) -> None:
 
 
 def check_analyzer_observations(doc: dict) -> None:
-    """Cross-field rules of the generic analyzer envelope (W19, docs/ANALYZERS.md; obsdoc.Validate)."""
+    """Cross-field rules of the generic analyzer envelope (docs/ANALYZERS.md; obsdoc.Validate)."""
     observations = doc["observations"]
     parse, outcome, coverage = doc["parse"], doc["outcome"], doc["coverage"]
     ensure(parse["observations"] == len(observations), "Envelope observation count mismatch")
@@ -247,7 +247,7 @@ def go_string_constant(path: Path, name: str) -> str:
     return match.group(1)
 
 
-def check_w19_contracts(validators: dict) -> int:
+def check_staticcheck_pack_contracts(validators: dict) -> int:
     """The staticcheck descriptor, the real envelope example and the analyzer_tools environment field.
 
     Returns the number of negative cases."""
@@ -325,8 +325,8 @@ def check_w19_contracts(validators: dict) -> int:
     return negatives
 
 
-def check_w17_python(validators: dict) -> None:
-    """W17 Python pack: the four descriptors, their selections against the Go constants and the real ruff envelope."""
+def check_python_pack(validators: dict) -> None:
+    """Python pack: the four descriptors, their selections against the Go constants and the real ruff envelope."""
     negatives = 0
     src = ROOT / "internal/worker/analysis/python"
     descriptors = {}
@@ -374,7 +374,7 @@ def check_w17_python(validators: dict) -> None:
     bad("ruff unbound raw stream", lambda d: d["observations"][0]["raw_ref"].update(stream_sha256="0" * 64))
     bad("ruff node path in argv", lambda d: d["executions"][-1]["command"]["argv"].append("/home/user/project"))
     bad("ruff suppressed under honored", lambda d: (d["rule_pack"].update(source_suppressions="honored"), d["observations"][0].update(suppressed=True)))
-    print(f"PASS: W17 Python pack (ruff, mypy, pyright, bandit descriptors; real ruff envelope; {negatives} negative cases)")
+    print(f"PASS: Python pack (ruff, mypy, pyright, bandit descriptors; real ruff envelope; {negatives} negative cases)")
 
 
 def go_string_slice(path: Path, name: str) -> list[str]:
@@ -384,11 +384,11 @@ def go_string_slice(path: Path, name: str) -> list[str]:
     return re.findall(r'"((?:[^"\\]|\\.)*)"', match.group(1))
 
 
-W16_SOURCE = (".c", ".cc", ".cpp", ".cxx", ".c++")
+CPP_SOURCE = (".c", ".cc", ".cpp", ".cxx", ".c++")
 
 
-def check_w16_contracts(validators: dict) -> int:
-    """W16 C/C++ pack (docs/ANALYZERS.md): the cppcheck and clang-tidy descriptors, the real envelope examples bound to the
+def check_cpp_pack_contracts(validators: dict) -> int:
+    """C/C++ pack (docs/ANALYZERS.md): the cppcheck and clang-tidy descriptors, the real envelope examples bound to the
     committed fixture bytes, the rule context, the single required baseline and the expected fixture outcomes.
 
     Returns the number of negative cases."""
@@ -425,7 +425,7 @@ def check_w16_contracts(validators: dict) -> int:
     ensure(not (fixture / "input/expected.json").exists(), "Expected outcomes must stay outside the fixture input")
     case = expected["cases"]["with_generated_header"]
 
-    def w16(doc: dict, tool: str) -> None:
+    def cpp_envelope(doc: dict, tool: str) -> None:
         envelope_validator.validate(doc)
         check_analyzer_observations(doc)
         rule_pack, coverage, outcome = doc["rule_pack"], doc["coverage"], doc["outcome"]
@@ -436,7 +436,7 @@ def check_w16_contracts(validators: dict) -> int:
         ensure(rule_pack["source_suppressions"] == ("disabled" if tool == "cppcheck" else "honored") and rule_pack["unreported_suppression_rules"] == [],
                tool + ": cppcheck runs without --inline-suppr; clang-tidy NOLINT cannot be reported (measured)")
         ensure(rule_pack["selection"][:len(selection if tool == "cppcheck" else checks)] == (selection if tool == "cppcheck" else checks), tool + ": envelope selection differs from the Go source")
-        ensure(all(p.endswith(W16_SOURCE) for p in coverage["processed_paths"] or []), tool + ": processed paths are translation units only (no header claims)")
+        ensure(all(p.endswith(CPP_SOURCE) for p in coverage["processed_paths"] or []), tool + ": processed paths are translation units only (no header claims)")
         ensure(coverage["unit"] == "translation_unit" and doc["target"]["properties"]["mode"] == "compile_db", tool + ": compile DB mode example")
         ensure(not any(ABSOLUTE.match(v) or "/home/" in v or "/tmp/" in v for v in doc["target"]["properties"].values()), tool + ": node path in a target property")
         for o in doc["observations"]:
@@ -450,7 +450,7 @@ def check_w16_contracts(validators: dict) -> int:
 
     examples = {"cppcheck": json_file(ROOT / "examples/observations-cppcheck.json"), "clang-tidy": json_file(ROOT / "examples/observations-clang-tidy.json")}
     for tool, doc in examples.items():
-        w16(doc, tool)
+        cpp_envelope(doc, tool)
     ensure(executions_exit(examples["cppcheck"], "cppcheck.check") == 2 and executions_exit(examples["clang-tidy"], "clang-tidy.check.1") == 0,
            "Examples are the measured exits: cppcheck 2 with records, clang-tidy 0 with warnings")
 
@@ -458,7 +458,7 @@ def check_w16_contracts(validators: dict) -> int:
         nonlocal negatives
         doc = copy.deepcopy(examples[tool])
         edit(doc)
-        expect_invalid(name, lambda d: w16(d, tool), doc)
+        expect_invalid(name, lambda d: cpp_envelope(d, tool), doc)
         negatives += 1
 
     bad("clang-tidy as a second required baseline", "clang-tidy", lambda d: d["analyzer"].update(required=True))
@@ -485,7 +485,7 @@ def check_w16_contracts(validators: dict) -> int:
             units = set(want["units"])
             ensure(want["task_status"] != "succeeded" or not units & gaps, name + " " + tool + ": success with a translation-unit gap")
             ensure((want["processed_paths"] is not None) == (want["task_status"] in ("succeeded", "unsupported")), name + " " + tool + ": processed paths only for succeeded or not-run tasks")
-            ensure(all(p.endswith(W16_SOURCE) for p in want["processed_paths"] or []), name + " " + tool + ": header in processed paths")
+            ensure(all(p.endswith(CPP_SOURCE) for p in want["processed_paths"] or []), name + " " + tool + ": header in processed paths")
             if want["properties"].get("mode") == "reduced":
                 ensure({"compile_db_missing", "reduced_mode_no_build_flags"} <= set(want["limitations"]) and not units & {"analyzed_clean", "analyzed_with_findings"},
                        name + ": reduced mode must say it ran without build flags")
@@ -496,8 +496,8 @@ def check_w16_contracts(validators: dict) -> int:
     return negatives
 
 
-def check_w18_contracts(validators: dict) -> int:
-    """W18 JS/TS pack: the ESLint and tsc descriptors and their real envelope examples.
+def check_js_ts_pack_contracts(validators: dict) -> int:
+    """JS/TS pack: the ESLint and tsc descriptors and their real envelope examples.
 
     Returns the number of negative cases."""
     negatives = 0
@@ -512,9 +512,9 @@ def check_w18_contracts(validators: dict) -> int:
     for descriptor in (eslint, tsc):
         validators["analyzer.schema.json"].validate(descriptor)
         check_analyzer(descriptor)
-        ensure(descriptor["executes_repository_code"] is False and descriptor["network_policy"] == "none", "W18 tasks never execute repository code")
-        ensure(descriptor["execute"]["executable"] == "${node}", "W18 tools run through the shared node toolchain, never their #! line")
-        ensure(descriptor["execute"]["env_allowlist"] == ["PATH", "LANG", "SystemRoot"], "W18 environment allowlist changed")
+        ensure(descriptor["executes_repository_code"] is False and descriptor["network_policy"] == "none", "tasks never execute repository code")
+        ensure(descriptor["execute"]["executable"] == "${node}", "tools run through the shared node toolchain, never their #! line")
+        ensure(descriptor["execute"]["env_allowlist"] == ["PATH", "LANG", "SystemRoot"], "environment allowlist changed")
     ensure(eslint["exit_codes"] == {"clean": [0], "findings": [1], "error": [2]}, "eslint exit-code contract changed")
     ensure(tsc["exit_codes"] == {"clean": [0], "findings": [2], "error": [1]}, "tsc exit-code contract changed")
     argv = eslint["execute"]["argv"]
@@ -563,8 +563,8 @@ def executions_exit(doc: dict, name: str):
     return next(e["exit_code"] for e in doc["executions"] if e["name"] == name)
 
 
-def check_w20_rust_pack(validators: dict) -> int:
-    """The cargo check and clippy descriptors and their real envelope examples (W20, docs/ANALYZERS.md).
+def check_rust_pack(validators: dict) -> int:
+    """The cargo check and clippy descriptors and their real envelope examples (docs/ANALYZERS.md).
 
     Returns the number of negative cases."""
     negatives = 0
@@ -635,8 +635,8 @@ def check_w20_rust_pack(validators: dict) -> int:
     return negatives
 
 
-def check_w21_contracts(validators: dict) -> int:
-    """W21 (docs/ANALYZERS.md): lizard, jscpd and gitleaks descriptors and real envelopes.
+def check_structure_pack_contracts(validators: dict) -> int:
+    """(docs/ANALYZERS.md): lizard, jscpd and gitleaks descriptors and real envelopes.
 
     Metric observations are measurements, never active observations or
     findings; secret detections carry the fixed message and no value or
@@ -747,7 +747,7 @@ def check_w21_contracts(validators: dict) -> int:
 
 
 def check_environment_example(doc: dict) -> None:
-    """Bind the W15 discovery examples to the fixture input bytes and evidence IDs."""
+    """Bind the discovery examples to the fixture input bytes and evidence IDs."""
     root = ROOT / "fixtures/w15-modules/input"
     for r in doc.get("environment", {}).get("requirements", []):
         src = r["source"]
@@ -789,7 +789,7 @@ def check_review_example(doc: dict) -> None:
     ensure(verdict["verdict"] == "refuted" and any(e["path"] == "load.go" and e.get("origin") == "caller" for e in callers), "Missing fixture counterexample")
 
 
-R1_STAGES = ("environment", "documents", "investigate", "interpret", "verify")
+ROLE_STAGES = ("environment", "documents", "investigate", "interpret", "verify")
 
 
 def compact_json(text: str) -> bytes:
@@ -814,21 +814,21 @@ def compact_json(text: str) -> bytes:
 
 
 # Language guides of review-r1 follow the snapshot's in-scope source
-# ecosystems (W24 rc2, A29). The w15 example snapshot has Go source only;
+# ecosystems (A29). The example snapshot has Go source only;
 # TestR1ExampleRecords checks that selection against the worker.
-R1_LANGUAGES = ("cpp", "go", "javascript", "python", "rust")
-R1_EXAMPLE_LANGUAGES = ("go",)
+ROLE_LANGUAGES = ("cpp", "go", "javascript", "python", "rust")
+ROLE_EXAMPLE_LANGUAGES = ("go",)
 
 
-def r1_pack(languages=R1_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
+def role_pack(languages=ROLE_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
     """The review-r1 default pack: identity, files and per-role digests
     (review-v1 algorithm over pack.yaml and the role's selected files) for
     the given in-scope ecosystems."""
     pack_file = ROOT / "prompts/review-r1/pack.yaml"
     pack = yaml_file(pack_file)
     ensure(pack["id"] == "review-r1" and pack["status"] == "default" and pack["schema_version"] == "0.2", "review-r1 pack identity")
-    ensure(tuple(pack["roles"]) == R1_STAGES, "review-r1 roles")
-    ensure(tuple(pack["languages"]) == R1_LANGUAGES and all(f == f"languages/{eco}.md" for eco, f in pack["languages"].items()), "review-r1 language guides")
+    ensure(tuple(pack["roles"]) == ROLE_STAGES, "review-r1 roles")
+    ensure(tuple(pack["languages"]) == ROLE_LANGUAGES and all(f == f"languages/{eco}.md" for eco, f in pack["languages"].items()), "review-r1 language guides")
     for guide in pack["languages"].values():
         ensure(within_root(pack_file.parent / guide).is_file(), "Missing review-r1 prompt: " + guide)
     selected = [pack["languages"][eco] for eco in sorted(set(languages)) if eco in pack["languages"]]
@@ -849,12 +849,12 @@ def r1_pack(languages=R1_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
     return pack, roles
 
 
-def check_review_r1_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None:
+def check_role_pack_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None:
     """Bind the review-r1 stage examples to the w15 fixture bytes, the pack
     files, each other (upstream SHA-256, candidates) and the scope rules."""
     root = ROOT / "fixtures/w15-modules/input"
     first = docs["environment"]
-    for stage in R1_STAGES:
+    for stage in ROLE_STAGES:
         doc = docs[stage]
         ensure(doc["stage"] == stage and doc["pack"] == {"id": pack["id"], "version": pack["version"]}, "review-r1 stage or pack: " + stage)
         ensure(all(doc[k] == first[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id")), "review-r1 examples of different attempts")
@@ -901,7 +901,7 @@ SERVER_STAGES = ("source", "report")
 
 def stage_vocabulary() -> tuple[list[str], list[str], list[str]]:
     """Task stage keys in domain.TaskStages order, the migration 0006 CHECK
-    values, and the progress.State values (W15, docs/ARCHITECTURE.md#표시-단계와-task-단계)."""
+    values, and the progress.State values (docs/ARCHITECTURE.md#표시-단계와-task-단계)."""
     go = (ROOT / "internal/domain/stage.go").read_text(encoding="utf-8")
     consts = dict(re.findall(r'^\s*(Stage\w+)\s+Stage\s*=\s*"([a-z_]+)"', go, re.M))
     listed = re.search(r"var TaskStages = \[\]Stage\{([^}]*)\}", go)
@@ -929,7 +929,7 @@ def check_stage_enums(api: dict, order: list[str], stored: list[str], states: li
 
 
 def check_stages(detail, stages: list, order: list[str]) -> None:
-    """Cross-field rules of a W15 stage list (project activity or run progress)."""
+    """Cross-field rules of a stage list (project activity or run progress)."""
     if detail != "recorded":
         ensure(stages == [], "Unrecorded run lists stages")
         return
@@ -958,7 +958,7 @@ def check_stages(detail, stages: list, order: list[str]) -> None:
 
 
 def check_activity(doc: dict, order: list[str]) -> None:
-    """Cross-field rules of a project activity (W15, docs/API.md)."""
+    """Cross-field rules of a project activity (docs/API.md)."""
     ensure((doc["run"] is None) == (doc["detail"] is None), "Activity detail must be null exactly without a run")
     if doc["run"] is None:
         ensure(doc["stages"] == [] and doc["other_active_runs"] == 0 and doc["waiting_reason"] is None and doc["last_event_at"] is None, "Activity data without a run")
@@ -975,8 +975,8 @@ def api_validator(name: str) -> Draft202012Validator:
     return Draft202012Validator(root, format_checker=FormatChecker())
 
 
-def check_w22_contracts() -> None:
-    """W22 schedules, plan revision/weighted progress and the run event stream.
+def check_schedule_contracts() -> None:
+    """Schedules, plan revision/weighted progress and the run event stream.
 
     Examples validate against OpenAPI; enums and bounds agree across OpenAPI,
     migration 0007 and the Go constants; derived progress fields are
@@ -1108,11 +1108,11 @@ def check_w22_contracts() -> None:
     reject("gap in event ids", check_stream, stream.replace("id: 22\n", "id: 23\n").replace('"sequence":22,', '"sequence":23,'))
     reject("node identity in event row", check_stream, stream.replace('"status":"failed",', '"status":"failed","node_id":"n1",'))
     reject("control message with id", check_stream, stream.replace("event: heartbeat\n", "id: 23\nevent: heartbeat\n"))
-    print(f"PASS: W22 schedule/progress/stream contracts (3 examples; overlap/misfire/occurrence/reason/stream/weight enums and bounds; {negatives} negative cases)")
+    print(f"PASS: schedule/progress/stream contracts (3 examples; overlap/misfire/occurrence/reason/stream/weight enums and bounds; {negatives} negative cases)")
 
 
-def check_w23_contracts(published: dict) -> None:
-    """W23 run comparison and human finding reviews (docs/REPORT.md).
+def check_comparison_contracts(published: dict) -> None:
+    """Run comparison and human finding reviews (docs/REPORT.md).
 
     Examples validate against OpenAPI; disposition/state/reason/match enums
     agree across OpenAPI, migration 0008, the report schema and the Go
@@ -1155,7 +1155,7 @@ def check_w23_contracts(published: dict) -> None:
         ensure(doc["counts"] == {s: states.count(s) for s in api["ComparisonState"]["enum"]}, "Counts are not recomputed from entries")
         ensure(len({e["fingerprint"] for e in doc["entries"]}) == len(doc["entries"]), "Duplicate comparison entry")
         by_fp = {e["fingerprint"]: e for e in doc["entries"]}
-        # W19: a resolved tool entry needs the same tool version and rule context on both sides (docs/REPORT.md#항목-상태).
+        # A resolved tool entry needs the same tool version and rule context on both sides (docs/REPORT.md#항목-상태).
         rule_keys = {d["key"] for d in doc["differences"]}
         for e in doc["entries"]:
             ensure(e["state"] != "resolved_observed" or (e["producer"] == "tool" and e["current"] == [] and e["baseline"] and e["reason"] is None), "Resolved entry not observed by a tool")
@@ -1242,7 +1242,7 @@ def check_w23_contracts(published: dict) -> None:
     bad = copy.deepcopy(listing)
     bad["items"][0]["fingerprint"] = "go-vet-fp-v1:1234"
     reject("review of a non-fp2 fingerprint", check_reviews, bad)
-    print(f"PASS: W23 comparison/review contracts (2 examples; disposition/state/reason/match enums across OpenAPI, migration 0008, schema and Go; {negatives} negative cases)")
+    print(f"PASS: comparison/review contracts (2 examples; disposition/state/reason/match enums across OpenAPI, migration 0008, schema and Go; {negatives} negative cases)")
 
 
 def resolve_pointer(document, pointer: str):
@@ -1310,9 +1310,9 @@ def expect_invalid(name: str, function, data) -> None:
     raise ValueError("Negative case was incorrectly accepted: " + name)
 
 
-def check_w25_doctor(validator, example) -> None:
-    """W25 (docs/OPERATIONS.md#codeye-doctor): the operations section is optional and closed."""
-    ensure("operations" in example, "Doctor example lacks the W25 operations section")
+def check_doctor_operations(validator, example) -> None:
+    """The doctor operations section (docs/OPERATIONS.md#codeye-doctor) is optional and closed."""
+    ensure("operations" in example, "Doctor example lacks the operations section")
     base = copy.deepcopy(example)
     del base["operations"]
     validator.validate(base)
@@ -1360,20 +1360,20 @@ def make_validators():
     return {name: Draft202012Validator(schema, registry=registry, format_checker=FormatChecker()) for name, schema in schemas.items()}
 
 
-def check_r1_corpus() -> None:
-    """W24 보류 corpus의 구조·위치·digest·누설을 도구 없이 확인하고 봉인 digest와 대조한다."""
+def check_holdout_corpus() -> None:
+    """보류 corpus의 구조·위치·digest·누설을 도구 없이 확인하고 봉인 digest와 대조한다."""
     import subprocess
 
     corpus = ROOT / "fixtures/r1-quality/corpus.py"
     env = {"PATH": os.environ.get("PATH", ""), "LANG": "C.UTF-8"}
     result = subprocess.run([sys.executable, "-I", str(corpus), "validate"], capture_output=True, text=True, timeout=300, env=env)
     tail = " | ".join((result.stdout + result.stderr).strip().splitlines()[-5:])
-    ensure(result.returncode == 0, "R1 corpus validate failed: " + tail)
+    ensure(result.returncode == 0, "holdout corpus validate failed: " + tail)
     out = subprocess.run([sys.executable, "-I", str(corpus), "digest"], capture_output=True, text=True, timeout=300, env=env)
-    ensure(out.returncode == 0 and out.stdout.split(), "R1 corpus digest failed")
+    ensure(out.returncode == 0 and out.stdout.split(), "holdout corpus digest failed")
     sealed = "ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4"
-    ensure(out.stdout.split()[-1] == sealed, "R1 holdout corpus digest differs from the sealed digest; a changed holdout needs a new seal recorded in docs/EVALUATION.md")
-    print(f"PASS: W24 R1 holdout corpus (structure, locations, digests, leakage scan; sealed digest {sealed[:12]})")
+    ensure(out.stdout.split()[-1] == sealed, "holdout corpus digest differs from the sealed digest; a changed holdout needs a new seal recorded in docs/EVALUATION.md")
+    print(f"PASS: holdout corpus (structure, locations, digests, leakage scan; sealed digest {sealed[:12]})")
 
 
 def heading_anchors(text: str) -> set:
@@ -1473,9 +1473,9 @@ def main() -> None:
         ensure(set(state[field]["enum"]) == set(api[name]["enum"]), "State/API enum mismatch: " + field)
     stage_order, stored_stages, stage_states = stage_vocabulary()
     check_stage_enums(api, stage_order, stored_stages, stage_states)
-    check_w22_contracts()
-    check_w23_contracts(json_file(ROOT / "examples/report-go-vet.json"))
-    check_r1_corpus()
+    check_schedule_contracts()
+    check_comparison_contracts(json_file(ROOT / "examples/report-go-vet.json"))
+    check_holdout_corpus()
     events = yaml_file(ROOT / "api/openapi.yaml")["paths"]["/api/v1/attempts/{attempt_id}/events"]["post"]
     payloads = events["requestBody"]["content"]["application/json"]["schema"]["properties"]["payload"]["oneOf"]
     created = [p for p in payloads if p.get("required") == ["key", "required"]]
@@ -1505,27 +1505,27 @@ def main() -> None:
     check_analyzer(go_vet)
     ensure(go_vet["exit_codes"]["findings"] == [], "go vet -json findings are not an exit-code class")
     check_observations(observations)
-    w19_negatives = check_w19_contracts(validators)
-    print(f"PASS: W19 analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {w19_negatives} negative cases)")
-    print(f"PASS: W16 C/C++ pack (cppcheck/clang-tidy descriptors, real envelopes bound to the fixture, expected outcomes; {check_w16_contracts(validators)} negative cases)")
-    print(f"PASS: W18 JS/TS pack contracts (eslint and tsc descriptors, real envelope examples; {check_w18_contracts(validators)} negative cases)")
-    w20_negatives = check_w20_rust_pack(validators)
-    print(f"PASS: W20 Rust pack contracts (cargo check and clippy descriptors, real envelope examples; {w20_negatives} negative cases)")
-    check_w17_python(validators)
-    print(f"PASS: W21 structure and secrets pack contracts (lizard, jscpd, gitleaks descriptors and real envelopes; {check_w21_contracts(validators)} negative cases)")
+    staticcheck_negatives = check_staticcheck_pack_contracts(validators)
+    print(f"PASS: analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {staticcheck_negatives} negative cases)")
+    print(f"PASS: C/C++ pack (cppcheck/clang-tidy descriptors, real envelopes bound to the fixture, expected outcomes; {check_cpp_pack_contracts(validators)} negative cases)")
+    print(f"PASS: JS/TS pack contracts (eslint and tsc descriptors, real envelope examples; {check_js_ts_pack_contracts(validators)} negative cases)")
+    rust_negatives = check_rust_pack(validators)
+    print(f"PASS: Rust pack contracts (cargo check and clippy descriptors, real envelope examples; {rust_negatives} negative cases)")
+    check_python_pack(validators)
+    print(f"PASS: structure and secrets pack contracts (lizard, jscpd, gitleaks descriptors and real envelopes; {check_structure_pack_contracts(validators)} negative cases)")
     review = json_file(ROOT / "examples/review-record.json")
     review_validator = validators["review-record.schema.json"]
     review_validator.validate(review)
     check_review_example(review)
-    r1_pack_doc, r1_roles = r1_pack()
-    r1_raw = {stage: (ROOT / "examples/review-r1" / (stage + ".json")).read_text(encoding="utf-8") for stage in R1_STAGES}
-    r1_docs = {stage: json.loads(text) for stage, text in r1_raw.items()}
-    for doc in r1_docs.values():
+    role_pack_doc, role_files = role_pack()
+    role_raw = {stage: (ROOT / "examples/review-r1" / (stage + ".json")).read_text(encoding="utf-8") for stage in ROLE_STAGES}
+    role_docs = {stage: json.loads(text) for stage, text in role_raw.items()}
+    for doc in role_docs.values():
         review_validator.validate(doc)
-    check_review_r1_examples(r1_docs, r1_raw, r1_pack_doc, r1_roles)
+    check_role_pack_examples(role_docs, role_raw, role_pack_doc, role_files)
     # review-r1 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
-    retried = copy.deepcopy(r1_docs["verify"])
+    retried = copy.deepcopy(role_docs["verify"])
     first = retried["calls"][0]
     retried["calls"] = [dict(first, attempt=1, output_errors=["evidence_id_dropped", "evidence_id_unknown"]),
                         dict(first, attempt=2, outcome="output_rejected", output_errors=["output_not_json"], usage=None),
@@ -1592,7 +1592,7 @@ def main() -> None:
         bad = copy.deepcopy(published)
         bad["findings"][0][field] = value
         expect_invalid("code-free export with " + field, validators["report.schema.json"].validate, bad)
-    # W19 rule context (builder 4): the code-free export keeps the mode but not the configuration paths or digest.
+    # Rule context: the code-free export keeps the mode but not the configuration paths or digest.
     context = {"rule_pack": "codeye-go-staticcheck", "rule_pack_version": "2", "selection": ["-checks", "SA*"], "repository_config": "honored",
                "source_suppressions": "reported", "config": "recorded"}
     ok = copy.deepcopy(published)
@@ -1651,7 +1651,7 @@ def main() -> None:
     bad = copy.deepcopy(json_file(ROOT / "examples/doctor.json"))
     bad["checks"][-1]["id"] = "host"
     expect_invalid("missing doctor capability", validators["doctor.schema.json"].validate, bad)
-    check_w25_doctor(validators["doctor.schema.json"], json_file(ROOT / "examples/doctor.json"))
+    check_doctor_operations(validators["doctor.schema.json"], json_file(ROOT / "examples/doctor.json"))
     calls_example = copy.deepcopy(published)
     calls_example["coverage"]["review_calls"] = [
         {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome")}
@@ -1671,24 +1671,24 @@ def main() -> None:
     bad = copy.deepcopy(review)
     bad["evidence"][0]["text"] = "raw source"
     expect_invalid("source text in review record", review_validator.validate, bad)
-    r1_calls = copy.deepcopy(published)
-    r1_calls["coverage"]["review_calls"] = [
+    role_calls = copy.deepcopy(published)
+    role_calls["coverage"]["review_calls"] = [
         {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome", "pack_id", "pack_version")}
-        for stage in R1_STAGES for call in r1_docs[stage]["calls"]]
-    validators["report.schema.json"].validate(r1_calls)
+        for stage in ROLE_STAGES for call in role_docs[stage]["calls"]]
+    validators["report.schema.json"].validate(role_calls)
     # Five review-r1 stages of up to three calls each fit the report; more do not.
-    most = copy.deepcopy(r1_calls)
-    most["coverage"]["review_calls"] = [dict(r1_calls["coverage"]["review_calls"][0]) for _ in range(15)]
+    most = copy.deepcopy(role_calls)
+    most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(15)]
     validators["report.schema.json"].validate(most)
-    most["coverage"]["review_calls"].append(dict(r1_calls["coverage"]["review_calls"][0]))
+    most["coverage"]["review_calls"].append(dict(role_calls["coverage"]["review_calls"][0]))
     expect_invalid("report with 16 review calls", validators["report.schema.json"].validate, most)
-    r1_calls["coverage"]["review_calls"][0]["pack_version"] = "2.0.0 rc1"
-    expect_invalid("invalid report pack version", validators["report.schema.json"].validate, r1_calls)
+    role_calls["coverage"]["review_calls"][0]["pack_version"] = "2.0.0 rc1"
+    expect_invalid("invalid report pack version", validators["report.schema.json"].validate, role_calls)
 
-    def r1_case(stage, edit, check):
-        docs = copy.deepcopy(r1_docs)
+    def role_case(stage, edit, check):
+        docs = copy.deepcopy(role_docs)
         edit(docs[stage])
-        return lambda _: check(docs[stage]) if check else check_review_r1_examples(docs, r1_raw, r1_pack_doc, r1_roles)
+        return lambda _: check(docs[stage]) if check else check_role_pack_examples(docs, role_raw, role_pack_doc, role_files)
 
     def set_key(key, value, index=0, field=None):
         def edit(doc):
@@ -1699,7 +1699,7 @@ def main() -> None:
         return edit
 
     fake_id = "ev_" + "0" * 24
-    r1_negative = [
+    role_negative = [
         ("review-r1 fabricated evidence", "investigate", lambda d: d["candidates"][0]["evidence_ids"].append(fake_id), None),
         ("review-r1 scope generalization", "documents", set_key("contracts", ".", 1, "applies_to"), None),
         ("review-r1 pack digest drift", "verify", set_key("calls", "0" * 64, 0, "pack_sha256"), None),
@@ -1712,9 +1712,9 @@ def main() -> None:
         ("review-r1 failed record keeps accepted call", "documents", lambda d: [d.update(outcome="failed", failure_reason="model_timeout")] + [d.pop(k) for k in ("contracts", "conflicts", "questions", "instruction_notes")], review_validator.validate),
         ("review-r1 investigate given raw tool observations", "investigate", lambda d: d.update(observations=docs_obs), review_validator.validate),
     ]
-    docs_obs = copy.deepcopy(r1_docs["interpret"]["observations"])
-    for name, stage, edit, check in r1_negative:
-        expect_invalid(name, r1_case(stage, edit, check), None)
+    docs_obs = copy.deepcopy(role_docs["interpret"]["observations"])
+    for name, stage, edit, check in role_negative:
+        expect_invalid(name, role_case(stage, edit, check), None)
     bad = copy.deepcopy(activity)
     bad["stages"][3]["counts"]["timed_out"] = 0
     expect_invalid("zero stage count", activity_validator.validate, bad)
@@ -1732,9 +1732,9 @@ def main() -> None:
     print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 19 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
-    print(f"PASS: {27 + len(r1_negative)} negative cases; example policy timing; prompt manifest")
+    print(f"PASS: {27 + len(role_negative)} negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
-    print(f"review-r1 default pack {r1_pack_doc['version']} (Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in r1_roles.items()))
+    print(f"review-r1 default pack {role_pack_doc['version']} (Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in role_files.items()))
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
 
 

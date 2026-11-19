@@ -1,4 +1,4 @@
-# W18 JS/TS 팩 tsc(javascript.tsc, 추가 깊이) 서술. 구현: internal/worker/analysis/tsc, 근거: docs/ANALYZERS.md.
+# JS/TS 팩 tsc(javascript.tsc, 추가 깊이) 서술. 구현: internal/worker/analysis/tsc, 근거: docs/ANALYZERS.md.
 # 운영자 typescript/bin/tsc를 공유 node toolchain으로 실행한다. tsconfig 체인은 JSONC 데이터로 읽어 manifest와 대조하고(honored),
 # 쓰기 옵션(generateTrace 등)·스냅샷 밖 경로를 가진 체인은 실행 전에 거부한다. --showConfig로 실효 설정과 루트 파일을 먼저 확인한다.
 # TypeScript 6.0.3 실측: 진단이 없으면 exit 0, 진단이 있으면 exit 2(--noEmit), 명령행 오류·설정 로드 실패는 exit 1.

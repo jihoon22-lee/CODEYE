@@ -1,6 +1,6 @@
-"""W15 TC-100: compare two archived pilot result directories (active vs candidate pack).
+"""TC-100: compare two archived pilot result directories (active vs candidate pack).
 
-Reads only archived results written by ``r0_pilot.py`` (summary.json, one report
+Reads only archived results written by ``regression_pilot.py`` (summary.json, one report
 JSON per case and the kept review/discovery artifacts) and an optional judgment
 file kept outside every snapshot. It never sends model requests. Structural
 metrics come from the reports; defect-detection judgments come from the
@@ -46,7 +46,7 @@ def structural(case):
     validations = Counter(f["validation"] for f in findings)
     calls = Counter((c["role"], c["outcome"]) for c in report["coverage"].get("review_calls", []))
     tasks = {t["key"]: (t["status"], t.get("reason")) for t in report["tasks"]}
-    # A reproduced verdict needs an execution record; the R0/W15 runs execute no tests.
+    # A reproduced verdict needs an execution record; the regression runs execute no tests.
     reproduced = validations.get("reproduced", 0)
     summary = report["summary"]
     stats_ok = (

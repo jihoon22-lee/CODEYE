@@ -1,4 +1,4 @@
-"""Shared harness for the R0 pilot (r0_pilot.py) and the W24 evaluation runner (r1_eval.py).
+"""Shared harness for the regression pilot (regression_pilot.py) and the evaluation runner (quality_eval.py).
 
 It builds the product binary, runs a real controller and real agents against a
 throwaway PostgreSQL (test_postgres.temporary_postgres), creates projects over

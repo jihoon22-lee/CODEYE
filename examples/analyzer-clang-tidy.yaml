@@ -1,4 +1,4 @@
-# W16 C/C++ 팩 추가 깊이 분석기 clang-tidy 어댑터 서술(Clang Static Analyzer는 clang-analyzer-* 검사로만 실행). 구현: internal/worker/analysis/cpp, 근거: docs/ANALYZERS.md.
+# C/C++ 팩 추가 깊이 분석기 clang-tidy 어댑터 서술(Clang Static Analyzer는 clang-analyzer-* 검사로만 실행). 구현: internal/worker/analysis/cpp, 근거: docs/ANALYZERS.md.
 # clang-tidy 23.1.5는 경고가 있어도 exit 0이다(WarningsAsErrors는 빈 값으로 고정). 그래서 findings는 종료 코드 범주가 아니다(빈 배열).
 # exit 1은 한 실행의 번역 단위 중 하나라도 compiler error가 있을 때다. 오류 수는 실행 안에서 누적되므로 단위별 실패는 stderr 누적 수의 증가로 정한다.
 # compile DB를 읽지 못한 "Running without flags."·사용법 오류·crash는 실패다. compile DB가 없으면 실행하지 않는다(unsupported/compile_db_missing).

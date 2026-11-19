@@ -1,4 +1,4 @@
-"""W24 scoring: auto-match pre-fill, judgment templates, docs/EVALUATION.md metrics with Wilson intervals,
+"""Scoring: auto-match pre-fill, judgment templates, docs/EVALUATION.md metrics with Wilson intervals,
 variance across repeats, and report-reading sheets (docs/EVALUATION.md#채점).
 
 Rules that keep the numbers honest:
@@ -344,10 +344,10 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
     reproduced = sum(v["validation"] == "reproduced" for u in units for v in u["views"])
     errors, stats_bad, rejected, markers = Counter(), 0, 0, Counter()
     try:
-        import w15_pack_compare
+        import pack_compare
         for u in units:
             records = records_of(batch_dir, u["row"]["key"]) if batch_dir else []
-            s = w15_pack_compare.structural({"row": {"status": u["row"]["status"]}, "report": reports[u["row"]["key"]],
+            s = pack_compare.structural({"row": {"status": u["row"]["status"]}, "report": reports[u["row"]["key"]],
                                              "records": records})
             errors.update(s["output_errors"])
             stats_bad += not s["stats_consistent"]
@@ -444,7 +444,7 @@ def evidence_validity(batch, rows, reports, corpus):
     """Re-check every published report against freshly materialized inputs (validate_bundle.check_report)."""
     from validate_bundle import check_report
     checked, failures, mismatches, evidence, claims = 0, [], [], 0, 0
-    with tempfile.TemporaryDirectory(prefix="codeye-r1-evidence-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="codeye-evidence-") as tmp:
         for row in rows:
             if row.get("invalid") or row["key"] not in reports:
                 continue
@@ -484,7 +484,7 @@ def score(batches, judgment_files, corpus, line_slack=2):
                                   "is labelled holdout_seen_by_prior_revision (docs/EVALUATION.md#holdout-등록부). Review batches with "
                                   "different answer_blocking modes exclude different variants (docs/EVALUATION.md#정답-차단).")}
     out["report_reading"] = {"status": "not_measured",
-                             "reason": "report-reading answers are scored separately with `r1_eval.py reader-score`"}
+                             "reason": "report-reading answers are scored separately with `quality_eval.py reader-score`"}
     return out
 
 

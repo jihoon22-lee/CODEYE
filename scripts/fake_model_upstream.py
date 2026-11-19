@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""W24 dry-run double: a loopback-only fake of the OpenAI Responses endpoint.
+"""Dry-run double: a loopback-only fake of the OpenAI Responses endpoint.
 
 It exists so the evaluation runner, OpenCode and the budget relay can be run end
 to end without a model or a key. It is NOT a model: every reply is a fixed
 placeholder derived from the request structure (role name, evidence ids), never
 from labels, and results produced through it carry no quality information. The
-relay reaches it only through `r0_openai_gateway.py --test-upstream
+relay reaches it only through `model_budget_relay.py --test-upstream
 http://127.0.0.1:PORT`.
 
 Replies satisfy the relay's settlement rules (model `<requested>-fake`,
@@ -39,7 +39,7 @@ PROOF = re.compile(r"^1: ([0-9a-f]{64})$", re.M)
 REVIEW_INPUT = re.compile(r"<review-input>\n(.*)\n</review-input>", re.S)
 ROLE = re.compile(r"^Role: ([a-z]+)$", re.M)
 CODE_SUFFIX = re.compile(r"\.(go|py|pyi|js|jsx|mjs|cjs|ts|tsx|mts|cts|rs|c|cc|cpp|cxx|h|hh|hpp|hxx)$")
-TEXT = "Placeholder from the W24 dry-run upstream; no model produced this text."
+TEXT = "Placeholder from the dry-run upstream; no model produced this text."
 
 
 def _evidence(node, out):

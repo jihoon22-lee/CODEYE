@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""R0 QA-only loopback relay: Chat Completions in (OpenCode), OpenAI Responses API out.
+"""QA-only loopback relay: Chat Completions in (OpenCode), OpenAI Responses API out.
 
 This is NOT a CODEYE product component and not the product model path (D10).
-It exists only for a human-approved, budget-capped R0 OpenCode integration probe.
+It exists only for a human-approved, budget-capped OpenCode integration probe.
 
 Guarantees (see docs/EVALUATION.md):
 - Listens on 127.0.0.1 only, per-run random bearer token, no CORS, Origin rejected.
@@ -14,11 +14,11 @@ Guarantees (see docs/EVALUATION.md):
   is sent. Failures, missing usage and crashes are charged the full reservation.
 - Errors returned to clients use non-retryable HTTP statuses only, so SDK retry
   loops cannot silently multiply paid calls.
-- W24: with --forbidden-phrases FILE (the evaluation corpus answer list), a
+- with --forbidden-phrases FILE (the evaluation corpus answer list), a
   request whose forwarded text contains a listed phrase is never reserved or
   forwarded; a durable `blocked` ledger record (no charge) is written instead.
   Budget/request-limit refusals are also recorded (`refused`, no charge).
-- W24 dry runs only: --test-upstream http://127.0.0.1:PORT replaces the pinned
+- dry runs only: --test-upstream http://127.0.0.1:PORT replaces the pinned
   endpoint with a loopback fake. It never reads OPENAI_API_KEY, accepts no other
   host, and binds the ledger to the test upstream (a real relay refuses that
   ledger and a test relay refuses a real one). Default behaviour is unchanged.
@@ -102,7 +102,7 @@ HALT_STATUSES = ("usage_out_of_bounds", "tier_mismatch", "model_mismatch")
 RETRYABLE_STATUSES = frozenset({408, 409, 429}) | frozenset(range(500, 600))
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
-# W24 answer blocking. The file is produced by fixtures/r1-quality/corpus.py forbidden.
+# Answer blocking. The file is produced by fixtures/r1-quality/corpus.py forbidden.
 FORBIDDEN_SCHEMA = "codeye-forbidden-phrases"
 FORBIDDEN_VERSION = 1
 FORBIDDEN_NORMALIZATION = "codeye-words-v1"
@@ -191,7 +191,7 @@ def reservation_for(input_bytes: int, message_count: int, output_cap: int) -> tu
 # Ledger
 # ---------------------------------------------------------------------------
 class Ledger:
-    """Append-only JSONL ledger shared by every relay process of one R0 run.
+    """Append-only JSONL ledger shared by every relay process of one run.
 
     Each mutation runs under an exclusive flock (cross-process) and a thread lock
     (flock is per open file description), re-reads the whole file and appends one
@@ -375,7 +375,7 @@ class Ledger:
             elif state["committed_microusd"] + reserved_microusd > state["cap_microusd"]:
                 refused = "budget_exhausted"
             if refused is not None:
-                # Durable signal for batch runners (W24); never charged, never forwarded.
+                # Durable signal for batch runners; never charged, never forwarded.
                 self._append({"type": "refused", "at": _now(), "pid": os.getpid(), "code": refused,
                               "reserved_microusd": reserved_microusd})
                 raise BudgetRefused(refused)
@@ -407,7 +407,7 @@ class Ledger:
             self._append({"type": "clear_halt", "at": _now(), "reason": reason[:200]})
 
     def note_forbidden(self, phrases: "ForbiddenPhrases", allow_model_echo: bool = False) -> None:
-        """Record which answer list this relay process enforces (W24), and whether ids the model
+        """Record which answer list this relay process enforces, and whether ids the model
         itself returned earlier in this process are exempt (--allow-model-echo)."""
         with self._locked():
             self._append({"type": "forbidden", "at": _now(), "pid": os.getpid(), "sha256": phrases.sha256,
@@ -557,7 +557,7 @@ def build_upstream_request(request, model: str, max_input_bytes: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# W24 answer blocking
+# Answer blocking
 # ---------------------------------------------------------------------------
 def _words(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.lower())
@@ -718,7 +718,7 @@ class OpenAIUpstream:
 
 
 class LoopbackTestUpstream(OpenAIUpstream):
-    """W24 dry runs: plain HTTP to 127.0.0.1:PORT, same path, deadline and
+    """Dry runs: plain HTTP to 127.0.0.1:PORT, same path, deadline and
     response limits. It never sees a real key: the bearer is a fixed dummy."""
 
     def __init__(self, port: int):
@@ -882,7 +882,7 @@ def sse_body(model: str, text: str, finish: str, usage: dict | None, include_usa
 
 
 def error_body(code: str, kind: str = "r0_gateway_error", extra: dict | None = None) -> bytes:
-    error = {"message": "R0 relay: " + code, "type": kind, "code": code}
+    error = {"message": "relay: " + code, "type": kind, "code": code}
     if extra:
         error.update({k: v for k, v in extra.items() if v is not None})
     return json.dumps({"error": error}).encode()
@@ -1138,8 +1138,8 @@ def _read_api_key() -> str:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="R0 QA-only budgeted loopback relay (Chat Completions in, OpenAI Responses API out; not a product path).")
-    parser.add_argument("--ledger", required=True, help="durable JSONL budget ledger (one per R0 run)")
+        description="QA-only budgeted loopback relay (Chat Completions in, OpenAI Responses API out; not a product path).")
+    parser.add_argument("--ledger", required=True, help="durable JSONL budget ledger (one per run)")
     parser.add_argument("--ready-file", help="fresh path to write {base_url, token, model} (0600)")
     parser.add_argument("--model", choices=ALLOWED_MODELS)
     parser.add_argument("--budget-usd", default="9.99",
@@ -1153,14 +1153,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--clear-halt", metavar="REASON",
                         help="append an audited clear_halt record (never changes cap or charges)")
     parser.add_argument("--forbidden-phrases", metavar="FILE",
-                        help="W24: answer list from `corpus.py forbidden`; matching requests are blocked "
+                        help="answer list from `corpus.py forbidden`; matching requests are blocked "
                              "(ledger `blocked`, no charge, never forwarded). A bad file is a usage error.")
     parser.add_argument("--allow-model-echo", action="store_true",
-                        help="W24, opt-in: do not block answer-list ids that occur in an upstream answer this "
+                        help="opt-in: do not block answer-list ids that occur in an upstream answer this "
                              "process already returned (the model's own words fed back, e.g. investigate -> "
                              "verify). Exempted ids are recorded on the request. Default: block every match.")
     parser.add_argument("--test-upstream", metavar="URL",
-                        help="W24 dry runs only: http://127.0.0.1:PORT fake upstream instead of the pinned "
+                        help="dry runs only: http://127.0.0.1:PORT fake upstream instead of the pinned "
                              "endpoint. Never reads OPENAI_API_KEY; needs a ledger created in this mode.")
     return parser
 

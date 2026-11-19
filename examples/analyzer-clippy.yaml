@@ -1,4 +1,4 @@
-# W20 Rust 팩 추가 깊이 분석기 clippy 서술. 구현: internal/worker/analysis/rustpack, 근거: docs/ANALYZERS.md.
+# Rust 팩 추가 깊이 분석기 clippy 서술. 구현: internal/worker/analysis/rustpack, 근거: docs/ANALYZERS.md.
 # cargo-clippy 0.1.99는 cargo check와 같은 종료 코드를 쓴다(경고만 있으면 0, 오류면 101).
 # `cargo clippy`가 아니라 cargo-clippy를 직접 실행한다. 저장소의 [alias] clippy가 외부 하위 명령을 가리면
 # 다른 명령이 실행되어 깨끗한 clippy 결과처럼 보일 수 있기 때문이다(실측).

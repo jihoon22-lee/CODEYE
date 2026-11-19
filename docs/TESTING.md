@@ -329,15 +329,15 @@ python3 scripts/test_postgres.py --web --nodes --scheduler --personal
 - `--scheduler`: 별도 DB에서 실제 controller·autoscaler와 `-tags codeye_fixture`로 빌드한 agent·worker(TC-71~75). fixture handler는 시험용이며 분석 결과가 아니다.
 - `--personal`: 개인 모드 start/status/stop, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32). Linux 전용이며 모델 호출·다운로드가 없다.
 - `--smokes-only`: Go 시험을 건너뛰고 고른 smoke만 다시 돌린다. 이때 마지막 줄은 저장 통합 시험을 실행했다고 주장하지 않는다.
-- `--r0-pilot`: **실모델** 파일럿. 실제 모델 요청을 보낸다. 고정 OpenCode와 승인된 relay가 필요하다. `CODEYE_R0_RELAY_FILE`에 relay descriptor, `CODEYE_R0_RESULTS`에 새 비공개 결과 디렉터리를 지정한다. `CODEYE_R0_CASES`(예: `Q01-before,pilot`)로 대상을, `CODEYE_R0_REVIEW_PACK`으로 검토 팩을 고른다(기본 `review-r1`). 보관된 결과는 `python3 scripts/r0_pilot.py --audit-results "$CODEYE_R0_RESULTS"`로 다시 대조한다. 이 대조는 위치·줄 범위·blob SHA의 참조 검사이며 주장이 옳다는 보증이 아니다. Git 시험에 기록된 commit 객체가 로컬에 있어야 한다.
+- `--r0-pilot`: **실모델** 파일럿. 실제 모델 요청을 보낸다. 고정 OpenCode와 승인된 relay가 필요하다. `CODEYE_R0_RELAY_FILE`에 relay descriptor, `CODEYE_R0_RESULTS`에 새 비공개 결과 디렉터리를 지정한다. `CODEYE_R0_CASES`(예: `Q01-before,pilot`)로 대상을, `CODEYE_R0_REVIEW_PACK`으로 검토 팩을 고른다(기본 `review-r1`). 보관된 결과는 `python3 scripts/regression_pilot.py --audit-results "$CODEYE_R0_RESULTS"`로 다시 대조한다. 이 대조는 위치·줄 범위·blob SHA의 참조 검사이며 주장이 옳다는 보증이 아니다. Git 시험에 기록된 commit 객체가 로컬에 있어야 한다.
 
 ### 그 밖의 보조 검사
 
 ```sh
 python3 fixtures/r0-quality/corpus.py --check                       # 회귀 집합의 결함 전후 계약 시험(모델 없음)
 python3 -m unittest discover -s fixtures/cleanup -p 'test_*.py' -v  # 합성 결함 전후
-python3 -m unittest discover -s scripts -p test_r0_openai_gateway.py -v
-python3 -m unittest discover -s scripts -p test_r1_eval.py -v
+python3 -m unittest discover -s scripts -p test_model_budget_relay.py -v
+python3 -m unittest discover -s scripts -p test_quality_eval.py -v
 ```
 
 ### CI가 실행하는 것

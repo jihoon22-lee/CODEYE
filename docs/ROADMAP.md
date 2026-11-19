@@ -45,7 +45,7 @@
 
 ### 단계 이름 제거
 
-코드 주석, 파일·시험·식별자 이름, CLI 문구, fixture와 스크립트 이름에서 구현 단계 이름을 없애고 기능 이름으로 바꾼다. 예: `internal/storage/postgres/w06_test.go`, `internal/worker/run/w21_e2e_test.go`, `fixtures/w16-cpp/`, `scripts/w15_pack_compare.py`, CLI 오류 문구의 단계 표기.
+코드 주석, 파일·시험·식별자 이름, CLI 문구, fixture와 스크립트 이름에서 구현 단계 이름을 없애고 기능 이름으로 바꾼다. 예: `internal/storage/postgres/w06_test.go`, `internal/worker/run/w21_e2e_test.go`, `fixtures/w16-cpp/`, `scripts/pack_compare.py`, CLI 오류 문구의 단계 표기.
 
 바꾸지 않는 것: 검토 팩 ID `review-r1`·`review-v1`(기존 기록이 팩 id·digest로 해석된다, A33), API 필드·schema 이름·media type·DB 열, 저장된 사유 코드. 이름을 바꾸면 기존 기록·운영자 설정이 깨지는 식별자는 그대로 두고 그 이유를 기록한다.
 
