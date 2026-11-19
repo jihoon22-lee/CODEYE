@@ -293,9 +293,10 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		return fail(domain.TaskFailed, depdoc.StateFailed, ReasonWorkspaceDrift)
 	}
 	if !exitedZero(res) {
-		if len(out.FailedItems) == 0 {
-			// The go command stops before listing any module when a go.mod
-			// of the graph is missing; its error names the module.
+		if len(out.FailedItems) == 0 && cfg.Offline && !registered {
+			// Reading only the operator's module cache, the go command stops
+			// before listing any module when a go.mod of the graph is
+			// missing; its error names the module to add to the cache.
 			out.FailedItems = stderrModules(res.Stderr.Data)
 		}
 		reason := classifyGo(string(res.Stderr.Data) + "\n" + failedText(failed))
