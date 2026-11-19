@@ -318,7 +318,7 @@
         "line_basis": {"enum": ["lines", "files", "mixed"], "description": "변경 부분을 줄로 나눴는지(lines), GitHub이 patch를 주지 않아 파일 단위인지(files), 섞였는지(mixed)"},
         "files_without_lines": {"type": "integer", "minimum": 0},
         "review": {"type": "object", "additionalProperties": false, "required": ["reviewable", "in_snapshot", "sent_to_model", "not_sent", "not_sent_total"],
-          "properties": {"reviewable": {"type": "integer", "minimum": 0}, "in_snapshot": {"type": "integer", "minimum": 0}, "sent_to_model": {"type": ["integer", "null"], "minimum": 0, "description": "검토 기록이 보낸 것으로 보여 주는 변경 파일 수. 실행된 모델 검토 task가 없으면(모델 없음, 소스 전송 끔) null"},
+          "properties": {"reviewable": {"type": "integer", "minimum": 0}, "in_snapshot": {"type": "integer", "minimum": 0}, "sent_to_model": {"type": ["integer", "null"], "minimum": 0, "description": "검토 기록이 보낸 것으로 보여 주는 변경 파일 수. 검토 기록의 호출 중 실제로 요청을 보낸 것이 없으면(모델 없음, 소스 전송 끔) null"},
             "not_sent": {"type": "array", "maxItems": 50, "items": {"type": "string"}}, "not_sent_total": {"type": "integer", "minimum": 0}}},
         "findings": {"$ref": "#/$defs/pull_request_counts"},
         "observations": {"$ref": "#/$defs/pull_request_counts"},
