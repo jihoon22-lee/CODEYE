@@ -197,6 +197,10 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 	cargoBin := tr.pathDir(t, ".cargo/bin")
 	script(t, filepath.Join(cargoBin, "cargo"), "cargo 1.99.1 (proxy)")
 	script(t, filepath.Join(cargoBin, "rustup"), "rustup 1.28.0")
+	// The Python package managers: uv in ~/.local/bin, the interpreter on
+	// PATH (its fake pip answers nothing, which uv makes acceptable).
+	script(t, filepath.Join(tr.home, ".local", "bin", "uv"), "uv 0.12.5 (x86_64-unknown-linux-gnu)")
+	script(t, filepath.Join(usrbin, "python3"), "Python 3.14.4")
 
 	res := detect(t, tr, Explicit{})
 	want := map[string]struct{ path, version, source string }{
@@ -221,6 +225,8 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 		"npm":         {filepath.Join(globalModules, "npm", "bin", "npm-cli.js"), "11.16.0", "node installation"},
 		"pnpm":        {filepath.Join(nm, "pnpm", "bin", "pnpm.cjs"), "11.28.13", "codeye-tools/node"},
 		"yarn":        {filepath.Join(nm, "yarn", "bin", "yarn.js"), "1.22.22", "codeye-tools/node"},
+		"uv":          {filepath.Join(tr.home, ".local", "bin", "uv"), "0.12.5", "~/.local/bin"},
+		"python":      {filepath.Join(usrbin, "python3"), "3.14.4", SourcePath},
 	}
 	if len(res.Tools) != len(Names()) || len(want) != len(Names()) {
 		t.Fatalf("%d tools, %d expected, %d names", len(res.Tools), len(want), len(Names()))

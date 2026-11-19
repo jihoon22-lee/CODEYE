@@ -1,4 +1,5 @@
 import type { AnalysisChoices, Project, Setup } from './api';
+import type { Dependency } from './reportSections';
 import { ko as t } from './locales/ko';
 
 export type Gap = { section: string; code: string; subject: string | null; detail: string | null };
@@ -16,6 +17,8 @@ const toolOf = (subject: string) => TOOL_OF[taskOf(subject)] ?? taskOf(subject);
 const MISSING_TOOL = new Set(['tool_not_configured', 'tool_unavailable']);
 // The tools a dependency task of an ecosystem fetches with (the tool table's names).
 const PACKAGE_MANAGERS: Record<string, string[]> = { go: ['go'], rust: ['cargo'], javascript: ['npm', 'pnpm', 'yarn'] };
+// The JS package managers are entry scripts run by node.
+const JS_RUNTIME = 'node';
 // Tasks whose build-script grant also lets deps.rust fetch the crates they read.
 const RUST_TASKS = new Set(['cargo-check', 'clippy']);
 // A dependency task (deps.go, deps.go.m02) names its ecosystem second.
@@ -26,8 +29,9 @@ const codeOf = (detail: string) => detail.split(':')[0];
 // improvementHints turns a report's gaps into the few actions that would fill them: install a
 // missing tool or package manager, set a model key, raise the call ceiling, reach the
 // dependency registry, or turn on a project choice or node switch. Gaps
-// without a known remedy are left to the report's own gap list.
-export function improvementHints(gaps: Gap[], setup: Setup | null, project: Project): Hint[] {
+// without a known remedy are left to the report's own gap list. dependencies are the
+// report's dependency tasks: a JS task's record names the manager its lockfile chose.
+export function improvementHints(gaps: Gap[], setup: Setup | null, project: Project, dependencies: Dependency[] = []): Hint[] {
   const out: Hint[] = [];
   const seen = new Set<string>();
   const push = (h: Hint) => { if (!seen.has(h.key)) { seen.add(h.key); out.push(h); } };
@@ -56,9 +60,16 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
     } else if (g.code === 'dependencies_not_prepared' && codeOf(detail) === 'package_manager_not_configured' && g.subject) {
       // The same key as a missing analyzer tool of that name, so installing go is said once.
       const ecosystem = ecosystemOf(g.subject);
-      const names = PACKAGE_MANAGERS[ecosystem] ?? [ecosystem];
-      // Of several managers (npm, pnpm, yarn) name the ones this computer lacks.
-      const missing = names.filter(n => setup?.tools?.tools.find(x => x.name === n)?.status !== 'found');
+      const status = (n: string) => setup?.tools?.tools.find(x => x.name === n)?.status;
+      let names = PACKAGE_MANAGERS[ecosystem] ?? [ecosystem];
+      if (ecosystem === 'javascript') {
+        // Name the missing piece: node when detection did not find it, else the manager the
+        // record chose (by lockfile), else the managers this computer lacks.
+        const chosen = dependencies.find(d => d.task === g.subject)?.manager;
+        if (setup?.tools && status(JS_RUNTIME) !== 'found') names = [JS_RUNTIME];
+        else if (chosen && names.includes(chosen)) names = [chosen];
+      }
+      const missing = names.filter(n => status(n) !== 'found');
       for (const name of missing.length > 0 ? missing : names) {
         const tool = setup?.tools?.tools.find(x => x.name === name);
         push({ key: `tool:${name}`, text: tool?.hint ? t.improve.tool(name, tool.hint) : t.improve.packageManager(name) });

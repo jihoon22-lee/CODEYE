@@ -58,7 +58,7 @@ func seriesOf(series string) testedInfo {
 // toolchain and for go (TestEveryToolHasATestedSeries). The series are the
 // constants of the packs, so a parser re-capture changes them in one place.
 func testedTable() map[string]testedInfo {
-	table := map[string]testedInfo{
+	return map[string]testedInfo{
 		"go":                {series: "1.27", tested: govet.GoVersionTested},
 		staticcheck.Tool:    {series: staticcheck.TestedRelease, tested: staticcheck.VersionTested},
 		cpp.CppcheckTool:    {series: cpp.CppcheckTestedRelease, tested: cpp.CppcheckVersionTested},
@@ -76,11 +76,6 @@ func testedTable() map[string]testedInfo {
 		gitleaks.Tool:       {series: gitleaks.TestedSeries, tested: gitleaks.VersionTested},
 		"node":              {},
 	}
-	// JS package managers have no tested series: any recognized version.
-	for _, p := range jsPackageManagers() {
-		table[p.name] = testedInfo{}
-	}
-	return table
 }
 
 // CheckTool validates the path configured for tool in cfg (cfg.GoExecutable
@@ -120,9 +115,6 @@ func CheckTool(ctx context.Context, cfg Config, runner executor.Runner, tool str
 		}
 		return finish(built{version: h.Version})
 	}
-	if p, ok := jsPackageManagerOf(tool); ok {
-		return finish(checkJSPackageManager(ctx, cfg, runner, p))
-	}
 	goh := goHandler(cfg)
 	states, _ := validateToolchains(ctx, cfg, runner)
 	for _, e := range catalog() {
@@ -144,7 +136,6 @@ func CheckTool(ctx context.Context, cfg Config, runner executor.Runner, tool str
 func Tools() []string {
 	out := append([]string{"go"}, ToolFlags()...)
 	out = append(out, ToolchainFlags()...)
-	out = append(out, JSPackageManagerFlags()...)
 	slices.Sort(out)
 	return slices.Compact(out)
 }

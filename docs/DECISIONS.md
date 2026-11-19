@@ -225,10 +225,22 @@
 5. **관리자는 lockfile로 고른다.** lockfile이 정한 버전을 그대로 설치해야 결과가 저장소와 같다. 여러 lockfile은 `packageManager`가 정한다. yarn 2 이상과 bun은 받지 않는다(`lockfile_format_unsupported`). 시험하지 않은 형식을 다른 관리자로 설치하면 lockfile과 다른 트리가 되기 때문이다. lockfile이 없으면 npm으로 버전을 고르고 그렇다고 기록한다.
 6. **관리자 릴리스와 위치는 운영자 것.** pnpm은 `packageManager`가 적은 릴리스를 모든 명령에서 내려받아 실행한다(실측). 그것을 끄고, 설치 위치·캐시·로그·레지스트리·proxy를 명령줄로 정한다. 명령줄이 `pnpm-workspace.yaml`·`.npmrc`보다 이기는 것을 실측했다. 저장소 `.npmrc`·`.yarnrc`는 비밀 파일 규칙으로 스냅샷에 없다.
 7. **밖을 가리키는 링크는 지운다.** `file:`·`link:` 의존성은 작업 사본 밖을 가리키는 링크가 될 수 있고, 타입 검사기가 그것을 따라 호스트 파일을 읽는다. 설치 전체를 버리지 않고 그 링크만 지우고 기록한다. 나머지 의존성으로 분석하는 쪽이 사용자에게 낫기 때문이다. 그보다 먼저, `package.json`과 lockfile이 스냅샷 밖의 `file:`·`link:`·`portal:` 경로를 적으면 설치를 실행하지 않는다(`local_dependency_outside_project`). 패키지 관리자가 그 경로에 설치해 원본 밖 경로에서 install을 실행하게 되기 때문이다. 드문 경우이므로 그 의존성만 빼는 처리는 하지 않는다.
-8. **패키지 관리자는 도구 표에 둔다.** npm·pnpm·yarn은 분석기가 아니지만 같은 탐지·검증(`<node> <script> --version`)과 플래그(`--npm`·`--pnpm`·`--yarn`)를 쓴다. 따로 두면 설치 안내와 "도구" 화면이 두 갈래가 된다.
-9. **버전 고정 공백은 받았을 때만.** 받기 전에 건너뛴 기록은 `pinned=false`이지만 이번에 버전을 고른 것이 아니다. 공백 `dependency_versions_not_pinned`는 `prepared`·`partial` 기록에만 단다. 저장된 보고서 바이트가 아니라 새로 만드는 보고서의 공백만 바뀌므로 builder 버전은 그대로다.
+8. **패키지 관리자는 분석기가 아니다.** npm·pnpm·yarn은 uv·python과 같은 한 갈래다. 도구 찾기가 받기 task가 실행하는 방식으로 검증하고(`<node> <script> --version`), 플래그(`--npm`·`--pnpm`·`--yarn`)와 `agent.tools.*`는 다른 도구와 같으며, 워커에는 hello의 `dependencies.package_managers`로 간다(`deps.ManagerFlags`). 분석기 도구 표(`analyzer_tools`)에 넣으면 분석기 구성이 모르는 이름을 따로 걸러야 하고, 다음 생태계가 그 예외를 또 더해야 한다. 설치 안내와 "도구" 화면은 한 갈래 그대로다.
+9. **버전 고정 공백은 받았을 때만.** 받기 전에 건너뛴 기록은 `pinned=false`이지만 이번에 버전을 고른 것이 아니다. 공백 `dependency_versions_not_pinned`는 `prepared`·`partial` 기록에만 단다. 저장된 보고서 바이트가 아니라 새로 만드는 보고서의 공백만 바뀌므로 builder 버전은 그대로다. 이런 기록을 담은 보고서는 Go 기록 말고는 아직 `main`에서 나온 적이 없고, Go 기록은 건너뛴 task가 실제로 그 공백을 단 적이 없다.
 
-[아키텍처](ARCHITECTURE.md#의존성-준비) · [Rust 받기](ANALYZERS.md#rust-의존성-받기) · [JS/TS 받기](ANALYZERS.md#jsts-의존성-받기)
+[아키텍처](ARCHITECTURE.md#의존성-준비) · [Rust 받기](ANALYZERS.md#rust-의존성-받기) · [JS/TS 받기](ANALYZERS.md#jsts-의존성-받기) · [한계](ANALYZERS.md#의존성-받기의-한계)
+
+**A44 — Python 의존성 받기.** (기록 2026-11-19) REQ-007/014/015, NFR-006과 TC-210~218에 대해 다음을 확정한다. A42의 틀을 따른다.
+
+1. **wheel만 받는다.** sdist를 빌드하면 저장소가 적은 패키지의 `setup.py`·build backend를 실행하게 된다. pip `--only-binary=:all:`, uv `--no-build`로 받고 wheel이 없는 요구사항은 빼고 다시 설치해 `partial`로 남긴다(최대 3번 더). 모듈 전체를 실패시키면 wheel 하나 때문에 나머지 패키지가 모두 빠진다(httpx의 `mkautodoc`, 실측).
+2. **선언을 다시 쓴다.** 저장소의 requirements 파일을 설치 도구에 그대로 넘기면 저장소가 `--index-url`·`--find-links`·editable·로컬 경로로 설치 대상을 정한다. 요구사항 줄을 허용 목록으로 읽어 CODEYE의 파일을 쓰고, 나머지는 `dropped_inputs`에 사유와 함께 남긴다. index는 운영자 값뿐이다. `pyproject.toml`은 운영자 interpreter의 `tomllib`로 `-I -S`·stdin으로 읽는다. Go 쪽에 TOML parser 의존성을 더하지 않기 위해서다. `uv.lock`은 uv의 `export --frozen --offline`으로만 읽는다.
+3. **mypy는 가짜 venv로 읽는다.** `MYPYPATH`에 site-packages를 주는 안은 실측에서 실패했다. mypy가 `mypy_extensions`를 stdlib 그림자로 거부하고(exit 2), 그 파일을 지우면 제3자 stub 안의 오류를 보고하며 `import-untyped`를 숨겼다. `--python-executable`에 운영자 interpreter와 받은 site-packages를 묶은 scratch venv를 주면 PEP 561 규칙대로 읽는다(httpx `import-not-found` 63 → 2). 대가로 mypy가 운영자 interpreter를 한 번 실행한다. pyright는 interpreter 없이 `venvPath`/`venv`로 같은 트리를 읽는다.
+4. **시작 hook을 지운다.** 그 interpreter의 `site`가 받은 트리의 `*.pth` import 줄과 `sitecustomize`·`usercustomize`를 실행한다. 받은 직후 site-packages 맨 위의 그 파일을 지우고 `interpreter_startup_hooks_removed`를 남긴다. 받은 패키지의 다른 코드는 import하지 않는다. 운영 체제의 `sitecustomize`(예: Debian)는 운영자 interpreter의 것이라 그대로다.
+5. **고정된 것만 공유한다.** 버전이 모두 고정됐을 때(`uv.lock` 또는 모든 줄 `==`)만 요구사항·interpreter·설치 도구·index로 정한 key의 공유 트리를 쓴다. 고정이 아니면 같은 선언이 run마다 다른 패키지를 받으므로 attempt 트리로 두고 attempt와 함께 지운다. 그래서 Python 분석기는 A42와 달리 attempt 캐시 기록도 쓴다.
+6. **interpreter는 운영자 것 하나.** 트리는 `--python`의 버전·플랫폼으로 풀린다. 분석 대상 버전과 다를 수 있지만, 대상 버전 interpreter를 내려받는 것은 조용한 외부 다운로드이므로 하지 않는다(uv `UV_PYTHON_DOWNLOADS=never`). uv를 써도 `--python`이 필요하다.
+7. **보고서 builder는 그대로.** 받기 꺼짐에서 Python 타입 검사기는 성공하므로 `dependency_unavailable`로는 공백이 생기지 않는다. coverage의 `import_unresolved`와 `third_party_packages_not_installed`를 `dependencies_not_fetched`의 조건으로 더했다. builder 7이 아직 출시되지 않았으므로 버전을 올리지 않는다.
+
+[분석기](ANALYZERS.md#python-의존성-받기) · [아키텍처](ARCHITECTURE.md#의존성-준비)
 
 **A42 — 의존성 받기.** (기록 2026-11-19) REQ-004/014/015, NFR-006과 TC-194~199에 대해 다음을 확정한다.
 

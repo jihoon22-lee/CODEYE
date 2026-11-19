@@ -191,6 +191,25 @@
       "status": "not_found",
       "version_tested": false,
       "hint": "`npm install --prefix ~/.local/share/codeye-tools/node yarn@1` or set `agent.tools.yarn`"
+    },
+    {
+      "name": "uv",
+      "status": "found",
+      "path": "/home/user/.local/bin/uv",
+      "version": "0.12.5",
+      "version_tested": true,
+      "source": "~/.local/bin",
+      "tested_series": "0.12"
+    },
+    {
+      "name": "python",
+      "status": "found",
+      "path": "/usr/bin/python3",
+      "resolved_path": "/usr/bin/python3.14",
+      "version": "3.14.4",
+      "version_tested": true,
+      "source": "PATH",
+      "tested_series": "3.11+"
     }
   ]
 }

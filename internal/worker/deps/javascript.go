@@ -57,6 +57,10 @@ const (
 	ManagerYarn = "yarn"
 )
 
+// JSManagers are the package manager flags of the JS/TS fetch: each is
+// the entry script of its npm package, run with the --node toolchain.
+var JSManagers = []string{ManagerNpm, ManagerPnpm, ManagerYarn}
+
 var jsCacheKeys = map[string]string{ManagerNpm: "javascript/npm", ManagerPnpm: "javascript/pnpm", ManagerYarn: "javascript/yarn"}
 
 // maxInstalled bounds the node_modules directories one install records.

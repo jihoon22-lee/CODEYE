@@ -248,6 +248,9 @@ func (d *detector) validate(name string, sp spec, path string) outcome {
 		}
 		return outcome{ok: true, version: m[1], tested: m[1] == opencode.Version, series: opencode.Version}
 	}
+	if out, ok := d.validateManager(name, path); ok {
+		return out
+	}
 	cfg := d.cfg()
 	if name == "go" {
 		cfg.GoExecutable = path
@@ -331,7 +334,10 @@ func (d *detector) version(exe string, args ...string) (string, string) {
 
 // detect finds one tool.
 func (d *detector) detect(name string) Tool {
-	sp := specs[name]
+	sp, ok := specs[name]
+	if !ok {
+		sp = managerSpecs[name]
+	}
 	t := Tool{Name: name, Status: NotFound, Hint: sp.hint, VersionTested: false}
 	var cands []candidate
 	if p := d.ex.Path(name); p != "" {

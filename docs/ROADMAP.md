@@ -18,21 +18,11 @@
 
 | 작업 | 선행 |
 |---|---|
-| Python 의존성 받기 | 없음 |
 | GitHub 연결 | 없음 |
 | PR·댓글 분석 | GitHub 연결 |
 | 다중 노드 검증 | 없음. GitHub 연결·PR·댓글 분석과 병행 |
 | 폐쇄망 배포팩 | 다중 노드 검증 |
 | 운영 수용 | PR·댓글 분석, 폐쇄망 배포팩 |
-
-## 분석 품질
-
-### 다른 언어의 의존성 받기
-
-Go·Rust·JS/TS의 의존성 받기([의존성 준비](ARCHITECTURE.md#의존성-준비))와 같은 틀에 생태계별 받기와 분석기 연결만 더한다.
-
-- Python: wheel만 받아(`--only-binary`, 빌드 없음) mypy·pyright가 그 디렉터리를 읽는다. wheel이 없는 패키지는 빼고 `partial`이다.
-- 완료 조건: 생태계마다 가짜 runner 시험(argv·환경·cwd 고정), 분석기 연결 시험, `CODEYE_TEST_DEPS_NETWORK=1` 실제 받기 시험, 공개 저장소 하나의 받기 끔·켬 보고서 비교.
 
 ## 여러 사용자·GitHub 연동·분산 운영
 

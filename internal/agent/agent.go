@@ -107,6 +107,11 @@ type Config struct {
 	// NpmRegistry (--npm-registry) is the registry every JS package manager
 	// of the dependency tasks uses ("" = npm's, or yarn's for yarn).
 	NpmRegistry string
+	// PackageManagers are the package manager paths of the dependency
+	// tasks by flag name (deps.ManagerFlags: --npm, --pnpm, --python, --uv,
+	// --yarn); PipIndexURL is --pip-index-url.
+	PackageManagers map[string]string
+	PipIndexURL     string
 	// AnalyzerTools are absolute analyzer tool paths by tool name, one
 	// agent flag per tool (--staticcheck PATH, docs/ANALYZERS.md), and the shared
 	// toolchains under their reserved names (--node PATH, docs/ANALYZERS.md#도구-경로). The
@@ -248,6 +253,14 @@ func New(cfg Config) (*Agent, error) {
 	if !domain.ValidRegistryURL(cfg.NpmRegistry) {
 		return nil, &ExitError{ExitUsage, "--npm-registry must be an http(s) URL without credentials"}
 	}
+	if !domain.ValidPackageIndexURL(cfg.PipIndexURL) {
+		return nil, &ExitError{ExitUsage, "--pip-index-url must be one http(s) URL without credentials"}
+	}
+	for _, p := range cfg.PackageManagers {
+		if p != "" && !filepath.IsAbs(p) {
+			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
+		}
+	}
 	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
@@ -316,7 +329,22 @@ func (ag *Agent) dependencies() *workerproto.Dependencies {
 	return &workerproto.Dependencies{CacheRoot: ag.dependencyCache(), AgentStateDir: ag.cfg.StateDir, GoProxy: ag.cfg.GoProxy,
 		GoSumDB: ag.cfg.GoSumDB, GoPrivate: ag.cfg.GoPrivate, GoNoProxy: ag.cfg.GoNoProxy, GoNoSumDB: ag.cfg.GoNoSumDB,
 		ModuleTimeoutS: int(ag.cfg.DependencyTimeout / time.Second), TotalTimeoutS: int(ag.cfg.DependencyTotalTimeout / time.Second),
-		MaxDownloadBytes: ag.cfg.DependencyMaxBytes, CacheQuotaBytes: ag.cfg.StorageQuota[quota.Cache], NpmRegistry: ag.cfg.NpmRegistry}
+		MaxDownloadBytes: ag.cfg.DependencyMaxBytes, CacheQuotaBytes: ag.cfg.StorageQuota[quota.Cache], NpmRegistry: ag.cfg.NpmRegistry,
+		PackageManagers: packageManagers(ag.cfg.PackageManagers), PipIndexURL: ag.cfg.PipIndexURL}
+}
+
+// packageManagers are the configured package manager paths (nil when none).
+func packageManagers(m map[string]string) map[string]string {
+	var out map[string]string
+	for name, p := range m {
+		if p != "" {
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[name] = p
+		}
+	}
+	return out
 }
 
 func (ag *Agent) heartbeatInterval() time.Duration {

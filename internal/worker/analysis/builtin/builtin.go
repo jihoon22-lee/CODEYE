@@ -37,6 +37,10 @@ type Config struct {
 	// tasks prepare (hello dependencies.cache_root); analyzers read it only
 	// for a module whose record says it was prepared.
 	DependencyCacheRoot string
+	// DependencyPython is the operator's Python interpreter of the
+	// dependency fetch (hello dependencies.package_managers.python); mypy
+	// asks it for the search paths of a prepared package tree.
+	DependencyPython string
 	// Tools are absolute paths by name: analyzer tools (--<tool>) and the
 	// shared toolchains of the toolchain table (--node), whose names are
 	// reserved and never analyzer tool names (docs/ANALYZERS.md#도구-경로).
@@ -262,10 +266,6 @@ func compose(ctx context.Context, cfg Config, runner executor.Runner, entries []
 	known := map[string]bool{}
 	for _, tc := range toolchainTable() {
 		known[tc.name] = true
-	}
-	// The dependency tasks' package managers are no analyzer members.
-	for _, n := range JSPackageManagerFlags() {
-		known[n] = true
 	}
 	var members []pack.Analyzer
 	baseline := false

@@ -128,9 +128,17 @@ type Config struct {
 	// then carry LimBothTypeCheckers. It records the selection, not that the
 	// other checker is usable; that task reports its own outcome (docs/ANALYZERS.md#타입-검사기-선택).
 	BothTypeCheckers bool
-	Timeout          time.Duration
-	StdoutLimit      int64
-	StderrLimit      int64
+	// DependencyCacheRoot is the node's shared dependency cache (hello
+	// dependencies.cache_root). When a deps.python task of the attempt
+	// prepared the module's third-party packages, mypy and pyright read them
+	// (docs/ANALYZERS.md#python-의존성-받기); "" or no record keeps today's
+	// path. Interpreter is the operator's Python (--python) mypy asks for
+	// the prepared search paths.
+	DependencyCacheRoot string
+	Interpreter         string
+	Timeout             time.Duration
+	StdoutLimit         int64
+	StderrLimit         int64
 }
 
 // base is what every Python adapter shares: identity, the resolved tool and
@@ -333,6 +341,25 @@ type runCtx struct {
 	// budgetSpent: a run that the tool needed was not started because the
 	// deadline had passed.
 	budgetSpent bool
+	// deps is the third-party package tree this attempt prepared for the
+	// module (type checkers only); nil runs as without one.
+	deps *prepared
+	// depsUsed: the checker was given deps; depsUnused: deps was set but
+	// the checker could not read it on this node.
+	depsUsed, depsUnused bool
+}
+
+// thirdPartyLimitations are the limitations of a type checker about the
+// third-party packages it read: none installed, the prepared tree, or a
+// prepared tree it could not use.
+func (rc *runCtx) thirdPartyLimitations() []string {
+	switch {
+	case rc.depsUsed:
+		return []string{rc.deps.limitation()}
+	case rc.depsUnused:
+		return []string{LimNoThirdParty, LimPreparedNotUsed}
+	}
+	return []string{LimNoThirdParty}
 }
 
 // toolRun is the tool-specific part of a task: the executions after the
@@ -380,7 +407,21 @@ func (b *base) run(ctx context.Context, job analysis.Job, task analysis.TaskSpec
 		rc.roots = append(rc.roots, r)
 	}
 	rc.moduleAbs = filepath.Join(rc.workspace, filepath.FromSlash(p.Module.Dir))
+	if b.desc.ID == MypyID || b.desc.ID == PyrightID {
+		rc.deps = preparedTree(job, b.cfg, p.Task.Spec.Key, b.desc.Name, p.Module.Dir)
+	}
 	rc.mask = b.masker(rc.roots, job.Scratch, job.Snapshot.Root)
+	if rc.deps != nil {
+		inner := rc.mask
+		tree := rc.deps.tree
+		rc.mask = func(s string) string {
+			s = strings.ReplaceAll(s, tree, "$DEPS")
+			if t := filepath.ToSlash(tree); t != tree {
+				s = strings.ReplaceAll(s, t, "$DEPS")
+			}
+			return inner(s)
+		}
+	}
 	rc.target = resolveTarget(job.Snapshot.SnapshotDir, rc.files, p.Module.Dir)
 	rc.texts = &texts{snapshotDir: job.Snapshot.SnapshotDir, cache: map[string]*fileText{}}
 
@@ -430,7 +471,13 @@ func (rc *runCtx) exec(name string, args []string, stdin []byte) *executor.Resul
 	}
 	exe, argv := rc.b.command(args)
 	redact := append(govet.RedactForms(rc.roots), rc.taskDir)
-	spec := executor.Spec{Executable: exe, Args: argv, WorkspaceRoot: rc.workspace, Dir: rc.moduleAbs, ProtectedRoots: []string{rc.job.Snapshot.SnapshotDir},
+	protected := []string{rc.job.Snapshot.SnapshotDir}
+	if rc.deps != nil {
+		// The prepared tree is read only, like the snapshot.
+		redact = append(redact, rc.deps.tree)
+		protected = append(protected, rc.deps.tree)
+	}
+	spec := executor.Spec{Executable: exe, Args: argv, WorkspaceRoot: rc.workspace, Dir: rc.moduleAbs, ProtectedRoots: protected,
 		TempParent: rc.dirs["tmp"], Env: rc.b.env(rc.extraEnv), Stdin: stdin, Timeout: timeout,
 		StdoutLimit: rc.b.cfg.StdoutLimit, StderrLimit: rc.b.cfg.StderrLimit, Redact: redact}
 	res := rc.runner.Run(rc.ctx, spec)

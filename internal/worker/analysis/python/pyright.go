@@ -124,8 +124,15 @@ func pyrightPlatform() string {
 // relative to the file's directory (pyright ignores absolute include paths,
 // measured); root is the module directory.
 func PyrightConfig(minor int, root string) []byte {
+	return pyrightConfig(minor, root, "venvs", emptyVenv)
+}
+
+// pyrightConfig is PyrightConfig with the virtual environment pyright reads
+// site-packages from: the empty scratch one, or (absolute venvPath) the
+// tree a deps.python task prepared.
+func pyrightConfig(minor int, root, venvPath, venv string) []byte {
 	cfg := map[string]any{"pythonVersion": "3." + strconv.Itoa(minor), "pythonPlatform": pyrightPlatform(), "typeCheckingMode": "standard",
-		"venvPath": "venvs", "venv": emptyVenv, "executionEnvironments": []any{map[string]any{"root": root}}}
+		"venvPath": venvPath, "venv": venv, "executionEnvironments": []any{map[string]any{"root": root}}}
 	for _, r := range PyrightRuleOverrides {
 		cfg[r] = "none"
 	}
@@ -144,7 +151,14 @@ func (pyrightRun) execute(rc *runCtx) {
 		return
 	}
 	site := filepath.Join(cfgDir, "venvs", emptyVenv, "lib", "python3."+strconv.Itoa(minor), "site-packages")
-	if os.MkdirAll(site, 0o700) != nil || analysis.WriteFileExclusive(filepath.Join(cfgDir, "pyrightconfig.json"), PyrightConfig(minor, filepath.ToSlash(root))) != nil {
+	config := PyrightConfig(minor, filepath.ToSlash(root))
+	if rc.deps != nil {
+		// pyright reads the prepared tree's site-packages from the directory
+		// and starts no interpreter (measured with 1.1.414).
+		config = pyrightConfig(minor, filepath.ToSlash(root), filepath.Dir(rc.deps.tree), filepath.Base(rc.deps.tree))
+		rc.depsUsed = true
+	}
+	if os.MkdirAll(site, 0o700) != nil || analysis.WriteFileExclusive(filepath.Join(cfgDir, "pyrightconfig.json"), config) != nil {
 		rc.writeFail = true
 		return
 	}
@@ -209,7 +223,8 @@ func (pyrightRun) assemble(rc *runCtx) obsdoc.Document {
 	if rc.b.cfg.Node != nil {
 		bd.doc.Target.Properties["node"] = rc.b.cfg.Node.Version
 	}
-	bd.limit(LimNoThirdParty, LimDefaultContext)
+	bd.limit(rc.thirdPartyLimitations()...)
+	bd.limit(LimDefaultContext)
 	bd.executions(execPyrightVersion, execPyrightCheck)
 
 	r := rc.results[execPyrightCheck]

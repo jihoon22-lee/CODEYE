@@ -48,8 +48,8 @@
     },
     "tools": {
       "type": "array",
-      "minItems": 21,
-      "maxItems": 21,
+      "minItems": 23,
+      "maxItems": 23,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -81,9 +81,11 @@
               "clippy",
               "npm",
               "pnpm",
-              "yarn"
+              "yarn",
+              "uv",
+              "python"
             ],
-            "description": "The agent flag name; go, git and opencode have their own settings."
+            "description": "The agent flag name; go, git and opencode have their own settings. npm, pnpm, yarn, uv and python are the package managers of the dependency fetch."
           },
           "status": {
             "enum": [
@@ -462,6 +464,32 @@
             "properties": {
               "name": {
                 "const": "clippy"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "uv"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "python"
               }
             },
             "required": [

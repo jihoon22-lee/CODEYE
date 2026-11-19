@@ -603,6 +603,9 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 			if d.NpmRegistry != "" {
 				args = append(args, "--npm-registry", d.NpmRegistry)
 			}
+			if d.PipIndexURL != "" {
+				args = append(args, "--pip-index-url", d.PipIndexURL)
+			}
 		}
 	}
 	tools := make([]string, 0, len(a.Tools))

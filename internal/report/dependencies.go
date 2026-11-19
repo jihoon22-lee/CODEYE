@@ -101,19 +101,38 @@ func (c sectionContext) dependencyGaps(add func(section, code string, subject, d
 			add(SectionEnvironment, GapVersionsNotPinned, strPtr(d.TaskKey), nil)
 		}
 	}
+	// Python type checkers succeed with unresolved imports; their coverage
+	// says no third-party package was installed.
+	unresolved := map[string]bool{}
+	for _, tc := range r.Coverage.Tools {
+		if tc.Packages[pythonImportUnresolved] > 0 && hasCode(tc.Limitations, pythonNoThirdParty) {
+			unresolved[tc.TaskKey] = true
+		}
+	}
 	if s := r.StaticAnalysis; s != nil {
 		for _, l := range s.Languages {
 			if l.Ecosystem == nil || fetched[*l.Ecosystem] || hasDependencyTask(c.keys, *l.Ecosystem) {
 				continue
 			}
 			for _, t := range l.Tools {
-				if t.TaskReason != nil && dependencyReasons[*t.TaskReason] {
+				switch {
+				case t.TaskReason != nil && dependencyReasons[*t.TaskReason]:
 					add(SectionEnvironment, GapDependenciesNotFetched, strPtr(t.TaskKey), t.TaskReason)
+				case unresolved[t.TaskKey]:
+					add(SectionEnvironment, GapDependenciesNotFetched, strPtr(t.TaskKey), strPtr(pythonImportsUnresolved))
 				}
 			}
 		}
 	}
 }
+
+// The Python type checkers' codes for imports no installed package
+// resolved (docs/ANALYZERS.md#importstub-공백).
+const (
+	pythonImportUnresolved  = "import_unresolved"
+	pythonNoThirdParty      = "third_party_packages_not_installed"
+	pythonImportsUnresolved = "imports_unresolved"
+)
 
 func hasDependencyTask(keys []string, ecosystem string) bool {
 	base := depdoc.TaskKey(ecosystem, "")

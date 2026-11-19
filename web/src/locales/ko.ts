@@ -84,8 +84,10 @@ export const ko = {
       ? 'go: 의존성을 받을 go toolchain이 없습니다. go를 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.'
       : name === 'cargo'
         ? 'cargo: crate를 받을 Rust toolchain이 없습니다. rustup으로 stable toolchain을 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.'
-        : `${name}: 이 프로젝트의 의존성을 받을 패키지 관리자가 없습니다. 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
-    registry: '의존성 저장소(Go 모듈 proxy, crates.io, npm 레지스트리 등)에 연결하지 못해 의존성을 받지 못했습니다. 네트워크와 설정의 agent.dependencies.go_proxy·agent.dependencies.npm_registry를 확인하고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
+        : name === 'node'
+          ? 'node: JS/TS 패키지 관리자를 실행할 Node.js가 없습니다. Node.js를 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.'
+          : `${name}: 이 프로젝트의 의존성을 받을 패키지 관리자가 없습니다. 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
+    registry: '의존성 저장소(Go 모듈 proxy, crates.io, npm 레지스트리, Python 패키지 index 등)에 연결하지 못해 의존성을 받지 못했습니다. 네트워크와 설정의 agent.dependencies.go_proxy·npm_registry·pip_index_url을 확인하고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
     sending: '바꾸는 중…',
     needsManager: '프로젝트 관리자만 바꿀 수 있습니다.',
   },
@@ -504,6 +506,18 @@ export const ko = {
       dependency_cache_full: '의존성 저장 영역(cache)이 상한에 닿아 받지 않음',
       dependency_fetch_failed: '의존성 받기가 실패함',
       dependency_record_failed: '의존성 받기 기록을 쓰지 못함 (실패)',
+      // Python 의존성 받기 (deps.python)
+      dynamic_dependencies_not_read: 'pyproject.toml의 의존성이 dynamic이라 빌드 없이 읽을 수 없어 받지 않음 (미지원)',
+      no_binary_distribution: 'wheel이 없는 패키지를 빼고 받음 (일부만 받음)',
+      no_matching_distribution: 'pip이 맞는 wheel을 찾지 못한 패키지를 빼고 받음 (일부만 받음)',
+      dependency_not_found: '패키지 저장소에 없는 의존성이 있음',
+      resolution_conflict: '요구사항끼리 버전이 맞지 않아 설치할 조합이 없음 (실패)',
+      registry_auth_required: '패키지 저장소가 인증을 요구함 (인증이 필요한 저장소는 미지원)',
+      lockfile_format_unsupported: '읽지 않는 lockfile 형식(yarn 2 이상, bun, poetry.lock, Pipfile 등)만 있어 받지 않음 (미지원)',
+      hash_mismatch: '받은 패키지의 hash가 요구사항과 다름 (실패)',
+      pyproject_unreadable: 'pyproject.toml을 읽지 못함',
+      too_many_requirements: 'pyproject.toml을 펼친 요구사항이 10,000개를 넘어 받지 않음 (실패)',
+      lockfile_export_failed: 'uv.lock에서 요구사항을 꺼내지 못함 (실패)',
     } as Record<string, string>,
     reasonLabel: (label: string) => `사유: ${label}`,
     finishedOfPlanned: (finished: number, planned: number) => `${finished}/${planned} 종료`,

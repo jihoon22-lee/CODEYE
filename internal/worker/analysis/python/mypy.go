@@ -133,7 +133,33 @@ func usesSrc(moduleDir string, files []string) bool {
 // report and the file list live in task scratch. skipConfig, when set, is
 // the scratch configuration of a rerun that skips the unparsable modules.
 func MypyArgs(minor int, cacheDir, reportDir, filesList, skipConfig string) []string {
+	return mypyArgs(minor, cacheDir, reportDir, filesList, skipConfig, "")
+}
+
+// mypyPreparedSelection is the selection recorded when mypy read a prepared
+// package tree: --python-executable at the task's shim replaces
+// --no-site-packages (the path is the shim's, never recorded).
+func mypyPreparedSelection() []string {
+	s := append([]string{}, MypySelection...)
+	for i, a := range s {
+		if a == "--no-site-packages" {
+			s[i] = "--python-executable=codeye-prepared"
+		}
+	}
+	return s
+}
+
+// mypyArgs is MypyArgs with the interpreter of a prepared package tree
+// ("" keeps --no-site-packages).
+func mypyArgs(minor int, cacheDir, reportDir, filesList, skipConfig, pythonExe string) []string {
 	args := append([]string{}, MypySelection...)
+	if pythonExe != "" {
+		for i, a := range args {
+			if a == "--no-site-packages" {
+				args[i] = "--python-executable=" + pythonExe
+			}
+		}
+	}
 	args = append(args, "--python-version", "3."+strconv.Itoa(minor), "--platform", mypyPlatform(), "--cache-dir", cacheDir,
 		"-O", "json", "--lineprecision-report", reportDir)
 	if skipConfig != "" {
@@ -179,6 +205,14 @@ func (mypyRun) execute(rc *runCtx) {
 	}
 	files := append([]string{}, m.Files...)
 	src := usesSrc(m.Dir, m.Files)
+	pythonExe := ""
+	if rc.deps != nil {
+		if exe, ok := mypyShim(filepath.Join(rc.dirs["cfg"], "venv"), rc.b.cfg.Interpreter, rc.deps); ok {
+			pythonExe, rc.depsUsed = exe, true
+		} else {
+			rc.depsUnused = true
+		}
+	}
 	var skipped []string
 	// The first run and its reruns share the task's one time limit: each
 	// rerun gets only what is left.
@@ -208,7 +242,7 @@ func (mypyRun) execute(rc *runCtx) {
 			}
 		}
 		exec := mypyCheckName(i)
-		r := rc.exec(exec, MypyArgs(minor, rc.dirs["cache"], rc.dirs["report"], list, skipConfig), nil)
+		r := rc.exec(exec, mypyArgs(minor, rc.dirs["cache"], rc.dirs["report"], list, skipConfig, pythonExe), nil)
 		if r == nil {
 			return
 		}
@@ -318,7 +352,11 @@ func readLinePrecision(p string) (map[string]bool, bool) {
 }
 
 func (mypyRun) assemble(rc *runCtx) obsdoc.Document {
-	rp := obsdoc.RulePack{ID: MypyRulePackID, Version: MypyRulePackVer, Selection: append([]string{}, MypySelection...), RepositoryConfig: obsdoc.RepoConfigOverridden,
+	selection := append([]string{}, MypySelection...)
+	if rc.depsUsed {
+		selection = mypyPreparedSelection()
+	}
+	rp := obsdoc.RulePack{ID: MypyRulePackID, Version: MypyRulePackVer, Selection: selection, RepositoryConfig: obsdoc.RepoConfigOverridden,
 		SourceSuppressions: obsdoc.SuppressHonored, ConfigFiles: []obsdoc.ConfigFile{}, UnreportedSuppressionRules: []string{}}
 	bd := newBuilder(rc, obsdoc.Component{ID: MypyName, Version: MypyAdapterVersion}, obsdoc.Component{ID: MypyParserID, Version: MypyParserVersion}, rp)
 	bd.identify(seriesTested(MypyTestedSeries))
@@ -329,7 +367,8 @@ func (mypyRun) assemble(rc *runCtx) obsdoc.Document {
 	if src {
 		bd.doc.Target.Properties["mypy_path"] = "src"
 	}
-	bd.limit(LimNoThirdParty, LimDefaultContext)
+	bd.limit(rc.thirdPartyLimitations()...)
+	bd.limit(LimDefaultContext)
 	checks := rc.checks
 	if len(checks) == 0 {
 		checks = []string{execMypyCheck}

@@ -193,3 +193,31 @@ func TestDependenciesNotFetchedGap(t *testing.T) {
 		}
 	}
 }
+
+// A Python type checker that left imports unresolved because no package was
+// installed is the same gap; one that read prepared packages, or that had
+// nothing unresolved, is not.
+func TestDependenciesNotFetchedGapPython(t *testing.T) {
+	py := "python"
+	r := &Report{Environment: &EnvironmentSection{}, StaticAnalysis: &StaticAnalysisSection{Languages: []StaticLanguage{
+		{Ecosystem: &py, Tools: []StaticTool{{TaskKey: "mypy"}, {TaskKey: "pyright"}, {TaskKey: "ruff"}}}}},
+		Coverage: Coverage{Tools: []ToolCoverage{
+			{TaskKey: "mypy", Packages: map[string]int{"import_unresolved": 3}, Limitations: []string{"imports_unresolved", "third_party_packages_not_installed"}},
+			{TaskKey: "pyright", Packages: map[string]int{"import_unresolved": 2}, Limitations: []string{"imports_unresolved", "third_party_packages_prepared"}},
+			{TaskKey: "ruff", Packages: map[string]int{}, Limitations: []string{}},
+		}}}
+	collect := func(keys []string) []Gap {
+		var out []Gap
+		sectionContext{r: r, keys: keys}.dependencyGaps(func(section, code string, subject, detail *string) {
+			out = append(out, Gap{Section: section, Code: code, Subject: subject, Detail: detail})
+		})
+		return out
+	}
+	g := collect([]string{"mypy", "pyright", "ruff"})
+	if len(g) != 1 || g[0].Code != GapDependenciesNotFetched || *g[0].Subject != "mypy" || *g[0].Detail != "imports_unresolved" {
+		t.Fatalf("gaps %+v", g)
+	}
+	if g := collect([]string{"deps.python", "mypy", "pyright"}); len(g) != 0 {
+		t.Fatalf("gap although a deps task ran: %+v", g)
+	}
+}

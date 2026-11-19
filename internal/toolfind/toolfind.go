@@ -180,8 +180,10 @@ type Options struct {
 }
 
 // order is the fixed order of Result.Tools.
-var order = []string{"go", "git", "node", "opencode", "staticcheck", "gitleaks", "ruff", "mypy", "pyright", "bandit", "lizard",
-	"cppcheck", "clang-tidy", "eslint", "tsc", "jscpd", "cargo", "clippy"}
+var order = append([]string{"go", "git", "node", "opencode", "staticcheck", "gitleaks", "ruff", "mypy", "pyright", "bandit", "lizard",
+	"cppcheck", "clang-tidy", "eslint", "tsc", "jscpd", "cargo", "clippy"},
+	// The package managers of the dependency fetch.
+	"npm", "pnpm", "yarn", "uv", "python")
 
 // Names are the tool names of a Result, in order.
 func Names() []string { return append([]string{}, order...) }
@@ -222,7 +224,10 @@ func Detect(ctx context.Context, opts Options) Result {
 	d.run([]string{"go", "git", "node", "opencode", "cargo", "gitleaks", "ruff", "mypy", "bandit", "lizard", "cppcheck", "clang-tidy"})
 	d.run([]string{"staticcheck", "pyright", "eslint", "tsc", "jscpd"})
 	d.run([]string{"clippy"})
-	d.run(jsPackageManagerNames)
+	// Package managers: the JS ones after node, python after uv (an
+	// interpreter without pip is usable with uv).
+	d.run(append(append([]string{}, jsManagerNames...), pythonManagerNames[0]))
+	d.run(pythonManagerNames[1:])
 
 	res := Result{SchemaVersion: SchemaVersion, DetectedAt: now().UTC().Truncate(time.Second)}
 	for _, name := range order {
@@ -300,6 +305,10 @@ func (d *detector) cfg() builtin.Config {
 			c.GoExecutable = t.Path
 		case "git", "opencode":
 		default:
+			if isManager(name) {
+				// Package managers are not analyzer tools.
+				continue
+			}
 			c.Tools[name] = t.Path
 		}
 	}

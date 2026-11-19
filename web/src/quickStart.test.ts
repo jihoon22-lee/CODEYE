@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Project, Setup } from './api';
 import { improvementHints, type Gap } from './improve';
+import type { Dependency } from './reportSections';
 import { ko as t } from './locales/ko';
 import { choicesFor, parseTarget, quickBody } from './quickStart';
 
@@ -138,13 +139,14 @@ describe('better results', () => {
     ]);
   });
 
-  it('names cargo for Rust and the JS package managers this computer lacks', () => {
+  it('names cargo for Rust and the missing piece of a JS fetch: node or the chosen manager', () => {
     const choices = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true };
     expect(improvementHints([gap('dependencies_not_prepared', 'deps.rust.m01', 'package_manager_not_configured', 'environment')], SETUP, project(choices))).toEqual([
       { key: 'tool:cargo', text: t.improve.packageManager('cargo') },
     ]);
     const js = [gap('dependencies_not_prepared', 'deps.javascript', 'package_manager_not_configured', 'environment')];
     const managers = { ...SETUP, tools: { detected_at: null, tools: [
+      { name: 'node', status: 'found', version: '24.18.0', path: '/n/node', hint: null, reason: null },
       { name: 'npm', status: 'found', version: '11.16.0', path: '/n/npm-cli.js', hint: null, reason: null },
       { name: 'pnpm', status: 'not_found', version: null, path: null, hint: 'npm install pnpm', reason: null },
       { name: 'yarn', status: 'not_found', version: null, path: null, hint: 'npm install yarn@1', reason: null },
@@ -155,5 +157,28 @@ describe('better results', () => {
     ]);
     // Without detection results all three are named.
     expect(improvementHints(js, { ...SETUP, tools: null }, project(choices)).map(h => h.key)).toEqual(['tool:npm', 'tool:pnpm', 'tool:yarn']);
+    // The record names the manager the lockfile chose: only that one is said.
+    const chose = (manager: string) => [{ task: 'deps.javascript', manager } as Dependency];
+    expect(improvementHints(js, managers, project(choices), chose('yarn'))).toEqual([
+      { key: 'tool:yarn', text: t.improve.tool('yarn', 'npm install yarn@1') },
+    ]);
+    expect(improvementHints(js, { ...SETUP, tools: null }, project(choices), chose('pnpm')).map(h => h.key)).toEqual(['tool:pnpm']);
+    // Without node the managers cannot run: node is the missing piece.
+    const noNode = { ...managers, tools: { detected_at: null, tools: managers.tools.tools.map(x => x.name === 'node' ? { ...x, status: 'not_found', path: null } : x) } };
+    expect(improvementHints(js, noNode, project(choices), chose('pnpm'))).toEqual([
+      { key: 'tool:node', text: t.improve.packageManager('node') },
+    ]);
+  });
+
+  // Python dependency preparation.
+  it('asks to fetch the packages a Python type checker could not import and names the Python install hint', () => {
+    const choices = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: false };
+    expect(improvementHints([gap('dependencies_not_fetched', 'mypy.m01', 'imports_unresolved', 'environment')], SETUP, project(choices))).toEqual([
+      { key: 'fetch_dependencies', text: t.improve.fetchDependencies('mypy'), turnOn: 'fetch_dependencies' },
+    ]);
+    const withPython = { ...SETUP, tools: { detected_at: null, tools: [{ name: 'python', status: 'unusable', version: null, path: null, hint: 'install Python 3 with pip', reason: 'pip is not installed' }] } };
+    expect(improvementHints([gap('dependencies_not_prepared', 'deps.python', 'package_manager_not_configured', 'environment')], withPython, project({ ...choices, fetch_dependencies: true }))).toEqual([
+      { key: 'tool:python', text: t.improve.tool('python', 'install Python 3 with pip') },
+    ]);
   });
 });

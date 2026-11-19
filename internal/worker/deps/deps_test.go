@@ -362,6 +362,24 @@ func TestDownloadLimitStopsTheFetch(t *testing.T) {
 	}
 }
 
+// What an installer unpacks into the process temp directory counts against
+// the same allowance as the cache.
+func TestDownloadLimitCountsTheTempDirectory(t *testing.T) {
+	pollEvery = 20 * time.Millisecond
+	t.Cleanup(func() { pollEvery = 2 * time.Second })
+	job, _ := jobOf(t, map[string]string{"go.mod": goMod, "go.sum": goSum, "main.go": "package main\n"})
+	h := handler(t, Config{MaxDownloadBytes: 1024})
+	r := &fakeRunner{fn: goScript(func(ctx context.Context, s executor.Spec) executor.Result {
+		_ = os.WriteFile(filepath.Join(s.TempParent, "unpacked.bin"), make([]byte, 4096), 0o600)
+		<-ctx.Done()
+		return executor.Result{Status: executor.StatusCancelled, Cleanup: executor.CleanupConfirmed}
+	})}
+	res := h.Run(context.Background(), job, analysis.TaskSpec{Key: "deps.go"}, r)
+	if res.Status != domain.TaskBudgetExhausted || res.Reason != depdoc.ReasonDownloadLimitExceeded {
+		t.Fatalf("result = %s/%s", res.Status, res.Reason)
+	}
+}
+
 func TestAttemptCancelDuringFetch(t *testing.T) {
 	job, _ := jobOf(t, map[string]string{"go.mod": goMod, "go.sum": goSum, "main.go": "package main\n"})
 	ctx, cancel := context.WithCancel(context.Background())
