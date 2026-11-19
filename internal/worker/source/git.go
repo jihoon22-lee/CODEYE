@@ -27,6 +27,9 @@ type GitOptions struct {
 	// Timeout is the deadline for the whole acquisition (every git command and the
 	// local extraction work share it), at most 10 minutes.
 	Timeout time.Duration
+	// CABundle is the PEM file git trusts for the host's TLS
+	// (GIT_SSL_CAINFO and SSL_CERT_FILE); "" keeps git's own store.
+	CABundle string
 }
 type capWriter struct {
 	data     []byte
@@ -47,6 +50,7 @@ func (w *capWriter) Write(b []byte) (int, error) {
 
 type gitRunner struct {
 	executable, repo, home string
+	caBundle               string
 	fileTransport          bool
 	// fetchLimit is a soft ceiling on the bytes git may write under repo. It is polled,
 	// not a filesystem quota: a fast transfer can overshoot it before the process is stopped.
@@ -87,6 +91,10 @@ func (g gitRunner) run(ctx context.Context, input io.Reader, max int64, args ...
 		if v, ok := os.LookupEnv(key); ok {
 			cmd.Env = append(cmd.Env, key+"="+v)
 		}
+	}
+	if g.caBundle != "" {
+		// GIT_SSL_CAINFO for every TLS backend git's curl may use.
+		cmd.Env = append(cmd.Env, "GIT_SSL_CAINFO="+g.caBundle, "SSL_CERT_FILE="+g.caBundle)
 	}
 	configureGitProcess(cmd)
 	out := &capWriter{limit: max}
@@ -240,7 +248,7 @@ func AcquireGit(ctx context.Context, repository, branch, dataRoot string, limits
 	if os.Mkdir(gitDir, 0700) != nil || os.Mkdir(home, 0700) != nil {
 		return Snapshot{}, ErrUnavailable
 	}
-	runner := gitRunner{executable: options.Executable, repo: gitDir, home: home, fileTransport: local, fetchLimit: softFetchLimit(limits)}
+	runner := gitRunner{executable: options.Executable, repo: gitDir, home: home, caBundle: options.CABundle, fileTransport: local, fetchLimit: softFetchLimit(limits)}
 	run := func(input io.Reader, max int64, args ...string) ([]byte, error) {
 		out, err := runner.run(ctx, input, max, args...)
 		if errors.Is(err, ErrRecoveryRequired) {

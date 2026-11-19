@@ -158,7 +158,10 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		return fail(domain.TaskFailed, depdoc.StateFailed, depdoc.ReasonCacheQuotaExceeded)
 	}
 	cfg := env.Config
-	proxy := registryProxies(cfg.GoProxy)
+	proxy := registryProxies(cfg.GoProxy, cfg.Offline)
+	// registered: a registry the operator named (or, online, the public
+	// default) answers besides the operator's module cache.
+	registered := len(proxy) > 0
 	noProxy := cfg.GoNoProxy
 	if noProxy == "" {
 		noProxy = cfg.GoPrivate
@@ -186,7 +189,12 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		goproxy = strings.Join(proxy, ",")
 	}
 	sumdb := cfg.GoSumDB
-	if sumdb == "" {
+	switch {
+	case sumdb == "" && cfg.Offline:
+		// No public checksum database offline: go.sum still verifies every
+		// module, and a sum the download had to add ends go_sum_incomplete.
+		sumdb = "off"
+	case sumdb == "":
 		sumdb = "sum.golang.org"
 	}
 	goExe := cfg.GoExecutable
@@ -211,6 +219,7 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 			vars["SystemRoot"] = v
 		}
 	}
+	executor.AddCAEnv(vars, cfg.CABundle)
 	if govet.DisableTelemetry(vars, work["config"]) != nil {
 		return fail(domain.TaskFailed, depdoc.StateFailed, analysis.ReasonHandlerError)
 	}
@@ -257,6 +266,10 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		out.Counts.Declared = &zero
 		return fail(domain.TaskSkippedPolicy, depdoc.StateSkipped, depdoc.ReasonNoDependencies)
 	}
+	if goproxy == "off" && cfg.Offline {
+		// Offline with no registry and no operator module cache to read.
+		return fail(domain.TaskSkippedPolicy, depdoc.StateSkipped, depdoc.ReasonOfflineNoRegistry)
+	}
 	out.CacheKind, out.CacheKey = depdoc.CacheShared, GoCacheKey
 	// The whole module cache is watched: the downloaded zips and the trees
 	// unpacked from them both count toward the size cap and the quota room.
@@ -283,6 +296,11 @@ func (GoFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 		reason := classifyGo(string(res.Stderr.Data) + "\n" + failedText(failed))
 		for i := range out.FailedItems {
 			out.FailedItems[i].Reason = classifyGo(out.FailedItems[i].Reason)
+		}
+		if cfg.Offline && !registered && offlineMiss(reason) {
+			// Only the operator's module cache was asked, and it lacks
+			// modules; offline nothing else may be asked.
+			reason = depdoc.ReasonOfflineNoRegistry
 		}
 		state := depdoc.StateFailed
 		if out.Counts.Prepared > 0 {
@@ -385,7 +403,9 @@ func classifyGo(text string) string {
 		return depdoc.ReasonToolchainUnavailable
 	case has("disabled by goproxy=off", "dial tcp", "connection refused", "no such host", "i/o timeout", "network is unreachable", "tls handshake", "connection reset", "proxyconnect"):
 		return depdoc.ReasonRegistryUnreachable
-	case has("404 not found", "410 gone", "not found:", "unknown revision", "invalid version", "no matching versions"):
+	case has("404 not found", "410 gone", "not found:", "unknown revision", "invalid version", "no matching versions"),
+		has("reading file://") && has("no such file or directory"):
+		// The last: a file:// proxy (the operator's module cache) without the module.
 		return ReasonGoModuleNotOnProxy
 	}
 	return depdoc.ReasonFetchFailed
@@ -407,10 +427,21 @@ func drifted(job analysis.Job, files map[string]source.Entry, dir string) bool {
 	return false
 }
 
+// offlineMiss reports a failure that a registry could have answered: a
+// module the proxies did not have, an unreachable proxy, an unclassified
+// fetch failure.
+func offlineMiss(reason string) bool {
+	return reason == ReasonGoModuleNotOnProxy || reason == depdoc.ReasonRegistryUnreachable || reason == depdoc.ReasonFetchFailed
+}
+
 // registryProxies is the operator's GOPROXY list without "direct" and
-// "off": the fetch never runs a VCS command. Empty means Go's public proxy.
-func registryProxies(v string) []string {
+// "off": the fetch never runs a VCS command. Empty means Go's public proxy,
+// or none offline.
+func registryProxies(v string, offline bool) []string {
 	if strings.TrimSpace(v) == "" {
+		if offline {
+			return nil
+		}
 		return []string{DefaultGoProxy}
 	}
 	var out []string

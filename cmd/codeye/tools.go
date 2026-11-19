@@ -14,18 +14,20 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
-// toolsCommand is `codeye tools [--config PATH] [--json]`: it detects the
+// toolsCommand is `codeye tools [--config PATH] [--json | --checklist]`: it detects the
 // tools CODEYE can use on this machine and prints what was found, what is
 // missing and how to add it (docs/ANALYZERS.md#도구-찾기). It changes nothing
 // except <state_dir>/tools.json when a personal configuration names an
 // existing state directory.
 func toolsCommand(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var configPath string
-	var asJSON bool
+	var asJSON, checklist bool
 	if !parse("tools", args, stderr, func(fs *flag.FlagSet) {
 		fs.StringVar(&configPath, "config", "", "")
 		fs.BoolVar(&asJSON, "json", false, "")
-	}) {
+		// A Markdown checklist for preparing a machine without the internet.
+		fs.BoolVar(&checklist, "checklist", false, "")
+	}) || (asJSON && checklist) {
 		return 2
 	}
 	var cfg *personal.Config
@@ -71,6 +73,13 @@ func toolsCommand(ctx context.Context, args []string, out, stderr io.Writer) int
 		return 0
 	}
 	home, _ := os.UserHomeDir()
+	if checklist {
+		if err := toolfind.WriteChecklist(out, res, home); err != nil {
+			fmt.Fprintln(stderr, "cannot write the result")
+			return 1
+		}
+		return 0
+	}
 	if err := toolfind.WriteTable(out, res, home); err != nil {
 		fmt.Fprintln(stderr, "cannot write the result")
 		return 1

@@ -260,6 +260,10 @@ func (JSFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 	if err != nil {
 		return fail(domain.TaskUnsupported, depdoc.StateSkipped, depdoc.ReasonPackageManagerNotConfigured)
 	}
+	if cfg.Offline && cfg.NpmRegistry == "" {
+		// npm's and yarn's public registries are the built-in defaults.
+		return fail(domain.TaskSkippedPolicy, depdoc.StateSkipped, depdoc.ReasonOfflineNoRegistry)
+	}
 	cacheKey := jsCacheKeys[mgr.name]
 	cache := env.CacheDir(cacheKey)
 	if os.MkdirAll(cache, 0o700) != nil {
@@ -275,7 +279,7 @@ func (JSFetcher) Fetch(ctx context.Context, env *Env, m Module) Outcome {
 	}
 	workspace := job.Snapshot.WorkspaceDir
 	rootAbs := filepath.Join(workspace, filepath.FromSlash(root.Dir))
-	vars := jsEnv(mgr.name, node.Dir)
+	vars := executor.AddCAEnv(jsEnv(mgr.name, node.Dir), cfg.CABundle)
 	spec := func(args ...string) executor.Spec {
 		return executor.Spec{Executable: node.Executable, Args: script.Argv(args...), WorkspaceRoot: workspace, Dir: rootAbs,
 			ProtectedRoots: []string{job.Snapshot.SnapshotDir}, Env: vars, Redact: []string{cfg.CacheRoot}}

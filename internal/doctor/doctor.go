@@ -51,6 +51,9 @@ type Report struct {
 	Tools []Tool `json:"tools"`
 	// Operations is present only with --config (docs/OPERATIONS.md#codeye-doctor).
 	Operations *Operations `json:"operations,omitempty"`
+	// Offline is the offline readiness section, present only with --config
+	// (docs/OPERATIONS.md#오프라인-준비-점검).
+	Offline *Offline `json:"offline,omitempty"`
 
 	detected toolfind.Result
 }
@@ -63,6 +66,9 @@ type Options struct {
 	// Detect finds the tools; nil runs toolfind with the explicit settings of
 	// Personal (and only those when agent.auto_detect is false).
 	Detect func(context.Context) toolfind.Result
+	// ModelEnv is where the offline section resolves the model; nil reads
+	// the process environment and the user's home.
+	ModelEnv *personal.ModelEnv
 }
 
 var versionPattern = regexp.MustCompile(`(?:^|[^0-9])([0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:[^0-9]|$)`)
@@ -134,6 +140,11 @@ func Collect(ctx context.Context, opts Options, runner Runner) Report {
 	report.Checks = append(report.Checks, db)
 	if opts.Personal != nil {
 		report.Operations = operations(opts.Personal, time.Now())
+		menv := personal.SystemModelEnv()
+		if opts.ModelEnv != nil {
+			menv = *opts.ModelEnv
+		}
+		report.Offline = offlineSection(ctx, opts.Personal, res, menv)
 	}
 	return report
 }
@@ -320,5 +331,8 @@ func (r Report) Write(w io.Writer, format string) error {
 			return err
 		}
 	}
-	return r.Operations.write(w)
+	if err := r.Operations.write(w); err != nil {
+		return err
+	}
+	return r.Offline.write(w)
 }

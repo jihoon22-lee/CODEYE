@@ -569,6 +569,12 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	// A project folder must not hold CODEYE's own data, however it was
 	// registered.
 	args = append(args, "--protected-dir", layout.Root, "--protected-dir", backupDirOf(cfg))
+	if cfg.Offline {
+		args = append(args, "--offline")
+	}
+	if cfg.CABundle != "" {
+		args = append(args, "--ca-bundle", cfg.CABundle)
+	}
 	if a.Git != "" && len(cfg.GitHosts) > 0 {
 		args = append(args, "--git", a.Git)
 		for _, h := range cfg.GitHosts {

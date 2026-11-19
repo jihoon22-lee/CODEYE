@@ -53,7 +53,18 @@ type Config struct {
 	// CredentialFile holds the provider's API key (a CODEYE model credential
 	// or an OpenCode auth.json); it is read at every call.
 	CredentialFile string
+	// Offline: a call goes only to an endpoint the operator named (the
+	// credential's base_url or the relay); a provider's public default
+	// endpoint and keyless models are refused (ReasonEndpointNotConfigured).
+	Offline bool
+	// CABundle is the PEM file OpenCode trusts for the endpoint's TLS
+	// (executor.CAEnv); "" keeps OpenCode's own store.
+	CABundle string
 }
+
+// ReasonEndpointNotConfigured: offline mode and the model would be reached
+// through a provider's public default endpoint (no base_url).
+const ReasonEndpointNotConfigured = "model_endpoint_not_configured"
 
 type Request struct {
 	Scratch        string
@@ -123,7 +134,14 @@ func (cfg Config) provider() (*executor.ModelProvider, string) {
 		if err != nil {
 			return nil, ReasonCredentialUnavailable
 		}
+		if cfg.Offline && p.BaseURL == "" {
+			return nil, ReasonEndpointNotConfigured
+		}
 		return p, ""
+	}
+	if cfg.Offline {
+		// A keyless model answers from the provider's public endpoint.
+		return nil, ReasonEndpointNotConfigured
 	}
 	return nil, ""
 }
@@ -209,6 +227,9 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 	if provider != nil {
 		spec.OpenCodeProvider = provider
 		spec.Redact = []string{provider.APIKey}
+	}
+	if cfg.CABundle != "" {
+		spec.Env = executor.CAEnv(cfg.CABundle)
 	}
 	run := runner.Run(ctx, spec)
 	reply.Cleanup, reply.Reason = run.Cleanup, outcome(run)

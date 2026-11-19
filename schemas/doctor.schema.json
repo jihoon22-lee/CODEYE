@@ -819,6 +819,351 @@
           }
         }
       }
+    },
+    "offline": {
+      "description": "Offline readiness (codeye doctor --config, docs/OPERATIONS.md#오프라인-준비-점검): every outbound destination the configuration leads to and where it comes from, the CA bundle, the PostgreSQL programs and what each language misses without the internet. No file path. Absent without --config.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "ca_bundle",
+        "destinations",
+        "postgres",
+        "languages"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "ca_bundle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "not_configured",
+                "available",
+                "unavailable"
+              ]
+            },
+            "certificates": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "reason": {
+              "enum": [
+                "ca_bundle_unreadable"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "available"
+                  }
+                },
+                "type": "object"
+              },
+              "then": {
+                "required": [
+                  "certificates"
+                ],
+                "properties": {
+                  "certificates": {
+                    "type": "integer"
+                  },
+                  "reason": false
+                },
+                "type": "object"
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "unavailable"
+                  }
+                },
+                "type": "object"
+              },
+              "then": {
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  },
+                  "certificates": false
+                },
+                "type": "object"
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "not_configured"
+                  }
+                },
+                "type": "object"
+              },
+              "then": {
+                "properties": {
+                  "reason": false,
+                  "certificates": false
+                },
+                "type": "object"
+              }
+            }
+          ]
+        },
+        "destinations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "origin"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "go_proxy",
+                  "go_sumdb",
+                  "npm_registry",
+                  "pip_index",
+                  "crates_registry",
+                  "git_host",
+                  "model_endpoint"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "not": {
+                  "pattern": "[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*@"
+                }
+              },
+              "origin": {
+                "enum": [
+                  "config",
+                  "user_go_env",
+                  "user_npm_config",
+                  "model_key_file",
+                  "relay_file",
+                  "builtin_default",
+                  "none"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "offline_no_registry_configured",
+                  "checksum_database_off",
+                  "dependency_fetch_disabled",
+                  "git_hosts_empty",
+                  "model_not_configured",
+                  "model_endpoint_not_configured"
+                ]
+              }
+            },
+            "if": {
+              "properties": {
+                "origin": {
+                  "const": "none"
+                }
+              },
+              "type": "object"
+            },
+            "then": {
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reason": {
+                  "type": "string"
+                },
+                "value": false
+              },
+              "type": "object"
+            },
+            "else": {
+              "required": [
+                "value"
+              ],
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "reason": false
+              },
+              "type": "object"
+            }
+          }
+        },
+        "postgres": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "programs"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "found",
+                "not_found"
+              ]
+            },
+            "version": {
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+)?$"
+            },
+            "source": {
+              "enum": [
+                "--postgres-bin-dir",
+                "database.postgres_bin_dir",
+                "CODEYE_POSTGRES_BIN_DIR",
+                "PATH",
+                "system"
+              ]
+            },
+            "programs": {
+              "type": "array",
+              "minItems": 6,
+              "maxItems": 6,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "status"
+                ],
+                "properties": {
+                  "name": {
+                    "enum": [
+                      "initdb",
+                      "pg_ctl",
+                      "postgres",
+                      "pg_dump",
+                      "pg_restore",
+                      "psql"
+                    ]
+                  },
+                  "status": {
+                    "enum": [
+                      "found",
+                      "not_found"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "languages": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "language",
+              "status",
+              "missing",
+              "dependencies"
+            ],
+            "properties": {
+              "language": {
+                "enum": [
+                  "go",
+                  "python",
+                  "javascript",
+                  "rust",
+                  "cpp",
+                  "common",
+                  "model"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "ready",
+                  "partial",
+                  "unavailable"
+                ]
+              },
+              "missing": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_|-]{0,63}$"
+                }
+              },
+              "dependencies": {
+                "enum": [
+                  "internal_registry",
+                  "operator_cache",
+                  "builtin_default",
+                  "fetch_disabled",
+                  "none",
+                  "not_fetched"
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "ready"
+                    }
+                  },
+                  "type": "object"
+                },
+                "then": {
+                  "properties": {
+                    "missing": {
+                      "maxItems": 0,
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "partial",
+                        "unavailable"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                "then": {
+                  "properties": {
+                    "missing": {
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            ]
+          }
+        }
+      }
     }
   }
 }

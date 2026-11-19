@@ -35,13 +35,14 @@ const upRunBody = `{"profile":"deep-review","source_policy":"latest_at_acquire",
 
 func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var configFlag, binDir string
-	var noOpen, noProbe bool
+	var noOpen, noProbe, offline bool
 	target, rest := splitTarget(args)
 	if !parse("up", rest, stderr, func(fs *flag.FlagSet) {
 		fs.StringVar(&configFlag, "config", "", "")
 		fs.StringVar(&binDir, "postgres-bin-dir", "", "")
 		fs.BoolVar(&noOpen, "no-open", false, "")
 		fs.BoolVar(&noProbe, "no-probe", false, "")
+		fs.BoolVar(&offline, "offline", false, "")
 	}) {
 		return 2
 	}
@@ -79,6 +80,14 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 			return 2
 		}
 		fmt.Fprintln(out, "saved database.postgres_bin_dir in", path)
+	}
+	if offline && !cfg.Offline {
+		// Saved, so that a later codeye start stays offline too.
+		if cfg, err = personal.EditFile(path, knownTools(), personal.ConfigEdit{Offline: true}); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		fmt.Fprintln(out, "saved \"offline\": true in", path)
 	}
 	layout := completeConfig(cfg)
 	if err := layout.Prepare(); err != nil {
@@ -271,6 +280,9 @@ func gitTarget(cfg *personal.Config, target string) (*upTarget, error) {
 	}
 	host, _ := domain.RepositoryHost(repo)
 	if !slices.Contains(cfg.GitHosts, host) {
+		if cfg.Offline {
+			return nil, fmt.Errorf("the Git host %s is not in git_hosts (offline mode allows no host by default); add the internal Git host to git_hosts", host)
+		}
 		return nil, fmt.Errorf("the Git host %s is not in git_hosts (default github.com); add it to the configuration to analyze its repositories", host)
 	}
 	return &upTarget{repoURL: repo, branch: branch, host: host}, nil

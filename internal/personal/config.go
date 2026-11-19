@@ -54,17 +54,32 @@ type Config struct {
 	BackupDir     string       `json:"backup_dir,omitempty"`
 	Stop          Stop         `json:"stop"`
 	// GitHosts are the HTTPS Git hosts projects may be fetched from (public
-	// repositories, no credentials). Absent means ["github.com"]; [] turns
-	// Git sources off.
+	// repositories, no credentials). Absent means ["github.com"], or none in
+	// offline mode; [] turns Git sources off.
 	GitHosts []string `json:"git_hosts,omitempty"`
+	// Offline keeps every built-in public default out (docs/OPERATIONS.md#오프라인-모드):
+	// dependencies come only from the operator's module cache and the
+	// registries set here or in the user's own go env and npm configuration,
+	// Git only from git_hosts, the model only through a credential with
+	// base_url. `codeye up --offline` sets it.
+	Offline bool `json:"offline,omitempty"`
+	// CABundle is a PEM file of every CA the tools that reach a registry,
+	// a Git host or the model endpoint should trust (it replaces the system
+	// store for some of them, so it holds the system CAs too).
+	CABundle string `json:"ca_bundle,omitempty"`
 
 	// listenSet records whether listen was written in the file (a default
 	// listen address may move to the next free port).
 	listenSet bool
+	// gitHostsSet records whether git_hosts was written in the file.
+	gitHostsSet bool
 }
 
 // ListenExplicit reports whether the configuration file sets listen.
 func (c *Config) ListenExplicit() bool { return c.listenSet }
+
+// GitHostsExplicit reports whether the configuration file sets git_hosts.
+func (c *Config) GitHostsExplicit() bool { return c.gitHostsSet }
 
 // Managed reports whether CODEYE runs its own PostgreSQL.
 func (c *Config) Managed() bool { return c.Database.Mode == DatabaseManaged }
@@ -493,8 +508,15 @@ func (c *Config) validate(knownTools []string) error {
 	if c.BackupDir != "" && (within(c.BackupDir, c.StateDir) || within(c.StateDir, c.BackupDir)) {
 		return errors.New("backup_dir and state_dir must not contain each other")
 	}
+	if c.CABundle != "" && !absClean(c.CABundle) {
+		return errors.New("ca_bundle must be an absolute, clean path")
+	}
+	c.gitHostsSet = c.GitHosts != nil
 	if c.GitHosts == nil {
-		c.GitHosts = append([]string{}, DefaultGitHosts...)
+		c.GitHosts = []string{}
+		if !c.Offline {
+			c.GitHosts = append(c.GitHosts, DefaultGitHosts...)
+		}
 	}
 	if len(c.GitHosts) > 16 {
 		return errors.New("git_hosts has at most 16 entries")
