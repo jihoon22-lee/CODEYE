@@ -104,7 +104,7 @@ builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단�
 | `status` | `complete`(모든 대상 파일을 보냈고 검증 역할까지 마쳤다), `overview_only`(성공한 slice investigate가 없다), 그 밖은 `partial` |
 | `modules[]` | 범위 산출물의 모듈마다 한 행(모듈 ID 순) |
 
-모듈 행은 `module_id`, `discovered`(모듈 탐색이 같은 ID를 찾았는지), `files_eligible`과 그 파일을 한 번씩 나눈 수 `files_sent_to_model`·`files_withheld`(비밀값 탐지)·`files_unreadable`·`files_budget_exhausted`(호출 상한으로 거절된 slice)·`files_not_planned`(slice 수 상한 밖)·`files_not_sent`(그 밖: overview가 보내지 못했거나 slice가 실패·생략됨)를 싣는다. 여섯 수의 합은 `files_eligible`이다. `bytes_sent`는 보낸 파일의 발췌 크기(범위 산출물의 계획 바이트), `files_truncated`는 발췌가 파일 끝까지 닿지 않은 보낸 파일, `files_with_completed_review`는 보낸 파일 중 검증 역할 기록까지 수락된 파일(overview 파일은 전체 verify, slice 파일은 그 slice의 verify)이다. `slices[]`는 그 모듈 파일을 가진 slice task마다 `task_key`·`status`·`reason`이며 task 행과 같아야 한다.
+모듈 행은 `module_id`, `discovered`(모듈 탐색이 같은 ID를 찾았는지), `files_eligible`과 그 파일을 한 번씩 나눈 수 `files_sent_to_model`·`files_withheld`(비밀값 탐지)·`files_unreadable`·`files_budget_exhausted`(호출 상한으로 거절된 slice)·`files_not_planned`(slice 수 상한 밖)·`files_not_sent`(그 밖: overview가 보내지 못했거나 slice가 실패·생략됨)를 싣는다. 여섯 수의 합은 `files_eligible`이다. 파일은 수락된 검토 기록 하나라도 그 파일의 발췌를 보냈으면 보낸 것으로 센다. verify가 반대 근거로 보낸 시험 파일 발췌도 들어가므로, 상한으로 거절된 slice의 파일도 보낸 쪽에 들 수 있다. `bytes_sent`는 실제 요청의 발췌가 아니라 보낸 파일의 범위 산출물 계획 바이트(첫 50줄, 파일당 2,400바이트 이하)의 합이고, `files_truncated`는 발췌가 파일 끝까지 닿지 않은 보낸 파일, `files_with_completed_review`는 보낸 파일 중 검증 역할 기록까지 수락된 파일(overview 파일은 전체 verify, slice 파일은 그 slice의 verify)이다. `slices[]`는 그 모듈 파일을 가진 slice task마다 `task_key`·`status`·`reason`이며 task 행과 같아야 한다.
 
 **모델에 보낸 범위는 검증된 범위가 아니다.** 장부는 무엇을 모델에 보냈는지만 센다. 모델이 본 파일에도 후보로 지목되지 않은 결함이 있을 수 있고, 화면과 내보내기는 이 범위를 "모델에 보냄"으로만 부른다.
 
