@@ -203,7 +203,9 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 
 // workerHandlers registers the handlers of this build. Without a usable
 // baseline analyzer (go vet needs --go, ruff needs --ruff) the worker
-// advertises no capability and is never leased. The deep-review profile is
+// advertises no capability and is never leased, unless the operator asked for
+// it with --advertise-without-baseline (then the tasks of unusable tools end
+// unsupported). The deep-review profile is
 // discovery (env.discover, docs.discover) → the analyzer composite (go vet,
 // staticcheck, ruff, mypy, pyright, bandit in catalog order; unconfigured
 // tools plan unsupported tasks) → review roles. Discovery observes the configured go and shared

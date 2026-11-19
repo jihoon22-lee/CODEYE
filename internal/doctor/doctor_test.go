@@ -149,7 +149,7 @@ func TestCollectReportsGapsHonestlyAndCleansDisk(t *testing.T) {
 // The exit code is 1 only for what matters in the chosen mode.
 func TestExitCodeRule(t *testing.T) {
 	cfg := func(mode string, tools map[string]string) *personal.Config {
-		return &personal.Config{Database: personal.Database{Mode: mode}, Agent: personal.Agent{Tools: tools}}
+		return &personal.Config{StateDir: t.TempDir(), Database: personal.Database{Mode: mode}, Agent: personal.Agent{Tools: tools}}
 	}
 	missing := Result{Reason: "executable_missing"}
 	psqlOK := Result{Output: "psql (PostgreSQL) 17.10\n"}

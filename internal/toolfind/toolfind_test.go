@@ -395,9 +395,11 @@ func TestResolveAndArgs(t *testing.T) {
 }
 
 func TestWriteReadAndTable(t *testing.T) {
-	res := Result{SchemaVersion: SchemaVersion, DetectedAt: time.Unix(1700000000, 0).UTC(), GoModCache: "/h/go/pkg/mod", PythonBothTypeCheckers: true, Tools: []Tool{
-		{Name: "go", Status: Found, Path: "/h/bin/go", Version: "1.27.4", VersionTested: true, TestedSeries: "1.27", Source: SourcePath},
-		{Name: "ruff", Status: Found, Path: "/h/bin/ruff", Version: "0.15.0", TestedSeries: "0.16", Source: SourceConfig, Notes: []string{NoteVersionUntested}},
+	home := t.TempDir()
+	bin := func(name string) string { return filepath.Join(home, "bin", name) }
+	res := Result{SchemaVersion: SchemaVersion, DetectedAt: time.Unix(1700000000, 0).UTC(), GoModCache: filepath.Join(home, "go", "pkg", "mod"), PythonBothTypeCheckers: true, Tools: []Tool{
+		{Name: "go", Status: Found, Path: bin("go"), Version: "1.27.4", VersionTested: true, TestedSeries: "1.27", Source: SourcePath},
+		{Name: "ruff", Status: Found, Path: bin("ruff"), Version: "0.15.0", TestedSeries: "0.16", Source: SourceConfig, Notes: []string{NoteVersionUntested}},
 		{Name: "cppcheck", Status: NotFound, Hint: specs["cppcheck"].hint},
 		{Name: "gitleaks", Status: Unusable, Reason: "version output not recognized", Hint: specs["gitleaks"].hint},
 	}}
@@ -421,13 +423,13 @@ func TestWriteReadAndTable(t *testing.T) {
 		t.Fatal("unknown fields must be refused")
 	}
 	var b bytes.Buffer
-	if err := WriteTable(&b, res, "/h"); err != nil {
+	if err := WriteTable(&b, res, home); err != nil {
 		t.Fatal(err)
 	}
 	out := b.String()
-	for _, want := range []string{"go  ", "found", "~/bin/go", "[untested version, tested 0.16]", "(config)",
+	for _, want := range []string{"go  ", "found", "~" + string(filepath.Separator) + filepath.Join("bin", "go"), "[untested version, tested 0.16]", "(config)",
 		"cppcheck", "missing", "not found - `micromamba install", "or set `agent.tools.cppcheck`", "unusable", "version output not recognized",
-		"go module cache: ~/go/pkg/mod", "mypy and pyright"} {
+		"go module cache: ~" + string(filepath.Separator) + filepath.Join("go", "pkg", "mod"), "mypy and pyright"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("table lacks %q:\n%s", want, out)
 		}

@@ -25,7 +25,8 @@ func toolsConfig(t *testing.T, agent string) (cfgPath, state string) {
 	if err := os.Mkdir(src, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"schema_version":"0.1","state_dir":"` + state + `","database":{"mode":"external"},"source_roots":[{"label":"w","path":"` + src + `"}],"agent":` + agent + `}`
+	q := func(s string) string { b, _ := json.Marshal(s); return string(b) }
+	body := `{"schema_version":"0.1","state_dir":` + q(state) + `,"database":{"mode":"external"},"source_roots":[{"label":"w","path":` + q(src) + `}],"agent":` + agent + `}`
 	cfgPath = filepath.Join(root, "personal.json")
 	if err := os.WriteFile(cfgPath, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -33,16 +34,45 @@ func toolsConfig(t *testing.T, agent string) (cfgPath, state string) {
 	return cfgPath, state
 }
 
+// stubDetection replaces the machine detection with a canned result and
+// records the explicit settings it was given.
+func stubDetection(t *testing.T) *toolfind.Explicit {
+	t.Helper()
+	var seen toolfind.Explicit
+	old := detectTools
+	t.Cleanup(func() { detectTools = old })
+	detectTools = func(_ context.Context, cfg *personal.Config) toolfind.Result {
+		seen = explicitTools(cfg)
+		res := toolfind.Result{SchemaVersion: toolfind.SchemaVersion}
+		for _, name := range toolfind.Names() {
+			tool := toolfind.Tool{Name: name, Status: toolfind.NotFound, Hint: "install " + name}
+			if p := seen.Tools[name]; p != "" {
+				tool = toolfind.Tool{Name: name, Status: toolfind.Unusable, Path: p, Source: toolfind.SourceConfig, Reason: "not usable", Hint: "install " + name}
+			}
+			res.Tools = append(res.Tools, tool)
+		}
+		return res
+	}
+	return &seen
+}
+
 // codeye tools prints the table, prints the same result as JSON with --json,
-// and records it in the state directory of the configuration.
+// passes the configuration's explicit settings to the detection and records
+// the result in the state directory of the configuration.
 func TestToolsCommand(t *testing.T) {
-	cfgPath, state := toolsConfig(t, `{"tools":{"ruff":"/nonexistent/ruff"}}`)
+	seen := stubDetection(t)
+	explicit := filepath.Join(t.TempDir(), "ruff")
+	q, _ := json.Marshal(explicit)
+	cfgPath, state := toolsConfig(t, `{"tools":{"ruff":`+string(q)+`}}`)
 	var out, errb bytes.Buffer
 	if code := toolsCommand(context.Background(), []string{"--config", cfgPath}, &out, &errb); code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
-	if !strings.HasPrefix(out.String(), "TOOL") || !strings.Contains(out.String(), "ruff") || !strings.Contains(out.String(), "(config)") {
+	if !strings.HasPrefix(out.String(), "TOOL") || !strings.Contains(out.String(), "ruff") || !strings.Contains(out.String(), "(config)") || !strings.Contains(out.String(), "install cppcheck") {
 		t.Fatalf("table:\n%s", out.String())
+	}
+	if seen.Tools["ruff"] != explicit {
+		t.Fatalf("explicit settings not passed: %+v", seen)
 	}
 	out.Reset()
 	if code := toolsCommand(context.Background(), []string{"--config", cfgPath, "--json"}, &out, &errb); code != 0 {
@@ -52,8 +82,7 @@ func TestToolsCommand(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &res); err != nil || len(res.Tools) != len(toolfind.Names()) {
 		t.Fatalf("json: %v\n%s", err, out.String())
 	}
-	// The explicit ruff path wins even though it does not exist.
-	if ruff, _ := res.Tool("ruff"); ruff.Status != toolfind.Unusable || ruff.Source != toolfind.SourceConfig || ruff.Path != "/nonexistent/ruff" {
+	if ruff, _ := res.Tool("ruff"); ruff.Status != toolfind.Unusable || ruff.Path != explicit {
 		t.Fatalf("ruff %+v", ruff)
 	}
 	back, err := toolfind.Read(filepath.Join(state, toolfind.FileName))
@@ -71,6 +100,12 @@ func TestToolsCommand(t *testing.T) {
 	}
 	if _, err := os.Stat(state2); err == nil {
 		t.Fatal("tools created the state directory")
+	}
+	// A configuration with detection off says so under the table.
+	cfgPath3, _ := toolsConfig(t, `{"auto_detect":false}`)
+	out.Reset()
+	if code := toolsCommand(context.Background(), []string{"--config", cfgPath3}, &out, &errb); code != 0 || !strings.Contains(out.String(), "agent.auto_detect is false") {
+		t.Fatalf("auto_detect false: exit %d\n%s", code, out.String())
 	}
 	if code := toolsCommand(context.Background(), []string{"--config", filepath.Join(t.TempDir(), "absent.json")}, &out, &errb); code != 2 {
 		t.Fatalf("missing config: exit %d", code)
@@ -105,7 +140,7 @@ func TestUseDetectedTools(t *testing.T) {
 	if !slices.Contains(args, "--python-both-type-checkers") || !slices.Contains(args, "--mypy") || !slices.Contains(args, "--pyright") {
 		t.Fatalf("%q", args)
 	}
-	// agent.auto_detect false leaves the agent settings alone.
+	// agent.auto_detect false leaves the agent settings alone and writes nothing.
 	off := false
 	cfg2 := &personal.Config{StateDir: t.TempDir(), Agent: personal.Agent{AutoDetect: &off}}
 	var out bytes.Buffer
@@ -114,5 +149,16 @@ func TestUseDetectedTools(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(cfg2.StateDir, toolfind.FileName)); err == nil {
 		t.Fatal("tools.json written with detection off")
+	}
+	// With detection on, prepareTools detects, records, prints and completes.
+	stubDetection(t)
+	cfg3 := &personal.Config{StateDir: t.TempDir(), Agent: personal.Agent{Tools: map[string]string{"ruff": "/mine/ruff"}}}
+	out.Reset()
+	res3, err := prepareTools(context.Background(), cfg3, &out)
+	if err != nil || len(res3.Tools) != len(toolfind.Names()) || !strings.HasPrefix(out.String(), "TOOL") || cfg3.Agent.Tools["ruff"] != "/mine/ruff" {
+		t.Fatalf("prepareTools: %v %q %+v", err, out.String(), cfg3.Agent)
+	}
+	if _, err := toolfind.Read(filepath.Join(cfg3.StateDir, toolfind.FileName)); err != nil {
+		t.Fatal(err)
 	}
 }

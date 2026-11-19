@@ -96,8 +96,8 @@ func explicitTools(cfg *personal.Config) toolfind.Explicit {
 }
 
 // detectTools runs the detection with the explicit settings of cfg (nil for
-// none).
-func detectTools(ctx context.Context, cfg *personal.Config) toolfind.Result {
+// none). Tests replace it.
+var detectTools = func(ctx context.Context, cfg *personal.Config) toolfind.Result {
 	return toolfind.Detect(ctx, toolfind.Options{Explicit: explicitTools(cfg)})
 }
 
