@@ -177,6 +177,7 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 		job.AllowRepositoryCode = ag.cfg.RepositoryCodeSourceRoots[j.Source.SourceRootID]
 		job.Source.ApprovedRoot = ag.cfg.SourceRoots[j.Source.SourceRootID]
 		job.Source.RelativePath = j.Source.RelativePath
+		job.Source.ProtectedDirs = ag.cfg.ProtectedDirs
 	case "git":
 		job.Source.RepositoryURL, job.Source.Branch = j.Source.RepositoryURL, j.Source.Branch
 		for _, h := range ag.cfg.GitHosts {
@@ -189,11 +190,12 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 	if ag.cfg.ProjectAnalysisPolicy {
 		// The project's own choices, for local and Git sources alike; a job
 		// from a controller that sends none gets the defaults.
-		choices := domain.DefaultAnalysisChoices
+		choices := domain.DefaultAnalysisChoices(domain.SourceKind(j.Source.Kind))
 		if j.Analysis != nil {
 			choices = *j.Analysis
 		}
-		job.AllowModelReview = choices.SendSourceToModel && ag.cfg.ModelName != ""
+		// Without a model the review handler records model_not_configured.
+		job.AllowModelReview = choices.SendSourceToModel
 		job.AllowRepositoryCode = choices.RunBuildScripts
 	}
 	if j.Snapshot != nil {

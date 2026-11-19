@@ -83,12 +83,19 @@ func (p *Personal) readSetup() *PersonalSetup {
 // setupView is GET /setup.
 type setupView struct {
 	// Mode is personal (codeye up) or server.
-	Mode             string                 `json:"mode"`
-	Model            *setupModelView        `json:"model"`
-	Git              *setupGitView          `json:"git"`
-	ReadableFolders  []string               `json:"readable_folders"`
-	AnalysisDefaults domain.AnalysisChoices `json:"analysis_defaults"`
-	Tools            *toolfind.Result       `json:"tools"`
+	Mode             string           `json:"mode"`
+	Model            *setupModelView  `json:"model"`
+	Git              *setupGitView    `json:"git"`
+	ReadableFolders  []string         `json:"readable_folders"`
+	AnalysisDefaults analysisDefaults `json:"analysis_defaults"`
+	Tools            *toolfind.Result `json:"tools"`
+}
+
+// analysisDefaults are the analysis choices of a project that records none,
+// by source kind.
+type analysisDefaults struct {
+	Local domain.AnalysisChoices `json:"local"`
+	Git   domain.AnalysisChoices `json:"git"`
 }
 
 type setupModelView struct {
@@ -107,7 +114,7 @@ type setupGitView struct {
 // and the detected tools; a server-mode controller knows none of these
 // (nodes report their own) and says so with nulls.
 func (s *Server) getSetup(q *request) {
-	v := setupView{Mode: "server", ReadableFolders: []string{}, AnalysisDefaults: domain.DefaultAnalysisChoices}
+	v := setupView{Mode: "server", ReadableFolders: []string{}, AnalysisDefaults: analysisDefaults{domain.DefaultAnalysisChoices(domain.SourceLocal), domain.DefaultAnalysisChoices(domain.SourceGit)}}
 	if s.personal == nil {
 		writeJSON(q.w, http.StatusOK, v)
 		return
@@ -143,9 +150,72 @@ func (s *Server) getSetup(q *request) {
 var (
 	errFolderMissing     = errors.New("the folder does not exist or is not a directory")
 	errFolderOutside     = errors.New("outside readable folders - run `codeye up <path>` in a terminal to add it")
-	errFolderHoldsData   = errors.New("the folder contains or is inside CODEYE's own data directory; pick a project folder")
 	errFolderUnsupported = errors.New("a folder name on this path is not supported (for example a ':'); run `codeye up <path>` to add the folder itself")
 )
+
+// folderHoldsData is a project folder that contains, or lies inside, one of
+// CODEYE's own data directories (database password, model key, snapshots).
+type folderHoldsData struct{ folder, data string }
+
+func (e folderHoldsData) Error() string {
+	if pathWithin(e.folder, e.data) {
+		return "the folder " + e.folder + " is inside CODEYE's data directory " + e.data + "; pick a project folder outside it"
+	}
+	return "the folder " + e.folder + " contains CODEYE's data directory " + e.data + " (database password, model key); pick a subfolder that holds the project instead"
+}
+
+// protectedDirs are the state and backup directories, resolved.
+func (p *Personal) protectedDirs() []string {
+	dirs := []string{p.StateDir}
+	if st := p.readSetup(); st != nil {
+		dirs = append(dirs, st.BackupDir)
+	}
+	var out []string
+	for _, d := range dirs {
+		if d == "" {
+			continue
+		}
+		if r, err := filepath.EvalSymlinks(d); err == nil {
+			d = r
+		}
+		out = append(out, filepath.Clean(d))
+	}
+	return out
+}
+
+// checkFolder refuses a resolved project folder that holds or lies inside
+// a data directory.
+func (p *Personal) checkFolder(real string) error {
+	for _, dir := range p.protectedDirs() {
+		if pathWithin(real, dir) || pathWithin(dir, real) {
+			return folderHoldsData{folder: real, data: dir}
+		}
+	}
+	return nil
+}
+
+// checkLocalSource applies checkFolder to a local source declared by root
+// and relative path (personal mode). A root the caller is not granted is
+// left to the registration, which answers 404.
+func (s *Server) checkLocalSource(q *request, src domain.Source) error {
+	ctx, cancel := q.ctx()
+	defer cancel()
+	roots, err := s.store.GrantedRootPaths(ctx, q.session.UserID)
+	if err != nil {
+		return err
+	}
+	for _, r := range roots {
+		if r.ID != src.SourceRootID {
+			continue
+		}
+		folder := filepath.Join(r.Path, filepath.FromSlash(src.RelativePath))
+		if real, err := filepath.EvalSymlinks(folder); err == nil {
+			folder = real
+		}
+		return s.personal.checkFolder(filepath.Clean(folder))
+	}
+	return nil
+}
 
 // localSource maps an absolute folder path onto the longest granted source
 // root that holds it (personal mode). The path is resolved through symbolic
@@ -162,20 +232,8 @@ func (s *Server) localSource(q *request, path string) (domain.Source, error) {
 	if st, err := os.Stat(real); err != nil || !st.IsDir() {
 		return domain.Source{}, errFolderMissing
 	}
-	protected := []string{s.personal.StateDir}
-	if st := s.personal.readSetup(); st != nil {
-		protected = append(protected, st.BackupDir)
-	}
-	for _, dir := range protected {
-		if dir == "" {
-			continue
-		}
-		if r, err := filepath.EvalSymlinks(dir); err == nil {
-			dir = r
-		}
-		if pathWithin(real, dir) || pathWithin(dir, real) {
-			return domain.Source{}, errFolderHoldsData
-		}
+	if err := s.personal.checkFolder(real); err != nil {
+		return domain.Source{}, err
 	}
 	ctx, cancel := q.ctx()
 	defer cancel()
@@ -218,13 +276,14 @@ func pathWithin(p, base string) bool {
 // folderError writes the response of a refused local_path.
 func (s *Server) folderError(q *request, err error) {
 	code := ""
+	var holds folderHoldsData
 	switch {
+	case errors.As(err, &holds):
+		code = "FOLDER_HOLDS_CODEYE_DATA"
 	case errors.Is(err, errFolderMissing):
 		code = "FOLDER_NOT_FOUND"
 	case errors.Is(err, errFolderOutside):
 		code = "FOLDER_NOT_READABLE"
-	case errors.Is(err, errFolderHoldsData):
-		code = "FOLDER_HOLDS_CODEYE_DATA"
 	case errors.Is(err, errFolderUnsupported):
 		code = "FOLDER_NAME_UNSUPPORTED"
 	default:

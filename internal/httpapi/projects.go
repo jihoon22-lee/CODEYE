@@ -94,6 +94,12 @@ func (s *Server) createProject(q *request) {
 	} else if src, err = domain.ParseSource(in.Source); err != nil {
 		s.storeError(q, err)
 		return
+	} else if s.personal != nil && src.Kind == domain.SourceLocal {
+		// However a folder is declared, it must not hold CODEYE's data.
+		if err := s.checkLocalSource(q, src); err != nil {
+			s.folderError(q, err)
+			return
+		}
 	}
 	reg := postgres.ProjectRegistration{Source: src}
 	if in.Analysis != nil && string(in.Analysis) != "null" {
@@ -146,7 +152,7 @@ func (s *Server) createProject(q *request) {
 	q.w.Header().Set("Location", apiPrefix+"/projects/"+p.ID)
 	// A new project has no run: an empty activity checked now (server clock).
 	created := postgres.ProjectSummary{ID: p.ID, Name: p.Name, Revision: p.Revision, Source: cfg.Source, Role: postgres.RoleOwner,
-		Analysis: domain.DefaultAnalysisChoices, Activity: postgres.Activity{CheckedAt: time.Now().UTC()}}
+		Analysis: domain.DefaultAnalysisChoices(src.Kind), Activity: postgres.Activity{CheckedAt: time.Now().UTC()}}
 	if reg.Analysis != nil {
 		created.Analysis = *reg.Analysis
 	}
@@ -216,6 +222,27 @@ func (s *Server) listProjects(q *request) {
 		next = &page.NextCursor
 	}
 	writeJSON(q.w, http.StatusOK, map[string]any{"items": items, "next_cursor": next})
+}
+
+// putProjectAnalysis replaces the project's analysis choices (owner or
+// manager) and answers the project.
+func (s *Server) putProjectAnalysis(q *request) {
+	raw, ok := q.readBody()
+	if !ok {
+		return
+	}
+	c, err := domain.ParseAnalysisChoices(raw)
+	if err != nil {
+		writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "analysis needs the booleans send_source_to_model and run_build_scripts", false)
+		return
+	}
+	ctx, cancel := q.ctx()
+	defer cancel()
+	if _, err := s.store.SetProjectAnalysis(ctx, q.session.UserID, q.params[0], c); err != nil {
+		s.storeError(q, err)
+		return
+	}
+	s.getProject(q)
 }
 
 func (s *Server) getProject(q *request) {

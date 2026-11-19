@@ -71,8 +71,13 @@ type Config struct {
 	// ProjectAnalysisPolicy (--project-analysis-policy, personal mode) makes
 	// every job follow its project's analysis choices (nodeproto.Job.Analysis)
 	// for local and Git sources alike, instead of ModelSourceRoots and
-	// RepositoryCodeSourceRoots. Model review still needs a configured model.
+	// RepositoryCodeSourceRoots.
 	ProjectAnalysisPolicy bool
+	// ProtectedDirs (--protected-dir): a local project folder that contains
+	// or lies inside one of these is refused before acquisition, however
+	// the project was registered (personal mode: the state and backup
+	// directories).
+	ProtectedDirs []string
 	// Workers is the static worker count (default mode).
 	Workers int
 	// Autoscale starts with zero workers and starts/drains/stops

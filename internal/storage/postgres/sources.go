@@ -231,7 +231,7 @@ type ProjectRegistration struct {
 	Source      domain.Source
 	Description string
 	// Analysis are the project's analysis choices; nil records none (the
-	// defaults of domain.DefaultAnalysisChoices apply).
+	// defaults of domain.DefaultAnalysisChoices for the source kind apply).
 	Analysis *domain.AnalysisChoices
 }
 
@@ -399,7 +399,11 @@ func scanSummary(row pgx.Row) (ProjectSummary, time.Time, error) {
 		return p, created, err
 	}
 	p.Activity.CheckedAt = p.Activity.CheckedAt.UTC()
-	p.Analysis = domain.AnalysisChoicesOf(analysis)
+	var kind struct {
+		Kind domain.SourceKind `json:"kind"`
+	}
+	_ = json.Unmarshal(source, &kind)
+	p.Analysis = domain.AnalysisChoicesOf(analysis, kind.Kind)
 	if reportRun != nil && reportRev != nil && reportAt != nil {
 		p.HasReport = true
 		p.Activity.LastReport = &ReportRef{RunID: *reportRun, Revision: *reportRev, PublishedAt: reportAt.UTC()}

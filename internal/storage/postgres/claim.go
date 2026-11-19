@@ -178,7 +178,7 @@ func scanCandidate(row pgx.Row) (candidate, bool, error) {
 		return c, false, nil
 	}
 	c.source = parsed
-	c.analysis = domain.AnalysisChoicesOf(analysis)
+	c.analysis = domain.AnalysisChoicesOf(analysis, parsed.Kind)
 	if parsed.Kind == domain.SourceGit {
 		host, err := domain.RepositoryHost(parsed.RepositoryURL)
 		if err != nil {

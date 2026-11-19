@@ -125,6 +125,10 @@ type JobSource struct {
 	// AllowedLocalRoot lets a Git source be a file:// repository under this
 	// directory. Only test builds (codeye_fixture) set it.
 	AllowedLocalRoot string `json:"allowed_local_root,omitempty"`
+	// ProtectedDirs: a local project folder that contains or lies inside
+	// one of these is refused before acquisition (personal mode: the state
+	// and backup directories).
+	ProtectedDirs []string `json:"protected_dirs,omitempty"`
 }
 
 // JobSnapshot pins a retry to a cached snapshot. Root is "" when the agent

@@ -435,7 +435,10 @@ const (
 	// with credentials (private or nonexistent); none are sent.
 	ReasonSourceAuthRequired = "source_auth_required"
 	// ReasonSourceUnreachable: the Git host could not be reached.
-	ReasonSourceUnreachable       = "source_unreachable"
+	ReasonSourceUnreachable = "source_unreachable"
+	// ReasonSourceHoldsCodeyeData: the local project folder contains, or
+	// lies inside, CODEYE's own state or backup directory.
+	ReasonSourceHoldsCodeyeData   = "source_holds_codeye_data"
 	ReasonSourceUnstable          = "source_unstable"
 	ReasonSourceLimitExceeded     = "source_limit_exceeded"
 	ReasonSourceUnsupported       = "source_unsupported"

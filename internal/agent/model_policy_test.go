@@ -54,8 +54,7 @@ func TestRepositoryCodeGrantIsSeparateFromAcquisition(t *testing.T) {
 }
 
 // Under --project-analysis-policy the project's own choices decide, for
-// local and Git sources alike; the per-root grants play no part. Model
-// review also needs a configured model.
+// local and Git sources alike; the per-root grants play no part.
 func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
 	root := domain.NewID()
 	both := domain.AnalysisChoices{SendSourceToModel: true, RunBuildScripts: true}
@@ -71,7 +70,7 @@ func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
 		{"git", "openai/m", &both, true, true},
 		{"git", "openai/m", &neither, false, false},
 		{"local", "openai/m", nil, true, true}, // a controller that sends no choices: the defaults
-		{"local", "", &both, false, true},      // no model configured
+		{"local", "", &both, true, true},       // no model: the review records model_not_configured
 	} {
 		ag := Agent{cfg: Config{SourceRoots: map[string]string{root: t.TempDir()}, ModelName: tc.model, ProjectAnalysisPolicy: true,
 			GitHosts: []string{"github.com"}}}

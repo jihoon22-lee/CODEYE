@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
@@ -93,6 +94,13 @@ func TestPersonalFolderPathsAndSetup(t *testing.T) {
 		}
 	}
 	e.do("POST", "/api/v1/projects", map[string]any{"local_path": filepath.Join(home, "src", "app"), "source": map[string]any{"kind": "local", "source_root_id": rootHome.ID, "relative_path": "."}}, u.o()).want(t, 400, "INVALID_REQUEST")
+	// The root-and-relative-path form gets the same check: "." under $HOME holds the state directory.
+	held := e.do("POST", "/api/v1/projects", map[string]any{"source": map[string]any{"kind": "local", "source_root_id": rootHome.ID, "relative_path": "."}}, u.o()).want(t, 422, "FOLDER_HOLDS_CODEYE_DATA")
+	if msg := held.body["error"].(map[string]any)["message"].(string); !strings.Contains(msg, "the folder "+home+" contains CODEYE's data directory "+state) || !strings.Contains(msg, "subfolder") {
+		t.Fatal(msg)
+	}
+	e.do("POST", "/api/v1/projects", map[string]any{"source": map[string]any{"kind": "local", "source_root_id": rootHome.ID, "relative_path": ".local/state/codeye/run"}}, u.o()).want(t, 422, "FOLDER_HOLDS_CODEYE_DATA")
+	e.do("POST", "/api/v1/projects", map[string]any{"source": map[string]any{"kind": "local", "source_root_id": rootHome.ID, "relative_path": "src"}}, u.o()).want(t, 201, "")
 	e.do("POST", "/api/v1/projects", map[string]any{"local_path": filepath.Join(home, "work"), "analysis": map[string]bool{"send_source_to_model": true}}, u.o()).want(t, 422, "VALIDATION_FAILED")
 
 	// A repository without a branch (the default branch); the same again is reused.
@@ -105,6 +113,16 @@ func TestPersonalFolderPathsAndSetup(t *testing.T) {
 	if s := g.body["source"].(map[string]any); s["branch"] != nil || g.body["name"] != "r" {
 		t.Fatalf("%s", g.raw)
 	}
+	// A repository's build scripts do not run unless the project turns that on.
+	if a := g.body["analysis"].(map[string]any); a["send_source_to_model"] != true || a["run_build_scripts"] != false {
+		t.Fatalf("git defaults %s", g.raw)
+	}
+	// Turning the build scripts on records a new revision and keeps the source.
+	on := e.do("PUT", "/api/v1/projects/"+g.body["id"].(string)+"/analysis", map[string]bool{"send_source_to_model": true, "run_build_scripts": true}, u.o()).want(t, 200, "")
+	if a := on.body["analysis"].(map[string]any); a["run_build_scripts"] != true || on.body["revision"] != float64(2) || on.body["source"].(map[string]any)["repository_url"] != "https://github.com/o/r" {
+		t.Fatalf("analysis put %s", on.raw)
+	}
+	e.do("PUT", "/api/v1/projects/"+g.body["id"].(string)+"/analysis", map[string]bool{"run_build_scripts": true}, u.o()).want(t, 422, "VALIDATION_FAILED")
 	gitBody["source"].(map[string]any)["repository_url"] = "https://github.com/O/r.git"
 	if r := e.do("POST", "/api/v1/projects", gitBody, u.o()).want(t, 200, ""); r.body["id"] != g.body["id"] {
 		t.Fatalf("repository not reused: %s", r.raw)
@@ -130,7 +148,8 @@ func TestPersonalFolderPathsAndSetup(t *testing.T) {
 		len(folders) != 2 || len(tools) != 1 || tools[0].(map[string]any)["hint"] != "install cppcheck" {
 		t.Fatalf("setup %s", v.raw)
 	}
-	if d := v.body["analysis_defaults"].(map[string]any); d["send_source_to_model"] != true || d["run_build_scripts"] != true {
+	d := v.body["analysis_defaults"].(map[string]any)
+	if l, g := d["local"].(map[string]any), d["git"].(map[string]any); l["send_source_to_model"] != true || l["run_build_scripts"] != true || g["send_source_to_model"] != true || g["run_build_scripts"] != false {
 		t.Fatalf("defaults %s", v.raw)
 	}
 }
@@ -162,5 +181,16 @@ func TestRetryRunRoute(t *testing.T) {
 	n := e.do("POST", "/api/v1/runs/"+queued+"/retry", nil, a.f.user.o()).want(t, 202, "")
 	if n.body["retry"] != "new_run" || n.body["id"] == queued || n.header.Get("Location") != "/api/v1/runs/"+n.body["id"].(string) {
 		t.Fatalf("%s", n.raw)
+	}
+}
+
+// After the project's analysis choices changed, a failed run whose snapshot
+// the node holds gets a new run, which follows the new choices.
+func TestRetryAfterAnalysisChange(t *testing.T) {
+	e := newEnv(t)
+	b := e.driveAttempt("failed")
+	e.do("PUT", "/api/v1/projects/"+b.f.projectID+"/analysis", map[string]bool{"send_source_to_model": false, "run_build_scripts": true}, b.f.user.o()).want(t, 200, "")
+	if r := e.do("POST", "/api/v1/runs/"+b.runID+"/retry", nil, b.f.user.o()).want(t, 202, ""); r.body["retry"] != "new_run" || r.body["id"] == b.runID {
+		t.Fatalf("%s", r.raw)
 	}
 }

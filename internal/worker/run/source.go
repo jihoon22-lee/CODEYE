@@ -50,7 +50,9 @@ func (w *worker) acquire(a *attempt) string {
 			reason = nodeproto.ReasonSnapshotIntegrityFailed
 		}
 	case job.Source.Kind == "local":
-		s, err = source.AcquireLocal(a.ctx, job.Source.ApprovedRoot, job.Source.RelativePath, w.hello.DataRoot, w.limits())
+		if err = source.CheckProtected(job.Source.ApprovedRoot, job.Source.RelativePath, job.Source.ProtectedDirs); err == nil {
+			s, err = source.AcquireLocal(a.ctx, job.Source.ApprovedRoot, job.Source.RelativePath, w.hello.DataRoot, w.limits())
+		}
 		reason = sourceReason(err)
 	case job.Source.Kind == "git":
 		if w.hello.GitExecutable == "" || job.Source.AllowedHost == "" {

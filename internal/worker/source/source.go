@@ -33,6 +33,10 @@ var (
 	// credentials (a private or nonexistent repository). It also matches
 	// ErrUnavailable.
 	ErrAuthRequired = errors.New("source_auth_required")
+	// ErrHoldsProtected: the project folder contains, or lies inside, a
+	// directory the node keeps private (personal mode: CODEYE's state and
+	// backup directories).
+	ErrHoldsProtected = errors.New("source_holds_codeye_data")
 	// ErrUnreachable: the Git host could not be reached (name resolution,
 	// connection, TLS). It also matches ErrUnavailable.
 	ErrUnreachable = errors.New("source_unreachable")
@@ -89,6 +93,30 @@ func within(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
+
+// CheckProtected refuses a local project folder (root and relative path,
+// symlinks resolved) that contains or lies inside one of the protected
+// directories. A folder that does not resolve is left to AcquireLocal.
+func CheckProtected(root, relative string, protected []string) error {
+	project, err := ResolveLocal(root, relative)
+	if err != nil {
+		return nil
+	}
+	for _, d := range protected {
+		if d == "" {
+			continue
+		}
+		if r, e := filepath.EvalSymlinks(d); e == nil {
+			d = r
+		}
+		d = filepath.Clean(d)
+		if within(project, d) || within(d, project) {
+			return ErrHoldsProtected
+		}
+	}
+	return nil
+}
+
 func ResolveLocal(root, relative string) (string, error) {
 	if !filepath.IsAbs(root) || relative == "" || (relative != "." && domain.ValidateEvidencePath(relative) != nil) {
 		return "", ErrInvalid

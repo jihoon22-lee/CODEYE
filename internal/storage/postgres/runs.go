@@ -366,9 +366,15 @@ func (s *Store) RetryRun(ctx context.Context, actor, id string) (Run, string, er
 		default:
 			return result{run: r}, domain.ErrConflict
 		}
+		// The same run again keeps its project revision; after the project's
+		// configuration changed (its analysis choices), a new run follows it.
+		var current int64
+		if err := tx.QueryRow(ctx, "SELECT current_revision FROM projects WHERE id=$1", r.ProjectID).Scan(&current); err != nil {
+			return result{run: r}, err
+		}
 		if ok, err := pinnedRetryable(ctx, tx, r, true); err != nil {
 			return result{run: r}, err
-		} else if ok {
+		} else if ok && current == r.ProjectRevision {
 			if err := requeuePinned(ctx, tx, &r); err != nil {
 				return result{run: r}, err
 			}

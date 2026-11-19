@@ -53,7 +53,7 @@ func TestPersonalAgentArgv(t *testing.T) {
 	argv := agentArgv(cfg, layout, []rootGrant{{SourceRoot: cfg.SourceRoots[0], ID: "root-1"}}, true)
 	got := strings.Join(argv, " ")
 	want := "agent --controller http://127.0.0.1:7331 --state-dir /srv/codeye/state/agent --name personal --autoscale --max-workers 3 --toolchain-path /usr/bin:/bin --advertise-without-baseline" +
-		" --enroll-token-file /srv/codeye/state/run/enroll-token --source-root root-1=/srv/src --project-analysis-policy --git /usr/bin/git --git-host github.com" +
+		" --enroll-token-file /srv/codeye/state/run/enroll-token --source-root root-1=/srv/src --project-analysis-policy --protected-dir /srv/codeye/state --protected-dir /srv/codeye/state-backups --git /usr/bin/git --git-host github.com" +
 		" --go /usr/local/go/bin/go --staticcheck /opt/sc --opencode /opt/opencode --model provider/model-a --model-relay-file /srv/relay.json --review-pack review-r1 --review-max-calls 50" +
 		" --storage-quota logs=100 --storage-quota workspace=200 --storage-log-dir /srv/codeye/state/logs"
 	if got != want {

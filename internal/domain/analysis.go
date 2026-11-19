@@ -15,8 +15,13 @@ type AnalysisChoices struct {
 	RunBuildScripts bool `json:"run_build_scripts"`
 }
 
-// DefaultAnalysisChoices apply to a project that recorded none: both on.
-var DefaultAnalysisChoices = AnalysisChoices{SendSourceToModel: true, RunBuildScripts: true}
+// DefaultAnalysisChoices apply to a project that recorded none. A local
+// folder is the user's own code: both on. A Git repository may be anyone's:
+// its source goes to the model, but its build scripts do not run until the
+// project turns that on.
+func DefaultAnalysisChoices(kind SourceKind) AnalysisChoices {
+	return AnalysisChoices{SendSourceToModel: true, RunBuildScripts: kind != SourceGit}
+}
 
 // ParseAnalysisChoices strictly decodes an "analysis" object; both fields
 // are required.
@@ -35,11 +40,12 @@ func ParseAnalysisChoices(raw []byte) (AnalysisChoices, error) {
 }
 
 // AnalysisChoicesOf reads the stored "analysis" object of a project
-// configuration; absent (or JSON null) yields the defaults. A stored object
-// that does not decode is treated as both off.
-func AnalysisChoicesOf(raw json.RawMessage) AnalysisChoices {
+// configuration whose source is of kind; absent (or JSON null) yields the
+// defaults of that kind. A stored object that does not decode is treated as
+// both off.
+func AnalysisChoicesOf(raw json.RawMessage, kind SourceKind) AnalysisChoices {
 	if len(raw) == 0 || string(raw) == "null" {
-		return DefaultAnalysisChoices
+		return DefaultAnalysisChoices(kind)
 	}
 	c, err := ParseAnalysisChoices(raw)
 	if err != nil {

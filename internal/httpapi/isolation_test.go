@@ -120,6 +120,9 @@ func isoCases() map[string]isoCase {
 			return map[string]any{"name": w.name("p"), "source": map[string]any{"kind": "local", "source_root_id": w.f.root.ID, "relative_path": "."}}
 		}},
 		"projects.get": {need: viewerRole, ok: 200, ids: isoProject},
+		"projects.analysis.put": {need: managerRole, ok: 200, ids: isoProject, body: func(*isoWorld) any {
+			return map[string]bool{"send_source_to_model": true, "run_build_scripts": true}
+		}},
 		"members.list": {need: managerRole, ok: 200, ids: isoProject},
 		"members.add": {need: managerRole, ok: 200, ids: isoProject, body: func(w *isoWorld) any {
 			name := w.name("u")

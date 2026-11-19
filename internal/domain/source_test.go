@@ -142,13 +142,17 @@ func TestSplitRepositoryURL(t *testing.T) {
 }
 
 func TestAnalysisChoices(t *testing.T) {
-	if c := AnalysisChoicesOf(nil); c != DefaultAnalysisChoices || !c.SendSourceToModel || !c.RunBuildScripts {
-		t.Fatalf("absent = %+v", c)
+	if c := AnalysisChoicesOf(nil, SourceLocal); !c.SendSourceToModel || !c.RunBuildScripts {
+		t.Fatalf("absent, local = %+v", c)
 	}
-	if c := AnalysisChoicesOf([]byte(`{"send_source_to_model":false,"run_build_scripts":true}`)); c.SendSourceToModel || !c.RunBuildScripts {
+	// A repository's build scripts do not run by default.
+	if c := AnalysisChoicesOf([]byte("null"), SourceGit); !c.SendSourceToModel || c.RunBuildScripts {
+		t.Fatalf("absent, git = %+v", c)
+	}
+	if c := AnalysisChoicesOf([]byte(`{"send_source_to_model":false,"run_build_scripts":true}`), SourceGit); c.SendSourceToModel || !c.RunBuildScripts {
 		t.Fatalf("stored = %+v", c)
 	}
-	if c := AnalysisChoicesOf([]byte(`{"send_source_to_model":true}`)); c != (AnalysisChoices{}) {
+	if c := AnalysisChoicesOf([]byte(`{"send_source_to_model":true}`), SourceLocal); c != (AnalysisChoices{}) {
 		t.Fatalf("an undecodable object must turn both off, got %+v", c)
 	}
 	for _, raw := range []string{`{}`, `{"send_source_to_model":true}`, `{"send_source_to_model":true,"run_build_scripts":true,"x":1}`, `{"send_source_to_model":"yes","run_build_scripts":true}`} {
