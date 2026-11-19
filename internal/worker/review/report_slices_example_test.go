@@ -293,7 +293,7 @@ func sliceExampleStatic(t *testing.T) *pack.Composite {
 func checkSliceExample(t *testing.T, r report.Report, calls int) {
 	t.Helper()
 	for _, l := range r.Limitations {
-		if strings.HasPrefix(l, report.LimReviewLineage) || strings.HasPrefix(l, report.LimReviewPackMismatch) || strings.HasPrefix(l, "artifact_rejected") ||
+		if strings.HasPrefix(l, report.LimReviewLineage) || strings.HasPrefix(l, "artifact_rejected") ||
 			strings.HasPrefix(l, "unrecognized_artifact") || strings.HasPrefix(l, "result_manifest") {
 			t.Fatalf("limitation %s in %v", l, r.Limitations)
 		}

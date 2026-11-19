@@ -116,7 +116,6 @@ type ResolvedModel struct {
 	CredentialFile string
 	RelayFile      string
 	Timeout        time.Duration
-	ReviewPack     string
 	ReviewMaxCalls int
 	// Source says where the credential comes from (ModelSource*).
 	Source string
@@ -156,7 +155,7 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 	if m == nil {
 		m = &Model{}
 	}
-	res := &ResolvedModel{RelayFile: m.RelayFile, Timeout: opencode.DefaultTimeout, ReviewPack: m.ReviewPack, ReviewMaxCalls: m.ReviewMaxCalls,
+	res := &ResolvedModel{RelayFile: m.RelayFile, Timeout: opencode.DefaultTimeout, ReviewMaxCalls: m.ReviewMaxCalls,
 		Offline: cfg.Offline, CABundle: cfg.CABundle}
 	if m.TimeoutSeconds > 0 {
 		res.Timeout = time.Duration(m.TimeoutSeconds) * time.Second

@@ -479,9 +479,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "fd79540f50307a7a75c97902d586027d56668c9d819fdd4ed9ba3112500656b9",
+    "input_digest": "495a31ef0140a9af8063e21ce46302410674ca5039373b4de3a434fba032a57e",
     "result_manifest_artifact_id": null,
-    "version": "9"
+    "version": "10"
   },
   "code_review": {
     "accepted_calls": 16,
@@ -670,7 +670,6 @@
       },
       "status": "complete"
     },
-    "pack": "role",
     "pack_id": "review-r1",
     "pack_version": "2.0.0",
     "request_bytes": 337136,

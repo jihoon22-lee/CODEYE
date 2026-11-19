@@ -271,7 +271,7 @@ func TestSectionsWithoutModelReview(t *testing.T) {
 	if r.Documents.Discovery != DiscoveryAccepted || len(r.Documents.Modules) == 0 || len(r.Documents.Contracts)+len(r.Documents.Conflicts)+len(r.Documents.Questions) != 0 {
 		t.Fatalf("documents %+v", r.Documents)
 	}
-	if r.CodeReview.Pack != "none" || len(r.CodeReview.Roles) != 0 || len(r.CodeReview.FindingIDs) != 0 {
+	if len(r.CodeReview.Roles) != 0 || len(r.CodeReview.FindingIDs) != 0 {
 		t.Fatalf("code review %+v", r.CodeReview)
 	}
 	gaps := map[string]bool{}

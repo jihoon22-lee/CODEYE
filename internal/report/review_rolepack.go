@@ -14,11 +14,9 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// Limitation codes of role-pack composition.
-const (
-	LimReviewLineage      = "review_lineage_mismatch"
-	LimReviewPackMismatch = "review_pack_mismatch"
-)
+// LimReviewLineage marks a review record whose upstream inputs do not match
+// the artifacts the report accepted.
+const LimReviewLineage = "review_lineage_mismatch"
 
 type RoleReviewDecoder struct{}
 
@@ -138,12 +136,6 @@ func composeRoleReviews(r *Report, states map[string]*taskState, limits *stringS
 	obs := map[string]Observation{}
 	for _, o := range r.Observations {
 		obs[o.ID] = o
-	}
-	for k, st := range states {
-		if strings.HasPrefix(k, "review.") && st.reviewResult != nil && st.reviewResult.Role == nil && !st.rejected {
-			st.rejected = true
-			limits.add(LimReviewPackMismatch + ":" + k)
-		}
 	}
 	exposed, known := map[string]bool{}, true
 	// The whole-run roles, then each slice's investigate and verify: a slice

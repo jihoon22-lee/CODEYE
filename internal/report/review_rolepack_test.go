@@ -53,9 +53,6 @@ func exampleRoleStages(t *testing.T) (map[string]*taskState, Report) {
 		if err != nil {
 			t.Fatal(stage, err)
 		}
-		if _, err := (ReviewDecoder{}).Decode(ctx, art, bodies[stage]); err == nil {
-			t.Fatal("the legacy decoder accepted a role-pack record")
-		}
 		states[key] = &taskState{facts: task, review: c.Review.Accepted, reviewResult: c.Review, decodedSHA: map[string]string{record.MediaType: art.SHA256}}
 		// The cited discovery and go vet artifacts, as the builder accepted them.
 		for _, u := range recs[i].Upstream {
@@ -179,20 +176,6 @@ func TestRolePackNoRequiredReviewTaskIsNotPerformed(t *testing.T) {
 	}
 }
 
-// Legacy-pack plans keep the three fixed roles, including not_planned rows, and no
-// optional list.
-func TestLegacyReviewRolesUnchanged(t *testing.T) {
-	ai := decideAIReview(map[string]*taskState{"review.investigate": {facts: TaskFacts{Key: "review.investigate", Status: "succeeded", Required: true}, review: true}})
-	if got := taskKeys(ai.RequiredTasks); ai.Status != AIReviewPartial || ai.OptionalTasks != nil || !slices.Equal(got, []string{"review.context=not_planned", "review.investigate=accepted", "review.verify=not_planned"}) {
-		t.Fatalf("%s %v %v", ai.Status, got, ai.OptionalTasks)
-	}
-	for _, x := range ai.RequiredTasks {
-		if x.Reason != nil {
-			t.Fatalf("legacy row with a reason %+v", x)
-		}
-	}
-}
-
 // The builder keeps a stage only if it joins what the report accepted: the
 // upstream artifacts it cites, the go vet observations and, for verify, the
 // candidates of the accepted upstream stages.
@@ -211,9 +194,6 @@ func TestRoleLineageRejected(t *testing.T) {
 		"upstream stage failed": {func(s map[string]*taskState, _ *Report) {
 			s["review.documents"].facts.Status = "failed"
 		}, "review.investigate"},
-		"legacy record in a role-pack plan": {func(s map[string]*taskState, _ *Report) {
-			s["review.investigate"].reviewResult = &ReviewResult{Accepted: true, Record: &record.Record{}}
-		}, "review.investigate"},
 		"verify relabels upstream evidence": {func(s map[string]*taskState, _ *Report) {
 			ev := s["review.verify"].reviewResult.Role.Evidence
 			for i := range ev {
@@ -230,7 +210,7 @@ func TestRoleLineageRejected(t *testing.T) {
 			states, base := exampleRoleStages(t)
 			c.edit(states, &base)
 			r, ai, lim := compose(states, base)
-			if !has(lim, LimReviewLineage+":"+c.key) && !has(lim, LimReviewPackMismatch+":"+c.key) {
+			if !has(lim, LimReviewLineage+":"+c.key) {
 				t.Fatalf("limitations %v", lim)
 			}
 			if ai.Status == AIReviewPerformed {
@@ -242,26 +222,5 @@ func TestRoleLineageRejected(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// A role-pack record attached to a legacy-pack plan is not read as a legacy
-// record.
-func TestRoleRecordInLegacyPlanRejected(t *testing.T) {
-	states, _ := exampleRoleStages(t)
-	legacy := map[string]*taskState{}
-	for _, k := range RequiredReviewTasks {
-		if st := states[k]; st != nil {
-			legacy[k] = st
-		}
-	}
-	lim := newSet()
-	var r Report
-	composeReviews(&r, legacy, lim)
-	if !has(lim.list(), LimReviewPackMismatch+":review.investigate") || len(r.Findings) != 0 {
-		t.Fatalf("limitations %v findings %d", lim.list(), len(r.Findings))
-	}
-	if ai := decideAIReview(legacy); ai.Status == AIReviewPerformed {
-		t.Fatalf("%+v", ai)
 	}
 }

@@ -51,10 +51,6 @@ type Config struct {
 	ModelCredentialFile string
 	// ModelTimeout bounds one model call (--model-timeout); 0 means 180 s.
 	ModelTimeout time.Duration
-	// ReviewPack selects the review instruction pack of this node's workers:
-	// "review-r1" (default when empty) or the legacy "review-v1", kept so
-	// earlier runs can be reproduced.
-	ReviewPack string
 	// ReviewMaxCalls is the model call ceiling per review attempt
 	// (--review-max-calls); 0 means record.DefaultMaxCalls.
 	ReviewMaxCalls   int
@@ -235,13 +231,6 @@ func New(cfg Config) (*Agent, error) {
 		if domain.ValidateHost(strings.ToLower(h)) != nil {
 			return nil, &ExitError{ExitUsage, "invalid --git-host"}
 		}
-	}
-	switch cfg.ReviewPack {
-	case "":
-		cfg.ReviewPack = "review-r1"
-	case "review-r1", "review-v1":
-	default:
-		return nil, &ExitError{ExitUsage, "--review-pack must be review-r1 (default) or review-v1 (legacy)"}
 	}
 	if cfg.ReviewMaxCalls == 0 {
 		cfg.ReviewMaxCalls = record.DefaultMaxCalls

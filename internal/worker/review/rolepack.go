@@ -24,17 +24,6 @@ import (
 	rolepack "github.com/jihoon22-lee/CODEYE/prompts/review-r1"
 )
 
-// Review packs a node operator may select (codeye agent --review-pack).
-// The role pack (review-r1) is the default; the legacy pack (review-v1) is
-// kept so earlier runs can be reproduced and their records read.
-const (
-	PackLegacy = "review-v1"
-	PackRole   = "review-r1"
-)
-
-// ValidPack reports whether name selects a known review pack.
-func ValidPack(name string) bool { return name == PackLegacy || name == PackRole }
-
 // PromptBudget bounds the full message text of one role-pack request
 // (opencode.Prompt: instructions, contract, repair rules, input and wrapper).
 // The QA relay accepts 49152 UTF-8 bytes of message text per request; the

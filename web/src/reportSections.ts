@@ -89,7 +89,8 @@ export type Sections = {
   };
   codeReview: {
     stage: SectionStage;
-    pack: string;
+    // planned is whether the run planned model review roles at all.
+    planned: boolean;
     packID: string | null;
     calls: number;
     acceptedCalls: number;
@@ -436,7 +437,7 @@ export function parseSections(
     },
     codeReview: {
       stage: stage(cr.stage),
-      pack: str(cr.pack),
+      planned: array(cr.roles, (v) => v).length > 0,
       packID: cr.pack_id == null ? null : str(cr.pack_id) + '@' + str(cr.pack_version),
       calls: count(cr.calls),
       acceptedCalls: count(cr.accepted_calls),

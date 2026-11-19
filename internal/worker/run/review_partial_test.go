@@ -20,31 +20,15 @@ import (
 )
 
 // Only the model and agent transport are scripted. The worker acquires a
-// snapshot, runs the actual Go toolchain and emits its ordinary result manifest.
-type timeoutVerifier struct{}
+// snapshot, runs the actual Go toolchain and emits its ordinary result
+// manifest. Every role answers as roleScripted does; verify times out.
+type timeoutVerifier struct{ roleScripted }
 
-func (timeoutVerifier) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
-	reply := opencode.Reply{Model: "fake/scripted", Version: opencode.Version, RequestDigest: domain.Digest(q.Input)}
-	var in struct {
-		Scope review.Corpus `json:"scope"`
+func (v *timeoutVerifier) Review(ctx context.Context, r executor.Runner, q opencode.Request) opencode.Reply {
+	if q.Role != "verify" {
+		return v.roleScripted.Review(ctx, r, q)
 	}
-	if json.Unmarshal(q.Input, &in) != nil || len(in.Scope.Excerpts) == 0 {
-		reply.Reason = "invalid_review_input"
-		return reply
-	}
-	refs := []string{in.Scope.Excerpts[0].ID}
-	var body any
-	switch q.Role {
-	case "context":
-		body = map[string]any{"facts": []record.Fact{{Kind: "observed", Statement: "Sum uses integer arithmetic.", Evidence: refs}}}
-	case "investigate":
-		body = map[string]any{"candidates": []record.Candidate{{Title: "Result may overflow.", Condition: "Inputs are large.", Impact: "The result may be wrong.", Improvement: "Check the input bound.", Counterpoint: "Callers may guarantee smaller inputs.", Evidence: refs}}}
-	default:
-		reply.Reason = "model_timeout"
-		return reply
-	}
-	reply.Output, _ = json.Marshal(body)
-	return reply
+	return opencode.Reply{Model: "fake/scripted", Version: opencode.Version, RequestDigest: domain.Digest([]byte(opencode.Prompt(q))), Reason: "model_timeout"}
 }
 
 func TestReviewTimeoutPreservesStaticObservationsInPartialManifest(t *testing.T) {
@@ -60,7 +44,7 @@ func TestReviewTimeoutPreservesStaticObservationsInPartialManifest(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fa, in, done, _ := startWorker(t, review.Handler{Static: h, Caller: timeoutVerifier{}})
+	fa, in, done, _ := startWorker(t, review.RoleHandler{Static: h, Caller: &timeoutVerifier{}})
 	defer func() {
 		in.Close()
 		if code := <-done; code != 0 {
@@ -83,7 +67,12 @@ func TestReviewTimeoutPreservesStaticObservationsInPartialManifest(t *testing.T)
 	if err := json.Unmarshal(fa.artifacts[*c.ResultManifestClientArtifact], &m); err != nil {
 		t.Fatal(err)
 	}
-	if len(m.Tasks) != 4 || m.Tasks[0].Status != "succeeded" || m.Tasks[1].Status != "succeeded" || m.Tasks[2].Status != "succeeded" || m.Tasks[3].Key != "review.verify" || m.Tasks[3].Status != "timed_out" || m.Tasks[3].Reason == nil || *m.Tasks[3].Reason != "model_timeout" {
+	status := map[string]analysis.ManifestTask{}
+	for _, task := range m.Tasks {
+		status[task.Key] = task
+	}
+	if vet, inv, ver := status["go-vet"], status["review.investigate"], status["review.verify"]; vet.Status != "succeeded" || inv.Status != "succeeded" ||
+		ver.Status != "timed_out" || ver.Reason == nil || *ver.Reason != "model_timeout" {
 		t.Fatalf("task statuses: %+v", m.Tasks)
 	}
 	var static, failed bool
@@ -97,9 +86,10 @@ func TestReviewTimeoutPreservesStaticObservationsInPartialManifest(t *testing.T)
 			static = json.Unmarshal(body, &o) == nil && o.Outcome.Status == "succeeded"
 		}
 		if fa.roles[id] == "other" {
-			var r record.Record
+			var r record.RoleRecord
 			if json.Unmarshal(body, &r) == nil && r.Stage == "verify" {
-				failed = !r.Accepted() && r.FailureReason == "model_timeout" && len(r.Verifications) == 1 && r.Verifications[0].Verdict == record.VerdictUnreviewed
+				failed = !r.Accepted() && r.FailureReason == "model_timeout" && len(r.Verifications) == len(r.Candidates) && len(r.Verifications) > 0 &&
+					r.Verifications[0].Verdict == record.VerdictUnreviewed
 			}
 		}
 	}

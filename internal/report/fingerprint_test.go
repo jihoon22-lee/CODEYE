@@ -43,14 +43,13 @@ func TestToolFingerprintIgnoresPositions(t *testing.T) {
 // platform fixed, not from the model's wording or citation order.
 func TestModelFingerprintStableAcrossTitles(t *testing.T) {
 	compose := func(edit func(states map[string]*taskState)) Finding {
-		states, _ := exampleStages(t)
+		states, base := exampleRoleStages(t)
 		if edit != nil {
 			edit(states)
 		}
-		r := Report{Inputs: Inputs{SnapshotID: "snap"}}
-		composeReviews(&r, states, newSet())
-		if len(r.Findings) != 1 || r.Coverage.AIReview.Status != "" {
-			t.Fatalf("findings=%d", len(r.Findings))
+		r, _, lim := compose(states, base)
+		if len(r.Findings) != 2 || len(lim) != 0 {
+			t.Fatalf("findings=%d limitations %v", len(r.Findings), lim)
 		}
 		if err := validateFinding(r.Findings[0], "snap", nil, nil); err != nil {
 			t.Fatal(err)
@@ -64,7 +63,7 @@ func TestModelFingerprintStableAcrossTitles(t *testing.T) {
 	}
 	reworded := compose(func(states map[string]*taskState) {
 		for _, key := range []string{"review.investigate", "review.verify"} {
-			c := &states[key].reviewResult.Record.Candidates[0]
+			c := &states[key].reviewResult.Role.Candidates[0]
 			c.Title, c.Condition, c.Impact, c.Improvement = "다르게 쓴 제목: "+c.Title, "다른 조건", "다른 영향", "다른 개선"
 			slices.Reverse(c.Evidence)
 		}
@@ -84,7 +83,7 @@ func TestModelFingerprintStableAcrossTitles(t *testing.T) {
 		t.Fatalf("unverified candidate shares the verified identity (%s)", unverified.Validation)
 	}
 	recategorized := compose(func(states map[string]*taskState) {
-		v := &states["review.verify"].reviewResult.Record.Verifications[0]
+		v := &states["review.verify"].reviewResult.Role.Verifications[0]
 		if v.Category == "security" {
 			v.Category = "concurrency"
 		} else {

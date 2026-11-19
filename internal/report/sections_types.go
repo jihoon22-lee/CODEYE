@@ -419,11 +419,9 @@ type SecretDetection struct {
 // CodeReviewSection is the model code review: pack, roles, calls, what the
 // model saw, the candidates and their verification outcome.
 type CodeReviewSection struct {
-	Stage SectionStage `json:"stage"`
-	// Pack is "role", "legacy" or "none" (no review task planned).
-	Pack        string  `json:"pack"`
-	PackID      *string `json:"pack_id"`
-	PackVersion *string `json:"pack_version"`
+	Stage       SectionStage `json:"stage"`
+	PackID      *string      `json:"pack_id"`
+	PackVersion *string      `json:"pack_version"`
 	// Roles are the code_review stage review tasks with their result.
 	Roles         []AIReviewTask `json:"roles"`
 	Calls         int            `json:"calls"`

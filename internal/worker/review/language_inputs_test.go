@@ -28,12 +28,11 @@ type sel struct {
 	path, kind string
 }
 
-// langCase is one language fixture: the legacy-pack corpus it must select
-// (in order; every file whole from line 1), the role-pack code excerpts in
-// order, and the source line of the synthetic analyzer observation.
+// langCase is one language fixture: the code excerpts the review must
+// select, in order, and the source line of the synthetic analyzer
+// observation.
 type langCase struct {
 	eco         string
-	legacy      []sel
 	role        []sel
 	obsPath     string
 	obsLine     int
@@ -42,17 +41,13 @@ type langCase struct {
 
 var langCases = []langCase{
 	{eco: "cpp",
-		legacy: []sel{{"src/main.cc", "code"}, {"README.md", "document"}, {"include/ring.h", "code"}, {"src/ring.cc", "code"}, {"CMakeLists.txt", "config"}, {"tests/ring_test.cc", "test"}},
-		role:   []sel{{"src/main.cc", "code"}, {"include/ring.h", "code"}, {"src/ring.cc", "code"}, {"tests/ring_test.cc", "test"}}, obsPath: "src/ring.cc", obsLine: 8},
+		role: []sel{{"src/main.cc", "code"}, {"include/ring.h", "code"}, {"src/ring.cc", "code"}, {"tests/ring_test.cc", "test"}}, obsPath: "src/ring.cc", obsLine: 8},
 	{eco: "python",
-		legacy: []sel{{"app/__main__.py", "code"}, {"README.md", "document"}, {"app/__init__.py", "code"}, {"app/store.py", "code"}, {"pyproject.toml", "config"}, {"tests/test_store.py", "test"}},
-		role:   []sel{{"app/__main__.py", "code"}, {"app/__init__.py", "code"}, {"app/store.py", "code"}, {"tests/test_store.py", "test"}}, obsPath: "app/store.py", obsLine: 16},
+		role: []sel{{"app/__main__.py", "code"}, {"app/__init__.py", "code"}, {"app/store.py", "code"}, {"tests/test_store.py", "test"}}, obsPath: "app/store.py", obsLine: 16},
 	{eco: "javascript",
-		legacy: []sel{{"src/index.ts", "code"}, {"README.md", "document"}, {"src/queue.ts", "code"}, {"package.json", "config"}, {"tsconfig.json", "config"}, {"src/queue.test.ts", "test"}},
-		role:   []sel{{"src/index.ts", "code"}, {"src/queue.ts", "code"}, {"src/queue.test.ts", "test"}}, obsPath: "src/queue.ts", obsLine: 29},
+		role: []sel{{"src/index.ts", "code"}, {"src/queue.ts", "code"}, {"src/queue.test.ts", "test"}}, obsPath: "src/queue.ts", obsLine: 29},
 	{eco: "rust",
-		legacy: []sel{{"src/lib.rs", "code"}, {"src/main.rs", "code"}, {"README.md", "document"}, {"src/parse.rs", "code"}, {"Cargo.toml", "config"}, {"tests/parse.rs", "test"}},
-		role:   []sel{{"src/lib.rs", "code"}, {"src/main.rs", "code"}, {"src/parse.rs", "code"}, {"tests/parse.rs", "test"}}, obsPath: "src/parse.rs", obsLine: 11},
+		role: []sel{{"src/lib.rs", "code"}, {"src/main.rs", "code"}, {"src/parse.rs", "code"}, {"tests/parse.rs", "test"}}, obsPath: "src/parse.rs", obsLine: 11},
 }
 
 func langJob(t *testing.T, eco string) analysis.Job {
@@ -162,62 +157,6 @@ func (s langStub) Run(_ context.Context, j analysis.Job, t analysis.TaskSpec, _ 
 func (c langCase) stub() langStub {
 	manifest := map[string]string{"cpp": "CMakeLists.txt", "python": "pyproject.toml", "javascript": "package.json", "rust": "Cargo.toml"}[c.eco]
 	return langStub{eco: c.eco, path: c.obsPath, line: c.obsLine, manifest: manifest}
-}
-
-// The legacy-pack corpus on each language fixture: entry points, the README,
-// sources, manifests, tests, each whole from line 1 within the unchanged
-// budgets; deterministic across acquisitions. The three roles then run and
-// every record decodes against the snapshot (evidence IDs, kinds by path).
-func TestLegacyCorpusPerLanguage(t *testing.T) {
-	for _, c := range langCases {
-		t.Run(c.eco, func(t *testing.T) {
-			j := langJob(t, c.eco)
-			corpus, err := buildCorpus(j.Snapshot, j.Scope)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var got []sel
-			for _, e := range corpus.Excerpts {
-				got = append(got, sel{e.Path, e.Kind})
-				if e.Start != 1 || e.End != lineCount(t, j, e.Path) || e.ID != record.ExcerptID(j.Snapshot.Digest, e.Path, e.SHA256, 1, e.End) {
-					t.Fatalf("excerpt %+v", e)
-				}
-			}
-			if !slices.Equal(got, c.legacy) || corpus.Eligible != len(c.legacy) || corpus.Documents != 1 || len(corpus.Limitations) != 0 {
-				t.Fatalf("legacy corpus %v eligible=%d docs=%d lims=%v", got, corpus.Eligible, corpus.Documents, corpus.Limitations)
-			}
-			// Deterministic: two acquisitions with the same identity send the
-			// same bytes.
-			first, second := legacyRequests(t, fixIdentity(langJob(t, c.eco))), legacyRequests(t, fixIdentity(langJob(t, c.eco)))
-			if len(first) != 3 || !slices.Equal(first, second) {
-				t.Fatalf("legacy requests %v / %v", first, second)
-			}
-			f := legacyGeneric(t)
-			_, r := runStages(t, j, f)
-			if r.Status != domain.TaskSucceeded {
-				t.Fatalf("verify %+v", r)
-			}
-			for _, role := range []string{"context", "investigate"} {
-				if _, err := readRecord(j, role); err != nil {
-					t.Fatalf("%s record: %v", role, err)
-				}
-			}
-			v := readVerify(t, j, r)
-			if len(v.Candidates) != 1 || len(v.Verifications) != 1 || record.SourceEcosystem(evidencePath(v.Evidence, v.Candidates[0].Evidence[0])) != c.eco ||
-				!slices.Contains(v.Limitations, limExpansionGoOnly) || !slices.Contains(v.Limitations, limNoSymbol) {
-				t.Fatalf("legacy verify record %+v", v)
-			}
-		})
-	}
-}
-
-func evidencePath(list []record.Excerpt, id string) string {
-	for _, e := range list {
-		if e.ID == id {
-			return e.Path
-		}
-	}
-	return ""
 }
 
 // The role pack on each language-only snapshot: investigate gets code excerpts
@@ -412,18 +351,6 @@ func TestReviewInputExclusionsHonoured(t *testing.T) {
 			t.Fatalf("the snapshot dropped %s; the test would not exercise the review rule", p)
 		}
 	}
-	c, err := buildCorpus(j.Snapshot, j.Scope)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.Eligible != len(own) || !slices.Contains(c.Limitations, limExcludedSource) {
-		t.Fatalf("legacy eligible %d, want %d; limitations %v", c.Eligible, len(own), c.Limitations)
-	}
-	for _, e := range c.Excerpts {
-		if _, ok := own[e.Path]; !ok {
-			t.Fatalf("legacy excerpt of %s", e.Path)
-		}
-	}
 	s := &roleStage{h: RoleHandler{Caller: &roleCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
 	code, lims, err := s.codeCorpus()
 	if err != nil {
@@ -436,37 +363,14 @@ func TestReviewInputExclusionsHonoured(t *testing.T) {
 	slices.Sort(paths)
 	if !slices.Equal(paths, []string{"app/main.py", "app/util.py", "crate/src/lib.rs", "internal/build/b.go", "native/main.cc", "web/index.js"}) || slices.Contains(lims, "files_outside_review_context") ||
 		!slices.Contains(lims, limExcludedSource) {
-		t.Fatalf("role-pack code corpus %v limitations %v", paths, lims)
-	}
-	for _, p := range excluded {
-		if r, _ := priority(p, newOtherScope(j.Snapshot.Manifest, j.Scope)); r != 5 {
-			t.Fatalf("legacy priority of %s is %d", p, r)
-		}
-	}
-
-	// Build files alone: on a Python-only snapshot, only pyproject.toml is
-	// a manifest of the corpus.
-	j = treeJob(t, map[string]string{"pyproject.toml": "[project]\nname = \"p\"\n", "p/m.py": "x = 1\n", "package.json": "{}\n", "tsconfig.json": "{}\n",
-		"Cargo.toml": "[package]\nname = \"p\"\n", "CMakeLists.txt": "project(p)\n", "compile_commands.json": "[]\n", "setup.cfg": "[metadata]\nname = p\n"})
-	c, err = buildCorpus(j.Snapshot, j.Scope)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var configs []string
-	for _, e := range c.Excerpts {
-		if e.Kind == "config" {
-			configs = append(configs, e.Path)
-		}
-	}
-	if !slices.Equal(configs, []string{"pyproject.toml", "setup.cfg"}) || c.Eligible != 3 {
-		t.Fatalf("configs %v eligible %d", configs, c.Eligible)
+		t.Fatalf("code corpus %v limitations %v", paths, lims)
 	}
 }
 
 // The secrets screen covers the other languages' inputs: on a Python-only snapshot a
-// file the secrets task reports reaches no request of either pack (code
-// context, observation window, verification), and an unusable scan sends
-// nothing at all.
+// file the secrets task reports reaches no request (code context,
+// observation window, verification), and an unusable scan leaves every
+// record saying the inputs were not screened.
 func TestSecretScreenOnPython(t *testing.T) {
 	value := "deploy-token-" + strings.Repeat("p4", 10) // not a Sensitive shape
 	planted := func(t *testing.T) analysis.Job {
@@ -492,7 +396,6 @@ func TestSecretScreenOnPython(t *testing.T) {
 	for _, mode := range []string{"hit", "failed", "missing"} {
 		t.Run(mode, func(t *testing.T) {
 			stub.secrets, stub.secretPath = mode, "app/store.py"
-			// Role pack.
 			j := planted(t)
 			f := &roleCaller{script: maxScript(t)}
 			plan, res := runRole(t, j, stub, f, "1.27.4")
@@ -533,30 +436,6 @@ func TestSecretScreenOnPython(t *testing.T) {
 					}
 				}
 			}
-			// Legacy pack.
-			j = planted(t)
-			fv := legacyGeneric(t)
-			h := Handler{Static: stub, Caller: fv}
-			for _, task := range []string{"lint", "secrets"} {
-				h.Run(t.Context(), j, analysis.TaskSpec{Key: task}, nil)
-			}
-			r := h.Run(t.Context(), j, analysis.TaskSpec{Key: "review.context"}, nil)
-			if mode != "hit" {
-				rec, err := readRecord(j, "context")
-				if r.Status != domain.TaskSucceeded || err != nil || len(fv.requests) != 1 || !slices.Contains(rec.Limitations, limNotSecretScreened) {
-					t.Fatalf("legacy %+v %v requests %d", r, err, len(fv.requests))
-				}
-				return
-			}
-			rec, err := readRecord(j, "context")
-			if r.Status != domain.TaskSucceeded || err != nil || !slices.Contains(rec.Limitations, limSecretWithheld) || strings.Contains(string(fv.requests[0].Input), value) {
-				t.Fatalf("legacy %+v %v limitations %v", r, err, rec.Limitations)
-			}
-			for _, e := range rec.Evidence {
-				if e.Path == "app/store.py" {
-					t.Fatal("legacy evidence on the withheld file")
-				}
-			}
 		})
 	}
 }
@@ -583,9 +462,8 @@ func TestReviewSourceExtensionsMatchPack(t *testing.T) {
 }
 
 // Source the review rule leaves out is never silent: a Python project whose
-// only source lies below build/ gives the legacy pack a document-only corpus
-// and the role pack no code context, and both say why
-// (source_in_excluded_directories). investigate fails, as for any snapshot
+// only source lies below build/ gives the review no code context, and the
+// record says why (source_in_excluded_directories). investigate fails, as for any snapshot
 // without reviewable code, instead of reviewing nothing.
 func TestExcludedSourceIsExplained(t *testing.T) {
 	j := treeJob(t, map[string]string{
@@ -596,17 +474,6 @@ func TestExcludedSourceIsExplained(t *testing.T) {
 	})
 	if got := languagesInScope(j); !slices.Equal(got, []string{"python"}) {
 		t.Fatalf("ecosystems %v", got)
-	}
-	c, err := buildCorpus(j.Snapshot, j.Scope)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var kinds []string
-	for _, e := range c.Excerpts {
-		kinds = append(kinds, e.Path+":"+e.Kind)
-	}
-	if !slices.Equal(kinds, []string{"README.md:document", "pyproject.toml:config"}) || !slices.Contains(c.Limitations, limExcludedSource) {
-		t.Fatalf("legacy corpus %v limitations %v", kinds, c.Limitations)
 	}
 	f := &roleCaller{script: maxScript(t)}
 	_, res := runRole(t, j, vetStub{}, f, "1.27.4")
@@ -625,7 +492,7 @@ func TestExcludedSourceIsExplained(t *testing.T) {
 
 // Barrel files: a JS/TS index file is an entry point only in its module root
 // or that root's src, so nested re-export index files rank as ordinary
-// sources (deeper ones last) in both packs.
+// sources (deeper ones last).
 func TestBarrelIndexIsNotAnEntryPoint(t *testing.T) {
 	tree := map[string]string{
 		"package.json":        "{\"name\": \"barrels\"}\n",
@@ -639,35 +506,18 @@ func TestBarrelIndexIsNotAnEntryPoint(t *testing.T) {
 		tree["src/"+d+"/index.ts"] = "export * from \"./" + d + ".js\";\n"
 	}
 	j := treeJob(t, tree)
-	o := newOtherScope(j.Snapshot.Manifest, j.Scope)
-	for p, want := range map[string]int{"src/index.ts": 0, "pkgs/p/index.js": 0, "src/a/index.ts": 2, "src/real.ts": 2} {
-		if r, _ := priority(p, o); r != want {
-			t.Fatalf("legacy rank of %s is %d, want %d", p, r, want)
-		}
-	}
-	c, err := buildCorpus(j.Snapshot, j.Scope)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, e := range c.Excerpts {
-		got = append(got, e.Path)
-	}
-	if !slices.Equal(got, []string{"src/index.ts", "pkgs/p/index.js", "src/real.ts", "src/util.ts", "src/a/index.ts", "src/b/index.ts"}) {
-		t.Fatalf("legacy corpus %v", got)
-	}
 	s := &roleStage{h: RoleHandler{Caller: &roleCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
 	code, _, err := s.codeCorpus()
 	if err != nil {
 		t.Fatal(err)
 	}
-	got = nil
+	var got []string
 	for _, e := range code[:4] {
 		got = append(got, e.Path)
 	}
 	// Groups "." and "pkgs/p" alternate; within "." the root index, then
 	// src/real.ts and src/util.ts before any nested index file.
 	if !slices.Equal(got, []string{"src/index.ts", "pkgs/p/index.js", "src/real.ts", "src/util.ts"}) {
-		t.Fatalf("role-pack corpus %v", got)
+		t.Fatalf("code corpus %v", got)
 	}
 }

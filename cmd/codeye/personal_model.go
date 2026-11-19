@@ -36,9 +36,6 @@ func modelAgentArgs(cfg *personal.Config, layout personal.Layout) []string {
 	if m.Timeout != opencode.DefaultTimeout {
 		args = append(args, "--model-timeout", m.Timeout.String())
 	}
-	if m.ReviewPack != "" {
-		args = append(args, "--review-pack", m.ReviewPack)
-	}
 	if m.ReviewMaxCalls != 0 {
 		args = append(args, "--review-max-calls", strconv.Itoa(m.ReviewMaxCalls))
 	}

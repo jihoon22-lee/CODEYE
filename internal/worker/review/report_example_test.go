@@ -643,7 +643,7 @@ func checkReportExample(t *testing.T, r report.Report, plan []analysis.TaskSpec,
 		rows = append(rows, p.Key+"="+string(results[p.Key].Status)+":"+results[p.Key].Reason)
 	}
 	for _, l := range r.Limitations {
-		if strings.HasPrefix(l, report.LimReviewLineage) || strings.HasPrefix(l, report.LimReviewPackMismatch) || strings.HasPrefix(l, "analysis_artifact_") || strings.HasPrefix(l, "artifact_rejected") ||
+		if strings.HasPrefix(l, report.LimReviewLineage) || strings.HasPrefix(l, "analysis_artifact_") || strings.HasPrefix(l, "artifact_rejected") ||
 			strings.HasPrefix(l, "unrecognized_artifact") || strings.HasPrefix(l, "result_manifest") || strings.HasPrefix(l, "task_not_in_result_manifest") {
 			t.Fatalf("limitation %s in %v (tasks %v)", l, r.Limitations, rows)
 		}
@@ -674,7 +674,7 @@ func checkReportExample(t *testing.T, r report.Report, plan []analysis.TaskSpec,
 		t.Fatalf("metrics %+v", mt)
 	case sec == nil || len(sec.Detections) == 0 || sec.ModelInput != report.ScreenWithheld:
 		t.Fatalf("secrets %+v", sec)
-	case cr == nil || cr.Pack != "role" || len(cr.Roles) == 0 || len(cr.FindingIDs) == 0 || len(cr.Limits) == 0:
+	case cr == nil || cr.PackID == nil || len(cr.Roles) == 0 || len(cr.FindingIDs) == 0 || len(cr.Limits) == 0:
 		t.Fatalf("code review %+v", cr)
 	}
 	validations := map[string]bool{}

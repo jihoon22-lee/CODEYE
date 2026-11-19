@@ -162,7 +162,7 @@ func (c sectionContext) ledger() *ReviewLedger {
 	}
 	// The scope task holds an artifact, not a review record: it is accepted
 	// when the report kept that artifact.
-	scopeItem, _ := reviewItem(record.TaskScope, scopeState, true)
+	scopeItem, _ := reviewItem(record.TaskScope, scopeState)
 	if scopeAccepted(scopeState) {
 		scopeItem.Result = "accepted"
 	}

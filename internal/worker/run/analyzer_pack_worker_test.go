@@ -137,7 +137,7 @@ func runPackCatalog(t *testing.T, files map[string]string, tools map[string]stri
 	if catalog != nil {
 		c = catalog(t, c)
 	}
-	h, err := discovery.Wrap(review.Handler{Static: c}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
+	h, err := discovery.Wrap(review.RoleHandler{Static: c}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
 	if err != nil {
 		t.Fatal(err)
 	}

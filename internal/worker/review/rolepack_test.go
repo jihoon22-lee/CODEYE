@@ -389,30 +389,26 @@ func TestRolePackInterpretObservationLinks(t *testing.T) {
 	}
 }
 
-// The deep-review composition under discovery.Wrap with each pack: discovery
-// first, the static plan, then the pack's roles (moved here from package
-// discovery, which cannot import review).
+// The deep-review composition under discovery.Wrap: discovery first, the
+// static plan, then the review roles (tested here because package discovery
+// cannot import review).
 func TestDiscoveryCompositionPlans(t *testing.T) {
 	j := modulesJob(t, nil)
-	for pack, h := range map[string]analysis.Handler{PackLegacy: Handler{Static: vetStub{}}, PackRole: RoleHandler{Static: vetStub{}}} {
-		w, err := discovery.Wrap(h, discovery.Config{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		plan, err := w.Plan(t.Context(), j)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var keys []string
-		for _, p := range plan {
-			keys = append(keys, p.Key)
-		}
-		want := map[string][]string{
-			PackLegacy: {"env.discover", "docs.discover", "go-vet", "review.context", "review.investigate", "review.verify"},
-			PackRole:   {"env.discover", "docs.discover", "go-vet", "review.environment", "review.documents", "review.investigate", "review.interpret", "review.verify"},
-		}[pack]
-		if !slices.Equal(keys, want) || w.Info() != h.Info() {
-			t.Fatalf("%s plan %v", pack, keys)
-		}
+	h := RoleHandler{Static: vetStub{}}
+	w, err := discovery.Wrap(h, discovery.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := w.Plan(t.Context(), j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	for _, p := range plan {
+		keys = append(keys, p.Key)
+	}
+	want := []string{"env.discover", "docs.discover", "go-vet", "review.environment", "review.documents", "review.investigate", "review.interpret", "review.verify"}
+	if !slices.Equal(keys, want) || w.Info() != h.Info() {
+		t.Fatalf("plan %v", keys)
 	}
 }

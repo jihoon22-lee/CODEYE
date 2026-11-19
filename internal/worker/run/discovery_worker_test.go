@@ -57,7 +57,7 @@ func TestDiscoveryTasksThroughTheWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := discovery.Wrap(review.Handler{Static: vet}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
+	h, err := discovery.Wrap(review.RoleHandler{Static: vet}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,8 @@ func TestDiscoveryTasksThroughTheWorker(t *testing.T) {
 	want := []row{
 		{"env.discover", "succeeded", ""}, {"docs.discover", "succeeded", ""},
 		{"go-vet", "succeeded", ""}, {"go-vet.m01", "succeeded", ""}, {"go-vet.m02", "failed", govet.ReasonToolchain},
-		{"review.context", "skipped_policy", "model_source_not_approved"}, {"review.investigate", "skipped_policy", "model_source_not_approved"}, {"review.verify", "skipped_policy", "model_source_not_approved"},
+		{"review.environment", "skipped_policy", "model_source_not_approved"}, {"review.documents", "skipped_policy", "model_source_not_approved"}, {"review.investigate", "skipped_policy", "model_source_not_approved"},
+		{"review.interpret", "skipped_policy", "model_source_not_approved"}, {"review.verify", "skipped_policy", "model_source_not_approved"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("tasks %v", got)

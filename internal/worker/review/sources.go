@@ -5,9 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -86,47 +84,6 @@ func entryPoint(p string, roots otherModules) bool {
 		return stem == "main" && slices.Contains([]string{".c", ".cc", ".cpp", ".cxx", ".c++"}, ext)
 	}
 	return false
-}
-
-// otherScope is what otherPriority needs of the whole snapshot: the
-// ecosystems with source in scope (pack.InScope) and the module roots.
-type otherScope struct {
-	ecosystems []string
-	roots      otherModules
-}
-
-func newOtherScope(m source.Manifest, scope domain.Scope) otherScope {
-	files := map[string]source.Entry{}
-	for _, e := range m.Entries {
-		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil {
-			files[e.Path] = e
-		}
-	}
-	return otherScope{ecosystems: pack.InScope(m, scope), roots: otherModuleRoots(files)}
-}
-
-// otherPriority is the legacy-pack rank of a path the Go rules do not select
-// (context.go priority): entry points 0, other sources 2, build manifests 3
-// and tests 4, for ecosystems with source in scope only (pack.InScope:
-// build files alone never add a manifest). 5 is not selected.
-func otherPriority(name string, o otherScope) (rank int, kind string) {
-	ecosystems := o.ecosystems
-	if eco := record.ManifestEcosystem(name); eco != "" && eco != "go" {
-		if !slices.Contains(ecosystems, eco) || reviewDataPath(name) {
-			return 5, ""
-		}
-		return 3, "config"
-	}
-	eco := otherSource(name)
-	switch {
-	case eco == "" || !slices.Contains(ecosystems, eco):
-		return 5, ""
-	case record.IsTestPath(name):
-		return 4, "test"
-	case entryPoint(name, o.roots):
-		return 0, "code"
-	}
-	return 2, "code"
 }
 
 // otherModules indexes the module roots of the non-Go ecosystems: the

@@ -286,7 +286,7 @@ func TestBuildDeterministic(t *testing.T) {
 type fakeReview struct{ accept bool }
 
 func (fakeReview) Key() DecoderKey {
-	return DecoderKey{MediaType: "application/vnd.codeye.review+json", SchemaVersion: "0.1"}
+	return DecoderKey{MediaType: "application/vnd.codeye.review+json", SchemaVersion: "0.2"}
 }
 func (d fakeReview) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
 	if !d.accept {
@@ -298,7 +298,7 @@ func (d fakeReview) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 func withReview(t *testing.T, statuses map[string]string) *fixture {
 	t.Helper()
 	specs := []taskSpec{goVet(t)}
-	for _, k := range RequiredReviewTasks {
+	for _, k := range []string{"review.investigate", "review.verify"} {
 		if s, ok := statuses[k]; ok {
 			specs = append(specs, taskSpec{key: k, status: s, required: true})
 		}
@@ -311,7 +311,7 @@ func withReview(t *testing.T, statuses map[string]string) *fixture {
 		if !strings.HasPrefix(rm.Tasks[i].Key, "review.") {
 			continue
 		}
-		body := canonical(t, map[string]any{"schema_version": "0.1", "snapshot_manifest_digest": f.in.Snapshot.ManifestDigest})
+		body := canonical(t, map[string]any{"schema_version": "0.2", "snapshot_manifest_digest": f.in.Snapshot.ManifestDigest})
 		a := ArtifactRef{ID: domain.NewID(), RunID: f.runID, AttemptID: f.attempt, Role: "other", MediaType: "application/vnd.codeye.review+json", SHA256: domain.Digest(body), SizeBytes: int64(len(body))}
 		f.in.Artifacts = append(f.in.Artifacts, a)
 		f.in.Bodies[a.ID] = body
@@ -326,7 +326,7 @@ func withReview(t *testing.T, statuses map[string]string) *fixture {
 // planned no analyzer task at all. Neither is counted as a required task.
 func TestStaticAnalysisGapMakesTheReportPartial(t *testing.T) {
 	reg, _ := NewRegistry(GoVetDecoder{}, fakeReview{accept: true})
-	all := map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"}
+	all := map[string]string{"review.investigate": "succeeded", "review.verify": "succeeded"}
 	if r := build(t, withReview(t, all).in, reg); r.Status != StatusCompleted {
 		t.Fatalf("baseline %s %v", r.Status, r.Limitations)
 	}
@@ -379,7 +379,7 @@ func TestStaticAnalysisGapMakesTheReportPartial(t *testing.T) {
 // TC-81: completion and a clean verdict need succeeded review tasks whose
 // bytes a registered decoder accepted; a tools-only registry has none.
 func TestAIReviewGate(t *testing.T) {
-	all := map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"}
+	all := map[string]string{"review.investigate": "succeeded", "review.verify": "succeeded"}
 	f := withReview(t, all)
 	toolsOnly, _ := NewRegistry(GoVetDecoder{})
 	r := build(t, f.in, toolsOnly)
@@ -398,7 +398,7 @@ func TestAIReviewGate(t *testing.T) {
 	if r = build(t, f.in, reg); r.Status != StatusPartial || r.Coverage.AIReview.RequiredTasks[0].Result != "result_rejected" {
 		t.Fatalf("rejected review: %s %+v", r.Status, r.Coverage.AIReview)
 	}
-	f = withReview(t, map[string]string{"review.context": "succeeded", "review.investigate": "failed", "review.verify": "succeeded"})
+	f = withReview(t, map[string]string{"review.investigate": "failed", "review.verify": "succeeded"})
 	reg, _ = NewRegistry(GoVetDecoder{}, fakeReview{accept: true})
 	if r = build(t, f.in, reg); r.Status != StatusPartial || r.Coverage.AIReview.Status != AIReviewPartial {
 		t.Fatalf("one failed review task: %s %s", r.Status, r.Coverage.AIReview.Status)
@@ -786,9 +786,9 @@ func stripCodeSpans(md string) string {
 	return out.String()
 }
 
-// TC-81: all three model records cannot hide a missing required tool result.
+// TC-81: accepted model records cannot hide a missing required tool result.
 func TestMissingAnalyzerResultWithAcceptedAIReview(t *testing.T) {
-	f := withReview(t, map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"})
+	f := withReview(t, map[string]string{"review.investigate": "succeeded", "review.verify": "succeeded"})
 	delete(f.in.Bodies, f.docArt)
 	reg, _ := NewRegistry(GoVetDecoder{}, fakeReview{accept: true})
 	got := build(t, f.in, reg)
@@ -843,7 +843,7 @@ func TestRejectedGoVetCoverageCannotClaimClean(t *testing.T) {
 }
 
 func TestWithTestsProfileRequiresTestResults(t *testing.T) {
-	f := withReview(t, map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"})
+	f := withReview(t, map[string]string{"review.investigate": "succeeded", "review.verify": "succeeded"})
 	f.in.Run.Profile = "with-tests"
 	reg, _ := NewRegistry(GoVetDecoder{}, fakeReview{accept: true})
 	got := build(t, f.in, reg)

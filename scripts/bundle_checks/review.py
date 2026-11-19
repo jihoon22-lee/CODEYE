@@ -25,34 +25,6 @@ def check_environment_example(doc: dict) -> None:
             ensure(hashlib.sha256(body).hexdigest() == d["sha256"] and len(body) == d["size_bytes"], "Document blob mismatch: " + d["path"])
 
 
-def check_review_example(doc: dict) -> None:
-    """Bind the verifier example to its labelled, synthetic source fixture."""
-    root = ROOT / "internal/worker/review/testdata/verify"
-    catalog = {}
-    for e in doc["evidence"]:
-        path = PurePosixPath(e["path"])
-        ensure(not path.is_absolute() and ".." not in path.parts, "Invalid review example path")
-        file = (root / path).resolve()
-        ensure(file.is_relative_to(root) and file.is_file(), "Review evidence file is missing")
-        body = file.read_bytes()
-        start, end = e["start_line"], e["end_line"]
-        ensure(1 <= start <= end <= len(body.splitlines()), "Review evidence range outside file")
-        sha = hashlib.sha256(body).hexdigest()
-        ensure(sha == e["sha256"], "Review evidence blob mismatch")
-        binding = "\0".join([doc["snapshot_manifest_digest"], e["path"], sha, f"{start}:{end}"])
-        expected_id = "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24]
-        ensure(e["id"] == expected_id and expected_id not in catalog, "Review evidence ID mismatch")
-        catalog[expected_id] = e
-    candidates = [c["id"] for c in doc["candidates"]]
-    ensure(candidates == [v["candidate_id"] for v in doc["verifications"]], "Verification coverage mismatch")
-    for item in doc["facts"] + doc["candidates"] + doc["verifications"]:
-        for key in ("evidence_ids", "supporting_evidence_ids", "counterevidence_ids"):
-            ensure(all(ref in catalog for ref in item.get(key, [])), "Unknown review evidence")
-    verdict = doc["verifications"][0]
-    callers = [catalog[ref] for ref in verdict["counterevidence_ids"]]
-    ensure(verdict["verdict"] == "refuted" and any(e["path"] == "load.go" and e.get("origin") == "caller" for e in callers), "Missing fixture counterexample")
-
-
 ROLE_STAGES = ("environment", "documents", "investigate", "interpret", "verify")
 
 
@@ -105,11 +77,6 @@ def role_pack(languages=ROLE_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
             ensure(path.is_file(), "Missing review-r1 prompt: " + relative)
             digest.update(relative.encode("utf-8") + b"\0" + path.read_bytes() + b"\0")
         roles[role] = {"files": names, "digest": digest.hexdigest()}
-    # The domain pack and the Go guide are copies of review-v1's; the other
-    # guides are review-r1's own.
-    v1 = ROOT / "prompts/review-v1"
-    for shared in [pack["domains"], pack["languages"]["go"]]:
-        ensure((pack_file.parent / shared).read_bytes() == (v1 / shared).read_bytes(), "review-r1 copy differs from review-v1: " + shared)
     return pack, roles
 
 

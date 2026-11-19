@@ -103,7 +103,7 @@ func TestDiscoveryArtifactsDecodeWithoutChangingTheReport(t *testing.T) {
 	}
 
 	// A registry without EnvironmentDecoder flags both tasks.
-	old, err := NewRegistry(GoVetDecoder{}, ReviewDecoder{})
+	old, err := NewRegistry(GoVetDecoder{}, RoleReviewDecoder{})
 	if err != nil {
 		t.Fatal(err)
 	}

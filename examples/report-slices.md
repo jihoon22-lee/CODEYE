@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000604` rev `1` |
-| digest | `db6b40d149bb` |
+| digest | `ae3163be7dcc` |
 | status | `partial` |
 | quality\_verdict | `inconclusive` 품질 판정은 안전 인증이 아니다\. |
 | run | `0195f3a0-0000-7000-8000-000000000601` |
@@ -69,7 +69,7 @@
 
 상태\: △ 일부 수행 · 작업 22개 중 9개 성공
 
-검토 팩\: review\-r1@2\.0\.0\(역할 팩\)
+검토 팩\: review\-r1@2\.0\.0
 
 모델 호출 10회, 그중 수락 10회\(환경·문서 역할 호출 포함, 전체 합계\)\.
 
@@ -423,4 +423,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 - 범위에 이 언어의 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않았다\. \(python\)
 - upstream\_interpret\_skipped
 
-digest sha256: `db6b40d149bb34d1ff2a08898abe8ac841ff025eebcd8a71cd2ac728d4c1e9c5`
+digest sha256: `ae3163be7dccaad1f45df5c3cff0167e01652afb1e867bfb2c4ce3000c5cd747`

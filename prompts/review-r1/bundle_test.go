@@ -70,17 +70,7 @@ func TestDefaultPackSelection(t *testing.T) {
 		}
 	}
 	if _, err := For("context", []string{"go"}); err == nil {
-		t.Fatal("legacy-pack role accepted by the role pack")
-	}
-	// The shared domain pack and the Go guide are copies of the legacy
-	// pack's. The other guides are the role pack's own (the legacy pack's
-	// differ, and it has no javascript.md).
-	for _, name := range []string{"domains.md", "languages/go.md"} {
-		a, _ := os.ReadFile(name)
-		b, _ := os.ReadFile("../review-v1/" + name)
-		if len(a) == 0 || !bytes.Equal(a, b) {
-			t.Fatalf("%s differs from the legacy pack", name)
-		}
+		t.Fatal("unknown role accepted")
 	}
 }
 

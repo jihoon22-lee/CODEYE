@@ -303,7 +303,7 @@ func TestRolePackThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, l := range r.Limitations {
-				if strings.HasPrefix(l, report.LimReviewLineage) || strings.HasPrefix(l, report.LimReviewPackMismatch) || strings.HasPrefix(l, "analysis_artifact_") {
+				if strings.HasPrefix(l, report.LimReviewLineage) || strings.HasPrefix(l, "analysis_artifact_") {
 					for cid, body := range fa.artifacts {
 						if fa.media[cid] == "application/vnd.codeye.review+json" {
 							t.Logf("%s", body)
@@ -332,7 +332,7 @@ func TestRolePackThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
 			}
 			for _, call := range r.Coverage.ReviewCalls {
-				if call.PackID != review.PackRole || call.PackVersion != "2.0.0" {
+				if call.PackID != "review-r1" || call.PackVersion != "2.0.0" {
 					t.Fatalf("call %+v", call)
 				}
 			}

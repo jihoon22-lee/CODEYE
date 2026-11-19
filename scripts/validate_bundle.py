@@ -26,7 +26,7 @@ except ImportError as exc:
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
 from bundle_checks.report import check_analyzer, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_environment_example, check_review_example, check_role_pack_examples, check_slice_examples, role_pack, slice_examples
+from bundle_checks.review import ROLE_STAGES, check_environment_example, check_role_pack_examples, check_slice_examples, role_pack, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_source_names, heading_anchors
 
@@ -154,10 +154,7 @@ def main() -> None:
     print(f"PASS: Rust pack contracts (cargo check and clippy descriptors, real envelope examples; {rust_negatives} negative cases)")
     check_python_pack(validators)
     print(f"PASS: structure and secrets pack contracts (lizard, jscpd, gitleaks descriptors and real envelopes; {check_structure_pack_contracts(validators)} negative cases)")
-    review = json_file(ROOT / "examples/review-record.json")
     review_validator = validators["review-record.schema.json"]
-    review_validator.validate(review)
-    check_review_example(review)
     role_pack_doc, role_files = role_pack()
     role_raw = {stage: (ROOT / "examples/review-r1" / (stage + ".json")).read_text(encoding="utf-8") for stage in ROLE_STAGES}
     role_docs = {stage: json.loads(text) for stage, text in role_raw.items()}
@@ -213,7 +210,7 @@ def main() -> None:
         ensure(0 <= pool["min_workers"] <= pool["max_workers"], "Invalid pool bounds")
     project = yaml_file(ROOT / "examples/project.yaml")
     ensure(project["analysis"]["profile"] == "deep-review", "Unexpected example default profile")
-    pack_file = ROOT / "prompts/review-v1/pack.yaml"
+    pack_file = ROOT / "prompts/review-r1/pack.yaml"
     pack = yaml_file(pack_file)
     pack_paths = ["pack.yaml", pack["core"], pack["domains"], *pack["roles"].values(), *pack["languages"].values()]
     digest = hashlib.sha256()
@@ -369,30 +366,17 @@ def main() -> None:
     bad["checks"][-1]["id"] = "host"
     expect_invalid("missing doctor capability", validators["doctor.schema.json"].validate, bad)
     check_doctor_operations(validators["doctor.schema.json"], json_file(ROOT / "examples/doctor.json"))
-    calls_example = copy.deepcopy(published)
-    calls_example["coverage"]["review_calls"] = [
-        {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome")}
-        for call in review["calls"]]
-    validators["report.schema.json"].validate(calls_example)
-    calls_example["coverage"]["review_calls"][0]["pack_sha256"] = "invalid"
-    expect_invalid("unbound report prompt digest", validators["report.schema.json"].validate, calls_example)
-    bad = copy.deepcopy(review)
-    bad["verifications"][0]["verdict"] = "reproduced"
-    expect_invalid("model reproduction claim", review_validator.validate, bad)
-    bad = copy.deepcopy(review)
-    bad["evidence"][0]["end_line"] = 100000
-    expect_invalid("review source range", check_review_example, bad)
-    bad = copy.deepcopy(review)
-    bad["verifications"][0]["counterevidence_ids"] = ["ev_" + "0" * 24]
-    expect_invalid("unknown counterevidence", check_review_example, bad)
-    bad = copy.deepcopy(review)
-    bad["evidence"][0]["text"] = "raw source"
-    expect_invalid("source text in review record", review_validator.validate, bad)
     role_calls = copy.deepcopy(published)
     role_calls["coverage"]["review_calls"] = [
         {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome", "pack_id", "pack_version")}
         for stage in ROLE_STAGES for call in role_docs[stage]["calls"]]
     validators["report.schema.json"].validate(role_calls)
+    bad = copy.deepcopy(role_calls)
+    bad["coverage"]["review_calls"][0]["pack_sha256"] = "invalid"
+    expect_invalid("unbound report prompt digest", validators["report.schema.json"].validate, bad)
+    bad = copy.deepcopy(role_calls)
+    del bad["coverage"]["review_calls"][0]["pack_id"]
+    expect_invalid("report review call without its pack", validators["report.schema.json"].validate, bad)
     # The largest call ceiling (207: five whole-run roles and 96 slots of two calls each) fits the report; more do not.
     most = copy.deepcopy(role_calls)
     most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(207)]
@@ -428,6 +412,8 @@ def main() -> None:
         ("review-r1 interpret candidate without observation", "interpret", lambda d: d["candidates"][0].pop("observation_ids"), review_validator.validate),
         ("review-r1 failed record keeps accepted call", "documents", lambda d: [d.update(outcome="failed", failure_reason="model_timeout")] + [d.pop(k) for k in ("contracts", "conflicts", "questions", "instruction_notes")], review_validator.validate),
         ("review-r1 investigate given raw tool observations", "investigate", lambda d: d.update(observations=docs_obs), review_validator.validate),
+        ("review-r1 source range outside the file", "investigate", lambda d: d["evidence"][0].update(end_line=100000), None),
+        ("review-r1 unknown counterevidence", "verify", lambda d: d["verifications"][0].update(counterevidence_ids=[fake_id]), None),
     ]
     docs_obs = copy.deepcopy(role_docs["interpret"]["observations"])
     for name, stage, edit, check in role_negative:
@@ -450,7 +436,7 @@ def main() -> None:
     print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 23 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
-    print(f"PASS: {28 + len(section_cases) + len(role_negative)} negative cases; example policy timing; prompt manifest")
+    print(f"PASS: {25 + len(section_cases) + len(role_negative)} negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
     print(f"review-r1 default pack {role_pack_doc['version']} (Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in role_files.items()))
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
