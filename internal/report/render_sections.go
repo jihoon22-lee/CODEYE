@@ -265,7 +265,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 
 	// Overview.
 	ov := secBlock{ID: "overview", Title: title("overview")}
-	ov.Parts = append(ov.Parts, secPart{Paras: []string{tf(l, "overview_lead", lab(l, "status", r.Status), lab(l, "verdict", r.QualityVerdict))}, Counts: v.Counts})
+	ov.Parts = append(ov.Parts, secPart{Paras: append([]string{tf(l, "overview_lead", lab(l, "status", r.Status), lab(l, "verdict", r.QualityVerdict))}, pullRequestParas(r, l)...), Counts: v.Counts})
 	t := &secTable{Head: []string{l.Label("col.section"), l.Label("col.state"), l.Label("col.counts")}}
 	for _, s := range r.Overview.Sections {
 		var parts []string

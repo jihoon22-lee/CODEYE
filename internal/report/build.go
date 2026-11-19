@@ -372,11 +372,15 @@ func Build(in Input, reg *Registry) (Report, error) {
 	}
 	r.Summary = ComputeSummary(r.Findings, r.Observations)
 	r.QualityVerdict = DecideVerdict(r.Status, r.Summary, r.Coverage.AIReview.Status)
+	if in.PullRequest != nil {
+		notes.add(NotePullRequestFocus)
+	}
 	r.Coverage.Notes = notes.list()
 	r.Limitations = lim.list()
 	// The sections read the finished report and the task states; they never
 	// change a limitation, note, count, status or verdict.
 	composeSections(&r, in, states, keys, rm != nil)
+	r.PullRequest = pullRequestSection(&r, in.PullRequest, index.entries, sentPaths(states, roleRecordKeys(states)), reviewPlanned)
 	if err := ValidateReport(r); err != nil {
 		return Report{}, err
 	}
@@ -434,6 +438,9 @@ func checkInput(in Input) error {
 	}
 	if err := checkReviews(in.Reviews); err != nil {
 		return err
+	}
+	if in.PullRequest != nil && in.PullRequest.Validate() != nil {
+		return invalidf("pull request pin is invalid")
 	}
 	if in.ResultManifest != nil && !seenArt[in.ResultManifest.ID] {
 		return invalidf("result manifest is not an artifact of this attempt")
