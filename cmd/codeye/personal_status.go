@@ -28,13 +28,16 @@ type areaStatus struct {
 }
 
 type statusReport struct {
-	State      string          `json:"state"`
-	Processes  []procReport    `json:"processes"`
-	Issues     []string        `json:"issues"`
-	Controller map[string]any  `json:"controller"`
-	Agent      map[string]any  `json:"agent"`
-	InFlight   []attemptReport `json:"in_flight"`
-	Storage    []areaStatus    `json:"storage"`
+	State      string         `json:"state"`
+	Processes  []procReport   `json:"processes"`
+	Issues     []string       `json:"issues"`
+	Controller map[string]any `json:"controller"`
+	Agent      map[string]any `json:"agent"`
+	// Database: mode, and for the managed PostgreSQL its state
+	// (running, stopped, not_initialized, unavailable), port and version.
+	Database map[string]any  `json:"database"`
+	InFlight []attemptReport `json:"in_flight"`
+	Storage  []areaStatus    `json:"storage"`
 }
 
 func personalStatus(ctx context.Context, args []string, out, stderr io.Writer) int {
@@ -47,7 +50,7 @@ func personalStatus(ctx context.Context, args []string, out, stderr io.Writer) i
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	rep := statusReport{Issues: []string{}, Controller: map[string]any{}, Agent: map[string]any{}, InFlight: []attemptReport{}, Storage: []areaStatus{}}
+	rep := statusReport{Issues: []string{}, Controller: map[string]any{}, Agent: map[string]any{}, Database: map[string]any{"mode": cfg.Database.Mode}, InFlight: []attemptReport{}, Storage: []areaStatus{}}
 	// Probe the agent lock only while no start/stop runs (it takes the lock
 	// for an instant).
 	probe := false
@@ -74,6 +77,28 @@ func personalStatus(ctx context.Context, args []string, out, stderr io.Writer) i
 	node, _ := layout.AgentNodeID()
 	rep.Agent["node_id"] = node
 	var store *postgres.Store
+	dctx, dcancel := context.WithTimeout(ctx, 30*time.Second)
+	db, dberr := personalDatabase(dctx, cfg, layout, dbOptions{notices: stderr})
+	dcancel()
+	if cfg.Managed() {
+		switch {
+		case dberr != nil:
+			rep.Database["postgres"] = "unavailable"
+			rep.Database["error"] = dberr.Error()
+		case db.cluster.Bin.Dir == "":
+			rep.Database["postgres"] = "not_initialized"
+		case db.running:
+			rep.Database["postgres"] = "running"
+			rep.Database["port"] = db.port
+		default:
+			rep.Database["postgres"] = "stopped"
+		}
+		if dberr == nil && db.cluster.Bin.Dir != "" {
+			rep.Database["version"] = db.cluster.Bin.Version
+			rep.Database["bin_dir"] = db.cluster.Bin.Dir
+		}
+		rep.Database["data_dir"] = layout.PostgresData()
+	}
 	if os.Getenv("CODEYE_DATABASE_URL") != "" {
 		sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		s, err := openStore(sctx)
@@ -149,6 +174,9 @@ func personalStatus(ctx context.Context, args []string, out, stderr io.Writer) i
 			fmt.Fprintf(out, "%-10s %-12s pid=%d\n", p.Role, p.After, p.PID)
 		}
 		fmt.Fprintf(out, "controller %s ready=%v database=%v\n", cfg.Origin(), ready, store != nil)
+		if cfg.Managed() {
+			fmt.Fprintf(out, "postgres %v port=%v version=%v data=%s\n", rep.Database["postgres"], rep.Database["port"], rep.Database["version"], layout.PostgresData())
+		}
 		fmt.Fprintf(out, "agent node=%s heartbeat_fresh=%v workers=%v\n", node, heartbeatFresh, rep.Agent["workers"])
 		for _, a := range rep.InFlight {
 			fmt.Fprintf(out, "in flight: attempt %s run %s %s cleanup=%s run=%s\n", a.ID, a.RunID, a.Status, a.Cleanup, a.RunStatus)

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,86 +38,176 @@ func personalStart(ctx context.Context, args []string, out, stderr io.Writer) in
 		return 1
 	}
 	defer unlock()
-	state := layout.Inspect(cfg.Listen, true)
-	ctrlUp, agentUp := state.Running(personal.RoleController), state.Running(personal.RoleAgent)
-	if ctrlUp && agentUp {
+	up, code := bringUp(ctx, cfg, layout, bringUpOptions{}, out, stderr)
+	if up == nil {
+		return code
+	}
+	defer up.store.Close()
+	if up.already {
 		fmt.Fprintf(out, "CODEYE is already running (controller %s); see codeye status\n", cfg.Origin())
 		return 0
 	}
-	if ctrlUp || agentUp {
-		fmt.Fprintln(stderr, "CODEYE is partially running; run codeye stop first, then codeye start")
-		return 1
+	lctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := writeLoginLink(lctx, up.store, up.user, cfg.Origin(), layout.LoginLink(), out); err != nil {
+		fmt.Fprintln(stderr, "started, but no login link:", err)
 	}
+	fmt.Fprintf(out, "CODEYE started: controller %s (pid %d), agent pid %d; logs in %s\n", cfg.Origin(), up.controllerPID, up.agentPID, layout.LogDir())
+	return 0
+}
+
+// bringUpOptions are the inputs of bringUp beyond the configuration.
+type bringUpOptions struct {
+	// postgresBinDir is `codeye up --postgres-bin-dir`.
+	postgresBinDir string
+}
+
+// running is a started or reused personal installation.
+type running struct {
+	store         *postgres.Store
+	db            *personalDB
+	user          string
+	roots         []rootGrant
+	controllerPID int
+	agentPID      int
+	// already: both processes were running with the configured arguments;
+	// nothing was started.
+	already bool
+}
+
+// bringUp is the shared core of `codeye start` and `codeye up`; the caller
+// holds the personal lock. It starts the database (managed mode), brings the
+// schema up to date (managed mode migrates by itself), registers the personal
+// user and the source roots, then starts whichever of the controller and the
+// agent is not running. A running agent whose argv no longer matches the
+// configuration is drained (running work finishes) and started again. On
+// failure everything this call started is stopped again and the exit code is
+// returned with a nil result.
+func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, o bringUpOptions, out, stderr io.Writer) (*running, int) {
+	opCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	db, err := personalDatabase(opCtx, cfg, layout, dbOptions{start: true, flagBinDir: o.postgresBinDir, notices: out})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return nil, 1
+	}
+	stopDB := func() {
+		if db.started {
+			_ = db.stop(context.Background())
+		}
+	}
+	state := layout.Inspect(cfg.Listen, true)
+	ctrlUp, agentUp := state.Running(personal.RoleController), state.Running(personal.RoleAgent)
 	for _, issue := range state.Issues {
 		switch issue {
 		case personal.IssueAgentWithoutRecord:
 			fmt.Fprintln(stderr, "an agent that codeye start did not record holds", filepath.Join(layout.AgentDir(), "agent.lock"), "- it was not signalled; stop it first")
-			return 1
+			stopDB()
+			return nil, 1
 		case personal.IssueListenWithoutRecord:
-			fmt.Fprintln(stderr, "the listen address", cfg.Listen, "is already in use by a process codeye start did not record")
-			return 1
+			if cfg.ListenExplicit() {
+				fmt.Fprintln(stderr, "the listen address", cfg.Listen, "is already in use by a process codeye start did not record")
+				stopDB()
+				return nil, 1
+			}
+			free := freeListen()
+			if free == "" {
+				fmt.Fprintf(stderr, "ports %d-%d on 127.0.0.1 are all in use; set listen in the configuration\n", defaultPort, lastAutoPort)
+				stopDB()
+				return nil, 1
+			}
+			fmt.Fprintf(out, "%s is in use by another program; using %s\n", cfg.Listen, free)
+			cfg.Listen = free
 		case personal.IssueRecordUnreadable:
 			fmt.Fprintln(stderr, "a process record or lock in", layout.RunDir(), "cannot be read; inspect it before starting")
-			return 1
+			stopDB()
+			return nil, 1
 		}
 	}
 	for _, p := range state.Processes {
-		if p.Record != nil {
+		if p.Record != nil && p.State != personal.ProcRunning {
 			// Exited or reused pid: the recorded process is gone; nothing is signalled.
 			fmt.Fprintf(out, "removed stale %s record (pid %d %s)\n", p.Role, p.Record.PID, p.State)
 			_ = layout.RemoveRecord(p.Role)
 		}
 	}
-	dbURL := os.Getenv("CODEYE_DATABASE_URL")
-	if dbURL == "" {
-		fmt.Fprintln(stderr, "CODEYE_DATABASE_URL is not set (database.mode external)")
-		return 1
-	}
 	exe, err := personalExecutable()
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot resolve the codeye executable")
-		return 1
+		stopDB()
+		return nil, 1
 	}
-	opCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
 	store, err := openStore(opCtx)
 	if err != nil {
 		fmt.Fprintln(stderr, "database unavailable:", err)
-		return 1
+		stopDB()
+		return nil, 1
 	}
-	defer store.Close()
-	st, err := store.SchemaStatus(opCtx)
-	if err != nil {
-		fmt.Fprintln(stderr, "cannot read database schema status:", err)
-		return 1
+	fail := func(msg ...any) (*running, int) {
+		fmt.Fprintln(stderr, msg...)
+		store.Close()
+		if !state.Running(personal.RoleController) && !state.Running(personal.RoleAgent) {
+			stopDB()
+		}
+		return nil, 1
 	}
-	if st.State != "current" {
-		fmt.Fprintf(stderr, "database schema is %s (applied %d, this binary expects %d); back it up and run \"codeye migrate\" explicitly\n", st.State, st.Applied, st.Latest)
-		return 1
+	if err := ensureSchema(opCtx, store, cfg, db, out); err != nil {
+		return fail(err)
 	}
 	user, err := personalUser(opCtx, store, layout, out)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return fail(err)
 	}
 	roots, err := reconcileRoots(opCtx, store, cfg, user, out)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return fail(err)
 	}
 	if err := store.SetArtifactQuota(opCtx, cfg.Quota.ArtifactsBytes); err != nil {
-		fmt.Fprintln(stderr, "cannot apply the artifact quota:", err)
-		return 1
+		return fail("cannot apply the artifact quota:", err)
 	}
-	enroll, err := prepareEnrollment(opCtx, store, layout, roots, out)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+	res := &running{store: store, db: db, user: user, roots: roots}
+	var agentRec, ctrlRec *personal.Record
+	for _, p := range state.Processes {
+		if p.State == personal.ProcRunning {
+			if p.Role == personal.RoleAgent {
+				agentRec = p.Record
+			} else {
+				ctrlRec = p.Record
+			}
+		}
+	}
+	desired := agentArgv(cfg, layout, roots, false)
+	if agentUp && agentRec.Args != nil && !slices.Equal(agentRec.Args, desired) {
+		fmt.Fprintf(out, "restarting the agent: its configuration changed (running work finishes first, up to %ds)\n", cfg.Stop.DrainTimeoutSeconds)
+		if err := agentRec.Drain(); err != nil && !errors.Is(err, personal.ErrProcessGone) {
+			return fail("cannot ask the agent to drain:", signalAction(err, "drain_requested"))
+		}
+		if !waitGoneCtx(ctx, agentRec, time.Duration(cfg.Stop.DrainTimeoutSeconds)*time.Second) {
+			return fail("the agent is still finishing its work and takes no new work; run the same command again when codeye status shows it idle")
+		}
+		_ = layout.RemoveRecord(personal.RoleAgent)
+		agentUp, agentRec = false, nil
+	}
+	if ctrlUp && agentUp {
+		res.already = true
+		res.controllerPID, res.agentPID = ctrlRec.PID, agentRec.PID
+		return res, 0
+	}
+	if ctrlRec != nil {
+		res.controllerPID = ctrlRec.PID
+	}
+	enroll := false
+	if !agentUp {
+		if enroll, err = prepareEnrollment(opCtx, store, layout, roots, out); err != nil {
+			return fail(err)
+		}
+	} else {
+		res.agentPID = agentRec.PID
 	}
 	defer os.Remove(layout.EnrollToken())
 
 	started := []*personal.Record{}
-	rollback := func(why string) int {
+	rollback := func(why string) (*running, int) {
 		fmt.Fprintln(stderr, why)
 		for i := len(started) - 1; i >= 0; i-- {
 			r := started[i]
@@ -130,79 +221,100 @@ func personalStart(ctx context.Context, args []string, out, stderr io.Writer) in
 			}
 		}
 		fmt.Fprintln(stderr, "logs:", layout.LogDir())
-		return 1
-	}
-	ctrlArgs := []string{"serve", "--listen", cfg.Listen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}
-	ctrlEnv := append(childEnv("PATH", "HOME", "LANG", "TZ"), "CODEYE_DATABASE_URL="+dbURL)
-	cmd, rec, err := personal.Spawn(personal.RoleController, exe, ctrlArgs, ctrlEnv, layout.Root, layout.LogFile(personal.RoleController))
-	if err != nil {
-		if cmd != nil {
-			_ = cmd.Wait()
+		store.Close()
+		if !ctrlUp && !agentUp {
+			stopDB()
 		}
-		return rollback(err.Error())
+		return nil, 1
 	}
-	if err := layout.WriteRecord(rec); err != nil {
-		started = append(started, &rec)
-		return rollback("cannot record the controller process")
-	}
-	started = append(started, &rec)
-	ctrlWatch := watchChild(cmd)
-	deadline := time.Now().Add(personalTimings.ready)
-	for {
-		if done, code := ctrlWatch.exited(); done {
-			return rollback(fmt.Sprintf("the controller exited during start (exit %d)", code))
-		}
-		if _, ok := httpReady(cfg.Origin()); ok {
-			break
-		}
-		if time.Now().After(deadline) || ctx.Err() != nil {
-			return rollback("the controller did not become ready")
-		}
-		time.Sleep(personalTimings.poll)
-	}
-	agentArgs := agentArgv(cfg, layout, roots, enroll)
-	cmd, arec, err := personal.Spawn(personal.RoleAgent, exe, agentArgs, childEnv("PATH", "LANG"), layout.Root, layout.LogFile(personal.RoleAgent))
-	if err != nil {
-		if cmd != nil {
-			_ = cmd.Wait()
-		}
-		return rollback(err.Error())
-	}
-	started = append(started, &arec)
-	if err := layout.WriteRecord(arec); err != nil {
-		return rollback("cannot record the agent process")
-	}
-	agentWatch := watchChild(cmd)
-	deadline = time.Now().Add(personalTimings.enroll)
-	for {
-		if done, code := agentWatch.exited(); done {
-			hint := ""
-			switch code {
-			case agent.ExitEnroll:
-				hint = " (enrollment rejected)"
-			case agent.ExitRevoked:
-				hint = " (the enrolled node is revoked)"
-			case agent.ExitUsage:
-				hint = " (invalid agent configuration)"
+	if !ctrlUp {
+		ctrlArgs := []string{"serve", "--personal", "--listen", cfg.Listen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}
+		ctrlEnv := append(childEnv("PATH", "HOME", "LANG", "TZ"), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
+		cmd, rec, err := personal.Spawn(personal.RoleController, exe, ctrlArgs, ctrlEnv, layout.Root, layout.LogFile(personal.RoleController))
+		if err != nil {
+			if cmd != nil {
+				_ = cmd.Wait()
 			}
-			return rollback(fmt.Sprintf("the agent exited during start (exit %d%s)", code, hint))
+			return rollback(err.Error())
 		}
-		if node, _ := layout.AgentNodeID(); node != "" {
-			if ns, err := store.NodeStateByID(opCtx, node); err == nil && ns.Fresh && !ns.Revoked {
+		rec.Listen = cfg.Listen
+		started = append(started, &rec)
+		if err := layout.WriteRecord(rec); err != nil {
+			return rollback("cannot record the controller process")
+		}
+		ctrlWatch := watchChild(cmd)
+		deadline := time.Now().Add(personalTimings.ready)
+		for {
+			if done, code := ctrlWatch.exited(); done {
+				return rollback(fmt.Sprintf("the controller exited during start (exit %d)", code))
+			}
+			if _, ok := httpReady(cfg.Origin()); ok {
 				break
 			}
+			if time.Now().After(deadline) || ctx.Err() != nil {
+				return rollback("the controller did not become ready")
+			}
+			time.Sleep(personalTimings.poll)
 		}
-		if time.Now().After(deadline) || ctx.Err() != nil {
-			return rollback("the agent did not enroll and report a heartbeat in time")
+		res.controllerPID = rec.PID
+	}
+	if !agentUp {
+		cmd, arec, err := personal.Spawn(personal.RoleAgent, exe, agentArgv(cfg, layout, roots, enroll), childEnv("PATH", "LANG"), layout.Root, layout.LogFile(personal.RoleAgent))
+		if err != nil {
+			if cmd != nil {
+				_ = cmd.Wait()
+			}
+			return rollback(err.Error())
 		}
-		time.Sleep(personalTimings.poll)
+		arec.Args = desired
+		started = append(started, &arec)
+		if err := layout.WriteRecord(arec); err != nil {
+			return rollback("cannot record the agent process")
+		}
+		agentWatch := watchChild(cmd)
+		deadline := time.Now().Add(personalTimings.enroll)
+		for {
+			if done, code := agentWatch.exited(); done {
+				hint := ""
+				switch code {
+				case agent.ExitEnroll:
+					hint = " (enrollment rejected)"
+				case agent.ExitRevoked:
+					hint = " (the enrolled node is revoked)"
+				case agent.ExitUsage:
+					hint = " (invalid agent configuration)"
+				}
+				return rollback(fmt.Sprintf("the agent exited during start (exit %d%s)", code, hint))
+			}
+			if node, _ := layout.AgentNodeID(); node != "" {
+				if ns, err := store.NodeStateByID(opCtx, node); err == nil && ns.Fresh && !ns.Revoked {
+					break
+				}
+			}
+			if time.Now().After(deadline) || ctx.Err() != nil {
+				return rollback("the agent did not enroll and report a heartbeat in time")
+			}
+			time.Sleep(personalTimings.poll)
+		}
+		res.agentPID = arec.PID
 	}
-	_ = os.Remove(layout.EnrollToken())
-	if err := writeLoginLink(opCtx, store, user, cfg.Origin(), layout.LoginLink(), out); err != nil {
-		fmt.Fprintln(stderr, "started, but no login link:", err)
+	return res, 0
+}
+
+// Listen ports tried when the default is busy and listen is not configured.
+const (
+	defaultPort  = 7331
+	lastAutoPort = 7340
+)
+
+// freeListen returns the first free loopback address on 7331..7340 ("" when none).
+func freeListen() string {
+	for p := defaultPort; p <= lastAutoPort; p++ {
+		if personal.PortFree("127.0.0.1", p) {
+			return "127.0.0.1:" + strconv.Itoa(p)
+		}
 	}
-	fmt.Fprintf(out, "CODEYE started: controller %s (pid %d), agent pid %d; logs in %s\n", cfg.Origin(), rec.PID, arec.PID, layout.LogDir())
-	return 0
+	return ""
 }
 
 // personalUser returns the installation's user, creating it on first start.

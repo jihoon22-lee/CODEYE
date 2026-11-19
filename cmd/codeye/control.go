@@ -34,9 +34,11 @@ Usage:
   codeye source-root grant --root ROOT_ID --user USER_ID
   codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
-  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]]
+  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--personal]
                [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]]   (required for a non-loopback --listen)
-` + nodeAdminUsage + `  codeye start [--config PATH]      (personal mode, Linux: controller + local agent from one JSON config)
+` + nodeAdminUsage + `  codeye up [PATH] [--config PATH] [--postgres-bin-dir DIR] [--no-open]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH)
+  codeye open [--config PATH] [--no-open]   (a new signed-in browser link)
+  codeye start [--config PATH]      (personal mode without a project or browser)
   codeye stop [--config PATH] [--format text|json]
   codeye status [--config PATH] [--format text|json]
   codeye backup [--config PATH] [--output DIR] [--format text|json]   (default output: <backup_dir>/codeye-<UTC>)
@@ -51,12 +53,12 @@ Usage:
                [--repo-code-source-root ID ...] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
                [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1] [--review-max-calls 15..207]
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
-Login links are written to a 0600 file; the token is never printed.
+Login links: codeye login-link and codeye start write them to a 0600 file; codeye up and codeye open print them and open the browser.
 Passwords are read from --password-file (mode 0600) or standard input (echo off on a Linux terminal), never from arguments.
 "serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.
 Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
 Enrollment tokens are written to a 0600 file; the token is never printed.
-Personal mode: the config path defaults to $XDG_CONFIG_HOME/codeye/personal.json; the database is CODEYE_DATABASE_URL.
+Personal mode: the config path defaults to $XDG_CONFIG_HOME/codeye/personal.json (codeye up creates it); database.mode managed (default) runs PostgreSQL in the state directory, external uses CODEYE_DATABASE_URL.
 `
 
 const launchTTL = 10 * time.Minute
@@ -238,9 +240,22 @@ func loopbackOrigin(origin string) bool {
 	return false
 }
 
+// issueLoginURL issues a single-use launch token for user and returns the
+// login URL (origin/#launch=TOKEN).
+func issueLoginURL(ctx context.Context, s *postgres.Store, user, origin string) (string, error) {
+	if !loginOrigin(origin) {
+		return "", errors.New("origin must be http://127.0.0.1:PORT, http://localhost:PORT, http://[::1]:PORT or the server's https://HOST[:PORT] public origin")
+	}
+	token := httpapi.NewToken()
+	if err := s.IssueLaunchToken(ctx, user, httpapi.TokenHash(token), launchTTL); err != nil {
+		return "", fmt.Errorf("cannot issue login link: %w", err)
+	}
+	return origin + "/#launch=" + token, nil
+}
+
 // writeLoginLink issues a single-use launch token for user and writes the
 // login URL to path with mode 0600 via a same-directory rename, so an existing
-// symlink at path is replaced rather than followed. The token is never printed.
+// symlink at path is replaced rather than followed. The token is not printed.
 func writeLoginLink(ctx context.Context, s *postgres.Store, user, origin, path string, out io.Writer) error {
 	if !loginOrigin(origin) {
 		return errors.New("origin must be http://127.0.0.1:PORT, http://localhost:PORT, http://[::1]:PORT or the server's https://HOST[:PORT] public origin")
@@ -262,12 +277,12 @@ func writeLoginLink(ctx context.Context, s *postgres.Store, user, origin, path s
 		_ = tmp.Close()
 		return errors.New("cannot restrict login-link file permissions")
 	}
-	token := httpapi.NewToken()
-	if err := s.IssueLaunchToken(ctx, user, httpapi.TokenHash(token), launchTTL); err != nil {
+	link, err := issueLoginURL(ctx, s, user, origin)
+	if err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("cannot issue login link: %w", err)
+		return err
 	}
-	if _, err := tmp.WriteString(origin + "/#launch=" + token + "\n"); err != nil {
+	if _, err := tmp.WriteString(link + "\n"); err != nil {
 		_ = tmp.Close()
 		return errors.New("cannot write the login-link file")
 	}
@@ -308,6 +323,9 @@ type serveConfig struct {
 	artifactDir                   string
 	reconcile                     time.Duration
 	tlsCert, tlsKey, publicOrigin string
+	// personal: the controller of `codeye up`/`codeye start` (one user on
+	// this machine): browser sessions last httpapi.PersonalSessionTTL.
+	personal bool
 }
 
 func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
@@ -323,6 +341,7 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fs.StringVar(&c.tlsCert, "tls-cert", "", "")
 		fs.StringVar(&c.tlsKey, "tls-key", "", "")
 		fs.StringVar(&c.publicOrigin, "public-origin", "", "")
+		fs.BoolVar(&c.personal, "personal", false, "")
 	}) {
 		return 2
 	}
@@ -381,8 +400,12 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 
 func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig, out, stderr io.Writer) int {
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
-	srv, err := httpapi.New(httpapi.Config{Listen: c.addr, WebDir: c.webDir, Logger: logger, ArtifactDir: c.artifactDir, ReconcileInterval: c.reconcile,
-		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigin: c.publicOrigin}, store)
+	cfg := httpapi.Config{Listen: c.addr, WebDir: c.webDir, Logger: logger, ArtifactDir: c.artifactDir, ReconcileInterval: c.reconcile,
+		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigin: c.publicOrigin}
+	if c.personal {
+		cfg.SessionTTL = httpapi.PersonalSessionTTL
+	}
+	srv, err := httpapi.New(cfg, store)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2

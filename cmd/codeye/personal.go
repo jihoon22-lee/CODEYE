@@ -18,8 +18,9 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 )
 
-// Personal mode (docs/OPERATIONS.md): `codeye start|stop|status` run one loopback
-// controller and one local agent from a JSON config. Linux only.
+// Personal mode (docs/OPERATIONS.md): `codeye up|start|stop|status` run one
+// loopback controller, one local agent and (database.mode managed) one
+// PostgreSQL server from a JSON config. Linux only.
 
 // personalTimings are replaced in tests.
 var personalTimings = struct {
@@ -37,6 +38,10 @@ var personalExecutable = func() (string, error) {
 
 func runPersonal(ctx context.Context, args []string, out, stderr io.Writer) (int, bool) {
 	switch args[0] {
+	case "up":
+		return personalUp(ctx, args[1:], out, stderr), true
+	case "open":
+		return personalOpen(ctx, args[1:], out, stderr), true
 	case "start":
 		return personalStart(ctx, args[1:], out, stderr), true
 	case "stop":
@@ -64,20 +69,63 @@ func loadPersonalConfig(name string, args []string, stderr io.Writer, define fun
 	}) {
 		return nil, personal.Layout{}, false
 	}
-	if path == "" {
-		p, err := personal.DefaultPath()
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return nil, personal.Layout{}, false
-		}
-		path = p
+	path, err := personalConfigPath(path)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return nil, personal.Layout{}, false
 	}
 	cfg, err := personal.Load(path, knownTools())
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return nil, personal.Layout{}, false
 	}
-	return cfg, personal.Layout{Root: cfg.StateDir}, true
+	layout := completeConfig(cfg)
+	return cfg, layout, true
+}
+
+// personalConfigPath is --config, or the default configuration path.
+func personalConfigPath(path string) (string, error) {
+	if path == "" {
+		return personal.DefaultPath()
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", errors.New("config path cannot be resolved")
+	}
+	return abs, nil
+}
+
+// completeConfig fills what depends on this host and the running
+// installation: the controller's recorded address (when listen is not
+// configured it may have moved to a free port) and web_dir next to the
+// executable.
+func completeConfig(cfg *personal.Config) personal.Layout {
+	layout := personal.Layout{Root: cfg.StateDir}
+	if !cfg.ListenExplicit() {
+		if rec, err := layout.ReadRecord(personal.RoleController); err == nil && rec != nil && rec.Listen != "" {
+			cfg.Listen = rec.Listen
+		}
+	}
+	if cfg.WebDir == "" {
+		cfg.WebDir = defaultWebDir()
+	}
+	return layout
+}
+
+// defaultWebDir is the built web app next to the executable: <exe dir>/web/dist
+// or <exe dir>/../web/dist ("" when neither holds index.html).
+func defaultWebDir() string {
+	exe, err := personalExecutable()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Dir(exe)
+	for _, c := range []string{filepath.Join(dir, "web", "dist"), filepath.Join(filepath.Dir(dir), "web", "dist")} {
+		if st, err := os.Stat(filepath.Join(c, "index.html")); err == nil && st.Mode().IsRegular() {
+			return c
+		}
+	}
+	return ""
 }
 
 // childEnv copies only the named variables of this process.
@@ -161,10 +209,20 @@ func journalUncertainty(j *agent.Journal) string {
 	return ""
 }
 
-// personalStore opens the database named by CODEYE_DATABASE_URL.
-func personalStore(ctx context.Context) (*postgres.Store, error) {
-	if os.Getenv("CODEYE_DATABASE_URL") == "" {
-		return nil, errors.New("CODEYE_DATABASE_URL is not set")
+// personalStore opens the installation's database. In managed mode a
+// stopped server is started for the command (db.started) and the caller
+// stops it again with db.stop.
+func personalStore(ctx context.Context, cfg *personal.Config, layout personal.Layout, notices io.Writer) (*postgres.Store, *personalDB, error) {
+	db, err := personalDatabase(ctx, cfg, layout, dbOptions{start: true, notices: notices})
+	if err != nil {
+		return nil, nil, err
 	}
-	return openStore(ctx)
+	store, err := openStore(ctx)
+	if err != nil {
+		if db.started {
+			_ = db.stop(context.Background())
+		}
+		return nil, nil, err
+	}
+	return store, db, nil
 }

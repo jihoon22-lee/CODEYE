@@ -70,6 +70,12 @@ type Record struct {
 	StartTime     uint64    `json:"start_time"`
 	Executable    string    `json:"executable"`
 	StartedAt     time.Time `json:"started_at"`
+	// Listen is the controller's address (it may differ from the configured
+	// default when that port was busy).
+	Listen string `json:"listen,omitempty"`
+	// Args is the agent argv without the one-time enrollment flag; a
+	// different argv from the configuration means the agent is restarted.
+	Args []string `json:"args,omitempty"`
 }
 
 // Process states.
