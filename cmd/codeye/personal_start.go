@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -96,8 +97,20 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 			_ = db.stop(context.Background())
 		}
 	}
-	state := layout.Inspect(cfg.Listen, true)
+	state := layout.Inspect(probedListen(cfg), true)
 	ctrlUp, agentUp := state.Running(personal.RoleController), state.Running(personal.RoleAgent)
+	if !ctrlUp && !cfg.ListenExplicit() && !addrFree(cfg.Listen) {
+		// The default address moves to the next free port; stop, status
+		// and open read it from the controller record.
+		free := freeListen()
+		if free == "" {
+			fmt.Fprintf(stderr, "ports %d-%d on 127.0.0.1 are all in use; set listen in the configuration\n", defaultPort, lastAutoPort)
+			stopDB()
+			return nil, 1
+		}
+		fmt.Fprintf(out, "%s is in use by another program; using %s\n", cfg.Listen, free)
+		cfg.Listen = free
+	}
 	for _, issue := range state.Issues {
 		switch issue {
 		case personal.IssueAgentWithoutRecord:
@@ -105,19 +118,9 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 			stopDB()
 			return nil, 1
 		case personal.IssueListenWithoutRecord:
-			if cfg.ListenExplicit() {
-				fmt.Fprintln(stderr, "the listen address", cfg.Listen, "is already in use by a process codeye start did not record")
-				stopDB()
-				return nil, 1
-			}
-			free := freeListen()
-			if free == "" {
-				fmt.Fprintf(stderr, "ports %d-%d on 127.0.0.1 are all in use; set listen in the configuration\n", defaultPort, lastAutoPort)
-				stopDB()
-				return nil, 1
-			}
-			fmt.Fprintf(out, "%s is in use by another program; using %s\n", cfg.Listen, free)
-			cfg.Listen = free
+			fmt.Fprintln(stderr, "the listen address", cfg.Listen, "is already in use by a process codeye start did not record")
+			stopDB()
+			return nil, 1
 		case personal.IssueRecordUnreadable:
 			fmt.Fprintln(stderr, "a process record or lock in", layout.RunDir(), "cannot be read; inspect it before starting")
 			stopDB()
@@ -306,6 +309,26 @@ const (
 	defaultPort  = 7331
 	lastAutoPort = 7340
 )
+
+// probedListen is the address Inspect checks for a process without a
+// record. A default address that another program uses is no problem (start
+// and up move to the next free port), so only a configured one is probed.
+func probedListen(cfg *personal.Config) string {
+	if cfg.ListenExplicit() {
+		return cfg.Listen
+	}
+	return ""
+}
+
+// addrFree reports whether a listener can bind addr now.
+func addrFree(addr string) bool {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return false
+	}
+	_ = ln.Close()
+	return true
+}
 
 // freeListen returns the first free loopback address on 7331..7340 ("" when none).
 func freeListen() string {

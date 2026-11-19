@@ -75,7 +75,7 @@ func personalStop(ctx context.Context, args []string, out, stderr io.Writer) int
 	}
 	defer unlock()
 	rep := stopReport{InFlight: []attemptReport{}, AttemptsNow: []attemptReport{}, Notes: []string{}, AgentCleanup: "not_applicable", Database: "external"}
-	state := layout.Inspect(cfg.Listen, true)
+	state := layout.Inspect(probedListen(cfg), true)
 	for _, issue := range state.Issues {
 		switch issue {
 		case personal.IssueAgentWithoutRecord:

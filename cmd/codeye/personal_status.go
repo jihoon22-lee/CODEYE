@@ -60,7 +60,7 @@ func personalStatus(ctx context.Context, args []string, out, stderr io.Writer) i
 	} else if errors.Is(err, personal.ErrBusy) {
 		rep.Issues = append(rep.Issues, "operation_in_progress")
 	}
-	state := layout.Inspect(cfg.Listen, probe)
+	state := layout.Inspect(probedListen(cfg), probe)
 	rep.Issues = append(rep.Issues, state.Issues...)
 	for _, p := range state.Processes {
 		pr := procReport{Role: p.Role, Before: p.State, After: p.State, Action: "none"}

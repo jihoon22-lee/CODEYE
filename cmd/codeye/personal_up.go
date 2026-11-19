@@ -143,7 +143,7 @@ func personalOpen(ctx context.Context, args []string, out, stderr io.Writer) int
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	state := layout.Inspect(cfg.Listen, false)
+	state := layout.Inspect(probedListen(cfg), false)
 	if !state.Running(personal.RoleController) {
 		fmt.Fprintln(stderr, "CODEYE is not running; run codeye up")
 		return 1

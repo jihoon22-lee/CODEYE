@@ -111,7 +111,7 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 		return 1
 	}
 	defer unlock()
-	state := layout.Inspect(cfg.Listen, true)
+	state := layout.Inspect(probedListen(cfg), true)
 	if state.Running(personal.RoleController) || state.Running(personal.RoleAgent) || len(state.Issues) > 0 {
 		fmt.Fprintln(stderr, "the target installation is running or inconsistent; run codeye stop and check codeye status first")
 		return 1

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// TC-125 node part (docs/OPERATIONS.md#start-stop-status): a drain request lets the running
+// TC-125 node part (docs/OPERATIONS.md#up-open-start-stop-status): a drain request lets the running
 // attempt finish (succeeded, cleanup confirmed), takes no further claim
 // although work is queued, and the agent then exits cleanly (nil error,
 // exit 0) with every worker journaled as exited.
