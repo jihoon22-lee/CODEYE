@@ -14,13 +14,6 @@ import (
 // which the agent accepts only with --python-both-type-checkers); bandit is
 // security depth.
 
-// prober is the startup version probe every Python and any-ecosystem adapter
-// implements.
-type prober interface {
-	pack.Analyzer
-	Probe(ctx context.Context, runner executor.Runner, dir string) (string, error)
-}
-
 // buildPython configures one Python adapter from its --<tool> path.
 func buildPython(ctx context.Context, cfg Config, runner executor.Runner, d pack.Descriptor, node *pack.Toolchain,
 	newFn func(python.Config) (prober, error)) built {
@@ -33,16 +26,7 @@ func buildPython(ctx context.Context, cfg Config, runner executor.Runner, d pack
 		pc.BothTypeCheckers = cfg.Tools[python.MypyTool] != "" && cfg.Tools[python.PyrightTool] != ""
 	}
 	a, err := newFn(pc)
-	if err != nil {
-		return unavailable(d.Name, "invalid_config", err.Error(), pack.ReasonToolUnavailable)
-	}
-	if runner == nil || cfg.ProbeDir == "" {
-		return unavailable(d.Name, "probe_failed", "no runner or probe dir", pack.ReasonToolUnavailable)
-	}
-	if _, err := a.Probe(ctx, runner, cfg.ProbeDir); err != nil {
-		return unavailable(d.Name, "probe_failed", err.Error(), pack.ReasonToolUnavailable)
-	}
-	return built{analyzer: a}
+	return probeBuilt(ctx, cfg, runner, d.Name, a, err)
 }
 
 func buildRuff(ctx context.Context, cfg Config, runner executor.Runner, _ *govet.Handler, _ map[string]pack.Toolchain) built {

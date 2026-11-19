@@ -14,19 +14,6 @@ import (
 // Analyzers of ecosystem "any" (docs/ANALYZERS.md): lizard complexity, jscpd
 // duplication (node script) and gitleaks secrets, all extra depth.
 
-func probeBuilt(ctx context.Context, cfg Config, runner executor.Runner, name string, a prober, err error) built {
-	if err != nil {
-		return unavailable(name, "invalid_config", err.Error(), pack.ReasonToolUnavailable)
-	}
-	if runner == nil || cfg.ProbeDir == "" {
-		return unavailable(name, "probe_failed", "no runner or probe dir", pack.ReasonToolUnavailable)
-	}
-	if _, err := a.Probe(ctx, runner, cfg.ProbeDir); err != nil {
-		return unavailable(name, "probe_failed", err.Error(), pack.ReasonToolUnavailable)
-	}
-	return built{analyzer: a}
-}
-
 func buildLizard(ctx context.Context, cfg Config, runner executor.Runner, _ *govet.Handler, _ map[string]pack.Toolchain) built {
 	exe := cfg.Tools[lizard.Tool]
 	if exe == "" {

@@ -220,10 +220,6 @@ func (a *Analyzer) Probe(ctx context.Context, runner executor.Runner, dir string
 	return v, nil
 }
 
-func failed(reason string, limitations ...string) analysis.TaskResult {
-	return analysis.TaskResult{Status: domain.TaskFailed, Reason: reason, Limitations: append([]string{}, limitations...)}
-}
-
 // Selection is the recorded rule selection of a task: rule set names with
 // the measured plugin versions (a plugin upgrade changes the rule context)
 // and the flags that turn off repository configuration and in-source
@@ -261,11 +257,11 @@ func CheckArgs(configPath, suppressionsPath string, patterns []string) []string 
 func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	mods, err := jsts.Modules(job.Snapshot.Manifest, job.Scope)
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	tasks, err := plan(job, a.typed)
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	var pt *pack.Task
 	for i := range tasks {
@@ -274,7 +270,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 	}
 	if pt == nil {
-		return failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
+		return pack.Failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
 	}
 	var mod jsts.Module
 	for _, m := range mods {
@@ -283,20 +279,20 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 	}
 	if !filepath.IsAbs(job.Scratch) || !filepath.IsAbs(job.Snapshot.WorkspaceDir) || !filepath.IsAbs(job.Snapshot.SnapshotDir) {
-		return failed(analysis.ReasonHandlerError, "invalid_job_paths")
+		return pack.Failed(analysis.ReasonHandlerError, "invalid_job_paths")
 	}
 	taskDir := filepath.Join(job.Scratch, "analyzers", pt.Spec.Key)
 	if err := os.MkdirAll(filepath.Dir(taskDir), 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	if err := os.Mkdir(taskDir, 0o700); err != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	dirs := map[string]string{}
 	for _, d := range []string{"exec", "cfg", "tmp"} {
 		dirs[d] = filepath.Join(taskDir, d)
 		if err := os.Mkdir(dirs[d], 0o700); err != nil {
-			return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		}
 	}
 	files := jsts.Included(job.Snapshot.Manifest)
@@ -351,7 +347,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	suppressions := filepath.Join(dirs["cfg"], "eslint-suppressions.json")
 	if analysis.WriteFileExclusive(configPath, []byte(body)) != nil || analysis.WriteFileExclusive(suppressions, []byte("{}\n")) != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	protected := []string{job.Snapshot.SnapshotDir}
 	spec := func(args []string) executor.Spec {
@@ -381,13 +377,13 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			break
 		}
 		in.Executions = append(in.Executions, e)
-		if jsts.Stoppable(&res) {
+		if pack.Stoppable(&res) {
 			break
 		}
 		// An unidentified eslint is never run on the code: the parser is
 		// pinned to the release's output format.
 		if s.name == execVersion {
-			if _, ok := ParseVersion(res.Stdout.Data); !ok || !jsts.ExitedZero(&res) {
+			if _, ok := ParseVersion(res.Stdout.Data); !ok || !pack.ExitedZero(&res) {
 				break
 			}
 		}

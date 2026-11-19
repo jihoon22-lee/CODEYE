@@ -7,6 +7,8 @@ import (
 	"io"
 	"regexp"
 	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 )
 
 // Parser identity: `cargo ... --message-format=json`, one JSON object per line.
@@ -224,34 +226,6 @@ type Stream struct {
 	DecodeError   string
 }
 
-func skipSpace(b []byte, i int64) int64 {
-	for i < int64(len(b)) {
-		switch b[i] {
-		case ' ', '\t', '\r', '\n':
-			i++
-		default:
-			return i
-		}
-	}
-	return i
-}
-
-func classifyDecodeError(err error) string {
-	var syn *json.SyntaxError
-	var typ *json.UnmarshalTypeError
-	switch {
-	case errors.Is(err, io.ErrUnexpectedEOF):
-		return "unexpected_eof"
-	case errors.As(err, &syn):
-		return "syntax_error"
-	case errors.As(err, &typ):
-		return "type_error"
-	case strings.HasPrefix(err.Error(), "json: unknown field"):
-		return "unknown_field"
-	}
-	return "decode_error"
-}
-
 func (s *spanJSON) valid() bool {
 	return s.FileName != nil && s.ByteStart != nil && s.ByteEnd != nil && s.LineStart != nil && s.LineEnd != nil && s.ColumnStart != nil && s.ColumnEnd != nil && s.IsPrimary != nil &&
 		*s.LineStart >= 1 && *s.LineEnd >= *s.LineStart && *s.ColumnStart >= 1 && *s.ColumnEnd >= 1 && *s.ByteStart >= 0 && *s.ByteEnd >= *s.ByteStart
@@ -340,7 +314,7 @@ func ParseStream(stdout []byte) Stream {
 	var out Stream
 	dec := json.NewDecoder(bytes.NewReader(stdout))
 	for {
-		start := skipSpace(stdout, dec.InputOffset())
+		start := pack.SkipSpace(stdout, dec.InputOffset())
 		if start >= int64(len(stdout)) {
 			return out
 		}
@@ -349,7 +323,7 @@ func ParseStream(stdout []byte) Stream {
 			if errors.Is(err, io.EOF) {
 				return out
 			}
-			out.DecodeError = classifyDecodeError(err)
+			out.DecodeError = pack.ClassifyDecodeError(err)
 			out.UnparsedBytes = int64(len(stdout)) - start
 			return out
 		}

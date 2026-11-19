@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -47,23 +48,15 @@ func capture(t *testing.T, name string, res analysis.TaskResult) {
 	}
 }
 
-func ruleCount(doc obsdoc.Document) map[string]int {
-	out := map[string]int{}
-	for _, o := range doc.Observations {
-		out[o.RuleID]++
-	}
-	return out
-}
-
 // TC-07: findings make staticcheck exit 1; with only check records and a
 // clean stderr that is success_with_findings, not a crash.
 func TestRealStaticcheckFindingsExitOne(t *testing.T) {
 	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	base := filepath.Join(t.TempDir(), "공백 & (dir)")
 	fx := newFixture(t, base, findingFiles(), domain.Scope{})
-	before, snapBefore := treeHash(t, fx.SourceRoot), treeHash(t, fx.Job.Snapshot.SnapshotDir)
+	before, snapBefore := packtest.TreeHash(t, fx.SourceRoot), packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
 	a := newAnalyzer(t, "")
-	res := runTask(t, a, fx.Job, "staticcheck", &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, "staticcheck", &executor.Executor{})
 	capture(t, "findings", res)
 	doc, raw := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || doc.Outcome.PartialParse {
@@ -80,7 +73,7 @@ func TestRealStaticcheckFindingsExitOne(t *testing.T) {
 	if !slices.Equal(names, []string{execGoVersion, execVersion, execModEdit, execList, execCheck}) {
 		t.Fatalf("executions %v", names)
 	}
-	rules := ruleCount(doc)
+	rules := packtest.Rules(doc)
 	for _, r := range []string{"SA1000", "SA1012", "SA4006", "SA4023", "U1000", "SA2001"} {
 		if rules[r] == 0 {
 			t.Fatalf("rule %s missing: %v", r, rules)
@@ -111,13 +104,13 @@ func TestRealStaticcheckFindingsExitOne(t *testing.T) {
 			t.Fatalf("limitation %s missing: %v", l, doc.Limitations)
 		}
 	}
-	assertNoNodePaths(t, raw, base, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.SnapshotDir, a.resolved)
-	if treeHash(t, fx.SourceRoot) != before || treeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
+	packtest.AssertNoNodePaths(t, raw, base, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.SnapshotDir, a.resolved)
+	if packtest.TreeHash(t, fx.SourceRoot) != before || packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
 		t.Fatal("source or snapshot changed")
 	}
 	// Same input, fresh attempt: IDs are content derived.
 	fx2 := newFixture(t, "", findingFiles(), domain.Scope{})
-	doc2, _ := readEnvelope(t, fx2.Job, runTask(t, a, fx2.Job, "staticcheck", &executor.Executor{}))
+	doc2, _ := readEnvelope(t, fx2.Job, packtest.RunTask(t, a, fx2.Job, "staticcheck", &executor.Executor{}))
 	for i := range doc.Observations {
 		if doc.Observations[i].ID != doc2.Observations[i].ID {
 			t.Fatalf("observation ids differ between runs: %s %s", doc.Observations[i].ID, doc2.Observations[i].ID)
@@ -145,7 +138,7 @@ func TestRealStaticcheckSuppressionsReported(t *testing.T) {
 		{"suppressed-only", true, 0, 3, obsdoc.ExitSuccessWithoutFindings},
 	} {
 		fx := newFixture(t, "", suppressionFiles(tc.all), domain.Scope{})
-		res := runTask(t, a, fx.Job, "staticcheck", &executor.Executor{})
+		res := packtest.RunTask(t, a, fx.Job, "staticcheck", &executor.Executor{})
 		capture(t, tc.name, res)
 		doc, _ := readEnvelope(t, fx.Job, res)
 		check := res.Executions[len(res.Executions)-1]
@@ -181,7 +174,7 @@ func TestRealStaticcheckSuppressionsReported(t *testing.T) {
 func TestRealStaticcheckClean(t *testing.T) {
 	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	fx := newFixture(t, "", map[string]string{"go.mod": fixGoMod, "clean/c.go": fixClean}, domain.Scope{})
-	res := runTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
+	res := packtest.RunTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
 	capture(t, "clean", res)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithoutFindings || len(doc.Observations) != 0 || len(doc.Coverage.ProcessedPaths) != 1 {
@@ -197,7 +190,7 @@ func TestRealStaticcheckTypeErrorPartial(t *testing.T) {
 	files := findingFiles()
 	files["typeerr/t.go"] = fixType
 	fx := newFixture(t, "", files, domain.Scope{})
-	res := runTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
+	res := packtest.RunTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
 	capture(t, "typeerr", res)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonPackageErrors || doc.Outcome.ExitClass != obsdoc.ExitExecutionError || !doc.Outcome.PartialParse {
@@ -218,7 +211,7 @@ func TestRealStaticcheckOfflineConfigurationErrors(t *testing.T) {
 	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	a := newAnalyzer(t, "")
 	dep := newFixture(t, "", map[string]string{"go.mod": "module example.test/dep\n\ngo 1.22\n\nrequire golang.org/x/text v0.3.0\n", "dep.go": fixDep}, domain.Scope{})
-	res := runTask(t, a, dep.Job, "staticcheck", &executor.Executor{})
+	res := packtest.RunTask(t, a, dep.Job, "staticcheck", &executor.Executor{})
 	capture(t, "dependency", res)
 	doc, _ := readEnvelope(t, dep.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonDependency || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError {
@@ -235,7 +228,7 @@ func TestRealStaticcheckOfflineConfigurationErrors(t *testing.T) {
 		t.Fatalf("module cache gained files offline: %v", files)
 	}
 	newer := newFixture(t, "", map[string]string{"go.mod": "module example.test/newer\n\ngo 1.40\n", "n.go": "package newer\n"}, domain.Scope{})
-	res = runTask(t, a, newer.Job, "staticcheck", &executor.Executor{})
+	res = packtest.RunTask(t, a, newer.Job, "staticcheck", &executor.Executor{})
 	capture(t, "toolchain", res)
 	doc, _ = readEnvelope(t, newer.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonToolchain || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError {
@@ -248,7 +241,7 @@ func TestRealStaticcheckOfflineConfigurationErrors(t *testing.T) {
 func TestRealStaticcheckNothingAnalyzable(t *testing.T) {
 	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	fx := newFixture(t, "", map[string]string{"go.mod": fixGoMod, "tagged/t.go": fixTag}, domain.Scope{})
-	res := runTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
+	res := packtest.RunTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
 	capture(t, "no-packages", res)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskUnsupported || res.Reason != ReasonNoPackages || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError {
@@ -262,7 +255,7 @@ func TestRealStaticcheckReplaceOutsideRefused(t *testing.T) {
 	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	fx := newFixture(t, "", map[string]string{"go.mod": "module example.test/r\n\ngo 1.22\n\nreplace example.test/x => ../outside\n", "r.go": "package r\n"}, domain.Scope{})
 	runner := &mutatingRunner{inner: &executor.Executor{}}
-	res := runTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", runner)
+	res := packtest.RunTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", runner)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSkippedPolicy || res.Reason != ReasonReplaceOutside || len(runner.specs) != 3 {
 		t.Fatalf("replace %s/%s executions %d %+v", res.Status, res.Reason, len(runner.specs), doc.Outcome)
@@ -301,7 +294,7 @@ func TestRealStaticcheckDamagedOutput(t *testing.T) {
 					c.mutate(r)
 				}
 			}}
-			res := runTask(t, a, fx.Job, "staticcheck", runner)
+			res := packtest.RunTask(t, a, fx.Job, "staticcheck", runner)
 			doc, _ := readEnvelope(t, fx.Job, res)
 			if res.Status != domain.TaskFailed || res.Reason != c.reason || doc.Outcome.PartialParse != c.partial || doc.Parse.OK || doc.Coverage.ProcessedPaths != nil {
 				t.Fatalf("%s: %s/%s %+v parse %+v", c.name, res.Status, res.Reason, doc.Outcome, doc.Parse)
@@ -327,7 +320,7 @@ func TestRealStaticcheckCancelAndTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	fx2 := newFixture(t, "", findingFiles(), domain.Scope{})
-	res = runTask(t, short, fx2.Job, "staticcheck", &executor.Executor{})
+	res = packtest.RunTask(t, short, fx2.Job, "staticcheck", &executor.Executor{})
 	doc, _ = readEnvelope(t, fx2.Job, res)
 	if res.Status != domain.TaskTimedOut || doc.Outcome.ExitClass != obsdoc.ExitTimeout {
 		t.Fatalf("timeout %s %+v", res.Status, doc.Outcome)
@@ -340,10 +333,10 @@ func TestRealStaticcheckCancelAndTimeout(t *testing.T) {
 func TestRealStaticcheckVetOverlapExcluded(t *testing.T) {
 	testStaticcheck(t) // skip before building fixtures (CI has no staticcheck)
 	fx := newFixture(t, "", map[string]string{"go.mod": fixGoMod, "overlap/o.go": fixOverlap, "overlap/o_test.go": fixOverlapT}, domain.Scope{})
-	res := runTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
+	res := packtest.RunTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
 	capture(t, "overlap", res)
 	doc, _ := readEnvelope(t, fx.Job, res)
-	rules := ruleCount(doc)
+	rules := packtest.Rules(doc)
 	for code := range VetOverlap {
 		if rules[code] != 0 {
 			t.Fatalf("excluded check %s reported: %v", code, rules)

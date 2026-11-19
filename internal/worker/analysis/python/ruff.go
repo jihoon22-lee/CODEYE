@@ -132,7 +132,7 @@ func (ruffRun) execute(rc *runCtx) {
 		rc.refused = ReasonUnsafeModuleName
 		return
 	}
-	if r := rc.exec(execRuffFiles, RuffArgs(minor, m.Nested, m.Targets, "--show-files"), nil); r == nil || !exitedZero(r) {
+	if r := rc.exec(execRuffFiles, RuffArgs(minor, m.Nested, m.Targets, "--show-files"), nil); r == nil || !pack.ExitedZero(r) {
 		return
 	}
 	// Two runs: the honored run gives the active diagnostics, the
@@ -229,7 +229,7 @@ func (ruffRun) assemble(rc *runCtx) obsdoc.Document {
 
 	// --show-files: the files ruff analyzes with the same settings.
 	var processed []string
-	if r := rc.results[execRuffFiles]; r != nil && exitedZero(r) && streamsComplete(r) {
+	if r := rc.results[execRuffFiles]; r != nil && pack.ExitedZero(r) && pack.StreamsComplete(r) {
 		processed = []string{}
 		sc := bufio.NewScanner(bytes.NewReader(r.Stdout.Data))
 		sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
@@ -276,7 +276,7 @@ func (ruffRun) assemble(rc *runCtx) obsdoc.Document {
 		if shape > 0 || unparsed > 0 || decodeErr != "" {
 			bd.unparsed()
 		}
-		switch code := exitCode(r); {
+		switch code := pack.ExitCode(r); {
 		case r.Status != executor.StatusExited:
 		case code == 0 && len(diags) == 0, code == 1 && len(diags) > 0:
 		case code == 0 || code == 1:

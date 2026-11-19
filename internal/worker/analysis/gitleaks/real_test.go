@@ -12,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack/anypacktest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -59,11 +60,11 @@ func TestRealGitleaksFindsWithoutValues(t *testing.T) {
 	}
 	secret := anypacktest.Secret(t)
 	fx := anypacktest.New(t, filepath.Join(t.TempDir(), "공백 & (dir)"), fixtureFiles(secret), domain.Scope{})
-	before, snapBefore := anypacktest.TreeHash(t, fx.SourceRoot), anypacktest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
+	before, snapBefore := packtest.TreeHash(t, fx.SourceRoot), packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
 	rr := &recordingRunner{inner: &executor.Executor{}}
-	res := anypacktest.RunTask(t, a, fx.Job, Name, rr)
+	res := packtest.RunTask(t, a, fx.Job, Name, rr)
 	doc, raw := anypacktest.ReadEnvelope(t, fx.Job, res)
-	if anypacktest.TreeHash(t, fx.SourceRoot) != before || anypacktest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
+	if packtest.TreeHash(t, fx.SourceRoot) != before || packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
 		t.Fatal("gitleaks changed the source or the snapshot")
 	}
 	anypacktest.AssertAbsent(t, secret, "envelope", raw)
@@ -116,7 +117,7 @@ func TestRealGitleaksScopedRoots(t *testing.T) {
 	}
 	secret := anypacktest.Secret(t)
 	fx := anypacktest.New(t, "", fixtureFiles(secret), domain.Scope{Kind: "paths", Paths: []string{"src", "config/"}})
-	res := anypacktest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
 	doc, raw := anypacktest.ReadEnvelope(t, fx.Job, res)
 	anypacktest.AssertAbsent(t, secret, "envelope", raw)
 	anypacktest.AssertTreeAbsent(t, secret, fx.Job.Scratch)
@@ -143,7 +144,7 @@ func TestRealGitleaksClean(t *testing.T) {
 		t.Fatal(err)
 	}
 	fx := anypacktest.New(t, "", cleanFiles(), domain.Scope{})
-	res := anypacktest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
 	doc, _ := anypacktest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithoutFindings || len(doc.Observations) != 0 || len(doc.Coverage.ProcessedPaths) != 3 {
 		t.Fatalf("%s/%s %+v %+v %+v", res.Status, res.Reason, doc.Outcome, doc.Coverage, doc.ToolErrors)

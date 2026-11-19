@@ -6,7 +6,8 @@ import (
 	"errors"
 	"io"
 	"strconv"
-	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 )
 
 // element is one raw JSON value with its byte range in a stream and its
@@ -26,40 +27,12 @@ type lines struct {
 	DecodeError   string
 }
 
-func skipSpace(b []byte, i int64) int64 {
-	for i < int64(len(b)) {
-		switch b[i] {
-		case ' ', '\t', '\r', '\n':
-			i++
-		default:
-			return i
-		}
-	}
-	return i
-}
-
-func classifyDecodeError(err error) string {
-	var syn *json.SyntaxError
-	var typ *json.UnmarshalTypeError
-	switch {
-	case errors.Is(err, io.ErrUnexpectedEOF):
-		return "unexpected_eof"
-	case errors.As(err, &syn):
-		return "syntax_error"
-	case errors.As(err, &typ):
-		return "type_error"
-	case strings.HasPrefix(err.Error(), "json: unknown field"):
-		return "unknown_field"
-	}
-	return "decode_error"
-}
-
 // parseJSONLines reads stdout value by value with byte offsets.
 func parseJSONLines(stdout []byte) lines {
 	var out lines
 	dec := json.NewDecoder(bytes.NewReader(stdout))
 	for {
-		start := skipSpace(stdout, dec.InputOffset())
+		start := pack.SkipSpace(stdout, dec.InputOffset())
 		if start >= int64(len(stdout)) {
 			return out
 		}
@@ -68,7 +41,7 @@ func parseJSONLines(stdout []byte) lines {
 			if errors.Is(err, io.EOF) {
 				return out
 			}
-			out.DecodeError = classifyDecodeError(err)
+			out.DecodeError = pack.ClassifyDecodeError(err)
 			out.UnparsedBytes = int64(len(stdout)) - start
 			return out
 		}
@@ -106,7 +79,7 @@ func parseDocument(b []byte, arrays ...string) document {
 	dec := json.NewDecoder(bytes.NewReader(b))
 	tok, err := dec.Token()
 	if err != nil {
-		return fail(classifyDecodeError(err), 0)
+		return fail(pack.ClassifyDecodeError(err), 0)
 	}
 	if d, ok := tok.(json.Delim); !ok || d != '{' {
 		return fail("not_an_object", 0)
@@ -119,7 +92,7 @@ func parseDocument(b []byte, arrays ...string) document {
 		at := dec.InputOffset()
 		tok, err := dec.Token()
 		if err != nil {
-			return fail(classifyDecodeError(err), at)
+			return fail(pack.ClassifyDecodeError(err), at)
 		}
 		key, ok := tok.(string)
 		if !ok {
@@ -131,7 +104,7 @@ func parseDocument(b []byte, arrays ...string) document {
 		if !wanted[key] {
 			var raw json.RawMessage
 			if err := dec.Decode(&raw); err != nil {
-				return fail(classifyDecodeError(err), at)
+				return fail(pack.ClassifyDecodeError(err), at)
 			}
 			out.Fields[key] = raw
 			continue
@@ -139,34 +112,34 @@ func parseDocument(b []byte, arrays ...string) document {
 		at = dec.InputOffset()
 		tok, err = dec.Token()
 		if err != nil {
-			return fail(classifyDecodeError(err), at)
+			return fail(pack.ClassifyDecodeError(err), at)
 		}
 		if d, ok := tok.(json.Delim); !ok || d != '[' {
 			return fail("type_error", at)
 		}
 		elems := []element{}
 		for dec.More() {
-			start := skipSpace(b, dec.InputOffset())
+			start := pack.SkipSpace(b, dec.InputOffset())
 			if start < int64(len(b)) && b[start] == ',' {
-				start = skipSpace(b, start+1)
+				start = pack.SkipSpace(b, start+1)
 			}
 			var raw json.RawMessage
 			if err := dec.Decode(&raw); err != nil {
-				return fail(classifyDecodeError(err), start)
+				return fail(pack.ClassifyDecodeError(err), start)
 			}
 			elems = append(elems, element{Index: len(elems), Raw: raw, Start: start, End: dec.InputOffset(),
 				Pointer: "/" + key + "/" + strconv.Itoa(len(elems))})
 		}
 		if _, err := dec.Token(); err != nil {
-			return fail(classifyDecodeError(err), dec.InputOffset())
+			return fail(pack.ClassifyDecodeError(err), dec.InputOffset())
 		}
 		out.Fields[key] = json.RawMessage("[]")
 		out.Arrays[key] = elems
 	}
 	if _, err := dec.Token(); err != nil {
-		return fail(classifyDecodeError(err), dec.InputOffset())
+		return fail(pack.ClassifyDecodeError(err), dec.InputOffset())
 	}
-	if rest := skipSpace(b, dec.InputOffset()); rest < int64(len(b)) {
+	if rest := pack.SkipSpace(b, dec.InputOffset()); rest < int64(len(b)) {
 		return fail("trailing_data", rest)
 	}
 	return out

@@ -2,41 +2,17 @@ package govet
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
-	"sort"
 	"strings"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
-
-// testGo returns the go command used to build this test binary, or skips.
-// CODEYE_TEST_GO overrides it. No PATH search and no os/exec.
-func testGo(t *testing.T) string {
-	t.Helper()
-	if p := os.Getenv("CODEYE_TEST_GO"); p != "" {
-		return p
-	}
-	exe := "go"
-	if runtime.GOOS == "windows" {
-		exe = "go.exe"
-	}
-	//lint:ignore SA1019 the test needs the toolchain that built it, without PATH search
-	p := filepath.Join(runtime.GOROOT(), "bin", exe)
-	if _, err := os.Stat(p); err != nil {
-		t.Skipf("go toolchain not found at GOROOT/bin (set CODEYE_TEST_GO): %v", err)
-	}
-	return p
-}
 
 // Fixture module sources are kept as strings (not testdata .go files) so the
 // repository's gofmt/go vet runs never see the intentionally broken code.
@@ -52,94 +28,13 @@ const (
 	fixType  = "package typeerr\n\nfunc F() int { return \"s\" }\n"
 )
 
-func writeTree(t *testing.T, root string, files map[string]string) {
-	t.Helper()
-	for rel, body := range files {
-		p := filepath.Join(root, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func treeHash(t *testing.T, root string) string {
-	t.Helper()
-	h := sha256.New()
-	var paths []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(root, p)
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		line := filepath.ToSlash(rel) + "|" + info.Mode().String()
-		if d.Type().IsRegular() {
-			b, err := os.ReadFile(p)
-			if err != nil {
-				return err
-			}
-			sum := sha256.Sum256(b)
-			line += "|" + hex.EncodeToString(sum[:])
-		}
-		paths = append(paths, line)
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sort.Strings(paths)
-	for _, p := range paths {
-		h.Write([]byte(p + "\n"))
-	}
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-type fixture struct {
-	SourceRoot string
-	DataRoot   string
-	Job        analysis.Job
-}
+type fixture = packtest.Fixture
 
 // newFixture writes files into a source root, acquires a snapshot and
 // clones a fresh attempt workspace, mimicking the worker.
 func newFixture(t *testing.T, base string, files map[string]string, scope domain.Scope) fixture {
 	t.Helper()
-	if base == "" {
-		base = t.TempDir()
-	}
-	src := filepath.Join(base, "source")
-	data := filepath.Join(base, "data")
-	scratch := filepath.Join(base, "scratch")
-	writeTree(t, src, files)
-	for _, d := range []string{data, scratch} {
-		if err := os.MkdirAll(d, 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ctx := context.Background()
-	snap, err := source.AcquireLocal(ctx, src, ".", data, source.DefaultLimits())
-	if err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
-	loaded, err := source.Load(ctx, snap.Root, snap.Digest)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	ws := filepath.Join(data, "attempt-workspace")
-	if err := source.CloneWorkspace(ctx, loaded, ws); err != nil {
-		t.Fatalf("clone: %v", err)
-	}
-	loaded.WorkspaceDir = ws
-	if scope.Kind == "" {
-		scope.Kind = "full"
-	}
-	return fixture{SourceRoot: src, DataRoot: data, Job: analysis.Job{RunID: "run-1", AttemptID: "attempt-1", Epoch: 1, Profile: "deep-review", Scope: scope, Snapshot: loaded, Scratch: scratch}}
+	return packtest.NewFixture(t, base, files, scope)
 }
 
 // mutatingRunner wraps the real executor and lets a test alter one result,
@@ -190,7 +85,7 @@ func readDoc(t *testing.T, res analysis.TaskResult) (Document, []byte) {
 func newHandler(t *testing.T, cfg Config) *Handler {
 	t.Helper()
 	if cfg.GoExecutable == "" {
-		cfg.GoExecutable = testGo(t)
+		cfg.GoExecutable = packtest.GoExecutable(t)
 	}
 	h, err := New(cfg)
 	if err != nil {

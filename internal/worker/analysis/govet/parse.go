@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 )
 
 // Parser identity recorded in every observations document.
@@ -66,18 +68,6 @@ func jsonPointerToken(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "~", "~0"), "/", "~1")
 }
 
-func skipSpace(b []byte, i int64) int64 {
-	for i < int64(len(b)) {
-		switch b[i] {
-		case ' ', '\t', '\n', '\r':
-			i++
-		default:
-			return i
-		}
-	}
-	return i
-}
-
 // parseVetStream decodes go vet -json stdout. It never turns undecodable
 // output into "no findings": UnparsedBytes/ShapeErrors/DecodeError say what
 // could not be read, and everything decoded before that point is kept.
@@ -85,7 +75,7 @@ func parseVetStream(stdout []byte) vetStream {
 	var out vetStream
 	dec := json.NewDecoder(bytes.NewReader(stdout))
 	for {
-		start := skipSpace(stdout, dec.InputOffset())
+		start := pack.SkipSpace(stdout, dec.InputOffset())
 		if start >= int64(len(stdout)) {
 			out.ParsedBytes = int64(len(stdout))
 			return out
@@ -208,7 +198,7 @@ func parseListStream(stdout []byte) listStream {
 	var out listStream
 	dec := json.NewDecoder(bytes.NewReader(stdout))
 	for {
-		start := skipSpace(stdout, dec.InputOffset())
+		start := pack.SkipSpace(stdout, dec.InputOffset())
 		if start >= int64(len(stdout)) {
 			return out
 		}

@@ -12,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -75,11 +76,11 @@ func runWith(t *testing.T, a planner, fixtureName, key string, runner executor.R
 	t.Helper()
 	files := loadFixture(t, fixtureName)
 	fx := newFixture(t, files, domain.Scope{})
-	before, snapBefore := treeHash(t, fx.SourceRoot), treeHash(t, fx.Job.Snapshot.SnapshotDir)
+	before, snapBefore := packtest.TreeHash(t, fx.SourceRoot), packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
 	rr := &recordingRunner{inner: runner}
-	res := runTask(t, a, fx.Job, key, rr)
+	res := packtest.RunTask(t, a, fx.Job, key, rr)
 	doc, raw := readEnvelope(t, fx.Job, res)
-	if treeHash(t, fx.SourceRoot) != before || treeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
+	if packtest.TreeHash(t, fx.SourceRoot) != before || packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
 		t.Fatal("source or snapshot changed")
 	}
 	_ = filepath.WalkDir(fx.Job.Snapshot.WorkspaceDir, func(p string, d fs.DirEntry, err error) error {
@@ -99,7 +100,7 @@ func runWith(t *testing.T, a planner, fixtureName, key string, runner executor.R
 		}
 	}
 	paths := append([]string{fx.SourceRoot, fx.Job.Snapshot.WorkspaceDir, fx.Job.Scratch, fx.Job.Snapshot.Root, os.Getenv("HOME")}, extra...)
-	assertNoNodePaths(t, raw, paths...)
+	packtest.AssertNoNodePaths(t, raw, paths...)
 	return realRun{res: res, doc: doc, raw: raw, fx: fx, rr: rr}
 }
 

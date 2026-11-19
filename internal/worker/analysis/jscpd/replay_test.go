@@ -15,6 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack/anypacktest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -43,8 +44,8 @@ type replayed struct {
 
 func replay(t *testing.T, c replayCase) replayed {
 	t.Helper()
-	node := anypacktest.FakeExecutable(t, "node")
-	script := anypacktest.FakeExecutable(t, "run-jscpd.js")
+	node := packtest.FakeExecutable(t, "node")
+	script := packtest.FakeExecutable(t, "run-jscpd.js")
 	tc := pack.Toolchain{Name: "node", Executable: node, Dir: filepath.Dir(node), Version: "24.18.0"}
 	a, err := New(Config{Executable: script, Node: tc})
 	if err != nil {
@@ -66,7 +67,7 @@ func replay(t *testing.T, c replayCase) replayed {
 		}
 		return c.run
 	}}
-	res := anypacktest.RunTask(t, a, fx.Job, Name, r)
+	res := packtest.RunTask(t, a, fx.Job, Name, r)
 	doc, _ := anypacktest.ReadEnvelope(t, fx.Job, res)
 	return replayed{res: res, doc: doc, r: r, fx: fx, script: script, node: tc}
 }
@@ -201,7 +202,7 @@ func TestReplayNothingToCompare(t *testing.T) {
 
 func TestNewRejectsShims(t *testing.T) {
 	dir := t.TempDir()
-	node := anypacktest.FakeExecutable(t, "node")
+	node := packtest.FakeExecutable(t, "node")
 	tc := pack.Toolchain{Name: "node", Executable: node, Dir: filepath.Dir(node), Version: "24.18.0"}
 	shim := filepath.Join(dir, "jscpd")
 	if err := os.WriteFile(shim, []byte("#!/bin/sh\n"), 0o700); err != nil {
@@ -210,7 +211,7 @@ func TestNewRejectsShims(t *testing.T) {
 	if _, err := New(Config{Executable: shim, Node: tc}); err == nil {
 		t.Fatal("shell shim accepted")
 	}
-	if _, err := New(Config{Executable: anypacktest.FakeExecutable(t, "run-jscpd.js")}); err == nil {
+	if _, err := New(Config{Executable: packtest.FakeExecutable(t, "run-jscpd.js")}); err == nil {
 		t.Fatal("no node toolchain accepted")
 	}
 	if _, err := New(Config{Executable: "run-jscpd.js", Node: tc}); err == nil {

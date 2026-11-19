@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 )
 
 // Parser identity: tsc --pretty false diagnostics (TypeScript 6.0 text
@@ -157,4 +159,4 @@ func ParseVersion(stdout []byte) (string, bool) {
 const TestedSeries = "6.0"
 
 // VersionTested reports a version of the tested series.
-func VersionTested(v string) bool { return strings.HasPrefix(v, TestedSeries+".") }
+func VersionTested(v string) bool { return pack.SeriesTested(v, TestedSeries) }

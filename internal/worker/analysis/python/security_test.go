@@ -10,6 +10,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -89,7 +90,7 @@ func TestRealOptionLikeFileNames(t *testing.T) {
 				a := c.a(t)
 				fx := newFixture(t, loadFixture(t, "dashnames"), scope)
 				rr := &recordingRunner{inner: &executor.Executor{}}
-				res := runTask(t, a, fx.Job, c.tool, rr)
+				res := packtest.RunTask(t, a, fx.Job, c.tool, rr)
 				doc, _ := readEnvelope(t, fx.Job, res)
 				want := []string{"--help.py", "-x.py", "pkg/-y.py", "pkg/__init__.py"}
 				slices.Sort(want)
@@ -134,7 +135,7 @@ func canaryFiles(outside string) map[string]string {
 func writeOutside(t *testing.T) string {
 	t.Helper()
 	outside := t.TempDir()
-	writeTree(t, outside, map[string]string{
+	packtest.WriteTree(t, outside, map[string]string{
 		"canary_mod.py":        "\"\"\"" + canary + "\"\"\"\n\nCANARY = \"" + canary + "\"\n\n\ndef fetch() -> int:\n    return \"" + canary + "\"\n",
 		"ruff.toml":            "# " + canary + "\n[lint]\nselect = [\"ALL\"]\n" + canary + " = 1\n",
 		"plugin.py":            "import pathlib\n\npathlib.Path(__file__).with_name(\"PLUGIN_RAN\").write_text(\"" + canary + "\")\n\n\ndef plugin(version):\n    raise SystemExit(\"" + canary + "\")\n",
@@ -165,11 +166,11 @@ func TestRealOutsideConfigCanary(t *testing.T) {
 			}
 			a := c.a(t)
 			outside := writeOutside(t)
-			before := treeHash(t, outside)
+			before := packtest.TreeHash(t, outside)
 			fx := newFixture(t, canaryFiles(outside), domain.Scope{})
-			src := treeHash(t, fx.SourceRoot)
+			src := packtest.TreeHash(t, fx.SourceRoot)
 			rr := &recordingRunner{inner: &executor.Executor{}}
-			res := runTask(t, a, fx.Job, c.tool, rr)
+			res := packtest.RunTask(t, a, fx.Job, c.tool, rr)
 			doc, raw := readEnvelope(t, fx.Job, res)
 			if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || doc.RulePack.RepositoryConfig != obsdoc.RepoConfigOverridden {
 				t.Fatalf("%s/%s %+v %+v", res.Status, res.Reason, doc.Outcome, doc.ToolErrors)
@@ -187,7 +188,7 @@ func TestRealOutsideConfigCanary(t *testing.T) {
 					}
 				}
 			}
-			if treeHash(t, outside) != before || treeHash(t, fx.SourceRoot) != src {
+			if packtest.TreeHash(t, outside) != before || packtest.TreeHash(t, fx.SourceRoot) != src {
 				t.Fatal("a tool wrote outside the task scratch")
 			}
 			for _, p := range doc.Coverage.ProcessedPaths {
@@ -229,7 +230,7 @@ func TestRealStreamsHoldNoSourceLines(t *testing.T) {
 			}
 			fx := newFixture(t, files, domain.Scope{})
 			rr := &recordingRunner{inner: &executor.Executor{}}
-			res := runTask(t, c.a(t), fx.Job, c.tool, rr)
+			res := packtest.RunTask(t, c.a(t), fx.Job, c.tool, rr)
 			if res.Status != domain.TaskSucceeded {
 				t.Fatalf("%s/%s", res.Status, res.Reason)
 			}

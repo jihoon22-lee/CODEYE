@@ -13,6 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack/anypacktest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -42,7 +43,7 @@ func isScan(s executor.Spec) bool { return len(s.Args) > 1 && s.Args[0] == "dir"
 
 func replay(t *testing.T, c replayCase) replayed {
 	t.Helper()
-	fake := anypacktest.FakeExecutable(t, Name)
+	fake := packtest.FakeExecutable(t, Name)
 	a, err := New(Settings{Executable: fake})
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +64,7 @@ func replay(t *testing.T, c replayCase) replayed {
 		}
 		return c.scans[ScanRoot(spec.Args)]
 	}}
-	res := anypacktest.RunTask(t, a, fx.Job, Name, r)
+	res := packtest.RunTask(t, a, fx.Job, Name, r)
 	doc, _ := anypacktest.ReadEnvelope(t, fx.Job, res)
 	return replayed{res: res, doc: doc, r: r, fx: fx}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -32,10 +33,10 @@ func TestRealTargetEvidence(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	srcBefore := treeHash(t, target)
+	srcBefore := packtest.TreeHash(t, target)
 	mcBefore := ""
 	if modcache != "" {
-		mcBefore = treeHash(t, modcache)
+		mcBefore = packtest.TreeHash(t, modcache)
 	}
 	snap, err := source.AcquireLocal(ctx, target, ".", data, source.DefaultLimits())
 	if err != nil {
@@ -50,7 +51,7 @@ func TestRealTargetEvidence(t *testing.T) {
 		t.Fatalf("clone: %v", err)
 	}
 	loaded.WorkspaceDir = ws
-	snapBefore := treeHash(t, loaded.SnapshotDir)
+	snapBefore := packtest.TreeHash(t, loaded.SnapshotDir)
 	job := analysis.Job{RunID: "evidence-run", AttemptID: "evidence-attempt", Epoch: 1, Profile: "deep-review", Scope: domain.Scope{Kind: "full"}, Snapshot: loaded, Scratch: scratch}
 	h := newHandler(t, Config{GoModCache: modcache})
 	tasks, err := h.Plan(ctx, job)
@@ -78,10 +79,10 @@ func TestRealTargetEvidence(t *testing.T) {
 	summary := map[string]any{
 		"manifest_digest":     loaded.Digest,
 		"manifest_entries":    len(loaded.Manifest.Entries),
-		"source_unchanged":    treeHash(t, target) == srcBefore,
-		"snapshot_unchanged":  treeHash(t, loaded.SnapshotDir) == snapBefore,
+		"source_unchanged":    packtest.TreeHash(t, target) == srcBefore,
+		"snapshot_unchanged":  packtest.TreeHash(t, loaded.SnapshotDir) == snapBefore,
 		"modcache_configured": modcache != "",
-		"modcache_unchanged":  modcache == "" || treeHash(t, modcache) == mcBefore,
+		"modcache_unchanged":  modcache == "" || packtest.TreeHash(t, modcache) == mcBefore,
 		"tasks":               ev,
 	}
 	raw, err := json.MarshalIndent(summary, "", "  ")

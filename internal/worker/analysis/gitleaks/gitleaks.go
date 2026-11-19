@@ -92,7 +92,7 @@ func ParseVersion(stdout []byte) (string, bool) {
 }
 
 // VersionTested reports the pinned series.
-func VersionTested(v string) bool { return anypack.SeriesTested(v, TestedSeries) }
+func VersionTested(v string) bool { return pack.SeriesTested(v, TestedSeries) }
 
 // Descriptor is gitleaks' pack identity: an extra-depth analyzer of every
 // supported language snapshot (ecosystem any).
@@ -347,12 +347,12 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	if !in.ScratchFailed && !in.Integrity && !in.ConfigRejected && !in.Linked {
 		env := a.tool.Env(nil)
 		in.Version = r.Exec(ctx, runner, execVersion, r.Spec(a.tool, env, anypack.ProbeTimeout, 64<<10, 64<<10, "version"))
-		if !anypack.Stoppable(in.Version) && anypack.ExitedZero(in.Version) {
+		if !pack.Stoppable(in.Version) && pack.ExitedZero(in.Version) {
 			if _, ok := ParseVersion(in.Version.Stdout.Data); ok {
 				for i, root := range in.Roots {
 					res := r.Exec(ctx, runner, execName(i, len(in.Roots)), r.Spec(a.tool, env, a.cfg.Timeout, a.cfg.StdoutLimit, a.cfg.StderrLimit, ScanArgs(root, cfg, ignore, tmpl)...))
 					in.Scans = append(in.Scans, scan{Root: root, Exec: execName(i, len(in.Roots)), Result: res})
-					if anypack.Stoppable(res) {
+					if pack.Stoppable(res) {
 						break
 					}
 				}

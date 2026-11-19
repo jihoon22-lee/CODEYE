@@ -1,15 +1,14 @@
 // Package anypacktest holds the fixtures the adapter tests of the any-ecosystem analyzers share
-// (docs/ANALYZERS.md): a snapshot with an attempt workspace, one task run through
-// a given runner, the envelope read back, tool executions replayed from
-// captured streams, and the generated fake secret with its leak checks. Only
-// tests import it.
+// (docs/ANALYZERS.md): a snapshot with an attempt workspace (and hostile links),
+// the envelope read back, tool executions replayed from captured streams,
+// and the generated fake secret with its leak checks; task runs and tree
+// hashes come from packtest. Only tests import it.
 package anypacktest
 
 import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"io/fs"
 	"os"
@@ -22,7 +21,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -141,80 +140,10 @@ func Text(m map[string]string) map[string][]byte {
 	return out
 }
 
-// RunTask plans the job with a and runs the task key through runner.
-func RunTask(t testing.TB, a pack.Analyzer, job analysis.Job, key string, runner executor.Runner) analysis.TaskResult {
-	t.Helper()
-	tasks, err := a.Plan(context.Background(), job)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, task := range tasks {
-		if task.Spec.Key == key {
-			return a.Run(context.Background(), job, task.Spec, runner)
-		}
-	}
-	t.Fatalf("task %s not planned: %+v", key, tasks)
-	return analysis.TaskResult{}
-}
-
 // ReadEnvelope reads and validates the task's observations artifact.
 func ReadEnvelope(t testing.TB, job analysis.Job, res analysis.TaskResult) (obsdoc.Document, []byte) {
 	t.Helper()
-	if len(res.Artifacts) != 1 || res.Artifacts[0].Role != analysis.RoleObservations || res.Artifacts[0].MediaType != analysis.MediaObservations {
-		t.Fatalf("observations artifact missing: %+v", res)
-	}
-	raw, err := os.ReadFile(res.Artifacts[0].Path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	key := filepath.Base(filepath.Dir(res.Artifacts[0].Path))
-	doc, err := obsdoc.Decode(raw, pack.Expect(job, key))
-	if err != nil {
-		t.Fatalf("envelope invalid: %v\n%s", err, raw)
-	}
-	if dump := os.Getenv("CODEYE_STRUCTURE_DUMP"); dump != "" {
-		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + key + ".json"
-		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return doc, raw
-}
-
-// TreeHash digests the paths, modes and contents below root.
-func TreeHash(t testing.TB, root string) string {
-	t.Helper()
-	var lines []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(root, p)
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		line := filepath.ToSlash(rel) + "|" + info.Mode().String()
-		if d.Type().IsRegular() {
-			b, err := os.ReadFile(p)
-			if err != nil {
-				return err
-			}
-			sum := sha256.Sum256(b)
-			line += "|" + hex.EncodeToString(sum[:])
-		}
-		lines = append(lines, line)
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sort.Strings(lines)
-	h := sha256.New()
-	for _, l := range lines {
-		h.Write([]byte(l + "\n"))
-	}
-	return hex.EncodeToString(h.Sum(nil))
+	return packtest.ReadEnvelope(t, job, res, "CODEYE_STRUCTURE_DUMP")
 }
 
 // Recorded is one captured tool execution.
@@ -303,17 +232,6 @@ func (r *Replay) Run(_ context.Context, spec executor.Spec) executor.Result {
 		r.Mutate(spec, &res)
 	}
 	return res
-}
-
-// FakeExecutable writes a file that stands for a tool path in replay tests
-// (never executed).
-func FakeExecutable(t testing.TB, name string) string {
-	t.Helper()
-	p := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(p, []byte("not executed: replayed\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return p
 }
 
 // secretAlphabet is the base32 alphabet of the generated key body.

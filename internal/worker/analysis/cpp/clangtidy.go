@@ -184,10 +184,10 @@ func clangTidyBase(job analysis.Job, key string, l layout) obsdoc.Document {
 func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	tasks, err := PlanClangTidy(ctx, job)
 	if err != nil {
-		return failed(analysis.ReasonHandlerError, "plan_failed")
+		return pack.Failed(analysis.ReasonHandlerError, "plan_failed")
 	}
 	if !slices.ContainsFunc(tasks, func(t pack.Task) bool { return t.Spec.Key == task.Key }) {
-		return failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
+		return pack.Failed(analysis.ReasonHandlerError, pack.ReasonUnknownTask)
 	}
 	l, _ := layoutOf(job)
 	s, bad := newSession(job, task.Key, a.t, "$CLANG_TIDY")
@@ -206,7 +206,7 @@ func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 	if !ok {
 		return notRun(s, doc, domain.TaskFailed, ReasonSnapshotIntegrity, obsdoc.ExitNotRun)
 	}
-	m, err := MapDBs(l.DBs, data, l.Files, func(rel string) bool { return inScope(rel, job.Scope) })
+	m, err := MapDBs(l.DBs, data, l.Files, func(rel string) bool { return pack.PathInScope(rel, job.Scope) })
 	if err != nil {
 		return notRun(s, doc, domain.TaskFailed, ReasonCompileDBUnreadable, obsdoc.ExitNotRun)
 	}
@@ -218,7 +218,7 @@ func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 	b, err := RenderDB(s.workspace, m.Units)
 	cdbDir := s.workDir
 	if err != nil || analysis.WriteFileExclusive(filepath.Join(cdbDir, CompileDBName), b) != nil {
-		return failed(analysis.ReasonHandlerError, "scratch_unavailable")
+		return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 	}
 	for i := 0; i < len(m.Units); i += a.t.cfg.BatchSize {
 		end := min(i+a.t.cfg.BatchSize, len(m.Units))
@@ -236,7 +236,7 @@ func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 		return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Limitations: []string{"execution_write_failed"}}
 	}
 	in.Executions = append(in.Executions, e)
-	if _, known := ParseClangTidyVersion(res.Stdout.Data); known && exitedWith(res, 0) && !stoppable(res) {
+	if _, known := ParseClangTidyVersion(res.Stdout.Data); known && exitedWith(res, 0) && !pack.Stoppable(res) {
 		for bi, batch := range in.Batches {
 			if ctx.Err() != nil {
 				in.Cancelled = true
@@ -254,7 +254,7 @@ func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 				return analysis.TaskResult{Status: domain.TaskFailed, Reason: analysis.ReasonHandlerError, Executions: in.Executions, Limitations: []string{"execution_write_failed"}}
 			}
 			in.Executions = append(in.Executions, e)
-			if stoppable(res) {
+			if pack.Stoppable(res) {
 				break
 			}
 		}
@@ -599,7 +599,7 @@ func assembleClangTidy(doc obsdoc.Document, in ctInput) obsdoc.Document {
 			continue
 		}
 		ranAny = true
-		if !streamsComplete(b.res) {
+		if !pack.StreamsComplete(b.res) {
 			o.fail(domain.TaskFailed, ReasonOutputTruncated, obsdoc.ExitExecutionError)
 		}
 		if (b.exit != 0 && b.exit != 1) || len(b.errs.Fatal) > 0 {

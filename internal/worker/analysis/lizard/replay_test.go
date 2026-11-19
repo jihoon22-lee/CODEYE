@@ -13,6 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack/anypacktest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -33,7 +34,7 @@ type replayCase struct {
 
 func replay(t *testing.T, c replayCase) (analysis.TaskResult, obsdoc.Document, *anypacktest.Replay, anypacktest.Fixture) {
 	t.Helper()
-	fake := anypacktest.FakeExecutable(t, "lizard")
+	fake := packtest.FakeExecutable(t, "lizard")
 	a, err := New(Config{Executable: fake})
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +55,7 @@ func replay(t *testing.T, c replayCase) (analysis.TaskResult, obsdoc.Document, *
 		}
 		return c.run
 	}}
-	res := anypacktest.RunTask(t, a, fx.Job, Name, r)
+	res := packtest.RunTask(t, a, fx.Job, Name, r)
 	doc, _ := anypacktest.ReadEnvelope(t, fx.Job, res)
 	return res, doc, r, fx
 }

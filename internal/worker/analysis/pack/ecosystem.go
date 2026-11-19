@@ -34,15 +34,22 @@ var sourceExtensions = map[string]string{
 	".h": "cpp", ".hh": "cpp", ".hpp": "cpp", ".hxx": "cpp", ".h++": "cpp",
 }
 
-// dataDir reports a path segment the analyzers treat as data or vendored
-// code, never as the project's own source.
-func dataDir(seg string) bool {
+// DataDir reports a path segment the analyzers treat as data or vendored
+// code, never as the project's own source: hidden directories, testdata,
+// vendor and node_modules.
+func DataDir(seg string) bool {
 	return strings.HasPrefix(seg, ".") || seg == "testdata" || seg == "vendor" || seg == "node_modules"
 }
 
-// inScope reports whether a snapshot path is covered by the scope ("full"
+// UnderDataDir reports a path with a data directory segment above it.
+func UnderDataDir(p string) bool {
+	segs := strings.Split(p, "/")
+	return slices.ContainsFunc(segs[:len(segs)-1], DataDir)
+}
+
+// PathInScope reports whether a snapshot path is covered by the scope ("full"
 // or a path list; a scope path covers itself and everything below it).
-func inScope(p string, scope domain.Scope) bool {
+func PathInScope(p string, scope domain.Scope) bool {
 	if scope.Kind == "" || scope.Kind == "full" {
 		return true
 	}
@@ -62,11 +69,10 @@ func inScope(p string, scope domain.Scope) bool {
 func SourceFiles(m source.Manifest, scope domain.Scope) map[string]int {
 	out := map[string]int{}
 	for _, e := range m.Entries {
-		if e.Kind != "file" || e.ExcludedReason != "" || !inScope(e.Path, scope) {
+		if e.Kind != "file" || e.ExcludedReason != "" || !PathInScope(e.Path, scope) {
 			continue
 		}
-		segs := strings.Split(e.Path, "/")
-		if slices.ContainsFunc(segs[:len(segs)-1], dataDir) {
+		if UnderDataDir(e.Path) {
 			continue
 		}
 		if eco, ok := sourceExtensions[strings.ToLower(path.Ext(e.Path))]; ok {

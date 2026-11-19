@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 )
 
 // Parser identity: ESLint's built-in json formatter (one JSON array of file
@@ -303,7 +305,7 @@ func ParseVersion(stdout []byte) (string, bool) {
 const TestedSeries = "10.15"
 
 // VersionTested reports a version of the tested series.
-func VersionTested(v string) bool { return strings.HasPrefix(v, TestedSeries+".") }
+func VersionTested(v string) bool { return pack.SeriesTested(v, TestedSeries) }
 
 // programDiagnostic is the managed codeye/program-diagnostics message of the
 // type-aware task: "TS<code> <program|file>: <text>".
