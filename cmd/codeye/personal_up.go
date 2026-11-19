@@ -37,9 +37,16 @@ const upRunBody = `{"profile":"deep-review","source_policy":"latest_at_acquire",
 func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var configFlag, binDir string
 	var noOpen, noProbe, offline bool
+	var serveFlags personal.ServeEdit
+	listenSet := false
 	pull := pullOptions{wait: time.Hour}
 	target, rest := splitTarget(args)
 	if !parse("up", rest, stderr, func(fs *flag.FlagSet) {
+		fs.Func("listen", "", func(v string) error { serveFlags.Listen, listenSet = v, true; return nil })
+		fs.StringVar(&serveFlags.TLSCert, "tls-cert", "", "")
+		fs.StringVar(&serveFlags.TLSKey, "tls-key", "", "")
+		fs.StringVar(&serveFlags.PublicOrigin, "public-origin", "", "")
+		fs.BoolVar(&serveFlags.PlainHTTP, "plain-http", false, "")
 		fs.StringVar(&configFlag, "config", "", "")
 		fs.StringVar(&binDir, "postgres-bin-dir", "", "")
 		fs.BoolVar(&noOpen, "no-open", false, "")
@@ -94,6 +101,28 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 		}
 		fmt.Fprintln(out, "saved \"offline\": true in", path)
 	}
+	if listenSet || serveFlags.TLSCert != "" || serveFlags.TLSKey != "" || serveFlags.PublicOrigin != "" || serveFlags.PlainHTTP {
+		// How the service listens is saved, so that codeye start and the
+		// user service serve the same address.
+		if !listenSet {
+			serveFlags.Listen = cfg.Listen
+		}
+		for _, p := range []*string{&serveFlags.TLSCert, &serveFlags.TLSKey} {
+			if *p != "" {
+				if abs, err := filepath.Abs(*p); err == nil {
+					*p = abs
+				}
+			}
+		}
+		if cfg, err = personal.EditFile(path, knownTools(), personal.ConfigEdit{Serve: &serveFlags}); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		fmt.Fprintln(out, "saved how the service listens in", path)
+	}
+	if cfg.PlainHTTP {
+		fmt.Fprintln(out, "plain HTTP on", cfg.Listen, "(plain_http): sign-in cookies and passwords travel unencrypted on this network")
+	}
 	layout := completeConfig(cfg)
 	if err := layout.Prepare(); err != nil {
 		fmt.Fprintln(stderr, err)
@@ -135,9 +164,12 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	defer up.store.Close()
 	if up.already {
-		fmt.Fprintf(out, "CODEYE is already running at %s (controller pid %d, agent pid %d)\n", cfg.Origin(), up.controllerPID, up.agentPID)
+		fmt.Fprintf(out, "CODEYE is already running at %s (controller pid %d, agent pid %d)\n", cfg.ServiceOrigin(), up.controllerPID, up.agentPID)
 	} else {
-		fmt.Fprintf(out, "CODEYE is running at %s (controller pid %d, agent pid %d); logs in %s\n", cfg.Origin(), up.controllerPID, up.agentPID, layout.LogDir())
+		fmt.Fprintf(out, "CODEYE is running at %s (controller pid %d, agent pid %d); logs in %s\n", cfg.ServiceOrigin(), up.controllerPID, up.agentPID, layout.LogDir())
+	}
+	if cfg.Public() {
+		fmt.Fprintf(out, "Other people open %s; add them under 관리 > 사용자 and send them their sign-in link.\n", cfg.ServiceOrigin())
 	}
 	if cfg.WebDir == "" {
 		fmt.Fprintf(out, "web UI not built - run `cd web && npm ci && npm run build` next to the codeye binary (or set web_dir); API is up at %s/api/v1\n", cfg.Origin())
@@ -156,7 +188,7 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fragment.Set("project", projectID)
 		fragment.Set("run", runID)
 	}
-	code = signIn(opCtx, up.store, up.user, cfg.Origin(), fragment, noOpen, out, stderr)
+	code = signIn(opCtx, up.store, up.user, cfg.ServiceOrigin(), fragment, noOpen, out, stderr)
 	if code != 0 || !pull.dryRunComment {
 		return code
 	}
@@ -195,7 +227,7 @@ func personalOpen(ctx context.Context, args []string, out, stderr io.Writer) int
 		return 1
 	}
 	defer store.Close()
-	return signIn(opCtx, store, id.UserID, cfg.Origin(), nil, noOpen, out, stderr)
+	return signIn(opCtx, store, id.UserID, cfg.ServiceOrigin(), nil, noOpen, out, stderr)
 }
 
 // signIn issues a login link, prints it and opens the browser on it. The
@@ -217,7 +249,7 @@ func signIn(ctx context.Context, s *postgres.Store, user, origin string, fragmen
 			fmt.Fprintln(out, "opened the browser with", opener)
 		}
 	}
-	fmt.Fprintf(out, "The browser stays signed in for %d days. New link: codeye open. Stop: codeye stop.\n", int(httpapi.PersonalSessionTTL/(24*time.Hour)))
+	fmt.Fprintf(out, "The browser stays signed in for %d days. New link: codeye open. Stop: codeye stop.\n", int(httpapi.ServiceSessionTTL/(24*time.Hour)))
 	return 0
 }
 

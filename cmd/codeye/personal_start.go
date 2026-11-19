@@ -17,6 +17,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/agent"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/httpapi"
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
@@ -52,7 +53,7 @@ func personalStart(ctx context.Context, args []string, out, stderr io.Writer) in
 	}
 	lctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := writeLoginLink(lctx, up.store, up.user, cfg.Origin(), layout.LoginLink(), out); err != nil {
+	if err := writeLoginLink(lctx, up.store, up.user, cfg.ServiceOrigin(), layout.LoginLink(), out); err != nil {
 		fmt.Fprintln(stderr, "started, but no login link:", err)
 	}
 	fmt.Fprintf(out, "CODEYE started: controller %s (pid %d), agent pid %d; logs in %s\n", cfg.Origin(), up.controllerPID, up.agentPID, layout.LogDir())
@@ -170,6 +171,9 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 	if err != nil {
 		return fail(err)
 	}
+	if err := syncAdminGitHubToken(layout, user, gh); err != nil {
+		fmt.Fprintln(out, "github:", err)
+	}
 	roots, err := reconcileRoots(opCtx, store, cfg, user, out)
 	if err != nil {
 		return fail(err)
@@ -183,8 +187,8 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 	if err := ensurePoolWorkers(opCtx, store, cfg); err != nil {
 		return fail(err)
 	}
-	if err := writePersonalSetup(cfg, layout, model, gh); err != nil {
-		fmt.Fprintln(out, "note: cannot write", httpapi.PersonalSetupFile, "- the web UI shows the setup as unknown:", err)
+	if err := writeInstanceSetup(cfg, layout, model, gh); err != nil {
+		fmt.Fprintln(out, "note: cannot write", httpapi.InstanceSetupFile, "- the web UI shows the setup as unknown:", err)
 	}
 	res := &running{store: store, db: db, user: user, roots: roots}
 	var agentRec, ctrlRec *personal.Record
@@ -249,7 +253,7 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 		return nil, 1
 	}
 	if !ctrlUp {
-		ctrlArgs := []string{"serve", "--personal", "--state-dir", layout.Root, "--listen", cfg.Listen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}
+		ctrlArgs := append([]string{"serve", "--personal", "--state-dir", layout.Root, "--listen", cfg.Listen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}, controllerListenArgs(cfg)...)
 		ctrlEnv := append(childEnv(append([]string{"PATH", "HOME", "LANG", "TZ"}, fixtureControllerEnv...)...), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
 		cmd, rec, err := personal.Spawn(personal.RoleController, exe, ctrlArgs, ctrlEnv, layout.Root, layout.LogFile(personal.RoleController))
 		if err != nil {
@@ -322,6 +326,48 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 	return res, 0
 }
 
+// controllerListenArgs are the controller flags of a service other machines
+// reach: TLS or plain HTTP with the public origin, and the loopback address
+// the local agent and the commands here use.
+func controllerListenArgs(cfg *personal.Config) []string {
+	var args []string
+	switch {
+	case cfg.TLS():
+		args = append(args, "--tls-cert", cfg.TLSCert, "--tls-key", cfg.TLSKey, "--public-origin", cfg.ServiceOrigin())
+	case cfg.PlainHTTP:
+		args = append(args, "--plain-http", "--public-origin", cfg.ServiceOrigin())
+	}
+	if cfg.NeedsLocalListen() {
+		args = append(args, "--local-listen", cfg.InternalListen())
+	}
+	return args
+}
+
+// syncAdminGitHubToken makes the token `codeye up` found (GH_TOKEN,
+// GITHUB_TOKEN or gh) the GitHub connection of the administrator who runs
+// the service: it is copied to that user's token file, which the controller
+// and the agent read for that user's projects only. A token the
+// administrator pasted in the web is kept; a discovered token that is gone
+// is removed again.
+func syncAdminGitHubToken(layout personal.Layout, user string, gh personal.GitHubSetup) error {
+	dir := github.UserTokensDir(layout.Root)
+	have, _ := dir.Read(user)
+	if have != nil && have.Source == github.TokenFromWeb {
+		return nil
+	}
+	cred, err := github.ReadCredential(layout.GitHubSecret())
+	if err != nil || cred == nil || !gh.Available {
+		if have != nil {
+			return dir.Remove(user)
+		}
+		return nil
+	}
+	if have != nil && *have == *cred {
+		return nil
+	}
+	return dir.Write(user, *cred)
+}
+
 // ensureGitProviders registers the configured Git hosts as providers, so
 // projects can be added by repository URL with nothing else set up.
 func ensureGitProviders(ctx context.Context, s *postgres.Store, cfg *personal.Config, out io.Writer) error {
@@ -352,12 +398,13 @@ func ensurePoolWorkers(ctx context.Context, s *postgres.Store, cfg *personal.Con
 	return nil
 }
 
-// writePersonalSetup records for the controller what the web app shows on
+// writeInstanceSetup records for the controller what the web app shows on
 // the first screen: the model, Git, the GitHub account and the backup
 // directory (no key, no token).
-func writePersonalSetup(cfg *personal.Config, layout personal.Layout, m *personal.ResolvedModel, gh personal.GitHubSetup) error {
-	st := httpapi.PersonalSetup{SchemaVersion: "0.1", Git: cfg.Agent.Git != "" && len(cfg.GitHosts) > 0, GitHosts: append([]string{}, cfg.GitHosts...), BackupDir: backupDirOf(cfg),
-		GitHub: setupGitHubOf(gh), Offline: cfg.Offline}
+func writeInstanceSetup(cfg *personal.Config, layout personal.Layout, m *personal.ResolvedModel, gh personal.GitHubSetup) error {
+	deps := cfg.Agent.DependenciesEnabled()
+	st := httpapi.InstanceSetup{SchemaVersion: "0.1", Git: cfg.Agent.Git != "", GitHosts: append([]string{}, cfg.GitHosts...), BackupDir: backupDirOf(cfg),
+		GitHub: setupGitHubOf(gh), Offline: cfg.Offline, DependencyFetch: &deps}
 	if m != nil {
 		st.Model = &httpapi.SetupModel{ID: m.ID, Probe: personal.ModelProbeResult(layout, m)}
 	}
@@ -365,7 +412,7 @@ func writePersonalSetup(cfg *personal.Config, layout personal.Layout, m *persona
 	if err != nil {
 		return err
 	}
-	return layout.WriteRunFile(httpapi.PersonalSetupFile, append(raw, '\n'))
+	return layout.WriteRunFile(httpapi.InstanceSetupFile, append(raw, '\n'))
 }
 
 // Listen ports tried when the default is busy and listen is not configured.
@@ -570,9 +617,12 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	for _, r := range roots {
 		args = append(args, "--source-root", r.ID+"="+r.Path)
 	}
-	// Each project's own choices decide whether its source goes to the
-	// model and whether its build scripts run, for folders and Git alike.
-	args = append(args, "--project-analysis-policy")
+	// Each project's own choices, as far as the service offers them to its
+	// owner, decide whether its source goes to the model and whether its
+	// build scripts run, for folders and Git alike. The agent runs on the
+	// controller's machine: folders and Git hosts the administrator adds in
+	// the web are served without restarting it.
+	args = append(args, "--project-analysis-policy", "--controller-sources")
 	// A project folder must not hold CODEYE's own data, however it was
 	// registered.
 	args = append(args, "--protected-dir", layout.Root, "--protected-dir", backupDirOf(cfg))
@@ -582,7 +632,7 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	if cfg.CABundle != "" {
 		args = append(args, "--ca-bundle", cfg.CABundle)
 	}
-	if a.Git != "" && len(cfg.GitHosts) > 0 {
+	if a.Git != "" {
 		args = append(args, "--git", a.Git)
 		for _, h := range cfg.GitHosts {
 			args = append(args, "--git-host", h)

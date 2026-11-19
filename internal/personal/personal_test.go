@@ -21,6 +21,50 @@ func cfg(state string, extra string) string {
 
 func q(s string) string { return `"` + strings.ReplaceAll(s, `\`, `\\`) + `"` }
 
+// Serving other machines: a non-loopback listen needs TLS (certificate,
+// key and an https public origin) or plain HTTP chosen explicitly; the
+// local agent and the commands here then use a loopback listener (default
+// the next port), and the address to share is the public origin.
+func TestServeOtherMachines(t *testing.T) {
+	base := t.TempDir()
+	state := filepath.Join(base, "state")
+	cert, key := q(filepath.Join(base, "c.pem")), q(filepath.Join(base, "k.pem"))
+	tlsCfg, err := Parse([]byte(cfg(state, `,"listen":"0.0.0.0:7443","tls_cert":`+cert+`,"tls_key":`+key+`,"public_origin":"https://codeye.lan:7443"`)), tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tlsCfg.TLS() || !tlsCfg.Public() || !tlsCfg.NeedsLocalListen() || tlsCfg.Origin() != "http://127.0.0.1:7444" || tlsCfg.ServiceOrigin() != "https://codeye.lan:7443" {
+		t.Fatalf("tls: origin %s service %s", tlsCfg.Origin(), tlsCfg.ServiceOrigin())
+	}
+	plain, err := Parse([]byte(cfg(state, `,"listen":"192.0.2.10:7331","plain_http":true,"local_listen":"127.0.0.1:7400"`)), tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.TLS() || !plain.Public() || plain.Origin() != "http://127.0.0.1:7400" || plain.ServiceOrigin() != "http://192.0.2.10:7331" {
+		t.Fatalf("plain: origin %s service %s", plain.Origin(), plain.ServiceOrigin())
+	}
+	// A loopback alias over plain HTTP needs no second listener.
+	alias, err := Parse([]byte(cfg(state, `,"listen":"127.0.0.2:7331","plain_http":true`)), tools)
+	if err != nil || alias.NeedsLocalListen() || alias.Origin() != "http://127.0.0.2:7331" || alias.ServiceOrigin() != "http://127.0.0.2:7331" {
+		t.Fatalf("alias: %v", err)
+	}
+	for name, extra := range map[string]string{
+		"non-loopback without TLS":  `,"listen":"0.0.0.0:7331"`,
+		"TLS and plain":             `,"listen":"0.0.0.0:7443","tls_cert":` + cert + `,"tls_key":` + key + `,"public_origin":"https://codeye.lan:7443","plain_http":true`,
+		"TLS without origin":        `,"listen":"0.0.0.0:7443","tls_cert":` + cert + `,"tls_key":` + key,
+		"TLS with an http origin":   `,"listen":"0.0.0.0:7443","tls_cert":` + cert + `,"tls_key":` + key + `,"public_origin":"http://codeye.lan:7443"`,
+		"key without cert":          `,"listen":"0.0.0.0:7443","tls_key":` + key + `,"public_origin":"https://codeye.lan:7443"`,
+		"relative cert":             `,"listen":"0.0.0.0:7443","tls_cert":"c.pem","tls_key":` + key + `,"public_origin":"https://codeye.lan:7443"`,
+		"plain with https origin":   `,"listen":"0.0.0.0:7331","plain_http":true,"public_origin":"https://codeye.lan"`,
+		"origin without TLS/plain":  `,"public_origin":"https://codeye.lan"`,
+		"non-loopback local listen": `,"listen":"0.0.0.0:7331","plain_http":true,"local_listen":"0.0.0.0:7400"`,
+	} {
+		if _, err := Parse([]byte(cfg(state, extra)), tools); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}
+
 func TestParseDefaultsAndStrictness(t *testing.T) {
 	base := t.TempDir()
 	state := filepath.Join(base, "state")

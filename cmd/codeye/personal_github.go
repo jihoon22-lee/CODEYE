@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"slices"
 
 	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/httpapi"
@@ -35,7 +34,7 @@ func setupPersonalGitHub(ctx context.Context, cfg *personal.Config, layout perso
 	case st.Reason == personal.GitHubOffline:
 		fmt.Fprintln(out, "github: off (offline mode) - no token is looked up or used, github.com is not a Git host, no pull requests")
 	case !st.Enabled:
-		fmt.Fprintln(out, "github: off (github.enabled false) - public repositories only, no pull-request comments")
+		fmt.Fprintln(out, "github: your token is not looked up (github.enabled false) - your projects reach public repositories only unless you connect a token under account > GitHub connection")
 	case st.Available && st.Login != "":
 		fmt.Fprintf(out, "github: signed in as %s on %s (token from %s) - private repositories and pull requests you can read\n", st.Login, st.Host, st.Source)
 	case st.Available:
@@ -50,15 +49,16 @@ func setupPersonalGitHub(ctx context.Context, cfg *personal.Config, layout perso
 	return st
 }
 
-// gitHubCredentialArgs are the agent flags of the GitHub token: the file the
-// worker reads for each Git fetch of github.com. It is passed whenever
-// discovery is on, whether or not a token was found, so a token appearing or
-// going away later does not restart the agent.
+// gitHubCredentialArgs are the agent flags of the users' GitHub tokens: the
+// directory of per-user token files; the worker reads the project owner's
+// file for each Git fetch of github.com. It is passed whenever the service
+// is not offline, whether or not anyone stored a token, so tokens added or
+// removed in the web do not restart the agent.
 func gitHubCredentialArgs(cfg *personal.Config, layout personal.Layout) []string {
-	if !cfg.GitHub.On() || cfg.Offline || cfg.Agent.Git == "" || !slices.Contains(cfg.GitHosts, github.Host) {
+	if cfg.Offline || cfg.Agent.Git == "" {
 		return nil
 	}
-	return []string{"--git-credential-file", layout.GitHubSecret()}
+	return []string{"--git-credential-dir", string(github.UserTokensDir(layout.Root))}
 }
 
 // setupGitHubOf is the GitHub part of the setup summary (no token).

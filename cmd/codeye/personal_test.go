@@ -53,8 +53,8 @@ func TestPersonalAgentArgv(t *testing.T) {
 	argv := agentArgv(cfg, layout, []rootGrant{{SourceRoot: cfg.SourceRoots[0], ID: "root-1"}}, true)
 	got := strings.Join(argv, " ")
 	want := "agent --controller http://127.0.0.1:7331 --state-dir /srv/codeye/state/agent --name personal --autoscale --max-workers 3 --toolchain-path /usr/bin:/bin --advertise-without-baseline" +
-		" --enroll-token-file /srv/codeye/state/run/enroll-token --source-root root-1=/srv/src --project-analysis-policy --protected-dir /srv/codeye/state --protected-dir /srv/codeye/state-backups --git /usr/bin/git --git-host github.com" +
-		" --git-credential-file /srv/codeye/state/secrets/github.json --go /usr/local/go/bin/go --dependency-fetch --dependency-cache-dir /srv/codeye/state/cache/deps --staticcheck /opt/sc --opencode /opt/opencode --model provider/model-a --model-relay-file /srv/relay.json --review-pack review-r1 --review-max-calls 50" +
+		" --enroll-token-file /srv/codeye/state/run/enroll-token --source-root root-1=/srv/src --project-analysis-policy --controller-sources --protected-dir /srv/codeye/state --protected-dir /srv/codeye/state-backups --git /usr/bin/git --git-host github.com" +
+		" --git-credential-dir /srv/codeye/state/secrets/github-users --go /usr/local/go/bin/go --dependency-fetch --dependency-cache-dir /srv/codeye/state/cache/deps --staticcheck /opt/sc --opencode /opt/opencode --model provider/model-a --model-relay-file /srv/relay.json --review-pack review-r1 --review-max-calls 50" +
 		" --storage-quota logs=100 --storage-quota workspace=200 --storage-log-dir /srv/codeye/state/logs"
 	if got != want {
 		t.Fatalf("argv\n got %s\nwant %s", got, want)
@@ -64,10 +64,11 @@ func TestPersonalAgentArgv(t *testing.T) {
 	if strings.Contains(again, "enroll-token") || strings.Contains(again, "artifacts=") {
 		t.Fatal(again)
 	}
-	// github.enabled false: no token file for the worker.
+	// github.enabled false only stops looking up the administrator's token:
+	// the users' own tokens still reach the worker.
 	off := false
 	cfg.GitHub.Enabled = &off
-	if off := strings.Join(agentArgv(cfg, layout, nil, false), " "); strings.Contains(off, "--git-credential-file") || !strings.Contains(off, "--git-host github.com") {
+	if off := strings.Join(agentArgv(cfg, layout, nil, false), " "); !strings.Contains(off, "--git-credential-dir") || !strings.Contains(off, "--git-host github.com") {
 		t.Fatal(off)
 	}
 }

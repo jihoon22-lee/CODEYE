@@ -14,7 +14,9 @@ import (
 )
 
 // Offline mode and the CA bundle reach the local agent; offline seeds no
-// Git host, so git is not given either.
+// Git host and passes no GitHub tokens. git is still given: a Git host the
+// administrator approves in the web (an internal server) works without a
+// restart.
 func TestPersonalAgentArgvOffline(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Linux paths")
@@ -28,7 +30,7 @@ func TestPersonalAgentArgvOffline(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Join(agentArgv(cfg, personal.Layout{Root: cfg.StateDir}, nil, false), " ")
-	if !strings.Contains(got, " --offline --ca-bundle /etc/codeye/ca.pem ") || strings.Contains(got, "--git") {
+	if !strings.Contains(got, " --offline --ca-bundle /etc/codeye/ca.pem ") || !strings.Contains(got, " --git /usr/bin/git ") || strings.Contains(got, "--git-host") || strings.Contains(got, "--git-credential") {
 		t.Fatalf("argv %s", got)
 	}
 }

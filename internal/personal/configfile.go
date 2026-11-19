@@ -79,6 +79,19 @@ func (d *document) set(key string, v any) error {
 	return nil
 }
 
+func (d *document) unset(key string) {
+	if _, ok := d.values[key]; !ok {
+		return
+	}
+	delete(d.values, key)
+	for i, k := range d.keys {
+		if k == key {
+			d.keys = append(d.keys[:i], d.keys[i+1:]...)
+			break
+		}
+	}
+}
+
 func (d *document) bytes() ([]byte, error) {
 	var b bytes.Buffer
 	b.WriteString("{\n")
@@ -109,6 +122,16 @@ type ConfigEdit struct {
 	PostgresBinDir string
 	// Offline sets "offline": true (codeye up --offline).
 	Offline bool
+	// Serve replaces how the service listens (codeye up --listen ...):
+	// listen, tls_cert, tls_key, public_origin and plain_http; empty values
+	// remove their key.
+	Serve *ServeEdit
+}
+
+// ServeEdit is the listening part of the configuration.
+type ServeEdit struct {
+	Listen, TLSCert, TLSKey, PublicOrigin string
+	PlainHTTP                             bool
 }
 
 // EditFile applies e to the file at path, validates the result like Load and
@@ -139,6 +162,22 @@ func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
 	if e.Offline {
 		if err := doc.set("offline", true); err != nil {
 			return nil, err
+		}
+	}
+	if s := e.Serve; s != nil {
+		for key, v := range map[string]string{"listen": s.Listen, "tls_cert": s.TLSCert, "tls_key": s.TLSKey, "public_origin": s.PublicOrigin} {
+			if v == "" {
+				doc.unset(key)
+			} else if err := doc.set(key, v); err != nil {
+				return nil, err
+			}
+		}
+		if s.PlainHTTP {
+			if err := doc.set("plain_http", true); err != nil {
+				return nil, err
+			}
+		} else {
+			doc.unset("plain_http")
 		}
 	}
 	if e.AddRoot != nil {

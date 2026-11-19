@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -69,6 +70,22 @@ type Config struct {
 	CABundle string `json:"ca_bundle,omitempty"`
 	// GitHub is the token discovery of github.com (docs/GITHUB.md).
 	GitHub GitHub `json:"github"`
+	// TLSCert and TLSKey (PEM files) serve listen over HTTPS with
+	// PublicOrigin (https://HOST[:PORT]) as the address people open.
+	TLSCert string `json:"tls_cert,omitempty"`
+	TLSKey  string `json:"tls_key,omitempty"`
+	// PublicOrigin is the address other people open (https:// with TLS,
+	// http:// with plain_http). Without it a plain-HTTP service on a
+	// specific address uses http://listen, and on 0.0.0.0 the first
+	// non-loopback address of this machine.
+	PublicOrigin string `json:"public_origin,omitempty"`
+	// PlainHTTP serves a non-loopback listen without TLS (a trusted
+	// network): sign-in cookies and passwords then travel unencrypted.
+	PlainHTTP bool `json:"plain_http,omitempty"`
+	// LocalListen is the loopback address the local agent and the commands
+	// on this machine use when listen is not reachable over plain loopback
+	// HTTP (TLS, or a non-loopback address). Default 127.0.0.1:<listen port + 1>.
+	LocalListen string `json:"local_listen,omitempty"`
 
 	// listenSet records whether listen was written in the file (a default
 	// listen address may move to the next free port).
@@ -371,8 +388,32 @@ func (c *Config) validate(knownTools []string) error {
 		c.Listen = DefaultListen
 	}
 	ap, err := netip.ParseAddrPort(c.Listen)
-	if err != nil || !ap.Addr().IsLoopback() || ap.Port() == 0 {
-		return errors.New("listen must be a loopback address with a port (for example 127.0.0.1:7331)")
+	if err != nil || ap.Port() == 0 {
+		return errors.New("listen must be IP:port (for example 127.0.0.1:7331, or 0.0.0.0:7331 to serve other machines)")
+	}
+	tls := c.TLSCert != "" || c.TLSKey != ""
+	switch {
+	case tls && c.PlainHTTP:
+		return errors.New("tls_cert/tls_key and plain_http are alternatives")
+	case tls && (!absClean(c.TLSCert) || !absClean(c.TLSKey)):
+		return errors.New("tls_cert and tls_key must both be absolute, clean paths")
+	case tls && !strings.HasPrefix(c.PublicOrigin, "https://"):
+		return errors.New("TLS needs public_origin https://HOST[:PORT], the address people open")
+	case c.PlainHTTP && c.PublicOrigin != "" && !strings.HasPrefix(c.PublicOrigin, "http://"):
+		return errors.New("plain_http needs public_origin http://HOST[:PORT] (or none)")
+	case !tls && !c.PlainHTTP && c.PublicOrigin != "":
+		return errors.New("public_origin needs tls_cert and tls_key, or plain_http")
+	case !tls && !c.PlainHTTP && !ap.Addr().IsLoopback():
+		return errors.New("a non-loopback listen needs tls_cert, tls_key and public_origin, or plain_http true (codeye up --listen ADDR --plain-http)")
+	}
+	if strings.ContainsAny(c.PublicOrigin, " \t\r\n") || len(c.PublicOrigin) > 300 {
+		return errors.New("public_origin must be one URL")
+	}
+	if c.LocalListen != "" {
+		lp, err := netip.ParseAddrPort(c.LocalListen)
+		if err != nil || !lp.Addr().IsLoopback() || lp.Port() == 0 {
+			return errors.New("local_listen must be a loopback address with a port")
+		}
 	}
 	if c.WebDir != "" && !absClean(c.WebDir) {
 		return errors.New("web_dir must be an absolute, clean path")
@@ -570,5 +611,93 @@ func sorted(s []string) []string {
 	return out
 }
 
-// Origin is the controller URL on the loopback listen address.
-func (c *Config) Origin() string { return "http://" + c.Listen }
+// TLS reports whether the service is served over HTTPS.
+func (c *Config) TLS() bool { return c.TLSCert != "" }
+
+// Public reports whether the service is configured for other machines
+// (TLS or plain HTTP chosen explicitly).
+func (c *Config) Public() bool { return c.TLS() || c.PlainHTTP }
+
+// NeedsLocalListen reports whether the controller needs its loopback
+// listener: listen is TLS or not a loopback address, so the local agent
+// and the commands here cannot use it over plain loopback HTTP.
+func (c *Config) NeedsLocalListen() bool {
+	ap, err := netip.ParseAddrPort(c.Listen)
+	return c.TLS() || err != nil || !ap.Addr().IsLoopback()
+}
+
+// InternalListen is the loopback address the local agent and the commands
+// on this machine use: listen itself, or local_listen (default
+// 127.0.0.1:<listen port + 1>) when NeedsLocalListen.
+func (c *Config) InternalListen() string {
+	if !c.NeedsLocalListen() {
+		return c.Listen
+	}
+	if c.LocalListen != "" {
+		return c.LocalListen
+	}
+	ap, err := netip.ParseAddrPort(c.Listen)
+	if err != nil || ap.Port() == 65535 {
+		return "127.0.0.1:7330"
+	}
+	return netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), ap.Port()+1).String()
+}
+
+// Origin is the controller URL the local agent and the commands on this
+// machine use (plain HTTP on loopback).
+func (c *Config) Origin() string { return "http://" + c.InternalListen() }
+
+// ServiceOrigin is the address to open in a browser and to share: the
+// public origin when configured, http://listen for a plain-HTTP service on
+// a specific address, the first non-loopback address of this machine for
+// one on an unspecified address, else the loopback origin.
+func (c *Config) ServiceOrigin() string {
+	if c.PublicOrigin != "" {
+		return strings.TrimSuffix(c.PublicOrigin, "/")
+	}
+	ap, err := netip.ParseAddrPort(c.Listen)
+	if !c.PlainHTTP || err != nil {
+		return "http://" + c.Listen
+	}
+	if !ap.Addr().IsUnspecified() {
+		return "http://" + c.Listen
+	}
+	if ip := firstInterfaceAddr(ap.Addr().Is6() && !ap.Addr().Is4In6()); ip.IsValid() {
+		return "http://" + netip.AddrPortFrom(ip, ap.Port()).String()
+	}
+	return "http://" + netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), ap.Port()).String()
+}
+
+// firstInterfaceAddr is the first up, non-loopback unicast address of this
+// machine (IPv4 unless v6), or the zero Addr.
+func firstInterfaceAddr(v6 bool) netip.Addr {
+	ifs, err := net.Interfaces()
+	if err != nil {
+		return netip.Addr{}
+	}
+	for _, i := range ifs {
+		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			n, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip, ok := netip.AddrFromSlice(n.IP)
+			if !ok {
+				continue
+			}
+			ip = ip.Unmap()
+			if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.Is4() == v6 {
+				continue
+			}
+			return ip
+		}
+	}
+	return netip.Addr{}
+}
