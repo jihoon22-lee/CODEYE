@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -573,6 +574,14 @@ func TestReportExample(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		return
+	}
+	// The snapshot manifest records each file's permission bits, and the
+	// manifest digest and every evidence ID derive from it. Windows reports
+	// different permission bits for the same files, so the stored bytes can
+	// only match where POSIX modes exist. The structural checks above ran.
+	if runtime.GOOS == "windows" {
+		t.Log("stored example bytes are compared on POSIX systems only: file modes are part of the manifest digest")
 		return
 	}
 	for p, b := range map[string][]byte{reportExampleJSON: pretty.Bytes(), reportExampleMD: md} {
