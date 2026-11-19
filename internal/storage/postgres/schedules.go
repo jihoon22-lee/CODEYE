@@ -122,7 +122,9 @@ func (n *normalized) validate(now time.Time) error {
 	if !schedule.ValidOverlap(n.Overlap) || !schedule.ValidMisfire(n.Misfire) {
 		return domain.ErrInvalid
 	}
-	if _, err = domain.ParseRunRequest(n.Run); err != nil {
+	// A schedule repeats a request on the current source; a pull request is
+	// pinned per run and is not scheduled.
+	if req, err := domain.ParseRunRequest(n.Run); err != nil || req.PullRequest != nil {
 		return domain.ErrInvalid
 	}
 	if n.Run, err = domain.CanonicalJSON(n.Run); err != nil {

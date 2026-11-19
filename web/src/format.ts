@@ -24,7 +24,8 @@ export function describeError(error: unknown): ErrorText {
   const requestId = error.requestId;
   if (error.kind === 'network') return { message: t.errors.network, detail: null, requestId };
   if (error.kind === 'invalid_response') return { message: t.errors.invalid_response, detail: null, requestId };
-  const known = Object.hasOwn(t.errors.codes, error.code) ? t.errors.codes[error.code] : undefined;
+  const known = Object.hasOwn(t.errors.codes, error.code) ? t.errors.codes[error.code]
+    : Object.hasOwn(t.pullRequest.errors, error.code) ? t.pullRequest.errors[error.code] : undefined;
   // The server's own wording is shown only for input validation, as plain text.
   // A folder that holds CODEYE's data: the server names the folders involved.
   const detail = error.code === 'VALIDATION_FAILED' || error.code === 'FOLDER_HOLDS_CODEYE_DATA' ? error.serverMessage : null;

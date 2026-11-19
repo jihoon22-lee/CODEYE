@@ -446,6 +446,7 @@ python3 scripts/offline_pack.py check-web web/dist
 | Python | `pip_index_url`, 없으면 PyPI | `pip_index_url`이 없으면 받지 않는다(같은 이유) |
 | Rust | crates.io 또는 저장소 Cargo 설정의 레지스트리 | 받지 않는다(같은 이유). cargo에는 CODEYE의 미러 설정이 없다 |
 | Git | `git_hosts` 기본 `["github.com"]` | `git_hosts`를 적지 않으면 빈 목록이라 Git 주소를 받지 않는다. github.com을 넣지 않는다 |
+| GitHub | 환경변수·gh에서 token을 찾아 `GET /user`로 확인, pull request·결과 댓글에 GitHub API | token을 찾지 않고(`gh auth token`도 실행하지 않는다) 저장된 token을 지운다. github.com을 `git_hosts`에 적어도 token을 보내지 않는다. pull request 주소는 거부한다. controller는 GitHub API를 부르지 않는다. `up` 출력 `github: off (offline mode)`, `GET /setup`의 `github.reason`은 `offline_mode`, doctor의 `github_api` 목적지는 `offline_mode`다. 사내 Git 호스트용 credential은 범위 밖이다([GitHub](GITHUB.md#github-token)) |
 | 모델 | 키 파일·환경변수 키·OpenCode `auth.json`, 공급자 공개 endpoint | `base_url`(사내 endpoint)이 있는 키 파일이나 relay만 쓴다. `base_url` 없는 키 파일은 쓰지 않고 이유를 출력한다. 환경변수의 키는 저장하지도 쓰지도 않는다. OpenCode `auth.json`을 찾지 않는다. 키 없는 공급자 모델은 쓰지 않는다. 모델 검토의 이유는 `model_endpoint_not_configured`다 |
 
 - 도구 탐지는 원래 이 머신의 파일과 `--version` 실행만 한다. 오프라인 모드와 관계없이 네트워크를 쓰지 않는다.
@@ -498,7 +499,7 @@ CODEYE는 자식 프로세스 환경에 다섯 변수를 같은 파일로 넣는
 `codeye doctor --config PATH`는 `offline` 절을 더한다(텍스트 출력은 "Offline readiness"). 오프라인 모드가 꺼져 있어도 보인다. 실패해도 종료 코드를 바꾸지 않는다.
 
 - `enabled`, `ca_bundle`(`status`가 `not_configured`, `available`(`certificates`에 인증서 수), `unavailable`(`ca_bundle_unreadable`: 읽을 수 없거나 인증서가 없음)).
-- `destinations[]`: 이 설정으로 CODEYE가 접속할 곳마다 `kind`(`go_proxy`·`go_sumdb`·`npm_registry`·`pip_index`·`crates_registry`·`git_host`·`model_endpoint`), `value`, `origin`(`config`·`user_go_env`·`user_npm_config`·`model_key_file`·`relay_file`·`builtin_default`·`none`), 접속하지 않으면 `reason`. 오프라인인데 `builtin_default`가 남으면 그것이 공개 서비스다.
+- `destinations[]`: 이 설정으로 CODEYE가 접속할 곳마다 `kind`(`go_proxy`·`go_sumdb`·`npm_registry`·`pip_index`·`crates_registry`·`git_host`·`github_api`·`model_endpoint`), `value`, `origin`(`config`·`user_go_env`·`user_npm_config`·`model_key_file`·`relay_file`·`builtin_default`·`none`), 접속하지 않으면 `reason`. 오프라인인데 `builtin_default`가 남으면 그것이 공개 서비스다.
 - `postgres`: 관리형 DB에 쓸 PostgreSQL 프로그램(`initdb`, `pg_ctl`, `postgres`, `pg_dump`, `pg_restore`, `psql`)을 찾았는지와 버전.
 - `languages[]`: Go·Python·JS/TS·Rust·C/C++·공통·모델마다 없는 도구와 의존성 준비 상태.
 
@@ -508,7 +509,7 @@ schema는 [doctor schema](../schemas/doctor.schema.json)의 `offline`, 예시는
 
 분석 도구는 묶음에 없다. 연결된 머신에서 같은 OS/arch로 받은 것을 옮기거나 사내 미러에서 설치한다. 놓을 곳은 [도구 찾기](ANALYZERS.md#도구-찾기)의 도구 prefix `~/.local/share/codeye-tools`(`bin`, `go/bin`, `node/node_modules`, `cpp/bin`)와 PATH이고, 다른 곳이면 `agent.tools`에 절대 경로를 적는다.
 
-`codeye tools --checklist [--config PATH]`는 Markdown 점검표를 낸다. 도구마다 찾았는지, 버전과 CODEYE가 시험한 계열(`tested 2026.2` 등), 없으면 폐쇄망에서 옮기는 방법(예: `uv tool install mypy --index-url <internal index>`, `npm install --prefix ~/.local/share/codeye-tools/node --registry <internal registry> typescript`, Rust standalone installer)을 적는다. 도구를 옮긴 뒤 다시 실행해 빈 칸을 지운다. `--json`과 함께 쓸 수 없다.
+`codeye tools --checklist [--config PATH]`는 Markdown 점검표를 낸다. 도구마다 찾았는지, 버전과 CODEYE가 시험한 계열(`tested 2026.2` 등), 없으면 폐쇄망에서 옮기는 방법(예: `uv tool install mypy --index-url <internal index>`, `npm install --prefix ~/.local/share/codeye-tools/node --registry <internal registry> typescript`, Rust standalone installer)을 적는다. 도구를 옮긴 뒤 다시 실행해 빈 칸을 지운다. `--json`과 함께 쓸 수 없다. `gh`는 선택이며 온라인에서만 쓴다(오프라인 모드는 GitHub을 쓰지 않으므로 옮기지 않아도 된다).
 
 - Python 도구의 venv를 다른 경로로 복사하면 옛 interpreter 경로를 가리켜 거부된다. 사내 index로 그 머신에서 `uv tool install`한다.
 - 시험한 계열과 다른 버전도 쓰지만 보고서와 점검표가 "시험하지 않은 버전"으로 표시한다.

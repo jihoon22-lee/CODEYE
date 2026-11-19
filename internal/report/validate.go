@@ -51,6 +51,9 @@ func ValidateReport(r Report) error {
 	if want := ComputeSummary(r.Findings, r.Observations); !reflect.DeepEqual(want, r.Summary) {
 		return invalidf("summary counts differ from findings/observations")
 	}
+	if err := validPullRequestSection(r); err != nil {
+		return err
+	}
 	requiredMissing := false
 	taskKeys := map[string]bool{}
 	for _, t := range r.Tasks {

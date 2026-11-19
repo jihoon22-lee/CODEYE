@@ -1,5 +1,6 @@
 import { parseAnalysisReport, reportURL } from './analysisReport';
 import { comparisonURL, parseComparison, parseFindingReview, type FindingReviewBody } from './comparison';
+import { parseCommentPreview, parseRunPullRequest, pullRequestRunBody, type RunPullRequest } from './pullRequest';
 import {
   auditQuery, parseAdminProviders, parseAdminSourceRoots, parseAuditPage, parseMember, parseMembers, parseRole, parseSession,
   parseUser, parseUserPage, parseUserWithLink, type AuditFilter, type CreateUserBody, type MemberRole, type ProjectRole,
@@ -35,6 +36,9 @@ export type Source =
 // A project's own analysis choices; personal-mode nodes follow them. fetch_dependencies:
 // fetch the third-party dependencies the modules declare before the analyzers run.
 export type AnalysisChoices = { send_source_to_model: boolean; run_build_scripts: boolean; fetch_dependencies: boolean };
+// A project's stored choices: comment_on_pull_request is the remembered result-comment choice of
+// its pull-request runs (absent: off).
+export type ProjectChoices = AnalysisChoices & { comment_on_pull_request?: boolean };
 
 export type Project = {
   id: string;
@@ -50,7 +54,7 @@ export type Project = {
   can_manage: boolean;
   // Optional: older servers do not send it (docs/API.md).
   activity?: ProjectActivity;
-  analysis?: AnalysisChoices;
+  analysis?: ProjectChoices;
 };
 export type ProjectPage = { items: Project[]; next_cursor: string | null };
 export type SourceRoot = { id: string; label: string };
@@ -115,6 +119,8 @@ export type RunView = {
   quality_verdict: string | null;
   reportRevision?: number;
   progress: RunProgress;
+  // A pull-request run's pinned pull request and comment state.
+  pull_request?: RunPullRequest;
 };
 
 export const RUN_BODY = { profile: 'deep-review', source_policy: 'latest_at_acquire', scope: { kind: 'full' } } as const;
@@ -286,13 +292,18 @@ export function createApi(options: ApiOptions = {}) {
       json({ method: 'GET', path: '/api/v1/projects' + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''), signal }, parseProjectPage),
     // 201 a new project; 200 (personal mode) the existing project of the same folder or repository.
     createProject: (body: CreateProjectBody) => json({ method: 'POST', path: '/api/v1/projects', body }, parseProject),
-    setProjectAnalysis: (projectId: string, choices: AnalysisChoices) =>
+    setProjectAnalysis: (projectId: string, choices: ProjectChoices) =>
       json({ method: 'PUT', path: `${project(projectId)}/analysis`, body: choices }, parseProject),
     getSetup: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/setup', signal }, parseSetup),
     // The run to follow: the same run again (same_run) or a new one (new_run).
     retryRun: (id: string) => json({ method: 'POST', path: `${run(id)}/retry` }, parseRetryAck),
     createRun: (projectId: string, idempotencyKey: string) =>
       json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: RUN_BODY, headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
+    // A pull-request run (personal mode); comment null follows the project's remembered choice.
+    createPullRequestRun: (projectId: string, idempotencyKey: string, number: number, comment: boolean | null) =>
+      json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: pullRequestRunBody(number, comment), headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
+    // The comment the run posts or would post; nothing is posted.
+    previewPullRequestComment: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: `${run(id)}/pull-request-comment`, signal }, parseCommentPreview),
     getRun: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: run(id), signal }, parseRun),
     getReport: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: reportURL(id, 'json', true), signal }, v => parseAnalysisReport(v, id)),
     cancelRun: (id: string) => json({ method: 'POST', path: `${run(id)}/cancel` }, parseAck),
@@ -418,10 +429,11 @@ function parseProject(v: unknown): Project {
     ...(o.analysis == null ? {} : { analysis: parseChoices(o.analysis) }),
   };
 }
-function parseChoices(v: unknown): AnalysisChoices {
+function parseChoices(v: unknown): ProjectChoices {
   const o = rec(v);
   // Older servers and stored records do not send fetch_dependencies: absent means on.
-  return { send_source_to_model: bool(o.send_source_to_model), run_build_scripts: bool(o.run_build_scripts), fetch_dependencies: o.fetch_dependencies == null ? true : bool(o.fetch_dependencies) };
+  return { send_source_to_model: bool(o.send_source_to_model), run_build_scripts: bool(o.run_build_scripts), fetch_dependencies: o.fetch_dependencies == null ? true : bool(o.fetch_dependencies),
+    ...(o.comment_on_pull_request == null ? {} : { comment_on_pull_request: bool(o.comment_on_pull_request) }) };
 }
 function optionalStr(v: unknown): string | null {
   return typeof v === 'string' && v !== '' ? v : null;
@@ -557,6 +569,7 @@ export function parseRun(v: unknown): RunView {
     snapshot_id: nullableStr(o.snapshot_id),
     quality_verdict: nullableStr(o.quality_verdict),
     ...(o.report == null ? {} : {reportRevision:int(rec(o.report).revision, 1)}),
+    ...(o.pull_request == null ? {} : { pull_request: parseRunPullRequest(o.pull_request) }),
     progress: {
       stage: typeof p.stage === 'string' ? p.stage : '',
       plan_revision: nullableInt(p.plan_revision, 1),

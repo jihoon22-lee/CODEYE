@@ -268,7 +268,7 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 
 ### manifest와 입력 digest
 
-[manifest schema](../schemas/snapshot-manifest.schema.json)는 상대 경로·종류·크기(또는 null)·SHA-256·mode·encoding 힌트·제외 이유·source SHA·(Git) `source_branch`와 `requested_at`·고정 시각(`source_fixed_at`)·`limitations`를 정의한다. [로컬 예시](../examples/snapshot-manifest.json)와 [Git 예시](../examples/snapshot-manifest-git.json)는 합성 값이다.
+[manifest schema](../schemas/snapshot-manifest.schema.json)는 상대 경로·종류·크기(또는 null)·SHA-256·mode·encoding 힌트·제외 이유·source SHA·(Git) `source_branch`(pull request는 대신 `source_ref`)와 `requested_at`·고정 시각(`source_fixed_at`)·`limitations`를 정의한다. [로컬 예시](../examples/snapshot-manifest.json)와 [Git 예시](../examples/snapshot-manifest-git.json)는 합성 값이다.
 
 - manifest에는 원본 절대 경로, URL, remote 이름, clone credential을 넣지 않는다. provider repository ID도 manifest에는 없다.
 - `manifest.json`은 전체 manifest의 canonical JSON(키 정렬, 공백 없음)이다.

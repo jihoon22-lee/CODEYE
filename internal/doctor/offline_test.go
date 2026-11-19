@@ -70,6 +70,9 @@ func TestOfflineReadiness(t *testing.T) {
 	if d := destinationOf(o, "git_host"); d.Value != "github.com" || d.Origin != "builtin_default" {
 		t.Fatalf("online git host %+v", d)
 	}
+	if d := destinationOf(o, "github_api"); d.Value != "https://api.github.com" || d.Origin != "builtin_default" {
+		t.Fatalf("online GitHub API %+v", d)
+	}
 
 	cfg := offlineConfig(t, `,"offline":true,"agent":{"dependencies":{"pip_index_url":"https://pypi.corp.example/simple"}}`)
 	report := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Personal: cfg, Detect: detect, ModelEnv: &menv}, &fakeRunner{result: Result{Reason: "executable_missing"}})
@@ -84,6 +87,7 @@ func TestOfflineReadiness(t *testing.T) {
 		"pip_index":       {Kind: "pip_index", Value: "https://pypi.corp.example/simple", Origin: "config"},
 		"crates_registry": {Kind: "crates_registry", Origin: "none", Reason: "offline_no_registry_configured"},
 		"git_host":        {Kind: "git_host", Origin: "none", Reason: "git_hosts_empty"},
+		"github_api":      {Kind: "github_api", Origin: "none", Reason: "offline_mode"},
 		"model_endpoint":  {Kind: "model_endpoint", Origin: "none", Reason: "model_not_configured"},
 	} {
 		if got := destinationOf(o, kind); got != want {

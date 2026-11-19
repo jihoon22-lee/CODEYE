@@ -67,6 +67,8 @@ type Config struct {
 	// a Git host or the model endpoint should trust (it replaces the system
 	// store for some of them, so it holds the system CAs too).
 	CABundle string `json:"ca_bundle,omitempty"`
+	// GitHub is the token discovery of github.com (docs/GITHUB.md).
+	GitHub GitHub `json:"github"`
 
 	// listenSet records whether listen was written in the file (a default
 	// listen address may move to the next free port).

@@ -538,6 +538,9 @@ type RunView struct {
 	// Origin is the schedule occurrence the run was requested for; nil
 	// for a manual request.
 	Origin *RunOrigin
+	// PullRequest is the pin and comment row of a pull-request run; nil
+	// for every other run.
+	PullRequest *RunPullRequest
 }
 
 // GetRunView returns the run and its task counts for an actor who may read it.
@@ -579,6 +582,9 @@ func (s *Store) GetRunView(ctx context.Context, actor, id string) (RunView, erro
 			return v, err
 		}
 		v.Stages = stages[id]
+		if v.PullRequest, err = loadRunPullRequest(ctx, tx, id); err != nil {
+			return v, err
+		}
 		if r.Status != domain.RunQueued {
 			return v, nil
 		}

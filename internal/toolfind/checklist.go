@@ -36,6 +36,7 @@ var offlinePlaces = map[string]string{
 	"yarn":        "`npm install --prefix ~/" + ToolPrefixRel + "/node --registry <internal registry> yarn@1`",
 	"uv":          "copy the uv binary to ~/" + ToolPrefixRel + "/bin",
 	"python":      "install python3 with pip from the OS packages of the internal mirror",
+	"gh":          "optional, online only: offline mode does not use GitHub, so gh is never asked for a token",
 }
 
 // TestedSeries is the release series CODEYE was checked with for name

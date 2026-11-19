@@ -372,11 +372,18 @@ func Build(in Input, reg *Registry) (Report, error) {
 	}
 	r.Summary = ComputeSummary(r.Findings, r.Observations)
 	r.QualityVerdict = DecideVerdict(r.Status, r.Summary, r.Coverage.AIReview.Status)
+	if in.PullRequest != nil {
+		notes.add(NotePullRequestFocus)
+	}
 	r.Coverage.Notes = notes.list()
 	r.Limitations = lim.list()
 	// The sections read the finished report and the task states; they never
 	// change a limitation, note, count, status or verdict.
 	composeSections(&r, in, states, keys, rm != nil)
+	// The pull-request section counts changed files sent to the model only
+	// when the run sent the model a request: a run without a model (whose
+	// records hold calls with no request) says so instead of "0 of N sent".
+	r.PullRequest = pullRequestSection(&r, in.PullRequest, index.entries, sentPaths(states, roleRecordKeys(states)), modelRequested(r.Coverage.ReviewCalls))
 	if err := ValidateReport(r); err != nil {
 		return Report{}, err
 	}
@@ -434,6 +441,9 @@ func checkInput(in Input) error {
 	}
 	if err := checkReviews(in.Reviews); err != nil {
 		return err
+	}
+	if in.PullRequest != nil && in.PullRequest.Validate() != nil {
+		return invalidf("pull request pin is invalid")
 	}
 	if in.ResultManifest != nil && !seenArt[in.ResultManifest.ID] {
 		return invalidf("result manifest is not an artifact of this attempt")

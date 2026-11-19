@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
@@ -160,7 +161,21 @@ func destinations(cfg *personal.Config, res toolfind.Result, menv personal.Model
 		}
 		out = append(out, Destination{Kind: "git_host", Value: h, Origin: origin})
 	}
+	out = append(out, gitHubDestination(cfg))
 	return append(out, modelDestination(cfg, menv))
+}
+
+// gitHubDestination is the GitHub API personal mode asks for the token's
+// account, pull requests and result comments: none offline (no token is
+// looked up, github.com is no Git host), none when github.enabled is false.
+func gitHubDestination(cfg *personal.Config) Destination {
+	switch {
+	case cfg.Offline:
+		return Destination{Kind: "github_api", Origin: "none", Reason: personal.GitHubOffline}
+	case !cfg.GitHub.On():
+		return Destination{Kind: "github_api", Origin: "none", Reason: "github_disabled"}
+	}
+	return Destination{Kind: "github_api", Value: github.DefaultAPIURL, Origin: "builtin_default"}
 }
 
 // modelDestination resolves the model like the local agent's start.

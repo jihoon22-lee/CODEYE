@@ -86,6 +86,9 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	maxWorkers := fs.Int("max-workers", 2, "")
 	toolPath := fs.String("toolchain-path", "/usr/bin:/bin", "")
 	git := fs.String("git", "", "")
+	// A Git host token file (personal mode's GitHub token): workers read it
+	// for a fetch of its host; the token is never an argument.
+	gitCredential := fs.String("git-credential-file", "", "")
 	goExe := fs.String("go", "", "")
 	goModCache := fs.String("go-mod-cache", "", "")
 	// Dependency fetching (docs/ARCHITECTURE.md#의존성-준비): the operator's
@@ -202,7 +205,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	cfg := agent.Config{
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
-		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
+		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GitCredentialFile: *gitCredential, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
 		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewPack: *reviewPack, ReviewMaxCalls: *reviewMaxCalls,
 		RepositoryCodeSourceRoots: codeApproved,
 		StorageQuota:              limits,

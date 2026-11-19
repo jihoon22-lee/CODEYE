@@ -406,7 +406,7 @@ export const ko = {
     } as Record<string, string>,
     count: (label: string, n: number) => `${label} ${n}건`,
     reasonLabels: {
-      source_auth_required: '저장소를 인증 없이 읽을 수 없음 — 비공개 저장소는 아직 지원하지 않습니다 (주소가 맞는지도 확인하세요)',
+      source_auth_required: '저장소를 읽을 권한이 없음 — 비공개 github.com 저장소는 gh auth login(또는 GH_TOKEN) 뒤 codeye up을 다시 하면 읽습니다 (주소가 맞는지도 확인하세요)',
       source_unreachable: 'Git 호스트에 연결하지 못함 — 네트워크를 확인하고 다시 시도하세요',
       source_unavailable: '소스를 읽지 못함 — 폴더가 있는지, 읽을 수 있는지 확인하세요',
       source_holds_codeye_data: '이 폴더는 CODEYE 데이터 폴더를 품고 있거나 그 안에 있어 읽지 않음 — 프로젝트가 든 하위 폴더를 고르세요',
@@ -962,6 +962,40 @@ export const ko = {
     },
   },
   // --- end of accounts ---
+
+  // --- pull requests (docs/GITHUB.md#pull-request-분석): run line, result comment, preview ---
+  pullRequest: {
+    label: 'pull request',
+    line: (n: number, repo: string) => `pull request #${n} (${repo})`,
+    commits: (head: string, headSHA: string, base: string, baseSHA: string) => `${head} ${headSHA} → ${base} ${baseSHA}를 분석합니다.`,
+    fork: (repo: string) => `head 저장소: ${repo}.`,
+    files: (n: number) => `변경 파일 ${n}개를 먼저 검토하고, 저장소의 나머지는 같은 깊이로 검토하지 않을 수 있습니다.`,
+    comment: '결과 댓글',
+    commentStates: {
+      not_requested: '남기지 않음',
+      waiting_for_report: '보고서를 기다리는 중',
+      pending: '게시 대기(실패하면 다시 시도)',
+      posted: '게시함',
+      superseded: '더 새 실행의 댓글이 있어 덮지 않음',
+      failed: '게시하지 못함',
+    } as Record<string, string>,
+    openComment: '댓글 보기',
+    preview: '미리 보기',
+    previewNote: '아래는 이 실행이 pull request에 남기는(또는 남길) 댓글입니다. 미리 보기는 아무것도 게시하지 않습니다.',
+    headMoved: (sha: string) => `분석 뒤 pull request의 head가 ${sha}로 바뀌었습니다.`,
+    commentBox: 'pull request에 결과 댓글 남기기',
+    commentHelp: '보고서가 나오면 GitHub token 계정으로 댓글 하나를 남기고, 같은 pull request를 다시 분석하면 그 댓글을 고칩니다. 코드는 싣지 않습니다. 이 프로젝트의 선택으로 기억합니다.',
+    errors: {
+      PULL_REQUEST_UNSUPPORTED: 'pull request는 개인 모드의 github.com 저장소에서만 분석할 수 있습니다.',
+      PULL_REQUEST_NOT_FOUND: 'GitHub이 그 pull request를 보여 주지 않습니다. 비공개 저장소라면 터미널에서 gh auth login 뒤 codeye up을 다시 실행하세요.',
+      GITHUB_TOKEN_REFUSED: 'GitHub이 저장된 token을 거부했습니다. gh auth login으로 다시 로그인하고 codeye up을 실행하세요.',
+      GITHUB_FORBIDDEN: '이 GitHub token으로는 그 pull request를 읽을 수 없습니다.',
+      GITHUB_RATE_LIMITED: 'GitHub API 사용 한도에 걸렸습니다. 잠시 뒤 다시 시도하세요.',
+      GITHUB_UNAVAILABLE: 'GitHub API에 연결하지 못했습니다. 네트워크를 확인하고 다시 시도하세요.',
+      NOT_A_PULL_REQUEST_RUN: '이 실행은 pull request를 분석하지 않습니다.',
+    } as Record<string, string>,
+  },
+  // --- end of pull requests ---
 
   // --- small shared pieces ---
   copy: { button: '복사', done: '✓ 복사함', failedShort: '복사 안 됨', failed: '복사하지 못했습니다. 글자를 직접 선택해 복사하세요.', labelFor: (text: string) => `${text} 복사` },

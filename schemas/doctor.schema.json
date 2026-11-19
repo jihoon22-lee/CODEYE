@@ -941,6 +941,7 @@
                   "pip_index",
                   "crates_registry",
                   "git_host",
+                  "github_api",
                   "model_endpoint"
                 ]
               },
@@ -969,6 +970,8 @@
                   "checksum_database_off",
                   "dependency_fetch_disabled",
                   "git_hosts_empty",
+                  "offline_mode",
+                  "github_disabled",
                   "model_not_configured",
                   "model_endpoint_not_configured"
                 ]

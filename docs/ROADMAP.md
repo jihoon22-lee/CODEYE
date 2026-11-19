@@ -18,13 +18,15 @@
 
 | 작업 | 선행 |
 |---|---|
-| GitHub 연결 | 없음 |
-| PR·댓글 분석 | GitHub 연결 |
+| GitHub 연결(App) | 없음 |
+| PR·댓글 분석(App) | GitHub 연결(App) |
 | 다중 노드 검증 | 없음. GitHub 연결·PR·댓글 분석과 병행 |
 | 폐쇄망 실기 확인 | 다중 노드 검증 |
 | 운영 수용 | PR·댓글 분석, 폐쇄망 실기 확인 |
 
 ## 여러 사용자·GitHub 연동·분산 운영
+
+개인 모드의 token 발견, 비공개 저장소, pull request 분석과 결과 댓글 하나는 끝났다([GitHub 연결](GITHUB.md), A46). 아래 두 작업은 여러 사람이 쓰는 서버 설치의 App 경로다. 개인 모드의 고정·게시 경로(`runs.pull_request`, 댓글 outbox)를 그대로 쓴다.
 
 ### GitHub 연결
 

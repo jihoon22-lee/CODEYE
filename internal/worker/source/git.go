@@ -3,6 +3,7 @@ package source
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"io/fs"
@@ -30,6 +31,18 @@ type GitOptions struct {
 	// CABundle is the PEM file git trusts for the host's TLS
 	// (GIT_SSL_CAINFO and SSL_CERT_FILE); "" keeps git's own store.
 	CABundle string
+	// Token authenticates the HTTPS requests to AllowedHost of this one
+	// acquisition (personal mode's GitHub token). It reaches git only as an
+	// Authorization header in the process environment
+	// (GIT_CONFIG_COUNT/KEY/VALUE scoped to https://AllowedHost/), never in
+	// argv, the remote URL or a file of the workspace.
+	Token string
+	// PullRequest, when set, fetches refs/pull/NUMBER/head instead of a
+	// branch; ExpectSHA is the pinned head commit. When the ref has moved
+	// since the pin, the pinned commit itself is fetched; if the host does
+	// not serve it the acquisition fails with ErrUnstable.
+	PullRequest int
+	ExpectSHA   string
 }
 type capWriter struct {
 	data     []byte
@@ -52,6 +65,8 @@ type gitRunner struct {
 	executable, repo, home string
 	caBundle               string
 	fileTransport          bool
+	// authHeader is the http.extraHeader for authHost ("" for none).
+	authHeader, authHost string
 	// fetchLimit is a soft ceiling on the bytes git may write under repo. It is polled,
 	// not a filesystem quota: a fast transfer can overshoot it before the process is stopped.
 	fetchLimit int64
@@ -95,6 +110,11 @@ func (g gitRunner) run(ctx context.Context, input io.Reader, max int64, args ...
 	if g.caBundle != "" {
 		// GIT_SSL_CAINFO for every TLS backend git's curl may use.
 		cmd.Env = append(cmd.Env, "GIT_SSL_CAINFO="+g.caBundle, "SSL_CERT_FILE="+g.caBundle)
+	}
+	if g.authHeader != "" {
+		// Command-scope configuration through the environment: the header
+		// applies to https://authHost/ only and is not in argv.
+		cmd.Env = append(cmd.Env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.https://"+g.authHost+"/.extraHeader", "GIT_CONFIG_VALUE_0="+g.authHeader)
 	}
 	configureGitProcess(cmd)
 	out := &capWriter{limit: max}
@@ -208,6 +228,9 @@ func AcquireGit(ctx context.Context, repository, branch, dataRoot string, limits
 	if options.AllowedLocalRoot != "" && !filepath.IsAbs(options.AllowedLocalRoot) {
 		return Snapshot{}, ErrInvalid
 	}
+	if options.PullRequest < 0 || (options.PullRequest > 0 && (branch != "" || !objectID.MatchString(options.ExpectSHA))) || strings.ContainsAny(options.Token, "\x00\r\n") {
+		return Snapshot{}, ErrInvalid
+	}
 	requestedAt := time.Now().UTC()
 	ctx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()
@@ -249,6 +272,10 @@ func AcquireGit(ctx context.Context, repository, branch, dataRoot string, limits
 		return Snapshot{}, ErrUnavailable
 	}
 	runner := gitRunner{executable: options.Executable, repo: gitDir, home: home, caBundle: options.CABundle, fileTransport: local, fetchLimit: softFetchLimit(limits)}
+	if options.Token != "" && !local {
+		runner.authHeader = "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:"+options.Token))
+		runner.authHost = strings.ToLower(options.AllowedHost)
+	}
 	run := func(input io.Reader, max int64, args ...string) ([]byte, error) {
 		out, err := runner.run(ctx, input, max, args...)
 		if errors.Is(err, ErrRecoveryRequired) {
@@ -256,35 +283,58 @@ func AcquireGit(ctx context.Context, repository, branch, dataRoot string, limits
 		}
 		return out, err
 	}
-	if branch == "" {
-		// No branch: the remote's default branch, whose name the snapshot records.
-		if branch, err = remoteDefaultBranch(run, location); err != nil {
-			return Snapshot{}, err
+	ref := "refs/pull/" + strconv.Itoa(options.PullRequest) + "/head"
+	if options.PullRequest == 0 {
+		if branch == "" {
+			// No branch: the remote's default branch, whose name the snapshot records.
+			if branch, err = remoteDefaultBranch(run, location); err != nil {
+				return Snapshot{}, err
+			}
+			if strings.HasPrefix(branch, "-") || strings.ContainsAny(branch, "\x00\r\n") || len(branch) > 255 {
+				return Snapshot{}, ErrUnsupported
+			}
 		}
-		if strings.HasPrefix(branch, "-") || strings.ContainsAny(branch, "\x00\r\n") || len(branch) > 255 {
-			return Snapshot{}, ErrUnsupported
+		s.Manifest.SourceBranch = branch
+		ref = "refs/heads/" + branch
+		if _, err = run(nil, 8192, "check-ref-format", ref); err != nil {
+			if errors.Is(err, ErrRecoveryRequired) {
+				return Snapshot{}, err
+			}
+			return Snapshot{}, ErrInvalid
 		}
-	}
-	s.Manifest.SourceBranch = branch
-	if _, err = run(nil, 8192, "check-ref-format", "refs/heads/"+branch); err != nil {
-		if errors.Is(err, ErrRecoveryRequired) {
-			return Snapshot{}, err
-		}
-		return Snapshot{}, ErrInvalid
+	} else {
+		s.Manifest.SourceRef = ref
 	}
 	if _, err = run(nil, 8192, "init", "--bare", "--template="); err != nil {
 		return Snapshot{}, err
 	}
-	if _, err = run(nil, 8192, "fetch", "--depth=1", "--no-tags", "--no-recurse-submodules", "--", location, "refs/heads/"+branch); err != nil {
+	fetchHead := func(what string) (string, error) {
+		if _, err := run(nil, 8192, "fetch", "--depth=1", "--no-tags", "--no-recurse-submodules", "--", location, what); err != nil {
+			return "", err
+		}
+		sha, err := run(nil, 256, "rev-parse", "--verify", "FETCH_HEAD^{commit}")
+		if err != nil {
+			return "", err
+		}
+		if id := strings.TrimSpace(string(sha)); objectID.MatchString(id) {
+			return id, nil
+		}
+		return "", ErrUnavailable
+	}
+	if s.Manifest.SourceSHA, err = fetchHead(ref); err != nil {
 		return Snapshot{}, err
 	}
-	sha, err := run(nil, 256, "rev-parse", "--verify", "FETCH_HEAD^{commit}")
-	if err != nil {
-		return Snapshot{}, err
-	}
-	s.Manifest.SourceSHA = strings.TrimSpace(string(sha))
-	if !objectID.MatchString(s.Manifest.SourceSHA) {
-		return Snapshot{}, ErrUnavailable
+	if options.ExpectSHA != "" && s.Manifest.SourceSHA != options.ExpectSHA {
+		// The pull request moved after it was pinned: the pinned commit
+		// itself, which the host serves while it is reachable.
+		got, err := fetchHead(options.ExpectSHA)
+		switch {
+		case errors.Is(err, ErrRecoveryRequired):
+			return Snapshot{}, err
+		case err != nil || got != options.ExpectSHA:
+			return Snapshot{}, errors.Join(ErrUnstable, ErrUnavailable)
+		}
+		s.Manifest.SourceSHA = got
 	}
 	tree, err := run(nil, int64(limits.MaxFiles)*8192, "ls-tree", "-r", "-z", "--full-tree", s.Manifest.SourceSHA)
 	if err != nil {

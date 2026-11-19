@@ -228,6 +228,11 @@
         "origin": "config"
       },
       {
+        "kind": "github_api",
+        "origin": "none",
+        "reason": "offline_mode"
+      },
+      {
         "kind": "model_endpoint",
         "value": "https://llm.corp.example/v1",
         "origin": "model_key_file"

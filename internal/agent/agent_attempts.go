@@ -186,6 +186,7 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 			}
 		}
 		job.Source.RepositoryURL, job.Source.AllowedLocalRoot = testGitMirror(job.Source.RepositoryURL, job.Source.AllowedHost)
+		job.PullRequest = j.PullRequest
 	}
 	// The project's own choices; a job from a controller that sends none
 	// gets the defaults.

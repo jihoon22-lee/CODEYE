@@ -39,7 +39,8 @@ Usage:
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
   codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--personal [--state-dir DIR]]
                [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]]   (required for a non-loopback --listen)
-` + nodeAdminUsage + `  codeye up [PATH] [--config PATH] [--postgres-bin-dir DIR] [--offline] [--no-open] [--no-probe]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH)
+` + nodeAdminUsage + `  codeye up [PATH|URL] [--config PATH] [--postgres-bin-dir DIR] [--offline] [--no-open] [--no-probe]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH or a repository URL)
+  codeye up https://github.com/OWNER/REPO/pull/N [--comment[=false]] [--dry-run-comment] [--comment-wait DURATION]   (analyzes a pull request; --comment posts one result comment and is remembered; --dry-run-comment prints it without posting)
   codeye open [--config PATH] [--no-open]   (a new signed-in browser link)
   codeye start [--config PATH]      (personal mode without a project or browser)
   codeye stop [--config PATH] [--format text|json]
@@ -47,7 +48,7 @@ Usage:
   codeye backup [--config PATH] [--output DIR] [--format text|json]   (default output: <backup_dir>/codeye-<UTC>)
   codeye restore [--config PATH] --from DIR [--format text|json]   (new empty database and state_dir only)
   codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
-               [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
+               [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ... [--git-credential-file PATH]] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
                [--cppcheck /abs/cppcheck] [--clang-tidy /abs/clang-tidy]
                [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit] [--advertise-without-baseline]
                [--eslint /abs/eslint/bin/eslint.js] [--tsc /abs/typescript/bin/tsc]

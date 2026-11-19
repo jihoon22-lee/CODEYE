@@ -89,8 +89,11 @@ type Config struct {
 	ToolPath      string
 	GitExecutable string
 	GitHosts      []string
-	GoExecutable  string
-	GoModCache    string
+	// GitCredentialFile (--git-credential-file) is where workers read a Git
+	// host token for a fetch of that host; it may not exist yet.
+	GitCredentialFile string
+	GoExecutable      string
+	GoModCache        string
 	// DependencyFetch (--dependency-fetch) is the operator's switch for the
 	// dependency tasks; a job fetches only when its project's
 	// fetch_dependencies choice is on too. The other Dependency fields are its
@@ -277,7 +280,7 @@ func New(cfg Config) (*Agent, error) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}
 	}
-	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile} {
+	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile, cfg.GitCredentialFile} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}

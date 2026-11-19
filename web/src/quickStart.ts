@@ -1,13 +1,15 @@
 import type { AnalysisChoices, CreateProjectBody, Provider, Setup } from './api';
 import { ko as t } from './locales/ko';
 import { urlHasCredentials } from './projectForm';
+import { pullRequestOf } from './pullRequest';
 
 const v = t.quick.validation;
 
 // What the single field holds: an absolute folder path or a Git repository address.
 export type QuickTarget =
   | { kind: 'local'; path: string }
-  | { kind: 'git'; url: string; host: string; branch: string | null };
+  // pullRequest: the number of a /pull/N address (a pull-request run of the repository).
+  | { kind: 'git'; url: string; host: string; branch: string | null; pullRequest?: number };
 
 export function isAbsolutePath(value: string): boolean {
   return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\');
@@ -40,6 +42,12 @@ export function parseTarget(raw: string): { target: QuickTarget | null; error: s
   if (url.search !== '' || url.hash !== '') return { target: null, error: v.notRepository };
   let path = url.pathname.replace(/\/+$/, '');
   let branch: string | null = null;
+  const pr = pullRequestOf(path);
+  if (pr) {
+    const parts = pr.repoPath.split('/').filter(Boolean);
+    if (parts.length !== 2) return { target: null, error: v.notRepository };
+    return { target: { kind: 'git', url: `https://${url.host.toLowerCase()}${pr.repoPath}`, host: url.host.toLowerCase(), branch: null, pullRequest: pr.number }, error: null };
+  }
   const tree = path.match(/^(\/[^/]+\/[^/]+)\/tree\/(.+)$/);
   if (tree) {
     path = tree[1];

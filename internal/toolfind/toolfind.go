@@ -1,5 +1,6 @@
 // Package toolfind finds the tools CODEYE can use on this machine: the Go
-// toolchain, git, node, OpenCode and every analyzer of the builtin catalog.
+// toolchain, git, the GitHub CLI, node, OpenCode and every analyzer of the
+// builtin catalog.
 //
 // A tool is looked for in the user's PATH, in the usual per-user install
 // directories and in the CODEYE tool prefix (docs/ANALYZERS.md#도구-찾기).
@@ -180,7 +181,7 @@ type Options struct {
 }
 
 // order is the fixed order of Result.Tools.
-var order = append([]string{"go", "git", "node", "opencode", "staticcheck", "gitleaks", "ruff", "mypy", "pyright", "bandit", "lizard",
+var order = append([]string{"go", "git", "gh", "node", "opencode", "staticcheck", "gitleaks", "ruff", "mypy", "pyright", "bandit", "lizard",
 	"cppcheck", "clang-tidy", "eslint", "tsc", "jscpd", "cargo", "clippy"},
 	// The package managers of the dependency fetch.
 	append(append([]string{}, jsManagerNames...), pythonManagerNames...)...)
@@ -221,7 +222,7 @@ func Detect(ctx context.Context, opts Options) Result {
 
 	// Phase one: tools that need no other tool. Phase two: tools run by node
 	// or needing go (Staticcheck), validated against the phase-one results.
-	d.run([]string{"go", "git", "node", "opencode", "cargo", "gitleaks", "ruff", "mypy", "bandit", "lizard", "cppcheck", "clang-tidy"})
+	d.run([]string{"go", "git", "gh", "node", "opencode", "cargo", "gitleaks", "ruff", "mypy", "bandit", "lizard", "cppcheck", "clang-tidy"})
 	d.run([]string{"staticcheck", "pyright", "eslint", "tsc", "jscpd"})
 	d.run([]string{"clippy"})
 	// Package managers: the JS ones after node, python after uv (an
@@ -303,7 +304,7 @@ func (d *detector) cfg() builtin.Config {
 		switch name {
 		case "go":
 			c.GoExecutable = t.Path
-		case "git", "opencode":
+		case "git", "gh", "opencode":
 		default:
 			if isManager(name) {
 				// Package managers are not analyzer tools.

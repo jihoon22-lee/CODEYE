@@ -77,6 +77,11 @@ class Session:
 def run(base, root, env, probe_env):
     directory = base / "personal-smoke"
     directory.mkdir(mode=0o700)
+    # No GitHub token of this machine reaches a smoke installation: the token variables are
+    # dropped and gh reads an empty configuration directory (no login).
+    env = {k: v for k, v in env.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN")}
+    (directory / "gh-config").mkdir(mode=0o700)
+    env["GH_CONFIG_DIR"] = str(directory / "gh-config")
     binary = base / "codeye"
     fixture = directory / "codeye-fixture"
     subprocess.run(["go", "build", "-tags", "codeye_fixture", "-o", fixture, "./cmd/codeye"],
@@ -116,10 +121,11 @@ def run(base, root, env, probe_env):
 
     def config(name, port, roots, **extra):
         state = directory / name / "state"
+        # GitHub token discovery is off: the machine's own gh login stays out of the smoke.
         doc = {"schema_version": "0.1", "state_dir": str(state), "listen": f"127.0.0.1:{port}",
                "database": {"mode": "external", "postgres_bin_dir": str(pg_bin)},
                "source_roots": [{"label": label, "path": str(path)} for label, path in roots],
-               "backup_dir": str(directory / "backups"), **extra}
+               "backup_dir": str(directory / "backups"), "github": {"enabled": False}, **extra}
         (directory / name).mkdir(mode=0o700)
         path = directory / name / "personal.json"
         path.write_text(json.dumps(doc, indent=2))
@@ -340,6 +346,7 @@ def run(base, root, env, probe_env):
                            capture_output=True, timeout=200)
     managed(base, root, env, directory, source)
     paths_and_git(root, env, directory, fixture)
+    pull_request(root, env, directory, fixture)
 
 
 def bare_repository(mirror, host_path, files):
@@ -438,6 +445,151 @@ def paths_and_git(root, env, directory, fixture):
     finally:
         subprocess.run([binary, "stop"], cwd=home, env=menv, capture_output=True, timeout=300)
 
+
+
+def git_env():
+    return dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_AUTHOR_NAME="codeye", GIT_AUTHOR_EMAIL="codeye@example.invalid",
+                GIT_COMMITTER_NAME="codeye", GIT_COMMITTER_EMAIL="codeye@example.invalid")
+
+
+def git(work, *args):
+    return subprocess.run(["git", *args], cwd=work, env=git_env(), check=True, capture_output=True, text=True, timeout=30).stdout.strip()
+
+
+def pull_files(work, base, head):
+    """The changed files of base..head as GitHub lists them, with the patch hunks."""
+    out = []
+    for line in git(work, "diff", "--name-status", base, head).splitlines():
+        status, name = line.split("\t", 1)
+        entry = {"filename": name, "status": {"A": "added", "M": "modified", "D": "removed"}[status[0]]}
+        diff = git(work, "diff", "--unified=3", base, head, "--", name)
+        if "@@" in diff:
+            entry["patch"] = diff[diff.index("@@"):]
+        out.append(entry)
+    return out
+
+
+def pull_request(root, env, directory, fixture):
+    """TC-227~229: a pull-request address, its pinned head, the one result comment and the dry run.
+
+    The fixture build reads CODEYE_TEST_GIT_MIRROR (the repository and its refs/pull/7/head) and
+    CODEYE_TEST_GITHUB_API (scripts/fake_github.py): no network. The token comes from GH_TOKEN.
+    """
+    from fake_github import FakeGitHub
+
+    token = "ghp_smoke" + os.urandom(12).hex()
+    home = directory / "pull"
+    home.mkdir(mode=0o700)
+    binary = home / "codeye"
+    shutil.copy2(fixture, binary)
+    user_home = home / "h"
+    user_home.mkdir(mode=0o700)
+    mirror = home / "mirror"
+    work = home / "work"
+    work.mkdir()
+    (work / "go.mod").write_text("module example.com/widget\n\ngo 1.22\n")
+    (work / "old.go").write_text('package widget\n\nimport "fmt"\n\nfunc Old() { fmt.Printf("%d\\n", "old") }\n')
+    (work / "gone.go").write_text("package widget\n\nfunc Gone() {}\n")
+    (work / "parse.go").write_text("package widget\n\nfunc Parse(s string) string {\n\treturn s\n}\n")
+    git(work, "init", "-q", "-b", "main")
+    git(work, "add", "-A")
+    git(work, "commit", "-q", "-m", "base")
+    base = git(work, "rev-parse", "HEAD")
+    git(work, "checkout", "-q", "-b", "feature")
+    (work / "parse.go").write_text('package widget\n\nimport "fmt"\n\nfunc Parse(s string) string {\n\tfmt.Printf("%d\\n", s)\n\treturn s\n}\n')
+    (work / "gone.go").unlink()
+    git(work, "add", "-A")
+    git(work, "commit", "-q", "-m", "change")
+    head1 = git(work, "rev-parse", "HEAD")
+    target = mirror / "github.com/acme/widget.git"
+    target.parent.mkdir(parents=True)
+    subprocess.run(["git", "clone", "-q", "--bare", "--branch", "main", str(work), str(target)], env=git_env(), check=True, capture_output=True, timeout=30)
+    git(work, "push", "-q", str(target), f"{head1}:refs/pull/7/head")
+    fake = FakeGitHub(token, "codeye-bot")
+    fake.add_pull("acme/widget", 7, base_sha=base, head_sha=head1, files=pull_files(work, base, head1), head_repo="someone/widget")
+    state = user_home / ".local/state/codeye"
+    menv = {k: v for k, v in env.items() if k not in ("CODEYE_DATABASE_URL", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "GITHUB_TOKEN") and not k.startswith("PG")}
+    menv.update(HOME=str(user_home), BROWSER="/bin/true", CODEYE_TEST_GIT_MIRROR=str(mirror), CODEYE_TEST_GITHUB_API=fake.url, GH_TOKEN=token)
+
+    def cli(*args, expect=0, timeout=300):
+        result = subprocess.run([binary, *map(str, args)], cwd=home, env=menv, capture_output=True, text=True, timeout=timeout)
+        text = result.stdout + result.stderr
+        assert token not in text, f"{args[0]}: token 노출"
+        if expect is not None and result.returncode != expect:
+            raise RuntimeError(f"{args[0]} 종료 코드 {result.returncode} (기대 {expect}): {text[-3000:]}")
+        return text
+
+    def link_of(text):
+        line = next(line.strip() for line in text.splitlines() if "#launch=" in line)
+        return line, line.split("/#", 1)[0]
+
+    def comment_state(session, run_id, want, timeout=120):
+        def probe():
+            c = session.request("GET", f"runs/{run_id}")["pull_request"]["comment"]
+            return c if c["state"] == want else None
+        return wait_for(f"run {run_id} 댓글 {want}", probe, timeout)
+
+    try:
+        # TC-227: up with a pull-request address and --comment.
+        first = cli("up", "--no-open", "--comment", "https://github.com/acme/widget/pull/7")
+        assert "github: signed in as codeye-bot on github.com (token from GH_TOKEN)" in first, first
+        assert f"queued an analysis of pull request #7 of acme/widget (feature from someone/widget, head {head1[:7]}" in first, first
+        assert "comment: on" in first and "pull-request comments are now on" in first, first
+        link, origin = link_of(first)
+        session = Session(state, origin, link)
+        run1 = link.rsplit("&run=", 1)[1]
+        view = session.finished(run1, timeout=300)
+        assert view["report"], json.dumps(view, ensure_ascii=False)[:3000]
+        pr = view["pull_request"]
+        assert pr["number"] == 7 and pr["head_sha"] == head1 and pr["base_sha"] == base and pr["head_repository"] == "someone/widget", pr
+        doc = session.request("GET", f"runs/{run1}/report?format=json&include_code=false")
+        assert doc["inputs"]["commit_sha"] == head1, doc["inputs"]
+        s = doc["pull_request"]
+        assert s["head_analyzed"] and s["files_removed"] == 1 and s["review"]["reviewable"] == 1 and s["line_basis"] == "lines", s
+        # No model: the section says the changed files had static analysis only, not "0 sent".
+        assert s["review"].get("sent_to_model") is None, s["review"]
+        assert s["observations"]["changed_lines"] >= 1 and s["observations"]["elsewhere"] >= 1, s
+        md = session.request("GET", f"runs/{run1}/report?format=markdown&include_code=false&detail=summary", raw=True)[0].decode()
+        assert "pull request \\#7" in md and "같은 깊이로 검토하지 않았을 수 있다" in md, md[:2000]
+        comment_state(session, run1, "posted")
+        comments = fake.comment_list("acme/widget", 7)
+        assert len(comments) == 1 and head1 in comments[0]["body"] and "parse.go" in comments[0]["body"], comments
+        setup = session.request("GET", "setup")
+        assert setup["github"] == {"enabled": True, "host": "github.com", "token": True, "account": "codeye-bot", "source": "GH_TOKEN", "reason": None}, setup["github"]
+        # TC-228: a push, then the same address again: a new run on the new head updates the one comment.
+        (work / "parse.go").write_text('package widget\n\nimport "fmt"\n\nfunc Parse(s string) string {\n\tfmt.Printf("%d %d\\n", s, s)\n\treturn s\n}\n')
+        git(work, "commit", "-q", "-am", "push")
+        head2 = git(work, "rev-parse", "HEAD")
+        git(work, "push", "-q", "-f", str(target), f"{head2}:refs/pull/7/head")
+        fake.set_head("acme/widget", 7, head2, pull_files(work, base, head2))
+        second = cli("up", "--no-open", "https://github.com/acme/widget/pull/7")
+        assert f"head {head2[:7]}" in second and "comment: on" in second, second
+        run2 = second.split("(run ", 1)[1].split(")", 1)[0]
+        assert run2 != run1
+        session.finished(run2, timeout=300)
+        comment_state(session, run2, "posted")
+        comments = fake.comment_list("acme/widget", 7)
+        assert len(comments) == 1 and head2 in comments[0]["body"] and head1 not in comments[0]["body"], comments
+        cmp = session.request("GET", f"runs/{run2}/comparison")
+        assert cmp["baseline"]["run_id"] == run1, cmp["baseline"]
+        # TC-229: the dry run posts nothing, keeps the remembered choice and prints the comment.
+        writes = fake.writes()
+        dry = cli("up", "--no-open", "--dry-run-comment", "https://github.com/acme/widget/pull/7", timeout=420)
+        assert "comment: dry run (nothing is posted)" in dry and "----- pull-request comment preview (not posted) -----" in dry and "<!-- codeye:pull-request-comment project=" in dry, dry[-3000:]
+        assert fake.writes() == writes and len(fake.comment_list("acme/widget", 7)) == 1, "dry run이 게시함"
+        projects = {p["name"]: p for p in session.request("GET", "projects?limit=100")["items"]}
+        assert projects["widget"]["analysis"].get("comment_on_pull_request") is True, projects["widget"]["analysis"]
+        assert all(authorized for _, _, authorized in fake.requests), "token 없는 GitHub 호출"
+        # The token is only in its secrets file.
+        secret = state / "secrets/github.json"
+        assert stat.S_IMODE(secret.stat().st_mode) == 0o600
+        for path in state.rglob("*"):
+            if path.is_file() and not path.is_symlink() and path != secret:
+                assert token.encode() not in path.read_bytes(), f"token이 상태 파일에 있음: {path.relative_to(state)}"
+        print("PASS: pull request 주소·head 고정·변경 부분 보고서·결과 댓글 하나(새 push에 갱신)·dry run 미게시·token은 비밀 파일에만")
+    finally:
+        subprocess.run([binary, "stop"], cwd=home, env=menv, capture_output=True, timeout=300)
+        fake.close()
 
 def managed(base, root, env, directory, source):
     """TC-170~173: codeye up with no configuration file and the managed PostgreSQL.

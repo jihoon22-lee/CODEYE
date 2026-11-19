@@ -25,6 +25,9 @@ const (
 	kindClippy
 	kindGit
 	kindOpenCode
+	// kindGH is the GitHub CLI: personal mode asks it for the signed-in
+	// account's token (docs/GITHUB.md). It is no analyzer and no agent flag.
+	kindGH
 )
 
 // spec describes how one tool is found.
@@ -56,6 +59,7 @@ var specs = map[string]spec{
 	"go":          {kindExec, "go", "", "install Go from https://go.dev/dl or set `agent.go`"},
 	"git":         {kindGit, "git", "", "install git (Ubuntu: `sudo apt install git`) or set `agent.git`"},
 	"node":        {kindExec, "node", "", "install Node.js from https://nodejs.org or set `agent.tools.node`"},
+	"gh":          {kindGH, "gh", "", "install the GitHub CLI (https://cli.github.com) and run `gh auth login`; or set GH_TOKEN for `codeye up`"},
 	"opencode":    {kindOpenCode, "opencode", "", "install OpenCode (`curl -fsSL https://opencode.ai/install | bash`) or set `agent.model.opencode`"},
 	"staticcheck": {kindExec, "staticcheck", "", "`go install honnef.co/go/tools/cmd/staticcheck@latest` or set `agent.tools.staticcheck`"},
 	"gitleaks":    {kindExec, "gitleaks", "", "download a release from https://github.com/gitleaks/gitleaks/releases into ~/" + ToolPrefixRel + "/bin or set `agent.tools.gitleaks`"},
@@ -92,7 +96,7 @@ func (d *detector) candidates(name string, sp spec) []candidate {
 		}
 	}
 	switch sp.kind {
-	case kindExec, kindGit, kindOpenCode:
+	case kindExec, kindGit, kindOpenCode, kindGH:
 		for _, dir := range d.env.execDirs() {
 			for _, n := range exeNames(sp.bin) {
 				if p := filepath.Join(dir.path, n); isExecutable(p) {
@@ -237,6 +241,16 @@ func (d *detector) validate(name string, sp spec, path string) outcome {
 			return outcome{reason: "version output not recognized"}
 		}
 		return outcome{ok: true, version: m[1], tested: true}
+	case kindGH:
+		v, err := d.version(path, "--version")
+		if err != "" {
+			return outcome{reason: err}
+		}
+		m := ghVersion.FindStringSubmatch(v)
+		if m == nil {
+			return outcome{reason: "version output not recognized"}
+		}
+		return outcome{ok: true, version: m[1], tested: true}
 	case kindOpenCode:
 		v, err := d.version(path, "--version")
 		if err != "" {
@@ -293,6 +307,7 @@ func shortVersion(v string) string {
 
 var (
 	gitVersion   = regexp.MustCompile(`^git version ([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
+	ghVersion    = regexp.MustCompile(`^gh version ([0-9]+\.[0-9]+\.[0-9]+)`)
 	plainVersion = regexp.MustCompile(`^v?([0-9]+\.[0-9]+\.[0-9]+)$`)
 )
 

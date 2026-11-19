@@ -2,6 +2,7 @@ package toolfind
 
 import (
 	"bytes"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -24,7 +25,8 @@ func TestChecklistCoversEveryTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := out.String()
-	for _, want := range []string{"- [x] go: 1.27.4 (tested 1.27) - ~" + filepath.Join(string(filepath.Separator)+"go", "bin", "go") + "\n", "- [ ] staticcheck: missing (tested 2026.2) - copy the staticcheck binary", "- [ ] opencode: missing (tested 1.19.5)", "1 found, 22 missing, 0 unusable."} {
+	for _, want := range []string{"- [x] go: 1.27.4 (tested 1.27) - ~" + filepath.Join(string(filepath.Separator)+"go", "bin", "go") + "\n", "- [ ] staticcheck: missing (tested 2026.2) - copy the staticcheck binary", "- [ ] opencode: missing (tested 1.19.5)",
+		"- [ ] gh: missing - optional, online only", fmt.Sprintf("1 found, %d missing, 0 unusable.", len(Names())-1)} {
 		if !strings.Contains(text, want) {
 			t.Errorf("checklist lacks %q:\n%s", want, text)
 		}
