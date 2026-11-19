@@ -75,6 +75,26 @@ type Config struct {
 	GoNoProxy string
 	GoNoSumDB string
 
+	// --- Rust and JS/TS fetch (deps.rust, deps.javascript) ---
+	// CargoExecutable is the operator's toolchain cargo (--cargo); the fetch
+	// runs `cargo fetch` with it. RustConsumer: cargo check is usable on this
+	// node, so fetched crates are read.
+	CargoExecutable string
+	RustConsumer    bool
+	// NodeExecutable is the shared node toolchain (--node); NpmScript,
+	// PnpmScript and YarnScript the package managers' entry scripts (--npm,
+	// --pnpm, --yarn), run as <node> <script>. JSConsumer: tsc or
+	// type-aware ESLint is usable on this node. NpmRegistry is the
+	// registry URL given to every JS package manager ("" = their default
+	// or the project's .npmrc).
+	NodeExecutable string
+	NpmScript      string
+	PnpmScript     string
+	YarnScript     string
+	JSConsumer     bool
+	NpmRegistry    string
+	// --- end Rust and JS/TS fetch ---
+
 	ModuleTimeout    time.Duration
 	TotalTimeout     time.Duration
 	MaxDownloadBytes int64
@@ -118,6 +138,9 @@ type Outcome struct {
 	DroppedInputs []depdoc.Dropped
 	FailedItems   []depdoc.Failed
 	Limitations   []string
+	// InstalledDirs are the node_modules directories a JS/TS fetch built in
+	// the workspace copy (cache kind attempt).
+	InstalledDirs []string
 }
 
 // Fetcher prepares the dependencies of one ecosystem.
@@ -133,7 +156,7 @@ type Fetcher interface {
 }
 
 // Fetchers are this build's fetchers in plan order.
-func Fetchers() []Fetcher { return []Fetcher{GoFetcher{}} }
+func Fetchers() []Fetcher { return []Fetcher{GoFetcher{}, RustFetcher{}, JSFetcher{}} }
 
 // Handler wraps an inner handler with the dependency tasks.
 type Handler struct {
@@ -486,6 +509,9 @@ func (h *Handler) finish(job analysis.Job, key string, mod depdoc.Module, env *E
 		TaskKey: key, Module: mod, Manager: out.Manager, Lockfile: out.Lockfile, Pinned: out.Pinned, State: out.State, TaskStatus: string(out.Status),
 		Counts: out.Counts, Cache: depdoc.Cache{Kind: out.CacheKind}, DroppedInputs: nonNil(out.DroppedInputs), FailedItems: nonNil(out.FailedItems),
 		Limitations: sortedUnique(out.Limitations)}
+	if dirs := sortedUnique(out.InstalledDirs); len(dirs) > 0 {
+		rec.InstalledDirs = dirs
+	}
 	if out.Reason != "" {
 		rec.Reason = &out.Reason
 	}

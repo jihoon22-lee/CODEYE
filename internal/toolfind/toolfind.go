@@ -99,6 +99,10 @@ type Result struct {
 	// environment that differ from Go's defaults (`go env`); the dependency
 	// fetch follows them. Absent when the user changed none.
 	GoSettings *GoSettings `json:"go_settings,omitempty"`
+	// NpmRegistry is the registry of the user's npm configuration when it
+	// differs from npm's default (`npm config get registry`); the JS
+	// dependency fetch uses it. Absent otherwise.
+	NpmRegistry string `json:"npm_registry,omitempty"`
 	// PythonBothTypeCheckers is true when mypy and pyright were both found:
 	// the agent then needs --python-both-type-checkers.
 	PythonBothTypeCheckers bool   `json:"python_both_type_checkers"`
@@ -168,6 +172,9 @@ type Options struct {
 	// GoSettingsEnv returns the user's module download settings; nil runs
 	// the found go. Tests inject.
 	GoSettingsEnv func(ctx context.Context, goExe string) GoSettings
+	// NpmRegistryEnv returns the user's npm registry ("" = npm's default);
+	// nil runs the found npm. Tests inject.
+	NpmRegistryEnv func(ctx context.Context, node, npm string) string
 	// Now stamps the result; nil uses the clock.
 	Now func() time.Time
 }
@@ -215,6 +222,7 @@ func Detect(ctx context.Context, opts Options) Result {
 	d.run([]string{"go", "git", "node", "opencode", "cargo", "gitleaks", "ruff", "mypy", "bandit", "lizard", "cppcheck", "clang-tidy"})
 	d.run([]string{"staticcheck", "pyright", "eslint", "tsc", "jscpd"})
 	d.run([]string{"clippy"})
+	d.run(jsPackageManagerNames)
 
 	res := Result{SchemaVersion: SchemaVersion, DetectedAt: now().UTC().Truncate(time.Second)}
 	for _, name := range order {
@@ -240,6 +248,13 @@ func Detect(ctx context.Context, opts Options) Result {
 	}
 	if opts.Explicit.GoModCache != "" {
 		res.GoModCache = opts.Explicit.GoModCache
+	}
+	if npm, node := d.found["npm"], d.found["node"]; npm.Status == Found && node.Status == Found {
+		registry := opts.NpmRegistryEnv
+		if registry == nil {
+			registry = func(ctx context.Context, n, m string) string { return npmRegistry(ctx, n, m, probeDir) }
+		}
+		res.NpmRegistry = registryOf(registry(ctx, node.Path, npm.Path))
 	}
 	res.PythonBothTypeCheckers = d.found["mypy"].Status == Found && d.found["pyright"].Status == Found
 	return res

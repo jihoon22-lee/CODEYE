@@ -29,6 +29,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/deps/depdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -655,10 +656,25 @@ func ClassifyText(snapshotDir string, e source.Entry) TextState {
 // directories and regular files. The snapshot never copies a link
 // (link_not_followed), so anything else means the copy was changed.
 func LinkFreeTree(workspace string, roots []string) bool {
+	return LinkFreeTreeExcept(workspace, roots, nil)
+}
+
+// LinkFreeTreeExcept is LinkFreeTree that does not descend into the listed
+// snapshot-relative directories when each is a real directory: the
+// node_modules trees this attempt's dependency tasks installed
+// (depdoc.InstalledTrees), whose package links are the package manager's.
+func LinkFreeTreeExcept(workspace string, roots, skip []string) bool {
+	skipped := map[string]bool{}
+	for _, s := range skip {
+		skipped[filepath.Join(workspace, filepath.FromSlash(s))] = true
+	}
 	for _, r := range roots {
-		err := filepath.WalkDir(filepath.Join(workspace, filepath.FromSlash(r)), func(_ string, d fs.DirEntry, err error) error {
+		err := filepath.WalkDir(filepath.Join(workspace, filepath.FromSlash(r)), func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
+			}
+			if d.IsDir() && skipped[p] {
+				return filepath.SkipDir
 			}
 			if t := d.Type(); t&fs.ModeSymlink != 0 || !(t.IsDir() || t.IsRegular()) {
 				return errLink
@@ -670,6 +686,19 @@ func LinkFreeTree(workspace string, roots []string) bool {
 		}
 	}
 	return true
+}
+
+// InstalledTrees are the node_modules directories this attempt's
+// deps.javascript tasks installed (usable records only, validated again).
+func InstalledTrees(job analysis.Job) []string {
+	files := map[string]string{}
+	for _, e := range job.Snapshot.Manifest.Entries {
+		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" {
+			files[e.Path] = e.SHA256
+		}
+	}
+	return depdoc.InstalledTrees(job.Scratch, depdoc.Expect{Snapshot: job.Snapshot.Digest, RunID: job.RunID, AttemptID: job.AttemptID,
+		Lookup: func(p string) (string, bool) { s, ok := files[p]; return s, ok }})
 }
 
 // LinkFreeFiles reports whether each listed workspace file is a regular

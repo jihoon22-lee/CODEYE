@@ -587,6 +587,9 @@ def check_tools_contract(validator, example) -> None:
     names = [t["name"] for t in example["tools"]]
     go = (ROOT / "internal/toolfind/detect.go").read_text(encoding="utf-8")
     declared = re.findall(r'^\t"([a-z-]+)":\s+\{kind', go, re.M)
+    # The JS package managers register their specs in their own file.
+    jspm = (ROOT / "internal/toolfind/jspm.go").read_text(encoding="utf-8")
+    declared += re.findall(r'^\tspecs\["([a-z-]+)"\] = spec\{kind', jspm, re.M)
     ensure(sorted(names) == sorted(declared), "tools example and toolfind specs list different tools")
     cases = []
     bad = copy.deepcopy(example)

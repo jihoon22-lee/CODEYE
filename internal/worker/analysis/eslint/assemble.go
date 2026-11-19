@@ -88,6 +88,9 @@ type assembleInput struct {
 	Cancelled, Integrity    bool
 	Policy                  string
 	PolicyOptions           []string
+	// Dependencies is the limitation of a type-aware run that read the
+	// dependencies this attempt installed (jsts.PreparedTrees); "" without.
+	Dependencies string
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -179,6 +182,9 @@ func assemble(in assembleInput) obsdoc.Document {
 	}
 	if in.Typed {
 		addLim(&limitations, "javascript_files_not_type_checked")
+		if in.Dependencies != "" {
+			addLim(&limitations, in.Dependencies)
+		}
 	}
 	for pkg, series := range testedPlugins {
 		v := ""

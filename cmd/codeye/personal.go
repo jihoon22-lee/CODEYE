@@ -56,7 +56,12 @@ func runPersonal(ctx context.Context, args []string, out, stderr io.Writer) (int
 	return 0, false
 }
 
-func knownTools() []string { return append(builtin.ToolFlags(), builtin.ToolchainFlags()...) }
+// knownTools are the tool flag names of this build: analyzer tools, shared
+// toolchains and the dependency tasks' package managers.
+func knownTools() []string {
+	out := append(builtin.ToolFlags(), builtin.ToolchainFlags()...)
+	return append(out, builtin.JSPackageManagerFlags()...)
+}
 
 // loadPersonalConfig parses --config (and the extra flags) and loads it.
 func loadPersonalConfig(name string, args []string, stderr io.Writer, define func(*flag.FlagSet)) (*personal.Config, personal.Layout, bool) {

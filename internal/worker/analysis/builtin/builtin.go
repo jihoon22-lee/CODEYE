@@ -263,6 +263,10 @@ func compose(ctx context.Context, cfg Config, runner executor.Runner, entries []
 	for _, tc := range toolchainTable() {
 		known[tc.name] = true
 	}
+	// The dependency tasks' package managers are no analyzer members.
+	for _, n := range JSPackageManagerFlags() {
+		known[n] = true
+	}
 	var members []pack.Analyzer
 	baseline := false
 	for _, e := range entries {

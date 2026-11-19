@@ -16,7 +16,7 @@ func buildCargoCheck(ctx context.Context, cfg Config, runner executor.Runner, _ 
 	if exe == "" {
 		return unavailable(rustpack.CheckName, "not_configured", "", pack.ReasonToolNotConfigured)
 	}
-	a, err := rustpack.New(rustpack.KindCheck, rustpack.Config{Cargo: exe, ToolPath: cfg.ToolPath})
+	a, err := rustpack.New(rustpack.KindCheck, rustpack.Config{Cargo: exe, ToolPath: cfg.ToolPath, DependencyCacheRoot: cfg.DependencyCacheRoot})
 	return probeBuilt(ctx, cfg, runner, rustpack.CheckName, a, err)
 }
 
@@ -31,7 +31,7 @@ func buildClippy(ctx context.Context, cfg Config, runner executor.Runner, _ *gov
 		// clippy is run by the toolchain's cargo.
 		return unavailable(rustpack.ClippyName, "toolchain_not_configured", "clippy needs --cargo", pack.ReasonToolchainNotConfigured)
 	}
-	a, err := rustpack.New(rustpack.KindClippy, rustpack.Config{Cargo: cargo, Clippy: exe, ToolPath: cfg.ToolPath})
+	a, err := rustpack.New(rustpack.KindClippy, rustpack.Config{Cargo: cargo, Clippy: exe, ToolPath: cfg.ToolPath, DependencyCacheRoot: cfg.DependencyCacheRoot})
 	return probeBuilt(ctx, cfg, runner, rustpack.ClippyName, a, err)
 }
 

@@ -169,6 +169,28 @@
       "version_tested": true,
       "source": "rustup default",
       "tested_series": "0.1.99"
+    },
+    {
+      "name": "npm",
+      "status": "found",
+      "path": "/home/user/.local/lib/node-v24.18.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+      "version": "11.16.0",
+      "version_tested": true,
+      "source": "node installation"
+    },
+    {
+      "name": "pnpm",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/node/node_modules/pnpm/bin/pnpm.cjs",
+      "version": "11.28.13",
+      "version_tested": true,
+      "source": "codeye-tools/node"
+    },
+    {
+      "name": "yarn",
+      "status": "not_found",
+      "version_tested": false,
+      "hint": "`npm install --prefix ~/.local/share/codeye-tools/node yarn@1` or set `agent.tools.yarn`"
     }
   ]
 }

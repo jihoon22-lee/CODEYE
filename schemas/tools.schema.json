@@ -37,14 +37,19 @@
         "gonosumdb": {"type": "string", "minLength": 1}
       }
     },
+    "npm_registry": {
+      "type": "string",
+      "pattern": "^https?://[^@\\s]+$",
+      "description": "The registry of the user's npm configuration when it differs from npm's default; the JS dependency fetch uses it. Absent otherwise."
+    },
     "python_both_type_checkers": {
       "type": "boolean",
       "description": "mypy and pyright were both found: the agent needs --python-both-type-checkers."
     },
     "tools": {
       "type": "array",
-      "minItems": 18,
-      "maxItems": 18,
+      "minItems": 21,
+      "maxItems": 21,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -73,7 +78,10 @@
               "tsc",
               "jscpd",
               "cargo",
-              "clippy"
+              "clippy",
+              "npm",
+              "pnpm",
+              "yarn"
             ],
             "description": "The agent flag name; go, git and opencode have their own settings."
           },

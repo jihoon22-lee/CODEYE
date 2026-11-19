@@ -355,7 +355,10 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		in.ScratchFailed = true
 	}
 	in.ConfigRejected = !IgnoreFilesSafe(job.Snapshot.SnapshotDir, files, in.Roots)
-	in.Linked = !anypack.LinkFreeTree(r.Workspace, in.Roots)
+	// gitleaks skips node_modules by its default allowlist without reading
+	// it; the dependency trees installed for this attempt hold the package
+	// manager's links, so the link check does not walk them either.
+	in.Linked = !anypack.LinkFreeTreeExcept(r.Workspace, in.Roots, anypack.InstalledTrees(job))
 	if !in.ScratchFailed && !in.Integrity && !in.ConfigRejected && !in.Linked {
 		env := a.tool.Env(nil)
 		in.Version = r.Exec(ctx, runner, execVersion, r.Spec(a.tool, env, anypack.ProbeTimeout, 64<<10, 64<<10, "version"))

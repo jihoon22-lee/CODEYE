@@ -65,6 +65,9 @@ var versionOutputs = map[string]string{
 	"eslint":      "v10.15.0",
 	"tsc":         "Version 6.0.3",
 	"jscpd":       "jscpd 5.4.3",
+	"npm":         "11.16.0",
+	"pnpm":        "11.28.13",
+	"yarn":        "1.22.22",
 }
 
 // fakeNode is a node whose "scripts" are shell scripts: it runs the entry
@@ -124,7 +127,8 @@ func detect(t *testing.T, tr *tree, ex Explicit) Result {
 	t.Helper()
 	probe := t.TempDir()
 	res := Detect(context.Background(), Options{Env: tr.env, Explicit: ex, ProbeDir: probe,
-		GoEnv: func(context.Context, string) string { return "" }, Now: func() time.Time { return time.Unix(0, 0) }})
+		GoEnv: func(context.Context, string) string { return "" }, NpmRegistryEnv: func(context.Context, string, string) string { return "" },
+		Now: func() time.Time { return time.Unix(0, 0) }})
 	if entries, _ := os.ReadDir(probe); len(entries) != 0 {
 		t.Fatalf("probes left %v", entries)
 	}
@@ -159,6 +163,8 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 	tr.env.Path = append(tr.env.Path, nodeBin)
 	globalModules := filepath.Join(tr.home, "node-prefix", "lib", "node_modules")
 	npmTool(t, globalModules, "jscpd/run-jscpd.js", versionOutputs["jscpd"])
+	// npm comes with node; pnpm and yarn are in the CODEYE tool prefix.
+	npmTool(t, globalModules, "npm/bin/npm-cli.js", versionOutputs["npm"])
 	// ~/.local/bin, ~/.opencode/bin and the CODEYE tool prefix.
 	script(t, filepath.Join(tr.home, ".local", "bin", "ruff"), versionOutputs["ruff"])
 	script(t, filepath.Join(tr.home, ".opencode", "bin", "opencode"), "1.19.5")
@@ -180,6 +186,8 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 		write(t, filepath.Join(nm, filepath.FromSlash(p), "index.js"), "", 0o644)
 	}
 	npmTool(t, nm, "typescript/bin/tsc", versionOutputs["tsc"])
+	npmTool(t, nm, "pnpm/bin/pnpm.cjs", versionOutputs["pnpm"])
+	npmTool(t, nm, "yarn/bin/yarn.js", versionOutputs["yarn"])
 	write(t, filepath.Join(nm, "typescript", "index.js"), "", 0o644)
 	// rustup: the default toolchain, not the proxy.
 	rustup := filepath.Join(tr.home, ".rustup")
@@ -210,6 +218,9 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 		"tsc":         {filepath.Join(nm, "typescript", "bin", "tsc"), "6.0.3", "codeye-tools/node"},
 		"cargo":       {filepath.Join(stable, "cargo"), "1.99.1", "rustup default"},
 		"clippy":      {filepath.Join(stable, "cargo-clippy"), "0.1.99", "rustup default"},
+		"npm":         {filepath.Join(globalModules, "npm", "bin", "npm-cli.js"), "11.16.0", "node installation"},
+		"pnpm":        {filepath.Join(nm, "pnpm", "bin", "pnpm.cjs"), "11.28.13", "codeye-tools/node"},
+		"yarn":        {filepath.Join(nm, "yarn", "bin", "yarn.js"), "1.22.22", "codeye-tools/node"},
 	}
 	if len(res.Tools) != len(Names()) || len(want) != len(Names()) {
 		t.Fatalf("%d tools, %d expected, %d names", len(res.Tools), len(want), len(Names()))

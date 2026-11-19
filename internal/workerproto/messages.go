@@ -132,6 +132,9 @@ type Dependencies struct {
 	MaxDownloadBytes int64  `json:"max_download_bytes"`
 	// CacheQuotaBytes is the cache storage area limit (0 = none).
 	CacheQuotaBytes int64 `json:"cache_quota_bytes"`
+	// NpmRegistry is the registry URL of npm, pnpm and yarn ("" = theirs
+	// or the project's .npmrc).
+	NpmRegistry string `json:"npm_registry,omitempty"`
 }
 
 // AttemptRef identifies the attempt a message belongs to.

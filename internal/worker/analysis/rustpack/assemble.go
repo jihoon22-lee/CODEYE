@@ -99,6 +99,9 @@ type assembleInput struct {
 	ConfigKnown                 bool
 	Linker                      bool
 	OutOfScope                  func(rel string) bool
+	// Dependencies is the limitation of a run that read the crates this
+	// attempt fetched (CARGO_HOME of deps.rust); "" for a scratch home.
+	Dependencies string
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -403,7 +406,11 @@ func assemble(in assembleInput) obsdoc.Document {
 	doc.Target.Properties = map[string]string{"features": "default", "targets": "all_targets", "workspace": "true", "host_only": "true", "profile": "dev"}
 	doc.Coverage.Unit = "crate"
 	doc.Coverage.FilesInScope = ptr(len(in.ScopeFiles))
-	limitations := []string{"default_features_only", "host_target_only", "offline_scratch_cargo_home", "rustc_wrapper_overridden"}
+	home := "offline_scratch_cargo_home"
+	if in.Dependencies != "" {
+		home = in.Dependencies
+	}
+	limitations := []string{"default_features_only", "host_target_only", home, "rustc_wrapper_overridden"}
 	if in.Kind == KindClippy {
 		limitations = append(limitations, "cap_lints_warn")
 	}
