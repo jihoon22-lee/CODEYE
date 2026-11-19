@@ -96,8 +96,10 @@ type Spec struct {
 	// OpenCodeModel selects the managed, tool-free OpenCode provider profile.
 	// Other commands leave this empty. No provider credentials are inherited.
 	OpenCodeModel string `json:"-"`
-	// Only this loopback relay receives the ephemeral relay token.
-	OpenCodeRelay *LocalModelRelay `json:"-"`
+	// OpenCodeProvider is the provider the model is reached through (its
+	// credential and endpoint, or the QA relay); nil for providers that
+	// need no credential. Its key is masked like Redact values.
+	OpenCodeProvider *ModelProvider `json:"-"`
 
 	// Stdin bytes; nil means the null device.
 	Stdin []byte `json:"-"`

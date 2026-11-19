@@ -14,7 +14,11 @@ output contract: `workspace_proof` is copied from the attached identity file and
 only evidence ids present in `<review-input>` are cited.
 
 Modes: `normal` (small usage), `expensive` (usage at the relay's bounds, to
-exhaust a small ledger cap quickly), `fail` (HTTP 500, charged in full by the relay).
+exhaust a small ledger cap quickly), `fail` (HTTP 500, charged in full by the relay),
+`unauthorized` (HTTP 401, which OpenCode does not retry: a fast failing probe).
+A request with `"stream": true` (OpenCode's OpenAI provider called directly, without
+the relay) gets the same reply as a Responses event stream; its `input` content
+may be a list of `input_text` parts.
 `--echo-text TEXT` appends an operator-chosen text to every investigate candidate
 title, to see whether a model's own words reach the verify request (the relay's
 `--allow-model-echo` path). The text comes from the operator, never from labels.
@@ -81,6 +85,10 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
     title = "Placeholder candidate (dry run)" + (": " + echo if echo else "")
     candidate = {"title": title, "condition": TEXT, "impact": TEXT,
                  "improvement": TEXT, "counterpoint": TEXT, "evidence_ids": code[:1]}
+    if role == "probe":  # codeye model probe: {"a": int, "b": int} -> {"sum": a + b}
+        data = review_input if isinstance(review_input, dict) else {}
+        a, b = data.get("a"), data.get("b")
+        return {"sum": a + b} if isinstance(a, int) and isinstance(b, int) else {}
     if role == "context":  # review-v1
         if code:
             return {"facts": [{"kind": "observed", "statement": TEXT, "evidence_ids": code[:1]}]}
@@ -116,9 +124,21 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
     return {}
 
 
+def content_text(content) -> str:
+    """The text of a message: a string (the relay's rebuilt payload) or the
+    list of input_text parts OpenCode's OpenAI provider sends directly."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(p.get("text", "") for p in content
+                         if isinstance(p, dict) and p.get("type") in ("input_text", "text") and isinstance(p.get("text"), str))
+    return ""
+
+
 def reply_text(payload: dict, echo: str | None = None) -> tuple[str, str]:
-    """Return (role, assistant text) for a rebuilt Responses payload."""
-    texts = [m.get("content", "") for m in payload.get("input", []) if isinstance(m, dict) and m.get("role") == "user"]
+    """Return (role, assistant text) for a Responses payload."""
+    texts = [content_text(m.get("content", "")) for m in payload.get("input", [])
+             if isinstance(m, dict) and m.get("role") == "user"]
     prompt = next((t for t in texts if ROLE.search(t)), "")
     found = ROLE.search(prompt)
     role = found.group(1) if found else "unknown"
@@ -152,9 +172,11 @@ class FakeUpstream:
             (self.dump / f"{number:04d}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=1))
         if self.mode == "fail":
             return 500, {"error": {"message": "fake failure", "type": "server_error", "code": "fake_failure"}}
+        if self.mode == "unauthorized":
+            return 401, {"error": {"message": "fake: invalid api key", "type": "invalid_request_error", "code": "invalid_api_key"}}
         role, text = reply_text(payload, self.echo)
         messages = payload.get("input", [])
-        input_bytes = sum(len(str(m.get("content", "")).encode()) for m in messages if isinstance(m, dict))
+        input_bytes = sum(len(content_text(m.get("content", "")).encode()) for m in messages if isinstance(m, dict))
         cap = int(payload.get("max_output_tokens") or 1)
         if self.mode == "expensive":
             usage_in, usage_out = input_bytes, cap  # the relay's bounds: input bytes and the output cap
@@ -170,6 +192,32 @@ class FakeUpstream:
                                "input_tokens_details": {"cached_tokens": 0},
                                "output_tokens_details": {"reasoning_tokens": 0}},
                      "metadata": {"codeye_fake_role": role}}
+
+
+def sse_events(body: dict) -> bytes:
+    """The Responses stream of a completed reply (what OpenCode's OpenAI
+    provider requests with "stream": true): created, one text delta, done."""
+    message = body["output"][0]
+    text = message["content"][0]["text"]
+    started = dict(body, status="in_progress", output=[], usage=None, created_at=int(time.time()))
+    events = [
+        {"type": "response.created", "response": started},
+        {"type": "response.output_item.added", "output_index": 0,
+         "item": dict(message, status="in_progress", content=[])},
+        {"type": "response.content_part.added", "item_id": message["id"], "output_index": 0, "content_index": 0,
+         "part": {"type": "output_text", "text": "", "annotations": []}},
+        {"type": "response.output_text.delta", "item_id": message["id"], "output_index": 0, "content_index": 0,
+         "delta": text, "logprobs": []},
+        {"type": "response.output_text.done", "item_id": message["id"], "output_index": 0, "content_index": 0,
+         "text": text, "logprobs": []},
+        {"type": "response.output_item.done", "output_index": 0, "item": message},
+        {"type": "response.completed", "response": dict(body, created_at=started["created_at"])},
+    ]
+    out = bytearray()
+    for number, event in enumerate(events):
+        event["sequence_number"] = number
+        out += f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode()
+    return bytes(out)
 
 
 def make_server(fake: FakeUpstream, port: int = 0) -> http.server.ThreadingHTTPServer:
@@ -188,9 +236,10 @@ def make_server(fake: FakeUpstream, port: int = 0) -> http.server.ThreadingHTTPS
                 self.send_error(400)
                 return
             status, body = fake.respond(payload)
-            data = json.dumps(body).encode()
+            stream = status == 200 and payload.get("stream") is True
+            data = sse_events(body) if stream else json.dumps(body).encode()
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "text/event-stream" if stream else "application/json")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -203,7 +252,7 @@ def make_server(fake: FakeUpstream, port: int = 0) -> http.server.ThreadingHTTPS
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--ready-file", required=True, type=Path, help="fresh path; receives {\"port\": N}")
-    parser.add_argument("--mode", choices=("normal", "expensive", "fail"), default="normal")
+    parser.add_argument("--mode", choices=("normal", "expensive", "fail", "unauthorized"), default="normal")
     parser.add_argument("--dump", type=Path, help="write every received payload here (dry-run analysis only)")
     parser.add_argument("--echo-text", help="append this operator text to investigate candidate titles")
     args = parser.parse_args(argv)

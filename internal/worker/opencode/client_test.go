@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -100,13 +102,148 @@ func TestEventGates(t *testing.T) {
 	}
 }
 
+func writeCredential(t *testing.T, dir string, body string, mode os.FileMode) string {
+	t.Helper()
+	path := filepath.Join(dir, "model.json")
+	if err := os.WriteFile(path, []byte(body), mode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// The credential is read at every call, from either a CODEYE credential or
+// an OpenCode auth.json entry of type api; a missing, shared or mismatched
+// file makes no request.
+func TestCredentialReadAtCallTime(t *testing.T) {
+	scratch := t.TempDir()
+	dir := t.TempDir()
+	var seen []*executor.ModelProvider
+	runner := runnerFunc(func(_ context.Context, s executor.Spec) executor.Result {
+		if reflect.DeepEqual(s.Args, []string{"--version"}) {
+			seen = append(seen, s.OpenCodeProvider)
+			if s.OpenCodeProvider == nil || !slicesContain(s.Redact, s.OpenCodeProvider.APIKey) {
+				t.Fatal("key not masked")
+			}
+			return successful(Version + "\n")
+		}
+		proof, _ := os.ReadFile(s.Args[len(s.Args)-1])
+		return successful(events(`{"workspace_proof":"` + strings.TrimSpace(string(proof)) + `","result":{"sum":5}}`))
+	})
+	q := Request{Scratch: scratch, SnapshotDigest: strings.Repeat("1", 64), Role: "probe", Input: json.RawMessage(`{}`)}
+	path := writeCredential(t, dir, `{"schema_version":"0.1","provider":"openai","api_key":"sk-one","base_url":"http://127.0.0.1:9/v1"}`, 0o600)
+	cfg := Config{Executable: filepath.Join(dir, "opencode"), Model: "openai/gpt-6.2-sol", CredentialFile: path, Timeout: time.Minute}
+	if r := cfg.Review(t.Context(), runner, q); r.Reason != "" || seen[0].APIKey != "sk-one" || seen[0].BaseURL != "http://127.0.0.1:9/v1" {
+		t.Fatalf("%+v", r)
+	}
+	writeCredential(t, dir, `{"schema_version":"0.1","provider":"openai","api_key":"sk-two"}`, 0o600)
+	if r := cfg.Review(t.Context(), runner, q); r.Reason != "" || seen[1].APIKey != "sk-two" {
+		t.Fatal("key not re-read")
+	}
+	auth := filepath.Join(dir, "auth.json")
+	if err := os.WriteFile(auth, []byte(`{"openai":{"type":"api","key":"sk-auth"},"anthropic":{"type":"oauth","access":"x"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.CredentialFile = auth
+	if r := cfg.Review(t.Context(), runner, q); r.Reason != "" || seen[2].APIKey != "sk-auth" {
+		t.Fatal("auth.json entry")
+	}
+	before := len(seen)
+	for name, c := range map[string]Config{
+		"oauth entry":      {Executable: cfg.Executable, Model: "anthropic/claude-opus-5-5", CredentialFile: auth, Timeout: time.Minute},
+		"missing file":     {Executable: cfg.Executable, Model: cfg.Model, CredentialFile: filepath.Join(dir, "none.json"), Timeout: time.Minute},
+		"other provider":   {Executable: cfg.Executable, Model: "anthropic/claude-opus-5-5", CredentialFile: path, Timeout: time.Minute},
+		"readable by all":  {Executable: cfg.Executable, Model: cfg.Model, CredentialFile: writeCredential(t, t.TempDir(), `{"schema_version":"0.1","provider":"openai","api_key":"k"}`, 0o644), Timeout: time.Minute},
+		"multi-line key":   {Executable: cfg.Executable, Model: cfg.Model, CredentialFile: writeCredential(t, t.TempDir(), `{"schema_version":"0.1","provider":"openai","api_key":"a\nb"}`, 0o600), Timeout: time.Minute},
+		"unknown field":    {Executable: cfg.Executable, Model: cfg.Model, CredentialFile: writeCredential(t, t.TempDir(), `{"schema_version":"0.1","provider":"openai","api_key":"k","x":1}`, 0o600), Timeout: time.Minute},
+		"gateway with key": {Executable: cfg.Executable, Model: "codeye-gateway/gpt-6.2-sol", CredentialFile: path, Timeout: time.Minute},
+	} {
+		want := ReasonCredentialUnavailable
+		if name == "gateway with key" {
+			want = "model_not_configured"
+		}
+		if runtime.GOOS == "windows" && name == "readable by all" {
+			continue
+		}
+		if r := c.Review(t.Context(), runner, q); r.Reason != want {
+			t.Errorf("%s: %s", name, r.Reason)
+		}
+	}
+	if len(seen) != before {
+		t.Fatal("a request was made without a usable credential")
+	}
+}
+
+func slicesContain(list []string, v string) bool {
+	for _, s := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
+// Another OpenCode release runs and is marked untested; an answer that is
+// not a release version is still refused.
+func TestUntestedVersion(t *testing.T) {
+	dir := t.TempDir()
+	for version, want := range map[string]string{"1.20.0": "", "2.0.0-beta.1": "", Version: "", "99.0": "opencode_version_unsupported", "opencode": "opencode_version_unsupported"} {
+		runner := runnerFunc(func(_ context.Context, s executor.Spec) executor.Result {
+			if reflect.DeepEqual(s.Args, []string{"--version"}) {
+				return successful(version + "\n")
+			}
+			proof, _ := os.ReadFile(s.Args[len(s.Args)-1])
+			return successful(events(`{"workspace_proof":"` + strings.TrimSpace(string(proof)) + `","result":{}}`))
+		})
+		cfg := Config{Executable: filepath.Join(dir, "opencode"), Model: "opencode/free", Timeout: time.Minute}
+		r := cfg.Review(t.Context(), runner, Request{Scratch: t.TempDir(), SnapshotDigest: strings.Repeat("0", 64), Role: "probe", Input: json.RawMessage(`{}`)})
+		if r.Reason != want {
+			t.Fatalf("%s: %q", version, r.Reason)
+		}
+		if want == "" && (r.Version != version || VersionUntested(r.Version) != (version != Version)) {
+			t.Fatalf("%s: version %q", version, r.Version)
+		}
+	}
+}
+
+// A failed `opencode run` is classified by its JSON error event.
+func TestProviderFailureReasons(t *testing.T) {
+	for status, want := range map[int]string{401: ReasonAuthFailed, 403: ReasonAuthFailed, 404: ReasonModelNotFound, 429: "model_rate_limited", 500: "model_unavailable"} {
+		line := `{"type":"error","sessionID":"s","error":{"name":"APIError","data":{"message":"x","statusCode":` + strconv.Itoa(status) + `}}}` + "\n"
+		if got := providerFailure([]byte(`{"type":"step_start"}` + "\n" + line)); got != want {
+			t.Errorf("%d: %s", status, got)
+		}
+	}
+	if got := providerFailure([]byte(`{"type":"error","error":{"name":"ProviderModelNotFoundError","data":{}}}`)); got != ReasonModelNotFound {
+		t.Fatal(got)
+	}
+	if got := providerFailure([]byte("not json")); got != "model_unavailable" {
+		t.Fatal(got)
+	}
+	dir := t.TempDir()
+	code := 1
+	runner := runnerFunc(func(_ context.Context, s executor.Spec) executor.Result {
+		if reflect.DeepEqual(s.Args, []string{"--version"}) {
+			return successful(Version + "\n")
+		}
+		return executor.Result{Status: executor.StatusExited, ExitCode: &code, Cleanup: executor.CleanupConfirmed,
+			Stdout: executor.Stream{Data: []byte(`{"type":"error","sessionID":"s","error":{"name":"APIError","data":{"statusCode":401}}}` + "\n")}}
+	})
+	cfg := Config{Executable: filepath.Join(dir, "opencode"), Model: "opencode/free", Timeout: time.Minute}
+	if r := cfg.Review(t.Context(), runner, Request{Scratch: t.TempDir(), SnapshotDigest: strings.Repeat("0", 64), Role: "probe", Input: json.RawMessage(`{}`)}); r.Reason != ReasonAuthFailed || r.Version != Version {
+		t.Fatalf("%+v", r)
+	}
+}
+
 // Explicit opt-in. CI's offline protocol tests never submit a provider request.
 func TestLiveOpenCode(t *testing.T) {
 	model := os.Getenv("CODEYE_TEST_OPENCODE_MODEL")
 	if model == "" {
 		t.Skip("live OpenCode model not requested")
 	}
-	cfg := Config{Executable: os.Getenv("CODEYE_TEST_OPENCODE_BIN"), Model: model, Timeout: 75 * time.Second}
+	cfg := Config{Executable: os.Getenv("CODEYE_TEST_OPENCODE_BIN"), Model: model, CredentialFile: os.Getenv("CODEYE_TEST_MODEL_CREDENTIAL"), Timeout: DefaultTimeout}
 	q := Request{Scratch: t.TempDir(), SnapshotDigest: strings.Repeat("0", 64), Role: "probe", Instructions: "For this synthetic fixture return the integer sum in result.sum.", Input: json.RawMessage(`{"a":2,"b":3}`)}
 	reply := cfg.Review(t.Context(), &executor.Executor{}, q)
 	if reply.Reason != "" {

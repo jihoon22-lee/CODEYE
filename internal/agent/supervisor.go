@@ -149,7 +149,7 @@ func (ag *Agent) startWorker(ctx context.Context, id string) (*workerProc, error
 	w.conn = workerproto.NewConn(stdout, stdin)
 	w.conn.Transcript = ag.cfg.Transcript
 	w.conn.Start()
-	hello := &workerproto.Hello{ModelExecutable: ag.cfg.ModelExecutable, ReviewPack: ag.cfg.ReviewPack, ReviewMaxCalls: ag.cfg.ReviewMaxCalls, ModelName: ag.cfg.ModelName, ModelRelayFile: ag.cfg.ModelRelayFile, Protocol: workerproto.Protocol, WorkerID: id, DataRoot: ag.dataRoot(), ScratchRoot: filepath.Join(dir, "scratch"), Limits: ag.cfg.Limits, GitExecutable: ag.cfg.GitExecutable, GoExecutable: ag.cfg.GoExecutable, GoModCache: ag.cfg.GoModCache, AnalyzerTools: ag.cfg.AnalyzerTools, ToolPath: ag.cfg.ToolPath, LeaseMarginSeconds: int(ag.leaseMargin() / time.Second)}
+	hello := &workerproto.Hello{ModelExecutable: ag.cfg.ModelExecutable, ReviewPack: ag.cfg.ReviewPack, ReviewMaxCalls: ag.cfg.ReviewMaxCalls, ModelName: ag.cfg.ModelName, ModelRelayFile: ag.cfg.ModelRelayFile, ModelCredentialFile: ag.cfg.ModelCredentialFile, ModelTimeoutSeconds: int(ag.cfg.ModelTimeout / time.Second), Protocol: workerproto.Protocol, WorkerID: id, DataRoot: ag.dataRoot(), ScratchRoot: filepath.Join(dir, "scratch"), Limits: ag.cfg.Limits, GitExecutable: ag.cfg.GitExecutable, GoExecutable: ag.cfg.GoExecutable, GoModCache: ag.cfg.GoModCache, AnalyzerTools: ag.cfg.AnalyzerTools, ToolPath: ag.cfg.ToolPath, LeaseMarginSeconds: int(ag.leaseMargin() / time.Second)}
 	if err := w.conn.Send(hello); err != nil {
 		ag.killWorker(w)
 		return nil, err
