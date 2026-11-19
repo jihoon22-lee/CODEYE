@@ -5,7 +5,7 @@ import { describeError } from './format';
 import { ComparisonSection, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportTasks, TextList, explainReason, label, type ReportHistory } from './ReportParts';
+import { FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportTasks, TextList, Verdict, explainReason, type ReportHistory } from './ReportParts';
 import { SectionedReport } from './ReportSections';
 
 export type { ReportHistory } from './ReportParts';
@@ -19,9 +19,7 @@ export function ReportDocument({ report, history }: { report: AnalysisReport; hi
         <h4>{t.title}</h4>
         <span>{t.revision(report.revision)}</span>
       </header>
-      <p>
-        <strong>{label(ko.runs.verdictLabels, report.verdict)}</strong> · {t.coverage} {label(t.ai, report.aiReview)}
-      </p>
+      <Verdict report={report} />
       <ReportCounts report={report} />
       {report.limitations.length > 0 && (
         <section>
