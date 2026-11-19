@@ -21,7 +21,8 @@ from urllib.error import URLError
 
 from node_smoke import Session, service, wait_for
 
-REVIEW_MEDIA = ("application/vnd.codeye.review+json", "application/vnd.codeye.environment+json")
+REVIEW_MEDIA = ("application/vnd.codeye.review+json", "application/vnd.codeye.environment+json",
+                "application/vnd.codeye.review-scope+json")
 TERMINAL = {"completed", "partial", "failed", "cancelled", "recovery_required"}
 
 
@@ -47,7 +48,7 @@ def extract_commit(root, commit, work, destination):
 
 
 def keep_review_artifacts(report, artifacts, destination):
-    """Copy the model-role and discovery artifacts a report references."""
+    """Copy the model-role, review-scope and discovery artifacts a report references."""
     index = {f.name: f for f in artifacts.rglob("*") if f.is_file()}
     destination.mkdir(mode=0o700)
     kept = 0
