@@ -5,7 +5,7 @@ import { PROJECT, json, mockFetch, runView } from './test-utils';
 
 const rejection = async (promise: Promise<unknown>) => promise.then(() => null, (e: unknown) => e as ApiError);
 
-describe('W15 stage fields (optional, strict when present)', () => {
+describe('stage fields (optional, strict when present)', () => {
   const stage = (over: Record<string, unknown> = {}) => ({ key: 'static_analysis', state: 'running', planned: 2, finished: 1, succeeded: 1, counts: {}, reasons: [], started_at: '2026-11-18T03:00:00Z', finished_at: null, ...over });
   const activity = (over: Record<string, unknown> = {}) => ({
     run: { id: 'run1', status: 'running', requested_at: '2026-11-18T03:00:00Z' }, other_active_runs: 1, detail: 'recorded', stages: [stage()],

@@ -15,11 +15,11 @@ import (
 )
 
 // Real jscpd tests run only with CODEYE_TEST_JSCPD and CODEYE_TEST_NODE.
-// CODEYE_W21_CAPTURE=DIR also writes the jscpd.run streams and exit code to
+// CODEYE_STRUCTURE_CAPTURE=DIR also writes the jscpd.run streams and exit code to
 // DIR, which is how testdata/*.stdout|stderr|exit were captured:
 //
 //	CODEYE_TEST_JSCPD=/abs/node_modules/jscpd/run-jscpd.js CODEYE_TEST_NODE=/abs/bin/node \
-//	  CODEYE_W21_CAPTURE=$PWD/internal/worker/analysis/jscpd/testdata \
+//	  CODEYE_STRUCTURE_CAPTURE=$PWD/internal/worker/analysis/jscpd/testdata \
 //	  go test -count=1 -run TestRealJscpd ./internal/worker/analysis/jscpd/
 
 type recordingRunner struct {

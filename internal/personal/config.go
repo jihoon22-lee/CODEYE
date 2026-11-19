@@ -1,4 +1,4 @@
-// Package personal runs CODEYE on one machine (W25, docs/OPERATIONS.md): one JSON
+// Package personal runs CODEYE on one machine (docs/OPERATIONS.md): one JSON
 // configuration file, a 0700 state directory, one loopback controller and one
 // local node agent started, stopped and inspected by `codeye start|stop|status`.
 //
@@ -237,7 +237,7 @@ func (c *Config) validate(knownTools []string) error {
 	switch c.Database.Mode {
 	case DatabaseExternal:
 	case "managed":
-		return errors.New("database.mode \"managed\" is not implemented (W25 implements \"external\" only)")
+		return errors.New("database.mode \"managed\" is not implemented (only \"external\" is supported)")
 	default:
 		return errors.New(`database.mode must be "external"`)
 	}
@@ -277,7 +277,7 @@ func (c *Config) validate(knownTools []string) error {
 	if a.Name != "" && (strings.TrimSpace(a.Name) != a.Name || utf8.RuneCountInString(a.Name) > 100) {
 		return errors.New("agent.name must be at most 100 characters without surrounding spaces")
 	}
-	// The default is a Linux PATH; personal start/stop is Linux-only (W25), so
+	// The default is a Linux PATH; personal start/stop is Linux-only, so
 	// on other systems the field stays empty unless set.
 	if a.ToolchainPath == "" && runtime.GOOS != "windows" {
 		a.ToolchainPath = DefaultToolchainPath

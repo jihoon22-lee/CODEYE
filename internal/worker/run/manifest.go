@@ -58,7 +58,7 @@ func (r redactor) str(s string) string {
 	return s
 }
 
-// workspaceMarked replaces the attempt workspace prefix by the W05 marker.
+// workspaceMarked replaces the attempt workspace prefix by the workspace redaction marker.
 func (r redactor) workspaceMarked(s string) string {
 	for _, ws := range r.workspaces {
 		if s == ws {
@@ -72,7 +72,7 @@ func (r redactor) workspaceMarked(s string) string {
 }
 
 // manifestExec builds a path-free execution record. Workspace paths become
-// the W05 redaction marker (so RelativeDir yields workspace-relative dirs),
+// the workspace redaction marker (so RelativeDir yields workspace-relative dirs),
 // other node roots become placeholders; analysis.CommandFor then drops any
 // remaining absolute value.
 func (w *worker) manifestExec(a *attempt, red redactor, name string, res executor.Result) analysis.ManifestExecution {

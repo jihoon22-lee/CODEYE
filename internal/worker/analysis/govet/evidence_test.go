@@ -15,15 +15,15 @@ import (
 )
 
 // TestRealTargetEvidence runs the adapter against a real project tree.
-// It is skipped unless CODEYE_W08_TARGET (an isolated source copy),
-// CODEYE_W08_OUT (evidence dir) and optionally CODEYE_W08_MODCACHE are set.
+// It is skipped unless CODEYE_GOVET_TARGET (an isolated source copy),
+// CODEYE_GOVET_OUT (evidence dir) and optionally CODEYE_GOVET_MODCACHE are set.
 // It records outcomes as observed, including failures.
 func TestRealTargetEvidence(t *testing.T) {
-	target, out := os.Getenv("CODEYE_W08_TARGET"), os.Getenv("CODEYE_W08_OUT")
+	target, out := os.Getenv("CODEYE_GOVET_TARGET"), os.Getenv("CODEYE_GOVET_OUT")
 	if target == "" || out == "" {
-		t.Skip("CODEYE_W08_TARGET/CODEYE_W08_OUT not set (manual evidence run)")
+		t.Skip("CODEYE_GOVET_TARGET/CODEYE_GOVET_OUT not set (manual evidence run)")
 	}
-	modcache := os.Getenv("CODEYE_W08_MODCACHE")
+	modcache := os.Getenv("CODEYE_GOVET_MODCACHE")
 	ctx := context.Background()
 	base := t.TempDir()
 	data, scratch := filepath.Join(base, "data"), filepath.Join(base, "scratch")

@@ -305,7 +305,7 @@
       ]
     },
     "operations": {
-      "description": "W25 personal operations (codeye doctor --config): storage use per area against the configured quota, the newest backup and the start/stop process state. Absent without --config.",
+      "description": "Personal operations (codeye doctor --config): storage use per area against the configured quota, the newest backup and the start/stop process state. Absent without --config.",
       "type": "object",
       "additionalProperties": false,
       "required": [

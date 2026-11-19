@@ -10,7 +10,7 @@ import (
 )
 
 // Fixture sources: the replay tests use the same files as the captures in
-// testdata/ (taken by real_test.go with CODEYE_W21_CAPTURE), with
+// testdata/ (taken by real_test.go with CODEYE_STRUCTURE_CAPTURE), with
 // anypacktest.Placeholder where the real test plants a generated secret
 // inside the duplicated block.
 

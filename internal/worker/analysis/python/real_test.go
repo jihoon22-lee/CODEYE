@@ -18,13 +18,13 @@ import (
 // Real-tool tests (docs/ANALYZERS.md#importstub-공백). Each is skipped unless its tool is named
 // by CODEYE_TEST_RUFF, CODEYE_TEST_MYPY, CODEYE_TEST_BANDIT or
 // CODEYE_TEST_PYRIGHT (+ CODEYE_TEST_NODE). The fixture projects are in
-// fixtures/w17-python/. With CODEYE_W17_CAPTURE=<dir> the tool streams are
+// fixtures/python/. With CODEYE_PYTHON_CAPTURE=<dir> the tool streams are
 // written there for the replay tests (see replay_test.go).
 
-// loadFixture reads fixtures/w17-python/<name> as a file map.
+// loadFixture reads fixtures/python/<name> as a file map.
 func loadFixture(t *testing.T, name string) map[string]string {
 	t.Helper()
-	root := filepath.Join("..", "..", "..", "..", "fixtures", "w17-python", name)
+	root := filepath.Join("..", "..", "..", "..", "fixtures", "python", name)
 	files := map[string]string{}
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {

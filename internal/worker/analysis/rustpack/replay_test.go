@@ -19,7 +19,7 @@ import (
 
 // Replay tests run in CI without a Rust toolchain: every execution returns the
 // redacted streams and dep-info captured from rustc 1.99.1, cargo 1.99.1 and
-// clippy 0.1.99 on the fixtures in fixtures/w20-rust (see real_test.go
+// clippy 0.1.99 on the fixtures in fixtures/rust (see real_test.go
 // capture). Changing a fixture requires a new capture (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처).
 
 type recorded struct {

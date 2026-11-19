@@ -439,7 +439,7 @@ func (o *outcome) fail(s domain.TaskStatus, reason, class string) {
 	}
 }
 
-// executionFailures applies the precedence shared with W19: cleanup,
+// executionFailures applies the precedence shared with the other adapters: cleanup,
 // cancellation, timeout, then executor refusals.
 func (o *outcome) executionFailures(results []*executor.Result, cancelled bool) {
 	for _, r := range results {

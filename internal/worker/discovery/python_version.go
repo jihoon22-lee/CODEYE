@@ -7,7 +7,7 @@ import "path"
 // [project] requires-python, setup.cfg [options] python_requires or the
 // first version of .python-version. kind is the environment requirement
 // kind (requires_python, python_requires, python_version_file); "" with a
-// nil error means the file declares none. The W17 Python pack uses it so
+// nil error means the file declares none. The Python pack uses it so
 // the version it passes to the tools is the one discovery reports.
 func PythonRequirement(p string, b []byte) (kind, constraint string, err error) {
 	switch path.Base(p) {

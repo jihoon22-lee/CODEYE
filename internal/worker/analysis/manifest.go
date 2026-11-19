@@ -12,11 +12,11 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// ResultManifestSchemaVersion is the result_manifest artifact version (W06 §8).
+// ResultManifestSchemaVersion is the result_manifest artifact version.
 const ResultManifestSchemaVersion = "0.1"
 
 // ResultManifest is the canonical JSON the worker uploads with role
-// result_manifest. The worker fills server artifact IDs; W09 consumes it.
+// result_manifest. The worker fills server artifact IDs; the report builder consumes it.
 // No field may carry a node absolute path or an environment value.
 type ResultManifest struct {
 	SchemaVersion string            `json:"schema_version"`
@@ -85,7 +85,7 @@ type ManifestArtifact struct {
 	SizeBytes  int64  `json:"size_bytes"`
 }
 
-// RedactedMarker is the W05 executor redaction marker. Handlers pass the
+// RedactedMarker is the executor redaction marker. Handlers pass the
 // workspace root as Spec.Redact, so recorded dirs and streams read
 // "[REDACTED]/rel".
 const RedactedMarker = "[REDACTED]"
@@ -156,7 +156,7 @@ func FormatTime(t time.Time) string {
 
 var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-// Validate enforces the invariants W09 relies on.
+// Validate enforces the invariants the report builder relies on.
 func (m ResultManifest) Validate() error {
 	if m.SchemaVersion != ResultManifestSchemaVersion {
 		return invalidf("schema_version must be %s", ResultManifestSchemaVersion)

@@ -40,12 +40,12 @@ func TestWireFieldNames(t *testing.T) {
 	}
 }
 
-// W07 heartbeat fields are omitted by static agents (unchanged W06 bytes) and
+// Heartbeat fields are omitted by static agents (their bytes are unchanged) and
 // keep their wire names for controller-scaled agents.
 func TestScalingFieldsOmittedForStaticAgents(t *testing.T) {
 	raw, _ := json.Marshal(NodeHeartbeatRequest{})
 	if strings.Contains(string(raw), "worker_scaling") || strings.Contains(string(raw), "max_workers") {
-		t.Fatalf("static heartbeat carries W07 fields: %s", raw)
+		t.Fatalf("static heartbeat carries scaling fields: %s", raw)
 	}
 	raw, _ = json.Marshal(NodeHeartbeatRequest{WorkerScaling: ScalingController, MaxWorkers: 2})
 	if !strings.Contains(string(raw), `"worker_scaling":"controller"`) || !strings.Contains(string(raw), `"max_workers":2`) {

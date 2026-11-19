@@ -15,7 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// nodeAdminUsage documents the operator node commands (W06).
+// nodeAdminUsage documents the operator node commands.
 const nodeAdminUsage = `  codeye node token create --pool NAME [--source-root ID[,ID...]] [--output .codeye/enroll-token] [--ttl 10m]
   codeye node token revoke --id TOKEN_ID
   codeye node list

@@ -18,13 +18,13 @@ import (
 )
 
 // Real staticcheck tests run only with CODEYE_TEST_STATICCHECK (CI has no
-// staticcheck). CODEYE_W19_CAPTURE=DIR also writes the redacted
+// staticcheck). CODEYE_STATICCHECK_CAPTURE=DIR also writes the redacted
 // staticcheck.check streams and exit code of each case to DIR, which is how
 // testdata/*.stdout|stderr|exit were captured (docs/ANALYZERS.md#staticcheck).
 
 func capture(t *testing.T, name string, res analysis.TaskResult) {
 	t.Helper()
-	dir := os.Getenv("CODEYE_W19_CAPTURE")
+	dir := os.Getenv("CODEYE_STATICCHECK_CAPTURE")
 	if dir == "" {
 		return
 	}

@@ -6,7 +6,20 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ### 변경
 
-- 단계별로 번호를 붙인 문서를 주제별 문서(`docs/GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/ANALYZERS.md`, `docs/REVIEW.md`, `docs/REPORT.md`, `docs/API.md`, `docs/OPERATIONS.md`, `docs/SECURITY.md`, `docs/EVALUATION.md` 등)와 이 변경 이력으로 바꾼다. 작업 기록은 이 파일로 모으고, 주제 문서에는 현재 유효한 계약과 운영 규칙만 둔다.
+- **문서 통합 (#37)**: 번호를 붙인 단계별 문서 50개를 주제별 문서 16개(`docs/`)와 이 변경 이력으로 바꿨다. 주제 문서에는 현재 유효한 계약과 운영 규칙만 두고, 코드에서 문서를 가리키는 참조는 절 anchor까지 검증한다.
+- **단계 이름 제거**: 코드 주석, 파일·시험·식별자 이름, CLI 문구, 스크립트·fixture 디렉터리 이름, 시험용 환경변수에서 구현 단계 번호를 뺐다. 예산 relay는 `scripts/model_budget_relay.py`, 평가 runner는 `scripts/quality_eval.py`, 회귀 집합은 `fixtures/regression/`이다. `scripts/validate_bundle.py`가 단계 표기가 다시 들어오는 것을 막는다.
+- OpenAPI의 구현 표시는 `x-codeye-status: implemented` 하나다.
+
+### 수정
+
+- `codeye` 도움말의 에이전트 사용법에 빠져 있던 분석기 옵션(`--cppcheck`, `--clang-tidy`, `--eslint`, `--tsc`, `--lizard`, `--jscpd`, `--gitleaks`)을 넣었다.
+
+### 그대로 둔 이름
+
+- 검토 팩 ID `review-r1`·`review-v1`과 그 디렉터리: 저장된 기록이 팩 ID와 digest로 해석된다.
+- `migrations/sql/`: 적용된 migration은 checksum으로 대조한다.
+- fixture 입력 안의 파일·매크로 이름, 보류 집합 `fixtures/r1-quality/`, 보류 평가 결과 문서: 도구 출력 캡처와 봉인 digest가 그 내용을 고정한다.
+- 진단 사유 값 `adapter_contract_pending_w10`: API로 나가는 값이다.
 
 ## 개인 실용판 — 2026-11-19
 
@@ -25,7 +38,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - **구조·중복 지표와 비밀정보 (#29)**: lizard 복잡도와 jscpd 중복을 결함이 아닌 지표로 보인다. gitleaks 탐지는 값 없이 위치만 남기고, 탐지된 파일은 모델 입력에서 뺀다.
 - **이력과 run 비교 (#20)**: 같은 source variant·profile·scope의 직전 보고서와 비교한다. 줄이 이동해도 같은 발견은 `persisting`이다. 검사가 돌지 않았거나 범위가 줄었거나 도구·규칙 문맥이 바뀌었다면 사라진 발견도 해결이 아니라 `absent_unverified`와 이유로 표시한다.
 - **발견에 대한 사람 판정 (#20)**: 이유와 만료 기간을 붙여 발견을 판정한다. 판정은 보고서 게시 시점에 고정되고 viewer는 할 수 없다.
-- **품질 평가 runner (#23, #32)**: `scripts/r1_eval.py`와 `scripts/r1_score.py`가 실제 controller·agent·분석기·모델 경로로 사례를 실행하고 채점한다. relay는 요청에 정답 문구가 있으면 전달하지 않고 장부에 남긴다. holdout 등록부는 이미 본 사례를 표시한다. 상세는 `docs/EVALUATION.md`.
+- **품질 평가 runner (#23, #32)**: `scripts/quality_eval.py`와 `scripts/quality_score.py`가 실제 controller·agent·분석기·모델 경로로 사례를 실행하고 채점한다. relay는 요청에 정답 문구가 있으면 전달하지 않고 장부에 남긴다. holdout 등록부는 이미 본 사례를 표시한다. 상세는 `docs/EVALUATION.md`.
 - **다섯 언어 검토 입력 (#31)**: 모델 검토용 코드 발췌를 Go뿐 아니라 C/C++, Python, JS/TS, Rust 소스에서도 만든다.
 - **개인 모드 `codeye start`·`stop`·`status` (#34)**: 설정 파일 하나로 컨트롤러와 로컬 에이전트를 시작·종료하고 상태를 본다.
 - **저장 영역 상한 (#34)**: snapshot·workspace·cache·logs·artifacts별 상한을 넘으면 새 작업을 거절한다. 기존 자료는 지우지 않는다.
@@ -80,10 +93,10 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - **스케줄러와 자동 증감 (#12)**: 워커 풀의 최소·최대, 0에서 N으로 늘고 다시 0이 되는 증감, drain, CPU·메모리·디스크 예산 입장 제어, lease 만료와 늦은 결과 거부.
 - **Go vet 분석 (#8)**: 제품 워커가 오프라인으로 `go vet`을 실행해 위치·해시가 있는 관찰로 정규화한다. 빌드 제약으로 빠진 패키지와 실패를 정상 0건으로 바꾸지 않는다.
 - **구조화 보고서와 내보내기 (#13)**: 모델 없이도 작업 상태, 원시 근거, 공백이 보이는 보고서를 게시한다. JSON·Markdown·HTML 내보내기는 기본이 코드 제외이며 같은 입력에서 같은 결과를 낸다.
-- **OpenCode 연동 (#9)**: 관리형 OpenCode를 도구 없이, 승인된 모델과 제한된 예산으로 실행한다. 취소하면 프로세스 트리까지 정리하고 잘못된 출력은 게시하지 않는다. 예산 상한이 있는 로컬 relay(`scripts/r0_openai_gateway.py`)가 호출을 예약·정산한다. 상세는 `docs/REVIEW.md`.
+- **OpenCode 연동 (#9)**: 관리형 OpenCode를 도구 없이, 승인된 모델과 제한된 예산으로 실행한다. 취소하면 프로세스 트리까지 정리하고 잘못된 출력은 게시하지 않는다. 예산 상한이 있는 로컬 relay(`scripts/model_budget_relay.py`)가 호출을 예약·정산한다. 상세는 `docs/REVIEW.md`.
 - **맥락·조사·반증 검토 (#10, #11)**: 맥락 수집, 독립 후보 조사, 반례 탐색과 근거 검증. 허위 경로·행·근거 ID와 모델이 단정한 재현·심각도는 거부하거나 미확정으로 남기고, 모델이 실패하면 도구 결과만으로 `partial` 보고서를 낸다.
 - **근거 보고서 화면 (#13, #14)**: 요약에서 영역, 후보, 스냅샷 파일과 줄 범위의 근거로 내려가며 반대 근거와 미확정 항목을 함께 본다.
-- **회귀 코퍼스와 파일럿 (#15)**: 결함·수정 쌍 10개의 계약 시험(`fixtures/r0-quality/corpus.py --check`)과 실제 프로젝트 파일럿 절차(`scripts/r0_pilot.py`).
+- **회귀 코퍼스와 파일럿 (#15)**: 결함·수정 쌍 10개의 계약 시험(`fixtures/regression/corpus.py --check`)과 실제 프로젝트 파일럿 절차(`scripts/regression_pilot.py`).
 
 ### 검증한 환경과 범위
 

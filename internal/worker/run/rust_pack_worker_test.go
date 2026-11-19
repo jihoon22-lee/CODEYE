@@ -28,10 +28,10 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
-// rustFixture reads fixtures/w20-rust/<name> into snapshot files.
+// rustFixture reads fixtures/rust/<name> into snapshot files.
 func rustFixture(t *testing.T, name string) map[string]string {
 	t.Helper()
-	root := filepath.Join("..", "..", "..", "fixtures", "w20-rust", name)
+	root := filepath.Join("..", "..", "..", "fixtures", "rust", name)
 	out := map[string]string{}
 	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -52,7 +52,7 @@ func rustFixture(t *testing.T, name string) map[string]string {
 }
 
 // runRustPack runs the production deep-review composition (discovery → the
-// analyzer composite → review-v1 roles) through the real worker on a Rust
+// analyzer composite → legacy-pack roles) through the real worker on a Rust
 // snapshot. goExe is configured because go vet is the only other baseline
 // analyzer; the snapshot has no Go, so go vet plans nothing. allow is the
 // node operator's repository-code grant for the job's source.

@@ -1,6 +1,6 @@
-// Package jststest holds the test fixtures the W18 tsc and ESLint adapters
+// Package jststest holds the test fixtures the tsc and ESLint adapters
 // share: operator tool paths from CODEYE_TEST_* (real-tool tests skip
-// without them; CI has no Node tools), a W04 snapshot with a cloned attempt
+// without them; CI has no Node tools), a snapshot with a cloned attempt
 // workspace, tree hashes, a result-mutating runner, envelope decoding and
 // the capture of real tool streams into testdata. It is imported by tests
 // only.
@@ -38,7 +38,7 @@ const (
 	EnvESLint = "CODEYE_TEST_ESLINT"
 	// EnvCapture names a directory: real-tool tests then write the check
 	// streams and exit code of each case there (how testdata was captured).
-	EnvCapture = "CODEYE_W18_CAPTURE"
+	EnvCapture = "CODEYE_JSTS_CAPTURE"
 )
 
 func toolPath(t *testing.T, env, what string) string {
@@ -133,11 +133,11 @@ func ReadTree(t *testing.T, dir string) map[string]string {
 	return out
 }
 
-// MonorepoFiles is fixtures/w18-js-ts/input, read from a package directory
+// MonorepoFiles is fixtures/js-ts/input, read from a package directory
 // depth levels below the repository root.
 func MonorepoFiles(t *testing.T, depth int) map[string]string {
 	t.Helper()
-	return ReadTree(t, filepath.Join(strings.Repeat("../", depth)+"fixtures", "w18-js-ts", "input"))
+	return ReadTree(t, filepath.Join(strings.Repeat("../", depth)+"fixtures", "js-ts", "input"))
 }
 
 // TreeHash digests every path, mode and regular file content below root.
@@ -182,7 +182,7 @@ type Fixture struct {
 	Job              analysis.Job
 }
 
-// NewFixture acquires a W04 snapshot of files under base (a temp dir when
+// NewFixture acquires a snapshot of files under base (a temp dir when
 // empty) and clones an attempt workspace like the worker.
 func NewFixture(t *testing.T, base string, files map[string]string, scope domain.Scope) Fixture {
 	t.Helper()
@@ -250,7 +250,7 @@ func ReadEnvelope(t *testing.T, job analysis.Job, res analysis.TaskResult) (obsd
 	if err != nil {
 		t.Fatalf("envelope invalid: %v\n%s", err, raw)
 	}
-	if dump := os.Getenv("CODEYE_W18_DUMP"); dump != "" {
+	if dump := os.Getenv("CODEYE_JSTS_DUMP"); dump != "" {
 		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + key + ".json"
 		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
 			t.Fatal(err)
@@ -297,7 +297,7 @@ func AssertNoNodePaths(t *testing.T, raw []byte, paths ...string) {
 	}
 }
 
-// Capture writes every execution of a task run (with CODEYE_W18_CAPTURE
+// Capture writes every execution of a task run (with CODEYE_JSTS_CAPTURE
 // set) as <name>.<execution>.stdout|stderr|exit and the execution order as
 // <name>.order, the input of NewReplay. Captures must hold no node path.
 func Capture(t *testing.T, name string, res analysis.TaskResult) {

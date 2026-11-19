@@ -116,13 +116,13 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 
 | 대상 | 도구 경로 변수 | 캡처·덤프 변수 | 시험 선택 |
 |---|---|---|---|
-| go vet | `CODEYE_TEST_GO`(없으면 테스트 바이너리의 `GOROOT/bin/go`) | `CODEYE_W08_TARGET`·`CODEYE_W08_OUT`·`CODEYE_W08_MODCACHE`·`CODEYE_W08_DUMP` | `./internal/worker/analysis/govet/` |
-| Staticcheck | `CODEYE_TEST_STATICCHECK`, 선택 `CODEYE_TEST_GOMODCACHE` | `CODEYE_W19_CAPTURE`, `CODEYE_W19_DUMP`, `CODEYE_W19_REPORT_DUMP` | `-run TestRealStaticcheck ./internal/worker/analysis/staticcheck/` |
-| C/C++ | `CODEYE_TEST_CPPCHECK`, `CODEYE_TEST_CLANG_TIDY` | `CODEYE_W16_CAPTURE`, `CODEYE_W16_DUMP`, `CODEYE_W16_PRINT`(기대값 비교 대신 실제 결과 기록) | `-run TestRealFixtureCases ./internal/worker/analysis/cpp/`, 기대값 `fixtures/w16-cpp/expected.json` |
-| Python | `CODEYE_TEST_RUFF`, `CODEYE_TEST_MYPY`, `CODEYE_TEST_BANDIT`, `CODEYE_TEST_PYRIGHT` + `CODEYE_TEST_NODE` | `CODEYE_W17_CAPTURE`, `CODEYE_W17_DUMP` | `-run TestReal ./internal/worker/analysis/python/`. bandit CSV는 CRLF이므로 `testdata/.gitattributes`가 줄바꿈 변환을 끈다 |
-| JS/TS | `CODEYE_TEST_NODE`, `CODEYE_TEST_ESLINT`, `CODEYE_TEST_TSC` | `CODEYE_W18_CAPTURE`, `CODEYE_W18_DUMP` | `-run 'TestRealESLint\|TestRealEngine' ./internal/worker/analysis/eslint/`, `-run TestRealTsc ./internal/worker/analysis/tsc/` |
-| Rust | `CODEYE_TEST_CARGO`, `CODEYE_TEST_CLIPPY`, 링커 시험은 `CODEYE_TEST_TOOLPATH`(`cc` 포함) | `CODEYE_W20_CAPTURE`, `CODEYE_W20_DUMP` | `./internal/worker/analysis/rustpack/` |
-| lizard, jscpd, gitleaks | `CODEYE_TEST_LIZARD`, `CODEYE_TEST_JSCPD` + `CODEYE_TEST_NODE`, `CODEYE_TEST_GITLEAKS` | `CODEYE_W21_CAPTURE`, `CODEYE_W21_DUMP` | `-run TestReal ./internal/worker/analysis/{lizard,jscpd,gitleaks}/` |
+| go vet | `CODEYE_TEST_GO`(없으면 테스트 바이너리의 `GOROOT/bin/go`) | `CODEYE_GOVET_TARGET`·`CODEYE_GOVET_OUT`·`CODEYE_GOVET_MODCACHE`·`CODEYE_GOVET_DUMP` | `./internal/worker/analysis/govet/` |
+| Staticcheck | `CODEYE_TEST_STATICCHECK`, 선택 `CODEYE_TEST_GOMODCACHE` | `CODEYE_STATICCHECK_CAPTURE`, `CODEYE_STATICCHECK_DUMP`, `CODEYE_STATICCHECK_REPORT_DUMP` | `-run TestRealStaticcheck ./internal/worker/analysis/staticcheck/` |
+| C/C++ | `CODEYE_TEST_CPPCHECK`, `CODEYE_TEST_CLANG_TIDY` | `CODEYE_CPP_CAPTURE`, `CODEYE_CPP_DUMP`, `CODEYE_CPP_PRINT`(기대값 비교 대신 실제 결과 기록) | `-run TestRealFixtureCases ./internal/worker/analysis/cpp/`, 기대값 `fixtures/cpp/expected.json` |
+| Python | `CODEYE_TEST_RUFF`, `CODEYE_TEST_MYPY`, `CODEYE_TEST_BANDIT`, `CODEYE_TEST_PYRIGHT` + `CODEYE_TEST_NODE` | `CODEYE_PYTHON_CAPTURE`, `CODEYE_PYTHON_DUMP` | `-run TestReal ./internal/worker/analysis/python/`. bandit CSV는 CRLF이므로 `testdata/.gitattributes`가 줄바꿈 변환을 끈다 |
+| JS/TS | `CODEYE_TEST_NODE`, `CODEYE_TEST_ESLINT`, `CODEYE_TEST_TSC` | `CODEYE_JSTS_CAPTURE`, `CODEYE_JSTS_DUMP` | `-run 'TestRealESLint\|TestRealEngine' ./internal/worker/analysis/eslint/`, `-run TestRealTsc ./internal/worker/analysis/tsc/` |
+| Rust | `CODEYE_TEST_CARGO`, `CODEYE_TEST_CLIPPY`, 링커 시험은 `CODEYE_TEST_TOOLPATH`(`cc` 포함) | `CODEYE_RUST_CAPTURE`, `CODEYE_RUST_DUMP` | `./internal/worker/analysis/rustpack/` |
+| lizard, jscpd, gitleaks | `CODEYE_TEST_LIZARD`, `CODEYE_TEST_JSCPD` + `CODEYE_TEST_NODE`, `CODEYE_TEST_GITLEAKS` | `CODEYE_STRUCTURE_CAPTURE`, `CODEYE_STRUCTURE_DUMP` | `-run TestReal ./internal/worker/analysis/{lizard,jscpd,gitleaks}/` |
 
 시험 대상 소스는 저장소의 gofmt·vet·분석기가 보지 않도록 시험 코드 문자열이나 `fixtures/` 아래에 둔다. 비밀값 fixture는 시험 시점에 생성하고 저장소에는 실제와 비슷한 토큰을 두지 않는다. 시험 전체 구성은 [시험](TESTING.md)을 따른다.
 
@@ -659,7 +659,7 @@ configure가 build 디렉터리에 만드는 생성 헤더(`config.h` 등)가 �
 
 ### C/C++ 엔진 중복
 
-cppcheck(자체 parser·value flow)와 clang-tidy(clang AST matcher·CSA 기호 실행)는 서로 감싸지 않으므로 둘 다 실행한다. 기준 분석기가 같은 줄에서 함께 보고한 것만 보고한 clang-tidy 검사와, clang-tidy 안에서 bugprone 검사와 같은 것만 보고한 Analyzer 검사는 뺐다(`fixtures/w16-cpp/overlap/`에서 측정).
+cppcheck(자체 parser·value flow)와 clang-tidy(clang AST matcher·CSA 기호 실행)는 서로 감싸지 않으므로 둘 다 실행한다. 기준 분석기가 같은 줄에서 함께 보고한 것만 보고한 clang-tidy 검사와, clang-tidy 안에서 bugprone 검사와 같은 것만 보고한 Analyzer 검사는 뺐다(`fixtures/cpp/overlap/`에서 측정).
 
 | 제외한 clang-tidy 검사 | 같은 구성을 보고한 검사 |
 |---|---|

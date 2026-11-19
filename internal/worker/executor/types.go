@@ -29,7 +29,7 @@ const (
 	StatusUnsupported Status = "unsupported"
 )
 
-// Cleanup follows the W02 cleanup_state vocabulary.
+// Cleanup follows the cleanup_state vocabulary.
 type Cleanup string
 
 const (
@@ -53,7 +53,7 @@ const (
 )
 
 // ResourceRequest is the scheduler reservation/estimate for this execution.
-// W05 never enforces it; see ResourceReport.Enforced.
+// The executor never enforces it; see ResourceReport.Enforced.
 type ResourceRequest struct {
 	CPUMillis   int64 `json:"cpu_millis,omitempty"`
 	MemoryBytes int64 `json:"memory_bytes,omitempty"`
@@ -93,7 +93,7 @@ type Spec struct {
 	// are rejected.
 	Env map[string]string `json:"-"`
 
-	// OpenCodeModel selects the managed, tool-free W10 provider profile.
+	// OpenCodeModel selects the managed, tool-free OpenCode provider profile.
 	// Other commands leave this empty. No provider credentials are inherited.
 	OpenCodeModel string `json:"-"`
 	// Only this loopback relay receives the ephemeral relay token.
@@ -169,7 +169,7 @@ type Stream struct {
 }
 
 // ResourceReport separates the request from what the OS enforced and what
-// was observed. W05 enforces nothing: Enforced is always false.
+// was observed. The executor enforces nothing: Enforced is always false.
 type ResourceReport struct {
 	Requested ResourceRequest `json:"requested"`
 	Enforced  bool            `json:"enforced"`
@@ -219,7 +219,7 @@ type Executor struct {
 	KillWait time.Duration
 }
 
-// Runner is the interface analyzers (W08) should depend on.
+// Runner is the interface analyzers should depend on.
 type Runner interface {
 	Run(ctx context.Context, spec Spec) Result
 }

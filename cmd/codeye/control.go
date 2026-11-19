@@ -20,7 +20,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-const usage = `CODEYE control plane (W03/W06/W07)
+const usage = `CODEYE control plane
 Usage:
   codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
   codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH] [--timeout 75s]
@@ -39,8 +39,11 @@ Usage:
   codeye restore [--config PATH] --from DIR [--format text|json]   (new empty database and state_dir only)
   codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
                [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
+               [--cppcheck /abs/cppcheck] [--clang-tidy /abs/clang-tidy]
                [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit]
+               [--eslint /abs/eslint/bin/eslint.js] [--tsc /abs/typescript/bin/tsc]
                [--cargo /abs/toolchain/bin/cargo [--clippy /abs/toolchain/bin/cargo-clippy]]
+               [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]
                [--repo-code-source-root ID ...] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
                [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1]
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
@@ -48,7 +51,7 @@ Login links are written to a 0600 file; the token is never printed.
 "serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.
 Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
 Enrollment tokens are written to a 0600 file; the token is never printed.
-Personal mode (W25): the config path defaults to $XDG_CONFIG_HOME/codeye/personal.json; the database is CODEYE_DATABASE_URL.
+Personal mode: the config path defaults to $XDG_CONFIG_HOME/codeye/personal.json; the database is CODEYE_DATABASE_URL.
 `
 
 const launchTTL = 10 * time.Minute
@@ -58,7 +61,7 @@ var openStore = func(ctx context.Context) (*postgres.Store, error) {
 	return postgres.Open(ctx, os.Getenv("CODEYE_DATABASE_URL"))
 }
 
-// runControl handles the W03 control-plane commands. ok is false for commands
+// runControl handles the control-plane commands. ok is false for commands
 // it does not own.
 func runControl(ctx context.Context, args []string, out, stderr io.Writer) (code int, ok bool) {
 	key := args[0]

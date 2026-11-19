@@ -111,7 +111,7 @@ func TestLegacyRecordsAndNoRequestReceipt(t *testing.T) {
 		if err != nil || !got.Accepted() {
 			t.Fatalf("legacy %s: %v", role, err)
 		}
-		// Before W10 forms a request it has neither a request digest nor usage.
+		// Before the model client forms a request it has neither a request digest nor usage.
 		r.Outcome, r.FailureReason = "failed", "workspace_unreachable"
 		if role == "context" {
 			r.Facts = []Fact{}

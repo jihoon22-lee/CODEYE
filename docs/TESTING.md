@@ -153,7 +153,7 @@
 | TC-97 | 문서 부재, 루트와 하위 문서의 충돌, 읽기 예산 초과, 문서 내 권한 변경 요구 | 네 경우를 구분한다. 모델은 제공된 근거 ID만 인용하고 권한·도구 설정은 유지된다. 유효한 모델 산출물만 다음 역할로 넘어간다. | REQ-005,009,011,027 |
 | TC-123 | C/C++·Python·JS/TS·Rust 단일 언어 스냅샷과 다언어 스냅샷, data·vendor·중첩 산출물 디렉터리, build 파일만 있는 생태계, 비 Go 파일의 비밀값 탐지와 쓸 수 없는 탐지, 기존 Go fixture | review-v1 코퍼스는 진입점·문서·소스·manifest·테스트 순으로 그 언어 코드를 담는다. review-r1 조사는 생태계별 round-robin 발췌를, 해석은 소스 위치의 줄 창을 받고 verify가 실행된다. 기록은 경로로 정한 종류로 decode되고 같은 신원의 두 취득에서 요청 바이트가 같다. 제외 디렉터리와 범위 밖 생태계 manifest는 입력이 아니고, 그렇게 빠진 범위 안 소스는 `source_in_excluded_directories`로 남는다. 중첩 index 파일은 진입점이 아니다. 실제 worker와 기본 보고서 registry가 Python 기록을 받는다. 비밀값 선별은 새 발췌에도 적용되고 쓸 수 없는 탐지면 요청이 없다. Go 요청은 변경 전 캡처와 같다. 실모델 품질 근거가 아니다. | REQ-004,009,027; TC-100,118 |
 | TC-128 | review-r1 2.0.0. 거부된 출력 뒤 JSON 아닌 복구 응답, JSON 아닌 응답 연속 두 번, 두 번 거부, verify에서 관찰 ID가 섞인 항목·관찰 ID만으로 지지한 항목·유효 근거 옆의 지어낸 ID, 후속 호출 timeout, 3회 호출 기록의 보고서 경로 | JSON 아닌 응답은 복구와 별도로 한 번 재시도하고 앞 오류 코드를 유지한다(단계당 최대 3회). 연속 두 번이나 두 번 거부면 2회에서 실패하고 격리한다. 요청의 관찰 ID만 빼고도 판정 규칙을 통과하는 항목만 받아들이고 `evidence_id_dropped`를 남긴다. 지어낸 ID는 거부한다. 후속 호출 실패는 수락한 판정을 유지하고 나머지를 격리한다. 3회 호출 기록이 보고서 검증과 두 schema를 통과한다. 합성 입력만 쓴다. | REQ-011,013; NFR-008 |
-| TC-129 | review-r1 2.0.0 기본 팩. 팩 미지정·`review-v1`·모르는 팩의 에이전트·워커·개인 설정, 기본 회귀 집합(`fixtures/r0-quality/`)의 실모델 실행(**실모델**) | 미지정이면 r1의 다섯 역할을 계획하고 `review-v1`은 세 역할, 모르는 팩은 사용 오류다. v1 요청 바이트는 그대로다. 회귀 실행은 [평가](EVALUATION.md)의 사전 기준으로 판정하고 차단 조건이 없어야 한다. 품질 우월의 근거가 아니다. | REQ-010,027; NFR-007,010; TC-100 |
+| TC-129 | review-r1 2.0.0 기본 팩. 팩 미지정·`review-v1`·모르는 팩의 에이전트·워커·개인 설정, 기본 회귀 집합(`fixtures/regression/`)의 실모델 실행(**실모델**) | 미지정이면 r1의 다섯 역할을 계획하고 `review-v1`은 세 역할, 모르는 팩은 사용 오류다. v1 요청 바이트는 그대로다. 회귀 실행은 [평가](EVALUATION.md)의 사전 기준으로 판정하고 차단 조건이 없어야 한다. 품질 우월의 근거가 아니다. | REQ-010,027; NFR-007,010; TC-100 |
 
 역할·입력·복구 규칙은 [모델 검토](REVIEW.md)에 있다.
 
@@ -198,9 +198,9 @@
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
 | TC-33 | schema/지침/모델/규칙 변경 | revision/digest·holdout 회귀 결과 기록 | REQ-027; NFR-008,010 |
-| TC-93 | 정답·확인 코드를 소스 외부에 둔 개발 5쌍과 보류 5쌍(`fixtures/r0-quality/`) | 별도 테스트로 수정 전후 동작 확인 | REQ-003,009,010,011,012,013,026; NFR-007,008 |
+| TC-93 | 정답·확인 코드를 소스 외부에 둔 개발 5쌍과 보류 5쌍(`fixtures/regression/`) | 별도 테스트로 수정 전후 동작 확인 | REQ-003,009,010,011,012,013,026; NFR-007,008 |
 | TC-94 | **실모델**. 공개 고정본과 합성 사례, 별도 Git 입력 | 취득 SHA, 보고서·원본 digest 및 위치 대조 | REQ-003,009,010,011,012,013,026; NFR-007,008 |
-| TC-100 | 지침 교체 시. 동일 스냅샷·모델·예산에서 활성 팩과 후보 팩을 평가. 기본 팩 하나를 개정할 때는 기본 회귀 집합(`fixtures/r0-quality/`)을 사전 기준으로 실행하고, 새 팩 id로 기본값을 바꿀 때만 두 팩을 비교한다(A33) | 역할별 digest·호출 내역과 평가 분모를 보존한다. Q08·Q10의 계약 밖 입력, 수정 전 결함, 호출자가 정리하는 반례를 분리 채점한다. 허위 근거·모델 재현 단정·통계 오염은 기본 팩 승격을 막는다. | REQ-010,011,013,027; NFR-007,008,010 |
+| TC-100 | 지침 교체 시. 동일 스냅샷·모델·예산에서 활성 팩과 후보 팩을 평가. 기본 팩 하나를 개정할 때는 기본 회귀 집합(`fixtures/regression/`)을 사전 기준으로 실행하고, 새 팩 id로 기본값을 바꿀 때만 두 팩을 비교한다(A33) | 역할별 digest·호출 내역과 평가 분모를 보존한다. Q08·Q10의 계약 밖 입력, 수정 전 결함, 호출자가 정리하는 반례를 분리 채점한다. 허위 근거·모델 재현 단정·통계 오염은 기본 팩 승격을 막는다. | REQ-010,011,013,027; NFR-007,008,010 |
 | TC-120 | 정답 차단: 정답 목록 생성, relay `--forbidden-phrases`, 줄바꿈으로 나뉜 문구·camelCase 토큰·대소문자가 다른 부분 문자열을 심은 요청, 입력·지침에 정상으로 나오는 표현, 목록 없이 시작한 relay | 목록은 어떤 사례·변형·README 입력에도 없는 라벨 문구·고유 토큰만 담는다. 일치 요청은 예약·전달·차감 없이 403 `blocked_answer_leak`이고 장부에는 항목 ID·역할 표지만 남는다. 정상 표현은 통과한다. 형식이 틀린 목록이면 relay가 시작하지 않는다. 선택 옵션 `--allow-model-echo`는 relay가 돌려준 답에 나온 ID만 예외로 기록하고, runner는 그 ID가 같은 사례의 모델 출력에 없으면 `answer_echo_unverified`로 뺀다. runner는 relay가 이 목록을 현재 corpus digest로 읽지 않았으면 review batch를 시작하지 않고, 차단된 사례는 `invalid`로 지표에서 뺀다. 심은 정답이 막히지 않으면 `planted_leak_not_blocked`다. | REQ-013,027; NFR-010 |
 | TC-121 | 평가 실행·예산: `tools`·`review` 조건, 층별 표본과 seed, 반복, holdout 등록부, 상한 추정이 남은 예산·요청 수를 넘는 batch, batch 중간의 relay 예산 거절, 시험용 upstream | 사례마다 실제 controller·agent·분석기 경로로 실행하고 manifest에 팩·역할 digest, corpus digest, 모델, OS, 도구 버전·플래그, 예산, 시각, seed를 남긴다. 같은 seed는 같은 표본이다. 이전 다른 digest의 실제 실행이 있으면 `holdout_seen_by_prior_revision`을 표시한다. 시작 전 거절은 사유를 남기고 아무 사례도 실행하지 않는다. 중간 거절은 그 사례를 무효로, 남은 변형을 `not_run`으로 기록하고 멈춘다. 시험용 upstream은 loopback URL만 받고 키를 읽지 않으며 실제 장부와 섞이지 않는다. | REQ-006,013,018,027; NFR-010 |
 | TC-122 | 채점: 위치 pre-fill, 판정 양식, 미판정·판정 충돌, 판정된 단위의 지표와 Wilson 95% 구간, 언어·범주·detection 분해, 조건 비교, 반복 일치도, 보고서 읽기 답 없음·있음 | 자동 위치 대조는 판정이 아니며 구조 지표로만 보고한다. 비율의 분모는 판정된 단위이고 미판정 수를 함께 낸다. 충돌한 판정은 미판정이다. 비용·시간과 정확도를 한 점수로 합치지 않는다. 표시된 batch나 dry run이 섞인 비교는 `independent: false`다. 근거 유효성은 새로 만든 입력과 대조한다. 검토 결과는 task 상태로 분류하고, 비밀값 선별 실패(`secret_screen_failed`)는 모델 실패와 따로 센다. 코드 노출은 보고서의 파일 수가 아니라 검토 기록의 근거 종류로 센다. 보고서 읽기는 사람의 답이 없으면 `not_measured`이고 모델로 독자를 흉내 내지 않는다. | REQ-011,012,013,027; NFR-010 |
@@ -329,15 +329,15 @@ python3 scripts/test_postgres.py --web --nodes --scheduler --personal
 - `--scheduler`: 별도 DB에서 실제 controller·autoscaler와 `-tags codeye_fixture`로 빌드한 agent·worker(TC-71~75). fixture handler는 시험용이며 분석 결과가 아니다.
 - `--personal`: 개인 모드 start/status/stop, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32). Linux 전용이며 모델 호출·다운로드가 없다.
 - `--smokes-only`: Go 시험을 건너뛰고 고른 smoke만 다시 돌린다. 이때 마지막 줄은 저장 통합 시험을 실행했다고 주장하지 않는다.
-- `--r0-pilot`: **실모델** 파일럿. 실제 모델 요청을 보낸다. 고정 OpenCode와 승인된 relay가 필요하다. `CODEYE_R0_RELAY_FILE`에 relay descriptor, `CODEYE_R0_RESULTS`에 새 비공개 결과 디렉터리를 지정한다. `CODEYE_R0_CASES`(예: `Q01-before,pilot`)로 대상을, `CODEYE_R0_REVIEW_PACK`으로 검토 팩을 고른다(기본 `review-r1`). 보관된 결과는 `python3 scripts/r0_pilot.py --audit-results "$CODEYE_R0_RESULTS"`로 다시 대조한다. 이 대조는 위치·줄 범위·blob SHA의 참조 검사이며 주장이 옳다는 보증이 아니다. Git 시험에 기록된 commit 객체가 로컬에 있어야 한다.
+- `--pilot`: **실모델** 파일럿. 실제 모델 요청을 보낸다. 고정 OpenCode와 승인된 relay가 필요하다. `CODEYE_PILOT_RELAY_FILE`에 relay descriptor, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정한다. `CODEYE_PILOT_CASES`(예: `Q01-before,pilot`)로 대상을, `CODEYE_PILOT_REVIEW_PACK`으로 검토 팩을 고른다(기본 `review-r1`). 보관된 결과는 `python3 scripts/regression_pilot.py --audit-results "$CODEYE_PILOT_RESULTS"`로 다시 대조한다. 이 대조는 위치·줄 범위·blob SHA의 참조 검사이며 주장이 옳다는 보증이 아니다. Git 시험에 기록된 commit 객체가 로컬에 있어야 한다.
 
 ### 그 밖의 보조 검사
 
 ```sh
-python3 fixtures/r0-quality/corpus.py --check                       # 회귀 집합의 결함 전후 계약 시험(모델 없음)
+python3 fixtures/regression/corpus.py --check                       # 회귀 집합의 결함 전후 계약 시험(모델 없음)
 python3 -m unittest discover -s fixtures/cleanup -p 'test_*.py' -v  # 합성 결함 전후
-python3 -m unittest discover -s scripts -p test_r0_openai_gateway.py -v
-python3 -m unittest discover -s scripts -p test_r1_eval.py -v
+python3 -m unittest discover -s scripts -p test_model_budget_relay.py -v
+python3 -m unittest discover -s scripts -p test_quality_eval.py -v
 ```
 
 ### CI가 실행하는 것
@@ -346,7 +346,7 @@ python3 -m unittest discover -s scripts -p test_r1_eval.py -v
 
 | 작업 | 실행 내용 |
 |---|---|
-| Linux / PostgreSQL / contracts (ubuntu-24.04) | Go 1.27.4·Python 3.14.4·Node 24.18.0. 웹 빌드, Playwright Chromium 설치, `gofmt`·`go vet`, `scripts/test_postgres.py --nodes --web --scheduler --personal`, scripts 단위 시험, `validate_bundle.py`, cleanup fixture 시험, `fixtures/r0-quality/corpus.py --check`, CLI 빌드 |
+| Linux / PostgreSQL / contracts (ubuntu-24.04) | Go 1.27.4·Python 3.14.4·Node 24.18.0. 웹 빌드, Playwright Chromium 설치, `gofmt`·`go vet`, `scripts/test_postgres.py --nodes --web --scheduler --personal`, scripts 단위 시험, `validate_bundle.py`, cleanup fixture 시험, `fixtures/regression/corpus.py --check`, CLI 빌드 |
 | Windows / Go unit tests (windows-2025) | `go test -count=1 ./...`, `go vet`, CLI 빌드만. DB 통합·smoke·실도구 시험은 없다 |
 | Web / tests and build | `npm ci`, `npm test`, `npm run build` |
 
@@ -354,4 +354,4 @@ CI 러너에는 go vet 말고 분석 도구가 없어 실도구 시험은 skip�
 
 ## 보조 검증과 제품 시험의 차이
 
-`scripts/validate_bundle.py`는 문서 링크·schema·예시·계획 DAG·보고서 수치·범위 참조를 검사한다. `fixtures/cleanup/test_cleanup.py`는 합성 결함 전후를 검사하고, `fixtures/r0-quality/corpus.py --check`는 회귀 집합 사례의 계약 시험을 검사한다. 이들의 성공을 TC 전체 통과나 실제 분석 성능 확보로 보고하지 않는다. scripted caller나 fixture handler의 결과는 플랫폼 경로의 근거이지 지침 품질이나 분석 정확도의 근거가 아니다. 코드 시험 결과와 제품 분석 정확도 평가는 별도 결과로 보고한다([평가](EVALUATION.md)).
+`scripts/validate_bundle.py`는 문서 링크·schema·예시·계획 DAG·보고서 수치·범위 참조를 검사한다. `fixtures/cleanup/test_cleanup.py`는 합성 결함 전후를 검사하고, `fixtures/regression/corpus.py --check`는 회귀 집합 사례의 계약 시험을 검사한다. 이들의 성공을 TC 전체 통과나 실제 분석 성능 확보로 보고하지 않는다. scripted caller나 fixture handler의 결과는 플랫폼 경로의 근거이지 지침 품질이나 분석 정확도의 근거가 아니다. 코드 시험 결과와 제품 분석 정확도 평가는 별도 결과로 보고한다([평가](EVALUATION.md)).

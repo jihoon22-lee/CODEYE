@@ -16,11 +16,11 @@ import (
 )
 
 // Real gitleaks tests run only with CODEYE_TEST_GITLEAKS.
-// CODEYE_W21_CAPTURE=DIR also writes the scan streams and exit code to DIR
+// CODEYE_STRUCTURE_CAPTURE=DIR also writes the scan streams and exit code to DIR
 // (refusing any capture that holds the generated secret), which is how
 // testdata/*.stdout|stderr|exit were captured:
 //
-//	CODEYE_TEST_GITLEAKS=/abs/gitleaks CODEYE_W21_CAPTURE=$PWD/internal/worker/analysis/gitleaks/testdata \
+//	CODEYE_TEST_GITLEAKS=/abs/gitleaks CODEYE_STRUCTURE_CAPTURE=$PWD/internal/worker/analysis/gitleaks/testdata \
 //	  go test -count=1 -run TestRealGitleaks ./internal/worker/analysis/gitleaks/
 
 type recordingRunner struct {

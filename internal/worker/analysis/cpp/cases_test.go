@@ -14,8 +14,8 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 )
 
-// fixtures/w16-cpp/expected.json: the expected outcome of each analyzer on
-// variants of fixtures/w16-cpp/input. The real-tool tests compare the tools'
+// fixtures/cpp/expected.json: the expected outcome of each analyzer on
+// variants of fixtures/cpp/input. The real-tool tests compare the tools'
 // results with it; the replay tests compare the parsers' results on the
 // captured streams (testdata/) with the same file, in CI.
 
@@ -145,7 +145,7 @@ func summarize(d obsdoc.Document) expectedTool {
 func compareTool(t *testing.T, label string, d obsdoc.Document, want expectedTool) {
 	t.Helper()
 	got := summarize(d)
-	if out := os.Getenv("CODEYE_W16_PRINT"); out != "" {
+	if out := os.Getenv("CODEYE_CPP_PRINT"); out != "" {
 		// Review aid: record the actual outcome instead of comparing.
 		b, _ := json.Marshal(map[string]any{"label": label, "actual": got})
 		f, err := os.OpenFile(out, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)

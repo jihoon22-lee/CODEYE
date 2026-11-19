@@ -8,7 +8,7 @@ import "errors"
 // treat cleanup as uncertain.
 var ErrUnsupported = errors.New("process_identity_unsupported")
 
-// Identity of a live process. StartTime uses the W05 marker (Linux: /proc
+// Identity of a live process. StartTime uses the platform process marker (Linux: /proc
 // stat starttime clock ticks).
 type Identity struct {
 	PID       int

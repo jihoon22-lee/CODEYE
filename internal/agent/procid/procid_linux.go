@@ -136,7 +136,7 @@ var ErrReused = errors.New("process_identity_mismatch")
 // ErrGone: no process with the recorded identity exists.
 var ErrGone = errGone
 
-// SignalVerified (W25) sends sig to the single process pid only if it is
+// SignalVerified sends sig to the single process pid only if it is
 // still the process recorded with start time start. The process is pinned
 // with pidfd_open BEFORE its identity is checked and is signalled only through
 // that pidfd, so a recycled PID can never be hit. Kernels without pidfd

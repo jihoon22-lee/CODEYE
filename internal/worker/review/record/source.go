@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Source classification of snapshot paths (W24 phase 2c). It decides from a
+// Source classification of snapshot paths. It decides from a
 // path alone whether an excerpt may carry kind code, test or config, so the
 // review builders and every decoder (worker, report) apply one rule. It reads
 // no file and parses no language.
@@ -30,8 +30,8 @@ func SourceEcosystem(p string) string {
 	return sourceExtensions[strings.ToLower(path.Ext(p))]
 }
 
-// manifests are the build manifests a review-v1 corpus may carry as config
-// excerpts, by lower-cased base name. compile_commands.json is not one: it
+// manifests are the build manifests a legacy-pack corpus may carry as
+// config excerpts, by lower-cased base name. compile_commands.json is not one: it
 // is generated build output that usually holds absolute paths of the machine
 // that wrote it, and the C/C++ pack already reads it as data (docs/ANALYZERS.md).
 var manifests = map[string]string{

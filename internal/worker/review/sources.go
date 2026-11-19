@@ -12,11 +12,11 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// Review input selection for the source ecosystems besides Go (W24 phase
-// 2c). Go files, README/AGENTS documents and go.mod keep the W11/W15 rules
-// byte for byte (priority in context.go, codeCorpus and goIgnored in
-// r1_inputs.go); this file only decides the C/C++, Python, JS/TS and Rust
-// files. Classification is by path (record/source.go): no file is parsed.
+// Review input selection for the source ecosystems besides Go. Go files,
+// README/AGENTS documents and go.mod keep their own rules byte for byte
+// (priority in context.go, codeCorpus and goIgnored in rolepack_inputs.go);
+// this file only decides the C/C++, Python, JS/TS and Rust files.
+// Classification is by path (record/source.go): no file is parsed.
 
 // generatedDirs are directory names that hold build output, installed
 // dependencies or copied third-party code in the non-Go ecosystems. The
@@ -39,7 +39,7 @@ func reviewDataPath(p string) bool {
 
 // otherSource returns the ecosystem of a non-Go source path a review may
 // read, or "". A Go path (any case of .go) is never "other": it follows the
-// Go rules or, as before W24, is not selected.
+// Go rules or is not selected.
 func otherSource(p string) string {
 	eco := record.SourceEcosystem(p)
 	if eco == "" || eco == "go" || reviewDataPath(p) {
@@ -105,7 +105,7 @@ func newOtherScope(m source.Manifest, scope domain.Scope) otherScope {
 	return otherScope{ecosystems: pack.InScope(m, scope), roots: otherModuleRoots(files)}
 }
 
-// otherPriority is the review-v1 rank of a path the Go rules do not select
+// otherPriority is the legacy-pack rank of a path the Go rules do not select
 // (context.go priority): entry points 0, other sources 2, build manifests 3
 // and tests 4, for ecosystems with source in scope only (pack.InScope:
 // build files alone never add a manifest). 5 is not selected.
@@ -164,7 +164,7 @@ func (m otherModules) owner(eco, p string) string {
 	return best
 }
 
-// groupKey is the round-robin group of a non-Go file in the r1 code corpus:
+// groupKey is the round-robin group of a non-Go file in the role-pack code corpus:
 // its module root and ecosystem. A Go module's key is its bare directory
 // (codeCorpus); a NUL never occurs in a snapshot path.
 func groupKey(dir, eco string) string { return dir + "\x00" + eco }
@@ -194,7 +194,7 @@ func groupOrder(byModule map[string][]source.Entry) []string {
 	return out
 }
 
-// otherRank is the r1 code corpus rank of a non-Go file within its group
+// otherRank is the role-pack code corpus rank of a non-Go file within its group
 // (Go: main.go 0, other 1, tests 2).
 func otherRank(p string, roots otherModules) int {
 	switch {
@@ -207,7 +207,7 @@ func otherRank(p string, roots otherModules) int {
 }
 
 // windowKind is the excerpt kind of an interpret window on p, or "" when p
-// gets no window. Go keeps its W15 rule; other source is classified by
+// gets no window. Go keeps its own rule; other source is classified by
 // path; any other file (a manifest, a configuration, a document) gets none.
 func windowKind(p string) string {
 	switch {
@@ -224,7 +224,7 @@ func windowKind(p string) string {
 // otherModuleDirs lists the module roots of the non-Go excerpts in code
 // whose build manifest is in scope, as investigate's modules list names the
 // go.mod directories in scope.
-func (s *r1Stage) otherModuleDirs(code []record.Excerpt) []string {
+func (s *roleStage) otherModuleDirs(code []record.Excerpt) []string {
 	files := s.entries()
 	roots := otherModuleRoots(files)
 	scope := normalizedScope(s.j.Scope)

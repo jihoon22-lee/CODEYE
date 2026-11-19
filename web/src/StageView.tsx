@@ -67,7 +67,7 @@ function StageItem({ stage }: { stage: StageView }) {
 export function ProjectActivity({ project }: { project: Project }) {
   const a = project.activity;
   if (!a) {
-    // Server without W15 fields: only the last run's status is known.
+    // Server without the stage fields: only the last run's status is known.
     if (!project.last_run) return <p className="small activity">{s.noRun}</p>;
     return <p className="small activity">{runStatusText(project.last_run.status)} · {s.unrecorded}</p>;
   }

@@ -1,4 +1,4 @@
-# W17 Python 팩 ruff 어댑터 서술(필수 기준선). 구현: internal/worker/analysis/python, 근거: docs/ANALYZERS.md.
+# Python 팩 ruff 어댑터 서술(필수 기준선). 구현: internal/worker/analysis/python, 근거: docs/ANALYZERS.md.
 # ruff 0.16.3 check는 진단이 있으면 exit 1, 없으면 exit 0, 사용법·설정 오류는 exit 2다(측정). 구문 오류도 invalid-syntax 레코드와 exit 1이므로
 # 종료 코드만으로 결정하지 않는다. invalid-syntax 레코드는 관찰이 아닌 tool error이며 task는 source_syntax_errors로 실패한다.
 # 실행은 네 번이다: ruff.version, ruff.files(--show-files, 처리 파일 목록), ruff.check(억제 존중), ruff.check-ignore-noqa(모든 진단, 원시 참조).

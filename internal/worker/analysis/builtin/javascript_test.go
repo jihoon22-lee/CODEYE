@@ -11,7 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// jsReasons are the rows of the W18 JS/TS analyzers.
+// jsReasons are the rows of the JS/TS analyzers.
 func jsReasons(missing []Unavailable) []string {
 	var out []string
 	for _, m := range missing {

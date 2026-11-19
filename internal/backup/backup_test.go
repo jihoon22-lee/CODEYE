@@ -246,7 +246,7 @@ func scalar[T any](t *testing.T, dsn, q string, args ...any) T {
 	return v
 }
 
-// TC-32 (W25, docs/OPERATIONS.md#백업과-복원): a backup taken while an attempt runs, with an
+// TC-32 (docs/OPERATIONS.md#백업과-복원): a backup taken while an attempt runs, with an
 // artifact finalized between the snapshot and the blob copy, restores into a
 // fresh database and artifact root with projects, runs, reports, evidence
 // links (report -> blob hashes), ACL and schedule de-duplication intact, and

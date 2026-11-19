@@ -21,8 +21,8 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// W09 report publication over real HTTP and PostgreSQL. Artifacts are the
-// real W08 observations document (examples/observations-go-vet.json) bound to
+// Report publication over real HTTP and PostgreSQL. Artifacts are the
+// real go vet observations document (examples/observations-go-vet.json) bound to
 // bytes uploaded through the node protocol. Skips (NOT executed) without
 // CODEYE_TEST_DATABASE_URL.
 
@@ -58,7 +58,7 @@ func (e *env) driveAttempt(taskStatus string) attemptRun {
 	return e.drive(nil, driveOpts{taskStatus: taskStatus})
 }
 
-// driveOpts varies one driven attempt (W23 runs several in one project).
+// driveOpts varies one driven attempt (runs several in one project).
 type driveOpts struct {
 	taskStatus string
 	scope      map[string]any       // nil: full

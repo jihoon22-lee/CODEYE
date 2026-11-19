@@ -19,8 +19,8 @@ func (w *worker) limits() source.Limits {
 }
 
 // acquire fixes the attempt input: a pinned retry only Loads the cached
-// snapshot (never re-acquires); otherwise W04 acquires local or Git source.
-// The intent is journaled before any W04 call (Git runs subprocesses that are
+// snapshot (never re-acquires); otherwise source acquisition reads local or Git
+// source. The intent is journaled before any acquisition call (Git runs subprocesses that are
 // not individually journaled). It returns a reason code on failure.
 func (w *worker) acquire(a *attempt) string {
 	job := a.job

@@ -35,15 +35,14 @@ const (
 )
 
 // CppcheckSelection is the CODEYE rule selection: the error checks (always
-// on) plus warning, performance and portability; style is not run (docs/ANALYZERS.md
-// §7). information and missingInclude are enabled for coverage only: their
+// on) plus warning, performance and portability; style is not run (docs/ANALYZERS.md#cppcheck).
+// information and missingInclude are enabled for coverage only: their
 // records (missing headers, configuration limits, the active-checker count)
 // never become observations. The check level and platform are pinned so a
 // default change of the tool cannot change the rules silently. Inline
 // suppressions are not enabled (no --inline-suppr): every diagnostic is
 // reported, so source_suppressions is "disabled" (measured: with
-// --inline-suppr suppressed diagnostics vanish without any record, docs/ANALYZERS.md
-// §6).
+// --inline-suppr suppressed diagnostics vanish without any record, docs/ANALYZERS.md#cppcheck).
 var CppcheckSelection = []string{"--enable=warning,performance,portability,information,missingInclude", "--check-level=normal", "--platform=native"}
 
 // CppcheckArgs is the check argv after the executable. input is

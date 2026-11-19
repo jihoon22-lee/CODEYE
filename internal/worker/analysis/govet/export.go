@@ -14,7 +14,7 @@ import (
 )
 
 // This file exposes the go vet handler as a pack.Analyzer (docs/ANALYZERS.md) and the
-// Go plumbing other Go analyzers share with it (W19 staticcheck). The
+// Go plumbing other Go analyzers share with it (staticcheck). The
 // wrappers do not change go vet behavior: Plan and Run are the handler's.
 
 // DisableTelemetry turns Go telemetry off for an execution with env. The go
@@ -51,7 +51,7 @@ func Descriptor() pack.Descriptor {
 
 // Plan is go vet's tool-independent planner as a pack member: the handler's
 // plan with scope, except that a snapshot or scope without Go source plans
-// nothing (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백). The R0 placeholder stays only when Go source is in
+// nothing (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백). The placeholder task stays only when Go source is in
 // scope but no module or package can be analyzed (go_module_missing,
 // scope_has_no_go_packages): that is a real gap of this ecosystem.
 func Plan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {
@@ -121,7 +121,7 @@ type ModuleTask struct {
 
 // PlanModules plans one task per Go module like go vet, keyed name,
 // name.m01, ... (name instead of "go-vet"). With no Go module it returns
-// nil: only go vet keeps its R0 placeholder task.
+// nil: only go vet keeps its placeholder task.
 func PlanModules(m source.Manifest, scope domain.Scope, name, title string) ([]ModuleTask, error) {
 	planned, err := planTasks(m, scope)
 	if err != nil {
@@ -174,7 +174,7 @@ func EscapingReplaces(targets []string, moduleDir string) []string {
 	return escapingReplaces(targets, moduleDir, runtime.GOOS == "windows")
 }
 
-// RedactForms returns the workspace roots in every form W05 must redact.
+// RedactForms returns the workspace roots in every form the executor must redact.
 func RedactForms(roots []string) []string { return redactForms(roots) }
 
 // Masker replaces node-absolute toolchain, cache, scratch and snapshot

@@ -10,7 +10,7 @@ import (
 )
 
 // Captured from go1.27.4 linux/amd64 `go vet -json ./...` on the probe
-// fixture, with the workspace root redacted by the W05 executor. Package
+// fixture, with the workspace root redacted by the executor. Package
 // output order varies between runs; clean units print "{}".
 const capturedVetStdout = `{}
 {
@@ -239,7 +239,7 @@ func TestAssembleLocationStates(t *testing.T) {
 	if doc.Parse.UnresolvedObservations != 5 {
 		t.Fatalf("unresolved = %d", doc.Parse.UnresolvedObservations)
 	}
-	// Tool success with unresolved locations stays a success; W09 must not link them.
+	// Tool success with unresolved locations stays a success; the report builder must not link them.
 	if doc.Outcome.TaskStatus != domain.TaskSucceeded {
 		t.Fatalf("outcome = %+v", doc.Outcome)
 	}
@@ -356,7 +356,7 @@ func TestParseModEditAndEscapes(t *testing.T) {
 	}
 }
 
-// Tool JSON escapes backslashes and "&", so W05 byte redaction can miss the
+// Tool JSON escapes backslashes and "&", so the executor's byte redaction can miss the
 // workspace root; decoded absolute roots (case-insensitive on Windows) are
 // stripped by the parser itself.
 func TestAssembleUnredactedRoots(t *testing.T) {

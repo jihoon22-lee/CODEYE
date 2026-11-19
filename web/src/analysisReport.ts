@@ -9,7 +9,7 @@ export type Evidence = {
 };
 export type Finding = {
   id: string;
-  // W23 fp2 identity; absent in code-free exports and in reports before builder 3.
+  // fp2 identity; absent in code-free exports and in reports from older builders.
   fingerprint: string | null;
   // The disposition stamped at publication (immutable); the current one comes from the comparison.
   disposition: string;
@@ -34,7 +34,7 @@ export type Observation = {
   message: string | null;
   path: string | null;
   state: string;
-  // W21 structure or duplication measurement (never a finding).
+  // Structure or duplication measurement (never a finding).
   metric: { name: string; value: number; threshold: number; unit: string } | null;
 };
 export type AnalysisReport = {
@@ -51,7 +51,7 @@ export type AnalysisReport = {
     refuted: number;
     raw: number;
   };
-  // W21: observations of counts.raw that are structure metrics (omitted as 0).
+  // Observations of counts.raw that are structure metrics (omitted as 0).
   metricObservations: number;
   scope: {
     inventory: number | null;

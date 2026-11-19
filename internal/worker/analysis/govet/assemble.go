@@ -55,7 +55,7 @@ type assembleInput struct {
 	ExtraLimitations            []string
 	// WorkspaceRoots are the absolute workspace root forms (as given and
 	// symlink-resolved). Tool JSON escapes backslashes and HTML characters,
-	// so W05 byte redaction can miss them; decoded paths are stripped here.
+	// so the executor's byte redaction can miss them; decoded paths are stripped here.
 	WorkspaceRoots []string
 	// Windows selects drive/backslash/case-insensitive path rules.
 	Windows bool
@@ -75,7 +75,7 @@ func streamsComplete(r *executor.Result) bool {
 }
 
 // stripWorkspace maps a tool path to a snapshot-relative path. Workspace
-// paths arrive as "[REDACTED]/rel" (W05 Redact hit) or as the decoded
+// paths arrive as "[REDACTED]/rel" (executor Redact hit) or as the decoded
 // absolute workspace root (Redact missed a JSON-escaped form). A relative
 // path is relative to the module directory and accepted only if allowRelative.
 func stripWorkspace(p, moduleDir string, roots []string, windows, allowRelative bool) (string, bool) {

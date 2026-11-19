@@ -405,7 +405,7 @@ func (s *Server) sweepLoop(ctx context.Context) {
 }
 
 // scaleLoop is the controller reconcile loop: it materializes due schedule
-// occurrences (W22) and runs the pool autoscaler (W07) until ctx ends.
+// occurrences and runs the pool autoscaler until ctx ends.
 // Decisions and commands are in the database; the log lines are diagnostic
 // only. Several controllers may run it (row locks and unique keys).
 func (s *Server) scaleLoop(ctx context.Context) {
@@ -418,7 +418,7 @@ func (s *Server) scaleLoop(ctx context.Context) {
 		case <-t.C:
 		}
 		// Due schedule occurrences are enqueued first so the autoscaler sees
-		// their runs in this pass (W22). Decisions are in the database.
+		// their runs in this pass. Decisions are in the database.
 		sctx, cancel := context.WithTimeout(ctx, storeTimeout)
 		decisions, err := s.store.MaterializeSchedules(sctx)
 		cancel()

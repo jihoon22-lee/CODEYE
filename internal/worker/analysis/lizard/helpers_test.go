@@ -9,7 +9,7 @@ import (
 
 // Fixture sources stay generated strings: the replay tests use the same
 // files as the captures in testdata/ (taken by real_test.go with
-// CODEYE_W21_CAPTURE), with anypacktest.Placeholder where the real test
+// CODEYE_STRUCTURE_CAPTURE), with anypacktest.Placeholder where the real test
 // plants a generated secret as a default argument value.
 
 // branches writes n "if" statements of the language (CCN 1+n).
@@ -24,7 +24,7 @@ func branches(n int, line string) string {
 // pyComplex: classify (line 4, CCN 17, a default argument holding token),
 // simple (CCN 1) and forgiven (CCN 17 under "# #lizard forgive").
 func pyComplex(token string) string {
-	return "\"\"\"W21 lizard fixture.\"\"\"\n\n\ndef classify(value, token=\"" + token + "\"):\n" +
+	return "\"\"\"lizard fixture.\"\"\"\n\n\ndef classify(value, token=\"" + token + "\"):\n" +
 		branches(16, "    if value == %d:\n        return %d\n") + "    return len(token)\n\n\n" +
 		"def simple(a, b):\n    return a + b\n\n\n" +
 		"def forgiven(value):\n    # #lizard forgive\n" + branches(16, "    if value == %d:\n        return %d\n") + "    return 0\n"

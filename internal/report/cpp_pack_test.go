@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// W16 (docs/ANALYZERS.md): the real cppcheck 2.22.0 and clang-tidy 23.1.5 envelopes
-// (examples/observations-{cppcheck,clang-tidy}.json, the fixture with its
+// The real cppcheck 2.22.0 and clang-tidy 23.1.5 envelopes
+// (docs/ANALYZERS.md; examples/observations-{cppcheck,clang-tidy}.json, the fixture with its
 // generated header) through the default registry in CI: cppcheck is the
 // required baseline, clang-tidy extra depth; observations become unreviewed
 // low tool findings and two engines on one line stay two findings (TC-102);

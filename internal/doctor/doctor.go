@@ -33,13 +33,13 @@ type Report struct {
 	Stage         string  `json:"stage"`
 	Host          Host    `json:"host"`
 	Checks        []Check `json:"checks"`
-	// Operations is present only with --config (W25, docs/OPERATIONS.md#codeye-doctor).
+	// Operations is present only with --config (docs/OPERATIONS.md#codeye-doctor).
 	Operations *Operations `json:"operations,omitempty"`
 }
 type Options struct {
 	WorkDir, DatabaseURL string
 	Timeout              time.Duration
-	// Personal adds the W25 operations section (storage, backup, processes).
+	// Personal adds the operations section (storage, backup, processes).
 	Personal *personal.Config
 }
 

@@ -1,6 +1,6 @@
 # 로드맵
 
-다음에 할 일과 순서, 각 작업의 완료 조건을 정한다. 아래는 소유자가 승인한 계획이며 완료된 작업이 아니다. 범위와 착수는 소유자가 정한다. 이미 끝난 작업의 이력은 [변경 기록](../CHANGELOG.md), 지금 제공하는 기능은 [요구사항](REQUIREMENTS.md)의 현재 제공 범위에 있다.
+다음에 할 일과 순서, 각 작업의 완료 조건을 정한다. 끝난 작업은 이 문서에서 지우고 변경 기록에 적는다. 아래는 소유자가 승인한 계획이며 완료된 작업이 아니다. 범위와 착수는 소유자가 정한다. 이미 끝난 작업의 이력은 [변경 기록](../CHANGELOG.md), 지금 제공하는 기능은 [요구사항](REQUIREMENTS.md)의 현재 제공 범위에 있다.
 
 ## 진행 원칙
 
@@ -10,7 +10,7 @@
 - '다섯 언어 지원'은 탐색·기본·정밀·실행 검증 수준을 나누어 표시한다. 공통 탐색만 된 언어를 정밀 지원이라고 하지 않는다.
 - 기존 CI 통합과 의존성 CVE 검사를 어떤 작업에도 끼워 넣지 않는다. 제품 범위 변경은 소유자 결정이 필요하다.
 - API·schema를 바꾸는 PR은 호환 가능한 응답·예시·검증 스크립트·migration 필요 여부를 함께 검토한다([시험](TESTING.md), [결정 기록](DECISIONS.md)의 변경 절차).
-- 지침 개정은 기본 팩 하나에 하고 기본 회귀 집합(`fixtures/r0-quality/`)으로 검증한다. 보류 평가 자료를 읽지 않는 규칙은 [평가](EVALUATION.md)를 따른다.
+- 지침 개정은 기본 팩 하나에 하고 기본 회귀 집합(`fixtures/regression/`)으로 검증한다. 보류 평가 자료를 읽지 않는 규칙은 [평가](EVALUATION.md)를 따른다.
 
 ## 순서
 
@@ -18,9 +18,7 @@
 
 | 작업 | 선행 |
 |---|---|
-| 문서 통합 (진행 중) | 없음 |
-| 단계 이름 제거 | 문서 통합 |
-| 리팩토링 | 단계 이름 제거 |
+| 리팩토링 | 없음 |
 | 보고서 재구성 | 리팩토링 |
 | 검토 범위 확대 | 리팩토링 |
 | 다중 사용자·권한 | 정리 작업 전체 |
@@ -32,35 +30,12 @@
 
 ## 정리 작업
 
-### 문서 통합
-
-번호 붙은 문서와 단계별 구현 기록을 현재 제품을 설명하는 주제별 문서(README, AGENTS, CHANGELOG, `docs/` 아래 GUIDE·ARCHITECTURE·EXECUTION·ANALYZERS·REVIEW·REPORT·API·OPERATIONS·SECURITY·GITHUB·EVALUATION·REQUIREMENTS·TESTING·DECISIONS·ROADMAP)로 합친다.
-
-완료 조건:
-- 유효한 계약·운영 규칙이 빠짐없이 새 문서로 옮겨졌다. 이력은 CHANGELOG로만 간다.
-- REQ·NFR·TC·D·A ID의 번호와 뜻이 그대로다.
-- `scripts/validate_bundle.py`가 새 파일 이름(요구사항·시험 추적)을 읽고 통과한다. 문서 링크가 모두 해석된다.
-- 코드 주석·스크립트의 옛 문서 참조(번호 붙은 문서와 절 번호를 가리키는 형식)를 새 파일로 바꿨다.
-- 보류 평가 결과와 보류 사례 내용이 봉인 문서 밖에 요약되지 않았다.
-
-### 단계 이름 제거
-
-코드 주석, 파일·시험·식별자 이름, CLI 문구, fixture와 스크립트 이름에서 구현 단계 이름을 없애고 기능 이름으로 바꾼다. 예: `internal/storage/postgres/w06_test.go`, `internal/worker/run/w21_e2e_test.go`, `fixtures/w16-cpp/`, `scripts/w15_pack_compare.py`, CLI 오류 문구의 단계 표기.
-
-바꾸지 않는 것: 검토 팩 ID `review-r1`·`review-v1`(기존 기록이 팩 id·digest로 해석된다, A33), API 필드·schema 이름·media type·DB 열, 저장된 사유 코드. 이름을 바꾸면 기존 기록·운영자 설정이 깨지는 식별자는 그대로 두고 그 이유를 기록한다.
-
-완료 조건:
-- 저장소 검색에서 단계 이름이 위의 예외 말고는 남지 않는다.
-- 시험 이름을 바꿔도 같은 시험이 모두 실행된다(이전과 같은 시험 수, skip 수).
-- 경로를 바꾼 fixture·스크립트를 참조하는 CI·문서·시험이 함께 바뀌었다.
-- 보류 집합 경로를 바꿀 때 내용을 열지 않고 기계적으로 옮겼다.
-
 ### 리팩토링
 
 분석기 팩이 반복하는 처리(도구 경로·버전 probe, 관리 설정 생성, 위치 인자 처리, 작업 사본 밖 결과 제거, 규칙 문맥 기록, 실행 결과 판정)를 공유 helper로 모으고, 지나치게 큰 파일(예: `internal/agent/agent.go`, `cmd/codeye/personal.go`, `internal/report/build.go`, `internal/worker/analysis/cpp/compiledb.go`, `scripts/validate_bundle.py`)을 책임별로 나눈다. 동작은 바꾸지 않는다.
 
 완료 조건:
-- 같은 입력에서 보고서 JSON·Markdown·HTML과 모델 요청(프롬프트) 바이트가 변경 전과 같다. `TestReviewV1IsPinned`와 Go 요청 캡처 비교 같은 기존 고정 시험이 그대로 통과하고, 각 분석기 팩의 재생 시험 산출물(envelope·보고서)도 바이트 비교한다.
+- 같은 입력에서 보고서 JSON·Markdown·HTML과 모델 요청(프롬프트) 바이트가 변경 전과 같다. `TestLegacyPackIsPinned`와 Go 요청 캡처 비교 같은 기존 고정 시험이 그대로 통과하고, 각 분석기 팩의 재생 시험 산출물(envelope·보고서)도 바이트 비교한다.
 - 공개 API·schema·CLI 플래그·DB migration이 바뀌지 않는다.
 - Linux 전체 시험(`scripts/test_postgres.py --web --nodes --scheduler --personal`), Windows Go 단위 시험, 웹 시험이 통과한다.
 
@@ -89,7 +64,7 @@
 
 ### 검토 범위 확대
 
-지금 모델 검토는 한 run에서 적은 수의 파일만 본다. `review-r1` 조사 역할은 코드 파일 최대 8개·12,000바이트(`r1MaxCodeFiles`·`r1MaxCodeBytes`, [`internal/worker/review/r1_inputs.go`](../internal/worker/review/r1_inputs.go)), `review-v1` 코퍼스는 최대 6개(`maxFiles`, [`internal/worker/review/context.go`](../internal/worker/review/context.go))이고, 요청마다 40,000바이트 한도(`PromptBudget`, [`internal/worker/review/r1.go`](../internal/worker/review/r1.go))가 있다. 모듈 단위로 나누어 검토해 모델이 저장소의 더 많은 부분을 보게 한다.
+지금 모델 검토는 한 run에서 적은 수의 파일만 본다. `review-r1` 조사 역할은 코드 파일 최대 8개·12,000바이트(`roleMaxCodeFiles`·`roleMaxCodeBytes`, [`internal/worker/review/rolepack_inputs.go`](../internal/worker/review/rolepack_inputs.go)), `review-v1` 코퍼스는 최대 6개(`maxFiles`, [`internal/worker/review/context.go`](../internal/worker/review/context.go))이고, 요청마다 40,000바이트 한도(`PromptBudget`, [`internal/worker/review/rolepack.go`](../internal/worker/review/rolepack.go))가 있다. 모듈 단위로 나누어 검토해 모델이 저장소의 더 많은 부분을 보게 한다.
 
 완료 조건:
 - 모듈마다 검토 task를 계획하고, 각 task의 입력 범위(모듈·파일·바이트)와 잘린 범위를 기록한다.
@@ -189,7 +164,6 @@ PR 이벤트와 권한 있는 사용자의 댓글 명령(`@codeye analyze`, `@co
 | 모델 검토가 run당 코드 파일 최대 8개만 본다. | 검토 범위 확대 |
 | `codeye doctor`는 모델·프로세스 제어 항목이 항상 미검증이라 종료 코드가 늘 1이다. | 리팩토링 뒤 운영 점검 정리 |
 | 재시도는 저장 계층에만 있고 API·CLI·화면에서 부를 수 없다. `recovery_required`를 되돌리는 경로도 없다. | 운영 수용 |
-| 에이전트 도움말에 분석기 옵션 일부(`--cppcheck`·`--clang-tidy`·`--eslint`·`--tsc`·`--lizard`·`--jscpd`·`--gitleaks`)가 빠져 있다. | 단계 이름 제거 (CLI 문구 정리) |
 | 지원 언어 소스가 없는 저장소(문서·설정만)는 비밀정보 검사가 계획되지 않는다. | 리팩토링 (동작 변경이므로 별도 커밋과 시험) |
 | `with-tests`·`focused` 프로필은 API가 받지만 워커가 실행하지 않는다. 시험 상태는 항상 미실행이다. | 후속 선택 작업 |
 

@@ -1,4 +1,4 @@
-// Package reportsvc publishes W09 reports on the controller. It loads the
+// Package reportsvc publishes structured reports on the controller. It loads the
 // run's structured state, re-hashes every artifact byte it reads from the
 // artifact store, builds the report with internal/report and stores it in the
 // same transaction that settles the run. It is safe to run repeatedly and from

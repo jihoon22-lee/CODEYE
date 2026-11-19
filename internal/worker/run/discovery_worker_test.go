@@ -20,7 +20,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
-// W15 through the real worker: the deep-review composition (discovery →
+// Discovery through the real worker: the deep-review composition (discovery →
 // go vet → review roles) on the fixture repository with the actual Go
 // toolchain. Discovery runs first, its probe execution is recorded cleanly
 // (so the worker keeps the success), and the svc/b mismatch verdict agrees
@@ -34,7 +34,7 @@ func TestDiscoveryTasksThroughTheWorker(t *testing.T) {
 	if err := os.Remove(filepath.Join(e.src, "main.go")); err != nil {
 		t.Fatal(err)
 	}
-	fixture, _ := filepath.Abs("../../../fixtures/w15-modules/input")
+	fixture, _ := filepath.Abs("../../../fixtures/modules/input")
 	err := filepath.WalkDir(fixture, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err

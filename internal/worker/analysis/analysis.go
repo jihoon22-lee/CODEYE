@@ -1,6 +1,6 @@
 // Package analysis defines the contract between the worker and analysis
-// handlers (W06 contract §8): a handler plans tasks from an immutable W04
-// snapshot and runs each task only through the W05 executor.Runner it is
+// handlers: a handler plans tasks from an immutable
+// snapshot and runs each task only through the executor.Runner it is
 // given. Handlers never import os/exec, never use the network and never
 // assert cleanup; the worker derives cleanup from the executor results it
 // recorded itself.
@@ -54,7 +54,7 @@ type TaskSpec struct {
 	// means "not recorded"; the server never infers it from Key.
 	Stage domain.Stage
 	// Weight is the optional estimate weight (1..1000) sent with task_created
-	// for the weighted progress (W22). 0 means not declared (the server counts
+	// for the weighted progress. 0 means not declared (the server counts
 	// the task as 1). Handlers must not claim a weight they have not measured.
 	Weight int
 }
@@ -92,7 +92,7 @@ type Handler interface {
 	Run(ctx context.Context, job Job, task TaskSpec, runner executor.Runner) TaskResult
 }
 
-// Media types and artifact roles shared with the worker and W09.
+// Media types and artifact roles shared with the worker and the report builder.
 const (
 	MediaResultManifest = "application/vnd.codeye.result-manifest+json"
 	MediaObservations   = "application/vnd.codeye.observations+json"

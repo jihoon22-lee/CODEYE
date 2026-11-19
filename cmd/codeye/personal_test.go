@@ -29,7 +29,7 @@ func TestPersonalExampleConfigParses(t *testing.T) {
 	}
 }
 
-// W25 (docs/OPERATIONS.md#start-stop-status): codeye start turns the configuration into the agent's
+// Personal mode (docs/OPERATIONS.md#start-stop-status): codeye start turns the configuration into the agent's
 // argv: autoscale, per-root grants, tools, model and storage quota. No
 // database URL or token value is ever in it (only the token file path).
 func TestPersonalAgentArgv(t *testing.T) {

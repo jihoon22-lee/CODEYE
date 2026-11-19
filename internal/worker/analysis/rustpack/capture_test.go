@@ -14,12 +14,12 @@ import (
 
 // capture writes the main execution of a real run (stdout, stderr, exit
 // code) and the dep-info files of its target directory to
-// $CODEYE_W20_CAPTURE/<name>.*, with every node path replaced by a
+// $CODEYE_RUST_CAPTURE/<name>.*, with every node path replaced by a
 // placeholder, so CI replays the exact bytes of the pinned toolchain
 // (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처). Version outputs are captured once as versions.*.
 func capture(t *testing.T, name string, job analysis.Job, key string, res analysis.TaskResult, a *Analyzer) {
 	t.Helper()
-	dir := os.Getenv("CODEYE_W20_CAPTURE")
+	dir := os.Getenv("CODEYE_RUST_CAPTURE")
 	if dir == "" {
 		return
 	}

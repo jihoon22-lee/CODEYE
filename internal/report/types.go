@@ -1,4 +1,4 @@
-// Package report builds the CODEYE structured report (W09) from verified,
+// Package report builds the CODEYE structured report from verified,
 // structured run data: database task rows, the attempt's result_manifest and
 // the artifacts it references. It performs no I/O and calls no model: the
 // publisher (internal/reportsvc) loads and re-hashes every byte it passes in.
@@ -17,7 +17,7 @@ import "time"
 const (
 	SchemaVersion = "0.1"
 	BuilderID     = "codeye-report"
-	// BuilderVersion 4 (W19) adds the tool rows' rule_context and the
+	// BuilderVersion 4 adds the tool rows' rule_context and the
 	// observations' suppressed flag (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태).
 	BuilderVersion = "4"
 )
@@ -46,7 +46,7 @@ const (
 )
 
 // Report is the stored, canonical report document. Field names follow
-// schemas/report.schema.json (v0.1 plus the W09 additive properties).
+// schemas/report.schema.json (v0.1 plus the builder's additive properties).
 type Report struct {
 	SchemaVersion  string        `json:"schema_version"`
 	Demo           bool          `json:"demo"`
@@ -117,12 +117,12 @@ type Summary struct {
 	Priorities             []string `json:"priorities"`
 
 	// HiddenFindings counts findings whose publication-time human
-	// disposition hides them from the action counts (W23). They stay in
+	// disposition hides them from the action counts. They stay in
 	// TotalFindings and in comparison. Omitted when zero (older revisions).
 	HiddenFindings int `json:"hidden_findings,omitempty"`
 
 	// MetricObservations counts the observations of RawObservations that
-	// are structure metrics (W21, docs/ANALYZERS.md: complexity, duplication). They
+	// are structure metrics (docs/ANALYZERS.md: complexity, duplication). They
 	// are never findings, candidates or actionable; omitted when zero.
 	MetricObservations int `json:"metric_observations,omitempty"`
 }
@@ -135,8 +135,8 @@ type ReviewCall struct {
 	PackDigest    string `json:"pack_sha256"`
 	RequestDigest string `json:"request_sha256"`
 	Outcome       string `json:"outcome"`
-	// PackID/PackVersion are set for review-r1 records (schema 0.2), which
-	// record the pack identity; R0 (0.1) calls leave them out.
+	// PackID/PackVersion are set for role-pack records (schema 0.2), which
+	// record the pack identity; legacy-pack (0.1) calls leave them out.
 	PackID      string `json:"pack_id,omitempty"`
 	PackVersion string `json:"pack_version,omitempty"`
 }
@@ -160,7 +160,7 @@ type AIReview struct {
 	Reason        *string        `json:"reason"`
 	RequiredTasks []AIReviewTask `json:"required_tasks"`
 	// OptionalTasks are planned review tasks not required for the verdict
-	// (review-r1 environment/interpret, documents without documents). They
+	// (role-pack environment/interpret, documents without documents). They
 	// are listed with their outcome and reason and never count as performed.
 	OptionalTasks []AIReviewTask `json:"optional_tasks,omitempty"`
 }
@@ -172,7 +172,7 @@ type AIReviewTask struct {
 	Key        string  `json:"key"`
 	TaskStatus *string `json:"task_status"`
 	Result     string  `json:"result"`
-	// Reason is the task's reason code (review-r1 plans only).
+	// Reason is the task's reason code (role-pack plans only).
 	Reason *string `json:"reason,omitempty"`
 }
 
@@ -193,7 +193,7 @@ type ToolCoverage struct {
 	Limitations    []string       `json:"limitations"`
 
 	// ProcessedPaths are the snapshot files the tool analyzed in an accepted
-	// succeeded task (W23). Only these locations count as inspected when a
+	// succeeded task. Only these locations count as inspected when a
 	// comparison decides a vanished finding was resolved. Omitted when the
 	// adapter does not record them (and in revisions before builder 3).
 	ProcessedPaths []string `json:"processed_paths,omitempty"`
@@ -269,7 +269,7 @@ type Observation struct {
 	// in-source suppression (builder 4). It is never a finding; a comparison
 	// uses it to tell "suppressed" from "fixed".
 	Suppressed bool `json:"suppressed,omitempty"`
-	// Metric marks a structure measurement over its threshold (W21, docs/ANALYZERS.md),
+	// Metric marks a structure measurement over its threshold (docs/ANALYZERS.md),
 	// never a defect: it is never a finding. Its numbers hold no code, so
 	// the code-free export keeps them.
 	Metric *ObservationMetric `json:"metric,omitempty"`
@@ -334,7 +334,7 @@ type Finding struct {
 	Verification       []string       `json:"verification"`
 	Limitations        []string       `json:"limitations"`
 
-	// FingerprintBasis records the fp2 identity inputs (W23); absent in
+	// FingerprintBasis records the fp2 identity inputs; absent in
 	// revisions before builder 3, whose fingerprints are kept as stored.
 	FingerprintBasis *FingerprintBasis `json:"fingerprint_basis,omitempty"`
 	// DispositionVersion is the human review version stamped at publication

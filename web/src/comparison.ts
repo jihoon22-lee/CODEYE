@@ -1,4 +1,4 @@
-// W23 run comparison and human finding reviews (docs/REPORT.md, api/openapi.yaml RunComparison).
+// Run comparison and human finding reviews (docs/REPORT.md, api/openapi.yaml RunComparison).
 // States, reasons and dispositions are open strings: an unrecognised value reaches the UI raw,
 // never as "resolved" or "hidden". Counts come from the server's structured data only.
 

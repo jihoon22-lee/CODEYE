@@ -24,12 +24,12 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
-// v1Scripted answers the three review-v1 roles from the request input alone
+// legacyScripted answers the three legacy-pack roles from the request input alone
 // (first excerpt, first code excerpt, every candidate). It never starts a
 // process or contacts a model.
-type v1Scripted struct{}
+type legacyScripted struct{}
 
-func (v1Scripted) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
+func (legacyScripted) Review(_ context.Context, _ executor.Runner, q opencode.Request) opencode.Reply {
 	reply := opencode.Reply{Model: "fake/scripted", Version: opencode.Version, RequestDigest: domain.Digest([]byte(opencode.Prompt(q))), Usage: &opencode.Usage{Input: int64(len(q.Input)), Output: 40}}
 	var in struct {
 		Scope struct {
@@ -70,8 +70,9 @@ func (v1Scripted) Review(_ context.Context, _ executor.Runner, q opencode.Reques
 	return reply
 }
 
-// W24 phase 2c through the real worker and the report builder: a Python-only
-// snapshot (fixtures/w24-review-inputs/python) with the production analyzer
+// Review inputs of other languages through the real worker and the report
+// builder: a Python-only
+// snapshot (fixtures/review-inputs/python) with the production analyzer
 // composite (no tool configured) and a scripted model. Both packs send
 // Python code to investigate and verify, and the report built from the
 // uploaded artifacts with the default registry accepts every review record
@@ -81,13 +82,13 @@ func TestReviewInputsOfPythonThroughTheWorkerAndReport(t *testing.T) {
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
-	for _, packName := range []string{review.PackV1, review.PackR1} {
+	for _, packName := range []string{review.PackLegacy, review.PackRole} {
 		t.Run(packName, func(t *testing.T) {
 			e := newEnv(t)
 			if err := os.Remove(filepath.Join(e.src, "main.go")); err != nil {
 				t.Fatal(err)
 			}
-			fixture, _ := filepath.Abs("../../../fixtures/w24-review-inputs/python")
+			fixture, _ := filepath.Abs("../../../fixtures/review-inputs/python")
 			err := filepath.WalkDir(fixture, func(p string, d fs.DirEntry, err error) error {
 				if err != nil || d.IsDir() {
 					return err
@@ -110,9 +111,9 @@ func TestReviewInputsOfPythonThroughTheWorkerAndReport(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var inner analysis.Handler = review.Handler{Static: static, Caller: v1Scripted{}}
-			if packName == review.PackR1 {
-				inner = review.R1Handler{Static: static, Caller: &r1Scripted{}}
+			var inner analysis.Handler = review.Handler{Static: static, Caller: legacyScripted{}}
+			if packName == review.PackRole {
+				inner = review.RoleHandler{Static: static, Caller: &roleScripted{}}
 			}
 			h, err := discovery.Wrap(inner, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe, Analyzers: builtin.Probes(cfg)}})
 			if err != nil {

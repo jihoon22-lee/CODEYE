@@ -17,11 +17,11 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// Real lizard tests run only with CODEYE_TEST_LIZARD. CODEYE_W21_CAPTURE=DIR
+// Real lizard tests run only with CODEYE_TEST_LIZARD. CODEYE_STRUCTURE_CAPTURE=DIR
 // also writes the lizard.run streams and exit code of each case to DIR,
 // which is how testdata/*.stdout|stderr|exit were captured:
 //
-//	CODEYE_TEST_LIZARD=/abs/lizard CODEYE_W21_CAPTURE=$PWD/internal/worker/analysis/lizard/testdata \
+//	CODEYE_TEST_LIZARD=/abs/lizard CODEYE_STRUCTURE_CAPTURE=$PWD/internal/worker/analysis/lizard/testdata \
 //	  go test -count=1 -run TestRealLizard ./internal/worker/analysis/lizard/
 
 type recordingRunner struct {

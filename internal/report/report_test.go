@@ -16,7 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// fixture builds builder input around the real W08 go vet observations
+// fixture builds builder input around the real go vet observations
 // document (examples/observations-go-vet.json, captured from go1.27.4). Only
 // the snapshot binding is re-pointed to a source manifest made for the test.
 type fixture struct {
@@ -224,7 +224,7 @@ func has(list []string, v string) bool {
 	return false
 }
 
-// TC-80: real W08 observations become bound observations and unreviewed
+// TC-80: real go vet observations become bound observations and unreviewed
 // findings; the report is partial and inconclusive because AI review is absent.
 func TestBuildFromRealGoVetDocument(t *testing.T) {
 	f := newFixture(t, goVet(t))
@@ -321,7 +321,7 @@ func withReview(t *testing.T, statuses map[string]string) *fixture {
 	return f
 }
 
-// TC-69 (W19, docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백): a report that would be completed is partial
+// TC-69 (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백): a report that would be completed is partial
 // when the run had a static analysis gap (a pack-gap task, not required) or
 // planned no analyzer task at all. Neither is counted as a required task.
 func TestStaticAnalysisGapMakesTheReportPartial(t *testing.T) {
@@ -377,7 +377,7 @@ func TestStaticAnalysisGapMakesTheReportPartial(t *testing.T) {
 }
 
 // TC-81: completion and a clean verdict need succeeded review tasks whose
-// bytes a registered decoder accepted; W09 registers none.
+// bytes a registered decoder accepted; a tools-only registry has none.
 func TestAIReviewGate(t *testing.T) {
 	all := map[string]string{"review.context": "succeeded", "review.investigate": "succeeded", "review.verify": "succeeded"}
 	f := withReview(t, all)

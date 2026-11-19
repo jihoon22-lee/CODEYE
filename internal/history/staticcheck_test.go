@@ -8,7 +8,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 )
 
-// W19 findings take part in W23 comparison like go vet's: identity from the
+// Staticcheck findings take part in comparison like go vet's: identity from the
 // shared report.ToolFingerprint, inspection from the staticcheck row's
 // processed paths. A not-configured staticcheck (not_run, a known zero
 // without paths) never resolves a vanished finding.
@@ -189,7 +189,7 @@ func TestTC104RuleContextGatesResolution(t *testing.T) {
 // The go vet document has no rule pack: the builder-4 decoder writes the
 // synthesized context on the row, and a builder-3 row without one gets the
 // same context in the comparison. So builder-3 and builder-4 go vet
-// revisions still resolve (the W23 three-run smoke) and show no rule-context
+// revisions still resolve (the three-run comparison smoke) and show no rule-context
 // difference.
 func TestGoVetRuleContextIsSynthesized(t *testing.T) {
 	base := vetRun("base", "succeeded", "go1.27.4", []string{"a.go"}, vetFinding("f1", "a.go", 5, msg))

@@ -73,15 +73,15 @@ const (
 	fixOverlapT = "package overlap\n\nimport \"testing\"\n\nfunc TestX(t *testing.T) {\n\tgo func() { t.Fatal(\"x\") }()\n}\n"
 	// suppressions (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제): one active SA1000, one hidden by
 	// //lint:ignore, one by //lint:file-ignore in another file.
-	fixSup     = "package sup\n\nimport \"regexp\"\n\nfunc Active() *regexp.Regexp { return regexp.MustCompile(\"[\") }\n\nfunc Hidden() *regexp.Regexp {\n\t//lint:ignore SA1000 kept for the W19 suppression fixture\n\treturn regexp.MustCompile(\"(\")\n}\n"
-	fixSupFile = "//lint:file-ignore SA1000 whole file kept for the W19 suppression fixture\n\npackage sup\n\nimport \"regexp\"\n\nfunc FileHidden() *regexp.Regexp { return regexp.MustCompile(\"(\") }\n"
+	fixSup     = "package sup\n\nimport \"regexp\"\n\nfunc Active() *regexp.Regexp { return regexp.MustCompile(\"[\") }\n\nfunc Hidden() *regexp.Regexp {\n\t//lint:ignore SA1000 kept for the suppression fixture\n\treturn regexp.MustCompile(\"(\")\n}\n"
+	fixSupFile = "//lint:file-ignore SA1000 whole file kept for the suppression fixture\n\npackage sup\n\nimport \"regexp\"\n\nfunc FileHidden() *regexp.Regexp { return regexp.MustCompile(\"(\") }\n"
 	// U1000 (measured, staticcheck 2026.2.2): //lint:ignore U1000 hides the
 	// unused function without any record, even with -show-ignored; the
 	// visible one shows the check fires on the same construct.
-	fixSupUnused       = "package sup\n\nfunc unusedVisible() int { return 1 }\n\n//lint:ignore U1000 kept for the W19 suppression fixture\nfunc unusedHidden() int { return 2 }\n"
-	fixSupUnusedHidden = "package sup\n\n//lint:ignore U1000 kept for the W19 suppression fixture\nfunc unusedHidden() int { return 2 }\n"
+	fixSupUnused       = "package sup\n\nfunc unusedVisible() int { return 1 }\n\n//lint:ignore U1000 kept for the suppression fixture\nfunc unusedHidden() int { return 2 }\n"
+	fixSupUnusedHidden = "package sup\n\n//lint:ignore U1000 kept for the suppression fixture\nfunc unusedHidden() int { return 2 }\n"
 	// the same package with the active problems suppressed too.
-	fixSupAll = "package sup\n\nimport \"regexp\"\n\nfunc Active() *regexp.Regexp {\n\t//lint:ignore SA1000 suppressed after review\n\treturn regexp.MustCompile(\"[\")\n}\n\nfunc Hidden() *regexp.Regexp {\n\t//lint:ignore SA1000 kept for the W19 suppression fixture\n\treturn regexp.MustCompile(\"(\")\n}\n"
+	fixSupAll = "package sup\n\nimport \"regexp\"\n\nfunc Active() *regexp.Regexp {\n\t//lint:ignore SA1000 suppressed after review\n\treturn regexp.MustCompile(\"[\")\n}\n\nfunc Hidden() *regexp.Regexp {\n\t//lint:ignore SA1000 kept for the suppression fixture\n\treturn regexp.MustCompile(\"(\")\n}\n"
 )
 
 func suppressionFiles(all bool) map[string]string {
@@ -149,7 +149,7 @@ type fixture struct {
 	Job        analysis.Job
 }
 
-// newFixture acquires a W04 snapshot of files and clones an attempt
+// newFixture acquires a snapshot of files and clones an attempt
 // workspace like the worker.
 func newFixture(t *testing.T, base string, files map[string]string, scope domain.Scope) fixture {
 	t.Helper()
@@ -227,7 +227,7 @@ func readEnvelope(t *testing.T, job analysis.Job, res analysis.TaskResult) (obsd
 	if err != nil {
 		t.Fatalf("envelope invalid: %v\n%s", err, raw)
 	}
-	if dump := os.Getenv("CODEYE_W19_DUMP"); dump != "" {
+	if dump := os.Getenv("CODEYE_STATICCHECK_DUMP"); dump != "" {
 		name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "-" + key + ".json"
 		if err := os.WriteFile(filepath.Join(dump, name), raw, 0o600); err != nil {
 			t.Fatal(err)

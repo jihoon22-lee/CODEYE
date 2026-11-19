@@ -84,7 +84,7 @@ function RunStatus({ api, runId, placeholder, onRunChange }: { api: Api; runId: 
   </div>;
 }
 
-// How the panel is kept up to date. polling keeps the pre-W22 wording.
+// How the panel is kept up to date. polling keeps the wording used without a stream.
 function updateText(mode: StreamMode): string {
   switch (mode) {
     case 'connecting': return t.runs.streamConnecting;
@@ -101,8 +101,8 @@ function triggerText(trigger: RunTrigger): string {
   return t.runs.triggerUnknown(shorten(trigger.kind, 40));
 }
 
-// The weighted plan behind the percentage and why its denominator changed (W22). Servers before
-// W22 send none of it: nothing is shown rather than a guess.
+// The weighted plan behind the percentage and why its denominator changed. Servers without a stream
+// send none of it: nothing is shown rather than a guess.
 function PlanDetails({ p }: { p: RunProgress }) {
   if (p.planned_weight === undefined && p.plan_changes === undefined) return null;
   const basis = p.weight_basis ?? null;

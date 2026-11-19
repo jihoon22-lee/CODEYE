@@ -239,7 +239,7 @@ func TestSplitCommand(t *testing.T) {
 }
 
 // The committed fixture DB maps as docs/ANALYZERS.md#compile-db-매핑 states (also the expectation
-// of fixtures/w16-cpp/expected.json).
+// of fixtures/cpp/expected.json).
 func TestFixtureCompileDB(t *testing.T) {
 	files := fixtureFiles(t)
 	snap := map[string]source.Entry{}

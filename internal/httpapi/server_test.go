@@ -37,9 +37,9 @@ type env struct {
 	hs     *httptest.Server
 	host   string
 	logs   *syncBuffer
-	// artifacts is the controller artifact directory (W06 node uploads).
+	// artifacts is the controller artifact directory (node uploads).
 	artifacts string
-	// stream is the event stream configuration start uses (W22).
+	// stream is the event stream configuration start uses.
 	stream StreamConfig
 }
 

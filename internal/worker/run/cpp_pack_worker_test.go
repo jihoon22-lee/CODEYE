@@ -16,13 +16,14 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 )
 
-// W16 (docs/ANALYZERS.md) through the production composition and the real worker:
+// The C/C++ pack (docs/ANALYZERS.md) through the production composition and
+// the real worker:
 // discovery → the analyzer composite with the C/C++ pack → review roles,
 // artifacts uploaded, report built by the default registry.
 
 func cppFixture(t *testing.T, add map[string]string) map[string]string {
 	t.Helper()
-	root := filepath.Join("..", "..", "..", "fixtures", "w16-cpp", "input")
+	root := filepath.Join("..", "..", "..", "fixtures", "cpp", "input")
 	files := map[string]string{}
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {

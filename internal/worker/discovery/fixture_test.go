@@ -19,11 +19,11 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-var updateExamples = flag.Bool("update-examples", false, "rewrite examples/environment*.json from the W15 fixture")
+var updateExamples = flag.Bool("update-examples", false, "rewrite examples/environment*.json from the module fixture")
 
 const (
-	fixtureInput    = "../../../fixtures/w15-modules/input"
-	fixtureExpected = "../../../fixtures/w15-modules/expected.json"
+	fixtureInput    = "../../../fixtures/modules/input"
+	fixtureExpected = "../../../fixtures/modules/expected.json"
 )
 
 // volatile fields depend on the acquisition (digest), the attempt, or the
@@ -133,7 +133,7 @@ func runFixture(t *testing.T, j analysis.Job, obs Observer, runner executor.Runn
 // TC-96/TC-97 first input (docs/TESTING.md): module, requirement, verdict and
 // document facts with an injected node observation (Go 1.27.4), so the
 // result does not depend on the CI toolchain.
-func TestW15FixtureMatchesExpected(t *testing.T) {
+func TestModuleFixtureMatchesExpected(t *testing.T) {
 	want := readExpected(t)
 	j := fixtureJob(t, domain.Scope{Kind: "full"})
 	env, docs := runFixture(t, j, StaticObserver{Versions: want.Observation}, nil)
@@ -179,7 +179,7 @@ func TestW15FixtureMatchesExpected(t *testing.T) {
 // verdicts: a module whose go directive the node satisfies is vetted, the
 // one that requires a newer Go fails as toolchain_unavailable without any
 // download (GOTOOLCHAIN=local, GOPROXY=off).
-func TestW15FixtureGoVetAgreesWithVerdicts(t *testing.T) {
+func TestModuleFixtureGoVetAgreesWithVerdicts(t *testing.T) {
 	goExe := testGo(t)
 	want := readExpected(t)
 	j := fixtureJob(t, domain.Scope{Kind: "full"})

@@ -1,4 +1,4 @@
-"""W07 scheduler·autoscaler 실제 프로세스 시험(Linux Native, 임시 PostgreSQL).
+"""scheduler·autoscaler 실제 프로세스 시험(Linux Native, 임시 PostgreSQL).
 
 실제 `codeye serve`(controller·autoscaler)와 `-tags codeye_fixture`로 빌드한 `codeye agent --autoscale`,
 그 agent가 시작하는 실제 worker 프로세스를 사용한다. fixture handler는 시험용이며 분석 결과가 아니다.
@@ -273,4 +273,4 @@ def run(base, root, env):
         assert agent.wait(timeout=40) == 0, "agent 종료 코드"
         controller.send_signal(signal.SIGINT)
         assert controller.wait(timeout=40) == 0, "controller 종료 코드"
-    print("PASS: W07 autoscale 0→2→0·drain·예산 대기 사유·재시작 중복 없음·늦은 complete 409 (시험용 handler)")
+    print("PASS: autoscale 0→2→0·drain·예산 대기 사유·재시작 중복 없음·늦은 complete 409 (시험용 handler)")

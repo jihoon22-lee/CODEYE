@@ -68,7 +68,7 @@ func activeLease(ctx context.Context, tx pgx.Tx, r Run, a attempt, o Ownership) 
 	return nil
 }
 
-// BeginAttempt reserves ownership only. W06/W07 must also perform resource admission
+// BeginAttempt reserves ownership only. The claim path must also perform resource admission
 // atomically before exposing a production claim endpoint.
 func (s *Store) BeginAttempt(ctx context.Context, run, node, worker string, ttl time.Duration) (Lease, error) {
 	if !validIDs(run, node, worker) || ttl < time.Second || ttl > time.Hour {
@@ -159,7 +159,7 @@ func advanceTx(ctx context.Context, tx pgx.Tx, r *Run, expected *int64, next dom
 // receiptCurrent reports whether an accepted completion receipt still describes the
 // run. A finalizing receipt stays valid once the report service settles the run:
 // published as completed/partial/failed, rejected as failed, or a cancel request
-// after completion settled as cancelled (W09). The caller has already matched node,
+// after completion settled as cancelled. The caller has already matched node,
 // worker and epoch against both the attempt and the run, so a requeued run or a
 // newer epoch never replays, and replay never mutates anything.
 func receiptCurrent(stored string, current domain.RunStatus) bool {
@@ -177,7 +177,7 @@ func receiptCurrent(stored string, current domain.RunStatus) bool {
 }
 
 // FinishAttempt records execution/cleanup only. Successful outcomes remain finalizing
-// until a later report service validates and publishes artifacts (W09).
+// until a later report service validates and publishes artifacts.
 func (s *Store) FinishAttempt(ctx context.Context, o Ownership, outcome, cleanup string) (Run, error) {
 	return s.finish(ctx, "", o, Completion{Outcome: outcome, Cleanup: cleanup})
 }
@@ -206,7 +206,7 @@ func (c Completion) valid() bool {
 	return c.Reason == nil || reasonPattern.MatchString(*c.Reason)
 }
 
-// digest keeps the W02 form for a bare outcome/cleanup so earlier receipts replay.
+// digest keeps the original form for a bare outcome/cleanup so earlier receipts replay.
 func (c Completion) digest() string {
 	if c.ResultManifestID == nil && c.Reason == nil {
 		return domain.Digest([]byte(c.Outcome + "\x00" + c.Cleanup))
@@ -330,7 +330,7 @@ func (s *Store) finish(ctx context.Context, node string, o Ownership, c Completi
 }
 
 // releaseReservation ends the attempt's capacity reservation, if it has one
-// (attempts created by the W02 BeginAttempt test path have none).
+// (attempts created by the BeginAttempt test path have none).
 func releaseReservation(ctx context.Context, tx pgx.Tx, attempt string) error {
 	_, err := tx.Exec(ctx, "UPDATE capacity_reservations SET released_at=clock_timestamp() WHERE attempt_id=$1 AND released_at IS NULL", attempt)
 	return err
@@ -362,7 +362,7 @@ func (s *Store) ExpireAttempt(ctx context.Context, id string) (Run, error) {
 }
 
 // ConfirmCleanup is a reconciliation operation for the authenticated owning node.
-// The caller must obtain actual process cleanup evidence; W02 cannot inspect the OS.
+// The caller must obtain actual process cleanup evidence; the store cannot inspect the OS.
 func (s *Store) ConfirmCleanup(ctx context.Context, o Ownership) (Run, error) {
 	return s.confirmCleanup(ctx, "", o)
 }

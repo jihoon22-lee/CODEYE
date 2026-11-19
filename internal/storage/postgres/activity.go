@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/progress"
 )
 
-// W15 stage display (docs/ARCHITECTURE.md#표시-단계와-task-단계). Both the project list/detail and the run
+// Stage display (docs/ARCHITECTURE.md#표시-단계와-task-단계). Both the project list/detail and the run
 // detail load their facts with loadRunStages (one statement, so one consistent
 // read per call) and compute them with progress.Compute.
 
@@ -33,7 +33,7 @@ const lifecycleTypes = `('attempt.leased','run.retried','run.status','snapshot.f
 // latest event time, the current attempt's milestones (events after the latest
 // lease or retry, including the plan-fixing running event's sequence), its
 // published report, completion and rejection reasons, and all logical tasks
-// with their weight and creation event (W22 plan revision). The current attempt is the one whose epoch is the run's
+// with their weight and creation event (plan revision). The current attempt is the one whose epoch is the run's
 // lease_epoch; earlier attempts' reports and reasons are history.
 const runStagesSQL = `SELECT x.id::text,x.status,x.snapshot_id IS NOT NULL,x.created_at,
 	(SELECT e.created_at FROM events e WHERE e.run_id=x.id AND e.sequence=x.event_sequence),

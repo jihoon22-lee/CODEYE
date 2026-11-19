@@ -8,7 +8,7 @@ import (
 )
 
 // spawner on non-Linux platforms starts workers directly. Windows worker
-// reconciliation is not verified in W06 (identity unsupported → uncertain).
+// reconciliation is not verified (identity unsupported → uncertain).
 type spawner struct{}
 
 func newSpawner() *spawner { return &spawner{} }

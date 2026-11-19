@@ -298,7 +298,7 @@ func parseModEdit(stdout []byte) (modulePath string, dirTargets []string, ok boo
 
 // escapingReplaces returns directory replace targets that are absolute or
 // leave the snapshot root when resolved lexically from the module directory.
-// The snapshot holds no symlinks (W04 does not follow them), so a lexical
+// The snapshot holds no symlinks (the snapshot does not follow them), so a lexical
 // check matches what the go command would open inside the workspace.
 func escapingReplaces(targets []string, moduleDir string, windows bool) []string {
 	var out []string
@@ -307,7 +307,7 @@ func escapingReplaces(targets []string, moduleDir string, windows bool) []string
 		// treating them as separators everywhere only adds refusals.
 		norm := strings.ReplaceAll(t, `\`, "/")
 		_ = windows
-		// The stream was redacted by W05: a target that contained the
+		// The stream was redacted by the executor: a target that contained the
 		// workspace path (or any redacted value) was absolute, so it is
 		// refused rather than resolved as relative.
 		if strings.Contains(t, analysis.RedactedMarker) || norm == "" || strings.HasPrefix(norm, "/") || strings.HasPrefix(norm, `\`) || (len(norm) >= 2 && norm[1] == ':') || strings.ContainsRune(norm, 0) {

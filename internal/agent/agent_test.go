@@ -64,7 +64,7 @@ func (modeHandler) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	switch strings.TrimSpace(string(mode)) {
 	case "sleep":
 		script = "sleep 300 & sleep 300; wait"
-	case "brief": // W25 drain: work that finishes on its own
+	case "brief": // drain: work that finishes on its own
 		script = "sleep 2"
 	}
 	res := r.Run(ctx, executor.Spec{Executable: "/bin/sh", Args: []string{"-c", script}, WorkspaceRoot: job.Snapshot.WorkspaceDir, Dir: job.Snapshot.WorkspaceDir, Env: map[string]string{"PATH": "/usr/bin:/bin"}, Timeout: 5 * time.Minute})
@@ -393,7 +393,7 @@ func TestStaleLeaseCleanupReportResentUntilAccepted(t *testing.T) {
 
 func TestPinnedRetryLoadsCachedSnapshotWithoutSource(t *testing.T) {
 	h := newHarness(t, "succeed")
-	// State dir behind a symlink: cache paths must still match W04's resolved roots.
+	// State dir behind a symlink: cache paths must still match the resolved snapshot roots.
 	real := filepath.Join(t.TempDir(), "real-state")
 	os.MkdirAll(real, 0700)
 	link := filepath.Join(t.TempDir(), "state-link")

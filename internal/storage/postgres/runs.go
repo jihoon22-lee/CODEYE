@@ -114,7 +114,7 @@ func (s *Store) Enqueue(ctx context.Context, actor, project, key string, body js
 	})
 }
 
-// RunOrigin is the schedule occurrence a run was requested for (W22). A run
+// RunOrigin is the schedule occurrence a run was requested for. A run
 // without one was requested manually.
 type RunOrigin struct {
 	ScheduleID   string
@@ -189,7 +189,7 @@ type EventPage struct {
 }
 
 // RunEvents returns up to limit events of a run after sequence after, for an
-// actor who may read the run (W22 SSE). Every call re-checks the project ACL.
+// actor who may read the run (SSE). Every call re-checks the project ACL.
 func (s *Store) RunEvents(ctx context.Context, actor, id string, after int64, limit int) (EventPage, error) {
 	if !validIDs(actor, id) || after < 0 || limit < 1 || limit > 1000 {
 		return EventPage{}, domain.ErrInvalid

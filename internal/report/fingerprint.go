@@ -12,7 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// W23 finding identity (docs/ARCHITECTURE.md#이전-결과-비교, docs/REPORT.md). This file is the only place
+// Finding identity (docs/ARCHITECTURE.md#이전-결과-비교, docs/REPORT.md). This file is the only place
 // that defines fingerprint semantics; decoders call ToolFingerprint or
 // setModelFingerprint and never hash their own fields.
 //

@@ -16,11 +16,11 @@ import (
 )
 
 // Real tsc tests run only with CODEYE_TEST_TSC and CODEYE_TEST_NODE (CI has
-// no Node tools). CODEYE_W18_CAPTURE=DIR also writes the redacted tsc.check
+// no Node tools). CODEYE_JSTS_CAPTURE=DIR also writes the redacted tsc.check
 // (and tsc.config) streams and exit code of each case to DIR, which is how
 // testdata/*.stdout|stderr|exit were captured (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처):
 //
-//	CODEYE_W18_CAPTURE=$PWD/internal/worker/analysis/tsc/testdata \
+//	CODEYE_JSTS_CAPTURE=$PWD/internal/worker/analysis/tsc/testdata \
 //	  go test -count=1 -run TestRealTsc ./internal/worker/analysis/tsc/
 
 const (
@@ -250,17 +250,17 @@ func TestRealTscDoesNotLoadTSConfigPlugins(t *testing.T) {
 	a := newReal(t)
 	dir := t.TempDir()
 	jststest.WriteTree(t, dir, map[string]string{
-		"tsconfig.json": "{\"compilerOptions\":{" + opts + ",\"plugins\":[{\"name\":\"w18-marker-plugin\"}]},\"include\":[\"src\"]}\n",
+		"tsconfig.json": "{\"compilerOptions\":{" + opts + ",\"plugins\":[{\"name\":\"marker-plugin\"}]},\"include\":[\"src\"]}\n",
 		"src/a.ts":      fixClean,
-		"node_modules/w18-marker-plugin/package.json": "{\"name\":\"w18-marker-plugin\",\"main\":\"index.js\"}\n",
-		"node_modules/w18-marker-plugin/index.js":     "require(\"node:fs\").writeFileSync(require(\"node:path\").join(__dirname, \"LOADED\"), \"x\");\nmodule.exports = () => ({ create: (info) => info.languageService });\n",
+		"node_modules/marker-plugin/package.json": "{\"name\":\"marker-plugin\",\"main\":\"index.js\"}\n",
+		"node_modules/marker-plugin/index.js":     "require(\"node:fs\").writeFileSync(require(\"node:path\").join(__dirname, \"LOADED\"), \"x\");\nmodule.exports = () => ({ create: (info) => info.languageService });\n",
 	})
 	res := (&executor.Executor{}).Run(context.Background(), executor.Spec{Executable: a.script.Node.Executable, Args: a.script.Argv(CheckArgs("tsconfig.json")...),
 		WorkspaceRoot: dir, Dir: dir, TempParent: t.TempDir(), Env: a.script.Env(), Timeout: time.Minute, StdoutLimit: 1 << 20, StderrLimit: 1 << 20})
 	if res.ExitCode == nil || *res.ExitCode != 0 {
 		t.Fatalf("tsc %s %v %s", res.Status, res.ExitCode, res.Stdout.Data)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "node_modules", "w18-marker-plugin", "LOADED")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "node_modules", "marker-plugin", "LOADED")); err == nil {
 		t.Fatal("tsc loaded a tsconfig plugin")
 	}
 }

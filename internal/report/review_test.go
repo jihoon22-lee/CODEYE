@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// Use the W12 example produced by the worker against its synthetic fixture.
+// Use the legacy-pack example produced by the worker against its synthetic fixture.
 // Derive context and investigator records exactly as the worker carries them.
 func exampleStages(t *testing.T) (map[string]*taskState, record.Record) {
 	t.Helper()

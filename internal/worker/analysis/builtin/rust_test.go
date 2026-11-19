@@ -36,14 +36,14 @@ func fakeRust(t *testing.T, withRustup bool) (dir string) {
 	return dir
 }
 
-// W20 (docs/ANALYZERS.md#rust-팩): cargo is the Rust baseline analyzer, so a node with only
+// Rust pack (docs/ANALYZERS.md#rust-팩): cargo is the Rust baseline analyzer, so a node with only
 // --cargo (no --go) advertises deep-review. Its Go and clippy members are
 // visible unsupported stand-ins.
 func TestCargoAloneAdvertisesDeepReview(t *testing.T) {
 	dir := fakeRust(t, false)
 	cfg := Config{Tools: map[string]string{"cargo": filepath.Join(dir, "cargo")}, ProbeDir: t.TempDir()}
 	hs, missing := Handlers(context.Background(), cfg, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), slices.Concat([]string{"go-vet:not_configured", "staticcheck:not_configured"}, cppUnconfigured, pythonUnconfigured, jsUnconfigured, []string{"clippy:not_configured"}, w21Missing)) {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), slices.Concat([]string{"go-vet:not_configured", "staticcheck:not_configured"}, cppUnconfigured, pythonUnconfigured, jsUnconfigured, []string{"clippy:not_configured"}, anyMissing)) {
 		t.Fatalf("handlers %d missing %v", len(hs), reasons(missing))
 	}
 	c, ok := hs[0].(*pack.Composite)

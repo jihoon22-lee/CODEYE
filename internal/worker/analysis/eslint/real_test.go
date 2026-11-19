@@ -18,14 +18,14 @@ import (
 )
 
 // Real ESLint tests run only with CODEYE_TEST_ESLINT and CODEYE_TEST_NODE
-// (CI has no Node tools). CODEYE_W18_CAPTURE=DIR also writes the redacted
+// (CI has no Node tools). CODEYE_JSTS_CAPTURE=DIR also writes the redacted
 // eslint.check streams and exit code of each case to DIR, which is how
 // testdata/*.stdout|stderr|exit were captured (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처):
 //
-//	CODEYE_W18_CAPTURE=$PWD/internal/worker/analysis/eslint/testdata \
+//	CODEYE_JSTS_CAPTURE=$PWD/internal/worker/analysis/eslint/testdata \
 //	  go test -count=1 -run TestRealESLint ./internal/worker/analysis/eslint/
 
-// Fixture sources stay strings (or under fixtures/w18-js-ts) so the
+// Fixture sources stay strings (or under fixtures/js-ts) so the
 // repository's own lint never sees the intentionally defective code.
 const (
 	pkgJSON   = "{\"name\":\"w18-case\",\"private\":true}\n"
@@ -255,10 +255,10 @@ func TestRealESLintTypedDoesNotLoadTSConfigPlugins(t *testing.T) {
 	dir := t.TempDir()
 	jststest.WriteTree(t, dir, map[string]string{
 		"package.json":  pkgJSON,
-		"tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"plugins\":[{\"name\":\"w18-marker-plugin\"}]},\"include\":[\"src\"]}\n",
+		"tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"plugins\":[{\"name\":\"marker-plugin\"}]},\"include\":[\"src\"]}\n",
 		"src/main.ts":   "export const one: number = 1;\n",
-		"node_modules/w18-marker-plugin/package.json": "{\"name\":\"w18-marker-plugin\",\"main\":\"index.js\"}\n",
-		"node_modules/w18-marker-plugin/index.js":     "require(\"node:fs\").writeFileSync(require(\"node:path\").join(__dirname, \"LOADED\"), \"x\");\nmodule.exports = () => ({ create: (info) => info.languageService });\n",
+		"node_modules/marker-plugin/package.json": "{\"name\":\"marker-plugin\",\"main\":\"index.js\"}\n",
+		"node_modules/marker-plugin/index.js":     "require(\"node:fs\").writeFileSync(require(\"node:path\").join(__dirname, \"LOADED\"), \"x\");\nmodule.exports = () => ({ create: (info) => info.languageService });\n",
 	})
 	cfgDir := t.TempDir()
 	cfg := filepath.Join(cfgDir, "eslint.config.cjs")
@@ -275,7 +275,7 @@ func TestRealESLintTypedDoesNotLoadTSConfigPlugins(t *testing.T) {
 	if res.ExitCode == nil || *res.ExitCode != 0 {
 		t.Fatalf("eslint %s %v %s %s", res.Status, res.ExitCode, res.Stdout.Data, res.Stderr.Data)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "node_modules", "w18-marker-plugin", "LOADED")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "node_modules", "marker-plugin", "LOADED")); err == nil {
 		t.Fatal("typescript-eslint loaded a tsconfig plugin")
 	}
 }

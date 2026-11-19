@@ -1,6 +1,6 @@
-// Package govet is the built-in Go vet analysis handler (W08). It runs
+// Package govet is the built-in Go vet analysis handler. It runs
 // `go version`, `go list -e -json` and `go vet -json` natively through the
-// supplied W05 executor.Runner inside the attempt workspace clone of a W04
+// supplied executor.Runner inside the attempt workspace clone of a
 // snapshot, offline (GOPROXY=off, GOTOOLCHAIN=local, GOENV=off, GOWORK=off,
 // CGO_ENABLED=0), and turns raw output into an observations document without
 // ever turning unreadable output into "no findings".
@@ -205,7 +205,7 @@ func failed(reason string, limitations ...string) analysis.TaskResult {
 }
 
 // ObservationsPath is where the go-vet task key writes its observations
-// artifact in attempt scratch. Later roles of the same attempt (review-r1
+// artifact in attempt scratch. Later roles of the same attempt (role pack
 // interpret) read it from there and validate it again.
 func ObservationsPath(scratch, key string) string {
 	return filepath.Join(scratch, "go-vet", key, "observations.json")
@@ -307,7 +307,7 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 	}
 	in.WorkspaceRoots, in.Windows = roots, runtime.GOOS == "windows"
 	redact := redactForms(roots)
-	// GOROOT is not a protected root: W05 refuses executables inside one.
+	// GOROOT is not a protected root: the executor refuses executables inside one.
 	protected := []string{job.Snapshot.SnapshotDir}
 	if h.modcache != "" {
 		protected = append(protected, h.modcache)
@@ -449,7 +449,7 @@ func masker(workspaceRoots []string, goroot, goexe, modcache, scratch, snapshotR
 
 // redactForms returns the workspace roots as given and as they appear inside
 // JSON strings (backslashes and, with HTML escaping, <, >, & are escaped), so
-// W05 redaction also hits go list/go vet JSON output.
+// Executor redaction also hits go list/go vet JSON output.
 func redactForms(roots []string) []string {
 	seen := map[string]bool{}
 	var out []string
