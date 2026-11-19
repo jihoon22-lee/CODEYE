@@ -23,6 +23,15 @@ DEV_AGENT_MARKER = "<!-- CODEYE test fixture (TC-97)."
 # fixture is the caller-closes counterexample TC-100 scores separately.
 FIXED_INPUTS = {"w15": "fixtures/modules/input", "w12-close": "internal/worker/review/testdata/verify"}
 
+# The pilot is a copy of this repository at an approved commit. CODEYE_PILOT_COMMIT
+# names another commit (e.g. a clean copy of the current main for a dry run).
+DEFAULT_PILOT_COMMIT = "bcfad99"
+
+
+def pilot_commit(root):
+    name = os.environ.get("CODEYE_PILOT_COMMIT") or DEFAULT_PILOT_COMMIT
+    return subprocess.check_output(["git", "rev-parse", name + "^{commit}"], cwd=root, text=True).strip()
+
 
 def materialize_fixed_input(root, destination, label="w15"):
     """Copy a fixed input; drop the development-agent warning comment.
@@ -88,9 +97,7 @@ def audit_reports(output, root):
                 if (
                     label == "pilot"
                     and commit
-                    != subprocess.check_output(
-                        ["git", "rev-parse", "bcfad99^{commit}"], cwd=root, text=True
-                    ).strip()
+                    != pilot_commit(root)
                 ):
                     raise ValueError("승인 파일럿 commit 불일치")
                 if label == "git" and commit != report["inputs"]["commit_sha"]:
@@ -284,9 +291,7 @@ def run(base, root, env, web=True, coverage_check=True):
         if selected and label in selected:
             rel = uuid4().hex
             dataset.append((label, rel, materialize_fixed_input(root, source / rel, label)))
-    commit = subprocess.check_output(
-        ["git", "rev-parse", "bcfad99^{commit}"], cwd=root, text=True
-    ).strip()
+    commit = pilot_commit(root)
     if not selected or "pilot" in selected:
         rel = uuid4().hex
         path = source / rel
@@ -530,7 +535,7 @@ def dry_run(args, root):
     env = dict(os.environ, CODEYE_PILOT_RELAY_FILE=str(args.relay_file), CODEYE_PILOT_RESULTS=str(args.results),
                CODEYE_PILOT_CASES=args.cases, CODEYE_PILOT_LEDGER=str(args.ledger))
     env.pop("OPENAI_API_KEY", None)
-    for key, value in (("CODEYE_PILOT_GITLEAKS", args.gitleaks), ("CODEYE_PILOT_REVIEW_MAX_CALLS", args.max_calls),
+    for key, value in (("CODEYE_PILOT_GITLEAKS", args.gitleaks), ("CODEYE_PILOT_REVIEW_MAX_CALLS", args.max_calls), ("CODEYE_PILOT_COMMIT", args.pilot_commit),
                        ("CODEYE_PILOT_TOOLS", " ".join(args.tool or []))):
         env.pop(key, None)
         if value:
@@ -562,6 +567,7 @@ if __name__ == "__main__":
     parser.add_argument("--gitleaks")
     parser.add_argument("--tool", action="append", help="agent tool flag as name=path, e.g. ruff=/abs/ruff (repeatable)")
     parser.add_argument("--max-calls", type=int)
+    parser.add_argument("--pilot-commit", help="commit of this repository the pilot copies (default bcfad99)")
     parser.add_argument("--build-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--no-coverage-check", action="store_true", help="baseline build without slices")
     args = parser.parse_args()
