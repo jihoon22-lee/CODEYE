@@ -148,7 +148,7 @@ func openSnapshot(job analysis.Job) (*os.Root, error) {
 }
 
 // ArtifactPath is where the discovery task of kind writes its artifact in
-// attempt scratch. Later roles of the same attempt (review-r1) read it from
+// attempt scratch. Later roles of the same attempt (role pack) read it from
 // there and validate it again with envdoc.Decode.
 func ArtifactPath(scratch, kind string) string {
 	return filepath.Join(scratch, "discovery", kind+".json")

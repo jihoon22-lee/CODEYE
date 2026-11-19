@@ -1,5 +1,5 @@
 // Package discovery collects module, environment and document facts from an
-// immutable W04 snapshot without a model (W15, docs/ARCHITECTURE.md#모듈환경문서-탐색). The pure part
+// immutable snapshot without a model (docs/ARCHITECTURE.md#모듈환경문서-탐색). The pure part
 // (module detection, manifest parsing, verdicts, document inventory) works on
 // the verified manifest and a read function; the handler supplies reads
 // through os.Root on the read-only snapshot and runs probes only through the

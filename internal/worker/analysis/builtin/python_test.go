@@ -13,7 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// W17 (docs/ANALYZERS.md#python-팩): ruff is the Python baseline, so a node with only
+// Python pack (docs/ANALYZERS.md#python-팩): ruff is the Python baseline, so a node with only
 // --ruff advertises deep-review.
 func TestRuffOnlyNodeAdvertisesDeepReview(t *testing.T) {
 	ruff := os.Getenv("CODEYE_TEST_RUFF")
@@ -21,13 +21,13 @@ func TestRuffOnlyNodeAdvertisesDeepReview(t *testing.T) {
 		t.Skip("set CODEYE_TEST_RUFF to the ruff binary")
 	}
 	hs, missing := Handlers(context.Background(), Config{ProbeDir: t.TempDir(), Tools: map[string]string{"ruff": ruff}}, &executor.Executor{})
-	want := slices.Concat([]string{"go-vet:not_configured", "staticcheck:not_configured"}, cppUnconfigured, []string{"mypy:not_configured", "pyright:not_configured", "bandit:not_configured"}, jsUnconfigured, rustUnconfigured, w21Missing)
+	want := slices.Concat([]string{"go-vet:not_configured", "staticcheck:not_configured"}, cppUnconfigured, []string{"mypy:not_configured", "pyright:not_configured", "bandit:not_configured"}, jsUnconfigured, rustUnconfigured, anyMissing)
 	if len(hs) != 1 || hs[0].Info().Name != pack.CompositeName || !slices.Equal(reasons(missing), want) {
 		t.Fatalf("ruff only: %d handlers, missing %v", len(hs), reasons(missing))
 	}
 }
 
-// W17 (docs/ANALYZERS.md#타입-검사기-선택): with both type checker paths (the agent accepted
+// Python pack (docs/ANALYZERS.md#타입-검사기-선택): with both type checker paths (the agent accepted
 // --python-both-type-checkers) the selection is recorded on the checker
 // that runs even when the other cannot (pyright without --node ends
 // toolchain_not_configured).

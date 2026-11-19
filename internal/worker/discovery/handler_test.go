@@ -23,7 +23,7 @@ func (h recordingHandler) Run(_ context.Context, _ analysis.Job, t analysis.Task
 	return analysis.TaskResult{Status: domain.TaskSucceeded}
 }
 
-// The review handlers import this package (review-r1 reads its artifacts),
+// The review handlers import this package (the role pack reads its artifacts),
 // so the composition with the real review plans is tested in package
 // review (TestDiscoveryCompositionPlans); the inner plan here stands for it.
 func TestPlanPrependsRequiredDiscoveryTasks(t *testing.T) {

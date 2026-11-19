@@ -49,7 +49,7 @@ type prepared struct {
 func prepare(spec Spec) (*prepared, *specError) {
 	if spec.Resources.RequireEnforced {
 		return nil, &specError{status: StatusUnsupported, code: "resource_enforcement_unavailable",
-			detail: "W05 native executor does not enforce CPU/memory limits"}
+			detail: "the native executor does not enforce CPU/memory limits"}
 	}
 	if spec.Timeout <= 0 {
 		return nil, reject("invalid_timeout", "timeout must be > 0")

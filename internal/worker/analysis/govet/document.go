@@ -165,7 +165,7 @@ type ObsLocation struct {
 	EndLine    int    `json:"end_line"`
 	EndCol     int    `json:"end_col"`
 	ColumnUnit string `json:"column_unit"`
-	BlobSHA256 string `json:"blob_sha256"` // W04 manifest entry hash
+	BlobSHA256 string `json:"blob_sha256"` // snapshot manifest entry hash
 }
 
 // RawRef locates the raw bytes of an observation: the execution's stream

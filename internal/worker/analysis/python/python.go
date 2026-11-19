@@ -1,6 +1,6 @@
-// Package python is the W17 Python analyzer pack (docs/ANALYZERS.md). It runs the
+// Package python is the Python analyzer pack (docs/ANALYZERS.md). It runs the
 // operator-installed ruff (the required baseline), mypy or pyright (type
-// checking) and bandit (security) natively through the W05 runner in the
+// checking) and bandit (security) natively through the executor runner in the
 // attempt workspace copy and records each task in the generic observations
 // envelope (obsdoc). No task executes repository-controlled code: every tool
 // gets a CODEYE-managed configuration that replaces the repository's, no

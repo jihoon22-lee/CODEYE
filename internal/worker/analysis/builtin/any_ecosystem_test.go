@@ -14,15 +14,15 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// w21Missing are the W21 analyzers a node without their tool flags
+// anyMissing are the any-ecosystem analyzers a node without their tool flags
 // reports, in catalog order (docs/ANALYZERS.md).
-var w21Missing = []string{"lizard:not_configured", "jscpd:not_configured", "gitleaks:not_configured"}
+var anyMissing = []string{"lizard:not_configured", "jscpd:not_configured", "gitleaks:not_configured"}
 
-func w21Task(key string) bool {
+func anyTask(key string) bool {
 	return pack.Owns(lizard.Name, key) || pack.Owns(jscpd.Name, key) || pack.Owns(gitleaks.Name, key)
 }
 
-func withoutW21(in []pack.ToolProbe) []pack.ToolProbe {
+func withoutAny(in []pack.ToolProbe) []pack.ToolProbe {
 	var out []pack.ToolProbe
 	for _, p := range in {
 		if p.Tool != lizard.Tool && p.Tool != jscpd.Tool && p.Tool != gitleaks.Tool {
@@ -32,15 +32,15 @@ func withoutW21(in []pack.ToolProbe) []pack.ToolProbe {
 	return out
 }
 
-// The W21 entries follow the Go section, are extra depth of ecosystem
+// The any-ecosystem entries follow the Go section, are extra depth of ecosystem
 // "any", and jscpd is the only one that needs the node toolchain.
-func TestW21CatalogEntries(t *testing.T) {
+func TestAnyEcosystemCatalogEntries(t *testing.T) {
 	var ids []string
 	for _, e := range catalog() {
 		ids = append(ids, e.desc.ID)
-		if w21Task(e.desc.Name) {
+		if anyTask(e.desc.Name) {
 			if e.desc.Required || e.desc.Ecosystem != "any" || e.desc.Validate() != nil {
-				t.Fatalf("W21 descriptor %+v", e.desc)
+				t.Fatalf("any-ecosystem descriptor %+v", e.desc)
 			}
 		}
 	}
@@ -64,9 +64,9 @@ func TestW21CatalogEntries(t *testing.T) {
 	}
 }
 
-// Reasons of the W21 build functions: no path, a toolchain jscpd needs,
+// Reasons of the any-ecosystem build functions: no path, a toolchain jscpd needs,
 // an invalid path and a failing startup probe.
-func TestW21BuildReasons(t *testing.T) {
+func TestAnyEcosystemBuildReasons(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	script := filepath.Join(dir, "run-jscpd.js")
@@ -89,7 +89,7 @@ func TestW21BuildReasons(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var got []string
 			for _, e := range catalog() {
-				if !w21Task(e.desc.Name) {
+				if !anyTask(e.desc.Name) {
 					continue
 				}
 				b, handles := gateToolchains(e.desc, Config{Tools: c.tools}, map[string]toolchainState{})
@@ -115,18 +115,18 @@ func TestW21BuildReasons(t *testing.T) {
 
 // With the real tools (CODEYE_TEST_LIZARD, CODEYE_TEST_JSCPD with
 // CODEYE_TEST_NODE, CODEYE_TEST_GITLEAKS) the startup probes make the
-// adapters members and nothing W21 is reported missing.
-func TestW21HandlersProbeRealTools(t *testing.T) {
+// adapters members and nothing of the any ecosystem is reported missing.
+func TestAnyEcosystemHandlersProbeRealTools(t *testing.T) {
 	tools := map[string]string{"lizard": os.Getenv("CODEYE_TEST_LIZARD"), "jscpd": os.Getenv("CODEYE_TEST_JSCPD"), "node": os.Getenv("CODEYE_TEST_NODE"), "gitleaks": os.Getenv("CODEYE_TEST_GITLEAKS")}
 	for k, v := range tools {
 		if v == "" {
-			t.Skipf("set CODEYE_TEST_LIZARD, CODEYE_TEST_JSCPD, CODEYE_TEST_NODE and CODEYE_TEST_GITLEAKS to probe the real W21 tools (%s missing)", k)
+			t.Skipf("set CODEYE_TEST_LIZARD, CODEYE_TEST_JSCPD, CODEYE_TEST_NODE and CODEYE_TEST_GITLEAKS to probe the real any-ecosystem tools (%s missing)", k)
 		}
 	}
 	_, missing, _ := Composite(context.Background(), Config{ProbeDir: t.TempDir(), Tools: tools}, &executor.Executor{})
 	for _, m := range missing {
-		if w21Task(m.Name) || m.Name == "node" {
-			t.Fatalf("W21 tool not usable: %+v", m)
+		if anyTask(m.Name) || m.Name == "node" {
+			t.Fatalf("any-ecosystem tool not usable: %+v", m)
 		}
 	}
 }

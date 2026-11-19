@@ -1,5 +1,5 @@
-// Package staticcheck is the W19 Staticcheck adapter of the Go pack. It runs
-// the operator-installed staticcheck binary natively through the W05 runner
+// Package staticcheck is the Staticcheck adapter of the Go pack. It runs
+// the operator-installed staticcheck binary natively through the executor runner
 // in the attempt workspace copy, offline and with the same build context as
 // go vet (GOTOOLCHAIN=local, GOPROXY=off, GOENV=off, GOWORK=off, GOFLAGS
 // unset, CGO_ENABLED=0), and records the result in the generic observations
@@ -387,8 +387,8 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 }
 
 // Selection is the rule-pack part of the staticcheck argv: the checks, the
-// test files and -show-ignored (source suppressions are reported, docs/ANALYZERS.md
-// §5.1). Measured with 2026.2.2: -checks replaces staticcheck.conf
+// test files and -show-ignored (source suppressions are reported, docs/ANALYZERS.md#staticcheck).
+// Measured with 2026.2.2: -checks replaces staticcheck.conf
 // "checks" (a conf disabling SA1000 and U1000 changes nothing), and with
 // -show-ignored a run whose only problems are ignored ones exits 1.
 var Selection = []string{"-checks", Checks, "-tests=true", "-show-ignored"}

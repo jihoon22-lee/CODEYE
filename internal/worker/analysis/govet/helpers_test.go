@@ -106,8 +106,8 @@ type fixture struct {
 	Job        analysis.Job
 }
 
-// newFixture writes files into a source root, acquires a W04 snapshot and
-// clones a fresh attempt workspace, mimicking the W06 worker.
+// newFixture writes files into a source root, acquires a snapshot and
+// clones a fresh attempt workspace, mimicking the worker.
 func newFixture(t *testing.T, base string, files map[string]string, scope domain.Scope) fixture {
 	t.Helper()
 	if base == "" {

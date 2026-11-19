@@ -1,8 +1,8 @@
 // Package obsdoc is the generic analyzer observations envelope shared by the
-// R1 analyzer packs (W16-W21, docs/ANALYZERS.md). One document describes one analyzer
+// analyzer packs (docs/ANALYZERS.md). One document describes one analyzer
 // task: which tool ran where, how each execution ended, what the parser read
 // and which raw tool diagnostics it kept. It is I/O free so the worker, the
-// review-r1 roles and the report decoder validate the same bytes with the
+// role pack roles and the report decoder validate the same bytes with the
 // same rules. A parser failure is never encoded as "no observations".
 package obsdoc
 
@@ -46,7 +46,7 @@ const (
 	ExitNotRun                 = "not_run"
 )
 
-// Location states (the W08 vocabulary). Only resolved observations carry a
+// Location states (the go vet vocabulary). Only resolved observations carry a
 // Location and may become code evidence.
 const (
 	LocationResolved        = "resolved"
@@ -74,7 +74,7 @@ const (
 	SuppressNone         = "none"       // the tool has no suppression syntax
 )
 
-// Ecosystems an analyzer may target; "any" is language independent (W21).
+// Ecosystems an analyzer may target; "any" is language independent.
 var Ecosystems = []string{"any", "cpp", "go", "javascript", "python", "rust"}
 
 // Categories are the report finding categories an adapter policy may assign.
@@ -284,8 +284,8 @@ type Observation struct {
 	// becomes a finding.
 	Suppressed bool `json:"suppressed"`
 	// Metric, when set, makes the observation a structure or duplication
-	// measurement that reached the rule pack's reporting threshold (W21,
-	// docs/ANALYZERS.md), not a diagnostic of a defect: it is never active (Active), a
+	// measurement that reached the rule pack's reporting threshold
+	// (docs/ANALYZERS.md), not a diagnostic of a defect: it is never active (Active), a
 	// finding, a defect count or model review input. Absent on diagnostics.
 	Metric *Metric `json:"metric,omitempty"`
 }
@@ -308,7 +308,7 @@ type Metric struct {
 var MetricUnits = []string{"count", "lines", "tokens"}
 
 // SecretAnalyzers are the analyzers whose observations locate a credential
-// in the snapshot (W21 gitleaks). No consumer attaches a code excerpt of
+// in the snapshot (gitleaks). No consumer attaches a code excerpt of
 // such a location, and their messages are fixed templates without secret
 // material (docs/ANALYZERS.md).
 var SecretAnalyzers = []string{"any.gitleaks"}
@@ -356,7 +356,7 @@ func invalid(format string, a ...any) error {
 }
 
 // ArtifactPath is where an analyzer task writes its envelope in attempt
-// scratch; later roles of the attempt (review-r1 interpret) read it there
+// scratch; later roles of the attempt (role pack interpret role) read it there
 // and validate it again.
 func ArtifactPath(scratch, taskKey string) string {
 	return filepath.Join(scratch, "analyzers", taskKey, "observations.json")
@@ -612,7 +612,7 @@ func checkConfigFiles(r RulePack, lookup func(string) (string, bool)) error {
 }
 
 // Active reports the observations that are diagnostics a finding may come
-// from: not suppressed in source and not a metric (W21). A task whose only
+// from: not suppressed in source and not a metric. A task whose only
 // observations are metrics succeeds without findings.
 func (d Document) Active() int {
 	n := 0

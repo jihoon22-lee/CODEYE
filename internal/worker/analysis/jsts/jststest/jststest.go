@@ -1,6 +1,6 @@
-// Package jststest holds the test fixtures the W18 tsc and ESLint adapters
+// Package jststest holds the test fixtures the tsc and ESLint adapters
 // share: operator tool paths from CODEYE_TEST_* (real-tool tests skip
-// without them; CI has no Node tools), a W04 snapshot with a cloned attempt
+// without them; CI has no Node tools), a snapshot with a cloned attempt
 // workspace, tree hashes, a result-mutating runner, envelope decoding and
 // the capture of real tool streams into testdata. It is imported by tests
 // only.
@@ -182,7 +182,7 @@ type Fixture struct {
 	Job              analysis.Job
 }
 
-// NewFixture acquires a W04 snapshot of files under base (a temp dir when
+// NewFixture acquires a snapshot of files under base (a temp dir when
 // empty) and clones an attempt workspace like the worker.
 func NewFixture(t *testing.T, base string, files map[string]string, scope domain.Scope) Fixture {
 	t.Helper()

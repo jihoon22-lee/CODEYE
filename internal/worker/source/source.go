@@ -123,7 +123,7 @@ func newSnapshot(dataRoot, kind, consistency string) (Snapshot, error) {
 }
 
 // exclusion returns why a path is not copied, or "". Name-based and deliberately
-// conservative; it is not secret scanning (W21). Standard cache names are excluded at
+// conservative; it is not secret scanning. Standard cache names are excluded at
 // any depth. build/dist/target are generated output only at the top of the selected
 // tree, so a source package such as internal/build is kept. venv/.venv are excluded at
 // the top or wherever marker reports a pyvenv.cfg inside them.
@@ -204,7 +204,7 @@ const readChunk = 64 << 10
 
 // readLimited reads at most max bytes (ErrLimit beyond that), checking ctx between
 // chunks. A single blocked read(2) on a hung network filesystem cannot be interrupted
-// from here; bounding that needs the executor's subprocess orchestration (W05/W06).
+// from here; bounding that needs the executor's subprocess orchestration.
 func readLimited(ctx context.Context, r io.Reader, max int64) ([]byte, error) {
 	var out []byte
 	chunk := make([]byte, readChunk)
@@ -450,7 +450,7 @@ func Load(ctx context.Context, root, expectedDigest string) (Snapshot, error) {
 
 // DecodeManifest strictly decodes and validates manifest bytes whose SHA-256
 // the caller has already matched to the snapshot digest (controller readers,
-// W09). It never touches the filesystem. Invalid bytes are ErrIntegrity.
+// the report builder). It never touches the filesystem. Invalid bytes are ErrIntegrity.
 func DecodeManifest(b []byte) (Manifest, error) {
 	if len(b) > maxManifestBytes {
 		return Manifest{}, ErrIntegrity

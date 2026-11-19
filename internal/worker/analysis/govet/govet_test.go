@@ -368,7 +368,7 @@ func TestNonGoSnapshotUnsupported(t *testing.T) {
 	if !contains(doc.Limitations, "no_go_files") || doc.Outcome.ExitClass != ExitNotRun {
 		t.Fatalf("doc = %+v", doc)
 	}
-	// W19 (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백): as a pack member go vet plans nothing when no Go
+	// Pack member (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백): as a pack member go vet plans nothing when no Go
 	// source is in scope; the composite shows the ecosystems' own gaps. The
 	// placeholder stays when Go source is in scope but cannot be analyzed.
 	ctx := context.Background()

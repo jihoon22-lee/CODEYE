@@ -132,7 +132,7 @@ type fixture struct {
 	Job        analysis.Job
 }
 
-// newFixture acquires a W04 snapshot of files and clones an attempt
+// newFixture acquires a snapshot of files and clones an attempt
 // workspace like the worker.
 func newFixture(t *testing.T, files map[string]string, scope domain.Scope) fixture {
 	t.Helper()

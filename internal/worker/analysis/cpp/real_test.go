@@ -164,7 +164,7 @@ func TestRealHostFileContentIsNotStored(t *testing.T) {
 		t.Skip("set CODEYE_TEST_CPPCHECK and/or CODEYE_TEST_CLANG_TIDY to run real-tool tests")
 	}
 	host := t.TempDir()
-	const bad, ok = "W16CANARY_BAD_c41f9e", "W16CANARY_OK_8d27b0"
+	const bad, ok = "CANARY_BAD_c41f9e", "CANARY_OK_8d27b0"
 	writeTree(t, host, map[string]string{
 		"bad.txt": bad + " secret line\n",
 		"ok.h":    "static int canary_fn(void) { int *p = 0; return *p; } /* " + ok + " */\n",

@@ -1,4 +1,4 @@
-// Package eslint is the ESLint part of the W18 JS/TS pack (docs/ANALYZERS.md). It has
+// Package eslint is the ESLint part of the JS/TS pack (docs/ANALYZERS.md). It has
 // two analyzers on the one operator tool (--eslint):
 //
 //   - javascript.eslint, the ecosystem's baseline (required): syntactic

@@ -1,5 +1,5 @@
-// Package gitleaks is the W21 secrets adapter (docs/ANALYZERS.md). It runs the
-// operator-installed gitleaks natively through the W05 runner over the
+// Package gitleaks is the secrets adapter (docs/ANALYZERS.md). It runs the
+// operator-installed gitleaks natively through the executor runner over the
 // attempt workspace copy ("gitleaks dir"; a snapshot has no Git history) and
 // records each detected credential location as a security observation whose
 // message is a fixed template.

@@ -255,10 +255,10 @@ func TestRealESLintTypedDoesNotLoadTSConfigPlugins(t *testing.T) {
 	dir := t.TempDir()
 	jststest.WriteTree(t, dir, map[string]string{
 		"package.json":  pkgJSON,
-		"tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"plugins\":[{\"name\":\"w18-marker-plugin\"}]},\"include\":[\"src\"]}\n",
+		"tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"plugins\":[{\"name\":\"marker-plugin\"}]},\"include\":[\"src\"]}\n",
 		"src/main.ts":   "export const one: number = 1;\n",
-		"node_modules/w18-marker-plugin/package.json": "{\"name\":\"w18-marker-plugin\",\"main\":\"index.js\"}\n",
-		"node_modules/w18-marker-plugin/index.js":     "require(\"node:fs\").writeFileSync(require(\"node:path\").join(__dirname, \"LOADED\"), \"x\");\nmodule.exports = () => ({ create: (info) => info.languageService });\n",
+		"node_modules/marker-plugin/package.json": "{\"name\":\"marker-plugin\",\"main\":\"index.js\"}\n",
+		"node_modules/marker-plugin/index.js":     "require(\"node:fs\").writeFileSync(require(\"node:path\").join(__dirname, \"LOADED\"), \"x\");\nmodule.exports = () => ({ create: (info) => info.languageService });\n",
 	})
 	cfgDir := t.TempDir()
 	cfg := filepath.Join(cfgDir, "eslint.config.cjs")
@@ -275,7 +275,7 @@ func TestRealESLintTypedDoesNotLoadTSConfigPlugins(t *testing.T) {
 	if res.ExitCode == nil || *res.ExitCode != 0 {
 		t.Fatalf("eslint %s %v %s %s", res.Status, res.ExitCode, res.Stdout.Data, res.Stderr.Data)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "node_modules", "w18-marker-plugin", "LOADED")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "node_modules", "marker-plugin", "LOADED")); err == nil {
 		t.Fatal("typescript-eslint loaded a tsconfig plugin")
 	}
 }

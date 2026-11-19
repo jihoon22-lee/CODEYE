@@ -101,7 +101,7 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 		return
 	}
 	switch q.Role {
-	// review-v1 roles, the review-r1 candidate roles and the live probe.
+	// legacy pack roles, the role pack candidate roles and the live probe.
 	case "context", "investigate", "verify", "probe", "environment", "documents", "interpret":
 	default:
 		reply.Reason = "invalid_review_role"

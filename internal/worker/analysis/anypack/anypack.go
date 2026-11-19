@@ -1,4 +1,4 @@
-// Package anypack holds the parts the W21 analyzers of ecosystem "any"
+// Package anypack holds the parts the analyzers of ecosystem "any"
 // share (lizard complexity, jscpd duplication, gitleaks secrets; docs/ANALYZERS.md):
 // selecting the snapshot files of the run scope, planning one task over
 // them, starting the operator tool through the executor with an explicit
@@ -33,7 +33,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// ModuleDir is the module of every W21 task: the snapshot root.
+// ModuleDir is the module of every task of these analyzers: the snapshot root.
 const ModuleDir = "."
 
 // Defaults for one execution.
@@ -44,7 +44,7 @@ const (
 	ProbeTimeout       = 30 * time.Second
 )
 
-// Task failure reasons shared by the W21 adapters.
+// Task failure reasons shared by these adapters.
 const (
 	ReasonCleanupUncertain     = "cleanup_uncertain"
 	ReasonCancelled            = "cancelled"
@@ -276,7 +276,7 @@ func (t *Tool) Probe(ctx context.Context, runner executor.Runner, dir string, ar
 	if !filepath.IsAbs(dir) {
 		return "", errors.New("probe dir must be absolute")
 	}
-	work, err := os.MkdirTemp(dir, "w21-probe-")
+	work, err := os.MkdirTemp(dir, "any-probe-")
 	if err != nil {
 		return "", err
 	}
