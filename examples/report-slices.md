@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000604` rev `1` |
-| digest | `66ba38f0584e` |
+| digest | `507331f68342` |
 | status | `partial` |
 | quality\_verdict | `inconclusive` 품질 판정은 안전 인증이 아니다\. |
 | run | `0195f3a0-0000-7000-8000-000000000601` |
@@ -287,7 +287,7 @@
 
 ## 코드 분석\(모델 검토\)
 
-상태\: △ 일부 수행 · 작업 20개 중 9개 성공
+상태\: △ 일부 수행 · 작업 22개 중 9개 성공
 
 검토 팩\: review\-r1@2\.0\.0\(역할 팩\)
 
@@ -462,6 +462,7 @@
 | `review.investigate.s006` | `budget_exhausted` | `not_succeeded` `review_budget_exhausted` |
 | `review.investigate.s007` | `skipped_policy` | `skipped` `no_review_scope` |
 | `review.investigate.s008` | `skipped_policy` | `skipped` `no_review_scope` |
+| `review.investigate.s009` | `skipped_policy` | `skipped` `no_review_scope` |
 | `review.scope` | `succeeded` | `result_missing` |
 | `review.verify.s001` | `succeeded` | `accepted` |
 | `review.verify.s002` | `succeeded` | `accepted` |
@@ -471,6 +472,7 @@
 | `review.verify.s006` | `budget_exhausted` | `not_succeeded` `review_budget_exhausted` |
 | `review.verify.s007` | `skipped_policy` | `skipped` `no_review_scope` |
 | `review.verify.s008` | `skipped_policy` | `skipped` `no_review_scope` |
+| `review.verify.s009` | `skipped_policy` | `skipped` `no_review_scope` |
 
 - 모델 호출 `environment` · `fake/scripted` · OpenCode `1.19.5` · `accepted` · 지침 `review-r1@2.0.0` `4ff052a3f276969278c1d1f93010103b013187d0260ecf5ce717fb9a1f7c746e`
 - 모델 호출 `documents` · `fake/scripted` · OpenCode `1.19.5` · `accepted` · 지침 `review-r1@2.0.0` `d0cdbb4ee15ac315dd2958e24878be7beb9ed3df0a3619596e0cd61249e095d2`
@@ -525,6 +527,7 @@
 | `review.investigate.s006` | false | `budget_exhausted` | `review_budget_exhausted` |
 | `review.investigate.s007` | false | `skipped_policy` | `no_review_scope` |
 | `review.investigate.s008` | false | `skipped_policy` | `no_review_scope` |
+| `review.investigate.s009` | false | `skipped_policy` | `no_review_scope` |
 | `review.scope` | false | `succeeded` | `없음` |
 | `review.verify` | true | `succeeded` | `없음` |
 | `review.verify.s001` | false | `succeeded` | `없음` |
@@ -535,6 +538,7 @@
 | `review.verify.s006` | false | `budget_exhausted` | `review_budget_exhausted` |
 | `review.verify.s007` | false | `skipped_policy` | `no_review_scope` |
 | `review.verify.s008` | false | `skipped_policy` | `no_review_scope` |
+| `review.verify.s009` | false | `skipped_policy` | `no_review_scope` |
 
 ### 실행 기록
 
@@ -560,7 +564,7 @@
 | id | task | role | media | sha256 | bytes | decoder |
 |---|---|---|---|---|---|---|
 | `0195f3a0-0000-7000-8000-000000000606` | `-` | `source_manifest` | `application/vnd.codeye.source-manifest+json` | `22d1b9e3af626ed1380a0a5502e8ab3793d98308932434fa65f21d9c12ee059a` | 7829 | `-` |
-| `0195f3a0-0000-7000-8000-000000000652` | `-` | `result_manifest` | `application/vnd.codeye.result-manifest+json` | `6d4864a32e8e6c34d35b92fe49135126fbd64cf2d4e8bd5b7718dd016cc2fbc2` | 16106 | `-` |
+| `0195f3a0-0000-7000-8000-000000000654` | `-` | `result_manifest` | `application/vnd.codeye.result-manifest+json` | `7ae1aa6b6b6f0b8317a4b79c82961f2133d76f20825b4b06ee589c0972ecc5c7` | 16503 | `-` |
 | `0195f3a0-0000-7000-8000-00000000061c` | `go-vet.m01` | `observations` | `application/vnd.codeye.observations+json` | `b65a119bccda754ae0649457a2cbe10c4f4fa2ed1f47f78707788a11323de3f1` | 3072 | `application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations` |
 | `0195f3a0-0000-7000-8000-000000000626` | `go-vet.m02` | `observations` | `application/vnd.codeye.observations+json` | `7e43e3f99236081c27d2744661f70cee0538f6c612276f8507cc27eeeb4cab5e` | 3543 | `application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations` |
 | `0195f3a0-0000-7000-8000-00000000062c` | `gitleaks` | `observations` | `application/vnd.codeye.observations+json` | `75ab8fe8cee9af64b98b0a06ef7c994e89c976b88a282cad086ab258b8e7134c` | 3006 | `application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations` |
@@ -600,13 +604,13 @@
 | `0195f3a0-0000-7000-8000-000000000634` | `review.documents` | `other` | `application/vnd.codeye.review+json` | `9b3df22853e958c1943cc544c119c1a2fa267dba6ba973d21b6a0bac3967fdbd` | 1347 | `application/vnd.codeye.review+json;schema_version=0.2` |
 | `0195f3a0-0000-7000-8000-000000000636` | `review.investigate` | `other` | `application/vnd.codeye.review+json` | `b57822ca2ee5be2b978746229dc6c850ccb21bc14d667c10c10fb95c7abfd3e9` | 3320 | `application/vnd.codeye.review+json;schema_version=0.2` |
 | `0195f3a0-0000-7000-8000-000000000639` | `review.verify` | `other` | `application/vnd.codeye.review+json` | `fbe76650dc466f4886e164cfdabaf2eba3e33217cd9fca26254920a423799297` | 4056 | `application/vnd.codeye.review+json;schema_version=0.2` |
-| `0195f3a0-0000-7000-8000-00000000063b` | `review.scope` | `other` | `application/vnd.codeye.review-scope+json` | `1d41f5c6511e4474e0ef6eae142f60248f6d971ffe1642028131d939ec11e97b` | 12721 | `application/vnd.codeye.review-scope+json;schema_version=0.2` |
-| `0195f3a0-0000-7000-8000-00000000063d` | `review.investigate.s001` | `other` | `application/vnd.codeye.review+json` | `62916472b35493292c08dc05fa952b493554124675f80b60864909df959f99d6` | 2897 | `application/vnd.codeye.review+json;schema_version=0.3` |
-| `0195f3a0-0000-7000-8000-00000000063f` | `review.verify.s001` | `other` | `application/vnd.codeye.review+json` | `52676c0b6edf2aa640c88b4e1992ec17121e86878bb4e7bba740b472c660228e` | 3521 | `application/vnd.codeye.review+json;schema_version=0.3` |
-| `0195f3a0-0000-7000-8000-000000000641` | `review.investigate.s002` | `other` | `application/vnd.codeye.review+json` | `1a7e737757c0bd277b209f393efd9f2f31922391b44afdf48a7b9e7c9c12264e` | 2889 | `application/vnd.codeye.review+json;schema_version=0.3` |
-| `0195f3a0-0000-7000-8000-000000000643` | `review.verify.s002` | `other` | `application/vnd.codeye.review+json` | `2513915c688ba4b8795123e04042d4e5f8b1c865bcec04ea78f75c223a2192f6` | 3513 | `application/vnd.codeye.review+json;schema_version=0.3` |
-| `0195f3a0-0000-7000-8000-000000000645` | `review.investigate.s003` | `other` | `application/vnd.codeye.review+json` | `f56d2f35cd68603a964c6c644571dd63e7912069e5c096813019539cc329cd5b` | 2891 | `application/vnd.codeye.review+json;schema_version=0.3` |
-| `0195f3a0-0000-7000-8000-000000000647` | `review.verify.s003` | `other` | `application/vnd.codeye.review+json` | `23591b646424330144c69cc319c8a673e137a4573aa41c237ca0a3bfac728a74` | 3515 | `application/vnd.codeye.review+json;schema_version=0.3` |
+| `0195f3a0-0000-7000-8000-00000000063b` | `review.scope` | `other` | `application/vnd.codeye.review-scope+json` | `e0ed4354a3a0de8ccf8b17da9b88c700e6ccfc592b6fd36e26858e664df9f235` | 12721 | `application/vnd.codeye.review-scope+json;schema_version=0.2` |
+| `0195f3a0-0000-7000-8000-00000000063d` | `review.investigate.s001` | `other` | `application/vnd.codeye.review+json` | `2889c89a67002b31a6c6aac852ca50743dcf56ce53c62311a7acf18ff8a806f1` | 2897 | `application/vnd.codeye.review+json;schema_version=0.3` |
+| `0195f3a0-0000-7000-8000-00000000063f` | `review.verify.s001` | `other` | `application/vnd.codeye.review+json` | `6fac9d3fa6ab6bc85769012a1864d8d9849f07001ccd209f4308d72fdcbfe1ec` | 3521 | `application/vnd.codeye.review+json;schema_version=0.3` |
+| `0195f3a0-0000-7000-8000-000000000641` | `review.investigate.s002` | `other` | `application/vnd.codeye.review+json` | `9253280ab05a1fb7e27ba876d5161f2ae5920273b728595ba73fc54ea72259ac` | 2889 | `application/vnd.codeye.review+json;schema_version=0.3` |
+| `0195f3a0-0000-7000-8000-000000000643` | `review.verify.s002` | `other` | `application/vnd.codeye.review+json` | `21f85c99def0a3f7fe2184d6e7d79c41816c63c4664ae08a28b77f15774f1c47` | 3513 | `application/vnd.codeye.review+json;schema_version=0.3` |
+| `0195f3a0-0000-7000-8000-000000000645` | `review.investigate.s003` | `other` | `application/vnd.codeye.review+json` | `ac5a0a56656534d455060d504077179310d9a2ad9b9b15267321790221068835` | 2891 | `application/vnd.codeye.review+json;schema_version=0.3` |
+| `0195f3a0-0000-7000-8000-000000000647` | `review.verify.s003` | `other` | `application/vnd.codeye.review+json` | `8a86a815d89516a00ac9c0b4f8a599c2e2de4fb2c4bbdd48423757278de6ca90` | 3515 | `application/vnd.codeye.review+json;schema_version=0.3` |
 
 ### 한계와 공백
 
@@ -621,4 +625,4 @@
 - 범위에 이 언어의 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않았다\. \(python\)
 - upstream\_interpret\_skipped
 
-digest sha256: `66ba38f0584ed00016a1ff73913f47921b929e69fd8d94b7c7e0d1e3bf6a44e5`
+digest sha256: `507331f6834207d6edaa4216a62a4680aaeb70ac2a26ce4d213980802af5738a`

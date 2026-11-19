@@ -223,7 +223,7 @@ func TestSliceAdmissionKeepsTheCeiling(t *testing.T) {
 					t.Fatalf("scope %+v", res[record.TaskScope])
 				}
 				keysOf := sliceKeys(plan)
-				if len(keysOf) != 8 {
+				if len(keysOf) != 9 {
 					t.Fatalf("slices %v", keysOf)
 				}
 				filled := filledSlots(t, j)

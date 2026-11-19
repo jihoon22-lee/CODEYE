@@ -182,7 +182,7 @@ var pinnedGoRole = map[string][]string{
 	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "environment e44b353d678a2b55 0f35e48b1837906c", "documents 6cd0e37915e181ac 96f75808572d08e4", "investigate 0811ea5731925461 0abc469c5f262c1d", "verify 1237fcad33c639ca e0f027c525ea4547"},
 	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment e44b353d678a2b55 025087360cbe1b62", "documents 6cd0e37915e181ac 1c7ade98e8c6af78", "investigate 0811ea5731925461 507e8ddbf32be184", "interpret 7031ffa47de47a37 6c30210249e618c0", "verify 1237fcad33c639ca 739ea4868928c8e1"},
 	// The worst case has more code than the overview offers, so it plans
-	// review.scope and twelve slots: the ten the plan-time packing needs and
+	// review.scope and nine slots: the seven the plan-time packing needs and
 	// two of slack, which review.scope leaves empty. Its go vet stand-in is
 	// no secrets screen: the whole-run requests stay as they were, and the
 	// slots run unscreened (their records say
@@ -195,6 +195,7 @@ var pinnedGoRole = map[string][]string{
 		"review.investigate.s003 succeeded/", "review.verify.s003 succeeded/", "review.investigate.s004 succeeded/", "review.verify.s004 succeeded/",
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
+		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
 		"environment e44b353d678a2b55 a26534f4af3e1545", "documents 6cd0e37915e181ac 8d417c5a891273d2", "investigate 0811ea5731925461 4164875e5225f917", "interpret 7031ffa47de47a37 0ba79c5a6cd9bbf3", "verify 1237fcad33c639ca 11e709f191c805fa",
 		"investigate 0811ea5731925461 2bcd0f8700b89737", "verify 1237fcad33c639ca 1e0b3bf55f240a5a", "investigate 0811ea5731925461 3b87f684621ff34c", "verify 1237fcad33c639ca 0d99b05c7e7f51df",
 		"investigate 0811ea5731925461 360f2ee9ae2d69af", "verify 1237fcad33c639ca 7e1901d8a090ab12", "investigate 0811ea5731925461 3afca3570b302a87", "verify 1237fcad33c639ca 9b0b4be18897149f",
@@ -210,6 +211,7 @@ var pinnedGoRole = map[string][]string{
 		"review.investigate.s003 succeeded/", "review.verify.s003 succeeded/", "review.investigate.s004 succeeded/", "review.verify.s004 succeeded/",
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
+		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
 		"environment e44b353d678a2b55 a26534f4af3e1545", "documents 6cd0e37915e181ac 8d417c5a891273d2", "investigate 0811ea5731925461 4164875e5225f917", "interpret 7031ffa47de47a37 71915d5d7b19dc70", "verify 1237fcad33c639ca 11e709f191c805fa",
 		"investigate 0811ea5731925461 2bcd0f8700b89737", "verify 1237fcad33c639ca 1e0b3bf55f240a5a", "investigate 0811ea5731925461 3b87f684621ff34c", "verify 1237fcad33c639ca 0d99b05c7e7f51df",
 		"investigate 0811ea5731925461 360f2ee9ae2d69af", "verify 1237fcad33c639ca 7e1901d8a090ab12", "investigate 0811ea5731925461 3afca3570b302a87", "verify 1237fcad33c639ca 9b0b4be18897149f",

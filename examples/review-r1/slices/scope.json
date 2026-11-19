@@ -23,7 +23,7 @@
     "max_file_bytes": 2400,
     "max_file_lines": 50,
     "max_slices": 96,
-    "slots": 8
+    "slots": 9
   },
   "priority": {
     "order": "primary_first_observations_first",

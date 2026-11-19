@@ -191,7 +191,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		}
 	}
 	notPlanned, secondaryNotPlanned := map[string]int{}, map[string]int{}
-	for i, sl := range packSlots(candidates) {
+	for i, sl := range fillSlots(candidates, plan.Slots) {
 		if i >= plan.Slots {
 			for _, f := range sl.Files {
 				notPlanned[f.Module]++

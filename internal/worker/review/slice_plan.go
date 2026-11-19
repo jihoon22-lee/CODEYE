@@ -108,9 +108,10 @@ type slicePlan struct {
 func sliceKey(i int) string { return fmt.Sprintf("s%03d", i+1) }
 
 // slotSlack is the number of slots planned beyond the plan-time packing of
-// n slots: filling them in priority order can need a few more (files move
-// between neighbors), so one more slot per eight, at least one.
-func slotSlack(n int) int { return max(1, (n+7)/8) }
+// n slots: filling them in priority order can need a few more (diagnosed
+// files form chunks of their own), so one more slot per eight, at least
+// two. When the strict packing still needs more, fillSlots relaxes it.
+func slotSlack(n int) int { return max(2, (n+7)/8) }
 
 // planSlices is the deterministic slot plan of a snapshot.
 //
@@ -210,7 +211,33 @@ func planSlices(m source.Manifest, scope domain.Scope, rule record.SecondaryRule
 //  4. Consecutive chunks of one class share a slot while the caps allow (at
 //     most MaxSliceModules modules), so small modules do not take one slot
 //     each.
-func packSlots(files []plannedFile) []reviewSlice {
+func packSlots(files []plannedFile) []reviewSlice { return packSlotsAt(files, packStrict) }
+
+// Packing levels: strict keeps directories and ranks apart in chunks;
+// packAnyDir drops the directory rule; packAnyRank also lets a chunk run
+// across ranks (its rank is that of its first file). The order of the files
+// is the same at every level; only the chunk boundaries move.
+const (
+	packStrict = iota
+	packAnyDir
+	packAnyRank
+)
+
+// fillSlots packs files into at most n slots in priority order: the strict
+// packing when it fits, else the first relaxed level that fits, else the
+// most relaxed packing, whose slots beyond n the caller counts as not
+// planned (the lowest-priority files).
+func fillSlots(files []plannedFile, n int) []reviewSlice {
+	var out []reviewSlice
+	for _, level := range []int{packStrict, packAnyDir, packAnyRank} {
+		if out = packSlotsAt(files, level); len(out) <= n {
+			break
+		}
+	}
+	return out
+}
+
+func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 	byModule := map[int][]plannedFile{}
 	var groups []int
 	for _, f := range files {
@@ -266,8 +293,9 @@ func packSlots(files []plannedFile) []reviewSlice {
 		var cur chunk
 		for i, f := range list {
 			weight[gi][f.Class] += f.Bound
-			newDir := i > 0 && path.Dir(list[i-1].Path) != path.Dir(f.Path)
-			if len(cur.files) > 0 && (len(cur.files) >= sliceMaxFiles || cur.bytes+f.Bound > sliceMaxBytes || cur.class != f.Class || cur.rank != record.RankIndex(f.Rank) ||
+			newDir := level == packStrict && i > 0 && path.Dir(list[i-1].Path) != path.Dir(f.Path)
+			newRank := level != packAnyRank && cur.rank != record.RankIndex(f.Rank)
+			if len(cur.files) > 0 && (len(cur.files) >= sliceMaxFiles || cur.bytes+f.Bound > sliceMaxBytes || cur.class != f.Class || newRank ||
 				(newDir && (len(cur.files)+runs[i].files > sliceMaxFiles || cur.bytes+runs[i].bytes > sliceMaxBytes))) {
 				chunks[gi] = append(chunks[gi], cur)
 				cur = chunk{}
@@ -277,7 +305,7 @@ func packSlots(files []plannedFile) []reviewSlice {
 			}
 			cur.files = append(cur.files, f)
 			cur.bytes += f.Bound
-			if f.Rank == record.RankToolObservations {
+			if f.Rank == record.RankToolObservations && record.RankIndex(f.Rank) == cur.rank {
 				cur.sev, cur.count = max(cur.sev, f.Severity), cur.count+f.Observations
 			}
 		}
