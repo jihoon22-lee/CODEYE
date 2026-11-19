@@ -67,7 +67,7 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
     </details>
     {error && <><ErrorNote error={error} />{retrying && <p className="small">{t.runs.retryNote}</p>}</>}
     {accepted && <p role="status">{t.runs.accepted(shorten(accepted.id, 12))}</p>}
-    {retried && <p role="status">{t.runs.retried(retried.retry)}</p>}
+    {retried && <p role="status">{'attempt_id' in retried ? t.runs.recovered(retried.retry) : t.runs.retried(retried.retry)}</p>}
     {activeId && <RunStatus key={`${activeId}:${generation}`} api={api} runId={activeId} project={project} setup={setup} canRun={canRun}
       placeholder={accepted?.id === activeId ? accepted : retried?.id === activeId ? retried : null} onRunChange={onRunChange}
       onRetried={ack => { setRetried(ack); setAccepted(null); setRunId(ack.id); setGeneration(n => n + 1); onRunChange?.(); }} />}
@@ -115,10 +115,14 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
     <div className="actions">
       {(!terminal || (run?.snapshot_id && !run.reportRevision)) && <button type="button" onClick={refresh}>{t.runs.refresh}</button>}
       {terminal && status !== null && RETRYABLE.has(status) && canRun && <RetryControl api={api} runId={runId} onRetried={onRetried} />}
-      {status !== null && !terminal && (canRun
+      {status === 'recovery_required' && (canRun
+        ? <RecoverControl api={api} runId={runId} onRetried={onRetried} />
+        : <p className="small">{t.runs.recoverNotAllowed}</p>)}
+      {status !== null && status !== 'recovery_required' && !terminal && (canRun
         ? <CancelControl api={api} runId={runId} status={status} onAck={applyAck} onForbidden={onRunChange} />
         : <p className="small">{t.accounts.cancelNotAllowed}</p>)}
     </div>
+    {run?.raw_evidence_removed_at && <p className="notice" role="note">{t.runs.rawEvidenceRemoved(formatInstant(run.raw_evidence_removed_at))}</p>}
     {/* The report comes after the run's actions (retry, cancel), which stay near its state. */}
     {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}
       extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project, report.sections?.codeReview.ledger ?? null, report.sections?.environment.dependencies ?? [])} runId={runId} canRun={canRun} onRetried={onRetried} />} />}
@@ -220,6 +224,39 @@ function RetryControl({ api, runId, onRetried }: { api: Api; runId: string; onRe
     <button type="button" className="primary" onClick={send} disabled={sending} aria-busy={sending}>{sending ? t.runs.retrying : t.runs.retry}</button>
     {error && <ErrorNote error={error} />}
   </>;
+}
+
+// A recovery_required run: CODEYE could not confirm that the attempt's processes ended, so the
+// user states it (an explicit check box) before the work runs again. The statement is audited.
+function RecoverControl({ api, runId, onRetried }: { api: Api; runId: string; onRetried: (ack: RetryAck) => void }) {
+  const [checked, setChecked] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<ErrorText | null>(null);
+  const [notQueued, setNotQueued] = useState(false);
+  async function send() {
+    setSending(true);
+    setError(null);
+    try {
+      const ack = await api.recoverRun(runId);
+      if (ack.retry === 'not_queued') {
+        setNotQueued(true);
+        setSending(false);
+        return;
+      }
+      onRetried(ack);
+    } catch (e) {
+      setError(describeError(e));
+      setSending(false);
+    }
+  }
+  if (notQueued) return <p role="status">{t.runs.recovered('not_queued')}</p>;
+  return <div role="group" aria-labelledby={`recover-${runId}`} className="notice">
+    <p id={`recover-${runId}`}><strong>{t.runs.recoverTitle}</strong></p>
+    <p className="small">{t.runs.recoverExplain}</p>
+    <label><input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} disabled={sending} /> {t.runs.recoverCheck}</label>
+    <button type="button" className="primary" onClick={send} disabled={!checked || sending} aria-busy={sending}>{sending ? t.runs.recovering : t.runs.recover}</button>
+    {error && <ErrorNote error={error} />}
+  </div>;
 }
 
 // "더 나은 결과를 얻으려면": what would fill the report's gaps. A project choice is turned on

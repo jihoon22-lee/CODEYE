@@ -108,6 +108,19 @@ def main():
                 scheduler_env = dict(env, CODEYE_DATABASE_URL=scheduler_url, CODEYE_TEST_DATABASE_URL=scheduler_url)
                 subprocess.run([str(base / "codeye"), "migrate"], cwd=base, env=scheduler_env, check=True)
                 scheduler_smoke.run(base, ROOT, scheduler_env)
+            if "--multinode" in sys.argv[1:]:
+                import multinode_smoke
+                # Its own database: node, worker and audit counts start from zero.
+                subprocess.run(["psql", "-X", "-w", "-v", "ON_ERROR_STOP=1", "-c", "CREATE DATABASE multinode_test"],
+                               env=probe_env, capture_output=True, check=True, timeout=10)
+                multinode_url = url.replace("/postgres?", "/multinode_test?")
+                multinode_env = dict(env, CODEYE_DATABASE_URL=multinode_url, CODEYE_TEST_DATABASE_URL=multinode_url)
+                subprocess.run([str(base / "codeye"), "migrate"], cwd=base, env=multinode_env, check=True)
+                multinode_smoke.run(base, ROOT, multinode_env)
+            if "--ops-drill" in sys.argv[1:]:
+                import ops_drill
+                # Its own PostgreSQL cluster: the database drill stops and starts it.
+                ops_drill.run(base, ROOT, env)
             if "--personal" in sys.argv[1:]:
                 import personal_smoke
                 personal_smoke.run(base, ROOT, env, probe_env)

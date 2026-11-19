@@ -113,6 +113,37 @@
 
 [사용 안내서](GUIDE.md#프로젝트별-분석-선택) · [API](API.md#프로젝트-등록) · [보안](SECURITY.md#소스와-네트워크)
 
+## 여러 노드와 운영 수용
+
+**A48 — 사람의 정리 확인으로 `recovery_required`를 끝낸다.** (기록 2026-11-20) REQ-021/022, NFR-003과 TC-246·TC-247에 대해 다음을 확정한다. A32 6과 A40 6의 열린 항목을 닫는다.
+
+1. **증거는 사람의 확인이다.** 노드가 정리를 확인하지 못한 attempt(노드 사망·철회·복원 fence, 확인할 수 없는 프로세스 그룹)는 시간이 지나도 깨끗한 것으로 바꾸지 않는다. `POST /runs/{id}/recover`(본문 `{"cleanup_confirmed": true}`만 받는다)와 `codeye run recover --id RUN --confirm-cleanup`이 "그 attempt의 프로세스가 노드에 남지 않았다"는 확인을 받는다. 확인이 없으면 API는 400, CLI는 종료 코드 2다. 한 트랜잭션이 attempt를 `released`·`confirmed`로 두고 예약을 풀고 남은 task를 닫고 run을 `failed`로 바꾼다(이벤트 `attempt.cleanup_confirmed`, 사유 `operator_confirmed`). 같은 트랜잭션에 `run.recovery_confirmed` 감사 행을 쓴다. 누가 언제 확인했는지가 증거다.
+2. **누가 확인하나.** 그 프로젝트를 실행할 수 있는 사용자(재시도와 같은 권한)와 운영자 CLI다. 개인 모드 사용자가 직접 정리할 수 없으면 쓸 수 없는 제품이 되므로 관리자 전용으로 두지 않았다. 웹은 확인 상자를 체크해야 단추가 켜진다.
+3. **확인 뒤 다시 실행.** 확인 뒤 기존 재시도 규칙(A40 6)으로 다시 넣는다. 고정 snapshot을 heartbeat가 신선한 노드가 갖고 있으면 같은 run, 아니면 같은 요청의 새 run이다. 운영자 CLI는 요청자 대신 넣는다(감사 행위자 `system`). 요청자가 권한을 잃었으면 확인은 남고 run은 보통의 `failed`이며 출력이 `not_queued`와 사유를 적는다.
+4. **재시도의 snapshot 보유.** 재시도가 snapshot을 "가진 노드"로 세는 것은 철회되지 않고 heartbeat가 신선한(`NodeStaleAfter`) 노드뿐이다. 죽은 노드에 묶인 같은 run은 영원히 대기하기 때문이다. 노드가 고정 snapshot을 읽지 못하고 `snapshot_unavailable`로 끝내면 그 노드의 위치 기록을 지운다.
+
+대안으로 일정 시간 뒤 자동 해제, 노드 재등록 때 자동 해제를 검토했다. 둘 다 확인되지 않은 정리를 깨끗하다고 간주해 같은 작업이 두 번 실행될 수 있어 채택하지 않았다. migration 0013이 감사 action을 더한다. [실행](EXECUTION.md#장애-처리) · [API](API.md#정리-확인)
+
+**A49 — 보존 정리(retention).** (기록 2026-11-20) REQ-018, NFR-006/007과 TC-248에 대해 다음을 확정한다. A32 4의 "정리 정책은 후속"을 닫는다.
+
+1. **명시적 명령, 기본은 dry run.** `codeye cleanup --older-than 30d`가 지울 것을 보여 주고 `--apply`가 있을 때만 지운다. 자동·예약 정리는 없다. 기준은 1시간보다 짧을 수 없다.
+2. **지우는 것.** 끝난 run(`completed`·`partial`·`failed`·`cancelled`)의 오래된 원시 산출물 역할 `stdout`·`stderr`·`raw_output`·`other`의 내용, 노드의 오래된 snapshot 사본(`acquire-*`)·작업 사본(`ws-*`, 열린 journal attempt 것은 제외)·은퇴한 에이전트 디렉터리(`agent.retired-*`)다. 보고서, 관찰(`observations`), manifest, DB 행은 남긴다. 보고서는 저장된 바이트로 그대로 열린다.
+3. **지운 사실을 남긴다.** 행을 지우지 않고 `artifacts.content_removed_at`(한 번만 설정, migration 0013)을 적는다. 한 건의 `storage.retention_applied` 감사 행이 개수·바이트·기준 일수를 담는다. 실행 화면과 `GET /runs/{id}`의 `raw_evidence_removed_at`이 "원시 증거가 삭제됨"을 알린다. 파일은 DB가 커밋된 뒤, 남은 행이 참조하지 않을 때만 지운다. 백업과 산출물 상한은 지운 내용을 세지 않는다.
+4. **감사 기록은 지우지 않는다.** 감사 표는 append-only(TC-153)이고 정리 자체가 감사 대상이라 보존 정리 대상에서 뺐다.
+
+대안인 상한 도달 때 오래된 것부터 자동 삭제는 사용자가 모르는 사이 근거가 사라지므로 채택하지 않았다. [운영](OPERATIONS.md#보존-정리) · [보안](SECURITY.md#보관과-삭제)
+
+**A50 — 로그아웃 뒤 지속 실행은 systemd 사용자 unit.** (기록 2026-11-20) NFR-003과 TC-249에 대해 정한다. A32 1의 "systemd 등록은 하지 않았다"를 Linux에서 바꾼다. `codeye service install`이 `~/.config/systemd/user/<name>.service`에 `codeye start`·`codeye stop`을 실행하는 oneshot unit(`RemainAfterExit=yes`, 절대 경로, 명시적 PATH, 정지 시간 = drain + 취소 + 60초)을 쓰고 `systemctl --user enable`을 실행한다. 바로 시작하지 않는 것은 이미 `codeye up`으로 띄운 설치를 unit 밖에서 한 번 더 띄우지 않기 위해서다(시작은 `systemctl --user start`). `uninstall`은 설정 없이 동작하고 CODEYE가 쓴 unit만 지운다. `up --no-open` 대신 `start`를 쓰는 것은 로그인 링크가 journal에 남지 않게 하기 위해서다. 로그아웃 뒤 유지는 `loginctl enable-linger`가 필요하며 CODEYE가 바꾸지 않는다. root 권한의 시스템 unit과 Windows Service는 만들지 않는다. 재부팅·로그아웃 뒤 실제 유지는 시험하지 않았다. [운영](OPERATIONS.md#사용자-서비스)
+
+**A51 — 여러 노드 운영의 범위.** (기록 2026-11-20) REQ-018/019/021/022, NFR-002/003과 TC-21·TC-22·TC-250~254에 대해 다음을 확정한다.
+
+1. **도구는 배정 기준이 아니다.** 배정은 `analysis:<profile>`, `source:local:<root>`(등록 token의 root 허가 포함), `source:git:<host>`, 고정 snapshot 위치만 본다. 노드는 기준 분석기가 하나라도 쓸 수 있을 때만 `analysis:deep-review`를 알린다(`--advertise-without-baseline` 예외). 그래서 도구가 하나도 없는 노드는 일을 받지 않지만, Python 도구만 있는 노드는 Go 프로젝트를 받아 Go 작업을 `unsupported`(`tool_not_configured`)로 끝낸다. 언어·도구 단위 배정은 능력 이름과 claim 조건을 넓혀야 하고, 한 run이 여러 언어를 가지므로 "할 수 있는 노드"의 정의가 정해지지 않았다. 운영자는 같은 root를 맡는 노드에 같은 도구를 둔다. 빠진 도구는 보고서와 비교에서 성공으로 보이지 않는다.
+2. **drain 중인 노드는 증감 계획에서 빠진다.** drain 중인 에이전트는 heartbeat에서 `worker_scaling`을 static으로, `analysis:*` 능력을 비워 보낸다. 고치기 전에는 controller가 drain 중인 노드에 `start_worker`를 계획했고, 노드가 적용하지 않은 그 시작이 `StartTimeout`(90초) 동안 pool 예산을 쥐었다. 대기 run의 사유는 다른 노드가 없으면 `no_capable_node`다.
+3. **활성 controller는 하나다.** 두 controller를 같은 DB에 띄우는 구성은 지원하지 않고 시험하지 않는다. sweep·증감 결정의 잠금(`SKIP LOCKED`)이 겹친 실행을 해치지 않게 하지만, 예약 materialize 외의 경로를 두 인스턴스로 검증하지 않았다.
+4. **한 호스트 검증.** 여러 노드 시험은 한 WSL2 호스트의 노드 신원 여럿(각자 상태 디렉터리·도구·root), SIGSTOP/SIGKILL, 로컬 TCP 프록시 차단, PostgreSQL 정지로 한다. 측정 시각은 이 호스트의 값이며 보장값이 아니다. 여러 물리 노드, NFS, 실제 네트워크 분할은 실제 환경에서만 검증한다([로드맵](ROADMAP.md)).
+
+[실행](EXECUTION.md#여러-노드에서-확인한-것) · [운영](OPERATIONS.md#장애-대응-runbook)
+
 ## 진행 단계 기록
 
 **A20 — 단계 기록과 검토 대상 없음.** (기록 2026-11-18) REQ-005/013/016/022와 TC-96~99에 대해 다음을 확정한다.

@@ -1,6 +1,6 @@
 # 배포와 운영
 
-한 머신에서 CODEYE를 Native로 운영하는 개인 모드의 계약, 폐쇄망 배포팩과 오프라인 모드, 아직 구현하지 않은 서버·노드 배포의 설계 계약을 적는다. 사용자용 절차는 [사용 안내서](GUIDE.md)에 있다. 보안 경계와 보관·삭제 정책은 [보안](SECURITY.md), 실행기와 워커 정책은 [실행](EXECUTION.md)에 있다.
+한 머신에서 CODEYE를 Native로 운영하는 개인 모드의 계약, controller와 여러 노드 에이전트의 운영과 장애 대응, 폐쇄망 배포팩과 오프라인 모드, 아직 구현하지 않은 여러 머신 배포 묶음의 설계 계약을 적는다. 사용자용 절차는 [사용 안내서](GUIDE.md)에 있다. 보안 경계와 보관·삭제 정책은 [보안](SECURITY.md), 실행기와 워커 정책은 [실행](EXECUTION.md)에 있다.
 
 | 범위 | 상태 |
 |---|---|
@@ -10,10 +10,12 @@
 | 백업·복원 | DB와 확정 산출물을 같은 논리 시점으로 묶는다. 빈 대상에만 복원하고 이전 lease를 살리지 않는다 |
 | `codeye doctor` | 호스트·도구·DB 진단. 도구는 에이전트가 쓰는 탐색과 같은 방법으로 찾는다. `--config`를 주면 저장 영역 사용량·상한, 최신 백업 나이, start/stop 상태 일관성을 더한다 |
 | `codeye tools` | 이 머신에서 찾은 도구, 없는 도구, 추가 방법을 표로 보인다 |
+| `codeye run recover`, `codeye cleanup`, `codeye service` | 정리 확인([runbook](#장애-대응-runbook)), [보존 정리](#보존-정리)(기본 dry run), [사용자 서비스](#사용자-서비스)(systemd 사용자 unit, Linux). 셋 다 네트워크를 쓰지 않아 오프라인 모드에서도 같다 |
+| 여러 노드 | controller 하나와 노드 에이전트 여럿(`codeye serve`·`codeye agent`, 등록 token). 한 호스트의 노드 신원 여럿으로 배정·사망·분할·drain·갱신을 시험했다([실행](EXECUTION.md#여러-노드에서-확인한-것)). 여러 물리 머신은 검증하지 않았다 |
 | 폐쇄망 배포팩, 오프라인 모드, 사내 CA | 묶음 스크립트·`offline`·`ca_bundle`·doctor 점검 구현. 사설 CA·로컬 미러·network namespace로 검증했고 실제 폐쇄망·RHEL 8.10은 실행하지 않았다. [마지막 절](#폐쇄망-배포팩) |
-| 서버 배포, 다중 노드 | 설계 계약(미구현). [서버·노드 배포](#서버노드-배포-설계-계약-미구현) |
+| 서버 배포 묶음(여러 머신의 설치·서비스 관리) | 설계 계약(미구현). [서버·노드 배포](#서버노드-배포) |
 
-관련 요구사항: REQ-018(자원 제한), REQ-021(drain), REQ-022(lease·fencing·복구), NFR-003(재시작 뒤 복구), NFR-006(loopback 개인 모드, 민감값), NFR-007(산출물 hash). 수용 시험 TC-124~127, TC-32, TC-170~175는 [시험](TESTING.md)에 있다.
+관련 요구사항: REQ-018(자원 제한), REQ-021(drain), REQ-022(lease·fencing·복구), NFR-003(재시작 뒤 복구), NFR-006(loopback 개인 모드, 민감값), NFR-007(산출물 hash). 수용 시험 TC-124~127, TC-32, TC-170~175, TC-246~255은 [시험](TESTING.md)에 있다.
 
 ## 지원 범위
 
@@ -29,7 +31,7 @@ Docker·Podman·Kubernetes는 필요 조건이 아니다. 아래는 실제로 �
 
 - 개인 모드의 프로세스 관리는 `pidfd_open`(Linux 5.3 이상), `flock`, `setsid`, `SIGUSR1`(drain)·`SIGTERM`(취소)을 쓴다.
 - Go 서비스 바이너리와 정적 웹 파일을 배포하되 분석 도구 런타임은 별도다. cgo나 동적 라이브러리를 쓰면 대상 glibc·시스템 라이브러리 호환성을 실제로 확인해야 한다. 최신 빌드 머신에서 컴파일됐다는 사실만으로 RHEL 8 호환을 가정하지 않는다.
-- 시스템 서비스 등록(systemd, Windows Service)과 로그아웃 뒤 유지는 없다. 개인 모드 프로세스는 setsid로 터미널과 분리될 뿐이다.
+- Linux에서는 `codeye service install`이 systemd 사용자 unit을 만든다([사용자 서비스](#사용자-서비스)). root 권한의 시스템 unit과 Windows Service는 없다. unit 없이 띄운 개인 모드 프로세스는 setsid로 터미널과 분리될 뿐이다.
 
 ## 구성 요소와 수동 실행
 
@@ -52,7 +54,7 @@ codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--auto
 - `serve --listen`이 loopback이 아니면 `--tls-cert`, `--tls-key`, `--public-origin`이 모두 있어야 한다. 하나라도 빠지면 종료 코드 2로 시작하지 않는다. 셋 중 일부만 주는 것도 loopback에서 같은 오류다. [TLS 수신](#tls-수신)을 본다.
 - 로그인 링크와 등록 토큰은 0600 파일에만 쓴다. 표준 출력에는 토큰을 쓰지 않는다. DB에는 SHA-256만 저장한다.
 - 에이전트의 옵션 전체는 `codeye --help`에 있다. 풀의 최소·최대와 전역 상한은 `codeye pool set`, `codeye scheduler set`으로 조정한다. 노드 철회는 `codeye node revoke --id NODE_ID`다.
-- 한 머신 밖의 노드를 쓰는 배포는 검증하지 않았다([서버·노드 배포](#서버노드-배포-설계-계약-미구현)).
+- 한 머신 밖의 노드를 쓰는 배포는 검증하지 않았다([서버·노드 배포](#서버노드-배포)).
 
 ### 계정과 관리자 CLI
 
@@ -213,7 +215,7 @@ codeye status [--config PATH] [--format text|json]
 
 개인 lock을 잡는다. 관리형 모드면 PostgreSQL을 띄운다([관리형 PostgreSQL](#관리형-postgresql)). 상태를 검사한다([일관성](#프로세스-상태-일관성)). 기록 없는 프로세스가 에이전트 lock이나 설정에 적은 `listen` 포트를 쥐고 있으면 거부한다. `listen`을 적지 않았고 기본 포트를 다른 프로그램이 쓰면 7340까지 다음 빈 포트를 쓴다. 기록의 프로세스가 끝났거나 pid가 다른 프로세스로 재사용됐으면 기록만 지운다(신호 없음). 그 뒤 순서는 다음과 같다. controller와 에이전트 중 이미 실행 중인 것은 그대로 쓴다. 둘 다 실행 중이고 에이전트 argv가 설정과 같으면 아무것도 띄우지 않고 종료 코드 0이다.
 
-1. schema가 이 바이너리의 migration(현재 11)과 같은지 확인한다. external 모드에서 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. 관리형 모드에서 이전 버전이면 migration을 적용한다. 이미 적용된 migration이 있으면(데이터가 있으면) 먼저 `pg_dump --format=custom`으로 `<백업 디렉터리>/codeye-pre-migrate-<UTC>/database.dump`(0600)를 쓰고, 실패하면 아무것도 바꾸지 않고 끝난다. 바이너리보다 새 schema나 불일치는 거부한다.
+1. schema가 이 바이너리의 migration(현재 13)과 같은지 확인한다. external 모드에서 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. 관리형 모드에서 이전 버전이면 migration을 적용한다. 이미 적용된 migration이 있으면(데이터가 있으면) 먼저 `pg_dump --format=custom`으로 `<백업 디렉터리>/codeye-pre-migrate-<UTC>/database.dump`(0600)를 쓰고, 실패하면 아무것도 바꾸지 않고 끝난다. 바이너리보다 새 schema나 불일치는 거부한다.
 2. 개인 사용자를 만들거나 다시 쓴다. 개인 사용자는 관리자다(이전 버전에서 만든 사용자는 이때 관리자로 지정되고 감사 기록이 남는다). 설정의 source root를 label로 등록하고 사용자에게 허가한다. 같은 label이 다른 경로로 등록돼 있으면 거부한다. `quota.artifacts_bytes`를 `scheduler_limits.artifact_quota_bytes`에 반영한다(0이면 제거).
 3. 등록이 필요한지 정한다. 처음 시작했거나, 노드가 철회됐거나, DB가 노드를 모르거나(복원 뒤), source root 집합이 바뀌었으면 다시 등록한다. 다시 등록하기 전에 에이전트 journal에 끝나지 않은 작업이 없는지 확인한다. 이전 노드는 철회하고, 이전 `agent/`는 `agent.retired-<ns>`로 이름만 바꾼다(삭제하지 않는다). 등록 토큰은 10분짜리 일회용이며 0600 파일로만 전달한다.
 4. `codeye serve --personal --state-dir <state_dir>`을 setsid로 띄운다(브라우저 세션 7일, 경로로 등록·`GET /setup`·데이터 폴더 검사에 상태 디렉터리를 쓴다). 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다. 기록에 listen 주소를 남긴다.
@@ -303,7 +305,7 @@ JSON 출력은 `outcome`, `processes[]`(`state_before`, `action`, `state_after`)
 - **거절 지점.** `ClaimAttempt` 트랜잭션 안에서 판정한다. 노드가 보고한 영역이 하나라도 있으면 그 노드는 새 claim을 받지 않는다(204). `artifact_quota_bytes`가 있고 확정 산출물 합이 그 이상이면 어떤 노드도 새 claim을 받지 않는다. 대기 중인 run의 `progress.waiting_reason`은 `storage_quota_exceeded`다. 기존 검사(`request_unavailable`부터 `project_limit`까지) 뒤의 순서는 `pool_paused` → 전역 상한 `capacity_full` → 산출물 상한 또는 "여유 있는 호환 노드가 모두 저장 상한"이면 `storage_quota_exceeded` → 그 밖의 여유 부족 `capacity_full`이다.
 - **보호.** 실행 중인 attempt는 중단하지 않는다. 그래서 그 attempt의 업로드로 상한을 넘을 수 있다. 확정된 산출물과 보고서는 지우지 않는다.
 - **받은 의존성.** `cache/deps`는 run이 끝나도 남아 다음 run이 다시 받지 않게 한다. 자동으로 지우지 않는다. 공간이 필요하면 에이전트를 멈춘 뒤 그 디렉터리를 지운다. 파일은 쓰기 가능하게 받으므로 일반 삭제로 지워진다. 다음 run은 처음부터 다시 받는다.
-- **구현하지 않은 것.** 오래된 파일부터 지우는 정리, 정리 후보 목록(dry run), 보존 기간·참조 기반 정리, 참조 없는 임시 업로드 정리는 없다. 참조·pin·보존 규칙 없이 지우면 근거를 잃기 때문이다. 공간을 비우는 일은 운영자가 한다. 보관·삭제 정책의 제안은 [보안](SECURITY.md)에 있다.
+- **정리.** 상한에 닿아도 자동으로 지우지 않는다. 공간은 운영자가 [보존 정리](#보존-정리)(`codeye cleanup`, 기본 dry run)로 비운다. 참조 없는 임시 업로드(DB 기록 전에 실패한 업로드 파일) 정리는 없다.
 - **측정과 적용의 구분.** `status`는 영역별 `basis`(`node_heartbeat`·`database_accounting`)를 보여 준다. `doctor`는 디렉터리를 지금 직접 재므로 적용 값과 다를 수 있다. 특히 artifacts의 디렉터리 크기와 DB 집계는 다르다.
 - 상한 조정: 설정을 바꾸고 `codeye stop`·`codeye start`. 운영자 CLI `codeye scheduler set --artifact-quota-bytes N`(0이면 제거)도 있다.
 
@@ -350,7 +352,7 @@ manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exp
 
 실패하면 대상 산출물 디렉터리를 비운다. `pg_restore`가 성공한 뒤의 실패라면 DB를 지우고 다시 만들라고 출력한다(복원 명령은 DB를 지우지 않는다).
 
-복원 뒤 `codeye up`(또는 `start`)은 새 노드로 등록한다. 이전 노드 credential과 세션은 거부된다. 이전 epoch의 lease 갱신은 `ErrStaleAttempt`다. 복원 시점에 실행 중이던 run은 `recovery_required`로 남는다. 철회된 노드만 정리를 확인할 수 있어서, 이 run이 쥔 예약을 푸는 운영자 명령은 아직 없다. 전역 상한이 막히면 `codeye scheduler set --global-max-running N`으로 늘린다. 정지 뒤에 백업하면 이 경우가 생기지 않는다.
+복원 뒤 `codeye up`(또는 `start`)은 새 노드로 등록한다. 이전 노드 credential과 세션은 거부된다. 이전 epoch의 lease 갱신은 `ErrStaleAttempt`다. 복원 시점에 실행 중이던 run은 `recovery_required`로 남고 예약을 쥔다. 원본 설치의 그 프로세스가 끝났는지(원본을 `codeye stop`했는지) 확인한 뒤 실행 화면의 "정리 확인 후 다시 실행"이나 `codeye run recover --id RUN_ID --confirm-cleanup`으로 정리를 확인하면 예약이 풀리고 같은 요청의 새 run이 들어간다(운영 훈련 D7에서 확인). 정지 뒤에 백업하면 이 경우가 생기지 않는다.
 
 ## 관측성
 
@@ -362,19 +364,69 @@ manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exp
 - run의 이벤트와 진행률, `waiting_reason`(`execution_unavailable`, `pool_paused`, `capacity_full`, `project_limit`, `storage_quota_exceeded` 등), 노드 heartbeat와 워커 상태(`codeye node list`, `codeye pool list`).
 - 모든 응답의 `X-Request-ID`, `state_dir/logs/controller.log`·`agent.log`. 로그와 출력에 DB 비밀번호와 토큰은 나오지 않는다.
 
-## 운영 상황별 대응
+## 장애 대응 runbook
 
-| 상황 | 기본 조치 | 구현 |
-|---|---|---|
-| 모델 응답 실패 | 도구 결과 보존, 모델 재시도 한도, partial 보고서 | 구현([검토](REVIEW.md)) |
-| node offline | 새 배정 중지, lease fence, recovery_required 확인 | 구현(lease 만료·epoch fencing). 한 머신에서만 시험했다 |
-| DB unavailable | 신규 요청 503, 에이전트는 lease 안전 정책으로 중단 | 구현(API 503 `UNAVAILABLE`, lease 갱신 실패 시 lease 만료 전에 취소) |
-| NFS 지연 | acquire timeout, 원본 불안정/권한 구분, 서버 전체 block 금지 | 소스 확보 timeout은 구현. NFS 실기는 검증하지 않았다 |
-| tool version 변경 | capability 갱신, 계약 시험 후 catalog revision | 설계 계약 |
-| max worker 축소 | drain, 진행 작업 강제 종료하지 않음 | 구현 |
-| artifact quota 초과 | 신규 생성 제한, 참조 없는 임시 업로드 정리 | 새 작업 거절은 구현. 임시 업로드 정리는 미구현 |
-| stop이 `recovery_required` | `status`·로그 확인 후 `codeye stop` 반복. 프로세스를 강제 종료하지 않는다 | 구현 |
-| 복원 직후 `recovery_required` run | 새 run으로 다시 요청 | 구현. 예약 해제 명령은 없다 |
+상황마다 운영자가 보는 것, 할 일, 확인 방법을 적는다. "훈련" 열은 `scripts/test_postgres.py --ops-drill`(TC-255)과 `--multinode`(TC-250~254)가 한 WSL2 호스트에서 실제로 해 본 것이고, 시간은 그 호스트의 측정값이다(보장값이 아니다).
+
+| 상황 | 보이는 것 | 할 일 | 확인 | 훈련 |
+|---|---|---|---|---|
+| 모델 endpoint 실패 | `codeye model probe`가 `FAILED at request: …`. run은 정적 분석을 마치고 `partial`, 보고서의 모델 검토가 `not_performed`와 사유(`model_unavailable`·`model_timeout`·`model_auth_failed` 등, Markdown에 문장) | 공급자 상태·키 파일·`base_url`을 고친다. 재시작은 필요 없다(키 파일은 호출마다 읽는다). 고친 뒤 다시 시도 | `model probe`가 `OK`, 다음 run의 모델 검토가 `performed` | D1: HTTP 500을 OpenCode가 호출 제한시간까지 재시도해 사유는 `model_timeout`, 제한시간 60초에서 run 136초 |
+| 노드 offline(사망) | `codeye node list`의 `last_heartbeat_at`이 20초보다 오래됨, 그 노드만 할 수 있는 run은 `node_stale`·`no_capable_node`로 대기. 실행 중이던 run은 lease 만료 뒤 `recovery_required` | 노드가 돌아오면 기다린다(에이전트가 정리 보고를 보내 run이 `failed`가 되고 다시 시도할 수 있다). 돌아오지 않으면 그 노드에 그 run의 프로세스(`codeye worker`와 자식)가 없는지 확인한 뒤 `codeye run recover --id RUN_ID --confirm-cleanup`(또는 실행 화면의 확인 상자와 "정리 확인 후 다시 실행") | 출력의 `retry`가 `same_run`·`new_run`이고 그 run이 끝난다. 감사 `run.recovery_confirmed` | D2·TC-251: SIGKILL 뒤 `recovery_required` 34~35초, 확인 뒤 다른 노드에서 끝남 |
+| 노드와 controller 사이 연결 끊김 | 노드 stale, 노드 로그 `heartbeat_failed`·`lease_lost`. run은 `recovery_required` | 연결을 복구한다. 노드가 돌아오면 정리 보고로 run이 `failed`가 된다. 같은 run은 그 사이 다른 노드에서 실행되지 않는다 | 노드 로그 `cleanup_reported accepted=true`, run `failed`, `POST /runs/{id}/retry`로 다시 실행 | TC-252: 차단 → `lease_lost` 19초, 복구 → `failed` 1초 미만 |
+| DB unavailable | `GET /api/v1/ready`가 503 `database_unavailable`, 화면·API가 503. 노드 로그 `heartbeat_failed reply_code=unavailable` | PostgreSQL을 되살린다. controller·에이전트는 재시작하지 않아도 다시 연결한다. lease 여유(20초)보다 오래 끊겼으면 진행 중 작업은 에이전트가 멈췄고 DB가 돌아온 뒤 `failed`가 된다 | `/ready` 200, `codeye doctor`의 database `available`, 정합성 질의(아래) 0건, 새 run이 끝남 | D3: 8초 중단은 작업이 그대로 끝남. 40초 중단은 `lease_lost` 20초, DB 복귀 뒤 4.7초에 `failed` |
+| 도구 버전이 바뀜·도구가 사라짐 | 비교의 차이 행 `tool:<analyzer>:version`. 사라진 도구의 작업은 `unsupported`(`tool_not_configured`), 그 진단은 `absent_unverified`(사유 `check_failed`)이며 `resolved_observed`가 아니다 | 의도한 변경이면 둔다. 아니면 에이전트의 도구 경로를 고치고 다시 띄운다 | `codeye tools`·`doctor`의 도구 버전, 다음 비교 | D4: ruff 0.16.3→0.16.4 차이 행, ruff를 뺀 run의 진단 1건 `absent_unverified` |
+| 작업 중 max workers 축소 | `codeye pool list`의 `capacity_state=over_target_draining`, `drain_worker` 명령 | 기다린다. 실행 중 작업은 끝까지 돈다. 급하면 run을 취소한다(강제 종료는 없다) | 상태가 `healthy`, 워커 수 ≤ 새 상한, 취소 명령 없음 | D5: 축소 0.4초 뒤 drain, 두 run 모두 첫 attempt로 끝남 |
+| 산출물·노드 저장 상한 도달 | 대기 run의 `storage_quota_exceeded`, `codeye status`의 `exceeded`. 기존 보고서는 열린다 | 상한을 올리거나 [보존 정리](#보존-정리)로 공간을 비운다 | 대기 run이 시작됨 | D6: 상한 해제 뒤 바로 시작. D9: 40일 지난 원시 산출물 정리 0.1초 |
+| 실행 중 백업을 복원함 | 복원본에서 그 run이 `recovery_required`(fence `runs_recovery_required`) | 원본 설치가 멈췄는지 확인한 뒤 정리를 확인한다(`codeye run recover --id RUN_ID --confirm-cleanup --config PATH`, 복원본의 설정) | 새 run이 끝나고 예약이 풀림 | D7: 백업 0.1~0.3초, 복원 0.2~0.4초(작은 데이터), CLI로 확인 뒤 새 run |
+| 사용자 비활성화·구성원 제거 | `codeye user disable`, `DELETE /projects/{id}/members/{user}` | — | 다음 요청이 401(비활성)·404(구성원 아님), 열린 SSE는 `event: closed`(`unauthenticated`·`access_revoked`) | D8: 두 stream이 0.5초 안에 닫힘 |
+| 노드 철회 | `codeye node revoke --id NODE_ID`. 실행 중 에이전트는 작업을 취소하고 종료 코드 4로 끝난다 | 그 노드의 run은 정리 보고를 못 보내므로 `recovery_required`로 남는다. 노드 프로세스가 끝났는지 확인하고 정리를 확인한다 | `node list`의 `revoked_at`, run이 다시 실행됨 | D8: 철회 4.9초 뒤 종료 코드 4, 남은 프로세스 없음 |
+| 에이전트 갱신 | — | `SIGUSR1`(개인 모드는 `codeye stop`)로 drain → 종료(코드 0) → 바이너리 교체 → 같은 `--state-dir`·`--controller`로 시작. 등록 token은 필요 없다 | `node list`의 같은 `id`와 `protocol_version`, 새 run을 받음 | TC-254: 다시 빌드 7.5초, 시작 → run 끝 5.2초 |
+| stop이 `recovery_required` | `codeye stop`의 `outcome` | `status`·로그 확인 후 `codeye stop` 반복. 프로세스를 강제 종료하지 않는다. 끝내 남은 run은 위 "노드 offline"처럼 정리를 확인한다 | `status`가 `stopped` | TC-125 |
+| NFS 지연 | 소스 확보 timeout, `source_unstable` | 원본 경로·권한을 확인한다 | 다음 run의 확보 | 실제 NFS는 시험하지 않았다 |
+
+**DB 정합성 질의.** DB가 돌아온 뒤 sweep(5초) 한 번이 지나면 다음이 모두 0이어야 한다(D3에서 확인).
+
+```sql
+SELECT count(*) FROM attempts WHERE status='leased' AND expires_at < clock_timestamp();
+SELECT count(*) FROM capacity_reservations c JOIN attempts a ON a.id=c.attempt_id
+ WHERE c.released_at IS NULL AND a.status='released';
+SELECT count(*) FROM runs r WHERE r.status='running'
+ AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.status='leased');
+```
+
+**하지 않는 것.** 두 controller를 같은 DB에 띄우지 않는다(지원하지 않음, A51). 정리를 확인하지 못한 run을 시간이 지났다고 다시 실행하지 않는다. 노드 프로세스를 원격으로 죽이지 않는다(SSH 없음).
+
+## 보존 정리
+
+```text
+codeye cleanup [--config PATH | --artifact-dir DIR] [--agent-state-dir DIR] [--older-than 30d] [--apply] [--format text|json]
+```
+
+기본은 dry run이다. 지울 것을 그대로 보여 주고 아무것도 바꾸지 않는다. `--apply`가 있을 때만 지운다. `--older-than`은 `30d` 같은 일 수나 Go duration(`36h`)이며 1시간보다 짧을 수 없다. 자동·예약 정리는 없다.
+
+| 어디서 | 대상 |
+|---|---|
+| 개인 모드(`--config` 또는 기본 설정) | 개인 lock을 잡고 그 DB(관리형이면 필요할 때 띄웠다가 멈춘다), `<state_dir>/artifacts`, `<state_dir>/agent`와 은퇴한 `agent.retired-*` |
+| controller 호스트 | `--artifact-dir DIR`와 `CODEYE_DATABASE_URL` |
+| 노드 | `--agent-state-dir DIR`. DB가 필요 없다 |
+
+- **산출물.** 끝난 run(`completed`·`partial`·`failed`·`cancelled`)의 기준보다 오래된 원시 역할 `stdout`·`stderr`·`raw_output`·`other`의 내용만 지운다. 행은 남기고 `content_removed_at`을 적은 뒤(한 번만, migration 0013), 커밋된 다음 남은 행이 참조하지 않는 파일만 지운다. 빈 내용은 지우지 않는다. 감사 `storage.retention_applied`(행위자 `operator_cli`)가 개수·바이트·기준 일수를 남긴다.
+- **노드 데이터.** 기준보다 오래된 snapshot 사본(`data/acquire-*`)과 작업 사본(`data/ws-*`), 은퇴한 에이전트 디렉터리. journal에서 끝나지 않은 attempt의 작업 사본은 지우지 않는다. 에이전트가 실행 중이면(state lock) snapshot 사본은 남긴다. 실행 중인 attempt가 그 안에서 일할 수 있기 때문이다. symlink는 따라가지 않는다. 고정 snapshot 재시도가 지운 사본을 찾으면 `snapshot_unavailable`로 끝나고 다음 재시도는 소스를 다시 받는다.
+- **남기는 것.** 보고서(저장된 바이트로 그대로 열린다), 관찰(`observations`), `source_manifest`·`result_manifest`, run·이벤트·사람 판정, 감사 행(append-only라 정리 대상이 아니다).
+- **보이는 것.** 지운 run의 `GET /runs/{id}`에 `raw_evidence_removed_at`이 생기고 실행 화면이 "원시 증거가 삭제됨"을 보인다. 백업은 지운 내용을 담지 않고 "내용 없는 행"으로 센다. 산출물 상한은 지운 내용을 세지 않는다.
+
+## 사용자 서비스
+
+```text
+codeye service install|uninstall|print [--config PATH] [--name codeye]
+```
+
+Linux의 systemd 사용자 인스턴스에 개인 모드 unit을 둔다. `print`는 unit을 출력만 한다. `install`은 `$XDG_CONFIG_HOME/systemd/user/<name>.service`(없으면 `~/.config/systemd/user/`)에 쓰고 `systemctl --user daemon-reload`와 `enable`을 실행한다. 시작은 하지 않는다(`systemctl --user start <name>`). 이미 `codeye up`으로 띄운 설치를 unit 밖에서 한 번 더 띄우지 않기 위해서다. `uninstall`은 설정 없이 `disable --now`와 파일 삭제를 한다. 두 명령 모두 CODEYE가 쓴 unit(첫 줄 표지)만 바꾸거나 지운다.
+
+- unit은 `Type=oneshot`·`RemainAfterExit=yes`이고 `ExecStart=<codeye> start --config <설정>`, `ExecStop=<codeye> stop --config <설정>`이다. 경로는 절대 경로이고 systemd 특수 문자(`%`, `$`)를 escape한다. PATH는 install할 때의 PATH를 적는다(사용자 manager는 로그인 셸의 PATH를 읽지 않는다). 정지 제한시간은 `stop.drain_timeout_seconds + cancel_timeout_seconds + 60`초다.
+- `start`를 쓰는 것은 로그인 링크가 journal에 남지 않게 하기 위해서다. 링크는 `codeye open`으로 새로 받는다.
+- 로그아웃 뒤에도 유지하려면 `loginctl enable-linger <사용자>`가 필요하다. CODEYE는 이것을 바꾸지 않는다.
+- WSL2(사용자 systemd, `XDG_RUNTIME_DIR=/run/user/1000`)에서 install → start(`running`) → stop(`stopped`, PostgreSQL 정지) → uninstall을 임시 이름과 설정으로 확인했다. 재부팅·로그아웃 뒤 유지는 시험하지 않았다.
 
 ## 배포 전 점검
 
@@ -387,13 +439,13 @@ manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exp
 - `codeye doctor --config PATH`로 도구·DB·저장 상한을 확인했다.
 - [예시 설정](../examples/platform.yaml)은 설계 예시이며 이 바이너리가 읽지 않는다. 출발점일 뿐이고 실제 머신 용량을 측정해 조정한다.
 
-## 서버·노드 배포 (설계 계약, 미구현)
+## 서버·노드 배포
 
-이 절은 설계다. 이 빌드에는 구현도 시험도 없다.
+controller 하나와 노드 에이전트(`codeye serve`·`codeye agent`, 등록·heartbeat·lease·drain·재등록 없는 갱신)는 구현됐고 한 호스트의 노드 신원 여럿으로 시험했다([runbook](#장애-대응-runbook), [실행](EXECUTION.md#여러-노드에서-확인한-것)). 여러 머신에 설치·등록하는 묶음과 아래의 나머지는 설계이고 실제 여러 머신에서 실행하지 않았다.
 
 - controller는 단일 활성 인스턴스로 시작한다. DB와 artifact store를 지정하고 노드 에이전트를 운영자가 직접 설치한다. 서버가 노드에 SSH하지 않는다. 에이전트는 서버에서 작업을 받아 간다.
-- Windows Service나 승인된 작업 실행 방식, Linux systemd/사용자 service 등 로그아웃 뒤에도 지속 실행되는 방법을 환경에 맞게 선택한다.
-- enrollment token은 짧은 수명의 1회용이며 node identity와 pool·신뢰 범위를 부여한다. 에이전트 업데이트는 drain → binary 교체 → protocol 확인 → 재등록 없이 복귀 순서를 따른다. 최소/최대 정책은 controller가 유지한다.
+- Windows Service나 승인된 작업 실행 방식, Linux systemd 등 로그아웃 뒤에도 지속 실행되는 방법을 환경에 맞게 선택한다. 개인 모드에는 [사용자 서비스](#사용자-서비스)가 있다.
+- enrollment token은 짧은 수명의 1회용이며 node identity와 pool·신뢰 범위를 부여한다. 에이전트 업데이트는 drain → binary 교체 → protocol 확인 → 재등록 없이 복귀 순서를 따른다(한 호스트에서 시험함, [runbook](#장애-대응-runbook)). 최소/최대 정책은 controller가 유지한다.
 - 배포 manifest에 실제 OS/arch, 빌드 ABI, toolchain, DB, 모델 adapter 버전을 고정한다.
 - 서버는 RHEL 8.10과 내부 미러·CA·NFS 조건을 우선 검증할 대상이다. 아직 실행하지 않았다.
 - 저장 위치: DB data, workspace, tool/runtime cache, 임시 결과는 로컬 디스크를 우선한다. NFS는 원본 source와 선택적 보관 산출물에 쓴다. DB data를 NFS로 옮기는 것은 별도 DB 운영 검증 없이 기본 지원하지 않는다. node cache를 공용 NFS에 두어 잠금·성능 문제가 생기는 것을 기본 설계로 삼지 않는다.

@@ -371,14 +371,17 @@ func (s *Store) Retry(ctx context.Context, actor, id string, expected int64) (Ru
 
 // pinnedRetryable reports whether the failed or cancelled run r (locked) can
 // run again on its own snapshot: every attempt is released with confirmed
-// cleanup and, when located is true, a node still holds the snapshot.
+// cleanup and, when located is true, a live node (not revoked, heartbeat
+// fresh) still holds the snapshot. A snapshot held only by a node that went
+// silent would keep the run waiting for that node, so it is not "held".
 func pinnedRetryable(ctx context.Context, tx pgx.Tx, r Run, located bool) (bool, error) {
 	if r.SnapshotID == nil || (r.Status != domain.RunFailed && r.Status != domain.RunCancelled) {
 		return false, nil
 	}
 	var unsafe, held bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attempts WHERE run_id=$1 AND (status!='released' OR cleanup_state!='confirmed')),
-		EXISTS(SELECT 1 FROM snapshot_locations l JOIN nodes n ON n.id=l.node_id WHERE l.snapshot_id=$2 AND n.revoked_at IS NULL)`, r.ID, *r.SnapshotID).Scan(&unsafe, &held); err != nil {
+		EXISTS(SELECT 1 FROM snapshot_locations l JOIN nodes n ON n.id=l.node_id WHERE l.snapshot_id=$2 AND n.revoked_at IS NULL
+			AND n.last_heartbeat_at>clock_timestamp()-$3*interval '1 millisecond')`, r.ID, *r.SnapshotID, NodeStaleAfter.Milliseconds()).Scan(&unsafe, &held); err != nil {
 		return false, err
 	}
 	return !unsafe && (held || !located), nil

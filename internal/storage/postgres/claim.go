@@ -545,11 +545,12 @@ func actorMayRun(ctx context.Context, tx pgx.Tx, actor, project, owner string) (
 
 // ArtifactUsageSQL is the controller artifact store accounting: the
 // total size of the distinct contents the artifacts rows reference
-// (finalized or announced). The store is content-addressed, so one blob is
+// (finalized or announced) and that retention (codeye cleanup) has not
+// removed. The store is content-addressed, so one blob is
 // counted once. Files the database does not reference (a crash between the
 // blob write and its row, interrupted uploads under tmp/) are not counted
 // here; doctor measures the directory itself.
-const ArtifactUsageSQL = `SELECT coalesce(sum(size_bytes),0)::bigint FROM (SELECT DISTINCT ON (sha256) sha256,size_bytes FROM artifacts ORDER BY sha256) a`
+const ArtifactUsageSQL = `SELECT coalesce(sum(size_bytes),0)::bigint FROM (SELECT DISTINCT ON (sha256) sha256,size_bytes FROM artifacts WHERE content_removed_at IS NULL ORDER BY sha256) a`
 
 // artifactQuotaReached reports whether the artifact accounting reached quota
 // (nil = no limit).

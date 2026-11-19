@@ -221,9 +221,10 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 
 등록 → journal 열기 → [재시작 복구](#재시작-복구) → journal 압축 → 워커 시작 → 노드 heartbeat(기본 5초).
 
-- heartbeat는 관측한 워커 상태, 실제 여유 메모리(`MemAvailable`), state 파일시스템의 여유 disk, CPU 수, 능력, 명령 cursor, 정리 보고를 보낸다. 자동 모드는 `worker_scaling: controller`와 `max_workers`를, 저장 상한이 있으면 상한에 걸린 영역을 함께 보낸다.
+- heartbeat는 관측한 워커 상태, 실제 여유 메모리(`MemAvailable`), state 파일시스템의 여유 disk, CPU 수, 능력, 명령 cursor, 정리 보고를 보낸다. 자동 모드는 `worker_scaling: controller`와 `max_workers`를, 저장 상한이 있으면 상한에 걸린 영역을 함께 보낸다. drain 중인 자동 모드 에이전트는 `worker_scaling`을 보내지 않는다(static). 그래서 controller의 증감 계획에서 빠지고 시작 명령을 받지 않는다.
 - 능력:
-  - `analysis:<profile>`은 준비된 워커가 `ready`에서 알린 handler에서만 만든다. handler가 없으면 claim을 보내지 않고 `no_analysis_handler`를 기록한다.
+  - `analysis:<profile>`은 준비된 워커가 `ready`에서 알린 handler에서만 만든다. handler가 없으면 claim을 보내지 않고 `no_analysis_handler`를 기록한다. drain 중에는 알리지 않는다.
+  - 워커는 기준 분석기(언어별 필수 분석기)가 하나라도 쓸 수 있을 때만 `analysis:deep-review` handler를 알린다(`--advertise-without-baseline`이면 항상). 도구는 배정 기준이 아니다. 도구가 하나도 없는 노드는 일을 받지 않지만, 다른 언어의 도구만 있는 노드는 run을 받아 없는 도구의 작업을 `unsupported`(`tool_not_configured`)로 끝낸다. 같은 root를 맡는 노드에는 같은 도구를 둔다(A51).
   - `source:local:<id>`는 `--source-root` 매핑이 있는 root만 알린다.
   - `source:git:<host>`는 `--git`과 `--git-host`가 모두 있을 때만 알린다.
   - 능력 목록은 최대 128개다.
@@ -325,10 +326,10 @@ process group 종료(`procid.TerminateVerifiedGroup`):
 
 ### 에이전트의 알려진 한계
 
-- `uncertain`으로 보고된 attempt는 agent가 다시 검사하지 않는다. 서버 예약은 계속 잡혀 있다.
+- `uncertain`으로 보고된 attempt는 agent가 다시 검사하지 않는다. 서버 예약은 사람이 정리를 확인할 때까지 잡혀 있다([lease와 만료](#lease와-만료)).
 - claim이 commit된 뒤 `attempt_assigned` 기록 전에 agent가 죽으면 agent는 그 lease를 모른다. lease는 만료 뒤 `recovery_required`로 남고 정리 보고는 오지 않는다(이때 실행된 프로세스는 없다).
 - 소스 확보의 git 하위 프로세스는 개별 journal하지 않는다. 확보 도중 agent가 죽으면 intent가 열린 채 남아 uncertain이 된다.
-- snapshot cache GC와 노드 간 snapshot 전송은 없다.
+- 자동 snapshot cache GC와 노드 간 snapshot 전송은 없다. 오래된 snapshot·작업 사본은 운영자가 `codeye cleanup --agent-state-dir`로 지운다([운영](OPERATIONS.md#보존-정리)).
 
 ## 노드 프로토콜
 
@@ -373,7 +374,8 @@ codeye serve [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] ...
 - 토큰은 일회용이다. TTL은 1분~24시간, 기본 10분이다. 사용·만료·철회된 토큰은 등록에 쓸 수 없다. 동시 등록에서도 한 건만 성공한다. 지원하지 않는 protocol version의 등록은 토큰을 소비하지 않는다. 사용된 토큰의 철회는 409이며, 그때는 노드를 철회한다.
 - 등록 토큰의 `--source-root`가 그 노드가 claim할 수 있는 local root를 정한다(노드가 알린 능력과 둘 다 필요하다).
 - pool은 이름으로 처음 쓸 때 만든다.
-- `node revoke`는 credential을 즉시 무효화한다. 그 노드의 인증·heartbeat·claim이 바로 거부된다. lease는 갱신되지 않아 만료 뒤 `recovery_required`가 된다.
+- `node revoke`는 credential을 즉시 무효화한다. 그 노드의 인증·heartbeat·claim이 바로 거부되고 실행 중인 에이전트는 작업을 취소한 뒤 종료 코드 4로 끝난다. 정리 보고를 보낼 수 없으므로 lease는 만료 뒤 `recovery_required`가 되고, 사람이 정리를 확인한다(`codeye run recover`, [lease와 만료](#lease와-만료)).
+- `codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]`은 `CODEYE_DATABASE_URL`의 DB(`--config`를 주거나 URL이 없으면 개인 모드 설정의 DB)에서 `recovery_required` run의 정리를 운영자가 확인한 것으로 기록하고(감사 `run.recovery_confirmed`, 행위자 `operator_cli`) 요청자 대신 다시 대기열에 넣는다. `--confirm-cleanup`이 없으면 종료 코드 2다. 출력 JSON은 `confirmed_run`, `attempt_id`, `epoch`, `status`(`failed`), `retry`(`same_run`·`new_run`·`not_queued`), `run`, `not_queued_reason`이다.
 - `scheduler set`: `--global-max-running`은 0..10000(초기값 2), `--project-max-running`은 1..10000(기본 1), `--artifact-quota-bytes`는 산출물 저장 상한(0이면 제거, [운영](OPERATIONS.md))이다.
 - `serve`의 기본 artifact 디렉터리는 실행 위치 기준 `.codeye/artifacts`다.
 
@@ -436,8 +438,8 @@ claim 응답의 job:
 - controller(`serve`)는 5초마다 만료된 lease(한 번에 최대 100개)를 `recovery_required`(cleanup `uncertain`)로 옮긴다. 이때 예약은 유지한다. 만료 뒤 갱신·이벤트·완료는 409다.
 - `recovery_required` run은 자동으로 다시 `queued`가 되거나 다른 노드에 배정되지 않는다.
 - 소유 노드가 `confirmed` 정리 결과(heartbeat `cleanup_reports` 또는 `/cleanup`)를 보고하면 attempt는 `released`, run은 `failed`가 되고 예약을 해제한다. `uncertain` 보고는 정보로만 받고 상태를 바꾸지 않는다(`uncertain_not_applied`).
-- 네트워크 분할에서 이전 프로세스가 실제로 살아 있을 수 있다. fencing은 데이터 게시를 막을 뿐 OS 실행을 멈추지 않는다. 읽기 전용 검사도 중복 자원 비용이 생길 수 있다. 부작용이 있을 수 있는 build·test는 종료 증거가 없으면 `recovery_required`에서 운영자 판단이나 노드 복귀를 기다린다.
-- 철회된 노드의 `recovery_required` attempt는 정리 결과를 보낼 수 없어 예약이 전역 상한을 계속 차지한다. 실제 프로세스 부재를 운영자가 확인한 뒤 예약을 강제 해제하는 명령은 없다. 백업 복원도 실행 중이던 run을 이 상태로 남긴다([운영](OPERATIONS.md)).
+- 네트워크 분할에서 이전 프로세스가 실제로 살아 있을 수 있다. fencing은 데이터 게시를 막을 뿐 OS 실행을 멈추지 않는다. 읽기 전용 검사도 중복 자원 비용이 생길 수 있다. 부작용이 있을 수 있는 build·test는 종료 증거가 없으면 `recovery_required`에서 운영자 판단이나 노드 복귀를 기다린다. 분할된 에이전트는 자기 watchdog(lease − 여유 = 20초)으로 작업을 먼저 멈추고, 연결이 돌아오면 정리 보고로 run을 `failed`로 끝낸다.
+- 노드가 돌아오지 않으면(사망·철회·복원 fence) 사람이 정리를 확인한다. `POST /runs/{id}/recover`(`{"cleanup_confirmed": true}`, 프로젝트 실행 권한) 또는 `codeye run recover --id RUN_ID --confirm-cleanup`이 attempt를 `released`·`confirmed`로 두고 예약을 풀고 run을 `failed`로 바꾼 뒤(이벤트 `attempt.cleanup_confirmed`, 사유 `operator_confirmed`, 감사 `run.recovery_confirmed`) [다시 시도](API.md#다시-시도) 규칙으로 다시 넣는다. 확인 없이 시간이 지났다는 이유로 정리를 깨끗하다고 보지 않는다(A48). 확인하기 전에 노드에서 그 run의 프로세스(워커 `codeye worker`와 그 자식)가 없는지 본다.
 
 ### 장애 처리
 
@@ -445,7 +447,9 @@ claim 응답의 job:
 |---|---|
 | 일시적 HTTP 오류 | 같은 멱등 key·client ID로 재전송 |
 | 워커 사망, agent 생존 | journal된 자식의 정리를 확인하고 attempt를 `failed`(reason `worker_lost`)와 실제 정리 상태로 보고. snapshot 유지. 새 attempt는 자동으로 만들지 않음 |
-| agent·노드 상실 | lease 만료, fenced, `recovery_required` |
+| agent·노드 상실 | lease 만료, fenced, `recovery_required`. 다른 노드에 자동 재배정하지 않음. 사람이 정리를 확인하면 다시 실행 |
+| 노드와 controller 사이 연결 끊김 | 에이전트가 lease 여유에서 작업을 멈추고 정리. controller는 lease 만료로 `recovery_required`. 연결이 돌아오면 정리 보고로 `failed`, 늦은 complete는 409 |
+| DB 중단 | API는 503(`/ready`는 `database_unavailable`). lease 여유 안이면 작업 계속, 넘으면 에이전트가 멈추고 DB가 돌아온 뒤 정리 보고 |
 | agent 재시작 | journal 복구 후 정리 결과 보고. attempt를 다시 실행하지 않음 |
 | controller 재시작 | DB의 run·lease·예약·명령·조정 상태로 이어서 판단. 시작 명령 중복 방지 |
 | 업로드 중단 | 같은 client artifact ID로 재전송, finalize 전 비공개 |
@@ -562,7 +566,25 @@ codeye serve --reconcile-interval 5s
 
 ### 검증 범위
 
-실프로세스 시험은 Linux 한 호스트의 복수 에이전트에서 수행한다. 별도 물리 호스트 사이의 네트워크 분할, 노드 디스크 손실, Windows 전체 자동 증감 운영은 검증하지 않았다. 단일 머신 성공을 분산 복구 완료로 보지 않는다. 다중 노드 검증은 예정 작업이다([로드맵](ROADMAP.md)).
+실프로세스 시험은 Linux 한 호스트의 복수 에이전트에서 수행한다. 별도 물리 호스트 사이의 네트워크 분할, 노드 디스크 손실, Windows 전체 자동 증감 운영은 검증하지 않았다. 단일 머신 성공을 분산 복구 완료로 보지 않는다. 한 호스트에서 확인한 것은 다음 절에 있다.
+
+## 여러 노드에서 확인한 것
+
+`scripts/test_postgres.py --multinode`(`scripts/multinode_smoke.py`)가 한 WSL2 호스트(Linux 6.18, PostgreSQL 17.10)에서 실제 `codeye serve`와 노드 신원 8개(각자 상태 디렉터리·도구·source root)를 띄워 확인한다. 장애는 SIGSTOP/SIGKILL과 로컬 TCP 프록시 차단으로 만든다. controller는 `[::1]:P`에서만 듣고 분할 대상 노드만 `127.0.0.1:P`의 프록시로 붙는다(둘 다 loopback Host 허용 목록에 있다). IPv6 loopback이 없으면 controller는 `127.0.0.1:P`, 프록시는 `127.0.0.2:P`에서 듣고 같은 길이의 Host 값으로 바꿔 넘긴다(`CODEYE_TEST_MULTINODE_IPV4=1`로 강제, 이 호스트에서 두 방식 모두 통과). root·Docker·네트워크 namespace는 쓰지 않는다. 오래 걸리는 작업은 시험용 handler(`-tags codeye_fixture`의 `sleep`·`pause`)이고, 배정 시험의 분석은 실제 go vet이다.
+
+| 시나리오 | 확인한 것 | 이 호스트의 측정값 |
+|---|---|---|
+| 능력 배정 | root·Git host별로 맞는 노드만 run을 받는다. go가 없고 다른 기준 분석기만 있는 노드는 Go 작업을 `unsupported`(`tool_not_configured`)로 끝낸다(성공 아님). 도구가 없는 노드는 root를 맡아도 능력을 알리지 않는다 | — |
+| 대기와 시작 | 아무도 못 하는 run은 `no_capable_node`로 대기하고, 능력 있는 노드(local root, `--git-host`)가 등록되면 시작한다 | 등록 → claim 0.2초, Git 노드 등록 → 끝 5.8초 |
+| 노드 사망 | 에이전트·워커·작업 프로세스 트리를 SIGKILL. lease 만료로 `recovery_required`(cleanup `uncertain`), 다른 노드로 자동 재배정 없음. 죽은 노드 자격·옛 epoch의 complete는 409 `STALE_ATTEMPT`와 `attempt.stale_rejected` 감사. 사람이 정리를 확인하면 새 run이 다른 노드에서 끝나고, 그 뒤의 옛 complete도 409이며 새 결과는 바뀌지 않는다. 같은 상태로 다시 띄운 에이전트는 옛 attempt를 정리 보고하고 새 일을 받는다 | 사망 → 노드 stale 19초, 사망 → `recovery_required` 34초(lease 30초 + sweep 5초 주기) |
+| 연결 끊김 | 프록시 차단 동안 같은 run을 다른 노드가 실행하지 않는다. 에이전트가 lease 여유에서 작업을 멈추고(`lease_lost`) 연결이 돌아오면 정리 보고로 run이 `failed`, 늦은 complete는 409. 같은 노드가 다시 일을 받는다. lease 안의 8초 SIGSTOP은 아무 상태도 바꾸지 않는다 | 차단 → `lease_lost` 19초, 복구 → `failed` 1초 미만 |
+| drain | SIGUSR1 뒤 하던 일은 첫 attempt로 끝나고, 새 run은 다른 노드가 없어 `no_capable_node`로 대기하며, 그 노드에 `start_worker`가 가지 않고, 에이전트는 종료 코드 0으로 끝난다 | drain → 종료 15초(작업 길이) |
+| 에이전트 갱신 | drain → 종료 → `-trimpath`로 다시 빌드한 바이너리(hash 다름)를 같은 상태 디렉터리로 시작. node ID·비밀값 같음, 등록 감사 없음, protocol `0.1`, 대기 run을 받아 끝낸다 | 다시 빌드 7.5초, 시작 → run 끝 5.2초 |
+
+- 전체 smoke는 이 호스트에서 약 2분이다(빌드 포함, `--smokes-only`).
+- 시각은 측정값이며 보장값이 아니다. 노드 stale(20초)과 lease(30초)·sweep(5초)·에이전트 여유(10초)가 결정한다.
+- **활성 controller는 하나다.** 두 controller를 같은 DB에 띄우는 구성은 지원하지 않고 시험하지 않는다(A51).
+- 실제 환경에서만 검증할 수 있는 것은 [로드맵](ROADMAP.md#실제-환경에서만-검증할-수-있는-것)에 있다.
 
 ## 예약
 

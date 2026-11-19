@@ -47,6 +47,7 @@ const (
 	AuditMemberRemoved         = "project.member_removed"
 	AuditRunRequested          = "run.requested"
 	AuditRunCancelRequested    = "run.cancel_requested"
+	AuditRecoveryConfirmed     = "run.recovery_confirmed"
 	AuditReportExported        = "report.exported"
 	AuditFindingReviewRecorded = "finding_review.recorded"
 	AuditScheduleCreated       = "schedule.created"
@@ -59,6 +60,7 @@ const (
 	AuditPoolPolicySet         = "pool.policy_set"
 	AuditSchedulerLimitsSet    = "scheduler.limits_set"
 	AuditArtifactQuotaSet      = "scheduler.artifact_quota_set"
+	AuditRetentionApplied      = "storage.retention_applied"
 	AuditStaleRejected         = "attempt.stale_rejected"
 )
 
@@ -78,6 +80,7 @@ var auditDetailKeys = map[string]bool{
 	"artifact_quota_bytes": true, "min_workers": true, "max_workers": true, "policy_revision": true,
 	"run_id": true, "protocol_version": true, "os": true, "arch": true,
 	"link_issued_by": true, "link_purpose": true, "pull_request": true,
+	"artifacts_removed": true, "bytes_removed": true, "older_than_days": true,
 }
 
 const maxAuditString = 200
@@ -299,6 +302,7 @@ var auditActions = map[string]bool{
 	AuditFindingReviewRecorded: true, AuditScheduleCreated: true, AuditScheduleUpdated: true, AuditScheduleDeleted: true,
 	AuditEnrollTokenCreated: true, AuditEnrollTokenRevoked: true, AuditNodeEnrolled: true, AuditNodeRevoked: true,
 	AuditPoolPolicySet: true, AuditSchedulerLimitsSet: true, AuditArtifactQuotaSet: true, AuditStaleRejected: true,
+	AuditRecoveryConfirmed: true, AuditRetentionApplied: true,
 }
 
 // AuditActions lists the closed action vocabulary.

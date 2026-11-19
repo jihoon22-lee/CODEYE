@@ -61,16 +61,23 @@ func (ag *Agent) loadOrEnroll(ctx context.Context) error {
 
 // capabilities: analysis:* only from handlers that ready workers advertised;
 // source capabilities only for locally mapped roots / approved Git hosts.
+// A draining agent takes no new work, so it advertises no analysis:*: the
+// controller then neither counts it as a place for queued runs nor plans
+// worker starts on it.
 func (ag *Agent) capabilities() []string {
 	set := map[string]bool{}
 	ag.mu.Lock()
+	draining := ag.draining
 	for _, h := range ag.probeHandlers {
+		if draining {
+			break
+		}
 		if nodeproto.ValidCapability(h.Capability) && strings.HasPrefix(h.Capability, "analysis:") {
 			set[h.Capability] = true
 		}
 	}
 	for _, w := range ag.workers {
-		if w.draining {
+		if w.draining || draining {
 			continue
 		}
 		for _, h := range w.handlers {
@@ -135,7 +142,13 @@ func (ag *Agent) heartbeat(ctx context.Context) error {
 	if req.CleanupReports == nil {
 		req.CleanupReports = []nodeproto.CleanupReport{}
 	}
-	if ag.cfg.Autoscale {
+	ag.mu.Lock()
+	draining := ag.draining
+	ag.mu.Unlock()
+	if ag.cfg.Autoscale && !draining {
+		// A draining agent ignores start_worker; reporting static scaling takes
+		// it out of the controller's scaling plan (no starts, and no pending
+		// starts holding the pool's budget for StartTimeout).
 		req.WorkerScaling, req.MaxWorkers = nodeproto.ScalingController, ag.cfg.MaxWorkers
 	}
 	req.StorageQuotaExceeded = ag.storageQuotaExceeded()

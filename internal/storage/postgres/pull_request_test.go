@@ -93,6 +93,102 @@ func TestPullRequestRunPinAndJob(t *testing.T) {
 
 }
 
+// TC-246 with TC-227: a recovery_required pull-request run keeps its pull request through the
+// operator confirmation: on the held snapshot it is the same run, and when
+// the holder went silent the new run carries the same pinned head, request
+// and comment choice (the claim rebuilds the same pull-request job). A plain
+// retry of a failed pull-request run keeps the comment choice too.
+func TestRecoveredPullRequestRunKeepsItsPin(t *testing.T) {
+	s := testStore(t)
+	ctx, user, root, prov := registered(t, s)
+	p, err := s.RegisterProject(ctx, user, ProjectRegistration{Source: domain.Source{Kind: domain.SourceGit, ProviderID: prov.ID, RepositoryURL: "https://github.com/Acme/widget"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := strings.Repeat("2", 40)
+	e := &nodeEnv{t: t, s: s, ctx: ctx, user: user, root: root, project: p}
+	caps := []string{nodeproto.AnalysisCapability("deep-review"), nodeproto.GitSourceCapability("github.com")}
+	pinOf := func(runID string) (domain.PullRequest, string) {
+		t.Helper()
+		var pin, request []byte
+		if err := s.pool.QueryRow(ctx, "SELECT pull_request,request FROM runs WHERE id=$1", runID).Scan(&pin, &request); err != nil || pin == nil {
+			t.Fatalf("run %s pin %s %v", runID, pin, err)
+		}
+		got, err := domain.ParsePullRequest(pin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got, string(request)
+	}
+	// expired claims the pull-request run on n, fixes its git snapshot and
+	// lets the lease expire into recovery_required.
+	expired := func(n testNode, key string) Run {
+		t.Helper()
+		r, err := s.EnqueuePullRequest(ctx, user, p.ID, key, json.RawMessage(prBody), testPullRequestPin(head, true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.beat(n, hb(n.workers, "idle", caps))
+		o := owner(n, e.claimOK(n, n.workers[0], "claim-"+key))
+		manifest := domain.Digest([]byte("manifest-" + key))
+		mid := e.artifact(n, o, "source_manifest", manifest)
+		sha := head
+		e.mustEvent(n, o, nodeproto.EventSnapshotFixed, nodeproto.SnapshotFixedPayload{ManifestDigest: manifest, Kind: "git", Consistency: "git_commit", SourceSHA: &sha, ManifestArtifactID: mid})
+		sqlExec(t, s, "UPDATE attempts SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", o.AttemptID)
+		if moved, err := s.SweepExpiredAttempts(ctx); err != nil || moved != 1 {
+			t.Fatalf("sweep %d %v", moved, err)
+		}
+		return r
+	}
+	var wantRequest string
+
+	// A live holder: the same run is queued again with its pin unchanged.
+	a := e.enroll("git-a")
+	r1 := expired(a, "pr-live")
+	_, wantRequest = pinOf(r1.ID)
+	e.beat(a, hb(a.workers, "idle", caps))
+	rec, err := s.ConfirmRecovery(ctx, UserPrincipal(user), r1.ID)
+	if err != nil || rec.Requeued == nil || rec.How != RetrySameRun || rec.Requeued.ID != r1.ID {
+		t.Fatalf("live holder %+v %v", rec, err)
+	}
+	if got, req := pinOf(r1.ID); got.HeadSHA != head || !got.Comment || req != wantRequest {
+		t.Fatalf("same run pin %+v request %s", got, req)
+	}
+	c := e.claimOK(a, a.workers[0], "claim-again")
+	if j := c.Job.PullRequest; c.Lease.RunID != r1.ID || j == nil || j.Number != 7 || j.HeadSHA != head {
+		t.Fatalf("requeued job %+v", c.Job.PullRequest)
+	}
+	if _, err := s.CompleteAttempt(ctx, a.id, owner(a, c), Completion{Outcome: "failed", Cleanup: "confirmed"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A silent holder: the operator CLI's confirmation queues a new run of the
+	// same pull request on the same head, with the comment still asked for.
+	b := e.enroll("git-b")
+	r2 := expired(b, "pr-silent")
+	sqlExec(t, s, "UPDATE nodes SET last_heartbeat_at=clock_timestamp()-interval '10 minutes' WHERE id=$1", b.id)
+	rec, err = s.ConfirmRecovery(ctx, OperatorPrincipal(), r2.ID)
+	if err != nil || rec.Requeued == nil || rec.How != RetryNewRun || rec.Requeued.ID == r2.ID {
+		t.Fatalf("silent holder %+v %v", rec, err)
+	}
+	if got, req := pinOf(rec.Requeued.ID); got.HeadSHA != head || got.BaseSHA != strings.Repeat("1", 40) || !got.Comment || len(got.Files) != 2 || req != wantRequest {
+		t.Fatalf("new run pin %+v request %s", got, req)
+	}
+	v, err := s.GetRunView(ctx, user, rec.Requeued.ID)
+	if err != nil || v.PullRequest == nil || v.PullRequest.Pin.HeadSHA != head || !v.PullRequest.Pin.Comment {
+		t.Fatalf("new run view %+v %v", v.PullRequest, err)
+	}
+
+	// A plain retry of the failed first run keeps the comment choice as well.
+	retried, how, err := s.RetryRun(ctx, user, r1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := pinOf(retried.ID); got.HeadSHA != head || !got.Comment {
+		t.Fatalf("retry (%s) pin %+v", how, got)
+	}
+}
+
 // The comment outbox: a run that asked for a comment queues one row when
 // its report is published; due rows are leased; a newer posted run of the
 // same pull request supersedes an older one; outcomes are recorded.

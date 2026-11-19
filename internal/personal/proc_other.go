@@ -33,6 +33,9 @@ func (l Layout) Lock() (func(), error) { return nil, ErrUnsupported }
 // AgentLockHeld is unsupported outside Linux.
 func (l Layout) AgentLockHeld() (bool, error) { return false, ErrUnsupported }
 
+// AgentStateLocked is unsupported outside Linux.
+func AgentStateLocked(string) (bool, error) { return false, ErrUnsupported }
+
 // Spawn is unsupported outside Linux.
 func Spawn(role, exe string, args, env []string, dir, logPath string) (*exec.Cmd, Record, error) {
 	return nil, Record{}, ErrUnsupported

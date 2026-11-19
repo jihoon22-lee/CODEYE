@@ -5,7 +5,8 @@
 // processes; it performs no analysis and its results are not findings.
 //
 // Mode is the first line of "codeye-fixture-mode" at the snapshot root:
-// succeed (default) | fail | partial | sleep | unsupported. Linux only
+// succeed (default) | fail | partial | sleep | pause | unsupported; for
+// pause the second line is the number of seconds to work. Linux only
 // (/bin/sh). No network, no user-provided strings reach a shell.
 package fixture
 
@@ -44,10 +45,28 @@ func mode(job analysis.Job) string {
 	}
 	m := strings.TrimSpace(strings.SplitN(string(b), "\n", 2)[0])
 	switch m {
-	case "succeed", "fail", "partial", "sleep", "unsupported":
+	case "succeed", "fail", "partial", "sleep", "pause", "unsupported":
 		return m
 	}
 	return "succeed"
+}
+
+// pauseSeconds is the second line of the mode file for "pause" (1..600,
+// default 15). Only the parsed integer reaches the shell script.
+func pauseSeconds(job analysis.Job) int {
+	b, err := os.ReadFile(filepath.Join(job.Snapshot.SnapshotDir, ModeFile))
+	if err != nil {
+		return 15
+	}
+	lines := strings.SplitN(string(b), "\n", 3)
+	if len(lines) < 2 {
+		return 15
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(lines[1]))
+	if err != nil || n < 1 || n > 600 {
+		return 15
+	}
+	return n
 }
 
 func (handler) Plan(_ context.Context, job analysis.Job) ([]analysis.TaskSpec, error) {
@@ -71,6 +90,9 @@ func (handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskSpec
 	case m == "sleep":
 		// Background grandchild + foreground child: cancel must clean both.
 		script = `sleep 300 & sleep 300; wait`
+	case m == "pause":
+		// Finite work that outlasts a few heartbeats, then succeeds.
+		script = "sleep " + strconv.Itoa(pauseSeconds(job)) + "; find . -type f | wc -l"
 	}
 	spec := executor.Spec{
 		Executable:    "/bin/sh",

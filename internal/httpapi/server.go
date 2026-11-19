@@ -71,6 +71,7 @@ type Store interface {
 	CancelRun(ctx context.Context, actor, id string) (postgres.Run, bool, error)
 	SetProjectAnalysis(ctx context.Context, actor, id string, c domain.AnalysisChoices) (int64, error)
 	RetryRun(ctx context.Context, actor, id string) (postgres.Run, string, error)
+	ConfirmRecovery(ctx context.Context, by postgres.Principal, id string) (postgres.Recovery, error)
 	// GrantedRootPaths (personal mode): the actor's source roots with paths.
 	GrantedRootPaths(ctx context.Context, actor string) ([]postgres.SourceRootRecord, error)
 	// Run event stream and schedules.

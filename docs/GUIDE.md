@@ -46,7 +46,7 @@ model: none (set OPENAI_API_KEY, ANTHROPIC_API_KEY or OPENCODE_API_KEY and run c
 github: signed in as octocat on github.com (token from gh) - private repositories and pull requests you can read
 initialized a PostgreSQL 17.10 cluster in /home/user/.local/state/codeye/postgres/data (binaries: /usr/lib/postgresql/17/bin)
 PostgreSQL 17.10 started on 127.0.0.1:55432 (log /home/user/.local/state/codeye/logs/postgres.log)
-database schema created (migration 12)
+database schema created (migration 13)
 created the personal user 2ce93dc8-…
 registered source root "home" (f655c03e-…)
 registered the Git host github.com (public repositories, and private ones the GitHub token can read)
@@ -302,7 +302,20 @@ storage artifacts  19459 bytes limit=1000000000 exceeded=false (database_account
 ```
 
 - 받은 의존성은 도구 cache 영역(`state_dir/cache/deps`)에 센다. 지워도 되고, 다음 분석이 다시 받는다. 지우기 전에 `codeye stop`을 한다.
-- 공간이 부족하면 운영자가 정리하거나 상한을 늘린다. 상한을 늘리려면 설정을 바꾸고 `codeye stop` → `codeye up`을 한다. CODEYE는 오래된 파일을 자동으로 지우지 않는다.
+- 공간이 부족하면 정리하거나 상한을 늘린다. 상한을 늘리려면 설정을 바꾸고 `codeye stop` → `codeye up`을 한다. CODEYE는 오래된 파일을 자동으로 지우지 않는다.
+- 오래된 도구 원시 출력과 작업 사본은 `codeye cleanup`으로 지운다. 먼저 무엇을 지울지 보고(`codeye cleanup --older-than 30d`, 아무것도 바꾸지 않는다), 맞으면 `--apply`를 붙인다. 보고서는 그대로 열리고 실행 화면에 "원시 증거가 삭제됨"이 보인다. 실행 중이면 snapshot 사본은 남기므로 `codeye stop` 뒤에 하면 더 많이 비운다([보존 정리](OPERATIONS.md#보존-정리)).
+
+### 로그아웃 뒤에도 실행
+
+```sh
+codeye service install               # ~/.config/systemd/user/codeye.service, enable만 한다
+systemctl --user start codeye        # codeye start
+loginctl enable-linger "$USER"       # 로그아웃 뒤에도 유지(선택)
+codeye open                          # 로그인 링크
+codeye service uninstall             # 끄고 지운다
+```
+
+Linux의 systemd 사용자 서비스다. 재부팅 뒤 유지는 시험하지 않았다([사용자 서비스](OPERATIONS.md#사용자-서비스)).
 
 ## 정지
 
@@ -430,6 +443,7 @@ codeye up
 | 의존성 표에 `private_module_not_fetched` | 비공개 모듈은 공개 proxy에서 받지 않는다. 그 저장소에서 한 번 `go mod download`를 해 내 Go 모듈 캐시에 두면 다음 분석이 쓴다 |
 | 분석이 시작되지 않고 저장 공간 상한 문구가 나온다 | [저장 공간](#저장-공간). `codeye status`의 `exceeded=true` 영역을 정리하거나 상한을 늘린다 |
 | stop의 `outcome: recovery_required` | [정지](#정지) |
+| 실행 화면의 "정리를 확인해야 다시 실행할 수 있습니다"(run `recovery_required`) | 이 실행을 맡은 노드가 사라졌거나 하위 프로세스가 끝났는지 확인하지 못했다. `codeye status`와 작업 관리자에서 그 실행의 프로세스(`codeye worker`와 그 자식)가 없는지 보고, 확인 상자를 체크한 뒤 "정리 확인 후 다시 실행"을 누른다. CLI는 `codeye run recover --id RUN_ID --confirm-cleanup`이다(설정 파일의 DB를 쓴다). 확인은 감사 기록에 남는다 |
 | `the target database is not empty; restore only into a new, empty database` | 복원 대상 DB가 비어 있지 않다. 새 DB를 만든다 |
 | `the target state_dir already has personal.json; restore needs a fresh state_dir` | 새 `state_dir`를 쓴다 |
 | `backup verification failed: …` | 세트가 손상됐거나 완성되지 않았다(manifest 없음). 다른 세트를 쓴다 |

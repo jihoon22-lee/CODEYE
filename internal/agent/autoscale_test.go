@@ -195,3 +195,41 @@ func TestStartNeedsDurableCommandCursor(t *testing.T) {
 		t.Fatal("a command below the durable cursor was replayed")
 	}
 }
+
+// A draining autoscale agent leaves the controller's scaling plan: its
+// heartbeat reports static scaling and no analysis capability while the busy
+// worker keeps its attempt; a start command that still arrives is not applied.
+func TestDrainingAgentLeavesTheScalingPlan(t *testing.T) {
+	h := newHarness(t, "sleep")
+	logs := &lockedBuf{}
+	cfg := autoscaleConfig(h, "worker", 2)
+	cfg.Log = logs
+	ag, _, _ := startAgent(t, cfg)
+	w1 := domain.NewID()
+	h.fc.queueWorkerCommand(nodeproto.CommandStartWorker, w1)
+	waitHB(t, h.fc, 30*time.Second, "w1 idle", func(hb nodeproto.NodeHeartbeatRequest) bool { return observed(hb)[w1] == "idle" })
+	h.fc.addJob(h.job())
+	waitTaskRunning(t, h.fc)
+	ag.beginDrain()
+	hb := waitHB(t, h.fc, 30*time.Second, "draining heartbeat", func(hb nodeproto.NodeHeartbeatRequest) bool {
+		return hb.WorkerScaling == "" && observed(hb)[w1] == "busy"
+	})
+	if hb.MaxWorkers != 0 || slices.Contains(hb.Capabilities, "analysis:deep-review") {
+		t.Fatalf("draining heartbeat %+v", hb)
+	}
+	if !slices.Contains(hb.Capabilities, nodeproto.LocalSourceCapability(h.rootID)) {
+		t.Fatalf("source capability dropped: %v", hb.Capabilities)
+	}
+	w2 := domain.NewID()
+	h.fc.queueWorkerCommand(nodeproto.CommandStartWorker, w2)
+	_, n := h.fc.heartbeatState()
+	waitHB(t, h.fc, 30*time.Second, "beats after the start", func(nodeproto.NodeHeartbeatRequest) bool { _, m := h.fc.heartbeatState(); return m >= n+3 })
+	if hb, _ := h.fc.heartbeatState(); observed(hb)[w2] != "" || observed(hb)[w1] != "busy" {
+		t.Fatalf("draining agent started a worker or lost the attempt: %+v", hb.ObservedWorkers)
+	}
+	select {
+	case c := <-h.fc.completeCh:
+		t.Fatalf("drain ended the attempt: %+v", c)
+	default:
+	}
+}
