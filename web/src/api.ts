@@ -1,5 +1,9 @@
 import { parseAnalysisReport, reportURL } from './analysisReport';
 import { comparisonURL, parseComparison, parseFindingReview, type FindingReviewBody } from './comparison';
+import {
+  auditQuery, parseAdminProviders, parseAdminSourceRoots, parseAuditPage, parseMember, parseMembers, parseRole, parseSession,
+  parseUser, parseUserPage, parseUserWithLink, type AuditFilter, type CreateUserBody, type MemberRole, type ProjectRole,
+} from './accounts';
 // Same-origin client for the CODEYE control API (docs/API.md, api/openapi.yaml).
 // Credentials are the HttpOnly session cookie, which the browser attaches itself.
 // The CSRF token lives only in this object's memory.
@@ -15,6 +19,8 @@ export class ApiError extends Error {
     readonly requestId: string | null = null,
     // Server text, shown only for validation-style rejections; never for session calls.
     readonly serverMessage: string | null = null,
+    // Seconds to wait before the next attempt (429: Retry-After or details.retry_after_seconds).
+    readonly retryAfter: number | null = null,
   ) {
     super(`${kind}:${status}:${code}`);
     this.name = 'ApiError';
@@ -33,13 +39,17 @@ export type Project = {
   source_status: string;
   capability_gaps: string[];
   last_run: { id: string; status: string } | null;
+  // The caller's role and what it allows (the server still enforces every action).
+  role: ProjectRole;
+  can_run: boolean;
+  can_manage: boolean;
   // Optional: older servers do not send it (docs/API.md).
   activity?: ProjectActivity;
 };
 export type ProjectPage = { items: Project[]; next_cursor: string | null };
 export type SourceRoot = { id: string; label: string };
 export type Provider = { id: string; kind: string; host: string }; // kind: github | ghes
-export type SessionInfo = { user_id: string; csrf_token: string; expires_at: string };
+export type { SessionInfo } from './accounts';
 export type RunAck = { id: string; status: string; version: number; url: string | null };
 // One displayed stage. `key` and `state` are open strings: an unrecognised value must reach the UI
 // as "unknown (raw)", never be read as success.
@@ -145,6 +155,8 @@ function defaultEventSource(): EventSourceFactory | null {
 export type ApiOptions = {
   fetch?: typeof fetch;
   onUnauthorized?: () => void;
+  // A 403 PASSWORD_CHANGE_REQUIRED from any call: the session may only change its password.
+  onPasswordChangeRequired?: () => void;
   // undefined: the browser's EventSource when it exists; null: never stream (polling only).
   eventSource?: EventSourceFactory | null;
 };
@@ -154,6 +166,7 @@ type Query = { method: string; path: string; body?: unknown; headers?: Record<st
 export function createApi(options: ApiOptions = {}) {
   let csrf: string | null = null;
   let onUnauthorized = options.onUnauthorized;
+  let onPasswordChangeRequired = options.onPasswordChangeRequired;
   const doFetch: typeof fetch = (...args) => (options.fetch ?? globalThis.fetch)(...args);
 
   async function request<T>(q: Query, parse: (value: unknown) => T): Promise<T> {
@@ -183,8 +196,9 @@ export function createApi(options: ApiOptions = {}) {
       throw new ApiError('network', response.status, 'network', true);
     }
     if (!response.ok) {
-      const error = httpError(response.status, text);
+      const error = httpError(response.status, text, response.headers);
       if (response.status === 401 && !q.session) onUnauthorized?.();
+      if (response.status === 403 && error.code === 'PASSWORD_CHANGE_REQUIRED') onPasswordChangeRequired?.();
       throw error;
     }
     let value: unknown = undefined;
@@ -206,14 +220,47 @@ export function createApi(options: ApiOptions = {}) {
   const json = <T>(q: Query, parse: (v: unknown) => T) => request(q, parse);
   const run = (id: string) => `/api/v1/runs/${encodeURIComponent(id)}`;
   const schedules = (projectId: string) => `/api/v1/projects/${encodeURIComponent(projectId)}/schedules`;
+  const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`;
+  const adminUser = (id: string) => `/api/v1/admin/users/${encodeURIComponent(id)}`;
+  const grant = (rootId: string, userId: string) => `/api/v1/admin/source-roots/${encodeURIComponent(rootId)}/grants/${encodeURIComponent(userId)}`;
   const eventSource = options.eventSource === undefined ? defaultEventSource() : options.eventSource;
 
   return {
     setCsrf(token: string | null) { csrf = token; },
     setOnUnauthorized(handler: (() => void) | undefined) { onUnauthorized = handler; },
+    setOnPasswordChangeRequired(handler: (() => void) | undefined) { onPasswordChangeRequired = handler; },
     getSession: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/session', signal, session: true }, parseSession),
     createSession: (launchToken: string) => json({ method: 'POST', path: '/api/v1/session', body: { launch_token: launchToken }, session: true }, parseSession),
     deleteSession: () => json({ method: 'DELETE', path: '/api/v1/session', session: true }, () => undefined),
+    // Every failed sign-in is the same 401; it is not a lost session, so it does not call onUnauthorized.
+    loginWithPassword: (username: string, password: string) =>
+      json({ method: 'POST', path: '/api/v1/session', body: { username, password }, session: true }, parseSession),
+    // current_password is sent only when the user has one (has_password).
+    changePassword: (body: { current_password?: string; new_password: string }) =>
+      json({ method: 'POST', path: '/api/v1/session/password', body }, parseSession),
+    // ---- project members and project audit (owner and manager) ----
+    listMembers: (projectId: string, signal?: AbortSignal) => json({ method: 'GET', path: `${project(projectId)}/members`, signal }, parseMembers),
+    addMember: (projectId: string, username: string, role: MemberRole) =>
+      json({ method: 'POST', path: `${project(projectId)}/members`, body: { username, role } }, parseMember),
+    setMemberRole: (projectId: string, userId: string, role: MemberRole) =>
+      json({ method: 'PUT', path: `${project(projectId)}/members/${encodeURIComponent(userId)}`, body: { role } }, parseMember),
+    removeMember: (projectId: string, userId: string) =>
+      json({ method: 'DELETE', path: `${project(projectId)}/members/${encodeURIComponent(userId)}` }, () => undefined),
+    listProjectAudit: (projectId: string, filter: AuditFilter, cursor: string | null, signal?: AbortSignal) =>
+      json({ method: 'GET', path: `${project(projectId)}/audit${auditQuery(filter, cursor)}`, signal }, parseAuditPage),
+    // ---- administrator (accounts and access grants only; no project access) ----
+    listUsers: (cursor: string | null, signal?: AbortSignal) =>
+      json({ method: 'GET', path: `/api/v1/admin/users?limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, signal }, parseUserPage),
+    createUser: (body: CreateUserBody) => json({ method: 'POST', path: '/api/v1/admin/users', body }, parseUserWithLink),
+    disableUser: (id: string) => json({ method: 'POST', path: `${adminUser(id)}/disable` }, parseUser),
+    setUserAdmin: (id: string, isAdmin: boolean) => json({ method: 'PUT', path: `${adminUser(id)}/admin`, body: { is_admin: isAdmin } }, parseUser),
+    resetPassword: (id: string) => json({ method: 'POST', path: `${adminUser(id)}/password-reset` }, parseUserWithLink),
+    listAdminSourceRoots: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/admin/source-roots', signal }, parseAdminSourceRoots),
+    grantSourceRoot: (rootId: string, userId: string) => json({ method: 'PUT', path: grant(rootId, userId) }, () => undefined),
+    revokeSourceRoot: (rootId: string, userId: string) => json({ method: 'DELETE', path: grant(rootId, userId) }, () => undefined),
+    listAdminProviders: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/admin/providers', signal }, parseAdminProviders),
+    listAudit: (filter: AuditFilter, cursor: string | null, signal?: AbortSignal) =>
+      json({ method: 'GET', path: `/api/v1/audit${auditQuery(filter, cursor)}`, signal }, parseAuditPage),
     listSourceRoots: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/source-roots', signal }, items(parseSourceRoot)),
     listProviders: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/providers', signal }, items(parseProvider)),
     listProjects: (cursor?: string | null, signal?: AbortSignal) =>
@@ -249,11 +296,18 @@ export type Api = ReturnType<typeof createApi>;
 
 export const runEventsURL = (id: string, cursor: number) => `/api/v1/runs/${encodeURIComponent(id)}/events?cursor=${cursor}`;
 
-function httpError(status: number, text: string): ApiError {
+// A wait in whole seconds, or null when the value is absent or not a sane non-negative number.
+function seconds(v: unknown): number | null {
+  const n = typeof v === 'string' && /^\d{1,6}$/.test(v.trim()) ? Number(v.trim()) : typeof v === 'number' ? v : NaN;
+  return Number.isInteger(n) && n >= 0 && n <= 86_400 ? n : null;
+}
+
+function httpError(status: number, text: string, headers?: Headers): ApiError {
   let code = `http_${status}`;
   let retryable = status >= 500 || status === 429 || status === 408;
   let requestId: string | null = null;
   let message: string | null = null;
+  let retryAfter = status === 429 ? seconds(headers?.get('Retry-After') ?? undefined) : null;
   try {
     const body: unknown = JSON.parse(text);
     const error = isRecord(body) && isRecord(body.error) ? body.error : null;
@@ -262,9 +316,14 @@ function httpError(status: number, text: string): ApiError {
       if (typeof error.retryable === 'boolean') retryable = error.retryable;
       if (typeof error.request_id === 'string') requestId = error.request_id.slice(0, 80);
       if (typeof error.message === 'string') message = error.message.slice(0, 300);
+      if (status === 429 && isRecord(error.details)) {
+        // Both carry the same seconds; take the longer one if they ever disagree.
+        const fromBody = seconds(error.details.retry_after_seconds);
+        if (fromBody !== null) retryAfter = Math.max(retryAfter ?? 0, fromBody);
+      }
     }
   } catch { /* non-JSON error body: keep the status-derived defaults */ }
-  return new ApiError('http', status, code, retryable, requestId, message);
+  return new ApiError('http', status, code, retryable, requestId, message, retryAfter);
 }
 
 // ---- response validation: anything unexpected is an invalid_response, never a guess ----
@@ -303,12 +362,6 @@ function items<T>(item: (v: unknown) => T) {
   return (v: unknown): T[] => list(item)(rec(v).items);
 }
 
-function parseSession(v: unknown): SessionInfo {
-  const o = rec(v);
-  const expires = str(o.expires_at);
-  if (Number.isNaN(Date.parse(expires))) throw new TypeError('date');
-  return { user_id: str(o.user_id), csrf_token: str(o.csrf_token), expires_at: expires };
-}
 function parseSourceRoot(v: unknown): SourceRoot {
   const o = rec(v);
   return { id: str(o.id), label: str(o.label) };
@@ -333,6 +386,9 @@ function parseProject(v: unknown): Project {
     source_status: str(o.source_status),
     capability_gaps: list(str)(o.capability_gaps ?? []),
     last_run: o.last_run === null || o.last_run === undefined ? null : parseLastRun(o.last_run),
+    role: parseRole(o.role),
+    can_run: bool(o.can_run),
+    can_manage: bool(o.can_manage),
     ...(o.activity == null ? {} : { activity: parseActivity(o.activity) }),
   };
 }

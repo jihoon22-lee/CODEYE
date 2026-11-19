@@ -1,12 +1,30 @@
+import type { SessionInfo } from './accounts';
 import type { Api } from './api';
 import { ApiError } from './api';
 
 export type AnonymousReason = 'none' | 'launch_rejected' | 'expired' | 'logged_out';
+// Who is signed in, from the server's SessionView. The CSRF token is not part of it.
+export type SessionUser = {
+  userId: string;
+  username: string | null;
+  displayName: string | null;
+  isAdmin: boolean;
+  mustChangePassword: boolean;
+  hasPassword: boolean;
+};
 export type SessionState =
   | { status: 'checking' }
   | { status: 'unavailable' }
   | { status: 'anonymous'; reason: AnonymousReason }
-  | { status: 'authenticated'; userId: string; expiresAt: string; loggingOut: boolean; logoutFailed: boolean };
+  | ({ status: 'authenticated'; expiresAt: string; loggingOut: boolean; logoutFailed: boolean } & SessionUser);
+
+// The outcome of a sign-in or password change, for the form that asked. The password is never part of it.
+export type CredentialResult =
+  | { ok: true }
+  | { ok: false; kind: 'rejected' } // every refused sign-in looks the same
+  | { ok: false; kind: 'throttled'; retryAfter: number | null }
+  | { ok: false; kind: 'unavailable' }
+  | { ok: false; kind: 'error'; error: unknown };
 
 type Env = {
   location: Pick<Location, 'hash' | 'pathname' | 'search'>;
@@ -43,9 +61,20 @@ export function createSessionController(api: Api, env?: Env) {
     state = next;
     listeners.forEach(l => l());
   };
-  const authenticated = (info: { user_id: string; csrf_token: string; expires_at: string }) => {
+  const authenticated = (info: SessionInfo) => {
     api.setCsrf(info.csrf_token);
-    set({ status: 'authenticated', userId: info.user_id, expiresAt: info.expires_at, loggingOut: false, logoutFailed: false });
+    set({
+      status: 'authenticated',
+      userId: info.user_id,
+      username: info.username,
+      displayName: info.display_name,
+      isAdmin: info.is_admin,
+      mustChangePassword: info.must_change_password,
+      hasPassword: info.has_password,
+      expiresAt: info.expires_at,
+      loggingOut: false,
+      logoutFailed: false,
+    });
     schedule(info.expires_at);
   };
   const anonymous = (reason: AnonymousReason) => {
@@ -98,6 +127,10 @@ export function createSessionController(api: Api, env?: Env) {
   api.setOnUnauthorized(() => {
     if (state.status === 'authenticated') anonymous('expired');
   });
+  // Any call refused with PASSWORD_CHANGE_REQUIRED: only the password screen may be shown.
+  api.setOnPasswordChangeRequired(() => {
+    if (state.status === 'authenticated' && !state.mustChangePassword) set({ ...state, mustChangePassword: true });
+  });
 
   return {
     getState: () => state,
@@ -115,6 +148,32 @@ export function createSessionController(api: Api, env?: Env) {
       set({ status: 'checking' });
       started = begin(null);
       return started;
+    },
+    // Username and password sign-in. The caller clears its password field whatever the outcome.
+    async login(username: string, password: string): Promise<CredentialResult> {
+      try {
+        authenticated(await api.loginWithPassword(username, password));
+        return { ok: true };
+      } catch (error) {
+        if (error instanceof ApiError && error.kind === 'http' && error.status === 429) return { ok: false, kind: 'throttled', retryAfter: error.retryAfter };
+        if (unreachable(error) && !(error instanceof ApiError && error.status === 404)) return { ok: false, kind: 'unavailable' };
+        return { ok: false, kind: 'rejected' };
+      }
+    },
+    // The server ends the user's other sessions and unused login links; this session stays.
+    async changePassword(current: string | null, next: string): Promise<CredentialResult> {
+      try {
+        authenticated(await api.changePassword(current === null ? { new_password: next } : { current_password: current, new_password: next }));
+        return { ok: true };
+      } catch (error) {
+        if (error instanceof ApiError && error.kind === 'http' && error.status === 429) return { ok: false, kind: 'throttled', retryAfter: error.retryAfter };
+        return { ok: false, kind: 'error', error };
+      }
+    },
+    // Re-read the session after a refusal that may mean the role changed (for example a lost admin role).
+    refresh(): Promise<void> {
+      if (state.status !== 'authenticated') return Promise.resolve();
+      return recover('expired');
     },
     async logout() {
       if (state.status !== 'authenticated') return;
