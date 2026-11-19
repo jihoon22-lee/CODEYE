@@ -191,7 +191,17 @@ func Roots(scope domain.Scope) []string {
 // planned when no supported language source or no selected file is in
 // scope.
 func Plan(job analysis.Job, d pack.Descriptor, title string, files []source.Entry) []pack.Task {
-	if len(files) == 0 || !LanguageInScope(job) {
+	if !LanguageInScope(job) {
+		return nil
+	}
+	return PlanTask(job, d, title, files)
+}
+
+// PlanTask is Plan without the language gate, for an analyzer with its own
+// planning rule (the secrets analyzer, gitleaks.Plan). No task is planned
+// when no file is selected.
+func PlanTask(job analysis.Job, d pack.Descriptor, title string, files []source.Entry) []pack.Task {
+	if len(files) == 0 {
 		return nil
 	}
 	n := len(files)

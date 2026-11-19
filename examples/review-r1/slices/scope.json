@@ -1,0 +1,539 @@
+{
+  "schema_version": "0.1",
+  "kind": "review_scope",
+  "pack": {
+    "id": "review-r1",
+    "version": "2.0.0"
+  },
+  "snapshot_manifest_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+  "run_id": "0195f3a0-0000-7000-8000-000000000041",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000042",
+  "screen": "applied",
+  "budget": {
+    "max_calls": 99,
+    "max_request_bytes": 40000,
+    "whole_run_max_calls": 15,
+    "slice_reserve_calls": 6,
+    "calls_before_slices": 4,
+    "admission": "sequential_reserve"
+  },
+  "limits": {
+    "max_files": 8,
+    "max_bytes": 12000,
+    "max_file_bytes": 2400,
+    "max_file_lines": 50,
+    "max_slices": 32
+  },
+  "upstream": [
+    {
+      "source": "review.investigate",
+      "state": "accepted",
+      "sha256": "108fd53bf8cabe5f577dbd786840f1a50495de7027c9b1892e5e614f5959067f"
+    }
+  ],
+  "modules": [
+    {
+      "id": "go:api",
+      "discovered": true,
+      "files_eligible": 3,
+      "files_not_planned": 0
+    },
+    {
+      "id": "javascript:web",
+      "discovered": true,
+      "files_eligible": 3,
+      "files_not_planned": 0
+    },
+    {
+      "id": "python:worker",
+      "discovered": true,
+      "files_eligible": 3,
+      "files_not_planned": 0
+    },
+    {
+      "id": "go:store",
+      "discovered": true,
+      "files_eligible": 30,
+      "files_not_planned": 0
+    }
+  ],
+  "overview": {
+    "files": [
+      {
+        "path": "api/main.go",
+        "sha256": "053e0c3191066ffd4e58976387606574b28f45f6b4826e506e1dcc677d2eca0d",
+        "module": "go:api",
+        "bound_bytes": 1028,
+        "planned_lines": 12,
+        "planned_bytes": 196,
+        "total_lines": 12,
+        "state": "covered_by_overview"
+      },
+      {
+        "path": "web/src/index.ts",
+        "sha256": "66aa8c9afceb6d9b83de499a080ad5f1560e84715cf9cdf92a86d59764edf2b6",
+        "module": "javascript:web",
+        "bound_bytes": 944,
+        "planned_lines": 6,
+        "planned_bytes": 177,
+        "total_lines": 6,
+        "state": "covered_by_overview"
+      },
+      {
+        "path": "worker/app.py",
+        "sha256": "420d7d7168d64a34d5aea835ce276b0f888b8b43be2e0cd539e3bd3c1a953299",
+        "module": "python:worker",
+        "bound_bytes": 734,
+        "planned_lines": 6,
+        "planned_bytes": 133,
+        "total_lines": 6,
+        "state": "covered_by_overview"
+      },
+      {
+        "path": "store/bucket.go",
+        "sha256": "f379ae2250a7e03a822b9a31c8295450a503447ff3d9bc9b7def5e08789ffa6d",
+        "module": "go:store",
+        "bound_bytes": 2400,
+        "planned_lines": 50,
+        "planned_bytes": 1235,
+        "total_lines": 89,
+        "state": "covered_by_overview"
+      },
+      {
+        "path": "api/handler.go",
+        "sha256": "7d44ca6fd3f465e7652f0e8bc5e27a737cfc86becf15714907baa7df8c6fcdc2",
+        "module": "go:api",
+        "bound_bytes": 2400,
+        "planned_lines": 20,
+        "planned_bytes": 482,
+        "total_lines": 20,
+        "state": "covered_by_overview"
+      },
+      {
+        "path": "web/src/client.ts",
+        "sha256": "e07e172e822da28ad8d10b45db1160af5946ca4277576e6e8753e5a2c9d55a7f",
+        "module": "javascript:web",
+        "bound_bytes": 1202,
+        "planned_lines": 7,
+        "planned_bytes": 217,
+        "total_lines": 7,
+        "state": "covered_by_overview"
+      },
+      {
+        "path": "worker/jobs.py",
+        "sha256": "33971e58e3a1ac75c1c1e5b75aca6a4cd6b7924d269cf380c31c4a595915cd50",
+        "module": "python:worker",
+        "bound_bytes": 2330,
+        "planned_lines": 19,
+        "planned_bytes": 413,
+        "total_lines": 19,
+        "state": "covered_by_overview"
+      }
+    ],
+    "offered": [
+      "api/handler.go",
+      "api/main.go",
+      "store/bucket.go",
+      "store/cache.go",
+      "web/src/client.ts",
+      "web/src/index.ts",
+      "worker/app.py",
+      "worker/jobs.py"
+    ]
+  },
+  "slices": [
+    {
+      "key": "s001",
+      "investigate_task": "review.investigate.s001",
+      "verify_task": "review.verify.s001",
+      "modules": [
+        "go:api",
+        "javascript:web",
+        "python:worker"
+      ],
+      "files": [
+        {
+          "path": "api/handler_test.go",
+          "sha256": "ca753b233587c9ff67892275eeac14362812d2b12209298a73bd67464a0dadf6",
+          "module": "go:api",
+          "bound_bytes": 1424,
+          "planned_lines": 14,
+          "planned_bytes": 267,
+          "total_lines": 14,
+          "state": "planned"
+        },
+        {
+          "path": "web/src/client.test.ts",
+          "sha256": "4b5b43662ca67931839c33e50b342dfef70b3bf86f2b32e2b30beecfb307c077",
+          "module": "javascript:web",
+          "bound_bytes": 908,
+          "planned_lines": 5,
+          "planned_bytes": 165,
+          "total_lines": 5,
+          "state": "planned"
+        },
+        {
+          "path": "worker/tests/test_jobs.py",
+          "sha256": "2a7781c4489492f2d2d0994b5625851427affcdab579ef6f45bc22d4e304f8ee",
+          "module": "python:worker",
+          "bound_bytes": 482,
+          "planned_lines": 5,
+          "planned_bytes": 89,
+          "total_lines": 5,
+          "state": "planned"
+        }
+      ]
+    },
+    {
+      "key": "s002",
+      "investigate_task": "review.investigate.s002",
+      "verify_task": "review.verify.s002",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        {
+          "path": "store/cache.go",
+          "sha256": "d45a70570fb87e528f95cf91dadead3d81d43212e049f989a1c9e25834c7d8b1",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1223,
+          "total_lines": 89,
+          "state": "covered_by_overview"
+        },
+        {
+          "path": "store/codec.go",
+          "sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1223,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/compact.go",
+          "sha256": "9ef0eca20bf12061ae2ba03f38fb9f80ed32c06bcec3fc20ddb98cd99950834b",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1247,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/cursor.go",
+          "sha256": "b307d1f015fdc13f26705796d2322bec07cb8dd601edc08e2c8e6903437ef44b",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1235,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/delete.go",
+          "sha256": "e255a7f3035e20a9b0e4963822b7dc87600b48cc4c0051c18f7be3fec2e31340",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1235,
+          "total_lines": 89,
+          "state": "planned"
+        }
+      ]
+    },
+    {
+      "key": "s003",
+      "investigate_task": "review.investigate.s003",
+      "verify_task": "review.verify.s003",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        {
+          "path": "store/encode.go",
+          "sha256": "eb60ec8caf4fda328a1e59584a3a508ef5b17ff0ae5a5a5cd358ba25f5cabae8",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1235,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/evict.go",
+          "sha256": "bb412f06b5b14efeaa375079e027df3bd5d6c4e766872e647d93c10e96702db7",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1223,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/flush.go",
+          "sha256": "77252f002872da47ace9a0d0439b028bb7c2405761ba9d6f43a262ea311e5dee",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1223,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/get.go",
+          "sha256": "74911882fadb23b36c435f9428e10653d7cef92effbf352b050141d24c9600b6",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1199,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/index.go",
+          "sha256": "c81d385a0a4cad23c363de433ca119f871ca6b26184585b441c5a470221850d5",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1223,
+          "total_lines": 89,
+          "state": "planned"
+        }
+      ]
+    },
+    {
+      "key": "s004",
+      "investigate_task": "review.investigate.s004",
+      "verify_task": "review.verify.s004",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        {
+          "path": "store/iter.go",
+          "sha256": "62f5efe1eb28ce5831f7792aace027e869418bd26620fe795b0b1f83ed7112ab",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1211,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/journal.go",
+          "sha256": "e82c4becf3a698055808aa588af80f546006489117fc6f71e3f9f5071dad823e",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1247,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/lock.go",
+          "sha256": "6c8e61f1bab04a6554cef33f4e3abd6924f26eb1491693c2df0cc2fb5eaed1bd",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1211,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/merge.go",
+          "sha256": "084d12650e95e9abe8b92f24376ae4d586fbc0c82518e2219e226bfc8f73a714",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1223,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/meta.go",
+          "sha256": "21589cf4fc97f5d76e7db439a68a792c413c35d1b298889431344ea689345342",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1211,
+          "total_lines": 89,
+          "state": "planned"
+        }
+      ]
+    },
+    {
+      "key": "s005",
+      "investigate_task": "review.investigate.s005",
+      "verify_task": "review.verify.s005",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        {
+          "path": "store/open.go",
+          "sha256": "a06f61cf8ea502d31f00bbdef807f441e43d42badc125f76e96c6f77f3925f8a",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1211,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/page.go",
+          "sha256": "d1359622403f56b8a6346fe74a2949c22f0c9c2212019a486ad609c665323430",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1211,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/put.go",
+          "sha256": "c0792bbaba93ac809a2aa1e68bad58368342130f6d2f44a0100b1c37c41e6d15",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1199,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/range.go",
+          "sha256": "aaca3330736317f7e95bd46f28cc175efa0f82d3147a7d95017f6909f8153a7a",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1223,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/recover.go",
+          "sha256": "5fdd39435bb0af44c3e37a506ac0fd9b6900a7c095e48d91063d9c37301e4e15",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1247,
+          "total_lines": 89,
+          "state": "planned"
+        }
+      ]
+    },
+    {
+      "key": "s006",
+      "investigate_task": "review.investigate.s006",
+      "verify_task": "review.verify.s006",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        {
+          "path": "store/scan.go",
+          "sha256": "332a2e040632193a6ea4d887017bf34179b7ed509de010552160bb31d1d02b62",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1211,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/segment.go",
+          "sha256": "fffb2c4b335c775ba0921cc41bec252ec79a3f689b9a6ba75d370e7b5b0a2cf9",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1247,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/snapshot.go",
+          "sha256": "b590731f7a30827193b5873f5bc18dd94a37b06598ef760db6b4ccb63709288a",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1259,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/split.go",
+          "sha256": "c2c0d8d7bb6e8daafc3628fb4b265b5df0e089399476977097d57b00188d5496",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1223,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/stats.go",
+          "sha256": "02e5e0f4687b420d163306e28ee3ef6925d70bce57bab3b2443244c162a50515",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1223,
+          "total_lines": 89,
+          "state": "planned"
+        }
+      ]
+    },
+    {
+      "key": "s007",
+      "investigate_task": "review.investigate.s007",
+      "verify_task": "review.verify.s007",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        {
+          "path": "store/sync.go",
+          "sha256": "166293aac82b552a67d74817fd533324313d6a0dcbe36e4ae526c079661af9da",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1211,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/tombstone.go",
+          "sha256": "d873c209863ccd4112618975334a468a94d66320f674f76e884952e6d28a66f7",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1271,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/txn.go",
+          "sha256": "52768d00ebde033a8282e5e36c710fc07a3843084c3b69b2bb053e4371fefb54",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1199,
+          "total_lines": 89,
+          "state": "planned"
+        },
+        {
+          "path": "store/wal.go",
+          "sha256": "8da6724626b889fb22e80a646a2e38224265486ac38b38d92e419eca9ecc9754",
+          "module": "go:store",
+          "bound_bytes": 2400,
+          "planned_lines": 50,
+          "planned_bytes": 1199,
+          "total_lines": 89,
+          "state": "planned"
+        }
+      ]
+    }
+  ],
+  "limitations": []
+}

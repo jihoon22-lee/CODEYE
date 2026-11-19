@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"bytes"
-	"path"
 	"slices"
 	"sort"
 	"strings"
@@ -38,50 +37,11 @@ const (
 	LimConflictsUnassessed = "semantic_conflicts_not_assessed"
 )
 
-var (
-	agentNames = map[string]bool{
-		"agents.md": true, "agent.md": true, "claude.md": true, "claude.local.md": true, "gemini.md": true,
-		".cursorrules": true, ".windsurfrules": true, ".clinerules": true,
-	}
-	docExt    = map[string]bool{"": true, ".md": true, ".markdown": true, ".mdx": true, ".rst": true, ".txt": true, ".adoc": true, ".asciidoc": true, ".org": true}
-	markupExt = map[string]bool{".md": true, ".markdown": true, ".mdx": true, ".rst": true, ".adoc": true, ".asciidoc": true}
-	docDirs   = map[string]bool{"docs": true, "doc": true, "design": true, "adr": true, "adrs": true, "rfc": true, "rfcs": true, "architecture": true}
-	priority  = map[string]int{envdoc.ClassAgent: 0, envdoc.ClassReadme: 1, envdoc.ClassContributing: 2, envdoc.ClassDesign: 3, envdoc.ClassOther: 4}
-)
+var priority = map[string]int{envdoc.ClassAgent: 0, envdoc.ClassReadme: 1, envdoc.ClassContributing: 2, envdoc.ClassDesign: 3, envdoc.ClassOther: 4}
 
 // Classify returns the document class of a snapshot path, or "" when the
-// path is not a document. Classification looks at names only: an
-// agent-instruction file is data for later review roles and grants nothing.
-func Classify(p string) string {
-	base := path.Base(p)
-	lower := strings.ToLower(base)
-	ext := strings.ToLower(path.Ext(base))
-	dir := strings.ToLower(envdoc.Dir(p))
-	switch {
-	case agentNames[lower],
-		lower == "copilot-instructions.md" && (dir == ".github" || strings.HasSuffix(dir, "/.github")),
-		ext == ".mdc" && (dir == ".cursor/rules" || strings.HasSuffix(dir, "/.cursor/rules")):
-		return envdoc.ClassAgent
-	case strings.HasPrefix(lower, "readme") && docExt[ext]:
-		return envdoc.ClassReadme
-	case strings.HasPrefix(lower, "contributing") && docExt[ext]:
-		return envdoc.ClassContributing
-	case !markupExt[ext]:
-		return ""
-	}
-	for _, seg := range strings.Split(dir, "/") {
-		if docDirs[seg] {
-			return envdoc.ClassDesign
-		}
-	}
-	stem := strings.TrimSuffix(lower, ext)
-	for _, w := range []string{"design", "architecture", "adr-", "rfc"} {
-		if strings.Contains(stem, w) {
-			return envdoc.ClassDesign
-		}
-	}
-	return envdoc.ClassOther
-}
+// path is not a document (envdoc.ClassifyDocument).
+func Classify(p string) string { return envdoc.ClassifyDocument(p) }
 
 func depth(p string) int { return strings.Count(p, "/") }
 

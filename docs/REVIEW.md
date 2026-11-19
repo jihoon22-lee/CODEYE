@@ -99,6 +99,7 @@
 | `no_tool_observations` | 해석할 도구 관찰이 없어 진단 해석 생략 | 아니오 |
 | `no_environment_gap` | 모든 선언이 관측과 일치해 환경 해석 생략 | 아니오 |
 | `secret_screen_failed` | 비밀값 분석이 실행됐지만 결과를 쓸 수 없음(아래 비밀값 선별) | 아니오 |
+| `no_review_scope` | slice의 파일을 overview가 이미 보냈거나 모두 보류·읽기 불가([모듈 단위 검토 분할](#모듈-단위-검토-분할)) | 아니오 |
 
 필수 여부는 계획 시 정한다. 문서가 없어 생략한 문서 역할을 모델 검토 성공으로 세지 않는다. 필수 모델 작업이 실패했으면 도구 결과가 남아도 검토 전체를 완료로 올리지 않는다. 진행 단계 판정에서 이 생략을 어떻게 셈하는지는 [구조](ARCHITECTURE.md)에 있다.
 
@@ -201,6 +202,71 @@ context·investigate·verify가 같은 코퍼스를 쓴다. 순위가 낮은 것
 - 보내기 전에 메시지 바이트를 재고, 넘으면 발췌를 뒤에서부터 줄이고 `review_input_trimmed`를 남긴다. 최소 발췌로도 넘으면 task는 `failed`(`review_input_too_large`)다.
 - 예산이 모자라면 목록 뒤쪽이 먼저 빠진다. 첫 순회에서 생태계 이름 순으로 뒤인 언어의 발췌가 여기에 해당한다. 다섯 생태계가 모두 범위에 있으면 언어 지침이 커져 코드 발췌가 줄고, 최대 길이 후보가 많은 verify는 일부 후보를 보내지 못할 수 있다. 요청 한도와 역할별 지침 구성의 변경은 소유자 결정이다.
 
+## 모듈 단위 검토 분할
+
+overview 조사(`review.investigate`)가 보내지 못하는 코드·테스트 파일을 모듈 단위 slice로 나누어 slice마다 조사·검증 한 쌍(`review.investigate.sNNN`, `review.verify.sNNN`)으로 검토한다. 계획은 manifest·scope·상수로만 정하고, 호출 상한 안에서 slice를 차례로 허용한다. 구현은 [`slice_plan.go`](../internal/worker/review/slice_plan.go)(계획)와 [`slice_run.go`](../internal/worker/review/slice_run.go)(실행)이다.
+
+| task | 단계 | 판정 필수 | 모델 호출 | 내용 |
+|---|---|---|---|---|
+| 전체 역할 다섯 개 | 위 표 | 위 표 | 위 표 | 바뀌지 않는다. overview verify는 계속 interpret 후보도 검증한다 |
+| `review.scope` | `code_review` | 아니오 | 없음 | slice가 하나 이상일 때만 계획한다. overview가 실제로 보낸 파일을 빼고 범위 산출물을 쓴다 |
+| `review.investigate.sNNN` | `code_review` | 아니오 | 1~3 | slice 하나의 코드·테스트 발췌로 조사한다 |
+| `review.verify.sNNN` | `code_review` | 아니오 | 0~3 | 같은 slice investigate의 후보만 검증한다 |
+
+slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 저장소는 모두 `partial`이 되어 run 상태가 의미를 잃는다. 검토하지 못한 범위는 범위 산출물과 slice task 상태로 남는다. 진행 단계에서는 `no_review_scope`만 단계를 낮추지 않고, 상한으로 거절된 slice나 선별이 없어 건너뛴 slice는 `code_review` 단계를 `partial`로 남긴다([구조](ARCHITECTURE.md#표시-단계와-task-단계)).
+
+### 계획
+
+- 모듈 단위는 overview 코퍼스의 묶음과 같다(위 [코드 발췌](#코드-발췌review-r1-investigate)). Go는 가장 깊은 go.mod 디렉터리, 다른 언어는 같은 생태계 manifest가 있는 가장 깊은 디렉터리, 없으면 `.`이다. ID는 `<ecosystem>:<dir>`이고, 범위 산출물의 `discovered`는 모듈 탐색이 같은 ID를 찾았는지 표시한다.
+- 파일 상한 `c(f) = min(2400, 6 × size + 2)`. JSON 인코딩은 바이트 하나를 최대 6바이트(`\u00XX`)로 바꾸고 따옴표 두 개가 붙으므로 실제 발췌 바이트보다 작지 않다.
+- overview 접두 P: 모든 파일을 상한 크기로 두고 overview의 순회(묶음 순서, 묶음 안 순위)를 그대로 흉내 낸다. 고른 파일이 8개 미만이고 남은 예산이 128바이트 이상이며 상한이 남은 예산에 들어가는 동안 파일이 P에 들어간다. 처음 들어가지 않는 파일에서 P가 끝난다. overview는 같은 순서로 파일을 보고 상한보다 많이 쓰지 않으므로 P의 파일을 반드시 낸다.
+- 남은 파일은 묶음마다 순위대로 연속 조각(8개·12,000바이트 이하, 상한 기준)으로 자른다. 작은 묶음은 통째로 한 조각이다. 조각은 순회마다(모든 묶음의 첫 조각, 그다음 둘째 조각) 묶음 순서로 나오고, 이웃한 조각은 한도 안에서 한 slice를 같이 쓴다(slice당 모듈 8개 이하). 그래서 너비가 깊이보다 먼저다.
+- slice는 32개(`s001`~`s032`)까지다. 그 뒤의 파일은 계획하지 않고 모듈별로 세며 `review_slice_limit`을 남긴다.
+- 모든 적격 파일이 overview에 들어가는 저장소는 slice가 없다. 계획·요청 바이트·기록이 이전과 같다(회귀 집합과 작은 fixture 전부).
+- 계획은 manifest, scope, 상수로만 정하고 호출 상한을 쓰지 않는다. 재시도는 모든 task 행을 queued로 되돌리고 남은 task가 있으면 완료하지 않으므로, 상한에 따라 task key가 달라지면 고아 task가 생긴다.
+- 계획 순서는 전체 역할 다섯, `review.scope`, slice 쌍이다. 모든 task가 run이 `running`이 되기 전에 만들어지므로 계획 revision은 1이고 가중치를 선언하지 않는다(진행 기준 `task_count`).
+
+### 호출 상한과 승인
+
+- 단위는 모델 호출이고 attempt마다의 상한이다. `codeye agent --review-max-calls N`(기본 99, 15~207), Hello `review_max_calls`, 개인 설정 `agent.model.review_max_calls`로 정한다. run이나 profile로 바꿀 수 없다(팩 선택과 같다). review-r1에만 적용하고 review-v1은 그대로다.
+- 기본 99는 중간 규모 저장소의 대부분을 기본 설정으로 검토하기 위한 값이다(처음 기본값 33은 유료 회귀 실행에서 파일럿 Go 모듈 67개 파일 중 34개를 28회 호출로 검토했다). 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 상한을 낮춘다. 15는 전체 역할만 실행하고 slice를 승인하지 않는다([안내서](GUIDE.md)).
+- 전체 역할 다섯 개는 최대 15회(5 × 3)를 쓰고 잘리지 않는다. 그래서 최솟값이 15다. 전체 역할이 모든 slice보다 먼저 실행되므로 그 몫을 따로 예약할 필요가 없다.
+- 계수는 attempt 안에서만 한다. attempt 하나는 worker 프로세스 하나이고 task를 차례로 실행한다. 모든 role-pack 호출은 보내기 전에 attempt scratch의 계수 파일에 한 줄을 쓴다. 계수를 쓰지 못한 호출은 보내지 않는다(`review_call_count_failed`). 전역 상태나 프로세스 사이 상태는 없다. 한 attempt 안에서 slice를 병렬로 실행하려면 공유 계수가 필요하다.
+- 승인은 계획 순서대로, 실제 사용량으로 한다. slice k의 investigate를 시작하기 전에 `상한 − 사용한 호출 ≥ 6`(investigate·verify 한 쌍의 최악 3 + 3)이면 승인한다. 처음 거절된 slice와 그 뒤의 모든 slice는 호출과 기록 없이 `budget_exhausted`(`review_budget_exhausted`)로 끝나고 짝 verify도 같다. 결정은 attempt scratch에 남기고 verify가 따른다.
+- 그래서 attempt의 호출은 상한을 넘지 않는다. 최악 사례로 미리 승인하면 상한의 세 분의 이가 버려지지만, 실제 사용량으로 승인하면 모델이 형식 복구를 많이 할수록 승인되는 마지막 slice가 run마다 달라질 수 있다. 승인 결과는 slice task 상태로 보인다.
+
+| 상한 | 한 번에 끝나는 task(1회) | 모든 task가 3회 | 최악 사례 사전 승인 |
+|---|---|---|---|
+| 15 | coverage fixture의 slice 7개 중 3개 | 0개 | 0개 |
+| 99 | 7개 모두 | 7개 모두 | 7개 모두 |
+| 207 | 7개 모두 | 7개 모두 | 7개 |
+
+(`TestSliceAdmissionKeepsTheCeiling`, [`fixtures/modules/slices/input`](../fixtures/modules/slices/input). environment는 차이가 없어 호출하지 않는다.)
+
+### 비밀값 선별과 판단 순서
+
+- `review.scope`와 slice는 전체 역할과 같은 선별 규칙을 따른다. 선별이 끝났으면 보고된 파일을 `withheld`로 빼고, 선별이 계획되지 않았거나 실행되지 않았으면(gitleaks 미설정) 기본 읽기 필터만 거친 입력으로 실행한다. 이때 범위 산출물은 `screen: not_screened`이고 범위 산출물과 모든 slice 기록이 `model_input_not_secret_screened`를 싣는다. 보고서는 비밀정보 절 `model_input`을 미선별로 보이고 공백 `model_input_not_screened`를 남긴다. 선별이 실행됐지만 결과를 쓸 수 없으면 `skipped_policy`(`secret_screen_failed`)이고 요청을 보내지 않는다.
+- 선별은 task마다 시작할 때 다시 읽는다. slice 발췌도 같은 읽기 경로를 지나므로 보류 파일과 민감값 패턴 필터를 똑같이 받는다.
+- slice task의 판단 순서: 모델 전송 허가 → 선별 결과를 쓸 수 있음(아니면 `secret_screen_failed`) → 범위 산출물을 읽을 수 있음(아니면 `dependency_failed`) → 보낼 파일이 남음(아니면 `no_review_scope`) → 호출 상한. 보낼 파일이 없는 slice는 상한이 다해도 `no_review_scope`다.
+
+### 범위 산출물
+
+`review.scope`는 모델을 호출하지 않는다. overview investigate 기록(수락이든 실패든, 요청을 보냈을 때)의 context 발췌에서 overview가 실제로 보낸 코드·테스트 파일을 읽고, 계획의 모든 파일을 선별과 읽기 필터로 다시 확인한 뒤 산출물 하나를 role `other`, media type `application/vnd.codeye.review-scope+json`으로 올린다. [스키마](../schemas/review-scope.schema.json) · [예시](../examples/review-r1/slices/scope.json)
+
+- 필드: `schema_version`(0.1), `kind`(`review_scope`), `pack`, `snapshot_manifest_digest`, `run_id`, `attempt_id`, `screen`(`applied` 또는 `not_screened`. `not_screened`이면 `limitations`에 `model_input_not_secret_screened`가 있다), `budget`(`max_calls`, `max_request_bytes`, `whole_run_max_calls` 15, `slice_reserve_calls` 6, `calls_before_slices`, `admission` `sequential_reserve`), `limits`, `upstream`(overview investigate 기록의 SHA-256), `modules[]`(`id`, `discovered`, `files_eligible`, `files_not_planned`), `overview`(`files`: P와 32개 뒤에서 overview가 보낸 파일, `offered`: overview가 보낸 경로), `slices[]`(`key`, `investigate_task`, `verify_task`, `modules`, `files`), `limitations`.
+- 파일마다 `path`, `sha256`, `module`, `bound_bytes`, `planned_lines`, `planned_bytes`, `total_lines`, `state`. 상태는 `planned`(slice가 보낸다), `covered_by_overview`(overview가 보냈다), `withheld`(선별이 보류), `unreadable`(UTF-8 아님·NUL·민감값 패턴·빈 파일), `overview_not_sent`(P에 있지만 overview가 보내지 않음: 요청을 줄였거나 보내기 전에 실패)다. 적격 파일은 모두 정확히 한 곳에 있다. 계획하지 않은 파일은 목록 대신 모듈별 `files_not_planned`로 센다.
+- 승인된 slice 목록은 산출물에 없다. 산출물은 어떤 slice도 실행되기 전에 쓰이고 승인은 실행 중에 차례로 정해지므로, 승인 결과는 slice task 상태(`budget_exhausted`/`review_budget_exhausted`)에서 읽는다.
+- decoder(`record.DecodeScope`)는 경로와 blob을 스냅샷 manifest와 대조하고, 모듈별 수, `covered_by_overview`와 `offered`의 일치, 파일 중복을 검사한다.
+
+### slice 요청과 기록
+
+- slice 요청은 overview의 요청 생성기, 역할 계약 문자열, 팩 파일을 그대로 쓴다. 지침 hash가 overview와 같고(`modules-worst-screened` 고정값), `prompts/`는 바뀌지 않는다.
+- slice investigate는 overview처럼 수락된 environment·documents 결과를 받고, 코퍼스는 그 slice에서 `planned`인 파일(첫 50줄, 파일당 2,400바이트, 합계 8개·12,000바이트)이다. 읽기 필터와 선별을 다시 적용하고, 그새 읽을 수 없게 된 파일은 건너뛴다. `modules`는 slice의 모듈 디렉터리이고 `files_outside_review_context`를 항상 남긴다. upstream은 `review.environment`, `review.documents`, `review.scope`다.
+- slice verify는 자기 slice investigate의 후보만 받는다(interpret 후보 없음). upstream은 `review.documents`, `review.investigate.sNNN`, `review.scope`다.
+- 기록은 schema 0.3이다(아래 [검토 기록](#검토-기록)). [investigate 예시](../examples/review-r1/slices/investigate.s001.json) · [verify 예시](../examples/review-r1/slices/verify.s001.json)
+- 다섯 언어가 모두 범위에 있는 최악 사례에서도 slice 요청은 40,000바이트 안이다(`TestSliceRequestSizeWorstCaseAllLanguages`).
+- 보고서(builder 6)는 0.3 기록과 범위 산출물을 읽는다. slice 후보는 `review_sNNN_<후보>` 발견이 되고, 코드 분석 절의 [모듈별 검토 장부](REPORT.md#모듈별-검토-장부)가 모듈마다 모델에 보낸 파일과 보내지 못한 이유(상한·비밀값·계획 밖 등)를 센다. 모델에 보낸 범위는 검증된 범위가 아니다. `ai_review`는 필수 역할만 본다.
+
 ## 모델 입력의 비밀값 선별
 
 검토 역할은 정적 분석 계획의 비밀값 분석 task가 끝난 뒤 실행된다. 각 역할은 시작할 때 그 결과를 읽는다([`screen.go`](../internal/worker/review/screen.go)). 비밀값 분석기 자체는 [분석기](ANALYZERS.md), 비밀정보 정책은 [보안](SECURITY.md)에 있다.
@@ -258,6 +324,9 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 |---|---|
 | 모델 전송 미승인 | `skipped_policy`(`model_source_not_approved`) |
 | 비밀값 선별 결과를 쓸 수 없음 | `skipped_policy`(`secret_screen_failed`) |
+| slice에 보낼 파일이 없음 | `skipped_policy`(`no_review_scope`) |
+| 호출 상한으로 slice 거절 | `budget_exhausted`(`review_budget_exhausted`) |
+| 호출 계수를 쓰거나 읽지 못함 | `failed`(`review_call_count_failed`) |
 | 앞 역할 미수락 | `skipped_policy`(`dependency_failed`) |
 | 모델 미설정 | `unsupported`(`model_not_configured`) |
 | 지원하지 않는 OpenCode 버전 | `unsupported`(`opencode_version_unsupported`) |
@@ -317,6 +386,13 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 - `calls[]`: `role`, `model`, `opencode_version`, `pack_id`, `pack_version`, `pack_sha256`, `pack_files`, `request_sha256`, `request_bytes`, `usage`, `attempt`(1~3), `outcome`(`accepted`, `output_rejected`, `result_discarded` 또는 실패 사유 코드), `output_errors`.
 - 모듈 ID는 `<ecosystem>:<path>`, 요구 ID는 `<kind>@<선언 파일 경로>` 형식이다.
 
+### schema 0.3(review-r1 slice)
+
+- slice 기록(`review.investigate.sNNN`, `review.verify.sNNN`)만 쓴다. 0.2에 필수 `slice`(`key` `s001`~`s032`, `modules` 1~8개)를 더한 것이다. 단계는 investigate·verify뿐이다.
+- slice investigate의 upstream은 `review.scope`도 이름으로 가질 수 있고, slice verify는 `review.investigate.sNNN`과 `review.scope`를 가진다. slice verify의 후보는 investigate 후보뿐이다.
+- 0.2 기록에는 `slice`가 없고 `review.scope`·slice upstream을 가질 수 없다. `slice`는 생략 가능 필드라 0.2 기록의 바이트는 그대로다(`TestRolePackExampleRecords`).
+- decoder는 기록의 slice key와 단계가 task key와 같은지 확인한다(`record.Expect.Slice`).
+
 ### schema 0.1(review-v1)
 
 - 각 역할 기록에 앞 역할 호출 이력이 누적된다. 합산할 때는 현재 역할의 호출만 센다.
@@ -328,7 +404,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 보고서 규칙의 전체는 [보고서](REPORT.md)에 있다. 검토 기록과 직접 맞물리는 규칙은 다음과 같다.
 
 - 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. review-r1 역할 key가 없는 계획은 review-v1의 세 역할로 해석한다.
-- `coverage.review_calls`는 0.2 기록에서 `pack_id`·`pack_version`을 싣는다. 상한은 15(역할 5개 × 최대 3회)다.
+- `coverage.review_calls`는 0.2·0.3 기록에서 `pack_id`·`pack_version`을, builder 6부터 호출이 든 task(`task_key`)를 싣는다. 상한은 207(호출 상한의 최댓값)이다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
 - 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 표시와 같으면 받는다. 계획과 다른 팩의 기록은 `review_pack_mismatch:<task>`로 제외한다.
 - 모델이 서술한 숫자를 run 상태나 통계로 쓰지 않는다. 도구 관찰과 모델 후보는 서로 다른 산출물이다.
 

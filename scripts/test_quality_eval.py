@@ -145,6 +145,112 @@ class PlannerTests(unittest.TestCase):
             v1 = make_batch(tmp, "v1", rows[:1], {}, dry_run=True, pack="codeye.review")  # review-v1's pack id
             self.assertEqual(quality_eval.history_profile([v1], "review-v1")["variants"], 1)
 
+    def test_variant_with_slices_is_bounded_by_the_ceiling(self):
+        # A variant whose history made more calls than review-r1 has roles planned
+        # module slices: with repairs it may use the whole per-attempt ceiling.
+        with tempfile.TemporaryDirectory() as tmp:
+            sliced = [{"role": r, "input_bytes": 20000} for r in ("documents", "investigate", "verify") + ("investigate", "verify") * 3]
+            rows = [{"case": "R1-GO-06", "variant": "before", "ledger": {"requests": sliced}},
+                    {"case": "R1-GO-06", "variant": "after", "ledger": {"requests": sliced[:3]}}]
+            hist = quality_eval.history_profile([make_batch(tmp, "h", rows, {}, dry_run=True)], "review-r1")
+            plan = quality_eval.variant_plan(CORPUS, [CORPUS.by_id["R1-GO-06"]])
+            est = quality_eval.estimate("review-r1", plan, history=hist, max_calls=40)
+            per_call = est["per_call_microusd"]
+            self.assertEqual(est["max_calls"], 40)
+            self.assertEqual(est["expected"]["calls"], 12)
+            self.assertEqual(est["upper"]["calls"], 40 + int(5 * 1.1 + 0.999))
+            dearest = max(per_call["investigate"], per_call["verify"])
+            self.assertGreaterEqual(est["upper"]["ledger_microusd"], int(40 * dearest * 1.5))
+
+
+class RegressionPilotCoverageTests(unittest.TestCase):
+    """check_coverage: the conditions registered before a paid run with slices."""
+
+    def setUp(self):
+        import regression_pilot
+        from bundle_checks.review import role_pack
+        self.rp = regression_pilot
+        self.digests = {r: v["digest"] for r, v in role_pack(("go",))[1].items()}
+        self.tmp = tempfile.TemporaryDirectory()
+        self.out = Path(self.tmp.name)
+        (self.out / "pilot").mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def record(self, name, stage, files, calls, slice_key=None):
+        doc = {"schema_version": "0.3" if slice_key else "0.2", "stage": stage, "calls": [{}] * calls,
+               "evidence": [{"path": p, "kind": "code", "origin": "context"} for p in files]}
+        if slice_key:
+            doc["slice"] = {"key": slice_key, "modules": ["go:."]}
+        (self.out / "pilot" / (name + ".json")).write_text(json.dumps(doc))
+
+    def rows(self, exhausted=("s003",), regression_tasks=("review.investigate",)):
+        tasks = [{"key": k, "status": "succeeded", "reason": None} for k in ("review.investigate", "review.verify", "review.scope")]
+        for key in ("s001", "s002", "s003"):
+            status = "budget_exhausted" if key in exhausted else "succeeded"
+            tasks += [{"key": f"review.{s}.{key}", "status": status, "reason": None} for s in ("investigate", "verify")]
+        regression = {"case": "Q01-before", "tasks": [{"key": k, "status": "succeeded", "reason": None} for k in regression_tasks],
+                      "review_pack": "review-r1", "review_calls": [{"role": "investigate", "pack_sha256": self.digests["investigate"]}]}
+        return [regression, {"case": "pilot", "status": "completed", "ai_review": "performed", "tasks": tasks}]
+
+    def check(self, rows, exposed=12, max_calls=99, ledger=None, calls_used=9, ledger_sent=5, required=(), limitations=(), calls=()):
+        tasks = [dict(t, required_for_verdict=t["key"] in required) for t in rows[1]["tasks"]]
+        report = {"tasks": tasks, "limitations": list(limitations),
+                  "coverage": {"llm_exposed_files": exposed, "review_calls": [{"task_key": k} for k in calls]},
+                  "code_review": {"ledger": {"calls_used": calls_used, "max_calls": max_calls, "status": "partial", "modules": [{"files_sent_to_model": ledger_sent}]}}}
+        (self.out / "pilot.json").write_text(json.dumps(report))
+        (self.out / "pilot" / "scope.json").write_text(json.dumps({"kind": "review_scope", "budget": {"max_calls": max_calls}}))
+        return self.rp.check_coverage(rows, self.out, SCRIPTS.parent, max_calls, ledger)
+
+    def write_pilot(self):
+        self.record("investigate", "investigate", ["a.go", "b.go"], 1)
+        self.record("verify", "verify", [], 1)
+        self.record("investigate.s001", "investigate", ["c.go"], 1, "s001")
+        self.record("verify.s001", "verify", [], 1, "s001")
+        self.record("investigate.s002", "investigate", ["d.go", "e.go"], 3, "s002")
+
+    def test_conditions_hold(self):
+        self.write_pilot()
+        failures, pilot = self.check(self.rows())
+        self.assertEqual(failures, [])
+        self.assertEqual((pilot["recorded_calls"], pilot["calls_used"], pilot["overview_files"], pilot["files_sent_by_records"], pilot["slices_admitted"]), (7, 9, 2, 5, 2))
+        self.assertEqual(pilot["dry_run_expected"], [])
+
+    def test_each_condition_fails(self):
+        self.write_pilot()
+        rows = self.rows(regression_tasks=("review.investigate", "review.scope"))
+        self.assertIn("slice tasks", self.check(rows)[0][0])
+        rows = self.rows()
+        rows[0]["review_calls"][0]["pack_sha256"] = "0" * 64
+        self.assertIn("pack digest", self.check(rows)[0][0])
+        self.assertIn("above the ceiling", " ".join(self.check(self.rows(), max_calls=6, calls_used=7)[0]))
+        self.assertTrue(any("calls_used None" in f for f in self.check(self.rows(), calls_used=None)[0]))
+        self.assertIn("llm_exposed_files", self.check(self.rows(), exposed=2)[0][0])
+        self.assertIn("ledger files sent", self.check(self.rows(), ledger_sent=2)[0][0])
+        self.assertIn("did not read", self.check(self.rows(), limitations=("unrecognized_artifact:review.scope",))[0][0])
+        self.assertIn("with a record", self.check(self.rows(exhausted=("s002",)))[0][0])
+        self.assertIn("with a record or a call", self.check(self.rows(), calls=("review.investigate.s003",))[0][0])
+        # A paid run (no test ledger): the fake-upstream and host causes are failures.
+        rows = self.rows()
+        rows[1]["status"] = "partial"
+        rows[1]["tasks"] += [{"key": "review.interpret", "status": "failed", "reason": "review_output_invalid"},
+                             {"key": "ruff", "status": "unsupported", "reason": "tool_not_configured"}]
+        self.assertIn("status partial", self.check(rows, exposed=None, required=("ruff",))[0][0])
+        # A dry run: they are expected and listed; another cause still fails.
+        test = self.out / "test-ledger.jsonl"
+        test.write_text(json.dumps({"type": "header", "upstream": "test-loopback"}) + "\n")
+        failures, pilot = self.check(rows, exposed=None, required=("ruff",), ledger=test)
+        self.assertEqual(failures, [])
+        self.assertEqual(len(pilot["dry_run_expected"]), 2)
+        rows[1]["tasks"].append({"key": "go-vet", "status": "failed", "reason": "toolchain_mismatch"})
+        self.assertIn("status partial", self.check(rows, exposed=None, required=("ruff", "go-vet"), ledger=test)[0][0])
+        self.record("investigate.s002", "investigate", ["a.go"], 1, "s002")
+        self.assertIn("two investigate requests", self.check(self.rows())[0][0])
+        ledger = self.out / "ledger.jsonl"
+        ledger.write_text(json.dumps({"type": "header", "upstream": "test-loopback"}) + "\n" + json.dumps({"type": "refused", "code": "budget_exhausted"}) + "\n")
+        self.assertTrue(any("refused" in f for f in self.check(self.rows(), ledger=ledger)[0]))
+
 
 class EchoAuditTests(unittest.TestCase):
     def test_exempted_ids_must_come_from_this_variants_model_output(self):

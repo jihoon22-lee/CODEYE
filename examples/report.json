@@ -587,9 +587,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "b4361103752fa194bde0c6693bfe08719a45b09378ae7e62af78dc56b940b9f4",
+    "input_digest": "8eaeb7218ecfa65b38a9e4b1d0f683e45579fbc4d6a2baad8fa8d0159222121b",
     "result_manifest_artifact_id": null,
-    "version": "5"
+    "version": "6"
   },
   "code_review": {
     "accepted_calls": 5,
@@ -689,7 +689,8 @@
         "pack_sha256": "da9c21fe08efaab7c307490102e69d35fc732f4d57a5faf2da9d2681768cfa3e",
         "pack_version": "2.0.0",
         "request_sha256": "14194f522f67349a30740b6c086e3cf53a7aa3b79eda06c24e0b3e1590448cff",
-        "role": "environment"
+        "role": "environment",
+        "task_key": "review.environment"
       },
       {
         "model": "fake/scripted",
@@ -699,7 +700,8 @@
         "pack_sha256": "42c12bd1d7e62d456d72f6b5af7caed424977dca248ee4f3014dbe5cf98b0d6a",
         "pack_version": "2.0.0",
         "request_sha256": "27cce362e61d0db9cc9afbe420959f98b0da203f8de2220cf4555a0233691d31",
-        "role": "documents"
+        "role": "documents",
+        "task_key": "review.documents"
       },
       {
         "model": "fake/scripted",
@@ -709,7 +711,8 @@
         "pack_sha256": "2df8621fe980f31a57d0a1dc8ca698fa05585ea36361bba20ee3c4f31a1be0e7",
         "pack_version": "2.0.0",
         "request_sha256": "227c055c1a069fbe9cc5982fb302e41c1e6aee755d42416d562136dcc4955cef",
-        "role": "investigate"
+        "role": "investigate",
+        "task_key": "review.investigate"
       },
       {
         "model": "fake/scripted",
@@ -719,7 +722,8 @@
         "pack_sha256": "9fdac5c6493f275c7ef17058ef4228176281eb6efbf3a88729138df168929921",
         "pack_version": "2.0.0",
         "request_sha256": "e557cab9949ce14b1eeb05fe242a76e5f19de39c29a5ce33782c1076b0a0b245",
-        "role": "interpret"
+        "role": "interpret",
+        "task_key": "review.interpret"
       },
       {
         "model": "fake/scripted",
@@ -729,7 +733,8 @@
         "pack_sha256": "b5a7cc45e05d4df310c6311ab1ae496a72b6f1ac7d51848e5a59edfd9d4d98b0",
         "pack_version": "2.0.0",
         "request_sha256": "9b3c058e3e4f97896f25399c01ce1e80cf2418fd2cc9848ca23969fcd60def6c",
-        "role": "verify"
+        "role": "verify",
+        "task_key": "review.verify"
       }
     ],
     "scope_mode": "full",

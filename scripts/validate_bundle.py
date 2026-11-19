@@ -26,7 +26,7 @@ except ImportError as exc:
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
 from bundle_checks.report import check_analyzer, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_environment_example, check_review_example, check_role_pack_examples, role_pack
+from bundle_checks.review import ROLE_STAGES, check_environment_example, check_review_example, check_role_pack_examples, check_slice_examples, role_pack, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_stage_enums, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_source_names, heading_anchors
 
@@ -94,6 +94,22 @@ def main() -> None:
     # (internal/worker/review/report_example_test.go); its evidence hashes bind to that tree.
     modules_root = ROOT / "fixtures/modules/input"
     check_report(report, modules_root)
+    # examples/report-slices.json is the builder's output for fixtures/modules/slices/input
+    # under call ceiling 15 (internal/worker/review/report_slices_example_test.go): review slices and the ledger.
+    slices_report = json_file(ROOT / "examples/report-slices.json")
+    coverage_root = ROOT / "fixtures/modules/slices/input"
+    validators["report.schema.json"].validate(slices_report)
+    check_report(slices_report, coverage_root)
+    # The same fixture without a secrets scan at the default ceiling: the slices still run, and the
+    # report says the model input was not screened.
+    unscreened = json_file(ROOT / "internal/report/testdata/report-unscreened.json")
+    validators["report.schema.json"].validate(unscreened)
+    check_report(unscreened, coverage_root)
+    unscreened_ledger = unscreened["code_review"]["ledger"]
+    ensure(unscreened_ledger["scope"]["result"] == "accepted" and unscreened_ledger["modules"] and unscreened_ledger["max_calls"] == 99
+           and unscreened["secrets"]["model_input"] == "not_screened"
+           and any(g["code"] == "model_input_not_screened" for g in unscreened["gaps"])
+           and any(f["id"].startswith("review_s") for f in unscreened["findings"]), "Unscreened slice report without its slices or its not-screened state")
     published = json_file(ROOT / "examples/report-go-vet.json")
     validators["report.schema.json"].validate(published)
     check_report(published, ROOT / "fixtures/go-vet")
@@ -119,6 +135,8 @@ def main() -> None:
     for doc in role_docs.values():
         review_validator.validate(doc)
     check_role_pack_examples(role_docs, role_raw, role_pack_doc, role_files)
+    slice_negatives = check_slice_examples(slice_examples(), validators)
+    print(f"PASS: review slices (scope artifact 0.1 and slice records 0.3 bound to the coverage fixture; {slice_negatives} negative cases)")
     # review-r1 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
     retried = copy.deepcopy(role_docs["verify"])
@@ -238,6 +256,34 @@ def main() -> None:
     bad = copy.deepcopy(published)
     bad["gaps"] = []
     expect_invalid("flat revision with a sections block", lambda d: check_report(d, ROOT / "fixtures/go-vet"), bad)
+    # Review slices and the ledger (docs/REPORT.md#모듈별-검토-장부).
+    ensure("ledger" in slices_report["code_review"] and "ledger" not in report["code_review"], "Ledger presence of the report examples")
+    store = lambda d: next(m for m in d["code_review"]["ledger"]["modules"] if m["module_id"] == "go:store")
+    ledger_cases = {
+        "ledger files that do not add up": lambda d: store(d).update(files_sent_to_model=store(d)["files_sent_to_model"] + 1),
+        "ledger status not following its rows": lambda d: d["code_review"]["ledger"].update(status="complete"),
+        "ledger dropped while review.scope ran": lambda d: d["code_review"].pop("ledger"),
+        "ledger slice differs from its task": lambda d: store(d)["slices"][0].update(status="failed"),
+        "ledger counts fewer calls than listed": lambda d: d["code_review"]["ledger"].update(calls_used=1),
+        "ledger request bytes differ": lambda d: d["code_review"]["ledger"].update(request_bytes_sent=1),
+        "review call naming another role's task": lambda d: d["coverage"]["review_calls"][0].update(task_key="review.verify.s001"),
+        "slice finding of an unplanned slice": lambda d: [f.update(id="review_s031_x") for f in d["findings"] if f["id"].startswith("review_s001_")],
+        "overview scope not from the ledger": lambda d: next(s for s in d["overview"]["sections"] if s["key"] == "code_review")["counts"].update(files_sent_to_model=0),
+    }
+    for name, edit in ledger_cases.items():
+        bad = copy.deepcopy(slices_report)
+        edit(bad)
+        expect_invalid(name, lambda d: check_report(d, coverage_root), bad)
+    for name, edit in {"ledger with an invalid ceiling": lambda d: d["code_review"]["ledger"].update(max_calls=14),
+                       "ledger with an unknown status": lambda d: d["code_review"]["ledger"].update(status="verified"),
+                       "review call with an invalid task key": lambda d: d["coverage"]["review_calls"][0].update(task_key="review.scope")}.items():
+        bad = copy.deepcopy(slices_report)
+        edit(bad)
+        expect_invalid(name, validators["report.schema.json"].validate, bad)
+    bad = copy.deepcopy(report)
+    bad["builder"]["version"] = "5"
+    bad["coverage"]["review_calls"][0]["task_key"] = "review.environment"
+    expect_invalid("builder-5 revision with a review call task key", lambda d: check_report(d, modules_root), bad)
     bad = copy.deepcopy(plan)
     bad["tasks"][0]["depends_on"] = [bad["tasks"][-1]["id"]]
     expect_invalid("cyclic plan", check_plan, bad)
@@ -296,12 +342,12 @@ def main() -> None:
         {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome", "pack_id", "pack_version")}
         for stage in ROLE_STAGES for call in role_docs[stage]["calls"]]
     validators["report.schema.json"].validate(role_calls)
-    # Five review-r1 stages of up to three calls each fit the report; more do not.
+    # The largest call ceiling (207: five whole-run roles and 32 slice pairs of up to three calls each) fits the report; more do not.
     most = copy.deepcopy(role_calls)
-    most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(15)]
+    most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(207)]
     validators["report.schema.json"].validate(most)
     most["coverage"]["review_calls"].append(dict(role_calls["coverage"]["review_calls"][0]))
-    expect_invalid("report with 16 review calls", validators["report.schema.json"].validate, most)
+    expect_invalid("report with 208 review calls", validators["report.schema.json"].validate, most)
     role_calls["coverage"]["review_calls"][0]["pack_version"] = "2.0.0 rc1"
     expect_invalid("invalid report pack version", validators["report.schema.json"].validate, role_calls)
 
@@ -350,7 +396,7 @@ def main() -> None:
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
     print(f"PASS: {code_refs} document references from source, schema and example files")
     print(f"PASS: {named} source files without build-stage labels")
-    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 20 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 23 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
     print(f"PASS: {28 + len(section_cases) + len(role_negative)} negative cases; example policy timing; prompt manifest")

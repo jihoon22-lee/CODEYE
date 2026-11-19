@@ -183,7 +183,7 @@ func TestRolePackRequestSizeWorstCase(t *testing.T) {
 	f := &roleCaller{script: maxScript(t)}
 	plan, res := runRole(t, j, vetStub{obs: obs}, f, "1.27.4")
 	for _, p := range plan {
-		if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status != domain.TaskSucceeded {
+		if wholeRunRole(p.Key) && res[p.Key].Status != domain.TaskSucceeded {
 			t.Fatalf("%s %+v", p.Key, res[p.Key])
 		}
 	}
@@ -263,7 +263,7 @@ func allLanguagesRun(t *testing.T, j analysis.Job, obs func(analysis.Job) []gove
 	plan, res := runRole(t, j, vetStub{obs: obs}, f, "1.27.4")
 	for _, p := range plan {
 		r := res[p.Key]
-		if (strings.HasPrefix(p.Key, "review.") && p.Key != "review.verify" && r.Status != domain.TaskSucceeded) || r.Reason == reasonInputTooLarge {
+		if (wholeRunRole(p.Key) && p.Key != "review.verify" && r.Status != domain.TaskSucceeded) || r.Reason == reasonInputTooLarge {
 			t.Fatalf("%s %+v", p.Key, r)
 		}
 	}

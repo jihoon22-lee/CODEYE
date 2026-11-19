@@ -16,26 +16,9 @@ const (
 	LimNestedBuildFiles = "nested_build_files_merged"
 )
 
-// manifestEcosystem maps a manifest base name to its ecosystem. Names are
-// case-sensitive, as the tools that read them are.
-func manifestEcosystem(base string) (string, bool) {
-	switch base {
-	case "go.mod", "go.work":
-		return envdoc.EcoGo, true
-	case "package.json":
-		return envdoc.EcoJavaScript, true
-	case "pyproject.toml", "setup.cfg", ".python-version":
-		return envdoc.EcoPython, true
-	case "Cargo.toml", "rust-toolchain", "rust-toolchain.toml":
-		return envdoc.EcoRust, true
-	case "CMakeLists.txt", "meson.build", "Makefile", "makefile", "GNUmakefile", "compile_commands.json":
-		return envdoc.EcoCpp, true
-	}
-	if strings.HasPrefix(base, "requirements") && strings.HasSuffix(base, ".txt") {
-		return envdoc.EcoPython, true
-	}
-	return "", false
-}
+// manifestEcosystem maps a manifest base name to its ecosystem
+// (envdoc.ManifestEcosystem).
+func manifestEcosystem(base string) (string, bool) { return envdoc.ManifestEcosystem(base) }
 
 // skippedManifest reports whether a manifest lies in a directory the tools
 // treat as data: testdata and hidden directories for every ecosystem, and for

@@ -1,0 +1,123 @@
+{
+  "description": "Slice plan of fixtures/modules/slices/input (docs/TESTING.md, TC-161): the overview prefix the overview investigate is certain to offer, then the slices that hold the other eligible files under the same caps.",
+  "modules": [
+    {
+      "module": "go:api",
+      "files_eligible": 3
+    },
+    {
+      "module": "javascript:web",
+      "files_eligible": 3
+    },
+    {
+      "module": "python:worker",
+      "files_eligible": 3
+    },
+    {
+      "module": "go:store",
+      "files_eligible": 30
+    }
+  ],
+  "overview": [
+    "api/main.go",
+    "web/src/index.ts",
+    "worker/app.py",
+    "store/bucket.go",
+    "api/handler.go",
+    "web/src/client.ts",
+    "worker/jobs.py"
+  ],
+  "slices": [
+    {
+      "key": "s001",
+      "modules": [
+        "go:api",
+        "javascript:web",
+        "python:worker"
+      ],
+      "files": [
+        "api/handler_test.go",
+        "web/src/client.test.ts",
+        "worker/tests/test_jobs.py"
+      ]
+    },
+    {
+      "key": "s002",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        "store/cache.go",
+        "store/codec.go",
+        "store/compact.go",
+        "store/cursor.go",
+        "store/delete.go"
+      ]
+    },
+    {
+      "key": "s003",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        "store/encode.go",
+        "store/evict.go",
+        "store/flush.go",
+        "store/get.go",
+        "store/index.go"
+      ]
+    },
+    {
+      "key": "s004",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        "store/iter.go",
+        "store/journal.go",
+        "store/lock.go",
+        "store/merge.go",
+        "store/meta.go"
+      ]
+    },
+    {
+      "key": "s005",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        "store/open.go",
+        "store/page.go",
+        "store/put.go",
+        "store/range.go",
+        "store/recover.go"
+      ]
+    },
+    {
+      "key": "s006",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        "store/scan.go",
+        "store/segment.go",
+        "store/snapshot.go",
+        "store/split.go",
+        "store/stats.go"
+      ]
+    },
+    {
+      "key": "s007",
+      "modules": [
+        "go:store"
+      ],
+      "files": [
+        "store/sync.go",
+        "store/tombstone.go",
+        "store/txn.go",
+        "store/wal.go"
+      ]
+    }
+  ],
+  "not_planned": []
+}

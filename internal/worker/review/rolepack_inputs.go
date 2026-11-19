@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"path"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -367,73 +366,8 @@ func goIgnored(p string) bool {
 // ecosystem, and modules are visited ecosystem by ecosystem (sources.go,
 // groupOrder). Every excerpt is the first lines of its file.
 func (s *roleStage) codeCorpus() ([]record.Excerpt, []string, error) {
-	files := s.entries()
-	scope := normalizedScope(s.j.Scope)
-	var modules []string
-	for p := range files {
-		if path.Base(p) == "go.mod" && !goIgnored(p) {
-			modules = append(modules, record.DocumentDir(p))
-		}
-	}
-	sort.Strings(modules)
-	owner := func(p string) string {
-		best := "."
-		for _, m := range modules {
-			if record.ScopeUnder(p, m) && len(m) >= len(best) {
-				best = m
-			}
-		}
-		return best
-	}
-	byModule := map[string][]source.Entry{}
-	others := otherModuleRoots(files)
-	eligible := 0
-	var lims []string
-	for _, p := range sortedKeys(files) {
-		e := files[p]
-		if !inScope(p, scope) || *e.Size > maxFileBytes {
-			continue
-		}
-		m := ""
-		switch eco := otherSource(p); {
-		case strings.HasSuffix(p, ".go") && !goIgnored(p):
-			m = owner(p)
-		case !strings.HasSuffix(p, ".go") && eco != "":
-			m = groupKey(others.owner(eco, p), eco)
-		default:
-			if excludedSource(p) {
-				lims = append(lims, limExcludedSource)
-			}
-			continue
-		}
-		eligible++
-		byModule[m] = append(byModule[m], e)
-	}
-	rank := func(p string) int {
-		switch {
-		case !strings.HasSuffix(p, ".go"):
-			return otherRank(p, others)
-		case path.Base(p) == "main.go":
-			return 0
-		case strings.HasSuffix(p, "_test.go"):
-			return 2
-		}
-		return 1
-	}
-	order := groupOrder(byModule)
-	for _, m := range order {
-		list := byModule[m]
-		sort.SliceStable(list, func(a, b int) bool {
-			x, y := list[a].Path, list[b].Path
-			if rank(x) != rank(y) {
-				return rank(x) < rank(y)
-			}
-			if strings.Count(x, "/") != strings.Count(y, "/") {
-				return strings.Count(x, "/") < strings.Count(y, "/")
-			}
-			return x < y
-		})
-	}
+	g := planCodeGroups(s.j.Snapshot.Manifest, s.j.Scope)
+	byModule, order, eligible, lims := g.files, g.order, g.eligible, append([]string{}, g.lims...)
 	var out []record.Excerpt
 	remain := roleMaxCodeBytes
 	for round := 0; len(out) < roleMaxCodeFiles && remain >= 128; round++ {

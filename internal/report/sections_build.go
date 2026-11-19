@@ -481,6 +481,14 @@ func (c sectionContext) screen() string {
 	case !decoded:
 		return ScreenNoModel
 	}
+	// A completed secrets scan the report accepted, with nothing withheld,
+	// screened the inputs (builder 6; earlier builders read this case as
+	// not screened).
+	for _, k := range c.purposeKeys(PurposeSecrets) {
+		if st := c.states[k]; st.facts.Status == string(domain.TaskSucceeded) && !st.rejected && st.tool != nil && !st.tool.PartialParse {
+			return ScreenScreened
+		}
+	}
 	// The records sent inputs and recorded no screening state: the run had no
 	// secrets task to screen with and predates the limitation code.
 	return ScreenNotScreened
@@ -497,6 +505,10 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 	}
 	ai := c.r.Coverage.AIReview
 	for _, t := range append(append([]AIReviewTask{}, ai.RequiredTasks...), ai.OptionalTasks...) {
+		// The scope and slice tasks are the ledger's rows, not roles.
+		if t.Key == record.TaskScope || isSliceTask(t.Key) {
+			continue
+		}
 		if t.Key != "review.environment" && t.Key != "review.documents" && (c.reviewPlanned || t.Result != "not_planned") {
 			s.Roles = append(s.Roles, t)
 		}
@@ -545,6 +557,9 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 		for _, l := range st.reviewResult.Role.Limits {
 			s.Limits = append(s.Limits, InterpretationLimit{ObservationIDs: append([]string{}, l.ObservationIDs...), Statement: l.Statement})
 		}
+	}
+	if c.rolePack {
+		s.Ledger = c.ledger()
 	}
 	return s
 }

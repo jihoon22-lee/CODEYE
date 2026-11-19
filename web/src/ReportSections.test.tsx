@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import sectioned from '../../examples/report.json';
 import flat from '../../examples/report-go-vet.json';
+import withSlices from '../../examples/report-slices.json';
+import unscreened from '../../internal/report/testdata/report-unscreened.json';
 import { parseAnalysisReport } from './analysisReport';
 import { ReportDocument } from './ReportPanel';
 import { reportKo as t } from './locales/report-ko';
@@ -12,8 +14,9 @@ afterEach(cleanup);
 // examples/report.json is the builder's output for fixtures/modules/input
 // (internal/worker/review/report_example_test.go), stored with demo: true;
 // examples/report-go-vet.json is a revision published before the sections.
-function example(name: 'report.json' | 'report-go-vet.json'): Record<string, any> {
-  const doc = structuredClone(name === 'report.json' ? sectioned : flat) as Record<string, any>;
+function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.json' | 'report-unscreened.json'): Record<string, any> {
+  const docs = { 'report.json': sectioned, 'report-go-vet.json': flat, 'report-slices.json': withSlices, 'report-unscreened.json': unscreened };
+  const doc = structuredClone(docs[name]) as Record<string, any>;
   doc.demo = false;
   return doc;
 }
@@ -109,5 +112,64 @@ describe('analysis sections', () => {
       edit(d);
       expect(() => parseAnalysisReport(d, d.run_id), name).toThrow();
     }
+  });
+
+  // examples/report-slices.json is the builder's output for
+  // fixtures/modules/slices/input under call ceiling 15
+  // (internal/worker/review/report_slices_example_test.go).
+  it('shows the per-module review ledger with the stored numbers and never calls the sent scope verified', () => {
+    const doc = example('report-slices.json');
+    const r = parseAnalysisReport(doc, doc.run_id);
+    const ledger = r.sections!.codeReview.ledger!;
+    expect(ledger.modules.length).toBe(doc.code_review.ledger.modules.length);
+    const { container } = render(<ReportDocument report={r} />);
+    const section = container.querySelector('#report-section-code_review') as HTMLElement;
+    const heading = within(section).getByRole('heading', { name: t.sections.ledger.heading });
+    let next = heading.nextElementSibling;
+    while (next && !next.querySelector('table')) next = next.nextElementSibling;
+    const table = next!.querySelector('table')!;
+    for (const m of doc.code_review.ledger.modules) {
+      const row = Array.from(table.querySelectorAll('tbody tr')).find((tr) => tr.querySelector('code')?.textContent === m.module_id)!;
+      const cells = Array.from(row.querySelectorAll('td')).map((td) => td.textContent);
+      expect(cells.slice(2)).toEqual([m.files_eligible, m.files_sent_to_model, m.bytes_sent, m.files_truncated, m.files_withheld, m.files_unreadable,
+        m.files_budget_exhausted, m.files_not_planned, m.files_not_sent, m.files_with_completed_review].map(String));
+    }
+    expect(within(section).getAllByText('review.investigate.s004').length).toBe(1);
+    expect(within(section).getByText(t.sections.ledger.calls(String(doc.code_review.ledger.calls_used), String(doc.code_review.ledger.max_calls)))).toBeTruthy();
+    expect(section.textContent).not.toMatch(/검증된 범위입니다|verified/);
+    // Slice findings are listed once, in the code review section.
+    const slice = doc.findings.filter((f: { id: string }) => f.id.startsWith('review_s')).length;
+    expect(slice).toBeGreaterThan(0);
+    expect(section.querySelectorAll('details.finding-card').length).toBe(doc.code_review.finding_ids.length);
+  });
+
+  it('rejects a ledger whose module files do not add up or whose overview scope differs', () => {
+    const cases: Array<[string, (d: Record<string, any>) => void]> = [
+      ['module files do not add up', (d) => d.code_review.ledger.modules[0].files_sent_to_model++],
+      ['completed beyond sent', (d) => (d.code_review.ledger.modules[0].files_with_completed_review = 99)],
+      ['overview scope differs', (d) => d.overview.sections.find((s: any) => s.key === 'code_review').counts.files_sent_to_model++],
+    ];
+    for (const [name, edit] of cases) {
+      const d = example('report-slices.json');
+      edit(d);
+      expect(() => parseAnalysisReport(d, d.run_id), name).toThrow();
+    }
+  });
+
+  // internal/report/testdata/report-unscreened.json: the same fixture without
+  // a secrets scan at the default ceiling
+  // (internal/worker/review/report_slices_example_test.go).
+  it('reviews the modules without a secrets screen and says the input was not screened', () => {
+    const doc = example('report-unscreened.json');
+    const r = parseAnalysisReport(doc, doc.run_id);
+    const ledger = r.sections!.codeReview.ledger!;
+    expect(ledger.modules.length).toBeGreaterThan(0);
+    expect(ledger.status).toBe('complete');
+    const { container } = render(<ReportDocument report={r} />);
+    const section = container.querySelector('#report-section-code_review') as HTMLElement;
+    expect(within(section).getByText(t.sections.ledger.status.complete)).toBeTruthy();
+    const gaps = container.querySelector('#report-section-gaps') as HTMLElement;
+    expect(within(gaps).getByText(t.sections.gapLabels.model_input_not_screened)).toBeTruthy();
+    expect(within(gaps).queryByText(t.sections.gapLabels.review_scope_skipped)).toBeNull();
   });
 });

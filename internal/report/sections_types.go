@@ -57,7 +57,10 @@ const (
 
 // Secret screening of model inputs as the review records state it.
 const (
-	ScreenWithheld    = "withheld"
+	ScreenWithheld = "withheld"
+	// ScreenScreened: a completed secrets scan screened the inputs and
+	// withheld nothing (builder 6).
+	ScreenScreened    = "screened"
 	ScreenNotScreened = "not_screened"
 	ScreenFailed      = "screen_failed"
 	ScreenNoModel     = "no_model_input"
@@ -401,6 +404,65 @@ type CodeReviewSection struct {
 	// Limits are the interpret role's statements about tool observations it
 	// could not relate to code (model interpretation).
 	Limits []InterpretationLimit `json:"interpretation_limits"`
+	// Ledger is the per-module review ledger (builder 6), present when the
+	// plan held review slices (review.scope). Roles then list the whole-run
+	// roles only; the slice tasks are in the ledger rows.
+	Ledger *ReviewLedger `json:"ledger,omitempty"`
+}
+
+// ReviewLedger tells, per module, how much of the eligible code and test
+// files was sent to the model and how far its review got. Sent to the model
+// is not verified scope: a file the model saw may hold defects no candidate
+// named.
+type ReviewLedger struct {
+	// Scope is the review.scope task with its result (accepted when the
+	// report kept its scope artifact).
+	Scope AIReviewTask `json:"scope"`
+	// MaxCalls and MaxRequestBytes are the attempt's call ceiling and request
+	// cap as the scope artifact records them; null without that artifact.
+	MaxCalls        *int `json:"max_calls"`
+	MaxRequestBytes *int `json:"max_request_bytes"`
+	// CallsUsed is the calls before the slices (the scope artifact's count
+	// from the attempt counter) plus the calls of the slice records; null
+	// when a review task that may have called left no usable record.
+	CallsUsed *int `json:"calls_used"`
+	// RequestBytesSent is the sum of the recorded request sizes of every
+	// review record (prompt bytes); null under the same condition.
+	RequestBytesSent *int `json:"request_bytes_sent"`
+	// Status is complete, partial or overview_only.
+	Status  string         `json:"status"`
+	Modules []LedgerModule `json:"modules"`
+}
+
+// LedgerModule is one module of the scope artifact. Every eligible file is
+// counted once: sent to the model, withheld (secret screen), unreadable,
+// budget exhausted (its slice was refused), not planned (beyond the slice
+// limit) or not sent (any other reason: the overview did not send it, its
+// slice failed or was skipped).
+type LedgerModule struct {
+	ModuleID             string `json:"module_id"`
+	Discovered           bool   `json:"discovered"`
+	FilesEligible        int    `json:"files_eligible"`
+	FilesSentToModel     int    `json:"files_sent_to_model"`
+	BytesSent            int    `json:"bytes_sent"`
+	FilesTruncated       int    `json:"files_truncated"`
+	FilesWithheld        int    `json:"files_withheld"`
+	FilesUnreadable      int    `json:"files_unreadable"`
+	FilesBudgetExhausted int    `json:"files_budget_exhausted"`
+	FilesNotPlanned      int    `json:"files_not_planned"`
+	FilesNotSent         int    `json:"files_not_sent"`
+	// FilesWithCompletedReview are the sent files whose review reached an
+	// accepted verify record (the whole-run verify for the overview's files,
+	// the slice's verify for a slice's).
+	FilesWithCompletedReview int           `json:"files_with_completed_review"`
+	Slices                   []LedgerSlice `json:"slices"`
+}
+
+// LedgerSlice is one slice task holding a file of the module.
+type LedgerSlice struct {
+	TaskKey string  `json:"task_key"`
+	Status  string  `json:"status"`
+	Reason  *string `json:"reason"`
 }
 
 type InterpretationLimit struct {

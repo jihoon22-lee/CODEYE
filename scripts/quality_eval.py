@@ -70,7 +70,7 @@ CONSTANTS = {
                   "ledger_microusd_per_call": 22_148, "input_tokens_per_call": 3_872, "output_tokens_per_call": 279},
 }
 DEFAULTS = {"margin": 1.5, "repair_rate": 0.1, "reserve_usd": "1.00", "request_reserve": 5,
-            "bytes_per_token": 3.0, "output_tokens_upper": 600}
+            "bytes_per_token": 3.0, "output_tokens_upper": 600, "review_max_calls": 99}
 
 
 def now():
@@ -327,7 +327,8 @@ def history_profile(dirs, pack):
             "per_key": per_key, "dirs": [str(d) for d in dirs]}
 
 
-def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAULTS["repair_rate"]):
+def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAULTS["repair_rate"],
+             max_calls=DEFAULTS["review_max_calls"]):
     """Calls and conservative ledger cost for a review batch.
 
     expected: per-role calls of the same variant in history (else history's per-variant average,
@@ -337,6 +338,12 @@ def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate
     each at the per-call cost times margin. Per-call cost: history usage when real, else
     request bytes / bytes_per_token input tokens and output_tokens_upper output tokens at the
     relay's worst-case prices, else CONSTANTS.
+    review-r1 module slices (docs/REVIEW.md#모듈-단위-검토-분할): a variant whose history made
+    more calls than the pack has roles planned slices; slices are admitted while calls are
+    left, so with repairs it can use the whole per-attempt ceiling. Its upper is max_calls
+    calls at the dearest per-call cost of investigate and verify. A variant without history is
+    estimated as above (the constants are single-file inputs without slices); run the capture
+    dry run with the same selection first.
     """
     roles = PACK_ROLES[pack]
     base = CONSTANTS[pack]
@@ -364,11 +371,15 @@ def estimate(pack, plan, *, history=None, margin=DEFAULTS["margin"], repair_rate
         counts = {r: seen.get(r, 0) for r in roles} if seen is not None else {r: rates.get(r, 0) for r in roles}
         expected_calls += sum(counts.values())
         expected_cost += sum(counts[r] * per_call[r] for r in roles)
+        if pack == "review-r1" and seen is not None and sum(seen.values()) > len(roles):
+            upper_calls += max_calls
+            upper_cost += max_calls * max(per_call["investigate"], per_call["verify"]) * margin
+            continue
         for r in roles:
             count = max(1, seen.get(r, 0)) if seen is not None else 1
             upper_calls += count * (1 + repair_rate)
             upper_cost += count * (1 + repair_rate) * per_call[r] * margin
-    return {"pack": pack, "variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate,
+    return {"pack": pack, "variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,
             "per_call_microusd": per_call, "calls_per_variant": rates,
             "expected": {"calls": round(expected_calls, 1), "ledger_microusd": int(expected_cost)},
             "upper": {"calls": int(upper_calls + 0.999), "ledger_microusd": int(upper_cost)}}
@@ -645,7 +656,7 @@ def run_batch(args):
                              "--forbidden-phrases file for the current corpus digest")
         forbidden["allow_model_echo"] = bool(active[-1].get("allow_model_echo"))
         history = history_profile([Path(h) for h in args.history or []], args.pack)
-        est = estimate(args.pack, plan, history=history, margin=args.margin)
+        est = estimate(args.pack, plan, history=history, margin=args.margin, max_calls=args.review_max_calls)
         refusal = budget_gate(est, report_before, parse_usd(args.reserve_usd), args.request_reserve)
         write_json(batch / "plan.json", {"estimate": est, "refusal": refusal, "selection": selection})
         if refusal:
@@ -718,6 +729,8 @@ def run_batch(args):
                 if review:
                     out += ["--model-source-root", root_id, "--opencode", args.opencode, "--model", args.model,
                             "--model-relay-file", args.relay_file, "--review-pack", args.pack]
+                    if args.pack == "review-r1":
+                        out += ["--review-max-calls", str(args.review_max_calls)]
                 return out
 
             concurrency = 1 if review else max(1, args.agents * args.max_workers)
@@ -772,7 +785,7 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
     est_one = None
     if review:
         est_one = estimate(args.pack, plan[:1], history=history_profile([Path(h) for h in args.history or []], args.pack),
-                           margin=args.margin)["upper"]
+                           margin=args.margin, max_calls=args.review_max_calls)["upper"]
     deadline = time.monotonic() + args.timeout
     while queue or inflight:
         if not cluster.alive():
@@ -941,6 +954,8 @@ def main(argv=None):
     p.add_argument("--history", action="append", help="saved batch dir of the same pack (repeatable)")
     p.add_argument("--ledger", help="relay ledger to check the estimate against (read only)")
     p.add_argument("--margin", type=float, default=DEFAULTS["margin"])
+    p.add_argument("--review-max-calls", type=int, default=DEFAULTS["review_max_calls"],
+                   help="the agents' model call ceiling per attempt (review-r1, codeye agent --review-max-calls)")
     p.add_argument("--reserve-usd", default=DEFAULTS["reserve_usd"])
     p.add_argument("--request-reserve", type=int, default=DEFAULTS["request_reserve"])
     r = sub.add_parser("run", help="run one batch through a real controller and agents")
@@ -966,6 +981,8 @@ def main(argv=None):
     r.add_argument("--forbidden-phrases", help="the answer list the relay was started with (review)")
     r.add_argument("--history", action="append")
     r.add_argument("--margin", type=float, default=DEFAULTS["margin"])
+    r.add_argument("--review-max-calls", type=int, default=DEFAULTS["review_max_calls"],
+                   help="the agents' model call ceiling per attempt (review-r1, codeye agent --review-max-calls)")
     r.add_argument("--reserve-usd", default=DEFAULTS["reserve_usd"])
     r.add_argument("--request-reserve", type=int, default=DEFAULTS["request_reserve"])
     r.add_argument("--dry-run", action="store_true", help="the relay uses --test-upstream (labelled, never evaluation)")
@@ -1003,7 +1020,7 @@ def main(argv=None):
         plan = variant_plan(corpus, chosen, set(args.variants.split(",")) if args.variants else None, args.repeat,
                             set(args.repeat_cases.split(",")) if args.repeat_cases else None)
         history = history_profile([Path(h) for h in args.history or []], args.pack)
-        est = estimate(args.pack, plan, history=history, margin=args.margin)
+        est = estimate(args.pack, plan, history=history, margin=args.margin, max_calls=args.review_max_calls)
         out = {"selection": selection, "variants": [key_of(c["id"], v, r) for c, v, r in plan], "estimate": est}
         if args.ledger:
             report = ledger_report(args.ledger)

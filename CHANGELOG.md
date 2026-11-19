@@ -8,6 +8,15 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 - **분석 종류별 절**: 보고서가 종합, 환경 분석, 문서 분석, 정적 분석(언어·도구별), 구조·중복 지표, 비밀정보(값 없음), 코드 분석(모델 검토), 분석 공백 순의 절로 나뉜다. 선택 최상위 블록으로 더했고 기존 필드는 바이트 단위로 같다(report 패키지 시험 입력 84개를 이전 builder 출력과 대조). 보고서 builder는 5이며, 모든 관찰과 발견이 한 절에 한 번씩 들어가는지를 저장·조회 검증이 확인한다. 상태·품질 판정 규칙은 그대로다. 모델 문장은 수락된 역할 기록에서만 오고 "모델 해석"으로 표시하며 코드 미포함 내보내기에서는 생략한다. Markdown·HTML·웹 화면은 같은 수를 보이고, 절이 없는 이전 리비전은 이전 평면 배치로 보인다. "이전 실행과 비교"는 웹 화면에만 있다. 분석기 envelope와 descriptor에 분석기 목적(`analyzer.purpose`: 지표·비밀정보)을 기록해 어느 절로 갈지 정한다. [`examples/report.json`](examples/report.json)과 [`examples/report.md`](examples/report.md)는 실제 worker 파이프라인과 대본 모델 응답으로 다시 만들었다(합성 예시, 실모델 호출 없음).
 
+### 추가 — 모듈 단위 검토 분할
+
+- overview가 보내지 못한 코드·테스트 파일을 모듈 단위 slice(`review.investigate.sNNN`, `review.verify.sNNN`, 최대 32개)로 검토한다. 계획은 manifest·scope·상수로만 정하고, `review.scope`가 overview가 실제로 보낸 파일을 빼고 범위 산출물(`application/vnd.codeye.review-scope+json` 0.1)을 쓴다. slice 기록은 schema 0.3이다. 지침 문구는 바뀌지 않았고 slice 요청의 지침 hash는 overview와 같다.
+- attempt당 모델 호출 상한 `codeye agent --review-max-calls`(기본 99, 15~207), Hello `review_max_calls`, 개인 설정 `agent.model.review_max_calls`. 전체 역할 다섯 개가 먼저 실행되고(최대 15회), slice는 남은 호출이 6 이상일 때 차례로 승인된다. 거절된 slice는 `budget_exhausted`(`review_budget_exhausted`)다. 기본 99는 중간 규모 저장소의 대부분을 기본 설정으로 검토하기 위한 값이다. 유료 회귀 실행에서 상한 33은 파일럿 Go 모듈 67개 파일 중 34개를 28회 호출로 검토했다. 비용과 낮추는 방법은 [안내서](docs/GUIDE.md)에 있다.
+- slice는 전체 역할과 같은 비밀값 선별 규칙을 따르고 선별이 없다고 막지 않는다. 선별이 끝났으면 보고된 파일을 빼고, gitleaks가 없거나 실행되지 않았으면 기본 읽기 필터(민감값 패턴·보류 파일)만 거친 입력으로 실행한다. 이때 범위 산출물은 `screen: not_screened`, 범위 산출물과 slice 기록은 `model_input_not_secret_screened`를 싣고, 보고서는 비밀정보 절 `model_input`의 미선별 상태와 공백 `model_input_not_screened`를 보인다. 선별 결과를 쓸 수 없으면 전체 역할처럼 `secret_screen_failed`로 건너뛴다. gitleaks는 지원 언어 소스가 없어도 안내 문서·모듈 manifest 같은 모델 입력 파일이 범위에 있으면 계획된다.
+- `scripts/regression_pilot.py`가 gitleaks 경로와 호출 상한을 에이전트에 넘기고 slice 조건을 보고서 장부로 검사하며, `--dry-run`(시험 장부의 relay만, 가짜 upstream과 이 호스트의 미설정 도구 때문인 부분 완료는 따로 적는다)과 `--compare-dumps`를 갖는다. `scripts/quality_eval.py`의 상한 추정은 slice가 있는 변형을 호출 상한까지로 본다.
+- 보고서 builder 6: slice 기록과 범위 산출물을 읽고, slice 후보를 `review_sNNN_<후보>` 발견으로 코드 분석 절에 넣는다. 코드 분석 절의 [모듈별 검토 장부](docs/REPORT.md#모듈별-검토-장부)(`code_review.ledger`)가 상한·호출·요청 크기와 모듈마다 모델에 보낸 파일·보내지 못한 이유를 센다(모델에 보낸 범위는 검증 범위가 아니다). `llm_exposed_files`는 slice도 세고, `review_calls[]`는 `task_key`를 싣고 최대 207개다. 종합에 보낸/보내지 않은 파일 수, 분석 공백에 `review_scope_*`가 생기며 Markdown·HTML·웹 화면이 같은 수를 보인다. 비밀정보 절 `model_input`에 `screened`가 생겼다. 예시 [`examples/report-slices.json`](examples/report-slices.json)·[`.md`](examples/report-slices.md)는 coverage fixture를 상한 15로 실행한 합성 예시다.
+- 확인 환경: Linux, Go 1.27.4, PostgreSQL 17.10(임시 cluster), gitleaks 8.30.1, OpenCode 1.19.5와 가짜 upstream(`--test-upstream`). 실모델 호출은 하지 않았다.
+
 ### 추가 — 계정·권한·감사
 
 - **로컬 계정**: 사용자 이름(대소문자 무시)과 비밀번호로 로그인한다(`POST /session`). 비밀번호는 PBKDF2-HMAC-SHA256(600,000회, 사용자별 salt)으로 저장하고, 없는 사용자와 틀린 비밀번호는 같은 응답·같은 비용이다. 로그인 링크와 개인 모드는 그대로 동작한다.

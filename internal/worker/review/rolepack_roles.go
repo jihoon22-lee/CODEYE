@@ -7,6 +7,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
@@ -467,14 +468,25 @@ func citedDocuments(docs record.RoleRecord) []record.Excerpt {
 	return out
 }
 
+// investigate is the overview investigate (codeCorpus over the whole run)
+// or, for a slice task, the same request over the slice's files
+// (sliceCorpus) with the review.scope artifact as a third upstream.
 func (s *roleStage) investigate() analysis.TaskResult {
 	envRec, uEnv := s.prior(record.StageEnvironment)
 	docRec, uDoc := s.prior(record.StageDocuments)
-	if r := s.begin([]record.Upstream{uEnv, uDoc}); r != nil {
+	upstream := []record.Upstream{uEnv, uDoc}
+	if s.slice != nil {
+		upstream = append(upstream, s.scopeUp)
+	}
+	if r := s.begin(upstream); r != nil {
 		return *r
 	}
-	s.noteUpstream(uEnv, uDoc)
-	code, lims, err := s.codeCorpus()
+	s.noteUpstream(upstream...)
+	corpus := s.codeCorpus
+	if s.slice != nil {
+		corpus = s.sliceCorpus
+	}
+	code, lims, err := corpus()
 	if err != nil {
 		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 	}
@@ -496,12 +508,20 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		envh.Notes = envRec.EnvironmentNotes
 	}
 	var modules []string
-	for p := range s.entries() {
-		if path.Base(p) == "go.mod" && !goIgnored(p) && inScope(p, normalizedScope(s.j.Scope)) {
-			modules = append(modules, record.DocumentDir(p))
+	if s.slice == nil {
+		for p := range s.entries() {
+			if path.Base(p) == "go.mod" && !goIgnored(p) && inScope(p, normalizedScope(s.j.Scope)) {
+				modules = append(modules, record.DocumentDir(p))
+			}
+		}
+		modules = append(modules, s.otherModuleDirs(code)...)
+	} else {
+		// A slice names the directories of its own modules.
+		for _, m := range s.slice.Modules {
+			_, dir, _ := strings.Cut(m, ":")
+			modules = append(modules, dir)
 		}
 	}
-	modules = append(modules, s.otherModuleDirs(code)...)
 	sort.Strings(modules)
 	modules = slices.Compact(modules)
 	if len(modules) > 32 {

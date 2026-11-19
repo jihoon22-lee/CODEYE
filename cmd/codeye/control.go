@@ -49,7 +49,7 @@ Usage:
                [--cargo /abs/toolchain/bin/cargo [--clippy /abs/toolchain/bin/cargo-clippy]]
                [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]
                [--repo-code-source-root ID ...] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
-               [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1]
+               [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1] [--review-max-calls 15..207]
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
 Login links are written to a 0600 file; the token is never printed.
 Passwords are read from --password-file (mode 0600) or standard input (echo off on a Linux terminal), never from arguments.

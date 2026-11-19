@@ -18,7 +18,6 @@
 
 | 작업 | 선행 |
 |---|---|
-| 검토 범위 확대 | 없음 |
 | 쉬운 시작 | 없음 |
 | GitHub 연결 | 쉬운 시작 |
 | PR·댓글 분석 | GitHub 연결 |
@@ -26,17 +25,7 @@
 | 폐쇄망 배포팩 | 다중 노드 검증 |
 | 운영 수용 | PR·댓글 분석, 폐쇄망 배포팩 |
 
-## 정리 작업
-
-### 검토 범위 확대
-
-지금 모델 검토는 한 run에서 적은 수의 파일만 본다. `review-r1` 조사 역할은 코드 파일 최대 8개·12,000바이트(`roleMaxCodeFiles`·`roleMaxCodeBytes`, [`internal/worker/review/rolepack_inputs.go`](../internal/worker/review/rolepack_inputs.go)), `review-v1` 코퍼스는 최대 6개(`maxFiles`, [`internal/worker/review/context.go`](../internal/worker/review/context.go))이고, 요청마다 40,000바이트 한도(`PromptBudget`, [`internal/worker/review/rolepack.go`](../internal/worker/review/rolepack.go))가 있다. 모듈 단위로 나누어 검토해 모델이 저장소의 더 많은 부분을 보게 한다.
-
-완료 조건:
-- 모듈마다 검토 task를 계획하고, 각 task의 입력 범위(모듈·파일·바이트)와 잘린 범위를 기록한다.
-- 보고서와 범위 원장이 검토한 모듈·파일과 검토하지 않은 범위를 구분한다. 모델에 보낸 파일 수를 검증 범위라고 계산하지 않는다.
-- 호출 수·비용 상한을 실행 전에 정하고 초과하면 남은 모듈을 미검토로 남긴다.
-- 기본 회귀 집합으로 회귀를 확인하고, 품질 향상 주장은 새 보류 사례로만 한다.
+## 쉽게 쓰기
 
 ### 쉬운 시작
 
@@ -125,10 +114,8 @@ GitHub 연결·PR·댓글 분석과 병행한다. 실제 여러 물리 머신에
 |---|---|
 | Git 입력은 모델 검토를 승인할 방법이 없다. 승인은 로컬 source root 단위(`ModelSourceRoots`)뿐이라 Git 저장소 분석은 정적 분석 결과만 나온다. | 쉬운 시작 (프로젝트별 선택) |
 | 개인 모드 `codeye start`가 에이전트에 Git 실행 파일·허용 호스트를 넘기지 않는다. Git 프로젝트는 에이전트를 직접 띄워야 한다. | 쉬운 시작 |
-| 모델 검토가 run당 코드 파일 최대 8개만 본다. | 검토 범위 확대 |
 | `codeye doctor`는 모델·프로세스 제어 항목이 항상 미검증이라 종료 코드가 늘 1이다. | 쉬운 시작 |
 | 재시도는 저장 계층에만 있고 API·CLI·화면에서 부를 수 없다. `recovery_required`를 되돌리는 경로도 없다. | 쉬운 시작 (다시 시도) |
-| 지원 언어 소스가 없는 저장소(문서·설정만)는 비밀정보 검사가 계획되지 않는다. | 검토 범위 확대 (모델 입력 선별과 함께) |
 | `with-tests`·`focused` 프로필은 API가 받지만 워커가 실행하지 않는다. 시험 상태는 항상 미실행이다. | 후속 선택 작업 |
 
 ## 후속 선택 작업

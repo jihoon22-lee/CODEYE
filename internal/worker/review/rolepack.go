@@ -67,27 +67,55 @@ const (
 type RoleHandler struct {
 	Static analysis.Handler
 	Caller Caller
+	// MaxCalls is the node operator's model call ceiling per attempt
+	// (codeye agent --review-max-calls); 0 means record.DefaultMaxCalls. It
+	// decides which review slices are admitted at run time and never the
+	// plan.
+	MaxCalls int
 }
 
 var _ analysis.Handler = RoleHandler{}
 
 func (h RoleHandler) Info() analysis.HandlerInfo { return h.Static.Info() }
 
+func (h RoleHandler) maxCalls() int {
+	if h.MaxCalls == 0 {
+		return record.DefaultMaxCalls
+	}
+	return h.MaxCalls
+}
+
 // Plan appends the five roles of the role pack. The documents role is required only when
 // the manifest has guidance documents in scope; environment and interpret
-// roles are optional.
+// roles are optional. When the overview investigate cannot offer every
+// eligible code file, review.scope and one investigate/verify pair per slice
+// follow (planSlices), all optional for the verdict. The slices come after
+// every whole-run role, so the whole-run roles' calls are always spent
+// before any slice is admitted.
 func (h RoleHandler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec, error) {
 	plan, err := h.Static.Plan(ctx, j)
 	if err != nil {
 		return nil, err
 	}
 	docs := len(discovery.EligibleDocuments(j.Snapshot.Manifest, j.Scope)) > 0
-	return append(plan,
+	plan = append(plan,
 		analysis.TaskSpec{Key: "review.environment", Required: false, Title: "환경 영향 검토", Stage: domain.StageEnvironment},
 		analysis.TaskSpec{Key: "review.documents", Required: docs, Title: "문서 계약 검토", Stage: domain.StageDocuments},
 		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "독립 코드 검토", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.interpret", Required: false, Title: "정적 진단 해석", Stage: domain.StageCodeReview},
-		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview}), nil
+		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview})
+	sp := planSlices(j.Snapshot.Manifest, j.Scope)
+	if len(sp.Slices) == 0 {
+		return plan, nil
+	}
+	plan = append(plan, analysis.TaskSpec{Key: record.TaskScope, Required: false, Title: "모듈별 검토 범위", Stage: domain.StageCodeReview})
+	for _, s := range sp.Slices {
+		inv, ver := s.TaskKeys()
+		plan = append(plan,
+			analysis.TaskSpec{Key: inv, Required: false, Title: "모듈별 코드 검토 " + s.Key, Stage: domain.StageCodeReview},
+			analysis.TaskSpec{Key: ver, Required: false, Title: "모듈별 후보 검증 " + s.Key, Stage: domain.StageCodeReview})
+	}
+	return plan, nil
 }
 
 func (h RoleHandler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
@@ -95,7 +123,12 @@ func (h RoleHandler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpe
 	if !ok {
 		return h.Static.Run(ctx, j, t, runner)
 	}
-	if !slices.Contains(rolepack.Roles, role) {
+	slice := ""
+	switch stage, key, isSlice := record.SliceTask(t.Key); {
+	case t.Key == record.TaskScope:
+	case isSlice:
+		role, slice = stage, key
+	case !slices.Contains(rolepack.Roles, role):
 		return result(domain.TaskFailed, reasonUnknownRole)
 	}
 	if !j.AllowModelReview {
@@ -104,11 +137,20 @@ func (h RoleHandler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpe
 	if ctx.Err() != nil {
 		return result(domain.TaskCancelled, "cancelled")
 	}
-	s := &roleStage{h: h, ctx: ctx, j: j, runner: runner, role: role, screen: screenSecrets(ctx, h.Static, j)}
+	s := &roleStage{h: h, ctx: ctx, j: j, runner: runner, task: t.Key, role: role, screen: screenSecrets(ctx, h.Static, j)}
 	if s.screen.state == screenFailed {
 		// The secrets task ran but its result is unusable: nothing of the
 		// snapshot may reach a model unscreened.
 		return result(domain.TaskSkippedPolicy, reasonSecretScreenFailed)
+	}
+	// The scope and the slices follow the whole-run roles' screen rule: with
+	// no secrets task run their inputs go through the read filters only and
+	// the records say model_input_not_secret_screened (screen.go).
+	if t.Key == record.TaskScope {
+		return s.scopeTask()
+	}
+	if slice != "" {
+		return s.sliceTask(slice)
 	}
 	switch role {
 	case record.StageEnvironment:
@@ -129,11 +171,16 @@ type roleStage struct {
 	ctx    context.Context
 	j      analysis.Job
 	runner executor.Runner
+	task   string // the task key (review.investigate.s001 for a slice)
 	role   string
 	pack   rolepack.Selection
 	rec    record.RoleRecord
 	// screen is the secrets screen of the run's model inputs (screen.go).
 	screen secretScreen
+	// slice is set for a slice task: its entry of the review.scope artifact
+	// and that artifact's upstream binding (slice_run.go).
+	slice   *record.ScopeSlice
+	scopeUp record.Upstream
 }
 
 // begin loads the pack and the record skeleton; a nil caller is reported
@@ -155,6 +202,10 @@ func (s *roleStage) begin(upstream []record.Upstream) *analysis.TaskResult {
 	s.rec = record.RoleRecord{Schema: record.SchemaVersionRole, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
 		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Stage: s.role, Outcome: record.OutcomeAccepted, Upstream: upstream,
 		Evidence: []record.Excerpt{}, Observations: []record.ObservationRef{}, Limitations: []string{}, Calls: []record.RoleCall{}}
+	if s.slice != nil {
+		s.rec.Schema = record.SchemaVersionSlice
+		s.rec.Slice = &record.SliceRef{Key: s.slice.Key, Modules: append([]string{}, s.slice.Modules...)}
+	}
 	return nil
 }
 
@@ -232,6 +283,9 @@ func (s *roleStage) exchange(contract string, input func(*roleRepair) ([]byte, e
 		size := len(opencode.Prompt(q))
 		if size > PromptBudget {
 			return s.fail(result(domain.TaskFailed, reasonInputTooLarge))
+		}
+		if err := s.countCall(); err != nil {
+			return s.fail(result(domain.TaskFailed, reasonCallCountFailed))
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
 		call := record.RoleCall{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,
@@ -330,8 +384,26 @@ func (s *roleStage) finish() analysis.TaskResult {
 	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: s.rec.Limitations}
 }
 
-func rolePath(j analysis.Job, stage string) string {
-	return filepath.Join(j.Scratch, "review.r1."+stage+".json")
+// rolePath is the scratch file of a role record: name is a stage, or
+// stage.sNNN for a slice record.
+func rolePath(j analysis.Job, name string) string {
+	return filepath.Join(j.Scratch, "review.r1."+name+".json")
+}
+
+// recordName is the rolePath name of a record.
+func recordName(r record.RoleRecord) string {
+	if r.Slice != nil {
+		return r.Stage + "." + r.Slice.Key
+	}
+	return r.Stage
+}
+
+// expectRecord is expectRole for a record name (stage or stage.sNNN).
+func expectRecord(j analysis.Job, name string) record.Expect {
+	stage, slice, _ := strings.Cut(name, ".")
+	e := expectRole(j, stage)
+	e.Slice = slice
+	return e
 }
 
 func expectRole(j analysis.Job, stage string) record.Expect {
@@ -349,11 +421,11 @@ func expectRole(j analysis.Job, stage string) record.Expect {
 }
 
 func persistRole(j analysis.Job, r record.RoleRecord) (analysis.ArtifactFile, error) {
-	b, err := record.MarshalRole(r, expectRole(j, r.Stage))
+	b, err := record.MarshalRole(r, expectRecord(j, recordName(r)))
 	if err != nil {
 		return analysis.ArtifactFile{}, err
 	}
-	p := rolePath(j, r.Stage)
+	p := rolePath(j, recordName(r))
 	if err = os.WriteFile(p, bytes.TrimSpace(b), 0600); err != nil {
 		return analysis.ArtifactFile{}, err
 	}
@@ -378,19 +450,20 @@ func readBounded(p string, max int64) ([]byte, error) {
 	return b, nil
 }
 
-// prior reads an earlier role record of this attempt. A missing record is
-// explained by the stage's own skip rule when it applies.
-func (s *roleStage) prior(stage string) (record.RoleRecord, record.Upstream) {
-	u := record.Upstream{Source: "review." + stage}
-	b, err := readBounded(rolePath(s.j, stage), record.MaxBytes)
+// prior reads an earlier role record of this attempt (name is a stage, or
+// stage.sNNN for a slice record). A missing whole-run record is explained by
+// the stage's own skip rule when it applies.
+func (s *roleStage) prior(name string) (record.RoleRecord, record.Upstream) {
+	u := record.Upstream{Source: "review." + name}
+	b, err := readBounded(rolePath(s.j, name), record.MaxBytes)
 	if err != nil {
 		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordMissing
-		if reason := s.skipReason(stage); reason != "" {
+		if reason := s.skipReason(name); reason != "" {
 			u.State, u.Reason = record.UpstreamSkipped, reason
 		}
 		return record.RoleRecord{}, u
 	}
-	r, err := record.DecodeRole(b, expectRole(s.j, stage))
+	r, err := record.DecodeRole(b, expectRecord(s.j, name))
 	switch {
 	case err != nil:
 		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordInvalid

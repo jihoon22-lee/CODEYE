@@ -39,6 +39,9 @@ var gapCode = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 // to the summary, an overview equal to its recomputation, resolvable
 // evidence and the code-free rules for model text.
 func validateSections(r Report) error {
+	if err := validateLedger(r); err != nil {
+		return err
+	}
 	if !sectionsExpected(r.Builder.Version) {
 		if r.hasSections() {
 			return invalidf("sections in a revision of builder %s", r.Builder.Version)
@@ -380,6 +383,16 @@ func projectSections(out *Report, r Report) {
 		for i, l := range cr.Limits {
 			l.Statement, l.ObservationIDs = textOmitted, slices.Clone(l.ObservationIDs)
 			c.Limits[i] = l
+		}
+		if cr.Ledger != nil {
+			// Module IDs, task keys, codes and counts: no repository text.
+			l := *cr.Ledger
+			l.Modules = make([]LedgerModule, len(cr.Ledger.Modules))
+			for i, m := range cr.Ledger.Modules {
+				m.Slices = slices.Clone(m.Slices)
+				l.Modules[i] = m
+			}
+			c.Ledger = &l
 		}
 		out.CodeReview = &c
 	}

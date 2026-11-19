@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.codeye.invalid/v0.1/review-scope.schema.json",
+  "title": "CODEYE review scope",
+  "description": "application/vnd.codeye.review-scope+json, schema_version 0.1: the artifact of the review.scope task (no model call), written before any review slice runs. It records the role pack's call ceiling and admission rule, the overview prefix (files the overview investigate is certain to offer when readable) with each file's state, the code and test files the overview actually sent, and every planned slice with its modules and files. Every eligible file is in exactly one place; files beyond the 32-slice limit are counted per module (files_not_planned). The admitted slices are not here: admission is sequential at run time and is read from the slice task states (budget_exhausted / review_budget_exhausted). Sizes are JSON-encoded excerpt bytes. The Go decoder (internal/worker/review/record, DecodeScope) is authoritative: it also binds paths and blobs to the snapshot manifest, checks per-module counts and that covered_by_overview matches overview.offered.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "pack", "snapshot_manifest_digest", "run_id", "attempt_id", "screen", "budget", "limits", "upstream", "modules", "overview", "slices", "limitations"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "review_scope"},
+    "pack": {"type": "object", "additionalProperties": false, "required": ["id", "version"], "properties": {"id": {"type": "string", "pattern": "^[a-z][a-z0-9.-]{0,63}$"}, "version": {"type": "string", "pattern": "^[a-zA-Z0-9_.-]{1,64}$"}}},
+    "snapshot_manifest_digest": {"$ref": "#/$defs/digest"},
+    "run_id": {"$ref": "#/$defs/uuid"},
+    "attempt_id": {"$ref": "#/$defs/uuid"},
+    "screen": {"enum": ["applied", "not_screened"], "description": "applied: a completed secrets screen withheld its files; not_screened: no secrets task ran, the inputs went through the read filters only and limitations hold model_input_not_secret_screened"},
+    "budget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["max_calls", "max_request_bytes", "whole_run_max_calls", "slice_reserve_calls", "calls_before_slices", "admission"],
+      "properties": {
+        "max_calls": {"type": "integer", "minimum": 15, "maximum": 207, "description": "the node operator's model call ceiling per attempt (codeye agent --review-max-calls, default 99)"},
+        "max_request_bytes": {"type": "integer", "minimum": 1},
+        "whole_run_max_calls": {"const": 15},
+        "slice_reserve_calls": {"const": 6},
+        "calls_before_slices": {"type": "integer", "minimum": 0, "maximum": 15, "description": "model calls the attempt had made when review.scope ran"},
+        "admission": {"const": "sequential_reserve", "description": "a slice is admitted in plan order only while max_calls minus the calls made so far is at least slice_reserve_calls; the first slice that fails and every later one end budget_exhausted"}
+      }
+    },
+    "limits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["max_files", "max_bytes", "max_file_bytes", "max_file_lines", "max_slices"],
+      "properties": {"max_files": {"type": "integer", "minimum": 1}, "max_bytes": {"type": "integer", "minimum": 1}, "max_file_bytes": {"type": "integer", "minimum": 1}, "max_file_lines": {"type": "integer", "minimum": 1}, "max_slices": {"const": 32}}
+    },
+    "upstream": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "#/$defs/upstream"}},
+    "modules": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false, "required": ["id", "discovered", "files_eligible", "files_not_planned"],
+      "properties": {"id": {"$ref": "#/$defs/module"}, "discovered": {"type": "boolean"}, "files_eligible": {"type": "integer", "minimum": 1}, "files_not_planned": {"type": "integer", "minimum": 0}}
+    }},
+    "overview": {
+      "type": "object", "additionalProperties": false, "required": ["files", "offered"],
+      "properties": {
+        "files": {"type": "array", "maxItems": 16, "items": {"allOf": [{"$ref": "#/$defs/file"}, {"properties": {"state": {"enum": ["covered_by_overview", "withheld", "unreadable", "overview_not_sent"]}}}]}},
+        "offered": {"type": "array", "maxItems": 8, "uniqueItems": true, "items": {"$ref": "#/$defs/path"}}
+      }
+    },
+    "slices": {"type": "array", "maxItems": 32, "items": {
+      "type": "object", "additionalProperties": false, "required": ["key", "investigate_task", "verify_task", "modules", "files"],
+      "properties": {
+        "key": {"type": "string", "pattern": "^s(00[1-9]|0[12][0-9]|03[0-2])$"},
+        "investigate_task": {"type": "string", "pattern": "^review\\.investigate\\.s[0-9]{3}$"},
+        "verify_task": {"type": "string", "pattern": "^review\\.verify\\.s[0-9]{3}$"},
+        "modules": {"type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": {"$ref": "#/$defs/module"}},
+        "files": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"allOf": [{"$ref": "#/$defs/file"}, {"properties": {"state": {"enum": ["planned", "covered_by_overview", "withheld", "unreadable"]}}}]}}
+      }
+    }},
+    "limitations": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/code"}}
+  },
+  "if": {"properties": {"screen": {"const": "not_screened"}}, "required": ["screen"]},
+  "then": {"properties": {"limitations": {"contains": {"const": "model_input_not_secret_screened"}}}},
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+    "path": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)[^:\\\\\\u0000-\\u001f\\u007f]+(?<!/)$"},
+    "module": {"type": "string", "pattern": "^(cpp|go|javascript|python|rust):(\\.|[^:\\u0000-\\u001f]+)$"},
+    "upstream": {
+      "type": "object", "additionalProperties": false, "required": ["source", "state"],
+      "properties": {"source": {"const": "review.investigate"}, "state": {"enum": ["accepted", "skipped", "failed", "unavailable"]}, "reason": {"$ref": "#/$defs/code"}, "sha256": {"$ref": "#/$defs/digest"}}
+    },
+    "file": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "module", "bound_bytes", "planned_lines", "planned_bytes", "total_lines", "state"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"}, "sha256": {"$ref": "#/$defs/digest"}, "module": {"$ref": "#/$defs/module"},
+        "bound_bytes": {"type": "integer", "minimum": 1, "maximum": 2400, "description": "the plan's bound min(2400, 6 x size + 2)"},
+        "planned_lines": {"type": "integer", "minimum": 0, "maximum": 50},
+        "planned_bytes": {"type": "integer", "minimum": 0, "maximum": 2400},
+        "total_lines": {"type": "integer", "minimum": 0},
+        "state": {"enum": ["planned", "withheld", "unreadable", "covered_by_overview", "overview_not_sent"]}
+      }
+    }
+  }
+}

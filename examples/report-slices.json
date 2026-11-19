@@ -1,0 +1,2731 @@
+{
+  "artifacts": [
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000606",
+      "media_type": "application/vnd.codeye.source-manifest+json",
+      "role": "source_manifest",
+      "sha256": "22d1b9e3af626ed1380a0a5502e8ab3793d98308932434fa65f21d9c12ee059a",
+      "size_bytes": 7829,
+      "task_key": null
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000650",
+      "media_type": "application/vnd.codeye.result-manifest+json",
+      "role": "result_manifest",
+      "sha256": "1080faf08998310ed7ca44204e39a4edcd327cf041df60faa8998a3a11c366c4",
+      "size_bytes": 15714,
+      "task_key": null
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations",
+      "id": "0195f3a0-0000-7000-8000-00000000061c",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "b65a119bccda754ae0649457a2cbe10c4f4fa2ed1f47f78707788a11323de3f1",
+      "size_bytes": 3072,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations",
+      "id": "0195f3a0-0000-7000-8000-000000000626",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "7e43e3f99236081c27d2744661f70cee0538f6c612276f8507cc27eeeb4cab5e",
+      "size_bytes": 3543,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
+      "id": "0195f3a0-0000-7000-8000-00000000062c",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "75ab8fe8cee9af64b98b0a06ef7c994e89c976b88a282cad086ab258b8e7134c",
+      "size_bytes": 3006,
+      "task_key": "gitleaks"
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
+      "id": "0195f3a0-0000-7000-8000-00000000062e",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "9d629182f29f5a0387d35216ff9f77ccb514ea65481d01d73d51a5dfb7fbcd70",
+      "size_bytes": 1142,
+      "task_key": "pack-gap.javascript"
+    },
+    {
+      "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
+      "id": "0195f3a0-0000-7000-8000-000000000630",
+      "media_type": "application/vnd.codeye.observations+json",
+      "role": "observations",
+      "sha256": "35b911b36d5ad38dc68eba6d2b2adda2c3a662d8f24d67f62e2dba36080c1a3f",
+      "size_bytes": 1130,
+      "task_key": "pack-gap.python"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000608",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000060a",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "c9fd9ccb6682c54b5fcb0363757b6c6873564e7c067f70b3b5581b611528b9f4",
+      "size_bytes": 7,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000060c",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "55f4221aa0e36b70cbfc65ccc26728d31f6510eb1ead635badc007cdb5cd2bed",
+      "size_bytes": 7,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000060e",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "53199309ddfb6ea7ecdc24c7731f535dc3d6bba2e8f053b895b78b967b84c534",
+      "size_bytes": 9,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000614",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000616",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "45f63a941a43b0e40cbf0c7ca3e31910f84485b8eef76ee82896dd3db4669835",
+      "size_bytes": 48,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000618",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "2bb15386bcd126dd898bf42f627459520bad3125c5aa674aff9d30c0df2a247e",
+      "size_bytes": 43,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000061a",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000061e",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000620",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "81d503b47847a8767cdc5b2fa8af2c93a59e41b3c34fee26cf3751deaa976803",
+      "size_bytes": 50,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000622",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "c698b07632921ba3ff4259f687a08a9785232f4b62da15e201652d42714d095a",
+      "size_bytes": 45,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000624",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000628",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "c9fd9ccb6682c54b5fcb0363757b6c6873564e7c067f70b3b5581b611528b9f4",
+      "size_bytes": 7,
+      "task_key": "gitleaks"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000062a",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "gitleaks"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000609",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000060b",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000060d",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000060f",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000615",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000617",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000619",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000061b",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000061f",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000621",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000623",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000625",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000629",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "gitleaks"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000062b",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "gitleaks"
+    },
+    {
+      "decoder": "application/vnd.codeye.environment+json;schema_version=0.1",
+      "id": "0195f3a0-0000-7000-8000-000000000610",
+      "media_type": "application/vnd.codeye.environment+json",
+      "role": "other",
+      "sha256": "ad18193c720bd7a91b6b25c25583bf10e9af4a1a6adc46555a2f768db8a9bcaf",
+      "size_bytes": 3950,
+      "task_key": "env.discover"
+    },
+    {
+      "decoder": "application/vnd.codeye.environment+json;schema_version=0.1",
+      "id": "0195f3a0-0000-7000-8000-000000000612",
+      "media_type": "application/vnd.codeye.environment+json",
+      "role": "other",
+      "sha256": "962fe2f9e87e2f315b6ac7f6f6514752da427c9754d8622ab6714c484069ba74",
+      "size_bytes": 1463,
+      "task_key": "docs.discover"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "id": "0195f3a0-0000-7000-8000-000000000632",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "49f998deba92769945ddfcb6463eb43cb2309b655437530aecf607534b66e72d",
+      "size_bytes": 4199,
+      "task_key": "review.environment"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "id": "0195f3a0-0000-7000-8000-000000000634",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "9b3df22853e958c1943cc544c119c1a2fa267dba6ba973d21b6a0bac3967fdbd",
+      "size_bytes": 1347,
+      "task_key": "review.documents"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "id": "0195f3a0-0000-7000-8000-000000000636",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "b57822ca2ee5be2b978746229dc6c850ccb21bc14d667c10c10fb95c7abfd3e9",
+      "size_bytes": 3320,
+      "task_key": "review.investigate"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "id": "0195f3a0-0000-7000-8000-000000000639",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "fbe76650dc466f4886e164cfdabaf2eba3e33217cd9fca26254920a423799297",
+      "size_bytes": 4056,
+      "task_key": "review.verify"
+    },
+    {
+      "decoder": "application/vnd.codeye.review-scope+json;schema_version=0.1",
+      "id": "0195f3a0-0000-7000-8000-00000000063b",
+      "media_type": "application/vnd.codeye.review-scope+json",
+      "role": "other",
+      "sha256": "94763c41ae4879ae557eac023826a72f9e5f6d7042cbb8f3999ae4a4234dfc8c",
+      "size_bytes": 10712,
+      "task_key": "review.scope"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-00000000063d",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "14b07efe36c3c7858a0879770caef8c42e051dddb7c75d7891e5bca676ebced3",
+      "size_bytes": 2531,
+      "task_key": "review.investigate.s001"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-00000000063f",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "a209f8b54e6add9dd21b4b85abfb7cdd95e4005f5d362f70c2ed9511713f8251",
+      "size_bytes": 3171,
+      "task_key": "review.verify.s001"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000641",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "5642553d03bf20663ab24d8e26405dc73c87b4eb74761a8384ae181562e47bef",
+      "size_bytes": 2696,
+      "task_key": "review.investigate.s002"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000643",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "964e0a9918ecbd2eaa5c10cf943fbd39022be1d2dbc9e6f22abe8258281de53f",
+      "size_bytes": 3321,
+      "task_key": "review.verify.s002"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000645",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "9e757b6e67a4fed51842b5562b23138fb811e600a9bb52e14996ba135d1f5f63",
+      "size_bytes": 2891,
+      "task_key": "review.investigate.s003"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000647",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "5bdc2c89414d7b5fa7152032badd1ef0c769f998b26789dd487da0be9b665771",
+      "size_bytes": 3515,
+      "task_key": "review.verify.s003"
+    }
+  ],
+  "attempt": {
+    "cleanup_state": "confirmed",
+    "completion_status": "partial",
+    "id": "0195f3a0-0000-7000-8000-000000000602",
+    "lease_epoch": 1,
+    "number": 1,
+    "reason": null
+  },
+  "builder": {
+    "id": "codeye-report",
+    "input_digest": "7c9ba8e812457ebe6fadc05b6cb83a34d76ae01b19da3103a71f52ffd870e9f3",
+    "result_manifest_artifact_id": null,
+    "version": "6"
+  },
+  "code_review": {
+    "accepted_calls": 10,
+    "calls": 10,
+    "exposed_files": 23,
+    "finding_ids": [
+      "review_s001_investigate_1",
+      "review_investigate_1",
+      "review_s002_investigate_1",
+      "review_s003_investigate_1"
+    ],
+    "interpretation_limits": [],
+    "inventory_files": 44,
+    "ledger": {
+      "calls_used": 10,
+      "max_calls": 15,
+      "max_request_bytes": 40000,
+      "modules": [
+        {
+          "bytes_sent": 945,
+          "discovered": true,
+          "files_budget_exhausted": 0,
+          "files_eligible": 3,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_sent_to_model": 3,
+          "files_truncated": 0,
+          "files_unreadable": 0,
+          "files_with_completed_review": 3,
+          "files_withheld": 0,
+          "module_id": "go:api",
+          "slices": [
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s001"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s001"
+            }
+          ]
+        },
+        {
+          "bytes_sent": 13501,
+          "discovered": true,
+          "files_budget_exhausted": 19,
+          "files_eligible": 30,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_sent_to_model": 11,
+          "files_truncated": 11,
+          "files_unreadable": 0,
+          "files_with_completed_review": 11,
+          "files_withheld": 0,
+          "module_id": "go:store",
+          "slices": [
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s002"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s002"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s003"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s003"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.investigate.s004"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.verify.s004"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.investigate.s005"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.verify.s005"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.investigate.s006"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.verify.s006"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.investigate.s007"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.verify.s007"
+            }
+          ]
+        },
+        {
+          "bytes_sent": 559,
+          "discovered": true,
+          "files_budget_exhausted": 0,
+          "files_eligible": 3,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_sent_to_model": 3,
+          "files_truncated": 0,
+          "files_unreadable": 0,
+          "files_with_completed_review": 3,
+          "files_withheld": 0,
+          "module_id": "javascript:web",
+          "slices": [
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s001"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s001"
+            }
+          ]
+        },
+        {
+          "bytes_sent": 635,
+          "discovered": true,
+          "files_budget_exhausted": 0,
+          "files_eligible": 3,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_sent_to_model": 3,
+          "files_truncated": 0,
+          "files_unreadable": 0,
+          "files_with_completed_review": 3,
+          "files_withheld": 0,
+          "module_id": "python:worker",
+          "slices": [
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s001"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s001"
+            }
+          ]
+        }
+      ],
+      "request_bytes_sent": 190850,
+      "scope": {
+        "key": "review.scope",
+        "result": "accepted",
+        "task_status": "succeeded"
+      },
+      "status": "partial"
+    },
+    "pack": "role",
+    "pack_id": "review-r1",
+    "pack_version": "2.0.0",
+    "request_bytes": 190850,
+    "roles": [
+      {
+        "key": "review.investigate",
+        "result": "accepted",
+        "task_status": "succeeded"
+      },
+      {
+        "key": "review.interpret",
+        "reason": "no_tool_observations",
+        "result": "skipped",
+        "task_status": "skipped_policy"
+      },
+      {
+        "key": "review.verify",
+        "result": "accepted",
+        "task_status": "succeeded"
+      }
+    ],
+    "stage": {
+      "counts": {
+        "budget_exhausted": 8,
+        "skipped_policy": 1
+      },
+      "reasons": [
+        "no_tool_observations",
+        "review_budget_exhausted"
+      ],
+      "stage": "code_review",
+      "state": "partial",
+      "succeeded": 9,
+      "tasks": 18
+    }
+  },
+  "coverage": {
+    "ai_review": {
+      "optional_tasks": [
+        {
+          "key": "review.environment",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.interpret",
+          "reason": "no_tool_observations",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s001",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.investigate.s002",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.investigate.s003",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.investigate.s004",
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
+        },
+        {
+          "key": "review.investigate.s005",
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
+        },
+        {
+          "key": "review.investigate.s006",
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
+        },
+        {
+          "key": "review.investigate.s007",
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
+        },
+        {
+          "key": "review.scope",
+          "result": "result_missing",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.verify.s001",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.verify.s002",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.verify.s003",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.verify.s004",
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
+        },
+        {
+          "key": "review.verify.s005",
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
+        },
+        {
+          "key": "review.verify.s006",
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
+        },
+        {
+          "key": "review.verify.s007",
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
+        }
+      ],
+      "reason": null,
+      "required_tasks": [
+        {
+          "key": "review.documents",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.investigate",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.verify",
+          "result": "accepted",
+          "task_status": "succeeded"
+        }
+      ],
+      "status": "performed"
+    },
+    "inventory_files": 44,
+    "llm_exposed_files": 23,
+    "notes": [
+      "inventory_counts_all_included_files",
+      "tests_not_planned",
+      "tool_reported_zero_is_not_clean"
+    ],
+    "review_calls": [
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "4ff052a3f276969278c1d1f93010103b013187d0260ecf5ce717fb9a1f7c746e",
+        "pack_version": "2.0.0",
+        "request_sha256": "fff68652a2ea96a1969d921b1b4714bb9233a8cafccc61c918e88dd98b8e6ad3",
+        "role": "environment",
+        "task_key": "review.environment"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "d0cdbb4ee15ac315dd2958e24878be7beb9ed3df0a3619596e0cd61249e095d2",
+        "pack_version": "2.0.0",
+        "request_sha256": "bf52196ea063ffa54ddaea6c12002d300e0ea4ab9651527e03c00d756ac4ca51",
+        "role": "documents",
+        "task_key": "review.documents"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "7e613a74b00f349cead135cd23b46f5d4b6dc916f67deede408e7abdae76e906",
+        "role": "investigate",
+        "task_key": "review.investigate"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "23272acf25df8e6af6b124e2d69cfadf346f7b9cabaec7fc1e3a54755178ed59",
+        "role": "verify",
+        "task_key": "review.verify"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "37daed14df4afe7c46a8d8fcab34f1a898db787ce68968c76dfcca5911114554",
+        "role": "investigate",
+        "task_key": "review.investigate.s001"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "e439206d5c8720c602f249fe1953e5c0f1b9e74f77a9b65b532381476daa0ab3",
+        "role": "verify",
+        "task_key": "review.verify.s001"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "0b12f8b612f60541707b66b95bbe1fbaca6da7ef4448d2c625f9790a48cf384a",
+        "role": "investigate",
+        "task_key": "review.investigate.s002"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "7443f1f1e8dc0f238a7c9a1ed640e7583fa097e54e25bc522cc680ef9b4f342d",
+        "role": "verify",
+        "task_key": "review.verify.s002"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "a40094f029fb4294d925c25164453fa58e55dd829a7bfd8166554fea08780a9f",
+        "role": "investigate",
+        "task_key": "review.investigate.s003"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "cc492da94a862f6dfd3b59697d4eb6ea4aa5cdcc909b04c302a0b425ded72487",
+        "role": "verify",
+        "task_key": "review.verify.s003"
+      }
+    ],
+    "scope_mode": "full",
+    "test_status": "not_run",
+    "tool_processed_files": 44,
+    "tools": [
+      {
+        "analyzer": "any.gitleaks",
+        "analyzer_errors": 0,
+        "exit_class": "success_without_findings",
+        "files_in_scope": 44,
+        "ignored_files": 0,
+        "limitations": [
+          "history_not_scanned",
+          "secret_columns_not_recorded",
+          "secret_values_withheld"
+        ],
+        "packages": {
+          "analyzed": 44
+        },
+        "partial_parse": false,
+        "processed_files": 44,
+        "processed_paths": [
+          "README.md",
+          "api/go.mod",
+          "api/handler.go",
+          "api/handler_test.go",
+          "api/main.go",
+          "store/bucket.go",
+          "store/cache.go",
+          "store/codec.go",
+          "store/compact.go",
+          "store/cursor.go",
+          "store/delete.go",
+          "store/encode.go",
+          "store/evict.go",
+          "store/flush.go",
+          "store/get.go",
+          "store/go.mod",
+          "store/index.go",
+          "store/iter.go",
+          "store/journal.go",
+          "store/lock.go",
+          "store/merge.go",
+          "store/meta.go",
+          "store/open.go",
+          "store/page.go",
+          "store/put.go",
+          "store/range.go",
+          "store/recover.go",
+          "store/scan.go",
+          "store/segment.go",
+          "store/snapshot.go",
+          "store/split.go",
+          "store/stats.go",
+          "store/sync.go",
+          "store/tombstone.go",
+          "store/txn.go",
+          "store/wal.go",
+          "web/package.json",
+          "web/src/client.test.ts",
+          "web/src/client.ts",
+          "web/src/index.ts",
+          "worker/app.py",
+          "worker/jobs.py",
+          "worker/pyproject.toml",
+          "worker/tests/test_jobs.py"
+        ],
+        "rule_context": {
+          "config": "not_read",
+          "repository_config": "overridden",
+          "rule_pack": "codeye-secrets-gitleaks",
+          "rule_pack_version": "1",
+          "selection": [
+            "config=extend.useDefault"
+          ],
+          "source_suppressions": "disabled"
+        },
+        "stderr_failures": 0,
+        "task_key": "gitleaks",
+        "tool_version": "8.30.1",
+        "unlisted_files": 0
+      },
+      {
+        "analyzer": "go.vet",
+        "analyzer_errors": 0,
+        "exit_class": "success_without_findings",
+        "files_in_scope": 3,
+        "ignored_files": 0,
+        "limitations": [
+          "default_build_context_only"
+        ],
+        "packages": {
+          "analyzed_clean": 1
+        },
+        "partial_parse": false,
+        "processed_files": 3,
+        "processed_paths": [
+          "api/handler.go",
+          "api/handler_test.go",
+          "api/main.go"
+        ],
+        "rule_context": {
+          "config": "not_read",
+          "repository_config": "none",
+          "rule_pack": "codeye-go-vet-default",
+          "rule_pack_version": "1",
+          "selection": [],
+          "source_suppressions": "none"
+        },
+        "stderr_failures": 0,
+        "task_key": "go-vet.m01",
+        "tool_version": "go1.27.4",
+        "unlisted_files": 0
+      },
+      {
+        "analyzer": "go.vet",
+        "analyzer_errors": 0,
+        "exit_class": "success_without_findings",
+        "files_in_scope": 30,
+        "ignored_files": 0,
+        "limitations": [
+          "default_build_context_only"
+        ],
+        "packages": {
+          "analyzed_clean": 1
+        },
+        "partial_parse": false,
+        "processed_files": 30,
+        "processed_paths": [
+          "store/bucket.go",
+          "store/cache.go",
+          "store/codec.go",
+          "store/compact.go",
+          "store/cursor.go",
+          "store/delete.go",
+          "store/encode.go",
+          "store/evict.go",
+          "store/flush.go",
+          "store/get.go",
+          "store/index.go",
+          "store/iter.go",
+          "store/journal.go",
+          "store/lock.go",
+          "store/merge.go",
+          "store/meta.go",
+          "store/open.go",
+          "store/page.go",
+          "store/put.go",
+          "store/range.go",
+          "store/recover.go",
+          "store/scan.go",
+          "store/segment.go",
+          "store/snapshot.go",
+          "store/split.go",
+          "store/stats.go",
+          "store/sync.go",
+          "store/tombstone.go",
+          "store/txn.go",
+          "store/wal.go"
+        ],
+        "rule_context": {
+          "config": "not_read",
+          "repository_config": "none",
+          "rule_pack": "codeye-go-vet-default",
+          "rule_pack_version": "1",
+          "selection": [],
+          "source_suppressions": "none"
+        },
+        "stderr_failures": 0,
+        "task_key": "go-vet.m02",
+        "tool_version": "go1.27.4",
+        "unlisted_files": 0
+      },
+      {
+        "analyzer": "javascript.none",
+        "analyzer_errors": 0,
+        "exit_class": "not_run",
+        "files_in_scope": 3,
+        "ignored_files": 0,
+        "limitations": [
+          "analyzer_pack_missing"
+        ],
+        "packages": {},
+        "partial_parse": false,
+        "processed_files": 0,
+        "rule_context": {
+          "config": "not_read",
+          "repository_config": "none",
+          "rule_pack": "none",
+          "rule_pack_version": "1",
+          "selection": [],
+          "source_suppressions": "none"
+        },
+        "stderr_failures": 0,
+        "task_key": "pack-gap.javascript",
+        "tool_version": null,
+        "unlisted_files": 0
+      },
+      {
+        "analyzer": "python.none",
+        "analyzer_errors": 0,
+        "exit_class": "not_run",
+        "files_in_scope": 3,
+        "ignored_files": 0,
+        "limitations": [
+          "analyzer_pack_missing"
+        ],
+        "packages": {},
+        "partial_parse": false,
+        "processed_files": 0,
+        "rule_context": {
+          "config": "not_read",
+          "repository_config": "none",
+          "rule_pack": "none",
+          "rule_pack_version": "1",
+          "selection": [],
+          "source_suppressions": "none"
+        },
+        "stderr_failures": 0,
+        "task_key": "pack-gap.python",
+        "tool_version": null,
+        "unlisted_files": 0
+      }
+    ]
+  },
+  "created_at": "2026-11-18T00:10:00Z",
+  "demo": true,
+  "documents": {
+    "budget": {
+      "max_documents": 1000,
+      "per_document_bytes": 32768,
+      "read_bytes": 168,
+      "total_bytes": 262144
+    },
+    "conflicts": [],
+    "contracts": [
+      {
+        "applies_to": ".",
+        "evidence_ids": [
+          "ev_54f17c93b602e2fab96fa1c3"
+        ],
+        "statement": "서비스는 설정을 읽어 요청을 처리한다."
+      }
+    ],
+    "discovery": "accepted",
+    "evidence": [
+      {
+        "blob_sha256": "80743a2e9629fa73cd272759bddaa6e2afc0cced627ecb524371a839e853f448",
+        "end_line": 4,
+        "id": "ev_54f17c93b602e2fab96fa1c3",
+        "kind": "document",
+        "path": "README.md",
+        "start_line": 1
+      }
+    ],
+    "instruction_notes": [],
+    "items": [
+      {
+        "applies_to": ".",
+        "class": "readme",
+        "line_count": 4,
+        "path": "README.md",
+        "reason": null,
+        "size_bytes": 168,
+        "status": "selected"
+      }
+    ],
+    "limitations": [],
+    "model": {
+      "reason": null,
+      "state": "performed",
+      "task_key": "review.documents",
+      "task_status": "succeeded"
+    },
+    "modules": [
+      {
+        "inherited": [
+          "README.md"
+        ],
+        "module": "go:api",
+        "own": [],
+        "state": "inherited"
+      },
+      {
+        "inherited": [
+          "README.md"
+        ],
+        "module": "go:store",
+        "own": [],
+        "state": "inherited"
+      },
+      {
+        "inherited": [
+          "README.md"
+        ],
+        "module": "javascript:web",
+        "own": [],
+        "state": "inherited"
+      },
+      {
+        "inherited": [
+          "README.md"
+        ],
+        "module": "python:worker",
+        "own": [],
+        "state": "inherited"
+      }
+    ],
+    "overlaps": [],
+    "questions": [],
+    "stage": {
+      "counts": {},
+      "reasons": [],
+      "stage": "documents",
+      "state": "succeeded",
+      "succeeded": 2,
+      "tasks": 2
+    }
+  },
+  "environment": {
+    "analyzer_tools": [
+      {
+        "analyzers": [
+          "any.gitleaks"
+        ],
+        "detail": null,
+        "status": "observed",
+        "tool": "gitleaks",
+        "version": "8.30.1"
+      },
+      {
+        "analyzers": [
+          "any.jscpd"
+        ],
+        "detail": null,
+        "status": "not_probed",
+        "tool": "jscpd",
+        "version": null
+      },
+      {
+        "analyzers": [
+          "any.lizard"
+        ],
+        "detail": null,
+        "status": "observed",
+        "tool": "lizard",
+        "version": "1.26.1"
+      },
+      {
+        "analyzers": [
+          "go.staticcheck"
+        ],
+        "detail": null,
+        "status": "observed",
+        "tool": "staticcheck",
+        "version": "2026.2.2"
+      }
+    ],
+    "discovery": "accepted",
+    "evidence": [
+      {
+        "blob_sha256": "424d740d3aa6c332df4f856843ec40be8cb54df088a5cb4506019517b06c67a1",
+        "end_line": 4,
+        "id": "ev_6081e869aacc33711a9b4f0d",
+        "kind": "manifest",
+        "path": "web/package.json",
+        "start_line": 4
+      },
+      {
+        "blob_sha256": "5390cff5df26984bc4b3cf3eb92a1fdf4d6c9722c46ada9b3dd83faea1802600",
+        "end_line": 3,
+        "id": "ev_b360495bff3f00f683c6df1a",
+        "kind": "manifest",
+        "path": "worker/pyproject.toml",
+        "start_line": 3
+      }
+    ],
+    "limitations": [
+      "tool_not_probed"
+    ],
+    "manifests": [
+      {
+        "path": "api/go.mod",
+        "status": "parsed"
+      },
+      {
+        "path": "store/go.mod",
+        "status": "parsed"
+      },
+      {
+        "path": "web/package.json",
+        "status": "parsed"
+      },
+      {
+        "path": "worker/pyproject.toml",
+        "status": "parsed"
+      }
+    ],
+    "model": {
+      "reason": null,
+      "state": "performed",
+      "task_key": "review.environment",
+      "task_status": "succeeded"
+    },
+    "modules": [
+      {
+        "ecosystem": "go",
+        "id": "go:api",
+        "in_scope": true,
+        "path": "api"
+      },
+      {
+        "ecosystem": "go",
+        "id": "go:store",
+        "in_scope": true,
+        "path": "store"
+      },
+      {
+        "ecosystem": "javascript",
+        "id": "javascript:web",
+        "in_scope": true,
+        "path": "web"
+      },
+      {
+        "ecosystem": "python",
+        "id": "python:worker",
+        "in_scope": true,
+        "path": "worker"
+      }
+    ],
+    "notes": [
+      {
+        "affected_checks": "a가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+        "evidence_ids": [
+          "ev_6081e869aacc33711a9b4f0d"
+        ],
+        "module": "javascript:web",
+        "needed_observation": "c가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+        "requirement_ids": [
+          "engines_node@web/package.json"
+        ],
+        "still_checkable": "b가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"
+      },
+      {
+        "affected_checks": "a가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+        "evidence_ids": [
+          "ev_b360495bff3f00f683c6df1a"
+        ],
+        "module": "python:worker",
+        "needed_observation": "c가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+        "requirement_ids": [
+          "requires_python@worker/pyproject.toml"
+        ],
+        "still_checkable": "b가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"
+      }
+    ],
+    "observed": [
+      {
+        "detail": null,
+        "status": "observed",
+        "tool": "go",
+        "version": "1.27.4"
+      },
+      {
+        "detail": null,
+        "status": "not_probed",
+        "tool": "node",
+        "version": null
+      },
+      {
+        "detail": null,
+        "status": "not_probed",
+        "tool": "python",
+        "version": null
+      }
+    ],
+    "requirements": [
+      {
+        "comparison": "minimum",
+        "constraint": ">=20",
+        "end_line": 4,
+        "id": "engines_node@web/package.json",
+        "kind": "engines_node",
+        "module": "javascript:web",
+        "path": "web/package.json",
+        "start_line": 4,
+        "tool": "node"
+      },
+      {
+        "comparison": "minimum",
+        "constraint": "1.23",
+        "end_line": 3,
+        "id": "go_directive@api/go.mod",
+        "kind": "go_directive",
+        "module": "go:api",
+        "path": "api/go.mod",
+        "start_line": 3,
+        "tool": "go"
+      },
+      {
+        "comparison": "minimum",
+        "constraint": "1.23",
+        "end_line": 3,
+        "id": "go_directive@store/go.mod",
+        "kind": "go_directive",
+        "module": "go:store",
+        "path": "store/go.mod",
+        "start_line": 3,
+        "tool": "go"
+      },
+      {
+        "comparison": "minimum",
+        "constraint": ">=3.11",
+        "end_line": 3,
+        "id": "requires_python@worker/pyproject.toml",
+        "kind": "requires_python",
+        "module": "python:worker",
+        "path": "worker/pyproject.toml",
+        "start_line": 3,
+        "tool": "python"
+      }
+    ],
+    "stage": {
+      "counts": {},
+      "reasons": [],
+      "stage": "environment",
+      "state": "succeeded",
+      "succeeded": 2,
+      "tasks": 2
+    },
+    "verdicts": [
+      {
+        "module": "go:api",
+        "reason": null,
+        "requirement": "go_directive@api/go.mod",
+        "status": "satisfied",
+        "tool": "go"
+      },
+      {
+        "module": "go:store",
+        "reason": null,
+        "requirement": "go_directive@store/go.mod",
+        "status": "satisfied",
+        "tool": "go"
+      },
+      {
+        "module": "javascript:web",
+        "reason": "not_observed",
+        "requirement": "engines_node@web/package.json",
+        "status": "unknown",
+        "tool": "node"
+      },
+      {
+        "module": "python:worker",
+        "reason": "not_observed",
+        "requirement": "requires_python@worker/pyproject.toml",
+        "status": "unknown",
+        "tool": "python"
+      }
+    ]
+  },
+  "executions": [
+    {
+      "argv": [
+        "gitleaks",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "env.discover/gitleaks.version",
+      "name": "gitleaks.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000060b",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000060a",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000607/1",
+      "task_key": "env.discover"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "env.discover/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000609",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000608",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000607/1",
+      "task_key": "env.discover"
+    },
+    {
+      "argv": [
+        "lizard",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "env.discover/lizard.version",
+      "name": "lizard.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000060d",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000060c",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000607/1",
+      "task_key": "env.discover"
+    },
+    {
+      "argv": [
+        "staticcheck",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "env.discover/staticcheck.version",
+      "name": "staticcheck.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000060f",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000060e",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000607/1",
+      "task_key": "env.discover"
+    },
+    {
+      "argv": [
+        "gitleaks",
+        "."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "gitleaks/gitleaks.run",
+      "name": "gitleaks.run",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000062b",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000062a",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000627/1",
+      "task_key": "gitleaks"
+    },
+    {
+      "argv": [
+        "gitleaks",
+        "--version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "gitleaks/gitleaks.version",
+      "name": "gitleaks.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000629",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000628",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000627/1",
+      "task_key": "gitleaks"
+    },
+    {
+      "argv": [
+        "go",
+        "list",
+        "-e",
+        "-json",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m01/go.list",
+      "name": "go.list",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000619",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000618",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000613/1",
+      "task_key": "go-vet.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "mod",
+        "edit",
+        "-json"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m01/go.modedit",
+      "name": "go.modedit",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000617",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000616",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000613/1",
+      "task_key": "go-vet.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m01/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000615",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000614",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000613/1",
+      "task_key": "go-vet.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "vet",
+        "-json",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m01/go.vet",
+      "name": "go.vet",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000061b",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000061a",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-000000000613/1",
+      "task_key": "go-vet.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "list",
+        "-e",
+        "-json",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m02/go.list",
+      "name": "go.list",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000623",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000622",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-00000000061d/1",
+      "task_key": "go-vet.m02"
+    },
+    {
+      "argv": [
+        "go",
+        "mod",
+        "edit",
+        "-json"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m02/go.modedit",
+      "name": "go.modedit",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000621",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000620",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-00000000061d/1",
+      "task_key": "go-vet.m02"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m02/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000061f",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000061e",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-00000000061d/1",
+      "task_key": "go-vet.m02"
+    },
+    {
+      "argv": [
+        "go",
+        "vet",
+        "-json",
+        "./..."
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:01:01Z",
+      "env_keys": [
+        "HOME",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "go-vet.m02/go.vet",
+      "name": "go.vet",
+      "reason": null,
+      "started_at": "2026-11-18T00:01:00Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000625",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000624",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000602/0195f3a0-0000-7000-8000-00000000061d/1",
+      "task_key": "go-vet.m02"
+    }
+  ],
+  "export": {
+    "include_code": true
+  },
+  "findings": [
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "ca753b233587c9ff67892275eeac14362812d2b12209298a73bd67464a0dadf6",
+          "description": "고정 스냅샷의 test 발췌 위치",
+          "id": "ev_1e0dc6fad5ef460d4a8467a8",
+          "kind": "code",
+          "location": {
+            "end_line": 14,
+            "path": "api/handler_test.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:11b687bfb932cdb4623572cdf83f5879e7ba12df53898cf62f273a4e8a822cf7",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "api/handler_test.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s001_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 14,
+          "path": "api/handler_test.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_7598f744a473d4f167c7b428"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_7598f744a473d4f167c7b428"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_7598f744a473d4f167c7b428"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "053e0c3191066ffd4e58976387606574b28f45f6b4826e506e1dcc677d2eca0d",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_7598f744a473d4f167c7b428",
+          "kind": "code",
+          "location": {
+            "end_line": 12,
+            "path": "api/main.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:45b06f5ccc250e128e61ff06e619d9817940ac3ba08ec426e0929567c552c93f",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "api/main.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 12,
+          "path": "api/main.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_79e28e56234d66d1a4784bae"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_79e28e56234d66d1a4784bae"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_79e28e56234d66d1a4784bae"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_79e28e56234d66d1a4784bae",
+          "kind": "code",
+          "location": {
+            "end_line": 50,
+            "path": "store/codec.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:0631bf7f115511666c3123a2571ffcc1e7c247765c4f44145519189ac4508cfb",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "store/codec.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s002_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 50,
+          "path": "store/codec.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_29e943f148fb75179ee04eba"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_29e943f148fb75179ee04eba"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_29e943f148fb75179ee04eba"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "eb60ec8caf4fda328a1e59584a3a508ef5b17ff0ae5a5a5cd358ba25f5cabae8",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_29e943f148fb75179ee04eba",
+          "kind": "code",
+          "location": {
+            "end_line": 50,
+            "path": "store/encode.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:4f94e127ea6b0b33088b6decb8717c4241bde1f3b3eb8f9e37e8260ab92df8c8",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "store/encode.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s003_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 50,
+          "path": "store/encode.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "code": "discovery_limitation",
+      "detail": "tool_not_probed",
+      "section": "environment",
+      "subject": null
+    },
+    {
+      "code": "verdict_unknown",
+      "detail": "not_observed",
+      "section": "environment",
+      "subject": "javascript:web node"
+    },
+    {
+      "code": "verdict_unknown",
+      "detail": "not_observed",
+      "section": "environment",
+      "subject": "python:worker python"
+    },
+    {
+      "code": "task_unsupported",
+      "detail": "analyzer_pack_missing",
+      "section": "static_analysis",
+      "subject": "pack-gap.javascript"
+    },
+    {
+      "code": "task_unsupported",
+      "detail": "analyzer_pack_missing",
+      "section": "static_analysis",
+      "subject": "pack-gap.python"
+    },
+    {
+      "code": "not_planned",
+      "detail": null,
+      "section": "metrics",
+      "subject": null
+    },
+    {
+      "code": "history_not_scanned",
+      "detail": null,
+      "section": "secrets",
+      "subject": "gitleaks"
+    },
+    {
+      "code": "review_scope_budget_exhausted",
+      "detail": null,
+      "section": "code_review",
+      "subject": "go:store"
+    },
+    {
+      "code": "tests_not_run",
+      "detail": null,
+      "section": "report",
+      "subject": null
+    }
+  ],
+  "id": "0195f3a0-0000-7000-8000-000000000604",
+  "inputs": {
+    "commit_sha": null,
+    "description": "승인된 로컬 경로를 복사해 고정한 snapshot이다(안정 복사 best effort).",
+    "manifest_sha256": "22d1b9e3af626ed1380a0a5502e8ab3793d98308932434fa65f21d9c12ee059a",
+    "profile": "deep-review",
+    "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+    "source_kind": "local"
+  },
+  "limitations": [
+    "caller_expansion_go_only",
+    "caller_expansion_package_functions_only",
+    "controller_holds_no_snapshot_bytes",
+    "excerpt_only",
+    "files_outside_review_context",
+    "no_callers_found",
+    "no_symbol_for_expansion",
+    "static_analysis_gap:javascript",
+    "static_analysis_gap:python",
+    "upstream_interpret_skipped"
+  ],
+  "metrics": {
+    "metrics": [],
+    "stage": {
+      "counts": {},
+      "reasons": [],
+      "stage": "static_analysis",
+      "state": "no_tasks",
+      "succeeded": 0,
+      "tasks": 0
+    },
+    "task_keys": []
+  },
+  "observations": [],
+  "overview": {
+    "attention": [
+      {
+        "code": "review_scope_not_sent",
+        "count": 19,
+        "section": "code_review"
+      },
+      {
+        "code": "pending_candidates",
+        "count": 4,
+        "section": "code_review"
+      },
+      {
+        "code": "analysis_gaps",
+        "count": 9,
+        "section": "gaps"
+      }
+    ],
+    "sections": [
+      {
+        "counts": {
+          "mismatch": 0,
+          "modules": 4,
+          "notes": 2,
+          "requirements": 4,
+          "satisfied": 2,
+          "unknown": 2
+        },
+        "key": "environment",
+        "state": "succeeded"
+      },
+      {
+        "counts": {
+          "conflicts": 0,
+          "contracts": 1,
+          "documents": 1,
+          "instruction_notes": 0,
+          "modules_without_documents": 0,
+          "not_read": 0,
+          "questions": 0,
+          "read": 1
+        },
+        "key": "documents",
+        "state": "succeeded"
+      },
+      {
+        "counts": {
+          "actionable": 0,
+          "findings": 0,
+          "not_succeeded": 2,
+          "observations": 0,
+          "pending": 0,
+          "succeeded": 3,
+          "tools": 5
+        },
+        "key": "static_analysis",
+        "state": "partial"
+      },
+      {
+        "counts": {
+          "metrics": 0,
+          "observations": 0,
+          "tools": 0
+        },
+        "key": "metrics",
+        "state": "no_tasks"
+      },
+      {
+        "counts": {
+          "detections": 0,
+          "files": 0,
+          "tools": 1
+        },
+        "key": "secrets",
+        "state": "succeeded"
+      },
+      {
+        "counts": {
+          "actionable": 0,
+          "calls": 10,
+          "files_not_sent_to_model": 19,
+          "files_sent_to_model": 20,
+          "findings": 4,
+          "pending": 4,
+          "refuted": 0
+        },
+        "key": "code_review",
+        "state": "partial"
+      },
+      {
+        "counts": {
+          "gaps": 9
+        },
+        "key": "gaps",
+        "state": null
+      }
+    ]
+  },
+  "quality_verdict": "inconclusive",
+  "revision": 1,
+  "run_id": "0195f3a0-0000-7000-8000-000000000601",
+  "schema_version": "0.1",
+  "secrets": {
+    "detections": [],
+    "model_input": "screened",
+    "stage": {
+      "counts": {},
+      "reasons": [],
+      "stage": "static_analysis",
+      "state": "succeeded",
+      "succeeded": 1,
+      "tasks": 1
+    },
+    "task_keys": [
+      "gitleaks"
+    ]
+  },
+  "static_analysis": {
+    "languages": [
+      {
+        "ecosystem": "go",
+        "tools": [
+          {
+            "analyzer": "go.vet",
+            "exit_class": "success_without_findings",
+            "files_in_scope": 3,
+            "finding_ids": [],
+            "metric_observations": 0,
+            "observation_ids": [],
+            "partial_parse": false,
+            "processed_files": 3,
+            "purpose": "diagnostics",
+            "required": true,
+            "result": "accepted",
+            "rule_pack": "codeye-go-vet-default@1",
+            "rules": [],
+            "secret_observations": 0,
+            "suppressed": 0,
+            "task_key": "go-vet.m01",
+            "task_reason": null,
+            "task_status": "succeeded",
+            "tool": "go",
+            "tool_version": "go1.27.4",
+            "unresolved": 0
+          },
+          {
+            "analyzer": "go.vet",
+            "exit_class": "success_without_findings",
+            "files_in_scope": 30,
+            "finding_ids": [],
+            "metric_observations": 0,
+            "observation_ids": [],
+            "partial_parse": false,
+            "processed_files": 30,
+            "purpose": "diagnostics",
+            "required": true,
+            "result": "accepted",
+            "rule_pack": "codeye-go-vet-default@1",
+            "rules": [],
+            "secret_observations": 0,
+            "suppressed": 0,
+            "task_key": "go-vet.m02",
+            "task_reason": null,
+            "task_status": "succeeded",
+            "tool": "go",
+            "tool_version": "go1.27.4",
+            "unresolved": 0
+          }
+        ]
+      },
+      {
+        "ecosystem": "javascript",
+        "tools": [
+          {
+            "analyzer": "javascript.none",
+            "exit_class": "not_run",
+            "files_in_scope": 3,
+            "finding_ids": [],
+            "metric_observations": 0,
+            "observation_ids": [],
+            "partial_parse": false,
+            "processed_files": 0,
+            "purpose": "diagnostics",
+            "required": false,
+            "result": "accepted",
+            "rule_pack": "none@1",
+            "rules": [],
+            "secret_observations": 0,
+            "suppressed": 0,
+            "task_key": "pack-gap.javascript",
+            "task_reason": "analyzer_pack_missing",
+            "task_status": "unsupported",
+            "tool": "none",
+            "tool_version": null,
+            "unresolved": 0
+          }
+        ]
+      },
+      {
+        "ecosystem": "python",
+        "tools": [
+          {
+            "analyzer": "python.none",
+            "exit_class": "not_run",
+            "files_in_scope": 3,
+            "finding_ids": [],
+            "metric_observations": 0,
+            "observation_ids": [],
+            "partial_parse": false,
+            "processed_files": 0,
+            "purpose": "diagnostics",
+            "required": false,
+            "result": "accepted",
+            "rule_pack": "none@1",
+            "rules": [],
+            "secret_observations": 0,
+            "suppressed": 0,
+            "task_key": "pack-gap.python",
+            "task_reason": "analyzer_pack_missing",
+            "task_status": "unsupported",
+            "tool": "none",
+            "tool_version": null,
+            "unresolved": 0
+          }
+        ]
+      },
+      {
+        "ecosystem": "any",
+        "tools": [
+          {
+            "analyzer": "any.gitleaks",
+            "exit_class": "success_without_findings",
+            "files_in_scope": 44,
+            "finding_ids": [],
+            "metric_observations": 0,
+            "observation_ids": [],
+            "partial_parse": false,
+            "processed_files": 44,
+            "purpose": "secrets",
+            "required": false,
+            "result": "accepted",
+            "rule_pack": "codeye-secrets-gitleaks@1",
+            "rules": [],
+            "secret_observations": 0,
+            "suppressed": 0,
+            "task_key": "gitleaks",
+            "task_reason": null,
+            "task_status": "succeeded",
+            "tool": "gitleaks",
+            "tool_version": "8.30.1",
+            "unresolved": 0
+          }
+        ]
+      }
+    ],
+    "stage": {
+      "counts": {
+        "unsupported": 2
+      },
+      "reasons": [
+        "analyzer_pack_missing"
+      ],
+      "stage": "static_analysis",
+      "state": "partial",
+      "succeeded": 3,
+      "tasks": 5
+    }
+  },
+  "status": "partial",
+  "summary": {
+    "actionable_findings": 0,
+    "pending_candidates": 4,
+    "priorities": [
+      "review_s001_investigate_1",
+      "review_investigate_1",
+      "review_s002_investigate_1",
+      "review_s003_investigate_1"
+    ],
+    "raw_observations": 0,
+    "refuted_findings": 0,
+    "total_findings": 4,
+    "unresolved_observations": 0
+  },
+  "tasks": [
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000611",
+      "key": "docs.discover",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000607",
+      "key": "env.discover",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000627",
+      "key": "gitleaks",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000613",
+      "key": "go-vet.m01",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000061d",
+      "key": "go-vet.m02",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000062d",
+      "key": "pack-gap.javascript",
+      "reason": "analyzer_pack_missing",
+      "required_for_verdict": false,
+      "status": "unsupported"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000062f",
+      "key": "pack-gap.python",
+      "reason": "analyzer_pack_missing",
+      "required_for_verdict": false,
+      "status": "unsupported"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000633",
+      "key": "review.documents",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000631",
+      "key": "review.environment",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000637",
+      "key": "review.interpret",
+      "reason": "no_tool_observations",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000635",
+      "key": "review.investigate",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000063c",
+      "key": "review.investigate.s001",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000640",
+      "key": "review.investigate.s002",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000644",
+      "key": "review.investigate.s003",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000648",
+      "key": "review.investigate.s004",
+      "reason": "review_budget_exhausted",
+      "required_for_verdict": false,
+      "status": "budget_exhausted"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000064a",
+      "key": "review.investigate.s005",
+      "reason": "review_budget_exhausted",
+      "required_for_verdict": false,
+      "status": "budget_exhausted"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000064c",
+      "key": "review.investigate.s006",
+      "reason": "review_budget_exhausted",
+      "required_for_verdict": false,
+      "status": "budget_exhausted"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000064e",
+      "key": "review.investigate.s007",
+      "reason": "review_budget_exhausted",
+      "required_for_verdict": false,
+      "status": "budget_exhausted"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000063a",
+      "key": "review.scope",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000638",
+      "key": "review.verify",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000063e",
+      "key": "review.verify.s001",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000642",
+      "key": "review.verify.s002",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000646",
+      "key": "review.verify.s003",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000649",
+      "key": "review.verify.s004",
+      "reason": "review_budget_exhausted",
+      "required_for_verdict": false,
+      "status": "budget_exhausted"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000064b",
+      "key": "review.verify.s005",
+      "reason": "review_budget_exhausted",
+      "required_for_verdict": false,
+      "status": "budget_exhausted"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000064d",
+      "key": "review.verify.s006",
+      "reason": "review_budget_exhausted",
+      "required_for_verdict": false,
+      "status": "budget_exhausted"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000064f",
+      "key": "review.verify.s007",
+      "reason": "review_budget_exhausted",
+      "required_for_verdict": false,
+      "status": "budget_exhausted"
+    }
+  ]
+}

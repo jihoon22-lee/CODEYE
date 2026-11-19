@@ -60,6 +60,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// The review pack is a node operator setting only; runs and profiles
 	// cannot select it. The default is review-r1 (the role pack); review-v1 is the legacy pack.
 	reviewPack := fs.String("review-pack", review.PackRole, "")
+	reviewMaxCalls := fs.Int("review-max-calls", review.DefaultMaxCalls, "")
 	fs.Var(&modelRoots, "model-source-root", "")
 	// The repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가) is a node operator setting
 	// per local source root, like the model-source grant; nothing in a run
@@ -98,6 +99,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	if !review.ValidPack(*reviewPack) {
 		fmt.Fprintln(stderr, "invalid --review-pack; expected review-r1 (default) or review-v1 (legacy)")
+		return agent.ExitUsage
+	}
+	if !review.ValidMaxCalls(*reviewMaxCalls) {
+		fmt.Fprintln(stderr, "invalid --review-max-calls; expected 15..207 (default 99)")
 		return agent.ExitUsage
 	}
 	// --autoscale starts with zero workers and follows controller
@@ -161,7 +166,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
 		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
-		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ReviewPack: *reviewPack,
+		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelSourceRoots: approved, ReviewPack: *reviewPack, ReviewMaxCalls: *reviewMaxCalls,
 		RepositoryCodeSourceRoots: codeApproved,
 		StorageQuota:              limits,
 		StorageLogDir:             *storageLogDir,
@@ -209,6 +214,9 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 		// No silent fallback to the default pack.
 		return nil, nil, errors.New("unknown review pack")
 	}
+	if h.ReviewMaxCalls != 0 && !review.ValidMaxCalls(h.ReviewMaxCalls) {
+		return nil, nil, errors.New("review call ceiling out of range")
+	}
 	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot, ToolPath: h.ToolPath}
 	hs, missing := builtin.Handlers(ctx, cfg, runner)
 	for i, handler := range hs {
@@ -216,7 +224,7 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, Timeout: 75 * time.Second}
 			var reviewed analysis.Handler = review.Handler{Static: handler, Caller: caller}
 			if pack == review.PackRole {
-				reviewed = review.RoleHandler{Static: handler, Caller: caller}
+				reviewed = review.RoleHandler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
 			}
 			observer := discovery.ProbeObserver{GoExecutable: h.GoExecutable, Analyzers: builtin.Probes(cfg), Toolchains: builtin.ToolchainProbes(cfg)}
 			wrapped, err := discovery.Wrap(reviewed, discovery.Config{Observer: observer})

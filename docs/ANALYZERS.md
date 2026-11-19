@@ -290,7 +290,7 @@ deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 �
 - **분석할 수 없는 소스는 그 생태계의 팩이 보인다.** 소스가 있는데 모듈을 만들 수 없으면 그 팩이 보이는 자리 작업을 계획한다(go vet `go_module_missing`, Python `no_analyzable_python_files`, Rust `cargo_manifest_missing`, C/C++ `no_translation_units` 등). composite는 이를 강제하지 않으므로 팩이 지켜야 한다.
 - **범위의 생태계에 분석기가 하나도 없으면 공백 작업을 계획한다.** composite가 생태계마다 `pack-gap.<생태계>`를 만든다. 필수가 아니고 단계는 `static_analysis`다. 프로세스 없이 `unsupported`(`analyzer_pack_missing`)로 끝나고 not-run envelope(분석기 ID `<생태계>.none`, 도구 `none`, `files_in_scope`=소스 수)를 쓴다. 보고서는 `static_analysis_gap:<생태계>` 제약과 not-run 도구 행으로 `partial`이다. 공백 작업만 있으면 단계는 `skipped`다. 이 빌드에는 모든 언어 생태계에 팩이 있으므로 이 경로는 팩을 빼고 만든 카탈로그에서만 나타난다.
 - 생태계의 멤버(설정된 분석기든 대역이든)가 하나라도 있으면 공백 작업을 만들지 않는다. `any` 생태계 분석기는 언어 공백을 메우지 않는다.
-- **지원 언어 소스가 하나도 없으면** 단계는 `no_tasks`이고 보고서는 `static_analysis_not_planned` 제약과 함께 `partial`이다. `any` 분석기도 지원 언어 소스가 범위에 있을 때만 계획되므로 이 경우 작업이 없다(문서·설정 파일만 있는 스냅샷에는 gitleaks도 계획되지 않는다).
+- **지원 언어 소스가 하나도 없으면** 보고서는 `static_analysis_not_planned` 제약과 함께 `partial`이다. lizard·jscpd는 지원 언어 소스가 범위에 있을 때만 계획된다. gitleaks는 모델 입력이 될 수 있는 파일이 범위에 있으면 계획되므로(아래 [구조·중복 지표와 비밀값 팩](#구조중복-지표와-비밀값-팩)), 문서·설정 파일만 있는 스냅샷에는 gitleaks 작업 하나만 있고 단계는 그 작업의 결과다. "정적 분석 계획됨" 판단은 비밀값 작업을 세지 않는다(`obsdoc.IsSecretTask`). 그런 파일도 없으면 단계는 `no_tasks`다.
 
 ### 관찰 envelope
 
@@ -1034,7 +1034,8 @@ clippy 작업은 allow-by-default인 여섯 lint를 `-W`로 켠다. 소스의 `#
 - 셋 다 추가 깊이이므로 이 플래그만으로는 deep-review를 광고하지 않는다. 경로가 없으면 작업은 계획되고 `unsupported`(`tool_not_configured`)다.
 - 저장소 코드를 실행하지 않는다(`RepositoryCode=false`). lizard는 넘긴 파일의 구문만 세고, jscpd는 토큰을 비교하고, gitleaks는 파일 바이트를 정규식으로 검사한다.
 - 환경 공통값에 더해 lizard는 `PYTHONDONTWRITEBYTECODE=1`·`PYTHONNOUSERSITE=1`·`PYTHONIOENCODING=utf-8`, jscpd는 `JSCPD_NO_TIPS=1`·`JSCPD_CACHE_DIR`·`XDG_CACHE_HOME`(scratch)을 받는다. 네트워크를 쓰지 않는다. jscpd의 semantic 모드(모델 내려받기)는 켜지 않는다.
-- **계획.** 분석 하나당 작업 하나(`lizard`, `jscpd`, `gitleaks`, 모듈 `.`, 패턴은 범위 루트)다. 범위에 지원 언어 소스(`pack.SourceFiles`)가 있고 그 도구가 받을 파일이 하나 이상이면 언어와 관계없이 계획한다.
+- **계획.** 분석 하나당 작업 하나(`lizard`, `jscpd`, `gitleaks`, 모듈 `.`, 패턴은 범위 루트)다. lizard·jscpd는 범위에 지원 언어 소스(`pack.SourceFiles`)가 있고 그 도구가 받을 파일이 하나 이상이면 언어와 관계없이 계획한다.
+- **gitleaks 계획.** gitleaks는 모델 검토의 비밀값 선별이기도 하므로 언어 조건 대신 범위에 모델 입력이 될 수 있는 파일이 하나라도 있으면 계획한다(`envdoc.ModelInputPath`: 지원 언어 소스, 안내 문서(README·AGENTS·CONTRIBUTING 등 문서 분류), 모듈 manifest). 문서·설정만 있는 스냅샷의 문서도 내장 민감값 패턴 외에 gitleaks 선별을 받는다. gitleaks를 설정하지 않았으면 작업은 계획되고 `unsupported`(`tool_not_configured`)로 끝나 공백이 보인다. 이때 전체 검토 역할은 미선별 경로(`model_input_not_secret_screened`)를 그대로 따르고, 모듈 단위 slice는 보내지 않는다([검토](REVIEW.md#모듈-단위-검토-분할)).
 - **입력 파일.** lizard와 jscpd는 C/C++, Python, JS/TS, Go, Rust 소스만 받는다(lizard는 reader가 있는 확장자만). 숨김 디렉터리, `testdata`, `vendor`, `node_modules` 아래 파일은 넘기지 않고 `excluded_data_directory` 단위로 세며 `target.properties.excluded_directories`와 `data_directories_excluded`로 남긴다. gitleaks는 범위의 모든 포함 파일(설정·문서·데이터 포함)을 본다.
 - **링크.** 스냅샷은 symlink를 복사하지 않는다. 작업 사본에 링크나 특수 파일이 생기면 도구를 시작하지 않고 `failed`/`workspace_link_refused`다(lizard·jscpd는 넘길 파일과 조상, gitleaks는 검사 루트 아래 전체). gitleaks `--follow-symlinks`와 jscpd `followSymlinks`는 꺼져 있다.
 - **사본 밖 결과.** 선택된 스냅샷 파일이 아닌 경로의 결과는 버리고 경로·문구를 저장하지 않으며 작업은 `result_outside_snapshot`으로 실패한다. 도구 오류 문구는 고정이고 건수만 담는다. lizard와 jscpd는 목록에 없는 파일의 결과를 형태 오류로 본다.

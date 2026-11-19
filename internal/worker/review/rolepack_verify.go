@@ -49,17 +49,29 @@ func verificationClaimsExecution(v record.Verification) bool {
 	return false
 }
 
+// verify checks the accepted investigate and interpret candidates of the
+// whole run or, for a slice task, its own slice's investigate candidates
+// only (with the review.scope artifact as upstream).
 func (s *roleStage) verify() analysis.TaskResult {
 	docRec, uDoc := s.prior(record.StageDocuments)
-	invRec, uInv := s.prior(record.StageInvestigate)
-	intRec, uInt := s.prior(record.StageInterpret)
+	var invRec, intRec record.RoleRecord
+	var uInv, uInt record.Upstream
+	var upstream []record.Upstream
+	if s.slice == nil {
+		invRec, uInv = s.prior(record.StageInvestigate)
+		intRec, uInt = s.prior(record.StageInterpret)
+		upstream = []record.Upstream{uDoc, uInv, uInt}
+	} else {
+		invRec, uInv = s.prior(record.StageInvestigate + "." + s.slice.Key)
+		upstream = []record.Upstream{uDoc, uInv, s.scopeUp}
+	}
 	if uInv.State != record.UpstreamAccepted && uInt.State != record.UpstreamAccepted {
 		return result(domain.TaskSkippedPolicy, reasonDependency)
 	}
-	if r := s.begin([]record.Upstream{uDoc, uInv, uInt}); r != nil {
+	if r := s.begin(upstream); r != nil {
 		return *r
 	}
-	s.noteUpstream(uDoc, uInv, uInt)
+	s.noteUpstream(upstream...)
 	var candidates []record.RoleCandidate
 	var context []record.Excerpt
 	seen := map[string]bool{}
@@ -249,6 +261,9 @@ func (s *roleStage) verify() analysis.TaskResult {
 		size := len(opencode.Prompt(q))
 		if size > PromptBudget {
 			return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
+		}
+		if err := s.countCall(); err != nil {
+			return *s.fail(result(domain.TaskFailed, reasonCallCountFailed))
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
 		call := record.RoleCall{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,

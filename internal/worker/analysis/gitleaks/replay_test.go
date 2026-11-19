@@ -215,9 +215,30 @@ func TestPlanAndVersion(t *testing.T) {
 	if err != nil || len(tasks) != 1 || tasks[0].Spec.Key != Name || tasks[0].Spec.Required || *tasks[0].FilesInScope != 13 {
 		t.Fatalf("plan %+v %v", tasks, err)
 	}
-	docs := anypacktest.New(t, "", anypacktest.Text(map[string]string{"README.md": "# x\n", "config.yaml": "a: 1\n"}), domain.Scope{})
-	if tasks, _ := Plan(context.Background(), docs.Job); len(tasks) != 0 {
-		t.Fatalf("no-language plan %+v", tasks)
+	// TC-160: the secrets task is planned whenever a file a review role may
+	// send is in scope (a guidance document, a module manifest or source),
+	// not only with supported language source; it covers every file in
+	// scope. Without any such file nothing is planned.
+	for name, tree := range map[string]map[string]string{
+		"guidance document": {"README.md": "# x\n", "config.yaml": "a: 1\n"},
+		"module manifest":   {"package.json": "{\"engines\": {\"node\": \">=20\"}}\n", "config.yaml": "a: 1\n"},
+	} {
+		fx := anypacktest.New(t, "", anypacktest.Text(tree), domain.Scope{})
+		tasks, err := Plan(context.Background(), fx.Job)
+		if err != nil || len(tasks) != 1 || tasks[0].Spec.Key != Name || tasks[0].Spec.Required || *tasks[0].FilesInScope != 2 || !slices.Equal(tasks[0].Patterns, []string{"."}) {
+			t.Fatalf("%s: plan %+v %v", name, tasks, err)
+		}
+	}
+	data := anypacktest.New(t, "", anypacktest.Text(map[string]string{"config.yaml": "a: 1\n", "data/rows.csv": "a,b\n"}), domain.Scope{})
+	if tasks, _ := Plan(context.Background(), data.Job); len(tasks) != 0 {
+		t.Fatalf("no model input plan %+v", tasks)
+	}
+	outside := anypacktest.New(t, "", anypacktest.Text(map[string]string{"README.md": "# x\n", "data/rows.csv": "a,b\n"}), domain.Scope{Kind: "paths", Paths: []string{"data"}})
+	if tasks, _ := Plan(context.Background(), outside.Job); len(tasks) != 0 {
+		t.Fatalf("document outside the scope planned %+v", tasks)
+	}
+	if !obsdoc.IsSecretTask(Name) || obsdoc.IsSecretTask("lizard") {
+		t.Fatal("secrets task name not registered in obsdoc")
 	}
 	for in, want := range map[string]string{"v8.30.1\n": "8.30.1", "8.30.1\n": "", "version is set by build process\n": "", "v8.30.1\nx\n": ""} {
 		if got, ok := ParseVersion([]byte(in)); got != want || ok != (want != "") {

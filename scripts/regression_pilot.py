@@ -120,7 +120,137 @@ def audit_reports(output, root):
     )
 
 
-def run(base, root, env):
+# Module-sliced review (docs/REVIEW.md#모듈-단위-검토-분할): slice task keys and
+# the scope artifact a pilot report references.
+SLICE_TASK = re.compile(r"^review\.(?:scope|(?:investigate|verify)\.s\d{3})$")
+REVIEW_RECORD_MEDIA = "application/vnd.codeye.review+json"
+DEFAULT_MAX_CALLS = 99
+
+
+def _kept_docs(directory):
+    """The review records and the scope artifact keep_review_artifacts saved."""
+    records, scope = [], None
+    for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+        doc = json.loads(path.read_bytes())
+        if doc.get("kind") == "review_scope":
+            scope = doc
+        elif doc.get("schema_version") in ("0.2", "0.3") and "stage" in doc:
+            records.append(doc)
+    return records, scope
+
+
+def _context_files(record):
+    return {e["path"] for e in record.get("evidence", [])
+            if e.get("origin") == "context" and e.get("kind") in ("code", "test")}
+
+
+def _test_ledger(ledger):
+    """Whether the relay ledger is a test ledger (relay --test-upstream)."""
+    if ledger is None:
+        return False
+    lines = Path(ledger).read_text().splitlines()
+    return bool(lines) and json.loads(lines[0]).get("upstream") == "test-loopback"
+
+
+# Report limitations that mean an input of the pilot report was not read.
+_UNREAD = ("artifact_rejected", "review_lineage_mismatch", "review_pack_mismatch", "unrecognized_artifact", "result_manifest", "analysis_artifact_missing")
+
+
+def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None):
+    """The conditions registered before a paid run with slices (docs/EVALUATION.md#회귀-집합-실행).
+
+    Non-pilot cases plan no slice task and their review calls use the pinned
+    Go-only pack digests. The pilot completes with the AI review performed;
+    its report reads every review artifact and carries the review ledger
+    with the configured ceiling; the ledger's calls_used (the attempt counter
+    before the slices plus the slice records) is known and at most the
+    ceiling; a slice the ceiling refused has no record and no call; the
+    overview and the slices never send the same file; the ledger and
+    llm_exposed_files count more files sent to the model than the overview
+    sent; the relay ledger has no refused or blocked request.
+
+    With a test relay ledger (a dry run against the fake upstream) two causes
+    are expected rather than failures, and are listed in dry_run_expected: a
+    review task the fake upstream's reply fails (review_output_invalid; its
+    exposure is then unknown) and a required analyzer this host has not
+    configured (tool_not_configured). The two usually come together: with the
+    pilot's analyzers missing, review.interpret gets no observation, and the
+    fake's interpret reply then has no item to give. Any other cause still
+    fails, and a paid run gets no exception. Returns the failures and the
+    pilot's numbers."""
+    from bundle_checks.review import role_pack
+
+    _, roles = role_pack(("go",))
+    test = _test_ledger(ledger)
+    failures, pilot = [], None
+    for row in rows:
+        label = row["case"]
+        if label == "git":
+            continue
+        if label != "pilot":
+            slices = [t["key"] for t in row["tasks"] if SLICE_TASK.match(t["key"])]
+            if slices:
+                failures.append(f"{label}: slice tasks {slices}")
+            if row.get("review_pack", "review-r1") == "review-r1":
+                for call in row["review_calls"]:
+                    want = roles.get(call["role"], {}).get("digest")
+                    if call["pack_sha256"] != want:
+                        failures.append(f"{label}: {call['role']} pack digest {call['pack_sha256']} is not the pinned {want}")
+            continue
+        report = json.loads((output / "pilot.json").read_bytes())
+        tasks = {t["key"]: t for t in report["tasks"]}
+        book = (report.get("code_review") or {}).get("ledger")
+        records, scope = _kept_docs(output / "pilot")
+        overview = next((r for r in records if r["stage"] == "investigate" and "slice" not in r), None)
+        slice_inv = [r for r in records if r["stage"] == "investigate" and "slice" in r]
+        sent = [(_context_files(overview) if overview else set())] + [_context_files(r) for r in slice_inv]
+        union = set().union(*sent)
+        exhausted = [k for k, t in tasks.items() if SLICE_TASK.match(k) and t["status"] == "budget_exhausted"]
+        recorded = {"review." + r["stage"] + "." + r["slice"]["key"] for r in records if "slice" in r}
+        called = {c.get("task_key") for c in report["coverage"].get("review_calls", [])}
+        exposed = report["coverage"].get("llm_exposed_files")
+        calls_used = book["calls_used"] if book else None
+        ledger_sent = sum(m["files_sent_to_model"] for m in book["modules"]) if book else None
+        fake = sorted(k for k, t in tasks.items() if k.startswith("review.") and t["status"] == "failed" and t["reason"] == "review_output_invalid") if test else []
+        unconfigured = sorted(k for k, t in tasks.items() if t["required_for_verdict"] and t["status"] == "unsupported" and t["reason"] == "tool_not_configured") if test else []
+        unrecorded = sorted(k for k, t in tasks.items() if k.startswith("review.") and t["status"] in ("failed", "timed_out"))
+        unread = sorted(x for x in report["limitations"] if x.startswith(_UNREAD))
+        expected = []
+        pilot = {"calls_used": calls_used, "recorded_calls": sum(len(r.get("calls", [])) for r in records), "max_calls": max_calls,
+                 "slice_tasks": sum(1 for k in tasks if SLICE_TASK.match(k)), "slices_admitted": len(slice_inv), "slice_tasks_budget_exhausted": len(exhausted),
+                 "overview_files": len(sent[0]), "files_sent_by_records": len(union), "ledger_status": book and book["status"],
+                 "ledger_files_sent_to_model": ledger_sent, "llm_exposed_files": exposed, "review_tasks_without_record": unrecorded, "dry_run_expected": expected}
+        if unread:
+            failures.append(f"pilot: report did not read {unread}")
+        if row["status"] != "completed" or row["ai_review"] != "performed":
+            other = sorted(k for k, t in tasks.items() if t["required_for_verdict"] and t["status"] != "succeeded" and k not in unconfigured)
+            if test and row["ai_review"] == "performed" and not other and set(unrecorded) <= set(fake) and (fake or unconfigured):
+                expected.append(f"pilot {row['status']}: required analyzers not configured on this host {unconfigured}; fake upstream reply rejected {fake}")
+            else:
+                failures.append(f"pilot: status {row['status']}, AI review {row['ai_review']}")
+        if scope is None or scope["budget"]["max_calls"] != max_calls or book is None or book["max_calls"] != max_calls:
+            failures.append("pilot: no scope artifact and ledger with the configured ceiling")
+        if not isinstance(calls_used, int) or calls_used > max_calls:
+            failures.append(f"pilot: ledger calls_used {calls_used} unknown or above the ceiling {max_calls}")
+        if set(exhausted) & (recorded | called):
+            failures.append(f"pilot: budget-exhausted slices with a record or a call {sorted(set(exhausted) & (recorded | called))}")
+        if sum(len(x) for x in sent) != len(union):
+            failures.append("pilot: a file reached two investigate requests")
+        if not isinstance(ledger_sent, int) or ledger_sent <= len(sent[0]):
+            failures.append(f"pilot: ledger files sent to the model {ledger_sent} not above the overview's {len(sent[0])} files")
+        if exposed is None and fake and set(unrecorded) <= set(fake):
+            expected.append(f"llm_exposed_files unknown: the fake upstream reply was rejected for {fake}")
+        elif not isinstance(exposed, int) or exposed <= len(sent[0]):
+            failures.append(f"pilot: llm_exposed_files {exposed} not above the overview's {len(sent[0])} files")
+    if ledger is not None:
+        bad = [r.get("type") for r in (json.loads(line) for line in Path(ledger).read_text().splitlines() if line.strip())
+               if r.get("type") in ("refused", "blocked")]
+        if bad:
+            failures.append(f"relay ledger: {len(bad)} refused or blocked requests")
+    return failures, pilot
+
+
+def run(base, root, env, web=True, coverage_check=True):
     relay = Path(os.environ["CODEYE_PILOT_RELAY_FILE"]).resolve(strict=True)
     output = Path(os.environ["CODEYE_PILOT_RESULTS"]).resolve()
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -178,12 +308,19 @@ def run(base, root, env):
             "--model", "codeye-gateway/gpt-6.2-sol",
             "--model-relay-file", relay,
             *(["--review-pack", os.environ["CODEYE_PILOT_REVIEW_PACK"]] if os.environ.get("CODEYE_PILOT_REVIEW_PACK") else []),
+            # 비밀정보 선별이 있어야 모듈 단위 slice가 실행된다. 호출 상한은 시도마다 적용된다.
+            *(["--gitleaks", os.environ["CODEYE_PILOT_GITLEAKS"]] if os.environ.get("CODEYE_PILOT_GITLEAKS") else []),
+            *(["--review-max-calls", os.environ["CODEYE_PILOT_REVIEW_MAX_CALLS"]] if os.environ.get("CODEYE_PILOT_REVIEW_MAX_CALLS") else []),
+            # 파일럿 사본의 Python·JS 모듈은 ruff·eslint가 판정에 필요하다. name=path를 공백으로
+            # 구분해 주면 에이전트 플래그 --name path가 된다(예: ruff=/abs/ruff node=/abs/node).
+            *[a for spec in os.environ.get("CODEYE_PILOT_TOOLS", "").split() for a in ("--" + spec.partition("=")[0], spec.partition("=")[2])],
         ]
 
-    subprocess.run(["npm", "run", "build"], cwd=root / "web", check=True)
+    if web:
+        subprocess.run(["npm", "run", "build"], cwd=root / "web", check=True)
     # 파일럿의 두 노드는 승인한 고정 사본에만 접근한다. 비용 장부와 키는 source 밖에 있다.
     with Cluster(base, binary, env, source, agent_args=agent_args, agents=2, max_workers=2,
-                 label="fixed inputs", web_dir=root / "web/dist", agent_path=env["PATH"], pool_max=2) as cluster:
+                 label="fixed inputs", web_dir=root / "web/dist" if web else None, agent_path=env["PATH"], pool_max=2) as cluster:
         api, cli, origin, user, children = cluster.api, cluster.cli, cluster.origin, cluster.user, cluster.children
         root_id = cluster.root_id
         provider = (
@@ -305,23 +442,35 @@ def run(base, root, env):
                 )
             if outstanding:
                 time.sleep(1)
-        inspected = next(
-            (row for row in rows if row["summary"]["total_findings"]), rows[0]
-        )
-        browser_link = work / "browser-launch"
-        cli("login-link", "--user", user, "--output", browser_link, "--origin", origin)
-        from browser_smoke import published_report
+        if web:
+            inspected = next(
+                (row for row in rows if row["summary"]["total_findings"]), rows[0]
+            )
+            browser_link = work / "browser-launch"
+            cli("login-link", "--user", user, "--output", browser_link, "--origin", origin)
+            from browser_smoke import published_report
 
-        published_report(
-            root, env, origin, browser_link, inspected["case"], inspected["run_id"]
-        )
+            published_report(
+                root, env, origin, browser_link, inspected["case"], inspected["run_id"]
+            )
+        if coverage_check:
+            ceiling = int(os.environ.get("CODEYE_PILOT_REVIEW_MAX_CALLS") or DEFAULT_MAX_CALLS)
+            failures, pilot = check_coverage(rows, output, root, ceiling, os.environ.get("CODEYE_PILOT_LEDGER"))
+            (output / "coverage-check.json").write_text(
+                json.dumps({"failures": failures, "pilot": pilot}, ensure_ascii=False, indent=2) + "\n")
+            print("coverage", json.dumps(pilot, ensure_ascii=False), flush=True)
+            if failures:
+                raise RuntimeError("모듈 단위 검토 조건 불충족: " + "; ".join(failures))
+        # A dry run whose pilot is partial only for the causes check_coverage
+        # expects of the fake upstream and this host (dry_run_expected).
+        expected_partial = coverage_check and pilot is not None and any(e.startswith("pilot ") for e in pilot["dry_run_expected"])
         if dataset and not any(
             row["status"] == "completed" and row["ai_review"] == "performed"
             for row in rows
         ):
             raise RuntimeError("전체 모델 검토를 거친 완료 보고서가 없습니다")
         for row in rows:
-            if row["case"] == "pilot" and (
+            if row["case"] == "pilot" and not expected_partial and (
                 row["status"] != "completed" or row["ai_review"] != "performed"
             ):
                 raise RuntimeError(
@@ -332,10 +481,100 @@ def run(base, root, env):
     )
 
 
+_NORMALIZE = [
+    (re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"), "<uuid>"),
+    (re.compile(r"\bev_[0-9a-f]{24}\b"), "<evidence>"),
+    (re.compile(r"\bobs_[0-9a-f]{20}\b"), "<observation>"),
+    (re.compile(r"\b[0-9a-f]{64}\b"), "<sha256>"),
+    (re.compile(r"\b[0-9a-f]{32}\b"), "<dir>"),
+    (re.compile(r"/tmp/[^\s\"'\\]+"), "<tmp>"),
+]
+
+
+def normalized_requests(dump):
+    """The (role, prompt) of every request a fake_model_upstream.py --dump
+    directory holds, with run-specific identities replaced (UUIDs, evidence
+    and observation IDs bound to the snapshot digest, digests, the random
+    source directory and temporary paths)."""
+    out = []
+    for path in sorted(Path(dump).glob("*.json")):
+        payload = json.loads(path.read_bytes())
+        text = "\n".join(str(m.get("content", "")) for m in payload.get("input", []) if isinstance(m, dict))
+        for pattern, repl in _NORMALIZE:
+            text = pattern.sub(repl, text)
+        role = re.search(r"^Role: ([a-z]+)$", text, re.M)
+        out.append((role.group(1) if role else "unknown", text))
+    return out
+
+
+def compare_dumps(baseline, candidate):
+    """Requests of candidate missing from baseline and the reverse, as multisets."""
+    from collections import Counter
+
+    a, b = Counter(normalized_requests(baseline)), Counter(normalized_requests(candidate))
+    return {"baseline": sum(a.values()), "candidate": sum(b.values()),
+            "only_baseline": sorted(Counter({k: n for k, n in (a - b).items()}).elements()),
+            "only_candidate": sorted(Counter({k: n for k, n in (b - a).items()}).elements())}
+
+
+def dry_run(args, root):
+    """The regression set through the product with a --test-upstream relay:
+    a temporary PostgreSQL, the binary built from --build-root, no web build
+    and no browser. The relay's ledger must be a test ledger; a real ledger is
+    refused, so this never sends a model request."""
+    from test_postgres import temporary_postgres
+
+    header = json.loads(Path(args.ledger).read_text().splitlines()[0])
+    if header.get("upstream") != "test-loopback":
+        raise SystemExit("--dry-run needs the ledger of a relay started with --test-upstream")
+    env = dict(os.environ, CODEYE_PILOT_RELAY_FILE=str(args.relay_file), CODEYE_PILOT_RESULTS=str(args.results),
+               CODEYE_PILOT_CASES=args.cases, CODEYE_PILOT_LEDGER=str(args.ledger))
+    env.pop("OPENAI_API_KEY", None)
+    for key, value in (("CODEYE_PILOT_GITLEAKS", args.gitleaks), ("CODEYE_PILOT_REVIEW_MAX_CALLS", args.max_calls),
+                       ("CODEYE_PILOT_TOOLS", " ".join(args.tool or []))):
+        env.pop(key, None)
+        if value:
+            env[key] = str(value)
+    os.environ.clear()
+    os.environ.update(env)
+    with tempfile.TemporaryDirectory(prefix="codeye-pilot-dry-") as directory:
+        base = Path(directory)
+        with temporary_postgres(base) as (url, penv, _):
+            penv = {k: v for k, v in penv.items() if k != "OPENAI_API_KEY"}
+            penv["CODEYE_DATABASE_URL"] = url
+            subprocess.run(["go", "build", "-o", str(base / "codeye"), "./cmd/codeye"], cwd=args.build_root, env=penv, check=True)
+            subprocess.run([str(base / "codeye"), "migrate"], cwd=base, env=penv, check=True, capture_output=True, timeout=120)
+            run(base, root, penv, web=False, coverage_check=not args.no_coverage_check)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="보관한 회귀 보고서를 같은 입력과 대조한다"
     )
-    parser.add_argument("--audit-results", required=True, type=Path)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--audit-results", type=Path)
+    mode.add_argument("--dry-run", action="store_true", help="test-upstream relay only (no model request)")
+    mode.add_argument("--compare-dumps", nargs=2, type=Path, metavar=("BASELINE", "CANDIDATE"))
+    parser.add_argument("--relay-file", type=Path)
+    parser.add_argument("--ledger", type=Path)
+    parser.add_argument("--results", type=Path)
+    parser.add_argument("--cases", default="")
+    parser.add_argument("--gitleaks")
+    parser.add_argument("--tool", action="append", help="agent tool flag as name=path, e.g. ruff=/abs/ruff (repeatable)")
+    parser.add_argument("--max-calls", type=int)
+    parser.add_argument("--build-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--no-coverage-check", action="store_true", help="baseline build without slices")
     args = parser.parse_args()
-    audit_reports(args.audit_results, Path(__file__).resolve().parents[1])
+    root = Path(__file__).resolve().parents[1]
+    if args.audit_results:
+        audit_reports(args.audit_results, root)
+    elif args.compare_dumps:
+        diff = compare_dumps(*args.compare_dumps)
+        for side in ("only_baseline", "only_candidate"):
+            diff[side] = [{"role": role, "bytes": len(text.encode()), "sha256": hashlib.sha256(text.encode()).hexdigest()[:16]}
+                          for role, text in diff[side]]
+        print(json.dumps(diff, ensure_ascii=False, indent=1))
+    else:
+        if not (args.relay_file and args.ledger and args.results and args.cases):
+            raise SystemExit("--dry-run needs --relay-file, --ledger, --results and --cases")
+        dry_run(args, root)

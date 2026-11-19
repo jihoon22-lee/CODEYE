@@ -7,6 +7,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
@@ -42,6 +43,8 @@ type taskState struct {
 	tool         *ToolCoverage
 	discovery    *envdoc.Document
 	toolFindings []string
+	// scope is the accepted review scope artifact (review.scope).
+	scope *record.ScopeDoc
 }
 
 // Build validates the input and produces the report. Every refusal wraps
@@ -216,6 +219,9 @@ func Build(in Input, reg *Registry) (Report, error) {
 				if c.Discovery != nil {
 					st.discovery = c.Discovery
 				}
+				if c.Scope != nil {
+					st.scope = c.Scope
+				}
 				r.Observations = append(r.Observations, c.Observations...)
 				r.Findings = append(r.Findings, c.Findings...)
 				if c.Tool != nil {
@@ -312,7 +318,9 @@ func Build(in Input, reg *Registry) (Report, error) {
 	analyzerPlanned := false
 	for _, k := range keys {
 		st := states[k]
-		if record.AnalyzerTaskKey(k) {
+		// The secrets task screens model inputs and is planned for a
+		// snapshot of documents alone; it is no static analysis of the code.
+		if record.AnalyzerTaskKey(k) && !obsdoc.IsSecretTask(k) {
 			analyzerPlanned = true
 		}
 		// A static analysis gap is visible and makes the report partial

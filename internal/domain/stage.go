@@ -38,6 +38,9 @@ const (
 	ReasonNoDocuments            = "no_documents"
 	ReasonNoToolObservations     = "no_tool_observations"
 	ReasonNoEnvironmentGap       = "no_environment_gap"
+	// ReasonNoReviewScope: a review slice whose planned files the overview
+	// already sent, or that are all withheld or unreadable.
+	ReasonNoReviewScope = "no_review_scope"
 )
 
 // NothingToReview reports whether reason marks a planned role skipped because
@@ -46,7 +49,7 @@ const (
 // exclusion and unreadable inputs are not in this set.
 func NothingToReview(reason string) bool {
 	switch reason {
-	case ReasonNoDocuments, ReasonNoToolObservations, ReasonNoEnvironmentGap:
+	case ReasonNoDocuments, ReasonNoToolObservations, ReasonNoEnvironmentGap, ReasonNoReviewScope:
 		return true
 	}
 	return false
