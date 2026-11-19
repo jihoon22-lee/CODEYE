@@ -19,15 +19,15 @@ test('real session, project registration, durable request and cancellation', asy
   await page.getByRole('button', { name: '프로젝트 등록', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'browser-fixture', exact: true })).toBeVisible();
   const enqueued = page.waitForResponse(r => r.request().method() === 'POST' && /\/projects\/[^/]+\/runs$/.test(new URL(r.url()).pathname));
-  await page.getByRole('button', { name: '분석 요청 등록' }).click();
+  await page.getByRole('button', { name: '새로 분석', exact: true }).click();
   const response = await enqueued;
   expect(response.status()).toBe(202);
   const run = await response.json();
   expect(run.status).toBe('queued');
-  await expect(page.getByText('실행기가 아직 연결되지 않아 시작되지 않았습니다.', { exact: true })).toBeVisible();
+  await expect(page.getByText('분석 에이전트가 아직 연결되지 않아 시작하지 못했습니다.', { exact: true })).toBeVisible();
   // Chromium has EventSource, so the panel follows the run's event stream (same origin,
   // session cookie, CSP connect-src 'self') instead of polling.
-  await expect(page.getByText(/^실시간 연결로 상태가 바뀔 때 갱신합니다/)).toBeVisible();
+  await expect(page.getByText(/^실시간으로 갱신하고 있습니다/)).toBeVisible();
   // Stages come from the same server aggregation for detail and list. A queued
   // run has not started source acquisition and has no plan yet.
   const source = page.getByRole('button', { name: '소스 확보 ◷ 대기', exact: true });
@@ -41,8 +41,8 @@ test('real session, project registration, durable request and cancellation', asy
   await page.getByRole('button', { name: '취소 요청 보내기' }).click();
   await expect(page.getByText('취소됨', { exact: true })).toBeVisible();
   await page.reload();
+  // Selecting the project opens its latest run.
   await page.getByRole('button', { name: /browser-fixture/ }).click();
-  await page.getByRole('button', { name: '마지막 실행 상태 보기' }).click();
   await expect(page.getByText('취소됨', { exact: true })).toBeVisible();
   // After a reload the cancelled run keeps its recorded stages: source never completed.
   await expect(page.getByRole('button', { name: '소스 확보 ■ 취소됨', exact: true })).toBeVisible();

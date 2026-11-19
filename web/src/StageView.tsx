@@ -3,6 +3,7 @@ import type { Project, StageSummary, StageView } from './api';
 import { reportURL } from './analysisReport';
 import { formatClock, formatInstant, isTerminalRun, orderStages, runStatusText, shorten, stageName, stageStateText } from './format';
 import { ko as t } from './locales/ko';
+import { reportKo } from './locales/report-ko';
 
 const s = t.stages;
 
@@ -12,8 +13,11 @@ export function countsText(counts: Record<string, number>): string {
     .map(([k, n]) => s.count(Object.hasOwn(s.countLabels, k) ? s.countLabels[k]! : shorten(k, 40), n))
     .join(' · ');
 }
+// A reason code in words: the stage wording, else the report's, else the code itself.
 export const reasonText = (code: string): string =>
-  s.reasonLabel(Object.hasOwn(s.reasonLabels, code) ? s.reasonLabels[code]! : shorten(code, 80));
+  s.reasonLabel(Object.hasOwn(s.reasonLabels, code) ? s.reasonLabels[code]!
+    : Object.hasOwn(reportKo.reasons, code) ? reportKo.reasons[code]!
+    : shorten(code, 80));
 export const progressText = (st: StageView): string =>
   st.planned === null ? s.finishedOnly(st.finished) : s.finishedOfPlanned(st.finished, st.planned);
 
@@ -46,12 +50,15 @@ function StageItem({ stage }: { stage: StageView }) {
   const panel = useId();
   const name = stageName(stage.key);
   const counts = countsText(stage.counts);
-  return <li className="stage">
+  const known = Object.hasOwn(s.states, stage.state);
+  return <li className={`stage st-${known ? stage.state : 'unknown'}`}>
     <button type="button" className="stage-toggle" aria-expanded={open} aria-controls={panel} onClick={() => setOpen(v => !v)}>
       <strong>{name}</strong> <span>{stageStateText(stage.state)}</span>
     </button>
-    {counts !== '' && <span className="small"> {counts}</span>}
-    {stage.reasons.map(r => <span key={r} className="small"> {reasonText(r)}</span>)}
+    {(counts !== '' || stage.reasons.length > 0) && <ul className="stage-notes">
+      {counts !== '' && <li>{counts}</li>}
+      {stage.reasons.map(r => <li key={r}>{reasonText(r)}</li>)}
+    </ul>}
     <div id={panel} hidden={!open}>
       <ul className="plain small">
         <li>{progressText(stage)}</li>
@@ -104,5 +111,5 @@ export function ProjectActivity({ project }: { project: Project }) {
 export function LastReportLink({ project }: { project: Project }) {
   const r = project.activity?.last_report;
   if (!r) return null;
-  return <a className="small" href={reportURL(r.run_id, 'html', false, r.revision)}>{s.lastReport(shorten(r.run_id, 16), r.revision)}</a>;
+  return <a className="small" href={reportURL(r.run_id, 'html', false, r.revision)} title={s.lastReportTitle(r.run_id, r.revision)}>{s.lastReport(shorten(r.run_id, 16), r.revision)}</a>;
 }
