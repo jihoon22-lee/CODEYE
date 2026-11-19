@@ -379,3 +379,40 @@ func TestNothingToReviewDoesNotDegradeStage(t *testing.T) {
 		t.Fatalf("documents %+v", s)
 	}
 }
+
+// TC-168 (docs/REVIEW.md#모듈-단위-검토-분할): review slices are code_review
+// tasks. A slice left with nothing to send (no_review_scope) does not
+// degrade the stage; a slice the call ceiling refused, or one skipped for a
+// missing secrets screen, does: the stage is partial and the reason stays
+// visible, while the run verdict follows the required tasks only.
+func TestReviewSlicesInCodeReviewStage(t *testing.T) {
+	cr := domain.StageCodeReview
+	base := []Task{
+		task(cr, domain.TaskSucceeded, ""), // review.investigate
+		task(cr, domain.TaskSucceeded, ""), // review.verify
+		task(cr, domain.TaskSucceeded, ""), // review.scope
+		task(cr, domain.TaskSucceeded, ""), // review.investigate.s001
+		task(cr, domain.TaskSucceeded, ""), // review.verify.s001
+		task(cr, domain.TaskSkippedPolicy, domain.ReasonNoReviewScope),
+		task(cr, domain.TaskSkippedPolicy, domain.ReasonNoReviewScope),
+	}
+	run := Run{Status: domain.RunCompleted, SnapshotFixed: true, RunningAt: at(3), FinalizingAt: at(30), ReportAt: at(31), Tasks: base}
+	if s := find(t, Compute(run), string(cr)); s.State != Succeeded || s.Counts["skipped_policy"] != 2 || !reflect.DeepEqual(s.Reasons, []string{"no_review_scope"}) {
+		t.Fatalf("nothing to review %+v", s)
+	}
+	for _, c := range []struct {
+		status domain.TaskStatus
+		reason string
+	}{{domain.TaskBudgetExhausted, "review_budget_exhausted"}, {domain.TaskSkippedPolicy, "secret_screen_unavailable"}} {
+		tasks := append([]Task{}, base...)
+		tasks[5], tasks[6] = task(cr, c.status, c.reason), task(cr, c.status, c.reason)
+		run.Tasks = tasks
+		s := find(t, Compute(run), string(cr))
+		if s.State != Partial || s.Counts[string(c.status)] != 2 || !reflect.DeepEqual(s.Reasons, []string{c.reason}) {
+			t.Fatalf("%s %+v", c.reason, s)
+		}
+	}
+	if !domain.NothingToReview(domain.ReasonNoReviewScope) || domain.NothingToReview("review_budget_exhausted") || domain.NothingToReview("secret_screen_unavailable") {
+		t.Fatal("nothing-to-review set")
+	}
+}
