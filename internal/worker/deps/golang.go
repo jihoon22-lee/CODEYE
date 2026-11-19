@@ -391,7 +391,7 @@ func stderrModules(stderr []byte) []depdoc.Failed {
 		}
 		name, text, ok := strings.Cut(rest, ": ")
 		at := strings.LastIndex(name, "@")
-		if !ok || at <= 0 || at == len(name)-1 || strings.ContainsAny(name, " \t\\") || filepath.IsAbs(name) || len(name) > 512 || seen[name] {
+		if !ok || at <= 0 || at == len(name)-1 || strings.ContainsAny(name, " \t\\") || strings.HasPrefix(name, "/") || filepath.IsAbs(name) || len(name) > 512 || seen[name] {
 			continue
 		}
 		seen[name] = true
