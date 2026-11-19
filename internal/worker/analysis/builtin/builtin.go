@@ -121,6 +121,29 @@ func unavailable(name, reason, detail, stub string) built {
 	return built{missing: &Unavailable{Name: name, Reason: reason, Detail: detail}, stub: stub}
 }
 
+// prober is an analyzer with a startup version probe: every configured
+// analyzer except go vet, whose handler is wrapped as a pack member.
+type prober interface {
+	pack.Analyzer
+	Probe(ctx context.Context, runner executor.Runner, dir string) (string, error)
+}
+
+// probeBuilt finishes building analyzer a, configured with err: a
+// configuration error makes it invalid_config; without a runner or probe
+// directory, or when its version probe fails, it is probe_failed.
+func probeBuilt(ctx context.Context, cfg Config, runner executor.Runner, name string, a prober, err error) built {
+	if err != nil {
+		return unavailable(name, "invalid_config", err.Error(), pack.ReasonToolUnavailable)
+	}
+	if runner == nil || cfg.ProbeDir == "" {
+		return unavailable(name, "probe_failed", "no runner or probe dir", pack.ReasonToolUnavailable)
+	}
+	if _, err := a.Probe(ctx, runner, cfg.ProbeDir); err != nil {
+		return unavailable(name, "probe_failed", err.Error(), pack.ReasonToolUnavailable)
+	}
+	return built{analyzer: a}
+}
+
 func buildGoVet(ctx context.Context, cfg Config, runner executor.Runner, goh *govet.Handler, _ map[string]pack.Toolchain) built {
 	if cfg.GoExecutable == "" {
 		return unavailable(govet.HandlerName, "not_configured", "", pack.ReasonToolNotConfigured)
@@ -151,16 +174,7 @@ func buildStaticcheck(ctx context.Context, cfg Config, runner executor.Runner, g
 		return unavailable(staticcheck.Name, "toolchain_not_configured", "staticcheck needs --go", pack.ReasonToolchainNotConfigured)
 	}
 	a, err := staticcheck.New(staticcheck.Config{Executable: exe, Go: goh})
-	if err != nil {
-		return unavailable(staticcheck.Name, "invalid_config", err.Error(), pack.ReasonToolUnavailable)
-	}
-	if runner == nil || cfg.ProbeDir == "" {
-		return unavailable(staticcheck.Name, "probe_failed", "no runner or probe dir", pack.ReasonToolUnavailable)
-	}
-	if _, err := a.Probe(ctx, runner, cfg.ProbeDir); err != nil {
-		return unavailable(staticcheck.Name, "probe_failed", err.Error(), pack.ReasonToolUnavailable)
-	}
-	return built{analyzer: a}
+	return probeBuilt(ctx, cfg, runner, staticcheck.Name, a, err)
 }
 
 // Handlers probes the configured tools through runner and returns the
