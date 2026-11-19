@@ -224,17 +224,21 @@ const (
 )
 
 // fillSlots packs files into at most n slots in priority order: the strict
-// packing when it fits, else the first relaxed level that fits, else the
-// most relaxed packing, whose slots beyond n the caller counts as not
-// planned (the lowest-priority files).
+// packing when it fits, else the first relaxed level that fits. When none
+// fits (the files outnumber the slot limit), it is the strict packing, whose
+// slots beyond n the caller counts as not planned (the lowest-priority
+// files): relaxing would only trade cohesion for a few more files.
 func fillSlots(files []plannedFile, n int) []reviewSlice {
-	var out []reviewSlice
-	for _, level := range []int{packStrict, packAnyDir, packAnyRank} {
-		if out = packSlotsAt(files, level); len(out) <= n {
-			break
+	strict := packSlotsAt(files, packStrict)
+	if len(strict) <= n {
+		return strict
+	}
+	for _, level := range []int{packAnyDir, packAnyRank} {
+		if out := packSlotsAt(files, level); len(out) <= n {
+			return out
 		}
 	}
-	return out
+	return strict
 }
 
 func packSlotsAt(files []plannedFile, level int) []reviewSlice {
