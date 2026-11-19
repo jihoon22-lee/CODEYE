@@ -28,7 +28,7 @@ func readW18Doc(t *testing.T, path string) map[string]any {
 func TestAnalyzerDecoderW18JSTS(t *testing.T) {
 	es := taskSpec{key: "eslint.m02", status: "succeeded", required: true, doc: readW18Doc(t, "../../examples/observations-eslint.json")}
 	tc := taskSpec{key: "tsc.m01", status: "succeeded", required: false, doc: readW18Doc(t, "../../examples/observations-tsc.json")}
-	sol := taskSpec{key: "tsc.m02", status: "succeeded", required: false, doc: readW18Doc(t, "testdata/w18-tsc-solution.json")}
+	sol := taskSpec{key: "tsc.m02", status: "succeeded", required: false, doc: readW18Doc(t, "testdata/tsc-solution.json")}
 	sol.doc["module"].(map[string]any)["dir"] = "."
 	f := analyzerFixture(t, nil, es, tc, sol)
 	r := build(t, f.in, DefaultRegistry())
