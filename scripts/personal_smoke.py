@@ -3,6 +3,8 @@
 scripts/test_postgres.py --personal 이 임시 PostgreSQL 안에 데이터베이스 셋을 만들어 실행한다.
 A: 실제 Go 분석(go vet) → 정지 → 백업 → 비어 있지 않은 대상 복원 거절 → B에 복원 → B 시작·보고서·증거·새 분석.
 C: 시험용 handler(-tags codeye_fixture) sleep 작업 중 정지 → drain 시간 초과 → 취소·정리 확인.
+관리형 `codeye up`(TC-170~173)과 쉬운 시작(TC-185~188): 홈 아래 폴더, Git 주소(시험 빌드의 file:// 미러),
+데이터 폴더 거절, 브라우저의 한 칸 입력·개선 안내·다시 시도·도구 화면.
 Linux 전용이다. 모델 호출·네트워크 다운로드는 없다.
 """
 import hashlib
@@ -15,7 +17,7 @@ import subprocess
 import time
 from http.cookiejar import CookieJar
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 from uuid import uuid4
@@ -337,6 +339,104 @@ def run(base, root, env, probe_env):
             subprocess.run([exe, "stop", "--config", str(cfg)], cwd=directory, env=dict(env, CODEYE_DATABASE_URL=urls[db]),
                            capture_output=True, timeout=200)
     managed(base, root, env, directory, source)
+    easy(root, env, directory, fixture)
+
+
+def bare_repository(mirror, host_path, files):
+    """A bare repository at mirror/HOST/OWNER/REPO.git with one commit on main."""
+    work = mirror.parent / ("work-" + host_path.replace("/", "-"))
+    for name, text in files.items():
+        (work / name).parent.mkdir(parents=True, exist_ok=True)
+        (work / name).write_text(text)
+    genv = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_AUTHOR_NAME="codeye", GIT_AUTHOR_EMAIL="codeye@example.invalid",
+                GIT_COMMITTER_NAME="codeye", GIT_COMMITTER_EMAIL="codeye@example.invalid")
+    for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "init"]):
+        subprocess.run(["git", *args], cwd=work, env=genv, check=True, capture_output=True, timeout=30)
+    target = mirror / (host_path + ".git")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "clone", "-q", "--bare", str(work), str(target)], env=genv, check=True, capture_output=True, timeout=30)
+
+
+def easy(root, env, directory, fixture):
+    """TC-185~188: a folder path and a GitHub address from one field, retry, tools, hints.
+
+    The fixture build reads CODEYE_TEST_GIT_MIRROR: https://github.com/O/R is fetched from
+    MIRROR/github.com/O/R.git over file:// (no network in CI). The real GitHub check is manual.
+    """
+    home = directory / "easy"
+    home.mkdir(mode=0o700)
+    binary = home / "codeye"
+    shutil.copy2(fixture, binary)
+    if (root / "web/dist/index.html").exists():
+        (home / "web").mkdir()
+        (home / "web/dist").symlink_to(root / "web/dist", target_is_directory=True)
+    user_home = home / "h"
+    folder = user_home / "code/hello"
+    (folder / "pkg").mkdir(parents=True)
+    (folder / "go.mod").write_text("module example.com/hello\n\ngo 1.22\n")
+    (folder / "pkg/a.go").write_text('package pkg\n\nimport "fmt"\n\nfunc A() { fmt.Printf("%d\\n", "x") }\n')
+    mirror = home / "mirror"
+    go_files = {"go.mod": "module example.com/r\n\ngo 1.22\n", "r.go": 'package r\n\nimport "fmt"\n\nfunc R() { fmt.Printf("%d\\n", "x") }\n'}
+    bare_repository(mirror, "github.com/o/r", go_files)
+    rust = shutil.which("cargo") is not None
+    web_files = dict(go_files)
+    if rust:
+        web_files.update({"crate/Cargo.toml": '[package]\nname = "c"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+                          "crate/src/lib.rs": "pub fn f() -> i32 { 1 }\n"})
+    bare_repository(mirror, "github.com/o/web", web_files)
+    state = user_home / ".local/state/codeye"
+    menv = {k: v for k, v in env.items() if k not in ("CODEYE_DATABASE_URL", "XDG_CONFIG_HOME", "XDG_STATE_HOME") and not k.startswith("PG")}
+    menv.update(HOME=str(user_home), BROWSER="/bin/true", CODEYE_TEST_GIT_MIRROR=str(mirror))
+
+    def cli(*args, expect=0, timeout=300):
+        result = subprocess.run([binary, *map(str, args)], cwd=home, env=menv, capture_output=True, text=True, timeout=timeout)
+        if expect is not None and result.returncode != expect:
+            raise RuntimeError(f"{args[0]} 종료 코드 {result.returncode} (기대 {expect}): {(result.stdout + result.stderr)[-3000:]}")
+        return result.stdout
+
+    def link_of(text):
+        line = next(line.strip() for line in text.splitlines() if "#launch=" in line)
+        return line, line.split("/#", 1)[0]
+
+    try:
+        # TC-185: a folder under $HOME needs no new source root; a GitHub address without a branch.
+        first = cli("up", "--no-open", folder)
+        assert 'registered source root "home"' in first and 'registered project "hello"' in first, first
+        repo = cli("up", "--no-open", "https://github.com/o/r")
+        assert 'registered project "r" (https://github.com/o/r)' in repo and "queued an analysis" in repo, repo
+        link, origin = link_of(repo)
+        session = Session(state, origin, link)
+        view = session.finished(link.rsplit("&run=", 1)[1], timeout=300)
+        assert view["status"] in ("partial", "completed") and view["report"], view
+        doc = session.request("GET", f"runs/{view['id']}/report?format=json&include_code=false")
+        assert doc["inputs"]["source_kind"] == "git" and doc["inputs"]["commit_sha"], doc["inputs"]
+        assert any(f["evidence"] for f in doc["findings"]), "Git 저장소의 go vet 발견 없음"
+        projects = {p["name"]: p for p in session.request("GET", "projects?limit=100")["items"]}
+        assert projects["r"]["analysis"] == {"send_source_to_model": True, "run_build_scripts": False}, projects["r"]
+        assert projects["hello"]["analysis"] == {"send_source_to_model": True, "run_build_scripts": True}, projects["hello"]
+        # TC-186: the home folder itself holds the state directory: refused, naming the folder.
+        try:
+            session.request("POST", "projects", {"local_path": str(user_home)})
+            raise AssertionError("상태 폴더를 품은 폴더가 등록됨")
+        except HTTPError as e:
+            body = json.loads(e.read())
+            assert e.code == 422 and body["error"]["code"] == "FOLDER_HOLDS_CODEYE_DATA" and str(user_home) in body["error"]["message"], body
+        setup = session.request("GET", "setup")
+        assert setup["mode"] == "personal" and setup["git"]["available"] and setup["tools"]["tools"], setup
+        if (home / "web/dist").exists():
+            # TC-187/188: the browser flows (path, Git, hints, retry, tools).
+            browser_link, _ = link_of(cli("open", "--no-open"))
+            link_file = home / "browser-link"
+            link_file.write_text(browser_link + "\n")
+            link_file.chmod(0o600)
+            benv = dict(env, CODEYE_TEST_BASE_URL=origin, CODEYE_TEST_PERSONAL_LINK_FILE=str(link_file), CODEYE_TEST_PERSONAL_FOLDER=str(folder),
+                        CODEYE_TEST_PERSONAL_REPO="https://github.com/o/web", CODEYE_TEST_PERSONAL_MISSING_REPO="https://github.com/o/missing")
+            if rust:
+                benv["CODEYE_TEST_PERSONAL_BUILD_HINT"] = "1"
+            subprocess.run(["npm", "run", "test:e2e", "--", "personal.spec.ts", "--global-timeout=600000"], cwd=root / "web", check=True, timeout=660, env=benv)
+        print("PASS: 개인 모드 쉬운 시작(홈 아래 폴더·Git 주소 기본 브랜치·프로젝트별 분석 선택·데이터 폴더 거절·도구·다시 시도·개선 안내)")
+    finally:
+        subprocess.run([binary, "stop"], cwd=home, env=menv, capture_output=True, timeout=300)
 
 
 def managed(base, root, env, directory, source):

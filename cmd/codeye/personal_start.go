@@ -279,7 +279,7 @@ func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, 
 		res.controllerPID = rec.PID
 	}
 	if !agentUp {
-		cmd, arec, err := personal.Spawn(personal.RoleAgent, exe, agentArgv(cfg, layout, roots, enroll), childEnv("PATH", "LANG"), layout.Root, layout.LogFile(personal.RoleAgent))
+		cmd, arec, err := personal.Spawn(personal.RoleAgent, exe, agentArgv(cfg, layout, roots, enroll), childEnv(append([]string{"PATH", "LANG"}, fixtureAgentEnv...)...), layout.Root, layout.LogFile(personal.RoleAgent))
 		if err != nil {
 			if cmd != nil {
 				_ = cmd.Wait()
