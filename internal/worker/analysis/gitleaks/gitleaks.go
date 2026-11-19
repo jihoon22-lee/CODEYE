@@ -98,7 +98,7 @@ func VersionTested(v string) bool { return pack.SeriesTested(v, TestedSeries) }
 // Descriptor is gitleaks' pack identity: an extra-depth analyzer of every
 // snapshot with model input in scope (ecosystem any, Plan).
 func Descriptor() pack.Descriptor {
-	return pack.Descriptor{ID: AnalyzerID, Name: Name, Ecosystem: "any", Required: false, Tool: Tool, VersionArgs: []string{"version"}, ParseVersion: ParseVersion}
+	return pack.Descriptor{ID: AnalyzerID, Name: Name, Ecosystem: "any", Required: false, Tool: Tool, VersionArgs: []string{"version"}, ParseVersion: ParseVersion, Purpose: obsdoc.PurposeSecrets}
 }
 
 // Plan is the tool-independent planner: one task "gitleaks" over every

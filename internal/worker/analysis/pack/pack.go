@@ -94,6 +94,15 @@ type Descriptor struct {
 	// <interpreter> <tool path> <args>, with PATH set to the interpreter's
 	// directory only, never through the script's #! line.
 	Interpreter string
+	// Purpose is the envelope's analyzer purpose (obsdoc.PurposeMetrics,
+	// obsdoc.PurposeSecrets; "" for diagnostics). Every envelope of the
+	// analyzer, including a not-run one, records it.
+	Purpose string
+}
+
+// Analyzer is the envelope identity of the descriptor.
+func (d Descriptor) Analyzer() obsdoc.Analyzer {
+	return obsdoc.Analyzer{ID: d.ID, Ecosystem: d.Ecosystem, Required: d.Required, Purpose: d.Purpose}
 }
 
 // Validate checks a descriptor.
@@ -109,6 +118,8 @@ func (d Descriptor) Validate() error {
 		return fmt.Errorf("pack: analyzer %s tool or version parser is invalid", d.ID)
 	case d.Interpreter != "" && !slices.Contains(d.Toolchains, d.Interpreter):
 		return fmt.Errorf("pack: analyzer %s interpreter %q is not one of its toolchains", d.ID, d.Interpreter)
+	case d.Purpose != "" && d.Purpose != obsdoc.PurposeMetrics && d.Purpose != obsdoc.PurposeSecrets:
+		return fmt.Errorf("pack: analyzer %s purpose %q is invalid", d.ID, d.Purpose)
 	}
 	for i, t := range d.Toolchains {
 		if !toolPattern.MatchString(t) || t == "go" || t == d.Tool || (i > 0 && d.Toolchains[i-1] >= t) {
@@ -413,7 +424,7 @@ func (n notConfigured) Run(ctx context.Context, job analysis.Job, task analysis.
 // zero). Further limitation codes (e.g. a second reason) are recorded with
 // reason.
 func NotRun(job analysis.Job, d Descriptor, t Task, reason string, limitations ...string) analysis.TaskResult {
-	doc := obsdoc.New(obsdoc.Analyzer{ID: d.ID, Ecosystem: d.Ecosystem, Required: d.Required}, NotRunAdapter, NotRunAdapter, t.Spec.Key, job.Snapshot.Digest)
+	doc := obsdoc.New(d.Analyzer(), NotRunAdapter, NotRunAdapter, t.Spec.Key, job.Snapshot.Digest)
 	doc.Module.Dir = t.Module
 	if doc.Module.Dir == "" {
 		doc.Module.Dir = "."

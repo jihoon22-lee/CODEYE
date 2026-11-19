@@ -98,6 +98,79 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
                 path = source_location(item["location"], source_root)
                 digest = hashlib.sha256(path.read_bytes()).hexdigest()
                 ensure(digest == item["blob_sha256"], "Evidence hash mismatch: " + str(path))
+    check_sections(report, source_root)
+
+
+SECTION_BLOCKS = ("overview", "environment", "documents", "static_analysis", "metrics", "secrets", "code_review")
+# Code-free model statements carry this label instead of the model's text (internal/report/govet.go).
+TEXT_OMITTED = "원문 생략(코드 미포함 내보내기)."
+
+
+def check_sections(report: dict, source_root: Path = ROOT) -> None:
+    """Cross-field rules of the analysis sections (docs/REPORT.md#분석-종류별-절; validate.go)."""
+    present = [key for key in SECTION_BLOCKS + ("gaps",) if key in report]
+    if not present:
+        return
+    ensure(all(key in report for key in SECTION_BLOCKS), "Report with only some analysis sections")
+    observations = {o["id"]: o for o in report.get("observations", [])}
+    findings = {f["id"]: f for f in report["findings"]}
+    # Every observation is in exactly one of static analysis, metrics and secrets.
+    placed: list[str] = []
+    static_findings: list[str] = []
+    for language in report["static_analysis"]["languages"]:
+        for tool in language["tools"]:
+            placed += tool["observation_ids"]
+            static_findings += tool["finding_ids"]
+            ensure(all(observations.get(i, {}).get("task_key") == tool["task_key"] and "metric" not in observations[i] for i in tool["observation_ids"]),
+                   "Static analysis row lists an observation of another task or a metric")
+            ensure(sum(rule["count"] for rule in tool["rules"]) == len(tool["observation_ids"]), "Static analysis rule counts differ from the row")
+            ensure(not (tool["task_status"] != "succeeded" and tool["exit_class"] in ("success_without_findings", "success_with_findings")),
+                   "Static analysis row reads as success for a task that did not succeed")
+    for group in report["metrics"]["metrics"]:
+        placed += group["observation_ids"]
+        values = [observations[i]["metric"] for i in group["observation_ids"] if "metric" in observations.get(i, {})]
+        ensure(len(values) == len(group["observation_ids"]) and values, "Metric group lists a non-metric observation")
+        ensure(group["max_value"] == max(m["value"] for m in values) and group["thresholds"] == sorted({m["threshold"] for m in values}),
+               "Metric group does not follow its observations")
+    for detection in report["secrets"]["detections"]:
+        placed.append(detection["observation_id"])
+        if detection.get("finding_id") is not None:
+            ensure(detection["finding_id"] in static_findings, "Secret detection names a finding outside static analysis")
+    ensure(sorted(placed) == sorted(observations), "Observations not partitioned between static analysis, metrics and secrets")
+    ensure(len([i for i in report["metrics"]["metrics"] for i in i["observation_ids"]]) == report["summary"].get("metric_observations", 0),
+           "Metrics section count differs from the summary")
+    # Every finding is in exactly one of static analysis and code review.
+    review = report["code_review"]["finding_ids"]
+    ensure(sorted(static_findings + review) == sorted(findings), "Findings not partitioned between static analysis and code review")
+    overview = {s["key"]: s for s in report["overview"]["sections"]}
+    ensure(overview["static_analysis"]["counts"].get("findings", 0) + overview["code_review"]["counts"].get("findings", 0) == report["summary"]["total_findings"],
+           "Section finding counts do not add up to the summary")
+    ensure(overview["gaps"]["counts"]["gaps"] == len(report.get("gaps", [])), "Gap count differs from the gaps")
+    ensure(all(a["section"] in overview for a in report["overview"]["attention"]), "Attention item points at an unknown section")
+    # Model statements: none without a performed role; code-free exports carry only the label.
+    free = not report["export"]["include_code"]
+    def statements(block: dict, lists: dict) -> list[str]:
+        out = [entry[field] for name, fields in lists.items() for entry in block[name] for field in fields]
+        ensure(block["model"]["state"] == "performed" or not out, "Model statements without a performed role")
+        return out
+    texts = statements(report["environment"], {"notes": ("affected_checks", "still_checkable", "needed_observation")})
+    texts += statements(report["documents"], {"contracts": ("statement",), "conflicts": ("summary", "impact"),
+                                              "questions": ("question",), "instruction_notes": ("note",)})
+    texts += [limit["statement"] for limit in report["code_review"]["interpretation_limits"]]
+    ensure(not free or all(text == TEXT_OMITTED for text in texts), "Code-free export carries model text")
+    # Section evidence resolves in the snapshot named by the report.
+    for block in ("environment", "documents"):
+        catalog = {e["id"]: e for e in report[block]["evidence"]}
+        ensure(len(catalog) == len(report[block]["evidence"]), "Duplicate section evidence")
+        for evidence in catalog.values():
+            location = {"path": evidence["path"], "start_line": evidence["start_line"], "end_line": evidence["end_line"],
+                        "snapshot_id": report["inputs"]["snapshot_id"]}
+            path = source_location(location, source_root)
+            ensure(hashlib.sha256(path.read_bytes()).hexdigest() == evidence["blob_sha256"], "Section evidence hash mismatch: " + str(path))
+        cited = [i for entries in report[block].values() if isinstance(entries, list)
+                 for entry in entries if isinstance(entry, dict)
+                 for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids") for i in entry.get(key, [])]
+        ensure(set(cited) <= set(catalog), "Section statement cites evidence the section does not carry")
 
 
 def check_analyzer(descriptor: dict) -> None:
@@ -152,6 +225,11 @@ def check_analyzer_observations(doc: dict) -> None:
     ensure(parse["unresolved_observations"] == sum(1 for o in observations if o["location_state"] != "resolved"), "Envelope unresolved count mismatch")
     ensure(len({o["id"] for o in observations}) == len(observations), "Duplicate envelope observation id")
     ensure(doc["limitations"] == sorted(set(doc["limitations"])), "Envelope limitations must be sorted unique codes")
+    # Analyzer purpose (docs/ANALYZERS.md#분석기-목적): a metrics envelope holds only metrics, a
+    # secrets envelope none; without a purpose the analyzer is diagnostics.
+    purpose = doc["analyzer"].get("purpose")
+    ensure(purpose != "metrics" or all("metric" in o for o in observations), "Metrics analyzer with a diagnostic observation")
+    ensure(purpose != "secrets" or not any("metric" in o for o in observations), "Secrets analyzer with a metric observation")
     executions = {e["name"]: e for e in doc["executions"]}
     ensure(len(executions) == len(doc["executions"]), "Duplicate envelope execution")
     for o in observations:

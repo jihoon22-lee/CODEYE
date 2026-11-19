@@ -290,8 +290,44 @@ func TestMetricObservations(t *testing.T) {
 	if _, err := Decode(encode(t, d), Expect{Lookup: lookupOf(d)}); !errors.Is(err, ErrInvalid) {
 		t.Fatal("metrics counted as findings")
 	}
-	if !IsSecretAnalyzer("any.gitleaks") || IsSecretAnalyzer("go.staticcheck") {
-		t.Fatal("secret analyzers")
+}
+
+// The analyzer purpose (docs/ANALYZERS.md#분석기-목적) marks metrics and secrets
+// envelopes: a metrics envelope holds only metrics, a secrets envelope none,
+// and an envelope without a purpose is diagnostics (metrics still decode).
+func TestAnalyzerPurpose(t *testing.T) {
+	metric := map[string]any{"name": "cyclomatic_complexity", "value": 17, "threshold": 16, "unit": "count"}
+	all := func(d map[string]any) {
+		for _, o := range d["observations"].([]any) {
+			o.(map[string]any)["metric"] = metric
+		}
+		d["outcome"].(map[string]any)["exit_class"] = ExitSuccessWithoutFindings
+	}
+	for name, c := range map[string]struct {
+		purpose string
+		edit    func(map[string]any)
+		ok      bool
+	}{
+		"metrics with metrics":       {PurposeMetrics, all, true},
+		"metrics with a diagnostic":  {PurposeMetrics, func(d map[string]any) { all(d); delete(obs0(d), "metric") }, false},
+		"secrets without metrics":    {PurposeSecrets, func(map[string]any) {}, true},
+		"secrets with a metric":      {PurposeSecrets, func(d map[string]any) { obs0(d)["metric"] = metric }, false},
+		"unknown purpose":            {"diagnostics", func(map[string]any) {}, false},
+		"no purpose with a metric":   {"", func(d map[string]any) { obs0(d)["metric"] = metric }, true},
+		"no purpose with diagnostic": {"", func(map[string]any) {}, true},
+	} {
+		d := example(t)
+		if c.purpose != "" {
+			d["analyzer"].(map[string]any)["purpose"] = c.purpose
+		}
+		c.edit(d)
+		doc, err := Decode(encode(t, d), Expect{Lookup: lookupOf(d)})
+		if (err == nil) != c.ok {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err == nil && doc.Analyzer.IsSecrets() != (c.purpose == PurposeSecrets) {
+			t.Fatalf("%s: IsSecrets", name)
+		}
 	}
 }
 

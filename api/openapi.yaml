@@ -286,7 +286,7 @@ paths:
     get:
       operationId: getReport
       x-codeye-status: implemented
-      description: 프로젝트 읽기 권한으로 고정된 revision을 조회한다. 기본 내보내기는 도구 원문과 코드 인용을 생략한다.
+      description: 프로젝트 읽기 권한으로 고정된 revision을 조회한다. 기본 내보내기는 도구 원문과 코드 인용, 절의 모델 문장을 생략한다. builder 5부터 분석 종류별 절 블록을 싣고(docs/REPORT.md#분석-종류별-절), 이전 실행과의 비교는 싣지 않는다.
       parameters:
         - {name: revision, in: query, schema: {type: integer, minimum: 1, maximum: 1000000}}
         - {name: format, in: query, schema: {enum: [json, markdown, html], default: json}}

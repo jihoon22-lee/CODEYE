@@ -151,7 +151,11 @@ func (p *Publisher) PublishRun(ctx context.Context, runID string) (Outcome, erro
 		if t.Key == nil {
 			return reject("task_key_missing", nil)
 		}
-		in.Tasks = append(in.Tasks, report.TaskFacts{ID: t.ID, Key: *t.Key, Status: t.Status, Required: t.Required, Reason: t.Reason, ExecutionOrdinal: t.ExecutionOrdinal})
+		facts := report.TaskFacts{ID: t.ID, Key: *t.Key, Status: t.Status, Required: t.Required, Reason: t.Reason, ExecutionOrdinal: t.ExecutionOrdinal}
+		if t.Stage != nil {
+			facts.Stage = *t.Stage
+		}
+		in.Tasks = append(in.Tasks, facts)
 	}
 	for _, art := range pub.Artifacts {
 		ref := report.ArtifactRef{ID: art.ID, RunID: art.RunID, AttemptID: art.AttemptID, Role: art.Role, MediaType: art.MediaType, SHA256: art.SHA256, SizeBytes: art.SizeBytes}

@@ -424,6 +424,7 @@ def check_structure_pack_contracts(validators: dict) -> int:
     def check_envelope(doc: dict, metric: dict | None) -> None:
         """The generic rules on the diagnostics, the metric rules on the rest."""
         envelope_validator.validate(doc)
+        ensure(doc["analyzer"].get("purpose") == ("metrics" if metric is not None else "secrets"), "Structure and secrets envelopes record their analyzer purpose")
         rest = copy.deepcopy(doc)
         metrics = [o for o in rest["observations"] if "metric" in o]
         rest["observations"] = [o for o in rest["observations"] if "metric" not in o]
@@ -463,6 +464,7 @@ def check_structure_pack_contracts(validators: dict) -> int:
         validators["analyzer.schema.json"].validate(descriptor)
         check_analyzer(descriptor)
         envelopes[name] = (descriptor, json_file(ROOT / ("examples/observations-" + name + ".json")))
+        ensure(descriptor.get("purpose") == envelopes[name][1]["analyzer"].get("purpose"), name + ": descriptor and envelope purpose differ")
     lizard_metric = {"name": "cyclomatic_complexity", "unit": "count", "rule": "cyclomatic_complexity", "threshold": go_int(adapters / "lizard/lizard.go", "CCNThreshold")}
     jscpd_metric = {"name": "duplicated_lines", "unit": "lines", "rule": "duplicated_code", "threshold": go_int(adapters / "jscpd/jscpd.go", "MinLines")}
     descriptor, lizard = envelopes["lizard"]
@@ -505,6 +507,9 @@ def check_structure_pack_contracts(validators: dict) -> int:
     case("secret columns recorded", secrets, None, lambda d: d["observations"][0]["location"].update(start_col=13, end_col=32))
     case("secret message with more than the rule", secrets, None, lambda d: d["observations"][0].update(raw_message=d["observations"][0]["raw_message"] + ": AKIA"))
     case("secret limitations dropped", secrets, None, lambda d: d.update(limitations=[x for x in d["limitations"] if x != "secret_values_withheld"]))
+    case("secrets envelope without its purpose", secrets, None, lambda d: d["analyzer"].pop("purpose"))
+    case("metrics envelope marked secrets", lizard, lizard_metric, lambda d: d["analyzer"].update(purpose="secrets"))
+    case("unknown analyzer purpose", jscpd, jscpd_metric, lambda d: d["analyzer"].update(purpose="diagnostics"))
     report = json_file(ROOT / "examples/report-go-vet.json")
     validators["report.schema.json"].validate(report)
     bad = copy.deepcopy(report)

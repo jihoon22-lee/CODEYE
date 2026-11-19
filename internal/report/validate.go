@@ -161,7 +161,7 @@ func ValidateReport(r Report) error {
 			}
 		}
 	}
-	return nil
+	return validateSections(r)
 }
 
 func validateFinding(f Finding, snapshot string, obs, arts map[string]bool) error {
@@ -281,10 +281,6 @@ func Unmarshal(b []byte) (Report, error) {
 // Digest is the sha256 of the canonical JSON; it is printed in every format.
 func Digest(canonical []byte) string { return domain.Digest(canonical) }
 
-// Project returns the export projection. includeCode=true is the stored
-// report. includeCode=false removes every raw tool message and replaces all
-// free text of findings that is not a fixed builder template, so neither code
-// nor tool/model text reaches the code-free export.
 // validateRuleContext checks a tool row's rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제).
 // The configuration paths and digest exist only in the full export.
 func validateRuleContext(c *RuleContext, includeCode bool) error {
@@ -317,6 +313,11 @@ func validateRuleContext(c *RuleContext, includeCode bool) error {
 	return nil
 }
 
+// Project returns the export projection. includeCode=true is the stored
+// report. includeCode=false removes every raw tool message and replaces all
+// free text of findings and every model statement of the sections that is
+// not a fixed builder template, so neither code nor tool/model text reaches
+// the code-free export.
 func Project(r Report, includeCode bool) Report {
 	if includeCode {
 		return r
@@ -396,6 +397,7 @@ func Project(r Report, includeCode bool) Report {
 		g.Fingerprint, g.FingerprintBasis, g.DispositionVersion = "", nil, nil
 		out.Findings[i] = g
 	}
+	projectSections(&out, r)
 	return out
 }
 

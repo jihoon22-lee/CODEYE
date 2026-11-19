@@ -172,6 +172,11 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 		}
 	}
 	out.Tool = &tc
+	purpose := d.Analyzer.Purpose
+	if purpose == "" {
+		purpose = PurposeDiagnostics
+	}
+	out.Analyzer = &AnalyzerIdentity{ID: d.Analyzer.ID, Ecosystem: d.Analyzer.Ecosystem, Purpose: purpose, Tool: d.Tool.Name, RulePack: d.RulePack.ID + "@" + d.RulePack.Version}
 	return out, nil
 }
 

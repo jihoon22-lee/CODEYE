@@ -20,6 +20,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
@@ -92,7 +93,7 @@ func VersionTested(v string) bool { return pack.SeriesTested(v, TestedSeries) }
 // supported language, run by the node toolchain.
 func Descriptor() pack.Descriptor {
 	return pack.Descriptor{ID: AnalyzerID, Name: Name, Ecosystem: "any", Required: false, Tool: Tool, VersionArgs: []string{"--version"}, ParseVersion: ParseVersion,
-		Toolchains: []string{Interpreter}, Interpreter: Interpreter}
+		Toolchains: []string{Interpreter}, Interpreter: Interpreter, Purpose: obsdoc.PurposeMetrics}
 }
 
 // Extensions are CODEYE's language source extensions; jscpd 5.4.3 maps

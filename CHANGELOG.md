@@ -4,6 +4,10 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가
+
+- **분석 종류별 절**: 보고서가 종합, 환경 분석, 문서 분석, 정적 분석(언어·도구별), 구조·중복 지표, 비밀정보(값 없음), 코드 분석(모델 검토), 분석 공백 순의 절로 나뉜다. 선택 최상위 블록으로 더했고 기존 필드는 바이트 단위로 같다(report 패키지 시험 입력 84개를 이전 builder 출력과 대조). 보고서 builder는 5이며, 모든 관찰과 발견이 한 절에 한 번씩 들어가는지를 저장·조회 검증이 확인한다. 상태·품질 판정 규칙은 그대로다. 모델 문장은 수락된 역할 기록에서만 오고 "모델 해석"으로 표시하며 코드 미포함 내보내기에서는 생략한다. Markdown·HTML·웹 화면은 같은 수를 보이고, 절이 없는 이전 리비전은 이전 평면 배치로 보인다. "이전 실행과 비교"는 웹 화면에만 있다. 분석기 envelope와 descriptor에 분석기 목적(`analyzer.purpose`: 지표·비밀정보)을 기록해 어느 절로 갈지 정한다. [`examples/report.json`](examples/report.json)과 [`examples/report.md`](examples/report.md)는 실제 worker 파이프라인과 대본 모델 응답으로 다시 만들었다(합성 예시, 실모델 호출 없음).
+
 ### 추가 — 모듈 단위 검토 분할
 
 - overview가 보내지 못한 코드·테스트 파일을 모듈 단위 slice(`review.investigate.sNNN`, `review.verify.sNNN`, 최대 32개)로 검토한다. 계획은 manifest·scope·상수로만 정하고, `review.scope`가 overview가 실제로 보낸 파일을 빼고 범위 산출물(`application/vnd.codeye.review-scope+json` 0.1)을 쓴다. slice 기록은 schema 0.3이다. 지침 문구는 바뀌지 않았고 slice 요청의 지침 hash는 overview와 같다.

@@ -180,7 +180,7 @@ type assembleInput struct {
 
 // assemble builds the envelope and decides the task outcome.
 func assemble(in assembleInput) obsdoc.Document {
-	doc := obsdoc.New(obsdoc.Analyzer{ID: AnalyzerID, Ecosystem: "any", Required: false}, obsdoc.Component{ID: Name, Version: AdapterVersion},
+	doc := obsdoc.New(Descriptor().Analyzer(), obsdoc.Component{ID: Name, Version: AdapterVersion},
 		obsdoc.Component{ID: ParserID, Version: ParserVersion}, in.TaskKey, in.ManifestDigest)
 	doc.Module.Dir = anypack.ModuleDir
 	doc.Patterns = append([]string{}, in.Patterns...)

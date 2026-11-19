@@ -237,8 +237,8 @@ func TestPlanAndVersion(t *testing.T) {
 	if tasks, _ := Plan(context.Background(), outside.Job); len(tasks) != 0 {
 		t.Fatalf("document outside the scope planned %+v", tasks)
 	}
-	if !obsdoc.IsSecretTask(Name) || !obsdoc.IsSecretAnalyzer(AnalyzerID) || obsdoc.IsSecretTask("lizard") {
-		t.Fatal("secrets task name or analyzer not registered in obsdoc")
+	if !obsdoc.IsSecretTask(Name) || obsdoc.IsSecretTask("lizard") {
+		t.Fatal("secrets task name not registered in obsdoc")
 	}
 	for in, want := range map[string]string{"v8.30.1\n": "8.30.1", "8.30.1\n": "", "version is set by build process\n": "", "v8.30.1\nx\n": ""} {
 		if got, ok := ParseVersion([]byte(in)); got != want || ok != (want != "") {

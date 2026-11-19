@@ -31,7 +31,7 @@ type secretsStub struct {
 }
 
 func (secretsStub) Descriptors() []pack.Descriptor {
-	return []pack.Descriptor{{ID: "go.vet", Name: "go-vet"}, {ID: "any.gitl" + "eaks", Name: secretsTaskKey}}
+	return []pack.Descriptor{{ID: "go.vet", Name: "go-vet"}, {ID: "any.gitl" + "eaks", Name: secretsTaskKey, Purpose: obsdoc.PurposeSecrets}}
 }
 
 func (secretsStub) Info() analysis.HandlerInfo {
@@ -48,7 +48,7 @@ func (w secretsStub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpe
 		return vetStub{obs: w.obs}.Run(ctx, j, t, r)
 	}
 	id := "any.gitl" + "eaks"
-	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: "any"}, obsdoc.Component{ID: t.Key, Version: "1"}, obsdoc.Component{ID: t.Key + "-stub", Version: "1"}, t.Key, j.Snapshot.Digest)
+	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: "any", Purpose: obsdoc.PurposeSecrets}, obsdoc.Component{ID: t.Key, Version: "1"}, obsdoc.Component{ID: t.Key + "-stub", Version: "1"}, t.Key, j.Snapshot.Digest)
 	doc.Module.Dir, doc.Tool.Name = ".", t.Key
 	version := "1.0.0"
 	doc.Tool.Version, doc.Tool.VersionTested = &version, true

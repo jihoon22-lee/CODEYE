@@ -31,7 +31,7 @@ import (
 type cleanScreen struct{}
 
 func (cleanScreen) Descriptors() []pack.Descriptor {
-	return []pack.Descriptor{{ID: "any.gitl" + "eaks", Name: "secrets"}}
+	return []pack.Descriptor{{ID: "any.gitl" + "eaks", Name: "secrets", Purpose: obsdoc.PurposeSecrets}}
 }
 
 func (cleanScreen) Info() analysis.HandlerInfo {
@@ -44,7 +44,7 @@ func (cleanScreen) Plan(context.Context, analysis.Job) ([]analysis.TaskSpec, err
 
 func (cleanScreen) Run(_ context.Context, j analysis.Job, t analysis.TaskSpec, _ executor.Runner) analysis.TaskResult {
 	id := "any.gitl" + "eaks"
-	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: "any"}, obsdoc.Component{ID: t.Key, Version: "1"}, obsdoc.Component{ID: t.Key + "-stub", Version: "1"}, t.Key, j.Snapshot.Digest)
+	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: "any", Purpose: obsdoc.PurposeSecrets}, obsdoc.Component{ID: t.Key, Version: "1"}, obsdoc.Component{ID: t.Key + "-stub", Version: "1"}, t.Key, j.Snapshot.Digest)
 	doc.Module.Dir, doc.Tool.Name = ".", t.Key
 	version := "1.0.0"
 	doc.Tool.Version, doc.Tool.VersionTested = &version, true

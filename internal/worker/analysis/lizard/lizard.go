@@ -17,6 +17,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
@@ -88,7 +89,7 @@ func VersionTested(v string) bool { return pack.SeriesTested(v, TestedSeries) }
 // Descriptor is lizard's pack identity: an extra-depth analyzer of every
 // supported language (ecosystem any).
 func Descriptor() pack.Descriptor {
-	return pack.Descriptor{ID: AnalyzerID, Name: Name, Ecosystem: "any", Required: false, Tool: Tool, VersionArgs: []string{"--version"}, ParseVersion: ParseVersion}
+	return pack.Descriptor{ID: AnalyzerID, Name: Name, Ecosystem: "any", Required: false, Tool: Tool, VersionArgs: []string{"--version"}, ParseVersion: ParseVersion, Purpose: obsdoc.PurposeMetrics}
 }
 
 // Eligible reports a file lizard measures: a supported extension.
