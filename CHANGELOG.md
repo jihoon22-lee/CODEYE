@@ -4,6 +4,13 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 고침 — 실제 저장소에서 한 곳의 문제가 작업 전체를 실패시키던 것
+
+- **작업 사이 되돌리기**: 한 attempt의 작업은 작업 사본 하나를 차례로 쓴다. Rust build script(`fixtures/rust/drift`)가 고쳐 쓴 `src/lib.rs`가 뒤의 lizard·jscpd·gitleaks를 `workspace_drift`로 실패시켰다. 이제 워커가 작업마다 사본을 스냅샷 내용으로 되돌리고(바뀐 manifest 파일은 다시 쓰고 manifest에 없는 항목은 지운다. 숨김 이름·`node_modules`·`vendor`·`testdata`는 남긴다) `workspace_restored_after_task`·`workspace_leftovers_removed`(실패하면 `workspace_restore_failed`)를 남긴다. 자기 실행 중에 사본을 바꾼 작업은 여전히 `workspace_drift`다.
+- **쓸 수 없는 비밀값 선별**: 비밀값 작업이 실패하거나 부분 결과여도 검토를 건너뛰지 않는다(`secret_screen_failed` 없앰). 미선별처럼 기본 읽기 필터만 거쳐 보내고 `model_input_not_secret_screened`를 남기되, 읽을 수 있는 결과가 보고한 파일은 계속 뺀다. 보고서(Markdown·웹)는 쓸 수 없던 작업과 상태·사유를 적는다. 이전 worker의 `secret_screen_failed` 기록은 그대로 읽는다. 보고서 builder 버전은 그대로다.
+- **해석하지 못한 파일**: ruff·mypy·pyright·bandit과 ESLint는 구문 분석하지 못한 파일만 빼고(`syntax_error`·`parse_error` 단위, `unparsable_files_not_analyzed`) 나머지 결과로 성공한다. 위치가 있는 구문 오류는 그 파일의 관찰(ESLint `parse-error`)이다. mypy는 구문 오류 파일을 빼고 다시 실행하며(`mypy.check.r01`…) 재실행은 작업 제한시간의 남은 시간만 쓴다(다 쓰면 `timed_out`, `mypy_reruns_time_limit_reached`). 해석할 수 있는 파일이 없을 때만 실패다. tsc·C/C++·go vet·Staticcheck·cargo의 판정은 바꾸지 않았다.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10, 가짜 모델 upstream. 이 저장소를 `codeye up`으로 분석한 작업 상태가 고치기 전 `succeeded` 79·`skipped_policy`(`secret_screen_failed`) 70·`workspace_drift` 5·`source_syntax_errors` 4에서 고친 뒤 `succeeded` 156·`workspace_drift` 2(`fixtures/rust/drift`의 cargo check·clippy, 의도한 결과)가 됐다. 실모델 호출은 하지 않았다.
+
 ### 추가 — 경로·Git 주소 하나로 분석, 프로젝트별 분석 선택, 다시 시도
 
 - **Git 주소**: `codeye up https://github.com/OWNER/REPO`(`…/tree/BRANCH`, `https://` 생략 가능)가 프로젝트를 등록하고 분석을 요청한다. 브랜치를 비우면 확보할 때마다 원격의 기본 브랜치를 쓰고 manifest에 남긴다. `git_hosts`(기본 `["github.com"]`)마다 provider를 등록하고 찾은 git과 함께 에이전트에 넘긴다. 인증을 요구하는 저장소는 `source_auth_required`, 닿지 않는 호스트는 `source_unreachable`로 실패한다. 비공개 저장소는 지원하지 않는다.
