@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -575,13 +576,21 @@ func TestReportExample(t *testing.T) {
 		}
 		return
 	}
+	// The snapshot manifest records each file's permission bits, and the
+	// manifest digest and every evidence ID derive from it. Windows reports
+	// different permission bits for the same files, so the stored bytes can
+	// only match where POSIX modes exist. The structural checks above ran.
+	if runtime.GOOS == "windows" {
+		t.Log("stored example bytes are compared on POSIX systems only: file modes are part of the manifest digest")
+		return
+	}
 	for p, b := range map[string][]byte{reportExampleJSON: pretty.Bytes(), reportExampleMD: md} {
 		have, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(have, b) {
-			t.Fatalf("%s differs from the regenerated example; rerun with CODEYE_UPDATE_EXAMPLES=1 and review the diff", p)
+			t.Fatalf("%s differs from the regenerated example; rerun with CODEYE_UPDATE_EXAMPLES=1 and review the diff\n%s", p, firstDifference(have, b))
 		}
 	}
 }
@@ -654,4 +663,31 @@ func checkReportExample(t *testing.T, r report.Report, plan []analysis.TaskSpec,
 		}
 	}
 	_ = record.MediaType
+}
+
+// firstDifference shows the first lines where the stored example and the
+// regenerated one disagree, so a failure on another platform is diagnosable
+// from the test log alone.
+func firstDifference(have, want []byte) string {
+	a, b := strings.Split(string(have), "\n"), strings.Split(string(want), "\n")
+	var out strings.Builder
+	shown := 0
+	for i := 0; i < len(a) || i < len(b); i++ {
+		var x, y string
+		if i < len(a) {
+			x = a[i]
+		}
+		if i < len(b) {
+			y = b[i]
+		}
+		if x == y {
+			continue
+		}
+		fmt.Fprintf(&out, "line %d\n  stored:      %.200s\n  regenerated: %.200s\n", i+1, x, y)
+		if shown++; shown == 8 {
+			break
+		}
+	}
+	fmt.Fprintf(&out, "stored %d lines, regenerated %d lines", len(a), len(b))
+	return out.String()
 }
