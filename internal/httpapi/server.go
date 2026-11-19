@@ -1,14 +1,16 @@
 // Package httpapi is the CODEYE control-plane HTTP API (user subset and
-// node protocol) and the same-origin static web host. It listens on
-// loopback only. Browser sessions come from single-use launch tokens; node
-// routes accept only a node Bearer secret (issued at enrollment) and reject
-// any Origin header. User Bearer tokens, LAN exposure and TLS are not
-// implemented.
+// node protocol) and the same-origin static web host. Without TLS it
+// listens on loopback only; any other address requires TLS and a public
+// origin (tls.go). Browser sessions come from single-use launch tokens or a
+// username and password; node routes accept only a node Bearer secret
+// (issued at enrollment) and reject any Origin header. User Bearer tokens
+// are not implemented.
 package httpapi
 
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +26,7 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/artifactstore"
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 	"github.com/jihoon22-lee/CODEYE/internal/reportsvc"
@@ -33,9 +36,29 @@ import (
 // Store is the persistence the API needs. *postgres.Store implements it.
 type Store interface {
 	SchemaStatus(ctx context.Context) (postgres.SchemaState, error)
-	ExchangeLaunchToken(ctx context.Context, tokenSHA256, sessionTokenSHA256 string, ttl time.Duration) (postgres.Session, error)
+	ExchangeLaunchTokenFrom(ctx context.Context, client, tokenSHA256, sessionTokenSHA256 string, ttl time.Duration) (postgres.Session, error)
+	PasswordLogin(ctx context.Context, in postgres.PasswordLogin) (postgres.Session, error)
+	ChangePassword(ctx context.Context, in postgres.PasswordChange) (postgres.Session, error)
 	SessionByTokenHash(ctx context.Context, tokenSHA256 string) (postgres.Session, error)
 	RevokeSession(ctx context.Context, id string) error
+	// Accounts and access (administrators; the store re-checks the role).
+	ListUsers(ctx context.Context, by postgres.Principal, cursor string, limit int) (postgres.UserPage, error)
+	CreateAccount(ctx context.Context, by postgres.Principal, in postgres.NewAccount) (postgres.User, error)
+	DisableAccount(ctx context.Context, by postgres.Principal, id string) (postgres.User, error)
+	SetAdmin(ctx context.Context, by postgres.Principal, id string, admin bool) (postgres.User, error)
+	ResetPassword(ctx context.Context, by postgres.Principal, id, tokenSHA256 string, ttl time.Duration) (postgres.User, error)
+	ListSourceRootAccess(ctx context.Context, by postgres.Principal) ([]postgres.SourceRootAccess, error)
+	GrantSourceRootBy(ctx context.Context, by postgres.Principal, root, user string) error
+	RevokeSourceRootGrant(ctx context.Context, by postgres.Principal, root, user string) error
+	ListProvidersBy(ctx context.Context, by postgres.Principal) ([]postgres.Provider, error)
+	ListAudit(ctx context.Context, actor string, f postgres.AuditFilter) (postgres.AuditPage, error)
+	ListProjectAudit(ctx context.Context, actor, project string, f postgres.AuditFilter) (postgres.AuditPage, error)
+	RecordStaleRejection(ctx context.Context, node, attempt string, epoch int64, route string) error
+	// Project membership (project managers).
+	ListMembers(ctx context.Context, actor, project string) ([]postgres.Member, error)
+	PutMember(ctx context.Context, actor, project, user string, role domain.Role) (postgres.Member, error)
+	AddMemberByUsername(ctx context.Context, actor, project, username string, role domain.Role) (postgres.Member, error)
+	RemoveMember(ctx context.Context, actor, project, user string) error
 	ListSourceRoots(ctx context.Context, actor string) ([]postgres.SourceRoot, error)
 	ListProviders(ctx context.Context, actor string) ([]postgres.Provider, error)
 	RegisterProject(ctx context.Context, actor string, in postgres.ProjectRegistration) (postgres.Project, error)
@@ -69,7 +92,7 @@ type Store interface {
 	NodesEnrolled(ctx context.Context) (bool, error)
 
 	// Reports.
-	GetReport(ctx context.Context, actor, runID string, revision int) (postgres.ReportRecord, error)
+	ExportReport(ctx context.Context, actor, runID string, revision int, ex postgres.ReportExport) (postgres.ReportRecord, error)
 	ListReports(ctx context.Context, actor, runID string) ([]postgres.ReportSummary, error)
 	reportsvc.Store
 	// Comparison and finding reviews.
@@ -81,8 +104,13 @@ type Store interface {
 
 // Config configures the server.
 type Config struct {
-	// Listen must be a loopback address with a non-zero port.
+	// Listen needs a non-zero port. A non-loopback address requires TLS.
 	Listen netip.AddrPort
+	// TLSCertFile and TLSKeyFile (PEM) switch the server to HTTPS; the key
+	// file must not be group or world accessible. PublicOrigin
+	// (https://HOST[:PORT]) is then required: it is the only accepted Host
+	// and Origin and the origin of login links.
+	TLSCertFile, TLSKeyFile, PublicOrigin string
 	// WebDir holds the built web app (index.html). If empty or missing, the
 	// API still works and non-API paths answer 503.
 	WebDir string
@@ -113,8 +141,12 @@ const DefaultSessionTTL = 12 * time.Hour
 
 // Server is the HTTP handler.
 type Server struct {
-	store      Store
-	hosts      map[string]bool
+	store Store
+	hosts map[string]bool
+	// tls is non-nil when serving HTTPS; origin is then the public origin.
+	tls        *tls.Config
+	origin     string
+	cookieName string
 	sessionTTL time.Duration
 	web        *os.Root
 	log        *slog.Logger
@@ -138,29 +170,33 @@ type Server struct {
 	stopOnce    sync.Once
 }
 
-// ParseListen parses and validates a loopback listen address.
+// ParseListen parses an IP:port listen address with a non-zero port. New
+// decides whether the address needs TLS.
 func ParseListen(s string) (netip.AddrPort, error) {
 	ap, err := netip.ParseAddrPort(s)
 	if err != nil {
 		return netip.AddrPort{}, fmt.Errorf("listen address must be IP:port: %w", err)
 	}
-	if !ap.Addr().IsLoopback() || ap.Port() == 0 {
-		return netip.AddrPort{}, errors.New("listen address must be a loopback IP with a non-zero port; LAN exposure is not supported")
+	if ap.Port() == 0 {
+		return netip.AddrPort{}, errors.New("listen address must have a non-zero port")
 	}
 	return ap, nil
 }
 
-// New builds the server. It fails for a non-loopback listen address.
+// New builds the server. Without TLS the listen address must be loopback
+// (ErrTLSRequired otherwise); with TLS the certificate, key and public
+// origin must all be given and valid.
 func New(cfg Config, store Store) (*Server, error) {
-	if !cfg.Listen.Addr().IsLoopback() || cfg.Listen.Port() == 0 {
-		return nil, errors.New("httpapi: listen address must be loopback with a non-zero port")
+	if !cfg.Listen.IsValid() || cfg.Listen.Port() == 0 {
+		return nil, errors.New("httpapi: listen address needs a non-zero port")
 	}
 	if store == nil {
 		return nil, errors.New("httpapi: nil store")
 	}
 	port := strconv.Itoa(int(cfg.Listen.Port()))
 	s := &Server{
-		store: store,
+		store:      store,
+		cookieName: sessionCookie,
 		hosts: map[string]bool{
 			"127.0.0.1:" + port: true,
 			"localhost:" + port: true,
@@ -174,6 +210,27 @@ func New(cfg Config, store Store) (*Server, error) {
 	}
 	if s.sessionTTL <= 0 {
 		s.sessionTTL = DefaultSessionTTL
+	}
+	switch {
+	case cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" || cfg.PublicOrigin != "":
+		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.PublicOrigin == "" {
+			return nil, errors.New("TLS needs all of --tls-cert, --tls-key and --public-origin")
+		}
+		origin, hosts, err := ParsePublicOrigin(cfg.PublicOrigin)
+		if err != nil {
+			return nil, err
+		}
+		tc, err := loadTLS(cfg.TLSCertFile, cfg.TLSKeyFile)
+		if err != nil {
+			return nil, err
+		}
+		s.tls, s.origin, s.cookieName = tc, origin, secureSessionCookie
+		s.hosts = map[string]bool{}
+		for _, h := range hosts {
+			s.hosts[h] = true
+		}
+	case !cfg.Listen.Addr().IsLoopback():
+		return nil, ErrTLSRequired
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -231,6 +288,10 @@ func (s *Server) Close() error {
 // Serve runs the HTTP server on ln until ctx is done, then shuts down
 // gracefully (in-flight requests get up to 10 seconds).
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	ln, err := s.guardListener(ln)
+	if err != nil {
+		return err
+	}
 	srv := &http.Server{
 		Handler:           s,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -318,7 +379,7 @@ const contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src '
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	rid := newRequestID()
-	r = r.WithContext(context.WithValue(r.Context(), requestIDKey, rid))
+	r = r.WithContext(postgres.WithRequestID(context.WithValue(r.Context(), requestIDKey, rid), rid))
 	rec := &recorder{ResponseWriter: w}
 	h := rec.Header()
 	h.Set("X-Request-ID", rid)
@@ -328,6 +389,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("Cross-Origin-Opener-Policy", "same-origin")
 	h.Set("Cross-Origin-Resource-Policy", "same-origin")
+	if s.tls != nil {
+		h.Set("Strict-Transport-Security", hstsValue)
+	}
 	route := "static"
 	defer func() {
 		if p := recover(); p != nil {
@@ -371,11 +435,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string, retryable bool) {
+	writeErrorDetails(w, r, status, code, message, retryable, map[string]any{})
+}
+
+// writeErrorDetails is writeError with structured details (never secrets).
+func writeErrorDetails(w http.ResponseWriter, r *http.Request, status int, code, message string, retryable bool, details map[string]any) {
 	var body errorBody
 	body.Error.Code = code
 	body.Error.Message = message
 	body.Error.Retryable = retryable
 	body.Error.RequestID = requestID(r)
-	body.Error.Details = map[string]any{}
+	body.Error.Details = details
 	writeJSON(w, status, body)
 }

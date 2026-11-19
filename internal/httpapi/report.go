@@ -10,6 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 	"github.com/jihoon22-lee/CODEYE/internal/reportsvc"
+	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
 // GET /runs/{id}/report?revision=N&format=json|markdown|html&include_code=true|false
@@ -54,7 +55,7 @@ func (s *Server) getReport(q *request) {
 	}
 	ctx, cancel := q.ctx()
 	defer cancel()
-	rec, err := s.store.GetReport(ctx, q.session.UserID, q.params[0], revision)
+	rec, err := s.store.ExportReport(ctx, q.session.UserID, q.params[0], revision, postgres.ReportExport{Format: format, IncludeCode: includeCode})
 	if err != nil {
 		s.storeError(q, err)
 		return
