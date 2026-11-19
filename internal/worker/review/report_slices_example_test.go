@@ -86,13 +86,7 @@ func TestReportSlicesExample(t *testing.T) {
 		return
 	}
 	for p, b := range files {
-		have, err := os.ReadFile(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(have, b) {
-			t.Fatalf("%s differs from the regenerated example; rerun with CODEYE_UPDATE_EXAMPLES=1 and review the diff", p)
-		}
+		compareStoredExample(t, p, b)
 	}
 }
 
@@ -198,10 +192,7 @@ func writeOrCompare(t *testing.T, r report.Report, p string) {
 		}
 		return
 	}
-	have, err := os.ReadFile(p)
-	if err != nil || !bytes.Equal(have, pretty.Bytes()) {
-		t.Fatalf("%s differs from the regenerated report; rerun with CODEYE_UPDATE_EXAMPLES=1 (%v)", p, err)
-	}
+	compareStoredExample(t, p, pretty.Bytes())
 }
 
 // sliceExampleStatic is go vet per Go module (clean) and a secrets scan
