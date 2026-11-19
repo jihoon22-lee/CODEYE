@@ -97,7 +97,7 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 | acquire | snapshot, source SHA, manifest | 접근 실패·불안정 복사면 failed | 구현 |
 | discover | 모듈 지도·환경 사실·문서 맥락 | 문서 없음은 정상, 읽지 못한 범위만 표시 | 구현 |
 | plan | task 목록(key·필수 여부·단계·가중치) | 미지원 검사를 숨기지 않고 사유 기록 | 구현(DAG 필드는 일부) |
-| prepare | 실행 사본·런타임·도구 manifest, 모듈별 의존성 기록 | 의존성 준비 실패는 그 task만 끝내고 분석 계속 | Go·Rust·JS/TS·Python 의존성 받기 구현, 빌드는 설계 계약(미구현) |
+| prepare | 실행 사본·런타임·도구 manifest, 모듈별 의존성 기록 | 의존성 준비 실패는 그 task만 끝내고 분석 계속 | Go·Rust·JS/TS·Python 의존성 받기 구현, C/C++ 의존성과 빌드는 설계 계약(미구현) |
 | analyze | 도구 observation, 맥락 중심 가설 | task별 제한시간과 부분 실패 | 구현 |
 | verify | 지지·기각·보류와 반대 근거 | 예산 종료 시 미검증 유지 | 구현 |
 | synthesize | finding group, risk·coverage | 무효 증거를 참조한 결론은 게시하지 않음 | 구현 |

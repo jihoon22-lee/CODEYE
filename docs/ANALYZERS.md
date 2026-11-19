@@ -457,7 +457,7 @@ review-r1의 `review.interpret` 역할은 계획된 분석기 task의 envelope�
 
 ## 의존성 준비
 
-`deps.*` task는 분석기가 읽을 의존성을 분석 전에 모듈마다 받는다. 흐름·캐시·예산·기록과 프로젝트 선택은 [의존성 준비](ARCHITECTURE.md#의존성-준비)를 따른다(결정 A42, A43, A44). 각 task는 그 의존성을 읽는 분석기와 같은 모듈 계획을 쓰고, 그 분석기를 이 노드에서 쓸 수 없으면 `no_dependency_consumer`로 건너뛴다. 받는 도구는 분석기가 아니다. go·cargo는 분석기의 toolchain(`--go`, `--cargo`)이고, npm·pnpm·yarn·uv·python은 패키지 관리자 플래그이며 hello의 `dependencies.package_managers`로 워커에 간다(`deps.ManagerFlags`).
+`deps.*` task는 분석기가 읽을 의존성을 분석 전에 모듈마다 받는다. 흐름·캐시·예산·기록과 프로젝트 선택은 [의존성 준비](ARCHITECTURE.md#의존성-준비)를 따른다(결정 A42, A43, A44). 각 task는 그 의존성을 읽는 분석기와 같은 모듈 계획을 쓴다. Rust·JS/TS·Python은 그 분석기를 이 노드에서 쓸 수 없으면 `no_dependency_consumer`로 건너뛴다. 받는 도구는 분석기가 아니다. go·cargo는 분석기의 toolchain(`--go`, `--cargo`)이고, npm·pnpm·yarn·uv·python은 패키지 관리자 플래그이며 hello의 `dependencies.package_managers`로 워커에 간다(`deps.ManagerFlags`).
 
 | 생태계 | task | 받는 도구 | 저장소 코드 실행 허가 | 받은 것의 위치 | 읽는 분석기 |
 |---|---|---|---|---|---|

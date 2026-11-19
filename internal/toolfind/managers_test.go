@@ -2,9 +2,30 @@ package toolfind
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/deps"
 )
+
+// The package managers found here are the ones the dependency tasks run
+// (deps.ManagerFlags), each with a spec, after the analyzer tools.
+func TestManagersAreTheDependencyFlags(t *testing.T) {
+	names := append(append([]string{}, jsManagerNames...), pythonManagerNames...)
+	for _, n := range names {
+		if _, ok := managerSpecs[n]; !ok || !isManager(n) {
+			t.Fatalf("%s has no spec", n)
+		}
+	}
+	if !slices.Equal(order[len(order)-len(names):], names) {
+		t.Fatalf("order %v", order)
+	}
+	slices.Sort(names)
+	if !slices.Equal(names, deps.ManagerFlags()) {
+		t.Fatalf("toolfind %v, deps %v", names, deps.ManagerFlags())
+	}
+}
 
 // The Python interpreter of the dependency fetch needs pip unless uv is
 // found; one with pip is found without uv. Its version decides whether it
@@ -55,6 +76,12 @@ func TestValidateJSPackageManagers(t *testing.T) {
 	fakeNode(t, filepath.Join(tr.pathDir(t, "nodebin"), "node"))
 	if got := mustTool(t, detect(t, tr, ex(good)), "pnpm"); got.Status != Found || got.Version != "11.28.13" || !got.VersionTested {
 		t.Fatalf("pnpm: %+v", got)
+	}
+	// An explicit manager does not disturb the analyzer tools' validation.
+	tsc := npmTool(t, filepath.Join(tr.home, "tools"), "typescript/bin/tsc", "Version 6.0.3")
+	res := detect(t, tr, Explicit{Tools: map[string]string{"pnpm": good, "tsc": tsc}})
+	if got := mustTool(t, res, "tsc"); got.Status != Found {
+		t.Fatalf("tsc with an explicit pnpm: %+v", got)
 	}
 	for name, p := range map[string]string{"other package": other, "command shim": shim, "unknown version": odd} {
 		if got := mustTool(t, detect(t, tr, ex(p)), "pnpm"); got.Status != Unusable || got.Reason == "" {

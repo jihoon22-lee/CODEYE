@@ -183,7 +183,7 @@ type Options struct {
 var order = append([]string{"go", "git", "node", "opencode", "staticcheck", "gitleaks", "ruff", "mypy", "pyright", "bandit", "lizard",
 	"cppcheck", "clang-tidy", "eslint", "tsc", "jscpd", "cargo", "clippy"},
 	// The package managers of the dependency fetch.
-	"npm", "pnpm", "yarn", "uv", "python")
+	append(append([]string{}, jsManagerNames...), pythonManagerNames...)...)
 
 // Names are the tool names of a Result, in order.
 func Names() []string { return append([]string{}, order...) }
@@ -318,7 +318,7 @@ func (d *detector) cfg() builtin.Config {
 		c.GoExecutable = p
 	}
 	for name, p := range d.ex.Tools {
-		if p != "" {
+		if p != "" && !isManager(name) {
 			c.Tools[name] = p
 		}
 	}
