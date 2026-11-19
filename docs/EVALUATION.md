@@ -149,7 +149,8 @@
 - 팩: `CODEYE_PILOT_REVIEW_PACK`(비우면 에이전트 기본값 `review-r1`).
 - 모듈 단위 slice: `CODEYE_PILOT_GITLEAKS`(gitleaks 절대 경로, slice는 완료된 비밀값 선별이 있어야 실행된다)와 `CODEYE_PILOT_REVIEW_MAX_CALLS`(비우면 에이전트 기본값 33)를 에이전트에 넘긴다. `CODEYE_PILOT_LEDGER`를 주면 그 relay 장부도 검사한다. 실행 뒤 `check_coverage`가 다음을 확인하고 결과를 `coverage-check.json`에 남긴다. 하나라도 어긋나면 실행이 실패한다.
   - 파일럿이 아닌 사례에는 slice task가 없고, review-r1 호출의 지침 팩 digest가 Go 단독 선택의 고정값이다.
-  - 파일럿은 `completed`이고 AI 검토가 `performed`다. 검토 기록의 호출 합계가 상한 이하이고, 기록 없이 실패한 검토 task가 없다(그 호출은 합계에 들어가지 않는다). 범위 산출물의 상한이 설정과 같다. `budget_exhausted` slice에는 기록이 없다. overview와 slice의 investigate가 같은 파일을 보내지 않는다. 보고서의 `llm_exposed_files`가 overview가 보낸 파일 수보다 크다.
+  - 파일럿은 `completed`이고 AI 검토가 `performed`다. 보고서가 검토 산출물을 모두 읽었다(`unrecognized_artifact`·`artifact_rejected`·`review_lineage_mismatch` 등이 없다). 범위 산출물과 보고서 [장부](REPORT.md#모듈별-검토-장부)의 상한이 설정과 같고, 장부의 `calls_used`(slice 앞 attempt 호출 수와 slice 기록의 호출)가 알려져 있고 상한 이하다. `budget_exhausted` slice에는 기록도 호출도 없다. overview와 slice의 investigate가 같은 파일을 보내지 않는다. 장부의 모델에 보낸 파일 합과 보고서의 `llm_exposed_files`가 overview가 보낸 파일 수보다 크다.
+  - 시험 장부(가짜 upstream)의 dry run에서는 두 원인을 실패가 아닌 `dry_run_expected`로 적는다. 가짜 upstream 응답이 거부된 검토 task(`review_output_invalid`, 이때 `llm_exposed_files`는 미확정)와 이 호스트에 설정하지 않은 필수 분석기(`tool_not_configured`) 때문에 파일럿이 `partial`인 경우다. 다른 원인은 그대로 실패이고, 유료 실행에는 이 예외가 없다.
   - relay 장부에 `refused`·`blocked` 요청이 없다.
 - 비용 없는 dry run: `python3 scripts/regression_pilot.py --dry-run --relay-file R --ledger L --results DIR --cases ... [--gitleaks P] [--max-calls N] [--build-root SRC] [--no-coverage-check]`. 장부 header가 `test-loopback`(relay `--test-upstream`)이 아니면 거부한다. 웹 빌드와 브라우저 내보내기는 하지 않는다. `--build-root`로 다른 checkout의 바이너리를 만들어 기준으로 삼고, `--compare-dumps BASE CAND`가 두 가짜 upstream `--dump` 디렉터리의 요청을 실행마다 다른 ID를 바꾼 뒤 다중집합으로 비교한다.
 - 에이전트 두 대는 같은 호스트에서 풀 최소·최대 0과 2로 돈다. 합성 사례와 공개 사본의 트리 해시를 실행 전후에 대조한다.

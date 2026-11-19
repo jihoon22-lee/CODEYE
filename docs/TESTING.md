@@ -168,7 +168,7 @@
 | TC-166 | 비밀값 작업 없음·미실행·실패·완료(보고된 파일이 slice에 있음), 판단 순서 | 완료된 선별이 없으면 `review.scope`와 모든 slice가 `secret_screen_unavailable`이고 요청이 없다. 전체 역할은 기존 규칙을 따른다. 보고된 파일은 범위 산출물에서 `withheld`이고 어떤 요청에도 없다. 파일이 남지 않은 slice는 상한이 다해도 `no_review_scope`다. 승인 없음 → 미선별 → 범위 산출물 없음(`dependency_failed`) 순서다. | REQ-009; NFR-008 |
 | TC-167 | coverage fixture와 다섯 언어 최악 사례, 상한 207 | 어떤 코드·테스트 파일도 두 investigate 요청에 가지 않는다. slice 요청의 지침은 overview와 바이트가 같다. slice 기록은 0.3이고 범위 산출물에 묶인다. run이 보낸 파일 수가 overview보다 많다. 다섯 언어 최악 사례의 모든 slice 요청이 40,000바이트 안이고 다섯 언어 지침을 싣는다. | REQ-009,027 |
 | TC-168 | 진행 단계, 실제 worker(상한 15, slice 요청 중 취소), 노드 프로토콜과 PostgreSQL | `no_review_scope`는 단계를 낮추지 않고 `budget_exhausted`·`secret_screen_unavailable`은 `code_review`를 `partial`로 남긴다. 실제 worker는 15회 이하로 끝나고 보고서가 만들어지며 AI 검토는 수행이다. 취소는 정리를 확인하고 이후 slice 요청이 없다. 서버는 slice key와 queued·running에서의 `budget_exhausted`를 받고, 계획 revision은 1이며, slice 실행 중 취소로 run이 `cancelled`가 된다. | REQ-012,018; NFR-006 |
-| TC-169 | 보고서 코드 검토 절의 모듈별 검토 장부(보고서 재구성 뒤) | 예약. 장부 합계와 `llm_exposed_files`가 기록과 맞는다. | REQ-012,027 |
+| TC-169 | 코드 분석 절의 모듈별 검토 장부: coverage fixture를 상한 15로 실행한 보고서(`examples/report-slices.json`), 장부·slice 발견·호출 `task_key`를 하나씩 어긴 보고서, builder 5 리비전 | slice 기록과 범위 산출물을 거부 없이 읽는다. slice 발견은 `review_sNNN_<후보>`로 코드 분석 분할에 들어간다. 모듈 행의 여섯 수 합이 대상 파일 수이고, 보낸 파일 합은 `llm_exposed_files` 이하이며 overview보다 많다. `calls_used`는 실제 호출 수(10)이고 상한 이하다. 상한으로 거절된 slice의 파일이 `files_budget_exhausted`와 공백 `review_scope_budget_exhausted`로 보인다. Go 검증·JSON schema·`validate_bundle.py`·웹 파서가 어긴 보고서를 거부하고, builder 5 리비전은 장부 없이 유효하다. 코드 미포함 projection은 장부를 바꾸지 않는다. Markdown·HTML·웹 화면이 같은 수를 보인다. | REQ-012,027 |
 
 역할·입력·복구 규칙은 [모델 검토](REVIEW.md)에 있다.
 

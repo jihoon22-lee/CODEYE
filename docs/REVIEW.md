@@ -265,7 +265,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 - slice verify는 자기 slice investigate의 후보만 받는다(interpret 후보 없음). upstream은 `review.documents`, `review.investigate.sNNN`, `review.scope`다.
 - 기록은 schema 0.3이다(아래 [검토 기록](#검토-기록)). [investigate 예시](../examples/review-r1/slices/investigate.s001.json) · [verify 예시](../examples/review-r1/slices/verify.s001.json)
 - 다섯 언어가 모두 범위에 있는 최악 사례에서도 slice 요청은 40,000바이트 안이다(`TestSliceRequestSizeWorstCaseAllLanguages`).
-- 현재 보고서 builder는 0.3 기록과 범위 산출물을 해석하지 않는다. 이 산출물은 `unrecognized_artifact:<task>` 제약으로만 남고, run 상태·`ai_review`·`coverage.review_calls`(상한 15)·`llm_exposed_files`는 전체 역할만 반영한다. 보고서의 코드 검토 영역에 모듈별 검토 장부를 싣는 일은 보고서 재구성 뒤의 작업이다.
+- 보고서(builder 6)는 0.3 기록과 범위 산출물을 읽는다. slice 후보는 `review_sNNN_<후보>` 발견이 되고, 코드 분석 절의 [모듈별 검토 장부](REPORT.md#모듈별-검토-장부)가 모듈마다 모델에 보낸 파일과 보내지 못한 이유(상한·비밀값·계획 밖 등)를 센다. 모델에 보낸 범위는 검증된 범위가 아니다. `ai_review`는 필수 역할만 본다.
 
 ## 모델 입력의 비밀값 선별
 
@@ -405,7 +405,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 보고서 규칙의 전체는 [보고서](REPORT.md)에 있다. 검토 기록과 직접 맞물리는 규칙은 다음과 같다.
 
 - 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. review-r1 역할 key가 없는 계획은 review-v1의 세 역할로 해석한다.
-- `coverage.review_calls`는 0.2 기록에서 `pack_id`·`pack_version`을 싣는다. 상한은 15(역할 5개 × 최대 3회)다.
+- `coverage.review_calls`는 0.2·0.3 기록에서 `pack_id`·`pack_version`을, builder 6부터 호출이 든 task(`task_key`)를 싣는다. 상한은 207(호출 상한의 최댓값)이다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
 - 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 표시와 같으면 받는다. 계획과 다른 팩의 기록은 `review_pack_mismatch:<task>`로 제외한다.
 - 모델이 서술한 숫자를 run 상태나 통계로 쓰지 않는다. 도구 관찰과 모델 후보는 서로 다른 산출물이다.
 
