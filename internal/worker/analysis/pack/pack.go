@@ -54,7 +54,8 @@ const (
 var (
 	namePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 	toolPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
-	// reserved task keys and prefixes belong to discovery and review roles.
+	// reserved task keys and prefixes belong to discovery, the dependency
+	// tasks (deps.*) and review roles.
 	reservedKeys = []string{"env.discover", "docs.discover"}
 )
 
@@ -215,7 +216,7 @@ func NewComposite(members ...Analyzer) (*Composite, error) {
 				return nil, fmt.Errorf("pack: analyzer names %q and %q overlap", n, d.Name)
 			}
 		}
-		if strings.HasPrefix(d.Name, "review") || Owns(d.Name, "env.discover") || Owns(d.Name, "docs.discover") || Owns(d.Name, GapName) || Owns(GapName, d.Name) {
+		if strings.HasPrefix(d.Name, "review") || d.Name == "deps" || Owns(d.Name, "env.discover") || Owns(d.Name, "docs.discover") || Owns(d.Name, GapName) || Owns(GapName, d.Name) {
 			return nil, fmt.Errorf("pack: analyzer name %q is reserved", d.Name)
 		}
 		ids[d.ID] = true

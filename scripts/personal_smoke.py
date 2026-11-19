@@ -412,8 +412,8 @@ def paths_and_git(root, env, directory, fixture):
         assert doc["inputs"]["source_kind"] == "git" and doc["inputs"]["commit_sha"], doc["inputs"]
         assert any(f["evidence"] for f in doc["findings"]), "Git 저장소의 go vet 발견 없음"
         projects = {p["name"]: p for p in session.request("GET", "projects?limit=100")["items"]}
-        assert projects["r"]["analysis"] == {"send_source_to_model": True, "run_build_scripts": False}, projects["r"]
-        assert projects["hello"]["analysis"] == {"send_source_to_model": True, "run_build_scripts": True}, projects["hello"]
+        assert projects["r"]["analysis"] == {"send_source_to_model": True, "run_build_scripts": False, "fetch_dependencies": True}, projects["r"]
+        assert projects["hello"]["analysis"] == {"send_source_to_model": True, "run_build_scripts": True, "fetch_dependencies": True}, projects["hello"]
         # TC-186: the home folder itself holds the state directory: refused, naming the folder.
         try:
             session.request("POST", "projects", {"local_path": str(user_home)})

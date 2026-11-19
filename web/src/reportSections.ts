@@ -23,6 +23,29 @@ export type StaticTool = {
   metrics: number;
   secrets: number;
 };
+// One dependency task (deps.go, deps.go.m02) of the environment section. The
+// record fields are null when its record did not reach the report (result says why).
+export type Dependency = {
+  task: string;
+  status: string;
+  taskReason: string | null;
+  result: string;
+  module: string | null;
+  ecosystem: string | null;
+  path: string | null;
+  manager: string | null;
+  managerVersion: string | null;
+  state: string | null;
+  reason: string | null;
+  pinned: boolean | null;
+  lockfile: string | null;
+  declared: number | null;
+  prepared: number | null;
+  failed: number | null;
+  cacheKind: string | null;
+  failedItems: { name: string; reason: string | null }[];
+  limitations: string[];
+};
 export type Sections = {
   overview: { key: string; state: string | null; counts: Record<string, number> }[];
   attention: { section: string; code: string; count: number }[];
@@ -36,6 +59,8 @@ export type Sections = {
     analyzerTools: { tool: string; analyzers: string[]; status: string; version: string | null; detail: string | null }[];
     model: ModelState;
     notes: { module: string; affected: string; still: string; needed: string; evidence: string[] }[];
+    // Empty when no dependency task was planned (fetching was off).
+    dependencies: Dependency[];
   };
   documents: {
     stage: SectionStage;
@@ -167,6 +192,9 @@ function optCount(v: unknown): number | null {
 function bool(v: unknown): boolean {
   return typeof v === 'boolean' ? v : invalid();
 }
+function optBool(v: unknown): boolean | null {
+  return v == null ? null : bool(v);
+}
 function array<T>(v: unknown, fn: (value: unknown) => T): T[] {
   return Array.isArray(v) ? v.map(fn) : invalid();
 }
@@ -174,6 +202,33 @@ function counts(v: unknown): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [k, n] of Object.entries(object(v))) out[k] = count(n);
   return out;
+}
+function dependency(v: unknown): Dependency {
+  const x = object(v);
+  return {
+    task: str(x.task_key),
+    status: str(x.task_status),
+    taskReason: nullable(x.task_reason),
+    result: str(x.result),
+    module: nullable(x.module),
+    ecosystem: nullable(x.ecosystem),
+    path: nullable(x.path),
+    manager: nullable(x.manager),
+    managerVersion: nullable(x.manager_version),
+    state: nullable(x.state),
+    reason: nullable(x.reason),
+    pinned: optBool(x.pinned),
+    lockfile: nullable(x.lockfile),
+    declared: optCount(x.declared),
+    prepared: optCount(x.prepared),
+    failed: optCount(x.failed),
+    cacheKind: nullable(x.cache_kind),
+    failedItems: array(x.failed_items ?? [], (f) => {
+      const y = object(f);
+      return { name: str(y.name), reason: nullable(y.reason) };
+    }),
+    limitations: array(x.limitations ?? [], str),
+  };
 }
 function stage(v: unknown): SectionStage {
   const s = object(v);
@@ -253,6 +308,7 @@ export function parseSections(
           evidence: array(x.evidence_ids, str),
         };
       }),
+      dependencies: array(e.dependencies ?? [], dependency),
     },
     documents: {
       stage: stage(d.stage),

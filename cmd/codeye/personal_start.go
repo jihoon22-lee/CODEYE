@@ -581,6 +581,27 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 	if a.GoModCache != "" {
 		args = append(args, "--go-mod-cache", a.GoModCache)
 	}
+	// Dependencies are fetched unless the configuration turns that off;
+	// each project's own choice still decides for its runs.
+	if a.DependenciesEnabled() {
+		args = append(args, "--dependency-fetch", "--dependency-cache-dir", a.DependencyCache(layout))
+		if d := a.Dependencies; d != nil {
+			for _, f := range []struct{ flag, value string }{{"--go-proxy", d.GoProxy}, {"--go-sumdb", d.GoSumDB}, {"--go-private", d.GoPrivate}, {"--go-noproxy", d.GoNoProxy}, {"--go-nosumdb", d.GoNoSumDB}} {
+				if f.value != "" {
+					args = append(args, f.flag, f.value)
+				}
+			}
+			if d.TimeoutSeconds > 0 {
+				args = append(args, "--dependency-timeout", strconv.Itoa(d.TimeoutSeconds)+"s")
+			}
+			if d.TotalTimeoutSeconds > 0 {
+				args = append(args, "--dependency-total-timeout", strconv.Itoa(d.TotalTimeoutSeconds)+"s")
+			}
+			if d.MaxDownloadBytes > 0 {
+				args = append(args, "--dependency-max-bytes", strconv.FormatInt(d.MaxDownloadBytes, 10))
+			}
+		}
+	}
 	tools := make([]string, 0, len(a.Tools))
 	for t := range a.Tools {
 		tools = append(tools, t)

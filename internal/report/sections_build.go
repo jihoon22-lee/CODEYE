@@ -174,6 +174,9 @@ func (c sectionContext) environment() *EnvironmentSection {
 		s.Limitations = append(s.Limitations, doc.Limitations...)
 	}
 	var rec *record.RoleRecord
+	if deps := c.dependencies(); len(deps) > 0 {
+		s.Dependencies = deps
+	}
 	s.Model, rec = c.model("review.environment")
 	var cited []string
 	if rec != nil {

@@ -115,6 +115,60 @@ describe('analysis sections', () => {
     }
   });
 
+  it('shows what each dependency task prepared, or why not, in the environment section', () => {
+    const doc = example('report.json');
+    const row = (over: Record<string, unknown>) => ({
+      task_key: 'deps.go', task_status: 'succeeded', task_reason: null, result: 'accepted',
+      module: 'go:.', ecosystem: 'go', path: '.', manager: 'go', manager_version: 'go1.27.4',
+      state: 'prepared', reason: null, pinned: true, lockfile: 'go.sum', declared: 6, prepared: 6, failed: 0, cache_kind: 'shared',
+      failed_items: [], limitations: ['dependencies_prepared'], ...over,
+    });
+    doc.environment.dependencies = [
+      row({}),
+      row({ task_key: 'deps.go.m01', module: 'go:svc/a', path: 'svc/a', state: 'partial', reason: 'module_not_on_proxy', declared: 4, prepared: 3, failed: 1,
+        failed_items: [{ name: 'example.com/private/lib', reason: 'module_not_on_proxy' }], limitations: ['dependencies_partially_prepared', 'dependency_versions_not_pinned'], pinned: false }),
+      row({ task_key: 'deps.go.m02', module: 'go:svc/b', task_status: 'skipped_policy', task_reason: 'no_dependencies', state: 'skipped', reason: 'no_dependencies', declared: 0, prepared: 0, limitations: [] }),
+      // The record did not reach the report: only the task's facts.
+      { task_key: 'deps.go.m03', task_status: 'failed', task_reason: null, result: 'result_missing', module: null, ecosystem: null, path: null, manager: null, manager_version: null,
+        state: null, reason: null, pinned: null, lockfile: null, declared: null, prepared: null, failed: null, cache_kind: null, failed_items: [], limitations: [] },
+    ];
+    doc.gaps.push({ section: 'environment', code: 'dependency_versions_not_pinned', subject: 'deps.go.m01', detail: null });
+    doc.overview.sections.find((s: any) => s.key === 'gaps').counts.gaps = doc.gaps.length;
+    const r = parseAnalysisReport(doc, doc.run_id);
+    expect(r.sections!.environment.dependencies.length).toBe(4);
+    const { container } = render(<ReportDocument report={r} />);
+    const section = container.querySelector('#report-section-environment') as HTMLElement;
+    const d = t.sections.dependencies;
+    within(section).getByRole('heading', { name: d.heading });
+    expect(within(section).getByText(d.lead)).toBeTruthy();
+    const table = Array.from(section.querySelectorAll('table')).find((x) => x.querySelector('th')?.textContent === t.sections.col.module && x.textContent!.includes(d.col.manager))!;
+    const cells = Array.from(table.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
+    expect(cells).toEqual([
+      ['go:.', 'go 1.27.4', d.state.prepared, '6/6', '—', t.reasons.dependencies_prepared],
+      ['go:svc/a', 'go 1.27.4', d.state.partial, '3/4 ' + d.failed(1), t.reasons.module_not_on_proxy, t.reasons.dependencies_partially_prepared + ' ' + t.reasons.dependency_versions_not_pinned],
+      ['go:svc/b', 'go 1.27.4', d.state.skipped, '0/0', t.reasons.no_dependencies, '—'],
+      ['deps.go.m03', '—', t.sections.taskStatus.failed, '—', d.record.result_missing, '—'],
+    ]);
+    const failed = within(section).getByRole('heading', { name: d.failedItems }).nextElementSibling!;
+    expect(failed.textContent).toBe('go:svc/a example.com/private/lib — ' + t.reasons.module_not_on_proxy);
+    const gaps = container.querySelector('#report-section-gaps') as HTMLElement;
+    expect(within(gaps).getByText(t.sections.gapLabels.dependency_versions_not_pinned)).toBeTruthy();
+  });
+
+  it('leaves the dependency table out when no dependency task was planned', () => {
+    const doc = example('report.json');
+    delete doc.environment.dependencies;
+    const env = doc.overview.sections.find((s: any) => s.key === 'environment').counts;
+    delete env.dependencies;
+    delete env.dependencies_prepared;
+    const r = parseAnalysisReport(doc, doc.run_id);
+    expect(r.sections!.environment.dependencies).toEqual([]);
+    const { container } = render(<ReportDocument report={r} />);
+    const section = container.querySelector('#report-section-environment') as HTMLElement;
+    expect(within(section).queryByRole('heading', { name: t.sections.dependencies.heading })).toBeNull();
+    expect(section.querySelector('[data-count="dependencies"]')).toBeNull();
+  });
+
   // examples/report-slices.json is the builder's output for
   // fixtures/modules/slices/input under call ceiling 15
   // (internal/worker/review/report_slices_example_test.go).

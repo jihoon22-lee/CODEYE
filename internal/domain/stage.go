@@ -43,6 +43,32 @@ const (
 	ReasonNoReviewScope = "no_review_scope"
 )
 
+// Controlled skip reasons for a planned dependency task that had nothing to
+// fetch or nothing that would use what it fetched
+// (docs/ARCHITECTURE.md#의존성-준비). Stored with status skipped_policy.
+const (
+	ReasonNoDependencies                = "no_dependencies"
+	ReasonVendoredDependencies          = "vendored_dependencies"
+	ReasonNoDependencyConsumer          = "no_dependency_consumer"
+	ReasonDependencyConsumersNotAllowed = "dependency_consumers_not_allowed"
+)
+
+// NothingToFetch reports whether reason marks a dependency task skipped
+// because there was nothing to fetch or nothing would use it.
+func NothingToFetch(reason string) bool {
+	switch reason {
+	case ReasonNoDependencies, ReasonVendoredDependencies, ReasonNoDependencyConsumer, ReasonDependencyConsumersNotAllowed:
+		return true
+	}
+	return false
+}
+
+// NothingToDo reports whether a skipped_policy task with this reason had no
+// input (a review role with nothing to review, a dependency task with
+// nothing to fetch). Such a skip does not make an otherwise successful stage
+// partial.
+func NothingToDo(reason string) bool { return NothingToReview(reason) || NothingToFetch(reason) }
+
 // NothingToReview reports whether reason marks a planned role skipped because
 // its input was empty (docs/ARCHITECTURE.md#표시-단계와-task-단계). Such a skip is never a successful model
 // review, but it does not make an otherwise successful stage partial. Policy

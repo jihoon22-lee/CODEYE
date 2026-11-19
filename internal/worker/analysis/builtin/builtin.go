@@ -33,6 +33,10 @@ type Config struct {
 	GoExecutable string
 	// GoModCache is an optional absolute offline module cache.
 	GoModCache string
+	// DependencyCacheRoot is the shared dependency cache the dependency
+	// tasks prepare (hello dependencies.cache_root); analyzers read it only
+	// for a module whose record says it was prepared.
+	DependencyCacheRoot string
 	// Tools are absolute paths by name: analyzer tools (--<tool>) and the
 	// shared toolchains of the toolchain table (--node), whose names are
 	// reserved and never analyzer tool names (docs/ANALYZERS.md#도구-경로).
@@ -160,7 +164,7 @@ func buildGoVet(ctx context.Context, cfg Config, runner executor.Runner, goh *go
 	}
 	if goh == nil {
 		detail := "go toolchain is invalid"
-		if _, err := govet.New(govet.Config{GoExecutable: cfg.GoExecutable, GoModCache: cfg.GoModCache}); err != nil {
+		if _, err := govet.New(govet.Config{GoExecutable: cfg.GoExecutable, GoModCache: cfg.GoModCache, DependencyCacheRoot: cfg.DependencyCacheRoot}); err != nil {
 			detail = err.Error()
 		}
 		return unavailable(govet.HandlerName, "invalid_config", detail, pack.ReasonToolUnavailable)
@@ -244,7 +248,7 @@ func goHandler(cfg Config) *govet.Handler {
 	if cfg.GoExecutable == "" {
 		return nil
 	}
-	h, err := govet.New(govet.Config{GoExecutable: cfg.GoExecutable, GoModCache: cfg.GoModCache})
+	h, err := govet.New(govet.Config{GoExecutable: cfg.GoExecutable, GoModCache: cfg.GoModCache, DependencyCacheRoot: cfg.DependencyCacheRoot})
 	if err != nil {
 		return nil
 	}

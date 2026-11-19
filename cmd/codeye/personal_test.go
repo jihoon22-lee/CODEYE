@@ -54,7 +54,7 @@ func TestPersonalAgentArgv(t *testing.T) {
 	got := strings.Join(argv, " ")
 	want := "agent --controller http://127.0.0.1:7331 --state-dir /srv/codeye/state/agent --name personal --autoscale --max-workers 3 --toolchain-path /usr/bin:/bin --advertise-without-baseline" +
 		" --enroll-token-file /srv/codeye/state/run/enroll-token --source-root root-1=/srv/src --project-analysis-policy --protected-dir /srv/codeye/state --protected-dir /srv/codeye/state-backups --git /usr/bin/git --git-host github.com" +
-		" --go /usr/local/go/bin/go --staticcheck /opt/sc --opencode /opt/opencode --model provider/model-a --model-relay-file /srv/relay.json --review-pack review-r1 --review-max-calls 50" +
+		" --go /usr/local/go/bin/go --dependency-fetch --dependency-cache-dir /srv/codeye/state/cache/deps --staticcheck /opt/sc --opencode /opt/opencode --model provider/model-a --model-relay-file /srv/relay.json --review-pack review-r1 --review-max-calls 50" +
 		" --storage-quota logs=100 --storage-quota workspace=200 --storage-log-dir /srv/codeye/state/logs"
 	if got != want {
 		t.Fatalf("argv\n got %s\nwant %s", got, want)
@@ -63,5 +63,30 @@ func TestPersonalAgentArgv(t *testing.T) {
 	again := strings.Join(agentArgv(cfg, layout, nil, false), " ")
 	if strings.Contains(again, "enroll-token") || strings.Contains(again, "artifacts=") {
 		t.Fatal(again)
+	}
+}
+
+// agent.dependencies: on by default; its options become the agent's flags,
+// and enabled=false removes the operator switch (no project fetches).
+func TestPersonalAgentArgvDependencies(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Linux paths")
+	}
+	personalModelEnv = func() personal.ModelEnv { return personal.ModelEnv{} }
+	t.Cleanup(func() { personalModelEnv = personal.SystemModelEnv })
+	for _, tc := range []struct{ deps, want string }{
+		{`{"cache_dir":"/srv/deps","go_proxy":"https://goproxy.example","timeout_seconds":60,"total_timeout_seconds":120,"max_download_bytes":1000}`,
+			" --dependency-fetch --dependency-cache-dir /srv/deps --go-proxy https://goproxy.example --dependency-timeout 60s --dependency-total-timeout 120s --dependency-max-bytes 1000"},
+		{`{"enabled":false,"cache_dir":"/srv/deps"}`, ""},
+	} {
+		raw := `{"schema_version":"0.1","state_dir":"/srv/codeye/state","database":{"mode":"external"},"agent":{"go":"/usr/local/go/bin/go","dependencies":` + tc.deps + `}}`
+		cfg, err := personal.Parse([]byte(raw), knownTools())
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := strings.Join(agentArgv(cfg, personal.Layout{Root: cfg.StateDir}, nil, false), " ")
+		if !strings.Contains(got, " --go /usr/local/go/bin/go"+tc.want) || (tc.want == "" && strings.Contains(got, "--dependency")) {
+			t.Fatalf("argv %s\nwant ...%s", got, tc.want)
+		}
 	}
 }

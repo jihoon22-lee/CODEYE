@@ -138,7 +138,7 @@ func personalStatus(ctx context.Context, args []string, out, stderr io.Writer) i
 		rep.Issues = append(rep.Issues, "database_unavailable")
 	}
 	healthy = healthy && heartbeatFresh
-	l := quota.Layout{AgentStateDir: layout.AgentDir(), GoModCache: cfg.Agent.GoModCache, LogDir: layout.LogDir()}
+	l := quota.Layout{AgentStateDir: layout.AgentDir(), GoModCache: cfg.Agent.GoModCache, DependencyCache: cfg.Agent.DependencyCache(layout), LogDir: layout.LogDir()}
 	for _, area := range quota.NodeAreas {
 		as := areaStatus{Area: area, Limit: cfg.Quota.Limit(area), Basis: "node_heartbeat"}
 		if u, err := quota.Measure(l, area); err == nil {

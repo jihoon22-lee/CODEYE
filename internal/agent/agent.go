@@ -90,6 +90,20 @@ type Config struct {
 	GitHosts      []string
 	GoExecutable  string
 	GoModCache    string
+	// DependencyFetch (--dependency-fetch) is the operator's switch for the
+	// dependency tasks; a job fetches only when its project's
+	// fetch_dependencies choice is on too. The other Dependency fields are its
+	// options; zero values are the defaults.
+	DependencyFetch        bool
+	DependencyCacheDir     string
+	GoProxy                string
+	GoSumDB                string
+	GoPrivate              string
+	GoNoProxy              string
+	GoNoSumDB              string
+	DependencyTimeout      time.Duration
+	DependencyTotalTimeout time.Duration
+	DependencyMaxBytes     int64
 	// AnalyzerTools are absolute analyzer tool paths by tool name, one
 	// agent flag per tool (--staticcheck PATH, docs/ANALYZERS.md), and the shared
 	// toolchains under their reserved names (--node PATH, docs/ANALYZERS.md#도구-경로). The
@@ -221,7 +235,14 @@ func New(cfg Config) (*Agent, error) {
 	if cfg.ModelTimeout < 0 || cfg.ModelTimeout > 30*time.Minute || (cfg.ModelTimeout != 0 && cfg.ModelTimeout < time.Second) {
 		return nil, &ExitError{ExitUsage, "--model-timeout must be between 1s and 30m"}
 	}
-	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile} {
+	if cfg.DependencyTimeout < 0 || cfg.DependencyTotalTimeout < 0 || cfg.DependencyMaxBytes < 0 {
+		return nil, &ExitError{ExitUsage, "dependency limits must not be negative"}
+	}
+	// The value is not echoed: it would be the credential.
+	if domain.GoSettingCarriesCredentials(cfg.GoProxy) || domain.GoSettingCarriesCredentials(cfg.GoSumDB) {
+		return nil, &ExitError{ExitUsage, "--go-proxy and --go-sumdb must not carry credentials"}
+	}
+	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}
@@ -270,6 +291,27 @@ func New(cfg Config) (*Agent, error) {
 }
 
 func (ag *Agent) dataRoot() string { return filepath.Join(ag.cfg.StateDir, "data") }
+
+// dependencyCache is the shared dependency cache: --dependency-cache-dir or
+// <state>/cache/deps.
+func (ag *Agent) dependencyCache() string {
+	if ag.cfg.DependencyCacheDir != "" {
+		return ag.cfg.DependencyCacheDir
+	}
+	return filepath.Join(ag.cfg.StateDir, "cache", "deps")
+}
+
+// dependencies is the hello's dependency configuration; nil while the
+// operator's switch is off.
+func (ag *Agent) dependencies() *workerproto.Dependencies {
+	if !ag.cfg.DependencyFetch {
+		return nil
+	}
+	return &workerproto.Dependencies{CacheRoot: ag.dependencyCache(), AgentStateDir: ag.cfg.StateDir, GoProxy: ag.cfg.GoProxy,
+		GoSumDB: ag.cfg.GoSumDB, GoPrivate: ag.cfg.GoPrivate, GoNoProxy: ag.cfg.GoNoProxy, GoNoSumDB: ag.cfg.GoNoSumDB,
+		ModuleTimeoutS: int(ag.cfg.DependencyTimeout / time.Second), TotalTimeoutS: int(ag.cfg.DependencyTotalTimeout / time.Second),
+		MaxDownloadBytes: ag.cfg.DependencyMaxBytes, CacheQuotaBytes: ag.cfg.StorageQuota[quota.Cache]}
+}
 
 func (ag *Agent) heartbeatInterval() time.Duration {
 	if ag.cfg.HeartbeatInterval > 0 {

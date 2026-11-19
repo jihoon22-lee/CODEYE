@@ -86,6 +86,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
       </div>}
       {box('send_source_to_model', q.sendSource, q.sendSourceHelp)}
       {box('run_build_scripts', q.runBuildScripts, q.runBuildScriptsHelp)}
+      {box('fetch_dependencies', q.fetchDependencies, q.fetchDependenciesHelp)}
     </details>
     <button type="submit" className="primary" disabled={submitting} aria-busy={submitting}>{submitting ? q.submitting : q.submit}</button>
     {serverError && <ErrorNote error={serverError} />}

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -109,6 +110,49 @@ type Agent struct {
 	// absent or true means detect. agent.go, agent.tools and the other fields
 	// above always win over what detection finds.
 	AutoDetect *bool `json:"auto_detect,omitempty"`
+	// Dependencies configures dependency fetching (codeye agent
+	// --dependency-fetch and its options, docs/ARCHITECTURE.md#의존성-준비).
+	// Absent means on with the defaults; each project can still turn it off.
+	Dependencies *Dependencies `json:"dependencies,omitempty"`
+}
+
+// Dependencies are the local agent's dependency fetch options. Zero values
+// are the defaults.
+type Dependencies struct {
+	// Enabled turns fetching off for every project when false.
+	Enabled *bool `json:"enabled,omitempty"`
+	// CacheDir is the shared dependency cache (default
+	// <state>/agent/cache/deps).
+	CacheDir string `json:"cache_dir,omitempty"`
+	// GoProxy, GoSumDB, GoPrivate, GoNoProxy and GoNoSumDB are the Go
+	// module download settings (GOPROXY, GOSUMDB, GOPRIVATE, GONOPROXY,
+	// GONOSUMDB). Unset ones come from the user's own `go env` when tools are
+	// detected; otherwise Go's public proxy and checksum database apply.
+	GoProxy   string `json:"go_proxy,omitempty"`
+	GoSumDB   string `json:"go_sumdb,omitempty"`
+	GoPrivate string `json:"go_private,omitempty"`
+	GoNoProxy string `json:"go_noproxy,omitempty"`
+	GoNoSumDB string `json:"go_nosumdb,omitempty"`
+	// TimeoutSeconds bounds one module (default 600), TotalTimeoutSeconds
+	// one run (default 1200), MaxDownloadBytes one module's download
+	// (default 2 GiB, soft).
+	TimeoutSeconds      int   `json:"timeout_seconds,omitempty"`
+	TotalTimeoutSeconds int   `json:"total_timeout_seconds,omitempty"`
+	MaxDownloadBytes    int64 `json:"max_download_bytes,omitempty"`
+}
+
+// DependenciesEnabled reports whether the local agent fetches dependencies.
+func (a Agent) DependenciesEnabled() bool {
+	return a.Dependencies == nil || a.Dependencies.Enabled == nil || *a.Dependencies.Enabled
+}
+
+// DependencyCache is the shared dependency cache of the local agent: the
+// configured cache_dir, else the state directory's cache/deps.
+func (a Agent) DependencyCache(l Layout) string {
+	if d := a.Dependencies; d != nil && d.CacheDir != "" {
+		return d.CacheDir
+	}
+	return l.DependencyCacheDir()
 }
 
 // AutoDetectEnabled reports whether tools are detected on start.
@@ -365,6 +409,26 @@ func (c *Config) validate(knownTools []string) error {
 	for name, p := range map[string]string{"agent.go": a.Go, "agent.git": a.Git, "agent.go_mod_cache": a.GoModCache} {
 		if p != "" && !absClean(p) {
 			return fmt.Errorf("%s must be an absolute, clean path", name)
+		}
+	}
+	if d := a.Dependencies; d != nil {
+		if d.CacheDir != "" && !absClean(d.CacheDir) {
+			return errors.New("agent.dependencies.cache_dir must be an absolute, clean path")
+		}
+		for name, v := range map[string]string{"go_proxy": d.GoProxy, "go_sumdb": d.GoSumDB, "go_private": d.GoPrivate, "go_noproxy": d.GoNoProxy, "go_nosumdb": d.GoNoSumDB} {
+			if strings.ContainsAny(v, "\x00\n\r") || len(v) > 2048 {
+				return fmt.Errorf("agent.dependencies.%s must be one line", name)
+			}
+		}
+		// A credential in a proxy URL would reach the agent's arguments
+		// and the worker hello; authenticated proxies are not supported.
+		for name, v := range map[string]string{"go_proxy": d.GoProxy, "go_sumdb": d.GoSumDB} {
+			if domain.GoSettingCarriesCredentials(v) {
+				return fmt.Errorf("agent.dependencies.%s must not carry credentials (user:token@ in a URL)", name)
+			}
+		}
+		if d.TimeoutSeconds < 0 || d.TotalTimeoutSeconds < 0 || d.MaxDownloadBytes < 0 {
+			return errors.New("agent.dependencies limits must not be negative")
 		}
 	}
 	known := map[string]bool{}

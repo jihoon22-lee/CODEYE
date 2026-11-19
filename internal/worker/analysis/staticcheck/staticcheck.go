@@ -279,8 +279,11 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 	}
 	goh := a.cfg.Go
-	modcache := goh.ModCache()
-	if modcache == "" {
+	modcache, prepared, lim := goh.ModuleCache(job, pt.Spec.Key, Name, pt.Module)
+	switch {
+	case prepared:
+		in.ExtraLimitations = append(in.ExtraLimitations, lim)
+	case modcache == "":
 		modcache = filepath.Join(dirs["gopath"], "pkg", "mod")
 		in.ExtraLimitations = append(in.ExtraLimitations, "no_offline_module_cache")
 	}
@@ -301,6 +304,9 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	protected := []string{job.Snapshot.SnapshotDir}
 	if goh.ModCache() != "" {
 		protected = append(protected, goh.ModCache())
+	}
+	if prepared {
+		protected = append(protected, modcache)
 	}
 	env := a.env(dirs["gocache"], dirs["gopath"], modcache, dirs["cache"])
 	if err := govet.DisableTelemetry(env, filepath.Join(taskDir, "config")); err != nil {

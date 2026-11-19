@@ -25,6 +25,18 @@
       "minLength": 2,
       "description": "go env GOMODCACHE of the Go toolchain found; absent without a usable Go or when the directory does not exist."
     },
+    "go_settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The Go module download settings of the user's go env that differ from Go's defaults; the dependency fetch follows them. Absent when none differs.",
+      "properties": {
+        "goproxy": {"type": "string", "minLength": 1},
+        "gosumdb": {"type": "string", "minLength": 1},
+        "goprivate": {"type": "string", "minLength": 1},
+        "gonoproxy": {"type": "string", "minLength": 1},
+        "gonosumdb": {"type": "string", "minLength": 1}
+      }
+    },
     "python_both_type_checkers": {
       "type": "boolean",
       "description": "mypy and pyright were both found: the agent needs --python-both-type-checkers."

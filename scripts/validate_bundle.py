@@ -165,6 +165,18 @@ def main() -> None:
     fourth = copy.deepcopy(retried)
     fourth["calls"][2]["attempt"] = 4
     expect_invalid("review-r1 call attempt 4", review_validator.validate, fourth)
+    dependencies = json_file(ROOT / "examples/dependencies.json")
+    validators["dependencies.schema.json"].validate(dependencies)
+    for name, edit in {
+        "succeeded but partial": lambda d: d.update(task_status="succeeded"),
+        "failed without reason": lambda d: d.update(reason=None),
+        "shared cache without key": lambda d: d["cache"].update(key=None),
+        "skipped_policy not skipped": lambda d: d.update(task_status="skipped_policy"),
+        "unknown task key": lambda d: d.update(task_key="deps.go.x"),
+    }.items():
+        bad = copy.deepcopy(dependencies)
+        edit(bad)
+        expect_invalid("dependency record " + name, validators["dependencies.schema.json"].validate, bad)
     for name in ("examples/environment.json", "examples/environment-documents.json"):
         environment = json_file(ROOT / name)
         validators["environment.schema.json"].validate(environment)

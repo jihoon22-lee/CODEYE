@@ -116,6 +116,27 @@ describe('response validation', () => {
     }
   });
 
+  it('reads an absent fetch_dependencies as on and only an explicit false as off', async () => {
+    const page = (items: unknown[]) => mockFetch(() => json(200, { items, next_cursor: null }));
+    const old = { send_source_to_model: true, run_build_scripts: false };
+    const projects = (await createApi({ fetch: page([
+      { ...PROJECT, analysis: old },
+      { ...PROJECT, id: 'p2', analysis: { ...old, fetch_dependencies: null } },
+      { ...PROJECT, id: 'p3', analysis: { ...old, fetch_dependencies: false } },
+    ]).fetch }).listProjects()).items;
+    expect(projects.map(p => p.analysis?.fetch_dependencies)).toEqual([true, true, false]);
+    expect(await rejection(createApi({ fetch: page([{ ...PROJECT, analysis: { ...old, fetch_dependencies: 'no' } }]).fetch }).listProjects())).toMatchObject({ kind: 'invalid_response' });
+    const setup = { mode: 'personal', model: null, git: null, readable_folders: [], tools: null, analysis_defaults: { local: { send_source_to_model: true, run_build_scripts: true }, git: { ...old, fetch_dependencies: false } } };
+    const s = await createApi({ fetch: mockFetch(() => json(200, setup)).fetch }).getSetup();
+    expect(s.analysis_defaults).toEqual({ local: { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }, git: { ...old, fetch_dependencies: false } });
+  });
+
+  it('sends the dependency choice with the other analysis choices', async () => {
+    const m = mockFetch(() => json(200, PROJECT));
+    await createApi({ fetch: m.fetch }).setProjectAnalysis('p1', { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: false });
+    expect(m.calls[0]).toMatchObject({ method: 'PUT', url: '/api/v1/projects/p1/analysis', body: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: false } });
+  });
+
   it('keeps an unrecognised run status as an opaque string and null progress as null', async () => {
     const view = runView({ status: 'teleporting' }, { total_tasks: null, estimated_percent: null });
     const run = await createApi({ fetch: mockFetch(() => json(200, view)).fetch }).getRun('run1');

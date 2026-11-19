@@ -4,6 +4,14 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — Go 의존성 받기
+
+- **의존성 준비**: 분석 전에 Go 모듈마다 `deps.go`·`deps.go.mNN` task가 의존성을 받고(`go mod download -json -modfile=<사본>`), go vet·Staticcheck는 그 캐시를 오프라인으로 읽는다. 받기는 실행 사본의 모듈 디렉터리에서 하고 원본·snapshot·실행 사본의 go.mod·go.sum을 바꾸지 않는다. 필수 task가 아니어서 실패해도 분석은 계속하고 사유가 남는다([의존성 준비](docs/ARCHITECTURE.md#의존성-준비), A42).
+- **선택과 설정**: 프로젝트 선택 `fetch_dependencies`(기본 켬, 화면 "고급"의 "의존성 받기")와 노드 스위치 `--dependency-fetch`(개인 모드는 켬). `--dependency-cache-dir`, `--dependency-timeout`(10분), `--dependency-total-timeout`(20분), `--dependency-max-bytes`(2 GiB), `--go-proxy`·`--go-sumdb`·`--go-private`·`--go-noproxy`·`--go-nosumdb`, 개인 모드 `agent.dependencies`. 개인 모드는 사용자 `go env`의 받기 설정을 따르고(`tools.json`의 `go_settings`), 비공개 모듈은 공개 proxy에 묻지 않는다. 받은 캐시는 `state_dir/cache/deps`이고 cache 저장 영역에 센다.
+- **기록과 보고서**: task마다 의존성 기록(`application/vnd.codeye.dependencies+json` 0.1, [schema](schemas/dependencies.schema.json), [예시](examples/dependencies.json))을 올린다. 보고서 builder 7은 환경 절에 `dependencies` 표와 공백 `dependencies_not_prepared`·`dependencies_not_fetched`·`dependency_versions_not_pinned`를 더한다. 웹은 그 표와 "더 나은 결과를 얻으려면"의 "의존성 받기 켜고 다시 시도"를 보인다.
+- **고침**: 모델이 설정되지 않은 개인 모드 run에서 모듈별 검토 장부가 있으면 보고서 게시가 거부되던 문제(장부가 보내지 않은 호출까지 세어 "ledger counts fewer calls", 요청 바이트 불일치). 장부는 요청이 있는 호출만 센다.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10, Node 24.18.0, Playwright Chromium, staticcheck 2026.2.2. 임시 설정·상태 디렉터리, 빈 Go 모듈 캐시, 모델 없음으로 `codeye up`을 실행했다. `spf13/cobra`(커밋 `adbc881`)는 받기 끔에서 보고서 `partial`/`inconclusive`, 관찰 20·발견 0, go vet·Staticcheck `failed`/`dependency_unavailable`(공백 `dependencies_not_fetched` 둘)였고, 받기 켬에서 `deps.go` 6/6 받음, go vet·Staticcheck `succeeded`(`dependencies_prepared`), 관찰 22·발견 2(Staticcheck SA1029)였다. 두 보고서 모두 `partial`인 이유는 모델 검토가 없어서다. 의존성 있는 로컬 폴더는 받은 뒤 go vet이 printf 결함을 찾았고 원본 트리의 파일 hash가 그대로였다. 닿지 않는 proxy는 `registry_unreachable`로 끝나고 분석은 계속됐다. 받는 중 취소는 `deps.go` `cancelled`, 정리 확인(`confirmed`), 남은 `go mod download` 프로세스 없음이었다. 1000바이트 크기 상한은 `budget_exhausted`/`download_limit_exceeded`였다(첫 측정 전에 약 52 MB를 받았다. 2초 간격의 soft 제한이다). 화면에서 받기를 끈 프로젝트의 "의존성 받기 켜고 다시 시도"가 선택을 켜고 다시 실행해 받는 것을 확인했다. 실모델 호출은 하지 않았다.
+
 ### 고침 — 실제 저장소에서 한 곳의 문제가 작업 전체를 실패시키던 것
 
 - **작업 사이 되돌리기**: 한 attempt의 작업은 작업 사본 하나를 차례로 쓴다. Rust build script(`fixtures/rust/drift`)가 고쳐 쓴 `src/lib.rs`가 뒤의 lizard·jscpd·gitleaks를 `workspace_drift`로 실패시켰다. 이제 워커가 작업마다 사본을 스냅샷 내용으로 되돌리고(바뀐 manifest 파일은 다시 쓰고 manifest에 없는 항목은 지운다. 숨김 이름·`node_modules`·`vendor`·`testdata`는 남긴다) `workspace_restored_after_task`·`workspace_leftovers_removed`(실패하면 `workspace_restore_failed`)를 남긴다. 자기 실행 중에 사본을 바꾼 작업은 여전히 `workspace_drift`다.

@@ -208,11 +208,12 @@ function ImproveHints({ api, project, hints, runId, canRun, onRetried }: { api: 
     }
   }
   const i = t.improve;
+  const action: Record<keyof AnalysisChoices, string> = { send_source_to_model: i.sendSourceAction, run_build_scripts: i.buildScriptsAction, fetch_dependencies: i.fetchDependenciesAction };
   return <section className="notice improve" aria-labelledby={`improve-${runId}`}>
     <h4 id={`improve-${runId}`}>{i.title}</h4>
     <ul>{hints.map(h => <li key={h.key}>{h.text}
       {h.turnOn && (project.can_manage && canRun
-        ? <> <button type="button" onClick={() => void turnOn(h.turnOn!)} disabled={sending} aria-busy={sending}>{sending ? i.sending : h.turnOn === 'run_build_scripts' ? i.buildScriptsAction : i.sendSourceAction}</button></>
+        ? <> <button type="button" onClick={() => void turnOn(h.turnOn!)} disabled={sending} aria-busy={sending}>{sending ? i.sending : action[h.turnOn]}</button></>
         : <small> {i.needsManager}</small>)}
     </li>)}</ul>
     {error && <ErrorNote error={error} />}

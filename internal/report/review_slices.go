@@ -178,6 +178,13 @@ func (c sectionContext) ledger() *ReviewLedger {
 				}
 			}
 		case noCallStatus(st.facts.Status):
+			// A record of a call that was not made (model_not_configured)
+			// still states its request size; the section sums every record.
+			if !st.rejected && st.reviewResult != nil && st.reviewResult.Role != nil {
+				for _, call := range st.reviewResult.Role.Calls {
+					bytes += call.RequestBytes
+				}
+			}
 		default:
 			bytesKnown = false
 			if !whole || doc == nil {
@@ -364,7 +371,15 @@ func validateLedger(r Report) error {
 		(l.MaxCalls == nil && len(l.Modules) > 0) || (l.Scope.Result == "accepted") != (l.MaxCalls != nil) {
 		return invalidf("ledger budget is invalid")
 	}
-	if l.CallsUsed != nil && *l.CallsUsed < len(r.Coverage.ReviewCalls) {
+	// A listed call without a request (model_not_configured and the other
+	// outcomes of a call that was never sent) is not one the ledger counts.
+	sent := 0
+	for _, c := range r.Coverage.ReviewCalls {
+		if c.RequestDigest != "" {
+			sent++
+		}
+	}
+	if l.CallsUsed != nil && *l.CallsUsed < sent {
 		return invalidf("ledger counts fewer calls than the report lists")
 	}
 	if l.RequestBytesSent != nil && (r.CodeReview.RequestBytes == nil || *l.RequestBytesSent != *r.CodeReview.RequestBytes) {

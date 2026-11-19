@@ -23,6 +23,7 @@ const SETUP = {
     ],
   },
 };
+// SETUP above and the projects below leave fetch_dependencies out, as older servers do: it reads as on.
 const ANALYSIS_ON = { send_source_to_model: true, run_build_scripts: true };
 const FOLDER = { ...PROJECT, id: 'p-folder', name: 'app', source: { kind: 'local', source_root_id: 'root1', relative_path: 'app' }, analysis: ANALYSIS_ON };
 const REPO = { ...PROJECT, id: 'p-repo', name: 'r', source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r' }, analysis: { send_source_to_model: true, run_build_scripts: false } };
@@ -67,7 +68,7 @@ describe('personal mode start', () => {
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
     await flush();
     const created = app.calls.find(c => c.method === 'POST' && c.url === '/api/v1/projects')!;
-    expect(created.body).toEqual({ local_path: '/home/me/app', analysis: ANALYSIS_ON });
+    expect(created.body).toEqual({ local_path: '/home/me/app', analysis: { ...ANALYSIS_ON, fetch_dependencies: true } });
     expect(app.calls.some(c => c.method === 'POST' && c.url === '/api/v1/projects/p-folder/runs')).toBe(true);
     expect(screen.getByRole('heading', { level: 2, name: 'app' })).toBeTruthy();
     expect(screen.getByText(t.runs.statusLabels.running!)).toBeTruthy();
@@ -83,10 +84,25 @@ describe('personal mode start', () => {
     expect((screen.getByLabelText(t.quick.branch) as HTMLInputElement).value).toBe('dev');
     expect((screen.getByLabelText(t.quick.runBuildScripts) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByLabelText(t.quick.sendSource) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText(t.quick.fetchDependencies) as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
     await flush();
     const created = app.calls.find(c => c.method === 'POST' && c.url === '/api/v1/projects')!;
-    expect(created.body).toEqual({ source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r', branch: 'dev' }, analysis: { send_source_to_model: true, run_build_scripts: false } });
+    expect(created.body).toEqual({ source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r', branch: 'dev' }, analysis: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true } });
+  });
+
+  it('sends the dependency choice the user turned off', async () => {
+    const current = { ...SETUP, analysis_defaults: { local: { ...ANALYSIS_ON, fetch_dependencies: true }, git: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true } } };
+    const app = renderApp(personal({ 'GET /api/v1/setup': () => json(200, current) }));
+    await flush();
+    type(t.quick.field, '/home/me/app');
+    const box = screen.getByLabelText(t.quick.fetchDependencies) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
+    await flush();
+    const created = app.calls.find(c => c.method === 'POST' && c.url === '/api/v1/projects')!;
+    expect(created.body).toEqual({ local_path: '/home/me/app', analysis: { ...ANALYSIS_ON, fetch_dependencies: false } });
   });
 
   it('opens the run still going for a folder registered before instead of requesting another', async () => {
@@ -153,9 +169,35 @@ describe('retry, report and hints', () => {
     await flush();
     const put = app.calls.find(c => c.method === 'PUT')!;
     expect(put.url).toBe('/api/v1/projects/p-repo/analysis');
-    expect(put.body).toEqual({ send_source_to_model: true, run_build_scripts: true });
+    expect(put.body).toEqual({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true });
     expect(app.calls.some(c => c.method === 'POST' && c.url === '/api/v1/runs/run-r/retry')).toBe(true);
     expect(screen.getByText('run-r2')).toBeTruthy();
+  });
+
+  it('turns dependency fetching on with a retry when an analyzer could not resolve the imports', async () => {
+    const repo = { ...REPO, analysis: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: false } };
+    const doc = report('run-r');
+    doc.gaps = [{ section: 'environment', code: 'dependencies_not_fetched', subject: 'go-vet', detail: 'dependency_unavailable' }];
+    doc.overview.sections.find((s: { key: string }) => s.key === 'gaps').counts.gaps = 1;
+    const app = renderApp(personal({
+      'POST /api/v1/projects': () => json(201, repo),
+      'GET /api/v1/runs/run-r': () => json(200, runView({ id: 'run-r', project_id: 'p-repo', status: 'partial', version: 4, report: { revision: 1 } })),
+      'GET /api/v1/runs/run-r/report': () => json(200, doc),
+      'PUT /api/v1/projects/p-repo/analysis': call => json(200, { ...repo, revision: 2, analysis: call.body }),
+      'POST /api/v1/runs/run-r/retry': () => json(202, { id: 'run-r2', status: 'queued', version: 1, url: '/api/v1/runs/run-r2', retry: 'new_run' }),
+      'GET /api/v1/runs/run-r2': () => json(200, runView({ id: 'run-r2', project_id: 'p-repo', status: 'queued' })),
+    }));
+    await flush();
+    type(t.quick.field, 'https://github.com/o/r');
+    fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
+    await flush(10);
+    const hints = screen.getByRole('region', { name: t.improve.title });
+    expect(within(hints).getByText(t.improve.fetchDependencies('go-vet'))).toBeTruthy();
+    fireEvent.click(within(hints).getByRole('button', { name: t.improve.fetchDependenciesAction }));
+    await flush();
+    const put = app.calls.find(c => c.method === 'PUT')!;
+    expect(put.body).toEqual({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true });
+    expect(app.calls.some(c => c.method === 'POST' && c.url === '/api/v1/runs/run-r/retry')).toBe(true);
   });
 });
 

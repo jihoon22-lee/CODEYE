@@ -187,13 +187,18 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 		}
 		job.Source.RepositoryURL, job.Source.AllowedLocalRoot = testGitMirror(job.Source.RepositoryURL, job.Source.AllowedHost)
 	}
+	// The project's own choices; a job from a controller that sends none
+	// gets the defaults.
+	choices := domain.DefaultAnalysisChoices(domain.SourceKind(j.Source.Kind))
+	if j.Analysis != nil {
+		choices = *j.Analysis
+	}
+	// Fetching dependencies needs the operator's switch and the project's
+	// choice, on every node.
+	job.AllowDependencyFetch = ag.cfg.DependencyFetch && choices.FetchDependencies
 	if ag.cfg.ProjectAnalysisPolicy {
-		// The project's own choices, for local and Git sources alike; a job
-		// from a controller that sends none gets the defaults.
-		choices := domain.DefaultAnalysisChoices(domain.SourceKind(j.Source.Kind))
-		if j.Analysis != nil {
-			choices = *j.Analysis
-		}
+		// The project's own choices decide the model and build scripts, for
+		// local and Git sources alike.
 		// Without a model the review handler records model_not_configured.
 		job.AllowModelReview = choices.SendSourceToModel
 		job.AllowRepositoryCode = choices.RunBuildScripts

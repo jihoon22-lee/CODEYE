@@ -24,6 +24,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/staticcheck"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/deps"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
@@ -109,6 +110,41 @@ func exampleExec(t *testing.T, j analysis.Job, task, name string, argv []string,
 		Stderr:    executor.Stream{Data: []byte{}},
 		StartedAt: reportExampleTime.Add(time.Minute), EndedAt: reportExampleTime.Add(time.Minute + time.Second)}
 	return analysis.Execution{Name: name, Result: res, StdoutPath: out, StderrPath: errp}
+}
+
+// exampleDepsRunner answers the go commands of the dependency tasks with
+// fixed output; the recorded command names no node path.
+type exampleDepsRunner struct{ j analysis.Job }
+
+func (r exampleDepsRunner) Run(_ context.Context, s executor.Spec) executor.Result {
+	module, _ := filepath.Rel(r.j.Snapshot.WorkspaceDir, s.Dir)
+	module = filepath.ToSlash(module)
+	argv := []string{"go"}
+	for _, a := range s.Args {
+		argv = append(argv, strings.ReplaceAll(filepath.ToSlash(a), filepath.ToSlash(r.j.Scratch), "$SCRATCH"))
+	}
+	out := func(code int, stdout, stderr string) executor.Result {
+		c := code
+		return executor.Result{Status: executor.StatusExited, ExitCode: &c, Cleanup: executor.CleanupConfirmed,
+			Command:   executor.CommandRecord{Executable: "go", Argv: argv, Dir: analysis.RedactedMarker, EnvKeys: []string{"GOMODCACHE", "GOPROXY", "PATH"}},
+			Stdout:    executor.Stream{Data: []byte(stdout), TotalBytes: int64(len(stdout))},
+			Stderr:    executor.Stream{Data: []byte(stderr), TotalBytes: int64(len(stderr))},
+			StartedAt: reportExampleTime.Add(30 * time.Second), EndedAt: reportExampleTime.Add(31 * time.Second)}
+	}
+	requires := map[string]string{
+		".":     `{"Module":{"Path":"example.test/w15"},"Require":[{"Path":"github.com/spf13/pflag","Version":"v1.0.9"},{"Path":"golang.org/x/text","Version":"v0.21.0"}]}`,
+		"svc/a": `{"Module":{"Path":"example.test/w15/svc/a"},"Require":[{"Path":"example.test/private/lib","Version":"v0.3.0"}]}`,
+		"svc/b": `{"Module":{"Path":"example.test/w15/svc/b"}}`,
+	}
+	switch {
+	case s.Args[0] == "version":
+		return out(0, "go version go1.27.4 linux/amd64\n", "")
+	case s.Args[1] == "edit":
+		return out(0, requires[module], "")
+	case module == ".":
+		return out(0, "{\n\t\"Path\": \"github.com/spf13/pflag\",\n\t\"Version\": \"v1.0.9\"\n}\n{\n\t\"Path\": \"golang.org/x/text\",\n\t\"Version\": \"v0.21.0\"\n}\n", "")
+	}
+	return out(1, "", "go: example.test/private/lib@v0.3.0: Get \"https://proxy.golang.org/example.test/private/lib/@v/v0.3.0.mod\": dial tcp: lookup proxy.golang.org: no such host\n")
 }
 
 // exampleObserver reports the node as the probes would: go 1.27.4 and the
@@ -535,7 +571,15 @@ func TestReportExample(t *testing.T) {
 	pinExampleSnapshot(t, &j)
 	ids := &exampleIDs{n: 2}
 	caller := &roleCaller{script: exampleScript(t)}
-	h, err := discovery.Wrap(RoleHandler{Static: exampleStatic(t), Caller: caller}, discovery.Config{Observer: exampleObserver{t: t}})
+	// The dependency tasks run against scripted go commands: the root module
+	// is prepared, svc/a cannot reach its registry, svc/b names no
+	// dependency.
+	j.AllowDependencyFetch = true
+	fetched, err := deps.Wrap(RoleHandler{Static: exampleStatic(t), Caller: caller}, deps.Config{CacheRoot: filepath.Join(t.TempDir(), "deps"), GoExecutable: "/opt/go/bin/go"}, deps.Fetchers()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := discovery.Wrap(fetched, discovery.Config{Observer: exampleObserver{t: t}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,7 +589,11 @@ func TestReportExample(t *testing.T) {
 	}
 	results := map[string]analysis.TaskResult{}
 	for _, task := range plan {
-		results[task.Key] = h.Run(t.Context(), j, task, nil)
+		var runner executor.Runner
+		if strings.HasPrefix(task.Key, "deps.") {
+			runner = exampleDepsRunner{j: j}
+		}
+		results[task.Key] = h.Run(t.Context(), j, task, runner)
 	}
 	if b, err := os.ReadFile(rolePath(j, "verify")); err == nil && os.Getenv("EXAMPLE_DEBUG") != "" {
 		t.Logf("%s", b)

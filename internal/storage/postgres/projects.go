@@ -177,7 +177,7 @@ func (s *Store) SetProjectAnalysis(ctx context.Context, actor, id string, c doma
 		if err := json.Unmarshal(raw, &config); err != nil || config == nil {
 			return 0, domain.ErrInvalid
 		}
-		choice, _ := json.Marshal(c)
+		choice, _ := json.Marshal(c.Stored())
 		config["analysis"] = choice
 		next, _ := json.Marshal(config)
 		canonical, digest, err := normalizeConfig(ctx, tx, next)

@@ -74,6 +74,7 @@ if res.RecoveryRequired() { /* attempt를 recovery_required로 */ }
   - 접두어: `AWS_`, `AZURE_`, `CODEYE_DB`, `ANTHROPIC_`, `OPENAI_`, `OPENCODE_`.
 - 기본 환경에는 최소 시스템 경로, 언어·locale, 명시적 미러·CA, task 전용 temp만 둔다. 운영 DB URL, 사용자 SSH agent, 클라우드 토큰, Git 댓글 토큰을 전달하지 않는다. 환경변수 제거만으로 원래 계정 비밀에 대한 OS 파일 접근까지 막았다고 하지 않는다.
 - 모델 실행(OpenCode)은 같은 실행기를 쓰며 loopback relay에만 일회용 토큰을 준다([검토](REVIEW.md)).
+- 실행기는 네트워크를 막거나 제한하지 않는다. 내려받지 않는 분석기는 `GOPROXY=off` 같은 도구 설정으로 오프라인을 지킨다. 의존성 받기는 레지스트리 주소를 argv·환경변수로 정할 뿐이며, 도구가 다른 주소로 접속하지 않는다는 것은 도구 설정에 기대고 플랫폼이 강제하지 않는다([의존성 준비](ARCHITECTURE.md#의존성-준비)).
 
 ### 실행별 파일
 
@@ -171,6 +172,10 @@ codeye agent --controller URL --state-dir DIR [--name NAME] [--enroll-token-file
              [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH]
              [--go /abs/go] [--go-mod-cache /abs/dir] [--<tool> /abs/path ...] [--node /abs/node]
              [--python-both-type-checkers] [--repo-code-source-root ID ...]
+             [--dependency-fetch [--dependency-cache-dir DIR] [--dependency-timeout 10m]
+              [--dependency-total-timeout 20m] [--dependency-max-bytes N]
+              [--go-proxy LIST] [--go-sumdb NAME] [--go-private PATTERNS]
+              [--go-noproxy PATTERNS] [--go-nosumdb PATTERNS]]
              [--opencode /abs/opencode --model PROVIDER/MODEL [--model-credential-file PATH | --model-relay-file PATH]]
              [--model-timeout 180s] [--model-source-root ID ...]
              [--review-pack review-r1|review-v1] [--review-max-calls 15..207]
@@ -190,6 +195,7 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 | `--toolchain-path` | 워커 `PATH`(기본 `/usr/bin:/bin`). |
 | `--go`, `--go-mod-cache`, `--<tool>`, `--node`, `--python-both-type-checkers` | 분석 도구와 공유 toolchain 경로. 절대 경로만 받고 PATH를 검색하거나 내려받지 않는다. 지정하지 않은 도구의 작업은 `unsupported`(`tool_not_configured`)로 끝난다([분석기](ANALYZERS.md)). |
 | `--repo-code-source-root ID` | 그 local source root에서 저장소 코드를 실행하는 분석 작업을 허가한다. ID는 `--source-root` 매핑이 있어야 한다([분석기](ANALYZERS.md)). |
+| `--dependency-fetch` 외 의존성 옵션 | 의존성 받기 운영자 스위치(기본 꺼짐)와 캐시·예산·Go 받기 설정. 스위치가 꺼져 있으면 다른 의존성 옵션은 쓰이지 않는다. 켜면 hello `dependencies`로 워커에 전달되고, run마다 프로젝트 선택 `fetch_dependencies`도 켜져 있어야 계획한다([의존성 준비](ARCHITECTURE.md#의존성-준비), [분석기](ANALYZERS.md#에이전트-플래그)). |
 | `--opencode`, `--model`, `--model-credential-file`, `--model-relay-file`, `--model-timeout`, `--model-source-root` | 모델 실행, API 키 파일(경로만 받고 워커가 호출마다 읽는다), 호출당 제한시간(기본 180초, 1초~30분), root별 모델 전송 승인([검토](REVIEW.md#모델-설정)). 키 파일과 relay 파일은 함께 쓰지 않는다. |
 | `--review-pack` | 검토 팩. 기본 `review-r1`, 이전 기록 재현용 `review-v1`. 다른 값이나 빈 값은 사용 오류이고 기본값으로 대체하지 않는다. run 요청으로는 바꿀 수 없다([검토](REVIEW.md)). |
 | `--review-max-calls N` | review-r1의 attempt당 모델 호출 상한(기본 99, 15~207). 상한을 다 쓰면 기본값 33일 때의 약 세 배 비용이 든다([안내서](GUIDE.md)). 범위 밖이면 사용 오류다. 전체 역할 다섯 개가 최대 15회를 쓰고 남은 호출로 모듈 단위 slice를 차례로 허용한다. Hello `review_max_calls`로 워커에 전달되고 run 요청으로는 바꿀 수 없다([검토](REVIEW.md#모듈-단위-검토-분할)). |

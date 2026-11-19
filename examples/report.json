@@ -11,16 +11,16 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000555",
+      "id": "0195f3a0-0000-7000-8000-00000000056b",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "8f3657e54f783acda98deedaf3ff3939c6e9c6c2afd09273432fbbd0a7832bc6",
-      "size_bytes": 16487,
+      "sha256": "d456675cbe8b25fec6f1612bfdbe49ed98225e252a7218e0b86d82b9bb0e36bd",
+      "size_bytes": 21210,
       "task_key": null
     },
     {
       "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations",
-      "id": "0195f3a0-0000-7000-8000-00000000051c",
+      "id": "0195f3a0-0000-7000-8000-000000000532",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
       "sha256": "4e4af1e70e5412fcd5bb003c557472c33c1996e277a2d3e2d71c5bc88bdfdd40",
@@ -29,7 +29,7 @@
     },
     {
       "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations",
-      "id": "0195f3a0-0000-7000-8000-000000000526",
+      "id": "0195f3a0-0000-7000-8000-00000000053c",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
       "sha256": "307cbc6cbdb30b5648e22d7132978f21d3ac0aa496fdf547d8e3d4f816c283c5",
@@ -38,7 +38,7 @@
     },
     {
       "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=go_vet_observations",
-      "id": "0195f3a0-0000-7000-8000-00000000052c",
+      "id": "0195f3a0-0000-7000-8000-000000000542",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
       "sha256": "16adcaf2411bd6ec09ad14373f9aeb036adef56e485289c372fbbacd95d83a6f",
@@ -47,7 +47,7 @@
     },
     {
       "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
-      "id": "0195f3a0-0000-7000-8000-000000000532",
+      "id": "0195f3a0-0000-7000-8000-000000000548",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
       "sha256": "704a87955bdfb148d439986203f4341847847f68608d5e09bcd15da3dccc6fee",
@@ -56,7 +56,7 @@
     },
     {
       "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
-      "id": "0195f3a0-0000-7000-8000-000000000538",
+      "id": "0195f3a0-0000-7000-8000-00000000054e",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
       "sha256": "842311c73839ff786e0d24b7d5f85c0b6314b202d650fabbb0cb4761b5aec75a",
@@ -65,7 +65,7 @@
     },
     {
       "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
-      "id": "0195f3a0-0000-7000-8000-00000000053c",
+      "id": "0195f3a0-0000-7000-8000-000000000552",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
       "sha256": "3cee2d6608fc6b66fbe1de472c0e6e236c503e6f6dd574004b26e4295f7e6221",
@@ -74,7 +74,7 @@
     },
     {
       "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
-      "id": "0195f3a0-0000-7000-8000-000000000542",
+      "id": "0195f3a0-0000-7000-8000-000000000558",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
       "sha256": "611f7f8b0c395c28d961a942293ab082360f6a18cab1b3176ed115aee609c8f2",
@@ -83,7 +83,7 @@
     },
     {
       "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
-      "id": "0195f3a0-0000-7000-8000-000000000544",
+      "id": "0195f3a0-0000-7000-8000-00000000055a",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
       "sha256": "52d6d4a20296cb541824d71d74dae422d14b1f1ab4d6d1314814f2e614c40e78",
@@ -92,7 +92,7 @@
     },
     {
       "decoder": "application/vnd.codeye.observations+json;schema_version=0.1;kind=analyzer_observations",
-      "id": "0195f3a0-0000-7000-8000-00000000054a",
+      "id": "0195f3a0-0000-7000-8000-000000000560",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
       "sha256": "6d20a6befabe55b18c4149123d359648315f812cdf1bbfeb871ba2e768d2652c",
@@ -142,11 +142,83 @@
       "role": "stdout",
       "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
       "size_bytes": 32,
-      "task_key": "go-vet"
+      "task_key": "deps.go"
     },
     {
       "decoder": null,
       "id": "0195f3a0-0000-7000-8000-000000000516",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "b2dc726d2aaf6a7480723829b0d24e769b6c1727935a4de86ad4a1311c50658d",
+      "size_bytes": 152,
+      "task_key": "deps.go"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000518",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "d03272385be3935eb23249110fb03dad51fc10451492dbac51de73ecef9f5ed2",
+      "size_bytes": 116,
+      "task_key": "deps.go"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000051c",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "deps.go.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000051e",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "2ff58078eb7c706b11aa839c286a5f16886c29083e1d094a49415b0fb1f0113b",
+      "size_bytes": 111,
+      "task_key": "deps.go.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000520",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "deps.go.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000524",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "deps.go.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000526",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "8ebc58eab026def3c7f211b05555f86327f95bdf178880cc45948dfef39ffe60",
+      "size_bytes": 44,
+      "task_key": "deps.go.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000052a",
+      "media_type": "text/plain",
+      "role": "stdout",
+      "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
+      "size_bytes": 32,
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000052c",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "aa6bffa862888ccc9390067c138809fc32c01173bc6f3ebc5942b87dafc4d734",
@@ -155,7 +227,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000518",
+      "id": "0195f3a0-0000-7000-8000-00000000052e",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "8e5787da2db5f5eddea3953d4026e5d8d572ca0dcde653173be66d47d4057fd2",
@@ -164,7 +236,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-00000000051a",
+      "id": "0195f3a0-0000-7000-8000-000000000530",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -173,7 +245,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-00000000051e",
+      "id": "0195f3a0-0000-7000-8000-000000000534",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
@@ -182,7 +254,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000520",
+      "id": "0195f3a0-0000-7000-8000-000000000536",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "cb75f384fd85b5bdabd7e758604aa735350393b0cb62e7495e06682892b33d8f",
@@ -191,7 +263,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000522",
+      "id": "0195f3a0-0000-7000-8000-000000000538",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "3ccb0911aca4513dd8004c88bd4bc213aa470e15db012cfe08688a9b311cfa4a",
@@ -200,7 +272,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000524",
+      "id": "0195f3a0-0000-7000-8000-00000000053a",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -209,7 +281,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000528",
+      "id": "0195f3a0-0000-7000-8000-00000000053e",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "a29205bd83967c2f70e6768fae009600038d6056499fa289de9d5f9b79beaef4",
@@ -218,7 +290,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-00000000052a",
+      "id": "0195f3a0-0000-7000-8000-000000000540",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -227,7 +299,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-00000000052e",
+      "id": "0195f3a0-0000-7000-8000-000000000544",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "53199309ddfb6ea7ecdc24c7731f535dc3d6bba2e8f053b895b78b967b84c534",
@@ -236,7 +308,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000530",
+      "id": "0195f3a0-0000-7000-8000-000000000546",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "1ec0246bca5d215b0838416d77cf2e0ae0151879d51bdc8802cc823fb8eaeb48",
@@ -245,7 +317,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000534",
+      "id": "0195f3a0-0000-7000-8000-00000000054a",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "53199309ddfb6ea7ecdc24c7731f535dc3d6bba2e8f053b895b78b967b84c534",
@@ -254,7 +326,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000536",
+      "id": "0195f3a0-0000-7000-8000-00000000054c",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "6b74f001b8c319d58fd8fa477f34ba1824f59b15a3d99a405e24e227bec52fb3",
@@ -263,7 +335,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-00000000053a",
+      "id": "0195f3a0-0000-7000-8000-000000000550",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "0818a3e891c9d6a4070fb66634783fc2577e0e27a5b2ff870e777a75e6aef4bb",
@@ -272,7 +344,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-00000000053e",
+      "id": "0195f3a0-0000-7000-8000-000000000554",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "55f4221aa0e36b70cbfc65ccc26728d31f6510eb1ead635badc007cdb5cd2bed",
@@ -281,7 +353,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000540",
+      "id": "0195f3a0-0000-7000-8000-000000000556",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "d28d60f3d8d59689726736a9bf691db00767456165b64ed57ea316074cf8924d",
@@ -290,7 +362,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000546",
+      "id": "0195f3a0-0000-7000-8000-00000000055c",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "c9fd9ccb6682c54b5fcb0363757b6c6873564e7c067f70b3b5581b611528b9f4",
@@ -299,7 +371,7 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000548",
+      "id": "0195f3a0-0000-7000-8000-00000000055e",
       "media_type": "text/plain",
       "role": "stdout",
       "sha256": "5a68577b15a92abaf20ded4f74948f63d7b4c801e1f8b52c797cae8a29b8eb4a",
@@ -349,7 +421,7 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "go-vet"
+      "task_key": "deps.go"
     },
     {
       "decoder": null,
@@ -358,7 +430,7 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "go-vet"
+      "task_key": "deps.go"
     },
     {
       "decoder": null,
@@ -367,16 +439,16 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "go-vet"
+      "task_key": "deps.go"
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-00000000051b",
+      "id": "0195f3a0-0000-7000-8000-00000000051d",
       "media_type": "text/plain",
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "go-vet"
+      "task_key": "deps.go.m01"
     },
     {
       "decoder": null,
@@ -385,25 +457,16 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "go-vet.m01"
+      "task_key": "deps.go.m01"
     },
     {
       "decoder": null,
       "id": "0195f3a0-0000-7000-8000-000000000521",
       "media_type": "text/plain",
       "role": "stderr",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "size_bytes": 0,
-      "task_key": "go-vet.m01"
-    },
-    {
-      "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000523",
-      "media_type": "text/plain",
-      "role": "stderr",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "size_bytes": 0,
-      "task_key": "go-vet.m01"
+      "sha256": "4524b46961969a896e597bfa8896909862ffea253df63b8195be33b50b04e32d",
+      "size_bytes": 156,
+      "task_key": "deps.go.m01"
     },
     {
       "decoder": null,
@@ -412,16 +475,16 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "go-vet.m01"
+      "task_key": "deps.go.m02"
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000529",
+      "id": "0195f3a0-0000-7000-8000-000000000527",
       "media_type": "text/plain",
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "go-vet.m02"
+      "task_key": "deps.go.m02"
     },
     {
       "decoder": null,
@@ -430,7 +493,16 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "go-vet.m02"
+      "task_key": "go-vet"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000052d",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet"
     },
     {
       "decoder": null,
@@ -439,7 +511,7 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "staticcheck"
+      "task_key": "go-vet"
     },
     {
       "decoder": null,
@@ -448,7 +520,7 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "staticcheck"
+      "task_key": "go-vet"
     },
     {
       "decoder": null,
@@ -457,7 +529,7 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "staticcheck.m01"
+      "task_key": "go-vet.m01"
     },
     {
       "decoder": null,
@@ -466,7 +538,16 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "staticcheck.m01"
+      "task_key": "go-vet.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000539",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "go-vet.m01"
     },
     {
       "decoder": null,
@@ -475,7 +556,7 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "staticcheck.m02"
+      "task_key": "go-vet.m01"
     },
     {
       "decoder": null,
@@ -484,7 +565,7 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "lizard"
+      "task_key": "go-vet.m02"
     },
     {
       "decoder": null,
@@ -493,7 +574,16 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
-      "task_key": "lizard"
+      "task_key": "go-vet.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000545",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "staticcheck"
     },
     {
       "decoder": null,
@@ -502,11 +592,65 @@
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
+      "task_key": "staticcheck"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000054b",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "staticcheck.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000054d",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "staticcheck.m01"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000551",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "staticcheck.m02"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000555",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "lizard"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-000000000557",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "task_key": "lizard"
+    },
+    {
+      "decoder": null,
+      "id": "0195f3a0-0000-7000-8000-00000000055d",
+      "media_type": "text/plain",
+      "role": "stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
       "task_key": "gitleaks"
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000549",
+      "id": "0195f3a0-0000-7000-8000-00000000055f",
       "media_type": "text/plain",
       "role": "stderr",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -532,8 +676,35 @@
       "task_key": "docs.discover"
     },
     {
+      "decoder": "application/vnd.codeye.dependencies+json;schema_version=0.1;kind=dependencies",
+      "id": "0195f3a0-0000-7000-8000-00000000051a",
+      "media_type": "application/vnd.codeye.dependencies+json",
+      "role": "other",
+      "sha256": "5eb6ea88bc6bba3746ab683386c11658ec9cf8e2b6ffb7e261f17fd6fbddbf05",
+      "size_bytes": 590,
+      "task_key": "deps.go"
+    },
+    {
+      "decoder": "application/vnd.codeye.dependencies+json;schema_version=0.1;kind=dependencies",
+      "id": "0195f3a0-0000-7000-8000-000000000522",
+      "media_type": "application/vnd.codeye.dependencies+json",
+      "role": "other",
+      "sha256": "970617e302339b2315d2cf52a6d3205d2a20a5689307b0511b6af2e557731af9",
+      "size_bytes": 618,
+      "task_key": "deps.go.m01"
+    },
+    {
+      "decoder": "application/vnd.codeye.dependencies+json;schema_version=0.1;kind=dependencies",
+      "id": "0195f3a0-0000-7000-8000-000000000528",
+      "media_type": "application/vnd.codeye.dependencies+json",
+      "role": "other",
+      "sha256": "d9e7058fcb668518d1e349b8769dae92fafc28f11e3d6e70e8d8f4c1dbe8ae03",
+      "size_bytes": 613,
+      "task_key": "deps.go.m02"
+    },
+    {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
-      "id": "0195f3a0-0000-7000-8000-00000000054c",
+      "id": "0195f3a0-0000-7000-8000-000000000562",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
       "sha256": "9b61f7da90fc86c8f4be14381e89e789879208cb3aeea670fc66d1ef9e46a637",
@@ -542,7 +713,7 @@
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
-      "id": "0195f3a0-0000-7000-8000-00000000054e",
+      "id": "0195f3a0-0000-7000-8000-000000000564",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
       "sha256": "63a59cca268c817cf292534145a6c06c6c18c046eaa25ade78502529c0312d7e",
@@ -551,7 +722,7 @@
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
-      "id": "0195f3a0-0000-7000-8000-000000000550",
+      "id": "0195f3a0-0000-7000-8000-000000000566",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
       "sha256": "1955cffd011417714ccb34a320d8aa51d35eeefcf6a83800103e0eff60531cae",
@@ -560,7 +731,7 @@
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
-      "id": "0195f3a0-0000-7000-8000-000000000552",
+      "id": "0195f3a0-0000-7000-8000-000000000568",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
       "sha256": "c46701518af1e8b5c57fdc1d9dca9fc1dd1c0f61b688864352a7ffb9426de0d6",
@@ -569,7 +740,7 @@
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
-      "id": "0195f3a0-0000-7000-8000-000000000554",
+      "id": "0195f3a0-0000-7000-8000-00000000056a",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
       "sha256": "eb32dbc4688a24f76c4321e71a70099d5f478cfb14c1d8133939eefd85c72461",
@@ -587,9 +758,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "8eaeb7218ecfa65b38a9e4b1d0f683e45579fbc4d6a2baad8fa8d0159222121b",
+    "input_digest": "9d4dc4dd88b2bda63b57fa0b96141b95d1444a236ab05411dd487e1755f7eb9e",
     "result_manifest_artifact_id": null,
-    "version": "6"
+    "version": "7"
   },
   "code_review": {
     "accepted_calls": 5,
@@ -1269,6 +1440,71 @@
         "version": "2026.2.2"
       }
     ],
+    "dependencies": [
+      {
+        "cache_kind": "shared",
+        "declared": 2,
+        "ecosystem": "go",
+        "failed": 0,
+        "failed_items": [],
+        "limitations": [],
+        "lockfile": null,
+        "manager": "go",
+        "manager_version": "go1.27.4",
+        "module": "go:.",
+        "path": ".",
+        "pinned": true,
+        "prepared": 2,
+        "reason": null,
+        "result": "accepted",
+        "state": "prepared",
+        "task_key": "deps.go",
+        "task_reason": null,
+        "task_status": "succeeded"
+      },
+      {
+        "cache_kind": "shared",
+        "declared": null,
+        "ecosystem": "go",
+        "failed": 0,
+        "failed_items": [],
+        "limitations": [],
+        "lockfile": null,
+        "manager": "go",
+        "manager_version": "go1.27.4",
+        "module": "go:svc/a",
+        "path": "svc/a",
+        "pinned": true,
+        "prepared": 0,
+        "reason": "registry_unreachable",
+        "result": "accepted",
+        "state": "failed",
+        "task_key": "deps.go.m01",
+        "task_reason": "registry_unreachable",
+        "task_status": "failed"
+      },
+      {
+        "cache_kind": "none",
+        "declared": 0,
+        "ecosystem": "go",
+        "failed": 0,
+        "failed_items": [],
+        "limitations": [],
+        "lockfile": null,
+        "manager": "go",
+        "manager_version": "go1.27.4",
+        "module": "go:svc/b",
+        "path": "svc/b",
+        "pinned": true,
+        "prepared": 0,
+        "reason": "no_dependencies",
+        "result": "accepted",
+        "state": "skipped",
+        "task_key": "deps.go.m02",
+        "task_reason": "no_dependencies",
+        "task_status": "skipped_policy"
+      }
+    ],
     "discovery": "accepted",
     "evidence": [
       {
@@ -1379,12 +1615,18 @@
       }
     ],
     "stage": {
-      "counts": {},
-      "reasons": [],
+      "counts": {
+        "failed": 1,
+        "skipped_policy": 1
+      },
+      "reasons": [
+        "no_dependencies",
+        "registry_unreachable"
+      ],
       "stage": "environment",
-      "state": "succeeded",
-      "succeeded": 2,
-      "tasks": 2
+      "state": "partial",
+      "succeeded": 3,
+      "tasks": 5
     },
     "verdicts": [
       {
@@ -1411,6 +1653,229 @@
     ]
   },
   "executions": [
+    {
+      "argv": [
+        "go",
+        "mod",
+        "download",
+        "-json",
+        "-modfile=$SCRATCH/deps/deps.go.m01/modfile/go.mod"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:00:31Z",
+      "env_keys": [
+        "GOMODCACHE",
+        "GOPROXY",
+        "PATH"
+      ],
+      "exit_code": 1,
+      "id": "deps.go.m01/go.download",
+      "name": "go.download",
+      "reason": null,
+      "started_at": "2026-11-18T00:00:30Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000521",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000520",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000051b/1",
+      "task_key": "deps.go.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "mod",
+        "edit",
+        "-json",
+        "$SCRATCH/deps/deps.go.m01/modfile/go.mod"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:00:31Z",
+      "env_keys": [
+        "GOMODCACHE",
+        "GOPROXY",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "deps.go.m01/go.modedit",
+      "name": "go.modedit",
+      "reason": null,
+      "started_at": "2026-11-18T00:00:30Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000051f",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000051e",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000051b/1",
+      "task_key": "deps.go.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:00:31Z",
+      "env_keys": [
+        "GOMODCACHE",
+        "GOPROXY",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "deps.go.m01/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:00:30Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000051d",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000051c",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000051b/1",
+      "task_key": "deps.go.m01"
+    },
+    {
+      "argv": [
+        "go",
+        "mod",
+        "edit",
+        "-json",
+        "$SCRATCH/deps/deps.go.m02/modfile/go.mod"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:00:31Z",
+      "env_keys": [
+        "GOMODCACHE",
+        "GOPROXY",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "deps.go.m02/go.modedit",
+      "name": "go.modedit",
+      "reason": null,
+      "started_at": "2026-11-18T00:00:30Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000527",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000526",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000523/1",
+      "task_key": "deps.go.m02"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:00:31Z",
+      "env_keys": [
+        "GOMODCACHE",
+        "GOPROXY",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "deps.go.m02/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:00:30Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000525",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000524",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000523/1",
+      "task_key": "deps.go.m02"
+    },
+    {
+      "argv": [
+        "go",
+        "mod",
+        "download",
+        "-json",
+        "-modfile=$SCRATCH/deps/deps.go/modfile/go.mod"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:00:31Z",
+      "env_keys": [
+        "GOMODCACHE",
+        "GOPROXY",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "deps.go/go.download",
+      "name": "go.download",
+      "reason": null,
+      "started_at": "2026-11-18T00:00:30Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000519",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000518",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000513/1",
+      "task_key": "deps.go"
+    },
+    {
+      "argv": [
+        "go",
+        "mod",
+        "edit",
+        "-json",
+        "$SCRATCH/deps/deps.go/modfile/go.mod"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:00:31Z",
+      "env_keys": [
+        "GOMODCACHE",
+        "GOPROXY",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "deps.go/go.modedit",
+      "name": "go.modedit",
+      "reason": null,
+      "started_at": "2026-11-18T00:00:30Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000517",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000516",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000513/1",
+      "task_key": "deps.go"
+    },
+    {
+      "argv": [
+        "go",
+        "version"
+      ],
+      "cleanup": "confirmed",
+      "cwd": ".",
+      "ended_at": "2026-11-18T00:00:31Z",
+      "env_keys": [
+        "GOMODCACHE",
+        "GOPROXY",
+        "PATH"
+      ],
+      "exit_code": 0,
+      "id": "deps.go/go.version",
+      "name": "go.version",
+      "reason": null,
+      "started_at": "2026-11-18T00:00:30Z",
+      "status": "exited",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000515",
+      "stderr_truncated": false,
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000514",
+      "stdout_truncated": false,
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000513/1",
+      "task_key": "deps.go"
+    },
     {
       "argv": [
         "gitleaks",
@@ -1529,11 +1994,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000549",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000055f",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000548",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000055e",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000545/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000055b/1",
       "task_key": "gitleaks"
     },
     {
@@ -1554,11 +2019,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000547",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000055d",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000546",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000055c",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000545/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000055b/1",
       "task_key": "gitleaks"
     },
     {
@@ -1582,11 +2047,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000523",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000539",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000522",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000538",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000051d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000533/1",
       "task_key": "go-vet.m01"
     },
     {
@@ -1609,11 +2074,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000521",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000537",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000520",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000536",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000051d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000533/1",
       "task_key": "go-vet.m01"
     },
     {
@@ -1634,11 +2099,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000051f",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000535",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000051e",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000534",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000051d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000533/1",
       "task_key": "go-vet.m01"
     },
     {
@@ -1661,11 +2126,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000525",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000053b",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000524",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000053a",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000051d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000533/1",
       "task_key": "go-vet.m01"
     },
     {
@@ -1688,11 +2153,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000052b",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000541",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000052a",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000540",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000527/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000053d/1",
       "task_key": "go-vet.m02"
     },
     {
@@ -1713,11 +2178,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000529",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000053f",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000528",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000053e",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000527/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000053d/1",
       "task_key": "go-vet.m02"
     },
     {
@@ -1741,11 +2206,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000519",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000052f",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000518",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000052e",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000513/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000529/1",
       "task_key": "go-vet"
     },
     {
@@ -1768,11 +2233,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000517",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000052d",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000516",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000052c",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000513/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000529/1",
       "task_key": "go-vet"
     },
     {
@@ -1793,11 +2258,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000515",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000052b",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000514",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000052a",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000513/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000529/1",
       "task_key": "go-vet"
     },
     {
@@ -1820,11 +2285,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000051b",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000531",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000051a",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000530",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000513/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000529/1",
       "task_key": "go-vet"
     },
     {
@@ -1845,11 +2310,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000541",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000557",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000540",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000556",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000053d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000553/1",
       "task_key": "lizard"
     },
     {
@@ -1870,11 +2335,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000053f",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000555",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000053e",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000554",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000053d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000553/1",
       "task_key": "lizard"
     },
     {
@@ -1895,11 +2360,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000537",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000054d",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000536",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000054c",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000533/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000549/1",
       "task_key": "staticcheck.m01"
     },
     {
@@ -1920,11 +2385,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000535",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000054b",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000534",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000054a",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000533/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000549/1",
       "task_key": "staticcheck.m01"
     },
     {
@@ -1945,11 +2410,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000053b",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000551",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000053a",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000550",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000539/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000054f/1",
       "task_key": "staticcheck.m02"
     },
     {
@@ -1970,11 +2435,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000531",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000547",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000530",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000546",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000052d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000543/1",
       "task_key": "staticcheck"
     },
     {
@@ -1995,11 +2460,11 @@
       "reason": null,
       "started_at": "2026-11-18T00:01:00Z",
       "status": "exited",
-      "stderr_artifact_id": "0195f3a0-0000-7000-8000-00000000052f",
+      "stderr_artifact_id": "0195f3a0-0000-7000-8000-000000000545",
       "stderr_truncated": false,
-      "stdout_artifact_id": "0195f3a0-0000-7000-8000-00000000052e",
+      "stdout_artifact_id": "0195f3a0-0000-7000-8000-000000000544",
       "stdout_truncated": false,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000052d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000543/1",
       "task_key": "staticcheck"
     }
   ],
@@ -2244,11 +2709,11 @@
           }
         },
         {
-          "artifact_id": "0195f3a0-0000-7000-8000-000000000530",
+          "artifact_id": "0195f3a0-0000-7000-8000-000000000546",
           "description": "도구 출력 stream의 원시 진단(레코드 순번과 byte 범위로 위치 지정).",
           "id": "ev_26c8b6f61cb6312d0fb3_tool",
           "kind": "tool",
-          "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000052d/1"
+          "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000543/1"
         }
       ],
       "fingerprint": "fp2:02a6f3434d22c8bb1dd98a39eb18abcffc5356419db7c8a6273d3f2f7f46adb9",
@@ -2331,11 +2796,11 @@
           }
         },
         {
-          "artifact_id": "0195f3a0-0000-7000-8000-000000000536",
+          "artifact_id": "0195f3a0-0000-7000-8000-00000000054c",
           "description": "도구 출력 stream의 원시 진단(레코드 순번과 byte 범위로 위치 지정).",
           "id": "ev_ce1cfe93957ba57dbc4e_tool",
           "kind": "tool",
-          "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000533/1"
+          "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000549/1"
         }
       ],
       "fingerprint": "fp2:cc4795a3cedf8a1bdd4f19b7eee423e734c0b2742072c6c29a9a2e3991cba28b",
@@ -2418,11 +2883,11 @@
           }
         },
         {
-          "artifact_id": "0195f3a0-0000-7000-8000-000000000548",
+          "artifact_id": "0195f3a0-0000-7000-8000-00000000055e",
           "description": "도구 출력 stream의 원시 진단(레코드 순번과 byte 범위로 위치 지정).",
           "id": "ev_5d7b53aeeecc5810853b_tool",
           "kind": "tool",
-          "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000545/1"
+          "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000055b/1"
         }
       ],
       "fingerprint": "fp2:ff7dd6a5c7453f3ee9fadd5069fd331f4fd10b5b59e148903f804af52952e416",
@@ -2470,6 +2935,12 @@
     }
   ],
   "gaps": [
+    {
+      "code": "dependencies_not_prepared",
+      "detail": "registry_unreachable",
+      "section": "environment",
+      "subject": "deps.go.m01"
+    },
     {
       "code": "document_budget_exceeded",
       "detail": "document_too_large",
@@ -2574,7 +3045,7 @@
       "location_state": "resolved",
       "raw_message": "secret detected by gitleaks rule generic-api-key (value withheld)",
       "raw_ref": {
-        "artifact_id": "0195f3a0-0000-7000-8000-000000000548",
+        "artifact_id": "0195f3a0-0000-7000-8000-00000000055e",
         "byte_end": 101,
         "byte_start": 0,
         "json_pointer": "",
@@ -2584,7 +3055,7 @@
       "raw_severity": null,
       "rule_id": "generic-api-key",
       "suggested_fix_count": 0,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000545/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000055b/1",
       "task_key": "gitleaks",
       "tool": "any.gitleaks",
       "tool_version": "8.30.1"
@@ -2611,7 +3082,7 @@
       },
       "raw_message": "Forward(...) at gateway.go:10: CCN 17 (synthetic example)",
       "raw_ref": {
-        "artifact_id": "0195f3a0-0000-7000-8000-000000000540",
+        "artifact_id": "0195f3a0-0000-7000-8000-000000000556",
         "byte_end": 95,
         "byte_start": 0,
         "json_pointer": "",
@@ -2621,7 +3092,7 @@
       "raw_severity": null,
       "rule_id": "cyclomatic_complexity",
       "suggested_fix_count": 0,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000053d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000553/1",
       "task_key": "lizard",
       "tool": "any.lizard",
       "tool_version": "1.26.1"
@@ -2642,7 +3113,7 @@
       "location_state": "resolved",
       "raw_message": "this value of err is overwritten before the previous attempt's error is logged (synthetic example)",
       "raw_ref": {
-        "artifact_id": "0195f3a0-0000-7000-8000-000000000530",
+        "artifact_id": "0195f3a0-0000-7000-8000-000000000546",
         "byte_end": 121,
         "byte_start": 0,
         "json_pointer": "",
@@ -2652,7 +3123,7 @@
       "raw_severity": null,
       "rule_id": "SA4006",
       "suggested_fix_count": 0,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-00000000052d/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000543/1",
       "task_key": "staticcheck",
       "tool": "go.staticcheck",
       "tool_version": "2026.2.2"
@@ -2673,7 +3144,7 @@
       "location_state": "resolved",
       "raw_message": "should use strings.EqualFold instead (synthetic example)",
       "raw_ref": {
-        "artifact_id": "0195f3a0-0000-7000-8000-000000000536",
+        "artifact_id": "0195f3a0-0000-7000-8000-00000000054c",
         "byte_end": 86,
         "byte_start": 0,
         "json_pointer": "",
@@ -2683,7 +3154,7 @@
       "raw_severity": null,
       "rule_id": "SA6005",
       "suggested_fix_count": 0,
-      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000533/1",
+      "task_execution_id": "0195f3a0-0000-7000-8000-000000000502/0195f3a0-0000-7000-8000-000000000549/1",
       "task_key": "staticcheck.m01",
       "tool": "go.staticcheck",
       "tool_version": "2026.2.2"
@@ -2723,13 +3194,15 @@
       },
       {
         "code": "analysis_gaps",
-        "count": 6,
+        "count": 7,
         "section": "gaps"
       }
     ],
     "sections": [
       {
         "counts": {
+          "dependencies": 3,
+          "dependencies_prepared": 1,
           "mismatch": 1,
           "modules": 3,
           "notes": 1,
@@ -2738,7 +3211,7 @@
           "unknown": 0
         },
         "key": "environment",
-        "state": "succeeded"
+        "state": "partial"
       },
       {
         "counts": {
@@ -2798,7 +3271,7 @@
       },
       {
         "counts": {
-          "gaps": 6
+          "gaps": 7
         },
         "key": "gaps",
         "state": null
@@ -3110,6 +3583,27 @@
   },
   "tasks": [
     {
+      "id": "0195f3a0-0000-7000-8000-000000000513",
+      "key": "deps.go",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000051b",
+      "key": "deps.go.m01",
+      "reason": "registry_unreachable",
+      "required_for_verdict": false,
+      "status": "failed"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000523",
+      "key": "deps.go.m02",
+      "reason": "no_dependencies",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
       "id": "0195f3a0-0000-7000-8000-000000000511",
       "key": "docs.discover",
       "reason": null,
@@ -3124,98 +3618,98 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000545",
+      "id": "0195f3a0-0000-7000-8000-00000000055b",
       "key": "gitleaks",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000513",
+      "id": "0195f3a0-0000-7000-8000-000000000529",
       "key": "go-vet",
       "reason": null,
       "required_for_verdict": true,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000051d",
+      "id": "0195f3a0-0000-7000-8000-000000000533",
       "key": "go-vet.m01",
       "reason": null,
       "required_for_verdict": true,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000527",
+      "id": "0195f3a0-0000-7000-8000-00000000053d",
       "key": "go-vet.m02",
       "reason": "toolchain_unavailable",
       "required_for_verdict": true,
       "status": "failed"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000543",
+      "id": "0195f3a0-0000-7000-8000-000000000559",
       "key": "jscpd",
       "reason": "toolchain_not_configured",
       "required_for_verdict": false,
       "status": "unsupported"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000053d",
+      "id": "0195f3a0-0000-7000-8000-000000000553",
       "key": "lizard",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000054d",
+      "id": "0195f3a0-0000-7000-8000-000000000563",
       "key": "review.documents",
       "reason": null,
       "required_for_verdict": true,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000054b",
+      "id": "0195f3a0-0000-7000-8000-000000000561",
       "key": "review.environment",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000551",
+      "id": "0195f3a0-0000-7000-8000-000000000567",
       "key": "review.interpret",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000054f",
+      "id": "0195f3a0-0000-7000-8000-000000000565",
       "key": "review.investigate",
       "reason": null,
       "required_for_verdict": true,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000553",
+      "id": "0195f3a0-0000-7000-8000-000000000569",
       "key": "review.verify",
       "reason": null,
       "required_for_verdict": true,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000052d",
+      "id": "0195f3a0-0000-7000-8000-000000000543",
       "key": "staticcheck",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000533",
+      "id": "0195f3a0-0000-7000-8000-000000000549",
       "key": "staticcheck.m01",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000539",
+      "id": "0195f3a0-0000-7000-8000-00000000054f",
       "key": "staticcheck.m02",
       "reason": "toolchain_unavailable",
       "required_for_verdict": false,

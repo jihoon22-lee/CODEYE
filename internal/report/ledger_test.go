@@ -184,3 +184,26 @@ func TestLedgerValidation(t *testing.T) {
 		t.Fatal("builder-5 report with a call task_key accepted")
 	}
 }
+
+// A listed call that was never sent (no request digest: model not
+// configured) is not one the ledger's call count has to cover.
+func TestLedgerCountsOnlySentCalls(t *testing.T) {
+	r := clone(t, sliceExample(t))
+	sent := 0
+	for i := range r.Coverage.ReviewCalls {
+		if i%2 == 0 {
+			r.Coverage.ReviewCalls[i].RequestDigest = ""
+		} else {
+			sent++
+		}
+	}
+	r.CodeReview.Ledger.CallsUsed = &sent
+	if err := ValidateReport(r); err != nil {
+		t.Fatalf("unsent calls counted: %v", err)
+	}
+	fewer := sent - 1
+	r.CodeReview.Ledger.CallsUsed = &fewer
+	if err := ValidateReport(r); err == nil {
+		t.Fatal("fewer calls than the sent ones accepted")
+	}
+}

@@ -37,6 +37,10 @@ func (l Layout) LogFile(role string) string {
 }
 func (l Layout) recordFile(role string) string { return filepath.Join(l.RunDir(), role+".json") }
 
+// DependencyCacheDir is the default shared dependency cache. It is outside
+// the agent directory so a re-enrolled agent keeps what was fetched.
+func (l Layout) DependencyCacheDir() string { return filepath.Join(l.Root, "cache", "deps") }
+
 // AgentNodeFile is the agent's enrolled identity (it also holds the node
 // secret; only node_id is ever read here).
 func (l Layout) AgentNodeFile() string { return filepath.Join(l.AgentDir(), "node.json") }

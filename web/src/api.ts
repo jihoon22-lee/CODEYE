@@ -32,8 +32,9 @@ export type Source =
   // branch absent: the repository's default branch, resolved at each acquisition.
   | { kind: 'git'; provider_id: string; repository_url: string; branch?: string };
 
-// A project's own analysis choices; personal-mode nodes follow them.
-export type AnalysisChoices = { send_source_to_model: boolean; run_build_scripts: boolean };
+// A project's own analysis choices; personal-mode nodes follow them. fetch_dependencies:
+// fetch the third-party dependencies the modules declare before the analyzers run.
+export type AnalysisChoices = { send_source_to_model: boolean; run_build_scripts: boolean; fetch_dependencies: boolean };
 
 export type Project = {
   id: string;
@@ -419,7 +420,8 @@ function parseProject(v: unknown): Project {
 }
 function parseChoices(v: unknown): AnalysisChoices {
   const o = rec(v);
-  return { send_source_to_model: bool(o.send_source_to_model), run_build_scripts: bool(o.run_build_scripts) };
+  // Older servers and stored records do not send fetch_dependencies: absent means on.
+  return { send_source_to_model: bool(o.send_source_to_model), run_build_scripts: bool(o.run_build_scripts), fetch_dependencies: o.fetch_dependencies == null ? true : bool(o.fetch_dependencies) };
 }
 function optionalStr(v: unknown): string | null {
   return typeof v === 'string' && v !== '' ? v : null;

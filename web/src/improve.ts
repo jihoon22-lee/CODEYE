@@ -14,9 +14,14 @@ const taskOf = (subject: string) => subject.replace(/\.m\d+$/, '');
 const toolOf = (subject: string) => TOOL_OF[taskOf(subject)] ?? taskOf(subject);
 
 const MISSING_TOOL = new Set(['tool_not_configured', 'tool_unavailable']);
+// A dependency task (deps.go, deps.go.m02) names its ecosystem second.
+const ecosystemOf = (subject: string) => taskOf(subject).split('.')[1] ?? taskOf(subject);
+// A reason may carry a detail after a colon.
+const codeOf = (detail: string) => detail.split(':')[0];
 
 // improvementHints turns a report's gaps into the few actions that would fill them: install a
-// missing tool, set a model key, raise the call ceiling, or turn on a project choice. Gaps
+// missing tool or package manager, set a model key, raise the call ceiling, reach the
+// dependency registry, or turn on a project choice or node switch. Gaps
 // without a known remedy are left to the report's own gap list.
 export function improvementHints(gaps: Gap[], setup: Setup | null, project: Project): Hint[] {
   const out: Hint[] = [];
@@ -24,6 +29,7 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
   const push = (h: Hint) => { if (!seen.has(h.key)) { seen.add(h.key); out.push(h); } };
   const personal = setup?.mode === 'personal';
   const blocked: string[] = [];
+  const unresolved: string[] = [];
   let sourceWithheld = false;
   for (const g of gaps) {
     const detail = g.detail ?? '';
@@ -41,6 +47,15 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
       if (!blocked.includes(taskOf(g.subject))) blocked.push(taskOf(g.subject));
     } else if (detail === 'model_source_not_approved') {
       sourceWithheld = true;
+    } else if (g.code === 'dependencies_not_fetched' && g.subject) {
+      if (!unresolved.includes(taskOf(g.subject))) unresolved.push(taskOf(g.subject));
+    } else if (g.code === 'dependencies_not_prepared' && codeOf(detail) === 'package_manager_not_configured' && g.subject) {
+      // The same key as a missing analyzer tool of that name, so installing go is said once.
+      const name = ecosystemOf(g.subject);
+      const tool = setup?.tools?.tools.find(x => x.name === name);
+      push({ key: `tool:${name}`, text: tool?.hint ? t.improve.tool(name, tool.hint) : t.improve.packageManager(name) });
+    } else if (g.code === 'dependencies_not_prepared' && codeOf(detail) === 'registry_unreachable') {
+      push({ key: 'dependency_registry', text: t.improve.registry });
     }
   }
   if (blocked.length > 0) {
@@ -50,6 +65,18 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
       push({ key: 'build_scripts', text: t.improve.buildScripts(tasks), turnOn: 'run_build_scripts' });
     } else if (!personal) {
       push({ key: 'build_scripts', text: t.improve.operatorGrant(tasks) });
+    }
+  }
+  if (unresolved.length > 0) {
+    const tasks = unresolved.join(', ');
+    // Personal mode: the project's choice, or (when it is on) the node switch in the
+    // configuration. Elsewhere the node operator starts the agent with fetching on.
+    if (personal && project.analysis && !project.analysis.fetch_dependencies) {
+      push({ key: 'fetch_dependencies', text: t.improve.fetchDependencies(tasks), turnOn: 'fetch_dependencies' });
+    } else if (personal) {
+      push({ key: 'fetch_dependencies', text: t.improve.dependencySwitch(tasks) });
+    } else {
+      push({ key: 'fetch_dependencies', text: t.improve.dependencyOperator(tasks) });
     }
   }
   if (sourceWithheld && personal && project.analysis && !project.analysis.send_source_to_model) {

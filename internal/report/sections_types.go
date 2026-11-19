@@ -135,11 +135,44 @@ type EnvironmentSection struct {
 	Observed      []EnvObserved     `json:"observed"`
 	Verdicts      []EnvVerdict      `json:"verdicts"`
 	AnalyzerTools []EnvAnalyzerTool `json:"analyzer_tools"`
-	Limitations   []string          `json:"limitations"`
+	// Dependencies are the run's dependency tasks (deps.*) in key order;
+	// absent when none was planned (fetching was off).
+	Dependencies []EnvDependency `json:"dependencies,omitempty"`
+	Limitations  []string        `json:"limitations"`
 	// Model is the review.environment role; Notes are its accepted output.
 	Model    ModelInterpretation `json:"model"`
 	Notes    []EnvNote           `json:"notes"`
 	Evidence []SectionEvidence   `json:"evidence"`
+}
+
+// EnvDependency is one dependency task. The record fields are null when its
+// record did not reach the report (Result says why).
+type EnvDependency struct {
+	TaskKey        string                 `json:"task_key"`
+	TaskStatus     string                 `json:"task_status"`
+	TaskReason     *string                `json:"task_reason"`
+	Result         string                 `json:"result"`
+	Module         *string                `json:"module"`
+	Ecosystem      *string                `json:"ecosystem"`
+	Path           *string                `json:"path"`
+	Manager        *string                `json:"manager"`
+	ManagerVersion *string                `json:"manager_version"`
+	State          *string                `json:"state"`
+	Reason         *string                `json:"reason"`
+	Pinned         *bool                  `json:"pinned"`
+	Lockfile       *string                `json:"lockfile"`
+	Declared       *int                   `json:"declared"`
+	Prepared       *int                   `json:"prepared"`
+	Failed         *int                   `json:"failed"`
+	CacheKind      *string                `json:"cache_kind"`
+	FailedItems    []EnvDependencyFailure `json:"failed_items"`
+	Limitations    []string               `json:"limitations"`
+}
+
+// EnvDependencyFailure names one dependency that was not prepared.
+type EnvDependencyFailure struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
 }
 
 type EnvModule struct {

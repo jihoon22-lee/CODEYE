@@ -162,6 +162,19 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 
 분석기 계약과 도구별 규칙은 [분석기](ANALYZERS.md)에 있다. 실도구 시험은 도구 경로 환경변수가 있을 때만 실행하고, CI에서는 캡처한 실제 출력을 재생하는 시험이 같은 판정 경로를 검사한다([시험 실행 방법](#시험-실행-방법)).
 
+## 의존성 준비
+
+규칙은 [의존성 준비](ARCHITECTURE.md#의존성-준비)와 [Go 의존성 받기](ANALYZERS.md#go-의존성-받기)다. 받기 시험은 가짜 runner로 argv·환경·cwd를 고정해 확인하고, 실제 proxy에서 받는 시험은 `CODEYE_TEST_DEPS_NETWORK=1`일 때만 돈다.
+
+| TC | 조건 | 기대 결과 | 요구 |
+|---|---|---|---|
+| TC-194 | 계획: 선택 꺼짐·스위치 꺼짐·캐시 root 없음, 루트와 하위 모듈, 내부 handler가 `deps.` key를 계획, 팩 이름 `deps`. job: 스위치·선택·선택 없는 job의 조합(로컬·Git, 개인·서버 모드). 저장 선택: 필드 없음, `false`, 잘못된 값, 이전 strict reader | 꺼져 있으면 계획이 내부 계획과 같다. 켜져 있으면 `deps.go`·`deps.go.m01`이 분석기 앞에 오고 접미사가 go vet key와 같다. `deps.` key를 계획하는 내부 handler는 거부된다. `allow_dependency_fetch`는 스위치와 선택이 모두 켜졌을 때만 참이고 선택 없는 job은 켜짐이다. 필드는 꺼짐일 때만 저장되고 이전 reader가 켜짐 기록을 읽는다 | REQ-004,014; NFR-006 |
+| TC-195 | Go 받기(가짜 runner): argv·cwd·환경(`GOENV`·`GOWORK`·`GOTOOLCHAIN`·`GOFLAGS`·`GOVCS`·`GOPROXY`·`GOSUMDB`·`GOMODCACHE`), 운영자 캐시 seed, 운영자 `GOPROXY`(`direct`만이면 `off`)·`GOSUMDB`·`GOPRIVATE`, 운영자 캐시의 비공개 모듈, vendor·require 없음·snapshot 밖 `replace` | cwd는 실행 사본의 모듈 디렉터리이고 원본·snapshot이 아니다. `-modfile` 사본을 쓰고 원본·snapshot·실행 사본의 go.mod·go.sum은 그대로다. 기록에 절대 경로가 없다. 운영자 설정이 그대로 가고 비공개 모듈은 복사돼 `private_modules_seeded`다. 받을 것이 없으면 `skipped_policy`이고 환경 단계를 낮추지 않는다 | REQ-014,015; NFR-006 |
+| TC-196 | 받기 실패와 예산: proxy 연결 실패, proxy에 없는 모듈(일부만 받음), checksum 불일치, go.sum 사본 변경, toolchain 부족, 비공개 모듈(GOVCS), timeout, 정리 불확실, attempt 취소, 합계 예산 소진·공유, 크기 상한, cache 저장 영역 가득 참, `--go` 없음 | 각각 `registry_unreachable`, `module_not_on_proxy`(`partial`), `checksum_mismatch`, `go_sum_incomplete`, `toolchain_unavailable`, `private_module_not_fetched`, `timed_out`, `cleanup_uncertain`, `cancelled`, `dependency_budget_exhausted`, `download_limit_exceeded`, `dependency_cache_full`, `unsupported`/`package_manager_not_configured`로 끝나고 기록은 늘 남는다. 실행이 깨끗하지 않은 성공은 없다 | REQ-014; NFR-006 |
+| TC-197 | 분석기 연결: 실제 go vet이 기록 없음·`prepared`·`partial`·다른 run의 기록·`failed` 기록을 만난다. Staticcheck는 같은 함수를 쓴다 | 쓸 수 있는 기록(`prepared`·`partial`, 같은 snapshot·attempt·모듈)일 때만 `GOMODCACHE`가 받기 캐시이고 보호 경로가 되며 한계가 `dependencies_prepared`·`dependencies_partially_prepared`다. 그 밖에는 받기 이전과 같은 경로(`no_offline_module_cache`)다. `GOPROXY`는 늘 `off`다 | REQ-006,008,014 |
+| TC-198 | 보고서: 받은·일부만 받은·받을 것 없는 기록, 다른 attempt·다른 snapshot·상태가 다른·role이 다른·snapshot에 없는 lockfile 기록, 의존성 task 없는 run, 분석기가 `dependency_unavailable`인데 그 생태계 task가 없음, 버전 고정 안 됨, 장부의 보내지 않은 호출(`model_not_configured`), 예시(`examples/report.json`, `examples/dependencies.json`), 웹 표와 안내 | 수락한 기록은 환경 절 한 행이고 상태·판정·요약·한계를 바꾸지 않는다. 거부는 `artifact_rejected:<task>`와 `result_rejected` 행이다. 의존성 task가 없으면 필드와 종합 수가 없다. 공백은 `dependencies_not_prepared`(받을 것 없음 제외), `dependencies_not_fetched`, `dependency_versions_not_pinned`다. 장부는 보낸 호출만 센다. builder는 7이다. 웹은 표와 "의존성 받기" 켜기 안내를 보인다 | REQ-012,013; NFR-006 |
+| TC-199 | 실제 받기: `CODEYE_TEST_DEPS_NETWORK=1`에서 공개 proxy로 받고 실제 go vet이 그 캐시를 읽음. 개인 모드 종단(임시 설정·상태, 빈 Go 모듈 캐시, 모델 없음): 공개 Go 저장소를 받기 끔·켬으로, 의존성 있는 로컬 폴더, 닿지 않는 proxy, 받는 중 취소, 작은 크기 상한 | 받은 뒤 go vet이 성공하고 원본은 그대로이며 캐시는 일반 삭제로 지워진다. 종단 결과와 출력은 [변경 이력](../CHANGELOG.md)에 있다(수동 확인, CI 밖) | REQ-014,015 |
+
 ## 도구 탐지
 
 도구를 찾는 규칙은 [도구 찾기](ANALYZERS.md#도구-찾기)다. 시험은 임시 디렉터리에 만든 가짜 도구 트리(버전 명령에 답하는 셸 스크립트)로 하므로 이 머신에 무엇이 설치되어 있는지와 무관하다. 실제 머신 시험은 `CODEYE_TEST_REAL_TOOLS=all`(또는 쉼표로 나눈 도구 이름)을 줄 때만 돈다.
@@ -326,7 +339,7 @@ TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력
 | REQ-006,007,008 | ARCHITECTURE, ANALYZERS | TC-06,07,08 |
 | REQ-009,010,011 | REQUIREMENTS, REVIEW, ARCHITECTURE | TC-09,10,11,16 |
 | REQ-012,013 | ARCHITECTURE, REPORT | TC-12,13,15,130,134 |
-| REQ-014 | ARCHITECTURE, EXECUTION | TC-17,18 |
+| REQ-014 | ARCHITECTURE, EXECUTION | TC-17,18,189,191 |
 | REQ-016,017,034 | API, REPORT | TC-26,98,99 |
 | REQ-018,019 | ARCHITECTURE, EXECUTION | TC-21,24 |
 | REQ-020,021 | EXECUTION | TC-19,20 |
@@ -378,6 +391,7 @@ go test ./...
 | `CODEYE_TEST_CARGO`, `CODEYE_TEST_CLIPPY`, `CODEYE_TEST_TOOLPATH` | Rust 팩(`CODEYE_TEST_TOOLPATH`에 링커 `cc`) |
 | `CODEYE_TEST_LIZARD`, `CODEYE_TEST_JSCPD`, `CODEYE_TEST_GITLEAKS` | 구조·중복·비밀값 팩 |
 | `CODEYE_TEST_PG_BIN` | 백업·복원 시험의 `pg_dump` 위치(없으면 PATH) |
+| `CODEYE_TEST_DEPS_NETWORK=1` | 공개 Go proxy에서 실제로 받는 의존성 시험(TC-194). 네트워크가 필요하다 |
 | `CODEYE_TEST_OPENCODE_BIN`, `CODEYE_TEST_REVIEW_RELAY`, `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL` | 실모델 시험(`TestLive*`). 비용이 들며 명시적으로 하나씩 실행한다([모델 검토](REVIEW.md)) |
 
 ### 웹 시험

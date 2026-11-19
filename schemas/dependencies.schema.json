@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codeye.invalid/schemas/dependencies.schema.json",
+  "title": "CODEYE dependency record (application/vnd.codeye.dependencies+json 0.1)",
+  "description": "What one deps.* task prepared for one module (docs/ARCHITECTURE.md#의존성-준비). Written whatever the task status; the analyzers read it to find the dependency cache and the report shows it in the environment section. No absolute path and no time is recorded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "snapshot_manifest_digest", "run_id", "attempt_id", "task_key", "module", "manager", "lockfile", "pinned", "state", "reason", "task_status", "counts", "cache", "dropped_inputs", "failed_items", "limitations"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "dependencies"},
+    "snapshot_manifest_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "run_id": {"type": "string", "format": "uuid"},
+    "attempt_id": {"type": "string", "format": "uuid"},
+    "task_key": {"type": "string", "pattern": "^deps\\.(go|rust|javascript|python)(\\.m[0-9]{2,3})?$"},
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ecosystem", "path"],
+      "properties": {
+        "id": {"type": "string", "description": "<ecosystem>:<path>, the module ID of env.discover."},
+        "ecosystem": {"enum": ["go", "rust", "javascript", "python"]},
+        "path": {"type": "string", "minLength": 1, "description": "Snapshot-relative module directory, \".\" for the root."}
+      }
+    },
+    "manager": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+        "version": {"type": ["string", "null"], "minLength": 1, "maxLength": 128}
+      }
+    },
+    "lockfile": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Equals the snapshot manifest entry of path."}}}
+      ]
+    },
+    "pinned": {"type": "boolean", "description": "The lockfile fixes every version; false means the package manager chose versions this time."},
+    "state": {"enum": ["prepared", "partial", "failed", "skipped"]},
+    "reason": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+    "task_status": {"enum": ["succeeded", "failed", "timed_out", "cancelled", "unsupported", "skipped_policy", "budget_exhausted"]},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "prepared", "failed"],
+      "properties": {
+        "declared": {"type": ["integer", "null"], "minimum": 0, "description": "Modules or packages the package manager listed; null when it stopped before listing any."},
+        "prepared": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0}
+      }
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "key"],
+      "properties": {
+        "kind": {"enum": ["shared", "attempt", "none"]},
+        "key": {"type": ["string", "null"], "minLength": 1, "description": "Relative directory under the node's dependency cache root (go/mod for Go)."}
+      }
+    },
+    "dropped_inputs": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "reason"], "properties": {"path": {"type": "string", "minLength": 1}, "reason": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}}}},
+    "failed_items": {"type": "array", "maxItems": 50, "items": {"type": "object", "additionalProperties": false, "required": ["name", "reason"], "properties": {"name": {"type": "string", "minLength": 1, "maxLength": 512}, "reason": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}}}},
+    "limitations": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}}
+  },
+  "allOf": [
+    {"if": {"properties": {"task_status": {"const": "succeeded"}}}, "then": {"properties": {"state": {"const": "prepared"}, "reason": {"type": "null"}}}, "else": {"properties": {"state": {"not": {"const": "prepared"}}, "reason": {"type": "string"}}}},
+    {"if": {"properties": {"task_status": {"const": "skipped_policy"}}}, "then": {"properties": {"state": {"const": "skipped"}}}},
+    {"if": {"properties": {"cache": {"properties": {"kind": {"const": "shared"}}}}}, "then": {"properties": {"cache": {"properties": {"key": {"type": "string"}}}}}, "else": {"properties": {"cache": {"properties": {"key": {"type": "null"}}}}}}
+  ]
+}

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -88,5 +89,43 @@ func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
 	a.job.Analysis = &both
 	if j := ag.buildJob(&a); j.AllowModelReview || j.AllowRepositoryCode {
 		t.Fatal("server-mode node followed the project's choices")
+	}
+}
+
+// A proxy URL with a credential is a usage error that does not repeat it.
+func TestDependencyProxyCredentialRefused(t *testing.T) {
+	for _, cfg := range []Config{{GoProxy: "https://user:s3cret@proxy.example"}, {GoSumDB: "sum+k https://u:s3cret@sum.example"}} {
+		cfg.ControllerURL, cfg.StateDir, cfg.Workers, cfg.DependencyFetch = "http://127.0.0.1:1", t.TempDir(), 1, true
+		_, err := New(cfg)
+		var exit *ExitError
+		if !errors.As(err, &exit) || exit.Code != ExitUsage || strings.Contains(exit.Msg, "s3cret") {
+			t.Fatalf("credential proxy: %v", err)
+		}
+	}
+}
+
+// Fetching dependencies needs the operator's switch and the project's
+// choice, on every node; a job without choices keeps the default (on).
+func TestDependencyFetchNeedsSwitchAndChoice(t *testing.T) {
+	root := domain.NewID()
+	on, off := domain.AnalysisChoices{FetchDependencies: true}, domain.AnalysisChoices{SendSourceToModel: true}
+	for _, tc := range []struct {
+		fetch, policy bool
+		choices       *domain.AnalysisChoices
+		want          bool
+	}{
+		{true, true, &on, true}, {true, true, &off, false}, {true, true, nil, true},
+		{true, false, &on, true}, {true, false, &off, false}, {true, false, nil, true},
+		{false, true, &on, false}, {false, false, nil, false},
+	} {
+		ag := Agent{cfg: Config{SourceRoots: map[string]string{root: t.TempDir()}, DependencyFetch: tc.fetch, ProjectAnalysisPolicy: tc.policy}}
+		for _, kind := range []string{"local", "git"} {
+			a := activeAttempt{}
+			a.job.Source = nodeproto.JobSource{Kind: kind, SourceRootID: root}
+			a.job.Analysis = tc.choices
+			if j := ag.buildJob(&a); j.AllowDependencyFetch != tc.want {
+				t.Errorf("%s switch=%v policy=%v choices=%v: fetch %v", kind, tc.fetch, tc.policy, tc.choices, j.AllowDependencyFetch)
+			}
+		}
 	}
 }

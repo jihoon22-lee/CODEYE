@@ -33,10 +33,15 @@ type Job struct {
 	// docs/ANALYZERS.md#저장소-코드-실행-허가). Only node configuration and the job set it; nothing in
 	// the snapshot or its configuration can.
 	AllowRepositoryCode bool
-	RunID, AttemptID    string
-	Epoch               int64
-	Profile             string
-	Scope               domain.Scope
+	// AllowDependencyFetch lets the dependency tasks fetch the modules'
+	// third-party dependencies from their registries (the project's
+	// fetch_dependencies choice and the node operator's switch,
+	// docs/ARCHITECTURE.md#의존성-준비). Without it no dependency task is planned.
+	AllowDependencyFetch bool
+	RunID, AttemptID     string
+	Epoch                int64
+	Profile              string
+	Scope                domain.Scope
 	// Snapshot.SnapshotDir is read-only; Snapshot.WorkspaceDir is a fresh
 	// writable clone for this attempt. Snapshot.Digest is the manifest digest.
 	Snapshot source.Snapshot

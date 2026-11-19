@@ -9,6 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/deps/depdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
@@ -45,6 +46,8 @@ type taskState struct {
 	toolFindings []string
 	// scope is the accepted review scope artifact (review.scope).
 	scope *record.ScopeDoc
+	// dependencies is the accepted record of a deps.* task.
+	dependencies *depdoc.Record
 }
 
 // Build validates the input and produces the report. Every refusal wraps
@@ -221,6 +224,9 @@ func Build(in Input, reg *Registry) (Report, error) {
 				}
 				if c.Scope != nil {
 					st.scope = c.Scope
+				}
+				if c.Dependencies != nil {
+					st.dependencies = c.Dependencies
 				}
 				r.Observations = append(r.Observations, c.Observations...)
 				r.Findings = append(r.Findings, c.Findings...)

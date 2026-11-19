@@ -54,10 +54,14 @@ type Config struct {
 	// GoModCache is an optional absolute, operator-prepared offline module
 	// cache (read only for the tool). Empty means an empty per-task cache, so
 	// modules with dependencies fail as dependency_unavailable.
-	GoModCache  string
-	Timeout     time.Duration
-	StdoutLimit int64
-	StderrLimit int64
+	GoModCache string
+	// DependencyCacheRoot is the node's shared dependency cache. When a
+	// dependency task of the attempt prepared this module's dependencies
+	// there (its record says so), go vet reads that module cache instead.
+	DependencyCacheRoot string
+	Timeout             time.Duration
+	StdoutLimit         int64
+	StderrLimit         int64
 }
 
 // Handler implements analysis.Handler for go vet.
@@ -292,8 +296,11 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 			return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
 		}
 	}
-	modcache := h.modcache
-	if modcache == "" {
+	modcache, prepared, lim := h.moduleCache(job, pt.Key, HandlerName, pt.ModuleDir)
+	switch {
+	case prepared:
+		in.ExtraLimitations = append(in.ExtraLimitations, lim)
+	case modcache == "":
 		modcache = filepath.Join(dirs["gopath"], "pkg", "mod")
 		in.ExtraLimitations = append(in.ExtraLimitations, "no_offline_module_cache")
 	}
@@ -308,6 +315,9 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 	protected := []string{job.Snapshot.SnapshotDir}
 	if h.modcache != "" {
 		protected = append(protected, h.modcache)
+	}
+	if prepared {
+		protected = append(protected, modcache)
 	}
 	env := h.env(dirs["gocache"], dirs["gopath"], modcache)
 	if err := DisableTelemetry(env, filepath.Join(taskDir, "config")); err != nil {

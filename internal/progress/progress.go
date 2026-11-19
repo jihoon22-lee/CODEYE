@@ -350,7 +350,7 @@ func taskStage(key string, tasks []Task, fixed bool) Stage {
 			s.Succeeded++
 		} else {
 			s.Counts[string(t.Status)]++
-			if t.Status == domain.TaskSkippedPolicy && domain.NothingToReview(t.Reason) {
+			if t.Status == domain.TaskSkippedPolicy && domain.NothingToDo(t.Reason) {
 				nothing++
 			}
 		}

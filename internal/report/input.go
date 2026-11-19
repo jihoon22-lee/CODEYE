@@ -12,6 +12,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/deps/depdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -203,6 +204,9 @@ type Contribution struct {
 	// Scope is the accepted review scope artifact of review.scope; only the
 	// code review ledger reads it.
 	Scope *record.ScopeDoc
+	// Dependencies is the accepted record of a deps.* task; only the
+	// environment section reads it.
+	Dependencies *depdoc.Record
 }
 
 // AnalyzerIdentity is the decoded envelope identity of one analyzer task.
@@ -255,7 +259,7 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 // analyzer envelope, docs/ANALYZERS.md), snapshot-bound review records and
 // discovery documents.
 func DefaultRegistry() *Registry {
-	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, RoleReviewDecoder{}, SliceReviewDecoder{}, ScopeDecoder{}, EnvironmentDecoder{})
+	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, RoleReviewDecoder{}, SliceReviewDecoder{}, ScopeDecoder{}, EnvironmentDecoder{}, DependenciesDecoder{})
 	if err != nil {
 		panic(err)
 	}
