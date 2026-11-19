@@ -109,8 +109,8 @@ func verifyJob(t *testing.T, docs bool) analysis.Job {
 	return analysis.Job{RunID: domain.NewID(), AttemptID: domain.NewID(), Epoch: 1, Snapshot: s, Scratch: t.TempDir(), Scope: domain.Scope{Kind: "full"}, AllowModelReview: true}
 }
 
-// leakCandidates is the scripted investigation path: one fact and n candidates citing
-// store.go, the declaration of Open.
+// leakCandidates scripts the context and investigate roles: one fact and n
+// candidates citing store.go, the declaration of Open.
 func leakCandidates(n int) func(int, opencode.Request) (opencode.Reply, bool) {
 	return func(_ int, q opencode.Request) (opencode.Reply, bool) {
 		var in sentInput

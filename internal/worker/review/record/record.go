@@ -75,7 +75,7 @@ type Usage struct {
 
 // Call is the provenance of one model request. It never holds the prompt,
 // raw output, private reasoning or credentials. Attempt/Outcome are absent in
-// older records, which still decode.
+// older records.
 type Call struct {
 	Role          string   `json:"role"`
 	Model         string   `json:"model"`
@@ -298,7 +298,7 @@ func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)
 	case domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.SHA256) || e.Start < 1 || e.End < e.Start:
 		return invalid("evidence location")
 	// Kinds follow the path rules of source.go: code is source of a review
-	// ecosystem (a Go test file stays acceptable as code, so older records still decode),
+	// ecosystem (a Go test file is also acceptable as code),
 	// test a test path and config a build manifest.
 	case e.End-e.Start+1 > 60 || (e.Kind == "code" && SourceEcosystem(e.Path) == "") ||
 		(e.Kind == "test" && SourceKind(e.Path) != "test") ||
