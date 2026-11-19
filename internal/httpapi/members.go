@@ -39,55 +39,31 @@ func (s *Server) listMembers(q *request) {
 	writeJSON(q.w, http.StatusOK, map[string]any{"items": items})
 }
 
-func decodeRole(q *request, withUsername bool) (domain.Role, string, bool) {
+func decodeRole(q *request) (domain.Role, bool) {
 	body, ok := q.readBody()
 	if !ok {
-		return "", "", false
+		return "", false
 	}
 	var in struct {
-		Username *string `json:"username"`
-		Role     string  `json:"role"`
+		Role string `json:"role"`
 	}
-	if domain.DecodeStrict(body, &in) != nil || (in.Username != nil) != withUsername {
-		msg := `body must be {"role": "manager"|"runner"|"viewer"}`
-		if withUsername {
-			msg = `body must be {"username": string, "role": "manager"|"runner"|"viewer"}`
-		}
-		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", msg, false)
-		return "", "", false
+	if domain.DecodeStrict(body, &in) != nil {
+		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", `body must be {"role": "manager"|"runner"|"viewer"}`, false)
+		return "", false
 	}
 	role := domain.Role(in.Role)
 	if !role.Valid() {
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "role must be manager, runner or viewer", false)
-		return "", "", false
+		return "", false
 	}
-	name := ""
-	if in.Username != nil {
-		name = *in.Username
-	}
-	return role, name, true
+	return role, true
 }
 
-// POST /projects/{id}/members {username, role}: add or change a member named
-// by username (a manager need not be an administrator to find colleagues).
-func (s *Server) addMember(q *request) {
-	role, name, ok := decodeRole(q, true)
-	if !ok {
-		return
-	}
-	ctx, cancel := q.ctx()
-	defer cancel()
-	m, err := s.store.AddMemberByUsername(ctx, q.session.UserID, q.params[0], name, role)
-	if err != nil {
-		s.storeError(q, err)
-		return
-	}
-	writeJSON(q.w, http.StatusOK, viewMember(m))
-}
-
-// PUT /projects/{id}/members/{user_id} {role}
+// PUT /projects/{id}/members/{user_id} {role}: add or change a member. The
+// user is named by ID only; there is no lookup by username, so no project
+// route tells whether a username exists.
 func (s *Server) putMember(q *request) {
-	role, _, ok := decodeRole(q, false)
+	role, ok := decodeRole(q)
 	if !ok {
 		return
 	}

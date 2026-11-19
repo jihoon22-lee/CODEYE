@@ -378,8 +378,8 @@ func TestMembersAndAuditReads(t *testing.T) {
 	if _, err := s.PutMember(ctx, owner, p.ID, viewer.ID, domain.RoleViewer); err != nil {
 		t.Fatal(err)
 	}
-	if m, err := s.AddMemberByUsername(ctx, owner, p.ID, "MANAGER", domain.RoleManager); err != nil || m.UserID != manager.ID {
-		t.Fatalf("by username: %+v %v", m, err)
+	if m, err := s.PutMember(ctx, owner, p.ID, manager.ID, domain.RoleManager); err != nil || m.UserID != manager.ID || m.Username == nil {
+		t.Fatalf("put manager: %+v %v", m, err)
 	}
 	for _, c := range []struct {
 		actor, user string
@@ -392,9 +392,6 @@ func TestMembersAndAuditReads(t *testing.T) {
 		if _, err := s.PutMember(ctx, c.actor, p.ID, c.user, domain.RoleRunner); !errors.Is(err, c.want) {
 			t.Fatalf("%v: %v", c, err)
 		}
-	}
-	if _, err := s.AddMemberByUsername(ctx, owner, p.ID, "nobody", domain.RoleViewer); !errors.Is(err, domain.ErrNotFound) {
-		t.Fatalf("unknown username: %v", err)
 	}
 	members, err := s.ListMembers(ctx, manager.ID, p.ID)
 	if err != nil || len(members) != 3 || members[0].Role != RoleOwner || members[1].Role != "manager" || members[2].Role != "viewer" {

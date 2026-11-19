@@ -57,7 +57,6 @@ type Store interface {
 	// Project membership (project managers).
 	ListMembers(ctx context.Context, actor, project string) ([]postgres.Member, error)
 	PutMember(ctx context.Context, actor, project, user string, role domain.Role) (postgres.Member, error)
-	AddMemberByUsername(ctx context.Context, actor, project, username string, role domain.Role) (postgres.Member, error)
 	RemoveMember(ctx context.Context, actor, project, user string) error
 	ListSourceRoots(ctx context.Context, actor string) ([]postgres.SourceRoot, error)
 	ListProviders(ctx context.Context, actor string) ([]postgres.Provider, error)

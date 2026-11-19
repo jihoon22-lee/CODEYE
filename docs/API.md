@@ -127,7 +127,7 @@
 | `GET /source-roots` | 세션 | 이 사용자에게 허가된 root의 `{id, label}`만. 서버 경로는 보이지 않는다. |
 | `GET /providers` | 세션 | `{id, kind(github·ghes), host}` |
 | `POST /projects`, `GET /projects`, `GET /projects/{id}` | 세션(+CSRF) | 등록 201+`Location`, 허가된 목록·상세. 항목마다 호출자의 `role`(`owner`·`manager`·`runner`·`viewer`), `can_run`, `can_manage` |
-| `GET/POST /projects/{id}/members`, `PUT/DELETE /projects/{id}/members/{uid}` | 소유자·manager | [구성원](#구성원) |
+| `GET /projects/{id}/members`, `PUT/DELETE /projects/{id}/members/{uid}` | 소유자·manager | [구성원](#구성원) |
 | `GET /projects/{id}/audit` | 소유자·manager | 그 프로젝트의 감사 기록([계정과 관리자](#계정과-관리자)) |
 | `/admin/…`, `GET /audit` | 관리자 | [계정과 관리자](#계정과-관리자) |
 | `POST /projects/{id}/runs` | 소유자·manager·runner | 202 `{id, status, version, url}`+`Location` |
@@ -324,6 +324,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `include_code` | `true`, `false` | `false`(코드 미포함) |
 
 - 다른 query parameter는 400이다. 프로젝트 구성원이 아니면 404이고, 권한은 요청마다 확인한다.
+- 성공한 요청마다 본문을 보내기 전에 `report.exported` 감사 행(형식, 코드 포함 여부, run·revision)을 쓰고, 쓰지 못하면 503이다. 웹 화면의 보고서 조회도 이 경로(JSON, 코드 포함)를 쓰므로 볼 때마다 행이 남는다([결정](DECISIONS.md) A35).
 - 저장된 본문을 엄격하게 다시 해석·검증하고 저장된 SHA-256과 대조한다. 실패하면 500 `REPORT_INVALID`이며 본문을 보내지 않는다.
 
 | 응답 헤더 | 값 |
@@ -373,12 +374,12 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | 경로 | 본문 | 결과 |
 |---|---|---|
 | `GET /projects/{id}/members` | — | `{items}`. 소유자, manager, runner, viewer 순, 그 안에서 사용자 이름 순 |
-| `POST /projects/{id}/members` | `{username, role}` | 200 `Member`. 사용자 이름으로 추가하거나 역할을 바꾼다 |
-| `PUT /projects/{id}/members/{uid}` | `{role}` | 200 `Member`. 사용자 ID로 같은 일을 한다 |
+| `PUT /projects/{id}/members/{uid}` | `{role}` | 200 `Member`. 사용자 ID로 구성원을 추가하거나 역할을 바꾼다 |
 | `DELETE /projects/{id}/members/{uid}` | — | 204. 구성원이 아니었으면 아무것도 바꾸지 않고 204 |
 
 - 권한은 소유자와 manager다. viewer·runner 403, 비구성원(관리자 포함) 404.
 - `role`은 `manager`, `runner`, `viewer`이고 그 밖은 422다. 소유자는 바꾸거나 제거할 수 없다(409). 없거나 비활성인 사용자는 404다.
+- 사용자는 ID로만 가리킨다. 사용자 이름으로 찾는 프로젝트 경로를 두지 않아 manager가 사용자 이름의 존재를 알 수 없다. 사용자 ID는 관리자(`GET /admin/users`)가 알려 준다. 구성원 추가 화면의 사용자 찾기는 웹 화면 작업에서 정한다([결정](DECISIONS.md) A36).
 - 변경과 감사 기록(`project.member_set`, `project.member_removed`, detail에 이전 역할)은 같은 트랜잭션이다. 제거된 사용자의 다음 요청은 404이고 열린 이벤트 스트림은 다음 poll에서 `closed`(`access_revoked`)로 끝난다.
 
 ## 계정과 관리자
@@ -388,7 +389,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | 경로 | 본문 | 결과 |
 |---|---|---|
 | `GET /admin/users` | — | `{items: UserView[], next_cursor}`. hash·salt는 없다 |
-| `POST /admin/users` | `{username, display_name?, is_admin?}` | 201 `{user, login_link}`+`Location`. 비밀번호 없는 계정(`must_change_password: true`)과 일회용 로그인 링크. 쓰인 이름 409 |
+| `POST /admin/users` | `{username, display_name?, is_admin?}` | 201 `{user, login_link}`. 비밀번호 없는 계정(`must_change_password: true`)과 일회용 로그인 링크. 쓰인 이름 409 |
 | `POST /admin/users/{id}/disable` | — | 200 `UserView`. 모든 세션 폐기. 마지막 활성 관리자 409. 이미 비활성이면 변경 없이 200 |
 | `PUT /admin/users/{id}/admin` | `{is_admin}` | 200 `UserView`. 마지막 활성 관리자 해제·비활성 사용자 지정 409 |
 | `POST /admin/users/{id}/password-reset` | — | 200 `{user, login_link}`. 비밀번호 삭제, 모든 세션과 이전 로그인 링크 폐기, 새 로그인 링크. 자기 자신 409, 비활성 404 |

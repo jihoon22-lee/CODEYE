@@ -119,13 +119,8 @@ func isoCases() map[string]isoCase {
 		"projects.create": {need: rootHolder, ok: 201, body: func(w *isoWorld) any {
 			return map[string]any{"name": w.name("p"), "source": map[string]any{"kind": "local", "source_root_id": w.f.root.ID, "relative_path": "."}}
 		}},
-		"projects.get": {need: viewerRole, ok: 200, ids: isoProject},
-		"members.list": {need: managerRole, ok: 200, ids: isoProject},
-		"members.add": {need: managerRole, ok: 200, ids: isoProject, body: func(w *isoWorld) any {
-			name := w.name("m")
-			w.e.account(name, "", false)
-			return map[string]string{"username": name, "role": "viewer"}
-		}},
+		"projects.get":   {need: viewerRole, ok: 200, ids: isoProject},
+		"members.list":   {need: managerRole, ok: 200, ids: isoProject},
 		"members.put":    {need: managerRole, ok: 200, ids: func(w *isoWorld) []string { return []string{w.f.projectID, w.namedUser()} }, body: func(*isoWorld) any { return map[string]string{"role": "viewer"} }},
 		"members.delete": {need: managerRole, ok: 204, ids: func(w *isoWorld) []string { return []string{w.f.projectID, w.member(domain.RoleViewer)} }},
 		"projects.audit": {need: managerRole, ok: 200, ids: isoProject},
@@ -332,6 +327,75 @@ func TestRouteIsolationAndAuditTable(t *testing.T) {
 		if !covered[name] {
 			t.Errorf("isolation case %s matches no route", name)
 		}
+	}
+}
+
+// TC-140: the gates in front of every handler, over the router's route list:
+// no session is 401 on every authenticated route; a foreign Origin, and a
+// missing CSRF token, are 403 on every state-changing user route and record
+// nothing; a session that must change its password is 403 on every route
+// that does not allow it.
+func TestRouteGatesForEveryRoute(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login(e.newAdminAccount("gate-admin"))
+	created := e.do("POST", "/api/v1/admin/users", map[string]string{"username": "gate-pending"}, admin.o()).want(t, 201, "")
+	pending, _ := e.exchangeLink(created.body["login_link"].(map[string]any)["url"].(string))
+	refusedSilently := func(r resp, what string) {
+		t.Helper()
+		var n int
+		if err := e.pool.QueryRow(context.Background(), "SELECT count(*) FROM audit_events WHERE request_id=$1", r.header.Get("X-Request-ID")).Scan(&n); err != nil || n != 0 {
+			t.Errorf("%s recorded %d audit rows", what, n)
+		}
+	}
+	checked := 0
+	for _, rt := range e.srv.routes {
+		if rt.node != nodeNone {
+			continue
+		}
+		ids := []string{}
+		for _, part := range rt.parts {
+			if part == "{id}" {
+				ids = append(ids, domain.NewID())
+			}
+		}
+		path := isoPath(rt, ids)
+		var body any
+		if rt.body {
+			body = map[string]any{}
+		}
+		name := rt.method + " " + rt.name
+		if rt.auth {
+			if r := e.do(rt.method, path, body, opts{}); r.status != 401 || r.code() != "UNAUTHENTICATED" {
+				t.Errorf("%s without a session: %d %s", name, r.status, r.code())
+			}
+		}
+		if unsafeMethod(rt.method) {
+			r := e.do(rt.method, path, body, opts{cookie: admin.cookie, csrf: admin.csrf, origin: "http://evil.example"})
+			if r.status != 403 || r.code() != "ORIGIN_REJECTED" {
+				t.Errorf("%s from a foreign origin: %d %s", name, r.status, r.code())
+			}
+			refusedSilently(r, name+" from a foreign origin")
+			if rt.auth {
+				r := e.do(rt.method, path, body, opts{cookie: admin.cookie})
+				if r.status != 403 || r.code() != "CSRF_REJECTED" {
+					t.Errorf("%s without CSRF: %d %s", name, r.status, r.code())
+				}
+				refusedSilently(r, name+" without CSRF")
+			}
+		}
+		if rt.auth && !rt.pending {
+			if rt.name == "runs.events" {
+				if s := e.openStream("", pending, ids[0], "?cursor=0", ""); s.status != 403 {
+					t.Errorf("%s with a pending session: %d", name, s.status)
+				}
+			} else if r := e.do(rt.method, path, body, pending.o()); r.status != 403 || r.code() != "PASSWORD_CHANGE_REQUIRED" {
+				t.Errorf("%s with a pending session: %d %s", name, r.status, r.code())
+			}
+		}
+		checked++
+	}
+	if checked < 30 {
+		t.Fatalf("only %d user routes checked", checked)
 	}
 }
 

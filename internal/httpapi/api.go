@@ -90,7 +90,6 @@ func (s *Server) apiRoutes() []route {
 		r("POST", "projects", "projects.create", true, true, (*Server).createProject).audits(postgres.AuditProjectRegistered),
 		r("GET", "projects/{id}", "projects.get", true, false, (*Server).getProject),
 		r("GET", "projects/{id}/members", "members.list", true, false, (*Server).listMembers),
-		r("POST", "projects/{id}/members", "members.add", true, true, (*Server).addMember).audits(postgres.AuditMemberSet),
 		r("PUT", "projects/{id}/members/{id}", "members.put", true, true, (*Server).putMember).audits(postgres.AuditMemberSet),
 		r("DELETE", "projects/{id}/members/{id}", "members.delete", true, false, (*Server).deleteMember).audits(postgres.AuditMemberRemoved),
 		r("GET", "projects/{id}/audit", "projects.audit", true, false, (*Server).projectAudit),

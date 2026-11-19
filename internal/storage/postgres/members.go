@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jihoon22-lee/CODEYE/internal/account"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
@@ -56,18 +55,6 @@ func (s *Store) PutMember(ctx context.Context, actor, project, user string, role
 	}
 	return transaction(ctx, s, func(tx pgx.Tx) (Member, error) {
 		return putMember(ctx, tx, actor, project, "id=$1", user, role)
-	})
-}
-
-// AddMemberByUsername is PutMember naming the user by username, so a
-// manager who is not an administrator can add a colleague.
-func (s *Store) AddMemberByUsername(ctx context.Context, actor, project, username string, role domain.Role) (Member, error) {
-	name, err := account.NormalizeUsername(username)
-	if err != nil || !validIDs(actor, project) || !role.Valid() {
-		return Member{}, domain.ErrInvalid
-	}
-	return transaction(ctx, s, func(tx pgx.Tx) (Member, error) {
-		return putMember(ctx, tx, actor, project, "username=$1", name, role)
 	})
 }
 

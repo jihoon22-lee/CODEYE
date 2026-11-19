@@ -641,32 +641,6 @@ paths:
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/Member'}}
         default: {$ref: '#/components/responses/Error'}
-    post:
-      operationId: addMember
-      x-codeye-status: implemented
-      description: >-
-        사용자 이름으로 구성원을 추가하거나 역할을 바꾼다(관리자가 아닌 manager가 동료를 추가하는 경로).
-        없는·비활성 사용자 404, owner 대상 409, 잘못된 role 422. 감사 action project.member_set.
-      parameters:
-        - {$ref: '#/components/parameters/CSRF'}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [username, role]
-              properties:
-                username: {type: string}
-                role: {$ref: '#/components/schemas/MemberRole'}
-      responses:
-        '200':
-          description: 저장된 구성원
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/Member'}
-        default: {$ref: '#/components/responses/Error'}
   /api/v1/projects/{project_id}/members/{user_id}:
     parameters:
       - {name: project_id, in: path, required: true, schema: {type: string}}
@@ -674,7 +648,9 @@ paths:
     put:
       operationId: putMember
       x-codeye-status: implemented
-      description: 사용자 ID로 구성원을 추가하거나 역할을 바꾼다. 규칙은 addMember와 같다.
+      description: >-
+        사용자 ID로 구성원을 추가하거나 역할을 바꾼다. 사용자 이름으로 찾는 프로젝트 경로는 없다(사용자 이름의 존재를
+        알리지 않는다). 없는·비활성 사용자 404, owner 대상 409, 잘못된 role 422. 감사 action project.member_set.
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
       requestBody:
@@ -773,8 +749,6 @@ paths:
       responses:
         '201':
           description: 생성된 사용자와 로그인 링크
-          headers:
-            Location: {schema: {type: string}}
           content:
             application/json:
               schema: {$ref: '#/components/schemas/UserWithLink'}

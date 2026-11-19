@@ -130,7 +130,6 @@ func (s *Server) adminCreateUser(q *request) {
 		}
 		return
 	}
-	q.w.Header().Set("Location", apiPrefix+"/admin/users/"+u.ID)
 	writeJSON(q.w, http.StatusCreated, map[string]any{"user": viewUser(u), "login_link": s.loginLink(q, token)})
 }
 
