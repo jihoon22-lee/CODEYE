@@ -16,6 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/deps"
 )
 
 // Personal mode (docs/OPERATIONS.md): `codeye up|start|stop|status` run one
@@ -56,7 +57,11 @@ func runPersonal(ctx context.Context, args []string, out, stderr io.Writer) (int
 	return 0, false
 }
 
-func knownTools() []string { return append(builtin.ToolFlags(), builtin.ToolchainFlags()...) }
+func knownTools() []string {
+	tools := append(builtin.ToolFlags(), builtin.ToolchainFlags()...)
+	// The package managers of the dependency fetch (--python, --uv).
+	return append(tools, deps.ManagerFlags()...)
+}
 
 // loadPersonalConfig parses --config (and the extra flags) and loads it.
 func loadPersonalConfig(name string, args []string, stderr io.Writer, define func(*flag.FlagSet)) (*personal.Config, personal.Layout, bool) {

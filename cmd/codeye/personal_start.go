@@ -600,6 +600,9 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 			if d.MaxDownloadBytes > 0 {
 				args = append(args, "--dependency-max-bytes", strconv.FormatInt(d.MaxDownloadBytes, 10))
 			}
+			if d.PipIndexURL != "" {
+				args = append(args, "--pip-index-url", d.PipIndexURL)
+			}
 		}
 	}
 	tools := make([]string, 0, len(a.Tools))

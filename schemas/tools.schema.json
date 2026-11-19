@@ -43,8 +43,8 @@
     },
     "tools": {
       "type": "array",
-      "minItems": 18,
-      "maxItems": 18,
+      "minItems": 20,
+      "maxItems": 20,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -73,9 +73,11 @@
               "tsc",
               "jscpd",
               "cargo",
-              "clippy"
+              "clippy",
+              "uv",
+              "python"
             ],
-            "description": "The agent flag name; go, git and opencode have their own settings."
+            "description": "The agent flag name; go, git and opencode have their own settings. uv and python are the package managers of the Python dependency fetch."
           },
           "status": {
             "enum": [
@@ -454,6 +456,32 @@
             "properties": {
               "name": {
                 "const": "clippy"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "uv"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "python"
               }
             },
             "required": [
