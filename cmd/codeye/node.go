@@ -58,7 +58,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	modelName := fs.String("model", "", "")
 	modelRelay := fs.String("model-relay-file", "", "")
 	// The review pack is a node operator setting only; runs and profiles
-	// cannot select it. review-r1 is the W15 candidate, not the default.
+	// cannot select it. The default is review-r1 (the role pack); review-v1 is the legacy pack.
 	reviewPack := fs.String("review-pack", review.PackR1, "")
 	fs.Var(&modelRoots, "model-source-root", "")
 	// The repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가) is a node operator setting
