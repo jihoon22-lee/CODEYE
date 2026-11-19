@@ -257,7 +257,8 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
         case("scope covered file the overview did not send", lambda d: first_file(d).update(state="covered_by_overview")),
         case("scope state outside the enum", lambda d: first_file(d).update(state="verified")),
         case("scope not_planned miscount", lambda d: d["scope"]["modules"][0].update(files_not_planned=1)),
-        case("scope unscreened", lambda d: d["scope"].update(screen="unscreened")),
+        case("scope screen outside the enum", lambda d: d["scope"].update(screen="unscreened")),
+        case("scope not_screened without its limitation", lambda d: d["scope"].update(screen="not_screened")),
         case("scope ceiling above 207", lambda d: d["scope"]["budget"].update(max_calls=208)),
         case("scope slice out of order", lambda d: d["scope"]["slices"].reverse()),
     ]

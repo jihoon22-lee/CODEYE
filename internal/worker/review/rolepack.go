@@ -138,21 +138,19 @@ func (h RoleHandler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpe
 		return result(domain.TaskCancelled, "cancelled")
 	}
 	s := &roleStage{h: h, ctx: ctx, j: j, runner: runner, task: t.Key, role: role, screen: screenSecrets(ctx, h.Static, j)}
-	if t.Key == record.TaskScope || slice != "" {
-		// Slices send several times more of the repository: they run only
-		// after a completed secrets screen, never unscreened.
-		if s.screen.state != screenApplied {
-			return result(domain.TaskSkippedPolicy, reasonScreenUnavailable)
-		}
-		if t.Key == record.TaskScope {
-			return s.scopeTask()
-		}
-		return s.sliceTask(slice)
-	}
 	if s.screen.state == screenFailed {
 		// The secrets task ran but its result is unusable: nothing of the
 		// snapshot may reach a model unscreened.
 		return result(domain.TaskSkippedPolicy, reasonSecretScreenFailed)
+	}
+	// The scope and the slices follow the whole-run roles' screen rule: with
+	// no secrets task run their inputs go through the read filters only and
+	// the records say model_input_not_secret_screened (screen.go).
+	if t.Key == record.TaskScope {
+		return s.scopeTask()
+	}
+	if slice != "" {
+		return s.sliceTask(slice)
 	}
 	switch role {
 	case record.StageEnvironment:

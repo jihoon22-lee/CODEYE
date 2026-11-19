@@ -102,7 +102,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		return agent.ExitUsage
 	}
 	if !review.ValidMaxCalls(*reviewMaxCalls) {
-		fmt.Fprintln(stderr, "invalid --review-max-calls; expected 15..207 (default 33)")
+		fmt.Fprintln(stderr, "invalid --review-max-calls; expected 15..207 (default 99)")
 		return agent.ExitUsage
 	}
 	// --autoscale starts with zero workers and follows controller

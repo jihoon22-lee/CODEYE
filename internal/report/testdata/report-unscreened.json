@@ -11,11 +11,11 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000743",
+      "id": "0195f3a0-0000-7000-8000-000000000752",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "239f5797d193c2ceb0d2bd978d0ea92c4df19d6b784706cfda6eeb71a3091d20",
-      "size_bytes": 12902,
+      "sha256": "f9afbf16b81c958fef45426ad4cf447d95debc6ddd41df0c6d8f212a8c4e3033",
+      "size_bytes": 17102,
       "task_key": null
     },
     {
@@ -323,6 +323,141 @@
       "sha256": "90dd75be6ab616e8012b065c2bf58214e31c4323d3fd32b62e0afb9ab3c79ccd",
       "size_bytes": 4090,
       "task_key": "review.verify"
+    },
+    {
+      "decoder": "application/vnd.codeye.review-scope+json;schema_version=0.1",
+      "id": "0195f3a0-0000-7000-8000-000000000735",
+      "media_type": "application/vnd.codeye.review-scope+json",
+      "role": "other",
+      "sha256": "8563505ba66a628d6ef498c8057a060f69884befe0cbeb27b7f745050f85824d",
+      "size_bytes": 10750,
+      "task_key": "review.scope"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000737",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "686d130a15a0e0de93d560f9208e248635b6ef182de1e31a6447918e30e64854",
+      "size_bytes": 2565,
+      "task_key": "review.investigate.s001"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000739",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "81dd7f3bab26e74761b7bb5b11a5c0fc017e4c75e49d231bf4e9d9cee83d593a",
+      "size_bytes": 3205,
+      "task_key": "review.verify.s001"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-00000000073b",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "0b94f9ec223f115b6ca75bbe98527aa020020bb73adc702933e962010de5ed74",
+      "size_bytes": 2730,
+      "task_key": "review.investigate.s002"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-00000000073d",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "35f50451e1cb279fac59fd3e0f430d46bdf3b192b2faa2f85b937b6661bbd506",
+      "size_bytes": 3355,
+      "task_key": "review.verify.s002"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-00000000073f",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "5d856f88423c2f319a9470965c1e35a192bb81a47220bfc4722187991f138179",
+      "size_bytes": 2925,
+      "task_key": "review.investigate.s003"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000741",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "4de1be505eb7fc0926e784f6e9b93fe687ceb211be4d605b41e8fe039733383b",
+      "size_bytes": 3549,
+      "task_key": "review.verify.s003"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000743",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "301d4166b60bef1c602ed612ba37869f70fe3cc26131b9b09bb42d0e02d84c7a",
+      "size_bytes": 2925,
+      "task_key": "review.investigate.s004"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000745",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "e80e31563db0c33ceedf550847740ab3f48e953a4b5e00c784e3e5787fda0275",
+      "size_bytes": 3549,
+      "task_key": "review.verify.s004"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000747",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "a6b1f51dd3345024dd580f0832d784892edfa67a790d9260775a857da58a25ad",
+      "size_bytes": 2924,
+      "task_key": "review.investigate.s005"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000749",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "8af287a2b9df3a070a0ee6f277288124ce2edc1f46902a2f50ca211e56bfbed7",
+      "size_bytes": 3548,
+      "task_key": "review.verify.s005"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-00000000074b",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "35c545d365f5a06eb0da9370c9beb4fe8f5a85790b77d82ee0e257da8735422d",
+      "size_bytes": 2930,
+      "task_key": "review.investigate.s006"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-00000000074d",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "ea46aa707723061e503052d2bc060c524eecfa77d072d91685288127015ecdf5",
+      "size_bytes": 3554,
+      "task_key": "review.verify.s006"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-00000000074f",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "02f7abda3c79175b0314bebcefea538ef2e8095e223716867b9580bd656829c4",
+      "size_bytes": 2725,
+      "task_key": "review.investigate.s007"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-000000000751",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "1d5d37121a5f3ffc169b20fc6ba294d27a19cf909e102b80e6e32b5415b5d171",
+      "size_bytes": 3350,
+      "task_key": "review.verify.s007"
     }
   ],
   "attempt": {
@@ -335,37 +470,198 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "f29dd6ef179389b62c9908e1e10a1ad6da85d33faea8b9fe252f77dfc64834ef",
+    "input_digest": "4a348b5553333939149d46da6789df4e41046846963ccda1a3c9b3469eeaf505",
     "result_manifest_artifact_id": null,
     "version": "6"
   },
   "code_review": {
-    "accepted_calls": 4,
-    "calls": 4,
-    "exposed_files": 11,
+    "accepted_calls": 18,
+    "calls": 18,
+    "exposed_files": 42,
     "finding_ids": [
-      "review_investigate_1"
+      "review_s001_investigate_1",
+      "review_investigate_1",
+      "review_s002_investigate_1",
+      "review_s003_investigate_1",
+      "review_s004_investigate_1",
+      "review_s005_investigate_1",
+      "review_s006_investigate_1",
+      "review_s007_investigate_1"
     ],
     "interpretation_limits": [],
     "inventory_files": 44,
     "ledger": {
-      "calls_used": 4,
-      "max_calls": null,
-      "max_request_bytes": null,
-      "modules": [],
-      "request_bytes_sent": 70783,
+      "calls_used": 18,
+      "max_calls": 99,
+      "max_request_bytes": 40000,
+      "modules": [
+        {
+          "bytes_sent": 945,
+          "discovered": true,
+          "files_budget_exhausted": 0,
+          "files_eligible": 3,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_sent_to_model": 3,
+          "files_truncated": 0,
+          "files_unreadable": 0,
+          "files_with_completed_review": 3,
+          "files_withheld": 0,
+          "module_id": "go:api",
+          "slices": [
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s001"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s001"
+            }
+          ]
+        },
+        {
+          "bytes_sent": 36738,
+          "discovered": true,
+          "files_budget_exhausted": 0,
+          "files_eligible": 30,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_sent_to_model": 30,
+          "files_truncated": 30,
+          "files_unreadable": 0,
+          "files_with_completed_review": 30,
+          "files_withheld": 0,
+          "module_id": "go:store",
+          "slices": [
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s002"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s002"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s003"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s003"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s004"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s004"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s005"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s005"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s006"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s006"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s007"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s007"
+            }
+          ]
+        },
+        {
+          "bytes_sent": 559,
+          "discovered": true,
+          "files_budget_exhausted": 0,
+          "files_eligible": 3,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_sent_to_model": 3,
+          "files_truncated": 0,
+          "files_unreadable": 0,
+          "files_with_completed_review": 3,
+          "files_withheld": 0,
+          "module_id": "javascript:web",
+          "slices": [
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s001"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s001"
+            }
+          ]
+        },
+        {
+          "bytes_sent": 635,
+          "discovered": true,
+          "files_budget_exhausted": 0,
+          "files_eligible": 3,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_sent_to_model": 3,
+          "files_truncated": 0,
+          "files_unreadable": 0,
+          "files_with_completed_review": 3,
+          "files_withheld": 0,
+          "module_id": "python:worker",
+          "slices": [
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s001"
+            },
+            {
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s001"
+            }
+          ]
+        }
+      ],
+      "request_bytes_sent": 367754,
       "scope": {
         "key": "review.scope",
-        "reason": "secret_screen_unavailable",
-        "result": "skipped",
-        "task_status": "skipped_policy"
+        "result": "accepted",
+        "task_status": "succeeded"
       },
-      "status": "overview_only"
+      "status": "complete"
     },
     "pack": "role",
     "pack_id": "review-r1",
     "pack_version": "2.0.0",
-    "request_bytes": 70783,
+    "request_bytes": 367754,
     "roles": [
       {
         "key": "review.investigate",
@@ -386,15 +682,14 @@
     ],
     "stage": {
       "counts": {
-        "skipped_policy": 16
+        "skipped_policy": 1
       },
       "reasons": [
-        "no_tool_observations",
-        "secret_screen_unavailable"
+        "no_tool_observations"
       ],
       "stage": "code_review",
-      "state": "partial",
-      "succeeded": 2,
+      "state": "succeeded",
+      "succeeded": 17,
       "tasks": 18
     }
   },
@@ -414,93 +709,78 @@
         },
         {
           "key": "review.investigate.s001",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.investigate.s002",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.investigate.s003",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.investigate.s004",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.investigate.s005",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.investigate.s006",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.investigate.s007",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.scope",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "result_missing",
+          "task_status": "succeeded"
         },
         {
           "key": "review.verify.s001",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.verify.s002",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.verify.s003",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.verify.s004",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.verify.s005",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.verify.s006",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         },
         {
           "key": "review.verify.s007",
-          "reason": "secret_screen_unavailable",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "result": "accepted",
+          "task_status": "succeeded"
         }
       ],
       "reason": null,
@@ -524,7 +804,7 @@
       "status": "performed"
     },
     "inventory_files": 44,
-    "llm_exposed_files": 11,
+    "llm_exposed_files": 42,
     "notes": [
       "inventory_counts_all_included_files",
       "tests_not_planned",
@@ -574,6 +854,160 @@
         "request_sha256": "23272acf25df8e6af6b124e2d69cfadf346f7b9cabaec7fc1e3a54755178ed59",
         "role": "verify",
         "task_key": "review.verify"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "37daed14df4afe7c46a8d8fcab34f1a898db787ce68968c76dfcca5911114554",
+        "role": "investigate",
+        "task_key": "review.investigate.s001"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "e439206d5c8720c602f249fe1953e5c0f1b9e74f77a9b65b532381476daa0ab3",
+        "role": "verify",
+        "task_key": "review.verify.s001"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "0b12f8b612f60541707b66b95bbe1fbaca6da7ef4448d2c625f9790a48cf384a",
+        "role": "investigate",
+        "task_key": "review.investigate.s002"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "7443f1f1e8dc0f238a7c9a1ed640e7583fa097e54e25bc522cc680ef9b4f342d",
+        "role": "verify",
+        "task_key": "review.verify.s002"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "a40094f029fb4294d925c25164453fa58e55dd829a7bfd8166554fea08780a9f",
+        "role": "investigate",
+        "task_key": "review.investigate.s003"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "cc492da94a862f6dfd3b59697d4eb6ea4aa5cdcc909b04c302a0b425ded72487",
+        "role": "verify",
+        "task_key": "review.verify.s003"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "f1132573b6e64835d360b74508c76f54e56958c96791a5704e2388f08a11d534",
+        "role": "investigate",
+        "task_key": "review.investigate.s004"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "9d29cdf5ea6dd5818f49640cf105b5482266bb5761b7da2a9bfeb0ae443a3b9e",
+        "role": "verify",
+        "task_key": "review.verify.s004"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "70b9daf3cb9e0d18b048ed5aab2c0511dbfaf891547025d10edffb56edc5de33",
+        "role": "investigate",
+        "task_key": "review.investigate.s005"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "8f9c296a1be016ce310a90e445e6782d7a8b4ca30a74fb739a2c616b25a86480",
+        "role": "verify",
+        "task_key": "review.verify.s005"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "cbf89bcaf4e3bef524a8a8247c587e7c4a55fc70a89e272c0fd79b3ebab2e9fa",
+        "role": "investigate",
+        "task_key": "review.investigate.s006"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "9452e47ecccc592582ef078a9a58d6854437b58a25d65298b1434e72c86fe112",
+        "role": "verify",
+        "task_key": "review.verify.s006"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "70a650d426a4355b782c8c761d7d41598dfab26ad70157f0098b14c7fd823a80",
+        "pack_version": "2.0.0",
+        "request_sha256": "2f5c9369a3f88c6f59a0f76d9ddfc83c17530176afcfb70615c8b35dc862fcd3",
+        "role": "investigate",
+        "task_key": "review.investigate.s007"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review-r1",
+        "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+        "pack_version": "2.0.0",
+        "request_sha256": "6127e5935fc03ac2215e92614b62ecd9b9a04b0aee0589a59a971012b03ee8dd",
+        "role": "verify",
+        "task_key": "review.verify.s007"
       }
     ],
     "scope_mode": "full",
@@ -1385,6 +1819,89 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "ca753b233587c9ff67892275eeac14362812d2b12209298a73bd67464a0dadf6",
+          "description": "고정 스냅샷의 test 발췌 위치",
+          "id": "ev_1e0dc6fad5ef460d4a8467a8",
+          "kind": "code",
+          "location": {
+            "end_line": 14,
+            "path": "api/handler_test.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:11b687bfb932cdb4623572cdf83f5879e7ba12df53898cf62f273a4e8a822cf7",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "api/handler_test.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s001_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 14,
+          "path": "api/handler_test.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
             "ev_7598f744a473d4f167c7b428"
           ],
           "kind": "inferred"
@@ -1461,6 +1978,504 @@
       "verification": [
         "Forward의 호출자와 결제 경로를 읽는다."
       ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_79e28e56234d66d1a4784bae"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_79e28e56234d66d1a4784bae"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_79e28e56234d66d1a4784bae"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_79e28e56234d66d1a4784bae",
+          "kind": "code",
+          "location": {
+            "end_line": 50,
+            "path": "store/codec.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:0631bf7f115511666c3123a2571ffcc1e7c247765c4f44145519189ac4508cfb",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "store/codec.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s002_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 50,
+          "path": "store/codec.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_29e943f148fb75179ee04eba"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_29e943f148fb75179ee04eba"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_29e943f148fb75179ee04eba"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "eb60ec8caf4fda328a1e59584a3a508ef5b17ff0ae5a5a5cd358ba25f5cabae8",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_29e943f148fb75179ee04eba",
+          "kind": "code",
+          "location": {
+            "end_line": 50,
+            "path": "store/encode.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:4f94e127ea6b0b33088b6decb8717c4241bde1f3b3eb8f9e37e8260ab92df8c8",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "store/encode.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s003_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 50,
+          "path": "store/encode.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_a56bb57970faf0cecd4bc935"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_a56bb57970faf0cecd4bc935"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_a56bb57970faf0cecd4bc935"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "62f5efe1eb28ce5831f7792aace027e869418bd26620fe795b0b1f83ed7112ab",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_a56bb57970faf0cecd4bc935",
+          "kind": "code",
+          "location": {
+            "end_line": 50,
+            "path": "store/iter.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:fd6820b0448c941d3f125919c200c08612add19cbd3be88278c13d295516d29e",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "store/iter.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s004_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 50,
+          "path": "store/iter.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_7d075cdecc7acf08b3078a21"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_7d075cdecc7acf08b3078a21"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_7d075cdecc7acf08b3078a21"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "a06f61cf8ea502d31f00bbdef807f441e43d42badc125f76e96c6f77f3925f8a",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_7d075cdecc7acf08b3078a21",
+          "kind": "code",
+          "location": {
+            "end_line": 50,
+            "path": "store/open.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:07aaf6a1a44b863f41ba795fd7d7d22f9e3b1b4b2775853b996057bbf7c862bc",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "store/open.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s005_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 50,
+          "path": "store/open.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_5f25ec415b25d9710a4e2cf3"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_5f25ec415b25d9710a4e2cf3"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_5f25ec415b25d9710a4e2cf3"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "332a2e040632193a6ea4d887017bf34179b7ed509de010552160bb31d1d02b62",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_5f25ec415b25d9710a4e2cf3",
+          "kind": "code",
+          "location": {
+            "end_line": 50,
+            "path": "store/scan.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:d8161ab30e4488f2ec19cacd9443b800e477a818671ea0f27e4a56b336c2da64",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "store/scan.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s006_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 50,
+          "path": "store/scan.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
+            "ev_3d0bf8126be3f1469a223332"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_3d0bf8126be3f1469a223332"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_3d0bf8126be3f1469a223332"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "166293aac82b552a67d74817fd533324313d6a0dcbe36e4ae526c079661af9da",
+          "description": "고정 스냅샷의 code 발췌 위치",
+          "id": "ev_3d0bf8126be3f1469a223332",
+          "kind": "code",
+          "location": {
+            "end_line": 50,
+            "path": "store/sync.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:59827dd5a9eb54fea52607508a0b0867889ab3c37e092c2f8d42409688a1b92d",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "store/sync.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s007_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 50,
+          "path": "store/sync.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000703",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
     }
   ],
   "gaps": [
@@ -1513,12 +2528,6 @@
       "subject": null
     },
     {
-      "code": "review_scope_skipped",
-      "detail": "secret_screen_unavailable",
-      "section": "code_review",
-      "subject": "review.scope"
-    },
-    {
       "code": "tests_not_run",
       "detail": null,
       "section": "report",
@@ -1541,6 +2550,7 @@
     "excerpt_only",
     "files_outside_review_context",
     "model_input_not_secret_screened",
+    "no_callers_found",
     "no_symbol_for_expansion",
     "static_analysis_gap:javascript",
     "static_analysis_gap:python",
@@ -1563,12 +2573,12 @@
     "attention": [
       {
         "code": "pending_candidates",
-        "count": 1,
+        "count": 8,
         "section": "code_review"
       },
       {
         "code": "analysis_gaps",
-        "count": 10,
+        "count": 9,
         "section": "gaps"
       }
     ],
@@ -1633,17 +2643,19 @@
       {
         "counts": {
           "actionable": 0,
-          "calls": 4,
-          "findings": 1,
-          "pending": 1,
+          "calls": 18,
+          "files_not_sent_to_model": 0,
+          "files_sent_to_model": 39,
+          "findings": 8,
+          "pending": 8,
           "refuted": 0
         },
         "key": "code_review",
-        "state": "partial"
+        "state": "succeeded"
       },
       {
         "counts": {
-          "gaps": 10
+          "gaps": 9
         },
         "key": "gaps",
         "state": null
@@ -1793,13 +2805,17 @@
   "status": "partial",
   "summary": {
     "actionable_findings": 0,
-    "pending_candidates": 1,
+    "pending_candidates": 8,
     "priorities": [
-      "review_investigate_1"
+      "review_s001_investigate_1",
+      "review_investigate_1",
+      "review_s002_investigate_1",
+      "review_s003_investigate_1",
+      "review_s004_investigate_1"
     ],
     "raw_observations": 0,
     "refuted_findings": 0,
-    "total_findings": 1,
+    "total_findings": 8,
     "unresolved_observations": 0
   },
   "tasks": [
@@ -1874,60 +2890,60 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000735",
+      "id": "0195f3a0-0000-7000-8000-000000000736",
       "key": "review.investigate.s001",
-      "reason": "secret_screen_unavailable",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000737",
+      "id": "0195f3a0-0000-7000-8000-00000000073a",
       "key": "review.investigate.s002",
-      "reason": "secret_screen_unavailable",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000739",
+      "id": "0195f3a0-0000-7000-8000-00000000073e",
       "key": "review.investigate.s003",
-      "reason": "secret_screen_unavailable",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000073b",
+      "id": "0195f3a0-0000-7000-8000-000000000742",
       "key": "review.investigate.s004",
-      "reason": "secret_screen_unavailable",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000073d",
+      "id": "0195f3a0-0000-7000-8000-000000000746",
       "key": "review.investigate.s005",
-      "reason": "secret_screen_unavailable",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000073f",
+      "id": "0195f3a0-0000-7000-8000-00000000074a",
       "key": "review.investigate.s006",
-      "reason": "secret_screen_unavailable",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000741",
+      "id": "0195f3a0-0000-7000-8000-00000000074e",
       "key": "review.investigate.s007",
-      "reason": "secret_screen_unavailable",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000734",
       "key": "review.scope",
-      "reason": "secret_screen_unavailable",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000732",
@@ -1937,53 +2953,53 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000736",
-      "key": "review.verify.s001",
-      "reason": "secret_screen_unavailable",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
       "id": "0195f3a0-0000-7000-8000-000000000738",
-      "key": "review.verify.s002",
-      "reason": "secret_screen_unavailable",
+      "key": "review.verify.s001",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000073a",
-      "key": "review.verify.s003",
-      "reason": "secret_screen_unavailable",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
       "id": "0195f3a0-0000-7000-8000-00000000073c",
-      "key": "review.verify.s004",
-      "reason": "secret_screen_unavailable",
+      "key": "review.verify.s002",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000073e",
-      "key": "review.verify.s005",
-      "reason": "secret_screen_unavailable",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000740",
-      "key": "review.verify.s006",
-      "reason": "secret_screen_unavailable",
+      "key": "review.verify.s003",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000742",
-      "key": "review.verify.s007",
-      "reason": "secret_screen_unavailable",
+      "id": "0195f3a0-0000-7000-8000-000000000744",
+      "key": "review.verify.s004",
+      "reason": null,
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000748",
+      "key": "review.verify.s005",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000074c",
+      "key": "review.verify.s006",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000750",
+      "key": "review.verify.s007",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
     }
   ]
 }

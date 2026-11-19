@@ -214,25 +214,31 @@ func TestScopeArtifactValidation(t *testing.T) {
 	if _, err := DecodeScope(b, want); err != nil {
 		t.Fatal(err)
 	}
+	unscreened := d
+	unscreened.Screen, unscreened.Limitations = ScreenNotScreened, []string{"model_input_not_secret_screened"}
+	if _, err := MarshalScope(unscreened, want); err != nil {
+		t.Fatalf("not_screened scope: %v", err)
+	}
 	mutations := map[string]func(*ScopeDoc){
-		"other attempt":          func(d *ScopeDoc) { d.AttemptID = domain.NewID() },
-		"screen not applied":     func(d *ScopeDoc) { d.Screen = "unscreened" },
-		"ceiling too low":        func(d *ScopeDoc) { d.Budget.MaxCalls = 14 },
-		"ceiling too high":       func(d *ScopeDoc) { d.Budget.MaxCalls = 208 },
-		"other admission":        func(d *ScopeDoc) { d.Budget.Admission = "worst_case" },
-		"file twice":             func(d *ScopeDoc) { d.Slices[0].Files[1].Path = "a/main.go" },
-		"file not in snapshot":   func(d *ScopeDoc) { d.Slices[0].Files[1].Path = "a/x.go" },
-		"not source":             func(d *ScopeDoc) { d.Slices[0].Files[1].Path = "README.md" },
-		"planned in overview":    func(d *ScopeDoc) { d.Overview.Files[0].State = FilePlanned },
-		"withheld but planned":   func(d *ScopeDoc) { d.Slices[0].Files[2].PlannedLines, d.Slices[0].Files[2].PlannedBytes = 5, 50 },
-		"bytes over bound":       func(d *ScopeDoc) { d.Slices[0].Files[1].PlannedBytes = 2401 },
-		"unknown module":         func(d *ScopeDoc) { d.Slices[0].Files[1].Module = "go:z" },
-		"module count":           func(d *ScopeDoc) { d.Modules[0].FilesEligible = 5 },
-		"slice key out of order": func(d *ScopeDoc) { d.Slices[0].Key = "s002" },
-		"slice task":             func(d *ScopeDoc) { d.Slices[0].VerifyTask = "review.verify" },
-		"offered not covered":    func(d *ScopeDoc) { d.Slices[0].Files[0].State = FilePlanned },
-		"covered not offered":    func(d *ScopeDoc) { d.Overview.Offered = []string{"a/main.go"} },
-		"offered unsorted":       func(d *ScopeDoc) { d.Overview.Offered = []string{"a/main.go", "a/b.go"} },
+		"other attempt":           func(d *ScopeDoc) { d.AttemptID = domain.NewID() },
+		"screen outside the enum": func(d *ScopeDoc) { d.Screen = "unscreened" },
+		"not_screened unmarked":   func(d *ScopeDoc) { d.Screen = ScreenNotScreened },
+		"ceiling too low":         func(d *ScopeDoc) { d.Budget.MaxCalls = 14 },
+		"ceiling too high":        func(d *ScopeDoc) { d.Budget.MaxCalls = 208 },
+		"other admission":         func(d *ScopeDoc) { d.Budget.Admission = "worst_case" },
+		"file twice":              func(d *ScopeDoc) { d.Slices[0].Files[1].Path = "a/main.go" },
+		"file not in snapshot":    func(d *ScopeDoc) { d.Slices[0].Files[1].Path = "a/x.go" },
+		"not source":              func(d *ScopeDoc) { d.Slices[0].Files[1].Path = "README.md" },
+		"planned in overview":     func(d *ScopeDoc) { d.Overview.Files[0].State = FilePlanned },
+		"withheld but planned":    func(d *ScopeDoc) { d.Slices[0].Files[2].PlannedLines, d.Slices[0].Files[2].PlannedBytes = 5, 50 },
+		"bytes over bound":        func(d *ScopeDoc) { d.Slices[0].Files[1].PlannedBytes = 2401 },
+		"unknown module":          func(d *ScopeDoc) { d.Slices[0].Files[1].Module = "go:z" },
+		"module count":            func(d *ScopeDoc) { d.Modules[0].FilesEligible = 5 },
+		"slice key out of order":  func(d *ScopeDoc) { d.Slices[0].Key = "s002" },
+		"slice task":              func(d *ScopeDoc) { d.Slices[0].VerifyTask = "review.verify" },
+		"offered not covered":     func(d *ScopeDoc) { d.Slices[0].Files[0].State = FilePlanned },
+		"covered not offered":     func(d *ScopeDoc) { d.Overview.Offered = []string{"a/main.go"} },
+		"offered unsorted":        func(d *ScopeDoc) { d.Overview.Offered = []string{"a/main.go", "a/b.go"} },
 		"not planned below limit": func(d *ScopeDoc) {
 			d.Modules[0].FilesNotPlanned = 1
 			d.Modules[0].FilesEligible = 5

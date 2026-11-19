@@ -388,7 +388,6 @@ export const ko = {
       secret_screen_failed: '비밀값 탐지 결과를 쓸 수 없어 모델 검토를 건너뜀 (코드 미전송, 모델 검토 성공으로 세지 않음)',
       // 모듈 단위 검토 분할 (docs/REVIEW.md#모듈-단위-검토-분할)
       no_review_scope: '이 모듈 묶음의 파일을 전체 검토가 이미 보냈거나 보낼 수 있는 파일이 없어 추가 검토를 생략함 (모델 검토 성공으로 세지 않음)',
-      secret_screen_unavailable: '완료된 비밀값 탐지가 없어 모듈 단위 추가 검토를 보내지 않음 (코드 미전송, 정책 제외)',
       review_budget_exhausted: '노드의 모델 호출 상한에 닿아 이 모듈 묶음을 검토하지 않음 (미검토, 0건 통과 아님)',
       review_call_count_failed: '모델 호출 수를 기록하지 못해 요청을 보내지 않음 (실패)',
     } as Record<string, string>,

@@ -99,7 +99,6 @@ var Korean = Locale{
 		"model_input_not_secret_screened":    "비밀값 탐지가 실행되지 않아 모델 입력을 비밀값 기준으로 거르지 않았다.",
 		"secret_files_withheld":              "비밀값이 탐지된 파일은 모델 입력에서 뺐다.",
 		"secret_screen_failed":               "비밀값 탐지 결과를 쓸 수 없어 모델 검토를 건너뛰었다(코드 미전송).",
-		"secret_screen_unavailable":          "완료된 비밀값 탐지가 없어 모듈 단위 검토를 하지 않았다(코드 미전송).",
 		"review_budget_exhausted":            "attempt의 모델 호출 상한에 닿아 실행하지 않았다(호출 없음).",
 		"no_review_scope":                    "보낼 파일이 남지 않아 실행하지 않았다.",
 		"review_call_count_failed":           "모델 호출 수를 기록하지 못해 호출하지 않았다.",

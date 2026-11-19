@@ -157,18 +157,19 @@ describe('analysis sections', () => {
   });
 
   // internal/report/testdata/report-unscreened.json: the same fixture without
-  // a secrets scan (internal/worker/review/report_slices_example_test.go).
-  it('says that no module was reviewed without a secrets screen', () => {
+  // a secrets scan at the default ceiling
+  // (internal/worker/review/report_slices_example_test.go).
+  it('reviews the modules without a secrets screen and says the input was not screened', () => {
     const doc = example('report-unscreened.json');
     const r = parseAnalysisReport(doc, doc.run_id);
     const ledger = r.sections!.codeReview.ledger!;
-    expect(ledger.modules).toEqual([]);
-    expect(ledger.status).toBe('overview_only');
+    expect(ledger.modules.length).toBeGreaterThan(0);
+    expect(ledger.status).toBe('complete');
     const { container } = render(<ReportDocument report={r} />);
     const section = container.querySelector('#report-section-code_review') as HTMLElement;
-    expect(within(section).getByText(t.sections.ledger.status.overview_only)).toBeTruthy();
-    expect(within(section).getByText(t.sections.ledger.none)).toBeTruthy();
+    expect(within(section).getByText(t.sections.ledger.status.complete)).toBeTruthy();
     const gaps = container.querySelector('#report-section-gaps') as HTMLElement;
-    expect(within(gaps).getByText(t.sections.gapLabels.review_scope_skipped)).toBeTruthy();
+    expect(within(gaps).getByText(t.sections.gapLabels.model_input_not_screened)).toBeTruthy();
+    expect(within(gaps).queryByText(t.sections.gapLabels.review_scope_skipped)).toBeNull();
   });
 });

@@ -114,9 +114,11 @@ func sliceReport(t *testing.T, j analysis.Job, static analysis.Handler, maxCalls
 	return r
 }
 
-// TC-169: without a completed secrets scan no slice runs. The ledger has
-// the scope task skipped (secret_screen_unavailable), no module row and
-// status overview_only, and the gap list says so. The report is stored as
+// TC-169: without a secrets scan the slices still run, as the whole-run
+// roles do. The scope artifact is accepted, every module has its row, the
+// slices' findings are in the report, and the report says the model input
+// was not screened (secrets.model_input not_screened and the gap
+// model_input_not_screened). The report is stored as
 // internal/report/testdata/report-unscreened.json, which the schema check
 // (validate_bundle.py) and the web parser read too.
 func TestReportSlicesUnscreened(t *testing.T) {
@@ -128,21 +130,25 @@ func TestReportSlicesUnscreened(t *testing.T) {
 	}
 	r := sliceReport(t, j, static, record.DefaultMaxCalls, &exampleIDs{n: 0x202})
 	l := r.CodeReview.Ledger
-	if l == nil || l.Scope.Result != "skipped" || deref(l.Scope.Reason) != "secret_screen_unavailable" || len(l.Modules) != 0 || l.Status != report.LedgerOverviewOnly ||
-		l.MaxCalls != nil || r.Secrets.ModelInput != report.ScreenNotScreened {
+	if l == nil || l.Scope.Result != "accepted" || len(l.Modules) == 0 || l.Status != report.LedgerComplete ||
+		l.MaxCalls == nil || *l.MaxCalls != record.DefaultMaxCalls || r.Secrets.ModelInput != report.ScreenNotScreened {
 		t.Fatalf("ledger %+v model input %s", l, r.Secrets.ModelInput)
 	}
 	gaps := map[string]bool{}
 	for _, g := range r.Gaps {
 		gaps[g.Code] = true
 	}
-	if !gaps["review_scope_skipped"] || !gaps["model_input_not_screened"] {
+	if !gaps["model_input_not_screened"] || gaps["review_scope_skipped"] {
 		t.Fatalf("gaps %+v", r.Gaps)
 	}
+	sliceFindings := 0
 	for _, f := range r.Findings {
 		if strings.HasPrefix(f.ID, "review_s") {
-			t.Fatalf("slice finding %s without a screen", f.ID)
+			sliceFindings++
 		}
+	}
+	if sliceFindings == 0 {
+		t.Fatal("no slice finding without a screen")
 	}
 	writeOrCompare(t, r, "../../report/testdata/report-unscreened.json")
 }

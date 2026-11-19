@@ -21,7 +21,7 @@ const (
 	ScopeMaxBytes      = 1 << 20
 
 	// Call budget of the role pack (codeye agent --review-max-calls).
-	DefaultMaxCalls = 33
+	DefaultMaxCalls = 99
 	// WholeRunMaxCalls is the most the five whole-run roles can call
 	// (5 x RoleMaxCalls); they are never cut, so it is the ceiling's minimum.
 	WholeRunMaxCalls = 5 * RoleMaxCalls
@@ -37,8 +37,13 @@ const (
 	// slices in plan order, each needing SliceReserveCalls of the calls the
 	// attempt has left.
 	AdmissionSequentialReserve = "sequential_reserve"
-	// ScreenApplied is the only screen state slices run with.
-	ScreenApplied = "applied"
+	// The secrets screen the scope and its slices ran with: applied (a
+	// completed screen withheld its files) or not_screened (no secrets task
+	// ran; the inputs went through the read filters only and every record
+	// says model_input_not_secret_screened). A screen that ran but is
+	// unusable runs no scope at all.
+	ScreenApplied     = "applied"
+	ScreenNotScreened = "not_screened"
 )
 
 // ValidMaxCalls reports a call ceiling the role pack accepts (0 is the
@@ -182,8 +187,10 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 		return invalid("snapshot or attempt identifiers")
 	case want.Lookup == nil || d.Snapshot != want.Snapshot || d.RunID != want.RunID || d.AttemptID != want.AttemptID:
 		return invalid("scope belongs to another snapshot or attempt")
-	case d.Screen != ScreenApplied:
+	case d.Screen != ScreenApplied && d.Screen != ScreenNotScreened:
 		return invalid("screen")
+	case d.Screen == ScreenNotScreened && !slices.Contains(d.Limitations, "model_input_not_secret_screened"):
+		return invalid("unscreened scope without its limitation")
 	case d.Upstream == nil || d.Modules == nil || d.Overview.Files == nil || d.Overview.Offered == nil || d.Slices == nil || d.Limitations == nil:
 		return invalid("missing list")
 	case !codes(d.Limitations):

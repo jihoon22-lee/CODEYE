@@ -30,9 +30,8 @@ import (
 // the attempt never makes more than the ceiling. Running slices in parallel
 // inside one attempt would need one shared counter for those tasks.
 const (
-	reasonBudgetExhausted   = "review_budget_exhausted"
-	reasonScreenUnavailable = "secret_screen_unavailable"
-	reasonCallCountFailed   = "review_call_count_failed"
+	reasonBudgetExhausted = "review_budget_exhausted"
+	reasonCallCountFailed = "review_call_count_failed"
 
 	decisionAdmitted  = "admitted"
 	decisionExhausted = "budget_exhausted"
@@ -126,12 +125,12 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		return sf, nil
 	}
 	doc := record.ScopeDoc{Schema: record.ScopeSchemaVersion, Kind: record.ScopeKind, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
-		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Screen: record.ScreenApplied,
+		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Screen: screenOf(s.screen),
 		Budget: record.ScopeBudget{MaxCalls: s.h.maxCalls(), MaxRequestBytes: PromptBudget, WholeRunMaxCalls: record.WholeRunMaxCalls, SliceReserveCalls: record.SliceReserveCalls,
 			CallsBeforeSlices: min(used, record.WholeRunMaxCalls), Admission: record.AdmissionSequentialReserve},
 		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: 50, MaxSlices: MaxSlices},
 		Upstream: []record.Upstream{up}, Modules: []record.ScopeModule{}, Overview: record.ScopeOverview{Files: []record.ScopeFile{}, Offered: nonNilList(offered)},
-		Slices: []record.ScopeSlice{}, Limitations: []string{}}
+		Slices: []record.ScopeSlice{}, Limitations: s.screenLimitation([]string{})}
 	for _, f := range plan.Overview {
 		sf, err := inspect(f, record.FileOverviewNotSent)
 		if err != nil {
@@ -181,6 +180,15 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		return result(domain.TaskFailed, "review_record_failed")
 	}
 	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: doc.Limitations}
+}
+
+// screenOf is the scope artifact's screen state; Run never reaches the scope
+// with a failed screen.
+func screenOf(sc secretScreen) string {
+	if sc.state == screenApplied {
+		return record.ScreenApplied
+	}
+	return record.ScreenNotScreened
 }
 
 // overviewOffered returns the code and test files the overview investigate

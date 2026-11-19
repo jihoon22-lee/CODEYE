@@ -124,7 +124,7 @@ def audit_reports(output, root):
 # the scope artifact a pilot report references.
 SLICE_TASK = re.compile(r"^review\.(?:scope|(?:investigate|verify)\.s\d{3})$")
 REVIEW_RECORD_MEDIA = "application/vnd.codeye.review+json"
-DEFAULT_MAX_CALLS = 33
+DEFAULT_MAX_CALLS = 99
 
 
 def _kept_docs(directory):

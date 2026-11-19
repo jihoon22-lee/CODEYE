@@ -166,7 +166,7 @@ func taskKeys(plan []analysis.TaskSpec) []string {
 }
 
 // TC-165 (docs/REVIEW.md#모듈-단위-검토-분할): the plan never depends on the
-// call ceiling, and admission never lets an attempt exceed it. At N = 15, 33
+// call ceiling, and admission never lets an attempt exceed it. At N = 15, 99
 // and 207, with an upstream that needs one call per task and one that needs
 // the most a task may make (3), the attempt's calls stay ≤ N; the admitted
 // slices are a prefix of the plan, each admitted when at least 6 calls were
@@ -175,7 +175,7 @@ func taskKeys(plan []analysis.TaskSpec) []string {
 // worst-case pre-admission ((N − 15) / 6) would allow.
 func TestSliceAdmissionKeepsTheCeiling(t *testing.T) {
 	var basePlan []string
-	for _, n := range []int{15, 33, 207} {
+	for _, n := range []int{15, record.DefaultMaxCalls, 207} {
 		for _, upstream := range []string{"one", "three"} {
 			t.Run(fmt.Sprintf("%d-%s", n, upstream), func(t *testing.T) {
 				j := coverageJob(t)
@@ -415,48 +415,70 @@ func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
 	}
 }
 
-// TC-166 (docs/REVIEW.md#모듈-단위-검토-분할): slices go out only after a
-// completed secrets screen. Unscreened (no secrets task or the not-configured
-// stand-in) and a failed screen skip review.scope and every slice with
-// secret_screen_unavailable and no request; the whole-run roles keep their
-// rules (unscreened is recorded, a failed screen skips them). A completed
-// screen withholds a reported file from the slices as from the overview: its
-// state is withheld in the scope artifact and no request carries it; a slice
-// left without files ends no_review_scope even when the budget is spent
-// (precedence: policy, screen, scope, nothing to review, budget).
+// TC-166 (docs/REVIEW.md#모듈-단위-검토-분할): review.scope and the slices
+// follow the whole-run roles' screen rule. Unscreened (no secrets task or the
+// not-configured stand-in) runs them: the scope artifact says not_screened,
+// and the scope and every slice record carry model_input_not_secret_screened.
+// A failed screen skips them with secret_screen_failed and no request, as it
+// skips the whole-run roles. A completed screen withholds a reported file
+// from the slices as from the overview: its state is withheld in the scope
+// artifact and no request carries it; a slice left without files ends
+// no_review_scope even when the budget is spent (precedence: policy, screen,
+// scope, nothing to review, budget).
 func TestSliceSecretGating(t *testing.T) {
 	for _, c := range []struct {
 		name   string
 		static analysis.Handler
-		whole  domain.TaskStatus
+		screen string // the scope artifact's screen; "" when no scope runs
 	}{
-		{"unscreened", vetStub{}, domain.TaskSucceeded},
-		{"not_run", secretsStub{mode: "not_run"}, domain.TaskSucceeded},
-		{"failed", secretsStub{mode: "failed"}, domain.TaskSkippedPolicy},
+		{"unscreened", vetStub{}, record.ScreenNotScreened},
+		{"not_run", secretsStub{mode: "not_run"}, record.ScreenNotScreened},
+		{"failed", secretsStub{mode: "failed"}, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			j := coverageJob(t)
 			f := &roleCaller{script: coverageScript(t)}
 			plan, res := runRoleWith(t, j, RoleHandler{Static: c.static, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+			slicesRun := 0
 			for _, p := range plan {
 				_, _, slice := record.SliceTask(p.Key)
 				r := res[p.Key]
 				switch {
-				case slice || p.Key == record.TaskScope:
-					if r.Status != domain.TaskSkippedPolicy || r.Reason != reasonScreenUnavailable {
+				case c.screen == "" && (slice || p.Key == record.TaskScope || p.Key == "review.investigate"):
+					if r.Status != domain.TaskSkippedPolicy || r.Reason != reasonSecretScreenFailed {
 						t.Fatalf("%s %+v", p.Key, r)
 					}
-				case p.Key == "review.investigate" && r.Status != c.whole:
+				case c.screen == "":
+				case p.Key == record.TaskScope && (r.Status != domain.TaskSucceeded || !slices.Contains(r.Limitations, limNotSecretScreened)):
+					t.Fatalf("%s %+v", p.Key, r)
+				case slice && r.Status == domain.TaskSucceeded:
+					slicesRun++
+					if !slices.Contains(r.Limitations, limNotSecretScreened) {
+						t.Fatalf("%s without %s: %+v", p.Key, limNotSecretScreened, r)
+					}
+				case slice && r.Status != domain.TaskSkippedPolicy:
 					t.Fatalf("%s %+v", p.Key, r)
 				}
 			}
-			for _, q := range f.requests {
-				if q.Role == "investigate" && f.calls("investigate") > 1 {
-					t.Fatalf("slice request made: %d investigate calls", f.calls("investigate"))
+			b, err := os.ReadFile(scopePath(j))
+			if c.screen == "" {
+				if !errors.Is(err, fs.ErrNotExist) {
+					t.Fatal("scope artifact written")
 				}
+				if len(f.requests) != 0 {
+					t.Fatalf("%d requests with a failed screen", len(f.requests))
+				}
+				return
 			}
-			if _, err := os.Stat(scopePath(j)); !errors.Is(err, fs.ErrNotExist) {
-				t.Fatal("scope artifact written")
+			if err != nil {
+				t.Fatal(err)
+			}
+			doc, err := record.DecodeScope(b, scopeExpect(j))
+			if err != nil || doc.Screen != c.screen {
+				t.Fatalf("scope screen %q %v", doc.Screen, err)
+			}
+			if slicesRun < 2 || f.calls("investigate") <= 1 {
+				t.Fatalf("slices run %d, investigate calls %d", slicesRun, f.calls("investigate"))
 			}
 		})
 	}
@@ -525,8 +547,8 @@ func TestSliceSecretGating(t *testing.T) {
 		if r := h.Run(t.Context(), off, inv, nil); r.Status != domain.TaskSkippedPolicy || r.Reason != "model_source_not_approved" {
 			t.Fatalf("not approved %+v", r)
 		}
-		// An unscreened run comes before the missing scope artifact.
-		if r := (RoleHandler{Static: vetStub{}, Caller: f}).Run(t.Context(), j, inv, nil); r.Reason != reasonScreenUnavailable {
+		// An unscreened run is not a gate: it too waits for review.scope.
+		if r := (RoleHandler{Static: vetStub{}, Caller: f}).Run(t.Context(), j, inv, nil); r.Reason != reasonDependency {
 			t.Fatalf("unscreened %+v", r)
 		}
 		if len(f.requests) != 0 {

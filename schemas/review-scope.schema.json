@@ -13,12 +13,12 @@
     "snapshot_manifest_digest": {"$ref": "#/$defs/digest"},
     "run_id": {"$ref": "#/$defs/uuid"},
     "attempt_id": {"$ref": "#/$defs/uuid"},
-    "screen": {"const": "applied", "description": "slices run only after a completed secrets screen"},
+    "screen": {"enum": ["applied", "not_screened"], "description": "applied: a completed secrets screen withheld its files; not_screened: no secrets task ran, the inputs went through the read filters only and limitations hold model_input_not_secret_screened"},
     "budget": {
       "type": "object", "additionalProperties": false,
       "required": ["max_calls", "max_request_bytes", "whole_run_max_calls", "slice_reserve_calls", "calls_before_slices", "admission"],
       "properties": {
-        "max_calls": {"type": "integer", "minimum": 15, "maximum": 207, "description": "the node operator's model call ceiling per attempt (codeye agent --review-max-calls, default 33)"},
+        "max_calls": {"type": "integer", "minimum": 15, "maximum": 207, "description": "the node operator's model call ceiling per attempt (codeye agent --review-max-calls, default 99)"},
         "max_request_bytes": {"type": "integer", "minimum": 1},
         "whole_run_max_calls": {"const": 15},
         "slice_reserve_calls": {"const": 6},
@@ -55,6 +55,8 @@
     }},
     "limitations": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/code"}}
   },
+  "if": {"properties": {"screen": {"const": "not_screened"}}, "required": ["screen"]},
+  "then": {"properties": {"limitations": {"contains": {"const": "model_input_not_secret_screened"}}}},
   "$defs": {
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},

@@ -10,7 +10,7 @@
   "attempt_id": "0195f3a0-0000-7000-8000-000000000042",
   "screen": "applied",
   "budget": {
-    "max_calls": 33,
+    "max_calls": 99,
     "max_request_bytes": 40000,
     "whole_run_max_calls": 15,
     "slice_reserve_calls": 6,

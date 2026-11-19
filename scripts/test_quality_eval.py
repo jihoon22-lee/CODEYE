@@ -194,7 +194,7 @@ class RegressionPilotCoverageTests(unittest.TestCase):
                       "review_pack": "review-r1", "review_calls": [{"role": "investigate", "pack_sha256": self.digests["investigate"]}]}
         return [regression, {"case": "pilot", "status": "completed", "ai_review": "performed", "tasks": tasks}]
 
-    def check(self, rows, exposed=12, max_calls=33, ledger=None, calls_used=9, ledger_sent=5, required=(), limitations=(), calls=()):
+    def check(self, rows, exposed=12, max_calls=99, ledger=None, calls_used=9, ledger_sent=5, required=(), limitations=(), calls=()):
         tasks = [dict(t, required_for_verdict=t["key"] in required) for t in rows[1]["tasks"]]
         report = {"tasks": tasks, "limitations": list(limitations),
                   "coverage": {"llm_exposed_files": exposed, "review_calls": [{"task_key": k} for k in calls]},

@@ -70,7 +70,7 @@ CONSTANTS = {
                   "ledger_microusd_per_call": 22_148, "input_tokens_per_call": 3_872, "output_tokens_per_call": 279},
 }
 DEFAULTS = {"margin": 1.5, "repair_rate": 0.1, "reserve_usd": "1.00", "request_reserve": 5,
-            "bytes_per_token": 3.0, "output_tokens_upper": 600, "review_max_calls": 33}
+            "bytes_per_token": 3.0, "output_tokens_upper": 600, "review_max_calls": 99}
 
 
 def now():
