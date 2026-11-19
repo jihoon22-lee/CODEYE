@@ -87,6 +87,9 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// mypy and pyright are alternative Python type checkers (docs/ANALYZERS.md#타입-검사기-선택):
 	// configuring both runs both only when the operator says so.
 	bothTypeCheckers := fs.Bool("python-both-type-checkers", false, "")
+	// Personal mode: take analysis work even without a usable baseline
+	// analyzer; the tasks of unusable tools are recorded unsupported.
+	advertiseAlways := fs.Bool("advertise-without-baseline", false, "")
 	fs.Var(&roots, "source-root", "")
 	fs.Var(&gitHosts, "git-host", "")
 	// Storage quota (docs/OPERATIONS.md#저장-영역과-상한): AREA=BYTES for snapshot, workspace,
@@ -172,6 +175,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		StorageLogDir:             *storageLogDir,
 		Log:                       stderr,
 	}
+	cfg.AdvertiseWithoutBaseline = *advertiseAlways
 	// SIGUSR1 (codeye stop) drains: no new claims, running work
 	// finishes, then a clean exit.
 	drain, stopDrain := drainSignal()
@@ -218,6 +222,7 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 		return nil, nil, errors.New("review call ceiling out of range")
 	}
 	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot, ToolPath: h.ToolPath}
+	cfg.AdvertiseWithoutBaseline = h.AdvertiseWithoutBaseline
 	hs, missing := builtin.Handlers(ctx, cfg, runner)
 	for i, handler := range hs {
 		if handler.Info().Name == analyzerpack.CompositeName {

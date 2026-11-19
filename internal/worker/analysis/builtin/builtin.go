@@ -3,7 +3,9 @@
 // build in catalog order (docs/ANALYZERS.md). An analyzer whose tool is not
 // configured, invalid or fails its startup probe is still a member: it plans
 // its tasks and reports them unsupported. The capability is advertised only
-// when at least one baseline (required) analyzer probed successfully.
+// when at least one baseline (required) analyzer probed successfully, or
+// when the node operator asks for it regardless
+// (Config.AdvertiseWithoutBaseline).
 package builtin
 
 import (
@@ -42,6 +44,12 @@ type Config struct {
 	// is only searched, once, for the system linker `cc` of the Rust pack
 	// (docs/ANALYZERS.md#rust-환경); it is never given to an analyzer as PATH.
 	ToolPath string
+	// AdvertiseWithoutBaseline makes the deep-review capability available
+	// even when no baseline analyzer probed successfully (personal mode). The
+	// analyzers that are not usable keep planning their tasks and report them
+	// unsupported, so a run on a node without tools finishes with the gaps
+	// recorded instead of waiting for a node that never appears.
+	AdvertiseWithoutBaseline bool
 }
 
 // Unavailable explains why a known analyzer, a configured toolchain (or the
@@ -57,6 +65,7 @@ type built struct {
 	analyzer pack.Analyzer // nil when unavailable
 	missing  *Unavailable
 	stub     string // pack reason when analyzer is nil
+	version  string // startup probe version when analyzer is set
 }
 
 // buildFunc configures one analyzer. goh is the go toolchain (nil when --go
@@ -138,10 +147,11 @@ func probeBuilt(ctx context.Context, cfg Config, runner executor.Runner, name st
 	if runner == nil || cfg.ProbeDir == "" {
 		return unavailable(name, "probe_failed", "no runner or probe dir", pack.ReasonToolUnavailable)
 	}
-	if _, err := a.Probe(ctx, runner, cfg.ProbeDir); err != nil {
+	v, err := a.Probe(ctx, runner, cfg.ProbeDir)
+	if err != nil {
 		return unavailable(name, "probe_failed", err.Error(), pack.ReasonToolUnavailable)
 	}
-	return built{analyzer: a}
+	return built{analyzer: a, version: v}
 }
 
 func buildGoVet(ctx context.Context, cfg Config, runner executor.Runner, goh *govet.Handler, _ map[string]pack.Toolchain) built {
@@ -158,10 +168,11 @@ func buildGoVet(ctx context.Context, cfg Config, runner executor.Runner, goh *go
 	if runner == nil || cfg.ProbeDir == "" {
 		return unavailable(govet.HandlerName, "probe_failed", "no runner or probe dir", pack.ReasonToolUnavailable)
 	}
-	if _, err := goh.Probe(ctx, runner, cfg.ProbeDir); err != nil {
+	v, err := goh.Probe(ctx, runner, cfg.ProbeDir)
+	if err != nil {
 		return unavailable(govet.HandlerName, "probe_failed", err.Error(), pack.ReasonToolUnavailable)
 	}
-	return built{analyzer: goh.Analyzer()}
+	return built{analyzer: goh.Analyzer(), version: v}
 }
 
 func buildStaticcheck(ctx context.Context, cfg Config, runner executor.Runner, goh *govet.Handler, _ map[string]pack.Toolchain) built {
@@ -179,7 +190,8 @@ func buildStaticcheck(ctx context.Context, cfg Config, runner executor.Runner, g
 
 // Handlers probes the configured tools through runner and returns the
 // handlers that may be advertised (the deep-review composite, if a baseline
-// analyzer is usable) and the analyzers that are not usable.
+// analyzer is usable or Config.AdvertiseWithoutBaseline is set) and the
+// analyzers that are not usable.
 func Handlers(ctx context.Context, cfg Config, runner executor.Runner) ([]analysis.Handler, []Unavailable) {
 	h, missing, err := Composite(ctx, cfg, runner)
 	var out []analysis.Handler
@@ -200,13 +212,21 @@ func Composite(ctx context.Context, cfg Config, runner executor.Runner) (*pack.C
 	return compose(ctx, cfg, runner, catalog())
 }
 
-func compose(ctx context.Context, cfg Config, runner executor.Runner, entries []entry) (*pack.Composite, []Unavailable, error) {
-	var goh *govet.Handler
-	if cfg.GoExecutable != "" {
-		if h, err := govet.New(govet.Config{GoExecutable: cfg.GoExecutable, GoModCache: cfg.GoModCache}); err == nil {
-			goh = h
-		}
+// goHandler is the go toolchain handle of cfg, nil when --go is unset or
+// invalid.
+func goHandler(cfg Config) *govet.Handler {
+	if cfg.GoExecutable == "" {
+		return nil
 	}
+	h, err := govet.New(govet.Config{GoExecutable: cfg.GoExecutable, GoModCache: cfg.GoModCache})
+	if err != nil {
+		return nil
+	}
+	return h
+}
+
+func compose(ctx context.Context, cfg Config, runner executor.Runner, entries []entry) (*pack.Composite, []Unavailable, error) {
+	goh := goHandler(cfg)
 	// Shared toolchains are validated once, before any analyzer is built.
 	states, missing := validateToolchains(ctx, cfg, runner)
 	known := map[string]bool{}
@@ -246,7 +266,7 @@ func compose(ctx context.Context, cfg Config, runner executor.Runner, entries []
 	for _, tool := range unknown {
 		missing = append(missing, Unavailable{Name: tool, Reason: "unknown_tool"})
 	}
-	if !baseline {
+	if !baseline && !cfg.AdvertiseWithoutBaseline {
 		return nil, missing, ErrNoBaseline
 	}
 	c, err := pack.NewComposite(members...)

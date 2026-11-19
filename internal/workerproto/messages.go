@@ -94,6 +94,10 @@ type Hello struct {
 	AnalyzerTools      map[string]string `json:"analyzer_tools,omitempty"`
 	ToolPath           string            `json:"tool_path"`
 	LeaseMarginSeconds int               `json:"lease_margin_seconds"`
+
+	// AdvertiseWithoutBaseline: advertise the analysis capability even when no
+	// baseline analyzer is usable; its tasks end unsupported (personal mode).
+	AdvertiseWithoutBaseline bool `json:"advertise_without_baseline,omitempty"`
 }
 
 // AttemptRef identifies the attempt a message belongs to.
