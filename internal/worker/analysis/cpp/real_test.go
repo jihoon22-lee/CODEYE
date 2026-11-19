@@ -11,6 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -47,15 +48,15 @@ type realRun struct {
 func runReal(t *testing.T, a planner, files map[string]string, scope domain.Scope) realRun {
 	t.Helper()
 	fx := newFixture(t, files, scope)
-	srcBefore, snapBefore := treeHash(t, fx.SourceRoot), treeHash(t, fx.Job.Snapshot.SnapshotDir)
+	srcBefore, snapBefore := packtest.TreeHash(t, fx.SourceRoot), packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
 	runner := &recordingRunner{inner: &executor.Executor{}}
 	res := runTask(t, a, fx.Job, runner)
 	doc, raw := readEnvelope(t, fx.Job, res)
-	if treeHash(t, fx.SourceRoot) != srcBefore || treeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
+	if packtest.TreeHash(t, fx.SourceRoot) != srcBefore || packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir) != snapBefore {
 		t.Fatal("the original source or the snapshot changed")
 	}
 	home, _ := os.UserHomeDir()
-	assertNoNodePaths(t, raw, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.Root, fx.SourceRoot, home, filepath.Dir(fx.Job.Scratch))
+	packtest.AssertNoNodePaths(t, raw, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.Root, fx.SourceRoot, home, filepath.Dir(fx.Job.Scratch))
 	out := realRun{res: res, doc: doc, raw: raw, specs: runner.specs, fx: fx}
 	for _, e := range res.Executions {
 		for _, p := range []string{e.StdoutPath, e.StderrPath} {
@@ -165,7 +166,7 @@ func TestRealHostFileContentIsNotStored(t *testing.T) {
 	}
 	host := t.TempDir()
 	const bad, ok = "CANARY_BAD_c41f9e", "CANARY_OK_8d27b0"
-	writeTree(t, host, map[string]string{
+	packtest.WriteTree(t, host, map[string]string{
 		"bad.txt": bad + " secret line\n",
 		"ok.h":    "static int canary_fn(void) { int *p = 0; return *p; } /* " + ok + " */\n",
 	})

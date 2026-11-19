@@ -13,6 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -84,15 +85,6 @@ func (r *replayRunner) Run(_ context.Context, spec executor.Spec) executor.Resul
 	return res
 }
 
-func fakeTool(t *testing.T, name string) string {
-	t.Helper()
-	p := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(p, []byte("not executed: replayed\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
-
 // captures lists the check captures of a case: <case>.cppcheck or
 // <case>.clang-tidy.<n> for n = 1.. as long as they exist.
 func captures(t *testing.T, name, tool string) []recorded {
@@ -115,7 +107,7 @@ func captures(t *testing.T, name, tool string) []recorded {
 
 func replayCppcheck(t *testing.T, files map[string]string, scope domain.Scope, checks []recorded, mutate func(int, *executor.Result)) (analysis.TaskResult, obsdoc.Document, *replayRunner) {
 	t.Helper()
-	fake := fakeTool(t, "cppcheck")
+	fake := packtest.FakeExecutable(t, "cppcheck")
 	a, err := NewCppcheck(Config{Executable: fake})
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +121,7 @@ func replayCppcheck(t *testing.T, files map[string]string, scope domain.Scope, c
 
 func replayClangTidy(t *testing.T, files map[string]string, scope domain.Scope, batch int, checks []recorded, mutate func(int, *executor.Result)) (analysis.TaskResult, obsdoc.Document, *replayRunner) {
 	t.Helper()
-	fake := fakeTool(t, "clang-tidy")
+	fake := packtest.FakeExecutable(t, "clang-tidy")
 	a, err := NewClangTidy(Config{Executable: fake, BatchSize: batch})
 	if err != nil {
 		t.Fatal(err)

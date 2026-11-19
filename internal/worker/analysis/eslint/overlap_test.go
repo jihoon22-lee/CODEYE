@@ -5,6 +5,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/tsc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
@@ -35,8 +36,8 @@ func TestRealEngineOverlapExcluded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixOverlapConfig, "src/o.ts": fixOverlapTS, "lib/o.js": fixOverlapJS}), domain.Scope{})
-	res := jststest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixOverlapConfig, "src/o.ts": fixOverlapTS, "lib/o.js": fixOverlapJS}), domain.Scope{})
+	res := packtest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
 	jststest.Capture(t, "overlap", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	byFile := map[string]map[string]int{}
@@ -59,7 +60,7 @@ func TestRealEngineOverlapExcluded(t *testing.T) {
 	if js["no-dupe-class-members"] != 1 || js["no-unused-vars"] != 2 || js["no-fallthrough"] != 1 || js["no-undef"] != 0 {
 		t.Fatalf("baseline JS rules %v", js)
 	}
-	tres := jststest.RunTask(t, tc, fx.Job, "tsc", &executor.Executor{})
+	tres := packtest.RunTask(t, tc, fx.Job, "tsc", &executor.Executor{})
 	jststest.Capture(t, "overlap-tsc", tres)
 	tdoc, _ := jststest.ReadEnvelope(t, fx.Job, tres)
 	rules := jststest.Rules(tdoc)

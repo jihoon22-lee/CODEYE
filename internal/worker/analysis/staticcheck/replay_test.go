@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -92,7 +93,7 @@ func replayAnalyzer(t *testing.T) (*Analyzer, string) {
 	if err := os.WriteFile(fake, []byte("not executed: replayed\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	goh, err := govet.New(govet.Config{GoExecutable: testGo(t)})
+	goh, err := govet.New(govet.Config{GoExecutable: packtest.GoExecutable(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func replay(t *testing.T, files map[string]string, capture string, mutate func(*
 	if capture != "" {
 		r.check = loadCapture(t, capture)
 	}
-	res := runTask(t, a, fx.Job, "staticcheck", r)
+	res := packtest.RunTask(t, a, fx.Job, "staticcheck", r)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	return res, doc, r, fx
 }
@@ -333,14 +334,14 @@ func TestReplayVersionContract(t *testing.T) {
 	a, fake := replayAnalyzer(t)
 	fx := newFixture(t, "", findingFiles(), domain.Scope{})
 	r := &replayRunner{real: &executor.Executor{}, fake: fake, version: "staticcheck (devel, v0.0.0-00010101000000-000000000000)\n", check: loadCapture(t, "findings")}
-	res := runTask(t, a, fx.Job, "staticcheck", r)
+	res := packtest.RunTask(t, a, fx.Job, "staticcheck", r)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonToolVersion || len(r.specs) != 1 || doc.Coverage.ProcessedPaths != nil {
 		t.Fatalf("devel %s/%s staticcheck runs %d %+v", res.Status, res.Reason, len(r.specs), doc.Coverage)
 	}
 	fx2 := newFixture(t, "", findingFiles(), domain.Scope{})
 	r2 := &replayRunner{real: &executor.Executor{}, fake: fake, version: "staticcheck 2025.1.1 (0.6.1)\n", check: loadCapture(t, "findings")}
-	res = runTask(t, a, fx2.Job, "staticcheck", r2)
+	res = packtest.RunTask(t, a, fx2.Job, "staticcheck", r2)
 	doc, _ = readEnvelope(t, fx2.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Tool.VersionTested || !slices.Contains(doc.Limitations, "tool_version_untested") {
 		t.Fatalf("untested %s/%s tested=%v %v", res.Status, res.Reason, doc.Tool.VersionTested, doc.Limitations)

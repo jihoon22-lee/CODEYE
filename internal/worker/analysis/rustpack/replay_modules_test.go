@@ -8,6 +8,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -31,7 +32,7 @@ func TestReplaySiblingModules(t *testing.T) {
 			a := replayAnalyzer(t, tc.kind)
 			fx := newFixture(t, "", fixtureFiles(t, "siblings"), domain.Scope{}, true)
 			r := newReplay(t, tc.capN)
-			res := runTask(t, a, fx.Job, tc.key, r)
+			res := packtest.RunTask(t, a, fx.Job, tc.key, r)
 			doc, _ := readEnvelope(t, fx.Job, res)
 			if res.Status != domain.TaskSucceeded || doc.Module.Dir != tc.dir {
 				t.Fatalf("status %s/%s module %q errors %+v", res.Status, res.Reason, doc.Module.Dir, doc.ToolErrors)

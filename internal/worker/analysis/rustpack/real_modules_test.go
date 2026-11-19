@@ -10,6 +10,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 )
 
 // A registry dependency served by a vendor directory (source replacement in
@@ -102,9 +103,9 @@ func TestRealNoWritesAfterCleanup(t *testing.T) {
 			continue
 		}
 		_, _, _, fx, _ := realRun(t, tc.kind, tc.fixture, tc.key, "", domain.Scope{}, nil)
-		before := treeHash(t, fx.Job.Scratch)
+		before := packtest.TreeHash(t, fx.Job.Scratch)
 		time.Sleep(500 * time.Millisecond)
-		if after := treeHash(t, fx.Job.Scratch); after != before {
+		if after := packtest.TreeHash(t, fx.Job.Scratch); after != before {
 			t.Fatalf("%s %s: the scratch changed after the task ended", tc.fixture, tc.key)
 		}
 		if entries, _ := os.ReadDir(filepath.Join(fx.Job.Scratch, "analyzers", tc.key, "tmp")); len(entries) != 0 {

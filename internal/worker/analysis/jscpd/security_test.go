@@ -9,6 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack/anypacktest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -25,7 +26,7 @@ func TestRealJscpdHostileNamesAndLinks(t *testing.T) {
 	target := anypacktest.Canary(t, canary)
 	files := map[string][]byte{"--help/a.js": []byte(block("alpha", canary)), "-x/b.js": []byte(block("alpha", canary))}
 	fx := anypacktest.NewLinked(t, files, map[string]string{"src/leak.js": target, "linked": filepath.Dir(target)}, domain.Scope{})
-	res := anypacktest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
 	doc, raw := anypacktest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || !slices.Equal(doc.Coverage.ProcessedPaths, []string{"--help/a.js", "-x/b.js"}) {
 		t.Fatalf("%s/%s %+v %+v", res.Status, res.Reason, doc.Coverage, doc.ToolErrors)

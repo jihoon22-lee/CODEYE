@@ -10,6 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack/anypacktest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -29,7 +30,7 @@ func TestRealGitleaksHostileNamesAndLinks(t *testing.T) {
 	links := map[string]string{"--help/leak.py": target, "-x/linked": filepath.Dir(target)}
 	for _, scope := range []domain.Scope{{Kind: "full"}, {Kind: "paths", Paths: []string{"--help", "-x"}}} {
 		fx := anypacktest.NewLinked(t, files, links, scope)
-		res := anypacktest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
+		res := packtest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
 		doc, raw := anypacktest.ReadEnvelope(t, fx.Job, res)
 		for _, v := range []string{secret, canary} {
 			anypacktest.AssertAbsent(t, v, "envelope", raw)

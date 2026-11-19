@@ -12,6 +12,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -53,11 +54,11 @@ func TestRealStaticcheckOperatorModuleCache(t *testing.T) {
 		"go.sum": gosum,
 		"dep.go": "package dep\n\nimport (\n\t\"regexp\"\n\n\t\"golang.org/x/sync/errgroup\"\n)\n\nfunc Group() *errgroup.Group { return new(errgroup.Group) }\n\nfunc Re() *regexp.Regexp { return regexp.MustCompile(\"[\") }\n",
 	}
-	before := []string{treeHash(t, dl), treeHash(t, extracted)}
+	before := []string{packtest.TreeHash(t, dl), packtest.TreeHash(t, extracted)}
 	fx := newFixture(t, "", files, domain.Scope{})
 	a := newAnalyzer(t, cache)
 	runner := &mutatingRunner{inner: &executor.Executor{}}
-	res := runTask(t, a, fx.Job, "staticcheck", runner)
+	res := packtest.RunTask(t, a, fx.Job, "staticcheck", runner)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || !slices.Equal(doc.Coverage.ProcessedPaths, []string{"dep.go"}) {
 		t.Fatalf("operator cache run %s/%s %+v %+v %+v", res.Status, res.Reason, doc.Outcome, doc.Coverage, doc.ToolErrors)
@@ -70,7 +71,7 @@ func TestRealStaticcheckOperatorModuleCache(t *testing.T) {
 			t.Fatalf("spec %s %v: cache %q protected %v", s.Executable, s.Args, s.Env["GOMODCACHE"], s.ProtectedRoots)
 		}
 	}
-	if after := []string{treeHash(t, dl), treeHash(t, extracted)}; !slices.Equal(before, after) {
+	if after := []string{packtest.TreeHash(t, dl), packtest.TreeHash(t, extracted)}; !slices.Equal(before, after) {
 		t.Fatal("the operator module cache changed")
 	}
 }

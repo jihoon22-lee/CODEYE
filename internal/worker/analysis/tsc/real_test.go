@@ -12,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -62,13 +63,13 @@ func caseFiles(extra map[string]string) map[string]string {
 // claimed, the workspace gains no file and no node path is recorded.
 func TestRealTscMonorepo(t *testing.T) {
 	a := newReal(t)
-	fx := jststest.NewFixture(t, filepath.Join(t.TempDir(), "공백 & (dir)"), jststest.MonorepoFiles(t, 4), domain.Scope{})
-	before, ws := jststest.TreeHash(t, fx.SourceRoot), jststest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir)
+	fx := packtest.NewFixture(t, filepath.Join(t.TempDir(), "공백 & (dir)"), jststest.MonorepoFiles(t, 4), domain.Scope{})
+	before, ws := packtest.TreeHash(t, fx.SourceRoot), packtest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir)
 	tasks, err := a.Plan(context.Background(), fx.Job)
 	if err != nil || len(tasks) != 1 || tasks[0].Spec.Key != "tsc.m01" || tasks[0].Spec.Required {
 		t.Fatalf("plan %v %+v", err, tasks)
 	}
-	res := jststest.RunTask(t, a, fx.Job, "tsc.m01", &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, "tsc.m01", &executor.Executor{})
 	jststest.Capture(t, "monorepo", res)
 	doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || doc.Outcome.PartialParse {
@@ -101,8 +102,8 @@ func TestRealTscMonorepo(t *testing.T) {
 	if doc.Module.Name != "@w18/app" || doc.Target.Properties["strict"] != "true" || doc.Target.Properties["module_resolution"] != "bundler" || !doc.Tool.VersionTested {
 		t.Fatalf("module/target %+v %+v %+v", doc.Module, doc.Target, doc.Tool)
 	}
-	jststest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
-	if jststest.TreeHash(t, fx.SourceRoot) != before || jststest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir) != ws {
+	packtest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
+	if packtest.TreeHash(t, fx.SourceRoot) != before || packtest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir) != ws {
 		t.Fatal("source or workspace changed")
 	}
 }
@@ -112,9 +113,9 @@ func TestRealTscMonorepo(t *testing.T) {
 // the workspace unchanged. A clean program exits 0.
 func TestRealTscCleanWritesNothing(t *testing.T) {
 	a := newReal(t)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixCleanConfig, "src/a.ts": fixClean}), domain.Scope{})
-	ws := jststest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir)
-	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixCleanConfig, "src/a.ts": fixClean}), domain.Scope{})
+	ws := packtest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir)
+	res := packtest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
 	jststest.Capture(t, "clean", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	check := res.Executions[len(res.Executions)-1]
@@ -122,7 +123,7 @@ func TestRealTscCleanWritesNothing(t *testing.T) {
 		!slices.Equal(doc.Coverage.ProcessedPaths, []string{"src/a.ts"}) {
 		t.Fatalf("clean %s/%s %+v %+v", res.Status, res.Reason, doc.Outcome, doc.Coverage)
 	}
-	if jststest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir) != ws {
+	if packtest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir) != ws {
 		t.Fatal("tsc wrote into the workspace")
 	}
 }
@@ -133,8 +134,8 @@ func TestRealTscCleanWritesNothing(t *testing.T) {
 // withheld as a tool error, never an observation.
 func TestRealTscDependencyGap(t *testing.T) {
 	a := newReal(t)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/main.ts": fixGap}), domain.Scope{})
-	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/main.ts": fixGap}), domain.Scope{})
+	res := packtest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
 	jststest.Capture(t, "gap", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonDependency || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError || len(doc.Observations) != 0 {
@@ -153,8 +154,8 @@ func TestRealTscDependencyGap(t *testing.T) {
 // fails, and the syntax diagnostics are kept as tool errors.
 func TestRealTscSyntaxError(t *testing.T) {
 	a := newReal(t)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/bad.ts": fixSyntax, "src/ok.ts": fixTypeErr}), domain.Scope{})
-	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/bad.ts": fixSyntax, "src/ok.ts": fixTypeErr}), domain.Scope{})
+	res := packtest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
 	jststest.Capture(t, "syntax", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonSyntax || doc.Coverage.ProcessedPaths != nil {
@@ -169,9 +170,9 @@ func TestRealTscSyntaxError(t *testing.T) {
 // adapter checks each local referenced project and records each run.
 func TestRealTscSolutionConfig(t *testing.T) {
 	a := newReal(t)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixSolution, "tsconfig.app.json": fixSolutionApp, "tsconfig.node.json": fixSolutionNod,
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixSolution, "tsconfig.app.json": fixSolutionApp, "tsconfig.node.json": fixSolutionNod,
 		"src/main.ts": fixTypeErr, "vite.config.ts": fixClean}), domain.Scope{})
-	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
+	res := packtest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
 	jststest.Capture(t, "solution", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	names := []string{}
@@ -200,8 +201,8 @@ func TestRealTscConfigurationFailures(t *testing.T) {
 		{"extends", fixPackageExt, domain.TaskFailed, ReasonExtendsUnresolved},
 		{"no-inputs", fixNoInputs, domain.TaskUnsupported, ReasonNoInputs},
 	} {
-		fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/a.ts": fixClean}), domain.Scope{})
-		res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
+		fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/a.ts": fixClean}), domain.Scope{})
+		res := packtest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
 		jststest.Capture(t, c.name, res)
 		doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 		if res.Status != c.status || res.Reason != c.reason || len(doc.Observations) != 0 || len(doc.Coverage.ProcessedPaths) != 0 {
@@ -214,8 +215,8 @@ func TestRealTscConfigurationFailures(t *testing.T) {
 // the check at the options stage; --ignoreDeprecations 6.0 lets it run.
 func TestRealTscDeprecatedOptionsStillCheck(t *testing.T) {
 	a := newReal(t)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixDeprecated, "src/a.ts": fixTypeErr}), domain.Scope{})
-	res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixDeprecated, "src/a.ts": fixTypeErr}), domain.Scope{})
+	res := packtest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
 	jststest.Capture(t, "deprecated", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSucceeded || len(doc.Observations) != 1 || doc.Observations[0].RuleID != "TS2322" {
@@ -227,16 +228,16 @@ func TestRealTscDeprecatedOptionsStillCheck(t *testing.T) {
 // path are refused before tsc runs.
 func TestRealTscPolicyRefusals(t *testing.T) {
 	a := newReal(t)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": "{\"extends\":\"../outside.json\"}\n", "src/a.ts": fixClean}), domain.Scope{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": "{\"extends\":\"../outside.json\"}\n", "src/a.ts": fixClean}), domain.Scope{})
 	runner := &jststest.MutatingRunner{Inner: &executor.Executor{}}
-	res := jststest.RunTask(t, a, fx.Job, "tsc", runner)
+	res := packtest.RunTask(t, a, fx.Job, "tsc", runner)
 	jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSkippedPolicy || res.Reason != ReasonConfigOutside || len(runner.Specs) != 0 {
 		t.Fatalf("outside %s/%s specs %d", res.Status, res.Reason, len(runner.Specs))
 	}
-	fx = jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixClean}), domain.Scope{})
-	jststest.WriteTree(t, fx.Job.Snapshot.WorkspaceDir, map[string]string{"node_modules/zod/package.json": "{\"name\":\"zod\"}\n"})
-	res = jststest.RunTask(t, a, fx.Job, "tsc", runner)
+	fx = packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixClean}), domain.Scope{})
+	packtest.WriteTree(t, fx.Job.Snapshot.WorkspaceDir, map[string]string{"node_modules/zod/package.json": "{\"name\":\"zod\"}\n"})
+	res = packtest.RunTask(t, a, fx.Job, "tsc", runner)
 	jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSkippedPolicy || res.Reason != ReasonForeignNodeModules || len(runner.Specs) != 0 {
 		t.Fatalf("node_modules %s/%s specs %d", res.Status, res.Reason, len(runner.Specs))
@@ -249,7 +250,7 @@ func TestRealTscPolicyRefusals(t *testing.T) {
 func TestRealTscDoesNotLoadTSConfigPlugins(t *testing.T) {
 	a := newReal(t)
 	dir := t.TempDir()
-	jststest.WriteTree(t, dir, map[string]string{
+	packtest.WriteTree(t, dir, map[string]string{
 		"tsconfig.json": "{\"compilerOptions\":{" + opts + ",\"plugins\":[{\"name\":\"marker-plugin\"}]},\"include\":[\"src\"]}\n",
 		"src/a.ts":      fixClean,
 		"node_modules/marker-plugin/package.json": "{\"name\":\"marker-plugin\",\"main\":\"index.js\"}\n",
@@ -292,13 +293,13 @@ func TestRealTscDamagedOutput(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixTypeErr}), domain.Scope{})
+			fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixTypeErr}), domain.Scope{})
 			runner := &jststest.MutatingRunner{Inner: &executor.Executor{}, Mutate: func(s executor.Spec, r *executor.Result) {
 				if isCheck(s) {
 					c.mutate(r)
 				}
 			}}
-			res := jststest.RunTask(t, a, fx.Job, "tsc", runner)
+			res := packtest.RunTask(t, a, fx.Job, "tsc", runner)
 			doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 			if res.Status != domain.TaskFailed || res.Reason != c.reason || doc.Parse.OK || doc.Coverage.ProcessedPaths != nil {
 				t.Fatalf("%s: %s/%s %+v parse %+v", c.name, res.Status, res.Reason, doc.Outcome, doc.Parse)
@@ -309,10 +310,10 @@ func TestRealTscDamagedOutput(t *testing.T) {
 
 func TestRealTscCancelAndTimeout(t *testing.T) {
 	a := newReal(t)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixClean}), domain.Scope{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixClean}), domain.Scope{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	res := jststest.RunTaskCtx(t, ctx, a, fx.Job, "tsc", &executor.Executor{})
+	res := packtest.RunTaskCtx(t, ctx, a, fx.Job, "tsc", &executor.Executor{})
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskCancelled || doc.Outcome.ExitClass != obsdoc.ExitCancelled {
 		t.Fatalf("cancelled %s %+v", res.Status, doc.Outcome)
@@ -321,8 +322,8 @@ func TestRealTscCancelAndTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fx2 := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixClean}), domain.Scope{})
-	res = jststest.RunTask(t, short, fx2.Job, "tsc", &executor.Executor{})
+	fx2 := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixClean}), domain.Scope{})
+	res = packtest.RunTask(t, short, fx2.Job, "tsc", &executor.Executor{})
 	doc, _ = jststest.ReadEnvelope(t, fx2.Job, res)
 	if res.Status != domain.TaskTimedOut || doc.Outcome.ExitClass != obsdoc.ExitTimeout {
 		t.Fatalf("timeout %s %+v", res.Status, doc.Outcome)

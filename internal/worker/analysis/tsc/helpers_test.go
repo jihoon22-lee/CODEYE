@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 )
 
 // newReal configures the operator tsc (CODEYE_TEST_TSC) on the node
@@ -20,6 +21,6 @@ func newReal(t *testing.T) *Analyzer {
 }
 
 // nodePaths are the host paths no structured output may hold.
-func nodePaths(a *Analyzer, fx jststest.Fixture) []string {
+func nodePaths(a *Analyzer, fx packtest.Fixture) []string {
 	return []string{fx.Base, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir, fx.Job.Snapshot.SnapshotDir, a.script.Package, a.script.Node.Dir, a.script.Resolved}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jsts/jststest"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -71,12 +72,12 @@ func TestTsconfigWriteAndHostPathOptionsRefused(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			// The option sits in an extended base, so the whole chain is checked.
-			fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": "{\"extends\":\"./base.json\"}\n", "base.json": c.config,
+			fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": "{\"extends\":\"./base.json\"}\n", "base.json": c.config,
 				"src/a.ts": fixClean}), domain.Scope{})
 			if c.name == "extends" || c.name == "references" {
-				fx = jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/a.ts": fixClean}), domain.Scope{})
+				fx = packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": c.config, "src/a.ts": fixClean}), domain.Scope{})
 			}
-			res := jststest.RunTask(t, a, fx.Job, "tsc", neverRunner{t})
+			res := packtest.RunTask(t, a, fx.Job, "tsc", neverRunner{t})
 			doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
 			if res.Status != domain.TaskSkippedPolicy || res.Reason != c.reason || !slices.Contains(doc.Limitations, c.limitation) || len(doc.Executions) != 0 {
 				t.Fatalf("%s: %s/%s limitations %v", c.name, res.Status, res.Reason, doc.Limitations)
@@ -92,12 +93,12 @@ func TestTsconfigWriteAndHostPathOptionsRefused(t *testing.T) {
 // flags; a symlink reaching outside the workspace copy is refused.
 func TestTsconfigSymlinkOutsideWorkspaceRefused(t *testing.T) {
 	a := fakeAnalyzer(t)
-	fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": "{\"include\":[\"linked/**/*\"]}\n", "src/a.ts": fixClean}), domain.Scope{})
+	fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": "{\"include\":[\"linked/**/*\"]}\n", "src/a.ts": fixClean}), domain.Scope{})
 	outside := t.TempDir()
 	if err := os.Symlink(outside, filepath.Join(fx.Job.Snapshot.WorkspaceDir, "linked")); err != nil {
 		t.Skipf("symlink: %v", err)
 	}
-	res := jststest.RunTask(t, a, fx.Job, "tsc", neverRunner{t})
+	res := packtest.RunTask(t, a, fx.Job, "tsc", neverRunner{t})
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskSkippedPolicy || res.Reason != ReasonConfigOutside || !slices.Contains(doc.Limitations, "tsconfig_option_symlink") {
 		t.Fatalf("symlink %s/%s %v", res.Status, res.Reason, doc.Limitations)
@@ -117,9 +118,9 @@ func TestEffectiveConfigRefusedBeforeCheck(t *testing.T) {
 		{"files", "{\"compilerOptions\":{\"noEmit\":true},\"files\":[\"../../host/a.ts\"]}\n", ReasonConfigOutside, "tsconfig_option_files"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixClean}), domain.Scope{})
+			fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": fixConfig, "src/a.ts": fixClean}), domain.Scope{})
 			replay := &jststest.Replay{T: t, Steps: []jststest.Recorded{{Name: execVersion, Stdout: []byte("Version 6.0.3\n")}, {Name: execConfig, Stdout: []byte(c.shown)}}}
-			res := jststest.RunTask(t, a, fx.Job, "tsc", replay)
+			res := packtest.RunTask(t, a, fx.Job, "tsc", replay)
 			doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
 			if res.Status != domain.TaskSkippedPolicy || res.Reason != c.reason || !slices.Contains(doc.Limitations, c.limitation) || len(replay.Specs) != 2 {
 				t.Fatalf("%s: %s/%s %v specs %d", c.name, res.Status, res.Reason, doc.Limitations, len(replay.Specs))
@@ -150,7 +151,7 @@ func TestRealTscWriteOptionsCanary(t *testing.T) {
 	}{{"outDir", false}, {"declarationDir", false}, {"outFile", false}, {"tsBuildInfoFile", false}, {"generateTrace", true}} {
 		dir, canary := t.TempDir(), t.TempDir()
 		val := filepath.ToSlash(filepath.Join(canary, "out"))
-		jststest.WriteTree(t, dir, map[string]string{
+		packtest.WriteTree(t, dir, map[string]string{
 			"tsconfig.json": "{\"compilerOptions\":{" + opts + ",\"declaration\":true,\"incremental\":true,\"composite\":true,\"" + c.opt + "\":\"" + val + "\"},\"include\":[\"src\"]}\n",
 			"src/a.ts":      fixClean,
 		})
@@ -189,17 +190,17 @@ func TestRealTscTypicalEmitConfigRuns(t *testing.T) {
 	for _, extra := range []string{"", ",\"emitDeclarationOnly\":true"} {
 		config := "{\"compilerOptions\":{" + opts + ",\"outDir\":\"./dist\",\"declaration\":true,\"declarationDir\":\"./types\",\"rootDir\":\"./src\",\"baseUrl\":\".\"," +
 			"\"paths\":{\"@/*\":[\"./src/*\"]},\"composite\":true,\"incremental\":true,\"tsBuildInfoFile\":\"./build/app.tsbuildinfo\"" + extra + "},\"include\":[\"src\"]}\n"
-		fx := jststest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": config, "src/a.ts": fixClean,
+		fx := packtest.NewFixture(t, "", caseFiles(map[string]string{"tsconfig.json": config, "src/a.ts": fixClean,
 			"src/b.ts": "import { add } from \"@/a\";\n\nexport const three: number = add(1, 2);\n"}), domain.Scope{})
-		ws := jststest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir)
-		res := jststest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
+		ws := packtest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir)
+		res := packtest.RunTask(t, a, fx.Job, "tsc", &executor.Executor{})
 		doc, raw := jststest.ReadEnvelope(t, fx.Job, res)
 		if res.Status != domain.TaskSucceeded || len(doc.Observations) != 0 || len(doc.Coverage.ProcessedPaths) != 2 {
 			t.Fatalf("%q: %s/%s %+v %v\n%s", extra, res.Status, res.Reason, doc.ToolErrors, doc.Limitations, res.Executions[len(res.Executions)-1].Result.Stdout.Data)
 		}
-		if jststest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir) != ws {
+		if packtest.TreeHash(t, fx.Job.Snapshot.WorkspaceDir) != ws {
 			t.Fatalf("%q: tsc wrote into the workspace", extra)
 		}
-		jststest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
+		packtest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)
 	}
 }

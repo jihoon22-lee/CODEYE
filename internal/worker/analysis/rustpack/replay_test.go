@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -157,7 +158,7 @@ func replayCase(t *testing.T, kind Kind, fixtureName, capture string, mutate fun
 	r := newReplay(t, capture)
 	r.mutate = mutate
 	key := a.Descriptor().Name
-	res := runTask(t, a, fx.Job, key, r)
+	res := packtest.RunTask(t, a, fx.Job, key, r)
 	doc, raw := readEnvelope(t, fx.Job, res)
 	return replayResult{res: res, doc: doc, raw: raw, r: r, fx: fx, a: a}
 }
@@ -210,7 +211,7 @@ func TestReplayCheckFindings(t *testing.T) {
 			t.Fatalf("spec %+v", s)
 		}
 	}
-	assertNoNodePaths(t, x.raw, x.fx.Job.Scratch, x.fx.Job.Snapshot.WorkspaceDir, x.fx.Job.Snapshot.SnapshotDir, x.a.tcDir)
+	packtest.AssertNoNodePaths(t, x.raw, x.fx.Job.Scratch, x.fx.Job.Snapshot.WorkspaceDir, x.fx.Job.Snapshot.SnapshotDir, x.a.tcDir)
 }
 
 // TC-114/116 on captured bytes: clippy keeps only clippy:: lints.
@@ -345,7 +346,7 @@ func TestReplayWorkspaceDrift(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	res := runTask(t, a, fx.Job, "cargo-check", r)
+	res := packtest.RunTask(t, a, fx.Job, "cargo-check", r)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskFailed || res.Reason != ReasonWorkspaceDrift || !slices.Equal(doc.WorkspaceDrift, []string{"src/lib.rs"}) || doc.Coverage.ProcessedPaths != nil {
 		t.Fatalf("status %s/%s drift %v", res.Status, res.Reason, doc.WorkspaceDrift)
@@ -412,7 +413,7 @@ func TestReplayNoDepInfoIsNotProcessed(t *testing.T) {
 	fx := newFixture(t, "", files, domain.Scope{}, true)
 	r := newReplay(t, "check-clean")
 	r.depsDir = ""
-	res := runTask(t, a, fx.Job, "cargo-check", r)
+	res := packtest.RunTask(t, a, fx.Job, "cargo-check", r)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskUnsupported || res.Reason != ReasonNoCrates || doc.Outcome.ExitClass != obsdoc.ExitConfigurationError || doc.Coverage.ProcessedPaths != nil && len(doc.Coverage.ProcessedPaths) != 0 {
 		t.Fatalf("status %s/%s %+v coverage %+v", res.Status, res.Reason, doc.Outcome, doc.Coverage)
@@ -427,7 +428,7 @@ func TestReplayVersionContract(t *testing.T) {
 		fx := newFixture(t, "", fixtureFiles(t, "clean"), domain.Scope{}, true)
 		r := newReplay(t, "check-clean")
 		mutate(r)
-		res := runTask(t, a, fx.Job, "cargo-check", r)
+		res := packtest.RunTask(t, a, fx.Job, "cargo-check", r)
 		doc, _ := readEnvelope(t, fx.Job, res)
 		return res, doc, r
 	}
@@ -473,14 +474,14 @@ func TestReplayPlaceholderWhenNoCargoPackage(t *testing.T) {
 		t.Fatalf("clippy plans the gap once, via cargo-check: %+v %v", ct, err)
 	}
 	r := newReplay(t, "")
-	res := runTask(t, a, fx.Job, "cargo-check", r)
+	res := packtest.RunTask(t, a, fx.Job, "cargo-check", r)
 	doc, _ := readEnvelope(t, fx.Job, res)
 	if res.Status != domain.TaskUnsupported || res.Reason != ReasonManifestMissing || doc.Outcome.ExitClass != obsdoc.ExitNotRun || len(r.all) != 0 || doc.Coverage.ProcessedPaths == nil || len(doc.Coverage.ProcessedPaths) != 0 {
 		t.Fatalf("status %s/%s %+v processes %d", res.Status, res.Reason, doc.Outcome, len(r.all))
 	}
 	// A manifest exists but the path scope holds no package.
 	fx = newFixture(t, "", map[string]string{"a/Cargo.toml": "[package]\nname=\"a\"\n", "a/src/lib.rs": "pub fn f() {}\n", "b/loose.rs": "fn g() {}\n"}, domain.Scope{Kind: "paths", Paths: []string{"b"}}, true)
-	res = runTask(t, a, fx.Job, "cargo-check", newReplay(t, ""))
+	res = packtest.RunTask(t, a, fx.Job, "cargo-check", newReplay(t, ""))
 	if res.Reason != ReasonScopeNoPackage {
 		t.Fatalf("status %s/%s", res.Status, res.Reason)
 	}
