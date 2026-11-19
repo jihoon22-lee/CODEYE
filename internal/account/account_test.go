@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// TC-147
 func TestNormalizeUsername(t *testing.T) {
 	for in, want := range map[string]string{"Alice": "alice", "bob.k_9-x": "bob.k_9-x", "AB": "ab"} {
 		if got, err := NormalizeUsername(in); err != nil || got != want {
@@ -19,6 +20,7 @@ func TestNormalizeUsername(t *testing.T) {
 	}
 }
 
+// TC-147
 func TestCheckPassword(t *testing.T) {
 	ok := []string{"correct horse battery", "비밀번호는열두글자이상입니다", strings.Repeat("ab", 6)}
 	for _, p := range ok {
@@ -37,6 +39,7 @@ func TestCheckPassword(t *testing.T) {
 	}
 }
 
+// TC-147
 func TestDeriveVerify(t *testing.T) {
 	h, err := Derive("correct horse battery", MinIterations)
 	if err != nil {
@@ -65,6 +68,7 @@ func TestDeriveVerify(t *testing.T) {
 
 // TestDefaultCostIsSlow records the cost of one default derivation on this
 // machine (the reason logins derive outside database transactions).
+// TC-147
 func TestDefaultCostIsSlow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short")

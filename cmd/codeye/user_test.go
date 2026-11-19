@@ -25,6 +25,7 @@ func withStdin(t *testing.T, text string) {
 	t.Cleanup(func() { passwordStdin = prev; _ = r.Close() })
 }
 
+// TC-154
 func TestUserAccountCommands(t *testing.T) {
 	pool, _ := isolatedStore(t)
 	ctx := context.Background()

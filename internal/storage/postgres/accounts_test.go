@@ -59,6 +59,7 @@ func auditRows(t *testing.T, s *Store, action string) []map[string]any {
 	return out
 }
 
+// TC-148
 func TestPasswordLoginOutcomesAreIndistinguishable(t *testing.T) {
 	s := fastStore(t)
 	ctx := context.Background()
@@ -110,6 +111,7 @@ func TestPasswordLoginOutcomesAreIndistinguishable(t *testing.T) {
 	}
 }
 
+// TC-149
 func TestLoginThrottleByAccountAndAddress(t *testing.T) {
 	s := fastStore(t)
 	ctx := context.Background()
@@ -168,6 +170,7 @@ func TestLoginThrottleByAccountAndAddress(t *testing.T) {
 	}
 }
 
+// TC-149
 func TestConcurrentGuessesAllCount(t *testing.T) {
 	s := fastStore(t)
 	newAccount(t, s, OperatorPrincipal(), "carol", false)
@@ -200,6 +203,7 @@ func TestConcurrentGuessesAllCount(t *testing.T) {
 	}
 }
 
+// TC-150
 func TestPasswordChangeResetAndRehash(t *testing.T) {
 	s := fastStore(t)
 	ctx := context.Background()
@@ -281,6 +285,7 @@ func TestPasswordChangeResetAndRehash(t *testing.T) {
 	}
 }
 
+// TC-151
 func TestLastAdministratorStays(t *testing.T) {
 	s := fastStore(t)
 	ctx := context.Background()
@@ -356,6 +361,7 @@ func TestLastAdministratorStays(t *testing.T) {
 	}
 }
 
+// TC-152
 func TestMembersAndAuditReads(t *testing.T) {
 	s := fastStore(t)
 	ctx := WithRequestID(context.Background(), "req_0123456789abcdef01234567")
@@ -459,6 +465,7 @@ func TestMembersAndAuditReads(t *testing.T) {
 	}
 }
 
+// TC-152
 func TestAuditDetailAllowlist(t *testing.T) {
 	for _, bad := range []map[string]any{
 		{"password": "x"}, {"token": "x"}, {"username": strings.Repeat("a", 201)}, {"user_id": map[string]any{}}, {"role": new(string)},

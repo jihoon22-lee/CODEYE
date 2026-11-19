@@ -14,6 +14,7 @@ import (
 // set once; the audit table is append-only with a closed vocabulary; the
 // throttle key exists once and is immutable. A 0009 binary refuses the
 // result.
+// TC-153
 func TestAccountsMigrationKeepsLoginLinkUsers(t *testing.T) {
 	schema, open := isolatedSchema(t)
 	ctx := testCtx(t)
@@ -94,6 +95,7 @@ func TestAccountsMigrationKeepsLoginLinkUsers(t *testing.T) {
 
 // A failing statement inside 0010 rolls back the whole application: the
 // users table keeps its 0009 shape and no audit table exists.
+// TC-153
 func TestAccountsMigrationFailureRollsBack(t *testing.T) {
 	schema, open := isolatedSchema(t)
 	ctx := testCtx(t)

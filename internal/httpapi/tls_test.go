@@ -61,6 +61,7 @@ func writeCert(t *testing.T, host string, keyMode os.FileMode) (string, string, 
 	return certFile, keyFile, pool
 }
 
+// TC-146
 func TestListenRules(t *testing.T) {
 	for _, bad := range []string{"127.0.0.1:0", "localhost:7331", "codeye.example:443", ":7331"} {
 		if _, err := ParseListen(bad); err == nil {
@@ -119,6 +120,7 @@ func TestListenRules(t *testing.T) {
 
 // TestServeRefusesPlainNonLoopbackListener: even a caller that hands Serve a
 // listener on a non-loopback address gets no plain HTTP served.
+// TC-146
 func TestServeRefusesPlainNonLoopbackListener(t *testing.T) {
 	srv, err := New(Config{Listen: mustLoopback(t), SweepInterval: -1, ReconcileInterval: -1, PublishInterval: -1}, &postgres.Store{})
 	if err != nil {
@@ -136,6 +138,7 @@ func TestServeRefusesPlainNonLoopbackListener(t *testing.T) {
 	}
 }
 
+// TC-146
 func TestTLSServerOnWildcardAddress(t *testing.T) {
 	e := newEnv(t)
 	ln, err := net.Listen("tcp", "0.0.0.0:0")
