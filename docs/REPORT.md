@@ -125,7 +125,7 @@ builder 7부터 환경 절은 `deps.*` task마다 한 행(`environment.dependenc
 - 종합의 환경 절 수에 `dependencies`(의존성 task 수)와 `dependencies_prepared`(성공한 task 수)가 더해진다. 의존성 task가 없으면 두 수는 없다.
 - 공백(`gaps`, 절 `environment`):
   - `dependencies_not_prepared`: 성공하지 않은 의존성 task. 받을 것이 없어 건너뛴 task는 넣지 않는다. `subject`는 task key, `detail`은 사유다.
-  - `dependencies_not_fetched`: 분석기 task가 `dependency_unavailable`로 끝났는데 그 생태계의 의존성 task가 없다(의존성 받기가 꺼져 있었다). `subject`는 분석기 task key다.
+  - `dependencies_not_fetched`: 그 생태계의 의존성 task가 없는데(의존성 받기가 꺼져 있었다) 분석기가 의존성을 풀지 못했다. 분석기 task가 `dependency_unavailable`로 끝났거나(`detail`은 그 사유), Python 타입 검사기가 성공했지만 coverage에 `import_unresolved` 단위와 `third_party_packages_not_installed`가 있다(`detail` `imports_unresolved`). `subject`는 분석기 task key다. Python 조건은 아직 출시하지 않은 builder 7 안에서 더했으므로 builder 버전은 그대로다.
   - `dependency_versions_not_pinned`: lockfile이 버전을 고정하지 않아 받는 도구가 버전을 골랐다.
 - 판정 규칙은 바뀌지 않는다. 의존성 task는 필수가 아니므로 실패해도 그것만으로 보고서가 `partial`이 되지 않는다. 의존성이 없어 분석기가 실패하면 그 분석기 task가 판정에 반영된다.
 - Markdown·HTML은 환경 절에 모듈·받는 도구·결과·받은 수·사유·한계 표를 보인다.

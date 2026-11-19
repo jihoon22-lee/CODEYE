@@ -69,19 +69,22 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--dependency-cache-dir DIR` | 받은 의존성의 공유 캐시. 기본 `<state-dir>/cache/deps`(개인 모드는 `state_dir/cache/deps`를 준다) | `deps.*`, 받은 캐시를 읽는 분석기 |
 | `--dependency-timeout D`, `--dependency-total-timeout D`, `--dependency-max-bytes N` | 모듈당 제한시간(10분), attempt 합계(20분), 내려받기 크기 상한(2 GiB) | `deps.*` |
 | `--go-proxy`, `--go-sumdb`, `--go-private`, `--go-noproxy`, `--go-nosumdb` | Go 모듈 받기의 `GOPROXY`·`GOSUMDB`·`GOPRIVATE`·`GONOPROXY`·`GONOSUMDB`. 비우면 Go 기본값([Go 의존성 받기](#go-의존성-받기)) | `deps.go` |
+| `--python /abs/python3` | pip을 가진(또는 uv가 설치할 대상인) Python interpreter. 3.11 이상이어야 `pyproject.toml`을 읽는다 | `deps.python`, 받은 패키지를 읽는 mypy |
+| `--uv /abs/uv` | uv 실행 파일. 있으면 pip 대신 uv가 설치하고 `uv.lock`을 읽는다([Python 의존성 받기](#python-의존성-받기)) | `deps.python` |
+| `--pip-index-url URL` | Python 패키지 index(`--index-url`). 비우면 설치 도구 기본값(PyPI). 인증정보가 든 URL은 거부 | `deps.python` |
 
 - 도구 플래그는 분석기 카탈로그에서 자동으로 만든다(`builtin.ToolFlags()`, `builtin.ToolchainFlags()`). 플래그 이름은 Descriptor의 `Tool`이고 `--eslint` 하나가 두 분석기에 쓰인다.
 - 모든 경로는 절대 경로다. PATH를 검색하지 않고, 내려받지 않으며, 다른 위치로 대체하지 않는다. 셸·`.cmd` shim은 받지 않는다.
 - `--mypy`와 `--pyright`를 함께 주면서 `--python-both-type-checkers`가 없거나, 이 플래그만 있고 두 경로가 다 없으면 agent는 사용법 오류(exit 2)로 시작하지 않는다.
-- agent는 값을 worker hello로 넘긴다. `go_executable`, `go_mod_cache`, `tool_path`, `analyzer_tools`(도구 이름 → 경로, 공유 toolchain은 예약 이름 `node`로 같은 맵에 들어감), 그리고 스위치가 켜졌을 때만 `dependencies`(캐시 root, 예산, Go 받기 설정)다. 이 빌드가 모르는 도구 이름은 `unknown_tool`로 보고하고 실행하지 않는다.
+- agent는 값을 worker hello로 넘긴다. `go_executable`, `go_mod_cache`, `tool_path`, `analyzer_tools`(도구 이름 → 경로, 공유 toolchain은 예약 이름 `node`로 같은 맵에 들어감), 그리고 스위치가 켜졌을 때만 `dependencies`(캐시 root, 예산, Go 받기 설정, 받는 도구 경로 `package_managers`, `pip_index_url`)다. 이 빌드가 모르는 도구 이름은 `unknown_tool`로 보고하고 실행하지 않는다.
 
-개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`, `agent.dependencies`(`enabled` 기본 켜짐, `cache_dir`, `go_proxy`, `go_sumdb`, `go_private`, `go_noproxy`, `go_nosumdb`, `timeout_seconds`, `total_timeout_seconds`, `max_download_bytes`)가 위 플래그가 된다. 저장소 코드 실행은 개인 모드에서 프로젝트별 선택이다(`source_roots[].repository_code`는 쓰이지 않는다, A40)([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
+개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`, `agent.dependencies`(`enabled` 기본 켜짐, `cache_dir`, `go_proxy`, `go_sumdb`, `go_private`, `go_noproxy`, `go_nosumdb`, `pip_index_url`, `timeout_seconds`, `total_timeout_seconds`, `max_download_bytes`)가 위 플래그가 된다. `agent.tools.python`·`agent.tools.uv`는 `--python`·`--uv`다. 저장소 코드 실행은 개인 모드에서 프로젝트별 선택이다(`source_roots[].repository_code`는 쓰이지 않는다, A40)([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
 
 ### 도구 찾기
 
 개인 모드는 도구 경로를 손으로 적지 않아도 된다. 시작할 때마다 `internal/toolfind`가 이 머신의 도구를 찾고, 위 플래그가 될 값을 정한다. `codeye tools`가 같은 탐색을 하고 표로 보여 준다([운영](OPERATIONS.md#codeye-tools)). 서버·노드 에이전트를 직접 띄울 때는 탐색이 없고 위 플래그만 쓴다.
 
-**찾는 대상.** go, git, node, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, eslint, tsc, jscpd, cargo, clippy). 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
+**찾는 대상.** go, git, node, OpenCode와 이 빌드의 분석기 도구 전부(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, eslint, tsc, jscpd, cargo, clippy), 그리고 의존성을 받는 도구 uv와 python이다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
 
 **찾는 위치.** 순서대로 사용자의 `PATH`, `~/.local/bin`, `~/go/bin`, `/usr/local/go/bin`과 시스템 디렉터리, `~/.opencode/bin`, CODEYE 도구 접두사 `~/.local/share/codeye-tools/{bin,cpp/bin,go/bin}`이다. 모양이 정해진 도구는 다음처럼 찾는다.
 
@@ -91,6 +94,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | cargo, clippy | `~/.rustup/settings.toml`의 `default_toolchain`, 이어서 나머지 toolchain의 `toolchains/<이름>/bin/cargo`. clippy는 선택한 cargo와 같은 디렉터리의 `cargo-clippy`만 쓴다. `~/.cargo/bin`의 rustup proxy는 [거부 규칙](#도구와-rustup-proxy-거부)대로 쓰지 않는다. |
 | mypy, bandit, lizard | 첫 줄이 절대 경로 interpreter인 스크립트여야 한다. `#!/usr/bin/env`인 후보는 다음 후보로 넘어간다. |
 | go | 실행 파일이 GOROOT의 `bin/go`여야 한다. |
+| uv, python | 실행 파일 `uv`와 `python3`(Windows `python`)을 같은 위치에서 찾는다. python은 3.8 이상이어야 하고 `python -I -m pip --version`이 pip을 보여야 한다. pip이 없는 interpreter는 uv를 찾았을 때만 쓴다(uv가 그 interpreter에 설치한다). 시험한 계열은 uv 0.12, Python 3.11 이상이다. |
 
 **검증.** 후보마다 에이전트가 시작할 때 하는 것과 같은 검증을 한다. 분석기를 만들고(모양 규칙) 버전 probe를 실행한다(`builtin.CheckTool`). 그래서 `found`인 도구는 에이전트가 받아들이는 도구다. git과 OpenCode는 `--version`만 실행한다. 한 도구의 후보가 여러 개면 버전이 시험한 계열(위 [확인한 도구 버전](#확인한-도구-버전))인 첫 후보를 쓰고, 없으면 쓸 수 있는 첫 후보를 쓴다.
 
@@ -773,7 +777,7 @@ ruff(기준), mypy·pyright(타입 검사, 서로 대안), bandit(보안)이다.
 
 네 도구 모두 `repository_config=overridden`, `config_files=[]`다. 저장소 설정 값은 경로를 정하지 못하며 쓰기 위치(캐시, 보고서, bandit JSON, pyright 설정·빈 venv)는 모두 task scratch다.
 
-mypy·bandit 스크립트는 운영자 venv의 절대 `#!` interpreter로 실행한다(`#!` 검사는 Unix에서만). 환경에는 `PYTHONDONTWRITEBYTECODE=1`·`PYTHONNOUSERSITE=1`·`PYTHONSAFEPATH=1`을 둔다. mypy는 `--no-site-packages`라 설치 패키지를 묻지 않는다. pyright는 공유 node toolchain이 진입 스크립트를 실행한다. 네 도구 모두 PATH에서 찾는 보조 프로그램이 없다.
+mypy·bandit 스크립트는 운영자 venv의 절대 `#!` interpreter로 실행한다(`#!` 검사는 Unix에서만). 환경에는 `PYTHONDONTWRITEBYTECODE=1`·`PYTHONNOUSERSITE=1`·`PYTHONSAFEPATH=1`을 둔다. mypy는 `--no-site-packages`라 설치 패키지를 묻지 않는다. 이 attempt가 Python 패키지를 받았으면 대신 `--python-executable`로 task scratch의 가짜 venv(운영자 `--python`을 가리키는 `bin/python`과 받은 트리의 site-packages)를 준다. mypy는 그 interpreter를 `-I`로 한 번 실행해 검색 경로를 묻는다. 받은 트리의 시작 hook(`*.pth`, `sitecustomize`)은 받을 때 지웠다([Python 의존성 받기](#python-의존성-받기)). pyright는 공유 node toolchain이 진입 스크립트를 실행한다. 네 도구 모두 PATH에서 찾는 보조 프로그램이 없다.
 
 ### 대상 Python 버전
 
@@ -837,7 +841,7 @@ ruff S 규칙은 bandit 검사를 다시 구현한 것이라 고르지 않는다
 
 ### import·stub 공백
 
-의존성을 설치하지 않는다. 해결되지 않은 import는 결함이 아니라 범위 공백이다. 두 검사기 모두 해결되지 않은 모듈을 `Any`로 다뤄 후속 오류를 내지 않으므로 후속 오류를 따로 거르지 않는다. 타입 검사기 task에는 언제나 `third_party_packages_not_installed`가 붙는다. 프로젝트 venv를 쓰는 방식은 저장소 코드 실행이라 두지 않았다.
+검사기는 패키지를 설치하지 않는다. 같은 attempt의 `deps.python` 기록이 쓸 수 있으면 그 트리를 읽는다([Python 의존성 받기](#python-의존성-받기)). 해결되지 않은 import는 결함이 아니라 범위 공백이다. 두 검사기 모두 해결되지 않은 모듈을 `Any`로 다뤄 후속 오류를 내지 않으므로 후속 오류를 따로 거르지 않는다. 받은 트리가 없으면 타입 검사기 task에 `third_party_packages_not_installed`가 붙고, 있으면 `third_party_packages_prepared`(일부만 받았으면 `third_party_packages_partially_prepared`)다. 프로젝트 venv를 쓰는 방식은 저장소 코드 실행이라 두지 않았다.
 
 | 도구 | 진단 | coverage 단위 | 제약 |
 |---|---|---|---|
@@ -846,6 +850,45 @@ ruff S 규칙은 bandit 검사를 다시 구현한 것이라 고르지 않는다
 | pyright | `reportMissingImports` | `import_unresolved` | `imports_unresolved` |
 | pyright | `reportMissingModuleSource` | `import_source_missing` | `import_sources_missing` |
 | pyright | `reportMissingTypeStubs` | `stub_missing` | `type_stubs_missing` |
+
+### Python 의존성 받기
+
+`deps.python`·`deps.python.mNN` task가 mypy·pyright와 같은 모듈 계획으로 모듈마다 제3자 패키지를 wheel로만 받아 트리 하나에 설치한다([의존성 준비](ARCHITECTURE.md#의존성-준비), 결정 A44). mypy나 pyright가 이 노드에서 쓸 수 없으면 `no_dependency_consumer`로 건너뛴다. 저장소 코드(`setup.py`, build backend)는 실행하지 않는다.
+
+**읽는 선언.** 모듈 디렉터리의 다음을 읽어 CODEYE의 요구사항 파일을 새로 쓴다. 저장소의 파일을 설치 도구에 그대로 넘기지 않는다.
+
+| 선언 | 읽는 방법 |
+|---|---|
+| `uv.lock` | `--uv`가 있을 때만. `uv export --frozen --offline --no-config --all-extras --all-groups --no-emit-project --no-emit-workspace --no-emit-local --format requirements-txt`로 꺼낸다(네트워크·프로젝트 수정 없음). 있으면 아래 선언은 읽지 않는다. uv가 없으면 `uv_not_configured`로 빼고 아래를 읽는다 |
+| `pyproject.toml` | `[project] dependencies`, 모든 `optional-dependencies`, PEP 735 `dependency-groups`(`include-group` 펼침, group마다 한 번, 요구사항 10,000개 상한). 운영자 interpreter를 `-I -S`로 실행해 표준 라이브러리 `tomllib`로 읽고 파일은 stdin으로 준다(3.11 이상) |
+| `requirements*.txt` | 모듈 디렉터리의 `requirements*.txt`. `-r`·`-c`는 snapshot 안 파일만 따라간다 |
+
+받지 않는 입력은 기록의 `dropped_inputs`에 사유와 함께 남는다(최대 100개): `editable_requirement_not_fetched`(`-e`), `local_requirement_not_fetched`(로컬 경로), `vcs_requirement_not_fetched`(`git+` 등), `installer_option_ignored`(`--index-url`·`--extra-index-url`·`--find-links`·`--trusted-host` 등 저장소가 적은 설치 옵션), `requirement_not_understood`, `included_file_not_in_snapshot`, `uv_not_configured`, `poetry_dependencies_not_read`, `lockfile_format_unsupported`(`poetry.lock`, `Pipfile`, `Pipfile.lock`, `pdm.lock`). 요구사항 줄은 허용 목록(이름, extras, PEP 440 지정자, marker, `--hash`, `name @ https://...`)으로만 다시 쓴다. 저장소가 적은 index 옵션을 따르지 않으므로 index는 운영자의 `--pip-index-url`(없으면 PyPI)뿐이다.
+
+**설치.** 빈 task 작업 디렉터리(`<scratch>/deps/<key>/work`)에서 실행한다.
+
+| 도구 | argv |
+|---|---|
+| uv | `uv pip install --target <트리>/lib/python3.N/site-packages --python <--python> --no-build --no-config --no-progress --color never --cache-dir <캐시>/python/uv -r <CODEYE 요구사항> [-c <제약>] [--index-url URL]`, 환경 `UV_PYTHON_DOWNLOADS=never` |
+| pip | `<--python> -I -m pip install --target ... --only-binary=:all: --isolated --no-input --disable-pip-version-check --no-warn-script-location --progress-bar off --no-color --retries 2 --timeout 30 --cache-dir <캐시>/python/pip -r ... [-c ...] [--index-url URL]`, 환경 `PYTHONNOUSERSITE=1` |
+
+- uv가 있으면 uv, 없으면 `--python`의 pip이다. 어느 쪽이든 `--python`이 필요하다(트리는 그 interpreter 버전으로 풀린다). 없으면 `unsupported`/`package_manager_not_configured`다.
+- wheel이 없거나 index에 없는 요구사항은 빼고 다시 설치한다(최대 3번 더). 전이 의존성이 원인이면 그것을 끌어온 직접 요구사항을 뺀다. 뺀 것은 `failed_items`에 남고 기록은 `partial`이다.
+- 설치가 끝나면 site-packages 맨 위의 `*.pth`, `sitecustomize.py`, `usercustomize.py`를 지운다(한계 `interpreter_startup_hooks_removed`). 받은 트리를 읽는 interpreter가 그 코드를 실행하지 않게 하기 위해서다.
+- 일부 요구사항에만 `--hash`가 있으면 설치 도구가 섞인 목록을 거부하므로 hash를 모두 떼고 `requirement_hashes_not_checked`를 남긴다. 모두 있으면 그대로 넘겨 설치 도구가 확인한다.
+- 크기 상한은 내려받기 캐시, 만드는 트리, 설치 도구가 푸는 임시 디렉터리를 함께 잰다.
+
+**캐시.** `uv.lock`에서 왔거나 모든 줄이 `==`(와일드카드 없음)이면 고정(`pinned=true`)이다. 고정이면 트리를 공유 캐시 `python/trees/<sha256 앞 32자>`에 둔다. key는 요구사항·제약·interpreter 버전·설치 도구와 버전·index다. 같은 key의 트리가 있으면 다시 받지 않는다(한계 `prepared_tree_reused`). 고정이 아니면 attempt 트리(`<scratch>/deps/<key>/tree`, 기록 cache `attempt`)이고 attempt scratch와 함께 지워지며 `dependency_versions_not_pinned` 공백이 남는다.
+
+**분석기 연결.** 같은 snapshot·attempt·모듈의 기록이 `prepared`·`partial`이고 트리가 있으면 쓴다.
+
+- pyright: CODEYE `pyrightconfig.json`의 `venvPath`/`venv`가 빈 venv 대신 받은 트리를 가리킨다.
+- mypy: `--no-site-packages` 대신 `--python-executable=<scratch 가짜 venv>/bin/python`이다. 가짜 venv는 `pyvenv.cfg`, 운영자 `--python`을 가리키는 `bin/python` symlink, 받은 site-packages를 가리키는 symlink다. `rule_pack.selection`에는 `--python-executable=codeye-prepared`로 남는다. Windows는 가짜 venv를 만들지 않아 mypy는 패키지 없이 검사하고 `prepared_packages_not_used`를 남긴다.
+- 트리 경로는 메시지에서 `$DEPS`로 가리고 보호 경로다.
+
+**사유.** `no_binary_distribution`(uv: wheel 없음), `no_matching_distribution`(pip: wheel 없음과 이름 없음을 구분하지 않는다), `dependency_not_found`, `resolution_conflict`, `registry_auth_required`, `hash_mismatch`, `registry_unreachable`, `dynamic_dependencies_not_read`(`dynamic`에 dependencies가 있음, `unsupported`), `lockfile_format_unsupported`(`unsupported`), `pyproject_unreadable`, `too_many_requirements`, `lockfile_export_failed`, `workspace_drift`, `snapshot_integrity_failed`와 공통 사유. 받을 것이 없으면 `no_dependencies`다.
+
+**한계.** 트리는 `--python`의 버전·플랫폼으로 풀린다. 분석 대상 버전(예: `requires-python` 하한 3.10)과 다르면 marker로 갈리는 패키지가 다를 수 있다. 사용자 pip 설정(`pip.conf`)과 proxy 환경변수는 넘기지 않는다(`--isolated`, 고정 환경).
 
 ### Python 결과 판정
 

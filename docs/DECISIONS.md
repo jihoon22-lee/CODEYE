@@ -216,6 +216,18 @@
 [분석기](ANALYZERS.md)
 
 
+**A44 — Python 의존성 받기.** (기록 2026-11-19) REQ-007/014/015, NFR-006과 TC-210~218에 대해 다음을 확정한다. A42의 틀을 따른다.
+
+1. **wheel만 받는다.** sdist를 빌드하면 저장소가 적은 패키지의 `setup.py`·build backend를 실행하게 된다. pip `--only-binary=:all:`, uv `--no-build`로 받고 wheel이 없는 요구사항은 빼고 다시 설치해 `partial`로 남긴다(최대 3번 더). 모듈 전체를 실패시키면 wheel 하나 때문에 나머지 패키지가 모두 빠진다(httpx의 `mkautodoc`, 실측).
+2. **선언을 다시 쓴다.** 저장소의 requirements 파일을 설치 도구에 그대로 넘기면 저장소가 `--index-url`·`--find-links`·editable·로컬 경로로 설치 대상을 정한다. 요구사항 줄을 허용 목록으로 읽어 CODEYE의 파일을 쓰고, 나머지는 `dropped_inputs`에 사유와 함께 남긴다. index는 운영자 값뿐이다. `pyproject.toml`은 운영자 interpreter의 `tomllib`로 `-I -S`·stdin으로 읽는다. Go 쪽에 TOML parser 의존성을 더하지 않기 위해서다. `uv.lock`은 uv의 `export --frozen --offline`으로만 읽는다.
+3. **mypy는 가짜 venv로 읽는다.** `MYPYPATH`에 site-packages를 주는 안은 실측에서 실패했다. mypy가 `mypy_extensions`를 stdlib 그림자로 거부하고(exit 2), 그 파일을 지우면 제3자 stub 안의 오류를 보고하며 `import-untyped`를 숨겼다. `--python-executable`에 운영자 interpreter와 받은 site-packages를 묶은 scratch venv를 주면 PEP 561 규칙대로 읽는다(httpx `import-not-found` 63 → 2). 대가로 mypy가 운영자 interpreter를 한 번 실행한다. pyright는 interpreter 없이 `venvPath`/`venv`로 같은 트리를 읽는다.
+4. **시작 hook을 지운다.** 그 interpreter의 `site`가 받은 트리의 `*.pth` import 줄과 `sitecustomize`·`usercustomize`를 실행한다. 받은 직후 site-packages 맨 위의 그 파일을 지우고 `interpreter_startup_hooks_removed`를 남긴다. 받은 패키지의 다른 코드는 import하지 않는다. 운영 체제의 `sitecustomize`(예: Debian)는 운영자 interpreter의 것이라 그대로다.
+5. **고정된 것만 공유한다.** 버전이 모두 고정됐을 때(`uv.lock` 또는 모든 줄 `==`)만 요구사항·interpreter·설치 도구·index로 정한 key의 공유 트리를 쓴다. 고정이 아니면 같은 선언이 run마다 다른 패키지를 받으므로 attempt 트리로 두고 attempt와 함께 지운다. 그래서 Python 분석기는 A42와 달리 attempt 캐시 기록도 쓴다.
+6. **interpreter는 운영자 것 하나.** 트리는 `--python`의 버전·플랫폼으로 풀린다. 분석 대상 버전과 다를 수 있지만, 대상 버전 interpreter를 내려받는 것은 조용한 외부 다운로드이므로 하지 않는다(uv `UV_PYTHON_DOWNLOADS=never`). uv를 써도 `--python`이 필요하다.
+7. **보고서 builder는 그대로.** 받기 꺼짐에서 Python 타입 검사기는 성공하므로 `dependency_unavailable`로는 공백이 생기지 않는다. coverage의 `import_unresolved`와 `third_party_packages_not_installed`를 `dependencies_not_fetched`의 조건으로 더했다. builder 7이 아직 출시되지 않았으므로 버전을 올리지 않는다.
+
+[분석기](ANALYZERS.md#python-의존성-받기) · [아키텍처](ARCHITECTURE.md#의존성-준비)
+
 **A42 — 의존성 받기.** (기록 2026-11-19) REQ-004/014/015, NFR-006과 TC-194~199에 대해 다음을 확정한다.
 
 1. **받아서 분석한다.** 분석기가 import를 풀지 못하면 타입 검사가 실패하고(`dependency_unavailable`) 그 모듈의 정적 분석은 비어 있다. 운영자가 미리 캐시를 채우게 하는 대신 분석 전에 모듈마다 의존성을 받는다. 분석기는 그 뒤에도 오프라인(`GOPROXY=off`)으로 실행하고 받은 캐시만 읽는다. 받는 단계와 읽는 단계를 나눠, 받기가 실패해도 분석기의 실행 경로와 실패 사유는 받기가 없을 때와 같다.

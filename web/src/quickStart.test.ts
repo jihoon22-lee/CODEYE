@@ -132,4 +132,16 @@ describe('better results', () => {
       { key: 'tool:go', text: t.improve.tool('go', 'install go 1.27') },
     ]);
   });
+
+  // Python dependency preparation.
+  it('asks to fetch the packages a Python type checker could not import and names the Python install hint', () => {
+    const choices = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: false };
+    expect(improvementHints([gap('dependencies_not_fetched', 'mypy.m01', 'imports_unresolved', 'environment')], SETUP, project(choices))).toEqual([
+      { key: 'fetch_dependencies', text: t.improve.fetchDependencies('mypy'), turnOn: 'fetch_dependencies' },
+    ]);
+    const withPython = { ...SETUP, tools: { detected_at: null, tools: [{ name: 'python', status: 'unusable', version: null, path: null, hint: 'install Python 3 with pip', reason: 'pip is not installed' }] } };
+    expect(improvementHints([gap('dependencies_not_prepared', 'deps.python', 'package_manager_not_configured', 'environment')], withPython, project({ ...choices, fetch_dependencies: true }))).toEqual([
+      { key: 'tool:python', text: t.improve.tool('python', 'install Python 3 with pip') },
+    ]);
+  });
 });

@@ -164,7 +164,7 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 
 ## 의존성 준비
 
-규칙은 [의존성 준비](ARCHITECTURE.md#의존성-준비)와 [Go 의존성 받기](ANALYZERS.md#go-의존성-받기)다. 받기 시험은 가짜 runner로 argv·환경·cwd를 고정해 확인하고, 실제 proxy에서 받는 시험은 `CODEYE_TEST_DEPS_NETWORK=1`일 때만 돈다.
+규칙은 [의존성 준비](ARCHITECTURE.md#의존성-준비), [Go 의존성 받기](ANALYZERS.md#go-의존성-받기), [Python 의존성 받기](ANALYZERS.md#python-의존성-받기)다. 받기 시험은 가짜 runner로 argv·환경·cwd를 고정해 확인하고, 실제 proxy에서 받는 시험은 `CODEYE_TEST_DEPS_NETWORK=1`일 때만 돈다.
 
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
@@ -174,6 +174,15 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-197 | 분석기 연결: 실제 go vet이 기록 없음·`prepared`·`partial`·다른 run의 기록·`failed` 기록을 만난다. Staticcheck는 같은 함수를 쓴다 | 쓸 수 있는 기록(`prepared`·`partial`, 같은 snapshot·attempt·모듈)일 때만 `GOMODCACHE`가 받기 캐시이고 보호 경로가 되며 한계가 `dependencies_prepared`·`dependencies_partially_prepared`다. 그 밖에는 받기 이전과 같은 경로(`no_offline_module_cache`)다. `GOPROXY`는 늘 `off`다 | REQ-006,008,014 |
 | TC-198 | 보고서: 받은·일부만 받은·받을 것 없는 기록, 다른 attempt·다른 snapshot·상태가 다른·role이 다른·snapshot에 없는 lockfile 기록, 의존성 task 없는 run, 분석기가 `dependency_unavailable`인데 그 생태계 task가 없음, 버전 고정 안 됨, 장부의 보내지 않은 호출(`model_not_configured`), 예시(`examples/report.json`, `examples/dependencies.json`), 웹 표와 안내 | 수락한 기록은 환경 절 한 행이고 상태·판정·요약·한계를 바꾸지 않는다. 거부는 `artifact_rejected:<task>`와 `result_rejected` 행이다. 의존성 task가 없으면 필드와 종합 수가 없다. 공백은 `dependencies_not_prepared`(받을 것 없음 제외), `dependencies_not_fetched`, `dependency_versions_not_pinned`다. 장부는 보낸 호출만 센다. builder는 7이다. 웹은 표와 "의존성 받기" 켜기 안내를 보인다 | REQ-012,013; NFR-006 |
 | TC-199 | 실제 받기: `CODEYE_TEST_DEPS_NETWORK=1`에서 공개 proxy로 받고 실제 go vet이 그 캐시를 읽음. 개인 모드 종단(임시 설정·상태, 빈 Go 모듈 캐시, 모델 없음): 공개 Go 저장소를 받기 끔·켬으로, 의존성 있는 로컬 폴더, 닿지 않는 proxy, 받는 중 취소, 작은 크기 상한 | 받은 뒤 go vet이 성공하고 원본은 그대로이며 캐시는 일반 삭제로 지워진다. 종단 결과와 출력은 [변경 이력](../CHANGELOG.md)에 있다(수동 확인, CI 밖) | REQ-014,015 |
+| TC-210 | Python 계획과 건너뛰기: mypy·pyright 모듈 계획, 소비자 없음, 요구사항 없음, `poetry.lock`만 있음, `dynamic` dependencies, `--python` 없음, pip 없는 interpreter와 uv 없음 | `deps.python`·`deps.python.mNN` 접미사가 mypy key와 같다. 각각 `no_dependency_consumer`, `no_dependencies`(`skipped_policy`), `lockfile_format_unsupported`·`dynamic_dependencies_not_read`·`package_manager_not_configured`(`unsupported`)이고 설치를 실행하지 않는다 | REQ-014; TC-194 |
+| TC-211 | Python 설치(가짜 runner): uv와 pip의 argv·환경·cwd, CODEYE 요구사항 파일, `-r`·`-c` 따라가기, 허용 목록(이름·extras·지정자·marker·hash·`@ https`)과 빼는 입력(editable·로컬·VCS·설치 옵션·이해 못 함), 일부만 hash, `pyproject.toml` 읽기(실제 interpreter: dependencies·optional·dependency-groups·include-group·poetry·두 번씩 포함하는 group 40단·순환) | cwd는 빈 task 작업 디렉터리이고 저장소 파일을 설치 도구에 넘기지 않는다. 빼는 입력은 사유와 함께 `dropped_inputs`다. 섞인 hash는 모두 떼고 `requirement_hashes_not_checked`다. group은 한 번씩 펼치고 10,000개를 넘으면 `too_many_requirements`로 그 모듈만 실패한다 | REQ-014,015; NFR-006 |
+| TC-212 | Python 캐시: 모든 줄 `==`, `uv.lock`(uv 있음·없음), 고정 안 됨, 같은 key 두 번째 run | 고정이면 공유 트리 `python/trees/<key>`(`shared`)이고 두 번째는 설치 없이 `prepared_tree_reused`다. 고정이 아니면 attempt 트리(`attempt`)와 `dependency_versions_not_pinned`다. uv가 없으면 `uv.lock`은 `uv_not_configured`로 빠진다. `uv export` 뒤 실행 사본이 바뀌면 `workspace_drift`다 | REQ-014 |
+| TC-213 | Python 실패: wheel 없는 직접·전이 요구사항(uv·pip), index에 없는 요구사항(uv), 해결 불가, 인증 요구, hash 불일치, 닿지 않는 index(uv·pip), 그 밖의 실패, 임시 디렉터리가 크기 상한을 넘김 | wheel이 없거나 index에 없는 요구사항은 빼고 다시 설치해 `partial`(`no_binary_distribution`·`no_matching_distribution`·`dependency_not_found`)이다. 나머지는 각 사유로 `failed`다. 임시 디렉터리 증가도 `download_limit_exceeded`다 | REQ-014; NFR-006 |
+| TC-214 | 시작 hook: 받은 트리의 `*.pth`·`sitecustomize.py`, 그 트리를 읽는 실제 interpreter | 지운 뒤 interpreter가 hook을 실행하지 않고 `interpreter_startup_hooks_removed`가 남는다 | REQ-015; NFR-006 |
+| TC-215 | 분석기 연결: mypy·pyright가 기록 없음·공유·attempt·`partial`·트리 없음·`failed` 기록을 만난다. 실제 mypy·pyright(`CODEYE_TEST_PYTHON`·`CODEYE_TEST_MYPY`·`CODEYE_TEST_PYRIGHT`) | 쓸 수 있는 기록이면 mypy는 `--python-executable`(가짜 venv), pyright는 `venvPath`/`venv`로 트리를 읽고 `third_party_packages_prepared`(`partially_prepared`)이며 트리 경로는 `$DEPS`다. 아니면 받기 이전과 같다(`--no-site-packages`, 빈 venv). Windows의 mypy는 `prepared_packages_not_used`다 | REQ-007,014 |
+| TC-216 | 도구와 설정: uv·python 탐지(pip 있음·없음, uv 있음·없음, 시험한 계열 밖 버전), 에이전트 `--python`·`--uv`·`--pip-index-url`, 개인 모드 `agent.tools.python`·`uv`·`agent.dependencies.pip_index_url`, 인증정보가 든 index URL·상대 경로, hello `package_managers`·`pip_index_url` | pip이 없는 interpreter는 uv가 있을 때만 `found`다. 인증정보 URL은 값을 되풀이하지 않는 사용법 오류다. 스위치가 꺼지면 hello에 싣지 않는다 | REQ-014,026; NFR-006 |
+| TC-217 | 보고서와 안내: 받기 꺼짐에서 mypy가 `import_unresolved`와 `third_party_packages_not_installed`, 받은 트리를 읽은 pyright, Python 사유·한계 라벨, `deps.python`의 `package_manager_not_configured` | 앞의 것만 `dependencies_not_fetched`(`imports_unresolved`)이고 "의존성 받기 켜고 다시 시도"다. 받는 도구가 없으면 python 설치 안내다 | REQ-014,024 |
+| TC-218 | 실제 받기: `CODEYE_TEST_DEPS_NETWORK=1`에서 PyPI로 uv와 pip이 받고 wheel 없는 패키지를 뺌. 개인 모드 종단(임시 설정·상태, 모델 없음): 공개 Python 저장소 받기 끔·켬, 고정된 `requirements.txt`의 로컬 폴더 두 번, 닿지 않는 index, 고정 안 된 요구사항 | 받은 뒤 해결되지 않은 import가 줄고 원본은 그대로이며 캐시는 일반 삭제로 지워진다. 종단 결과는 [변경 이력](../CHANGELOG.md)에 있다(수동 확인, CI 밖) | REQ-014,015 |
 
 ## 도구 탐지
 
@@ -181,7 +190,7 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
-| TC-176 | 모든 도구를 문서가 정한 위치에 둔 가짜 머신: PATH, `~/.local/bin`, `~/.opencode/bin`, CODEYE 도구 접두사(`bin`, `cpp/bin`, `go/bin`), `node_modules`의 진입 스크립트(도구 접두사와 node 설치 옆), rustup 기본 toolchain과 PATH의 rustup proxy, PATH의 npm shim | 18개 도구가 각 위치에서 경로·버전·`source`와 함께 `found`다. cargo·clippy는 proxy가 아닌 toolchain 디렉터리, JS 도구는 shim이 아닌 진입 스크립트다. 빈 머신은 모든 도구가 `not_found`이고 추가 방법이 있으며 쓸 수 있다고 세지 않는다 | REQ-004,030 |
+| TC-176 | 모든 도구를 문서가 정한 위치에 둔 가짜 머신: PATH, `~/.local/bin`, `~/.opencode/bin`, CODEYE 도구 접두사(`bin`, `cpp/bin`, `go/bin`), `node_modules`의 진입 스크립트(도구 접두사와 node 설치 옆), rustup 기본 toolchain과 PATH의 rustup proxy, PATH의 npm shim | 20개 도구(uv·python 포함)가 각 위치에서 경로·버전·`source`와 함께 `found`다. cargo·clippy는 proxy가 아닌 toolchain 디렉터리, JS 도구는 shim이 아닌 진입 스크립트다. 빈 머신은 모든 도구가 `not_found`이고 추가 방법이 있으며 쓸 수 있다고 세지 않는다 | REQ-004,030 |
 | TC-177 | 버전 처리: 시험한 계열 밖 버전, 알아볼 수 없는 출력, 앞 후보가 실패, 여러 후보 중 시험한 계열, proxy만 있는 cargo, node 없는 JS 도구, 명시 경로(쓸 수 없는 경우 포함) | 계열 밖은 쓰고 `tool_version_untested`를 기록한다. 알아볼 수 없는 후보는 건너뛰고 다음 후보를 쓰며, 남은 것이 없으면 `unusable`과 이유·`tried`다. 시험한 계열 후보가 우선한다. proxy와 node 없음은 `unusable`이다. 명시 경로는 유일한 후보이며 실패해도 다른 것으로 바꾸지 않는다. `agent.auto_detect=false`면 탐색하지 않는다 | REQ-004,030 |
 | TC-178 | 탐색 결과와 명시 설정을 합친 에이전트 인자: mypy와 pyright 둘 다·하나·명시 설정만, 쓸 수 없는 탐색 결과, 명시 go와 모듈 캐시, 모듈 캐시가 없는 디렉터리·상대 경로·파일 | 명시 값이 항상 우선하고 쓸 수 없는 탐색 결과는 넘기지 않는다. `--python-both-type-checkers`는 두 검사기가 모두 있을 때만 붙어 에이전트의 일관성 검사를 통과한다. `go env GOMODCACHE`는 실제 절대 디렉터리일 때만 `--go-mod-cache`가 된다. `tools.json`은 0600으로 쓰고 읽으며 다른 schema 버전·모르는 필드는 거부한다 | REQ-004,030 |
 | TC-179 | `codeye tools`(표·`--json`·설정 오류·없는 상태 디렉터리)와 `tools.json`·`examples/tools.json` schema, builtin의 `CheckTool`(모양 규칙·버전·시험한 계열) | 표는 찾은 것·없는 것·추가 방법을 보이고 `--json`은 schema를 통과한다. 상태 디렉터리가 없으면 아무것도 만들지 않는다. 도구 이름마다 시험한 계열이 있고, env shebang·proxy·node 없음은 분석기가 거부하는 이유 그대로 나온다 | REQ-004,030 |
@@ -391,7 +400,8 @@ go test ./...
 | `CODEYE_TEST_CARGO`, `CODEYE_TEST_CLIPPY`, `CODEYE_TEST_TOOLPATH` | Rust 팩(`CODEYE_TEST_TOOLPATH`에 링커 `cc`) |
 | `CODEYE_TEST_LIZARD`, `CODEYE_TEST_JSCPD`, `CODEYE_TEST_GITLEAKS` | 구조·중복·비밀값 팩 |
 | `CODEYE_TEST_PG_BIN` | 백업·복원 시험의 `pg_dump` 위치(없으면 PATH) |
-| `CODEYE_TEST_DEPS_NETWORK=1` | 공개 Go proxy에서 실제로 받는 의존성 시험(TC-194). 네트워크가 필요하다 |
+| `CODEYE_TEST_DEPS_NETWORK=1` | 공개 Go proxy와 PyPI에서 실제로 받는 의존성 시험(TC-199, TC-218). 네트워크가 필요하다 |
+| `CODEYE_TEST_PYTHON` | 받은 트리를 읽는 실제 mypy 시험의 interpreter(TC-215) |
 | `CODEYE_TEST_OPENCODE_BIN`, `CODEYE_TEST_REVIEW_RELAY`, `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL` | 실모델 시험(`TestLive*`). 비용이 들며 명시적으로 하나씩 실행한다([모델 검토](REVIEW.md)) |
 
 ### 웹 시험
