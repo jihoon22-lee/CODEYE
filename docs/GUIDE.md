@@ -33,24 +33,28 @@ codeye up ~/src/myproject
 5. 홈 디렉터리 아래 폴더는 기본 root `home` 아래 상대 경로로, 그 밖의 폴더는 그 폴더 자체를 root로 설정에 더해 프로젝트로 등록하고 분석을 요청한다. 이미 등록한 폴더면 그 프로젝트에 새 분석을 요청한다(분석이 아직 대기·실행 중이면 그것을 보여 준다).
 6. 로그인된 주소를 출력하고 브라우저로 연다. WSL에서는 `wslview` 또는 `explorer.exe`로 Windows 브라우저를 연다. 그 주소는 해당 프로젝트와 실행 화면으로 바로 간다.
 
-첫 실행의 출력(실제 실행의 출력에서 경로·ID·pid만 예시로 바꿨다):
+첫 실행의 출력(실제 실행의 출력에서 경로·ID·pid만 예시로 바꾸고, 찾은 도구 줄은 줄였다):
 
 ```text
 wrote a new configuration: /home/user/.config/codeye/personal.json
-added source root "myproject" (/home/user/src/myproject) to /home/user/.config/codeye/personal.json
-Go toolchain: /usr/local/go/bin/go (from PATH)
-no review model configured (agent.model): reports hold static analysis only
+TOOL         STATUS   VERSION   WHERE / HOW TO ADD
+go           found    1.27.4    /usr/local/go/bin/go
+…
+opencode     missing  -         not found - install OpenCode (`curl -fsSL https://opencode.ai/install | bash`) or set `agent.model.opencode`
+go module cache: ~/go/pkg/mod; python type checkers: mypy and pyright both run
+model: none (set OPENAI_API_KEY, ANTHROPIC_API_KEY or OPENCODE_API_KEY and run codeye up again) - static analysis only
 initialized a PostgreSQL 17.10 cluster in /home/user/.local/state/codeye/postgres/data (binaries: /usr/lib/postgresql/17/bin)
 PostgreSQL 17.10 started on 127.0.0.1:55432 (log /home/user/.local/state/codeye/logs/postgres.log)
 database schema created (migration 11)
-created the personal user 72a98f0a-…
-registered source root "myproject" (291c5233-…)
+created the personal user 2ce93dc8-…
+registered source root "home" (f655c03e-…)
+registered the Git host github.com (public repositories)
 CODEYE is running at http://127.0.0.1:7331 (controller pid 4101, agent pid 4113); logs in /home/user/.local/state/codeye/logs
 registered project "myproject" (/home/user/src/myproject)
-queued an analysis of "myproject" (run 268871fd-…); the browser shows its progress and the report
+queued an analysis of "myproject" (run 4699c64a-…); the browser shows its progress and the report
 
 Open CODEYE (signed in; the link works once, within 10 minutes):
-  http://127.0.0.1:7331/#launch=…&project=acbb2f35-…&run=268871fd-…
+  http://127.0.0.1:7331/#launch=…&project=26a4247c-…&run=4699c64a-…
 
 opened the browser with xdg-open
 The browser stays signed in for 7 days. New link: codeye open. Stop: codeye stop.
