@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
@@ -156,6 +157,9 @@ func (mypyRun) execute(rc *runCtx) {
 		rc.extraEnv["MYPYPATH"] = filepath.Join(rc.moduleAbs, "src")
 	}
 	files := append([]string{}, m.Files...)
+	// The first run and its reruns share the task's one time limit: each
+	// rerun gets only what is left.
+	rc.deadline = time.Now().Add(rc.b.cfg.Timeout)
 	for i := 0; i <= MypyMaxReruns; i++ {
 		name := "files.txt"
 		if i > 0 {
@@ -295,6 +299,13 @@ func (mypyRun) assemble(rc *runCtx) obsdoc.Document {
 		checks = []string{execMypyCheck}
 	}
 	bd.executions(append([]string{execMypyVersion}, checks...)...)
+	if rc.budgetSpent {
+		// The time limit ran out before a rerun without the unparsable
+		// files: the syntax errors found so far stay, nothing was
+		// type-checked.
+		bd.fail(domain.TaskTimedOut, ReasonTimeout, obsdoc.ExitTimeout)
+		bd.limit(LimMypyRerunsTimedOut)
+	}
 
 	syntax := map[string]bool{}
 	var processed []string

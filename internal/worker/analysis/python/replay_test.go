@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
@@ -320,6 +321,60 @@ func TestReplayRuffUnparsableFiles(t *testing.T) {
 func TestReplayMypyUnparsableFiles(t *testing.T) {
 	checkMypyUnparsable(t, runReplay(t, MypyTool, "syntaxmix", nil))
 }
+
+// mypy's reruns without the unparsable files share the task's one time
+// limit: a rerun gets only what is left, and when nothing is left the task
+// times out with the syntax errors found so far (TC-201).
+func TestReplayMypyRerunsShareTimeLimit(t *testing.T) {
+	const limit = 2 * time.Second
+	dir := t.TempDir()
+	fake := filepath.Join(dir, MypyTool)
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexit 3\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name  string
+		delay time.Duration
+	}{{"time left", limit / 4}, {"time spent", limit + limit/4}} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, err := NewMypy(Config{Executable: fake, Timeout: limit})
+			if err != nil {
+				t.Fatal(err)
+			}
+			slow := func(name string, _ executor.Spec, _ *executor.Result) {
+				if name == "mypy.check" {
+					time.Sleep(tc.delay)
+				}
+			}
+			r := runWith(t, a, "syntaxmix", MypyTool, &replayRunner{t: t, tool: MypyTool, fake: fake, fixture: "syntaxmix", mutate: slow}, dir)
+			var reruns []time.Duration
+			for _, s := range r.rr.specs {
+				if s.Timeout > limit {
+					t.Fatalf("execution timeout %s over the limit %s", s.Timeout, limit)
+				}
+				if slices.ContainsFunc(s.Args, func(a string) bool { return strings.Contains(a, "files.r") }) {
+					reruns = append(reruns, s.Timeout)
+				}
+			}
+			if tc.delay < limit {
+				checkMypyUnparsable(t, r)
+				if len(reruns) != 2 || reruns[0] > limit-tc.delay {
+					t.Fatalf("rerun timeouts %v: want at most %s", reruns, limit-tc.delay)
+				}
+				return
+			}
+			wantStatus(t, r, domain.TaskTimedOut, obsdoc.ExitTimeout)
+			if len(reruns) != 0 || r.res.Reason != ReasonTimeout || !slices.Contains(r.doc.Limitations, LimMypyRerunsTimedOut) {
+				t.Fatalf("reruns %v reason %s limitations %v", reruns, r.res.Reason, r.doc.Limitations)
+			}
+			wantExecutions(t, r.doc, "mypy.version", "mypy.check")
+			if got := findObs(r.doc, "syntax"); len(got) != 1 || len(r.doc.Coverage.ProcessedPaths) != 0 {
+				t.Fatalf("syntax observations %+v processed %v", got, r.doc.Coverage.ProcessedPaths)
+			}
+		})
+	}
+}
+
 func TestReplayBanditUnparsableFiles(t *testing.T) {
 	checkBanditUnparsable(t, runReplay(t, BanditTool, "syntaxmix", nil))
 }
