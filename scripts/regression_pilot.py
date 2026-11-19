@@ -144,20 +144,41 @@ def _context_files(record):
             if e.get("origin") == "context" and e.get("kind") in ("code", "test")}
 
 
+def _test_ledger(ledger):
+    """Whether the relay ledger is a test ledger (relay --test-upstream)."""
+    if ledger is None:
+        return False
+    lines = Path(ledger).read_text().splitlines()
+    return bool(lines) and json.loads(lines[0]).get("upstream") == "test-loopback"
+
+
+# Report limitations that mean an input of the pilot report was not read.
+_UNREAD = ("artifact_rejected", "review_lineage_mismatch", "review_pack_mismatch", "unrecognized_artifact", "result_manifest", "analysis_artifact_missing")
+
+
 def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None):
     """The conditions registered before a paid run with slices (docs/EVALUATION.md#회귀-집합-실행).
 
     Non-pilot cases plan no slice task and their review calls use the pinned
-    Go-only pack digests; the pilot completes with the AI review performed,
-    its review records make at most max_calls calls and no review task
-    failed without a record (its calls would go uncounted), a slice the ceiling
-    refused has no record, the overview and the slices never send the same
-    file and the report counts more files sent to the model than the overview
-    sent; the relay ledger has no refused or blocked request. Returns the
-    failures (empty when every condition holds) and the pilot's numbers."""
+    Go-only pack digests. The pilot completes with the AI review performed;
+    its report reads every review artifact and carries the review ledger
+    with the configured ceiling; the ledger's calls_used (the attempt counter
+    before the slices plus the slice records) is known and at most the
+    ceiling; a slice the ceiling refused has no record and no call; the
+    overview and the slices never send the same file; the ledger and
+    llm_exposed_files count more files sent to the model than the overview
+    sent; the relay ledger has no refused or blocked request.
+
+    With a test relay ledger (a dry run against the fake upstream) two causes
+    are expected rather than failures, and are listed in dry_run_expected: a
+    review task the fake upstream's reply fails (review_output_invalid; its
+    exposure is then unknown) and a required analyzer this host has not
+    configured (tool_not_configured). Any other cause still fails, and a
+    paid run gets no exception. Returns the failures and the pilot's numbers."""
     from bundle_checks.review import role_pack
 
     _, roles = role_pack(("go",))
+    test = _test_ledger(ledger)
     failures, pilot = [], None
     for row in rows:
         label = row["case"]
@@ -174,34 +195,49 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
                         failures.append(f"{label}: {call['role']} pack digest {call['pack_sha256']} is not the pinned {want}")
             continue
         report = json.loads((output / "pilot.json").read_bytes())
+        tasks = {t["key"]: t for t in report["tasks"]}
+        book = (report.get("code_review") or {}).get("ledger")
         records, scope = _kept_docs(output / "pilot")
-        calls = sum(len(r.get("calls", [])) for r in records)
         overview = next((r for r in records if r["stage"] == "investigate" and "slice" not in r), None)
         slice_inv = [r for r in records if r["stage"] == "investigate" and "slice" in r]
         sent = [(_context_files(overview) if overview else set())] + [_context_files(r) for r in slice_inv]
         union = set().union(*sent)
-        exhausted = [t["key"] for t in row["tasks"] if SLICE_TASK.match(t["key"]) and t["status"] == "budget_exhausted"]
+        exhausted = [k for k, t in tasks.items() if SLICE_TASK.match(k) and t["status"] == "budget_exhausted"]
         recorded = {"review." + r["stage"] + "." + r["slice"]["key"] for r in records if "slice" in r}
+        called = {c.get("task_key") for c in report["coverage"].get("review_calls", [])}
         exposed = report["coverage"].get("llm_exposed_files")
-        # A failed or timed-out review task keeps no record, so its calls are
-        # outside recorded_calls; the attempt-local counter is not exported.
-        unrecorded = sorted(t["key"] for t in row["tasks"] if t["key"].startswith("review.") and t["status"] in ("failed", "timed_out"))
-        pilot = {"recorded_calls": calls, "max_calls": max_calls, "review_tasks_without_record": unrecorded, "slice_tasks": sum(1 for t in row["tasks"] if SLICE_TASK.match(t["key"])),
-                 "slices_admitted": len(slice_inv), "slice_tasks_budget_exhausted": len(exhausted),
-                 "overview_files": len(sent[0]), "files_sent_by_records": len(union), "llm_exposed_files": exposed}
+        calls_used = book["calls_used"] if book else None
+        ledger_sent = sum(m["files_sent_to_model"] for m in book["modules"]) if book else None
+        fake = sorted(k for k, t in tasks.items() if k.startswith("review.") and t["status"] == "failed" and t["reason"] == "review_output_invalid") if test else []
+        unconfigured = sorted(k for k, t in tasks.items() if t["required_for_verdict"] and t["status"] == "unsupported" and t["reason"] == "tool_not_configured") if test else []
+        unrecorded = sorted(k for k, t in tasks.items() if k.startswith("review.") and t["status"] in ("failed", "timed_out"))
+        unread = sorted(x for x in report["limitations"] if x.startswith(_UNREAD))
+        expected = []
+        pilot = {"calls_used": calls_used, "recorded_calls": sum(len(r.get("calls", [])) for r in records), "max_calls": max_calls,
+                 "slice_tasks": sum(1 for k in tasks if SLICE_TASK.match(k)), "slices_admitted": len(slice_inv), "slice_tasks_budget_exhausted": len(exhausted),
+                 "overview_files": len(sent[0]), "files_sent_by_records": len(union), "ledger_status": book and book["status"],
+                 "ledger_files_sent_to_model": ledger_sent, "llm_exposed_files": exposed, "review_tasks_without_record": unrecorded, "dry_run_expected": expected}
+        if unread:
+            failures.append(f"pilot: report did not read {unread}")
         if row["status"] != "completed" or row["ai_review"] != "performed":
-            failures.append(f"pilot: status {row['status']}, AI review {row['ai_review']}")
-        if scope is None or scope["budget"]["max_calls"] != max_calls:
-            failures.append("pilot: no scope artifact with the configured ceiling")
-        if calls > max_calls:
-            failures.append(f"pilot: {calls} calls above the ceiling {max_calls}")
-        if unrecorded:
-            failures.append(f"pilot: review tasks without a record {unrecorded}; their calls are not counted")
-        if set(exhausted) & recorded:
-            failures.append(f"pilot: budget-exhausted slices with a record {sorted(set(exhausted) & recorded)}")
-        if sum(len(s) for s in sent) != len(union):
+            other = sorted(k for k, t in tasks.items() if t["required_for_verdict"] and t["status"] != "succeeded" and k not in unconfigured)
+            if test and row["ai_review"] == "performed" and not other and set(unrecorded) <= set(fake) and (fake or unconfigured):
+                expected.append(f"pilot {row['status']}: required analyzers not configured on this host {unconfigured}; fake upstream reply rejected {fake}")
+            else:
+                failures.append(f"pilot: status {row['status']}, AI review {row['ai_review']}")
+        if scope is None or scope["budget"]["max_calls"] != max_calls or book is None or book["max_calls"] != max_calls:
+            failures.append("pilot: no scope artifact and ledger with the configured ceiling")
+        if not isinstance(calls_used, int) or calls_used > max_calls:
+            failures.append(f"pilot: ledger calls_used {calls_used} unknown or above the ceiling {max_calls}")
+        if set(exhausted) & (recorded | called):
+            failures.append(f"pilot: budget-exhausted slices with a record or a call {sorted(set(exhausted) & (recorded | called))}")
+        if sum(len(x) for x in sent) != len(union):
             failures.append("pilot: a file reached two investigate requests")
-        if not isinstance(exposed, int) or exposed <= len(sent[0]):
+        if not isinstance(ledger_sent, int) or ledger_sent <= len(sent[0]):
+            failures.append(f"pilot: ledger files sent to the model {ledger_sent} not above the overview's {len(sent[0])} files")
+        if exposed is None and fake and set(unrecorded) <= set(fake):
+            expected.append(f"llm_exposed_files unknown: the fake upstream reply was rejected for {fake}")
+        elif not isinstance(exposed, int) or exposed <= len(sent[0]):
             failures.append(f"pilot: llm_exposed_files {exposed} not above the overview's {len(sent[0])} files")
     if ledger is not None:
         bad = [r.get("type") for r in (json.loads(line) for line in Path(ledger).read_text().splitlines() if line.strip())
@@ -419,13 +455,16 @@ def run(base, root, env, web=True, coverage_check=True):
             print("coverage", json.dumps(pilot, ensure_ascii=False), flush=True)
             if failures:
                 raise RuntimeError("모듈 단위 검토 조건 불충족: " + "; ".join(failures))
+        # A dry run whose pilot is partial only for the causes check_coverage
+        # expects of the fake upstream and this host (dry_run_expected).
+        expected_partial = coverage_check and pilot is not None and any(e.startswith("pilot ") for e in pilot["dry_run_expected"])
         if dataset and not any(
             row["status"] == "completed" and row["ai_review"] == "performed"
             for row in rows
         ):
             raise RuntimeError("전체 모델 검토를 거친 완료 보고서가 없습니다")
         for row in rows:
-            if row["case"] == "pilot" and (
+            if row["case"] == "pilot" and not expected_partial and (
                 row["status"] != "completed" or row["ai_review"] != "performed"
             ):
                 raise RuntimeError(

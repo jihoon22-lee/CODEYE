@@ -194,8 +194,12 @@ class RegressionPilotCoverageTests(unittest.TestCase):
                       "review_pack": "review-r1", "review_calls": [{"role": "investigate", "pack_sha256": self.digests["investigate"]}]}
         return [regression, {"case": "pilot", "status": "completed", "ai_review": "performed", "tasks": tasks}]
 
-    def check(self, rows, exposed=12, max_calls=33, ledger=None):
-        (self.out / "pilot.json").write_text(json.dumps({"coverage": {"llm_exposed_files": exposed}}))
+    def check(self, rows, exposed=12, max_calls=33, ledger=None, calls_used=9, ledger_sent=5, required=(), limitations=(), calls=()):
+        tasks = [dict(t, required_for_verdict=t["key"] in required) for t in rows[1]["tasks"]]
+        report = {"tasks": tasks, "limitations": list(limitations),
+                  "coverage": {"llm_exposed_files": exposed, "review_calls": [{"task_key": k} for k in calls]},
+                  "code_review": {"ledger": {"calls_used": calls_used, "max_calls": max_calls, "status": "partial", "modules": [{"files_sent_to_model": ledger_sent}]}}}
+        (self.out / "pilot.json").write_text(json.dumps(report))
         (self.out / "pilot" / "scope.json").write_text(json.dumps({"kind": "review_scope", "budget": {"max_calls": max_calls}}))
         return self.rp.check_coverage(rows, self.out, SCRIPTS.parent, max_calls, ledger)
 
@@ -210,7 +214,8 @@ class RegressionPilotCoverageTests(unittest.TestCase):
         self.write_pilot()
         failures, pilot = self.check(self.rows())
         self.assertEqual(failures, [])
-        self.assertEqual((pilot["recorded_calls"], pilot["overview_files"], pilot["files_sent_by_records"], pilot["slices_admitted"]), (7, 2, 5, 2))
+        self.assertEqual((pilot["recorded_calls"], pilot["calls_used"], pilot["overview_files"], pilot["files_sent_by_records"], pilot["slices_admitted"]), (7, 9, 2, 5, 2))
+        self.assertEqual(pilot["dry_run_expected"], [])
 
     def test_each_condition_fails(self):
         self.write_pilot()
@@ -219,12 +224,27 @@ class RegressionPilotCoverageTests(unittest.TestCase):
         rows = self.rows()
         rows[0]["review_calls"][0]["pack_sha256"] = "0" * 64
         self.assertIn("pack digest", self.check(rows)[0][0])
-        self.assertIn("above the ceiling", self.check(self.rows(), max_calls=6)[0][0])
+        self.assertIn("above the ceiling", " ".join(self.check(self.rows(), max_calls=6, calls_used=7)[0]))
+        self.assertTrue(any("calls_used None" in f for f in self.check(self.rows(), calls_used=None)[0]))
         self.assertIn("llm_exposed_files", self.check(self.rows(), exposed=2)[0][0])
+        self.assertIn("ledger files sent", self.check(self.rows(), ledger_sent=2)[0][0])
+        self.assertIn("did not read", self.check(self.rows(), limitations=("unrecognized_artifact:review.scope",))[0][0])
         self.assertIn("with a record", self.check(self.rows(exhausted=("s002",)))[0][0])
+        self.assertIn("with a record or a call", self.check(self.rows(), calls=("review.investigate.s003",))[0][0])
+        # A paid run (no test ledger): the fake-upstream and host causes are failures.
         rows = self.rows()
-        rows[1]["tasks"].append({"key": "review.interpret", "status": "failed", "reason": "review_output_invalid"})
-        self.assertIn("without a record", self.check(rows)[0][0])
+        rows[1]["status"] = "partial"
+        rows[1]["tasks"] += [{"key": "review.interpret", "status": "failed", "reason": "review_output_invalid"},
+                             {"key": "ruff", "status": "unsupported", "reason": "tool_not_configured"}]
+        self.assertIn("status partial", self.check(rows, exposed=None, required=("ruff",))[0][0])
+        # A dry run: they are expected and listed; another cause still fails.
+        test = self.out / "test-ledger.jsonl"
+        test.write_text(json.dumps({"type": "header", "upstream": "test-loopback"}) + "\n")
+        failures, pilot = self.check(rows, exposed=None, required=("ruff",), ledger=test)
+        self.assertEqual(failures, [])
+        self.assertEqual(len(pilot["dry_run_expected"]), 2)
+        rows[1]["tasks"].append({"key": "go-vet", "status": "failed", "reason": "toolchain_mismatch"})
+        self.assertIn("status partial", self.check(rows, exposed=None, required=("ruff", "go-vet"), ledger=test)[0][0])
         self.record("investigate.s002", "investigate", ["a.go"], 1, "s002")
         self.assertIn("two investigate requests", self.check(self.rows())[0][0])
         ledger = self.out / "ledger.jsonl"
