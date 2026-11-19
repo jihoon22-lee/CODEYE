@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,7 +16,18 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-type Store struct{ pool *pgxpool.Pool }
+// Store is the PostgreSQL persistence. iterations is the password
+// derivation cost and kdf bounds concurrent derivations on this process's
+// CPUs (process configuration, not shared state: each controller limits its
+// own CPU).
+type Store struct {
+	pool       *pgxpool.Pool
+	iterations int
+
+	kdfMu   sync.Mutex
+	kdf     chan struct{}
+	kdfWait time.Duration
+}
 
 // Open requires an explicit URL and never applies migrations.
 func Open(ctx context.Context, dsn string) (*Store, error) {
@@ -95,8 +107,12 @@ func classify(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, ErrIdempotencyConflict) {
-		return ErrIdempotencyConflict
+	// Store sentinels that carry a reason the API states; each wraps a
+	// domain class, so callers that only test the class still match.
+	for _, e := range []error{ErrIdempotencyConflict, ErrSelfReset, ErrResetNeedsUsername} {
+		if errors.Is(err, e) {
+			return e
+		}
 	}
 	for _, e := range []error{domain.ErrUnauthenticated, domain.ErrUnsupported, domain.ErrInvalid, domain.ErrForbidden, domain.ErrNotFound, domain.ErrConflict, domain.ErrStaleAttempt, domain.ErrUnavailable, domain.ErrMigration, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, e) {

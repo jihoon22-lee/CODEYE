@@ -58,6 +58,9 @@ func (s *Store) materializeSchedules(ctx context.Context, at *time.Time) ([]Sche
 	}
 	var out []ScheduleDecision
 	var first error
+	// Runs the materializer enqueues are audited as system on behalf of the
+	// schedule's actor.
+	ctx = asSystem(ctx)
 	for _, d := range list {
 		ds, err := transaction(ctx, s, func(tx pgx.Tx) ([]ScheduleDecision, error) {
 			return materializeOne(ctx, tx, d.id, d.project, at)

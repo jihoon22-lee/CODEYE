@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 
@@ -212,6 +213,11 @@ func (s *Store) CreateSchedule(ctx context.Context, actor, project, key string, 
 			VALUES($1,$2,$3,$3,$4,$5,$6,$7,$8::text::jsonb,$9,$10,$11,$12)`, id, project, actor, key, digest, n.Cron, n.Timezone, string(n.Run), n.Overlap, n.Misfire, n.Enabled, n.next(now)); err != nil {
 			return Schedule{}, err
 		}
+		e := userAudit(ctx, actor, AuditScheduleCreated).target("schedule", id).in(project).
+			with(map[string]any{"cron": truncateAudit(n.Cron), "timezone": truncateAudit(n.Timezone), "enabled": n.Enabled})
+		if err := writeAudit(ctx, tx, e); err != nil {
+			return Schedule{}, err
+		}
 		return readSchedule(ctx, tx, project, id)
 	})
 }
@@ -373,6 +379,18 @@ func (s *Store) UpdateSchedule(ctx context.Context, actor, project, id string, e
 			version=version+1,updated_at=clock_timestamp() WHERE id=$1`, args...); err != nil {
 			return Schedule{}, err
 		}
+		var fields []string
+		for name, set := range map[string]bool{"cron": p.Cron != nil, "timezone": p.Timezone != nil, "overlap": p.Overlap != nil, "misfire": p.Misfire != nil, "enabled": p.Enabled != nil, "run": p.Run != nil} {
+			if set {
+				fields = append(fields, name)
+			}
+		}
+		slices.Sort(fields)
+		e := userAudit(ctx, actor, AuditScheduleUpdated).target("schedule", id).in(project).
+			with(map[string]any{"fields": fields, "enabled": n.Enabled, "cron": truncateAudit(n.Cron), "timezone": truncateAudit(n.Timezone)})
+		if err := writeAudit(ctx, tx, e); err != nil {
+			return Schedule{}, err
+		}
 		return readSchedule(ctx, tx, project, id)
 	})
 }
@@ -398,8 +416,10 @@ func (s *Store) DeleteSchedule(ctx context.Context, actor, project, id string, e
 		if err := cancelPending(ctx, tx, id, ReasonScheduleDeleted); err != nil {
 			return false, err
 		}
-		_, err = tx.Exec(ctx, "UPDATE schedules SET deleted_at=clock_timestamp(),enabled=false,next_at=NULL,version=version+1,updated_at=clock_timestamp() WHERE id=$1", id)
-		return true, err
+		if _, err = tx.Exec(ctx, "UPDATE schedules SET deleted_at=clock_timestamp(),enabled=false,next_at=NULL,version=version+1,updated_at=clock_timestamp() WHERE id=$1", id); err != nil {
+			return false, err
+		}
+		return true, writeAudit(ctx, tx, userAudit(ctx, actor, AuditScheduleDeleted).target("schedule", id).in(project))
 	})
 	return err
 }

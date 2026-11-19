@@ -65,3 +65,7 @@ export function orderStages<T extends { key: string }>(stages: T[]): T[] {
   const rank = (k: string) => { const i = STAGE_ORDER.indexOf(k); return i < 0 ? STAGE_ORDER.length : i; };
   return stages.map((s, i) => ({ s, i })).sort((a, b) => rank(a.s.key) - rank(b.s.key) || a.i - b.i).map(x => x.s);
 }
+
+// A project role in words; an unrecognised role keeps its raw value and grants nothing.
+export const roleLabel = (role: string): string =>
+  Object.hasOwn(t.accounts.roles, role) ? t.accounts.roles[role]! : t.accounts.roleUnknown(shorten(role, 32));

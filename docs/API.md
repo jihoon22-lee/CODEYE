@@ -4,9 +4,9 @@
 
 ## 구현 범위
 
-- OpenAPI operation의 `x-codeye-status`가 `implemented-`로 시작하면 서버가 실제로 제공한다. 그 밖의 operation은 설계 계약(미구현)이다. 현재 미구현 operation은 풀 관리(`/api/v1/admin/pools/{pool_id}`)와 Git webhook 수신(`/api/v1/providers/{provider_id}/webhook`)이다.
+- OpenAPI operation의 `x-codeye-status`가 `implemented`이면 서버가 실제로 제공한다. 그 밖의 operation은 설계 계약(미구현)이다. 현재 미구현 operation은 풀 관리(`/api/v1/admin/pools/{pool_id}`)와 Git webhook 수신(`/api/v1/providers/{provider_id}/webhook`)이다.
 - 서버가 등록한 라우트와 OpenAPI의 구현 operation이 같은지 [`internal/httpapi/contract_test.go`](../internal/httpapi/contract_test.go)가 확인한다. 라우트 표는 [`internal/httpapi/api.go`](../internal/httpapi/api.go)와 [`node.go`](../internal/httpapi/node.go)에 있다.
-- 사용자 인증은 개인 모드의 세션 cookie뿐이다. 사용자 Bearer 토큰(`UserBearer`), LAN 공개, TLS는 구현하지 않았고 서버가 허용하지 않는다. 다중 사용자 배포와 권한 관리는 예정된 "다중 사용자·권한" 작업이다.
+- 사용자 인증은 세션 cookie뿐이며, 세션은 일회용 로그인 링크나 사용자 이름·비밀번호로 만든다. 사용자 Bearer 토큰(`UserBearer`)은 구현하지 않았다. loopback이 아닌 주소는 TLS로만 받는다([보안](SECURITY.md#네트워크와-브라우저)). 계정·구성원·감사 기록은 웹 화면과 CLI에서 다룬다.
 - 설계 계약(미구현) 사용자 API: 프로젝트 설정 변경, 연결 진단·브랜치 조회, 같은 입력 재시도, 개별 task·로그 조회(로그는 상태 이벤트와 별도의 byte/record cursor로 가져오는 설계), 첫 발견 시각 이력, 판정 일괄 적용, 풀·노드 관리 웹 API. 풀·노드 관리는 운영자 CLI를 쓴다([운영](OPERATIONS.md)).
 
 ## 공통 규칙
@@ -24,22 +24,31 @@
 | 응답 헤더 | 모든 응답에 `X-Request-ID`(오류 envelope의 `request_id`와 같음), CSP `default-src 'self'` 계열, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy`·`Cross-Origin-Resource-Policy: same-origin`. API 응답은 `Cache-Control: no-store` |
 | 정적 파일 | 같은 origin에서 빌드된 웹 앱을 제공한다. SPA fallback이 있고 symlink·`..` 탈출은 404, 디렉터리 목록은 없다. 웹 디렉터리가 없으면 API만 동작하고 다른 경로는 503이다. |
 
-## 개인 모드 인증
+## 인증
 
-클라이언트가 인증하는 절차와 헤더를 적는다. 이 보호가 막는 위협, 쿠키·링크 파일의 운영 경계, 다중 사용자 확장 방향은 [보안](SECURITY.md)에 있다. listen 주소는 loopback IP와 0이 아닌 포트여야 하며 아니면 서버가 시작하지 않는다.
+클라이언트가 인증하는 절차와 헤더를 적는다. 이 보호가 막는 위협, 쿠키·링크 파일의 운영 경계, 로그인 제한과 비밀번호 저장 방식은 [보안](SECURITY.md)에 있다. listen 주소는 IP와 0이 아닌 포트여야 하며, loopback이 아니면 TLS 설정(`--tls-cert`, `--tls-key`, `--public-origin`)이 모두 있어야 서버가 시작한다.
 
 ### 일회용 로그인 링크
 
-- 사용자는 운영자 CLI로만 만든다. HTTP로 사용자를 만드는 경로는 없다.
 - `codeye start`, `codeye serve --user`, `codeye login-link`가 일회용 launch token(32 byte 난수, base64url 43자, 10분, 한 번만 교환)을 발급해 `<origin>/#launch=<token>` 링크를 0600 파일에 쓴다. 토큰은 출력하지 않고 DB에는 SHA-256만 저장한다. CLI 사용법은 [사용 안내](GUIDE.md)에 있다.
+- 관리자 API의 사용자 생성과 비밀번호 재설정도 같은 링크를 응답의 `login_link`로 한 번 준다([계정과 관리자](#계정과-관리자)). origin은 TLS 서버면 public origin, 아니면 요청의 loopback origin이다.
 - 토큰은 URL fragment에 있으므로 HTTP 요청·서버 로그에 실리지 않는다. 웹 앱은 fragment를 읽은 즉시 주소창에서 지우고 `POST /session`으로 교환한다.
 
 ### 세션
 
-- `POST /session`은 `{launch_token}`을 받아 토큰을 소비하고 같은 트랜잭션에서 세션을 만든다. 응답은 201 `{user_id, csrf_token, expires_at}`과 세션 cookie다. 잘못된·사용한·만료된 토큰은 모두 401이다. Host·Origin 검사에 걸린 요청은 토큰을 소비하지 않는다.
-- 교환의 잠금 순서는 user(FOR SHARE)→token→session이다. 사용자 비활성화(user FOR UPDATE→세션 폐기)와 직렬화되므로 둘이 경합해도 유효한 세션이 남지 않는다.
-- cookie는 `codeye_session`(HttpOnly, SameSite=Strict, Path=/)이다. 절대 만료 12시간이며 sliding 연장은 없다. 만료는 DB 시각으로 판단한다.
-- `GET /session`은 같은 형태의 현재 세션을 준다. `DELETE /session`은 세션을 폐기하고 cookie를 지운다(204, CSRF 필요). `codeye user disable`은 그 사용자의 모든 세션을 폐기하고 이후 교환을 거부한다.
+- `POST /session`은 `{launch_token}` 또는 `{username, password}` 중 하나만 받는다. 섞거나 일부만 보내면 400이다.
+  - launch token: 토큰을 소비하고 같은 트랜잭션에서 세션을 만든다. 잘못된·사용한·만료된 토큰은 모두 401 `launch token is invalid, used or expired`다. Host·Origin 검사에 걸린 요청은 토큰을 소비하지 않는다. 교환의 잠금 순서는 user(FOR SHARE)→token→session이고, 사용자 비활성화(user FOR UPDATE→세션 폐기)와 직렬화되므로 둘이 경합해도 유효한 세션이 남지 않는다.
+  - 비밀번호: 사용자 이름은 대소문자를 구분하지 않는다. 없는 사용자·틀린 비밀번호·비활성·비밀번호 없는 사용자는 모두 같은 401 `username or password is incorrect`다. 실패가 한도를 넘으면 429 `RATE_LIMITED`이고 `Retry-After` 헤더와 `details.retry_after_seconds`가 같은 초다. 429 동안은 맞는 비밀번호도 거절한다. 서버의 KDF 계산 자리가 3초 안에 나지 않으면 503 `UNAVAILABLE`이고 시도로 세지 않는다.
+- 응답은 201 [`SessionView`](../api/openapi.yaml)(`user_id`, `csrf_token`, `expires_at`, `username`, `display_name`, `is_admin`, `must_change_password`, `has_password`, `password_reset`)와 세션 cookie다. `password_reset`은 관리자가 한 가장 최근의 비밀번호 재설정(재설정 뒤 30일 동안, 아니면 null)이며 `reset_at`, `reset_by_user_id`, `reset_by_username`을 담는다. 로그인 횟수와 무관하게 30일 동안 나오고 지우는 경로는 없다.
+- cookie는 평문 loopback에서 `codeye_session`, TLS에서 `__Host-codeye_session`(Secure)이다. HttpOnly, SameSite=Strict, Path=/, 절대 만료 12시간이며 sliding 연장은 없다. 만료는 DB 시각으로 판단한다. TLS 서버는 평문 이름의 cookie를 읽지 않는다.
+- `GET /session`은 같은 형태의 현재 세션을 준다. `DELETE /session`은 세션을 폐기하고 cookie를 지운다(204, CSRF 필요). 사용자 비활성화(`codeye user disable`, `POST /admin/users/{id}/disable`)와 비밀번호 재설정은 그 사용자의 모든 세션을 폐기한다.
+
+### 비밀번호 변경
+
+- `POST /session/password` `{current_password?, new_password}`(CSRF 필요). 비밀번호가 있는 사용자(`has_password: true`)는 `current_password`가 필수다(없으면 400). 비밀번호가 없는 사용자는 세션만으로 처음 정한다.
+- 새 비밀번호가 규칙(12~256자, 사용자 이름·표시 이름과 다름, 한 문자 반복 아님)을 어기면 422 `VALIDATION_FAILED`이고 시도로 세지 않는다. 현재 비밀번호가 틀리면 403 `PASSWORD_INCORRECT`이고 로그인 실패 한도에 센다(넘으면 429). 사용자 이름이 없는 사용자, 확인 뒤 비밀번호가 바뀐 경우는 409다.
+- 성공하면 200 `SessionView`(`must_change_password: false`, `has_password: true`)이고 그 사용자의 다른 세션과 쓰지 않은 로그인 링크는 모두 끝난다. 이 세션과 cookie는 그대로다.
+- `must_change_password`가 true인 세션은 `GET/DELETE /session`과 `POST /session/password`만 쓸 수 있다. 다른 사용자 경로(이벤트 스트림 포함)는 403 `PASSWORD_CHANGE_REQUIRED`다.
 
 ### CSRF
 
@@ -47,9 +56,16 @@
 
 ### Host와 Origin
 
-- `Host`는 `127.0.0.1:<port>`, `localhost:<port>`, `[::1]:<port>`만 허용한다. 정적 파일을 포함한 모든 요청에 적용하며 위반은 403 `HOST_REJECTED`다.
-- 상태 변경 요청은 `Origin`이 `http://` + Host와 정확히 같아야 하고, `Sec-Fetch-Site`가 있으면 `same-origin`이어야 한다. 위반은 403 `ORIGIN_REJECTED`다. `POST /session`도 이 검사를 받는다.
+- 평문 loopback: `Host`는 `127.0.0.1:<port>`, `localhost:<port>`, `[::1]:<port>`만 허용한다. 상태 변경 요청은 `Origin`이 `http://` + Host와 정확히 같아야 한다.
+- TLS: `Host`는 public origin의 host(기본 포트 443이면 `host`와 `host:443`)만 허용하고, 상태 변경 요청의 `Origin`은 public origin과 정확히 같아야 한다. 모든 응답에 `Strict-Transport-Security: max-age=31536000`을 보낸다.
+- Host 위반은 정적 파일을 포함한 모든 요청에서 403 `HOST_REJECTED`, Origin 위반과 `same-origin`이 아닌 `Sec-Fetch-Site`는 403 `ORIGIN_REJECTED`다. `POST /session`도 Origin 검사를 받는다.
 - CORS 허용 헤더를 보내지 않는다(same-origin만).
+
+### 관리자와 비밀번호 변경 대기
+
+- 관리자 경로(`/admin/…`, `GET /audit`)는 세션 사용자가 활성 관리자여야 한다. 아니면 403 `FORBIDDEN`이다. 저장 계층이 같은 트랜잭션에서 다시 확인한다.
+- 관리자 역할은 프로젝트 권한을 주지 않는다. 관리자도 구성원이 아닌 프로젝트는 404다.
+- 검사 순서는 Host → Origin(상태 변경) → 세션 cookie → CSRF(상태 변경) → 비밀번호 변경 대기 → 관리자 → 본문 형식 → 처리다.
 
 ### 노드 경로
 
@@ -63,20 +79,20 @@
 |---|---|
 | 400 | `INVALID_REQUEST`: JSON 형식, 알 수 없는 필드, 중복 key, `Idempotency-Key`·`If-Match`·cursor·query 형식 오류, 알 수 없는 query parameter |
 | 401 | `UNAUTHENTICATED`. 노드 경로는 `NODE_UNAUTHENTICATED` |
-| 403 | `FORBIDDEN`(구성원이지만 역할 부족), `HOST_REJECTED`, `ORIGIN_REJECTED`, `CSRF_REJECTED` |
+| 403 | `FORBIDDEN`(구성원이지만 역할 부족, 관리자 아님), `HOST_REJECTED`, `ORIGIN_REJECTED`, `CSRF_REJECTED`, `PASSWORD_CHANGE_REQUIRED`, `PASSWORD_INCORRECT` |
 | 404 | `NOT_FOUND`: 없음·비구성원·허가 없는 source root·없는 provider·UUID 아님을 구분하지 않는다. |
 | 405 | `METHOD_NOT_ALLOWED` |
 | 409 | `IDEMPOTENCY_CONFLICT`(같은 키, 다른 요청), `CONFLICT`(version 불일치 등 현재 상태와 충돌), `STALE_ATTEMPT`(노드 fencing) |
 | 411 | `LENGTH_REQUIRED`(노드 산출물 업로드) |
 | 413 | `PAYLOAD_TOO_LARGE` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` |
+| 429 | `RATE_LIMITED`(`retryable=true`, `Retry-After`, `details.retry_after_seconds`): 로그인과 비밀번호 변경의 실패 한도 |
 | 422 | `VALIDATION_FAILED`(의미 제약), `SOURCE_UNSUPPORTED`(ssh·scp·`git://`), `ATTACHMENTS_UNSUPPORTED`, 노드 `INTEGRITY_MISMATCH`·`PROTOCOL_UNSUPPORTED` |
 | 500 | `INTERNAL`, `REPORT_INVALID`(저장된 보고서가 검증에 실패) |
 | 503 | `UNAVAILABLE`(`retryable=true`). DB 오류 뒤에는 202를 반환하지 않는다. 이벤트 스트림 상한 초과도 503이다. |
 
-- 프로젝트 구성원이 아니면 403이 아니라 404다(존재 비노출). 구성원의 역할 부족만 403이다. 권한이 철회되면 그 뒤 요청은 404다.
-- 429(한도)는 오류 분류에 예약되어 있으나 현재 어떤 경로도 보내지 않는다.
-- OpenAPI의 오류 code 목록에는 `REPORT_INVALID`가 아직 없다.
+- 프로젝트 구성원이 아니면 403이 아니라 404다(존재 비노출). 관리자도 같다. 구성원의 역할 부족만 403이다. 권한이 철회되면 그 뒤 요청은 404다.
+- 상태를 바꾼 요청의 감사 기록을 쓰지 못하면 변경은 커밋되지 않고 503이다.
 
 ## 멱등성과 동시 변경
 
@@ -94,20 +110,26 @@
 
 - `GET /projects`: `?cursor&limit`(1..100, 기본 20), 최신순 keyset. 응답은 `{items, next_cursor}`이고 마지막 페이지의 `next_cursor`는 null이다. 형식이 틀린 cursor는 400이다.
 - `GET /projects/{id}/finding-reviews`: `?cursor&limit`(1..200, 기본 50). cursor는 fp2 fingerprint이며 `fingerprint`와 함께 쓸 수 없다.
-- `GET /source-roots`, `GET /providers`, `GET /projects/{id}/schedules`, `GET /runs/{id}/reports`는 `{items, …}` 객체를 준다. 맨 배열을 반환하는 경로는 없다.
+- `GET /admin/users`: `?cursor&limit`(1..200, 기본 50), 생성순 keyset. cursor는 앞 페이지의 `next_cursor`(사용자 ID)다.
+- `GET /audit`, `GET /projects/{id}/audit`: `?since&until&actor&action&cursor&limit`(`/audit`은 `project`도). 최신순(id 내림차순) keyset이고 cursor는 앞 페이지의 `next_cursor`(행 id 문자열)다. `since`는 포함, `until`은 제외하는 RFC 3339 시각이다. 모르는 action·형식 오류는 400이다.
+- `GET /source-roots`, `GET /providers`, `GET /projects/{id}/schedules`, `GET /runs/{id}/reports`, `GET /projects/{id}/members`, `GET /admin/source-roots`, `GET /admin/providers`는 `{items, …}` 객체를 준다. 맨 배열을 반환하는 경로는 없다.
 
 ## 자원 개요
 
-권한 열의 "구성원"은 프로젝트 소유자와 manager·runner·viewer 역할이다. 소유자는 모든 프로젝트 권한을 갖는다.
+권한 열의 "구성원"은 프로젝트 소유자와 manager·runner·viewer 역할이다. 소유자는 모든 프로젝트 권한을 갖는다. 관리자는 관리자 경로만 더 쓸 수 있고 프로젝트 권한은 없다.
 
 | 메서드·경로 | 권한 | 결과 |
 |---|---|---|
 | `GET /health` | 없음 | 프로세스 생존. DB readiness와 다르다. |
 | `GET /ready` | 없음 | 200 `{status:"ready", schema_version}` 또는 503 `{status:"not_ready", reason}`. reason: `database_unavailable`, `schema_outdated`, `schema_newer`, `schema_inconsistent`. 읽기 전용이며 migration을 바꾸지 않는다. |
 | `POST/GET/DELETE /session` | Origin / 세션 / 세션+CSRF | [세션](#세션) |
+| `POST /session/password` | 세션+CSRF(변경 대기 세션 포함) | [비밀번호 변경](#비밀번호-변경) |
 | `GET /source-roots` | 세션 | 이 사용자에게 허가된 root의 `{id, label}`만. 서버 경로는 보이지 않는다. |
 | `GET /providers` | 세션 | `{id, kind(github·ghes), host}` |
-| `POST /projects`, `GET /projects`, `GET /projects/{id}` | 세션(+CSRF) | 등록 201+`Location`, 허가된 목록·상세 |
+| `POST /projects`, `GET /projects`, `GET /projects/{id}` | 세션(+CSRF) | 등록 201+`Location`, 허가된 목록·상세. 항목마다 호출자의 `role`(`owner`·`manager`·`runner`·`viewer`), `can_run`, `can_manage` |
+| `GET /projects/{id}/members`, `PUT/DELETE /projects/{id}/members/{uid}` | 소유자·manager | [구성원](#구성원) |
+| `GET /projects/{id}/audit` | 소유자·manager | 그 프로젝트의 감사 기록([계정과 관리자](#계정과-관리자)) |
+| `/admin/…`, `GET /audit` | 관리자 | [계정과 관리자](#계정과-관리자) |
 | `POST /projects/{id}/runs` | 소유자·manager·runner | 202 `{id, status, version, url}`+`Location` |
 | `GET /runs/{id}`, `GET /runs/{id}/events` | 구성원 | [실행 조회와 진행](#실행-조회와-진행), [실행 이벤트 스트림](#실행-이벤트-스트림) |
 | `POST /runs/{id}/cancel` | 소유자·manager·runner | 상태를 바꿨으면 202, 이미 종료·취소 중이면 200(현재 상태) |
@@ -302,6 +324,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `include_code` | `true`, `false` | `false`(코드 미포함) |
 
 - 다른 query parameter는 400이다. 프로젝트 구성원이 아니면 404이고, 권한은 요청마다 확인한다.
+- 성공한 요청마다 본문을 보내기 전에 `report.exported` 감사 행(형식, 코드 포함 여부, run·revision)을 쓰고, 쓰지 못하면 503이다. 웹 화면의 보고서 조회도 이 경로(JSON, 코드 포함)를 쓰므로 볼 때마다 행이 남는다([결정](DECISIONS.md) A35).
 - 저장된 본문을 엄격하게 다시 해석·검증하고 저장된 SHA-256과 대조한다. 실패하면 500 `REPORT_INVALID`이며 본문을 보내지 않는다.
 
 | 응답 헤더 | 값 |
@@ -344,6 +367,43 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 - 사유 없음, 2000자 초과, 과거 만료, `open`에 만료·경로 지정, 그 리비전 본문에 같은 fingerprint의 발견이 없음은 422 `VALIDATION_FAILED`다.
 - 새 version이면 201, 같은 키·같은 요청의 재전송이면 기존 행과 200이다. 둘 다 `ETag: "<version>"`을 준다. 헤더 규칙은 [멱등성과 동시 변경](#멱등성과-동시-변경)에 있다.
 
+## 구성원
+
+형식은 OpenAPI `Member`와 [`examples/accounts.json`](../examples/accounts.json)이다.
+
+| 경로 | 본문 | 결과 |
+|---|---|---|
+| `GET /projects/{id}/members` | — | `{items}`. 소유자, manager, runner, viewer 순, 그 안에서 사용자 이름 순 |
+| `POST /projects/{id}/members` | `{username, role}` | 200 `Member`. 사용자 이름(대소문자 무시, 정확히 일치)으로 구성원을 추가하거나 역할을 바꾼다 |
+| `PUT /projects/{id}/members/{uid}` | `{role}` | 200 `Member`. 사용자 ID로 구성원을 추가하거나 역할을 바꾼다 |
+| `DELETE /projects/{id}/members/{uid}` | — | 204. 구성원이 아니었으면 아무것도 바꾸지 않고 204 |
+
+- 권한은 소유자와 manager다. viewer·runner 403, 비구성원(관리자 포함) 404.
+- `role`은 `manager`, `runner`, `viewer`이고 그 밖은 422다. 소유자는 바꾸거나 제거할 수 없다(409). 없거나 비활성인 사용자는 404다.
+- 사용자 이름으로 추가할 때 역할 확인이 먼저라 viewer·runner는 이름의 존재와 무관하게 403이다. manager에게는 없는·비활성·형식이 틀린 이름이 모두 같은 404다. 검색이나 부분 일치는 없다([결정](DECISIONS.md) A36).
+- 변경과 감사 기록(`project.member_set`, `project.member_removed`, detail에 이전 역할)은 같은 트랜잭션이다. 제거된 사용자의 다음 요청은 404이고 열린 이벤트 스트림은 다음 poll에서 `closed`(`access_revoked`)로 끝난다.
+
+## 계정과 관리자
+
+관리자 경로는 활성 관리자의 세션이 필요하다. 관리자 역할은 어떤 프로젝트도 열지 않는다. 형식은 OpenAPI의 `UserView`, `UserWithLink`, `AuditPage`와 [`examples/accounts.json`](../examples/accounts.json)이다.
+
+| 경로 | 본문 | 결과 |
+|---|---|---|
+| `GET /admin/users` | — | `{items: UserView[], next_cursor}`. hash·salt는 없다 |
+| `POST /admin/users` | `{username, display_name?, is_admin?}` | 201 `{user, login_link}`. 비밀번호 없는 계정(`must_change_password: true`)과 일회용 로그인 링크. 쓰인 이름 409 |
+| `POST /admin/users/{id}/disable` | — | 200 `UserView`. 모든 세션 폐기. 마지막 활성 관리자 409. 이미 비활성이면 변경 없이 200 |
+| `PUT /admin/users/{id}/admin` | `{is_admin}` | 200 `UserView`. 마지막 활성 관리자 해제·비활성 사용자 지정 409 |
+| `POST /admin/users/{id}/password-reset` | — | 200 `{user, login_link}`. 비밀번호 삭제, 모든 세션과 이전 로그인 링크 폐기, 새 로그인 링크. 자기 자신 409, 사용자 이름이 없는 사용자 409(문구가 다르다), 비활성 404. 링크로 시작한 세션은 비밀번호 변경에 묶이고 그 세션의 감사 행에 `link_issued_by`가 붙는다 |
+| `GET /admin/source-roots` | — | `{items: [{id, label, created_at, grants: [{user_id, username, granted_at}]}]}`. 서버 경로는 없다 |
+| `PUT/DELETE /admin/source-roots/{rid}/grants/{uid}` | — | 204. 이미 그 상태면 변경 없이 204 |
+| `GET /admin/providers` | — | `{items: [{id, kind, host, api_url}]}` |
+| `GET /audit` | — | 전체 감사 기록 `AuditPage` |
+
+- 로그인 링크(`login_link.url`, `expires_at`)는 응답에 한 번만 나온다. 관리자는 링크를 사용자에게 안전한 경로로 전달하고, 사용자는 링크로 로그인한 뒤 `POST /session/password`로 비밀번호를 정한다. 그 전에는 다른 경로가 403 `PASSWORD_CHANGE_REQUIRED`다.
+- source root와 provider의 등록은 운영자 CLI(`codeye source-root add`, `codeye provider add`)가 한다. 관리자 API는 허가만 바꾼다.
+- 첫 관리자와 비밀번호 직접 지정은 운영자 CLI(`codeye user create --admin`, `codeye user passwd`)다([운영](OPERATIONS.md#계정과-관리자-cli)).
+- 감사 기록 항목은 `id`(문자열), `occurred_at`, `actor_kind`, `actor_user_id`, `actor_username`, `actor_node_id`, `action`, `target_type`, `target_id`, `project_id`, `request_id`, `detail`이다. action 목록과 detail 규칙은 [보안](SECURITY.md#감사)에 있다.
+
 ## 노드 API 요약
 
 노드 에이전트가 관리 서버에서 작업을 받는 경로다. SSH 원격 실행은 없다. 상태 전이·lease·fencing·정리 확인의 규칙은 [실행](EXECUTION.md)에 있고 필드는 OpenAPI를 따른다.
@@ -372,4 +432,4 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 - 구버전 컨트롤러는 `task_created`의 `stage`·`weight`를 거부하므로 업그레이드할 때 컨트롤러를 워커보다 먼저 올린다.
 - 서버는 migration 이력이 바이너리의 최신과 정확히 같을 때만 시작한다. 더 새 schema의 DB에서 이전 바이너리는 시작하지 않는다(`schema_newer`). 운영 절차는 [운영](OPERATIONS.md)에 있다.
 
-관련 요구사항·수용 시험: REQ-013, REQ-016, REQ-017, REQ-022, REQ-023, NFR-003, NFR-004, TC-25(예약), TC-46~TC-52(loopback 보호, 일회용 토큰과 세션, 선언 등록, ACL 404/403, 멱등 202와 DB 실패 503, readiness, 정적 파일 경계), TC-99(단계 집계, SSE 순번 누락, 계획 분모 변경). 요구사항 정의는 [요구사항](REQUIREMENTS.md), 수용 시험 정의는 [시험](TESTING.md)에 있다.
+관련 요구사항·수용 시험: REQ-013, REQ-016, REQ-017, REQ-022, REQ-023, NFR-003, NFR-004, TC-25(예약), TC-46~TC-52(loopback 보호, 일회용 토큰과 세션, 선언 등록, ACL 404/403, 멱등 202와 DB 실패 503, readiness, 정적 파일 경계), TC-99(단계 집계, SSE 순번 누락, 계획 분모 변경), TC-140~TC-157(경로별 격리와 감사, 비밀번호 로그인과 제한, 관리자, TLS, 재설정 기록, 이름으로 구성원 추가). 요구사항 정의는 [요구사항](REQUIREMENTS.md), 수용 시험 정의는 [시험](TESTING.md)에 있다.

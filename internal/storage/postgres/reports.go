@@ -346,17 +346,47 @@ func readReport(row pgx.Row) (ReportRecord, error) {
 // GetReport returns revision (0 = latest) of the run's report for an actor who
 // may read the run. A run without a published report is ErrNotFound.
 func (s *Store) GetReport(ctx context.Context, actor, runID string, revision int) (ReportRecord, error) {
+	return s.getReport(ctx, actor, runID, revision, nil)
+}
+
+// ReportExport is the format and code choice of a report download.
+type ReportExport struct {
+	Format      string
+	IncludeCode bool
+}
+
+// ExportReport is GetReport for a download: the export (format, whether
+// code is included) is audited in the same transaction as the permission
+// check, before any byte is sent. If the audit row cannot be written the
+// read fails.
+func (s *Store) ExportReport(ctx context.Context, actor, runID string, revision int, ex ReportExport) (ReportRecord, error) {
+	if ex.Format == "" || len(ex.Format) > 20 {
+		return ReportRecord{}, domain.ErrInvalid
+	}
+	return s.getReport(ctx, actor, runID, revision, &ex)
+}
+
+func (s *Store) getReport(ctx context.Context, actor, runID string, revision int, ex *ReportExport) (ReportRecord, error) {
 	if !validIDs(actor, runID) || revision < 0 {
 		return ReportRecord{}, domain.ErrInvalid
 	}
 	return transaction(ctx, s, func(tx pgx.Tx) (ReportRecord, error) {
-		if _, err := authorizeRunRead(ctx, tx, actor, runID); err != nil {
+		run, err := authorizeRunRead(ctx, tx, actor, runID)
+		if err != nil {
 			return ReportRecord{}, err
 		}
+		var rec ReportRecord
 		if revision == 0 {
-			return readReport(tx.QueryRow(ctx, "SELECT "+reportColumns+" FROM reports WHERE run_id=$1 ORDER BY revision DESC LIMIT 1", runID))
+			rec, err = readReport(tx.QueryRow(ctx, "SELECT "+reportColumns+" FROM reports WHERE run_id=$1 ORDER BY revision DESC LIMIT 1", runID))
+		} else {
+			rec, err = readReport(tx.QueryRow(ctx, "SELECT "+reportColumns+" FROM reports WHERE run_id=$1 AND revision=$2", runID, revision))
 		}
-		return readReport(tx.QueryRow(ctx, "SELECT "+reportColumns+" FROM reports WHERE run_id=$1 AND revision=$2", runID, revision))
+		if err != nil || ex == nil {
+			return rec, err
+		}
+		e := userAudit(ctx, actor, AuditReportExported).target("report", rec.ID).in(run.ProjectID).
+			with(map[string]any{"run_id": runID, "revision": rec.Revision, "format": ex.Format, "include_code": ex.IncludeCode})
+		return rec, writeAudit(ctx, tx, e)
 	})
 }
 

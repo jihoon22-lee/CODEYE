@@ -46,6 +46,20 @@ test('real session, project registration, durable request and cancellation', asy
   await expect(page.getByText('취소됨', { exact: true })).toBeVisible();
   // After a reload the cancelled run keeps its recorded stages: source never completed.
   await expect(page.getByRole('button', { name: '소스 확보 ■ 취소됨', exact: true })).toBeVisible();
+  // The owner manages members and reads the project's audit log from the real server.
+  const tabs = page.getByRole('navigation', { name: '프로젝트 화면' });
+  await tabs.getByRole('button', { name: '구성원', exact: true }).click();
+  const members = page.getByRole('table', { name: '구성원 목록' });
+  await expect(members).toContainText('Browser fixture');
+  await expect(members).toContainText('🔒 소유자는 바꾸거나 제거할 수 없습니다.');
+  await tabs.getByRole('button', { name: '감사 기록', exact: true }).click();
+  const audit = page.getByRole('table', { name: '감사 기록(최신순)' });
+  await expect(audit).toContainText('프로젝트 등록');
+  await expect(audit).toContainText('취소 요청');
+  await page.getByLabel('작업').selectOption('project.registered');
+  await page.getByRole('button', { name: '적용', exact: true }).click();
+  await expect(audit).not.toContainText('취소 요청');
+  await expect(audit).toContainText('프로젝트 등록');
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
   await expect(page.getByRole('heading', { name: '로그인이 필요합니다' })).toBeVisible();
   expect((await page.request.get(`/api/v1/runs/${run.id}`)).status()).toBe(401);

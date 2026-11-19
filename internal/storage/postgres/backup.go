@@ -37,7 +37,7 @@ type BackupPoint struct {
 // countedTables are compared between a backup point and the restored
 // database (docs/OPERATIONS.md: projects, runs, reports, evidence, ACL, schedules).
 var countedTables = []string{"users", "projects", "project_members", "source_roots", "source_root_grants", "runs", "attempts", "tasks", "events",
-	"artifacts", "evidence", "reports", "finding_reviews", "schedules", "schedule_occurrences", "nodes"}
+	"artifacts", "evidence", "reports", "finding_reviews", "schedules", "schedule_occurrences", "nodes", "audit_events"}
 
 const blobsSQL = `SELECT sha256,min(size_bytes) FROM artifacts WHERE finalized AND storage_key IS NOT NULL GROUP BY sha256 ORDER BY sha256`
 

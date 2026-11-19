@@ -19,6 +19,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jihoon22-lee/CODEYE/internal/account"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 	"github.com/jihoon22-lee/CODEYE/migrations"
@@ -125,6 +126,7 @@ func (e *env) start(webDir string) {
 	}
 	e.pool = newPool(t, e.url, e.schema)
 	e.store = postgres.NewFromPool(e.pool)
+	e.store.SetPasswordIterations(account.MinIterations)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -691,22 +693,6 @@ func TestNoSecretsInLogsOrErrors(t *testing.T) {
 		if strings.Contains(string(errResp.raw), leak) {
 			t.Fatalf("error leaks %q: %s", leak, errResp.raw)
 		}
-	}
-}
-
-func TestListenMustBeLoopback(t *testing.T) {
-	for _, bad := range []string{"0.0.0.0:7331", "192.168.1.2:7331", "127.0.0.1:0", "localhost:7331", "[::]:7331"} {
-		if _, err := ParseListen(bad); err == nil {
-			t.Errorf("ParseListen(%q) accepted", bad)
-		}
-	}
-	for _, ok := range []string{"127.0.0.1:7331", "[::1]:7331"} {
-		if _, err := ParseListen(ok); err != nil {
-			t.Errorf("ParseListen(%q): %v", ok, err)
-		}
-	}
-	if _, err := New(Config{Listen: netip.MustParseAddrPort("0.0.0.0:7331")}, &postgres.Store{}); err == nil {
-		t.Fatal("New accepted a non-loopback listen")
 	}
 }
 

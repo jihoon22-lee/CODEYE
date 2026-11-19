@@ -75,7 +75,9 @@ CODEYE started: controller http://127.0.0.1:7331 (pid …), agent pid …; logs 
 codeye login-link --user USER_ID --output /…/state/login-link --origin http://127.0.0.1:7331
 ```
 
-migration 전에 `start`하면 `database schema is outdated (applied 0, this binary expects 9); back it up and run "codeye migrate" explicitly`로 끝난다. start는 schema를 바꾸지 않는다.
+개인 사용자는 관리자다. 사용자 이름과 비밀번호는 없고 로그인 링크로만 들어간다. 관리자 역할은 계정과 source root 허가를 다룰 뿐 프로젝트 권한은 아니며, 개인 사용자는 자기가 등록한 프로젝트의 소유자다. 다른 사람과 함께 쓰는 배포는 [계정과 관리자 CLI](OPERATIONS.md#계정과-관리자-cli)와 [TLS 수신](OPERATIONS.md#tls-수신)을 본다.
+
+migration 전에 `start`하면 `database schema is outdated (applied 0, this binary expects 11); back it up and run "codeye migrate" explicitly`로 끝난다. start는 schema를 바꾸지 않는다. 이전 버전에서 업그레이드하면 `codeye migrate`가 0010·0011을 적용한다(기존 사용자는 사용자 이름·비밀번호 없이 그대로 로그인 링크로 들어간다).
 
 ## 프로젝트와 source root
 

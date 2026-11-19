@@ -5,8 +5,13 @@ export type Handler = (call: Call) => Response | Promise<Response> | 'network';
 
 export const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-export const apiError = (status: number, code: string, message = 'm', retryable = false) =>
-  json(status, { error: { code, message, retryable, request_id: 'req-1' } });
+export const apiError = (status: number, code: string, message = 'm', retryable = false, details?: Record<string, unknown>, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify({ error: { code, message, retryable, request_id: 'req-1', ...(details ? { details } : {}) } }), {
+    status, headers: { 'Content-Type': 'application/json', ...headers },
+  });
+// A throttled sign-in or password change: the same wait in the header and in details.
+export const rateLimited = (seconds: number) =>
+  apiError(429, 'RATE_LIMITED', 'too many attempts', true, { retry_after_seconds: seconds }, { 'Retry-After': String(seconds) });
 
 // A recording fetch. The handler decides every response; 'network' simulates a lost connection.
 export function mockFetch(handler: Handler) {
@@ -29,7 +34,16 @@ export function mockFetch(handler: Handler) {
   return { fetch: fn as unknown as typeof fetch, calls, fn };
 }
 
-export const SESSION = { user_id: '11111111-2222-4333-8444-555555555555', csrf_token: 'csrf-secret-value', expires_at: '2099-01-01T00:00:00Z' };
+export const SESSION = {
+  user_id: '11111111-2222-4333-8444-555555555555',
+  csrf_token: 'csrf-secret-value',
+  expires_at: '2099-01-01T00:00:00Z',
+  username: 'dana',
+  display_name: 'Dana',
+  is_admin: false,
+  must_change_password: false,
+  has_password: true,
+};
 
 export const PROJECT = {
   id: 'p1',
@@ -39,6 +53,9 @@ export const PROJECT = {
   source_status: 'declared_unverified',
   capability_gaps: ['source_access_unverified', 'execution_unavailable', 'report_unavailable'],
   last_run: null,
+  role: 'owner',
+  can_run: true,
+  can_manage: true,
 };
 
 export const runView = (over: Record<string, unknown> = {}, progress: Record<string, unknown> = {}) => ({
