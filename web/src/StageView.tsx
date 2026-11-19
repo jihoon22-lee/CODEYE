@@ -1,8 +1,10 @@
-import { useId, useState } from 'react';
+import { Fragment, useId, useState, type ReactNode } from 'react';
 import type { Project, StageSummary, StageView } from './api';
 import { reportURL } from './analysisReport';
+import { Time } from './CopyText';
 import { formatClock, formatInstant, isTerminalRun, orderStages, runStatusText, shorten, stageName, stageStateText } from './format';
 import { ko as t } from './locales/ko';
+import { reportKo } from './locales/report-ko';
 
 const s = t.stages;
 
@@ -12,8 +14,11 @@ export function countsText(counts: Record<string, number>): string {
     .map(([k, n]) => s.count(Object.hasOwn(s.countLabels, k) ? s.countLabels[k]! : shorten(k, 40), n))
     .join(' · ');
 }
+// A reason code in words: the stage wording, else the report's, else the code itself.
 export const reasonText = (code: string): string =>
-  s.reasonLabel(Object.hasOwn(s.reasonLabels, code) ? s.reasonLabels[code]! : shorten(code, 80));
+  s.reasonLabel(Object.hasOwn(s.reasonLabels, code) ? s.reasonLabels[code]!
+    : Object.hasOwn(reportKo.reasons, code) ? reportKo.reasons[code]!
+    : shorten(code, 80));
 export const progressText = (st: StageView): string =>
   st.planned === null ? s.finishedOnly(st.finished) : s.finishedOfPlanned(st.finished, st.planned);
 
@@ -29,15 +34,16 @@ export function StageList({ summary, runStatus, confirmedAt }: { summary: StageS
     if (stages.length === 0) return <p>{s.noStages}</p>;
     return <ol className="plain stages">{stages.map(st => <StageItem key={st.key} stage={st} />)}</ol>;
   })();
-  const times = [
-    summary?.last_event_at ? s.lastEvent(formatInstant(summary.last_event_at)) : null,
-    summary?.checked_at ? s.checkedAt(formatInstant(summary.checked_at)) : null,
+  // Relative times read faster; the exact time stays in the title and the datetime attribute.
+  const times: ReactNode[] = [
+    summary?.last_event_at ? <>{s.lastEvent} <Time iso={summary.last_event_at} /></> : null,
+    summary?.checked_at ? <>{s.checkedAt} <Time iso={summary.checked_at} /></> : null,
     confirmedAt ? s.lastConfirmed(formatClock(confirmedAt)) : null,
   ].filter(x => x !== null);
   return <div className="stage-summary">
     <h4>{s.title}</h4>
     {body}
-    {times.length > 0 && <p className="small">{times.join(' · ')}</p>}
+    {times.length > 0 && <p className="small">{times.map((x, i) => <Fragment key={i}>{i > 0 && ' · '}{x}</Fragment>)}</p>}
   </div>;
 }
 
@@ -46,12 +52,15 @@ function StageItem({ stage }: { stage: StageView }) {
   const panel = useId();
   const name = stageName(stage.key);
   const counts = countsText(stage.counts);
-  return <li className="stage">
+  const known = Object.hasOwn(s.states, stage.state);
+  return <li className={`stage st-${known ? stage.state : 'unknown'}`}>
     <button type="button" className="stage-toggle" aria-expanded={open} aria-controls={panel} onClick={() => setOpen(v => !v)}>
       <strong>{name}</strong> <span>{stageStateText(stage.state)}</span>
     </button>
-    {counts !== '' && <span className="small"> {counts}</span>}
-    {stage.reasons.map(r => <span key={r} className="small"> {reasonText(r)}</span>)}
+    {(counts !== '' || stage.reasons.length > 0) && <ul className="stage-notes">
+      {counts !== '' && <li>{counts}</li>}
+      {stage.reasons.map(r => <li key={r}>{reasonText(r)}</li>)}
+    </ul>}
     <div id={panel} hidden={!open}>
       <ul className="plain small">
         <li>{progressText(stage)}</li>
@@ -104,5 +113,5 @@ export function ProjectActivity({ project }: { project: Project }) {
 export function LastReportLink({ project }: { project: Project }) {
   const r = project.activity?.last_report;
   if (!r) return null;
-  return <a className="small" href={reportURL(r.run_id, 'html', false, r.revision)}>{s.lastReport(shorten(r.run_id, 16), r.revision)}</a>;
+  return <a className="small" href={reportURL(r.run_id, 'html', false, r.revision)} title={s.lastReportTitle(r.run_id, r.revision)}>{s.lastReport(shorten(r.run_id, 16), r.revision)}</a>;
 }

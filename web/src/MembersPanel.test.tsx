@@ -44,7 +44,7 @@ describe('role-gated project actions', () => {
     await flush();
     expect(calls.some(c => c.method === 'POST' && c.url.endsWith('/runs'))).toBe(false);
     // The run can still be watched, but not cancelled.
-    fireEvent.click(screen.getByRole('button', { name: t.projects.lastRunOpen }));
+    // Selecting the project opens its latest run.
     await flush();
     expect(screen.getByText(t.runs.statusLabels.queued!)).toBeTruthy();
     expect(screen.queryByRole('button', { name: t.runs.cancel })).toBeNull();
@@ -67,7 +67,7 @@ describe('role-gated project actions', () => {
 
   it('keeps cancel for a runner with an active run', async () => {
     await open({ role: 'runner', can_run: true, can_manage: false, last_run: { id: 'run1', status: 'queued' } }, { 'GET /api/v1/runs/run1': () => json(200, runView()) });
-    fireEvent.click(screen.getByRole('button', { name: t.projects.lastRunOpen }));
+    // Selecting the project opens its latest run.
     await flush();
     expect(screen.getByRole('button', { name: t.runs.cancel })).toBeTruthy();
   });

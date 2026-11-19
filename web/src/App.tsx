@@ -4,6 +4,7 @@ import type { Api } from './api';
 import type { DeepLink } from './deepLink';
 import { DoctorView } from './DoctorView';
 import type { Idempotency } from './idempotency';
+import { CopyText } from './CopyText';
 import { ko as t } from './locales/ko';
 import { PasswordForm } from './PasswordForm';
 import { ProjectsView } from './ProjectsView';
@@ -28,6 +29,15 @@ export function App({ api, controller, idempotency, link }: Props) {
   const forced = signedIn?.mustChangePassword === true;
   // The admin area exists only for admins; a stale choice falls back to projects.
   const shown: View = forced ? 'account' : view === 'admin' && !signedIn?.isAdmin ? 'projects' : view === 'account' && !signedIn ? 'projects' : view;
+  // The project screen names its project and run in the title itself.
+  useEffect(() => {
+    if (shown === 'projects' && signedIn) return;
+    document.title = !signedIn && shown !== 'doctor' ? t.pageTitle(t.session.anonymous.title)
+      : shown === 'doctor' ? t.pageTitle(t.nav.doctor)
+      : shown === 'admin' ? t.pageTitle(t.accounts.nav.admin)
+      : shown === 'account' ? t.pageTitle(t.accounts.password.title)
+      : t.appName;
+  }, [shown, signedIn]);
 
   return <>
     <a className="skip" href="#main">{t.skipToMain}</a>
@@ -40,7 +50,6 @@ export function App({ api, controller, idempotency, link }: Props) {
           {signedIn?.isAdmin && <NavButton current={shown} view="admin" onSelect={go}>{t.accounts.nav.admin}</NavButton>}
         </nav>}
         <div className="session">
-          <span className="stage">{t.stage}</span>
           {signedIn && <AccountMenu session={signedIn} forced={forced} current={shown} onAccount={() => go('account')} onLogout={() => void controller.logout()} />}
         </div>
       </header>
@@ -83,14 +92,16 @@ function ConnectionPanel({ session, controller }: { session: SessionState; contr
     return <section className="panel" aria-labelledby="conn-title">
       <h1 id="conn-title">{t.session.unavailable.title}</h1>
       <p role="alert">{t.session.unavailable.body}</p>
+      <p><CopyText text={t.session.unavailable.command} /></p>
       <p className="small">{t.session.unavailable.hint}</p>
       <button type="button" onClick={() => void controller.retry()}>{t.session.unavailable.retry}</button>
     </section>;
   }
   if (session.status === 'anonymous') {
-    return <section className="panel" aria-labelledby="login-title">
+    return <section className="panel signin" aria-labelledby="login-title">
       <h1 id="login-title">{t.session.anonymous.title}</h1>
       <p role={session.reason === 'launch_rejected' || session.reason === 'expired' ? 'alert' : undefined}>{t.session.anonymous[session.reason]}</p>
+      <p><CopyText text={t.session.anonymous.command} label={t.session.anonymous.commandLabel} /></p>
       <SignInForm controller={controller} />
     </section>;
   }

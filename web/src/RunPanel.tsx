@@ -8,6 +8,7 @@ import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
 import type { StreamMode } from './runStream';
 import { StageList } from './StageView';
+import { CopyText } from './CopyText';
 import { useRunPolling } from './useRunPolling';
 import { PullRequestPanel } from './PullRequestPanel';
 
@@ -54,11 +55,16 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
   }
 
   return <section className="panel" aria-labelledby="run-title">
-    <h2 id="run-title">{t.runs.title}</h2>
-    <ul className="plain small"><li>{t.runs.profile}</li><li>{t.runs.policy}</li><li>{t.runs.scope}</li></ul>
-    <p className="small">{t.runs.startNote}</p>
-    <button type="button" className="primary" onClick={start} disabled={pending || !canRun} aria-busy={pending} aria-describedby={canRun ? undefined : 'run-not-allowed'}>{pending ? t.runs.starting : t.runs.start}</button>
+    <div className="run-head">
+      <h2 id="run-title">{t.runs.title}</h2>
+      <button type="button" className={activeId ? undefined : 'primary'} onClick={start} disabled={pending || !canRun} aria-busy={pending} aria-describedby={canRun ? undefined : 'run-not-allowed'}>{pending ? t.runs.starting : t.runs.start}</button>
+    </div>
     {!canRun && <p id="run-not-allowed" className="small">{t.accounts.runNotAllowed(roleLabel(project.role))}</p>}
+    <details className="disclosure">
+      <summary>{t.runs.settings}</summary>
+      <ul className="plain small"><li>{t.runs.profile}</li><li>{t.runs.policy}</li><li>{t.runs.scope}</li></ul>
+      <p className="small">{t.runs.startNote}</p>
+    </details>
     {error && <><ErrorNote error={error} />{retrying && <p className="small">{t.runs.retryNote}</p>}</>}
     {accepted && <p role="status">{t.runs.accepted(shorten(accepted.id, 12))}</p>}
     {retried && <p role="status">{t.runs.retried(retried.retry)}</p>}
@@ -80,24 +86,32 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
   const status = run?.status ?? placeholder?.status ?? null;
   const version = run?.version ?? placeholder?.version ?? null;
   const terminal = status !== null && isTerminalRun(status);
+  // The tab title follows the run: "분석 중 42% · project · CODEYE".
+  const percent = run?.progress.estimated_percent ?? null;
+  const name = project.name;
+  useEffect(() => {
+    if (status === null) return;
+    const label = runStatusLabel(status) + (!terminal && percent !== null ? ` ${Math.floor(percent)}%` : '');
+    document.title = t.pageTitle(name === '' ? label : `${label} · ${name}`);
+  }, [status, terminal, percent, name]);
   return <div className="run" aria-labelledby="run-current">
     <h3 id="run-current">{t.runs.current}</h3>
-    <div role="status" aria-live="polite" aria-atomic="true">
-      {status === null
-        ? <p>{t.projects.loading}</p>
-        : <p className={`badge ${isKnownRunStatus(status) ? `s-${status}` : 's-unknown'}`}><strong>{runStatusLabel(status)}</strong></p>}
+    <div className="run-status">
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {status === null
+          ? <p>{t.projects.loading}</p>
+          : <p className={`badge ${isKnownRunStatus(status) ? `s-${status}` : 's-unknown'}`}><span aria-hidden="true">{isKnownRunStatus(status) ? t.runStatusIcons[status] : t.runStatusUnknownIcon}</span><strong>{runStatusLabel(status)}</strong></p>}
+      </div>
+      <p className="update-note">
+        {terminal ? t.runs.terminalNote : hidden && mode !== 'paused' ? t.runs.pollingHidden : stopped ? t.runs.pollStopped : updateText(mode)}
+        {!terminal && !stopped && mode === 'live' && confirmedAt && <> {t.stages.lastConfirmed(formatClock(confirmedAt))}</>}
+      </p>
     </div>
     {status !== null && !isKnownRunStatus(status) && <p className="notice">{t.runs.statusUnknownNote} <code>{shorten(status, 40)}</code></p>}
     {run?.pull_request && <PullRequestPanel api={api} runId={runId} pr={run.pull_request} hasReport={!!run.reportRevision} />}
     {run && <RunDetails run={run} confirmedAt={error !== null ? confirmedAt : null} />}
-    {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}
-      extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project, report.sections?.codeReview.ledger ?? null, report.sections?.environment.dependencies ?? [])} runId={runId} canRun={canRun} onRetried={onRetried} />} />}
     {!run && <dl><dt>{t.runs.id}</dt><dd><code>{runId}</code></dd>{version !== null && <><dt>{t.runs.version}</dt><dd>{version}</dd></>}</dl>}
     {error !== null && <p role="alert" className="error">{stopped ? t.runs.pollStopped : t.runs.pollError} {describeError(error).message}</p>}
-    <p className="small">
-      {terminal ? t.runs.terminalNote : hidden && mode !== 'paused' ? t.runs.pollingHidden : stopped ? t.runs.pollStopped : updateText(mode)}
-      {!terminal && !stopped && mode === 'live' && confirmedAt && <> {t.stages.lastConfirmed(formatClock(confirmedAt))}</>}
-    </p>
     <div className="actions">
       {(!terminal || (run?.snapshot_id && !run.reportRevision)) && <button type="button" onClick={refresh}>{t.runs.refresh}</button>}
       {terminal && status !== null && RETRYABLE.has(status) && canRun && <RetryControl api={api} runId={runId} onRetried={onRetried} />}
@@ -105,6 +119,9 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
         ? <CancelControl api={api} runId={runId} status={status} onAck={applyAck} onForbidden={onRunChange} />
         : <p className="small">{t.accounts.cancelNotAllowed}</p>)}
     </div>
+    {/* The report comes after the run's actions (retry, cancel), which stay near its state. */}
+    {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}
+      extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project, report.sections?.codeReview.ledger ?? null, report.sections?.environment.dependencies ?? [])} runId={runId} canRun={canRun} onRetried={onRetried} />} />}
   </div>;
 }
 
@@ -151,25 +168,39 @@ function PlanDetails({ p }: { p: RunProgress }) {
   </>;
 }
 
+// The run at a glance (overall progress, what it waits for, the verdict), the stages, then
+// the identifiers and the plan behind the percentage in a disclosure.
 function RunDetails({ run, confirmedAt }: { run: RunView; confirmedAt: Date | null }) {
   const p = run.progress;
   const reason = p.waiting_reason;
-  return <><dl>
-    <dt>{t.runs.id}</dt><dd><code>{run.id}</code></dd>
-    <dt>{t.runs.version}</dt><dd>{run.version}</dd>
-    {run.trigger && <><dt>{t.runs.trigger}</dt><dd>{triggerText(run.trigger)}</dd></>}
-    <dt>{t.runs.snapshot}</dt><dd>{run.snapshot_id ? <code>{run.snapshot_id}</code> : t.runs.snapshotNone}</dd>
-    <dt>{t.runs.tasks}</dt><dd>{t.runs.tasksValue(p.completed_tasks, p.total_tasks)}</dd>
-    <dt>{t.runs.percent}</dt>
-    <dd>{p.estimated_percent === null
-      ? t.runs.percentUnknown
-      : <><progress max={100} value={p.estimated_percent} aria-label={t.runs.percent} /> {p.estimated_percent}%</>}
-      {p.planned_weight !== undefined && <p className="small">{t.runs.percentNote}</p>}</dd>
-    <PlanDetails p={p} />
-    {reason !== null && <><dt>{t.runs.waiting}</dt><dd>{Object.hasOwn(t.runs.waitingLabels, reason) ? t.runs.waitingLabels[reason] : shorten(reason, 120)}</dd></>}
-    {run.quality_verdict !== null && <><dt>{t.runs.verdict}</dt><dd>{Object.hasOwn(t.runs.verdictLabels, run.quality_verdict) ? t.runs.verdictLabels[run.quality_verdict] : t.runs.statusUnknown}</dd></>}
-  </dl>
-  <StageList summary={p.stages} runStatus={run.status} confirmedAt={confirmedAt} /></>;
+  return <>
+    <div className="run-progress">
+      <div className="bar">
+        {p.estimated_percent === null
+          ? <span className="small">{t.runs.percent}: {t.runs.percentUnknown}</span>
+          : <><progress max={100} value={p.estimated_percent} aria-label={t.runs.percent} /> <span className="figure">{p.estimated_percent}%</span></>}
+      </div>
+      <p className="run-facts">
+        <span>{t.runs.tasks} <strong>{t.runs.tasksValue(p.completed_tasks, p.total_tasks)}</strong></span>
+        {run.quality_verdict !== null && <span><span className="visually-hidden">{t.runs.verdict} </span><strong>{Object.hasOwn(t.runs.verdictLabels, run.quality_verdict) ? t.runs.verdictLabels[run.quality_verdict] : t.runs.statusUnknown}</strong></span>}
+      </p>
+    </div>
+    {reason !== null && <p className="notice"><strong>{t.runs.waiting}</strong> · <span>{Object.hasOwn(t.runs.waitingLabels, reason) ? t.runs.waitingLabels[reason] : shorten(reason, 120)}</span></p>}
+    <StageList summary={p.stages} runStatus={run.status} confirmedAt={confirmedAt} />
+    <details className="disclosure">
+      <summary>{t.runs.details}</summary>
+      <dl>
+        <dt>{t.runs.id}</dt><dd><code>{run.id}</code></dd>
+        <dt>{t.runs.version}</dt><dd>{run.version}</dd>
+        {run.trigger && <><dt>{t.runs.trigger}</dt><dd>{triggerText(run.trigger)}</dd></>}
+        <dt>{t.runs.snapshot}</dt><dd>{run.snapshot_id ? <code>{run.snapshot_id}</code> : t.runs.snapshotNone}</dd>
+        <dt>{t.runs.percent}</dt>
+        <dd>{p.estimated_percent === null ? t.runs.percentUnknown : `${p.estimated_percent}%`}
+          {p.planned_weight !== undefined && <p className="small">{t.runs.percentNote}</p>}</dd>
+        <PlanDetails p={p} />
+      </dl>
+    </details>
+  </>;
 }
 
 function RetryControl({ api, runId, onRetried }: { api: Api; runId: string; onRetried: (ack: RetryAck) => void }) {
@@ -211,6 +242,8 @@ function ImproveHints({ api, project, hints, runId, canRun, onRetried }: { api: 
   }
   const i = t.improve;
   const action: Record<keyof AnalysisChoices, string> = { send_source_to_model: i.sendSourceAction, run_build_scripts: i.buildScriptsAction, fetch_dependencies: i.fetchDependenciesAction };
+  // Most hints end with running codeye up again in a terminal: offer the command to copy.
+  const command = hints.some(h => h.text.includes(i.command));
   return <section className="notice improve" aria-labelledby={`improve-${runId}`}>
     <h4 id={`improve-${runId}`}>{i.title}</h4>
     <ul>{hints.map(h => <li key={h.key}>{h.text}
@@ -218,6 +251,7 @@ function ImproveHints({ api, project, hints, runId, canRun, onRetried }: { api: 
         ? <> <button type="button" onClick={() => void turnOn(h.turnOn!)} disabled={sending} aria-busy={sending}>{sending ? i.sending : action[h.turnOn]}</button></>
         : <small> {i.needsManager}</small>)}
     </li>)}</ul>
+    {command && <CopyText text={i.command} label={i.commandLabel} />}
     {error && <ErrorNote error={error} />}
   </section>;
 }

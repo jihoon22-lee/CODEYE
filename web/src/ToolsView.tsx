@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Api, Setup } from './api';
 import { DoctorView } from './DoctorView';
 import { describeError, formatInstant, type ErrorText } from './format';
+import { CopyText } from './CopyText';
 import { ko } from './locales/ko';
 import { ErrorNote } from './RunPanel';
 
@@ -39,17 +40,17 @@ export function ToolsView({ api }: { api: Api }) {
           <td>{x.status === 'found' ? <code>{x.path ?? '—'}</code> : <>{x.hint ?? x.reason ?? '—'}</>}</td>
         </tr>)}</tbody>
       </table></div>}
-      {tools.some(x => x.status !== 'found') && <p className="small">{t.addAfter}</p>}
+      {tools.some(x => x.status !== 'found') && <><p className="small">{t.addAfter}</p><CopyText text="codeye up" label={t.command} /></>}
     </section>
     <section className="panel" aria-labelledby="tools-setup">
       <h2 id="tools-setup" className="visually-hidden">{t.model}</h2>
       <dl>
         <dt>{t.model}</dt>
-        <dd>{setup.model?.configured && setup.model.id ? t.modelSet(setup.model.id, Object.hasOwn(t.probes, setup.model.probe ?? '') ? t.probes[setup.model.probe!] : setup.model.probe ?? '—') : t.modelNone}</dd>
+        <dd>{setup.model?.configured && setup.model.id ? t.modelSet(setup.model.id, Object.hasOwn(t.probes, setup.model.probe ?? '') ? t.probes[setup.model.probe!] : setup.model.probe ?? '—') : <>{t.modelNone}<br /><CopyText text="codeye up" /></>}</dd>
         <dt>{t.git}</dt>
         <dd>{setup.git?.available ? t.gitOn(setup.git.hosts.join(', ')) : t.gitOff}</dd>
         <dt>{t.folders}</dt>
-        <dd>{setup.readable_folders.length === 0 ? t.foldersNone : <ul className="plain">{setup.readable_folders.map(f => <li key={f}><code>{f}</code></li>)}</ul>}</dd>
+        <dd>{setup.readable_folders.length === 0 ? t.foldersNone : <ul className="plain">{setup.readable_folders.map(f => <li key={f}><code>{f}</code></li>)}</ul>}<p className="small">{t.foldersNote}</p></dd>
       </dl>
     </section>
   </>;

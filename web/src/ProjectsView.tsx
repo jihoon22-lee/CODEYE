@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Api, Project, ProjectPage, Provider, Setup, SourceRoot } from './api';
 import { QuickStart } from './QuickStart';
-import { describeError, formatClock, isTerminalRun, roleLabel, shorten, type ErrorText } from './format';
+import { describeError, formatClock, isTerminalRun, roleLabel, runStatusText, shorten, type ErrorText } from './format';
 import { createPoller, type Poller } from './poller';
 import { LastReportLink, ProjectActivity } from './StageView';
 import { retryable } from './useRunPolling';
@@ -134,43 +134,47 @@ export function ProjectsView({ api, userId, idempotency, link }: Props) {
 
   const selected = projects.find(p => p.id === selectedId) ?? null;
   const p = t.projects;
-  return <>
-    <section aria-labelledby="projects-title">
-      <h1 id="projects-title">{p.title}</h1>
-      <p>{p.intro}</p>
-    </section>
-    <div className="grid">
-      <section className="panel" aria-labelledby="list-title">
-        <h2 id="list-title">{p.listTitle}</h2>
-        {error && <><ErrorNote error={{ ...error, message: `${p.loadFailed} ${error.message}` }} />{projects.length > 0 && lastOk && <p className="small">{t.stages.listPollError} {t.stages.lastConfirmed(formatClock(lastOk))}</p>}<button type="button" onClick={() => setReloads(n => n + 1)}>{p.reload}</button></>}
-        <div aria-live="polite" aria-busy={loading}>
-          {loading && projects.length === 0 ? <p>{p.loading}</p> : projects.length === 0 && !error ? <p>{p.listEmpty}</p> : null}
-        </div>
-        <ul className="plain projects">
-          {projects.map(project => {
-            const summary = describeSource(project, roots.items, providers.items);
-            return <li key={project.id}>
-              <button type="button" className="item" aria-pressed={project.id === selectedId} onClick={() => setSelectedId(project.id)}>
-                <strong>{project.name === '' ? shorten(summary, 60) : project.name}</strong>
-                {project.name !== '' && <span className="small">{summary}</span>}
-              </button>
-              <ProjectActivity project={project} />
-              <LastReportLink project={project} />
-            </li>;
-          })}
-        </ul>
-        {cursor && <button type="button" onClick={loadMore} disabled={loading}>{p.loadMore}</button>}
-      </section>
-      <section className="panel" aria-labelledby="create-title">
-        <h2 id="create-title" className="visually-hidden">{p.createTitle}</h2>
-        {(roots.error || providers.error) && <p role="alert" className="error">{p.lookupFailed} {(roots.error ?? providers.error)!.message}</p>}
-        {personal && <QuickStart api={api} userId={userId} idempotency={idempotency} setup={setup} providers={providers.items}
-          onStarted={(project, run) => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setOpened({ project: project.id, run }); setSelectedId(project.id); setStarted(n => n + 1); wake(); }} />}
-        {personal
-          ? <details><summary>{p.otherForm}</summary><ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={project => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); }} /></details>
-          : <ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={project => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); }} />}
-      </section>
+  useEffect(() => { if (selected === null) document.title = t.pageTitle(p.title); }, [selected, p.title]);
+  // A server installation keeps the list beside the registration form; a personal one leads
+  // with the one-field start and lists the projects under it.
+  const serverLayout = setup !== null && !personal;
+  const created = (project: Project) => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); };
+  const list = <section className="panel list-panel" aria-labelledby="list-title">
+    <h2 id="list-title">{p.listTitle}</h2>
+    {error && <><ErrorNote error={{ ...error, message: `${p.loadFailed} ${error.message}` }} />{projects.length > 0 && lastOk && <p className="small">{t.stages.listPollError} {t.stages.lastConfirmed(formatClock(lastOk))}</p>}<button type="button" onClick={() => setReloads(n => n + 1)}>{p.reload}</button></>}
+    <div aria-live="polite" aria-busy={loading}>
+      {loading && projects.length === 0 ? <p>{p.loading}</p> : projects.length === 0 && !error ? <p className="small">{serverLayout ? p.listEmptyServer : p.listEmpty}</p> : null}
     </div>
+    <ul className="plain projects">
+      {projects.map(project => {
+        const summary = describeSource(project, roots.items, providers.items);
+        return <li key={project.id}>
+          <button type="button" className="item" aria-pressed={project.id === selectedId} onClick={() => setSelectedId(project.id)}>
+            <strong>{project.name === '' ? shorten(summary, 60) : project.name}</strong>
+            {project.name !== '' && <span className="small">{summary}</span>}
+          </button>
+          <ProjectActivity project={project} />
+          <LastReportLink project={project} />
+        </li>;
+      })}
+    </ul>
+    {cursor && <div className="actions"><button type="button" onClick={loadMore} disabled={loading}>{p.loadMore}</button></div>}
+  </section>;
+  const create = <section className={serverLayout ? 'panel' : 'panel start-panel'} aria-labelledby="create-title">
+    <h2 id="create-title" className="visually-hidden">{p.createTitle}</h2>
+    {(roots.error || providers.error) && <p role="alert" className="error">{p.lookupFailed} {(roots.error ?? providers.error)!.message}</p>}
+    {personal && <QuickStart api={api} userId={userId} idempotency={idempotency} setup={setup} providers={providers.items}
+      onStarted={(project, run) => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setOpened({ project: project.id, run }); setSelectedId(project.id); setStarted(n => n + 1); wake(); }} />}
+    {personal
+      ? <details><summary>{p.otherForm}</summary><ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={created} /></details>
+      : <ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={created} />}
+  </section>;
+  return <>
+    <section className="page-head" aria-labelledby="projects-title">
+      <h1 id="projects-title">{p.title}</h1>
+      <p>{serverLayout ? p.serverIntro : p.intro}</p>
+    </section>
+    {serverLayout ? <div className="grid">{list}{create}</div> : <>{create}{list}</>}
     {selected && <ProjectDetail key={`${selected.id}:${opened?.project === selected.id ? opened.run : ''}`} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)}
       setup={setup} initialRun={opened?.project === selected.id ? opened.run : null} />}
   </>;
@@ -179,32 +183,45 @@ export function ProjectsView({ api, userId, idempotency, link }: Props) {
 type DetailTab = 'run' | 'members' | 'audit';
 
 function ProjectDetail({ api, userId, project, idempotency, source, onRunChange, initialRun, setup }: { api: Api; userId: string; project: Project; idempotency: Idempotency; source: string; onRunChange: () => void; initialRun: string | null; setup: Setup | null }) {
-  const [openRun, setOpenRun] = useState<string | null>(initialRun);
+  // The run shown first: the one asked for (a link, the quick start), else the project's latest.
+  const [openRun, setOpenRun] = useState<string | null>(initialRun ?? project.last_run?.id ?? null);
   const [chosen, setChosen] = useState<DetailTab>('run');
   // The audit tab exists only for the owner and managers; a lost role falls back to the run tab.
   const tabs: DetailTab[] = project.can_manage ? ['run', 'members', 'audit'] : ['run', 'members'];
   const tab = tabs.includes(chosen) ? chosen : 'run';
   const p = t.projects;
   const status = Object.hasOwn(p.sourceStatuses, project.source_status) ? p.sourceStatuses[project.source_status] : p.sourceStatusUnknown;
+  const title = project.name === '' ? shorten(source, 60) : project.name;
+  // Opening a project brings it into view: it sits below the start form and the list.
+  useEffect(() => { document.getElementById('detail-title')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }); }, []);
+  useEffect(() => { document.title = t.pageTitle(title); }, [title]);
+  // Gaps a reader must know stay in view; "not read yet" is a detail.
+  const quiet = new Set(['source_access_unverified']);
+  const gapText = (gap: string) => Object.hasOwn(p.gapLabels, gap) ? p.gapLabels[gap] : shorten(gap, 80);
+  const loud = project.capability_gaps.filter(gap => !quiet.has(gap));
+  const soft = project.capability_gaps.filter(gap => quiet.has(gap));
   return <>
     <section className="panel" aria-labelledby="detail-title">
-      <h2 id="detail-title">{project.name === '' ? shorten(source, 60) : project.name}</h2>
-      <dl>
-        <dt>{p.sourceLabel}</dt><dd>{source}</dd>
-        <dt>{p.sourceStatus}</dt><dd>{status}</dd>
-        <dt>{p.projectId}</dt><dd><code>{project.id}</code></dd>
-        <dt>{p.revisionLabel}</dt><dd>{project.revision}</dd>
-        <dt>{t.accounts.members.myRoleLabel}</dt><dd>{roleLabel(project.role)}</dd>
-      </dl>
-      {project.capability_gaps.length > 0 && <>
-        <h3>{p.gaps}</h3>
-        <ul>{project.capability_gaps.map(gap => <li key={gap}>{Object.hasOwn(p.gapLabels, gap) ? p.gapLabels[gap] : shorten(gap, 80)}</li>)}</ul>
-      </>}
-      {project.last_run && <>
-        <h3>{p.lastRun}</h3>
-        <p className="small">{p.lastRunHint(shorten(project.last_run.status, 32))}</p>
-        <button type="button" onClick={() => { setOpenRun(project.last_run!.id); setChosen('run'); }} disabled={openRun === project.last_run.id}>{p.lastRunOpen}</button>
-      </>}
+      <div className="detail-head">
+        <h2 id="detail-title">{title}</h2>
+        <p className="small">{source} · {t.accounts.members.myRoleLabel} {roleLabel(project.role)}</p>
+      </div>
+      {loud.length > 0 && <div className="notice"><h3 className="visually-hidden">{p.gaps}</h3><ul className="plain">{loud.map(gap => <li key={gap}>{gapText(gap)}</li>)}</ul></div>}
+      {project.last_run && openRun !== project.last_run.id && <div className="actions">
+        <p className="small">{p.lastRunHint(runStatusText(project.last_run.status))}</p>
+        <button type="button" onClick={() => { setOpenRun(project.last_run!.id); setChosen('run'); }}>{p.lastRunOpen}</button>
+      </div>}
+      <details className="disclosure">
+        <summary>{p.details}</summary>
+        <dl>
+          <dt>{p.sourceLabel}</dt><dd>{source}</dd>
+          <dt>{p.sourceStatus}</dt><dd>{status}</dd>
+          <dt>{p.projectId}</dt><dd><code>{project.id}</code></dd>
+          <dt>{p.revisionLabel}</dt><dd>{project.revision}</dd>
+          <dt>{t.accounts.members.myRoleLabel}</dt><dd>{roleLabel(project.role)}</dd>
+        </dl>
+        {soft.length > 0 && <ul className="small">{soft.map(gap => <li key={gap}>{gapText(gap)}</li>)}</ul>}
+      </details>
     </section>
     <nav aria-label={t.accounts.tabs.label} className="tabs">
       {tabs.map(x => <button key={x} type="button" aria-current={tab === x ? 'page' : undefined} onClick={() => setChosen(x)}>{t.accounts.tabs[x]}</button>)}

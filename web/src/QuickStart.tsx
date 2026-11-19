@@ -76,7 +76,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
     <small id={`${uid}-${key}-help`} className="small">{help}</small>
   </div>;
 
-  return <form onSubmit={submit} noValidate aria-labelledby={`${uid}-title`}>
+  return <form className="quick-form" onSubmit={submit} noValidate aria-labelledby={`${uid}-title`}>
     <h3 id={`${uid}-title`}>{q.title}</h3>
     <div className="field">
       <label htmlFor={`${uid}-target`}>{q.field}</label>

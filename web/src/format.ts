@@ -52,6 +52,24 @@ export function formatInstant(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${formatClock(d)}`;
 }
 
+// A past instant in words ("3분 전"); the exact time is shown next to it on hover.
+export function formatRelative(iso: string, now: Date): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const r = t.relative;
+  const seconds = Math.round((now.getTime() - d.getTime()) / 1000);
+  // A minute of clock difference between server and browser still reads as now; later is shown as is.
+  if (seconds < -60) return formatInstant(iso);
+  if (seconds < 45) return r.now;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return r.minutes(minutes);
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return r.hours(hours);
+  const days = Math.round(hours / 24);
+  if (days < 7) return r.days(days);
+  return formatInstant(iso).slice(0, 10);
+}
+
 // "icon label" for a run status; an unrecognised status keeps its raw value visible and is never read as success.
 export function runStatusText(status: string): string {
   if (!isKnownRunStatus(status)) return `${t.runStatusUnknownIcon} ${t.runStatusRaw(t.runs.statusUnknown, shorten(status, 32))}`;

@@ -4,7 +4,7 @@ import type { Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sectio
 import { ComparisonSection } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportTasks, TextList, explainReason, label, type ReportHistory } from './ReportParts';
+import { FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportTasks, TextList, Verdict, explainReason, label, type ReportHistory } from './ReportParts';
 import {
   findingSecondary,
   gapGroups,
@@ -61,6 +61,10 @@ function More({ title, children }: { title: string; children: () => ReactNode })
 function state(value: string | null) {
   return value === null ? '—' : Object.hasOwn(s.states, value) ? s.states[value] : ko.stages.unknownState(value);
 }
+// The colour class of a state; an unknown state is never coloured as success.
+function stateClass(value: string | null) {
+  return 'state-pill st-' + (value === null ? 'none' : Object.hasOwn(s.states, value) ? value : 'unknown');
+}
 function or(value: string | null | undefined, fallback = '—') {
   return value == null || value === '' ? fallback : value;
 }
@@ -68,15 +72,17 @@ function anchor(key: string) {
   return 'report-section-' + key;
 }
 
-function Table({ head, rows, empty }: { head: string[]; rows: ReactNode[][]; empty?: string }) {
+function Table({ head, rows, empty, compact }: { head: string[]; rows: ReactNode[][]; empty?: string; compact?: boolean }) {
   if (rows.length === 0) return empty ? <p>{empty}</p> : null;
+  // Columns of numbers align right in tabular figures.
+  const numeric = head.map((_, j) => rows.every((row) => typeof row[j] === 'number'));
   return (
-    <div className="table">
+    <div className={compact ? 'table compact' : 'table'}>
       <table>
         <thead>
           <tr>
-            {head.map((h) => (
-              <th key={h} scope="col">
+            {head.map((h, j) => (
+              <th key={h} scope="col" className={numeric[j] ? 'num' : undefined}>
                 {h}
               </th>
             ))}
@@ -86,7 +92,7 @@ function Table({ head, rows, empty }: { head: string[]; rows: ReactNode[][]; emp
           {rows.map((row, i) => (
             <tr key={i}>
               {row.map((cell, j) => (
-                <td key={j}>{cell}</td>
+                <td key={j} className={numeric[j] ? 'num' : undefined}>{cell}</td>
               ))}
             </tr>
           ))}
@@ -193,7 +199,10 @@ function LedgerBlock({ ledger }: { ledger: Ledger }) {
   return (
     <>
       <h6>{l.heading}</h6>
-      <p>{l.lead}</p>
+      <p>
+        <strong>{l.coverage(ledger.modules.length, ledger.modules.reduce((a, m) => a + m.eligible, 0), ledger.modules.reduce((a, m) => a + m.sent, 0))}</strong>
+      </p>
+      <p className="small">{l.lead}</p>
       <ul>
         <li>{label(l.status, ledger.status)}</li>
         <li>
@@ -205,6 +214,7 @@ function LedgerBlock({ ledger }: { ledger: Ledger }) {
         {ledger.primarySlotsRefused > 0 && <li>{l.refusedSlots(ledger.primarySlotsRefused)}</li>}
       </ul>
       <Table
+        compact
         head={head}
         rows={[
           ...primary.map((m) => row(m, <code key="m">{m.id}</code>, m.discovered ? l.discovered : l.notDiscovered)),
@@ -220,7 +230,7 @@ function LedgerBlock({ ledger }: { ledger: Ledger }) {
       <More title={l.allModules(ledger.modules.length)}>
         {() => (
           <>
-            <Table head={head} rows={ledger.modules.map((m) => row(m, <code key="m">{m.id}</code>, m.discovered ? l.discovered : l.notDiscovered))} empty={l.none} />
+            <Table compact head={head} rows={ledger.modules.map((m) => row(m, <code key="m">{m.id}</code>, m.discovered ? l.discovered : l.notDiscovered))} empty={l.none} />
             <Table
               head={[l.col.task, s.col.status, l.col.reason, l.col.modules]}
               rows={[...slices.entries()]
@@ -336,7 +346,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <details key={key} id={anchor(key)} className="report-section" open={open.has(key)} onToggle={(e) => toggle(key, (e.currentTarget as HTMLDetailsElement).open)}>
         <summary>
           <strong>{label(s.titles, key)}</strong>
-          {st !== null && <span> — {state(st)}</span>}
+          {st !== null && <span className={stateClass(st)}>{state(st)}</span>}
         </summary>
         {body}
       </details>
@@ -535,9 +545,20 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
                 })}
               />
               {groups.length > 0 && (
+                // What (the rule and its first message), how many, how severe, where first.
                 <Table
-                  head={[s.col.tool, s.col.rule, s.col.count, s.col.severity, s.col.message, s.col.location]}
-                  rows={groups.map((g) => [<code key="a">{g.analyzer}</code>, <code key="r">{g.rule}</code>, g.count, or(g.severity), cutLine(g.message), placesText(places(g.primary, g.secondary))])}
+                  head={[s.col.rule, s.col.message, s.col.count, s.col.severity, s.col.location]}
+                  rows={groups.map((g) => [
+                    <span key="r">
+                      <code>{g.rule}</code>
+                      <br />
+                      <small>{g.analyzer}</small>
+                    </span>,
+                    cutLine(g.message),
+                    g.count,
+                    g.severity === null ? '—' : <span key="v" className={'pill sev sev-' + (Object.hasOwn(t.severity, g.severity) ? g.severity : 'unknown')}>{label(t.severity, g.severity)}</span>,
+                    placesText(places(g.primary, g.secondary)),
+                  ])}
                 />
               )}
             </section>
@@ -648,7 +669,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         {cr.roles.length > 0 && (
           <>
             <h6>{s.roles}</h6>
-            <Table head={[s.col.role, s.col.status, s.col.result]} rows={cr.roles.map((x) => [<code key="k">{x.key}</code>, label(s.taskStatus, x.status ?? ''), x.result])} />
+            <Table head={[s.col.role, s.col.status, s.col.result]} rows={cr.roles.map((x) => [<code key="k">{x.key}</code>, label(s.taskStatus, x.status ?? ''), label(s.result, x.result)])} />
           </>
         )}
         {cr.ledger && <LedgerBlock ledger={cr.ledger} />}
@@ -704,43 +725,20 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       </header>
       <section aria-labelledby="report-overview">
         <h5 id="report-overview">{s.overview}</h5>
-        <p>
-          <strong>{label(ko.runs.verdictLabels, report.verdict)}</strong> · {t.coverage} {label(t.ai, report.aiReview)}
-        </p>
+        <Verdict report={report} />
         <ul className="report-summary">
           {summaryLines(facts, cr.pack).map((line, i) => (
             <li key={i}>{line}</li>
           ))}
         </ul>
-        <p className="small" role="note">
-          {sm.note}
-        </p>
-        <ReportCounts report={report} />
-        <h6>{s.stateTable}</h6>
-        <Table
-          head={[s.section, s.col.status, s.counts]}
-          rows={ORDER.map((key) => {
-            const row = overview.get(key);
-            return [
-              <button key="b" type="button" className="link" onClick={() => go(key)}>
-                {label(s.titles, key)}
-              </button>,
-              state(row?.state ?? null),
-              (s.countOrder[key] ?? [])
-                .filter((k) => row && Object.hasOwn(row.counts, k))
-                .map((k) => label(s.countLabels, key + '.' + k) + ' ' + row!.counts[k])
-                .join(' · '),
-            ];
-          })}
-        />
         <h6>{s.attention}</h6>
         {sections.attention.length === 0 ? (
           <p>{s.noAttention}</p>
         ) : (
-          <ul>
+          <ul className="attention">
             {sections.attention.map((a) => (
               <li key={a.section + ':' + a.code}>
-                {(s.attentionText[a.code] ?? (() => a.code))(a.count)}{' '}
+                <span>{(s.attentionText[a.code] ?? (() => a.code))(a.count)}</span>
                 <button type="button" className="link" onClick={() => go(a.section)}>
                   {s.go(label(s.titles, a.section))}
                 </button>
@@ -768,6 +766,27 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
             </ol>
           </>
         )}
+        <ReportCounts report={report} />
+        <p className="small" role="note">
+          {sm.note}
+        </p>
+        <h6>{s.stateTable}</h6>
+        <Table
+          head={[s.section, s.col.status, s.counts]}
+          rows={ORDER.map((key) => {
+            const row = overview.get(key);
+            return [
+              <button key="b" type="button" className="link" onClick={() => go(key)}>
+                {label(s.titles, key)}
+              </button>,
+              <span key="s" className={stateClass(row?.state ?? null)}>{state(row?.state ?? null)}</span>,
+              (s.countOrder[key] ?? [])
+                .filter((k) => row && Object.hasOwn(row.counts, k))
+                .map((k) => label(s.countLabels, key + '.' + k) + ' ' + row!.counts[k])
+                .join(' · '),
+            ];
+          })}
+        />
       </section>
       {history && <ComparisonSection load={history.load} reload={history.reload} />}
       {ORDER.map((key) => block(key, bodies[key]))}

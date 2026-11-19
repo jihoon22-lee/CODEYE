@@ -36,13 +36,13 @@ describe('project list activity', () => {
     ]));
     await flush();
     const orders = row('orders').textContent!;
-    expect(orders).toContain('◉ 실행 중 · ◉ 정적 분석 중 · ◉ 코드 분석 중');
-    expect(orders).toContain('다른 활성 실행 2건');
+    expect(orders).toContain('◉ 분석 중 · ◉ 정적 분석 중 · ◉ 코드 분석 중');
+    expect(orders).toContain(t.stages.otherActive(2));
     expect(orders).not.toContain('소스 확보');
     const billing = row('billing').textContent!;
-    expect(billing).toContain('◷ 대기열에 있음 · 시작한 단계 없음');
+    expect(billing).toContain('◷ 대기 중 · 아직 시작하지 않음');
     expect(billing).not.toContain('소스 확보');
-    expect(row('empty').textContent).toContain('실행 기록 없음');
+    expect(row('empty').textContent).toContain('아직 분석하지 않음');
     expect(row('legacy').textContent).toContain('✓ 완료 · 세부 단계 미기록');
   });
 
@@ -61,7 +61,7 @@ describe('project list activity', () => {
     renderApp(projects([proj('p1', 'old', undefined, { id: 'r', status: 'failed' }), proj('p2', 'none')]));
     await flush();
     expect(row('old').textContent).toContain('✕ 실패 · 세부 단계 미기록');
-    expect(row('none').textContent).toContain('실행 기록 없음');
+    expect(row('none').textContent).toContain('아직 분석하지 않음');
   });
 
   it('renders unknown run status, stage and state safely with the raw value, never as success', async () => {
@@ -127,11 +127,11 @@ describe('queued waiting reason', () => {
       proj('p3', 'absent', activity('queued', [stage('source', 'waiting')], { waiting_reason: null })),
     ]));
     await flush();
-    expect(row('known').textContent).toContain(`◷ 대기열에 있음 · ${t.runs.waitingLabels.capacity_full}`);
-    expect(row('known').textContent).not.toContain('시작한 단계 없음');
+    expect(row('known').textContent).toContain(`◷ 대기 중 · ${t.runs.waitingLabels.capacity_full}`);
+    expect(row('known').textContent).not.toContain('아직 시작하지 않음');
     expect(row('known').textContent).not.toContain('계획 미확정');
-    expect(row('rawone').textContent).toContain('◷ 대기열에 있음 · odd_reason');
-    expect(row('absent').textContent).toContain('◷ 대기열에 있음 · 시작한 단계 없음');
+    expect(row('rawone').textContent).toContain('◷ 대기 중 · odd_reason');
+    expect(row('absent').textContent).toContain('◷ 대기 중 · 아직 시작하지 않음');
   });
 });
 
@@ -143,7 +143,7 @@ describe('run detail stages', () => {
     }));
     await flush();
     fireEvent.click(screen.getByRole('button', { name: /sample/ }));
-    fireEvent.click(screen.getByRole('button', { name: t.projects.lastRunOpen }));
+    // Selecting the project opens its latest run.
     await flush();
   };
   const progress = (stages: unknown[], over: Record<string, unknown> = {}) => ({ detail: 'recorded', stages, last_event_at: '2026-11-18T03:01:10Z', checked_at: '2026-11-18T03:01:12Z', ...over });
@@ -161,7 +161,7 @@ describe('run detail stages', () => {
     expect(text).not.toContain('해당 작업 없음');
     expect(text).not.toContain('환경 분석');
     expect(text).toContain('사유: 스냅샷 범위에 문서가 없어 문서 검토를 생략함');
-    expect(text).toContain('사유: 소스의 모델 전송이 승인되지 않아 제외됨 (정책 제외');
+    expect(text).toContain(t.stages.reasonLabel(t.stages.reasonLabels.model_source_not_approved!));
     expect(text).toContain('실패 1건 · 시간 초과 1건');
     expect(text).toContain('△ 일부 수행');
     expect(text).toContain('■ 취소됨');
@@ -169,8 +169,8 @@ describe('run detail stages', () => {
     const order = ['소스 확보', '문서 검토', '정적 분석', '코드 분석', '보고서 생성'].map(n => text.indexOf(n, text.indexOf('세부 단계')));
     expect(order.every(i => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(text).toContain('마지막 이벤트');
-    expect(text).toContain('서버 집계');
+    expect(text).toContain('마지막 변화');
+    expect(text).toContain('서버 확인');
   });
 
   it('expands a stage with a real button and shows the planned count only when known', async () => {
@@ -220,7 +220,7 @@ describe('run detail stages', () => {
     }));
     await flush();
     fireEvent.click(screen.getByRole('button', { name: /sample/ }));
-    fireEvent.click(screen.getByRole('button', { name: t.projects.lastRunOpen }));
+    // Selecting the project opens its latest run.
     await flush();
     const confirmed = formatClock(new Date());
     fail = true;
