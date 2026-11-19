@@ -199,6 +199,14 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 
 역할·입력·복구 규칙은 [모델 검토](REVIEW.md)에 있다.
 
+모델 설정([모델 검토](REVIEW.md#모델-설정)):
+
+| TC | 조건 | 기대 결과 | 요구 |
+|---|---|---|---|
+| TC-170 | 모델 ID(`openai/…`, `vendor/model` 중첩, 공백·`..`·대문자 provider), relay 프로필, 키 파일 provider, 키 파일 형식(CODEYE·OpenCode `auth.json`의 api·oauth 항목, 다른 provider, 권한 0644, 여러 줄 키, 모르는 필드, 없는 파일), 호출 사이에 바뀐 키 | `PROVIDER/MODEL`만 받고 `codeye-gateway/*`는 relay에만 쓴다. relay의 `OPENCODE_CONFIG_CONTENT`는 바이트가 이전과 같다. 키는 호출마다 다시 읽고, 쓸 수 없는 키 파일이면 요청 없이 `unsupported`(`model_credential_unavailable`)다. 키는 프로필에만 있고 기록된 명령·표준 출력에서 가려진다(`TestProviderKeyOnlyInProfile`, `TestCredentialReadAtCallTime`). | REQ-026,030; NFR-006 |
+| TC-171 | 개인 모드: 키 환경변수(`OPENAI_API_KEY` 등) 하나, 같은 키 재기록, 상태 키 파일·`agent.model.credential_file`·OpenCode `auth.json`의 순서, 이름 없는 설정·이름만 있는 설정·OpenCode 설정의 `model`, 키 없는 provider, OpenCode 없음, `model_review: false`인 root | 키 파일은 0600(디렉터리 0700)이고 같은 키면 다시 쓰지 않는다. 기본 모델은 `openai/gpt-6.2-sol`이다. 에이전트 인자에는 키 파일 경로만 있고, `model_review: false`가 아닌 root만 `--model-source-root`를 받는다. 모델을 정하지 못하면 모델 없이 시작한다. probe 기록에 키가 없다(`TestModelSecretFromEnvironment`, `TestModelResolutionOrder`, `TestPersonalModelFromSecret`). | REQ-026; NFR-006 |
+| TC-172 | 실제 OpenCode와 가짜 upstream(OpenAI provider에 `base_url`만 바꿈)으로 개인 모드 start → `codeye model probe` → 로컬 Go 프로젝트 run. 같은 키 파일을 401 upstream으로 바꾼 run, `--version`만 1.99.0인 wrapper로 재시작한 run(`scripts/test_postgres.py --personal-model`) | probe가 provider·모델·버전과 성공을 출력하고 검토 단계가 수락돼 `ai_review: performed`다. 401이면 probe가 `FAILED at request: model_auth_failed`이고 run은 정적 분석을 마치며 보고서(JSON·Markdown)가 미수행과 사유를 적는다. wrapper run은 검토를 수행하고 한계 `opencode_version_untested`를 싣는다. 키가 키 파일 밖의 상태 파일·로그·산출물·보고서·DB dump·CLI 출력·모든 프로세스 argv에 없다. 가짜 upstream 결과는 경로 검증이며 검토 품질의 근거가 아니다. | REQ-026; NFR-006,008 |
+
 ## 보고서·화면
 
 | TC | 조건 | 기대 결과 | 요구 |
@@ -297,17 +305,17 @@ TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력
 | REQ-022,035 | ARCHITECTURE, EXECUTION, API | TC-18,21,22,23 |
 | REQ-023 | EXECUTION | TC-25 |
 | REQ-024,025 | GITHUB | TC-27,28,29 |
-| REQ-026 | REVIEW | TC-12,34 |
+| REQ-026 | REVIEW | TC-12,34,170,171,172 |
 | REQ-027 | REVIEW, EVALUATION | TC-33,97,100 |
 | REQ-028,029 | ARCHITECTURE, REPORT | TC-14,31 |
-| REQ-030 | SECURITY, OPERATIONS | TC-30 |
+| REQ-030 | SECURITY, OPERATIONS | TC-30,170 |
 | REQ-031 | REPORT, SECURITY | TC-15,31 |
 | REQ-032,033 | REQUIREMENTS | TC-35 |
 | NFR-001,009 | EXECUTION, OPERATIONS | TC-17,18,23 |
 | NFR-002,003 | EXECUTION, API, OPERATIONS | TC-21,23,25,32 |
 | NFR-004,005 | REPORT | TC-26, [UI 성능](#고위험-시나리오) |
-| NFR-006,007 | ARCHITECTURE, SECURITY | TC-02,15,22,31,32 |
-| NFR-008,010 | REVIEW, EVALUATION | TC-11,12,24,33 |
+| NFR-006,007 | ARCHITECTURE, SECURITY | TC-02,15,22,31,32,170,171,172 |
+| NFR-008,010 | REVIEW, EVALUATION | TC-11,12,24,33,172 |
 
 주요 문서 열의 이름은 `docs/` 아래 같은 이름의 `.md` 파일이다. 이 표는 요구별 대표 시험이며, 나머지 연결은 영역별 표의 요구 열에 있다.
 
@@ -375,6 +383,7 @@ python3 scripts/test_postgres.py --web --nodes --scheduler --personal
 - `--nodes`: 서로 다른 노드 신원 두 개의 Linux Native 수용 시험. `CODEYE_TEST_STATICCHECK`·`CODEYE_TEST_NODE`·`CODEYE_TEST_RUFF` 등 도구 변수가 있으면 실제 도구로도 실행하고, 없으면 해당 smoke를 SKIP으로 출력한다.
 - `--scheduler`: 별도 DB에서 실제 controller·autoscaler와 `-tags codeye_fixture`로 빌드한 agent·worker(TC-71~75). fixture handler는 시험용이며 분석 결과가 아니다.
 - `--personal`: 개인 모드 start/status/stop, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32). Linux 전용이며 모델 호출·다운로드가 없다.
+- `--personal-model`: 개인 모드 모델 설정(TC-172). 실제 OpenCode(`~/.opencode/bin/opencode` 또는 `CODEYE_TEST_OPENCODE_BIN`)와 가짜 upstream을 쓰며 유료 호출이 없다.
 - `--smokes-only`: Go 시험을 건너뛰고 고른 smoke만 다시 돌린다. 이때 마지막 줄은 저장 통합 시험을 실행했다고 주장하지 않는다.
 - `--pilot`: **실모델** 파일럿. 실제 모델 요청을 보낸다. 고정 OpenCode와 승인된 relay가 필요하다. `CODEYE_PILOT_RELAY_FILE`에 relay descriptor, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정한다. `CODEYE_PILOT_CASES`(예: `Q01-before,pilot`)로 대상을, `CODEYE_PILOT_REVIEW_PACK`으로 검토 팩을 고른다(기본 `review-r1`). 보관된 결과는 `python3 scripts/regression_pilot.py --audit-results "$CODEYE_PILOT_RESULTS"`로 다시 대조한다. 이 대조는 위치·줄 범위·blob SHA의 참조 검사이며 주장이 옳다는 보증이 아니다. Git 시험에 기록된 commit 객체가 로컬에 있어야 한다.
 

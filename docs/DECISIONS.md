@@ -241,6 +241,20 @@
 
 [모델 검토](REVIEW.md#모듈-단위-검토-분할) · [분석기](ANALYZERS.md)
 
+**A38 — API 키 하나로 모델 설정.** (기록 2026-11-19) REQ-026/030, NFR-006/008과 TC-170~172에 대해 다음을 확정한다. 소유자는 OpenAI API 키(`OPENAI_API_KEY`)와 `gpt-6.2-sol`을 OpenCode로 쓰려 하고, 그 전까지 제품의 실모델 경로는 QA 예산 relay로만 실행됐다.
+
+1. **일반 공급자.** 모델은 (provider ID, API 키, 선택 endpoint)인 공급자 하나로 부른다. 예산 relay는 그 한 사례(`codeye-gateway`, OpenAI 호환 패키지, 고정 한도)이고 relay 프로필의 `OPENCODE_CONFIG_CONTENT`는 바이트가 이전과 같다(`TestRelayProfileUnchanged`). 회귀 파일럿과 평가 스크립트의 relay 경로를 바꾸지 않기 위해서다. 모델 ID는 `PROVIDER/MODEL`이면 받는다.
+2. **키는 파일, 호출마다 읽는다.** 실행기는 OpenCode에 실행별 HOME을 주고 `*API_KEY*`·`OPENAI_*`·`OPENCODE_*` 환경변수를 거른다. 그래서 키는 relay token과 같은 자리(`OPENCODE_CONFIG_CONTENT`의 provider `options.apiKey`)로만 들어가고 기록에서 가린다. 에이전트·워커에는 키 파일 경로만 간다(argv·Hello·로그에 키 없음). 키를 에이전트 환경변수로 넘기는 안은 모든 자식 프로세스 환경과 진단 출력에 퍼질 수 있어 택하지 않았다. 호출마다 읽으므로 키 교체가 재시작 없이 적용된다. OpenCode 프로세스의 환경에는 키가 있다(같은 사용자는 `/proc/PID/environ`으로 읽을 수 있다). relay token과 같은 수준이고 개인 모드에서는 받아들인다.
+3. **개인 모드의 기본값.** 키는 `agent.model.credential_file`, `<state_dir>/secrets/model.json`(0600, `codeye up`이 `OPENAI_API_KEY`·`ANTHROPIC_API_KEY`·`OPENCODE_API_KEY`에서 쓴다), OpenCode `auth.json`의 `api` 항목 순으로 찾는다. 모델은 `agent.model.name`, OpenCode 설정의 `model`, provider별 기본값(OpenAI `gpt-6.2-sol`) 순이다. 설정 파일에는 키를 두지 않는다. 설정 파일은 예시로 복사·공유되기 쉽고, 상태 디렉터리는 이미 0700이며 백업에 들어가지 않는다.
+4. **개인 모드에서는 모델 검토를 기본으로 허가한다.** 모델이 설정되면 개인 사용자의 모든 로컬 source root가 `--model-source-root`를 받고, `model_review: false`인 root만 뺀다. 개인 모드의 사용자는 자기 키로 자기 코드를 보내는 한 사람이다. 루트마다 허가를 적게 하면 키를 넣어도 검토가 실행되지 않아 사용자가 원인을 찾기 어렵다. 서버 모드는 그대로 운영자의 명시 허가다. 프로젝트별 선택이 들어오면 이 기본값 하나를 그 설정으로 바꾼다.
+5. **OpenCode 버전은 막지 않는다.** 시험한 1.19.5가 아닌 릴리스도 실행하고 기록·보고서에 `opencode_version_untested`를 남긴다. 릴리스 형식이 아닌 `--version` 응답만 거부한다. OpenCode는 자주 갱신되고, 사용을 막기보다 한계를 기록하는 쪽이 지금의 제품 방향이다. 응답 수집 규칙(이벤트 형식, workspace 확인)은 그대로라 형식이 바뀐 릴리스는 `model_output_invalid`로 드러난다.
+6. **모델은 항상 선언한다.** OpenCode 1.19.5의 오프라인 모델 목록에 `gpt-6.2-sol`이 없고 목록 갱신은 꺼져 있다(`OPENCODE_DISABLE_MODELS_FETCH`). 그래서 provider의 `models`에 모델을 선언한다. 목록에 있는 모델은 목록의 한도·추론 정보를 유지하는 것을 확인했다. 목록에 없는 모델은 기본값(추론 표시 없음, 출력 한도는 OpenCode 기본)으로 간다.
+7. **실패해도 분석은 계속.** 모델 실패는 오류 이벤트의 HTTP 상태로 `model_auth_failed`·`model_not_found`·`model_rate_limited`·`model_unavailable`로 나누고, 키 파일을 쓸 수 없으면 `unsupported`(`model_credential_unavailable`)다. 시작 전 확인(`codeye model probe`)이 실패해도 시작을 막지 않는다. 정적 분석은 끝나고 보고서가 검토 미수행과 사유를 적는다. 다른 모델로 자동 전환하지 않는다(REQ-030).
+8. **제한시간 180초.** 호출당 기본을 75초에서 180초로 올리고 1초~30분을 받는다. 추론 모델이 40 KB 안팎의 요청에 답하는 시간을 75초가 덮지 못할 수 있어서다. 측정값이 아니라 추정이며 실제 호출 시간을 보고 다시 정한다.
+9. **확인한 범위.** OpenCode 1.19.5가 이 설정으로 OpenAI Responses API에 스트리밍 요청(`POST {base_url}/responses`, `Authorization` 헤더)을 보내고, 가짜 upstream의 답으로 검토 단계가 수락되는 것까지 확인했다. OpenAI가 이 요청과 모델 ID를 받는지는 확인하지 않았다(유료 호출은 소유자 예산의 장부로 한 번 한다).
+
+[모델 검토](REVIEW.md#모델-설정) · [운영](OPERATIONS.md)
+
 ## 품질 평가
 
 **A30 — 품질 평가 runner.** (기록 2026-11-19) REQ-006/011/013/027, NFR-010과 TC-120~122에 대해 다음을 확정한다.
