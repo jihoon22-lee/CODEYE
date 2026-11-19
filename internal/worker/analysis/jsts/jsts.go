@@ -17,6 +17,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -42,34 +43,6 @@ func IsJS(p string) bool { return slices.Contains(jsExt, strings.ToLower(path.Ex
 
 // IsTS reports a TypeScript source path (declaration files included).
 func IsTS(p string) bool { return slices.Contains(tsExt, strings.ToLower(path.Ext(p))) }
-
-// dataDir is pack's rule: hidden, testdata, vendor and node_modules
-// directories hold data or vendored code, never the project's own source.
-func dataDir(seg string) bool {
-	return strings.HasPrefix(seg, ".") || seg == "testdata" || seg == "vendor" || seg == "node_modules"
-}
-
-// inDataDir reports a path below a data directory.
-func inDataDir(p string) bool {
-	segs := strings.Split(p, "/")
-	return slices.ContainsFunc(segs[:len(segs)-1], dataDir)
-}
-
-// InScope reports whether a snapshot path is covered by the job scope ("full"
-// or a path list; a scope path covers itself and everything below it), the
-// rule of pack.SourceFiles.
-func InScope(p string, scope domain.Scope) bool {
-	if scope.Kind == "" || scope.Kind == "full" {
-		return true
-	}
-	for _, s := range scope.Paths {
-		s = strings.TrimSuffix(strings.TrimPrefix(s, "./"), "/")
-		if s == "" || s == "." || p == s || strings.HasPrefix(p, s+"/") {
-			return true
-		}
-	}
-	return false
-}
 
 // Module is one planned JS/TS module: a package.json directory found by the
 // module discovery, or the implicit root that holds JS/TS sources outside
@@ -235,7 +208,7 @@ func Modules(m source.Manifest, scope domain.Scope) ([]Module, error) {
 			mod.Index = index
 		}
 		for p := range files {
-			if IsSource(p) && !inDataDir(p) && InScope(p, scope) && mod.Owns(p) {
+			if IsSource(p) && !pack.UnderDataDir(p) && pack.PathInScope(p, scope) && mod.Owns(p) {
 				mod.Files = append(mod.Files, p)
 				if IsTS(p) {
 					mod.TSFiles = append(mod.TSFiles, p)

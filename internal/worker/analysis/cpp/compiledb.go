@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
@@ -490,7 +491,7 @@ func MapDBs(dbs []string, data map[string][]byte, files map[string]source.Entry,
 			u, reason, rel := mapEntry(e, root, files, dirs, inScope, &m)
 			if reason != "" {
 				m.Excluded[reason]++
-				if rel != "" && inScope(rel) && IsSource(rel) && !underDataDir(rel) && !seen[rel] && reason != ExclDuplicate {
+				if rel != "" && inScope(rel) && IsSource(rel) && !pack.UnderDataDir(rel) && !seen[rel] && reason != ExclDuplicate {
 					if _, already := m.ExcludedSources[rel]; !already {
 						m.ExcludedSources[rel] = reason
 					}
@@ -560,7 +561,7 @@ func mapEntry(e dbEntry, root string, files map[string]source.Entry, dirs map[st
 		return Unit{}, ExclNotInSnapshot, ""
 	}
 	switch {
-	case underDataDir(rel):
+	case pack.UnderDataDir(rel):
 		return Unit{}, ExclDataDir, rel
 	case !IsCppFile(rel):
 		return Unit{}, ExclNotCpp, rel

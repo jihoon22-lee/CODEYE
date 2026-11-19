@@ -206,7 +206,7 @@ func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 	if !ok {
 		return notRun(s, doc, domain.TaskFailed, ReasonSnapshotIntegrity, obsdoc.ExitNotRun)
 	}
-	m, err := MapDBs(l.DBs, data, l.Files, func(rel string) bool { return inScope(rel, job.Scope) })
+	m, err := MapDBs(l.DBs, data, l.Files, func(rel string) bool { return pack.PathInScope(rel, job.Scope) })
 	if err != nil {
 		return notRun(s, doc, domain.TaskFailed, ReasonCompileDBUnreadable, obsdoc.ExitNotRun)
 	}

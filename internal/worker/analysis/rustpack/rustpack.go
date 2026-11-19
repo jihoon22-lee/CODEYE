@@ -401,7 +401,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	for p := range files {
 		if path.Base(p) == "rust-toolchain.toml" || path.Base(p) == "rust-toolchain" {
-			if underDir(p, mod.Dir) || underDir(mod.Dir, dirOf(p)) {
+			if pack.UnderDir(p, mod.Dir) || pack.UnderDir(mod.Dir, pack.DirOf(p)) {
 				// Real toolchain binaries are named by the operator; the
 				// repository's choice is only recorded (docs/ANALYZERS.md#rust-환경).
 				in.ExtraLimitations = append(in.ExtraLimitations, "rust_toolchain_file_ignored")
@@ -493,7 +493,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	if len(mod.Patterns) != 1 || mod.Patterns[0] != "." {
 		patterns := mod.Patterns
-		in.OutOfScope = func(rel string) bool { return !scopeCovers(relTo(rel, mod.Dir), patterns) }
+		in.OutOfScope = func(rel string) bool { return !scopeCovers(pack.RelTo(rel, mod.Dir), patterns) }
 	}
 	doc := assemble(in)
 	if writeFailed {
@@ -541,7 +541,7 @@ func driftInput(p string) bool {
 	case strings.HasSuffix(p, ".rs"), base == "Cargo.toml", base == "Cargo.lock", base == "clippy.toml", base == ".clippy.toml":
 		return true
 	}
-	return (base == "config.toml" || base == "config") && path.Base(dirOf(p)) == ".cargo"
+	return (base == "config.toml" || base == "config") && path.Base(pack.DirOf(p)) == ".cargo"
 }
 
 // workspaceDrift compares the module's inputs in the workspace with the
@@ -551,7 +551,7 @@ func workspaceDrift(workspace string, files map[string]source.Entry, mod string)
 	root, err := os.OpenRoot(workspace)
 	if err != nil {
 		for p := range files {
-			if underDir(p, mod) && driftInput(p) {
+			if pack.UnderDir(p, mod) && driftInput(p) {
 				drift[p] = true
 			}
 		}
@@ -559,7 +559,7 @@ func workspaceDrift(workspace string, files map[string]source.Entry, mod string)
 	}
 	defer root.Close()
 	for p, e := range files {
-		if !underDir(p, mod) || !driftInput(p) {
+		if !pack.UnderDir(p, mod) || !driftInput(p) {
 			continue
 		}
 		b, err := readRootFile(root, p)
@@ -633,7 +633,7 @@ var lintsSection = regexp.MustCompile(`(?m)^\s*(?:\[(?:workspace\.)?lints\b|(?:w
 func ruleConfig(k Kind, files map[string]source.Entry, mod, workspace string, read func(string) ([]byte, bool)) (cfg []obsdoc.ConfigFile, known, external bool) {
 	set := map[string]string{}
 	add := func(p string) { set[p] = files[p].SHA256 }
-	for dir := mod; ; dir = dirOf(dir) {
+	for dir := mod; ; dir = pack.DirOf(dir) {
 		for _, n := range []string{".cargo/config.toml", ".cargo/config"} {
 			if p := govet.JoinRel(dir, n); files[p].SHA256 != "" {
 				add(p)
@@ -646,9 +646,9 @@ func ruleConfig(k Kind, files map[string]source.Entry, mod, workspace string, re
 	for p := range files {
 		base := path.Base(p)
 		switch {
-		case k == KindClippy && (base == "clippy.toml" || base == ".clippy.toml") && (underDir(p, mod) || underDir(mod, dirOf(p))):
+		case k == KindClippy && (base == "clippy.toml" || base == ".clippy.toml") && (pack.UnderDir(p, mod) || pack.UnderDir(mod, pack.DirOf(p))):
 			add(p)
-		case base == "Cargo.toml" && underDir(p, mod):
+		case base == "Cargo.toml" && pack.UnderDir(p, mod):
 			if b, ok := read(p); ok && lintsSection.Match(b) {
 				add(p)
 			}

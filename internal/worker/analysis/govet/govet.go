@@ -278,7 +278,7 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 	in.Module.Path = modulePath(gomodBytes) // replaced by the go command's parse below
 	for p := range files {
 		switch {
-		case path.Base(p) == "go.work" && underDir(pt.ModuleDir, dirOf(p)):
+		case path.Base(p) == "go.work" && pack.UnderDir(pt.ModuleDir, pack.DirOf(p)):
 			in.ExtraLimitations = append(in.ExtraLimitations, "go_work_ignored")
 		case p == joinRel(pt.ModuleDir, "vendor/modules.txt"):
 			in.ExtraLimitations = append(in.ExtraLimitations, "vendor_directory_used")

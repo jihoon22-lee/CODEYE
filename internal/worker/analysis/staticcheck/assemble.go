@@ -355,7 +355,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		if p := byFile[rel]; p != nil {
 			return p
 		}
-		return byDir[dirOf(rel)]
+		return byDir[pack.DirOf(rel)]
 	}
 	rs := &resolver{in: in, cache: map[string][3]any{}}
 	withFindings := map[*pkgState]bool{}
@@ -468,7 +468,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	if listOK {
 		for _, f := range in.ScopeGoFiles {
 			if !listed[f] {
-				unlisted[dirOf(f)] = true
+				unlisted[pack.DirOf(f)] = true
 				doc.Coverage.FilesUnlisted++
 			}
 		}

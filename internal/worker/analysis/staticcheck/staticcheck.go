@@ -272,7 +272,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	for p := range files {
 		switch {
-		case path.Base(p) == "go.work" && underDir(pt.Module, dirOf(p)):
+		case path.Base(p) == "go.work" && pack.UnderDir(pt.Module, pack.DirOf(p)):
 			in.ExtraLimitations = append(in.ExtraLimitations, "go_work_ignored")
 		case p == govet.JoinRel(pt.Module, "vendor/modules.txt"):
 			in.ExtraLimitations = append(in.ExtraLimitations, "vendor_directory_used")
@@ -392,16 +392,4 @@ var Selection = []string{"-checks", Checks, "-tests=true", "-show-ignored"}
 // CheckArgs is the staticcheck argv after the executable.
 func CheckArgs(patterns []string) []string {
 	return append(append([]string{"-f", "json"}, Selection...), patterns...)
-}
-
-func dirOf(p string) string {
-	d := path.Dir(p)
-	if d == "" {
-		return "."
-	}
-	return d
-}
-
-func underDir(p, dir string) bool {
-	return dir == "." || p == dir || len(p) > len(dir) && p[:len(dir)+1] == dir+"/"
 }

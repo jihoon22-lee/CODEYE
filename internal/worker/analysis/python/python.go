@@ -460,7 +460,7 @@ func workspaceDrift(workspace string, files map[string]source.Entry, moduleDir s
 	root, err := os.OpenRoot(workspace)
 	if err != nil {
 		for p := range files {
-			if underDir(p, moduleDir) {
+			if pack.UnderDir(p, moduleDir) {
 				drift[p] = true
 			}
 		}
@@ -468,7 +468,7 @@ func workspaceDrift(workspace string, files map[string]source.Entry, moduleDir s
 	}
 	defer root.Close()
 	for p, e := range files {
-		if !underDir(p, moduleDir) || !(isSource(p) || moduleManifest(filepath.Base(p))) {
+		if !pack.UnderDir(p, moduleDir) || !(isSource(p) || moduleManifest(filepath.Base(p))) {
 			continue
 		}
 		b, err := root.ReadFile(filepath.FromSlash(p))

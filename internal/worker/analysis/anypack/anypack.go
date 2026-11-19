@@ -91,13 +91,12 @@ func cleanScope(s string) string {
 // DataDir reports a path segment treated as data or vendored code (hidden
 // directories, testdata, vendor, node_modules), as pack.SourceFiles does.
 func DataDir(seg string) bool {
-	return strings.HasPrefix(seg, ".") || seg == "testdata" || seg == "vendor" || seg == "node_modules"
+	return pack.DataDir(seg)
 }
 
 // UnderDataDir reports a path with a data directory segment above it.
 func UnderDataDir(p string) bool {
-	segs := strings.Split(p, "/")
-	return slices.ContainsFunc(segs[:len(segs)-1], DataDir)
+	return pack.UnderDataDir(p)
 }
 
 // Files lists the included regular files of the manifest in the job scope

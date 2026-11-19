@@ -148,7 +148,7 @@ func (pyrightRun) execute(rc *runCtx) {
 	var list bytes.Buffer
 	for _, f := range m.Files {
 		// "./" keeps a name like -x.py from reading as an option.
-		list.WriteString("./" + relTo(f, m.Dir))
+		list.WriteString("./" + pack.RelTo(f, m.Dir))
 		list.WriteByte('\n')
 	}
 	// The files are read from stdin ("-"): no argv length limit, and only

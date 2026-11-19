@@ -85,26 +85,6 @@ func safeNested(nested []string) bool {
 
 func isSource(p string) bool { return strings.HasSuffix(p, ".py") || strings.HasSuffix(p, ".pyi") }
 
-func dirOf(p string) string {
-	d := path.Dir(p)
-	if d == "" {
-		return "."
-	}
-	return d
-}
-
-func underDir(p, dir string) bool { return dir == "." || p == dir || strings.HasPrefix(p, dir+"/") }
-
-func relTo(p, dir string) string {
-	if dir == "." {
-		return p
-	}
-	if p == dir {
-		return "."
-	}
-	return strings.TrimPrefix(p, dir+"/")
-}
-
 func joinRel(dir, name string) string {
 	if dir == "." || dir == "" {
 		return name
@@ -133,7 +113,7 @@ func moduleDirs(files map[string]source.Entry) []string {
 	seen := map[string]bool{}
 	for p := range files {
 		if moduleManifest(path.Base(p)) && !inSkippedDir(p) {
-			seen[dirOf(p)] = true
+			seen[pack.DirOf(p)] = true
 		}
 	}
 	out := make([]string, 0, len(seen))
@@ -149,24 +129,11 @@ func moduleDirs(files map[string]source.Entry) []string {
 func owningModule(p string, modules []string) string {
 	best := "."
 	for _, m := range modules {
-		if m != "." && underDir(p, m) && (best == "." || len(m) > len(best)) {
+		if m != "." && pack.UnderDir(p, m) && (best == "." || len(m) > len(best)) {
 			best = m
 		}
 	}
 	return best
-}
-
-func inScope(p string, scope domain.Scope) bool {
-	if scope.Kind == "" || scope.Kind == "full" {
-		return true
-	}
-	for _, s := range scope.Paths {
-		s = strings.TrimSuffix(strings.TrimPrefix(s, "./"), "/")
-		if s == "" || s == "." || p == s || strings.HasPrefix(p, s+"/") {
-			return true
-		}
-	}
-	return false
 }
 
 // module is one planned Python module of a snapshot and scope.
@@ -202,7 +169,7 @@ func planModules(m source.Manifest, scope domain.Scope) ([]module, error) {
 	for p := range files {
 		// Hidden files are skipped like hidden directories (ruff and bandit
 		// exclude both).
-		if !isSource(p) || inSkippedDir(p) || strings.HasPrefix(path.Base(p), ".") || !inScope(p, scope) {
+		if !isSource(p) || inSkippedDir(p) || strings.HasPrefix(path.Base(p), ".") || !pack.PathInScope(p, scope) {
 			continue
 		}
 		mod := owningModule(p, modules)
@@ -227,8 +194,8 @@ func planModules(m source.Manifest, scope domain.Scope) ([]module, error) {
 		mod := module{Dir: d, Files: byModule[d], Nested: []string{}}
 		sort.Strings(mod.Files)
 		for _, n := range modules {
-			if n != d && underDir(n, d) {
-				mod.Nested = append(mod.Nested, relTo(n, d))
+			if n != d && pack.UnderDir(n, d) {
+				mod.Nested = append(mod.Nested, pack.RelTo(n, d))
 			}
 		}
 		mod.Targets = targets(d, scope, files, modules)
@@ -246,16 +213,16 @@ func targets(d string, scope domain.Scope, files map[string]source.Entry, module
 	for _, s := range scope.Paths {
 		s = strings.TrimSuffix(strings.TrimPrefix(s, "./"), "/")
 		switch {
-		case s == "" || s == "." || underDir(d, s):
+		case s == "" || s == "." || pack.UnderDir(d, s):
 			// The scope covers the whole module.
 			return []string{"."}
-		case underDir(s, d):
+		case pack.UnderDir(s, d):
 			if _, isFile := files[s]; (isFile && !isSource(s)) || owningModule(s, modules) != d {
 				// A scope path inside a nested module is that module's
 				// target, never this one's.
 				continue
 			}
-			set[relTo(s, d)] = true
+			set[pack.RelTo(s, d)] = true
 		}
 	}
 	out := make([]string, 0, len(set))

@@ -449,7 +449,7 @@ func assemble(in assembleInput) Document {
 	if listOK {
 		for _, f := range in.ScopeGoFiles {
 			if !listed[f] {
-				unlisted[dirOf(f)] = append(unlisted[dirOf(f)], f)
+				unlisted[pack.DirOf(f)] = append(unlisted[pack.DirOf(f)], f)
 				doc.Coverage.UnlistedGoFiles++
 			}
 		}

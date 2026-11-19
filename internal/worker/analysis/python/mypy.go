@@ -117,7 +117,7 @@ func mypyPlatform() string {
 // names relative to src (MYPYPATH), as pyright resolves them.
 func usesSrc(moduleDir string, files []string) bool {
 	for _, f := range files {
-		if strings.HasPrefix(relTo(f, moduleDir), "src/") {
+		if strings.HasPrefix(pack.RelTo(f, moduleDir), "src/") {
 			return true
 		}
 	}
@@ -141,7 +141,7 @@ func (mypyRun) execute(rc *runCtx) {
 	for _, f := range m.Files {
 		// Every line of the @file list is an argument: "./" keeps a name
 		// like -x.py from reading as an option.
-		rels = append(rels, "./"+relTo(f, m.Dir))
+		rels = append(rels, "./"+pack.RelTo(f, m.Dir))
 	}
 	if err := writeLines(list, rels); err != nil {
 		rc.writeFail = true
@@ -322,7 +322,7 @@ func (mypyRun) assemble(rc *runCtx) obsdoc.Document {
 			if names, ok := readLinePrecision(filepath.Join(rc.dirs["report"], "lineprecision.txt")); ok {
 				processed = []string{}
 				for _, f := range m.Files {
-					if names[mypyModuleName(relTo(f, m.Dir), src)] {
+					if names[mypyModuleName(pack.RelTo(f, m.Dir), src)] {
 						processed = append(processed, f)
 					}
 				}

@@ -17,7 +17,6 @@ package cpp
 import (
 	"fmt"
 	"path"
-	"slices"
 	"sort"
 	"strings"
 
@@ -100,30 +99,6 @@ func IsCppFile(p string) bool {
 	return sourceExt[e] || headerExt[e]
 }
 
-// dataDir mirrors pack.SourceFiles: hidden, testdata, vendor and
-// node_modules directories are data or vendored code.
-func dataDir(seg string) bool {
-	return strings.HasPrefix(seg, ".") || seg == "testdata" || seg == "vendor" || seg == "node_modules"
-}
-
-func underDataDir(p string) bool {
-	segs := strings.Split(p, "/")
-	return slices.ContainsFunc(segs[:len(segs)-1], dataDir)
-}
-
-func inScope(p string, scope domain.Scope) bool {
-	if scope.Kind == "" || scope.Kind == "full" {
-		return true
-	}
-	for _, s := range scope.Paths {
-		s = strings.TrimSuffix(strings.TrimPrefix(s, "./"), "/")
-		if s == "" || s == "." || p == s || strings.HasPrefix(p, s+"/") {
-			return true
-		}
-	}
-	return false
-}
-
 // includedFiles indexes the included regular files of a manifest.
 func includedFiles(m source.Manifest) map[string]source.Entry {
 	out := map[string]source.Entry{}
@@ -156,10 +131,10 @@ func layoutOf(job analysis.Job) (layout, error) {
 	l := layout{Files: includedFiles(job.Snapshot.Manifest), CppFiles: pack.SourceFiles(job.Snapshot.Manifest, job.Scope)[Ecosystem]}
 	for p := range l.Files {
 		switch {
-		case underDataDir(p):
+		case pack.UnderDataDir(p):
 		case path.Base(p) == CompileDBName:
 			l.DBs = append(l.DBs, p)
-		case IsSource(p) && inScope(p, job.Scope):
+		case IsSource(p) && pack.PathInScope(p, job.Scope):
 			l.Sources = append(l.Sources, p)
 		}
 	}

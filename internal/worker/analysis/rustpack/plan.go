@@ -53,26 +53,6 @@ func skippedPath(p string) bool {
 	return false
 }
 
-func dirOf(p string) string {
-	d := path.Dir(p)
-	if d == "" {
-		return "."
-	}
-	return d
-}
-
-func underDir(p, dir string) bool { return dir == "." || p == dir || strings.HasPrefix(p, dir+"/") }
-
-func relTo(p, dir string) string {
-	switch {
-	case dir == ".":
-		return p
-	case p == dir:
-		return "."
-	}
-	return strings.TrimPrefix(p, dir+"/")
-}
-
 // scopeCovers reports whether a module-relative file is covered by patterns.
 func scopeCovers(rel string, patterns []string) bool {
 	for _, p := range patterns {
@@ -109,7 +89,7 @@ func planModules(m source.Manifest, scope domain.Scope, name, title string) (pla
 		switch {
 		case skippedPath(p):
 		case path.Base(p) == "Cargo.toml":
-			manifestDirs = append(manifestDirs, dirOf(p))
+			manifestDirs = append(manifestDirs, pack.DirOf(p))
 		case strings.EqualFold(path.Ext(p), ".rs"):
 			rs = append(rs, p)
 		}
@@ -126,7 +106,7 @@ func planModules(m source.Manifest, scope domain.Scope, name, title string) (pla
 	for _, d := range manifestDirs {
 		nested := false
 		for a := d; a != "."; {
-			a = dirOf(a)
+			a = pack.DirOf(a)
 			if has[a] {
 				nested = true
 				break
@@ -144,10 +124,10 @@ func planModules(m source.Manifest, scope domain.Scope, name, title string) (pla
 			set := map[string]bool{}
 			for _, sp := range scopePaths {
 				switch {
-				case sp == "" || sp == "." || underDir(root, sp):
+				case sp == "" || sp == "." || pack.UnderDir(root, sp):
 					set["."] = true
-				case underDir(sp, root):
-					set[relTo(sp, root)] = true
+				case pack.UnderDir(sp, root):
+					set[pack.RelTo(sp, root)] = true
 				}
 			}
 			patterns = patterns[:0]
@@ -162,7 +142,7 @@ func planModules(m source.Manifest, scope domain.Scope, name, title string) (pla
 		}
 		var inScope []string
 		for _, f := range rs {
-			if underDir(f, root) && scopeCovers(relTo(f, root), patterns) {
+			if pack.UnderDir(f, root) && scopeCovers(pack.RelTo(f, root), patterns) {
 				inScope = append(inScope, f)
 			}
 		}
