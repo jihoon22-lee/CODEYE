@@ -165,13 +165,16 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 - **의존성 받기.** 켜면(기본) 분석 전에 노드가 운영자 `GOPROXY`(기본 `https://proxy.golang.org`)와 checksum DB(기본 `sum.golang.org`)에 접속해 대상 프로젝트가 적은 모듈을 받는다. 그래서 모듈 이름과 버전이 그 서비스에 알려진다. 운영자의 `GOPRIVATE`·`GONOPROXY`·`GONOSUMDB`에 맞는 비공개 모듈은 묻지 않고, VCS에서 직접 받지 않는다(`GOVCS=*:off`). 받은 파일은 go.sum으로 검증하고 저장소 코드는 실행하지 않는다. 받는 주소는 운영자 설정이며 사용자·저장소의 `.netrc`·`GOFLAGS`·`go.work` 같은 설정은 쓰지 않는다(`GOENV=off`, `GOWORK=off`, 실행별 `HOME`, 실행기의 환경 필터). 다른 주소로 접속하지 않는다는 것은 도구 설정에 기대며 OS 수준으로 막지 않는다. Rust는 crates.io(또는 저장소 Cargo 설정이 정한 레지스트리)에서 `Cargo.lock`의 crate를 받고, 저장소 코드 실행 허가가 있을 때만 받는다. 공유 `CARGO_HOME`은 build script 실행 중 쓰기에서 보호되지 않는다([Rust 받기](ANALYZERS.md#rust-의존성-받기)). JS/TS는 운영자 레지스트리(`--npm-registry`, 기본 `registry.npmjs.org`)에서 lockfile의 패키지를 lifecycle script 없이 실행 사본에 설치하고, 설치 위치·캐시·proxy를 명령줄로 정하며 작업 사본 밖을 가리키는 링크를 지운다([JS/TS 받기](ANALYZERS.md#jsts-의존성-받기)). 프로젝트마다 "의존성 받기"를 끄거나 노드에서 `--dependency-fetch`를 주지 않으면 접속하지 않는다([의존성 준비](ARCHITECTURE.md#의존성-준비)).
 - **Python 패키지 받기.** 같은 스위치로 노드가 운영자 index(`--pip-index-url`, 기본 PyPI)에서 대상 프로젝트가 적은 패키지를 받는다. 패키지 이름·버전이 index에 알려진다. wheel만 받고(`--only-binary=:all:`, uv `--no-build`) 저장소의 `setup.py`·build backend를 실행하지 않는다. 저장소가 적은 `--index-url`·`--extra-index-url`·`--find-links`, editable·로컬·VCS 요구사항은 따르지 않는다. 직접 URL 요구사항(`name @ https://...`)은 pip처럼 그 주소에서 받는다. pip은 `--isolated`, uv는 `--no-config`라 사용자·저장소 설정 파일을 읽지 않는다. 받은 트리의 `*.pth`·`sitecustomize`는 지운다. mypy가 받은 트리를 읽을 때 운영자 interpreter로 mypy의 `pyinfo.py`를 한 번 실행해 검색 경로를 묻는다(`PYTHONSAFEPATH=1`, `PYTHONNOUSERSITE=1`). 그 실행은 `site`·`sysconfig`만 import하고 받은 패키지는 import하지 않는다([Python 의존성 받기](ANALYZERS.md#python-의존성-받기), A44).
 
-## 보관과 삭제 (제안, 미구현)
+## 보관과 삭제
 
-보관 기간 기본값과 자동 삭제는 구현하지 않았다. 지금은 아무것도 자동으로 지우지 않으며, 저장 상한은 새 작업만 거절한다([운영](OPERATIONS.md)). 아래는 구현할 때의 제안 기본값이다.
+자동 삭제는 없다. 저장 상한은 새 작업만 거절한다. 운영자가 `codeye cleanup`(기본 dry run, `--apply`로 적용)으로 오래된 원시 증거와 노드 사본을 지운다([보존 정리](OPERATIONS.md#보존-정리), A47).
 
-- 초기 제안은 workspace 1일, snapshot 14일, raw artifact 30일, 보고서·검토 이력 90일이며 운영자가 조정한다. 값은 법적 보존 기준이 아니라 운영 기본 예시다([platform.yaml](../examples/platform.yaml)의 `retention_days`도 설계 예시다).
-- pinned run은 별도 승인과 용량 제한을 갖는다. 보고서가 남아도 원시 증거가 삭제되면 `unavailable`을 표시한다.
-- 삭제 순서: 신규 접근 중지 → 진행 작업 취소·정리 → 참조 확인 → artifact GC → 감사 요약 유지. backup에서 실제 삭제되는 시점도 운영 정책에 적는다.
+- **지금 지우는 것.** 끝난 run의 원시 산출물 내용(`stdout`·`stderr`·`raw_output`·`other`), 노드의 오래된 snapshot·작업 사본, 은퇴한 에이전트 디렉터리. 기준(`--older-than`, 기본 30일, 최소 1시간)은 한 값이다.
+- **남기는 것.** 보고서, 관찰, manifest, run·이벤트·사람 판정, 감사 기록. 감사 표는 append-only이고 정리 자체를 `storage.retention_applied`로 남긴다.
+- **표시.** 원시 증거가 지워진 run은 `raw_evidence_removed_at`과 화면의 "원시 증거가 삭제됨"을 보인다. 보고서는 그대로 열린다.
+- **백업.** 지운 뒤의 백업은 그 내용을 담지 않는다. 이전 백업에는 남아 있으므로 백업 보관 기간은 운영자가 따로 정한다.
+- **남은 제안(미구현).** 영역별 기본값(workspace 1일, snapshot 14일, raw artifact 30일, 보고서·검토 이력 90일)은 운영 예시이며 법적 보존 기준이 아니다([platform.yaml](../examples/platform.yaml)의 `retention_days`도 설계 예시다). pinned run의 별도 승인, 보고서·검토 이력의 삭제, 예약 정리는 없다.
+- 삭제 순서: 신규 접근 중지 → 진행 작업 취소·정리 → 참조 확인 → artifact GC → 감사 요약 유지. 지금의 `cleanup`은 끝난 run만 고르고, 커밋 뒤 남은 참조가 없는 파일만 지우며, 에이전트가 실행 중이면 snapshot 사본을 남긴다.
 - 다중 프로젝트 간 cache가 삭제·권한 철회를 우회하지 않게 한다.
 - 외래키 CASCADE로 감사·보고서 증거를 예상치 않게 삭제하지 않도록 명시적 GC 작업을 쓴다. 오류로 생긴 고아 산출물은 격리하고 유예 기간 뒤 수거한다.
 

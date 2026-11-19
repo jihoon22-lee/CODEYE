@@ -175,9 +175,19 @@
 
 `POST /runs/{id}/retry`는 끝난 run(`failed`·`cancelled`·`partial`·`completed`)을 다시 실행한다.
 
-- `retry: "same_run"`: `failed`·`cancelled` run의 스냅샷을 철회되지 않은 노드가 갖고 있고, 모든 attempt의 정리가 확인됐고, 그 뒤 프로젝트 설정이 바뀌지 않았으면 그 run 자체를 같은 스냅샷으로 다시 큐에 넣는다. 응답의 `id`는 같은 run이다.
+- `retry: "same_run"`: `failed`·`cancelled` run의 스냅샷을 철회되지 않고 heartbeat가 신선한 노드가 갖고 있고, 모든 attempt의 정리가 확인됐고, 그 뒤 프로젝트 설정이 바뀌지 않았으면 그 run 자체를 같은 스냅샷으로 다시 큐에 넣는다. 응답의 `id`는 같은 run이다.
 - `retry: "new_run"`: 그 밖에는 저장된 같은 요청으로 새 run을 만든다. 소스를 다시 확보한다(소스 확보 실패, 도구를 설치하거나 분석 선택을 바꾼 뒤의 부분 완료). 같은 run version에 대한 반복 요청은 같은 새 run을 준다. 응답과 `Location`은 새 run이다.
-- 아직 끝나지 않았거나 `recovery_required`인 run은 409 `RUN_NOT_FINISHED`, viewer는 403이다. 어느 경우든 성공하면 `run.requested` 감사(`trigger: "retry"`)를 남긴다. 클라이언트는 응답의 run을 따라간다.
+- 아직 끝나지 않았거나 `recovery_required`인 run은 409 `RUN_NOT_FINISHED`, viewer는 403이다. 어느 경우든 성공하면 `run.requested` 감사(`trigger: "retry"`)를 남긴다. 클라이언트는 응답의 run을 따라간다. `recovery_required`는 [정리 확인](#정리-확인)을 쓴다.
+
+### 정리 확인
+
+`POST /runs/{id}/recover`는 `recovery_required` run에 대해 "그 attempt의 프로세스가 노드에 남지 않았다"는 사람의 확인을 받는다(A46).
+
+- 본문은 정확히 `{"cleanup_confirmed": true}`다. 본문이 없으면 415, `false`·`{}`·다른 필드는 400 `INVALID_REQUEST`다. 권한은 [다시 시도](#다시-시도)와 같다(프로젝트 실행 권한, viewer는 403).
+- 한 트랜잭션에서 attempt를 `released`·`confirmed`로 두고 예약을 풀고 남은 task를 닫고 run을 `failed`로 바꾼다(이벤트 `attempt.cleanup_confirmed`, 사유 `operator_confirmed`). `run.recovery_confirmed` 감사(`detail`: `epoch`, `status`)를 남긴다.
+- 그다음 다시 시도와 같은 규칙으로 다시 넣는다. 202와 `Location`, 본문은 다시 실행할 run의 ack에 `retry`(`same_run`·`new_run`), 확인한 `attempt_id`·`epoch`를 더한 것이다. 확인은 기록됐지만 다시 넣지 못했으면 200과 `retry: "not_queued"`(본문의 run은 확인한 `failed` run)다.
+- `recovery_required`가 아닌 run은 409 `RUN_NOT_RECOVERY_REQUIRED`다. 같은 확인을 두 번 보내면 두 번째가 409다.
+- 운영자 CLI는 `codeye run recover --id RUN_ID --confirm-cleanup`이다([실행](EXECUTION.md#등록-토큰과-운영자-명령)).
 
 ### 설치 정보
 
@@ -203,6 +213,7 @@
 | `progress.detail`, `stages`, `last_event_at`, `checked_at` | [단계 집계](#단계-집계). `checked_at`은 서버가 집계한 시각이다. |
 | `progress.plan_revision`, `planned_weight`, `finished_weight`, `weight_basis`, `estimated_percent`, `plan_changes` | [계획 revision과 가중 진행률](#계획-revision과-가중-진행률) |
 | `progress.waiting_reason` | [대기 사유](#대기-사유). `queued`일 때만 값이 있다. |
+| `raw_evidence_removed_at` | [보존 정리](OPERATIONS.md#보존-정리)가 이 run의 원시 산출물 내용을 지운 마지막 시각. 지운 적이 없으면 null. 보고서는 그대로다. |
 
 ### 단계 집계
 

@@ -4,6 +4,41 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — 여러 노드 검증과 운영 수용
+
+- **정리 확인**: `recovery_required` run을 사람이 "노드에 남은 프로세스가 없음"을 확인한 뒤 끝낸다. API `POST /runs/{id}/recover`(`{"confirm_cleanup": true}`), 운영자 CLI `codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]`(개인 모드는 설정의 DB), 웹의 확인 상자와 단추. 한 트랜잭션에서 attempt `released`·`confirmed`, 예약 해제, run `failed`(`operator_confirmed`), 감사 `run.recovery_confirmed`이고 이어서 다시 시도처럼 대기열에 넣는다(신선한 노드가 snapshot을 가질 때만 같은 run)([정리 확인](docs/API.md#정리-확인), A46).
+- **보존 정리**: `codeye cleanup --older-than 30d`가 기본 dry run이고 `--apply`일 때만 끝난 run의 오래된 원시 산출물(`stdout`·`stderr`·`raw_output`·`other`) 내용을 지운다. 행·hash·보고서·관찰·감사는 남고 run 화면에 "원시 증거가 삭제됨"이 보인다. 노드 상태 디렉터리의 끝난 작업 사본도 정리하되 에이전트가 실행 중이면(또는 확인할 수 없으면) snapshot은 건너뛴다([보존 정리](docs/OPERATIONS.md#보존-정리), A47).
+- **사용자 서비스**: `codeye service install|uninstall|print`가 systemd 사용자 unit(`codeye start`/`stop`)을 쓴다. install은 enable만 하고, uninstall은 설정 없이 자기가 쓴 unit만 지운다([사용자 서비스](docs/OPERATIONS.md#사용자-서비스), A48).
+- **고침**: drain 중인 노드가 자동 증감 계획에 남아 `start_worker`를 받고 그 노드의 예산을 시작 제한시간(90초) 동안 잡던 것. drain 중인 에이전트는 정적 scaling과 분석 능력 없음을 알린다(A49). `service uninstall`이 설정 파일을 요구하던 것, 보존 정리가 실행 중 attempt가 쓰는 snapshot을 지울 수 있던 것, 개인 모드에서 `run recover`가 DB를 찾지 못하던 것.
+- **여러 노드 smoke**(`scripts/test_postgres.py --multinode`, TC-231~235, CI 작업 `native-multinode`): 한 WSL2 호스트에서 `codeye serve` 하나와 노드 신원 8개(각자 상태 디렉터리·도구·source root). 장애는 SIGSTOP/SIGKILL과 로컬 TCP 프록시 차단이다. 이 호스트에서 전체 116~125초, 모두 통과. 표는 첫 측정이고 다시 실행한 값도 그 근처였다(사망 → `recovery_required` 32~34초, 다시 빌드는 build cache에 따라 1.3~7.5초).
+
+  | 시나리오 | 한 일 | 관찰 | 시간 |
+  |---|---|---|---|
+  | S1 능력 배정·대기 | go/ruff/도구 없음 노드, 늦게 오는 local root 노드와 Git host 노드 | 맞는 노드만 받음, ruff만 있는 노드의 go vet `unsupported`/`tool_not_configured`, `no_capable_node` 대기 뒤 시작 | 등록 → claim 0.2초, Git 노드 → 끝 5.8초 |
+  | S2 노드 사망 | 작업 중 에이전트·워커·작업 트리 SIGKILL | stale 19초, `recovery_required` 34초, 자동 재배정 없음, 옛 epoch complete 409 + `attempt.stale_rejected`, 확인 없이 400, 확인 뒤 새 run이 다른 노드에서 끝(2.8초), 그 뒤 옛 complete도 409·결과 불변, 다시 띄운 에이전트가 정리 보고 | 34.1초 |
+  | S3 연결 끊김 | 프록시로 한 노드의 연결 차단 뒤 복구, lease 안의 8초 SIGSTOP | 차단 중 다른 노드가 실행하지 않음, `lease_lost` 19초, 복구 → `failed`(`cleanup_reported`) 0.2초, 같은 노드가 다음 일을 받음, SIGSTOP은 상태를 바꾸지 않음 | 19.1초 |
+  | S4 drain | 작업 중 SIGUSR1 | 하던 일 첫 attempt로 끝, 새 run `no_capable_node`, 그 노드에 `start_worker` 없음, 종료 코드 0 | 15.0초 |
+  | S5 에이전트 갱신 | `-trimpath`로 다시 빌드(hash 다름), 같은 상태 디렉터리로 시작 | 같은 node ID, `node.enrolled` 감사 없음, 대기 run을 받아 끝 | 빌드 7.5초, 시작 → 끝 5.2초 |
+
+- **운영 훈련**(`scripts/test_postgres.py --ops-drill`, TC-236): 자기 PostgreSQL cluster를 띄워 그것만 멈춘다. 이 호스트에서 약 9분이라 CI에는 넣지 않았다. 마지막 두 번 모두 통과(D9의 지금 형태는 마지막 실행).
+
+  | 훈련 | 한 일 | 관찰 | 시간 |
+  |---|---|---|---|
+  | D1 모델 endpoint 실패 | OpenCode + HTTP 500만 돌려주는 가짜 upstream | probe `FAILED`(`model_timeout`), run `partial`(136초), 정적 결과 유지, 사유 `dependency_failed`·`model_timeout`이 보고서 문장에 보임 | 263초 |
+  | D2 노드 offline | 작업 중 노드 트리 SIGKILL, CLI 정리 확인 | `recovery_required` 35초, `--confirm-cleanup` 없이 종료 코드 2, 있으면 `failed` + 새 run(감사 `operator_cli`), 다른 노드에서 끝 | 35초 |
+  | D3 DB 짧은 중단 | 작업 중 cluster 8초 정지 | `ready`·`GET run` 503, 정지 8초 뒤 다시 ready, 같은 attempt로 끝 | 30초 |
+  | D3 DB 긴 중단 | 40초 정지(lease 30초) | `lease_lost` 20초, DB 복구 4.7초 뒤 `failed`, 정합성 검사 0건, doctor `available`, 새 run 끝 | 55초 |
+  | D4 도구 변경·사라짐 | ruff 버전을 올린 wrapper, 그다음 ruff 없음 | 비교에 `tool:python.ruff:version` 차이 행, 사라진 작업은 `absent_unverified`(`check_failed`)이고 `resolved_observed` 0 | 1.5초 |
+  | D5 max workers 축소 | 작업 중 pool 2 → 1 | drain 0.4초, 취소 없음, 작업 끝 | 35초 |
+  | D6 산출물 상한 | 상한 1 → 0 | 상한 넘으면 새 작업만 대기, 하던 일은 끝 | 5.4초 |
+  | D7 실행 중 백업·복원 | 작업 중 온라인 백업 → 새 DB·상태에 복원 → 시작 | 백업 0.1~0.3초, 복원 0.2~0.4초, 같은 보고서, 실행 중이던 run `recovery_required` → `codeye run recover --config`로 확인 → 이어 실행 끝, 새 run 끝 | 24~26초 |
+  | D8 권한 회수 | 구성원 제거, 사용자 비활성화, 노드 철회 | 열린 SSE가 0.5초 안에 `access_revoked`·`unauthenticated`로 닫힘, 다음 요청 404·401, 철회 4.9초 뒤 에이전트 종료 코드 4, 남은 프로세스 없음, 정리 확인 뒤 새 run | 38초 |
+  | D9 보존 정리 | 끝난 run의 산출물을 40일 전으로 돌린 뒤 `codeye cleanup --config` dry run → `--apply` → dry run | dry run은 원시 행 6개(풀 내용 2개)를 보이고 바꾸지 않음, 적용 뒤 파일 1개 삭제(빈 내용 1개 남김), 같은 보고서, 감사 `storage.retention_applied` 한 건, `raw_evidence_removed_at`, 다시 dry run 0건 | 0.1초 |
+
+- **활성 controller는 하나다.** 두 controller를 같은 DB에 띄우는 구성은 지원하지 않고 시험하지 않았다. 여러 물리 노드, NFS, 실제 네트워크 분할, RHEL 8.10, 회사 SSO, GHES는 이 호스트에서 확인할 수 없다([로드맵](docs/ROADMAP.md#다중-노드-검증)).
+- 사용자 systemd(WSL2): install(enable) → start 1.3초 running, stop 0.7초(PostgreSQL도 멈춤), uninstall.
+- 확인 환경: Linux(WSL2, 6.18), Go 1.27.4, PostgreSQL 17.10, Python 3.14.4. 시간은 이 호스트의 측정값이며 보장값이 아니다. 실모델 호출은 하지 않았다.
+
 ### 바뀜 — 웹 화면 다듬기
 
 - **시각 체계**: 색·글자·간격 토큰과 단추·입력·카드·상태 표지·표·펼침 요소의 공통 모양을 스타일시트 하나에 정했다(새 의존성 없음). 상태는 기호·글자·색을 함께 쓴다. 대비는 색 값으로 계산해 글자 4.5:1, 입력 테두리·초점 3:1 이상이다([접근성](docs/REPORT.md#접근성)).
