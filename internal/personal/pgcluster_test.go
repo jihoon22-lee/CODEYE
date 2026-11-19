@@ -24,7 +24,9 @@ func TestMinimalConfigDefaults(t *testing.T) {
 		t.Fatalf("%+v", c)
 	}
 	t.Setenv("XDG_STATE_HOME", "")
+	// The home directory comes from HOME on Unix and USERPROFILE on Windows.
 	t.Setenv("HOME", xdg)
+	t.Setenv("USERPROFILE", xdg)
 	if c, err = Parse([]byte(`{"schema_version":"0.1","listen":"127.0.0.1:7400","database":{"mode":"external"}}`), tools); err != nil {
 		t.Fatal(err)
 	}
