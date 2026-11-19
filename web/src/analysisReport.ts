@@ -1,4 +1,6 @@
 // Validate the projection used by the report view before rendering any model or tool text.
+import { parseSections, type Sections } from './reportSections';
+
 export type Evidence = {
   id: string;
   kind: string;
@@ -69,6 +71,9 @@ export type AnalysisReport = {
   observations: Observation[];
   tasks: Task[];
   limitations: string[];
+  // Analysis sections; null for revisions published before they existed,
+  // which keep the flat layout.
+  sections: Sections | null;
 };
 
 const invalid = (): never => {
@@ -218,6 +223,12 @@ export function parseAnalysisReport(
       };
     }),
     limitations: array(r.limitations, str),
+    sections: parseSections(
+      r,
+      observations.map((o) => o.id),
+      findings.map((f) => f.id),
+      counts.total,
+    ),
   };
 }
 
