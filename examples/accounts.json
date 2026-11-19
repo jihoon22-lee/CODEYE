@@ -1,0 +1,89 @@
+{
+  "session": {
+    "user_id": "0b5f3c1e-7d2a-4c11-9a63-2f0e5b8d4a10",
+    "csrf_token": "q8n3VfJ6mXgS1u0yZkP4aRw2tLb7cHd9eQo5iTs8jUv",
+    "expires_at": "2026-11-19T21:00:00Z",
+    "username": "dana",
+    "display_name": "Dana",
+    "is_admin": false,
+    "must_change_password": false,
+    "has_password": true
+  },
+  "created_user": {
+    "user": {
+      "id": "6c2a9d14-31f8-4be0-8d57-91a3e0c4f7b2",
+      "username": "erin",
+      "display_name": "Erin",
+      "is_admin": false,
+      "must_change_password": true,
+      "has_password": false,
+      "disabled": false,
+      "disabled_at": null,
+      "created_at": "2026-11-19T09:00:00Z",
+      "last_login_at": null
+    },
+    "login_link": {
+      "url": "https://codeye.example/#launch=REPLACED-IN-EXAMPLE-0000000000000000000000",
+      "expires_at": "2026-11-19T09:10:00Z"
+    }
+  },
+  "project_role": {
+    "role": "runner",
+    "can_run": true,
+    "can_manage": false
+  },
+  "members": {
+    "items": [
+      {"user_id": "a1d0f6b2-58c4-4e7a-b9f3-0c2e6d8a4b11", "username": "owner.kim", "display_name": "Kim", "role": "owner", "disabled": false},
+      {"user_id": "0b5f3c1e-7d2a-4c11-9a63-2f0e5b8d4a10", "username": "dana", "display_name": "Dana", "role": "runner", "disabled": false},
+      {"user_id": "6c2a9d14-31f8-4be0-8d57-91a3e0c4f7b2", "username": "erin", "display_name": "Erin", "role": "viewer", "disabled": false}
+    ]
+  },
+  "audit": {
+    "items": [
+      {
+        "id": "4182",
+        "occurred_at": "2026-11-19T09:12:31.204Z",
+        "actor_kind": "user",
+        "actor_user_id": "0b5f3c1e-7d2a-4c11-9a63-2f0e5b8d4a10",
+        "actor_username": "dana",
+        "actor_node_id": null,
+        "action": "report.exported",
+        "target_type": "report",
+        "target_id": "9e1f4b7a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+        "project_id": "3f7c2e19-8a4b-4d6e-9f01-b2c3d4e5f6a7",
+        "request_id": "req_5d3a9f0c1b2e4d6f8a7b9c0d",
+        "detail": {"run_id": "c4d5e6f7-0a1b-4c2d-8e3f-a4b5c6d7e8f9", "revision": 1, "format": "html", "include_code": true}
+      },
+      {
+        "id": "4177",
+        "occurred_at": "2026-11-19T09:10:02.880Z",
+        "actor_kind": "user",
+        "actor_user_id": "a1d0f6b2-58c4-4e7a-b9f3-0c2e6d8a4b11",
+        "actor_username": "owner.kim",
+        "actor_node_id": null,
+        "action": "project.member_set",
+        "target_type": "user",
+        "target_id": "6c2a9d14-31f8-4be0-8d57-91a3e0c4f7b2",
+        "project_id": "3f7c2e19-8a4b-4d6e-9f01-b2c3d4e5f6a7",
+        "request_id": "req_0a1b2c3d4e5f60718293a4b5",
+        "detail": {"user_id": "6c2a9d14-31f8-4be0-8d57-91a3e0c4f7b2", "role": "viewer", "previous_role": null}
+      },
+      {
+        "id": "4170",
+        "occurred_at": "2026-11-19T09:08:44.117Z",
+        "actor_kind": "anonymous",
+        "actor_user_id": null,
+        "actor_username": null,
+        "actor_node_id": null,
+        "action": "auth.login_failed",
+        "target_type": null,
+        "target_id": null,
+        "project_id": null,
+        "request_id": "req_ffeeddccbbaa998877665544",
+        "detail": {"method": "password", "client_address": "192.0.2.10"}
+      }
+    ],
+    "next_cursor": "4170"
+  }
+}

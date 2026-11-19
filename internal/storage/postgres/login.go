@@ -402,6 +402,11 @@ func (s *Store) ChangePassword(ctx context.Context, in PasswordChange) (Session,
 			// A user without a username cannot hold a password.
 			return gate{cred: c}, domain.ErrConflict
 		}
+		// The policy is checked before anything is counted: a rejected new
+		// password says nothing about the current one and costs no attempt.
+		if account.CheckPassword(in.New, c.username, c.display) != nil {
+			return gate{}, domain.ErrInvalid
+		}
 		g := gate{cred: c}
 		if c.hash == nil {
 			return g, nil
@@ -433,9 +438,6 @@ func (s *Store) ChangePassword(ctx context.Context, in PasswordChange) (Session,
 			return Session{}, err
 		}
 		return Session{}, domain.ErrUnauthenticated
-	}
-	if err := account.CheckPassword(in.New, g.cred.username, g.cred.display); err != nil {
-		return Session{}, domain.ErrInvalid
 	}
 	h, err := account.Derive(in.New, s.kdfIterations())
 	if err != nil {

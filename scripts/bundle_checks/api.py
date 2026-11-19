@@ -365,6 +365,115 @@ def check_comparison_contracts(published: dict) -> None:
     print(f"PASS: comparison/review contracts (2 examples; disposition/state/reason/match enums across OpenAPI, migration 0008, schema and Go; {negatives} negative cases)")
 
 
+def account_vocabulary() -> dict:
+    """The audit action, actor kind and target type vocabularies as written in
+    migration 0010, the Go store (internal/storage/postgres/audit.go) and
+    OpenAPI (docs/SECURITY.md#감사), plus the Go detail-key allowlist."""
+    migrations = sorted((ROOT / "migrations/sql").glob("0010_*.sql"))
+    ensure(len(migrations) == 1, "Missing migration 0010")
+    sql = migrations[0].read_text(encoding="utf-8")
+
+    def check_list(column: str) -> list[str]:
+        match = re.search(column + r" IN \((.*?)\)\)", sql, re.S)
+        ensure(match is not None, "Migration 0010 has no " + column + " CHECK")
+        return re.findall(r"'([a-z_.]+)'", match.group(1))
+
+    go = (ROOT / "internal/storage/postgres/audit.go").read_text(encoding="utf-8")
+    consts = dict(re.findall(r'^\s*(Audit\w+)\s*=\s*"([a-z_.]+)"', go, re.M))
+    actors = re.findall(r'^\s*Actor\w+\s*=\s*"([a-z_]+)"', go, re.M)
+    listed = re.search(r"var auditActions = map\[string\]bool\{(.*?)\n\}", go, re.S)
+    keys = re.search(r"var auditDetailKeys = map\[string\]bool\{(.*?)\n\}", go, re.S)
+    ensure(bool(consts) and bool(actors) and listed is not None and keys is not None, "Go audit vocabulary not found")
+    allowed = [consts.get(name, "?" + name) for name in re.findall(r"(Audit\w+):\s*true", listed.group(1))]
+    api = yaml_file(ROOT / "api/openapi.yaml")["components"]["schemas"]
+    event = api["AuditEvent"]["properties"]
+    return {
+        "actions": {"migration 0010": check_list("action"), "Go constants": list(consts.values()), "Go auditActions": allowed,
+                    "OpenAPI AuditAction": api["AuditAction"]["enum"]},
+        "actors": {"migration 0010": check_list("actor_kind"), "Go constants": actors, "OpenAPI AuditEvent": event["actor_kind"]["enum"]},
+        "targets": {"migration 0010": check_list("target_type"), "OpenAPI AuditEvent": [t for t in event["target_type"]["enum"] if t is not None]},
+        "detail_keys": set(re.findall(r'"([a-z_]+)":\s*true', keys.group(1))),
+    }
+
+
+def check_account_vocabulary(vocabulary: dict) -> None:
+    for name in ("actions", "actors", "targets"):
+        lists = vocabulary[name]
+        reference = next(iter(lists.values()))
+        for source, values in lists.items():
+            ensure(len(values) == len(set(values)), f"Duplicate audit {name} in {source}")
+            ensure(set(values) == set(reference), f"Audit {name} differ: {source} vs migration 0010: {sorted(set(values) ^ set(reference))}")
+    secret = re.compile(r"password|token|secret|hash|salt|prompt|reasoning|path$|^path")
+    leaked = [key for key in vocabulary["detail_keys"] if secret.search(key) and key != "must_change_password"]
+    ensure(not leaked, "Audit detail allowlist names a secret or path: " + ", ".join(sorted(leaked)))
+
+
+def check_account_contracts() -> None:
+    """Accounts, members and the audit log (docs/API.md#계정과-관리자): the
+    example documents fit their OpenAPI schemas, the closed audit vocabulary
+    is the same in migration 0010, Go and OpenAPI, and every example audit
+    detail uses only allowlisted keys."""
+    vocabulary = account_vocabulary()
+    check_account_vocabulary(vocabulary)
+    example = json_file(ROOT / "examples/accounts.json")
+    session, with_link, member, page = (api_validator(n) for n in ("SessionView", "UserWithLink", "Member", "AuditPage"))
+    role = api_validator("ProjectRole")
+
+    def check(doc: dict) -> None:
+        session.validate(doc["session"])
+        with_link.validate(doc["created_user"])
+        ensure(doc["created_user"]["user"]["must_change_password"] and not doc["created_user"]["user"]["has_password"],
+               "An account created by an administrator has no password and must set one")
+        ensure("#launch=" in doc["created_user"]["login_link"]["url"], "Login link carries the token in the fragment")
+        project = doc["project_role"]
+        role.validate(project["role"])
+        ensure(project["can_run"] == (project["role"] in ("owner", "manager", "runner")) and project["can_manage"] == (project["role"] in ("owner", "manager")),
+               "can_run/can_manage do not follow the role")
+        for item in doc["members"]["items"]:
+            member.validate(item)
+        ensure([m["role"] for m in doc["members"]["items"]][:1] == ["owner"], "Member list starts with the owner")
+        page.validate(doc["audit"])
+        ids = [int(item["id"]) for item in doc["audit"]["items"]]
+        ensure(ids == sorted(ids, reverse=True), "Audit page is newest first")
+        ensure(doc["audit"]["next_cursor"] in (None, str(ids[-1])), "Audit cursor is the last id of the page")
+        for item in doc["audit"]["items"]:
+            ensure(set(item["detail"]) <= vocabulary["detail_keys"], "Audit detail key outside the allowlist: " + item["action"])
+            ensure((item["actor_kind"] == "user") <= (item["actor_user_id"] is not None), "User actor without a user")
+            ensure((item["target_type"] is None) == (item["target_id"] is None), "Audit target pair")
+
+    check(example)
+    negatives = 0
+
+    def reject(name: str, function, data) -> None:
+        nonlocal negatives
+        expect_invalid(name, function, data)
+        negatives += 1
+
+    for name, edit in (
+        ("unknown audit action", lambda d: d["audit"]["items"][0].update(action="report.viewed")),
+        ("audit detail with a password", lambda d: d["audit"]["items"][2]["detail"].update(password="hunter2hunter2")),
+        ("session without must_change_password", lambda d: d["session"].pop("must_change_password")),
+        ("user view with a password hash", lambda d: d["created_user"]["user"].update(password_hash="00")),
+        ("member role outside the vocabulary", lambda d: d["members"]["items"][1].update(role="admin")),
+        ("viewer that can run", lambda d: d["project_role"].update(role="viewer")),
+        ("audit page oldest first", lambda d: d["audit"]["items"].reverse()),
+        ("user actor without a user", lambda d: d["audit"]["items"][0].update(actor_user_id=None)),
+    ):
+        bad = copy.deepcopy(example)
+        edit(bad)
+        reject(name, check, bad)
+    for name, edit in (
+        ("audit action drift", lambda v: v["actions"]["OpenAPI AuditAction"].append("report.viewed")),
+        ("audit actor drift", lambda v: v["actors"]["Go constants"].remove("system")),
+        ("secret detail key", lambda v: v["detail_keys"].add("new_password")),
+    ):
+        bad = copy.deepcopy(vocabulary)
+        edit(bad)
+        reject(name, check_account_vocabulary, bad)
+    print(f"PASS: account contracts ({len(vocabulary['actions']['migration 0010'])} audit actions across migration 0010, Go and OpenAPI; "
+          f"examples/accounts.json; {negatives} negative cases)")
+
+
 def resolve_pointer(document, pointer: str):
     if not pointer:
         return document

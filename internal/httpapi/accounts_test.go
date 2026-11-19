@@ -162,6 +162,8 @@ func TestPasswordChangeResetAndPendingGate(t *testing.T) {
 	other := e.loginPassword("carol", carolPW)
 	e.do("POST", "/api/v1/session/password", map[string]string{"new_password": carolPW2}, carol.o()).want(t, 400, "INVALID_REQUEST")
 	e.do("POST", "/api/v1/session/password", map[string]string{"current_password": "wrong passphrase", "new_password": carolPW2}, carol.o()).want(t, 403, "PASSWORD_INCORRECT")
+	// The policy is checked first: a weak new password says nothing about the current one.
+	e.do("POST", "/api/v1/session/password", map[string]string{"current_password": "wrong passphrase", "new_password": "short"}, carol.o()).want(t, 422, "VALIDATION_FAILED")
 	e.do("POST", "/api/v1/session/password", map[string]string{"current_password": carolPW, "new_password": carolPW2}, opts{cookie: carol.cookie}).want(t, 403, "CSRF_REJECTED")
 	e.do("POST", "/api/v1/session/password", map[string]string{"current_password": carolPW, "new_password": carolPW2}, carol.o()).want(t, 200, "")
 	e.do("GET", "/api/v1/session", nil, other.o()).want(t, 401, "UNAUTHENTICATED")

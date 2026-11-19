@@ -4,6 +4,18 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — 계정·권한·감사 (서버 쪽)
+
+- **로컬 계정**: 사용자 이름(대소문자 무시)과 비밀번호로 로그인한다(`POST /session`). 비밀번호는 PBKDF2-HMAC-SHA256(600,000회, 사용자별 salt)으로 저장하고, 없는 사용자와 틀린 비밀번호는 같은 응답·같은 비용이다. 로그인 링크와 개인 모드는 그대로 동작한다.
+- **로그인 제한**: 계정별 5회·접속 주소별 20회 실패면 30초부터 두 배씩 최대 15분 잠근다. 카운터는 DB에 있어 여러 controller가 공유한다. 잠긴 요청은 429와 `Retry-After`다.
+- **비밀번호 변경·재설정**: `POST /session/password`는 다른 세션을 끝낸다. 관리자 재설정은 비밀번호를 지우고 일회용 로그인 링크를 주며, 사용자는 새 비밀번호를 정하기 전에는 다른 경로를 쓸 수 없다.
+- **관리자**: 사용자 목록·생성·비활성화, 관리자 지정·해제, 재설정, source root 허가, provider·감사 기록 조회(`/api/v1/admin/…`, `/api/v1/audit`). 관리자 역할은 프로젝트를 열지 않는다. 마지막 활성 관리자는 남는다. 첫 관리자와 계정 운영은 `codeye user create --username … --admin`, `user passwd`, `user list`, `user disable`, `user admin --set/--unset`. 개인 모드 사용자는 관리자다.
+- **프로젝트 구성원**: `GET/POST /projects/{id}/members`, `PUT/DELETE /projects/{id}/members/{user_id}`. 프로젝트 응답에 호출자의 `role`, `can_run`, `can_manage`가 붙는다.
+- **감사 기록**: 추가 전용 `audit_events`(migration 0010). 등록·변경·실행·취소·내보내기·판정·예약·구성원·계정·로그인·노드·배치 한도·오래된 epoch 거부를 변경과 같은 트랜잭션에 남긴다. 기록하지 못하면 변경도 하지 않는다. 비밀번호·토큰·경로·모델 입력은 담지 않는다.
+- **TLS 수신**: `codeye serve --tls-cert --tls-key --public-origin`으로 loopback이 아닌 주소에서 HTTPS로 받는다(`__Host-` Secure cookie, HSTS). TLS 없이 loopback이 아닌 주소로는 시작하지 않는다. reverse proxy 뒤 배포는 지원하지 않는다.
+- **격리 시험**: 라우터의 모든 경로를 여섯 행위자로 요청해 404·403과 감사 행을 확인하는 표 시험(TC-140~TC-155). 웹 화면은 아직 없다.
+- 확인한 환경: Linux(WSL2), PostgreSQL 17.10, Go 1.27.4.
+
 ### 변경
 
 - **문서 통합 (#37)**: 번호를 붙인 단계별 문서 50개를 주제별 문서 16개(`docs/`)와 이 변경 이력으로 바꿨다. 주제 문서에는 현재 유효한 계약과 운영 규칙만 두고, 코드에서 문서를 가리키는 참조는 절 anchor까지 검증한다.
