@@ -605,7 +605,7 @@ def check_tools_contract(validator, example) -> None:
     bad["tools"] = bad["tools"][1:]
     cases.append(("missing tool entry", bad))
     bad = copy.deepcopy(example)
-    bad["tools"][5].pop("hint")
+    next(t for t in bad["tools"] if t["status"] == "unusable").pop("hint")
     cases.append(("unusable without a hint", bad))
     bad = copy.deepcopy(example)
     bad["tools"][0]["notes"] = ["other"]

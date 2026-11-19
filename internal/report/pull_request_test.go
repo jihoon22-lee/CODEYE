@@ -1,6 +1,8 @@
 package report
 
 import (
+	"bytes"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -76,8 +78,26 @@ func TestPullRequestSectionClassifiesTheChanges(t *testing.T) {
 	if code := Project(r, false); code.PullRequest == nil || len(code.PullRequest.Items) != len(s.Items) {
 		t.Fatal("the code-free export drops the section")
 	}
-	if _, err := Marshal(r); err != nil {
+	body, err := Marshal(r)
+	if err != nil {
 		t.Fatal(err)
+	}
+	// examples/report-pull-request.json is a report like this one (its
+	// fixture IDs are random, so CODEYE_UPDATE_EXAMPLES=1 rewrites it and
+	// otherwise it must still be a valid report with the section;
+	// schemas/report.schema.json checks it in scripts/validate_bundle.py).
+	const example = "../../examples/report-pull-request.json"
+	if os.Getenv("CODEYE_UPDATE_EXAMPLES") == "1" {
+		if err := os.WriteFile(example, append(body, '\n'), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	have, err := os.ReadFile(example)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored, err := Unmarshal(bytes.TrimSpace(have)); err != nil || stored.PullRequest == nil || stored.Builder.Version != BuilderVersion {
+		t.Fatalf("%s is not a current pull-request report (%v); rerun with CODEYE_UPDATE_EXAMPLES=1", example, err)
 	}
 	md := string(RenderMarkdownAt(r, "d", Korean, DetailSummary))
 	for _, want := range []string{`pull request \#7`, "2222222", "변경 부분", "같은 깊이로 검토하지 않았을 수 있다", "파일 1개의 변경 줄을 주지 않아"} {

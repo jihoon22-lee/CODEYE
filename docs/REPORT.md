@@ -10,8 +10,8 @@ CODEYE 보고서가 지금 담는 내용, 발견 항목을 읽는 방법, 웹 �
 |---|---|
 | `schema_version` | `0.1`. 새 필드는 모두 선택 필드로 추가했다. |
 | `demo` | 제품이 게시한 보고서는 항상 `false`다. [`examples/report.json`](../examples/report.json)은 현재 builder가 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이고, [`examples/report-go-vet.json`](../examples/report-go-vet.json)은 builder 1 시절의 실제 코드 미포함 내보내기다(분석 종류별 절 없음). |
-| `builder.id` / `builder.version` | `codeye-report` / `8`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를, 버전 5부터 [분석 종류별 절](#분석-종류별-절)을, 버전 6부터 [모듈 단위 검토 분할](#모듈별-검토-장부)의 기록·발견·장부와 `review_calls[].task_key`를, 버전 7부터 환경 절의 [의존성 목록](#의존성-목록)과 의존성 공백을, 버전 8부터 [검토 우선순위](REVIEW.md#검토-우선순위)로 채운 범위 산출물(schema 0.2)의 분류(장부 행의 `class`와 부차 파일 수, 상한에 막힌 주요 slot 수)를 기록한다. |
-| `builder.input_digest` | builder 입력(run·snapshot·attempt 사실, task 행, 결과 manifest, 산출물 행, 게시 시점 판정 집합, builder ID·버전·스키마 버전)의 SHA-256. 보고서 ID·리비전·생성 시각은 넣지 않는다. |
+| `builder.id` / `builder.version` | `codeye-report` / `9`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를, 버전 5부터 [분석 종류별 절](#분석-종류별-절)을, 버전 6부터 [모듈 단위 검토 분할](#모듈별-검토-장부)의 기록·발견·장부와 `review_calls[].task_key`를, 버전 7부터 환경 절의 [의존성 목록](#의존성-목록)과 의존성 공백을, 버전 8부터 [검토 우선순위](REVIEW.md#검토-우선순위)로 채운 범위 산출물(schema 0.2)의 분류(장부 행의 `class`와 부차 파일 수, 상한에 막힌 주요 slot 수)를, 버전 9부터 pull request run의 [`pull_request` 절](#pull-request-보고서)을 기록한다. |
+| `builder.input_digest` | builder 입력(run·snapshot·attempt 사실, task 행, 결과 manifest, 산출물 행, 게시 시점 판정 집합, pull request run이면 고정한 pull request, builder ID·버전·스키마 버전)의 SHA-256. 보고서 ID·리비전·생성 시각은 넣지 않는다. |
 | `export.include_code` | 저장본은 `true`다. 코드 미포함 내보내기는 같은 저장본의 projection이며 `false`다. |
 
 보고서 builder는 I/O를 하지 않고 모델을 부르지 않는다. 게시 서비스([`internal/reportsvc`](../internal/reportsvc/publisher.go))가 DB 행과 산출물 바이트를 읽어 크기·SHA-256을 다시 확인한 뒤 넘긴다. 저장할 때와 읽을 때 모두 같은 검증(`ValidateReport`)을 거친다. 저장 본문이 검증에 실패하면 조회는 500 `REPORT_INVALID`로 끝나며 깨진 본문을 내보내지 않는다.
@@ -130,6 +130,16 @@ builder 7부터 환경 절은 `deps.*` task마다 한 행(`environment.dependenc
 - 판정 규칙은 바뀌지 않는다. 의존성 task는 필수가 아니므로 실패해도 그것만으로 보고서가 `partial`이 되지 않는다. 의존성이 없어 분석기가 실패하면 그 분석기 task가 판정에 반영된다.
 - Markdown·HTML은 환경 절에 모듈·받는 도구·결과·받은 수·사유·한계 표를 보인다.
 
+
+### pull request 보고서
+
+builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-분석))의 보고서는 `pull_request` 절을 싣는다. 다른 run에는 이 필드가 없고 input digest도 이전과 같다. 예시는 [`examples/report-pull-request.json`](../examples/report-pull-request.json)이다(합성 go vet 사실에 pull request를 고정한 것).
+
+- 고정값: `number`, `url`, `title`, `repository`(HOST/OWNER/REPO), `head_repository`(fork면 다르다), `base_ref`·`head_ref`, `base_sha`·`head_sha`, `resolved_at`, `head_analyzed`(snapshot의 commit이 고정한 head와 같은지).
+- 파일 수: `changed_files`(GitHub의 수), `files_listed`(목록에 온 수, `files_truncated`), `files_removed`, `review.reviewable`(head에 있는 변경 파일), `review.in_snapshot`(snapshot이 읽을 수 있는 파일로 가진 것. 나머지는 비밀정보·생성·cache 경로, 링크 규칙으로 빠졌다), `review.sent_to_model`(검토 기록이 보낸 것으로 보여 주는 변경 파일. 실행된 모델 검토 task가 없으면(모델 없음, 소스 전송 끔) null이고 요약은 "0개를 보냈다" 대신 정적 분석만 거쳤다고 쓴다), 보내지 못한 경로 `review.not_sent`(최대 50개)와 `review.not_sent_total`.
+- 나누기: 발견과 도구 진단(지표·억제 진단 제외)을 위치로 나눈다. `changed_lines`(pull request가 더하거나 바꾼 head 쪽 줄과 겹친다), `changed_file`(GitHub이 patch를 주지 않은 변경 파일. 파일 단위로 변경에 넣는다), `changed_file_other_lines`(변경 파일의 다른 줄, 기존 코드), `elsewhere`(변경하지 않은 파일). `line_basis`는 `lines`, `files`(patch가 하나도 없다), `mixed`이고 `files_without_lines`가 patch 없는 파일 수다. 변경 부분의 항목은 `items`(종류, ID, 위치, 경로·줄)에 있다.
+- 요약: 종합 절 첫 문단 뒤에 pull request 번호와 브랜치·SHA, 모델에 보낸 변경 파일 수, 검토하지 않은 삭제 파일, snapshot에 없는 변경 파일, 목록이 잘렸는지, 나눈 기준, 변경 부분과 기존 부분의 수를 적고, 변경 파일을 먼저 검토했으며 저장소의 나머지는 같은 깊이로 검토하지 않았을 수 있다고 적는다. 한계 노트 `pull_request_focus`가 같은 뜻이다.
+- 코드 미포함 내보내기에도 절이 그대로 있다(경로·줄·수·SHA만 담는다). 비교는 이 절을 읽지 않는다. 기본 기준이 같은 pull request의 이전 run이기 때문이다([기본 기준](#기본-기준)).
 
 ## 상태와 판정
 
@@ -356,6 +366,7 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 
 - source variant가 같다. 그 run의 프로젝트 설정 `source`(Git 저장소+브랜치 또는 source root+경로)가 같다.
 - 요청의 `profile`과 `scope`가 같다.
+- 같은 pull request다. pull request run은 같은 번호의 pull request run만, 다른 run은 pull request가 없는 run만 기준으로 삼는다.
 - 보고서가 `completed` 또는 `partial`이고 builder 3 이상이다. `failed`·`cancelled` 보고서는 기본 기준이 아니며, 명시하면 비교할 수 있다.
 
 응답의 `baseline.selection`은 `default` 또는 `explicit`이다. 기준이 없으면 `comparable=false`, `not_comparable_reason=no_baseline`이다. 한쪽이라도 builder 3 미만이면 `comparable=false`, `not_comparable_reason=fingerprint_scheme_differs`이고 run 차이(`builder_version` 등)만 보여준다.

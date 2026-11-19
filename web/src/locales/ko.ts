@@ -396,7 +396,7 @@ export const ko = {
     } as Record<string, string>,
     count: (label: string, n: number) => `${label} ${n}건`,
     reasonLabels: {
-      source_auth_required: '저장소를 인증 없이 읽을 수 없음 — 비공개 저장소는 아직 지원하지 않습니다 (주소가 맞는지도 확인하세요)',
+      source_auth_required: '저장소를 읽을 권한이 없음 — 비공개 github.com 저장소는 gh auth login(또는 GH_TOKEN) 뒤 codeye up을 다시 하면 읽습니다 (주소가 맞는지도 확인하세요)',
       source_unreachable: 'Git 호스트에 연결하지 못함 — 네트워크를 확인하고 다시 시도하세요',
       source_unavailable: '소스를 읽지 못함 — 폴더가 있는지, 읽을 수 있는지 확인하세요',
       source_holds_codeye_data: '이 폴더는 CODEYE 데이터 폴더를 품고 있거나 그 안에 있어 읽지 않음 — 프로젝트가 든 하위 폴더를 고르세요',

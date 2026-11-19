@@ -349,10 +349,25 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 |---|---|---|---|
 | TC-27 | **설계(미구현)**: GitHub App 연결 상태. webhook이 없지만 repository readable | 수동/예약 사용 가능, PR 기능만 연결 미완료 | REQ-024,025 |
 | TC-28 | **설계(미구현)**: webhook·댓글 명령. 잘못된 HMAC·중복 delivery·무권한 mention | 요청 차단/멱등 처리, 승인된 사용자만 실행 | REQ-024,025 |
-| TC-29 | **설계(미구현)**: PR 결과 댓글. PR head 변경 후 이전 결과 완료·댓글 API 실패 | stale 표기, 최신 댓글 미덮어쓰기, outbox만 재시도 | REQ-024,025 |
+| TC-29 | **일부**(개인 모드의 결과 댓글은 TC-228·235, App 경로는 설계): PR 결과 댓글. PR head 변경 후 이전 결과 완료·댓글 API 실패 | stale 표기, 최신 댓글 미덮어쓰기, outbox만 재시도 | REQ-024,025 |
 | TC-35 | 문서·코드·서비스 설정의 기능 검토 | 기존 CI 연결 및 초기 CVE 기능이 없음 | REQ-032,033 |
 
-TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력으로 지금도 동작한다. 연결 상태 표시와 PR 기능은 없다. 연결 계약은 [GitHub 연결](GITHUB.md)에 있다.
+TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력으로 지금도 동작한다. App의 연결 상태 표시와 이벤트는 없다. 개인 모드의 token·pull request·결과 댓글은 아래 TC-227~236이다. 연결 계약은 [GitHub 연결](GITHUB.md)에 있다.
+
+개인 모드의 GitHub token, pull request, 결과 댓글([GitHub 연결](GITHUB.md), [pull request 보고서](REPORT.md#pull-request-보고서), A46):
+
+| TC | 조건 | 기대 결과 | 요구 |
+|---|---|---|---|
+| TC-227 | 가짜 GitHub API와 Git 미러, `GH_TOKEN`, `codeye up --comment …/pull/7`(fork head, 삭제 파일 하나, 변경 줄의 go vet 진단과 기존 코드의 진단) | `up`이 계정·출처와 고정한 head·base·fork를 출력하고 선택을 기억한다. run의 `pull_request`와 보고서 `inputs.commit_sha`가 고정 head다. 보고서 절은 삭제 파일 1, 검토 대상 1, 줄 기준이고 진단을 변경된 줄과 기존 코드로 나눈다. Markdown 요약이 pull request와 "같은 깊이로 검토하지 않았을 수 있다"를 말한다. 댓글 하나가 게시되고 `GET /setup`의 `github`에 token이 없다(`scripts/personal_smoke.py`) | REQ-024 |
+| TC-228 | TC-227 뒤 새 push(ref 이동), 같은 주소로 다시 `up` | 새 head의 새 run, 같은 댓글 하나가 새 head로 고쳐진다. 비교 기준은 이전 run이다(`scripts/personal_smoke.py`) | REQ-024 |
+| TC-229 | `--dry-run-comment`, 그 뒤 상태 디렉터리 전체 | GitHub 쓰기 요청 0, 댓글 미리 보기 출력, 기억한 선택 유지. 모든 GitHub 요청에 token이 있고, token은 `secrets/github.json`(0600)에만 있다(`scripts/personal_smoke.py`) | REQ-024; NFR-006 |
+| TC-230 | token 발견 순서, 거부된 token, GitHub에 닿지 못함, 발견 끔, 여러 줄 token, gh 없음 | 순서대로 고르고 거부된 token과 이전 파일을 지운다. 닿지 못하면 token을 두고 계정을 모른다. 끄면 파일이 없다(`TestSetupGitHubDiscoversStoresAndRemoves`, `TestGitHubConfigField`) | REQ-024; NFR-006 |
+| TC-231 | API client: page 넘김, fork·파일 상태, 짧은 목록, 오류 종류(401·403·404·429·5xx), 다른 origin의 다음 page, redirect, patch의 변경 줄 | 고정값이 정확하고 잘린 목록을 표시한다. token은 API host 밖으로 가지 않는다(`TestResolvePaginatesAndKeepsTheForkAndTheFileStatuses`, `TestResolveMarksAShortListingTruncated`, `TestErrorKinds`, `TestTokenStaysOnTheAPIHost`, `TestChangedLines`) | REQ-024; NFR-006 |
+| TC-232 | `refs/pull/N/head` 가져오기, ref가 움직인 뒤 고정 SHA, 고정 없음·브랜치와 함께, token 전달 | 고정 SHA를 확보하고 ref가 움직여도 그 SHA다. token은 git 환경변수의 header로만 가고 argv·URL·작업 사본에 없다(`TestGitFetchesThePullRequestHead`, `TestGitPullRequestThatMovedFetchesThePinnedCommit`, `TestGitPullRequestNeedsAPinnedHeadAndNoBranch`, `TestGitTokenTravelsInTheEnvironmentOnly`, `TestReadHostToken`) | REQ-024; NFR-006 |
+| TC-233 | HTTP: 서버 모드, 개인 모드 run 보기·미리 보기, 브랜치 run, 기억·명시 댓글, GitHub 404·429·403·401, 번호 0, 다른 host, 예약, 격리 표의 새 경로 | 정한 코드로 거절하고 미리 보기는 쓰지 않는다. 비구성원은 404다(`TestPullRequestRunsOverHTTP`, 격리 표 `runs.pull_request_comment`) | REQ-024,025 |
+| TC-234 | 저장: 고정 값 한 번 쓰기, job의 pull request, outbox 대기·lease·끝·다시 대기, 새 run 게시 뒤 이전 run | 고정 값은 바뀌지 않고 lease는 한 번에 하나다. 더 늦은 run이 게시했으면 이전 run은 `superseded`다(`TestPullRequestRunPinAndJob`, `TestPullRequestCommentOutbox`) | REQ-024 |
+| TC-235 | 게시: 댓글 하나 유지, push 뒤 갱신, DB와 marker의 더 새 version, 남이 붙인 marker, 실패 종류와 재시도, 본문의 mention·참조·문자 참조·URL·code | 하나만 남고 되돌아가지 않는다. 남의 댓글은 고치지 않는다. 본문에 살아 있는 mention·참조·링크·코드가 없다(`TestPosterKeepsOneCommentAndNeverGoesBack`, `TestPosterFailuresAreRecorded`, `TestPublicationMarkerRoundTrip`, `TestRenderedTextHasNoLiveMentionOrReference`) | REQ-024; NFR-006 |
+| TC-236 | 검토 순서: 변경 파일·같은 폴더·나머지, 삭제 파일, 범위 산출물 label, 역할 팩 끝까지, pull request가 아닌 run의 계획, 보고서 절의 분류와 예시 | 변경 파일이 overview와 첫 slot에 먼저 오고 pull request가 아닌 run은 이전과 같다. 보고서 예시(`examples/report-pull-request.json`)가 schema를 지킨다(`TestPullRequestChangedFilesFirst`, `TestPullRequestRunReviewsChangedFilesFirst`, `TestScopePullRequestLabels`, `TestPullRequestSectionClassifiesTheChanges`, `validate_bundle.py`) | REQ-009,012,024 |
 
 ## 요구사항 추적표
 
@@ -372,7 +387,7 @@ TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력
 | REQ-020,021 | EXECUTION | TC-19,20 |
 | REQ-022,035 | ARCHITECTURE, EXECUTION, API | TC-18,21,22,23 |
 | REQ-023 | EXECUTION | TC-25 |
-| REQ-024,025 | GITHUB | TC-27,28,29 |
+| REQ-024,025 | GITHUB | TC-27,28,29, TC-227~236 |
 | REQ-026 | REVIEW | TC-12,34,170,171,172 |
 | REQ-027 | REVIEW, EVALUATION | TC-33,97,100 |
 | REQ-028,029 | ARCHITECTURE, REPORT | TC-14,31 |
