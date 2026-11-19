@@ -63,7 +63,7 @@ func TestRealEngineOverlapExcluded(t *testing.T) {
 	tres := packtest.RunTask(t, tc, fx.Job, "tsc", &executor.Executor{})
 	jststest.Capture(t, "overlap-tsc", tres)
 	tdoc, _ := jststest.ReadEnvelope(t, fx.Job, tres)
-	rules := jststest.Rules(tdoc)
+	rules := packtest.Rules(tdoc)
 	if rules["TS2304"] != 1 || rules["TS2393"] != 2 || rules["TS6133"] != 0 || rules["TS6196"] != 0 || rules["TS7029"] != 0 {
 		t.Fatalf("tsc rules %v", rules)
 	}

@@ -48,14 +48,6 @@ func capture(t *testing.T, name string, res analysis.TaskResult) {
 	}
 }
 
-func ruleCount(doc obsdoc.Document) map[string]int {
-	out := map[string]int{}
-	for _, o := range doc.Observations {
-		out[o.RuleID]++
-	}
-	return out
-}
-
 // TC-07: findings make staticcheck exit 1; with only check records and a
 // clean stderr that is success_with_findings, not a crash.
 func TestRealStaticcheckFindingsExitOne(t *testing.T) {
@@ -81,7 +73,7 @@ func TestRealStaticcheckFindingsExitOne(t *testing.T) {
 	if !slices.Equal(names, []string{execGoVersion, execVersion, execModEdit, execList, execCheck}) {
 		t.Fatalf("executions %v", names)
 	}
-	rules := ruleCount(doc)
+	rules := packtest.Rules(doc)
 	for _, r := range []string{"SA1000", "SA1012", "SA4006", "SA4023", "U1000", "SA2001"} {
 		if rules[r] == 0 {
 			t.Fatalf("rule %s missing: %v", r, rules)
@@ -344,7 +336,7 @@ func TestRealStaticcheckVetOverlapExcluded(t *testing.T) {
 	res := packtest.RunTask(t, newAnalyzer(t, ""), fx.Job, "staticcheck", &executor.Executor{})
 	capture(t, "overlap", res)
 	doc, _ := readEnvelope(t, fx.Job, res)
-	rules := ruleCount(doc)
+	rules := packtest.Rules(doc)
 	for code := range VetOverlap {
 		if rules[code] != 0 {
 			t.Fatalf("excluded check %s reported: %v", code, rules)

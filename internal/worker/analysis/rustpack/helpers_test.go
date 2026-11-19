@@ -111,14 +111,6 @@ func readEnvelope(t *testing.T, job analysis.Job, res analysis.TaskResult) (obsd
 	return packtest.ReadEnvelope(t, job, res, "CODEYE_RUST_DUMP")
 }
 
-func ruleCount(doc obsdoc.Document) map[string]int {
-	out := map[string]int{}
-	for _, o := range doc.Observations {
-		out[o.RuleID]++
-	}
-	return out
-}
-
 // mutatingRunner wraps the real executor and lets a test alter one result.
 type mutatingRunner struct {
 	inner  executor.Runner

@@ -85,7 +85,7 @@ func TestReplayESLintCaptures(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, fx, r, doc := replayRun(t, c.name, c.typed, c.key, nil)
-			got := jststest.Rules(doc)
+			got := packtest.Rules(doc)
 			if doc.Outcome.TaskStatus != c.status || (c.reason != "" && *doc.Outcome.Reason != c.reason) || !mapsEqual(got, c.rules) {
 				t.Fatalf("%s: %+v rules %v errors %+v", c.name, doc.Outcome, got, doc.ToolErrors)
 			}
@@ -154,7 +154,7 @@ func TestReplayOverlapTsc(t *testing.T) {
 	fx := packtest.NewFixture(t, "", replayFiles(t, "overlap-tsc"), domain.Scope{})
 	res := packtest.RunTask(t, tc, fx.Job, "tsc", &jststest.Replay{T: t, Steps: jststest.LoadCapture(t, "overlap-tsc")})
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
-	if got := jststest.Rules(doc); !mapsEqual(got, map[string]int{"TS2304": 1, "TS2393": 2}) {
+	if got := packtest.Rules(doc); !mapsEqual(got, map[string]int{"TS2304": 1, "TS2393": 2}) {
 		t.Fatalf("tsc rules %v", got)
 	}
 }

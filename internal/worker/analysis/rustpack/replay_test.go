@@ -172,7 +172,7 @@ func TestReplayCheckFindings(t *testing.T) {
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || doc.Outcome.PartialParse || !doc.Parse.OK {
 		t.Fatalf("status %s/%s outcome %+v errors %+v", res.Status, res.Reason, doc.Outcome, doc.ToolErrors)
 	}
-	if got := ruleCount(doc); len(got) != 2 || got["unused_imports"] != 1 || got["unused_variables"] != 3 {
+	if got := packtest.Rules(doc); len(got) != 2 || got["unused_imports"] != 1 || got["unused_variables"] != 3 {
 		t.Fatalf("rules %v", got)
 	}
 	files := fixtureFiles(t, "findings")
@@ -221,7 +221,7 @@ func TestReplayClippyFindings(t *testing.T) {
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || !doc.Parse.OK {
 		t.Fatalf("status %s/%s %+v errors %+v", res.Status, res.Reason, doc.Outcome, doc.ToolErrors)
 	}
-	rules := ruleCount(doc)
+	rules := packtest.Rules(doc)
 	want := map[string]int{"clippy::len_zero": 1, "clippy::ptr_arg": 1, "clippy::missing_safety_doc": 1, "clippy::undocumented_unsafe_blocks": 1, "clippy::panic_in_result_fn": 1, "clippy::todo": 1}
 	for r, n := range want {
 		if rules[r] != n {

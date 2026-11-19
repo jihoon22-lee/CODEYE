@@ -287,12 +287,3 @@ func EnvAllowlisted(env map[string]string) bool {
 	_, lang := env["LANG"]
 	return path && lang && len(env) <= want
 }
-
-// Rules counts observations per rule id.
-func Rules(doc obsdoc.Document) map[string]int {
-	out := map[string]int{}
-	for _, o := range doc.Observations {
-		out[o.RuleID]++
-	}
-	return out
-}

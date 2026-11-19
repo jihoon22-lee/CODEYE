@@ -63,8 +63,8 @@ func TestRealStaticcheckOperatorModuleCache(t *testing.T) {
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || !slices.Equal(doc.Coverage.ProcessedPaths, []string{"dep.go"}) {
 		t.Fatalf("operator cache run %s/%s %+v %+v %+v", res.Status, res.Reason, doc.Outcome, doc.Coverage, doc.ToolErrors)
 	}
-	if slices.Contains(doc.Limitations, "no_offline_module_cache") || ruleCount(doc)["SA1000"] != 1 {
-		t.Fatalf("limitations %v rules %v", doc.Limitations, ruleCount(doc))
+	if slices.Contains(doc.Limitations, "no_offline_module_cache") || packtest.Rules(doc)["SA1000"] != 1 {
+		t.Fatalf("limitations %v rules %v", doc.Limitations, packtest.Rules(doc))
 	}
 	for _, s := range runner.specs {
 		if s.Env["GOMODCACHE"] != cache || !slices.Contains(s.ProtectedRoots, cache) || s.Env["GOPROXY"] != "off" {

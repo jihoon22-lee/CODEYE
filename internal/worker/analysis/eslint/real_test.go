@@ -89,7 +89,7 @@ func TestRealESLintMonorepo(t *testing.T) {
 		if check.Name != execCheck || check.Result.ExitCode == nil || *check.Result.ExitCode != 1 || len(check.Result.Stderr.Data) != 0 {
 			t.Fatalf("%s: eslint must exit 1 with findings and a clean stderr: %+v", c.key, check.Result)
 		}
-		rules := jststest.Rules(doc)
+		rules := packtest.Rules(doc)
 		for _, r := range c.rules {
 			if rules[r] == 0 {
 				t.Fatalf("%s: rule %s missing: %v", c.key, r, rules)
@@ -171,7 +171,7 @@ func TestRealESLintParseError(t *testing.T) {
 	if res.Status != domain.TaskFailed || res.Reason != ReasonParseErrors || !doc.Outcome.PartialParse || *check.Result.ExitCode != 1 {
 		t.Fatalf("parse error %s/%s %+v", res.Status, res.Reason, doc.Outcome)
 	}
-	if len(doc.ToolErrors) != 1 || doc.ToolErrors[0].Kind != "parse" || *doc.ToolErrors[0].Path != "index.js" || jststest.Rules(doc)["no-unused-vars"] != 1 ||
+	if len(doc.ToolErrors) != 1 || doc.ToolErrors[0].Kind != "parse" || *doc.ToolErrors[0].Path != "index.js" || packtest.Rules(doc)["no-unused-vars"] != 1 ||
 		doc.Coverage.ProcessedPaths != nil || doc.Coverage.Units[FileParseError] != 1 {
 		t.Fatalf("tool errors %+v coverage %+v", doc.ToolErrors, doc.Coverage)
 	}
@@ -188,7 +188,7 @@ func TestRealESLintSuppressionsDisabled(t *testing.T) {
 	res := packtest.RunTask(t, a, fx.Job, "eslint", &executor.Executor{})
 	jststest.Capture(t, "suppressions", res)
 	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
-	rules := jststest.Rules(doc)
+	rules := packtest.Rules(doc)
 	if res.Status != domain.TaskSucceeded || rules["no-empty"] != 1 || rules["no-unused-vars"] != 1 || rules["no-debugger"] != 1 {
 		t.Fatalf("suppressions %s/%s rules %v errors %+v", res.Status, res.Reason, rules, doc.ToolErrors)
 	}

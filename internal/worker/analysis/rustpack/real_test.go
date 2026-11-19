@@ -87,7 +87,7 @@ func TestRealCargoCheckFindings(t *testing.T) {
 	if main.Result.ExitCode == nil || *main.Result.ExitCode != 0 {
 		t.Fatalf("warnings must exit 0: %+v", main.Result)
 	}
-	if got, want := ruleCount(doc), map[string]int{"unused_imports": 1, "unused_variables": 3}; len(got) != len(want) || got["unused_imports"] != 1 || got["unused_variables"] != 3 {
+	if got, want := packtest.Rules(doc), map[string]int{"unused_imports": 1, "unused_variables": 3}; len(got) != len(want) || got["unused_imports"] != 1 || got["unused_variables"] != 3 {
 		t.Fatalf("rules %v, want %v (the #[allow]ed variable must not appear)", got, want)
 	}
 	for _, o := range doc.Observations {
@@ -110,7 +110,7 @@ func TestRealCargoCheckFindings(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("tail diagnostic missing: %v", ruleCount(doc))
+		t.Fatalf("tail diagnostic missing: %v", packtest.Rules(doc))
 	}
 	if !slices.Equal(doc.Coverage.ProcessedPaths, []string{"src/lib.rs", "src/main.rs", "tests/it.rs"}) || *doc.Coverage.FilesInScope != 3 || doc.Coverage.FilesUnlisted != 0 ||
 		doc.Coverage.Units[CrateAnalyzedWithFindings] != 1 || doc.Coverage.Unit != "crate" {
@@ -194,7 +194,7 @@ func TestRealClippyFindings(t *testing.T) {
 	if !slices.Equal(execNames(doc), []string{execRustc, execCargo, execClippyV, execClippy}) {
 		t.Fatalf("executions %v", execNames(doc))
 	}
-	rules := ruleCount(doc)
+	rules := packtest.Rules(doc)
 	want := map[string]int{"clippy::len_zero": 1, "clippy::ptr_arg": 1, "clippy::missing_safety_doc": 1, "clippy::undocumented_unsafe_blocks": 1, "clippy::panic_in_result_fn": 1, "clippy::todo": 1}
 	for r, n := range want {
 		if rules[r] != n {
@@ -378,7 +378,7 @@ func TestRealWorkspace(t *testing.T) {
 	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings {
 		t.Fatalf("status %s/%s errors %+v", res.Status, res.Reason, doc.ToolErrors)
 	}
-	if got := ruleCount(doc); len(got) != 1 || got["unused_variables"] != 1 || *doc.Observations[0].Path != "crates/app/src/lib.rs" || doc.Observations[0].Unit != "app" {
+	if got := packtest.Rules(doc); len(got) != 1 || got["unused_variables"] != 1 || *doc.Observations[0].Path != "crates/app/src/lib.rs" || doc.Observations[0].Unit != "app" {
 		t.Fatalf("rules %v obs %+v", got, doc.Observations)
 	}
 	if !slices.Equal(doc.Coverage.ProcessedPaths, []string{"crates/app/src/lib.rs", "crates/core/src/lib.rs"}) || doc.Coverage.Units[CrateAnalyzedWithFindings] != 1 || doc.Coverage.Units[CrateAnalyzedClean] != 1 {

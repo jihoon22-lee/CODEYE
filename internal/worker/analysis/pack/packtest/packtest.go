@@ -171,6 +171,15 @@ func ReadEnvelope(t testing.TB, job analysis.Job, res analysis.TaskResult, dumpE
 	return doc, raw
 }
 
+// Rules counts observations per rule id.
+func Rules(doc obsdoc.Document) map[string]int {
+	out := map[string]int{}
+	for _, o := range doc.Observations {
+		out[o.RuleID]++
+	}
+	return out
+}
+
 // AssertNoNodePaths fails when raw holds any of the node paths, native or
 // slash separated.
 func AssertNoNodePaths(t testing.TB, raw []byte, paths ...string) {

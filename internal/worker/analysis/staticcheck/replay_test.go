@@ -127,7 +127,7 @@ func TestReplayFindingsExitOne(t *testing.T) {
 		t.Fatalf("status %s/%s %+v %+v", res.Status, res.Reason, doc.Outcome, doc.ToolErrors)
 	}
 	want := map[string]int{"SA1000": 1, "SA1012": 1, "SA4006": 2, "SA4023": 1, "U1000": 1, "SA2001": 1}
-	if got := ruleCount(doc); len(got) != len(want) {
+	if got := packtest.Rules(doc); len(got) != len(want) {
 		t.Fatalf("rules %v", got)
 	} else {
 		for k, v := range want {
