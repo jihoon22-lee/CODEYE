@@ -2466,18 +2466,6 @@
   ],
   "gaps": [
     {
-      "code": "discovery_limitation",
-      "detail": "document_budget_exceeded",
-      "section": "documents",
-      "subject": null
-    },
-    {
-      "code": "discovery_limitation",
-      "detail": "semantic_conflicts_not_assessed",
-      "section": "documents",
-      "subject": null
-    },
-    {
       "code": "document_budget_exceeded",
       "detail": "document_too_large",
       "section": "documents",
@@ -2730,7 +2718,7 @@
       },
       {
         "code": "analysis_gaps",
-        "count": 8,
+        "count": 6,
         "section": "gaps"
       }
     ],
@@ -2805,7 +2793,7 @@
       },
       {
         "counts": {
-          "gaps": 8
+          "gaps": 6
         },
         "key": "gaps",
         "state": null

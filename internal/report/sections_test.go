@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -144,7 +145,7 @@ func TestSectionsPartitionRejected(t *testing.T) {
 			r.CodeReview.FindingIDs = append(r.CodeReview.FindingIDs, scFinding)
 		},
 		"model finding dropped": func(r *Report) { r.CodeReview.FindingIDs = r.CodeReview.FindingIDs[1:] },
-		"tool finding dropped": func(r *Report) { x := staticTool(t, r, "staticcheck"); x.FindingIDs = []string{} },
+		"tool finding dropped":  func(r *Report) { x := staticTool(t, r, "staticcheck"); x.FindingIDs = []string{} },
 		"overview count invented": func(r *Report) {
 			for i := range r.Overview.Sections {
 				if r.Overview.Sections[i].Key == SectionCodeReview {
@@ -152,12 +153,12 @@ func TestSectionsPartitionRejected(t *testing.T) {
 				}
 			}
 		},
-		"rule tally invented": func(r *Report) { x := staticTool(t, r, "staticcheck"); x.Rules[0].Count++ },
+		"rule tally invented":       func(r *Report) { x := staticTool(t, r, "staticcheck"); x.Rules[0].Count++ },
 		"metric group max invented": func(r *Report) { r.Metrics.Metrics[0].MaxValue++ },
-		"gap removed":              func(r *Report) { r.Gaps = r.Gaps[1:] },
-		"attention removed":        func(r *Report) { r.Overview.Attention = r.Overview.Attention[1:] },
-		"unknown section state":    func(r *Report) { r.Metrics.Stage.State = "done" },
-		"section block missing":    func(r *Report) { r.Secrets = nil },
+		"gap removed":               func(r *Report) { r.Gaps = r.Gaps[1:] },
+		"attention removed":         func(r *Report) { r.Overview.Attention = r.Overview.Attention[1:] },
+		"unknown section state":     func(r *Report) { r.Metrics.Stage.State = "done" },
+		"section block missing":     func(r *Report) { r.Secrets = nil },
 		"sections on an older builder": func(r *Report) {
 			r.Builder.Version = "4"
 		},
@@ -282,7 +283,7 @@ func TestSectionsWithoutModelReview(t *testing.T) {
 		t.Fatalf("verdict %s, ai review %s", r.QualityVerdict, r.Coverage.AIReview.Status)
 	}
 	md := string(RenderMarkdown(r, strings.Repeat("0", 64), Korean))
-	if !strings.Contains(md, Korean.Labels["model_not_performed_reason"]) {
+	if want := mdText(tf(Korean, "model.not_performed", reasonText(Korean, "review_tasks_not_planned"))); strings.Count(md, want) != 2 {
 		t.Fatalf("markdown does not say why the model interpretation is absent:\n%s", md)
 	}
 }
@@ -344,4 +345,53 @@ func TestOldRevisionRendersFlat(t *testing.T) {
 func mustRegistry(t *testing.T) *Registry {
 	t.Helper()
 	return DefaultRegistry()
+}
+
+// The example's JSON, Markdown and HTML show the same section numbers, and
+// every observation and finding appears once in the HTML (full and
+// code-free export).
+func TestExampleFormatsShowSameNumbers(t *testing.T) {
+	full := exampleReport(t)
+	for _, include := range []bool{true, false} {
+		r := Project(full, include)
+		b, err := Marshal(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html, err := RenderHTML(r, Digest(b), Korean)
+		if err != nil {
+			t.Fatal(err)
+		}
+		md := string(RenderMarkdown(r, Digest(b), Korean))
+		h := string(html)
+		if strings.Count(h, `data-observation="`) != len(r.Observations) || strings.Count(h, `data-finding="`) != len(r.Findings) || strings.Count(md, "\n#### ") != len(r.Findings) {
+			t.Fatalf("include_code=%v: rendered lists differ from the report", include)
+		}
+		for _, s := range r.Overview.Sections {
+			for k, n := range s.Counts {
+				if s.Key == SectionGaps {
+					continue
+				}
+				if !strings.Contains(h, `data-count="`+s.Key+"."+k+`">`+strconv.Itoa(n)+"<") {
+					t.Fatalf("html lacks %s.%s=%d", s.Key, k, n)
+				}
+				if !strings.Contains(md, "| "+mdText(Korean.Label("count."+s.Key+"."+k))+" | "+strconv.Itoa(n)+" |") {
+					t.Fatalf("markdown lacks %s.%s=%d", s.Key, k, n)
+				}
+			}
+		}
+		for _, sec := range []string{"environment", "documents", "static_analysis", "metrics", "secrets", "code_review", "gaps"} {
+			if !strings.Contains(h, `<section id="`+sec+`" data-section="`+sec+`">`) || !strings.Contains(md, "## "+mdText(Korean.Label("section."+sec))+"\n") {
+				t.Fatalf("section %s not rendered", sec)
+			}
+		}
+		statement := full.Documents.Contracts[0].Statement
+		if !include && (strings.Contains(h, statement) || strings.Contains(md, mdText(statement))) {
+			t.Fatal("code-free rendering carries a model statement")
+		}
+		// A task that did not run never reads as zero diagnostics.
+		if !strings.Contains(md, "| `jscpd` |") || !strings.Contains(md, mdText(Korean.Label("not_run"))) {
+			t.Fatal("not-run tool row missing its state")
+		}
+	}
 }

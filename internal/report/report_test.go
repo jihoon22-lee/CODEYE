@@ -635,8 +635,33 @@ func TestFormatsShowSameCounts(t *testing.T) {
 			t.Fatalf("markdown count %s missing", row.Name)
 		}
 	}
-	if strings.Count(md, "\n### ") != len(r.Findings) {
+	if strings.Count(md, "\n#### ") != len(r.Findings) {
 		t.Fatal("markdown finding count differs")
+	}
+	// Every section count of the overview is the same number in HTML and
+	// Markdown (docs/REPORT.md#분석-종류별-절).
+	sectionCount := regexp.MustCompile(`data-count="([a-z_]+\.[a-z_]+)">([0-9]+)<`)
+	shown := map[string]string{}
+	for _, m := range sectionCount.FindAllStringSubmatch(string(html), -1) {
+		shown[m[1]] = m[2]
+	}
+	sections := 0
+	for _, s := range back.Overview.Sections {
+		for k, n := range s.Counts {
+			if s.Key == SectionGaps {
+				continue
+			}
+			sections++
+			if shown[s.Key+"."+k] != strconv.Itoa(n) {
+				t.Fatalf("html section count %s.%s = %q, report %d", s.Key, k, shown[s.Key+"."+k], n)
+			}
+			if !strings.Contains(md, "| "+mdText(Korean.Label("count."+s.Key+"."+k))+" | "+strconv.Itoa(n)+" |") {
+				t.Fatalf("markdown section count %s.%s missing", s.Key, k)
+			}
+		}
+	}
+	if sections == 0 {
+		t.Fatal("no section count rendered")
 	}
 	for _, s := range []string{digest, r.ID, r.Inputs.SnapshotID} {
 		if !strings.Contains(md, s) || !strings.Contains(string(html), s) {
@@ -674,14 +699,28 @@ func TestRenderingEscapesHostileText(t *testing.T) {
 			t.Fatalf("non-fragment link %s", m[1])
 		}
 	}
-	md := string(RenderMarkdown(r, Digest(b), Korean))
-	outside := stripCodeSpans(md)
-	if strings.Contains(outside, "<script") || strings.Contains(outside, "<img") || strings.Contains(outside, "](") || strings.Contains(outside, "![") || strings.Contains(outside, "\n# heading") {
-		t.Fatalf("markdown structure broken:\n%s", md)
-	}
-	for _, line := range strings.Split(md, "\n") {
-		if strings.HasPrefix(line, "| `obs_") && strings.Count(strings.ReplaceAll(line, "\\|", ""), "|") != 8 {
-			t.Fatalf("table row structure changed: %s", line)
+	// The sectioned layout (6 observation columns) and the flat layout of
+	// older revisions (7 columns) both keep their table structure.
+	flat := r
+	flat.Builder.Version = "4"
+	flat.Overview, flat.Environment, flat.Documents, flat.StaticAnalysis, flat.Metrics, flat.Secrets, flat.CodeReview, flat.Gaps = nil, nil, nil, nil, nil, nil, nil, nil
+	for rep, pipes := range map[*Report]int{&r: 7, &flat: 8} {
+		md := string(RenderMarkdown(*rep, Digest(b), Korean))
+		outside := stripCodeSpans(md)
+		if strings.Contains(outside, "<script") || strings.Contains(outside, "<img") || strings.Contains(outside, "](") || strings.Contains(outside, "![") || strings.Contains(outside, "\n# heading") {
+			t.Fatalf("markdown structure broken:\n%s", md)
+		}
+		rows := 0
+		for _, line := range strings.Split(md, "\n") {
+			if strings.HasPrefix(line, "| `obs_") {
+				rows++
+				if strings.Count(strings.ReplaceAll(line, "\\|", ""), "|") != pipes {
+					t.Fatalf("table row structure changed: %s", line)
+				}
+			}
+		}
+		if rows == 0 {
+			t.Fatal("no observation row rendered")
 		}
 	}
 }

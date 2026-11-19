@@ -49,12 +49,20 @@ func (c sectionContext) gaps() []Gap {
 		if d.Discovery != DiscoveryAccepted {
 			add(SectionDocuments, "discovery_"+d.Discovery, strPtr(envdoc.TaskDocuments), nil)
 		}
+		budget := false
 		for _, x := range d.Items {
 			if x.Status != envdoc.DocSelected {
 				add(SectionDocuments, "document_"+x.Status, strPtr(x.Path), x.Reason)
+				budget = budget || x.Status == envdoc.DocBudgetExceeded
 			}
 		}
 		for _, l := range d.Limitations {
+			// A limitation the list already shows per document, or one the
+			// performed documents role answered (discovery itself never
+			// compares guidance), is no further gap.
+			if (l == "document_budget_exceeded" && budget) || (l == "semantic_conflicts_not_assessed" && d.Model.State == ModelPerformed) {
+				continue
+			}
 			add(SectionDocuments, "discovery_limitation", nil, strPtr(l))
 		}
 		if d.Model.State != ModelPerformed {

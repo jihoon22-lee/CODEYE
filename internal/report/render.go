@@ -98,6 +98,9 @@ func short(s string) string {
 // or a code span, so tool text cannot create links, images, HTML or table
 // structure.
 func RenderMarkdown(r Report, digest string, l Locale) []byte {
+	if r.hasSections() {
+		return renderMarkdownSections(r, digest, l)
+	}
 	v := newView(r, digest, l)
 	var b strings.Builder
 	p := func(s ...string) {
@@ -106,6 +109,59 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		}
 		b.WriteByte('\n')
 	}
+	mdHeader(p, r, v, l)
+	p("## ", mdText(l.Label("summary")))
+	p()
+	p("| ", mdText(l.Label("raw_to_findings")), " | 수 |")
+	p("|---|---|")
+	for _, c := range v.Counts {
+		p("| ", mdText(c.Label), " | ", c.Value, " |")
+	}
+	p()
+	if len(r.Summary.Priorities) > 0 {
+		p("우선 확인:")
+		for _, id := range r.Summary.Priorities {
+			p("- ", mdCode(id))
+		}
+		p()
+	}
+	mdAIReview(p, r, l, "## ")
+	mdCoverage(p, r, v, l, "## ")
+	mdTasks(p, r, l, "## ")
+	p("## ", mdText(l.Label("findings")))
+	p()
+	p(mdText(l.Label("code_excerpt_none")))
+	p()
+	if len(r.Findings) == 0 {
+		p(mdText(l.Label("no_findings")))
+		p()
+	}
+	for _, f := range r.Findings {
+		mdFinding(p, f, "### ")
+	}
+	p("## ", mdText(l.Label("observations")))
+	p()
+	if len(r.Observations) == 0 {
+		p(mdText(l.Label("no_observations")))
+	} else {
+		p("| id | task | rule | 위치 | 상태 | 근거 | 메시지 |")
+		p("|---|---|---|---|---|---|---|")
+		for _, o := range r.Observations {
+			loc := l.Label("none")
+			if o.Location != nil {
+				loc = o.Location.Path + ":" + strconv.Itoa(o.Location.StartLine) + ":" + strconv.Itoa(o.Location.StartCol)
+			}
+			p("| ", mdCode(o.ID), " | ", mdCode(o.TaskKey), " | ", mdCode(o.RuleID), " | ", mdCode(loc), " | ", mdCode(o.LocationState), " | ", mdCode(o.EvidenceState), " | ", mdCode(v.Message[o.ID]), " |")
+		}
+	}
+	p()
+	mdAppendix(p, r, v, l, "## ")
+	p("digest sha256: ", mdCode(digest))
+	return []byte(b.String())
+}
+
+// mdHeader is the identity table and status banner both layouts start with.
+func mdHeader(p func(...string), r Report, v view, l Locale) {
 	p("# ", mdText(l.Label("title")))
 	p()
 	p("| 항목 | 값 |")
@@ -131,22 +187,10 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 	p()
 	p("> ", mdText(v.Banner))
 	p()
-	p("## ", mdText(l.Label("summary")))
-	p()
-	p("| ", mdText(l.Label("raw_to_findings")), " | 수 |")
-	p("|---|---|")
-	for _, c := range v.Counts {
-		p("| ", mdText(c.Label), " | ", c.Value, " |")
-	}
-	p()
-	if len(r.Summary.Priorities) > 0 {
-		p("우선 확인:")
-		for _, id := range r.Summary.Priorities {
-			p("- ", mdCode(id))
-		}
-		p()
-	}
-	p("## ", mdText(l.Label("ai_review")))
+}
+
+func mdAIReview(p func(...string), r Report, l Locale, h string) {
+	p(h, mdText(l.Label("ai_review")))
 	p()
 	ai := r.Coverage.AIReview
 	reason := ""
@@ -194,7 +238,10 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		p("- 모델 호출 ", mdCode(c.Role), " · ", mdCode(c.Model), " · OpenCode ", mdCode(c.Version), " · ", mdCode(c.Outcome), " · 지침", pack, " ", mdCode(c.PackDigest))
 	}
 	p()
-	p("## ", mdText(l.Label("coverage")))
+}
+
+func mdCoverage(p func(...string), r Report, v view, l Locale, h string) {
+	p(h, mdText(l.Label("coverage")))
 	p()
 	p("- scope: ", mdCode(r.Coverage.ScopeMode))
 	p("- inventory_files: ", strconv.Itoa(r.Coverage.InventoryFiles))
@@ -226,7 +273,10 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		}
 		p()
 	}
-	p("## ", mdText(l.Label("tasks")))
+}
+
+func mdTasks(p func(...string), r Report, l Locale, h string) {
+	p(h, mdText(l.Label("tasks")))
 	p()
 	p("| task | 필수 | 상태 | 사유 |")
 	p("|---|---|---|---|")
@@ -238,71 +288,53 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		p("| ", mdCode(t.Key), " | ", strconv.FormatBool(t.RequiredForVerdict), " | ", mdCode(t.Status), " | ", mdCode(reason), " |")
 	}
 	p()
-	p("## ", mdText(l.Label("findings")))
+}
+
+// mdFinding renders one finding under heading level h.
+func mdFinding(p func(...string), f Finding, h string) {
+	p(h, mdText(f.Title))
 	p()
-	p(mdText(l.Label("code_excerpt_none")))
-	p()
-	if len(r.Findings) == 0 {
-		p(mdText(l.Label("no_findings")))
-		p()
+	p("- id: ", mdCode(f.ID))
+	p("- category / severity: ", mdCode(f.Category), " / ", mdCode(f.Severity), " — ", mdText(f.SeverityReason))
+	p("- validation / disposition: ", mdCode(f.Validation), " / ", mdCode(f.Disposition))
+	for _, loc := range f.Locations {
+		p("- location: ", mdCode(loc.Path+":"+strconv.Itoa(loc.StartLine)+"-"+strconv.Itoa(loc.EndLine)))
 	}
-	for _, f := range r.Findings {
-		p("### ", mdText(f.Title))
-		p()
-		p("- id: ", mdCode(f.ID))
-		p("- category / severity: ", mdCode(f.Category), " / ", mdCode(f.Severity), " — ", mdText(f.SeverityReason))
-		p("- validation / disposition: ", mdCode(f.Validation), " / ", mdCode(f.Disposition))
-		for _, loc := range f.Locations {
-			p("- location: ", mdCode(loc.Path+":"+strconv.Itoa(loc.StartLine)+"-"+strconv.Itoa(loc.EndLine)))
-		}
-		for _, cond := range f.Conditions {
-			p("- 발생 조건 (", mdCode(cond.Status), ") ", mdText(cond.Statement), " ", mdCode(strings.Join(cond.EvidenceIDs, ",")))
-		}
-		if len(f.CounterevidenceIDs) > 0 {
-			p("- 반대 근거 ", mdCode(strings.Join(f.CounterevidenceIDs, ",")))
-		}
-		p("- impact: ", mdText(f.Impact))
-		for _, c := range f.Claims {
-			p("- claim (", mdCode(c.Kind), "): ", mdText(c.Assertion), " [", mdCode(strings.Join(c.EvidenceIDs, ",")), "]")
-		}
-		for _, e := range f.Evidence {
-			ref := e.ArtifactID
-			if e.Location != nil {
-				ref = e.Location.Path + ":" + strconv.Itoa(e.Location.StartLine) + " sha256 " + short(e.BlobSHA256)
-			} else if e.JSONPointer != nil {
-				ref += " " + *e.JSONPointer
-			}
-			p("- evidence ", mdCode(e.ID), " (", mdCode(e.Kind), "): ", mdText(e.Description), " ", mdCode(ref))
-		}
-		if len(f.ObservationIDs) > 0 {
-			p("- observations: ", mdCode(strings.Join(f.ObservationIDs, ",")))
-		}
-		p("- recommendation: ", mdText(f.Recommendation.Summary))
-		for _, x := range f.Verification {
-			p("- verification: ", mdText(x))
-		}
-		for _, x := range f.Limitations {
-			p("- limitation: ", mdText(x))
-		}
-		p()
+	for _, cond := range f.Conditions {
+		p("- 발생 조건 (", mdCode(cond.Status), ") ", mdText(cond.Statement), " ", mdCode(strings.Join(cond.EvidenceIDs, ",")))
 	}
-	p("## ", mdText(l.Label("observations")))
-	p()
-	if len(r.Observations) == 0 {
-		p(mdText(l.Label("no_observations")))
-	} else {
-		p("| id | task | rule | 위치 | 상태 | 근거 | 메시지 |")
-		p("|---|---|---|---|---|---|---|")
-		for _, o := range r.Observations {
-			loc := l.Label("none")
-			if o.Location != nil {
-				loc = o.Location.Path + ":" + strconv.Itoa(o.Location.StartLine) + ":" + strconv.Itoa(o.Location.StartCol)
-			}
-			p("| ", mdCode(o.ID), " | ", mdCode(o.TaskKey), " | ", mdCode(o.RuleID), " | ", mdCode(loc), " | ", mdCode(o.LocationState), " | ", mdCode(o.EvidenceState), " | ", mdCode(v.Message[o.ID]), " |")
+	if len(f.CounterevidenceIDs) > 0 {
+		p("- 반대 근거 ", mdCode(strings.Join(f.CounterevidenceIDs, ",")))
+	}
+	p("- impact: ", mdText(f.Impact))
+	for _, c := range f.Claims {
+		p("- claim (", mdCode(c.Kind), "): ", mdText(c.Assertion), " [", mdCode(strings.Join(c.EvidenceIDs, ",")), "]")
+	}
+	for _, e := range f.Evidence {
+		ref := e.ArtifactID
+		if e.Location != nil {
+			ref = e.Location.Path + ":" + strconv.Itoa(e.Location.StartLine) + " sha256 " + short(e.BlobSHA256)
+		} else if e.JSONPointer != nil {
+			ref += " " + *e.JSONPointer
 		}
+		p("- evidence ", mdCode(e.ID), " (", mdCode(e.Kind), "): ", mdText(e.Description), " ", mdCode(ref))
+	}
+	if len(f.ObservationIDs) > 0 {
+		p("- observations: ", mdCode(strings.Join(f.ObservationIDs, ",")))
+	}
+	p("- recommendation: ", mdText(f.Recommendation.Summary))
+	for _, x := range f.Verification {
+		p("- verification: ", mdText(x))
+	}
+	for _, x := range f.Limitations {
+		p("- limitation: ", mdText(x))
 	}
 	p()
-	p("## ", mdText(l.Label("executions")))
+}
+
+// mdAppendix is the executions, artifacts and limitations of both layouts.
+func mdAppendix(p func(...string), r Report, v view, l Locale, h string) {
+	p(h, mdText(l.Label("executions")))
 	p()
 	p("| 실행 | 상태 | exit | 정리 | argv | cwd | stdout | stderr |")
 	p("|---|---|---|---|---|---|---|---|")
@@ -315,7 +347,7 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 			mdCode(artRef(e.StdoutArtifactID, e.StdoutTruncated)), " | ", mdCode(artRef(e.StderrArtifactID, e.StderrTruncated)), " |")
 	}
 	p()
-	p("## ", mdText(l.Label("artifacts")))
+	p(h, mdText(l.Label("artifacts")))
 	p()
 	p("| id | task | role | media | sha256 | bytes | decoder |")
 	p("|---|---|---|---|---|---|---|")
@@ -330,14 +362,12 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		p("| ", mdCode(a.ID), " | ", mdCode(task), " | ", mdCode(a.Role), " | ", mdCode(a.MediaType), " | ", mdCode(a.SHA256), " | ", strconv.FormatInt(a.SizeBytes, 10), " | ", mdCode(dec), " |")
 	}
 	p()
-	p("## ", mdText(l.Label("limitations")))
+	p(h, mdText(l.Label("limitations")))
 	p()
 	for _, x := range v.Limitations {
 		p("- ", mdText(x))
 	}
 	p()
-	p("digest sha256: ", mdCode(digest))
-	return []byte(b.String())
 }
 
 func artRef(id *string, truncated bool) string {
@@ -442,7 +472,8 @@ func mdCode(s string) string {
 // a saved file keeps the policy: no script, no external fetch of any kind.
 const HTMLContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
-var htmlTemplate = template.Must(template.New("report").Funcs(template.FuncMap{
+// htmlFuncs are the template functions of both HTML layouts.
+var htmlFuncs = template.FuncMap{
 	"itoa": strconv.Itoa,
 	"i64":  func(n int64) string { return strconv.FormatInt(n, 10) },
 	"deref": func(p *string, def string) string {
@@ -462,7 +493,10 @@ var htmlTemplate = template.Must(template.New("report").Funcs(template.FuncMap{
 	"code":     func(l Locale, c string) string { return l.Code(c) },
 	"packages": packages,
 	"artref":   artRef,
-}).Parse(`<!DOCTYPE html>
+	"pair":     func(l Locale, p secPart) partArgs { return partArgs{L: l, P: p} },
+}
+
+var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -567,6 +601,9 @@ code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:a
 // RenderHTML renders a self-contained page: html/template escaping, no
 // script, no external resource, links only to in-page fragments.
 func RenderHTML(r Report, digest string, l Locale) ([]byte, error) {
+	if r.hasSections() {
+		return renderHTMLSections(r, digest, l)
+	}
 	var buf bytes.Buffer
 	if err := htmlTemplate.Execute(&buf, newView(r, digest, l)); err != nil {
 		return nil, err
