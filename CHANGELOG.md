@@ -4,6 +4,14 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — Python 의존성 받기
+
+- **받기**: mypy·pyright 모듈마다 `deps.python`·`deps.python.mNN` task가 `uv.lock`(uv `export --frozen --offline`), `pyproject.toml`의 `[project]` dependencies·optional-dependencies·dependency-groups, `requirements*.txt`를 읽어 CODEYE의 요구사항 파일을 쓰고 wheel만 트리 하나에 설치한다(uv가 있으면 `uv pip install --no-build`, 없으면 `--python`의 `pip install --only-binary=:all:`). wheel이 없는 요구사항은 빼고 다시 설치해 `partial`로 남긴다. 저장소가 적은 index·editable·로컬·VCS 요구사항은 따르지 않고 `dropped_inputs`에 남긴다. 받은 트리의 `*.pth`·`sitecustomize`는 지운다. 버전이 모두 고정되면 공유 트리(`python/trees/<key>`)를 다음 run이 다시 쓰고, 아니면 attempt 트리다([Python 의존성 받기](docs/ANALYZERS.md#python-의존성-받기), A44).
+- **분석기 연결**: pyright는 `venvPath`/`venv`, mypy는 `--python-executable`(운영자 interpreter와 받은 site-packages를 묶은 scratch 가짜 venv)로 받은 트리를 읽고 `third_party_packages_prepared`(`partially_prepared`)를 남긴다. Windows의 mypy는 패키지 없이 검사한다(`prepared_packages_not_used`).
+- **도구와 설정**: 도구 찾기가 uv와 python(pip이 없으면 uv가 있을 때만)을 찾는다. 에이전트 `--python`·`--uv`·`--pip-index-url`, 개인 모드 `agent.tools.python`·`agent.tools.uv`·`agent.dependencies.pip_index_url`(인증정보 URL 거부), hello `dependencies.package_managers`·`pip_index_url`.
+- **보고서**: 받기가 꺼진 run에서 Python 타입 검사기가 패키지 없이 import를 풀지 못하면 `dependencies_not_fetched`(`imports_unresolved`)이고 "의존성 받기 켜고 다시 시도"가 나온다. 아직 출시하지 않은 builder 7 안의 변경이라 버전은 그대로다. Python 사유·한계의 한국어 라벨을 더했다.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10, Python 3.14.4, uv 0.12.5, mypy 2.4.1, pyright 1.1.414(Node 24.18.0), ruff 0.16.3, bandit 1.9.4. 임시 설정·상태 디렉터리, 모델 없음(`OPENAI_API_KEY` 없음)으로 `codeye up`을 실행했다. `encode/httpx`(커밋 `7cff5f7`)는 받기 끔에서 mypy `import_unresolved` 63·`stub_missing` 3, pyright `import_unresolved` 68·`import_source_missing` 2, 관찰 168·발견 129였고, 받기 켬에서 `deps.python`이 27개 중 26개를 받고 wheel이 없는 `mkautodoc`을 뺐으며(`partial`/`no_binary_distribution`, 고정 안 됨이라 attempt 트리) mypy `import_unresolved` 2·`stub_missing` 4, pyright `import_unresolved` 1, 관찰 184·발견 145(pyright `reportArgumentType` 17개가 새로 나옴)였다. 고정된 `requirements.txt`(attrs·idna)의 작은 로컬 프로젝트는 받기 끔에서 mypy·pyright가 attrs 클래스 생성자를 모르고 `call-arg`·`reportCallIssue` 2개씩을 냈고(받기 공백 `dependencies_not_fetched` 둘), 받기 켬에서 그것이 사라지고 실제 결함인 `arg-type`·`return-value`(pyright `reportArgumentType`·`reportReturnType`) 3개씩이 나왔다. 두 번째 run은 설치 없이 공유 트리를 썼다(`prepared_tree_reused`). 고정하지 않은 같은 프로젝트는 attempt 트리와 `dependency_versions_not_pinned`였다. 닿지 않는 index(`http://127.0.0.1:9/simple`)는 `deps.python` `failed`/`registry_unreachable`로 끝나고 분석은 계속됐다. 세 로컬 프로젝트의 파일 hash와 항목 수는 실행 전후 같았다. 모든 보고서가 `partial`인 이유는 모델 검토가 없어서다.
+
 ### 추가 — Go 의존성 받기
 
 - **의존성 준비**: 분석 전에 Go 모듈마다 `deps.go`·`deps.go.mNN` task가 의존성을 받고(`go mod download -json -modfile=<사본>`), go vet·Staticcheck는 그 캐시를 오프라인으로 읽는다. 받기는 실행 사본의 모듈 디렉터리에서 하고 원본·snapshot·실행 사본의 go.mod·go.sum을 바꾸지 않는다. 필수 task가 아니어서 실패해도 분석은 계속하고 사유가 남는다([의존성 준비](docs/ARCHITECTURE.md#의존성-준비), A42).
