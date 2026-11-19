@@ -12,7 +12,7 @@
 | `codeye tools` | 이 머신에서 찾은 도구, 없는 도구, 추가 방법을 표로 보인다 |
 | `codeye run recover`, `codeye cleanup`, `codeye service` | 정리 확인([runbook](#장애-대응-runbook)), [보존 정리](#보존-정리)(기본 dry run), [사용자 서비스](#사용자-서비스)(systemd 사용자 unit, Linux) |
 | 여러 노드 | 한 호스트의 노드 신원 여럿으로 배정·사망·분할·drain·갱신을 시험했다([실행](EXECUTION.md#여러-노드에서-확인한-것)). 여러 물리 노드는 검증하지 않았다 |
-| 서버 배포, 다중 노드, 폐쇄망 배포팩 | 설계 계약(미구현). 마지막 두 절 |
+| 서버 배포(여러 머신의 노드), 폐쇄망 배포팩 | 설계 계약(미구현). 마지막 두 절 |
 
 관련 요구사항: REQ-018(자원 제한), REQ-021(drain), REQ-022(lease·fencing·복구), NFR-003(재시작 뒤 복구), NFR-006(loopback 개인 모드, 민감값), NFR-007(산출물 hash). 수용 시험 TC-124~127, TC-32, TC-170~175, TC-227~236은 [시험](TESTING.md)에 있다.
 

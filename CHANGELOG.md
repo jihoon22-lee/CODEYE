@@ -33,7 +33,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
   | D6 산출물 상한 | 상한 1 → 0 | 상한 넘으면 새 작업만 대기, 하던 일은 끝 | 5.4초 |
   | D7 실행 중 백업·복원 | 작업 중 온라인 백업 → 새 DB·상태에 복원 → 시작 | 백업 0.1~0.3초, 복원 0.2~0.4초, 같은 보고서, 실행 중이던 run `recovery_required` → `codeye run recover --config`로 확인 → 이어 실행 끝, 새 run 끝 | 24~26초 |
   | D8 권한 회수 | 구성원 제거, 사용자 비활성화, 노드 철회 | 열린 SSE가 0.5초 안에 `access_revoked`·`unauthenticated`로 닫힘, 다음 요청 404·401, 철회 4.9초 뒤 에이전트 종료 코드 4, 남은 프로세스 없음, 정리 확인 뒤 새 run | 38초 |
-  | D9 보존 정리 | 끝난 run의 산출물을 40일 전으로 돌린 뒤 `codeye cleanup --config` dry run → `--apply` → dry run | dry run은 원시 행 6개(풀 내용 2개)를 보이고 바꾸지 않음, 적용 뒤 파일 1개 삭제(빈 내용 1개 남김), 같은 보고서, 감사 `storage.retention_applied` 한 건, `raw_evidence_removed_at`, 다시 dry run 0건 | 0.1초 |
+  | D9 보존 정리 | 끝난 run의 산출물을 40일 전으로 돌린 뒤 `codeye cleanup --config` dry run → `--apply` → dry run | dry run은 원시 행 6개(풀 내용 2개)를 보이고 바꾸지 않음, 적용 뒤 파일 1개 삭제, 1개 남김(`kept_files`: 빈 내용이거나 그 사이 다시 참조됨. 어느 쪽인지는 구분하지 않았다), 같은 보고서, 감사 `storage.retention_applied` 한 건, `raw_evidence_removed_at`, 다시 dry run 0건 | 0.1초 |
 
 - **활성 controller는 하나다.** 두 controller를 같은 DB에 띄우는 구성은 지원하지 않고 시험하지 않았다. 여러 물리 노드, NFS, 실제 네트워크 분할, RHEL 8.10, 회사 SSO, GHES는 이 호스트에서 확인할 수 없다([로드맵](docs/ROADMAP.md#다중-노드-검증)).
 - 사용자 systemd(WSL2): install(enable) → start 1.3초 running, stop 0.7초(PostgreSQL도 멈춤), uninstall.

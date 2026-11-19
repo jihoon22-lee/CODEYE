@@ -71,6 +71,9 @@ func runRecover(ctx context.Context, args []string, out, stderr io.Writer) int {
 			}
 			cfg, layout, ok := loadPersonalConfig("run recover", args, stderr, nil)
 			if !ok {
+				if config == "" {
+					fmt.Fprintln(stderr, "for a server installation set CODEYE_DATABASE_URL")
+				}
 				return 2
 			}
 			store, db, err := personalStore(ctx, cfg, layout, stderr)

@@ -71,6 +71,26 @@ func TestOperationsUsageErrors(t *testing.T) {
 	}
 }
 
+// TC-227: without CODEYE_DATABASE_URL and without a personal configuration,
+// run recover stops with a hint and creates no configuration, state or
+// database (an operator who forgot the URL must not get a new install).
+func TestRunRecoverWithoutDatabaseCreatesNothing(t *testing.T) {
+	cfgHome, stateHome := t.TempDir(), t.TempDir()
+	t.Setenv("CODEYE_DATABASE_URL", "")
+	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	var out, stderr bytes.Buffer
+	code := runRecover(context.Background(), []string{"--id", "00000000-0000-4000-8000-000000000001", "--confirm-cleanup"}, &out, &stderr)
+	if code != 2 || out.Len() != 0 || !strings.Contains(stderr.String(), "CODEYE_DATABASE_URL") {
+		t.Fatalf("code %d out %q stderr %q", code, out.String(), stderr.String())
+	}
+	for _, dir := range []string{cfgHome, stateHome} {
+		if entries, err := os.ReadDir(dir); err != nil || len(entries) != 0 {
+			t.Fatalf("%s: %v %v", dir, entries, err)
+		}
+	}
+}
+
 // TC-230: uninstall needs no configuration and removes only a unit that
 // codeye wrote; a missing unit is not an error.
 func TestServiceUninstallRemovesOnlyItsUnit(t *testing.T) {
