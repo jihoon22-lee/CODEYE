@@ -22,7 +22,7 @@ type projectView struct {
 	Name   string          `json:"name"`
 	Source json.RawMessage `json:"source"`
 	// Analysis are the project's analysis choices (defaults when none were
-	// recorded); personal-mode nodes follow them.
+	// recorded); the agent `codeye up` starts follows them.
 	Analysis       domain.AnalysisChoices `json:"analysis"`
 	Revision       int64                  `json:"revision"`
 	SourceStatus   string                 `json:"source_status"`
@@ -70,8 +70,12 @@ func (s *Server) createProject(q *request) {
 		Analysis      json.RawMessage `json:"analysis"`
 		Description   *string         `json:"description"`
 		AttachmentIDs []string        `json:"attachment_ids"`
+		// OpenExisting: the same folder or repository again answers the
+		// caller's existing project (200) instead of a new one. Default true
+		// for local_path, false for source.
+		OpenExisting *bool `json:"open_existing"`
 	}
-	// Exactly one of source and local_path (an absolute folder, personal mode).
+	// Exactly one of source and local_path (an absolute folder on this server).
 	if domain.DecodeStrict(body, &in) != nil || (in.Source != nil && string(in.Source) != "null") == (in.LocalPath != nil) {
 		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", "body must be a project object with a source or a local_path", false)
 		return
@@ -83,21 +87,29 @@ func (s *Server) createProject(q *request) {
 	var src domain.Source
 	var err error
 	if in.LocalPath != nil {
-		if s.personal == nil {
-			writeError(q.w, q.r, http.StatusUnprocessableEntity, "LOCAL_PATH_UNSUPPORTED", "local_path is accepted by the personal-mode controller only; use source", false)
+		// A path on this server, for a user allowed at least one folder.
+		ctx, cancel := q.ctx()
+		roots, err := s.store.GrantedRootPaths(ctx, q.session.UserID)
+		cancel()
+		if err != nil {
+			s.storeError(q, err)
 			return
 		}
-		if src, err = s.localSource(q, *in.LocalPath); err != nil {
-			s.folderError(q, err)
+		if src, err = s.localSource(*in.LocalPath, roots); err != nil {
+			readable := make([]string, 0, len(roots))
+			for _, r := range roots {
+				readable = append(readable, r.Path)
+			}
+			s.folderError(q, err, readable)
 			return
 		}
 	} else if src, err = domain.ParseSource(in.Source); err != nil {
 		s.storeError(q, err)
 		return
-	} else if s.personal != nil && src.Kind == domain.SourceLocal {
+	} else if src.Kind == domain.SourceLocal {
 		// However a folder is declared, it must not hold CODEYE's data.
 		if err := s.checkLocalSource(q, src); err != nil {
-			s.folderError(q, err)
+			s.folderError(q, err, nil)
 			return
 		}
 	}
@@ -110,19 +122,21 @@ func (s *Server) createProject(q *request) {
 		}
 		reg.Analysis = &choices
 	}
-	if s.personal != nil {
-		// The same folder or repository again opens its project.
-		if p, found, ok := s.existingProject(q, src); !ok {
-			return
-		} else if found {
-			gaps, ok := s.executionGaps(q)
-			if !ok {
-				return
-			}
-			q.w.Header().Set("Location", apiPrefix+"/projects/"+p.ID)
-			writeJSON(q.w, http.StatusOK, viewOf(p, gaps))
+	// The same folder or repository again opens the caller's project.
+	reuse := in.LocalPath != nil
+	if in.OpenExisting != nil {
+		reuse = *in.OpenExisting
+	}
+	if p, found, ok := s.existingProject(q, src, reuse); !ok {
+		return
+	} else if found {
+		gaps, ok := s.executionGaps(q)
+		if !ok {
 			return
 		}
+		q.w.Header().Set("Location", apiPrefix+"/projects/"+p.ID)
+		writeJSON(q.w, http.StatusOK, viewOf(p, gaps))
+		return
 	}
 	if in.Name != nil {
 		if strings.TrimSpace(*in.Name) == "" {
@@ -161,7 +175,10 @@ func (s *Server) createProject(q *request) {
 
 // existingProject finds a project the caller can see whose current source
 // is src. ok is false when the error response was written.
-func (s *Server) existingProject(q *request, src domain.Source) (postgres.ProjectSummary, bool, bool) {
+func (s *Server) existingProject(q *request, src domain.Source, reuse bool) (postgres.ProjectSummary, bool, bool) {
+	if !reuse {
+		return postgres.ProjectSummary{}, false, true
+	}
 	ctx, cancel := q.ctx()
 	defer cancel()
 	for cursor := ""; ; {

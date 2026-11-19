@@ -212,26 +212,32 @@ func (s *Server) adminListSourceRoots(q *request) {
 		s.storeError(q, err)
 		return
 	}
-	type grant struct {
-		UserID    string    `json:"user_id"`
-		Username  *string   `json:"username"`
-		GrantedAt time.Time `json:"granted_at"`
-	}
-	type item struct {
-		ID        string    `json:"id"`
-		Label     string    `json:"label"`
-		CreatedAt time.Time `json:"created_at"`
-		Grants    []grant   `json:"grants"`
-	}
-	items := make([]item, 0, len(roots))
+	items := make([]sourceRootItem, 0, len(roots))
 	for _, r := range roots {
-		it := item{ID: r.ID, Label: r.Label, CreatedAt: r.CreatedAt, Grants: []grant{}}
+		it := sourceRootItem{ID: r.ID, Label: r.Label, Path: r.Path, Everyone: r.Everyone, CreatedAt: r.CreatedAt, Grants: []sourceRootGrantItem{}}
 		for _, g := range r.Grants {
-			it.Grants = append(it.Grants, grant{g.UserID, g.Username, g.GrantedAt})
+			it.Grants = append(it.Grants, sourceRootGrantItem{g.UserID, g.Username, g.GrantedAt})
 		}
 		items = append(items, it)
 	}
 	writeJSON(q.w, http.StatusOK, map[string]any{"items": items})
+}
+
+type sourceRootGrantItem struct {
+	UserID    string    `json:"user_id"`
+	Username  *string   `json:"username"`
+	GrantedAt time.Time `json:"granted_at"`
+}
+
+// sourceRootItem is one folder in the administrator's list: its server
+// path, whether every user may read it, and the users granted it.
+type sourceRootItem struct {
+	ID        string                `json:"id"`
+	Label     string                `json:"label"`
+	Path      string                `json:"path"`
+	Everyone  bool                  `json:"everyone"`
+	CreatedAt time.Time             `json:"created_at"`
+	Grants    []sourceRootGrantItem `json:"grants"`
 }
 
 func (s *Server) adminGrantSourceRoot(q *request) {

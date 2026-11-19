@@ -91,8 +91,9 @@ func viewSession(sess postgres.Session, token string) sessionView {
 	return v
 }
 
-func (s *Server) setSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
-	c := &http.Cookie{Name: s.cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: s.tls != nil}
+func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+	f := s.faceOf(r)
+	c := &http.Cookie{Name: f.cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: f.tls != nil}
 	if token == "" {
 		c.MaxAge = -1
 	} else {
@@ -153,7 +154,7 @@ func (s *Server) createSession(q *request) {
 		}
 		return
 	}
-	s.setSessionCookie(q.w, token, sess.ExpiresAt)
+	s.setSessionCookie(q.w, q.r, token, sess.ExpiresAt)
 	writeJSON(q.w, http.StatusCreated, viewSession(sess, token))
 }
 
@@ -168,7 +169,7 @@ func (s *Server) deleteSession(q *request) {
 		s.storeError(q, err)
 		return
 	}
-	s.setSessionCookie(q.w, "", time.Time{})
+	s.setSessionCookie(q.w, q.r, "", time.Time{})
 	q.w.WriteHeader(http.StatusNoContent)
 }
 

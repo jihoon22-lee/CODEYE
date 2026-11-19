@@ -12,13 +12,14 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
-// Personal mode: a folder is registered by its absolute path (mapped onto
-// the longest granted root), the same folder or repository again opens its
-// project, the data directories and folders outside the roots are refused
-// with their own codes, and GET /setup reports the model, Git, readable
-// folders and the detected tools without any key. Server mode refuses
-// local_path and reports nulls.
-func TestPersonalFolderPathsAndSetup(t *testing.T) {
+// A folder on the server is registered by its absolute path (mapped onto
+// the longest root the user may use), with or without a state directory;
+// the same folder or repository again opens its project; the data
+// directories and folders outside the roots are refused with their own
+// codes, and GET /setup reports the model, Git, readable folders and the
+// detected tools without any key (nulls where the controller has no state
+// directory).
+func TestFolderPathsAndSetup(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Linux paths")
 	}
@@ -46,13 +47,18 @@ func TestPersonalFolderPathsAndSetup(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Server mode first.
-	e.do("POST", "/api/v1/projects", map[string]any{"local_path": filepath.Join(home, "src", "app")}, u.o()).want(t, 422, "LOCAL_PATH_UNSUPPORTED")
-	if v := e.do("GET", "/api/v1/setup", nil, u.o()).want(t, 200, ""); v.body["mode"] != "server" || v.body["model"] != nil || v.body["tools"] != nil {
-		t.Fatalf("server setup %s", v.raw)
+	// A controller without a state directory maps paths too; it knows no
+	// model or tools and cannot store GitHub tokens.
+	svc := e.do("POST", "/api/v1/projects", map[string]any{"local_path": filepath.Join(home, "work", "svc")}, u.o()).want(t, 201, "")
+	if s := svc.body["source"].(map[string]any); s["source_root_id"] != rootWork.ID || s["relative_path"] != "svc" {
+		t.Fatalf("%s", svc.raw)
+	}
+	if v := e.do("GET", "/api/v1/setup", nil, u.o()).want(t, 200, ""); v.body["model"] != nil || v.body["tools"] != nil ||
+		v.body["github"].(map[string]any)["enabled"] != false || len(v.body["readable_folders"].([]any)) != 2 {
+		t.Fatalf("setup without state %s", v.raw)
 	}
 
-	e.personal = &Personal{StateDir: state}
+	e.inst = &Instance{StateDir: state}
 	e.start(t.TempDir())
 	u = e.login(u.id)
 	created := e.do("POST", "/api/v1/projects", map[string]any{"local_path": filepath.Join(home, "src", "app"), "analysis": map[string]bool{"send_source_to_model": false, "run_build_scripts": true}}, u.o()).want(t, 201, "")
@@ -89,7 +95,8 @@ func TestPersonalFolderPathsAndSetup(t *testing.T) {
 		filepath.Join(home, "src", "a:b"): "FOLDER_NAME_UNSUPPORTED",
 	} {
 		r := e.do("POST", "/api/v1/projects", map[string]any{"local_path": path}, u.o()).want(t, 422, code)
-		if code == "FOLDER_NOT_READABLE" && r.body["error"].(map[string]any)["message"] != "outside readable folders - run `codeye up <path>` in a terminal to add it" {
+		if code == "FOLDER_NOT_READABLE" && (!strings.Contains(r.body["error"].(map[string]any)["message"].(string), "ask the administrator") ||
+			len(r.body["error"].(map[string]any)["details"].(map[string]any)["readable_folders"].([]any)) != 2) {
 			t.Fatalf("%s", r.raw)
 		}
 	}
@@ -124,17 +131,18 @@ func TestPersonalFolderPathsAndSetup(t *testing.T) {
 	}
 	e.do("PUT", "/api/v1/projects/"+g.body["id"].(string)+"/analysis", map[string]bool{"run_build_scripts": true}, u.o()).want(t, 422, "VALIDATION_FAILED")
 	gitBody["source"].(map[string]any)["repository_url"] = "https://github.com/O/r.git"
+	gitBody["open_existing"] = true
 	if r := e.do("POST", "/api/v1/projects", gitBody, u.o()).want(t, 200, ""); r.body["id"] != g.body["id"] {
 		t.Fatalf("repository not reused: %s", r.raw)
 	}
 
 	// GET /setup: nothing recorded yet, then the summary and the tool table.
 	v := e.do("GET", "/api/v1/setup", nil, u.o()).want(t, 200, "")
-	if v.body["mode"] != "personal" || v.body["git"] != nil || v.body["tools"] != nil || v.body["model"].(map[string]any)["configured"] != false {
+	if v.body["tools"] != nil || v.body["model"] != nil || v.body["git"].(map[string]any)["hosts"].([]any)[0] != "github.com" || v.body["github"].(map[string]any)["enabled"] != true {
 		t.Fatalf("empty setup %s", v.raw)
 	}
-	raw, _ := json.Marshal(PersonalSetup{SchemaVersion: "0.1", Model: &SetupModel{ID: "openai/gpt-6.2-sol", Probe: ProbeVerified}, Git: true, GitHosts: []string{"github.com"}})
-	if err := os.WriteFile(filepath.Join(state, "run", PersonalSetupFile), raw, 0o600); err != nil {
+	raw, _ := json.Marshal(InstanceSetup{SchemaVersion: "0.1", Model: &SetupModel{ID: "openai/gpt-6.2-sol", Probe: ProbeVerified}, Git: true, GitHosts: []string{"github.com"}})
+	if err := os.WriteFile(filepath.Join(state, "run", InstanceSetupFile), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := toolfind.Write(filepath.Join(state, toolfind.FileName), toolfind.Result{SchemaVersion: toolfind.SchemaVersion, Tools: []toolfind.Tool{{Name: "cppcheck", Status: toolfind.NotFound, Hint: "install cppcheck"}}}); err != nil {
@@ -145,12 +153,22 @@ func TestPersonalFolderPathsAndSetup(t *testing.T) {
 	folders := v.body["readable_folders"].([]any)
 	tools := v.body["tools"].(map[string]any)["tools"].([]any)
 	if m["configured"] != true || m["id"] != "openai/gpt-6.2-sol" || m["probe"] != "verified" || v.body["git"].(map[string]any)["available"] != true ||
-		len(folders) != 2 || len(tools) != 1 || tools[0].(map[string]any)["hint"] != "install cppcheck" {
+		len(folders) != 2 || len(tools) != 1 || tools[0].(map[string]any)["hint"] != nil {
 		t.Fatalf("setup %s", v.raw)
 	}
+	// A user who is not an administrator: build scripts are not offered by
+	// default, so the defaults leave them off and say why.
 	d := v.body["analysis_defaults"].(map[string]any)
-	if l, g := d["local"].(map[string]any), d["git"].(map[string]any); l["send_source_to_model"] != true || l["run_build_scripts"] != true || g["send_source_to_model"] != true || g["run_build_scripts"] != false {
+	if l, g := d["local"].(map[string]any), d["git"].(map[string]any); l["send_source_to_model"] != true || l["run_build_scripts"] != false || g["send_source_to_model"] != true || g["run_build_scripts"] != false ||
+		v.body["available"].(map[string]any)["build_scripts"].(map[string]any)["reason"] != "not_offered" {
 		t.Fatalf("defaults %s", v.raw)
+	}
+	// The administrator sees the tool hints and gets the build scripts.
+	admin := e.login(e.newAdminAccount("admin"))
+	v = e.do("GET", "/api/v1/setup", nil, admin.o()).want(t, 200, "")
+	if v.body["is_admin"] != true || v.body["tools"].(map[string]any)["tools"].([]any)[0].(map[string]any)["hint"] != "install cppcheck" ||
+		v.body["analysis_defaults"].(map[string]any)["local"].(map[string]any)["run_build_scripts"] != true || len(v.body["readable_folders"].([]any)) != 0 {
+		t.Fatalf("admin setup %s", v.raw)
 	}
 }
 
