@@ -14,6 +14,6 @@ test('the codeye up link signs in and opens the project run with its report', as
   expect(new URL(page.url()).hash).toContain('project=');
   await expect(page.getByRole('heading', { level: 2, name: project, exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '현재 실행', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '보고서 열기', exact: true }).click({ timeout: 25_000 });
-  await expect(page.getByRole('article', { name: '분석 보고서' })).toBeVisible();
+  // The published report opens by itself.
+  await expect(page.getByRole('article', { name: '분석 보고서' })).toBeVisible({ timeout: 25_000 });
 });

@@ -29,7 +29,11 @@ export class ApiError extends Error {
 
 export type Source =
   | { kind: 'local'; source_root_id: string; relative_path: string }
-  | { kind: 'git'; provider_id: string; repository_url: string; branch: string };
+  // branch absent: the repository's default branch, resolved at each acquisition.
+  | { kind: 'git'; provider_id: string; repository_url: string; branch?: string };
+
+// A project's own analysis choices; personal-mode nodes follow them.
+export type AnalysisChoices = { send_source_to_model: boolean; run_build_scripts: boolean };
 
 export type Project = {
   id: string;
@@ -45,6 +49,7 @@ export type Project = {
   can_manage: boolean;
   // Optional: older servers do not send it (docs/API.md).
   activity?: ProjectActivity;
+  analysis?: AnalysisChoices;
 };
 export type ProjectPage = { items: Project[]; next_cursor: string | null };
 export type SourceRoot = { id: string; label: string };
@@ -113,7 +118,20 @@ export type RunView = {
 
 export const RUN_BODY = { profile: 'deep-review', source_policy: 'latest_at_acquire', scope: { kind: 'full' } } as const;
 
-export type CreateProjectBody = { name?: string; source: Source };
+// Either a declared source, or (personal mode) an absolute folder path the server maps onto a readable folder.
+export type CreateProjectBody = { name?: string; analysis?: AnalysisChoices } & ({ source: Source } | { local_path: string });
+export type RetryAck = RunAck & { retry: string }; // same_run | new_run (open string)
+
+// GET /setup: what this installation can do (personal mode); a server-mode controller sends nulls.
+export type SetupTool = { name: string; status: string; version: string | null; path: string | null; hint: string | null; reason: string | null };
+export type Setup = {
+  mode: string; // personal | server (open string)
+  model: { configured: boolean; id: string | null; probe: string | null } | null;
+  git: { available: boolean; hosts: string[] } | null;
+  readable_folders: string[];
+  analysis_defaults: { local: AnalysisChoices; git: AnalysisChoices };
+  tools: { detected_at: string | null; tools: SetupTool[] } | null;
+};
 
 // ---- schedules (members list; managers create and delete) ----
 export type ScheduleOccurrence = { scheduled_for: string; state: string; reason: string | null; missed_from: string | null; decided_at: string; run_id: string | null };
@@ -265,7 +283,13 @@ export function createApi(options: ApiOptions = {}) {
     listProviders: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/providers', signal }, items(parseProvider)),
     listProjects: (cursor?: string | null, signal?: AbortSignal) =>
       json({ method: 'GET', path: '/api/v1/projects' + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''), signal }, parseProjectPage),
+    // 201 a new project; 200 (personal mode) the existing project of the same folder or repository.
     createProject: (body: CreateProjectBody) => json({ method: 'POST', path: '/api/v1/projects', body }, parseProject),
+    setProjectAnalysis: (projectId: string, choices: AnalysisChoices) =>
+      json({ method: 'PUT', path: `${project(projectId)}/analysis`, body: choices }, parseProject),
+    getSetup: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/setup', signal }, parseSetup),
+    // The run to follow: the same run again (same_run) or a new one (new_run).
+    retryRun: (id: string) => json({ method: 'POST', path: `${run(id)}/retry` }, parseRetryAck),
     createRun: (projectId: string, idempotencyKey: string) =>
       json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: RUN_BODY, headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
     getRun: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: run(id), signal }, parseRun),
@@ -373,7 +397,7 @@ function parseProvider(v: unknown): Provider {
 function parseSource(v: unknown): Source {
   const o = rec(v);
   if (o.kind === 'local') return { kind: 'local', source_root_id: str(o.source_root_id), relative_path: str(o.relative_path) };
-  if (o.kind === 'git') return { kind: 'git', provider_id: str(o.provider_id), repository_url: str(o.repository_url), branch: str(o.branch) };
+  if (o.kind === 'git') return { kind: 'git', provider_id: str(o.provider_id), repository_url: str(o.repository_url), ...(o.branch == null ? {} : { branch: str(o.branch) }) };
   throw new TypeError('source kind');
 }
 function parseProject(v: unknown): Project {
@@ -390,7 +414,41 @@ function parseProject(v: unknown): Project {
     can_run: bool(o.can_run),
     can_manage: bool(o.can_manage),
     ...(o.activity == null ? {} : { activity: parseActivity(o.activity) }),
+    ...(o.analysis == null ? {} : { analysis: parseChoices(o.analysis) }),
   };
+}
+function parseChoices(v: unknown): AnalysisChoices {
+  const o = rec(v);
+  return { send_source_to_model: bool(o.send_source_to_model), run_build_scripts: bool(o.run_build_scripts) };
+}
+function optionalStr(v: unknown): string | null {
+  return typeof v === 'string' && v !== '' ? v : null;
+}
+function parseSetup(v: unknown): Setup {
+  const o = rec(v);
+  const d = rec(o.analysis_defaults);
+  let model: Setup['model'] = null;
+  if (o.model != null) {
+    const m = rec(o.model);
+    model = { configured: bool(m.configured), id: nullableStr(m.id), probe: nullableStr(m.probe) };
+  }
+  let git: Setup['git'] = null;
+  if (o.git != null) {
+    const g = rec(o.git);
+    git = { available: bool(g.available), hosts: list(str)(g.hosts ?? []) };
+  }
+  let tools: Setup['tools'] = null;
+  if (o.tools != null) {
+    const r = rec(o.tools);
+    tools = {
+      detected_at: optionalStr(r.detected_at),
+      tools: list((x: unknown): SetupTool => {
+        const t = rec(x);
+        return { name: str(t.name), status: str(t.status), version: optionalStr(t.version), path: optionalStr(t.path), hint: optionalStr(t.hint), reason: optionalStr(t.reason) };
+      })(r.tools ?? []),
+    };
+  }
+  return { mode: str(o.mode), model, git, readable_folders: list(str)(o.readable_folders ?? []), analysis_defaults: { local: parseChoices(d.local), git: parseChoices(d.git) }, tools };
 }
 function date(v: unknown): string {
   const s = str(v);
@@ -465,6 +523,9 @@ function parseProjectPage(v: unknown): ProjectPage {
 function parseAck(v: unknown): RunAck {
   const o = rec(v);
   return { id: str(o.id), status: str(o.status), version: int(o.version, 1), url: nullableStr(o.url) };
+}
+function parseRetryAck(v: unknown): RetryAck {
+  return { ...parseAck(v), retry: str(rec(v).retry) };
 }
 function parsePlanChange(v: unknown): PlanChange {
   const o = rec(v);

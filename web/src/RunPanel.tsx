@@ -1,6 +1,8 @@
 import { ReportPanel } from './ReportPanel';
 import { useEffect, useState } from 'react';
-import { ApiError, type Api, type Project, type RunAck, type RunProgress, type RunTrigger, type RunView } from './api';
+import { ApiError, type AnalysisChoices, type Api, type Project, type RetryAck, type RunAck, type RunProgress, type RunTrigger, type RunView, type Setup } from './api';
+import { improvementHints, type Hint } from './improve';
+import type { AnalysisReport } from './analysisReport';
 import { canCancelRun, describeError, roleLabel, formatClock, formatInstant, isKnownRunStatus, isTerminalRun, runStatusLabel, shorten, stageName, type ErrorText } from './format';
 import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
@@ -13,10 +15,13 @@ export function ErrorNote({ error }: { error: ErrorText }) {
 }
 
 // onRunChange lets the project list re-read its aggregate after this run was accepted or changed state.
-type Props = { api: Api; userId: string; project: Project; idempotency: Idempotency; openRunId?: string | null; onRunChange?: () => void };
+type Props = { api: Api; userId: string; project: Project; idempotency: Idempotency; openRunId?: string | null; onRunChange?: () => void; setup?: Setup | null };
 
-export function RunPanel({ api, userId, project, idempotency, openRunId = null, onRunChange }: Props) {
+export function RunPanel({ api, userId, project, idempotency, openRunId = null, onRunChange, setup = null }: Props) {
   const [runId, setRunId] = useState<string | null>(null);
+  // A retry of the same run restarts its status view; a new run replaces it.
+  const [generation, setGeneration] = useState(0);
+  const [retried, setRetried] = useState<RetryAck | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<ErrorText | null>(null);
   const [accepted, setAccepted] = useState<RunAck | null>(null);
@@ -55,11 +60,19 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
     {!canRun && <p id="run-not-allowed" className="small">{t.accounts.runNotAllowed(roleLabel(project.role))}</p>}
     {error && <><ErrorNote error={error} />{retrying && <p className="small">{t.runs.retryNote}</p>}</>}
     {accepted && <p role="status">{t.runs.accepted(shorten(accepted.id, 12))}</p>}
-    {activeId && <RunStatus key={activeId} api={api} runId={activeId} canRun={canRun} placeholder={accepted?.id === activeId ? accepted : null} onRunChange={onRunChange} />}
+    {retried && <p role="status">{t.runs.retried(retried.retry)}</p>}
+    {activeId && <RunStatus key={`${activeId}:${generation}`} api={api} runId={activeId} project={project} setup={setup} canRun={canRun}
+      placeholder={accepted?.id === activeId ? accepted : retried?.id === activeId ? retried : null} onRunChange={onRunChange}
+      onRetried={ack => { setRetried(ack); setAccepted(null); setRunId(ack.id); setGeneration(n => n + 1); onRunChange?.(); }} />}
   </section>;
 }
 
-function RunStatus({ api, runId, canRun, placeholder, onRunChange }: { api: Api; runId: string; canRun: boolean; placeholder: RunAck | null; onRunChange?: () => void }) {
+type StatusProps = { api: Api; runId: string; project: Project; setup: Setup | null; canRun: boolean; placeholder: RunAck | null; onRunChange?: () => void; onRetried: (ack: RetryAck) => void };
+
+// Finished runs that a retry can improve: a failure, a partial result, a cancellation.
+const RETRYABLE = new Set(['failed', 'partial', 'cancelled']);
+
+function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChange, onRetried }: StatusProps) {
   const { run, error, stopped, hidden, confirmedAt, mode, applyAck, refresh } = useRunPolling(api, runId);
   const runVersion = run?.version;
   useEffect(() => { if (runVersion !== undefined) onRunChange?.(); }, [runVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -75,7 +88,8 @@ function RunStatus({ api, runId, canRun, placeholder, onRunChange }: { api: Api;
     </div>
     {status !== null && !isKnownRunStatus(status) && <p className="notice">{t.runs.statusUnknownNote} <code>{shorten(status, 40)}</code></p>}
     {run && <RunDetails run={run} confirmedAt={error !== null ? confirmedAt : null} />}
-    {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}/> }
+    {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}
+      extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project)} runId={runId} canRun={canRun} onRetried={onRetried} />} />}
     {!run && <dl><dt>{t.runs.id}</dt><dd><code>{runId}</code></dd>{version !== null && <><dt>{t.runs.version}</dt><dd>{version}</dd></>}</dl>}
     {error !== null && <p role="alert" className="error">{stopped ? t.runs.pollStopped : t.runs.pollError} {describeError(error).message}</p>}
     <p className="small">
@@ -84,6 +98,7 @@ function RunStatus({ api, runId, canRun, placeholder, onRunChange }: { api: Api;
     </p>
     <div className="actions">
       {(!terminal || (run?.snapshot_id && !run.reportRevision)) && <button type="button" onClick={refresh}>{t.runs.refresh}</button>}
+      {terminal && status !== null && RETRYABLE.has(status) && canRun && <RetryControl api={api} runId={runId} onRetried={onRetried} />}
       {status !== null && !terminal && (canRun
         ? <CancelControl api={api} runId={runId} status={status} onAck={applyAck} onForbidden={onRunChange} />
         : <p className="small">{t.accounts.cancelNotAllowed}</p>)}
@@ -153,6 +168,55 @@ function RunDetails({ run, confirmedAt }: { run: RunView; confirmedAt: Date | nu
     {run.quality_verdict !== null && <><dt>{t.runs.verdict}</dt><dd>{Object.hasOwn(t.runs.verdictLabels, run.quality_verdict) ? t.runs.verdictLabels[run.quality_verdict] : t.runs.statusUnknown}</dd></>}
   </dl>
   <StageList summary={p.stages} runStatus={run.status} confirmedAt={confirmedAt} /></>;
+}
+
+function RetryControl({ api, runId, onRetried }: { api: Api; runId: string; onRetried: (ack: RetryAck) => void }) {
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<ErrorText | null>(null);
+  async function send() {
+    setSending(true);
+    setError(null);
+    try {
+      onRetried(await api.retryRun(runId));
+    } catch (e) {
+      setError(describeError(e));
+      setSending(false);
+    }
+  }
+  return <>
+    <button type="button" className="primary" onClick={send} disabled={sending} aria-busy={sending}>{sending ? t.runs.retrying : t.runs.retry}</button>
+    {error && <ErrorNote error={error} />}
+  </>;
+}
+
+// "더 나은 결과를 얻으려면": what would fill the report's gaps. A project choice is turned on
+// and the run retried in one step.
+function ImproveHints({ api, project, hints, runId, canRun, onRetried }: { api: Api; project: Project; hints: Hint[]; runId: string; canRun: boolean; onRetried: (ack: RetryAck) => void }) {
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<ErrorText | null>(null);
+  if (hints.length === 0) return null;
+  async function turnOn(key: keyof AnalysisChoices) {
+    if (!project.analysis) return;
+    setSending(true);
+    setError(null);
+    try {
+      await api.setProjectAnalysis(project.id, { ...project.analysis, [key]: true });
+      onRetried(await api.retryRun(runId));
+    } catch (e) {
+      setError(describeError(e));
+      setSending(false);
+    }
+  }
+  const i = t.improve;
+  return <section className="notice improve" aria-labelledby={`improve-${runId}`}>
+    <h4 id={`improve-${runId}`}>{i.title}</h4>
+    <ul>{hints.map(h => <li key={h.key}>{h.text}
+      {h.turnOn && (project.can_manage && canRun
+        ? <> <button type="button" onClick={() => void turnOn(h.turnOn!)} disabled={sending} aria-busy={sending}>{sending ? i.sending : h.turnOn === 'run_build_scripts' ? i.buildScriptsAction : i.sendSourceAction}</button></>
+        : <small> {i.needsManager}</small>)}
+    </li>)}</ul>
+    {error && <ErrorNote error={error} />}
+  </section>;
 }
 
 function CancelControl({ api, runId, status, onAck, onForbidden }: { api: Api; runId: string; status: string; onAck: (ack: RunAck) => void; onForbidden?: () => void }) {

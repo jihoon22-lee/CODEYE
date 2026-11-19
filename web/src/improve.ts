@@ -1,0 +1,59 @@
+import type { AnalysisChoices, Project, Setup } from './api';
+import { ko as t } from './locales/ko';
+
+export type Gap = { section: string; code: string; subject: string | null; detail: string | null };
+
+// One line of "더 나은 결과를 얻으려면". turnOn names the project choice whose action
+// ("켜고 다시 시도") changes it and retries; only a manager can take it.
+export type Hint = { key: string; text: string; turnOn?: keyof AnalysisChoices };
+
+// Analyzer task keys whose tool has another name in the tool table.
+const TOOL_OF: Record<string, string> = { 'go-vet': 'go', 'cargo-check': 'cargo', 'cargo-clippy': 'clippy' };
+// A task of one module carries its suffix (go-vet.m02).
+const taskOf = (subject: string) => subject.replace(/\.m\d+$/, '');
+const toolOf = (subject: string) => TOOL_OF[taskOf(subject)] ?? taskOf(subject);
+
+const MISSING_TOOL = new Set(['tool_not_configured', 'tool_unavailable']);
+
+// improvementHints turns a report's gaps into the few actions that would fill them: install a
+// missing tool, set a model key, raise the call ceiling, or turn on a project choice. Gaps
+// without a known remedy are left to the report's own gap list.
+export function improvementHints(gaps: Gap[], setup: Setup | null, project: Project): Hint[] {
+  const out: Hint[] = [];
+  const seen = new Set<string>();
+  const push = (h: Hint) => { if (!seen.has(h.key)) { seen.add(h.key); out.push(h); } };
+  const personal = setup?.mode === 'personal';
+  const blocked: string[] = [];
+  let sourceWithheld = false;
+  for (const g of gaps) {
+    const detail = g.detail ?? '';
+    if (MISSING_TOOL.has(detail) && g.subject) {
+      const name = toolOf(g.subject);
+      const tool = setup?.tools?.tools.find(x => x.name === name);
+      push({ key: `tool:${name}`, text: tool?.hint ? t.improve.tool(name, tool.hint) : t.improve.toolGeneric(name) });
+    } else if (detail === 'toolchain_not_configured' && g.subject) {
+      push({ key: `toolchain:${taskOf(g.subject)}`, text: t.improve.toolchain(taskOf(g.subject)) });
+    } else if (detail === 'model_not_configured') {
+      push({ key: 'model', text: t.improve.model });
+    } else if (g.code === 'review_scope_budget_exhausted') {
+      push({ key: 'budget', text: t.improve.budget });
+    } else if (detail === 'repository_code_not_allowed' && g.subject) {
+      if (!blocked.includes(taskOf(g.subject))) blocked.push(taskOf(g.subject));
+    } else if (detail === 'model_source_not_approved') {
+      sourceWithheld = true;
+    }
+  }
+  if (blocked.length > 0) {
+    const tasks = blocked.join(', ');
+    // In personal mode the project's own choice decides; elsewhere the node operator's grant.
+    if (personal && project.analysis && !project.analysis.run_build_scripts) {
+      push({ key: 'build_scripts', text: t.improve.buildScripts(tasks), turnOn: 'run_build_scripts' });
+    } else if (!personal) {
+      push({ key: 'build_scripts', text: t.improve.operatorGrant(tasks) });
+    }
+  }
+  if (sourceWithheld && personal && project.analysis && !project.analysis.send_source_to_model) {
+    push({ key: 'send_source', text: t.improve.sendSource, turnOn: 'send_source_to_model' });
+  }
+  return out;
+}

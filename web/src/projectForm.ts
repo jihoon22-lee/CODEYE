@@ -1,4 +1,4 @@
-import type { CreateProjectBody } from './api';
+import type { CreateProjectBody, Source } from './api';
 import { ko as t } from './locales/ko';
 
 export type FormValues = {
@@ -34,7 +34,7 @@ export function validateProjectForm(values: FormValues): { body: CreateProjectBo
   const errors: FormErrors = {};
   const name = values.name.trim();
   if (name.length > 200) errors.name = v.nameTooLong;
-  let source: CreateProjectBody['source'] | null = null;
+  let source: Source | null = null;
   if (values.kind === 'local') {
     const path = values.relativePath.trim();
     if (values.sourceRootId === '') errors.sourceRootId = v.sourceRootMissing;
@@ -47,8 +47,8 @@ export function validateProjectForm(values: FormValues): { body: CreateProjectBo
     if (values.providerId === '') errors.providerId = v.providerMissing;
     if (url === '') errors.repositoryUrl = v.repositoryMissing;
     else if (urlHasCredentials(url)) errors.repositoryUrl = v.repositoryCredentials;
-    if (branch === '') errors.branch = v.branchMissing;
-    if (!errors.providerId && !errors.repositoryUrl && !errors.branch) source = { kind: 'git', provider_id: values.providerId, repository_url: url, branch };
+    // An empty branch is the repository's default branch.
+    if (!errors.providerId && !errors.repositoryUrl) source = { kind: 'git', provider_id: values.providerId, repository_url: url, ...(branch === '' ? {} : { branch }) };
   }
   if (Object.keys(errors).length > 0 || !source) return { body: null, errors };
   return { body: name === '' ? { source } : { name, source }, errors };

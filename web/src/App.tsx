@@ -9,6 +9,7 @@ import { PasswordForm } from './PasswordForm';
 import { ProjectsView } from './ProjectsView';
 import type { SessionController, SessionState } from './session';
 import { SignInForm } from './SignInForm';
+import { ToolsView } from './ToolsView';
 
 type View = 'projects' | 'doctor' | 'account' | 'admin';
 type Props = { api: Api; controller: SessionController; idempotency: Idempotency; link?: DeepLink };
@@ -46,7 +47,7 @@ export function App({ api, controller, idempotency, link }: Props) {
       {signedIn?.logoutFailed && <p role="alert" className="error">{t.session.logoutFailed}</p>}
       {passwordSet && !forced && shown === 'projects' && <p role="status">{t.accounts.password.done}</p>}
       <div id="main" tabIndex={-1}>
-        {shown === 'doctor' ? <DoctorView />
+        {shown === 'doctor' ? (signedIn && !forced ? <ToolsView api={api} /> : <DoctorView />)
           : !signedIn ? <ConnectionPanel session={session} controller={controller} />
           : shown === 'account' ? <>
             <PasswordForm key={signedIn.userId} controller={controller} user={signedIn} forced={forced} onDone={() => { if (forced) { setPasswordSet(true); setView('projects'); } }} />

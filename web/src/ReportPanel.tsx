@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { Api } from './api';
 import type { AnalysisReport } from './analysisReport';
 import { describeError } from './format';
@@ -57,8 +57,9 @@ export function ReportDocument({ report, history }: { report: AnalysisReport; hi
   );
 }
 
-export function ReportPanel({ api, runID }: { api: Api; runID: string }) {
-  const [requested, setRequested] = useState(0);
+// The report of a finished run opens by itself; extra renders above it (the improvement hints).
+export function ReportPanel({ api, runID, extra }: { api: Api; runID: string; extra?: (report: AnalysisReport) => ReactNode }) {
+  const [requested, setRequested] = useState(1);
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [error, setError] = useState('');
   const [load, setLoad] = useState<ComparisonLoad>({ state: 'loading' });
@@ -90,7 +91,7 @@ export function ReportPanel({ api, runID }: { api: Api; runID: string }) {
       });
     return () => controller.abort();
   }, [api, runID, requested]);
-  if (report) return <ReportDocument report={report} history={{ load, api, reload }} />;
+  if (report) return <>{extra?.(report)}<ReportDocument report={report} history={{ load, api, reload }} /></>;
   return (
     <section>
       {error && <p role="alert">{error}</p>}
