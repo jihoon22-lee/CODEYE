@@ -52,7 +52,7 @@ Usage:
                [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]
                [--repo-code-source-root ID ...] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
                [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1] [--review-max-calls 15..207]
-Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
+Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema, except that personal mode with database.mode managed migrates on up/start after saving a pg_dump copy.
 Login links: codeye login-link and codeye start write them to a 0600 file; codeye up and codeye open print them and open the browser.
 Passwords are read from --password-file (mode 0600) or standard input (echo off on a Linux terminal), never from arguments.
 "serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.

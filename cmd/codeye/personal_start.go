@@ -85,6 +85,10 @@ type running struct {
 // failure everything this call started is stopped again and the exit code is
 // returned with a nil result.
 func bringUp(ctx context.Context, cfg *personal.Config, layout personal.Layout, o bringUpOptions, out, stderr io.Writer) (*running, int) {
+	// Detected tools and the model complete the configuration before the
+	// agent argv is built and compared with a running agent's.
+	applyDetectedTools(cfg, out)
+	prepareModel(cfg, out)
 	opCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	db, err := personalDatabase(opCtx, cfg, layout, dbOptions{start: true, flagBinDir: o.postgresBinDir, notices: out})
@@ -413,6 +417,10 @@ func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *personal.Config
 			return nil, fmt.Errorf("cannot read source root %q: %w", r.Label, err)
 		case rec.Path != r.Path:
 			return nil, fmt.Errorf("source root %q is registered with another path; source roots are immutable, use a new label", r.Label)
+		default:
+			if st, err := os.Stat(r.Path); err != nil || !st.IsDir() {
+				fmt.Fprintf(out, "note: source root %q (%s) is not an existing directory; its projects cannot be analyzed until it is back (or remove it from source_roots)\n", r.Label, r.Path)
+			}
 		}
 		if err := s.GrantSourceRoot(ctx, rec.ID, user); err != nil {
 			return nil, fmt.Errorf("cannot grant source root %q: %w", r.Label, err)

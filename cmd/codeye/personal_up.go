@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -102,9 +103,6 @@ func personalUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 		}
 		layout = completeConfig(cfg)
 	}
-	applyDetectedTools(cfg, out)
-	prepareModel(cfg, out)
-
 	up, code := bringUp(ctx, cfg, layout, bringUpOptions{postgresBinDir: binDir}, out, stderr)
 	if up == nil {
 		return code
@@ -340,7 +338,9 @@ func analyzeTarget(ctx context.Context, up *running, t *upTarget, out io.Writer)
 	var projectID, name string
 	if project != nil {
 		projectID, name = project.ID, project.Name
-		if lr := project.LastRun; lr != nil && !lr.Status.Terminal() {
+		// A queued or executing run is shown instead of queueing another; a
+		// cancelling or recovery_required run gets a new run beside it.
+		if lr := project.LastRun; lr != nil && slices.Contains([]domain.RunStatus{domain.RunQueued, domain.RunPreparing, domain.RunRunning, domain.RunFinalizing}, lr.Status) {
 			fmt.Fprintf(out, "project %q (%s): its analysis is already %s (run %s)\n", name, t.path, lr.Status, lr.ID)
 			return projectID, lr.ID, nil
 		}
