@@ -61,6 +61,7 @@ func TestRealReportRenders(t *testing.T) {
 			t.Fatalf("format error in the %s rendering", detail)
 		}
 		checkInPageLinks(t, html)
+		checkTableWidths(t, string(md))
 		t.Logf("builder %s, %s: markdown %d lines, html %d bytes", r.Builder.Version, detail, strings.Count(string(md), "\n"), len(html))
 		if out := os.Getenv("CODEYE_REAL_REPORT_OUT"); out != "" {
 			if err := os.WriteFile(out+"."+detail+".md", md, 0o600); err != nil {

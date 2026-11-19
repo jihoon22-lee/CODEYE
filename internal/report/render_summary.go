@@ -527,7 +527,8 @@ func (v secView) summaryLedger(x ReviewLedger) []secPart {
 			sum.FilesTruncated += m.FilesTruncated
 			sum.FilesWithheld += m.FilesWithheld
 			sum.FilesUnreadable += m.FilesUnreadable
-			sum.FilesBudgetExhausted += m.FilesBudgetExhausted + m.FilesSecondaryNotReached
+			sum.FilesBudgetExhausted += m.FilesBudgetExhausted
+			sum.FilesSecondaryNotReached += m.FilesSecondaryNotReached
 			sum.FilesNotPlanned += m.FilesNotPlanned
 			sum.FilesNotSent += m.FilesNotSent
 			sum.FilesWithCompletedReview += m.FilesWithCompletedReview
@@ -536,8 +537,13 @@ func (v secView) summaryLedger(x ReviewLedger) []secPart {
 		mt.Rows = append(mt.Rows, parts[1].Table.Rows[i])
 	}
 	if secondary > 0 {
-		mt.Rows = append(mt.Rows, []secCell{txt(tf(l, "summary.ledger_secondary_modules", secondary)), txt("-"), num(sum.FilesEligible), num(sum.FilesSentToModel), num(sum.BytesSent),
-			num(sum.FilesTruncated), num(sum.FilesWithheld), num(sum.FilesUnreadable), num(sum.FilesBudgetExhausted), num(sum.FilesNotPlanned), num(sum.FilesNotSent), num(sum.FilesWithCompletedReview)})
+		row := []secCell{txt(tf(l, "summary.ledger_secondary_modules", secondary)), txt("-"), num(sum.FilesEligible), num(sum.FilesSentToModel), num(sum.BytesSent),
+			num(sum.FilesTruncated), num(sum.FilesWithheld), num(sum.FilesUnreadable), num(sum.FilesBudgetExhausted), num(sum.FilesNotPlanned), num(sum.FilesNotSent), num(sum.FilesWithCompletedReview)}
+		if ledgerClasses(&x) {
+			row = slices.Insert(row, 1, txt(lab(l, "class", record.ClassSecondary)))
+			row = slices.Insert(row, 11, num(sum.FilesSecondaryNotReached))
+		}
+		mt.Rows = append(mt.Rows, row)
 	}
 	// Slots: consecutive slots of one state and reason share a row.
 	type run struct {

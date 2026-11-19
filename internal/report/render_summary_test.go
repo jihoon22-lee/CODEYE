@@ -45,6 +45,7 @@ func TestSummaryLayout(t *testing.T) {
 				t.Fatal("format error")
 			}
 			checkInPageLinks(t, html)
+			checkTableWidths(t, md)
 			var at []int
 			for _, k := range []string{"overview", SectionCodeReview, SectionStaticAnalysis, SectionMetrics, SectionSecrets, SectionEnvironment, SectionDocuments, SectionGaps} {
 				at = append(at, strings.Index(md, "## "+mdText(Korean.Label("section."+k))+"\n"))
@@ -58,6 +59,7 @@ func TestSummaryLayout(t *testing.T) {
 				t.Fatal("summary without its note")
 			}
 			full := RenderMarkdownAt(r, d, Korean, DetailFull)
+			checkTableWidths(t, string(full))
 			if !bytes.Equal(full, RenderMarkdown(r, d, Korean)) {
 				t.Fatal("full level differs from the sectioned layout")
 			}
@@ -67,6 +69,53 @@ func TestSummaryLayout(t *testing.T) {
 			}
 			checkInPageLinks(t, fullHTML)
 		})
+	}
+}
+
+// checkTableWidths fails when a Markdown table row has another number of
+// cells than its header.
+func checkTableWidths(t *testing.T, md string) {
+	t.Helper()
+	width := 0
+	for _, line := range strings.Split(md, "\n") {
+		if !strings.HasPrefix(line, "|") {
+			width = 0
+			continue
+		}
+		n := strings.Count(strings.ReplaceAll(line, `\|`, ""), "|")
+		if width == 0 {
+			width = n
+		} else if n != width {
+			t.Fatalf("table row of %d cells under a header of %d: %s", n-1, width-1, line)
+		}
+	}
+}
+
+// A builder 8 ledger shows each module's class and the secondary files left
+// out within the ceiling, so that every row adds up to its eligible files;
+// the summary's sum row of the secondary modules does too.
+func TestLedgerRowsShowSecondaryFiles(t *testing.T) {
+	r := storedExample(t, "../../examples/report-slices.json")
+	m := &r.CodeReview.Ledger.Modules[1]
+	// go:store as a secondary module whose 13 files the ceiling refused.
+	m.Class, m.FilesSecondary, m.FilesSecondarySent = "secondary", m.FilesEligible, m.FilesSentToModel
+	m.FilesSecondaryNotReached, m.FilesBudgetExhausted = m.FilesBudgetExhausted, 0
+	d := strings.Repeat("0", 64)
+	for _, detail := range []string{DetailSummary, DetailFull} {
+		md := string(RenderMarkdownAt(r, d, Korean, detail))
+		checkTableWidths(t, md)
+		row := "| `go:store` | " + Korean.Label("class.secondary") + " | "
+		if detail == DetailSummary {
+			row = "| " + mdText(tf(Korean, "summary.ledger_secondary_modules", 1)) + " | " + Korean.Label("class.secondary") + " | "
+		}
+		i := strings.Index(md, row)
+		if i < 0 {
+			t.Fatalf("%s: no secondary ledger row", detail)
+		}
+		line := md[i : i+strings.Index(md[i:], "\n")]
+		if !strings.Contains(line, " | 0 | 0 | 13 | 0 | 17 |") {
+			t.Fatalf("%s: secondary row %s", detail, line)
+		}
 	}
 }
 

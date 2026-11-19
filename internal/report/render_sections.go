@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -588,12 +589,25 @@ func ledgerParts(l Locale, x ReviewLedger) []secPart {
 	mt := &secTable{Head: []string{l.Label("col.module"), l.Label("col.discovered"), l.Label("col.eligible"), l.Label("col.sent"), l.Label("col.bytes_sent"),
 		l.Label("col.truncated"), l.Label("col.withheld"), l.Label("col.unreadable"), l.Label("col.budget_exhausted"), l.Label("col.not_planned"),
 		l.Label("col.not_sent"), l.Label("col.completed")}}
+	// Builder 8 classes each module and counts its secondary files: the
+	// class and the secondary files left out within the ceiling get a column
+	// so that each row adds up to the eligible files.
+	classes := ledgerClasses(&x)
+	if classes {
+		mt.Head = slices.Insert(mt.Head, 1, l.Label("col.module_class"))
+		mt.Head = slices.Insert(mt.Head, 11, l.Label("col.secondary_not_reached"))
+	}
 	var order []string
 	slicesOf := map[string]LedgerSlice{}
 	modulesOf := map[string][]string{}
 	for _, m := range x.Modules {
-		mt.Rows = append(mt.Rows, []secCell{code(m.ModuleID), txt(lab(l, "discovered", strconv.FormatBool(m.Discovered))), num(m.FilesEligible), num(m.FilesSentToModel), num(m.BytesSent), num(m.FilesTruncated),
-			num(m.FilesWithheld), num(m.FilesUnreadable), num(m.FilesBudgetExhausted), num(m.FilesNotPlanned), num(m.FilesNotSent), num(m.FilesWithCompletedReview)})
+		row := []secCell{code(m.ModuleID), txt(lab(l, "discovered", strconv.FormatBool(m.Discovered))), num(m.FilesEligible), num(m.FilesSentToModel), num(m.BytesSent), num(m.FilesTruncated),
+			num(m.FilesWithheld), num(m.FilesUnreadable), num(m.FilesBudgetExhausted), num(m.FilesNotPlanned), num(m.FilesNotSent), num(m.FilesWithCompletedReview)}
+		if classes {
+			row = slices.Insert(row, 1, txt(lab(l, "class", m.Class)))
+			row = slices.Insert(row, 11, num(m.FilesSecondaryNotReached))
+		}
+		mt.Rows = append(mt.Rows, row)
 		for _, s := range m.Slices {
 			if _, ok := slicesOf[s.TaskKey]; !ok {
 				order = append(order, s.TaskKey)
