@@ -213,7 +213,10 @@ func (g *WorkspaceGuard) intact(root *os.Root, rel string, d fs.DirEntry) (bool,
 	if err != nil {
 		return false, nil
 	}
-	if st, ok := g.stamps[rel]; ok && st == stampOf(fi) {
+	// The stamp is trusted only where it carries the file's change time and
+	// inode: size and modification time alone can be put back by a rewrite,
+	// so platforms without that identity compare the bytes every time.
+	if st, ok := g.stamps[rel]; ok && st == stampOf(fi) && st.extra != (fileIdentity{}) {
 		return true, nil
 	}
 	e := g.files[rel]
