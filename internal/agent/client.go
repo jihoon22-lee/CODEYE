@@ -17,7 +17,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// APIError is a non-2xx controller response (W03 envelope code).
+// APIError is a non-2xx controller response (envelope code).
 type APIError struct {
 	Status    int
 	Code      string

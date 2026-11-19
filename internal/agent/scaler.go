@@ -6,9 +6,9 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// Scaler decides which workers the agent starts. StaticScaler (W06 default,
+// Scaler decides which workers the agent starts. StaticScaler (default,
 // `--workers N`) keeps N workers and restarts exited ones. ControllerScaler
-// (W07, `--autoscale`) starts workers only for controller start_worker
+// (`--autoscale`) starts workers only for controller start_worker
 // commands and never restarts on its own; drain/stop are applied by the agent.
 type Scaler interface {
 	// Plan returns worker IDs to start now. alive counts live non-draining
@@ -20,7 +20,7 @@ type Scaler interface {
 
 // StaticScaler keeps N workers alive. It also honours controller start
 // requests without exceeding N + requests (the controller never sends them to
-// static nodes; W07 commands only nodes that declared controller scaling).
+// static nodes; commands go only to nodes that declared controller scaling).
 type StaticScaler struct {
 	N         int
 	mu        sync.Mutex

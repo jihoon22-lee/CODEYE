@@ -71,7 +71,7 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	opts := doctor.Options{WorkDir: *work, DatabaseURL: os.Getenv("CODEYE_DATABASE_URL"), Timeout: *timeout}
 	if *config != "" {
-		// W25: --config adds the personal operations section.
+		// --config adds the personal operations section.
 		cfg, err := personal.Load(*config, knownTools())
 		if err != nil {
 			fmt.Fprintln(stderr, err)

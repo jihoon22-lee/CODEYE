@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/migrations"
 )
 
-// W25 backup and restore support (docs/OPERATIONS.md#백업과-복원). The database dump and the
+// Backup and restore support (docs/OPERATIONS.md#백업과-복원). The database dump and the
 // artifact list come from ONE exported snapshot: WithBackupPoint holds a
 // REPEATABLE READ READ ONLY transaction, exports its snapshot for pg_dump
 // --snapshot and reads the finalized blobs in the same snapshot.
@@ -29,7 +29,7 @@ type BackupPoint struct {
 	Schema           string
 	Blobs            []Blob
 	// MetadataOnly counts finalized artifact rows without stored bytes (the
-	// W02 metadata path); they have nothing to copy.
+	// metadata path); they have nothing to copy.
 	MetadataOnly int64
 	Rows         map[string]int64
 }

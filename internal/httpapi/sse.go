@@ -14,7 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// GET /runs/{id}/events (W22, docs/API.md#실행-조회와-진행): the run's stored events after a
+// GET /runs/{id}/events (docs/API.md#실행-조회와-진행): the run's stored events after a
 // cursor as text/event-stream. Each event row is an unnamed SSE message with
 // "id: <sequence>" (the run event sequence written in the transaction that
 // changed the state) and a data object of allowlisted structured fields.

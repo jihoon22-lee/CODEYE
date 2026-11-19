@@ -4,7 +4,7 @@ package procid
 
 import "time"
 
-// Read is unsupported outside Linux in W06 (Windows identity is the W05 Job
+// Read is unsupported outside Linux (the Windows identity is the Job
 // Object; agent reconciliation reports uncertain).
 func Read(pid int) (Identity, error) { return Identity{}, ErrUnsupported }
 

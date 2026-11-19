@@ -6,10 +6,10 @@ import (
 	"testing/fstest"
 )
 
-// TestW07MigrationFromPopulatedW06Schema applies 0001-0003, fills pool, node,
-// worker and command rows the way W06 wrote them, then applies 0004 and checks
+// TestPoolPolicyMigrationFromPopulatedNodeSchema applies 0001-0003, fills pool, node,
+// worker and command rows the way the earlier schema wrote them, then applies 0004 and checks
 // the defaults, the new guards and that an 0003 binary refuses the result.
-func TestW07MigrationFromPopulatedW06Schema(t *testing.T) {
+func TestPoolPolicyMigrationFromPopulatedNodeSchema(t *testing.T) {
 	_, open := isolatedSchema(t)
 	ctx := testCtx(t)
 	c := open()
@@ -70,7 +70,7 @@ func TestW07MigrationFromPopulatedW06Schema(t *testing.T) {
 }
 
 // A failing statement inside 0004 rolls back the whole application.
-func TestW07MigrationFailureRollsBack(t *testing.T) {
+func TestPoolPolicyMigrationFailureRollsBack(t *testing.T) {
 	schema, open := isolatedSchema(t)
 	ctx := testCtx(t)
 	c := open()

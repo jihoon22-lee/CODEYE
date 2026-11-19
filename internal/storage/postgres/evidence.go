@@ -80,7 +80,7 @@ func (s *Store) CreateTask(ctx context.Context, o Ownership, required bool) (str
 
 // createTaskTx creates a task of the locked run. With a key, an existing task of
 // the run with that key (a retried run re-planning) is returned with its current
-// version. The display stage (docs/ARCHITECTURE.md#표시-단계와-task-단계) and the estimate weight (W22) are
+// version. The display stage (docs/ARCHITECTURE.md#표시-단계와-task-단계) and the estimate weight are
 // fixed at the first record: an omitted value keeps the stored one, a
 // different value is ErrConflict (like required), and a value declared for a
 // task stored without one (an older record re-planned by a newer worker) is
@@ -234,7 +234,7 @@ type EvidenceInput struct {
 // RecordEvidence allocates the evidence ID. The task must have an execution row for
 // this attempt in a started or finished state, so evidence cannot be attributed to a
 // task that never ran here. That is execution metadata only: file existence, actual
-// hash/range, and artifact byte verification belong to collectors/finalizers (W04/W12).
+// hash/range, and artifact byte verification belong to collectors/finalizers.
 func (s *Store) RecordEvidence(ctx context.Context, o Ownership, in EvidenceInput) (string, error) {
 	if !validOwner(o) || !validIDs(in.TaskID) {
 		return "", domain.ErrInvalid

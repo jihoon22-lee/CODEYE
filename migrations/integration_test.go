@@ -814,11 +814,11 @@ func TestSchemaRetryGuardIndependentOfSearchPath(t *testing.T) {
 	mustExec(t, ctx, c, "UPDATE "+runs+" SET status = 'queued', version = 3 WHERE id = $1", f.runA)
 }
 
-func TestSchema0002GuardsAndUpgradeFromW02(t *testing.T) {
+func TestSchema0002GuardsAndUpgradeFromInitialSchema(t *testing.T) {
 	_, open := isolatedSchema(t)
 	ctx := testCtx(t)
 	c := open()
-	// A W02 database with rows: apply 0001 only, add data, then upgrade.
+	// A database with rows: apply 0001 only, add data, then upgrade.
 	ms, _ := Embedded()
 	only1 := fstest.MapFS{"m/0001_core_domain.sql": {Data: []byte(ms[0].sql)}}
 	if err := applyFS(ctx, c, only1, "m"); err != nil {

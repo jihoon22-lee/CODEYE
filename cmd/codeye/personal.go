@@ -23,7 +23,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 )
 
-// Personal mode (W25, docs/OPERATIONS.md): `codeye start|stop|status` run one loopback
+// Personal mode (docs/OPERATIONS.md): `codeye start|stop|status` run one loopback
 // controller and one local agent from a JSON config. Linux only.
 
 // personalTimings are replaced in tests.

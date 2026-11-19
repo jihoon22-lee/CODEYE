@@ -21,12 +21,12 @@ func TestRunNodeDispatchAndUsage(t *testing.T) {
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--workers", "17"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--git", "git"},
 		{"worker", "--anything"},
-		// W07: --autoscale excludes an explicit --workers; --max-workers needs --autoscale and 1..16.
+		// --autoscale excludes an explicit --workers; --max-workers needs --autoscale and 1..16.
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--autoscale", "--workers", "1"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--max-workers", "2"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--autoscale", "--max-workers", "17"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--autoscale", "--max-workers", "0"},
-		// W15: the review pack is review-v1 or review-r1; nothing else, no fallback.
+		// The review pack is review-v1 or review-r1; nothing else, no fallback.
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-pack", "review-r2"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-pack", ""},
 	}

@@ -46,18 +46,18 @@ const (
 )
 
 // Task is one logical task of the run as stored. Stage "" is a task recorded
-// without a stage (pre-W15 worker or R0 record); it is never inferred.
+// without a stage (a worker that declares no stage, or a legacy record); it is never inferred.
 type Task struct {
 	Stage      domain.Stage
 	Status     domain.TaskStatus
 	Reason     string
 	StartedAt  *time.Time
 	FinishedAt *time.Time
-	// Weight is the worker's declared estimate weight (W22); nil means not
+	// Weight is the worker's declared estimate weight; nil means not
 	// declared and counts as DefaultWeight.
 	Weight *int
 	// CreatedSeq is the run event sequence of the task's creation and
-	// CreatedAt its database time; both nil for tasks recorded before W22.
+	// CreatedAt its database time; both nil for tasks recorded before plan revisions existed.
 	CreatedSeq *int64
 	CreatedAt  *time.Time
 }
@@ -126,8 +126,8 @@ type View struct {
 	Plan   Plan
 }
 
-// Plan is the weighted progress estimate of the current attempt (W22,
-// REQ-017). Before the plan is fixed every pointer is nil and Changes is
+// Plan is the weighted progress estimate of the current attempt
+// (REQ-017). Before the plan is fixed every pointer is nil and Changes is
 // empty. Revision is 1 when the plan is fixed and grows by one for each task
 // created afterwards (Changes says which task, with what weight, moved the
 // denominator). The estimate is finished weight / planned weight of the
@@ -201,7 +201,7 @@ func weightOf(t Task) int {
 // computePlan derives the plan revision and weighted estimate. A task belongs
 // to the first revision unless it was created after the current attempt's
 // plan-fixing event (CreatedSeq > RunningSeq); tasks without a creation
-// sequence (before W22) belong to the first revision.
+// sequence (legacy tasks) belong to the first revision.
 func computePlan(r Run, fixed bool) Plan {
 	p := Plan{Changes: []PlanChange{}}
 	if !fixed {

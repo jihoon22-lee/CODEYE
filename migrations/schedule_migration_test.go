@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-// TestW22MigrationKeepsLegacyRows applies 0001-0006, writes a run and tasks
-// the way W15 workers did, then applies 0007: the run stays a manual request
+// TestScheduleMigrationKeepsLegacyRows applies 0001-0006, writes a run and tasks
+// the way workers that declared stages but no weight did, then applies 0007: the run stays a manual request
 // (no schedule origin), the tasks keep NULL weight and creation sequence (no
 // backfill), the new columns follow their first-record rules, occurrences are
 // unique per (schedule_id, scheduled_for) and decided occurrences are
 // immutable. A 0006 binary refuses the result.
-func TestW22MigrationKeepsLegacyRows(t *testing.T) {
+func TestScheduleMigrationKeepsLegacyRows(t *testing.T) {
 	schema, open := isolatedSchema(t)
 	ctx := testCtx(t)
 	c := open()
@@ -61,7 +61,7 @@ func TestW22MigrationKeepsLegacyRows(t *testing.T) {
 	execState(t, ctx, c, "23514", "INSERT INTO runs(id,project_id,actor_id,idempotency_key,request_digest,project_revision,status,schedule_id) VALUES($1,$2,$3,'s4',$4,1,'queued',$5)", newID(), project, user, digest('d'), schedule)
 	execState(t, ctx, c, SQLStateImmutable, "DELETE FROM schedules WHERE id=$1", schedule)
 	if !relationExists(t, ctx, c, schema, "schedules_due_idx") || !relationExists(t, ctx, c, schema, "runs_schedule_occurrence_idx") {
-		t.Fatal("W22 indexes missing")
+		t.Fatal("schedule indexes missing")
 	}
 	if err := applyFS(ctx, c, embeddedPrefix(t, 7), "m"); err != nil {
 		t.Fatalf("reapply: %v", err)

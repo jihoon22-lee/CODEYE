@@ -13,7 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// W07 autoscale mode with real worker processes (the test binary re-executed
+// Autoscale mode with real worker processes (the test binary re-executed
 // as "worker"/"worker-none") against the strict fake controller.
 
 func autoscaleConfig(h *harness, workerArg string, cap int) Config {

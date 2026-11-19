@@ -274,7 +274,7 @@ func (s *Store) FinalizeArtifact(ctx context.Context, node string, o Ownership, 
 	})
 }
 
-// ArtifactRecord is a stored artifact's metadata (controller-side readers, W09).
+// ArtifactRecord is a stored artifact's metadata (controller-side readers).
 type ArtifactRecord struct {
 	ID, RunID, AttemptID, Role, MediaType, SHA256, StorageKey string
 	SizeBytes                                                 int64

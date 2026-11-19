@@ -15,10 +15,10 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// W06 node protocol storage tests. Every test needs CODEYE_TEST_DATABASE_URL
+// Node protocol storage tests. Every test needs CODEYE_TEST_DATABASE_URL
 // (real PostgreSQL, isolated schema); without it they skip = NOT executed.
 
-type w06 struct {
+type nodeEnv struct {
 	t       *testing.T
 	s       *Store
 	ctx     context.Context
@@ -27,19 +27,19 @@ type w06 struct {
 	project Project
 }
 
-func newW06(t *testing.T) *w06 {
+func newNodeEnv(t *testing.T) *nodeEnv {
 	s := testStore(t)
 	ctx, user, root, _ := registered(t, s)
 	p, err := s.RegisterProject(ctx, user, ProjectRegistration{Source: domain.Source{Kind: domain.SourceLocal, SourceRootID: root.ID, RelativePath: "."}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &w06{t: t, s: s, ctx: ctx, user: user, root: root, project: p}
+	return &nodeEnv{t: t, s: s, ctx: ctx, user: user, root: root, project: p}
 }
 
 const deepReview = `{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"full"}}`
 
-func (e *w06) enqueue(key, body string) Run {
+func (e *nodeEnv) enqueue(key, body string) Run {
 	e.t.Helper()
 	r, err := e.s.Enqueue(e.ctx, e.user, e.project.ID, key, json.RawMessage(body))
 	if err != nil {
@@ -53,7 +53,7 @@ type testNode struct {
 	workers    []string
 }
 
-func (e *w06) enroll(name string, roots ...string) testNode {
+func (e *nodeEnv) enroll(name string, roots ...string) testNode {
 	e.t.Helper()
 	token := domain.NewID()
 	if _, err := e.s.IssueEnrollmentToken(e.ctx, "default", roots, hashOf(token), time.Minute); err != nil {
@@ -87,7 +87,7 @@ func hb(workers []string, state string, caps []string) nodeproto.NodeHeartbeatRe
 	return in
 }
 
-func (e *w06) beat(n testNode, in nodeproto.NodeHeartbeatRequest) nodeproto.NodeHeartbeatResponse {
+func (e *nodeEnv) beat(n testNode, in nodeproto.NodeHeartbeatRequest) nodeproto.NodeHeartbeatResponse {
 	e.t.Helper()
 	out, err := e.s.NodeHeartbeat(e.ctx, n.id, in)
 	if err != nil {
@@ -96,12 +96,12 @@ func (e *w06) beat(n testNode, in nodeproto.NodeHeartbeatRequest) nodeproto.Node
 	return out
 }
 
-func (e *w06) idle(n testNode) {
+func (e *nodeEnv) idle(n testNode) {
 	e.t.Helper()
 	e.beat(n, hb(n.workers, "idle", capable(e.root.ID)))
 }
 
-func (e *w06) claimOK(n testNode, worker, key string) *nodeproto.ClaimResponse {
+func (e *nodeEnv) claimOK(n testNode, worker, key string) *nodeproto.ClaimResponse {
 	e.t.Helper()
 	res, err := e.s.ClaimAttempt(e.ctx, n.id, worker, key)
 	if err != nil {
@@ -113,7 +113,7 @@ func (e *w06) claimOK(n testNode, worker, key string) *nodeproto.ClaimResponse {
 	return res.Response
 }
 
-func (e *w06) noClaim(n testNode, worker, key string) {
+func (e *nodeEnv) noClaim(n testNode, worker, key string) {
 	e.t.Helper()
 	res, err := e.s.ClaimAttempt(e.ctx, n.id, worker, key)
 	if err != nil {
@@ -124,7 +124,7 @@ func (e *w06) noClaim(n testNode, worker, key string) {
 	}
 }
 
-func (e *w06) waiting(run string) string {
+func (e *nodeEnv) waiting(run string) string {
 	e.t.Helper()
 	v, err := e.s.GetRunView(e.ctx, e.user, run)
 	if err != nil {
@@ -136,15 +136,15 @@ func (e *w06) waiting(run string) string {
 	return *v.WaitingReason
 }
 
-// projectLimit sets scheduler_limits.project_max_running (W07).
-func (e *w06) projectLimit(n int) {
+// projectLimit sets scheduler_limits.project_max_running.
+func (e *nodeEnv) projectLimit(n int) {
 	e.t.Helper()
 	if _, err := e.s.SetSchedulerLimits(e.ctx, nil, &n); err != nil {
 		e.t.Fatal(err)
 	}
 }
 
-func (e *w06) count(q string, args ...any) int {
+func (e *nodeEnv) count(q string, args ...any) int {
 	e.t.Helper()
 	var n int
 	if err := e.s.pool.QueryRow(e.ctx, q, args...).Scan(&n); err != nil {
@@ -157,7 +157,7 @@ func owner(n testNode, c *nodeproto.ClaimResponse) Ownership {
 	return Ownership{AttemptID: c.Lease.AttemptID, NodeID: n.id, WorkerID: c.Lease.WorkerID, Epoch: c.Lease.LeaseEpoch}
 }
 
-// The 0003 request restore matches W03 digests only if its literals are the
+// The 0003 request restore matches stored digests only if its literals are the
 // exact canonical bytes Enqueue hashed.
 func TestRequestBackfillLiteralsAreCanonical(t *testing.T) {
 	sql, err := os.ReadFile("../../../migrations/sql/0003_nodes_and_leases.sql")
@@ -178,7 +178,7 @@ func TestRequestBackfillLiteralsAreCanonical(t *testing.T) {
 }
 
 func TestEnrollmentTokenSingleUseExpiryRevocation(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	token := domain.NewID()
 	tok, err := e.s.IssueEnrollmentToken(e.ctx, "default", []string{e.root.ID}, hashOf(token), time.Minute)
 	if err != nil {
@@ -259,7 +259,7 @@ func TestEnrollmentTokenSingleUseExpiryRevocation(t *testing.T) {
 }
 
 func TestNodeAuthenticationAndRevocation(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	id, err := e.s.AuthenticateNode(e.ctx, hashOf(n.secret))
 	if err != nil || id.ID != n.id {
@@ -281,7 +281,7 @@ func TestNodeAuthenticationAndRevocation(t *testing.T) {
 }
 
 func TestHeartbeatWorkersCommandsAndValidation(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	a, b := e.enroll("a", e.root.ID), e.enroll("b")
 	e.idle(a)
 	if n := e.count("SELECT count(*) FROM workers WHERE node_id=$1 AND state='idle'", a.id); n != 2 {
@@ -350,7 +350,7 @@ func TestHeartbeatWorkersCommandsAndValidation(t *testing.T) {
 
 // TC-21: two agents race for one run; exactly one lease, epoch, reservation.
 func TestTC21ConcurrentClaimSingleOwner(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	a, b := e.enroll("a", e.root.ID), e.enroll("b", e.root.ID)
 	e.idle(a)
 	e.idle(b)
@@ -434,7 +434,7 @@ func TestTC21ConcurrentClaimSingleOwner(t *testing.T) {
 	c3 := e.enroll("c", e.root.ID)
 	e.idle(c3)
 	e.noClaim(c3, c3.workers[0], "empty")
-	// W07: r2 is in the same project as the running r1; this test is about
+	// r2 is in the same project as the running r1; this test is about
 	// ownership, so lift the per-project limit (default 1, see TC-73).
 	e.projectLimit(2)
 	e.enqueue("r2", deepReview)
@@ -447,7 +447,7 @@ func TestTC21ConcurrentClaimSingleOwner(t *testing.T) {
 
 // TC-21: an event-insert failure after the reservation leaves nothing behind.
 func TestTC21ClaimFailureLeavesNoPartialState(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	a := e.enroll("a", e.root.ID)
 	e.idle(a)
 	r := e.enqueue("r1", deepReview)
@@ -470,7 +470,7 @@ func TestTC21ClaimFailureLeavesNoPartialState(t *testing.T) {
 }
 
 func TestClaimRefusalsAndWaitingReasons(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	r := e.enqueue("r1", deepReview)
 	if got := e.waiting(r.ID); got != nodeproto.WaitingExecutionUnavailable {
 		t.Fatalf("no node: %q", got)
@@ -554,8 +554,8 @@ func TestClaimRefusalsAndWaitingReasons(t *testing.T) {
 // Accounting model: observed free memory is not reduced by every reservation
 // again; only reservations made after the last heartbeat are subtracted.
 func TestCapacityAccountingWithoutDoubleCounting(t *testing.T) {
-	e := newW06(t)
-	// W07: three runs of one project run concurrently here; this test is about
+	e := newNodeEnv(t)
+	// Three runs of one project run concurrently here; this test is about
 	// node resource accounting, so lift the per-project limit (default 1).
 	e.projectLimit(3)
 	n := e.enroll("a", e.root.ID)
@@ -586,7 +586,7 @@ func TestCapacityAccountingWithoutDoubleCounting(t *testing.T) {
 
 // Incompatible runs ahead in the queue must not starve a compatible one.
 func TestClaimPagesPastIncompatibleQueueHead(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
 	for i := 0; i < candidatePage+5; i++ {
@@ -599,7 +599,7 @@ func TestClaimPagesPastIncompatibleQueueHead(t *testing.T) {
 }
 
 func TestClaimRechecksActorPermissionAndSourceGrant(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
 	member, err := e.s.CreateUser(e.ctx)
@@ -636,7 +636,7 @@ func TestClaimRechecksActorPermissionAndSourceGrant(t *testing.T) {
 
 // uploadManifest stores a finalized artifact row for o (bytes are the HTTP
 // layer's concern; here only metadata).
-func (e *w06) artifact(n testNode, o Ownership, role, sha string) string {
+func (e *nodeEnv) artifact(n testNode, o Ownership, role, sha string) string {
 	e.t.Helper()
 	out, err := e.s.FinalizeArtifact(e.ctx, n.id, o, ArtifactUpload{ClientArtifactID: domain.NewID(), Role: role, MediaType: "application/json", SHA256: sha, StorageKey: "sha256/" + sha[:2] + "/" + sha, SizeBytes: 10})
 	if err != nil {
@@ -645,12 +645,12 @@ func (e *w06) artifact(n testNode, o Ownership, role, sha string) string {
 	return out.ArtifactID
 }
 
-func (e *w06) event(n testNode, o Ownership, kind string, payload any) (nodeproto.EventResponse, error) {
+func (e *nodeEnv) event(n testNode, o Ownership, kind string, payload any) (nodeproto.EventResponse, error) {
 	raw, _ := json.Marshal(payload)
 	return e.s.RecordAttemptEvent(e.ctx, n.id, o, AttemptEvent{ClientEventID: domain.NewID(), Kind: kind, Payload: raw})
 }
 
-func (e *w06) mustEvent(n testNode, o Ownership, kind string, payload any) nodeproto.EventResponse {
+func (e *nodeEnv) mustEvent(n testNode, o Ownership, kind string, payload any) nodeproto.EventResponse {
 	e.t.Helper()
 	out, err := e.event(n, o, kind, payload)
 	if err != nil {
@@ -660,7 +660,7 @@ func (e *w06) mustEvent(n testNode, o Ownership, kind string, payload any) nodep
 }
 
 func TestNodeAttemptHappyPathToFinalizing(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
 	r := e.enqueue("r1", deepReview)
@@ -744,7 +744,7 @@ func TestNodeAttemptHappyPathToFinalizing(t *testing.T) {
 // TC-22/TC-18 protocol scope: fencing of other workers, nodes, old epochs and
 // expired leases; expiry keeps the reservation until real cleanup is reported.
 func TestLeaseFencingExpiryAndCleanup(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	a, b := e.enroll("a", e.root.ID), e.enroll("b", e.root.ID)
 	e.idle(a)
 	e.idle(b)
@@ -805,7 +805,7 @@ func TestLeaseFencingExpiryAndCleanup(t *testing.T) {
 }
 
 func TestUncertainCompletionKeepsReservation(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
 	e.enqueue("r1", deepReview)
@@ -831,7 +831,7 @@ func TestUncertainCompletionKeepsReservation(t *testing.T) {
 }
 
 func TestNodeCommandsCannotBeDeleted(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
 	r := e.enqueue("r1", deepReview)
@@ -857,7 +857,7 @@ func TestGitSourceClaimEligibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &w06{t: t, s: s, ctx: ctx, user: user, root: root, project: p}
+	e := &nodeEnv{t: t, s: s, ctx: ctx, user: user, root: root, project: p}
 	r := e.enqueue("g1", deepReview)
 	without := e.enroll("no-git")
 	e.beat(without, hb(without.workers, "idle", []string{nodeproto.AnalysisCapability("deep-review"), nodeproto.GitSourceCapability("gitlab.example")}))
@@ -876,7 +876,7 @@ func TestGitSourceClaimEligibility(t *testing.T) {
 
 // A failed run with a fixed snapshot is retried only on a node holding it.
 func TestPinnedRetryRequiresSnapshotLocation(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	a, b := e.enroll("a", e.root.ID), e.enroll("b", e.root.ID)
 	e.idle(a)
 	r := e.enqueue("r1", deepReview)
@@ -901,7 +901,7 @@ func TestPinnedRetryRequiresSnapshotLocation(t *testing.T) {
 		t.Fatalf("revoked holder: %q", got)
 	}
 	// A fresh test with the holder alive.
-	e2 := newW06(t)
+	e2 := newNodeEnv(t)
 	h := e2.enroll("h", e2.root.ID)
 	e2.idle(h)
 	r2 := e2.enqueue("r", deepReview)
@@ -945,7 +945,7 @@ func TestPinnedRetryRequiresSnapshotLocation(t *testing.T) {
 }
 
 func TestArtifactFinalizeIdempotencyAndFencing(t *testing.T) {
-	e := newW06(t)
+	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
 	e.enqueue("r1", deepReview)

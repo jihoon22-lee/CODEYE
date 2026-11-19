@@ -13,7 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
 )
 
-// `codeye backup` and `codeye restore` (W25, docs/OPERATIONS.md#백업과-복원) for a personal
+// `codeye backup` and `codeye restore` (docs/OPERATIONS.md#백업과-복원) for a personal
 // installation: the database is CODEYE_DATABASE_URL, the artifact store is
 // <state_dir>/artifacts and pg_dump/pg_restore come from
 // database.postgres_bin_dir.

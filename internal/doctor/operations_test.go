@@ -40,7 +40,7 @@ func writeManifest(t *testing.T, dir string, at time.Time) {
 	}
 }
 
-// TC-126 (W25, docs/OPERATIONS.md#codeye-doctor): doctor --config reports every storage area
+// TC-126 (docs/OPERATIONS.md#codeye-doctor): doctor --config reports every storage area
 // against its limit, the newest backup's age and the start/stop state; the
 // section is absent without --config.
 func TestOperationsStorageBackupAndProcesses(t *testing.T) {

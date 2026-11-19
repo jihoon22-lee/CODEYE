@@ -12,7 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// Default per-attempt reservation (W06 fixed demand; W07 derives it from the
+// Default per-attempt reservation (fixed demand; derived from the
 // pool/profile policy). Reservations are admission bookkeeping, not OS limits.
 const (
 	ReserveCPUMillis   = 1000
@@ -33,7 +33,7 @@ type candidate struct {
 	runID, projectID, actorID string
 	createdAt                 time.Time
 	// dispatchedAt is the project's last claim time (-infinity if never):
-	// the first key of the round-robin order (W07 fairness).
+	// the first key of the round-robin order (fairness).
 	dispatchedAt pgtype.Timestamptz
 	request      domain.RunRequest
 	source       domain.Source
@@ -64,7 +64,7 @@ type nodeView struct {
 	unseenDisk         int64
 	lastBeatOK         bool
 	// quotaExceeded are the storage areas the node last reported at or over
-	// their limit (W25); a non-empty list refuses new attempts on the node.
+	// their limit; a non-empty list refuses new attempts on the node.
 	quotaExceeded []string
 }
 
@@ -150,7 +150,7 @@ const candidateSQL = `SELECT r.id::text,r.project_id::text,r.actor_id::text,r.re
 	LEFT JOIN project_dispatch pd ON pd.project_id=r.project_id
 	WHERE r.status='queued' AND r.request IS NOT NULL `
 
-// fairOrder is the claim order (W07): projects round-robin by their last
+// fairOrder is the claim order: projects round-robin by their last
 // dispatch (never-dispatched first), then oldest run, then ID. Within one
 // claim transaction (serialized by the scheduler_limits lock) the key is
 // stable, so keyset paging over it is exact.
@@ -184,7 +184,7 @@ func scanCandidate(row pgx.Row) (candidate, bool, error) {
 		}
 		c.gitHost = host
 	}
-	// A pre-W06 snapshot has no manifest digest and no location: never pinned-retried.
+	// A snapshot taken before node protocol manifests has no manifest digest and no location: never pinned-retried.
 	if c.snapshotID != nil && manifest == nil {
 		return c, false, nil
 	}
@@ -251,7 +251,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 		// Only a worker the agent last reported idle, owning no active attempt,
 		// may claim (starting/busy/draining/stopped/failed are refused). A
 		// worker the autoscaler already told to drain or stop is refused too,
-		// even before the agent applied the command (W07).
+		// even before the agent applied the command.
 		var leaving bool
 		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM node_commands WHERE worker_id=$1 AND node_id=$2 AND kind IN ('drain_worker','stop_worker'))", worker, node).Scan(&leaving); err != nil {
 			return ClaimResult{}, err
@@ -273,7 +273,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 		if !n.lastBeatOK || active >= limit || !n.hasRoom() {
 			return none()
 		}
-		// Storage quota (W25, docs/OPERATIONS.md#저장-영역과-상한): admission only. New attempts are
+		// Storage quota (docs/OPERATIONS.md#저장-영역과-상한): admission only. New attempts are
 		// refused; running attempts and their uploads are never affected.
 		if len(n.quotaExceeded) > 0 {
 			return none()
@@ -284,7 +284,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 			}
 			return none()
 		}
-		// Pool budget (W07): active reservations of all nodes in the pool stay
+		// Pool budget: active reservations of all nodes in the pool stay
 		// below the pool's current max_workers (max 0 pauses the pool).
 		pol, err := currentPolicy(ctx, tx, n.poolID)
 		if err != nil {
@@ -463,7 +463,7 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 	if _, err = tx.Exec(ctx, "UPDATE workers SET state='busy',attempt_id=$2,state_since=CASE WHEN state='busy' THEN state_since ELSE clock_timestamp() END WHERE id=$1", worker, a.ID); err != nil {
 		return nil, false, err
 	}
-	// Round-robin key (W07): this project was served now.
+	// Round-robin key: this project was served now.
 	if _, err = tx.Exec(ctx, `INSERT INTO project_dispatch(project_id,last_dispatched_at,dispatch_count) VALUES($1,clock_timestamp(),1)
 		ON CONFLICT(project_id) DO UPDATE SET last_dispatched_at=excluded.last_dispatched_at,dispatch_count=project_dispatch.dispatch_count+1`, r.ProjectID); err != nil {
 		return nil, false, err
@@ -610,9 +610,9 @@ func waitingReason(ctx context.Context, tx pgx.Tx, runID string) (*string, error
 	if projectActive >= projectLimit {
 		return reason(nodeproto.WaitingProjectLimit)
 	}
-	// Pool budget (W07): a capable node has room only if its pool is below
+	// Pool budget: a capable node has room only if its pool is below
 	// max_workers; pools with max 0 are paused. A node over a storage quota
-	// (W25) has no room; quotaOnly records that it would have otherwise.
+	// has no room; quotaOnly records that it would have otherwise.
 	paused, room, quotaOnly := true, false, false
 	for _, v := range capableViews {
 		pol, err := currentPolicy(ctx, tx, v.poolID)
@@ -650,7 +650,7 @@ func waitingReason(ctx context.Context, tx pgx.Tx, runID string) (*string, error
 	return nil, nil
 }
 
-// ArtifactUsageSQL is the controller artifact store accounting (W25): the
+// ArtifactUsageSQL is the controller artifact store accounting: the
 // total size of the distinct contents the artifacts rows reference
 // (finalized or announced). The store is content-addressed, so one blob is
 // counted once. Files the database does not reference (a crash between the

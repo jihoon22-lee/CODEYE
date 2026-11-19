@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// W09 report publication. The controller publishes a report for the run's
+// Report publication. The controller publishes a report for the run's
 // current attempt (attempt.epoch = run.lease_epoch) only after the attempt was
 // released with confirmed cleanup:
 //   - finalizing: the publish transaction also moves the run to the report
@@ -55,7 +55,7 @@ type Publication struct {
 	Artifacts      []ArtifactRecord // finalized artifacts of the attempt
 	SourceManifest *ArtifactRecord  // a finalized source_manifest of the run whose sha256 = manifest digest
 	NextRevision   int
-	// Reviews are the project's latest human review per fingerprint (W23);
+	// Reviews are the project's latest human review per fingerprint;
 	// the builder stamps those in effect at publication.
 	Reviews []FindingReview
 }

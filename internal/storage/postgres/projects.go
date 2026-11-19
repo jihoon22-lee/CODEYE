@@ -42,7 +42,7 @@ func normalizeConfig(ctx context.Context, tx pgx.Tx, config json.RawMessage) (js
 	return normalized, domain.Digest(normalized), nil
 }
 
-// CreateUser is a trusted provisioning operation; authentication is implemented in W03.
+// CreateUser is a trusted provisioning operation; authentication is separate.
 func (s *Store) CreateUser(ctx context.Context) (string, error) {
 	id := domain.NewID()
 	_, err := s.pool.Exec(ctx, "INSERT INTO users(id) VALUES($1)", id)

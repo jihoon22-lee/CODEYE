@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// W25 (docs/OPERATIONS.md#백업과-복원): the URL rules match the controller, credentials reach
+// docs/OPERATIONS.md#백업과-복원: the URL rules match the controller, credentials reach
 // the child only through the environment and never appear in errors.
 func TestParseURLEnvironmentOnly(t *testing.T) {
 	c, err := ParseURL("postgresql://backup:s3cret%21@127.0.0.1:6543/codeye?sslmode=disable")

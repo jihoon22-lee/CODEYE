@@ -61,7 +61,7 @@ type Header struct {
 	ReplyTo string `json:"reply_to,omitempty"`
 }
 
-// Limits mirrors W04 source.Limits on the wire.
+// Limits mirrors source.Limits on the wire.
 type Limits struct {
 	MaxFiles      int   `json:"max_files"`
 	MaxFileBytes  int64 `json:"max_file_bytes"`

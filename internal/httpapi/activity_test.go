@@ -14,7 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// W15 activity/progress over real HTTP and PostgreSQL (TC-98/TC-99). Skips
+// Activity/progress over real HTTP and PostgreSQL (TC-98/TC-99). Skips
 // (NOT executed) without CODEYE_TEST_DATABASE_URL.
 
 // activityWithoutClock drops checked_at (the read time) for comparisons.

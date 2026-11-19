@@ -134,7 +134,7 @@ func (s *Server) listReports(q *request) {
 		n := items[len(items)-1].Revision
 		latest = &n
 	}
-	// W23: the run the comparison view uses by default (same project, source
+	// The run the comparison view uses by default (same project, source
 	// variant, profile and scope; an earlier fp2 report), or null.
 	ref, err := s.store.DefaultBaseline(ctx, q.session.UserID, q.params[0])
 	if err != nil {
