@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { AdminView } from './AdminView';
 import type { Api } from './api';
 import { DoctorView } from './DoctorView';
 import type { Idempotency } from './idempotency';
@@ -34,6 +35,7 @@ export function App({ api, controller, idempotency }: Props) {
         {!forced && <nav aria-label={t.nav.label}>
           <NavButton current={shown} view="projects" onSelect={go}>{t.nav.projects}</NavButton>
           <NavButton current={shown} view="doctor" onSelect={go}>{t.nav.doctor}</NavButton>
+          {signedIn?.isAdmin && <NavButton current={shown} view="admin" onSelect={go}>{t.accounts.nav.admin}</NavButton>}
         </nav>}
         <div className="session">
           <span className="stage">{t.stage}</span>
@@ -49,6 +51,7 @@ export function App({ api, controller, idempotency }: Props) {
             <PasswordForm key={signedIn.userId} controller={controller} user={signedIn} forced={forced} onDone={() => { if (forced) { setPasswordSet(true); setView('projects'); } }} />
             {!forced && <p><button type="button" onClick={() => go('projects')}>{t.accounts.password.back}</button></p>}
           </>
+          : shown === 'admin' ? <AdminView api={api} controller={controller} me={signedIn.userId} />
           : <ProjectsView api={api} userId={signedIn.userId} idempotency={idempotency} />}
       </div>
     </main>
