@@ -147,6 +147,24 @@ func countedCalls(t *testing.T, j analysis.Job) []string {
 	return strings.Fields(string(b))
 }
 
+// filledSlots are the slot keys review.scope filled, in order.
+func filledSlots(t *testing.T, j analysis.Job) []string {
+	t.Helper()
+	b, err := os.ReadFile(scopePath(j))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := record.DecodeScope(b, scopeExpect(j))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, s := range doc.Slices {
+		out = append(out, s.Key)
+	}
+	return out
+}
+
 func sliceKeys(plan []analysis.TaskSpec) []string {
 	var out []string
 	for _, p := range plan {
@@ -205,12 +223,23 @@ func TestSliceAdmissionKeepsTheCeiling(t *testing.T) {
 					t.Fatalf("scope %+v", res[record.TaskScope])
 				}
 				keysOf := sliceKeys(plan)
-				if len(keysOf) != 7 {
+				if len(keysOf) != 8 {
 					t.Fatalf("slices %v", keysOf)
+				}
+				filled := filledSlots(t, j)
+				if len(filled) != 6 {
+					t.Fatalf("filled slots %v", filled)
 				}
 				admitted, exhausted := 0, false
 				for _, key := range keysOf {
 					inv, ver := res["review.investigate."+key], res["review.verify."+key]
+					if !slices.Contains(filled, key) {
+						// A slot review.scope left empty makes no call.
+						if inv.Status != domain.TaskSkippedPolicy || inv.Reason != domain.ReasonNoReviewScope || ver.Status != domain.TaskSkippedPolicy || ver.Reason != domain.ReasonNoReviewScope {
+							t.Fatalf("%s: %+v %+v", key, inv, ver)
+						}
+						continue
+					}
 					var mine int
 					firstAt := -1
 					for i, c := range calls {
@@ -249,11 +278,11 @@ func TestSliceAdmissionKeepsTheCeiling(t *testing.T) {
 					admitted++
 				}
 				pre := (n - record.WholeRunMaxCalls) / record.SliceReserveCalls
-				t.Logf("ceiling %d, %s-call tasks: %d calls, %d of %d slices admitted (worst-case pre-admission: %d)", n, upstream, len(calls), admitted, len(keysOf), min(pre, len(keysOf)))
-				if upstream == "one" && admitted <= min(pre, len(keysOf)) && admitted < len(keysOf) {
+				t.Logf("ceiling %d, %s-call tasks: %d calls, %d of %d slices admitted (worst-case pre-admission: %d)", n, upstream, len(calls), admitted, len(filled), min(pre, len(filled)))
+				if upstream == "one" && admitted <= min(pre, len(filled)) && admitted < len(filled) {
 					t.Fatalf("admitted %d, pre-admission %d", admitted, pre)
 				}
-				if n == record.MaxMaxCalls && admitted != len(keysOf) {
+				if n == record.MaxMaxCalls && admitted != len(filled) {
 					t.Fatalf("ceiling %d admitted %d", n, admitted)
 				}
 			})
@@ -304,11 +333,12 @@ func TestSlicesNeverRepeatOverviewFiles(t *testing.T) {
 			seen[p] = "sent"
 		}
 	}
-	if f.calls("investigate") != 8 || f.calls("verify") != 8 {
+	if f.calls("investigate") != 7 || f.calls("verify") != 7 {
 		t.Fatalf("investigate %d verify %d calls", f.calls("investigate"), f.calls("verify"))
 	}
 	// The overview offers its certain prefix (7 files) and here one more
-	// that fit; review.scope drops that one from its slice.
+	// that fit; review.scope leaves that one out of the slots, and the six
+	// filled slots hold the rest.
 	t.Logf("overview sent %d files, the run %d", overview, len(seen))
 	if overview != 8 || len(seen) != 39 {
 		t.Fatalf("overview %d files, run %d", overview, len(seen))
@@ -382,6 +412,10 @@ func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
 	for _, p := range plan {
 		if _, key, ok := record.SliceTask(p.Key); ok {
 			r := res[p.Key]
+			if r.Status == domain.TaskSkippedPolicy && r.Reason == domain.ReasonNoReviewScope {
+				// A slot planned as slack and left empty.
+				continue
+			}
 			if r.Status != domain.TaskSucceeded {
 				t.Fatalf("%s %+v", p.Key, r)
 			}
@@ -420,10 +454,10 @@ func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
 // not-configured stand-in, or a scan whose result is unusable) runs them: the
 // scope artifact says not_screened, and the scope and every slice record
 // carry model_input_not_secret_screened. A completed screen withholds a
-// reported file from the slices as from the overview: its state is withheld
-// in the scope artifact and no request carries it; a slice left without
-// files ends no_review_scope even when the budget is spent (precedence:
-// policy, scope, nothing to review, budget).
+// reported file from the slots as from the overview: it is listed withheld
+// among the scope artifact's excluded files, takes no slot and no request
+// carries it; a slot left without files ends no_review_scope even when the
+// budget is spent (precedence: policy, scope, nothing to review, budget).
 func TestSliceSecretGating(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -470,7 +504,6 @@ func TestSliceSecretGating(t *testing.T) {
 
 	t.Run("withheld", func(t *testing.T) {
 		j := coverageJob(t)
-		// s002 starts with store/cache.go; s007 holds the last four store files.
 		withhold := []string{"store/cache.go", "store/sync.go", "store/tombstone.go", "store/txn.go", "store/wal.go"}
 		f := &roleCaller{script: coverageScript(t)}
 		plan, res := runRoleWith(t, j, RoleHandler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
@@ -492,9 +525,14 @@ func TestSliceSecretGating(t *testing.T) {
 			t.Fatal(err)
 		}
 		states := map[string]string{}
+		for _, file := range doc.Excluded {
+			states[file.Path] = file.State
+		}
 		for _, sl := range doc.Slices {
 			for _, file := range sl.Files {
-				states[file.Path] = file.State
+				if slices.Contains(withhold, file.Path) {
+					t.Fatalf("withheld %s in slot %s", file.Path, sl.Key)
+				}
 			}
 		}
 		for _, p := range withhold {
@@ -505,11 +543,11 @@ func TestSliceSecretGating(t *testing.T) {
 		last := sliceKeys(plan)[len(sliceKeys(plan))-1]
 		for _, k := range []string{"review.investigate." + last, "review.verify." + last} {
 			if res[k].Status != domain.TaskSkippedPolicy || res[k].Reason != domain.ReasonNoReviewScope {
-				t.Fatalf("%s %+v (slice files %+v)", k, res[k], doc.Slices[len(doc.Slices)-1].Files)
+				t.Fatalf("%s %+v", k, res[k])
 			}
 		}
-		if res["review.investigate.s002"].Status != domain.TaskSucceeded {
-			t.Fatalf("s002 %+v", res["review.investigate.s002"])
+		if res["review.investigate.s001"].Status != domain.TaskSucceeded {
+			t.Fatalf("s001 %+v", res["review.investigate.s001"])
 		}
 	})
 
@@ -546,13 +584,23 @@ func TestSliceSecretGating(t *testing.T) {
 		withhold := []string{"store/sync.go", "store/tombstone.go", "store/txn.go", "store/wal.go"}
 		f := &roleCaller{script: coverageScript(t)}
 		plan, res := runRoleWith(t, j, RoleHandler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.WholeRunMaxCalls}, "1.27.4")
-		keys := sliceKeys(plan)
-		last := "review.investigate." + keys[len(keys)-1]
-		if res[last].Reason != domain.ReasonNoReviewScope {
-			t.Fatalf("%s %+v", last, res[last])
+		filled := filledSlots(t, j)
+		empty, exhausted := 0, 0
+		for _, key := range sliceKeys(plan) {
+			r := res["review.investigate."+key]
+			switch {
+			case slices.Contains(filled, key) && r.Status == domain.TaskBudgetExhausted:
+				exhausted++
+			case slices.Contains(filled, key) && r.Status != domain.TaskSucceeded:
+				t.Fatalf("%s %+v", key, r)
+			case !slices.Contains(filled, key) && r.Reason != domain.ReasonNoReviewScope:
+				t.Fatalf("%s %+v", key, r)
+			case !slices.Contains(filled, key):
+				empty++
+			}
 		}
-		if res["review.investigate."+keys[len(keys)-2]].Status != domain.TaskBudgetExhausted {
-			t.Fatalf("%+v", res["review.investigate."+keys[len(keys)-2]])
+		if empty == 0 || exhausted == 0 {
+			t.Fatalf("filled %v, %d empty, %d exhausted", filled, empty, exhausted)
 		}
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
+	"path"
 	"reflect"
 	"slices"
 	"strings"
@@ -77,7 +78,7 @@ func randomTree(r *rand.Rand) map[string]int64 {
 // checkPlan asserts the partition and cap invariants of a slice plan.
 func checkPlan(t *testing.T, m source.Manifest, scope domain.Scope, plan slicePlan) {
 	t.Helper()
-	g := planCodeGroups(m, scope)
+	g := planCodeGroups(m, scope, record.DefaultSecondary)
 	seen := map[string]string{}
 	add := func(where string, files []plannedFile) {
 		for _, f := range files {
@@ -98,53 +99,25 @@ func checkPlan(t *testing.T, m source.Manifest, scope domain.Scope, plan slicePl
 	if len(plan.Overview) > roleMaxCodeFiles || bytes > roleMaxCodeBytes {
 		t.Fatalf("overview %d files %d bytes", len(plan.Overview), bytes)
 	}
-	if len(plan.Slices) > MaxSlices || (len(plan.NotPlanned) > 0 && len(plan.Slices) != MaxSlices) {
-		t.Fatalf("%d slices, %d files not planned", len(plan.Slices), len(plan.NotPlanned))
+	if plan.Slots > MaxSlices || len(plan.Slices) > plan.Slots || (len(plan.NotPlanned) > 0 && len(plan.Slices) != plan.Slots) ||
+		(plan.Slots > 0) != (len(plan.Rest) > 0) || (plan.Slots > 0 && plan.Slots < MaxSlices && plan.Slots != len(plan.Slices)+slotSlack(len(plan.Slices))) {
+		t.Fatalf("%d slots, %d slices, %d files not planned", plan.Slots, len(plan.Slices), len(plan.NotPlanned))
 	}
-	for i, s := range plan.Slices {
+	checkSlots(t, plan.Slices)
+	for _, s := range plan.Slices {
 		add(s.Key, s.Files)
-		bytes := 0
-		modules := []string{}
-		for _, f := range s.Files {
-			bytes += f.Bound
-			if !slices.Contains(modules, f.Module) {
-				modules = append(modules, f.Module)
-			}
-		}
-		slices.Sort(modules)
-		if s.Key != sliceKey(i) || len(s.Files) == 0 || len(s.Files) > sliceMaxFiles || bytes > sliceMaxBytes || !slices.Equal(modules, s.Modules) {
-			t.Fatalf("slice %+v (%d bytes)", s, bytes)
-		}
 	}
 	add("not planned", plan.NotPlanned)
-	if len(seen) != g.eligible {
+	if len(seen) != g.eligible || len(plan.Rest)+len(plan.Overview) != g.eligible {
 		t.Fatalf("%d of %d eligible files planned", len(seen), g.eligible)
 	}
-	// Every group keeps its rank order across overview, slices and the rest.
-	position := map[string]int{}
-	order := append(append([]plannedFile{}, plan.Overview...), plan.NotPlanned...)
-	order = slices.Insert(order, len(plan.Overview), func() []plannedFile {
-		var all []plannedFile
-		for _, s := range plan.Slices {
-			all = append(all, s.Files...)
-		}
-		return all
-	}()...)
-	for i, f := range order {
-		position[f.Path] = i
-	}
+	// The overview prefix holds the first files of its groups.
 	for _, k := range g.order {
 		var inP []string
-		last := -1
 		for _, e := range g.files[k] {
 			if seen[e.Path] == "overview" {
 				inP = append(inP, e.Path)
-				continue
 			}
-			if position[e.Path] < last {
-				t.Fatalf("group %q out of rank order at %s", k, e.Path)
-			}
-			last = position[e.Path]
 		}
 		for i, p := range inP {
 			if g.files[k][i].Path != p {
@@ -155,16 +128,18 @@ func checkPlan(t *testing.T, m source.Manifest, scope domain.Scope, plan slicePl
 	// The overview prefix is codeCorpus's round-robin order with every file
 	// at its bound.
 	var rr []string
-	for round := 0; ; round++ {
-		progressed := false
-		for _, k := range g.order {
-			if round < len(g.files[k]) {
-				rr = append(rr, g.files[k][round].Path)
-				progressed = true
+	for _, order := range g.phases() {
+		for round := 0; ; round++ {
+			progressed := false
+			for _, k := range order {
+				if round < len(g.files[k]) {
+					rr = append(rr, g.files[k][round].Path)
+					progressed = true
+				}
 			}
-		}
-		if !progressed {
-			break
+			if !progressed {
+				break
+			}
 		}
 	}
 	for i, f := range plan.Overview {
@@ -174,10 +149,41 @@ func checkPlan(t *testing.T, m source.Manifest, scope domain.Scope, plan slicePl
 	}
 }
 
+// checkSlots asserts what every packing keeps: slot keys in order, the caps,
+// one class per slot, primary slots before secondary ones and, within a
+// class, slots in rank order.
+func checkSlots(t *testing.T, list []reviewSlice) {
+	t.Helper()
+	for i, s := range list {
+		bytes := 0
+		modules := []string{}
+		for _, f := range s.Files {
+			bytes += f.Bound
+			if !slices.Contains(modules, f.Module) {
+				modules = append(modules, f.Module)
+			}
+			if f.Class != s.Class {
+				t.Fatalf("slot %s mixes classes", s.Key)
+			}
+		}
+		slices.Sort(modules)
+		if s.Key != sliceKey(i) || len(s.Files) == 0 || len(s.Files) > sliceMaxFiles || bytes > sliceMaxBytes || !slices.Equal(modules, s.Modules) ||
+			len(modules) > record.MaxSliceModules || s.Rank != s.Files[0].Rank {
+			t.Fatalf("slice %+v (%d bytes)", s, bytes)
+		}
+		if i > 0 {
+			p := list[i-1]
+			if p.Class == record.ClassSecondary && s.Class == record.ClassPrimary || p.Class == s.Class && record.RankIndex(p.Rank) > record.RankIndex(s.Rank) {
+				t.Fatalf("slot %s (%s %s) after %s (%s %s)", s.Key, s.Class, s.Rank, p.Key, p.Class, p.Rank)
+			}
+		}
+	}
+}
+
 // TC-161: the plan partitions the eligible files exactly once into the
-// overview prefix, at most 32 slices under the overview's caps and the
-// files beyond the slice limit; it is a pure function of manifest and
-// scope (entry order does not matter).
+// overview prefix, the slots under the overview's caps and the files beyond
+// the slot limit; it is a pure function of manifest and scope (entry order
+// does not matter).
 func TestSlicePlanPartitionsEligibleFiles(t *testing.T) {
 	r := rand.New(rand.NewPCG(1, 2))
 	sawSlices := false
@@ -188,24 +194,24 @@ func TestSlicePlanPartitionsEligibleFiles(t *testing.T) {
 		if i%5 == 4 {
 			scope = domain.Scope{Kind: "paths", Paths: []string{"m0", "m1"}}
 		}
-		plan := planSlices(m, scope)
+		plan := planSlices(m, scope, record.DefaultSecondary)
 		checkPlan(t, m, scope, plan)
 		shuffled := m
 		shuffled.Entries = append([]source.Entry{}, m.Entries...)
 		r.Shuffle(len(shuffled.Entries), func(a, b int) { shuffled.Entries[a], shuffled.Entries[b] = shuffled.Entries[b], shuffled.Entries[a] })
-		if !reflect.DeepEqual(plan, planSlices(shuffled, scope)) {
+		if !reflect.DeepEqual(plan, planSlices(shuffled, scope, record.DefaultSecondary)) {
 			t.Fatal("plan depends on manifest entry order")
 		}
 		sawSlices = sawSlices || len(plan.Slices) > 0
 	}
-	// A large tree reaches the slice limit.
+	// A large tree reaches the slot limit.
 	big := map[string]int64{"go.mod": 30}
-	for f := range 400 {
+	for f := range 600 {
 		big[fmt.Sprintf("pkg/f%03d.go", f)] = 5000
 	}
-	plan := planSlices(syntheticManifest(big), domain.Scope{Kind: "full"})
+	plan := planSlices(syntheticManifest(big), domain.Scope{Kind: "full"}, record.DefaultSecondary)
 	checkPlan(t, syntheticManifest(big), domain.Scope{Kind: "full"}, plan)
-	if len(plan.Slices) != MaxSlices || len(plan.NotPlanned) != 400-5-MaxSlices*5 {
+	if plan.Slots != MaxSlices || len(plan.Slices) != MaxSlices || len(plan.NotPlanned) != 600-5-MaxSlices*5 {
 		t.Fatalf("slices %d not planned %d", len(plan.Slices), len(plan.NotPlanned))
 	}
 	if !sawSlices {
@@ -225,7 +231,7 @@ func TestSlicePlanBreadthBeforeDepth(t *testing.T) {
 		files[fmt.Sprintf("c/c%d.py", f)] = 100
 	}
 	files["d/index.ts"] = 100
-	plan := planSlices(syntheticManifest(files), domain.Scope{Kind: "full"})
+	plan := planSlices(syntheticManifest(files), domain.Scope{Kind: "full"}, record.DefaultSecondary)
 	checkPlan(t, syntheticManifest(files), domain.Scope{Kind: "full"}, plan)
 	var got []string
 	for _, s := range plan.Slices {
@@ -303,8 +309,8 @@ func TestSmallRepositoriesPlanNoSlices(t *testing.T) {
 		jobs["lang-"+c.eco] = langJob(t, c.eco)
 	}
 	for name, j := range jobs {
-		plan := planSlices(j.Snapshot.Manifest, j.Scope)
-		if len(plan.Slices) != 0 || len(plan.NotPlanned) != 0 {
+		plan := planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary)
+		if plan.Slots != 0 || len(plan.Slices) != 0 || len(plan.NotPlanned) != 0 {
 			t.Errorf("%s: %d slices", name, len(plan.Slices))
 		}
 		specs, err := RoleHandler{Static: stubStatic{}}.Plan(t.Context(), j)
@@ -346,7 +352,7 @@ type expectedPlanSlice struct {
 // module of 30 files) plans the overview prefix, then slices round by round.
 func TestCoverageFixturePlan(t *testing.T) {
 	j := dirJob(t, "../../../fixtures/modules/slices/input")
-	plan := planSlices(j.Snapshot.Manifest, j.Scope)
+	plan := planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary)
 	checkPlan(t, j.Snapshot.Manifest, j.Scope, plan)
 	paths := func(list []plannedFile) []string {
 		out := []string{}
@@ -382,5 +388,105 @@ func TestCoverageFixturePlan(t *testing.T) {
 	}
 	if len(plan.Slices) < 6 || len(plan.NotPlanned) != 0 {
 		t.Fatalf("coverage fixture slices %d", len(plan.Slices))
+	}
+}
+
+// repoLikePlan is a repository shaped like this one: a large main Go module
+// (cmd, internal/a, internal/b), a TypeScript app in web/, Python scripts,
+// and ten tiny modules under fixtures/ that are test inputs.
+func repoLikePlan(t *testing.T) slicePlan {
+	t.Helper()
+	files := map[string]int64{"go.mod": 30, "web/package.json": 30, "scripts/pyproject.toml": 30, "cmd/tool/main.go": 1500}
+	for f := range 30 {
+		files[fmt.Sprintf("internal/a/a%02d.go", f)] = 2000
+		files[fmt.Sprintf("internal/b/b%02d.go", f)] = 2000
+		files[fmt.Sprintf("internal/b/b%02d_test.go", f)] = 2000
+	}
+	for f := range 10 {
+		files[fmt.Sprintf("web/src/w%02d.ts", f)] = 1500
+		files[fmt.Sprintf("scripts/s%02d.py", f)] = 1500
+		files[fmt.Sprintf("fixtures/m%d/go.mod", f)] = 30
+		files[fmt.Sprintf("fixtures/m%d/main.go", f)] = 300
+	}
+	plan := planSlices(syntheticManifest(files), domain.Scope{Kind: "full"}, record.DefaultSecondary)
+	checkPlan(t, syntheticManifest(files), domain.Scope{Kind: "full"}, plan)
+	return plan
+}
+
+// TC-161 (review priority, docs/REVIEW.md#검토-우선순위): files with tool
+// diagnostics fill the first slots (higher severity first), then every
+// primary module gets its first slot before any gets a second, the large
+// module takes most of the rest, tests come after source, and the
+// secondary material (fixtures) comes last, its diagnosed file first. The
+// fixtures do not take the overview either.
+func TestPackSlotsPriority(t *testing.T) {
+	plan := repoLikePlan(t)
+	for _, f := range plan.Overview {
+		if strings.HasPrefix(f.Path, "fixtures/") {
+			t.Fatalf("overview takes secondary %s", f.Path)
+		}
+	}
+	rest := append([]plannedFile{}, plan.Rest...)
+	for i := range rest {
+		switch rest[i].Path {
+		case "internal/b/b17.go":
+			rest[i].Rank, rest[i].Observations, rest[i].Severity = record.RankToolObservations, 2, 3
+		case "web/src/w07.ts":
+			rest[i].Rank, rest[i].Observations, rest[i].Severity = record.RankToolObservations, 9, 1
+		case "fixtures/m4/main.go":
+			rest[i].Rank, rest[i].Observations, rest[i].Severity = record.RankToolObservations, 40, 3
+		}
+	}
+	slots := packSlots(rest)
+	checkSlots(t, slots)
+	if slots[0].Files[0].Path != "internal/b/b17.go" || slots[0].Rank != record.RankToolObservations {
+		t.Fatalf("first slot %+v", slots[0].Files[0])
+	}
+	firstOf := map[string]int{}
+	secondaryFrom := -1
+	for i, s := range slots {
+		for _, m := range s.Modules {
+			if _, ok := firstOf[m]; !ok {
+				firstOf[m] = i
+			}
+		}
+		if s.Class == record.ClassSecondary && secondaryFrom < 0 {
+			secondaryFrom = i
+			if s.Files[0].Path != "fixtures/m4/main.go" {
+				t.Fatalf("first secondary slot %+v", s.Files)
+			}
+		}
+		if secondaryFrom >= 0 && s.Class != record.ClassSecondary {
+			t.Fatalf("primary slot %s after secondary ones", s.Key)
+		}
+	}
+	// The two diagnosed files share the first slot (the higher severity
+	// first); the other primary modules each get a slot right after it.
+	if len(slots[0].Files) != 2 || slots[0].Files[1].Path != "web/src/w07.ts" {
+		t.Fatalf("first slot %+v", slots[0].Files)
+	}
+	if firstOf["python:scripts"] > 3 || firstOf["go:."] > 0 {
+		t.Fatalf("first slots %v", firstOf)
+	}
+	// Secondary material is last and its ten tiny modules share two slots.
+	if secondaryFrom < 0 || len(slots)-secondaryFrom > 2 {
+		t.Fatalf("secondary from %d of %d", secondaryFrom, len(slots))
+	}
+	// Tests of the large module come after its source, and a slot holds one
+	// directory where it can: no slot mixes internal/a with internal/b.
+	sourceDone := false
+	for _, s := range slots[:secondaryFrom] {
+		dirs := map[string]bool{}
+		for _, f := range s.Files {
+			dirs[path.Dir(f.Path)] = true
+			if strings.HasSuffix(f.Path, "_test.go") {
+				sourceDone = true
+			} else if sourceDone && f.Module == "go:." && f.Rank != record.RankToolObservations {
+				t.Fatalf("source %s after a test slot", f.Path)
+			}
+		}
+		if dirs["internal/a"] && dirs["internal/b"] {
+			t.Fatalf("slot %s mixes directories %v", s.Key, dirs)
+		}
 	}
 }

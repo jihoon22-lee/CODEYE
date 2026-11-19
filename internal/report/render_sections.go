@@ -145,8 +145,9 @@ var countOrder = map[string][]string{
 	SectionStaticAnalysis: {"tools", "succeeded", "not_succeeded", "observations", "findings", "actionable", "pending"},
 	SectionMetrics:        {"tools", "observations", "metrics"},
 	SectionSecrets:        {"tools", "detections", "files"},
-	SectionCodeReview:     {"calls", "files_sent_to_model", "files_not_sent_to_model", "findings", "actionable", "pending", "refuted"},
-	SectionGaps:           {"gaps"},
+	SectionCodeReview: {"calls", "files_sent_to_model", "files_not_sent_to_model", "primary_modules", "primary_files", "primary_files_sent_to_model",
+		"secondary_files", "secondary_files_not_reached", "findings", "actionable", "pending", "refuted"},
+	SectionGaps: {"gaps"},
 }
 
 // dependencyPart is the dependency table: one row per deps.* task with what

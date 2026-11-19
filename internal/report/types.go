@@ -25,8 +25,13 @@ const (
 	// scope artifact, the code review ledger and the review calls' task_key.
 	// Version 7 reads the dependency records of the deps.* tasks: the
 	// environment section's optional dependencies list, its counts and the
-	// dependency gaps (docs/REPORT.md#분석-범위와-한계).
-	BuilderVersion = "7"
+	// dependency gaps (docs/REPORT.md#분석-범위와-한계). Version 8 reads the
+	// review scope artifact of schema 0.2 (slots filled by review priority,
+	// docs/REVIEW.md#검토-우선순위): the ledger rows' class and secondary
+	// counts, the slots of primary files the ceiling refused, the code review
+	// overview's primary and secondary counts and the
+	// review_primary_not_sent attention.
+	BuilderVersion = "8"
 )
 
 // Report statuses (schemas/report.schema.json).

@@ -241,14 +241,19 @@ type toolLocation struct {
 type toolObservation struct {
 	ID, Tool, RuleID, RawMessage, LocationState string
 	Location                                    *toolLocation
+	// Severity is the tool's raw severity; it orders review.scope's slots
+	// and is never part of a request.
+	Severity *string
 }
 
 type toolSummary struct {
 	Tool, Module, TaskStatus, ExitClass string
-	ToolVersion                         *string
-	PartialParse, ParseOK               bool
-	Limitations                         []string
-	Observations                        []toolObservation
+	// Ecosystem is the analyzer's ecosystem (go for a go vet document).
+	Ecosystem             string
+	ToolVersion           *string
+	PartialParse, ParseOK bool
+	Limitations           []string
+	Observations          []toolObservation
 }
 
 type toolDoc struct {
@@ -267,7 +272,7 @@ func (s *roleStage) readToolDoc(key string, files map[string]source.Entry) (tool
 			return toolSummary{}, nil, reasonRecordInvalid
 		}
 		sum := toolSummary{Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, Module: d.Module.Dir, TaskStatus: string(d.Outcome.TaskStatus), ExitClass: d.Outcome.ExitClass,
-			PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations}
+			PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations, Ecosystem: d.Analyzer.Ecosystem}
 		for _, o := range d.Observations {
 			// A diagnostic the tool reported as suppressed in source is the
 			// project's decision, not a candidate: it never reaches the model
@@ -281,7 +286,7 @@ func (s *roleStage) readToolDoc(key string, files map[string]source.Entry) (tool
 			if o.Metric != nil {
 				continue
 			}
-			to := toolObservation{ID: o.ID, Tool: d.Analyzer.ID, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState}
+			to := toolObservation{ID: o.ID, Tool: d.Analyzer.ID, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState, Severity: o.RawSeverity}
 			if o.Location != nil {
 				to.Location = &toolLocation{Path: o.Location.Path, StartLine: o.Location.StartLine, EndLine: o.Location.EndLine}
 			}
@@ -302,7 +307,7 @@ func (s *roleStage) readToolDoc(key string, files map[string]source.Entry) (tool
 		return toolSummary{}, nil, reasonRecordInvalid
 	}
 	sum := toolSummary{Tool: d.AnalyzerID, ToolVersion: d.ToolVersion, Module: d.Module.Dir, TaskStatus: string(d.Outcome.TaskStatus), ExitClass: d.Outcome.ExitClass,
-		PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations}
+		PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations, Ecosystem: "go"}
 	for _, o := range d.Observations {
 		to := toolObservation{ID: o.ID, Tool: o.Tool, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState}
 		if o.Location != nil {
@@ -366,34 +371,38 @@ func goIgnored(p string) bool {
 // ecosystem, and modules are visited ecosystem by ecosystem (sources.go,
 // groupOrder). Every excerpt is the first lines of its file.
 func (s *roleStage) codeCorpus() ([]record.Excerpt, []string, error) {
-	g := planCodeGroups(s.j.Snapshot.Manifest, s.j.Scope)
-	byModule, order, eligible, lims := g.files, g.order, g.eligible, append([]string{}, g.lims...)
+	g := planCodeGroups(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary())
+	byModule, eligible, lims := g.files, g.eligible, append([]string{}, g.lims...)
 	var out []record.Excerpt
 	remain := roleMaxCodeBytes
-	for round := 0; len(out) < roleMaxCodeFiles && remain >= 128; round++ {
-		progressed := false
-		for _, m := range order {
-			if round >= len(byModule[m]) || len(out) >= roleMaxCodeFiles || remain < 128 {
-				continue
+	// Secondary modules (test input, examples) only get rounds once the
+	// primary modules have no file left.
+	for _, order := range g.phases() {
+		for round := 0; len(out) < roleMaxCodeFiles && remain >= 128; round++ {
+			progressed := false
+			for _, m := range order {
+				if round >= len(byModule[m]) || len(out) >= roleMaxCodeFiles || remain < 128 {
+					continue
+				}
+				progressed = true
+				e := byModule[m][round]
+				kind := windowKind(e.Path)
+				x, total, ok, err := s.excerpt(e, kind, "context", 1, 50, min(roleMaxCodeFile, remain))
+				if err != nil {
+					return nil, nil, err
+				}
+				if !ok {
+					continue
+				}
+				if x.End < total {
+					lims = append(lims, "excerpt_only")
+				}
+				out = append(out, x)
+				remain -= record.JSONLen(x.Text)
 			}
-			progressed = true
-			e := byModule[m][round]
-			kind := windowKind(e.Path)
-			x, total, ok, err := s.excerpt(e, kind, "context", 1, 50, min(roleMaxCodeFile, remain))
-			if err != nil {
-				return nil, nil, err
+			if !progressed {
+				break
 			}
-			if !ok {
-				continue
-			}
-			if x.End < total {
-				lims = append(lims, "excerpt_only")
-			}
-			out = append(out, x)
-			remain -= record.JSONLen(x.Text)
-		}
-		if !progressed {
-			break
 		}
 	}
 	if eligible > len(out) {

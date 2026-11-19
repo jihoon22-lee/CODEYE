@@ -1,22 +1,33 @@
 package record
 
 import (
+	"bytes"
 	"encoding/json"
 	"slices"
+	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// The review scope artifact (schema 0.1) of the review.scope task
+// The review scope artifact of the review.scope task
 // (docs/REVIEW.md#모듈-단위-검토-분할): the fixed inputs of every review
-// slice, written before any slice runs. It holds what the plan and the
+// slot, written before any slot runs. It holds what the plan and the
 // overview decided (the call ceiling, the overview prefix and the files the
-// overview actually sent, every slice's files with their state) but not the
-// admitted slices: admission happens slice by slice afterwards and is read
-// from the slice task states (budget_exhausted / review_budget_exhausted).
+// overview actually sent) and how review.scope filled the slots: every
+// filled slot's files in priority order with their class and rank, the
+// files it left out (withheld, unreadable) and, per module, the files no
+// slot was left for. It does not hold the admitted slots: admission happens
+// slot by slot afterwards and is read from the slice task states
+// (budget_exhausted / review_budget_exhausted).
+//
+// Schema 0.2 is what the worker writes. Schema 0.1 (plan-time slices without
+// priority) is still decoded so an older worker's artifact reads; DecodeScope
+// returns it in the 0.2 shape with Schema "0.1" and no priority fields.
 const (
 	ScopeMediaType     = "application/vnd.codeye.review-scope+json"
-	ScopeSchemaVersion = "0.1"
+	ScopeSchemaVersion = "0.2"
+	// ScopeSchemaPlanned is the earlier schema of plan-time slices.
+	ScopeSchemaPlanned = "0.1"
 	ScopeKind          = "review_scope"
 	ScopeMaxBytes      = 1 << 20
 
@@ -28,15 +39,23 @@ const (
 	// SliceReserveCalls is the worst case of one slice pair
 	// (investigate and verify, RoleMaxCalls each).
 	SliceReserveCalls = 2 * RoleMaxCalls
-	// MaxSlices bounds the slices of a run; MaxMaxCalls is the ceiling that
-	// admits all of them in the worst case.
-	MaxSlices   = 32
-	MaxMaxCalls = WholeRunMaxCalls + MaxSlices*SliceReserveCalls
+	// MaxSlices bounds the slots of a run. MaxMaxCalls is the largest call
+	// ceiling: the whole-run roles plus two calls (one investigate, one
+	// verify) for every slot, the usual cost of a slot whose replies need no
+	// repair. A slot needing repairs costs up to SliceReserveCalls, so at
+	// the largest ceiling fewer slots may be admitted.
+	MaxSlices   = 96
+	MaxMaxCalls = WholeRunMaxCalls + MaxSlices*2
+	// planSlices bounds the slices of a schema 0.1 artifact.
+	planSlices = 32
 
 	// Admission rule recorded in the artifact: sequential admission of
-	// slices in plan order, each needing SliceReserveCalls of the calls the
+	// slots in order, each needing SliceReserveCalls of the calls the
 	// attempt has left.
 	AdmissionSequentialReserve = "sequential_reserve"
+	// PriorityOrder names the order review.scope fills the slots in
+	// (docs/REVIEW.md#검토-우선순위).
+	PriorityOrder = "primary_first_observations_first"
 	// The secrets screen the scope and its slices ran with: applied (a
 	// completed screen withheld its files) or not_screened (no secrets task
 	// ran; the inputs went through the read filters only and every record
@@ -51,12 +70,14 @@ const (
 func ValidMaxCalls(n int) bool { return n >= WholeRunMaxCalls && n <= MaxMaxCalls }
 
 // Scope file states. Every eligible code or test file of the run is in
-// exactly one: the overview prefix holds covered_by_overview, withheld,
+// exactly one place: the overview list holds covered_by_overview, withheld,
 // unreadable or overview_not_sent (the overview did not send it: its
-// request was trimmed or failed before sending); a slice holds planned,
-// covered_by_overview (the overview sent it after all), withheld or
-// unreadable; the files beyond the slice limit are counted per module as
-// not planned.
+// request was trimmed or failed before sending) for the prefix, and
+// covered_by_overview for a file the overview sent beyond it; a slot holds
+// planned files; the excluded list holds withheld and unreadable files; the
+// files no slot was left for are counted per module as not planned. (A
+// schema 0.1 slice may also hold covered_by_overview, withheld and
+// unreadable files.)
 const (
 	FilePlanned           = "planned"
 	FileWithheld          = "withheld"
@@ -76,13 +97,21 @@ type ScopeBudget struct {
 	Admission         string `json:"admission"`
 }
 
-// ScopeLimits are the per-request caps of the overview and of every slice.
+// ScopeLimits are the per-request caps of the overview and of every slot,
+// the slot limit and the slots the plan made (Slots, schema 0.2).
 type ScopeLimits struct {
 	MaxFiles     int `json:"max_files"`
 	MaxBytes     int `json:"max_bytes"`
 	MaxFileBytes int `json:"max_file_bytes"`
 	MaxFileLines int `json:"max_file_lines"`
 	MaxSlices    int `json:"max_slices"`
+	Slots        int `json:"slots"`
+}
+
+// ScopePriority is the rule review.scope ordered the files by.
+type ScopePriority struct {
+	Order     string        `json:"order"`
+	Secondary SecondaryRule `json:"secondary"`
 }
 
 // ScopeModule is one module of the code corpus.
@@ -90,15 +119,24 @@ type ScopeModule struct {
 	ID string `json:"id"`
 	// Discovered says module discovery (env.discover) found the same ID;
 	// a corpus group without a manifest of its ecosystem is not discovered.
-	Discovered    bool `json:"discovered"`
-	FilesEligible int  `json:"files_eligible"`
-	// FilesNotPlanned are the module's files beyond the slice limit.
-	FilesNotPlanned int `json:"files_not_planned"`
+	Discovered bool `json:"discovered"`
+	// Class is the module's class (secondary when its directory is below a
+	// secondary path).
+	Class         string `json:"class"`
+	FilesEligible int    `json:"files_eligible"`
+	// FilesSecondary counts the module's eligible files of class secondary.
+	FilesSecondary int `json:"files_secondary"`
+	// FilesNotPlanned are the module's files no slot was left for, of which
+	// FilesSecondaryNotPlanned are secondary.
+	FilesNotPlanned          int `json:"files_not_planned"`
+	FilesSecondaryNotPlanned int `json:"files_secondary_not_planned"`
 }
 
-// ScopeFile is one eligible file of the overview prefix or a slice. Bound
-// is the plan's byte bound; planned lines and bytes are the excerpt a
-// review would send (0 when the file is withheld or unreadable).
+// ScopeFile is one eligible file of the overview list, a slot or the
+// excluded list. Bound is the plan's byte bound; planned lines and bytes are
+// the excerpt a review would send (0 when the file is withheld or
+// unreadable). Class, Rank, Secondary, Observations and Severity say why the
+// file sits where it does (schema 0.2).
 type ScopeFile struct {
 	Path         string `json:"path"`
 	SHA256       string `json:"sha256"`
@@ -108,27 +146,39 @@ type ScopeFile struct {
 	PlannedBytes int    `json:"planned_bytes"`
 	TotalLines   int    `json:"total_lines"`
 	State        string `json:"state"`
+	Class        string `json:"class"`
+	Rank         string `json:"rank"`
+	// Secondary is the reason of a secondary file: secondary_path:<segment>
+	// or generated_file.
+	Secondary string `json:"secondary,omitempty"`
+	// Observations counts the non-metric tool diagnostics located in the
+	// file; Severity is the highest of them (SeverityNames).
+	Observations int    `json:"observations,omitempty"`
+	Severity     string `json:"severity,omitempty"`
 }
 
 // ScopeOverview is the overview prefix and the code and test files the
 // overview investigate actually sent (its record's context excerpts).
-// Files holds the prefix and, as covered_by_overview, a file the overview
-// sent beyond it that no slice holds (one past the slice limit).
+// Files holds the prefix and, as covered_by_overview, every file the
+// overview sent beyond it.
 type ScopeOverview struct {
 	Files   []ScopeFile `json:"files"`
 	Offered []string    `json:"offered"`
 }
 
-// ScopeSlice is one planned slice.
+// ScopeSlice is one filled slot, in slot order. Class and Rank are those of
+// its first file.
 type ScopeSlice struct {
 	Key             string      `json:"key"`
 	InvestigateTask string      `json:"investigate_task"`
 	VerifyTask      string      `json:"verify_task"`
+	Class           string      `json:"class"`
+	Rank            string      `json:"rank"`
 	Modules         []string    `json:"modules"`
 	Files           []ScopeFile `json:"files"`
 }
 
-// ScopeDoc is the review scope artifact.
+// ScopeDoc is the review scope artifact (schema 0.2 shape).
 type ScopeDoc struct {
 	Schema      string        `json:"schema_version"`
 	Kind        string        `json:"kind"`
@@ -139,21 +189,132 @@ type ScopeDoc struct {
 	Screen      string        `json:"screen"`
 	Budget      ScopeBudget   `json:"budget"`
 	Limits      ScopeLimits   `json:"limits"`
+	Priority    ScopePriority `json:"priority"`
 	Upstream    []Upstream    `json:"upstream"`
 	Modules     []ScopeModule `json:"modules"`
 	Overview    ScopeOverview `json:"overview"`
 	Slices      []ScopeSlice  `json:"slices"`
+	Excluded    []ScopeFile   `json:"excluded"`
 	Limitations []string      `json:"limitations"`
 }
 
-// DecodeScope strictly parses and validates a scope artifact.
+// Planned reports an artifact of the earlier schema (plan-time slices, no
+// priority).
+func (d ScopeDoc) Planned() bool { return d.Schema == ScopeSchemaPlanned }
+
+// The schema 0.1 shape, decoded strictly and converted.
+type scopeLimitsV01 struct {
+	MaxFiles     int `json:"max_files"`
+	MaxBytes     int `json:"max_bytes"`
+	MaxFileBytes int `json:"max_file_bytes"`
+	MaxFileLines int `json:"max_file_lines"`
+	MaxSlices    int `json:"max_slices"`
+}
+
+type scopeModuleV01 struct {
+	ID              string `json:"id"`
+	Discovered      bool   `json:"discovered"`
+	FilesEligible   int    `json:"files_eligible"`
+	FilesNotPlanned int    `json:"files_not_planned"`
+}
+
+type scopeFileV01 struct {
+	Path         string `json:"path"`
+	SHA256       string `json:"sha256"`
+	Module       string `json:"module"`
+	BoundBytes   int    `json:"bound_bytes"`
+	PlannedLines int    `json:"planned_lines"`
+	PlannedBytes int    `json:"planned_bytes"`
+	TotalLines   int    `json:"total_lines"`
+	State        string `json:"state"`
+}
+
+type scopeSliceV01 struct {
+	Key             string         `json:"key"`
+	InvestigateTask string         `json:"investigate_task"`
+	VerifyTask      string         `json:"verify_task"`
+	Modules         []string       `json:"modules"`
+	Files           []scopeFileV01 `json:"files"`
+}
+
+type scopeDocV01 struct {
+	Schema    string           `json:"schema_version"`
+	Kind      string           `json:"kind"`
+	Pack      PackRef          `json:"pack"`
+	Snapshot  string           `json:"snapshot_manifest_digest"`
+	RunID     string           `json:"run_id"`
+	AttemptID string           `json:"attempt_id"`
+	Screen    string           `json:"screen"`
+	Budget    ScopeBudget      `json:"budget"`
+	Limits    scopeLimitsV01   `json:"limits"`
+	Upstream  []Upstream       `json:"upstream"`
+	Modules   []scopeModuleV01 `json:"modules"`
+	Overview  struct {
+		Files   []scopeFileV01 `json:"files"`
+		Offered []string       `json:"offered"`
+	} `json:"overview"`
+	Slices      []scopeSliceV01 `json:"slices"`
+	Limitations []string        `json:"limitations"`
+}
+
+func (f scopeFileV01) file() ScopeFile {
+	return ScopeFile{Path: f.Path, SHA256: f.SHA256, Module: f.Module, BoundBytes: f.BoundBytes, PlannedLines: f.PlannedLines, PlannedBytes: f.PlannedBytes, TotalLines: f.TotalLines, State: f.State}
+}
+
+func filesV01(list []scopeFileV01) []ScopeFile {
+	if list == nil {
+		return nil
+	}
+	out := make([]ScopeFile, 0, len(list))
+	for _, f := range list {
+		out = append(out, f.file())
+	}
+	return out
+}
+
+func (v scopeDocV01) doc() ScopeDoc {
+	d := ScopeDoc{Schema: v.Schema, Kind: v.Kind, Pack: v.Pack, Snapshot: v.Snapshot, RunID: v.RunID, AttemptID: v.AttemptID, Screen: v.Screen, Budget: v.Budget,
+		Limits:   ScopeLimits{MaxFiles: v.Limits.MaxFiles, MaxBytes: v.Limits.MaxBytes, MaxFileBytes: v.Limits.MaxFileBytes, MaxFileLines: v.Limits.MaxFileLines, MaxSlices: v.Limits.MaxSlices, Slots: len(v.Slices)},
+		Upstream: v.Upstream, Overview: ScopeOverview{Files: filesV01(v.Overview.Files), Offered: v.Overview.Offered}, Excluded: []ScopeFile{}, Limitations: v.Limitations}
+	if v.Modules != nil {
+		d.Modules = []ScopeModule{}
+		for _, m := range v.Modules {
+			d.Modules = append(d.Modules, ScopeModule{ID: m.ID, Discovered: m.Discovered, FilesEligible: m.FilesEligible, FilesNotPlanned: m.FilesNotPlanned})
+		}
+	}
+	if v.Slices != nil {
+		d.Slices = []ScopeSlice{}
+		for _, s := range v.Slices {
+			d.Slices = append(d.Slices, ScopeSlice{Key: s.Key, InvestigateTask: s.InvestigateTask, VerifyTask: s.VerifyTask, Modules: s.Modules, Files: filesV01(s.Files)})
+		}
+	}
+	return d
+}
+
+// DecodeScope strictly parses and validates a scope artifact of either
+// schema.
 func DecodeScope(body []byte, want Expect) (ScopeDoc, error) {
-	var d ScopeDoc
 	if len(body) > ScopeMaxBytes {
 		return ScopeDoc{}, invalid("scope artifact too large")
 	}
-	if err := domain.DecodeStrict(body, &d); err != nil {
-		return ScopeDoc{}, invalid("not strict JSON: %v", err)
+	var head struct {
+		Schema string `json:"schema_version"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&head); err != nil {
+		return ScopeDoc{}, invalid("not JSON: %v", err)
+	}
+	var d ScopeDoc
+	switch head.Schema {
+	case ScopeSchemaPlanned:
+		var v scopeDocV01
+		if err := domain.DecodeStrict(body, &v); err != nil {
+			return ScopeDoc{}, invalid("not strict JSON: %v", err)
+		}
+		d = v.doc()
+	default:
+		if err := domain.DecodeStrict(body, &d); err != nil {
+			return ScopeDoc{}, invalid("not strict JSON: %v", err)
+		}
 	}
 	if err := ValidateScope(d, want); err != nil {
 		return ScopeDoc{}, err
@@ -161,8 +322,11 @@ func DecodeScope(body []byte, want Expect) (ScopeDoc, error) {
 	return d, nil
 }
 
-// MarshalScope validates before encoding.
+// MarshalScope validates before encoding. Only schema 0.2 is written.
 func MarshalScope(d ScopeDoc, want Expect) ([]byte, error) {
+	if d.Schema != ScopeSchemaVersion {
+		return nil, invalid("scope schema")
+	}
 	if err := ValidateScope(d, want); err != nil {
 		return nil, err
 	}
@@ -176,10 +340,12 @@ func MarshalScope(d ScopeDoc, want Expect) ([]byte, error) {
 // ValidateScope checks a scope artifact against the attempt and the
 // snapshot manifest: identities, the budget rule, the caps, the file
 // partition (no file twice; states allowed where they occur; files of the
-// listed modules) and the slice keys in plan order.
+// listed modules), the slot keys in order and, for schema 0.2, the priority
+// fields of every file and slot.
 func ValidateScope(d ScopeDoc, want Expect) error {
+	planned := d.Planned()
 	switch {
-	case d.Schema != ScopeSchemaVersion || d.Kind != ScopeKind:
+	case (d.Schema != ScopeSchemaVersion && !planned) || d.Kind != ScopeKind:
 		return invalid("scope schema")
 	case !packID.MatchString(d.Pack.ID) || !version.MatchString(d.Pack.Version):
 		return invalid("pack identity")
@@ -191,19 +357,32 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 		return invalid("screen")
 	case d.Screen == ScreenNotScreened && !slices.Contains(d.Limitations, "model_input_not_secret_screened"):
 		return invalid("unscreened scope without its limitation")
-	case d.Upstream == nil || d.Modules == nil || d.Overview.Files == nil || d.Overview.Offered == nil || d.Slices == nil || d.Limitations == nil:
+	case d.Upstream == nil || d.Modules == nil || d.Overview.Files == nil || d.Overview.Offered == nil || d.Slices == nil || d.Excluded == nil || d.Limitations == nil:
 		return invalid("missing list")
 	case !codes(d.Limitations):
 		return invalid("limitations")
 	}
 	b := d.Budget
+	// A schema 0.1 artifact came from a worker whose largest ceiling was 207
+	// as well.
 	if !ValidMaxCalls(b.MaxCalls) || b.WholeRunMaxCalls != WholeRunMaxCalls || b.SliceReserveCalls != SliceReserveCalls || b.Admission != AdmissionSequentialReserve ||
 		b.MaxRequestBytes <= 0 || b.CallsBeforeSlices < 0 || b.CallsBeforeSlices > WholeRunMaxCalls {
 		return invalid("budget")
 	}
 	l := d.Limits
-	if l.MaxFiles <= 0 || l.MaxBytes <= 0 || l.MaxFileBytes <= 0 || l.MaxFileBytes > l.MaxBytes || l.MaxFileLines <= 0 || l.MaxSlices != MaxSlices {
+	maxSlices := MaxSlices
+	if planned {
+		maxSlices = planSlices
+	}
+	if l.MaxFiles <= 0 || l.MaxBytes <= 0 || l.MaxFileBytes <= 0 || l.MaxFileBytes > l.MaxBytes || l.MaxFileLines <= 0 || l.MaxSlices != maxSlices ||
+		(!planned && (l.Slots < 1 || l.Slots > MaxSlices)) {
 		return invalid("limits")
+	}
+	if !planned && (d.Priority.Order != PriorityOrder || !d.Priority.Secondary.Valid()) {
+		return invalid("priority rule")
+	}
+	if planned && (d.Priority.Order != "" || len(d.Excluded) != 0) {
+		return invalid("schema 0.1 with priority fields")
 	}
 	if len(d.Upstream) != 1 || d.Upstream[0].Source != "review.investigate" {
 		return invalid("upstream source")
@@ -211,22 +390,33 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 	if err := checkUpstreamState(d.Upstream[0]); err != nil {
 		return err
 	}
-	modules := map[string]bool{}
+	modules := map[string]ScopeModule{}
 	notPlanned := 0
 	for _, m := range d.Modules {
-		if !ValidModuleRef(m.ID) || modules[m.ID] || m.FilesEligible < 1 || m.FilesNotPlanned < 0 || m.FilesNotPlanned > m.FilesEligible {
+		_, dup := modules[m.ID]
+		if !ValidModuleRef(m.ID) || dup || m.FilesEligible < 1 || m.FilesNotPlanned < 0 || m.FilesNotPlanned > m.FilesEligible {
 			return invalid("scope module")
 		}
-		modules[m.ID] = true
+		if planned && (m.Class != "" || m.FilesSecondary != 0 || m.FilesSecondaryNotPlanned != 0) {
+			return invalid("schema 0.1 module with priority fields")
+		}
+		if !planned && ((m.Class != ClassPrimary && m.Class != ClassSecondary) || m.Class != d.Priority.Secondary.ModuleClass(m.ID) || m.FilesSecondary < 0 ||
+			m.FilesSecondary > m.FilesEligible || m.FilesSecondaryNotPlanned < 0 || m.FilesSecondaryNotPlanned > min(m.FilesNotPlanned, m.FilesSecondary) ||
+			(m.Class == ClassSecondary && m.FilesSecondary != m.FilesEligible)) {
+			return invalid("scope module class")
+		}
+		modules[m.ID] = m
 		notPlanned += m.FilesNotPlanned
 	}
 	files := map[string]bool{}
 	perModule := map[string]int{}
+	secondary := map[string]int{}
 	checkFile := func(f ScopeFile, states ...string) error {
+		_, known := modules[f.Module]
 		switch {
 		case domain.ValidateEvidencePath(f.Path) != nil || !hex64.MatchString(f.SHA256) || files[f.Path]:
 			return invalid("scope file")
-		case SourceKind(f.Path) == "" || !modules[f.Module] || !slices.Contains(states, f.State):
+		case SourceKind(f.Path) == "" || !known || !slices.Contains(states, f.State):
 			return invalid("scope file attributes")
 		case f.BoundBytes <= 0 || f.BoundBytes > l.MaxFileBytes || f.PlannedBytes < 0 || f.PlannedBytes > f.BoundBytes ||
 			f.PlannedLines < 0 || f.PlannedLines > l.MaxFileLines || f.TotalLines < f.PlannedLines || (f.PlannedLines == 0) != (f.PlannedBytes == 0):
@@ -234,11 +424,17 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 		case (f.State == FileWithheld || f.State == FileUnreadable) && f.PlannedLines != 0:
 			return invalid("scope file planned while not readable")
 		}
+		if err := checkPriority(f, planned, d.Priority.Secondary); err != nil {
+			return err
+		}
 		if sha, ok := want.Lookup(f.Path); !ok || sha != f.SHA256 {
 			return invalid("scope file not in snapshot")
 		}
 		files[f.Path] = true
 		perModule[f.Module]++
+		if f.Class == ClassSecondary {
+			secondary[f.Module]++
+		}
 		return nil
 	}
 	for _, f := range d.Overview.Files {
@@ -247,12 +443,20 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 		}
 	}
 	// The prefix (at most MaxFiles) plus any file the overview sent beyond
-	// it that no slice holds (at most MaxFiles more).
+	// it (at most MaxFiles more).
 	if len(d.Overview.Files) > 2*l.MaxFiles || len(d.Overview.Offered) > l.MaxFiles {
 		return invalid("overview files")
 	}
-	if len(d.Slices) > MaxSlices || (notPlanned > 0 && len(d.Slices) != MaxSlices) {
+	slots := l.Slots
+	if planned {
+		slots = maxSlices
+	}
+	if len(d.Slices) > slots || (notPlanned > 0 && len(d.Slices) != slots) {
 		return invalid("slice count")
+	}
+	sliceStates := []string{FilePlanned}
+	if planned {
+		sliceStates = []string{FilePlanned, FileCoveredByOverview, FileWithheld, FileUnreadable}
 	}
 	for i, s := range d.Slices {
 		key := sliceKeyOf(i)
@@ -260,11 +464,17 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 			len(s.Modules) == 0 || len(s.Modules) > MaxSliceModules || !slices.IsSorted(s.Modules) {
 			return invalid("slice %d", i+1)
 		}
+		if planned != (s.Class == "" && s.Rank == "") || (!planned && (s.Class != s.Files[0].Class || s.Rank != s.Files[0].Rank)) {
+			return invalid("slice %d priority", i+1)
+		}
 		used := map[string]bool{}
 		bytes := 0
 		for _, f := range s.Files {
-			if err := checkFile(f, FilePlanned, FileCoveredByOverview, FileWithheld, FileUnreadable); err != nil {
+			if err := checkFile(f, sliceStates...); err != nil {
 				return err
+			}
+			if !planned && f.Class != s.Class {
+				return invalid("slice %d mixes classes", i+1)
 			}
 			used[f.Module] = true
 			bytes += f.BoundBytes
@@ -278,8 +488,13 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 			}
 		}
 	}
+	for _, f := range d.Excluded {
+		if err := checkFile(f, FileWithheld, FileUnreadable); err != nil {
+			return err
+		}
+	}
 	for _, m := range d.Modules {
-		if perModule[m.ID]+m.FilesNotPlanned != m.FilesEligible {
+		if perModule[m.ID]+m.FilesNotPlanned != m.FilesEligible || (!planned && secondary[m.ID]+m.FilesSecondaryNotPlanned != m.FilesSecondary) {
 			return invalid("module %s file count", m.ID)
 		}
 	}
@@ -301,6 +516,38 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 				return invalid("slice file state")
 			}
 		}
+	}
+	for _, f := range d.Excluded {
+		if sent[f.Path] {
+			return invalid("excluded file the overview sent")
+		}
+	}
+	return nil
+}
+
+// checkPriority checks the priority fields of a file: none in schema 0.1;
+// in 0.2 a class and rank, a secondary reason exactly for a secondary file
+// (a segment of the recorded rule or generated_file), and a count and
+// severity exactly for a file ranked by its tool diagnostics.
+func checkPriority(f ScopeFile, planned bool, rule SecondaryRule) error {
+	if planned {
+		if f.Class != "" || f.Rank != "" || f.Secondary != "" || f.Observations != 0 || f.Severity != "" {
+			return invalid("schema 0.1 file with priority fields")
+		}
+		return nil
+	}
+	seg, isPath := strings.CutPrefix(f.Secondary, ReasonSecondaryPath+":")
+	switch {
+	case f.Class != ClassPrimary && f.Class != ClassSecondary, RankIndex(f.Rank) == len(Ranks):
+		return invalid("scope file priority")
+	case (f.Class == ClassSecondary) != (f.Secondary != ""):
+		return invalid("scope file secondary reason")
+	case f.Secondary != "" && f.Secondary != ReasonGeneratedFile && (!isPath || !slices.Contains(rule.Segments, seg)):
+		return invalid("scope file secondary reason")
+	case (f.Rank == RankToolObservations) != (f.Observations > 0), f.Observations < 0:
+		return invalid("scope file observations")
+	case (f.Observations > 0) != (f.Severity != ""), f.Severity != "" && !slices.Contains(SeverityNames, f.Severity):
+		return invalid("scope file severity")
 	}
 	return nil
 }

@@ -225,7 +225,8 @@ func runSlices(t *testing.T, caller *sliceScripted, maxCalls int, cancelOnBlock 
 
 // TC-168 (docs/REVIEW.md#모듈-단위-검토-분할): the slices through the real
 // worker. At the minimum ceiling the attempt makes at most 15 calls; the
-// slices it could not admit end budget_exhausted, the attempt completes, the
+// slots it could not admit end budget_exhausted, slots review.scope left
+// empty end skipped_policy (no_review_scope), the attempt completes, the
 // slices are optional so the required review tasks alone decide the AI
 // review, and the report builds and validates. Cancelling during a slice
 // request cancels that slice and every later task and confirms cleanup.
@@ -239,7 +240,8 @@ func TestReviewSlicesThroughTheWorker(t *testing.T) {
 		joined := strings.Join(rows, " ")
 		for _, want := range []string{"review.investigate=succeeded/true", "review.verify=succeeded/true", "review.scope=succeeded/false",
 			"review.investigate.s001=succeeded/false", "review.verify.s001=succeeded/false",
-			"review.investigate.s007=budget_exhausted/false:review_budget_exhausted", "review.verify.s007=budget_exhausted/false:review_budget_exhausted"} {
+			"review.investigate.s006=budget_exhausted/false:review_budget_exhausted", "review.verify.s006=budget_exhausted/false:review_budget_exhausted",
+			"review.investigate.s008=skipped_policy/false:no_review_scope", "review.verify.s008=skipped_policy/false:no_review_scope"} {
 			if !strings.Contains(joined, want) {
 				t.Fatalf("missing %s in %v", want, rows)
 			}

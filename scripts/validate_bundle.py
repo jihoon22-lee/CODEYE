@@ -368,7 +368,7 @@ def main() -> None:
         {key: call[key] for key in ("role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome", "pack_id", "pack_version")}
         for stage in ROLE_STAGES for call in role_docs[stage]["calls"]]
     validators["report.schema.json"].validate(role_calls)
-    # The largest call ceiling (207: five whole-run roles and 32 slice pairs of up to three calls each) fits the report; more do not.
+    # The largest call ceiling (207: five whole-run roles and 96 slots of two calls each) fits the report; more do not.
     most = copy.deepcopy(role_calls)
     most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(207)]
     validators["report.schema.json"].validate(most)

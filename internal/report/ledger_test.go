@@ -119,8 +119,23 @@ func TestLedgerValidation(t *testing.T) {
 			module(r, "go:store").Slices[0].Status = "failed"
 		},
 		"budget-exhausted files without such a slice": func(r *Report) {
+			// go:api's only slot was refused (s006); without it listed, its
+			// budget-exhausted file has no refused slice.
 			m := module(r, "go:api")
-			m.FilesSentToModel, m.FilesBudgetExhausted = 2, 1
+			m.Slices = []LedgerSlice{}
+		},
+		"class missing on one row":            func(r *Report) { module(r, "go:api").Class = "" },
+		"unknown class":                       func(r *Report) { module(r, "go:api").Class = "tests" },
+		"classes in a builder-7 revision":     func(r *Report) { r.Builder.Version = "7" },
+		"secondary module with primary files": func(r *Report) { module(r, "go:api").Class = "secondary" },
+		"secondary files sent beyond the secondary files": func(r *Report) {
+			module(r, "go:api").FilesSecondarySent = 1
+		},
+		"refused primary files without refused primary slots": func(r *Report) {
+			r.CodeReview.Ledger.PrimarySlotsBudgetExhausted = 0
+		},
+		"more refused primary slots than refused slots": func(r *Report) {
+			r.CodeReview.Ledger.PrimarySlotsBudgetExhausted = 4
 		},
 		"fewer calls than listed": func(r *Report) { n := 1; r.CodeReview.Ledger.CallsUsed = &n },
 		"request bytes differ":    func(r *Report) { n := 1; r.CodeReview.Ledger.RequestBytesSent = &n },
