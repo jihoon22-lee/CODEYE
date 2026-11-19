@@ -394,6 +394,10 @@ func jsEnv(manager, nodeDir string) map[string]string {
 	return vars
 }
 
+// Retries are bounded: with npm's defaults an unreachable registry kept
+// npm 11 retrying past the module timeout (measured, over 5 minutes);
+// with one retry it ends in under a minute as registry_unreachable.
+
 // Default registries when the operator names none (npm and pnpm share npm's).
 const (
 	defaultNpmRegistry  = "https://registry.npmjs.org/"
@@ -435,7 +439,8 @@ func installArgs(manager string, locked bool, d installDirs, registry string) []
 			"--config.lockfile-dir=" + d.root, "--config.cache-dir=" + filepath.Join(d.task, "pnpm-cache"), "--config.state-dir=" + filepath.Join(d.task, "pnpm-state"),
 			"--config.global-dir=" + filepath.Join(d.task, "pnpm-global"), "--config.registry=" + registry, "--config.proxy=false", "--config.https-proxy=false",
 			"--config.pm-on-fail=ignore", "--config.manage-package-manager-versions=false", "--config.package-manager-strict=false",
-			"--config.update-notifier=false", "--config.side-effects-cache=false", "--config.verify-deps-before-run=false"}
+			"--config.update-notifier=false", "--config.side-effects-cache=false", "--config.verify-deps-before-run=false",
+			"--config.fetch-retries=1", "--config.fetch-retry-mintimeout=2000", "--config.fetch-retry-maxtimeout=10000"}
 	case ManagerYarn:
 		if registry == "" {
 			registry = defaultYarnRegistry
@@ -443,7 +448,7 @@ func installArgs(manager string, locked bool, d installDirs, registry string) []
 		// yarn 1 reads its settings from .yarnrc only, which the snapshot
 		// leaves out; it has no command-line value that clears a proxy.
 		args = []string{"install", "--frozen-lockfile", "--ignore-scripts", "--no-bin-links", "--non-interactive", "--ignore-engines", "--prefer-offline",
-			"--no-progress", "--modules-folder", filepath.Join(d.root, "node_modules"), "--cache-folder", d.cache, "--registry", registry}
+			"--no-progress", "--modules-folder", filepath.Join(d.root, "node_modules"), "--cache-folder", d.cache, "--registry", registry, "--network-timeout", "60000"}
 	default:
 		if registry == "" {
 			registry = defaultNpmRegistry
@@ -459,7 +464,8 @@ func installArgs(manager string, locked bool, d installDirs, registry string) []
 		args = append(args, "--ignore-scripts", "--no-bin-links", "--no-audit", "--no-fund", "--include=dev", "--include=optional", "--include=peer",
 			"--engine-strict=false", "--prefer-offline", "--no-update-notifier", "--no-progress", "--prefix", d.root, "--cache", d.cache,
 			"--logs-dir", filepath.Join(d.task, "npm-logs"), "--userconfig", d.userRC, "--globalconfig", d.globalRC,
-			"--registry", registry, "--proxy=null", "--https-proxy=null", "--install-links=false", "--git=git")
+			"--registry", registry, "--proxy=null", "--https-proxy=null", "--install-links=false",
+			"--fetch-retries=1", "--fetch-retry-mintimeout=2000", "--fetch-retry-maxtimeout=10000", "--git=git")
 	}
 	return args
 }

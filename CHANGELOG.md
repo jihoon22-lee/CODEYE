@@ -4,6 +4,19 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — Rust·JS/TS 의존성 받기
+
+- **Rust**: `deps.rust`·`deps.rust.mNN`이 cargo check와 같은 모듈 계획으로 `cargo fetch --locked --target <host>`를 실행해 crate를 공유 `CARGO_HOME`(`rust/cargo`)에 받고, cargo check·clippy는 그것을 오프라인으로 읽는다(`dependencies_prepared`). `Cargo.lock`이 없으면 만든 lockfile을 task 디렉터리에 두고 분석기가 실행하는 동안만 사본에 놓는다. 저장소 코드 실행 허가가 없으면 받지 않는다(`dependency_consumers_not_allowed`)([Rust 받기](docs/ANALYZERS.md#rust-의존성-받기), A43).
+- **JS/TS**: `deps.javascript`·`deps.javascript.mNN`이 lockfile이 있는 설치 루트마다 npm·pnpm·yarn 1을 lifecycle script 없이 실행해 이번 attempt의 작업 사본에 `node_modules`를 설치하고 기록의 `installed_dirs`에 적는다. tsc·type-aware ESLint는 적힌 실제 디렉터리만 받아들인다. 설치 위치·캐시·레지스트리·proxy를 명령줄로 정하고, pnpm의 `packageManager` 릴리스 전환을 끄며, 작업 사본 밖을 가리키는 링크를 지운다. 스냅샷 밖 `file:`·`link:`·`portal:` 의존성이 있으면 설치하지 않는다(`local_dependency_outside_project`). yarn 2 이상·bun은 받지 않는다([JS/TS 받기](docs/ANALYZERS.md#jsts-의존성-받기)).
+- **도구와 설정**: npm·pnpm·yarn을 node 진입 스크립트로 찾고(`tools.json` 21개 도구) `--npm`·`--pnpm`·`--yarn`, `--npm-registry`(개인 모드 `agent.dependencies.npm_registry`, 비우면 사용자 `npm config get registry`)로 넘긴다. "더 나은 결과를 얻으려면"이 없는 cargo·JS 관리자와, 빌드 스크립트를 켜면 crate도 받는다는 것을 안내한다. 의존성 기록에 `installed_dirs`(JS/TS, attempt 캐시)를 더했다([예시](examples/dependencies-javascript.json)).
+- **고침**: 받기 전에 건너뛴 의존성 기록(`pinned=false`)에 `dependency_versions_not_pinned` 공백이 붙던 것. 받은 기록에만 단다.
+- 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10, Node 24.18.0, npm 11.16.0, pnpm 11.28.13, yarn 1.22.22, cargo 1.99.1. 임시 설정·상태 디렉터리, 모델 없음으로 `codeye up`을 실행했다. 모든 보고서가 `partial`/`inconclusive`인 이유는 모델 검토가 없어서다.
+  - `sharkdp/hexyl`(`6ecc29b`): 빌드 스크립트 끔이면 `deps.rust` `skipped_policy`/`dependency_consumers_not_allowed`, cargo check·clippy `unsupported`/`repository_code_not_allowed`. 빌드 스크립트 켬·받기 끔이면 cargo check·clippy `failed`/`dependency_unavailable`, 관찰 14·발견 0. 받기 켬이면 `deps.rust` 67/67, cargo check `succeeded`, clippy `succeeded`(관찰 2), 관찰 16·발견 2.
+  - `pmndrs/zustand`(`9fed2eb`, pnpm): 받기 끔이면 tsc·type-aware ESLint `failed`/`dependency_unavailable`, 관찰 187·발견 141. 받기 켬이면 `deps.javascript` pnpm 11.28.13로 558/558, tsc `succeeded`(진단 0), type-aware ESLint `succeeded`(관찰 268), 관찰 455·발견 409. 루트 lockfile이 맡지만 workspace 멤버가 아닌 `examples/starter`의 tsc·ESLint(`.m02`)는 두 경우 모두 공백이다. gitleaks 처리 범위는 두 경우 모두 144 파일(설치 트리를 세지 않음)이다.
+  - `developit/mitt`(`6b41670`, lockfile 없음): npm 11.16.0으로 21개 설치(`dependency_versions_not_pinned`). tsc·type-aware ESLint는 받은 뒤에도 `dependency_unavailable`이다. 테스트가 빌드 산출물(`'..'`)을 import하고 `@types/mocha`를 선언하지 않아서이며, 손으로 실행한 tsc에서 받기 전 TS2307 다섯이 받은 뒤 공백 둘(TS2307 `'..'`, TS2593)로 줄었다. 관찰 20·발견 20은 기준선 ESLint다.
+  - 로컬 폴더(zustand 사본): 받은 뒤 tsc·type-aware ESLint가 위와 같은 결과를 냈고 원본 트리의 파일 목록과 hash가 그대로였다. 모든 run 뒤 에이전트 디렉터리에 `node_modules`가 남지 않았다(작업 사본과 함께 지워짐).
+  - 닿지 않는 레지스트리(`npm_registry` `http://127.0.0.1:9/`): `deps.javascript` `failed`/`registry_unreachable`, 분석은 계속됐다(run 118초). 처음에는 npm 기본 재시도가 5분 넘게 이어져 모듈 제한시간(`timed_out`)으로 끝났고, 재시도를 줄여 고쳤다. 받는 중 취소: run `cancelled`, 남은 pnpm 프로세스와 `node_modules` 없음. 1000바이트 크기 상한: `budget_exhausted`/`download_limit_exceeded`. 실모델 호출은 하지 않았다.
+
 ### 추가 — Go 의존성 받기
 
 - **의존성 준비**: 분석 전에 Go 모듈마다 `deps.go`·`deps.go.mNN` task가 의존성을 받고(`go mod download -json -modfile=<사본>`), go vet·Staticcheck는 그 캐시를 오프라인으로 읽는다. 받기는 실행 사본의 모듈 디렉터리에서 하고 원본·snapshot·실행 사본의 go.mod·go.sum을 바꾸지 않는다. 필수 task가 아니어서 실패해도 분석은 계속하고 사유가 남는다([의존성 준비](docs/ARCHITECTURE.md#의존성-준비), A42).
