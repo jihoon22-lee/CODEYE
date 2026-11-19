@@ -431,7 +431,16 @@ def inner(args) -> int:
     home = work / "home"
     home.mkdir()
     godir = str(Path(tools["go"]).parent)
-    env = {"PATH": f"{godir}:/usr/bin:/bin", "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "XDG_STATE_HOME": str(home / ".local/state"),
+    # A gh stand-in on PATH: tool detection may ask its version; offline,
+    # nothing may ask it for a token or call the API through it.
+    ghbin = work / "ghbin"
+    ghbin.mkdir()
+    gh_log = work / "gh.log"
+    (ghbin / "gh").write_text(f'#!/bin/sh\necho "$*" >> {gh_log}\n'
+                              'if [ "$1" = --version ]; then echo "gh version 2.80.0 (2026-01-01)"; exit 0; fi\n'
+                              'echo gho_standintoken0123456789\n')
+    (ghbin / "gh").chmod(0o755)
+    env = {"PATH": f"{ghbin}:{godir}:/usr/bin:/bin", "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "XDG_STATE_HOME": str(home / ".local/state"),
            "XDG_DATA_HOME": str(home / ".local/share"), "LANG": "C.UTF-8"}
     # The fixtures: an operator module cache with one module, a mirror with both.
     mirror_root = work / "mirror"
@@ -500,8 +509,10 @@ def inner(args) -> int:
         return None
 
     try:
-        out, session, run_id = up(src / "seeded", ["--offline"], dict(env, OPENAI_API_KEY="sk-env-key-not-stored"))
+        out, session, run_id = up(src / "seeded", ["--offline"], dict(env, OPENAI_API_KEY="sk-env-key-not-stored", GH_TOKEN="ghp_envtokennotused0123456789"))
         assert 'saved "offline": true' in out, out
+        assert "github: off (offline mode)" in out, out
+        assert not (state / "secrets/github.json").exists(), "a GitHub token was stored offline"
         assert "has no base_url" in out, out
         assert secret.read_bytes() == before, "the environment key replaced the key file"
         saved = json.loads(config.read_text())
@@ -520,6 +531,9 @@ def inner(args) -> int:
         missing_module = "@".join(GO_MIRRORED)
         assert any(f["name"] == missing_module for f in d["failed_items"]), d["failed_items"]
         step("offline, module not in the cache", run=view["status"], deps_go=f"{d['task_status']}/{why(d)}", failed_items=[f["reason"] for f in d["failed_items"]])
+        pr = sh([exe, "up", "--config", config, "--no-open", "--postgres-bin-dir", args.postgres_bin_dir, "https://github.com/octo/demo/pull/1"], env=env, check=False)
+        assert pr.returncode == 2 and "offline mode does not use GitHub" in pr.stderr, (pr.returncode, pr.stdout, pr.stderr)
+        step("offline, pull request refused", exit=pr.returncode, message=pr.stderr.strip().splitlines()[-1][:80])
         doctor1 = sh([exe, "doctor", "--config", config, "--format", "json", "--work-dir", work / "doctor-work"], env=env, check=False).stdout
         (work / "doctor-offline.json").write_text(doctor1)
         # Offline with no mirror: no public default is left as a destination.
@@ -612,6 +626,12 @@ def inner(args) -> int:
         except ImportError:
             schema_ok = "jsonschema not installed"
         off = json.loads(doctor2)["offline"]
+        asked = [line for line in gh_log.read_text().splitlines()] if gh_log.exists() else []
+        assert all(line == "--version" for line in asked), asked
+        assert not (state / "secrets/github.json").exists(), "a GitHub token was stored offline"
+        setup = json.loads(session.request("GET", "setup", raw=True)[0])
+        assert (setup.get("github") or {}).get("reason") == "offline_mode", setup.get("github")
+        step("GitHub offline", gh_invocations=sorted(set(asked)) or "none", setup_github=setup["github"]["reason"], token_file="absent")
         step("doctor", schema=schema_ok, destinations={d["kind"]: d["origin"] for d in off["destinations"]}, ca_bundle=off["ca_bundle"]["status"])
         checklist = sh([exe, "tools", "--config", config, "--checklist"], env=env).stdout
         (work / "checklist.md").write_text(checklist)
