@@ -97,7 +97,7 @@ builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단�
 
 | 필드 | 뜻 |
 |---|---|
-| `scope` | `review.scope` task와 결과. 범위 산출물을 받았으면 `accepted`, 아니면 작업 상태·사유(예: `skipped` / `secret_screen_failed`) |
+| `scope` | `review.scope` task와 결과. 범위 산출물을 받았으면 `accepted`, 아니면 작업 상태·사유(예: `skipped` / `model_source_not_approved`) |
 | `max_calls`, `max_request_bytes` | 범위 산출물이 기록한 attempt 호출 상한과 요청 크기 상한. 산출물이 없으면 `null` |
 | `calls_used` | slice 앞 호출 수(범위 산출물의 `calls_before_slices`, attempt 호출 기록에서 셈. 기록 없이 실패한 전체 역할 호출도 들어간다)와 slice 기록의 호출 합. 범위 산출물이 없으면 전체 역할 기록에서 센다. 호출했을 수 있는 검토 task에 쓸 수 있는 기록이 없으면 `null` |
 | `request_bytes_sent` | 모든 검토 기록의 요청 크기 합(프롬프트 바이트). 같은 조건에서 `null`이며, 값이 있으면 `code_review.request_bytes`와 같다 |
@@ -112,7 +112,7 @@ builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단�
 
 **검증.** 장부는 builder 6 이상이고 `review.scope` task가 있을 때만 있어야 하며, 있으면 반드시 있어야 한다. 모듈 행의 합, 보낸 파일 이하인 잘림·검증 완료 수, 상한 초과 파일이 있으면 그런 slice가 있을 것, 상태가 행과 task 행에서 다시 계산한 값과 같을 것, `calls_used`가 `review_calls` 수 이상일 것, 호출의 `task_key`가 같은 역할의 계획된 task일 것을 저장 시와 조회 시에 확인한다. 장부는 모듈 ID·task 키·코드·수만 담으므로 코드 미포함 projection에서도 그대로다. 세 형식과 웹 화면은 장부의 같은 수를 보인다.
 
-**비밀값 선별 상태.** builder 6부터 비밀정보 절의 `model_input`에 `screened`(완료된 탐지로 걸렀고 뺀 파일 없음)가 있다. builder 5는 이 경우를 `not_screened`로 읽었다.
+**비밀값 선별 상태.** builder 6부터 비밀정보 절의 `model_input`에 `screened`(완료된 탐지로 걸렀고 뺀 파일 없음)가 있다. builder 5는 이 경우를 `not_screened`로 읽었다. 비밀값 작업이 실행됐지만 결과를 쓸 수 없어(실패·부분 결과) 미선별로 검토한 실행도 `not_screened`다. 그 결과가 보고한 파일을 뺐어도(`secret_files_withheld`) `withheld`보다 `not_screened`가 앞선다. 나머지 입력은 거르지 않았기 때문이다. Markdown과 웹은 이때 쓸 수 없던 작업과 상태·사유를 적는다(예시 `internal/report/testdata/report-screen-unusable.json`). 이전 worker가 검토를 건너뛴 실행(`secret_screen_failed`)은 그대로 `screen_failed`로 읽는다.
 
 예시는 [`examples/report-slices.json`](../examples/report-slices.json)과 [`examples/report-slices.md`](../examples/report-slices.md)이다. `fixtures/modules/slices/input`을 호출 상한 15로 실행해(작업마다 대본 응답 1회, 모델 호출 없음) slice 3개가 승인되고 4개가 `budget_exhausted`로 끝난 합성 예시이며, 생성 시험은 [`report_slices_example_test.go`](../internal/worker/review/report_slices_example_test.go)다.
 

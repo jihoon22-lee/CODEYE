@@ -5,6 +5,7 @@ import sectioned from '../../examples/report.json';
 import flat from '../../examples/report-go-vet.json';
 import withSlices from '../../examples/report-slices.json';
 import unscreened from '../../internal/report/testdata/report-unscreened.json';
+import screenUnusable from '../../internal/report/testdata/report-screen-unusable.json';
 import { parseAnalysisReport } from './analysisReport';
 import { ReportDocument } from './ReportPanel';
 import { reportKo as t } from './locales/report-ko';
@@ -14,8 +15,8 @@ afterEach(cleanup);
 // examples/report.json is the builder's output for fixtures/modules/input
 // (internal/worker/review/report_example_test.go), stored with demo: true;
 // examples/report-go-vet.json is a revision published before the sections.
-function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.json' | 'report-unscreened.json'): Record<string, any> {
-  const docs = { 'report.json': sectioned, 'report-go-vet.json': flat, 'report-slices.json': withSlices, 'report-unscreened.json': unscreened };
+function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.json' | 'report-unscreened.json' | 'report-screen-unusable.json'): Record<string, any> {
+  const docs = { 'report.json': sectioned, 'report-go-vet.json': flat, 'report-slices.json': withSlices, 'report-unscreened.json': unscreened, 'report-screen-unusable.json': screenUnusable };
   const doc = structuredClone(docs[name]) as Record<string, any>;
   doc.demo = false;
   return doc;
@@ -225,5 +226,23 @@ describe('analysis sections', () => {
     const gaps = container.querySelector('#report-section-gaps') as HTMLElement;
     expect(within(gaps).getByText(t.sections.gapLabels.model_input_not_screened)).toBeTruthy();
     expect(within(gaps).queryByText(t.sections.gapLabels.review_scope_skipped)).toBeNull();
+    // No secrets task ran: the fixed not-screened sentence.
+    const secrets = container.querySelector('#report-section-secrets') as HTMLElement;
+    expect(within(secrets).getByText(t.sections.modelInput.not_screened)).toBeTruthy();
+  });
+
+  // internal/report/testdata/report-screen-unusable.json: the same fixture
+  // after a secrets scan that ran but failed
+  // (internal/worker/review/report_slices_example_test.go).
+  it('names the failed secrets task when the review ran without a usable screen', () => {
+    const doc = example('report-screen-unusable.json');
+    const r = parseAnalysisReport(doc, doc.run_id);
+    const { container } = render(<ReportDocument report={r} />);
+    const secrets = container.querySelector('#report-section-secrets') as HTMLElement;
+    expect(within(secrets).getByText(/탐지 작업 gitleaks의 결과를 쓸 수 없어/)).toBeTruthy();
+    expect(within(secrets).queryByText(t.sections.modelInput.not_screened)).toBeNull();
+    const gaps = container.querySelector('#report-section-gaps') as HTMLElement;
+    expect(within(gaps).getByText(t.sections.gapLabels.model_input_not_screened)).toBeTruthy();
+    expect(doc.tasks.some((x: { reason: string | null }) => x.reason === 'secret_screen_failed')).toBe(false);
   });
 });

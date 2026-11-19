@@ -182,8 +182,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: doc.Limitations}
 }
 
-// screenOf is the scope artifact's screen state; Run never reaches the scope
-// with a failed screen.
+// screenOf is the scope artifact's screen state.
 func screenOf(sc secretScreen) string {
 	if sc.state == screenApplied {
 		return record.ScreenApplied

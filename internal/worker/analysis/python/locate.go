@@ -85,6 +85,10 @@ func byteColumn(line []byte, unit string, col int) (int, bool) {
 type place struct {
 	StartLine, StartCol, EndLine, EndCol int
 	Unit                                 string
+	// Clamp moves a column past the end of its line to the line end: a
+	// parser reports an error at the end of a line one column further
+	// (measured: mypy end_column on an unclosed parenthesis).
+	Clamp bool
 }
 
 // locate maps a snapshot-relative path and tool place to an observation
@@ -131,8 +135,15 @@ func locate(rel string, ok bool, pl place, files map[string]source.Entry, drift 
 	if !ok1 || !ok2 {
 		return &relp, nil, obsdoc.LocationLineOutOfRange
 	}
-	sc, ok1 := byteColumn(sl, pl.Unit, max(pl.StartCol, 1))
-	ec, ok2 := byteColumn(el, pl.Unit, max(endCol, 1))
+	column := func(line []byte, c int) (int, bool) {
+		b, ok := byteColumn(line, pl.Unit, max(c, 1))
+		if !ok && pl.Clamp && utf8.Valid(line) {
+			return len(line) + 1, true
+		}
+		return b, ok
+	}
+	sc, ok1 := column(sl, pl.StartCol)
+	ec, ok2 := column(el, endCol)
 	if !ok1 || !ok2 {
 		return &relp, nil, obsdoc.LocationLineOutOfRange
 	}

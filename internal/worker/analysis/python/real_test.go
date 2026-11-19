@@ -249,17 +249,26 @@ func TestRealRuffSyntaxError(t *testing.T) {
 	checkRuffSyntaxError(t, runReal(t, newRuffT(t), "syntax", "ruff"))
 }
 
+// One file that does not parse leaves the rest analyzed: the task succeeds
+// with the file as a syntax_error unit and its syntax error as observation.
 func checkRuffSyntaxError(t *testing.T, r realRun) {
 	t.Helper()
-	wantStatus(t, r, domain.TaskFailed, obsdoc.ExitExecutionError)
-	if r.res.Reason != ReasonSyntaxErrors || r.doc.Coverage.ProcessedPaths != nil || r.doc.Coverage.Units[UnitSyntaxError] != 1 || len(r.doc.ToolErrors) == 0 ||
-		r.doc.ToolErrors[0].Kind != "syntax" || *r.doc.ToolErrors[0].Path != "broken.py" {
-		t.Fatalf("syntax %s %+v %+v", r.res.Reason, r.doc.Coverage, r.doc.ToolErrors)
-	}
-	for _, o := range r.doc.Observations {
-		if o.RuleID == "invalid-syntax" {
-			t.Fatalf("syntax error as observation %+v", o)
-		}
+	wantStatus(t, r, domain.TaskSucceeded, obsdoc.ExitSuccessWithFindings)
+	checkUnparsable(t, r, "invalid-syntax", []string{"ok.py"}, "broken.py")
+}
+
+// TC-191: two unparsable files (a syntax error and Python 2 print) next to a
+// healthy file with a real finding: the finding stands, each broken file is
+// one syntax observation and a syntax_error unit.
+func TestRealRuffUnparsableFiles(t *testing.T) {
+	checkRuffUnparsable(t, runReal(t, newRuffT(t), "syntaxmix", "ruff"))
+}
+
+func checkRuffUnparsable(t *testing.T, r realRun) {
+	t.Helper()
+	checkUnparsable(t, r, "invalid-syntax", []string{"app.py"}, "broken.py", "legacy.py")
+	if got := findObs(r.doc, "E722"); len(got) != 1 || *got[0].Path != "app.py" {
+		t.Fatalf("E722 on app.py: %+v", got)
 	}
 }
 
@@ -383,10 +392,66 @@ func TestRealMypySyntaxError(t *testing.T) {
 	checkMypySyntaxError(t, runReal(t, newMypyT(t), "syntax", "mypy"))
 }
 
+// mypy stops at the first file it cannot parse; the pack runs it again
+// without that file, so the others are type-checked.
 func checkMypySyntaxError(t *testing.T, r realRun) {
 	t.Helper()
-	if r.res.Status != domain.TaskFailed || r.res.Reason != ReasonSyntaxErrors || r.doc.Coverage.ProcessedPaths != nil {
-		t.Fatalf("syntax %s/%s %+v", r.res.Status, r.res.Reason, r.doc.Coverage)
+	checkUnparsable(t, r, "syntax", []string{"ok.py"}, "broken.py")
+	wantExecutions(t, r.doc, "mypy.version", "mypy.check", "mypy.check.r01")
+}
+
+// TC-191 for mypy: one rerun per unparsable file, then the type check of the
+// rest with its real finding.
+func TestRealMypyUnparsableFiles(t *testing.T) {
+	checkMypyUnparsable(t, runReal(t, newMypyT(t), "syntaxmix", "mypy"))
+}
+
+func checkMypyUnparsable(t *testing.T, r realRun) {
+	t.Helper()
+	checkUnparsable(t, r, "syntax", []string{"app.py"}, "broken.py", "legacy.py")
+	wantExecutions(t, r.doc, "mypy.version", "mypy.check", "mypy.check.r01", "mypy.check.r02")
+	if got := findObs(r.doc, "return-value"); len(got) != 1 || *got[0].Path != "app.py" {
+		t.Fatalf("return-value on app.py: %+v", got)
+	}
+}
+
+// A healthy file that imports the unparsable one: the rerun skips that
+// module (follow_imports = skip in a scratch configuration) instead of
+// stopping at its syntax error again (TC-191).
+func TestRealMypyUnparsableImported(t *testing.T) {
+	checkMypyUnparsableImported(t, runReal(t, newMypyT(t), "syntaximport", "mypy"))
+}
+
+func checkMypyUnparsableImported(t *testing.T, r realRun) {
+	t.Helper()
+	checkUnparsable(t, r, "syntax", []string{"app.py"}, "broken.py")
+	wantExecutions(t, r.doc, "mypy.version", "mypy.check", "mypy.check.r01")
+	if got := findObs(r.doc, "return-value"); len(got) != 1 || *got[0].Path != "app.py" || got[0].Location.StartLine != 9 {
+		t.Fatalf("return-value on app.py:9: %+v", got)
+	}
+	if got := rulesOf(r.doc, false); len(got) != 2 {
+		t.Fatalf("rules %v: want only the syntax error and return-value", got)
+	}
+	var rerun []string
+	for _, s := range r.rr.specs {
+		if slices.ContainsFunc(s.Args, func(a string) bool { return strings.HasSuffix(a, "files.r01.txt") }) {
+			rerun = s.Args
+		}
+	}
+	i := slices.Index(rerun, "--config-file")
+	if i < 0 || i+1 >= len(rerun) || filepath.Base(rerun[i+1]) != "mypy.r01.ini" {
+		t.Fatalf("rerun argv %v: want the skip configuration", rerun)
+	}
+}
+
+func wantExecutions(t *testing.T, d obsdoc.Document, names ...string) {
+	t.Helper()
+	var got []string
+	for _, e := range d.Executions {
+		got = append(got, e.Name)
+	}
+	if !slices.Equal(got, names) {
+		t.Fatalf("executions %v, want %v", got, names)
 	}
 }
 
@@ -503,8 +568,21 @@ func TestRealPyrightSyntaxError(t *testing.T) {
 
 func checkPyrightSyntaxError(t *testing.T, a *Pyright, r realRun) {
 	t.Helper()
-	if r.res.Status != domain.TaskFailed || r.res.Reason != ReasonSyntaxErrors || r.doc.Coverage.ProcessedPaths != nil || r.doc.Coverage.Units[UnitSyntaxError] != 1 {
-		t.Fatalf("syntax %s/%s %+v", r.res.Status, r.res.Reason, r.doc.Coverage)
+	checkUnparsable(t, r, PyrightSyntaxRule, []string{"ok.py"}, "broken.py")
+}
+
+// TC-191 for pyright: it checks every file in one run; the parser errors of
+// each broken file become one observation, the rest stands.
+func TestRealPyrightUnparsableFiles(t *testing.T) {
+	a := newPyrightT(t)
+	checkPyrightUnparsable(t, a, runReal(t, a, "syntaxmix", "pyright", a.cfg.Node.Dir))
+}
+
+func checkPyrightUnparsable(t *testing.T, a *Pyright, r realRun) {
+	t.Helper()
+	checkUnparsable(t, r, PyrightSyntaxRule, []string{"app.py"}, "broken.py", "legacy.py")
+	if got := findObs(r.doc, "reportReturnType"); len(got) != 1 || *got[0].Path != "app.py" {
+		t.Fatalf("reportReturnType on app.py: %+v", got)
 	}
 }
 
@@ -589,9 +667,22 @@ func TestRealBanditSyntaxError(t *testing.T) {
 	checkBanditSyntaxError(t, runReal(t, newBanditT(t), "syntax", "bandit"))
 }
 
+// bandit skips a file it cannot parse and scans the rest; the error has no
+// position, so the file is counted, not observed.
 func checkBanditSyntaxError(t *testing.T, r realRun) {
 	t.Helper()
-	if r.res.Status != domain.TaskFailed || r.res.Reason != ReasonSyntaxErrors || r.doc.Coverage.Units[UnitSyntaxError] != 1 {
-		t.Fatalf("syntax %s/%s %+v %+v", r.res.Status, r.res.Reason, r.doc.Coverage, r.doc.ToolErrors)
+	checkUnparsable(t, r, "", []string{"ok.py"}, "broken.py")
+}
+
+// TC-191 for bandit.
+func TestRealBanditUnparsableFiles(t *testing.T) {
+	checkBanditUnparsable(t, runReal(t, newBanditT(t), "syntaxmix", "bandit"))
+}
+
+func checkBanditUnparsable(t *testing.T, r realRun) {
+	t.Helper()
+	checkUnparsable(t, r, "", []string{"app.py"}, "broken.py", "legacy.py")
+	if got := findObs(r.doc, "B602"); len(got) != 1 || *got[0].Path != "app.py" {
+		t.Fatalf("B602 on app.py: %+v", got)
 	}
 }

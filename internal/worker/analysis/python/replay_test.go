@@ -3,6 +3,7 @@ package python
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
@@ -42,6 +44,14 @@ func execNameOf(tool string, args []string) string {
 		return "ruff.check-ignore-noqa"
 	case tool == BanditTool && slices.Contains(args, "--ignore-nosec"):
 		return "bandit.check-ignore-nosec"
+	}
+	if tool == MypyTool {
+		// A rerun without unparsable files reads files.rNN.txt.
+		for _, a := range args {
+			if base := filepath.Base(a); strings.HasPrefix(a, "@") && strings.HasPrefix(base, "files.r") {
+				return "mypy.check." + strings.TrimSuffix(strings.TrimPrefix(base, "files."), ".txt")
+			}
+		}
 	}
 	return tool + ".check"
 }
@@ -101,7 +111,7 @@ func capture(t *testing.T, fixtureName, key string, r realRun) {
 		write(".stdout", sub(res.Stdout.Data))
 		write(".stderr", sub(res.Stderr.Data))
 		write(".exit", []byte(strconv.Itoa(code)+"\n"))
-		if tool == MypyTool && name == "mypy.check" {
+		if tool == MypyTool && strings.HasPrefix(name, "mypy.check") {
 			if b, err := os.ReadFile(filepath.Join(argAfter(args, "--lineprecision-report"), "lineprecision.txt")); err == nil {
 				write(".lineprecision", b)
 			}
@@ -163,7 +173,7 @@ func (rr *replayRunner) Run(ctx context.Context, spec executor.Spec) executor.Re
 			}
 		}
 	}
-	if rr.tool == MypyTool && name == "mypy.check" {
+	if rr.tool == MypyTool && strings.HasPrefix(name, "mypy.check") {
 		if lp, err := os.ReadFile(base + ".lineprecision"); err == nil {
 			if err := os.WriteFile(filepath.Join(argAfter(args, "--lineprecision-report"), "lineprecision.txt"), lp, 0o600); err != nil {
 				rr.t.Fatal(err)
@@ -303,7 +313,96 @@ func TestReplayPyrightSuppressions(t *testing.T) {
 	replayPyright(t, "suppressions", checkPyrightSuppressionsHonored)
 }
 func TestReplayPyrightSyntaxError(t *testing.T) { replayPyright(t, "syntax", checkPyrightSyntaxError) }
-func TestReplayPyrightOverlap(t *testing.T)     { replayPyright(t, "overlap", checkPyrightOverlapDisabled) }
+func TestReplayPyrightUnparsableFiles(t *testing.T) {
+	replayPyright(t, "syntaxmix", checkPyrightUnparsable)
+}
+func TestReplayRuffUnparsableFiles(t *testing.T) {
+	checkRuffUnparsable(t, runReplay(t, RuffTool, "syntaxmix", nil))
+}
+func TestReplayMypyUnparsableFiles(t *testing.T) {
+	checkMypyUnparsable(t, runReplay(t, MypyTool, "syntaxmix", nil))
+}
+
+// mypy's reruns without the unparsable files share the task's one time
+// limit: a rerun gets only what is left, and when nothing is left the task
+// times out with the syntax errors found so far (TC-192).
+func TestReplayMypyRerunsShareTimeLimit(t *testing.T) {
+	const limit = 2 * time.Second
+	dir := t.TempDir()
+	fake := filepath.Join(dir, MypyTool)
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexit 3\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name  string
+		delay time.Duration
+	}{{"time left", limit / 4}, {"time spent", limit + limit/4}} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, err := NewMypy(Config{Executable: fake, Timeout: limit})
+			if err != nil {
+				t.Fatal(err)
+			}
+			slow := func(name string, _ executor.Spec, _ *executor.Result) {
+				if name == "mypy.check" {
+					time.Sleep(tc.delay)
+				}
+			}
+			r := runWith(t, a, "syntaxmix", MypyTool, &replayRunner{t: t, tool: MypyTool, fake: fake, fixture: "syntaxmix", mutate: slow}, dir)
+			var reruns []time.Duration
+			for _, s := range r.rr.specs {
+				if s.Timeout > limit {
+					t.Fatalf("execution timeout %s over the limit %s", s.Timeout, limit)
+				}
+				if slices.ContainsFunc(s.Args, func(a string) bool { return strings.Contains(a, "files.r") }) {
+					reruns = append(reruns, s.Timeout)
+				}
+			}
+			if tc.delay < limit {
+				checkMypyUnparsable(t, r)
+				if len(reruns) != 2 || reruns[0] > limit-tc.delay {
+					t.Fatalf("rerun timeouts %v: want at most %s", reruns, limit-tc.delay)
+				}
+				return
+			}
+			wantStatus(t, r, domain.TaskTimedOut, obsdoc.ExitTimeout)
+			if len(reruns) != 0 || r.res.Reason != ReasonTimeout || !slices.Contains(r.doc.Limitations, LimMypyRerunsTimedOut) {
+				t.Fatalf("reruns %v reason %s limitations %v", reruns, r.res.Reason, r.doc.Limitations)
+			}
+			wantExecutions(t, r.doc, "mypy.version", "mypy.check")
+			if got := findObs(r.doc, "syntax"); len(got) != 1 || len(r.doc.Coverage.ProcessedPaths) != 0 {
+				t.Fatalf("syntax observations %+v processed %v", got, r.doc.Coverage.ProcessedPaths)
+			}
+		})
+	}
+}
+
+// The unparsable_files property names the files in order and counts the
+// ones past its 256-byte limit.
+func TestUnparsableList(t *testing.T) {
+	files := map[string]bool{"b.py": true, "a.py": true}
+	if got := unparsableList(files); got != "a.py, b.py" {
+		t.Fatalf("%q", got)
+	}
+	for i := range 40 {
+		files[fmt.Sprintf("pkg/module_%02d.py", i)] = true
+	}
+	got := unparsableList(files)
+	if len(got) > 256 || !strings.HasPrefix(got, "a.py, b.py, pkg/module_00.py") || !strings.HasSuffix(got, " more") {
+		t.Fatalf("%d bytes: %q", len(got), got)
+	}
+	if got := unparsableList(map[string]bool{"x,y.py": true}); got != "+1 more" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestReplayMypyUnparsableImported(t *testing.T) {
+	checkMypyUnparsableImported(t, runReplay(t, MypyTool, "syntaximport", nil))
+}
+
+func TestReplayBanditUnparsableFiles(t *testing.T) {
+	checkBanditUnparsable(t, runReplay(t, BanditTool, "syntaxmix", nil))
+}
+func TestReplayPyrightOverlap(t *testing.T) { replayPyright(t, "overlap", checkPyrightOverlapDisabled) }
 
 // ---- failure modes: never success ----
 

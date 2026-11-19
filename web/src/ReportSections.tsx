@@ -247,6 +247,11 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const sa = sections.staticAnalysis;
   const m = sections.metrics;
   const sc = sections.secrets;
+  // Not screened because a secrets task ran but its result is unusable: name
+  // that task with its state and reason (review still ran on the read filters).
+  const unusableScreen = sc.modelInput === 'not_screened'
+    ? sc.tasks.map((k) => report.tasks.find((x) => x.key === k)).find((r) => r && r.status !== 'succeeded' && r.status !== 'unsupported')
+    : undefined;
   const cr = sections.codeReview;
   const staticFindings = sa.languages.flatMap((l) => l.tools.flatMap((x) => x.findings));
   const bodies: Record<string, ReactNode> = {
@@ -428,7 +433,11 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <>
         <StageLine stage={sc.stage} />
         <p>{s.secretsLead}</p>
-        <p>{label(s.modelInput, sc.modelInput)}</p>
+        <p>
+          {unusableScreen
+            ? s.modelInputUnusable(unusableScreen.key, label(s.taskStatus, unusableScreen.status), unusableScreen.reason ? explainReason(unusableScreen.reason) : '—')
+            : label(s.modelInput, sc.modelInput)}
+        </p>
         <SectionCounts sections={sections} keyName="secrets" />
         <Table
           head={[s.col.task, s.col.status, s.col.reason]}

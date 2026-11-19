@@ -76,7 +76,7 @@ func TestReplayESLintCaptures(t *testing.T) {
 		{"monorepo-typed", "eslint-typed.m01", true, domain.TaskSucceeded, "", map[string]int{"@typescript-eslint/no-floating-promises": 1, "@typescript-eslint/no-misused-promises": 1,
 			"@typescript-eslint/no-unsafe-assignment": 1, "@typescript-eslint/no-unsafe-member-access": 1, "@typescript-eslint/no-unsafe-return": 1, "@typescript-eslint/require-await": 1}, 3},
 		{"clean", "eslint", false, domain.TaskSucceeded, "", map[string]int{}, 1},
-		{"parse-error", "eslint", false, domain.TaskFailed, ReasonParseErrors, map[string]int{"no-unused-vars": 1}, -1},
+		{"parse-error", "eslint", false, domain.TaskSucceeded, "", map[string]int{"no-unused-vars": 1, ParseErrorRule: 1}, 1},
 		{"suppressions", "eslint", false, domain.TaskSucceeded, "", map[string]int{"no-empty": 1, "no-unused-vars": 1, "no-debugger": 1}, 1},
 		{"typed-gap", "eslint-typed", true, domain.TaskFailed, ReasonDependency, map[string]int{}, -1},
 		{"typed-deprecated", "eslint-typed", true, domain.TaskSucceeded, "", map[string]int{"@typescript-eslint/require-await": 1}, 1},

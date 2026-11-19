@@ -13,7 +13,7 @@
     "snapshot_manifest_digest": {"$ref": "#/$defs/digest"},
     "run_id": {"$ref": "#/$defs/uuid"},
     "attempt_id": {"$ref": "#/$defs/uuid"},
-    "screen": {"enum": ["applied", "not_screened"], "description": "applied: a completed secrets screen withheld its files; not_screened: no secrets task ran, the inputs went through the read filters only and limitations hold model_input_not_secret_screened"},
+    "screen": {"enum": ["applied", "not_screened"], "description": "applied: a completed secrets screen withheld its files; not_screened: no secrets task ran or its result was unusable, the inputs went through the read filters only and limitations hold model_input_not_secret_screened"},
     "budget": {
       "type": "object", "additionalProperties": false,
       "required": ["max_calls", "max_request_bytes", "whole_run_max_calls", "slice_reserve_calls", "calls_before_slices", "admission"],
