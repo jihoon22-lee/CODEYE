@@ -80,7 +80,12 @@ type Config struct {
 	// toolchains under their reserved names (--node PATH, docs/ANALYZERS.md#도구-경로). The
 	// worker build decides which names it knows.
 	AnalyzerTools map[string]string
-	Limits        workerproto.Limits
+	// AdvertiseWithoutBaseline (--advertise-without-baseline) lets the node
+	// take analysis work even when no baseline analyzer is usable: the tasks of
+	// unusable tools are recorded unsupported instead of the run waiting for a
+	// node that would never appear.
+	AdvertiseWithoutBaseline bool
+	Limits                   workerproto.Limits
 	// WorkerCommand is the worker argv (default: this executable + "worker").
 	WorkerCommand []string
 	Log           io.Writer

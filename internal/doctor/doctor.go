@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
 type Check struct {
@@ -20,6 +21,9 @@ type Check struct {
 	Status  string `json:"status"`
 	Reason  string `json:"reason"`
 	Version string `json:"version,omitempty"`
+	// Blocking marks a check whose failure makes the exit code 1: something
+	// that matters for the mode doctor was asked about.
+	Blocking bool `json:"blocking,omitempty"`
 }
 type Host struct {
 	OS     string  `json:"os"`
@@ -28,19 +32,37 @@ type Host struct {
 	Memory *uint64 `json:"memory_total_bytes"`
 	Disk   *uint64 `json:"disk_available_bytes"`
 }
+
+// Tool is one detected tool as doctor reports it. It carries no path.
+type Tool struct {
+	Name          string `json:"name"`
+	Status        string `json:"status"`
+	Version       string `json:"version,omitempty"`
+	VersionTested bool   `json:"version_tested"`
+	Source        string `json:"source,omitempty"`
+}
 type Report struct {
 	SchemaVersion string  `json:"schema_version"`
 	Stage         string  `json:"stage"`
 	Host          Host    `json:"host"`
 	Checks        []Check `json:"checks"`
+	// Tools are the tools detection found, searched the way the agent searches
+	// (docs/ANALYZERS.md#도구-찾기).
+	Tools []Tool `json:"tools"`
 	// Operations is present only with --config (docs/OPERATIONS.md#codeye-doctor).
 	Operations *Operations `json:"operations,omitempty"`
+
+	detected toolfind.Result
 }
 type Options struct {
 	WorkDir, DatabaseURL string
 	Timeout              time.Duration
-	// Personal adds the operations section (storage, backup, processes).
+	// Personal adds the operations section (storage, backup, processes) and
+	// supplies the explicit tool settings and the database mode.
 	Personal *personal.Config
+	// Detect finds the tools; nil runs toolfind with the explicit settings of
+	// Personal (and only those when agent.auto_detect is false).
+	Detect func(context.Context) toolfind.Result
 }
 
 var versionPattern = regexp.MustCompile(`(?:^|[^0-9])([0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:[^0-9]|$)`)
@@ -53,37 +75,107 @@ func version(s string) string {
 	return ""
 }
 
+// explicitTools maps the personal configuration onto the settings that always
+// win over detection.
+func explicitTools(cfg *personal.Config) toolfind.Explicit {
+	if cfg == nil {
+		return toolfind.Explicit{}
+	}
+	a := cfg.Agent
+	ex := toolfind.Explicit{Go: a.Go, GoModCache: a.GoModCache, Tools: a.Tools}
+	if a.Model != nil {
+		ex.OpenCode = a.Model.OpenCode
+	}
+	return ex
+}
+
+func (o Options) detect(ctx context.Context) toolfind.Result {
+	if o.Detect != nil {
+		return o.Detect(ctx)
+	}
+	return toolfind.Detect(ctx, toolfind.Options{Explicit: explicitTools(o.Personal), OnlyExplicit: o.Personal != nil && !o.Personal.Agent.AutoDetectEnabled()})
+}
+
+// toolChecks are the detected tools doctor reports as checks, by check id.
+var toolChecks = []struct{ id, tool string }{{"git", "git"}, {"go", "go"}, {"node", "node"}, {"rust", "cargo"}, {"opencode_cli", "opencode"}}
+
 func Collect(ctx context.Context, opts Options, runner Runner) Report {
-	report := Report{SchemaVersion: "0.1", Stage: "foundation", Host: Host{OS: runtime.GOOS, Arch: runtime.GOARCH, CPUs: runtime.NumCPU()}, Checks: []Check{}}
-	report.Checks = append(report.Checks, Check{"host", "available", "observed_runtime", ""}, workDisk(opts.WorkDir))
+	report := Report{SchemaVersion: "0.1", Stage: "foundation", Host: Host{OS: runtime.GOOS, Arch: runtime.GOARCH, CPUs: runtime.NumCPU()}, Checks: []Check{}, Tools: []Tool{}}
+	disk := workDisk(opts.WorkDir)
+	disk.Blocking = disk.Status != "available"
+	report.Checks = append(report.Checks, Check{ID: "host", Status: "available", Reason: "observed_runtime"}, disk)
 	report.Host.Memory, report.Host.Disk = resources(opts.WorkDir)
-	probes := []struct {
-		id, name string
-		args     []string
-	}{
-		{"git", "git", []string{"--version"}}, {"go", "go", []string{"version"}},
-		{"node", "node", []string{"--version"}}, {"python", "python3", []string{"--version"}},
-		{"c_cpp", "cc", []string{"--version"}}, {"rust", "rustc", []string{"--version"}},
-		{"postgres_client", "psql", []string{"--version"}}, {"opencode_cli", "opencode", []string{"--version"}},
+	res := opts.detect(ctx)
+	report.detected = res
+	explicit := explicitTools(opts.Personal)
+	for _, tc := range toolChecks {
+		report.Checks = append(report.Checks, toolCheck(tc.id, res, tc.tool, explicit.Path(tc.tool) != ""))
 	}
-	for _, probe := range probes {
-		r := runner.Run(ctx, Command{Name: probe.name, Args: probe.args, Timeout: opts.Timeout})
-		c := Check{ID: probe.id, Status: "available", Reason: "version_only", Version: version(r.Output)}
-		if r.Reason != "" {
-			c.Status = "unavailable"
-			c.Reason = r.Reason
-			c.Version = ""
-		} else if c.Version == "" {
-			c.Status = "unverified"
-			c.Reason = "version_unrecognized"
-		}
-		report.Checks = append(report.Checks, c)
+	for _, t := range res.Tools {
+		report.Tools = append(report.Tools, Tool{Name: t.Name, Status: string(t.Status), Version: t.Version, VersionTested: t.Status == toolfind.Found && t.VersionTested, Source: t.Source})
 	}
-	report.Checks = append(report.Checks, database(ctx, opts, runner), Check{"model", "unverified", "adapter_contract_pending_w10", ""}, Check{"process_control", "unverified", "runtime_process_control_not_probed", ""})
+	// The database client is only used by doctor's own database query.
+	psql := runner.Run(ctx, Command{Name: "psql", Args: []string{"--version"}, Timeout: opts.Timeout})
+	client := Check{ID: "postgres_client", Status: "available", Reason: "version_only", Version: version(psql.Output)}
+	if psql.Reason != "" {
+		client.Status, client.Reason, client.Version = "unavailable", psql.Reason, ""
+	} else if client.Version == "" {
+		client.Status, client.Reason = "unverified", "version_unrecognized"
+	}
+	report.Checks = append(report.Checks, client, analyzers(res), configuredTools(res))
+	db := database(ctx, opts, runner)
+	if db.Status == "not_configured" {
+		// Without a URL the database is required only by the external mode;
+		// the managed mode brings its own.
+		db.Blocking = opts.Personal != nil && opts.Personal.Database.Mode == personal.DatabaseExternal
+	} else {
+		db.Blocking = db.Status != "available"
+	}
+	report.Checks = append(report.Checks, db)
 	if opts.Personal != nil {
 		report.Operations = operations(opts.Personal, time.Now())
 	}
 	return report
+}
+
+// toolCheck turns a detection result into a check. Only a tool set explicitly
+// in the configuration and not usable blocks: the agent would run with a tool
+// that does not work.
+func toolCheck(id string, res toolfind.Result, name string, explicit bool) Check {
+	t, ok := res.Tool(name)
+	c := Check{ID: id, Status: "unavailable", Reason: "executable_missing"}
+	switch {
+	case !ok || t.Status == toolfind.NotFound:
+	case t.Status == toolfind.Found:
+		c.Status, c.Reason, c.Version = "available", "version_only", version(t.Version)
+		if c.Version == "" {
+			c.Status, c.Reason = "unverified", "version_unrecognized"
+		}
+	default:
+		c.Reason = "invalid_executable"
+	}
+	c.Blocking = explicit && c.Status != "available"
+	return c
+}
+
+// analyzers reports whether any baseline analyzer is usable: without one an
+// analysis records every tool as not run.
+func analyzers(res toolfind.Result) Check {
+	if res.BaselineUsable() {
+		return Check{ID: "analyzers", Status: "available", Reason: "baseline_analyzer_usable"}
+	}
+	return Check{ID: "analyzers", Status: "unavailable", Reason: "no_baseline_analyzer", Blocking: true}
+}
+
+// configuredTools checks the tools the configuration names: a path set by the
+// operator that is not usable stays what the agent is given, so it blocks.
+func configuredTools(res toolfind.Result) Check {
+	for _, t := range res.Tools {
+		if t.Status == toolfind.Unusable && t.Source == toolfind.SourceConfig {
+			return Check{ID: "configured_tools", Status: "unavailable", Reason: "configured_tool_unusable", Blocking: true}
+		}
+	}
+	return Check{ID: "configured_tools", Status: "available", Reason: "configured_tools_usable"}
 }
 
 func workDisk(path string) Check {
@@ -190,9 +282,12 @@ func database(ctx context.Context, opts Options, runner Runner) Check {
 	return c
 }
 
+// ExitCode is 1 when a check that matters for the chosen mode failed (see
+// Check.Blocking) and 0 otherwise. A tool that is only missing, or a
+// capability doctor does not check, does not change it.
 func (r Report) ExitCode() int {
 	for _, c := range r.Checks {
-		if c.Status != "available" {
+		if c.Blocking {
 			return 1
 		}
 	}
@@ -208,7 +303,20 @@ func (r Report) Write(w io.Writer, format string) error {
 		return err
 	}
 	for _, c := range r.Checks {
-		if _, err := fmt.Fprintf(w, "%-18s %-16s %-38s %s\n", c.ID, c.Status, c.Reason, c.Version); err != nil {
+		mark := ""
+		if c.Blocking {
+			mark = "  <- blocks"
+		}
+		if _, err := fmt.Fprintf(w, "%-18s %-16s %-38s %s%s\n", c.ID, c.Status, c.Reason, c.Version, mark); err != nil {
+			return err
+		}
+	}
+	if len(r.detected.Tools) > 0 {
+		home, _ := os.UserHomeDir()
+		if _, err := fmt.Fprintln(w, "\nTools"); err != nil {
+			return err
+		}
+		if err := toolfind.WriteTable(w, r.detected, home); err != nil {
 			return err
 		}
 	}

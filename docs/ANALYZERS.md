@@ -55,6 +55,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--mypy /abs/mypy`, `--bandit /abs/bandit` | 운영자 venv의 스크립트. 첫 줄은 절대 경로 `#!` interpreter여야 하고 `#!/usr/bin/env`는 거부 | mypy, bandit |
 | `--pyright /abs/node_modules/pyright/index.js` | JS 진입 스크립트 | pyright |
 | `--python-both-type-checkers` | mypy와 pyright를 둘 다 실행하겠다는 명시 선택 | mypy, pyright |
+| `--advertise-without-baseline` | 기준 분석기가 하나도 쓸 수 없어도 분석 capability를 광고. 기본은 광고하지 않음([광고 규칙](#빌트인-카탈로그와-capability-광고)) | 모든 분석기 |
 | `--eslint /abs/node_modules/eslint/bin/eslint.js` | JS 진입 스크립트. 같은 도구 `node_modules`에 `@eslint/js`·`typescript-eslint`가 있어야 함 | ESLint 기준·type-aware |
 | `--tsc /abs/node_modules/typescript/bin/tsc` | JS 진입 스크립트 | tsc |
 | `--cargo /abs/<toolchain>/bin/cargo` | toolchain의 실제 cargo(rustup proxy 거부) | cargo check |
@@ -71,6 +72,40 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 - agent는 값을 worker hello로 넘긴다. `go_executable`, `go_mod_cache`, `tool_path`, 그리고 `analyzer_tools`(도구 이름 → 경로, 공유 toolchain은 예약 이름 `node`로 같은 맵에 들어감)다. 이 빌드가 모르는 도구 이름은 `unknown_tool`로 보고하고 실행하지 않는다.
 
 개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`, `source_roots[].repository_code`가 위 플래그가 된다([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
+
+### 도구 찾기
+
+개인 모드는 도구 경로를 손으로 적지 않아도 된다. 시작할 때마다 `internal/toolfind`가 이 머신의 도구를 찾고, 위 플래그가 될 값을 정한다. `codeye tools`가 같은 탐색을 하고 표로 보여 준다([운영](OPERATIONS.md#codeye-tools)). 서버·노드 에이전트를 직접 띄울 때는 탐색이 없고 위 플래그만 쓴다.
+
+**찾는 대상.** go, git, node, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, eslint, tsc, jscpd, cargo, clippy). 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
+
+**찾는 위치.** 순서대로 사용자의 `PATH`, `~/.local/bin`, `~/go/bin`, `/usr/local/go/bin`과 시스템 디렉터리, `~/.opencode/bin`, CODEYE 도구 접두사 `~/.local/share/codeye-tools/{bin,cpp/bin,go/bin}`이다. 모양이 정해진 도구는 다음처럼 찾는다.
+
+| 도구 | 찾는 방법 |
+|---|---|
+| pyright, eslint, tsc, jscpd | node가 읽을 진입 스크립트 파일(`pyright/index.js`, `eslint/bin/eslint.js`, `typescript/bin/tsc`, `jscpd/run-jscpd.js`)을 `node_modules` 디렉터리에서 찾는다. 디렉터리는 `~/.local/share/codeye-tools/node/node_modules`, `~/.local/share/codeye-tools/node_modules`, 찾은 node의 `<prefix>/lib/node_modules`, `~/.npm-global/lib/node_modules`, 시스템 `node_modules`다. `PATH`의 npm shim은 가리키는 진입 스크립트로 풀어서 쓴다. shim 자체는 쓰지 않는다. eslint는 같은 `node_modules`에 `@eslint/js`·`typescript-eslint`·`typescript`가 있어야 한다. |
+| cargo, clippy | `~/.rustup/settings.toml`의 `default_toolchain`, 이어서 나머지 toolchain의 `toolchains/<이름>/bin/cargo`. clippy는 선택한 cargo와 같은 디렉터리의 `cargo-clippy`만 쓴다. `~/.cargo/bin`의 rustup proxy는 [거부 규칙](#도구와-rustup-proxy-거부)대로 쓰지 않는다. |
+| mypy, bandit, lizard | 첫 줄이 절대 경로 interpreter인 스크립트여야 한다. `#!/usr/bin/env`인 후보는 다음 후보로 넘어간다. |
+| go | 실행 파일이 GOROOT의 `bin/go`여야 한다. |
+
+**검증.** 후보마다 에이전트가 시작할 때 하는 것과 같은 검증을 한다. 분석기를 만들고(모양 규칙) 버전 probe를 실행한다(`builtin.CheckTool`). 그래서 `found`인 도구는 에이전트가 받아들이는 도구다. git과 OpenCode는 `--version`만 실행한다. 한 도구의 후보가 여러 개면 버전이 시험한 계열(위 [확인한 도구 버전](#확인한-도구-버전))인 첫 후보를 쓰고, 없으면 쓸 수 있는 첫 후보를 쓴다.
+
+| 상태 | 뜻 |
+|---|---|
+| `found` | 후보가 검증을 통과했다. 경로, 버전, 어디서 찾았는지(`source`), `version_tested`를 기록한다. 시험한 계열 밖이면 `version_tested=false`와 `notes=["tool_version_untested"]`를 남기고 그대로 쓴다. |
+| `unusable` | 후보는 있으나 모두 검증에 실패했다(버전을 알아볼 수 없음, 모양 규칙 위반, 필요한 go·node·cargo 없음). `reason`과 `tried`에 이유가 남는다. |
+| `not_found` | 후보가 없다. |
+
+찾지 못한 도구와 쓸 수 없는 도구에는 `hint`(한 줄 추가 방법)가 붙는다. 예: ``cppcheck: not found - `micromamba install -p ~/.local/share/codeye-tools/cpp cppcheck` ... or set `agent.tools.cppcheck` ``.
+
+**명시 설정이 우선한다.** `agent.go`, `agent.go_mod_cache`, `agent.tools.*`, `agent.model.opencode`에 적은 값은 탐색 결과로 바뀌지 않는다. 그 경로가 쓸 수 없으면 다른 후보로 바꾸지 않고 `unusable`(`source=config`)로 보이며 `codeye doctor`가 실패로 센다. `"agent": {"auto_detect": false}`이면 탐색하지 않고 명시 설정만 쓴다.
+
+**함께 정하는 값.**
+
+- **Go 모듈 캐시.** 찾은 go의 `go env GOMODCACHE`(사용자의 실제 환경 기준)가 실제 디렉터리이면 `--go-mod-cache`로 넘긴다. go vet은 `GOPROXY=off`로 실행하므로 의존성이 있는 모듈은 이 캐시가 있어야 분석된다. 캐시는 저장 영역 상한의 `cache` 영역에 센다([운영](OPERATIONS.md#저장-영역과-상한)). 명시한 `agent.go_mod_cache`가 있으면 그것이 우선한다.
+- **Python 타입 검사기.** 결과 도구 집합에 mypy와 pyright가 모두 있으면 `--python-both-type-checkers`를 함께 준다([타입 검사기 선택](#타입-검사기-선택)). 하나만 있으면 주지 않는다. 에이전트의 검사는 그대로이며(둘 다 있으면서 플래그가 없거나 그 반대면 사용법 오류), 개인 모드는 값을 정할 때 그 규칙을 맞춘다.
+
+결과는 `<state_dir>/tools.json`에 쓴다([schema](../schemas/tools.schema.json), [예시](../examples/tools.json)). 탐색 결과와 명시 설정을 합친 에이전트 인자는 `toolfind.Resolve`가 만든다. 명시 값이 있으면 그 값이, 없으면 `found` 도구의 경로가 쓰이며 쓸 수 없는 탐색 결과는 넘기지 않는다.
 
 ### 실행 제한값
 
@@ -229,7 +264,7 @@ type Analyzer interface {
 
 `builtin.catalog()`가 이 빌드의 분석기 목록이다. 팩은 자기 항목(`{desc, plan, build}`)만 추가한다. `build`는 노드 설정으로 분석기를 만들고 시작 probe를 실행한다. 실패하면 이유를 돌려주고 카탈로그는 그 자리에 `NotConfigured` 대역을 넣는다. 에이전트 플래그와 탐색 probe 목록은 카탈로그에서 자동으로 만든다.
 
-deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 이상 있을 때만 광고한다. 추가 깊이 도구만 있는 노드는 광고하지 않는다. 예를 들어 `--cargo`만, `--ruff`만, `--cppcheck`만, `--node`+`--eslint`만 있는 노드도 광고한다. capability는 노드 단위이고 생태계별 배정은 하지 않는다. 그래서 한 생태계 도구만 있는 노드가 다른 언어 스냅샷을 받으면 그 언어의 작업은 `tool_not_configured`로 보인다.
+deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 이상 있을 때만 광고한다. 추가 깊이 도구만 있는 노드는 광고하지 않는다. 노드 운영자가 `--advertise-without-baseline`을 주면 기준 분석기가 하나도 없어도 광고한다(개인 모드가 켠다). 쓸 수 없는 도구의 작업은 [설정되지 않은 도구](#설정되지-않은-도구)대로 `unsupported`로 기록되고, run은 도구를 기다리며 대기열에 머무르는 대신 빈틈이 보이는 부분 보고서로 끝난다. 예를 들어 `--cargo`만, `--ruff`만, `--cppcheck`만, `--node`+`--eslint`만 있는 노드도 광고한다. capability는 노드 단위이고 생태계별 배정은 하지 않는다. 그래서 한 생태계 도구만 있는 노드가 다른 언어 스냅샷을 받으면 그 언어의 작업은 `tool_not_configured`로 보인다.
 
 ### 도구 경로
 

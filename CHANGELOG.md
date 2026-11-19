@@ -12,6 +12,20 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - 개인 모드 controller(`codeye serve --personal`)의 브라우저 세션은 7일이다.
 - 확인 환경: Linux(WSL2), Go 1.27.4, PostgreSQL 17.10(관리형 cluster와 smoke의 임시 서버), Node 24.18.0, Playwright Chromium. 임시 설정·상태 디렉터리로 `up` → Go 분석 보고서 → 출력 링크로 Chromium 로그인 → `stop`(PostgreSQL 정지) → `backup` → `up` 재사용 → 새 상태 디렉터리로 `restore` → `up`을 실행했다. 브라우저 자동 열기 프로그램은 실행하지 않았다.
 
+### 추가 — 도구 자동 탐지
+
+- **도구 탐지**(`internal/toolfind`): go, git, node, OpenCode와 분석기 도구 열네 개를 사용자의 PATH, `~/.local/bin`, `~/go/bin`, `/usr/local/go/bin`, `~/.opencode/bin`, CODEYE 도구 접두사 `~/.local/share/codeye-tools/{bin,cpp/bin,go/bin}`에서 찾는다. JS 도구(pyright, eslint, tsc, jscpd)는 `node_modules`의 진입 스크립트(도구 접두사와 찾은 node 옆, PATH의 npm shim은 가리키는 스크립트로 푼다), cargo·clippy는 `~/.rustup/settings.toml`의 기본 toolchain(없으면 나머지 toolchain)의 실제 바이너리를 쓰고 rustup proxy는 쓰지 않는다. 후보마다 에이전트가 시작할 때 하는 검증과 같은 것(`builtin.CheckTool`: 분석기 생성의 모양 규칙과 버전 probe)을 하므로 찾은 도구는 에이전트가 받아들이는 도구다. 상태는 `found`·`not_found`·`unusable`이고 경로, 버전, 시험한 계열 여부, 찾은 위치, 이유, 한 줄 추가 방법을 기록한다. 시험한 계열 밖의 버전은 `tool_version_untested`로 기록하고 쓴다. 찾은 go의 `go env GOMODCACHE`를 모듈 캐시로 넘기고(go vet은 `GOPROXY=off`), mypy와 pyright가 모두 있으면 `--python-both-type-checkers`를 함께 준다. 명시 설정은 항상 우선한다. 결과는 `<state_dir>/tools.json`([schema](schemas/tools.schema.json), [예시](examples/tools.json))이다.
+- **`codeye tools [--config PATH] [--json]`**: 찾은 것·없는 것·추가 방법의 표를 보인다. 설정 파일이 없어도 동작하고 아무것도 설치하지 않는다.
+- **`agent.auto_detect`**: 개인 모드 설정. `false`이면 탐색하지 않고 명시 설정만 쓴다.
+- **`--advertise-without-baseline`**(에이전트 플래그, worker hello `advertise_without_baseline`, `builtin.Config.AdvertiseWithoutBaseline`): 기준 분석기가 하나도 없어도 분석 capability를 광고한다. 쓸 수 없는 도구의 작업은 `unsupported`로 기록되고 run은 부분 보고서로 끝난다. 기본은 꺼져 있다.
+- 확인 환경: Linux, 이 머신의 `~/.local/share/codeye-tools`·`~/.local/bin`·`~/.rustup`·`~/.opencode`. 가짜 도구 트리 단위 시험과 실제 머신 시험(`CODEYE_TEST_REAL_TOOLS=all`), 탐색 결과를 넘긴 개인 모드의 Go(모듈 캐시의 의존성 포함)·Python·JS 분석에서 `tool_not_configured`가 없음을 확인했다.
+
+### 변경 — `codeye doctor`
+
+- 도구를 PATH 조회 대신 도구 탐지로 찾는다. 에이전트가 쓸 도구와 같은 결과이고, JSON 보고서의 `tools` 배열(경로 없음)과 텍스트의 도구 표로 보인다.
+- 항상 `unverified`이던 `model`·`process_control` 항목과 사유 값 `adapter_contract_pending_w10`·`native_executor_pending_w05`·`runtime_process_control_not_probed`를 없앴다. `python`·`c_cpp`(PATH의 `python3`·`cc`) 항목도 에이전트가 쓰지 않으므로 없앴다. `analyzers`(기준 분석기가 하나라도 쓸 수 있는가)와 `configured_tools`(설정에 적은 도구가 쓸 수 있는가)가 생겼다.
+- 종료 코드는 이 모드에서 중요한 항목(`checks[].blocking`)이 실패했을 때만 1이다. 이전에는 늘 1이었다.
+
 ### 추가
 
 - **분석 종류별 절**: 보고서가 종합, 환경 분석, 문서 분석, 정적 분석(언어·도구별), 구조·중복 지표, 비밀정보(값 없음), 코드 분석(모델 검토), 분석 공백 순의 절로 나뉜다. 선택 최상위 블록으로 더했고 기존 필드는 바이트 단위로 같다(report 패키지 시험 입력 84개를 이전 builder 출력과 대조). 보고서 builder는 5이며, 모든 관찰과 발견이 한 절에 한 번씩 들어가는지를 저장·조회 검증이 확인한다. 상태·품질 판정 규칙은 그대로다. 모델 문장은 수락된 역할 기록에서만 오고 "모델 해석"으로 표시하며 코드 미포함 내보내기에서는 생략한다. Markdown·HTML·웹 화면은 같은 수를 보이고, 절이 없는 이전 리비전은 이전 평면 배치로 보인다. "이전 실행과 비교"는 웹 화면에만 있다. 분석기 envelope와 descriptor에 분석기 목적(`analyzer.purpose`: 지표·비밀정보)을 기록해 어느 절로 갈지 정한다. [`examples/report.json`](examples/report.json)과 [`examples/report.md`](examples/report.md)는 실제 worker 파이프라인과 대본 모델 응답으로 다시 만들었다(합성 예시, 실모델 호출 없음).
@@ -56,7 +70,6 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - 검토 팩 ID `review-r1`·`review-v1`과 그 디렉터리: 저장된 기록이 팩 ID와 digest로 해석된다.
 - `migrations/sql/`: 적용된 migration은 checksum으로 대조한다.
 - fixture 입력 안의 파일·매크로 이름, 보류 집합 `fixtures/r1-quality/`, 보류 평가 결과 문서: 도구 출력 캡처와 봉인 digest가 그 내용을 고정한다.
-- 진단 사유 값 `adapter_contract_pending_w10`: API로 나가는 값이다.
 
 ## 개인 실용판 — 2026-11-19
 

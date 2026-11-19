@@ -16,7 +16,7 @@
 |---|---|---|---|
 | TC-01 | 설명 없는 Git/local 프로젝트 등록 | 필수 추가 문서 없이 요청 가능, 자동 탐색 및 추정 표시 | REQ-001,004,005 |
 | TC-05 | monorepo·문서 없음·문서 충돌·버전 불일치 | 모듈별 사실/추론·제약 기록, 가능한 분석 계속 | REQ-001,004,005 |
-| TC-36 | Native doctor 실행, 도구 없음·실패·출력 초과·timeout | OS/arch와 실제 버전만 기록, 실패/미검증 구분, bounded probe, secret 상속·원시 출력 노출 없음 | REQ-004,030; NFR-001,006 |
+| TC-36 | Native doctor 실행, 도구 없음·실패·출력 초과·timeout | OS/arch와 실제 버전만 기록, 실패/미검증 구분, bounded probe, secret 상속·원시 출력 노출 없음. 도구는 에이전트와 같은 탐색으로 찾고 JSON 보고서에 경로가 없다 | REQ-004,030; NFR-001,006 |
 | TC-37 | DB 미설정·정상·잘못된 인증·없는 DB·허용되지 않은 TLS 설정 | 인증 query 성공만 available, 고정 실패 reason, credential argv/결과 비노출, 설정 없는 네트워크 호출 없음 | REQ-030; NFR-006 |
 | TC-39 | 웹에서 doctor JSON 읽기, 손상·미지원 schema·중복 ID·파일 교체 | 실제 결과만 표시, 오류와 미검증을 성공으로 바꾸지 않음, 파일 서버 전송 없음, 최신 선택 유지 | REQ-013,030; NFR-006 |
 | TC-96 | 루트와 중첩 모듈의 버전 요구가 다르고 노드 관측이 한 모듈에만 맞음 | 모듈별 요구·관측·적용 범위·근거가 분리된다. 모델이 없어도 사실과 미확인 값이 남는다. | REQ-004,005,006 |
@@ -158,6 +158,19 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 
 분석기 계약과 도구별 규칙은 [분석기](ANALYZERS.md)에 있다. 실도구 시험은 도구 경로 환경변수가 있을 때만 실행하고, CI에서는 캡처한 실제 출력을 재생하는 시험이 같은 판정 경로를 검사한다([시험 실행 방법](#시험-실행-방법)).
 
+## 도구 탐지
+
+도구를 찾는 규칙은 [도구 찾기](ANALYZERS.md#도구-찾기)다. 시험은 임시 디렉터리에 만든 가짜 도구 트리(버전 명령에 답하는 셸 스크립트)로 하므로 이 머신에 무엇이 설치되어 있는지와 무관하다. 실제 머신 시험은 `CODEYE_TEST_REAL_TOOLS=all`(또는 쉼표로 나눈 도구 이름)을 줄 때만 돈다.
+
+| TC | 조건 | 기대 결과 | 요구 |
+|---|---|---|---|
+| TC-176 | 모든 도구를 문서가 정한 위치에 둔 가짜 머신: PATH, `~/.local/bin`, `~/.opencode/bin`, CODEYE 도구 접두사(`bin`, `cpp/bin`, `go/bin`), `node_modules`의 진입 스크립트(도구 접두사와 node 설치 옆), rustup 기본 toolchain과 PATH의 rustup proxy, PATH의 npm shim | 18개 도구가 각 위치에서 경로·버전·`source`와 함께 `found`다. cargo·clippy는 proxy가 아닌 toolchain 디렉터리, JS 도구는 shim이 아닌 진입 스크립트다. 빈 머신은 모든 도구가 `not_found`이고 추가 방법이 있으며 쓸 수 있다고 세지 않는다 | REQ-004,030 |
+| TC-177 | 버전 처리: 시험한 계열 밖 버전, 알아볼 수 없는 출력, 앞 후보가 실패, 여러 후보 중 시험한 계열, proxy만 있는 cargo, node 없는 JS 도구, 명시 경로(쓸 수 없는 경우 포함) | 계열 밖은 쓰고 `tool_version_untested`를 기록한다. 알아볼 수 없는 후보는 건너뛰고 다음 후보를 쓰며, 남은 것이 없으면 `unusable`과 이유·`tried`다. 시험한 계열 후보가 우선한다. proxy와 node 없음은 `unusable`이다. 명시 경로는 유일한 후보이며 실패해도 다른 것으로 바꾸지 않는다. `agent.auto_detect=false`면 탐색하지 않는다 | REQ-004,030 |
+| TC-178 | 탐색 결과와 명시 설정을 합친 에이전트 인자: mypy와 pyright 둘 다·하나·명시 설정만, 쓸 수 없는 탐색 결과, 명시 go와 모듈 캐시, 모듈 캐시가 없는 디렉터리·상대 경로·파일 | 명시 값이 항상 우선하고 쓸 수 없는 탐색 결과는 넘기지 않는다. `--python-both-type-checkers`는 두 검사기가 모두 있을 때만 붙어 에이전트의 일관성 검사를 통과한다. `go env GOMODCACHE`는 실제 절대 디렉터리일 때만 `--go-mod-cache`가 된다. `tools.json`은 0600으로 쓰고 읽으며 다른 schema 버전·모르는 필드는 거부한다 | REQ-004,030 |
+| TC-179 | `codeye tools`(표·`--json`·설정 오류·없는 상태 디렉터리)와 `tools.json`·`examples/tools.json` schema, builtin의 `CheckTool`(모양 규칙·버전·시험한 계열) | 표는 찾은 것·없는 것·추가 방법을 보이고 `--json`은 schema를 통과한다. 상태 디렉터리가 없으면 아무것도 만들지 않는다. 도구 이름마다 시험한 계열이 있고, env shebang·proxy·node 없음은 분석기가 거부하는 이유 그대로 나온다 | REQ-004,030 |
+| TC-180 | `codeye doctor` 종료 코드: 도구 하나도 없음, 기준 분석기만 있음, `external` 모드에서 DB 없음, 관리형 모드에서 DB 설정 없음, DB 주소가 있는데 질의 실패, 설정에 적은 도구가 쓸 수 없음, 작업 디스크 쓰기 불가, 탐색된 도구가 쓸 수 없음 | 중요한 항목(`checks[].blocking`)만 1이다. 없는 선택 도구·psql·DB 미설정은 상태만 표시하고 0이다. `model`·`process_control` 항목과 그 사유 값이 없고 JSON 보고서에 경로가 없다. schema·예시·`validate_bundle`이 같은 계약이다 | REQ-004,030 |
+| TC-181 | 도구가 하나도 없는 노드(`--advertise-without-baseline`)와 기본 노드, 도구를 탐색해 넘긴 노드의 Go·Python·JS 실행 | 기본 노드는 광고하지 않는다. 플래그를 준 노드는 광고하고 모든 도구 작업을 `unsupported`(`tool_not_configured`)로 기록하며 run이 부분 보고서로 끝난다. 탐색 결과를 넘긴 노드는 의존성이 있는 Go 모듈(모듈 캐시)과 Python·JS를 분석하고 `tool_not_configured`가 없다 | REQ-004,030; TC-80 |
+
 ## 모델 검토
 
 | TC | 조건 | 기대 결과 | 요구 |
@@ -167,7 +180,7 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-12 | 모델 timeout·JSON 오류·permission ask | 제한 재시도 후 partial, 도구 기반 보고서 열람 가능 | REQ-012,013,026; NFR-008,010 |
 | TC-16 | 문서 prompt injection이 토큰/권한 상승 요구 | 실행 정책 유지, secret 미노출, 공격 자료로만 취급 | REQ-009,010,011 |
 | TC-34 | 원격 OpenCode가 다른 workspace를 봄 | marker/hash 불일치 거부, 다른 개인 경로 fallback 없음 | REQ-026 |
-| TC-38 | OpenCode CLI만 설치되고 모델 연결이 확인되지 않은 doctor | version_only, 모델·workspace·취소는 unverified, 모델 호출/자동 fallback 없음 | REQ-026,030 |
+| TC-38 | OpenCode CLI만 설치되고 모델 연결이 확인되지 않은 doctor | `opencode_cli`는 version_only, doctor는 모델·workspace·취소를 항목으로 두지 않고(연결은 `codeye model probe`) 모델을 호출하지 않으며 자동 fallback도 없음 | REQ-026,030 |
 | TC-76 | **실모델**. `codeye model probe`가 관리형 OpenCode 프로세스와 승인된 모델로 합성 입력을 보냄 | 작업별 확인값 일치, verified=true, cleanup=confirmed | REQ-026,030; NFR-006,008,010 |
 | TC-77 | 설치된 OpenCode CLI에 로컬 합성 응답이 read 도구를 요청(`scripts/test_opencode_policy.py`) | 광고한 도구 0개, 실제 tool_use/read는 error, 파일 내용이 모델로 전달되지 않음. 어댑터 회귀 시험에서 같은 이벤트는 policy_blocked | REQ-026,030; NFR-006,008,010 |
 | TC-78 | **실모델**. 실제 요청이 relay 장부에 예약된 뒤 컨텍스트 취소 | OS 프로세스 트리 정리 확인, cancelled. 이미 전송된 공급자 추론은 청구될 수 있어 장부에 사용량 또는 보수적인 예약을 유지 | REQ-026,030; NFR-006,008,010 |

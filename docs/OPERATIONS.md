@@ -8,7 +8,8 @@
 | 데이터베이스 | 관리형(기본): 설치된 PostgreSQL 프로그램으로 상태 디렉터리에 cluster를 만들어 띄운다. external: 운영자가 준비한 PostgreSQL(`CODEYE_DATABASE_URL`). PostgreSQL을 내려받거나 설치하지 않는다 |
 | 저장 영역 상한 | snapshot·workspace·cache·logs·artifacts. 새 작업만 거절하고 지우지 않는다 |
 | 백업·복원 | DB와 확정 산출물을 같은 논리 시점으로 묶는다. 빈 대상에만 복원하고 이전 lease를 살리지 않는다 |
-| `codeye doctor` | 호스트·도구·DB 진단. `--config`를 주면 저장 영역 사용량·상한, 최신 백업 나이, start/stop 상태 일관성을 더한다 |
+| `codeye doctor` | 호스트·도구·DB 진단. 도구는 에이전트가 쓰는 탐색과 같은 방법으로 찾는다. `--config`를 주면 저장 영역 사용량·상한, 최신 백업 나이, start/stop 상태 일관성을 더한다 |
+| `codeye tools` | 이 머신에서 찾은 도구, 없는 도구, 추가 방법을 표로 보인다 |
 | 서버 배포, 다중 노드, 폐쇄망 배포팩 | 설계 계약(미구현). 마지막 두 절 |
 
 관련 요구사항: REQ-018(자원 제한), REQ-021(drain), REQ-022(lease·fencing·복구), NFR-003(재시작 뒤 복구), NFR-006(loopback 개인 모드, 민감값), NFR-007(산출물 hash). 수용 시험 TC-124~127, TC-32, TC-170~175는 [시험](TESTING.md)에 있다.
@@ -89,6 +90,22 @@ codeye serve --listen 0.0.0.0:8443 --tls-cert /etc/codeye/tls/cert.pem --tls-key
 - 개인 모드(`codeye start`)의 `listen`은 계속 loopback만 받는다. TLS 수신은 `serve`를 직접 실행하는 배포의 기능이다.
 - `codeye login-link --origin`은 `https://HOST[:PORT]`도 받는다(TLS 서버의 public origin을 준다).
 
+## codeye tools
+
+```text
+codeye tools [--config PATH] [--json]
+```
+
+이 머신에서 CODEYE가 쓸 수 있는 도구를 찾아 표로 보인다. 찾은 도구는 경로·버전을, 없는 도구는 한 줄 추가 방법을 보인다. `--json`은 같은 결과를 [tools schema](../schemas/tools.schema.json)의 문서로 낸다. `--config`(또는 기본 설정 파일)의 `agent.go`·`agent.tools`·`agent.model.opencode`는 탐색보다 우선하고, 설정 파일 없이도 동작한다. 설정이 있고 그 `state_dir`가 이미 있으면 결과를 `<state_dir>/tools.json`에 쓴다. 그 밖에는 아무것도 만들거나 설치하지 않는다. 탐색 규칙은 [도구 찾기](ANALYZERS.md#도구-찾기)다. 종료 코드는 도구가 없어도 0이고, 설정 오류만 2다.
+
+```text
+TOOL         STATUS  VERSION   WHERE / HOW TO ADD
+go           found   1.27.4    ~/.local/bin/go
+cppcheck     missing -         not found - `micromamba install -p ~/.local/share/codeye-tools/cpp cppcheck` (or ...) or set `agent.tools.cppcheck`
+```
+
+시작할 때(`codeye start`·`up`)도 같은 탐색을 하고 같은 표를 출력한다.
+
 ## codeye doctor
 
 ```text
@@ -97,7 +114,7 @@ codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--c
 
 호스트·도구·디스크·DB를 검사한다. 실제 모델 요청은 하지 않는다. 모델 연결은 `codeye model probe`(실제 추론을 요청하므로 비용이 들 수 있다)로 확인한다. [schema](../schemas/doctor.schema.json)와 [합성 예시](../examples/doctor.json)가 있다. 예시는 현재 머신의 실측 결과가 아니다.
 
-**검사 항목(13개).** `host`, `work_disk`, 도구 probe 여덟 개(`git`, `go`, `node`, `python`(실행명 `python3`), `c_cpp`(`cc`), `rust`(`rustc`), `postgres_client`(`psql`), `opencode_cli`), `database`, `model`, `process_control`. `schema_version`은 `0.1`이다. host에는 OS·arch·논리 CPU와, Linux에서는 RAM·디스크 관측치를 기록한다. Linux 외의 RAM·디스크 관측은 구현하지 않아 null이며 자원 한도를 적용한다는 뜻이 아니다.
+**검사 항목(11개).** `host`, `work_disk`, 도구 검사 다섯 개(`git`, `go`, `node`, `rust`(cargo), `opencode_cli`), `postgres_client`(`psql`), `analyzers`, `configured_tools`, `database`. 도구는 PATH만 보지 않고 [도구 찾기](ANALYZERS.md#도구-찾기)와 같은 탐색으로 찾으므로 doctor가 보는 도구가 에이전트가 쓸 도구다. 보고서의 `tools` 배열에 이 탐색의 도구별 결과(경로 없이 상태·버전·시험한 계열 여부)를 싣고, 텍스트 출력은 `codeye tools`와 같은 표를 더한다. `schema_version`은 `0.1`이다. host에는 OS·arch·논리 CPU와, Linux에서는 RAM·디스크 관측치를 기록한다. Linux 외의 RAM·디스크 관측은 구현하지 않아 null이며 자원 한도를 적용한다는 뜻이 아니다.
 
 | 상태 | 뜻 |
 |---|---|
@@ -106,12 +123,13 @@ codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--c
 | `not_configured` | DB 설정(`CODEYE_DATABASE_URL`)이 없다 |
 | `unverified` | 계약이나 능력을 확인하지 않았다 |
 
-- `version_only`는 버전 문자열만 확인했다는 뜻이다. 언어 어댑터 지원, 분석 품질, OS 호환성 인증이 아니다. Python은 `python3`, C/C++는 `cc`만 찾는다. 다른 실행명, MSVC, 별도 toolchain profile 탐지는 하지 않는다.
-- `model`과 `process_control`은 doctor가 확인하지 않는 항목이라 항상 `unverified`다.
-- **종료 코드.** 0은 모든 항목이 `available`, 1은 `available`이 아닌 항목이 있음, 2는 사용법·출력 오류다. 위 두 항목이 고정으로 `unverified`이므로 현재 빌드의 `doctor`는 다른 항목이 모두 정상이어도 1로 끝난다. 이 값은 분석 run 상태와 무관하다.
+- `version_only`는 버전 문자열만 확인했다는 뜻이다. 언어 어댑터 지원, 분석 품질, OS 호환성 인증이 아니다. 시험한 계열인지는 `tools[].version_tested`가 따로 알려 준다.
+- `analyzers`는 기준 분석기(go vet, cppcheck, ruff, ESLint, cargo check) 중 하나라도 쓸 수 있으면 `available`이다. 하나도 없으면 분석이 모든 도구를 실행하지 않음으로 기록하므로 `unavailable`(`no_baseline_analyzer`)이다. `configured_tools`는 설정 파일에 적은 도구 경로가 모두 쓸 수 있는지 본다.
+- 모델 연결과 프로세스 제어는 doctor가 확인하지 않는다. 항목으로 두지 않는다.
+- **종료 코드.** 0은 이 모드에서 중요한 항목이 모두 정상, 1은 중요한 항목이 실패, 2는 사용법·출력 오류다. 중요한 항목은 보고서의 `checks[].blocking`이 `true`인 것이다. 작업 디스크를 쓸 수 없음, `CODEYE_DATABASE_URL`을 주었는데 질의가 실패함, 쓸 수 있는 기준 분석기가 하나도 없음, 설정에 적은 도구가 쓸 수 없음이다. `--config`의 `database.mode`가 `external`인데 DB 설정이 없는 것도 포함한다. 찾지 못한 선택 도구(git, rust, psql 등)와 DB를 설정하지 않은 상태는 상태 표시만 하고 종료 코드를 바꾸지 않는다. 이 값은 분석 run 상태와 무관하다.
 - `--timeout`은 probe별 제한이며 기본 5초, 최대 1분이다. 여러 probe를 순서대로 실행하므로 전체 시간 제한은 아니다.
 - 작업 디스크 probe는 `--work-dir`를 만들고 임시 파일 쓰기, sync, 읽기, 삭제를 확인한다. 분석 대상 프로젝트 경로를 지정하지 않는다. 같은 경로의 기존 파일을 덮어쓰지 않는다.
-- 도구는 PATH에서 찾은 실행 파일을 argv로 호출한다. 임시 cwd/home, 제한된 환경, 8 KiB 출력 상한을 쓰고 계정 credential을 상속하지 않는다. 실행 파일 자체는 운영자가 신뢰하는 설치여야 한다. 이는 OS 샌드박스가 아니다.
+- 도구는 찾은 실행 파일을 argv로 호출한다(`psql`만 PATH). 임시 cwd/home, 제한된 환경, 출력 상한을 쓰고 계정 credential을 상속하지 않는다. 실행 파일 자체는 운영자가 신뢰하는 설치여야 한다. 이는 OS 샌드박스가 아니다.
 - 원시 stdout/stderr, 실행 경로, DSN, 비밀번호를 결과에 넣지 않는다. 버전은 숫자 부분만 기록하고 실패는 고정 reason으로 표시한다. timeout은 종료를 확정하지 않고 `recovery_required`다. probe의 process group 중지는 실행기의 취소 계약을 대체하지 않는다.
 - **DB 검사.** `CODEYE_DATABASE_URL`에 명시한 PostgreSQL URL만 검사한다. argv에 URL을 넣는 옵션은 없다. URL에는 host·user·database가 필요하고 `sslmode`, `sslrootcert`만 허용한다. 기본 TLS는 verify-full이며 `sslmode=disable`은 `127.0.0.1`/`::1`만 허용한다. 인증정보는 psql 자식 환경에만 전달하고 사용자 psqlrc, PGSERVICE, 기존 PGPASS, 운영 DB 환경을 상속하지 않는다. `psql -X -w`로 비대화형 읽기 쿼리 `SELECT current_setting('server_version')`만 수행한다. psql이 없으면 명확히 실패한다. TCP 포트가 열렸다는 이유로 DB 정상이라고 표시하지 않는다. DB 생성과 migration은 하지 않는다.
 
@@ -139,9 +157,10 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `agent.name` | `personal` | 100자 이하 |
 | `agent.max_workers` | 1 | 1~16. 에이전트는 `--autoscale --max-workers N`으로 시작한다 |
 | `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록 |
-| `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로 |
-| `agent.tools` | 빈 값 | 이 빌드의 분석기·toolchain 플래그 이름(`staticcheck`, `node`, `ruff` 등)을 키로, 실행 파일의 절대 경로를 값으로. 모르는 이름은 거부한다 |
-| `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행 |
+| `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로. 비우면 [탐색](ANALYZERS.md#도구-찾기)이 찾은 go와 그 모듈 캐시를 쓴다 |
+| `agent.tools` | 빈 값 | 이 빌드의 분석기·toolchain 플래그 이름(`staticcheck`, `node`, `ruff` 등)을 키로, 실행 파일의 절대 경로를 값으로. 모르는 이름은 거부한다. 적지 않은 도구는 탐색이 찾은 것을 쓰고, 적은 값은 항상 우선한다 |
+| `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행. 탐색은 둘 다 찾으면 켠다 |
+| `agent.auto_detect` | true | `false`이면 도구를 탐색하지 않고 위 명시 설정만 쓴다 |
 | `agent.model` | 없음 | `opencode`(절대 경로), `name`(`PROVIDER/MODEL`, 공백 없음), 선택 `relay_file`(절대 경로), `review_pack`(`review-r1` 기본·`review-v1` 이전 팩), `review_max_calls`(15~207, 비우면 99: attempt마다 review-r1 모델 호출 상한, `--review-max-calls`) |
 | `quota.*_bytes` | 0(상한 없음) | `snapshot`·`workspace`·`cache`·`logs`·`artifacts`, 음수 거부 |
 | `backup_dir` | 빈 값(백업은 `<state_dir>-backups`에 만든다) | 절대 경로. `state_dir` 안이거나 `state_dir`를 포함하면 거부 |

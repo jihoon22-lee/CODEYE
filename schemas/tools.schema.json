@@ -1,0 +1,455 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codeye.invalid/schemas/tools.schema.json",
+  "title": "CODEYE tool detection result (<state_dir>/tools.json, codeye tools --json)",
+  "description": "Which tools CODEYE found on this machine, written by codeye tools and at start (docs/ANALYZERS.md). Paths are absolute; the file stays in the state directory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "detected_at",
+    "python_both_type_checkers",
+    "tools"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "go_mod_cache": {
+      "type": "string",
+      "pattern": "^(/|[A-Za-z]:[\\\\/])",
+      "minLength": 2,
+      "description": "go env GOMODCACHE of the Go toolchain found; absent without a usable Go or when the directory does not exist."
+    },
+    "python_both_type_checkers": {
+      "type": "boolean",
+      "description": "mypy and pyright were both found: the agent needs --python-both-type-checkers."
+    },
+    "tools": {
+      "type": "array",
+      "minItems": 18,
+      "maxItems": 18,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "status",
+          "version_tested"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "go",
+              "git",
+              "node",
+              "opencode",
+              "staticcheck",
+              "gitleaks",
+              "ruff",
+              "mypy",
+              "pyright",
+              "bandit",
+              "lizard",
+              "cppcheck",
+              "clang-tidy",
+              "eslint",
+              "tsc",
+              "jscpd",
+              "cargo",
+              "clippy"
+            ],
+            "description": "The agent flag name; go, git and opencode have their own settings."
+          },
+          "status": {
+            "enum": [
+              "found",
+              "not_found",
+              "unusable"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(/|[A-Za-z]:[\\\\/])",
+            "minLength": 2,
+            "description": "The path the agent is given."
+          },
+          "resolved_path": {
+            "type": "string",
+            "pattern": "^(/|[A-Za-z]:[\\\\/])",
+            "minLength": 2,
+            "description": "path after resolving symbolic links, when different."
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version_tested": {
+            "type": "boolean",
+            "description": "The version is in the tested series; false for a tool that is not found."
+          },
+          "tested_series": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Where the tool was found (PATH, a directory, codeye-tools/..., rustup default, config)."
+          },
+          "notes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "tool_version_untested"
+              ]
+            }
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tried": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "reason"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "hint": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The one-line way to add a missing or unusable tool."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "found"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "path",
+                "version"
+              ],
+              "properties": {
+                "reason": false,
+                "hint": false
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "not_found"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "hint"
+              ],
+              "properties": {
+                "path": false,
+                "version": false,
+                "version_tested": {
+                  "const": false
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "unusable"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "reason",
+                "hint"
+              ],
+              "properties": {
+                "version": false,
+                "version_tested": {
+                  "const": false
+                }
+              }
+            }
+          }
+        ]
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "go"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "git"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "node"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "opencode"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "staticcheck"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "gitleaks"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "ruff"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "mypy"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "pyright"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "bandit"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "lizard"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "cppcheck"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "clang-tidy"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "eslint"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "tsc"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "jscpd"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "cargo"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "clippy"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -23,7 +23,8 @@ import (
 const usage = `CODEYE control plane
 Usage:
   codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
-  codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH] [--timeout 75s]
+  codeye tools [--config PATH] [--json]   (the tools found on this machine, what is missing and how to add it)
+  codeye model probe--executable PATH --model PROVIDER/MODEL [--relay-file PATH] [--timeout 75s]
   codeye migrate
   codeye user create [--name NAME] [--username NAME [--password-file PATH]] [--admin]
   codeye user passwd (--id USER_ID | --username NAME) [--password-file PATH] [--must-change]
@@ -46,7 +47,7 @@ Usage:
   codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
                [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ...] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
                [--cppcheck /abs/cppcheck] [--clang-tidy /abs/clang-tidy]
-               [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit]
+               [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit] [--advertise-without-baseline]
                [--eslint /abs/eslint/bin/eslint.js] [--tsc /abs/typescript/bin/tsc]
                [--cargo /abs/toolchain/bin/cargo [--clippy /abs/toolchain/bin/cargo-clippy]]
                [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]

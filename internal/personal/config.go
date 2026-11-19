@@ -94,7 +94,14 @@ type Agent struct {
 	Tools                  map[string]string `json:"tools,omitempty"`
 	PythonBothTypeCheckers bool              `json:"python_both_type_checkers,omitempty"`
 	Model                  *Model            `json:"model,omitempty"`
+	// AutoDetect turns the tool detection off when false (docs/ANALYZERS.md#도구-찾기);
+	// absent or true means detect. agent.go, agent.tools and the other fields
+	// above always win over what detection finds.
+	AutoDetect *bool `json:"auto_detect,omitempty"`
 }
+
+// AutoDetectEnabled reports whether tools are detected on start.
+func (a Agent) AutoDetectEnabled() bool { return a.AutoDetect == nil || *a.AutoDetect }
 
 // Model is the optional review model (an approved relay file or OpenCode).
 // Without it the review stage is skipped, never replaced by another model.

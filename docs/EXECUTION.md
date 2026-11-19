@@ -157,7 +157,7 @@ if res.RecoveryRequired() { /* attempt를 recovery_required로 */ }
 
 ### 실행기 능력 표시
 
-실행기 라이브러리의 구현과 각 머신의 실시간 능력 probe는 다르다. `doctor`는 `process_control`을 `unverified`/`runtime_process_control_not_probed`로 표시한다. 바이너리가 빌드됐다는 이유로 그 계정에서 Job Object나 전체 프로세스 제어를 확인했다고 표시하지 않는다([운영](OPERATIONS.md)).
+실행기 라이브러리의 구현과 각 머신의 실시간 능력 probe는 다르다. `doctor`는 프로세스 제어를 확인하는 항목을 두지 않는다. 바이너리가 빌드됐다는 이유로 그 계정에서 Job Object나 전체 프로세스 제어를 확인했다고 표시하지 않는다([운영](OPERATIONS.md#codeye-doctor)).
 
 ## 노드 에이전트
 

@@ -7,9 +7,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
 type fakeRunner struct {
@@ -67,34 +71,135 @@ func TestDatabaseQueryAndRedaction(t *testing.T) {
 		}
 	}
 }
-func TestCollectPreservesGapsAndCleansDisk(t *testing.T) {
+
+// detectedTools is a detection result in which exactly the named tools are
+// found (with a tested version) and every other tool is missing.
+func detectedTools(found ...string) func(context.Context) toolfind.Result {
+	return func(context.Context) toolfind.Result {
+		res := toolfind.Result{SchemaVersion: toolfind.SchemaVersion}
+		for _, name := range toolfind.Names() {
+			t := toolfind.Tool{Name: name, Status: toolfind.NotFound}
+			if slices.Contains(found, name) {
+				t = toolfind.Tool{Name: name, Status: toolfind.Found, Path: "/fake/" + name, Version: "1.2.3", VersionTested: true, Source: toolfind.SourcePath}
+			}
+			res.Tools = append(res.Tools, t)
+		}
+		return res
+	}
+}
+
+func checkOf(t *testing.T, r Report, id string) Check {
+	t.Helper()
+	for _, c := range r.Checks {
+		if c.ID == id {
+			return c
+		}
+	}
+	t.Fatalf("no check %s", id)
+	return Check{}
+}
+
+func TestCollectReportsGapsHonestlyAndCleansDisk(t *testing.T) {
 	dir := t.TempDir()
 	runner := &fakeRunner{result: Result{Reason: "executable_missing"}}
-	report := Collect(context.Background(), Options{WorkDir: dir, Timeout: time.Second}, runner)
-	if report.ExitCode() != 1 {
-		t.Fatal("incomplete capabilities must not pass")
-	}
+	report := Collect(context.Background(), Options{WorkDir: dir, Timeout: time.Second, Detect: detectedTools("ruff")}, runner)
 	files, err := os.ReadDir(dir)
 	if err != nil || len(files) != 0 {
 		t.Fatal("doctor left probe files")
 	}
+	// The checks that were placeholders are gone; missing tools stay visible
+	// as unavailable although they do not make the exit code 1.
 	for _, c := range report.Checks {
-		if c.ID == "model" && (c.Status != "unverified" || c.Reason != "adapter_contract_pending_w10") {
-			t.Fatalf("%+v", c)
+		if c.ID == "model" || c.ID == "process_control" {
+			t.Fatalf("placeholder check %s", c.ID)
 		}
+	}
+	if g := checkOf(t, report, "git"); g.Status != "unavailable" || g.Reason != "executable_missing" || g.Blocking {
+		t.Fatalf("git %+v", g)
+	}
+	if a := checkOf(t, report, "analyzers"); a.Status != "available" || a.Reason != "baseline_analyzer_usable" {
+		t.Fatalf("analyzers %+v", a)
+	}
+	if d := checkOf(t, report, "database"); d.Status != "not_configured" || d.Blocking {
+		t.Fatalf("database %+v", d)
+	}
+	if len(report.Tools) != len(toolfind.Names()) {
+		t.Fatalf("tools %+v", report.Tools)
 	}
 	var b bytes.Buffer
 	if err := report.Write(&b, "json"); err != nil {
 		t.Fatal(err)
 	}
+	if strings.Contains(b.String(), "/fake/") {
+		t.Fatal("the JSON report must not carry tool paths")
+	}
 	var decoded Report
 	if err := json.Unmarshal(b.Bytes(), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if len(decoded.Checks) != 13 {
+	if len(decoded.Checks) != len(report.Checks) || len(decoded.Checks) != 11 {
 		t.Fatalf("got %d checks", len(decoded.Checks))
 	}
+	b.Reset()
+	if err := report.Write(&b, "text"); err != nil || !strings.Contains(b.String(), "/fake/ruff") || !strings.Contains(b.String(), "not found") {
+		t.Fatalf("text %q %v", b.String(), err)
+	}
 }
+
+// The exit code is 1 only for what matters in the chosen mode.
+func TestExitCodeRule(t *testing.T) {
+	cfg := func(mode string, tools map[string]string) *personal.Config {
+		return &personal.Config{StateDir: t.TempDir(), Database: personal.Database{Mode: mode}, Agent: personal.Agent{Tools: tools}}
+	}
+	missing := Result{Reason: "executable_missing"}
+	psqlOK := Result{Output: "psql (PostgreSQL) 17.10\n"}
+	badDB := "postgres://u:secret@127.0.0.1/app?sslmode=disable"
+	unusableRuff := func(source string) func(context.Context) toolfind.Result {
+		return func(context.Context) toolfind.Result {
+			res := detectedTools("go")(context.Background())
+			for i, tool := range res.Tools {
+				if tool.Name == "ruff" {
+					res.Tools[i] = toolfind.Tool{Name: "ruff", Status: toolfind.Unusable, Reason: "x", Path: "/x/ruff", Source: source}
+				}
+			}
+			return res
+		}
+	}
+	for _, tc := range []struct {
+		name   string
+		opts   Options
+		runner Result
+		want   int
+		reason string
+	}{
+		{"no tool at all", Options{Detect: detectedTools()}, missing, 1, "analyzers blocks"},
+		{"one baseline tool, nothing else", Options{Detect: detectedTools("ruff")}, missing, 0, "missing git, go, psql and database do not matter"},
+		{"external mode without a database", Options{Detect: detectedTools("go"), Personal: cfg("external", nil)}, missing, 1, "external needs its database"},
+		{"managed mode without a database url", Options{Detect: detectedTools("go"), Personal: cfg("managed", nil)}, missing, 0, "managed brings its own"},
+		{"database url that cannot be queried", Options{Detect: detectedTools("go"), DatabaseURL: badDB}, missing, 1, "configured database failing"},
+		{"database url that works", Options{Detect: detectedTools("go"), DatabaseURL: badDB}, psqlOK, 0, "configured database fine"},
+		{"explicit tool that is unusable", Options{Detect: unusableRuff(toolfind.SourceConfig), Personal: cfg("managed", map[string]string{"ruff": "/x/ruff"})}, missing, 1, "explicit unusable tool blocks"},
+		{"detected tool that is unusable", Options{Detect: unusableRuff(""), Personal: cfg("managed", nil)}, missing, 0, "only an explicit one blocks"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.opts.WorkDir, tc.opts.Timeout = t.TempDir(), time.Second
+			report := Collect(context.Background(), tc.opts, &fakeRunner{result: tc.runner})
+			if got := report.ExitCode(); got != tc.want {
+				t.Fatalf("exit %d, want %d (%s): %+v", got, tc.want, tc.reason, report.Checks)
+			}
+		})
+	}
+	// An unwritable work directory blocks.
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	report := Collect(context.Background(), Options{WorkDir: file, Timeout: time.Second, Detect: detectedTools("go")}, &fakeRunner{result: Result{Reason: "executable_missing"}})
+	if report.ExitCode() != 1 || !checkOf(t, report, "work_disk").Blocking {
+		t.Fatalf("%+v", report.Checks)
+	}
+}
+
 func TestDiskFailure(t *testing.T) {
 	name := filepath.Join(t.TempDir(), "file")
 	if err := os.WriteFile(name, []byte("original"), 0600); err != nil {
