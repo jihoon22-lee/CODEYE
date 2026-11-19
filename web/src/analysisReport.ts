@@ -28,6 +28,9 @@ export type Finding = {
   limitations: string[];
   evidence: Evidence[];
   counter: string[];
+  // Snapshot paths of the finding's locations and its tool diagnostics.
+  locations: string[];
+  observations: string[];
 };
 export type Task = { key: string; status: string; reason: string | null };
 export type Observation = {
@@ -36,6 +39,9 @@ export type Observation = {
   message: string | null;
   path: string | null;
   state: string;
+  // The tool's own severity, and whether an in-source suppression hid it.
+  severity: string | null;
+  suppressed: boolean;
   // Structure or duplication measurement (never a finding).
   metric: { name: string; value: number; threshold: number; unit: string } | null;
 };
@@ -140,6 +146,8 @@ function finding(v: unknown): Finding {
     limitations: array(f.limitations, str),
     evidence: array(f.evidence, evidence),
     counter: array(f.counterevidence_ids, str),
+    locations: array(f.locations ?? [], (l) => str(object(l).path)),
+    observations: array(f.observation_ids ?? [], str),
   };
 }
 
@@ -173,6 +181,8 @@ export function parseAnalysisReport(
       message: nullable(o.raw_message),
       state: str(o.location_state),
       path: loc ? str(loc.path) + ':' + count(loc.start_line) : null,
+      severity: nullable(o.raw_severity),
+      suppressed: o.suppressed === true,
       metric: o.metric == null ? null : (() => {
         const m = object(o.metric);
         return { name: str(m.name), value: count(m.value), threshold: count(m.threshold), unit: str(m.unit) };
@@ -237,17 +247,21 @@ export function parseAnalysisReport(
   };
 }
 
+// Markdown and HTML are the summary view unless detail is 'full'
+// (docs/REPORT.md#내보내기-상세도); JSON is always complete.
 export function reportURL(
   id: string,
   format: string,
   includeCode: boolean,
   revision?: number,
+  detail?: 'full',
 ) {
   const params = new URLSearchParams({
     format,
     include_code: String(includeCode),
   });
   if (revision !== undefined) params.set('revision', String(revision));
+  if (detail) params.set('detail', detail);
   return (
     '/api/v1/runs/' + encodeURIComponent(id) + '/report?' + params.toString()
   );

@@ -47,6 +47,10 @@ test('published report exposes the same counts, evidence and revision in the bro
     }
   }
   if (doc.findings.length) {
+    // The summary view keeps the full lists (static findings, the other
+    // review findings) behind disclosures that render when opened.
+    const more = report.locator('details.report-more:not([open]) > summary');
+    while (await more.count() > 0) await more.first().click();
     const item = doc.findings[0];
     await report.locator('details.finding-card summary').getByText(item.title, {exact:true}).first().click();
     await expect(report.getByText(item.impact, {exact:true}).first()).toBeVisible();

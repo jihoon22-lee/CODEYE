@@ -118,6 +118,13 @@ export type LedgerModule = {
   notPlanned: number;
   notSent: number;
   completed: number;
+  // Builder 8 (a schema 0.2 scope artifact): the module's class and its
+  // secondary files (test input, examples, generated), those sent and those
+  // the ceiling or the slot limit left out. Null class: an earlier builder.
+  cls: 'primary' | 'secondary' | null;
+  secondary: number;
+  secondarySent: number;
+  secondaryNotReached: number;
   slices: { task: string; status: string; reason: string | null }[];
 };
 
@@ -128,6 +135,8 @@ export type Ledger = {
   callsUsed: number | null;
   requestBytesSent: number | null;
   status: string;
+  // Slots of primary files the call ceiling refused (builder 8; 0 otherwise).
+  primarySlotsRefused: number;
   modules: LedgerModule[];
 };
 
@@ -142,8 +151,11 @@ function parseLedger(v: unknown): Ledger | null {
     callsUsed: optCount(l.calls_used),
     requestBytesSent: optCount(l.request_bytes_sent),
     status: str(l.status),
+    primarySlotsRefused: l.primary_slots_budget_exhausted == null ? 0 : count(l.primary_slots_budget_exhausted),
     modules: array(l.modules, (m) => {
       const x = object(m);
+      const cls = x.class == null ? null : str(x.class);
+      if (cls !== null && cls !== 'primary' && cls !== 'secondary') invalid();
       return {
         id: str(x.module_id),
         discovered: bool(x.discovered),
@@ -157,6 +169,10 @@ function parseLedger(v: unknown): Ledger | null {
         notPlanned: count(x.files_not_planned),
         notSent: count(x.files_not_sent),
         completed: count(x.files_with_completed_review),
+        cls: cls as LedgerModule['cls'],
+        secondary: x.files_secondary == null ? 0 : count(x.files_secondary),
+        secondarySent: x.files_secondary_sent == null ? 0 : count(x.files_secondary_sent),
+        secondaryNotReached: x.files_secondary_not_reached == null ? 0 : count(x.files_secondary_not_reached),
         slices: array(x.slices, (e) => {
           const y = object(e);
           return { task: str(y.task_key), status: str(y.status), reason: nullable(y.reason) };
@@ -166,7 +182,8 @@ function parseLedger(v: unknown): Ledger | null {
   };
   // Each module's files are counted once.
   for (const m of out.modules) {
-    if (m.sent + m.withheld + m.unreadable + m.budgetExhausted + m.notPlanned + m.notSent !== m.eligible || m.completed > m.sent) invalid();
+    if (m.sent + m.withheld + m.unreadable + m.budgetExhausted + m.notPlanned + m.secondaryNotReached + m.notSent !== m.eligible || m.completed > m.sent) invalid();
+    if (m.secondary > m.eligible || m.secondarySent > Math.min(m.sent, m.secondary) || (m.cls === null && m.secondary + m.secondaryNotReached > 0)) invalid();
   }
   return out;
 }
