@@ -204,7 +204,7 @@ export const ko = {
     triggerUnknown: (raw: string) => `알 수 없음 (${raw})`,
   },
 
-  // --- W22 schedules (docs/38) ---
+  // --- W22 schedules (docs/API.md) ---
   schedules: {
     title: '예약 실행',
     intro: '정해진 시각마다 위와 같은 분석 요청을 대기열에 넣습니다. 각 실행 때 요청자 권한을 다시 확인하고, 입력은 실행 시작 시점에 고정합니다.',
@@ -264,7 +264,7 @@ export const ko = {
     unknown: (raw: string) => `알 수 없음 (${raw})`,
   },
 
-  // --- stage display (docs/12 section 5, docs/37) ---
+  // --- stage display (docs/REPORT.md#프로젝트-목록과-단계-표시, docs/ARCHITECTURE.md) ---
   stages: {
     title: '세부 단계',
     names: {
@@ -310,7 +310,7 @@ export const ko = {
       toolchain_not_configured: '이 분석 도구가 필요로 하는 언어 toolchain이 노드에 지정되지 않아 실행하지 않음 (미지원)',
       repository_code_not_allowed: '저장소 코드(build script·설정 프로그램·plugin)를 실행해야 하는 분석인데 노드 운영자가 이 소스에 허가하지 않아 실행하지 않음 (미지원)',
       analyzer_pack_missing: '범위에 이 언어의 소스가 있으나 이 노드에 그 언어의 분석기가 없음 (정적 분석 공백, 0건 통과 아님)',
-      // W16 C/C++ 팩 (docs/41)
+      // W16 C/C++ 팩 (docs/ANALYZERS.md)
       compile_db_missing: '스냅샷에 compile_commands.json이 없어 build flag가 필요한 분석을 실행하지 않음. 생성은 저장소 코드를 실행하므로 하지 않음 (미지원, 0건 통과 아님)',
       compile_db_unreadable: 'compile_commands.json을 compile DB로 읽을 수 없어 실행하지 않음 (실패)',
       no_translation_units: '범위 안에 분석기에 넘길 C/C++ 번역 단위가 없음(헤더만 있거나 compile DB에 범위 안 항목이 없음) (미지원, 0건 통과 아님)',
@@ -321,7 +321,7 @@ export const ko = {
       clang_tidy_failed: 'clang-tidy가 compile DB를 읽지 못했거나 사용법 오류·비정상 종료로 끝남 (실패)',
       cppcheck_not_run: 'cppcheck 실행이 모두 수행되지 않아 결과를 만들지 못함',
       clang_tidy_not_run: 'clang-tidy 실행이 모두 수행되지 않아 결과를 만들지 못함',
-      // W17 Python 팩 (docs/42)
+      // W17 Python 팩 (docs/ANALYZERS.md)
       no_analyzable_python_files: '범위에 Python 소스가 있으나 제외 디렉터리(가상환경·숨김·vendor 등) 안에만 있어 분석할 파일이 없음 (미실행, 0건 통과 아님)',
       source_syntax_errors: '구문 오류로 도구가 분석하지 못한 파일이 있어 작업을 실패로 기록함 (구문 오류는 결함 관찰이 아님)',
       tool_file_errors: '도구가 일부 파일을 읽거나 해석하지 못해 작업을 실패로 기록함',
@@ -335,7 +335,7 @@ export const ko = {
       no_files_processed: '도구가 스냅샷의 Python 파일을 하나도 처리하지 않음 (실패, 0건 통과 아님)',
       processed_files_unverified: '도구 출력으로 처리 파일을 확인하지 못해 결과를 신뢰하지 않음',
       tool_not_run: '필요한 도구 실행 중 수행되지 않은 것이 있어 결과를 만들지 못함',
-      // W18 JS/TS 팩(eslint·tsc, docs/43)
+      // W18 JS/TS 팩(eslint·tsc, docs/ANALYZERS.md)
       tsconfig_invalid: 'tsconfig를 불러오지 못했거나 옵션 오류가 있어 검사 결과를 쓰지 않음 (설정 오류)',
       tsconfig_extends_unresolved: 'tsconfig의 extends 대상을 찾지 못함 (패키지 extends는 node_modules가 필요함, 설정 오류)',
       tsconfig_outside_snapshot: 'tsconfig가 스냅샷 밖 경로(절대경로·상위 경로·외부 symlink)를 가리켜 실행하지 않음 (정책 제외)',
@@ -363,7 +363,7 @@ export const ko = {
       no_analyzable_crates: 'cargo가 범위의 소스를 하나도 컴파일하지 않아 분석한 파일이 없음 (미지원, 0건 통과 아님)',
       cargo_failed: 'cargo가 오류 없이 설명되지 않는 실패로 끝남',
       cargo_not_run: 'cargo 실행이 모두 수행되지 않아 결과를 만들지 못함',
-      // W21 구조·중복·비밀값 팩 (lizard, jscpd, gitleaks; docs/45)
+      // W21 구조·중복·비밀값 팩 (lizard, jscpd, gitleaks; docs/ANALYZERS.md)
       workspace_link_refused: '검사 사본에 링크나 특수 파일이 있어 사본 밖을 읽지 않도록 도구를 실행하지 않음 (실패)',
       repository_config_rejected: '저장소 .gitleaksignore에 사본 밖을 가리키는 항목이 있어 검사하지 않음 (실패, 값은 기록하지 않음)',
       result_outside_snapshot: '도구가 선택된 스냅샷 파일이 아닌 곳의 결과를 내 그 결과를 버림 (실패)',
@@ -432,7 +432,7 @@ export const ko = {
   runStatusUnknownIcon: '?',
   runStatusRaw: (label: string, raw: string) => `${label} (${raw})`,
 
-  // --- W23 run comparison and human finding reviews (docs/40) ---
+  // --- W23 run comparison and human finding reviews (docs/REPORT.md) ---
   history: {
     title: '이전 실행과 비교',
     loading: '비교 정보를 불러오는 중입니다…',

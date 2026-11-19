@@ -16,7 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// Ruff identity: the required baseline of the Python ecosystem (docs/42 §2).
+// Ruff identity: the required baseline of the Python ecosystem (docs/ANALYZERS.md#python-팩).
 const (
 	RuffID             = "python.ruff"
 	RuffName           = "ruff"
@@ -34,7 +34,7 @@ const (
 // flow, no style. E711-E714/E721 comparisons, E722 bare except, E9 IO and
 // syntax, F pyflakes, B bugbear, BLE blind except, PLE pylint errors, ASYNC.
 // S (flake8-bandit) is not selected: bandit is the security engine of the
-// pack and ruff's S rules re-implement its checks (docs/42 §7).
+// pack and ruff's S rules re-implement its checks (docs/ANALYZERS.md#python-엔진-중복).
 const RuffRules = "E711,E712,E713,E714,E721,E722,E9,F,B,BLE,PLE,ASYNC"
 
 // RuffIgnore drops the bugbear rules that only demand an explicit strict=
@@ -137,7 +137,7 @@ func (ruffRun) execute(rc *runCtx) {
 	}
 	// Two runs: the honored run gives the active diagnostics, the
 	// --ignore-noqa run every diagnostic; the difference is what the
-	// project suppressed in source (docs/42 §8).
+	// project suppressed in source (docs/ANALYZERS.md#python-소스-안-억제).
 	rc.exec(execRuffCheck, RuffArgs(minor, m.Nested, m.Targets, "--output-format", "json-lines"), nil)
 	rc.exec(execRuffAll, RuffArgs(minor, m.Nested, m.Targets, "--output-format", "json-lines", "--ignore-noqa"), nil)
 }
@@ -309,7 +309,7 @@ func (ruffRun) assemble(rc *runCtx) obsdoc.Document {
 		ref := obsdoc.RawRef{Execution: execRuffAll, Stream: "stdout", StreamSHA256: stdoutSHA, RecordIndex: d.el.Index, ByteStart: d.el.Start, ByteEnd: d.el.End}
 		if ruffSyntax(d.code) {
 			// A file ruff could not parse is a tool error, not a defect
-			// observation; the task cannot succeed (docs/42 §6).
+			// observation; the task cannot succeed (docs/ANALYZERS.md#python-규칙-팩).
 			bd.toolError(execRuffAll, "syntax", d.file, d.row, d.col, d.msg)
 			if rel, ok := bd.toolPath(d.file); ok {
 				syntax[rel] = true

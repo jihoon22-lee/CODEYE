@@ -18,7 +18,7 @@ import (
 
 // Replay tests run in CI without either tool: the fake executables answer
 // with the redacted streams captured from cppcheck 2.22.0 and clang-tidy
-// 23.1.5 in testdata/ (real_test.go, docs/41 §9). The fixture input and
+// 23.1.5 in testdata/ (real_test.go, docs/ANALYZERS.md#실제-도구-시험과-출력-캡처). The fixture input and
 // expected.json are the ones the captures were taken from; changing either
 // requires a new capture.
 

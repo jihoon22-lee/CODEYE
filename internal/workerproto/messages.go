@@ -86,7 +86,7 @@ type Hello struct {
 	GoExecutable  string `json:"go_executable"`
 	GoModCache    string `json:"go_mod_cache"`
 	// AnalyzerTools are operator analyzer tool paths by tool name and the
-	// shared toolchain paths under their reserved names (node, docs/39
+	// shared toolchain paths under their reserved names (node, docs/ANALYZERS.md
 	// §2.4); absent when none is configured.
 	AnalyzerTools      map[string]string `json:"analyzer_tools,omitempty"`
 	ToolPath           string            `json:"tool_path"`
@@ -122,7 +122,7 @@ type JobSnapshot struct {
 type Job struct {
 	AllowModelReview bool `json:"allow_model_review,omitempty"`
 	// AllowRepositoryCode is the node operator's repository-code grant for
-	// the job's local source root (docs/39 §2.7). Absent means not granted.
+	// the job's local source root (docs/ANALYZERS.md#저장소-코드-실행-허가). Absent means not granted.
 	AllowRepositoryCode bool `json:"allow_repository_code,omitempty"`
 	Header
 	Attempt   AttemptRef      `json:"attempt"`

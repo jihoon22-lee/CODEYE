@@ -1,4 +1,4 @@
-# W17 Python 팩 bandit 어댑터 서술(보안 깊이). 구현: internal/worker/analysis/python, 근거: docs/42-w17-python-pack.md.
+# W17 Python 팩 bandit 어댑터 서술(보안 깊이). 구현: internal/worker/analysis/python, 근거: docs/ANALYZERS.md.
 # bandit 1.9.4는 결과가 있으면 exit 1, 없으면 exit 0, 사용법 오류는 exit 2다. 구문 오류 파일은 exit 코드를 바꾸지 않는다(측정).
 # 실행은 세 번이다: bandit.version, bandit.check(# nosec 존중, JSON을 scratch 파일로 -o), bandit.check-ignore-nosec(모든 결과, CSV stdout).
 # JSON 보고서는 -n 0이어도 "code"에 원본 소스 줄을 담으므로 수집 stream에 두지 않는다. 처리 파일(metrics)·파일 오류(errors)·억제 존중 결과는

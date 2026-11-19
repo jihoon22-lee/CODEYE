@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""W24 R1 quality evaluation runner (docs/46).
+"""W24 R1 quality evaluation runner (docs/EVALUATION.md).
 
 Subcommands:
   plan        stratified selection and call/cost estimate; no product run
@@ -9,7 +9,7 @@ Subcommands:
   allow-text  tool messages of a tools batch and instruction envelopes of a capture dry run,
               for an explicit `corpus.py forbidden --allow-text`
   capture-list  sentinel answer list (blocks nothing) for that capture dry run; test upstream only
-  reader      report-reading task sheets and an evaluator answer key (docs/16 §7)
+  reader      report-reading task sheets and an evaluator answer key (docs/EVALUATION.md#보고서-읽기-평가)
   reader-score  score supplied human answers; without answers the result is "not_measured"
 
 The runner never reads a model key and never starts a relay. A review batch
@@ -58,13 +58,13 @@ BUDGET_REFUSALS = ("budget_exhausted", "request_limit_reached", "relay_halted")
 # Relay settlement prices (microUSD per token; r0_openai_gateway.PRICE_INPUT_WORST / PRICE_OUTPUT).
 PRICE_IN, PRICE_OUT = 5, 10
 
-# Planner fallback when no history directory is given (docs/46 §5). Source: docs/37 §11,
+# Planner fallback when no history directory is given (docs/EVALUATION.md#표본과-예산). Source: docs/EVALUATION.md#회귀-집합-실행,
 # TC-100 on R0 Go pairs + W15 (11 inputs per pack, single-file Go excerpts, reasoning low).
 CONSTANTS = {
-    "review-v1": {"source": "docs/37 §11 TC-100: 11 inputs, 32 calls, ledger 0.789 USD",
+    "review-v1": {"source": "docs/EVALUATION.md#회귀-집합-실행 TC-100: 11 inputs, 32 calls, ledger 0.789 USD",
                   "calls_per_variant": {"context": 11 / 11, "investigate": 11 / 11, "verify": 10 / 11},
                   "ledger_microusd_per_call": 24_656, "input_tokens_per_call": 4_283, "output_tokens_per_call": 324},
-    "review-r1": {"source": "docs/37 §11 TC-100: 11 inputs, 27 calls, ledger 0.598 USD",
+    "review-r1": {"source": "docs/EVALUATION.md#회귀-집합-실행 TC-100: 11 inputs, 27 calls, ledger 0.598 USD",
                   "calls_per_variant": {"environment": 1 / 11, "documents": 7 / 11, "investigate": 11 / 11,
                                         "interpret": 0 / 11, "verify": 8 / 11},
                   "ledger_microusd_per_call": 22_148, "input_tokens_per_call": 3_872, "output_tokens_per_call": 279},

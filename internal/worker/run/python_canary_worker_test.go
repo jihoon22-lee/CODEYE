@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// Security (W17, docs/42 §9) through the production composition:
+// Security (W17, docs/ANALYZERS.md#python-입력-보호) through the production composition:
 // repository configuration that points every path option outside the
 // workspace (an outside directory holding a unique canary) is never read.
 // With the configured real tools the canary appears in no uploaded artifact

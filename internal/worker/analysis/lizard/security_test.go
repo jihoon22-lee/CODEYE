@@ -12,7 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// The repository is hostile (docs/45 security): file names that look like
+// The repository is hostile (docs/ANALYZERS.md security): file names that look like
 // options and links out of the tree.
 func hostileFiles() map[string][]byte {
 	return map[string][]byte{

@@ -12,7 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// Go telemetry is off for every CODEYE go execution (docs/39 §8.2): the mode
+// Go telemetry is off for every CODEYE go execution (docs/ANALYZERS.md#go-공통-환경과-빌드-문맥): the mode
 // file "off" in the XDG config dir, on the platforms whose os.UserConfigDir
 // reads XDG_CONFIG_HOME. Windows needs nothing (no AppData in the executor
 // environment); darwin has no override.

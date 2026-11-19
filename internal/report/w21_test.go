@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// W21 (docs/45): the real lizard 1.26.1, jscpd 5.4.3 and gitleaks 8.30.1
+// W21 (docs/ANALYZERS.md): the real lizard 1.26.1, jscpd 5.4.3 and gitleaks 8.30.1
 // envelopes (examples/observations-{lizard,jscpd,gitleaks}.json) through
 // the generic decoder.
 

@@ -1,6 +1,6 @@
 import { parseAnalysisReport, reportURL } from './analysisReport';
 import { comparisonURL, parseComparison, parseFindingReview, type FindingReviewBody } from './comparison';
-// Same-origin client for the CODEYE control API (docs/11, api/openapi.yaml).
+// Same-origin client for the CODEYE control API (docs/API.md, api/openapi.yaml).
 // Credentials are the HttpOnly session cookie, which the browser attaches itself.
 // The CSRF token lives only in this object's memory.
 
@@ -33,7 +33,7 @@ export type Project = {
   source_status: string;
   capability_gaps: string[];
   last_run: { id: string; status: string } | null;
-  // Optional: servers before W15 do not send it (docs/37 section 4).
+  // Optional: servers before W15 do not send it (docs/API.md).
   activity?: ProjectActivity;
 };
 export type ProjectPage = { items: Project[]; next_cursor: string | null };

@@ -1,4 +1,4 @@
-// Package cpp is the W16 C/C++ analyzer pack (docs/41): the baseline
+// Package cpp is the W16 C/C++ analyzer pack (docs/ANALYZERS.md): the baseline
 // cppcheck adapter and the extra-depth clang-tidy adapter, which also
 // carries the Clang Static Analyzer (its clang-analyzer-* checks; clang
 // --analyze is the same engine and is never run). Both tools run natively

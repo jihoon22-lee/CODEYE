@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/personal"
 )
 
-// The documented example (examples/personal.json, docs/48) is a valid
+// The documented example (examples/personal.json, docs/GUIDE.md) is a valid
 // configuration for this build's tool names.
 func TestPersonalExampleConfigParses(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -29,7 +29,7 @@ func TestPersonalExampleConfigParses(t *testing.T) {
 	}
 }
 
-// W25 (docs/47 §3): codeye start turns the configuration into the agent's
+// W25 (docs/OPERATIONS.md#start-stop-status): codeye start turns the configuration into the agent's
 // argv: autoscale, per-root grants, tools, model and storage quota. No
 // database URL or token value is ever in it (only the token file path).
 func TestPersonalAgentArgv(t *testing.T) {

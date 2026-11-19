@@ -1,5 +1,5 @@
 // Package discovery collects module, environment and document facts from an
-// immutable W04 snapshot without a model (W15, docs/37 §5). The pure part
+// immutable W04 snapshot without a model (W15, docs/ARCHITECTURE.md#모듈환경문서-탐색). The pure part
 // (module detection, manifest parsing, verdicts, document inventory) works on
 // the verified manifest and a read function; the handler supplies reads
 // through os.Root on the read-only snapshot and runs probes only through the
@@ -124,12 +124,12 @@ func Environment(in Input, read readFunc, observe func(tools []string) Observed)
 	}
 	need = uniqueSorted(need)
 	// observe runs even without modules: analyzer tools of ecosystem "any"
-	// (docs/39) apply to every snapshot.
+	// (docs/ANALYZERS.md) apply to every snapshot.
 	observed := observe(need)
 	if observed.Err != nil {
 		return envdoc.Document{}, observed, observed.Err
 	}
-	// Shared toolchains an in-scope analyzer needs (docs/39 §2.4) are
+	// Shared toolchains an in-scope analyzer needs (docs/ANALYZERS.md#도구-경로) are
 	// recorded like the modules' runtimes; they add no verdict.
 	for _, t := range observed.Needed {
 		if envdoc.IsRuntimeTool(t) {

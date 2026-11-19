@@ -14,7 +14,7 @@ import (
 )
 
 // W23 run comparison inputs and human finding reviews (migration 0008,
-// docs/40). Comparison is computed by internal/history from the immutable
+// docs/REPORT.md). Comparison is computed by internal/history from the immutable
 // report bodies loaded here; nothing derived is stored.
 
 // FingerprintBuilderSince is the first report builder version whose findings

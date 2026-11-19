@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 ACTION = {"supported", "reproduced"}
-# Validator error codes (docs/37 §10) grouped into the TC-100 blocking classes.
+# Validator error codes (docs/REVIEW.md) grouped into the TC-100 blocking classes.
 ERROR_CLASS = {
     **dict.fromkeys(("evidence_id_unknown", "evidence_missing", "evidence_kind_invalid", "observation_id_unknown",
                      "evidence_not_at_observation", "code_evidence_missing"), "fabricated_evidence"),

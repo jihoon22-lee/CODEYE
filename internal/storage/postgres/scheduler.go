@@ -31,7 +31,7 @@ type PoolPolicy struct {
 	CreatedAt                *time.Time
 }
 
-// DefaultPoolPolicy is the docs/09 starting point (not a measured value).
+// DefaultPoolPolicy is the docs/EXECUTION.md starting point (not a measured value).
 var DefaultPoolPolicy = PoolPolicy{MinWorkers: 0, MaxWorkers: 2, IdleTimeoutSeconds: 180, ScaleUpCooldownSeconds: 10, ScaleDownCooldownSeconds: 60}
 
 // StartTimeout is how long an issued start_worker command counts as a pending

@@ -97,7 +97,7 @@ type Config struct {
 	// (default 5s; negative disables, for tests that drive it directly).
 	SweepInterval time.Duration
 	// ReconcileInterval is how often Serve runs the pool autoscaler
-	// (docs/09 reconcile_seconds, default 5s; negative disables).
+	// (docs/EXECUTION.md reconcile_seconds, default 5s; negative disables).
 	ReconcileInterval time.Duration
 	// PublishInterval is how often Serve reconciles pending reports (default
 	// 2s; negative disables, for tests that drive the publisher directly).

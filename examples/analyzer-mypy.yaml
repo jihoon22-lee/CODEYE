@@ -1,4 +1,4 @@
-# W17 Python 팩 mypy 어댑터 서술(추가 깊이, pyright와 대안). 구현: internal/worker/analysis/python, 근거: docs/42-w17-python-pack.md.
+# W17 Python 팩 mypy 어댑터 서술(추가 깊이, pyright와 대안). 구현: internal/worker/analysis/python, 근거: docs/ANALYZERS.md.
 # mypy 2.4.1 -O json은 오류가 없으면 exit 0, 오류가 있으면 exit 1, 구문 오류·blocking 오류·사용법 오류는 exit 2다(측정).
 # --config-file=(빈 값)은 mypy.ini·setup.cfg·pyproject의 설정과 plugins를 읽지 않는다(overridden). 경로 plugins는 실행 코드이므로 저장소 설정을 따르지 않는다.
 # import-not-found·import-untyped는 관찰이 아닌 coverage 단위(import_unresolved, stub_missing)다. 처리 파일은 --lineprecision-report의 모듈 목록으로 확인한다.

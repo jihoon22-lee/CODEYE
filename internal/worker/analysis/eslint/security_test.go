@@ -29,7 +29,7 @@ func fakeAnalyzer(t *testing.T, typed bool) *Analyzer {
 }
 
 // The type-aware task reads the module's tsconfig chain through
-// typescript-eslint: the chain checks of tsc apply (docs/43 §3.2), before
+// typescript-eslint: the chain checks of tsc apply (docs/ANALYZERS.md#저장소-코드와-tsconfig-검사), before
 // ESLint runs, with option names only.
 func TestTypedTsconfigChainRefused(t *testing.T) {
 	a := fakeAnalyzer(t, true)

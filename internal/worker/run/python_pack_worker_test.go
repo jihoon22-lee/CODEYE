@@ -25,7 +25,7 @@ var pythonFiles = map[string]string{
 	"README.md": "# app\n",
 }
 
-// TC-108 (W17, docs/42 §2): the Python pack replaces the W19
+// TC-108 (W17, docs/ANALYZERS.md#python-팩): the Python pack replaces the W19
 // pack-gap.python gap. On a node with --go only, a Python snapshot plans the
 // pack's tasks: the ruff baseline is required and unsupported
 // (tool_not_configured), so the report is partial with a required task that
@@ -45,7 +45,7 @@ func TestPythonSnapshotWithoutRuff(t *testing.T) {
 			t.Fatalf("required flag %+v", task)
 		}
 	}
-	// The W21 any-ecosystem analyzers (docs/45) also plan, not required.
+	// The W21 any-ecosystem analyzers (docs/ANALYZERS.md) also plan, not required.
 	pyKeys := []string{"ruff", "mypy", "pyright", "bandit"}
 	if !slices.Equal(static, append(slices.Clone(pyKeys), w21StaticTasks()...)) {
 		t.Fatalf("static tasks %v (all %v)", static, rows)

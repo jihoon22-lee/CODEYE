@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// Column units the tools report (measured, docs/42 §6): ruff 1-based code
+// Column units the tools report (measured, docs/ANALYZERS.md#python-규칙-팩): ruff 1-based code
 // points, pyright 0-based UTF-16 code units, mypy (legacy parser) and
 // bandit 0-based UTF-8 bytes. The adapters convert every column to 1-based
 // bytes of the snapshot line, which is the report's unit.

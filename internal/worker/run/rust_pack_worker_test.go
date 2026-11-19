@@ -205,7 +205,7 @@ func fakeRustToolchain(t *testing.T, log string) (cargo, clippy string) {
 	return filepath.Join(dir, "cargo"), filepath.Join(dir, "cargo-clippy")
 }
 
-// TC-103/115/116 (docs/44 §2): a node without the repository-code grant never
+// TC-103/115/116 (docs/ANALYZERS.md#rust-환경): a node without the repository-code grant never
 // runs cargo. The Rust baseline is unsupported / repository_code_not_allowed
 // whether or not the tool is configured; the static_analysis stage and the
 // report show it; the tool reason stays a limitation. With cargo configured, the

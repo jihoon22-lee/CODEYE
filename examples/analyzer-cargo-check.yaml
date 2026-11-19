@@ -1,4 +1,4 @@
-# W20 Rust 팩 기준 분석기 cargo check 서술. 구현: internal/worker/analysis/rustpack, 근거: docs/44-w20-rust-pack.md.
+# W20 Rust 팩 기준 분석기 cargo check 서술. 구현: internal/worker/analysis/rustpack, 근거: docs/ANALYZERS.md.
 # cargo 1.99.1 check --message-format=json은 경고만 있으면 exit 0, 컴파일 오류·deny 수준 lint·빌드 스크립트 실패면 exit 101이다.
 # 경고(발견 사항)와 정상 종료가 같은 exit 0이므로 종료 코드만으로 findings를 정하지 않는다.
 # stdout의 마지막 build-finished 레코드(success)와 종료 코드가 일치해야 성공이며, 진단 레코드가 findings를 정한다.

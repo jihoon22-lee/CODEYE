@@ -1,4 +1,4 @@
-// Package pack is the analyzer-pack contract of R1 (docs/39). A language pack
+// Package pack is the analyzer-pack contract of R1 (docs/ANALYZERS.md). A language pack
 // (W16 C/C++, W17 Python, W18 JS/TS, W19 Go, W20 Rust, W21 structure and
 // secrets) contributes Analyzers; the Composite turns an ordered list of them
 // into the one analysis.Handler of the deep-review capability. Planning reads
@@ -43,7 +43,7 @@ const (
 	ReasonUnknownTask = "unknown_task"
 	// ReasonRepositoryCodeNotAllowed: the task would execute
 	// repository-controlled code and the job carries no repository-code
-	// grant (docs/39 §2.7). It takes precedence over the not-configured
+	// grant (docs/ANALYZERS.md#저장소-코드-실행-허가). It takes precedence over the not-configured
 	// reasons, which stay visible as limitations.
 	ReasonRepositoryCodeNotAllowed = "repository_code_not_allowed"
 	// LimRepositoryCodeExecuted marks a task that ran processes under the
@@ -86,7 +86,7 @@ type Descriptor struct {
 	// "node") the tool needs, sorted unique. builtin builds the analyzer only
 	// when each one is configured (--<toolchain>) and passed its startup
 	// probe, and passes the validated handles; otherwise the analyzer is the
-	// NotConfigured stand-in (docs/39 §2.4). The go toolchain is not listed:
+	// NotConfigured stand-in (docs/ANALYZERS.md#도구-경로). The go toolchain is not listed:
 	// --go stays its own setting.
 	Toolchains []string
 	// Interpreter, when set, is the toolchain (one of Toolchains) that runs
@@ -118,7 +118,7 @@ func (d Descriptor) Validate() error {
 	return nil
 }
 
-// Toolchain is a validated shared toolchain (docs/39 §2.4): the operator's
+// Toolchain is a validated shared toolchain (docs/ANALYZERS.md#도구-경로): the operator's
 // absolute path (--<name>), the directory of the resolved executable (the
 // only PATH entry a child of the toolchain gets) and the version its startup
 // probe read. builtin passes one per Descriptor.Toolchains entry.
@@ -145,7 +145,7 @@ type Task struct {
 	FilesInScope *int
 	// RepositoryCode declares that running the task executes
 	// repository-controlled code: build scripts, configuration programs,
-	// compiler plugins, proc macros, configure steps (docs/39 §2.7). Plan
+	// compiler plugins, proc macros, configure steps (docs/ANALYZERS.md#저장소-코드-실행-허가). Plan
 	// derives it from the manifest and scope only, so the NotConfigured
 	// stand-in declares it identically, and Run never executes more than
 	// Plan declared (no fallback from a declared-safe mode to a configure
@@ -175,7 +175,7 @@ type PlanFunc func(ctx context.Context, job analysis.Job) ([]Task, error)
 // Composite runs several analyzers as one handler: plans are concatenated in
 // member order, every task key is owned by exactly one member, and Run is
 // dispatched to the owner. After the members it plans one gap task per
-// language ecosystem with source in scope and no member (docs/39 §2.8).
+// language ecosystem with source in scope and no member (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백).
 type Composite struct {
 	members []Analyzer
 }
@@ -258,7 +258,7 @@ func (c *Composite) PlanTasks(ctx context.Context, job analysis.Job) ([]Task, er
 }
 
 // gaps are the gap tasks of job: one per language ecosystem with source in
-// scope and no member analyzer (docs/39 §2.8). A member of ecosystem "any"
+// scope and no member analyzer (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백). A member of ecosystem "any"
 // (structure, secrets) never fills a language gap. An ecosystem that has a
 // member is that member's to plan, including a visible placeholder when its
 // source cannot be analyzed.
@@ -466,7 +466,7 @@ func WriteEnvelope(job analysis.Job, doc obsdoc.Document) (analysis.ArtifactFile
 	return analysis.ArtifactFile{Path: p, Role: analysis.RoleObservations, MediaType: analysis.MediaObservations}, nil
 }
 
-// ToolProbe is the env.discover version probe of one operator tool (docs/39
+// ToolProbe is the env.discover version probe of one operator tool (docs/ANALYZERS.md
 // discovery hook). Executable "" means the operator did not configure it;
 // the observation is then not_probed.
 //

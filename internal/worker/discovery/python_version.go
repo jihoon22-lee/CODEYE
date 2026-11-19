@@ -3,7 +3,7 @@ package discovery
 import "path"
 
 // PythonRequirement reads the Python version declaration of one module
-// manifest with the env.discover parser (docs/37): pyproject.toml
+// manifest with the env.discover parser (docs/ARCHITECTURE.md): pyproject.toml
 // [project] requires-python, setup.cfg [options] python_requires or the
 // first version of .python-version. kind is the environment requirement
 // kind (requires_python, python_requires, python_version_file); "" with a

@@ -119,7 +119,7 @@ func TestLiveQualityRoles(t *testing.T) {
 	}
 }
 
-// W15 display stages (docs/37 §2): the review-v1 context role reads
+// W15 display stages (docs/ARCHITECTURE.md#표시-단계와-task-단계): the review-v1 context role reads
 // documents, investigation and verification are code review. The static
 // handler's own stages are kept.
 func TestPlanStages(t *testing.T) {

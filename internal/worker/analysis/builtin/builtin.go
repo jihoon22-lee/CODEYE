@@ -1,6 +1,6 @@
 // Package builtin assembles the analysis handlers a worker may advertise.
 // The deep-review handler is a pack.Composite of every analyzer of this
-// build in catalog order (docs/39). An analyzer whose tool is not
+// build in catalog order (docs/ANALYZERS.md). An analyzer whose tool is not
 // configured, invalid or fails its startup probe is still a member: it plans
 // its tasks and reports them unsupported. The capability is advertised only
 // when at least one baseline (required) analyzer probed successfully.
@@ -33,14 +33,14 @@ type Config struct {
 	GoModCache string
 	// Tools are absolute paths by name: analyzer tools (--<tool>) and the
 	// shared toolchains of the toolchain table (--node), whose names are
-	// reserved and never analyzer tool names (docs/39 §2.4).
+	// reserved and never analyzer tool names (docs/ANALYZERS.md#도구-경로).
 	Tools map[string]string
 	// ProbeDir is an absolute writable directory outside any source tree
 	// (e.g. the worker scratch root) used for toolchain probes.
 	ProbeDir string
 	// ToolPath is the operator's --toolchain-path list (hello tool_path). It
 	// is only searched, once, for the system linker `cc` of the Rust pack
-	// (docs/44 §2); it is never given to an analyzer as PATH.
+	// (docs/ANALYZERS.md#rust-환경); it is never given to an analyzer as PATH.
 	ToolPath string
 }
 
@@ -89,7 +89,7 @@ func catalog() []entry {
 		{desc: python.PyrightDescriptor(), plan: python.PyrightPlan, build: buildPyright},
 		{desc: python.BanditDescriptor(), plan: python.BanditPlan, build: buildBandit},
 		// JavaScript/TypeScript (W18 baseline ESLint, extra depth tsc and
-		// type-aware ESLint; javascript.go, docs/43).
+		// type-aware ESLint; javascript.go, docs/ANALYZERS.md).
 		eslintEntry(), tscEntry(), eslintTypedEntry(),
 		// Rust (W20 baseline cargo check, extra depth clippy).
 		{desc: rustpack.CheckDescriptor(), plan: rustpack.CheckPlan, build: buildCargoCheck},

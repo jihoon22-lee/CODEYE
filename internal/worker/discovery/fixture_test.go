@@ -130,7 +130,7 @@ func runFixture(t *testing.T, j analysis.Job, obs Observer, runner executor.Runn
 	return out[0], out[1]
 }
 
-// TC-96/TC-97 first input (docs/37 §7): module, requirement, verdict and
+// TC-96/TC-97 first input (docs/TESTING.md): module, requirement, verdict and
 // document facts with an injected node observation (Go 1.27.4), so the
 // result does not depend on the CI toolchain.
 func TestW15FixtureMatchesExpected(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// W23 finding identity (docs/10 §5, docs/40). This file is the only place
+// W23 finding identity (docs/ARCHITECTURE.md#이전-결과-비교, docs/REPORT.md). This file is the only place
 // that defines fingerprint semantics; decoders call ToolFingerprint or
 // setModelFingerprint and never hash their own fields.
 //
@@ -290,7 +290,7 @@ func applyDispositions(r *Report, reviews []ReviewFact, now time.Time) {
 	}
 }
 
-// ValidDisposition reports a finding disposition (docs/04 §2).
+// ValidDisposition reports a finding disposition (docs/ARCHITECTURE.md#상태-전이).
 func ValidDisposition(d string) bool { return dispositions[d] }
 
 // HiddenDisposition reports a disposition that removes a finding from the

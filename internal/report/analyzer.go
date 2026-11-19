@@ -14,7 +14,7 @@ import (
 )
 
 // Fixed template texts of findings decoded from the generic analyzer
-// envelope (docs/39). They name no tool and hold no code, so the code-free
+// envelope (docs/ANALYZERS.md). They name no tool and hold no code, so the code-free
 // export keeps them verbatim (safeTemplates).
 const (
 	textToolSeverityReason = "분석 도구 진단의 심각도는 검토 전 기본값 low이다. 도구가 표시한 원문 등급은 관찰에 그대로 남기며 영향을 검토하지 않았다."
@@ -40,7 +40,7 @@ var rawSeverityPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,31}$`)
 // suppressed in source and not structure metrics (W21) become tool-reported
 // findings that stay unreviewed
 // (pending, never actionable without review). The row records the
-// envelope's rule context (docs/39 §5.1). Only observations identical in analyzer, rule, location
+// envelope's rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제). Only observations identical in analyzer, rule, location
 // and message are grouped into one finding; a different rule or message on
 // the same line stays a separate finding (TC-09).
 type AnalyzerDecoder struct{}

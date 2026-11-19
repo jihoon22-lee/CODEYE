@@ -320,7 +320,7 @@ func unitOf(m MsgRecord) string { return unitName(m.PackageID, m.ManifestPath) }
 // ---- rule pack --------------------------------------------------------------
 
 // Rule pack identities. Version 1 of each: bump it when the selection or its
-// meaning changes (docs/39 §5.1).
+// meaning changes (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제).
 const (
 	CheckRulePackID  = "codeye-rust-cargo-check"
 	ClippyRulePackID = "codeye-rust-clippy"
@@ -333,7 +333,7 @@ const (
 var CheckSelection = []string{"--workspace", "--all-targets"}
 
 // ClippyReviewLints are the allow-by-default clippy lints the pack enables for
-// the unsafe and panic review (docs/44 §6). They are the only lint levels
+// the unsafe and panic review (docs/ANALYZERS.md#unsafepanic-lint). They are the only lint levels
 // CODEYE sets; `#[allow]` in the source still hides them.
 var ClippyReviewLints = []string{"clippy::undocumented_unsafe_blocks", "clippy::multiple_unsafe_ops_per_block", "clippy::panic_in_result_fn", "clippy::unwrap_in_result", "clippy::todo", "clippy::unimplemented"}
 
@@ -398,7 +398,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	doc.Patterns = append([]string{}, in.Patterns...)
 	doc.Tool.Name = tool
 	// The repository's Cargo configuration, [lints] tables and clippy.toml are
-	// honored (docs/44 §5); in-source #[allow]/#[expect] hide diagnostics and
+	// honored (docs/ANALYZERS.md#rust-규칙-문맥과-억제); in-source #[allow]/#[expect] hide diagnostics and
 	// nothing reports them (measured), so suppressions are honored too.
 	doc.RulePack = obsdoc.RulePack{ID: rulePack, Version: RulePackVersion, Selection: append([]string{}, sel...), RepositoryConfig: obsdoc.RepoConfigHonored,
 		SourceSuppressions: obsdoc.SuppressHonored, UnreportedSuppressionRules: []string{}}

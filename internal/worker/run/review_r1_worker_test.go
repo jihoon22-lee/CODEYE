@@ -210,7 +210,7 @@ func TestReviewR1ThroughTheWorkerAndReport(t *testing.T) {
 		{name: "vet finding", extra: vetFinding,
 			interpret: "review.interpret=succeeded", calls: "environment,documents,investigate,interpret,verify",
 			optional: []string{"review.environment=accepted", "review.interpret=accepted"}, findings: []string{"review_interpret_1=inconclusive", "review_investigate_1=inconclusive"}},
-		// review-r1 2.0.0 (docs/49 §3): a three-call verifier record reaches
+		// review-r1 2.0.0 (docs/REVIEW.md#복구-경로): a three-call verifier record reaches
 		// the report and validates.
 		{name: "verify retry", extra: vetFinding, retry: true,
 			interpret: "review.interpret=succeeded", calls: "environment,documents,investigate,interpret,verify,verify,verify",

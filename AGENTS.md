@@ -1,17 +1,20 @@
 # CODEYE 개발 에이전트 지침
 
-이 파일은 **CODEYE 자체를 구현하는 개발 에이전트**를 위한 지침이다. 대상 프로젝트를 검토하는 런타임 지침은 기본 팩 `prompts/review-r1/`에 있다(`prompts/review-v1/`은 이전 기록 재현용). W01~W14의 R0 수직 경로, W15의 모듈·문서·환경 탐색과 프로젝트별 단계 표시, W22의 예약·가중 진행률·SSE, W23의 run 비교(absent≠fixed)와 사람 판정, W19의 분석기 팩 계약(저장소 코드 실행 허가·규칙 문맥·공유 toolchain)과 Go Staticcheck 팩, 그 계약을 따르는 W16(C/C++)·W17(Python)·W18(JS/TS)·W20(Rust)·W21(구조·중복 지표와 비밀정보, 모델 입력 비밀값 선별) 분석 팩, W24의 품질 평가 runner(정답 차단·holdout 등록부)와 다섯 언어 검토 입력을 구현하고 1회차 보류 평가를 실행했다. W25의 개인 모드 start/stop/status, 저장 영역 quota, 같은 시점 백업·복원과 [사용 안내서](docs/48-user-guide.md)로 R1을 마쳤다. 실도구·모델·보고서 검증 범위와 운영 한계는 [R0 파일럿](docs/36-r0-pilot.md), [W15 기록](docs/37-w15-discovery-and-progress.md), [W22 기록](docs/38-w22-schedules-progress-sse.md), [W23 기록](docs/40-w23-history-comparison.md), [분석기 팩 계약](docs/39-r1-analyzer-packs.md)과 팩별 기록(docs/41~45), [W24 평가](docs/46-w24-evaluation.md), [W25 운영](docs/47-w25-packaging-and-operations.md)을 따른다. R1 뒤 검토 팩을 하나로 합쳐 `review-r1` 2.0.0을 기본으로 삼았다([기본 팩](docs/49-review-pack-default.md)). 지침 개정은 기본 팩 하나에 하고 R0 회귀로 검증하며, 다음 지침 개정 작성자는 docs/46 §13과 `fixtures/r1-quality/`를 읽지 않는다. 다음 범위는 R2(W26~)이며 착수는 소유자가 정한다. [구현 순서](docs/17-implementation-plan.md), [역할별 후보 지침](docs/07-llm-and-instructions.md), [화면·상태 기준](docs/12-report-and-ui.md)을 따른다.
+이 파일은 **CODEYE 자체를 구현하는 개발 에이전트**를 위한 지침이다. 대상 프로젝트를 검토하는 런타임 지침은 기본 검토 팩 `prompts/review-r1/`에 있다(`prompts/review-v1/`은 이전 기록 재현용).
 
 ## 착수 순서
 
-1. `docs/00-product-and-scope.md`, `docs/01-requirements.md`, `docs/03-architecture.md`를 읽는다.
-2. `docs/17-implementation-plan.md`에서 다음 미완료 작업을 선택하고 선행 작업을 확인한다.
-3. 관련 세부 명세와 `docs/18-acceptance-and-traceability.md`를 읽고 요구사항 ID·수용 테스트 ID를 연결한다.
+1. [제품 범위와 요구사항](docs/REQUIREMENTS.md), [아키텍처](docs/ARCHITECTURE.md)를 읽는다.
+2. [다음 작업](docs/ROADMAP.md)에서 할 일을 고르고 선행 작업을 확인한다.
+3. 관련 주제 문서와 [수용 시험](docs/TESTING.md)을 읽고 요구사항 ID·수용 테스트 ID를 연결한다.
 4. 현재 저장소와 실행 환경을 조사한다. 실제 도구·버전·권한을 확인하기 전에는 호환성을 주장하지 않는다.
+
+주제 문서: [실행·노드·스케줄링](docs/EXECUTION.md) · [분석기](docs/ANALYZERS.md) · [모델 검토](docs/REVIEW.md) · [보고서·화면](docs/REPORT.md) · [API](docs/API.md) · [운영](docs/OPERATIONS.md) · [보안](docs/SECURITY.md) · [GitHub 연동](docs/GITHUB.md) · [품질 평가](docs/EVALUATION.md) · [결정 기록](docs/DECISIONS.md) · [사용 안내서](docs/GUIDE.md) · [변경 이력](CHANGELOG.md)
 
 ## 고정된 제품 방향
 
 - 독립적인 분석·검토·보고서 플랫폼이다. 기존 CI 결과 수집, Coverity 연결, CI 워크플로 생성은 구현하지 않는다.
+- 사내 전용 제품이 아니다. 개인 사용과 GitHub.com 연동은 일급 대상이다. GHES는 같은 계약을 쓰는 변형이며, 실기 검증이 없다는 이유로 기능을 미루지 않는다.
 - Native 실행은 일급 기능이다. Docker·Podman·Kubernetes가 없으면 동작하지 않는 구조를 만들지 않는다.
 - SSH 원격 실행을 구현하지 않는다. 운영자가 설치한 노드 에이전트가 API로 작업을 받는다.
 - 문서·환경·소스 자동 파악이 기본이다. 프로젝트 소개나 요구사항 문서를 필수 입력으로 바꾸지 않는다.
@@ -31,8 +34,21 @@
 - 도구 진단, LLM 후보, 재현된 결함, 사람의 판단을 분리한다. 모델의 자신감을 측정된 정확도로 표현하지 않는다.
 - schema 변경 시 API·문서·예시·검증 스크립트·테스트를 함께 수정한다. 불일치를 발견하면 결정 기록을 갱신한다.
 - 보조 검증 통과를 플랫폼 구현 통과라고 보고하지 않는다. 향후 CLI와 API는 구현될 때까지 설계 계약으로 표시한다.
-- 문서는 한국어, 코드 식별자·API 필드는 영어를 기본으로 한다. UI 문자열은 다국어 확장 가능하게 분리한다.
+- UI 문자열은 다국어 확장 가능하게 분리한다.
+
+## 문서와 이름 규칙
+
+- 문서는 한국어, 코드 식별자·API 필드는 영어를 기본으로 한다.
+- 문서는 주제별로 둔다. 작업마다 새 기록 문서를 만들지 않고 해당 주제 문서를 고친다. 무엇을 언제 했는지는 [CHANGELOG](CHANGELOG.md)에만 적는다.
+- 작업 단계 번호나 릴리스 약칭을 코드·주석·파일 이름·테스트 이름·CLI 문구·문서에 쓰지 않는다. 기능이 하는 일로 이름을 붙인다. 주석은 코드의 동작과 이유를 설명하고 작업 이력을 적지 않는다.
+- 요구사항(REQ·NFR), 수용 시험(TC), 결정(D·A) ID는 번호와 의미를 유지한다.
 - 문서에 경쟁 제품 비교나 어떤 제품에서 무엇을 가져왔는지 기록하는 장을 추가하지 않는다. 필요한 기술 선택은 CODEYE의 요구와 근거로 설명한다.
+
+## 분석 지침 변경
+
+- 검토 지침 개정은 기본 팩 하나에 하고, 합성 회귀 집합의 실행 한 번으로 검증한다([품질 평가](docs/EVALUATION.md)).
+- 검토 지침을 고치는 작성자는 [보류 평가 결과](docs/EVALUATION-RESULTS.md)와 `fixtures/r1-quality/`를 읽지 않는다. 그 내용을 다른 문서에 요약해 옮기지도 않는다.
+- 실제 모델 호출은 소유자가 정한 예산의 장부를 거친다. 예산이 부족하면 멈추고 보고한다.
 
 ## 완료 정의
 
@@ -42,8 +58,8 @@
 
 기존 파일과 브랜치를 확인해 변경한다. 소유자 요청 없이 저장소 생성·삭제, force-push, 라이선스 선택, 사내 자료 공개를 하지 않는다. 자격증명·실제 내부 주소는 저장소에 넣지 않는다.
 
-## 작업 종료와 다음 단계
+## 작업 종료와 다음 작업
 
 - 착수 전에 전체 로컬·원격 브랜치, `git worktree list`, 관련 PR·CI 및 보조 에이전트 상태를 확인한다. main만 보고 작업의 구현 여부를 판단하지 않는다.
 - 각 작업은 구현·검증·CI 통과·병합 뒤 해당 로컬/원격 작업 브랜치, 워크트리, 보조 에이전트·작업공간, 임시 테스트 산출물을 정리하고 다음 작업을 시작한다.
-- squash 병합은 PR의 병합 상태와 head SHA로 보존 여부를 확인한다. 미병합 코드·사용자 변경·다음 단계에 필요한 자료를 정리 과정에서 잃지 않는다.
+- squash 병합은 PR의 병합 상태와 head SHA로 보존 여부를 확인한다. 미병합 코드·사용자 변경·다음 작업에 필요한 자료를 정리 과정에서 잃지 않는다.

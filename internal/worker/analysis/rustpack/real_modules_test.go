@@ -14,7 +14,7 @@ import (
 
 // A registry dependency served by a vendor directory (source replacement in
 // the repository's own .cargo/config.toml) resolves offline with the scratch
-// CARGO_HOME: the one route to registry dependencies (docs/44 §2.5). cargo
+// CARGO_HOME: the one route to registry dependencies (docs/ANALYZERS.md#오프라인-의존성). cargo
 // still writes its lock and cache files into CARGO_HOME while offline, which
 // is why a read-only operator cache cannot be given to it.
 func TestRealVendoredDependencies(t *testing.T) {
@@ -87,7 +87,7 @@ func TestRealSiblingModules(t *testing.T) {
 	}
 }
 
-// docs/39 §11: no detached child may write after the cleanup was confirmed.
+// docs/ANALYZERS.md#실행-규칙: no detached child may write after the cleanup was confirmed.
 // The scratch tree is identical right after the tasks and half a second
 // later, for cargo check, clippy and a run with a build script and proc macro.
 func TestRealNoWritesAfterCleanup(t *testing.T) {

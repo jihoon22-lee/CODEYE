@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 )
 
-// Pure comparison rules (docs/40 §3). The PostgreSQL and HTTP tests run the
+// Pure comparison rules (docs/GUIDE.md#이전-실행과-비교). The PostgreSQL and HTTP tests run the
 // same rules on published revisions; these cover every branch quickly.
 
 var localSource = json.RawMessage(`{"kind":"local","relative_path":".","source_root_id":"11111111-1111-4111-8111-111111111111"}`)
@@ -244,7 +244,7 @@ func TestOverlayKeepsPublicationAndCurrentApart(t *testing.T) {
 // One review (the latest version) is in effect per fingerprint. In an
 // ambiguous group it applies only to the finding a person named; confirming
 // a second finding of the group moves the confirmation, so the first is a
-// candidate (open) again. docs/40 §9 records this limit.
+// candidate (open) again. docs/REPORT.md#발견-식별-fp2 records this limit.
 func TestAmbiguousGroupHasOneConfirmedFinding(t *testing.T) {
 	now := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
 	a, b := vetFinding("a", "a.go", 5, msg), vetFinding("b", "a.go", 9, msg)

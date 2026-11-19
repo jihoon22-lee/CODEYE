@@ -11,7 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// W21 analyzers of ecosystem "any" (docs/45): lizard complexity, jscpd
+// W21 analyzers of ecosystem "any" (docs/ANALYZERS.md): lizard complexity, jscpd
 // duplication (node script) and gitleaks secrets, all extra depth.
 
 func probeBuilt(ctx context.Context, cfg Config, runner executor.Runner, name string, a prober, err error) built {

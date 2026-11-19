@@ -5,7 +5,7 @@
 // the generic observations envelope (obsdoc). Both execute repository code
 // (build scripts, proc macros, repository Cargo configuration), so every task
 // is pack.Task.RepositoryCode=true and runs only under the node operator's
-// repository-code grant (docs/39 §2.7, docs/44).
+// repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가, docs/ANALYZERS.md).
 package rustpack
 
 import (
@@ -412,7 +412,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		if path.Base(p) == "rust-toolchain.toml" || path.Base(p) == "rust-toolchain" {
 			if underDir(p, mod.Dir) || underDir(mod.Dir, dirOf(p)) {
 				// Real toolchain binaries are named by the operator; the
-				// repository's choice is only recorded (docs/44 §2).
+				// repository's choice is only recorded (docs/ANALYZERS.md#rust-환경).
 				in.ExtraLimitations = append(in.ExtraLimitations, "rust_toolchain_file_ignored")
 			}
 		}
@@ -633,7 +633,7 @@ func readDepInfo(targetDir string, roots []string, mod string, files map[string]
 var lintsSection = regexp.MustCompile(`(?m)^\s*(?:\[(?:workspace\.)?lints\b|(?:workspace\.)?lints\b)`)
 
 // ruleConfig lists the repository files that choose which diagnostics the
-// tool reports (docs/44 §5): Cargo configuration of the module directory and
+// tool reports (docs/ANALYZERS.md#rust-규칙-문맥과-억제): Cargo configuration of the module directory and
 // its ancestors, clippy.toml files (clippy only) and the Cargo.toml files
 // that carry lint tables. known is false when the list is too long or cargo
 // can also read configuration outside the snapshot: the directories above the

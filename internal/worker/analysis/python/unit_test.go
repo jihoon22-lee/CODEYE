@@ -251,7 +251,7 @@ func TestVersionParsers(t *testing.T) {
 	}
 }
 
-// The rule packs are the documented selections (docs/42 §6, §7).
+// The rule packs are the documented selections (docs/ANALYZERS.md#python-규칙-팩).
 func TestRulePackSelections(t *testing.T) {
 	if slices.ContainsFunc(strings.Split(RuffRules, ","), func(r string) bool { return strings.HasPrefix(r, "S") }) || !slices.Contains(RuffSelection, "--isolated") || !slices.Contains(RuffSelection, "--unfixable") {
 		t.Fatalf("ruff %v", RuffSelection)

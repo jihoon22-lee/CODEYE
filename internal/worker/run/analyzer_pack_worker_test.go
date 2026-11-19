@@ -339,7 +339,7 @@ func TestAnalyzerPackWithRealStaticcheck(t *testing.T) {
 	t.Logf("staticcheck %s: %d observations, rules %v", *at[0].Version, len(d.Observations), rules)
 }
 
-// TC-69 (W19, docs/39 §2.8): snapshots without Go through the worker on a
+// TC-69 (W19, docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백): snapshots without Go through the worker on a
 // node with --go only. go vet plans nothing (no required placeholder), so
 // nothing fails for an ecosystem that is not there. A snapshot of an
 // ecosystem without a pack has a visible gap instead: one not-required
@@ -366,7 +366,7 @@ func TestNonGoSnapshotsShowTheGapNotARequiredFailure(t *testing.T) {
 		{"python without a pack", map[string]string{"app.py": "print(1)\n", "pkg/util.py": "X = 1\n", "README.md": "# app\n"},
 			[]string{"pack-gap.python"}, progress.Skipped, []string{"analyzer_pack_missing"}, "static_analysis_gap:python",
 			[]string{"python.none=not_run"}, goOnlyCatalog},
-		// W21 (docs/45): the any-ecosystem analyzers plan for a snapshot
+		// W21 (docs/ANALYZERS.md): the any-ecosystem analyzers plan for a snapshot
 		// with language source and, without their tool flags, add
 		// not-required tool_not_configured tasks and not-run tool rows
 		// before the gap task.

@@ -15,7 +15,7 @@ import (
 // codeye_default, limitation python_version_unknown). It is the newest
 // release every pinned tool accepts as a target, because an old default
 // turns newer syntax into parse errors while a new one only misses
-// version-specific diagnostics (docs/42 §4).
+// version-specific diagnostics (docs/ANALYZERS.md#대상-python-버전).
 const DefaultPythonMinor = 14
 
 // Target version sources (target.properties python_version_source).

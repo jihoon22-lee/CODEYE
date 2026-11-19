@@ -5,7 +5,7 @@
 // unset, CGO_ENABLED=0), and records the result in the generic observations
 // envelope (obsdoc). Staticcheck is a separate engine: it does not run go
 // vet, and the CODEYE rule selection drops the checks whose construct an
-// enabled go vet analyzer reports in the same run (docs/39 §6).
+// enabled go vet analyzer reports in the same run (docs/ANALYZERS.md#탐색-probe).
 package staticcheck
 
 import (
@@ -45,16 +45,16 @@ const (
 // suppressions -show-ignored does not report. Measured with staticcheck
 // 2026.2.2: //lint:ignore U1000 on a declaration and //lint:file-ignore U1000
 // leave no record at all (the unused check treats the object as used), so a
-// U1000 finding that vanishes may have been suppressed (docs/39 §5.1).
+// U1000 finding that vanishes may have been suppressed (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제).
 var UnreportedSuppressionRules = []string{"U1000"}
 
 // Checks is the CODEYE selection passed with -checks (it overrides the
 // repository's staticcheck.conf "checks"; with ST* disabled no other
 // staticcheck.conf option applies). SA* are the correctness, concurrency,
 // testing, dead-code and performance checks, U1000 is unused code. S1*
-// (simplifications) and ST* (style) are not run (docs/06 §7). The excluded SA
+// (simplifications) and ST* (style) are not run (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제). The excluded SA
 // checks report the same construct as an enabled go vet analyzer (measured
-// with staticcheck 2026.2.2 and go1.27.4 on one fixture, docs/39 §6):
+// with staticcheck 2026.2.2 and go1.27.4 on one fixture, docs/ANALYZERS.md#탐색-probe):
 // SA1014 unmarshal, SA1017 sigchanyzer, SA2000 waitgroup, SA2002
 // testinggoroutine, SA4021 appends, SA5009 printf.
 const Checks = "SA*,U1000,-SA1014,-SA1017,-SA2000,-SA2002,-SA4021,-SA5009"
@@ -387,7 +387,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 }
 
 // Selection is the rule-pack part of the staticcheck argv: the checks, the
-// test files and -show-ignored (source suppressions are reported, docs/39
+// test files and -show-ignored (source suppressions are reported, docs/ANALYZERS.md
 // §5.1). Measured with 2026.2.2: -checks replaces staticcheck.conf
 // "checks" (a conf disabling SA1000 and U1000 changes nothing), and with
 // -show-ignored a run whose only problems are ignored ones exits 1.

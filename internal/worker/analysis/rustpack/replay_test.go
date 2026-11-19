@@ -20,7 +20,7 @@ import (
 // Replay tests run in CI without a Rust toolchain: every execution returns the
 // redacted streams and dep-info captured from rustc 1.99.1, cargo 1.99.1 and
 // clippy 0.1.99 on the fixtures in fixtures/w20-rust (see real_test.go
-// capture). Changing a fixture requires a new capture (docs/44 §9).
+// capture). Changing a fixture requires a new capture (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처).
 
 type recorded struct {
 	stdout, stderr []byte
@@ -240,7 +240,7 @@ func TestReplayClippyFindings(t *testing.T) {
 		t.Fatalf("clippy spec %+v", m)
 	}
 	// clippy runs as cargo-clippy, never as `cargo clippy`: a repository alias
-	// cannot shadow the external subcommand (measured, docs/44 §4).
+	// cannot shadow the external subcommand (measured, docs/ANALYZERS.md#rust-실행과-lint-수준).
 	if m.Args[0] != "clippy" {
 		t.Fatalf("args %v", m.Args)
 	}
@@ -255,7 +255,7 @@ func TestReplayClippyFindings(t *testing.T) {
 	}
 }
 
-// The outcome table on captured bytes (docs/44 §7).
+// The outcome table on captured bytes (docs/ANALYZERS.md#rust-결과-판정).
 func TestReplayOutcomeTable(t *testing.T) {
 	for _, tc := range []struct {
 		name, fixture, capture string

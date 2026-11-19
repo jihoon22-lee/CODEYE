@@ -1,4 +1,4 @@
-# W21 중복 지표 팩 jscpd 어댑터 서술. 구현: internal/worker/analysis/jscpd, 근거: docs/45-w21-structure-secrets-pack.md.
+# W21 중복 지표 팩 jscpd 어댑터 서술. 구현: internal/worker/analysis/jscpd, 근거: docs/ANALYZERS.md.
 # jscpd 5.4.3은 --exit-code·threshold 없이 중복이 있든 없든 exit 0이다(측정). 중복 블록(minLines 10, minTokens 100, mode mild)은 지표 관찰이며 결함이 아니다.
 # 설정은 CODEYE가 scratch에 쓴 --config 하나다: 저장소의 .jscpd.json, .config/jscpd.json, package.json "jscpd"는 읽지 않는다(측정).
 # 파일 목록도 그 설정의 path에 절대 경로로 들어가고 output은 scratch다. 1,000,000바이트 초과·UTF-8 아닌 파일, node_modules·vendor·testdata·숨김 디렉터리는 넘기지 않고 따로 센다.

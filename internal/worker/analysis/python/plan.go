@@ -24,7 +24,7 @@ const maxModules = 64
 const ReasonNoAnalyzableFiles = "no_analyzable_python_files"
 
 // moduleManifest reports a file name that makes its directory a Python
-// module, the same names env.discover uses (docs/37): pyproject.toml,
+// module, the same names env.discover uses (docs/ARCHITECTURE.md): pyproject.toml,
 // setup.cfg, .python-version and requirements*.txt.
 func moduleManifest(base string) bool {
 	switch base {
@@ -313,7 +313,7 @@ func planTasks(d pack.Descriptor, job analysis.Job) ([]planned, error) {
 		out = append(out, planned{Module: m, Task: pack.Task{
 			Spec:   analysis.TaskSpec{Key: key, Required: d.Required, Title: title, Stage: domain.StageStaticAnalysis},
 			Module: m.Dir, Patterns: append([]string{}, m.Targets...), FilesInScope: &n,
-			// No Python task runs repository-controlled code (docs/42 §3).
+			// No Python task runs repository-controlled code (docs/ANALYZERS.md#저장소-설정과-interpreter).
 			RepositoryCode: false,
 		}})
 	}

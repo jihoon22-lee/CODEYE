@@ -18,7 +18,7 @@ import (
 // per-role digests and texts, the corpus it selects and every request it
 // sends are pinned to the values captured at 5ff38e6 before the R1 candidate
 // pack was added. A change here is a change of the active pack and needs the
-// promotion evidence of docs/16 §8, not a test update.
+// promotion evidence of docs/EVALUATION.md#지침-개정과-회귀-검증, not a test update.
 func TestReviewV1IsPinned(t *testing.T) {
 	sum := func(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 	packs := map[string][2]string{

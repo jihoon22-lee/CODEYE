@@ -20,7 +20,7 @@ import (
 // needs a compile DB (a translation unit is compiled by the clang frontend
 // with the entry's flags), and it carries the Clang Static Analyzer as its
 // clang-analyzer-* checks; `clang --analyze` is the same engine and is never
-// run (docs/41 §7).
+// run (docs/ANALYZERS.md#cc-엔진-중복).
 const (
 	ClangTidyID             = "cpp.clang_tidy"
 	ClangTidyName           = "clang-tidy"
@@ -44,7 +44,7 @@ const (
 // function (DeprecatedOrUnsafeBufferHandling, mt-unsafe), bugprone checks
 // about naming, style or conversions that fire on most C code without a
 // defect, and the duplicates measured on fixtures/w16-cpp/overlap
-// (TestRealEngineOverlap, docs/41 §7): checks that reported only what the
+// (TestRealEngineOverlap, docs/ANALYZERS.md#cc-엔진-중복): checks that reported only what the
 // baseline cppcheck also reported on the same lines (assert-side-effect,
 // suspicious-memset-usage, core.BitwiseShift, core.StackAddressEscape,
 // cplusplus.InnerPointer) and the Analyzer checks that reported only what a
@@ -540,7 +540,7 @@ func assembleClangTidy(doc obsdoc.Document, in ctInput) obsdoc.Document {
 				continue
 			}
 			if strings.HasPrefix(rule, "clang-diagnostic-") {
-				// Compiler warnings are not selected (docs/41 §4); one that
+				// Compiler warnings are not selected (docs/ANALYZERS.md#cppcheck); one that
 				// still appears (a #pragma) is not a finding.
 				doc.Limitations = append(doc.Limitations, "compiler_warnings_ignored")
 				continue

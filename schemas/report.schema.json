@@ -40,7 +40,7 @@
         "raw_observations": {"type": "integer", "minimum": 0},
         "unresolved_observations": {"type": "integer", "minimum": 0},
         "hidden_findings": {"type": "integer", "minimum": 1, "description": "W23: 게시 시점의 사람 disposition으로 조치 수에서 숨긴 발견 수(0이면 생략). 전체 수와 비교에는 남는다."},
-        "metric_observations": {"type": "integer", "minimum": 1, "description": "W21(docs/45): raw_observations 중 구조 지표(복잡도·중복) 관찰 수(0이면 생략). 결함·finding·조치 수가 아니다."}
+        "metric_observations": {"type": "integer", "minimum": 1, "description": "W21(docs/ANALYZERS.md): raw_observations 중 구조 지표(복잡도·중복) 관찰 수(0이면 생략). 결함·finding·조치 수가 아니다."}
       }
     },
     "coverage": {
@@ -175,7 +175,7 @@
     },
     "ruleContext": {
       "type": "object",
-      "description": "W19(builder 4): 도구 버전 외에 어떤 진단을 낼지 정하는 규칙 문맥(docs/39 §5.1). 비교는 양쪽 문맥이 알려져 있고 같을 때만 사라진 도구 finding을 resolved_observed로 본다. 없는 행은 문맥을 모르는 것이다(go vet 행은 비교가 합성한다).",
+      "description": "W19(builder 4): 도구 버전 외에 어떤 진단을 낼지 정하는 규칙 문맥(docs/ANALYZERS.md#규칙-문맥과-소스-안-억제). 비교는 양쪽 문맥이 알려져 있고 같을 때만 사라진 도구 finding을 resolved_observed로 본다. 없는 행은 문맥을 모르는 것이다(go vet 행은 비교가 합성한다).",
       "additionalProperties": false,
       "required": ["rule_pack", "rule_pack_version", "selection", "repository_config", "source_suppressions", "config"],
       "properties": {
@@ -280,7 +280,7 @@
         "raw_ref": {"$ref": "#/$defs/rawRef"},
         "suggested_fix_count": {"type": "integer", "minimum": 0},
         "suppressed": {"type": "boolean", "description": "W19: 도구가 소스 안 억제로 숨겨졌다고 보고한 진단. finding이 되지 않고 비교의 suppressed_in_source 판단에만 쓰인다. false는 생략한다."},
-        "metric": {"type": "object", "additionalProperties": false, "required": ["name", "value", "threshold", "unit"], "description": "W21(docs/45): 임계값(value >= threshold)에 닿은 구조·중복 측정값. 이 관찰은 finding의 근거가 될 수 없다(observation_ids에 오면 보고서 무효). 진단에는 없다.", "properties": {
+        "metric": {"type": "object", "additionalProperties": false, "required": ["name", "value", "threshold", "unit"], "description": "W21(docs/ANALYZERS.md): 임계값(value >= threshold)에 닿은 구조·중복 측정값. 이 관찰은 finding의 근거가 될 수 없다(observation_ids에 오면 보고서 무효). 진단에는 없다.", "properties": {
           "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
           "value": {"type": "integer", "minimum": 0},
           "threshold": {"type": "integer", "minimum": 0},

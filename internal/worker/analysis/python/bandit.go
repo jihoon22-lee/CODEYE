@@ -34,7 +34,7 @@ const (
 	BanditTestedSeries   = "1.9"
 )
 
-// BanditSkips are the tests CODEYE does not run (docs/42 §7): B101
+// BanditSkips are the tests CODEYE does not run (docs/ANALYZERS.md#python-엔진-중복): B101
 // assert_used (flags every pytest assertion); B105-B107 hardcoded
 // passwords (the message carries the literal value into report text;
 // secrets belong to the redacting secret pack); B613 trojansource (ruff
@@ -144,7 +144,7 @@ func (banditRun) execute(rc *runCtx) {
 		return
 	}
 	// Two runs, as for ruff: the honored run's results are active, the rest
-	// of the --ignore-nosec run is what # nosec hides (docs/42 §8). bandit's
+	// of the --ignore-nosec run is what # nosec hides (docs/ANALYZERS.md#python-소스-안-억제). bandit's
 	// JSON carries the flagged source lines ("code", even with -n 0), so it
 	// goes to a scratch file (files, errors, honored results) and never into
 	// a captured stream; the stream observations come from the code-free

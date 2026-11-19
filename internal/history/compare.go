@@ -1,5 +1,5 @@
 // Package history compares two published report revisions of one project
-// and overlays human dispositions (W23, docs/40). It is pure: the caller
+// and overlays human dispositions (W23, docs/REPORT.md). It is pure: the caller
 // loads the immutable report bodies, the run facts and the review rows. Every
 // state and count is derived from those structured records; no model text is
 // read.
@@ -17,7 +17,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 )
 
-// Comparison states (docs/10 §5).
+// Comparison states (docs/ARCHITECTURE.md#이전-결과-비교).
 const (
 	StateNew              = "new"
 	StatePersisting       = "persisting"
@@ -44,7 +44,7 @@ const (
 	// A model that does not raise a candidate again has not observed that
 	// it was fixed: model candidates are never resolved_observed.
 	ReasonModelAbsence = "model_absence_not_observation"
-	// W19 rule context (docs/39 §5.1, docs/40 §3.3). A tool finding is
+	// W19 rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태). A tool finding is
 	// resolved only when its rule pack and selection and the handling of
 	// repository configuration and in-source suppressions are known and
 	// equal on both sides.
@@ -444,7 +444,7 @@ func unverified(fp string, b report.FingerprintBasis, observed, other Side, vani
 	}
 	ca, knownA := ruleContexts(observed.Report, b.Analyzer)
 	co, knownO := ruleContexts(other.Report, b.Analyzer)
-	// Precedence (docs/40 §3.3): the location was not inspected; the
+	// Precedence (docs/REPORT.md#항목-상태): the location was not inspected; the
 	// observing side reported the diagnostic suppressed; the tool version;
 	// the rule context; unreported suppressions on the current side.
 	switch {

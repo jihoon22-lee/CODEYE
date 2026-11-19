@@ -15,7 +15,7 @@ import (
 )
 
 // w21Missing are the W21 analyzers a node without their tool flags
-// reports, in catalog order (docs/45).
+// reports, in catalog order (docs/ANALYZERS.md).
 var w21Missing = []string{"lizard:not_configured", "jscpd:not_configured", "gitleaks:not_configured"}
 
 func w21Task(key string) bool {

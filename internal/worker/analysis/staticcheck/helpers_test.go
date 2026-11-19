@@ -68,10 +68,10 @@ const (
 	fixTag   = "//go:build special\n\npackage tagged\n"
 	fixType  = "package typeerr\n\nfunc F() int { return \"s\" }\n"
 	fixDep   = "package dep\n\nimport _ \"golang.org/x/text/language\"\n"
-	// overlap: constructs both go vet and staticcheck report (docs/39 §6).
+	// overlap: constructs both go vet and staticcheck report (docs/ANALYZERS.md#탐색-probe).
 	fixOverlap  = "package overlap\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"os/signal\"\n\t\"sync\"\n)\n\nfunc Printf() { fmt.Printf(\"%d\", \"x\") }\n\nfunc Sig() {\n\tc := make(chan os.Signal)\n\tsignal.Notify(c, os.Interrupt)\n}\n\nfunc WG() {\n\tvar wg sync.WaitGroup\n\tgo func() {\n\t\twg.Add(1)\n\t\tdefer wg.Done()\n\t}()\n\twg.Wait()\n}\n\nfunc Appends(x []int) []int {\n\tx = append(x)\n\treturn x\n}\n\nfunc Unmarshal(b []byte) {\n\tvar v struct{ A int }\n\t_ = json.Unmarshal(b, v)\n}\n\nfunc Bools(a int) bool { return a == 1 || a == 1 }\n"
 	fixOverlapT = "package overlap\n\nimport \"testing\"\n\nfunc TestX(t *testing.T) {\n\tgo func() { t.Fatal(\"x\") }()\n}\n"
-	// suppressions (docs/39 §5.1): one active SA1000, one hidden by
+	// suppressions (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제): one active SA1000, one hidden by
 	// //lint:ignore, one by //lint:file-ignore in another file.
 	fixSup     = "package sup\n\nimport \"regexp\"\n\nfunc Active() *regexp.Regexp { return regexp.MustCompile(\"[\") }\n\nfunc Hidden() *regexp.Regexp {\n\t//lint:ignore SA1000 kept for the W19 suppression fixture\n\treturn regexp.MustCompile(\"(\")\n}\n"
 	fixSupFile = "//lint:file-ignore SA1000 whole file kept for the W19 suppression fixture\n\npackage sup\n\nimport \"regexp\"\n\nfunc FileHidden() *regexp.Regexp { return regexp.MustCompile(\"(\") }\n"

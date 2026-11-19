@@ -16,7 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 )
 
-// W16 (docs/41) through the production composition and the real worker:
+// W16 (docs/ANALYZERS.md) through the production composition and the real worker:
 // discovery → the analyzer composite with the C/C++ pack → review roles,
 // artifacts uploaded, report built by the default registry.
 

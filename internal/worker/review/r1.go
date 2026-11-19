@@ -171,7 +171,7 @@ func (s *r1Stage) screenLimitation(lims []string) []string {
 
 // languagesInScope are the source ecosystems whose language guides a role
 // gets: the analyzer packs' one definition of an ecosystem in scope
-// (pack.InScope, docs/39 §2.8) over the job's manifest and scope. Every call
+// (pack.InScope, docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백) over the job's manifest and scope. Every call
 // records the selected guide files in pack_files.
 func languagesInScope(j analysis.Job) []string {
 	return pack.InScope(j.Snapshot.Manifest, j.Scope)

@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// W17 (docs/42 §5): mypy and pyright are alternative type checkers. One of
+// W17 (docs/ANALYZERS.md#타입-검사기-선택): mypy and pyright are alternative type checkers. One of
 // them runs when its path is given; both run only with the explicit
 // --python-both-type-checkers choice, which itself needs both paths.
 func TestPythonTypeCheckerChoice(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 
 // ErrUnsupported: W25 personal process management is Linux-only. Windows and
 // other systems get this explicit error instead of a guessed implementation
-// (docs/47 §1).
+// (docs/OPERATIONS.md#지원-범위).
 var ErrUnsupported = errors.New("codeye start/stop/status manage processes on Linux only (W25); on this system run codeye serve and codeye agent directly")
 
 // Supported reports whether personal process management works here.

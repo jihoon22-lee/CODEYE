@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// The Python pack (W17, docs/42): ruff is the baseline; mypy and pyright are
+// The Python pack (W17, docs/ANALYZERS.md): ruff is the baseline; mypy and pyright are
 // alternative type checkers (both run only when the operator configured both,
 // which the agent accepts only with --python-both-type-checkers); bandit is
 // security depth.

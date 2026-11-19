@@ -211,7 +211,7 @@ func TestReplayESLintDamagedAndVersions(t *testing.T) {
 	}
 }
 
-// docs/43 §3.2: a result for a file outside the snapshot is dropped without
+// docs/ANALYZERS.md#저장소-코드와-tsconfig-검사: a result for a file outside the snapshot is dropped without
 // echoing its path or messages, and recorded as a limitation.
 func TestReplayESLintHostResultDropped(t *testing.T) {
 	host := `{"filePath":"/etc/host-secret.js","messages":[{"ruleId":"no-unused-vars","severity":2,"message":"MARKER-host-text","line":1,"column":1}],` +

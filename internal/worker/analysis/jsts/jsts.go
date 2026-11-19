@@ -1,4 +1,4 @@
-// Package jsts is the shared part of the W18 JS/TS pack (docs/43): module
+// Package jsts is the shared part of the W18 JS/TS pack (docs/ANALYZERS.md): module
 // planning from the W15 discovery modules, the operator's Node script tools
 // run through the shared node toolchain, snapshot path and column mapping,
 // the tsconfig chain read as data, and the dependency-gap code list the tsc
@@ -73,7 +73,7 @@ func InScope(p string, scope domain.Scope) bool {
 
 // Module is one planned JS/TS module: a package.json directory found by the
 // W15 module discovery, or the implicit root that holds JS/TS sources outside
-// every package.json module (docs/39 §2.8: a pack shows the source it cannot
+// every package.json module (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백: a pack shows the source it cannot
 // place instead of dropping it).
 type Module struct {
 	// Dir is the snapshot-relative module directory ("." = root).

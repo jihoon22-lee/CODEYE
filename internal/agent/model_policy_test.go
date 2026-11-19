@@ -25,7 +25,7 @@ func TestModelSourceGrantIsSeparateFromAcquisition(t *testing.T) {
 	}
 }
 
-// The repository-code grant (docs/39 §2.7) mirrors the model-source grant:
+// The repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가) mirrors the model-source grant:
 // it is node configuration per local source root, separate from acquisition
 // and from the model grant, and git sources never get it.
 func TestRepositoryCodeGrantIsSeparateFromAcquisition(t *testing.T) {

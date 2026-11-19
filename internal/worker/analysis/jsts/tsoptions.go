@@ -11,7 +11,7 @@ import (
 	"unicode"
 )
 
-// A repository tsconfig chain is untrusted input (docs/43 §3.2). Options
+// A repository tsconfig chain is untrusted input (docs/ANALYZERS.md#저장소-코드와-tsconfig-검사). Options
 // that name host paths or make tsc write are checked before any tool runs;
 // the adapters refuse the task and record only option names.
 

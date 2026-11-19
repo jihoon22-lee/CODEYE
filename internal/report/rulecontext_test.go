@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 )
 
-// W19 rule context (docs/39 §5.1): the staticcheck row records the
+// W19 rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제): the staticcheck row records the
 // envelope's rule pack, the go vet row the synthesized context; a
 // diagnostic staticcheck reported as suppressed in source stays an
 // observation and never becomes a finding.

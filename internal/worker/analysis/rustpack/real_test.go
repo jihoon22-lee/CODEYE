@@ -19,7 +19,7 @@ import (
 // Real-tool tests run only with CODEYE_TEST_CARGO / CODEYE_TEST_CLIPPY (CI has
 // no Rust toolchain). CODEYE_W20_CAPTURE=DIR also writes the redacted streams
 // and dep-info of each case to DIR, which is how testdata/ was captured
-// (docs/44 §9). The replay tests run the same fixtures in CI on those bytes.
+// (docs/ANALYZERS.md#실제-도구-시험과-출력-캡처). The replay tests run the same fixtures in CI on those bytes.
 
 // realRun runs one task of a fixture with the real toolchain under the grant
 // and returns everything a test checks.
@@ -218,7 +218,7 @@ func TestRealClippyFindings(t *testing.T) {
 	}
 }
 
-// docs/06 §1: clippy also prints rustc's own diagnostics. They are exactly the
+// docs/ANALYZERS.md#선정-원칙: clippy also prints rustc's own diagnostics. They are exactly the
 // check task's observations, so keeping only clippy:: lints in the clippy task
 // removes duplicates and nothing else.
 func TestRealClippyRustcOverlapIsTheCheckTask(t *testing.T) {
@@ -263,7 +263,7 @@ func TestRealClippyRustcOverlapIsTheCheckTask(t *testing.T) {
 	}
 }
 
-// docs/39 §5.1: source suppressions are honored. #[allow] hides the diagnostic
+// docs/ANALYZERS.md#규칙-문맥과-소스-안-억제: source suppressions are honored. #[allow] hides the diagnostic
 // and no flag reports it as suppressed: --force-warn prints it as an ordinary
 // warning with no marker, so a vanished finding cannot be told fixed from
 // allowed (measured with the pinned rustc).

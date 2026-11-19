@@ -61,7 +61,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// cannot select it. review-r1 is the W15 candidate, not the default.
 	reviewPack := fs.String("review-pack", review.PackR1, "")
 	fs.Var(&modelRoots, "model-source-root", "")
-	// The repository-code grant (docs/39 §2.7) is a node operator setting
+	// The repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가) is a node operator setting
 	// per local source root, like the model-source grant; nothing in a run
 	// or its snapshot can raise it.
 	fs.Var(&codeRoots, "repo-code-source-root", "")
@@ -77,18 +77,18 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	goExe := fs.String("go", "", "")
 	goModCache := fs.String("go-mod-cache", "", "")
 	// One flag per analyzer tool of this build (--staticcheck PATH) and per
-	// shared toolchain (--node PATH, docs/39 §2.4). Both travel in the hello's
+	// shared toolchain (--node PATH, docs/ANALYZERS.md#도구-경로). Both travel in the hello's
 	// analyzer_tools map; toolchain names are reserved there.
 	toolFlags := map[string]*string{}
 	for _, tool := range append(builtin.ToolFlags(), builtin.ToolchainFlags()...) {
 		toolFlags[tool] = fs.String(tool, "", "")
 	}
-	// mypy and pyright are alternative Python type checkers (docs/42 §5):
+	// mypy and pyright are alternative Python type checkers (docs/ANALYZERS.md#타입-검사기-선택):
 	// configuring both runs both only when the operator says so.
 	bothTypeCheckers := fs.Bool("python-both-type-checkers", false, "")
 	fs.Var(&roots, "source-root", "")
 	fs.Var(&gitHosts, "git-host", "")
-	// W25 storage quota (docs/47 §4): AREA=BYTES for snapshot, workspace,
+	// W25 storage quota (docs/OPERATIONS.md#저장-영역과-상한): AREA=BYTES for snapshot, workspace,
 	// cache and logs; areas at their limit refuse new claims for this node.
 	fs.Var(&storageQuota, "storage-quota", "")
 	storageLogDir := fs.String("storage-log-dir", "", "")

@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// The example is a real staticcheck 2026.2.2 envelope (docs/39 §8).
+// The example is a real staticcheck 2026.2.2 envelope (docs/ANALYZERS.md#staticcheck).
 func example(t *testing.T) map[string]any {
 	t.Helper()
 	b, err := os.ReadFile("../../../../examples/observations-staticcheck.json")
@@ -142,7 +142,7 @@ func TestValidateRejects(t *testing.T) {
 		"processed paths unsorted": func(d map[string]any) {
 			d["coverage"].(map[string]any)["processed_paths"] = []any{"find/find.go", "clean/c.go"}
 		},
-		// Rule context (docs/39 §5.1).
+		// Rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제).
 		"config files with overridden config": func(d map[string]any) {
 			d["rule_pack"].(map[string]any)["config_files"] = []any{map[string]any{"path": "clean/c.go", "sha256": strings.Repeat("b", 64)}}
 		},
@@ -226,7 +226,7 @@ func TestValidateNotRunAndFailed(t *testing.T) {
 	}
 }
 
-// The rule context a pack may record (docs/39 §5.1): honored repository
+// The rule context a pack may record (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제): honored repository
 // configuration with the files read (bound to the manifest) or null when it
 // cannot enumerate them, and suppressed observations under reported
 // suppressions, which are not findings.
@@ -258,7 +258,7 @@ func TestRuleContextAccepted(t *testing.T) {
 	}
 }
 
-// W21 (docs/45): a metric observation is a structure measurement over its
+// W21 (docs/ANALYZERS.md): a metric observation is a structure measurement over its
 // threshold. It is never active (no finding, never success_with_findings)
 // and its fields are bounded; older envelopes without metric decode as
 // before.

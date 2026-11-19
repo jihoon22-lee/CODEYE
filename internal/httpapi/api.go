@@ -404,7 +404,7 @@ type projectView struct {
 	Activity       activityView    `json:"activity"`
 }
 
-// stageView is one display stage (docs/37 §2, §4). Planned is null until the
+// stageView is one display stage (docs/ARCHITECTURE.md#표시-단계와-task-단계). Planned is null until the
 // plan is fixed and always null for source/report.
 type stageView struct {
 	Key        string         `json:"key"`

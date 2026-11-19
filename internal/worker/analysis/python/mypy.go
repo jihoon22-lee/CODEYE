@@ -19,7 +19,7 @@ import (
 )
 
 // mypy identity: an extra-depth type checker, the alternative of pyright
-// (docs/42 §2.2).
+// (docs/ANALYZERS.md#python-팩).
 const (
 	MypyID             = "python.mypy"
 	MypyName           = "mypy"
@@ -37,7 +37,7 @@ const (
 
 // MypyDisabledCodes are the error codes that report the same construct as
 // a selected ruff rule on the same line (measured with mypy 2.4.1 and ruff
-// 0.16.3 on one fixture, docs/42 §7): name-defined F821, no-redef F811,
+// 0.16.3 on one fixture, docs/ANALYZERS.md#python-엔진-중복): name-defined F821, no-redef F811,
 // str-format F50x/F52x, await-not-async PLE1142.
 var MypyDisabledCodes = []string{"await-not-async", "name-defined", "no-redef", "str-format"}
 

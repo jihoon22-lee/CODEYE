@@ -86,7 +86,7 @@ func Identity() (id, version string, err error) {
 }
 
 // For returns the instructions of one R1 role for a snapshot whose in-scope
-// source ecosystems are ecosystems (as pack.InScope returns them; docs/39
+// source ecosystems are ecosystems (as pack.InScope returns them; docs/ANALYZERS.md
 // §2.8). Only the guides of those ecosystems are selected, after the core,
 // role and domain files in ascending ecosystem order; an ecosystem without a
 // guide adds nothing, so a snapshot with no supported ecosystem in scope gets

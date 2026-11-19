@@ -1,7 +1,7 @@
 package domain
 
 // Stage is the user-facing pipeline stage a planned task belongs to
-// (docs/37 §2). The worker sets it at plan time; the server validates and
+// (docs/ARCHITECTURE.md#표시-단계와-task-단계). The worker sets it at plan time; the server validates and
 // stores it once. Tasks recorded before W15 have no stage and are never
 // assigned one by inference.
 type Stage string
@@ -31,7 +31,7 @@ func (s Stage) Valid() bool {
 }
 
 // Controlled skip reasons for a planned role that had nothing to review
-// (docs/37 §2). They are stored in the task reason with status skipped_policy
+// (docs/ARCHITECTURE.md#표시-단계와-task-단계). They are stored in the task reason with status skipped_policy
 // and are never counted as a successful model review.
 const (
 	ReasonModelSourceNotApproved = "model_source_not_approved"
@@ -41,7 +41,7 @@ const (
 )
 
 // NothingToReview reports whether reason marks a planned role skipped because
-// its input was empty (docs/37 §2). Such a skip is never a successful model
+// its input was empty (docs/ARCHITECTURE.md#표시-단계와-task-단계). Such a skip is never a successful model
 // review, but it does not make an otherwise successful stage partial. Policy
 // exclusion and unreadable inputs are not in this set.
 func NothingToReview(reason string) bool {

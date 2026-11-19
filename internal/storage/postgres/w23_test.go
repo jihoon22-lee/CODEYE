@@ -13,7 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 )
 
-// W23 comparison inputs and finding reviews over real PostgreSQL (docs/40).
+// W23 comparison inputs and finding reviews over real PostgreSQL (docs/REPORT.md).
 // Report bodies here are minimal structured reports (the real builder path
 // is exercised by the HTTP tests). Skips (NOT executed) without
 // CODEYE_TEST_DATABASE_URL.

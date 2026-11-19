@@ -1,6 +1,6 @@
 package domain
 
-// RunStatus is the run lifecycle state (docs/04 §2).
+// RunStatus is the run lifecycle state (docs/ARCHITECTURE.md#상태-전이).
 type RunStatus string
 
 const (
@@ -59,7 +59,7 @@ func CanTransitionRun(from, to RunStatus) bool {
 	return canTransition(runTransitions, from, to)
 }
 
-// TaskStatus is the task state (docs/04 §2).
+// TaskStatus is the task state (docs/ARCHITECTURE.md#상태-전이).
 type TaskStatus string
 
 const (

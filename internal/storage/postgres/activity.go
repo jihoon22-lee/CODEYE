@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/progress"
 )
 
-// W15 stage display (docs/37 §2-4). Both the project list/detail and the run
+// W15 stage display (docs/ARCHITECTURE.md#표시-단계와-task-단계). Both the project list/detail and the run
 // detail load their facts with loadRunStages (one statement, so one consistent
 // read per call) and compute them with progress.Compute.
 
@@ -127,7 +127,7 @@ func loadRunStages(ctx context.Context, tx pgx.Tx, ids []string) (map[string]Run
 	return out, rows.Err()
 }
 
-// Activity is a project's progress summary (docs/37 §3-4). Run is nil when the
+// Activity is a project's progress summary (docs/ARCHITECTURE.md#대표-실행-선택). Run is nil when the
 // project has no run; then Stages is nil too.
 type Activity struct {
 	Run             *ActivityRun

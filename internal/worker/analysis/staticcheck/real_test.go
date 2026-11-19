@@ -20,7 +20,7 @@ import (
 // Real staticcheck tests run only with CODEYE_TEST_STATICCHECK (CI has no
 // staticcheck). CODEYE_W19_CAPTURE=DIR also writes the redacted
 // staticcheck.check streams and exit code of each case to DIR, which is how
-// testdata/*.stdout|stderr|exit were captured (docs/39 §8).
+// testdata/*.stdout|stderr|exit were captured (docs/ANALYZERS.md#staticcheck).
 
 func capture(t *testing.T, name string, res analysis.TaskResult) {
 	t.Helper()
@@ -125,7 +125,7 @@ func TestRealStaticcheckFindingsExitOne(t *testing.T) {
 	}
 }
 
-// TC-104 (docs/39 §5.1): with -show-ignored staticcheck reports the
+// TC-104 (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제): with -show-ignored staticcheck reports the
 // problems //lint:ignore and //lint:file-ignore hide, with severity
 // "ignored". They are kept as suppressed observations (source_suppressions
 // reported) and are not findings: a package whose every problem is
@@ -334,7 +334,7 @@ func TestRealStaticcheckCancelAndTimeout(t *testing.T) {
 	}
 }
 
-// docs/39 §6: the excluded staticcheck checks are the ones go vet reports in
+// docs/ANALYZERS.md#탐색-probe: the excluded staticcheck checks are the ones go vet reports in
 // the same run; SA4000 (identical operands) stays on as a broader check, so
 // it and go vet's bools both report line 37 as separate observations.
 func TestRealStaticcheckVetOverlapExcluded(t *testing.T) {

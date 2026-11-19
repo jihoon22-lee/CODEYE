@@ -134,7 +134,7 @@ func ValidateReport(r Report) error {
 			if suppressed[id] {
 				return invalidf("finding %s is built from a suppressed observation", f.ID)
 			}
-			// A structure metric is never defect evidence (W21, docs/45).
+			// A structure metric is never defect evidence (W21, docs/ANALYZERS.md).
 			if metrics[id] {
 				return invalidf("finding %s is built from a metric observation", f.ID)
 			}
@@ -285,7 +285,7 @@ func Digest(canonical []byte) string { return domain.Digest(canonical) }
 // report. includeCode=false removes every raw tool message and replaces all
 // free text of findings that is not a fixed builder template, so neither code
 // nor tool/model text reaches the code-free export.
-// validateRuleContext checks a tool row's rule context (docs/39 §5.1).
+// validateRuleContext checks a tool row's rule context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제).
 // The configuration paths and digest exist only in the full export.
 func validateRuleContext(c *RuleContext, includeCode bool) error {
 	if c == nil {
