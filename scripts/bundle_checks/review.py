@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
+import json
 from pathlib import PurePosixPath
 
-from .common import ROOT, ensure, within_root, yaml_file
+from .common import ROOT, ensure, expect_invalid, within_root, yaml_file
 
 
 def check_environment_example(doc: dict) -> None:
@@ -156,3 +158,109 @@ def check_role_pack_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> 
     upstream = docs["investigate"].get("candidates", []) + docs["interpret"].get("candidates", [])
     ensure(verify.get("candidates", []) == upstream, "verify candidates differ from the accepted upstream candidates")
     ensure([c["id"] for c in verify.get("candidates", [])] == [v["candidate_id"] for v in verify.get("verifications", [])], "review-r1 verification coverage")
+
+
+# The slice examples (docs/REVIEW.md#모듈-단위-검토-분할): the review.scope
+# artifact and the first slice's records of fixtures/modules/coverage/input,
+# written by TestSliceExampleRecords. That snapshot has Go, JavaScript and
+# Python source.
+SLICE_EXAMPLE_LANGUAGES = ("go", "javascript", "python")
+SLICE_EXAMPLE_FILES = ("scope", "investigate.s001", "verify.s001")
+
+
+def slice_examples() -> dict:
+    return {name: (ROOT / "examples/review-r1/slices" / (name + ".json")).read_text(encoding="utf-8") for name in SLICE_EXAMPLE_FILES}
+
+
+def check_scope_artifact(scope: dict) -> None:
+    """The scope artifact rules the schema cannot express: blobs of the
+    fixture, every eligible file in exactly one place, covered_by_overview
+    exactly for the files the overview sent, per-module counts and slice
+    keys in plan order."""
+    root = ROOT / "fixtures/modules/coverage/input"
+    offered = scope["overview"]["offered"]
+    ensure(offered == sorted(offered), "scope offered files are not sorted")
+    placed = {}
+    files = list(scope["overview"]["files"]) + [f for s in scope["slices"] for f in s["files"]]
+    for f in files:
+        ensure(f["path"] not in placed, "scope file in two places: " + f["path"])
+        placed[f["path"]] = f
+        ensure(hashlib.sha256((root / f["path"]).read_bytes()).hexdigest() == f["sha256"], "scope file blob: " + f["path"])
+        ensure((f["state"] == "covered_by_overview") == (f["path"] in offered), "scope covered_by_overview differs from offered: " + f["path"])
+        ensure(f["planned_bytes"] <= f["bound_bytes"], "scope planned bytes above the bound: " + f["path"])
+    ensure(set(offered) <= set(placed), "scope offered file outside the plan")
+    for m in scope["modules"]:
+        held = sum(1 for f in files if f["module"] == m["id"])
+        ensure(held + m["files_not_planned"] == m["files_eligible"], "scope module count: " + m["id"])
+    for i, s in enumerate(scope["slices"]):
+        key = f"s{i + 1:03d}"
+        ensure(s["key"] == key and s["investigate_task"] == "review.investigate." + key and s["verify_task"] == "review.verify." + key, "scope slice keys out of order")
+        ensure({f["module"] for f in s["files"]} <= set(s["modules"]), "scope slice file outside its modules: " + key)
+
+
+def check_slice_examples(raw: dict, validators: dict) -> int:
+    """Validate and bind the slice examples; returns the negative cases run."""
+
+    record_v, scope_v = validators["review-record.schema.json"], validators["review-scope.schema.json"]
+    docs = {name: json.loads(text) for name, text in raw.items()}
+    pack, roles = role_pack(SLICE_EXAMPLE_LANGUAGES)
+
+    def check(docs: dict) -> None:
+        scope = docs["scope"]
+        scope_v.validate(scope)
+        check_scope_artifact(scope)
+        root = ROOT / "fixtures/modules/coverage/input"
+        entry = scope["slices"][0]
+        for name in ("investigate.s001", "verify.s001"):
+            doc = docs[name]
+            record_v.validate(doc)
+            stage = name.split(".")[0]
+            ensure(doc["schema_version"] == "0.3" and doc["stage"] == stage and doc["slice"] == {"key": entry["key"], "modules": entry["modules"]}, "slice record identity: " + name)
+            ensure(all(doc[k] == scope[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id", "pack")), "slice record of another attempt: " + name)
+            for e in doc["evidence"]:
+                body = (root / e["path"]).read_bytes()
+                sha = hashlib.sha256(body).hexdigest()
+                binding = "\0".join([doc["snapshot_manifest_digest"], e["path"], sha, f'{e["start_line"]}:{e["end_line"]}'])
+                ensure(sha == e["sha256"] and e["id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24], "slice evidence blob or ID: " + e["path"])
+            for call in doc["calls"]:
+                ensure(call["role"] == stage and call["pack_files"] == roles[stage]["files"] and call["pack_sha256"] == roles[stage]["digest"], "slice call pack digest: " + name)
+            by_source = {u["source"]: u for u in doc["upstream"]}
+            ensure(by_source.get("review.scope", {}).get("sha256") == hashlib.sha256(compact_json(raw["scope"])).hexdigest(), "slice upstream scope digest: " + name)
+        planned = {f["path"] for f in entry["files"] if f["state"] == "planned"}
+        sent = {e["path"] for e in docs["investigate.s001"]["evidence"] if e.get("origin") == "context" and e["kind"] in ("code", "test")}
+        ensure(sent and sent <= planned, "slice sent files outside its planned files")
+        verify = docs["verify.s001"]
+        inv = {u["source"]: u for u in verify["upstream"]}.get("review.investigate.s001", {})
+        ensure(inv.get("sha256") == hashlib.sha256(compact_json(raw["investigate.s001"])).hexdigest(), "slice verify upstream investigate digest")
+        ensure(verify["candidates"] == docs["investigate.s001"]["candidates"], "slice verify candidates differ from its investigate candidates")
+
+    check(docs)
+
+    def case(name: str, edit) -> tuple[str, dict]:
+        d = copy.deepcopy(docs)
+        edit(d)
+        return name, d
+
+    def first_file(d):
+        return d["scope"]["slices"][1]["files"][1]
+
+    negative = [
+        case("slice record without slice", lambda d: d["investigate.s001"].pop("slice")),
+        case("0.2 record with a slice", lambda d: d["investigate.s001"].update(schema_version="0.2")),
+        case("slice key outside s001..s032", lambda d: d["verify.s001"]["slice"].update(key="s033")),
+        case("slice of nine modules", lambda d: d["investigate.s001"]["slice"].update(modules=[f"go:m{i}" for i in range(9)])),
+        case("slice verify given an interpret candidate", lambda d: d["verify.s001"]["candidates"][0].update(origin="interpret")),
+        case("slice interpret record", lambda d: d["investigate.s001"].update(stage="interpret")),
+        case("whole-run record bound to a slice", lambda d: [d["investigate.s001"].pop("slice"), d["investigate.s001"].update(schema_version="0.2")]),
+        case("scope file in two slices", lambda d: d["scope"]["slices"][2]["files"].append(dict(first_file(d)))),
+        case("scope offered not sorted", lambda d: d["scope"]["overview"]["offered"].reverse()),
+        case("scope covered file the overview did not send", lambda d: first_file(d).update(state="covered_by_overview")),
+        case("scope state outside the enum", lambda d: first_file(d).update(state="verified")),
+        case("scope not_planned miscount", lambda d: d["scope"]["modules"][0].update(files_not_planned=1)),
+        case("scope unscreened", lambda d: d["scope"].update(screen="unscreened")),
+        case("scope ceiling above 207", lambda d: d["scope"]["budget"].update(max_calls=208)),
+        case("scope slice out of order", lambda d: d["scope"]["slices"].reverse()),
+    ]
+    for name, d in negative:
+        expect_invalid(name, check, d)
+    return len(negative)

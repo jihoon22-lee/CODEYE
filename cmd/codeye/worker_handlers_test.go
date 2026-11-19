@@ -81,6 +81,11 @@ func TestWorkerHandlersSelectReviewPack(t *testing.T) {
 	if _, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewPack: "review-r2"}, &executor.Executor{}); err == nil {
 		t.Fatal("unknown review pack accepted")
 	}
+	for _, n := range []int{14, 208, -1} {
+		if _, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewMaxCalls: n}, &executor.Executor{}); err == nil {
+			t.Fatalf("call ceiling %d accepted", n)
+		}
+	}
 	hs, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewPack: "review-r1"}, &executor.Executor{})
 	if err != nil || len(hs) != 1 {
 		t.Fatal(err)

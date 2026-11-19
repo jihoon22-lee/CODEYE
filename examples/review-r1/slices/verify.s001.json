@@ -1,0 +1,145 @@
+{
+  "schema_version": "0.3",
+  "pack": {
+    "id": "review-r1",
+    "version": "2.0.0"
+  },
+  "snapshot_manifest_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+  "run_id": "0195f3a0-0000-7000-8000-000000000041",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000042",
+  "stage": "verify",
+  "slice": {
+    "key": "s001",
+    "modules": [
+      "go:api",
+      "javascript:web",
+      "python:worker"
+    ]
+  },
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "review.documents",
+      "state": "accepted",
+      "sha256": "c02f7cf324cfa2e4a28841f2e94b55118efe5bb31dc8d3493812796e4f6e6dc2"
+    },
+    {
+      "source": "review.investigate.s001",
+      "state": "accepted",
+      "sha256": "40cefe66c134b829f72dc7ba6e9185e84fc52a0cfa230f0095b22a25924ef9a4"
+    },
+    {
+      "source": "review.scope",
+      "state": "accepted",
+      "sha256": "3768c597c67d07c0f355cec7ee8cc17dd5f70fe9935a6c8a394c3c534f87bc35"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_2236532578dae124cc0404a5",
+      "path": "api/handler_test.go",
+      "sha256": "ca753b233587c9ff67892275eeac14362812d2b12209298a73bd67464a0dadf6",
+      "start_line": 1,
+      "end_line": 14,
+      "kind": "test",
+      "origin": "context"
+    },
+    {
+      "id": "ev_ba864736a08d6b38355965e6",
+      "path": "web/src/client.test.ts",
+      "sha256": "4b5b43662ca67931839c33e50b342dfef70b3bf86f2b32e2b30beecfb307c077",
+      "start_line": 1,
+      "end_line": 5,
+      "kind": "test",
+      "origin": "context"
+    },
+    {
+      "id": "ev_d9605f1e29ebc405033ad49a",
+      "path": "worker/tests/test_jobs.py",
+      "sha256": "2a7781c4489492f2d2d0994b5625851427affcdab579ef6f45bc22d4e304f8ee",
+      "start_line": 1,
+      "end_line": 5,
+      "kind": "test",
+      "origin": "context"
+    },
+    {
+      "id": "ev_5f0636ffbbd0e40e3a12dbe6",
+      "path": "README.md",
+      "sha256": "80743a2e9629fa73cd272759bddaa6e2afc0cced627ecb524371a839e853f448",
+      "start_line": 1,
+      "end_line": 4,
+      "kind": "document"
+    }
+  ],
+  "observations": [],
+  "candidates": [
+    {
+      "id": "investigate_1",
+      "title": "설정 주소 검증 누락",
+      "condition": "주소가 비어 있는 경우",
+      "impact": "서비스가 잘못된 주소로 시작한다.",
+      "improvement": "주소를 검사한다.",
+      "counterpoint": "기본값이 항상 채워질 수 있다.",
+      "evidence_ids": [
+        "ev_2236532578dae124cc0404a5"
+      ],
+      "origin": "investigate"
+    }
+  ],
+  "verifications": [
+    {
+      "candidate_id": "investigate_1",
+      "verdict": "inconclusive",
+      "category": "error_handling",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "valid_conditions": [],
+      "invalid_conditions": [],
+      "supporting_evidence_ids": [
+        "ev_2236532578dae124cc0404a5"
+      ],
+      "counterevidence_ids": [],
+      "unresolved_assumptions": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "next_verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ],
+      "limitations": []
+    }
+  ],
+  "limitations": [
+    "caller_expansion_go_only",
+    "caller_expansion_package_functions_only",
+    "no_callers_found"
+  ],
+  "calls": [
+    {
+      "role": "verify",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review-r1",
+      "pack_version": "2.0.0",
+      "pack_sha256": "20a357b9a050beb03ae3eba175c14e95880c54374c86caf17a4f8872ed00b194",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "languages/go.md",
+        "languages/javascript.md",
+        "languages/python.md",
+        "pack.yaml",
+        "verify.md"
+      ],
+      "request_sha256": "18a51b96bb85851855d72f227c29c72957814e13bb55c4a064d13526539f1369",
+      "request_bytes": 15827,
+      "usage": {
+        "input": 2258,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

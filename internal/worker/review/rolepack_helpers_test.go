@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -263,11 +264,24 @@ func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.R
 	}
 }
 
+// wholeRunRole reports one of the five whole-run role tasks (not
+// review.scope or a slice task).
+func wholeRunRole(key string) bool {
+	role, ok := strings.CutPrefix(key, "review.")
+	return ok && slices.Contains(record.RoleStages, role)
+}
+
 // runRole plans and runs the deep-review composition (discovery → static →
 // role pack) with an injected node observation.
 func runRole(t *testing.T, j analysis.Job, static analysis.Handler, caller Caller, goVersion string) ([]analysis.TaskSpec, map[string]analysis.TaskResult) {
 	t.Helper()
-	h, err := discovery.Wrap(RoleHandler{Static: static, Caller: caller}, discovery.Config{Observer: discovery.StaticObserver{Versions: map[string]string{"go": goVersion}}})
+	return runRoleWith(t, j, RoleHandler{Static: static, Caller: caller}, goVersion)
+}
+
+// runRoleWith is runRole with a configured role handler (call ceiling).
+func runRoleWith(t *testing.T, j analysis.Job, rh RoleHandler, goVersion string) ([]analysis.TaskSpec, map[string]analysis.TaskResult) {
+	t.Helper()
+	h, err := discovery.Wrap(rh, discovery.Config{Observer: discovery.StaticObserver{Versions: map[string]string{"go": goVersion}}})
 	if err != nil {
 		t.Fatal(err)
 	}

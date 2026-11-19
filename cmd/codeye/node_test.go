@@ -29,6 +29,10 @@ func TestRunNodeDispatchAndUsage(t *testing.T) {
 		// The review pack is review-v1 or review-r1; nothing else, no fallback.
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-pack", "review-r2"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-pack", ""},
+		// The call ceiling is 15..207: never below the whole-run roles' worst case.
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "14"},
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "208"},
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "0"},
 	}
 	for _, args := range cases {
 		var stderr bytes.Buffer

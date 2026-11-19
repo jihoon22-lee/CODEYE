@@ -369,6 +369,9 @@ func agentArgv(cfg *personal.Config, layout personal.Layout, roots []rootGrant, 
 		if m.ReviewPack != "" {
 			args = append(args, "--review-pack", m.ReviewPack)
 		}
+		if m.ReviewMaxCalls != 0 {
+			args = append(args, "--review-max-calls", strconv.Itoa(m.ReviewMaxCalls))
+		}
 	}
 	limits := cfg.Quota.NodeLimits()
 	areas := make([]string, 0, len(limits))

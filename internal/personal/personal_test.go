@@ -49,6 +49,8 @@ func TestParseDefaultsAndStrictness(t *testing.T) {
 		"negative quota":     cfg(state, `,"quota":{"logs_bytes":-1}`),
 		"model review alone": strings.Replace(cfg(state, ""), `"label":"work"`, `"label":"work","model_review":true`, 1),
 		"short cancel":       cfg(state, `,"stop":{"cancel_timeout_seconds":5}`),
+		"low call ceiling":   cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":14}}`),
+		"high call ceiling":  cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":208}}`),
 		"backup in state":    cfg(state, `,"backup_dir":`+q(filepath.Join(state, "b"))),
 		"trailing":           cfg(state, "") + "{}",
 	} {

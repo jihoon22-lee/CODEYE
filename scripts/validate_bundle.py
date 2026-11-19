@@ -26,7 +26,7 @@ except ImportError as exc:
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
 from bundle_checks.report import check_analyzer, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_environment_example, check_review_example, check_role_pack_examples, role_pack
+from bundle_checks.review import ROLE_STAGES, check_environment_example, check_review_example, check_role_pack_examples, check_slice_examples, role_pack, slice_examples
 from bundle_checks.api import api_validator, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_stage_enums, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_source_names, heading_anchors
 
@@ -115,6 +115,8 @@ def main() -> None:
     for doc in role_docs.values():
         review_validator.validate(doc)
     check_role_pack_examples(role_docs, role_raw, role_pack_doc, role_files)
+    slice_negatives = check_slice_examples(slice_examples(), validators)
+    print(f"PASS: review slices (scope artifact 0.1 and slice records 0.3 bound to the coverage fixture; {slice_negatives} negative cases)")
     # review-r1 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
     retried = copy.deepcopy(role_docs["verify"])
@@ -322,7 +324,7 @@ def main() -> None:
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
     print(f"PASS: {code_refs} document references from source, schema and example files")
     print(f"PASS: {named} source files without build-stage labels")
-    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 19 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 22 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
     print(f"PASS: {27 + len(role_negative)} negative cases; example policy timing; prompt manifest")

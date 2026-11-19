@@ -39,7 +39,7 @@ func TestPersonalAgentArgv(t *testing.T) {
 	raw := `{"schema_version":"0.1","state_dir":"/srv/codeye/state","database":{"mode":"external"},
 "source_roots":[{"label":"work","path":"/srv/src","repository_code":true,"model_review":true}],
 "agent":{"max_workers":3,"go":"/usr/local/go/bin/go","tools":{"staticcheck":"/opt/sc"},
-"model":{"opencode":"/opt/opencode","name":"provider/model-a","relay_file":"/srv/relay.json","review_pack":"review-r1"}},
+"model":{"opencode":"/opt/opencode","name":"provider/model-a","relay_file":"/srv/relay.json","review_pack":"review-r1","review_max_calls":50}},
 "quota":{"logs_bytes":100,"workspace_bytes":200,"artifacts_bytes":300}}`
 	cfg, err := personal.Parse([]byte(raw), knownTools())
 	if err != nil {
@@ -50,7 +50,7 @@ func TestPersonalAgentArgv(t *testing.T) {
 	got := strings.Join(argv, " ")
 	want := "agent --controller http://127.0.0.1:7331 --state-dir /srv/codeye/state/agent --name personal --autoscale --max-workers 3 --toolchain-path /usr/bin:/bin" +
 		" --enroll-token-file /srv/codeye/state/run/enroll-token --source-root root-1=/srv/src --repo-code-source-root root-1 --model-source-root root-1" +
-		" --go /usr/local/go/bin/go --staticcheck /opt/sc --opencode /opt/opencode --model provider/model-a --model-relay-file /srv/relay.json --review-pack review-r1" +
+		" --go /usr/local/go/bin/go --staticcheck /opt/sc --opencode /opt/opencode --model provider/model-a --model-relay-file /srv/relay.json --review-pack review-r1 --review-max-calls 50" +
 		" --storage-quota logs=100 --storage-quota workspace=200 --storage-log-dir /srv/codeye/state/logs"
 	if got != want {
 		t.Fatalf("argv\n got %s\nwant %s", got, want)

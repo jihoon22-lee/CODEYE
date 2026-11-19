@@ -19,6 +19,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 	"github.com/jihoon22-lee/CODEYE/internal/quota"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
@@ -47,7 +48,10 @@ type Config struct {
 	// ReviewPack selects the review instruction pack of this node's workers:
 	// "review-r1" (default when empty) or the legacy "review-v1", kept so
 	// earlier runs can be reproduced.
-	ReviewPack       string
+	ReviewPack string
+	// ReviewMaxCalls is the model call ceiling per review attempt
+	// (--review-max-calls); 0 means record.DefaultMaxCalls.
+	ReviewMaxCalls   int
 	ModelSourceRoots map[string]bool
 	ControllerURL    string
 	StateDir         string
@@ -185,6 +189,11 @@ func New(cfg Config) (*Agent, error) {
 	case "review-r1", "review-v1":
 	default:
 		return nil, &ExitError{ExitUsage, "--review-pack must be review-r1 (default) or review-v1 (legacy)"}
+	}
+	if cfg.ReviewMaxCalls == 0 {
+		cfg.ReviewMaxCalls = record.DefaultMaxCalls
+	} else if !record.ValidMaxCalls(cfg.ReviewMaxCalls) {
+		return nil, &ExitError{ExitUsage, "--review-max-calls must be between 15 and 207"}
 	}
 	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.ModelExecutable, cfg.ModelRelayFile} {
 		if p != "" && !filepath.IsAbs(p) {
