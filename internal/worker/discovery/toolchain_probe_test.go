@@ -195,7 +195,7 @@ func TestInterpreterToolProbe(t *testing.T) {
 
 var nodeObserved = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
-// With CODEYE_TEST_NODE the real node is observed through the W05 executor
+// With CODEYE_TEST_NODE the real node is observed through the executor
 // and compared with engines.node.
 func TestToolchainProbeRealNode(t *testing.T) {
 	node := os.Getenv("CODEYE_TEST_NODE")

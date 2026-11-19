@@ -1,5 +1,5 @@
-// Package anypacktest holds the fixtures the W21 adapter tests share
-// (docs/ANALYZERS.md): a W04 snapshot with an attempt workspace, one task run through
+// Package anypacktest holds the fixtures the adapter tests of the any-ecosystem analyzers share
+// (docs/ANALYZERS.md): a snapshot with an attempt workspace, one task run through
 // a given runner, the envelope read back, tool executions replayed from
 // captured streams, and the generated fake secret with its leak checks. Only
 // tests import it.

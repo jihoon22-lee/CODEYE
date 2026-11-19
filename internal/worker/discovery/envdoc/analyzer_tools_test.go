@@ -14,7 +14,7 @@ func tools() []envdoc.AnalyzerTool {
 	}
 }
 
-// docs/ANALYZERS.md: analyzer_tools is additive (absent before W19) and records only
+// docs/ANALYZERS.md: analyzer_tools is additive (absent in older documents) and records only
 // what a probe execution of this attempt showed.
 func TestAnalyzerToolsValidation(t *testing.T) {
 	in, env, _ := fixture(t)
@@ -28,7 +28,7 @@ func TestAnalyzerToolsValidation(t *testing.T) {
 	if err != nil || len(got.Environment.AnalyzerTools) != 2 {
 		t.Fatalf("round trip %v %+v", err, got.Environment)
 	}
-	// Without tools the field is omitted: pre-W19 documents stay identical.
+	// Without tools the field is omitted: older documents stay identical.
 	plain, _ := envdoc.Marshal(env, in.Expect(env.Kind))
 	if strings.Contains(string(plain), "analyzer_tools") {
 		t.Fatal("empty analyzer_tools serialized")

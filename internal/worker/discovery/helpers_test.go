@@ -45,7 +45,7 @@ func writeTree(t *testing.T, root string, files map[string]string) {
 	}
 }
 
-// snapshotOf acquires src as a real local W04 snapshot and clones a workspace.
+// snapshotOf acquires src as a real local snapshot and clones a workspace.
 func snapshotOf(t *testing.T, src string, scope domain.Scope) analysis.Job {
 	t.Helper()
 	base := t.TempDir()

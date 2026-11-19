@@ -1,4 +1,4 @@
-// Package tsc is the TypeScript compiler part of the W18 JS/TS pack
+// Package tsc is the TypeScript compiler part of the JS/TS pack
 // (docs/ANALYZERS.md): an extra-depth analyzer (javascript.tsc) that type-checks each
 // JS/TS module with a tsconfig.json by running the operator's tsc entry
 // script through the shared node toolchain, in the attempt workspace copy,

@@ -1,5 +1,5 @@
-// Package rustpack is the W20 Rust pack: cargo check (the baseline analyzer)
-// and cargo clippy (extra depth) run natively through the W05 runner in the
+// Package rustpack is the Rust pack: cargo check (the baseline analyzer)
+// and cargo clippy (extra depth) run natively through the executor runner in the
 // attempt workspace copy, offline, with the real toolchain binaries the
 // operator named (never a rustup proxy, never PATH), and record the result in
 // the generic observations envelope (obsdoc). Both execute repository code

@@ -328,7 +328,7 @@ func TestRepositoryCodeGrantIsEnforcedBeforeDispatch(t *testing.T) {
 	}
 }
 
-// TC-69 (W19 composite): an ecosystem whose source is in scope but which has
+// TC-69 (composite): an ecosystem whose source is in scope but which has
 // no analyzer in this build plans one visible, not-required gap task per
 // ecosystem; it ends unsupported/analyzer_pack_missing with a not-run
 // envelope. Build files alone, vendored, hidden and testdata files and

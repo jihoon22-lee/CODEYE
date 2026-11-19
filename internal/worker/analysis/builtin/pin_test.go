@@ -52,7 +52,7 @@ func snapshotJobs(t *testing.T, files map[string]string) (analysis.Job, analysis
 }
 
 // docs/ANALYZERS.md#go-vet: with only --go configured, the composite's go-vet tasks are
-// the W08 handler's (same keys, specs and v0.1 document bytes); staticcheck
+// the go vet handler's (same keys, specs and v0.1 document bytes); staticcheck
 // adds its own tasks after them and never changes go vet's.
 func TestGoVetUnchangedInComposite(t *testing.T) {
 	goExe := goPath(t)
@@ -78,7 +78,7 @@ func TestGoVetUnchangedInComposite(t *testing.T) {
 	}
 	var vet, other []analysis.TaskSpec
 	for _, p := range plan {
-		if w21Task(p.Key) {
+		if anyTask(p.Key) {
 			continue
 		}
 		if pack.Owns(govet.HandlerName, p.Key) {

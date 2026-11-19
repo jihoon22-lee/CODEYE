@@ -44,7 +44,7 @@ func reasons(missing []Unavailable) []string {
 }
 
 // cppUnconfigured, pythonUnconfigured, jsUnconfigured and rustUnconfigured
-// are the W16, W17, W18 and W20 analyzers when none of their tool paths is
+// are the C/C++, Python, JS/TS and Rust analyzers when none of their tool paths is
 // set: members that plan unsupported tasks.
 var (
 	cppUnconfigured    = []string{"cppcheck:not_configured", "clang-tidy:not_configured"}
@@ -53,11 +53,11 @@ var (
 	rustUnconfigured   = []string{"cargo-check:not_configured", "clippy:not_configured"}
 )
 
-// withPacks appends the unconfigured C/C++, Python, JavaScript, Rust and W21
-// (any-ecosystem) members in catalog order (Go, C/C++, Python, JavaScript,
+// withPacks appends the unconfigured C/C++, Python, JavaScript, Rust and
+// any-ecosystem members in catalog order (Go, C/C++, Python, JavaScript,
 // Rust, any).
 func withPacks(r ...string) []string {
-	return slices.Concat(r, cppUnconfigured, pythonUnconfigured, jsUnconfigured, rustUnconfigured, w21Missing)
+	return slices.Concat(r, cppUnconfigured, pythonUnconfigured, jsUnconfigured, rustUnconfigured, anyMissing)
 }
 
 func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
@@ -134,9 +134,9 @@ func TestToolFlagsAndProbes(t *testing.T) {
 	if !slices.Equal(tools, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "eslint", "gitleaks", "jscpd", "lizard", "mypy", "pyright", "ruff", "staticcheck", "tsc"}) {
 		t.Fatalf("probe tools %v", tools)
 	}
-	// The C/C++ probes (W16) are checked by TestCppAnalyzersAdvertiseOnlyWithTheBaseline,
-	// the W21 probes by TestW21CatalogEntries.
-	probes := withoutW21(slices.DeleteFunc(slices.Clone(all), func(p pack.ToolProbe) bool { return p.Tool == "clang-tidy" || p.Tool == "cppcheck" }))
+	// The C/C++ probes are checked by TestCppAnalyzersAdvertiseOnlyWithTheBaseline,
+	// the any-ecosystem probes by TestAnyEcosystemCatalogEntries.
+	probes := withoutAny(slices.DeleteFunc(slices.Clone(all), func(p pack.ToolProbe) bool { return p.Tool == "clang-tidy" || p.Tool == "cppcheck" }))
 	sc := probes[7]
 	if sc.Executable != "/sc" || !slices.Equal(sc.Analyzers, []string{"go.staticcheck"}) || !slices.Equal(sc.Args, []string{"-version"}) || !slices.Equal(sc.Ecosystems, []string{"go"}) {
 		t.Fatalf("probes %+v", probes)
@@ -144,7 +144,7 @@ func TestToolFlagsAndProbes(t *testing.T) {
 	if v, ok := sc.ParseVersion([]byte("staticcheck 2026.2.2 (0.8.2)\n")); !ok || v != "2026.2.2 (0.8.2)" {
 		t.Fatalf("version %q %v", v, ok)
 	}
-	// The Rust pack (W20): cargo and clippy are probed directly, in the rust ecosystem.
+	// The Rust pack: cargo and clippy are probed directly, in the rust ecosystem.
 	if c := probes[1]; c.Executable != filepath.Join(tc, "cargo") || !slices.Equal(c.Analyzers, []string{"rust.cargocheck"}) || !slices.Equal(c.Args, []string{"--version"}) || !slices.Equal(c.Ecosystems, []string{"rust"}) || c.Interpreter != "" {
 		t.Fatalf("cargo probe %+v", c)
 	}
@@ -154,7 +154,7 @@ func TestToolFlagsAndProbes(t *testing.T) {
 	if c := probes[2]; c.Executable != filepath.Join(tc, "cargo-clippy") || !slices.Equal(c.Analyzers, []string{"rust.clippy"}) {
 		t.Fatalf("clippy probe %+v", c)
 	}
-	// The Python pack (W17): pyright is run by the node toolchain.
+	// The Python pack: pyright is run by the node toolchain.
 	if p := probes[5]; p.Tool != "pyright" || p.Interpreter != "node" || !slices.Equal(p.Analyzers, []string{"python.pyright"}) || !slices.Equal(p.Ecosystems, []string{"python"}) {
 		t.Fatalf("pyright probe %+v", p)
 	}

@@ -112,7 +112,7 @@ func TestRealOptionLikeFileNames(t *testing.T) {
 }
 
 // canary is a unique string only the outside files hold.
-const canary = "W17CANARY_8f3a1c"
+const canary = "CANARY_8f3a1c"
 
 // canaryFiles is a project whose repository configuration points every
 // path option the tools know outside the workspace (absolute paths into
@@ -120,7 +120,7 @@ const canary = "W17CANARY_8f3a1c"
 func canaryFiles(outside string) map[string]string {
 	o := filepath.ToSlash(outside)
 	return map[string]string{
-		"pyproject.toml": "[project]\nname = \"w17-canary\"\nrequires-python = \">=3.11\"\n\n" +
+		"pyproject.toml": "[project]\nname = \"canary-project\"\nrequires-python = \">=3.11\"\n\n" +
 			"[tool.ruff]\nextend = \"" + o + "/ruff.toml\"\nsrc = [\"" + o + "\"]\ncache-dir = \"" + o + "/ruff-cache\"\n\n" +
 			"[tool.mypy]\nmypy_path = \"" + o + "\"\nfiles = [\"" + o + "/canary_mod.py\"]\ncache_dir = \"" + o + "/mypy-cache\"\nplugins = [\"" + o + "/plugin.py\"]\nhtml_report = \"" + o + "/html\"\n\n" +
 			"[tool.pyright]\nextraPaths = [\"" + o + "\"]\nstubPath = \"" + o + "/stubs\"\ntypeshedPath = \"" + o + "/typeshed\"\nvenvPath = \"" + o + "\"\nvenv = \"venv\"\ninclude = [\"" + o + "\"]\n",

@@ -1,4 +1,4 @@
-// Package envdoc defines the W15 environment/documents discovery artifact
+// Package envdoc defines the environment/documents discovery artifact
 // (application/vnd.codeye.environment+json, schema 0.1). It performs no I/O
 // and imports no process code, so a report decoder can validate an uploaded
 // artifact against the snapshot manifest alone. The worker produces the
@@ -156,7 +156,7 @@ type Environment struct {
 	// AnalyzerTools are the node's analyzer tools (docs/ANALYZERS.md) for the
 	// in-scope ecosystems: probed when the operator configured them,
 	// not_probed otherwise. They are not compared with declarations.
-	// Absent in documents written before W19.
+	// Absent in documents written before analyzer tools were recorded.
 	AnalyzerTools []AnalyzerTool `json:"analyzer_tools,omitempty"`
 }
 

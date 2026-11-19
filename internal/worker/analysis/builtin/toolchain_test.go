@@ -323,7 +323,7 @@ func TestDescriptorToolchainRules(t *testing.T) {
 
 var nodeVersionOut = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
-// With CODEYE_TEST_NODE the real node binary is probed through the W05
+// With CODEYE_TEST_NODE the real node binary is probed through the
 // executor at startup and its handle reaches the build function.
 func TestToolchainProbeRealNode(t *testing.T) {
 	node := os.Getenv("CODEYE_TEST_NODE")

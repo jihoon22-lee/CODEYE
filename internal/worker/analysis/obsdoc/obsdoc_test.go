@@ -258,7 +258,7 @@ func TestRuleContextAccepted(t *testing.T) {
 	}
 }
 
-// W21 (docs/ANALYZERS.md): a metric observation is a structure measurement over its
+// Metrics (docs/ANALYZERS.md): a metric observation is a structure measurement over its
 // threshold. It is never active (no finding, never success_with_findings)
 // and its fields are bounded; older envelopes without metric decode as
 // before.

@@ -1,5 +1,5 @@
-// Package jsts is the shared part of the W18 JS/TS pack (docs/ANALYZERS.md): module
-// planning from the W15 discovery modules, the operator's Node script tools
+// Package jsts is the shared part of the JS/TS pack (docs/ANALYZERS.md): module
+// planning from the discovery modules, the operator's Node script tools
 // run through the shared node toolchain, snapshot path and column mapping,
 // the tsconfig chain read as data, and the dependency-gap code list the tsc
 // and type-aware ESLint adapters share. It never executes repository code:
@@ -72,7 +72,7 @@ func InScope(p string, scope domain.Scope) bool {
 }
 
 // Module is one planned JS/TS module: a package.json directory found by the
-// W15 module discovery, or the implicit root that holds JS/TS sources outside
+// module discovery, or the implicit root that holds JS/TS sources outside
 // every package.json module (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백: a pack shows the source it cannot
 // place instead of dropping it).
 type Module struct {
@@ -142,7 +142,7 @@ func (m Module) Owns(p string) bool {
 	return true
 }
 
-// PackageModules are the W15 JavaScript modules of the included files: every
+// PackageModules are the JavaScript modules of the included files: every
 // directory with a package.json outside testdata and hidden directories
 // (discovery.DetectModules, ecosystem javascript; the test pins the two
 // together), with the outermost nested modules of each. It is restated here
@@ -191,7 +191,7 @@ func PackageModules(files map[string]source.Entry) ([]string, map[string][]strin
 }
 
 // Modules plans the JS/TS modules of a manifest and scope, deterministically
-// and without reading file contents: the W15 package.json modules plus the
+// and without reading file contents: the package.json modules plus the
 // implicit root for sources outside them. A module without its own source in
 // scope is not planned.
 func Modules(m source.Manifest, scope domain.Scope) ([]Module, error) {

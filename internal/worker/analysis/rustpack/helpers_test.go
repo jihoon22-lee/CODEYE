@@ -152,7 +152,7 @@ type fixture struct {
 	Job        analysis.Job
 }
 
-// newFixture acquires a W04 snapshot of files and clones an attempt workspace
+// newFixture acquires a snapshot of files and clones an attempt workspace
 // like the worker. The job carries the repository-code grant when allow is set.
 func newFixture(t *testing.T, base string, files map[string]string, scope domain.Scope, allow bool) fixture {
 	t.Helper()

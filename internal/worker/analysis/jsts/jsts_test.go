@@ -23,7 +23,7 @@ func monorepo(t *testing.T) jststest.Fixture {
 	return jststest.NewFixture(t, "", files, domain.Scope{})
 }
 
-// PackageModules restates W15's JavaScript module discovery (discovery
+// PackageModules restates the JavaScript module discovery (discovery
 // imports the analyzer catalog, so jsts cannot import discovery); this
 // pins the two together.
 func TestPackageModulesMatchesDiscovery(t *testing.T) {

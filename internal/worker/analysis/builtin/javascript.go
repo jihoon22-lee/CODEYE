@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// The W18 JS/TS pack's catalog entries (docs/ANALYZERS.md). Each analyzer runs its
+// The JS/TS pack's catalog entries (docs/ANALYZERS.md). Each analyzer runs its
 // operator script through the shared node toolchain; builtin builds it only
 // when --node is configured and probed (gateToolchains), with the handle.
 

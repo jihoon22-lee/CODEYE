@@ -662,7 +662,7 @@ func assembleClangTidy(doc obsdoc.Document, in ctInput) obsdoc.Document {
 	if notProcessed && ranAny {
 		o.fail(domain.TaskFailed, ReasonTUNotProcessed, obsdoc.ExitExecutionError)
 	}
-	// As W19: a failed task keeps what it parsed and says so.
+	// As in the other adapters: a failed task keeps what it parsed and says so.
 	partial := false
 	for _, b := range batches {
 		if b.res != nil && (b.out.Values > 0 || b.out.UnparsedBytes > 0 || b.res.Stdout.Truncated || b.res.Stdout.Incomplete) {

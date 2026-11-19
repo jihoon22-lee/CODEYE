@@ -156,7 +156,7 @@ func TestAnalyzerToolProbesFollowEcosystems(t *testing.T) {
 	}
 }
 
-// With CODEYE_TEST_STATICCHECK the real binary is probed through the W05
+// With CODEYE_TEST_STATICCHECK the real binary is probed through the
 // executor.
 func TestAnalyzerToolProbeRealStaticcheck(t *testing.T) {
 	sc := os.Getenv("CODEYE_TEST_STATICCHECK")

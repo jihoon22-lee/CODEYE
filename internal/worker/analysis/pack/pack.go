@@ -1,5 +1,5 @@
-// Package pack is the analyzer-pack contract of R1 (docs/ANALYZERS.md). A language pack
-// (W16 C/C++, W17 Python, W18 JS/TS, W19 Go, W20 Rust, W21 structure and
+// Package pack is the analyzer-pack contract (docs/ANALYZERS.md). A language pack
+// (C/C++, Python, JS/TS, Go, Rust, structure and
 // secrets) contributes Analyzers; the Composite turns an ordered list of them
 // into the one analysis.Handler of the deep-review capability. Planning reads
 // only the snapshot manifest and scope, so an analyzer whose tool the operator
