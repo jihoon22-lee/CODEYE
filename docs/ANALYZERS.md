@@ -65,13 +65,17 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--gitleaks /abs/gitleaks` | 실행 파일 | gitleaks |
 | `--toolchain-path PATH` | 절대 디렉터리 목록, 기본 `/usr/bin:/bin`. 분석기는 보조 프로그램 조회에만 쓴다(Rust 링커 `cc`) | cargo check, clippy |
 | `--repo-code-source-root ID` (반복) | 저장소 코드 실행 허가. 같은 agent의 `--source-root ID=...`가 있어야 함 | 저장소 코드를 실행하는 작업 |
+| `--dependency-fetch` | 의존성 받기 운영자 스위치. 기본 꺼짐, 개인 모드는 켬. 프로젝트 선택 `fetch_dependencies`도 켜져 있어야 함([의존성 준비](ARCHITECTURE.md#의존성-준비)) | `deps.*` |
+| `--dependency-cache-dir DIR` | 받은 의존성의 공유 캐시. 기본 `<state>/cache/deps` | `deps.*`, 받은 캐시를 읽는 분석기 |
+| `--dependency-timeout D`, `--dependency-total-timeout D`, `--dependency-max-bytes N` | 모듈당 제한시간(10분), attempt 합계(20분), 내려받기 크기 상한(2 GiB) | `deps.*` |
+| `--go-proxy`, `--go-sumdb`, `--go-private`, `--go-noproxy`, `--go-nosumdb` | Go 모듈 받기의 `GOPROXY`·`GOSUMDB`·`GOPRIVATE`·`GONOPROXY`·`GONOSUMDB`. 비우면 Go 기본값([Go 의존성 받기](#go-의존성-받기)) | `deps.go` |
 
 - 도구 플래그는 분석기 카탈로그에서 자동으로 만든다(`builtin.ToolFlags()`, `builtin.ToolchainFlags()`). 플래그 이름은 Descriptor의 `Tool`이고 `--eslint` 하나가 두 분석기에 쓰인다.
 - 모든 경로는 절대 경로다. PATH를 검색하지 않고, 내려받지 않으며, 다른 위치로 대체하지 않는다. 셸·`.cmd` shim은 받지 않는다.
 - `--mypy`와 `--pyright`를 함께 주면서 `--python-both-type-checkers`가 없거나, 이 플래그만 있고 두 경로가 다 없으면 agent는 사용법 오류(exit 2)로 시작하지 않는다.
-- agent는 값을 worker hello로 넘긴다. `go_executable`, `go_mod_cache`, `tool_path`, 그리고 `analyzer_tools`(도구 이름 → 경로, 공유 toolchain은 예약 이름 `node`로 같은 맵에 들어감)다. 이 빌드가 모르는 도구 이름은 `unknown_tool`로 보고하고 실행하지 않는다.
+- agent는 값을 worker hello로 넘긴다. `go_executable`, `go_mod_cache`, `tool_path`, `analyzer_tools`(도구 이름 → 경로, 공유 toolchain은 예약 이름 `node`로 같은 맵에 들어감), 그리고 스위치가 켜졌을 때만 `dependencies`(캐시 root, 예산, Go 받기 설정)다. 이 빌드가 모르는 도구 이름은 `unknown_tool`로 보고하고 실행하지 않는다.
 
-개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`가 위 플래그가 된다. 저장소 코드 실행은 개인 모드에서 프로젝트별 선택이다(`source_roots[].repository_code`는 쓰이지 않는다, A40)([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
+개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`, `agent.dependencies`(`enabled` 기본 켜짐, `cache_dir`, `go_proxy`, `go_sumdb`, `go_private`, `go_noproxy`, `go_nosumdb`, `timeout_seconds`, `total_timeout_seconds`, `max_download_bytes`)가 위 플래그가 된다. 저장소 코드 실행은 개인 모드에서 프로젝트별 선택이다(`source_roots[].repository_code`는 쓰이지 않는다, A40)([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
 
 ### 도구 찾기
 
@@ -102,7 +106,8 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 
 **함께 정하는 값.**
 
-- **Go 모듈 캐시.** 찾은 go의 `go env GOMODCACHE`(사용자의 실제 환경 기준)가 실제 디렉터리이면 `--go-mod-cache`로 넘긴다. go vet은 `GOPROXY=off`로 실행하므로 의존성이 있는 모듈은 이 캐시가 있어야 분석된다. 캐시는 저장 영역 상한의 `cache` 영역에 센다([운영](OPERATIONS.md#저장-영역과-상한)). 명시한 `agent.go_mod_cache`가 있으면 그것이 우선한다.
+- **Go 모듈 캐시.** 찾은 go의 `go env GOMODCACHE`(사용자의 실제 환경 기준)가 실제 디렉터리이면 `--go-mod-cache`로 넘긴다. go vet은 `GOPROXY=off`로 실행하므로 의존성이 있는 모듈은 이 캐시가 있어야 분석된다. 캐시는 저장 영역 상한의 `cache` 영역에 센다([운영](OPERATIONS.md#저장-영역과-상한)). 명시한 `agent.go_mod_cache`가 있으면 그것이 우선한다. 의존성 받기를 켜면 의존성은 이 캐시가 아니라 받기 캐시에서 읽고, 이 캐시는 받기의 첫 출처가 된다([Go 의존성 받기](#go-의존성-받기)).
+- **Go 받기 설정.** 같은 go로 `go env -json GOPROXY GOSUMDB GOPRIVATE GONOPROXY GONOSUMDB`를 읽어 Go 기본값과 다른 값만 `tools.json`의 `go_settings`에 남기고, 설정 파일이 비워 둔 `agent.dependencies`의 Go 값을 채운다. 의존성 받기가 꺼져 있으면 채우지 않는다.
 - **Python 타입 검사기.** 결과 도구 집합에 mypy와 pyright가 모두 있으면 `--python-both-type-checkers`를 함께 준다([타입 검사기 선택](#타입-검사기-선택)). 하나만 있으면 주지 않는다. 에이전트의 검사는 그대로이며(둘 다 있으면서 플래그가 없거나 그 반대면 사용법 오류), 개인 모드는 값을 정할 때 그 규칙을 맞춘다.
 
 결과는 `<state_dir>/tools.json`에 쓴다([schema](../schemas/tools.schema.json), [예시](../examples/tools.json)). 탐색 결과와 명시 설정을 합친 에이전트 인자는 `toolfind.Resolve`가 만든다. 명시 값이 있으면 그 값이, 없으면 `found` 도구의 경로가 쓰이며 쓸 수 없는 탐색 결과는 넘기지 않는다.
@@ -462,13 +467,27 @@ go vet(기준)과 Staticcheck(추가 깊이)다. 두 작업 모두 저장소 코
 | `GOPROXY=off`, `GOSUMDB=off`, `GOVCS=*:off` | 모듈 다운로드·VCS 명령 없음 |
 | `CGO_ENABLED=0` | cgo 끔 |
 | `GOCACHE`, `GOPATH`, `STATICCHECK_CACHE` | task scratch |
-| `GOMODCACHE` | `--go-mod-cache`(읽기 전용 보호) 또는 빈 scratch 캐시 |
+| `GOMODCACHE` | 이 attempt의 `deps.go` 기록이 쓸 수 있으면 받기 캐시(보호 경로), 아니면 `--go-mod-cache`(읽기 전용 보호) 또는 빈 scratch 캐시 |
 | `XDG_CONFIG_HOME` | scratch의 `config`. 그 안 `go/telemetry/mode`에 `off`를 쓴다 |
 
 - **Go telemetry를 끈다.** mode 파일이 없으면 go 명령은 사용자 설정 디렉터리에 counter를 쓰고 분리된(setsid) upload 자식을 시작한다. 그 자식은 정리 확인 뒤에도 실행별 디렉터리에 쓴다. `GOTELEMETRY=off` 환경변수는 효과가 없다. 그래서 go vet·Staticcheck 실행과 probe, env.discover의 go probe는 mode 파일로 끈다(`govet.DisableTelemetry`). darwin은 `XDG_CONFIG_HOME`을 읽지 않아 끌 수단이 없고, Windows는 executor 환경에 `AppData`가 없어 telemetry가 꺼진다(소스 확인).
 - **빌드 문맥은 하나다.** 노드 기본 GOOS/GOARCH, 사용자 build tag 없음, CGO 끔. `GOFLAGS`를 비워 Go 기본값(vendor 디렉터리가 없으면 `-mod=readonly`, 있으면 `-mod=vendor`)을 따른다. `-mod=readonly`를 강제하면 vendor 모듈 프로젝트가 실패한다. 이 값은 `target.properties`(goos, goarch, cgo_enabled, build_tags, go_flags, toolchain, tests)와 제약 `default_build_context_only`·`cgo_disabled`로 항상 기록한다. 다른 tag·CGO·target 조합은 계획하지 않는다. build constraint로 빠진 파일은 `files_skipped`와 `build_constraint_ignored_files`로 보인다.
 - **go.mod 검사.** 실행 전에 go.mod hash를 manifest와 대조한다(다르면 `snapshot_integrity_failed`). `replace` 판정은 `go mod edit -json` 결과로 한다. 마스킹 표지(`[REDACTED]`)가 든 대상과 절대 경로·스냅샷 밖 디렉터리 `replace`는 `skipped_policy`(`replace_outside_snapshot`)로 끝내고 `go list`·분석을 실행하지 않는다. 스냅샷 안 `replace`는 허용한다.
 - 운영자 모듈 캐시의 무결성은 go.sum 대조에 의존하고 `GOSUMDB=off`다. 원시 stderr에는 모듈 캐시나 GOROOT 절대 경로가 남을 수 있으므로 원시 bytes를 렌더링하지 않는다.
+
+### Go 의존성 받기
+
+`deps.go`·`deps.go.mNN` task가 go vet과 같은 모듈 계획으로 모듈마다 의존성을 받는다([의존성 준비](ARCHITECTURE.md#의존성-준비)). go vet과 Staticcheck는 그 뒤에도 `GOPROXY=off`로 실행하고 받은 캐시만 읽는다.
+
+- 명령: 실행 사본의 모듈 디렉터리에서 `go version`, `go mod edit -json <사본>`, `go mod download -json -modfile=<사본>`. 사본은 attempt의 task 디렉터리에 복사한 `go.mod`·`go.sum`이다. 그래서 받기가 go.mod·go.sum을 고치더라도 실행 사본과 snapshot은 그대로이고 go vet의 drift 검사가 유지된다. 실행 전에 두 파일 hash를 manifest와 대조하고, 받은 뒤 실행 사본의 두 파일이 바뀌었으면 `workspace_drift`다.
+- 환경: `GOENV=off`, `GOWORK=off`, `GOTOOLCHAIN=local`, `GOFLAGS=-mod=readonly -modcacherw`, `CGO_ENABLED=0`, `GOVCS=*:off`, `GOMODCACHE=<받기 캐시>/go/mod`, task별 `GOCACHE`·`GOPATH`, telemetry 끔.
+- `GOPROXY`: 운영자 모듈 캐시(`--go-mod-cache`)의 `cache/download`가 있으면 `file://` 출처를 맨 앞에 둔다(읽기만 한다, 한계 `seeded_from_operator_cache`). 그 뒤에 운영자 `GOPROXY`(기본 `https://proxy.golang.org`)에서 `direct`·`off`를 뺀 목록이 온다. 목록이 비면 `off`다. VCS에서 직접 받지 않는다. `GOSUMDB`는 운영자 값, 없으면 `sum.golang.org`다.
+- 비공개 모듈: 운영자의 `GOPRIVATE`·`GONOPROXY`·`GONOSUMDB`를 그대로 넘기므로 비공개 모듈은 공개 proxy와 checksum DB에 묻지 않는다. 운영자 캐시에 이미 있는 비공개 모듈은 받기 캐시로 복사해 쓰고(한계 `private_modules_seeded`), 없으면 `private_module_not_fetched`로 끝난다.
+- 받을 것이 없음: `vendor/modules.txt`가 있으면 `vendored_dependencies`, `require`가 없으면 `no_dependencies`(둘 다 `skipped_policy`). 스냅샷 밖 `replace`는 go vet과 같이 `replace_outside_snapshot`이다.
+- 캐시: 공유 캐시 key `go/mod`. 모듈 zip과 푼 트리 모두 크기 상한과 cache 저장 영역에 센다.
+- 사유: `module_not_on_proxy`(일부 모듈만 실패하면 `partial`), `checksum_mismatch`, `go_sum_incomplete`(go.sum 사본이 받는 도중 바뀜. go.sum에 없는 항목이 있다는 뜻이고 go vet은 `-mod=readonly`로 실패한다), `go_mod_unreadable`, `snapshot_integrity_failed`, `workspace_drift`, `private_module_not_fetched`, `toolchain_unavailable`(go.mod가 노드 go보다 높은 버전 요구), `registry_unreachable`, `package_manager_not_configured`(`--go` 없음)와 공통 사유.
+- stderr는 사유를 정하는 데만 쓰고 받기 캐시 경로는 마스킹한다.
+
 
 ### go vet
 
@@ -511,7 +530,7 @@ go vet(기준)과 Staticcheck(추가 깊이)다. 두 작업 모두 저장소 코
 - `rule_id`는 analyzer 이름이고 `raw_severity`는 항상 null이다. 메시지의 workspace 접두는 상대 경로로, GOROOT·모듈 캐시·scratch·스냅샷 경로는 `$GOROOT` 같은 이름으로 바꾼다.
 - ID는 `obs_` + sha256(도구, package key, rule, 정규화 위치, 메시지, 같은 튜플 순번) 앞 20자다. `raw_ref`는 `go.vet` stdout의 sha256, 최상위 값 순번, RFC 6901 JSON pointer, byte 범위다. `stream_index`는 ID에 넣지 않는다.
 - 패키지 상태는 `analyzed_clean`, `analyzed_with_findings`, `failed_typecheck`, `dependency_unavailable`, `load_error`, `not_analyzed`, `unknown`이다. vet이 완전히 성공했을 때만 진단 없는 패키지가 `analyzed_clean`이고, 실패한 실행의 진단 없는 패키지는 `unknown`이다. manifest에는 있지만 `go list`가 보고하지 않은 Go 파일은 `not_analyzed`(`not_listed_by_go_command`)다. `processed_go_files`는 분석 패키지의 파일 수이고 `unknown`이 하나라도 있으면 null이다.
-- 한계 코드는 항상 `default_build_context_only`·`cgo_disabled`이고, 조건에 따라 `build_constraint_ignored_files`, `unlisted_go_files`, `no_offline_module_cache`, `go_work_ignored`, `vendor_directory_used`, `tool_version_untested`, `workspace_drift`, `unattributed_vet_package_key`, `local_replace_outside_snapshot`을 더한다.
+- 한계 코드는 항상 `default_build_context_only`·`cgo_disabled`이고, 조건에 따라 `build_constraint_ignored_files`, `unlisted_go_files`, `no_offline_module_cache`, `go_work_ignored`, `vendor_directory_used`, `tool_version_untested`, `workspace_drift`, `unattributed_vet_package_key`, `local_replace_outside_snapshot`을 더한다. 받기 캐시를 쓰면 `no_offline_module_cache` 대신 `dependencies_prepared` 또는 `dependencies_partially_prepared`다(Staticcheck도 같다).
 - 보고서는 실행 이름과 stdout sha256으로 result manifest의 `executions[].name`과 artifact에 다시 연결하고, 스냅샷은 `snapshot_manifest_digest`로 식별한다.
 
 go vet은 composite 안에서도 계획(key·제목·필수·단계), 실행, 문서 바이트가 단독 `govet.Handler`와 같다. 규칙 문맥은 `codeye-go-vet-default` v1(selection `[]`, `repository_config=none`, `source_suppressions=none`)로 합성한다. go vet의 분석기 집합은 toolchain 버전이 정하고 저장소 설정과 억제 문법이 없기 때문이다.

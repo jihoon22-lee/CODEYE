@@ -4,6 +4,13 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — Go 의존성 받기
+
+- **의존성 준비**: 분석 전에 Go 모듈마다 `deps.go`·`deps.go.mNN` task가 의존성을 받고(`go mod download -json -modfile=<사본>`), go vet·Staticcheck는 그 캐시를 오프라인으로 읽는다. 받기는 실행 사본의 모듈 디렉터리에서 하고 원본·snapshot·실행 사본의 go.mod·go.sum을 바꾸지 않는다. 필수 task가 아니어서 실패해도 분석은 계속하고 사유가 남는다([의존성 준비](docs/ARCHITECTURE.md#의존성-준비), A41).
+- **선택과 설정**: 프로젝트 선택 `fetch_dependencies`(기본 켬, 화면 "고급"의 "의존성 받기")와 노드 스위치 `--dependency-fetch`(개인 모드는 켬). `--dependency-cache-dir`, `--dependency-timeout`(10분), `--dependency-total-timeout`(20분), `--dependency-max-bytes`(2 GiB), `--go-proxy`·`--go-sumdb`·`--go-private`·`--go-noproxy`·`--go-nosumdb`, 개인 모드 `agent.dependencies`. 개인 모드는 사용자 `go env`의 받기 설정을 따르고(`tools.json`의 `go_settings`), 비공개 모듈은 공개 proxy에 묻지 않는다. 받은 캐시는 `state_dir/cache/deps`이고 cache 저장 영역에 센다.
+- **기록과 보고서**: task마다 의존성 기록(`application/vnd.codeye.dependencies+json` 0.1, [schema](schemas/dependencies.schema.json), [예시](examples/dependencies.json))을 올린다. 보고서 builder 7은 환경 절에 `dependencies` 표와 공백 `dependencies_not_prepared`·`dependencies_not_fetched`·`dependency_versions_not_pinned`를 더한다. 웹은 그 표와 "더 나은 결과를 얻으려면"의 "의존성 받기 켜고 다시 시도"를 보인다.
+- **고침**: 모델이 설정되지 않은 개인 모드 run에서 모듈별 검토 장부가 있으면 보고서 게시가 거부되던 문제(장부가 보내지 않은 호출까지 세어 "ledger counts fewer calls", 요청 바이트 불일치). 장부는 요청이 있는 호출만 센다.
+
 ### 추가 — 경로·Git 주소 하나로 분석, 프로젝트별 분석 선택, 다시 시도
 
 - **Git 주소**: `codeye up https://github.com/OWNER/REPO`(`…/tree/BRANCH`, `https://` 생략 가능)가 프로젝트를 등록하고 분석을 요청한다. 브랜치를 비우면 확보할 때마다 원격의 기본 브랜치를 쓰고 manifest에 남긴다. `git_hosts`(기본 `["github.com"]`)마다 provider를 등록하고 찾은 git과 함께 에이전트에 넘긴다. 인증을 요구하는 저장소는 `source_auth_required`, 닿지 않는 호스트는 `source_unreachable`로 실패한다. 비공개 저장소는 지원하지 않는다.

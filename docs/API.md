@@ -152,7 +152,7 @@
 - **CODEYE 데이터 폴더(개인 모드)**: 프로젝트 폴더가 상태 디렉터리나 백업 디렉터리를 품거나 그 안에 있으면, `local_path`든 root와 상대 경로든 symlink를 푼 뒤 422 `FOLDER_HOLDS_CODEYE_DATA`다. `message`는 문제의 두 폴더를 적고 프로젝트가 든 하위 폴더를 고르라고 안내한다. 노드도 소스를 확보하기 전에 같은 검사를 하고 실패 사유는 `source_holds_codeye_data`다.
 - **같은 소스(개인 모드)**: 같은 root와 경로, 또는 같은 provider와 저장소 주소(대소문자, 끝의 `/`·`.git` 무시)의 프로젝트가 이미 있으면 새로 만들지 않고 200과 그 프로젝트를 준다.
 - **git 소스**: 승인된 provider와 `https://<provider host>/<owner>/<repo>[.git]`. 브랜치는 선택이며 `git check-ref-format`의 부분집합을 만족해야 한다. 비우면 소스를 확보할 때마다 저장소의 기본 브랜치(`git ls-remote --symref … HEAD`)를 쓰고 보고서 입력에 그 브랜치와 커밋을 남긴다. ssh·scp·`git://`는 422 `SOURCE_UNSUPPORTED`다. 비공개 Git 인증은 아직 없다. 인증을 요구하는 저장소(비공개이거나 없는 저장소)는 실행이 `source_auth_required`, 호스트에 닿지 못하면 `source_unreachable`로 실패한다.
-- **analysis**: `{send_source_to_model, run_build_scripts}` 둘 다 있어야 한다(아니면 422 `VALIDATION_FAILED`). 없으면 소스 종류의 기본값이다. 로컬 폴더는 둘 다 `true`, Git 저장소는 `send_source_to_model: true`, `run_build_scripts: false`다. 설정의 `analysis`에 저장하고 응답의 `analysis`로 보인다. `--project-analysis-policy`로 띄운 노드(개인 모드)는 로컬·Git 모두 이 선택을 따른다. 그 밖의 노드는 운영자의 root별 허가(`--model-source-root`·`--repo-code-source-root`)를 따른다. `PUT /projects/{id}/analysis`가 바꾸고(설정의 나머지는 그대로, 새 revision, `project.revised` 감사), 그 뒤의 run이 새 선택을 따른다.
+- **analysis**: `{send_source_to_model, run_build_scripts, fetch_dependencies?}`. 앞의 둘은 있어야 한다(아니면 422 `VALIDATION_FAILED`). 없으면 소스 종류의 기본값이다. 로컬 폴더는 둘 다 `true`, Git 저장소는 `send_source_to_model: true`, `run_build_scripts: false`다. `fetch_dependencies`는 선택이고 없으면 `true`다(두 종류 모두). 설정에는 `false`일 때만 쓴다. 이 선택은 노드 운영자 스위치(`--dependency-fetch`)와 함께 모든 노드에서 의존성 받기를 정한다([의존성 준비](ARCHITECTURE.md#의존성-준비)). 설정의 `analysis`에 저장하고 응답의 `analysis`로 보인다. `--project-analysis-policy`로 띄운 노드(개인 모드)는 로컬·Git 모두 이 선택을 따른다. 그 밖의 노드는 운영자의 root별 허가(`--model-source-root`·`--repo-code-source-root`)를 따른다. `PUT /projects/{id}/analysis`가 바꾸고(설정의 나머지는 그대로, 새 revision, `project.revised` 감사), 그 뒤의 run이 새 선택을 따른다.
 - 등록은 소스 위치의 선언이며 형식과 권한만 검사한다. 서버는 등록 시 파일 시스템·네트워크에 접근하지 않는다. 경로 정규화와 symlink·junction 경계는 워커가 소스를 확보할 때 검사한다([실행](EXECUTION.md)). 이름이 없으면 경로 마지막 구간, root label, 저장소 이름 순으로 정한다. 저장되는 설정 revision 1은 `{"config_version":1,"source":…,"description"?}`이다.
 - 프로젝트 응답의 `source_status`는 등록만 확인한 소스이므로 `declared_unverified`다. `capability_gaps`는 `source_access_unverified`(항상), `execution_unavailable`(철회되지 않은 등록 노드가 없음), `report_unavailable`(게시된 보고서가 없음)이다. 실행별 배치 가능 여부는 대기 사유로 따로 보고한다.
 
@@ -446,7 +446,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 - 인증 실패와 철회된 노드는 401 `NODE_UNAUTHENTICATED`다. 경로의 node ID가 인증한 노드와 다르거나 다른 노드의 attempt면 404다. 다른 worker·이전 epoch·만료·종료된 attempt는 409 `STALE_ATTEMPT`다.
 - 워커에게 node secret을 주지 않고 에이전트가 중계한다.
-- 에이전트가 워커에 넘기는 job의 허가 두 개(`allow_model_review`, `allow_repository_code`)는 노드 운영자 설정에서 나온다. 관리 서버와 run 요청은 정하지 않는다([분석기](ANALYZERS.md), [보안](SECURITY.md)).
+- 에이전트가 워커에 넘기는 job의 허가 두 개(`allow_model_review`, `allow_repository_code`)는 노드 운영자 설정에서 나온다. 관리 서버와 run 요청은 정하지 않는다([분석기](ANALYZERS.md), [보안](SECURITY.md)). `allow_dependency_fetch`는 운영자 스위치와 프로젝트 선택 `fetch_dependencies`가 둘 다 켜졌을 때만 참이다([의존성 준비](ARCHITECTURE.md#의존성-준비)).
 
 ## 호환과 버전
 

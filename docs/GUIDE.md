@@ -138,14 +138,16 @@ re-enrolling the local agent: the configured source roots changed (previous stat
 
 ### 프로젝트별 분석 선택
 
-개인 모드에서는 프로젝트마다 두 가지를 고른다. 등록할 때 고급에서 정하고, 나중에는 보고서의 "더 나은 결과를 얻으려면"에서 켠다.
+개인 모드에서는 프로젝트마다 세 가지를 고른다. 등록할 때 고급에서 정하고, 나중에는 보고서의 "더 나은 결과를 얻으려면"에서 켠다.
 
 | 선택 | 뜻 | 로컬 폴더 기본 | Git 저장소 기본 |
 |---|---|---|---|
 | 소스를 모델에 보냄 | 설정한 검토 모델이 이 프로젝트의 소스를 읽는다. 끄면 정적 분석만 한다 | 켬 | 켬 |
 | 저장소의 빌드 스크립트 실행 | build script·`cargo check`·plugin처럼 저장소의 코드를 실행하는 분석기를 돌린다([저장소 코드 실행 허가](ANALYZERS.md)) | 켬 | 끔 |
+| 의존성 받기 | 분석 전에 모듈마다 의존성을 레지스트리에서 받아 분석기가 읽게 한다. 지금은 Go 모듈이다. 저장소 코드는 실행하지 않는다([의존성 준비](ARCHITECTURE.md#의존성-준비)) | 켬 | 켬 |
 
 - 내 폴더는 내 코드라 둘 다 켠다. Git 저장소는 누구의 코드든 될 수 있어 빌드 스크립트를 실행하지 않는다. 그래서 Rust 저장소는 처음에 `cargo check`·clippy가 "저장소 코드 실행이 허가되지 않아 실행하지 않음"으로 빠진다. 켜면 그 저장소의 코드가 이 컴퓨터에서 내 권한으로 실행된다.
+- 의존성 받기는 "고급"의 "의존성 받기"다. 켜면 분석이 인터넷(기본 `proxy.golang.org`)에 접속하고 처음 받는 모듈은 시간이 걸린다. 받은 것은 `state_dir/cache/deps`에 남아 다음 분석은 빠르다. 끄면 의존성이 있는 Go 모듈의 go vet·Staticcheck가 `dependency_unavailable`로 끝날 수 있고, 보고서의 "더 나은 결과를 얻으려면"이 다시 켜기를 권한다. 사용자의 `go env`에 `GOPROXY`·`GOPRIVATE` 등을 정해 두었으면 그 값을 따른다. 비공개 모듈은 공개 proxy에 묻지 않고, 내 Go 모듈 캐시에 이미 있는 것만 쓴다. 컴퓨터 전체에서 끄려면 설정 `agent.dependencies.enabled: false`다.
 - 설정 파일 source root의 `repository_code`·`model_review`는 개인 모드에서 쓰이지 않는다. 서버 모드의 노드는 계속 운영자의 root별 허가를 따른다.
 
 ## 사용할 수 있는 도구 확인
@@ -267,6 +269,7 @@ storage workspace  0 bytes limit=2000000000 exceeded=false (node_heartbeat)
 storage artifacts  19459 bytes limit=1000000000 exceeded=false (database_accounting)
 ```
 
+- 받은 의존성은 도구 cache 영역(`state_dir/cache/deps`)에 센다. 지워도 되고, 다음 분석이 다시 받는다. 지우기 전에 `codeye stop`을 한다.
 - 공간이 부족하면 운영자가 정리하거나 상한을 늘린다. 상한을 늘리려면 설정을 바꾸고 `codeye stop` → `codeye up`을 한다. CODEYE는 오래된 파일을 자동으로 지우지 않는다.
 
 ## 정지
@@ -371,6 +374,9 @@ codeye up
 | `removed stale controller record (pid … pid_reused)` | 이전 프로세스가 비정상 종료됐다. 기록만 지웠고 신호는 보내지 않았다. 정상 |
 | `status`의 `issue: stale_record`, 종료 코드 1 | 위와 같다. `codeye start`가 정리한다 |
 | `the agent did not enroll and report a heartbeat in time` | `state_dir/logs/agent.log` 확인. 도구 경로·source root 경로가 맞는지 본다 |
+| 보고서 환경 절의 의존성 표에 "의존성 저장소(registry·proxy)에 연결하지 못했다"(`registry_unreachable`) | 인터넷이나 proxy에 닿지 않는다. 네트워크를 확인하거나 `agent.dependencies.go_proxy`에 쓸 수 있는 proxy를 적는다. 분석은 받은 것 없이 계속됐다 |
+| 의존성 표에 `download_limit_exceeded`·`dependency_budget_exhausted` | 받을 의존성이 크거나 느리다. `agent.dependencies.max_download_bytes`·`timeout_seconds`·`total_timeout_seconds`를 늘린다 |
+| 의존성 표에 `private_module_not_fetched` | 비공개 모듈은 공개 proxy에서 받지 않는다. 그 저장소에서 한 번 `go mod download`를 해 내 Go 모듈 캐시에 두면 다음 분석이 쓴다 |
 | 분석이 시작되지 않고 저장 공간 상한 문구가 나온다 | [저장 공간](#저장-공간). `codeye status`의 `exceeded=true` 영역을 정리하거나 상한을 늘린다 |
 | stop의 `outcome: recovery_required` | [정지](#정지) |
 | `the target database is not empty; restore only into a new, empty database` | 복원 대상 DB가 비어 있지 않다. 새 DB를 만든다 |

@@ -10,7 +10,7 @@ CODEYE 보고서가 지금 담는 내용, 발견 항목을 읽는 방법, 웹 �
 |---|---|
 | `schema_version` | `0.1`. 새 필드는 모두 선택 필드로 추가했다. |
 | `demo` | 제품이 게시한 보고서는 항상 `false`다. [`examples/report.json`](../examples/report.json)은 현재 builder가 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이고, [`examples/report-go-vet.json`](../examples/report-go-vet.json)은 builder 1 시절의 실제 코드 미포함 내보내기다(분석 종류별 절 없음). |
-| `builder.id` / `builder.version` | `codeye-report` / `6`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를, 버전 5부터 [분석 종류별 절](#분석-종류별-절)을, 버전 6부터 [모듈 단위 검토 분할](#모듈별-검토-장부)의 기록·발견·장부와 `review_calls[].task_key`를 기록한다. |
+| `builder.id` / `builder.version` | `codeye-report` / `7`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를, 버전 5부터 [분석 종류별 절](#분석-종류별-절)을, 버전 6부터 [모듈 단위 검토 분할](#모듈별-검토-장부)의 기록·발견·장부와 `review_calls[].task_key`를, 버전 7부터 환경 절의 [의존성 목록](#의존성-목록)과 의존성 공백을 기록한다. |
 | `builder.input_digest` | builder 입력(run·snapshot·attempt 사실, task 행, 결과 manifest, 산출물 행, 게시 시점 판정 집합, builder ID·버전·스키마 버전)의 SHA-256. 보고서 ID·리비전·생성 시각은 넣지 않는다. |
 | `export.include_code` | 저장본은 `true`다. 코드 미포함 내보내기는 같은 저장본의 projection이며 `false`다. |
 
@@ -61,7 +61,7 @@ builder 5부터 보고서는 위 필드에 더해 분석 종류마다 한 블록
 | 순서 | 절 | 블록 | 담는 것 |
 |---|---|---|---|
 | 1 | 종합 | `overview` | 절마다 단계 상태와 수(`sections[]`: `key`, `state`, `counts`), 먼저 볼 항목(`attention[]`: `section`, `code`, `count`) |
-| 2 | 환경 분석 | `environment` | 탐색 결과 수락 여부(`discovery`), 모듈·manifest, 모듈이 선언한 도구 요구, 노드가 관측한 도구·분석기 버전, 요구별 판정, 모델 해석(`model`, `notes`)과 그 근거 목록 |
+| 2 | 환경 분석 | `environment` | 탐색 결과 수락 여부(`discovery`), 모듈·manifest, 모듈이 선언한 도구 요구, 노드가 관측한 도구·분석기 버전, 요구별 판정, 의존성 받기 결과(`dependencies`, builder 7부터, 의존성 task가 없으면 생략), 모델 해석(`model`, `notes`)과 그 근거 목록 |
 | 3 | 문서 분석 | `documents` | 문서 목록과 읽음·예산 초과·제외 상태, 읽기 예산, 모듈별 적용 문서, 겹치는 안내, 모델 해석(계약·충돌·질문·지침 메모)과 근거 목록 |
 | 4 | 정적 분석 | `static_analysis` | 생태계(`languages[].ecosystem`)별, 그 안에서 분석기 task별 한 행: 목적, 작업 상태·사유, 결과 수락 여부, exit class, 규칙 팩, 범위·처리 파일 수, 규칙별 관찰 수, 관찰·발견 ID |
 | 5 | 구조·중복 지표 | `metrics` | 지표 분석기 task와 지표별 묶음(이름·단위·임계값·최댓값·관찰 ID) |
@@ -115,6 +115,21 @@ builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단�
 **비밀값 선별 상태.** builder 6부터 비밀정보 절의 `model_input`에 `screened`(완료된 탐지로 걸렀고 뺀 파일 없음)가 있다. builder 5는 이 경우를 `not_screened`로 읽었다.
 
 예시는 [`examples/report-slices.json`](../examples/report-slices.json)과 [`examples/report-slices.md`](../examples/report-slices.md)이다. `fixtures/modules/slices/input`을 호출 상한 15로 실행해(작업마다 대본 응답 1회, 모델 호출 없음) slice 3개가 승인되고 4개가 `budget_exhausted`로 끝난 합성 예시이며, 생성 시험은 [`report_slices_example_test.go`](../internal/worker/review/report_slices_example_test.go)다.
+
+### 의존성 목록
+
+builder 7부터 환경 절은 `deps.*` task마다 한 행(`environment.dependencies[]`, key 순서)을 싣는다([의존성 준비](ARCHITECTURE.md#의존성-준비)). 의존성 task가 계획되지 않은 run에는 필드가 없고 보고서는 builder 6과 같은 모양이다.
+
+- 행 필드: `task_key`, `task_status`, `task_reason`, 기록 수락 여부 `result`(`accepted`, `result_rejected`, `result_missing`), 그리고 수락한 기록의 `module`·`ecosystem`·`path`·`manager`·`manager_version`·`state`·`reason`·`pinned`·`lockfile`·`declared`·`prepared`·`failed`·`cache_kind`·`failed_items`·`limitations`. 기록을 수락하지 못했으면 기록 필드는 null이고 task 상태·사유만 보인다.
+- 기록은 `DependenciesDecoder`가 attempt·snapshot·task와 대조한다. 기록의 `task_status`가 task 행과 다르면 거부한다. 관찰·발견·도구 coverage에는 더하지 않는다.
+- 종합의 환경 절 수에 `dependencies`(의존성 task 수)와 `dependencies_prepared`(성공한 task 수)가 더해진다. 의존성 task가 없으면 두 수는 없다.
+- 공백(`gaps`, 절 `environment`):
+  - `dependencies_not_prepared`: 성공하지 않은 의존성 task. 받을 것이 없어 건너뛴 task는 넣지 않는다. `subject`는 task key, `detail`은 사유다.
+  - `dependencies_not_fetched`: 분석기 task가 `dependency_unavailable`로 끝났는데 그 생태계의 의존성 task가 없다(의존성 받기가 꺼져 있었다). `subject`는 분석기 task key다.
+  - `dependency_versions_not_pinned`: lockfile이 버전을 고정하지 않아 받는 도구가 버전을 골랐다.
+- 판정 규칙은 바뀌지 않는다. 의존성 task는 필수가 아니므로 실패해도 그것만으로 보고서가 `partial`이 되지 않는다. 의존성이 없어 분석기가 실패하면 그 분석기 task가 판정에 반영된다.
+- Markdown·HTML은 환경 절에 모듈·받는 도구·결과·받은 수·사유·한계 표를 보인다.
+
 
 ## 상태와 판정
 
