@@ -1,7 +1,7 @@
 import { ReportPanel } from './ReportPanel';
 import { useEffect, useState } from 'react';
-import type { Api, Project, RunAck, RunProgress, RunTrigger, RunView } from './api';
-import { canCancelRun, describeError, formatClock, formatInstant, isKnownRunStatus, isTerminalRun, runStatusLabel, shorten, stageName, type ErrorText } from './format';
+import { ApiError, type Api, type Project, type RunAck, type RunProgress, type RunTrigger, type RunView } from './api';
+import { canCancelRun, describeError, roleLabel, formatClock, formatInstant, isKnownRunStatus, isTerminalRun, runStatusLabel, shorten, stageName, type ErrorText } from './format';
 import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
 import type { StreamMode } from './runStream';
@@ -22,9 +22,11 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
   const [accepted, setAccepted] = useState<RunAck | null>(null);
   const activeId = runId ?? openRunId;
   const retrying = error !== null && idempotency.pending(userId, project.id);
+  // The server decides; this only keeps a viewer from offering an action it will refuse.
+  const canRun = project.can_run;
 
   async function start() {
-    if (pending) return;
+    if (pending || !canRun) return;
     setPending(true);
     setError(null);
     // The key is created once per (user, project, body) and reused until the server accepts it,
@@ -38,6 +40,8 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
       onRunChange?.();
     } catch (e) {
       setError(describeError(e));
+      // A 403 means the caller's role changed: re-read the project so the controls follow it.
+      if (e instanceof ApiError && e.status === 403) onRunChange?.();
     } finally {
       setPending(false);
     }
@@ -47,14 +51,15 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
     <h2 id="run-title">{t.runs.title}</h2>
     <ul className="plain small"><li>{t.runs.profile}</li><li>{t.runs.policy}</li><li>{t.runs.scope}</li></ul>
     <p className="small">{t.runs.startNote}</p>
-    <button type="button" className="primary" onClick={start} disabled={pending} aria-busy={pending}>{pending ? t.runs.starting : t.runs.start}</button>
+    <button type="button" className="primary" onClick={start} disabled={pending || !canRun} aria-busy={pending} aria-describedby={canRun ? undefined : 'run-not-allowed'}>{pending ? t.runs.starting : t.runs.start}</button>
+    {!canRun && <p id="run-not-allowed" className="small">{t.accounts.runNotAllowed(roleLabel(project.role))}</p>}
     {error && <><ErrorNote error={error} />{retrying && <p className="small">{t.runs.retryNote}</p>}</>}
     {accepted && <p role="status">{t.runs.accepted(shorten(accepted.id, 12))}</p>}
-    {activeId && <RunStatus key={activeId} api={api} runId={activeId} placeholder={accepted?.id === activeId ? accepted : null} onRunChange={onRunChange} />}
+    {activeId && <RunStatus key={activeId} api={api} runId={activeId} canRun={canRun} placeholder={accepted?.id === activeId ? accepted : null} onRunChange={onRunChange} />}
   </section>;
 }
 
-function RunStatus({ api, runId, placeholder, onRunChange }: { api: Api; runId: string; placeholder: RunAck | null; onRunChange?: () => void }) {
+function RunStatus({ api, runId, canRun, placeholder, onRunChange }: { api: Api; runId: string; canRun: boolean; placeholder: RunAck | null; onRunChange?: () => void }) {
   const { run, error, stopped, hidden, confirmedAt, mode, applyAck, refresh } = useRunPolling(api, runId);
   const runVersion = run?.version;
   useEffect(() => { if (runVersion !== undefined) onRunChange?.(); }, [runVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -79,7 +84,9 @@ function RunStatus({ api, runId, placeholder, onRunChange }: { api: Api; runId: 
     </p>
     <div className="actions">
       {(!terminal || (run?.snapshot_id && !run.reportRevision)) && <button type="button" onClick={refresh}>{t.runs.refresh}</button>}
-      {status !== null && !terminal && <CancelControl api={api} runId={runId} status={status} onAck={applyAck} />}
+      {status !== null && !terminal && (canRun
+        ? <CancelControl api={api} runId={runId} status={status} onAck={applyAck} onForbidden={onRunChange} />
+        : <p className="small">{t.accounts.cancelNotAllowed}</p>)}
     </div>
   </div>;
 }
@@ -148,7 +155,7 @@ function RunDetails({ run, confirmedAt }: { run: RunView; confirmedAt: Date | nu
   <StageList summary={p.stages} runStatus={run.status} confirmedAt={confirmedAt} /></>;
 }
 
-function CancelControl({ api, runId, status, onAck }: { api: Api; runId: string; status: string; onAck: (ack: RunAck) => void }) {
+function CancelControl({ api, runId, status, onAck, onForbidden }: { api: Api; runId: string; status: string; onAck: (ack: RunAck) => void; onForbidden?: () => void }) {
   const [step, setStep] = useState<'idle' | 'confirm' | 'sending' | 'done'>('idle');
   const [error, setError] = useState<ErrorText | null>(null);
   if (!canCancelRun(status)) {
@@ -163,6 +170,7 @@ function CancelControl({ api, runId, status, onAck }: { api: Api; runId: string;
     } catch (e) {
       setError(describeError(e));
       setStep('confirm');
+      if (e instanceof ApiError && e.status === 403) onForbidden?.();
     }
   }
   if (step === 'done') return <p role="status">{t.runs.cancelDone}</p>;

@@ -42,11 +42,10 @@ func normalizeConfig(ctx context.Context, tx pgx.Tx, config json.RawMessage) (js
 	return normalized, domain.Digest(normalized), nil
 }
 
-// CreateUser is a trusted provisioning operation; authentication is separate.
+// CreateUser is a trusted provisioning operation (a login-link user without
+// a display name); authentication is separate.
 func (s *Store) CreateUser(ctx context.Context) (string, error) {
-	id := domain.NewID()
-	_, err := s.pool.Exec(ctx, "INSERT INTO users(id) VALUES($1)", id)
-	return id, classify(err)
+	return s.CreateUserNamed(ctx, "")
 }
 func (s *Store) CreateProject(ctx context.Context, actor, name string, config json.RawMessage) (Project, error) {
 	if !validIDs(actor) || strings.TrimSpace(name) == "" || len(name) > 200 {
@@ -73,8 +72,39 @@ func insertProject(ctx context.Context, tx pgx.Tx, actor, name string, canonical
 	if _, err := tx.Exec(ctx, "INSERT INTO project_members(project_id,user_id,role) VALUES($1,$2,'manager')", p.ID, actor); err != nil {
 		return Project{}, err
 	}
-	_, err := tx.Exec(ctx, "INSERT INTO project_revisions(project_id,revision,config,config_digest) VALUES($1,1,$2,$3)", p.ID, string(canonical), digest)
-	return p, err
+	if _, err := tx.Exec(ctx, "INSERT INTO project_revisions(project_id,revision,config,config_digest) VALUES($1,1,$2,$3)", p.ID, string(canonical), digest); err != nil {
+		return Project{}, err
+	}
+	detail := map[string]any{"name": truncateAudit(name), "revision": 1}
+	var cfg struct {
+		Source struct {
+			Kind         string `json:"kind"`
+			SourceRootID string `json:"source_root_id"`
+			ProviderID   string `json:"provider_id"`
+		} `json:"source"`
+	}
+	if json.Unmarshal(canonical, &cfg) == nil && cfg.Source.Kind != "" {
+		detail["source_kind"] = truncateAudit(cfg.Source.Kind)
+		if validIDs(cfg.Source.SourceRootID) {
+			detail["source_root_id"] = cfg.Source.SourceRootID
+		}
+		if validIDs(cfg.Source.ProviderID) {
+			detail["provider_id"] = cfg.Source.ProviderID
+		}
+	}
+	return p, writeAudit(ctx, tx, userAudit(ctx, actor, AuditProjectRegistered).target("project", p.ID).in(p.ID).with(detail))
+}
+
+// truncateAudit shortens free text (names) to the audit string limit.
+func truncateAudit(s string) string {
+	if len(s) <= maxAuditString {
+		return s
+	}
+	r := []rune(s)
+	for len(string(r)) > maxAuditString {
+		r = r[:len(r)-1]
+	}
+	return string(r)
 }
 
 // requireProject checks the actor's access under a project row lock so a concurrent
@@ -149,32 +179,9 @@ func (s *Store) ReviseProject(ctx context.Context, actor, id string, expected in
 			}
 			return 0, err
 		}
-		_, err = tx.Exec(ctx, "INSERT INTO project_revisions(project_id,revision,config,config_digest) VALUES($1,$2,$3,$4)", id, revision, string(canonical), digest)
-		return revision, err
+		if _, err = tx.Exec(ctx, "INSERT INTO project_revisions(project_id,revision,config,config_digest) VALUES($1,$2,$3,$4)", id, revision, string(canonical), digest); err != nil {
+			return 0, err
+		}
+		return revision, writeAudit(ctx, tx, userAudit(ctx, actor, AuditProjectRevised).target("project", id).in(id).with(map[string]any{"revision": revision}))
 	})
-}
-func (s *Store) SetMember(ctx context.Context, actor, project, user string, role domain.Role) error {
-	if !validIDs(actor, project, user) || (role != "" && !role.Valid()) {
-		return domain.ErrInvalid
-	}
-	_, err := transaction(ctx, s, func(tx pgx.Tx) (bool, error) {
-		if err := requireProject(ctx, tx, actor, project, true, false); err != nil {
-			return false, err
-		}
-		var owner string
-		if err := tx.QueryRow(ctx, "SELECT owner_id::text FROM projects WHERE id=$1", project).Scan(&owner); err != nil {
-			return false, err
-		}
-		if owner == user {
-			return false, domain.ErrConflict
-		}
-		var err error
-		if role == "" {
-			_, err = tx.Exec(ctx, "DELETE FROM project_members WHERE project_id=$1 AND user_id=$2", project, user)
-		} else {
-			_, err = tx.Exec(ctx, "INSERT INTO project_members(project_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(project_id,user_id) DO UPDATE SET role=excluded.role", project, user, role)
-		}
-		return true, err
-	})
-	return err
 }

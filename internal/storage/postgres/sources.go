@@ -31,17 +31,139 @@ func (s *Store) AddSourceRoot(ctx context.Context, label, path string) (SourceRo
 		return SourceRoot{}, domain.ErrInvalid
 	}
 	r := SourceRoot{ID: domain.NewID(), Label: clean}
-	_, err := s.pool.Exec(ctx, "INSERT INTO source_roots(id,label,path) VALUES($1,$2,$3)", r.ID, r.Label, path)
-	return r, classify(err)
+	_, err := transaction(ctx, s, func(tx pgx.Tx) (bool, error) {
+		if _, err := tx.Exec(ctx, "INSERT INTO source_roots(id,label,path) VALUES($1,$2,$3)", r.ID, r.Label, path); err != nil {
+			return false, err
+		}
+		// The path is the operator's own input; the audit row keeps only the label.
+		return true, writeAudit(ctx, tx, principalAudit(OperatorPrincipal(), AuditSourceRootAdded).target("source_root", r.ID).with(map[string]any{"label": r.Label}))
+	})
+	return r, err
 }
 
-// GrantSourceRoot lets user register projects under root. Granting twice is a no-op.
+// GrantSourceRoot is GrantSourceRootBy the operator CLI.
 func (s *Store) GrantSourceRoot(ctx context.Context, root, user string) error {
+	return s.GrantSourceRootBy(ctx, OperatorPrincipal(), root, user)
+}
+
+// GrantSourceRootBy lets user register projects under root. by is the
+// operator or an administrator. Granting twice changes nothing and writes no
+// second audit row. An unknown root or user is ErrNotFound.
+func (s *Store) GrantSourceRootBy(ctx context.Context, by Principal, root, user string) error {
 	if !validIDs(root, user) {
 		return domain.ErrInvalid
 	}
-	_, err := s.pool.Exec(ctx, "INSERT INTO source_root_grants(source_root_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", root, user)
-	return classify(err)
+	_, err := transaction(ctx, s, func(tx pgx.Tx) (bool, error) {
+		if err := requireAdmin(ctx, tx, by); err != nil {
+			return false, err
+		}
+		if err := sourceRootAndUser(ctx, tx, root, user); err != nil {
+			return false, err
+		}
+		tag, err := tx.Exec(ctx, "INSERT INTO source_root_grants(source_root_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", root, user)
+		if err != nil || tag.RowsAffected() == 0 {
+			return false, err
+		}
+		return true, writeAudit(ctx, tx, principalAudit(by, AuditSourceRootGranted).target("source_root", root).with(map[string]any{"user_id": user}))
+	})
+	return err
+}
+
+// RevokeSourceRootGrant removes user's grant on root. Projects the user
+// registered under it stay, but the claim-time re-check refuses their new
+// runs. Revoking a missing grant succeeds without an audit row.
+func (s *Store) RevokeSourceRootGrant(ctx context.Context, by Principal, root, user string) error {
+	if !validIDs(root, user) {
+		return domain.ErrInvalid
+	}
+	_, err := transaction(ctx, s, func(tx pgx.Tx) (bool, error) {
+		if err := requireAdmin(ctx, tx, by); err != nil {
+			return false, err
+		}
+		if err := sourceRootAndUser(ctx, tx, root, user); err != nil {
+			return false, err
+		}
+		tag, err := tx.Exec(ctx, "DELETE FROM source_root_grants WHERE source_root_id=$1 AND user_id=$2", root, user)
+		if err != nil || tag.RowsAffected() == 0 {
+			return false, err
+		}
+		return true, writeAudit(ctx, tx, principalAudit(by, AuditSourceRootRevoked).target("source_root", root).with(map[string]any{"user_id": user}))
+	})
+	return err
+}
+
+func sourceRootAndUser(ctx context.Context, tx pgx.Tx, root, user string) error {
+	var ok bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM source_roots WHERE id=$1) AND EXISTS(SELECT 1 FROM users WHERE id=$2)", root, user).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// SourceRootGrant is one user granted a source root.
+type SourceRootGrant struct {
+	UserID    string
+	Username  *string
+	GrantedAt time.Time
+}
+
+// SourceRootAccess is a root (label only, never its server path) with its grants.
+type SourceRootAccess struct {
+	ID, Label string
+	CreatedAt time.Time
+	Grants    []SourceRootGrant
+}
+
+// ListSourceRootAccess is the administrator's view of every root and who
+// may use it.
+func (s *Store) ListSourceRootAccess(ctx context.Context, by Principal) ([]SourceRootAccess, error) {
+	return transaction(ctx, s, func(tx pgx.Tx) ([]SourceRootAccess, error) {
+		if err := requireAdmin(ctx, tx, by); err != nil {
+			return nil, err
+		}
+		rows, err := tx.Query(ctx, `SELECT r.id::text,r.label,r.created_at,g.user_id::text,u.username,g.created_at FROM source_roots r
+			LEFT JOIN source_root_grants g ON g.source_root_id=r.id LEFT JOIN users u ON u.id=g.user_id
+			ORDER BY r.label,r.id,u.username NULLS LAST,g.user_id`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		out := []SourceRootAccess{}
+		for rows.Next() {
+			var id, label string
+			var created time.Time
+			var user, username *string
+			var granted *time.Time
+			if err := rows.Scan(&id, &label, &created, &user, &username, &granted); err != nil {
+				return nil, err
+			}
+			if len(out) == 0 || out[len(out)-1].ID != id {
+				out = append(out, SourceRootAccess{ID: id, Label: label, CreatedAt: created.UTC(), Grants: []SourceRootGrant{}})
+			}
+			if user != nil && granted != nil {
+				last := &out[len(out)-1]
+				last.Grants = append(last.Grants, SourceRootGrant{UserID: *user, Username: username, GrantedAt: granted.UTC()})
+			}
+		}
+		return out, rows.Err()
+	})
+}
+
+// ListProvidersBy is the administrator's provider list (with API URLs).
+func (s *Store) ListProvidersBy(ctx context.Context, by Principal) ([]Provider, error) {
+	return transaction(ctx, s, func(tx pgx.Tx) ([]Provider, error) {
+		if err := requireAdmin(ctx, tx, by); err != nil {
+			return nil, err
+		}
+		rows, err := tx.Query(ctx, "SELECT id::text,kind,host,coalesce(api_url,'') FROM providers ORDER BY host,kind")
+		if err != nil {
+			return nil, err
+		}
+		return pgx.CollectRows(rows, pgx.RowToStructByPos[Provider])
+	})
 }
 
 // ListSourceRoots returns the roots granted to actor, ordered by label.
@@ -76,8 +198,13 @@ func (s *Store) AddProvider(ctx context.Context, kind, host, apiURL string) (Pro
 		api = apiURL
 	}
 	p := Provider{ID: domain.NewID(), Kind: kind, Host: host, APIURL: apiURL}
-	_, err := s.pool.Exec(ctx, "INSERT INTO providers(id,kind,host,api_url) VALUES($1,$2,$3,$4)", p.ID, kind, host, api)
-	return p, classify(err)
+	_, err := transaction(ctx, s, func(tx pgx.Tx) (bool, error) {
+		if _, err := tx.Exec(ctx, "INSERT INTO providers(id,kind,host,api_url) VALUES($1,$2,$3,$4)", p.ID, kind, host, api); err != nil {
+			return false, err
+		}
+		return true, writeAudit(ctx, tx, principalAudit(OperatorPrincipal(), AuditProviderAdded).target("provider", p.ID).with(map[string]any{"kind": kind, "host": truncateAudit(host)}))
+	})
+	return p, err
 }
 
 // ListProviders returns all approved providers, ordered by host.
@@ -201,6 +328,8 @@ type ProjectSummary struct {
 	LastRun  *RunRef
 	// HasReport is true once any run of the project has a published report.
 	HasReport bool
+	// Role is the reading actor's role: owner, manager, runner or viewer.
+	Role string
 	// Activity is the representative run's stage view. Store reads
 	// always fill it; a hand-built summary has CheckedAt zero.
 	Activity Activity
@@ -295,6 +424,9 @@ func (s *Store) GetProjectSummary(ctx context.Context, actor, id string) (Projec
 			return p, err
 		}
 		items := []ProjectSummary{p}
+		if err = attachRoles(ctx, tx, actor, items); err != nil {
+			return p, err
+		}
 		err = attachActivity(ctx, tx, items)
 		return items[0], err
 	})
@@ -352,8 +484,27 @@ func (s *Store) ListProjects(ctx context.Context, actor, cursor string, limit in
 		}
 		// One statement for the stage views of the whole page (no per-project
 		// round trip); only queued representatives add waiting-reason reads.
+		if err := attachRoles(ctx, tx, actor, page.Items); err != nil {
+			return ProjectPage{}, err
+		}
 		return page, attachActivity(ctx, tx, page.Items)
 	})
+}
+
+// attachRoles fills each summary's Role for actor (one statement per page).
+func attachRoles(ctx context.Context, tx pgx.Tx, actor string, items []ProjectSummary) error {
+	ids := make([]string, len(items))
+	for i, p := range items {
+		ids[i] = p.ID
+	}
+	roles, err := callerRoles(ctx, tx, actor, ids)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		items[i].Role = roles[items[i].ID]
+	}
+	return nil
 }
 
 // RunView is a run with task counts for status display. TotalTasks is 0 when

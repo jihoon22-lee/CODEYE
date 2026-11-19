@@ -34,12 +34,13 @@ describe('connection states', () => {
     expect(screen.getByText(t.session.unavailable.title)).toBeTruthy();
   });
 
-  it('asks for a launch link when there is no session and offers no token input', async () => {
+  it('offers a launch link or a password sign-in when there is no session, and no launch-token input', async () => {
     const { container } = renderApp(() => apiError(401, 'UNAUTHENTICATED'));
     await flush();
     expect(screen.getByText(t.session.anonymous.title)).toBeTruthy();
     expect(screen.getByText(t.session.anonymous.none)).toBeTruthy();
-    expect(container.querySelector('input')).toBeNull();
+    const inputs = [...container.querySelectorAll('input')].map(i => i.getAttribute('autocomplete'));
+    expect(inputs).toEqual(['username', 'current-password']);
   });
 
   it('explains a rejected launch link', async () => {

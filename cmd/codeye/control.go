@@ -25,13 +25,17 @@ Usage:
   codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
   codeye model probe --executable PATH --model PROVIDER/MODEL [--relay-file PATH] [--timeout 75s]
   codeye migrate
-  codeye user create [--name NAME]
-  codeye user disable --id USER_ID
+  codeye user create [--name NAME] [--username NAME [--password-file PATH]] [--admin]
+  codeye user passwd (--id USER_ID | --username NAME) [--password-file PATH] [--must-change]
+  codeye user list
+  codeye user disable (--id USER_ID | --username NAME)
+  codeye user admin (--id USER_ID | --username NAME) (--set | --unset)
   codeye source-root add --label LABEL --path ABSOLUTE_DIR
   codeye source-root grant --root ROOT_ID --user USER_ID
   codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
-  codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331]
+  codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
   codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]]
+               [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]]   (required for a non-loopback --listen)
 ` + nodeAdminUsage + `  codeye start [--config PATH]      (personal mode, Linux: controller + local agent from one JSON config)
   codeye stop [--config PATH] [--format text|json]
   codeye status [--config PATH] [--format text|json]
@@ -48,6 +52,7 @@ Usage:
                [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1] [--review-max-calls 15..207]
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema.
 Login links are written to a 0600 file; the token is never printed.
+Passwords are read from --password-file (mode 0600) or standard input (echo off on a Linux terminal), never from arguments.
 "serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.
 Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
 Enrollment tokens are written to a 0600 file; the token is never printed.
@@ -77,6 +82,12 @@ func runControl(ctx context.Context, args []string, out, stderr io.Writer) (code
 		cmd = userCreate
 	case "user disable":
 		cmd = userDisable
+	case "user passwd":
+		cmd = userPasswd
+	case "user list":
+		cmd = userList
+	case "user admin":
+		cmd = userAdmin
 	case "source-root add":
 		cmd = sourceRootAdd
 	case "source-root grant":
@@ -131,38 +142,6 @@ func printJSON(out io.Writer, v any) {
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
 	_ = enc.Encode(v)
-}
-
-func userCreate(ctx context.Context, args []string, out, stderr io.Writer) int {
-	var name string
-	if !parse("user create", args, stderr, func(fs *flag.FlagSet) { fs.StringVar(&name, "name", "", "") }) {
-		return 2
-	}
-	return withStore(ctx, stderr, func(ctx context.Context, s *postgres.Store) int {
-		id, err := s.CreateUserNamed(ctx, name)
-		if err != nil {
-			fmt.Fprintln(stderr, "cannot create user:", err)
-			return 1
-		}
-		printJSON(out, map[string]string{"id": id})
-		return 0
-	})
-}
-
-func userDisable(ctx context.Context, args []string, out, stderr io.Writer) int {
-	var id string
-	if !parse("user disable", args, stderr, func(fs *flag.FlagSet) { fs.StringVar(&id, "id", "", "") }) || id == "" {
-		fmt.Fprintln(stderr, "--id is required")
-		return 2
-	}
-	return withStore(ctx, stderr, func(ctx context.Context, s *postgres.Store) int {
-		if err := s.DisableUser(ctx, id); err != nil {
-			fmt.Fprintln(stderr, "cannot disable user:", err)
-			return 1
-		}
-		fmt.Fprintln(out, "user disabled; its sessions are revoked")
-		return 0
-	})
 }
 
 func sourceRootAdd(ctx context.Context, args []string, out, stderr io.Writer) int {
@@ -235,6 +214,17 @@ func providerAdd(ctx context.Context, args []string, out, stderr io.Writer) int 
 	})
 }
 
+// loginOrigin accepts the origins a login link may point at: http on a
+// loopback host with a port (plain loopback serve), or an https public
+// origin (serve with TLS).
+func loginOrigin(origin string) bool {
+	if strings.HasPrefix(origin, "https://") {
+		canonical, _, err := httpapi.ParsePublicOrigin(origin)
+		return err == nil && canonical == origin
+	}
+	return loopbackOrigin(origin)
+}
+
 // loopbackOrigin validates an http origin on a loopback host with a port.
 func loopbackOrigin(origin string) bool {
 	u, err := url.Parse(origin)
@@ -252,8 +242,8 @@ func loopbackOrigin(origin string) bool {
 // login URL to path with mode 0600 via a same-directory rename, so an existing
 // symlink at path is replaced rather than followed. The token is never printed.
 func writeLoginLink(ctx context.Context, s *postgres.Store, user, origin, path string, out io.Writer) error {
-	if !loopbackOrigin(origin) {
-		return errors.New("origin must be http://127.0.0.1:PORT, http://localhost:PORT or http://[::1]:PORT")
+	if !loginOrigin(origin) {
+		return errors.New("origin must be http://127.0.0.1:PORT, http://localhost:PORT, http://[::1]:PORT or the server's https://HOST[:PORT] public origin")
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -311,16 +301,28 @@ func loginLink(ctx context.Context, args []string, out, stderr io.Writer) int {
 	})
 }
 
+// serveConfig is the parsed serve command line.
+type serveConfig struct {
+	addr                          netip.AddrPort
+	webDir, user, linkFile        string
+	artifactDir                   string
+	reconcile                     time.Duration
+	tlsCert, tlsKey, publicOrigin string
+}
+
 func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
-	var listen, webDir, user, linkFile, artifactDir string
-	var reconcile time.Duration
+	var listen string
+	var c serveConfig
 	if !parse("serve", args, stderr, func(fs *flag.FlagSet) {
-		fs.DurationVar(&reconcile, "reconcile-interval", 5*time.Second, "")
+		fs.DurationVar(&c.reconcile, "reconcile-interval", 5*time.Second, "")
 		fs.StringVar(&listen, "listen", "127.0.0.1:7331", "")
-		fs.StringVar(&webDir, "web-dir", filepath.Join("web", "dist"), "")
-		fs.StringVar(&artifactDir, "artifact-dir", filepath.Join(".codeye", "artifacts"), "")
-		fs.StringVar(&user, "user", "", "")
-		fs.StringVar(&linkFile, "login-link-file", filepath.Join(".codeye", "login-link"), "")
+		fs.StringVar(&c.webDir, "web-dir", filepath.Join("web", "dist"), "")
+		fs.StringVar(&c.artifactDir, "artifact-dir", filepath.Join(".codeye", "artifacts"), "")
+		fs.StringVar(&c.user, "user", "", "")
+		fs.StringVar(&c.linkFile, "login-link-file", filepath.Join(".codeye", "login-link"), "")
+		fs.StringVar(&c.tlsCert, "tls-cert", "", "")
+		fs.StringVar(&c.tlsKey, "tls-key", "", "")
+		fs.StringVar(&c.publicOrigin, "public-origin", "", "")
 	}) {
 		return 2
 	}
@@ -329,15 +331,31 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if reconcile == 0 || reconcile > time.Hour || (reconcile > 0 && reconcile < 100*time.Millisecond) {
+	c.addr = addr
+	tls := c.tlsCert != "" || c.tlsKey != "" || c.publicOrigin != ""
+	switch {
+	case tls && (c.tlsCert == "" || c.tlsKey == "" || c.publicOrigin == ""):
+		fmt.Fprintln(stderr, "TLS needs all of --tls-cert, --tls-key and --public-origin https://HOST[:PORT]")
+		return 2
+	case !tls && !addr.Addr().IsLoopback():
+		fmt.Fprintln(stderr, httpapi.ErrTLSRequired)
+		return 2
+	}
+	if tls {
+		if _, _, err := httpapi.ParsePublicOrigin(c.publicOrigin); err != nil {
+			fmt.Fprintln(stderr, "--public-origin:", err)
+			return 2
+		}
+	}
+	if c.reconcile == 0 || c.reconcile > time.Hour || (c.reconcile > 0 && c.reconcile < 100*time.Millisecond) {
 		fmt.Fprintln(stderr, "--reconcile-interval must be between 100ms and 1h (negative disables the autoscaler and schedules)")
 		return 2
 	}
-	if artifactDir == "" {
+	if c.artifactDir == "" {
 		fmt.Fprintln(stderr, "--artifact-dir must not be empty")
 		return 2
 	}
-	if artifactDir, err = filepath.Abs(artifactDir); err != nil {
+	if c.artifactDir, err = filepath.Abs(c.artifactDir); err != nil {
 		fmt.Fprintln(stderr, "--artifact-dir cannot be resolved")
 		return 2
 	}
@@ -358,31 +376,39 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "database schema is %s (applied %d, this binary expects %d); run \"codeye migrate\" explicitly after reviewing it\n", st.State, st.Applied, st.Latest)
 		return 1
 	}
-	return serveOn(ctx, startCtx, store, addr, webDir, user, linkFile, artifactDir, reconcile, out, stderr)
+	return serveOn(ctx, startCtx, store, c, out, stderr)
 }
 
-func serveOn(ctx, startCtx context.Context, store *postgres.Store, addr netip.AddrPort, webDir, user, linkFile, artifactDir string, reconcile time.Duration, out, stderr io.Writer) int {
+func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig, out, stderr io.Writer) int {
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
-	srv, err := httpapi.New(httpapi.Config{Listen: addr, WebDir: webDir, Logger: logger, ArtifactDir: artifactDir, ReconcileInterval: reconcile}, store)
+	srv, err := httpapi.New(httpapi.Config{Listen: c.addr, WebDir: c.webDir, Logger: logger, ArtifactDir: c.artifactDir, ReconcileInterval: c.reconcile,
+		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigin: c.publicOrigin}, store)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	defer srv.Close()
-	ln, err := net.Listen("tcp", addr.String())
+	ln, err := net.Listen("tcp", c.addr.String())
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot listen:", strings.TrimSpace(err.Error()))
 		return 1
 	}
-	origin := "http://" + addr.String()
-	if user != "" {
-		if err := writeLoginLink(startCtx, store, user, origin, linkFile, out); err != nil {
+	origin := "http://" + c.addr.String()
+	if srv.Secure() {
+		origin = srv.Origin()
+	}
+	if c.user != "" {
+		if err := writeLoginLink(startCtx, store, c.user, origin, c.linkFile, out); err != nil {
 			_ = ln.Close()
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
 	}
-	fmt.Fprintf(out, "CODEYE controller API on %s (node protocol enabled; runs wait until a capable node claims them)\n", origin)
+	if srv.Secure() {
+		fmt.Fprintf(out, "CODEYE controller API on %s over TLS, listening on %s (node protocol enabled; runs wait until a capable node claims them)\n", origin, c.addr)
+	} else {
+		fmt.Fprintf(out, "CODEYE controller API on %s (node protocol enabled; runs wait until a capable node claims them)\n", origin)
+	}
 	if err := srv.Serve(ctx, ln); err != nil {
 		fmt.Fprintln(stderr, "server stopped:", err)
 		return 1

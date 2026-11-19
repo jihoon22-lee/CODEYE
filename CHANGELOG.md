@@ -17,6 +17,20 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - 보고서 builder 6: slice 기록과 범위 산출물을 읽고, slice 후보를 `review_sNNN_<후보>` 발견으로 코드 분석 절에 넣는다. 코드 분석 절의 [모듈별 검토 장부](docs/REPORT.md#모듈별-검토-장부)(`code_review.ledger`)가 상한·호출·요청 크기와 모듈마다 모델에 보낸 파일·보내지 못한 이유를 센다(모델에 보낸 범위는 검증 범위가 아니다). `llm_exposed_files`는 slice도 세고, `review_calls[]`는 `task_key`를 싣고 최대 207개다. 종합에 보낸/보내지 않은 파일 수, 분석 공백에 `review_scope_*`가 생기며 Markdown·HTML·웹 화면이 같은 수를 보인다. 비밀정보 절 `model_input`에 `screened`가 생겼다. 예시 [`examples/report-slices.json`](examples/report-slices.json)·[`.md`](examples/report-slices.md)는 coverage fixture를 상한 15로 실행한 합성 예시다.
 - 확인 환경: Linux, Go 1.27.4, PostgreSQL 17.10(임시 cluster), gitleaks 8.30.1, OpenCode 1.19.5와 가짜 upstream(`--test-upstream`). 실모델 호출은 하지 않았다.
 
+### 추가 — 계정·권한·감사
+
+- **로컬 계정**: 사용자 이름(대소문자 무시)과 비밀번호로 로그인한다(`POST /session`). 비밀번호는 PBKDF2-HMAC-SHA256(600,000회, 사용자별 salt)으로 저장하고, 없는 사용자와 틀린 비밀번호는 같은 응답·같은 비용이다. 로그인 링크와 개인 모드는 그대로 동작한다.
+- **관리자 재설정의 기록과 표시**: 로그인 링크마다 발급자와 목적을 저장하고, 관리자 링크로 시작한 세션의 로그인과 모든 감사 행에 `link_issued_by`를 남긴다. 계정 생성·재설정 링크의 세션은 세션 행에서 비밀번호 변경에 묶인다. 사용자 이름 없는 사용자의 관리자 재설정은 409다. 세션 조회의 `password_reset`이 재설정한 관리자와 시각을 30일 동안 지울 수 없게 보여 준다. 관리자가 재설정으로 계정을 넘겨받는 것은 막지 않고 기록·표시한다.
+- **로그인 제한**: (이름, 접속 주소) 쌍 5회 실패면 그 쌍만 30초부터 두 배씩 최대 5분 지연한다. 주소만으로는 500회에서 5분 지연한다. 이름 전체를 잠그는 규칙은 없다. 카운터는 DB에 있어 여러 controller가 공유하고, 15분 지난 행은 지운다. 지연된 요청은 429와 `Retry-After`다. 비밀번호 KDF 동시 계산은 프로세스마다 CPU 수로 제한하고 3초 안에 자리가 없으면 503이다.
+- **비밀번호 변경·재설정**: `POST /session/password`는 다른 세션을 끝낸다. 관리자 재설정은 비밀번호를 지우고 일회용 로그인 링크를 주며, 사용자는 새 비밀번호를 정하기 전에는 다른 경로를 쓸 수 없다.
+- **관리자**: 사용자 목록·생성·비활성화, 관리자 지정·해제, 재설정, source root 허가, provider·감사 기록 조회(`/api/v1/admin/…`, `/api/v1/audit`). 관리자 역할은 프로젝트를 열지 않는다. 마지막 활성 관리자는 남는다. 첫 관리자와 계정 운영은 `codeye user create --username … --admin`, `user passwd`, `user list`, `user disable`, `user admin --set/--unset`. 개인 모드 사용자는 관리자다.
+- **프로젝트 구성원**: `GET /projects/{id}/members`, `POST /projects/{id}/members`(정확한 사용자 이름), `PUT/DELETE /projects/{id}/members/{user_id}`. 프로젝트 응답에 호출자의 `role`, `can_run`, `can_manage`가 붙는다.
+- **계정·구성원 화면**: 사용자 이름·비밀번호 로그인, 비밀번호 변경, 계정 메뉴, 프로젝트 구성원 관리(아이디로 추가), 역할에 따른 버튼 제한, 관리자 영역(사용자·source root 허가·provider·감사 기록), 프로젝트 감사 기록 탭.
+- **감사 기록**: 추가 전용 `audit_events`(migration 0010). 등록·변경·실행·취소·내보내기·판정·예약·구성원·계정·로그인·노드·배치 한도·오래된 epoch 거부를 변경과 같은 트랜잭션에 남긴다. 기록하지 못하면 변경도 하지 않는다. 비밀번호·토큰·경로·모델 입력은 담지 않는다.
+- **TLS 수신**: `codeye serve --tls-cert --tls-key --public-origin`으로 loopback이 아닌 주소에서 HTTPS로 받는다(`__Host-` Secure cookie, HSTS). TLS 없이 loopback이 아닌 주소로는 시작하지 않는다. reverse proxy 뒤 배포는 지원하지 않는다.
+- **격리 시험**: 라우터의 모든 경로를 여섯 행위자로 요청해 404·403과 감사 행을 확인하는 표 시험(TC-140~TC-157). 웹 화면은 아직 없다.
+- 확인한 환경: Linux(WSL2), PostgreSQL 17.10, Go 1.27.4.
+
 ### 변경
 
 - **문서 통합 (#37)**: 번호를 붙인 단계별 문서 50개를 주제별 문서 16개(`docs/`)와 이 변경 이력으로 바꿨다. 주제 문서에는 현재 유효한 계약과 운영 규칙만 두고, 코드에서 문서를 가리키는 참조는 절 anchor까지 검증한다.

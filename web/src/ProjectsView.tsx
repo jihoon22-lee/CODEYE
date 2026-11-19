@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Api, Project, ProjectPage, Provider, SourceRoot } from './api';
-import { describeError, formatClock, isTerminalRun, shorten, type ErrorText } from './format';
+import { describeError, formatClock, isTerminalRun, roleLabel, shorten, type ErrorText } from './format';
 import { createPoller, type Poller } from './poller';
 import { LastReportLink, ProjectActivity } from './StageView';
 import { retryable } from './useRunPolling';
@@ -9,6 +9,8 @@ import { ko as t } from './locales/ko';
 import { ProjectForm } from './ProjectForm';
 import { ErrorNote, RunPanel } from './RunPanel';
 import { SchedulePanel } from './SchedulePanel';
+import { MembersPanel } from './MembersPanel';
+import { ProjectAudit } from './ProjectAudit';
 
 type Props = { api: Api; userId: string; idempotency: Idempotency };
 
@@ -153,8 +155,14 @@ export function ProjectsView({ api, userId, idempotency }: Props) {
   </>;
 }
 
+type DetailTab = 'run' | 'members' | 'audit';
+
 function ProjectDetail({ api, userId, project, idempotency, source, onRunChange }: { api: Api; userId: string; project: Project; idempotency: Idempotency; source: string; onRunChange: () => void }) {
   const [openRun, setOpenRun] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<DetailTab>('run');
+  // The audit tab exists only for the owner and managers; a lost role falls back to the run tab.
+  const tabs: DetailTab[] = project.can_manage ? ['run', 'members', 'audit'] : ['run', 'members'];
+  const tab = tabs.includes(chosen) ? chosen : 'run';
   const p = t.projects;
   const status = Object.hasOwn(p.sourceStatuses, project.source_status) ? p.sourceStatuses[project.source_status] : p.sourceStatusUnknown;
   return <>
@@ -165,6 +173,7 @@ function ProjectDetail({ api, userId, project, idempotency, source, onRunChange 
         <dt>{p.sourceStatus}</dt><dd>{status}</dd>
         <dt>{p.projectId}</dt><dd><code>{project.id}</code></dd>
         <dt>{p.revisionLabel}</dt><dd>{project.revision}</dd>
+        <dt>{t.accounts.members.myRoleLabel}</dt><dd>{roleLabel(project.role)}</dd>
       </dl>
       {project.capability_gaps.length > 0 && <>
         <h3>{p.gaps}</h3>
@@ -173,10 +182,17 @@ function ProjectDetail({ api, userId, project, idempotency, source, onRunChange 
       {project.last_run && <>
         <h3>{p.lastRun}</h3>
         <p className="small">{p.lastRunHint(shorten(project.last_run.status, 32))}</p>
-        <button type="button" onClick={() => setOpenRun(project.last_run!.id)} disabled={openRun === project.last_run.id}>{p.lastRunOpen}</button>
+        <button type="button" onClick={() => { setOpenRun(project.last_run!.id); setChosen('run'); }} disabled={openRun === project.last_run.id}>{p.lastRunOpen}</button>
       </>}
     </section>
-    <RunPanel api={api} userId={userId} project={project} idempotency={idempotency} openRunId={openRun} onRunChange={onRunChange} />
-    <SchedulePanel api={api} projectId={project.id} />
+    <nav aria-label={t.accounts.tabs.label} className="tabs">
+      {tabs.map(x => <button key={x} type="button" aria-current={tab === x ? 'page' : undefined} onClick={() => setChosen(x)}>{t.accounts.tabs[x]}</button>)}
+    </nav>
+    {tab === 'run' && <>
+      <RunPanel api={api} userId={userId} project={project} idempotency={idempotency} openRunId={openRun} onRunChange={onRunChange} />
+      <SchedulePanel api={api} projectId={project.id} />
+    </>}
+    {tab === 'members' && <MembersPanel api={api} project={project} me={userId} onAccessChange={onRunChange} />}
+    {tab === 'audit' && <ProjectAudit api={api} projectId={project.id} onForbidden={onRunChange} />}
   </>;
 }

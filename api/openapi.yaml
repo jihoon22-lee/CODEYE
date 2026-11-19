@@ -4,17 +4,24 @@ info:
   version: 0.1.0
   description: >-
     핵심 수직 경로의 계약이다. `x-codeye-status` 값이 `implemented`인 operation을
-    `codeye serve`(loopback 전용 controller)가 실제로 제공하며 나머지는 아직 설계 계약이다
-    (docs/API.md, docs/EXECUTION.md, docs/REPORT.md, docs/API.md, docs/REPORT.md). 운영 CRUD 전체는 docs/API.md에 따라 확장한다.
+    `codeye serve`(controller)가 실제로 제공하며 나머지는 아직 설계 계약이다
+    (docs/API.md, docs/EXECUTION.md, docs/REPORT.md). 운영 CRUD 전체는 docs/API.md에 따라 확장한다.
     의미 제약과 lease fencing은 JSON Schema 검증 외에 서버에서 검사한다.
-    사용자 인증은 UserSession cookie뿐이다. UserBearer는 구현되지 않았다.
-    상태 변경 요청(POST/PATCH/DELETE)은 Origin이 서버 origin과 정확히 같아야 하고,
-    POST /session을 제외하면 X-CODEYE-CSRF header가 필요하다. Host는 loopback allowlist만 허용한다.
+    사용자 인증은 UserSession cookie뿐이다(로그인 링크 또는 사용자 이름·비밀번호로 만든다). UserBearer는 구현되지 않았다.
+    상태 변경 요청(POST/PUT/PATCH/DELETE)은 Origin이 서버 origin과 정확히 같아야 하고,
+    POST /session을 제외하면 X-CODEYE-CSRF header가 필요하다. loopback 수신은 평문 HTTP와 loopback Host
+    allowlist를 쓴다. 그 밖의 주소는 TLS가 필수이며 Host는 public origin의 host, Origin은 public origin과 같아야 하고,
+    cookie 이름은 __Host-codeye_session(Secure)이며 Strict-Transport-Security를 보낸다(docs/SECURITY.md).
+    비밀번호 변경이 필요한 세션(must_change_password)은 GET/DELETE /session과 POST /session/password 밖의
+    사용자 경로에서 403 PASSWORD_CHANGE_REQUIRED를 받는다. 관리자(is_admin)는 계정·source root 허가·감사 기록을
+    다루며 어떤 프로젝트도 열지 못한다.
     모든 응답은 X-Request-ID header를 가지며 오류 envelope의 request_id와 같다.
     노드 경로(NodeBearer)는 cookie를 읽지 않고 CSRF를 쓰지 않으며 Origin header가 있으면 403으로 거부한다.
 servers:
   - url: http://127.0.0.1:7331
     description: 개인 Native 모드의 제안 포트
+  - url: https://codeye.example
+    description: TLS 수신(--tls-cert, --tls-key, --public-origin)의 예. 실제 주소는 운영자가 정한다.
 security:
   - UserSession: []
 paths:
@@ -66,27 +73,50 @@ paths:
       x-codeye-status: implemented
       security: []
       description: >-
-        CLI(`codeye login-link`/`codeye serve --user`)가 0600 파일로 전달한 일회용 launch token(10분)을
-        세션으로 교환한다. Origin 검사는 적용되고 CSRF header는 필요 없다.
+        둘 중 하나로 세션을 만든다. (1) CLI(`codeye login-link`/`codeye serve --user`)가 0600 파일로 전달했거나
+        관리자 API가 돌려준 일회용 launch token(10분). (2) 사용자 이름(대소문자 무시)과 비밀번호.
+        두 형식을 섞거나 일부만 보내면 400이다. 없는 사용자, 틀린 비밀번호, 비활성 사용자, 비밀번호 없는 사용자는
+        모두 같은 401과 같은 문구이며 같은 비용(KDF 한 번)이 든다. (이름, 접속 주소) 쌍 5회(최대 5분), 주소 500회(5분) 실패에서
+        잠시 지연되고, 지연 동안은 맞는 비밀번호도 429 RATE_LIMITED와 Retry-After를 받는다. launch token 실패는 주소 한도에만 센다.
+        서버의 KDF 계산 자리가 3초 안에 나지 않으면 503이고 시도로 세지 않는다.
+        Origin 검사는 적용되고 CSRF header는 필요 없다.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: false
-              required: [launch_token]
-              properties:
-                launch_token: {type: string, minLength: 43, maxLength: 43}
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [launch_token]
+                  properties:
+                    launch_token: {type: string, minLength: 43, maxLength: 43}
+                - type: object
+                  additionalProperties: false
+                  required: [username, password]
+                  properties:
+                    username: {type: string, minLength: 1, maxLength: 256}
+                    password: {type: string, maxLength: 1024, writeOnly: true}
       responses:
         '201':
-          description: 세션 생성. codeye_session cookie(HttpOnly, SameSite=Strict, Path=/, 12시간)를 설정한다.
+          description: >-
+            세션 생성. 세션 cookie(HttpOnly, SameSite=Strict, Path=/, 12시간; TLS면 __Host-codeye_session과 Secure)를 설정한다.
+            must_change_password가 true면 비밀번호를 정할 때까지 POST /session/password와 로그아웃만 쓸 수 있다.
           headers:
             Set-Cookie: {schema: {type: string}}
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SessionView'}
+        '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
+        '429':
+          description: 로그인 제한. Retry-After(초)와 details.retry_after_seconds가 같다.
+          headers:
+            Retry-After: {schema: {type: integer, minimum: 1}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503': {description: 'UNAVAILABLE: DB 또는 KDF 계산 자리 부족(재시도 가능, 시도로 세지 않는다)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         default: {$ref: '#/components/responses/Error'}
     get:
       operationId: getSession
@@ -105,6 +135,41 @@ paths:
         - {$ref: '#/components/parameters/CSRF'}
       responses:
         '204': {description: 세션 폐기와 cookie 삭제}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/session/password:
+    post:
+      operationId: changePassword
+      x-codeye-status: implemented
+      description: >-
+        이 세션 사용자의 비밀번호를 정하거나 바꾼다. 비밀번호가 있는 사용자는 current_password가 필수다(없으면 400).
+        비밀번호가 없는 사용자(관리자가 만들었거나 재설정한 계정)는 current_password 없이 처음 정한다.
+        새 비밀번호는 12~256자, 사용자 이름·표시 이름과 같지 않고 한 문자 반복이 아니어야 한다(422; 현재 비밀번호보다
+        먼저 검사하고 시도로 세지 않는다). 성공하면 이 사용자의 다른 세션과 쓰지 않은 로그인 링크를 모두 끝내고 이 세션은 유지하며
+        must_change_password를 지운다. 사용자 이름이 없는 사용자(로그인 링크 전용)와, 검증 뒤 비밀번호가 재설정·변경된
+        경우는 409다. must_change_password 세션도 쓸 수 있다.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [new_password]
+              properties:
+                current_password: {type: string, writeOnly: true}
+                new_password: {type: string, minLength: 1, writeOnly: true}
+      responses:
+        '200':
+          description: 갱신된 현재 세션
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionView'}
+        '403': {description: 'PASSWORD_INCORRECT(현재 비밀번호 틀림; 로그인 실패 한도에 센다) 또는 CSRF/Origin 거부', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {description: 'UNAVAILABLE: DB 또는 KDF 계산 자리 부족(재시도 가능, 시도로 세지 않는다)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/source-roots:
     get:
@@ -559,6 +624,343 @@ paths:
       responses:
         '204': {description: 삭제됨}
         '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/projects/{project_id}/members:
+    parameters:
+      - {name: project_id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: listMembers
+      x-codeye-status: implemented
+      description: owner와 manager만 읽는다. viewer·runner 403, 비구성원(관리자 포함) 404. 첫 항목은 owner다.
+      responses:
+        '200':
+          description: 구성원 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Member'}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: addMember
+      x-codeye-status: implemented
+      description: >-
+        사용자 이름(대소문자 무시, 정확히 일치)으로 구성원을 추가하거나 역할을 바꾼다. owner와 manager만 쓴다.
+        역할 확인이 먼저라 viewer·runner는 이름의 존재와 무관하게 403이다. 없는·비활성·형식이 틀린 이름 404,
+        owner 대상 409, 잘못된 role 422. 감사 action project.member_set.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, role]
+              properties:
+                username: {type: string, minLength: 1, maxLength: 256}
+                role: {$ref: '#/components/schemas/MemberRole'}
+      responses:
+        '200':
+          description: 저장된 구성원
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Member'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/projects/{project_id}/members/{user_id}:
+    parameters:
+      - {name: project_id, in: path, required: true, schema: {type: string}}
+      - {name: user_id, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: putMember
+      x-codeye-status: implemented
+      description: >-
+        사용자 ID로 구성원을 추가하거나 역할을 바꾼다. 없는·비활성 사용자 404, owner 대상 409, 잘못된 role 422. 감사 action project.member_set.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: {$ref: '#/components/schemas/MemberRole'}
+      responses:
+        '200':
+          description: 저장된 구성원
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Member'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: deleteMember
+      x-codeye-status: implemented
+      description: >-
+        구성원을 제거한다. 그 사용자의 열린 이벤트 스트림은 다음 poll에서 closed(access_revoked)로 끝난다.
+        구성원이 아니었으면 변경·감사 기록 없이 204, owner 대상 409. 감사 action project.member_removed.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '204': {description: 제거됨(또는 구성원이 아니었음)}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/projects/{project_id}/audit:
+    parameters:
+      - {name: project_id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: listProjectAudit
+      x-codeye-status: implemented
+      description: >-
+        그 프로젝트의 감사 기록(project_id가 이 프로젝트인 행). owner와 manager만 읽는다. viewer·runner 403,
+        비구성원(관리자 포함) 404. 필터와 pagination은 GET /audit과 같고 project parameter는 없다.
+      parameters:
+        - {$ref: '#/components/parameters/AuditSince'}
+        - {$ref: '#/components/parameters/AuditUntil'}
+        - {$ref: '#/components/parameters/AuditActor'}
+        - {$ref: '#/components/parameters/AuditActionFilter'}
+        - {$ref: '#/components/parameters/AuditCursor'}
+        - {$ref: '#/components/parameters/AuditLimit'}
+      responses:
+        '200':
+          description: 감사 기록 한 페이지
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditPage'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/users:
+    get:
+      operationId: adminListUsers
+      x-codeye-status: implemented
+      description: 관리자 전용(그 밖은 403 FORBIDDEN). 생성순 keyset. 비밀번호 hash·salt는 반환하지 않는다.
+      parameters:
+        - {name: cursor, in: query, schema: {type: string, format: uuid}, description: 이전 페이지의 next_cursor}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: 사용자 한 페이지
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/UserView'}}
+                  next_cursor: {type: [string, 'null']}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: adminCreateUser
+      x-codeye-status: implemented
+      description: >-
+        비밀번호 없는 계정을 만들고 일회용 로그인 링크를 돌려준다. 사용자는 링크로 한 번 로그인한 뒤
+        POST /session/password로 비밀번호를 정해야 다른 경로를 쓸 수 있다(must_change_password). 관리자가 비밀번호를
+        고르거나 보지 않는다. 쓰인 사용자 이름(대소문자 무시)은 409. 감사 action user.created.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username]
+              properties:
+                username: {type: string, description: '2~64자 a-z 0-9 . _ -(대문자는 소문자로 저장)'}
+                display_name: {type: string, maxLength: 200}
+                is_admin: {type: boolean, default: false}
+      responses:
+        '201':
+          description: 생성된 사용자와 로그인 링크
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserWithLink'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/users/{user_id}/disable:
+    parameters:
+      - {name: user_id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: adminDisableUser
+      x-codeye-status: implemented
+      description: >-
+        사용자를 비활성화하고 모든 세션을 같은 트랜잭션에서 폐기한다(열린 이벤트 스트림은 closed(unauthenticated)).
+        마지막 활성 관리자는 409. 이미 비활성이면 변경 없이 200. 되돌리는 경로는 없다. 감사 action user.disabled.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '200':
+          description: 비활성화된 사용자
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserView'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/users/{user_id}/admin:
+    parameters:
+      - {name: user_id, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: adminSetAdmin
+      x-codeye-status: implemented
+      description: >-
+        관리자 역할을 주거나 거둔다. 마지막 활성 관리자를 내리거나 비활성 사용자에게 주면 409.
+        감사 action user.admin_granted 또는 user.admin_revoked.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [is_admin]
+              properties:
+                is_admin: {type: boolean}
+      responses:
+        '200':
+          description: 갱신된 사용자
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserView'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/users/{user_id}/password-reset:
+    parameters:
+      - {name: user_id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: adminResetPassword
+      x-codeye-status: implemented
+      description: >-
+        비밀번호를 지우고 모든 세션과 이전에 발급한 쓰지 않은 로그인 링크를 끝낸 뒤 새 일회용 로그인 링크(10분)를 돌려준다. 사용자는 링크로 로그인해 새
+        비밀번호를 정한다. 임시 비밀번호는 만들지 않는다. 자기 자신은 409(POST /session/password를 쓴다),
+        사용자 이름이 없는 사용자도 409(비밀번호가 없다; 로그인 링크는 운영자 CLI만 발급한다), 비활성 사용자는 404.
+        이 링크로 시작한 세션은 그 세션에서 비밀번호를 정할 때까지 비밀번호 변경만 할 수 있고, 로그인 기록과 그 세션이 남기는 모든 감사 행에
+        detail.link_issued_by(이 관리자)가 붙는다. 사용자의 세션 조회는 30일 동안 password_reset으로 초기화 시각과 관리자를 보여 준다(지울 수 없다).
+        관리자는 이 링크로 그 계정을 넘겨받을 수 있다. 막지 않고 기록하고 사용자에게 보여 준다(docs/SECURITY.md).
+        감사 action auth.password_reset.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '200':
+          description: 재설정된 사용자와 로그인 링크
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserWithLink'}
+        '409': {description: 'CONFLICT: 자기 자신의 초기화, 또는 사용자 이름이 없는 사용자(문구로 구분)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/source-roots:
+    get:
+      operationId: adminListSourceRoots
+      x-codeye-status: implemented
+      description: 모든 source root와 허가 받은 사용자. 서버 경로는 반환하지 않는다. root 등록은 운영자 CLI(codeye source-root add)다.
+      responses:
+        '200':
+          description: source root 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, label, created_at, grants]
+                      properties:
+                        id: {type: string, format: uuid}
+                        label: {type: string}
+                        created_at: {type: string, format: date-time}
+                        grants:
+                          type: array
+                          items:
+                            type: object
+                            additionalProperties: false
+                            required: [user_id, username, granted_at]
+                            properties:
+                              user_id: {type: string, format: uuid}
+                              username: {type: [string, 'null']}
+                              granted_at: {type: string, format: date-time}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/source-roots/{source_root_id}/grants/{user_id}:
+    parameters:
+      - {name: source_root_id, in: path, required: true, schema: {type: string}}
+      - {name: user_id, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: adminGrantSourceRoot
+      x-codeye-status: implemented
+      description: 사용자에게 root를 허가한다(이미 허가면 변경 없이 204). 없는 root·사용자 404. 감사 action source_root.granted.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '204': {description: 허가됨}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: adminRevokeSourceRoot
+      x-codeye-status: implemented
+      description: >-
+        허가를 거둔다. 그 root로 등록한 프로젝트는 남지만 새 등록과, 배정 시점의 요청자 허가 확인이 실패한다.
+        허가가 없었으면 변경 없이 204. 감사 action source_root.grant_revoked.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '204': {description: 거둠}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/providers:
+    get:
+      operationId: adminListProviders
+      x-codeye-status: implemented
+      description: 등록된 Git provider. 등록은 운영자 CLI(codeye provider add)다.
+      responses:
+        '200':
+          description: provider 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, kind, host, api_url]
+                      properties:
+                        id: {type: string, format: uuid}
+                        kind: {enum: [github, ghes]}
+                        host: {type: string}
+                        api_url: {type: [string, 'null']}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/audit:
+    get:
+      operationId: listAudit
+      x-codeye-status: implemented
+      description: 관리자 전용 전체 감사 기록. 최신순 keyset이며 cursor는 앞 페이지의 next_cursor다.
+      parameters:
+        - {$ref: '#/components/parameters/AuditSince'}
+        - {$ref: '#/components/parameters/AuditUntil'}
+        - {$ref: '#/components/parameters/AuditActor'}
+        - {$ref: '#/components/parameters/AuditActionFilter'}
+        - {name: project, in: query, schema: {type: string, format: uuid}, description: project_id가 이 값인 행}
+        - {$ref: '#/components/parameters/AuditCursor'}
+        - {$ref: '#/components/parameters/AuditLimit'}
+      responses:
+        '200':
+          description: 감사 기록 한 페이지
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditPage'}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/admin/pools/{pool_id}:
     parameters:
@@ -1025,7 +1427,7 @@ paths:
 components:
   securitySchemes:
     UserBearer: {type: http, scheme: bearer, description: 미구현(향후 CLI/자동화용). 서버는 받지 않는다.}
-    UserSession: {type: apiKey, in: cookie, name: codeye_session}
+    UserSession: {type: apiKey, in: cookie, name: codeye_session, description: 'TLS 서버에서는 __Host-codeye_session(Secure). 평문 이름의 cookie는 TLS 서버가 읽지 않는다.'}
     NodeBearer: {type: http, scheme: bearer, description: '등록 응답의 node_secret(43자 base64url). 서버는 SHA-256만 저장한다. 철회된 노드는 401 NODE_UNAUTHENTICATED. 경로 node_id가 인증 노드와 다르거나 다른 노드의 attempt이면 404.'}
   parameters:
     RunId: {name: run_id, in: path, required: true, schema: {type: string}}
@@ -1033,14 +1435,21 @@ components:
     AttemptId: {name: attempt_id, in: path, required: true, schema: {type: string}}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 200, pattern: '^[!-~]+$'}}
     CSRF: {name: X-CODEYE-CSRF, in: header, required: true, description: GET /session 또는 POST /session 응답의 csrf_token, schema: {type: string}}
+    AuditSince: {name: since, in: query, description: 'occurred_at >= since(RFC 3339)', schema: {type: string, format: date-time}}
+    AuditUntil: {name: until, in: query, description: 'occurred_at < until(RFC 3339)', schema: {type: string, format: date-time}}
+    AuditActor: {name: actor, in: query, description: actor_user_id, schema: {type: string, format: uuid}}
+    AuditActionFilter: {name: action, in: query, description: 한 action만(목록에 없는 값은 400), schema: {$ref: '#/components/schemas/AuditAction'}}
+    AuditCursor: {name: cursor, in: query, description: 앞 페이지의 next_cursor(그보다 작은 id부터), schema: {type: string, pattern: '^[1-9][0-9]*$'}}
+    AuditLimit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
   responses:
     Error:
       description: >-
         인증·권한·검증·충돌·일시 오류. code와 retryable을 확인한다. 사용자 경로 code:
-        INVALID_REQUEST(400), UNAUTHENTICATED(401), FORBIDDEN/HOST_REJECTED/ORIGIN_REJECTED/CSRF_REJECTED(403),
-        NOT_FOUND(404), METHOD_NOT_ALLOWED(405), CONFLICT/IDEMPOTENCY_CONFLICT(409), PAYLOAD_TOO_LARGE(413),
-        UNSUPPORTED_MEDIA_TYPE(415), VALIDATION_FAILED/SOURCE_UNSUPPORTED/ATTACHMENTS_UNSUPPORTED(422),
-        INTERNAL(500), UNAVAILABLE(503, retryable). 노드 code: NODE_UNAUTHENTICATED(401), STALE_ATTEMPT(409),
+        INVALID_REQUEST(400), UNAUTHENTICATED(401), FORBIDDEN/HOST_REJECTED/ORIGIN_REJECTED/CSRF_REJECTED/
+        PASSWORD_CHANGE_REQUIRED/PASSWORD_INCORRECT(403), NOT_FOUND(404), METHOD_NOT_ALLOWED(405),
+        CONFLICT/IDEMPOTENCY_CONFLICT(409), PAYLOAD_TOO_LARGE(413), UNSUPPORTED_MEDIA_TYPE(415),
+        VALIDATION_FAILED/SOURCE_UNSUPPORTED/ATTACHMENTS_UNSUPPORTED(422), RATE_LIMITED(429, retryable, Retry-After),
+        INTERNAL/REPORT_INVALID(500), UNAVAILABLE(503, retryable). 노드 code: NODE_UNAUTHENTICATED(401), STALE_ATTEMPT(409),
         LENGTH_REQUIRED(411), INTEGRITY_MISMATCH/PROTOCOL_UNSUPPORTED(422). If-Match 누락·형식 오류는 INVALID_REQUEST(400),
         version 불일치는 CONFLICT(409).
       content:
@@ -1095,10 +1504,13 @@ components:
         attachment_ids: {type: array, maxItems: 0, items: {type: string}, description: 미지원. 비어 있지 않으면 422}
     Project:
       type: object
-      required: [id, name, source, revision, source_status, capability_gaps, last_run]
+      required: [id, name, source, revision, source_status, capability_gaps, last_run, role, can_run, can_manage]
       properties:
         id: {type: string}
         name: {type: string}
+        role: {$ref: '#/components/schemas/ProjectRole'}
+        can_run: {type: boolean, description: 실행 요청·취소·사람 판정 가능(owner, manager, runner)}
+        can_manage: {type: boolean, description: 예약·구성원·프로젝트 감사 기록(owner, manager)}
         source: {$ref: '#/components/schemas/Source'}
         revision: {type: integer, minimum: 1}
         source_status:
@@ -1216,11 +1628,145 @@ components:
         checked_at: {type: string, format: date-time, description: 서버가 읽은 시각. 생성 응답은 서버 시계, 조회는 DB 시각.}
     SessionView:
       type: object
-      required: [user_id, csrf_token, expires_at]
+      required: [user_id, csrf_token, expires_at, username, display_name, is_admin, must_change_password, has_password, password_reset]
       properties:
         user_id: {type: string, format: uuid}
         csrf_token: {type: string}
         expires_at: {type: string, format: date-time}
+        username: {type: [string, 'null'], description: 로그인 링크 전용 사용자는 null}
+        display_name: {type: [string, 'null']}
+        is_admin: {type: boolean, description: 관리자 경로(/admin/…, /audit)를 쓸 수 있다. 프로젝트 권한은 주지 않는다.}
+        must_change_password: {type: boolean, description: true면 POST /session/password와 로그아웃 밖의 경로가 403 PASSWORD_CHANGE_REQUIRED}
+        has_password: {type: boolean, description: false면 POST /session/password에 current_password가 필요 없다}
+        password_reset:
+          description: >-
+            이 계정에 관리자가 한 가장 최근의 비밀번호 초기화(초기화 뒤 30일 동안; 아니면 null). 화면은 "관리자 X가 T에 비밀번호를 초기화했습니다"를
+            보인다. 로그인 횟수와 무관하게 30일 동안 나오며 지우는 경로는 없다(계정을 가진 사람이 지울 수 있으면 넘겨받은 관리자도 지운다).
+            권위 있는 기록은 감사 기록이다.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [reset_at, reset_by_user_id, reset_by_username]
+              properties:
+                reset_at: {type: string, format: date-time}
+                reset_by_user_id: {type: string, format: uuid}
+                reset_by_username: {type: [string, 'null']}
+    ProjectRole:
+      description: 호출자의 프로젝트 역할. owner는 프로젝트를 등록한 사용자이며 바꾸거나 제거할 수 없다.
+      enum: [owner, manager, runner, viewer]
+    MemberRole:
+      description: 지정할 수 있는 구성원 역할
+      enum: [manager, runner, viewer]
+    UserView:
+      type: object
+      additionalProperties: false
+      required: [id, username, display_name, is_admin, must_change_password, has_password, disabled, disabled_at, created_at, last_login_at]
+      properties:
+        id: {type: string, format: uuid}
+        username: {type: [string, 'null'], pattern: '^[a-z0-9][a-z0-9._-]{1,63}$'}
+        display_name: {type: [string, 'null']}
+        is_admin: {type: boolean}
+        must_change_password: {type: boolean}
+        has_password: {type: boolean}
+        disabled: {type: boolean}
+        disabled_at: {type: [string, 'null'], format: date-time}
+        created_at: {type: string, format: date-time}
+        last_login_at: {type: [string, 'null'], format: date-time, description: 마지막 세션 생성 시각(로그인 방식 무관)}
+    LoginLink:
+      type: object
+      additionalProperties: false
+      description: 일회용 로그인 링크(10분). 응답에서 한 번만 주며 서버는 hash만 저장한다. 관리자가 사용자에게 안전한 경로로 전달한다.
+      required: [url, expires_at]
+      properties:
+        url: {type: string, description: '<origin>/#launch=<token>. TLS 서버는 public origin을 쓴다.'}
+        expires_at: {type: string, format: date-time}
+    UserWithLink:
+      type: object
+      additionalProperties: false
+      required: [user, login_link]
+      properties:
+        user: {$ref: '#/components/schemas/UserView'}
+        login_link: {$ref: '#/components/schemas/LoginLink'}
+    Member:
+      type: object
+      additionalProperties: false
+      required: [user_id, username, display_name, role, disabled]
+      properties:
+        user_id: {type: string, format: uuid}
+        username: {type: [string, 'null']}
+        display_name: {type: [string, 'null']}
+        role: {$ref: '#/components/schemas/ProjectRole'}
+        disabled: {type: boolean}
+    AuditAction:
+      description: >-
+        닫힌 감사 action 목록. migration 0010의 CHECK, internal/storage/postgres/audit.go의 Audit* 상수와 같은지
+        scripts/validate_bundle.py가 확인한다. 의미는 docs/SECURITY.md#감사.
+      enum:
+        - auth.login_succeeded
+        - auth.login_failed
+        - auth.login_throttled
+        - auth.logout
+        - auth.password_changed
+        - auth.password_change_failed
+        - auth.password_set
+        - auth.password_reset
+        - auth.login_link_issued
+        - user.created
+        - user.disabled
+        - user.admin_granted
+        - user.admin_revoked
+        - source_root.added
+        - source_root.granted
+        - source_root.grant_revoked
+        - provider.added
+        - project.registered
+        - project.revised
+        - project.member_set
+        - project.member_removed
+        - run.requested
+        - run.cancel_requested
+        - report.exported
+        - finding_review.recorded
+        - schedule.created
+        - schedule.updated
+        - schedule.deleted
+        - node.enrollment_token_created
+        - node.enrollment_token_revoked
+        - node.enrolled
+        - node.revoked
+        - pool.policy_set
+        - scheduler.limits_set
+        - scheduler.artifact_quota_set
+        - attempt.stale_rejected
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required: [id, occurred_at, actor_kind, actor_user_id, actor_username, actor_node_id, action, target_type, target_id, project_id, request_id, detail]
+      properties:
+        id: {type: string, pattern: '^[1-9][0-9]*$', description: 단조 증가 행 번호(cursor로 쓴다)}
+        occurred_at: {type: string, format: date-time, description: DB 시각}
+        actor_kind: {enum: [user, operator_cli, node, system, anonymous]}
+        actor_user_id: {type: [string, 'null'], format: uuid}
+        actor_username: {type: [string, 'null']}
+        actor_node_id: {type: [string, 'null'], format: uuid}
+        action: {$ref: '#/components/schemas/AuditAction'}
+        target_type: {type: [string, 'null'], enum: [user, session, project, run, report, finding_review, schedule, source_root, provider, node, enrollment_token, pool, scheduler, attempt, null]}
+        target_id: {type: [string, 'null']}
+        project_id: {type: [string, 'null'], format: uuid}
+        request_id: {type: [string, 'null'], pattern: '^req_[0-9a-f]{24}$', description: 그 요청의 X-Request-ID. CLI·시스템 기록은 null}
+        detail:
+          type: object
+          description: >-
+            작은 redaction된 객체(4096 byte 이하). 허용 key만 저장하고 비밀번호·토큰·secret·경로·모델 입력·추론은 넣지 않는다.
+            로그인 기록의 client_address는 IPv4 또는 IPv6 /64다.
+    AuditPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AuditEvent'}, description: 최신순(id 내림차순)}
+        next_cursor: {type: [string, 'null'], description: 다음 페이지의 cursor(이 페이지 마지막 id). 마지막 페이지는 null}
     RunStatus:
       enum: [queued, preparing, running, finalizing, cancel_requested, cancelling, recovery_required, completed, partial, failed, cancelled]
     RunAck:

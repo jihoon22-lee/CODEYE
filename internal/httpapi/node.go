@@ -28,10 +28,10 @@ const (
 
 func (s *Server) nodeRoutes() []route {
 	r := func(method, path, name string, kind nodeAuthKind, body bool, h func(*Server, *request)) route {
-		return route{method: method, parts: strings.Split(path, "/"), name: name, body: body, node: kind, handle: h}
+		return route{method: method, parts: strings.Split(path, "/"), name: name, body: body, node: kind, handle: h, audit: []string{auditNodeProtocol}}
 	}
 	return []route{
-		r("POST", "nodes/enroll", "nodes.enroll", nodePublic, true, (*Server).enrollNode),
+		r("POST", "nodes/enroll", "nodes.enroll", nodePublic, true, (*Server).enrollNode).audits(postgres.AuditNodeEnrolled),
 		r("POST", "nodes/{id}/heartbeat", "nodes.heartbeat", nodeAuth, true, (*Server).nodeHeartbeat),
 		r("POST", "nodes/{id}/claims", "nodes.claim", nodeAuth, true, (*Server).claimAttempt),
 		r("POST", "attempts/{id}/heartbeat", "attempts.heartbeat", nodeAuth, true, (*Server).renewAttempt),
@@ -90,6 +90,21 @@ func (s *Server) nodeError(q *request, err error) {
 		writeError(q.w, q.r, http.StatusConflict, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used for a different worker", false)
 	case errors.Is(err, domain.ErrUnsupported):
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, nodeproto.CodeProtocolUnsupported, "protocol version is not supported", false)
+	case errors.Is(err, domain.ErrStaleAttempt) && q.node.ID != "":
+		// The refused write rolled back; its trace is an audit row. If the row
+		// cannot be written the node gets 503 and retries (and is refused
+		// again), so no stale write goes unrecorded.
+		attempt := ""
+		if len(q.params) > 0 && strings.HasPrefix(q.route, "attempts.") {
+			attempt = q.params[0]
+		}
+		ctx, cancel := q.ctx()
+		defer cancel()
+		if aerr := s.store.RecordStaleRejection(ctx, q.node.ID, attempt, q.epoch, q.route); aerr != nil {
+			s.storeError(q, aerr)
+			return
+		}
+		s.storeError(q, err)
 	default:
 		s.storeError(q, err)
 	}
@@ -220,6 +235,7 @@ func (q *request) owner(worker string, epoch int64) (postgres.Ownership, bool) {
 		invalid(q, "worker_id must be a UUID and lease_epoch >= 1")
 		return postgres.Ownership{}, false
 	}
+	q.epoch = epoch
 	return postgres.Ownership{AttemptID: q.params[0], NodeID: q.node.ID, WorkerID: worker, Epoch: epoch}, true
 }
 

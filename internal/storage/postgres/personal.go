@@ -50,8 +50,14 @@ func (s *Store) SetArtifactQuota(ctx context.Context, bytes int64) error {
 		if (cur == nil && next == nil) || (cur != nil && next != nil && *cur == *next) {
 			return true, nil
 		}
-		_, err := tx.Exec(ctx, "UPDATE scheduler_limits SET artifact_quota_bytes=$1,revision=revision+1,updated_at=clock_timestamp() WHERE singleton", next)
-		return true, err
+		if _, err := tx.Exec(ctx, "UPDATE scheduler_limits SET artifact_quota_bytes=$1,revision=revision+1,updated_at=clock_timestamp() WHERE singleton", next); err != nil {
+			return false, err
+		}
+		var quota any
+		if next != nil {
+			quota = *next
+		}
+		return true, writeAudit(ctx, tx, principalAudit(OperatorPrincipal(), AuditArtifactQuotaSet).target("scheduler", "limits").with(map[string]any{"artifact_quota_bytes": quota}))
 	})
 	return err
 }
