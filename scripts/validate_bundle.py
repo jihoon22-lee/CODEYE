@@ -211,6 +211,32 @@ def main() -> None:
     bad["observations"][0]["suppressed"] = True
     bad["findings"][0]["observation_ids"] = [bad["observations"][0]["id"]]
     expect_invalid("finding from a suppressed observation", check_report, bad)
+    # Analysis sections (docs/REPORT.md#분석-종류별-절): a revision without them keeps the flat
+    # layout, and a sectioned one partitions observations and findings exactly once.
+    ensure("overview" not in published and "overview" in report, "Section presence of the report examples")
+    tool_with = lambda d, key: next(t for l in d["static_analysis"]["languages"] for t in l["tools"] if t[key])
+    section_cases = {
+        "report with only some sections": lambda d: d.pop("secrets"),
+        "observation dropped from its section": lambda d: d["secrets"]["detections"].pop(),
+        "observation listed twice": lambda d: d["secrets"]["detections"].append(dict(d["secrets"]["detections"][0])),
+        "finding in static analysis and code review": lambda d: d["code_review"]["finding_ids"].append(tool_with(d, "finding_ids")["finding_ids"][0]),
+        "finding dropped from code review": lambda d: d["code_review"]["finding_ids"].pop(),
+        "invented metric maximum": lambda d: d["metrics"]["metrics"][0].update(max_value=d["metrics"]["metrics"][0]["max_value"] + 1),
+        "invented section finding count": lambda d: next(s for s in d["overview"]["sections"] if s["key"] == "code_review")["counts"].update(findings=99),
+        "invented gap count": lambda d: next(s for s in d["overview"]["sections"] if s["key"] == "gaps")["counts"].update(gaps=99),
+        "failed tool row read as success": lambda d: next(t for l in d["static_analysis"]["languages"] for t in l["tools"] if t["task_status"] == "failed").update(exit_class="success_without_findings"),
+        "model statement without a performed role": lambda d: d["documents"]["model"].update(state="not_performed"),
+        "code-free export with model text": lambda d: (d["export"].update(include_code=False), [o.update(raw_message=None) for o in d["observations"]]),
+        "section evidence hash mismatch": lambda d: d["documents"]["evidence"][0].update(blob_sha256="0" * 64),
+        "section statement cites unknown evidence": lambda d: d["documents"]["contracts"][0]["evidence_ids"].append("ev_missing"),
+    }
+    for name, edit in section_cases.items():
+        bad = copy.deepcopy(report)
+        edit(bad)
+        expect_invalid(name, lambda d: check_report(d, modules_root), bad)
+    bad = copy.deepcopy(published)
+    bad["gaps"] = []
+    expect_invalid("flat revision with a sections block", lambda d: check_report(d, ROOT / "fixtures/go-vet"), bad)
     bad = copy.deepcopy(plan)
     bad["tasks"][0]["depends_on"] = [bad["tasks"][-1]["id"]]
     expect_invalid("cyclic plan", check_plan, bad)
@@ -326,7 +352,7 @@ def main() -> None:
     print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 19 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
-    print(f"PASS: {27 + len(role_negative)} negative cases; example policy timing; prompt manifest")
+    print(f"PASS: {28 + len(section_cases) + len(role_negative)} negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
     print(f"review-r1 default pack {role_pack_doc['version']} (Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in role_files.items()))
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
