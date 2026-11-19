@@ -73,6 +73,25 @@ func (w *isoWorld) schedule() string {
 	return r.body["id"].(string)
 }
 
+// recoveryRequiredRun is a run of the world's project whose attempt lease
+// expired (recovery_required, cleanup uncertain).
+func (w *isoWorld) recoveryRequiredRun() string {
+	e := w.e
+	id := e.createRun(w.f.user, w.f.projectID)
+	ctx := context.Background()
+	a, err := e.store.BeginAttempt(ctx, id, domain.NewID(), domain.NewID(), time.Minute)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, "UPDATE attempts SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", a.ID); err != nil {
+		e.t.Fatal(err)
+	}
+	if _, err := e.store.ExpireAttempt(ctx, a.ID); err != nil {
+		e.t.Fatal(err)
+	}
+	return id
+}
+
 func scheduleBody() map[string]any {
 	return map[string]any{"cron": "0 9 * * 1-5", "timezone": "UTC", "run": map[string]any{"profile": "deep-review", "source_policy": "latest_at_acquire", "scope": map[string]any{"kind": "full"}}}
 }
@@ -151,6 +170,8 @@ func isoCases() map[string]isoCase {
 			}
 			return []string{id}
 		}},
+		"runs.recover": {need: runnerRole, ok: 202, ids: func(w *isoWorld) []string { return []string{w.recoveryRequiredRun()} },
+			body: func(*isoWorld) any { return map[string]bool{"cleanup_confirmed": true} }},
 		"setup.get":            {need: signedIn, ok: 200},
 		"runs.report":          {need: viewerRole, ok: 200, ids: isoRun, query: "?format=json&include_code=true"},
 		"runs.reports":         {need: viewerRole, ok: 200, ids: isoRun},

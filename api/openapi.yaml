@@ -391,10 +391,10 @@ paths:
       operationId: retryRun
       x-codeye-status: implemented
       description: >-
-        끝난 실행(failed, cancelled, partial, completed)을 다시 실행한다. failed·cancelled run의 스냅샷을 아직 노드가 갖고 있고
+        끝난 실행(failed, cancelled, partial, completed)을 다시 실행한다. failed·cancelled run의 스냅샷을 살아 있는 노드(철회되지 않았고 heartbeat가 신선함)가 아직 갖고 있고
         모든 attempt 정리가 확인됐고 그 뒤 프로젝트 설정이 바뀌지 않았으면 그 run을 같은 스냅샷으로 다시 큐에 넣는다(retry same_run). 그 밖에는 같은 요청으로 새 run을
         만들어 소스를 다시 확보한다(retry new_run): 소스 확보 실패, 도구를 설치한 뒤의 partial 실행이 이 경우다. 같은 run version에
-        대한 반복 요청은 같은 새 run을 돌려준다. 아직 끝나지 않았거나 recovery_required인 run은 409 RUN_NOT_FINISHED,
+        대한 반복 요청은 같은 새 run을 돌려준다. 아직 끝나지 않았거나 recovery_required인 run은 409 RUN_NOT_FINISHED(recovery_required는 recoverRun),
         viewer는 403이다. 두 경우 모두 run.requested 감사 기록을 남긴다. 클라이언트는 응답의 run을 따라간다.
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
@@ -412,6 +412,48 @@ paths:
                     required: [retry]
                     properties:
                       retry: {enum: [same_run, new_run]}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/runs/{run_id}/recover:
+    parameters:
+      - {$ref: '#/components/parameters/RunId'}
+    post:
+      operationId: recoverRun
+      x-codeye-status: implemented
+      description: >-
+        recovery_required run의 attempt 프로세스가 노드에 하나도 남지 않았다는 호출자의 확인을 기록하고 그 일을 다시 실행한다.
+        노드가 정리를 확인하지 못한 attempt(죽거나 철회된 노드, 확인할 수 없는 process group)를 그 확인 없이 깨끗하다고 보지 않는다.
+        본문 {"cleanup_confirmed": true}가 확인이며, 같은 트랜잭션에서 attempt와 예약을 해제하고 run을 failed로 두며
+        (이벤트 attempt.cleanup_confirmed, reason operator_confirmed) run.recovery_confirmed 감사 기록을 남긴다.
+        이어서 retryRun과 같은 규칙으로 다시 실행한다(retry same_run 또는 new_run, run.requested 감사 기록).
+        다시 실행하지 못하면(예: 권한이 바뀜) 확인은 남고 200과 retry not_queued, failed run을 돌려준다.
+        권한은 retry와 같다(runner 이상, viewer 403). recovery_required가 아닌 run은 409 RUN_NOT_RECOVERY_REQUIRED,
+        본문 없음·false는 400이다. 운영자 CLI `codeye run recover --id RUN_ID --confirm-cleanup`이 같은 동작을 한다.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [cleanup_confirmed]
+              properties:
+                cleanup_confirmed: {const: true}
+      responses:
+        '202':
+          description: 확인을 기록했고 다시 실행할 run
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryAck'}
+        '200':
+          description: 확인을 기록했지만 다시 실행하지 않았다(retry not_queued). failed run의 현재 상태
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryAck'}
         '409': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/setup:
@@ -1807,7 +1849,7 @@ components:
         disabled: {type: boolean}
     AuditAction:
       description: >-
-        닫힌 감사 action 목록. migration 0010의 CHECK, internal/storage/postgres/audit.go의 Audit* 상수와 같은지
+        닫힌 감사 action 목록. 그 CHECK를 가장 나중에 정한 migration(0010 이후), internal/storage/postgres/audit.go의 Audit* 상수와 같은지
         scripts/validate_bundle.py가 확인한다. 의미는 docs/SECURITY.md#감사.
       enum:
         - auth.login_succeeded
@@ -1833,6 +1875,7 @@ components:
         - project.member_removed
         - run.requested
         - run.cancel_requested
+        - run.recovery_confirmed
         - report.exported
         - finding_review.recorded
         - schedule.created
@@ -1845,6 +1888,7 @@ components:
         - pool.policy_set
         - scheduler.limits_set
         - scheduler.artifact_quota_set
+        - storage.retention_applied
         - attempt.stale_rejected
     AuditEvent:
       type: object
@@ -1923,6 +1967,18 @@ components:
         status: {$ref: '#/components/schemas/RunStatus'}
         version: {type: integer, minimum: 1}
         url: {type: string}
+    RecoveryAck:
+      description: >-
+        recoverRun의 답. id·status·version·url은 다시 실행할 run(retry not_queued면 확인한 failed run)이다.
+        attempt_id와 epoch는 호출자가 정리를 확인한 attempt다.
+      allOf:
+        - {$ref: '#/components/schemas/RunAck'}
+        - type: object
+          required: [retry, attempt_id, epoch]
+          properties:
+            retry: {enum: [same_run, new_run, not_queued]}
+            attempt_id: {type: string, format: uuid}
+            epoch: {type: integer, minimum: 1}
     RunTrigger:
       description: run이 생긴 이유. manual은 사용자 요청, schedule은 예약 occurrence다.
       oneOf:
@@ -2091,6 +2147,12 @@ components:
             status: {enum: [completed, partial, failed, cancelled]}
             sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
             url: {type: string}
+        raw_evidence_removed_at:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            보존 정리(codeye cleanup --apply)가 이 run의 원시 도구 출력(stdout·stderr·raw_output·other) 내용을 지운 마지막 시각.
+            null이면 모두 남아 있다. 보고서는 저장된 본문으로 그대로 읽히며 화면은 "원시 증거가 삭제됨"을 표시한다.
         progress:
           type: object
           required: [stage, plan_revision, completed_tasks, total_tasks, estimated_percent, planned_weight, finished_weight, weight_basis, plan_changes, waiting_reason]

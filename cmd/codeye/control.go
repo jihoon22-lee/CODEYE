@@ -38,7 +38,7 @@ Usage:
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
   codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--personal [--state-dir DIR]]
                [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]]   (required for a non-loopback --listen)
-` + nodeAdminUsage + `  codeye up [PATH] [--config PATH] [--postgres-bin-dir DIR] [--no-open] [--no-probe]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH)
+` + nodeAdminUsage + operationsUsage + `  codeye up [PATH] [--config PATH] [--postgres-bin-dir DIR] [--no-open] [--no-probe]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH)
   codeye open [--config PATH] [--no-open]   (a new signed-in browser link)
   codeye start [--config PATH]      (personal mode without a project or browser)
   codeye stop [--config PATH] [--format text|json]

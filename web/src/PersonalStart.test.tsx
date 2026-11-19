@@ -147,6 +147,31 @@ describe('retry, report and hints', () => {
     expect(screen.queryByRole('button', { name: t.runs.retry })).toBeNull();
   });
 
+  it('a recovery_required run runs again only after the user checks that no process is left', async () => {
+    const app = renderApp(personal({
+      'GET /api/v1/runs/run-f': () => json(200, runView({ id: 'run-f', project_id: 'p-folder', status: 'recovery_required', version: 4, raw_evidence_removed_at: '2026-11-19T01:00:00Z' })),
+      'POST /api/v1/runs/run-f/recover': () => json(202, { id: 'run-n', status: 'queued', version: 1, url: '/api/v1/runs/run-n', retry: 'new_run', attempt_id: 'a1', epoch: 1 }),
+      'GET /api/v1/runs/run-n': () => json(200, runView({ id: 'run-n', project_id: 'p-folder', status: 'queued' })),
+    }));
+    await flush();
+    type(t.quick.field, '/home/me/app');
+    fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
+    await flush();
+    expect(screen.getByText(t.runs.recoverTitle)).toBeTruthy();
+    expect(screen.getByRole('note').textContent).toContain('원시 증거가 삭제됨');
+    // No cancel for a run that needs recovery; the button waits for the check box.
+    expect(screen.queryByRole('button', { name: t.runs.cancel })).toBeNull();
+    const recover = screen.getByRole('button', { name: t.runs.recover }) as HTMLButtonElement;
+    expect(recover.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText(t.runs.recoverCheck));
+    fireEvent.click(recover);
+    await flush();
+    const call = app.calls.find(c => c.method === 'POST' && c.url === '/api/v1/runs/run-f/recover');
+    expect(call?.body).toEqual({ cleanup_confirmed: true });
+    expect(screen.getByText(t.runs.recovered('new_run'))).toBeTruthy();
+    expect(screen.getByText('run-n')).toBeTruthy();
+  });
+
   it('opens the published report by itself and lists what would make it better, turning the build scripts on with a retry', async () => {
     const app = renderApp(personal({
       'GET /api/v1/runs/run-r': () => json(200, runView({ id: 'run-r', project_id: 'p-repo', status: 'partial', version: 4, report: { revision: 1 } })),

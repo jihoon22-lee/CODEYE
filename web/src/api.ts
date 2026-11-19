@@ -115,6 +115,8 @@ export type RunView = {
   quality_verdict: string | null;
   reportRevision?: number;
   progress: RunProgress;
+  // When retention (codeye cleanup) removed this run's raw tool output; the report itself is unchanged.
+  raw_evidence_removed_at?: string | null;
 };
 
 export const RUN_BODY = { profile: 'deep-review', source_policy: 'latest_at_acquire', scope: { kind: 'full' } } as const;
@@ -122,6 +124,8 @@ export const RUN_BODY = { profile: 'deep-review', source_policy: 'latest_at_acqu
 // Either a declared source, or (personal mode) an absolute folder path the server maps onto a readable folder.
 export type CreateProjectBody = { name?: string; analysis?: AnalysisChoices } & ({ source: Source } | { local_path: string });
 export type RetryAck = RunAck & { retry: string }; // same_run | new_run (open string)
+// POST /runs/{id}/recover: the run that runs again (or the confirmed run when retry is not_queued).
+export type RecoveryAck = RetryAck & { attempt_id: string; epoch: number };
 
 // GET /setup: what this installation can do (personal mode); a server-mode controller sends nulls.
 export type SetupTool = { name: string; status: string; version: string | null; path: string | null; hint: string | null; reason: string | null };
@@ -291,6 +295,8 @@ export function createApi(options: ApiOptions = {}) {
     getSetup: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/setup', signal }, parseSetup),
     // The run to follow: the same run again (same_run) or a new one (new_run).
     retryRun: (id: string) => json({ method: 'POST', path: `${run(id)}/retry` }, parseRetryAck),
+    // A recovery_required run: the user states that no process of its attempt is left on the node.
+    recoverRun: (id: string) => json({ method: 'POST', path: `${run(id)}/recover`, body: { cleanup_confirmed: true } }, parseRecoveryAck),
     createRun: (projectId: string, idempotencyKey: string) =>
       json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: RUN_BODY, headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
     getRun: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: run(id), signal }, parseRun),
@@ -529,6 +535,10 @@ function parseAck(v: unknown): RunAck {
 function parseRetryAck(v: unknown): RetryAck {
   return { ...parseAck(v), retry: str(rec(v).retry) };
 }
+function parseRecoveryAck(v: unknown): RecoveryAck {
+  const o = rec(v);
+  return { ...parseRetryAck(v), attempt_id: str(o.attempt_id), epoch: int(o.epoch, 1) };
+}
 function parsePlanChange(v: unknown): PlanChange {
   const o = rec(v);
   return { revision: int(o.revision, 2), reason: str(o.reason), stage: nullableStr(o.stage), weight: int(o.weight, 1), planned_weight: int(o.planned_weight, 1), recorded_at: nullableDate(o.recorded_at) };
@@ -557,6 +567,7 @@ export function parseRun(v: unknown): RunView {
     snapshot_id: nullableStr(o.snapshot_id),
     quality_verdict: nullableStr(o.quality_verdict),
     ...(o.report == null ? {} : {reportRevision:int(rec(o.report).revision, 1)}),
+    ...(o.raw_evidence_removed_at == null ? {} : { raw_evidence_removed_at: date(o.raw_evidence_removed_at) }),
     progress: {
       stage: typeof p.stage === 'string' ? p.stage : '',
       plan_revision: nullableInt(p.plan_revision, 1),

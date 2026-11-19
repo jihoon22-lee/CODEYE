@@ -538,6 +538,9 @@ type RunView struct {
 	// Origin is the schedule occurrence the run was requested for; nil
 	// for a manual request.
 	Origin *RunOrigin
+	// RawEvidenceRemovedAt is when retention last removed raw artifact
+	// contents of this run (codeye cleanup); nil while they are all kept.
+	RawEvidenceRemovedAt *time.Time
 }
 
 // GetRunView returns the run and its task counts for an actor who may read it.
@@ -579,6 +582,9 @@ func (s *Store) GetRunView(ctx context.Context, actor, id string) (RunView, erro
 			return v, err
 		}
 		v.Stages = stages[id]
+		if err = tx.QueryRow(ctx, "SELECT max(content_removed_at) FROM artifacts WHERE run_id=$1", id).Scan(&v.RawEvidenceRemovedAt); err != nil {
+			return v, err
+		}
 		if r.Status != domain.RunQueued {
 			return v, nil
 		}

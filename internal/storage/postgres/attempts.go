@@ -303,6 +303,14 @@ func (s *Store) finish(ctx context.Context, node string, o Ownership, c Completi
 				return r, err
 			}
 		}
+		// A node that could not load the run's fixed snapshot no longer holds
+		// it (its copy was removed or damaged): a retry acquires anew instead
+		// of being pinned to that node again.
+		if c.Reason != nil && *c.Reason == "snapshot_unavailable" && r.SnapshotID != nil {
+			if _, err = tx.Exec(ctx, "DELETE FROM snapshot_locations WHERE snapshot_id=$1 AND node_id=$2", *r.SnapshotID, a.NodeID); err != nil {
+				return r, err
+			}
+		}
 		// Cancellation is receipted as cancel_requested -> cancelling -> cancelled,
 		// each with its own event, in this one transaction.
 		if next == domain.RunCancelled && r.Status == domain.RunCancelRequested {

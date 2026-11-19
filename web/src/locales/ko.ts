@@ -282,6 +282,16 @@ export const ko = {
     retry: '다시 시도',
     retrying: '다시 시작하는 중…',
     retried: (how: string) => (how === 'same_run' ? '같은 입력으로 다시 실행합니다.' : '소스를 다시 받아 새 실행을 시작했습니다.'),
+    // --- recovery_required: the user confirms the node's cleanup ---
+    recoverTitle: '정리를 확인해야 다시 실행할 수 있습니다',
+    recoverExplain: '이 실행을 맡은 노드가 응답하지 않거나 하위 프로세스가 끝났는지 확인하지 못했습니다. 노드에서 이 실행의 프로세스가 하나도 남지 않았는지 확인한 뒤(codeye status, 작업 관리자 등) 정리를 확인하면 같은 일을 다시 실행합니다.',
+    recoverCheck: '노드에 이 실행의 프로세스가 남아 있지 않음을 확인했습니다',
+    recover: '정리 확인 후 다시 실행',
+    recovering: '확인을 기록하는 중…',
+    recovered: (how: string) => (how === 'not_queued' ? '정리 확인을 기록했습니다. 다시 실행하지는 못했습니다(권한이나 설정을 확인하세요).' : how === 'same_run' ? '정리 확인을 기록하고 같은 입력으로 다시 실행합니다.' : '정리 확인을 기록하고 소스를 다시 받아 새 실행을 시작했습니다.'),
+    recoverNotAllowed: '정리 확인은 실행 권한이 있는 구성원이 할 수 있습니다.',
+    // --- retention removed the raw tool output ---
+    rawEvidenceRemoved: (at: string) => `원시 증거가 삭제됨 (${at}): 보존 정리가 이 실행의 도구 원시 출력(stdout·stderr 등)을 지웠습니다. 보고서와 근거 위치는 그대로입니다.`,
     // --- event stream, plan revision, trigger ---
     streamConnecting: '실시간 연결을 여는 중…',
     streamLive: '실시간으로 갱신하고 있습니다.',

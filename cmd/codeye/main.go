@@ -43,6 +43,9 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if code, ok := runControl(ctx, args, out, stderr); ok {
 		return code
 	}
+	if code, ok := runOperations(ctx, args, out, stderr); ok {
+		return code
+	}
 	if args[0] == "migrate" {
 		if len(args) != 1 {
 			fmt.Fprintln(stderr, "invalid migrate options")

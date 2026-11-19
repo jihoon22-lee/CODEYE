@@ -104,6 +104,7 @@ func (s *Server) apiRoutes() []route {
 		r("GET", "runs/{id}/events", "runs.events", true, false, (*Server).streamRunEvents),
 		r("POST", "runs/{id}/cancel", "runs.cancel", true, false, (*Server).cancelRun).audits(postgres.AuditRunCancelRequested),
 		r("POST", "runs/{id}/retry", "runs.retry", true, false, (*Server).retryRun).audits(postgres.AuditRunRequested),
+		r("POST", "runs/{id}/recover", "runs.recover", true, true, (*Server).recoverRun).audits(postgres.AuditRecoveryConfirmed),
 		r("GET", "setup", "setup.get", true, false, (*Server).getSetup),
 		r("GET", "runs/{id}/report", "runs.report", true, false, (*Server).getReport).audits(postgres.AuditReportExported),
 		r("GET", "runs/{id}/reports", "runs.reports", true, false, (*Server).listReports),

@@ -39,7 +39,19 @@ type BackupPoint struct {
 var countedTables = []string{"users", "projects", "project_members", "source_roots", "source_root_grants", "runs", "attempts", "tasks", "events",
 	"artifacts", "evidence", "reports", "finding_reviews", "schedules", "schedule_occurrences", "nodes", "audit_events"}
 
-const blobsSQL = `SELECT sha256,min(size_bytes) FROM artifacts WHERE finalized AND storage_key IS NOT NULL GROUP BY sha256 ORDER BY sha256`
+// blobsSQL lists the stored contents a backup copies and a restore checks:
+// finalized rows with a storage key whose content retention did not remove
+// (content_removed_at, migration 12). A schema from before that migration
+// (a restored older backup) has no removal column.
+func blobsSQL(migration int) string {
+	if migration < retentionMigration {
+		return `SELECT sha256,min(size_bytes) FROM artifacts WHERE finalized AND storage_key IS NOT NULL GROUP BY sha256 ORDER BY sha256`
+	}
+	return `SELECT sha256,min(size_bytes) FROM artifacts WHERE finalized AND storage_key IS NOT NULL AND content_removed_at IS NULL GROUP BY sha256 ORDER BY sha256`
+}
+
+// retentionMigration added artifacts.content_removed_at.
+const retentionMigration = 12
 
 func rowCounts(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
@@ -80,7 +92,7 @@ func (s *Store) WithBackupPoint(ctx context.Context, fn func(BackupPoint) error)
 	if p.MigrationVersion, err = migrations.Inspect(ctx, tx); err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, blobsSQL)
+	rows, err := tx.Query(ctx, blobsSQL(p.MigrationVersion))
 	if err != nil {
 		return classify(err)
 	}
@@ -90,7 +102,11 @@ func (s *Store) WithBackupPoint(ctx context.Context, fn func(BackupPoint) error)
 	if p.Blobs == nil {
 		p.Blobs = []Blob{}
 	}
-	if err := tx.QueryRow(ctx, "SELECT count(*) FROM artifacts WHERE finalized AND storage_key IS NULL").Scan(&p.MetadataOnly); err != nil {
+	metadataOnly := "SELECT count(*) FROM artifacts WHERE finalized AND storage_key IS NULL"
+	if p.MigrationVersion >= retentionMigration {
+		metadataOnly += " OR content_removed_at IS NOT NULL"
+	}
+	if err := tx.QueryRow(ctx, metadataOnly).Scan(&p.MetadataOnly); err != nil {
 		return classify(err)
 	}
 	if p.Rows, err = rowCounts(ctx, tx); err != nil {
@@ -131,7 +147,7 @@ func (s *Store) ReadRestoredState(ctx context.Context) (RestoredState, error) {
 	if st.MigrationVersion, err = migrations.Inspect(ctx, tx); err != nil {
 		return st, err
 	}
-	rows, err := tx.Query(ctx, blobsSQL)
+	rows, err := tx.Query(ctx, blobsSQL(st.MigrationVersion))
 	if err != nil {
 		return st, classify(err)
 	}
