@@ -71,6 +71,7 @@ export const ko = {
     model: '모델 키를 설정하세요: OPENAI_API_KEY, ANTHROPIC_API_KEY 또는 OPENCODE_API_KEY를 설정하고 codeye up을 다시 실행하면 모델 검토를 합니다.',
     budget: '모델 호출 상한 때문에 검토하지 못한 파일이 있습니다. 설정의 agent.model.review_max_calls(15~207, 기본 99)를 올리고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
     buildScripts: (tasks: string) => `이 프로젝트에서 "저장소의 빌드 스크립트 실행"을 켜면 ${tasks}도 실행합니다.`,
+    buildScriptsCrates: (tasks: string) => `이 프로젝트에서 "저장소의 빌드 스크립트 실행"을 켜면 분석 전에 Rust crate를 받아 두고 ${tasks}도 실행합니다.`,
     buildScriptsAction: '켜고 다시 시도',
     sendSource: '이 프로젝트에서 "소스를 모델에 보냄"을 켜면 모델 검토를 합니다.',
     sendSourceAction: '켜고 다시 시도',
@@ -79,10 +80,12 @@ export const ko = {
     fetchDependenciesAction: '의존성 받기 켜고 다시 시도',
     dependencySwitch: (tasks: string) => `${tasks}는 프로젝트가 쓰는 외부 라이브러리를 찾지 못했습니다. 이 프로젝트의 "의존성 받기"는 켜져 있지만 이 컴퓨터의 설정에서 꺼져 있습니다. 설정의 agent.dependencies.enabled를 true로 바꾸고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
     dependencyOperator: (tasks: string) => `${tasks}는 프로젝트가 쓰는 외부 라이브러리를 찾지 못했습니다. 노드 운영자가 에이전트를 --dependency-fetch로 시작해야 분석 전에 의존성을 받습니다.`,
-    packageManager: (ecosystem: string) => ecosystem === 'go'
+    packageManager: (name: string) => name === 'go'
       ? 'go: 의존성을 받을 go toolchain이 없습니다. go를 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.'
-      : `${ecosystem}: 의존성을 받을 패키지 관리자가 없습니다. 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
-    registry: '의존성 저장소(Go 모듈 proxy 등)에 연결하지 못해 의존성을 받지 못했습니다. 네트워크와 프록시 설정(설정의 agent.dependencies.go_proxy)을 확인하고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
+      : name === 'cargo'
+        ? 'cargo: crate를 받을 Rust toolchain이 없습니다. rustup으로 stable toolchain을 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.'
+        : `${name}: 이 프로젝트의 의존성을 받을 패키지 관리자가 없습니다. 설치하고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
+    registry: '의존성 저장소(Go 모듈 proxy, crates.io, npm 레지스트리 등)에 연결하지 못해 의존성을 받지 못했습니다. 네트워크와 설정의 agent.dependencies.go_proxy·agent.dependencies.npm_registry를 확인하고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
     sending: '바꾸는 중…',
     needsManager: '프로젝트 관리자만 바꿀 수 있습니다.',
   },

@@ -164,7 +164,7 @@ describe('retry, report and hints', () => {
     const items = within(hints).getAllByRole('listitem').map(li => li.textContent);
     expect(items[0]).toContain(t.improve.tool('cppcheck', 'apt install cppcheck'));
     expect(items[1]).toContain(t.improve.model);
-    expect(items[2]).toContain(t.improve.buildScripts('cargo-check'));
+    expect(items[2]).toContain(t.improve.buildScriptsCrates('cargo-check'));
     fireEvent.click(within(hints).getByRole('button', { name: t.improve.buildScriptsAction }));
     await flush();
     const put = app.calls.find(c => c.method === 'PUT')!;

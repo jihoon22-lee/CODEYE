@@ -14,6 +14,10 @@ const taskOf = (subject: string) => subject.replace(/\.m\d+$/, '');
 const toolOf = (subject: string) => TOOL_OF[taskOf(subject)] ?? taskOf(subject);
 
 const MISSING_TOOL = new Set(['tool_not_configured', 'tool_unavailable']);
+// The tools a dependency task of an ecosystem fetches with (the tool table's names).
+const PACKAGE_MANAGERS: Record<string, string[]> = { go: ['go'], rust: ['cargo'], javascript: ['npm', 'pnpm', 'yarn'] };
+// Tasks whose build-script grant also lets deps.rust fetch the crates they read.
+const RUST_TASKS = new Set(['cargo-check', 'clippy']);
 // A dependency task (deps.go, deps.go.m02) names its ecosystem second.
 const ecosystemOf = (subject: string) => taskOf(subject).split('.')[1] ?? taskOf(subject);
 // A reason may carry a detail after a colon.
@@ -51,9 +55,14 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
       if (!unresolved.includes(taskOf(g.subject))) unresolved.push(taskOf(g.subject));
     } else if (g.code === 'dependencies_not_prepared' && codeOf(detail) === 'package_manager_not_configured' && g.subject) {
       // The same key as a missing analyzer tool of that name, so installing go is said once.
-      const name = ecosystemOf(g.subject);
-      const tool = setup?.tools?.tools.find(x => x.name === name);
-      push({ key: `tool:${name}`, text: tool?.hint ? t.improve.tool(name, tool.hint) : t.improve.packageManager(name) });
+      const ecosystem = ecosystemOf(g.subject);
+      const names = PACKAGE_MANAGERS[ecosystem] ?? [ecosystem];
+      // Of several managers (npm, pnpm, yarn) name the ones this computer lacks.
+      const missing = names.filter(n => setup?.tools?.tools.find(x => x.name === n)?.status !== 'found');
+      for (const name of missing.length > 0 ? missing : names) {
+        const tool = setup?.tools?.tools.find(x => x.name === name);
+        push({ key: `tool:${name}`, text: tool?.hint ? t.improve.tool(name, tool.hint) : t.improve.packageManager(name) });
+      }
     } else if (g.code === 'dependencies_not_prepared' && codeOf(detail) === 'registry_unreachable') {
       push({ key: 'dependency_registry', text: t.improve.registry });
     }
@@ -62,7 +71,9 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
     const tasks = blocked.join(', ');
     // In personal mode the project's own choice decides; elsewhere the node operator's grant.
     if (personal && project.analysis && !project.analysis.run_build_scripts) {
-      push({ key: 'build_scripts', text: t.improve.buildScripts(tasks), turnOn: 'run_build_scripts' });
+      // With dependency fetching on, the same grant lets deps.rust fetch the crates first.
+      const crates = project.analysis.fetch_dependencies && blocked.some(b => RUST_TASKS.has(b));
+      push({ key: 'build_scripts', text: crates ? t.improve.buildScriptsCrates(tasks) : t.improve.buildScripts(tasks), turnOn: 'run_build_scripts' });
     } else if (!personal) {
       push({ key: 'build_scripts', text: t.improve.operatorGrant(tasks) });
     }

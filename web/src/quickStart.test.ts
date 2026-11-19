@@ -79,7 +79,12 @@ describe('better results', () => {
       { key: 'tool:go', text: t.improve.toolGeneric('go') },
       { key: 'model', text: t.improve.model },
       { key: 'budget', text: t.improve.budget },
-      { key: 'build_scripts', text: t.improve.buildScripts('cargo-check'), turnOn: 'run_build_scripts' },
+      // Dependency fetching is on, so the same switch fetches the crates first.
+      { key: 'build_scripts', text: t.improve.buildScriptsCrates('cargo-check'), turnOn: 'run_build_scripts' },
+    ]);
+    const noFetch = project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: false });
+    expect(improvementHints([gap('task_unsupported', 'clippy', 'repository_code_not_allowed')], SETUP, noFetch)).toEqual([
+      { key: 'build_scripts', text: t.improve.buildScripts('clippy'), turnOn: 'run_build_scripts' },
     ]);
   });
 
@@ -131,5 +136,24 @@ describe('better results', () => {
     expect(improvementHints([gap('task_unsupported', 'go-vet', 'tool_not_configured'), notPrepared[0]!], withTool, project(choices))).toEqual([
       { key: 'tool:go', text: t.improve.tool('go', 'install go 1.27') },
     ]);
+  });
+
+  it('names cargo for Rust and the JS package managers this computer lacks', () => {
+    const choices = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true };
+    expect(improvementHints([gap('dependencies_not_prepared', 'deps.rust.m01', 'package_manager_not_configured', 'environment')], SETUP, project(choices))).toEqual([
+      { key: 'tool:cargo', text: t.improve.packageManager('cargo') },
+    ]);
+    const js = [gap('dependencies_not_prepared', 'deps.javascript', 'package_manager_not_configured', 'environment')];
+    const managers = { ...SETUP, tools: { detected_at: null, tools: [
+      { name: 'npm', status: 'found', version: '11.16.0', path: '/n/npm-cli.js', hint: null, reason: null },
+      { name: 'pnpm', status: 'not_found', version: null, path: null, hint: 'npm install pnpm', reason: null },
+      { name: 'yarn', status: 'not_found', version: null, path: null, hint: 'npm install yarn@1', reason: null },
+    ] } };
+    expect(improvementHints(js, managers, project(choices))).toEqual([
+      { key: 'tool:pnpm', text: t.improve.tool('pnpm', 'npm install pnpm') },
+      { key: 'tool:yarn', text: t.improve.tool('yarn', 'npm install yarn@1') },
+    ]);
+    // Without detection results all three are named.
+    expect(improvementHints(js, { ...SETUP, tools: null }, project(choices)).map(h => h.key)).toEqual(['tool:npm', 'tool:pnpm', 'tool:yarn']);
   });
 });
