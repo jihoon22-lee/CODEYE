@@ -32,8 +32,11 @@ const (
 	// PyrightTestedVersion is the exact release whose output the captures
 	// pin (pyright releases weekly).
 	PyrightTestedVersion = "1.1.414"
-	pyrightMinMinor      = 3
-	pyrightMaxMinor      = 15
+	// PyrightSyntaxRule is the rule of an observation of a pyright parser
+	// error (pyright gives those no rule).
+	PyrightSyntaxRule = "syntax"
+	pyrightMinMinor   = 3
+	pyrightMaxMinor   = 15
 	// emptyVenv is the CODEYE-managed empty virtual environment pyright is
 	// pointed at: with a venv configured it reads site-packages from the
 	// directory and never starts a Python interpreter to ask for search
@@ -244,11 +247,10 @@ func (pyrightRun) assemble(rc *runCtx) obsdoc.Document {
 			switch rule {
 			case "":
 				// Diagnostics without a rule are the parser's (syntax
-				// errors): the file was not analyzed.
-				bd.toolError(execPyrightCheck, "syntax", *d.File, *start.Line+1, *start.Character+1, *d.Message)
-				if rel, ok := bd.toolPath(*d.File); ok {
-					syntax[rel] = true
-				}
+				// errors): the file is left out and its first one is the
+				// file's observation.
+				ref := obsdoc.RawRef{Execution: execPyrightCheck, Stream: "stdout", StreamSHA256: sha, RecordIndex: el.Index, JSONPointer: el.Pointer, ByteStart: el.Start, ByteEnd: el.End}
+				bd.unparsable(syntax, PyrightSyntaxRule, *d.Severity, *d.Message, *d.File, &place{StartLine: *start.Line + 1, StartCol: *start.Character + 1, EndLine: *end.Line + 1, EndCol: *end.Character + 1, Unit: unitUTF16}, ref)
 				continue
 			case "reportMissingImports":
 				bd.doc.Coverage.Units[UnitImportUnresolved]++

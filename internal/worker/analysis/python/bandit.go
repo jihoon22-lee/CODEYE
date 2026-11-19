@@ -352,20 +352,13 @@ func (banditRun) assemble(rc *runCtx) obsdoc.Document {
 		// not parse or read.
 		failedFiles := map[string]bool{}
 		for _, e := range report.errors {
+			// A file bandit could not parse or read (syntax error, decoding)
+			// is left out; bandit skips it and scans the rest. Its error has
+			// no position and lives in the scratch report, not a captured
+			// stream, so it is counted, not observed.
 			file := path.Clean(*e.Filename)
 			failedFiles[file] = true
-			if !strings.Contains(*e.Reason, "syntax error") {
-				// A file bandit could not read or decode is not a syntax
-				// error of the code; the task still fails (a success
-				// envelope carries no tool errors).
-				bd.toolError(execBanditCheck, "file", file, 0, 0, *e.Reason)
-				bd.fail(domain.TaskFailed, ReasonFileErrors, obsdoc.ExitExecutionError)
-				continue
-			}
-			bd.toolError(execBanditCheck, "syntax", file, 0, 0, *e.Reason)
-			if rel, ok := bd.toolPath(file); ok {
-				syntax[rel] = true
-			}
+			bd.unparsable(syntax, "", "", "", file, nil, obsdoc.RawRef{})
 		}
 		processed = []string{}
 		for _, f := range report.metrics {

@@ -57,8 +57,10 @@ const (
 	ReasonOutputTruncated      = "output_truncated"
 	ReasonOutputUnparsed       = "output_unparsed"
 	ReasonExitMismatch         = "exit_status_mismatch"
-	ReasonSyntaxErrors         = "source_syntax_errors"
-	ReasonFileErrors           = "tool_file_errors"
+	// ReasonSyntaxErrors: mypy stopped at a syntax error it could not be run
+	// past (the file is not one of the listed files, or the rerun bound was
+	// reached). Other unparsable files are a limitation, not a failure.
+	ReasonSyntaxErrors = "source_syntax_errors"
 	// ReasonUnsafeModuleName: a nested module directory name holds a
 	// character the tool's exclusion list would split or expand (",", glob
 	// metacharacters); the task refuses instead of mis-excluding files.
@@ -101,6 +103,10 @@ const (
 	// outside the attempt workspace (its own stubs, a path a configuration
 	// pointed to); they are dropped with their text and only counted.
 	LimOutsideDropped = "diagnostics_outside_workspace_dropped"
+	// LimUnparsable: files the tool could not parse or read were left out
+	// (coverage unit syntax_error); the task reports everything else it
+	// analyzed (docs/ANALYZERS.md#python-결과-판정).
+	LimUnparsable = "unparsable_files_not_analyzed"
 )
 
 // Config selects one operator-installed tool. Nothing is searched in PATH
@@ -312,6 +318,9 @@ type runCtx struct {
 	refused string
 	drift   map[string]bool
 	texts   *texts
+	// checks are the names of a tool's check executions in run order when
+	// it runs more than one (mypy's reruns without unparsable files).
+	checks []string
 }
 
 // toolRun is the tool-specific part of a task: the executions after the

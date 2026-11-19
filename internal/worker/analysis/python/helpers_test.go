@@ -128,3 +128,36 @@ func hasLimit(d obsdoc.Document, code string) bool {
 	}
 	return false
 }
+
+// checkUnparsable is the outcome of a tree with unparsable files: the task
+// succeeds on the files the tool could analyze (processed), every unparsable
+// file is a syntax_error unit and never processed, the task records
+// unparsable_files_not_analyzed and no tool error, and, where the tool
+// reports a position (syntaxRule != ""), each unparsable file has exactly
+// one syntax observation.
+func checkUnparsable(t *testing.T, r realRun, syntaxRule string, processed []string, unparsable ...string) {
+	t.Helper()
+	if r.res.Status != domain.TaskSucceeded || !r.doc.Parse.OK || len(r.doc.ToolErrors) != 0 || !hasLimit(r.doc, LimUnparsable) ||
+		r.doc.Coverage.Units[UnitSyntaxError] != len(unparsable) {
+		t.Fatalf("outcome %s/%s units %+v limitations %v tool errors %+v\n%s", r.res.Status, r.res.Reason, r.doc.Coverage.Units, r.doc.Limitations, r.doc.ToolErrors, r.raw)
+	}
+	wantProcessed(t, r.doc, processed...)
+	perFile := map[string]int{}
+	for _, o := range r.doc.Observations {
+		if syntaxRule != "" && o.RuleID == syntaxRule && o.Path != nil {
+			perFile[*o.Path]++
+			if o.Category != "correctness" || o.Suppressed || o.LocationState != obsdoc.LocationResolved {
+				t.Fatalf("syntax observation %+v", o)
+			}
+		}
+	}
+	want := 0
+	if syntaxRule != "" {
+		want = 1
+	}
+	for _, f := range unparsable {
+		if perFile[f] != want {
+			t.Fatalf("%s: %d syntax observations, want %d (%v)", f, perFile[f], want, perFile)
+		}
+	}
+}

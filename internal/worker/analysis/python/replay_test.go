@@ -43,6 +43,14 @@ func execNameOf(tool string, args []string) string {
 	case tool == BanditTool && slices.Contains(args, "--ignore-nosec"):
 		return "bandit.check-ignore-nosec"
 	}
+	if tool == MypyTool {
+		// A rerun without unparsable files reads files.rNN.txt.
+		for _, a := range args {
+			if base := filepath.Base(a); strings.HasPrefix(a, "@") && strings.HasPrefix(base, "files.r") {
+				return "mypy.check." + strings.TrimSuffix(strings.TrimPrefix(base, "files."), ".txt")
+			}
+		}
+	}
 	return tool + ".check"
 }
 
@@ -101,7 +109,7 @@ func capture(t *testing.T, fixtureName, key string, r realRun) {
 		write(".stdout", sub(res.Stdout.Data))
 		write(".stderr", sub(res.Stderr.Data))
 		write(".exit", []byte(strconv.Itoa(code)+"\n"))
-		if tool == MypyTool && name == "mypy.check" {
+		if tool == MypyTool && strings.HasPrefix(name, "mypy.check") {
 			if b, err := os.ReadFile(filepath.Join(argAfter(args, "--lineprecision-report"), "lineprecision.txt")); err == nil {
 				write(".lineprecision", b)
 			}
@@ -163,7 +171,7 @@ func (rr *replayRunner) Run(ctx context.Context, spec executor.Spec) executor.Re
 			}
 		}
 	}
-	if rr.tool == MypyTool && name == "mypy.check" {
+	if rr.tool == MypyTool && strings.HasPrefix(name, "mypy.check") {
 		if lp, err := os.ReadFile(base + ".lineprecision"); err == nil {
 			if err := os.WriteFile(filepath.Join(argAfter(args, "--lineprecision-report"), "lineprecision.txt"), lp, 0o600); err != nil {
 				rr.t.Fatal(err)
@@ -303,7 +311,19 @@ func TestReplayPyrightSuppressions(t *testing.T) {
 	replayPyright(t, "suppressions", checkPyrightSuppressionsHonored)
 }
 func TestReplayPyrightSyntaxError(t *testing.T) { replayPyright(t, "syntax", checkPyrightSyntaxError) }
-func TestReplayPyrightOverlap(t *testing.T)     { replayPyright(t, "overlap", checkPyrightOverlapDisabled) }
+func TestReplayPyrightUnparsableFiles(t *testing.T) {
+	replayPyright(t, "syntaxmix", checkPyrightUnparsable)
+}
+func TestReplayRuffUnparsableFiles(t *testing.T) {
+	checkRuffUnparsable(t, runReplay(t, RuffTool, "syntaxmix", nil))
+}
+func TestReplayMypyUnparsableFiles(t *testing.T) {
+	checkMypyUnparsable(t, runReplay(t, MypyTool, "syntaxmix", nil))
+}
+func TestReplayBanditUnparsableFiles(t *testing.T) {
+	checkBanditUnparsable(t, runReplay(t, BanditTool, "syntaxmix", nil))
+}
+func TestReplayPyrightOverlap(t *testing.T) { replayPyright(t, "overlap", checkPyrightOverlapDisabled) }
 
 // ---- failure modes: never success ----
 
