@@ -69,6 +69,26 @@ test('password sign-in, admin-created user, forced password change', async ({ pa
   const row = page.getByRole('row').filter({ hasText: 'browser-newcomer' });
   await expect(row).toContainText('✓ 활성');
   await expect(row).not.toContainText('비밀번호 설정 대기');
+
+  // Source-root grants, providers and the server audit log, against the real server.
+  const adminTabs = page.getByRole('navigation', { name: '관리 화면' });
+  await adminTabs.getByRole('button', { name: '소스 루트', exact: true }).click();
+  await page.getByLabel('browser-fixture-root에 허가할 사용자').selectOption({ label: 'browser-newcomer' });
+  await page.getByRole('button', { name: '허가', exact: true }).click();
+  const revoke = page.getByRole('button', { name: 'browser-fixture-root에서 browser-newcomer의 허가 철회' });
+  await expect(revoke).toBeVisible();
+  await revoke.click();
+  await expect(revoke).toHaveCount(0);
+  await adminTabs.getByRole('button', { name: 'Git 공급자', exact: true }).click();
+  await expect(page.getByText('등록된 Git 공급자가 없습니다.')).toBeVisible();
+  await adminTabs.getByRole('button', { name: '감사 기록', exact: true }).click();
+  const audit = page.getByRole('table', { name: '감사 기록(최신순)' });
+  await expect(audit).toContainText('소스 루트 허가 철회');
+  await expect(audit).toContainText('사용자 생성');
+  await page.getByLabel('작업').selectOption('auth.login_failed');
+  await page.getByRole('button', { name: '적용', exact: true }).click();
+  await expect(audit).not.toContainText('사용자 생성');
+  await expect(audit).toContainText('로그인 실패');
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
   await expect(page.getByRole('heading', { name: '로그인이 필요합니다' })).toBeVisible();
 });

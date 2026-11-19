@@ -21,7 +21,7 @@ export function MembersPanel({ api, project, me, onAccessChange }: Props) {
       <h2 id="members-title">{s.title}</h2>
       <p><strong>{s.myRole(roleLabel(project.role))}</strong></p>
       {Object.hasOwn(t.accounts.roleAllows, project.role) && <p className="small">{t.accounts.roleAllows[project.role]}</p>}
-      <p className="small">🔒 {s.readOnly}</p>
+      <p className="small">{s.readOnly}</p>
     </section>;
   }
   return <ManagedMembers api={api} project={project} me={me} onAccessChange={onAccessChange} />;
@@ -80,7 +80,7 @@ function MemberRow({ api, projectId, member, self, onChanged }: { api: Api; proj
   const status = <td>{member.disabled ? s.disabled : s.active}</td>;
 
   if (member.role === 'owner') {
-    return <tr><td>{label}</td><td>{roleLabel('owner')}</td>{status}<td className="small">🔒 {s.ownerFixed}</td></tr>;
+    return <tr><td>{label}</td><td>{roleLabel('owner')}</td>{status}<td className="small">{s.ownerFixedRow}</td></tr>;
   }
 
   function fail(e: unknown) {
