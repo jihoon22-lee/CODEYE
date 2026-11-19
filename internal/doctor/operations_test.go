@@ -168,12 +168,12 @@ func TestOperationsStorageBackupAndProcesses(t *testing.T) {
 
 	// Only --config adds the section; text and JSON both carry it.
 	runner := &fakeRunner{result: Result{Reason: "executable_missing"}}
-	plain := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second}, runner)
+	plain := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Detect: detectedTools("ruff")}, runner)
 	var out bytes.Buffer
 	if err := plain.Write(&out, "json"); err != nil || strings.Contains(out.String(), "operations") {
 		t.Fatalf("operations without --config: %v", err)
 	}
-	full := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Personal: cfg}, runner)
+	full := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Personal: cfg, Detect: detectedTools("ruff")}, runner)
 	out.Reset()
 	if err := full.Write(&out, "json"); err != nil || !strings.Contains(out.String(), `"operations"`) {
 		t.Fatalf("operations missing: %v", err)

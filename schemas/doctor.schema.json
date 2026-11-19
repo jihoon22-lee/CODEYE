@@ -58,8 +58,8 @@
     },
     "checks": {
       "type": "array",
-      "minItems": 13,
-      "maxItems": 13,
+      "minItems": 11,
+      "maxItems": 11,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -76,14 +76,12 @@
               "git",
               "go",
               "node",
-              "python",
-              "c_cpp",
               "rust",
               "postgres_client",
               "opencode_cli",
-              "database",
-              "model",
-              "process_control"
+              "analyzers",
+              "configured_tools",
+              "database"
             ]
           },
           "status": {
@@ -121,14 +119,19 @@
               "connection_failed",
               "server_version_unrecognized",
               "authenticated_query_verified",
-              "adapter_contract_pending_w10",
-              "native_executor_pending_w05",
-              "runtime_process_control_not_probed"
+              "baseline_analyzer_usable",
+              "no_baseline_analyzer",
+              "configured_tools_usable",
+              "configured_tool_unusable"
             ]
           },
           "version": {
             "type": "string",
             "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+          },
+          "blocking": {
+            "description": "True when a failure of this check makes the exit code 1: it matters for the mode doctor was asked about.",
+            "type": "boolean"
           }
         }
       },
@@ -203,32 +206,6 @@
             "type": "object",
             "properties": {
               "id": {
-                "const": "python"
-              }
-            },
-            "required": [
-              "id"
-            ]
-          }
-        },
-        {
-          "contains": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "const": "c_cpp"
-              }
-            },
-            "required": [
-              "id"
-            ]
-          }
-        },
-        {
-          "contains": {
-            "type": "object",
-            "properties": {
-              "id": {
                 "const": "rust"
               }
             },
@@ -268,33 +245,33 @@
             "type": "object",
             "properties": {
               "id": {
+                "const": "analyzers"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "configured_tools"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
                 "const": "database"
-              }
-            },
-            "required": [
-              "id"
-            ]
-          }
-        },
-        {
-          "contains": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "const": "model"
-              }
-            },
-            "required": [
-              "id"
-            ]
-          }
-        },
-        {
-          "contains": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "const": "process_control"
               }
             },
             "required": [
@@ -803,6 +780,43 @@
               }
             }
           ]
+        }
+      }
+    },
+    "tools": {
+      "description": "The tools detection found, searched the way the agent searches them (docs/ANALYZERS.md). No paths.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "status",
+          "version_tested"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z-]*$"
+          },
+          "status": {
+            "enum": [
+              "found",
+              "not_found",
+              "unusable"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version_tested": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     }

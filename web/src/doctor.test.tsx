@@ -7,7 +7,8 @@ import example from '../../examples/doctor.json';
 describe('diagnostics import', () => {
   it('accepts the shared contract and preserves unverified capabilities', () => {
     const report = parseReport(JSON.stringify(example));
-    expect(report.checks.find(c => c.id === 'model')?.status).toBe('unverified');
+    expect(report.checks.find(c => c.id === 'database')?.status).toBe('not_configured');
+    expect(report.checks.find(c => c.id === 'rust')?.status).toBe('unavailable');
   });
   it.each([
     '{', JSON.stringify({ ...example, schema_version: '99' }),
