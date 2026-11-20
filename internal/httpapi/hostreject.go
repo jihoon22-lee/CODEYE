@@ -31,7 +31,9 @@ func (s *Server) hostRejectionOf(r *http.Request) hostRejection {
 	}
 	if _, _, ok := splitHost(r.Host); ok {
 		out.Host = strings.ToLower(r.Host)
-		if f == s.pub {
+		// A public origin needs TLS or plain HTTP; the default loopback
+		// service has no command that adds a name.
+		if f == s.pub && (f.tls != nil || f.plain) {
 			args := []string{"codeye", "up"}
 			for _, o := range s.origins {
 				args = append(args, "--public-origin", o)

@@ -98,10 +98,12 @@ codeye serve --listen 0.0.0.0:8443 --tls-cert /etc/codeye/tls/cert.pem --tls-key
 
 ### 받는 주소
 
-사람이 서비스를 여는 주소는 네트워크마다 다르다(LAN, VPN, 이 머신의 이름). controller는 다음 Host를 모두 받는다. 따로 정할 것은 없다.
+사람이 서비스를 여는 주소는 네트워크마다 다르다(LAN, VPN, 이 머신의 이름). loopback이 아닌 주소(`0.0.0.0` 포함)로 들으면 controller는 다음 Host를 모두 받는다. 따로 정할 것은 없다.
 
 - 이 머신의 이름과 주소에 listen 포트를 붙인 것: `localhost`, 모든 loopback 주소(`127.0.0.0/8`, `::1`), 호스트 이름과 `호스트이름.local`, `/etc/resolv.conf`의 search domain을 붙인 이름(예: Tailscale MagicDNS의 `main.tail1234.ts.net`), 네트워크 인터페이스의 모든 주소(IPv4, 대괄호의 IPv6). 인터페이스는 몇 초마다 다시 읽어 나중에 켠 VPN 주소도 받는다. 이름은 정확히 같아야 하고(대소문자 무시) 앞부분만 같은 이름(`main.evil.example`)은 받지 않는다. 기본 포트(평문 80, TLS 443)면 포트 없는 Host도 받는다. DNS는 묻지 않는다.
 - `--public-origin`(설정 `public_origins`)의 Host. 이 머신의 것이 아닌 주소, 예를 들어 다른 머신이 포트를 전달해 주는 주소나 DNS 이름을 더한다.
+
+loopback으로만 들으면(`--listen` 없는 기본 `codeye up`) 다른 사람이 닿을 수 없으므로 loopback 이름(`127.0.0.1`, `localhost`, `[::1]`, 듣는 주소)과 `--public-origin`의 Host만 받는다. 호스트 이름이나 다른 인터페이스 주소는 받지 않는다. 그 이름을 `127.0.0.1`로 풀리게 만든 웹 페이지가 들어오지 못하게 하려는 것이다.
 
 상태를 바꾸는 요청의 `Origin`은 그 요청의 scheme + Host와 같아야 한다. 받는 주소 A로 연 화면이 받는 다른 주소 B의 Origin을 보내면 거절한다. 세션 cookie는 연 주소마다 따로다.
 

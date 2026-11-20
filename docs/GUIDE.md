@@ -154,7 +154,7 @@ The service answers on:
 ```
 
 - 평문 HTTP는 시작할 때 `plain HTTP on 0.0.0.0:7331 (plain_http): sign-in cookies and passwords travel unencrypted on this network`를 한 줄 출력한다. 막지는 않는다.
-- 서비스는 이 머신의 이름과 모든 주소(LAN, Tailscale 같은 VPN, loopback)로 들어오는 요청을 받는다. 로그인 쿠키는 연 주소마다 따로다(TLS면 `__Host-` 쿠키에 Secure).
+- 다른 머신에 열면 서비스는 이 머신의 이름과 모든 주소(LAN, Tailscale 같은 VPN, loopback)로 들어오는 요청을 받는다. 기본(loopback만)은 `127.0.0.1`·`localhost`만 받는다. 로그인 쿠키는 연 주소마다 따로다(TLS면 `__Host-` 쿠키에 Secure).
 - `--public-origin`은 이 머신의 것이 아닌 주소를 더한다. 예를 들어 다른 머신이 포트를 전달해 주는 주소나 DNS 이름이다. 여러 번 줄 수 있고 첫 값이 "Other people open …"의 주소가 된다. TLS에서는 하나 이상 필요하다.
 - 받지 않는 주소로 열면 "이 주소로는 CODEYE에 들어올 수 없습니다" 화면이 쓴 주소, 받는 주소, 더하는 명령(`codeye up --public-origin http://그주소:7331`)을 보인다. 그 명령을 서비스를 띄운 머신에서 실행하면 controller만 다시 뜬다.
 - 출력되는 로그인 링크와 "Other people open …" 줄은 알려 줄 주소(첫 설정 주소, 없으면 첫 LAN·VPN 주소)를 쓴다. 관리 화면에서 만든 로그인 링크는 관리자가 지금 연 주소를 쓴다(VPN 주소로 열었으면 VPN 주소의 링크). 이 머신의 에이전트와 명령은 loopback의 따로 된 주소(기본 듣는 포트 + 1, 설정 `local_listen`)로 controller에 붙는다.

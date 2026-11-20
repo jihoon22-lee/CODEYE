@@ -29,12 +29,12 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 
 공개 주소(TLS나 평문 HTTP)로 들을 때 `codeye up`은 controller에 loopback 수신 주소를 하나 더 준다(`--local-listen`, 기본 공개 포트 + 1). 같은 머신의 에이전트와 명령은 그 주소를 쓴다. 두 수신 주소는 Host·Origin·cookie 규칙을 따로 가진다(접속한 listener가 정한다). loopback 주소는 loopback Host만 받는다.
 
-공개 수신 주소의 Host 검사는 DNS rebinding(이 머신으로 풀리게 만든 남의 이름)을 막는 것이 목적이다. 그래서 사람이 쓰는 주소를 하나로 정하지 않고, 이 머신 자신의 이름과 주소(인터페이스 주소, loopback, 호스트 이름, search domain을 붙인 이름)와 설정한 public origin을 받는다([받는 주소](OPERATIONS.md#받는-주소)). 이름은 정확히 일치해야 하며 접두사로 비교하지 않는다. 받지 않는 Host에 주는 403은 받는 주소 목록과 더하는 명령을 담는다. 쓰기 쉬움을 위해 고른 것이고, 그 결과 Host를 틀린 요청 누구에게나 이 머신의 LAN·VPN 주소와 호스트 이름이 보인다(서비스가 이미 그 주소에서 듣고 있으므로 접근 범위는 바뀌지 않는다).
+공개 수신 주소의 Host 검사는 DNS rebinding(이 머신으로 풀리게 만든 남의 이름)을 막는 것이 목적이다. 그래서 loopback이 아닌 주소로 들을 때는 사람이 쓰는 주소를 하나로 정하지 않고, 이 머신 자신의 이름과 주소(인터페이스 주소, loopback, 호스트 이름, search domain을 붙인 이름)와 설정한 public origin을 받는다([받는 주소](OPERATIONS.md#받는-주소)). loopback으로만 들으면 다른 사람이 닿을 수 없으므로 loopback 이름(`127.0.0.1`, `localhost`, `[::1]`, 듣는 주소)과 설정한 public origin만 받는다. 이 머신의 이름을 `127.0.0.1`로 풀리게 만든 웹 페이지가 들어오지 못하게 하려는 것이다. 이름은 정확히 일치해야 하며 접두사로 비교하지 않는다. 받지 않는 Host에 주는 403은 받는 주소 목록과 더하는 명령을 담는다. 쓰기 쉬움을 위해 고른 것이고, 그 결과 Host를 틀린 요청 누구에게나 이 머신의 LAN·VPN 주소와 호스트 이름이 보인다(서비스가 이미 그 주소에서 듣고 있으므로 접근 범위는 바뀌지 않는다).
 
 | 항목 | loopback(평문) | 공개 평문 HTTP(`--plain-http`) | TLS |
 |---|---|---|---|
 | 수신 | loopback IP와 0이 아닌 포트 | 아무 IP. `0.0.0.0`·`[::]`도 `--public-origin` 없이 | 아무 IP. TLS 1.2 이상, 인증서·키는 운영자가 준다. 키 파일은 group·other가 읽거나 쓸 수 없어야 한다(POSIX mode 검사, Windows ACL은 검사하지 않음). 같은 포트의 평문 요청에는 API를 주지 않는다 |
-| Host | 이 머신의 이름·주소에 listen 포트(DNS rebinding 방어). 정적 파일 포함 모든 요청 | 이 머신의 이름·주소와 public origin의 host | 같다(기본 포트면 포트 없는 Host도) |
+| Host | loopback 이름(`127.0.0.1`, `localhost`, `[::1]`, 듣는 주소)에 listen 포트(DNS rebinding 방어). 정적 파일 포함 모든 요청 | loopback이 아닌 주소로 들으면 이 머신의 이름·주소, 그리고 public origin의 host | 같다(기본 포트면 포트 없는 Host도) |
 | Origin | 상태 변경 요청은 `Origin`이 `http://`+Host와 정확히 같아야 한다 | 같다(`http://`+받은 Host) | `https://`+받은 Host와 같아야 한다 |
 | 세션 cookie | `codeye_session` | `codeye_session`(Secure 아님) | `__Host-codeye_session`(`Secure`, Domain 없음). 평문 이름의 cookie는 읽지 않는다 |
 | HSTS | 보내지 않는다 | 보내지 않는다 | `Strict-Transport-Security: max-age=31536000` |

@@ -80,6 +80,38 @@ func TestHostAcceptance(t *testing.T) {
 	if srv80.pub.accepts("main:443") {
 		t.Error("port 80: another port accepted")
 	}
+	// A loopback listener keeps the strict rule: the loopback names, the
+	// listen address and the configured origins, not this machine's other
+	// names and addresses (nobody else reaches it; a page resolving such a
+	// name to 127.0.0.1 must not get in).
+	for _, cfg := range []Config{
+		{Listen: netip.MustParseAddrPort("127.0.0.1:7331"), Machine: wslMachine()},
+		{Listen: netip.MustParseAddrPort("127.0.0.1:7331"), PlainHTTP: true, Machine: wslMachine(), PublicOrigins: []string{"http://codeye.lan:7331"}},
+		{Listen: netip.MustParseAddrPort("127.0.0.2:7331"), PlainHTTP: true, Machine: wslMachine(), PublicOrigins: []string{"http://codeye.lan:7331"}},
+	} {
+		lo, err := New(cfg, &postgres.Store{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		accepted := []string{"127.0.0.1:7331", "localhost:7331", "LOCALHOST:7331", "[::1]:7331", lo.listen.String()}
+		if len(cfg.PublicOrigins) > 0 {
+			accepted = append(accepted, "codeye.lan:7331")
+		}
+		for _, h := range accepted {
+			if !lo.pub.accepts(h) {
+				t.Errorf("loopback %s: %s refused", cfg.Listen, h)
+			}
+		}
+		refused := []string{"main:7331", "main.local:7331", "main.tail30f401.ts.net:7331", "172.24.157.79:7331", "100.108.34.23:7331", "127.0.0.3:7331", "10.255.255.254:7331", "localhost:7332"}
+		if len(cfg.PublicOrigins) == 0 {
+			refused = append(refused, "codeye.lan:7331")
+		}
+		for _, h := range refused {
+			if lo.pub.accepts(h) {
+				t.Errorf("loopback %s: %s accepted", cfg.Listen, h)
+			}
+		}
+	}
 	// The address list for people: configured first, then loopback, name,
 	// LAN, VPN; no bridge.
 	var got []string
@@ -145,5 +177,22 @@ func TestHostRejectionTellsWhatWorks(t *testing.T) {
 	odd := get("/", `ev"il<x>:7331`, "text/html")
 	if odd.Code != 403 || strings.Contains(odd.Body.String(), "ev\"il") || strings.Contains(odd.Body.String(), "<x>") || strings.Contains(odd.Body.String(), "codeye up") {
 		t.Fatalf("odd host echoed: %s", odd.Body)
+	}
+	// The default loopback service refuses this machine's name and offers no
+	// --public-origin command (it would need TLS or plain HTTP).
+	srv, err = New(Config{Listen: netip.MustParseAddrPort("127.0.0.1:7331"), Machine: wslMachine()}, &postgres.Store{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lo := get("/api/v1/health", "main:7331", "")
+	e.Error.Details = nil
+	if err := json.Unmarshal(lo.Body.Bytes(), &e); err != nil || lo.Code != 403 || e.Error.Code != "HOST_REJECTED" {
+		t.Fatalf("loopback %d %s", lo.Code, lo.Body)
+	}
+	if _, ok := e.Error.Details["add_command"]; ok || strings.Contains(e.Error.Message, "codeye up") {
+		t.Fatalf("loopback offers a command: %v %s", e.Error.Details, e.Error.Message)
+	}
+	if acc, _ := e.Error.Details["accepted_origins"].([]any); len(acc) != 2 || acc[0] != "http://127.0.0.1:7331" || acc[1] != "http://localhost:7331" {
+		t.Fatalf("loopback accepted %v", e.Error.Details["accepted_origins"])
 	}
 }

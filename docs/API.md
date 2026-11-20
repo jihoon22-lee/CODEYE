@@ -58,7 +58,7 @@
 
 ### Host와 Origin
 
-- `Host`는 이 머신의 이름과 주소에 listen 포트(`localhost`, loopback 주소, 호스트 이름, 인터페이스 주소. [받는 주소](OPERATIONS.md#받는-주소))와 `--public-origin`의 host다. 기본 포트(평문 80, TLS 443)면 포트 없는 Host도 받는다.
+- `Host`는 loopback이 아닌 주소로 들으면 이 머신의 이름과 주소에 listen 포트(`localhost`, loopback 주소, 호스트 이름, 인터페이스 주소. [받는 주소](OPERATIONS.md#받는-주소))와 `--public-origin`의 host다. loopback으로만 들으면 loopback 이름(`127.0.0.1`, `localhost`, `[::1]`, 듣는 주소)과 `--public-origin`의 host만이다. 기본 포트(평문 80, TLS 443)면 포트 없는 Host도 받는다.
 - 상태 변경 요청의 `Origin`은 그 요청의 scheme + Host(`http://` 또는 `https://`)와 정확히 같아야 한다.
 - TLS는 모든 응답에 `Strict-Transport-Security: max-age=31536000`을 보낸다.
 - `--local-listen`의 loopback 수신 주소는 평문 loopback 규칙을 따른다. 규칙은 요청이 들어온 수신 주소가 정한다.

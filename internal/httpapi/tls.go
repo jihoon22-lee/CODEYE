@@ -17,12 +17,15 @@ import (
 
 // Listening rules (docs/SECURITY.md#네트워크와-브라우저):
 //
-//   - Host: the Host of a configured public origin, or a name of this
-//     machine on the listen port (localhost, the hostname forms, any
-//     loopback address, any address of its interfaces; hostaddr.Machine).
-//     Anything else is 403 HOST_REJECTED, with the accepted addresses and
-//     the command that adds the one used. This keeps DNS rebinding out (a
-//     foreign name resolving to this machine) without making people use
+//   - Host: the Host of a configured public origin, or on the listen port
+//     a loopback name (127.0.0.1, localhost, [::1], the listen address).
+//     A non-loopback listener also accepts every name of this machine (the
+//     hostname forms, any loopback address, any address of its interfaces;
+//     hostaddr.Machine); a loopback one does not, since nobody else can
+//     reach it and a page resolving such a name to 127.0.0.1 must not get
+//     in. Anything else is 403 HOST_REJECTED, with the accepted addresses
+//     and the command that adds the one used. This keeps DNS rebinding out
+//     (a foreign name resolving to this machine) without making people use
 //     one particular address;
 //   - Origin of a state-changing request: scheme://Host of that request;
 //   - loopback without TLS: plain HTTP, cookie codeye_session;
@@ -100,7 +103,7 @@ func (f *face) accepts(h string) bool {
 	if f.hosts[h] {
 		return true
 	}
-	if f.machine == nil {
+	if !f.ownNames || f.machine == nil {
 		return false
 	}
 	host, port, ok := splitHost(h)

@@ -188,13 +188,18 @@ const DefaultSessionTTL = 12 * time.Hour
 const ServiceSessionTTL = 7 * 24 * time.Hour
 
 // face is how one listener meets browsers: the Host values it accepts (the
-// configured ones, and with machine those naming this machine on port),
+// configured ones, and with ownNames those naming this machine on port),
 // TLS, whether plain HTTP was chosen for a non-loopback address, and the
 // session cookie name. A state-changing request's Origin must be
 // scheme://Host of that very request.
 type face struct {
-	hosts      map[string]bool
+	hosts map[string]bool
+	// machine lists this machine's addresses (the service's addresses and
+	// the 403 page); ownNames also accepts every one of them as Host, which
+	// only a non-loopback listener needs (nobody else reaches a loopback
+	// one, and a page resolving a name to 127.0.0.1 must not get in).
 	machine    *hostaddr.Machine
+	ownNames   bool
 	port       uint16
 	tls        *tls.Config
 	plain      bool
@@ -304,6 +309,16 @@ func New(cfg Config, store Store) (*Server, error) {
 	s.pub.machine = hostaddr.SystemMachine()
 	if cfg.Machine != nil {
 		s.pub.machine = cfg.Machine
+	}
+	if cfg.Listen.Addr().IsLoopback() {
+		// Loopback only: the loopback names, the listen address itself and
+		// the configured origins.
+		for h := range loopbackFace(cfg.Listen.Port()).hosts {
+			s.pub.hosts[h] = true
+		}
+		s.pub.hosts[strings.ToLower(cfg.Listen.String())] = true
+	} else {
+		s.pub.ownNames = true
 	}
 	for _, o := range cfg.PublicOrigins {
 		canon, hosts, err := parseOrigin(o, s.scheme())

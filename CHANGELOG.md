@@ -6,7 +6,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ### 추가 — 사람이 쓰는 주소, 다른 사용자의 안내, 명령줄 도움말
 
-- **이 머신의 주소를 모두 받는다**: controller는 listen 포트에서 이 머신의 인터페이스 주소(LAN, Tailscale 같은 VPN, WSL2 내부 주소), loopback, `localhost`, 호스트 이름과 search domain을 붙인 이름을 Host로 받는다. `--listen 0.0.0.0:PORT --plain-http`에 `--public-origin`이 필요 없다. DNS는 묻지 않는다. 이름은 정확히 같을 때만 받는다. 상태 변경 요청의 Origin은 그 요청의 Host와 같아야 한다([받는 주소](docs/OPERATIONS.md#받는-주소), A53 7).
+- **이 머신의 주소를 모두 받는다**: controller는 listen 포트에서 이 머신의 인터페이스 주소(LAN, Tailscale 같은 VPN, WSL2 내부 주소), loopback, `localhost`, 호스트 이름과 search domain을 붙인 이름을 Host로 받는다. `--listen 0.0.0.0:PORT --plain-http`에 `--public-origin`이 필요 없다. DNS는 묻지 않는다. 이름은 정확히 같을 때만 받는다. loopback으로만 들으면(기본 `codeye up`) 이전처럼 loopback 이름과 설정한 origin만 받는다. 상태 변경 요청의 Origin은 그 요청의 Host와 같아야 한다([받는 주소](docs/OPERATIONS.md#받는-주소), A53 7).
 - **`--public-origin`을 여러 번**: 설정 키는 목록 `public_origins`(이전 `public_origin`, 별칭 없음)이고 이 머신의 것이 아닌 주소(reverse proxy, port forward)를 더한다. `codeye up --public-origin URL`만 주면 그 목록만 바꾸고, 듣는 방식이 바뀌면 `codeye up`이 controller만 다시 띄운다.
 - **주소 목록**: `codeye up`은 "The service answers on:" 아래 받는 주소를 설정·LAN·VPN·이름·이 머신으로 묶어 보인다(`0.0.0.0`, docker·bridge 주소는 빼고). 관리 화면의 "이 서비스 주소"도 같은 목록을 보인다(`GET /admin/settings`의 `service_addresses`). 관리 화면에서 만든 로그인 링크는 관리자가 연 주소를 쓴다(loopback이면 알려 줄 주소).
 - **받지 않는 주소의 403**: 쓴 주소, 받는 주소, 그 주소를 더하는 `codeye up --public-origin …` 명령을 한국어로 말한다. API와 HTML이 아닌 요청에는 `HOST_REJECTED`와 `host`·`accepted_origins`·`add_command` details다.
