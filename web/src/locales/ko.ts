@@ -445,7 +445,7 @@ export const ko = {
     } as Record<string, string>,
     count: (label: string, n: number) => `${label} ${n}건`,
     reasonLabels: {
-      source_auth_required: '저장소를 읽을 권한이 없음 — 비공개 github.com 저장소는 프로젝트 소유자가 계정 메뉴의 GitHub 연결에 token을 넣으면 읽습니다 (주소가 맞는지도 확인하세요)',
+      source_auth_required: '저장소를 읽을 권한이 없음 — 비공개 github.com 저장소는 분석을 시작한 사람이 계정 메뉴의 GitHub 연결에 token을 넣으면 읽습니다 (주소가 맞는지도 확인하세요)',
       source_unreachable: 'Git 호스트에 연결하지 못함 — 네트워크를 확인하고 다시 시도하세요',
       source_unavailable: '소스를 읽지 못함 — 폴더가 있는지, 읽을 수 있는지 확인하세요',
       source_holds_codeye_data: '이 폴더는 CODEYE 데이터 폴더를 품고 있거나 그 안에 있어 읽지 않음 — 프로젝트가 든 하위 폴더를 고르세요',
@@ -804,7 +804,7 @@ export const ko = {
     tabs: { label: '프로젝트 화면', run: '분석·예약', members: '구성원', audit: '감사 기록' },
     github: {
       title: 'GitHub 연결',
-      intro: '내 GitHub token을 넣으면 내가 소유한 프로젝트의 비공개 github.com 저장소와 pull request를 읽고, 결과 댓글을 이 token의 계정으로 남깁니다. 다른 사람의 프로젝트에는 쓰이지 않습니다. token이 없으면 공개 저장소만 분석합니다.',
+      intro: '내 GitHub token을 넣으면 내가 시작한 분석이 비공개 github.com 저장소와 pull request를 읽고, 결과 댓글을 이 token의 계정으로 남깁니다. 다른 사람이 시작한 분석에는 쓰이지 않습니다(다른 사람의 프로젝트라도 내가 시작하면 내 token을 씁니다). token이 없으면 공개 저장소만 분석합니다.',
       storedNote: 'token은 서버의 서비스 계정만 읽는 파일에 저장합니다. 화면·로그·감사 기록에 다시 보여 주지 않습니다.',
       loading: '불러오는 중…',
       loadFailed: 'GitHub 연결을 불러오지 못했습니다.',
@@ -1092,11 +1092,11 @@ export const ko = {
     previewNote: '아래는 이 실행이 pull request에 남기는(또는 남길) 댓글입니다. 미리 보기는 아무것도 게시하지 않습니다.',
     headMoved: (sha: string) => `분석 뒤 pull request의 head가 ${sha}로 바뀌었습니다.`,
     commentBox: 'pull request에 결과 댓글 남기기',
-    commentHelp: '보고서가 나오면 프로젝트 소유자의 GitHub token 계정으로 댓글 하나를 남기고, 같은 pull request를 다시 분석하면 그 댓글을 고칩니다. 코드는 싣지 않습니다. 이 프로젝트의 선택으로 기억합니다.',
+    commentHelp: '보고서가 나오면 분석을 시작한 내 GitHub token 계정으로 댓글 하나를 남기고(token이 없으면 댓글을 남기지 않습니다), 같은 pull request를 다시 분석하면 그 댓글을 고칩니다. 코드는 싣지 않습니다. 이 프로젝트의 선택으로 기억합니다.',
     errors: {
       PULL_REQUEST_UNSUPPORTED: 'pull request는 github.com 저장소 프로젝트에서만 분석할 수 있습니다(오프라인 모드에서는 분석하지 않습니다).',
-      PULL_REQUEST_NOT_FOUND: 'GitHub이 그 pull request를 프로젝트 소유자의 연결에 보여 주지 않습니다. 비공개 저장소라면 소유자가 계정 메뉴의 GitHub 연결에 token을 넣어야 합니다.',
-      GITHUB_TOKEN_REFUSED: 'GitHub이 프로젝트 소유자의 token을 거부했습니다. 소유자가 계정 메뉴의 GitHub 연결에서 token을 바꾸세요.',
+      PULL_REQUEST_NOT_FOUND: 'GitHub이 그 pull request를 내 연결에 보여 주지 않습니다. 비공개 저장소라면 계정 메뉴의 GitHub 연결에 내 token을 넣으세요.',
+      GITHUB_TOKEN_REFUSED: 'GitHub이 내 token을 거부했습니다. 계정 메뉴의 GitHub 연결에서 token을 바꾸세요.',
       GITHUB_FORBIDDEN: '이 GitHub token으로는 그 pull request를 읽을 수 없습니다.',
       GITHUB_RATE_LIMITED: 'GitHub API 사용 한도에 걸렸습니다. 잠시 뒤 다시 시도하세요.',
       GITHUB_UNAVAILABLE: 'GitHub API에 연결하지 못했습니다. 네트워크를 확인하고 다시 시도하세요.',

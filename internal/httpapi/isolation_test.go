@@ -436,28 +436,23 @@ func TestRouteIsolationAndAuditTable(t *testing.T) {
 			t.Errorf("isolation case %s matches no route", name)
 		}
 	}
-	// GitHub calls for the owner's project carry the owner's token only, also
-	// when a member with a token of their own asks; a token never reaches a
-	// response or the log.
+	// A GitHub call carries the token of the user it acts for only: each
+	// member's preview of the owner's run uses that member's own token, never
+	// the owner's; a token never reaches a response or the log.
 	for _, a := range actors {
 		e.do("PUT", "/api/v1/account/github", map[string]string{"token": isoToken(a)}, w.actors[a].o()).want(t, 200, "")
 	}
-	before := len(w.gh.Requests())
 	for _, a := range []string{"viewer", "manager", "owner"} {
+		before := len(w.gh.Requests())
 		e.do("GET", "/api/v1/runs/"+w.pullRequestRun()+"/pull-request-comment", nil, w.actors[a].o()).want(t, 200, "")
-	}
-	calls := w.gh.Requests()[before:]
-	if len(calls) == 0 {
-		t.Error("the preview asked GitHub nothing")
-	}
-	for _, rq := range calls {
-		if rq.Login != "gh-owner" {
-			t.Errorf("GitHub call for the owner's project carried %q's token: %+v", rq.Login, rq)
+		calls := w.gh.Requests()[before:]
+		if len(calls) == 0 {
+			t.Errorf("%s's preview asked GitHub nothing", a)
 		}
-	}
-	for _, rq := range w.gh.Requests() {
-		if rq.Login != "" && rq.Path != "/user" && rq.Login != "gh-owner" {
-			t.Errorf("a GitHub call carried a member's token: %+v", rq)
+		for _, rq := range calls {
+			if rq.Login != "gh-"+a {
+				t.Errorf("%s's preview carried %q's token: %+v", a, rq.Login, rq)
+			}
 		}
 	}
 	for _, a := range actors {

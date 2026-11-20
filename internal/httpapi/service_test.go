@@ -103,25 +103,45 @@ func TestSharedServiceForOtherUsers(t *testing.T) {
 		}
 		return out
 	}
-	n := len(fake.Requests())
-	run := runPR(bob, pa, 202, "")
-	if got := logins(n); len(got) == 0 || strings.Join(got, ",") != strings.Repeat("alice,", len(got)-1)+"alice" {
-		t.Fatalf("bob's run of alice's project used %v", got)
-	}
-	n = len(fake.Requests())
-	e.do("GET", "/api/v1/runs/"+run.body["id"].(string)+"/pull-request-comment", nil, bob.o()).want(t, 200, "")
-	for _, l := range logins(n) {
-		if l != "alice" {
-			t.Fatalf("bob's preview of alice's project used %q", l)
+	only := func(from int, login string) {
+		t.Helper()
+		got := logins(from)
+		if len(got) == 0 {
+			t.Fatal("GitHub was not asked")
+		}
+		for _, l := range got {
+			if l != login {
+				t.Fatalf("calls carried %v, want only %q", got, login)
+			}
 		}
 	}
-	// bob's own project: bob's token, which GitHub does not show the
-	// private repository; without a token, anonymous.
+	// alice's own run: her token reads her private repository.
+	n := len(fake.Requests())
+	run := runPR(alice, pa, 202, "")
+	only(n, "alice")
+	// bob starts a run of alice's project: his own token, which GitHub does
+	// not show alice's private repository - never alice's token.
+	n = len(fake.Requests())
+	runPR(bob, pa, 422, "PULL_REQUEST_NOT_FOUND")
+	only(n, "bob")
+	// bob's preview of alice's run asks with bob's token too.
+	n = len(fake.Requests())
+	e.do("GET", "/api/v1/runs/"+run.body["id"].(string)+"/pull-request-comment", nil, bob.o()).want(t, 200, "")
+	only(n, "bob")
+	// bob's own project of the same repository: bob's token.
 	n = len(fake.Requests())
 	runPR(bob, pb, 422, "PULL_REQUEST_NOT_FOUND")
-	if got := logins(n); len(got) == 0 || got[0] != "bob" {
-		t.Fatalf("bob's project used %v", got)
+	only(n, "bob")
+	// Once the repository is public, bob's run of alice's project is pinned
+	// with bob's token, and its comment would be posted as bob.
+	fake.Private = nil
+	n = len(fake.Requests())
+	bobRun := runPR(bob, pa, 202, "")
+	only(n, "bob")
+	if src, err := e.store.PullRequestCommentSource(ctx, bobRun.body["id"].(string), 0); err != nil || src.RequesterID != bob.id {
+		t.Fatalf("comment of bob's run acts for %q (%v)", src.RequesterID, err)
 	}
+	fake.Private = map[string]string{"acme/widget": "alice"}
 	e.do("DELETE", "/api/v1/account/github", nil, bob.o()).want(t, 204, "")
 	if v := e.do("GET", "/api/v1/account/github", nil, bob.o()).want(t, 200, ""); v.body["connected"] != false {
 		t.Fatalf("%s", v.raw)

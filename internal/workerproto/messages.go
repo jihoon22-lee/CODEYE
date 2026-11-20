@@ -214,7 +214,8 @@ type Job struct {
 	ModelReviewWithheld    bool `json:"model_review_withheld,omitempty"`
 	RepositoryCodeWithheld bool `json:"repository_code_withheld,omitempty"`
 	// GitCredentialFile is the token file of this job's Git fetch (the
-	// project owner's, docs/GITHUB.md#누구의-token인가); empty falls back to the
+	// own file of the user who started the run, docs/GITHUB.md#누구의-token인가);
+	// empty falls back to the
 	// hello's file.
 	GitCredentialFile string `json:"git_credential_file,omitempty"`
 	Header

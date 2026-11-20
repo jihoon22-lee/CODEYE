@@ -178,9 +178,9 @@ func TestPosterKeepsOneCommentAndNeverGoesBack(t *testing.T) {
 	}
 }
 
-// A comment is posted with the token of the project's owner: the poster asks
-// for the job's owner, and GitHub shows that account as the author.
-func TestPosterPostsWithTheProjectOwnersToken(t *testing.T) {
+// A comment is posted with the token of the user who started the run: the poster asks
+// for the job's requester, and GitHub shows that account as the author.
+func TestPosterPostsWithTheRequestersToken(t *testing.T) {
 	fake := githubtest.New("", "")
 	defer fake.Close()
 	fake.Users = map[string]string{"tok-alice-123456": "alice", "tok-bob-1234567": "bob"}
@@ -193,7 +193,7 @@ func TestPosterPostsWithTheProjectOwnersToken(t *testing.T) {
 		return github.New(fake.URL, tokens[owner]), ""
 	}}
 	m.queue(t, runA, headA, 100, 1)
-	m.due[0].OwnerID = "alice-id"
+	m.due[0].RequesterID = "alice-id"
 	if n, err := p.Run(context.Background()); err != nil || n != 1 || m.outcomes[runA].State != postgres.CommentPosted {
 		t.Fatalf("post: %d %v %+v", n, err, m.outcomes[runA])
 	}

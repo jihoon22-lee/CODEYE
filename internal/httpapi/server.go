@@ -204,8 +204,8 @@ type Server struct {
 	scaleEvery time.Duration
 
 	publisher *reportsvc.Publisher
-	// commenter posts the pull-request comments, each with its project
-	// owner's GitHub token.
+	// commenter posts the pull-request comments, each with the GitHub token
+	// of the user who started the run.
 	commenter    *prcomment.Poster
 	publishEvery time.Duration
 	publishKick  chan struct{}

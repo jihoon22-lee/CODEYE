@@ -45,11 +45,11 @@ const (
 // row and retried; it never changes the run or its report.
 type Poster struct {
 	Store Store
-	// GitHub returns the client with owner's stored token (nil or without a
-	// token when the owner has none) and the token's account login ("" when
-	// unknown). It is asked for each comment, so a comment is only ever
-	// posted with the token of the project's owner.
-	GitHub func(owner string) (*github.Client, string)
+	// GitHub returns the client with user's stored token (nil or without a
+	// token when the user has none) and the token's account login ("" when
+	// unknown). It is asked for each comment with the user who started the
+	// run, so a comment is only ever posted with that user's own token.
+	GitHub func(user string) (*github.Client, string)
 	Log    *slog.Logger
 	Now    func() time.Time
 }
@@ -77,7 +77,7 @@ func (p *Poster) Run(ctx context.Context) (int, error) {
 	}
 	done := 0
 	for _, j := range jobs {
-		client, login := p.GitHub(j.OwnerID)
+		client, login := p.GitHub(j.RequesterID)
 		o := p.post(ctx, client, &login, j)
 		if err := p.Store.FinishPullRequestComment(ctx, j.RunID, o); err != nil && !errors.Is(err, domain.ErrConflict) {
 			return done, err

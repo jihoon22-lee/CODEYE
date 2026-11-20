@@ -50,8 +50,8 @@ func setupPersonalGitHub(ctx context.Context, cfg *personal.Config, layout perso
 }
 
 // gitHubCredentialArgs are the agent flags of the users' GitHub tokens: the
-// directory of per-user token files; the worker reads the project owner's
-// file for each Git fetch of github.com. It is passed whenever the service
+// directory of per-user token files; the worker reads the file of the user
+// who started the run for each Git fetch of github.com. It is passed whenever the service
 // is not offline, whether or not anyone stored a token, so tokens added or
 // removed in the web do not restart the agent.
 func gitHubCredentialArgs(cfg *personal.Config, layout personal.Layout) []string {

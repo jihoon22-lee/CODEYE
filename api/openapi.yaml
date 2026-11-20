@@ -246,7 +246,7 @@ paths:
         ssh/scp/git:// URL은 422 SOURCE_UNSUPPORTED, attachment_ids가 있으면 422 ATTACHMENTS_UNSUPPORTED다.
         git source의 branch를 비우면 저장소의 기본 브랜치를 쓴다(이름은 스냅샷에 기록한다).
         analysis는 프로젝트의 분석 선택이며 없으면 source 종류의 기본값(AnalysisChoices)이다. 프로젝트 선택을 따르는 노드
-        (--project-analysis-policy, codeye up이 띄운 노드)는 이 선택과 서비스가 소유자에게 허용한 범위(Job.offered)를 함께 따르고,
+        (--project-analysis-policy, codeye up이 띄운 노드)는 이 선택과 서비스가 run을 시작한 사용자에게 허용한 범위(Job.offered)를 함께 따르고,
         따로 띄운 노드는 운영자 플래그를 상한으로 둔다.
         source 대신 local_path(서버의 절대 폴더 경로)를 줄 수 있다. 사용자에게 허가된(개별 허가 또는 모두에게 연) 폴더가 하나라도
         있어야 한다. 경로를 symlink까지 풀어 가장 긴 허가 root 아래 상대 경로로 바꾸고, 없거나 폴더가 아니면 422 FOLDER_NOT_FOUND,
@@ -288,7 +288,7 @@ paths:
         같은 actor·project·Idempotency-Key와 같은 body(정규화 JSON digest)는 같은 run을 202로 반환한다.
         다른 body는 409 IDEMPOTENCY_CONFLICT. viewer는 403, 프로젝트 비구성원은 404다.
         worker가 없는 빌드에서 run은 queued에 머문다.
-        pull_request가 있으면(github.com 저장소 프로젝트) controller가 프로젝트 소유자의 token(없으면 익명)으로 GitHub API로 base/head SHA, head 저장소,
+        pull_request가 있으면(github.com 저장소 프로젝트) controller가 run을 시작하는 사용자의 token(없으면 익명)으로 GitHub API로 base/head SHA, head 저장소,
         변경 파일과 변경 줄을 확인해 run에 한 번 고정한다(docs/GITHUB.md#pull-request-분석). idempotency 비교는 보낸 body로만 한다.
         오프라인 모드·다른 host의 프로젝트는 422 PULL_REQUEST_UNSUPPORTED, GitHub이 보여 주지 않는 pull request는 422
         PULL_REQUEST_NOT_FOUND, 거부된 token은 422 GITHUB_TOKEN_REFUSED, 권한 없음은 422 GITHUB_FORBIDDEN,
@@ -500,8 +500,8 @@ paths:
       operationId: putAccountGitHub
       x-codeye-status: implemented
       description: >-
-        사용자 자신의 github.com token을 저장한다(서비스 계정만 읽는 state 디렉터리의 파일, 0600). 이 사용자가 소유한 프로젝트의
-        GitHub 호출(pull request 고정·미리보기·댓글)과 Git fetch가 이 token만 쓴다. 다른 사람의 프로젝트에는 쓰이지 않는다.
+        사용자 자신의 github.com token을 저장한다(서비스 계정만 읽는 state 디렉터리의 파일, 0600). 이 사용자가 시작한 run의
+        GitHub 호출(pull request 고정·댓글)과 Git fetch, 이 사용자의 미리보기가 이 token만 쓴다. 다른 사람의 run에는 쓰이지 않는다.
         GitHub에 계정을 묻고, GitHub가 거절한 token은 저장하지 않는다(422 GITHUB_TOKEN_REFUSED). GitHub에 닿지 못하면 계정 없이 저장한다.
         오프라인 모드나 state 디렉터리가 없는 controller는 422 GITHUB_TOKEN_UNAVAILABLE이다. token은 응답·로그·감사 detail에 남지 않는다.
         감사 action account.github_token_set.
@@ -607,7 +607,7 @@ paths:
       x-codeye-status: implemented
       description: >-
         프로젝트 읽기 권한(viewer 포함, 비구성원 404)으로 pull request run이 남기는(또는 남길) 결과 댓글을 게시하지 않고 렌더링한다.
-        보고서 revision(기본 최신)으로 만들고, 소유자의 연결로 GitHub에 현재 head를 물어(오프라인 모드는 묻지 않는다) head가 바뀌었으면 그 사실을 적는다.
+        보고서 revision(기본 최신)으로 만들고, 요청한 사용자의 연결로 GitHub에 현재 head를 물어(오프라인 모드는 묻지 않는다) head가 바뀌었으면 그 사실을 적는다.
         pull request run이 아니면 404 NOT_A_PULL_REQUEST_RUN이다(docs/GITHUB.md#결과-댓글).
       parameters:
         - {name: revision, in: query, schema: {type: integer, minimum: 1, maximum: 1000000}}
@@ -2566,14 +2566,14 @@ components:
         offered:
           type: object
           required: [model_review, build_scripts]
-          description: 서비스가 이 프로젝트 소유자에게 허용하는 분석. 관리자 소유 프로젝트는 둘 다 true이고, 다른 사용자의 프로젝트는 관리자의 서비스 설정을 따른다. 없으면(이전 controller) 모두 허용이다.
+          description: 서비스가 이 run을 시작한 사용자에게 허용하는 분석. 관리자가 시작한 run은 둘 다 true이고, 다른 사용자의 run은 관리자의 서비스 설정을 따른다. 없으면(이전 controller) 모두 허용이다.
           properties:
             model_review: {type: boolean}
             build_scripts: {type: boolean}
         git_credential_user:
           type: string
           format: uuid
-          description: 프로젝트 소유자. 사용자별 Git credential 디렉터리를 쓰는 노드는 이 사용자의 token으로만 받는다.
+          description: run을 시작한 사용자(예약 run은 예약을 만든 사용자). 사용자별 Git credential 디렉터리를 쓰는 노드는 이 사용자의 token으로만 받는다.
         source:
           oneOf:
             - type: object

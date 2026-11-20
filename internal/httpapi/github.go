@@ -13,13 +13,14 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// Whose token (docs/GITHUB.md#누구의-token인가): every GitHub call made for a
-// project — the pull-request pin, the comment preview's head lookup, the
-// result comment and the agent's Git fetch — uses the token of the user who
-// registered the project (its owner), and only that token. A member who
-// runs someone else's project works through the owner's connection; one
-// user's token is never used for another user's project. A user without a
-// token reaches public repositories only.
+// Whose token (docs/GITHUB.md#누구의-token인가): every GitHub call uses the
+// token of the user whose action it serves, and only that token. A run's
+// pull-request pin, its Git fetch and its result comment use the token of
+// the user who started the run (a scheduled run: the schedule's author); a
+// comment preview uses the token of the user asking. One user's token is
+// never used for another user's run or request. A user without a token
+// reaches public repositories only, and their run's comment is not posted
+// (recorded as no_token).
 
 // tokens is the per-user token directory ("" without a state directory).
 func (p *Instance) tokens() github.UserTokens {
@@ -46,24 +47,24 @@ func (p *Instance) userToken(user string) *github.Credential {
 	return cred
 }
 
-// gitHubFor is the GitHub client for the projects of owner: owner's stored
-// token (read now, so a token added or removed in the account screen takes
-// effect at once; anonymous without one) and its account login ("" when
-// unknown). Offline it is nil: the comment poster records no_token and
-// nothing calls GitHub.
-func (p *Instance) gitHubFor(owner string) (*github.Client, string) {
+// gitHubFor is the GitHub client acting for user: user's stored token (read
+// now, so a token added or removed in the account screen takes effect at
+// once; anonymous without one) and its account login ("" when unknown).
+// Offline it is nil: the comment poster records no_token and nothing calls
+// GitHub.
+func (p *Instance) gitHubFor(user string) (*github.Client, string) {
 	if p.offline() {
 		return nil, ""
 	}
-	if cred := p.userToken(owner); cred != nil {
+	if cred := p.userToken(user); cred != nil {
 		return github.New(p.apiBase(), cred.Token), cred.Login
 	}
 	return github.New(p.apiBase(), ""), ""
 }
 
 // pinPullRequest resolves the run request's pull request for the project
-// through the GitHub API (github.PinForProject) with the project owner's
-// token. ok is false when the error response was written: offline mode, a
+// through the GitHub API (github.PinForProject) with the token of the user
+// starting the run. ok is false when the error response was written: offline mode, a
 // project that is not a github.com repository, a pull request GitHub does
 // not show that token, or an unreachable or rate-limited API.
 func (s *Server) pinPullRequest(q *request, project string, ref domain.PullRequestRef) (domain.PullRequest, bool) {
@@ -78,7 +79,7 @@ func (s *Server) pinPullRequest(q *request, project string, ref domain.PullReque
 		s.storeError(q, err)
 		return domain.PullRequest{}, false
 	}
-	client, _ := s.inst.gitHubFor(p.OwnerID)
+	client, _ := s.inst.gitHubFor(q.session.UserID)
 	pin, err := github.PinForProject(ctx, client, p.Source, ref, p.Analysis.CommentOnPullRequest, time.Now())
 	if err == nil {
 		return pin, true
@@ -87,9 +88,9 @@ func (s *Server) pinPullRequest(q *request, project string, ref domain.PullReque
 	case errors.Is(err, github.ErrNotGitHubProject):
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_UNSUPPORTED", "pull requests can be analyzed for github.com repository projects only", false)
 	case kind == github.KindNotFound:
-		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_NOT_FOUND", "GitHub shows no such pull request to the project owner's connection (a private repository needs the owner's GitHub token: account > GitHub connection)", false)
+		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_NOT_FOUND", "GitHub shows no such pull request to your connection (a private repository needs your own GitHub token: account > GitHub connection)", false)
 	case kind == github.KindUnauthorized:
-		writeError(q.w, q.r, http.StatusUnprocessableEntity, "GITHUB_TOKEN_REFUSED", "GitHub refused the project owner's stored token; replace it under account > GitHub connection", false)
+		writeError(q.w, q.r, http.StatusUnprocessableEntity, "GITHUB_TOKEN_REFUSED", "GitHub refused your stored token; replace it under account > GitHub connection", false)
 	case kind == github.KindForbidden:
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, "GITHUB_FORBIDDEN", "the GitHub token may not read this pull request", false)
 	case kind == github.KindRateLimited:
@@ -194,7 +195,7 @@ func (s *Server) previewPullRequestComment(q *request) {
 		writeError(q.w, q.r, http.StatusNotFound, "NOT_FOUND", "no such report revision", false)
 		return
 	}
-	client, _ := s.inst.gitHubFor(src.OwnerID)
+	client, _ := s.inst.gitHubFor(q.session.UserID)
 	body, current, err := prcomment.Preview(ctx, client, src)
 	if err != nil {
 		s.storeError(q, err)

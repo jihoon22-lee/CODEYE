@@ -497,7 +497,11 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 		Job: nodeproto.Job{Profile: c.request.Profile, Scope: c.request.Scope, Analysis: &c.analysis,
 			Resources: nodeproto.Resources{CPUMillis: ReserveCPUMillis, MemoryBytes: ReserveMemoryBytes, DiskBytes: ReserveDiskBytes}},
 	}
-	offer, err := analysisOffer(ctx, tx, owner)
+	// The service's offer and the Git token are those of the user who started
+	// the run: one person's token never fetches a repository on behalf of
+	// another, and an administrator's allowance does not carry over to a
+	// member's run of the administrator's project.
+	offer, err := analysisOffer(ctx, tx, r.ActorID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -512,7 +516,7 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 		}
 	case domain.SourceGit:
 		resp.Job.Source = nodeproto.JobSource{Kind: "git", RepositoryURL: c.source.RepositoryURL, Branch: c.source.Branch, Host: c.gitHost}
-		resp.Job.GitCredentialUser = owner
+		resp.Job.GitCredentialUser = r.ActorID
 		if c.pullRequest != nil {
 			resp.Job.PullRequest = c.pullRequest.Job()
 		}

@@ -166,8 +166,8 @@ func (ag *Agent) claimFor(w *workerProc, key string) {
 	}
 }
 
-// gitCredentialFor is the token file a Git fetch for the project owner user
-// reads: with a per-user credential directory that user's own file ("" for
+// gitCredentialFor is the token file a Git fetch for user (who started the
+// run) reads: with a per-user credential directory that user's own file ("" for
 // an unusable ID, so the fetch is anonymous), else the agent's single
 // --git-credential-file.
 func (ag *Agent) gitCredentialFor(user string) string {

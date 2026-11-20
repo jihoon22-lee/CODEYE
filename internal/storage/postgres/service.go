@@ -146,14 +146,14 @@ func (s *Store) AddProviderBy(ctx context.Context, by Principal, host string) (P
 	return res.p, res.created, err
 }
 
-// analysisOffer is what the service offers the projects of owner: an
-// enabled administrator's projects get everything, other users' projects
-// follow the service switches.
+// analysisOffer is what the service offers the runs user starts: an
+// enabled administrator's runs get everything, other users' runs follow the
+// service switches (whoever owns the project).
 func analysisOffer(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
-}, owner string) (nodeproto.AnalysisOffer, error) {
+}, user string) (nodeproto.AnalysisOffer, error) {
 	var admin bool
-	if err := q.QueryRow(ctx, "SELECT is_admin AND disabled_at IS NULL FROM users WHERE id=$1", owner).Scan(&admin); err != nil {
+	if err := q.QueryRow(ctx, "SELECT is_admin AND disabled_at IS NULL FROM users WHERE id=$1", user).Scan(&admin); err != nil {
 		return nodeproto.AnalysisOffer{}, err
 	}
 	if admin {
@@ -166,7 +166,7 @@ func analysisOffer(ctx context.Context, q interface {
 	return nodeproto.AnalysisOffer{ModelReview: st.OthersModelReview, BuildScripts: st.OthersBuildScripts}, nil
 }
 
-// OfferFor is analysisOffer for projects user would own (GET /setup).
+// OfferFor is analysisOffer for the runs user would start (GET /setup).
 func (s *Store) OfferFor(ctx context.Context, user string) (nodeproto.AnalysisOffer, error) {
 	if !validIDs(user) {
 		return nodeproto.AnalysisOffer{}, domain.ErrInvalid

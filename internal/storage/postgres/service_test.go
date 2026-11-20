@@ -101,6 +101,25 @@ func TestEveryoneRootsOfferAndControllerNode(t *testing.T) {
 	if err := s.pool.QueryRow(ctx, "SELECT status FROM runs WHERE id=$1", queued.ID).Scan(&status); err != nil || status != string(domain.RunFailed) {
 		t.Fatalf("queued run after close: %q %v", status, err)
 	}
+	// The offer follows who started the run, not who owns the project: a
+	// member's run of the administrator's project gets the member's offer.
+	if err := s.SetSourceRootEveryone(ctx, by, shared.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	ap, err := s.RegisterProject(ctx, admin.ID, ProjectRegistration{Name: "admin-project", Source: reg.Source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetMember(ctx, admin.ID, ap.ID, other, domain.RoleRunner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Enqueue(ctx, other, ap.ID, "k3", []byte(deepReview)); err != nil {
+		t.Fatal(err)
+	}
+	member := e.claimOK(n, n.workers[1], "c3")
+	if member.Job.Offered == nil || member.Job.Offered.ModelReview || !member.Job.Offered.BuildScripts {
+		t.Fatalf("member's run of the administrator's project: offer %+v", member.Job.Offered)
+	}
 	// Git hosts the administrator approves.
 	g, created, err := s.AddProviderBy(ctx, by, "GHE.Example.com")
 	if err != nil || !created || g.Kind != "ghes" || g.Host != "ghe.example.com" {
@@ -114,7 +133,7 @@ func TestEveryoneRootsOfferAndControllerNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, a := range access {
-		if a.ID == shared.ID && (a.Everyone || a.Path != dir) {
+		if a.ID == shared.ID && (!a.Everyone || a.Path != dir) {
 			t.Fatalf("access %+v", a)
 		}
 	}
