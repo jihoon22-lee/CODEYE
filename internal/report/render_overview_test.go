@@ -78,6 +78,43 @@ func TestProjectOpeningSelectsLocatedProductionReview(t *testing.T) {
 	}
 }
 
+func TestSummaryExportsLabelExampleAndTestFindings(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	var keep Finding
+	for _, f := range r.Findings {
+		if f.Validation == ValidationSupported {
+			keep = f
+			break
+		}
+	}
+	if keep.ID == "" {
+		t.Fatal("expected a supported finding in the report example")
+	}
+	for _, row := range []struct{ id, title, file, validation string }{
+		{"fixture-only", "예제의 인자 검증", "fixtures/data.go", ValidationSupported},
+		{"test-only", "시험의 예상값", "service_test.go", ValidationInconclusive},
+	} {
+		f := keep
+		f.ID, f.Title, f.Validation = row.id, row.title, row.validation
+		loc := Location{Path: row.file, StartLine: 8, EndLine: 9}
+		f.Locations = []Location{loc}
+		f.Evidence = []Evidence{{ID: "source", Kind: "code", Location: &loc}}
+		r.Findings = append(r.Findings, f)
+		r.CodeReview.FindingIDs = append(r.CodeReview.FindingIDs, f.ID)
+	}
+	h, err := RenderHTMLAt(r, "0", Korean, DetailSummary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, out := range []string{string(h), string(RenderMarkdownAt(r, "0", Korean, DetailSummary))} {
+		before, exampleSection, found := strings.Cut(out, Korean.Label("summary.findings_secondary"))
+		if !found || !strings.Contains(before, keep.Title) || strings.Contains(before, "예제의 인자 검증") || strings.Contains(before, "시험의 예상값") ||
+			!strings.Contains(exampleSection, "예제의 인자 검증") || !strings.Contains(exampleSection, "시험의 예상값") {
+			t.Fatal("summary does not preserve findings under their source context")
+		}
+	}
+}
+
 func TestProjectDecisionShowsOneGroundedPriority(t *testing.T) {
 	r := storedExample(t, "../../examples/report.json")
 	r.CodeReview.FindingIDs = nil

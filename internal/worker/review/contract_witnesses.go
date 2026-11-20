@@ -50,8 +50,11 @@ type witnessQuery struct {
 	members              []string
 	navigationNames      []string
 	pythonDocs           map[string][]record.Excerpt
+	pythonCalls          []string
 	packageEntry         string
 	goExamples           []goContractExample
+	goCommands           []goContractCommand
+	hasGoCommandRoute    bool
 }
 
 type contractWitness struct {
@@ -74,6 +77,7 @@ type contractSelection struct {
 	member                memberPair
 	sources               map[string]string
 	goTraces              []goWrapperTrace
+	queries               []witnessQuery
 }
 
 // contractWitnesses looks for readable implementation and test locations for
@@ -210,10 +214,15 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		}
 		return content, ok, err
 	}
-	goTraces, err := s.goWrapperTraces(g, queries, readSafe)
+	goTraces, err := s.goCommandTraces(g, queries, readSafe)
 	if err != nil {
 		return contractSelection{}, err
 	}
+	wrappers, err := s.goWrapperTraces(g, queries, readSafe)
+	if err != nil {
+		return contractSelection{}, err
+	}
+	goTraces = append(goTraces, wrappers...)
 	read := func(e source.Entry) (string, bool, error) {
 		content, ok, err := readSafe(e)
 		if !ok || record.GeneratedHeader([]byte(content)) {
@@ -262,6 +271,11 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		}
 		for i, w := range found {
 			w.query = i + 1
+			q := queries[i]
+			if q.hasGoCommandRoute && !q.names(e.Path) &&
+				(maintenance[e.Path] && !q.namesMaintenance(e.Path) || benchmarkPath(e.Path) && !q.performance) {
+				continue
+			}
 			if c.penalties != nil {
 				w.score -= c.penalties[i]
 			}
@@ -276,7 +290,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 		}
 		for i, trace := range contractCalls(content, e, queries, found, c.penalties) {
-			if trace.site.line == 0 || (found[i].end > 0 && len(queries[i].pythonDocs[e.Path]) != 0) {
+			if trace.site.line == 0 || queries[i].hasGoCommandRoute || (found[i].end > 0 && len(queries[i].pythonDocs[e.Path]) != 0) {
 				continue
 			}
 			python := callLanguage(e.Path) == "python"
@@ -441,7 +455,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 		}
 	}
-	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents, goTraces: goTraces}, nil
+	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents, goTraces: goTraces, queries: queries}, nil
 }
 
 func minifiedSource(path string) bool {
@@ -572,8 +586,11 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 		addWitnessWords(statement, c.Statement, 4)
 		paths := map[string]bool{}
 		var pythonDocs map[string][]record.Excerpt
+		var pythonCalls []string
+		statementCalls := pythonFreeCalls(c.Statement)
 		var packageEntry string
 		var goExamples []goContractExample
+		var goCommands []goContractCommand
 		addWitnessPaths(paths, c.Statement)
 		members := documentedMembers(c.Statement, true)
 		names := navigationIdentifiers(c.Statement)
@@ -598,8 +615,19 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 				cited[id] = raw
 			}
 			passage := witnessPassage(statement, raw)
+			if len(statementCalls) > 0 && c.AppliesTo == x.DocumentScope() {
+				for _, name := range pythonFreeCalls(raw) {
+					if slices.Contains(statementCalls, name) && !slices.Contains(pythonCalls, name) {
+						pythonCalls = append(pythonCalls, name)
+					}
+				}
+			}
 			if x.DirectivePath == "" && c.AppliesTo == x.DocumentScope() {
 				goExamples = goExamplesInContract(goExamples, c.Statement, raw)
+				goCommands = goCommandsInContract(goCommands, c.Statement, raw)
+				if command, ok := standaloneGoCommand(x.Path, c.Statement, raw); ok && !slices.Contains(goCommands, command) {
+					goCommands = append(goCommands, command)
+				}
 			}
 			addWitnessWords(terms, passage, 2)
 			addWitnessPaths(paths, passage)
@@ -632,8 +660,8 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 		if len(terms) != 0 || len(paths) != 0 {
 			out = append(out, witnessQuery{contractIndex: i + 1, scope: c.AppliesTo, terms: terms, statement: statement, paths: paths,
 				operation: maintenanceOperation(c.Statement), typeContract: mentionsJavaScriptTypes(c.Statement),
-				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, pythonDocs: pythonDocs,
-				packageEntry: packageEntry, goExamples: goExamples})
+				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, pythonDocs: pythonDocs, pythonCalls: pythonCalls,
+				packageEntry: packageEntry, goExamples: goExamples, goCommands: goCommands})
 		}
 	}
 	common := map[string]int{}

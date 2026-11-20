@@ -341,7 +341,7 @@ func (v secView) comparisonDecision(c DocComparison, code bool) projectDecision 
 			}
 			docRow := secItem{Label: l.Label("decision.row_document"), Text: c.Statement}
 			if document != nil {
-				docRow.Sources = []sourceCitation{v.citeSectionEvidence(*document)}
+				docRow.Sources = []sourceCitation{v.citeDecisionDocument(*document, c.Statement)}
 			}
 			d.ComparisonRows = []secItem{docRow, {Label: l.Label("decision.row_code"), Text: d.Reason, Sources: v.sourceCitations(codeRefs, evidence)}}
 			d.Reason = ""
@@ -354,7 +354,7 @@ func (v secView) comparisonDecision(c DocComparison, code bool) projectDecision 
 		d.ReasonLabel = l.Label("decision.unconfirmed_reason")
 	}
 	if document != nil {
-		d.Sources = append(d.Sources, v.citeSectionEvidence(*document))
+		d.Sources = append(d.Sources, v.citeDecisionDocument(*document, c.Statement))
 	}
 	if additional != nil {
 		d.AdditionalObservation = true
@@ -371,8 +371,14 @@ func (v secView) comparisonDecision(c DocComparison, code bool) projectDecision 
 					d.Condition = condition.Statement
 					if doc := bestProductEvidence(condition.DocumentEvidenceIDs, evidence, "document"); doc != nil {
 						source := v.citeSectionEvidence(*doc)
-						if !slices.ContainsFunc(d.Sources, func(e sourceCitation) bool { return e.Location == source.Location }) {
+						if !slices.ContainsFunc(d.Sources, func(e sourceCitation) bool { return e.Example != nil }) {
+							source = v.citeDecisionDocument(*doc, condition.Statement)
+						}
+						index := slices.IndexFunc(d.Sources, func(e sourceCitation) bool { return e.Location == source.Location })
+						if index < 0 {
 							d.Sources = append(d.Sources, source)
+						} else if source.Example != nil && source.Text == d.Sources[index].Text {
+							d.Sources[index] = source
 						}
 					}
 				}
@@ -380,6 +386,15 @@ func (v secView) comparisonDecision(c DocComparison, code bool) projectDecision 
 		}
 	}
 	return d
+}
+
+func (v secView) citeDecisionDocument(e SectionEvidence, statement string) sourceCitation {
+	source := v.citeSectionEvidence(e)
+	if v.R.Export.IncludeCode {
+		source.Example = citedDocumentExample(statement, &e)
+		source.ExampleLabel = v.L.Label("decision.document_example")
+	}
+	return source
 }
 
 func additionalPrimaryCode(c DocComparison, evidence []SectionEvidence) *SectionEvidence {

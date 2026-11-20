@@ -49,9 +49,13 @@ func newView(r Report, digest string, l Locale) view {
 		v.Banner = l.Label("banner_completed")
 	}
 	s := r.Summary
+	rawLabel, unresolvedLabel := "원시 도구 진단", "위치 미확인 진단"
+	if r.hasSections() {
+		rawLabel, unresolvedLabel = l.Label("count.tool_reported"), l.Label("count.tool_location_unverified")
+	}
 	v.Counts = []countRow{
-		{"raw_observations", "원시 도구 진단", strconv.Itoa(s.RawObservations)},
-		{"unresolved_observations", "위치 미확인 진단", strconv.Itoa(s.UnresolvedObservations)},
+		{"raw_observations", rawLabel, strconv.Itoa(s.RawObservations)},
+		{"unresolved_observations", unresolvedLabel, strconv.Itoa(s.UnresolvedObservations)},
 		{"total_findings", "항목", strconv.Itoa(s.TotalFindings)},
 		{"actionable_findings", "조치 항목(supported/reproduced)", strconv.Itoa(s.ActionableFindings)},
 		{"pending_candidates", "미확정 후보(unreviewed/inconclusive)", strconv.Itoa(s.PendingCandidates)},

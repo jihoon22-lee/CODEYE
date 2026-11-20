@@ -15,6 +15,7 @@ type documentHeading struct {
 	line, level, weight int
 	skip                bool
 	member              bool
+	workflow            bool
 }
 
 type documentRange struct{ start, end int }
@@ -33,8 +34,8 @@ type documentCoverage struct {
 // fillDocumentCoverage spends spare slots on the earliest unread text of a
 // file already read for the document role. Each document gets a turn before
 // the next round. Appending preserves preceding excerpts during request fitting.
-func (s *roleStage) fillDocumentCoverage(docs []userDocument, primary string, out []record.Excerpt, remain int) []record.Excerpt {
-	if len(out) >= roleMaxDocs || remain <= 2 {
+func (s *roleStage) fillDocumentCoverage(docs []userDocument, primary string, out []record.Excerpt, remain, limit int) []record.Excerpt {
+	if len(out) >= limit || remain <= 2 {
 		return out
 	}
 	covered := map[string][]documentRange{}
@@ -63,7 +64,7 @@ func (s *roleStage) fillDocumentCoverage(docs []userDocument, primary string, ou
 			out = append(out, x)
 			next = append(next, coverage)
 			remain -= record.JSONLen(x.Text)
-			if len(out) >= roleMaxDocs || remain <= 2 {
+			if len(out) >= limit || remain <= 2 {
 				return out
 			}
 		}
@@ -190,6 +191,10 @@ func documentationRanges(lines []string, ext string, start, end, slots int) []do
 // leading window. Headings bound the search and the score favors concrete
 // behavior and examples under user-facing sections.
 func documentationContinuation(lines []string, prefixEnd int, ext string, budget int) (start, end int) {
+	return bestDocumentationSection(lines, prefixEnd, ext, budget, false)
+}
+
+func bestDocumentationSection(lines []string, prefixEnd int, ext string, budget int, workflowOnly bool) (start, end int) {
 	headings := documentationHeadings(lines, ext)
 	start = -1
 	best := 0
@@ -204,7 +209,7 @@ func documentationContinuation(lines []string, prefixEnd int, ext string, budget
 			heading.weight = max(heading.weight, parent.weight-1)
 		}
 		context = append(context, heading)
-		if heading.line < prefixEnd || heading.skip || heading.weight == 0 {
+		if heading.line < prefixEnd || heading.skip || (workflowOnly && !heading.workflow) || (!heading.workflow && heading.weight == 0) {
 			continue
 		}
 		limit := min(len(lines), heading.line+roleMaxDocLines)
@@ -231,6 +236,9 @@ func documentationContinuation(lines []string, prefixEnd int, ext string, budget
 			windowEnd = line + 1
 			if line > heading.line {
 				strength := documentationLineWeight(raw)
+				if heading.workflow && substantiveDocumentLine(raw) {
+					strength++
+				}
 				if strength > 0 {
 					weight += strength
 					behavior++
@@ -295,10 +303,27 @@ func documentationHeadings(lines []string, ext string) []documentHeading {
 		if level > 0 {
 			weight, skip := documentationHeadingWeight(title)
 			member := !strings.Contains(title, "://") && len(documentedMembers(title, true)) > 0
-			headings = append(headings, documentHeading{line: i, level: level, weight: weight, skip: skip, member: member})
+			headings = append(headings, documentHeading{line: i, level: level, weight: weight, skip: skip, member: member, workflow: workflowHeading(title)})
 		}
 	}
 	return headings
+}
+
+func workflowHeading(title string) bool {
+	var previous string
+	for _, word := range witnessTerms(title) {
+		switch word {
+		case "workflow", "workflows", "사용흐름", "작업흐름":
+			return true
+		}
+		switch previous + " " + word {
+		case "use case", "use cases", "user journey", "user journeys", "user flow", "user flows", "user roles",
+			"functional requirements", "사용 사례", "사용자 흐름", "사용자 역할", "작업 흐름", "기능 요구", "기능 요구사항":
+			return true
+		}
+		previous = word
+	}
+	return false
 }
 
 func documentationHeadingWeight(title string) (weight int, skip bool) {

@@ -1,0 +1,167 @@
+[
+  {
+    "name": "JavaScript literal call and adjacent output",
+    "statement": "`normalize(' a ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```",
+    "example": {
+      "call": "normalize(' a ')",
+      "output": "'a'"
+    }
+  },
+  {
+    "name": "Python assertion with both specified options among other cases",
+    "statement": "format_word는 'été'에 locale='fr'와 keep_accent=False를 적용하면 'ete'를 반환한다.",
+    "text": "# Output\n\n```python\nfrom words import format_word\n\n# Formatting options\nassert format_word('été', locale='fr', keep_accent=True) == 'été'\nassert format_word('été', locale='fr', keep_accent=False) == 'ete'\nassert other('été') == 'ete'\n```",
+    "example": {
+      "call": "format_word('été', locale='fr', keep_accent=False)",
+      "output": "'ete'"
+    }
+  },
+  {
+    "name": "Python prose accepts the same named options in a different order",
+    "statement": "format_word는 'été'에 keep_accent=False와 locale='fr'를 적용하면 'ete'를 반환한다.",
+    "text": "# Output\n\n```python\nfrom words import format_word\n\n# Formatting options\nassert format_word('été', locale='fr', keep_accent=True) == 'été'\nassert format_word('été', locale='fr', keep_accent=False) == 'ete'\nassert other('été') == 'ete'\n```",
+    "example": {
+      "call": "format_word('été', locale='fr', keep_accent=False)",
+      "output": "'ete'"
+    }
+  },
+  {
+    "name": "Angular brackets stay literal",
+    "statement": "preview('raw') returns '<img src=x>'.",
+    "text": "```js\npreview('raw');\n//=> '<img src=x>'\n```",
+    "example": {
+      "call": "preview('raw')",
+      "output": "'<img src=x>'"
+    }
+  },
+  {
+    "name": "Unrelated callable",
+    "statement": "`renormalize(' a ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```",
+    "example": null
+  },
+  {
+    "name": "Unrelated literal argument",
+    "statement": "`normalize(' b ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```",
+    "example": null
+  },
+  {
+    "name": "An unsupported alternative calling the same API",
+    "statement": "`normalize(' a ')` or normalize('b') returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```",
+    "example": null
+  },
+  {
+    "name": "No concrete outcome in claim",
+    "statement": "`normalize` processes whitespace.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```",
+    "example": null
+  },
+  {
+    "name": "Named call without an explicit result",
+    "statement": "`normalize`는 값을 반환한다.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```",
+    "example": null
+  },
+  {
+    "name": "Result only after another section and fence",
+    "statement": "`normalize(' a ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n```\n## Result\n```js\n//=> 'a'\n```",
+    "example": null
+  },
+  {
+    "name": "An intervening line makes a JavaScript result ambiguous",
+    "statement": "`normalize(' a ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\nother();\n//=> 'a'\n```",
+    "example": null
+  },
+  {
+    "name": "Unclosed fence",
+    "statement": "`normalize(' a ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n",
+    "example": null
+  },
+  {
+    "name": "Nested Markdown listing",
+    "statement": "`normalize(' a ')` returns 'a'.",
+    "text": "````markdown\n## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```\n````",
+    "example": null
+  },
+  {
+    "name": "Conflicting result for same call apart from spacing",
+    "statement": "`normalize(' a ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```\n\n## Formatting\n\n```js\nnormalize(  ' a ' );\n//=> 'z'\n```",
+    "example": null
+  },
+  {
+    "name": "Duplicate cited example",
+    "statement": "`normalize(' a ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```\n\n## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```",
+    "example": null
+  },
+  {
+    "name": "Redacted material",
+    "statement": "`normalize(' a ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nnormalize(' a ');\n//=> 'a'\n```\n[redacted]",
+    "example": null
+  },
+  {
+    "name": "Nonliteral option",
+    "statement": "format_word는 'été'에 locale='fr'와 keep_accent=False를 적용하면 'ete'를 반환한다.",
+    "text": "# Output\n\n```python\nfrom words import format_word\n\n# Formatting options\nassert format_word('été', locale='fr', keep_accent=True) == 'été'\nassert format_word('été', locale='fr', keep_accent=options.value) == 'ete'\nassert other('été') == 'ete'\n```",
+    "example": null
+  },
+  {
+    "name": "Duplicate option in assertion",
+    "statement": "format_word는 'été'에 locale='fr'와 keep_accent=False를 적용하면 'ete'를 반환한다.",
+    "text": "# Output\n\n```python\nfrom words import format_word\n\n# Formatting options\nassert format_word('été', locale='fr', keep_accent=True) == 'été'\nassert format_word('été', locale='fr', locale='fr', keep_accent=False) == 'ete'\nassert other('été') == 'ete'\n```",
+    "example": null
+  },
+  {
+    "name": "Missing option in claim",
+    "statement": "format_word는 'été'에 keep_accent=False를 적용하면 'ete'를 반환한다.",
+    "text": "# Output\n\n```python\nfrom words import format_word\n\n# Formatting options\nassert format_word('été', locale='fr', keep_accent=True) == 'été'\nassert format_word('été', locale='fr', keep_accent=False) == 'ete'\nassert other('été') == 'ete'\n```",
+    "example": null
+  },
+  {
+    "name": "Different option in claim",
+    "statement": "format_word는 'été'에 locale='fr'와 keep_accent=True를 적용하면 'ete'를 반환한다.",
+    "text": "# Output\n\n```python\nfrom words import format_word\n\n# Formatting options\nassert format_word('été', locale='fr', keep_accent=True) == 'été'\nassert format_word('été', locale='fr', keep_accent=False) == 'ete'\nassert other('été') == 'ete'\n```",
+    "example": null
+  },
+  {
+    "name": "Negative result claim",
+    "statement": "format_word는 'été'에 locale='fr'와 keep_accent=False를 적용하면 'ete'를 반환하지 않는다.",
+    "text": "# Output\n\n```python\nfrom words import format_word\n\n# Formatting options\nassert format_word('été', locale='fr', keep_accent=True) == 'été'\nassert format_word('été', locale='fr', keep_accent=False) == 'ete'\nassert other('été') == 'ete'\n```",
+    "example": null
+  },
+  {
+    "name": "Assert led by an opening quoted block",
+    "statement": "format_word는 'été'에 locale='fr'와 keep_accent=False를 적용하면 'ete'를 반환한다.",
+    "text": "# Output\n\n```python\nfrom words import format_word\n\ndescription = \"\"\"\nassert format_word('été', locale='fr', keep_accent=True) == 'été'\nassert format_word('été', locale='fr', keep_accent=False) == 'ete'\nassert other('été') == 'ete'\n```",
+    "example": null
+  },
+  {
+    "name": "Comma and parentheses inside a quoted literal",
+    "statement": "format_word('x, (y)') returns 'xy'.",
+    "text": "```py\nassert format_word('x, (y)') == 'xy'\n```",
+    "example": {
+      "call": "format_word('x, (y)')",
+      "output": "'xy'"
+    }
+  },
+  {
+    "name": "Method name is not a bare callable",
+    "statement": "`normalize(' a ')` returns 'a'.",
+    "text": "## Formatting\n\n```js\nformatter.normalize(' a ');\n//=> 'a'\n```",
+    "example": null
+  },
+  {
+    "name": "Overlong display",
+    "statement": "trim('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') returns 'b'.",
+    "text": "```js\ntrim('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');\n//=> 'b'\n```",
+    "example": null
+  }
+]

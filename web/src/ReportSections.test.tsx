@@ -482,6 +482,30 @@ describe('analysis sections', () => {
     expect(judgment.querySelectorAll('img, script')).toHaveLength(0);
   });
 
+  it('shows one literal document example with its source and omits it from code-free or older reports', () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Examples' };
+    const report = parseAnalysisReport(doc, doc.run_id);
+    const { documents } = report.sections!;
+    const first = documents.comparisons[0];
+    const citation = documents.citations.find(c => first.documentRefs.includes(c.id))!;
+    citation.excerpt = { start: 1, end: 4, text: '```js\npreview("raw");\n//=> "<img src=x>"\n```' };
+    documents.comparisons = [{ ...first, status: 'unknown', statement: 'preview("raw") returns "<img src=x>".' }];
+    const { rerender } = render(<ReportDocument report={report} />);
+    const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
+    const row = within(overview).getByText(t.reading.documentExample).closest('p')!;
+    expect([...row.querySelectorAll('code')].map(code => code.textContent)).toEqual(['preview("raw")', '"<img src=x>"']);
+    expect(row.querySelector('img')).toBeNull();
+    expect(row.nextElementSibling?.querySelector('summary')?.getAttribute('aria-label')).toContain('README.md');
+    expect(within(overview).getByText(t.reading.codeEvidenceMissing)).toBeTruthy();
+
+    rerender(<ReportDocument report={{ ...report, includesCode: false }} />);
+    expect(within(overview).queryByText(t.reading.documentExample)).toBeNull();
+    citation.excerpt = null;
+    rerender(<ReportDocument report={report} />);
+    expect(within(overview).queryByText(t.reading.documentExample)).toBeNull();
+  });
+
   it('opens saved overview evidence first and keeps the fixed-commit link', () => {
     const doc = example('report.json');
     const sha = 'a'.repeat(40);
@@ -685,6 +709,8 @@ describe('analysis sections', () => {
 
   it('shows the overview first, one collapsible section per analysis kind and the same numbers as the document', () => {
     const doc = example('report.json');
+    doc.observations[0].evidence_state = 'source_manifest_mismatch';
+    doc.summary.unresolved_observations = 1;
     const r = parseAnalysisReport(doc, doc.run_id);
     expect(r.sections).not.toBeNull();
     const { container } = render(<ReportDocument report={r} />);
@@ -700,6 +726,8 @@ describe('analysis sections', () => {
     openDisclosure(screen.getByText(t.reading.operations));
     const total = Array.from(container.querySelectorAll('.report-counts > div')).find((x) => x.querySelector('dt')?.textContent === t.counts.total);
     expect(total?.querySelector('dd')?.textContent).toBe(String(doc.summary.total_findings));
+    expect(within(article).getByText(t.sectionedCounts.raw).nextElementSibling?.textContent).toBe(String(doc.summary.raw_observations));
+    expect(within(article).getByText(t.sectionedCounts.unresolved).nextElementSibling?.textContent).toBe('1');
     // Every section count is the stored number.
     for (const s of doc.overview.sections) {
       if (s.key === 'gaps') continue;

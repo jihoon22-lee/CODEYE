@@ -71,6 +71,8 @@ type sourceCitation struct {
 	ExcerptLocation, Text    string
 	URL, LinkLabel           string
 	ActionLabel, StoredLabel string
+	Example                  *documentExample
+	ExampleLabel             string
 }
 
 func (s sourceCitation) Brief() sourceCitation {
@@ -169,6 +171,10 @@ func citeSource(path string, start, end int, excerpt *sourceexcerpt.Excerpt) sou
 // A fence longer than any backtick run in the snapshot keeps its lines literal.
 func mdCitations(p func(...string), sources []sourceCitation) {
 	for _, x := range sources {
+		if x.Example != nil {
+			p("**", mdText(x.ExampleLabel), "** ", mdCodeSpan(x.Example.Call), " → ", mdCodeSpan(x.Example.Output))
+			p()
+		}
 		if x.URL == "" {
 			p(mdCode(x.Location))
 		} else {

@@ -145,7 +145,7 @@ export function orderFindings(findings: Finding[]): Finding[] {
 export function secondaryReviewPath(path: string): boolean {
   const segments = path.toLowerCase().split('/');
   const file = segments.pop() ?? '';
-  return secondaryPath(path) || segments.some(dir => ['test', 'tests', '__tests__', 'spec', 'specs'].includes(dir)) ||
+  return secondaryPath(path) || segments.some(dir => ['test', 'tests', '__tests__', 'spec', 'specs', 'fuzz', 'fuzzer', 'fuzzers', 'fuzzing'].includes(dir)) ||
     /_test\.(go|py|rs)$|\.(test|spec)\.(js|jsx|ts|tsx|mjs|cjs|mts|cts)$|^test_.*\.py$/.test(file);
 }
 

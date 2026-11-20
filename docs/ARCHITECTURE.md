@@ -408,7 +408,7 @@ Go 모듈, Rust crate, JS/TS 패키지, Python 패키지(wheel만) 의존성 받
 - 상태: `selected`, `budget_exceeded`, `excluded`, `unreadable`. 사유 코드는 `document_too_large`, `read_budget_exhausted`, `out_of_scope`, `credential_like_content`, `not_utf8`, `contains_nul`, `lfs_object_not_acquired`, `not_a_regular_file`과 manifest 제외 사유다.
 - 기본 예산은 문서당 32 KiB, 합계 256 KiB, 최대 1,000개이며 산출물의 `budget`에 기록한다. 예산 초과는 `document_limit_exceeded`·`document_budget_exceeded`, 범위 밖 문서는 `documents_out_of_scope` limitation으로 남긴다.
 - 안내 문서는 시작·사용·구성·동작·참조 가이드와 의미 있는 경로의 `index.md`·`+page.md`도 포함한다. 발견한 문서가 상한 안에 들면 에이전트 지침, README, CONTRIBUTING, 설계, 기타 순으로 읽는다. 같은 분류 안에서는 얕은 경로가 먼저다.
-- 설계·안내 문서가 읽기 예산을 두고 경쟁하면 대표 README와 제품 안내가 있을 때의 루트 `AGENTS.md`, README에서 연결한 안내와 경로에서 식별한 제품 가이드를 먼저 읽는다. 루트 README가 없고 가장 얕은 README 디렉터리가 하나면 그 디렉터리의 README를 대표로 쓴다. 일반 모듈 README와 지역 지침도 후보로 유지하고 운영·기여 문서와 기본본이 있는 번역은 뒤로 둔다. 검증된 Markdown README의 로컬 링크는 스냅샷의 범위 안 후보에서 찾는다. 읽기 순위와 별개로 목록은 같은 상한에서 경로순이며 문서 상태와 실제 읽은 바이트를 기록한다.
+- 설계·안내 문서가 읽기 예산을 두고 경쟁하면 대표 README와 제품 안내가 있을 때의 루트 `AGENTS.md`, 경로에서 식별한 제품 요구사항, README에서 연결한 안내와 제품 가이드를 먼저 읽는다. 루트 README가 없고 가장 얕은 README 디렉터리가 하나면 그 디렉터리의 README를 대표로 쓴다. 일반 모듈 README와 지역 지침도 후보로 유지하고 운영·기여 문서와 기본본이 있는 번역은 뒤로 둔다. 검증된 Markdown README의 로컬 링크는 스냅샷의 범위 안 후보에서 찾는다. 읽기 순위와 별개로 목록은 같은 상한에서 경로순이며 문서 상태와 실제 읽은 바이트를 기록한다.
 - `applies_to`는 문서가 설명하는 기본 범위다. `docs/`·`doc/` 아래의 설계·요구사항·안내 문서는 그 문서 트리를 담은 프로젝트 또는 모듈 디렉터리에 적용한다. README와 AGENTS 등 지역 안내·지침 파일은 실제 디렉터리에 적용한다. 이전 산출물에 저장된 실제 문서 디렉터리는 그대로 읽는다. 모듈마다 자기 문서(`own`), 상속 문서(`inherited`), 없음(`none`)을 구분한다. `other` 분류는 목록에만 남기고 모듈 연결과 겹침 묶음에는 넣지 않는다.
 - 에이전트 지침 문서는 분석 자료로 분류할 뿐 권한·도구 설정·계획을 바꾸지 않는다.
 - 문서가 없는 것은 정상이다. 읽지 못한 범위만 표시한다.
