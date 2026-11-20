@@ -43,6 +43,8 @@ test('a folder path goes straight to its run, and the report opens with what wou
 });
 
 test('a GitHub address is analyzed the same way; turning the build scripts on retries it', async () => {
+  // Two analyses end to end (the waits below allow 150 s each).
+  test.setTimeout(330_000);
   await analyze(env.CODEYE_TEST_PERSONAL_REPO!);
   await expect(page.getByRole('article', { name: '분석 보고서' })).toBeVisible({ timeout: 150_000 });
   if (!env.CODEYE_TEST_PERSONAL_BUILD_HINT) return;
@@ -55,6 +57,7 @@ test('a GitHub address is analyzed the same way; turning the build scripts on re
 });
 
 test('a run that could not read its source says why and can be retried', async () => {
+  test.setTimeout(240_000);
   await analyze(env.CODEYE_TEST_PERSONAL_MISSING_REPO!);
   await expect(page.getByText('실패', { exact: true }).first()).toBeVisible({ timeout: 90_000 });
   const retry = page.getByRole('button', { name: '다시 시도', exact: true });

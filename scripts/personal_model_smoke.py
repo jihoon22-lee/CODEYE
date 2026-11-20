@@ -1,4 +1,4 @@
-"""개인 모드 모델 설정 시험(TC-182~TC-184): API 키 파일 하나로 모델 검토까지.
+"""codeye start의 모델 설정 시험(TC-182~TC-184): API 키 파일 하나로 모델 검토까지.
 
 scripts/test_postgres.py --personal-model 이 임시 PostgreSQL 안에서 실행한다. 실제 OpenCode
 (~/.opencode/bin/opencode 또는 CODEYE_TEST_OPENCODE_BIN)를 쓰고, 공급자는 OpenAI provider에
@@ -161,7 +161,7 @@ def run(base, root, env, probe_env):
             cli("stop", "--config", cfg)
             checked = no_key_on_disk()
             print(f"  키 미노출: 상태 파일 {checked}개·DB dump·보고서·CLI 출력·프로세스 인자 {len(seen_argv)}건 확인")
-            print("PASS: 실모델 개인 모드 모델 검토(키 파일 하나)")
+            print("PASS: 실모델 codeye start 모델 검토(키 파일 하나)")
             return
 
         # 2. 키 거부: 재시작 없이 다음 호출부터 401. 정적 분석은 계속, 보고서가 사유를 적는다.
@@ -198,7 +198,7 @@ def run(base, root, env, probe_env):
         checked = no_key_on_disk()
         assert stat_mode(secret) == 0o600 and stat_mode(secret.parent) == 0o700
         print(f"  키 미노출: 상태 파일 {checked}개·DB dump·보고서·CLI 출력·프로세스 인자 {len(seen_argv)}건 확인")
-        print("PASS: 개인 모드 모델 설정(API 키 파일, 실패 사유, 시험하지 않은 버전)")
+        print("PASS: codeye start 모델 설정(API 키 파일, 실패 사유, 시험하지 않은 버전)")
     finally:
         if (state / "run/controller.json").exists() or (state / "run/agent.json").exists():
             subprocess.run([str(binary), "stop", "--config", str(cfg)], cwd=directory, env=run_env, capture_output=True, timeout=200)

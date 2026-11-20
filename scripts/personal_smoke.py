@@ -1,4 +1,4 @@
-"""개인 모드 수용 시험(TC-125, TC-127, TC-32): start/status/stop, 백업·복원, 복원본 재시작.
+"""codeye up·start 수용 시험(TC-125, TC-127, TC-32): start/status/stop, 백업·복원, 복원본 재시작.
 
 scripts/test_postgres.py --personal 이 임시 PostgreSQL 안에 데이터베이스 셋을 만들어 실행한다.
 A: 실제 Go 분석(go vet) → 정지 → 백업 → 비어 있지 않은 대상 복원 거절 → B에 복원 → B 시작·보고서·증거·새 분석.
@@ -250,7 +250,7 @@ def run(base, root, env, probe_env):
         stopped = json.loads(cli(binary, "stop", "--config", cfg_b, "--format", "json", db="personal_b", timeout=200).stdout)
         assert stopped["outcome"] == "stopped", stopped
         no_secrets(state_b, [restored_session.token])
-        print("PASS: 개인 모드 start/status/stop·실제 Go 분석·온라인/정지 백업·비어 있지 않은 대상 거절·복원·새 노드·보고서와 증거 hash·새 분석")
+        print("PASS: codeye start/status/stop·실제 Go 분석·온라인/정지 백업·비어 있지 않은 대상 거절·복원·새 노드·보고서와 증거 hash·새 분석")
 
         # C: 진행 중 작업이 drain 시간을 넘기면 취소하고 정리를 확인한다(시험용 handler).
         fsrc = directory / "fixture-src"
@@ -441,7 +441,7 @@ def paths_and_git(root, env, directory, fixture):
             if rust:
                 benv["CODEYE_TEST_PERSONAL_BUILD_HINT"] = "1"
             subprocess.run(["npm", "run", "test:e2e", "--", "personal.spec.ts", "--global-timeout=600000"], cwd=root / "web", check=True, timeout=660, env=benv)
-        print("PASS: 개인 모드 경로·Git 주소 입력(홈 아래 폴더·Git 주소 기본 브랜치·프로젝트별 분석 선택·데이터 폴더 거절·도구·다시 시도·개선 안내)")
+        print("PASS: 경로·Git 주소 입력(홈 아래 폴더·Git 주소 기본 브랜치·프로젝트별 분석 선택·데이터 폴더 거절·도구·다시 시도·개선 안내)")
     finally:
         subprocess.run([binary, "stop"], cwd=home, env=menv, capture_output=True, timeout=300)
 
@@ -580,11 +580,14 @@ def pull_request(root, env, directory, fixture):
         projects = {p["name"]: p for p in session.request("GET", "projects?limit=100")["items"]}
         assert projects["widget"]["analysis"].get("comment_on_pull_request") is True, projects["widget"]["analysis"]
         assert all(authorized for _, _, authorized in fake.requests), "token 없는 GitHub 호출"
-        # The token is only in its secrets file.
+        # The token is only in its secrets file and in the administrator's own token file (one file).
         secret = state / "secrets/github.json"
-        assert stat.S_IMODE(secret.stat().st_mode) == 0o600
+        users = state / "secrets/github-users"
+        own = list(users.iterdir())
+        assert len(own) == 1 and token.encode() in own[0].read_bytes(), own
+        assert all(stat.S_IMODE(p.stat().st_mode) == 0o600 for p in (secret, own[0])) and stat.S_IMODE(users.stat().st_mode) == 0o700
         for path in state.rglob("*"):
-            if path.is_file() and not path.is_symlink() and path != secret:
+            if path.is_file() and not path.is_symlink() and path not in (secret, own[0]):
                 assert token.encode() not in path.read_bytes(), f"token이 상태 파일에 있음: {path.relative_to(state)}"
         print("PASS: pull request 주소·head 고정·변경 부분 보고서·결과 댓글 하나(새 push에 갱신)·dry run 미게시·token은 비밀 파일에만")
     finally:
