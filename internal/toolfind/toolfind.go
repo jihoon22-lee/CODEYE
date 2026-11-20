@@ -65,7 +65,7 @@ type Rejected struct {
 
 // Tool is the detection result of one tool. Name is the agent flag name
 // (docs/ANALYZERS.md#에이전트-플래그), which is also the key under agent.tools in the
-// personal configuration; go, git and opencode have their own settings.
+// service configuration; go, git and opencode have their own settings.
 type Tool struct {
 	Name   string `json:"name"`
 	Status Status `json:"status"`
@@ -133,7 +133,7 @@ func (r Result) BaselineUsable() bool {
 }
 
 // Explicit is the configuration that always wins over detection. Its fields
-// map one-to-one onto the personal configuration (agent.go, agent.git,
+// map one-to-one onto the service configuration (agent.go, agent.git,
 // agent.go_mod_cache, agent.tools, agent.model.opencode).
 type Explicit struct {
 	Go         string

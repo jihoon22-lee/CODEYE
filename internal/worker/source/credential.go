@@ -7,8 +7,9 @@ import (
 	"strings"
 )
 
-// ReadHostToken reads the token of host from a Git credential file (personal
-// mode writes <state>/secrets/github.json: {"host": ..., "token": ...}). It
+// ReadHostToken reads the token of host from a Git credential file (the
+// service writes <state>/secrets/github-users/<user_id>.json: {"host": ...,
+// "token": ...}). It
 // returns "" when path is empty, the file is missing or unreadable, or it
 // holds a token of another host: the fetch then runs without credentials, as
 // for any public repository.

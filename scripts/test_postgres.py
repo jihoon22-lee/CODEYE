@@ -121,15 +121,15 @@ def main():
                 import ops_drill
                 # Its own PostgreSQL cluster: the database drill stops and starts it.
                 ops_drill.run(base, ROOT, env)
-            if "--personal" in sys.argv[1:]:
-                import personal_smoke
-                personal_smoke.run(base, ROOT, env, probe_env)
+            if "--instance" in sys.argv[1:]:
+                import instance_smoke
+                instance_smoke.run(base, ROOT, env, probe_env)
             if "--web-service" in sys.argv[1:]:
                 import web_service_smoke
                 web_service_smoke.run(base, ROOT, env)
-            if "--personal-model" in sys.argv[1:]:
-                import personal_model_smoke
-                personal_model_smoke.run(base, ROOT, env, probe_env)
+            if "--instance-model" in sys.argv[1:]:
+                import instance_model_smoke
+                instance_model_smoke.run(base, ROOT, env, probe_env)
             if "--pilot" in sys.argv[1:]:
                 import regression_pilot
                 regression_pilot.run(base, ROOT, env)

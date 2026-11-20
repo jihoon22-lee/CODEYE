@@ -61,7 +61,7 @@ func writeGitHubCredential(t *testing.T, state, user, token, login string) {
 
 func patch(s string) *string { return &s }
 
-// Pull-request runs in personal mode: the controller resolves the pull
+// Pull-request runs in the service: the controller resolves the pull
 // request with the stored token, pins it on the run and shows it in the run
 // view and the comment preview; GitHub's refusals have their own codes;
 // server mode, a folder project and schedules refuse pull requests; the

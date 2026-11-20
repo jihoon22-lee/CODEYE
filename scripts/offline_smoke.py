@@ -404,7 +404,7 @@ def build_git(dest: Path, env: dict) -> None:
 
 
 def inner(args) -> int:
-    from personal_smoke import Session, free_port, wait_for  # noqa: PLC0415
+    from instance_smoke import Session, free_port, wait_for  # noqa: PLC0415
     work = Path(args.work)
     tools = json.loads((work / "tools.json").read_text())
     summary: dict = {"steps": []}
@@ -466,7 +466,7 @@ def inner(args) -> int:
 
     port = free_port()
     state = work / "state"
-    config = home / ".config/codeye/personal.json"
+    config = home / ".config/codeye/config.json"
     config.parent.mkdir(parents=True)
     doc = {"schema_version": "0.1", "state_dir": str(state), "listen": f"127.0.0.1:{port}", "database": {"mode": "managed"},
            "source_roots": [{"label": "src", "path": str(src)}],
@@ -512,7 +512,7 @@ def inner(args) -> int:
         out, session, run_id = up(src / "seeded", ["--offline"], dict(env, OPENAI_API_KEY="sk-env-key-not-stored", GH_TOKEN="ghp_envtokennotused0123456789"))
         assert 'saved "offline": true' in out, out
         assert "github: off (offline mode)" in out, out
-        assert not (state / "secrets/github.json").exists(), "a GitHub token was stored offline"
+        assert not any((state / "secrets/github-users").glob("*.json")), "a GitHub token was stored offline"
         assert "has no base_url" in out, out
         assert secret.read_bytes() == before, "the environment key replaced the key file"
         saved = json.loads(config.read_text())
@@ -628,7 +628,7 @@ def inner(args) -> int:
         off = json.loads(doctor2)["offline"]
         asked = [line for line in gh_log.read_text().splitlines()] if gh_log.exists() else []
         assert all(line == "--version" for line in asked), asked
-        assert not (state / "secrets/github.json").exists(), "a GitHub token was stored offline"
+        assert not any((state / "secrets/github-users").glob("*.json")), "a GitHub token was stored offline"
         setup = json.loads(session.request("GET", "setup", raw=True)[0])
         assert (setup.get("github") or {}).get("reason") == "offline_mode", setup.get("github")
         step("GitHub offline", gh_invocations=sorted(set(asked)) or "none", setup_github=setup["github"]["reason"], token_file="absent")
@@ -655,7 +655,7 @@ def inner(args) -> int:
 
 def tool_ca_checks(work: Path, tools: dict, mirror: Mirror, endpoint: str, bundle: Path, env: dict) -> dict:
     """Every tool against the mirror with CODEYE's CA variables and without."""
-    from personal_smoke import free_port  # noqa: F401,PLC0415
+    from instance_smoke import free_port  # noqa: F401,PLC0415
     base = work / "ca-checks"
     base.mkdir()
     ca = {"SSL_CERT_FILE": str(bundle), "NODE_EXTRA_CA_CERTS": str(bundle), "GIT_SSL_CAINFO": str(bundle), "PIP_CERT": str(bundle), "CARGO_HTTP_CAINFO": str(bundle)}

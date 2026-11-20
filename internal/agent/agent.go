@@ -83,7 +83,7 @@ type Config struct {
 	GitCredentialDir string
 	// ProtectedDirs (--protected-dir): a local project folder that contains
 	// or lies inside one of these is refused before acquisition, however
-	// the project was registered (personal mode: the state and backup
+	// the project was registered (the service: the state and backup
 	// directories).
 	ProtectedDirs []string
 	// Workers is the static worker count (default mode).
@@ -147,7 +147,7 @@ type Config struct {
 	// Transcript, if set, records all worker IPC (tests).
 	Transcript io.Writer
 
-	// Drain (personal stop) asks the agent to finish: no new claims and
+	// Drain (codeye stop) asks the agent to finish: no new claims and
 	// no new workers; running attempts finish normally. Once nothing runs,
 	// the agent shuts down like on a signal and exits 0 when every cleanup is
 	// confirmed. A nil channel never drains.
@@ -157,7 +157,7 @@ type Config struct {
 	// heartbeat (storage_quota_exceeded) and the controller refuses new
 	// claims for this node; running attempts are never interrupted.
 	StorageQuota map[string]int64
-	// StorageLogDir locates the "logs" area (personal mode log directory).
+	// StorageLogDir locates the "logs" area (the service log directory).
 	StorageLogDir string
 
 	// Timing overrides (tests); zero uses the controller's values.

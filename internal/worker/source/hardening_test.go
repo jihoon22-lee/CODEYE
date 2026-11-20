@@ -219,7 +219,7 @@ func TestDataRootMustBeOutsideTheProject(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(approved, "proj", "data")); !os.IsNotExist(err) {
 		t.Error("data directory created inside the project")
 	}
-	// Beside the project under the same root (a personal state directory
+	// Beside the project under the same root (a service state directory
 	// under a $HOME root): the copy holds the project only.
 	beside := filepath.Join(approved, ".state", "data")
 	s, err := AcquireLocal(context.Background(), approved, "proj", beside, DefaultLimits())

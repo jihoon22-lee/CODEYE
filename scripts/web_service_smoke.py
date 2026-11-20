@@ -117,7 +117,7 @@ def serve(directory, root, env, fixture, fake, variant, shared, outside, admin_t
         token_file = home / "bob-token"
         token_file.write_text(bob_token + "\n")
         token_file.chmod(0o600)
-        config = json.loads((home / "xdg-config/codeye/personal.json").read_text())
+        config = json.loads((home / "xdg-config/codeye/config.json").read_text())
         assert config["listen"] == f"{ip}:{port}" and config.get("plain_http", False) == (variant == "plain"), config
         if variant == "tls":
             # The local agent and the commands use the loopback listener next to the TLS port.
@@ -139,13 +139,13 @@ def serve(directory, root, env, fixture, fake, variant, shared, outside, admin_t
             assert "bob-gh" in fake.logins_of("/user"), fake.calls
             asked = fake.logins_of("/repos/acme/secret/")
             assert asked and set(asked) == {"bob-gh"}, asked
-            # One token file per user: the administrator's (copied from what up found) and bob's.
+            # One token file per user and nothing else: the administrator's (what up found) and bob's.
             users = state / "secrets/github-users"
             files = {p: p.read_bytes() for p in users.iterdir()}
             assert stat.S_IMODE(users.stat().st_mode) == 0o700 and all(stat.S_IMODE(p.stat().st_mode) == 0o600 for p in files), list(files)
             holders = sorted((bob_token.encode() in data, admin_token.encode() in data) for data in files.values())
             assert holders == [(False, True), (True, False)], holders
-            allowed = set(files) | {state / "secrets/github.json"}
+            allowed = set(files)
             for path in state.rglob("*"):
                 if path.is_file() and not path.is_symlink() and path not in allowed:
                     data = path.read_bytes()

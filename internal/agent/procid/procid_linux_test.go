@@ -81,7 +81,7 @@ func TestGoneLeaderWithSurvivorIsNotEmpty(t *testing.T) {
 	}
 }
 
-// Personal stop signals one recorded process only while its identity
+// codeye stop signals one recorded process only while its identity
 // still matches; a reused PID is never signalled and a gone one is reported.
 func TestSignalVerifiedSingleProcess(t *testing.T) {
 	cmd := exec.Command("/bin/sleep", "300")

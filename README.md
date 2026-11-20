@@ -24,7 +24,7 @@ CODEYE는 `codeye up`으로 띄우는 웹 서비스 하나입니다. 혼자 쓸 
    ./bin/codeye up --listen 0.0.0.0:7331 --plain-http --public-origin http://192.168.0.10:7331   # 로그인 쿠키가 암호화되지 않습니다
    ```
 
-   웹의 **관리 > 사용자**에서 사용자를 더하고 로그인 링크를 복사해 전달합니다. 설정은 `personal.json`에 남습니다(이름은 이전 설정과의 호환을 위해 그대로입니다).
+   웹의 **관리 > 사용자**에서 사용자를 더하고 로그인 링크를 복사해 전달합니다. 설정은 `~/.config/codeye/config.json`에 남습니다.
 5. **다른 사람이 분석할 수 있는 것.**
    - 승인된 Git host(github.com 기본, 관리자가 GitHub Enterprise Server host를 더함)의 공개 저장소는 누구나 분석합니다. 비공개 저장소와 pull request 댓글은 각자 **계정 > GitHub 연결**에 자기 token을 넣어야 합니다. token은 그 사람이 시작한 분석에만 쓰입니다.
    - 서버의 폴더는 관리자가 **관리 > 폴더**에서 허용한 곳만, 그 폴더를 허용받은 사람(또는 모두에게 연 폴더)만 경로로 분석합니다.
@@ -60,7 +60,7 @@ npm --prefix web run build
 go test ./...                                   # Go 단위 시험
 npm --prefix web test                           # 웹 시험
 python3 scripts/validate_bundle.py              # 문서·schema·예시 계약
-python3 scripts/test_postgres.py --web --nodes --scheduler --personal --web-service   # 임시 PostgreSQL과 Chromium을 쓰는 제품 경로
+python3 scripts/test_postgres.py --web --nodes --scheduler --instance --web-service   # 임시 PostgreSQL과 Chromium을 쓰는 제품 경로
 ```
 
 시험별 준비물과 CI 범위는 [수용 시험](docs/TESTING.md)에 있습니다.

@@ -32,7 +32,7 @@ type GitOptions struct {
 	// (GIT_SSL_CAINFO and SSL_CERT_FILE); "" keeps git's own store.
 	CABundle string
 	// Token authenticates the HTTPS requests to AllowedHost of this one
-	// acquisition (personal mode's GitHub token). It reaches git only as an
+	// acquisition (the service's GitHub token). It reaches git only as an
 	// Authorization header in the process environment
 	// (GIT_CONFIG_COUNT/KEY/VALUE scoped to https://AllowedHost/), never in
 	// argv, the remote URL or a file of the workspace.

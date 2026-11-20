@@ -1,7 +1,6 @@
 # 설계 예시다. 아직 CODEYE 바이너리에서 읽을 수 있는 실제 구현 설정이 아니다.
 # 경로와 용량은 doctor 결과에 맞춰 설정한다. secret 값은 이 파일에 넣지 않는다.
 schema_version: '0.1'
-mode: personal
 api:
   listen: 127.0.0.1:7331
   auth: launch-session
@@ -27,7 +26,7 @@ scheduler:
   default_overlap: coalesce_latest
   default_misfire: latest_once
 pools:
-  - id: personal-native
+  - id: local-native
     executor: native
     min_workers: 0
     max_workers: 2
@@ -37,7 +36,7 @@ pools:
     scale_down_cooldown_seconds: 60
 nodes:
   - id: local
-    pool_id: personal-native
+    pool_id: local-native
     max_workers: 2
     reserve_cpu_cores: 1
     reserve_memory_mb: 2048

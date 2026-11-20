@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 )
@@ -132,7 +132,7 @@ func (r modelProbeResult) text() string {
 
 // model probe is an explicit live request. doctor stays local and does not
 // consume the model quota. With --executable/--model it probes exactly that
-// configuration; otherwise the personal configuration's model (as codeye
+// configuration; otherwise the service configuration's model (as codeye
 // start passes it to the agent).
 func modelCommand(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 || args[0] != "probe" {
@@ -161,11 +161,11 @@ func modelCommand(ctx context.Context, args []string, out, stderr io.Writer) int
 		fmt.Fprintln(stderr, "model probe needs both --executable and --model (or neither, to probe the service configuration)")
 		return 2
 	case !explicit:
-		pcfg, layout, ok := loadPersonalConfig("model probe", configArgs(configPath), stderr, nil)
+		pcfg, layout, ok := loadInstanceConfig("model probe", configArgs(configPath), stderr, nil)
 		if !ok {
 			return 2
 		}
-		m, err := personal.ResolveModel(pcfg, layout, personalModelEnv())
+		m, err := instance.ResolveModel(pcfg, layout, instanceModelEnv())
 		if err != nil {
 			fmt.Fprintln(stderr, "model not configured:", err)
 			return 1

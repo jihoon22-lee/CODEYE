@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/doctor"
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
@@ -40,7 +40,7 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if args[0] == "tools" {
 		return toolsCommand(ctx, args[1:], out, stderr)
 	}
-	if code, ok := runPersonal(ctx, args, out, stderr); ok {
+	if code, ok := runInstance(ctx, args, out, stderr); ok {
 		return code
 	}
 	if code, ok := runControl(ctx, args, out, stderr); ok {
@@ -80,17 +80,17 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	opts := doctor.Options{WorkDir: *work, DatabaseURL: os.Getenv("CODEYE_DATABASE_URL"), Timeout: *timeout}
 	if *config != "" {
-		// --config adds the personal operations section.
-		cfg, err := personal.Load(*config, knownTools())
+		// --config adds the service's operations section.
+		cfg, err := instance.Load(*config, knownTools())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
 		}
-		opts.Personal = cfg
+		opts.Instance = cfg
 		if cfg.Managed() {
 			// The managed cluster's URL when it runs (it is not started here).
 			layout := completeConfig(cfg)
-			if _, err := personalDatabase(ctx, cfg, layout, dbOptions{notices: stderr}); err == nil {
+			if _, err := instanceDatabase(ctx, cfg, layout, dbOptions{notices: stderr}); err == nil {
 				opts.DatabaseURL = os.Getenv("CODEYE_DATABASE_URL")
 			}
 		}

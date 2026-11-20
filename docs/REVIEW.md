@@ -204,7 +204,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ### 호출 상한과 승인
 
-- 단위는 모델 호출이고 attempt마다의 상한이다. `codeye agent --review-max-calls N`(기본 99, 15~207), Hello `review_max_calls`, 개인 설정 `agent.model.review_max_calls`로 정한다. run이나 profile로 바꿀 수 없다.
+- 단위는 모델 호출이고 attempt마다의 상한이다. `codeye agent --review-max-calls N`(기본 99, 15~207), Hello `review_max_calls`, 서비스 설정 `agent.model.review_max_calls`로 정한다. run이나 profile로 바꿀 수 없다.
 - 기본 99는 중간 규모 저장소의 대부분을 기본 설정으로 검토하기 위한 값이다(처음 기본값 33은 유료 회귀 실행에서 파일럿 Go 모듈 67개 파일 중 34개를 28회 호출로 검토했다). 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 상한을 낮춘다. 15는 전체 역할만 실행하고 slice를 승인하지 않는다([안내서](GUIDE.md)).
 - 전체 역할 다섯 개는 최대 15회(5 × 3)를 쓰고 잘리지 않는다. 그래서 최솟값이 15다. 전체 역할이 모든 slice보다 먼저 실행되므로 그 몫을 따로 예약할 필요가 없다.
 - 계수는 attempt 안에서만 한다. attempt 하나는 worker 프로세스 하나이고 task를 차례로 실행한다. 모든 검토 호출은 보내기 전에 attempt scratch의 계수 파일에 한 줄을 쓴다. 계수를 쓰지 못한 호출은 보내지 않는다(`review_call_count_failed`). 전역 상태나 프로세스 사이 상태는 없다. 한 attempt 안에서 slice를 병렬로 실행하려면 공유 계수가 필요하다.
@@ -340,7 +340,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 - **relay 파일.** 예산 relay를 쓸 때 ready 파일은 일반 파일이고 그룹·기타 권한이 없어야 하며(Windows 제외) 4,096바이트 이하다. `base_url`은 `http://127.0.0.1:PORT/v1`, token은 32~256자다. OpenCode에는 이 임시 로컬 token만 넘기고 실행 기록에서 가린다. 상위 API 키는 relay만 가진다. relay 운영은 [평가](EVALUATION.md)에 있다.
 - **취소.** 컨텍스트 취소·제한시간은 프로세스 트리 정리까지 확인한다. 정리를 확인하지 못하면 `recovery_required`로 남기고 작업 디렉터리를 지우지 않는다. 이미 전송된 공급자 추론은 취소 뒤에도 청구될 수 있다. 공급자 측 생성의 확정 중단은 보장하지 않는다.
 - **실패 분류.** `opencode run`이 실패하면 JSON 오류 이벤트의 HTTP 상태와 오류 이름만 읽는다. 401·403은 `model_auth_failed`, 404는 `model_not_found`, 429는 `model_rate_limited`, 나머지는 `model_unavailable`이다. 공급자의 오류 문장은 남기지 않는다. OpenCode는 5xx를 몇 번 다시 시도하므로 실패까지 1분 넘게 걸릴 수 있다.
-- **직접 확인.** `codeye model probe`는 합성 입력으로 실제 추론을 한 번 요청한다. 비용이 드는 명령이다. 인자 없이(또는 `--config PATH`) 실행하면 개인 설정에서 `codeye start`와 같은 방법으로 모델을 정해 확인한다. `--executable ABSOLUTE_PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`는 그 설정 그대로 확인한다. `--timeout`(기본 180초), `--json`. 출력은 provider, 모델, OpenCode 버전(시험한 버전인지), 성공 또는 실패한 단계(`configuration`·`credential`·`opencode`·`request`·`output`)와 사유 코드다. 실패하면 종료 코드 1이고, 분석은 그대로 실행된다.
+- **직접 확인.** `codeye model probe`는 합성 입력으로 실제 추론을 한 번 요청한다. 비용이 드는 명령이다. 인자 없이(또는 `--config PATH`) 실행하면 서비스 설정에서 `codeye start`와 같은 방법으로 모델을 정해 확인한다. `--executable ABSOLUTE_PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`는 그 설정 그대로 확인한다. `--timeout`(기본 180초), `--json`. 출력은 provider, 모델, OpenCode 버전(시험한 버전인지), 성공 또는 실패한 단계(`configuration`·`credential`·`opencode`·`request`·`output`)와 사유 코드다. 실패하면 종료 코드 1이고, 분석은 그대로 실행된다.
 - 네트워크 차단의 OS 수준 강제는 배포 환경에 의존한다([보안](SECURITY.md)).
 
 ## 모델 설정
@@ -349,7 +349,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 - **에이전트.** `codeye agent --opencode ABSOLUTE_PATH --model PROVIDER/MODEL [--model-credential-file ABSOLUTE_PATH | --model-relay-file ABSOLUTE_PATH] [--model-timeout 180s]`. 키 파일 경로와 제한시간은 Hello의 `model_credential_file`, `model_timeout_seconds`로 워커에 간다. 키 파일 없이 고른 provider는 키가 필요 없는 경우(OpenCode Zen의 무료 모델)에만 답한다.
 - **키 파일 형식.** CODEYE 키 파일 `{"schema_version":"0.1","provider":"openai","api_key":"…","base_url":"…","openai_compatible":false}`(`base_url`·`openai_compatible` 선택, 알 수 없는 필드 거부) 또는 OpenCode의 `auth.json`이다. `auth.json`은 모델 provider의 항목이 `{"type":"api","key":"…"}`일 때만 쓴다(OAuth 항목은 쓰지 않는다). `base_url`은 http·https URL이다. OpenAI 호환 서버, 프록시, 시험용 가짜 upstream에 쓴다.
-- **`codeye up`의 키.** 순서대로 찾는다. (1) `agent.model.credential_file`, (2) `<state_dir>/secrets/model.json`(0600, 디렉터리 0700), (3) 사용자의 OpenCode `auth.json`(`$XDG_DATA_HOME/opencode/auth.json`, 기본 `~/.local/share/opencode/auth.json`)에서 모델 provider의 `api` 항목. `agent.model.name`이 없으면 (3)은 아래 표의 provider를 표 순서로 찾는다. 환경변수 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY` 중 처음 있는 것을 `codeye up`이 (2)에 쓴다(`personal.WriteModelSecretFromEnv`). 같은 키면 파일을 다시 쓰지 않는다.
+- **`codeye up`의 키.** 순서대로 찾는다. (1) `agent.model.credential_file`, (2) `<state_dir>/secrets/model.json`(0600, 디렉터리 0700), (3) 사용자의 OpenCode `auth.json`(`$XDG_DATA_HOME/opencode/auth.json`, 기본 `~/.local/share/opencode/auth.json`)에서 모델 provider의 `api` 항목. `agent.model.name`이 없으면 (3)은 아래 표의 provider를 표 순서로 찾는다. 환경변수 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY` 중 처음 있는 것을 `codeye up`이 (2)에 쓴다(`instance.WriteModelSecretFromEnv`). 같은 키면 파일을 다시 쓰지 않는다.
 - **`codeye up`의 모델.** `agent.model.name`(`PROVIDER/MODEL`, 또는 키 provider의 모델 이름), 없으면 사용자 OpenCode 설정(`~/.config/opencode/opencode.json`, 주석 없는 JSON일 때)의 `model` 중 그 provider의 것, 없으면 provider별 기본값이다. OpenCode 실행 파일은 `agent.model.opencode`, 없으면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`다. 제한시간은 `agent.model.timeout_seconds`(1~1800, 기본 180)다.
 
 | provider | 키 환경변수 | 기본 모델 |
@@ -412,7 +412,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ## 시험
 
-- 회귀: `go test -race ./internal/worker/review/... ./internal/worker/run`. 실제 OpenCode와 가짜 upstream으로 `codeye start`의 키 파일 경로 전체(시작, probe, 검토 단계 수락, 키 거부 사유, 시험하지 않은 버전, 키 미노출)를 `python3 scripts/test_postgres.py --smokes-only --personal-model`이 확인한다(비용 없음). 예시와 부정 입력: `python3 scripts/validate_bundle.py`. 일반 CI는 유료 모델을 호출하지 않으며 scripted caller만 쓴다. scripted caller 결과는 플랫폼 검사의 근거이고 지침 품질의 근거가 아니다.
+- 회귀: `go test -race ./internal/worker/review/... ./internal/worker/run`. 실제 OpenCode와 가짜 upstream으로 `codeye start`의 키 파일 경로 전체(시작, probe, 검토 단계 수락, 키 거부 사유, 시험하지 않은 버전, 키 미노출)를 `python3 scripts/test_postgres.py --smokes-only --instance-model`이 확인한다(비용 없음). 예시와 부정 입력: `python3 scripts/validate_bundle.py`. 일반 CI는 유료 모델을 호출하지 않으며 scripted caller만 쓴다. scripted caller 결과는 플랫폼 검사의 근거이고 지침 품질의 근거가 아니다.
 - 실모델 시험은 명시적으로 환경을 준 경우에만 실행한다. `CODEYE_TEST_OPENCODE_BIN`과 `CODEYE_TEST_REVIEW_RELAY`(필요하면 `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL`)를 주고 `go test -v -count=1 -run '^TestLiveVerifier$' ./internal/worker/review`처럼 하나씩 실행한다. 대상은 `TestLiveOpenCode`(키 파일은 `CODEYE_TEST_MODEL_CREDENTIAL`), `TestLiveInFlightCancel`(`internal/worker/opencode`)이다. 검토 역할 전체를 실모델로 돌리는 경로는 회귀 파일럿(`scripts/regression_pilot.py --pilot`, [평가](EVALUATION.md))이다. 비용이 든다. 시험 체계는 [시험](TESTING.md)에 있다.
 
 ## 한계

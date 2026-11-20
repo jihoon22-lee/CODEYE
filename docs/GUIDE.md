@@ -26,7 +26,7 @@ codeye up ~/src/myproject
 
 이 한 줄이 다음을 한다.
 
-1. 설정 파일(`~/.config/codeye/personal.json`)이 없으면 `schema_version`만 담아 만든다. 비어 있는 필드는 기본값이다. 상태 디렉터리는 `~/.local/state/codeye`(`XDG_STATE_HOME`을 따른다)다.
+1. 설정 파일(`~/.config/codeye/config.json`)이 없으면 `schema_version`만 담아 만든다. 비어 있는 필드는 기본값이다. 상태 디렉터리는 `~/.local/state/codeye`(`XDG_STATE_HOME`을 따른다)다.
 2. PostgreSQL을 찾아 상태 디렉터리의 `postgres/data`에 cluster를 만들고 127.0.0.1의 빈 포트(55432부터)로 띄운다. 비밀번호는 만들어 `postgres/password`(0600)에 둔다. 셸의 `PG*` 변수와 `CODEYE_DATABASE_URL`은 무시하고 그렇다고 알린다.
 3. schema를 만든다. 데이터가 있는 DB의 schema가 이전 버전이면 먼저 `pg_dump` 사본을 백업 디렉터리에 쓰고 migration을 적용한다.
 4. controller(`127.0.0.1:7331`, 쓰이고 있으면 7340까지 다음 빈 포트)와 로컬 에이전트를 띄운다.
@@ -36,7 +36,7 @@ codeye up ~/src/myproject
 첫 실행의 출력(실제 실행의 출력에서 경로·ID·pid만 예시로 바꾸고, 찾은 도구 줄은 줄였다):
 
 ```text
-wrote a new configuration: /home/user/.config/codeye/personal.json
+wrote a new configuration: /home/user/.config/codeye/config.json
 TOOL         STATUS   VERSION   WHERE / HOW TO ADD
 go           found    1.27.4    /usr/local/go/bin/go
 …
@@ -173,7 +173,7 @@ codeye up --listen 0.0.0.0:7331 --plain-http --public-origin http://192.168.0.10
 
 ## 설정 파일
 
-기본 위치는 `~/.config/codeye/personal.json`이다(`XDG_CONFIG_HOME`을 따른다). 다른 위치는 모든 명령에 `--config PATH`로 준다. `codeye up`이 만든 파일은 `schema_version`뿐이고, `up`은 자기가 다루는 필드(`source_roots`에 더한 폴더, `database.postgres_bin_dir`, `--listen`·`--tls-cert`·`--tls-key`·`--public-origin`·`--plain-http`로 준 수신 설정)만 고친다. 파일 이름 `personal.json`과 `codeye serve --personal` 같은 이름은 이전 설치와 호환되도록 그대로 두었다. 이름과 달리 여러 사람이 쓰는 서비스의 설정이다. 기본값은 파일에 쓰지 않는다. 더 정하고 싶은 것만 적는다. 예시는 [examples/personal.json](../examples/personal.json)이다.
+기본 위치는 `~/.config/codeye/config.json`이다(`XDG_CONFIG_HOME`을 따른다). 다른 위치는 모든 명령에 `--config PATH`로 준다. `codeye up`이 만든 파일은 `schema_version`뿐이고, `up`은 자기가 다루는 필드(`source_roots`에 더한 폴더, `database.postgres_bin_dir`, `--listen`·`--tls-cert`·`--tls-key`·`--public-origin`·`--plain-http`로 준 수신 설정)만 고친다. 기본값은 파일에 쓰지 않는다. 더 정하고 싶은 것만 적는다. 예시는 [examples/config.json](../examples/config.json)이다.
 
 ```json
 {
@@ -434,7 +434,7 @@ sha256sum -c codeye-VERSION-linux-amd64.tar.gz.sha256
 tar -xzf codeye-VERSION-linux-amd64.tar.gz && cd codeye-VERSION-linux-amd64
 sha256sum -c SHA256SUMS
 ./codeye tools --checklist       # 없는 도구와 옮기는 방법
-./codeye doctor --config ~/.config/codeye/personal.json   # "Offline readiness"
+./codeye doctor --config ~/.config/codeye/config.json   # "Offline readiness"
 ./codeye up --offline ~/src/my-project
 ```
 
@@ -488,7 +488,7 @@ codeye up
 | stop의 `outcome: recovery_required` | [정지](#정지) |
 | 실행 화면의 "정리를 확인해야 다시 실행할 수 있습니다"(run `recovery_required`) | 이 실행을 맡은 노드가 사라졌거나 하위 프로세스가 끝났는지 확인하지 못했다. `codeye status`와 작업 관리자에서 그 실행의 프로세스(`codeye worker`와 그 자식)가 없는지 보고, 확인 상자를 체크한 뒤 "정리 확인 후 다시 실행"을 누른다. CLI는 `codeye run recover --id RUN_ID --confirm-cleanup`이다(설정 파일의 DB를 쓴다). 확인은 감사 기록에 남는다 |
 | `the target database is not empty; restore only into a new, empty database` | 복원 대상 DB가 비어 있지 않다. 새 DB를 만든다 |
-| `the target state_dir already has personal.json; restore needs a fresh state_dir` | 새 `state_dir`를 쓴다 |
+| `the target state_dir already has admin.json; restore needs a fresh state_dir` | 새 `state_dir`를 쓴다 |
 | `backup verification failed: …` | 세트가 손상됐거나 완성되지 않았다(manifest 없음). 다른 세트를 쓴다 |
 | 로그인 링크가 만료됐거나 이미 썼다 | `codeye open` |
 | `codeye start/stop/status manage processes on Linux only …` | Windows·macOS에서는 `codeye up`으로 서비스를 띄우지 못한다(`codeye serve`·`agent`는 따로 실행할 수 있다) |

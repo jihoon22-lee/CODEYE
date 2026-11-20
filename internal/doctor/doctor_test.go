@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
@@ -148,8 +148,8 @@ func TestCollectReportsGapsHonestlyAndCleansDisk(t *testing.T) {
 
 // The exit code is 1 only for what matters in the chosen mode.
 func TestExitCodeRule(t *testing.T) {
-	cfg := func(mode string, tools map[string]string) *personal.Config {
-		return &personal.Config{StateDir: t.TempDir(), Database: personal.Database{Mode: mode}, Agent: personal.Agent{Tools: tools}}
+	cfg := func(mode string, tools map[string]string) *instance.Config {
+		return &instance.Config{StateDir: t.TempDir(), Database: instance.Database{Mode: mode}, Agent: instance.Agent{Tools: tools}}
 	}
 	missing := Result{Reason: "executable_missing"}
 	psqlOK := Result{Output: "psql (PostgreSQL) 17.10\n"}
@@ -174,12 +174,12 @@ func TestExitCodeRule(t *testing.T) {
 	}{
 		{"no tool at all", Options{Detect: detectedTools()}, missing, 1, "analyzers blocks"},
 		{"one baseline tool, nothing else", Options{Detect: detectedTools("ruff")}, missing, 0, "missing git, go, psql and database do not matter"},
-		{"external mode without a database", Options{Detect: detectedTools("go"), Personal: cfg("external", nil)}, missing, 1, "external needs its database"},
-		{"managed mode without a database url", Options{Detect: detectedTools("go"), Personal: cfg("managed", nil)}, missing, 0, "managed brings its own"},
+		{"external mode without a database", Options{Detect: detectedTools("go"), Instance: cfg("external", nil)}, missing, 1, "external needs its database"},
+		{"managed mode without a database url", Options{Detect: detectedTools("go"), Instance: cfg("managed", nil)}, missing, 0, "managed brings its own"},
 		{"database url that cannot be queried", Options{Detect: detectedTools("go"), DatabaseURL: badDB}, missing, 1, "configured database failing"},
 		{"database url that works", Options{Detect: detectedTools("go"), DatabaseURL: badDB}, psqlOK, 0, "configured database fine"},
-		{"explicit tool that is unusable", Options{Detect: unusableRuff(toolfind.SourceConfig), Personal: cfg("managed", map[string]string{"ruff": "/x/ruff"})}, missing, 1, "explicit unusable tool blocks"},
-		{"detected tool that is unusable", Options{Detect: unusableRuff(""), Personal: cfg("managed", nil)}, missing, 0, "only an explicit one blocks"},
+		{"explicit tool that is unusable", Options{Detect: unusableRuff(toolfind.SourceConfig), Instance: cfg("managed", map[string]string{"ruff": "/x/ruff"})}, missing, 1, "explicit unusable tool blocks"},
+		{"detected tool that is unusable", Options{Detect: unusableRuff(""), Instance: cfg("managed", nil)}, missing, 0, "only an explicit one blocks"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.opts.WorkDir, tc.opts.Timeout = t.TempDir(), time.Second

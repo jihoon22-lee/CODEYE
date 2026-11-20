@@ -61,7 +61,7 @@ type Manifest struct {
 	Database         FileEntry        `json:"database"`
 	Artifacts        ArtifactsEntry   `json:"artifacts"`
 	Rows             map[string]int64 `json:"rows"`
-	PersonalUserID   string           `json:"personal_user_id,omitempty"`
+	AdminUserID      string           `json:"admin_user_id,omitempty"`
 }
 
 // FileEntry is one file of the set with its SHA-256.
@@ -86,7 +86,7 @@ type Options struct {
 	PostgresBinDir string
 	ArtifactDir    string
 	Output         string
-	PersonalUserID string
+	AdminUserID    string
 	// AfterSnapshot (tests) runs after the snapshot is exported and the blob
 	// list read, before pg_dump starts.
 	AfterSnapshot func()
@@ -149,7 +149,7 @@ func Create(ctx context.Context, store *postgres.Store, opts Options) (m Manifes
 			total += b.Size
 		}
 		m = Manifest{Format: Format, Consistency: "exported_snapshot", MigrationVersion: p.MigrationVersion,
-			ServerVersion: p.ServerVersion, PgDumpVersion: dumpVersion, Rows: p.Rows, PersonalUserID: opts.PersonalUserID}
+			ServerVersion: p.ServerVersion, PgDumpVersion: dumpVersion, Rows: p.Rows, AdminUserID: opts.AdminUserID}
 		m.Artifacts.Count, m.Artifacts.Bytes, m.Artifacts.MetadataOnly = len(p.Blobs), total, p.MetadataOnly
 		list, err := json.MarshalIndent(p.Blobs, "", "  ")
 		if err != nil {

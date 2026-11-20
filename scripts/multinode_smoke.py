@@ -31,7 +31,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from node_smoke import Session, wait_for
-from personal_smoke import bare_repository
+from instance_smoke import bare_repository
 
 TERMINAL = {"partial", "completed", "failed", "cancelled", "recovery_required"}
 

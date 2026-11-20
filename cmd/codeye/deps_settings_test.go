@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
@@ -13,18 +13,18 @@ import (
 // configuration leaves empty; configured values and a disabled fetch stay.
 func TestDetectedGoSettingsFillDependencyOptions(t *testing.T) {
 	res := toolfind.Result{GoSettings: &toolfind.GoSettings{GoProxy: "https://goproxy.example", GoPrivate: "git.corp/*", GoSumDB: "off"}}
-	cfg := &personal.Config{}
+	cfg := &instance.Config{}
 	useDetectedTools(cfg, res)
 	if d := cfg.Agent.Dependencies; d == nil || d.GoProxy != "https://goproxy.example" || d.GoPrivate != "git.corp/*" || d.GoSumDB != "off" {
 		t.Fatalf("dependencies %+v", d)
 	}
-	cfg = &personal.Config{Agent: personal.Agent{Dependencies: &personal.Dependencies{GoProxy: "https://mine.example"}}}
+	cfg = &instance.Config{Agent: instance.Agent{Dependencies: &instance.Dependencies{GoProxy: "https://mine.example"}}}
 	useDetectedTools(cfg, res)
 	if d := cfg.Agent.Dependencies; d.GoProxy != "https://mine.example" || d.GoPrivate != "git.corp/*" {
 		t.Fatalf("configured value replaced: %+v", d)
 	}
 	off := false
-	cfg = &personal.Config{Agent: personal.Agent{Dependencies: &personal.Dependencies{Enabled: &off}}}
+	cfg = &instance.Config{Agent: instance.Agent{Dependencies: &instance.Dependencies{Enabled: &off}}}
 	useDetectedTools(cfg, res)
 	if d := cfg.Agent.Dependencies; d.GoPrivate != "" {
 		t.Fatalf("filled although fetching is off: %+v", d)
@@ -36,7 +36,7 @@ func TestDetectedGoSettingsFillDependencyOptions(t *testing.T) {
 func TestDependencyProxyCredentialRefused(t *testing.T) {
 	for _, field := range []string{"go_proxy", "go_sumdb"} {
 		raw := `{"schema_version":"0.1","state_dir":` + jsonString(filepath.Join(t.TempDir(), "state")) + `,"agent":{"dependencies":{"` + field + `":"https://user:s3cret@proxy.example"}}}`
-		_, err := personal.Parse([]byte(raw), knownTools())
+		_, err := instance.Parse([]byte(raw), knownTools())
 		if err == nil || strings.Contains(err.Error(), "s3cret") || !strings.Contains(err.Error(), field) {
 			t.Fatalf("%s: %v", field, err)
 		}

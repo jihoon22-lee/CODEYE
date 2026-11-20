@@ -62,21 +62,21 @@ func runRecover(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	with := withStore
 	if config != "" || os.Getenv("CODEYE_DATABASE_URL") == "" {
-		// Personal mode (--config, or the default configuration when no
+		// The service (--config, or the default configuration when no
 		// database URL is set): the installation's own database.
 		with = func(ctx context.Context, stderr io.Writer, f func(context.Context, *postgres.Store) int) int {
 			args := []string{}
 			if config != "" {
 				args = append(args, "--config", config)
 			}
-			cfg, layout, ok := loadPersonalConfig("run recover", args, stderr, nil)
+			cfg, layout, ok := loadInstanceConfig("run recover", args, stderr, nil)
 			if !ok {
 				if config == "" {
 					fmt.Fprintln(stderr, "for a server installation set CODEYE_DATABASE_URL")
 				}
 				return 2
 			}
-			store, db, err := personalStore(ctx, cfg, layout, stderr)
+			store, db, err := instanceStore(ctx, cfg, layout, stderr)
 			if err != nil {
 				fmt.Fprintln(stderr, "database unavailable:", err)
 				return 1

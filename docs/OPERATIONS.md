@@ -149,7 +149,7 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 
 ## 서비스 설정 파일
 
-기본 경로는 `$XDG_CONFIG_HOME/codeye/personal.json`(Go `os.UserConfigDir`)이다. `up`·`open`·`start`·`stop`·`status`·`backup`·`restore` 등 서비스 명령은 모두 `--config PATH`를 받는다. 이름 `personal.json`은 이전 설치와의 호환을 위해 그대로 두었다. `codeye up`은 파일이 없으면 `{"schema_version": "0.1"}`만 담아 만들고(디렉터리 0700, 파일 0600), 그 뒤 자기가 다루는 필드(`source_roots`에 폴더 추가, `--postgres-bin-dir`의 `database.postgres_bin_dir`, `--listen`·`--tls-cert`·`--tls-key`·`--public-origin`·`--plain-http`의 수신 필드)만 고친다. 다른 필드와 순서는 그대로이고 기본값은 쓰지 않는다. 고친 결과가 검증을 통과할 때만 바꾼다(같은 디렉터리의 rename, symlink면 그 대상). 형식은 JSON 하나다. 알 수 없는 필드, 뒤에 붙은 값, 상대 경로, 정리되지 않은 경로는 거부한다. 오류 메시지에는 설정 경로나 거부된 값을 넣지 않는다. 예시는 [examples/personal.json](../examples/personal.json)이고, 이 빌드의 도구 이름으로 읽힌다는 시험이 있다. 코드는 [internal/personal/config.go](../internal/personal/config.go)다.
+기본 경로는 `$XDG_CONFIG_HOME/codeye/config.json`(Go `os.UserConfigDir`)이다. `up`·`open`·`start`·`stop`·`status`·`backup`·`restore` 등 서비스 명령은 모두 `--config PATH`를 받는다. `codeye up`은 파일이 없으면 `{"schema_version": "0.1"}`만 담아 만들고(디렉터리 0700, 파일 0600), 그 뒤 자기가 다루는 필드(`source_roots`에 폴더 추가, `--postgres-bin-dir`의 `database.postgres_bin_dir`, `--listen`·`--tls-cert`·`--tls-key`·`--public-origin`·`--plain-http`의 수신 필드)만 고친다. 다른 필드와 순서는 그대로이고 기본값은 쓰지 않는다. 고친 결과가 검증을 통과할 때만 바꾼다(같은 디렉터리의 rename, symlink면 그 대상). 형식은 JSON 하나다. 알 수 없는 필드, 뒤에 붙은 값, 상대 경로, 정리되지 않은 경로는 거부한다. 오류 메시지에는 설정 경로나 거부된 값을 넣지 않는다. 예시는 [examples/config.json](../examples/config.json)이고, 이 빌드의 도구 이름으로 읽힌다는 시험이 있다. 코드는 [internal/instance/config.go](../internal/instance/config.go)다.
 
 | 필드 | 기본값 | 검증 |
 |---|---|---|
@@ -167,7 +167,7 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `offline` | false | true면 [오프라인 모드](#오프라인-모드). `codeye up --offline`이 이 값을 저장한다 |
 | `ca_bundle` | 빈 값 | 시스템 CA와 사내 CA를 합친 PEM 파일의 절대 경로([사내 CA](#사내-ca)) |
 | `git_hosts` | `["github.com"]`(필드가 없을 때, 오프라인이면 `[]`) | 서로 다른 DNS 호스트 이름(선택 포트) 0~16개, 소문자로 바꾼다. `up`·`start`가 호스트마다 provider를 등록하고(`github.com`은 `github`, 그 밖은 `ghes`) 찾은 git과 함께 에이전트에 `--git`·`--git-host`로 넘긴다. 빈 목록이면 Git 주소를 받지 않는다 |
-| `agent.name` | `personal` | 100자 이하 |
+| `agent.name` | `local` | 100자 이하 |
 | `agent.max_workers` | min(4, 논리 CPU 수/2), 최소 1 | 1~16. 에이전트는 `--autoscale --max-workers N`으로 시작하고, `up`·`start`가 `default` 풀의 최대 워커 수를 같은 값으로 둔다 |
 | `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록 |
 | `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로. 비우면 [탐색](ANALYZERS.md#도구-찾기)이 찾은 go와 그 모듈 캐시를 쓴다 |
@@ -204,20 +204,19 @@ codeye status [--config PATH] [--format text|json]
 |---|---|
 | `run/controller.json`, `run/agent.json` | pid, 프로세스 시작 시각(`/proc/PID/stat` starttime), 실행 파일, 기록 시각 |
 | `run/enroll-token` | 일회용 등록 토큰. 등록·heartbeat 확인 직후, 그리고 실패한 start의 끝에 지운다 |
-| `personal.json` | 관리자 사용자 ID(`up`·`start`·`open`이 로그인시키는 사용자) |
+| `admin.json` | 관리자 사용자 ID(`up`·`start`·`open`이 로그인시키는 사용자) |
 | `login-link` | 일회용 로그인 링크(`codeye start`가 쓴다) |
 | `postgres/data` | 관리형 PostgreSQL cluster(`initdb`가 만든 0700 디렉터리). `codeye.conf`는 시작마다 다시 쓰는 listen 주소·포트·socket 설정이다 |
 | `postgres/password` | 관리형 PostgreSQL의 생성 비밀번호(0600) |
 | `postgres/run` | 관리형 PostgreSQL의 Unix socket 디렉터리 |
 | `logs/postgres.log` | 관리형 PostgreSQL 로그 |
-| `personal.lock` | up·start·stop·backup·restore의 상호 배제 |
+| `instance.lock` | up·start·stop·backup·restore의 상호 배제 |
 | `logs/controller.log`, `logs/agent.log` | 자식 프로세스 출력(O_APPEND) |
 | `agent/` | 에이전트 상태 디렉터리(journal, node.json, 작업 사본) |
 | `artifacts/` | controller 산출물 저장소 |
 | `secrets/model.json` | 모델 API 키 파일(`codeye up`이 환경변수에서 쓴다). 워커의 모델 호출만 읽는다 |
-| `secrets/github.json` | `up`이 찾은 관리자의 GitHub token(계정·출처와 함께) |
-| `secrets/github-users/<user_id>.json` | 사용자마다의 github.com token(웹의 **계정 > GitHub 연결**, 관리자는 `up`이 옮긴 token). controller와 워커만 읽는다. 백업에 들어가지 않는다 |
-| `run/personal-setup.json` | 화면의 설치 정보(`GET /setup`): 모델 ID와 마지막 확인 결과, git 사용 가능 여부와 호스트, 백업 디렉터리. 키는 없다 |
+| `secrets/github-users/<user_id>.json` | 사용자마다의 github.com token(웹의 **계정 > GitHub 연결**, 관리자는 `up`이 찾은 token도 여기에 둔다). controller와 워커만 읽는다. 백업에 들어가지 않는다 |
+| `run/setup.json` | 화면의 설치 정보(`GET /setup`): 모델 ID와 마지막 확인 결과, git 사용 가능 여부와 호스트, 백업 디렉터리. 키는 없다 |
 | `tools.json` | `codeye up`·`start`가 마지막으로 찾은 도구([codeye tools](#codeye-tools)) |
 | `run/model-probe.json` | 마지막 모델 확인의 설정 지문(모델 ID·경로·키 파일 시각과 크기)과 결과. 키에서 나온 값은 없다 |
 
@@ -228,7 +227,7 @@ codeye status [--config PATH] [--format text|json]
 1. schema가 이 바이너리의 migration(현재 14)과 같은지 확인한다. external 모드에서 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. 관리형 모드에서 이전 버전이면 migration을 적용한다. 이미 적용된 migration이 있으면(데이터가 있으면) 먼저 `pg_dump --format=custom`으로 `<백업 디렉터리>/codeye-pre-migrate-<UTC>/database.dump`(0600)를 쓰고, 실패하면 아무것도 바꾸지 않고 끝난다. 바이너리보다 새 schema나 불일치는 거부한다.
 2. 관리자 사용자를 만들거나 다시 쓴다. 설정의 사용자는 관리자다(이전 버전에서 만든 사용자는 이때 관리자로 지정되고 감사 기록이 남는다). `up`이 찾은 GitHub token을 그 사용자의 token 파일(`secrets/github-users/<id>.json`)에 옮긴다(웹에서 넣은 token은 그대로). 설정의 source root를 label로 등록하고 사용자에게 허가한다. 같은 label이 다른 경로로 등록돼 있으면 거부한다. `quota.artifacts_bytes`를 `scheduler_limits.artifact_quota_bytes`에 반영한다(0이면 제거).
 3. 등록이 필요한지 정한다. 처음 시작했거나, 노드가 철회됐거나, DB가 노드를 모르거나(복원 뒤), source root 집합이 바뀌었으면 다시 등록한다. 다시 등록하기 전에 에이전트 journal에 끝나지 않은 작업이 없는지 확인한다. 이전 노드는 철회하고, 이전 `agent/`는 `agent.retired-<ns>`로 이름만 바꾼다(삭제하지 않는다). 등록 토큰은 10분짜리 일회용이며 0600 파일로만 전달한다.
-4. `codeye serve --personal --state-dir <state_dir>`을 setsid로 띄운다(설정의 수신 필드가 있으면 `--tls-cert`·`--tls-key`·`--public-origin` 또는 `--plain-http`·`--public-origin`과 `--local-listen`도 준다. 브라우저 세션 7일, 경로로 등록·`GET /setup`·사용자 GitHub token·데이터 폴더 검사에 상태 디렉터리를 쓴다). 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다. 기록에 listen 주소를 남긴다.
+4. `codeye serve --session-ttl 168h --state-dir <state_dir>`을 setsid로 띄운다(설정의 수신 필드가 있으면 `--tls-cert`·`--tls-key`·`--public-origin` 또는 `--plain-http`·`--public-origin`과 `--local-listen`도 준다. 브라우저 세션 7일, 경로로 등록·`GET /setup`·사용자 GitHub token·데이터 폴더 검사에 상태 디렉터리를 쓴다). 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다. 기록에 listen 주소를 남긴다.
 5. `codeye agent`를 띄운다. 환경은 PATH·LANG뿐이며 DB 정보가 없다. argv는 설정에서 만든다(source root, `--project-analysis-policy`, `--controller-sources`, 상태·백업 디렉터리의 `--protected-dir`, git과 `--git-host`, 사용자별 token 디렉터리 `--git-credential-dir`(오프라인이 아닐 때), 도구, 모델(`--opencode`·`--model`·`--model-credential-file`), `--storage-quota`, `--storage-log-dir`). `--project-analysis-policy`는 root별 허가 대신 각 프로젝트의 분석 선택(소스를 모델에 보냄, 저장소의 빌드 스크립트 실행)을 로컬·Git 모두에 적용하게 하고, 배정의 `offered`(관리자 스위치)도 따르게 한다. `--controller-sources`는 웹에서 더한 폴더·Git host를 배정이 준 경로·host로 재시작 없이 받게 한다. `--protected-dir`은 그 디렉터리를 품거나 그 안에 있는 프로젝트 폴더의 소스 확보를 `source_holds_codeye_data`로 거절하게 한다. 기록에 등록 토큰 플래그를 뺀 argv를 남긴다. `node.json`이 생기고 DB에 신선한 heartbeat가 올 때까지 120초를 기다린다. 실행 중인 에이전트의 기록 argv가 설정에서 만든 argv와 다르면(예: source root 추가) drain을 요청해 실행 중인 작업을 끝내게 하고(`stop.drain_timeout_seconds`까지), 끝나면 3단계부터 다시 띄운다. 그 안에 끝나지 않으면 취소하지 않고 오류로 끝난다. 에이전트는 작업을 마친 뒤 스스로 종료한다.
 6. 실패하면 이 명령이 띄운 프로세스를 역순으로 SIGTERM하고 45초 기다린다. 끝나지 않은 프로세스의 기록은 지우지 않는다. 이 명령이 띄운 관리형 PostgreSQL은 다른 CODEYE 프로세스가 없으면 다시 멈춘다.
 
@@ -279,7 +278,7 @@ JSON 출력은 `outcome`, `processes[]`(`state_before`, `action`, `state_after`)
 
 ## 관리형 PostgreSQL
 
-`database.mode`가 `managed`(기본)이면 CODEYE가 상태 디렉터리에 전용 PostgreSQL cluster를 만들고 띄운다. 코드는 [internal/personal/pgcluster.go](../internal/personal/pgcluster.go)다. PostgreSQL은 내려받거나 설치하지 않는다.
+`database.mode`가 `managed`(기본)이면 CODEYE가 상태 디렉터리에 전용 PostgreSQL cluster를 만들고 띄운다. 코드는 [internal/instance/pgcluster.go](../internal/instance/pgcluster.go)다. PostgreSQL은 내려받거나 설치하지 않는다.
 
 **프로그램 찾기.** `initdb`·`pg_ctl`·`postgres`·`pg_dump`·`pg_restore`가 모두 있고 `pg_ctl --version`이 14 이상인 디렉터리를 쓴다. 명시한 곳(`up --postgres-bin-dir`, `database.postgres_bin_dir`, 환경변수 `CODEYE_POSTGRES_BIN_DIR` 순)이 있으면 그것만 본다. 그 디렉터리가 조건을 채우지 않으면 다른 곳을 찾지 않고 이유(없는 프로그램, 낮은 버전)와 함께 오류다. 명시한 곳이 없으면 PATH에서 `initdb`가 있는 디렉터리와 `/usr/lib/postgresql/*/bin`, `/usr/pgsql-*/bin`, `/usr/local/pgsql/bin`을 찾고 가장 높은 주 버전을 쓴다. cluster가 이미 있으면 그 주 버전(`PG_VERSION`)의 설치를 먼저 고른다. 아무것도 없으면 `PostgreSQL binaries not found (searched: …). Install `postgresql` (Ubuntu: `sudo apt install postgresql`), or set `database.postgres_bin_dir`, or use `database.mode: external`.`로 끝난다.
 
@@ -341,13 +340,13 @@ codeye restore [--config PATH] --from DIR [--format text|json]
 
 **같은 논리 시점.** dump와 산출물 목록은 같은 DB snapshot에서 나온다. 산출물은 내용 주소(sha256)이고 확정 뒤 바뀌지 않는다. 그래서 snapshot 뒤에 복사해도 같은 바이트이며, 복사할 때 hash로 확인한다. snapshot 뒤에 확정된 산출물은 세트에 들어가지 않고 그 산출물을 가리키는 행도 dump에 없다. 확정되지 않은 업로드는 백업하지 않는다. DB 잠금이나 정지 강제는 개인 사용 중 백업을 막아 채택하지 않았다. 정지 뒤 백업을 권장한다.
 
-manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exported_snapshot`), `migration_version`, `codeye_binary_migrations`, `postgres_server_version`, `pg_dump_version`, `database`(파일·형식·sha256·크기), `artifacts`(목록 파일 hash, 수, 바이트, 내용 없는 행 수), `rows`, `personal_user_id`. 호스트·사용자·DB 이름·비밀번호·URL은 넣지 않는다. 모든 파일은 0600, 디렉터리는 0700이다.
+manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exported_snapshot`), `migration_version`, `codeye_binary_migrations`, `postgres_server_version`, `pg_dump_version`, `database`(파일·형식·sha256·크기), `artifacts`(목록 파일 hash, 수, 바이트, 내용 없는 행 수), `rows`, `admin_user_id`. 호스트·사용자·DB 이름·비밀번호·URL은 넣지 않는다. 모든 파일은 0600, 디렉터리는 0700이다.
 
 **인증정보.** `pg_dump`·`pg_restore`는 관리형 cluster의 프로그램 디렉터리, external 모드면 `database.postgres_bin_dir`에서만 찾는다. argv에는 플래그와 파일 경로만 들어간다. 연결 정보는 자식 환경의 `PGHOST`·`PGPORT`·`PGUSER`·`PGPASSWORD`·`PGDATABASE`·`PGSSLMODE`·`PGSSLROOTCERT`로만 전달한다. `PGPASSFILE=/dev/null`로 사용자 `.pgpass`를 읽지 않게 하고, cwd는 임시 디렉터리다. 오류 문구의 비밀번호는 `[REDACTED]`로 바꾼다. URL 규칙은 controller와 같다(loopback만 `sslmode=disable`, 그 외 `verify-full`).
 
 ### 복원 전 검증
 
-- 대상 설치가 실행 중이거나 불일치하면 거부한다. 대상 `state_dir`에 `agent/node.json`이나 `personal.json`이 있으면 거부한다. 새 `state_dir`가 필요하다.
+- 대상 설치가 실행 중이거나 불일치하면 거부한다. 대상 `state_dir`에 `agent/node.json`이나 `admin.json`이 있으면 거부한다. 새 `state_dir`가 필요하다.
 - 세트 검증: manifest를 엄격하게 읽고 형식을 확인한다. dump와 목록의 hash·크기, 목록 정렬, 각 내용의 hash·크기, 총계를 확인한다. 하나라도 다르면 대상에 아무것도 쓰지 않는다.
 - manifest의 migration 버전이 이 바이너리보다 높으면 거부한다. 낮으면 복원 뒤 관리형 모드의 `up`·`start`가 migration을 적용하고(먼저 `pg_dump` 사본), external 모드의 start는 `codeye migrate`를 요구한다.
 - 대상 DB의 현재 schema에 표가 하나라도 있으면 거부한다(`not empty`). 대상 산출물 디렉터리에 파일이 있으면 거부한다. 병합이나 덮어쓰기는 ID 충돌과 근거 혼합 위험이 있어 하지 않는다.
@@ -358,7 +357,7 @@ manifest 필드: `format`(`codeye-backup/0.1`), `created_at`, `consistency`(`exp
 2. `pg_restore --list` 결과에서 `SCHEMA public`·`COMMENT ON SCHEMA public` 항목을 뺀다. 그 목록으로 `pg_restore --use-list --exit-on-error --single-transaction --no-owner --no-privileges`를 실행한다.
 3. 복원된 행 수가 manifest와 같은지 비교한다. 확정 산출물 행마다 내용이 있는지 다시 hash해 확인한다.
 4. **fence.** 한 트랜잭션에서 모든 노드를 철회하고 그 워커를 `stopped`로 둔다. 모든 세션을 철회하고, 쓰지 않은 로그인 토큰을 사용 처리하고, 쓰지 않은 등록 토큰을 철회한다. `leased` attempt는 lease를 지금으로 끝낸 뒤 기존 만료 경로(`ExpireAttempt`)로 `recovery_required`로 둔다. 예약은 유지한다. 대기 중인 run, 예약, 이미 만든 예약 회차는 그대로라서 같은 회차가 다시 만들어지지 않는다.
-5. `personal.json`에 manifest의 사용자 ID를 쓴다.
+5. `admin.json`에 manifest의 사용자 ID를 쓴다.
 
 실패하면 대상 산출물 디렉터리를 비운다. `pg_restore`가 성공한 뒤의 실패라면 DB를 지우고 다시 만들라고 출력한다(복원 명령은 DB를 지우지 않는다).
 
@@ -485,7 +484,7 @@ python3 scripts/offline_pack.py check-web web/dist
 | `codeye` | 정적 링크 실행 파일(CGO 없음). `file`은 statically linked, `ldd`는 not a dynamic executable이고 ELF에 interpreter·dynamic section이 없다. build가 이를 검사해 동적이면 실패한다 |
 | `web/dist/` | 빌드된 웹 화면. 외부 주소를 불러오지 않는다(아래) |
 | `docs/GUIDE.md`, `docs/OPERATIONS.md` | 사용 안내서와 이 문서 |
-| `examples/personal-offline.json` | 오프라인 설정 예시(`*.corp.example` 주소, 실제 주소 아님) |
+| `examples/config-offline.json` | 오프라인 설정 예시(`*.corp.example` 주소, 실제 주소 아님) |
 | `INSTALL.md` | 설치 절차(확인, 놓을 곳, 설정, 점검, 실행) |
 | `MANIFEST.json` | `name`, `version`, `commit`, `dirty`, `build_time`, `os`, `arch`, `go_version`, `node_version`, `cgo_enabled`, `linking`, `embedded`, `not_included`, `files[]`(경로·크기·sha256·mode) |
 | `SHA256SUMS` | 모든 파일과 MANIFEST.json의 sha256(`sha256sum -c`로 확인) |

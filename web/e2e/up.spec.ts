@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-// The link printed by `codeye up PATH` (scripts/personal_smoke.py writes it to a 0600 file):
+// The link printed by `codeye up PATH` (scripts/instance_smoke.py writes it to a 0600 file):
 // one visit signs in, removes the token from the address bar, opens the project and its
 // queued run, and the run ends with a published report.
 test('the codeye up link signs in and opens the project run with its report', async ({ page }) => {

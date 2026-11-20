@@ -42,7 +42,7 @@ type env struct {
 	artifacts string
 	// stream is the event stream configuration start uses.
 	stream StreamConfig
-	// personal makes start serve the personal-mode controller.
+	// inst makes start serve the controller of `codeye up` (its state directory).
 	inst *Instance
 }
 

@@ -17,11 +17,11 @@ import (
 // RemainAfterExit (codeye start exits after spawning) and a stop budget
 // covering the drain and the cancellation; systemd specials are escaped.
 func TestServiceUnitText(t *testing.T) {
-	unit := serviceUnit("/opt/co deye/codeye", "/home/a b/.config/codeye/personal.json", "/home/a/.local/bin:/usr/bin:/bin", 450*time.Second)
+	unit := serviceUnit("/opt/co deye/codeye", "/home/a b/.config/codeye/config.json", "/home/a/.local/bin:/usr/bin:/bin", 450*time.Second)
 	for _, want := range []string{
 		"Type=oneshot\n", "RemainAfterExit=yes\n",
-		`ExecStart="/opt/co deye/codeye" start --config "/home/a b/.config/codeye/personal.json"` + "\n",
-		`ExecStop="/opt/co deye/codeye" stop --config "/home/a b/.config/codeye/personal.json"` + "\n",
+		`ExecStart="/opt/co deye/codeye" start --config "/home/a b/.config/codeye/config.json"` + "\n",
+		`ExecStop="/opt/co deye/codeye" stop --config "/home/a b/.config/codeye/config.json"` + "\n",
 		`Environment="PATH=/home/a/.local/bin:/usr/bin:/bin"` + "\n",
 		"TimeoutStopSec=450\n", "WantedBy=default.target\n",
 	} {
@@ -71,7 +71,7 @@ func TestOperationsUsageErrors(t *testing.T) {
 	}
 }
 
-// TC-246: without CODEYE_DATABASE_URL and without a personal configuration,
+// TC-246: without CODEYE_DATABASE_URL and without a service configuration,
 // run recover stops with a hint and creates no configuration, state or
 // database (an operator who forgot the URL must not get a new install).
 func TestRunRecoverWithoutDatabaseCreatesNothing(t *testing.T) {

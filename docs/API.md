@@ -34,7 +34,7 @@
 - `codeye up PATH`의 링크는 토큰 뒤에 깊은 링크 `&project=<ID>&run=<ID>`를 붙인다. 웹 앱은 토큰을 지울 때 이 두 키(canonical UUID)만 fragment에 남기고 그 프로젝트와 실행을 연다.
 - 관리자 API의 사용자 생성과 비밀번호 재설정도 같은 링크를 응답의 `login_link`로 한 번 준다([계정과 관리자](#계정과-관리자)). origin은 public origin(TLS나 평문 HTTP)이 있으면 그것, 아니면 요청의 loopback origin이다.
 - 토큰은 URL fragment에 있으므로 HTTP 요청·서버 로그에 실리지 않는다. 웹 앱은 fragment를 읽은 즉시 주소창에서 지우고 `POST /session`으로 교환한다.
-- 세션 수명은 12시간이다. `codeye up`·`start`가 띄우는 controller(`codeye serve --personal`)는 7일이다(저장 계층의 상한과 같다).
+- 세션 수명은 12시간이다. `codeye up`·`start`가 띄우는 controller(`codeye serve --session-ttl 168h`)는 7일이다(저장 계층의 상한과 같다).
 
 ### 세션
 
@@ -209,7 +209,7 @@ github.com 저장소 프로젝트는 누가 등록했든 `{"profile":"deep-revie
 
 ### 설치 정보
 
-`GET /setup`은 로그인한 사람에게 맞춘 첫 화면 정보 `{is_admin, service_origin, model, git, readable_folders, analysis_defaults, available, tools, github, offline}`다([schema](../api/openapi.yaml)의 `Setup`). 이전의 `mode`(personal·server)는 없다. 같은 서비스에서 사람마다 답이 다르다.
+`GET /setup`은 로그인한 사람에게 맞춘 첫 화면 정보 `{is_admin, service_origin, model, git, readable_folders, analysis_defaults, available, tools, github, offline}`다([schema](../api/openapi.yaml)의 `Setup`). 같은 서비스에서 사람마다 답이 다르다.
 
 - `readable_folders`는 이 사람이 경로로 분석할 수 있는 서버 폴더(사용자별 grant와 모두에게 연 root의 절대 경로)다. `git`은 `{available, hosts}`로, `hosts`는 승인된 provider이고 `available`은 `codeye up`이 기록한 git 실행 파일이 있고 host가 하나 이상일 때 true다.
 - `analysis_defaults`는 `{local, git}`의 기본 분석 선택에 이 사람의 허용 범위를 적용한 값이다(관리자가 아닌 사람은 스위치가 끈 것이 false).

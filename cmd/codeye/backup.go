@@ -10,18 +10,18 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/backup"
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 )
 
-// `codeye backup` and `codeye restore` (docs/OPERATIONS.md#백업과-복원) for a personal
+// `codeye backup` and `codeye restore` (docs/OPERATIONS.md#백업과-복원) for the service
 // installation: the database is the managed cluster (started for the
 // command when it is stopped) or CODEYE_DATABASE_URL, the artifact store is
 // <state_dir>/artifacts, and pg_dump/pg_restore come from the managed
 // cluster's binaries or database.postgres_bin_dir.
 
-func personalBackup(ctx context.Context, args []string, out, stderr io.Writer) int {
+func cmdBackup(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var output, format string
-	cfg, layout, ok := loadPersonalConfig("backup", args, stderr, func(fs *flag.FlagSet) {
+	cfg, layout, ok := loadInstanceConfig("backup", args, stderr, func(fs *flag.FlagSet) {
 		fs.StringVar(&output, "output", "", "")
 		fs.StringVar(&format, "format", "text", "")
 	})
@@ -36,7 +36,7 @@ func personalBackup(ctx context.Context, args []string, out, stderr io.Writer) i
 		fmt.Fprintln(stderr, "--output cannot be resolved")
 		return 2
 	}
-	if err := personal.Supported(); err != nil {
+	if err := instance.Supported(); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -56,7 +56,7 @@ func personalBackup(ctx context.Context, args []string, out, stderr io.Writer) i
 	}
 	opCtx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	store, db, err := personalStore(opCtx, cfg, layout, stderr)
+	store, db, err := instanceStore(opCtx, cfg, layout, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "database unavailable:", err)
 		return 1
@@ -64,7 +64,7 @@ func personalBackup(ctx context.Context, args []string, out, stderr io.Writer) i
 	defer stopStartedDB(db)
 	defer store.Close()
 	m, err := backup.Create(opCtx, store, backup.Options{DatabaseURL: os.Getenv("CODEYE_DATABASE_URL"), PostgresBinDir: db.binDir,
-		ArtifactDir: layout.ArtifactDir(), Output: abs, PersonalUserID: user})
+		ArtifactDir: layout.ArtifactDir(), Output: abs, AdminUserID: user})
 	if err != nil {
 		fmt.Fprintln(stderr, "backup failed:", err)
 		return 1
@@ -80,9 +80,9 @@ func personalBackup(ctx context.Context, args []string, out, stderr io.Writer) i
 	return 0
 }
 
-func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) int {
+func cmdRestore(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var from, format string
-	cfg, layout, ok := loadPersonalConfig("restore", args, stderr, func(fs *flag.FlagSet) {
+	cfg, layout, ok := loadInstanceConfig("restore", args, stderr, func(fs *flag.FlagSet) {
 		fs.StringVar(&from, "from", "", "")
 		fs.StringVar(&format, "format", "text", "")
 	})
@@ -97,7 +97,7 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 		fmt.Fprintln(stderr, "--from cannot be resolved")
 		return 2
 	}
-	if err := personal.Supported(); err != nil {
+	if err := instance.Supported(); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -112,7 +112,7 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 	}
 	defer unlock()
 	state := layout.Inspect(probedListen(cfg), true)
-	if state.Running(personal.RoleController) || state.Running(personal.RoleAgent) || len(state.Issues) > 0 {
+	if state.Running(instance.RoleController) || state.Running(instance.RoleAgent) || len(state.Issues) > 0 {
 		fmt.Fprintln(stderr, "the target installation is running or inconsistent; run codeye stop and check codeye status first")
 		return 1
 	}
@@ -121,7 +121,7 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 		return 1
 	}
 	if id, err := layout.ReadIdentity(); err != nil || id != nil {
-		fmt.Fprintln(stderr, "the target state_dir already has personal.json; restore needs a fresh state_dir")
+		fmt.Fprintln(stderr, "the target state_dir already has admin.json; restore needs a fresh state_dir")
 		return 1
 	}
 	v, err := backup.Verify(from)
@@ -131,7 +131,7 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 	}
 	opCtx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	store, db, err := personalStore(opCtx, cfg, layout, stderr)
+	store, db, err := instanceStore(opCtx, cfg, layout, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "database unavailable:", err)
 		return 1
@@ -144,9 +144,9 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 		fmt.Fprintln(stderr, "restore failed:", err)
 		return 1
 	}
-	if v.Manifest.PersonalUserID != "" {
-		if err := layout.WriteIdentity(v.Manifest.PersonalUserID); err != nil {
-			fmt.Fprintln(stderr, "restored, but cannot write personal.json:", err)
+	if v.Manifest.AdminUserID != "" {
+		if err := layout.WriteIdentity(v.Manifest.AdminUserID); err != nil {
+			fmt.Fprintln(stderr, "restored, but cannot write admin.json:", err)
 			return 1
 		}
 	}
@@ -164,7 +164,7 @@ func personalRestore(ctx context.Context, args []string, out, stderr io.Writer) 
 }
 
 // stopStartedDB stops a managed server that this command started.
-func stopStartedDB(db *personalDB) {
+func stopStartedDB(db *instanceDB) {
 	if db != nil && db.started {
 		_ = db.stop(context.Background())
 	}

@@ -1,6 +1,6 @@
 """A loopback fake of the parts of the GitHub REST API CODEYE uses (stdlib only).
 
-Used by scripts/personal_smoke.py with a fixture build (CODEYE_TEST_GITHUB_API) so a pull-request
+Used by scripts/instance_smoke.py with a fixture build (CODEYE_TEST_GITHUB_API) so a pull-request
 run and its result comment run end to end without the network. It serves GET /user, GET
 /repos/O/R/pulls/N, GET /repos/O/R/pulls/N/files, GET and POST /repos/O/R/issues/N/comments and
 PATCH /repos/O/R/issues/comments/ID. Every request must carry "Authorization: Bearer <token>"

@@ -126,7 +126,7 @@ type Principal struct {
 	operator bool
 }
 
-// OperatorPrincipal is the operator CLI (and personal-mode start).
+// OperatorPrincipal is the operator CLI (and service start).
 func OperatorPrincipal() Principal { return Principal{operator: true} }
 
 // UserPrincipal is a signed-in user acting through the API.

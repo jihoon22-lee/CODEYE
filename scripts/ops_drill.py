@@ -509,11 +509,11 @@ def drills(base, root, env, directory, records):
         children.clear()
 
         # --- D1·D7 codeye start ------------------------------------------------------------------------------
-        personal_drills(root, env, directory, binary, fixture, go, cluster, drill)
+        instance_drills(root, env, directory, binary, fixture, go, cluster, drill)
 
 
-def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
-    from personal_smoke import Session as PSession
+def instance_drills(root, env, directory, binary, fixture, go, cluster, drill):
+    from instance_smoke import Session as PSession
 
     pg_bin = Path(shutil.which("pg_dump")).parent
     go_dir = str(Path(go).parent)
@@ -543,7 +543,7 @@ def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
                "database": {"mode": "external", "postgres_bin_dir": str(pg_bin)},
                "source_roots": [{"label": label, "path": str(path)} for label, path in roots],
                "backup_dir": str(directory / "backups"), **extra}
-        path = directory / name / "personal.json"
+        path = directory / name / "config.json"
         path.write_text(json.dumps(doc, indent=2))
         path.chmod(0o600)
         return path, state, f"http://127.0.0.1:{port}", doc
@@ -590,7 +590,7 @@ def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
             at_restore = sb.request("GET", f"runs/{inflight}")["status"]
             how = None
             if at_restore == "recovery_required":
-                # The personal-mode CLI form (codeye run recover --config).
+                # The service CLI form (codeye run recover --config).
                 out = json.loads(pcli(fixture, "run", "recover", "--id", inflight, "--confirm-cleanup", "--config", cfg_b, db="pb").stdout)
                 how = out["retry"]
                 follow = sb.finished(out["run"])

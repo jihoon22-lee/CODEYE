@@ -67,7 +67,7 @@ github.com token은 사용자마다 따로 둔다. 각 사용자는 웹의 **계
 2. 환경변수 `GITHUB_TOKEN`
 3. `gh auth token --hostname github.com`(toolfind가 찾은 gh. 사용자 환경에서 위 두 변수를 뺀 채 15초 안에 실행한다)
 
-찾은 token은 GitHub API `GET /user`로 확인한다. GitHub이 거부하면(401) 쓰지 않고 이전 파일도 지운다. GitHub에 닿지 못하면 token을 두고 계정은 모른다고 표시한다. 확인한 token은 모델 키처럼 `<state>/secrets/github.json`(0600, 폴더 0700)에 계정·출처와 함께 두고 `up`마다 새로 쓰며, 같은 내용을 관리자의 사용자별 파일에 옮긴다. token을 찾지 못하거나 발견을 끄면 두 파일을 지운다(웹에서 넣은 token은 남긴다).
+찾은 token은 GitHub API `GET /user`로 확인한다. GitHub이 거부하면(401) 쓰지 않고 이전에 찾아 둔 token도 지운다. GitHub에 닿지 못하면 token을 두고 계정은 모른다고 표시한다. 확인한 token은 계정·출처와 함께 관리자의 사용자별 파일 `<state>/secrets/github-users/<user_id>.json`(0600, 폴더 0700) 하나에만 두고, 내용이 바뀌면 `up`이 다시 쓴다. token을 찾지 못하거나 발견을 끄면 그 파일을 지운다(웹에서 넣은 token은 남긴다).
 
 ```text
 github: signed in as octocat on github.com (token from gh) - private repositories and pull requests you can read
@@ -76,7 +76,7 @@ github: no token (sign in with `gh auth login` or set GH_TOKEN, then run codeye 
 
 `GET /api/v1/setup`의 `github`와 `GET /api/v1/account/github`는 로그인한 사람 자신의 token이 있는지, 계정, 출처(`web`·`GH_TOKEN`·`GITHUB_TOKEN`·`gh`)와 이유만 싣는다. token 자체는 설정 파일, 명령 인자, 로그, 보고서, 감사 기록, 데이터베이스 어디에도 들어가지 않는다. 설정에 `"github": {"enabled": false}`를 두면 관리자 token 발견만 끈다. 다른 사람이 웹에서 넣은 token은 그대로 쓴다.
 
-**오프라인 모드**(`"offline": true`, [운영](OPERATIONS.md#오프라인-모드))에서는 GitHub을 쓰지 않는다. 환경변수·gh에서 token을 찾지 않고(`gh auth token`을 실행하지 않는다) 이전에 저장한 `github.json`을 지우며, github.com은 기본 Git 호스트가 아니다. `git_hosts`에 github.com을 적어도 token은 보내지 않는다. pull request 주소는 `codeye up`과 `POST /projects/{id}/runs`가 거부한다(`PULL_REQUEST_UNSUPPORTED`). controller는 GitHub API를 부르지 않는다(pull request 확인·댓글 미리보기·게시 없음). `codeye up` 출력은 `github: off (offline mode) - ...`, `GET /setup`의 `github`는 `enabled: false`, `reason: "offline_mode"`다. 사내 Git 호스트용 credential은 지원하지 않는다(그 호스트는 인증 없이 읽을 수 있어야 한다).
+**오프라인 모드**(`"offline": true`, [운영](OPERATIONS.md#오프라인-모드))에서는 GitHub을 쓰지 않는다. 환경변수·gh에서 token을 찾지 않고(`gh auth token`을 실행하지 않는다) `up`이 전에 찾아 둔 관리자의 token을 지우며, github.com은 기본 Git 호스트가 아니다. `git_hosts`에 github.com을 적어도 token은 보내지 않는다. pull request 주소는 `codeye up`과 `POST /projects/{id}/runs`가 거부한다(`PULL_REQUEST_UNSUPPORTED`). controller는 GitHub API를 부르지 않는다(pull request 확인·댓글 미리보기·게시 없음). `codeye up` 출력은 `github: off (offline mode) - ...`, `GET /setup`의 `github`는 `enabled: false`, `reason: "offline_mode"`다. 사내 Git 호스트용 credential은 지원하지 않는다(그 호스트는 인증 없이 읽을 수 있어야 한다).
 
 ### 누구의 token인가
 

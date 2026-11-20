@@ -58,7 +58,7 @@ function report(runId: string) {
   return doc;
 }
 
-function personal(over: Record<string, (call: Call) => Response | undefined> = {}) {
+function service(over: Record<string, (call: Call) => Response | undefined> = {}) {
   return backend({
     'GET /api/v1/setup': () => json(200, SETUP),
     'GET /api/v1/projects': () => json(200, { items: [], next_cursor: null }),
@@ -74,7 +74,7 @@ function personal(over: Record<string, (call: Call) => Response | undefined> = {
 
 describe('the start screen', () => {
   it('analyzes a folder from one field and opens its run', async () => {
-    const app = renderApp(personal());
+    const app = renderApp(service());
     await flush();
     // The root form is folded away.
     expect((screen.getByLabelText(t.projects.relativePath).closest('details') as HTMLDetailsElement).open).toBe(false);
@@ -89,7 +89,7 @@ describe('the start screen', () => {
   });
 
   it('takes a GitHub /tree/ address with its branch and the repository defaults, and shows a refused host', async () => {
-    const app = renderApp(personal());
+    const app = renderApp(service());
     await flush();
     type(t.quick.field, 'https://gitlab.com/o/r');
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
@@ -107,7 +107,7 @@ describe('the start screen', () => {
 
   it('sends the dependency choice the user turned off', async () => {
     const current = { ...SETUP, analysis_defaults: { local: { ...ANALYSIS_ON, fetch_dependencies: true }, git: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true } } };
-    const app = renderApp(personal({ 'GET /api/v1/setup': () => json(200, current) }));
+    const app = renderApp(service({ 'GET /api/v1/setup': () => json(200, current) }));
     await flush();
     type(t.quick.field, '/home/me/app');
     const box = screen.getByLabelText(t.quick.fetchDependencies) as HTMLInputElement;
@@ -120,7 +120,7 @@ describe('the start screen', () => {
   });
 
   it('tells a user with no allowed folder to use a Git address or ask the administrator, without asking the server', async () => {
-    const app = renderApp(personal({ 'GET /api/v1/setup': () => json(200, MEMBER_SETUP) }));
+    const app = renderApp(service({ 'GET /api/v1/setup': () => json(200, MEMBER_SETUP) }));
     await flush();
     // What is not available is said under the field.
     const limits = document.getElementById('start-unavailable')!;
@@ -148,7 +148,7 @@ describe('the start screen', () => {
   });
 
   it('shows the folders the server allows with its refusal of a path', async () => {
-    renderApp(personal({ 'POST /api/v1/projects': () => apiError(422, 'FOLDER_NOT_READABLE', 'outside', false, { readable_folders: ['/srv/team', '/home/me'] }) }));
+    renderApp(service({ 'POST /api/v1/projects': () => apiError(422, 'FOLDER_NOT_READABLE', 'outside', false, { readable_folders: ['/srv/team', '/home/me'] }) }));
     await flush();
     type(t.quick.field, '/opt/elsewhere');
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
@@ -160,7 +160,7 @@ describe('the start screen', () => {
   });
 
   it('says there is no allowed folder when the server answers LOCAL_PATH_NOT_ALLOWED', async () => {
-    renderApp(personal({ 'POST /api/v1/projects': () => apiError(422, 'LOCAL_PATH_NOT_ALLOWED', 'no folder', false, { readable_folders: [] }) }));
+    renderApp(service({ 'POST /api/v1/projects': () => apiError(422, 'LOCAL_PATH_NOT_ALLOWED', 'no folder', false, { readable_folders: [] }) }));
     await flush();
     type(t.quick.field, '/home/me/app');
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
@@ -170,7 +170,7 @@ describe('the start screen', () => {
 
   it('opens the run still going for a folder registered before instead of requesting another', async () => {
     const going = { ...FOLDER, activity: { stages: [], last_event_at: null, checked_at: null, detail: 'recorded', run: { id: 'run-f', status: 'running', requested_at: '2026-11-19T01:00:00Z' }, other_active_runs: 0, last_report: null } };
-    const app = renderApp(personal({ 'POST /api/v1/projects': () => json(200, going) }));
+    const app = renderApp(service({ 'POST /api/v1/projects': () => json(200, going) }));
     await flush();
     type(t.quick.field, '/home/me/app');
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
@@ -180,7 +180,7 @@ describe('the start screen', () => {
   });
 
   it('names the folder that holds CODEYE data', async () => {
-    renderApp(personal({ 'POST /api/v1/projects': () => apiError(422, 'FOLDER_HOLDS_CODEYE_DATA', 'the folder /home/me contains CODEYE\'s data directory /home/me/.local/state/codeye (database password, model key); pick a subfolder that holds the project instead') }));
+    renderApp(service({ 'POST /api/v1/projects': () => apiError(422, 'FOLDER_HOLDS_CODEYE_DATA', 'the folder /home/me contains CODEYE\'s data directory /home/me/.local/state/codeye (database password, model key); pick a subfolder that holds the project instead') }));
     await flush();
     type(t.quick.field, '/home/me');
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
@@ -193,7 +193,7 @@ describe('the start screen', () => {
 
 describe('retry, report and hints', () => {
   it('retries a failed run and follows the new run', async () => {
-    const app = renderApp(personal({
+    const app = renderApp(service({
       'GET /api/v1/runs/run-f': () => json(200, runView({ id: 'run-f', project_id: 'p-folder', status: 'failed', version: 3 }, { stages: undefined, detail: 'recorded', stages_list: undefined })),
       'POST /api/v1/runs/run-f/retry': () => json(202, { id: 'run-n', status: 'queued', version: 1, url: '/api/v1/runs/run-n', retry: 'new_run' }),
       'GET /api/v1/runs/run-n': () => json(200, runView({ id: 'run-n', project_id: 'p-folder', status: 'queued' })),
@@ -211,7 +211,7 @@ describe('retry, report and hints', () => {
   });
 
   it('a recovery_required run runs again only after the user checks that no process is left', async () => {
-    const app = renderApp(personal({
+    const app = renderApp(service({
       'GET /api/v1/runs/run-f': () => json(200, runView({ id: 'run-f', project_id: 'p-folder', status: 'recovery_required', version: 4, raw_evidence_removed_at: '2026-11-19T01:00:00Z' })),
       'POST /api/v1/runs/run-f/recover': () => json(202, { id: 'run-n', status: 'queued', version: 1, url: '/api/v1/runs/run-n', retry: 'new_run', attempt_id: 'a1', epoch: 1 }),
       'GET /api/v1/runs/run-n': () => json(200, runView({ id: 'run-n', project_id: 'p-folder', status: 'queued' })),
@@ -236,7 +236,7 @@ describe('retry, report and hints', () => {
   });
 
   it('opens the published report by itself and lists what would make it better, turning the build scripts on with a retry', async () => {
-    const app = renderApp(personal({
+    const app = renderApp(service({
       'GET /api/v1/runs/run-r': () => json(200, runView({ id: 'run-r', project_id: 'p-repo', status: 'partial', version: 4, report: { revision: 1 } })),
       'GET /api/v1/runs/run-r/report': () => json(200, report('run-r')),
       'PUT /api/v1/projects/p-repo/analysis': call => json(200, { ...REPO, revision: 2, analysis: call.body }),
@@ -267,7 +267,7 @@ describe('retry, report and hints', () => {
     const doc = report('run-r');
     doc.gaps = [{ section: 'environment', code: 'dependencies_not_fetched', subject: 'go-vet', detail: 'dependency_unavailable' }];
     doc.overview.sections.find((s: { key: string }) => s.key === 'gaps').counts.gaps = 1;
-    const app = renderApp(personal({
+    const app = renderApp(service({
       'POST /api/v1/projects': () => json(201, repo),
       'GET /api/v1/runs/run-r': () => json(200, runView({ id: 'run-r', project_id: 'p-repo', status: 'partial', version: 4, report: { revision: 1 } })),
       'GET /api/v1/runs/run-r/report': () => json(200, doc),
@@ -291,7 +291,7 @@ describe('retry, report and hints', () => {
 
 describe('tools panel', () => {
   it('shows the tools found and how to add a missing one, with the model and Git', async () => {
-    renderApp(personal());
+    renderApp(service());
     await flush();
     fireEvent.click(screen.getByRole('button', { name: t.nav.doctor }));
     await flush();
@@ -308,7 +308,7 @@ describe('tools panel', () => {
 
   it('hides the tool hints from a user who is not an administrator', async () => {
     const member = { ...SETUP, is_admin: false, tools: { ...SETUP.tools, tools: [{ name: 'cppcheck', status: 'not_found', version_tested: false }] } };
-    renderApp(personal({ 'GET /api/v1/setup': () => json(200, member) }));
+    renderApp(service({ 'GET /api/v1/setup': () => json(200, member) }));
     await flush();
     fireEvent.click(screen.getByRole('button', { name: t.nav.doctor }));
     await flush();

@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/backup"
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/quota"
 )
 
 // Operations is the optional section of `codeye doctor --config` (docs/OPERATIONS.md
-// §6): per-area storage use against the personal quota, the newest backup's
+// §6): per-area storage use against the service quota, the newest backup's
 // age and whether the start/stop state matches the running processes. It is
 // absent without --config, so the base report is unchanged.
 type Operations struct {
@@ -62,15 +62,15 @@ const (
 	AreaUnmeasured  = "unmeasured"
 )
 
-// IssueOperationInProgress: a start/stop/backup/restore holds the personal
+// IssueOperationInProgress: a start/stop/backup/restore holds the service
 // lock, so the state may be changing (same word as codeye status).
 const IssueOperationInProgress = "operation_in_progress"
 
 // backupStaleAfter: an older newest backup is reported "stale".
 const backupStaleAfter = 7 * 24 * time.Hour
 
-func operations(cfg *personal.Config, now time.Time) *Operations {
-	layout := personal.Layout{Root: cfg.StateDir}
+func operations(cfg *instance.Config, now time.Time) *Operations {
+	layout := instance.Layout{Root: cfg.StateDir}
 	ops := &Operations{Storage: []AreaStatus{}}
 	l := quota.Layout{AgentStateDir: layout.AgentDir(), GoModCache: cfg.Agent.GoModCache, DependencyCache: cfg.Agent.DependencyCache(layout), LogDir: layout.LogDir(), ArtifactDir: layout.ArtifactDir()}
 	for _, area := range quota.Areas {
@@ -100,12 +100,12 @@ func operations(cfg *personal.Config, now time.Time) *Operations {
 	}
 	ops.Backup = backupStatus(cfg.BackupDir, now)
 	// Like codeye status: probe the agent lock (an agent without a record) only
-	// while no start/stop/backup/restore holds the personal lock.
+	// while no start/stop/backup/restore holds the service lock.
 	probe, busy := false, false
 	if unlock, err := layout.Lock(); err == nil {
 		probe = true
 		defer unlock()
-	} else if errors.Is(err, personal.ErrBusy) {
+	} else if errors.Is(err, instance.ErrBusy) {
 		busy = true
 	}
 	state := layout.Inspect(cfg.Listen, probe)
@@ -115,13 +115,13 @@ func operations(cfg *personal.Config, now time.Time) *Operations {
 	}
 	for _, p := range state.Processes {
 		switch p.Role {
-		case personal.RoleController:
+		case instance.RoleController:
 			ops.Processes.Controller = p.State
-		case personal.RoleAgent:
+		case instance.RoleAgent:
 			ops.Processes.Agent = p.State
 		}
 	}
-	if personal.Supported() != nil {
+	if instance.Supported() != nil {
 		ops.Processes.Status = "unsupported"
 	} else if len(ops.Processes.Issues) > 0 {
 		ops.Processes.Status = "inconsistent"

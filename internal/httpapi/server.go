@@ -177,7 +177,7 @@ type Config struct {
 const DefaultSessionTTL = 12 * time.Hour
 
 // ServiceSessionTTL is the session lifetime of the controller `codeye up`
-// starts (`codeye serve --personal`): people sign in once a week.
+// starts (`codeye serve --session-ttl 168h`): people sign in once a week.
 const ServiceSessionTTL = 7 * 24 * time.Hour
 
 // face is how one listener meets browsers: the Host names it accepts, the

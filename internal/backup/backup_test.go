@@ -282,12 +282,12 @@ func TestTC32BackupRestoreRoundTrip(t *testing.T) {
 	art := must(artifactstore.Open(srcArt))
 	late := node{t: t, s: src, art: art, id: w.node, root: w.root, workers: w.workers}
 	var lateSHA string
-	m, err := Create(ctx, src, Options{DatabaseURL: srcURL, PostgresBinDir: bin, ArtifactDir: srcArt, Output: out, PersonalUserID: w.owner,
+	m, err := Create(ctx, src, Options{DatabaseURL: srcURL, PostgresBinDir: bin, ArtifactDir: srcArt, Output: out, AdminUserID: w.owner,
 		AfterSnapshot: func() { _, lateSHA = late.upload(w.inflightOwner, "stderr", []byte("written after the snapshot\n")) }})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Rows["artifacts"] != 4 || m.Artifacts.Count != 4 || m.MigrationVersion < 9 || m.PersonalUserID != w.owner || m.Consistency != "exported_snapshot" {
+	if m.Rows["artifacts"] != 4 || m.Artifacts.Count != 4 || m.MigrationVersion < 9 || m.AdminUserID != w.owner || m.Consistency != "exported_snapshot" {
 		t.Fatalf("manifest %+v", m)
 	}
 	if got := scalar[int64](t, srcURL, "SELECT count(*) FROM artifacts"); got != 5 {

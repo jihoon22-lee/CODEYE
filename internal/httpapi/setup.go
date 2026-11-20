@@ -22,7 +22,7 @@ import (
 // Every method is safe on a nil Instance.
 type Instance struct {
 	// StateDir is the installation's state directory. The tool detection
-	// (tools.json) and the setup summary (run/personal-setup.json) are read
+	// (tools.json) and the setup summary (run/setup.json) are read
 	// from it on each request, because `codeye up` rewrites them while the
 	// controller keeps running; no project may contain it. The users' GitHub
 	// tokens (secrets/github-users/<user>.json) are read from it for each
@@ -34,9 +34,8 @@ type Instance struct {
 }
 
 // InstanceSetupFile is the setup summary `codeye up`/`start` writes under
-// <state>/run for the controller (the file name predates the shared
-// service and stays for existing installations).
-const InstanceSetupFile = "personal-setup.json"
+// <state>/run for the controller.
+const InstanceSetupFile = "setup.json"
 
 // InstanceSetup is what the installation tells the web app about itself. It
 // holds no credential and no key.

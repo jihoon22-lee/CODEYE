@@ -11,9 +11,9 @@ import (
 // CredentialSchema is the schema_version of a credential file.
 const CredentialSchema = "0.1"
 
-// Credential is personal mode's stored token (<state>/secrets/github.json,
-// 0600) and what `codeye up` learned about it. The controller reads it for
-// each API call and the agent's worker for each Git fetch of Host.
+// Credential is one user's stored token (UserTokens, 0600) and what is
+// known about it. The controller reads it for the API calls made for that
+// user and the agent's worker for that user's Git fetches of Host.
 type Credential struct {
 	SchemaVersion string `json:"schema_version"`
 	Host          string `json:"host"`

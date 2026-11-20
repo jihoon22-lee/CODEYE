@@ -37,7 +37,7 @@ Usage:
   codeye source-root grant --root ROOT_ID --user USER_ID
   codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
-  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--personal] [--state-dir DIR] [--local-listen 127.0.0.1:PORT]
+  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--session-ttl 12h (at most 168h)] [--state-dir DIR] [--local-listen 127.0.0.1:PORT]
                [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT] | --plain-http [--public-origin http://HOST:PORT]]   (one of them for a non-loopback --listen)
 ` + nodeAdminUsage + operationsUsage + `  codeye up [PATH|URL] [--config PATH] [--postgres-bin-dir DIR] [--offline] [--no-open] [--no-probe]   (Linux: starts the web service - PostgreSQL + controller + local agent; analyzes PATH or a repository URL)
   codeye up --listen IP:PORT (--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT] | --plain-http [--public-origin http://HOST:PORT])   (serve other machines; saved in the configuration)
@@ -64,7 +64,7 @@ Passwords are read from --password-file (mode 0600) or standard input (echo off 
 "serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.
 Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
 Enrollment tokens are written to a 0600 file; the token is never printed.
-up/start/stop/status: the config path defaults to $XDG_CONFIG_HOME/codeye/personal.json (codeye up creates it; the file name is kept for existing installations); database.mode managed (default) runs PostgreSQL in the state directory, external uses CODEYE_DATABASE_URL.
+up/start/stop/status: the config path defaults to $XDG_CONFIG_HOME/codeye/config.json (codeye up creates it); database.mode managed (default) runs PostgreSQL in the state directory, external uses CODEYE_DATABASE_URL.
 `
 
 const launchTTL = 10 * time.Minute
@@ -347,9 +347,9 @@ type serveConfig struct {
 	// local is the optional loopback address for the agent and commands on
 	// this machine (--local-listen).
 	local netip.AddrPort
-	// personal: the controller of `codeye up`/`codeye start`: browser
-	// sessions last httpapi.ServiceSessionTTL.
-	personal bool
+	// sessionTTL is the browser session lifetime (--session-ttl; 0 is
+	// httpapi.DefaultSessionTTL). codeye start gives httpapi.ServiceSessionTTL.
+	sessionTTL time.Duration
 	// stateDir is the installation's state directory (httpapi.Instance):
 	// the setup summary, detected tools and the users' GitHub tokens.
 	stateDir string
@@ -370,7 +370,7 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fs.StringVar(&c.tlsCert, "tls-cert", "", "")
 		fs.StringVar(&c.tlsKey, "tls-key", "", "")
 		fs.StringVar(&c.publicOrigin, "public-origin", "", "")
-		fs.BoolVar(&c.personal, "personal", false, "")
+		fs.DurationVar(&c.sessionTTL, "session-ttl", 0, "")
 		fs.StringVar(&c.stateDir, "state-dir", "", "")
 	}) {
 		return 2
@@ -381,6 +381,10 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return 2
 	}
 	c.addr = addr
+	if c.sessionTTL < 0 || c.sessionTTL > httpapi.ServiceSessionTTL {
+		fmt.Fprintln(stderr, "--session-ttl must be between 0 (the default, 12h) and 168h")
+		return 2
+	}
 	if local != "" {
 		la, err := httpapi.ParseListen(local)
 		if err != nil || !la.Addr().IsLoopback() {
@@ -456,10 +460,8 @@ func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
 	cfg := httpapi.Config{Listen: c.addr, WebDir: c.webDir, Logger: logger, ArtifactDir: c.artifactDir, ReconcileInterval: c.reconcile,
 		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigin: c.publicOrigin, PlainHTTP: c.plainHTTP, LocalListen: c.local}
-	if c.personal {
-		cfg.SessionTTL = httpapi.ServiceSessionTTL
-	}
-	if c.personal || c.stateDir != "" {
+	cfg.SessionTTL = c.sessionTTL
+	if c.stateDir != "" {
 		cfg.Instance = &httpapi.Instance{StateDir: c.stateDir}
 	}
 	srv, err := httpapi.New(cfg, store)
