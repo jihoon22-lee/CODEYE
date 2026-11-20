@@ -1,12 +1,13 @@
-import { useId, useState, type ReactNode } from 'react';
+import { createContext, useContext, useId, useState, type ReactNode } from 'react';
 import type { Api } from './api';
-import type { AnalysisReport, Finding } from './analysisReport';
+import type { AnalysisReport, Evidence, Finding } from './analysisReport';
 import { formatInstant, runStatusLabel } from './format';
 import type { Citation, Excerpt } from './reportSections';
-import { reportURL } from './analysisReport';
+import { reportURL, sourceEvidenceURL } from './analysisReport';
 import { FindingHistory, HIDDEN, findingBadge, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
+import { secondaryReviewFinding, type Decision } from './reportGroups';
 
 export function label(labels: Record<string, string>, key: string) {
   return Object.hasOwn(labels, key) ? labels[key] : key;
@@ -20,11 +21,11 @@ export function explainReason(value: string) {
   if (text == null) return value;
   return [text, ...detail].join(' · ');
 }
-export function ReportIdentity({ report }: { report: AnalysisReport }) {
+export function ReportIdentity({ report, showStatus = true }: { report: AnalysisReport; showStatus?: boolean }) {
   const p = report.project;
   const facts = [
     { label: t.sourcePath, value: p?.source, wide: true },
-    { label: t.status, value: runStatusLabel(report.status) },
+    { label: t.status, value: showStatus ? runStatusLabel(report.status) : null },
     { label: t.start, value: p?.start && formatInstant(p.start) },
     { label: t.finish, value: p?.finish && formatInstant(p.finish) },
     { label: t.published, value: !p?.finish && report.published ? formatInstant(report.published) : null },
@@ -49,11 +50,42 @@ function CodeWindow({ excerpt, location }: { excerpt: Excerpt; location: string 
   );
 }
 
+export const ReportSourceContext = createContext<string | undefined>(undefined);
+
+function SourceAnchor({ href, location }: { href: string; location: string }) {
+  return <a className="pinned-source" href={href} target="_blank" rel="noopener noreferrer" aria-label={t.pinnedRangeAt(location)}>{location}</a>;
+}
+
+export function PinnedSourceLink({ path, start, end, fallback }: { path: string; start: number; end: number; fallback?: string }) {
+  const base = useContext(ReportSourceContext);
+  const href = sourceEvidenceURL(base, path, start, end);
+  return href ? <SourceAnchor href={href} location={sourceLocation(path, start, end)} /> : fallback ? <code>{fallback}</code> : null;
+}
+
+function FindingSourceLink({ evidence, fallback }: { evidence: Evidence; fallback: string }) {
+  return evidence.path && evidence.lines && ['code', 'document', 'test'].includes(evidence.kind)
+    ? <PinnedSourceLink path={evidence.path} {...evidence.lines} fallback={fallback} />
+    : <code>{fallback}</code>;
+}
+
 export function Citations({refs,catalog}: {refs: string[]; catalog: Citation[]}) {
+  const base = useContext(ReportSourceContext);
   const evidence = refs.map(id => catalog.find(x => x.id === id)).filter(x => x !== undefined);
-  return <>{evidence.map(e => e.excerpt
-    ? <details key={e.id}><summary>{e.path}:{e.line}</summary><CodeWindow excerpt={e.excerpt} location={`${e.path}:${e.line}`} /></details>
-    : <div key={e.id}><code>{e.path}:{e.line}</code></div>)}</>;
+  return <>{evidence.map(e => {
+    const location = sourceLocation(e.path, e.line, e.end);
+    const href = sourceEvidenceURL(base, e.path, e.line, e.end);
+    return <div className="source-citation" key={e.id}>
+      {href && <SourceAnchor href={href} location={location} />}
+      {e.excerpt ? <details>
+        <summary aria-label={href ? t.excerptAt(location) : undefined}>{href ? t.showExcerpt : location}</summary>
+        <CodeWindow excerpt={e.excerpt} location={sourceLocation(e.path, e.excerpt.start, e.excerpt.end)} />
+      </details> : !href && <code>{location}</code>}
+    </div>;
+  })}</>;
+}
+
+export function sourceLocation(path: string, start: number, end: number) {
+  return `${path}:${start === end ? start : `${start}–${end}`}`;
 }
 
 export function TextList({ values }: { values: string[] }) {
@@ -68,31 +100,50 @@ export function TextList({ values }: { values: string[] }) {
 // A finding a reader can scan: the title, severity and validation as words, and where; once
 // opened, the impact and the fix first, then the conditions and how to check, with the claims
 // and evidence behind their own disclosure.
-export function FindingCard({ f, badge, history, priority = false }: { f: Finding; badge?: string | null; history?: ReactNode; priority?: boolean }) {
+export function FindingCard({ f, badge, history, preview }: { f: Finding; badge?: string | null; history?: ReactNode; preview?: Decision }) {
   const [open, setOpen] = useState(false);
+  const base = useContext(ReportSourceContext);
   const known = (labels: Record<string, string>, key: string) => (Object.hasOwn(labels, key) ? key : 'unknown');
+  const location = preview ? sourceLocation(preview.source.path, preview.source.lines.start, preview.source.lines.end) : f.locations[0];
+  const href = preview && sourceEvidenceURL(base, preview.source.path, preview.source.lines.start, preview.source.lines.end);
+  const status = preview && f.validation === 'supported' ? t.reading.supported : label(t.validation, f.validation);
+  const source = location && href ? <SourceAnchor href={href} location={location} /> : null;
+  const details = (
+    <FindingDetails f={f} history={history} preview={Boolean(preview)} linkedEvidence={href ? preview?.source.id : undefined} />
+  );
   return (
-    <details className={'finding-card sev-' + known(t.severity, f.severity)} onToggle={priority ? (e) => setOpen(e.currentTarget.open) : undefined}>
+    <>
+    <details data-finding-id={f.id} className={'finding-card sev-' + known(t.severity, f.severity)} onToggle={preview ? (e) => setOpen(e.currentTarget.open) : undefined}>
       <summary>
         <strong>{f.title}</strong>
         <span>
           <span className={'pill sev sev-' + known(t.severity, f.severity)}>{t.severityBadge(label(t.severity, f.severity))}</span>
-          <span className={'pill val val-' + known(t.validation, f.validation)}>{label(t.validation, f.validation)}</span>
+          <span className={'pill val val-' + known(t.validation, f.validation)}>{status}</span>
           {badge && <span className="pill tone-plain">{badge}</span>}
-          {f.locations.length > 0 && (
+          {!preview && secondaryReviewFinding(f) && <span className="pill tone-plain">{t.reading.secondary}</span>}
+          {location && !href && (
             <span className="where">
-              {f.locations[0]}
-              {f.locations.length > 1 && t.morePlaces(f.locations.length - 1)}
+              {location}
+              {!preview && f.locations.length > 1 && t.morePlaces(f.locations.length - 1)}
             </span>
           )}
         </span>
+        {preview && <span className="finding-preview">
+          {preview.condition && <span><b>{t.reading.basis}</b> {preview.condition}</span>}
+          {preview.next
+            ? <span><b>{t.reading.nextCheck}</b> {preview.next}</span>
+            : <span><b>{t.reading.nextAction}</b> {f.recommendation}</span>}
+        </span>}
       </summary>
-      {(!priority || open) && <FindingDetails f={f} history={history} priority={priority} />}
+      {open && source}
+      {(!preview || open) && details}
     </details>
+    {!open && source}
+    </>
   );
 }
 
-function FindingDetails({ f, history, priority }: { f: Finding; history?: ReactNode; priority: boolean }) {
+function FindingDetails({ f, history, preview, linkedEvidence }: { f: Finding; history?: ReactNode; preview: boolean; linkedEvidence?: string }) {
   const ref = useId();
   return (
     <div className="finding-body">
@@ -105,10 +156,10 @@ function FindingDetails({ f, history, priority }: { f: Finding; history?: ReactN
       {f.evidence.map(e => {
         if (!e.excerpt) return null;
         const { start, end } = e.excerpt;
-        const location = `${e.path}:${start === end ? start : `${start}–${end}`}`;
+        const location = sourceLocation(e.path ?? '', start, end);
         return (
           <figure key={e.id} className="finding-excerpt">
-            <figcaption><code>{location}</code></figcaption>
+            <figcaption>{e.id === linkedEvidence ? <code>{location}</code> : <FindingSourceLink evidence={e} fallback={location} />}</figcaption>
             <CodeWindow excerpt={e.excerpt} location={location} />
             <p className="small">{e.description}</p>
           </figure>
@@ -117,7 +168,7 @@ function FindingDetails({ f, history, priority }: { f: Finding; history?: ReactN
       <dl>
         <dt>{t.conditions}</dt>
         <dd>
-          <TextList values={f.conditions} />
+          <TextList values={f.conditions.map(c => c.statement)} />
         </dd>
         <dt>{t.severityReason}</dt>
         <dd>{f.severityReason}</dd>
@@ -132,7 +183,7 @@ function FindingDetails({ f, history, priority }: { f: Finding; history?: ReactN
           <TextList values={f.limitations} />
         </>
       )}
-      <details className="finding-evidence" open={priority && !f.evidence.some(e => e.excerpt)}>
+      <details className="finding-evidence" open={preview && !f.evidence.some(e => e.excerpt)}>
         <summary>{t.evidenceToggle(f.evidence.length)}</summary>
         {f.claims.map((claim, i) => (
           <p key={i}>
@@ -149,7 +200,11 @@ function FindingDetails({ f, history, priority }: { f: Finding; history?: ReactN
             <li key={e.id} id={`${ref}-${e.id}`}>
               {f.counter.includes(e.id) && <strong>{t.counter} · </strong>}
               {e.description}
-              {e.path && <div><code>{e.path}:{e.range}</code></div>}
+              {e.path && e.lines && <div>
+                {e.excerpt || e.id === linkedEvidence
+                  ? <code>{e.path}:{e.lines.start}–{e.lines.end}</code>
+                  : <FindingSourceLink evidence={e} fallback={`${e.path}:${e.lines.start}–${e.lines.end}`} />}
+              </div>}
               {e.artifact && <div>{t.artifact} <code>{e.artifact}</code></div>}
             </li>
           ))}
@@ -257,7 +312,7 @@ export function Verdict({ report }: { report: AnalysisReport }) {
   );
 }
 
-// ReportCounts are the summary numbers both layouts open with.
+// ReportCounts presents the counts stored at publication.
 export function ReportCounts({ report }: { report: AnalysisReport }) {
   return (
     <dl className="report-counts">

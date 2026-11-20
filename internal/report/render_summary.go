@@ -14,12 +14,9 @@ import (
 )
 
 // Detail levels of the Markdown and HTML exports
-// (docs/REPORT.md#내보내기-상세도). The summary is the default: the sections
-// in order of value (overview, model review findings, grouped static
-// analysis, metrics, secrets, environment, documents, gaps) with long lists
-// grouped and cut to their first entries. The full level is the complete
-// sectioned layout, every row of every list. Both read the same stored
-// report; the JSON export always holds everything.
+// (docs/REPORT.md#내보내기-상세도). The summary opens with selected evidence,
+// then groups long lists in each analysis section. The full level shows every
+// row. Both read the same stored report as the JSON export.
 const (
 	DetailSummary = "summary"
 	DetailFull    = "full"
@@ -57,6 +54,10 @@ func RenderHTMLAt(r Report, digest string, l Locale, detail string) ([]byte, err
 	}
 	return buf.Bytes(), nil
 }
+
+func (v secView) ReportStatus() string  { return v.L.Label("status." + v.R.Status) }
+func (v secView) ReportVerdict() string { return v.L.Label("verdict." + v.R.QualityVerdict) }
+func (v secView) HasStatusBanner() bool { return v.R.Status != StatusCompleted }
 
 // summaryShown is how many entries a grouped list shows before "외 N".
 const summaryShown = 5
@@ -194,11 +195,14 @@ func (v secView) staticGroups(lang StaticLanguage, obs map[string]Observation, s
 			}
 			loc := l0(v.L)
 			if o.Location != nil {
-				loc = o.Location.Path + ":" + strconv.Itoa(o.Location.StartLine)
+				loc = sourceRange(o.Location.Path, o.Location.StartLine, o.Location.EndLine)
 			}
 			if o.Location != nil && secondaryPath(o.Location.Path) {
 				g.Secondary = append(g.Secondary, loc)
 			} else {
+				if o.Location != nil && len(g.Primary) == 0 {
+					g.Message = cutLine(v.Message[o.ID], summaryMessageRunes)
+				}
 				g.Primary = append(g.Primary, loc)
 			}
 		}
@@ -243,13 +247,28 @@ func newSummaryView(r Report, digest string, l Locale) secView {
 	for _, f := range r.Findings {
 		findings[f.ID] = f
 	}
-	order := []string{SectionCodeReview, SectionStaticAnalysis, SectionMetrics, SectionSecrets, SectionEnvironment, SectionDocuments, SectionGaps}
+	order := SectionKeys
 
-	// Overview: the lead, the sentences that say what was found and what
-	// was covered, then the section table in display order.
+	// Separate the opening review from the structured coverage and totals.
 	ov := byID["overview"]
-	parts := []secPart{ov.Parts[0]}
-	parts[0].Paras = append(parts[0].Paras, summarySentences(r, l, obs)...)
+	parts := v.projectOpening()
+	needsFallback := len(parts) == 0
+	if limits := v.openingLimits(); len(limits.Paras)+len(limits.List) > 0 {
+		parts = append(parts, limits)
+	}
+	if needsFallback {
+		if tool := v.primaryDiagnostic(); len(tool.List) > 0 {
+			parts = append(parts, tool)
+		}
+	}
+	if len(parts) == 0 {
+		parts = append(parts, secPart{Paras: []string{l.Label("opening.no_highlights")}})
+	}
+	if r.PullRequest != nil {
+		parts = append([]secPart{{Paras: pullRequestParas(r, l)[:1]}}, parts...)
+	}
+	detail := ov.Parts[0]
+	detail.Paras = append(pullRequestParas(r, l), summarySentences(r, l, obs)...)
 	table := *ov.Parts[1].Table
 	rows := map[string][]secCell{}
 	for i, s := range r.Overview.Sections {
@@ -261,8 +280,8 @@ func newSummaryView(r Report, digest string, l Locale) secView {
 			table.Rows = append(table.Rows, row)
 		}
 	}
-	parts = append(parts, secPart{Heading: ov.Parts[1].Heading, Table: &table})
-	parts = append(parts, ov.Parts[2:]...)
+	v.OverviewDetail = []secPart{detail, {Heading: ov.Parts[1].Heading, Table: &table}}
+	v.OverviewDetail = append(v.OverviewDetail, ov.Parts[2:]...)
 	ov.Parts = parts
 	v.Sections = append(v.Sections, ov)
 
@@ -421,19 +440,19 @@ func summarySentences(r Report, l Locale, obs map[string]Observation) []string {
 func (v secView) summaryCodeReview(b secBlock, findings map[string]Finding) secBlock {
 	l := v.L
 	c := v.R.CodeReview
-	var parts []secPart
-	for _, p := range b.Parts {
+	parts := []secPart{b.Parts[0]}
+	parts = append(parts, v.findingSummaryParts(c.FindingIDs, findings)...)
+	for _, p := range b.Parts[1:] {
 		switch {
 		case p.Heading == l.Label("ledger.heading"), p.Heading == l.Label("ledger.modules"), p.Heading == l.Label("ledger.slices"):
 			continue
 		case p.Heading == l.Label("review.findings"):
-			if c.Ledger != nil {
-				parts = append(parts, v.summaryLedger(*c.Ledger)...)
-			}
-			parts = append(parts, findingSummaryParts(l, c.FindingIDs, findings)...)
 			continue
 		}
 		parts = append(parts, p)
+	}
+	if c.Ledger != nil {
+		parts = append(parts, v.summaryLedger(*c.Ledger)...)
 	}
 	b.Parts = parts
 	return b
@@ -441,7 +460,8 @@ func (v secView) summaryCodeReview(b secBlock, findings map[string]Finding) secB
 
 // findingSummaryParts are the cards of the supported and reproduced findings
 // and one table row for every other finding.
-func findingSummaryParts(l Locale, ids []string, findings map[string]Finding) []secPart {
+func (v secView) findingSummaryParts(ids []string, findings map[string]Finding) []secPart {
+	l := v.L
 	cards := secPart{Heading: l.Label("summary.findings_supported"), Empty: l.Label("summary.findings_supported_none")}
 	head := []string{l.Label("col.finding"), l.Label("col.title"), l.Label("col.validation"), l.Label("col.severity"), l.Label("col.location")}
 	secondarySupported := &secTable{Head: head, RowIDs: []string{}}
@@ -459,7 +479,7 @@ func findingSummaryParts(l Locale, ids []string, findings map[string]Finding) []
 	for _, f := range ordered {
 		var locs []string
 		for _, x := range f.Locations {
-			locs = append(locs, x.Path+":"+strconv.Itoa(x.StartLine)+"-"+strconv.Itoa(x.EndLine))
+			locs = append(locs, sourceRange(x.Path, x.StartLine, x.EndLine))
 		}
 		supported := f.Validation == ValidationSupported || f.Validation == ValidationReproduced
 		if supported && findingSecondary(f) {
@@ -468,19 +488,7 @@ func findingSummaryParts(l Locale, ids []string, findings map[string]Finding) []
 			continue
 		}
 		if supported {
-			card := secCard{ID: f.ID, Title: f.Title, Lines: []secItem{
-				{Text: tf(l, "summary.card_meta", f.Category, f.Severity, f.Validation, f.Disposition), Codes: []string{f.ID}},
-				{Text: l.Label("summary.card_location"), Codes: locs},
-				{Text: l.Label("summary.card_impact") + " " + f.Impact},
-				{Text: l.Label("summary.card_recommendation") + " " + f.Recommendation.Summary},
-			}}
-			for _, e := range f.Evidence {
-				if e.Location != nil && e.Excerpt != nil {
-					card.Sources = append(card.Sources, sourceCitation{Location: e.Location.Path + ":" + strconv.Itoa(e.Excerpt.StartLine), Text: e.Excerpt.Text})
-					break
-				}
-			}
-			cards.Cards = append(cards.Cards, card)
+			cards.Cards = append(cards.Cards, v.findingCard(f, true))
 			continue
 		}
 		other.RowIDs = append(other.RowIDs, f.ID)
@@ -497,6 +505,64 @@ func findingSummaryParts(l Locale, ids []string, findings map[string]Finding) []
 		out = append(out, secPart{Heading: l.Label("summary.findings_other"), Table: other})
 	}
 	return out
+}
+
+func (v secView) findingCard(f Finding, detail bool) secCard {
+	l := v.L
+	c := secCard{Title: f.Title, State: lab(l, "validation", f.Validation) + " · " + lab(l, "severity", f.Severity)}
+	if detail {
+		c.ID = f.ID
+		c.Lines = append(c.Lines, secItem{Label: l.Label("opening.disposition"), Text: lab(l, "disposition", f.Disposition)})
+	}
+	add := func(label, text string, refs []string) {
+		item := secItem{Label: l.Label(label), Text: openingText(text, "")}
+		for _, e := range f.Evidence {
+			if e.Location == nil || !slices.Contains(refs, e.ID) {
+				continue
+			}
+			excerpt := e.Excerpt
+			if !detail {
+				excerpt = nil
+			}
+			x := v.citeSource(e.Location.Path, e.Location.StartLine, e.Location.EndLine, excerpt)
+			item.addCitations([]sourceCitation{x}, detail)
+		}
+		if item.Text != "" || len(item.Codes) > 0 || len(item.Sources) > 0 {
+			c.Lines = append(c.Lines, item)
+		}
+	}
+	for _, x := range f.Conditions {
+		add("opening.condition."+x.Status, x.Statement, x.EvidenceIDs)
+		if !detail {
+			break
+		}
+	}
+	var impactRefs []string
+	printedClaim := false
+	for _, x := range f.Claims {
+		if x.Assertion == f.Impact {
+			impactRefs = append(impactRefs, x.EvidenceIDs...)
+			continue
+		}
+		if (detail || !printedClaim) && (x.Assertion != f.Title || len(f.Conditions) == 0) {
+			add("opening.claim."+x.Kind, x.Assertion, x.EvidenceIDs)
+			printedClaim = true
+		}
+	}
+	add("opening.impact", f.Impact, impactRefs)
+	if detail || f.Validation == ValidationSupported || f.Validation == ValidationReproduced {
+		add("opening.recommendation", f.Recommendation.Summary, nil)
+	}
+	for _, x := range f.Verification {
+		if !nonempty(x) {
+			continue
+		}
+		add("opening.verification", x, nil)
+		if !detail {
+			break
+		}
+	}
+	return c
 }
 
 // findingSecondary reports a finding whose every location is below a
@@ -1121,12 +1187,18 @@ func (v *secView) dropDanglingLinks() {
 		visit(s.Parts)
 	}
 	visit(v.Appendix)
+	visit(v.OverviewDetail)
 	fix := func(parts []secPart) {
 		for i := range parts {
 			p := &parts[i]
 			for j := range p.List {
 				if p.List[j].Link != "" && !ids[p.List[j].Link] {
 					p.List[j].Link = ""
+				}
+			}
+			for j := range p.Cards {
+				if p.Cards[j].Link != "" && !ids[p.Cards[j].Link] {
+					p.Cards[j].Link = ""
 				}
 			}
 			if t := p.Table; t != nil {
@@ -1144,6 +1216,7 @@ func (v *secView) dropDanglingLinks() {
 		fix(v.Sections[i].Parts)
 	}
 	fix(v.Appendix)
+	fix(v.OverviewDetail)
 }
 
 // --- Markdown ----------------------------------------------------------------
@@ -1157,7 +1230,24 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 		}
 		b.WriteByte('\n')
 	}
-	mdHeader(p, r, v.view, l)
+	if r.Project != nil {
+		p("# ", mdText(r.Project.Name))
+		p()
+		p(mdText(l.Label("title")))
+	} else {
+		p("# ", mdText(l.Label("title")))
+	}
+	p()
+	p("**", mdText(v.ReportStatus()), "** · ", mdText(v.ReportVerdict()))
+	p()
+	if v.HasStatusBanner() {
+		p("> ", mdText(v.Banner))
+		p()
+	}
+	if !r.Export.IncludeCode {
+		p(mdText(l.Label("opening.code_free")))
+		p()
+	}
 
 	for _, s := range v.Sections {
 		p("## ", mdText(s.Title))
@@ -1165,12 +1255,24 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 		for _, part := range s.Parts {
 			mdPart(p, part, l)
 		}
+		if s.ID == "overview" {
+			p("### ", mdText(l.Label("opening.coverage_details")))
+			p()
+			for _, part := range v.OverviewDetail {
+				mdPart(p, part, l)
+			}
+		}
 	}
 	p("## ", mdText(l.Label("section.appendix")))
 	p()
 	for _, part := range v.Appendix {
 		mdPart(p, part, l)
 	}
+	identity := &secTable{Head: []string{l.Label("col.item"), l.Label("opening.value")}}
+	for _, field := range v.Identity() {
+		identity.Rows = append(identity.Rows, []secCell{txt(field.Label), txt(field.Value)})
+	}
+	mdPart(p, secPart{Heading: l.Label("opening.source_details"), Table: identity}, l)
 	mdTechnical(p, r, v.view, l)
 	p("digest sha256: ", mdCode(digest))
 	return []byte(b.String())
@@ -1181,17 +1283,13 @@ func mdCards(p func(...string), cards []secCard) {
 	for _, c := range cards {
 		p("#### ", mdText(c.Title))
 		p()
+		if c.State != "" {
+			p(mdText(c.State))
+			p()
+		}
 		for _, it := range c.Lines {
-			line := "-"
-			if it.Text != "" {
-				line += " " + mdText(it.Text)
-			}
-			for _, x := range it.Codes {
-				line += " " + mdCode(x)
-			}
-			p(line)
+			mdItem(p, it)
 		}
 		p()
-		mdCitations(p, c.Sources)
 	}
 }

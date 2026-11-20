@@ -137,7 +137,7 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		p()
 	}
 	for _, f := range r.Findings {
-		mdFinding(p, f, "### ")
+		mdFinding(p, f, "### ", false)
 	}
 	p("## ", mdText(l.Label("observations")))
 	p()
@@ -330,7 +330,7 @@ func mdTasks(p func(...string), r Report, l Locale, h string) {
 }
 
 // mdFinding renders one finding under heading level h.
-func mdFinding(p func(...string), f Finding, h string) {
+func mdFinding(p func(...string), f Finding, h string, sectioned bool) {
 	p(h, mdText(f.Title))
 	p()
 	p("- id: ", mdCode(f.ID))
@@ -338,7 +338,7 @@ func mdFinding(p func(...string), f Finding, h string) {
 	p("- validation / disposition: ", mdCode(f.Validation), " / ", mdCode(f.Disposition))
 	for _, e := range f.Evidence {
 		if e.Excerpt != nil && e.Location != nil {
-			mdCitations(p, []sourceCitation{{Location: e.Location.Path + ":" + strconv.Itoa(e.Excerpt.StartLine), Text: e.Excerpt.Text}})
+			mdCitations(p, []sourceCitation{citeSource(e.Location.Path, e.Location.StartLine, e.Location.EndLine, e.Excerpt)})
 		}
 	}
 	for _, loc := range f.Locations {
@@ -357,7 +357,12 @@ func mdFinding(p func(...string), f Finding, h string) {
 	for _, e := range f.Evidence {
 		ref := e.ArtifactID
 		if e.Location != nil {
-			ref = e.Location.Path + ":" + strconv.Itoa(e.Location.StartLine) + " sha256 " + short(e.BlobSHA256)
+			loc := e.Location
+			ref = loc.Path + ":" + strconv.Itoa(loc.StartLine)
+			if sectioned {
+				ref = sourceRange(loc.Path, loc.StartLine, loc.EndLine)
+			}
+			ref += " sha256 " + short(e.BlobSHA256)
 		} else if e.JSONPointer != nil {
 			ref += " " + *e.JSONPointer
 		}

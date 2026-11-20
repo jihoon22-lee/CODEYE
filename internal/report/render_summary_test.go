@@ -29,7 +29,7 @@ func checkInPageLinks(t *testing.T, html []byte) {
 }
 
 // The summary layout (docs/REPORT.md#내보내기-상세도) of the stored
-// examples: sections in order of value, no format errors, every in-page
+// examples: sections in reading order, no format errors, every in-page
 // link has its target, and the full level is the sectioned layout as it was.
 func TestSummaryLayout(t *testing.T) {
 	for _, path := range []string{"../../examples/report.json", "../../examples/report-slices.json"} {
@@ -47,7 +47,7 @@ func TestSummaryLayout(t *testing.T) {
 			checkInPageLinks(t, html)
 			checkTableWidths(t, md)
 			var at []int
-			for _, k := range []string{"overview", SectionCodeReview, SectionStaticAnalysis, SectionMetrics, SectionSecrets, SectionEnvironment, SectionDocuments, SectionGaps} {
+			for _, k := range append([]string{"overview"}, SectionKeys...) {
 				at = append(at, strings.Index(md, "## "+mdText(Korean.Label("section."+k))+"\n"))
 			}
 			for i := range at {

@@ -6,7 +6,7 @@ export type Evidence = {
   kind: string;
   description: string;
   path?: string;
-  range?: string;
+  lines?: { start: number; end: number };
   artifact?: string;
   excerpt?: Excerpt | null;
 };
@@ -23,7 +23,7 @@ export type Finding = {
   impact: string;
   claims: { assertion: string; kind: string; evidence: string[] }[];
   severityReason: string;
-  conditions: string[];
+  conditions: { statement: string; evidence: string[] }[];
   recommendation: string;
   verification: string[];
   limitations: string[];
@@ -37,9 +37,12 @@ export type Task = { key: string; status: string; reason: string | null };
 export type Observation = {
   id: string;
   rule: string;
+  tool: string | null;
   message: string | null;
   path: string | null;
+  location: { path: string; start: number; end: number } | null;
   state: string;
+  evidenceState: string | null;
   // The tool's own severity, and whether an in-source suppression hid it.
   severity: string | null;
   suppressed: boolean;
@@ -49,6 +52,7 @@ export type Observation = {
 export type AnalysisReport = {
   project?: {name: string; source: string | null; start: string | null; finish: string | null};
   commit?: string | null;
+  sourceBase?: string;
   published?: string | null;
   runID: string;
   revision: number;
@@ -110,6 +114,36 @@ function count(v: unknown): number {
 function array<T>(v: unknown, fn: (value: unknown) => T): T[] {
   return Array.isArray(v) ? v.map(fn) : invalid();
 }
+
+// Accept the same HTTPS owner/repository form as the registered Git source.
+// Parsing the original string prevents URL normalization from accepting a path
+// that contains escaped delimiters or dot segments.
+function pinnedSourceBase(source: string | null | undefined, commit: string | null, head: string | null) {
+  if (!source || source.length > 2048 || !commit || ![40, 64].includes(commit.length) || /[^a-f0-9]/.test(commit)) return;
+  const repo = /^https:\/\/([a-z0-9.-]+(?::[0-9]{1,5})?)\/([a-z0-9][a-z0-9._-]{0,99})\/([a-z0-9._-]{1,100})\/?$/i.exec(source);
+  if (!repo || repo[0] !== source || repo[1].length > 253 || source.includes('..')) return;
+  const [, authority, owner, repository] = repo;
+  const name = repository.endsWith('.git') ? repository.slice(0, -4) : repository;
+  if (!name || name === '.' || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*(?::[0-9]{1,5})?$/i.test(authority)) return;
+  try {
+    const url = new URL(source);
+    if (/^[0-9.]+$/.test(url.hostname) || (head && head.toLowerCase() !== `${owner}/${name}`.toLowerCase())) return;
+    return `${url.origin}/${owner}/${name}/blob/${commit}`;
+  } catch {
+    return;
+  }
+}
+
+export function sourceEvidenceURL(base: string | undefined, path: string, start: number, end: number) {
+  if (!base || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start || /[\\:\x00-\x1f\x7f]/.test(path)) return;
+  const segments = path.split('/');
+  if (segments.some(part => !part || part === '.' || part === '..') || new TextEncoder().encode(path).length > 4096) return;
+  try {
+    return `${base}/${segments.map(encodeURIComponent).join('/')}#L${start}-L${end}`;
+  } catch {
+    return;
+  }
+}
 function evidence(v: unknown): Evidence {
   const e = object(v);
   const loc = e.location == null ? null : object(e.location);
@@ -118,9 +152,7 @@ function evidence(v: unknown): Evidence {
     kind: str(e.kind),
     description: str(e.description),
     path: loc ? str(loc.path) : undefined,
-    range: loc
-      ? String(count(loc.start_line)) + '–' + String(count(loc.end_line))
-      : undefined,
+    lines: loc ? { start: count(loc.start_line), end: count(loc.end_line) } : undefined,
     excerpt: parseExcerpt(e.excerpt),
     artifact: nullable(e.artifact_id) ?? undefined,
   };
@@ -145,7 +177,10 @@ function finding(v: unknown): Finding {
         evidence: array(c.evidence_ids, str),
       };
     }),
-    conditions: array(f.conditions, (c) => str(object(c).statement)),
+    conditions: array(f.conditions, (v) => {
+      const c = object(v);
+      return { statement: str(c.statement), evidence: array(c.evidence_ids ?? [], str) };
+    }),
     recommendation: str(object(f.recommendation).summary),
     verification: array(f.verification, str),
     limitations: array(f.limitations, str),
@@ -180,12 +215,16 @@ export function parseAnalysisReport(
   const observations = array(r.observations, (v) => {
     const o = object(v),
       loc = o.location == null ? null : object(o.location);
+    const location = loc ? { path: str(loc.path), start: count(loc.start_line), end: count(loc.end_line) } : null;
     return {
       id: str(o.id),
       rule: str(o.rule_id),
+      tool: nullable(o.tool),
       message: nullable(o.raw_message),
       state: str(o.location_state),
-      path: loc ? str(loc.path) + ':' + count(loc.start_line) : null,
+      evidenceState: nullable(o.evidence_state),
+      path: location ? location.path + ':' + location.start : null,
+      location,
       severity: nullable(o.raw_severity),
       suppressed: o.suppressed === true,
       metric: o.metric == null ? null : (() => {
@@ -204,6 +243,14 @@ export function parseAnalysisReport(
   )
     invalid();
   const coverage = object(r.coverage);
+  const input = object(r.inputs);
+  const commit = nullable(input.commit_sha);
+  const project = r.project == null ? undefined : (() => {
+    const p = object(r.project);
+    return { name: str(p.name), source: nullable(p.source), start: nullable(p.started_at), finish: nullable(p.finished_at) };
+  })();
+  const includesCode = r.export != null && object(r.export).include_code === true;
+  const head = r.pull_request == null ? null : nullable(object(r.pull_request).head_repository);
   function metric(key: string) {
     return coverage[key] == null ? null : count(coverage[key]);
   }
@@ -223,14 +270,13 @@ export function parseAnalysisReport(
         pack: str(c.pack_sha256),
       };
     }),
-    project: r.project == null ? undefined : (() => {
-      const p = object(r.project);
-      return {name: str(p.name), source: nullable(p.source), start: nullable(p.started_at), finish: nullable(p.finished_at)};
-    })(),
-    commit: nullable(object(r.inputs).commit_sha), published: nullable(r.created_at),
+    project,
+    commit,
+    sourceBase: includesCode && input.source_kind === 'git' ? pinnedSourceBase(project?.source, commit, head) : undefined,
+    published: nullable(r.created_at),
     runID: expectedID,
     revision: count(r.revision),
-    snapshot: str(object(r.inputs).snapshot_id),
+    snapshot: str(input.snapshot_id),
     status: str(r.status),
     verdict: str(r.quality_verdict),
     aiReview: str(object(object(r.coverage).ai_review).status),

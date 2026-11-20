@@ -1,8 +1,8 @@
 // Grouping of the summary view (docs/REPORT.md#내보내기-상세도): the same
 // groups and order as the summary Markdown and HTML (internal/report/
 // render_summary.go). Everything is computed from the stored report.
-import type { AnalysisReport, Finding, Observation } from './analysisReport';
-import type { Ledger, Sections, StaticTool } from './reportSections';
+import type { AnalysisReport, Evidence, Finding, Observation } from './analysisReport';
+import type { Citation, Ledger, Sections, StaticTool } from './reportSections';
 
 // The default secondary path rule of review priority (docs/REVIEW.md#검토-우선순위,
 // record.DefaultSecondary). A test checks it against the rule the scope
@@ -137,6 +137,93 @@ export function findingSecondary(f: Finding): boolean {
 // orderFindings puts findings on primary paths before the others, keeping the stored order.
 export function orderFindings(findings: Finding[]): Finding[] {
   return [...findings.filter((f) => !findingSecondary(f)), ...findings.filter(findingSecondary)];
+}
+
+// Test files can corroborate product behavior, but never establish it by themselves.
+// The report exports use the same scope and ordering for their opening view.
+export function secondaryReviewPath(path: string): boolean {
+  const segments = path.toLowerCase().split('/');
+  const file = segments.pop() ?? '';
+  return secondaryPath(path) || segments.some(dir => ['test', 'tests', '__tests__', 'spec', 'specs'].includes(dir)) ||
+    /_test\.(go|py|rs)$|\.(test|spec)\.(js|jsx|ts|tsx|mjs|cjs|mts|cts)$|^test_.*\.py$/.test(file);
+}
+
+export function secondaryReviewScope(scope: string): boolean {
+  return scope !== '.' && (secondaryReviewPath(scope) || secondaryReviewPath(scope + '/x'));
+}
+
+type LocatedEvidence = Evidence & Required<Pick<Evidence, 'path' | 'lines'>>;
+
+function sourceEvidence(finding: Finding): LocatedEvidence[] {
+  return finding.evidence.filter((e): e is LocatedEvidence =>
+    (e.kind === 'code' || e.kind === 'test') && Boolean(e.path) && Boolean(e.lines && e.lines.start > 0 && e.lines.end >= e.lines.start),
+  );
+}
+
+export function secondaryReviewFinding(finding: Finding): boolean {
+  const evidence = sourceEvidence(finding);
+  return evidence.length > 0
+    ? evidence.every(e => e.kind === 'test' || secondaryReviewPath(e.path))
+    : findingSecondary(finding);
+}
+
+export function primaryCitation(citation: Citation, kind: 'document' | 'code'): boolean {
+  return citation.kind === kind && Boolean(citation.path) && citation.line > 0 && citation.end >= citation.line && !secondaryReviewPath(citation.path);
+}
+
+export type Decision = { finding: Finding; source: LocatedEvidence; condition?: string; next?: string };
+const hiddenDispositions = new Set(['accepted_risk', 'false_positive', 'suppressed', 'fixed_by_user']);
+
+export function projectReadings(report: AnalysisReport, sections: Sections) {
+  const reviewed = new Set(sections.codeReview.findings);
+  const actions: Decision[] = [];
+  const followups: Decision[] = [];
+  for (const finding of report.findings) {
+    if (!reviewed.has(finding.id) || hiddenDispositions.has(finding.disposition)) continue;
+    const sources = sourceEvidence(finding).filter(e => e.kind === 'code' && !secondaryReviewPath(e.path) && !finding.counter.includes(e.id));
+    const basis = [
+      ...finding.conditions,
+      ...finding.claims.map(claim => ({ statement: claim.assertion, evidence: claim.evidence })),
+    ].find(row => row.statement.trim() && sources.some(e => row.evidence.includes(e.id)));
+    const source = basis && sources.find(e => basis.evidence.includes(e.id));
+    if (!source) continue;
+    if (finding.validation === 'supported' || finding.validation === 'reproduced') {
+      actions.push({ finding, source });
+    } else if (finding.validation === 'inconclusive' || finding.validation === 'unreviewed') {
+      const next = finding.verification.find(text => text.trim());
+      if (next && basis) followups.push({ finding, source, condition: basis.statement, next });
+    }
+  }
+  const severity = (a: Decision, b: Decision) => sevRank(b.finding.severity) - sevRank(a.finding.severity);
+  const reproduced = (a: Decision) => Number(a.finding.validation === 'reproduced');
+  actions.sort((a, b) => severity(a, b) || reproduced(b) - reproduced(a));
+  followups.sort(severity);
+
+  const { documents, codeReview } = sections;
+  const cites = (catalog: Citation[], refs: string[], kind: 'document' | 'code') =>
+    catalog.some(c => refs.includes(c.id) && primaryCitation(c, kind));
+  const hasComparisonEvidence = (row: typeof documents.comparisons[number]) =>
+    cites(documents.citations, row.documentRefs, 'document') && cites(documents.citations, row.codeRefs, 'code');
+  const comparisons: Sections['documents']['comparisons'] = [];
+  for (const status of ['mismatch', 'partial', 'match']) {
+    comparisons.push(...documents.comparisons.filter(row => row.status === status && hasComparisonEvidence(row)).slice(0, 2));
+  }
+  const uncertainComparison = comparisons.length === 0
+    ? documents.comparisons.find(row => row.status === 'unknown' && hasComparisonEvidence(row))
+    : undefined;
+  const strengths = codeReview.strengths.filter(row => cites(codeReview.citations, row.refs, 'code'));
+
+  let diagnostic: Observation | undefined;
+  if (!uncertainComparison && actions.length + comparisons.length + strengths.length + followups.length === 0) {
+    const toolIDs = new Set(sections.staticAnalysis.languages.flatMap(lang => lang.tools)
+      .filter(tool => (tool.purpose ?? 'diagnostics') === 'diagnostics').flatMap(tool => tool.observations));
+    diagnostic = report.observations.find(o => {
+      const loc = o.location;
+      return toolIDs.has(o.id) && o.evidenceState === 'verified_against_source_manifest' && !o.suppressed && !o.metric &&
+        loc && loc.path && loc.start > 0 && loc.end >= loc.start && !secondaryReviewPath(loc.path);
+    });
+  }
+  return { actions: actions.slice(0, 3), comparisons: comparisons.slice(0, 3), uncertainComparison, strengths: strengths.slice(0, 3), followups: followups.slice(0, 2), diagnostic };
 }
 
 // moduleSecondary: the ledger row's class, or for an earlier builder the path rule.

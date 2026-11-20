@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -54,29 +55,38 @@ func (s *roleStage) entries() map[string]source.Entry {
 	return out
 }
 
-// readLines returns lines start..end (1-based, inclusive) of a verified
-// snapshot blob, or ok=false when the blob is not safe model input.
-func (s *roleStage) readLines(e source.Entry, start, end int) (string, int, bool, error) {
+// readSource returns a verified snapshot blob that is safe to use as model input.
+func (s *roleStage) readSource(e source.Entry) (string, bool, error) {
 	if *e.Size > maxFileBytes || domain.ValidateEvidencePath(e.Path) != nil {
-		return "", 0, false, nil
+		return "", false, nil
 	}
 	if s.secretFiles()[e.Path] {
 		s.rec.Limitations = addLim(s.rec.Limitations, limSecretWithheld)
-		return "", 0, false, nil
+		return "", false, nil
 	}
 	root, err := os.OpenRoot(s.j.Snapshot.SnapshotDir)
 	if err != nil {
-		return "", 0, false, err
+		return "", false, err
 	}
 	defer root.Close()
 	b, err := readVerified(root, e)
 	if err != nil {
-		return "", 0, false, err
+		return "", false, err
 	}
 	if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || record.Sensitive(b) {
-		return "", 0, false, nil
+		return "", false, nil
 	}
-	lines := strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
+	return strings.TrimSuffix(string(b), "\n"), true, nil
+}
+
+// readLines returns lines start..end (1-based, inclusive) of a verified
+// snapshot blob, or ok=false when the blob is not safe model input.
+func (s *roleStage) readLines(e source.Entry, start, end int) (string, int, bool, error) {
+	text, ok, err := s.readSource(e)
+	if err != nil || !ok {
+		return "", 0, false, err
+	}
+	lines := strings.Split(text, "\n")
 	if start < 1 || start > len(lines) {
 		return "", len(lines), false, nil
 	}
@@ -195,6 +205,23 @@ type docFacts struct {
 
 var docOrder = map[string]int{envdoc.ClassAgent: 0, envdoc.ClassReadme: 1, envdoc.ClassContributing: 2, envdoc.ClassDesign: 3}
 
+func userDocRank(d envdoc.Doc) int {
+	if d.Class == envdoc.ClassReadme {
+		return 0
+	}
+	if d.Class == envdoc.ClassDesign {
+		p := strings.ToLower(d.Path)
+		stem := strings.TrimSuffix(p, path.Ext(p))
+		for _, word := range strings.FieldsFunc(stem, func(r rune) bool { return r == '/' || r == '-' || r == '_' || r == ' ' }) {
+			switch word {
+			case "guide", "guides", "usage", "quickstart", "manual", "tutorial", "가이드", "사용법", "안내":
+				return 1
+			}
+		}
+	}
+	return 2
+}
+
 // documentFacts applies the documents role's skip rules: no guidance
 // document in scope (no_documents), discovery unavailable (dependency_failed)
 // or none of them selected under the read budget (documents_not_selected).
@@ -212,8 +239,19 @@ func (s *roleStage) documentFacts() (docFacts, string) {
 			f.selected = append(f.selected, it)
 		}
 	}
+	bound := 0
+	files := s.entries()
+	for _, d := range f.selected {
+		if e, ok := files[d.Path]; ok {
+			bound += min(roleMaxDocBytes, excerptBound(*e.Size))
+		}
+	}
+	constrained := len(f.selected) > roleMaxDocs || bound > roleMaxDocsBytes
 	sort.SliceStable(f.selected, func(a, b int) bool {
 		x, y := f.selected[a], f.selected[b]
+		if xr, yr := userDocRank(x), userDocRank(y); constrained && xr != yr {
+			return xr < yr
+		}
 		if docOrder[x.Class] != docOrder[y.Class] {
 			return docOrder[x.Class] < docOrder[y.Class]
 		}
@@ -369,44 +407,46 @@ func goIgnored(p string) bool {
 // gets a second file. A Go file belongs to its deepest go.mod directory; a
 // file of another ecosystem to its deepest build manifest directory of that
 // ecosystem, and modules are visited ecosystem by ecosystem (sources.go,
-// groupOrder). Every excerpt is the first lines of its file.
-func (s *roleStage) codeCorpus() ([]record.Excerpt, []string, error) {
+// groupOrder). Accepted document contracts can add targeted windows before
+// the ordinary file prefixes.
+func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, []string, error) {
 	g := planCodeGroupsFor(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary(), changedPaths(s.j))
-	eligible, lims := g.eligible, append([]string{}, g.lims...)
+	lims := append([]string{}, g.lims...)
 	var out []record.Excerpt
 	remain := roleMaxCodeBytes
-	// Secondary modules (test input, examples) only get rounds once the
-	// primary modules have no file left.
-	for _, ph := range g.phases() {
-		byModule := ph.files
-		for round := 0; len(out) < roleMaxCodeFiles && remain >= 128; round++ {
-			progressed := false
-			for _, m := range ph.order {
-				if round >= len(byModule[m]) || len(out) >= roleMaxCodeFiles || remain < 128 {
-					continue
-				}
-				progressed = true
-				e := byModule[m][round]
-				kind := windowKind(e.Path)
-				x, total, ok, err := s.excerpt(e, kind, "context", 1, 50, min(roleMaxCodeFile, remain))
-				if err != nil {
-					return nil, nil, err
-				}
-				if !ok {
-					continue
-				}
-				if x.End < total {
-					lims = append(lims, "excerpt_only")
-				}
-				out = append(out, x)
-				remain -= record.JSONLen(x.Text)
+	offered := map[string]bool{}
+	add := func(e source.Entry, start, lines, budget int) error {
+		x, total, ok, err := s.excerpt(e, windowKind(e.Path), "context", start, lines, min(budget, remain))
+		if ok {
+			if x.Start > 1 || x.End < total {
+				lims = addLim(lims, "excerpt_only")
 			}
-			if !progressed {
-				break
+			out = append(out, x)
+			offered[x.Path] = true
+			remain -= record.JSONLen(x.Text)
+		}
+		return err
+	}
+	witnesses, err := s.contractWitnesses(g, documents)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, w := range witnesses {
+		if err := add(w.entry, w.line, witnessMaxLines, witnessMaxExcerpt); err != nil {
+			return nil, nil, err
+		}
+	}
+	for e := range g.orderedFiles() {
+		if len(out) >= roleMaxCodeFiles || remain < 128 {
+			break
+		}
+		if !offered[e.Path] {
+			if err := add(e, 1, 50, roleMaxCodeFile); err != nil {
+				return nil, nil, err
 			}
 		}
 	}
-	if eligible > len(out) {
+	if g.eligible > len(out) {
 		lims = append(lims, "files_outside_review_context")
 	}
 	return out, addLim(nil, lims...), nil

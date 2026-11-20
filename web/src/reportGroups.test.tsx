@@ -9,7 +9,7 @@ import { improvementHints } from './improve';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
 import { ReportDocument } from './ReportPanel';
-import { SECONDARY_NOT_FOR_GO, SECONDARY_SEGMENTS, gapGroups, overviewFacts, places, ruleGroups, secondaryPath, severityOf, slotRuns } from './reportGroups';
+import { SECONDARY_NOT_FOR_GO, SECONDARY_SEGMENTS, gapGroups, overviewFacts, places, projectReadings, ruleGroups, secondaryPath, secondaryReviewPath, severityOf, slotRuns } from './reportGroups';
 
 afterEach(cleanup);
 
@@ -32,6 +32,31 @@ describe('summary grouping', () => {
     expect(secondaryPath('web/build/app.js')).toBe(true);
     // The file name is not a directory.
     expect(secondaryPath('internal/examples')).toBe(false);
+    expect(secondaryReviewPath('internal/examples/demo.go')).toBe(true);
+    expect(secondaryReviewPath('cmd/build/main.go')).toBe(false);
+    expect(secondaryReviewPath('cmd/run_test.go')).toBe(true);
+    expect(secondaryReviewPath('service/test_worker.py')).toBe(true);
+    expect(secondaryReviewPath('web/MyComponent.spec.tsx')).toBe(true);
+    expect(secondaryReviewPath('service/tests/load.go')).toBe(true);
+  });
+
+  it('omits secondary, unanchored and suppressed candidates from the project opening', () => {
+    const report = load(sectioned);
+    const sections = report.sections!;
+    const supported = report.findings.find(f => f.validation === 'supported')!;
+    const alternate = (id: string, fields: Partial<typeof supported>) => ({ ...supported, id, ...fields });
+    report.findings.push(
+      alternate('sample-only', { evidence: supported.evidence.map(e => ({ ...e, path: 'examples/charges.go' })) }),
+      alternate('test-only', { evidence: supported.evidence.map(e => ({ ...e, path: 'charges_test.go' })) }),
+      alternate('counter-only', { counter: supported.evidence.map(e => e.id) }),
+      alternate('accepted-risk', { disposition: 'accepted_risk' }),
+      alternate('unanchored', { validation: 'inconclusive', conditions: [], claims: [] }),
+      alternate('reproduced', { validation: 'reproduced' }),
+    );
+    sections.codeReview.findings.push('sample-only', 'test-only', 'counter-only', 'accepted-risk', 'unanchored', 'reproduced');
+    const rows = projectReadings(report, sections);
+    expect(rows.actions.map(r => r.finding.id)).toEqual(['reproduced', supported.id]);
+    expect(rows.followups).toHaveLength(0);
   });
 
   it('counts every diagnostic once in the rule groups and shows five places with the rest counted', () => {
@@ -116,9 +141,13 @@ describe('summary grouping', () => {
     expect(improvementHints(r.sections!.gaps, null, project, many).find((h) => h.key === 'budget')!.text).toBe(ko.improve.budgetCallsMax(99, 60, 99 + 118 + 6));
   });
 
-  it('opens with the overview sentences and keeps every row behind a keyboard-reachable disclosure', () => {
+  it('keeps analysis statistics and full gap rows behind keyboard-reachable disclosures', () => {
     const r = load(sectioned);
     const { container } = render(<ReportDocument report={r} />);
+    expect(container.querySelector('.report-summary')).toBeNull();
+    const stats = within(container).getByText(t.reading.operations).closest('details')!;
+    stats.open = true;
+    fireEvent(stats, new Event('toggle'));
     const lines = Array.from(container.querySelectorAll('.report-summary > li')).map((x) => x.textContent);
     const f = overviewFacts(r, r.sections!);
     expect(lines.some((x) => x!.startsWith(t.sections.summary.static(f.diagnostics.total, f.diagnostics.rules, f.diagnostics.tools)))).toBe(true);

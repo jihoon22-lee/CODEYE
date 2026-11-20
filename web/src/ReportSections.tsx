@@ -2,11 +2,11 @@ import { useId, useState, type ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
 import type { Citation, Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './reportSections';
 import { ComparisonSection } from './HistoryView';
+import { runStatusLabel } from './format';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { Citations, FindingCard, FindingList, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportScope, ReportTasks, TextList, Verdict, explainReason, label, type ReportHistory } from './ReportParts';
+import { Citations, FindingCard, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportScope, ReportTasks, TextList, Verdict, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
 import {
-  findingSecondary,
   gapGroups,
   locationPath,
   moduleDir,
@@ -14,9 +14,13 @@ import {
   orderFindings,
   overviewFacts,
   places,
+  primaryCitation,
+  projectReadings,
   ruleGroups,
   secondaryDir,
   secondaryPath,
+  secondaryReviewFinding,
+  secondaryReviewScope,
   severityOf,
   slotRuns,
   toolRows,
@@ -26,9 +30,8 @@ import {
 
 const s = t.sections;
 const sm = s.summary;
-// Sections in order of value (docs/REPORT.md#내보내기-상세도): what the
-// review and the tools found first, the context after.
-const ORDER = ['code_review', 'static_analysis', 'metrics', 'secrets', 'environment', 'documents', 'gaps'];
+const ORDER = ['environment', 'documents', 'static_analysis', 'metrics', 'secrets', 'code_review', 'gaps'];
+const TABS = ['overview', ...ORDER];
 
 function placesText(p: Places) {
   let out = p.shown.join(', ');
@@ -142,17 +145,31 @@ function ModelReading({ title, children }: { title: string; children: ReactNode 
   );
 }
 
-type Reading = { title: string; statement?: string; scope?: string; status?: string; refs?: string[] };
+type Reading = {
+  title: string;
+  statement: string;
+  scope?: string;
+  status?: string;
+  secondary?: boolean;
+  sources: { label?: string; refs: string[] }[];
+};
 
-function ReadingList({ rows, catalog }: { rows: Reading[]; catalog?: Citation[] }) {
+function ReadingList({ rows, catalog }: { rows: Reading[]; catalog: Citation[] }) {
   return (
     <ul className="plain model-reading-list">
-      {rows.map(({ title, statement, scope, status, refs }, i) => (
+      {rows.map(({ title, statement, scope, status, secondary, sources }, i) => (
         <li className="model-reading-item" key={i}>
-          <div className="reading-title"><strong>{title}</strong>{status && <span className="pill tone-plain">{status}</span>}</div>
-          {statement && <p>{statement}</p>}
+          <div className="reading-title">
+            {status && <span className="pill tone-plain">{status}</span>}
+            {secondary && <span className="pill tone-plain">{t.reading.secondary}</span>}
+            <strong>{title}</strong>
+          </div>
+          <p>{statement}</p>
           {scope && <p className="small">{t.scopeTitle} <code>{scope}</code></p>}
-          {refs && catalog && <div className="reading-refs"><Citations refs={refs} catalog={catalog} /></div>}
+          {sources.map(({ label, refs }, j) => refs.length > 0 && <div className="reading-refs" key={j}>
+            {label && <b>{label}</b>}
+            <Citations refs={refs} catalog={catalog} />
+          </div>)}
         </li>
       ))}
     </ul>
@@ -317,9 +334,9 @@ function DependencyBlock({ dependencies }: { dependencies: Dependency[] }) {
 
 // summaryLines are the overview's sentences: each kind of result with the
 // counts that matter, from the stored report.
-function summaryLines(f: ReturnType<typeof overviewFacts>, reviewPlanned: boolean): string[] {
+function summaryLines(f: ReturnType<typeof overviewFacts>, aiReview: string): string[] {
   const out: string[] = [];
-  if (!f.model && reviewPlanned) out.push(sm.modelNone);
+  if (!f.model && aiReview === 'performed') out.push(sm.modelNone);
   if (f.model) {
     const rest = (['reproduced', 'inconclusive', 'refuted', 'unreviewed'] as const).filter((k) => f.model![k] > 0).map((k) => sm.validation[k](f.model![k]));
     out.push(sm.modelFindings(f.model.total, f.model.supported + f.model.reproduced) + (rest.length > 0 ? ' (' + rest.join(', ') + ')' : '') + '.');
@@ -341,24 +358,112 @@ function pick(findings: Finding[], ids: string[]) {
   return findings.filter((f) => ids.includes(f.id));
 }
 
-// SectionedReport is the report of builder 5 and later: the overview first,
-// then one collapsible section per analysis kind (keyboard reachable through
-// the native summary element), the gaps and the raw records. The comparison
-// with the previous run is a screen section, not part of the stored document.
+function comparisonReading(row: Sections['documents']['comparisons'][number], catalog: Citation[]): Reading {
+  const hasPrimary = catalog.some(c => row.codeRefs.includes(c.id) && primaryCitation(c, 'code'));
+  return {
+    title: row.statement,
+    scope: row.scope,
+    status: label(t.assessment, row.status),
+    statement: row.reason,
+    secondary: row.codeRefs.length > 0 ? !hasPrimary : secondaryReviewScope(row.scope),
+    sources: [
+      { label: t.reading.documentEvidence, refs: row.documentRefs },
+      { label: t.reading.codeEvidence, refs: row.codeRefs },
+    ],
+  };
+}
+
+function strengthReading(row: Sections['codeReview']['strengths'][number], catalog: Citation[]): Reading {
+  return {
+    title: row.title, scope: row.scope, statement: row.benefit,
+    secondary: !catalog.some(c => row.refs.includes(c.id) && primaryCitation(c, 'code')),
+    sources: [{ label: t.reading.codeEvidence, refs: row.refs }],
+  };
+}
+
+function ProjectOverview({ report, sections, go }: { report: AnalysisReport; sections: Sections; go: (key: string) => void }) {
+  const { actions, comparisons, uncertainComparison, strengths, followups, diagnostic } = projectReadings(report, sections);
+  const { documents, codeReview } = sections;
+  const next = (title: string, decisions: typeof actions) => decisions.length > 0 && (
+    <section className="project-decisions">
+      <h6>{title}</h6>
+      <ul className="plain report-priorities">
+        {decisions.map(decision => <li key={decision.finding.id}><FindingCard f={decision.finding} preview={decision} /></li>)}
+      </ul>
+    </section>
+  );
+  const gaps = sections.gaps.length;
+  const unknown = documents.comparisons.filter(row => row.status === 'unknown').length;
+  const showUnknownCount = unknown > (uncertainComparison ? 1 : 0);
+  const secrets = sections.attention.find(a => a.code === 'secrets_detected');
+  const comparisonRows = uncertainComparison ? [uncertainComparison] : comparisons;
+  const hasReadings = actions.length + comparisonRows.length + strengths.length + followups.length > 0;
+  const documentReading = <section className="project-reading">
+    {comparisonRows.length > 0 ? (
+      <ModelReading title={uncertainComparison ? t.reading.uncertainComparison : t.comparisonsTitle}>
+        <ReadingList rows={comparisonRows.map(row => comparisonReading(row, documents.citations))} catalog={documents.citations} />
+      </ModelReading>
+    ) : <><h6>{t.comparisonsTitle}</h6><p>{t.reading.noComparison}</p></>}
+    <button type="button" className="link" onClick={() => go('documents')}>{s.go(s.titles.documents)}</button>
+  </section>;
+  return (
+    <>
+      {next(t.reading.actions, actions)}
+      <div className={strengths.length ? 'project-readings has-strengths' : 'project-readings'}>
+        {comparisons.length > 0 && documentReading}
+        {strengths.length > 0 && <section className="project-reading">
+          <ModelReading title={t.strengthsTitle}>
+            <ReadingList rows={strengths.map(row => strengthReading(row, codeReview.citations))} catalog={codeReview.citations} />
+          </ModelReading>
+          <button type="button" className="link" onClick={() => go('code_review')}>{s.go(s.titles.code_review)}</button>
+        </section>}
+        {comparisons.length === 0 && documentReading}
+      </div>
+      {next(t.reading.followups, followups)}
+      {diagnostic?.location && <section className="project-decisions">
+        <h6>{t.reading.staticTitle}</h6>
+        <div className="report-diagnostic">
+          <span className="pill tone-plain">{t.reading.staticStatus}</span>
+          <code>{[diagnostic.tool, diagnostic.rule].filter(Boolean).join(' · ')}</code>
+          {diagnostic.message && <p>{diagnostic.message}</p>}
+          <PinnedSourceLink {...diagnostic.location} fallback={sourceLocation(diagnostic.location.path, diagnostic.location.start, diagnostic.location.end)} />
+        </div>
+        <button type="button" className="link" onClick={() => go('static_analysis')}>{s.go(s.titles.static_analysis)}</button>
+      </section>}
+      {!hasReadings && !diagnostic && <p>{t.reading.noFindings}</p>}
+      {(gaps > 0 || showUnknownCount || secrets || report.aiReview !== 'performed') && (
+        <section className="project-coverage">
+          <h6>{t.reading.coverage}</h6>
+          {report.aiReview !== 'performed' && <p>{t.reading.modelState(label(t.ai, report.aiReview))}</p>}
+          {showUnknownCount && <p>{t.reading.unknownComparisons(unknown)}</p>}
+          {gaps > 0 && <p>
+            {s.attentionText.analysis_gaps(gaps)}{' '}
+            <button type="button" className="link" onClick={() => go('gaps')}>{s.go(s.titles.gaps)}</button>
+          </p>}
+          {secrets && <p>
+            {s.attentionText.secrets_detected(secrets.count)}{' '}
+            <button type="button" className="link" onClick={() => go('secrets')}>{s.go(s.titles.secrets)}</button>
+          </p>}
+        </section>
+      )}
+    </>
+  );
+}
+
+// Project reports use tabs. Archived reports without project metadata use
+// the same reading order in native disclosures.
 export function SectionedReport({ report, sections, history }: { report: AnalysisReport; sections: Sections; history?: ReportHistory }) {
   // Sections the overview points at start open; the rest stay collapsed.
   const [open, setOpen] = useState<Set<string>>(() => new Set(sections.attention.map((a) => a.section)));
   const tabbed = Boolean(report.project);
   const id = useId();
   const [active,setActive] = useState('overview');
-  const tabs = ['overview','documents','code_review','static_analysis','metrics','secrets','environment','gaps'];
   const tabId = (key:string) => id + '-tab-' + key;
   const select = (key:string) => {
     setActive(key);
     document.getElementById(tabId(key))?.focus();
   };
   const byID = new Map(report.observations.map((o) => [o.id, o]));
-  const byFindingID = new Map(report.findings.map((f) => [f.id, f]));
   const go = (key: string) => {
     if (tabbed) {select(key); return;}
     setOpen((prev) => new Set(prev).add(key));
@@ -406,7 +511,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   // Review findings: the supported and reproduced ones on primary paths
   // open the section; the others and those on secondary paths come after.
   const reviewFindings = orderFindings(pick(report.findings, cr.findings));
-  const supported = (f: Finding) => (f.validation === 'supported' || f.validation === 'reproduced') && !findingSecondary(f);
+  const supported = (f: Finding) => (f.validation === 'supported' || f.validation === 'reproduced') && !secondaryReviewFinding(f);
   const reviewFirst = reviewFindings.filter(supported);
   const reviewRest = reviewFindings.filter((f) => !supported(f));
   const allDiagnostics = sa.languages.flatMap((l) => l.tools.flatMap((x) => x.observations));
@@ -437,8 +542,8 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const verdictRow = (x: (typeof e.verdicts)[number]) => [<code key="m">{x.module}</code>, x.tool, label(s.verdictStatus, x.status), or(x.reason)];
   const itemRow = (x: (typeof d.items)[number]) => [<code key="p">{x.path}</code>, x.cls, <code key="a">{x.appliesTo}</code>, label(s.docStatus, x.status), x.reason ? explainReason(x.reason) : '—', x.size ?? '—'];
   const docModuleRow = (x: (typeof d.modules)[number]) => [<code key="m">{x.module}</code>, label(s.docState, x.state), or(x.own.join(', ')), or(x.inherited.join(', '))];
-  const docComparisons = d.comparisons.map(c => ({ title: c.statement, scope: c.scope, status: label(t.assessment, c.status), statement: c.reason, refs: c.refs }));
-  const strengths = cr.strengths.map(x => ({ title: x.title, scope: x.scope, statement: x.benefit, refs: x.refs }));
+  const docComparisons = d.comparisons.map(c => comparisonReading(c, d.citations));
+  const strengths = cr.strengths.map(x => strengthReading(x, cr.citations));
   const bodies: Record<string, ReactNode> = {
     environment: (
       <>
@@ -498,7 +603,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         )}
         {d.quality.length > 0 && (
           <ModelReading title={t.qualityTitle}>
-            <ReadingList rows={d.quality.map(q => ({ title: label(t.assessment, q.aspect), status: label(t.assessment, q.assessment), statement: q.statement, refs: q.refs }))} catalog={d.citations} />
+            <ReadingList rows={d.quality.map(q => ({ title: label(t.assessment, q.aspect), status: label(t.assessment, q.assessment), statement: q.statement, sources: [{ refs: q.refs }] }))} catalog={d.citations} />
           </ModelReading>
         )}
         <p>{label(s.discovery, d.discovery)}</p>
@@ -772,95 +877,68 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     ),
   };
   return (
-    <article className="report-document" aria-label={t.title}>
+    <article className="report-document sectioned-report" aria-label={t.title}>
       <header className="report-masthead">
         <div className="report-masthead-heading">
-          <h4>{t.title}</h4>
-          {report.project?.name && <p className="report-project">{report.project.name}</p>}
+          <div>
+            {report.project?.name && <p>{t.title}</p>}
+            <h4>{report.project?.name || t.title}</h4>
+          </div>
+          <span className="pill tone-plain">{runStatusLabel(report.status)}</span>
         </div>
-        <ReportIdentity report={report} />
       </header>
       {tabbed && <div role="tablist" aria-label={t.title} className="report-tabs">
-        {tabs.map((key,i) => <button key={key} id={tabId(key)} type="button" role="tab" aria-selected={active===key}
+        {TABS.map((key,i) => <button key={key} id={tabId(key)} type="button" role="tab" aria-selected={active===key}
           aria-controls={anchor(key)} tabIndex={active===key ? 0 : -1} onClick={() => select(key)}
           onKeyDown={e => {
-            const to = {ArrowRight:(i+1)%tabs.length, ArrowLeft:(i+tabs.length-1)%tabs.length, Home:0, End:tabs.length-1}[e.key];
-            if (to!==undefined) {e.preventDefault(); select(tabs[to]);}
+            const to = {ArrowRight:(i+1)%TABS.length, ArrowLeft:(i+TABS.length-1)%TABS.length, Home:0, End:TABS.length-1}[e.key];
+            if (to!==undefined) {e.preventDefault(); select(TABS[to]);}
           }}>{key==='overview' ? s.overview : label(s.titles,key)}</button>)}
       </div>}
       <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'} tabIndex={tabbed ? 0 : undefined}>
         <h5 id="report-overview">{s.overview}</h5>
-        <Verdict report={report} />
-        {report.priorities.length > 0 && (
-          <>
-            <h6>{s.priorities}</h6>
-            <ol className="report-priorities">
-              {report.priorities.map(id => {
-                const finding = byFindingID.get(id);
-                return finding && <li key={id}><FindingCard f={finding} priority /></li>;
+        {(!tabbed || active === 'overview') && <>
+          <ProjectOverview report={report} sections={sections} go={go} />
+          <More title={t.reading.operations}>{() => <>
+            <Verdict report={report} />
+            <ReportCounts report={report} />
+            <ul className="report-summary">
+              {summaryLines(facts, report.aiReview).map(line => <li key={line}>{line}</li>)}
+            </ul>
+            {sections.attention.length > 0 && <>
+              <h6>{s.attention}</h6>
+              <ul className="attention">
+                {sections.attention.map(a => <li key={a.section + ':' + a.code}>
+                  <span>{(s.attentionText[a.code] ?? (() => a.code))(a.count)}</span>
+                  <button type="button" className="link" onClick={() => go(a.section)}>{s.go(label(s.titles, a.section))}</button>
+                </li>)}
+              </ul>
+            </>}
+            <h6>{s.stateTable}</h6>
+            <Table
+              head={[s.section, s.col.status, s.counts]}
+              rows={ORDER.map(key => {
+                const row = overview.get(key);
+                return [
+                  <button key="b" type="button" className="link" onClick={() => go(key)}>{label(s.titles, key)}</button>,
+                  <span key="s" className={stateClass(row?.state ?? null)}>{state(row?.state ?? null)}</span>,
+                  row && (s.countOrder[key] ?? [])
+                    .filter(k => Object.hasOwn(row.counts, k))
+                    .map(k => `${label(s.countLabels, key + '.' + k)} ${row.counts[k]}`).join(' · '),
+                ];
               })}
-            </ol>
-          </>
-        )}
-        <ul className="report-summary">
-          {summaryLines(facts, cr.planned).map((line, i) => (
-            <li key={i}>{line}</li>
-          ))}
-        </ul>
-        <h6>{s.attention}</h6>
-        {sections.attention.length === 0 ? (
-          <p>{s.noAttention}</p>
-        ) : (
-          <ul className="attention">
-            {sections.attention.map((a) => (
-              <li key={a.section + ':' + a.code}>
-                <span>{(s.attentionText[a.code] ?? (() => a.code))(a.count)}</span>
-                <button type="button" className="link" onClick={() => go(a.section)}>
-                  {s.go(label(s.titles, a.section))}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <ReportCounts report={report} />
-        {cr.strengths.length > 0 && (
-          <ModelReading title={t.strengthsTitle}>
-            <ReadingList rows={strengths.slice(0, 3)} />
-            <button type="button" className="link" onClick={() => go('code_review')}>{s.go(s.titles.code_review)}</button>
-          </ModelReading>
-        )}
-        {d.comparisons.length > 0 && (
-          <ModelReading title={t.comparisonsTitle}>
-            <ReadingList rows={docComparisons.slice(0, 3)} />
-            <button type="button" className="link" onClick={() => go('documents')}>{s.go(s.titles.documents)}</button>
-          </ModelReading>
-        )}
-
-        <h6>{s.stateTable}</h6>
-        <Table
-          head={[s.section, s.col.status, s.counts]}
-          rows={ORDER.map((key) => {
-            const row = overview.get(key);
-            return [
-              <button key="b" type="button" className="link" onClick={() => go(key)}>
-                {label(s.titles, key)}
-              </button>,
-              <span key="s" className={stateClass(row?.state ?? null)}>{state(row?.state ?? null)}</span>,
-              (s.countOrder[key] ?? [])
-                .filter((k) => row && Object.hasOwn(row.counts, k))
-                .map((k) => label(s.countLabels, key + '.' + k) + ' ' + row!.counts[k])
-                .join(' · '),
-            ];
-          })}
-        />
+            />
+          </>}</More>
+          {history && <More title={ko.history.title}>{() => <ComparisonSection load={history.load} reload={history.reload} />}</More>}
+        </>}
       </section>
-      {history && (!tabbed || active==='overview') && <ComparisonSection load={history.load} reload={history.reload} />}
       {ORDER.map((key) => block(key, bodies[key]))}
       <details className="report-section">
         <summary>
-          <strong>{s.appendix}</strong>
+          <strong>{t.reading.provenance}</strong>
         </summary>
         <p>{t.revision(report.revision)}</p>
+        <ReportIdentity report={report} showStatus={false} />
         <ReportScope report={report} />
         <ReportCalls report={report} />
         <p>
