@@ -512,13 +512,16 @@ def tool_specs(values):
 
 
 def help_flags(binary):
-    """Option names in the `codeye agent` usage of `codeye --help` (the agent itself rejects unknown ones)."""
+    """Option names in the usage lines of `codeye agent --help` (the agent itself rejects unknown ones)."""
     import re
-    text = subprocess.run([str(binary), "--help"], capture_output=True, text=True, timeout=30).stdout
+    text = subprocess.run([str(binary), "agent", "--help"], capture_output=True, text=True, timeout=30).stdout
     usage, inside = [], False
     for line in text.splitlines():
-        if line.strip().startswith("codeye "):
-            inside = line.strip().startswith("codeye agent ")
+        stripped = line.strip()
+        if stripped.startswith("codeye "):
+            inside = stripped.startswith("codeye agent ")
+        elif not stripped.startswith("["):
+            inside = False  # the description under the usage lines
         if inside:
             usage.append(line)
     return set(re.findall(r"--([a-z][a-z0-9-]*)", "\n".join(usage)))

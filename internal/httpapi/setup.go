@@ -229,7 +229,7 @@ func (s *Server) getSetup(q *request) {
 		return
 	}
 	st := s.inst.readSetup()
-	v := setupView{IsAdmin: q.session.IsAdmin, ServiceOrigin: optString(s.pub.origin), ReadableFolders: []string{}, Offline: st != nil && st.Offline,
+	v := setupView{IsAdmin: q.session.IsAdmin, ServiceOrigin: optString(s.Origin()), ReadableFolders: []string{}, Offline: st != nil && st.Offline,
 		AnalysisDefaults: analysisDefaults{offered(domain.DefaultAnalysisChoices(domain.SourceLocal), offer), offered(domain.DefaultAnalysisChoices(domain.SourceGit), offer)}}
 	for _, r := range roots {
 		v.ReadableFolders = append(v.ReadableFolders, r.Path)

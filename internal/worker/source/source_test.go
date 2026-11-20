@@ -209,7 +209,9 @@ func git(t *testing.T, dir string, args ...string) string {
 	if err != nil {
 		t.Skip("git unavailable")
 	}
-	base := []string{"-c", "user.name=CODEYE Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false"}
+	// No background maintenance: a detached repack of the fixture repository
+	// must not run under the fetch that follows.
+	base := []string{"-c", "user.name=CODEYE Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"}
 	cmd := exec.Command(bin, append(base, args...)...)
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, "USERPROFILE=" + dir, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_TERMINAL_PROMPT=0"}

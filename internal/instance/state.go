@@ -77,8 +77,9 @@ type Record struct {
 	// Listen is the controller's address (it may differ from the configured
 	// default when that port was busy).
 	Listen string `json:"listen,omitempty"`
-	// Args is the agent argv without the one-time enrollment flag; a
-	// different argv from the configuration means the agent is restarted.
+	// Args is the argv (the agent's without the one-time enrollment flag);
+	// a different argv from the configuration means the process is
+	// restarted.
 	Args []string `json:"args,omitempty"`
 }
 

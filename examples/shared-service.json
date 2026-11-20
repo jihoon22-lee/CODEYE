@@ -235,7 +235,29 @@
     "others_model_review": true,
     "others_build_scripts": true,
     "updated_at": "2026-11-20T00:50:51.451605Z",
-    "service_origin": "http://codeye.lan:7331"
+    "service_origin": "http://codeye.lan:7331",
+    "service_addresses": [
+      {
+        "origin": "http://127.0.0.1:7331",
+        "kind": "this_machine"
+      },
+      {
+        "origin": "http://localhost:7331",
+        "kind": "this_machine"
+      },
+      {
+        "origin": "http://codeye:7331",
+        "kind": "name"
+      },
+      {
+        "origin": "http://codeye.lan:7331",
+        "kind": "lan"
+      },
+      {
+        "origin": "http://100.101.102.103:7331",
+        "kind": "vpn"
+      }
+    ]
   },
   "source_root": {
     "id": "3813a6ac-c2c0-4d2e-9cbb-47e5fc597f51",
@@ -466,5 +488,24 @@
       "reason": null
     },
     "offline": false
+  },
+  "host_refusal": {
+    "error": {
+      "code": "HOST_REJECTED",
+      "message": "이 주소(windows-host.lan:7331)로는 이 CODEYE 서비스에 들어올 수 없습니다. 받는 주소: http://127.0.0.1:7331, http://localhost:7331, http://codeye:7331, http://codeye.lan:7331, http://100.101.102.103:7331. 이 주소도 받게 하려면 서비스를 띄운 머신에서 다음을 실행하세요: codeye up --public-origin http://windows-host.lan:7331",
+      "retryable": false,
+      "request_id": "req_6f1d2c3b4a5968778695a4b3",
+      "details": {
+        "host": "windows-host.lan:7331",
+        "accepted_origins": [
+          "http://127.0.0.1:7331",
+          "http://localhost:7331",
+          "http://codeye:7331",
+          "http://codeye.lan:7331",
+          "http://100.101.102.103:7331"
+        ],
+        "add_command": "codeye up --public-origin http://windows-host.lan:7331"
+      }
+    }
   }
 }

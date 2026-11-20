@@ -80,17 +80,17 @@ func TestListenRules(t *testing.T) {
 		}
 	}
 	cert, key, _ := writeCert(t, "codeye.test", 0o600)
-	all := Config{Listen: netip.MustParseAddrPort("0.0.0.0:8443"), TLSCertFile: cert, TLSKeyFile: key, PublicOrigin: "https://codeye.test:8443"}
+	all := Config{Listen: netip.MustParseAddrPort("0.0.0.0:8443"), TLSCertFile: cert, TLSKeyFile: key, PublicOrigins: []string{"https://codeye.test:8443"}}
 	if _, err := New(all, &postgres.Store{}); err != nil {
 		t.Fatalf("TLS config refused: %v", err)
 	}
 	for name, mutate := range map[string]func(*Config){
 		"no key":            func(c *Config) { c.TLSKeyFile = "" },
 		"no cert":           func(c *Config) { c.TLSCertFile = "" },
-		"no origin":         func(c *Config) { c.PublicOrigin = "" },
-		"http origin":       func(c *Config) { c.PublicOrigin = "http://codeye.test:8443" },
-		"origin with path":  func(c *Config) { c.PublicOrigin = "https://codeye.test/app" },
-		"origin with user":  func(c *Config) { c.PublicOrigin = "https://u@codeye.test" },
+		"no origin":         func(c *Config) { c.PublicOrigins = nil },
+		"http origin":       func(c *Config) { c.PublicOrigins = []string{"http://codeye.test:8443"} },
+		"origin with path":  func(c *Config) { c.PublicOrigins = []string{"https://codeye.test/app"} },
+		"origin with user":  func(c *Config) { c.PublicOrigins = []string{"https://u@codeye.test"} },
 		"missing key file":  func(c *Config) { c.TLSKeyFile = filepath.Join(t.TempDir(), "none.pem") },
 		"cert is not a key": func(c *Config) { c.TLSKeyFile = c.TLSCertFile },
 	} {
@@ -155,14 +155,11 @@ func TestPlainHTTPServiceAndLocalListener(t *testing.T) {
 		t.Fatal(err)
 	}
 	port, lport := ln.Addr().(*net.TCPAddr).Port, local.Addr().(*net.TCPAddr).Port
-	origin := "http://codeye.lan:" + itoa(port)
-	if _, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), PlainHTTP: true}, e.store); err == nil {
-		t.Fatal("plain HTTP on 0.0.0.0 without a public origin accepted")
-	}
-	if _, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), PlainHTTP: true, PublicOrigin: "https://codeye.lan"}, e.store); err == nil {
+	origin, vpnOrigin := "http://codeye.lan:"+itoa(port), "http://codeye.vpn:"+itoa(port)
+	if _, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), PlainHTTP: true, PublicOrigins: []string{"https://codeye.lan"}}, e.store); err == nil {
 		t.Fatal("plain HTTP with an https origin accepted")
 	}
-	srv, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), PlainHTTP: true, PublicOrigin: origin, LocalListen: netip.MustParseAddrPort(local.Addr().String()),
+	srv, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), PlainHTTP: true, PublicOrigins: []string{origin, vpnOrigin}, LocalListen: netip.MustParseAddrPort(local.Addr().String()),
 		Logger: slog.New(slog.DiscardHandler), SweepInterval: -1, ReconcileInterval: -1, PublishInterval: -1}, e.store)
 	if err != nil {
 		t.Fatal(err)
@@ -234,6 +231,46 @@ func TestPlainHTTPServiceAndLocalListener(t *testing.T) {
 	if link, _ := body["login_link"].(map[string]any); res.StatusCode != 201 || link == nil || !strings.HasPrefix(link["url"].(string), origin+"/#launch=") {
 		t.Fatalf("login link over plain HTTP: %d %v", res.StatusCode, body)
 	}
+	// TC-264: another address of this machine (here a second loopback
+	// address) signs in and posts with its own Origin; an Origin of another
+	// accepted address is refused. A login link points at the address the
+	// administrator browses from (the second public origin), and one made
+	// on a loopback address gets the address to share.
+	other := "127.0.0.2:" + itoa(port)
+	otherDial := pubDial
+	if c, err := net.DialTimeout("tcp", other, time.Second); err == nil {
+		c.Close()
+		otherDial = other
+	}
+	if res, _ := login(otherDial, other, origin); res.StatusCode != 403 {
+		t.Fatalf("Origin of another accepted address: %d", res.StatusCode)
+	}
+	res, body = login(otherDial, other, "http://"+other)
+	if res.StatusCode != 201 {
+		t.Fatalf("sign-in through %s: %d %v", other, res.StatusCode, body)
+	}
+	set = strings.Join(res.Header.Values("Set-Cookie"), "; ")
+	ocookie, ocsrf := strings.TrimPrefix(strings.SplitN(set, ";", 2)[0], sessionCookie+"="), body["csrf_token"].(string)
+	res, body = do(otherDial, "POST", "/api/v1/admin/users", other, "http://"+other, ocookie, ocsrf, map[string]any{"username": "second-address-user"})
+	if link, _ := body["login_link"].(map[string]any); res.StatusCode != 201 || link == nil || !strings.HasPrefix(link["url"].(string), origin+"/#launch=") {
+		t.Fatalf("login link through %s: %d %v", other, res.StatusCode, body)
+	}
+	vpnHost := strings.TrimPrefix(vpnOrigin, "http://")
+	res, body = login(pubDial, vpnHost, vpnOrigin)
+	set = strings.Join(res.Header.Values("Set-Cookie"), "; ")
+	vcookie, vcsrf := strings.TrimPrefix(strings.SplitN(set, ";", 2)[0], sessionCookie+"="), body["csrf_token"].(string)
+	res, body = do(pubDial, "POST", "/api/v1/admin/users", vpnHost, vpnOrigin, vcookie, vcsrf, map[string]any{"username": "vpn-user"})
+	if link, _ := body["login_link"].(map[string]any); res.StatusCode != 201 || link == nil || !strings.HasPrefix(link["url"].(string), vpnOrigin+"/#launch=") {
+		t.Fatalf("login link through the second origin: %d %v", res.StatusCode, body)
+	}
+	lh := "localhost:" + itoa(port)
+	res, body = login(pubDial, lh, "http://"+lh)
+	set = strings.Join(res.Header.Values("Set-Cookie"), "; ")
+	lcookie, lcsrf := strings.TrimPrefix(strings.SplitN(set, ";", 2)[0], sessionCookie+"="), body["csrf_token"].(string)
+	res, body = do(pubDial, "POST", "/api/v1/admin/users", lh, "http://"+lh, lcookie, lcsrf, map[string]any{"username": "localhost-user"})
+	if link, _ := body["login_link"].(map[string]any); res.StatusCode != 201 || link == nil || !strings.HasPrefix(link["url"].(string), origin+"/#launch=") {
+		t.Fatalf("login link through localhost: %d %v", res.StatusCode, body)
+	}
 	// The loopback listener: loopback Hosts only.
 	localHost := "127.0.0.1:" + itoa(lport)
 	if res, _ := do(localDial, "GET", "/api/v1/health", localHost, "", "", "", nil); res.StatusCode != 200 {
@@ -261,7 +298,7 @@ func TestTLSServerOnWildcardAddress(t *testing.T) {
 	host := "codeye.test"
 	origin := "https://" + host + ":" + itoa(port)
 	cert, key, pool := writeCert(t, host, 0o600)
-	srv, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), TLSCertFile: cert, TLSKeyFile: key, PublicOrigin: origin,
+	srv, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), TLSCertFile: cert, TLSKeyFile: key, PublicOrigins: []string{origin},
 		Logger: slog.New(slog.DiscardHandler), SweepInterval: -1, ReconcileInterval: -1, PublishInterval: -1}, e.store)
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +363,13 @@ func TestTLSServerOnWildcardAddress(t *testing.T) {
 	if res.StatusCode != 200 || res.Header.Get("Strict-Transport-Security") != hstsValue {
 		t.Fatalf("health over TLS %d hsts %q", res.StatusCode, res.Header.Get("Strict-Transport-Security"))
 	}
-	for _, other := range []string{addr, "localhost:" + itoa(port), "evil.example:" + itoa(port)} {
+	// This machine's own names are accepted over TLS too; foreign ones not.
+	for _, own := range []string{addr, "localhost:" + itoa(port)} {
+		if res, _ := do("GET", "/api/v1/health", own, "", "", "", nil); res.StatusCode != 200 {
+			t.Fatalf("Host %s answered %d", own, res.StatusCode)
+		}
+	}
+	for _, other := range []string{"evil.example:" + itoa(port), "codeye.test", "localhost"} {
 		if res, _ := do("GET", "/api/v1/health", other, "", "", "", nil); res.StatusCode != 403 {
 			t.Fatalf("Host %s answered %d", other, res.StatusCode)
 		}

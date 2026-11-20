@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Project, Setup } from './api';
-import { improvementHints, type Gap } from './improve';
+import { improvementHints, operatorHints, type Gap } from './improve';
 import type { Dependency } from './reportSections';
 import { ko as t } from './locales/ko';
 import { choiceLocked, choicesFor, noFolderFor, parseTarget, quickBody, unavailableReason } from './quickStart';
@@ -17,6 +17,8 @@ const SETUP: Setup = {
   github: null,
   offline: false,
 };
+// The administrator who runs the service: the remedies are theirs to take.
+const OPERATOR: Setup = { ...SETUP, is_admin: true };
 // A controller without a recorded setup (started on its own): the node operator decides.
 const SEPARATE: Setup = { ...SETUP, model: null, tools: null };
 const PROVIDERS = [{ id: 'gh', kind: 'github', host: 'github.com' }];
@@ -104,7 +106,7 @@ describe('better results', () => {
       gap('review_scope_budget_exhausted', null, null, 'code_review'),
       gap('task_unsupported', 'cargo-check.m01', 'repository_code_not_allowed'),
       gap('tests_not_run', null, null, 'report'),
-    ], SETUP, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true }));
+    ], OPERATOR, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true }));
     expect(hints).toEqual([
       { key: 'tool:cppcheck', text: t.improve.tool('cppcheck', 'apt install cppcheck') },
       { key: 'tool:go', text: t.improve.toolGeneric('go') },
@@ -114,18 +116,39 @@ describe('better results', () => {
       { key: 'build_scripts', text: t.improve.buildScriptsCrates('cargo-check'), turnOn: 'run_build_scripts' },
     ]);
     const noFetch = project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: false });
-    expect(improvementHints([gap('task_unsupported', 'clippy', 'repository_code_not_allowed')], SETUP, noFetch)).toEqual([
+    expect(improvementHints([gap('task_unsupported', 'clippy', 'repository_code_not_allowed')], OPERATOR, noFetch)).toEqual([
       { key: 'build_scripts', text: t.improve.buildScripts('clippy'), turnOn: 'run_build_scripts' },
     ]);
   });
 
+  it('tells a user who is not the administrator to ask for what only the service host can do', () => {
+    const gaps = [
+      gap('task_unsupported', 'staticcheck', 'tool_not_configured'),
+      gap('task_unsupported', 'gitleaks', 'tool_not_configured', 'secrets'),
+      gap('role_not_succeeded', 'review.investigate', 'model_not_configured', 'code_review'),
+      gap('review_scope_budget_exhausted', null, null, 'code_review'),
+      gap('task_unsupported', 'cargo-check', 'repository_code_not_allowed'),
+    ];
+    const hints = improvementHints(gaps, SETUP, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true }));
+    expect(hints).toEqual([
+      { key: 'ask_admin_tools', text: t.improve.askAdminTools('staticcheck, gitleaks') },
+      { key: 'model', text: t.improve.askAdminModel },
+      { key: 'budget', text: t.improve.askAdmin(t.improve.budget) },
+      // The project's own switch stays the user's (or the project manager's) to turn on.
+      { key: 'build_scripts', text: t.improve.buildScriptsCrates('cargo-check'), turnOn: 'run_build_scripts' },
+    ]);
+    expect(hints.some(h => h.text.startsWith(t.improve.model))).toBe(false);
+    expect(operatorHints(SETUP)).toBe(false);
+    expect(operatorHints(OPERATOR)).toBe(true);
+  });
+
   it('offers the build-script switch only while it is off, and leaves a separate node\'s grant to the operator', () => {
     const blocked = [gap('task_unsupported', 'cargo-check', 'repository_code_not_allowed')];
-    expect(improvementHints(blocked, SETUP, project({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }))).toEqual([]);
+    expect(improvementHints(blocked, OPERATOR, project({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }))).toEqual([]);
     expect(improvementHints(blocked, SEPARATE, project(undefined))).toEqual([{ key: 'build_scripts', text: t.improve.operatorGrant('cargo-check') }]);
     const withheld = [gap('role_skipped', 'review.interpret', 'model_source_not_approved', 'code_review')];
-    expect(improvementHints(withheld, SETUP, project({ send_source_to_model: false, run_build_scripts: true, fetch_dependencies: true }))).toEqual([{ key: 'send_source', text: t.improve.sendSource, turnOn: 'send_source_to_model' }]);
-    expect(improvementHints([gap('tests_not_run', null, null, 'report')], SETUP, project(undefined))).toEqual([]);
+    expect(improvementHints(withheld, OPERATOR, project({ send_source_to_model: false, run_build_scripts: true, fetch_dependencies: true }))).toEqual([{ key: 'send_source', text: t.improve.sendSource, turnOn: 'send_source_to_model' }]);
+    expect(improvementHints([gap('tests_not_run', null, null, 'report')], OPERATOR, project(undefined))).toEqual([]);
   });
 
   it('says that the administrator did not offer the build scripts or the model review, with nothing to turn on', () => {
@@ -134,7 +157,7 @@ describe('better results', () => {
       gap('task_unsupported', 'clippy', 'repository_code_not_offered'),
       gap('role_skipped', 'review.interpret', 'model_review_not_offered', 'code_review'),
     ];
-    expect(improvementHints(gaps, SETUP, project({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }))).toEqual([
+    expect(improvementHints(gaps, OPERATOR, project({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }))).toEqual([
       { key: 'model_not_offered', text: t.improve.modelNotOffered },
       { key: 'build_scripts_not_offered', text: t.improve.buildScriptsNotOffered('cargo-check, clippy') },
     ]);
@@ -147,11 +170,11 @@ describe('better results', () => {
       gap('dependencies_not_fetched', 'staticcheck', 'dependency_unavailable', 'environment'),
     ];
     // The project's choice is off: turn it on and retry.
-    expect(improvementHints(unresolved, SETUP, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: false }))).toEqual([
+    expect(improvementHints(unresolved, OPERATOR, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: false }))).toEqual([
       { key: 'fetch_dependencies', text: t.improve.fetchDependencies('go-vet, staticcheck'), turnOn: 'fetch_dependencies' },
     ]);
     // The choice is on, so this computer's switch is off.
-    expect(improvementHints(unresolved, SETUP, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true }))).toEqual([
+    expect(improvementHints(unresolved, OPERATOR, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true }))).toEqual([
       { key: 'fetch_dependencies', text: t.improve.dependencySwitch('go-vet, staticcheck') },
     ]);
     expect(improvementHints(unresolved, SEPARATE, project(undefined))).toEqual([
@@ -170,7 +193,7 @@ describe('better results', () => {
       gap('dependency_versions_not_pinned', 'deps.go', null, 'environment'),
     ];
     const choices = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true };
-    expect(improvementHints(notPrepared, SETUP, project(choices))).toEqual([
+    expect(improvementHints(notPrepared, OPERATOR, project(choices))).toEqual([
       { key: 'tool:go', text: t.improve.packageManager('go') },
       { key: 'dependency_registry', text: t.improve.registry },
     ]);
@@ -179,11 +202,11 @@ describe('better results', () => {
       gap('dependencies_not_prepared', 'deps.go', 'offline_no_registry_configured', 'environment'),
       gap('dependencies_not_prepared', 'deps.python', 'offline_no_registry_configured', 'environment'),
     ];
-    expect(improvementHints(offline, SETUP, project(choices))).toEqual([
+    expect(improvementHints(offline, OPERATOR, project(choices))).toEqual([
       { key: 'dependency_offline', text: t.improve.offlineRegistry },
     ]);
     // A missing go analyzer tool and a missing go package manager are one install.
-    const withTool = { ...SETUP, tools: { detected_at: null, tools: [{ name: 'go', status: 'not_found', version: null, path: null, hint: 'install go 1.27', reason: null }] } };
+    const withTool = { ...OPERATOR, tools: { detected_at: null, tools: [{ name: 'go', status: 'not_found', version: null, path: null, hint: 'install go 1.27', reason: null }] } };
     expect(improvementHints([gap('task_unsupported', 'go-vet', 'tool_not_configured'), notPrepared[0]!], withTool, project(choices))).toEqual([
       { key: 'tool:go', text: t.improve.tool('go', 'install go 1.27') },
     ]);
@@ -191,11 +214,11 @@ describe('better results', () => {
 
   it('names cargo for Rust and the missing piece of a JS fetch: node or the chosen manager', () => {
     const choices = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true };
-    expect(improvementHints([gap('dependencies_not_prepared', 'deps.rust.m01', 'package_manager_not_configured', 'environment')], SETUP, project(choices))).toEqual([
+    expect(improvementHints([gap('dependencies_not_prepared', 'deps.rust.m01', 'package_manager_not_configured', 'environment')], OPERATOR, project(choices))).toEqual([
       { key: 'tool:cargo', text: t.improve.packageManager('cargo') },
     ]);
     const js = [gap('dependencies_not_prepared', 'deps.javascript', 'package_manager_not_configured', 'environment')];
-    const managers = { ...SETUP, tools: { detected_at: null, tools: [
+    const managers = { ...OPERATOR, tools: { detected_at: null, tools: [
       { name: 'node', status: 'found', version: '24.18.0', path: '/n/node', hint: null, reason: null },
       { name: 'npm', status: 'found', version: '11.16.0', path: '/n/npm-cli.js', hint: null, reason: null },
       { name: 'pnpm', status: 'not_found', version: null, path: null, hint: 'npm install pnpm', reason: null },
@@ -206,13 +229,13 @@ describe('better results', () => {
       { key: 'tool:yarn', text: t.improve.tool('yarn', 'npm install yarn@1') },
     ]);
     // Without detection results all three are named.
-    expect(improvementHints(js, { ...SETUP, tools: null }, project(choices)).map(h => h.key)).toEqual(['tool:npm', 'tool:pnpm', 'tool:yarn']);
+    expect(improvementHints(js, { ...OPERATOR, tools: null }, project(choices)).map(h => h.key)).toEqual(['tool:npm', 'tool:pnpm', 'tool:yarn']);
     // The record names the manager the lockfile chose: only that one is said.
     const chose = (manager: string) => [{ task: 'deps.javascript', manager } as Dependency];
     expect(improvementHints(js, managers, project(choices), null, chose('yarn'))).toEqual([
       { key: 'tool:yarn', text: t.improve.tool('yarn', 'npm install yarn@1') },
     ]);
-    expect(improvementHints(js, { ...SETUP, tools: null }, project(choices), null, chose('pnpm')).map(h => h.key)).toEqual(['tool:pnpm']);
+    expect(improvementHints(js, { ...OPERATOR, tools: null }, project(choices), null, chose('pnpm')).map(h => h.key)).toEqual(['tool:pnpm']);
     // Without node the managers cannot run: node is the missing piece.
     const noNode = { ...managers, tools: { detected_at: null, tools: managers.tools.tools.map(x => x.name === 'node' ? { ...x, status: 'not_found', path: null } : x) } };
     expect(improvementHints(js, noNode, project(choices), null, chose('pnpm'))).toEqual([
@@ -223,10 +246,10 @@ describe('better results', () => {
   // Python dependency preparation.
   it('asks to fetch the packages a Python type checker could not import and names the Python install hint', () => {
     const choices = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: false };
-    expect(improvementHints([gap('dependencies_not_fetched', 'mypy.m01', 'imports_unresolved', 'environment')], SETUP, project(choices))).toEqual([
+    expect(improvementHints([gap('dependencies_not_fetched', 'mypy.m01', 'imports_unresolved', 'environment')], OPERATOR, project(choices))).toEqual([
       { key: 'fetch_dependencies', text: t.improve.fetchDependencies('mypy'), turnOn: 'fetch_dependencies' },
     ]);
-    const withPython = { ...SETUP, tools: { detected_at: null, tools: [{ name: 'python', status: 'unusable', version: null, path: null, hint: 'install Python 3 with pip', reason: 'pip is not installed' }] } };
+    const withPython = { ...OPERATOR, tools: { detected_at: null, tools: [{ name: 'python', status: 'unusable', version: null, path: null, hint: 'install Python 3 with pip', reason: 'pip is not installed' }] } };
     expect(improvementHints([gap('dependencies_not_prepared', 'deps.python', 'package_manager_not_configured', 'environment')], withPython, project({ ...choices, fetch_dependencies: true }))).toEqual([
       { key: 'tool:python', text: t.improve.tool('python', 'install Python 3 with pip') },
     ]);

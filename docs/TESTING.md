@@ -399,6 +399,8 @@ GitHub token, pull request, 결과 댓글([GitHub 연결](GITHUB.md), [pull requ
 | TC-261 | 격리 표의 새 경로: `/account/github`(조회·저장·삭제), `/admin/source-roots`(추가, 모두에게), `/admin/providers`, `/admin/settings`(조회·변경) | 관리자 경로는 관리자만, 계정 경로는 자기 연결만 바꾼다. 거절된 요청은 감사 행이 없고 받아들인 변경은 선언한 action 하나다. 미리 보기는 각 사용자 자신의 token을 쓴다(`TestRouteIsolationAndAuditTable`, `TestRouteGatesForEveryRoute`) | REQ-002,031; NFR-006 |
 | TC-262 | `codeye up`이 띄운 노드(`--controller-sources`): 웹에서 더한 root와 Git host, 따로 띄운 노드 | up의 노드는 등록에 없던 root의 경로와 승인 host를 job에서 받고 project 선택을 offer 안에서 따른다. 따로 띄운 노드는 job에서 아무것도 받지 않고 운영자 플래그가 상한이다(`TestOfferControllerSourcesAndRequesterToken`, `TestEveryoneRootsOfferAndControllerNode`, `TestInstanceAgentArgv`, `TestInstanceAgentArgvOffline`) | REQ-002,018,019 |
 | TC-263 | 두 사용자의 실제 화면(`scripts/web_service_smoke.py`, Chromium 두 context): 관리자가 `codeye up --plain-http`(loopback 별칭)과 자체 서명 TLS로 시작, 사용자 추가와 로그인 링크, 다른 사용자의 시작 화면, 허용된 폴더 없는 경로, GitHub 연결 저장·삭제, 관리자의 폴더(모두에게)·Git host·두 스위치·서비스 주소, 다시 경로 | 다른 사용자는 같은 시작 화면에서 허용된 폴더 없음 안내를 보고, 관리자가 폴더를 열면 그 폴더로 프로젝트를 만든다. token은 화면·응답·상태 파일 밖에 없다. 스위치를 바꾸면 그 사용자의 안내가 바뀐다. `CODEYE_TEST_SCREENSHOTS`를 주면 화면을 그 디렉터리에 남긴다(`scripts/test_postgres.py --web-service`) | REQ-002,024; NFR-005,006 |
+| TC-264 | 사람이 실제로 쓰는 주소: `0.0.0.0`의 평문 HTTP를 `--public-origin` 없이, 이 머신의 인터페이스 주소·VPN 주소·호스트 이름·search domain 이름·loopback 주소들·대괄호 IPv6·기본 포트를 뺀 Host, 다른 포트·접두사만 같은 이름·남의 이름, loopback으로만 듣는 서비스에 쓴 호스트 이름·인터페이스 주소·다른 loopback 주소, 다른 받는 주소의 Origin, loopback과 VPN 주소에서 만든 로그인 링크, 받지 않는 Host의 화면과 JSON, 그 안내의 명령 실행 | loopback이 아닌 주소로 들으면 플래그 없이 이 머신의 이름·주소는 모두 받고 나머지는 403이다. loopback으로만 들으면 loopback 이름·듣는 주소·설정한 origin만 받는다. 받는 주소로 로그인과 POST가 되고 다른 받는 주소의 Origin은 `ORIGIN_REJECTED`다. 링크는 관리자가 연 주소를 쓰고 loopback이면 알려 줄 주소다. 403은 쓴 주소(모양이 맞을 때만, HTML escape), 받는 주소, `codeye up --public-origin …`을 말하고 그 명령 뒤 controller만 다시 떠서 그 주소를 받는다. `up`과 관리 화면은 받는 주소를 묶어 보이고 `0.0.0.0`·bridge 주소는 보이지 않는다(`TestHostAcceptance`, `TestHostRejectionTellsWhatWorks`, `TestPlainHTTPServiceAndLocalListener`, `internal/hostaddr`, `TestControllerListenArgs`, `TestEditFileServeAndPublicOrigins`, `scripts/web_service_smoke.py` wildcard) | REQ-001,002; NFR-006 |
+| TC-265 | 명령줄 도움말: `codeye`, `codeye --help`·`-h`·`help`, `codeye up --help`, start·stop·status·open·tools·doctor의 `-h`·`--help`, `codeye user --help`, `codeye user create --help`, 다른 인자·모르는 플래그와 함께 쓴 `--help`, 없는 명령의 `--help` | 모두 0으로 끝난다. 전체 도움말은 자주 쓰는 명령(up, up --listen, open, status, stop, tools, doctor)을 운영 명령과 따로 띄운 controller·노드의 관리 명령보다 먼저 보이고 명령마다 한 줄 설명을 단다. 명령의 도움말은 `Usage:`와 그 명령의 줄만 보인다(`user`는 user 명령 모두). 없는 명령이면 전체 도움말이다. 명령과 플래그는 바뀌지 않는다(`TestCommandHelpExitsZero`, `TestHelpPutsEverydayCommandsFirst`, `TestUsageEntriesMatchTheirLines`) | REQ-001 |
 
 ## 요구사항 추적표
 
@@ -406,8 +408,8 @@ GitHub token, pull request, 결과 댓글([GitHub 연결](GITHUB.md), [pull requ
 
 | 요구 | 주요 문서 | 수용 테스트 |
 |---|---|---|
-| REQ-001,004,005 | ARCHITECTURE, REVIEW, REPORT | TC-01,05,96,97 |
-| REQ-002,015 | ARCHITECTURE, EXECUTION, SECURITY | TC-02,04,17, TC-256~263 |
+| REQ-001,004,005 | ARCHITECTURE, REVIEW, REPORT, OPERATIONS | TC-01,05,96,97,265 |
+| REQ-002,015 | ARCHITECTURE, EXECUTION, SECURITY | TC-02,04,17, TC-256~264 |
 | REQ-003 | ARCHITECTURE | TC-03,04 |
 | REQ-006,007,008 | ARCHITECTURE, ANALYZERS | TC-06,07,08 |
 | REQ-009,010,011 | REQUIREMENTS, REVIEW, ARCHITECTURE | TC-09,10,11,16 |
@@ -501,7 +503,7 @@ python3 scripts/test_postgres.py --web --nodes --scheduler --instance --web-serv
 - `--instance`: `codeye start`/`status`/`stop`, 백업·복원, 복원본 재시작(TC-125, TC-127, TC-32), 관리형 PostgreSQL의 `codeye up` 경로(TC-170~173, 웹 빌드가 있으면 TC-171의 Chromium 확인 포함), 경로·Git 주소 입력(TC-187, 웹 빌드가 있으면 TC-188의 Chromium 확인 포함, cargo가 있으면 빌드 스크립트 안내까지). 관리형 cluster는 PATH의 PostgreSQL 프로그램으로 만든다. Linux 전용이며 모델 호출·다운로드가 없다.
 
 - `--instance-model`: `codeye start`의 모델 설정(TC-184). 실제 OpenCode(`~/.opencode/bin/opencode` 또는 `CODEYE_TEST_OPENCODE_BIN`)와 가짜 upstream을 쓰며 유료 호출이 없다. `CODEYE_SMOKE_REAL_MODEL_CREDENTIAL`에 0600 키 파일(`base_url` 없음)을 주면 그 키로 첫 단계(probe와 run 하나, 호출 상한 15)만 실행한다(**실모델**, 비용 발생, relay 장부를 거치지 않으므로 비용은 따로 기록한다).
-- `--web-service`: 여러 사용자의 한 서비스(TC-263). `codeye up`을 loopback 별칭(`127.0.0.2`)의 `--plain-http`와 자체 서명 TLS로 한 번씩 띄우고 Chromium 두 context(관리자와 다른 사용자)로 시작 화면·폴더 허용·GitHub 연결·관리 화면을 확인한다. 가짜 GitHub(`scripts/fake_github.py`)를 쓰며 웹 빌드·Chromium·`openssl`이 필요하다. Linux 전용이다.
+- `--web-service`: 여러 사용자의 한 서비스(TC-263). `codeye up`을 loopback 별칭(`127.0.0.2`)의 `--plain-http`와 자체 서명 TLS로 한 번씩 띄우고 Chromium 두 context(관리자와 다른 사용자)로 시작 화면·폴더 허용·GitHub 연결·관리 화면을 확인한다. 세 번째로 `--listen 0.0.0.0:PORT --plain-http`만으로 띄워 듣는 주소가 아닌 `127.0.0.2`로 로그인과 POST, 받지 않는 Host의 안내와 그 명령을 확인한다(TC-264). 가짜 GitHub(`scripts/fake_github.py`)를 쓰며 웹 빌드·Chromium·`openssl`이 필요하다. Linux 전용이다.
 - `--multinode`: 별도 DB에서 한 호스트의 노드 신원 8개로 능력 배정·대기·노드 사망·분할·drain·에이전트 갱신(TC-250~254). 실제 go vet과 시험용 handler를 쓰고 `git`이 필요하다. ruff가 PATH에 없으면 "go 없는 노드"는 `--advertise-without-baseline`으로 띄운다. Linux 전용이며 이 호스트에서 약 2분이다.
 - `--ops-drill`: 운영 훈련 D1~D9(TC-255). 자기 PostgreSQL cluster를 띄워 그것만 멈춘다(`pg_ctl` 필요). D1은 OpenCode가 없으면, D4는 ruff가 없으면 `NOT RUN`으로 기록한다. 이 호스트에서 약 9분(그중 D1이 4분여)이라 CI에서는 실행하지 않는다.
 - `--smokes-only`: Go 시험을 건너뛰고 고른 smoke만 다시 돌린다. 이때 마지막 줄은 저장 통합 시험을 실행했다고 주장하지 않는다.

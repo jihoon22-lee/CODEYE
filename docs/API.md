@@ -26,13 +26,13 @@
 
 ## 인증
 
-클라이언트가 인증하는 절차와 헤더를 적는다. 이 보호가 막는 위협, 쿠키·링크 파일의 운영 경계, 로그인 제한과 비밀번호 저장 방식은 [보안](SECURITY.md)에 있다. listen 주소는 IP와 0이 아닌 포트여야 하며, loopback이 아니면 TLS 설정(`--tls-cert`, `--tls-key`, `--public-origin`)이 모두 있거나 `--plain-http`가 있어야 서버가 시작한다. `--local-listen`은 같은 머신의 에이전트·명령용 loopback 수신 주소를 하나 더 연다.
+클라이언트가 인증하는 절차와 헤더를 적는다. 이 보호가 막는 위협, 쿠키·링크 파일의 운영 경계, 로그인 제한과 비밀번호 저장 방식은 [보안](SECURITY.md)에 있다. listen 주소는 IP와 0이 아닌 포트여야 하며, loopback이 아니면 TLS 설정(`--tls-cert`, `--tls-key`, 하나 이상의 `--public-origin`)이 모두 있거나 `--plain-http`가 있어야 서버가 시작한다. `--local-listen`은 같은 머신의 에이전트·명령용 loopback 수신 주소를 하나 더 연다.
 
 ### 일회용 로그인 링크
 
 - `codeye start`, `codeye serve --user`, `codeye login-link`가 일회용 launch token(32 byte 난수, base64url 43자, 10분, 한 번만 교환)을 발급해 `<origin>/#launch=<token>` 링크를 0600 파일에 쓴다. `codeye up`·`codeye open`은 같은 링크를 터미널에 출력하고 브라우저로 연다(A38). DB에는 SHA-256만 저장한다. CLI 사용법은 [사용 안내](GUIDE.md)에 있다.
 - `codeye up PATH`의 링크는 토큰 뒤에 깊은 링크 `&project=<ID>&run=<ID>`를 붙인다. 웹 앱은 토큰을 지울 때 이 두 키(canonical UUID)만 fragment에 남기고 그 프로젝트와 실행을 연다.
-- 관리자 API의 사용자 생성과 비밀번호 재설정도 같은 링크를 응답의 `login_link`로 한 번 준다([계정과 관리자](#계정과-관리자)). origin은 public origin(TLS나 평문 HTTP)이 있으면 그것, 아니면 요청의 loopback origin이다.
+- 관리자 API의 사용자 생성과 비밀번호 재설정도 같은 링크를 응답의 `login_link`로 한 번 준다([계정과 관리자](#계정과-관리자)). origin은 관리자가 지금 연 주소(그 요청의 scheme + Host)다. 공개 서비스를 loopback 주소로 열었으면 알려 줄 주소(`service_origin`)다.
 - 토큰은 URL fragment에 있으므로 HTTP 요청·서버 로그에 실리지 않는다. 웹 앱은 fragment를 읽은 즉시 주소창에서 지우고 `POST /session`으로 교환한다.
 - 세션 수명은 12시간이다. `codeye up`·`start`가 띄우는 controller(`codeye serve --session-ttl 168h`)는 7일이다(저장 계층의 상한과 같다).
 
@@ -58,11 +58,11 @@
 
 ### Host와 Origin
 
-- 평문 loopback: `Host`는 `127.0.0.1:<port>`, `localhost:<port>`, `[::1]:<port>`만 허용한다. 상태 변경 요청은 `Origin`이 `http://` + Host와 정확히 같아야 한다.
-- TLS: `Host`는 public origin의 host(기본 포트 443이면 `host`와 `host:443`)만 허용하고, 상태 변경 요청의 `Origin`은 public origin과 정확히 같아야 한다. 모든 응답에 `Strict-Transport-Security: max-age=31536000`을 보낸다.
-- 공개 평문 HTTP(`--plain-http`): `Host`는 public origin의 host(듣는 주소가 loopback·unspecified면 loopback Host도), 상태 변경 요청의 `Origin`은 `http://` + Host다.
+- `Host`는 loopback이 아닌 주소로 들으면 이 머신의 이름과 주소에 listen 포트(`localhost`, loopback 주소, 호스트 이름, 인터페이스 주소. [받는 주소](OPERATIONS.md#받는-주소))와 `--public-origin`의 host다. loopback으로만 들으면 loopback 이름(`127.0.0.1`, `localhost`, `[::1]`, 듣는 주소)과 `--public-origin`의 host만이다. 기본 포트(평문 80, TLS 443)면 포트 없는 Host도 받는다.
+- 상태 변경 요청의 `Origin`은 그 요청의 scheme + Host(`http://` 또는 `https://`)와 정확히 같아야 한다.
+- TLS는 모든 응답에 `Strict-Transport-Security: max-age=31536000`을 보낸다.
 - `--local-listen`의 loopback 수신 주소는 평문 loopback 규칙을 따른다. 규칙은 요청이 들어온 수신 주소가 정한다.
-- Host 위반은 정적 파일을 포함한 모든 요청에서 403 `HOST_REJECTED`, Origin 위반과 `same-origin`이 아닌 `Sec-Fetch-Site`는 403 `ORIGIN_REJECTED`다. `POST /session`도 Origin 검사를 받는다.
+- Host 위반은 정적 파일을 포함한 모든 요청에서 403 `HOST_REJECTED`다. `message`는 쓴 주소, 받는 주소, 그 주소를 더하는 `codeye up --public-origin …` 명령을 한국어로 말하고 `details`에 `host`(`host[:port]` 모양일 때만), `accepted_origins`, `add_command`가 있다. 브라우저가 연 화면(Accept에 `text/html`, `/api` 밖)이면 같은 내용의 HTML이다. Origin 위반과 `same-origin`이 아닌 `Sec-Fetch-Site`는 403 `ORIGIN_REJECTED`다. `POST /session`도 Origin 검사를 받는다.
 - CORS 허용 헤더를 보내지 않는다(same-origin만).
 
 ### 관리자와 비밀번호 변경 대기
@@ -216,9 +216,9 @@ github.com 저장소 프로젝트는 누가 등록했든 `{"profile":"deep-revie
 - `available`은 `git_url`, `local_path`, `pull_requests`, `github_token`, `model_review`, `build_scripts`, `fetch_dependencies`마다 `{available, reason}`이다. reason은 `no_git_host`, `no_allowed_folder`, `offline`, `no_state_dir`, `not_offered`(관리자 스위치), `model_not_configured`, `node_disabled`, `unknown`(기록 없음)이다. 화면은 쓸 수 없는 것을 이유와 함께 보인다.
 - `model`은 `{configured, id, probe}`(키 없음, probe는 `verified`·`failed`·`not_probed`), `tools`는 `codeye up`이 찾은 도구(`<state_dir>/tools.json`, [schema](../schemas/tools.schema.json))다. 관리자가 아니면 도구의 경로·힌트·출처를 지운다. `codeye up`의 기록이 없으면(state 디렉터리 없이 띄운 `codeye serve`) 둘 다 `null`이다.
 - `github`는 이 사람 자신의 GitHub 연결 `{enabled, host, token, account, source, reason}`이다. token 자체는 싣지 않는다. `enabled`는 이 서비스가 token을 저장할 수 있는지(`reason`: `offline_mode`, `no_state_dir`), `source`는 `web`·`GH_TOKEN`·`GITHUB_TOKEN`·`gh`다.
-- `service_origin`은 다른 사람에게 알려 줄 주소(public origin)이고 loopback에서만 들으면 null이다.
+- `service_origin`은 다른 사람에게 알려 줄 주소(첫 `--public-origin`, 없으면 이 머신의 첫 LAN·VPN·이름 주소)이고 loopback에서만 들으면 null이다. `GET /admin/settings`는 같은 값과 받는 주소 전부 `service_addresses`(`{origin, kind}`, kind는 `configured`·`this_machine`·`name`·`lan`·`vpn`)를 준다.
 
-실제 `codeye up --plain-http`에서 받은 관리자가 아닌 사용자의 `GET /setup`(폴더 허용 전후), 폴더 거절, GitHub 연결, 관리자 설정·폴더·Git host 응답은 [examples/shared-service.json](../examples/shared-service.json)에 있고 `validate_bundle.py`가 schema와 대조한다.
+실제 `codeye up --plain-http`에서 받은 관리자가 아닌 사용자의 `GET /setup`(폴더 허용 전후), 폴더 거절, GitHub 연결, 관리자 설정·폴더·Git host 응답, 받지 않는 Host의 403은 [examples/shared-service.json](../examples/shared-service.json)에 있고 `validate_bundle.py`가 schema와 대조한다.
 
 ### GitHub 연결
 

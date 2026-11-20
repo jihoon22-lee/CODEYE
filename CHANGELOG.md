@@ -4,6 +4,20 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 고침 — Git 입력 확보
+
+- Git 입력을 확보하는 임시 저장소에서 git의 자동 유지보수(`maintenance.auto`, `gc.auto`)를 끈다. git 2.56은 fetch 뒤에 분리된 유지보수 프로세스를 띄우는데, 한 번 쓰고 지우는 저장소에는 필요 없고 다음 명령과 겹칠 수 있다. CI에서 `TestGitPullRequestThatMovedFetchesThePinnedCommit`이 간헐적으로 `source_unavailable`로 실패한 뒤 넣었다. 로컬(git 2.53·2.56)에서는 그 실패를 재현하지 못했으므로 원인으로 확정한 것은 아니다.
+
+### 추가 — 사람이 쓰는 주소, 다른 사용자의 안내, 명령줄 도움말
+
+- **이 머신의 주소를 모두 받는다**: controller는 listen 포트에서 이 머신의 인터페이스 주소(LAN, Tailscale 같은 VPN, WSL2 내부 주소), loopback, `localhost`, 호스트 이름과 search domain을 붙인 이름을 Host로 받는다. `--listen 0.0.0.0:PORT --plain-http`에 `--public-origin`이 필요 없다. DNS는 묻지 않는다. 이름은 정확히 같을 때만 받는다. loopback으로만 들으면(기본 `codeye up`) 이전처럼 loopback 이름과 설정한 origin만 받는다. 상태 변경 요청의 Origin은 그 요청의 Host와 같아야 한다([받는 주소](docs/OPERATIONS.md#받는-주소), A53 7).
+- **`--public-origin`을 여러 번**: 설정 키는 목록 `public_origins`(이전 `public_origin`, 별칭 없음)이고 이 머신의 것이 아닌 주소(reverse proxy, port forward)를 더한다. `codeye up --public-origin URL`만 주면 그 목록만 바꾸고, 듣는 방식이 바뀌면 `codeye up`이 controller만 다시 띄운다.
+- **주소 목록**: `codeye up`은 "The service answers on:" 아래 받는 주소를 설정·LAN·VPN·이름·이 머신으로 묶어 보인다(`0.0.0.0`, docker·bridge 주소는 빼고). 관리 화면의 "이 서비스 주소"도 같은 목록을 보인다(`GET /admin/settings`의 `service_addresses`). 관리 화면에서 만든 로그인 링크는 관리자가 연 주소를 쓴다(loopback이면 알려 줄 주소).
+- **받지 않는 주소의 403**: 쓴 주소, 받는 주소, 그 주소를 더하는 `codeye up --public-origin …` 명령을 한국어로 말한다. API와 HTML이 아닌 요청에는 `HOST_REJECTED`와 `host`·`accepted_origins`·`add_command` details다.
+- **관리자가 아닌 사용자의 개선 안내**: "더 나은 결과를 얻으려면"이 서비스 머신에서만 할 수 있는 일(도구 설치, 모델 키, 예산, 의존성 설정)을 관리자에게 요청하라고 말하고 명령 복사 단추를 보이지 않는다. 프로젝트 스위치는 그대로 그 사람의 일이다.
+- **명령줄 도움말**: `codeye --help`는 자주 쓰는 명령(up, 다른 머신에 열기, open, status, stop, tools, doctor)을 한 줄 설명과 함께 먼저 보이고, 운영 명령과 따로 띄운 controller·노드의 관리 명령을 그다음에 묶는다. 모든 명령의 `--help`·`-h`가 그 명령의 사용법을 보이고 0으로 끝난다(이전에는 "invalid … options"와 2). 명령과 플래그는 그대로다(TC-265).
+- **확인**: 단위 시험(`internal/hostaddr`, `TestHostAcceptance`: IPv4·IPv6·포트 형태), smoke `scripts/web_service_smoke.py` wildcard(TC-264: `0.0.0.0` 평문 HTTP를 듣는 주소가 아닌 `127.0.0.2`로 로그인·POST, 받지 않는 Host의 안내, 그 명령 뒤 받음). 이 WSL2 호스트에서 `codeye up --listen 0.0.0.0:PORT --plain-http`만으로 띄워 Tailscale 주소·eth0 주소·`127.0.0.1`·호스트 이름(`Main`)·Tailscale 이름으로 curl과 Chromium 로그인이 모두 됐고 다른 Host는 403과 명령을 받았다. 관리자가 만든 사용자가 Tailscale 주소로 로그인해 GitHub token과 모델 없이 공개 저장소 `spf13/pflag`를 분석하면 약 10초에 `partial` 보고서("모델이 설정되지 않아 모델 검토를 하지 않았습니다.")가 나왔고, 그 저장소의 병합된 pull request는 약 14초에 고정된 head와 변경 파일로 분석됐다(댓글 없음). 브라우저도 같은 호스트에서 열었고 실제 다른 물리 머신과 Windows 쪽 portproxy는 시험하지 않았다.
+
 ### 추가 — 한 서비스, 사용자별 허가
 
 - **다른 머신에 서비스**: `codeye up --listen ADDR --plain-http`(경고 한 줄과 함께 평문 HTTP) 또는 `--tls-cert`·`--tls-key`·`--public-origin`(TLS). 듣는 방식은 설정 파일에 저장돼 `codeye start`와 사용자 서비스도 같은 주소로 뜬다. 이 머신의 에이전트와 명령은 loopback listener(기본은 listen 포트 + 1)를 쓴다. 로그인 링크와 관리 화면의 "이 서비스 주소"는 public origin이다([다른 사람 초대](docs/GUIDE.md#다른-사람-초대), A53).

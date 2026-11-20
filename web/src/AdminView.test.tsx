@@ -19,7 +19,9 @@ const ERIN = user({ id: '6c2a9d14-31f8-4be0-8d57-91a3e0c4f7b2', username: 'erin'
 const LINK = 'https://codeye.example/#launch=ONE-TIME-LINK-SECRET-0000000000000000000';
 const ROOT = { id: 'r0000000-0000-4000-8000-000000000001', label: 'team-root', created_at: '2026-11-01T00:00:00Z', grants: [{ user_id: SESSION.user_id, username: 'dana', granted_at: '2026-11-02T00:00:00Z' }] };
 
-const SETTINGS = { others_model_review: true, others_build_scripts: false, updated_at: '2026-11-20T00:00:00Z', service_origin: 'http://codeye.lan:7331' };
+const SETTINGS = { others_model_review: true, others_build_scripts: false, updated_at: '2026-11-20T00:00:00Z', service_origin: 'http://codeye.lan:7331',
+  service_addresses: [{ origin: 'http://127.0.0.1:7331', kind: 'this_machine' }, { origin: 'http://main:7331', kind: 'name' },
+    { origin: 'http://codeye.lan:7331', kind: 'lan' }, { origin: 'http://100.108.34.23:7331', kind: 'vpn' }] };
 type Over = Record<string, (c: Call) => Response | undefined>;
 async function openAdmin(over: Over = {}) {
   const app = renderApp(backend({
@@ -205,9 +207,20 @@ describe('shared service', () => {
     expect(screen.getAllByRole('status').some(x => x.textContent === a.changed)).toBe(true);
   });
 
+  it('lists every address the service answers on, grouped by network', async () => {
+    await openAdmin({});
+    const box = document.getElementById('service-addresses')!;
+    expect(box.textContent).toContain(a.serviceAddresses);
+    const groups = [...box.querySelectorAll('dt')].map(x => x.textContent);
+    expect(groups).toEqual([a.addressKinds.lan, a.addressKinds.vpn, a.addressKinds.name, a.addressKinds.this_machine]);
+    expect(box.textContent).toContain('http://100.108.34.23:7331');
+    expect(box.textContent).toContain(a.serviceAddressesHelp);
+  });
+
   it('says a loopback-only service has no address to share', async () => {
     await openAdmin({ 'GET /api/v1/admin/settings': () => json(200, { ...SETTINGS, service_origin: null }) });
     expect(document.getElementById('service-address')!.textContent).toContain(a.serviceAddressLocal);
+    expect(document.getElementById('service-addresses')).toBeNull();
   });
 
   it('adds a folder for everyone, shows its path, and opens or closes an existing one', async () => {

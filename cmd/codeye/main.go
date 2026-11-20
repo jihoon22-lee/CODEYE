@@ -21,8 +21,18 @@ func main() {
 	os.Exit(run(ctx, os.Args[1:], os.Stdout, os.Stderr))
 }
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
-		fmt.Fprint(out, usage)
+	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" || args[0] == "-help" {
+		writeUsage(out)
+		return 0
+	}
+	// COMMAND --help (or -h) prints that command's usage, before any of its
+	// own flag parsing (which treats an unknown flag as an error). The agent
+	// starts the worker; it has no help.
+	if args[0] != "worker" && helpRequested(args[1:]) {
+		if commandUsage(out, args) {
+			return 0
+		}
+		writeUsage(out)
 		return 0
 	}
 	if code, ok := runNodeAdmin(ctx, args, out, stderr); ok {

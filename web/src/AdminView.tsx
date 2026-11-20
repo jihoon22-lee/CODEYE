@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { userLabel, type AdminProvider, type AdminSourceRoot, type UserView } from './accounts';
 import { AdminUsers } from './AdminUsers';
-import { ApiError, type Api, type ServiceSettings } from './api';
+import { ApiError, type Api, type ServiceAddress, type ServiceAddressKind, type ServiceSettings } from './api';
 import { CopyText } from './CopyText';
 import { isAbsolutePath } from './quickStart';
 import { AuditLog, type ActorOption } from './AuditLog';
@@ -69,6 +69,7 @@ export function AdminView({ api, controller, me }: Props) {
         {current.service_origin ? <><CopyText text={current.service_origin} id="service-address-value" /><small className="small">{s.serviceAddressHelp}</small></>
           : <small className="small">{s.serviceAddressLocal}</small>}
       </div>}
+      {current?.service_origin && current.service_addresses.length > 1 && <ServiceAddresses addresses={current.service_addresses} />}
     </section>
     <nav aria-label={s.tabs.label} className="tabs">
       {TABS.map(x => <button key={x} type="button" aria-current={tab === x ? 'page' : undefined} onClick={() => setTab(x)}>{s.tabs[x]}</button>)}
@@ -350,4 +351,21 @@ function Providers({ api, onForbidden }: { api: Api; onForbidden: () => void }) 
       </tr>)}</tbody>
     </table></div>}
   </>;
+}
+
+const ADDRESS_ORDER: readonly ServiceAddressKind[] = ['configured', 'lan', 'vpn', 'name', 'this_machine'];
+
+// Every address the service answers on, grouped by the network that reaches it.
+function ServiceAddresses({ addresses }: { addresses: ServiceAddress[] }) {
+  const s = t.accounts.admin;
+  return <div id="service-addresses" className="field">
+    <span>{s.serviceAddresses}</span>
+    <dl>
+      {ADDRESS_ORDER.filter(k => addresses.some(a => a.kind === k)).map(k => <div key={k}>
+        <dt>{s.addressKinds[k]}</dt>
+        {addresses.filter(a => a.kind === k).map(a => <dd key={a.origin}><CopyText text={a.origin} /></dd>)}
+      </div>)}
+    </dl>
+    <small className="small">{s.serviceAddressesHelp}</small>
+  </div>;
 }

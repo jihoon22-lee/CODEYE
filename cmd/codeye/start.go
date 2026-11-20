@@ -213,6 +213,25 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 		_ = layout.RemoveRecord(instance.RoleAgent)
 		agentUp, agentRec = false, nil
 	}
+	// A controller that listens differently from the configuration (a new
+	// public origin, another listen address) is restarted; the agent and
+	// running work stay (the agent reconnects).
+	ctrlListen := cfg.Listen
+	if ctrlUp && !cfg.ListenExplicit() && ctrlRec.Listen != "" {
+		ctrlListen = ctrlRec.Listen
+	}
+	ctrlArgs := append([]string{"serve", "--session-ttl", httpapi.ServiceSessionTTL.String(), "--state-dir", layout.Root, "--listen", ctrlListen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}, controllerListenArgs(cfg)...)
+	if ctrlUp && ctrlRec.Args != nil && !slices.Equal(ctrlRec.Args, ctrlArgs) {
+		fmt.Fprintln(out, "restarting the controller: how it listens changed")
+		if err := ctrlRec.Terminate(); err != nil && !errors.Is(err, instance.ErrProcessGone) {
+			return fail("cannot stop the controller:", signalAction(err, "terminate_requested"))
+		}
+		if !waitGoneCtx(ctx, ctrlRec, 45*time.Second) {
+			return fail("the controller did not stop; run codeye stop, then codeye up again")
+		}
+		_ = layout.RemoveRecord(instance.RoleController)
+		ctrlUp, ctrlRec = false, nil
+	}
 	if ctrlUp && agentUp {
 		res.already = true
 		res.controllerPID, res.agentPID = ctrlRec.PID, agentRec.PID
@@ -253,7 +272,6 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 		return nil, 1
 	}
 	if !ctrlUp {
-		ctrlArgs := append([]string{"serve", "--session-ttl", httpapi.ServiceSessionTTL.String(), "--state-dir", layout.Root, "--listen", cfg.Listen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}, controllerListenArgs(cfg)...)
 		ctrlEnv := append(childEnv(append([]string{"PATH", "HOME", "LANG", "TZ"}, fixtureControllerEnv...)...), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
 		cmd, rec, err := instance.Spawn(instance.RoleController, exe, ctrlArgs, ctrlEnv, layout.Root, layout.LogFile(instance.RoleController))
 		if err != nil {
@@ -262,7 +280,7 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 			}
 			return rollback(err.Error())
 		}
-		rec.Listen = cfg.Listen
+		rec.Listen, rec.Args = ctrlListen, ctrlArgs
 		started = append(started, &rec)
 		if err := layout.WriteRecord(rec); err != nil {
 			return rollback("cannot record the controller process")
@@ -333,9 +351,12 @@ func controllerListenArgs(cfg *instance.Config) []string {
 	var args []string
 	switch {
 	case cfg.TLS():
-		args = append(args, "--tls-cert", cfg.TLSCert, "--tls-key", cfg.TLSKey, "--public-origin", cfg.ServiceOrigin())
+		args = append(args, "--tls-cert", cfg.TLSCert, "--tls-key", cfg.TLSKey)
 	case cfg.PlainHTTP:
-		args = append(args, "--plain-http", "--public-origin", cfg.ServiceOrigin())
+		args = append(args, "--plain-http")
+	}
+	for _, o := range cfg.PublicOrigins {
+		args = append(args, "--public-origin", o)
 	}
 	if cfg.NeedsLocalListen() {
 		args = append(args, "--local-listen", cfg.InternalListen())

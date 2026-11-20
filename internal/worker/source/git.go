@@ -93,7 +93,10 @@ func dirSize(dir string) int64 {
 func (g gitRunner) run(ctx context.Context, input io.Reader, max int64, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	policy := []string{"-c", "protocol.allow=never", "-c", "protocol.https.allow=always", "-c", "credential.helper=", "-c", "http.followRedirects=false", "-c", "core.hooksPath=" + filepath.Join(g.home, "hooks"), "-c", "fetch.recurseSubmodules=false", "-c", "transfer.fsckObjects=true", "-c", "fetch.fsckObjects=true"}
+	policy := []string{"-c", "protocol.allow=never", "-c", "protocol.https.allow=always", "-c", "credential.helper=", "-c", "http.followRedirects=false", "-c", "core.hooksPath=" + filepath.Join(g.home, "hooks"), "-c", "fetch.recurseSubmodules=false", "-c", "transfer.fsckObjects=true", "-c", "fetch.fsckObjects=true",
+		// The repository is scratch space for one acquisition: no background
+		// maintenance process may outlive a command or repack under the next one.
+		"-c", "maintenance.auto=false", "-c", "gc.auto=0"}
 	if g.fileTransport {
 		policy = append(policy, "-c", "protocol.file.allow=always")
 	}

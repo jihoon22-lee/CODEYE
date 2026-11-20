@@ -149,7 +149,7 @@ describe('response validation', () => {
   it('calls the GitHub connection and the administrator routes, and never parses a token back', async () => {
     const view = { host: 'github.com', connected: true, account: null, source: 'web', storable: true, reason: null };
     const m = mockFetch(call => call.method === 'DELETE' || call.url.endsWith('/everyone') ? new Response(null, { status: 204 })
-      : call.url === '/api/v1/admin/settings' ? json(200, { others_model_review: false, others_build_scripts: false, updated_at: '2026-11-20T00:00:00Z', service_origin: null })
+      : call.url === '/api/v1/admin/settings' ? json(200, { others_model_review: false, others_build_scripts: false, updated_at: '2026-11-20T00:00:00Z', service_origin: null, service_addresses: [{ origin: 'http://127.0.0.1:7331', kind: 'this_machine' }] })
       : call.url === '/api/v1/admin/source-roots' ? json(201, { id: 'r1', label: 'nfs', path: '/mnt/nfs', everyone: true, created_at: '2026-11-20T00:00:00Z', grants: [] })
       : call.url === '/api/v1/admin/providers' ? json(201, { id: 'p1', kind: 'ghes', host: 'ghe.example.com', api_url: null })
       : json(200, { ...view, token: 'must-not-matter' }));
@@ -159,7 +159,9 @@ describe('response validation', () => {
     expect((await api.addSourceRoot({ path: '/mnt/nfs', everyone: true })).path).toBe('/mnt/nfs');
     await api.setSourceRootEveryone('r1', false);
     expect((await api.addProvider('ghe.example.com')).kind).toBe('ghes');
-    expect((await api.putSettings({ others_model_review: false })).others_model_review).toBe(false);
+    const saved = await api.putSettings({ others_model_review: false });
+    expect(saved.others_model_review).toBe(false);
+    expect(saved.service_addresses).toEqual([{ origin: 'http://127.0.0.1:7331', kind: 'this_machine' }]);
     expect(m.calls.map(c => `${c.method} ${c.url} ${JSON.stringify(c.body ?? null)}`)).toEqual([
       'PUT /api/v1/account/github {"token":"tok-123456789"}',
       'DELETE /api/v1/account/github null',
