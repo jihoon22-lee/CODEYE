@@ -52,11 +52,16 @@ describe('analysis sections', () => {
     render(<ReportDocument report={report} />);
     const hero = screen.getByRole('heading', { name: 'Billing' }).closest('header')!;
     expect(within(hero).getByText('/srv/billing')).toBeTruthy();
-    expect(within(hero).getByText(t.executionStatuses[report.status])).toBeTruthy();
+    expect(report.status).toBe('partial');
+    expect(within(hero).getByText('일부 검사 미완료로 종료')).toBeTruthy();
+    expect(within(hero).getByText('종료 시각')).toBeTruthy();
+    expect(within(hero).queryByText('분석 종료', {exact: true})).toBeNull();
     expect(hero.querySelector('time')?.dateTime).toBe(doc.project.finished_at);
     const input = screen.getByText(t.reading.provenance).closest('details')!;
     expect(input.open).toBe(false);
     expect(within(input).getByText('/srv/billing')).toBeTruthy();
+    expect(within(input).getByText('시작 시각')).toBeTruthy();
+    expect(within(input).getByText('종료 시각')).toBeTruthy();
     const tab = screen.getByRole('tab',{name:t.sections.overview});
     expect(tab.getAttribute('aria-selected')).toBe('true');
     const order = ['environment', 'documents', 'static_analysis', 'metrics', 'secrets', 'code_review', 'gaps'];

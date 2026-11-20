@@ -30,9 +30,13 @@ test('published report exposes the same counts, evidence and revision in the bro
   const hero = report.locator('.report-hero');
   await expect(hero.getByRole('heading', { name: project, exact: true })).toBeVisible();
   await expect(hero.getByText(doc.project.source, {exact: true})).toBeVisible();
-  const status = {completed: '분석 완료', partial: '분석 일부 완료', failed: '분석 실패', cancelled: '분석 취소됨'}[doc.status as string];
+  const status = {completed: '분석 완료', partial: '일부 검사 미완료로 종료', failed: '분석 실패', cancelled: '분석 취소됨'}[doc.status as string];
   await expect(hero.getByText(status!, {exact: true})).toBeVisible();
-  if (doc.project.finished_at) await expect(hero.locator('time')).toHaveAttribute('datetime', doc.project.finished_at);
+  if (doc.project.finished_at) {
+    await expect(hero.locator('time')).toHaveAttribute('datetime', doc.project.finished_at);
+    await expect(hero.getByText('종료 시각', {exact: true})).toBeVisible();
+    await expect(hero.getByText('분석 종료', {exact: true})).toHaveCount(0);
+  }
   const judgment = report.locator('.report-executive');
   await expect(judgment).toHaveCount(1);
   await expect(judgment.locator('table, .model-reading-list')).toHaveCount(0);

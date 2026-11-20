@@ -296,6 +296,7 @@ func TestRelatedConfirmedControlAndPendingBehaviorHaveSeparateRanges(t *testing.
 func TestReportCoverUsesOnlyRegisteredSourceAndRecordedTime(t *testing.T) {
 	r := storedExample(t, "../../examples/report.json")
 	r.Inputs.Description = "scratch/workspace/provisional-copy"
+	r.Status = "partial"
 	r.Project.FinishedAt = "2026-11-20T21:01:52+09:00"
 	for _, source := range []string{
 		"https://github.com/owner/" + strings.Repeat("long-", 35) + "project.git",
@@ -312,12 +313,12 @@ func TestReportCoverUsesOnlyRegisteredSourceAndRecordedTime(t *testing.T) {
 				t.Fatal("missing report cover")
 			}
 			cover, _, _ := strings.Cut(rest, "</header>")
-			for _, want := range []string{r.Project.Name, source, Korean.Label("report.status." + r.Status), "2026-11-20 12:01 UTC"} {
+			for _, want := range []string{r.Project.Name, source, "일부 검사 미완료로 종료", "종료 시각", "2026-11-20 12:01 UTC"} {
 				if !strings.Contains(cover, want) {
 					t.Fatalf("cover lacks %q", want)
 				}
 			}
-			for _, unwanted := range []string{r.Inputs.Description, Korean.Label("verdict.inconclusive"), "href="} {
+			for _, unwanted := range []string{r.Inputs.Description, Korean.Label("verdict.inconclusive"), "분석 종료", "href="} {
 				if strings.Contains(cover, unwanted) {
 					t.Fatalf("cover exposes %q", unwanted)
 				}

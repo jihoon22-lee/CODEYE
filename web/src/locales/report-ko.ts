@@ -1,5 +1,5 @@
 export const reportKo = {
-  sourcePath: '분석 경로', commit: '커밋', start: '분석 시작', finish: '분석 종료', published: '작성 시각',
+  sourcePath: '분석 경로', commit: '커밋', start: '시작 시각', finish: '종료 시각', published: '작성 시각',
   duration: '소요 시간',
   durationValue: (seconds: number) => [
     Math.floor(seconds / 3600) > 0 ? `${Math.floor(seconds / 3600)}시간` : '',
@@ -9,7 +9,7 @@ export const reportKo = {
   status: '분석 상태', excerptAt: (location: string) => `${location} 원문 발췌`,
   target: '분석 대상',
   executionStatus: (status: string) => `분석 ${status}`,
-  executionStatuses: {completed: '분석 완료', partial: '분석 일부 완료', failed: '분석 실패', cancelled: '분석 취소됨'} as Record<string, string>,
+  executionStatuses: {completed: '분석 완료', partial: '일부 검사 미완료로 종료', failed: '분석 실패', cancelled: '분석 취소됨'} as Record<string, string>,
   openSource: '커밋에서 열기',
   viewCode: '코드 보기',
   viewDocument: '문서 보기',
