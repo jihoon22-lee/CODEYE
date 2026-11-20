@@ -17,6 +17,18 @@ except ImportError as exc:
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def holdout_corpus(root: Path = ROOT) -> Path:
+    """The holdout corpus script, fixtures/quality-holdout/corpus.py. A checkout
+    that keeps the holdout under another directory name has it as the one
+    fixture corpus.py beside the regression set; its contents are not read here."""
+    named = root / "fixtures/quality-holdout/corpus.py"
+    if named.is_file():
+        return named
+    found = [p for p in sorted((root / "fixtures").glob("*/corpus.py")) if p.parent.name != "regression"]
+    ensure(len(found) == 1, "holdout corpus not found under fixtures/")
+    return found[0]
+
+
 def ensure(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)

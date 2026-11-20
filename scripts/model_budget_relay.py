@@ -102,7 +102,7 @@ HALT_STATUSES = ("usage_out_of_bounds", "tier_mismatch", "model_mismatch")
 RETRYABLE_STATUSES = frozenset({408, 409, 429}) | frozenset(range(500, 600))
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
-# Answer blocking. The file is produced by fixtures/r1-quality/corpus.py forbidden.
+# Answer blocking. The file is produced by fixtures/quality-holdout/corpus.py forbidden.
 FORBIDDEN_SCHEMA = "codeye-forbidden-phrases"
 FORBIDDEN_VERSION = 1
 FORBIDDEN_NORMALIZATION = "codeye-words-v1"

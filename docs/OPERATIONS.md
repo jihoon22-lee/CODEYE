@@ -168,7 +168,7 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행. 탐색은 둘 다 찾으면 켠다 |
 | `agent.dependencies` | 없음(의존성 받기 켜짐) | `enabled`(기본 true, false면 에이전트에 `--dependency-fetch`를 주지 않는다), `cache_dir`(절대 경로, 기본 `<state_dir>/cache/deps`), `go_proxy`·`go_sumdb`·`go_private`·`go_noproxy`·`go_nosumdb`(비우면 탐색이 읽은 사용자 `go env` 값, 그것도 없으면 Go 기본값), `npm_registry`(인증정보 없는 http(s) URL, 비우면 탐색이 읽은 사용자 npm 레지스트리, 그것도 없으면 npm 기본값), `pip_index_url`(Python 패키지 index, 비우면 PyPI. 인증정보가 든 URL은 설정 오류), `timeout_seconds`(기본 600), `total_timeout_seconds`(기본 1200), `max_download_bytes`(기본 2 GiB). 프로젝트별로 끄는 것은 "고급"의 "의존성 받기"다([의존성 준비](ARCHITECTURE.md#의존성-준비)) |
 | `agent.auto_detect` | true | `false`이면 도구를 탐색하지 않고 위 명시 설정만 쓴다 |
-| `agent.model` | 없음(키 파일만으로도 모델을 쓴다) | 모든 항목 선택. `opencode`(절대 경로, 비우면 `~/.opencode/bin/opencode` 다음 PATH), `name`(`PROVIDER/MODEL` 또는 키 provider의 모델 이름, 비우면 provider 기본값), `credential_file`(절대 경로, CODEYE 키 파일 또는 OpenCode `auth.json`), `relay_file`(절대 경로, `credential_file`과 함께 쓰지 않음), `timeout_seconds`(1~1800, 비우면 180), `review_pack`(`review-r1` 기본·`review-v1` 이전 팩), `review_max_calls`(15~207, 비우면 99: attempt마다 review-r1 모델 호출 상한, `--review-max-calls`). 해석 순서는 [검토](REVIEW.md#모델-설정) |
+| `agent.model` | 없음(키 파일만으로도 모델을 쓴다) | 모든 항목 선택. `opencode`(절대 경로, 비우면 `~/.opencode/bin/opencode` 다음 PATH), `name`(`PROVIDER/MODEL` 또는 키 provider의 모델 이름, 비우면 provider 기본값), `credential_file`(절대 경로, CODEYE 키 파일 또는 OpenCode `auth.json`), `relay_file`(절대 경로, `credential_file`과 함께 쓰지 않음), `timeout_seconds`(1~1800, 비우면 180), `review_max_calls`(15~207, 비우면 99: attempt마다 모델 검토 호출 상한, `--review-max-calls`). 해석 순서는 [검토](REVIEW.md#모델-설정) |
 | `quota.*_bytes` | 0(상한 없음) | `snapshot`·`workspace`·`cache`·`logs`·`artifacts`, 음수 거부 |
 | `backup_dir` | 빈 값(백업은 `<state_dir>-backups`에 만든다) | 절대 경로. `state_dir` 안이거나 `state_dir`를 포함하면 거부 |
 | `stop.drain_timeout_seconds` | 300 | 1~86400 |
@@ -480,7 +480,7 @@ python3 scripts/offline_pack.py check-web web/dist
 | `MANIFEST.json` | `name`, `version`, `commit`, `dirty`, `build_time`, `os`, `arch`, `go_version`, `node_version`, `cgo_enabled`, `linking`, `embedded`, `not_included`, `files[]`(경로·크기·sha256·mode) |
 | `SHA256SUMS` | 모든 파일과 MANIFEST.json의 sha256(`sha256sum -c`로 확인) |
 
-- **실행 파일에 들어 있는 것.** DB migration(`internal/storage/migrations`)과 검토 지침 팩(`prompts/review-r1`, `prompts/review-v1`)은 Go embed로 실행 파일 안에 있다. MANIFEST의 `embedded`가 migration마다 이름·sha256, 지침 팩마다 id·version·파일 수·sha256을 적는다. `codeye version [--json]`이 실행 파일의 버전·commit·빌드 시각·Go 버전·OS/arch·최신 migration 번호를 보인다.
+- **실행 파일에 들어 있는 것.** DB migration(`internal/storage/migrations`)과 검토 지침(`prompts/review`)은 Go embed로 실행 파일 안에 있다. MANIFEST의 `embedded`가 migration마다 이름·sha256, 지침의 id·version·파일 수·sha256을 적는다. `codeye version [--json]`이 실행 파일의 버전·commit·빌드 시각·Go 버전·OS/arch·최신 migration 번호를 보인다.
 - **파일로 싣는 것.** 웹 화면, 문서, 설정 예시. `codeye`는 옆의 `web/dist`를 쓴다.
 - **싣지 않는 것**(`not_included`). 분석 도구, 언어 toolchain, PostgreSQL, OpenCode, 프로젝트 의존성. 운영자가 따로 옮긴다([분석 도구 옮기기](#분석-도구-옮기기)).
 - **웹 화면이 외부를 부르지 않음.** 응답의 CSP가 `default-src 'self'`라 브라우저가 다른 출처를 불러오지 않는다. 그와 별도로 `check-web`이 `web/dist`의 HTML·CSS·JS에서 `http(s)://`·`//host` 형태의 주소와 원격 source map을 찾아, 식별자·문구로만 쓰이는 주소(`www.w3.org`, `json-schema.org`, React 오류 안내 주소, `codeye.invalid`, 입력란 예시 `https://github.com/owner/repo`) 밖의 것이 있으면 실패한다. CI의 웹 작업이 빌드 뒤 이 검사를 실행하고, `scripts/test_offline_pack.py`가 글꼴·CDN·`@import`·`url()`·`fetch`·원격 source map 각각이 실패하는지 시험한다.

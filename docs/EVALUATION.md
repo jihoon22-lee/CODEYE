@@ -2,7 +2,7 @@
 
 이 문서는 CODEYE의 분석·검토 품질을 재는 방법을 정한다. 원칙과 지표, 회귀 집합과 보류 집합, 평가 runner, 유료 batch 절차, 예산 relay와 장부, 지침 개정 규칙을 다룬다. 결과 수치는 이 문서에 쓰지 않는다. 실행 결과는 [평가 결과](EVALUATION-RESULTS.md)에만 둔다.
 
-- 구현: 회귀 집합 [`fixtures/regression`](../fixtures/regression/corpus.json), 실행 틀 [`scripts/eval_harness.py`](../scripts/eval_harness.py), 회귀 실행 [`scripts/regression_pilot.py`](../scripts/regression_pilot.py), 평가 runner [`scripts/quality_eval.py`](../scripts/quality_eval.py), 채점 [`scripts/quality_score.py`](../scripts/quality_score.py), 두 결과 비교 [`scripts/pack_compare.py`](../scripts/pack_compare.py), 예산 relay [`scripts/model_budget_relay.py`](../scripts/model_budget_relay.py)
+- 구현: 회귀 집합 [`fixtures/regression`](../fixtures/regression/corpus.json), 실행 틀 [`scripts/eval_harness.py`](../scripts/eval_harness.py), 회귀 실행 [`scripts/regression_pilot.py`](../scripts/regression_pilot.py), 평가 runner [`scripts/quality_eval.py`](../scripts/quality_eval.py), 채점 [`scripts/quality_score.py`](../scripts/quality_score.py), 예산 relay [`scripts/model_budget_relay.py`](../scripts/model_budget_relay.py)
 - 요구사항: REQ-010/011/013/027, NFR-007/008/010([요구사항](REQUIREMENTS.md))
 - 수용 시험: TC-100, TC-120~122, TC-128, TC-129([시험](TESTING.md))
 - 검토 역할·입력·출력 규칙: [모델 검토](REVIEW.md)
@@ -57,7 +57,7 @@
 
 ### 보류 집합과 봉인
 
-보류 집합은 `fixtures/r1-quality/`의 다언어 corpus다. C/C++·Python·JS/TS·Go·Rust 언어마다 결함 쌍 9개와 까다로운 정상 사례 2개, 총 55개 사례(변형 100개)다. 사례는 실제 toolchain으로 수정 전 실패·수정 후 통과(정상 사례는 통과)를 확인했고, 정답 문구가 분석 입력에 들어가지 않는지 자동 검사한다. 지침 작성자가 읽지 않는 자료이므로 이 문서는 사례 내용을 담지 않는다.
+보류 집합은 `fixtures/quality-holdout/`의 다언어 corpus다. C/C++·Python·JS/TS·Go·Rust 언어마다 결함 쌍 9개와 까다로운 정상 사례 2개, 총 55개 사례(변형 100개)다. 사례는 실제 toolchain으로 수정 전 실패·수정 후 통과(정상 사례는 통과)를 확인했고, 정답 문구가 분석 입력에 들어가지 않는지 자동 검사한다. 지침 작성자가 읽지 않는 자료이므로 이 문서는 사례 내용을 담지 않는다.
 
 봉인 기록은 이곳에 둔다. 보류 집합을 바꾸면 새 digest와 날짜, 바꾼 이유를 이 표에 더하고 [`scripts/validate_bundle.py`](../scripts/validate_bundle.py)의 `sealed` 값을 같은 커밋에서 바꾼다.
 
@@ -65,7 +65,7 @@
 |---|---|---|
 | 현재 | `ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4` | 지침 조정에 쓰지 않았고, 작성자는 지침과 과거 모델 결과를 읽지 않았다 |
 
-- 확인: `python3 scripts/validate_bundle.py`가 `python3 -I fixtures/r1-quality/corpus.py validate`와 `... digest`를 실행해 구조·위치·digest·누설 검사와 봉인 digest 일치를 확인한다. 불일치면 실패한다.
+- 확인: `python3 scripts/validate_bundle.py`가 `python3 -I fixtures/quality-holdout/corpus.py validate`와 `... digest`를 실행해 구조·위치·digest·누설 검사와 봉인 digest 일치를 확인한다. 불일치면 실패한다.
 - 봉인을 바꾸면 이전 봉인으로 얻은 결과와 새 결과는 다른 집합의 결과다. 같은 표에서 비교하지 않는다.
 
 ## 정답 라벨
@@ -89,7 +89,7 @@
 | false-positive rate | 정상 사례 변형, after 변형, 둘을 합친 것 | `false_positive` finding이 있는 변형. 범위는 actionable finding(`supported`·`reproduced`, open)과 모든 finding 두 가지. 알려지지 않은 코드 전체를 정상 분모로 쓰지 않는다 |
 | actionable precision | 판정된 actionable finding | `valid_actionable`(엄격), `valid_*`(넓게). 미판정은 제외하고 수를 따로 낸다 |
 | evidence validity | 게시 보고서 | `validate_bundle.check_report`로 새로 만든 입력과 대조해 통과한 보고서. 근거·claim 수를 함께 센다 |
-| unsupported assertions | 판정된 finding / 구조 | `insufficient_evidence` 비율. 구조로는 실행 근거 없는 `reproduced`, 검증기가 거부한 출력의 오류 분류(꾸민 근거·범위 일반화·실행 주장, `pack_compare.structural`), 통계 불일치 보고서 |
+| unsupported assertions | 판정된 finding / 구조 | `insufficient_evidence` 비율. 구조로는 실행 근거 없는 `reproduced`, 검증기가 거부한 출력의 오류 분류(꾸민 근거·범위 일반화·실행 주장), 통계 불일치 보고서 |
 | duplicate burden | 판정된 finding / 구조 | `duplicate` 수. 구조로는 같은 변형에서 위치가 겹치는 finding 수 |
 | reversal quality(설계) | 반례가 있는 후보 | 유효한 반대 근거로 철회한 수/반례 수, 실제 결함을 유지한 수. 채점기가 내지 않으며 사람이 판정한다 |
 | report usefulness | 보고서 읽기 과제 | 영향·조건·수정/확인 방법을 독자가 정확히 찾는지(아래 보고서 읽기 평가) |
@@ -117,12 +117,11 @@
 
 ## 지침 개정과 회귀 검증
 
-- 검토 지침 개정은 기본 팩(`review-r1`) 하나에만 한다. 팩 구성과 작성 규칙은 [모델 검토](REVIEW.md)에 있다.
-- 기본 팩 개정은 회귀 집합을 실모델로 **한 번** 실행해 검증한다. 대상 사례와 판정 기준(사전 기준)은 실행 전에 함께 정하고, 결과와 함께 [평가 결과](EVALUATION-RESULTS.md)에 기록한다. 결과를 보고 기준이나 대상을 바꾸지 않는다.
-- 다음 차단 조건 중 하나라도 나오면 개정을 기본값으로 쓰지 않는다: 허위 근거, 실행 없이 재현을 단정한 서술, 통계 오염(모델 서술이 상태·수치에 들어감), 중요한 기존 사례의 승인되지 않은 성능 저하.
-- 경고 수 감소만으로 승격하지 않는다. 계약 밖 경고 부담을 줄이면서 수정 전 결함을 계속 찾는지 함께 본다.
+- 검토 기준은 하나다(A52). 개정은 검토 지침(`prompts/review`) 하나에 한다. 지침 구성과 작성 규칙은 [모델 검토](REVIEW.md)에 있다.
+- 지침 개정은 회귀 집합을 실모델로 **한 번** 실행해 검증한다. 대상 사례와 판정 기준(사전 기준)은 실행 전에 함께 정하고, 결과와 함께 [평가 결과](EVALUATION-RESULTS.md)에 기록한다. 결과를 보고 기준이나 대상을 바꾸지 않는다.
+- 다음 차단 조건 중 하나라도 나오면 개정을 병합하지 않는다: 허위 근거, 실행 없이 재현을 단정한 서술, 통계 오염(모델 서술이 상태·수치에 들어감), 중요한 기존 사례의 승인되지 않은 성능 저하.
+- 경고 수 감소만으로 개정을 받아들이지 않는다. 계약 밖 경고 부담을 줄이면서 수정 전 결함을 계속 찾는지 함께 본다.
 - 회귀 한 번의 통과는 품질 우월의 근거가 아니다. 독립 품질 주장은 조정에 쓰지 않은 새 보류 사례로만 한다.
-- 두 팩을 나란히 비교하는 일은 새 팩 id로 기본값을 바꿀 때만 한다. 이때는 같은 스냅샷·역할별 입력·모델·예산을 고정하고, 팩 digest·제외 범위·팩별 호출 수와 usage를 따로 남긴다. 정답은 모델 입력 밖에 둔다.
 - 기록할 지표:
 
 | 역할 | 대조할 사례 | 기록할 지표 |
@@ -133,11 +132,11 @@
 
 ## 보류 독립성
 
-- 지침(프롬프트) 작성자는 [평가 결과](EVALUATION-RESULTS.md)와 `fixtures/r1-quality/`를 읽지 않는다. 저장소 밖 평가 결과 디렉터리, 판정 양식, answer key도 읽지 않는다. 그 경로를 지나는 검색도 하지 않는다.
+- 지침(프롬프트) 작성자는 [평가 결과](EVALUATION-RESULTS.md)와 `fixtures/quality-holdout/`을 읽지 않는다. 저장소 밖 평가 결과 디렉터리, 판정 양식, answer key도 읽지 않는다. 그 경로를 지나는 검색도 하지 않는다.
 - 보류 사례나 결과를 본 사람(조정자)은 지침 문구를 쓰지 않는다. 결과에서 알게 된 실패는 지침 문구를 그 사례에 맞추지 않고, 가능하면 구조(플랫폼 검사)로 막는다.
 - 지침 작성 지시에 보류 결과에서 얻은 관찰을 옮기지 않는다. 옮겼다면 그 사실을 결과와 함께 기록한다.
 - 결과는 [평가 결과](EVALUATION-RESULTS.md)에만 둔다. 다른 문서, 코드 주석, 지침, 커밋 메시지에 결과 수치나 사례 내용을 옮기지 않는다.
-- holdout 등록부(아래)가 같은 팩 id의 이전 digest 실행을 표시한다. 현재 기본 팩 `review-r1`은 같은 팩 id의 다른 digest가 현재 보류 집합으로 실행된 적이 있으므로 이후 실행은 `holdout_seen_by_prior_revision`으로 표시된다. 현재 기본 팩의 독립 보류 평가에는 새 사례(새 봉인)가 필요하다.
+- holdout 등록부(아래)가 같은 지침의 이전 digest 실행을 표시한다. 현재 지침은 이전 digest가 현재 보류 집합으로 실행된 적이 있으므로 이후 실행은 `holdout_seen_by_prior_revision`으로 표시된다. 현재 지침의 독립 보류 평가에는 새 사례(새 봉인)가 필요하다.
 
 ## 회귀 집합 실행
 
@@ -146,16 +145,14 @@
 - 준비물: Go, PostgreSQL 도구(`initdb`, `pg_ctl`, `psql`), 잠금 파일대로 설치한 웹 의존성, Chromium, 고정 버전 OpenCode, 이미 시작한 예산 relay의 ready file. Go 도구는 설치된 로컬 모듈 캐시를 쓴다.
 - 실행: `CODEYE_PILOT_RELAY_FILE`에 relay ready file을, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정하고 `python3 scripts/test_postgres.py --pilot`을 실행한다. 실제 모델 요청을 보낸다.
 - 대상 한정: `CODEYE_PILOT_CASES`에 `Q01-before,Q01-after,...,w15,w12-close,pilot,git`처럼 쉼표로 준다. 비우면 합성 쌍 전체, 고정 공개 커밋, 공개 HTTPS `main`을 실행한다. 고정 입력 `w15`·`w12-close`는 명시할 때만 들어간다.
-- 팩: `CODEYE_PILOT_REVIEW_PACK`(비우면 에이전트 기본값 `review-r1`).
 - 모듈 단위 slice: `CODEYE_PILOT_GITLEAKS`(gitleaks 절대 경로. 없으면 slice는 미선별로 실행되고 보고서에 미선별 공백이 남는다)와 `CODEYE_PILOT_REVIEW_MAX_CALLS`(비우면 에이전트 기본값 99)를 에이전트에 넘긴다. `CODEYE_PILOT_TOOLS`(공백으로 구분한 `name=path`, 예: `ruff=/abs/ruff node=/abs/node eslint=/abs/eslint/bin/eslint.js`)는 에이전트 플래그 `--name path`가 된다. 파일럿 사본은 Python·JS 모듈의 ruff·eslint가 판정에 필요하므로, 이 도구가 없으면 파일럿은 `partial`이고 아래 조건을 통과하지 못한다. `CODEYE_PILOT_LEDGER`를 주면 그 relay 장부도 검사한다. 실행 뒤 `check_coverage`가 다음을 확인하고 결과를 `coverage-check.json`에 남긴다. 하나라도 어긋나면 실행이 실패한다.
-  - 파일럿이 아닌 사례에는 slice task가 없고, review-r1 호출의 지침 팩 digest가 Go 단독 선택의 고정값이다.
+  - 파일럿이 아닌 사례에는 slice task가 없고, 검토 호출의 지침 digest가 Go 단독 선택의 고정값이다.
   - 파일럿은 `completed`이고 AI 검토가 `performed`다. 보고서가 검토 산출물을 모두 읽었다(`unrecognized_artifact`·`artifact_rejected`·`review_lineage_mismatch` 등이 없다). 범위 산출물과 보고서 [장부](REPORT.md#모듈별-검토-장부)의 상한이 설정과 같고, 장부의 `calls_used`(slice 앞 attempt 호출 수와 slice 기록의 호출)가 알려져 있고 상한 이하다. `budget_exhausted` slice에는 기록도 호출도 없다. overview와 slice의 investigate가 같은 파일을 보내지 않는다. 장부의 모델에 보낸 파일 합과 보고서의 `llm_exposed_files`가 overview가 보낸 파일 수보다 크다.
   - 시험 장부(가짜 upstream)의 dry run에서는 두 원인을 실패가 아닌 `dry_run_expected`로 적는다. 가짜 upstream 응답이 거부된 검토 task(`review_output_invalid`, 이때 `llm_exposed_files`는 미확정)와 이 호스트에 설정하지 않은 필수 분석기(`tool_not_configured`) 때문에 파일럿이 `partial`인 경우다. 두 원인은 대개 함께 나타난다. 분석기가 없으면 `review.interpret`에 들어갈 관찰이 없고, 가짜 upstream은 관찰이 없을 때 항목 없는 응답을 돌려줘 거부된다. `CODEYE_PILOT_TOOLS`로 ruff·eslint·node를 주면 dry run 파일럿도 `completed`이고 `dry_run_expected`는 비어 있다. 다른 원인은 그대로 실패이고, 유료 실행에는 이 예외가 없다.
   - relay 장부에 `refused`·`blocked` 요청이 없다.
 - 비용 없는 dry run: `python3 scripts/regression_pilot.py --dry-run --relay-file R --ledger L --results DIR --cases ... [--gitleaks P] [--max-calls N] [--tool name=path ...] [--build-root SRC] [--no-coverage-check]`. 장부 header가 `test-loopback`(relay `--test-upstream`)이 아니면 거부한다. 웹 빌드와 브라우저 내보내기는 하지 않는다. `--build-root`로 다른 checkout의 바이너리를 만들어 기준으로 삼고, `--compare-dumps BASE CAND`가 두 가짜 upstream `--dump` 디렉터리의 요청을 실행마다 다른 ID를 바꾼 뒤 다중집합으로 비교한다.
 - 에이전트 두 대는 같은 호스트에서 풀 최소·최대 0과 2로 돈다. 합성 사례와 공개 사본의 트리 해시를 실행 전후에 대조한다.
 - 감사: `python3 scripts/regression_pilot.py --audit-results "$CODEYE_PILOT_RESULTS"`가 보관된 보고서를 원본과 다시 대조한다(구조·통계·스냅샷, 주장과 근거의 파일 위치·줄 범위·blob SHA). Git 입력의 commit 객체가 로컬에 있어야 한다. 이 검사는 주장 자체가 옳다는 보증과 구분한다.
-- 두 결과 비교: `python3 scripts/pack_compare.py A_DIR B_DIR --judgments FILE`. 보관 결과만 읽고 모델 요청을 보내지 않는다. 구조 지표는 보고서에서, 결함 판정은 스냅샷 밖 판정 파일에서 읽는다. 판정은 평가자의 라벨이며 측정된 precision이 아니다.
 - 결과 디렉터리와 판정은 저장소 밖 비공개 경로에 둔다. 결과 요약은 [평가 결과](EVALUATION-RESULTS.md)에 쓴다.
 
 ## 평가 runner
@@ -165,7 +162,7 @@
 | 하위 명령 | 역할 |
 |---|---|
 | `plan` | 층별 표본 선택과 호출·비용 추정만. 제품을 실행하지 않는다. `--ledger`를 주면 거절 판단까지 한다(거절이면 종료 코드 1) |
-| `run` | batch 하나 실행. `--condition tools`(분석기만) 또는 `--condition review --pack review-r1|review-v1` |
+| `run` | batch 하나 실행. `--condition tools`(분석기만) 또는 `--condition review --pack review` |
 | `score` | 판정 지표와 Wilson 구간, batch 나란히 비교 |
 | `allow-text` | tools batch의 도구 메시지와 capture dry run의 envelope를 허용 텍스트로 모은다 |
 | `capture-list` | 아무것도 막지 않는 감시용 목록(`purpose: envelope_capture`). 시험용 upstream 전용 |
@@ -174,7 +171,7 @@
 
 | 부분 | 위치 | 역할 |
 |---|---|---|
-| 정답 목록 | `fixtures/r1-quality/corpus.py forbidden` | 라벨 문구 n-gram과 고유 토큰 중 어떤 입력에도 나오지 않는 것을 JSON으로 내보낸다 |
+| 정답 목록 | `fixtures/quality-holdout/corpus.py forbidden` | 라벨 문구 n-gram과 고유 토큰 중 어떤 입력에도 나오지 않는 것을 JSON으로 내보낸다 |
 | relay 차단 | `scripts/model_budget_relay.py --forbidden-phrases FILE [--allow-model-echo]` | 목록 항목이 든 요청을 예약·전달 없이 막는다 |
 | 시험용 upstream | `--test-upstream http://127.0.0.1:PORT`, [`scripts/fake_model_upstream.py`](../scripts/fake_model_upstream.py) | dry run 전용 loopback 가짜. 키를 읽지 않는다. `--echo-text`는 운영자가 정한 문장을 investigate 후보 제목에 붙이고, `--dump DIR`은 요청을 저장한다 |
 | 공용 실행 틀 | `scripts/eval_harness.py`, `scripts/test_postgres.py`의 `temporary_postgres` | 임시 PostgreSQL, 제품 빌드, controller·agent, 보고서 조회. 회귀 실행(`regression_pilot.py`)도 같은 코드를 쓴다 |
@@ -184,7 +181,7 @@
 | 조건 | 실행 | 모델 | 대상 |
 |---|---|---|---|
 | `tools` | 분석기만. agent에 모델 설정을 주지 않는다 | 없음. 검토 task는 `skipped_policy`(`model_source_not_approved`) | 보통 corpus 전체 |
-| `review` | 제품 전체 경로. `--pack`을 agent의 `--review-pack`으로 준다 | 운영자가 시작한 relay | 표본 |
+| `review` | 제품 전체 경로. 검토 지침은 실행 파일에 묶인 하나다 | 운영자가 시작한 relay | 표본 |
 
 - 사례 변형마다 `corpus.py materialize`로 무작위 이름의 디렉터리에 입력만 만든다. 프로젝트 이름도 무작위(`eval-<hex>`)다. 사례 ID·변형 이름·라벨은 스냅샷에 들어가지 않는다. README 포함 여부는 corpus 순서로 고정(짝수 번째 사례)이고 모든 batch가 같은 선택을 쓴다.
 - 분석기 플래그는 `--tool NAME=/abs/path`로 받아 agent에 `--NAME PATH`로 넘긴다. 값이 없는 agent 옵션(예: `python-both-type-checkers`)은 `--agent-flag NAME`으로 준다. 둘 다 manifest에 남고 tools 조건의 holdout digest에 들어간다. 이 빌드가 모르는 이름이면 agent가 사용 오류로 끝나고 runner가 멈춘다. 새 분석기 팩이 생기면 runner를 고치지 않고 플래그만 더한다. 분석기 공백은 보고서의 task(`pack-gap.<생태계>`, `tool_not_configured` 등)에서 읽는다.
@@ -222,7 +219,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 2. `quality_eval.py capture-list --output FILE`로 감시용 목록을 만든다. relay는 `--test-upstream`일 때만 이 목록으로 시작하고, runner도 dry run이 아니면 거부한다.
 3. 가짜 upstream(`--dump DIR`)과 감시용 목록으로 review dry run을 돌린다. 모든 역할의 요청이 막히지 않고 dump에 남는다.
 4. `quality_eval.py allow-text --tools-batch B --request-dump DIR --output FILE`가 도구 메시지·규칙 ID와 envelope(system 메시지와 `<review-input>`을 뺀 user 텍스트)를 모은다. review input은 가져오지 않는다.
-5. `corpus.py forbidden --allow-text prompts/review-v1 --allow-text prompts/review-r1 --allow-text FILE`로 목록을 만든다.
+5. `corpus.py forbidden --allow-text prompts/review --allow-text FILE`로 목록을 만든다.
 
 제품 코드·지침·분석기 구성이 바뀌면 envelope와 도구 진단도 바뀐다. 유료 batch 직전에 같은 checkout으로 목록을 다시 만든다.
 
@@ -267,8 +264,8 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 
 - 기대값: 이력에 같은 변형이 있으면 그 변형의 역할별 호출 수, 없으면 이력의 변형당 평균(이력이 없으면 상수표) × 호출당 비용.
 - 상한: 팩의 모든 역할이 변형마다 한 번 호출된다고 본다(이력에 그 변형의 호출 수가 더 많으면 그 수). 형식 복구 10%를 더하고 호출당 비용에 여유 계수 1.5를 곱한다(`--margin`).
-- review-r1에서 이력의 그 변형 호출 수가 역할 수보다 많으면 모듈 단위 slice가 계획된 변형이다. slice는 남은 호출이 있는 동안 승인되므로 형식 복구가 많으면 attempt 상한까지 쓸 수 있다. 이 변형의 상한은 `--review-max-calls`(기본 99, 에이전트에 그대로 넘긴다)회 × investigate·verify 중 비싼 호출당 비용 × 여유 계수다. 이력이 없는 변형은 slice 여부를 알 수 없으므로 같은 표본의 capture dry run을 먼저 돌려 이력으로 준다([검토](REVIEW.md#모듈-단위-검토-분할)).
-- `--history DIR`은 manifest의 팩 id(review-v1은 `codeye.review`)로 같은 팩의 batch만 쓴다. 쓸 수 있는 행이 없으면 상수표로 돌아가지 않고 오류로 끝난다.
+- 이력의 그 변형 호출 수가 역할 수보다 많으면 모듈 단위 slice가 계획된 변형이다. slice는 남은 호출이 있는 동안 승인되므로 형식 복구가 많으면 attempt 상한까지 쓸 수 있다. 이 변형의 상한은 `--review-max-calls`(기본 99, 에이전트에 그대로 넘긴다)회 × investigate·verify 중 비싼 호출당 비용 × 여유 계수다. 이력이 없는 변형은 slice 여부를 알 수 없으므로 같은 표본의 capture dry run을 먼저 돌려 이력으로 준다([검토](REVIEW.md#모듈-단위-검토-분할)).
+- `--history DIR`은 manifest의 지침 id로 같은 지침의 batch만 쓴다. 쓸 수 있는 행이 없으면 상수표로 돌아가지 않고 오류로 끝난다.
 - 호출당 비용의 출처 우선순위: (1) 실제 batch 이력이면 역할별 usage 평균 × relay 단가(입력 5, 출력 10 microUSD/token), (2) dry run 이력이면 역할별 최대 요청 바이트 ÷ 3(바이트당 토큰) × 5 + 출력 600 토큰 × 10, (3) 상수표(`quality_eval.py`의 `CONSTANTS`). 상수표는 단일 파일 Go 입력에서 나온 값이라 다파일·다언어 사례에서는 작을 수 있다.
 - 바이트당 3토큰과 여유 계수 1.5는 실측에 맞춘 값이 아닌 보수적 근사다. 실제 batch의 usage를 이력으로 주면 그 값을 쓴다.
 
@@ -322,7 +319,7 @@ TOOLS=(--go "$GO" --tool staticcheck="$STATICCHECK" --tool cargo="$CARGO" --tool
        --tool node="$NODE" --tool eslint="$ESLINT_JS" --tool tsc="$TSC_JS")
 REVIEW=(--opencode "$OPENCODE" --model codeye-gateway/gpt-6.2-sol)
 SEL=(--sample N --seed S)   # 표본. 5단계 plan으로 예산 안인지 확인한다
-PACK=review-r1
+PACK=review
 
 # 1. tools(모델 없음): 전체와 비교용 표본
 python3 scripts/quality_eval.py run --condition tools --results-root "$R" --batch tools-all "${TOOLS[@]}" --max-workers 3
@@ -347,7 +344,7 @@ kill $CAP_RELAY_PID $FAKE_PID
 
 # 3. 정답 목록. 출력의 dropped.in_allowed_text에서 허용 텍스트가 뺀 라벨 표현을 확인한다.
 python3 scripts/quality_eval.py allow-text --tools-batch "$R/tools-all" --request-dump "$R/cap/dump" --output "$R/allow.txt"
-python3 -I fixtures/r1-quality/corpus.py forbidden --allow-text prompts/review-v1 --allow-text prompts/review-r1 \
+python3 -I fixtures/quality-holdout/corpus.py forbidden --allow-text prompts/review \
   --allow-text "$R/allow.txt" --output "$R/forbidden.json"
 
 # 4. 실제 relay(운영자 셸, 키는 이 프로세스만 읽는다). --allow-model-echo는 선택이다.
@@ -371,7 +368,6 @@ python3 scripts/quality_eval.py reader "$R/paid-$PACK" --sample 6 --seed S --out
 ```
 
 - 2단계 capture는 유료 batch와 같은 `SEL`로 돌린다. 시험 장부의 요청 상한(기본 200건) 안에 들어가야 한다. 넘으면 언어마다 새 시험 relay를 쓴다.
-- 두 팩을 비교할 때(새 팩 id로 기본값을 바꿀 때만): 2단계 capture와 5~6단계를 팩마다 한다. 상한 호출이 큰 팩을 먼저 실행하고, 끝난 뒤의 장부로 둘째 팩을 다시 계획한다. 거절이면 둘째 팩을 실행하지 않는다. 시작 전 남은 요청이 적으면 `남은 요청 − 첫 팩 기대 호출 − 5 ≥ 둘째 팩 상한 호출`이 되는 표본을 고른다.
 - 결과 수치와 판단은 [평가 결과](EVALUATION-RESULTS.md)에 쓰고 batch 디렉터리는 저장소 밖에 둔다.
 
 ## 예산 relay와 장부

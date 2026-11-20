@@ -923,7 +923,11 @@ class CorpusListTests(unittest.TestCase):
 
     def test_corpus_list_is_clean_on_inputs_and_catches_plants(self):
         import runpy
-        corpus_py = SCRIPTS.parent / "fixtures/r1-quality/corpus.py"
+        # fixtures/quality-holdout, or the one non-regression fixture corpus
+        # of a checkout that keeps the holdout under another directory name.
+        corpus_py = SCRIPTS.parent / "fixtures/quality-holdout/corpus.py"
+        if not corpus_py.is_file():
+            corpus_py, = [p for p in sorted((SCRIPTS.parent / "fixtures").glob("*/corpus.py")) if p.parent.name != "regression"]
         corpus = runpy.run_path(str(corpus_py))
         with tempfile.TemporaryDirectory(prefix="relay-forbidden-") as tmp:
             out = os.path.join(tmp, "forbidden.json")

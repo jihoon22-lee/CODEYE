@@ -7,14 +7,14 @@ from pathlib import Path
 import re
 import sys
 
-from .common import ROOT, ensure
+from .common import ROOT, ensure, holdout_corpus
 
 
 def check_holdout_corpus() -> None:
     """보류 corpus의 구조·위치·digest·누설을 도구 없이 확인하고 봉인 digest와 대조한다."""
     import subprocess
 
-    corpus = ROOT / "fixtures/r1-quality/corpus.py"
+    corpus = holdout_corpus()
     env = {"PATH": os.environ.get("PATH", ""), "LANG": "C.UTF-8"}
     result = subprocess.run([sys.executable, "-I", str(corpus), "validate"], capture_output=True, text=True, timeout=300, env=env)
     tail = " | ".join((result.stdout + result.stderr).strip().splitlines()[-5:])

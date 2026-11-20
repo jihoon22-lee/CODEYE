@@ -2,7 +2,7 @@
 
 모델 검토는 고정 스냅샷에서 정적 분석 뒤에 실행되는 제한된 모델 작업이다. 모델은 플랫폼이 고른 발췌와 근거 ID만 받는다. 모델의 출력은 후보와 판정 서술일 뿐이다. task 상태, 재현 여부, 통계, 보고서 수치는 워커와 서버가 구조화 기록으로 정한다. 이 문서는 역할, 지침 팩, 입력 선택과 크기 한도, 비밀값 선별, 출력 검사와 검증 규칙, 복구 경로, OpenCode 어댑터, 소스 정책, 검토 기록 형식을 정한다.
 
-- 구현 위치: [`internal/worker/review`](../internal/worker/review), [`internal/worker/review/record`](../internal/worker/review/record), [`internal/worker/opencode`](../internal/worker/opencode), [`prompts/review-r1`](../prompts/review-r1), [`prompts/review-v1`](../prompts/review-v1)
+- 구현 위치: [`internal/worker/review`](../internal/worker/review), [`internal/worker/review/record`](../internal/worker/review/record), [`internal/worker/opencode`](../internal/worker/opencode), [`prompts/review`](../prompts/review)
 - 요구사항: REQ-004/005/009/010/011/012/013/026/027/030, NFR-007/008/010([요구사항](REQUIREMENTS.md))
 - 수용 시험: TC-05, TC-10~12, TC-16, TC-18, TC-33, TC-34, TC-76~79, TC-85~89, TC-97, TC-100, TC-123, TC-128, TC-129([시험](TESTING.md))
 - 품질 평가와 지침 개정 절차: [평가](EVALUATION.md)
@@ -18,22 +18,21 @@
 - 다른 모델이나 외부 모델로 자동 전환하지 않는다. 모델 설정이 없으면 검토 task는 `unsupported`(`model_not_configured`)다.
 - 모델의 내부 추론(reasoning), 원시 이벤트 스트림, 원시 프롬프트, 프로세스 출력은 기록·로그·보고서·화면에 넣지 않는다.
 
-## 검토 팩
+## 검토 지침
 
-검토 지침은 저장소에 포함된 팩으로 빌드 시점에 묶인다(`embed`). 대상 저장소가 지침이나 digest를 제공할 수 없다.
+검토 기준은 하나다(A52). 지침은 저장소의 [`prompts/review`](../prompts/review/pack.yaml)에 있고 빌드 시점에 실행 파일에 묶인다(`embed`). 대상 저장소가 지침이나 digest를 제공할 수 없고, run 요청·프로필·API·노드 설정으로 다른 지침을 고를 수 없다.
 
-| 팩 | `pack.yaml` id·version | 상태 | 기록 schema | 역할 |
-|---|---|---|---|---|
-| [`review-r1`](../prompts/review-r1/pack.yaml) | `review-r1` 2.0.0 | `status: default`. 팩을 지정하지 않으면 이 팩을 쓴다 | `0.2` | environment, documents, investigate, interpret, verify |
-| [`review-v1`](../prompts/review-v1/pack.yaml) | `codeye.review` 1.0.0 | 이전 팩. 이전 기록을 읽고 같은 조건으로 재현할 때만 명시해서 고른다 | `0.1` | context, investigate, verify |
+| `pack.yaml` id·version | 기록 schema | 역할 |
+|---|---|---|
+| `review` 2.0.0 | `0.2`(slice는 `0.3`) | environment, documents, investigate, interpret, verify |
 
-- 지침 개정은 기본 팩 하나에만 한다. 개정의 검증 절차는 [평가](EVALUATION.md)에 있다. 두 팩을 나란히 비교하는 일은 새 팩 id로 기본값을 바꿀 때만 한다.
-- review-v1 디렉터리와 id는 지우거나 바꾸지 않는다. 기존 기록이 v1의 팩 id·digest로 해석되고, `TestLegacyPackIsPinned`가 v1의 역할별 digest·지침 해시·계획 key·발췌 선택·정규화한 요청 해시를 고정한다. v1 요청 바이트를 바꾸는 변경은 시험 갱신이 아니라 승격 근거가 필요한 지침 변경이다.
-- review-v1에는 synthesize·report 지침과 Go 이외 언어 지침 파일이 있지만 선택되지 않는다. v1은 언어와 무관하게 공통·역할·영역·Go 지침만 붙인다. 보고서는 Go가 만들므로 종합·보고 역할에 모델을 호출하지 않는다.
+- 지침 개정은 이 지침 하나에 한다. 개정의 검증 절차는 [평가](EVALUATION.md)에 있다.
+- 보고서는 Go가 만들므로 종합·보고 역할에 모델을 호출하지 않는다.
+- `scripts/validate_bundle.py`가 `pack.yaml`의 id·역할·언어 지침과 예시 기록의 역할별 digest를 확인한다.
 
 ### 팩 구성과 digest
 
-- review-r1은 공통 지침 `00-core.md`, 역할 지침 다섯, 영역 지침 `domains.md`, 언어 지침 다섯(`languages/cpp.md`·`go.md`·`javascript.md`·`python.md`·`rust.md`)으로 구성한다.
+- 지침은 공통 지침 `00-core.md`, 역할 지침 다섯, 영역 지침 `domains.md`, 언어 지침 다섯(`languages/cpp.md`·`go.md`·`javascript.md`·`python.md`·`rust.md`)으로 구성한다.
 - 한 역할의 지침 텍스트는 공통, 역할, 영역, 고른 언어 지침 순으로 이어 붙인다.
 - 언어 지침은 스냅샷 scope 안에 소스가 있는 생태계만 생태계 이름 순서로 붙는다. 판별은 분석기 팩의 공백 계획과 같은 `pack.InScope`다([분석기](ANALYZERS.md)). 소스 확장자로 세고, data·vendor 디렉터리는 빼며, build 파일만으로는 생태계가 들어오지 않는다. 지원 생태계가 없으면 언어 지침을 붙이지 않는다.
 - 역할별 digest는 SHA-256이다. 입력은 `pack.yaml`과 실제로 고른 파일이고, UTF-8 상대 경로 오름차순으로 `경로 NUL 내용 NUL`을 이어 해시한다. 따라서 같은 역할도 생태계 조합마다 digest가 다르고, `pack.yaml`의 version·status가 바뀌면 모든 역할 digest가 바뀐다.
@@ -44,24 +43,11 @@
 ### 지침 작성 규칙
 
 - 지침 파일에는 평가·시험 사례의 내용을 쓰지 않는다. 사례 ID, 작업 ID, fixture 경로와 식별자, 특정 문서·재시도 횟수·버전 조합이 여기에 해당한다. 예시가 필요하면 사례 없는 규칙으로 쓴다.
-- [`prompts/review-r1/bundle_test.go`](../prompts/review-r1/bundle_test.go)가 사례 ID·fixture 이름을 검사한다. 같은 뜻을 다른 말로 쓴 문장은 이 검사로 잡지 못하므로 지침 검토에서 확인한다.
+- [`prompts/review/bundle_test.go`](../prompts/review/bundle_test.go)가 사례 ID·fixture 이름을 검사한다. 같은 뜻을 다른 말로 쓴 문장은 이 검사로 잡지 못하므로 지침 검토에서 확인한다.
 - 언어 생태계마다 언어 지침이 있어야 한다(시험으로 고정). 의존성·타입·헤더가 없어 생긴 진단은 결함이 아니라 분석 공백으로 다룬다. 지침에 도구 규칙 ID를 쓰지 않는다.
 - 지침 작성자는 보류 평가 결과와 보류 사례를 읽지 않는다. 범위는 [평가](EVALUATION.md)에 있다.
 
-## 팩 선택
-
-팩은 노드 운영자 설정이다. run 요청, 프로필, API로는 고를 수 없다.
-
-| 경로 | 동작 |
-|---|---|
-| `codeye agent --review-pack` | 기본 `review-r1`. `review-r1`·`review-v1`만 받는다. 다른 값은 사용 오류(종료 코드 2)이며 기본값으로 바꾸지 않는다 |
-| 워커 Hello `review_pack` | 비어 있으면 `review-r1`. 모르는 값이면 워커가 시작하지 않는다 |
-| 개인 설정 `agent.model.review_pack` | 비우면 `review-r1`. 다른 값은 설정 오류([사용 안내](GUIDE.md)) |
-| `scripts/regression_pilot.py`의 `CODEYE_PILOT_REVIEW_PACK` | 비우면 에이전트 기본값(`review-r1`) |
-| `scripts/validate_bundle.py` | review-r1 `pack.yaml`의 `status: default`를 확인한다 |
-| 보고서 | 계획에 있는 역할 key로 해석한다. review-v1 계획은 세 역할로 읽는다 |
-
-## review-r1 역할과 산출물
+## 역할과 산출물
 
 워커는 deep-review 계획에서 탐색 task(`env.discover`, `docs.discover`)와 정적 분석 task 뒤에 다섯 역할을 이 순서로 둔다. 탐색 산출물은 [구조](ARCHITECTURE.md)에 있다. 한 역할의 출력은 다음 역할에 넘길 자료다. 역할 수가 모델 호출 수를 정하지 않는다. 환경 버전 비교, 문서 존재 확인, 정적 검사 실행, 보고서 게시는 모델 없이 플랫폼이 처리한다.
 
@@ -77,11 +63,11 @@
 
 | 지침 | 허용된 입력 | 다음 단계에 남길 결과 |
 |---|---|---|
-| [환경 분석](../prompts/review-r1/environment.md) | 모듈 범위, 선언 버전, 노드 관측값과 출처 | 검사별 요구·관측·불일치·미확인과 그 영향 |
-| [문서 검토](../prompts/review-r1/documents.md) | 경로별 문서·설정·선택 첨부와 제한된 코드 발췌 | 적용 경로, 문서상 계약, 상충하는 근거, 미확인 질문 |
-| [독립 코드 분석](../prompts/review-r1/investigate.md) | 모듈 계약, 환경 한계, 코드·테스트 발췌 | 원인·발생 조건·영향·반증 가능성을 가진 후보 또는 빈 목록 |
-| [정적 진단 해석](../prompts/review-r1/interpret-diagnostics.md) | 어댑터가 발급한 관찰 ID, 버전·범위·파싱 상태와 관련 발췌 | 원시 관찰에 연결한 영향 가설 또는 해석 한계 |
-| [후보 검증](../prompts/review-r1/verify.md) | 이전 후보 원문과 ID, 호출부·테스트·반대 근거 | 지지·기각·판단 보류의 이유, 유효·무효 조건, 추가 확인 사항 |
+| [환경 분석](../prompts/review/environment.md) | 모듈 범위, 선언 버전, 노드 관측값과 출처 | 검사별 요구·관측·불일치·미확인과 그 영향 |
+| [문서 검토](../prompts/review/documents.md) | 경로별 문서·설정·선택 첨부와 제한된 코드 발췌 | 적용 경로, 문서상 계약, 상충하는 근거, 미확인 질문 |
+| [독립 코드 분석](../prompts/review/investigate.md) | 모듈 계약, 환경 한계, 코드·테스트 발췌 | 원인·발생 조건·영향·반증 가능성을 가진 후보 또는 빈 목록 |
+| [정적 진단 해석](../prompts/review/interpret-diagnostics.md) | 어댑터가 발급한 관찰 ID, 버전·범위·파싱 상태와 관련 발췌 | 원시 관찰에 연결한 영향 가설 또는 해석 한계 |
+| [후보 검증](../prompts/review/verify.md) | 이전 후보 원문과 ID, 호출부·테스트·반대 근거 | 지지·기각·판단 보류의 이유, 유효·무효 조건, 추가 확인 사항 |
 
 - 도구 진단 해석은 독립 조사와 별도 입력으로 수행하고 원시 메시지·규칙·위치를 보존한다. 도구의 실행 상태, finding 수, 심각도를 다시 말하지 않고, 진단이 없다는 사실을 깨끗한 코드로 서술하지 않는다.
 - 출력 개수 한도: documents는 계약 6, 충돌 3, 질문 4, 지침성 문구 메모 3개까지. interpret는 가설 2, 한계 3개까지이고 합해서 하나 이상. investigate는 후보 4개까지.
@@ -103,22 +89,11 @@
 
 필수 여부는 계획 시 정한다. 문서가 없어 생략한 문서 역할을 모델 검토 성공으로 세지 않는다. 필수 모델 작업이 실패했으면 도구 결과가 남아도 검토 전체를 완료로 올리지 않는다. 진행 단계 판정에서 이 생략을 어떻게 셈하는지는 [구조](ARCHITECTURE.md)에 있다.
 
-## review-v1 역할
-
-| task | 단계 | 판정 필수 | 출력 |
-|---|---|---|---|
-| `review.context` | `documents` | 예 | 사실 1~4개. 종류 `observed`·`documented`·`inferred`, 근거 ID. `documented`는 문서·설정 근거만 인용한다 |
-| `review.investigate` | `code_review` | 예 | 후보 0~4개(`candidate_N`). 각 후보는 code 근거를 하나 이상 인용한다. 같은 코퍼스로 만든 context 기록이 없으면 `dependency_failed` |
-| `review.verify` | `code_review` | 예 | 후보별 판정(아래 검증 규칙) |
-
-- 문서가 없어도 소스에서 시작한다. 후보가 없으면 빈 배열을 명시해야 한다. 누락된 배열, 알 수 없는 필드, 존재하지 않는 ID, 문서만 인용한 코드 후보는 거부한다.
-- context·investigate는 한 번만 호출하고 형식 복구가 없다. 출력이 무효면 task는 `failed`(`review_evidence_invalid`)다.
-
 ## 검토 입력 선택
 
 모든 발췌는 고정 스냅샷의 manifest 항목(크기·SHA-256)과 대조해 읽는다. 512 KiB를 넘는 파일, UTF-8이 아니거나 NUL을 포함한 파일, 민감값 패턴에 걸린 파일, 비밀값 선별이 보류한 파일은 발췌하지 않는다. 구문 분석기는 쓰지 않고, 발췌는 줄 단위다. 근거 ID는 manifest digest, 스냅샷 상대 경로, blob SHA-256, 행 범위에서 결정된다(`record.ExcerptID`).
 
-review-r1의 한도는 발췌 텍스트를 JSON으로 인코딩한 바이트로 센다(`encoding/json`은 `<`·`>`·`&`를 6바이트로 바꾼다). 상수는 [`rolepack_inputs.go`](../internal/worker/review/rolepack_inputs.go), review-v1 코퍼스 상수는 [`context.go`](../internal/worker/review/context.go)에 있다.
+한도는 발췌 텍스트를 JSON으로 인코딩한 바이트로 센다(`encoding/json`은 `<`·`>`·`&`를 6바이트로 바꾼다). 상수는 [`inputs.go`](../internal/worker/review/inputs.go)에 있다.
 
 ### 종류 판별과 제외 디렉터리
 
@@ -126,11 +101,11 @@ review-r1의 한도는 발췌 텍스트를 JSON으로 인코딩한 바이트로 
 - 테스트 경로: Go `*_test.go`. Python `test_*`·`*_test`·`conftest.py`. JS/TS `*.test.*`·`*.spec.*`. Rust `tests.rs`. C/C++ `test_*`·`*_test`·`*_tests`·`*_unittest`·`*-test`. Go가 아닌 언어는 `test`·`tests` 디렉터리 아래 파일도 테스트다(JS/TS는 `__tests__`도, Rust는 `tests`만).
 - manifest(config): go.mod, pyproject.toml·setup.cfg, package.json·tsconfig.json, Cargo.toml, CMakeLists.txt. `compile_commands.json`은 생성 산출물이고 보통 생성한 머신의 절대 경로를 담으므로 config 후보가 아니다.
 - Go가 아닌 파일은 분석기 팩의 data 디렉터리(숨김·testdata·vendor·node_modules, `anypack.DataDir`) 아래에 있으면 후보가 아니다. 어느 깊이든 `build`·`dist`·`target`·`coverage`·`htmlcov`·`site-packages`·`venv`·`__pycache__`·`third_party` 아래 파일도 뺀다. 같은 이름의 소스 디렉터리도 빠진다. 범위 안 소스가 이렇게 빠지면 `source_in_excluded_directories`를 남긴다.
-- Go 파일은 이 제외 규칙을 받지 않는다(internal/build 같은 Go 패키지가 흔하다). review-r1의 Go 발췌는 vendor·testdata·`.`·`_`로 시작하는 디렉터리를 건너뛴다. review-v1은 vendor 아래 Go 파일도 후보로 둔다.
+- Go 파일은 이 제외 규칙을 받지 않는다(internal/build 같은 Go 패키지가 흔하다). Go 발췌는 vendor·testdata·`.`·`_`로 시작하는 디렉터리를 건너뛴다.
 - 다른 생태계의 파일과 manifest는 그 생태계의 소스가 범위 안에 있을 때만 넣는다(`pack.InScope`). Go 저장소의 package.json·Cargo.toml처럼 build 파일만 있으면 config 발췌가 되지 않는다.
 - 확장자 없는 스크립트와 생성 파일 이름(예: `.min.js`)은 판별하지 않는다.
 
-### 코드 발췌(review-r1 investigate)
+### 코드 발췌(investigate)
 
 - Go 파일은 가장 깊은 go.mod 디렉터리(모듈)로 묶는다. 다른 언어 파일은 같은 생태계 manifest가 있는 가장 깊은 디렉터리로 묶고, 없으면 `.`다.
 - 묶음 안의 순서는 진입점, 소스, 테스트이고 같은 순위는 깊이와 경로 순이다.
@@ -140,20 +115,20 @@ review-r1의 한도는 발췌 텍스트를 JSON으로 인코딩한 바이트로 
 - 발췌가 있는 모듈 디렉터리는 `modules`(최대 32개)에 들어간다.
 - 범위 안 소스가 모두 제외 디렉터리 아래 있거나 발췌가 하나도 없으면 investigate는 `failed`(`review_input_unavailable`)다.
 
-### 문서 발췌(review-r1 documents)
+### 문서 발췌(documents)
 
 - 대상은 탐색 산출물에서 `selected` 상태인 안내 문서다. 순서는 에이전트 지침, README, CONTRIBUTING, 설계 문서이고 같은 분류는 얕은 경로가 먼저다.
 - 문서당 첫 40줄·2,000바이트, 최대 8개, 합계 10,000바이트다. 넘으면 `documents_outside_review_input`, 문서 일부만 보내면 `document_excerpt_only`를 남긴다.
 - 읽지 않은 안내 문서(최대 16개), 모듈별 문서 연결과 겹침 묶음(각 최대 32·16개, 목록당 8개)을 함께 준다. 줄이면 `document_lists_shortened`다.
 - 문서 규칙의 적용 경로(`applies_to`)는 인용한 문서의 디렉터리와 같거나 그 아래여야 한다.
 
-### 환경 입력(review-r1 environment)
+### 환경 입력(environment)
 
 - gap 모듈(판정이 `satisfied`가 아닌 모듈) 최대 4개, 그 모듈들의 요구 최대 16개다. 넘으면 `environment_gaps_outside_input`·`requirements_outside_input`를 남긴다.
 - 요구마다 원문 줄(600바이트 이하)과 근거 ID를 준다. 원문을 쓸 수 없으면 `requirement_source_omitted`다.
 - 출력 메모는 자기 모듈의 요구·근거 ID만 인용한다. 한 모듈·호스트에서 본 버전을 다른 모듈로 옮기지 않는다.
 
-### 도구 관찰과 해석 창(review-r1 interpret)
+### 도구 관찰과 해석 창(interpret)
 
 - 계획된 분석기 task의 관찰 산출물을 다시 검증해 읽는다. 소스에서 억제된 진단과 구조 지표는 넣지 않는다([분석기](ANALYZERS.md)).
 - 도구 상태는 최대 8개(`tools_outside_interpret_input`), 관찰은 경로·줄·ID 순으로 최대 8개다(`observations_outside_interpret_input`).
@@ -169,31 +144,16 @@ review-r1의 한도는 발췌 텍스트를 JSON으로 인코딩한 바이트로 
   - 간접 호출, 메서드 디스패치, 다른 패키지 호출, 외부 계약은 범위 밖이며 `caller_expansion_package_functions_only`를 남긴다. 호출을 찾지 못하면 `no_callers_found`, 예산 밖이면 `callers_outside_review_context`다.
   - 확장을 시도한 verify 기록에는 Go만 있는 스냅샷을 포함해 항상 `caller_expansion_go_only`와 `caller_expansion_package_functions_only`가 남는다. 인용에서 Go 패키지 함수를 찾지 못하면(다른 언어만 인용한 후보 등) `no_symbol_for_expansion`이 더해진다. 다른 언어 후보는 인용한 발췌와 문서 계약으로만 검증된다.
 - 비밀값 선별이 보류한 파일의 호출자·테스트 발췌는 빼고 `secret_files_withheld`를 남긴다.
-- review-r1 verify 요청의 발췌는 인용 발췌, 확장, 인용되지 않은 문맥 순으로 최대 40개다(인용 발췌는 항상 남는다). 요청이 한도를 넘으면 확장·비인용 문맥·문서 계약을 먼저 줄이고(`review_input_trimmed`, `callers_outside_review_context`, `contracts_outside_verify_input`), 그래도 넘으면 후보를 앞에서부터(investigate 다음 interpret) 보낼 수 있는 만큼만 보낸다. 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)로 남고 task는 `failed`(`review_input_incomplete`)다. 성공으로 바꾸지 않는다.
+- verify 요청의 발췌는 인용 발췌, 확장, 인용되지 않은 문맥 순으로 최대 40개다(인용 발췌는 항상 남는다). 요청이 한도를 넘으면 확장·비인용 문맥·문서 계약을 먼저 줄이고(`review_input_trimmed`, `callers_outside_review_context`, `contracts_outside_verify_input`), 그래도 넘으면 후보를 앞에서부터(investigate 다음 interpret) 보낼 수 있는 만큼만 보낸다. 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)로 남고 task는 `failed`(`review_input_incomplete`)다. 성공으로 바꾸지 않는다.
 
-### review-v1 코퍼스
-
-context·investigate·verify가 같은 코퍼스를 쓴다. 순위가 낮은 것부터 고르고 같은 순위는 디렉터리 깊이와 경로 순이다. 발췌는 파일 첫 줄부터다.
-
-| 순위 | 종류 | 파일 |
-|---|---|---|
-| 0 | code | 진입점(위 코드 발췌의 진입점 규칙과 같다) |
-| 1 | document | README.md, AGENTS.md(최대 2개) |
-| 2 | code | 그 밖의 소스 |
-| 3 | config | 위 manifest 목록 |
-| 4 | test | 위 테스트 경로 |
-
-- 한 요청에 파일 최대 6개, 파일당 최대 50줄, 코드 파일당 3,200바이트·문서당 1,200바이트, 합계 12,000바이트다.
-- 문서를 하나도 고르지 못하면 `no_document_in_selected_context`, 상한 때문에 빠진 후보가 있으면 `files_outside_review_context`를 남긴다. 진입점·소스가 먼저 차므로 테스트는 자주 빠진다.
-- Go 파일·README/AGENTS·go.mod의 순위와 포함 규칙은 고정이다. 기존 Go 입력의 요청 바이트는 `TestLegacyPackIsPinned`와 `TestGoReviewInputsUnchanged`가 고정한다.
+- Go 입력의 요청 바이트는 `TestGoReviewInputsUnchanged`가 역할마다 지침 해시와 입력 해시로 고정한다.
 
 ### 요청 크기
 
 | 한도 | 값 | 적용 |
 |---|---|---|
-| review-r1 요청 한도 `PromptBudget` | 40,000바이트 | 한 요청의 전체 메시지 텍스트(`opencode.Prompt`: 지침, 계약, 복구 규칙, 입력, 감싸는 문장) |
+| 요청 한도 `PromptBudget` | 40,000바이트 | 한 요청의 전체 메시지 텍스트(`opencode.Prompt`: 지침, 계약, 복구 규칙, 입력, 감싸는 문장) |
 | 복구 여유 | 3,072바이트 | 첫 요청을 만들 때 형식 복구 요청이 들어갈 자리를 남긴다 |
-| review-v1 verify 한도 | 60 KiB | v1 검증 요청 |
 | OpenCode 어댑터 입력 한도 | 64 KiB | 지침 + 입력. 넘으면 `invalid_review_input` |
 | QA 예산 relay 입력 한도 | 49,152바이트(기본) | relay가 받는 요청당 메시지 텍스트. 40,000바이트와의 차이는 OpenCode 클라이언트 자체 메시지 몫이다([평가](EVALUATION.md)) |
 | 출력 | relay 기본 1,536 토큰 | OpenCode 관리 설정의 모델 출력 한도와 같다 |
@@ -217,7 +177,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ### 계획
 
-- 모듈 단위는 overview 코퍼스의 묶음과 같다(위 [코드 발췌](#코드-발췌review-r1-investigate)). Go는 가장 깊은 go.mod 디렉터리, 다른 언어는 같은 생태계 manifest가 있는 가장 깊은 디렉터리, 없으면 `.`이다. ID는 `<ecosystem>:<dir>`이고, 범위 산출물의 `discovered`는 모듈 탐색이 같은 ID를 찾았는지 표시한다.
+- 모듈 단위는 overview 코퍼스의 묶음과 같다(위 [코드 발췌](#코드-발췌investigate)). Go는 가장 깊은 go.mod 디렉터리, 다른 언어는 같은 생태계 manifest가 있는 가장 깊은 디렉터리, 없으면 `.`이다. ID는 `<ecosystem>:<dir>`이고, 범위 산출물의 `discovered`는 모듈 탐색이 같은 ID를 찾았는지 표시한다.
 - 파일 상한 `c(f) = min(2400, 6 × size + 2)`. JSON 인코딩은 바이트 하나를 최대 6바이트(`\u00XX`)로 바꾸고 따옴표 두 개가 붙으므로 실제 발췌 바이트보다 작지 않다.
 - overview 접두 P: 모든 파일을 상한 크기로 두고 overview의 순회(묶음 순서, 묶음 안 순위)를 그대로 흉내 낸다. 고른 파일이 8개 미만이고 남은 예산이 128바이트 이상이며 상한이 남은 예산에 들어가는 동안 파일이 P에 들어간다. 처음 들어가지 않는 파일에서 P가 끝난다. overview는 같은 순서로 파일을 보고 상한보다 많이 쓰지 않으므로 P의 파일을 반드시 낸다.
 - 계획은 slot 수만 정한다. 남은 파일을 manifest만으로 아는 사실(경로 분류, 진입점·소스·테스트)로 [우선순위](#검토-우선순위)대로 묶어 본 수에 여유(묶음 8개마다 하나, 최소 둘)를 더한다. 실행 때 도구 진단이 순서를 바꾸면 진단이 있는 파일이 따로 묶여 묶음 수가 늘 수 있기 때문이다. 그래도 모자라면 `review.scope`는 같은 순서를 유지한 채 묶음 경계를 푼다: 먼저 디렉터리 규칙을, 그다음 순위 경계를 푼다(slot의 순위는 첫 파일의 순위다). 경계를 풀어도 담을 수 없으면(파일이 상한 96개 slot보다 많으면) 경계를 지킨 묶음의 앞 slot만 채운다. 상한 96 아래에서는 이렇게 해서 계획 밖 파일이 생기지 않는다(`TestSlotSlackCoversRunTimeOrder`: 임의 트리 약 3,000개, 파일의 30%에 진단, 모듈 일부에 실패한 분석기, 일부 생성 파일).
@@ -244,10 +204,10 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ### 호출 상한과 승인
 
-- 단위는 모델 호출이고 attempt마다의 상한이다. `codeye agent --review-max-calls N`(기본 99, 15~207), Hello `review_max_calls`, 개인 설정 `agent.model.review_max_calls`로 정한다. run이나 profile로 바꿀 수 없다(팩 선택과 같다). review-r1에만 적용하고 review-v1은 그대로다.
+- 단위는 모델 호출이고 attempt마다의 상한이다. `codeye agent --review-max-calls N`(기본 99, 15~207), Hello `review_max_calls`, 개인 설정 `agent.model.review_max_calls`로 정한다. run이나 profile로 바꿀 수 없다.
 - 기본 99는 중간 규모 저장소의 대부분을 기본 설정으로 검토하기 위한 값이다(처음 기본값 33은 유료 회귀 실행에서 파일럿 Go 모듈 67개 파일 중 34개를 28회 호출로 검토했다). 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 상한을 낮춘다. 15는 전체 역할만 실행하고 slice를 승인하지 않는다([안내서](GUIDE.md)).
 - 전체 역할 다섯 개는 최대 15회(5 × 3)를 쓰고 잘리지 않는다. 그래서 최솟값이 15다. 전체 역할이 모든 slice보다 먼저 실행되므로 그 몫을 따로 예약할 필요가 없다.
-- 계수는 attempt 안에서만 한다. attempt 하나는 worker 프로세스 하나이고 task를 차례로 실행한다. 모든 role-pack 호출은 보내기 전에 attempt scratch의 계수 파일에 한 줄을 쓴다. 계수를 쓰지 못한 호출은 보내지 않는다(`review_call_count_failed`). 전역 상태나 프로세스 사이 상태는 없다. 한 attempt 안에서 slice를 병렬로 실행하려면 공유 계수가 필요하다.
+- 계수는 attempt 안에서만 한다. attempt 하나는 worker 프로세스 하나이고 task를 차례로 실행한다. 모든 검토 호출은 보내기 전에 attempt scratch의 계수 파일에 한 줄을 쓴다. 계수를 쓰지 못한 호출은 보내지 않는다(`review_call_count_failed`). 전역 상태나 프로세스 사이 상태는 없다. 한 attempt 안에서 slice를 병렬로 실행하려면 공유 계수가 필요하다.
 - 최댓값 207은 전체 역할 15회와 slot 96개마다 두 번(investigate·verify 한 번씩, 형식 복구가 없을 때)이다. 복구가 많으면 207에서도 96개를 다 승인하지 못할 수 있다.
 - 승인은 계획 순서대로, 실제 사용량으로 한다. slice k의 investigate를 시작하기 전에 `상한 − 사용한 호출 ≥ 6`(investigate·verify 한 쌍의 최악 3 + 3)이면 승인한다. 처음 거절된 slice와 그 뒤의 모든 slice는 호출과 기록 없이 `budget_exhausted`(`review_budget_exhausted`)로 끝나고 짝 verify도 같다. 결정은 attempt scratch에 남기고 verify가 따른다.
 - 그래서 attempt의 호출은 상한을 넘지 않는다. 최악 사례로 미리 승인하면 상한의 세 분의 이가 버려지지만, 실제 사용량으로 승인하면 모델이 형식 복구를 많이 할수록 승인되는 마지막 slice가 run마다 달라질 수 있다. 승인 결과는 slice task 상태로 보인다.
@@ -268,7 +228,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ### 범위 산출물
 
-`review.scope`는 모델을 호출하지 않는다. overview investigate 기록(수락이든 실패든, 요청을 보냈을 때)의 context 발췌에서 overview가 실제로 보낸 코드·테스트 파일을 읽고, 계획의 모든 파일을 선별과 읽기 필터로 다시 확인하고, 분석 산출물의 진단으로 우선순위를 매겨 slot을 채운 뒤 산출물 하나를 role `other`, media type `application/vnd.codeye.review-scope+json`으로 올린다. [스키마](../schemas/review-scope.schema.json) · [예시](../examples/review-r1/slices/scope.json)
+`review.scope`는 모델을 호출하지 않는다. overview investigate 기록(수락이든 실패든, 요청을 보냈을 때)의 context 발췌에서 overview가 실제로 보낸 코드·테스트 파일을 읽고, 계획의 모든 파일을 선별과 읽기 필터로 다시 확인하고, 분석 산출물의 진단으로 우선순위를 매겨 slot을 채운 뒤 산출물 하나를 role `other`, media type `application/vnd.codeye.review-scope+json`으로 올린다. [스키마](../schemas/review-scope.schema.json) · [예시](../examples/review/slices/scope.json)
 
 - 필드(schema 0.2): `schema_version`(0.2), `kind`(`review_scope`), `pack`, `snapshot_manifest_digest`, `run_id`, `attempt_id`, `screen`(`applied` 또는 `not_screened`. `not_screened`이면 `limitations`에 `model_input_not_secret_screened`가 있다), `budget`(`max_calls`, `max_request_bytes`, `whole_run_max_calls` 15, `slice_reserve_calls` 6, `calls_before_slices`, `admission` `sequential_reserve`), `limits`(`max_slices` 96, 계획이 만든 `slots`), `priority`(`order`: 보통 `primary_first_observations_first`, pull request run은 `pull_request_changed_first`, `secondary`: 쓴 `segments`와 `not_for_go`), `upstream`(overview investigate 기록의 SHA-256), `modules[]`(`id`, `discovered`, `class`, `files_eligible`, `files_secondary`, `files_not_planned`, `files_secondary_not_planned`), `overview`(`files`: P와 그 밖에서 overview가 보낸 파일, `offered`: overview가 보낸 경로), `slices[]`(채운 slot만 차례로: `key`, `investigate_task`, `verify_task`, 첫 파일의 `class`·`rank`·`pull_request`, `modules`, `files`), `excluded`(slot에 넣지 않은 `withheld`·`unreadable` 파일), `limitations`.
 - 파일마다 `path`, `sha256`, `module`, `bound_bytes`, `planned_lines`, `planned_bytes`, `total_lines`, `state`, `class`, `rank`, 부차 파일의 `secondary`(이유), 진단이 있는 파일의 `observations`(수)·`severity`(가장 높은 값), pull request run에서 변경 파일과 그 이웃의 `pull_request`(`changed`·`neighbor`). 상태는 `planned`(slot이 보낸다), `covered_by_overview`(overview가 보냈다), `withheld`(선별이 보류), `unreadable`(UTF-8 아님·NUL·민감값 패턴·빈 파일), `overview_not_sent`(P에 있지만 overview가 보내지 않음: 요청을 줄였거나 보내기 전에 실패)다. 적격 파일은 모두 정확히 한 곳에 있다. slot이 남지 않은 파일은 목록 대신 모듈별 `files_not_planned`로 센다.
@@ -281,7 +241,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 - slice 요청은 overview의 요청 생성기, 역할 계약 문자열, 팩 파일을 그대로 쓴다. 지침 hash가 overview와 같고(`modules-worst-screened` 고정값), `prompts/`는 바뀌지 않는다.
 - slice investigate는 overview처럼 수락된 environment·documents 결과를 받고, 코퍼스는 그 slice에서 `planned`인 파일(첫 50줄, 파일당 2,400바이트, 합계 8개·12,000바이트)이다. 읽기 필터와 선별을 다시 적용하고, 그새 읽을 수 없게 된 파일은 건너뛴다. `modules`는 slice의 모듈 디렉터리이고 `files_outside_review_context`를 항상 남긴다. upstream은 `review.environment`, `review.documents`, `review.scope`다.
 - slice verify는 자기 slice investigate의 후보만 받는다(interpret 후보 없음). upstream은 `review.documents`, `review.investigate.sNNN`, `review.scope`다.
-- 기록은 schema 0.3이다(아래 [검토 기록](#검토-기록)). [investigate 예시](../examples/review-r1/slices/investigate.s001.json) · [verify 예시](../examples/review-r1/slices/verify.s001.json)
+- 기록은 schema 0.3이다(아래 [검토 기록](#검토-기록)). [investigate 예시](../examples/review/slices/investigate.s001.json) · [verify 예시](../examples/review/slices/verify.s001.json)
 - 다섯 언어가 모두 범위에 있는 최악 사례에서도 slice 요청은 40,000바이트 안이다(`TestSliceRequestSizeWorstCaseAllLanguages`).
 - 보고서(builder 6부터)는 0.3 기록과 범위 산출물을 읽는다. builder 8은 schema 0.2 산출물의 분류도 읽는다. slice 후보는 `review_sNNN_<후보>` 발견이 되고, 코드 분석 절의 [모듈별 검토 장부](REPORT.md#모듈별-검토-장부)가 모듈마다 모델에 보낸 파일과 보내지 못한 이유(상한·비밀값·계획 밖 등)를 센다. 모델에 보낸 범위는 검증된 범위가 아니다. `ai_review`는 필수 역할만 본다.
 
@@ -295,7 +255,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 | 실행됐지만 쓸 수 없음(실패, 시간 초과, 취소, 부분 파싱, 산출물 누락·무효) | 검토를 건너뛰지 않는다. 지금까지 읽은 결과와 해석되는 실패·부분 envelope의 관찰 경로가 가리키는 파일은 계속 뺀다(`secret_files_withheld`). 나머지는 기본 읽기 필터만 거쳐 보내고 `model_input_not_secret_screened`를 남긴다. 아무것도 읽을 수 없을 때만 빼는 파일이 없다. 보고서는 미선별과 쓸 수 없던 작업·사유를 적는다 |
 | 완전한 파싱으로 성공 | 보고된 파일을 모든 발췌(코드 문맥, 문서, 관찰 창, 검증 확장)에서 뺀다. `secret_files_withheld`를 남긴다 |
 
-- 모든 발췌는 같은 읽기 경로(`readLines`, review-v1은 `buildScreenedCorpus`)를 지나므로 새 입력 종류도 같은 선별을 받는다.
+- 모든 발췌는 같은 읽기 경로(`readLines`)를 지나므로 새 입력 종류도 같은 선별을 받는다.
 - 이와 별도로 민감값 패턴(`record.Sensitive`: 개인 키 블록, `sk-`·`gh?_` 형식 토큰, Authorization 헤더 값, 따옴표로 감싼 api_key·password·client_secret 값)에 걸린 파일은 발췌하지 않는다. 이 패턴은 완전한 비밀 탐지를 보장하지 않는다.
 - 모델이 쓴 서술도 같은 패턴에 걸리면 기록에 남지 않는다(`record.SafeText`).
 
@@ -305,7 +265,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 - 그 호출에 준 근거·관찰 ID만 인용할 수 있다. 오류 코드: `evidence_id_unknown`, `evidence_id_duplicate`, `evidence_kind_invalid`, `evidence_missing`, `evidence_list_too_long`, `observation_id_unknown`, `evidence_not_at_observation`, `code_evidence_missing`.
 - 문서 규칙의 적용 경로를 상위 디렉터리나 저장소 전체로 넓히면 거부한다(`scope_generalized`, `scope_unknown_path`, `scope_invalid`). 충돌의 두 쪽은 서로 다른 문서를 인용해야 한다(`conflict_same_document`).
 - 실행·재현·테스트 통과를 주장하는 서술은 거부한다. 호출 오류 코드는 `execution_claim`이고, 단계 기록에는 `execution_claim_rejected` 한계가 남는다. 이 검사는 정규식 휴리스틱이다. 놓친 주장이 있어도 상태·재현·통계는 구조화 기록에서만 정하므로 모델 서술이 판정을 바꾸지 못한다.
-- review-r1 서술 필드는 JSON 인코딩 400바이트 이하다(지침은 120자 이하를 요구한다). 기록에 남는 모델 서술은 2,400바이트 이하이고 민감값 패턴에 걸리지 않아야 한다.
+- 서술 필드는 JSON 인코딩 400바이트 이하다(지침은 120자 이하를 요구한다). 기록에 남는 모델 서술은 2,400바이트 이하이고 민감값 패턴에 걸리지 않아야 한다.
 - 환경 메모는 플랫폼 판정을 다시 쓰거나 올리지 못한다. 판정 필드를 붙인 출력은 거부한다.
 
 ## 후보 검증과 근거 규칙
@@ -322,7 +282,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ## 복구 경로
 
-review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`record.RoleMaxCalls = 3`)다.
+모든 역할에 적용한다. 단계당 호출은 최대 3회(`record.RoleMaxCalls = 3`)다.
 
 1. **형식 복구.** 출력이 JSON이지만 계약·근거 검사에서 거부되면, 고정 오류 코드만 담은 복구 요청을 한 번 보낸다. verify는 거부된 후보, 허용된 근거와 오류 코드만 다시 보낸다.
 2. **JSON이 아닌 응답의 재시도.** JSON이 아닌 응답은 항목에 대해 아무 정보도 주지 않는다. 형식 복구 기회를 쓰지 않고 한 번 더 요청한다. 재시도 요청은 같은 입력에 복구 규칙과 오류 코드 `output_not_json`을 담은 `repair` 블록을 붙인다. 앞서 복구 요청이 있었으면 그 오류 코드(verify는 후보별 오류)를 유지하고 `output_not_json`을 더한다.
@@ -334,7 +294,6 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 6. **verify 결과.** 일부만 유효하면 사용 가능한 판정을 보존하고 task는 `failed`(`review_output_incomplete`)다. 사용 가능한 판정이 전혀 없으면 `failed`(`review_output_invalid`)다.
 
 - 횟수 제한 없는 재시도는 하지 않는다. 단계마다 호출이 하나 늘 수 있어 최악의 비용과 시간이 그만큼 늘어난다.
-- review-v1 verify는 이 경로를 쓰지 않는다. 형식 복구가 한 번이고 최대 2회 호출이며, 복구 호출이 실패하면 task가 실패한다.
 
 ## 실패와 task 결과
 
@@ -359,7 +318,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 | 입력을 만들 수 없음·스냅샷 무결성 불일치 | `failed`(`review_input_unavailable`) |
 | 요청 한도 초과 | `failed`(`review_input_too_large`) |
 | 보내지 못한 verify 후보 | `failed`(`review_input_incomplete`) |
-| 출력 무효(복구 뒤에도) | `failed`(`review_output_invalid`), v1 context·investigate는 `review_evidence_invalid` |
+| 출력 무효(복구 뒤에도) | `failed`(`review_output_invalid`) |
 | verify 일부 판정만 유효 | `failed`(`review_output_incomplete`) |
 | 지침 팩을 읽지 못함 | `failed`(`review_instructions_invalid`) |
 | 기록을 쓰지 못함 | `failed`(`review_record_failed`) |
@@ -416,18 +375,18 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 
 ## 검토 기록
 
-검토 task마다 산출물 하나를 role `other`, media type `application/vnd.codeye.review+json`으로 올린다. 크기는 256 KiB 이하다. 보고서 registry는 `schema_version`으로 decoder를 고른다. [스키마](../schemas/review-record.schema.json) · [v1 예시](../examples/review-record.json) · [r1 예시](../examples/review-r1/verify.json)(scripted caller로 만든 다섯 단계 기록 중 하나)
+검토 task마다 산출물 하나를 role `other`, media type `application/vnd.codeye.review+json`으로 올린다. 크기는 256 KiB 이하다. 보고서 registry는 `schema_version`으로 decoder를 고른다. [스키마](../schemas/review-record.schema.json) · [예시](../examples/review/verify.json)(scripted caller로 만든 다섯 단계 기록 중 하나)
 
 공통 규칙:
 
 - 메타데이터와 모델의 판정문·근거 참조만 담는다. 발췌의 원문(`text`), 원시 프롬프트, 내부 추론, 프로세스 출력은 저장하지 않는다.
-- 근거(`evidence`)는 `id`, `path`, `sha256`, `start_line`, `end_line`, `kind`, 선택 `origin`과 `symbol`을 가진다. `kind`는 0.1이 code·test·document·config, 0.2가 code·test·document·manifest(환경 요구 원문)다. `origin`은 0.1이 context·caller·test, 0.2는 여기에 observation(해석 창)을 더한다. document·manifest 근거에는 origin이 없다.
-- decoder(`record.Decode`, `record.DecodeRole`)는 기록을 그 attempt의 run ID·attempt ID·snapshot manifest digest·단계와 대조한다. 근거마다 ID가 (snapshot digest, 경로, blob SHA-256, 행 범위)에서 다시 계산되는지, 경로가 manifest에 있고 blob이 같은지 확인한다. 모든 참조는 그 기록의 근거 목록 안에 있어야 한다. 허위 경로·행·blob·근거 ID, 다른 run·attempt·snapshot의 기록은 거부된다.
+- 근거(`evidence`)는 `id`, `path`, `sha256`, `start_line`, `end_line`, `kind`, 선택 `origin`과 `symbol`을 가진다. `kind`는 code·test·document·manifest(환경 요구 원문)다. `origin`은 context·caller·test·observation(해석 창)이다. document·manifest 근거에는 origin이 없다.
+- decoder(`record.Decode`)는 기록을 그 attempt의 run ID·attempt ID·snapshot manifest digest·단계와 대조한다. 근거마다 ID가 (snapshot digest, 경로, blob SHA-256, 행 범위)에서 다시 계산되는지, 경로가 manifest에 있고 blob이 같은지 확인한다. 모든 참조는 그 기록의 근거 목록 안에 있어야 한다. 허위 경로·행·blob·근거 ID, 다른 run·attempt·snapshot의 기록은 거부된다.
 - 사용량이 없으면 `null`이다. 요청을 만들기 전에 실패하면 요청 digest가 빈 문자열일 수 있다.
 - 실패한 기록은 시도한 호출, 준 입력, 앞 단계 상태를 남기고 모델 내용은 격리한다. 수락됐다가 버려진 호출의 `outcome`은 `result_discarded`다. verify가 실패하면 후보는 모두 `unreviewed`로 남는다.
 - 보고서가 검토 완료로 판단하려면 DB task 성공과 검증된 역할 기록을 함께 확인한다.
 
-### schema 0.2(review-r1)
+### schema 0.2
 
 - 단계마다 하나이고 자기 호출만 담는다. 필드는 `schema_version`, `pack`(id·version), `snapshot_manifest_digest`, `run_id`, `attempt_id`, `stage`, `outcome`(`accepted`·`failed`), `failure_reason`, `upstream`, `evidence`(최대 40), `observations`(최대 16), 역할별 내용, `limitations`, `calls`다.
 - 역할별 내용: environment `environment_notes`, documents `contracts`·`conflicts`·`questions`·`instruction_notes`, investigate·interpret `candidates`(`investigate_1`~`4`, `interpret_1`~`4`), interpret `interpretation_limits`, verify `candidates`(앞 단계 후보 원문)와 `verifications`.
@@ -435,32 +394,26 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 - `calls[]`: `role`, `model`, `opencode_version`, `pack_id`, `pack_version`, `pack_sha256`, `pack_files`, `request_sha256`, `request_bytes`, `usage`, `attempt`(1~3), `outcome`(`accepted`, `output_rejected`, `result_discarded` 또는 실패 사유 코드), `output_errors`.
 - 모듈 ID는 `<ecosystem>:<path>`, 요구 ID는 `<kind>@<선언 파일 경로>` 형식이다.
 
-### schema 0.3(review-r1 slice)
+### schema 0.3(slice)
 
 - slice 기록(`review.investigate.sNNN`, `review.verify.sNNN`)만 쓴다. 0.2에 필수 `slice`(`key` `s001`~`s096`, `modules` 1~8개)를 더한 것이다. 단계는 investigate·verify뿐이다.
 - slice investigate의 upstream은 `review.scope`도 이름으로 가질 수 있고, slice verify는 `review.investigate.sNNN`과 `review.scope`를 가진다. slice verify의 후보는 investigate 후보뿐이다.
-- 0.2 기록에는 `slice`가 없고 `review.scope`·slice upstream을 가질 수 없다. `slice`는 생략 가능 필드라 0.2 기록의 바이트는 그대로다(`TestRolePackExampleRecords`).
+- 0.2 기록에는 `slice`가 없고 `review.scope`·slice upstream을 가질 수 없다. `slice`는 생략 가능 필드라 0.2 기록의 바이트는 그대로다(`TestReviewExampleRecords`).
 - decoder는 기록의 slice key와 단계가 task key와 같은지 확인한다(`record.Expect.Slice`).
-
-### schema 0.1(review-v1)
-
-- 각 역할 기록에 앞 역할 호출 이력이 누적된다. 합산할 때는 현재 역할의 호출만 센다.
-- `calls[].attempt`는 1~2다. `outcome`과 시도 번호가 없는 이전 성공 기록도 읽는다.
-- 이전 기록(Go만 있는 코퍼스)은 그대로 읽힌다.
 
 ## 보고서 연결
 
 보고서 규칙의 전체는 [보고서](REPORT.md)에 있다. 검토 기록과 직접 맞물리는 규칙은 다음과 같다.
 
-- 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. review-r1 역할 key가 없는 계획은 review-v1의 세 역할로 해석한다.
-- `coverage.review_calls`는 0.2·0.3 기록에서 `pack_id`·`pack_version`을, builder 6부터 호출이 든 task(`task_key`)를 싣는다. 상한은 207(호출 상한의 최댓값)이다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
-- 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 표시와 같으면 받는다. 계획과 다른 팩의 기록은 `review_pack_mismatch:<task>`로 제외한다.
+- 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없다.
+- `coverage.review_calls`는 호출마다 `pack_id`·`pack_version`을, builder 6부터 호출이 든 task(`task_key`)를 싣는다. 상한은 207(호출 상한의 최댓값)이다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
+- 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 표시와 같으면 받는다.
 - 모델이 서술한 숫자를 run 상태나 통계로 쓰지 않는다. 도구 관찰과 모델 후보는 서로 다른 산출물이다.
 
 ## 시험
 
 - 회귀: `go test -race ./internal/worker/review/... ./internal/worker/run`. 실제 OpenCode와 가짜 upstream으로 개인 모드의 키 파일 경로 전체(시작, probe, 검토 단계 수락, 키 거부 사유, 시험하지 않은 버전, 키 미노출)를 `python3 scripts/test_postgres.py --smokes-only --personal-model`이 확인한다(비용 없음). 예시와 부정 입력: `python3 scripts/validate_bundle.py`. 일반 CI는 유료 모델을 호출하지 않으며 scripted caller만 쓴다. scripted caller 결과는 플랫폼 검사의 근거이고 지침 품질의 근거가 아니다.
-- 실모델 시험은 명시적으로 환경을 준 경우에만 실행한다. `CODEYE_TEST_OPENCODE_BIN`과 `CODEYE_TEST_REVIEW_RELAY`(필요하면 `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL`)를 주고 `go test -v -count=1 -run '^TestLiveVerifier$' ./internal/worker/review`처럼 하나씩 실행한다. 대상은 `TestLiveQualityRoles`, `TestLiveVerifier`(`internal/worker/review`), `TestLiveOpenCode`(키 파일은 `CODEYE_TEST_MODEL_CREDENTIAL`), `TestLiveInFlightCancel`(`internal/worker/opencode`)이다. 비용이 든다. 시험 체계는 [시험](TESTING.md)에 있다.
+- 실모델 시험은 명시적으로 환경을 준 경우에만 실행한다. `CODEYE_TEST_OPENCODE_BIN`과 `CODEYE_TEST_REVIEW_RELAY`(필요하면 `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL`)를 주고 `go test -v -count=1 -run '^TestLiveVerifier$' ./internal/worker/review`처럼 하나씩 실행한다. 대상은 `TestLiveOpenCode`(키 파일은 `CODEYE_TEST_MODEL_CREDENTIAL`), `TestLiveInFlightCancel`(`internal/worker/opencode`)이다. 검토 역할 전체를 실모델로 돌리는 경로는 회귀 파일럿(`scripts/regression_pilot.py --pilot`, [평가](EVALUATION.md))이다. 비용이 든다. 시험 체계는 [시험](TESTING.md)에 있다.
 
 ## 한계
 
