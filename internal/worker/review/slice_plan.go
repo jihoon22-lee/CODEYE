@@ -93,9 +93,8 @@ type planGroup struct {
 }
 
 // slicePlan is the plan-time view of the slots. Every eligible file is in
-// exactly one of the overview prefix (files the overview is certain to offer
-// when readable), a slice or NotPlanned. Slices and NotPlanned are the
-// packing with what the manifest alone tells (path class, entry point,
+// exactly one of the ordinary overview prefix, a slice or NotPlanned.
+// Slices and NotPlanned are packed using the manifest (path class, entry point,
 // source, test); review.scope packs the same files again with the tool
 // observations and may order them differently. Slots is the number of slot
 // tasks: the plan-time packing plus slack for that re-ordering, at most
@@ -125,14 +124,12 @@ func slotSlack(n int) int { return max(2, (n+7)/8) }
 //     fewer than roleMaxCodeFiles files are taken, at least 128 bytes remain
 //     and its bound fits the remaining roleMaxCodeBytes. The first file that
 //     does not fit ends P. The overview visits files in the same order and
-//     never spends more than the bound, so it reaches every file of P with
-//     room for its whole excerpt.
+//     never spends more than the bound for an ordinary excerpt.
 //   - The other files are packed by packSlots with their path class and
 //     kind; the slot count is that packing plus slotSlack, at most MaxSlices.
 //
-// At run time review.scope drops the files the overview actually offered (it
-// may offer more than P when a file of P was unreadable), so no file is
-// reviewed twice.
+// At run time review.scope drops the files the overview actually offered
+// and can put readable files displaced by contract windows into slots.
 func planSlices(m source.Manifest, scope domain.Scope, rule record.SecondaryRule) slicePlan {
 	return planSlicesFor(m, scope, rule, nil)
 }

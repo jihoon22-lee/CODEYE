@@ -493,12 +493,18 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		return *r
 	}
 	s.noteUpstream(upstream...)
-	corpus := s.codeCorpus
+	var code []record.Excerpt
+	var lims []string
+	var err error
 	if s.slice != nil {
-		corpus = s.sliceCorpus
+		code, lims, err = s.sliceCorpus()
+	} else {
+		code, lims, err = s.codeCorpus(docRec)
 	}
-	code, lims, err := corpus()
 	if err != nil {
+		if s.ctx.Err() != nil {
+			return *s.fail(result(domain.TaskCancelled, "cancelled"))
+		}
 		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 	}
 	s.rec.Limitations = addLim(s.rec.Limitations, lims...)

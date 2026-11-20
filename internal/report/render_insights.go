@@ -1,8 +1,12 @@
 package report
 
 import (
+	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
 // withInsights adds the same evidence-backed assessments to both export layouts.
@@ -12,29 +16,17 @@ func withInsights(v secView) secView {
 		block := &v.Sections[i]
 		var parts []secPart
 		switch block.ID {
-		case "overview":
-			table := &secTable{Head: []string{l.Label("identity.verdict"), l.Label("insight.scope"), l.Label("insight.statement")}}
-			for _, c := range v.R.Documents.Comparisons {
-				table.Rows = append(table.Rows, []secCell{txt(l.Label("insight." + c.Status)), code(c.AppliesTo), txt(c.Statement)})
-			}
-			for _, s := range v.R.CodeReview.Strengths[:min(3, len(v.R.CodeReview.Strengths))] {
-				table.Rows = append(table.Rows, []secCell{txt(l.Label("insight.strength")), code(s.Scope), txt(s.Title + " · " + s.Benefit)})
-			}
-			if len(table.Rows) > 0 {
-				parts = append(parts, secPart{Heading: l.Label("insight.overview"), Table: table, Model: l.Label("insight.interpretation")})
-			}
 		case SectionDocuments:
 			doc := v.R.Documents
 			for _, q := range doc.Quality {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight."+q.Aspect) + " · " + l.Label("insight."+q.Assessment), Paras: []string{q.Statement}, Sources: sourceCitations(q.EvidenceIDs, doc.Evidence)})
+				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight."+q.Aspect) + " · " + l.Label("insight."+q.Assessment), Paras: []string{q.Statement}, Sources: v.sourceCitations(q.EvidenceIDs, doc.Evidence, true)})
 			}
 			for _, c := range doc.Comparisons {
-				ids := append(append([]string{}, c.DocumentEvidenceIDs...), c.CodeEvidenceIDs...)
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight.comparison") + " · " + l.Label("insight."+c.Status), Paras: []string{l.Label("insight.scope") + " · " + c.AppliesTo, c.Statement, c.Reason}, Sources: sourceCitations(ids, doc.Evidence)})
+				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight.comparison") + " · " + l.Label("insight."+c.Status), Paras: []string{l.Label("insight.scope") + " · " + c.AppliesTo, c.Statement}, List: v.comparisonDetails(c, doc.Evidence, true)})
 			}
 		case SectionCodeReview:
 			for _, s := range v.R.CodeReview.Strengths {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight.strength") + " · " + s.Title, Paras: []string{l.Label("insight.scope") + " · " + s.Scope, s.Benefit}, Sources: sourceCitations(s.EvidenceIDs, v.R.CodeReview.Evidence)})
+				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight.strength") + " · " + s.Title, Paras: []string{l.Label("insight.scope") + " · " + s.Scope, s.Benefit}, Sources: v.sourceCitations(s.EvidenceIDs, v.R.CodeReview.Evidence, true)})
 			}
 		}
 		block.Parts = append(parts, block.Parts...)
@@ -42,33 +34,85 @@ func withInsights(v secView) secView {
 	return v
 }
 
-type sourceCitation struct{ Location, Text string }
+type sourceCitation struct{ Location, ExcerptLocation, Text, URL, LinkLabel string }
 
-func sourceCitations(ids []string, evidence []SectionEvidence) []sourceCitation {
+func (v secView) sourceCitations(ids []string, evidence []SectionEvidence, excerpts bool) []sourceCitation {
 	var list []sourceCitation
 	for _, id := range ids {
 		for _, e := range evidence {
 			if e.ID != id {
 				continue
 			}
-			x := sourceCitation{Location: e.Path + ":" + strconv.Itoa(e.StartLine)}
-			if e.Excerpt != nil {
-				x.Location = e.Path + ":" + strconv.Itoa(e.Excerpt.StartLine) + "-" + strconv.Itoa(e.Excerpt.EndLine)
-				x.Text = e.Excerpt.Text
+			excerpt := e.Excerpt
+			if !excerpts {
+				excerpt = nil
 			}
-			list = append(list, x)
+			list = append(list, v.citeSource(e.Path, e.StartLine, e.EndLine, excerpt))
 			break
 		}
 	}
 	return list
 }
 
+func (v secView) citeSource(path string, start, end int, excerpt *sourceexcerpt.Excerpt) sourceCitation {
+	s := citeSource(path, start, end, excerpt)
+	if v.Summary {
+		s.URL = snapshotBrowserURL(v.R, path, start, end)
+		s.LinkLabel = v.L.Label("opening.open_source")
+	}
+	return s
+}
+
+// snapshotBrowserURL derives only a link to the stored Git snapshot. URLs in
+// model content are never used as navigation targets.
+func snapshotBrowserURL(r Report, path string, start, end int) string {
+	if !r.Export.IncludeCode || r.Project == nil || r.Inputs.SourceKind != string(domain.SourceGit) || r.Inputs.CommitSHA == nil ||
+		!domain.ValidObjectID(*r.Inputs.CommitSHA) || domain.ValidateEvidencePath(path) != nil || start < 1 || end < start {
+		return ""
+	}
+	host, err := domain.RepositoryHost(r.Project.Source)
+	if err != nil {
+		return ""
+	}
+	repo := domain.RepositoryPath(r.Project.Source)
+	if pr := r.PullRequest; pr != nil && pr.HeadRepository != "" && !strings.EqualFold(pr.HeadRepository, repo) {
+		return ""
+	}
+	segments := strings.Split(path, "/")
+	for i, segment := range segments {
+		segments[i] = url.PathEscape(segment)
+	}
+	return "https://" + host + "/" + repo + "/blob/" + *r.Inputs.CommitSHA + "/" + strings.Join(segments, "/") +
+		"#L" + strconv.Itoa(start) + "-L" + strconv.Itoa(end)
+}
+
+func sourceRange(path string, start, end int) string {
+	return path + ":" + strconv.Itoa(start) + "-" + strconv.Itoa(end)
+}
+
+func citeSource(path string, start, end int, excerpt *sourceexcerpt.Excerpt) sourceCitation {
+	s := sourceCitation{Location: sourceRange(path, start, end)}
+	if excerpt != nil {
+		s.ExcerptLocation = sourceRange(path, excerpt.StartLine, excerpt.EndLine)
+		s.Text = excerpt.Text
+	}
+	return s
+}
+
 // A fence longer than any backtick run in the snapshot keeps its lines literal.
 func mdCitations(p func(...string), sources []sourceCitation) {
 	for _, x := range sources {
-		p(mdCode(x.Location))
+		if x.URL == "" {
+			p(mdCode(x.Location))
+		} else {
+			p(mdCode(x.Location), " · [", mdText(x.LinkLabel), "](<", x.URL, ">)")
+		}
 		p()
 		if x.Text != "" {
+			if x.ExcerptLocation != "" && x.ExcerptLocation != x.Location {
+				p(mdCode(x.ExcerptLocation))
+				p()
+			}
 			fence := strings.Repeat("`", max(3, longestBacktickRun(x.Text)+1))
 			p(fence)
 			p(x.Text)

@@ -17,7 +17,7 @@ import (
 )
 
 // Review input selection covers C/C++, Python, JS/TS and Rust besides Go.
-// Go inputs must not move: these pins hash every request, with fixed
+// The pins catch unplanned request drift by hashing every request, with fixed
 // snapshot, run and attempt identities, on the modules fixture, its worst
 // case and a Go tree that also holds build files of other ecosystems,
 // vendored and data directories (no non-Go source, so no other ecosystem is
@@ -179,8 +179,8 @@ var pinnedGo = map[string][]string{
 	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment 5a399a3b40ccea8c 1591d2065785bf02", "documents 91ec418a6a9861bd d079a2a538605788", "investigate 260f86ff9e85c12d 7fab296a9fdf4def", "interpret 07f3d86f118cca51 6c30210249e618c0", "verify 969bdee6217e9f4e 739ea4868928c8e1"},
 	// The worst case has more code than the overview offers, so it plans
 	// review.scope and nine slots: the seven the plan-time packing needs and
-	// two of slack, which review.scope leaves empty. Its go vet stand-in is
-	// no secrets screen: the whole-run requests stay as they were, and the
+	// two of slack, which review.scope leaves empty. The fixture has no
+	// secrets screen. User-facing documentation leads under the cap. The
 	// slots run unscreened (their records say
 	// model_input_not_secret_screened) with the same requests as behind a
 	// completed screen that withholds nothing. The slot requests follow the
@@ -192,11 +192,11 @@ var pinnedGo = map[string][]string{
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
 		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 91ec418a6a9861bd d95dde1a3c0ccbd9", "investigate 260f86ff9e85c12d 7fe8358e86097a74", "interpret 07f3d86f118cca51 0ba79c5a6cd9bbf3", "verify 969bdee6217e9f4e a3579848cffcabeb",
-		"investigate 260f86ff9e85c12d aeafd9fcb82918dc", "verify 969bdee6217e9f4e cd05e65614d0799e", "investigate 260f86ff9e85c12d 09a9f87c75e0c2ad", "verify 969bdee6217e9f4e a5550428954e2027",
-		"investigate 260f86ff9e85c12d 596007b18402b636", "verify 969bdee6217e9f4e 40276ed3d25f55c1", "investigate 260f86ff9e85c12d 3dda5f04424a7a1b", "verify 969bdee6217e9f4e 0b9a6176bf0e4478",
-		"investigate 260f86ff9e85c12d a697d9d836ce73a5", "verify 969bdee6217e9f4e 8e0168af6c87f7d3", "investigate 260f86ff9e85c12d af8cf97036b7204c", "verify 969bdee6217e9f4e aeae2ffe561dd1e4",
-		"investigate 260f86ff9e85c12d f5a2fbaae7df9bb5", "verify 969bdee6217e9f4e 71534e3b97c6afdb"},
+		"environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 91ec418a6a9861bd 9bb600f162ca6e78", "investigate 260f86ff9e85c12d 4c9b255a73219e7c", "interpret 07f3d86f118cca51 0ba79c5a6cd9bbf3", "verify 969bdee6217e9f4e a3579848cffcabeb",
+		"investigate 260f86ff9e85c12d c361ff17c1595f29", "verify 969bdee6217e9f4e 408ea18bbba220f2", "investigate 260f86ff9e85c12d 2d198f5833a94c7e", "verify 969bdee6217e9f4e 15c78ee68ce4a01c",
+		"investigate 260f86ff9e85c12d 988b3d0f3aaa3797", "verify 969bdee6217e9f4e 5afda52117684f82", "investigate 260f86ff9e85c12d a814574a9fa37aa9", "verify 969bdee6217e9f4e 9cbc440d25bb8ba4",
+		"investigate 260f86ff9e85c12d b02f5fe18573d22f", "verify 969bdee6217e9f4e 15ac4b1a24bafdaf", "investigate 260f86ff9e85c12d 29e92f74da285314", "verify 969bdee6217e9f4e 33089d6beed8fbab",
+		"investigate 260f86ff9e85c12d 7561e4c5bde1f2c9", "verify 969bdee6217e9f4e 4b2a9f51d58b68ec"},
 	// The worst case behind a completed secrets screen at the default
 	// ceiling: the whole-run requests are those of modules-worst except
 	// interpret (it also lists the secrets task), and every slot request
@@ -208,11 +208,11 @@ var pinnedGo = map[string][]string{
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
 		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 91ec418a6a9861bd d95dde1a3c0ccbd9", "investigate 260f86ff9e85c12d 7fe8358e86097a74", "interpret 07f3d86f118cca51 71915d5d7b19dc70", "verify 969bdee6217e9f4e a3579848cffcabeb",
-		"investigate 260f86ff9e85c12d aeafd9fcb82918dc", "verify 969bdee6217e9f4e cd05e65614d0799e", "investigate 260f86ff9e85c12d 09a9f87c75e0c2ad", "verify 969bdee6217e9f4e a5550428954e2027",
-		"investigate 260f86ff9e85c12d 596007b18402b636", "verify 969bdee6217e9f4e 40276ed3d25f55c1", "investigate 260f86ff9e85c12d 3dda5f04424a7a1b", "verify 969bdee6217e9f4e 0b9a6176bf0e4478",
-		"investigate 260f86ff9e85c12d a697d9d836ce73a5", "verify 969bdee6217e9f4e 8e0168af6c87f7d3", "investigate 260f86ff9e85c12d af8cf97036b7204c", "verify 969bdee6217e9f4e aeae2ffe561dd1e4",
-		"investigate 260f86ff9e85c12d f5a2fbaae7df9bb5", "verify 969bdee6217e9f4e 71534e3b97c6afdb"},
+		"environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 91ec418a6a9861bd 9bb600f162ca6e78", "investigate 260f86ff9e85c12d 4c9b255a73219e7c", "interpret 07f3d86f118cca51 71915d5d7b19dc70", "verify 969bdee6217e9f4e a3579848cffcabeb",
+		"investigate 260f86ff9e85c12d c361ff17c1595f29", "verify 969bdee6217e9f4e 408ea18bbba220f2", "investigate 260f86ff9e85c12d 2d198f5833a94c7e", "verify 969bdee6217e9f4e 15c78ee68ce4a01c",
+		"investigate 260f86ff9e85c12d 988b3d0f3aaa3797", "verify 969bdee6217e9f4e 5afda52117684f82", "investigate 260f86ff9e85c12d a814574a9fa37aa9", "verify 969bdee6217e9f4e 9cbc440d25bb8ba4",
+		"investigate 260f86ff9e85c12d b02f5fe18573d22f", "verify 969bdee6217e9f4e 15ac4b1a24bafdaf", "investigate 260f86ff9e85c12d 29e92f74da285314", "verify 969bdee6217e9f4e 33089d6beed8fbab",
+		"investigate 260f86ff9e85c12d 7561e4c5bde1f2c9", "verify 969bdee6217e9f4e 4b2a9f51d58b68ec"},
 }
 
 func TestGoReviewInputsUnchanged(t *testing.T) {

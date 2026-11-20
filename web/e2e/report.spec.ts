@@ -25,21 +25,35 @@ test('published report exposes the same counts, evidence and revision in the bro
   const response = await page.request.get('/api/v1/runs/' + id + '/report?format=json&include_code=true');
   expect(response.ok()).toBe(true);
   const doc = await response.json();
-  const rows = report.locator('.report-counts > div');
+  const stats = report.locator('details.report-more > summary').filter({hasText: /^분석 상태와 통계$/});
+  await expect(report.locator('.report-summary')).toHaveCount(0);
+  const viewport = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(report.getByRole('tab', { name: '종합', exact: true })).toBeVisible();
+  await expect.poll(() => report.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  if (viewport) await page.setViewportSize(viewport);
+  await stats.click();
+  const rows = report.getByRole('tabpanel', {name: '종합', exact: true}).locator('.report-counts > div');
   await expect(rows.filter({hasText:'발견 사항'}).locator('dd')).toHaveText(String(doc.summary.total_findings));
-  if (doc.summary.priorities.length) {
-    const finding = doc.findings.find((entry: { id: string }) => entry.id === doc.summary.priorities[0]);
-    const priority = report.locator('.report-priorities .finding-card').first();
+  const priority = report.locator('.report-priorities .finding-card').first();
+  if (await priority.count()) {
+    const findingID = await priority.getAttribute('data-finding-id');
+    const finding = doc.findings.find((entry: { id: string }) => entry.id === findingID);
+    expect(doc.code_review.finding_ids).toContain(findingID);
+    expect(['supported', 'reproduced', 'inconclusive', 'unreviewed']).toContain(finding.validation);
     const title = priority.locator('summary').first();
     await expect(title).toContainText(finding.title);
     await title.focus();
     await page.keyboard.press('Enter');
-    await expect(priority.getByText(finding.impact, {exact:true})).toBeVisible();
+    await expect(priority.locator('dd').getByText(finding.impact, {exact:true})).toBeVisible();
     const excerpt = finding.evidence.find((entry: { excerpt?: unknown }) => entry.excerpt);
     if (excerpt) await expect(priority.locator('pre').first()).toBeVisible();
     await expect(report.getByRole('tab', {name:'종합', exact:true})).toHaveAttribute('aria-selected', 'true');
   }
   if (doc.overview) {
+    const tabOrder = ['overview', 'environment', 'documents', 'static_analysis', 'metrics', 'secrets', 'code_review', 'gaps'];
+    const tabs = report.getByRole('tablist').getByRole('tab');
+    expect(await tabs.evaluateAll(elements => elements.map(element => element.getAttribute('aria-controls')))).toEqual(tabOrder.map(key => 'report-section-' + key));
     for (const section of doc.overview.sections) {
       if (section.key === 'gaps') continue;
       await report.getByRole('tablist').locator('[aria-controls="report-section-' + section.key + '"]').click();

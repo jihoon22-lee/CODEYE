@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -99,10 +98,16 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 	}
 	rule := s.h.secondary()
 	plan := planSlicesFor(s.j.Snapshot.Manifest, s.j.Scope, rule, changedPaths(s.j))
-	offered, up := s.overviewOffered()
-	sent := map[string]bool{}
-	for _, p := range offered {
-		sent[p] = true
+	sent, up := s.overviewOffered()
+	reordered := false
+	for _, x := range sent {
+		reordered = reordered || x.Start > 1
+	}
+	for _, f := range plan.Rest {
+		if _, ok := sent[f.Path]; ok {
+			reordered = true
+			break
+		}
 	}
 	files := s.entries()
 	facts := s.priorityFacts(files)
@@ -133,13 +138,20 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 				if f.Class == record.ClassPrimary && record.GeneratedHeader([]byte(x.Text)) {
 					f.Class, f.Secondary = record.ClassSecondary, record.ReasonGeneratedFile
 				}
-			case !sent[f.Path]:
+			case sent[f.Path].ID == "":
 				// Not UTF-8, NUL bytes, a sensitive pattern or no text.
 				sf.State = record.FileUnreadable
 			}
 		}
-		if sent[f.Path] {
+		if sent, ok := sent[f.Path]; ok {
 			sf.State = record.FileCoveredByOverview
+			if sent.Start > 1 {
+				text, total, ok, err := s.readLines(e, sent.Start, sent.End)
+				if err != nil || !ok {
+					return record.ScopeFile{}, errSnapshotIntegrity
+				}
+				sf.PlannedLines, sf.PlannedBytes, sf.TotalLines = sent.End-sent.Start+1, record.JSONLen(text), total
+			}
 		}
 		sf.Class, sf.Rank, sf.Secondary, sf.Observations, sf.PullRequest = f.Class, f.Rank, f.Secondary, f.Observations, f.Change
 		if f.Observations > 0 {
@@ -153,7 +165,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 			CallsBeforeSlices: min(used, record.WholeRunMaxCalls), Admission: record.AdmissionSequentialReserve},
 		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: 50, MaxSlices: MaxSlices, Slots: plan.Slots},
 		Priority: record.ScopePriority{Order: priorityOrder(s.j), Secondary: rule},
-		Upstream: []record.Upstream{up}, Modules: []record.ScopeModule{}, Overview: record.ScopeOverview{Files: []record.ScopeFile{}, Offered: nonNilList(offered)},
+		Upstream: []record.Upstream{up}, Modules: []record.ScopeModule{}, Overview: record.ScopeOverview{Files: []record.ScopeFile{}, Offered: sortedKeys(sent)},
 		Slices: []record.ScopeSlice{}, Excluded: []record.ScopeFile{}, Limitations: s.screenLimitation([]string{})}
 	secondary := map[string]int{}
 	count := func(sf record.ScopeFile) {
@@ -161,19 +173,28 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 			secondary[sf.Module]++
 		}
 	}
+	inspected := map[string]record.ScopeFile{}
+	var candidates []plannedFile
 	for _, f := range plan.Overview {
 		sf, err := inspect(&f, record.FileOverviewNotSent)
 		if err != nil {
 			return result(domain.TaskFailed, "review_input_unavailable")
 		}
-		doc.Overview.Files = append(doc.Overview.Files, sf)
 		count(sf)
+		// Contract windows can take space from the ordinary overview.
+		// Give the displaced readable files the same chance at a slice
+		// as files outside the planned prefix.
+		if reordered && sf.State == record.FileOverviewNotSent {
+			sf.State = record.FilePlanned
+			inspected[f.Path] = sf
+			candidates = append(candidates, f)
+		} else {
+			doc.Overview.Files = append(doc.Overview.Files, sf)
+		}
 	}
 	// The files beyond the prefix: those the overview sent after all are
 	// covered by it, withheld and unreadable files take no slot, the rest
 	// fill the slots.
-	inspected := map[string]record.ScopeFile{}
-	var candidates []plannedFile
 	for _, f := range plan.Rest {
 		sf, err := inspect(&f, record.FilePlanned)
 		if err != nil {
@@ -281,17 +302,17 @@ func screenOf(sc secretScreen) string {
 // overviewOffered returns the code and test files the overview investigate
 // sent to the model (the context excerpts of its record, accepted or failed,
 // when it made a call) and the upstream binding of that record.
-func (s *roleStage) overviewOffered() ([]string, record.Upstream) {
+func (s *roleStage) overviewOffered() (map[string]record.Excerpt, record.Upstream) {
 	u := record.Upstream{Source: "review." + record.StageInvestigate}
 	b, err := readBounded(recordPath(s.j, record.StageInvestigate), record.MaxBytes)
 	if err != nil {
 		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordMissing
-		return []string{}, u
+		return nil, u
 	}
 	r, err := record.Decode(b, expectStage(s.j, record.StageInvestigate))
 	if err != nil {
 		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordInvalid
-		return []string{}, u
+		return nil, u
 	}
 	if r.Accepted() {
 		u.State, u.SHA256 = record.UpstreamAccepted, digestOf(b)
@@ -299,13 +320,12 @@ func (s *roleStage) overviewOffered() ([]string, record.Upstream) {
 		u.State, u.Reason = record.UpstreamFailed, r.FailureReason
 	}
 	sent := slices.ContainsFunc(r.Calls, func(c record.Call) bool { return c.RequestDigest != "" })
-	out := []string{}
+	out := map[string]record.Excerpt{}
 	for _, e := range r.Evidence {
-		if sent && e.Origin == "context" && (e.Kind == "code" || e.Kind == "test") && !slices.Contains(out, e.Path) {
-			out = append(out, e.Path)
+		if sent && e.Origin == "context" && (e.Kind == "code" || e.Kind == "test") {
+			out[e.Path] = e
 		}
 	}
-	sort.Strings(out)
 	return out, u
 }
 

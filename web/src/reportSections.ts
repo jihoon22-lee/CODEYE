@@ -4,7 +4,7 @@
 // section counts add up to the summary, so the screen never shows numbers the
 // stored document does not hold.
 export type Excerpt = { start: number; end: number; text: string };
-export type Citation = { id: string; path: string; line: number; excerpt: Excerpt | null };
+export type Citation = { id: string; kind: string; path: string; line: number; end: number; excerpt: Excerpt | null };
 
 export function parseExcerpt(v: unknown): Excerpt | null {
   if (v == null) return null;
@@ -13,7 +13,7 @@ export function parseExcerpt(v: unknown): Excerpt | null {
 }
 function citation(v: unknown): Citation {
   const x = object(v);
-  return { id: str(x.id), path: str(x.path), line: count(x.start_line), excerpt: parseExcerpt(x.excerpt) };
+  return { id: str(x.id), kind: str(x.kind), path: str(x.path), line: count(x.start_line), end: count(x.end_line), excerpt: parseExcerpt(x.excerpt) };
 }
 export type SectionStage = { state: string; tasks: number; succeeded: number };
 export type ModelState = { task: string; performed: boolean; reason: string | null };
@@ -78,7 +78,7 @@ export type Sections = {
   documents: {
     citations: Citation[];
     quality: {aspect: string; assessment: string; statement: string; refs: string[]}[];
-    comparisons: {statement: string; scope: string; status: string; reason: string; refs: string[]}[];
+    comparisons: {statement: string; scope: string; status: string; reason: string; documentRefs: string[]; codeRefs: string[]}[];
     stage: SectionStage;
     discovery: string;
     budget: { perDocument: number; total: number; read: number } | null;
@@ -356,7 +356,7 @@ export function parseSections(
       comparisons: array(d.comparisons ?? [], v => {
         const x = object(v);
         return { statement: str(x.statement), scope: str(x.applies_to), status: str(x.status), reason: str(x.reason),
-          refs: [...array(x.document_evidence_ids, str), ...array(x.code_evidence_ids, str)] };
+          documentRefs: array(x.document_evidence_ids, str), codeRefs: array(x.code_evidence_ids, str) };
       }),
       stage: stage(d.stage),
       discovery: str(d.discovery),

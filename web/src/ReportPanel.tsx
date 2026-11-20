@@ -3,16 +3,20 @@ import type { Api } from './api';
 import type { AnalysisReport } from './analysisReport';
 import { describeError } from './format';
 import { ComparisonSection, type ComparisonLoad } from './HistoryView';
-import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { ReportIdentity, FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportTasks, TextList, Verdict, explainReason, type ReportHistory } from './ReportParts';
+import { ReportIdentity, FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportSourceContext, ReportTasks, TextList, Verdict, explainReason, type ReportHistory } from './ReportParts';
 import { SectionedReport } from './ReportSections';
 
 export type { ReportHistory } from './ReportParts';
 
 export function ReportDocument({ report, history }: { report: AnalysisReport; history?: ReportHistory }) {
-  if (report.sections) return <SectionedReport report={report} sections={report.sections} history={history} />;
-  // Revisions published before the analysis sections keep this flat layout.
+  return <ReportSourceContext value={report.sourceBase}>
+    {report.sections ? <SectionedReport report={report} sections={report.sections} history={history} /> : <FlatReport report={report} history={history} />}
+  </ReportSourceContext>;
+}
+
+// Revisions published before the analysis sections keep this flat layout.
+function FlatReport({ report, history }: { report: AnalysisReport; history?: ReportHistory }) {
   return (
     <article className="report-document" aria-label={t.title}>
       <header>
@@ -20,8 +24,10 @@ export function ReportDocument({ report, history }: { report: AnalysisReport; hi
         {report.project?.name && <p className="report-project">{report.project.name}</p>}
         <span>{t.revision(report.revision)}</span>
       </header>
-      <ReportIdentity report={report} />
+      <p>{t.reading.reportsOnly}</p>
       <Verdict report={report} />
+      <h5>{t.findings}</h5>
+      <FindingList findings={report.findings} history={history} empty={t.empty} />
       <ReportCounts report={report} />
       {report.limitations.length > 0 && (
         <section>
@@ -29,15 +35,15 @@ export function ReportDocument({ report, history }: { report: AnalysisReport; hi
           <TextList values={report.limitations.map(explainReason)} />
         </section>
       )}
-      <ReportScope report={report} />
       {history && <ComparisonSection load={history.load} reload={history.reload} />}
-      <ReportCalls report={report} />
-      <p>
-        {t.snapshot} <code>{report.snapshot}</code>
-      </p>
-      <h5>{t.findings}</h5>
-      <FindingList findings={report.findings} history={history} empty={t.empty} />
-      <ReportTasks report={report} />
+      <details>
+        <summary>{t.reading.provenance}</summary>
+        <ReportIdentity report={report} />
+        <p>{t.snapshot} <code>{report.snapshot}</code></p>
+        <ReportScope report={report} />
+        <ReportCalls report={report} />
+        <ReportTasks report={report} />
+      </details>
       {report.observations.length > 0 && (
         <details>
           <summary>

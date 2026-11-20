@@ -1,6 +1,7 @@
 package review
 
 import (
+	"iter"
 	"path"
 	"sort"
 	"strings"
@@ -255,6 +256,27 @@ func (g codeGroups) phases() []phase {
 	add(g.order[:g.primary], func(p string) bool { return g.tier[p] == tierOther })
 	add(g.order[g.primary:], func(p string) bool { return g.tier[p] == tierOther })
 	return out
+}
+
+func (g codeGroups) orderedFiles() iter.Seq[source.Entry] {
+	return func(yield func(source.Entry) bool) {
+		for _, ph := range g.phases() {
+			active := append([]string(nil), ph.order...)
+			for round := 0; len(active) > 0; round++ {
+				next := active[:0]
+				for _, m := range active {
+					files := ph.files[m]
+					if round < len(files) && !yield(files[round]) {
+						return
+					}
+					if round+1 < len(files) {
+						next = append(next, m)
+					}
+				}
+				active = next
+			}
+		}
+	}
 }
 
 // moduleID is the module ID (<ecosystem>:<dir>) of a group key: a bare

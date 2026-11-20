@@ -1,31 +1,53 @@
-# CODEYE 분석 보고서
+# Billing gateway
 
 > **합성 예시.** 아래는 `fixtures/modules/input`에 대해 CODEYE의 탐색·검토 역할을 실제로 실행하고 보고서 builder가 만든 출력이다. 모델 응답은 미리 정한 스크립트이며 모델을 부르지 않았다. 정적 분석 진단, 복잡도 지표, 비밀정보 탐지는 합성한 도구 결과이고 실제 도구를 실행하지 않았다. 사용자 프로젝트의 결함 발견 결과가 아니다. 기계 판독 원본은 [report.json](report.json)이다.
 
-| 항목 | 값 |
-|---|---|
-| 프로젝트 | Billing gateway |
-| 분석 경로 | fixtures/modules/input |
-| 분석 시작 | 2026\-11\-18T00\:00\:00Z |
-| 분석 종료 | 2026\-11\-18T00\:10\:00Z |
-| 진행 상태 | 부분 결과 |
-| 검토 결과 | 확인할 항목이 있습니다\. |
+CODEYE 분석 보고서
+
+**부분 결과** · 확인할 항목이 있습니다\.
 
 > 일부 검사를 마치지 못했습니다\. 분석 범위에서 해당 항목을 확인할 수 있습니다\.
 
 ## 종합
 
-### 프로젝트 종합 분석
+### 조치가 필요한 항목
 
-> AI 검토
+> AI의 문서·코드 검토
 
-| 검토 결과 | 적용 범위 | 검토 내용 |
-|---|---|---|
-| 일치 | `.` | 하위 호출이 실패하면 최대 3번 재시도한다\. |
-| 확인 보류 | `svc/b` | 결제 호출은 요청마다 정확히 한 번만 한다\. |
-| 잘된 점 | `.` | 성공하면 즉시 종료하는 제한된 재시도 · 호출 성공 후에는 더 요청하지 않고, 연속 실패 시에는 재시도 횟수를 제한한다\. |
+#### 재시도 반복에서 앞선 시도의 오류를 덮어씀
 
-실행 상태는 부분 결과, 품질 판정은 확인할 항목이 있습니다\.\.
+근거로 지지됨 · 낮음
+
+- **발생 조건\(가정\)** send가 두 번 이상 실패하는 경우 `gateway.go:3-16`
+- **영향** 재시도가 모두 실패하면 첫 실패의 원인을 로그에서 찾을 수 없다\. `gateway.go:3-16`
+- **권고** 시도마다 오류를 기록하거나 errors\.Join으로 묶어 반환한다\.
+- **다음 확인** send가 연속으로 실패하는 테스트로 반환 오류를 확인한다\.
+
+### 문서와 구현
+
+#### 하위 호출이 실패하면 최대 3번 재시도한다\.
+
+일치
+
+- **적용 범위** 저장소 전체
+- **구현 대조** Forward는 처음의 호출이 실패한 경우 MaxRetries 상수로 반복을 세 번까지 제한한다\.
+- **문서 근거** `README.md:1-9`
+- **구현 근거** `gateway.go:1-16`
+
+### 유지할 만한 구현
+
+#### 성공하면 즉시 종료하는 제한된 재시도
+
+- **적용 범위** 저장소 전체
+- **유지할 이유** 호출 성공 후에는 더 요청하지 않고, 연속 실패 시에는 재시도 횟수를 제한한다\.
+- **구현 근거** `gateway.go:1-16`
+
+### 이번 검토의 범위
+
+- 문서 계약 1건은 구현 대조가 미확인입니다\.
+- 미실행·미지원 등 분석 공백을 확인할 수 있습니다\.
+
+### 검토 범위와 집계
 
 AI가 검토한 문제 2건 중 코드 근거를 확인한 항목 1건 \(기각 1건\)\.
 
@@ -51,12 +73,12 @@ AI가 검토한 문제 2건 중 코드 근거를 확인한 항목 1건 \(기각 
 
 | 분석 | 상태 | 핵심 수 |
 |---|---|---|
-| 코드 분석\(모델 검토\) | ✓ 성공 | 모델 호출 5 · 발견 2 · 조치 1 · 미확정 0 · 기각 1 |
+| 환경 분석 | △ 일부 수행 | 범위 안 모듈 3 · 선언 요구 3 · 충족 2 · 불일치 1 · 판단 불가 0 · 의존성 받기 작업 3 · 그중 성공 1 · 모델 해석 메모 1 |
+| 문서 분석 | ✓ 성공 | 발견 문서 4 · 읽은 문서 3 · 읽지 않은 문서 1 · 문서 없는 모듈 0 · 계약 2 · 충돌 1 · 질문 1 · 지침 메모 1 |
 | 정적 분석 | △ 일부 수행 | 분석 작업 9 · 성공 6 · 성공하지 않음 3 · 진단 2 · 발견 3 · 조치 0 · 미확정 3 |
 | 구조·중복 지표 | △ 일부 수행 | 측정 작업 2 · 임계 초과 측정 1 · 지표 종류 1 |
 | 비밀정보 | ✓ 성공 | 탐지 작업 1 · 탐지 1 · 파일 1 |
-| 환경 분석 | △ 일부 수행 | 범위 안 모듈 3 · 선언 요구 3 · 충족 2 · 불일치 1 · 판단 불가 0 · 의존성 받기 작업 3 · 그중 성공 1 · 모델 해석 메모 1 |
-| 문서 분석 | ✓ 성공 | 발견 문서 4 · 읽은 문서 3 · 읽지 않은 문서 1 · 문서 없는 모듈 0 · 계약 2 · 충돌 1 · 질문 1 · 지침 메모 1 |
+| 코드 분석\(모델 검토\) | ✓ 성공 | 모델 호출 5 · 발견 2 · 조치 1 · 미확정 0 · 기각 1 |
 | 분석 공백 | \- | 공백 7 |
 
 ### 먼저 볼 것
@@ -75,167 +97,6 @@ AI가 검토한 문제 2건 중 코드 근거를 확인한 항목 1건 \(기각 
 - go\.staticcheck SA4006\: this value of err is overwritten before the previous attempt\'s error is logged \(synthetic example\) — unreviewed / low `fnd_e67a73d834b3bddb35e6`
 - go\.staticcheck SA6005\: should use strings\.EqualFold instead \(synthetic example\) — unreviewed / low `fnd_4bc80f2ae454c254fb78`
 - any\.gitleaks generic\-api\-key\: secret detected by gitleaks rule generic\-api\-key \(value withheld\) — unreviewed / low `fnd_ad49092ef174f1d0949c`
-
-## 코드 분석\(모델 검토\)
-
-### 잘된 점 · 성공하면 즉시 종료하는 제한된 재시도
-
-적용 범위 · \.
-
-호출 성공 후에는 더 요청하지 않고, 연속 실패 시에는 재시도 횟수를 제한한다\.
-
-> AI 검토
-
-`gateway.go:1-6`
-
-```
-// Package gateway forwards billing requests to a downstream service.
-package gateway
-
-// MaxRetries is how many times Forward repeats a failed call, following the
-// repository guidance to retry failed calls up to 3 times.
-const MaxRetries = 3
-```
-
-상태\: ✓ 성공 · 작업 3개 중 3개 성공
-
-검토 팩\: review@2\.1\.0
-
-모델 호출 5회, 그중 수락 5회\(환경·문서 역할 호출 포함, 전체 합계\)\.
-
-모델 요청 크기 합계 64778바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
-
-모델에 보낸 파일 6개 / snapshot 파일 10개\.
-
-| 항목 | 수 |
-|---|---|
-| 모델 호출 | 5 |
-| 발견 | 2 |
-| 조치 | 1 |
-| 미확정 | 0 |
-| 기각 | 1 |
-
-### 코드 분석 역할
-
-| 역할 | 작업 상태 | 결과 문서 | 이유 |
-|---|---|---|---|
-| `review.investigate` | ✓ 성공 | `accepted` | `-` |
-| `review.interpret` | ✓ 성공 | `accepted` | `-` |
-| `review.verify` | ✓ 성공 | `accepted` | `-` |
-
-### 근거로 지지한 발견
-
-#### 재시도 반복에서 앞선 시도의 오류를 덮어씀
-
-- error\_handling / low · supported / open `review_interpret_1`
-- 위치\: `gateway.go:3-16`
-- 영향\: 재시도가 모두 실패하면 첫 실패의 원인을 로그에서 찾을 수 없다\.
-- 권고\: 시도마다 오류를 기록하거나 errors\.Join으로 묶어 반환한다\.
-
-### 그 밖의 모델 검토 발견
-
-| 발견 | 제목 | 판정 | 심각도 | 위치 |
-|---|---|---|---|---|
-| `review_investigate_1` | Forward가 결제 호출에도 재시도를 적용할 수 있음 | `refuted` | `medium` | `gateway.go:1-16, README.md:1-9` |
-
-### 진단 해석의 한계
-
-> 모델 해석 — review\.interpret 역할의 수락된 기록에서 가져온 모델 서술이다\. 도구나 실행으로 확인한 사실이 아니다\. 줄 끝의 ID는 정적 분석 절의 진단이다\.
-
-- Normalize의 호출자와 비교 용도가 입력에 없어 진단의 영향을 판단할 수 없다\. `obs_ce1cfe93957ba57dbc4e`
-
-## 정적 분석
-
-상태\: △ 일부 수행 · 작업 9개 중 6개 성공
-
-도구별 검사 결과와 확인할 위치입니다\.
-
-| 항목 | 수 |
-|---|---|
-| 분석 작업 | 9 |
-| 성공 | 6 |
-| 성공하지 않음 | 3 |
-| 진단 | 2 |
-| 발견 | 3 |
-| 조치 | 0 |
-| 미확정 | 3 |
-
-### 언어\: go
-
-| 도구 | 작업 | 필수 | 성공 | 진단 | 성공하지 않은 작업 |
-|---|---|---|---|---|---|
-| `go.vet (go)` | 3 | 3 | 2 | 0 | go\-vet\.m02 ✕ 실패 · 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했다\. |
-| `go.staticcheck (staticcheck)` | 3 | 0 | 2 | 2 | staticcheck\.m02 ✕ 실패 · 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했다\. |
-
-### 언어\: go\: 규칙별 진단
-
-| 도구 | 규칙 | 수 | 심각도 | 메시지 | 위치 |
-|---|---|---|---|---|---|
-| `go.staticcheck` | `SA4006` | 1 | `low` | this value of err is overwritten before the previous attempt\'s error is logged \(synthetic example\) | gateway\.go\:13 |
-| `go.staticcheck` | `SA6005` | 1 | `low` | should use strings\.EqualFold instead \(synthetic example\) | svc/a/normalize\.go\:8 |
-
-### 언어 무관\(지표·비밀정보 도구\)
-
-이 도구들의 측정값과 탐지는 구조·중복 지표와 비밀정보 절에 있다\.
-
-| 도구 | 작업 | 필수 | 성공 | 진단 | 성공하지 않은 작업 |
-|---|---|---|---|---|---|
-| `any.gitleaks (gitleaks)` | 1 | 0 | 1 | 탐지 1 | \- |
-| `any.jscpd (jscpd)` | 1 | 0 | 0 | 지표 0 | jscpd – 실행 안 함\(미지원\) · 이 도구가 필요로 하는 언어 toolchain이 노드에 지정되지 않아 실행하지 않았다\(0건 통과 아님\)\. |
-| `any.lizard (lizard)` | 1 | 0 | 1 | 지표 1 | \- |
-
-개별 진단과 도구 발견 3건은 전체 보기\(detail\=full\)와 JSON에 있다\.
-
-## 구조·중복 지표
-
-상태\: △ 일부 수행 · 작업 2개 중 1개 성공
-
-구조 지표는 임계값을 넘은 측정값이며 결함이 아니다\. 발견을 만들지 않고 품질 판정에 쓰지 않는다\.
-
-| 항목 | 수 |
-|---|---|
-| 측정 작업 | 2 |
-| 임계 초과 측정 | 1 |
-| 지표 종류 | 1 |
-
-### 측정 작업
-
-| 작업 | 상태 | 이유 |
-|---|---|---|
-| `jscpd` | – 실행 안 함\(미지원\) | 이 도구가 필요로 하는 언어 toolchain이 노드에 지정되지 않아 실행하지 않았다\(0건 통과 아님\)\. |
-| `lizard` | ✓ 성공 | \- |
-
-### 지표별 요약
-
-| 지표 | 단위 | 임계값 | 최댓값 | 수 | 큰 값\(주요 경로 먼저\) |
-|---|---|---|---|---|---|
-| `cyclomatic_complexity` | `count` | 16 | 17 | 1 | gateway\.go\:10 \(17\) |
-
-## 비밀정보
-
-상태\: ✓ 성공 · 작업 1개 중 1개 성공
-
-비밀정보 탐지는 위치와 규칙만 기록한다\. 값과 그 일부·hash는 저장하지 않는다\.
-
-탐지된 파일은 모든 모델 입력에서 뺐다\.
-
-| 항목 | 수 |
-|---|---|
-| 탐지 작업 | 1 |
-| 탐지 | 1 |
-| 파일 | 1 |
-
-### 탐지 작업
-
-| 작업 | 상태 | 이유 |
-|---|---|---|
-| `gitleaks` | ✓ 성공 | \- |
-
-### 탐지 위치
-
-| 규칙 | 위치 | 위치 확인 | 발견 |
-|---|---|---|---|
-| `generic-api-key` | `svc/b/charge.go:6-6` | `verified_against_source_manifest` | `fnd_ad49092ef174f1d0949c` |
 
 ## 환경 분석
 
@@ -319,7 +180,9 @@ const MaxRetries = 3
 
 루트 README는 최초 호출과 재시도를 합한 호출 상한을 명시한다\.
 
-> AI 검토
+> AI의 문서·코드 검토
+
+`README.md:1-9`
 
 `README.md:1-6`
 
@@ -336,7 +199,9 @@ This repository holds a small billing gateway and two services under `svc/`.
 
 실패 시 호출을 반복할지 여부가 루트 안내와 결제 모듈 안내에서 달라 적용 범위를 확인해야 한다\.
 
-> AI 검토
+> AI의 문서·코드 검토
+
+`README.md:1-9`
 
 `README.md:1-6`
 
@@ -365,31 +230,39 @@ caller instead.
 
 하위 호출이 실패하면 최대 3번 재시도한다\.
 
-Forward는 처음의 호출이 실패한 경우 MaxRetries 상수로 반복을 세 번까지 제한한다\.
+> AI의 문서·코드 검토
 
-> AI 검토
+- **구현 대조** Forward는 처음의 호출이 실패한 경우 MaxRetries 상수로 반복을 세 번까지 제한한다\.
+- **문서 근거**
 
-`README.md:1-6`
+  `README.md:1-9`
 
-```
-# Billing gateway
+  `README.md:1-6`
 
-This repository holds a small billing gateway and two services under `svc/`.
+  ```
+  # Billing gateway
 
-## Guidance for every module
+  This repository holds a small billing gateway and two services under `svc/`.
 
-```
+  ## Guidance for every module
 
-`gateway.go:1-6`
+  ```
 
-```
-// Package gateway forwards billing requests to a downstream service.
-package gateway
+- **구현 근거**
 
-// MaxRetries is how many times Forward repeats a failed call, following the
-// repository guidance to retry failed calls up to 3 times.
-const MaxRetries = 3
-```
+  `gateway.go:1-16`
+
+  `gateway.go:1-6`
+
+  ```
+  // Package gateway forwards billing requests to a downstream service.
+  package gateway
+
+  // MaxRetries is how many times Forward repeats a failed call, following the
+  // repository guidance to retry failed calls up to 3 times.
+  const MaxRetries = 3
+  ```
+
 
 ### 문서와 구현 · 확인 보류
 
@@ -397,19 +270,21 @@ const MaxRetries = 3
 
 결제 호출은 요청마다 정확히 한 번만 한다\.
 
-이 문서 계약에 대한 코드 대조 결과가 기록되지 않았습니다\.
+> AI의 문서·코드 검토
 
-> AI 검토
+- **확인하지 못한 이유** 이 문서 계약에 대한 코드 대조 결과가 기록되지 않았습니다\.
+- **문서 근거**
 
-`svc/b/README.md:1-5`
+  `svc/b/README.md:1-5`
 
-```
-# Payment client
+  ```
+  # Payment client
 
-Call the payment endpoint exactly once per request. Never retry a failed
-call: a repeated call may charge the customer twice. Return the error to the
-caller instead.
-```
+  Call the payment endpoint exactly once per request. Never retry a failed
+  call: a repeated call may charge the customer twice. Return the error to the
+  caller instead.
+  ```
+
 
 상태\: ✓ 성공 · 작업 2개 중 2개 성공
 
@@ -486,6 +361,182 @@ caller instead.
 | `ev_db01a731b6e8e8a2d717118c` | `document` | `README.md:1-9` | `cb8e4c2940c4` |
 | `ev_fefbd0c501bd533cc8f2743e` | `code` | `gateway.go:1-16` | `a03fee1a659e` |
 
+## 정적 분석
+
+상태\: △ 일부 수행 · 작업 9개 중 6개 성공
+
+도구별 검사 결과와 확인할 위치입니다\.
+
+| 항목 | 수 |
+|---|---|
+| 분석 작업 | 9 |
+| 성공 | 6 |
+| 성공하지 않음 | 3 |
+| 진단 | 2 |
+| 발견 | 3 |
+| 조치 | 0 |
+| 미확정 | 3 |
+
+### 언어\: go
+
+| 도구 | 작업 | 필수 | 성공 | 진단 | 성공하지 않은 작업 |
+|---|---|---|---|---|---|
+| `go.vet (go)` | 3 | 3 | 2 | 0 | go\-vet\.m02 ✕ 실패 · 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했다\. |
+| `go.staticcheck (staticcheck)` | 3 | 0 | 2 | 2 | staticcheck\.m02 ✕ 실패 · 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했다\. |
+
+### 언어\: go\: 규칙별 진단
+
+| 도구 | 규칙 | 수 | 심각도 | 메시지 | 위치 |
+|---|---|---|---|---|---|
+| `go.staticcheck` | `SA4006` | 1 | `low` | this value of err is overwritten before the previous attempt\'s error is logged \(synthetic example\) | gateway\.go\:13\-13 |
+| `go.staticcheck` | `SA6005` | 1 | `low` | should use strings\.EqualFold instead \(synthetic example\) | svc/a/normalize\.go\:8\-8 |
+
+### 언어 무관\(지표·비밀정보 도구\)
+
+이 도구들의 측정값과 탐지는 구조·중복 지표와 비밀정보 절에 있다\.
+
+| 도구 | 작업 | 필수 | 성공 | 진단 | 성공하지 않은 작업 |
+|---|---|---|---|---|---|
+| `any.gitleaks (gitleaks)` | 1 | 0 | 1 | 탐지 1 | \- |
+| `any.jscpd (jscpd)` | 1 | 0 | 0 | 지표 0 | jscpd – 실행 안 함\(미지원\) · 이 도구가 필요로 하는 언어 toolchain이 노드에 지정되지 않아 실행하지 않았다\(0건 통과 아님\)\. |
+| `any.lizard (lizard)` | 1 | 0 | 1 | 지표 1 | \- |
+
+개별 진단과 도구 발견 3건은 전체 보기\(detail\=full\)와 JSON에 있다\.
+
+## 구조·중복 지표
+
+상태\: △ 일부 수행 · 작업 2개 중 1개 성공
+
+구조 지표는 임계값을 넘은 측정값이며 결함이 아니다\. 발견을 만들지 않고 품질 판정에 쓰지 않는다\.
+
+| 항목 | 수 |
+|---|---|
+| 측정 작업 | 2 |
+| 임계 초과 측정 | 1 |
+| 지표 종류 | 1 |
+
+### 측정 작업
+
+| 작업 | 상태 | 이유 |
+|---|---|---|
+| `jscpd` | – 실행 안 함\(미지원\) | 이 도구가 필요로 하는 언어 toolchain이 노드에 지정되지 않아 실행하지 않았다\(0건 통과 아님\)\. |
+| `lizard` | ✓ 성공 | \- |
+
+### 지표별 요약
+
+| 지표 | 단위 | 임계값 | 최댓값 | 수 | 큰 값\(주요 경로 먼저\) |
+|---|---|---|---|---|---|
+| `cyclomatic_complexity` | `count` | 16 | 17 | 1 | gateway\.go\:10 \(17\) |
+
+## 비밀정보
+
+상태\: ✓ 성공 · 작업 1개 중 1개 성공
+
+비밀정보 탐지는 위치와 규칙만 기록한다\. 값과 그 일부·hash는 저장하지 않는다\.
+
+탐지된 파일은 모든 모델 입력에서 뺐다\.
+
+| 항목 | 수 |
+|---|---|
+| 탐지 작업 | 1 |
+| 탐지 | 1 |
+| 파일 | 1 |
+
+### 탐지 작업
+
+| 작업 | 상태 | 이유 |
+|---|---|---|
+| `gitleaks` | ✓ 성공 | \- |
+
+### 탐지 위치
+
+| 규칙 | 위치 | 위치 확인 | 발견 |
+|---|---|---|---|
+| `generic-api-key` | `svc/b/charge.go:6-6` | `verified_against_source_manifest` | `fnd_ad49092ef174f1d0949c` |
+
+## 코드 분석\(모델 검토\)
+
+### 잘된 점 · 성공하면 즉시 종료하는 제한된 재시도
+
+적용 범위 · \.
+
+호출 성공 후에는 더 요청하지 않고, 연속 실패 시에는 재시도 횟수를 제한한다\.
+
+> AI의 문서·코드 검토
+
+`gateway.go:1-16`
+
+`gateway.go:1-6`
+
+```
+// Package gateway forwards billing requests to a downstream service.
+package gateway
+
+// MaxRetries is how many times Forward repeats a failed call, following the
+// repository guidance to retry failed calls up to 3 times.
+const MaxRetries = 3
+```
+
+상태\: ✓ 성공 · 작업 3개 중 3개 성공
+
+검토 팩\: review@2\.1\.0
+
+모델 호출 5회, 그중 수락 5회\(환경·문서 역할 호출 포함, 전체 합계\)\.
+
+모델 요청 크기 합계 64778바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
+
+모델에 보낸 파일 6개 / snapshot 파일 10개\.
+
+| 항목 | 수 |
+|---|---|
+| 모델 호출 | 5 |
+| 발견 | 2 |
+| 조치 | 1 |
+| 미확정 | 0 |
+| 기각 | 1 |
+
+### 근거로 지지한 발견
+
+#### 재시도 반복에서 앞선 시도의 오류를 덮어씀
+
+근거로 지지됨 · 낮음
+
+- **게시 시점 판정** 미판정
+- **발생 조건\(가정\)** send가 두 번 이상 실패하는 경우
+
+  `gateway.go:3-16`
+
+- **발생 조건\(가정\)** send가 두 번 이상 실패한다\.
+
+  `gateway.go:3-16`
+
+- **영향** 재시도가 모두 실패하면 첫 실패의 원인을 로그에서 찾을 수 없다\.
+
+  `gateway.go:3-16`
+
+- **권고** 시도마다 오류를 기록하거나 errors\.Join으로 묶어 반환한다\.
+- **다음 확인** send가 연속으로 실패하는 테스트로 반환 오류를 확인한다\.
+
+### 그 밖의 모델 검토 발견
+
+| 발견 | 제목 | 판정 | 심각도 | 위치 |
+|---|---|---|---|---|
+| `review_investigate_1` | Forward가 결제 호출에도 재시도를 적용할 수 있음 | `refuted` | `medium` | `gateway.go:1-16, README.md:1-9` |
+
+### 코드 분석 역할
+
+| 역할 | 작업 상태 | 결과 문서 | 이유 |
+|---|---|---|---|
+| `review.investigate` | ✓ 성공 | `accepted` | `-` |
+| `review.interpret` | ✓ 성공 | `accepted` | `-` |
+| `review.verify` | ✓ 성공 | `accepted` | `-` |
+
+### 진단 해석의 한계
+
+> 모델 해석 — review\.interpret 역할의 수락된 기록에서 가져온 모델 서술이다\. 도구나 실행으로 확인한 사실이 아니다\. 줄 끝의 ID는 정적 분석 절의 진단이다\.
+
+- Normalize의 호출자와 비교 용도가 입력에 없어 진단의 영향을 판단할 수 없다\. `obs_ce1cfe93957ba57dbc4e`
+
 ## 분석 공백
 
 분석하지 못했거나 일부만 분석한 범위를 모은 목록이다\. 이 범위의 결과는 0건이 아니라 미확인이다\.
@@ -544,6 +595,17 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 - 필수 작업 중 성공하지 않은 작업이 있다\.
 - 비밀값이 탐지된 파일은 모델 입력에서 뺐다\.
 - tools\_outside\_interpret\_input
+
+### 분석 대상과 실행 시각
+
+| 항목 | 값 |
+|---|---|
+| 프로젝트 | Billing gateway |
+| 분석 경로 | fixtures/modules/input |
+| 분석 시작 | 2026\-11\-18T00\:00\:00Z |
+| 분석 종료 | 2026\-11\-18T00\:10\:00Z |
+| 진행 상태 | 부분 결과 |
+| 검토 결과 | 확인할 항목이 있습니다\. |
 
 ### 기술 상세
 
