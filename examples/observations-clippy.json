@@ -221,15 +221,15 @@
       "stderr": {
         "captured_bytes": 114,
         "incomplete": false,
-        "sha256": "436e4e32ac96d28f258bcee24177754b8d65a201cdab874f5235b1386f41e6c1",
-        "total_bytes": 168,
+        "sha256": "a4e7437011bc988475e0421a2485d421392e245a040687447a95e7ac42f454d8",
+        "total_bytes": 187,
         "truncated": false
       },
       "stdout": {
         "captured_bytes": 40694,
         "incomplete": false,
-        "sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e",
-        "total_bytes": 45186,
+        "sha256": "c46fd11fce94f5d2d454f0d5cee0ef200f7a71285572345632a6df00f54db88a",
+        "total_bytes": 46763,
         "truncated": false
       }
     }
@@ -254,7 +254,7 @@
       "category": "maintainability",
       "id": "obs_d6d5f472f17e142c591c",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 20,
         "end_line": 7,
@@ -272,13 +272,13 @@
         "json_pointer": "/message",
         "record_index": 6,
         "stream": "stdout",
-        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+        "stream_sha256": "c46fd11fce94f5d2d454f0d5cee0ef200f7a71285572345632a6df00f54db88a"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+            "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
             "column_unit": "byte",
             "end_col": 20,
             "end_line": 7,
@@ -300,7 +300,7 @@
       "category": "maintainability",
       "id": "obs_17539c29ed4c6e8cce1d",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 28,
         "end_line": 13,
@@ -318,13 +318,13 @@
         "json_pointer": "/message",
         "record_index": 8,
         "stream": "stdout",
-        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+        "stream_sha256": "c46fd11fce94f5d2d454f0d5cee0ef200f7a71285572345632a6df00f54db88a"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+            "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
             "column_unit": "byte",
             "end_col": 28,
             "end_line": 13,
@@ -346,7 +346,7 @@
       "category": "maintainability",
       "id": "obs_d00d5dc2beaa57165109",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 43,
         "end_line": 18,
@@ -358,13 +358,13 @@
       "path": "src/lib.rs",
       "raw_message": "unsafe function's docs are missing a `# Safety` section",
       "raw_ref": {
-        "byte_end": 17372,
-        "byte_start": 15812,
+        "byte_end": 19462,
+        "byte_start": 17902,
         "execution": "clippy.check",
         "json_pointer": "/message",
-        "record_index": 9,
+        "record_index": 10,
         "stream": "stdout",
-        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+        "stream_sha256": "c46fd11fce94f5d2d454f0d5cee0ef200f7a71285572345632a6df00f54db88a"
       },
       "raw_severity": "warning",
       "related": [],
@@ -377,7 +377,7 @@
       "category": "security",
       "id": "obs_8e9f5db8b4f772007c7b",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 18,
         "end_line": 23,
@@ -395,7 +395,7 @@
         "json_pointer": "/message",
         "record_index": 14,
         "stream": "stdout",
-        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+        "stream_sha256": "c46fd11fce94f5d2d454f0d5cee0ef200f7a71285572345632a6df00f54db88a"
       },
       "raw_severity": "warning",
       "related": [],
@@ -408,7 +408,7 @@
       "category": "correctness",
       "id": "obs_b28442b6010380f2f531",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 16,
         "end_line": 23,
@@ -420,13 +420,13 @@
       "path": "src/lib.rs",
       "raw_message": "this public function might dereference a raw pointer but is not marked `unsafe`",
       "raw_ref": {
-        "byte_end": 21023,
-        "byte_start": 19463,
+        "byte_end": 22584,
+        "byte_start": 21024,
         "execution": "clippy.check",
         "json_pointer": "/message",
-        "record_index": 11,
+        "record_index": 12,
         "stream": "stdout",
-        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+        "stream_sha256": "c46fd11fce94f5d2d454f0d5cee0ef200f7a71285572345632a6df00f54db88a"
       },
       "raw_severity": "warning",
       "related": [],
@@ -439,7 +439,7 @@
       "category": "error_handling",
       "id": "obs_52b93240e1858701f4f6",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 2,
         "end_line": 31,
@@ -457,13 +457,13 @@
         "json_pointer": "/message",
         "record_index": 16,
         "stream": "stdout",
-        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+        "stream_sha256": "c46fd11fce94f5d2d454f0d5cee0ef200f7a71285572345632a6df00f54db88a"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+            "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
             "column_unit": "byte",
             "end_col": 24,
             "end_line": 28,
@@ -485,7 +485,7 @@
       "category": "error_handling",
       "id": "obs_6deb0c7dd9c28fe9e44c",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 12,
         "end_line": 34,
@@ -503,7 +503,7 @@
         "json_pointer": "/message",
         "record_index": 18,
         "stream": "stdout",
-        "stream_sha256": "1cf1e01bb3775a0687e3e7202f0b3a5f3cd46333a3082791fc6d9efb024a5b4e"
+        "stream_sha256": "c46fd11fce94f5d2d454f0d5cee0ef200f7a71285572345632a6df00f54db88a"
       },
       "raw_severity": "warning",
       "related": [],
@@ -564,7 +564,7 @@
     "version": "1"
   },
   "schema_version": "0.1",
-  "snapshot_manifest_digest": "3d1da0393bea266fa324f3d8588d907f15aa8da0198612475bd0f519f53a9030",
+  "snapshot_manifest_digest": "52dc9c3198390ec633f9e8e61ef88595af584c96e9243f5d7fb7cae15ad71595",
   "target": {
     "platform": "x86_64-unknown-linux-gnu",
     "properties": {
