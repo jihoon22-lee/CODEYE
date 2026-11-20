@@ -158,7 +158,7 @@ func modelCommand(ctx context.Context, args []string, out, stderr io.Writer) int
 	explicit := cfg.Executable != "" || cfg.Model != "" || cfg.RelayFile != "" || cfg.CredentialFile != ""
 	switch {
 	case explicit && (cfg.Executable == "" || cfg.Model == "" || configPath != ""):
-		fmt.Fprintln(stderr, "model probe needs both --executable and --model (or neither, to probe the personal configuration)")
+		fmt.Fprintln(stderr, "model probe needs both --executable and --model (or neither, to probe the service configuration)")
 		return 2
 	case !explicit:
 		pcfg, layout, ok := loadPersonalConfig("model probe", configArgs(configPath), stderr, nil)

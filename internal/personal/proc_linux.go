@@ -45,14 +45,14 @@ var ErrBusy = errors.New("another codeye start, stop, backup or restore is runni
 func (l Layout) Lock() (func(), error) {
 	f, err := os.OpenFile(l.LockFile(), os.O_RDWR|os.O_CREATE|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
 	if err != nil {
-		return nil, errors.New("cannot open the personal lock file")
+		return nil, errors.New("cannot open the service lock file")
 	}
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		_ = f.Close()
 		if errors.Is(err, unix.EWOULDBLOCK) {
 			return nil, ErrBusy
 		}
-		return nil, errors.New("cannot lock the personal state")
+		return nil, errors.New("cannot lock the service state")
 	}
 	return func() { _ = unix.Flock(int(f.Fd()), unix.LOCK_UN); _ = f.Close() }, nil
 }
