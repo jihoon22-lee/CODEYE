@@ -38,8 +38,11 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
   const out: Hint[] = [];
   const seen = new Set<string>();
   const push = (h: Hint) => { if (!seen.has(h.key)) { seen.add(h.key); out.push(h); } };
-  const personal = setup?.mode === 'personal';
+  // A service started by `codeye up` records its setup (model null otherwise); its node follows
+  // the project's own choices. A separately run controller leaves them to the node operator.
+  const followsProject = setup !== null && setup.model !== null;
   const blocked: string[] = [];
+  const notOffered: string[] = [];
   const unresolved: string[] = [];
   let sourceWithheld = false;
   for (const g of gaps) {
@@ -59,6 +62,10 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
       if (n > 0) push({ key: 'not_planned', text: t.improve.notPlanned(n) });
     } else if (detail === 'repository_code_not_allowed' && g.subject) {
       if (!blocked.includes(taskOf(g.subject))) blocked.push(taskOf(g.subject));
+    } else if (detail === 'repository_code_not_offered' && g.subject) {
+      if (!notOffered.includes(taskOf(g.subject))) notOffered.push(taskOf(g.subject));
+    } else if (detail === 'model_review_not_offered') {
+      push({ key: 'model_not_offered', text: t.improve.modelNotOffered });
     } else if (detail === 'model_source_not_approved') {
       sourceWithheld = true;
     } else if (g.code === 'dependencies_not_fetched' && g.subject) {
@@ -88,28 +95,30 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
   }
   if (blocked.length > 0) {
     const tasks = blocked.join(', ');
-    // In personal mode the project's own choice decides; elsewhere the node operator's grant.
-    if (personal && project.analysis && !project.analysis.run_build_scripts) {
+    // Under `codeye up` the project's own choice decides; elsewhere the node operator's grant.
+    if (followsProject && project.analysis && !project.analysis.run_build_scripts) {
       // With dependency fetching on, the same grant lets deps.rust fetch the crates first.
       const crates = project.analysis.fetch_dependencies && blocked.some(b => RUST_TASKS.has(b));
       push({ key: 'build_scripts', text: crates ? t.improve.buildScriptsCrates(tasks) : t.improve.buildScripts(tasks), turnOn: 'run_build_scripts' });
-    } else if (!personal) {
+    } else if (!followsProject) {
       push({ key: 'build_scripts', text: t.improve.operatorGrant(tasks) });
     }
   }
+  // Only the administrator's switch took it away: nothing for the project to turn on.
+  if (notOffered.length > 0) push({ key: 'build_scripts_not_offered', text: t.improve.buildScriptsNotOffered(notOffered.join(', ')) });
   if (unresolved.length > 0) {
     const tasks = unresolved.join(', ');
-    // Personal mode: the project's choice, or (when it is on) the node switch in the
+    // Under `codeye up`: the project's choice, or (when it is on) the node switch in the
     // configuration. Elsewhere the node operator starts the agent with fetching on.
-    if (personal && project.analysis && !project.analysis.fetch_dependencies) {
+    if (followsProject && project.analysis && !project.analysis.fetch_dependencies) {
       push({ key: 'fetch_dependencies', text: t.improve.fetchDependencies(tasks), turnOn: 'fetch_dependencies' });
-    } else if (personal) {
+    } else if (followsProject) {
       push({ key: 'fetch_dependencies', text: t.improve.dependencySwitch(tasks) });
     } else {
       push({ key: 'fetch_dependencies', text: t.improve.dependencyOperator(tasks) });
     }
   }
-  if (sourceWithheld && personal && project.analysis && !project.analysis.send_source_to_model) {
+  if (sourceWithheld && followsProject && project.analysis && !project.analysis.send_source_to_model) {
     push({ key: 'send_source', text: t.improve.sendSource, turnOn: 'send_source_to_model' });
   }
   return out;

@@ -89,7 +89,7 @@ type Hello struct {
 	// ModelTimeoutSeconds bounds one model call; 0 means the default (180).
 	ModelTimeoutSeconds int `json:"model_timeout_seconds,omitempty"`
 	// GitCredentialFile is the file the worker reads a Git host token from
-	// for one fetch of that host (personal mode's GitHub token,
+	// for one fetch of that host (the service's GitHub token,
 	// docs/GITHUB.md); the token never travels in the hello, and analyzers
 	// and the model never see it.
 	GitCredentialFile string `json:"git_credential_file,omitempty"`
@@ -110,7 +110,7 @@ type Hello struct {
 	LeaseMarginSeconds int               `json:"lease_margin_seconds"`
 
 	// AdvertiseWithoutBaseline: advertise the analysis capability even when no
-	// baseline analyzer is usable; its tasks end unsupported (personal mode).
+	// baseline analyzer is usable; its tasks end unsupported (the service).
 	AdvertiseWithoutBaseline bool `json:"advertise_without_baseline,omitempty"`
 
 	// Offline is the node operator's offline mode (codeye agent --offline,
@@ -178,7 +178,7 @@ type JobSource struct {
 	// directory. Only test builds (codeye_fixture) set it.
 	AllowedLocalRoot string `json:"allowed_local_root,omitempty"`
 	// ProtectedDirs: a local project folder that contains or lies inside
-	// one of these is refused before acquisition (personal mode: the state
+	// one of these is refused before acquisition (the service: the state
 	// and backup directories).
 	ProtectedDirs []string `json:"protected_dirs,omitempty"`
 }
@@ -205,6 +205,17 @@ type Job struct {
 	// third-party dependencies (the operator's --dependency-fetch and the
 	// project's fetch_dependencies choice). Absent means no fetching.
 	AllowDependencyFetch bool `json:"allow_dependency_fetch,omitempty"`
+	// ModelReviewWithheld and RepositoryCodeWithheld: the project chose the
+	// model or its build scripts and the node allows them, but the service
+	// does not offer them to the project's owner (the administrator's
+	// switches); the tasks record their own reason for it.
+	ModelReviewWithheld    bool `json:"model_review_withheld,omitempty"`
+	RepositoryCodeWithheld bool `json:"repository_code_withheld,omitempty"`
+	// GitCredentialFile is the token file of this job's Git fetch (the
+	// own file of the user who started the run, docs/GITHUB.md#누구의-token인가);
+	// empty falls back to the
+	// hello's file.
+	GitCredentialFile string `json:"git_credential_file,omitempty"`
 	Header
 	Attempt   AttemptRef      `json:"attempt"`
 	Profile   string          `json:"profile"`

@@ -2,7 +2,7 @@ import { parseAnalysisReport, reportURL } from './analysisReport';
 import { comparisonURL, parseComparison, parseFindingReview, type FindingReviewBody } from './comparison';
 import { parseCommentPreview, parseRunPullRequest, pullRequestRunBody, type RunPullRequest } from './pullRequest';
 import {
-  auditQuery, parseAdminProviders, parseAdminSourceRoots, parseAuditPage, parseMember, parseMembers, parseRole, parseSession,
+  auditQuery, parseAdminProvider, parseAdminProviders, parseAdminSourceRoot, parseAdminSourceRoots, parseAuditPage, parseMember, parseMembers, parseRole, parseSession,
   parseUser, parseUserPage, parseUserWithLink, type AuditFilter, type CreateUserBody, type MemberRole, type ProjectRole,
 } from './accounts';
 // Same-origin client for the CODEYE control API (docs/API.md, api/openapi.yaml).
@@ -22,6 +22,8 @@ export class ApiError extends Error {
     readonly serverMessage: string | null = null,
     // Seconds to wait before the next attempt (429: Retry-After or details.retry_after_seconds).
     readonly retryAfter: number | null = null,
+    // A refused folder path: the folders this user may read (error.details.readable_folders).
+    readonly readableFolders: string[] | null = null,
   ) {
     super(`${kind}:${status}:${code}`);
     this.name = 'ApiError';
@@ -33,7 +35,7 @@ export type Source =
   // branch absent: the repository's default branch, resolved at each acquisition.
   | { kind: 'git'; provider_id: string; repository_url: string; branch?: string };
 
-// A project's own analysis choices; personal-mode nodes follow them. fetch_dependencies:
+// A project's own analysis choices; the node `codeye up` starts follows them. fetch_dependencies:
 // fetch the third-party dependencies the modules declare before the analyzers run.
 export type AnalysisChoices = { send_source_to_model: boolean; run_build_scripts: boolean; fetch_dependencies: boolean };
 // A project's stored choices: comment_on_pull_request is the remembered result-comment choice of
@@ -127,22 +129,40 @@ export type RunView = {
 
 export const RUN_BODY = { profile: 'deep-review', source_policy: 'latest_at_acquire', scope: { kind: 'full' } } as const;
 
-// Either a declared source, or (personal mode) an absolute folder path the server maps onto a readable folder.
-export type CreateProjectBody = { name?: string; analysis?: AnalysisChoices } & ({ source: Source } | { local_path: string });
+// Either a declared source, or an absolute folder path on the server that it maps onto a folder
+// the user may read. open_existing: the same folder or repository again opens its project.
+export type CreateProjectBody = { name?: string; analysis?: AnalysisChoices; open_existing?: boolean } & ({ source: Source } | { local_path: string });
 export type RetryAck = RunAck & { retry: string }; // same_run | new_run (open string)
 // POST /runs/{id}/recover: the run that runs again (or the confirmed run when retry is not_queued).
 export type RecoveryAck = RetryAck & { attempt_id: string; epoch: number };
 
-// GET /setup: what this installation can do (personal mode); a server-mode controller sends nulls.
+// GET /setup: what this service can do for the signed-in user, and why not. Tool paths and
+// hints reach administrators only.
 export type SetupTool = { name: string; status: string; version: string | null; path: string | null; hint: string | null; reason: string | null };
+// reason is an open string: no_git_host, no_allowed_folder, offline, no_state_dir, not_offered,
+// model_not_configured, node_disabled, unknown.
+export type SetupAvailable = { available: boolean; reason: string | null };
+export const SETUP_AVAILABLE_KEYS = ['git_url', 'local_path', 'pull_requests', 'github_token', 'model_review', 'build_scripts', 'fetch_dependencies'] as const;
+export type SetupAvailableKey = (typeof SETUP_AVAILABLE_KEYS)[number];
 export type Setup = {
-  mode: string; // personal | server (open string)
+  is_admin: boolean;
+  service_origin: string | null;
   model: { configured: boolean; id: string | null; probe: string | null } | null;
   git: { available: boolean; hosts: string[] } | null;
   readable_folders: string[];
   analysis_defaults: { local: AnalysisChoices; git: AnalysisChoices };
+  // Absent from older servers: everything counts as available there.
+  available: Partial<Record<SetupAvailableKey, SetupAvailable>>;
   tools: { detected_at: string | null; tools: SetupTool[] } | null;
+  github: SetupGitHub | null;
+  offline: boolean;
 };
+export type SetupGitHub = { enabled: boolean; host: string; token: boolean; account: string | null; source: string | null; reason: string | null };
+// GET /account/github: the signed-in user's own GitHub connection. It never holds the token.
+export type AccountGitHub = { host: string; connected: boolean; account: string | null; source: string | null; storable: boolean; reason: string | null };
+// GET/PUT /admin/settings: the two service switches and the address to share.
+export type ServiceSettings = { others_model_review: boolean; others_build_scripts: boolean; updated_at: string; service_origin: string | null };
+export type AddSourceRootBody = { path: string; label?: string; everyone?: boolean };
 
 // ---- schedules (members list; managers create and delete) ----
 export type ScheduleOccurrence = { scheduled_for: string; state: string; reason: string | null; missed_from: string | null; decided_at: string; run_id: string | null };
@@ -287,14 +307,25 @@ export function createApi(options: ApiOptions = {}) {
     listAdminSourceRoots: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/admin/source-roots', signal }, parseAdminSourceRoots),
     grantSourceRoot: (rootId: string, userId: string) => json({ method: 'PUT', path: grant(rootId, userId) }, () => undefined),
     revokeSourceRoot: (rootId: string, userId: string) => json({ method: 'DELETE', path: grant(rootId, userId) }, () => undefined),
+    addSourceRoot: (body: AddSourceRootBody) => json({ method: 'POST', path: '/api/v1/admin/source-roots', body }, parseAdminSourceRoot),
+    setSourceRootEveryone: (rootId: string, everyone: boolean) =>
+      json({ method: 'PUT', path: `/api/v1/admin/source-roots/${encodeURIComponent(rootId)}/everyone`, body: { everyone } }, () => undefined),
     listAdminProviders: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/admin/providers', signal }, parseAdminProviders),
+    addProvider: (host: string) => json({ method: 'POST', path: '/api/v1/admin/providers', body: { host } }, parseAdminProvider),
+    getSettings: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/admin/settings', signal }, parseSettings),
+    putSettings: (patch: Partial<Pick<ServiceSettings, 'others_model_review' | 'others_build_scripts'>>) =>
+      json({ method: 'PUT', path: '/api/v1/admin/settings', body: patch }, parseSettings),
+    // ---- the signed-in user's own GitHub connection (the token is sent, never answered) ----
+    getAccountGitHub: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/account/github', signal }, parseAccountGitHub),
+    putAccountGitHub: (token: string) => json({ method: 'PUT', path: '/api/v1/account/github', body: { token } }, parseAccountGitHub),
+    deleteAccountGitHub: () => json({ method: 'DELETE', path: '/api/v1/account/github' }, () => undefined),
     listAudit: (filter: AuditFilter, cursor: string | null, signal?: AbortSignal) =>
       json({ method: 'GET', path: `/api/v1/audit${auditQuery(filter, cursor)}`, signal }, parseAuditPage),
     listSourceRoots: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/source-roots', signal }, items(parseSourceRoot)),
     listProviders: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/providers', signal }, items(parseProvider)),
     listProjects: (cursor?: string | null, signal?: AbortSignal) =>
       json({ method: 'GET', path: '/api/v1/projects' + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''), signal }, parseProjectPage),
-    // 201 a new project; 200 (personal mode) the existing project of the same folder or repository.
+    // 201 a new project; 200 the existing project of the same folder or repository (open_existing).
     createProject: (body: CreateProjectBody) => json({ method: 'POST', path: '/api/v1/projects', body }, parseProject),
     setProjectAnalysis: (projectId: string, choices: ProjectChoices) =>
       json({ method: 'PUT', path: `${project(projectId)}/analysis`, body: choices }, parseProject),
@@ -305,7 +336,7 @@ export function createApi(options: ApiOptions = {}) {
     recoverRun: (id: string) => json({ method: 'POST', path: `${run(id)}/recover`, body: { cleanup_confirmed: true } }, parseRecoveryAck),
     createRun: (projectId: string, idempotencyKey: string) =>
       json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: RUN_BODY, headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
-    // A pull-request run (personal mode); comment null follows the project's remembered choice.
+    // A pull-request run; comment null follows the project's remembered choice.
     createPullRequestRun: (projectId: string, idempotencyKey: string, number: number, comment: boolean | null) =>
       json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: pullRequestRunBody(number, comment), headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
     // The comment the run posts or would post; nothing is posted.
@@ -350,6 +381,7 @@ function httpError(status: number, text: string, headers?: Headers): ApiError {
   let requestId: string | null = null;
   let message: string | null = null;
   let retryAfter = status === 429 ? seconds(headers?.get('Retry-After') ?? undefined) : null;
+  let readable: string[] | null = null;
   try {
     const body: unknown = JSON.parse(text);
     const error = isRecord(body) && isRecord(body.error) ? body.error : null;
@@ -363,9 +395,12 @@ function httpError(status: number, text: string, headers?: Headers): ApiError {
         const fromBody = seconds(error.details.retry_after_seconds);
         if (fromBody !== null) retryAfter = Math.max(retryAfter ?? 0, fromBody);
       }
+      if (isRecord(error.details) && Array.isArray(error.details.readable_folders)) {
+        readable = error.details.readable_folders.filter((x): x is string => typeof x === 'string' && x !== '').slice(0, 200);
+      }
     }
   } catch { /* non-JSON error body: keep the status-derived defaults */ }
-  return new ApiError('http', status, code, retryable, requestId, message, retryAfter);
+  return new ApiError('http', status, code, retryable, requestId, message, retryAfter, readable);
 }
 
 // ---- response validation: anything unexpected is an invalid_response, never a guess ----
@@ -468,7 +503,34 @@ function parseSetup(v: unknown): Setup {
       })(r.tools ?? []),
     };
   }
-  return { mode: str(o.mode), model, git, readable_folders: list(str)(o.readable_folders ?? []), analysis_defaults: { local: parseChoices(d.local), git: parseChoices(d.git) }, tools };
+  const available: Setup['available'] = {};
+  if (o.available != null) {
+    const a = rec(o.available);
+    for (const key of SETUP_AVAILABLE_KEYS) {
+      if (a[key] == null) continue;
+      const x = rec(a[key]);
+      available[key] = { available: bool(x.available), reason: nullableStr(x.reason) };
+    }
+  }
+  let github: Setup['github'] = null;
+  if (o.github != null) {
+    const g = rec(o.github);
+    github = { enabled: bool(g.enabled), host: str(g.host), token: bool(g.token), account: nullableStr(g.account), source: nullableStr(g.source), reason: nullableStr(g.reason) };
+  }
+  return {
+    is_admin: o.is_admin === true,
+    service_origin: nullableStr(o.service_origin),
+    model, git, readable_folders: list(str)(o.readable_folders ?? []), analysis_defaults: { local: parseChoices(d.local), git: parseChoices(d.git) },
+    available, tools, github, offline: o.offline === true,
+  };
+}
+function parseAccountGitHub(v: unknown): AccountGitHub {
+  const o = rec(v);
+  return { host: str(o.host), connected: bool(o.connected), account: nullableStr(o.account), source: nullableStr(o.source), storable: bool(o.storable), reason: nullableStr(o.reason) };
+}
+function parseSettings(v: unknown): ServiceSettings {
+  const o = rec(v);
+  return { others_model_review: bool(o.others_model_review), others_build_scripts: bool(o.others_build_scripts), updated_at: date(o.updated_at), service_origin: nullableStr(o.service_origin) };
 }
 function date(v: unknown): string {
   const s = str(v);

@@ -66,8 +66,8 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--npm /abs/node_modules/npm/bin/npm-cli.js`, `--pnpm /abs/node_modules/pnpm/bin/pnpm.cjs`, `--yarn /abs/node_modules/yarn/bin/yarn.js` | JS 진입 스크립트. `--node`가 있어야 함. 분석기가 아니라 받는 도구다 | `deps.javascript` |
 | `--toolchain-path PATH` | 절대 디렉터리 목록, 기본 `/usr/bin:/bin`. 분석기는 보조 프로그램 조회에만 쓴다(Rust 링커 `cc`) | cargo check, clippy |
 | `--repo-code-source-root ID` (반복) | 저장소 코드 실행 허가. 같은 agent의 `--source-root ID=...`가 있어야 함 | 저장소 코드를 실행하는 작업 |
-| `--dependency-fetch` | 의존성 받기 운영자 스위치. 기본 꺼짐, 개인 모드는 켬. 프로젝트 선택 `fetch_dependencies`도 켜져 있어야 함([의존성 준비](ARCHITECTURE.md#의존성-준비)) | `deps.*` |
-| `--dependency-cache-dir DIR` | 받은 의존성의 공유 캐시. 기본 `<state-dir>/cache/deps`(개인 모드는 `state_dir/cache/deps`를 준다) | `deps.*`, 받은 캐시를 읽는 분석기 |
+| `--dependency-fetch` | 의존성 받기 운영자 스위치. 기본 꺼짐, `codeye up`의 에이전트는 켬. 프로젝트 선택 `fetch_dependencies`도 켜져 있어야 함([의존성 준비](ARCHITECTURE.md#의존성-준비)) | `deps.*` |
+| `--dependency-cache-dir DIR` | 받은 의존성의 공유 캐시. 기본 `<state-dir>/cache/deps`(`codeye up`은 `state_dir/cache/deps`를 준다) | `deps.*`, 받은 캐시를 읽는 분석기 |
 | `--dependency-timeout D`, `--dependency-total-timeout D`, `--dependency-max-bytes N` | 모듈당 제한시간(10분), attempt 합계(20분), 내려받기 크기 상한(2 GiB) | `deps.*` |
 | `--go-proxy`, `--go-sumdb`, `--go-private`, `--go-noproxy`, `--go-nosumdb` | Go 모듈 받기의 `GOPROXY`·`GOSUMDB`·`GOPRIVATE`·`GONOPROXY`·`GONOSUMDB`. 비우면 Go 기본값([Go 의존성 받기](#go-의존성-받기)) | `deps.go` |
 | `--npm-registry URL` | npm·pnpm·yarn이 쓸 레지스트리. 인증정보 없는 http(s) URL만. 비우면 npm은 `https://registry.npmjs.org/`, yarn은 `https://registry.yarnpkg.com`([JS/TS 의존성 받기](#jsts-의존성-받기)) | `deps.javascript` |
@@ -80,11 +80,11 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 - `--mypy`와 `--pyright`를 함께 주면서 `--python-both-type-checkers`가 없거나, 이 플래그만 있고 두 경로가 다 없으면 agent는 사용법 오류(exit 2)로 시작하지 않는다.
 - agent는 값을 worker hello로 넘긴다. `go_executable`, `go_mod_cache`, `tool_path`, `analyzer_tools`(도구 이름 → 경로, 공유 toolchain은 예약 이름 `node`로 같은 맵에 들어감), 그리고 스위치가 켜졌을 때만 `dependencies`(캐시 root, 예산, Go 받기 설정, 받는 도구 경로 `package_managers`, `pip_index_url`)다. 이 빌드가 모르는 도구 이름은 `unknown_tool`로 보고하고 실행하지 않는다.
 
-개인 모드 설정 파일에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`, `agent.dependencies`(`enabled` 기본 켜짐, `cache_dir`, `go_proxy`, `go_sumdb`, `go_private`, `go_noproxy`, `go_nosumdb`, `npm_registry`, `pip_index_url`, `timeout_seconds`, `total_timeout_seconds`, `max_download_bytes`)가 위 플래그가 된다. 패키지 관리자 `agent.tools.npm`·`pnpm`·`yarn`·`uv`·`python`은 같은 이름의 플래그다. 저장소 코드 실행은 개인 모드에서 프로젝트별 선택이다(`source_roots[].repository_code`는 쓰이지 않는다, A40)([예시](../examples/personal.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
+서비스 설정 파일(`config.json`)에서는 `agent.go`, `agent.go_mod_cache`, `agent.toolchain_path`, `agent.tools`(도구 플래그 이름 → 절대 경로, `node` 포함), `agent.python_both_type_checkers`, `agent.dependencies`(`enabled` 기본 켜짐, `cache_dir`, `go_proxy`, `go_sumdb`, `go_private`, `go_noproxy`, `go_nosumdb`, `npm_registry`, `pip_index_url`, `timeout_seconds`, `total_timeout_seconds`, `max_download_bytes`)가 위 플래그가 된다. 패키지 관리자 `agent.tools.npm`·`pnpm`·`yarn`·`uv`·`python`은 같은 이름의 플래그다. 저장소 코드 실행은 `codeye up`의 에이전트에서 프로젝트별 선택이다(관리자가 아닌 사람이 시작한 run은 관리자 스위치 안에서)(`source_roots[].repository_code`는 쓰이지 않는다, A40)([예시](../examples/config.json)). `agent.tools`에 모르는 이름이 있으면 설정 오류다.
 
 ### 도구 찾기
 
-개인 모드는 도구 경로를 손으로 적지 않아도 된다. 시작할 때마다 `internal/toolfind`가 이 머신의 도구를 찾고, 위 플래그가 될 값을 정한다. `codeye tools`가 같은 탐색을 하고 표로 보여 준다([운영](OPERATIONS.md#codeye-tools)). 서버·노드 에이전트를 직접 띄울 때는 탐색이 없고 위 플래그만 쓴다.
+`codeye up`·`start`는 도구 경로를 손으로 적지 않아도 된다. 시작할 때마다 `internal/toolfind`가 이 머신의 도구를 찾고, 위 플래그가 될 값을 정한다. `codeye tools`가 같은 탐색을 하고 표로 보여 준다([운영](OPERATIONS.md#codeye-tools)). 서버·노드 에이전트를 직접 띄울 때는 탐색이 없고 위 플래그만 쓴다.
 
 **찾는 대상.** go, git, node, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, eslint, tsc, jscpd, cargo, clippy), 그리고 의존성을 받는 패키지 관리자 npm, pnpm, yarn, uv, python이다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
 
@@ -116,7 +116,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 - **Go 모듈 캐시.** 찾은 go의 `go env GOMODCACHE`(사용자의 실제 환경 기준)가 실제 디렉터리이면 `--go-mod-cache`로 넘긴다. go vet은 `GOPROXY=off`로 실행하므로 의존성이 있는 모듈은 이 캐시가 있어야 분석된다. 캐시는 저장 영역 상한의 `cache` 영역에 센다([운영](OPERATIONS.md#저장-영역과-상한)). 명시한 `agent.go_mod_cache`가 있으면 그것이 우선한다. 의존성 받기를 켜면 의존성은 이 캐시가 아니라 받기 캐시에서 읽고, 이 캐시는 받기의 첫 출처가 된다([Go 의존성 받기](#go-의존성-받기)).
 - **Go 받기 설정.** 같은 go로 `go env -json GOPROXY GOSUMDB GOPRIVATE GONOPROXY GONOSUMDB`를 읽어 Go 기본값과 다른 값만 `tools.json`의 `go_settings`에 남기고, 설정 파일이 비워 둔 `agent.dependencies`의 Go 값을 채운다. 의존성 받기가 꺼져 있으면 채우지 않는다.
 - **npm 레지스트리.** 찾은 npm으로 사용자의 실제 환경에서 `npm config get registry`를 읽어, npm 기본값과 다르고 인증정보가 없으면 `tools.json`의 `npm_registry`에 남기고 설정 파일이 비워 둔 `agent.dependencies.npm_registry`를 채운다. 인증정보가 든 값은 버린다(공개 레지스트리로 받는다).
-- **Python 타입 검사기.** 결과 도구 집합에 mypy와 pyright가 모두 있으면 `--python-both-type-checkers`를 함께 준다([타입 검사기 선택](#타입-검사기-선택)). 하나만 있으면 주지 않는다. 에이전트의 검사는 그대로이며(둘 다 있으면서 플래그가 없거나 그 반대면 사용법 오류), 개인 모드는 값을 정할 때 그 규칙을 맞춘다.
+- **Python 타입 검사기.** 결과 도구 집합에 mypy와 pyright가 모두 있으면 `--python-both-type-checkers`를 함께 준다([타입 검사기 선택](#타입-검사기-선택)). 하나만 있으면 주지 않는다. 에이전트의 검사는 그대로이며(둘 다 있으면서 플래그가 없거나 그 반대면 사용법 오류), `codeye up`은 값을 정할 때 그 규칙을 맞춘다.
 
 결과는 `<state_dir>/tools.json`에 쓴다([schema](../schemas/tools.schema.json), [예시](../examples/tools.json)). 탐색 결과와 명시 설정을 합친 에이전트 인자는 `toolfind.Resolve`가 만든다. 명시 값이 있으면 그 값이, 없으면 `found` 도구의 경로가 쓰이며 쓸 수 없는 탐색 결과는 넘기지 않는다.
 
@@ -279,7 +279,7 @@ type Analyzer interface {
 
 `builtin.catalog()`가 이 빌드의 분석기 목록이다. 팩은 자기 항목(`{desc, plan, build}`)만 추가한다. `build`는 노드 설정으로 분석기를 만들고 시작 probe를 실행한다. 실패하면 이유를 돌려주고 카탈로그는 그 자리에 `NotConfigured` 대역을 넣는다. 에이전트 플래그와 탐색 probe 목록은 카탈로그에서 자동으로 만든다.
 
-deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 이상 있을 때만 광고한다. 추가 깊이 도구만 있는 노드는 광고하지 않는다. 노드 운영자가 `--advertise-without-baseline`을 주면 기준 분석기가 하나도 없어도 광고한다(개인 모드가 켠다). 쓸 수 없는 도구의 작업은 [설정되지 않은 도구](#설정되지-않은-도구)대로 `unsupported`로 기록되고, run은 도구를 기다리며 대기열에 머무르는 대신 빈틈이 보이는 부분 보고서로 끝난다. 예를 들어 `--cargo`만, `--ruff`만, `--cppcheck`만, `--node`+`--eslint`만 있는 노드도 광고한다. capability는 노드 단위이고 생태계별 배정은 하지 않는다. 그래서 한 생태계 도구만 있는 노드가 다른 언어 스냅샷을 받으면 그 언어의 작업은 `tool_not_configured`로 보인다.
+deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 이상 있을 때만 광고한다. 추가 깊이 도구만 있는 노드는 광고하지 않는다. 노드 운영자가 `--advertise-without-baseline`을 주면 기준 분석기가 하나도 없어도 광고한다(`codeye up`이 켠다). 쓸 수 없는 도구의 작업은 [설정되지 않은 도구](#설정되지-않은-도구)대로 `unsupported`로 기록되고, run은 도구를 기다리며 대기열에 머무르는 대신 빈틈이 보이는 부분 보고서로 끝난다. 예를 들어 `--cargo`만, `--ruff`만, `--cppcheck`만, `--node`+`--eslint`만 있는 노드도 광고한다. capability는 노드 단위이고 생태계별 배정은 하지 않는다. 그래서 한 생태계 도구만 있는 노드가 다른 언어 스냅샷을 받으면 그 언어의 작업은 `tool_not_configured`로 보인다.
 
 ### 도구 경로
 
@@ -324,7 +324,7 @@ deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 �
 
 정적 분석도 저장소가 정한 코드를 실행할 수 있다(JS 설정 파일, build script, compiler plugin, proc macro, configure 단계). 이런 작업은 노드 운영자가 명시적으로 허가한 소스에서만 실행한다(결정 A23, [결정](DECISIONS.md)).
 
-- **허가**: `codeye agent --repo-code-source-root ID`(반복 가능, 개인 모드 `source_roots[].repository_code`). ID는 같은 agent의 `--source-root` 매핑이 있어야 하며 없으면 옵션 오류다. agent는 그 local source root의 job에만 `allow_repository_code=true`를 보낸다. Git 소스는 허가를 받지 않는다. `--project-analysis-policy` 노드(개인 모드)는 root 허가 대신 job의 프로젝트 분석 선택 `run_build_scripts`를 로컬·Git 모두에 쓴다(로컬 폴더 기본 켬, Git 저장소 기본 끔). 워커는 `analysis.Job.AllowRepositoryCode`로 받는다. 스냅샷·저장소 설정·run 요청은 이 값을 올릴 수 없다.
+- **허가**: `codeye agent --repo-code-source-root ID`(반복 가능, 운영자가 따로 띄운 노드의 플래그). ID는 같은 agent의 `--source-root` 매핑이 있어야 하며 없으면 옵션 오류다. agent는 그 local source root의 job에만 `allow_repository_code=true`를 보낸다. Git 소스는 허가를 받지 않는다. `--project-analysis-policy` 노드(`codeye up`의 에이전트)는 root 허가 대신 job의 프로젝트 분석 선택 `run_build_scripts`를 로컬·Git 모두에 쓴다(로컬 폴더 기본 켬, Git 저장소 기본 끔). 관리자가 아닌 사람이 시작한 run은 job의 `offered`가 꺼 둔 것을 하지 않는다. 워커는 `analysis.Job.AllowRepositoryCode`로 받는다. 스냅샷·저장소 설정·run 요청은 이 값을 올릴 수 없다.
 - **선언**: `pack.Task.RepositoryCode`. `Plan`이 manifest와 scope만으로 정하므로 대역도 같은 선언을 계획한다. 한 도구가 두 방식을 함께 계획할 수 있다. `Run`은 `Plan`이 선언한 것보다 더 실행하지 않는다. false로 선언한 작업이 실행 중 저장소 코드 경로로 넘어가는 대체 경로는 금지다.
 - **집행**: `Composite.Run`이 dispatch 전에 한 번 검사한다. 선언은 소유 분석기의 계획에서 다시 얻는다. 허가가 없으면 분석기를 호출하지 않고 `unsupported`(`repository_code_not_allowed`)로 끝내며 not-run envelope를 쓴다. 허가가 있어 프로세스를 실행한 작업에는 `repository_code_executed` 제약을 남긴다.
 - **우선순위**: 허가 검사가 도구 검사보다 먼저다. 허가가 없으면 도구가 없어도 사유는 `repository_code_not_allowed`이고 도구 사유는 제약으로 남는다.
@@ -484,7 +484,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 
 `deps.rust`·`deps.rust.mNN` task가 cargo check와 같은 모듈 계획으로 모듈마다 crate를 받는다([의존성 준비](ARCHITECTURE.md#의존성-준비)). cargo check·clippy는 그 뒤에도 `--offline`·`CARGO_NET_OFFLINE=true`로 실행하고 받은 `CARGO_HOME`만 읽는다.
 
-- **허가.** cargo는 받는 동안 저장소 Cargo 설정(`.cargo/config.toml`)을 읽고, 받은 crate를 쓰는 cargo check·clippy는 build script를 실행한다. 그래서 저장소 코드 실행 허가(개인 모드는 프로젝트의 "저장소의 빌드 스크립트 실행")가 없으면 아무것도 시작하지 않고 `skipped_policy`/`dependency_consumers_not_allowed`다. `--cargo`가 없으면 `package_manager_not_configured`, cargo check를 쓸 수 없으면 `no_dependency_consumer`, source replacement로 vendor 디렉터리를 쓰면 `vendored_dependencies`, `Cargo.lock`에 레지스트리·git crate가 없으면 `no_dependencies`다.
+- **허가.** cargo는 받는 동안 저장소 Cargo 설정(`.cargo/config.toml`)을 읽고, 받은 crate를 쓰는 cargo check·clippy는 build script를 실행한다. 그래서 저장소 코드 실행 허가(`codeye up`의 에이전트는 프로젝트의 "저장소의 빌드 스크립트 실행"과 관리자 스위치)가 없으면 아무것도 시작하지 않고 `skipped_policy`/`dependency_consumers_not_allowed`다. `--cargo`가 없으면 `package_manager_not_configured`, cargo check를 쓸 수 없으면 `no_dependency_consumer`, source replacement로 vendor 디렉터리를 쓰면 `vendored_dependencies`, `Cargo.lock`에 레지스트리·git crate가 없으면 `no_dependencies`다.
 - **명령.** 실행 사본의 모듈 디렉터리에서 `rustc -vV`, `cargo --version`, (`Cargo.lock`이 없을 때) `cargo generate-lockfile`, `cargo fetch --locked --target <host>`. 환경은 cargo check와 같고(`RUSTUP_TOOLCHAIN` 없이 운영자 toolchain, task별 `CARGO_TARGET_DIR`) `CARGO_HOME=<받기 캐시>/rust/cargo`이며 `CARGO_NET_OFFLINE`만 뺀다.
 - **lockfile 없음.** `generate-lockfile`이 버전을 고른다(한계 `dependency_versions_not_pinned`). 만든 `Cargo.lock`은 task 디렉터리에 옮겨 두고 실행 사본에서는 지운다. cargo check·clippy는 실행하는 동안만 그 파일을 모듈 디렉터리에 두고(`--locked`가 읽는다) 끝나면 지운다. 파일이 없으면 기록을 쓰지 않은 것처럼 실행한다.
 - **캐시.** 공유 캐시 key `rust/cargo`. 레지스트리 색인·crate 파일·푼 소스가 크기 상한과 cache 저장 영역에 센다. 받은 뒤 `Cargo.toml`·`Cargo.lock`이 바뀌었으면 `workspace_drift`다.

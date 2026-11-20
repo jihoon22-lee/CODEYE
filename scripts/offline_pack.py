@@ -41,7 +41,7 @@ MANIFEST = "MANIFEST.json"
 SUMS = "SHA256SUMS"
 # Documents shipped as files (the binary embeds migrations and prompt packs).
 DOCS = ["docs/GUIDE.md", "docs/OPERATIONS.md"]
-EXAMPLES = ["examples/personal-offline.json"]
+EXAMPLES = ["examples/config-offline.json"]
 INSTALL_TEMPLATE = ROOT / "scripts" / "offline_pack_install.md"
 
 # Hosts a built web app may name without loading anything from them: XML and

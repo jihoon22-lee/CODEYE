@@ -28,6 +28,20 @@ describe('copy button', () => {
     expect(screen.getByRole('status').textContent).toBe(t.copy.failed);
     expect(screen.getByText('codeye open').tagName).toBe('CODE');
   });
+  it('copies the selected text without the Clipboard API (a plain-HTTP origin on the network)', async () => {
+    vi.stubGlobal('navigator', {});
+    const exec = vi.fn(() => true);
+    Object.defineProperty(document, 'execCommand', { value: exec, configurable: true });
+    try {
+      render(<CopyText text="http://codeye.lan:7331" />);
+      await click(t.copy.labelFor('http://codeye.lan:7331'));
+      expect(exec).toHaveBeenCalledWith('copy');
+      expect(window.getSelection()?.toString()).toBe('http://codeye.lan:7331');
+      expect(screen.getByRole('button').textContent).toBe(t.copy.done);
+    } finally {
+      Reflect.deleteProperty(document, 'execCommand');
+    }
+  });
   it('says it could not copy when the browser refuses', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: () => Promise.reject(new Error('denied')) } });
     render(<CopyText text="codeye up" />);

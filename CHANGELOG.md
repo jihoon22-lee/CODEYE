@@ -4,6 +4,17 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — 한 서비스, 사용자별 허가
+
+- **다른 머신에 서비스**: `codeye up --listen ADDR --plain-http`(경고 한 줄과 함께 평문 HTTP) 또는 `--tls-cert`·`--tls-key`·`--public-origin`(TLS). 듣는 방식은 설정 파일에 저장돼 `codeye start`와 사용자 서비스도 같은 주소로 뜬다. 이 머신의 에이전트와 명령은 loopback listener(기본은 listen 포트 + 1)를 쓴다. 로그인 링크와 관리 화면의 "이 서비스 주소"는 public origin이다([다른 사람 초대](docs/GUIDE.md#다른-사람-초대), A53).
+- **모드 대신 사용자별 허가**: 같은 시작 화면에서 각 사람이 분석할 수 있는 것을 허가로 정한다. 관리자는 웹에서 서버 폴더를 더하고 사용자별로 또는 모두에게 열며(`POST /admin/source-roots`, `PUT /admin/source-roots/{id}/everyone`), Git host를 승인하고(`POST /admin/providers`), 두 스위치 "다른 사용자도 모델 검토 사용"(기본 켬)·"다른 사용자의 저장소 빌드 스크립트 실행 허용"(기본 끔)을 바꾼다(`GET`·`PUT /admin/settings`). 스위치는 run을 시작한 사람 기준이고, 스위치 때문에 빠진 것만 보고서에 `model_review_not_offered`·`repository_code_not_offered`로 남는다. 허용된 폴더가 없는 사람에게는 "이 서버에서 읽도록 허용된 폴더가 없습니다. …"와 읽을 수 있는 폴더 목록을 보인다. `GET /setup`은 사용자마다 답하고 `mode` 필드가 없어졌다.
+- **사용자별 GitHub token**: 계정 메뉴의 GitHub 연결(`GET`·`PUT`·`DELETE /account/github`). token은 `secrets/github-users/<user_id>.json`(0600)에 있고 응답·로그·감사 detail에 없다. `codeye up`이 찾은 token은 관리자의 연결이고 관리자의 token 파일 하나에만 둔다(이전의 `secrets/github.json`은 없어졌다). 모든 GitHub 호출은 그 호출이 대신하는 사람의 token을 쓴다(pull request 고정·Git fetch·결과 댓글은 run을 시작한 사람, 미리 보기는 요청한 사람). token이 없으면 공개 저장소만 읽고 댓글은 `no_token`으로 남는다([누구의 token인가](docs/GITHUB.md#누구의-token인가)).
+- **`codeye up`의 에이전트**는 웹에서 더한 폴더와 Git host를 job에서 받는다(`--controller-sources`, `--git-credential-dir`). 따로 띄운 노드는 운영자 플래그를 상한으로 둔다.
+- migration 0014(`source_root_everyone`, `service_settings`, 감사 action `source_root.everyone_set`·`service.settings_set`·`account.github_token_set`·`account.github_token_removed`). `POST /projects`의 `open_existing`(같은 폴더·저장소면 그 프로젝트를 연다).
+- **고침**: `codeye up --listen ADDR`이 ADDR를 분석 대상으로 읽던 것. 시험 하나(`TestUpGitTarget`)가 실행한 사람의 실제 상태 디렉터리(`~/.local/state/codeye`)를 만들던 것. 새 설치의 관리자 표시 이름은 `admin`이다(기존 설치는 그대로).
+- **이름**: 실행 모드를 뜻하던 이름을 별칭 없이 바꿨다. 설정 파일 `$XDG_CONFIG_HOME/codeye/config.json`(이전 `personal.json`), 상태의 관리자 기록 `admin.json`, 화면 설치 정보 `run/setup.json`, 잠금 `instance.lock`, backup manifest의 `admin_user_id`, Go 패키지 `internal/instance`, controller 세션 수명 `codeye serve --session-ttl`(이전 `--personal`), `codeye up` 노드의 기본 이름 `local`, 예시 `examples/config.json`·`examples/config-offline.json`, smoke 플래그 `--instance`·`--instance-model`. `scripts/bundle_checks/docs.py`는 `CHANGELOG.md`·`docs/DECISIONS.md` 밖에서 실행 모드 이름을 찾으면 실패한다. migration 0011의 주석이 바뀌어 checksum이 다르므로 데이터베이스를 새로 만든다.
+- **확인**: 두 사용자 smoke(`scripts/test_postgres.py --web-service`, TC-263)가 loopback 별칭의 평문 HTTP와 자체 서명 TLS에서 통과했다. 이 호스트의 LAN 주소(WSL2 eth0)로 TLS와 `--plain-http`를 한 번씩 띄운 확인은 시험용 빌드와 가짜 GitHub를 쓴 스크립트였고, 브라우저와 API 호출도 같은 호스트에서 그 주소로 보냈다(다른 사용자의 로그인·시작 화면·폴더 거절·GitHub 연결·관리자 설정, 다른 Host는 403). 실제 다른 물리 머신의 브라우저와 GHES는 시험하지 않았다.
+
 ### 바뀜 — 검토 기준 하나
 
 - **검토 지침 하나**: 검토 지침은 `prompts/review`(id `review`, 2.0.0) 하나다(A52). 세 역할 이전 지침과 그 기록 schema `0.1`·decoder·보고서 조립 경로·고정 시험, 두 팩 비교 스크립트를 지웠다. 노드 플래그·워커 Hello·개인 설정·회귀 실행에서 지침을 고르는 설정이 없다. 이전 설정 파일에 남은 지침 선택 키는 모르는 키로 거부된다.

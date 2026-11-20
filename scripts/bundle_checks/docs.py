@@ -116,6 +116,43 @@ def stage_labels(text: str) -> list:
     return [m.group(0) for pattern in STAGE_PATTERNS for m in pattern.finditer(text)]
 
 
+# The product is one web service whose features follow what the signed-in
+# user may do (AGENTS.md): no text may present a run mode by its old names.
+# CHANGELOG.md (history) and docs/DECISIONS.md (superseded entries) may.
+# Split literals so this file does not match itself.
+MODE_PATTERN = re.compile(r"(?i)personal[ -]" r"mode|개인 " r"모드|personal" r"\.json")
+MODE_EXEMPT = ("CHANGELOG.md", "docs/DECISIONS.md")
+
+
+def mode_names(text: str) -> list:
+    """The old run-mode names in text (MODE_PATTERN)."""
+    return [m.group(0) for m in MODE_PATTERN.finditer(text)]
+
+
+def check_mode_names(paths=None) -> int:
+    """No tracked text file outside MODE_EXEMPT names the old run mode."""
+    count = 0
+    for relative in tracked_files() if paths is None else paths:
+        if relative in MODE_EXEMPT:
+            continue
+        found = mode_names(relative)
+        ensure(not found, "Run-mode name in path " + relative + ": " + ", ".join(found))
+        path = ROOT / relative
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        if b"\0" in data[:8192]:
+            continue
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        found = mode_names(text)
+        ensure(not found, "Run-mode name in " + relative + ": " + ", ".join(sorted(set(found))))
+        count += 1
+    return count
+
+
 def tracked_files() -> list:
     """Tracked paths (git ls-files), or every file outside build output when git is unavailable."""
     import subprocess

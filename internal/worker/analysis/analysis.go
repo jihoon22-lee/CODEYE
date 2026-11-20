@@ -33,6 +33,10 @@ type Job struct {
 	// docs/ANALYZERS.md#저장소-코드-실행-허가). Only node configuration and the job set it; nothing in
 	// the snapshot or its configuration can.
 	AllowRepositoryCode bool
+	// ModelReviewWithheld and RepositoryCodeWithheld: the grant is missing
+	// only because the service does not offer it to the project's owner
+	// (the administrator's switches); the skipped tasks say so.
+	ModelReviewWithheld, RepositoryCodeWithheld bool
 	// AllowDependencyFetch lets the dependency tasks fetch the modules'
 	// third-party dependencies from their registries (the project's
 	// fetch_dependencies choice and the node operator's switch,

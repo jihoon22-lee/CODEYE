@@ -1,4 +1,4 @@
-// Package github is CODEYE's GitHub REST client for personal mode
+// Package github is CODEYE's GitHub REST client for the service
 // (docs/GITHUB.md): the token's own account, a pull request's metadata and
 // changed files with their patches, and the one CODEYE conversation comment
 // of a pull request (list, create, update). It never follows a redirect or a

@@ -25,7 +25,7 @@ const (
 	kindClippy
 	kindGit
 	kindOpenCode
-	// kindGH is the GitHub CLI: personal mode asks it for the signed-in
+	// kindGH is the GitHub CLI: the service asks it for the signed-in
 	// account's token (docs/GITHUB.md). It is no analyzer and no agent flag.
 	kindGH
 )

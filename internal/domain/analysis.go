@@ -4,7 +4,7 @@ import "encoding/json"
 
 // AnalysisChoices are a project's own analysis choices (the "analysis" object
 // of the project configuration). A node started with
-// --project-analysis-policy (personal mode) follows them for local and Git
+// --project-analysis-policy (the service) follows them for local and Git
 // sources alike; other nodes keep the operator's per-source-root grants.
 type AnalysisChoices struct {
 	// SendSourceToModel lets the configured review model read the

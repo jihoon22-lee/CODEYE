@@ -42,8 +42,8 @@ type env struct {
 	artifacts string
 	// stream is the event stream configuration start uses.
 	stream StreamConfig
-	// personal makes start serve the personal-mode controller.
-	personal *Personal
+	// inst makes start serve the controller of `codeye up` (its state directory).
+	inst *Instance
 }
 
 type syncBuffer struct {
@@ -137,7 +137,7 @@ func (e *env) start(webDir string) {
 	if e.artifacts == "" {
 		e.artifacts = filepath.Join(t.TempDir(), "artifacts")
 	}
-	srv, err := New(Config{Listen: ap, WebDir: webDir, Logger: slog.New(slog.NewJSONHandler(e.logs, nil)), ArtifactDir: e.artifacts, SweepInterval: -1, Stream: e.stream, Personal: e.personal}, e.store)
+	srv, err := New(Config{Listen: ap, WebDir: webDir, Logger: slog.New(slog.NewJSONHandler(e.logs, nil)), ArtifactDir: e.artifacts, SweepInterval: -1, Stream: e.stream, Instance: e.inst}, e.store)
 	if err != nil {
 		t.Fatal(err)
 	}

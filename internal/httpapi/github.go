@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -14,46 +13,62 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// gitHubCredentialFile is where `codeye up` stores the GitHub token under
-// the state directory (personal.Layout.GitHubSecret).
-func (p *Personal) gitHubCredentialFile() string {
-	if p == nil || p.StateDir == "" {
+// Whose token (docs/GITHUB.md#누구의-token인가): every GitHub call uses the
+// token of the user whose action it serves, and only that token. A run's
+// pull-request pin, its Git fetch and its result comment use the token of
+// the user who started the run (a scheduled run: the schedule's author); a
+// comment preview uses the token of the user asking. One user's token is
+// never used for another user's run or request. A user without a token
+// reaches public repositories only, and their run's comment is not posted
+// (recorded as no_token).
+
+// tokens is the per-user token directory ("" without a state directory).
+func (p *Instance) tokens() github.UserTokens {
+	if p == nil {
 		return ""
 	}
-	return filepath.Join(p.StateDir, "secrets", "github.json")
+	return github.UserTokensDir(p.StateDir)
 }
 
-// gitHub is the GitHub client of personal mode: the token `codeye up` stored
-// (read now, so a refreshed or removed token takes effect without a
-// restart; anonymous without one) and its account login ("" when unknown).
-func (p *Personal) gitHub() (*github.Client, string) {
+// apiBase is the GitHub REST API base.
+func (p *Instance) apiBase() string {
+	if p != nil && p.GitHubAPI != "" {
+		return p.GitHubAPI
+	}
+	return github.APIBase()
+}
+
+// userToken is user's stored github.com credential (nil without one).
+func (p *Instance) userToken(user string) *github.Credential {
+	cred, err := p.tokens().Read(user)
+	if err != nil || cred == nil || cred.Host != github.Host {
+		return nil
+	}
+	return cred
+}
+
+// gitHubFor is the GitHub client acting for user: user's stored token (read
+// now, so a token added or removed in the account screen takes effect at
+// once; anonymous without one) and its account login ("" when unknown).
+// Offline it is nil: the comment poster records no_token and nothing calls
+// GitHub.
+func (p *Instance) gitHubFor(user string) (*github.Client, string) {
 	if p.offline() {
-		// No client: the comment poster records no_token and makes no call.
 		return nil, ""
 	}
-	base := p.GitHubAPI
-	if base == "" {
-		base = github.APIBase()
+	if cred := p.userToken(user); cred != nil {
+		return github.New(p.apiBase(), cred.Token), cred.Login
 	}
-	cred, err := github.ReadCredential(p.gitHubCredentialFile())
-	if err != nil || cred == nil || cred.Host != github.Host {
-		return github.New(base, ""), ""
-	}
-	return github.New(base, cred.Token), cred.Login
+	return github.New(p.apiBase(), ""), ""
 }
 
 // pinPullRequest resolves the run request's pull request for the project
-// through the GitHub API (github.PinForProject). ok is false when the error
-// response was written: server mode (the operator's providers have no
-// token discovery), a project that is not a github.com repository, a pull
-// request GitHub does not show this token, or an unreachable or
-// rate-limited API.
+// through the GitHub API (github.PinForProject) with the token of the user
+// starting the run. ok is false when the error response was written: offline mode, a
+// project that is not a github.com repository, a pull request GitHub does
+// not show that token, or an unreachable or rate-limited API.
 func (s *Server) pinPullRequest(q *request, project string, ref domain.PullRequestRef) (domain.PullRequest, bool) {
-	if s.personal == nil {
-		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_UNSUPPORTED", "pull-request analysis is available in personal mode (codeye up); this controller has no GitHub connection", false)
-		return domain.PullRequest{}, false
-	}
-	if s.personal.offline() {
+	if s.inst.offline() {
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_UNSUPPORTED", "offline mode does not use GitHub: pull requests cannot be analyzed", false)
 		return domain.PullRequest{}, false
 	}
@@ -64,7 +79,7 @@ func (s *Server) pinPullRequest(q *request, project string, ref domain.PullReque
 		s.storeError(q, err)
 		return domain.PullRequest{}, false
 	}
-	client, _ := s.personal.gitHub()
+	client, _ := s.inst.gitHubFor(q.session.UserID)
 	pin, err := github.PinForProject(ctx, client, p.Source, ref, p.Analysis.CommentOnPullRequest, time.Now())
 	if err == nil {
 		return pin, true
@@ -73,9 +88,9 @@ func (s *Server) pinPullRequest(q *request, project string, ref domain.PullReque
 	case errors.Is(err, github.ErrNotGitHubProject):
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_UNSUPPORTED", "pull requests can be analyzed for github.com repository projects only", false)
 	case kind == github.KindNotFound:
-		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_NOT_FOUND", "GitHub shows no such pull request to this installation (a private repository needs a GitHub token: gh auth login, then codeye up)", false)
+		writeError(q.w, q.r, http.StatusUnprocessableEntity, "PULL_REQUEST_NOT_FOUND", "GitHub shows no such pull request to your connection (a private repository needs your own GitHub token: account > GitHub connection)", false)
 	case kind == github.KindUnauthorized:
-		writeError(q.w, q.r, http.StatusUnprocessableEntity, "GITHUB_TOKEN_REFUSED", "GitHub refused the stored token; sign in again (gh auth login) and run codeye up", false)
+		writeError(q.w, q.r, http.StatusUnprocessableEntity, "GITHUB_TOKEN_REFUSED", "GitHub refused your stored token; replace it under account > GitHub connection", false)
 	case kind == github.KindForbidden:
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, "GITHUB_FORBIDDEN", "the GitHub token may not read this pull request", false)
 	case kind == github.KindRateLimited:
@@ -86,8 +101,8 @@ func (s *Server) pinPullRequest(q *request, project string, ref domain.PullReque
 	return domain.PullRequest{}, false
 }
 
-// postComments works through the due pull-request comments once (personal
-// mode). A failure is logged and left for the next pass; it never touches
+// postComments works through the due pull-request comments once. A failure
+// is logged and left for the next pass; it never touches
 // the run or its report.
 func (s *Server) postComments(ctx context.Context) {
 	if s.commenter == nil {
@@ -180,10 +195,7 @@ func (s *Server) previewPullRequestComment(q *request) {
 		writeError(q.w, q.r, http.StatusNotFound, "NOT_FOUND", "no such report revision", false)
 		return
 	}
-	var client *github.Client
-	if s.personal != nil {
-		client, _ = s.personal.gitHub()
-	}
+	client, _ := s.inst.gitHubFor(q.session.UserID)
 	body, current, err := prcomment.Preview(ctx, client, src)
 	if err != nil {
 		s.storeError(q, err)

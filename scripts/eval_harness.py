@@ -200,6 +200,6 @@ def file_sha256(path):
 
 
 def home_relative(path):
-    """Paths in manifests are recorded relative to $HOME to avoid personal prefixes."""
+    """Paths in manifests are recorded relative to $HOME to avoid user-specific prefixes."""
     p, home = str(path), os.path.expanduser("~")
     return "~" + p[len(home):] if home and p.startswith(home + os.sep) else p

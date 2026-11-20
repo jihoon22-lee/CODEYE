@@ -34,7 +34,7 @@ var (
 	// ErrUnavailable.
 	ErrAuthRequired = errors.New("source_auth_required")
 	// ErrHoldsProtected: the project folder contains, or lies inside, a
-	// directory the node keeps private (personal mode: CODEYE's state and
+	// directory the node keeps private (the service: CODEYE's state and
 	// backup directories).
 	ErrHoldsProtected = errors.New("source_holds_codeye_data")
 	// ErrUnreachable: the Git host could not be reached (name resolution,

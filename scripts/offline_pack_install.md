@@ -1,6 +1,6 @@
 # CODEYE {{version}} 설치 ({{os}}/{{arch}}, 인터넷 없는 머신)
 
-이 묶음은 `codeye` 실행 파일 하나(정적 링크, CGO 없음), 빌드된 웹 화면(`web/dist`), 문서(`docs/GUIDE.md`, `docs/OPERATIONS.md`), 오프라인 설정 예시(`examples/personal-offline.json`), `MANIFEST.json`, `SHA256SUMS`를 담는다. DB migration과 검토 지침 팩은 실행 파일 안에 들어 있다. 분석 도구, 언어 toolchain, PostgreSQL, OpenCode, 프로젝트 의존성은 들어 있지 않다(`docs/OPERATIONS.md`의 "폐쇄망 배포팩").
+이 묶음은 `codeye` 실행 파일 하나(정적 링크, CGO 없음), 빌드된 웹 화면(`web/dist`), 문서(`docs/GUIDE.md`, `docs/OPERATIONS.md`), 오프라인 설정 예시(`examples/config-offline.json`), `MANIFEST.json`, `SHA256SUMS`를 담는다. DB migration과 검토 지침 팩은 실행 파일 안에 들어 있다. 분석 도구, 언어 toolchain, PostgreSQL, OpenCode, 프로젝트 의존성은 들어 있지 않다(`docs/OPERATIONS.md`의 "폐쇄망 배포팩").
 
 ## 1. 확인
 
@@ -20,7 +20,7 @@ sha256sum -c SHA256SUMS                  # 풀어 놓은 파일 전부
 
 ## 3. 설정
 
-`examples/personal-offline.json`을 `~/.config/codeye/personal.json`으로 복사하고 주소와 경로를 이 머신의 것으로 바꾼다. 쓰지 않는 미러 항목은 지운다. 미러가 하나도 없으면 `"offline": true`만 있어도 된다. 그때 Go 의존성은 `agent.go_mod_cache`(미리 받아 둔 모듈 캐시)에서만 읽고, 나머지는 받지 않고 `offline_no_registry_configured`로 보고서에 남는다.
+`examples/config-offline.json`을 `~/.config/codeye/config.json`으로 복사하고 주소와 경로를 이 머신의 것으로 바꾼다. 쓰지 않는 미러 항목은 지운다. 미러가 하나도 없으면 `"offline": true`만 있어도 된다. 그때 Go 의존성은 `agent.go_mod_cache`(미리 받아 둔 모듈 캐시)에서만 읽고, 나머지는 받지 않고 `offline_no_registry_configured`로 보고서에 남는다.
 
 모델 검토를 쓰려면 사내 OpenAI 호환 주소를 담은 키 파일을 `<state_dir>/secrets/model.json`(권한 0600)에 둔다.
 
@@ -34,7 +34,7 @@ sha256sum -c SHA256SUMS                  # 풀어 놓은 파일 전부
 
 ```sh
 ./codeye tools --checklist               # 분석 도구 점검표: 없는 도구와 옮길 위치
-./codeye doctor --config ~/.config/codeye/personal.json   # "Offline readiness": 나가는 주소, CA, PostgreSQL, 언어별 빠진 것
+./codeye doctor --config ~/.config/codeye/config.json   # "Offline readiness": 나가는 주소, CA, PostgreSQL, 언어별 빠진 것
 ./codeye up --offline ~/src/my-project   # 처음 한 번 --offline을 주면 설정에 저장된다
 ```
 

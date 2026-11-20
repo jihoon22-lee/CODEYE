@@ -4,7 +4,8 @@ CODEYE의 위협 모델과 경계, 지금 집행하는 규칙, 아직 구현하�
 
 | 영역 | 상태 |
 |---|---|
-| loopback 평문 수신과 비 loopback TLS 필수, 브라우저 세션, CSRF·Origin·Host 검사 | 구현 |
+| loopback 평문 수신, 비 loopback의 TLS 또는 명시적 평문 HTTP, 브라우저 세션, CSRF·Origin·Host 검사 | 구현 |
+| 사용자별 GitHub token, 서버 폴더 허가(사용자별·모두에게), 관리자 서비스 스위치 | 구현(API·웹 화면) |
 | 로컬 계정(사용자 이름·비밀번호), 로그인 제한, 비밀번호 변경·재설정, 관리자 역할 | 구현(API·CLI·웹 화면) |
 | 노드 등록 토큰, 노드 credential, lease·epoch fencing | 구현 |
 | 프로젝트 역할(`manager`·`runner`·`viewer`)과 비구성원 404, 구성원 관리 | 구현(API·웹 화면) |
@@ -24,16 +25,18 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 
 ### 네트워크와 브라우저
 
-수신 방식은 두 가지다. loopback 주소는 평문 HTTP로 받을 수 있다(개인 모드). 그 밖의 주소(`0.0.0.0`, `[::]`, LAN 주소)는 `codeye serve --tls-cert --tls-key --public-origin`을 모두 줄 때만 받고, 하나라도 없으면 서버가 시작하지 않는다. 서버 코드도 TLS가 없으면 loopback이 아닌 listener를 거부하므로 비 loopback 주소에서 평문 HTTP가 나가는 경로는 없다. 개인 모드 설정(`codeye up`·`codeye start`)은 계속 loopback만 받는다.
+수신 방식은 세 가지다. loopback 주소는 평문 HTTP로 받는다. 그 밖의 주소(`0.0.0.0`, `[::]`, LAN 주소)는 TLS(`--tls-cert --tls-key --public-origin`을 모두)로 받거나, 운영자가 `--plain-http`(설정 `plain_http: true`)를 명시했을 때만 평문 HTTP로 받는다. 둘 다 없으면 서버가 시작하지 않고(`ErrTLSRequired`), 서버 코드도 그 경우 loopback이 아닌 listener를 거부한다. 평문 HTTP를 고르면 `codeye up`·`codeye serve`가 시작할 때 "로그인 쿠키와 비밀번호가 암호화되지 않고 네트워크를 지난다"는 한 줄을 출력한다. 막지는 않는다(사용을 막는 관문 대신 한계를 기록한다는 제품 방향).
 
-| 항목 | loopback(평문) | TLS |
-|---|---|---|
-| 수신 | loopback IP와 0이 아닌 포트 | 아무 IP. TLS 1.2 이상, 인증서·키는 운영자가 준다. 키 파일은 group·other가 읽거나 쓸 수 없어야 한다(POSIX mode 검사, Windows ACL은 검사하지 않음). 같은 포트의 평문 요청에는 API를 주지 않는다 |
-| Host | `127.0.0.1:P`, `localhost:P`, `[::1]:P`만(DNS rebinding 방어). 정적 파일 포함 모든 요청 | public origin의 host(`host`, 기본 포트면 `host:443`도)만 |
-| Origin | 상태 변경 요청은 `Origin`이 `http://`+Host와 정확히 같아야 한다 | 상태 변경 요청은 `Origin`이 public origin과 정확히 같아야 한다 |
-| 세션 cookie | `codeye_session` | `__Host-codeye_session`(`Secure`, Domain 없음). 평문 이름의 cookie는 읽지 않는다 |
-| HSTS | 보내지 않는다 | `Strict-Transport-Security: max-age=31536000` |
-| 로그인 링크 origin | 요청의 loopback origin | public origin |
+공개 주소(TLS나 평문 HTTP)로 들을 때 `codeye up`은 controller에 loopback 수신 주소를 하나 더 준다(`--local-listen`, 기본 공개 포트 + 1). 같은 머신의 에이전트와 명령은 그 주소를 쓴다. 두 수신 주소는 Host·Origin·cookie 규칙을 따로 가진다(접속한 listener가 정한다). 공개 주소는 public origin의 Host·Origin만, loopback 주소는 loopback Host·Origin만 받는다.
+
+| 항목 | loopback(평문) | 공개 평문 HTTP(`--plain-http`) | TLS |
+|---|---|---|---|
+| 수신 | loopback IP와 0이 아닌 포트 | 아무 IP. `0.0.0.0`·`[::]`이면 `--public-origin http://HOST[:PORT]`가 필수 | 아무 IP. TLS 1.2 이상, 인증서·키는 운영자가 준다. 키 파일은 group·other가 읽거나 쓸 수 없어야 한다(POSIX mode 검사, Windows ACL은 검사하지 않음). 같은 포트의 평문 요청에는 API를 주지 않는다 |
+| Host | `127.0.0.1:P`, `localhost:P`, `[::1]:P`만(DNS rebinding 방어). 정적 파일 포함 모든 요청 | public origin의 host와(듣는 주소가 loopback·unspecified면) loopback Host | public origin의 host(`host`, 기본 포트면 `host:443`도)만 |
+| Origin | 상태 변경 요청은 `Origin`이 `http://`+Host와 정확히 같아야 한다 | 같다(`http://`+받은 Host) | 상태 변경 요청은 `Origin`이 public origin과 정확히 같아야 한다 |
+| 세션 cookie | `codeye_session` | `codeye_session`(Secure 아님) | `__Host-codeye_session`(`Secure`, Domain 없음). 평문 이름의 cookie는 읽지 않는다 |
+| HSTS | 보내지 않는다 | 보내지 않는다 | `Strict-Transport-Security: max-age=31536000` |
+| 로그인 링크 origin | 요청의 loopback origin | public origin | public origin |
 
 두 방식에 공통인 규칙은 다음과 같다.
 
@@ -48,6 +51,7 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 
 운영 한계:
 
+- 공개 평문 HTTP에서는 같은 네트워크의 누구나 로그인 링크·비밀번호·세션 cookie·보고서를 볼 수 있고 세션을 가로챌 수 있다. 믿을 수 있는 LAN에서만 고르고, 아니면 TLS를 쓴다. 평문 HTTP 화면에서는 브라우저가 클립보드 API를 주지 않으므로 복사 단추는 글자를 선택해 복사한다.
 - 평문 loopback에서 cookie는 port를 구분하지 않으므로 같은 PC의 다른 loopback 서비스와 공유될 수 있다. CSRF·Origin 검사가 상태 변경을 막지만, 같은 PC에 신뢰할 수 없는 로컬 웹 서비스가 있는 환경은 별도 운영 판단이 필요하다.
 - TLS 종료를 앞단 reverse proxy에 맡기는 배포는 지원하지 않는다. 서버는 `X-Forwarded-*`·`Forwarded` 헤더를 읽지 않으므로 proxy 뒤에서는 접속 주소별 로그인 제한이 proxy 주소 하나로 묶이고 Origin·Host 규칙도 맞지 않는다.
 - 인증서 갱신은 서버 재시작으로 반영한다. 노드 에이전트가 자체 서명 인증서를 신뢰하게 하는 설정은 시험하지 않았다.
@@ -88,7 +92,8 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 - 마지막 활성 관리자는 비활성화하거나 관리자 역할을 거둘 수 없다. 검사는 활성 관리자 행 전체를 id 순으로 `FOR UPDATE` 잠근 같은 트랜잭션에서 하므로, 두 관리자가 동시에 서로를 내려도 한 명은 남는다.
 - 관리자 경로는 API 계층에서 세션의 관리자 여부를 확인하고, 저장 계층이 같은 트랜잭션에서 다시 확인한다(그 사이 역할을 잃었으면 403).
 - 비활성화는 되돌리는 경로가 없다. 비활성화와 재설정은 세션을 같은 트랜잭션에서 폐기하므로 이후 요청과 열린 이벤트 스트림의 다음 poll이 401·`closed`(`unauthenticated`)가 된다.
-- 개인 모드(`codeye up`·`codeye start`)의 사용자는 관리자다([결정](DECISIONS.md) A36). 개인 모드 브라우저 세션은 7일이다(A38).
+- `codeye up`·`codeye start`가 로그인시키는 사용자(설정의 사용자)는 관리자다([결정](DECISIONS.md) A36). 그 서비스의 브라우저 세션은 7일이다(A38). 다른 사용자는 관리자가 만들고, 같은 서비스를 같은 규칙으로 쓴다(A53).
+- 관리자는 웹에서 서버 폴더를 더하고 사용자마다 또는 모두에게 열며(`source_root.added`, `source_root.granted`, `source_root.everyone_set`), Git host를 승인하고(`provider.added`), 두 서비스 스위치를 바꾼다(`service.settings_set`). 모두 감사 행을 남긴다.
 
 ### 노드와 에이전트
 
@@ -104,6 +109,20 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, 그 이름의 활성 계정이 있는지 알 수 있다. 계정은 관리자가 아는 사람에게 만들어 주므로 받아들인다. 검색·부분 일치·사용자 목록은 manager에게 없고, 사용자 목록 전체는 관리자만 본다.
 
 격리는 라우터의 경로 목록 전체를 관리자(비구성원), 외부인, viewer, runner, manager, 소유자로 요청하는 표 시험이 확인한다([시험](TESTING.md) TC-140).
+
+### 서버 경로 허가
+
+서버의 폴더를 경로(`local_path`)로 분석하는 것은 그 폴더(source root)를 허가받은 사용자만 한다. 허가는 사용자별 grant 또는 관리자가 "모두에게 열기"를 켠 root다. 판단은 한 SQL 술어(`rootAllowedSQL`)가 등록·목록·`GET /setup`·자동 증감·배정 시점의 재확인에 모두 쓴다. 허가된 폴더가 없는 사용자는 422 `LOCAL_PATH_NOT_ALLOWED`, 허가된 폴더 밖은 422 `FOLDER_NOT_READABLE`이고 둘 다 읽을 수 있는 폴더 목록을 함께 준다. root를 닫거나 grant를 거두면 대기 중인 그 사용자의 run은 배정 때 `source_grant_revoked`로 실패한다.
+
+- 폴더는 서비스를 띄운 OS 계정의 권한으로 읽힌다. CODEYE 계정과 OS 계정을 잇고 그 계정의 POSIX 권한으로 폴더를 다시 확인하는 규칙은 넣지 않았다. 넣을 자리는 controller의 경로 대응(`localSource`)과 배정 시점의 재확인이다.
+- CODEYE 데이터 디렉터리 안의 폴더는 root로 더할 수 없다(`FOLDER_HOLDS_CODEYE_DATA`). 데이터 디렉터리를 품는 root(예: 홈)는 받고, 그 안의 프로젝트 폴더를 하나씩 검사한다([CODEYE 데이터 폴더](#소스와-네트워크)).
+- `codeye up`이 띄운 에이전트(능력 `source:controller`)는 웹에서 더한 root의 경로를 배정에서 받아 재시작 없이 읽는다. 이 능력은 운영자가 설치·등록한 노드만 알린다고 본다(노드 등록 자체가 운영자 권한이다).
+
+### 사용자별 GitHub token
+
+- 각 사용자의 github.com token은 `<state>/secrets/github-users/<user_id>.json`(0600, 폴더 0700)에만 있다. 데이터베이스·백업·응답·로그·감사 detail·명령 인자에 없다. 감사 행(`account.github_token_set`·`account.github_token_removed`)은 host와 GitHub 계정 이름만 남긴다.
+- GitHub 호출은 그 호출이 대신하는 사람의 token만 쓴다. run의 pull request 고정·Git fetch·결과 댓글은 run을 시작한 사람, 미리보기는 요청한 사람이다. 구성원이 남의 프로젝트를 실행해도 소유자의 token을 쓰지 않는다([누구의 token인가](GITHUB.md#누구의-token인가)).
+- 관리자 스위치("다른 사용자도 모델 검토 사용" 기본 켬, "다른 사용자의 저장소 빌드 스크립트 실행 허용" 기본 끔)도 run을 시작한 사람 기준이다. 배정 응답의 `offered`가 노드에 그 범위를 알리고, 노드는 노드 상한·프로젝트 선택·`offered`를 모두 만족할 때만 실행한다.
 
 **코드 포함 내보내기.** viewer도 `include_code=true`로 내보낼 수 있고 모든 내보내기는 형식과 코드 포함 여부와 함께 감사 기록에 남는다([결정](DECISIONS.md) A35).
 
@@ -141,12 +160,12 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 | 사용자 비밀번호 | PBKDF2 verifier만 저장([로그인과 제한](#로그인과-제한)). 평문은 저장·기록하지 않는다 |
 | TLS 키 | 운영자가 준 파일 경로. group·other 접근 불가 mode만 받는다. 내용은 오류 문구에 넣지 않는다 |
 | 노드 | 일회용 등록 토큰과 노드 credential. 0600 파일, hash 저장 |
-| 모델 | API 키는 키 파일(개인 모드 `<state_dir>/secrets/model.json` 0600, `agent.model.credential_file`, OpenCode `auth.json`)에만 두고, 설정·인자에는 그 경로나 relay 파일 경로만 둔다. 워커가 호출마다 읽어 OpenCode 프로필로만 넘기고 기록에서 가린다([검토](REVIEW.md#모델-설정)) |
-| Git | 사용자 Git 설정과 credential helper를 차단한다. 개인 모드의 github.com token(`GH_TOKEN`·`GITHUB_TOKEN`·`gh auth token`에서 찾는다)은 `<state_dir>/secrets/github.json`(0600)에만 두고 에이전트에는 그 경로만 준다. 워커가 fetch마다 읽어 github.com 요청에만 git 환경변수의 HTTP header로 넘긴다. URL·argv·작업 사본·snapshot·분석기·모델 입력에는 없다. 다른 호스트에는 보내지 않는다([GitHub token](GITHUB.md#github-token)) |
-| GitHub API(개인 모드) | 같은 token 파일을 controller와 `codeye up`이 요청마다 읽어 pull request 확인과 결과 댓글에만 쓴다. redirect를 따르지 않고 다른 origin의 page 주소를 쓰지 않는다. `GET /setup`은 token 유무·계정·출처만 보인다. 댓글은 token 계정의 권한으로 게시되므로 기본으로 꺼져 있고 사용자가 켠다([결과 댓글](GITHUB.md#결과-댓글)) |
-| GitHub App key, 서버 모드 게시 credential | 설계 계약(미구현, [Git 연결](GITHUB.md#다중-사용자-설치-설계-계약)) |
+| 모델 | API 키는 키 파일(`codeye up`의 `<state_dir>/secrets/model.json` 0600, `agent.model.credential_file`, OpenCode `auth.json`)에만 두고, 설정·인자에는 그 경로나 relay 파일 경로만 둔다. 워커가 호출마다 읽어 OpenCode 프로필로만 넘기고 기록에서 가린다([검토](REVIEW.md#모델-설정)) |
+| Git | 사용자 Git 설정과 credential helper를 차단한다. 사용자마다의 github.com token(웹에서 넣거나, 관리자는 `GH_TOKEN`·`GITHUB_TOKEN`·`gh auth token`에서 찾는다)은 `<state_dir>/secrets/github-users/<user_id>.json`(0600)에만 두고 에이전트에는 그 디렉터리 경로만 준다. 에이전트는 배정마다 run을 시작한 사람의 파일 하나만 워커에 넘기고, 워커가 fetch마다 읽어 github.com 요청에만 git 환경변수의 HTTP header로 넘긴다. URL·argv·작업 사본·snapshot·분석기·모델 입력에는 없다. 다른 호스트에는 보내지 않는다([GitHub token](GITHUB.md#github-token)) |
+| GitHub API | 같은 사용자별 파일을 controller와 `codeye up`이 요청마다 읽어 pull request 확인과 결과 댓글에만 쓴다. redirect를 따르지 않고 다른 origin의 page 주소를 쓰지 않는다. `GET /setup`·`GET /account/github`는 자기 token의 유무·계정·출처만 보인다. 댓글은 run을 시작한 사람의 token 계정 권한으로 게시되므로 기본으로 꺼져 있고 사용자가 켠다([결과 댓글](GITHUB.md#결과-댓글)) |
+| GitHub App key | 설계 계약(미구현, [Git 연결](GITHUB.md#다중-사용자-설치-설계-계약)) |
 
-- 일시 credential은 만료와 삭제를 확인한다. 개인 모드는 권한을 제한한 파일, 서버 모드는 운영자 secret store를 선택한다(서버 모드는 설계 계약).
+- 일시 credential은 만료와 삭제를 확인한다. 지금은 권한을 제한한 파일이고, 운영자 secret store는 설계 계약이다.
 - 비밀정보 검사 결과는 매칭 값 전체를 보존하지 않는다. 비밀값 자체와 그 일부·hash는 DB, 로그, 보고서, 내보내기, 웹, 모델 입력 어디에도 저장하지 않는다. 마스킹된 유형·위치·제거/회전 방향만 제공한다. 실제 인증 가능성을 확인하려고 외부 서비스에 토큰을 쓰지 않는다. 비밀값이 탐지된 파일은 모델 입력에서 뺀다([분석기](ANALYZERS.md)).
 - 도구의 원시 stdout/stderr 산출물에 비밀값이 있을 수 있으므로 저장 전에 마스킹하고, 도구가 비밀값을 출력하지 않도록 출력 형식을 고정한다.
 - 명령 기록에는 secret 값을 마스킹한다.
@@ -154,15 +173,15 @@ manager는 정확한 사용자 이름으로 구성원을 추가할 수 있어, �
 
 ## 소스와 네트워크
 
-- **소스 경계.** path traversal, symlink/junction, archive traversal, source-root 밖 접근, 대소문자 충돌을 검사한다. source root는 열린 디렉터리 핸들에서 하위 경로를 해석한다. 플랫폼 data root는 확보하는 프로젝트 폴더의 바깥에 두고, 그 폴더를 품어서도 안 된다(이전에는 승인된 root 전체의 바깥이었다. 개인 모드의 홈 root가 상태 디렉터리를 품기 때문에 바꿨다. A40). 실행기의 보호 경로도 root 전체가 아닌 프로젝트 폴더다.
-- **CODEYE 데이터 폴더.** 개인 모드에서는 상태 디렉터리(DB 비밀번호, 모델 키, 스냅샷)나 백업 디렉터리를 품거나 그 안에 있는 프로젝트 폴더를 받지 않는다. 등록할 때 controller가 symlink를 푼 경로로 검사하고(`local_path`든 root와 상대 경로든 422 `FOLDER_HOLDS_CODEYE_DATA`), 소스를 확보하기 전에 에이전트가 다시 검사한다(`--protected-dir`, 실패 사유 `source_holds_codeye_data`). 그래서 어떤 경로로 등록된 프로젝트도 그 데이터를 snapshot·모델 입력에 넣지 않는다.
+- **소스 경계.** path traversal, symlink/junction, archive traversal, source-root 밖 접근, 대소문자 충돌을 검사한다. source root는 열린 디렉터리 핸들에서 하위 경로를 해석한다. 플랫폼 data root는 확보하는 프로젝트 폴더의 바깥에 두고, 그 폴더를 품어서도 안 된다(이전에는 승인된 root 전체의 바깥이었다. `codeye up`의 홈 root가 상태 디렉터리를 품기 때문에 바꿨다. A40). 실행기의 보호 경로도 root 전체가 아닌 프로젝트 폴더다.
+- **CODEYE 데이터 폴더.** state 디렉터리를 가진 controller(`codeye up`)는 상태 디렉터리(DB 비밀번호, 모델 키, 스냅샷)나 백업 디렉터리를 품거나 그 안에 있는 프로젝트 폴더를 받지 않는다. 등록할 때 controller가 symlink를 푼 경로로 검사하고(`local_path`든 root와 상대 경로든 422 `FOLDER_HOLDS_CODEYE_DATA`), 소스를 확보하기 전에 에이전트가 다시 검사한다(`--protected-dir`, 실패 사유 `source_holds_codeye_data`). 그래서 어떤 경로로 등록된 프로젝트도 그 데이터를 snapshot·모델 입력에 넣지 않는다.
 - **제외 정책.** 어느 깊이에서든 `.git`, `.codeye`, `node_modules`, `__pycache__`를 제외한다. credential 디렉터리(`.ssh`, `.aws`, `.gnupg`, `.docker`, `.kube`, `.azure`, `.gcloud`)와 비밀 파일 이름(`.env`와 `.env.*`(단 `.env.example`·`.env.sample`은 유지), `*.pem`, `*.key`, SSH 개인키, `.npmrc`, `.netrc`, `.git-credentials`, `.pypirc`, `.pgpass`, `*.tfstate`, `*.tfvars`, 인증서 저장소 등)을 기본으로 제외한다. 선택한 트리의 최상위에서 `build`, `dist`, `target`, `venv`, `.venv`도 제외한다. 소스 패키지 이름(`internal/credentials`, `internal/build`)은 유지한다. 제외 목록은 [소스 확보 구현](../internal/worker/source)이 기준이다.
 - **보고서의 코드 조각**은 소스와 같은 민감도다. 기본 내보내기는 코드 발췌를 뺀다. "코드 포함"은 같은 프로젝트의 읽기 권한자에게만 열린다.
 - **저장소 코드 실행 허가.** 저장소가 정한 코드(build script, 설정 프로그램, plugin, proc macro)를 실행하는 분석 작업은 허가가 있을 때만 실행한다. 허가가 없으면 프로세스를 시작하지 않고 미지원으로 끝난다. 스냅샷·저장소 설정·run 요청은 이 값을 올릴 수 없다.
-  - 서버 모드: 노드 운영자가 source root마다 준 허가(`--repo-code-source-root`)다. Git 소스는 허가를 받지 않는다.
-  - 개인 모드(A40): 프로젝트의 분석 선택 "저장소의 빌드 스크립트 실행"(`analysis.run_build_scripts`)이다. **기본값이 바뀌었다.** 로컬 폴더 프로젝트는 기본 켬이다(이전에는 root마다 `repository_code: true`를 적어야 했다). 내 폴더의 코드는 이미 내 권한으로 실행할 수 있는 내 코드라고 본다. Git 저장소 프로젝트는 기본 끔이고, 프로젝트 관리자가 켜면 그 저장소의 코드가 사용자의 권한으로 이 컴퓨터에서 실행된다(Native 실행이며 격리가 없다). 선택은 프로젝트 설정 revision에 남고 바꾸면 `project.revised` 감사가 남는다.
-- **모델 전송 승인.** 서버 모드는 노드 운영자가 root마다 승인한 코드만 모델에 보낸다(기본은 보내지 않음). 개인 모드는 프로젝트의 분석 선택 "소스를 모델에 보냄"(`analysis.send_source_to_model`)이 정하고 로컬 폴더·Git 저장소 모두 기본 켬이다(A40, A39의 root 단위 기본 허가와 `model_review`를 대신한다). **Git 저장소의 소스도 이제 기본으로 모델에 간다**(이전에는 Git 소스를 모델에 보낼 방법이 없었다). 보내는 곳은 사용자가 키를 둔 모델 공급자 하나다. 모델 설정이 없으면 다른 모델이나 인터넷 서비스로 우회하지 않고 모델 검토를 건너뛴 것으로 보고서에 표시한다.
-- **Git credential은 github.com token 하나.** 개인 모드의 Git 주소는 `git_hosts`(기본 `github.com`)의 HTTPS 저장소만 받는다. github.com에는 찾은 token이 있을 때만 그것을 보내고 다른 호스트에는 아무 credential도 보내지 않는다. 인증을 요구하는 저장소는 `source_auth_required`로 실패하며 사용자 credential helper나 다른 경로로 재시도하지 않는다. 오프라인 모드에서는 token을 찾지도 보내지도 않는다(github.com도 기본 호스트가 아니다). 사내 Git 호스트용 credential은 아직 없다.
+  - 따로 띄운 노드: 노드 운영자가 source root마다 준 허가(`--repo-code-source-root`)가 상한이다. Git 소스는 허가를 받지 않는다.
+  - 프로젝트 선택을 따르는 노드(`codeye up`이 띄운 노드, A40·A53): 관리자가 아닌 사람이 시작한 run은 관리자 스위치 "다른 사용자의 저장소 빌드 스크립트 실행 허용"(기본 끔)이 켜져 있어야 하고, 그 위에서 프로젝트의 분석 선택 "저장소의 빌드 스크립트 실행"(`analysis.run_build_scripts`)이다. **기본값이 바뀌었다.** 로컬 폴더 프로젝트는 기본 켬이다(이전에는 root마다 `repository_code: true`를 적어야 했다). 내 폴더의 코드는 이미 내 권한으로 실행할 수 있는 내 코드라고 본다. Git 저장소 프로젝트는 기본 끔이고, 프로젝트 관리자가 켜면 그 저장소의 코드가 사용자의 권한으로 이 컴퓨터에서 실행된다(Native 실행이며 격리가 없다). 선택은 프로젝트 설정 revision에 남고 바꾸면 `project.revised` 감사가 남는다.
+- **모델 전송 승인.** 따로 띄운 노드는 노드 운영자가 root마다 승인한 코드만 모델에 보낸다(기본은 보내지 않음). 프로젝트 선택을 따르는 노드는 관리자 스위치 "다른 사용자도 모델 검토 사용"(기본 켬, 관리자가 아닌 사람이 시작한 run에만 적용)과 프로젝트의 분석 선택 "소스를 모델에 보냄"(`analysis.send_source_to_model`)이 정하고 로컬 폴더·Git 저장소 모두 기본 켬이다(A40, A39의 root 단위 기본 허가와 `model_review`를 대신한다). **Git 저장소의 소스도 이제 기본으로 모델에 간다**(이전에는 Git 소스를 모델에 보낼 방법이 없었다). 보내는 곳은 사용자가 키를 둔 모델 공급자 하나다. 모델 설정이 없으면 다른 모델이나 인터넷 서비스로 우회하지 않고 모델 검토를 건너뛴 것으로 보고서에 표시한다.
+- **Git credential은 github.com token 하나.** Git 주소는 승인된 Git host(설정 `git_hosts`, 기본 `github.com`, 관리자가 웹에서 더한 host)의 HTTPS 저장소만 받는다. github.com에는 run을 시작한 사람의 token이 있을 때만 그것을 보내고 다른 호스트에는 아무 credential도 보내지 않는다. 인증을 요구하는 저장소는 `source_auth_required`로 실패하며 사용자 credential helper나 다른 경로로 재시도하지 않는다. 오프라인 모드에서는 token을 찾지도 보내지도 않는다(github.com도 기본 호스트가 아니다). 사내 Git 호스트용 credential은 아직 없다.
 - **네트워크.** 설정된 Git host, 모델 endpoint, mirror, CA만 쓴다. 소스 확보는 승인된 HTTPS host에서 redirect, URL userinfo, SSH, `git://`, 알려지지 않은 host를 거부한다. 도구에는 가능한 곳에서 오프라인 옵션을 준다(예: cargo `--offline`). 그러나 Native 실행에서 프로세스 전체의 네트워크를 OS 수준으로 차단하지는 않는다. 환경변수만으로 OS 수준 차단을 달성했다고 표시하지 않는다. 필요하면 OS 방화벽 등 운영자 통제를 둔다. CODEYE에는 telemetry·업데이트 확인·원격 규칙 다운로드가 없다.
 - **오프라인 모드.** `offline: true`이면 공개 레지스트리·github.com·공급자 공개 모델 endpoint를 기본값으로 쓰지 않는다. 운영자가 적은 미러·Git 호스트·`base_url`만 쓰고, 없으면 받지 않거나 검토하지 않은 이유를 보고서에 남긴다(`offline_no_registry_configured`, `model_endpoint_not_configured`). 환경변수의 모델 키는 공개 endpoint용이라 저장하지 않는다. 저장소 코드 실행이 허가된 build script 등은 이 설정과 무관하게 접속할 수 있다. 측정한 접속과 남은 경로는 [운영](OPERATIONS.md#오프라인-모드)에 있다.
 - **사내 CA.** `ca_bundle`은 신뢰할 CA를 더하는 설정일 뿐이다. 인증서 검증을 끄거나 약하게 하는 설정은 두지 않는다. `SSL_CERT_FILE`은 시스템 CA를 대신하므로 합본을 준다([사내 CA](OPERATIONS.md#사내-ca)).
@@ -204,7 +223,8 @@ action 목록(의미가 같은 이름은 묶음):
 |---|---|
 | 인증 | `auth.login_succeeded`, `auth.login_failed`, `auth.login_throttled`, `auth.logout`, `auth.password_changed`, `auth.password_change_failed`, `auth.password_set`(운영자 CLI), `auth.password_reset`, `auth.password_reset_acknowledged`, `auth.login_link_issued`(운영자 CLI) |
 | 계정 | `user.created`, `user.disabled`, `user.admin_granted`, `user.admin_revoked` |
-| 접근 | `source_root.added`, `source_root.granted`, `source_root.grant_revoked`, `provider.added` |
+| 접근 | `source_root.added`, `source_root.granted`, `source_root.grant_revoked`, `source_root.everyone_set`, `provider.added` |
+| 서비스·계정 | `service.settings_set`(바뀐 스위치 값), `account.github_token_set`·`account.github_token_removed`(host와 GitHub 계정 이름만, token 없음) |
 | 프로젝트 | `project.registered`, `project.revised`, `project.member_set`, `project.member_removed` |
 | 실행·결과 | `run.requested`, `run.cancel_requested`, `report.exported`, `finding_review.recorded` |
 | 예약 | `schedule.created`, `schedule.updated`, `schedule.deleted` |
@@ -212,7 +232,7 @@ action 목록(의미가 같은 이름은 묶음):
 | 배치 한도 | `pool.policy_set`, `scheduler.limits_set`, `scheduler.artifact_quota_set` |
 | fencing | `attempt.stale_rejected` |
 
-목록은 migration(0010에서 만들고 0011이 늘린 CHECK), 저장 계층 상수, OpenAPI `AuditAction`에 같게 적고 [`scripts/validate_bundle.py`](../scripts/validate_bundle.py)가 대조한다. 예약이 만든 run의 `run.requested`는 행위자 종류 `system`이고 예약의 actor를 사용자로 남긴다.
+목록은 migration(0010에서 만들고 0011·0013·0014가 늘린 CHECK), 저장 계층 상수, OpenAPI `AuditAction`에 같게 적고 [`scripts/validate_bundle.py`](../scripts/validate_bundle.py)가 대조한다. 예약이 만든 run의 `run.requested`는 행위자 종류 `system`이고 예약의 actor를 사용자로 남긴다.
 
 감사 행을 쓰지 않는 변경: 노드 프로토콜 쓰기(위), 보고서 게시·거부(run 이벤트 `report.published`·`report.rejected`), 노드 heartbeat가 보고한 정리 결과 중 오래된 attempt에 대한 것(응답 본문으로만 알린다), 복원 직후의 세션·토큰·노드 무효화(새 DB에 복원하는 운영자 명령 `codeye restore`의 일부다).
 

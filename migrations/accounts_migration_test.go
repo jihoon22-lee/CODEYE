@@ -23,7 +23,7 @@ func TestAccountsMigrationKeepsLoginLinkUsers(t *testing.T) {
 		t.Fatalf("apply 0001-0009: %v", err)
 	}
 	named, disabled, project, session := newID(), newID(), newID(), newID()
-	mustExec(t, ctx, c, "INSERT INTO users(id,display_name) VALUES($1,'personal')", named)
+	mustExec(t, ctx, c, "INSERT INTO users(id,display_name) VALUES($1,'admin')", named)
 	mustExec(t, ctx, c, "INSERT INTO users(id) VALUES($1)", disabled)
 	mustExec(t, ctx, c, "UPDATE users SET disabled_at=now() WHERE id=$1", disabled)
 	mustExec(t, ctx, c, "WITH p AS (INSERT INTO projects(id,owner_id,name,current_revision) VALUES($1,$2,'p',1) RETURNING id) INSERT INTO project_revisions(project_id,revision,config,config_digest) SELECT id,1,'{}',$3 FROM p", project, named, digest('a'))

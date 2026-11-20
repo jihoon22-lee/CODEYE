@@ -1,7 +1,8 @@
 // Package httpapi is the CODEYE control-plane HTTP API (user subset and
 // node protocol) and the same-origin static web host. Without TLS it
-// listens on loopback only; any other address requires TLS and a public
-// origin (tls.go). Browser sessions come from single-use launch tokens or a
+// listens on loopback only unless the operator chose plain HTTP; any other
+// address needs TLS or that explicit choice, and has a public origin
+// (tls.go). Browser sessions come from single-use launch tokens or a
 // username and password; node routes accept only a node Bearer secret
 // (issued at enrollment) and reject any Origin header. User Bearer tokens
 // are not implemented.
@@ -72,8 +73,17 @@ type Store interface {
 	SetProjectAnalysis(ctx context.Context, actor, id string, c domain.AnalysisChoices) (int64, error)
 	RetryRun(ctx context.Context, actor, id string) (postgres.Run, string, error)
 	ConfirmRecovery(ctx context.Context, by postgres.Principal, id string) (postgres.Recovery, error)
-	// GrantedRootPaths (personal mode): the actor's source roots with paths.
+	// GrantedRootPaths: the source roots the actor may use, with paths.
 	GrantedRootPaths(ctx context.Context, actor string) ([]postgres.SourceRootRecord, error)
+	// The shared service: folders and Git hosts the administrator adds, the
+	// service switches, what they offer a user, and token audit rows.
+	AddSourceRootBy(ctx context.Context, by postgres.Principal, label, path string) (postgres.SourceRootRecord, error)
+	SetSourceRootEveryone(ctx context.Context, by postgres.Principal, root string, everyone bool) error
+	AddProviderBy(ctx context.Context, by postgres.Principal, host string) (postgres.Provider, bool, error)
+	GetServiceSettings(ctx context.Context) (postgres.ServiceSettings, error)
+	SetServiceSettings(ctx context.Context, by postgres.Principal, p postgres.ServiceSettingsPatch) (postgres.ServiceSettings, error)
+	OfferFor(ctx context.Context, user string) (nodeproto.AnalysisOffer, error)
+	RecordGitHubToken(ctx context.Context, user string, set bool, host, login string) error
 	// Run event stream and schedules.
 	RunEvents(ctx context.Context, actor, id string, after int64, limit int) (postgres.EventPage, error)
 	ListSchedules(ctx context.Context, actor, project string) ([]postgres.Schedule, bool, error)
@@ -102,7 +112,7 @@ type Store interface {
 	ExportReport(ctx context.Context, actor, runID string, revision int, ex postgres.ReportExport) (postgres.ReportRecord, error)
 	ListReports(ctx context.Context, actor, runID string) ([]postgres.ReportSummary, error)
 	reportsvc.Store
-	// Pull-request comments (personal mode).
+	// Pull-request comments.
 	prcomment.Store
 	PullRequestCommentPreview(ctx context.Context, actor, runID string, revision int) (postgres.CommentPreview, error)
 	// Comparison and finding reviews.
@@ -114,13 +124,24 @@ type Store interface {
 
 // Config configures the server.
 type Config struct {
-	// Listen needs a non-zero port. A non-loopback address requires TLS.
+	// Listen needs a non-zero port. A non-loopback address requires TLS or
+	// PlainHTTP.
 	Listen netip.AddrPort
 	// TLSCertFile and TLSKeyFile (PEM) switch the server to HTTPS; the key
 	// file must not be group or world accessible. PublicOrigin
 	// (https://HOST[:PORT]) is then required: it is the only accepted Host
 	// and Origin and the origin of login links.
 	TLSCertFile, TLSKeyFile, PublicOrigin string
+	// PlainHTTP serves a non-loopback Listen without TLS, when the operator
+	// says so (a trusted network): sign-in cookies then travel unencrypted.
+	// PublicOrigin (http://HOST[:PORT]) is the origin other machines use; it
+	// defaults to http://Listen for a specific address and is required for
+	// an unspecified one (0.0.0.0, ::). Loopback names stay accepted too.
+	PlainHTTP bool
+	// LocalListen is an optional second, loopback, plain-HTTP address (served
+	// by ServeLocal) for the agent and the commands on the controller's own
+	// machine when Listen is a public address.
+	LocalListen netip.AddrPort
 	// WebDir holds the built web app (index.html). If empty or missing, the
 	// API still works and non-API paths answer 503.
 	WebDir string
@@ -144,29 +165,36 @@ type Config struct {
 	// Stream configures GET /runs/{id}/events (SSE); zero fields take
 	// the defaults of StreamConfig.
 	Stream StreamConfig
-	// Personal is set for the personal-mode controller (`codeye serve
-	// --personal`): POST /projects accepts an absolute local_path, a folder
-	// or repository given again opens its project, and GET /setup reports
-	// the model, Git and the detected tools. Nil is server mode.
-	Personal *Personal
+	// Instance is the installation's state directory (`codeye serve
+	// --state-dir`, always set by `codeye up`): GET /setup reads the model,
+	// Git and the detected tools from it, the users' GitHub tokens live in
+	// it and no project may contain it. Nil serves the same API without
+	// those (tokens cannot be stored).
+	Instance *Instance
 }
 
 // DefaultSessionTTL is the absolute browser session lifetime.
 const DefaultSessionTTL = 12 * time.Hour
 
-// PersonalSessionTTL is the session lifetime of the personal-mode controller
-// (`codeye serve --personal`, started by `codeye up`): one user on their own
-// machine signs in once a week.
-const PersonalSessionTTL = 7 * 24 * time.Hour
+// ServiceSessionTTL is the session lifetime of the controller `codeye up`
+// starts (`codeye serve --session-ttl 168h`): people sign in once a week.
+const ServiceSessionTTL = 7 * 24 * time.Hour
+
+// face is how one listener meets browsers: the Host names it accepts, the
+// origin state-changing requests must carry ("" = "http://"+Host), TLS and
+// the session cookie name.
+type face struct {
+	hosts      map[string]bool
+	tls        *tls.Config
+	origin     string
+	cookieName string
+}
 
 // Server is the HTTP handler.
 type Server struct {
 	store Store
-	hosts map[string]bool
-	// tls is non-nil when serving HTTPS; origin is then the public origin.
-	tls        *tls.Config
-	origin     string
-	cookieName string
+	// pub is the face of Listen; local the face of LocalListen (nil without).
+	pub, local *face
 	sessionTTL time.Duration
 	web        *os.Root
 	log        *slog.Logger
@@ -176,14 +204,15 @@ type Server struct {
 	scaleEvery time.Duration
 
 	publisher *reportsvc.Publisher
-	// commenter posts the pull-request comments (personal mode only).
+	// commenter posts the pull-request comments, each with the GitHub token
+	// of the user who started the run.
 	commenter    *prcomment.Poster
 	publishEvery time.Duration
 	publishKick  chan struct{}
 
 	stream StreamConfig
-	// personal is Config.Personal (nil in server mode).
-	personal *Personal
+	// inst is Config.Instance (nil without a state directory).
+	inst *Instance
 	// streams counts open event streams in total and per session user (a
 	// per-process connection limit, not scheduling state); stopStreams ends
 	// them before a graceful shutdown.
@@ -207,9 +236,15 @@ func ParseListen(s string) (netip.AddrPort, error) {
 	return ap, nil
 }
 
+// loopbackFace accepts the loopback names of port with origin "http://"+Host.
+func loopbackFace(port uint16) *face {
+	p := strconv.Itoa(int(port))
+	return &face{cookieName: sessionCookie, hosts: map[string]bool{"127.0.0.1:" + p: true, "localhost:" + p: true, "[::1]:" + p: true}}
+}
+
 // New builds the server. Without TLS the listen address must be loopback
-// (ErrTLSRequired otherwise); with TLS the certificate, key and public
-// origin must all be given and valid.
+// unless PlainHTTP is set (ErrTLSRequired otherwise); with TLS the
+// certificate, key and public origin must all be given and valid.
 func New(cfg Config, store Store) (*Server, error) {
 	if !cfg.Listen.IsValid() || cfg.Listen.Port() == 0 {
 		return nil, errors.New("httpapi: listen address needs a non-zero port")
@@ -217,19 +252,13 @@ func New(cfg Config, store Store) (*Server, error) {
 	if store == nil {
 		return nil, errors.New("httpapi: nil store")
 	}
-	port := strconv.Itoa(int(cfg.Listen.Port()))
 	s := &Server{
-		store:      store,
-		cookieName: sessionCookie,
-		hosts: map[string]bool{
-			"127.0.0.1:" + port: true,
-			"localhost:" + port: true,
-			"[::1]:" + port:     true,
-		},
+		store:       store,
+		pub:         loopbackFace(cfg.Listen.Port()),
 		sessionTTL:  cfg.SessionTTL,
 		log:         cfg.Logger,
 		stream:      cfg.Stream.withDefaults(),
-		personal:    cfg.Personal,
+		inst:        cfg.Instance,
 		stopStreams: make(chan struct{}),
 		userStreams: map[string]int32{},
 	}
@@ -237,9 +266,12 @@ func New(cfg Config, store Store) (*Server, error) {
 		s.sessionTTL = DefaultSessionTTL
 	}
 	switch {
-	case cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" || cfg.PublicOrigin != "":
+	case cfg.TLSCertFile != "" || cfg.TLSKeyFile != "":
 		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.PublicOrigin == "" {
 			return nil, errors.New("TLS needs all of --tls-cert, --tls-key and --public-origin")
+		}
+		if cfg.PlainHTTP {
+			return nil, errors.New("--plain-http and TLS are alternatives")
 		}
 		origin, hosts, err := ParsePublicOrigin(cfg.PublicOrigin)
 		if err != nil {
@@ -249,13 +281,26 @@ func New(cfg Config, store Store) (*Server, error) {
 		if err != nil {
 			return nil, err
 		}
-		s.tls, s.origin, s.cookieName = tc, origin, secureSessionCookie
-		s.hosts = map[string]bool{}
+		s.pub = &face{tls: tc, origin: origin, cookieName: secureSessionCookie, hosts: map[string]bool{}}
 		for _, h := range hosts {
-			s.hosts[h] = true
+			s.pub.hosts[h] = true
 		}
+	case cfg.PlainHTTP:
+		f, err := plainFace(cfg.Listen, cfg.PublicOrigin)
+		if err != nil {
+			return nil, err
+		}
+		s.pub = f
+	case cfg.PublicOrigin != "":
+		return nil, errors.New("TLS needs all of --tls-cert, --tls-key and --public-origin (or --plain-http with an http:// origin)")
 	case !cfg.Listen.Addr().IsLoopback():
 		return nil, ErrTLSRequired
+	}
+	if cfg.LocalListen.IsValid() {
+		if !cfg.LocalListen.Addr().IsLoopback() || cfg.LocalListen.Port() == 0 {
+			return nil, errors.New("the local listen address must be loopback with a port")
+		}
+		s.local = loopbackFace(cfg.LocalListen.Port())
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -282,9 +327,7 @@ func New(cfg Config, store Store) (*Server, error) {
 	if s.artifacts != nil {
 		s.publisher = &reportsvc.Publisher{Store: store, Artifacts: s.artifacts, Registry: report.DefaultRegistry(), Log: s.log}
 		s.publishKick = make(chan struct{}, 1)
-		if s.personal != nil {
-			s.commenter = &prcomment.Poster{Store: store, GitHub: s.personal.gitHub, Log: s.log}
-		}
+		s.commenter = &prcomment.Poster{Store: store, GitHub: s.inst.gitHubFor, Log: s.log}
 	}
 	if cfg.WebDir != "" {
 		if root, err := os.OpenRoot(cfg.WebDir); err == nil {
@@ -313,13 +356,8 @@ func (s *Server) Close() error {
 	return nil
 }
 
-// Serve runs the HTTP server on ln until ctx is done, then shuts down
-// gracefully (in-flight requests get up to 10 seconds).
-func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	ln, err := s.guardListener(ln)
-	if err != nil {
-		return err
-	}
+// httpServer is the HTTP server of one listener; f is its face.
+func (s *Server) httpServer(f *face) *http.Server {
 	srv := &http.Server{
 		Handler:           s,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -328,10 +366,52 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 		ErrorLog:          slog.NewLogLogger(s.log.Handler(), slog.LevelWarn),
+		ConnContext:       func(ctx context.Context, _ net.Conn) context.Context { return context.WithValue(ctx, faceKey, f) },
 	}
 	// Event streams clear their own read deadline and extend the write
 	// deadline per write; they end here when shutdown begins.
 	srv.RegisterOnShutdown(s.StopStreams)
+	return srv
+}
+
+// ServeLocal serves the LocalListen face on ln (a loopback listener) until
+// ctx is done. Serve runs the background loops; this only answers requests.
+func (s *Server) ServeLocal(ctx context.Context, ln net.Listener) error {
+	if s.local == nil {
+		return errors.New("httpapi: no local listen address configured")
+	}
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok || !addr.IP.IsLoopback() {
+		return errors.New("httpapi: the local listener must be loopback")
+	}
+	srv := s.httpServer(s.local)
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Serve(ln) }()
+	select {
+	case err := <-errc:
+		return err
+	case <-ctx.Done():
+	}
+	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdown); err != nil {
+		_ = srv.Close()
+		return err
+	}
+	if err := <-errc; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+// Serve runs the HTTP server on ln until ctx is done, then shuts down
+// gracefully (in-flight requests get up to 10 seconds).
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	ln, err := s.guardListener(ln)
+	if err != nil {
+		return err
+	}
+	srv := s.httpServer(s.pub)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	sweepCtx, stopSweep := context.WithCancel(ctx)
@@ -364,7 +444,20 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 
 type ctxKey int
 
-const requestIDKey ctxKey = 1
+const (
+	requestIDKey ctxKey = 1
+	// faceKey carries the *face of the listener a connection arrived on.
+	faceKey ctxKey = 2
+)
+
+// faceOf is the face of r's listener (the public one for a handler used
+// without Serve, as in tests).
+func (s *Server) faceOf(r *http.Request) *face {
+	if f, ok := r.Context().Value(faceKey).(*face); ok && f != nil {
+		return f
+	}
+	return s.pub
+}
 
 func newRequestID() string {
 	var b [12]byte
@@ -417,7 +510,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("Cross-Origin-Opener-Policy", "same-origin")
 	h.Set("Cross-Origin-Resource-Policy", "same-origin")
-	if s.tls != nil {
+	if s.faceOf(r).tls != nil {
 		h.Set("Strict-Transport-Security", hstsValue)
 	}
 	route := "static"
@@ -430,7 +523,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.log.Info("http", "request_id", rid, "method", r.Method, "route", route, "status", rec.status, "duration_ms", time.Since(start).Milliseconds())
 	}()
-	if !s.hosts[strings.ToLower(r.Host)] {
+	if !s.faceOf(r).hosts[strings.ToLower(r.Host)] {
 		route = "host_rejected"
 		writeError(rec, r, http.StatusForbidden, "HOST_REJECTED", "host is not allowed", false)
 		return

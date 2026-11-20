@@ -121,7 +121,7 @@ func acquireLocalHooks(ctx context.Context, approvedRoot, relative, dataRoot str
 	}
 	// Platform storage must be outside the selected project (and must not
 	// contain it), resolved through existing symlinked ancestors. It may lie
-	// elsewhere under the approved root: a personal installation keeps its
+	// elsewhere under the approved root: a service installation keeps its
 	// state under $HOME, which is itself a readable root. The copy below never
 	// leaves the project directory.
 	dataRoot, err = outsideSource(dataRoot, project)

@@ -18,7 +18,7 @@ const ReasonCredentialUnavailable = "model_credential_unavailable"
 // CredentialSchema is the schema_version of a CODEYE model credential.
 const CredentialSchema = "0.1"
 
-// Credential is CODEYE's model credential file (personal mode writes it to
+// Credential is CODEYE's model credential file (the service writes it to
 // <state>/secrets/model.json, mode 0600). Only the worker's model call reads
 // the key; it never travels in argv, the hello or a log.
 type Credential struct {

@@ -19,7 +19,7 @@ info:
     노드 경로(NodeBearer)는 cookie를 읽지 않고 CSRF를 쓰지 않으며 Origin header가 있으면 403으로 거부한다.
 servers:
   - url: http://127.0.0.1:7331
-    description: 개인 Native 모드의 제안 포트
+    description: codeye up의 기본 주소(loopback)
   - url: https://codeye.example
     description: TLS 수신(--tls-cert, --tls-key, --public-origin)의 예. 실제 주소는 운영자가 정한다.
 security:
@@ -245,13 +245,16 @@ paths:
         않으므로 응답의 source_status는 declared_unverified다. 허가되지 않은 root와 없는 provider는 같은 404다.
         ssh/scp/git:// URL은 422 SOURCE_UNSUPPORTED, attachment_ids가 있으면 422 ATTACHMENTS_UNSUPPORTED다.
         git source의 branch를 비우면 저장소의 기본 브랜치를 쓴다(이름은 스냅샷에 기록한다).
-        analysis는 프로젝트의 분석 선택이며 없으면 source 종류의 기본값(AnalysisChoices)이다. 개인 모드 노드(--project-analysis-policy)가
-        따르고, 서버 모드 노드는 source root별 운영자 허가를 쓴다.
-        개인 모드 controller(serve --personal)만 source 대신 local_path(절대 폴더 경로)를 받는다. 경로를 symlink까지
-        풀어 사용자에게 허가된 가장 긴 source root 아래 상대 경로로 바꾸고, 없거나 폴더가 아니면 422 FOLDER_NOT_FOUND,
-        어느 root에도 없으면 422 FOLDER_NOT_READABLE, 상태·백업 디렉터리를 담거나 그 안이면 422 FOLDER_HOLDS_CODEYE_DATA,
-        상대 경로로 쓸 수 없는 이름이면 422 FOLDER_NAME_UNSUPPORTED다. 서버 모드의 local_path는 422 LOCAL_PATH_UNSUPPORTED다.
-        개인 모드에서 같은 source의 프로젝트가 이미 있으면 새로 만들지 않고 그 프로젝트를 200으로 돌려준다.
+        analysis는 프로젝트의 분석 선택이며 없으면 source 종류의 기본값(AnalysisChoices)이다. 프로젝트 선택을 따르는 노드
+        (--project-analysis-policy, codeye up이 띄운 노드)는 이 선택과 서비스가 run을 시작한 사용자에게 허용한 범위(Job.offered)를 함께 따르고,
+        따로 띄운 노드는 운영자 플래그를 상한으로 둔다.
+        source 대신 local_path(서버의 절대 폴더 경로)를 줄 수 있다. 사용자에게 허가된(개별 허가 또는 모두에게 연) 폴더가 하나라도
+        있어야 한다. 경로를 symlink까지 풀어 가장 긴 허가 root 아래 상대 경로로 바꾸고, 없거나 폴더가 아니면 422 FOLDER_NOT_FOUND,
+        허가된 폴더가 없으면 422 LOCAL_PATH_NOT_ALLOWED, 어느 허가 root에도 없으면 422 FOLDER_NOT_READABLE,
+        상태·백업 디렉터리를 담거나 그 안이면 422 FOLDER_HOLDS_CODEYE_DATA, 상대 경로로 쓸 수 없는 이름이면 422
+        FOLDER_NAME_UNSUPPORTED다. 이 경로 오류의 error.details.readable_folders는 사용자가 읽을 수 있는 폴더 목록이다.
+        open_existing(local_path는 기본 true, source는 기본 false)이 true이고 사용자가 볼 수 있는 같은 source의 프로젝트가 있으면
+        새로 만들지 않고 그 프로젝트를 200으로 돌려준다.
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
       requestBody:
@@ -268,7 +271,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Project'}
         '200':
-          description: 개인 모드에서 같은 source의 기존 프로젝트(새로 만들지 않음)
+          description: open_existing일 때 같은 source의 기존 프로젝트(새로 만들지 않음)
           headers:
             Location: {schema: {type: string}}
           content:
@@ -285,9 +288,9 @@ paths:
         같은 actor·project·Idempotency-Key와 같은 body(정규화 JSON digest)는 같은 run을 202로 반환한다.
         다른 body는 409 IDEMPOTENCY_CONFLICT. viewer는 403, 프로젝트 비구성원은 404다.
         worker가 없는 빌드에서 run은 queued에 머문다.
-        pull_request가 있으면(개인 모드, github.com 저장소 프로젝트) controller가 GitHub API로 base/head SHA, head 저장소,
+        pull_request가 있으면(github.com 저장소 프로젝트) controller가 run을 시작하는 사용자의 token(없으면 익명)으로 GitHub API로 base/head SHA, head 저장소,
         변경 파일과 변경 줄을 확인해 run에 한 번 고정한다(docs/GITHUB.md#pull-request-분석). idempotency 비교는 보낸 body로만 한다.
-        서버 모드·다른 host의 프로젝트는 422 PULL_REQUEST_UNSUPPORTED, GitHub이 보여 주지 않는 pull request는 422
+        오프라인 모드·다른 host의 프로젝트는 422 PULL_REQUEST_UNSUPPORTED, GitHub이 보여 주지 않는 pull request는 422
         PULL_REQUEST_NOT_FOUND, 거부된 token은 422 GITHUB_TOKEN_REFUSED, 권한 없음은 422 GITHUB_FORBIDDEN,
         rate limit은 503 GITHUB_RATE_LIMITED(retryable), 연결 실패는 502 GITHUB_UNAVAILABLE이다.
       parameters:
@@ -470,16 +473,65 @@ paths:
       operationId: getSetup
       x-codeye-status: implemented
       description: >-
-        첫 화면이 쓰는 설치 정보. 개인 모드(mode personal)는 설정된 모델(키는 없다)과 마지막 확인 결과, git과 Git host,
-        경로로 분석할 수 있는 폴더(readable_folders), 찾은 도구(<state>/tools.json, schemas/tools.schema.json)를 돌려준다.
-        서버 모드 controller는 노드마다 다른 이 정보를 모르므로 model, git, tools가 null이고 readable_folders가 비어 있다.
-        github는 codeye up이 찾은 GitHub 연결(token 유무·계정·출처)이며 token 자체는 싣지 않는다. 서버 모드와 이전 설정 요약은 null.
+        첫 화면이 쓰는 정보로, 로그인한 사용자마다 다르다. 이 사용자가 경로로 분석할 수 있는 폴더(readable_folders), 승인된 Git host,
+        자기 GitHub 연결(token은 싣지 않는다), 이 사용자의 프로젝트가 받는 분석 기본값(관리자 스위치 적용), 무엇을 쓸 수 있고
+        못 쓰면 왜인지(available), 설정된 모델(키는 없다)과 마지막 확인 결과, 찾은 도구를 돌려준다. 도구의 경로·힌트는 관리자에게만
+        보인다. state 디렉터리가 없는 controller(codeye serve)는 model과 tools를 모르므로 null이다.
       responses:
         '200':
           description: 설치 정보
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Setup'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/account/github:
+    get:
+      operationId: getAccountGitHub
+      x-codeye-status: implemented
+      description: 로그인한 사용자 자신의 github.com 연결. token은 돌려주지 않는다.
+      responses:
+        '200':
+          description: GitHub 연결
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountGitHub'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putAccountGitHub
+      x-codeye-status: implemented
+      description: >-
+        사용자 자신의 github.com token을 저장한다(서비스 계정만 읽는 state 디렉터리의 파일, 0600). 이 사용자가 시작한 run의
+        GitHub 호출(pull request 고정·댓글)과 Git fetch, 이 사용자의 미리보기가 이 token만 쓴다. 다른 사람의 run에는 쓰이지 않는다.
+        GitHub에 계정을 묻고, GitHub가 거절한 token은 저장하지 않는다(422 GITHUB_TOKEN_REFUSED). GitHub에 닿지 못하면 계정 없이 저장한다.
+        오프라인 모드나 state 디렉터리가 없는 controller는 422 GITHUB_TOKEN_UNAVAILABLE이다. token은 응답·로그·감사 detail에 남지 않는다.
+        감사 action account.github_token_set.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: {type: string, minLength: 8, maxLength: 512, writeOnly: true}
+      responses:
+        '200':
+          description: 저장한 뒤의 연결
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountGitHub'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: deleteAccountGitHub
+      x-codeye-status: implemented
+      description: 사용자 자신의 token을 지운다(없었어도 204). 그 뒤 이 사용자가 시작하는 run과 미리 보기는 공개 저장소만 읽는다. 감사 action account.github_token_removed.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '204': {description: 지움}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/runs/{run_id}/report:
     parameters:
@@ -555,7 +607,7 @@ paths:
       x-codeye-status: implemented
       description: >-
         프로젝트 읽기 권한(viewer 포함, 비구성원 404)으로 pull request run이 남기는(또는 남길) 결과 댓글을 게시하지 않고 렌더링한다.
-        보고서 revision(기본 최신)으로 만들고, 개인 모드에서는 GitHub에 현재 head를 물어 head가 바뀌었으면 그 사실을 적는다.
+        보고서 revision(기본 최신)으로 만들고, 요청한 사용자의 연결로 GitHub에 현재 head를 물어(오프라인 모드는 묻지 않는다) head가 바뀌었으면 그 사실을 적는다.
         pull request run이 아니면 404 NOT_A_PULL_REQUEST_RUN이다(docs/GITHUB.md#결과-댓글).
       parameters:
         - {name: revision, in: query, schema: {type: integer, minimum: 1, maximum: 1000000}}
@@ -1017,7 +1069,7 @@ paths:
     get:
       operationId: adminListSourceRoots
       x-codeye-status: implemented
-      description: 모든 source root와 허가 받은 사용자. 서버 경로는 반환하지 않는다. root 등록은 운영자 CLI(codeye source-root add)다.
+      description: 모든 source root(서버 경로, 모두에게 열렸는지)와 허가 받은 사용자. 관리자만 경로를 본다.
       responses:
         '200':
           description: source root 목록
@@ -1028,26 +1080,61 @@ paths:
                 additionalProperties: false
                 required: [items]
                 properties:
-                  items:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: false
-                      required: [id, label, created_at, grants]
-                      properties:
-                        id: {type: string, format: uuid}
-                        label: {type: string}
-                        created_at: {type: string, format: date-time}
-                        grants:
-                          type: array
-                          items:
-                            type: object
-                            additionalProperties: false
-                            required: [user_id, username, granted_at]
-                            properties:
-                              user_id: {type: string, format: uuid}
-                              username: {type: [string, 'null']}
-                              granted_at: {type: string, format: date-time}
+                  items: {type: array, items: {$ref: '#/components/schemas/AdminSourceRoot'}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: adminAddSourceRoot
+      x-codeye-status: implemented
+      description: >-
+        서버의 폴더(예: NFS mount)를 허가 목록에 더한다. 절대 경로이고 있어야 하며(422 FOLDER_NOT_FOUND) CODEYE 데이터 디렉터리
+        안이면 안 된다(422 FOLDER_HOLDS_CODEYE_DATA). 같은 경로나 이름이 있으면 409 CONFLICT. label을 비우면 폴더 이름이다.
+        everyone이 true면 모든 사용자에게 연다. 감사 action source_root.added(와 source_root.everyone_set).
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [path]
+              properties:
+                path: {type: string, minLength: 1, maxLength: 4096}
+                label: {type: string, maxLength: 100}
+                everyone: {type: boolean, default: false}
+      responses:
+        '201':
+          description: 더한 root
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminSourceRoot'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/source-roots/{source_root_id}/everyone:
+    parameters:
+      - {name: source_root_id, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: adminSetSourceRootEveryone
+      x-codeye-status: implemented
+      description: >-
+        root를 모든 사용자에게 열거나 닫는다(사용자별 허가는 그대로). 닫으면 허가 없는 사용자의 새 등록과 배정 시점 확인이 실패한다.
+        없는 root 404. 감사 action source_root.everyone_set.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [everyone]
+              properties:
+                everyone: {type: boolean}
+      responses:
+        '204': {description: 바뀜}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/admin/source-roots/{source_root_id}/grants/{user_id}:
     parameters:
@@ -1077,7 +1164,7 @@ paths:
     get:
       operationId: adminListProviders
       x-codeye-status: implemented
-      description: 등록된 Git provider. 등록은 운영자 CLI(codeye provider add)다.
+      description: 등록된 Git provider.
       responses:
         '200':
           description: provider 목록
@@ -1088,17 +1175,76 @@ paths:
                 additionalProperties: false
                 required: [items]
                 properties:
-                  items:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: false
-                      required: [id, kind, host, api_url]
-                      properties:
-                        id: {type: string, format: uuid}
-                        kind: {enum: [github, ghes]}
-                        host: {type: string}
-                        api_url: {type: [string, 'null']}
+                  items: {type: array, items: {$ref: '#/components/schemas/AdminProvider'}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: adminAddProvider
+      x-codeye-status: implemented
+      description: >-
+        HTTPS Git host를 승인한다(github.com이면 github, 그 밖은 GitHub Enterprise Server인 ghes). 이미 있으면 200, 새로 더하면 201.
+        host 형식이 틀리면 422 VALIDATION_FAILED. 감사 action provider.added. 승인된 host의 Git 주소는 모든 사용자가 쓸 수 있다.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [host]
+              properties:
+                host: {type: string, minLength: 1, maxLength: 253}
+      responses:
+        '201':
+          description: 새로 승인함
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminProvider'}
+        '200':
+          description: 이미 승인되어 있음
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminProvider'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/settings:
+    get:
+      operationId: adminGetSettings
+      x-codeye-status: implemented
+      description: 서비스 스위치와 다른 사람에게 알려 줄 이 서비스의 주소.
+      responses:
+        '200':
+          description: 서비스 설정
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ServiceSettings'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: adminPutSettings
+      x-codeye-status: implemented
+      description: >-
+        스위치를 바꾼다(적어도 하나). others_model_review(기본 true)는 관리자가 아닌 사용자가 시작한 run에 모델 검토를,
+        others_build_scripts(기본 false)는 그 run의 저장소 빌드 스크립트 실행을 허용한다. 관리자가 시작한 run은 영향이 없다.
+        다음 배정부터 적용된다. 바뀐 값이 있을 때만 감사 action service.settings_set을 남긴다.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                others_model_review: {type: boolean}
+                others_build_scripts: {type: boolean}
+      responses:
+        '200':
+          description: 바뀐 뒤의 설정
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ServiceSettings'}
         default: {$ref: '#/components/responses/Error'}
   /api/v1/audit:
     get:
@@ -1659,7 +1805,7 @@ components:
         프로젝트의 분석 선택. send_source_to_model은 설정된 모델이 이 프로젝트의 소스를 읽어도 되는지,
         run_build_scripts는 저장소 코드를 실행하는 분석기(build script, cargo check 등)를 돌려도 되는지다.
         기록이 없으면 send_source_to_model은 true, run_build_scripts는 로컬 폴더에서 true이고 Git 저장소에서 false다
-        (남의 저장소 build script를 묻지 않고 실행하지 않는다). 개인 모드 노드가 따른다.
+        (남의 저장소 build script를 묻지 않고 실행하지 않는다). 프로젝트 선택을 따르는 노드(codeye up이 띄운 노드)가 서비스 스위치와 함께 따른다.
         fetch_dependencies는 분석 전에 모듈 의존성을 레지스트리에서 받아도 되는지이며 선택 필드다.
         없으면 true이고 false일 때만 저장한다. 노드 운영자 스위치(--dependency-fetch)도 켜져 있어야 하며
         이것은 모든 노드에서 같다(docs/ARCHITECTURE.md#의존성-준비).
@@ -1673,14 +1819,15 @@ components:
     ProjectCreate:
       type: object
       additionalProperties: false
-      description: source와 local_path 중 정확히 하나. local_path는 개인 모드 controller만 받는다.
+      description: source와 local_path 중 정확히 하나. local_path는 허가된 폴더가 있는 사용자만 쓸 수 있다.
       oneOf:
         - required: [source]
         - required: [local_path]
       properties:
         name: {type: string, minLength: 1, maxLength: 200}
         source: {$ref: '#/components/schemas/Source'}
-        local_path: {type: string, minLength: 2, maxLength: 4096, pattern: '^/', description: 이 머신의 절대 폴더 경로(개인 모드)}
+        local_path: {type: string, minLength: 2, maxLength: 4096, pattern: '^/', description: 서버 머신의 절대 폴더 경로}
+        open_existing: {type: boolean, description: '같은 source의 기존 프로젝트를 연다(200). 기본은 local_path true, source false'}
         analysis: {$ref: '#/components/schemas/AnalysisChoices'}
         description: {type: string, maxLength: 20000}
         attachment_ids: {type: array, maxItems: 0, items: {type: string}, description: 미지원. 비어 있지 않으면 422}
@@ -1924,6 +2071,10 @@ components:
         - scheduler.artifact_quota_set
         - storage.retention_applied
         - attempt.stale_rejected
+        - source_root.everyone_set
+        - service.settings_set
+        - account.github_token_set
+        - account.github_token_removed
     AuditEvent:
       type: object
       additionalProperties: false
@@ -1936,7 +2087,7 @@ components:
         actor_username: {type: [string, 'null']}
         actor_node_id: {type: [string, 'null'], format: uuid}
         action: {$ref: '#/components/schemas/AuditAction'}
-        target_type: {type: [string, 'null'], enum: [user, session, project, run, report, finding_review, schedule, source_root, provider, node, enrollment_token, pool, scheduler, attempt, null]}
+        target_type: {type: [string, 'null'], enum: [user, session, project, run, report, finding_review, schedule, source_root, provider, node, enrollment_token, pool, scheduler, attempt, service, null]}
         target_id: {type: [string, 'null']}
         project_id: {type: [string, 'null'], format: uuid}
         request_id: {type: [string, 'null'], pattern: '^req_[0-9a-f]{24}$', description: 그 요청의 X-Request-ID. CLI·시스템 기록은 null}
@@ -1957,11 +2108,12 @@ components:
     Setup:
       type: object
       additionalProperties: false
-      required: [mode, model, git, readable_folders, analysis_defaults, tools]
+      required: [is_admin, service_origin, model, git, readable_folders, analysis_defaults, available, tools, github, offline]
       properties:
-        mode: {enum: [personal, server]}
+        is_admin: {type: boolean}
+        service_origin: {type: [string, 'null'], description: '다른 사람에게 알려 줄 주소(공개 origin). loopback에서만 들으면 null'}
         model:
-          description: 개인 모드의 리뷰 모델. 서버 모드는 null
+          description: codeye up이 기록한 리뷰 모델. 기록이 없으면(state 디렉터리 없는 controller, 아직 시작 전) null
           oneOf:
             - type: 'null'
             - type: object
@@ -1972,44 +2124,116 @@ components:
                 id: {type: [string, 'null'], description: PROVIDER/MODEL}
                 probe: {enum: [verified, failed, not_probed, null], description: 이 설정으로 한 마지막 codeye model probe}
         git:
-          description: 개인 모드에서 git 실행 파일과 허용 host. 설정 요약이 아직 없거나 서버 모드면 null
-          oneOf:
-            - type: 'null'
-            - type: object
-              additionalProperties: false
-              required: [available, hosts]
-              properties:
-                available: {type: boolean}
-                hosts: {type: array, items: {type: string}}
-        readable_folders: {type: array, items: {type: string}, description: 개인 모드 사용자가 경로로 분석할 수 있는 폴더(허가된 source root 경로)}
+          description: 승인된 Git host(providers)와, codeye up이 기록한 git 실행 파일이 있는지(기록이 없으면 있다고 본다)
+          type: object
+          additionalProperties: false
+          required: [available, hosts]
+          properties:
+            available: {type: boolean, description: git이 있고 승인된 host가 하나 이상}
+            hosts: {type: array, items: {type: string}}
+        readable_folders: {type: array, items: {type: string}, description: 이 사용자가 경로로 분석할 수 있는 서버 폴더(개별 허가 또는 모두에게 연 source root 경로)}
         analysis_defaults:
           type: object
           additionalProperties: false
           required: [local, git]
-          description: 분석 선택을 기록하지 않은 프로젝트의 기본값. 로컬 폴더는 모두 true, Git 저장소는 run_build_scripts만 false다(fetch_dependencies는 둘 다 true)
+          description: >-
+            이 사용자의 새 프로젝트가 받는 기본 선택. 로컬 폴더는 모두 true, Git 저장소는 run_build_scripts만 false이고, 관리자 스위치가
+            허용하지 않는 것(관리자가 아닌 사용자의 모델 검토·빌드 스크립트)은 false다
           properties:
             local: {$ref: '#/components/schemas/AnalysisChoices'}
             git: {$ref: '#/components/schemas/AnalysisChoices'}
+        available:
+          type: object
+          additionalProperties: false
+          description: 이 사용자가 쓸 수 있는지와, 못 쓰면 이유
+          required: [git_url, local_path, pull_requests, github_token, model_review, build_scripts, fetch_dependencies]
+          properties:
+            git_url: {$ref: '#/components/schemas/SetupAvailable'}
+            local_path: {$ref: '#/components/schemas/SetupAvailable'}
+            pull_requests: {$ref: '#/components/schemas/SetupAvailable'}
+            github_token: {$ref: '#/components/schemas/SetupAvailable'}
+            model_review: {$ref: '#/components/schemas/SetupAvailable'}
+            build_scripts: {$ref: '#/components/schemas/SetupAvailable'}
+            fetch_dependencies: {$ref: '#/components/schemas/SetupAvailable'}
         tools:
-          description: 개인 모드가 찾은 도구(schemas/tools.schema.json). 아직 없거나 서버 모드면 null
+          description: 찾은 도구(schemas/tools.schema.json). 관리자가 아니면 경로·힌트·출처를 지운다. 기록이 없으면 null
           type: [object, 'null']
         github:
           description: >-
-            개인 모드의 GitHub 연결. enabled는 설정 github.enabled, token은 저장된 token이 있는지, account는 그 token의 계정(GitHub에
-            닿지 못하면 null), source는 GH_TOKEN·GITHUB_TOKEN·gh 중 출처, reason은 token이 없거나 계정을 모르는 이유(no_token, offline_mode(오프라인 모드, enabled false),
-            token_refused, github_unavailable 등)다. 서버 모드와 이전 설정 요약은 null
-          oneOf:
-            - type: 'null'
-            - type: object
-              additionalProperties: false
-              required: [enabled, host, token, account, source, reason]
-              properties:
-                enabled: {type: boolean}
-                host: {type: string}
-                token: {type: boolean}
-                account: {type: [string, 'null']}
-                source: {enum: [GH_TOKEN, GITHUB_TOKEN, gh, null]}
-                reason: {type: [string, 'null']}
+            이 사용자 자신의 GitHub 연결(token은 싣지 않는다). enabled는 이 서비스가 token을 저장할 수 있는지, token은 저장된 token이 있는지,
+            account는 그 token의 계정(모르면 null), source는 web(계정 화면에 붙여 넣음) 또는 서비스를 띄운 관리자의 GH_TOKEN·GITHUB_TOKEN·gh,
+            reason은 enabled가 false인 이유(offline_mode, no_state_dir)다
+          type: object
+          additionalProperties: false
+          required: [enabled, host, token, account, source, reason]
+          properties:
+            enabled: {type: boolean}
+            host: {type: string}
+            token: {type: boolean}
+            account: {type: [string, 'null']}
+            source: {enum: [web, GH_TOKEN, GITHUB_TOKEN, gh, null]}
+            reason: {type: [string, 'null']}
+        offline: {type: boolean, description: 오프라인 모드(GitHub 호출 없음)}
+    SetupAvailable:
+      type: object
+      additionalProperties: false
+      required: [available, reason]
+      properties:
+        available: {type: boolean}
+        reason:
+          description: >-
+            쓸 수 없는 이유. no_git_host(승인된 host가 없거나 git이 없음), no_allowed_folder(허가된 폴더 없음), offline(오프라인 모드),
+            no_state_dir(token을 저장할 곳이 없음), not_offered(관리자 스위치), model_not_configured, node_disabled(노드가 끔), unknown(기록 없음)
+          enum: [no_git_host, no_allowed_folder, offline, no_state_dir, not_offered, model_not_configured, node_disabled, unknown, null]
+    AccountGitHub:
+      type: object
+      additionalProperties: false
+      required: [host, connected, account, source, storable, reason]
+      properties:
+        host: {type: string}
+        connected: {type: boolean, description: 이 사용자의 token이 저장되어 있다}
+        account: {type: [string, 'null'], description: token의 GitHub 계정(모르면 null)}
+        source: {enum: [web, GH_TOKEN, GITHUB_TOKEN, gh, null]}
+        storable: {type: boolean, description: 이 서비스가 token을 저장할 수 있다}
+        reason: {enum: [offline_mode, no_state_dir, null]}
+    AdminSourceRoot:
+      type: object
+      additionalProperties: false
+      required: [id, label, path, everyone, created_at, grants]
+      properties:
+        id: {type: string, format: uuid}
+        label: {type: string}
+        path: {type: string, description: 서버의 절대 경로(관리자에게만)}
+        everyone: {type: boolean, description: 모든 사용자에게 열림}
+        created_at: {type: string, format: date-time}
+        grants:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [user_id, username, granted_at]
+            properties:
+              user_id: {type: string, format: uuid}
+              username: {type: [string, 'null']}
+              granted_at: {type: string, format: date-time}
+    AdminProvider:
+      type: object
+      additionalProperties: false
+      required: [id, kind, host, api_url]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {enum: [github, ghes]}
+        host: {type: string}
+        api_url: {type: [string, 'null']}
+    ServiceSettings:
+      type: object
+      additionalProperties: false
+      required: [others_model_review, others_build_scripts, updated_at, service_origin]
+      properties:
+        others_model_review: {type: boolean, description: '"다른 사용자도 모델 검토 사용"(기본 true)'}
+        others_build_scripts: {type: boolean, description: '"다른 사용자의 저장소 빌드 스크립트 실행 허용"(기본 false)'}
+        updated_at: {type: string, format: date-time}
+        service_origin: {type: [string, 'null'], description: '다른 사람에게 알려 줄 주소. loopback에서만 들으면 null'}
     PullRequestRef:
       type: object
       additionalProperties: false
@@ -2338,16 +2562,28 @@ components:
         scope: {$ref: '#/components/schemas/Scope'}
         analysis:
           $ref: '#/components/schemas/AnalysisChoices'
-          description: 프로젝트의 분석 선택(기본값 적용). --project-analysis-policy 노드가 따른다. 이전 controller는 보내지 않는다.
+          description: 프로젝트의 분석 선택(기본값 적용). --project-analysis-policy 노드가 따르고, 다른 노드는 자기 root별 허가를 상한으로 둔다. 이전 controller는 보내지 않는다.
+        offered:
+          type: object
+          required: [model_review, build_scripts]
+          description: 서비스가 이 run을 시작한 사용자에게 허용하는 분석. 관리자가 시작한 run은 둘 다 true이고, 다른 사용자의 run은 관리자의 서비스 설정을 따른다. 없으면(이전 controller) 모두 허용이다.
+          properties:
+            model_review: {type: boolean}
+            build_scripts: {type: boolean}
+        git_credential_user:
+          type: string
+          format: uuid
+          description: run을 시작한 사용자(예약 run은 예약을 만든 사용자). 사용자별 Git credential 디렉터리를 쓰는 노드는 이 사용자의 token으로만 받는다.
         source:
           oneOf:
             - type: object
               required: [kind, source_root_id, relative_path]
-              description: 노드는 source_root_id를 자신의 비공개 경로 설정으로 해석한다. 서버는 경로를 보내지 않는다.
+              description: 노드는 source_root_id를 자신의 비공개 경로 설정으로 해석한다. root_path는 source:controller 능력을 알린 노드(같은 머신의 codeye up 에이전트)에만 보낸다.
               properties:
                 kind: {const: local}
                 source_root_id: {type: string, format: uuid}
                 relative_path: {type: string}
+                root_path: {type: string, description: source root의 서버 경로(source:controller 노드에만)}
             - type: object
               required: [kind, repository_url, host]
               properties:

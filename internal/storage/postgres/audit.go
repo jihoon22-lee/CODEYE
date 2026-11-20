@@ -40,7 +40,11 @@ const (
 	AuditSourceRootAdded       = "source_root.added"
 	AuditSourceRootGranted     = "source_root.granted"
 	AuditSourceRootRevoked     = "source_root.grant_revoked"
+	AuditSourceRootEveryone    = "source_root.everyone_set"
 	AuditProviderAdded         = "provider.added"
+	AuditServiceSettingsSet    = "service.settings_set"
+	AuditGitHubTokenSet        = "account.github_token_set"
+	AuditGitHubTokenRemoved    = "account.github_token_removed"
 	AuditProjectRegistered     = "project.registered"
 	AuditProjectRevised        = "project.revised"
 	AuditMemberSet             = "project.member_set"
@@ -81,6 +85,7 @@ var auditDetailKeys = map[string]bool{
 	"run_id": true, "protocol_version": true, "os": true, "arch": true,
 	"link_issued_by": true, "link_purpose": true, "pull_request": true,
 	"artifacts_removed": true, "bytes_removed": true, "older_than_days": true,
+	"everyone": true, "others_model_review": true, "others_build_scripts": true, "login": true,
 }
 
 const maxAuditString = 200
@@ -121,7 +126,7 @@ type Principal struct {
 	operator bool
 }
 
-// OperatorPrincipal is the operator CLI (and personal-mode start).
+// OperatorPrincipal is the operator CLI (and service start).
 func OperatorPrincipal() Principal { return Principal{operator: true} }
 
 // UserPrincipal is a signed-in user acting through the API.
@@ -302,7 +307,8 @@ var auditActions = map[string]bool{
 	AuditFindingReviewRecorded: true, AuditScheduleCreated: true, AuditScheduleUpdated: true, AuditScheduleDeleted: true,
 	AuditEnrollTokenCreated: true, AuditEnrollTokenRevoked: true, AuditNodeEnrolled: true, AuditNodeRevoked: true,
 	AuditPoolPolicySet: true, AuditSchedulerLimitsSet: true, AuditArtifactQuotaSet: true, AuditStaleRejected: true,
-	AuditRecoveryConfirmed: true, AuditRetentionApplied: true,
+	AuditRecoveryConfirmed: true, AuditRetentionApplied: true, AuditSourceRootEveryone: true, AuditServiceSettingsSet: true,
+	AuditGitHubTokenSet: true, AuditGitHubTokenRemoved: true,
 }
 
 // AuditActions lists the closed action vocabulary.

@@ -11,7 +11,6 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 const SETUP = {
-  mode: 'personal',
   model: { configured: false, id: null, probe: null },
   git: { available: true, hosts: ['github.com'] },
   readable_folders: ['/home/me'],

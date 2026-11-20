@@ -531,7 +531,7 @@ func runnable(ctx context.Context, tx pgx.Tx, c candidate) (bool, error) {
 	}
 	if c.source.Kind == domain.SourceLocal {
 		var granted bool
-		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM source_root_grants WHERE source_root_id=$1 AND user_id=$2)", c.source.SourceRootID, c.actorID).Scan(&granted); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT "+rootAllowedSQL("$1", "$2"), c.source.SourceRootID, c.actorID).Scan(&granted); err != nil {
 			return false, err
 		}
 		return granted, nil

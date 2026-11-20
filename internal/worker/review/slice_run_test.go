@@ -570,6 +570,11 @@ func TestSliceSecretGating(t *testing.T) {
 		if r := h.Run(t.Context(), off, inv, nil); r.Status != domain.TaskSkippedPolicy || r.Reason != "model_source_not_approved" {
 			t.Fatalf("not approved %+v", r)
 		}
+		// Withheld by the service's switch for the user who started the run.
+		off.ModelReviewWithheld = true
+		if r := h.Run(t.Context(), off, inv, nil); r.Status != domain.TaskSkippedPolicy || r.Reason != domain.ReasonModelReviewNotOffered {
+			t.Fatalf("withheld %+v", r)
+		}
 		// An unscreened run is not a gate: it too waits for review.scope.
 		if r := (Handler{Static: vetStub{}, Caller: f}).Run(t.Context(), j, inv, nil); r.Reason != reasonDependency {
 			t.Fatalf("unscreened %+v", r)

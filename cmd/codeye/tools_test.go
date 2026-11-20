@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
@@ -27,7 +27,7 @@ func toolsConfig(t *testing.T, agent string) (cfgPath, state string) {
 	}
 	q := func(s string) string { b, _ := json.Marshal(s); return string(b) }
 	body := `{"schema_version":"0.1","state_dir":` + q(state) + `,"database":{"mode":"external"},"source_roots":[{"label":"w","path":` + q(src) + `}],"agent":` + agent + `}`
-	cfgPath = filepath.Join(root, "personal.json")
+	cfgPath = filepath.Join(root, "config.json")
 	if err := os.WriteFile(cfgPath, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func stubDetection(t *testing.T) *toolfind.Explicit {
 	var seen toolfind.Explicit
 	old := detectTools
 	t.Cleanup(func() { detectTools = old })
-	detectTools = func(_ context.Context, cfg *personal.Config) toolfind.Result {
+	detectTools = func(_ context.Context, cfg *instance.Config) toolfind.Result {
 		seen = explicitTools(cfg)
 		res := toolfind.Result{SchemaVersion: toolfind.SchemaVersion}
 		for _, name := range toolfind.Names() {
@@ -126,7 +126,7 @@ func TestUseDetectedTools(t *testing.T) {
 		{Name: "ruff", Status: toolfind.Found, Path: "/d/ruff"},
 		{Name: "lizard", Status: toolfind.NotFound},
 	}}
-	cfg := &personal.Config{Agent: personal.Agent{Tools: map[string]string{"ruff": "/mine/ruff"}}}
+	cfg := &instance.Config{Agent: instance.Agent{Tools: map[string]string{"ruff": "/mine/ruff"}}}
 	useDetectedTools(cfg, res)
 	a := cfg.Agent
 	if a.Go != "/d/go" || a.GoModCache != "/h/mod" || a.Tools["ruff"] != "/mine/ruff" || a.Tools["node"] != "/d/node" || !a.PythonBothTypeCheckers {
@@ -136,13 +136,13 @@ func TestUseDetectedTools(t *testing.T) {
 		t.Fatal("a missing tool must not be set")
 	}
 	// The flags built from it satisfy the agent's own consistency rule.
-	args := agentArgv(&personal.Config{Agent: a, Listen: "127.0.0.1:7331", StateDir: "/s"}, personal.Layout{Root: "/s"}, nil, false)
+	args := agentArgv(&instance.Config{Agent: a, Listen: "127.0.0.1:7331", StateDir: "/s"}, instance.Layout{Root: "/s"}, nil, false)
 	if !slices.Contains(args, "--python-both-type-checkers") || !slices.Contains(args, "--mypy") || !slices.Contains(args, "--pyright") {
 		t.Fatalf("%q", args)
 	}
 	// agent.auto_detect false leaves the agent settings alone and writes nothing.
 	off := false
-	cfg2 := &personal.Config{StateDir: t.TempDir(), Agent: personal.Agent{AutoDetect: &off}}
+	cfg2 := &instance.Config{StateDir: t.TempDir(), Agent: instance.Agent{AutoDetect: &off}}
 	var out bytes.Buffer
 	if res, err := prepareTools(context.Background(), cfg2, &out); err != nil || len(res.Tools) != 0 || out.Len() != 0 || cfg2.Agent.Go != "" {
 		t.Fatalf("auto_detect false: %+v %v %q", res, err, out.String())
@@ -152,7 +152,7 @@ func TestUseDetectedTools(t *testing.T) {
 	}
 	// With detection on, prepareTools detects, records, prints and completes.
 	stubDetection(t)
-	cfg3 := &personal.Config{StateDir: t.TempDir(), Agent: personal.Agent{Tools: map[string]string{"ruff": "/mine/ruff"}}}
+	cfg3 := &instance.Config{StateDir: t.TempDir(), Agent: instance.Agent{Tools: map[string]string{"ruff": "/mine/ruff"}}}
 	out.Reset()
 	res3, err := prepareTools(context.Background(), cfg3, &out)
 	if err != nil || len(res3.Tools) != len(toolfind.Names()) || !strings.HasPrefix(out.String(), "TOOL") || cfg3.Agent.Tools["ruff"] != "/mine/ruff" {

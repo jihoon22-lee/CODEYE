@@ -162,6 +162,7 @@ var Korean = Locale{
 		"tool_unavailable":                 "지정된 분석 도구가 시작 검증·버전 확인을 통과하지 못해 실행하지 않았다.",
 		"analyzer_pack_missing":            "범위의 이 언어를 맡을 분석기가 이 빌드에 없다.",
 		"repository_code_not_allowed":      "저장소 코드 실행이 허가되지 않아 이 분석기를 실행하지 않았다.",
+		"repository_code_not_offered":      "이 서비스의 관리자가 다른 사용자의 빌드 스크립트 실행을 허용하지 않아 이 분석기를 실행하지 않았다.",
 		"document_too_large":               "문서가 문서당 읽기 한도보다 크다.",
 		"read_budget_exhausted":            "전체 읽기 예산을 다 써서 읽지 않았다.",
 		// Python dependency preparation (docs/ANALYZERS.md#python-의존성-받기).
@@ -326,6 +327,7 @@ var koSectionLabels = map[string]string{
 	"model_reason.no_documents":              "범위에 읽을 문서가 없어 역할을 생략했다",
 	"model_reason.no_tool_observations":      "해석할 도구 진단이 없어 역할을 생략했다",
 	"model_reason.model_source_not_approved": "이 소스의 모델 전송이 승인되지 않았다",
+	"model_reason.model_review_not_offered":  "이 서비스의 관리자가 다른 사용자의 모델 검토를 허용하지 않았다",
 	"model_reason.secret_screen_failed":      "비밀값 탐지 결과를 쓸 수 없어 모델에 코드를 보내지 않았다",
 	"evidence":                               "근거",
 	"evidence_none":                          "인용한 근거가 없다.",

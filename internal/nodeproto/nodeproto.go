@@ -200,14 +200,16 @@ type Lease struct {
 	RunVersion      int64     `json:"run_version"`
 }
 
-// JobSource is the declared source. For kind "local" only SourceRootID and
-// RelativePath are set (the agent maps the root ID to its own private path;
-// the controller never sends a filesystem path). For kind "git" only
-// RepositoryURL, Branch and Host are set.
+// JobSource is the declared source. For kind "local" SourceRootID and
+// RelativePath are set (the agent maps the root ID to its own private path);
+// RootPath, the root's server path, is sent only to a node that advertises
+// ControllerSourcesCapability. For kind "git" only RepositoryURL, Branch and
+// Host are set.
 type JobSource struct {
 	Kind          string `json:"kind"`
 	SourceRootID  string `json:"source_root_id,omitempty"`
 	RelativePath  string `json:"relative_path,omitempty"`
+	RootPath      string `json:"root_path,omitempty"`
 	RepositoryURL string `json:"repository_url,omitempty"`
 	Branch        string `json:"branch,omitempty"`
 	Host          string `json:"host,omitempty"`
@@ -223,6 +225,14 @@ type JobSnapshot struct {
 	SourceSHA      *string `json:"source_sha"`
 }
 
+// AnalysisOffer says which of a project's analysis choices the service
+// offers to its owner: administrators' projects get both; other users'
+// projects follow the service switches.
+type AnalysisOffer struct {
+	ModelReview  bool `json:"model_review"`
+	BuildScripts bool `json:"build_scripts"`
+}
+
 // Resources is the reservation the claim made for this attempt (admission
 // bookkeeping, not an OS limit).
 type Resources struct {
@@ -236,12 +246,23 @@ type Job struct {
 	Profile string       `json:"profile"`
 	Scope   domain.Scope `json:"scope"`
 	// Analysis are the project's analysis choices (defaults applied). A node
-	// started with --project-analysis-policy follows them; other nodes use
-	// their per-source-root grants. Absent from older controllers.
+	// started with --project-analysis-policy follows them; other nodes take
+	// their per-source-root grants as the upper bound. Absent from older
+	// controllers.
 	Analysis  *domain.AnalysisChoices `json:"analysis,omitempty"`
 	Source    JobSource               `json:"source"`
 	Snapshot  *JobSnapshot            `json:"snapshot"`
 	Resources Resources               `json:"resources"`
+	// Offered is what the service lets the run use (an administrator's
+	// run everything, another user's run the administrator's switches);
+	// nil from older controllers means everything. A node never allows more
+	// than its own configuration and the project's choices either.
+	Offered *AnalysisOffer `json:"offered,omitempty"`
+	// GitCredentialUser is the user who started the run (a scheduled run:
+	// the schedule's author). A node with a per-user Git
+	// credential directory fetches with that user's stored token only
+	// (docs/GITHUB.md#누구의-token인가), never another user's.
+	GitCredentialUser string `json:"git_credential_user,omitempty"`
 	// PullRequest is set only for a pull-request run of a Git source: the
 	// worker fetches its head commit and reviews its changed files first
 	// (docs/GITHUB.md). Absent for every other run.
@@ -485,9 +506,17 @@ func GitSourceCapability(host string) string { return "source:git:" + strings.To
 // MaxCapabilities bounds a heartbeat's capability list.
 const MaxCapabilities = 128
 
-// ValidCapability reports whether c is one of the three capability forms.
+// ControllerSourcesCapability is advertised by a node on the controller's
+// machine running as the same service account (the agent `codeye up`
+// starts, --controller-sources): it takes jobs for every source root and Git
+// host the controller approves, and the claim sends it the root's path.
+const ControllerSourcesCapability = "source:controller"
+
+// ValidCapability reports whether c is one of the capability forms.
 func ValidCapability(c string) bool {
 	switch {
+	case c == ControllerSourcesCapability:
+		return true
 	case strings.HasPrefix(c, "analysis:"):
 		return profilePattern.MatchString(strings.TrimPrefix(c, "analysis:"))
 	case strings.HasPrefix(c, "source:local:"):

@@ -72,7 +72,7 @@ test('password sign-in, admin-created user, forced password change', async ({ pa
 
   // Source-root grants, providers and the server audit log, against the real server.
   const adminTabs = page.getByRole('navigation', { name: '관리 화면' });
-  await adminTabs.getByRole('button', { name: '소스 루트', exact: true }).click();
+  await adminTabs.getByRole('button', { name: '폴더', exact: true }).click();
   await page.getByLabel('browser-fixture-root에 허가할 사용자').selectOption({ label: 'browser-newcomer' });
   await page.getByRole('button', { name: '허가', exact: true }).click();
   const revoke = page.getByRole('button', { name: 'browser-fixture-root에서 browser-newcomer의 허가 철회' });

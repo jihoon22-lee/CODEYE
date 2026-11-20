@@ -115,7 +115,7 @@ func settingsOf(v map[string]string) GoSettings {
 
 // Resolved is the tool configuration of the agent: the explicit settings
 // where there are any, otherwise what detection found. It maps one-to-one onto
-// the agent flags and the personal configuration fields.
+// the agent flags and the service configuration fields.
 type Resolved struct {
 	// Go is --go (agent.go).
 	Go string
@@ -133,7 +133,7 @@ type Resolved struct {
 	// where it handles git sources and the model.
 	Git      string
 	OpenCode string
-	// GH is the GitHub CLI personal mode asks for a token; it has no
+	// GH is the GitHub CLI the service asks for a token; it has no
 	// setting and no agent flag.
 	GH string
 	// Sources tells per tool name whether the value is SourceConfig or the
@@ -171,7 +171,7 @@ func Resolve(res Result, ex Explicit) Resolved {
 			r.Tools[name] = p
 		}
 	}
-	// A tool name this build does not know stays: the personal
+	// A tool name this build does not know stays: the service
 	// configuration rejects those before they get here.
 	for name, p := range ex.Tools {
 		if _, known := r.Tools[name]; !known && p != "" {

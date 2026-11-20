@@ -49,8 +49,11 @@ type Comment struct {
 // Request is one recorded request.
 type Request struct {
 	Method, Path string
-	// Authorized: the request carried "Authorization: Bearer <Token>".
+	// Authorized: the request carried "Authorization: Bearer <Token>" (or a
+	// token of Users).
 	Authorized bool
+	// Login is the account of the token the request carried ("" anonymous).
+	Login string
 }
 
 // Server is the fake API. Token is the accepted bearer token ("" accepts
@@ -59,6 +62,11 @@ type Server struct {
 	*httptest.Server
 	Token string
 	Login string
+	// Users are more accepted tokens and their accounts (token -> login).
+	Users map[string]string
+	// Private repositories ("owner/repo" -> the only login that may read
+	// it): their pull requests are 404 to anyone else, as GitHub answers.
+	Private map[string]string
 	// PerPage is the files and comments page size (default 100).
 	PerPage int
 	// Fail answers every request whose path has this prefix with FailStatus
@@ -155,11 +163,27 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// loginOf is the account of the request's bearer token ("" for none or
+// an unknown token).
+func (s *Server) loginOf(auth string) string {
+	token, ok := strings.CutPrefix(auth, "Bearer ")
+	if !ok || token == "" {
+		return ""
+	}
+	if s.Token != "" && token == s.Token {
+		return s.Login
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Users[token]
+}
+
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	auth := r.Header.Get("Authorization")
-	authorized := s.Token != "" && auth == "Bearer "+s.Token
+	login := s.loginOf(auth)
+	authorized := login != ""
 	s.mu.Lock()
-	s.requests = append(s.requests, Request{Method: r.Method, Path: r.URL.Path, Authorized: authorized})
+	s.requests = append(s.requests, Request{Method: r.Method, Path: r.URL.Path, Authorized: authorized, Login: login})
 	s.mu.Unlock()
 	if s.FailPrefix != "" && strings.HasPrefix(r.URL.Path, s.FailPrefix) {
 		if s.FailStatus == http.StatusTooManyRequests || strings.Contains(s.FailBody, "rate limit") {
@@ -180,21 +204,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Requires authentication"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"login": s.Login, "id": 42})
+		writeJSON(w, http.StatusOK, map[string]any{"login": login, "id": 42})
 	case len(parts) >= 5 && parts[0] == "repos" && parts[3] == "pulls":
-		s.servePull(w, r, parts[1]+"/"+parts[2], parts[4:])
+		s.servePull(w, r, parts[1]+"/"+parts[2], parts[4:], login)
 	case len(parts) == 6 && parts[0] == "repos" && parts[3] == "issues" && parts[5] == "comments":
 		n, _ := strconv.Atoi(parts[4])
-		s.serveComments(w, r, parts[1]+"/"+parts[2], n, authorized)
+		s.serveComments(w, r, parts[1]+"/"+parts[2], n, login)
 	case len(parts) == 6 && parts[0] == "repos" && parts[3] == "issues" && parts[4] == "comments" && r.Method == http.MethodPatch:
 		id, _ := strconv.ParseInt(parts[5], 10, 64)
-		s.updateComment(w, r, parts[1]+"/"+parts[2], id, authorized)
+		s.updateComment(w, r, parts[1]+"/"+parts[2], id, login)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
 	}
 }
 
-func (s *Server) servePull(w http.ResponseWriter, r *http.Request, repo string, rest []string) {
+func (s *Server) servePull(w http.ResponseWriter, r *http.Request, repo string, rest []string, login string) {
 	n, _ := strconv.Atoi(rest[0])
 	s.mu.Lock()
 	p := s.pulls[key(repo, n)]
@@ -203,7 +227,10 @@ func (s *Server) servePull(w http.ResponseWriter, r *http.Request, repo string, 
 		pr = *p
 	}
 	s.mu.Unlock()
-	if p == nil || r.Method != http.MethodGet {
+	s.mu.Lock()
+	reader, private := s.Private[strings.ToLower(repo)]
+	s.mu.Unlock()
+	if p == nil || r.Method != http.MethodGet || (private && reader != login) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
 		return
 	}
@@ -248,7 +275,8 @@ func (s *Server) commentJSON(repo string, c *Comment) map[string]any {
 	return map[string]any{"id": c.ID, "body": c.Body, "html_url": fmt.Sprintf("https://github.com/%s/pull/0#issuecomment-%d", repo, c.ID), "user": map[string]any{"login": c.Author, "id": 7}}
 }
 
-func (s *Server) serveComments(w http.ResponseWriter, r *http.Request, repo string, n int, authorized bool) {
+func (s *Server) serveComments(w http.ResponseWriter, r *http.Request, repo string, n int, login string) {
+	authorized := login != ""
 	s.mu.Lock()
 	_, known := s.pulls[key(repo, n)]
 	s.mu.Unlock()
@@ -288,7 +316,7 @@ func (s *Server) serveComments(w http.ResponseWriter, r *http.Request, repo stri
 		}
 		s.mu.Lock()
 		s.nextID++
-		c := &Comment{ID: s.nextID, Body: in.Body, Author: s.Login}
+		c := &Comment{ID: s.nextID, Body: in.Body, Author: login}
 		s.comments[key(repo, n)] = append(s.comments[key(repo, n)], c)
 		out := s.commentJSON(repo, c)
 		s.mu.Unlock()
@@ -298,7 +326,8 @@ func (s *Server) serveComments(w http.ResponseWriter, r *http.Request, repo stri
 	}
 }
 
-func (s *Server) updateComment(w http.ResponseWriter, r *http.Request, repo string, id int64, authorized bool) {
+func (s *Server) updateComment(w http.ResponseWriter, r *http.Request, repo string, id int64, login string) {
+	authorized := login != ""
 	if !authorized {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Requires authentication"})
 		return
@@ -318,7 +347,7 @@ func (s *Server) updateComment(w http.ResponseWriter, r *http.Request, repo stri
 		}
 		for _, c := range list {
 			if c.ID == id {
-				if c.Author != s.Login {
+				if c.Author != login {
 					writeJSON(w, http.StatusForbidden, map[string]string{"message": "Resource not accessible by integration"})
 					return
 				}

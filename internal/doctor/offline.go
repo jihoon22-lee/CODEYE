@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/github"
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
@@ -93,7 +93,7 @@ const (
 
 var postgresPrograms = []string{"initdb", "pg_ctl", "postgres", "pg_dump", "pg_restore", "psql"}
 
-func offlineSection(ctx context.Context, cfg *personal.Config, res toolfind.Result, menv personal.ModelEnv) *Offline {
+func offlineSection(ctx context.Context, cfg *instance.Config, res toolfind.Result, menv instance.ModelEnv) *Offline {
 	o := &Offline{Enabled: cfg.Offline, CABundle: CABundle{Status: "not_configured"}}
 	if cfg.CABundle != "" {
 		n, err := executor.CheckCABundle(cfg.CABundle)
@@ -109,10 +109,10 @@ func offlineSection(ctx context.Context, cfg *personal.Config, res toolfind.Resu
 	return o
 }
 
-func destinations(cfg *personal.Config, res toolfind.Result, menv personal.ModelEnv) []Destination {
+func destinations(cfg *instance.Config, res toolfind.Result, menv instance.ModelEnv) []Destination {
 	d := cfg.Agent.Dependencies
 	if d == nil {
-		d = &personal.Dependencies{}
+		d = &instance.Dependencies{}
 	}
 	detected := cfg.Agent.AutoDetectEnabled()
 	var gs toolfind.GoSettings
@@ -165,13 +165,13 @@ func destinations(cfg *personal.Config, res toolfind.Result, menv personal.Model
 	return append(out, modelDestination(cfg, menv))
 }
 
-// gitHubDestination is the GitHub API personal mode asks for the token's
+// gitHubDestination is the GitHub API the service asks for the token's
 // account, pull requests and result comments: none offline (no token is
 // looked up, github.com is no Git host), none when github.enabled is false.
-func gitHubDestination(cfg *personal.Config) Destination {
+func gitHubDestination(cfg *instance.Config) Destination {
 	switch {
 	case cfg.Offline:
-		return Destination{Kind: "github_api", Origin: "none", Reason: personal.GitHubOffline}
+		return Destination{Kind: "github_api", Origin: "none", Reason: instance.GitHubOffline}
 	case !cfg.GitHub.On():
 		return Destination{Kind: "github_api", Origin: "none", Reason: "github_disabled"}
 	}
@@ -179,9 +179,9 @@ func gitHubDestination(cfg *personal.Config) Destination {
 }
 
 // modelDestination resolves the model like the local agent's start.
-func modelDestination(cfg *personal.Config, menv personal.ModelEnv) Destination {
-	layout := personal.Layout{Root: cfg.StateDir}
-	m, err := personal.ResolveModel(cfg, layout, menv)
+func modelDestination(cfg *instance.Config, menv instance.ModelEnv) Destination {
+	layout := instance.Layout{Root: cfg.StateDir}
+	m, err := instance.ResolveModel(cfg, layout, menv)
 	switch {
 	case err != nil && cfg.Offline:
 		return Destination{Kind: "model_endpoint", Origin: "none", Reason: opencode.ReasonEndpointNotConfigured}
@@ -198,10 +198,10 @@ func modelDestination(cfg *personal.Config, menv personal.ModelEnv) Destination 
 	return Destination{Kind: "model_endpoint", Value: m.Provider(), Origin: "builtin_default"}
 }
 
-func findPostgres(ctx context.Context, cfg *personal.Config) Postgres {
+func findPostgres(ctx context.Context, cfg *instance.Config) Postgres {
 	pg := Postgres{Status: "not_found", Programs: []Program{}}
 	dir := ""
-	if b, err := personal.FindPostgres(ctx, personal.PostgresSearch{Config: cfg.Database.PostgresBinDir, Env: os.Getenv("CODEYE_POSTGRES_BIN_DIR"), PathEnv: os.Getenv("PATH")}); err == nil {
+	if b, err := instance.FindPostgres(ctx, instance.PostgresSearch{Config: cfg.Database.PostgresBinDir, Env: os.Getenv("CODEYE_POSTGRES_BIN_DIR"), PathEnv: os.Getenv("PATH")}); err == nil {
 		pg.Status, pg.Version, pg.Source, dir = "found", b.Version, b.Source, b.Dir
 	}
 	for _, name := range postgresPrograms {
@@ -235,7 +235,7 @@ var languageNeeds = []struct {
 	{"model", []string{"opencode"}, nil, "model_endpoint"},
 }
 
-func languages(cfg *personal.Config, res toolfind.Result, dests []Destination) []Language {
+func languages(cfg *instance.Config, res toolfind.Result, dests []Destination) []Language {
 	found := func(names string) bool {
 		for _, n := range strings.Split(names, "|") {
 			if t, ok := res.Tool(n); ok && t.Status == toolfind.Found {
@@ -311,7 +311,7 @@ func contains(s []string, v string) bool {
 
 // goSeed reports an operator module cache with downloaded modules (the
 // fetch reads it as its first proxy).
-func goSeed(cfg *personal.Config, res toolfind.Result) bool {
+func goSeed(cfg *instance.Config, res toolfind.Result) bool {
 	dir := cfg.Agent.GoModCache
 	if dir == "" && cfg.Agent.AutoDetectEnabled() {
 		dir = res.GoModCache

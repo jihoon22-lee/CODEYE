@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -165,17 +166,39 @@ func (ag *Agent) claimFor(w *workerProc, key string) {
 	}
 }
 
+// gitCredentialFor is the token file a Git fetch for user (who started the
+// run) reads: with a per-user credential directory that user's own file ("" for
+// an unusable ID, so the fetch is anonymous), else the agent's single
+// --git-credential-file.
+func (ag *Agent) gitCredentialFor(user string) string {
+	if ag.cfg.GitCredentialDir == "" {
+		return ag.cfg.GitCredentialFile
+	}
+	if !domain.ValidID(user) {
+		return ""
+	}
+	return filepath.Join(ag.cfg.GitCredentialDir, user+".json")
+}
+
 // buildJob resolves the job source from the agent's private configuration.
 func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 	l, j := att.lease, att.job
 	scope, _ := json.Marshal(j.Scope)
 	res, _ := json.Marshal(j.Resources)
 	job := &workerproto.Job{Attempt: workerproto.AttemptRef{ID: l.AttemptID, RunID: l.RunID, Epoch: l.LeaseEpoch}, Profile: j.Profile, Scope: scope, Resources: res, RunVersion: l.RunVersion, Source: workerproto.JobSource{Kind: j.Source.Kind}}
+	// The node's own upper bound: the operator's per-root grants, or
+	// everything under the project policy.
+	nodeModel, nodeCode := ag.cfg.ProjectAnalysisPolicy, ag.cfg.ProjectAnalysisPolicy
 	switch j.Source.Kind {
 	case "local":
-		job.AllowModelReview = ag.cfg.ModelSourceRoots[j.Source.SourceRootID]
-		job.AllowRepositoryCode = ag.cfg.RepositoryCodeSourceRoots[j.Source.SourceRootID]
+		nodeModel = nodeModel || ag.cfg.ModelSourceRoots[j.Source.SourceRootID]
+		nodeCode = nodeCode || ag.cfg.RepositoryCodeSourceRoots[j.Source.SourceRootID]
 		job.Source.ApprovedRoot = ag.cfg.SourceRoots[j.Source.SourceRootID]
+		if job.Source.ApprovedRoot == "" && ag.cfg.ControllerSources && filepath.IsAbs(j.Source.RootPath) {
+			// A root the administrator added in the web after this agent
+			// started: the controller on this machine names its path.
+			job.Source.ApprovedRoot = filepath.Clean(j.Source.RootPath)
+		}
 		job.Source.RelativePath = j.Source.RelativePath
 		job.Source.ProtectedDirs = ag.cfg.ProtectedDirs
 	case "git":
@@ -185,8 +208,12 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 				job.Source.AllowedHost = strings.ToLower(h)
 			}
 		}
+		if job.Source.AllowedHost == "" && ag.cfg.ControllerSources && j.Source.Host != "" {
+			job.Source.AllowedHost = strings.ToLower(j.Source.Host)
+		}
 		job.Source.RepositoryURL, job.Source.AllowedLocalRoot = testGitMirror(job.Source.RepositoryURL, job.Source.AllowedHost)
 		job.PullRequest = j.PullRequest
+		job.GitCredentialFile = ag.gitCredentialFor(j.GitCredentialUser)
 	}
 	// The project's own choices; a job from a controller that sends none
 	// gets the defaults.
@@ -194,16 +221,21 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 	if j.Analysis != nil {
 		choices = *j.Analysis
 	}
+	offer := nodeproto.AnalysisOffer{ModelReview: true, BuildScripts: true}
+	if j.Offered != nil {
+		offer = *j.Offered
+	}
 	// Fetching dependencies needs the operator's switch and the project's
 	// choice, on every node.
 	job.AllowDependencyFetch = ag.cfg.DependencyFetch && choices.FetchDependencies
-	if ag.cfg.ProjectAnalysisPolicy {
-		// The project's own choices decide the model and build scripts, for
-		// local and Git sources alike.
-		// Without a model the review handler records model_not_configured.
-		job.AllowModelReview = choices.SendSourceToModel
-		job.AllowRepositoryCode = choices.RunBuildScripts
-	}
+	// The model and build scripts need the node's bound, the project's
+	// choice and the service's offer. Without a model the review handler
+	// records model_not_configured.
+	job.AllowModelReview = nodeModel && choices.SendSourceToModel && offer.ModelReview
+	job.AllowRepositoryCode = nodeCode && choices.RunBuildScripts && offer.BuildScripts
+	// What only the service's offer took away is recorded with its own reason.
+	job.ModelReviewWithheld = nodeModel && choices.SendSourceToModel && !offer.ModelReview
+	job.RepositoryCodeWithheld = nodeCode && choices.RunBuildScripts && !offer.BuildScripts
 	if j.Snapshot != nil {
 		job.Snapshot = &workerproto.JobSnapshot{ID: j.Snapshot.ID, ManifestDigest: j.Snapshot.ManifestDigest, Root: ag.cache.get(j.Snapshot.ManifestDigest)}
 	}

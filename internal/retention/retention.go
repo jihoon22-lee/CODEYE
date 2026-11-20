@@ -1,6 +1,6 @@
 // Package retention finds and removes old node data: the snapshot copies
 // (data/acquire-*) and attempt workspaces (data/ws-*) an agent leaves in its
-// state directory, and the agent directories personal mode retired on
+// state directory, and the agent directories the service retired on
 // re-enrollment (agent.retired-*). It never touches the journal, the node
 // identity, caches or anything a report is read from. See
 // docs/OPERATIONS.md#보존-정리.

@@ -69,7 +69,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// per local source root, like the model-source grant; nothing in a run
 	// or its snapshot can raise it.
 	fs.Var(&codeRoots, "repo-code-source-root", "")
-	// Personal mode: each project's own analysis choices (send source to
+	// The service: each project's own analysis choices (send source to
 	// the model, run build scripts) decide instead of the two per-root grants.
 	projectPolicy := fs.Bool("project-analysis-policy", false, "")
 	// A local project folder holding one of these directories is refused.
@@ -83,9 +83,11 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	maxWorkers := fs.Int("max-workers", 2, "")
 	toolPath := fs.String("toolchain-path", "/usr/bin:/bin", "")
 	git := fs.String("git", "", "")
-	// A Git host token file (personal mode's GitHub token): workers read it
+	// A Git host token file (the service's GitHub token): workers read it
 	// for a fetch of its host; the token is never an argument.
 	gitCredential := fs.String("git-credential-file", "", "")
+	gitCredentialDir := fs.String("git-credential-dir", "", "")
+	controllerSources := fs.Bool("controller-sources", false, "")
 	goExe := fs.String("go", "", "")
 	goModCache := fs.String("go-mod-cache", "", "")
 	// Dependency fetching (docs/ARCHITECTURE.md#의존성-준비): the operator's
@@ -121,7 +123,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// mypy and pyright are alternative Python type checkers (docs/ANALYZERS.md#타입-검사기-선택):
 	// configuring both runs both only when the operator says so.
 	bothTypeCheckers := fs.Bool("python-both-type-checkers", false, "")
-	// Personal mode: take analysis work even without a usable baseline
+	// The service: take analysis work even without a usable baseline
 	// analyzer; the tasks of unusable tools are recorded unsupported.
 	advertiseAlways := fs.Bool("advertise-without-baseline", false, "")
 	fs.Var(&roots, "source-root", "")
@@ -218,6 +220,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		}
 	}
 	cfg.ProjectAnalysisPolicy = *projectPolicy
+	cfg.ControllerSources, cfg.GitCredentialDir = *controllerSources, *gitCredentialDir
 	for _, d := range protectedDirs {
 		if !filepath.IsAbs(d) {
 			fmt.Fprintln(stderr, "invalid --protected-dir; expected an absolute path")

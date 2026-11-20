@@ -13,7 +13,9 @@ test('real session, project registration, durable request and cancellation', asy
   expect(await page.content()).not.toContain(secret);
   await page.reload();
   await expect(page.getByRole('heading', { name: '프로젝트', exact: true })).toBeVisible();
-  await page.getByLabel('이름 (선택)').fill('browser-fixture');
+  // The start field leads; registering from a source root is folded under it.
+  await page.getByText('허용된 폴더(소스 루트)나 Git 공급자에서 골라 등록', { exact: true }).click();
+  await page.getByLabel('이름 (선택)', { exact: true }).fill('browser-fixture');
   await page.getByLabel('소스 루트', { exact: true }).selectOption({ label: 'browser-fixture-root' });
   await page.getByLabel('루트 아래 상대 경로').fill('.');
   await page.getByRole('button', { name: '프로젝트 등록', exact: true }).click();

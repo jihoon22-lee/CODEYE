@@ -5,12 +5,12 @@ GitHub.com은 소유자가 실제로 쓸 일급 대상이다. GitHub Enterprise 
 | 기능 | 상태 |
 |---|---|
 | 승인한 HTTPS 호스트의 Git 브랜치 가져오기와 commit SHA 고정 | 구현. 공개 GitHub 저장소에서 실행해 확인했다. GHES 호스트는 실제 인스턴스로 시험하지 않았다 |
-| 개인 모드의 Git 주소(`codeye up https://github.com/OWNER/REPO`, 화면의 입력란) | 구현. 브랜치를 비우면 기본 브랜치다 |
-| 개인 모드의 GitHub token 자동 발견(`GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token`)과 비공개 저장소 가져오기 | 구현(github.com만). [GitHub token](#github-token) |
-| 개인 모드의 pull request 분석(`codeye up …/pull/N`, 화면의 입력란) | 구현(github.com만). [pull request 분석](#pull-request-분석) |
-| 개인 모드의 결과 댓글 하나(선택, 기본 끔)와 미리 보기 | 구현(github.com만). [결과 댓글](#결과-댓글) |
-| provider 등록(`codeye provider add`) | 구현. 종류·호스트·선택 API URL을 저장할 뿐 API로 연결을 확인하지 않는다 |
-| 서버 모드의 token, pull request 분석, 댓글 | 없음. 서버 모드는 token을 찾지 않고 pull request 요청을 `PULL_REQUEST_UNSUPPORTED`로 거절한다 |
+| Git 주소(`codeye up https://github.com/OWNER/REPO`, 화면의 입력란). 모든 사용자 | 구현. 브랜치를 비우면 기본 브랜치다 |
+| 사용자별 GitHub token(**계정 > GitHub 연결**, 관리자는 `GH_TOKEN`·`GITHUB_TOKEN`·`gh auth token` 자동 발견)과 비공개 저장소 가져오기 | 구현(github.com만). [GitHub token](#github-token), [누구의 token인가](#누구의-token인가) |
+| pull request 분석(`codeye up …/pull/N`, 화면의 입력란). 모든 사용자 | 구현(github.com만). [pull request 분석](#pull-request-분석) |
+| 결과 댓글 하나(선택, 기본 끔)와 미리 보기. 모든 사용자 | 구현(github.com만). [결과 댓글](#결과-댓글) |
+| provider 등록(`codeye provider add`, 웹의 **관리 > Git 공급자**) | 구현. 종류·호스트·선택 API URL을 저장할 뿐 API로 연결을 확인하지 않는다 |
+| state 디렉터리 없이 띄운 controller(`codeye serve`만)의 token | 없음. 사용자 token을 저장할 곳이 없어 공개 저장소만, pull request는 익명으로 공개 저장소만 확인한다 |
 | GitHub App 설치, webhook 수신, PR 이벤트와 댓글 명령, 연결·권한 진단 | 설계 계약(미구현). [다중 사용자 설치](#다중-사용자-설치-설계-계약) |
 | pull request 주기 확인(polling) | 만들지 않는다. 새 push는 사용자가 다시 요청한다 |
 | GHES의 token·pull request, 사내 CA·proxy, submodule/LFS | 미구현. 조용히 다른 credential이나 인터넷 대체 경로로 우회하지 않는다 |
@@ -19,7 +19,7 @@ GitHub.com은 소유자가 실제로 쓸 일급 대상이다. GitHub Enterprise 
 
 ## 현재 동작하는 것
 
-**개인 모드**에서는 준비가 필요 없다. `codeye up`이 git과 gh를 찾아 에이전트에 넘기고, 설정의 `git_hosts`(기본 `["github.com"]`)마다 provider를 등록한다(`github.com`은 `github`, 그 밖은 `ghes`). 그다음 주소만 준다.
+**`codeye up`으로 띄운 서비스**에서는 준비가 필요 없다. `codeye up`이 git과 gh를 찾아 에이전트에 넘기고, 설정의 `git_hosts`(기본 `["github.com"]`)마다 provider를 등록한다(`github.com`은 `github`, 그 밖은 `ghes`). 관리자는 웹의 **관리 > Git 공급자**에서 host를 더 승인할 수 있고, 서비스를 다시 시작하지 않아도 에이전트가 그 host의 저장소를 받는다. 그다음 주소만 준다.
 
 ```sh
 codeye up https://github.com/OWNER/REPO                # 기본 브랜치
@@ -30,9 +30,9 @@ codeye up https://github.com/OWNER/REPO/pull/123       # pull request
 
 화면의 "폴더 경로 또는 Git 주소" 입력란에 같은 주소를 붙여넣어도 된다. 같은 저장소를 다시 주면 그 프로젝트에 새 분석을 요청한다. Git 저장소의 프로젝트는 소스를 모델에 보내고(기본 켬), 저장소의 빌드 스크립트·`cargo check`처럼 저장소 코드를 실행하는 분석은 기본으로 하지 않는다. 그 분석이 빠진 보고서의 "더 나은 결과를 얻으려면"에서 "저장소의 빌드 스크립트 실행"을 켜고 다시 시도한다.
 
-비공개 github.com 저장소는 [GitHub token](#github-token)이 있으면 읽는다. token이 없거나 그 token으로 읽을 수 없는 주소는 소스 확보가 "저장소를 인증 없이 읽을 수 없음"(`source_auth_required`)으로 실패한다. 다른 호스트에는 token을 보내지 않는다.
+비공개 github.com 저장소는 분석을 시작한 사람의 [GitHub token](#github-token)이 있으면 읽는다. token이 없거나 그 token으로 읽을 수 없는 주소는 소스 확보가 "저장소를 인증 없이 읽을 수 없음"(`source_auth_required`)으로 실패한다. 다른 호스트에는 token을 보내지 않는다.
 
-**서버 모드**에서는 다음 조건으로 공개 저장소를 가져온다. token 발견과 pull request는 없다.
+**따로 띄운 노드**(`codeye agent`, [운영](OPERATIONS.md#서버노드-배포))는 다음 조건으로 저장소를 가져온다.
 
 1. provider를 등록한다. `github`은 호스트가 `github.com`이어야 하고, `ghes`는 호스트 이름과 선택 `--api-url https://HOST/api/v3`를 받는다. API URL은 저장만 하고 아직 쓰지 않는다.
 
@@ -59,27 +59,44 @@ codeye up https://github.com/OWNER/REPO/pull/123       # pull request
 
 ## GitHub token
 
-개인 모드의 `codeye up`은 실행할 때마다 github.com token을 다음 순서로 찾는다. 따로 설정할 것은 없다.
+github.com token은 사용자마다 따로 둔다. 각 사용자는 웹의 **계정 > GitHub 연결**에 자기 token을 붙여넣고(`PUT /api/v1/account/github`) 같은 화면에서 지운다(`DELETE`). controller는 저장하기 전에 GitHub `GET /user`로 계정을 묻고, GitHub이 거부한 token(401)은 저장하지 않는다(`GITHUB_TOKEN_REFUSED`). GitHub에 닿지 못하면 계정 없이 저장한다. token은 `<state>/secrets/github-users/<user_id>.json`(0600, 폴더 0700, 서비스 계정만 읽는다)에 계정·출처와 함께 저장되고 응답·로그·감사 detail·데이터베이스에 들어가지 않는다. 데이터베이스 백업에도 들어가지 않으므로 복원한 뒤에는 다시 넣는다. 오프라인 모드와 state 디렉터리 없는 controller는 token을 받지 않는다(`GITHUB_TOKEN_UNAVAILABLE`).
+
+**서비스를 띄운 관리자**의 연결은 `codeye up`이 실행할 때마다 다음 순서로 찾는다. 따로 설정할 것은 없다. 관리자가 웹에서 token을 넣었으면 그것이 우선이고 `up`은 바꾸지 않는다.
 
 1. 환경변수 `GH_TOKEN`
 2. 환경변수 `GITHUB_TOKEN`
 3. `gh auth token --hostname github.com`(toolfind가 찾은 gh. 사용자 환경에서 위 두 변수를 뺀 채 15초 안에 실행한다)
 
-찾은 token은 GitHub API `GET /user`로 확인한다. GitHub이 거부하면(401) 쓰지 않고 이전 파일도 지운다. GitHub에 닿지 못하면 token을 두고 계정은 모른다고 표시한다. 확인한 token은 모델 키처럼 `<state>/secrets/github.json`(0600, 폴더 0700)에 계정·출처와 함께 두고 `up`마다 새로 쓴다. token을 찾지 못하거나 발견을 끄면 파일을 지운다.
+찾은 token은 GitHub API `GET /user`로 확인한다. GitHub이 거부하면(401) 쓰지 않고 이전에 찾아 둔 token도 지운다. GitHub에 닿지 못하면 token을 두고 계정은 모른다고 표시한다. 확인한 token은 계정·출처와 함께 관리자의 사용자별 파일 `<state>/secrets/github-users/<user_id>.json`(0600, 폴더 0700) 하나에만 두고, 내용이 바뀌면 `up`이 다시 쓴다. token을 찾지 못하거나 발견을 끄면 그 파일을 지운다(웹에서 넣은 token은 남긴다).
 
 ```text
 github: signed in as octocat on github.com (token from gh) - private repositories and pull requests you can read
 github: no token (sign in with `gh auth login` or set GH_TOKEN, then run codeye up again) - public repositories only
 ```
 
-`GET /api/v1/setup`의 `github`는 token이 있는지(`token`), 계정, 출처(`GH_TOKEN`·`GITHUB_TOKEN`·`gh`)와 이유만 싣는다. token 자체는 설정 파일, 명령 인자, 로그, 보고서, 감사 기록, 데이터베이스 어디에도 들어가지 않는다. 설정에 `"github": {"enabled": false}`를 두면 발견을 끈다(공개 저장소만, pull request는 token 없이 공개 저장소만 확인).
+`GET /api/v1/setup`의 `github`와 `GET /api/v1/account/github`는 로그인한 사람 자신의 token이 있는지, 계정, 출처(`web`·`GH_TOKEN`·`GITHUB_TOKEN`·`gh`)와 이유만 싣는다. token 자체는 설정 파일, 명령 인자, 로그, 보고서, 감사 기록, 데이터베이스 어디에도 들어가지 않는다. 설정에 `"github": {"enabled": false}`를 두면 관리자 token 발견만 끈다. 다른 사람이 웹에서 넣은 token은 그대로 쓴다.
 
-**오프라인 모드**(`"offline": true`, [운영](OPERATIONS.md#오프라인-모드))에서는 GitHub을 쓰지 않는다. 환경변수·gh에서 token을 찾지 않고(`gh auth token`을 실행하지 않는다) 이전에 저장한 `github.json`을 지우며, github.com은 기본 Git 호스트가 아니다. `git_hosts`에 github.com을 적어도 token은 보내지 않는다. pull request 주소는 `codeye up`과 `POST /projects/{id}/runs`가 거부한다(`PULL_REQUEST_UNSUPPORTED`). controller는 GitHub API를 부르지 않는다(pull request 확인·댓글 미리보기·게시 없음). `codeye up` 출력은 `github: off (offline mode) - ...`, `GET /setup`의 `github`는 `enabled: false`, `reason: "offline_mode"`다. 사내 Git 호스트용 credential은 지원하지 않는다(그 호스트는 인증 없이 읽을 수 있어야 한다).
+**오프라인 모드**(`"offline": true`, [운영](OPERATIONS.md#오프라인-모드))에서는 GitHub을 쓰지 않는다. 환경변수·gh에서 token을 찾지 않고(`gh auth token`을 실행하지 않는다) `up`이 전에 찾아 둔 관리자의 token을 지우며, github.com은 기본 Git 호스트가 아니다. `git_hosts`에 github.com을 적어도 token은 보내지 않는다. pull request 주소는 `codeye up`과 `POST /projects/{id}/runs`가 거부한다(`PULL_REQUEST_UNSUPPORTED`). controller는 GitHub API를 부르지 않는다(pull request 확인·댓글 미리보기·게시 없음). `codeye up` 출력은 `github: off (offline mode) - ...`, `GET /setup`의 `github`는 `enabled: false`, `reason: "offline_mode"`다. 사내 Git 호스트용 credential은 지원하지 않는다(그 호스트는 인증 없이 읽을 수 있어야 한다).
+
+### 누구의 token인가
+
+GitHub 호출은 그 호출이 대신하는 사람의 token만 쓴다.
+
+| 호출 | 쓰는 token |
+|---|---|
+| pull request 고정(run을 넣을 때) | run을 시작하는 사람 |
+| Git fetch(소스 확보) | run을 시작한 사람(예약 run은 예약을 만들거나 마지막으로 고친 사람) |
+| 결과 댓글 게시 | run을 시작한 사람. token이 없으면 게시하지 않고 `failed`·`no_token`으로 남긴다 |
+| 댓글 미리보기의 현재 head 확인 | 미리보기를 요청한 사람 |
+
+- 구성원이 남의 프로젝트를 실행해도 소유자의 token을 쓰지 않는다. 비공개 저장소라면 그 구성원이 자기 token으로 그 저장소를 읽을 수 있어야 한다. 한 사람의 token이 다른 사람이 고른 저장소나 다른 사람의 run에 쓰이는 일은 없다.
+- token이 없는 사람의 run은 익명으로 공개 저장소만 읽는다.
+- 관리자 스위치(다른 사용자의 모델 검토·빌드 스크립트)도 run을 시작한 사람 기준이다. 관리자의 프로젝트라도 관리자가 아닌 구성원이 시작한 run은 스위치를 따른다.
 
 token을 쓰는 곳은 둘이다.
 
-- **Git fetch**: 에이전트는 파일 경로(`--git-credential-file`)만 받고, 워커가 fetch마다 파일을 읽어 github.com 요청에만 HTTP header로 넣는다. header는 git 환경변수(`GIT_CONFIG_COUNT`, `http.https://github.com/.extraHeader`)로 전달하므로 URL, argv, 작업 사본, snapshot에 남지 않는다. `ca_bundle`이 있으면 같은 git 프로세스 환경에 `GIT_SSL_CAINFO`·`SSL_CERT_FILE`도 들어간다([사내 CA](OPERATIONS.md#사내-ca)). 분석기와 모델 프로세스는 이 파일과 값을 받지 않는다.
-- **GitHub API**: controller와 `codeye up`이 pull request 확인과 댓글 게시에 쓴다. 요청마다 파일을 다시 읽으므로 token이 바뀌어도 다시 시작할 필요가 없다. redirect를 따라가지 않고, 다음 page 주소가 API와 다른 origin이면 쓰지 않는다.
+- **Git fetch**: 에이전트는 파일 경로만 받는다. `codeye up`이 띄운 에이전트는 사용자별 token 디렉터리(`--git-credential-dir`)를 받고, 배정마다 run을 시작한 사람의 파일 하나만 워커에 넘긴다. 따로 띄운 노드는 운영자가 준 파일 하나(`--git-credential-file`)를 쓴다. 워커가 fetch마다 파일을 읽어 github.com 요청에만 HTTP header로 넣는다. header는 git 환경변수(`GIT_CONFIG_COUNT`, `http.https://github.com/.extraHeader`)로 전달하므로 URL, argv, 작업 사본, snapshot에 남지 않는다. `ca_bundle`이 있으면 같은 git 프로세스 환경에 `GIT_SSL_CAINFO`·`SSL_CERT_FILE`도 들어간다([사내 CA](OPERATIONS.md#사내-ca)). 분석기와 모델 프로세스는 이 파일과 값을 받지 않는다.
+- **GitHub API**: controller와 `codeye up`이 pull request 확인과 댓글 게시에 쓴다. 요청마다 그 사람의 파일을 다시 읽으므로 token을 넣거나 지워도 다시 시작할 필요가 없다. redirect를 따라가지 않고, 다음 page 주소가 API와 다른 origin이면 쓰지 않는다.
 
 ## pull request 분석
 
@@ -96,7 +113,7 @@ codeye up https://github.com/OWNER/REPO/pull/123/files   # 브라우저의 탭 �
 4. **보고서**: 요약이 pull request 번호, base/head SHA, 변경 파일 중 모델에 보낸 수를 말하고, 발견과 도구 진단을 변경된 줄·변경 파일·기존 코드로 나눈다. patch가 없는 파일은 파일 단위로 세고 그 사실을 적는다. 저장소 전체를 같은 깊이로 검토했다고 말하지 않는다([보고서](REPORT.md#pull-request-보고서)).
 5. **다시 분석**: 새 push 뒤 같은 주소를 다시 주면 그때의 head로 새 run을 만든다(진행 중인 run이 있어도). 비교 기준은 같은 pull request의 이전 run이다.
 
-거절은 각각 다른 코드로 돌아온다: github.com 저장소 프로젝트가 아님·서버 모드(`PULL_REQUEST_UNSUPPORTED`), 이 token으로 보이지 않는 pull request(`PULL_REQUEST_NOT_FOUND`), 거부된 token(`GITHUB_TOKEN_REFUSED`), 권한 없음(`GITHUB_FORBIDDEN`), rate limit(`GITHUB_RATE_LIMITED`, 다시 시도 가능), 연결 실패(`GITHUB_UNAVAILABLE`). 예약 run은 pull request를 받지 않는다.
+거절은 각각 다른 코드로 돌아온다: github.com 저장소 프로젝트가 아님·오프라인 모드(`PULL_REQUEST_UNSUPPORTED`), 시작한 사람의 token(또는 익명)으로 보이지 않는 pull request(`PULL_REQUEST_NOT_FOUND`), 거부된 token(`GITHUB_TOKEN_REFUSED`), 권한 없음(`GITHUB_FORBIDDEN`), rate limit(`GITHUB_RATE_LIMITED`, 다시 시도 가능), 연결 실패(`GITHUB_UNAVAILABLE`). 예약 run은 pull request를 받지 않는다.
 
 외부 fork의 pull request도 같은 정책으로 분석한다. 저장소 코드를 실행하는 분석(빌드 스크립트)은 프로젝트 선택을 따르고 Git 프로젝트에서 기본으로 꺼져 있다.
 
@@ -124,7 +141,7 @@ provider는 host, API base URL, clone policy, CA bundle, App identity, credentia
 
 ## 다중 사용자 설치 (설계 계약)
 
-개인 모드의 token 방식은 한 사람의 컴퓨터에서 그 사람의 권한으로 동작한다. 여러 사람이 쓰는 서버 설치의 계획은 여전히 GitHub App과 webhook이다. 이 절은 코드에 없다. pull request를 주기적으로 확인하는 polling 방식은 만들지 않았다(A46 6).
+지금의 token 방식은 사람마다 자기 token으로 동작한다(A53). 조직 단위의 GitHub App과 webhook은 여전히 계획이다. 이 절은 코드에 없다. pull request를 주기적으로 확인하는 polling 방식은 만들지 않았다(A46 6).
 
 ### 역할
 
@@ -145,7 +162,7 @@ provider는 host, API base URL, clone policy, CA bundle, App identity, credentia
 3. provider+delivery ID로 중복을 확인한다. 동일 ID에 다른 payload digest는 거부하고 감사한다.
 4. event/action, installation, repository, 프로젝트 등록 상태를 검증한다.
 5. durable delivery와 작업 의도를 저장한 뒤 신속히 2xx로 응답한다.
-6. 별도 처리기가 provider API로 PR·권한·SHA를 확인하고 run을 만든다(개인 모드의 고정·게시 경로를 그대로 쓴다).
+6. 별도 처리기가 provider API로 PR·권한·SHA를 확인하고 run을 만든다(지금의 고정·게시 경로를 그대로 쓴다).
 
 응답 목표는 2초 이내이며 분석을 완료할 때까지 연결을 유지하지 않는다. 큐 저장에 실패하면 성공 응답으로 유실시키지 않는다. webhook 수신만으로 Native 실행을 승인하지 않는다.
 

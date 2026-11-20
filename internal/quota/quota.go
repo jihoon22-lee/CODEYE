@@ -1,6 +1,6 @@
 // Package quota names CODEYE's storage areas (docs/OPERATIONS.md, docs/OPERATIONS.md#저장-영역과-상한) and
 // measures how many bytes each one holds on this host. It is shared by the
-// node agent (which reports areas over their limit), doctor and the personal
+// node agent (which reports areas over their limit), doctor and the service
 // status command. It never deletes anything.
 //
 // Area layout of one node agent state dir (internal/agent, internal/worker):
@@ -9,7 +9,7 @@
 //	workspace  <state>/data/acquire-*/workspace and <state>/data/ws-* (attempt working copies)
 //	cache      <state>/workers/ (worker HOME, TMP and scratch: tool caches), <state>/cache/
 //	           (the shared dependency cache), --go-mod-cache and --dependency-cache-dir
-//	logs       the personal log directory (controller and agent logs)
+//	logs       the service log directory (controller and agent logs)
 //	artifacts  the controller artifact store (serve --artifact-dir)
 package quota
 

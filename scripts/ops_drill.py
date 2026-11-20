@@ -8,7 +8,7 @@ DB 중단 훈련은 시험 harness의 PostgreSQL을 멈추지 않도록 이 스�
 D1 모델 endpoint 실패      D2 노드 offline(운영자 CLI 정리 확인)   D3 DB 중단(짧게·lease보다 길게)
 D4 도구 버전 변경·사라짐   D5 작업 중 max workers 축소             D6 산출물 저장 상한
 D7 실행 중 백업 → 새 상태 복원 → recovery_required 정리 확인 → 새 run
-D8 권한 회수(구성원 제거·사용자 비활성화의 열린 SSE, 노드 token 회수)  D9 보존 정리(개인 모드)
+D8 권한 회수(구성원 제거·사용자 비활성화의 열린 SSE, 노드 token 회수)  D9 보존 정리(codeye start 설치)
 """
 from contextlib import ExitStack, contextmanager
 import json
@@ -508,12 +508,12 @@ def drills(base, root, env, directory, records):
         stop(ctl)
         children.clear()
 
-        # --- D1·D7 개인 모드 ----------------------------------------------------------------------------------
-        personal_drills(root, env, directory, binary, fixture, go, cluster, drill)
+        # --- D1·D7 codeye start ------------------------------------------------------------------------------
+        instance_drills(root, env, directory, binary, fixture, go, cluster, drill)
 
 
-def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
-    from personal_smoke import Session as PSession
+def instance_drills(root, env, directory, binary, fixture, go, cluster, drill):
+    from instance_smoke import Session as PSession
 
     pg_bin = Path(shutil.which("pg_dump")).parent
     go_dir = str(Path(go).parent)
@@ -543,7 +543,7 @@ def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
                "database": {"mode": "external", "postgres_bin_dir": str(pg_bin)},
                "source_roots": [{"label": label, "path": str(path)} for label, path in roots],
                "backup_dir": str(directory / "backups"), **extra}
-        path = directory / name / "personal.json"
+        path = directory / name / "config.json"
         path.write_text(json.dumps(doc, indent=2))
         path.chmod(0o600)
         return path, state, f"http://127.0.0.1:{port}", doc
@@ -590,7 +590,7 @@ def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
             at_restore = sb.request("GET", f"runs/{inflight}")["status"]
             how = None
             if at_restore == "recovery_required":
-                # The personal-mode CLI form (codeye run recover --config).
+                # The service CLI form (codeye run recover --config).
                 out = json.loads(pcli(fixture, "run", "recover", "--id", inflight, "--confirm-cleanup", "--config", cfg_b, db="pb").stdout)
                 how = out["retry"]
                 follow = sb.finished(out["run"])
@@ -605,7 +605,7 @@ def personal_drills(root, env, directory, binary, fixture, go, cluster, drill):
         # D9 보존 정리: every finished run's artifacts are made 40 days old (created_at
         # is immutable, so as the throwaway cluster's superuser with triggers off).
         # All runs share the fixture's outputs, so only aging all of them frees files.
-        with drill("D9 보존 정리(개인 모드)", "오프라인 모드 설치에서 끝난 run의 산출물을 40일 전으로 돌린 뒤 codeye cleanup --config dry run → --apply → 다시 dry run") as r:
+        with drill("D9 보존 정리(codeye start 설치)", "오프라인 모드 설치에서 끝난 run의 산출물을 40일 전으로 돌린 뒤 codeye cleanup --config dry run → --apply → 다시 dry run") as r:
             finished = "SELECT id FROM runs WHERE status IN ('completed','partial','failed','cancelled')"
             raw = int(cluster.scalar("pb", "SELECT count(*) FROM artifacts WHERE role IN ('stdout','stderr','raw_output','other') AND finalized "
                                            f"AND storage_key IS NOT NULL AND content_removed_at IS NULL AND run_id IN ({finished})"))

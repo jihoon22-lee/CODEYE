@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
-func offlineConfig(t *testing.T, extra string) *personal.Config {
+func offlineConfig(t *testing.T, extra string) *instance.Config {
 	t.Helper()
 	base := t.TempDir()
 	q := func(s string) string { b, _ := json.Marshal(s); return string(b) }
 	raw := `{"schema_version":"0.1","state_dir":` + q(filepath.Join(base, "state")) + `,"database":{"mode":"external"}` + extra + `}`
-	cfg, err := personal.Parse([]byte(raw), nil)
+	cfg, err := instance.Parse([]byte(raw), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,14 +49,14 @@ func languageOf(o *Offline, name string) Language {
 // own go env and npm settings counted as configured, and per language what
 // is missing.
 func TestOfflineReadiness(t *testing.T) {
-	menv := personal.ModelEnv{Getenv: func(string) string { return "" }, Home: t.TempDir()}
+	menv := instance.ModelEnv{Getenv: func(string) string { return "" }, Home: t.TempDir()}
 	detect := func(context.Context) toolfind.Result {
 		res := detectedTools("go", "ruff", "mypy", "python", "eslint", "node", "npm")(context.Background())
 		res.GoSettings = &toolfind.GoSettings{GoProxy: "https://goproxy.corp.example"}
 		res.NpmRegistry = "https://npm.corp.example/"
 		return res
 	}
-	online := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Personal: offlineConfig(t, ""), Detect: detect, ModelEnv: &menv}, &fakeRunner{result: Result{Reason: "executable_missing"}})
+	online := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Instance: offlineConfig(t, ""), Detect: detect, ModelEnv: &menv}, &fakeRunner{result: Result{Reason: "executable_missing"}})
 	o := online.Offline
 	if o == nil || o.Enabled || o.CABundle.Status != "not_configured" {
 		t.Fatalf("online section %+v", o)
@@ -75,7 +75,7 @@ func TestOfflineReadiness(t *testing.T) {
 	}
 
 	cfg := offlineConfig(t, `,"offline":true,"agent":{"dependencies":{"pip_index_url":"https://pypi.corp.example/simple"}}`)
-	report := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Personal: cfg, Detect: detect, ModelEnv: &menv}, &fakeRunner{result: Result{Reason: "executable_missing"}})
+	report := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Instance: cfg, Detect: detect, ModelEnv: &menv}, &fakeRunner{result: Result{Reason: "executable_missing"}})
 	o = report.Offline
 	if !o.Enabled {
 		t.Fatal("offline not reported")
@@ -110,7 +110,7 @@ func TestOfflineReadiness(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.CABundle = bad
-	report = Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Personal: cfg, Detect: detect, ModelEnv: &menv}, &fakeRunner{result: Result{Reason: "executable_missing"}})
+	report = Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Instance: cfg, Detect: detect, ModelEnv: &menv}, &fakeRunner{result: Result{Reason: "executable_missing"}})
 	var out bytes.Buffer
 	if err := report.Write(&out, "json"); err != nil || report.Offline.CABundle.Status != "unavailable" || strings.Contains(out.String(), bad) {
 		t.Fatalf("bundle %+v %v", report.Offline.CABundle, err)

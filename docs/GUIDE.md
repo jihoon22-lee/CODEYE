@@ -1,6 +1,6 @@
 # CODEYE 사용 안내서
 
-한 사람이 자기 Linux(WSL2 포함) 머신에서 CODEYE를 쓰는 방법이다(개인 모드). 첫 시작, 프로젝트 추가와 분석, 보고서 읽기, 예약, 이전 실행과 비교, 정지, 저장 공간, 백업·복원, 업그레이드, 문제 해결을 다룬다. 설정 필드 전체 표와 명령의 동작 계약, 지원 범위는 [운영](OPERATIONS.md)에 있다.
+Linux(WSL2 포함) 머신에서 `codeye up`으로 CODEYE 서비스를 띄워 쓰는 방법이다. 시작 → 열기 → 분석 → 다른 사람 초대 → 다른 사람이 분석할 수 있는 것의 순서로 읽으면 된다. 혼자 쓰든 여럿이 쓰든 같은 서비스이고, 로그인한 사람이 무엇을 분석할 수 있는지는 사람마다 받은 권한이 정한다. 그 뒤에 보고서 읽기, 예약, 이전 실행과 비교, 정지, 저장 공간, 백업·복원, 업그레이드, 문제 해결을 다룬다. 설정 필드 전체 표와 명령의 동작 계약, 지원 범위는 [운영](OPERATIONS.md)에 있다.
 
 아래 명령은 이 저장소의 빌드에서 Linux(WSL2)와 PostgreSQL 17.10으로 실제 실행해 확인했다. 실행하지 않은 절차는 **(설계 절차, 시험 안 함)**으로 표시했다. 경로와 이름은 예시다.
 
@@ -26,7 +26,7 @@ codeye up ~/src/myproject
 
 이 한 줄이 다음을 한다.
 
-1. 설정 파일(`~/.config/codeye/personal.json`)이 없으면 `schema_version`만 담아 만든다. 비어 있는 필드는 기본값이다. 상태 디렉터리는 `~/.local/state/codeye`(`XDG_STATE_HOME`을 따른다)다.
+1. 설정 파일(`~/.config/codeye/config.json`)이 없으면 `schema_version`만 담아 만든다. 비어 있는 필드는 기본값이다. 상태 디렉터리는 `~/.local/state/codeye`(`XDG_STATE_HOME`을 따른다)다.
 2. PostgreSQL을 찾아 상태 디렉터리의 `postgres/data`에 cluster를 만들고 127.0.0.1의 빈 포트(55432부터)로 띄운다. 비밀번호는 만들어 `postgres/password`(0600)에 둔다. 셸의 `PG*` 변수와 `CODEYE_DATABASE_URL`은 무시하고 그렇다고 알린다.
 3. schema를 만든다. 데이터가 있는 DB의 schema가 이전 버전이면 먼저 `pg_dump` 사본을 백업 디렉터리에 쓰고 migration을 적용한다.
 4. controller(`127.0.0.1:7331`, 쓰이고 있으면 7340까지 다음 빈 포트)와 로컬 에이전트를 띄운다.
@@ -36,7 +36,7 @@ codeye up ~/src/myproject
 첫 실행의 출력(실제 실행의 출력에서 경로·ID·pid만 예시로 바꾸고, 찾은 도구 줄은 줄였다):
 
 ```text
-wrote a new configuration: /home/user/.config/codeye/personal.json
+wrote a new configuration: /home/user/.config/codeye/config.json
 TOOL         STATUS   VERSION   WHERE / HOW TO ADD
 go           found    1.27.4    /usr/local/go/bin/go
 …
@@ -47,7 +47,7 @@ github: signed in as octocat on github.com (token from gh) - private repositorie
 initialized a PostgreSQL 17.10 cluster in /home/user/.local/state/codeye/postgres/data (binaries: /usr/lib/postgresql/17/bin)
 PostgreSQL 17.10 started on 127.0.0.1:55432 (log /home/user/.local/state/codeye/logs/postgres.log)
 database schema created (migration 13)
-created the personal user 2ce93dc8-…
+created the administrator user 2ce93dc8-…
 registered source root "home" (f655c03e-…)
 registered the Git host github.com (public repositories, and private ones the GitHub token can read)
 CODEYE is running at http://127.0.0.1:7331 (controller pid 4101, agent pid 4113); logs in /home/user/.local/state/codeye/logs
@@ -88,10 +88,10 @@ Open CODEYE (signed in; the link works once, within 10 minutes):
 ```
 
 - 받는 주소는 `https://HOST/OWNER/REPO`다(`https://`는 생략해도 된다). 허용 호스트는 설정의 `git_hosts`이고 기본은 `["github.com"]`이다. `git`이 없으면 주소를 받지 않고 그렇다고 알린다.
-- **비공개 github.com 저장소**는 GitHub token이 있으면 그대로 읽는다. `codeye up`이 `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token` 순으로 찾아 `github:` 줄에 계정과 출처만 보인다(token은 출력하지 않는다). `gh auth login`을 해 두었으면 할 일이 없다. token이 없거나 그 token으로 읽을 수 없는 주소(없는 저장소 포함)는 소스 확보가 "저장소를 읽을 권한이 없음"으로 실패한다. 호스트에 닿지 못하면 "Git 호스트에 연결하지 못함"이다. 끄려면 설정에 `"github": {"enabled": false}`를 둔다([GitHub token](GITHUB.md#github-token)). 다른 호스트에는 token을 보내지 않는다.
+- **비공개 github.com 저장소**는 분석을 시작한 사람의 GitHub token이 있으면 그대로 읽는다. 관리자의 token은 `codeye up`이 `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token` 순으로 찾아 `github:` 줄에 계정과 출처만 보인다(token은 출력하지 않는다). `gh auth login`을 해 두었으면 할 일이 없다. token이 없거나 그 token으로 읽을 수 없는 주소(없는 저장소 포함)는 소스 확보가 "저장소를 읽을 권한이 없음"으로 실패한다. 호스트에 닿지 못하면 "Git 호스트에 연결하지 못함"이다. 관리자 token 찾기를 끄려면 설정에 `"github": {"enabled": false}`를 둔다. 다른 사람은 **계정 > GitHub 연결**에 자기 token을 넣는다([GitHub token](GITHUB.md#github-token)). 다른 호스트에는 token을 보내지 않는다.
 - 저장소의 빌드 스크립트(`cargo check` 등)는 기본으로 실행하지 않는다([프로젝트별 분석 선택](#프로젝트별-분석-선택)).
 - `web/dist`가 없으면 화면 없이 API만 뜨고 `web UI not built - run …`을 출력한다.
-- 개인 사용자는 관리자다. 사용자 이름과 비밀번호 없이 로그인 링크로 들어간다. 관리자 역할은 계정과 source root 허가를 다룰 뿐 프로젝트 권한은 아니며, 개인 사용자는 자기가 등록한 프로젝트의 소유자다. 다른 사람과 함께 쓰는 배포는 [계정과 관리자 CLI](OPERATIONS.md#계정과-관리자-cli)와 [TLS 수신](OPERATIONS.md#tls-수신)을 본다.
+- `codeye up`을 실행한 사람(설정의 사용자)은 관리자다. 사용자 이름과 비밀번호 없이 로그인 링크로 들어간다. 관리자 역할은 계정·폴더·Git host·서비스 스위치를 다룰 뿐 프로젝트 권한은 아니며, 각 사람은 자기가 등록한 프로젝트의 소유자다. 다른 사람을 들이는 방법은 [다른 사람 초대](#다른-사람-초대)에 있다.
 
 **pull request**는 그 주소를 준다. 변경 파일을 먼저 검토하고 보고서가 변경 부분과 기존 코드를 나눈다.
 
@@ -127,9 +127,53 @@ waiting for the report of run 2a2fccd3-… to preview its pull-request comment (
 
 `codeye start`도 같은 일을 하지만 경로를 받지 않고 브라우저를 열지 않는다. 로그인 링크는 `state_dir/login-link`(0600) 파일에 쓴다.
 
+## 다른 사람 초대
+
+### 다른 머신에서 열 수 있게 하기
+
+기본 주소 `127.0.0.1:7331`은 이 머신에서만 열린다. 다른 머신에서 열려면 듣는 주소와 사람들이 여는 주소를 정해 한 번 `up`을 한다. 값은 설정 파일에 저장되므로 다음부터는 `codeye up`만 하면 된다.
+
+```sh
+# TLS(권장): 인증서와 키(PEM), 사람들이 여는 https 주소
+codeye up --listen 0.0.0.0:7443 --tls-cert /etc/codeye/cert.pem --tls-key /etc/codeye/key.pem --public-origin https://codeye.example:7443
+
+# 믿을 수 있는 LAN에서 평문 HTTP를 명시적으로 고를 때
+codeye up --listen 0.0.0.0:7331 --plain-http --public-origin http://192.168.0.10:7331
+```
+
+- 평문 HTTP는 시작할 때 `plain HTTP on 0.0.0.0:7331 (plain_http): sign-in cookies and passwords travel unencrypted on this network`를 한 줄 출력한다. 막지는 않는다.
+- `--public-origin`은 다른 사람이 브라우저에 넣는 주소다. 서버는 이 주소의 Host·Origin만 받고 로그인 쿠키도 이 주소에 맞춘다(TLS면 `__Host-` 쿠키에 Secure). 평문 HTTP에서는 생략할 수 있다. 특정 주소(`192.168.0.10:7331`)를 들으면 그 주소이고, `0.0.0.0`을 들으면 `up`이 이 머신의 첫 번째 네트워크 주소(loopback 제외)를 골라 출력한다. 이 머신에 주소가 여럿이면(VPN, DNS 이름) 사람들이 쓸 주소를 직접 준다. 다른 주소로 들어온 요청은 Host 검사에서 403 `HOST_REJECTED`다. 같은 머신의 브라우저는 loopback 주소로도 들어온다. `codeye serve`를 직접 띄울 때는 `0.0.0.0`이면 반드시 준다.
+- 출력되는 로그인 링크와 "Other people open …" 줄은 이 공개 주소를 쓴다. 이 머신의 에이전트와 명령은 loopback의 따로 된 주소(기본 듣는 포트 + 1, 설정 `local_listen`)로 controller에 붙는다.
+- 인증서는 운영자가 준비한다. 자체 서명 인증서면 다른 사람의 브라우저가 경고를 보이므로 그 인증서를 믿게 해야 한다.
+- 되돌리려면 설정 파일에서 `listen`·`tls_cert`·`tls_key`·`public_origin`·`plain_http`를 지운다.
+
+### 사용자 더하기
+
+웹의 **관리 > 사용자**에서 사용자 이름을 넣어 더하고, 나온 로그인 링크를 복사해 그 사람에게 전한다. 링크는 한 번만, 정해진 시간 안에만 쓴다. 그 사람은 링크로 들어와 비밀번호를 정한다. **관리** 화면 맨 위의 "이 서비스 주소"가 다른 사람이 여는 주소다. 명령줄의 [계정과 관리자 CLI](OPERATIONS.md#계정과-관리자-cli)도 같다.
+
+### 다른 사람이 분석할 수 있는 것
+
+새 사용자도 같은 첫 화면을 본다. 입력란에 GitHub 주소를 붙여넣고 **분석**을 누르면 된다. 무엇을 쓸 수 있는지는 그 사람의 권한과 관리자 설정이 정하고, 쓸 수 없는 것은 첫 화면의 "이 서비스에서 쓸 수 없는 것"이 이유와 함께 보여 준다.
+
+| 할 수 있는 것 | 누가 | 정하는 곳 |
+|---|---|---|
+| 공개 Git 저장소 분석 | 모두 | 승인된 Git host(기본 github.com, **관리 > Git 공급자**에서 GitHub Enterprise Server host를 더함) |
+| 비공개 github.com 저장소, pull request 결과 댓글 | 자기 GitHub token을 넣은 사람 | 각자 **계정 > GitHub 연결** |
+| 서버 폴더를 경로로 분석 | 그 폴더를 허용받은 사람, 또는 모두에게 연 폴더 | **관리 > 폴더** |
+| 모델 검토 | 관리자, 그리고 "다른 사용자도 모델 검토 사용"이 켜져 있으면(기본 켬) 모두 | **관리 > 서비스** |
+| 저장소의 빌드 스크립트 실행 | 관리자, 그리고 "다른 사용자의 저장소 빌드 스크립트 실행 허용"이 켜져 있으면(기본 끔) 모두 | **관리 > 서비스** |
+| 다른 사람의 프로젝트 | 소유자가 구성원으로 더한 사람(보기·실행·관리) | 프로젝트의 **구성원** |
+
+- **GitHub token은 분석을 시작한 사람의 것만 쓴다.** 내가 시작한 분석(구성원으로서 남의 프로젝트를 실행해도)은 내 token으로 pull request를 읽고 받고 댓글을 남긴다. 다른 사람의 token은 쓰이지 않는다. token이 없으면 공개 저장소만 읽고, 결과 댓글은 남기지 않고 실행 화면에 이유(`no_token`)를 남긴다. 예약 실행은 예약을 만든(마지막으로 고친) 사람의 분석이다.
+- token은 **계정 > GitHub 연결**에 붙여넣는다. 서버의 상태 디렉터리에 서비스 계정만 읽는 파일(0600)로 저장되고, 화면·로그·감사 기록에 다시 나오지 않는다. 같은 화면에서 지운다. 관리자의 연결은 `codeye up`이 `gh`·`GH_TOKEN`에서 찾은 token이며, 관리자가 웹에서 넣은 token이 있으면 그것이 우선이다.
+- 서버 폴더를 경로로 넣었는데 허용된 폴더가 없으면 "이 서버에서 읽도록 허용된 폴더가 없습니다. Git 주소를 쓰거나 관리자에게 폴더 허용을 요청하세요."가 나오고, 허용된 폴더 목록을 함께 보여 준다. 관리자가 **관리 > 폴더**에서 폴더(예: NFS mount)를 더하고 사람마다 허용하거나 "모두에게 열기"를 켠다. 웹에서 더한 폴더와 Git host는 서비스를 다시 시작하지 않아도 바로 쓰인다.
+- 관리자 스위치는 관리자가 아닌 사람이 시작한 분석에 적용된다. 관리자가 시작한 분석은 영향을 받지 않는다. 스위치 때문에 빠진 검토는 보고서에 "관리자가 다른 사용자의 모델 검토를 허용하지 않아 …"처럼 그 이유로 나온다.
+- 사람마다 남의 프로젝트·보고서·감사 기록은 보이지 않는다(구성원이 아니면 없는 것처럼 404).
+- 서버 폴더를 운영체제 계정 권한으로도 확인하는 연결점은 남겨 두었지만 지금은 CODEYE의 폴더 허용만 본다. 서버 폴더는 서비스를 띄운 계정의 권한으로 읽힌다.
+
 ## 설정 파일
 
-기본 위치는 `~/.config/codeye/personal.json`이다(`XDG_CONFIG_HOME`을 따른다). 다른 위치는 모든 명령에 `--config PATH`로 준다. `codeye up`이 만든 파일은 `schema_version`뿐이고, `up`은 자기가 다루는 필드(`source_roots`에 더한 폴더, `database.postgres_bin_dir`)만 고친다. 기본값은 파일에 쓰지 않는다. 더 정하고 싶은 것만 적는다. 예시는 [examples/personal.json](../examples/personal.json)이다.
+기본 위치는 `~/.config/codeye/config.json`이다(`XDG_CONFIG_HOME`을 따른다). 다른 위치는 모든 명령에 `--config PATH`로 준다. `codeye up`이 만든 파일은 `schema_version`뿐이고, `up`은 자기가 다루는 필드(`source_roots`에 더한 폴더, `database.postgres_bin_dir`, `--listen`·`--tls-cert`·`--tls-key`·`--public-origin`·`--plain-http`로 준 수신 설정)만 고친다. 기본값은 파일에 쓰지 않는다. 더 정하고 싶은 것만 적는다. 예시는 [examples/config.json](../examples/config.json)이다.
 
 ```json
 {
@@ -142,8 +186,8 @@ waiting for the report of run 2a2fccd3-… to preview its pull-request comment (
 ```
 
 - 경로는 모두 절대 경로다. `state_dir`와 source root는 서로 포함하면 안 된다. 알 수 없는 필드가 있으면 설정 전체를 거부한다.
-- `listen`은 loopback 주소만 받는다. 적으면 그 포트만 쓴다(쓰이고 있으면 시작하지 않는다). 다른 사람이 접속하는 서버 배포는 개인 모드의 범위가 아니다.
-- 필드 전체 표는 [개인 모드 설정 파일](OPERATIONS.md#개인-모드-설정-파일)에 있다.
+- `listen`은 기본 `127.0.0.1:7331`이다. 적으면 그 주소만 쓴다(쓰이고 있으면 시작하지 않는다). loopback이 아닌 주소는 TLS(`tls_cert`·`tls_key`·`public_origin`)나 `plain_http`가 있어야 한다([다른 사람 초대](#다른-사람-초대)).
+- 필드 전체 표는 [서비스 설정 파일](OPERATIONS.md#서비스-설정-파일)에 있다.
 
 **이미 있는 PostgreSQL을 쓰려면**(`"database": {"mode": "external", "postgres_bin_dir": "/usr/pgsql-17/bin"}`) 운영자가 서버와 CODEYE 전용의 빈 데이터베이스·사용자를 준비하고, 연결은 명령을 실행하는 셸의 `CODEYE_DATABASE_URL` 환경변수로 준다. 형식은 `postgresql://USER:PASSWORD@127.0.0.1:5432/DBNAME?sslmode=disable`이다. loopback이 아니면 `sslmode`를 생략해 `verify-full`로 둔다. 이 모드에서는 `codeye migrate`를 직접 하고, `PG*` 변수가 환경에 있으면 DB 열기를 거부하며, 백업·복원의 `pg_dump`·`pg_restore`는 `postgres_bin_dir`에서만 찾는다.
 
@@ -169,7 +213,7 @@ re-enrolling the local agent: the configured source roots changed (previous stat
 
 ### 프로젝트별 분석 선택
 
-개인 모드에서는 프로젝트마다 세 가지를 고른다. 등록할 때 고급에서 정하고, 나중에는 보고서의 "더 나은 결과를 얻으려면"에서 켠다.
+프로젝트마다 세 가지를 고른다. 등록할 때 고급에서 정하고, 나중에는 보고서의 "더 나은 결과를 얻으려면"에서 켠다.
 
 | 선택 | 뜻 | 로컬 폴더 기본 | Git 저장소 기본 |
 |---|---|---|---|
@@ -179,7 +223,7 @@ re-enrolling the local agent: the configured source roots changed (previous stat
 
 - 내 폴더는 내 코드라 둘 다 켠다. Git 저장소는 누구의 코드든 될 수 있어 빌드 스크립트를 실행하지 않는다. 그래서 Rust 저장소는 처음에 `cargo check`·clippy가 "저장소 코드 실행이 허가되지 않아 실행하지 않음"으로 빠진다. 켜면 그 저장소의 코드가 이 컴퓨터에서 내 권한으로 실행된다.
 - 의존성 받기는 "고급"의 "의존성 받기"다. 켜면 분석이 인터넷(Go는 `proxy.golang.org`, Rust는 crates.io, JS/TS는 `registry.npmjs.org`, Python은 PyPI)에 접속하고 처음 받는 것은 시간이 걸린다. 받은 것은 `state_dir/cache/deps`에 남아 다음 분석은 빠르다. 끄면 의존성이 있는 모듈의 go vet·Staticcheck, cargo check·clippy, tsc·type-aware ESLint가 `dependency_unavailable`로 끝나거나 mypy·pyright가 import를 풀지 못할 수 있고, 보고서의 "더 나은 결과를 얻으려면"이 다시 켜기를 권한다. 사용자의 `go env`에 `GOPROXY`·`GOPRIVATE` 등을 정해 두었으면 그 값을 따른다. 비공개 모듈은 공개 proxy에 묻지 않고, 내 Go 모듈 캐시에 이미 있는 것만 쓴다. npm 설정(`npm config get registry`)에 기본값과 다른 레지스트리가 있으면 JS/TS 받기가 그것을 쓰고(인증정보가 든 주소는 쓰지 않는다), 따로 정하려면 `agent.dependencies.npm_registry`다. JS/TS 패키지는 이번 분석의 작업 사본에 설치되고 분석이 끝나면 함께 지워진다. pnpm·yarn은 `codeye tools`가 없다고 하면 안내대로 설치한다. Python은 mypy·pyright가 있을 때 `uv.lock`, `pyproject.toml`, `requirements*.txt`의 패키지를 PyPI(또는 `agent.dependencies.pip_index_url`)에서 wheel로만 받는다. 이 컴퓨터에 uv나 pip이 있는 Python이 있어야 한다(`codeye tools`의 uv·python). 저장소의 `setup.py`는 실행하지 않으므로 wheel이 없는 패키지는 빠지고 보고서에 남는다. 컴퓨터 전체에서 끄려면 설정 `agent.dependencies.enabled: false`다.
-- 설정 파일 source root의 `repository_code`·`model_review`는 개인 모드에서 쓰이지 않는다. 서버 모드의 노드는 계속 운영자의 root별 허가를 따른다.
+- 이 선택을 따르는 것은 `codeye up`이 띄운 에이전트다. 관리자가 아닌 사람이 시작한 분석은 관리자 스위치(**관리 > 서비스**)가 허용하는 것만 한다. 따로 띄운 노드(`codeye agent`)는 운영자의 root별 허가(설정 source root의 `repository_code`·`model_review`, 노드 플래그)를 상한으로 두고 그 안에서 프로젝트 선택을 따른다.
 
 ## 사용할 수 있는 도구 확인
 
@@ -187,7 +231,7 @@ re-enrolling the local agent: the configured source roots changed (previous stat
 codeye tools
 ```
 
-이 머신에서 찾은 도구(경로와 버전), 찾지 못한 도구와 추가하는 방법을 표로 보여 준다. 화면의 **도구** 메뉴도 `codeye up`이 마지막으로 찾은 같은 표와 모델·Git·경로로 분석할 수 있는 폴더를 보여 준다. 개인 모드는 시작할 때 같은 탐색을 하므로 도구 경로를 설정에 적지 않아도 된다. 설정의 `agent.tools.<이름>`에 적은 경로는 항상 탐색보다 우선한다. 없는 도구에 해당하는 분석은 보고서에 "미지원"으로 나온다([도구 찾기](ANALYZERS.md#도구-찾기), [운영](OPERATIONS.md#codeye-tools)).
+이 머신에서 찾은 도구(경로와 버전), 찾지 못한 도구와 추가하는 방법을 표로 보여 준다. 화면의 **도구** 메뉴도 `codeye up`이 마지막으로 찾은 같은 표와 모델·Git·경로로 분석할 수 있는 폴더를 보여 준다(도구 경로는 관리자에게만 보인다). `codeye up`은 시작할 때 같은 탐색을 하므로 도구 경로를 설정에 적지 않아도 된다. 설정의 `agent.tools.<이름>`에 적은 경로는 항상 탐색보다 우선한다. 없는 도구에 해당하는 분석은 보고서에 "미지원"으로 나온다([도구 찾기](ANALYZERS.md#도구-찾기), [운영](OPERATIONS.md#codeye-tools)).
 
 ## 분석 실행
 
@@ -197,7 +241,7 @@ codeye tools
 - **대기 사유**: 시작하지 않은 run에는 이유가 표시된다. 저장 공간 상한에 걸리면 "저장 공간 상한에 도달해 새 작업을 시작하지 않습니다"가 나온다([저장 공간](#저장-공간)).
 - 실행을 취소하면 실행 중인 도구 프로세스를 정리하고 정리 결과를 확인한 뒤 취소로 표시한다. 확인하지 못하면 "정리 확인 필요"(`recovery_required`)로 남는다.
 - **다시 시도**: 실패·일부 완료·취소된 실행에 "다시 시도" 버튼이 있다. 고정한 입력이 노드에 남아 있는 실패·취소 실행은 같은 입력으로 다시 하고, 그 밖(소스 확보 실패, 도구를 설치하거나 선택을 바꾼 뒤)에는 소스를 다시 받아 새 실행을 시작한다. 화면은 그 실행을 따라간다. `recovery_required`는 다시 시도하지 못한다.
-- 소스를 읽지 못한 실행은 이유를 보여 준다. 예: "저장소를 읽을 권한이 없음 — 비공개 github.com 저장소는 gh auth login(또는 GH_TOKEN) 뒤 codeye up을 다시 하면 읽습니다".
+- 소스를 읽지 못한 실행은 이유를 보여 준다. 예: "저장소를 읽을 권한이 없음 — 비공개 github.com 저장소는 분석을 시작한 사람이 계정 메뉴의 GitHub 연결에 token을 넣으면 읽습니다".
 
 ## 보고서 읽기
 
@@ -286,7 +330,7 @@ codeye up
 - `opencode`를 비우면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`를 쓴다. `name`을 비우면 키 provider의 기본 모델이다. `credential_file`은 키 파일을 다른 곳에 둘 때만 적는다. `timeout_seconds`는 모델 호출 한 번의 제한시간이다(기본 180).
 - `relay_file`은 승인된 로컬 relay를 쓸 때만 넣는다. 이 저장소의 `scripts/model_budget_relay.py`는 예산 상한을 강제하는 QA 전용 relay이며 제품 구성요소가 아니다. 사용법은 그 파일의 머리말과 `--help`에 있다.
 - `review_max_calls`는 run 하나(시도 하나)가 쓸 수 있는 모델 호출 수의 상한이다. 비우면 99이고 15~207을 받는다. 처음 다섯 역할이 최대 15회를 쓰고, 남은 호출로 overview가 보내지 못한 파일을 모듈 단위로 더 검토한다. 기본값으로 중간 규모 저장소의 대부분이 모델에 간다. 비용: 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 `review_max_calls`를 낮춘다(예: 33). 15는 처음 다섯 역할만 실행하고 모듈 단위 추가 검토를 하지 않는다. 비밀값 선별(`agent.tools.gitleaks`)이 있으면 선별된 파일을 빼고 보내고, 없으면 기본 민감값 패턴 필터만 거쳐 보내며 보고서에 "비밀값 미선별"이 표시된다([검토](REVIEW.md#모듈-단위-검토-분할)).
-- 모델 연결은 `codeye model probe`(개인 설정의 모델) 또는 `codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`로 확인한다. 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다. `codeye doctor`는 모델을 호출하지 않는다.
+- 모델 연결은 `codeye model probe`(서비스 설정의 모델) 또는 `codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`로 확인한다. 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다. `codeye doctor`는 모델을 호출하지 않는다.
 
 ## 저장 공간
 
@@ -390,7 +434,7 @@ sha256sum -c codeye-VERSION-linux-amd64.tar.gz.sha256
 tar -xzf codeye-VERSION-linux-amd64.tar.gz && cd codeye-VERSION-linux-amd64
 sha256sum -c SHA256SUMS
 ./codeye tools --checklist       # 없는 도구와 옮기는 방법
-./codeye doctor --config ~/.config/codeye/personal.json   # "Offline readiness"
+./codeye doctor --config ~/.config/codeye/config.json   # "Offline readiness"
 ./codeye up --offline ~/src/my-project
 ```
 
@@ -444,9 +488,9 @@ codeye up
 | stop의 `outcome: recovery_required` | [정지](#정지) |
 | 실행 화면의 "정리를 확인해야 다시 실행할 수 있습니다"(run `recovery_required`) | 이 실행을 맡은 노드가 사라졌거나 하위 프로세스가 끝났는지 확인하지 못했다. `codeye status`와 작업 관리자에서 그 실행의 프로세스(`codeye worker`와 그 자식)가 없는지 보고, 확인 상자를 체크한 뒤 "정리 확인 후 다시 실행"을 누른다. CLI는 `codeye run recover --id RUN_ID --confirm-cleanup`이다(설정 파일의 DB를 쓴다). 확인은 감사 기록에 남는다 |
 | `the target database is not empty; restore only into a new, empty database` | 복원 대상 DB가 비어 있지 않다. 새 DB를 만든다 |
-| `the target state_dir already has personal.json; restore needs a fresh state_dir` | 새 `state_dir`를 쓴다 |
+| `the target state_dir already has admin.json; restore needs a fresh state_dir` | 새 `state_dir`를 쓴다 |
 | `backup verification failed: …` | 세트가 손상됐거나 완성되지 않았다(manifest 없음). 다른 세트를 쓴다 |
 | 로그인 링크가 만료됐거나 이미 썼다 | `codeye open` |
-| `codeye start/stop/status manage processes on Linux only …` | Windows·macOS는 개인 모드를 지원하지 않는다 |
+| `codeye start/stop/status manage processes on Linux only …` | Windows·macOS에서는 `codeye up`으로 서비스를 띄우지 못한다(`codeye serve`·`agent`는 따로 실행할 수 있다) |
 
 점검 순서: `codeye status --format json` → `codeye doctor --config PATH` → `state_dir/logs/controller.log`, `agent.log`, `postgres.log`. 로그와 `status`·`stop` 출력에는 DB 비밀번호와 토큰이 나오지 않는다(`up`·`open`이 출력하는 로그인 링크에는 일회용 토큰이 있다). 문의할 때 설정 파일과 로그를 그대로 보내도 연결 정보는 들어 있지 않다. 다만 경로와 프로젝트 이름은 들어 있다. 관리형 DB 비밀번호는 `state_dir/postgres/password`에만 있으니 상태 디렉터리를 통째로 보내지 않는다.

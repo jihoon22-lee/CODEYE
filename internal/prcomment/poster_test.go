@@ -118,7 +118,7 @@ func TestPosterKeepsOneCommentAndNeverGoesBack(t *testing.T) {
 	// Someone pasted the marker into their own comment.
 	fake.AddComment("acme/widget", 7, "mallory", ProjectMarker(project)+"\nnot CODEYE")
 	m := &memStore{sources: map[string]postgres.CommentPreview{}, posted: map[string]bool{}, versions: map[string]int64{}, outcomes: map[string]postgres.CommentOutcome{}}
-	p := &Poster{Store: m, GitHub: func() (*github.Client, string) { return github.New(fake.URL, token), "" }}
+	p := &Poster{Store: m, GitHub: func(string) (*github.Client, string) { return github.New(fake.URL, token), "" }}
 	ctx := context.Background()
 
 	// Preview first: nothing is written.
@@ -178,6 +178,36 @@ func TestPosterKeepsOneCommentAndNeverGoesBack(t *testing.T) {
 	}
 }
 
+// A comment is posted with the token of the user who started the run: the poster asks
+// for the job's requester, and GitHub shows that account as the author.
+func TestPosterPostsWithTheRequestersToken(t *testing.T) {
+	fake := githubtest.New("", "")
+	defer fake.Close()
+	fake.Users = map[string]string{"tok-alice-123456": "alice", "tok-bob-1234567": "bob"}
+	fake.AddPullRequest("acme/widget", githubtest.PullRequest{Number: 7, Title: "Fix", State: "open", BaseRef: "main", BaseSHA: base, HeadRef: "fix", HeadSHA: headA})
+	tokens := map[string]string{"alice-id": "tok-alice-123456", "bob-id": "tok-bob-1234567"}
+	var asked []string
+	m := &memStore{sources: map[string]postgres.CommentPreview{}, posted: map[string]bool{}, versions: map[string]int64{}, outcomes: map[string]postgres.CommentOutcome{}}
+	p := &Poster{Store: m, GitHub: func(owner string) (*github.Client, string) {
+		asked = append(asked, owner)
+		return github.New(fake.URL, tokens[owner]), ""
+	}}
+	m.queue(t, runA, headA, 100, 1)
+	m.due[0].RequesterID = "alice-id"
+	if n, err := p.Run(context.Background()); err != nil || n != 1 || m.outcomes[runA].State != postgres.CommentPosted {
+		t.Fatalf("post: %d %v %+v", n, err, m.outcomes[runA])
+	}
+	cs := fake.Comments("acme/widget", 7)
+	if len(asked) != 1 || asked[0] != "alice-id" || len(cs) != 1 || cs[0].Author != "alice" {
+		t.Fatalf("asked %v comments %+v", asked, cs)
+	}
+	for _, rq := range fake.Requests() {
+		if rq.Login != "alice" {
+			t.Fatalf("a call carried another token: %+v", rq)
+		}
+	}
+}
+
 func (m *memStore) preview(t *testing.T, run, head string, version int64) postgres.CommentPreview {
 	return postgres.CommentPreview{RunID: run, ProjectID: project, Pin: pin(head, true), Version: version, ReportRevision: 1, ReportBody: prReport(t, head)}
 }
@@ -191,7 +221,7 @@ func TestPosterFailuresAreRecorded(t *testing.T) {
 	fake.AddPullRequest("acme/widget", githubtest.PullRequest{Number: 7, Title: "Fix", State: "open", BaseRef: "main", BaseSHA: base, HeadRef: "fix", HeadSHA: headA})
 	m := &memStore{sources: map[string]postgres.CommentPreview{}, posted: map[string]bool{}, versions: map[string]int64{}, outcomes: map[string]postgres.CommentOutcome{}}
 	now := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
-	p := &Poster{Store: m, GitHub: func() (*github.Client, string) { return github.New(fake.URL, token), "codeye-bot" }, Now: func() time.Time { return now }}
+	p := &Poster{Store: m, GitHub: func(string) (*github.Client, string) { return github.New(fake.URL, token), "codeye-bot" }, Now: func() time.Time { return now }}
 	ctx := context.Background()
 
 	fake.FailPrefix, fake.FailStatus = "/repos/acme/widget/issues", 429
@@ -214,7 +244,7 @@ func TestPosterFailuresAreRecorded(t *testing.T) {
 	}
 	fake.FailPrefix = ""
 	before := len(fake.Requests())
-	p.GitHub = func() (*github.Client, string) { return github.New(fake.URL, ""), "" }
+	p.GitHub = func(string) (*github.Client, string) { return github.New(fake.URL, ""), "" }
 	m.queue(t, runA, headA, 100, 1)
 	if _, _ = p.Run(ctx); m.outcomes[runA].Reason != ReasonNoToken || len(fake.Requests()) != before {
 		t.Fatalf("no token: %+v", m.outcomes[runA])

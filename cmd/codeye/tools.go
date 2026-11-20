@@ -10,14 +10,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
 // toolsCommand is `codeye tools [--config PATH] [--json | --checklist]`: it detects the
 // tools CODEYE can use on this machine and prints what was found, what is
 // missing and how to add it (docs/ANALYZERS.md#도구-찾기). It changes nothing
-// except <state_dir>/tools.json when a personal configuration names an
+// except <state_dir>/tools.json when a service configuration names an
 // existing state directory.
 func toolsCommand(ctx context.Context, args []string, out, stderr io.Writer) int {
 	var configPath string
@@ -30,10 +30,10 @@ func toolsCommand(ctx context.Context, args []string, out, stderr io.Writer) int
 	}) || (asJSON && checklist) {
 		return 2
 	}
-	var cfg *personal.Config
+	var cfg *instance.Config
 	switch {
 	case configPath != "":
-		c, err := personal.Load(configPath, knownTools())
+		c, err := instance.Load(configPath, knownTools())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
@@ -42,9 +42,9 @@ func toolsCommand(ctx context.Context, args []string, out, stderr io.Writer) int
 	default:
 		// The default configuration is optional here: the table is useful
 		// before anything is set up.
-		if p, err := personal.DefaultPath(); err == nil {
+		if p, err := instance.DefaultPath(); err == nil {
 			if _, statErr := os.Stat(p); statErr == nil {
-				c, err := personal.Load(p, knownTools())
+				c, err := instance.Load(p, knownTools())
 				if err != nil {
 					fmt.Fprintln(stderr, "ignoring the default configuration:", err)
 				} else {
@@ -90,9 +90,9 @@ func toolsCommand(ctx context.Context, args []string, out, stderr io.Writer) int
 	return 0
 }
 
-// explicitTools maps the personal configuration onto the settings that always
+// explicitTools maps the service configuration onto the settings that always
 // win over detection. cfg may be nil.
-func explicitTools(cfg *personal.Config) toolfind.Explicit {
+func explicitTools(cfg *instance.Config) toolfind.Explicit {
 	if cfg == nil {
 		return toolfind.Explicit{}
 	}
@@ -106,7 +106,7 @@ func explicitTools(cfg *personal.Config) toolfind.Explicit {
 
 // detectTools runs the detection with the explicit settings of cfg (nil for
 // none). Tests replace it.
-var detectTools = func(ctx context.Context, cfg *personal.Config) toolfind.Result {
+var detectTools = func(ctx context.Context, cfg *instance.Config) toolfind.Result {
 	return toolfind.Detect(ctx, toolfind.Options{Explicit: explicitTools(cfg)})
 }
 
@@ -114,7 +114,7 @@ var detectTools = func(ctx context.Context, cfg *personal.Config) toolfind.Resul
 // explicit values stay, missing ones are filled, and both Python type checkers
 // are enabled when both are present. The agent arguments built from cfg.Agent
 // (agentArgv) are then complete.
-func useDetectedTools(cfg *personal.Config, res toolfind.Result) {
+func useDetectedTools(cfg *instance.Config, res toolfind.Result) {
 	r := toolfind.Resolve(res, explicitTools(cfg))
 	a := &cfg.Agent
 	a.Go, a.Git, a.GoModCache = r.Go, r.Git, r.GoModCache
@@ -124,7 +124,7 @@ func useDetectedTools(cfg *personal.Config, res toolfind.Result) {
 	// unless the configuration names them.
 	if s := res.GoSettings; s != nil && a.DependenciesEnabled() {
 		if a.Dependencies == nil {
-			a.Dependencies = &personal.Dependencies{}
+			a.Dependencies = &instance.Dependencies{}
 		}
 		d := a.Dependencies
 		for _, f := range []struct {
@@ -140,7 +140,7 @@ func useDetectedTools(cfg *personal.Config, res toolfind.Result) {
 	// configuration names one.
 	if res.NpmRegistry != "" && a.DependenciesEnabled() {
 		if a.Dependencies == nil {
-			a.Dependencies = &personal.Dependencies{}
+			a.Dependencies = &instance.Dependencies{}
 		}
 		if a.Dependencies.NpmRegistry == "" {
 			a.Dependencies.NpmRegistry = res.NpmRegistry
@@ -148,12 +148,12 @@ func useDetectedTools(cfg *personal.Config, res toolfind.Result) {
 	}
 }
 
-// prepareTools is the start-up step of personal mode: detect the tools
+// prepareTools is the start-up step of the service: detect the tools
 // (unless agent.auto_detect is false), record <state_dir>/tools.json, print
 // the found / missing / how-to-add table to out and complete cfg.Agent with
 // the result. It returns the detection result; with detection off the result
 // is empty and cfg.Agent is unchanged.
-func prepareTools(ctx context.Context, cfg *personal.Config, out io.Writer) (toolfind.Result, error) {
+func prepareTools(ctx context.Context, cfg *instance.Config, out io.Writer) (toolfind.Result, error) {
 	if !cfg.Agent.AutoDetectEnabled() {
 		return toolfind.Result{}, nil
 	}

@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 )
 
 // `codeye service install|uninstall|print` (docs/OPERATIONS.md#사용자-서비스): a
-// systemd user unit that keeps personal mode running after the terminal
+// systemd user unit that keeps the service running after the terminal
 // closes. The unit runs `codeye start` (it never prints a login link, so no
 // token reaches the journal) and `codeye stop` when the service stops.
 // codeye start spawns its processes and exits, so the unit is oneshot with
@@ -74,7 +74,7 @@ func serviceUnit(exe, config, path string, stop time.Duration) string {
 	env := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%", "$", "$$").Replace(path)
 	return unitMarker + " Remove with codeye service uninstall.\n" +
 		"[Unit]\n" +
-		"Description=CODEYE personal mode (PostgreSQL, controller, agent)\n" +
+		"Description=CODEYE web service (PostgreSQL, controller, agent)\n" +
 		"\n" +
 		"[Service]\n" +
 		"Type=oneshot\n" +
@@ -124,13 +124,13 @@ func serviceCommand(ctx context.Context, args []string, out, stderr io.Writer) i
 		// Removing the unit needs no configuration (it may be gone already).
 		return serviceUninstall(ctx, name, out, stderr)
 	}
-	config, err := personalConfigPath(config)
+	config, err := instanceConfigPath(config)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	// The unit names this file: it must already be a valid configuration.
-	cfg, err := personal.Load(config, knownTools())
+	cfg, err := instance.Load(config, knownTools())
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2

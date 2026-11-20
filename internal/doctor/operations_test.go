@@ -13,16 +13,16 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/backup"
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 )
 
-func personalConfig(t *testing.T, base, listen string) *personal.Config {
+func instanceConfig(t *testing.T, base, listen string) *instance.Config {
 	t.Helper()
 	q := func(s string) string { b, _ := json.Marshal(s); return string(b) }
 	raw := `{"schema_version":"0.1","state_dir":` + q(filepath.Join(base, "state")) + `,"listen":` + q(listen) +
 		`,"database":{"mode":"external"},"source_roots":[{"label":"work","path":` + q(filepath.Join(base, "src")) + `}]` +
 		`,"quota":{"logs_bytes":10,"workspace_bytes":1073741824},"backup_dir":` + q(filepath.Join(base, "backups")) + `}`
-	cfg, err := personal.Parse([]byte(raw), nil)
+	cfg, err := instance.Parse([]byte(raw), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +51,8 @@ func TestOperationsStorageBackupAndProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ln.Close()
-	cfg := personalConfig(t, base, ln.Addr().String())
-	layout := personal.Layout{Root: cfg.StateDir}
+	cfg := instanceConfig(t, base, ln.Addr().String())
+	layout := instance.Layout{Root: cfg.StateDir}
 	if err := os.MkdirAll(layout.LogDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -79,9 +79,9 @@ func TestOperationsStorageBackupAndProcesses(t *testing.T) {
 	if ops.Backup.Status != "none" || ops.Backup.Latest != nil {
 		t.Fatalf("backup %+v", ops.Backup)
 	}
-	if personal.Supported() == nil {
-		if ops.Processes.Status != "inconsistent" || strings.Join(ops.Processes.Issues, ",") != personal.IssueListenWithoutRecord ||
-			ops.Processes.Controller != personal.ProcNone || ops.Processes.Agent != personal.ProcNone {
+	if instance.Supported() == nil {
+		if ops.Processes.Status != "inconsistent" || strings.Join(ops.Processes.Issues, ",") != instance.IssueListenWithoutRecord ||
+			ops.Processes.Controller != instance.ProcNone || ops.Processes.Agent != instance.ProcNone {
 			t.Fatalf("processes %+v", ops.Processes)
 		}
 	} else if ops.Processes.Status != "unsupported" {
@@ -114,21 +114,21 @@ func TestOperationsStorageBackupAndProcesses(t *testing.T) {
 	}
 
 	// A record whose pid now belongs to another process is stale.
-	if personal.Supported() == nil {
+	if instance.Supported() == nil {
 		if err := layout.Prepare(); err != nil {
 			t.Fatal(err)
 		}
-		if err := layout.WriteRecord(personal.Record{Role: personal.RoleAgent, PID: os.Getpid(), StartTime: 1, Executable: "/x", StartedAt: now}); err != nil {
+		if err := layout.WriteRecord(instance.Record{Role: instance.RoleAgent, PID: os.Getpid(), StartTime: 1, Executable: "/x", StartedAt: now}); err != nil {
 			t.Fatal(err)
 		}
 		ops = operations(cfg, now)
-		if ops.Processes.Status != "inconsistent" || ops.Processes.Agent != personal.ProcReused || !strings.Contains(strings.Join(ops.Processes.Issues, ","), personal.IssueStaleRecord) {
+		if ops.Processes.Status != "inconsistent" || ops.Processes.Agent != instance.ProcReused || !strings.Contains(strings.Join(ops.Processes.Issues, ","), instance.IssueStaleRecord) {
 			t.Fatalf("stale record %+v", ops.Processes)
 		}
-		if err := layout.RemoveRecord(personal.RoleAgent); err != nil {
+		if err := layout.RemoveRecord(instance.RoleAgent); err != nil {
 			t.Fatal(err)
 		}
-		// A running start/stop holds the personal lock: reported, not probed.
+		// A running start/stop holds the service lock: reported, not probed.
 		unlock, err := layout.Lock()
 		if err != nil {
 			t.Fatal(err)
@@ -160,7 +160,7 @@ func TestOperationsStorageBackupAndProcesses(t *testing.T) {
 				time.Sleep(20 * time.Millisecond)
 			}
 			ops = operations(cfg, now)
-			if ops.Processes.Status != "inconsistent" || strings.Join(ops.Processes.Issues, ",") != personal.IssueAgentWithoutRecord {
+			if ops.Processes.Status != "inconsistent" || strings.Join(ops.Processes.Issues, ",") != instance.IssueAgentWithoutRecord {
 				t.Fatalf("unrecorded agent %+v", ops.Processes)
 			}
 		}
@@ -173,8 +173,8 @@ func TestOperationsStorageBackupAndProcesses(t *testing.T) {
 	if err := plain.Write(&out, "json"); err != nil || strings.Contains(out.String(), "operations") {
 		t.Fatalf("operations without --config: %v", err)
 	}
-	menv := personal.ModelEnv{Getenv: func(string) string { return "" }, Home: t.TempDir()}
-	full := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Personal: cfg, Detect: detectedTools("ruff"), ModelEnv: &menv}, runner)
+	menv := instance.ModelEnv{Getenv: func(string) string { return "" }, Home: t.TempDir()}
+	full := Collect(context.Background(), Options{WorkDir: t.TempDir(), Timeout: time.Second, Instance: cfg, Detect: detectedTools("ruff"), ModelEnv: &menv}, runner)
 	out.Reset()
 	if err := full.Write(&out, "json"); err != nil || !strings.Contains(out.String(), `"operations"`) {
 		t.Fatalf("operations missing: %v", err)

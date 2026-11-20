@@ -20,7 +20,7 @@ const testGitHubToken = "tok-httpapi-123456"
 
 // pullRequestRun is the isolation world's pull-request run: a github.com
 // project of the same owner with the same members, and a run pinned
-// directly (server mode resolves no pull request itself).
+// directly in the store (this world has no GitHub API to resolve it).
 func (w *isoWorld) pullRequestRun() string {
 	if w.prRun != "" {
 		return w.prRun
@@ -50,25 +50,21 @@ func (w *isoWorld) pullRequestRun() string {
 	return r.ID
 }
 
-// writeGitHubCredential stores the token like `codeye up` does.
-func writeGitHubCredential(t *testing.T, state, token, login string) {
+// writeGitHubCredential stores user's token like `codeye up` does for the
+// administrator who runs the service.
+func writeGitHubCredential(t *testing.T, state, user, token, login string) {
 	t.Helper()
-	dir := filepath.Join(state, "secrets")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(github.Credential{SchemaVersion: github.CredentialSchema, Host: "github.com", Token: token, Source: "GH_TOKEN", Login: login})
-	if err := os.WriteFile(filepath.Join(dir, "github.json"), raw, 0o600); err != nil {
+	if err := github.UserTokensDir(state).Write(user, github.Credential{Host: "github.com", Token: token, Source: "GH_TOKEN", Login: login}); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func patch(s string) *string { return &s }
 
-// Pull-request runs in personal mode: the controller resolves the pull
+// Pull-request runs in the service: the controller resolves the pull
 // request with the stored token, pins it on the run and shows it in the run
 // view and the comment preview; GitHub's refusals have their own codes;
-// server mode, a folder project and schedules refuse pull requests; the
+// a project that is not on github.com and schedules refuse pull requests; the
 // remembered comment choice applies when the request leaves it out; the
 // token never appears in a response or the log.
 func TestPullRequestRunsOverHTTP(t *testing.T) {
@@ -100,16 +96,16 @@ func TestPullRequestRunsOverHTTP(t *testing.T) {
 	run := func(u user, p string, body any, status int, code string) resp {
 		return e.do("POST", "/api/v1/projects/"+p+"/runs", body, opts{cookie: u.cookie, csrf: u.csrf, idem: domain.NewID()}).want(t, status, code)
 	}
-	// Server mode: no GitHub connection.
-	serverProject := project(u, prov.ID, "https://github.com/acme/widget")
-	run(u, serverProject, runBody(map[string]any{"number": 7}), 422, "PULL_REQUEST_UNSUPPORTED")
-
+	// The repository is private to octo: without the owner's token GitHub
+	// shows no such pull request.
+	fake.Private = map[string]string{"acme/widget": "octo"}
 	state := filepath.Join(t.TempDir(), "state")
-	writeGitHubCredential(t, state, testGitHubToken, "octo")
-	e.personal = &Personal{StateDir: state, GitHubAPI: fake.URL}
+	e.inst = &Instance{StateDir: state, GitHubAPI: fake.URL}
 	e.start(t.TempDir())
 	u = e.login(u.id)
-	p := serverProject
+	p := project(u, prov.ID, "https://github.com/acme/widget")
+	run(u, p, runBody(map[string]any{"number": 7}), 422, "PULL_REQUEST_NOT_FOUND")
+	writeGitHubCredential(t, state, u.id, testGitHubToken, "octo")
 	r := run(u, p, runBody(map[string]any{"number": 7}), 202, "")
 	v := e.do("GET", "/api/v1/runs/"+r.body["id"].(string), nil, u.o()).want(t, 200, "")
 	pr := v.body["pull_request"].(map[string]any)
@@ -171,7 +167,7 @@ func TestPullRequestRunsOverHTTP(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(state, "run"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(state, "run", PersonalSetupFile), []byte(`{"schema_version":"0.1","model":null,"git":false,"git_hosts":[],"offline":true}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(state, "run", InstanceSetupFile), []byte(`{"schema_version":"0.1","model":null,"git":false,"git_hosts":[],"offline":true}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	calls := len(fake.Requests())
@@ -182,12 +178,13 @@ func TestPullRequestRunsOverHTTP(t *testing.T) {
 	if n := len(fake.Requests()); n != calls {
 		t.Fatalf("%d GitHub calls offline", n-calls)
 	}
-	if err := os.Remove(filepath.Join(state, "run", PersonalSetupFile)); err != nil {
+	if err := os.Remove(filepath.Join(state, "run", InstanceSetupFile)); err != nil {
 		t.Fatal(err)
 	}
 
-	// Every API call carried the stored token; no answer or log line did.
-	for _, rq := range fake.Requests() {
+	// Every API call after the token was stored carried it; no answer or
+	// log line did.
+	for _, rq := range fake.Requests()[1:] {
 		if !rq.Authorized {
 			t.Fatalf("anonymous call %+v", rq)
 		}

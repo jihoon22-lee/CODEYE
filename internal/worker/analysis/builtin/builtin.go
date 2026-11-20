@@ -53,7 +53,7 @@ type Config struct {
 	// (docs/ANALYZERS.md#rust-환경); it is never given to an analyzer as PATH.
 	ToolPath string
 	// AdvertiseWithoutBaseline makes the deep-review capability available
-	// even when no baseline analyzer probed successfully (personal mode). The
+	// even when no baseline analyzer probed successfully (the service). The
 	// analyzers that are not usable keep planning their tasks and report them
 	// unsupported, so a run on a node without tools finishes with the gaps
 	// recorded instead of waiting for a node that never appears.

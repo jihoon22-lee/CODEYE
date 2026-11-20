@@ -126,9 +126,55 @@ describe('response validation', () => {
     ]).fetch }).listProjects()).items;
     expect(projects.map(p => p.analysis?.fetch_dependencies)).toEqual([true, true, false]);
     expect(await rejection(createApi({ fetch: page([{ ...PROJECT, analysis: { ...old, fetch_dependencies: 'no' } }]).fetch }).listProjects())).toMatchObject({ kind: 'invalid_response' });
-    const setup = { mode: 'personal', model: null, git: null, readable_folders: [], tools: null, analysis_defaults: { local: { send_source_to_model: true, run_build_scripts: true }, git: { ...old, fetch_dependencies: false } } };
+    const setup = { model: null, git: null, readable_folders: [], tools: null, analysis_defaults: { local: { send_source_to_model: true, run_build_scripts: true }, git: { ...old, fetch_dependencies: false } } };
     const s = await createApi({ fetch: mockFetch(() => json(200, setup)).fetch }).getSetup();
     expect(s.analysis_defaults).toEqual({ local: { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }, git: { ...old, fetch_dependencies: false } });
+  });
+
+  it('reads what the service offers the signed-in user, and refuses a malformed answer', async () => {
+    const setup = {
+      is_admin: false, service_origin: 'http://codeye.lan:7331', model: { configured: true, id: 'p/m', probe: 'verified' },
+      git: { available: true, hosts: ['github.com'] }, readable_folders: ['/srv/team'],
+      analysis_defaults: { local: { send_source_to_model: true, run_build_scripts: false }, git: { send_source_to_model: true, run_build_scripts: false } },
+      available: { local_path: { available: true, reason: null }, build_scripts: { available: false, reason: 'not_offered' }, a_later_item: { available: true, reason: null } },
+      tools: null, github: { enabled: true, host: 'github.com', token: true, account: 'octo', source: 'web', reason: null }, offline: false,
+    };
+    const s = await createApi({ fetch: mockFetch(() => json(200, setup)).fetch }).getSetup();
+    expect(s).toMatchObject({ is_admin: false, service_origin: 'http://codeye.lan:7331', readable_folders: ['/srv/team'], offline: false,
+      github: { token: true, account: 'octo', source: 'web' } });
+    expect(s.available).toEqual({ local_path: { available: true, reason: null }, build_scripts: { available: false, reason: 'not_offered' } });
+    expect(await rejection(createApi({ fetch: mockFetch(() => json(200, { ...setup, available: { build_scripts: { available: 'no' } } })).fetch }).getSetup())).toMatchObject({ kind: 'invalid_response' });
+  });
+
+  it('calls the GitHub connection and the administrator routes, and never parses a token back', async () => {
+    const view = { host: 'github.com', connected: true, account: null, source: 'web', storable: true, reason: null };
+    const m = mockFetch(call => call.method === 'DELETE' || call.url.endsWith('/everyone') ? new Response(null, { status: 204 })
+      : call.url === '/api/v1/admin/settings' ? json(200, { others_model_review: false, others_build_scripts: false, updated_at: '2026-11-20T00:00:00Z', service_origin: null })
+      : call.url === '/api/v1/admin/source-roots' ? json(201, { id: 'r1', label: 'nfs', path: '/mnt/nfs', everyone: true, created_at: '2026-11-20T00:00:00Z', grants: [] })
+      : call.url === '/api/v1/admin/providers' ? json(201, { id: 'p1', kind: 'ghes', host: 'ghe.example.com', api_url: null })
+      : json(200, { ...view, token: 'must-not-matter' }));
+    const api = createApi({ fetch: m.fetch });
+    expect(await api.putAccountGitHub('tok-123456789')).toEqual(view);
+    await api.deleteAccountGitHub();
+    expect((await api.addSourceRoot({ path: '/mnt/nfs', everyone: true })).path).toBe('/mnt/nfs');
+    await api.setSourceRootEveryone('r1', false);
+    expect((await api.addProvider('ghe.example.com')).kind).toBe('ghes');
+    expect((await api.putSettings({ others_model_review: false })).others_model_review).toBe(false);
+    expect(m.calls.map(c => `${c.method} ${c.url} ${JSON.stringify(c.body ?? null)}`)).toEqual([
+      'PUT /api/v1/account/github {"token":"tok-123456789"}',
+      'DELETE /api/v1/account/github null',
+      'POST /api/v1/admin/source-roots {"path":"/mnt/nfs","everyone":true}',
+      'PUT /api/v1/admin/source-roots/r1/everyone {"everyone":false}',
+      'POST /api/v1/admin/providers {"host":"ghe.example.com"}',
+      'PUT /api/v1/admin/settings {"others_model_review":false}',
+    ]);
+  });
+
+  it('keeps the folders a refused path may use from the error details', async () => {
+    const m = mockFetch(() => apiError(422, 'FOLDER_NOT_READABLE', 'outside', false, { readable_folders: ['/srv/team', 7, ''] }));
+    const e = await rejection(createApi({ fetch: m.fetch }).createProject({ local_path: '/opt/x', open_existing: true }));
+    expect(e).toMatchObject({ code: 'FOLDER_NOT_READABLE', readableFolders: ['/srv/team'] });
+    expect(m.calls[0]!.body).toEqual({ local_path: '/opt/x', open_existing: true });
   });
 
   it('sends the dependency choice with the other analysis choices', async () => {

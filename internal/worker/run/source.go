@@ -60,8 +60,12 @@ func (w *worker) acquire(a *attempt) string {
 			break
 		}
 		a.anyProc.Store(true)
+		credential := job.GitCredentialFile
+		if credential == "" {
+			credential = w.hello.GitCredentialFile
+		}
 		opts := source.GitOptions{Executable: w.hello.GitExecutable, AllowedHost: job.Source.AllowedHost, AllowedLocalRoot: job.Source.AllowedLocalRoot, Timeout: 10 * time.Minute, CABundle: w.hello.CABundle,
-			Token: source.ReadHostToken(w.hello.GitCredentialFile, job.Source.AllowedHost)}
+			Token: source.ReadHostToken(credential, job.Source.AllowedHost)}
 		branch := job.Source.Branch
 		if pr := job.PullRequest; pr != nil {
 			// A pull request names its own head; the project's branch is not fetched.

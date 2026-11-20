@@ -41,12 +41,12 @@ CODEYE 저장소 자체의 자동 테스트(GitHub Actions)는 위 CI 비목표�
 
 ## 현재 제공 범위
 
-지금 쓸 수 있는 것은 **한 Linux 머신의 개인 모드**다. 설치와 사용은 [사용 안내서](GUIDE.md)를 따른다.
+지금 쓸 수 있는 것은 **한 Linux 머신에서 `codeye up`으로 띄우는 웹 서비스**다. 혼자 써도, 다른 머신의 여러 사용자를 초대해도 같은 서비스이며 로그인한 사람마다 받은 권한으로 분석할 수 있는 것이 정해진다(A53). 설치와 사용은 [사용 안내서](GUIDE.md)를 따른다.
 
 | 영역 | 현재 제공 |
 |---|---|
-| 실행 형태 | 상태 디렉터리의 관리형 PostgreSQL(기본) 또는 운영자가 준비한 PostgreSQL, loopback 전용 controller와 로컬 에이전트. `codeye up`·`open`·`start`·`stop`·`status`(Linux 전용), 한 머신의 여러 워커와 최소·최대 자동 증감, 취소, lease·fencing |
-| 입력 | 승인된 local source root의 경로, 승인된 HTTPS 호스트의 공개 Git 저장소 브랜치. 설명 없이 등록하고 문서·환경·모듈을 자동 탐색 |
+| 실행 형태 | 상태 디렉터리의 관리형 PostgreSQL(기본) 또는 운영자가 준비한 PostgreSQL, controller(loopback, 또는 다른 머신용 TLS·명시적 평문 HTTP)와 로컬 에이전트. `codeye up`·`open`·`start`·`stop`·`status`(Linux 전용), 한 머신의 여러 워커와 최소·최대 자동 증감, 취소, lease·fencing |
+| 입력 | 사용자에게 허가된(또는 모두에게 연) 서버 폴더의 경로, 승인된 HTTPS 호스트의 Git 저장소 브랜치와 github.com pull request(비공개 저장소는 run을 시작한 사람의 token). 설명 없이 등록하고 문서·환경·모듈을 자동 탐색 |
 | 정적 분석 | Go(go vet·Staticcheck), C/C++(cppcheck·clang-tidy), Python(ruff·mypy·pyright·bandit), JS/TS(ESLint·tsc), Rust(cargo check·clippy) 다섯 언어 팩과 언어 무관 구조·중복 지표(lizard·jscpd)·비밀정보(gitleaks). 도구는 운영자가 설치하고 경로를 지정한다 |
 | 모델 검토 | 검토 지침 하나(`prompts/review`), 승인된 OpenCode 연결. 모델 없이도 도구 결과 보고서가 나온다 |
 | 보고서 | 종합과 분석 종류별 절(환경·문서·정적 분석·지표·비밀정보·모델 검토·분석 공백), 개별 근거, JSON·Markdown·HTML 내보내기(코드 제외가 기본), 프로젝트별 단계 표시와 가중 진행률, SSE 재접속 |
@@ -54,9 +54,9 @@ CODEYE 저장소 자체의 자동 테스트(GitHub Actions)는 위 CI 비목표�
 | 운영 | 저장 영역 상한, 같은 시점 DB·산출물 백업과 새 위치로 복원, `codeye doctor` |
 | 평가 | 품질 평가 runner와 정답 차단 relay([평가](EVALUATION.md)) |
 
-아직 없는 것: 계정·구성원·감사 기록의 웹 화면(API와 운영자 CLI는 있다), GitHub App·webhook·PR·댓글, 다중 물리 노드 검증, 폐쇄망 배포팩, Windows의 up/start/stop과 관리형 PostgreSQL, 빌드·기존 테스트 실행(`with-tests`), 모듈 중심 분석(`focused`), 잔여 시간 추정. 계획과 순서는 [로드맵](ROADMAP.md)에 있다.
+아직 없는 것: GitHub App·webhook·댓글 명령, 다중 물리 노드 검증, 실제 폐쇄망 검증, OS 계정 권한으로 서버 폴더를 다시 확인하는 규칙, Windows의 up/start/stop과 관리형 PostgreSQL, 빌드·기존 테스트 실행(`with-tests`), 모듈 중심 분석(`focused`), 잔여 시간 추정. 계획과 순서는 [로드맵](ROADMAP.md)에 있다.
 
-API 권한·프로젝트 소유권·노드 식별·lease는 개인 모드에도 있다. 여러 사용자에게 공개할 때 보안과 분산 상태를 뒤늦게 덧붙이지 않는다. 개인 모드의 검증 결과를 전체 제품 출시라고 표현하지 않는다.
+API 권한·프로젝트 소유권·노드 식별·lease는 처음부터 여러 사용자를 전제로 한다. 한 머신의 검증 결과를 여러 물리 머신 배포의 검증이라고 표현하지 않는다.
 
 ## 품질 축
 
@@ -89,7 +89,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 개인 모드에도 
 | 실행자 | 분석·취소·보고서 검토 |
 | 열람자 | 읽기만 |
 
-개인 모드에서도 owner ID와 프로젝트 ACL은 존재한다. 서버 실행 계정의 NFS 권한이 모든 웹 사용자에게 자동 승계되지 않는다. 로컬 계정(사용자 이름·비밀번호), 전역 관리자 역할(계정·source root 허가·감사 기록, 프로젝트 권한은 없음), 프로젝트 구성원 관리는 API와 운영자 CLI로 제공하고 웹 화면은 아직 없다([보안](SECURITY.md), [로드맵](ROADMAP.md)).
+모든 사용자에게 owner ID와 프로젝트 ACL이 있다. 서버 실행 계정의 NFS 권한이 모든 웹 사용자에게 자동 승계되지 않는다: 서버 폴더는 관리자가 사용자마다(또는 모두에게) 허가한 것만 경로로 쓴다. 로컬 계정(사용자 이름·비밀번호), 전역 관리자 역할(계정·폴더 허가·Git host·서비스 스위치·감사 기록, 프로젝트 권한은 없음), 프로젝트 구성원 관리는 웹 화면·API·운영자 CLI로 제공한다([보안](SECURITY.md)).
 
 ## 기능 요구
 
@@ -137,7 +137,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 개인 모드에도 
 
 | ID | 상태 |
 |---|---|
-| REQ-002 | 개인 모드의 owner·프로젝트 ACL과 source root grant는 구현. 여러 사용자 계정과 역할 운영은 설계 계약(미구현) |
+| REQ-002 | 프로젝트 ACL, 사용자별·모두에게 연 폴더 허가, 여러 사용자 계정과 역할은 구현. 노드 실행 계정(OS 계정)의 폴더 권한을 사용자별로 다시 확인하는 규칙은 미구현(연결점만 있다, [서버 경로 허가](SECURITY.md#서버-경로-허가)) |
 | REQ-004 | 모듈·런타임 버전 선언·문서·노드 관측은 구현. include·define, 가상환경·stub, features 같은 추가 빌드 조건 수집은 설계 계약(미구현)([아키텍처](ARCHITECTURE.md)) |
 | REQ-006 | 분석기 팩이 task마다 대상 범위와 판정 필수 여부(`required_for_verdict`)를 계획. 예산·완료 기준을 갖는 완전한 계획 DAG는 설계 계약(미구현)([아키텍처](ARCHITECTURE.md)) |
 | REQ-014 | 정적 검사와 Go 모듈·Rust crate·JS/TS 패키지·Python 패키지(wheel만) 의존성 받기(분석 전, 저장소 코드 실행 없음, Rust는 저장소 코드 실행 허가가 있을 때만)는 구현([의존성 준비](ARCHITECTURE.md#의존성-준비)). C/C++ 의존성 받기와 빌드·기존 테스트 실행은 설계 계약(미구현) |
@@ -146,7 +146,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 개인 모드에도 
 | REQ-018 | 작업·노드·pool·전역 자원 상한과 relay의 모델 예산은 구현. endpoint별 모델 동시 요청 상한(`model_max_inflight`)과 전역 모델 semaphore는 설계 계약(미구현)([실행](EXECUTION.md)) |
 | REQ-019 | 등록·능력 배정은 구현. 한 머신의 두 노드 신원으로만 시험했고 여러 물리 머신은 미검증 |
 | REQ-022 | durable queue·lease/fencing·취소·복구·다시 시도(`POST /runs/{id}/retry`)는 구현. `recovery_required` run의 다시 시도는 미구현([API](API.md#다시-시도)) |
-| REQ-024 | 승인된 HTTPS 호스트의 공개 Git 저장소 읽기는 구현(개인 모드는 주소 하나로, 브랜치를 비우면 기본 브랜치). 개인 모드는 github.com token을 자동으로 찾아 비공개 저장소를 읽고, pull request 주소를 분석하며, 켠 경우 결과 댓글 하나를 게시한다(구현). GHES 실기, 서버 모드의 credential, App·webhook·댓글 명령은 설계 계약(미구현) |
+| REQ-024 | 승인된 HTTPS 호스트의 Git 저장소 읽기는 구현(주소 하나로, 브랜치를 비우면 기본 브랜치). 사용자마다 github.com token을 두고(관리자는 자동 발견) run을 시작한 사람의 token으로 비공개 저장소를 읽고, pull request 주소를 분석하며, 켠 경우 결과 댓글 하나를 게시한다(구현). GHES 실기, GHES token, App·webhook·댓글 명령은 설계 계약(미구현) |
 | REQ-025 | 연결 진단과 권한 부여 가이드는 설계 계약(미구현) |
 | REQ-030 | 외부 다운로드·모델 fallback을 하지 않는 실행 경로, 폐쇄망 배포팩(`scripts/offline_pack.py`), 오프라인 모드(`offline`), 사내 CA(`ca_bundle`), doctor 오프라인 점검은 구현. 사설 CA·로컬 미러·network namespace로 확인했고 실제 폐쇄망·RHEL 8.10은 미실행 |
 | REQ-031 | 코드 포함/미포함 내보내기와 요청마다의 열람 권한 확인은 구현. 여러 사용자 사이의 접근 제어는 다중 사용자 작업에 속함 |
@@ -168,13 +168,13 @@ API 권한·프로젝트 소유권·노드 식별·lease는 개인 모드에도 
 | NFR-003 | 관리 서버 재시작 뒤 실행·증거·보고서 복구, 노드 미전송 이벤트 재전송 |
 | NFR-004 | 정상 연결 시 상태 표시 지연 5초 이내를 검증 목표로 삼음. 미측정 목표임 |
 | NFR-005 | 키보드·검색·필터·색상 외 상태 구분·대형 목록 페이지 처리 |
-| NFR-006 | TLS, 토큰 분리, 민감값 마스킹, 감사 로그. loopback 개인 모드 예외 명시 |
+| NFR-006 | TLS, 토큰 분리, 민감값 마스킹, 감사 로그. loopback과 운영자가 명시한 평문 HTTP 예외 명시 |
 | NFR-007 | 산출물 hash·크기 검증 후 게시. 미완료 업로드 노출 금지 |
 | NFR-008 | 모델 응답 오류는 제한된 복구 후 부분 완료. 무검증 내용 게시 금지 |
 | NFR-009 | 한 도구의 실패/OOM이 관리 서버와 다른 작업을 종료시키지 않게 배치·제어 |
 | NFR-010 | 자원·호출량·비용 추적. 호출 수 증가를 정확도 향상으로 해석하지 않음 |
 
-검증 상태: NFR-001의 실기 검증은 Linux(WSL2)에서만 했다. Windows는 CI의 Go 단위 시험과 빌드까지이고 RHEL 8.10은 실행하지 않았다. NFR-004는 측정하지 않았다. NFR-006은 토큰 분리와 민감값 마스킹이 구현돼 있다. loopback 개인 모드는 평문 예외이고 loopback이 아닌 주소는 TLS 없이는 시작하지 않는다. 통합 감사 로그는 구현돼 있다([보안](SECURITY.md)). reverse proxy 뒤 배포는 지원하지 않는다.
+검증 상태: NFR-001의 실기 검증은 Linux(WSL2)에서만 했다. Windows는 CI의 Go 단위 시험과 빌드까지이고 RHEL 8.10은 실행하지 않았다. NFR-004는 측정하지 않았다. NFR-006은 토큰 분리와 민감값 마스킹이 구현돼 있다. loopback은 평문 예외이고, loopback이 아닌 주소는 TLS나 운영자가 명시한 `--plain-http`(시작할 때 경고 한 줄) 없이는 시작하지 않는다. 사용자 GitHub token은 사용자별 0600 파일에만 있다. 통합 감사 로그는 구현돼 있다([보안](SECURITY.md)). reverse proxy 뒤 배포는 지원하지 않는다.
 
 ## 해석
 

@@ -138,6 +138,118 @@ func TestServeRefusesPlainNonLoopbackListener(t *testing.T) {
 	}
 }
 
+// Plain HTTP for other machines, chosen explicitly: the public origin's Host
+// and Origin are accepted and foreign ones refused, the cookie is not
+// Secure, and login links use the public origin. The loopback listener for
+// the local agent and commands accepts loopback Hosts only, and a session
+// made there is not taken on the public face (another cookie name is not
+// involved: the Host check refuses the request first).
+func TestPlainHTTPServiceAndLocalListener(t *testing.T) {
+	e := newEnv(t)
+	ln, err := net.Listen("tcp", "0.0.0.0:0")
+	if err != nil {
+		t.Skipf("cannot bind a wildcard address here: %v", err)
+	}
+	local, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, lport := ln.Addr().(*net.TCPAddr).Port, local.Addr().(*net.TCPAddr).Port
+	origin := "http://codeye.lan:" + itoa(port)
+	if _, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), PlainHTTP: true}, e.store); err == nil {
+		t.Fatal("plain HTTP on 0.0.0.0 without a public origin accepted")
+	}
+	if _, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), PlainHTTP: true, PublicOrigin: "https://codeye.lan"}, e.store); err == nil {
+		t.Fatal("plain HTTP with an https origin accepted")
+	}
+	srv, err := New(Config{Listen: netip.MustParseAddrPort(ln.Addr().String()), PlainHTTP: true, PublicOrigin: origin, LocalListen: netip.MustParseAddrPort(local.Addr().String()),
+		Logger: slog.New(slog.DiscardHandler), SweepInterval: -1, ReconcileInterval: -1, PublishInterval: -1}, e.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srv.Secure() || srv.Origin() != origin {
+		t.Fatalf("secure %v origin %s", srv.Secure(), srv.Origin())
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 2)
+	go func() { done <- srv.Serve(ctx, ln) }()
+	go func() { done <- srv.ServeLocal(ctx, local) }()
+	t.Cleanup(func() { cancel(); <-done; <-done })
+	do := func(dial, method, path, host, originHeader, cookie, csrf string, body any) (*http.Response, map[string]any) {
+		t.Helper()
+		var rd io.Reader
+		if body != nil {
+			raw, _ := json.Marshal(body)
+			rd = strings.NewReader(string(raw))
+		}
+		req, _ := http.NewRequest(method, "http://"+dial+path, rd)
+		req.Host = host
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if originHeader != "" {
+			req.Header.Set("Origin", originHeader)
+		}
+		if cookie != "" {
+			req.Header.Set("Cookie", sessionCookie+"="+cookie)
+		}
+		if csrf != "" {
+			req.Header.Set(csrfHeader, csrf)
+		}
+		res, err := http.DefaultTransport.RoundTrip(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&out)
+		return res, out
+	}
+	pubDial, localDial := "127.0.0.1:"+itoa(port), "127.0.0.1:"+itoa(lport)
+	publicHost := "codeye.lan:" + itoa(port)
+	if res, _ := do(pubDial, "GET", "/api/v1/health", publicHost, "", "", "", nil); res.StatusCode != 200 || res.Header.Get("Strict-Transport-Security") != "" {
+		t.Fatalf("health over plain HTTP: %d", res.StatusCode)
+	}
+	if res, _ := do(pubDial, "GET", "/api/v1/health", "evil.example:"+itoa(port), "", "", "", nil); res.StatusCode != 403 {
+		t.Fatalf("foreign Host answered %d", res.StatusCode)
+	}
+	admin := e.newAdminAccount("plain-admin")
+	login := func(dial, host, originHeader string) (*http.Response, map[string]any) {
+		token := NewToken()
+		if err := e.store.IssueLaunchToken(context.Background(), admin, TokenHash(token), time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		return do(dial, "POST", "/api/v1/session", host, originHeader, "", "", map[string]string{"launch_token": token})
+	}
+	if res, _ := login(pubDial, publicHost, "http://evil.example"); res.StatusCode != 403 {
+		t.Fatalf("foreign Origin accepted: %d", res.StatusCode)
+	}
+	res, body := login(pubDial, publicHost, origin)
+	set := strings.Join(res.Header.Values("Set-Cookie"), "; ")
+	if res.StatusCode != 201 || !strings.HasPrefix(set, sessionCookie+"=") || strings.Contains(set, "Secure") || !strings.Contains(set, "HttpOnly") {
+		t.Fatalf("session over plain HTTP: %d %s", res.StatusCode, set)
+	}
+	cookie, csrf := strings.TrimPrefix(strings.SplitN(set, ";", 2)[0], sessionCookie+"="), body["csrf_token"].(string)
+	res, body = do(pubDial, "POST", "/api/v1/admin/users", publicHost, origin, cookie, csrf, map[string]any{"username": "lan-user"})
+	if link, _ := body["login_link"].(map[string]any); res.StatusCode != 201 || link == nil || !strings.HasPrefix(link["url"].(string), origin+"/#launch=") {
+		t.Fatalf("login link over plain HTTP: %d %v", res.StatusCode, body)
+	}
+	// The loopback listener: loopback Hosts only.
+	localHost := "127.0.0.1:" + itoa(lport)
+	if res, _ := do(localDial, "GET", "/api/v1/health", localHost, "", "", "", nil); res.StatusCode != 200 {
+		t.Fatalf("local health %d", res.StatusCode)
+	}
+	if res, _ := do(localDial, "GET", "/api/v1/session", publicHost, "", cookie, "", nil); res.StatusCode != 403 {
+		t.Fatalf("public Host on the local listener answered %d", res.StatusCode)
+	}
+	if res, _ := do(localDial, "GET", "/api/v1/session", localHost, "", cookie, "", nil); res.StatusCode != 200 {
+		t.Fatalf("session on the local listener: %d", res.StatusCode)
+	}
+	if res, _ := login(localDial, localHost, "http://"+localHost); res.StatusCode != 201 {
+		t.Fatalf("sign-in on the local listener: %d", res.StatusCode)
+	}
+}
+
 // TC-146
 func TestTLSServerOnWildcardAddress(t *testing.T) {
 	e := newEnv(t)

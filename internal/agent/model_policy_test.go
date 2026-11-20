@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -82,13 +83,65 @@ func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
 			t.Errorf("%s model=%q choices=%v: model %v, code %v", tc.kind, tc.model, tc.choices, j.AllowModelReview, j.AllowRepositoryCode)
 		}
 	}
-	// Without the flag the stored choices change nothing (server mode).
+	// Without --project-analysis-policy (a node an operator starts) the
+	// stored choices change nothing.
 	ag := Agent{cfg: Config{SourceRoots: map[string]string{root: t.TempDir()}, ModelName: "openai/m"}}
 	a := activeAttempt{}
 	a.job.Source = nodeproto.JobSource{Kind: "local", SourceRootID: root}
 	a.job.Analysis = &both
 	if j := ag.buildJob(&a); j.AllowModelReview || j.AllowRepositoryCode {
-		t.Fatal("server-mode node followed the project's choices")
+		t.Fatal("a node without the policy flag followed the project's choices")
+	}
+}
+
+// The service's offer bounds the project's choices and what only the offer
+// took away is marked as withheld; a node on the controller's machine
+// (ControllerSources) takes a root or Git host the administrator added in
+// the web from the job; a Git fetch reads the own token file of the user
+// who started the run.
+func TestOfferControllerSourcesAndRequesterToken(t *testing.T) {
+	both := domain.AnalysisChoices{SendSourceToModel: true, RunBuildScripts: true}
+	owner := domain.NewID()
+	dir := filepath.Join(t.TempDir(), "github-users")
+	ag := Agent{cfg: Config{ModelName: "openai/m", ProjectAnalysisPolicy: true, ControllerSources: true, GitCredentialDir: dir}}
+	root := t.TempDir()
+	a := activeAttempt{}
+	a.job.Source = nodeproto.JobSource{Kind: "local", SourceRootID: domain.NewID(), RootPath: root, RelativePath: "."}
+	a.job.Analysis = &both
+	a.job.Offered = &nodeproto.AnalysisOffer{ModelReview: false, BuildScripts: true}
+	j := ag.buildJob(&a)
+	if j.Source.ApprovedRoot != root || j.AllowModelReview || !j.ModelReviewWithheld || !j.AllowRepositoryCode || j.RepositoryCodeWithheld {
+		t.Fatalf("offer without model review: %+v", j)
+	}
+	a.job.Offered = &nodeproto.AnalysisOffer{ModelReview: true}
+	if j := ag.buildJob(&a); !j.AllowModelReview || j.ModelReviewWithheld || j.AllowRepositoryCode || !j.RepositoryCodeWithheld {
+		t.Fatalf("offer without build scripts: %+v", j)
+	}
+	// The project did not choose it: not withheld, just off.
+	a.job.Analysis = &domain.AnalysisChoices{}
+	if j := ag.buildJob(&a); j.AllowRepositoryCode || j.RepositoryCodeWithheld || j.ModelReviewWithheld {
+		t.Fatalf("not chosen: %+v", j)
+	}
+	// Git: the host from the job, the token file of the user who started the run.
+	a.job.Source = nodeproto.JobSource{Kind: "git", RepositoryURL: "https://ghe.example.com/o/r", Host: "GHE.example.com"}
+	a.job.GitCredentialUser = owner
+	if j := ag.buildJob(&a); j.Source.AllowedHost != "ghe.example.com" || j.GitCredentialFile != filepath.Join(dir, owner+".json") {
+		t.Fatalf("git job %+v", j.Source)
+	}
+	a.job.GitCredentialUser = "../x"
+	if j := ag.buildJob(&a); j.GitCredentialFile != "" {
+		t.Fatalf("bad user id read %q", j.GitCredentialFile)
+	}
+	// A separately started node takes neither from the job, and keeps its
+	// single credential file.
+	plain := Agent{cfg: Config{ModelName: "openai/m", ProjectAnalysisPolicy: true, GitCredentialFile: "/srv/github.json"}}
+	a.job.GitCredentialUser = owner
+	if j := plain.buildJob(&a); j.Source.AllowedHost != "" || j.GitCredentialFile != "/srv/github.json" {
+		t.Fatalf("separate node git job %+v %q", j.Source, j.GitCredentialFile)
+	}
+	a.job.Source = nodeproto.JobSource{Kind: "local", SourceRootID: domain.NewID(), RootPath: root, RelativePath: "."}
+	if j := plain.buildJob(&a); j.Source.ApprovedRoot != "" {
+		t.Fatalf("separate node took the root path %q", j.Source.ApprovedRoot)
 	}
 }
 

@@ -3,12 +3,14 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/github/githubtest"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
@@ -54,6 +56,12 @@ type isoWorld struct {
 	// prRun is a pull-request run in a second project with the same members
 	// (made on first use).
 	prRun string
+	// actor is the actor whose request is being built.
+	actor string
+	// buildScripts is the last value admin.settings.put set.
+	buildScripts bool
+	// gh is the fake GitHub the controller asks (tokens per actor).
+	gh *githubtest.Server
 }
 
 func (w *isoWorld) name(prefix string) string {
@@ -211,8 +219,36 @@ func isoCases() map[string]isoCase {
 		}},
 		"admin.providers.list": {need: adminRole, ok: 200},
 		"audit.list":           {need: adminRole, ok: 200},
+		// Each actor stores a token of its own (the fake GitHub knows whose).
+		"account.github.get":    {need: signedIn, ok: 200},
+		"account.github.put":    {need: signedIn, ok: 200, body: func(w *isoWorld) any { return map[string]string{"token": isoToken(w.actor)} }},
+		"account.github.delete": {need: signedIn, ok: 204},
+		"admin.source_roots.create": {need: adminRole, ok: 201, body: func(w *isoWorld) any {
+			return map[string]any{"path": w.e.t.TempDir(), "label": w.name("folder"), "everyone": true}
+		}},
+		// A folder of its own: opening the world's root to everyone would let
+		// every actor register projects in it.
+		"admin.source_roots.everyone": {need: adminRole, ok: 204, ids: func(w *isoWorld) []string {
+			r, err := w.e.store.AddSourceRoot(context.Background(), w.name("open"), w.e.t.TempDir())
+			if err != nil {
+				w.e.t.Fatal(err)
+			}
+			return []string{r.ID}
+		}, body: func(*isoWorld) any { return map[string]bool{"everyone": true} }},
+		"admin.providers.create": {need: adminRole, ok: 201, body: func(w *isoWorld) any { return map[string]string{"host": w.name("git") + ".example.com"} }},
+		"admin.settings.get":     {need: adminRole, ok: 200},
+		// Every accepted request flips the switch, so it records a change.
+		"admin.settings.put": {need: adminRole, ok: 200, body: func(w *isoWorld) any {
+			if w.accepting {
+				w.buildScripts = !w.buildScripts
+			}
+			return map[string]bool{"others_build_scripts": w.buildScripts}
+		}},
 	}
 }
+
+// isoToken is the GitHub token the actor stores in the isolation table.
+func isoToken(actor string) string { return "tok-iso-" + actor + "-123456" }
 
 // expected is the status (and error code) the actor gets.
 func (w *isoWorld) expected(c isoCase, actor string) (int, string) {
@@ -251,10 +287,20 @@ func (w *isoWorld) auditActions(requestID string) []string {
 
 func newIsoWorld(t *testing.T) *isoWorld {
 	e := newEnv(t)
+	// A controller with a state directory (per-user GitHub tokens) talking to
+	// a fake GitHub that knows each actor's token.
+	gh := githubtest.New("tok-unused-123456", "nobody")
+	t.Cleanup(gh.Close)
+	gh.Users = map[string]string{}
+	for _, a := range []string{"admin", "stranger", "viewer", "runner", "manager", "owner"} {
+		gh.Users[isoToken(a)] = "gh-" + a
+	}
+	gh.AddPullRequest("acme/widget", githubtest.PullRequest{Number: 7, Title: "Fix", State: "open", BaseRef: "main", BaseSHA: strings.Repeat("1", 40), HeadRef: "fix", HeadSHA: strings.Repeat("2", 40), HeadRepo: "acme/widget"})
+	e.inst = &Instance{StateDir: filepath.Join(t.TempDir(), "state"), GitHubAPI: gh.URL}
 	fastStreams(e, StreamConfig{})
 	a := e.driveAttempt("succeeded")
 	e.publishRun(a)
-	w := &isoWorld{e: e, f: a.f, run: a, actors: map[string]user{}, rank: map[string]int{}}
+	w := &isoWorld{e: e, f: a.f, run: a, actors: map[string]user{}, rank: map[string]int{}, gh: gh}
 	w.actors["owner"], w.rank["owner"] = a.f.user, 4
 	w.actors["admin"] = e.login(e.newAdminAccount("iso-admin"))
 	for name, role := range map[string]domain.Role{"viewer": domain.RoleViewer, "runner": domain.RoleRunner, "manager": domain.RoleManager} {
@@ -364,7 +410,7 @@ func TestRouteIsolationAndAuditTable(t *testing.T) {
 					o = c.opts(w, o)
 				}
 				var body any
-				w.accepting = status < 400
+				w.accepting, w.actor = status < 400, a
 				if c.body != nil {
 					body = c.body(w)
 				}
@@ -388,6 +434,30 @@ func TestRouteIsolationAndAuditTable(t *testing.T) {
 	for name := range cases {
 		if !covered[name] {
 			t.Errorf("isolation case %s matches no route", name)
+		}
+	}
+	// A GitHub call carries the token of the user it acts for only: each
+	// member's preview of the owner's run uses that member's own token, never
+	// the owner's; a token never reaches a response or the log.
+	for _, a := range actors {
+		e.do("PUT", "/api/v1/account/github", map[string]string{"token": isoToken(a)}, w.actors[a].o()).want(t, 200, "")
+	}
+	for _, a := range []string{"viewer", "manager", "owner"} {
+		before := len(w.gh.Requests())
+		e.do("GET", "/api/v1/runs/"+w.pullRequestRun()+"/pull-request-comment", nil, w.actors[a].o()).want(t, 200, "")
+		calls := w.gh.Requests()[before:]
+		if len(calls) == 0 {
+			t.Errorf("%s's preview asked GitHub nothing", a)
+		}
+		for _, rq := range calls {
+			if rq.Login != "gh-"+a {
+				t.Errorf("%s's preview carried %q's token: %+v", a, rq.Login, rq)
+			}
+		}
+	}
+	for _, a := range actors {
+		if strings.Contains(e.logs.String(), isoToken(a)) {
+			t.Errorf("%s's token reached the log", a)
 		}
 	}
 	// The manager's session began from the administrator's reset link: its

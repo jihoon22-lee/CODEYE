@@ -78,6 +78,16 @@ func (h Handler) secondary() record.SecondaryRule {
 
 func (h Handler) Info() analysis.HandlerInfo { return h.Static.Info() }
 
+// modelSkipReason is the reason of a review task the job may not send to
+// the model: the service withholding it from the user who started the run,
+// or the source not approved (the project's choice or the node's grant).
+func modelSkipReason(j analysis.Job) string {
+	if j.ModelReviewWithheld {
+		return domain.ReasonModelReviewNotOffered
+	}
+	return domain.ReasonModelSourceNotApproved
+}
+
 func (h Handler) maxCalls() int {
 	if h.MaxCalls == 0 {
 		return record.DefaultMaxCalls
@@ -133,7 +143,7 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 		return result(domain.TaskFailed, reasonUnknownRole)
 	}
 	if !j.AllowModelReview {
-		return result(domain.TaskSkippedPolicy, "model_source_not_approved")
+		return result(domain.TaskSkippedPolicy, modelSkipReason(j))
 	}
 	if ctx.Err() != nil {
 		return result(domain.TaskCancelled, "cancelled")

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
@@ -60,15 +60,15 @@ type Report struct {
 type Options struct {
 	WorkDir, DatabaseURL string
 	Timeout              time.Duration
-	// Personal adds the operations section (storage, backup, processes) and
+	// Instance adds the operations section (storage, backup, processes) and
 	// supplies the explicit tool settings and the database mode.
-	Personal *personal.Config
+	Instance *instance.Config
 	// Detect finds the tools; nil runs toolfind with the explicit settings of
-	// Personal (and only those when agent.auto_detect is false).
+	// Instance (and only those when agent.auto_detect is false).
 	Detect func(context.Context) toolfind.Result
 	// ModelEnv is where the offline section resolves the model; nil reads
 	// the process environment and the user's home.
-	ModelEnv *personal.ModelEnv
+	ModelEnv *instance.ModelEnv
 }
 
 var versionPattern = regexp.MustCompile(`(?:^|[^0-9])([0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:[^0-9]|$)`)
@@ -81,9 +81,9 @@ func version(s string) string {
 	return ""
 }
 
-// explicitTools maps the personal configuration onto the settings that always
+// explicitTools maps the service configuration onto the settings that always
 // win over detection.
-func explicitTools(cfg *personal.Config) toolfind.Explicit {
+func explicitTools(cfg *instance.Config) toolfind.Explicit {
 	if cfg == nil {
 		return toolfind.Explicit{}
 	}
@@ -99,7 +99,7 @@ func (o Options) detect(ctx context.Context) toolfind.Result {
 	if o.Detect != nil {
 		return o.Detect(ctx)
 	}
-	return toolfind.Detect(ctx, toolfind.Options{Explicit: explicitTools(o.Personal), OnlyExplicit: o.Personal != nil && !o.Personal.Agent.AutoDetectEnabled()})
+	return toolfind.Detect(ctx, toolfind.Options{Explicit: explicitTools(o.Instance), OnlyExplicit: o.Instance != nil && !o.Instance.Agent.AutoDetectEnabled()})
 }
 
 // toolChecks are the detected tools doctor reports as checks, by check id.
@@ -113,7 +113,7 @@ func Collect(ctx context.Context, opts Options, runner Runner) Report {
 	report.Host.Memory, report.Host.Disk = resources(opts.WorkDir)
 	res := opts.detect(ctx)
 	report.detected = res
-	explicit := explicitTools(opts.Personal)
+	explicit := explicitTools(opts.Instance)
 	for _, tc := range toolChecks {
 		report.Checks = append(report.Checks, toolCheck(tc.id, res, tc.tool, explicit.Path(tc.tool) != ""))
 	}
@@ -133,18 +133,18 @@ func Collect(ctx context.Context, opts Options, runner Runner) Report {
 	if db.Status == "not_configured" {
 		// Without a URL the database is required only by the external mode;
 		// the managed mode brings its own.
-		db.Blocking = opts.Personal != nil && opts.Personal.Database.Mode == personal.DatabaseExternal
+		db.Blocking = opts.Instance != nil && opts.Instance.Database.Mode == instance.DatabaseExternal
 	} else {
 		db.Blocking = db.Status != "available"
 	}
 	report.Checks = append(report.Checks, db)
-	if opts.Personal != nil {
-		report.Operations = operations(opts.Personal, time.Now())
-		menv := personal.SystemModelEnv()
+	if opts.Instance != nil {
+		report.Operations = operations(opts.Instance, time.Now())
+		menv := instance.SystemModelEnv()
 		if opts.ModelEnv != nil {
 			menv = *opts.ModelEnv
 		}
-		report.Offline = offlineSection(ctx, opts.Personal, res, menv)
+		report.Offline = offlineSection(ctx, opts.Instance, res, menv)
 	}
 	return report
 }

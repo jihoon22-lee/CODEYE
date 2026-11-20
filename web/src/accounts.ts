@@ -40,7 +40,8 @@ export type UserWithLink = { user: UserView; login_link: LoginLink };
 export type CreateUserBody = { username: string; display_name?: string; is_admin?: boolean };
 
 export type SourceRootGrant = { user_id: string; username: string | null; granted_at: string };
-export type AdminSourceRoot = { id: string; label: string; created_at: string; grants: SourceRootGrant[] };
+// path is the folder on the server; everyone: every user may read it without a grant.
+export type AdminSourceRoot = { id: string; label: string; path: string | null; everyone: boolean; created_at: string; grants: SourceRootGrant[] };
 export type AdminProvider = { id: string; kind: string; host: string; api_url: string | null };
 
 export type AuditEvent = {
@@ -72,6 +73,7 @@ export const AUDIT_ACTIONS = [
   'schedule.created', 'schedule.updated', 'schedule.deleted',
   'node.enrollment_token_created', 'node.enrollment_token_revoked', 'node.enrolled', 'node.revoked',
   'pool.policy_set', 'scheduler.limits_set', 'scheduler.artifact_quota_set', 'attempt.stale_rejected',
+  'source_root.everyone_set', 'service.settings_set', 'account.github_token_set', 'account.github_token_removed',
 ] as const;
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -174,26 +176,27 @@ export function parseUserWithLink(v: unknown): UserWithLink {
   return { user: parseUser(o.user), login_link: { url, expires_at: date(link.expires_at) } };
 }
 
-export function parseAdminSourceRoots(v: unknown): AdminSourceRoot[] {
-  return list(rec(v).items, item => {
-    const o = rec(item);
-    return {
-      id: str(o.id),
-      label: str(o.label),
-      created_at: date(o.created_at),
-      grants: list(o.grants, g => {
-        const x = rec(g);
-        return { user_id: str(x.user_id), username: nullableStr(x.username), granted_at: date(x.granted_at) };
-      }),
-    };
-  });
+export function parseAdminSourceRoot(item: unknown): AdminSourceRoot {
+  const o = rec(item);
+  return {
+    id: str(o.id),
+    label: str(o.label),
+    // Older servers send neither: no path shown, not open to everyone.
+    path: o.path == null ? null : str(o.path),
+    everyone: o.everyone == null ? false : bool(o.everyone),
+    created_at: date(o.created_at),
+    grants: list(o.grants, g => {
+      const x = rec(g);
+      return { user_id: str(x.user_id), username: nullableStr(x.username), granted_at: date(x.granted_at) };
+    }),
+  };
 }
-export function parseAdminProviders(v: unknown): AdminProvider[] {
-  return list(rec(v).items, item => {
-    const o = rec(item);
-    return { id: str(o.id), kind: str(o.kind), host: str(o.host), api_url: o.api_url === undefined ? null : nullableStr(o.api_url) };
-  });
+export const parseAdminSourceRoots = (v: unknown): AdminSourceRoot[] => list(rec(v).items, parseAdminSourceRoot);
+export function parseAdminProvider(item: unknown): AdminProvider {
+  const o = rec(item);
+  return { id: str(o.id), kind: str(o.kind), host: str(o.host), api_url: o.api_url === undefined ? null : nullableStr(o.api_url) };
 }
+export const parseAdminProviders = (v: unknown): AdminProvider[] => list(rec(v).items, parseAdminProvider);
 
 function parseAuditEvent(v: unknown): AuditEvent {
   const o = rec(v);

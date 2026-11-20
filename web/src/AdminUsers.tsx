@@ -3,6 +3,7 @@ import { userLabel, type CreateUserBody, type UserView, type UserWithLink } from
 import type { UsersState } from './AdminView';
 import { ApiError, type Api } from './api';
 import { describeError, formatInstant, type ErrorText } from './format';
+import { copyText } from './clipboard';
 import { ko as t } from './locales/ko';
 import { ErrorNote } from './RunPanel';
 
@@ -44,11 +45,9 @@ function OneTimeLink({ issued, onClose }: { issued: Issued; onClose: () => void 
   const uid = useId();
   const s = t.accounts.admin;
   async function copyLink() {
-    try {
-      if (!navigator.clipboard) throw new Error('clipboard');
-      await navigator.clipboard.writeText(issued.link.url);
+    if (await copyText(issued.link.url, field.current)) {
       setCopy('copied');
-    } catch {
+    } else {
       setCopy('failed');
       field.current?.select();
     }
@@ -59,11 +58,11 @@ function OneTimeLink({ issued, onClose }: { issued: Issued; onClose: () => void 
     <p className="small">{s.linkDeliver}</p>
     <div className="field">
       <label htmlFor={`${uid}-link`}>{s.linkLabel}</label>
-      <input id={`${uid}-link`} ref={field} type="text" readOnly value={issued.link.url} spellCheck={false} autoComplete="off" onFocus={e => e.currentTarget.select()} />
+      <input id={`${uid}-link`} data-login-link="" ref={field} type="text" readOnly value={issued.link.url} spellCheck={false} autoComplete="off" onFocus={e => e.currentTarget.select()} />
     </div>
     <p className="small">{s.linkExpires(formatInstant(issued.link.expires_at))}</p>
     <div className="actions">
-      <button type="button" className="primary" onClick={() => void copyLink()}>{s.copy}</button>
+      <button type="button" id="login-link-copy" className="primary" onClick={() => void copyLink()}>{s.copy}</button>
       <button type="button" onClick={onClose}>{s.linkClose}</button>
     </div>
     <div aria-live="polite">

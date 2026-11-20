@@ -204,7 +204,11 @@ func TestLoginLinkFile(t *testing.T) {
 			t.Fatal("symlink target overwritten")
 		}
 	}
-	for _, origin := range []string{"https://codeye.example/path", "https://user@codeye.example", "https://CODEYE.example:443", "ftp://127.0.0.1:7444", "http://evil.example:7444", "http://127.0.0.1", "http://127.0.0.1:7444/path"} {
+	// A plain-HTTP service's public origin is a valid link origin too.
+	if code, _, errOut := cli(t, "login-link", "--user", user, "--output", link, "--origin", "http://codeye.lan:7444"); code != 0 {
+		t.Fatal(errOut)
+	}
+	for _, origin := range []string{"https://codeye.example/path", "https://user@codeye.example", "https://CODEYE.example:443", "ftp://127.0.0.1:7444", "http://CODEYE.lan:7444", "http://codeye.lan:80", "http://127.0.0.1", "http://127.0.0.1:7444/path"} {
 		if code, _, _ := cli(t, "login-link", "--user", user, "--output", filepath.Join(dir, "x"), "--origin", origin); code != 1 {
 			t.Fatalf("origin %q accepted", origin)
 		}

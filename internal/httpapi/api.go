@@ -106,6 +106,9 @@ func (s *Server) apiRoutes() []route {
 		r("POST", "runs/{id}/retry", "runs.retry", true, false, (*Server).retryRun).audits(postgres.AuditRunRequested),
 		r("POST", "runs/{id}/recover", "runs.recover", true, true, (*Server).recoverRun).audits(postgres.AuditRecoveryConfirmed),
 		r("GET", "setup", "setup.get", true, false, (*Server).getSetup),
+		r("GET", "account/github", "account.github.get", true, false, (*Server).getAccountGitHub),
+		r("PUT", "account/github", "account.github.put", true, true, (*Server).putAccountGitHub).audits(postgres.AuditGitHubTokenSet),
+		r("DELETE", "account/github", "account.github.delete", true, false, (*Server).deleteAccountGitHub).audits(postgres.AuditGitHubTokenRemoved),
 		r("GET", "runs/{id}/report", "runs.report", true, false, (*Server).getReport).audits(postgres.AuditReportExported),
 		r("GET", "runs/{id}/reports", "runs.reports", true, false, (*Server).listReports),
 		r("GET", "runs/{id}/comparison", "runs.comparison", true, false, (*Server).getComparison),
@@ -118,9 +121,14 @@ func (s *Server) apiRoutes() []route {
 		r("PUT", "admin/users/{id}/admin", "admin.users.set_admin", true, true, (*Server).adminSetAdmin).admins().audits(postgres.AuditAdminGranted, postgres.AuditAdminRevoked),
 		r("POST", "admin/users/{id}/password-reset", "admin.users.reset_password", true, false, (*Server).adminResetPassword).admins().audits(postgres.AuditPasswordReset),
 		r("GET", "admin/source-roots", "admin.source_roots.list", true, false, (*Server).adminListSourceRoots).admins(),
+		r("POST", "admin/source-roots", "admin.source_roots.create", true, true, (*Server).adminAddSourceRoot).admins().audits(postgres.AuditSourceRootAdded),
+		r("PUT", "admin/source-roots/{id}/everyone", "admin.source_roots.everyone", true, true, (*Server).adminSetSourceRootEveryone).admins().audits(postgres.AuditSourceRootEveryone),
 		r("PUT", "admin/source-roots/{id}/grants/{id}", "admin.source_roots.grant", true, false, (*Server).adminGrantSourceRoot).admins().audits(postgres.AuditSourceRootGranted),
 		r("DELETE", "admin/source-roots/{id}/grants/{id}", "admin.source_roots.revoke", true, false, (*Server).adminRevokeSourceRoot).admins().audits(postgres.AuditSourceRootRevoked),
 		r("GET", "admin/providers", "admin.providers.list", true, false, (*Server).adminListProviders).admins(),
+		r("POST", "admin/providers", "admin.providers.create", true, true, (*Server).adminAddProvider).admins().audits(postgres.AuditProviderAdded),
+		r("GET", "admin/settings", "admin.settings.get", true, false, (*Server).adminGetSettings).admins(),
+		r("PUT", "admin/settings", "admin.settings.put", true, true, (*Server).adminPutSettings).admins().audits(postgres.AuditServiceSettingsSet),
 		r("GET", "audit", "audit.list", true, false, (*Server).listAudit).admins(),
 	}, s.nodeRoutes()...)
 }
@@ -204,7 +212,7 @@ func (s *Server) dispatch(rt route, q *request) {
 		}
 	}
 	if rt.auth {
-		c, err := r.Cookie(s.cookieName)
+		c, err := r.Cookie(s.faceOf(r).cookieName)
 		if err != nil || !validToken(c.Value) {
 			writeError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required", false)
 			return

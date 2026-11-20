@@ -37,18 +37,19 @@ Usage:
   codeye source-root grant --root ROOT_ID --user USER_ID
   codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
   codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
-  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--personal [--state-dir DIR]]
-               [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]]   (required for a non-loopback --listen)
-` + nodeAdminUsage + operationsUsage + `  codeye up [PATH|URL] [--config PATH] [--postgres-bin-dir DIR] [--offline] [--no-open] [--no-probe]   (personal mode, Linux: PostgreSQL + controller + local agent; analyzes PATH or a repository URL)
+  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--session-ttl 12h (at most 168h)] [--state-dir DIR] [--local-listen 127.0.0.1:PORT]
+               [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT] | --plain-http [--public-origin http://HOST:PORT]]   (one of them for a non-loopback --listen)
+` + nodeAdminUsage + operationsUsage + `  codeye up [PATH|URL] [--config PATH] [--postgres-bin-dir DIR] [--offline] [--no-open] [--no-probe]   (Linux: starts the web service - PostgreSQL + controller + local agent; analyzes PATH or a repository URL)
+  codeye up --listen IP:PORT (--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT] | --plain-http [--public-origin http://HOST:PORT])   (serve other machines; saved in the configuration)
   codeye up https://github.com/OWNER/REPO/pull/N [--comment[=false]] [--dry-run-comment] [--comment-wait DURATION]   (analyzes a pull request; --comment posts one result comment and is remembered; --dry-run-comment prints it without posting)
   codeye open [--config PATH] [--no-open]   (a new signed-in browser link)
-  codeye start [--config PATH]      (personal mode without a project or browser)
+  codeye start [--config PATH]      (starts the service without a project or browser)
   codeye stop [--config PATH] [--format text|json]
   codeye status [--config PATH] [--format text|json]
   codeye backup [--config PATH] [--output DIR] [--format text|json]   (default output: <backup_dir>/codeye-<UTC>)
   codeye restore [--config PATH] --from DIR [--format text|json]   (new empty database and state_dir only)
   codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
-               [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ... [--git-credential-file PATH]] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
+               [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ... [--git-credential-file PATH | --git-credential-dir DIR]] [--controller-sources] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
                [--cppcheck /abs/cppcheck] [--clang-tidy /abs/clang-tidy]
                [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit] [--advertise-without-baseline]
                [--eslint /abs/eslint/bin/eslint.js] [--tsc /abs/typescript/bin/tsc]
@@ -57,13 +58,13 @@ Usage:
                [--repo-code-source-root ID ...] [--project-analysis-policy] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
                [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-max-calls 15..207]
                [--offline] [--ca-bundle /abs/ca-bundle.pem]   (offline: no built-in public registry or model endpoint; the CA bundle the fetch, Git and model processes trust)
-Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema, except that personal mode with database.mode managed migrates on up/start after saving a pg_dump copy.
+Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema, except that up/start with database.mode managed migrate after saving a pg_dump copy.
 Login links: codeye login-link and codeye start write them to a 0600 file; codeye up and codeye open print them and open the browser.
 Passwords are read from --password-file (mode 0600) or standard input (echo off on a Linux terminal), never from arguments.
 "serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.
 Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
 Enrollment tokens are written to a 0600 file; the token is never printed.
-Personal mode: the config path defaults to $XDG_CONFIG_HOME/codeye/personal.json (codeye up creates it); database.mode managed (default) runs PostgreSQL in the state directory, external uses CODEYE_DATABASE_URL.
+up/start/stop/status: the config path defaults to $XDG_CONFIG_HOME/codeye/config.json (codeye up creates it); database.mode managed (default) runs PostgreSQL in the state directory, external uses CODEYE_DATABASE_URL.
 `
 
 const launchTTL = 10 * time.Minute
@@ -229,7 +230,16 @@ func loginOrigin(origin string) bool {
 		canonical, _, err := httpapi.ParsePublicOrigin(origin)
 		return err == nil && canonical == origin
 	}
-	return loopbackOrigin(origin)
+	if loopbackOrigin(origin) {
+		return true
+	}
+	// A plain-HTTP service's public origin (http://HOST[:PORT]); a loopback
+	// host must name its port (above).
+	canonical, _, err := httpapi.ParseHTTPOrigin(origin)
+	if u, perr := url.Parse(origin); perr != nil || isLoopbackName(u.Hostname()) {
+		return false
+	}
+	return err == nil && canonical == origin
 }
 
 // loopbackOrigin validates an http origin on a loopback host with a port.
@@ -238,7 +248,11 @@ func loopbackOrigin(origin string) bool {
 	if err != nil || u.Scheme != "http" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.Port() == "" {
 		return false
 	}
-	switch u.Hostname() {
+	return isLoopbackName(u.Hostname())
+}
+
+func isLoopbackName(host string) bool {
+	switch host {
 	case "127.0.0.1", "localhost", "::1":
 		return true
 	}
@@ -249,7 +263,7 @@ func loopbackOrigin(origin string) bool {
 // login URL (origin/#launch=TOKEN).
 func issueLoginURL(ctx context.Context, s *postgres.Store, user, origin string) (string, error) {
 	if !loginOrigin(origin) {
-		return "", errors.New("origin must be http://127.0.0.1:PORT, http://localhost:PORT, http://[::1]:PORT or the server's https://HOST[:PORT] public origin")
+		return "", errors.New("origin must be http://127.0.0.1:PORT, http://localhost:PORT, http://[::1]:PORT or the service's public origin (https://HOST[:PORT], or http://HOST[:PORT] for plain HTTP)")
 	}
 	token := httpapi.NewToken()
 	if err := s.IssueLaunchToken(ctx, user, httpapi.TokenHash(token), launchTTL); err != nil {
@@ -263,7 +277,7 @@ func issueLoginURL(ctx context.Context, s *postgres.Store, user, origin string) 
 // symlink at path is replaced rather than followed. The token is not printed.
 func writeLoginLink(ctx context.Context, s *postgres.Store, user, origin, path string, out io.Writer) error {
 	if !loginOrigin(origin) {
-		return errors.New("origin must be http://127.0.0.1:PORT, http://localhost:PORT, http://[::1]:PORT or the server's https://HOST[:PORT] public origin")
+		return errors.New("origin must be http://127.0.0.1:PORT, http://localhost:PORT, http://[::1]:PORT or the service's public origin (https://HOST[:PORT], or http://HOST[:PORT] for plain HTTP)")
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -328,17 +342,25 @@ type serveConfig struct {
 	artifactDir                   string
 	reconcile                     time.Duration
 	tlsCert, tlsKey, publicOrigin string
-	// personal: the controller of `codeye up`/`codeye start` (one user on
-	// this machine): browser sessions last httpapi.PersonalSessionTTL, and
-	// with stateDir it maps folder paths and reports the setup (httpapi.Personal).
-	personal bool
+	// plainHTTP serves a non-loopback address without TLS (--plain-http).
+	plainHTTP bool
+	// local is the optional loopback address for the agent and commands on
+	// this machine (--local-listen).
+	local netip.AddrPort
+	// sessionTTL is the browser session lifetime (--session-ttl; 0 is
+	// httpapi.DefaultSessionTTL). codeye start gives httpapi.ServiceSessionTTL.
+	sessionTTL time.Duration
+	// stateDir is the installation's state directory (httpapi.Instance):
+	// the setup summary, detected tools and the users' GitHub tokens.
 	stateDir string
 }
 
 func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
-	var listen string
+	var listen, local string
 	var c serveConfig
 	if !parse("serve", args, stderr, func(fs *flag.FlagSet) {
+		fs.BoolVar(&c.plainHTTP, "plain-http", false, "")
+		fs.StringVar(&local, "local-listen", "", "")
 		fs.DurationVar(&c.reconcile, "reconcile-interval", 5*time.Second, "")
 		fs.StringVar(&listen, "listen", "127.0.0.1:7331", "")
 		fs.StringVar(&c.webDir, "web-dir", filepath.Join("web", "dist"), "")
@@ -348,7 +370,7 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fs.StringVar(&c.tlsCert, "tls-cert", "", "")
 		fs.StringVar(&c.tlsKey, "tls-key", "", "")
 		fs.StringVar(&c.publicOrigin, "public-origin", "", "")
-		fs.BoolVar(&c.personal, "personal", false, "")
+		fs.DurationVar(&c.sessionTTL, "session-ttl", 0, "")
 		fs.StringVar(&c.stateDir, "state-dir", "", "")
 	}) {
 		return 2
@@ -359,17 +381,41 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return 2
 	}
 	c.addr = addr
-	tls := c.tlsCert != "" || c.tlsKey != "" || c.publicOrigin != ""
+	if c.sessionTTL < 0 || c.sessionTTL > httpapi.ServiceSessionTTL {
+		fmt.Fprintln(stderr, "--session-ttl must be between 0 (the default, 12h) and 168h")
+		return 2
+	}
+	if local != "" {
+		la, err := httpapi.ParseListen(local)
+		if err != nil || !la.Addr().IsLoopback() {
+			fmt.Fprintln(stderr, "--local-listen must be a loopback IP:port")
+			return 2
+		}
+		c.local = la
+	}
+	tls := c.tlsCert != "" || c.tlsKey != ""
 	switch {
+	case tls && c.plainHTTP:
+		fmt.Fprintln(stderr, "--plain-http and --tls-cert/--tls-key are alternatives")
+		return 2
 	case tls && (c.tlsCert == "" || c.tlsKey == "" || c.publicOrigin == ""):
 		fmt.Fprintln(stderr, "TLS needs all of --tls-cert, --tls-key and --public-origin https://HOST[:PORT]")
 		return 2
-	case !tls && !addr.Addr().IsLoopback():
+	case !tls && !c.plainHTTP && c.publicOrigin != "":
+		fmt.Fprintln(stderr, "--public-origin needs TLS (--tls-cert, --tls-key) or --plain-http")
+		return 2
+	case !tls && !c.plainHTTP && !addr.Addr().IsLoopback():
 		fmt.Fprintln(stderr, httpapi.ErrTLSRequired)
 		return 2
 	}
 	if tls {
 		if _, _, err := httpapi.ParsePublicOrigin(c.publicOrigin); err != nil {
+			fmt.Fprintln(stderr, "--public-origin:", err)
+			return 2
+		}
+	}
+	if c.plainHTTP && c.publicOrigin != "" {
+		if _, _, err := httpapi.ParseHTTPOrigin(c.publicOrigin); err != nil {
 			fmt.Fprintln(stderr, "--public-origin:", err)
 			return 2
 		}
@@ -382,8 +428,8 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "--artifact-dir must not be empty")
 		return 2
 	}
-	if c.stateDir != "" && (!c.personal || !filepath.IsAbs(c.stateDir)) {
-		fmt.Fprintln(stderr, "--state-dir is an absolute path and needs --personal")
+	if c.stateDir != "" && !filepath.IsAbs(c.stateDir) {
+		fmt.Fprintln(stderr, "--state-dir must be an absolute path")
 		return 2
 	}
 	if c.artifactDir, err = filepath.Abs(c.artifactDir); err != nil {
@@ -413,10 +459,10 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig, out, stderr io.Writer) int {
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
 	cfg := httpapi.Config{Listen: c.addr, WebDir: c.webDir, Logger: logger, ArtifactDir: c.artifactDir, ReconcileInterval: c.reconcile,
-		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigin: c.publicOrigin}
-	if c.personal {
-		cfg.SessionTTL = httpapi.PersonalSessionTTL
-		cfg.Personal = &httpapi.Personal{StateDir: c.stateDir}
+		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigin: c.publicOrigin, PlainHTTP: c.plainHTTP, LocalListen: c.local}
+	cfg.SessionTTL = c.sessionTTL
+	if c.stateDir != "" {
+		cfg.Instance = &httpapi.Instance{StateDir: c.stateDir}
 	}
 	srv, err := httpapi.New(cfg, store)
 	if err != nil {
@@ -429,9 +475,25 @@ func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig
 		fmt.Fprintln(stderr, "cannot listen:", strings.TrimSpace(err.Error()))
 		return 1
 	}
+	if c.local.IsValid() {
+		lln, err := net.Listen("tcp", c.local.String())
+		if err != nil {
+			_ = ln.Close()
+			fmt.Fprintln(stderr, "cannot listen on the local address:", strings.TrimSpace(err.Error()))
+			return 1
+		}
+		go func() {
+			if err := srv.ServeLocal(ctx, lln); err != nil {
+				fmt.Fprintln(stderr, "local listener stopped:", err)
+			}
+		}()
+	}
 	origin := "http://" + c.addr.String()
-	if srv.Secure() {
-		origin = srv.Origin()
+	if o := srv.Origin(); o != "" {
+		origin = o
+	}
+	if c.plainHTTP {
+		fmt.Fprintln(out, "plain HTTP on", c.addr.String(), "- sign-in cookies and passwords travel unencrypted on this network")
 	}
 	if c.user != "" {
 		if err := writeLoginLink(startCtx, store, c.user, origin, c.linkFile, out); err != nil {

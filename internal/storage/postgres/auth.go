@@ -166,7 +166,7 @@ func (s *Store) DisableUser(ctx context.Context, id string) error {
 }
 
 // IssueLaunchToken stores the SHA-256 of a single-use launch token for an
-// enabled user (operator CLI: login-link, serve --user, personal start).
+// enabled user (operator CLI: login-link, serve --user, codeye start).
 // Unknown or disabled users yield ErrNotFound.
 func (s *Store) IssueLaunchToken(ctx context.Context, user, tokenSHA256 string, ttl time.Duration) error {
 	if !validIDs(user) || !hexDigest.MatchString(tokenSHA256) || ttl < time.Second || ttl > maxLaunchTTL {

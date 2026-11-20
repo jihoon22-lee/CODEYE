@@ -17,6 +17,7 @@ export const reportKo = {
     review_lineage_mismatch:
       '검토 단계 사이의 후보 또는 호출 기록이 일치하지 않습니다.',
     model_source_not_approved: '이 소스의 모델 전송을 승인하지 않았습니다.',
+    model_review_not_offered: '관리자가 다른 사용자의 모델 검토를 허용하지 않아 모델 검토를 하지 않았습니다.',
     analysis_artifact_missing: '확인에 필요한 분석 산출물이 누락됐습니다.',
     // (docs/ANALYZERS.md) structure metrics and secret detection.
     metrics_not_defects: '구조 지표(복잡도·중복)는 임계값을 넘은 측정값이며 결함 근거가 아닙니다.',
@@ -44,6 +45,7 @@ export const reportKo = {
     tool_unavailable: '지정된 분석 도구가 시작 검증·버전 확인을 통과하지 못해 실행하지 않았습니다.',
     analyzer_pack_missing: '범위의 이 언어를 맡을 분석기가 이 빌드에 없습니다.',
     repository_code_not_allowed: '저장소 코드 실행이 허가되지 않아 이 분석기를 실행하지 않았습니다.',
+    repository_code_not_offered: '관리자가 다른 사용자의 저장소 빌드 스크립트 실행을 허용하지 않아 이 분석기를 실행하지 않았습니다.',
     document_too_large: '문서가 문서당 읽기 한도보다 큽니다.',
     read_budget_exhausted: '전체 읽기 예산을 다 써서 읽지 않았습니다.',
     document_budget_exceeded: '읽기 예산을 넘은 문서가 있어 그 문서는 읽지 않았습니다.',
@@ -344,6 +346,7 @@ export const reportKo = {
       no_documents: '범위에 읽을 문서가 없어 역할을 생략했습니다',
       no_tool_observations: '해석할 도구 진단이 없어 역할을 생략했습니다',
       model_source_not_approved: '이 소스의 모델 전송이 승인되지 않았습니다',
+      model_review_not_offered: '관리자가 다른 사용자의 모델 검토를 허용하지 않았습니다',
       secret_screen_failed: '비밀값 탐지 결과를 쓸 수 없어 모델에 코드를 보내지 않았습니다',
     } as Record<string, string>,
     evidence: (ids: string[]) => `근거 ${ids.join(', ')}`,

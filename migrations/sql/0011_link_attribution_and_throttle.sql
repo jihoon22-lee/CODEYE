@@ -15,7 +15,7 @@
 ALTER TABLE auth_launch_tokens
     -- 발급한 관리자. NULL은 운영자 CLI(DB URL을 가진 사람)다.
     ADD COLUMN issued_by uuid NULL REFERENCES users (id) ON DELETE RESTRICT,
-    -- login: 운영자의 login-link·serve --user·personal start. account_created: 계정 생성.
+    -- login: 운영자의 login-link·serve --user·codeye start. account_created: 계정 생성.
     -- password_reset: 비밀번호 초기화.
     ADD COLUMN purpose text NOT NULL DEFAULT 'login'
         CHECK (purpose IN ('login', 'account_created', 'password_reset'));

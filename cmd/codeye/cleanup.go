@@ -15,7 +15,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/agent"
 	"github.com/jihoon22-lee/CODEYE/internal/artifactstore"
-	"github.com/jihoon22-lee/CODEYE/internal/personal"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/retention"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
@@ -27,7 +27,7 @@ import (
 // manifests, runs, reviews and audit rows are kept.
 //
 // Where it acts:
-//   - personal mode (default, or --config): the managed or external database,
+//   - the service (default, or --config): the managed or external database,
 //     <state_dir>/artifacts, <state_dir>/agent and its retired directories;
 //   - a controller host: --artifact-dir with CODEYE_DATABASE_URL;
 //   - a node: --agent-state-dir (no database needed).
@@ -135,7 +135,7 @@ func cleanupCommand(ctx context.Context, args []string, out, stderr io.Writer) i
 		code = cleanNode(agentState, "", olderThan, apply, &rep, stderr)
 		rep.Notes = append(rep.Notes, "no database given: controller artifacts were not checked")
 	default:
-		code = cleanPersonal(ctx, config, agentState, olderThan, apply, &rep, stderr)
+		code = cleanInstance(ctx, config, agentState, olderThan, apply, &rep, stderr)
 	}
 	if code != 0 && rep.Artifacts == nil && rep.NodeData == nil {
 		return code
@@ -148,16 +148,16 @@ func cleanupCommand(ctx context.Context, args []string, out, stderr io.Writer) i
 	return code
 }
 
-func cleanPersonal(ctx context.Context, config, agentState string, olderThan time.Duration, apply bool, rep *cleanupReport, stderr io.Writer) int {
+func cleanInstance(ctx context.Context, config, agentState string, olderThan time.Duration, apply bool, rep *cleanupReport, stderr io.Writer) int {
 	args := []string{}
 	if config != "" {
 		args = append(args, "--config", config)
 	}
-	cfg, layout, ok := loadPersonalConfig("cleanup", args, stderr, nil)
+	cfg, layout, ok := loadInstanceConfig("cleanup", args, stderr, nil)
 	if !ok {
 		return 2
 	}
-	if err := personal.Supported(); err != nil {
+	if err := instance.Supported(); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -169,7 +169,7 @@ func cleanPersonal(ctx context.Context, config, agentState string, olderThan tim
 	defer unlock()
 	opCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
-	store, db, err := personalStore(opCtx, cfg, layout, stderr)
+	store, db, err := instanceStore(opCtx, cfg, layout, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "database unavailable:", err)
 		return 1
@@ -280,7 +280,7 @@ func cleanNode(stateDir, retiredOf string, olderThan time.Duration, apply bool, 
 	// A running attempt works inside its snapshot copy (acquire-*/workspace)
 	// and the journal does not name that directory: while the agent runs (or
 	// when that cannot be told), snapshot copies are left alone.
-	if running, err := personal.AgentStateLocked(stateDir); running || err != nil {
+	if running, err := instance.AgentStateLocked(stateDir); running || err != nil {
 		kept := entries[:0]
 		for _, e := range entries {
 			if e.Kind != retention.KindSnapshot {

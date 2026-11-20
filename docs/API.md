@@ -1,12 +1,12 @@
 # HTTP API와 이벤트
 
-관리 서버(`codeye serve`, 개인 모드 `codeye up`·`codeye start`의 controller)가 제공하는 HTTP API와 실행 이벤트 스트림의 규칙이다. 필드와 응답 형식의 기계 판독 기준은 [`api/openapi.yaml`](../api/openapi.yaml)이다. 이 문서는 필드를 되풀이하지 않고 OpenAPI가 표현하지 못하는 규칙을 적는다. 보고서 내용·비교 상태·판정 적용 규칙과 화면은 [보고서와 화면](REPORT.md), 노드 프로토콜의 lease·fencing·완료 절차는 [실행](EXECUTION.md), 위협 모델과 비밀정보 정책은 [보안](SECURITY.md)에 있다.
+관리 서버(`codeye serve`, `codeye up`·`codeye start`가 띄우는 controller)가 제공하는 HTTP API와 실행 이벤트 스트림의 규칙이다. 필드와 응답 형식의 기계 판독 기준은 [`api/openapi.yaml`](../api/openapi.yaml)이다. 이 문서는 필드를 되풀이하지 않고 OpenAPI가 표현하지 못하는 규칙을 적는다. 보고서 내용·비교 상태·판정 적용 규칙과 화면은 [보고서와 화면](REPORT.md), 노드 프로토콜의 lease·fencing·완료 절차는 [실행](EXECUTION.md), 위협 모델과 비밀정보 정책은 [보안](SECURITY.md)에 있다.
 
 ## 구현 범위
 
 - OpenAPI operation의 `x-codeye-status`가 `implemented`이면 서버가 실제로 제공한다. 그 밖의 operation은 설계 계약(미구현)이다. 현재 미구현 operation은 풀 관리(`/api/v1/admin/pools/{pool_id}`)와 Git webhook 수신(`/api/v1/providers/{provider_id}/webhook`)이다.
 - 서버가 등록한 라우트와 OpenAPI의 구현 operation이 같은지 [`internal/httpapi/contract_test.go`](../internal/httpapi/contract_test.go)가 확인한다. 라우트 표는 [`internal/httpapi/api.go`](../internal/httpapi/api.go)와 [`node.go`](../internal/httpapi/node.go)에 있다.
-- 사용자 인증은 세션 cookie뿐이며, 세션은 일회용 로그인 링크나 사용자 이름·비밀번호로 만든다. 사용자 Bearer 토큰(`UserBearer`)은 구현하지 않았다. loopback이 아닌 주소는 TLS로만 받는다([보안](SECURITY.md#네트워크와-브라우저)). 계정·구성원·감사 기록은 웹 화면과 CLI에서 다룬다.
+- 사용자 인증은 세션 cookie뿐이며, 세션은 일회용 로그인 링크나 사용자 이름·비밀번호로 만든다. 사용자 Bearer 토큰(`UserBearer`)은 구현하지 않았다. loopback이 아닌 주소는 TLS나 명시적 평문 HTTP(`--plain-http`)로만 받는다([보안](SECURITY.md#네트워크와-브라우저)). 계정의 GitHub 연결(`/account/github`), 관리자의 폴더·Git host·서비스 스위치(`/admin/source-roots`, `/admin/providers`, `/admin/settings`)도 API가 있다. 계정·구성원·감사 기록은 웹 화면과 CLI에서 다룬다.
 - 설계 계약(미구현) 사용자 API: 프로젝트 설정 변경(분석 선택 `PUT /projects/{id}/analysis`만 구현), 연결 진단·브랜치 조회, 개별 task·로그 조회(로그는 상태 이벤트와 별도의 byte/record cursor로 가져오는 설계), 첫 발견 시각 이력, 판정 일괄 적용, 풀·노드 관리 웹 API. 풀·노드 관리는 운영자 CLI를 쓴다([운영](OPERATIONS.md)).
 
 ## 공통 규칙
@@ -26,15 +26,15 @@
 
 ## 인증
 
-클라이언트가 인증하는 절차와 헤더를 적는다. 이 보호가 막는 위협, 쿠키·링크 파일의 운영 경계, 로그인 제한과 비밀번호 저장 방식은 [보안](SECURITY.md)에 있다. listen 주소는 IP와 0이 아닌 포트여야 하며, loopback이 아니면 TLS 설정(`--tls-cert`, `--tls-key`, `--public-origin`)이 모두 있어야 서버가 시작한다.
+클라이언트가 인증하는 절차와 헤더를 적는다. 이 보호가 막는 위협, 쿠키·링크 파일의 운영 경계, 로그인 제한과 비밀번호 저장 방식은 [보안](SECURITY.md)에 있다. listen 주소는 IP와 0이 아닌 포트여야 하며, loopback이 아니면 TLS 설정(`--tls-cert`, `--tls-key`, `--public-origin`)이 모두 있거나 `--plain-http`가 있어야 서버가 시작한다. `--local-listen`은 같은 머신의 에이전트·명령용 loopback 수신 주소를 하나 더 연다.
 
 ### 일회용 로그인 링크
 
-- `codeye start`, `codeye serve --user`, `codeye login-link`가 일회용 launch token(32 byte 난수, base64url 43자, 10분, 한 번만 교환)을 발급해 `<origin>/#launch=<token>` 링크를 0600 파일에 쓴다. 개인 모드의 `codeye up`·`codeye open`은 같은 링크를 터미널에 출력하고 브라우저로 연다(A38). DB에는 SHA-256만 저장한다. CLI 사용법은 [사용 안내](GUIDE.md)에 있다.
+- `codeye start`, `codeye serve --user`, `codeye login-link`가 일회용 launch token(32 byte 난수, base64url 43자, 10분, 한 번만 교환)을 발급해 `<origin>/#launch=<token>` 링크를 0600 파일에 쓴다. `codeye up`·`codeye open`은 같은 링크를 터미널에 출력하고 브라우저로 연다(A38). DB에는 SHA-256만 저장한다. CLI 사용법은 [사용 안내](GUIDE.md)에 있다.
 - `codeye up PATH`의 링크는 토큰 뒤에 깊은 링크 `&project=<ID>&run=<ID>`를 붙인다. 웹 앱은 토큰을 지울 때 이 두 키(canonical UUID)만 fragment에 남기고 그 프로젝트와 실행을 연다.
-- 관리자 API의 사용자 생성과 비밀번호 재설정도 같은 링크를 응답의 `login_link`로 한 번 준다([계정과 관리자](#계정과-관리자)). origin은 TLS 서버면 public origin, 아니면 요청의 loopback origin이다.
+- 관리자 API의 사용자 생성과 비밀번호 재설정도 같은 링크를 응답의 `login_link`로 한 번 준다([계정과 관리자](#계정과-관리자)). origin은 public origin(TLS나 평문 HTTP)이 있으면 그것, 아니면 요청의 loopback origin이다.
 - 토큰은 URL fragment에 있으므로 HTTP 요청·서버 로그에 실리지 않는다. 웹 앱은 fragment를 읽은 즉시 주소창에서 지우고 `POST /session`으로 교환한다.
-- 세션 수명은 12시간이다. 개인 모드 controller(`codeye serve --personal`, `up`·`start`가 띄운다)는 7일이다(저장 계층의 상한과 같다).
+- 세션 수명은 12시간이다. `codeye up`·`start`가 띄우는 controller(`codeye serve --session-ttl 168h`)는 7일이다(저장 계층의 상한과 같다).
 
 ### 세션
 
@@ -42,7 +42,7 @@
   - launch token: 토큰을 소비하고 같은 트랜잭션에서 세션을 만든다. 잘못된·사용한·만료된 토큰은 모두 401 `launch token is invalid, used or expired`다. Host·Origin 검사에 걸린 요청은 토큰을 소비하지 않는다. 교환의 잠금 순서는 user(FOR SHARE)→token→session이고, 사용자 비활성화(user FOR UPDATE→세션 폐기)와 직렬화되므로 둘이 경합해도 유효한 세션이 남지 않는다.
   - 비밀번호: 사용자 이름은 대소문자를 구분하지 않는다. 없는 사용자·틀린 비밀번호·비활성·비밀번호 없는 사용자는 모두 같은 401 `username or password is incorrect`다. 실패가 한도를 넘으면 429 `RATE_LIMITED`이고 `Retry-After` 헤더와 `details.retry_after_seconds`가 같은 초다. 429 동안은 맞는 비밀번호도 거절한다. 서버의 KDF 계산 자리가 3초 안에 나지 않으면 503 `UNAVAILABLE`이고 시도로 세지 않는다.
 - 응답은 201 [`SessionView`](../api/openapi.yaml)(`user_id`, `csrf_token`, `expires_at`, `username`, `display_name`, `is_admin`, `must_change_password`, `has_password`, `password_reset`)와 세션 cookie다. `password_reset`은 관리자가 한 가장 최근의 비밀번호 재설정(재설정 뒤 30일 동안, 아니면 null)이며 `reset_at`, `reset_by_user_id`, `reset_by_username`을 담는다. 로그인 횟수와 무관하게 30일 동안 나오고 지우는 경로는 없다.
-- cookie는 평문 loopback에서 `codeye_session`, TLS에서 `__Host-codeye_session`(Secure)이다. HttpOnly, SameSite=Strict, Path=/, 절대 만료 12시간이며 sliding 연장은 없다. 만료는 DB 시각으로 판단한다. TLS 서버는 평문 이름의 cookie를 읽지 않는다.
+- cookie는 평문(loopback과 공개 평문 HTTP)에서 `codeye_session`, TLS에서 `__Host-codeye_session`(Secure)이다. HttpOnly, SameSite=Strict, Path=/, 절대 만료 12시간이며 sliding 연장은 없다. 만료는 DB 시각으로 판단한다. TLS 서버는 평문 이름의 cookie를 읽지 않는다.
 - `GET /session`은 같은 형태의 현재 세션을 준다. `DELETE /session`은 세션을 폐기하고 cookie를 지운다(204, CSRF 필요). 사용자 비활성화(`codeye user disable`, `POST /admin/users/{id}/disable`)와 비밀번호 재설정은 그 사용자의 모든 세션을 폐기한다.
 
 ### 비밀번호 변경
@@ -60,6 +60,8 @@
 
 - 평문 loopback: `Host`는 `127.0.0.1:<port>`, `localhost:<port>`, `[::1]:<port>`만 허용한다. 상태 변경 요청은 `Origin`이 `http://` + Host와 정확히 같아야 한다.
 - TLS: `Host`는 public origin의 host(기본 포트 443이면 `host`와 `host:443`)만 허용하고, 상태 변경 요청의 `Origin`은 public origin과 정확히 같아야 한다. 모든 응답에 `Strict-Transport-Security: max-age=31536000`을 보낸다.
+- 공개 평문 HTTP(`--plain-http`): `Host`는 public origin의 host(듣는 주소가 loopback·unspecified면 loopback Host도), 상태 변경 요청의 `Origin`은 `http://` + Host다.
+- `--local-listen`의 loopback 수신 주소는 평문 loopback 규칙을 따른다. 규칙은 요청이 들어온 수신 주소가 정한다.
 - Host 위반은 정적 파일을 포함한 모든 요청에서 403 `HOST_REJECTED`, Origin 위반과 `same-origin`이 아닌 `Sec-Fetch-Site`는 403 `ORIGIN_REJECTED`다. `POST /session`도 Origin 검사를 받는다.
 - CORS 허용 헤더를 보내지 않는다(same-origin만).
 
@@ -89,7 +91,7 @@
 | 413 | `PAYLOAD_TOO_LARGE` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` |
 | 429 | `RATE_LIMITED`(`retryable=true`, `Retry-After`, `details.retry_after_seconds`): 로그인과 비밀번호 변경의 실패 한도 |
-| 422 | `VALIDATION_FAILED`(의미 제약), `SOURCE_UNSUPPORTED`(ssh·scp·`git://`), `ATTACHMENTS_UNSUPPORTED`, 노드 `INTEGRITY_MISMATCH`·`PROTOCOL_UNSUPPORTED`, pull request run의 `PULL_REQUEST_UNSUPPORTED`·`PULL_REQUEST_NOT_FOUND`·`GITHUB_TOKEN_REFUSED`·`GITHUB_FORBIDDEN`([pull request run](#pull-request-run)) |
+| 422 | `VALIDATION_FAILED`(의미 제약), `SOURCE_UNSUPPORTED`(ssh·scp·`git://`), `ATTACHMENTS_UNSUPPORTED`, 폴더 경로의 `LOCAL_PATH_NOT_ALLOWED`·`FOLDER_NOT_READABLE`·`FOLDER_NOT_FOUND`·`FOLDER_NAME_UNSUPPORTED`·`FOLDER_HOLDS_CODEYE_DATA`([프로젝트 등록](#프로젝트-등록)), GitHub 연결의 `GITHUB_TOKEN_UNAVAILABLE`, 노드 `INTEGRITY_MISMATCH`·`PROTOCOL_UNSUPPORTED`, pull request run의 `PULL_REQUEST_UNSUPPORTED`·`PULL_REQUEST_NOT_FOUND`·`GITHUB_TOKEN_REFUSED`·`GITHUB_FORBIDDEN`([pull request run](#pull-request-run)) |
 | 500 | `INTERNAL`, `REPORT_INVALID`(저장된 보고서가 검증에 실패) |
 | 502 | `GITHUB_UNAVAILABLE`(`retryable=true`): pull request를 확인할 GitHub API에 닿지 못함 |
 | 503 | `UNAVAILABLE`(`retryable=true`). DB 오류 뒤에는 202를 반환하지 않는다. 이벤트 스트림 상한 초과도 503이다. `GITHUB_RATE_LIMITED`(`retryable=true`)는 GitHub API rate limit 소진이다. |
@@ -129,9 +131,10 @@
 | `POST /session/password` | 세션+CSRF(변경 대기 세션 포함) | [비밀번호 변경](#비밀번호-변경) |
 | `GET /source-roots` | 세션 | 이 사용자에게 허가된 root의 `{id, label}`만. 서버 경로는 보이지 않는다. |
 | `GET /providers` | 세션 | `{id, kind(github·ghes), host}` |
-| `POST /projects`, `GET /projects`, `GET /projects/{id}` | 세션(+CSRF) | 등록 201+`Location`(개인 모드에서 같은 폴더·저장소면 200과 그 프로젝트), 허가된 목록·상세. 항목마다 호출자의 `role`(`owner`·`manager`·`runner`·`viewer`), `can_run`, `can_manage`, `analysis` |
+| `POST /projects`, `GET /projects`, `GET /projects/{id}` | 세션(+CSRF) | 등록 201+`Location`(`open_existing`이고 같은 폴더·저장소면 200과 그 프로젝트), 허가된 목록·상세. 항목마다 호출자의 `role`(`owner`·`manager`·`runner`·`viewer`), `can_run`, `can_manage`, `analysis` |
 | `PUT /projects/{id}/analysis` | 소유자·manager(+CSRF) | 분석 선택을 바꾼 새 설정 revision. 200과 프로젝트([프로젝트 등록](#프로젝트-등록)) |
-| `GET /setup` | 세션 | 첫 화면의 설치 정보([설치 정보](#설치-정보)) |
+| `GET /setup` | 세션 | 이 사용자에게 맞춘 첫 화면 정보([설치 정보](#설치-정보)) |
+| `GET/PUT/DELETE /account/github` | 세션(+CSRF) | 자기 github.com token의 상태·저장·삭제([GitHub 연결](#github-연결)) |
 | `GET /projects/{id}/members`, `PUT/DELETE /projects/{id}/members/{uid}` | 소유자·manager | [구성원](#구성원) |
 | `GET /projects/{id}/audit` | 소유자·manager | 그 프로젝트의 감사 기록([계정과 관리자](#계정과-관리자)) |
 | `/admin/…`, `GET /audit` | 관리자 | [계정과 관리자](#계정과-관리자) |
@@ -150,11 +153,11 @@
 
 - 본문은 `{name?, source | local_path, analysis?, description?, attachment_ids?}`다. `source`와 `local_path` 중 정확히 하나를 준다(둘 다·둘 다 없음은 400). 첨부는 아직 받지 않는다(`attachment_ids`가 비어 있지 않으면 422 `ATTACHMENTS_UNSUPPORTED`). 빈 이름은 422다.
 - **local 소스**: 이 사용자에게 허가된 source root와 상대 경로. 경로는 `.`이거나, 절대 경로·드라이브·역슬래시·`..`·빈 구간이 없어야 한다. 허가 없는 root는 404다.
-- **local_path(개인 모드)**: 절대 경로의 폴더. 서버가 symlink를 풀고 허가된 root 중 가장 긴 root 아래의 상대 경로로 바꾼다. 개인 모드는 홈 디렉터리를 기본 root(`home`)로 둔다. 없는 폴더는 422 `FOLDER_NOT_FOUND`, root 밖은 422 `FOLDER_NOT_READABLE`(터미널의 `codeye up <경로>`가 root를 더한다), 상대 경로로 쓸 수 없는 이름(`:` 등)은 422 `FOLDER_NAME_UNSUPPORTED`다. 서버 모드는 422 `LOCAL_PATH_UNSUPPORTED`다.
-- **CODEYE 데이터 폴더(개인 모드)**: 프로젝트 폴더가 상태 디렉터리나 백업 디렉터리를 품거나 그 안에 있으면, `local_path`든 root와 상대 경로든 symlink를 푼 뒤 422 `FOLDER_HOLDS_CODEYE_DATA`다. `message`는 문제의 두 폴더를 적고 프로젝트가 든 하위 폴더를 고르라고 안내한다. 노드도 소스를 확보하기 전에 같은 검사를 하고 실패 사유는 `source_holds_codeye_data`다.
-- **같은 소스(개인 모드)**: 같은 root와 경로, 또는 같은 provider와 저장소 주소(대소문자, 끝의 `/`·`.git` 무시)의 프로젝트가 이미 있으면 새로 만들지 않고 200과 그 프로젝트를 준다.
-- **git 소스**: 승인된 provider와 `https://<provider host>/<owner>/<repo>[.git]`. 브랜치는 선택이며 `git check-ref-format`의 부분집합을 만족해야 한다. 비우면 소스를 확보할 때마다 저장소의 기본 브랜치(`git ls-remote --symref … HEAD`)를 쓰고 보고서 입력에 그 브랜치와 커밋을 남긴다. ssh·scp·`git://`는 422 `SOURCE_UNSUPPORTED`다. 개인 모드는 github.com에 한해 `codeye up`이 찾은 token으로 비공개 저장소를 읽는다([GitHub token](GITHUB.md#github-token)). 그 밖의 인증은 없다. 인증을 요구하는 저장소(token이 없거나 읽을 수 없는 비공개 저장소, 없는 저장소)는 실행이 `source_auth_required`, 호스트에 닿지 못하면 `source_unreachable`로 실패한다.
-- **analysis**: `{send_source_to_model, run_build_scripts, fetch_dependencies?}`. 앞의 둘은 있어야 한다(아니면 422 `VALIDATION_FAILED`). 없으면 소스 종류의 기본값이다. 로컬 폴더는 둘 다 `true`, Git 저장소는 `send_source_to_model: true`, `run_build_scripts: false`다. `fetch_dependencies`는 선택이고 없으면 `true`다(두 종류 모두). 설정에는 `false`일 때만 쓴다. 이 선택은 노드 운영자 스위치(`--dependency-fetch`)와 함께 모든 노드에서 의존성 받기를 정한다([의존성 준비](ARCHITECTURE.md#의존성-준비)). 설정의 `analysis`에 저장하고 응답의 `analysis`로 보인다. `--project-analysis-policy`로 띄운 노드(개인 모드)는 로컬·Git 모두 이 선택을 따른다. 그 밖의 노드는 운영자의 root별 허가(`--model-source-root`·`--repo-code-source-root`)를 따른다. `PUT /projects/{id}/analysis`가 바꾸고(설정의 나머지는 그대로, 새 revision, `project.revised` 감사), 그 뒤의 run이 새 선택을 따른다.
+- **local_path**: 서버의 절대 경로 폴더. 허가된 폴더(사용자별 grant 또는 모두에게 연 source root)가 있는 사용자면 누구나 쓴다. 서버가 symlink를 풀고 허가된 root 중 가장 긴 root 아래의 상대 경로로 바꾼다. `codeye up`은 관리자의 홈 디렉터리를 기본 root(`home`)로 둔다. 허가된 폴더가 하나도 없으면 422 `LOCAL_PATH_NOT_ALLOWED`, 없는 폴더는 422 `FOLDER_NOT_FOUND`, 허가된 root 밖은 422 `FOLDER_NOT_READABLE`, 상대 경로로 쓸 수 없는 이름(`:` 등)은 422 `FOLDER_NAME_UNSUPPORTED`다. 이 오류들의 `details.readable_folders`는 이 사용자가 읽을 수 있는 폴더 목록이다. 운영체제 계정 권한은 확인하지 않는다([서버 경로 허가](SECURITY.md#서버-경로-허가)).
+- **CODEYE 데이터 폴더**(state 디렉터리가 있는 controller): 프로젝트 폴더가 상태 디렉터리나 백업 디렉터리를 품거나 그 안에 있으면, `local_path`든 root와 상대 경로든 symlink를 푼 뒤 422 `FOLDER_HOLDS_CODEYE_DATA`다. `message`는 문제의 두 폴더를 적고 프로젝트가 든 하위 폴더를 고르라고 안내한다. 노드도 소스를 확보하기 전에 같은 검사를 하고 실패 사유는 `source_holds_codeye_data`다.
+- **같은 소스**: `open_existing`(기본 `local_path`는 true, `source`는 false)이 true이고, 같은 root와 경로 또는 같은 provider와 저장소 주소(대소문자, 끝의 `/`·`.git` 무시)의 프로젝트를 이 사용자가 볼 수 있으면 새로 만들지 않고 200과 그 프로젝트를 준다. 웹의 첫 화면은 둘 다 true로 보낸다.
+- **git 소스**: 승인된 provider와 `https://<provider host>/<owner>/<repo>[.git]`. 브랜치는 선택이며 `git check-ref-format`의 부분집합을 만족해야 한다. 비우면 소스를 확보할 때마다 저장소의 기본 브랜치(`git ls-remote --symref … HEAD`)를 쓰고 보고서 입력에 그 브랜치와 커밋을 남긴다. ssh·scp·`git://`는 422 `SOURCE_UNSUPPORTED`다. github.com에 한해 run을 시작한 사람의 token으로 비공개 저장소를 읽는다([누구의 token인가](GITHUB.md#누구의-token인가)). 그 밖의 인증은 없다. 인증을 요구하는 저장소(token이 없거나 읽을 수 없는 비공개 저장소, 없는 저장소)는 실행이 `source_auth_required`, 호스트에 닿지 못하면 `source_unreachable`로 실패한다.
+- **analysis**: `{send_source_to_model, run_build_scripts, fetch_dependencies?}`. 앞의 둘은 있어야 한다(아니면 422 `VALIDATION_FAILED`). 없으면 소스 종류의 기본값이다. 로컬 폴더는 둘 다 `true`, Git 저장소는 `send_source_to_model: true`, `run_build_scripts: false`다. `fetch_dependencies`는 선택이고 없으면 `true`다(두 종류 모두). 설정에는 `false`일 때만 쓴다. 이 선택은 노드 운영자 스위치(`--dependency-fetch`)와 함께 모든 노드에서 의존성 받기를 정한다([의존성 준비](ARCHITECTURE.md#의존성-준비)). 설정의 `analysis`에 저장하고 응답의 `analysis`로 보인다. `--project-analysis-policy`로 띄운 노드(`codeye up`이 띄운다)는 로컬·Git 모두 이 선택과, 배정의 `offered`(관리자가 아닌 사람이 시작한 run에 관리자 스위치가 허용한 것)를 함께 따른다. 그 밖의 노드는 운영자의 root별 허가(`--model-source-root`·`--repo-code-source-root`)를 상한으로 이 선택을 따른다. `PUT /projects/{id}/analysis`가 바꾸고(설정의 나머지는 그대로, 새 revision, `project.revised` 감사), 그 뒤의 run이 새 선택을 따른다.
 - 등록은 소스 위치의 선언이며 형식과 권한만 검사한다. 서버는 등록 시 파일 시스템·네트워크에 접근하지 않는다. 경로 정규화와 symlink·junction 경계는 워커가 소스를 확보할 때 검사한다([실행](EXECUTION.md)). 이름이 없으면 경로 마지막 구간, root label, 저장소 이름 순으로 정한다. 저장되는 설정 revision 1은 `{"config_version":1,"source":…,"description"?}`이다.
 - 프로젝트 응답의 `source_status`는 등록만 확인한 소스이므로 `declared_unverified`다. `capability_gaps`는 `source_access_unverified`(항상), `execution_unavailable`(철회되지 않은 등록 노드가 없음), `report_unavailable`(게시된 보고서가 없음)이다. 실행별 배치 가능 여부는 대기 사유로 따로 보고한다.
 
@@ -194,24 +197,35 @@
 
 ### pull request run
 
-개인 모드에서 github.com 저장소 프로젝트는 `{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"full"},"pull_request":{"number":7,"comment":true}}`처럼 pull request 하나를 분석한다. 동작과 근거는 [GitHub 연결](GITHUB.md#pull-request-분석)에 있다.
+github.com 저장소 프로젝트는 누가 등록했든 `{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"full"},"pull_request":{"number":7,"comment":true}}`처럼 pull request 하나를 분석한다. 동작과 근거는 [GitHub 연결](GITHUB.md#pull-request-분석)에 있다.
 
-- controller가 저장된 GitHub token으로 pull request의 base/head SHA, head 저장소(fork), 변경 파일과 변경 줄을 읽어 run에 한 번 고정한다(`runs.pull_request`, 바꾸지 않는다). 노드는 `refs/pull/N/head`를 받아 고정한 head SHA를 분석한다. 202 뒤에 head가 움직여도 이 run은 고정한 head다.
+- controller가 run을 시작하는 사람의 GitHub token(없으면 익명)으로 pull request의 base/head SHA, head 저장소(fork), 변경 파일과 변경 줄을 읽어 run에 한 번 고정한다(`runs.pull_request`, 바꾸지 않는다). 노드는 `refs/pull/N/head`를 받아 고정한 head SHA를 분석한다. 202 뒤에 head가 움직여도 이 run은 고정한 head다.
 - `comment`는 이 run이 결과 댓글을 남길지다. 없으면 프로젝트 `analysis.comment_on_pull_request`(기본 `false`)를 따른다. 화면과 `codeye up --comment`는 값을 보낸 뒤 `PUT /projects/{id}/analysis`로 기억시킨다.
 - idempotency 비교는 보낸 body로만 한다. 같은 키의 반복은 GitHub에 다시 묻지 않고 같은 run을 준다. 새 push 뒤의 새 분석은 새 키(새 run)다.
-- 거절: 서버 모드나 github.com이 아닌 프로젝트는 422 `PULL_REQUEST_UNSUPPORTED`, GitHub이 보여 주지 않는 번호(없음, token 없이 읽을 수 없는 비공개 저장소)는 422 `PULL_REQUEST_NOT_FOUND`, 거부된 token은 422 `GITHUB_TOKEN_REFUSED`, 권한 부족은 422 `GITHUB_FORBIDDEN`, rate limit은 503 `GITHUB_RATE_LIMITED`, 연결 실패는 502 `GITHUB_UNAVAILABLE`이다. 예약은 `pull_request`를 받지 않는다(422 `VALIDATION_FAILED`).
+- 거절: 오프라인 모드나 github.com이 아닌 프로젝트는 422 `PULL_REQUEST_UNSUPPORTED`, GitHub이 그 사람에게 보여 주지 않는 번호(없음, 그 사람의 token으로 읽을 수 없는 비공개 저장소)는 422 `PULL_REQUEST_NOT_FOUND`, 거부된 token은 422 `GITHUB_TOKEN_REFUSED`, 권한 부족은 422 `GITHUB_FORBIDDEN`, rate limit은 503 `GITHUB_RATE_LIMITED`, 연결 실패는 502 `GITHUB_UNAVAILABLE`이다. 예약은 `pull_request`를 받지 않는다(422 `VALIDATION_FAILED`).
 - `GET /runs/{id}`의 `pull_request`가 고정한 값과 댓글 상태(`comment.state`: `not_requested`·`waiting_for_report`·`pending`·`posted`·`superseded`·`failed`, `reason`, `url`, `attempts`, `next_attempt_at`)다. pull request run이 아니면 필드가 없다.
-- `GET /runs/{id}/pull-request-comment[?revision=N]`은 게시할(또는 게시한) 댓글 본문을 렌더링해 `{run_id, report_revision, format:"markdown", body, head_sha, current_head_sha, head_moved, comment}`로 준다. GitHub에 쓰지 않는다. pull request run이 아니면 404 `NOT_A_PULL_REQUEST_RUN`이다.
+- `GET /runs/{id}/pull-request-comment[?revision=N]`은 게시할(또는 게시한) 댓글 본문을 렌더링해 `{run_id, report_revision, format:"markdown", body, head_sha, current_head_sha, head_moved, comment}`로 준다. GitHub에 쓰지 않고, 현재 head는 미리보기를 요청한 사람의 token으로 묻는다. 결과 댓글은 run을 시작한 사람의 token으로 게시하며 그 사람의 token이 없으면 게시하지 않는다(`failed`, `no_token`). pull request run이 아니면 404 `NOT_A_PULL_REQUEST_RUN`이다.
 - 보고서에는 `pull_request` 절이 생긴다([보고서](REPORT.md#pull-request-보고서)). 결과 댓글 게시는 보고서 게시와 별개라 실패해도 run 상태와 보고서를 바꾸지 않는다.
 
 ### 설치 정보
 
-`GET /setup`은 첫 화면이 쓰는 `{mode, model, git, readable_folders, analysis_defaults, tools, github}`다([schema](../api/openapi.yaml)의 `Setup`).
+`GET /setup`은 로그인한 사람에게 맞춘 첫 화면 정보 `{is_admin, service_origin, model, git, readable_folders, analysis_defaults, available, tools, github, offline}`다([schema](../api/openapi.yaml)의 `Setup`). 같은 서비스에서 사람마다 답이 다르다.
 
-- 개인 모드(`mode: "personal"`): `model`은 `{configured, id, probe}`(키 없음, probe는 `verified`·`failed`·`not_probed`), `git`은 `{available, hosts}`, `readable_folders`는 이 사용자에게 허가된 root의 절대 경로, `tools`는 `codeye up`이 찾은 도구(`<state_dir>/tools.json`, [schema](../schemas/tools.schema.json))다. 기록이 아직 없으면 `git`·`tools`가 `null`이다.
-- 서버 모드(`mode: "server"`): controller는 노드마다 다른 이 정보를 모르므로 `model`·`git`·`tools`가 `null`이고 `readable_folders`가 비어 있다.
-- `analysis_defaults`는 `{local, git}`의 기본 분석 선택이다.
-- `github`(개인 모드)은 `{enabled, host, token, account, source, reason}`이다. token 자체는 싣지 않는다. `token`은 저장된 token이 있는지, `account`는 그 token의 GitHub 계정, `source`는 `GH_TOKEN`·`GITHUB_TOKEN`·`gh`, `reason`은 token이 없거나 계정을 모르는 이유(`no_token`, `token_refused`, `github_unavailable`, 오프라인 모드면 `offline_mode`(이때 `enabled`는 false) 등)다. 서버 모드와 이전 설정 요약은 `null`이다.
+- `readable_folders`는 이 사람이 경로로 분석할 수 있는 서버 폴더(사용자별 grant와 모두에게 연 root의 절대 경로)다. `git`은 `{available, hosts}`로, `hosts`는 승인된 provider이고 `available`은 `codeye up`이 기록한 git 실행 파일이 있고 host가 하나 이상일 때 true다.
+- `analysis_defaults`는 `{local, git}`의 기본 분석 선택에 이 사람의 허용 범위를 적용한 값이다(관리자가 아닌 사람은 스위치가 끈 것이 false).
+- `available`은 `git_url`, `local_path`, `pull_requests`, `github_token`, `model_review`, `build_scripts`, `fetch_dependencies`마다 `{available, reason}`이다. reason은 `no_git_host`, `no_allowed_folder`, `offline`, `no_state_dir`, `not_offered`(관리자 스위치), `model_not_configured`, `node_disabled`, `unknown`(기록 없음)이다. 화면은 쓸 수 없는 것을 이유와 함께 보인다.
+- `model`은 `{configured, id, probe}`(키 없음, probe는 `verified`·`failed`·`not_probed`), `tools`는 `codeye up`이 찾은 도구(`<state_dir>/tools.json`, [schema](../schemas/tools.schema.json))다. 관리자가 아니면 도구의 경로·힌트·출처를 지운다. `codeye up`의 기록이 없으면(state 디렉터리 없이 띄운 `codeye serve`) 둘 다 `null`이다.
+- `github`는 이 사람 자신의 GitHub 연결 `{enabled, host, token, account, source, reason}`이다. token 자체는 싣지 않는다. `enabled`는 이 서비스가 token을 저장할 수 있는지(`reason`: `offline_mode`, `no_state_dir`), `source`는 `web`·`GH_TOKEN`·`GITHUB_TOKEN`·`gh`다.
+- `service_origin`은 다른 사람에게 알려 줄 주소(public origin)이고 loopback에서만 들으면 null이다.
+
+실제 `codeye up --plain-http`에서 받은 관리자가 아닌 사용자의 `GET /setup`(폴더 허용 전후), 폴더 거절, GitHub 연결, 관리자 설정·폴더·Git host 응답은 [examples/shared-service.json](../examples/shared-service.json)에 있고 `validate_bundle.py`가 schema와 대조한다.
+
+### GitHub 연결
+
+- `GET /account/github`은 `{host, connected, account, source, storable, reason}`이다. token은 돌려주지 않는다.
+- `PUT /account/github` `{token}`(CSRF)은 자기 token을 저장하고 200과 같은 형태를 준다. 1줄 8~512자가 아니면 422 `VALIDATION_FAILED`, GitHub이 거부하면 422 `GITHUB_TOKEN_REFUSED`(저장하지 않음), 저장할 곳이 없거나 오프라인이면 422 `GITHUB_TOKEN_UNAVAILABLE`다. GitHub에 닿지 못하면 계정 없이 저장한다. 감사 `account.github_token_set`(host·계정 이름만).
+- `DELETE /account/github`(CSRF)은 지우고 204다(없었어도). 감사 `account.github_token_removed`.
+- 이 token이 쓰이는 곳은 [누구의 token인가](GITHUB.md#누구의-token인가)에 있다.
 
 ## 실행 조회와 진행
 
@@ -449,13 +463,18 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `POST /admin/users/{id}/disable` | — | 200 `UserView`. 모든 세션 폐기. 마지막 활성 관리자 409. 이미 비활성이면 변경 없이 200 |
 | `PUT /admin/users/{id}/admin` | `{is_admin}` | 200 `UserView`. 마지막 활성 관리자 해제·비활성 사용자 지정 409 |
 | `POST /admin/users/{id}/password-reset` | — | 200 `{user, login_link}`. 비밀번호 삭제, 모든 세션과 이전 로그인 링크 폐기, 새 로그인 링크. 자기 자신 409, 사용자 이름이 없는 사용자 409(문구가 다르다), 비활성 404. 링크로 시작한 세션은 비밀번호 변경에 묶이고 그 세션의 감사 행에 `link_issued_by`가 붙는다 |
-| `GET /admin/source-roots` | — | `{items: [{id, label, created_at, grants: [{user_id, username, granted_at}]}]}`. 서버 경로는 없다 |
+| `GET /admin/source-roots` | — | `{items: AdminSourceRoot[]}`: `{id, label, path, everyone, created_at, grants: [{user_id, username, granted_at}]}`. 서버 경로는 관리자에게만 보인다 |
+| `POST /admin/source-roots` | `{path, label?, everyone?}` | 201 `AdminSourceRoot`. 절대 경로의 있는 폴더여야 한다(422 `FOLDER_NOT_FOUND`). CODEYE 데이터 디렉터리 안은 422 `FOLDER_HOLDS_CODEYE_DATA`, 같은 경로·이름 409. label을 비우면 폴더 이름. 감사 `source_root.added`(와 `source_root.everyone_set`) |
+| `PUT /admin/source-roots/{rid}/everyone` | `{everyone}` | 204. 모두에게 열거나 닫는다(사용자별 grant는 그대로). 감사 `source_root.everyone_set` |
 | `PUT/DELETE /admin/source-roots/{rid}/grants/{uid}` | — | 204. 이미 그 상태면 변경 없이 204 |
 | `GET /admin/providers` | — | `{items: [{id, kind, host, api_url}]}` |
+| `POST /admin/providers` | `{host}` | Git host 승인. 새로 더하면 201, 이미 있으면 200(`AdminProvider`). `github.com`은 `github`, 그 밖은 `ghes`. 형식 오류 422. 감사 `provider.added` |
+| `GET /admin/settings` | — | `ServiceSettings`: `{others_model_review, others_build_scripts, updated_at, service_origin}` |
+| `PUT /admin/settings` | `{others_model_review?, others_build_scripts?}`(하나 이상) | 200 `ServiceSettings`. 관리자가 아닌 사람이 시작한 run에 다음 배정부터 적용한다. 바뀐 값이 있을 때만 감사 `service.settings_set` |
 | `GET /audit` | — | 전체 감사 기록 `AuditPage` |
 
 - 로그인 링크(`login_link.url`, `expires_at`)는 응답에 한 번만 나온다. 관리자는 링크를 사용자에게 안전한 경로로 전달하고, 사용자는 링크로 로그인한 뒤 `POST /session/password`로 비밀번호를 정한다. 그 전에는 다른 경로가 403 `PASSWORD_CHANGE_REQUIRED`다.
-- source root와 provider의 등록은 운영자 CLI(`codeye source-root add`, `codeye provider add`)가 한다. 관리자 API는 허가만 바꾼다.
+- source root와 provider는 웹(위 경로)이나 운영자 CLI(`codeye source-root add`, `codeye provider add`)로 더한다. 웹에서 더한 root는 `codeye up`이 띄운 에이전트(능력 `source:controller`)가 배정에서 경로를 받아 바로 읽는다. 따로 띄운 노드는 자기 등록에 든 root만 읽는다.
 - 첫 관리자와 비밀번호 직접 지정은 운영자 CLI(`codeye user create --admin`, `codeye user passwd`)다([운영](OPERATIONS.md#계정과-관리자-cli)).
 - 감사 기록 항목은 `id`(문자열), `occurred_at`, `actor_kind`, `actor_user_id`, `actor_username`, `actor_node_id`, `action`, `target_type`, `target_id`, `project_id`, `request_id`, `detail`이다. action 목록과 detail 규칙은 [보안](SECURITY.md#감사)에 있다.
 

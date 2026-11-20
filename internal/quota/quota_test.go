@@ -18,7 +18,7 @@ func write(t *testing.T, path string, n int) {
 	}
 }
 
-// The areas map to the agent and personal layout (docs/OPERATIONS.md#저장-영역과-상한): the
+// The areas map to the agent and service layout (docs/OPERATIONS.md#저장-영역과-상한): the
 // workspace of an acquisition is not counted as snapshot, pinned retry
 // copies are workspace, worker homes and the Go module cache are cache.
 func TestMeasureAreas(t *testing.T) {

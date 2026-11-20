@@ -1,4 +1,4 @@
-import type { AnalysisChoices, CreateProjectBody, Provider, Setup } from './api';
+import type { AnalysisChoices, CreateProjectBody, Provider, Setup, SetupAvailableKey } from './api';
 import { ko as t } from './locales/ko';
 import { urlHasCredentials } from './projectForm';
 import { pullRequestOf } from './pullRequest';
@@ -58,21 +58,51 @@ export function parseTarget(raw: string): { target: QuickTarget | null; error: s
   return { target: { kind: 'git', url: `https://${url.host.toLowerCase()}${path}`, host: url.host.toLowerCase(), branch }, error: null };
 }
 
+// The setup availability behind each analysis choice.
+export const CHOICE_AVAILABILITY: Record<keyof AnalysisChoices, SetupAvailableKey> = {
+  send_source_to_model: 'model_review',
+  run_build_scripts: 'build_scripts',
+  fetch_dependencies: 'fetch_dependencies',
+};
+
+// Why the service does not offer this to the signed-in user (a plain sentence), or null when
+// it is available or the server does not say. "unknown" (nothing recorded yet) is not a refusal.
+export function unavailableReason(setup: Setup | null, key: SetupAvailableKey): string | null {
+  const a = setup?.available[key];
+  if (!a || a.available || a.reason === 'unknown') return null;
+  const reason = a.reason ?? 'unknown';
+  return Object.hasOwn(t.quick.reasons, reason) ? t.quick.reasons[reason] : t.quick.reasonUnknown(reason);
+}
+
+// Choices the service refuses to this user are off and cannot be turned on.
+export function choiceLocked(setup: Setup | null, key: keyof AnalysisChoices): boolean {
+  const reason = setup?.available[CHOICE_AVAILABILITY[key]]?.reason;
+  return reason === 'not_offered' || reason === 'node_disabled';
+}
+
 // The analysis choices shown: the user's own once a box was touched, otherwise the defaults of
-// the target's kind (a folder: all on; a repository: build scripts off).
+// the target's kind (a folder: all on; a repository: build scripts off), with what the service
+// does not offer this user off.
 export function choicesFor(kind: 'local' | 'git', setup: Setup | null, touched: Partial<AnalysisChoices>): AnalysisChoices {
   const d = setup?.analysis_defaults[kind] ?? { send_source_to_model: true, run_build_scripts: kind === 'local', fetch_dependencies: true };
+  const pick = (key: keyof AnalysisChoices) => !choiceLocked(setup, key) && (touched[key] ?? d[key]);
   return {
-    send_source_to_model: touched.send_source_to_model ?? d.send_source_to_model,
-    run_build_scripts: touched.run_build_scripts ?? d.run_build_scripts,
-    fetch_dependencies: touched.fetch_dependencies ?? d.fetch_dependencies,
+    send_source_to_model: pick('send_source_to_model'),
+    run_build_scripts: pick('run_build_scripts'),
+    fetch_dependencies: pick('fetch_dependencies'),
   };
+}
+
+// A folder path for a user the server allows no folder: say so before asking the server.
+export function noFolderFor(target: QuickTarget, setup: Setup | null): boolean {
+  return target.kind === 'local' && setup !== null && setup.readable_folders.length === 0;
 }
 
 // quickBody builds the registration; a repository needs the provider of its host.
 export function quickBody(target: QuickTarget, name: string, branch: string, choices: AnalysisChoices, providers: Provider[], setup: Setup | null): { body: CreateProjectBody | null; error: string | null } {
   const label = name.trim();
-  const base = { ...(label === '' ? {} : { name: label }), analysis: choices };
+  // The same folder or repository again opens the user's project instead of a second one.
+  const base = { ...(label === '' ? {} : { name: label }), analysis: choices, open_existing: true };
   if (target.kind === 'local') return { body: { ...base, local_path: target.path }, error: null };
   if (setup?.git && !setup.git.available) return { body: null, error: v.noGit };
   const provider = providers.find(p => p.host.toLowerCase() === target.host);
