@@ -17,9 +17,9 @@ export function ErrorNote({ error }: { error: ErrorText }) {
 }
 
 // onRunChange lets the project list re-read its aggregate after this run was accepted or changed state.
-type Props = { api: Api; userId: string; project: Project; idempotency: Idempotency; openRunId?: string | null; onRunChange?: () => void; setup?: Setup | null };
+type Props = { api: Api; userId: string; project: Project; idempotency: Idempotency; openRunId?: string | null; onRunChange?: () => void; setup?: Setup | null; claimReportLanding?: (runId: string) => boolean };
 
-export function RunPanel({ api, userId, project, idempotency, openRunId = null, onRunChange, setup = null }: Props) {
+export function RunPanel({ api, userId, project, idempotency, openRunId = null, onRunChange, setup = null, claimReportLanding }: Props) {
   const [runId, setRunId] = useState<string | null>(null);
   // A retry of the same run restarts its status view; a new run replaces it.
   const [generation, setGeneration] = useState(0);
@@ -69,17 +69,18 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
     {accepted && <p role="status">{t.runs.accepted(shorten(accepted.id, 12))}</p>}
     {retried && <p role="status">{'attempt_id' in retried ? t.runs.recovered(retried.retry) : t.runs.retried(retried.retry)}</p>}
     {activeId && <RunStatus key={`${activeId}:${generation}`} api={api} runId={activeId} project={project} setup={setup} canRun={canRun}
+      claimReportLanding={runId === null ? claimReportLanding : undefined}
       placeholder={accepted?.id === activeId ? accepted : retried?.id === activeId ? retried : null} onRunChange={onRunChange}
       onRetried={ack => { setRetried(ack); setAccepted(null); setRunId(ack.id); setGeneration(n => n + 1); onRunChange?.(); }} />}
   </section>;
 }
 
-type StatusProps = { api: Api; runId: string; project: Project; setup: Setup | null; canRun: boolean; placeholder: RunAck | null; onRunChange?: () => void; onRetried: (ack: RetryAck) => void };
+type StatusProps = { api: Api; runId: string; project: Project; setup: Setup | null; canRun: boolean; placeholder: RunAck | null; onRunChange?: () => void; onRetried: (ack: RetryAck) => void; claimReportLanding?: (runId: string) => boolean };
 
 // Finished runs that a retry can improve: a failure, a partial result, a cancellation.
 const RETRYABLE = new Set(['failed', 'partial', 'cancelled']);
 
-function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChange, onRetried }: StatusProps) {
+function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChange, onRetried, claimReportLanding }: StatusProps) {
   const { run, error, stopped, hidden, confirmedAt, mode, applyAck, refresh } = useRunPolling(api, runId);
   const runVersion = run?.version;
   useEffect(() => { if (runVersion !== undefined) onRunChange?.(); }, [runVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -127,6 +128,7 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
     {run?.raw_evidence_removed_at && <p className="notice" role="note">{t.runs.rawEvidenceRemoved(formatInstant(run.raw_evidence_removed_at))}</p>}
     {/* The report comes after the run's actions (retry, cancel), which stay near its state. */}
     {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}
+      claimReportLanding={run.project_id === project.id ? claimReportLanding : undefined}
       extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project, report.sections?.codeReview.ledger ?? null, report.sections?.environment.dependencies ?? [])} runId={runId} canRun={canRun} operator={operatorHints(setup)} onRetried={onRetried} />} />}
   </div>;
 }

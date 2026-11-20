@@ -381,6 +381,23 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 보고서의 `documents.quality`, `documents.comparisons`, `code_review.strengths`는 수락된 모델 해석과 근거 ID를 담는 선택 필드다. `findings[].evidence[]`와 분석 절 근거의 `excerpt`에는 고정 스냅샷에서 저장한 실제 줄 범위와 원문이 들어간다. 도구 진단의 문맥은 최대 9줄이며 새 모델 발췌는 인용 시작 줄부터 최대 50줄이다. JSON 인코딩 1,800바이트에 닿으면 마지막으로 저장할 수 있는 완전한 줄까지 담는다. `include_code=false`에서는 발췌 필드를 생략하고 모델 문장을 생략 문구로 바꾼다. 이전 보고서에는 이 필드가 없을 수 있다.
 
+수락된 최종 대조가 기존 미확인 계약 하나의 판정을 갱신한 경우, 해당 비교에 선택 필드 `followup: true`가 있다. 계약 문서와 적용 범위는 기존과 같고 새 근거는 `code_evidence_ids`에 들어간다. 근거의 종류는 `documents.evidence[].kind`에서 코드와 테스트를 구별한다. `coverage.review_calls[].task_key`가 `review.contract`이면 이 작업의 호출 기록이다. 최종 대조가 여전히 미확인이면서 새 구현을 인용한 경우에는 `additional_observation`의 `reason`과 `code_evidence_ids`에 추가로 확인한 범위와 근거를 담는다. 이때 원래 비교의 `status`, `reason`, `code_evidence_ids`는 그대로다. 이전 리비전은 선택 필드 없이 읽을 수 있다. 코드 미포함 응답은 상태와 근거 ID를 유지하고 추가 관찰의 `reason`도 다른 모델 문장과 같은 생략 문구로 바꾼다.
+
+```json
+{
+  "statement": "유효한 항목은 등록한 콜백으로 전달한다.",
+  "applies_to": "src",
+  "status": "unknown",
+  "reason": "공개 진입점에서 콜백까지 이어지는 호출을 확인하지 못했다.",
+  "document_evidence_ids": ["ev_0123456789abcdef01234567"],
+  "code_evidence_ids": [],
+  "additional_observation": {
+    "reason": "유효한 항목의 콜백 호출을 읽었다. 공개 진입점과의 연결은 확인되지 않았다.",
+    "code_evidence_ids": ["ev_89abcdef0123456789abcdef"]
+  }
+}
+```
+
 Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `directive_path`로 원래 Markdown 페이지를 가리킨다. `path`, 줄 범위, `blob_sha256`는 docstring이 담긴 스냅샷의 실제 Python 파일을 가리킨다. 코드 미포함 내보내기에도 출처 경로가 남는다.
 
 보고서 내용과 projection 규칙은 [보고서와 화면](REPORT.md)에 있다.

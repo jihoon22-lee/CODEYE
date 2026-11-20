@@ -20,12 +20,16 @@ const (
 	// (review.investigate.sNNN, review.verify.sNNN): 0.2 plus the required
 	// slice reference. Every other role record stays 0.2, byte for byte.
 	SchemaVersionSlice = "0.3"
+	// SchemaVersionContract adds the optional whole-run investigation probe
+	// and the single contract followup record.
+	SchemaVersionContract = "0.4"
 
 	StageEnvironment = "environment"
 	StageDocuments   = "documents"
 	StageInvestigate = "investigate"
 	StageInterpret   = "interpret"
 	StageVerify      = "verify"
+	StageContract    = "contract"
 
 	// Upstream states. Only accepted inputs reach a downstream role.
 	UpstreamAccepted    = "accepted"
@@ -168,25 +172,27 @@ type Record struct {
 	Stage     string  `json:"stage"`
 	// Slice is set on 0.3 records only (nil is omitted, so 0.2 bytes do not
 	// change).
-	Slice               *SliceRef             `json:"slice,omitempty"`
-	Outcome             string                `json:"outcome"`
-	FailureReason       string                `json:"failure_reason,omitempty"`
-	Upstream            []Upstream            `json:"upstream"`
-	Evidence            []Excerpt             `json:"evidence"`
-	Observations        []ObservationRef      `json:"observations"`
-	EnvironmentNotes    []EnvironmentNote     `json:"environment_notes,omitempty"`
-	Contracts           []Contract            `json:"contracts,omitempty"`
-	Conflicts           []Conflict            `json:"conflicts,omitempty"`
-	Questions           []Question            `json:"questions,omitempty"`
-	InstructionNotes    []InstructionNote     `json:"instruction_notes,omitempty"`
-	DocumentQuality     []DocumentQuality     `json:"document_quality,omitempty"`
-	Strengths           []Strength            `json:"strengths,omitempty"`
-	ContractComparisons []ContractComparison  `json:"contract_comparisons,omitempty"`
-	Candidates          []Candidate           `json:"candidates,omitempty"`
-	Limits              []InterpretationLimit `json:"interpretation_limits,omitempty"`
-	Verifications       []Verification        `json:"verifications,omitempty"`
-	Limitations         []string              `json:"limitations"`
-	Calls               []Call                `json:"calls"`
+	Slice               *SliceRef               `json:"slice,omitempty"`
+	Outcome             string                  `json:"outcome"`
+	FailureReason       string                  `json:"failure_reason,omitempty"`
+	Upstream            []Upstream              `json:"upstream"`
+	Evidence            []Excerpt               `json:"evidence"`
+	Observations        []ObservationRef        `json:"observations"`
+	EnvironmentNotes    []EnvironmentNote       `json:"environment_notes,omitempty"`
+	Contracts           []Contract              `json:"contracts,omitempty"`
+	Conflicts           []Conflict              `json:"conflicts,omitempty"`
+	Questions           []Question              `json:"questions,omitempty"`
+	InstructionNotes    []InstructionNote       `json:"instruction_notes,omitempty"`
+	DocumentQuality     []DocumentQuality       `json:"document_quality,omitempty"`
+	Strengths           []Strength              `json:"strengths,omitempty"`
+	ContractComparisons []ContractComparison    `json:"contract_comparisons,omitempty"`
+	PartialSupport      *ContractPartialSupport `json:"partial_support,omitempty"`
+	ContractProbe       *ContractProbe          `json:"contract_probe,omitempty"`
+	Candidates          []Candidate             `json:"candidates,omitempty"`
+	Limits              []InterpretationLimit   `json:"interpretation_limits,omitempty"`
+	Verifications       []Verification          `json:"verifications,omitempty"`
+	Limitations         []string                `json:"limitations"`
+	Calls               []Call                  `json:"calls"`
 }
 
 // Accepted reports whether the record carries an accepted stage result.
@@ -284,18 +290,25 @@ func Marshal(r Record, want Expect) ([]byte, error) {
 func Validate(r Record, want Expect) error {
 	switch r.Schema {
 	case SchemaVersion:
-		if r.Slice != nil || want.Slice != "" {
+		if r.Slice != nil || want.Slice != "" || r.Stage == StageContract || r.ContractProbe != nil {
 			return invalid("slice reference on a whole-run record")
 		}
 	case SchemaVersionSlice:
 		if err := checkSlice(r, want); err != nil {
 			return err
 		}
+		if r.ContractProbe != nil {
+			return invalid("contract probe on a slice")
+		}
+	case SchemaVersionContract:
+		if r.Slice != nil || want.Slice != "" || (r.Stage != StageContract && (r.Stage != StageInvestigate || r.ContractProbe == nil)) {
+			return invalid("contract record version")
+		}
 	default:
 		return invalid("schema_version")
 	}
 	switch {
-	case !slices.Contains(Stages, r.Stage) || (want.Stage != "" && want.Stage != r.Stage):
+	case (r.Stage != StageContract && !slices.Contains(Stages, r.Stage)) || (want.Stage != "" && want.Stage != r.Stage):
 		return invalid("stage")
 	case !packID.MatchString(r.Pack.ID) || !version.MatchString(r.Pack.Version):
 		return invalid("pack identity")
@@ -443,6 +456,10 @@ func checkUpstream(r Record) error {
 		for _, s := range upstreamSources(r) {
 			allowed = allowed || u.Source == s || (s == analyzerSource && AnalyzerTaskKey(u.Source))
 		}
+		if r.Stage == StageContract {
+			_, _, isSlice := SliceTask(u.Source)
+			allowed = u.Source == "review.documents" || u.Source == "review.investigate" || u.Source == TaskScope || isSlice
+		}
 		if !allowed || seen[u.Source] {
 			return invalid("upstream source")
 		}
@@ -459,6 +476,9 @@ func checkUpstream(r Record) error {
 		default:
 			return invalid("upstream state")
 		}
+	}
+	if r.Stage == StageContract {
+		return checkContractUpstream(r, seen)
 	}
 	return nil
 }
@@ -549,6 +569,10 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 	case StageVerify:
 		if !empty(notes, docs, len(r.Limits)) || len(r.Candidates) > 6 || len(r.Verifications) != len(r.Candidates) {
 			return invalid("verify content")
+		}
+	case StageContract:
+		if !empty(notes, docs, len(r.Candidates), len(r.Limits), len(r.Verifications), len(r.Observations)) {
+			return invalid("contract content")
 		}
 	}
 	for _, n := range r.EnvironmentNotes {
@@ -666,7 +690,7 @@ func CandidateTextOK(c CandidateText) bool {
 }
 
 func checkCalls(r Record) error {
-	if len(r.Calls) > RoleMaxCalls {
+	if len(r.Calls) > RoleMaxCalls || (r.Stage == StageContract && len(r.Calls) > ContractMaxCalls) {
 		return invalid("too many calls")
 	}
 	accepted := false

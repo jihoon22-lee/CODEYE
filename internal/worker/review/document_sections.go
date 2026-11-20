@@ -1,10 +1,14 @@
 package review
 
 import (
+	"path"
+	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
 type documentHeading struct {
@@ -14,6 +18,127 @@ type documentHeading struct {
 }
 
 type documentRange struct{ start, end int }
+
+type userDocument struct {
+	entry source.Entry
+	lines []string
+	after int
+}
+
+type documentCoverage struct {
+	doc  userDocument
+	gaps []documentRange
+}
+
+// fillDocumentCoverage spends spare slots on the earliest unread text of a
+// file already read for the document role. Each document gets a turn before
+// the next round. Appending preserves preceding excerpts during request fitting.
+func (s *roleStage) fillDocumentCoverage(docs []userDocument, primary string, out []record.Excerpt, remain int) []record.Excerpt {
+	if len(out) >= roleMaxDocs || remain <= 2 {
+		return out
+	}
+	covered := map[string][]documentRange{}
+	for _, x := range out {
+		if x.DirectivePath == "" {
+			covered[x.Path] = append(covered[x.Path], documentRange{x.Start - 1, x.End})
+		}
+	}
+	active := make([]documentCoverage, 0, len(docs))
+	for _, doc := range docs {
+		p := doc.entry.Path
+		coverage := documentCoverage{doc: doc, gaps: uncoveredDocumentRanges(doc.lines, path.Ext(p), covered[p])}
+		if p == primary {
+			active = slices.Insert(active, 0, coverage)
+		} else {
+			active = append(active, coverage)
+		}
+	}
+	for len(active) > 0 {
+		next := active[:0]
+		for _, coverage := range active {
+			x, ok := coverage.next(s, min(roleMaxDocBytes, remain))
+			if !ok {
+				continue
+			}
+			out = append(out, x)
+			next = append(next, coverage)
+			remain -= record.JSONLen(x.Text)
+			if len(out) >= roleMaxDocs || remain <= 2 {
+				return out
+			}
+		}
+		active = next
+	}
+	return out
+}
+
+func (c *documentCoverage) next(s *roleStage, budget int) (record.Excerpt, bool) {
+	for len(c.gaps) > 0 {
+		gap := &c.gaps[0]
+		if gap.start >= gap.end {
+			c.gaps = c.gaps[1:]
+			continue
+		}
+		start := gap.start
+		end := min(gap.end, start+roleMaxDocLines)
+		lines := c.doc.lines[start:end]
+		first := slices.IndexFunc(lines, substantiveDocumentLine)
+		if first < 0 {
+			gap.start = end
+			continue
+		}
+		x, ok := s.boundedExcerpt(c.doc.entry, "document", "", start+1, lines, budget)
+		if !ok || x.End <= start+first {
+			gap.start += max(1, first)
+			continue
+		}
+		gap.start = x.End
+		return x, true
+	}
+	return record.Excerpt{}, false
+}
+
+func uncoveredDocumentRanges(lines []string, ext string, covered []documentRange) []documentRange {
+	headings := documentationHeadings(lines, ext)
+	skipThrough := 0
+	for i, heading := range headings {
+		if !heading.skip || heading.line < skipThrough {
+			continue
+		}
+		skipThrough = len(lines)
+		for _, next := range headings[i+1:] {
+			if next.level <= heading.level {
+				skipThrough = next.line
+				break
+			}
+		}
+		covered = append(covered, documentRange{heading.line, skipThrough})
+	}
+	sort.Slice(covered, func(i, j int) bool { return covered[i].start < covered[j].start })
+	var gaps []documentRange
+	start := 0
+	for _, r := range covered {
+		if start < r.start {
+			gaps = append(gaps, documentRange{start, r.start})
+		}
+		start = max(start, r.end)
+	}
+	if start < len(lines) {
+		gaps = append(gaps, documentRange{start, len(lines)})
+	}
+	return gaps
+}
+
+func substantiveDocumentLine(raw string) bool {
+	line := strings.TrimLeft(strings.TrimSpace(raw), "-* >")
+	switch {
+	case strings.HasPrefix(line, "#"), strings.HasPrefix(line, "```"), strings.HasPrefix(line, "~~~"), strings.HasPrefix(line, "<!--"):
+		return false
+	case strings.HasPrefix(line, "!["), strings.HasPrefix(line, "[") && strings.HasSuffix(line, ")"), strings.HasPrefix(line, "https://"), strings.HasPrefix(line, "http://"):
+		return false
+	}
+	return strings.ContainsFunc(line, unicode.IsLetter)
+}
 
 // documentationRanges partitions an already bounded continuation when it
 // contains several API entries. It keeps the whole range in order and

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.codeye.invalid/v0.1/review-record.schema.json",
   "title": "CODEYE review stage record",
-  "description": "application/vnd.codeye.review+json. schema_version 0.2: one review stage record (environment, documents, investigate, interpret, verify) with only its own calls (at most 3: the request, one repair, one retry of a reply that was not JSON); every upstream input is bound by the SHA-256 of the artifact bytes it read. schema_version 0.3: the record of one review slice (review.investigate.sNNN, review.verify.sNNN): 0.2 plus the required slice {key, modules}; a slice investigate also names review.scope upstream, a slice verify its own slice's investigate record and review.scope, and it carries investigate candidates only. The Go decoder (internal/worker/review/record) is authoritative: it additionally checks evidence IDs against the snapshot, the path rules of evidence kinds (code: a Go, Python, JS/TS, Rust or C/C++ source extension; test: that ecosystem's test path; manifest: a build manifest), scope rules, JSON-encoded text sizes (400 bytes of model text) and execution claims.",
+  "description": "application/vnd.codeye.review+json. Version 0.2 records the original whole-run roles, 0.3 adds slice lineage, and 0.4 records a whole-run investigation with a validated probe or one contract followup. The Go decoder also checks snapshot evidence IDs, evidence kinds, scope, model text sizes and execution claims.",
   "type": "object",
   "$ref": "#/$defs/record",
   "$defs": {
@@ -10,7 +10,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["schema_version", "pack", "snapshot_manifest_digest", "run_id", "attempt_id", "stage", "outcome", "upstream", "evidence", "observations", "limitations", "calls"],
       "properties": {
-        "schema_version": {"enum":["0.2","0.3"]},
+        "schema_version": {"enum":["0.2","0.3","0.4"]},
         "slice": {"type":"object","additionalProperties":false,"required":["key","modules"],"properties":{"key":{"type":"string","pattern":"^s(00[1-9]|0[1-8][0-9]|09[0-6])$"},"modules":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","pattern":"^(cpp|go|javascript|python|rust):(\\.|[^:\\u0000-\\u001f]+)$"}}}},
         "pack": {"type":"object","additionalProperties":false,"required":["id","version"],"properties":{"id":{"$ref":"#/$defs/pack_id"},"version":{"$ref":"#/$defs/version"}}},
         "snapshot_manifest_digest": {"$ref":"#/$defs/digest"},
@@ -28,6 +28,8 @@
         "document_quality": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "object", "additionalProperties": false, "required": ["aspect", "assessment", "statement", "evidence_ids"], "properties": {"aspect": {"enum": ["clarity", "completeness", "actionability", "consistency"]}, "assessment": {"enum": ["strength", "weakness"]}, "statement": {"$ref": "#/$defs/text"}, "evidence_ids": {"$ref": "#/$defs/refs", "minItems": 1, "maxItems": 4}}}},
         "strengths": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "object", "additionalProperties": false, "required": ["title", "benefit", "scope", "evidence_ids"], "properties": {"title": {"$ref": "#/$defs/text"}, "benefit": {"$ref": "#/$defs/text"}, "scope": {"$ref": "#/$defs/scope_path"}, "evidence_ids": {"$ref": "#/$defs/refs", "minItems": 1, "maxItems": 4}}}},
         "contract_comparisons": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "object", "additionalProperties": false, "required": ["contract_index", "applies_to", "status", "reason", "document_evidence_ids", "code_evidence_ids"], "properties": {"contract_index": {"type": "integer", "minimum": 1, "maximum": 6}, "applies_to": {"$ref": "#/$defs/scope_path"}, "status": {"enum": ["match", "partial", "mismatch", "unknown"]}, "reason": {"$ref": "#/$defs/text"}, "document_evidence_ids": {"$ref": "#/$defs/refs", "minItems": 1, "maxItems": 4}, "code_evidence_ids": {"$ref": "#/$defs/refs", "minItems": 0, "maxItems": 4}}}},
+        "partial_support": {"type":"object","additionalProperties":false,"required":["matching","violating"],"properties":{"matching":{"$ref":"#/$defs/contract_condition_evidence"},"violating":{"$ref":"#/$defs/contract_condition_evidence"}}},
+        "contract_probe": {"$ref":"#/$defs/contract_probe"},
         "candidates": {"type":"array","minItems":1,"maxItems":6,"items":{"$ref":"#/$defs/candidate"}},
         "interpretation_limits": {"type":"array","minItems":1,"maxItems":3,"items":{"$ref":"#/$defs/interpretation_limit"}},
         "verifications": {"type":"array","minItems":1,"maxItems":6,"items":{"allOf":[{"$ref":"#/$defs/verification"},{"properties":{"candidate_id":{"$ref":"#/$defs/candidate_id"}}}]}},
@@ -35,12 +37,15 @@
         "calls": {"type":"array","maxItems":3,"items":{"$ref":"#/$defs/call"}}
       },
       "allOf": [
-        {"if": {"required": ["contract_comparisons"]}, "then": {"properties": {"stage": {"const": "investigate"}, "outcome": {"const": "accepted"}, "schema_version": {"const": "0.2"}}}},
+        {"if": {"required": ["contract_comparisons"]}, "then": {"properties": {"stage": {"enum": ["investigate", "contract"]}, "outcome": {"const": "accepted"}, "schema_version": {"enum": ["0.2", "0.4"]}}}},
+        {"if": {"required": ["contract_probe"]}, "then": {"required": ["contract_comparisons"], "properties": {"stage": {"const": "investigate"}, "outcome": {"const": "accepted"}, "schema_version": {"const": "0.4"}, "contract_comparisons":{"contains":{"properties":{"status":{"const":"unknown"}}}}}}},
         {"if": {"required": ["strengths"]}, "then": {"properties": {"stage": {"const": "investigate"}, "outcome": {"const": "accepted"}}}},
         {"if": {"required": ["document_quality"]}, "then": {"properties": {"stage": {"const": "documents"}, "outcome": {"const": "accepted"}}}},
         {"if":{"properties":{"schema_version":{"const":"0.3"}}},
          "then":{"required":["slice"],"properties":{"stage":{"enum":["investigate","verify"]},"candidates":{"items":{"properties":{"origin":{"const":"investigate"}}}}}},
-         "else":{"not":{"required":["slice"]},"properties":{"upstream":{"items":{"properties":{"source":{"not":{"pattern":"^review\\.(scope|investigate\\.s[0-9]{3})$"}}}}}}}},
+         "else":{"not":{"required":["slice"]}}},
+        {"if":{"properties":{"schema_version":{"const":"0.4"}}},
+         "then":{"oneOf":[{"properties":{"stage":{"const":"contract"}}},{"required":["contract_probe"],"properties":{"stage":{"const":"investigate"},"outcome":{"const":"accepted"},"upstream":{"items":{"properties":{"source":{"enum":["review.environment","review.documents"]}}}}}}]}},
         {"if":{"properties":{"outcome":{"const":"failed"}}},
          "then":{"required":["failure_reason"],"not":{"anyOf":[{"required":["environment_notes"]},{"required":["contracts"]},{"required":["conflicts"]},{"required":["questions"]},{"required":["instruction_notes"]},{"required":["interpretation_limits"]}]},"properties":{"verifications":{"items":{"properties":{"verdict":{"const":"unreviewed"}}}},"calls":{"items":{"properties":{"outcome":{"not":{"const":"accepted"}}}}}}},
          "else":{"not":{"required":["failure_reason"]}}},
@@ -58,12 +63,45 @@
                  "properties":{"observations":{"minItems":1},"candidates":{"maxItems":2,"items":{"properties":{"origin":{"const":"interpret"}}}},"upstream":{"items":{"properties":{"source":{"pattern":"^go-vet"}}}},"calls":{"items":{"properties":{"role":{"const":"interpret"}}}}}}},
         {"if":{"properties":{"stage":{"const":"verify"}}},
          "then":{"not":{"anyOf":[{"required":["environment_notes"]},{"required":["contracts"]},{"required":["conflicts"]},{"required":["questions"]},{"required":["instruction_notes"]},{"required":["interpretation_limits"]}]},
-                 "properties":{"upstream":{"items":{"properties":{"source":{"anyOf":[{"enum":["review.documents","review.investigate","review.interpret","review.scope"]},{"pattern":"^review\\.investigate\\.s[0-9]{3}$"}]}}}},"calls":{"items":{"properties":{"role":{"const":"verify"}}}}}}}
+                 "properties":{"upstream":{"items":{"properties":{"source":{"anyOf":[{"enum":["review.documents","review.investigate","review.interpret","review.scope"]},{"pattern":"^review\\.investigate\\.s[0-9]{3}$"}]}}}},"calls":{"items":{"properties":{"role":{"const":"verify"}}}}}}},
+        {"if":{"properties":{"schema_version":{"const":"0.2"}}},"then":{"properties":{"upstream":{"items":{"properties":{"source":{"not":{"pattern":"^review\\.(scope|investigate\\.s[0-9]{3})$"}}}}}}}},
+        {"if":{"properties":{"stage":{"const":"contract"}}},"then":{"$ref":"#/$defs/final_contract"},"else":{"not":{"required":["partial_support"]}}}
       ]
     },
+    "final_contract": {
+      "not": {"anyOf":[{"required":["contract_probe"]},{"required":["environment_notes"]},{"required":["contracts"]},{"required":["conflicts"]},{"required":["questions"]},{"required":["instruction_notes"]},{"required":["candidates"]},{"required":["interpretation_limits"]},{"required":["verifications"]}]},
+      "properties": {
+        "schema_version":{"const":"0.4"},
+        "observations":{"maxItems":0},
+        "contract_comparisons":{"maxItems":1,"items":{
+          "if":{"properties":{"status":{"enum":["match","partial","mismatch"]}}},
+          "then":{"properties":{"code_evidence_ids":{"minItems":1}}}
+        }},
+        "calls":{"maxItems":2,"items":{"properties":{"role":{"const":"contract"},"attempt":{"maximum":2}}}},
+        "upstream":{
+          "minItems":2,"maxItems":7,
+          "items":{"properties":{"state":{"const":"accepted"},"source":{"anyOf":[{"enum":["review.documents","review.investigate","review.scope"]},{"pattern":"^review\\.(investigate|verify)\\.s(00[1-9]|0[1-8][0-9]|09[0-6])$"}]}}},
+          "allOf":[
+            {"contains":{"properties":{"source":{"const":"review.documents"}}},"maxContains":1},
+            {"contains":{"properties":{"source":{"const":"review.investigate"}}},"maxContains":1},
+            {"if":{"contains":{"properties":{"source":{"pattern":"^review\\.(investigate|verify)\\.s"}}}},
+             "then":{"contains":{"properties":{"source":{"const":"review.scope"}}},"maxContains":1},
+             "else":{"not":{"contains":{"properties":{"source":{"const":"review.scope"}}}}}}
+          ]
+        }
+      },
+      "allOf": [
+        {"if":{"properties":{"outcome":{"const":"accepted"}}},
+         "then":{"required":["contract_comparisons"],"properties":{"calls":{"contains":{"properties":{"outcome":{"const":"accepted"}}},"maxContains":1}}}},
+        {"if":{"required":["contract_comparisons"],"properties":{"contract_comparisons":{"contains":{"properties":{"status":{"const":"partial"}}}}}},
+         "then":{"required":["partial_support"],"properties":{"contract_comparisons":{"items":{"properties":{"code_evidence_ids":{"minItems":2}}}}}},
+         "else":{"not":{"required":["partial_support"]}}}
+      ]
+    },
+    "contract_condition_evidence":{"type":"object","additionalProperties":false,"required":["condition","evidence_id"],"properties":{"condition":{"$ref":"#/$defs/text"},"evidence_id":{"$ref":"#/$defs/id"}}},
     "digest": {"type":"string","pattern":"^[0-9a-f]{64}$"},
     "uuid": {"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
-    "stage": {"enum":["environment","documents","investigate","interpret","verify"]},
+    "stage": {"enum":["environment","documents","investigate","interpret","verify","contract"]},
     "pack_id": {"type":"string","pattern":"^[a-z][a-z0-9.-]{0,63}$"},
     "version": {"type":"string","pattern":"^[a-zA-Z0-9_.-]{1,64}$"},
     "code": {"type":"string","pattern":"^[a-z][a-z0-9_]{0,63}$"},
@@ -79,6 +117,23 @@
     "candidate_id": {"type":"string","pattern":"^(investigate|interpret)_[1-4]$"},
     "refs": {"type":"array","uniqueItems":true,"maxItems":8,"items":{"$ref":"#/$defs/id"}},
     "citations": {"$ref":"#/$defs/refs","minItems":1,"maxItems":6},
+    "contract_literal": {"type":"string","pattern":"^[A-Za-z_][A-Za-z0-9_]{2,47}$"},
+    "contract_location": {
+      "type":"object","additionalProperties":false,"required":["id","path","sha256","start_line","end_line","kind"],
+      "properties": {
+        "id":{"type":"string","pattern":"^loc_[0-9a-f]{24}$"},"path":{"$ref":"#/$defs/path"},"sha256":{"$ref":"#/$defs/digest"},
+        "start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1},"kind":{"enum":["code","test"]},
+        "symbol":{"$ref":"#/$defs/contract_literal"}
+      }
+    },
+    "contract_probe": {
+      "type":"object","additionalProperties":false,"required":["contract_index","candidates"],
+      "properties": {
+        "contract_index":{"type":"integer","minimum":1,"maximum":6},
+        "candidates":{"type":"array","minItems":1,"maxItems":3,"uniqueItems":true,"items":{"$ref":"#/$defs/contract_location"}},
+        "literals":{"type":"array","maxItems":3,"uniqueItems":true,"items":{"$ref":"#/$defs/contract_literal"}}
+      }
+    },
     "excerpt": {
       "type":"object","additionalProperties":false,"required":["id","path","sha256","start_line","end_line","kind"],
       "properties": {

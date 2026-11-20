@@ -26,7 +26,7 @@ except ImportError as exc:
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
 from bundle_checks.report import check_analyzer, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_environment_example, check_stage_examples, check_slice_examples, pack_selection, slice_examples
+from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, pack_selection, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_mode_names, check_stage_labels, heading_anchors
 
@@ -163,6 +163,10 @@ def main() -> None:
     for doc in role_docs.values():
         review_validator.validate(doc)
     check_stage_examples(role_docs, role_raw, pack_doc, role_files)
+    probe_negatives = check_probe_example(review_validator, role_docs, role_raw)
+    print(f"PASS: review navigation probe bound to the example snapshot; {probe_negatives} negative cases")
+    contract_negatives = check_contract_example(review_validator, pack_doc, role_files)
+    print(f"PASS: final contract review bound to accepted documents and overview artifacts; {contract_negatives} negative cases")
     slice_negatives = check_slice_examples(slice_examples(), validators)
     print(f"PASS: review slices (scope artifact 0.2 and slice records 0.3 bound to the coverage fixture; {slice_negatives} negative cases)")
     # Review 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the

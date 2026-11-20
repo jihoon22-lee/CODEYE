@@ -32,6 +32,44 @@ function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.jso
 }
 
 describe('analysis sections', () => {
+  it('shows contextual environment and document sources without raw evidence identifiers', () => {
+    const doc = example('report.json');
+    const commit = 'a'.repeat(40);
+    doc.project = { name: 'Billing gateway', source: 'https://github.com/example/billing.git' };
+    doc.inputs.source_kind = 'git';
+    doc.inputs.commit_sha = commit;
+    render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    for (const key of ['environment', 'documents'] as const) {
+      const name = t.sections.titles[key];
+      fireEvent.click(screen.getByRole('tab', { name }));
+      const panel = screen.getByRole('tabpanel', { name });
+      for (const citation of doc[key].evidence) {
+        expect(panel.textContent).not.toContain(citation.id);
+        expect(panel.textContent).not.toContain(citation.blob_sha256.slice(0, 12));
+      }
+    }
+    fireEvent.click(screen.getByRole('tab', { name: t.sections.titles.environment }));
+    const environment = screen.getByRole('tabpanel', { name: t.sections.titles.environment });
+    const evidence = doc.environment.evidence[0];
+    const place = `${evidence.path}:${evidence.start_line}`;
+    const control = within(environment).getByLabelText(t.sourceActionAt(t.viewManifest, place));
+    const excerpt = openDisclosure(control);
+    const source = within(excerpt).getByRole('link', { name: t.sourceActionAt(t.openSource, place) });
+    expect(source.getAttribute('href')).toBe(`https://github.com/example/billing/blob/${commit}/${evidence.path}#L${evidence.start_line}-L${evidence.end_line}`);
+  });
+
+  it('keeps the unselected review reason in code-review details', () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Billing gateway' };
+    const text = '이 단계에서 검토할 대상이 선택되지 않았습니다.';
+    render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
+    expect(within(overview.querySelector<HTMLElement>('.report-executive')!).queryByText(text, { exact: false })).toBeNull();
+    const name = t.sections.titles.code_review;
+    fireEvent.click(screen.getByRole('tab', { name }));
+    expect(within(screen.getByRole('tabpanel', { name })).getByText(text, { exact: false })).toBeTruthy();
+  });
+
   it('keeps Python API citations at their source lines and retains the Markdown page', () => {
     const doc = example('report.json');
     const evidence = doc.documents.evidence.find((item: Record<string, unknown>) => item.kind === 'document');
@@ -54,9 +92,12 @@ describe('analysis sections', () => {
     expect(within(hero).getByText('/srv/billing')).toBeTruthy();
     expect(report.status).toBe('partial');
     expect(within(hero).getByText('일부 검사 미완료로 종료')).toBeTruthy();
-    expect(within(hero).getByText('종료 시각')).toBeTruthy();
+    const time = (label: string) => within(hero).getByText(label, { exact: true }).parentElement?.querySelector('time');
+    expect(time(t.start)?.dateTime).toBe(doc.project.started_at);
+    expect(time(t.finish)?.dateTime).toBe(doc.project.finished_at);
+    expect(within(hero).getByText('2분 0초')).toBeTruthy();
+    expect(within(hero).queryByText(t.commit, { exact: true })).toBeNull();
     expect(within(hero).queryByText('분석 종료', {exact: true})).toBeNull();
-    expect(hero.querySelector('time')?.dateTime).toBe(doc.project.finished_at);
     const input = screen.getByText(t.reading.provenance).closest('details')!;
     expect(input.open).toBe(false);
     expect(within(input).getByText('/srv/billing')).toBeTruthy();
@@ -83,6 +124,7 @@ describe('analysis sections', () => {
     const doc = example('report.json');
     doc.project = { name: 'Billing', source: '/srv/billing' };
     const report = parseAnalysisReport(doc, doc.run_id);
+    report.sections!.documents.comparisons = [];
     const finding = report.findings.find(f => f.validation === 'supported')!;
     const { rerender } = render(<ReportDocument report={report} />);
 
@@ -104,6 +146,7 @@ describe('analysis sections', () => {
     const doc = example('report.json');
     doc.project = { name: 'Billing' };
     const report = parseAnalysisReport(doc, doc.run_id);
+    report.sections!.documents.comparisons = [];
     const finding = report.findings.find(f => f.validation === 'supported')!;
     finding.title = '대기 중인 promise가 완료되지 않음';
     finding.impact = '잘못된 JSON 요청에 파싱 오류를 포함한 500 응답을 반환합니다.';
@@ -155,7 +198,7 @@ describe('analysis sections', () => {
 
     const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
     const judgment = within(overview).getByRole('region', { name: comparison.statement });
-    expect(within(judgment).getByText(t.assessment.match)).toBeTruthy();
+    expect(within(judgment).getByText(t.reading.comparisonStatus.match)).toBeTruthy();
     expect(within(judgment).getByText(comparison.reason)).toBeTruthy();
     expect(within(judgment).getAllByText(t.viewDocument, { selector: 'summary' })).toHaveLength(1);
     expect(within(judgment).getAllByText(t.viewCode, { selector: 'summary' })).toHaveLength(1);
@@ -174,6 +217,114 @@ describe('analysis sections', () => {
     expect(Array.from(panel.querySelectorAll('.report-card-meta code')).every(scope => scope.textContent !== '.')).toBe(true);
   });
 
+  it('shows one published follow-up result and one independent high priority action', () => {
+    const doc = example('report.json');
+    doc.builder.version = '12';
+    doc.project = { name: 'Billing', source: '/srv/billing' };
+    const key = 'review.contract';
+    const forOtherTask = (row: { key: string }) => row.key !== key;
+    const role = { key, result: 'accepted', task_status: 'succeeded' };
+    doc.tasks = [...doc.tasks.filter(forOtherTask), { key, status: 'succeeded', required_for_verdict: false, reason: null }];
+    doc.coverage.ai_review.optional_tasks = [...doc.coverage.ai_review.optional_tasks.filter(forOtherTask), role];
+    doc.code_review.roles = [...doc.code_review.roles.filter(forOtherTask), role];
+    doc.coverage.review_calls.push({ ...doc.coverage.review_calls[0], task_key: key, role: 'contract' });
+    const row = doc.documents.comparisons.find((r: { status: string }) => r.status === 'match')!;
+    const action = doc.findings.find((f: { validation: string }) => f.validation === 'supported')!;
+    row.followup = true;
+    action.severity = 'high';
+    const view = () => <ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />;
+    const { rerender } = render(view());
+    const judgment = within(screen.getByRole('region', { name: row.statement }));
+    expect(judgment.getByText(t.reading.followedContract)).toBeTruthy();
+    expect(judgment.getByText(row.reason)).toBeTruthy();
+    expect(judgment.getByText(t.reading.priorityAction).parentElement?.textContent).toContain(action.title);
+    expect(judgment.queryByRole('heading', { name: action.title })).toBeNull();
+
+    const rejected = structuredClone(doc);
+    rejected.coverage.ai_review.optional_tasks = [];
+    expect(() => parseAnalysisReport(rejected, rejected.run_id)).toThrow();
+    const invalidOutcome = structuredClone(doc);
+    invalidOutcome.documents.comparisons[0].status = 'unknown';
+    expect(() => parseAnalysisReport(invalidOutcome, invalidOutcome.run_id)).toThrow();
+
+    action.severity = 'low';
+    rerender(view());
+    expect(judgment.queryByText(t.reading.priorityAction)).toBeNull();
+    action.severity = 'high';
+
+    const modelText = row.reason;
+    doc.export.include_code = false;
+    const omitted = '원문 생략(코드 미포함 내보내기).';
+    for (const finding of doc.findings) for (const e of finding.evidence) delete e.excerpt;
+    for (const section of [doc.environment, doc.documents, doc.code_review]) for (const e of section.evidence) delete e.excerpt;
+    for (const r of doc.documents.comparisons) r.reason = r.statement = omitted;
+    for (const contract of doc.documents.contracts) contract.statement = omitted;
+    rerender(view());
+    const projected = within(screen.getByRole('region', { name: t.reading.omitted }));
+    expect(projected.getByText(t.reading.comparisonStatus.match)).toBeTruthy();
+    expect(projected.getByText(t.reading.followedContract)).toBeTruthy();
+    expect(projected.getByText(t.reading.priorityAction)).toBeTruthy();
+    expect(projected.queryByText(modelText)).toBeNull();
+    expect(projected.queryByText(action.title)).toBeNull();
+    expect(projected.queryByRole('link')).toBeNull();
+    expect(projected.getAllByText(/gateway\.go:/).length).toBeGreaterThan(0);
+  });
+
+  it('keeps a scoped new source observation with an unresolved comparison', () => {
+    const doc = example('report.json');
+    doc.builder.version = '12';
+    doc.project = { name: 'Callbacks' };
+    const key = 'review.contract';
+    const keep = (entry: {key: string}) => entry.key !== key;
+    const role = { key, result: 'accepted', task_status: 'succeeded' };
+    doc.tasks = [...doc.tasks.filter(keep), { key, status: 'succeeded', required_for_verdict: false }];
+    doc.coverage.ai_review.optional_tasks = [...doc.coverage.ai_review.optional_tasks.filter(keep), role];
+    doc.code_review.roles = [...doc.code_review.roles.filter(keep), role];
+    doc.coverage.review_calls.push({ ...doc.coverage.review_calls[0], task_key: key, role: 'contract' });
+    for (const comparison of doc.documents.comparisons) comparison.status = 'unknown';
+    const row = doc.documents.comparisons[0];
+    const priorReason = row.reason;
+    const newReason = '유효한 항목에서 콜백 호출은 보이지만 공개 진입점과의 연결은 확인되지 않았습니다.';
+    const newEvidence = { id: 'extra-evidence', path: 'src/routes.go', start_line: 21, end_line: 22, kind: 'code',
+      excerpt: { start_line: 21, end_line: 22, text: 'if valid {\n  callback(value)' } };
+    doc.documents.evidence.push(newEvidence);
+    row.additional_observation = { reason: newReason, code_evidence_ids: [newEvidence.id] };
+    const parse = () => parseAnalysisReport(doc, doc.run_id);
+    const { rerender } = render(<ReportDocument report={parse()} />);
+    const opening = within(screen.getByRole('region', { name: t.reading.documentClaim }));
+    expect(opening.getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
+    expect(opening.getByText(newReason, {exact: false})).toBeTruthy();
+    expect(opening.queryByText(priorReason)).toBeNull();
+    expect(opening.queryByText(t.reading.followedContract)).toBeNull();
+    expect(opening.getByText(t.reading.unknownContracts(doc.documents.comparisons.length, doc.documents.comparisons.length))).toBeTruthy();
+    fireEvent.click(opening.getByRole('button', { name: t.reading.openDocumentAnalysis }));
+    const detail = within(screen.getByRole('tabpanel', { name: t.sections.titles.documents }));
+    expect(detail.getByText(priorReason)).toBeTruthy();
+    expect(detail.getByText(newReason, {exact: false})).toBeTruthy();
+    const newCode = detail.getByLabelText(t.sourceActionAt(t.viewCode, 'src/routes.go:21–22'));
+    expect(openDisclosure(newCode).querySelector('pre')?.textContent).toContain('callback(value)');
+
+    row.additional_observation.code_evidence_ids = row.code_evidence_ids;
+    expect(parse).toThrow();
+    row.additional_observation.code_evidence_ids = [newEvidence.id];
+    doc.export.include_code = false;
+    const omitted = '원문 생략(코드 미포함 내보내기).';
+    for (const finding of doc.findings) for (const e of finding.evidence) delete e.excerpt;
+    for (const section of [doc.environment, doc.documents, doc.code_review]) for (const e of section.evidence) delete e.excerpt;
+    for (const c of doc.documents.comparisons) c.reason = c.statement = omitted;
+    for (const contract of doc.documents.contracts) contract.statement = omitted;
+    expect(parse).toThrow();
+    row.additional_observation.reason = omitted;
+    rerender(<ReportDocument report={parse()} />);
+    fireEvent.click(screen.getByRole('tab', { name: t.sections.overview }));
+    const projected = within(screen.getByRole('region', { name: t.reading.omitted }));
+    expect(projected.getByText('src/routes.go:21–22')).toBeTruthy();
+    expect(projected.getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
+    expect(projected.queryByText(newReason, {exact: false})).toBeNull();
+    delete row.additional_observation;
+    expect(parse().sections?.documents.comparisons[0].additional).toBeUndefined();
+  });
+
   it('shows one representative document claim as unverified when it is the only anchored result', () => {
     const doc = example('report.json');
     doc.project = { name: 'Documentation' };
@@ -189,13 +340,58 @@ describe('analysis sections', () => {
 
     const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
     const judgment = within(overview).getByRole('region', { name: t.reading.documentClaim });
-    expect(within(judgment).getByText(t.reading.implementationUnknown)).toBeTruthy();
+    expect(within(judgment).getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
     expect(within(judgment).getByText(comparison.statement)).toBeTruthy();
     expect(within(judgment).getByText(t.reading.unconfirmedReason)).toBeTruthy();
     expect(within(judgment).queryByText(t.modelReading)).toBeNull();
     expect(within(judgment).getByText(t.viewDocument)).toBeTruthy();
     expect(within(judgment).queryByText(t.viewCode)).toBeNull();
     expect(within(overview).queryByText('별도의 동작')).toBeNull();
+  });
+
+  it('breaks an unknown tie with one question sharing the subject, scope and exact document citation', () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Queue' };
+    const report = parseAnalysisReport(doc, doc.run_id);
+    const { documents } = report.sections!;
+    const base = documents.comparisons.find(row => row.documentRefs.length > 0)!;
+    const shared = base.documentRefs[0];
+    const row = (statement: string) => ({ ...base, statement, scope: '.', status: 'unknown', codeRefs: [], followup: undefined });
+    const first = row('지원 범위와 실행 환경을 설명한다.');
+    const queue = row('대기열 항목은 연결을 끊어도 보존된다.');
+    const restore = row('복원 기록을 읽을 수 있다.');
+    documents.comparisons = [first, queue, restore];
+    const question = { question: '대기열 보존 조건을 확인한다.', appliesTo: '.', evidence: [shared] };
+    documents.questions = [{ ...question, appliesTo: 'other' }, { ...question, evidence: ['wrong-citation'] }, question,
+      { ...question, question: '복원 기록을 확인한다.' }];
+
+    const { rerender } = render(<ReportDocument report={report} />);
+    const judgment = () => within(screen.getByRole('region', { name: t.reading.documentClaim }));
+    expect(judgment().getByText(queue.statement)).toBeTruthy();
+    expect(judgment().queryByText(first.statement)).toBeNull();
+    expect(judgment().getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
+    fireEvent.click(judgment().getByRole('button', { name: t.reading.openDocumentAnalysis }));
+    const selected = screen.getByRole('heading', { name: queue.statement });
+    expect(document.activeElement).toBe(selected);
+    expect(within(selected.closest('li')!).getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: t.sections.overview }));
+    documents.questions = [{ ...question, question: '대기열 또는 복원 동작을 확인한다.' }, { ...question, question: '지원 범위 확인' }];
+    rerender(<ReportDocument report={report} />);
+    expect(judgment().getByText(first.statement)).toBeTruthy();
+    documents.questions = [];
+    rerender(<ReportDocument report={report} />);
+    expect(judgment().getByText(first.statement)).toBeTruthy();
+
+    const omitted = '원문 생략(코드 미포함 내보내기).';
+    documents.questions = [{ ...question, question: omitted }];
+    documents.comparisons = [first, queue, restore].map(row => ({ ...row, statement: omitted, reason: omitted }));
+    rerender(<ReportDocument report={{ ...report, includesCode: false }} />);
+    const projected = within(screen.getByRole('region', { name: t.reading.omitted }));
+    expect(projected.getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
+    expect(projected.queryByText(queue.statement)).toBeNull();
+    fireEvent.click(projected.getByRole('button', { name: t.reading.openDocumentAnalysis }));
+    expect(document.activeElement).toBe(screen.getAllByRole('heading', { name: omitted })[0]);
   });
 
   it('adds a matched option for the same named behavior and exact code range', () => {
@@ -237,7 +433,7 @@ describe('analysis sections', () => {
     codeReview.strengths = [];
     const { rerender } = render(<ReportDocument report={report} />);
     const overview = () => screen.getByRole('tabpanel', { name: t.sections.overview });
-    expect(within(overview()).getByText(t.reading.implementationUnknown)).toBeTruthy();
+    expect(within(overview()).getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
     expect(within(overview()).getByRole('heading', { name: t.reading.documentClaim })).toBeTruthy();
     expect(within(overview()).getByText(t.reading.unconfirmedReason)).toBeTruthy();
     expect(within(overview()).getByText(uncertain.reason)).toBeTruthy();
@@ -246,8 +442,8 @@ describe('analysis sections', () => {
 
     documents.comparisons = [uncertain, known];
     rerender(<ReportDocument report={report} />);
-    expect(within(overview()).queryByText(t.reading.implementationUnknown)).toBeNull();
-    expect(within(overview()).getByText(t.assessment.match)).toBeTruthy();
+    expect(within(overview()).queryByText(t.reading.comparisonStatus.unknown)).toBeNull();
+    expect(within(overview()).getByText(t.reading.comparisonStatus.match)).toBeTruthy();
   });
 
   it('shows the registered Git URL and opens the full cited span at the fixed commit', () => {
@@ -264,6 +460,10 @@ describe('analysis sections', () => {
     render(<ReportDocument report={report} />);
     const hero = screen.getByRole('heading', { name: 'Billing' }).closest('header')!;
     expect(within(hero).getByText(doc.project.source)).toBeTruthy();
+    expect(within(hero).getByText(t.commit)).toBeTruthy();
+    expect(within(hero).getByText(sha.slice(0, 12)).getAttribute('title')).toBe(sha);
+    expect(within(hero).getByText(t.published).parentElement?.querySelector('time')?.dateTime).toBe(doc.created_at);
+    expect(within(hero).queryByText(t.duration)).toBeNull();
     const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
     const url = `https://git.example.test:8443/Owner/Billing/blob/${sha}/${citation.path}#L${citation.start_line}-L${citation.end_line}`;
     const visibleRange = `${citation.path}:${citation.start_line}–${citation.end_line}`;
@@ -355,6 +555,7 @@ describe('analysis sections', () => {
     const doc = example('report-slices.json');
     doc.project = { name: 'Billing' };
     const report = parseAnalysisReport(doc, doc.run_id);
+    report.sections!.documents.comparisons = [];
     const other = example('report.json');
     const main = parseAnalysisReport(other, other.run_id);
     report.sections!.codeReview.strengths = main.sections!.codeReview.strengths;
@@ -484,10 +685,10 @@ describe('analysis sections', () => {
       fireEvent(more, new Event('toggle'));
     }
     expect(container.querySelectorAll('details.report-section .finding-card').length).toBe(doc.findings.length);
-    // Only source-backed project findings appear in the opening.
+    // The opening focuses on documented behavior with implementation evidence.
     const judgments = container.querySelectorAll('.report-executive .card-title');
     expect(judgments).toHaveLength(1);
-    expect(judgments[0].textContent).toBe(r.findings.find(f => f.validation === 'supported')!.title);
+    expect(judgments[0].textContent).toBe(r.sections!.documents.comparisons.find(c => c.status === 'match')!.statement);
   });
 
   it('opens a section from the overview and moves focus to it from the keyboard', async () => {

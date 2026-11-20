@@ -16,8 +16,9 @@ import (
 // builder 7 reads, the review priority classes builder 8 reads, the
 // pull_request section builder 9 writes and the code review section's pack
 // field builder 10 drops are not read by the comparison (slice calls share
-// the role and pack digest of the whole-run role), and the fp2 and
-// rule-context rules hold for every version. Only the builder_version
+// the role and pack digest of the whole-run role). The document comparison,
+// followup marker and source excerpts also belong to the report presentation.
+// The fp2 and rule-context rules hold for every version. Only the builder_version
 // difference row tells them apart.
 func TestBuilderFourBaselineAgainstCurrentBuilder(t *testing.T) {
 	gone := vetFinding("f2", "b.go", 9, msg)
@@ -30,11 +31,11 @@ func TestBuilderFourBaselineAgainstCurrentBuilder(t *testing.T) {
 	cur.Report.Overview = &report.Overview{Sections: []report.OverviewSection{}, Attention: []report.Attention{}}
 	cur.Report.StaticAnalysis = &report.StaticAnalysisSection{Languages: []report.StaticLanguage{}}
 	cur.Report.PullRequest = &report.PullRequestSection{Number: 7, Items: []report.PullRequestItem{}}
-	cur.Report.Documents = &report.DocumentsSection{Comparisons: []report.DocComparison{{Status: "match", Statement: "same behavior"}}}
+	cur.Report.Documents = &report.DocumentsSection{Comparisons: []report.DocComparison{{Status: "match", Statement: "same behavior", Followup: true}}}
 	cur.Report.CodeReview = &report.CodeReviewSection{Strengths: []record.Strength{{Title: "guarded return"}}}
 	cur.Report.Findings = slices.Clone(old.Report.Findings)
 	cur.Report.Findings[0].Evidence = []report.Evidence{{Kind: "code", Excerpt: &sourceexcerpt.Excerpt{StartLine: 5, EndLine: 5, Text: "return nil"}}}
-	if report.BuilderVersion != "11" {
+	if report.BuilderVersion != "12" {
 		t.Fatalf("builder version %s: revisit this test", report.BuilderVersion)
 	}
 

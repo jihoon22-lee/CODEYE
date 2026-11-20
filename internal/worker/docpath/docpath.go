@@ -49,6 +49,9 @@ func Classify(p string) string {
 			return Design
 		}
 	}
+	if namedGuide(p) != notGuide && !administrative(p, "") {
+		return Design
+	}
 	stem := strings.TrimSuffix(lower, ext)
 	for _, w := range []string{"design", "architecture", "adr-", "rfc"} {
 		if strings.Contains(stem, w) {

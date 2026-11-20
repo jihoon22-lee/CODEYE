@@ -1,6 +1,43 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
+test('long saved source scrolls inside the HTML finding card at mobile and desktop widths', async ({page}) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css', 'export.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const tail = 'END_OF_SAVED_SOURCE';
+  await page.setContent(`<!DOCTYPE html><html lang="ko"><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style></head>
+    <body class="review-theme report-export"><div class="report-layout export-page"><main class="report-main">
+      <section class="export-section"><div class="report-cards"><article class="card report-card"><div class="card-body">
+        <h3>코드 검토 결과</h3><ul class="export-card-points"><li>근거
+          <div class="report-evidence"><details class="report-excerpt">
+            <summary class="btn btn-sm btn-ghost-primary export-evidence-control">코드 보기</summary>
+            <pre tabindex="0" aria-label="저장된 발췌"><code>const value = '${'content_'.repeat(44)}${tail}'</code></pre>
+          </details></div>
+        </li></ul>
+      </div></article></div></section>
+    </main></div></body></html>`);
+
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({width, height: 844});
+    await page.getByText('코드 보기', {exact: true}).click();
+    const source = page.getByLabel('저장된 발췌');
+    await expect(source).toContainText(tail);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    const fitsAtEnd = await source.evaluate(pre => {
+      if (pre.scrollWidth <= pre.clientWidth) return false;
+      pre.scrollLeft = pre.scrollWidth;
+      const code = pre.querySelector('code')?.firstChild;
+      if (!code?.textContent) return false;
+      const range = document.createRange();
+      range.setStart(code, code.textContent.length - 1);
+      range.setEnd(code, code.textContent.length);
+      return range.getBoundingClientRect().right <= pre.getBoundingClientRect().right;
+    });
+    expect(fitsAtEnd).toBe(true);
+    await page.getByText('코드 보기', {exact: true}).click();
+  }
+});
+
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {
   const login = process.env.CODEYE_TEST_REPORT_LOGIN;
   test.skip(!login, '실제 게시 보고서는 회귀 파일럿에서 생성한다');
@@ -32,11 +69,13 @@ test('published report exposes the same counts, evidence and revision in the bro
   await expect(hero.getByText(doc.project.source, {exact: true})).toBeVisible();
   const status = {completed: '분석 완료', partial: '일부 검사 미완료로 종료', failed: '분석 실패', cancelled: '분석 취소됨'}[doc.status as string];
   await expect(hero.getByText(status!, {exact: true})).toBeVisible();
+  const labeledTime = (label: string) => hero.getByText(label, {exact: true}).locator('..').locator('time');
+  if (doc.project.started_at) await expect(labeledTime('시작 시각')).toHaveAttribute('datetime', doc.project.started_at);
   if (doc.project.finished_at) {
-    await expect(hero.locator('time')).toHaveAttribute('datetime', doc.project.finished_at);
-    await expect(hero.getByText('종료 시각', {exact: true})).toBeVisible();
+    await expect(labeledTime('종료 시각')).toHaveAttribute('datetime', doc.project.finished_at);
     await expect(hero.getByText('분석 종료', {exact: true})).toHaveCount(0);
   }
+  if (doc.inputs.commit_sha) await expect(hero.getByText(doc.inputs.commit_sha.slice(0, 12), {exact: true})).toHaveAttribute('title', doc.inputs.commit_sha);
   const judgment = report.locator('.report-executive');
   await expect(judgment).toHaveCount(1);
   await expect(judgment.locator('table, .model-reading-list')).toHaveCount(0);

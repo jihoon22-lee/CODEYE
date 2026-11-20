@@ -3,6 +3,7 @@ package review
 import (
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -36,6 +37,7 @@ var (
 )
 
 type witnessQuery struct {
+	contractIndex        int
 	scope                string
 	terms                map[string]int
 	statement            map[string]int
@@ -46,6 +48,7 @@ type witnessQuery struct {
 	typeContract         bool
 	performance          bool
 	members              []string
+	navigationNames      []string
 	pythonDocs           map[string][]record.Excerpt
 }
 
@@ -66,6 +69,7 @@ type contractSelection struct {
 	witnesses, additional []contractWitness
 	calls                 []contractCall
 	member                memberPair
+	sources               map[string]string
 }
 
 // contractWitnesses looks for readable implementation and test locations for
@@ -421,7 +425,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 		}
 	}
-	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member}, nil
+	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents}, nil
 }
 
 func minifiedSource(path string) bool {
@@ -547,13 +551,15 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 	files := s.entries()
 	cited := map[string]string{}
 	var out []witnessQuery
-	for _, c := range docs.Contracts {
+	for i, c := range docs.Contracts {
 		statement := map[string]int{}
 		addWitnessWords(statement, c.Statement, 4)
 		paths := map[string]bool{}
 		var pythonDocs map[string][]record.Excerpt
 		addWitnessPaths(paths, c.Statement)
 		members := documentedMembers(c.Statement, true)
+		names := navigationIdentifiers(c.Statement)
+		var exactNames []string
 		terms := map[string]int{}
 		for word, weight := range statement {
 			terms[word] = weight
@@ -576,6 +582,11 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 			passage := witnessPassage(statement, raw)
 			addWitnessWords(terms, passage, 2)
 			addWitnessPaths(paths, passage)
+			for _, name := range names {
+				if !slices.Contains(exactNames, name) && containsContractLiteral(raw, name) {
+					exactNames = append(exactNames, name)
+				}
+			}
 			if x.DirectivePath != "" {
 				if pythonDocs == nil {
 					pythonDocs = map[string][]record.Excerpt{}
@@ -590,9 +601,9 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 			}
 		}
 		if len(terms) != 0 || len(paths) != 0 {
-			out = append(out, witnessQuery{scope: c.AppliesTo, terms: terms, statement: statement, paths: paths,
+			out = append(out, witnessQuery{contractIndex: i + 1, scope: c.AppliesTo, terms: terms, statement: statement, paths: paths,
 				operation: maintenanceOperation(c.Statement), typeContract: mentionsJavaScriptTypes(c.Statement),
-				performance: performanceContract(c.Statement), members: members, pythonDocs: pythonDocs})
+				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, pythonDocs: pythonDocs})
 		}
 	}
 	common := map[string]int{}

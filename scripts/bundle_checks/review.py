@@ -5,9 +5,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path, PurePosixPath
 
-from .common import ROOT, ensure, expect_invalid, within_root, yaml_file
+from .common import ROOT, ensure, expect_invalid, source_location, within_root, yaml_file
 
 
 def document_scope(path: str) -> str:
@@ -58,6 +59,7 @@ def check_environment_example(doc: dict) -> None:
 
 
 ROLE_STAGES = ("environment", "documents", "investigate", "interpret", "verify")
+PACK_ROLES = (*ROLE_STAGES, "contract")
 
 
 def compact_json(text: str) -> bytes:
@@ -95,7 +97,7 @@ def pack_selection(languages=ROLE_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
     pack_file = ROOT / "prompts/review/pack.yaml"
     pack = yaml_file(pack_file)
     ensure(pack["id"] == "review" and pack["status"] == "default" and pack["schema_version"] == "0.2", "review pack identity")
-    ensure(tuple(pack["roles"]) == ROLE_STAGES, "review roles")
+    ensure(tuple(pack["roles"]) == PACK_ROLES, "review roles")
     ensure(tuple(pack["languages"]) == ROLE_LANGUAGES and all(f == f"languages/{eco}.md" for eco, f in pack["languages"].items()), "review language guides")
     for guide in pack["languages"].values():
         ensure(within_root(pack_file.parent / guide).is_file(), "Missing review prompt: " + guide)
@@ -158,6 +160,135 @@ def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None
     upstream = docs["investigate"].get("candidates", []) + docs["interpret"].get("candidates", [])
     ensure(verify.get("candidates", []) == upstream, "verify candidates differ from the accepted upstream candidates")
     ensure([c["id"] for c in verify.get("candidates", [])] == [v["candidate_id"] for v in verify.get("verifications", [])], "review verification coverage")
+
+
+def check_probe_example(validator, role_docs: dict, role_raw: dict) -> int:
+    """Check the independently read probe location against the overview and snapshot."""
+    raw = (ROOT / "examples/review/investigate-probe.json").read_text(encoding="utf-8")
+    probe_example = json.loads(raw)
+    root = ROOT / "fixtures/modules/input"
+
+    def check(doc: dict) -> None:
+        validator.validate(doc)
+        base = role_docs["investigate"]
+        ensure(all(doc[k] == base[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id", "pack")), "probe attempt identity")
+        upstream = {u["source"]: u for u in doc["upstream"]}
+        docs_source = upstream["review.documents"]
+        ensure(docs_source["state"] == "accepted" and docs_source["sha256"] == hashlib.sha256(compact_json(role_raw["documents"])).hexdigest(), "probe documents digest")
+        probe = doc["contract_probe"]
+        idx = probe["contract_index"]
+        comparisons = [c for c in doc["contract_comparisons"] if c["contract_index"] == idx]
+        contracts = role_docs["documents"]["contracts"]
+        ensure(idx <= len(contracts) and len(comparisons) == 1 and comparisons[0]["status"] == "unknown", "probe unresolved comparison")
+        scope = comparisons[0]["applies_to"]
+        ensure(PurePosixPath(scope).is_relative_to(PurePosixPath(contracts[idx - 1]["applies_to"])) and
+               comparisons[0]["document_evidence_ids"] == contracts[idx - 1]["evidence_ids"], "probe scope or document citation differs")
+        ids = [c["id"] for c in probe["candidates"]]
+        ensure(len(ids) == len(set(ids)), "duplicate probe location")
+        for candidate in probe["candidates"]:
+            ensure(PurePosixPath(candidate["path"]).is_relative_to(PurePosixPath(scope)), "probe source outside comparison scope")
+            path = source_location(candidate, root)
+            sha = hashlib.sha256(path.read_bytes()).hexdigest()
+            start, end = candidate["start_line"], candidate["end_line"]
+            binding = "\0".join([doc["snapshot_manifest_digest"], candidate["path"], sha, f"{start}:{end}"])
+            ensure(candidate["sha256"] == sha and end - start < 16 and
+                   candidate["id"] == "loc_" + hashlib.sha256(binding.encode()).hexdigest()[:24], "probe location binding")
+            if symbol := candidate.get("symbol"):
+                excerpt = "\n".join(path.read_text(encoding="utf-8").splitlines()[start - 1:end])
+                ensure(re.search(r"(?<![\w$])" + re.escape(symbol) + r"(?![\w$])", excerpt), "probe source symbol missing")
+
+    check(probe_example)
+    negatives = {
+        "probe on a legacy record": lambda d: d.update(schema_version="0.2"),
+        "probe for another contract": lambda d: d["contract_probe"].update(contract_index=1),
+        "probe literal expression": lambda d: d["contract_probe"].update(literals=["Charge()"]),
+        "probe location used as evidence": lambda d: d["contract_comparisons"][0].update(code_evidence_ids=[d["contract_probe"]["candidates"][0]["id"]]),
+        "probe location digest drift": lambda d: d["contract_probe"]["candidates"][0].update(sha256="0" * 64),
+        "probe location outside file": lambda d: d["contract_probe"]["candidates"][0].update(end_line=1000),
+        "probe invented source symbol": lambda d: d["contract_probe"]["candidates"][0].update(symbol="Absent"),
+    }
+    for name, edit in negatives.items():
+        d = copy.deepcopy(probe_example)
+        edit(d)
+        expect_invalid(name, check, d)
+    return len(negatives)
+
+
+def check_contract_example(validator, pack: dict, roles: dict) -> int:
+    """Verify the snapshot and prior comparison for a scripted final role."""
+    fixture = ROOT / "fixtures/modules/input"
+    directory = ROOT / "examples/review/contract"
+    raw = {stage: (directory / f"{stage}.json").read_text(encoding="utf-8")
+           for stage in ("documents", "investigate", "contract")}
+    documents, investigate, final = (json.loads(raw[stage]) for stage in raw)
+    for parent in (documents, investigate):
+        validator.validate(parent)
+
+    def check(final):
+        validator.validate(final)
+        identity = ("snapshot_manifest_digest", "run_id", "attempt_id")
+        ensure(all(final[key] == documents[key] == investigate[key] for key in identity), "contract example identity")
+        expected_upstream = {f"review.{stage}": hashlib.sha256(compact_json(raw[stage])).hexdigest()
+                             for stage in ("documents", "investigate")}
+        ensure(len(final["upstream"]) == 2 and {u["source"]: u["sha256"] for u in final["upstream"]} == expected_upstream,
+               "contract example parent digest")
+        ensure(final["pack"] == {"id": pack["id"], "version": pack["version"]}, "contract example pack")
+        call, = final["calls"]
+        ensure(call["attempt"] == 1 and call["outcome"] == "accepted" and call["pack_files"] == roles["contract"]["files"]
+               and call["pack_sha256"] == roles["contract"]["digest"], "contract example call provenance")
+        comparison, = final["contract_comparisons"]
+        index = investigate["contract_probe"]["contract_index"]
+        prior = next(x for x in investigate["contract_comparisons"] if x["contract_index"] == index)
+        ensure(prior["status"] == "unknown" and comparison["status"] == "match", "contract example transition")
+        ensure(all(comparison[key] == prior[key] for key in ("contract_index", "applies_to", "document_evidence_ids"))
+               and comparison["document_evidence_ids"] == documents["contracts"][index - 1]["evidence_ids"], "contract example scope or document")
+        evidence = {}
+        for e in final["evidence"]:
+            body = (fixture / e["path"]).read_bytes()
+            sha = hashlib.sha256(body).hexdigest()
+            start, end = e["start_line"], e["end_line"]
+            binding = "\0".join([final["snapshot_manifest_digest"], e["path"], sha, f"{start}:{end}"])
+            ensure(sha == e["sha256"] and 1 <= start <= end <= len(body.split(b"\n"))
+                   and e["id"] not in evidence and e["id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24],
+                   "contract evidence binding")
+            evidence[e["id"]] = e
+        for evidence_id in comparison["document_evidence_ids"]:
+            ensure(evidence_id in evidence and evidence[evidence_id]["kind"] == "document"
+                   and all(evidence[evidence_id] in parent["evidence"] for parent in (documents, investigate)), "contract document provenance")
+        fresh_code = False
+        for evidence_id in comparison["code_evidence_ids"]:
+            ensure(evidence_id in evidence, "contract comparison cites an unknown excerpt")
+            e = evidence[evidence_id]
+            scope = comparison["applies_to"]
+            ensure(e["kind"] in {"code", "test"} and (scope == "." or e["path"] == scope or e["path"].startswith(scope + "/")),
+                   "contract cites out-of-scope or non-code evidence")
+            fresh_code |= e["kind"] == "code" and any(
+                not any(old["kind"] == "code" and old["path"] == e["path"] and old["start_line"] <= line <= old["end_line"]
+                        for old in investigate["evidence"])
+                for line in range(e["start_line"], e["end_line"] + 1))
+        ensure(fresh_code, "contract finding without fresh scoped implementation")
+
+    check(final)
+
+    def case(mutation):
+        changed = copy.deepcopy(final)
+        mutation(changed)
+        return changed
+
+    cases = {
+        "contract on schema 0.2": lambda d: d.update(schema_version="0.2"),
+        "contract omitted parent": lambda d: d["upstream"].pop(),
+        "contract unbound parent": lambda d: d["upstream"][0].update(sha256="0" * 64),
+        "contract changed scope": lambda d: d["contract_comparisons"][0].update(applies_to="svc/b"),
+        "contract without implementation": lambda d: d["contract_comparisons"][0].update(code_evidence_ids=[]),
+        "contract with documentation as implementation": lambda d: d["contract_comparisons"][0].update(
+            code_evidence_ids=d["contract_comparisons"][0]["document_evidence_ids"]),
+        "contract with three calls": lambda d: d["calls"].extend(d["calls"] * 2),
+        "partial without matching and violating conditions": lambda d: d["contract_comparisons"][0].update(status="partial"),
+    }
+    for name, mutation in cases.items():
+        expect_invalid(name, check, case(mutation))
+    return len(cases)
 
 
 # The slice examples (docs/REVIEW.md#모듈-단위-검토-분할): the review.scope

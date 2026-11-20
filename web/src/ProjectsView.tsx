@@ -14,7 +14,7 @@ import { SchedulePanel } from './SchedulePanel';
 import { MembersPanel } from './MembersPanel';
 import { ProjectAudit } from './ProjectAudit';
 
-type Props = { api: Api; userId: string; idempotency: Idempotency; link?: DeepLink };
+type Props = { api: Api; userId: string; idempotency: Idempotency; link?: DeepLink; claimReportLanding?: (runId: string) => boolean };
 
 type Lookup<T> = { loading: boolean; items: T[]; error: ErrorText | null };
 const initial = { loading: true, items: [], error: null };
@@ -55,7 +55,7 @@ export function mergeFirstPage(prev: Project[], first: Project[]): Project[] {
   return [...first, ...prev.filter(p => !ids.has(p.id))];
 }
 
-export function ProjectsView({ api, userId, idempotency, link }: Props) {
+export function ProjectsView({ api, userId, idempotency, link, claimReportLanding }: Props) {
   const roots = useLookup<SourceRoot>(useCallback(signal => api.listSourceRoots(signal), [api]));
   const providers = useLookup<Provider>(useCallback(signal => api.listProviders(signal), [api]));
   // What this service offers the user: the one-field start and the improvement hints use it.
@@ -174,7 +174,8 @@ export function ProjectsView({ api, userId, idempotency, link }: Props) {
       {list}
       {selected && <div className="project-detail">
         <ProjectDetail key={`${selected.id}:${opened?.project === selected.id ? opened.run : ''}`} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)}
-          setup={setup} initialRun={opened?.project === selected.id ? opened.run : null} />
+          setup={setup} initialRun={opened?.project === selected.id ? opened.run : null}
+          claimReportLanding={link?.project === selected.id && link.run && opened?.run === link.run ? claimReportLanding : undefined} />
       </div>}
     </div>
   </>;
@@ -182,7 +183,10 @@ export function ProjectsView({ api, userId, idempotency, link }: Props) {
 
 type DetailTab = 'run' | 'members' | 'audit';
 
-function ProjectDetail({ api, userId, project, idempotency, source, onRunChange, initialRun, setup }: { api: Api; userId: string; project: Project; idempotency: Idempotency; source: string; onRunChange: () => void; initialRun: string | null; setup: Setup | null }) {
+function ProjectDetail({ api, userId, project, idempotency, source, onRunChange, initialRun, setup, claimReportLanding }: {
+  api: Api; userId: string; project: Project; idempotency: Idempotency; source: string; onRunChange: () => void; initialRun: string | null; setup: Setup | null;
+  claimReportLanding?: (runId: string) => boolean;
+}) {
   // The run shown first: the one asked for (a link, the quick start), else the project's latest.
   const [openRun, setOpenRun] = useState<string | null>(initialRun ?? project.last_run?.id ?? null);
   const [chosen, setChosen] = useState<DetailTab>('run');
@@ -193,7 +197,7 @@ function ProjectDetail({ api, userId, project, idempotency, source, onRunChange,
   const status = Object.hasOwn(p.sourceStatuses, project.source_status) ? p.sourceStatuses[project.source_status] : p.sourceStatusUnknown;
   const title = project.name === '' ? shorten(source, 60) : project.name;
   // Opening a project brings it into view: it sits below the start form and the list.
-  useEffect(() => { document.getElementById('detail-title')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }); }, []);
+  useEffect(() => { document.getElementById('detail-title')?.scrollIntoView?.({ block: 'start', behavior: claimReportLanding ? 'instant' : 'smooth' }); }, [claimReportLanding]);
   useEffect(() => { document.title = t.pageTitle(title); }, [title]);
   // Gaps a reader must know stay in view; "not read yet" is a detail.
   const quiet = new Set(['source_access_unverified']);
@@ -227,7 +231,7 @@ function ProjectDetail({ api, userId, project, idempotency, source, onRunChange,
       {tabs.map(x => <button key={x} type="button" aria-current={tab === x ? 'page' : undefined} onClick={() => setChosen(x)}>{t.accounts.tabs[x]}</button>)}
     </nav>
     {tab === 'run' && <>
-      <RunPanel api={api} userId={userId} project={project} idempotency={idempotency} openRunId={openRun} onRunChange={onRunChange} setup={setup} />
+      <RunPanel api={api} userId={userId} project={project} idempotency={idempotency} openRunId={openRun} onRunChange={onRunChange} setup={setup} claimReportLanding={claimReportLanding} />
       <SchedulePanel api={api} projectId={project.id} />
     </>}
     {tab === 'members' && <MembersPanel api={api} project={project} me={userId} onAccessChange={onRunChange} />}

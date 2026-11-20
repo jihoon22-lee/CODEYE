@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react';
 import { vi } from 'vitest';
 import { App } from './App';
 import { createApi, type EventSourceFactory } from './api';
+import { readDeepLink } from './deepLink';
 import { createIdempotency } from './idempotency';
 import { createSessionController } from './session';
 import { PROJECT, SESSION, apiError, json, mockFetch, runView, type Call, type Handler } from './test-utils';
@@ -48,7 +49,7 @@ export function renderApp(handler: Handler = backend(), options: { hash?: string
     history: { state: null, replaceState },
   });
   const idempotency = createIdempotency(null);
-  const view = render(<App api={api} controller={controller} idempotency={idempotency} />);
+  const view = render(<App api={api} controller={controller} idempotency={idempotency} link={readDeepLink(options.hash ?? '')} />);
   return { ...m, api, controller, idempotency, replaceState, ...view };
 }
 

@@ -6,23 +6,47 @@ CODEYE 분석 보고서
 
 **일부 검사 미완료로 종료**
 분석 대상 · `fixtures/modules/input`
+시작 시각 · 2026\-11\-18 00\:00 UTC
 종료 시각 · 2026\-11\-18 00\:10 UTC
+소요 시간 · 10분 0초
 
 > 일부 검사를 마치지 못했습니다\. 분석 범위에서 해당 항목을 확인할 수 있습니다\.
 
 ## 종합
 
-### 재시도 반복에서 앞선 시도의 오류를 덮어씀
+### 게이트웨이에서 하위 호출이 실패하면 최대 3번 재시도한다\.
 
-코드 검토로 확인
+문서와 구현 일치
 
 > AI의 문서·코드 검토
 
-재시도가 모두 실패하면 첫 실패의 원인을 로그에서 찾을 수 없다\.
+Forward는 send의 오류가 남아 있는 동안 MaxRetries에 도달할 때까지만 send를 다시 호출한다\.
 
-**다음 조치** 시도마다 오류를 기록하거나 errors\.Join으로 묶어 반환한다\.
+`README.md:1-9`
 
-`gateway.go:3-16`
+`README.md:1-6`
+
+```
+# Billing gateway
+
+This repository holds a small billing gateway and two services under `svc/`.
+
+## Guidance for every module
+
+```
+
+`gateway.go:1-16`
+
+`gateway.go:1-6`
+
+```
+// Package gateway forwards billing requests to a downstream service.
+package gateway
+
+// MaxRetries is how many times Forward repeats a failed call, following the
+// repository guidance to retry failed calls up to 3 times.
+const MaxRetries = 3
+```
 
 문서가 설명한 동작 3개 중 1개는 코드 근거가 충분하지 않아 일치 여부를 판단하지 못했습니다\.
 
@@ -148,15 +172,20 @@ AI가 검토한 문제 2건 중 코드 근거를 확인한 항목 1건 \(기각 
 
 ### 환경 메모
 
-> 모델 해석 — review\.environment 역할의 수락된 기록에서 가져온 모델 서술이다\. 도구나 실행으로 확인한 사실이 아니다\. 줄 끝의 근거 ID는 이 절의 근거 표에 있다\.
+> 모델 해석 — review\.environment 역할의 수락된 기록이다\. 인용한 파일과 줄 범위는 각 항목에서 확인할 수 있다\.
 
-- go\:svc/b\: 영향 — svc/b 모듈의 go vet은 선언 버전보다 낮은 노드 toolchain 때문에 수행할 수 없다\. / 여전히 확인 가능 — 루트와 svc/a 모듈의 정적 검사와 코드 검토는 가능하다\. / 필요한 관측 — go 1\.30 이상 toolchain의 노드 관측 `ev_513338f17c1a60331a355d2c`
+- go\:svc/b\: 영향 — svc/b 모듈의 go vet은 선언 버전보다 낮은 노드 toolchain 때문에 수행할 수 없다\. / 여전히 확인 가능 — 루트와 svc/a 모듈의 정적 검사와 코드 검토는 가능하다\. / 필요한 관측 — go 1\.30 이상 toolchain의 노드 관측
 
-### 근거
+  `svc/b/go.mod:3-3`
 
-| 근거 ID | 종류 | 위치 | blob sha256 |
-|---|---|---|---|
-| `ev_513338f17c1a60331a355d2c` | `manifest` | `svc/b/go.mod:3-3` | `67b2518c1138` |
+  `svc/b/go.mod:1-3`
+
+  ```
+  module example.test/modules/svc/b
+
+  go 1.30
+  ```
+
 
 ## 문서 분석
 
@@ -208,7 +237,7 @@ call: a repeated call may charge the customer twice. Return the error to the
 caller instead.
 ```
 
-### 문서와 구현 · 일치
+### 문서와 구현 일치
 
 게이트웨이에서 하위 호출이 실패하면 최대 3번 재시도한다\.
 
@@ -244,12 +273,13 @@ caller instead.
   ```
 
 
-### 문서와 구현 · 확인 보류
+### 구현 미확인
 
 결제 호출은 요청마다 정확히 한 번만 한다\.
 
 > AI의 문서·코드 검토
 
+- **적용 범위** svc/b
 - **확인하지 못한 이유** 이 문서 계약에 대한 코드 대조 결과가 기록되지 않았습니다\.
 -
 
@@ -264,7 +294,7 @@ caller instead.
   ```
 
 
-### 문서와 구현 · 일치
+### 문서와 구현 일치
 
 게이트웨이에서 하위 호출이 재시도 끝까지 실패하면 호출자에게 마지막 오류를 반환한다\.
 
@@ -347,7 +377,7 @@ caller instead.
 - 읽기 예산을 넘은 문서가 있어 그 문서는 읽지 않았다\. `document_budget_exceeded`
 - 탐색은 안내끼리의 의미 충돌을 판단하지 않는다\(문서 역할이 판단한다\)\. `semantic_conflicts_not_assessed`
 
-> 모델 해석 — review\.documents 역할의 수락된 기록에서 가져온 모델 서술이다\. 도구나 실행으로 확인한 사실이 아니다\. 줄 끝의 근거 ID는 이 절의 근거 표에 있다\.
+> 모델 해석 — review\.documents 역할의 수락된 기록이다\. 인용한 파일과 줄 범위는 각 항목에서 확인할 수 있다\.
 
 ### 안내 사이의 충돌
 
@@ -409,15 +439,6 @@ caller instead.
 
   ```
 
-
-### 근거
-
-| 근거 ID | 종류 | 위치 | blob sha256 |
-|---|---|---|---|
-| `ev_66e68c327cf89aa79170534a` | `document` | `svc/b/README.md:1-5` | `49ae0cef2ada` |
-| `ev_8d951286edc67ceff72c48a4` | `document` | `AGENTS.md:1-11` | `7ae2874cb0c4` |
-| `ev_db01a731b6e8e8a2d717118c` | `document` | `README.md:1-9` | `cb8e4c2940c4` |
-| `ev_fefbd0c501bd533cc8f2743e` | `code` | `gateway.go:1-16` | `a03fee1a659e` |
 
 ## 정적 분석
 
@@ -533,13 +554,13 @@ package gateway
 const MaxRetries = 3
 ```
 
-상태\: ✓ 성공 · 작업 3개 중 3개 성공
+상태\: ✓ 성공 · 작업 4개 중 3개 성공
 
-검토 팩\: review@2\.2\.0
+검토 팩\: review@2\.3\.1
 
 모델 호출 5회, 그중 수락 5회\(환경·문서 역할 호출 포함, 전체 합계\)\.
 
-모델 요청 크기 합계 68063바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
+모델 요청 크기 합계 68639바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
 
 모델에 보낸 파일 6개 / snapshot 파일 10개\.
 
@@ -580,6 +601,7 @@ const MaxRetries = 3
 | `review.investigate` | ✓ 성공 | `accepted` | `-` |
 | `review.interpret` | ✓ 성공 | `accepted` | `-` |
 | `review.verify` | ✓ 성공 | `accepted` | `-` |
+| `review.contract` | – 정책 제외 | `skipped` | 이 단계에서 검토할 대상이 선택되지 않았습니다\. |
 
 ### 진단 해석의 한계
 
@@ -620,7 +642,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 ### 작업 상태
 
-작업 19개\(failed 3, skipped\_policy 1, succeeded 14, unsupported 1\)\. 아래는 성공하지 않은 작업을 상태와 이유별로 묶은 것이다\(입력이 없어 건너뛴 작업은 뺐다\)\.
+작업 20개\(failed 3, skipped\_policy 2, succeeded 14, unsupported 1\)\. 아래는 성공하지 않은 작업을 상태와 이유별로 묶은 것이다\(입력이 없어 건너뛴 작업은 뺐다\)\.
 
 | 상태 | 이유 | 수 | 작업 |
 |---|---|---|---|
@@ -632,7 +654,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 실행 기록 31개\(exited 31\)\.
 
-산출물 84개, 합계 74634바이트\.
+산출물 84개, 합계 74827바이트\.
 
 작업·실행·산출물의 전체 목록과 개별 진단은 전체 보기\(detail\=full\)와 JSON 내보내기에 있다\.
 
@@ -662,7 +684,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `9041f05af322` |
+| digest | `37d6c8af36bd` |
 | status | `partial` |
 | quality\_verdict | `attention_required` |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -672,4 +694,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | created\_at | `2026-11-18T00:10:00Z` |
 | export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
 
-digest sha256: `9041f05af32213b62e291700c446c49e830f90875c8fae302ded3560507b376a`
+digest sha256: `37d6c8af36bd6e87976247c3a31f682f068afb05bd70b63abaee6e11a60e4ed7`

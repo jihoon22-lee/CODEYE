@@ -51,7 +51,7 @@ func withInsights(v secView) secView {
 				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight."+q.Aspect) + " · " + l.Label("insight."+q.Assessment), Paras: []string{q.Statement}, Sources: v.sourceCitations(q.EvidenceIDs, doc.Evidence)})
 			}
 			for i, c := range doc.Comparisons {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Anchor: comparisonAnchor(i), Heading: l.Label("insight.comparison") + " · " + l.Label("insight."+c.Status), Paras: []string{c.Statement}, List: v.comparisonDetails(c, doc.Evidence)})
+				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Anchor: comparisonAnchor(i), Heading: l.Label("decision.comparison." + c.Status), Paras: []string{c.Statement}, List: v.comparisonDetails(c, doc.Evidence)})
 			}
 		case SectionCodeReview:
 			for i, s := range v.R.CodeReview.Strengths {
@@ -100,14 +100,22 @@ func (v secView) sourceCitations(ids []string, evidence []SectionEvidence) []sou
 }
 
 func (v secView) citeSectionEvidence(e SectionEvidence) sourceCitation {
-	return v.citeEvidence(e.Kind, e.Path, e.StartLine, e.EndLine, e.Excerpt)
+	s := newSourceCitation(v.L, e.Kind, e.Path, e.StartLine, e.EndLine, e.Excerpt)
+	s.URL = snapshotBrowserURL(v.R, e.Path, e.StartLine, e.EndLine)
+	s.LinkLabel = v.L.Label("opening.open_source")
+	return s
 }
 
 func newSourceCitation(l Locale, kind, path string, start, end int, excerpt *sourceexcerpt.Excerpt) sourceCitation {
 	s := citeSource(path, start, end, excerpt)
 	s.ActionLabel = l.Label("evidence.view_code")
-	if kind == "document" {
+	switch kind {
+	case "document":
 		s.ActionLabel = l.Label("evidence.view_document")
+	case "test":
+		s.ActionLabel = l.Label("evidence.view_test_code")
+	case "manifest":
+		s.ActionLabel = l.Label("evidence.view_manifest")
 	}
 	s.StoredLabel = l.Label("evidence.stored_excerpt")
 	return s

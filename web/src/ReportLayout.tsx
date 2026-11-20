@@ -40,8 +40,10 @@ export function ReportLayout({ report, rail, children, className = '' }: {
             <div className="report-verdict">
               <span className="badge"><ReportIcon name={report.status === 'completed' ? 'check' : 'clock'} />
                 {Object.hasOwn(t.executionStatuses, report.status) ? t.executionStatuses[report.status] : t.executionStatus(runStatusLabel(report.status))}</span>
+              {start && Number.isFinite(startedAt) && <span className="report-hero-time"><b>{t.start}</b> <time dateTime={start}>{formatInstant(start)}</time></span>}
               {end && <span className="report-hero-time"><b>{end.label}</b> <time dateTime={end.time}>{formatInstant(end.time)}</time></span>}
               {duration !== null && <span className="report-hero-time"><b>{t.duration}</b> {t.durationValue(duration)}</span>}
+              {report.commit && <span className="report-hero-time"><b>{t.commit}</b> <code title={report.commit}>{report.commit.slice(0, 12)}</code></span>}
             </div>
           </header>
           {children}

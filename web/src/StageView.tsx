@@ -113,5 +113,5 @@ export function ProjectActivity({ project }: { project: Project }) {
 export function LastReportLink({ project }: { project: Project }) {
   const r = project.activity?.last_report;
   if (!r) return null;
-  return <a className="small" href={reportURL(r.run_id, 'html', false, r.revision)} title={s.lastReportTitle(r.run_id, r.revision)}>{s.lastReport(shorten(r.run_id, 16), r.revision)}</a>;
+  return <a className="button-link small-button" href={reportURL(r.run_id, 'html', false, r.revision)} title={s.lastReportTitle(r.run_id, r.revision)}>{s.lastReport(shorten(r.run_id, 16), r.revision)}</a>;
 }

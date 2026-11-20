@@ -101,8 +101,8 @@ func (h Handler) maxCalls() int {
 // eligible code file, review.scope and one investigate/verify pair per slot
 // follow (planSlices: the plan fixes how many slots exist, review.scope
 // fills them at run time), all optional for the verdict. The slices come after
-// every whole-run role, so the whole-run roles' calls are always spent
-// before any slice is admitted.
+// every required whole-run role, so those calls are always spent before
+// any slice is admitted. The optional contract followup comes last.
 func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec, error) {
 	plan, err := h.Static.Plan(ctx, j)
 	if err != nil {
@@ -116,15 +116,18 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 		analysis.TaskSpec{Key: "review.interpret", Required: false, Title: "정적 진단 해석", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview})
 	sp := planSlicesFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j))
-	if sp.Slots == 0 {
-		return plan, nil
+	if sp.Slots > 0 {
+		plan = append(plan, analysis.TaskSpec{Key: record.TaskScope, Required: false, Title: "모듈별 검토 범위", Stage: domain.StageCodeReview})
+		for i := range sp.Slots {
+			inv, ver := slotTaskKeys(sliceKey(i))
+			plan = append(plan,
+				analysis.TaskSpec{Key: inv, Required: false, Title: "모듈별 코드 검토 " + sliceKey(i), Stage: domain.StageCodeReview},
+				analysis.TaskSpec{Key: ver, Required: false, Title: "모듈별 후보 검증 " + sliceKey(i), Stage: domain.StageCodeReview})
+		}
 	}
-	plan = append(plan, analysis.TaskSpec{Key: record.TaskScope, Required: false, Title: "모듈별 검토 범위", Stage: domain.StageCodeReview})
-	for i := range sp.Slots {
-		inv, ver := slotTaskKeys(sliceKey(i))
-		plan = append(plan,
-			analysis.TaskSpec{Key: inv, Required: false, Title: "모듈별 코드 검토 " + sliceKey(i), Stage: domain.StageCodeReview},
-			analysis.TaskSpec{Key: ver, Required: false, Title: "모듈별 후보 검증 " + sliceKey(i), Stage: domain.StageCodeReview})
+	isCode := func(f plannedFile) bool { return record.SourceKind(f.Path) == "code" }
+	if j.AllowModelReview && h.Caller != nil && docs && (slices.ContainsFunc(sp.Overview, isCode) || slices.ContainsFunc(sp.Rest, isCode)) {
+		plan = append(plan, analysis.TaskSpec{Key: record.TaskContract, Title: "문서 계약 후속 검토", Stage: domain.StageCodeReview})
 	}
 	return plan, nil
 }
@@ -167,6 +170,8 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 		return s.investigate()
 	case record.StageInterpret:
 		return s.interpret()
+	case record.StageContract:
+		return s.contractFollowup()
 	}
 	return s.verify()
 }
@@ -211,6 +216,8 @@ func (s *roleStage) begin(upstream []record.Upstream) *analysis.TaskResult {
 	if s.slice != nil {
 		s.rec.Schema = record.SchemaVersionSlice
 		s.rec.Slice = &record.SliceRef{Key: s.slice.Key, Modules: append([]string{}, s.slice.Modules...)}
+	} else if s.role == record.StageContract {
+		s.rec.Schema = record.SchemaVersionContract
 	}
 	return nil
 }
@@ -273,7 +280,11 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 	instructions := s.instructions(contract)
 	var repair *outputRepair
 	repaired, retried := false, false
-	for attempt := 1; attempt <= record.RoleMaxCalls; attempt++ {
+	maxCalls := record.RoleMaxCalls
+	if s.role == record.StageContract {
+		maxCalls = record.ContractMaxCalls
+	}
+	for attempt := 1; attempt <= maxCalls; attempt++ {
 		if s.ctx.Err() != nil {
 			return s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
@@ -289,6 +300,15 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 		size := len(opencode.Prompt(q))
 		if size > PromptBudget {
 			return s.fail(result(domain.TaskFailed, reasonInputTooLarge))
+		}
+		if s.role == record.StageContract {
+			used, err := callsUsed(s.j)
+			if err != nil {
+				return s.fail(result(domain.TaskFailed, reasonCallCountFailed))
+			}
+			if used >= s.h.maxCalls() {
+				return s.fail(result(domain.TaskBudgetExhausted, reasonBudgetExhausted))
+			}
 		}
 		if err := s.countCall(); err != nil {
 			return s.fail(result(domain.TaskFailed, reasonCallCountFailed))
@@ -359,6 +379,8 @@ func (s *roleStage) fail(res analysis.TaskResult) *analysis.TaskResult {
 		r.FailureReason = "review_failed"
 	}
 	r.EnvironmentNotes, r.Contracts, r.Conflicts, r.Questions, r.InstructionNotes, r.Limits = nil, nil, nil, nil, nil, nil
+	r.ContractComparisons = nil
+	r.PartialSupport = nil
 	if r.Stage != record.StageVerify {
 		r.Candidates = nil
 	} else {
@@ -388,7 +410,7 @@ func (s *roleStage) finish() analysis.TaskResult {
 	if err != nil {
 		return result(domain.TaskFailed, "review_record_failed")
 	}
-	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: s.rec.Limitations}
+	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: s.rec.PublicLimitations()}
 }
 
 // recordPath is the scratch file of a role record: name is a stage, or

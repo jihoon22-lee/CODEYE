@@ -12,10 +12,19 @@ import (
 // Rendering does not turn evidence coverage or a candidate into a verdict.
 type projectDecision struct {
 	Tone, State, Title, Reason, Boundary, Next, Coverage string
-	DocumentClaim, ReasonLabel, Condition                string
+	DocumentClaim, ReasonLabel, Condition, Scope         string
+	ComparisonAnchor                                     string
 	Sources                                              []sourceCitation
+	Action                                               *projectAction
+	Followup                                             bool
+	AdditionalObservation                                bool
 	Glossary                                             []reportTerm
 	Review                                               bool
+}
+
+type projectAction struct {
+	Title, State string
+	Source       sourceCitation
 }
 
 func (v secView) projectDecision() projectDecision {
@@ -23,6 +32,9 @@ func (v secView) projectDecision() projectDecision {
 	if !v.R.Export.IncludeCode && d.Review {
 		d.Title, d.Reason, d.Boundary, d.Next = v.L.Label("decision.omitted"), "", "", ""
 		d.DocumentClaim, d.Condition = "", ""
+		if d.Action != nil {
+			d.Action.Title = ""
+		}
 	}
 	if n := len(v.R.Documents.Comparisons); n > 0 {
 		unknown := 0
@@ -66,56 +78,97 @@ func (v secView) selectDecision() projectDecision {
 			}
 		}
 	}
-	if action != nil {
-		return v.findingDecision(*action, false)
-	}
-
-	var match, unresolved, documented *DocComparison
+	assessment := -1
+	assessmentRank := -1
+	// Earlier statuses take priority. A resolved follow-up at the same
+	// status carries the additional evidence gathered for that contract.
 	for _, status := range []string{"mismatch", "partial", "match", "unknown"} {
+		var tied []int
 		for i := range doc.Comparisons {
 			c := &doc.Comparisons[i]
 			if c.Status != status || !v.hasReviewText(c.Statement) ||
 				!hasProductSectionEvidence(c.DocumentEvidenceIDs, doc.Evidence, "document") {
 				continue
 			}
-			code := hasProductSectionEvidence(c.CodeEvidenceIDs, doc.Evidence, "code")
-			if (status == "mismatch" || status == "partial") && code {
-				return v.comparisonDecision(*c, true)
+			additional := additionalPrimaryCode(*c, doc.Evidence) != nil
+			code := additional || hasProductSectionEvidence(c.CodeEvidenceIDs, doc.Evidence, "code")
+			if status != "unknown" && !code {
+				continue
 			}
-			if status == "match" && code && match == nil {
-				match = c
+			rank := 0
+			if code {
+				rank = 1
 			}
-			if status == "unknown" {
-				if code && unresolved == nil {
-					unresolved = c
-				}
-				if documented == nil {
-					documented = c
-				}
+			if c.Followup || additional {
+				rank = 2
+			}
+			if rank > assessmentRank {
+				assessmentRank = rank
+				tied = tied[:0]
+			}
+			if rank == assessmentRank {
+				tied = append(tied, i)
 			}
 		}
+		if len(tied) > 0 {
+			assessment = tied[0]
+			if len(tied) > 1 && status == "unknown" && r.Export.IncludeCode {
+				assessment = questionComparison(doc, tied)
+			}
+			break
+		}
+	}
+	if assessment >= 0 {
+		d := v.comparisonDecision(doc.Comparisons[assessment], assessmentRank > 0)
+		d.ComparisonAnchor = comparisonAnchor(assessment)
+		if action != nil && sevRank(action.Severity) >= sevRank("high") {
+			risk := v.findingDecision(*action, false)
+			d.Action = &projectAction{Title: risk.Title, State: risk.State, Source: risk.Sources[0]}
+		}
+		return d
+	}
+	if action != nil {
+		return v.findingDecision(*action, false)
 	}
 
 	if pending != nil {
 		d := v.findingDecision(*pending, true)
 		return v.withRelatedStrength(d, *pending)
 	}
-	if match != nil {
-		return v.comparisonDecision(*match, true)
-	}
 	if strength := v.strengthDecision(); strength.Title != "" {
 		return strength
-	}
-	if unresolved != nil {
-		return v.comparisonDecision(*unresolved, true)
-	}
-	if documented != nil {
-		return v.comparisonDecision(*documented, false)
 	}
 	if tool := v.primaryDiagnostic(); tool.Title != "" {
 		return tool
 	}
 	return projectDecision{Tone: "neutral", State: l.Label("decision.scope_only"), Title: l.Label("opening.no_highlights"), Reason: noDecisionReason(l, r.Coverage.AIReview)}
+}
+
+// A question can break a tie only when its scope, cited document and subject
+// identify one of the tied comparisons. Retain the published order otherwise.
+func questionComparison(docs *DocumentsSection, tied []int) int {
+	for _, question := range docs.Questions {
+		matched := -1
+		for _, i := range tied {
+			row := docs.Comparisons[i]
+			if row.AppliesTo != question.AppliesTo || !sharedSubject(row.Statement, question.Question) ||
+				!slices.ContainsFunc(docs.Evidence, func(e SectionEvidence) bool {
+					return e.Kind == "document" && productLocation(e.Path, e.StartLine, e.EndLine) &&
+						slices.Contains(row.DocumentEvidenceIDs, e.ID) && slices.Contains(question.EvidenceIDs, e.ID)
+				}) {
+				continue
+			}
+			if matched >= 0 {
+				matched = -1
+				break
+			}
+			matched = i
+		}
+		if matched >= 0 {
+			return matched
+		}
+	}
+	return tied[0]
 }
 
 func noDecisionReason(l Locale, review AIReview) string {
@@ -191,9 +244,11 @@ func subjectWord(word string) string {
 		return ""
 	}
 	switch word {
-	case "코드", "구현", "동작", "보류", "기능", "확인", "오류", "실패", "처리", "검사", "결과", "때문", "조건", "일부", "검증", "관리", "분기", "경로", "예외", "반환", "발생", "가능", "필요", "있음", "없음",
+	case "코드", "구현", "동작", "보류", "기능", "확인", "확인한다", "오류", "실패", "처리", "검사", "결과", "때문", "조건", "일부", "검증", "관리", "분기", "경로", "예외", "반환", "발생", "가능", "필요", "있음", "없음",
+		"문서", "범위", "지원", "버전", "환경", "여부", "사용", "실제", "설정",
 		"code", "error", "errors", "failed", "failure", "failures", "check", "checks", "checking", "test", "during", "with", "the", "and", "when", "from", "not", "may", "can", "does", "is", "in", "on", "to", "of", "or",
-		"for", "after", "before", "handle", "handling", "result", "state", "case", "path", "paths":
+		"for", "after", "before", "handle", "handling", "result", "state", "case", "path", "paths",
+		"document", "documentation", "support", "supported", "scope", "version", "environment", "actual", "configuration":
 		return ""
 	}
 	return word
@@ -268,25 +323,34 @@ func (v secView) comparisonDecision(c DocComparison, code bool) projectDecision 
 		tone = "strength"
 	}
 	d := projectDecision{Tone: tone, State: l.Label("decision.comparison." + c.Status), Title: c.Statement,
-		Reason: openingText(c.Reason, ""), Review: true}
+		Reason: openingText(c.Reason, ""), Scope: displayDocumentScope(c.AppliesTo), Review: true, Followup: c.Followup}
 	if c.Status == "unknown" {
 		d.Title = l.Label("decision.document_claim")
 		d.DocumentClaim = c.Statement
 		d.ReasonLabel = l.Label("decision.unconfirmed_reason")
 	}
-	if !code {
-		d.State = l.Label("opening.implementation_unknown")
-	}
 	if doc := bestProductEvidence(c.DocumentEvidenceIDs, evidence, "document"); doc != nil {
 		d.Sources = append(d.Sources, v.citeSectionEvidence(*doc))
+	}
+	if extra := additionalPrimaryCode(c, evidence); extra != nil {
+		d.AdditionalObservation = true
+		d.Reason = openingText(c.AdditionalObservation.Reason, "")
+		d.ReasonLabel = l.Label("decision.additional_observation")
+		d.Sources = append(d.Sources, v.citeSectionEvidence(*extra))
+		return d
 	}
 	if code {
 		if implementation := bestProductEvidence(c.CodeEvidenceIDs, evidence, "code"); implementation != nil {
 			d.Sources = append(d.Sources, v.citeSectionEvidence(*implementation))
 			if c.Status == "match" && v.R.Export.IncludeCode {
-				d.Condition = v.matchingCondition(c, *implementation)
-				if d.Condition != "" {
-					d.Reason = ""
+				if condition := v.matchingCondition(c, *implementation); condition != nil {
+					d.Condition = condition.Statement
+					if doc := bestProductEvidence(condition.DocumentEvidenceIDs, evidence, "document"); doc != nil {
+						source := v.citeSectionEvidence(*doc)
+						if !slices.ContainsFunc(d.Sources, func(e sourceCitation) bool { return e.Location == source.Location }) {
+							d.Sources = append(d.Sources, source)
+						}
+					}
 				}
 			}
 		}
@@ -294,18 +358,26 @@ func (v secView) comparisonDecision(c DocComparison, code bool) projectDecision 
 	return d
 }
 
+func additionalPrimaryCode(c DocComparison, evidence []SectionEvidence) *SectionEvidence {
+	if c.AdditionalObservation != nil {
+		return bestProductEvidence(c.AdditionalObservation.CodeEvidenceIDs, evidence, "code")
+	}
+	return nil
+}
+
 var namedDocumentOperation = regexp.MustCompile(`\b([A-Za-z_$][A-Za-z0-9_$]{2,})\s*\(`)
 var explicitDocumentOption = regexp.MustCompile(`\b([A-Za-z_$][A-Za-z0-9_$]{2,})\x60?(?:가|이|를|을|은|는)?\s*(?:={1,3}\s*(?:true|false)\b|(?:is\s+)?(?:enabled|disabled)\b|활성화|비활성화|참이면|거짓이면)`)
 
 // Both documented rules must identify the same callable and cite the exact
 // implementation range. A second rule adds a named configuration condition.
-func (v secView) matchingCondition(first DocComparison, source SectionEvidence) string {
+func (v secView) matchingCondition(first DocComparison, source SectionEvidence) *DocComparison {
 	functions := namedDocumentOperation.FindAllStringSubmatch(first.Statement, -1)
 	if len(functions) == 0 {
-		return ""
+		return nil
 	}
 	doc := v.R.Documents
-	for _, other := range doc.Comparisons {
+	for i := range doc.Comparisons {
+		other := &doc.Comparisons[i]
 		if other.Status != "match" || other.AppliesTo != first.AppliesTo || other.Statement == first.Statement ||
 			!hasProductSectionEvidence(other.DocumentEvidenceIDs, doc.Evidence, "document") {
 			continue
@@ -322,11 +394,11 @@ func (v secView) matchingCondition(first DocComparison, source SectionEvidence) 
 		}
 		for _, option := range explicitDocumentOption.FindAllStringSubmatch(other.Statement, -1) {
 			if !strings.Contains(first.Statement, option[1]) {
-				return other.Statement
+				return other
 			}
 		}
 	}
-	return ""
+	return nil
 }
 
 func (v secView) strengthDecision() projectDecision {
@@ -400,6 +472,12 @@ func (v secView) openingLimits() secPart {
 func (v secView) comparisonDetails(c DocComparison, evidence []SectionEvidence) []secItem {
 	l := v.L
 	var items []secItem
+	if scope := displayDocumentScope(c.AppliesTo); scope != "" {
+		items = append(items, secItem{Label: l.Label("col.applies_to"), Text: scope})
+	}
+	if c.Followup {
+		items = append(items, secItem{Text: l.Label("decision.followup")})
+	}
 	if reason := openingText(c.Reason, ""); reason != "" {
 		label := "opening.comparison_reason"
 		if c.Status == "unknown" {
@@ -409,6 +487,10 @@ func (v secView) comparisonDetails(c DocComparison, evidence []SectionEvidence) 
 	}
 	if sources := v.sourceCitations(append(slices.Clone(c.DocumentEvidenceIDs), c.CodeEvidenceIDs...), evidence); len(sources) > 0 {
 		items = append(items, secItem{Sources: sources})
+	}
+	if extra := c.AdditionalObservation; extra != nil {
+		items = append(items, secItem{Label: l.Label("decision.additional_observation"), Text: openingText(extra.Reason, ""),
+			Sources: v.sourceCitations(extra.CodeEvidenceIDs, evidence)})
 	}
 	return items
 }

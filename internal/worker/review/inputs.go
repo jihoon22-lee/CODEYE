@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -15,6 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/docpath"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -209,25 +211,6 @@ type docFacts struct {
 	selected []envdoc.Doc
 }
 
-var docOrder = map[string]int{envdoc.ClassAgent: 0, envdoc.ClassReadme: 1, envdoc.ClassContributing: 2, envdoc.ClassDesign: 3}
-
-func userDocRank(d envdoc.Doc) int {
-	if d.Class == envdoc.ClassReadme {
-		return 0
-	}
-	if d.Class == envdoc.ClassDesign {
-		p := strings.ToLower(d.Path)
-		stem := strings.TrimSuffix(p, path.Ext(p))
-		for _, word := range strings.FieldsFunc(stem, func(r rune) bool { return r == '/' || r == '-' || r == '_' || r == ' ' }) {
-			switch word {
-			case "guide", "guides", "usage", "quickstart", "manual", "tutorial", "가이드", "사용법", "안내":
-				return 1
-			}
-		}
-	}
-	return 2
-}
-
 // documentFacts applies the documents role's skip rules: no guidance
 // document in scope (no_documents), discovery unavailable (dependency_failed)
 // or none of them selected under the read budget (documents_not_selected).
@@ -245,27 +228,6 @@ func (s *roleStage) documentFacts() (docFacts, string) {
 			f.selected = append(f.selected, it)
 		}
 	}
-	bound := 0
-	files := s.entries()
-	for _, d := range f.selected {
-		if e, ok := files[d.Path]; ok {
-			bound += min(roleMaxDocBytes, excerptBound(*e.Size))
-		}
-	}
-	constrained := len(f.selected) > roleMaxDocs || bound > roleMaxDocsBytes
-	sort.SliceStable(f.selected, func(a, b int) bool {
-		x, y := f.selected[a], f.selected[b]
-		if xr, yr := userDocRank(x), userDocRank(y); constrained && xr != yr {
-			return xr < yr
-		}
-		if docOrder[x.Class] != docOrder[y.Class] {
-			return docOrder[x.Class] < docOrder[y.Class]
-		}
-		if strings.Count(x.Path, "/") != strings.Count(y.Path, "/") {
-			return strings.Count(x.Path, "/") < strings.Count(y.Path, "/")
-		}
-		return x.Path < y.Path
-	})
 	if len(f.selected) == 0 {
 		return f, ReasonDocsNotSelected
 	}
@@ -409,8 +371,9 @@ func goIgnored(p string) bool {
 }
 
 type corpusLinks struct {
-	directCalls []directCall
-	member      memberPair
+	directCalls   []directCall
+	member        memberPair
+	witnessSource map[string]string
 }
 
 // codeCorpus selects code and test excerpts round-robin over the modules of
@@ -451,7 +414,7 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 			return nil, corpusLinks{}, nil, err
 		}
 	}
-	links := corpusLinks{member: selected.member}
+	links := corpusLinks{member: selected.member, witnessSource: selected.sources}
 	for _, call := range selected.calls {
 		caller, callee := offered[call.caller.entry.Path], offered[call.callee.entry.Path]
 		if caller != "" && callee != "" {
@@ -659,37 +622,63 @@ func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput,
 	return tools, obs, refs, windows, addLim(nil, lims...), nil
 }
 
+type documentEvidence struct {
+	excerpts    []record.Excerpt
+	lists       map[string][]documentRange
+	limitations []string
+}
+
 // documentExcerpts reads the selected guidance documents within the bounds.
-func (s *roleStage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, []string, error) {
+func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, error) {
 	files := s.entries()
-	var manifest map[string]source.Entry
-	var out []record.Excerpt
-	var lims []string
-	remain := roleMaxDocsBytes
-	apiExcerpts := 0
-	apiEvidence := map[string]bool{}
-	type userDocument struct {
-		entry source.Entry
-		lines []string
-		after int
-	}
-	var later [2][]userDocument
+	paths := make([]string, 0, len(selected))
+	bound := 0
 	for _, d := range selected {
 		e, ok := files[d.Path]
 		if !ok || e.SHA256 != *d.SHA256 {
-			return nil, nil, errSnapshotIntegrity
+			return documentEvidence{}, errSnapshotIntegrity
 		}
+		if s.secretFiles()[d.Path] {
+			s.rec.Limitations = addLim(s.rec.Limitations, limSecretWithheld)
+			continue
+		}
+		paths = append(paths, d.Path)
+		bound += min(roleMaxDocBytes, excerptBound(*e.Size))
+	}
+	selection := docpath.NewSelection(paths)
+	file := func(d envdoc.Doc) (string, string) { return d.Path, d.Class }
+	constrained := len(paths) > roleMaxDocs || bound > roleMaxDocsBytes
+	if constrained {
+		docpath.Sort(selected, selection, file)
+	} else {
+		docpath.Sort(selected, nil, file)
+	}
+	var manifest map[string]source.Entry
+	var out []record.Excerpt
+	var lims []string
+	lists := map[string][]documentRange{}
+	remain := roleMaxDocsBytes
+	apiExcerpts := 0
+	apiEvidence := map[string]bool{}
+	var later [2][]userDocument
+	var primary string
+	for i := range selected {
+		d := selected[i]
+		e := files[d.Path]
 		if len(out) >= roleMaxDocs || remain < 128 {
 			lims = append(lims, "documents_outside_review_input")
 			continue
 		}
 		content, ok, err := s.readSource(e)
 		if err != nil {
-			return nil, nil, err
+			return documentEvidence{}, err
 		}
 		if !ok {
 			lims = append(lims, "documents_outside_review_input")
 			continue
+		}
+		if selection.WithReadmeLinks(d.Path, content) && constrained {
+			docpath.Sort(selected[i+1:], selection, file)
 		}
 		lines := strings.Split(content, "\n")
 		x, ok := s.boundedExcerpt(e, "document", "", 1, lines[:min(len(lines), roleMaxDocLines)], min(roleMaxDocBytes, remain))
@@ -698,9 +687,20 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, [
 			continue
 		}
 		if x.End < *d.LineCount {
-			lims = append(lims, "document_excerpt_only")
-			if rank := userDocRank(d); rank < len(later) {
-				later[rank] = append(later[rank], userDocument{entry: e, lines: lines, after: x.End})
+			switch strings.ToLower(path.Ext(d.Path)) {
+			case ".md", ".mdx", ".markdown", "":
+				lists[d.Path] = markdownListRanges(lines)
+			}
+		}
+		if x.End < *d.LineCount && selection.Product(d.Path, d.Class) {
+			doc := userDocument{entry: e, lines: lines, after: x.End}
+			rank := 1
+			if d.Class == envdoc.ClassReadme {
+				rank = 0
+			}
+			later[rank] = append(later[rank], doc)
+			if selection.Primary(d.Path) {
+				primary = d.Path
 			}
 		}
 		if apiExcerpts < maxAPIDocExcerpts && x.End >= *d.LineCount {
@@ -713,7 +713,7 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, [
 				}
 				api, ok, err := s.documentedPythonAPI(manifest, files, d, target, min(roleMaxDocBytes, remain))
 				if err != nil {
-					return nil, nil, err
+					return documentEvidence{}, err
 				}
 				if ok && !apiEvidence[api.ID] {
 					apiEvidence[api.ID] = true
@@ -727,21 +727,43 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, [
 	}
 	if len(out) < roleMaxDocs && remain >= 128 {
 		budget := min(roleMaxDocBytes, remain)
+	preferred:
 		for _, ranked := range later {
 			for _, d := range ranked {
 				start, end := documentationContinuation(d.lines, d.after, path.Ext(d.entry.Path), budget)
 				if start >= 0 {
 					for _, r := range documentationRanges(d.lines, path.Ext(d.entry.Path), start, end, roleMaxDocs-len(out)) {
-						x, _ := s.boundedExcerpt(d.entry, "document", "", r.start+1, d.lines[r.start:r.end], budget)
-						out = append(out, x)
-						budget -= record.JSONLen(x.Text)
+						if x, ok := s.boundedExcerpt(d.entry, "document", "", r.start+1, d.lines[r.start:r.end], budget); ok {
+							out = append(out, x)
+							cost := record.JSONLen(x.Text)
+							budget -= cost
+							remain -= cost
+						}
 					}
-					return out, addLim(nil, lims...), nil
+					break preferred
 				}
 			}
 		}
 	}
-	return out, addLim(nil, lims...), nil
+	out = s.fillDocumentCoverage(slices.Concat(later[0], later[1]), primary, out, remain)
+	return documentEvidence{excerpts: out, lists: lists, limitations: addLim(nil, lims...)}, nil
+}
+
+// Excerpts from a document do not overlap. A Python docstring replaces a
+// complete directive page, so its source line count is irrelevant here.
+func partialDocumentInput(docs []envdoc.Doc, excerpts []record.Excerpt) bool {
+	covered := map[string]int{}
+	for _, e := range excerpts {
+		if e.DirectivePath == "" {
+			covered[e.Path] += e.End - e.Start + 1
+		}
+	}
+	for _, d := range docs {
+		if n := covered[d.Path]; n > 0 && n < *d.LineCount {
+			return true
+		}
+	}
+	return false
 }
 
 // existingDir reports whether p is "." or a directory holding an included

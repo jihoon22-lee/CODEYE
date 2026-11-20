@@ -15,6 +15,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/report"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 // Comparison states (docs/ARCHITECTURE.md#이전-결과-비교).
@@ -374,10 +375,14 @@ func suppressionsHidden(r report.Report, analyzer, rule string) bool {
 	return false
 }
 
-// reviewRules is the role/model/pack identity of the accepted review calls.
+// reviewRules is the role/model/pack identity of the review that may produce
+// findings. The optional contract comparison only updates document results.
 func reviewRules(r report.Report) []string {
 	var out []string
 	for _, c := range r.Coverage.ReviewCalls {
+		if c.Role == record.StageContract {
+			continue
+		}
 		out = append(out, c.Role+"\x00"+c.Model+"\x00"+c.PackDigest)
 	}
 	slices.Sort(out)

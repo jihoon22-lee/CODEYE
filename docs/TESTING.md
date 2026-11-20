@@ -233,11 +233,27 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-97 | 문서 부재, 루트와 하위 문서의 충돌, 읽기 예산 초과, 문서 내 권한 변경 요구 | 네 경우를 구분한다. 모델은 제공된 근거 ID만 인용하고 권한·도구 설정은 유지된다. 유효한 모델 산출물만 다음 역할로 넘어간다. | REQ-005,009,011,027 |
 | TC-123 | C/C++·Python·JS/TS·Rust 단일 언어 스냅샷과 다언어 스냅샷, data·vendor·중첩 산출물 디렉터리, build 파일만 있는 생태계, 비 Go 파일의 비밀값 탐지와 쓸 수 없는 탐지, 기존 Go fixture | 조사는 생태계별 round-robin 발췌를, 해석은 소스 위치의 줄 창을 받고 verify가 실행된다. 기록은 경로로 정한 종류로 decode되고 같은 신원의 두 취득에서 요청 바이트가 같다. 제외 디렉터리와 범위 밖 생태계 manifest는 입력이 아니고, 그렇게 빠진 범위 안 소스는 `source_in_excluded_directories`로 남는다. 중첩 index 파일은 진입점이 아니다. 실제 worker와 기본 보고서 registry가 Python 기록을 받는다. 비밀값 선별은 새 발췌에도 적용되고 쓸 수 없는 탐지면 요청이 없다. Go 요청은 변경 전 캡처와 같다. 실모델 품질 근거가 아니다. | REQ-004,009,027; TC-100,118 |
 | TC-128 | 검토 지침 2.0.0. 거부된 출력 뒤 JSON 아닌 복구 응답, JSON 아닌 응답 연속 두 번, 두 번 거부, verify에서 관찰 ID가 섞인 항목·관찰 ID만으로 지지한 항목·유효 근거 옆의 지어낸 ID, 후속 호출 timeout, 3회 호출 기록의 보고서 경로 | JSON 아닌 응답은 복구와 별도로 한 번 재시도하고 앞 오류 코드를 유지한다(단계당 최대 3회). 연속 두 번이나 두 번 거부면 2회에서 실패하고 격리한다. 요청의 관찰 ID만 빼고도 판정 규칙을 통과하는 항목만 받아들이고 `evidence_id_dropped`를 남긴다. 지어낸 ID는 거부한다. 후속 호출 실패는 수락한 판정을 유지하고 나머지를 격리한다. 3회 호출 기록이 보고서 검증과 두 schema를 통과한다. 합성 입력만 쓴다. | REQ-011,013; NFR-008 |
-| TC-129 | 검토 지침 하나(`prompts/review`). 에이전트·워커·서비스 설정에서 검토를 켠 노드, 기본 회귀 집합(`fixtures/regression/`)의 실모델 실행(**실모델**) | 모든 노드가 같은 다섯 역할을 계획하고 지침을 고르는 설정이 없다. 회귀 실행은 [평가](EVALUATION.md)의 사전 기준으로 판정하고 차단 조건이 없어야 한다. 품질 우월의 근거가 아니다. | REQ-010,027; NFR-007,010; TC-100 |
+| TC-129 | 검토 지침 하나(`prompts/review`). 에이전트·워커·서비스 설정에서 검토를 켠 노드, 기본 회귀 집합(`fixtures/regression/`)의 실모델 실행(**실모델**) | 모든 노드가 같은 기본 역할과 같은 조건의 계약 후속 검토를 계획한다. 회귀 실행은 [평가](EVALUATION.md)의 사전 기준으로 판정하고 차단 조건이 없어야 한다. 품질 비교에는 별도 측정이 필요하다. | REQ-010,027; NFR-007,010; TC-100 |
+| TC-267 | 구현 이름과 다른 언어로 쓴 문서 계약과 질문, 깊은 구현·테스트 위치, 비밀값 선별·부차 경로·PR 범위, 위치 생략·허위 ID·중복·미제공 식별자 | 실제 경로·줄·이름을 위치 후보로 제공하며 일반 코드 발췌 공간을 먼저 확보한다. 범위 밖·보류 파일은 고르지 않는다. 유효한 선택만 스냅샷에 묶어 저장하고 후속 읽기에서 범위·줄·해시를 다시 확인한다. 선택이 없거나 잘못됐으면 일반 발견과 대조를 수락하고 기존 기록 형식을 유지한다. 위치 ID는 근거나 코드 노출로 세지 않는다(`TestInvestigateKeepsFindingsWhenProbeIsInvalid`, `TestNavigationFitsAfterExistingExcerpts`, `TestContractProbeRereadsExactLocationsWithinScopeAndChanges`, `TestContractProbeRecordExample`). | REQ-009,010,011,027; NFR-006,008 |
+| TC-268 | 수락된 전체 조사의 미확인 계약, 새 구현과 후속 모듈 발췌, 선언·주석·테스트만 인용, 문서 충돌·digest 불일치·모델 미설정, 첫 응답 오류와 남은 호출 0·1·2회 | 후속 작업을 기존 검토 뒤에 두고 선택과 새 구현 근거가 있을 때만 요청한다. 판정의 계약·범위·문서 근거를 보존하고 실제 호출과 입력을 기록한다. 모듈 기록은 digest가 맞을 때만 다시 읽는다. 문서가 명시한 이름에는 범위 안의 유일한 구현을 찾는다. 잘못된 응답은 남은 예산으로 한 번 수리할 수 있다. 원래 판정은 후속 실패·모델 미실행·미확인에서 유지된다(`TestContractFollowup`으로 시작하는 시험, `validate_bundle.py`). | REQ-010,011,013,018,027; NFR-006,008 |
+
+TC-270은 README 링크와 번역·기여 문서가 있는 제품, 여러 모듈 README와 문서 사이트가 있는 모노레포, 관리 문서만 있는 프로젝트에서 탐색·발췌 한도를 시험한다. 대표 README와 연결된 안내, 시작·구성·지역 참조 문서를 우선 선택한다. 범위 밖 README와 외부·코드 예제·모호한 링크는 순위를 바꾸지 않는다. 관리 문서만 있어도 검토하며, 남은 목록과 상속·적용 경로, 읽은 바이트와 발췌 제한을 보존한다(`TestDiscoveryKeepsProductGuidanceWithinDocumentBudgets`, `TestReviewPrioritizesProductGuidesUnderInputLimits`, `TestReviewStillUsesAdministrativeOnlyGuidance`). REQ-004,005,011,027과 NFR-006,008에 연결한다.
+
+TC-270의 긴 문서 시험은 첫 발췌와 뒤쪽 API 절 사이의 본문, 전체가 기존 예산에 들어가는 170줄짜리 안내, 여러 긴 안내의 발췌 순서, 개수나 바이트 상한 초과, 운영 절과 다른 문서가 발췌 자리를 모두 쓰는 경우를 다룬다. 기존 발췌를 유지하고 남은 자리에 추가한 본문의 원래 줄과 근거 ID가 요청과 보고서에서 일치하는지 확인한다. 실제 요청에서 본문이 빠졌으면 `document_excerpt_only`를 기록한다(`TestDocumentContinuationReachesReport`, `TestDocumentCoverage`로 시작하는 시험).
+
+TC-270의 목록 시험은 첫 발췌 바로 다음 줄에 마지막 항목이 있는 Markdown 순서 목록과 글머리 목록, 중첩·코드 블록, 남은 발췌 자리나 바이트가 없는 경우를 다룬다. 마지막 항목까지 전달할 수 있으면 연속한 원문 줄을 보내고, 실제 요청에 목록 일부만 남으면 `incomplete_list`를 붙인다(`TestDocumentRequestPreservesListBoundary`, `TestDocumentListBoundaryReflectsFittedWindows`).
+
+TC-267의 `TestNavigationReachesNestedTestAssertions`는 한 디렉터리에 읽기 상한보다 많은 테스트 파일이 있어도 중첩 디렉터리에 읽기 차례를 준다. 테스트 본문에 있는 단언으로 위치를 고르고 준비 함수에만 단언이 있으면 일반 위치를 유지한다. 요청 한도로 빠진 `L` 별칭과 그 정식 ID는 모두 거부하며 나머지 별칭은 같은 위치에 묶인다. 선택 누락·`null`과 유효하지 않은 객체의 차이는 검토 원시 기록에만 남는다.
 
 TC-97의 Python API 문서 시험은 Markdown 지시문이 참조하는 모듈과 공개 메서드, 루트와 `src/` 경로 중복, 코드 블록 속 예제, 비리터럴 표현, 범위 밖 또는 비밀값이 있는 소스를 다룬다. 문서의 예제 원문과 적용 범위를 유지하고 구현 본문·pytest의 동일 입력 기대값을 별도 근거로 보낸다. 인용한 docstring과 겹치는 코드만으로는 구현 대조 판정을 수락하지 않는다. 결과와 근거 출처는 코드 포함·미포함 보고서에서 검증한다.
 
+TC-268은 일부 구현만 확인한 응답을 미확인으로 유지하는지, 부분 일치의 준수·위반 근거가 같은 파일의 서로 다른 줄 범위에서도 각각 연결되는지 확인한다. 근거를 하나만 인용하거나 같은 조건을 반복하거나 이미 읽은 줄만 참조하면 판정을 바꾸지 않는다. Rust 테스트 전용 블록 중간과 JS·TS 템플릿 문자열 중간에서 시작하는 발췌를 구현으로 인용한 응답을 거부하고, 같은 파일의 실행 코드는 수락한다.
+
 TC-97의 요청 한도 시험은 여러 모듈이 긴 경로의 안내 문서를 상속해 부가 목록만으로 한도를 넘는 경우를 다룬다. 정상 문서 발췌를 담은 모델 요청 한 번을 보내고 요청과 기록의 한계 코드를 확인한다. 탐색의 모듈·문서 연결은 전부 보존한다.
+
+TC-97의 인용 시험은 전달 순서의 `D1`, `D2`와 형식 복구 시의 같은 대응을 확인한다. 미제공 참조와 짧은 참조·스냅샷 근거 ID가 섞인 중복 인용을 거부한다. 계약, 충돌 양쪽, 질문, 지침 메모, 문서 품질의 유효한 인용은 원래 스냅샷 근거 ID로 저장해 후속 조사로 보낸다.
+
+TC-267의 위치 시험은 같은 이름이 앞선 조사에 들어간 설정 창과 새 분기 실행문에 모두 있는 경우를 포함한다. 한 파일의 서로 다른 분기 두 곳과 관련 테스트의 순서, 앞선 읽기 자료로만 접근할 수 있는 구현의 선별, 모든 구현 줄이 이미 제공된 경우, 일반 구조의 모호성, 보류 파일과 PR 변경 밖 구현의 제외를 검사한다. 테스트 위치만 고른 응답에서도 일반 발견과 계약 대조를 수락한다(`TestNavigationRanksFreshContractDecisionsBeforeTestSupport`, `TestNavigationOmitsAmbiguousStructuralCode`, `TestInvestigateKeepsFindingsWhenProbeIsInvalid`).
 
 모듈 단위 검토 분할([모델 검토](REVIEW.md#모듈-단위-검토-분할)):
 
@@ -246,11 +262,11 @@ TC-97의 요청 한도 시험은 여러 모듈이 긴 경로의 안내 문서를
 | TC-160 | 지원 언어 소스 없이 문서·manifest만 있는 스냅샷, 모델 입력이 될 파일이 없는 스냅샷, 범위 밖 파일, gitleaks 미설정 | 모델 입력 파일(지원 언어 소스·안내 문서·모듈 manifest)이 범위에 있으면 gitleaks를 계획하고 아니면 계획하지 않는다. 미설정이면 `unsupported`(`tool_not_configured`)로 공백이 보인다. 비밀값 작업만 있는 보고서도 `static_analysis_not_planned`다. | REQ-009; NFR-008 |
 | TC-161 | 무작위 트리와 항목 순서, 400파일 한도 사례, `fixtures/modules/slices/input` | 적격 파일마다 overview 접두·slice·계획 안 함 중 정확히 한 곳이다. slice는 8개·12,000바이트(상한 기준)·모듈 8개 이하이고 96개를 넘지 않으며, 순회 순서로 너비가 깊이보다 먼저다. 항목 순서가 바뀌어도 계획이 같다. coverage fixture의 계획은 입력 밖의 기대값(`expected-plan.json`)과 같다. | REQ-009,027 |
 | TC-162 | 0~4,000바이트의 무작위 파일(JSON이 escape하는 문자·제어 문자·다바이트 문자) | 파일 상한 `min(2400, 6 × size + 2)`는 실제 JSON 발췌 바이트보다 작지 않다. | REQ-009 |
-| TC-163 | 회귀 집합과 기존 fixture처럼 모든 적격 파일이 overview에 들어가는 저장소 | slice와 `review.scope`를 계획하지 않는다. 계획·요청 바이트·기록이 이전과 같다(`TestGoReviewInputsUnchanged`의 요청 hash 줄, `TestReviewExampleRecords`). | REQ-009,027; NFR-007 |
+| TC-163 | 회귀 집합과 기존 fixture처럼 모든 적격 파일이 overview에 들어가는 저장소 | slice와 `review.scope`를 계획하지 않는다. 일반 역할과 요청 바이트를 고정하고 예시 기록을 같은 fixture로 다시 만든다(`TestGoReviewInputsUnchanged`, `TestReviewExampleRecords`). | REQ-009,027; NFR-007 |
 | TC-164 | 기록 0.3과 범위 산출물 0.1: slice 없는 0.3, slice 있는 0.2, 범위 밖 key, 모듈 9개, interpret 단계·후보, 0.2 기록의 slice upstream, 두 곳에 있는 파일, 정렬되지 않은 `offered`, `offered`와 다른 `covered_by_overview`, 모듈 수 불일치, 목록 밖 선별 상태, 제한 코드 없는 `not_screened` 산출물, 상한 208 | Go decoder와 JSON schema·`validate_bundle.py`가 모두 거부한다. 0.2 기록의 바이트는 그대로다. 예시는 coverage fixture로 다시 만든 바이트와 같다. | REQ-011,027 |
 | TC-165 | 상한 15·99(기본)·207, task마다 1회와 3회 호출하는 가짜 upstream | 계획 key는 상한과 무관하다. attempt의 호출은 상한 이하다. 승인된 slice는 계획의 앞부분이고 각자 남은 호출이 6 이상일 때 승인됐다. 거절된 slice와 짝 verify는 호출·기록 없이 `budget_exhausted`(`review_budget_exhausted`)다. 1회 호출이면 최악 사례 사전 승인보다 많은 slice가 실행된다. | REQ-012,027; NFR-007 |
 | TC-166 | 비밀값 작업 없음·미실행·실패·완료(보고된 파일이 slice에 있음), 판단 순서 | 선별 작업이 없거나 미실행이면 `review.scope`와 slice가 실행되고 범위 산출물은 `not_screened`, 범위와 slice 기록은 `model_input_not_secret_screened`를 싣는다. 선별 결과를 쓸 수 없으면(실패·부분 결과) 미선별과 같이 실행되고 `not_screened`이며, 읽을 수 있는 결과가 보고한 파일은 계속 `withheld`다. 보고된 파일은 범위 산출물에서 `withheld`이고 어떤 요청에도 없다. 파일이 남지 않은 slice는 상한이 다해도 `no_review_scope`다. 승인 없음 → 범위 산출물 없음(`dependency_failed`) 순서이고, 미선별과 쓸 수 없는 선별은 관문이 아니다. | REQ-009; NFR-008 |
-| TC-167 | coverage fixture와 다섯 언어 최악 사례, 상한 207 | 어떤 코드·테스트 파일도 두 investigate 요청에 가지 않는다. slice 요청의 지침은 overview와 바이트가 같다. slice 기록은 0.3이고 범위 산출물에 묶인다. run이 보낸 파일 수가 overview보다 많다. 다섯 언어 최악 사례의 모든 slice 요청이 40,000바이트 안이고 다섯 언어 지침을 싣는다. | REQ-009,027 |
+| TC-167 | coverage fixture와 다섯 언어 최악 사례, 상한 207 | 어떤 코드·테스트 파일도 두 investigate 요청에 가지 않는다. slice와 overview는 공통 검토 지침을 쓰고 위치 선택 지침은 후보가 있는 overview에만 붙는다. slice 기록은 0.3이고 범위 산출물에 묶인다. run이 보낸 파일 수가 overview보다 많다. 다섯 언어 최악 사례의 모든 slice 요청이 40,000바이트 안이고 다섯 언어 지침을 싣는다. | REQ-009,027 |
 | TC-168 | 진행 단계, 실제 worker(상한 15, slice 요청 중 취소), 노드 프로토콜과 PostgreSQL | `no_review_scope`는 단계를 낮추지 않고 `budget_exhausted`는 `code_review`를 `partial`로 남긴다(이전 worker가 남긴 `secret_screen_failed`도 같다). 실제 worker는 15회 이하로 끝나고 보고서가 만들어지며 AI 검토는 수행이다. 취소는 정리를 확인하고 이후 slice 요청이 없다. 서버는 slice key와 queued·running에서의 `budget_exhausted`를 받고, 계획 revision은 1이며, slice 실행 중 취소로 run이 `cancelled`가 된다. | REQ-012,018; NFR-006 |
 | TC-169 | 코드 분석 절의 모듈별 검토 장부: coverage fixture를 상한 15로 실행한 보고서(`examples/report-slices.json`), 장부·slice 발견·호출 `task_key`를 하나씩 어긴 보고서, builder 5 리비전, 비밀정보 검사가 없는 기본 상한 실행(`internal/report/testdata/report-unscreened.json`), 범위 계획 밖 파일이 생기는 200개 Go 파일 저장소 | slice 기록과 범위 산출물을 거부 없이 읽는다. slice 발견은 `review_sNNN_<후보>`로 코드 분석 분할에 들어간다. 모듈 행의 여섯 수 합이 대상 파일 수이고, 보낸 파일 합은 `llm_exposed_files` 이하이며 overview보다 많다. `calls_used`는 실제 호출 수(10)이고 상한 이하다. 상한으로 거절된 slice의 파일이 `files_budget_exhausted`와 공백 `review_scope_budget_exhausted`로 보인다. Go 검증·JSON schema·`validate_bundle.py`·웹 파서가 어긴 보고서를 거부하고, builder 5 리비전은 장부 없이 유효하다. 코드 미포함 projection은 장부를 바꾸지 않는다. Markdown·HTML·웹 화면이 같은 수를 보인다. 검사가 없어도 범위 산출물이 수락되고 모든 모듈 행과 slice 발견이 보이며, `model_input`은 `not_screened`이고 공백 `model_input_not_screened`가 보인다. 계획 밖 파일은 `files_not_planned`와 공백 `review_scope_not_planned`로 보인다. | REQ-012,027 |
 | TC-190 | 비밀값 작업이 실행됐지만 결과를 쓸 수 없음(실패 envelope, 탐지 하나를 담은 부분 결과), 두 검토 팩 | 검토를 건너뛰지 않는다. 모델 입력은 기본 읽기 필터만 거치고 기록은 `model_input_not_secret_screened`를 싣는다. 부분 결과가 보고한 파일은 어떤 요청에도 없고(`secret_files_withheld`) 나머지 파일은 보낸다. 보고서(JSON·Markdown·웹)의 모델 입력 선별은 `not_screened`이고 쓸 수 없던 작업과 사유를 적는다(`TestReportSlicesSecretScreenUnusable`, `TestPartialSecretScanStillWithholdsFlaggedFiles`, `internal/report/testdata/report-screen-unusable.json`) | REQ-009,031; NFR-006,008; TC-118,166 |
@@ -305,12 +321,20 @@ TC-97의 요청 한도 시험은 여러 모듈이 긴 경로의 안내 문서를
 | TC-135 | 근거 있는 문서 품질·코드 강점·문서 계약 대조, 스냅샷 줄 발췌, 발췌에 해당하는 비밀값 파일, 코드 미포함 projection | 문서 대조는 적용 범위와 문서 근거에 묶이고 일치·부분 일치·불일치에는 구현 근거가 있다. 근거 없는 계약은 미확인이다. 저장한 발췌는 스냅샷 원문과 일치하고 자격증명 패턴이나 탐지 경로의 원문을 담지 않는다. 코드 미포함 보고서는 발췌를 싣지 않는다. 문서에 등장하는 기능을 구현한 늦은 줄과 관련 테스트를 선택해도 인용 위치, 검토 장부, 소스 비공개 처리를 유지한다. | REQ-005,009,011,012,027,031; TC-15 |
 
 TC-135는 문서 인용 개수 초과에 대한 필드별 형식 복구와 조사 범위가 8개 파일을 넘을 때도 뒤쪽 계약의 메서드 본문·관련 테스트 단언을 함께 보내는 경우를 포함한다(`TestDocumentEvidenceRepairReportsTheInvalidField`, `TestDocumentedMemberEffectsReachOverview`).
+
+TC-92·TC-98의 공유 실행 링크 시험은 게시 보고서를 불러온 뒤 제목과 종합 시작으로 한 번 이동하는지 확인한다. 일반 프로젝트 선택, 실행 중 상태, 조회 오류, 늦은 응답 전에 사용자가 고른 화면이나 양식 초점, 숨겨진 브라우저 탭, URL fragment 보존을 함께 검사한다(`ProjectsView.test.tsx`).
 모델 요청의 멤버 연결은 두 발췌의 정확한 ID를 담는다. 요청 축소로 한 발췌가 빠지거나 계약 범위가 한쪽을 제외하면 연결을 생략한다. 연결을 받은 모델이 미확인으로 응답하면 기록도 미확인이다(`TestMemberTestHintFollowsRequestTrimming`, `TestMemberTestHintSelectionRespectsContractScope`).
 
 TC-135에서 1~24줄을 인용한 모델 발췌를 열면 13줄의 입력 처리와 22줄의 응답을 포함해 고정 스냅샷의 24줄을 읽을 수 있다. 바이트 또는 행 상한에 닿으면 실제 마지막 줄을 표시한다. 같은 시작 줄의 인용 두 건에 각각의 끝 줄을 적용하고 도구 진단의 9줄 문맥과 이전 발췌를 읽을 수 있어야 한다. 비밀값이 인용 범위 밖에 있는 파일과 코드 미포함 내보내기에는 원문을 싣지 않는다.
 긴 사용 안내의 후반 발췌를 여러 API 제목에서 나눌 때 원래 줄 범위·바이트와 다른 문서의 첫 발췌를 보존하며, 해당 제목의 개별 ID를 인용한 보고서가 같은 위치를 가리키는지도 확인한다(`TestDocumentSectionSplitsPreserveRangeAndBudget`, `TestDocumentContinuationReachesReport`).
 
 TC-134·TC-135에서 종합의 같은 파일과 주제에 속하는 확인된 동작과 후보는 각자의 줄 범위로 이동한다. 후보는 기록된 확인 방법을 보이고 발견을 확정한 상태로 바꾸지 않는다. 같은 호출과 정확히 같은 코드 줄을 인용한 일치 대조에서만 이름 있는 옵션의 조건을 함께 보인다. Git URL과 긴 NFS 경로가 표지에서 빠짐없이 보이며 사본 경로는 나타나지 않는다. 분석 대상 경로, 종합의 상태, 상세 근거의 파일·줄 범위와 발췌 조작은 390px·1280px Chromium에서도 확인한다. 코드 미포함 상태에서는 서술 생략을 밝히고 구조화된 상태와 위치를 유지한다.
+
+같은 우선순위의 미확인 대조는 저장된 문서 질문과 적용 범위·문서 인용·구체어가 모두 일치하고 후보가 하나일 때 그 대조를 먼저 보여 준다. 모호한 질문, 문장 없는 이전 보고서 및 코드 미포함에서는 저장 순서를 유지한다. 종합과 문서 분석에서 같은 상태 문구를 쓰고 종합의 링크 또는 버튼으로 선택한 대조에 바로 간다. 표지에서는 각각의 라벨로 시작·종료 시각과 작성 시각 대체 표시를 확인하고, 실제 고정 커밋과 시작·종료를 기록한 경우의 소요 시간만 표시되는지 확인한다.
+
+HTML 내보내기에서 발견 카드의 긴 발췌를 열어도 390px·1280px에서 페이지 너비가 늘어나지 않아야 한다. 좌우로 스크롤해 발췌의 마지막 글자를 읽을 수 있는지 확인한다(`web/e2e/report.spec.ts`).
+
+TC-269는 한 미확인 문서 계약의 추가 대조 기록을 게시할 때 적용한다. 같은 스냅샷·시도·문서·범위와 수락된 선행 기록에 새로운 구현 근거가 연결된 경우에만 판정과 이유를 갱신한다. 응답 실패·예산 소진·정책 제외·선행 불일치·테스트만 인용·구버전 기록은 원래 판정을 유지한다. 새 구현 근거를 인용한 미확인 대조는 원래 이유·근거·상태·집계를 유지하면서 추가 관찰을 표시한다. 처음 조사에서 읽은 원문이나 위치 후보만 인용하거나 테스트에만 새 줄이 있는 경우 추가 관찰을 싣지 않는다. 실제 보낸 요청·고유 파일은 통계에 남고 테스트 실행은 미실행으로 남는다. 웹·Markdown·HTML에서 동작과 연결된 문서·코드 근거, 같은 호출과 줄로 입증한 별도 설정 문서, 독립적인 중대한 조치 한 건을 확인한다. 코드 미포함 상태에서 구조화된 판정·위치만 남는지, 390px·1280px Chromium에서 종합에 가로 넘침이 없는지도 확인한다. REQ-010,011,012,013,027,031과 연결한다.
 
 보고서 계약은 [보고서와 화면](REPORT.md)에 있다.
 

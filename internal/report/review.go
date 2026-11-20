@@ -19,7 +19,24 @@ import (
 // the artifacts the report accepted.
 const LimReviewLineage = "review_lineage_mismatch"
 
-type ReviewDecoder struct{}
+const ContractReviewSince = 12
+
+type (
+	ReviewDecoder         struct{}
+	ContractReviewDecoder struct{}
+)
+
+func (ContractReviewDecoder) Key() DecoderKey {
+	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersionContract}
+}
+
+func (ContractReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
+	if (ctx.Task.Key != record.TaskContract && ctx.Task.Key != "review.investigate") || art.Role != "other" ||
+		(ctx.Task.Key == record.TaskContract && ctx.Task.Required) {
+		return Contribution{}, invalidf("contract review record attached to unexpected task or role")
+	}
+	return decodeWholeReview(ctx, body, strings.TrimPrefix(ctx.Task.Key, "review."))
+}
 
 func (ReviewDecoder) Key() DecoderKey {
 	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersion}
@@ -30,12 +47,16 @@ func (ReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Co
 	if !ok || !slices.Contains(record.Stages, stage) || art.Role != "other" {
 		return Contribution{}, invalidf("review record attached to unexpected task or role")
 	}
+	return decodeWholeReview(ctx, body, stage)
+}
+
+func decodeWholeReview(ctx DecodeContext, body []byte, stage string) (Contribution, error) {
 	r, err := record.Decode(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest,
 		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Lookup: ctx.Source.Lookup})
 	if err != nil {
 		return Contribution{}, err
 	}
-	return Contribution{Review: &ReviewResult{Accepted: r.Accepted(), Record: &r}, Limitations: r.Limitations}, nil
+	return Contribution{Review: &ReviewResult{Accepted: r.Accepted(), Record: &r}, Limitations: r.PublicLimitations()}, nil
 }
 
 // upstreamMedia is the artifact media type each upstream source must match.
@@ -98,6 +119,13 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 			}
 		}
 	}
+	if rec.Stage == record.StageContract && rec.Accepted() {
+		docs, inv := states["review.documents"], states["review.investigate"]
+		return reviewAccepted(docs) && reviewAccepted(inv) &&
+			up["review.documents"].State == record.UpstreamAccepted && up["review.investigate"].State == record.UpstreamAccepted &&
+			contractSliceLineage(rec, states) &&
+			record.ValidateContractFollowup(*rec, *docs.reviewResult.Record, *inv.reviewResult.Record)
+	}
 	if rec.Stage != record.StageVerify {
 		return true
 	}
@@ -127,6 +155,28 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 	}
 	for _, e := range rec.Evidence {
 		if variants, ok := evidence[e.ID]; ok && !slices.Contains(variants, e) {
+			return false
+		}
+	}
+	return true
+}
+
+// The optional follow-up can use a later slot only when one of its named,
+// already accepted investigate or verify records supplied a sent window.
+func contractSliceLineage(rec *record.Record, states map[string]*taskState) bool {
+	matched := map[string]bool{}
+	for _, u := range rec.Upstream {
+		_, key, slice := record.SliceTask(u.Source)
+		if slice {
+			st := states[u.Source]
+			if !reviewAccepted(st) {
+				return false
+			}
+			matched[key] = matched[key] || record.ContractSliceEvidence(*rec, *st.reviewResult.Record)
+		}
+	}
+	for _, used := range matched {
+		if !used {
 			return false
 		}
 	}
@@ -170,11 +220,19 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		if !reviewLineage(rec, states, obs) {
 			st.rejected = true
 			limits.add(LimReviewLineage + ":" + key)
-			known = false
-			continue
+			// An invalid upstream binding rules out the final comparison.
+			// Its decoded record still accounts for the model requests sent.
+			if key != record.TaskContract {
+				known = false
+				continue
+			}
+			st.contractLineageRejected = true
 		}
 		sent := false
 		for _, c := range rec.Calls {
+			if key == record.TaskContract && c.RequestDigest == "" {
+				continue
+			}
 			r.Coverage.ReviewCalls = append(r.Coverage.ReviewCalls, ReviewCall{Role: c.Role, Model: c.Model, Version: c.Version, PackDigest: c.PackDigest,
 				RequestDigest: c.RequestDigest, Outcome: c.Outcome, PackID: c.PackID, PackVersion: c.PackVersion, TaskKey: key})
 			sent = sent || c.RequestDigest != ""

@@ -376,6 +376,9 @@ func projectSections(out *Report, r Report) {
 		for i := range c.Comparisons {
 			c.Comparisons[i].Statement = textOmitted
 			c.Comparisons[i].Reason = textOmitted
+			if original := d.Comparisons[i].AdditionalObservation; original != nil {
+				c.Comparisons[i].AdditionalObservation = &AdditionalCodeObservation{Reason: textOmitted, CodeEvidenceIDs: slices.Clone(original.CodeEvidenceIDs)}
+			}
 		}
 		c.Contracts = make([]DocContract, len(d.Contracts))
 		for i, x := range d.Contracts {
@@ -442,7 +445,7 @@ func validateInsights(r Report) error {
 		out := make(map[string]record.Excerpt, len(entries))
 		for _, e := range entries {
 			out[e.ID] = record.Excerpt{ID: e.ID, Path: e.Path, Kind: e.Kind, DirectivePath: e.DirectivePath,
-				Start: e.StartLine, End: e.EndLine}
+				Start: e.StartLine, End: e.EndLine, SHA256: e.BlobSHA256}
 		}
 		return out
 	}
@@ -459,6 +462,7 @@ func validateInsights(r Report) error {
 			return invalidf("document quality is invalid")
 		}
 	}
+	followups := 0
 	for i, x := range docs.Comparisons {
 		d := docs.Contracts[i]
 		comparison := record.ContractComparison{ContractIndex: i + 1, AppliesTo: x.AppliesTo,
@@ -466,6 +470,28 @@ func validateInsights(r Report) error {
 		if !comparison.Valid(byDoc) || !record.ScopeUnder(x.AppliesTo, d.AppliesTo) ||
 			!slices.Equal(x.DocumentEvidenceIDs, d.EvidenceIDs) || x.Statement != d.Statement || !text(x.Reason) {
 			return invalidf("document comparison is invalid")
+		}
+		if x.Followup || x.AdditionalObservation != nil {
+			followups++
+			if followups > 1 || !hasAcceptedContractReview(r) ||
+				(x.Followup && (x.Status == "unknown" || x.AdditionalObservation != nil)) ||
+				(x.AdditionalObservation != nil && x.Status != "unknown") {
+				return invalidf("document comparison followup is invalid")
+			}
+		}
+		if extra := x.AdditionalObservation; extra != nil {
+			var original, cited []record.Excerpt
+			for _, id := range x.CodeEvidenceIDs {
+				original = append(original, byDoc[id])
+			}
+			for _, id := range append(slices.Clone(x.DocumentEvidenceIDs), extra.CodeEvidenceIDs...) {
+				cited = append(cited, byDoc[id])
+			}
+			comparison.Reason, comparison.CodeEvidenceIDs = extra.Reason, extra.CodeEvidenceIDs
+			validated := additionalCodeObservation(comparison, cited, original)
+			if !text(extra.Reason) || validated == nil || !slices.Equal(validated.CodeEvidenceIDs, extra.CodeEvidenceIDs) {
+				return invalidf("additional document observation is invalid")
+			}
 		}
 	}
 	for _, x := range code.Strengths {

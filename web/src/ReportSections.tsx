@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
 import type { Citation, Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './reportSections';
 import { ComparisonSection } from './HistoryView';
@@ -151,28 +151,34 @@ function ModelReading({ title, children }: { title: string; children: ReactNode 
 }
 
 type Reading = {
+  id?: string;
   title: string;
   statement: string;
   scope?: string;
   status?: string;
   secondary?: boolean;
   refs: string[];
+  additional?: { reason: string; codeRefs: string[] };
 };
 
 function ReadingList({ rows, catalog }: { rows: Reading[]; catalog: Citation[] }) {
   return (
     <ul className="plain report-cards model-reading-list">
-      {rows.map(({ title, statement, scope, status, secondary, refs }, i) => (
+      {rows.map(({ id, title, statement, scope, status, secondary, refs, additional }, i) => (
         <li className="card report-card model-reading-item" key={i}>
           <div className="card-body">
             <div className="reading-badges">
               {status && <span className="badge">{status}</span>}
               {secondary && <span className="badge">{t.reading.secondary}</span>}
             </div>
-            <h6 className="card-title">{title}</h6>
+            <h6 className="card-title" id={id} tabIndex={id ? -1 : undefined}>{title}</h6>
             <p className="report-card-copy">{statement}</p>
             {scope && scope !== '.' && <p className="report-card-meta">{t.scopeTitle} <code>{scope}</code></p>}
             {refs.length > 0 && <div className="reading-refs"><Citations refs={refs} catalog={catalog} /></div>}
+            {additional && <>
+              <p className="report-card-copy"><strong>{t.reading.additionalObservation}</strong>{' '}{additional.reason}</p>
+              <div className="reading-refs"><Citations refs={additional.codeRefs} catalog={catalog} /></div>
+            </>}
           </div>
         </li>
       ))}
@@ -367,10 +373,11 @@ function comparisonReading(row: Sections['documents']['comparisons'][number], ca
   return {
     title: row.statement,
     scope: row.scope,
-    status: label(t.assessment, row.status),
+    status: label(t.reading.comparisonStatus, row.status) + (row.followup ? ' · ' + t.reading.followedContract : ''),
     statement: row.reason,
     secondary: row.codeRefs.length > 0 ? !hasPrimary : secondaryReviewScope(row.scope),
     refs: [...row.documentRefs, ...row.codeRefs],
+    additional: row.additional,
   };
 }
 
@@ -383,11 +390,15 @@ function strengthReading(row: Sections['codeReview']['strengths'][number], catal
 }
 
 type OverviewReading = {
+  comparisonIndex?: number;
   title: string;
   text?: string;
   documentClaim?: string;
   reasonLabel?: string;
   condition?: string;
+  scope?: string;
+  followedContract?: boolean;
+  action?: { state: string; title?: string; source: ReactNode };
   unresolved?: string;
   status?: string;
   model?: boolean;
@@ -401,33 +412,45 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
   const source = (catalog: Citation[], refs: string[], kind: 'code' | 'document') =>
     catalog.find(c => refs.includes(c.id) && primaryCitation(c, kind))?.id;
   const action = actions[0];
+  const actionStatus = action?.finding.validation === 'supported' ? t.reading.supported : t.reading.reproduced;
+  const comparison = comparisons[0] ?? uncertainComparison ?? documentedBehavior;
+  if (comparison) {
+    const included = report.includesCode !== false;
+    const unknown = comparison.status === 'unknown';
+    const newCode = comparison.additional && source(documents.citations, comparison.additional.codeRefs, 'code');
+    const condition = included && comparison.status === 'match'
+      ? matchingDocumentCondition(comparison, documents.comparisons, documents.citations) : undefined;
+    return {
+      comparisonIndex: documents.comparisons.indexOf(comparison),
+      title: !included ? t.reading.omitted : unknown ? t.reading.documentClaim : comparison.statement,
+      model: included ? !unknown || Boolean(newCode) : true,
+      documentClaim: included && unknown ? comparison.statement : undefined,
+      text: included ? (newCode ? comparison.additional?.reason : comparison.reason) : undefined,
+      condition: condition?.statement,
+      scope: comparison.scope !== '.' ? comparison.scope : undefined,
+      followedContract: comparison.followup,
+      reasonLabel: newCode ? t.reading.additionalObservation : unknown ? t.reading.unconfirmedReason : undefined,
+      status: label(t.reading.comparisonStatus, comparison.status),
+      sources: <Citations catalog={documents.citations} preferOriginal refs={[
+        source(documents.citations, comparison.documentRefs, 'document'),
+        newCode ?? source(documents.citations, comparison.codeRefs, 'code'),
+        condition && source(documents.citations, condition.documentRefs, 'document'),
+      ].filter((id): id is string => id !== undefined)} />,
+      action: action && ['critical', 'high'].includes(action.finding.severity) ? {
+        state: actionStatus,
+        title: included ? action.finding.title : undefined,
+        source: <FindingSourceLink evidence={action.source} preferOriginal />,
+      } : undefined,
+    };
+  }
   if (action) return {
-    title: action.finding.title,
+    title: report.includesCode === false ? t.reading.omitted : action.finding.title,
     model: true,
-    text: action.finding.impact,
-    status: action.finding.validation === 'supported' ? t.reading.supported : t.reading.reproduced,
-    next: { label: t.reading.nextAction, text: action.finding.recommendation },
+    text: report.includesCode === false ? undefined : action.finding.impact,
+    status: actionStatus,
+    next: report.includesCode === false ? undefined : { label: t.reading.nextAction, text: action.finding.recommendation },
     sources: <FindingSourceLink evidence={action.source} preferOriginal />,
   };
-  const comparison = comparisons[0];
-  const documentReading = (row: NonNullable<typeof comparison>, known: boolean): OverviewReading => {
-    const condition = row.status === 'match'
-      ? matchingDocumentCondition(row, documents.comparisons, documents.citations) : undefined;
-    return {
-      title: known ? row.statement : t.reading.documentClaim,
-      model: known,
-      documentClaim: known ? undefined : row.statement,
-      text: condition ? undefined : row.reason,
-      condition,
-      reasonLabel: known ? undefined : t.reading.unconfirmedReason,
-      status: known ? label(t.assessment, row.status) : t.reading.implementationUnknown,
-      sources: <Citations catalog={documents.citations} preferOriginal refs={[
-        source(documents.citations, row.documentRefs, 'document'),
-        source(documents.citations, row.codeRefs, 'code'),
-      ].filter((id): id is string => id !== undefined)} />,
-    };
-  };
-  if (comparison && comparison.status !== 'match') return documentReading(comparison, true);
   const followup = followups[0];
   if (followup?.next) {
     const confirmed = relatedStrength(followup, strengths, codeReview.citations);
@@ -444,8 +467,7 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
       </>,
     };
   }
-  if (comparison) return documentReading(comparison, true);
-  const strength = strengths[0];
+   const strength = strengths[0];
   if (strength) {
     const first = codeReview.citations.find(c => strength.refs.includes(c.id) && primaryCitation(c, 'code'))!;
     const related = strengths.slice(1).find(row => row.benefit !== strength.benefit && shareTitleSubject(strength.title, row.title) &&
@@ -461,9 +483,7 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
       sources: <Citations catalog={codeReview.citations} preferOriginal refs={[(proof || first).id]} />,
     };
   }
-  if (uncertainComparison) return documentReading(uncertainComparison, false);
-  if (documentedBehavior) return documentReading(documentedBehavior, false);
-  if (diagnostic?.location) return {
+   if (diagnostic?.location) return {
     title: diagnostic.message || diagnostic.rule,
     status: t.reading.staticStatus,
     sources: <PinnedSourceLink {...diagnostic.location}
@@ -474,8 +494,8 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
   return { title: t.reading.noFindings, text: report.aiReview === 'not_requested' ? t.reading.reviewNotRequested : reason };
 }
 
-function ProjectOverview({ report, sections, openDocuments }: { report: AnalysisReport; sections: Sections; openDocuments: () => void }) {
-  const { status, title, text, documentClaim, reasonLabel, condition, unresolved, next, sources, model } = selectedReading(report, sections);
+function ProjectOverview({ report, sections, openDocuments }: { report: AnalysisReport; sections: Sections; openDocuments: (index?: number) => void }) {
+  const { status, title, text, documentClaim, reasonLabel, condition, scope, comparisonIndex, followedContract, action, unresolved, next, sources, model } = selectedReading(report, sections);
   const comparisons = sections.documents.comparisons;
   const unknown = comparisons.filter(row => row.status === 'unknown').length;
   const heading = cutLine(title, 165);
@@ -493,11 +513,17 @@ function ProjectOverview({ report, sections, openDocuments }: { report: Analysis
         {condition && <p className="report-card-copy"><strong>{t.reading.option}</strong> {condition}</p>}
         {boundary && <p className="report-executive-next"><strong>{t.reading.unresolvedBehavior}</strong> {boundary}</p>}
         {next && nextStep && <p className="report-executive-next"><strong>{next.label}</strong> {nextStep}</p>}
+        {scope && <p className="report-card-meta">{t.scopeTitle} <code>{scope}</code></p>}
+        {followedContract && <p className="report-card-meta">{t.reading.followedContract}</p>}
         {sources && <div className="report-executive-sources">{sources}</div>}
-        <ReportGlossary text={[heading, claim, detail, condition ?? '', boundary, nextStep]} hasSources={Boolean(sources)} />
-        {unknown > 0 && <div className="report-executive-scope">
-          <p>{t.reading.unknownContracts(comparisons.length, unknown)}</p>
-          <ReportAction onClick={openDocuments}>{t.reading.openDocumentAnalysis}</ReportAction>
+        {action && <>
+          <p className="report-executive-next"><strong>{t.reading.priorityAction}</strong> {action.state}{action.title && <> · {cutLine(action.title, 165)}</>}</p>
+          <div className="report-executive-sources">{action.source}</div>
+        </>}
+        <ReportGlossary text={[heading, claim, detail, condition ?? '', boundary, nextStep]} hasSources={Boolean(sources || action)} />
+        {(unknown > 0 || comparisonIndex !== undefined) && <div className="report-executive-scope">
+          {unknown > 0 && <p>{t.reading.unknownContracts(comparisons.length, unknown)}</p>}
+          <ReportAction onClick={() => openDocuments(comparisonIndex)}>{t.reading.openDocumentAnalysis}</ReportAction>
         </div>}
       </div>
     </section>
@@ -511,8 +537,16 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const [open, setOpen] = useState<Set<string>>(() => new Set(sections.attention.map((a) => a.section)));
   const tabbed = Boolean(report.project);
   const id = useId();
+  const documentTarget = useRef<string | null>(null);
   const [active,setActive] = useState('overview');
+  useLayoutEffect(() => {
+    if (documentTarget.current) {
+      document.getElementById(documentTarget.current)?.focus();
+      documentTarget.current = null;
+    }
+  }, [active, open]);
   const tabId = (key:string) => id + '-tab-' + key;
+  const comparisonId = (index: number) => id + '-document-comparison-' + (index + 1);
   const select = (key:string) => {
     setActive(key);
     document.getElementById(tabId(key))?.focus();
@@ -595,7 +629,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const verdictRow = (x: (typeof e.verdicts)[number]) => [<code key="m">{x.module}</code>, x.tool, label(s.verdictStatus, x.status), or(x.reason)];
   const itemRow = (x: (typeof d.items)[number]) => [<code key="p">{x.path}</code>, x.cls, <code key="a">{x.appliesTo}</code>, label(s.docStatus, x.status), x.reason ? explainReason(x.reason) : '—', x.size ?? '—'];
   const docModuleRow = (x: (typeof d.modules)[number]) => [<code key="m">{x.module}</code>, label(s.docState, x.state), or(x.own.join(', ')), or(x.inherited.join(', '))];
-  const docComparisons = d.comparisons.map(c => comparisonReading(c, d.citations));
+  const docComparisons = d.comparisons.map((c, i) => ({ ...comparisonReading(c, d.citations), id: comparisonId(i) }));
   const unpairedContracts = d.contracts.filter(contract => !d.comparisons.some(comparison =>
     comparison.scope === contract.appliesTo && comparison.statement.trim() === contract.statement.trim() &&
     contract.evidence.every(id => comparison.documentRefs.includes(id))));
@@ -897,7 +931,17 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         {cr.roles.length > 0 && (
           <>
             <h6>{s.roles}</h6>
-            <Table head={[s.col.role, s.col.status, s.col.result]} rows={cr.roles.map((x) => [<code key="k">{x.key}</code>, label(s.taskStatus, x.status ?? ''), label(s.result, x.result)])} />
+            <Table
+              head={[s.col.role, s.col.status, s.col.result]}
+              rows={cr.roles.map((x) => [
+                <code key="k">{x.key}</code>,
+                <>
+                  {label(s.taskStatus, x.status ?? '')}
+                  {x.reason === 'no_review_scope' && <small> · {explainReason(x.reason)}</small>}
+                </>,
+                label(s.result, x.result),
+              ])}
+            />
           </>
         )}
         {cr.ledger && <LedgerBlock ledger={cr.ledger} />}
@@ -958,7 +1002,10 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'} tabIndex={tabbed ? 0 : undefined}>
         <h5 id="report-overview" className="visually-hidden">{s.overview}</h5>
         {(!tabbed || active === 'overview') && <>
-          <ProjectOverview report={report} sections={sections} openDocuments={() => go('documents')} />
+          <ProjectOverview report={report} sections={sections} openDocuments={index => {
+            documentTarget.current = index === undefined ? null : comparisonId(index);
+            go('documents');
+          }} />
           <More title={t.reading.operations}>{() => <div className="report-more-body">
             <ReportReviewStatus report={report} />
             <ReportCounts report={report} />

@@ -53,6 +53,7 @@ export type AnalysisReport = {
   project?: {name: string; source: string | null; start: string | null; finish: string | null};
   commit?: string | null;
   sourceBase?: string;
+  includesCode?: boolean;
   published?: string | null;
   runID: string;
   revision: number;
@@ -282,6 +283,7 @@ export function parseAnalysisReport(
     }),
     project,
     commit,
+    includesCode,
     sourceBase: includesCode && input.source_kind === 'git' ? pinnedSourceBase(project?.source, commit, head) : undefined,
     published: nullable(r.created_at),
     runID: expectedID,

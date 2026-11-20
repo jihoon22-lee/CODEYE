@@ -183,6 +183,7 @@
 
 .report-export .export-card-points {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: .28rem;
   margin: 0;
   padding: 0;
