@@ -124,6 +124,9 @@ def main():
             if "--personal" in sys.argv[1:]:
                 import personal_smoke
                 personal_smoke.run(base, ROOT, env, probe_env)
+            if "--web-service" in sys.argv[1:]:
+                import web_service_smoke
+                web_service_smoke.run(base, ROOT, env)
             if "--personal-model" in sys.argv[1:]:
                 import personal_model_smoke
                 personal_model_smoke.run(base, ROOT, env, probe_env)

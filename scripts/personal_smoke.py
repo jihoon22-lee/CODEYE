@@ -429,7 +429,7 @@ def paths_and_git(root, env, directory, fixture):
             body = json.loads(e.read())
             assert e.code == 422 and body["error"]["code"] == "FOLDER_HOLDS_CODEYE_DATA" and str(user_home) in body["error"]["message"], body
         setup = session.request("GET", "setup")
-        assert setup["mode"] == "personal" and setup["git"]["available"] and setup["tools"]["tools"], setup
+        assert setup["is_admin"] and setup["available"]["local_path"]["available"] and setup["git"]["available"] and setup["tools"]["tools"], setup
         if (home / "web/dist").exists():
             # TC-187/188: the browser flows (path, Git, hints, retry, tools).
             browser_link, _ = link_of(cli("open", "--no-open"))
@@ -654,7 +654,7 @@ def managed(base, root, env, directory, source):
     try:
         # TC-170: no configuration, no database: one command to a queued run and a signed-in link.
         first = cli("up", source / "hello").stdout
-        for want in ("wrote a new configuration: " + str(config), "initialized a PostgreSQL", "database schema created", "created the personal user",
+        for want in ("wrote a new configuration: " + str(config), "initialized a PostgreSQL", "database schema created", "created the administrator user",
                      "registered project \"hello\"", "queued an analysis", "note: ignoring CODEYE_DATABASE_URL, PGHOST, PGPASSWORD",
                      "opened the browser with " + str(stub)):
             assert want in first, (want, first)
@@ -692,7 +692,7 @@ def managed(base, root, env, directory, source):
         assert stopped["outcome"] == "stopped" and stopped["database"] == "stopped", stopped
         assert not postgres_processes(), "정지 뒤 PostgreSQL이 남음"
         reused = cli("up", "--no-open").stdout
-        assert "initialized" not in reused and "created the personal user" not in reused and "PostgreSQL" in reused, reused
+        assert "initialized" not in reused and "created the administrator user" not in reused and "PostgreSQL" in reused, reused
         link, origin = link_of(reused)
         names = {p["name"] for p in Session(state, origin, link).request("GET", "projects?limit=100")["items"]}
         assert names == {"hello", "src-b"}, names
