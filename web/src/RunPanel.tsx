@@ -1,7 +1,7 @@
 import { ReportPanel } from './ReportPanel';
 import { useEffect, useState } from 'react';
 import { ApiError, type AnalysisChoices, type Api, type Project, type RetryAck, type RunAck, type RunProgress, type RunTrigger, type RunView, type Setup } from './api';
-import { improvementHints, type Hint } from './improve';
+import { improvementHints, operatorHints, type Hint } from './improve';
 import type { AnalysisReport } from './analysisReport';
 import { canCancelRun, describeError, roleLabel, formatClock, formatInstant, isKnownRunStatus, isTerminalRun, runStatusLabel, shorten, stageName, type ErrorText } from './format';
 import type { Idempotency } from './idempotency';
@@ -125,7 +125,7 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
     {run?.raw_evidence_removed_at && <p className="notice" role="note">{t.runs.rawEvidenceRemoved(formatInstant(run.raw_evidence_removed_at))}</p>}
     {/* The report comes after the run's actions (retry, cancel), which stay near its state. */}
     {terminal && run?.reportRevision && <ReportPanel key={runId} api={api} runID={runId}
-      extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project, report.sections?.codeReview.ledger ?? null, report.sections?.environment.dependencies ?? [])} runId={runId} canRun={canRun} onRetried={onRetried} />} />}
+      extra={report => <ImproveHints api={api} project={project} hints={improvementHints(report.sections?.gaps ?? [], setup, project, report.sections?.codeReview.ledger ?? null, report.sections?.environment.dependencies ?? [])} runId={runId} canRun={canRun} operator={operatorHints(setup)} onRetried={onRetried} />} />}
   </div>;
 }
 
@@ -261,7 +261,7 @@ function RecoverControl({ api, runId, onRetried }: { api: Api; runId: string; on
 
 // "더 나은 결과를 얻으려면": what would fill the report's gaps. A project choice is turned on
 // and the run retried in one step.
-function ImproveHints({ api, project, hints, runId, canRun, onRetried }: { api: Api; project: Project; hints: Hint[]; runId: string; canRun: boolean; onRetried: (ack: RetryAck) => void }) {
+function ImproveHints({ api, project, hints, runId, canRun, operator, onRetried }: { api: Api; project: Project; hints: Hint[]; runId: string; canRun: boolean; operator: boolean; onRetried: (ack: RetryAck) => void }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<ErrorText | null>(null);
   if (hints.length === 0) return null;
@@ -280,7 +280,8 @@ function ImproveHints({ api, project, hints, runId, canRun, onRetried }: { api: 
   const i = t.improve;
   const action: Record<keyof AnalysisChoices, string> = { send_source_to_model: i.sendSourceAction, run_build_scripts: i.buildScriptsAction, fetch_dependencies: i.fetchDependenciesAction };
   // Most hints end with running codeye up again in a terminal: offer the command to copy.
-  const command = hints.some(h => h.text.includes(i.command));
+  // Only the person who runs the service can run it.
+  const command = operator && hints.some(h => h.text.includes(i.command));
   return <section className="notice improve" aria-labelledby={`improve-${runId}`}>
     <h4 id={`improve-${runId}`}>{i.title}</h4>
     <ul>{hints.map(h => <li key={h.key}>{h.text}

@@ -121,7 +121,34 @@ export function improvementHints(gaps: Gap[], setup: Setup | null, project: Proj
   if (sourceWithheld && followsProject && project.analysis && !project.analysis.send_source_to_model) {
     push({ key: 'send_source', text: t.improve.sendSource, turnOn: 'send_source_to_model' });
   }
+  return followsProject && !setup.is_admin ? forMember(out) : out;
+}
+
+// HOST_SIDE are the hints only the person who runs the service can act on (install, configure,
+// run codeye up again). A user who is not the administrator gets them as a request to that person.
+const HOST_SIDE = /^(tool:|toolchain:|model$|budget$|dependency_registry$|dependency_offline$|fetch_dependencies$)/;
+
+function forMember(hints: Hint[]): Hint[] {
+  const tools = hints.filter(h => h.key.startsWith('tool:')).map(h => h.key.slice('tool:'.length));
+  const out: Hint[] = [];
+  for (const h of hints) {
+    if (h.key.startsWith('tool:')) {
+      if (h.key === `tool:${tools[0]}`) out.push({ key: 'ask_admin_tools', text: t.improve.askAdminTools(tools.join(', ')) });
+    } else if (h.key === 'model') {
+      out.push({ key: 'model', text: t.improve.askAdminModel });
+    } else if (HOST_SIDE.test(h.key) && !h.turnOn) {
+      out.push({ ...h, text: t.improve.askAdmin(h.text) });
+    } else {
+      out.push(h);
+    }
+  }
   return out;
+}
+
+// operatorHints reports whether the hints are for the person who runs the service (the terminal
+// command is offered then): the administrator, or a setup that is not known.
+export function operatorHints(setup: Setup | null): boolean {
+  return !setup || setup.is_admin;
 }
 
 // The largest call ceiling (docs/REVIEW.md#호출-상한과-승인).
