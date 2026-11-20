@@ -58,10 +58,9 @@ export function mergeFirstPage(prev: Project[], first: Project[]): Project[] {
 export function ProjectsView({ api, userId, idempotency, link }: Props) {
   const roots = useLookup<SourceRoot>(useCallback(signal => api.listSourceRoots(signal), [api]));
   const providers = useLookup<Provider>(useCallback(signal => api.listProviders(signal), [api]));
-  // Personal mode offers the one-field start; the setup also feeds the improvement hints.
+  // What this service offers the user: the one-field start and the improvement hints use it.
   const setupLookup = useLookup<Setup>(useCallback(signal => api.getSetup(signal).then(s => [s]), [api]));
   const setup = setupLookup.items[0] ?? null;
-  const personal = setup?.mode === 'personal';
   // The run to open in the selected project: a deep link's, then the one the quick start requested.
   const [opened, setOpened] = useState<{ project: string; run: string } | null>(link?.project && link.run ? { project: link.project, run: link.run } : null);
   // After the quick start the run panel is brought into view (it sits below the forms).
@@ -135,15 +134,13 @@ export function ProjectsView({ api, userId, idempotency, link }: Props) {
   const selected = projects.find(p => p.id === selectedId) ?? null;
   const p = t.projects;
   useEffect(() => { if (selected === null) document.title = t.pageTitle(p.title); }, [selected, p.title]);
-  // A server installation keeps the list beside the registration form; a personal one leads
-  // with the one-field start and lists the projects under it.
-  const serverLayout = setup !== null && !personal;
+  // Every user starts with the one-field start; the projects are listed under it.
   const created = (project: Project) => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); };
   const list = <section className="panel list-panel" aria-labelledby="list-title">
     <h2 id="list-title">{p.listTitle}</h2>
     {error && <><ErrorNote error={{ ...error, message: `${p.loadFailed} ${error.message}` }} />{projects.length > 0 && lastOk && <p className="small">{t.stages.listPollError} {t.stages.lastConfirmed(formatClock(lastOk))}</p>}<button type="button" onClick={() => setReloads(n => n + 1)}>{p.reload}</button></>}
     <div aria-live="polite" aria-busy={loading}>
-      {loading && projects.length === 0 ? <p>{p.loading}</p> : projects.length === 0 && !error ? <p className="small">{serverLayout ? p.listEmptyServer : p.listEmpty}</p> : null}
+      {loading && projects.length === 0 ? <p>{p.loading}</p> : projects.length === 0 && !error ? <p className="small">{p.listEmpty}</p> : null}
     </div>
     <ul className="plain projects">
       {projects.map(project => {
@@ -160,21 +157,19 @@ export function ProjectsView({ api, userId, idempotency, link }: Props) {
     </ul>
     {cursor && <div className="actions"><button type="button" onClick={loadMore} disabled={loading}>{p.loadMore}</button></div>}
   </section>;
-  const create = <section className={serverLayout ? 'panel' : 'panel start-panel'} aria-labelledby="create-title">
+  const create = <section className="panel start-panel" aria-labelledby="create-title">
     <h2 id="create-title" className="visually-hidden">{p.createTitle}</h2>
     {(roots.error || providers.error) && <p role="alert" className="error">{p.lookupFailed} {(roots.error ?? providers.error)!.message}</p>}
-    {personal && <QuickStart api={api} userId={userId} idempotency={idempotency} setup={setup} providers={providers.items}
-      onStarted={(project, run) => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setOpened({ project: project.id, run }); setSelectedId(project.id); setStarted(n => n + 1); wake(); }} />}
-    {personal
-      ? <details><summary>{p.otherForm}</summary><ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={created} /></details>
-      : <ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={created} />}
+    <QuickStart api={api} userId={userId} idempotency={idempotency} setup={setup} providers={providers.items}
+      onStarted={(project, run) => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setOpened({ project: project.id, run }); setSelectedId(project.id); setStarted(n => n + 1); wake(); }} />
+    <details><summary>{p.otherForm}</summary><ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={created} /></details>
   </section>;
   return <>
     <section className="page-head" aria-labelledby="projects-title">
       <h1 id="projects-title">{p.title}</h1>
-      <p>{serverLayout ? p.serverIntro : p.intro}</p>
+      <p>{p.intro}</p>
     </section>
-    {serverLayout ? <div className="grid">{list}{create}</div> : <>{create}{list}</>}
+    {create}{list}
     {selected && <ProjectDetail key={`${selected.id}:${opened?.project === selected.id ? opened.run : ''}`} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)}
       setup={setup} initialRun={opened?.project === selected.id ? opened.run : null} />}
   </>;

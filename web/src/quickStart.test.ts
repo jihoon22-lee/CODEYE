@@ -3,16 +3,22 @@ import type { Project, Setup } from './api';
 import { improvementHints, type Gap } from './improve';
 import type { Dependency } from './reportSections';
 import { ko as t } from './locales/ko';
-import { choicesFor, parseTarget, quickBody } from './quickStart';
+import { choiceLocked, choicesFor, noFolderFor, parseTarget, quickBody, unavailableReason } from './quickStart';
 
 const SETUP: Setup = {
-  mode: 'personal',
+  is_admin: false,
+  service_origin: null,
   model: { configured: false, id: null, probe: null },
   git: { available: true, hosts: ['github.com'] },
   readable_folders: ['/home/me'],
   analysis_defaults: { local: { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }, git: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true } },
+  available: {},
   tools: { detected_at: null, tools: [{ name: 'cppcheck', status: 'not_found', version: null, path: null, hint: 'apt install cppcheck', reason: null }] },
+  github: null,
+  offline: false,
 };
+// A controller without a recorded setup (started on its own): the node operator decides.
+const SEPARATE: Setup = { ...SETUP, model: null, tools: null };
 const PROVIDERS = [{ id: 'gh', kind: 'github', host: 'github.com' }];
 
 describe('the one field', () => {
@@ -48,12 +54,36 @@ describe('the one field', () => {
 
   it('builds the registration: a folder by path, a repository with the provider of its host', () => {
     const on = { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: false };
-    expect(quickBody({ kind: 'local', path: '/home/me/app' }, '', '', on, PROVIDERS, SETUP).body).toEqual({ analysis: on, local_path: '/home/me/app' });
+    expect(quickBody({ kind: 'local', path: '/home/me/app' }, '', '', on, PROVIDERS, SETUP).body).toEqual({ analysis: on, open_existing: true, local_path: '/home/me/app' });
     const repo = parseTarget('https://github.com/o/r/tree/dev').target!;
-    expect(quickBody(repo, ' mine ', '', on, PROVIDERS, SETUP).body).toEqual({ name: 'mine', analysis: on, source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r', branch: 'dev' } });
-    expect(quickBody(parseTarget('https://github.com/o/r').target!, '', '', on, PROVIDERS, SETUP).body).toEqual({ analysis: on, source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r' } });
+    expect(quickBody(repo, ' mine ', '', on, PROVIDERS, SETUP).body).toEqual({ name: 'mine', analysis: on, open_existing: true, source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r', branch: 'dev' } });
+    expect(quickBody(parseTarget('https://github.com/o/r').target!, '', '', on, PROVIDERS, SETUP).body).toEqual({ analysis: on, open_existing: true, source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r' } });
     expect(quickBody(parseTarget('https://gitlab.com/o/r').target!, '', '', on, PROVIDERS, SETUP).error).toBe(t.quick.validation.hostNotAllowed('gitlab.com'));
     expect(quickBody(repo, '', '', on, PROVIDERS, { ...SETUP, git: { available: false, hosts: [] } }).error).toBe(t.quick.validation.noGit);
+  });
+
+  it('says plainly what the service does not offer this user, and keeps a refused choice off', () => {
+    const limited: Setup = { ...SETUP, readable_folders: [], available: {
+      model_review: { available: false, reason: 'not_offered' },
+      build_scripts: { available: false, reason: 'not_offered' },
+      fetch_dependencies: { available: false, reason: 'unknown' },
+      local_path: { available: false, reason: 'no_allowed_folder' },
+      git_url: { available: true, reason: null },
+    } };
+    expect(unavailableReason(limited, 'model_review')).toBe(t.quick.reasons.not_offered);
+    expect(unavailableReason(limited, 'local_path')).toBe(t.quick.reasons.no_allowed_folder);
+    // Nothing recorded yet is not a refusal; neither is an available item or an older server.
+    expect(unavailableReason(limited, 'fetch_dependencies')).toBeNull();
+    expect(unavailableReason(limited, 'git_url')).toBeNull();
+    expect(unavailableReason(SETUP, 'model_review')).toBeNull();
+    expect(unavailableReason({ ...SETUP, available: { model_review: { available: false, reason: 'later_reason' } } }, 'model_review')).toBe(t.quick.reasonUnknown('later_reason'));
+    expect(choiceLocked(limited, 'run_build_scripts')).toBe(true);
+    expect(choicesFor('local', limited, { run_build_scripts: true, send_source_to_model: true })).toEqual({ send_source_to_model: false, run_build_scripts: false, fetch_dependencies: true });
+    // A folder path with no folder allowed is refused before asking the server; Git is not.
+    expect(noFolderFor({ kind: 'local', path: '/srv/x' }, limited)).toBe(true);
+    expect(noFolderFor({ kind: 'local', path: '/srv/x' }, SETUP)).toBe(false);
+    expect(noFolderFor(parseTarget('github.com/o/r').target!, limited)).toBe(false);
+    expect(noFolderFor({ kind: 'local', path: '/srv/x' }, null)).toBe(false);
   });
 });
 
@@ -89,13 +119,25 @@ describe('better results', () => {
     ]);
   });
 
-  it('offers the build-script switch only while it is off, and leaves a server-mode grant to the operator', () => {
+  it('offers the build-script switch only while it is off, and leaves a separate node\'s grant to the operator', () => {
     const blocked = [gap('task_unsupported', 'cargo-check', 'repository_code_not_allowed')];
     expect(improvementHints(blocked, SETUP, project({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }))).toEqual([]);
-    expect(improvementHints(blocked, { ...SETUP, mode: 'server' }, project(undefined))).toEqual([{ key: 'build_scripts', text: t.improve.operatorGrant('cargo-check') }]);
+    expect(improvementHints(blocked, SEPARATE, project(undefined))).toEqual([{ key: 'build_scripts', text: t.improve.operatorGrant('cargo-check') }]);
     const withheld = [gap('role_skipped', 'review.interpret', 'model_source_not_approved', 'code_review')];
     expect(improvementHints(withheld, SETUP, project({ send_source_to_model: false, run_build_scripts: true, fetch_dependencies: true }))).toEqual([{ key: 'send_source', text: t.improve.sendSource, turnOn: 'send_source_to_model' }]);
     expect(improvementHints([gap('tests_not_run', null, null, 'report')], SETUP, project(undefined))).toEqual([]);
+  });
+
+  it('says that the administrator did not offer the build scripts or the model review, with nothing to turn on', () => {
+    const gaps = [
+      gap('task_unsupported', 'cargo-check', 'repository_code_not_offered'),
+      gap('task_unsupported', 'clippy', 'repository_code_not_offered'),
+      gap('role_skipped', 'review.interpret', 'model_review_not_offered', 'code_review'),
+    ];
+    expect(improvementHints(gaps, SETUP, project({ send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true }))).toEqual([
+      { key: 'model_not_offered', text: t.improve.modelNotOffered },
+      { key: 'build_scripts_not_offered', text: t.improve.buildScriptsNotOffered('cargo-check, clippy') },
+    ]);
   });
 
   it('asks to fetch dependencies the analyzers could not resolve: the project choice, the node switch or the operator', () => {
@@ -112,7 +154,7 @@ describe('better results', () => {
     expect(improvementHints(unresolved, SETUP, project({ send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true }))).toEqual([
       { key: 'fetch_dependencies', text: t.improve.dependencySwitch('go-vet, staticcheck') },
     ]);
-    expect(improvementHints(unresolved, { ...SETUP, mode: 'server' }, project(undefined))).toEqual([
+    expect(improvementHints(unresolved, SEPARATE, project(undefined))).toEqual([
       { key: 'fetch_dependencies', text: t.improve.dependencyOperator('go-vet, staticcheck') },
     ]);
   });

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-// Personal mode in the browser (scripts/personal_smoke.py): one field to a folder's and a
+// The service `codeye up` starts, in the browser (scripts/personal_smoke.py): one field to a folder's and a
 // repository's report, the improvement hints, a failed run retried, and the tools panel.
 // One sign-in (the link works once) is shared by the steps, in order.
 const env = process.env;

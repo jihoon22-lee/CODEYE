@@ -3,6 +3,7 @@ import { AdminView } from './AdminView';
 import type { Api } from './api';
 import type { DeepLink } from './deepLink';
 import { DoctorView } from './DoctorView';
+import { GitHubAccount } from './GitHubAccount';
 import type { Idempotency } from './idempotency';
 import { CopyText } from './CopyText';
 import { ko as t } from './locales/ko';
@@ -12,7 +13,7 @@ import type { SessionController, SessionState } from './session';
 import { SignInForm } from './SignInForm';
 import { ToolsView } from './ToolsView';
 
-type View = 'projects' | 'doctor' | 'account' | 'admin';
+type View = 'projects' | 'doctor' | 'account' | 'github' | 'admin';
 type Props = { api: Api; controller: SessionController; idempotency: Idempotency; link?: DeepLink };
 type Authenticated = Extract<SessionState, { status: 'authenticated' }>;
 
@@ -28,7 +29,7 @@ export function App({ api, controller, idempotency, link }: Props) {
   // mounted, so no other request is made with it.
   const forced = signedIn?.mustChangePassword === true;
   // The admin area exists only for admins; a stale choice falls back to projects.
-  const shown: View = forced ? 'account' : view === 'admin' && !signedIn?.isAdmin ? 'projects' : view === 'account' && !signedIn ? 'projects' : view;
+  const shown: View = forced ? 'account' : view === 'admin' && !signedIn?.isAdmin ? 'projects' : (view === 'account' || view === 'github') && !signedIn ? 'projects' : view;
   // The project screen names its project and run in the title itself.
   useEffect(() => {
     if (shown === 'projects' && signedIn) return;
@@ -36,6 +37,7 @@ export function App({ api, controller, idempotency, link }: Props) {
       : shown === 'doctor' ? t.pageTitle(t.nav.doctor)
       : shown === 'admin' ? t.pageTitle(t.accounts.nav.admin)
       : shown === 'account' ? t.pageTitle(t.accounts.password.title)
+      : shown === 'github' ? t.pageTitle(t.accounts.github.title)
       : t.appName;
   }, [shown, signedIn]);
 
@@ -50,7 +52,7 @@ export function App({ api, controller, idempotency, link }: Props) {
           {signedIn?.isAdmin && <NavButton current={shown} view="admin" onSelect={go}>{t.accounts.nav.admin}</NavButton>}
         </nav>}
         <div className="session">
-          {signedIn && <AccountMenu session={signedIn} forced={forced} current={shown} onAccount={() => go('account')} onLogout={() => void controller.logout()} />}
+          {signedIn && <AccountMenu session={signedIn} forced={forced} current={shown} onAccount={() => go('account')} onGitHub={() => go('github')} onLogout={() => void controller.logout()} />}
         </div>
       </header>
       {signedIn?.logoutFailed && <p role="alert" className="error">{t.session.logoutFailed}</p>}
@@ -61,6 +63,10 @@ export function App({ api, controller, idempotency, link }: Props) {
           : shown === 'account' ? <>
             <PasswordForm key={signedIn.userId} controller={controller} user={signedIn} forced={forced} onDone={() => { if (forced) { setPasswordSet(true); setView('projects'); } }} />
             {!forced && <p><button type="button" onClick={() => go('projects')}>{t.accounts.password.back}</button></p>}
+          </>
+          : shown === 'github' ? <>
+            <GitHubAccount api={api} />
+            <p><button type="button" onClick={() => go('projects')}>{t.accounts.password.back}</button></p>
           </>
           : shown === 'admin' ? <AdminView api={api} controller={controller} me={signedIn.userId} />
           : <ProjectsView api={api} userId={signedIn.userId} idempotency={idempotency} link={link} />}
@@ -73,7 +79,7 @@ function NavButton({ current, view, onSelect, children }: { current: View; view:
   return <button type="button" aria-current={current === view ? 'page' : undefined} onClick={() => onSelect(view)}>{children}</button>;
 }
 
-function AccountMenu({ session, forced, current, onAccount, onLogout }: { session: Authenticated; forced: boolean; current: View; onAccount: () => void; onLogout: () => void }) {
+function AccountMenu({ session, forced, current, onAccount, onGitHub, onLogout }: { session: Authenticated; forced: boolean; current: View; onAccount: () => void; onGitHub: () => void; onLogout: () => void }) {
   const m = t.accounts.menu;
   const name = session.displayName && session.username && session.displayName !== session.username
     ? `${session.displayName} (${session.username})`
@@ -81,6 +87,7 @@ function AccountMenu({ session, forced, current, onAccount, onLogout }: { sessio
   return <div className="account" role="group" aria-label={m.label}>
     <span className="small">{name}</span>
     {session.isAdmin && <span className="badge role-badge">{m.admin}</span>}
+    {!forced && <button type="button" id="menu-github" aria-current={current === 'github' ? 'page' : undefined} onClick={onGitHub}>{m.github}</button>}
     {!forced && <button type="button" aria-current={current === 'account' ? 'page' : undefined} onClick={onAccount}>{m.account}</button>}
     <button type="button" onClick={onLogout} disabled={session.loggingOut}>{session.loggingOut ? t.session.loggingOut : t.session.logout}</button>
   </div>;

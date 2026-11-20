@@ -19,6 +19,7 @@ const ERIN = user({ id: '6c2a9d14-31f8-4be0-8d57-91a3e0c4f7b2', username: 'erin'
 const LINK = 'https://codeye.example/#launch=ONE-TIME-LINK-SECRET-0000000000000000000';
 const ROOT = { id: 'r0000000-0000-4000-8000-000000000001', label: 'team-root', created_at: '2026-11-01T00:00:00Z', grants: [{ user_id: SESSION.user_id, username: 'dana', granted_at: '2026-11-02T00:00:00Z' }] };
 
+const SETTINGS = { others_model_review: true, others_build_scripts: false, updated_at: '2026-11-20T00:00:00Z', service_origin: 'http://codeye.lan:7331' };
 type Over = Record<string, (c: Call) => Response | undefined>;
 async function openAdmin(over: Over = {}) {
   const app = renderApp(backend({
@@ -29,6 +30,7 @@ async function openAdmin(over: Over = {}) {
     'GET /api/v1/admin/source-roots': () => json(200, { items: [ROOT] }),
     'GET /api/v1/admin/providers': () => json(200, { items: [{ id: 'gh', kind: 'github', host: 'github.com', api_url: null }] }),
     'GET /api/v1/audit': () => json(200, { items: [], next_cursor: null }),
+    'GET /api/v1/admin/settings': () => json(200, SETTINGS),
     ...over,
   }));
   await flush();
@@ -180,6 +182,95 @@ describe('source roots and providers', () => {
     const table = screen.getByRole('table', { name: a.providersCaption });
     expect(table.textContent).toContain('github.com');
     expect(within(table).queryByRole('button')).toBeNull();
+  });
+});
+
+describe('shared service', () => {
+  it('shows the address to share and changes the two switches', async () => {
+    const { calls } = await openAdmin({ 'PUT /api/v1/admin/settings': c => json(200, { ...SETTINGS, ...(c.body as object) }) });
+    expect(document.getElementById('service-address')!.textContent).toContain(a.serviceAddress);
+    expect(document.getElementById('service-address-value')!.textContent).toBe('http://codeye.lan:7331');
+    adminTab(a.tabs.service);
+    await flush();
+    const review = document.getElementById('switch-others-model-review') as HTMLInputElement;
+    const scripts = document.getElementById('switch-others-build-scripts') as HTMLInputElement;
+    expect(screen.getByLabelText(a.othersModelReview)).toBe(review);
+    expect(screen.getByLabelText(a.othersBuildScripts)).toBe(scripts);
+    expect(review.checked).toBe(true);
+    expect(scripts.checked).toBe(false);
+    fireEvent.click(scripts);
+    await flush();
+    expect(calls.find(c => c.method === 'PUT' && c.url === '/api/v1/admin/settings')!.body).toEqual({ others_build_scripts: true });
+    expect((document.getElementById('switch-others-build-scripts') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getAllByRole('status').some(x => x.textContent === a.changed)).toBe(true);
+  });
+
+  it('says a loopback-only service has no address to share', async () => {
+    await openAdmin({ 'GET /api/v1/admin/settings': () => json(200, { ...SETTINGS, service_origin: null }) });
+    expect(document.getElementById('service-address')!.textContent).toContain(a.serviceAddressLocal);
+  });
+
+  it('adds a folder for everyone, shows its path, and opens or closes an existing one', async () => {
+    let roots = [{ ...ROOT, path: '/srv/team', everyone: false }];
+    const { calls } = await openAdmin({
+      'GET /api/v1/admin/source-roots': () => json(200, { items: roots }),
+      'POST /api/v1/admin/source-roots': c => {
+        const b = c.body as { path: string; label?: string; everyone?: boolean };
+        const added = { id: 'r0000000-0000-4000-8000-000000000002', label: b.label ?? 'nfs', path: b.path, everyone: b.everyone ?? false, created_at: '2026-11-20T00:00:00Z', grants: [] };
+        roots = [...roots, added];
+        return json(201, added);
+      },
+      'PUT /api/v1/admin/source-roots/r0000000-0000-4000-8000-000000000001/everyone': () => new Response(null, { status: 204 }),
+    });
+    adminTab(a.tabs.roots);
+    await flush();
+    expect(screen.getByText('/srv/team')).toBeTruthy();
+    fireEvent.change(document.getElementById('add-root-path')!, { target: { value: 'srv/nfs' } });
+    fireEvent.click(document.getElementById('add-root-submit')!);
+    expect(screen.getByRole('alert').textContent).toBe(a.addRootNotAbsolute);
+    fireEvent.change(document.getElementById('add-root-path')!, { target: { value: '/mnt/nfs' } });
+    fireEvent.change(document.getElementById('add-root-label')!, { target: { value: 'nfs' } });
+    fireEvent.click(document.getElementById('add-root-everyone')!);
+    fireEvent.click(document.getElementById('add-root-submit')!);
+    await flush();
+    expect(calls.find(c => c.method === 'POST' && c.url === '/api/v1/admin/source-roots')!.body).toEqual({ path: '/mnt/nfs', label: 'nfs', everyone: true });
+    expect(screen.getByText(a.rootAdded('nfs'))).toBeTruthy();
+    expect((document.querySelector('[data-root-everyone="nfs"]') as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(document.querySelector('[data-root-everyone="team-root"]')!);
+    await flush();
+    const put = calls.find(c => c.method === 'PUT' && c.url.endsWith('/everyone'))!;
+    expect(put.url).toBe('/api/v1/admin/source-roots/r0000000-0000-4000-8000-000000000001/everyone');
+    expect(put.body).toEqual({ everyone: true });
+  });
+
+  it('says a folder is already allowed', async () => {
+    await openAdmin({ 'POST /api/v1/admin/source-roots': () => apiError(409, 'CONFLICT') });
+    adminTab(a.tabs.roots);
+    await flush();
+    fireEvent.change(document.getElementById('add-root-path')!, { target: { value: '/srv/team' } });
+    fireEvent.click(document.getElementById('add-root-submit')!);
+    await flush();
+    expect(screen.getByRole('alert').textContent).toBe(a.rootConflict);
+  });
+
+  it('approves a Git host', async () => {
+    let hosts = [{ id: 'gh', kind: 'github', host: 'github.com', api_url: null }];
+    const { calls } = await openAdmin({
+      'GET /api/v1/admin/providers': () => json(200, { items: hosts }),
+      'POST /api/v1/admin/providers': c => {
+        const p = { id: 'ghe', kind: 'ghes', host: (c.body as { host: string }).host, api_url: null };
+        hosts = [...hosts, p];
+        return json(201, p);
+      },
+    });
+    adminTab(a.tabs.providers);
+    await flush();
+    fireEvent.change(document.getElementById('add-provider-host')!, { target: { value: 'ghe.example.com' } });
+    fireEvent.click(document.getElementById('add-provider-submit')!);
+    await flush();
+    expect(calls.find(c => c.method === 'POST' && c.url === '/api/v1/admin/providers')!.body).toEqual({ host: 'ghe.example.com' });
+    expect(screen.getByText(a.providerAdded('ghe.example.com'))).toBeTruthy();
+    expect(screen.getByText('ghe.example.com')).toBeTruthy();
   });
 });
 

@@ -8,9 +8,10 @@ import { ErrorNote } from './RunPanel';
 
 const t = ko.tools;
 
-// The tools panel of a personal installation: the tools `codeye up` found (<state>/tools.json),
-// how to add a missing one, the model and Git. A server-mode controller does not know its nodes'
-// tools; there the doctor file view stays.
+// The tools panel: the tools `codeye up` found (<state>/tools.json), how to add a missing one,
+// the model, Git and the folders this user may read. A controller that recorded no setup (started
+// on its own) does not know its nodes' tools; there the doctor file view stays. Tool paths and
+// hints reach administrators only.
 export function ToolsView({ api }: { api: Api }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [error, setError] = useState<ErrorText | null>(null);
@@ -23,7 +24,7 @@ export function ToolsView({ api }: { api: Api }) {
   }, [api, loads]);
   if (error) return <section className="panel"><ErrorNote error={{ ...error, message: `${t.failed} ${error.message}` }} /><button type="button" onClick={() => setLoads(n => n + 1)}>{t.reload}</button></section>;
   if (!setup) return <section className="panel" role="status"><p>{t.loading}</p></section>;
-  if (setup.mode !== 'personal') return <DoctorView />;
+  if (setup.tools === null && setup.model === null) return <DoctorView />;
   const tools = setup.tools?.tools ?? [];
   const status = (s: string) => (Object.hasOwn(t.statuses, s) ? t.statuses[s] : t.statusUnknown(s));
   return <>
@@ -40,7 +41,8 @@ export function ToolsView({ api }: { api: Api }) {
           <td>{x.status === 'found' ? <code>{x.path ?? '—'}</code> : <>{x.hint ?? x.reason ?? '—'}</>}</td>
         </tr>)}</tbody>
       </table></div>}
-      {tools.some(x => x.status !== 'found') && <><p className="small">{t.addAfter}</p><CopyText text="codeye up" label={t.command} /></>}
+      {!setup.is_admin && <p className="small">{t.pathsAdminOnly}</p>}
+      {setup.is_admin && tools.some(x => x.status !== 'found') && <><p className="small">{t.addAfter}</p><CopyText text="codeye up" label={t.command} /></>}
     </section>
     <section className="panel" aria-labelledby="tools-setup">
       <h2 id="tools-setup" className="visually-hidden">{t.model}</h2>

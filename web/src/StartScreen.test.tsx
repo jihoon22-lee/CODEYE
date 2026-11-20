@@ -10,7 +10,8 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 const SETUP = {
-  mode: 'personal',
+  is_admin: true,
+  service_origin: null,
   model: { configured: false, id: null, probe: null },
   git: { available: true, hosts: ['github.com'] },
   readable_folders: ['/home/me'],
@@ -21,6 +22,19 @@ const SETUP = {
       { name: 'go', status: 'found', version: '1.27.4', path: '/usr/local/go/bin/go', version_tested: true },
       { name: 'cppcheck', status: 'not_found', version_tested: false, hint: 'apt install cppcheck' },
     ],
+  },
+  github: { enabled: true, host: 'github.com', token: false, account: null, source: null, reason: null },
+  offline: false,
+};
+// What a user who is not an administrator gets by default: no folder, no build scripts.
+const MEMBER_SETUP = {
+  ...SETUP, is_admin: false, readable_folders: [], tools: null,
+  analysis_defaults: { local: { send_source_to_model: true, run_build_scripts: false }, git: { send_source_to_model: true, run_build_scripts: false } },
+  available: {
+    git_url: { available: true, reason: null }, local_path: { available: false, reason: 'no_allowed_folder' },
+    pull_requests: { available: true, reason: null }, github_token: { available: true, reason: null },
+    model_review: { available: true, reason: null }, build_scripts: { available: false, reason: 'not_offered' },
+    fetch_dependencies: { available: true, reason: null },
   },
 };
 // SETUP above and the projects below leave fetch_dependencies out, as older servers do: it reads as on.
@@ -58,7 +72,7 @@ function personal(over: Record<string, (call: Call) => Response | undefined> = {
   });
 }
 
-describe('personal mode start', () => {
+describe('the start screen', () => {
   it('analyzes a folder from one field and opens its run', async () => {
     const app = renderApp(personal());
     await flush();
@@ -68,7 +82,7 @@ describe('personal mode start', () => {
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
     await flush();
     const created = app.calls.find(c => c.method === 'POST' && c.url === '/api/v1/projects')!;
-    expect(created.body).toEqual({ local_path: '/home/me/app', analysis: { ...ANALYSIS_ON, fetch_dependencies: true } });
+    expect(created.body).toEqual({ local_path: '/home/me/app', analysis: { ...ANALYSIS_ON, fetch_dependencies: true }, open_existing: true });
     expect(app.calls.some(c => c.method === 'POST' && c.url === '/api/v1/projects/p-folder/runs')).toBe(true);
     expect(screen.getByRole('heading', { level: 2, name: 'app' })).toBeTruthy();
     expect(screen.getByText(t.runs.statusLabels.running!)).toBeTruthy();
@@ -88,7 +102,7 @@ describe('personal mode start', () => {
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
     await flush();
     const created = app.calls.find(c => c.method === 'POST' && c.url === '/api/v1/projects')!;
-    expect(created.body).toEqual({ source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r', branch: 'dev' }, analysis: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true } });
+    expect(created.body).toEqual({ source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/o/r', branch: 'dev' }, analysis: { send_source_to_model: true, run_build_scripts: false, fetch_dependencies: true }, open_existing: true });
   });
 
   it('sends the dependency choice the user turned off', async () => {
@@ -102,7 +116,56 @@ describe('personal mode start', () => {
     fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
     await flush();
     const created = app.calls.find(c => c.method === 'POST' && c.url === '/api/v1/projects')!;
-    expect(created.body).toEqual({ local_path: '/home/me/app', analysis: { ...ANALYSIS_ON, fetch_dependencies: false } });
+    expect(created.body).toEqual({ local_path: '/home/me/app', analysis: { ...ANALYSIS_ON, fetch_dependencies: false }, open_existing: true });
+  });
+
+  it('tells a user with no allowed folder to use a Git address or ask the administrator, without asking the server', async () => {
+    const app = renderApp(personal({ 'GET /api/v1/setup': () => json(200, MEMBER_SETUP) }));
+    await flush();
+    // What is not available is said under the field.
+    const limits = document.getElementById('start-unavailable')!;
+    expect(limits.textContent).toContain(t.quick.reasons.no_allowed_folder);
+    expect(limits.textContent).toContain(t.quick.reasons.not_offered);
+    type(t.quick.field, '/srv/team/app');
+    fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
+    await flush();
+    const alert = document.getElementById('start-folder-error')!;
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.textContent).toContain('이 서버에서 읽도록 허용된 폴더가 없습니다. Git 주소를 쓰거나 관리자에게 폴더 허용을 요청하세요.');
+    expect(alert.textContent).toContain(t.quick.allowedFoldersNone);
+    expect(app.calls.some(c => c.method === 'POST' && c.url === '/api/v1/projects')).toBe(false);
+    // The build-scripts box is off, cannot be turned on, and says why.
+    const box = screen.getByLabelText(t.quick.runBuildScripts) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(box.disabled).toBe(true);
+    expect(document.querySelector('[data-unavailable="run_build_scripts"]')!.textContent).toContain(t.quick.reasons.not_offered);
+    // A Git address still works.
+    type(t.quick.field, 'https://github.com/o/r');
+    expect(document.getElementById('start-folder-error')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
+    await flush();
+    expect(app.calls.find(c => c.method === 'POST' && c.url === '/api/v1/projects')!.body).toMatchObject({ analysis: { run_build_scripts: false } });
+  });
+
+  it('shows the folders the server allows with its refusal of a path', async () => {
+    renderApp(personal({ 'POST /api/v1/projects': () => apiError(422, 'FOLDER_NOT_READABLE', 'outside', false, { readable_folders: ['/srv/team', '/home/me'] }) }));
+    await flush();
+    type(t.quick.field, '/opt/elsewhere');
+    fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
+    await flush();
+    const alert = document.getElementById('start-folder-error')!;
+    expect(alert.textContent).toContain(t.quick.outsideFolders);
+    expect(alert.textContent).toContain('/srv/team');
+    expect(alert.textContent).toContain('/home/me');
+  });
+
+  it('says there is no allowed folder when the server answers LOCAL_PATH_NOT_ALLOWED', async () => {
+    renderApp(personal({ 'POST /api/v1/projects': () => apiError(422, 'LOCAL_PATH_NOT_ALLOWED', 'no folder', false, { readable_folders: [] }) }));
+    await flush();
+    type(t.quick.field, '/home/me/app');
+    fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
+    await flush();
+    expect(document.getElementById('start-folder-error')!.textContent).toContain(t.quick.noFolder);
   });
 
   it('opens the run still going for a folder registered before instead of requesting another', async () => {
@@ -243,8 +306,18 @@ describe('tools panel', () => {
     expect(screen.getByText('/home/me')).toBeTruthy();
   });
 
-  it('keeps the doctor file view on a server-mode controller', async () => {
-    renderApp(backend({ 'GET /api/v1/setup': () => json(200, { ...SETUP, mode: 'server', model: null, git: null, tools: null, readable_folders: [] }) }));
+  it('hides the tool hints from a user who is not an administrator', async () => {
+    const member = { ...SETUP, is_admin: false, tools: { ...SETUP.tools, tools: [{ name: 'cppcheck', status: 'not_found', version_tested: false }] } };
+    renderApp(personal({ 'GET /api/v1/setup': () => json(200, member) }));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: t.nav.doctor }));
+    await flush();
+    expect(screen.getByText(t.tools.pathsAdminOnly)).toBeTruthy();
+    expect(screen.queryByText(t.tools.addAfter)).toBeNull();
+  });
+
+  it('keeps the doctor file view on a controller that recorded no setup', async () => {
+    renderApp(backend({ 'GET /api/v1/setup': () => json(200, { ...SETUP, model: null, git: null, tools: null, readable_folders: [] }) }));
     await flush();
     fireEvent.click(screen.getByRole('button', { name: t.nav.doctor }));
     await flush();
