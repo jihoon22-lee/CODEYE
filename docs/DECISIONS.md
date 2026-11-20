@@ -72,7 +72,7 @@
 
 대안으로 OpenAPI 초안의 MB 단위·command ID cursor·lease 단독 응답을 검토했다. 단위 혼동, cursor 순서 보장 불가, job 재조회 왕복 때문에 채택하지 않았다. migration 0003은 forward 전용이다. migration 0002 시점의 run 본문은 digest가 정확히 일치하는 scope=full 세 형태만 복원하고, 그 시점의 Git snapshot(digest=commit)은 수정하지 않고 재시도 불가로 둔다. 비용은 claim 직렬화(전역 limits 행 잠금)이며 단일 controller 규모에서 허용한다. 상세 계약은 [API](API.md)와 [실행](EXECUTION.md)을 따른다.
 
-## 개인 모드 운영
+## 한 머신의 서비스 운영
 
 **A32 — 개인 패키징과 운영.** (기록 2026-11-19) REQ-018/021/022, NFR-003/006/007과 TC-124~127, TC-32에 대해 다음을 확정한다.
 
@@ -449,7 +449,7 @@
 
 [보안](SECURITY.md) · [API](API.md)
 
-**A53 — 모드 대신 권한: `codeye up` 하나의 웹 서비스.** (기록 2026-11-20) REQ-001/002/024, NFR-006과 TC-256~TC-263에 대해 다음을 확정한다. A15의 "loopback 전용", A36 5·6의 "개인 사용자"와 "`codeye up`은 loopback만", A40 2·7의 개인 모드 한정, A46 1·6의 "token은 `codeye up`을 실행한 사람 하나"를 바꾼다. 개인 모드·서버 모드라는 구분을 제품에서 없앤다. 이름에도 모드를 남기지 않는다. 설정 파일은 `$XDG_CONFIG_HOME/codeye/config.json`, 상태의 관리자 기록은 `admin.json`, 내부 패키지는 `instance`, controller의 세션 수명은 `serve --session-ttl`이다. 설치된 곳이 없으므로 이전 이름의 별칭이나 호환 경로는 두지 않는다.
+**A53 — 모드 대신 권한: `codeye up` 하나의 웹 서비스.** (기록 2026-11-20) REQ-001/002/024, NFR-006과 TC-256~TC-263에 대해 다음을 확정한다. A15의 "loopback 전용", A36 5·6의 "개인 사용자"와 "`codeye up`은 loopback만", A38 6의 `serve --personal`, A39 4의 "개인 사용자의 모든 로컬 source root", A40 2·7의 개인 모드 한정, A46 1·6의 "token은 `codeye up`을 실행한 사람 하나"를 바꾼다. 개인 모드·서버 모드라는 구분을 제품에서 없앤다. 이름에도 모드를 남기지 않는다. 설정 파일은 `$XDG_CONFIG_HOME/codeye/config.json`, 상태의 관리자 기록은 `admin.json`, 내부 패키지는 `instance`, controller의 세션 수명은 `serve --session-ttl`이다. 설치된 곳이 없으므로 이전 이름의 별칭이나 호환 경로는 두지 않는다. 앞선 결정에 남은 "개인 모드"는 `codeye up`·`start`가 띄운 서비스로, "서버 모드"는 운영자가 따로 띄운 controller·노드로 읽는다. 그 결정의 ID와 나머지 내용은 그대로이고 이 결정이 바꾼 부분만 대체된다.
 
 1. **다른 머신에 서비스.** `codeye up --listen ADDR`은 TLS(`--tls-cert`·`--tls-key`·`--public-origin`) 또는 운영자가 명시한 `--plain-http`로 loopback이 아닌 주소를 듣는다. 평문 HTTP는 막지 않고 시작할 때 한 줄로 알린다(쉬운 사용을 막는 관문 대신 한계를 기록한다는 방향). controller는 수신 주소마다 Host·Origin·cookie 규칙을 따로 가진다(`ConnContext`로 고른다). 같은 머신의 에이전트와 명령은 별도의 loopback 수신 주소(`local_listen`, 기본 공개 포트 + 1)를 쓴다. TLS 주소에 붙으려면 에이전트가 사설 인증서를 믿어야 하고, 평문 공개 주소를 쓰면 노드 secret이 평문으로 흐르기 때문이다. 로그인 링크와 "이 서비스 주소"는 public origin이다.
 2. **token은 사람마다, 쓰는 것은 행동한 사람의 것.** 사용자마다 `<state>/secrets/github-users/<id>.json`(0600)에 github.com token을 둔다. DB에 두지 않은 것은 백업에 비밀값을 넣지 않기 위해서다(복원 뒤 다시 넣는다). 관리자의 token은 `codeye up`이 찾은 것이고 그 사용자 파일 하나에만 둔다(A46 1의 `secrets/github.json`은 없앤다). 규칙은 하나다: **GitHub 호출은 그 호출이 대신하는 사람의 token만 쓴다.** run의 pull request 고정·Git fetch·결과 댓글은 run을 시작한 사람(예약 run은 예약의 actor), 미리보기는 요청한 사람이다. 대안이던 "프로젝트 소유자의 token"은 구성원이 고른 저장소나 구성원이 시작한 run에 소유자의 token이 쓰여 기각했다. 그 결과 구성원은 비공개 저장소를 자기 token으로 읽을 수 있어야 하고, token이 없는 사람의 run은 공개 저장소만 읽으며 댓글은 `no_token`으로 남는다.

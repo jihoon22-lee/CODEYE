@@ -19,7 +19,7 @@ info:
     노드 경로(NodeBearer)는 cookie를 읽지 않고 CSRF를 쓰지 않으며 Origin header가 있으면 403으로 거부한다.
 servers:
   - url: http://127.0.0.1:7331
-    description: 개인 Native 모드의 제안 포트
+    description: codeye up의 기본 주소(loopback)
   - url: https://codeye.example
     description: TLS 수신(--tls-cert, --tls-key, --public-origin)의 예. 실제 주소는 운영자가 정한다.
 security:

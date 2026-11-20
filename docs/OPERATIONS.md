@@ -222,7 +222,7 @@ codeye status [--config PATH] [--format text|json]
 
 ### start
 
-개인 lock을 잡는다. 관리형 모드면 PostgreSQL을 띄운다([관리형 PostgreSQL](#관리형-postgresql)). 상태를 검사한다([일관성](#프로세스-상태-일관성)). 기록 없는 프로세스가 에이전트 lock이나 설정에 적은 `listen` 포트를 쥐고 있으면 거부한다. `listen`을 적지 않았고 기본 포트를 다른 프로그램이 쓰면 7340까지 다음 빈 포트를 쓴다. 기록의 프로세스가 끝났거나 pid가 다른 프로세스로 재사용됐으면 기록만 지운다(신호 없음). 그 뒤 순서는 다음과 같다. controller와 에이전트 중 이미 실행 중인 것은 그대로 쓴다. 둘 다 실행 중이고 에이전트 argv가 설정과 같으면 아무것도 띄우지 않고 종료 코드 0이다.
+서비스 lock(`instance.lock`)을 잡는다. 관리형 모드면 PostgreSQL을 띄운다([관리형 PostgreSQL](#관리형-postgresql)). 상태를 검사한다([일관성](#프로세스-상태-일관성)). 기록 없는 프로세스가 에이전트 lock이나 설정에 적은 `listen` 포트를 쥐고 있으면 거부한다. `listen`을 적지 않았고 기본 포트를 다른 프로그램이 쓰면 7340까지 다음 빈 포트를 쓴다. 기록의 프로세스가 끝났거나 pid가 다른 프로세스로 재사용됐으면 기록만 지운다(신호 없음). 그 뒤 순서는 다음과 같다. controller와 에이전트 중 이미 실행 중인 것은 그대로 쓴다. 둘 다 실행 중이고 에이전트 argv가 설정과 같으면 아무것도 띄우지 않고 종료 코드 0이다.
 
 1. schema가 이 바이너리의 migration(현재 14)과 같은지 확인한다. external 모드에서 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. 관리형 모드에서 이전 버전이면 migration을 적용한다. 이미 적용된 migration이 있으면(데이터가 있으면) 먼저 `pg_dump --format=custom`으로 `<백업 디렉터리>/codeye-pre-migrate-<UTC>/database.dump`(0600)를 쓰고, 실패하면 아무것도 바꾸지 않고 끝난다. 바이너리보다 새 schema나 불일치는 거부한다.
 2. 관리자 사용자를 만들거나 다시 쓴다. 설정의 사용자는 관리자다(이전 버전에서 만든 사용자는 이때 관리자로 지정되고 감사 기록이 남는다). `up`이 찾은 GitHub token을 그 사용자의 token 파일(`secrets/github-users/<id>.json`)에 옮긴다(웹에서 넣은 token은 그대로). 설정의 source root를 label로 등록하고 사용자에게 허가한다. 같은 label이 다른 경로로 등록돼 있으면 거부한다. `quota.artifacts_bytes`를 `scheduler_limits.artifact_quota_bytes`에 반영한다(0이면 제거).
@@ -331,7 +331,7 @@ codeye restore [--config PATH] --from DIR [--format text|json]
 
 ### 백업
 
-출력 디렉터리는 없거나 비어 있어야 한다. `--output`이 없으면 `<backup_dir>/codeye-<UTC 시각>`이고, `backup_dir`가 없으면 `<state_dir>-backups/codeye-<UTC 시각>`이다. 실행 중에도(온라인) 정지 뒤에도 만들 수 있다. 개인 lock을 잡으므로 start·stop·restore와 겹치지 않는다.
+출력 디렉터리는 없거나 비어 있어야 한다. `--output`이 없으면 `<backup_dir>/codeye-<UTC 시각>`이고, `backup_dir`가 없으면 `<state_dir>-backups/codeye-<UTC 시각>`이다. 실행 중에도(온라인) 정지 뒤에도 만들 수 있다. 서비스 lock을 잡으므로 start·stop·restore와 겹치지 않는다.
 
 1. `REPEATABLE READ READ ONLY` 트랜잭션을 열고 `pg_export_snapshot()`으로 snapshot ID를 얻는다. 같은 snapshot에서 migration 버전, 서버 버전, 확정 산출물 목록(`finalized`이고 저장 키가 있는 행의 sha256·크기), 표별 행 수를 읽는다.
 2. 트랜잭션을 연 채 `pg_dump --format=custom --no-owner --no-privileges --snapshot=ID --schema=<현재 schema> --file=database.dump`를 실행한다. 파일은 미리 0600으로 만든다. `pg_dump` 주 버전이 서버보다 낮으면 거부한다.

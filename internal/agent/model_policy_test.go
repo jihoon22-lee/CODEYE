@@ -83,13 +83,14 @@ func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
 			t.Errorf("%s model=%q choices=%v: model %v, code %v", tc.kind, tc.model, tc.choices, j.AllowModelReview, j.AllowRepositoryCode)
 		}
 	}
-	// Without the flag the stored choices change nothing (server mode).
+	// Without --project-analysis-policy (a node an operator starts) the
+	// stored choices change nothing.
 	ag := Agent{cfg: Config{SourceRoots: map[string]string{root: t.TempDir()}, ModelName: "openai/m"}}
 	a := activeAttempt{}
 	a.job.Source = nodeproto.JobSource{Kind: "local", SourceRootID: root}
 	a.job.Analysis = &both
 	if j := ag.buildJob(&a); j.AllowModelReview || j.AllowRepositoryCode {
-		t.Fatal("server-mode node followed the project's choices")
+		t.Fatal("a node without the policy flag followed the project's choices")
 	}
 }
 

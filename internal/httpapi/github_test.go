@@ -20,7 +20,7 @@ const testGitHubToken = "tok-httpapi-123456"
 
 // pullRequestRun is the isolation world's pull-request run: a github.com
 // project of the same owner with the same members, and a run pinned
-// directly (server mode resolves no pull request itself).
+// directly in the store (this world has no GitHub API to resolve it).
 func (w *isoWorld) pullRequestRun() string {
 	if w.prRun != "" {
 		return w.prRun
@@ -64,7 +64,7 @@ func patch(s string) *string { return &s }
 // Pull-request runs in the service: the controller resolves the pull
 // request with the stored token, pins it on the run and shows it in the run
 // view and the comment preview; GitHub's refusals have their own codes;
-// server mode, a folder project and schedules refuse pull requests; the
+// a project that is not on github.com and schedules refuse pull requests; the
 // remembered comment choice applies when the request leaves it out; the
 // token never appears in a response or the log.
 func TestPullRequestRunsOverHTTP(t *testing.T) {
