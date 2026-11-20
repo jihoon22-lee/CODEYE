@@ -1,8 +1,8 @@
--- CODEYE W03: 사용자 세션, 일회용 launch token, source root·provider 등록.
+-- CODEYE: 사용자 세션, 일회용 launch token, source root·provider 등록.
 --
 -- 0001과 같은 규칙: BEGIN/COMMIT 없음, 비한정 이름(current_schema), 트리거는 NEW/OLD/TG_*만 사용,
 -- 외래키는 ON DELETE RESTRICT. token 원문은 저장하지 않고 SHA-256 hex만 저장한다.
--- source root·provider 등록은 선언일 뿐이다. 실제 경로·저장소 접근은 W04 acquire에서만 확인한다.
+-- source root·provider 등록은 선언일 뿐이다. 실제 경로·저장소 접근은 소스 취득(acquire)에서만 확인한다.
 -- provider에는 자격증명 열이 없다(공개 HTTPS GitHub/GHES만; 비공개 인증은 미구현).
 
 ALTER TABLE users

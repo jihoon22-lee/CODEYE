@@ -1,4 +1,4 @@
--- CODEYE W02 core domain schema.
+-- CODEYE core domain schema.
 --
 -- 이 파일은 migrations.Apply가 단일 트랜잭션 안에서 실행한다. BEGIN/COMMIT을 넣지 않는다.
 -- 모든 이름은 스키마를 지정하지 않으며 호출자의 search_path 첫 스키마(current_schema)에 생성된다.
@@ -13,7 +13,7 @@
 --
 -- 외래키는 모두 ON DELETE RESTRICT이며 CASCADE를 사용하지 않는다. 근거·감사 데이터 삭제는
 -- 후속 명시적 GC 작업의 책임이다. evidence의 실제 파일 존재·행 범위·hash 검증은 이 schema가
--- 보장하지 않는다(W04/W12). 여기서는 metadata 형식과 범위 참조만 강제한다.
+-- 보장하지 않는다(소스 취득과 보고서 builder가 확인한다). 여기서는 metadata 형식과 범위 참조만 강제한다.
 
 -- ---------------------------------------------------------------------------
 -- 공통 트리거 함수
@@ -104,7 +104,7 @@ CREATE TABLE snapshots (
     project_id  uuid NOT NULL REFERENCES projects (id) ON DELETE RESTRICT,
     -- Git commit SHA-1(40) / SHA-256(64) 또는 manifest SHA-256(64), 소문자 hex.
     digest      text NOT NULL CHECK (digest ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'),
-    -- 어휘는 W04 SourceAdapter에서 확정한다(예: stable_copy_best_effort). 여기서는 토큰 형식만 검사한다.
+    -- 어휘는 소스 취득 어댑터가 정한다(예: stable_copy_best_effort). 여기서는 토큰 형식만 검사한다.
     consistency text NOT NULL CHECK (consistency ~ '^[a-z][a-z0-9_]*$'),
     UNIQUE (project_id, id)
 );
@@ -435,7 +435,7 @@ CREATE TRIGGER artifacts_guard
 -- ---------------------------------------------------------------------------
 -- 기준은 snapshot 또는 artifact 중 정확히 하나다. tool_output은 artifact 기반이어야 한다.
 -- code/document는 snapshot 경로(path 필수) 또는 생성 파일 artifact 기반일 수 있다.
--- path/행 범위/blob hash가 실제 내용과 일치하는지는 이 schema가 검증하지 않는다(W04/W12).
+-- path/행 범위/blob hash가 실제 내용과 일치하는지는 이 schema가 검증하지 않는다(소스 취득과 보고서 builder가 확인한다).
 
 CREATE TABLE evidence (
     id          uuid   PRIMARY KEY,

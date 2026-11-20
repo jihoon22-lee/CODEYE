@@ -1,4 +1,4 @@
--- CODEYE W09: 게시된 구조화 보고서와 게시 거부 기록.
+-- CODEYE: 게시된 구조화 보고서와 게시 거부 기록.
 --
 -- 0001~0004과 같은 규칙: BEGIN/COMMIT 없음, 비한정 이름(current_schema), 외래키는 ON DELETE RESTRICT.
 -- 이전 migration의 테이블·트리거는 바꾸지 않는다(새 테이블만 추가).

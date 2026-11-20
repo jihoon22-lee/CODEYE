@@ -1,4 +1,4 @@
--- CODEYE W22: 예약(schedules)과 UTC occurrence, 예약으로 만든 run의 출처, task 가중치·계획 변경 순번.
+-- CODEYE: 예약(schedules)과 UTC occurrence, 예약으로 만든 run의 출처, task 가중치·계획 변경 순번.
 --
 -- 0001~0006과 같은 규칙: BEGIN/COMMIT 없음, 비한정 이름(current_schema), 외래키는 ON DELETE RESTRICT,
 -- 트리거는 NEW/OLD/TG_*만 사용한다. 이전 migration의 테이블·트리거는 바꾸지 않는다(열·테이블·트리거·색인만 추가).
