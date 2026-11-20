@@ -390,8 +390,8 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 
 - **에이전트.** `codeye agent --opencode ABSOLUTE_PATH --model PROVIDER/MODEL [--model-credential-file ABSOLUTE_PATH | --model-relay-file ABSOLUTE_PATH] [--model-timeout 180s]`. 키 파일 경로와 제한시간은 Hello의 `model_credential_file`, `model_timeout_seconds`로 워커에 간다. 키 파일 없이 고른 provider는 키가 필요 없는 경우(OpenCode Zen의 무료 모델)에만 답한다.
 - **키 파일 형식.** CODEYE 키 파일 `{"schema_version":"0.1","provider":"openai","api_key":"…","base_url":"…","openai_compatible":false}`(`base_url`·`openai_compatible` 선택, 알 수 없는 필드 거부) 또는 OpenCode의 `auth.json`이다. `auth.json`은 모델 provider의 항목이 `{"type":"api","key":"…"}`일 때만 쓴다(OAuth 항목은 쓰지 않는다). `base_url`은 http·https URL이다. OpenAI 호환 서버, 프록시, 시험용 가짜 upstream에 쓴다.
-- **개인 모드의 키.** 순서대로 찾는다. (1) `agent.model.credential_file`, (2) `<state_dir>/secrets/model.json`(0600, 디렉터리 0700), (3) 사용자의 OpenCode `auth.json`(`$XDG_DATA_HOME/opencode/auth.json`, 기본 `~/.local/share/opencode/auth.json`)에서 모델 provider의 `api` 항목. `agent.model.name`이 없으면 (3)은 아래 표의 provider를 표 순서로 찾는다. 환경변수 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY` 중 처음 있는 것을 `codeye up`이 (2)에 쓴다(`personal.WriteModelSecretFromEnv`). 같은 키면 파일을 다시 쓰지 않는다.
-- **개인 모드의 모델.** `agent.model.name`(`PROVIDER/MODEL`, 또는 키 provider의 모델 이름), 없으면 사용자 OpenCode 설정(`~/.config/opencode/opencode.json`, 주석 없는 JSON일 때)의 `model` 중 그 provider의 것, 없으면 provider별 기본값이다. OpenCode 실행 파일은 `agent.model.opencode`, 없으면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`다. 제한시간은 `agent.model.timeout_seconds`(1~1800, 기본 180)다.
+- **`codeye up`의 키.** 순서대로 찾는다. (1) `agent.model.credential_file`, (2) `<state_dir>/secrets/model.json`(0600, 디렉터리 0700), (3) 사용자의 OpenCode `auth.json`(`$XDG_DATA_HOME/opencode/auth.json`, 기본 `~/.local/share/opencode/auth.json`)에서 모델 provider의 `api` 항목. `agent.model.name`이 없으면 (3)은 아래 표의 provider를 표 순서로 찾는다. 환경변수 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY` 중 처음 있는 것을 `codeye up`이 (2)에 쓴다(`personal.WriteModelSecretFromEnv`). 같은 키면 파일을 다시 쓰지 않는다.
+- **`codeye up`의 모델.** `agent.model.name`(`PROVIDER/MODEL`, 또는 키 provider의 모델 이름), 없으면 사용자 OpenCode 설정(`~/.config/opencode/opencode.json`, 주석 없는 JSON일 때)의 `model` 중 그 provider의 것, 없으면 provider별 기본값이다. OpenCode 실행 파일은 `agent.model.opencode`, 없으면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`다. 제한시간은 `agent.model.timeout_seconds`(1~1800, 기본 180)다.
 
 | provider | 키 환경변수 | 기본 모델 |
 |---|---|---|
@@ -408,7 +408,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 ## 모델에 보낼 수 있는 소스
 
 - 모델 전송은 노드 운영자가 로컬 소스 루트마다 허용한다. `codeye agent --model-source-root ROOT_ID`(반복 가능)다.
-- 개인 모드에서는 프로젝트마다 고른다. 에이전트가 `--project-analysis-policy`로 뜨고, job에 실린 프로젝트의 분석 선택 `send_source_to_model`(로컬 폴더·Git 저장소 모두 기본 켬)이 모델 전송을 정한다. Git 저장소 프로젝트도 모델 검토를 받는다. `source_roots[].model_review`는 더 이상 쓰이지 않는다(A40). 모델이 설정되지 않았으면 선택과 관계없이 검토 단계가 `model_not_configured`로 끝난다.
+- `codeye up`이 띄운 에이전트는 프로젝트마다 고른다(관리자가 아닌 사람이 시작한 run은 관리자 스위치 안에서). 에이전트가 `--project-analysis-policy`로 뜨고, job에 실린 프로젝트의 분석 선택 `send_source_to_model`(로컬 폴더·Git 저장소 모두 기본 켬)이 모델 전송을 정한다. Git 저장소 프로젝트도 모델 검토를 받는다. `source_roots[].model_review`는 더 이상 쓰이지 않는다(A40). 모델이 설정되지 않았으면 선택과 관계없이 검토 단계가 `model_not_configured`로 끝난다.
 - 실제 모델을 쓰려면 에이전트에 `--opencode ABSOLUTE_PATH --model PROVIDER/MODEL`과 키 파일(`--model-credential-file`)을 준다. 예산 relay를 쓸 때는 `--model-relay-file ABSOLUTE_PATH`를 준다.
 - 일반 소스 매핑(`--source-root`)과 모델 전송 허가는 별개다. 허가가 없는 루트의 run은 모든 검토 task가 `model_source_not_approved`이고 정적 분석 결과만 남는다.
 - Git 소스는 모델에 보낼 수 없다. Git 취득 run의 검토 task는 항상 `model_source_not_approved`다. Git 소스의 개별 모델 전송 승인은 설계 계약(미구현)이다.
@@ -459,7 +459,7 @@ review-r1의 모든 역할에 적용한다. 단계당 호출은 최대 3회(`rec
 
 ## 시험
 
-- 회귀: `go test -race ./internal/worker/review/... ./internal/worker/run`. 실제 OpenCode와 가짜 upstream으로 개인 모드의 키 파일 경로 전체(시작, probe, 검토 단계 수락, 키 거부 사유, 시험하지 않은 버전, 키 미노출)를 `python3 scripts/test_postgres.py --smokes-only --personal-model`이 확인한다(비용 없음). 예시와 부정 입력: `python3 scripts/validate_bundle.py`. 일반 CI는 유료 모델을 호출하지 않으며 scripted caller만 쓴다. scripted caller 결과는 플랫폼 검사의 근거이고 지침 품질의 근거가 아니다.
+- 회귀: `go test -race ./internal/worker/review/... ./internal/worker/run`. 실제 OpenCode와 가짜 upstream으로 `codeye start`의 키 파일 경로 전체(시작, probe, 검토 단계 수락, 키 거부 사유, 시험하지 않은 버전, 키 미노출)를 `python3 scripts/test_postgres.py --smokes-only --personal-model`이 확인한다(비용 없음). 예시와 부정 입력: `python3 scripts/validate_bundle.py`. 일반 CI는 유료 모델을 호출하지 않으며 scripted caller만 쓴다. scripted caller 결과는 플랫폼 검사의 근거이고 지침 품질의 근거가 아니다.
 - 실모델 시험은 명시적으로 환경을 준 경우에만 실행한다. `CODEYE_TEST_OPENCODE_BIN`과 `CODEYE_TEST_REVIEW_RELAY`(필요하면 `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL`)를 주고 `go test -v -count=1 -run '^TestLiveVerifier$' ./internal/worker/review`처럼 하나씩 실행한다. 대상은 `TestLiveQualityRoles`, `TestLiveVerifier`(`internal/worker/review`), `TestLiveOpenCode`(키 파일은 `CODEYE_TEST_MODEL_CREDENTIAL`), `TestLiveInFlightCancel`(`internal/worker/opencode`)이다. 비용이 든다. 시험 체계는 [시험](TESTING.md)에 있다.
 
 ## 한계

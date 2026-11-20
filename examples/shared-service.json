@@ -1,0 +1,470 @@
+{
+  "setup_member": {
+    "is_admin": false,
+    "service_origin": "http://codeye.lan:7331",
+    "model": {
+      "configured": false,
+      "id": null,
+      "probe": null
+    },
+    "git": {
+      "available": true,
+      "hosts": [
+        "github.com"
+      ]
+    },
+    "readable_folders": [],
+    "analysis_defaults": {
+      "local": {
+        "send_source_to_model": true,
+        "run_build_scripts": false,
+        "fetch_dependencies": true
+      },
+      "git": {
+        "send_source_to_model": true,
+        "run_build_scripts": false,
+        "fetch_dependencies": true
+      }
+    },
+    "available": {
+      "git_url": {
+        "available": true,
+        "reason": null
+      },
+      "local_path": {
+        "available": false,
+        "reason": "no_allowed_folder"
+      },
+      "pull_requests": {
+        "available": true,
+        "reason": null
+      },
+      "github_token": {
+        "available": true,
+        "reason": null
+      },
+      "model_review": {
+        "available": false,
+        "reason": "model_not_configured"
+      },
+      "build_scripts": {
+        "available": false,
+        "reason": "not_offered"
+      },
+      "fetch_dependencies": {
+        "available": true,
+        "reason": null
+      }
+    },
+    "tools": {
+      "schema_version": "0.1",
+      "detected_at": "2026-11-20T00:50:47Z",
+      "python_both_type_checkers": false,
+      "tools": [
+        {
+          "name": "go",
+          "status": "found",
+          "version": "1.27.4",
+          "version_tested": true,
+          "tested_series": "1.27"
+        },
+        {
+          "name": "git",
+          "status": "found",
+          "version": "2.53.0",
+          "version_tested": true
+        },
+        {
+          "name": "gh",
+          "status": "found",
+          "version": "2.86.0",
+          "version_tested": true
+        },
+        {
+          "name": "node",
+          "status": "found",
+          "version": "24.18.0",
+          "version_tested": true
+        },
+        {
+          "name": "opencode",
+          "status": "found",
+          "version": "1.19.5",
+          "version_tested": true,
+          "tested_series": "1.19.5"
+        },
+        {
+          "name": "staticcheck",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "gitleaks",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "ruff",
+          "status": "found",
+          "version": "0.16.3",
+          "version_tested": true,
+          "tested_series": "0.16"
+        },
+        {
+          "name": "mypy",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "pyright",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "bandit",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "lizard",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "cppcheck",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "clang-tidy",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "eslint",
+          "status": "unusable",
+          "version_tested": false,
+          "tested_series": "10.15",
+          "reason": "eslint needs @eslint/js installed beside it in the same node_modules"
+        },
+        {
+          "name": "tsc",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "jscpd",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "cargo",
+          "status": "unusable",
+          "version_tested": false,
+          "tested_series": "1.99",
+          "reason": "cargo executable must resolve to a cargo binary (a rustup proxy is not accepted)"
+        },
+        {
+          "name": "clippy",
+          "status": "not_found",
+          "version_tested": false,
+          "reason": "needs cargo"
+        },
+        {
+          "name": "npm",
+          "status": "found",
+          "version": "11.16.0",
+          "version_tested": true
+        },
+        {
+          "name": "pnpm",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "yarn",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "uv",
+          "status": "found",
+          "version": "0.12.5",
+          "version_tested": true,
+          "tested_series": "0.12"
+        },
+        {
+          "name": "python",
+          "status": "found",
+          "version": "3.14.4",
+          "version_tested": true,
+          "tested_series": "3.11+"
+        }
+      ]
+    },
+    "github": {
+      "enabled": true,
+      "host": "github.com",
+      "token": false,
+      "account": null,
+      "source": null,
+      "reason": null
+    },
+    "offline": false
+  },
+  "folder_refusal": {
+    "error": {
+      "code": "LOCAL_PATH_NOT_ALLOWED",
+      "message": "this server allows you no folder to read; use a Git address or ask the administrator to allow a folder",
+      "retryable": false,
+      "request_id": "req_36c10e79117b9eaa7c370f84",
+      "details": {
+        "readable_folders": []
+      }
+    }
+  },
+  "account_github": {
+    "host": "github.com",
+    "connected": true,
+    "account": "bob-gh",
+    "source": "web",
+    "storable": true,
+    "reason": null
+  },
+  "settings": {
+    "others_model_review": true,
+    "others_build_scripts": true,
+    "updated_at": "2026-11-20T00:50:51.451605Z",
+    "service_origin": "http://codeye.lan:7331"
+  },
+  "source_root": {
+    "id": "3813a6ac-c2c0-4d2e-9cbb-47e5fc597f51",
+    "label": "shared",
+    "path": "/srv/code/shared",
+    "everyone": true,
+    "created_at": "2026-11-20T00:50:51Z",
+    "grants": []
+  },
+  "provider": {
+    "api_url": null,
+    "host": "ghe.example.com",
+    "id": "a9aac7be-10da-4423-8538-afd44e8b6eb7",
+    "kind": "ghes"
+  },
+  "setup_member_after": {
+    "is_admin": false,
+    "service_origin": "http://codeye.lan:7331",
+    "model": {
+      "configured": false,
+      "id": null,
+      "probe": null
+    },
+    "git": {
+      "available": true,
+      "hosts": [
+        "ghe.example.com",
+        "github.com"
+      ]
+    },
+    "readable_folders": [
+      "/srv/code/shared"
+    ],
+    "analysis_defaults": {
+      "local": {
+        "send_source_to_model": true,
+        "run_build_scripts": true,
+        "fetch_dependencies": true
+      },
+      "git": {
+        "send_source_to_model": true,
+        "run_build_scripts": false,
+        "fetch_dependencies": true
+      }
+    },
+    "available": {
+      "git_url": {
+        "available": true,
+        "reason": null
+      },
+      "local_path": {
+        "available": true,
+        "reason": null
+      },
+      "pull_requests": {
+        "available": true,
+        "reason": null
+      },
+      "github_token": {
+        "available": true,
+        "reason": null
+      },
+      "model_review": {
+        "available": false,
+        "reason": "model_not_configured"
+      },
+      "build_scripts": {
+        "available": true,
+        "reason": null
+      },
+      "fetch_dependencies": {
+        "available": true,
+        "reason": null
+      }
+    },
+    "tools": {
+      "schema_version": "0.1",
+      "detected_at": "2026-11-20T00:50:47Z",
+      "python_both_type_checkers": false,
+      "tools": [
+        {
+          "name": "go",
+          "status": "found",
+          "version": "1.27.4",
+          "version_tested": true,
+          "tested_series": "1.27"
+        },
+        {
+          "name": "git",
+          "status": "found",
+          "version": "2.53.0",
+          "version_tested": true
+        },
+        {
+          "name": "gh",
+          "status": "found",
+          "version": "2.86.0",
+          "version_tested": true
+        },
+        {
+          "name": "node",
+          "status": "found",
+          "version": "24.18.0",
+          "version_tested": true
+        },
+        {
+          "name": "opencode",
+          "status": "found",
+          "version": "1.19.5",
+          "version_tested": true,
+          "tested_series": "1.19.5"
+        },
+        {
+          "name": "staticcheck",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "gitleaks",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "ruff",
+          "status": "found",
+          "version": "0.16.3",
+          "version_tested": true,
+          "tested_series": "0.16"
+        },
+        {
+          "name": "mypy",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "pyright",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "bandit",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "lizard",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "cppcheck",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "clang-tidy",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "eslint",
+          "status": "unusable",
+          "version_tested": false,
+          "tested_series": "10.15",
+          "reason": "eslint needs @eslint/js installed beside it in the same node_modules"
+        },
+        {
+          "name": "tsc",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "jscpd",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "cargo",
+          "status": "unusable",
+          "version_tested": false,
+          "tested_series": "1.99",
+          "reason": "cargo executable must resolve to a cargo binary (a rustup proxy is not accepted)"
+        },
+        {
+          "name": "clippy",
+          "status": "not_found",
+          "version_tested": false,
+          "reason": "needs cargo"
+        },
+        {
+          "name": "npm",
+          "status": "found",
+          "version": "11.16.0",
+          "version_tested": true
+        },
+        {
+          "name": "pnpm",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "yarn",
+          "status": "not_found",
+          "version_tested": false
+        },
+        {
+          "name": "uv",
+          "status": "found",
+          "version": "0.12.5",
+          "version_tested": true,
+          "tested_series": "0.12"
+        },
+        {
+          "name": "python",
+          "status": "found",
+          "version": "3.14.4",
+          "version_tested": true,
+          "tested_series": "3.11+"
+        }
+      ]
+    },
+    "github": {
+      "enabled": true,
+      "host": "github.com",
+      "token": true,
+      "account": "bob-gh",
+      "source": "web",
+      "reason": null
+    },
+    "offline": false
+  }
+}

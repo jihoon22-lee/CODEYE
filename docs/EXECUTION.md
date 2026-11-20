@@ -1,6 +1,6 @@
 # 실행
 
-분석 작업이 실제로 실행되는 방식을 정리한다. Native 실행기 계약, 노드 에이전트와 워커 런타임, 노드 프로토콜, 워커 풀과 자동 증감, 예약을 다룬다. 상태 전이와 데이터 모델은 [아키텍처](ARCHITECTURE.md), 운영 절차(개인 모드 start/stop, 저장 영역 상한, 백업·복원)는 [운영](OPERATIONS.md), 노드 경로의 HTTP 형식은 [API](API.md)에 있다.
+분석 작업이 실제로 실행되는 방식을 정리한다. Native 실행기 계약, 노드 에이전트와 워커 런타임, 노드 프로토콜, 워커 풀과 자동 증감, 예약을 다룬다. 상태 전이와 데이터 모델은 [아키텍처](ARCHITECTURE.md), 운영 절차(`codeye up`·`start`·`stop`, 저장 영역 상한, 백업·복원)는 [운영](OPERATIONS.md), 노드 경로의 HTTP 형식은 [API](API.md)에 있다.
 
 ## 객체와 범위
 
@@ -207,7 +207,7 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 - 등록 결과는 `<state-dir>/node.json`(0600, 디렉터리 0700)에 저장한다. 저장된 controller와 `--controller`가 다르면 요청을 보내기 전에 종료한다(exit 2). 노드 비밀값을 다른 controller에 보내지 않기 위해서다.
 - `<state-dir>/agent.lock`에 배타 flock을 건다. 같은 state dir의 두 번째 agent는 journal·identity를 건드리기 전에 종료한다(exit 1).
 - 로그는 stderr의 JSON 줄(`code`와 ID)이다. 비밀값·토큰을 쓰지 않는다. 상태 판단은 controller API로 하고 로그는 진단용이다.
-- `SIGUSR1`(개인 모드 `codeye stop`)은 drain이다. 새 claim을 멈추고 실행 중 작업을 끝낸 뒤 정상 종료한다([운영](OPERATIONS.md)).
+- `SIGUSR1`(`codeye stop`)은 drain이다. 새 claim을 멈추고 실행 중 작업을 끝낸 뒤 정상 종료한다([운영](OPERATIONS.md)).
 
 | 종료 코드 | 의미 |
 |---|---|
@@ -375,7 +375,7 @@ codeye serve [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] ...
 - 등록 토큰의 `--source-root`가 그 노드가 claim할 수 있는 local root를 정한다(노드가 알린 능력과 둘 다 필요하다).
 - pool은 이름으로 처음 쓸 때 만든다.
 - `node revoke`는 credential을 즉시 무효화한다. 그 노드의 인증·heartbeat·claim이 바로 거부되고 실행 중인 에이전트는 작업을 취소한 뒤 종료 코드 4로 끝난다. 정리 보고를 보낼 수 없으므로 lease는 만료 뒤 `recovery_required`가 되고, 사람이 정리를 확인한다(`codeye run recover`, [lease와 만료](#lease와-만료)).
-- `codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]`은 `CODEYE_DATABASE_URL`의 DB(`--config`를 주거나 URL이 없으면 개인 모드 설정의 DB)에서 `recovery_required` run의 정리를 운영자가 확인한 것으로 기록하고(감사 `run.recovery_confirmed`, 행위자 `operator_cli`) 요청자 대신 다시 대기열에 넣는다. `--confirm-cleanup`이 없으면 종료 코드 2다. 출력 JSON은 `confirmed_run`, `attempt_id`, `epoch`, `status`(`failed`), `retry`(`same_run`·`new_run`·`not_queued`), `run`, `not_queued_reason`이다.
+- `codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]`은 `CODEYE_DATABASE_URL`의 DB(`--config`를 주거나 URL이 없으면 서비스 설정 파일의 DB)에서 `recovery_required` run의 정리를 운영자가 확인한 것으로 기록하고(감사 `run.recovery_confirmed`, 행위자 `operator_cli`) 요청자 대신 다시 대기열에 넣는다. `--confirm-cleanup`이 없으면 종료 코드 2다. 출력 JSON은 `confirmed_run`, `attempt_id`, `epoch`, `status`(`failed`), `retry`(`same_run`·`new_run`·`not_queued`), `run`, `not_queued_reason`이다.
 - `scheduler set`: `--global-max-running`은 0..10000(초기값 2), `--project-max-running`은 1..10000(기본 1), `--artifact-quota-bytes`는 산출물 저장 상한(0이면 제거, [운영](OPERATIONS.md))이다.
 - `serve`의 기본 artifact 디렉터리는 실행 위치 기준 `.codeye/artifacts`다.
 
@@ -397,13 +397,15 @@ claim 트랜잭션:
 
 1. `scheduler_limits` 행을 잠그고 노드 행을 잠근다. 노드 철회, heartbeat 신선도(20초), 전역 활성 예약 수 < 상한, 노드 여유, 노드 저장 영역 상한, 산출물 저장 상한, pool 상한을 확인한다.
 2. queued run을 공정 순서로 keyset page(200개)씩 끝까지 훑어 호환 run을 찾는다. 앞쪽의 비호환 run이 뒤 run을 굶기지 않는다. 프로젝트 동시 실행 상한에 걸린 프로젝트의 run은 건너뛴다.
-3. 호환 조건: `analysis:<profile>` 능력. local이면 `source:local:<root>` 능력과 등록 토큰의 root 허가. Git이면 `source:git:<host>`. 고정 snapshot이면 그 노드의 `snapshot_locations`. 저장된 요청·소스가 현재 규칙으로 해석되지 않는 run은 배정하지 않고 그대로 둔다.
+3. 호환 조건: `analysis:<profile>` 능력. local이면 `source:local:<root>` 능력과 등록 토큰의 root 허가, 또는 controller와 같은 머신의 노드가 알리는 `source:controller`(모든 root). Git이면 `source:git:<host>` 또는 `source:controller`(승인된 모든 host). 고정 snapshot이면 그 노드의 `snapshot_locations`. 저장된 요청·소스가 현재 규칙으로 해석되지 않는 run은 배정하지 않고 그대로 둔다.
 4. 후보의 project·run을 잠근 뒤 `queued` 여부와 미해제 attempt 부재를 다시 확인한다. 요청자가 비활성이거나 실행 권한을 잃었으면 `actor_revoked`, local 프로젝트의 source root 권한을 잃었으면 `source_grant_revoked`로 run을 실패 처리하고 대기 task를 `skipped_policy`로 둔다.
 5. attempt(epoch+1), `capacity_reservations`, run `preparing`, 워커 `busy`, 프로젝트 배정 시각, `attempt.leased` 이벤트, 멱등 응답을 같은 트랜잭션에 기록한다. 어느 단계든 실패하면 전부 rollback된다.
 
 claim 응답의 job:
 
-- local source는 `source_root_id`·`relative_path`만 보낸다. 서버는 노드 경로를 보내지도 저장하지도 않는다. Git은 URL·branch·host를 보낸다.
+- local source는 `source_root_id`·`relative_path`만 보낸다. 서버는 노드 경로를 저장하지 않는다. `source:controller` 노드(`codeye up`이 띄운 에이전트, `--controller-sources`)에는 웹에서 더한 root도 쓸 수 있도록 controller의 root 경로(`root_path`)를 함께 보낸다. Git은 URL·branch·host를 보낸다.
+- `analysis`는 프로젝트의 분석 선택, `offered`는 run을 시작한 사람에게 서비스가 허용하는 것(`{model_review, build_scripts}`, 활성 관리자는 둘 다 true, 아니면 관리자 스위치)이다. 프로젝트 선택을 따르는 노드는 둘의 교집합만 하고, `offered` 때문에 빠진 것은 보고서 한계 `model_review_not_offered`·`repository_code_not_offered`가 된다.
+- `git_credential_user`는 run을 시작한 사람(예약 run은 예약을 만든 사람)이다. `--git-credential-dir`를 받은 노드는 그 사람의 token 파일만 읽고, 없으면 token 없이 가져온다([누구의 token인가](GITHUB.md#누구의-token인가)).
 - 고정 입력 재시도는 `job.snapshot`(ID, manifest digest, kind, consistency, source SHA)을 함께 보낸다. 워커는 그것을 로컬에서 `Load`하고 다시 가져오지 않는다.
 - `resources`는 그 claim이 잡은 예약이다(OS 제한이 아니다).
 

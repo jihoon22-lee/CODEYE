@@ -439,6 +439,17 @@
 
 [보안](SECURITY.md) · [API](API.md)
 
+**A52 — 모드 대신 권한: `codeye up` 하나의 웹 서비스.** (기록 2026-11-20) REQ-001/002/024, NFR-006과 TC-256~TC-263에 대해 다음을 확정한다. A15의 "loopback 전용", A36 5·6의 "개인 사용자"와 "`codeye up`은 loopback만", A40 2·7의 개인 모드 한정, A46 1·6의 "token은 `codeye up`을 실행한 사람 하나"를 바꾼다. 개인 모드·서버 모드라는 구분을 제품에서 없앤다. 설정 파일 이름(`personal.json`), `serve --personal`, 내부 패키지 이름은 이전 설치와의 호환을 위해 그대로 둔다.
+
+1. **다른 머신에 서비스.** `codeye up --listen ADDR`은 TLS(`--tls-cert`·`--tls-key`·`--public-origin`) 또는 운영자가 명시한 `--plain-http`로 loopback이 아닌 주소를 듣는다. 평문 HTTP는 막지 않고 시작할 때 한 줄로 알린다(쉬운 사용을 막는 관문 대신 한계를 기록한다는 방향). controller는 수신 주소마다 Host·Origin·cookie 규칙을 따로 가진다(`ConnContext`로 고른다). 같은 머신의 에이전트와 명령은 별도의 loopback 수신 주소(`local_listen`, 기본 공개 포트 + 1)를 쓴다. TLS 주소에 붙으려면 에이전트가 사설 인증서를 믿어야 하고, 평문 공개 주소를 쓰면 노드 secret이 평문으로 흐르기 때문이다. 로그인 링크와 "이 서비스 주소"는 public origin이다.
+2. **token은 사람마다, 쓰는 것은 행동한 사람의 것.** 사용자마다 `<state>/secrets/github-users/<id>.json`(0600)에 github.com token을 둔다. DB에 두지 않은 것은 백업에 비밀값을 넣지 않기 위해서다(복원 뒤 다시 넣는다). 관리자의 token은 `codeye up`이 찾은 것이다. 규칙은 하나다: **GitHub 호출은 그 호출이 대신하는 사람의 token만 쓴다.** run의 pull request 고정·Git fetch·결과 댓글은 run을 시작한 사람(예약 run은 예약의 actor), 미리보기는 요청한 사람이다. 대안이던 "프로젝트 소유자의 token"은 구성원이 고른 저장소나 구성원이 시작한 run에 소유자의 token이 쓰여 기각했다. 그 결과 구성원은 비공개 저장소를 자기 token으로 읽을 수 있어야 하고, token이 없는 사람의 run은 공개 저장소만 읽으며 댓글은 `no_token`으로 남는다.
+3. **서버 폴더는 허가만.** 경로 분석은 허가된 폴더가 있는 모든 사용자에게 열린다. 관리자가 웹에서 폴더를 더하고 사용자별 또는 모두에게(`source_root_everyone`, migration 0014) 연다. source root 행은 바꿀 수 없게 되어 있어(trigger) "모두에게"를 별도 표로 두었다. 허가 판단은 SQL 술어 하나를 등록·목록·setup·자동 증감·배정 재확인이 같이 쓴다. OS 계정 권한 확인은 연결점만 둔다(서비스 계정 권한으로 읽는다는 한계를 문서에 적는다).
+4. **두 스위치.** "다른 사용자도 모델 검토 사용"(기본 켬)과 "다른 사용자의 저장소 빌드 스크립트 실행 허용"(기본 끔)을 `service_settings`에 둔다. run을 시작한 사람이 활성 관리자가 아니면 배정의 `offered`가 그 범위를 노드에 알리고, 노드는 노드 상한·프로젝트 선택·`offered`를 모두 만족할 때만 실행한다. 스위치 때문에 빠진 검토는 `model_review_not_offered`·`repository_code_not_offered`로 따로 기록해 "프로젝트가 끔"과 구분한다. 기준을 소유자가 아닌 run을 시작한 사람으로 둔 것은 2와 같은 이유다.
+5. **재시작 없는 웹 관리.** `codeye up`이 띄운 에이전트는 `source:controller` 능력을 알리고, 그런 노드에는 배정이 root 경로와 Git host를 실어 보낸다. 웹에서 더한 폴더·host가 에이전트 재등록 없이 쓰인다. 이 능력은 노드를 설치·등록하는 운영자 권한 안의 일이라 따로 막지 않는다.
+6. **같은 첫 화면.** `GET /setup`이 사용자마다 쓸 수 있는 것과 이유(`available`)를 답하고 `mode`를 없앤다. 도구 경로는 관리자에게만 보인다. 첫 화면의 입력란은 모든 사용자에게 같고, 같은 소스의 프로젝트를 다시 여는 것은 `open_existing`으로 요청이 고른다(API의 기본은 `local_path`만 true라 이전 클라이언트의 201 동작을 바꾸지 않는다).
+
+[보안](SECURITY.md#서버-경로-허가) · [GitHub](GITHUB.md#누구의-token인가) · [안내서](GUIDE.md#다른-사람-초대)
+
 ## 폐쇄망 배포
 
 **A47 — 폐쇄망 배포팩과 오프라인 모드.** (기록 2026-11-20) REQ-030, NFR-001/006과 TC-30, TC-240~245에 대해 다음을 확정한다.

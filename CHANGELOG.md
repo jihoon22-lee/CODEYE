@@ -4,6 +4,16 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 추가 — 한 서비스, 사용자별 허가
+
+- **다른 머신에 서비스**: `codeye up --listen ADDR --plain-http`(경고 한 줄과 함께 평문 HTTP) 또는 `--tls-cert`·`--tls-key`·`--public-origin`(TLS). 듣는 방식은 설정 파일에 저장돼 `codeye start`와 사용자 서비스도 같은 주소로 뜬다. 이 머신의 에이전트와 명령은 loopback listener(기본은 listen 포트 + 1)를 쓴다. 로그인 링크와 관리 화면의 "이 서비스 주소"는 public origin이다([다른 사람 초대](docs/GUIDE.md#다른-사람-초대), A52).
+- **모드 대신 사용자별 허가**: 같은 시작 화면에서 각 사람이 분석할 수 있는 것을 허가로 정한다. 관리자는 웹에서 서버 폴더를 더하고 사용자별로 또는 모두에게 열며(`POST /admin/source-roots`, `PUT /admin/source-roots/{id}/everyone`), Git host를 승인하고(`POST /admin/providers`), 두 스위치 "다른 사용자도 모델 검토 사용"(기본 켬)·"다른 사용자의 저장소 빌드 스크립트 실행 허용"(기본 끔)을 바꾼다(`GET`·`PUT /admin/settings`). 스위치는 run을 시작한 사람 기준이고, 스위치 때문에 빠진 것만 보고서에 `model_review_not_offered`·`repository_code_not_offered`로 남는다. 허용된 폴더가 없는 사람에게는 "이 서버에서 읽도록 허용된 폴더가 없습니다. …"와 읽을 수 있는 폴더 목록을 보인다. `GET /setup`은 사용자마다 답하고 `mode` 필드가 없어졌다.
+- **사용자별 GitHub token**: 계정 메뉴의 GitHub 연결(`GET`·`PUT`·`DELETE /account/github`). token은 `secrets/github-users/<user_id>.json`(0600)에만 있고 응답·로그·감사 detail에 없다. `codeye up`이 찾은 token은 관리자의 연결이다. 모든 GitHub 호출은 그 호출이 대신하는 사람의 token을 쓴다(pull request 고정·Git fetch·결과 댓글은 run을 시작한 사람, 미리 보기는 요청한 사람). token이 없으면 공개 저장소만 읽고 댓글은 `no_token`으로 남는다([누구의 token인가](docs/GITHUB.md#누구의-token인가)).
+- **`codeye up`의 에이전트**는 웹에서 더한 폴더와 Git host를 job에서 받는다(`--controller-sources`, `--git-credential-dir`). 따로 띄운 노드는 운영자 플래그를 상한으로 둔다.
+- migration 0014(`source_root_everyone`, `service_settings`, 감사 action `source_root.everyone_set`·`service.settings_set`·`account.github_token_set`·`account.github_token_removed`). `POST /projects`의 `open_existing`(같은 폴더·저장소면 그 프로젝트를 연다).
+- **고침**: `codeye up --listen ADDR`이 ADDR를 분석 대상으로 읽던 것. 시험 하나(`TestUpGitTarget`)가 실행한 사람의 실제 상태 디렉터리(`~/.local/state/codeye`)를 만들던 것. 새 설치의 관리자 표시 이름은 `admin`이다(기존 설치는 그대로).
+- **확인**: 두 사용자 smoke(`scripts/test_postgres.py --web-service`, TC-263)가 loopback 별칭의 평문 HTTP와 자체 서명 TLS에서 통과했다. 이 호스트의 LAN 주소로 TLS와 `--plain-http`를 한 번씩 손으로 띄워 다른 사용자의 로그인·시작 화면을 확인했다. 실제 다른 물리 머신의 브라우저와 GHES는 시험하지 않았다.
+
 ### 추가 — 여러 노드 검증과 운영 수용
 
 - **정리 확인**: `recovery_required` run을 사람이 "노드에 남은 프로세스가 없음"을 확인한 뒤 끝낸다. API `POST /runs/{id}/recover`(`{"cleanup_confirmed": true}`), 운영자 CLI `codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]`(개인 모드는 설정의 DB), 웹의 확인 상자와 단추. 한 트랜잭션에서 attempt `released`·`confirmed`, 예약 해제, run `failed`(`operator_confirmed`), 감사 `run.recovery_confirmed`이고 이어서 다시 시도처럼 대기열에 넣는다(신선한 노드가 snapshot을 가질 때만 같은 run). pull request run은 고정한 pull request(head SHA·변경 파일)와 댓글 선택을 그대로 가진 채 다시 들어간다([정리 확인](docs/API.md#정리-확인), A48, migration 13).

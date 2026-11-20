@@ -26,7 +26,7 @@
 
 ## 여러 사용자·GitHub 연동·분산 운영
 
-개인 모드의 token 발견, 비공개 저장소, pull request 분석과 결과 댓글 하나는 끝났다([GitHub 연결](GITHUB.md), A46). 아래 두 작업은 여러 사람이 쓰는 서버 설치의 App 경로다. 개인 모드의 고정·게시 경로(`runs.pull_request`, 댓글 outbox)를 그대로 쓴다.
+사용자별 GitHub token, 비공개 저장소, pull request 분석과 결과 댓글 하나는 끝났다([GitHub 연결](GITHUB.md), A46·A52). `codeye up` 하나가 다른 머신의 사용자에게도 서비스하고, 각 사람이 무엇을 분석할 수 있는지는 사용자별 허가로 정한다(A52). 아래 두 작업은 token 대신 GitHub App으로 연결하는 경로다. 지금의 고정·게시 경로(`runs.pull_request`, 댓글 outbox)를 그대로 쓴다.
 
 ### GitHub 연결
 
@@ -116,7 +116,8 @@ GitHub.com에서는 시험용 저장소와 App으로 검증한다. GHES는 [아�
 
 - Container 실행기(ContainerExecutor). Native 실행을 대체하지 않는 선택 실행기다.
 - 고비용 interfile 분석.
-- 추가 OS(Windows의 개인 모드 start/stop 포함).
+- 추가 OS(Windows의 `codeye up`·`start`·`stop` 포함).
+- 서버 폴더 허가에 OS 계정 권한(POSIX 소유자·그룹) 확인을 더하는 것. 지금은 관리자가 연 폴더를 서비스 계정 권한으로 읽는다([서버 경로 허가](SECURITY.md#서버-경로-허가)).
 - 인프라 용량 공급자(CapacityProvider): 클라우드 VM 생성·삭제는 초기 범위 밖이다.
 - PDF 내보내기.
 

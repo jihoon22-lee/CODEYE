@@ -25,7 +25,7 @@ flowchart TD
   OC --> LM[Configured LLM]
 ```
 
-- 개인 모드는 한 PC에 관리 서버(controller)·PostgreSQL·노드 에이전트를 둔다([운영](OPERATIONS.md)). 워커가 다른 노드로 옮겨도 관리 API 계약은 같다.
+- `codeye up`은 한 머신에 관리 서버(controller)·PostgreSQL·노드 에이전트를 두고, 같은 서비스를 다른 머신의 사용자에게도 연다([운영](OPERATIONS.md)). 워커가 다른 노드로 옮겨도 관리 API 계약은 같다.
 - 노드 에이전트는 controller에 outbound HTTPS 연결만 만든다. SSH 원격 실행은 없다. 노드와 워커는 DB에 접근하지 않는다.
 - 스냅샷 사본은 그것을 만든 노드에 남는다. manifest와 결과 산출물만 인증된 API로 controller에 전송한다. 그래서 고정 입력 재시도에는 그 스냅샷을 보유한 노드가 필요하다. 노드 간 스냅샷 전송은 없다.
 - NFS는 필수 공용 버스가 아니다. 선택적인 소스 경로일 뿐이다.
@@ -422,7 +422,7 @@ Go 모듈, Rust crate, JS/TS 패키지, Python 패키지(wheel만) 의존성 받
 
 ### 선택과 계획
 
-- 프로젝트 선택 `fetch_dependencies`(기본 켜짐, 웹 "고급"의 "의존성 받기")와 노드 운영자 스위치(`--dependency-fetch`)가 둘 다 켜져야 계획한다. 개인 모드는 스위치를 켠다. 서버 모드 노드는 기본 꺼짐이다. 저장된 선택에 필드가 없으면 켜짐으로 읽고, 꺼짐일 때만 저장한다.
+- 프로젝트 선택 `fetch_dependencies`(기본 켜짐, 웹 "고급"의 "의존성 받기")와 노드 운영자 스위치(`--dependency-fetch`)가 둘 다 켜져야 계획한다. `codeye up`이 띄운 에이전트는 스위치를 켠다. 따로 띄운 노드는 기본 꺼짐이다. 저장된 선택에 필드가 없으면 켜짐으로 읽고, 꺼짐일 때만 저장한다.
 - 꺼져 있으면 `deps.*` task를 하나도 계획하지 않는다. 계획·보고서는 선택이 없던 때와 같다.
 - `deps.Wrap`은 탐색 wrapper 안, 검토 wrapper 밖에 놓인다. 검토 역할은 정적 handler의 계획만 보므로 `deps.*` task를 보지 않는다.
 - task key는 `deps.<ecosystem>`과 `deps.<ecosystem>.mNN`이다. 접미사는 그 생태계 분석기의 모듈 key 접미사와 같다(Go는 go vet, Rust는 cargo check, Python은 mypy·pyright의 모듈 계획을 그대로 쓴다. JS/TS는 lockfile이 있는 설치 루트마다 하나이고 tsc·type-aware ESLint가 같은 계획으로 기록을 찾는다). 그래서 받는 작업 디렉터리와 분석기 작업 디렉터리가 같다.
@@ -432,7 +432,7 @@ Go 모듈, Rust crate, JS/TS 패키지, Python 패키지(wheel만) 의존성 받
 ### 실행
 
 - 받기는 실행 사본(workspace)의 모듈 디렉터리 또는 task의 빈 작업 디렉터리(Python)에서 executor(argv·cwd·환경변수·제한시간)로 실행한다. 원본 경로와 snapshot에서는 실행하지 않고 둘 다 보호 root다.
-- 받은 의존성은 노드 캐시(`--dependency-cache-dir`, 기본 에이전트 `<state-dir>/cache/deps`, 개인 모드 `state_dir/cache/deps`)에 둔다. 개인 모드의 위치는 에이전트 디렉터리 밖이라 에이전트가 다시 등록돼도 남는다. 생태계별 하위 디렉터리를 run과 attempt가 공유한다. attempt별 파일(사본 manifest, 실행 로그, 기록)은 `<scratch>/deps/<key>/` 아래에 있고 attempt scratch와 함께 지워진다.
+- 받은 의존성은 노드 캐시(`--dependency-cache-dir`, 기본 에이전트 `<state-dir>/cache/deps`, `codeye up`은 `state_dir/cache/deps`)에 둔다. `codeye up`의 위치는 에이전트 디렉터리 밖이라 에이전트가 다시 등록돼도 남는다. 생태계별 하위 디렉터리를 run과 attempt가 공유한다. attempt별 파일(사본 manifest, 실행 로그, 기록)은 `<scratch>/deps/<key>/` 아래에 있고 attempt scratch와 함께 지워진다.
 - 레지스트리는 argv·환경변수로 정한다. executor는 네트워크를 막거나 허용 목록으로 제한하지 않는다. 받는 도구가 다른 주소로 접속하지 않는다는 것은 도구 설정에 기대며 플랫폼이 강제하지 않는다.
 - 저장소 코드(빌드 스크립트·lifecycle script)를 실행하지 않는다. 그런 실행은 별도 선택 `run_build_scripts`의 몫이다([분석기](ANALYZERS.md#저장소-코드-실행-허가)). `deps.rust`는 cargo가 저장소 Cargo 설정을 읽고, 받은 crate를 쓰는 cargo check·clippy가 build script를 실행하므로 그 허가가 있을 때만 받는다. JS/TS 설치는 lifecycle script를 끄고 실행하므로 허가와 무관하다.
 - 느리거나 실패하는 레지스트리는 그 task만 끝낸다. 분석기와 검토는 계속 실행하고 부족한 입력은 보고서 공백으로 남는다.
@@ -680,7 +680,7 @@ migration 이력은 `codeye_schema_migrations(version, name, checksum, applied_a
 
 ### 연결과 migration
 
-- 운영자는 CODEYE 전용 DB와 schema owner 계정을 준비하고 `CODEYE_DATABASE_URL`을 프로세스 환경으로 전달한다. DSN을 명령행 인자나 저장소에 넣지 않는다. 개인 모드의 관리형 PostgreSQL은 CODEYE가 상태 디렉터리에 cluster를 만들고 같은 환경변수로 controller에 전달한다([운영](OPERATIONS.md#관리형-postgresql)).
+- 운영자는 CODEYE 전용 DB와 schema owner 계정을 준비하고 `CODEYE_DATABASE_URL`을 프로세스 환경으로 전달한다. DSN을 명령행 인자나 저장소에 넣지 않는다. `codeye up`의 관리형 PostgreSQL은 CODEYE가 상태 디렉터리에 cluster를 만들고 같은 환경변수로 controller에 전달한다([운영](OPERATIONS.md#관리형-postgresql)).
 - 연결 URL에는 host·user·database가 있어야 한다. TLS 기본은 `verify-full`이고 평문은 literal loopback만 허용한다. 승인된 root CA는 URL의 `sslrootcert`로 지정한다.
 - 저장 계층은 연결에 영향을 주는 `PGHOST`, `PGSERVICE`, `PGPASSWORD`, `PGOPTIONS` 등의 libpq 환경변수가 있으면 거부한다. Windows 설치 경로 `PGROOT`·`PGBIN`은 연결 변수가 아니므로 허용한다. psql 설정, 개인 client certificate, passfile을 자동으로 쓰지 않는다.
 - 원시 DSN과 SQL 오류 detail은 CLI·API 공개 오류로 보내지 않는다.

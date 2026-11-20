@@ -480,6 +480,57 @@ def check_account_contracts() -> None:
           f"examples/accounts.json; {negatives} negative cases)")
 
 
+def check_shared_service_contracts() -> None:
+    """One service, per-user permissions (docs/API.md#설치-정보, A52): the
+    answers recorded from a real `codeye up --plain-http` fit their OpenAPI
+    schemas; a user's setup says why a path cannot be used exactly when no
+    folder is readable; the GitHub connection never carries a token."""
+    example = json_file(ROOT / "examples/shared-service.json")
+    setup, account, settings, root, provider, error = (api_validator(n) for n in ("Setup", "AccountGitHub", "ServiceSettings", "AdminSourceRoot", "AdminProvider", "Error"))
+
+    def check(doc: dict) -> None:
+        for key in ("setup_member", "setup_member_after"):
+            s = doc[key]
+            setup.validate(s)
+            path = s["available"]["local_path"]
+            ensure(path["available"] == bool(s["readable_folders"]) and (path["reason"] == "no_allowed_folder") == (not s["readable_folders"]),
+                   "local_path availability must follow readable_folders")
+            for tool in (s["tools"] or {}).get("tools", []):
+                ensure(s["is_admin"] or not {"path", "hint", "source"} & set(tool), "A user who is not an administrator sees no tool path or hint")
+            built = s["available"]["build_scripts"]
+            ensure(built["available"] or s["analysis_defaults"]["local"]["run_build_scripts"] is False,
+                   "A switch that is off must also turn the default off")
+        error.validate(doc["folder_refusal"])
+        refusal = doc["folder_refusal"]["error"]
+        ensure(refusal["code"] in ("LOCAL_PATH_NOT_ALLOWED", "FOLDER_NOT_READABLE") and isinstance(refusal.get("details", {}).get("readable_folders"), list),
+               "A refused path names the folders the user may read")
+        account.validate(doc["account_github"])
+        ensure("token" not in doc["account_github"], "The GitHub connection never answers the token")
+        settings.validate(doc["settings"])
+        root.validate(doc["source_root"])
+        provider.validate(doc["provider"])
+        ensure(doc["source_root"]["path"] in doc["setup_member_after"]["readable_folders"] and doc["source_root"]["everyone"],
+               "A folder opened to everyone is readable by every user")
+
+    check(example)
+    negatives = 0
+    for name, edit in (
+        ("setup with a mode", lambda d: d["setup_member"].update(mode="server")),
+        ("connection that answers the token", lambda d: d["account_github"].update(token="ghp_example-token")),
+        ("path available without a folder", lambda d: d["setup_member"]["available"]["local_path"].update(available=True, reason=None)),
+        ("tool path shown to a user", lambda d: d["setup_member"]["tools"]["tools"][0].update(path="/usr/bin/go")),
+        ("reason outside the vocabulary", lambda d: d["setup_member"]["available"]["build_scripts"].update(reason="server_mode")),
+        ("settings without the service address", lambda d: d["settings"].pop("service_origin")),
+        ("refusal without readable folders", lambda d: d["folder_refusal"]["error"].pop("details")),
+        ("provider of another kind", lambda d: d["provider"].update(kind="gitlab")),
+    ):
+        bad = copy.deepcopy(example)
+        edit(bad)
+        expect_invalid(name, check, bad)
+        negatives += 1
+    print(f"PASS: shared service contracts (examples/shared-service.json; {negatives} negative cases)")
+
+
 def resolve_pointer(document, pointer: str):
     if not pointer:
         return document

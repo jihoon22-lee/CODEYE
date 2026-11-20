@@ -27,7 +27,7 @@ from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_v
 from bundle_checks.report import check_analyzer, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
 from bundle_checks.review import ROLE_STAGES, check_environment_example, check_review_example, check_role_pack_examples, check_slice_examples, role_pack, slice_examples
-from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
+from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_source_names, heading_anchors
 
 
@@ -71,6 +71,7 @@ def main() -> None:
     check_schedule_contracts()
     check_comparison_contracts(json_file(ROOT / "examples/report-go-vet.json"))
     check_account_contracts()
+    check_shared_service_contracts()
     check_holdout_corpus()
     events = yaml_file(ROOT / "api/openapi.yaml")["paths"]["/api/v1/attempts/{attempt_id}/events"]["post"]
     payloads = events["requestBody"]["content"]["application/json"]["schema"]["properties"]["payload"]["oneOf"]
