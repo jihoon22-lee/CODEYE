@@ -271,15 +271,13 @@ func (s *roleStage) fits(instructions string, input []byte, reserve bool) (int, 
 	return n, n <= PromptBudget
 }
 
-// exchange sends one request and at most one bounded format repair. parse
-// validates an output and returns platform error codes; it must keep its
-// result aside until it returns none. A model failure fails the task with
-// the client's reason; an output still invalid after the repair fails it
-// with review_output_invalid and no model content is kept.
+// exchange sends a request and handles bounded retries and format repair.
+// parse validates an output and returns platform error codes; it must keep
+// its result aside until it returns none.
 func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte, error), parse func(json.RawMessage) []string) *analysis.TaskResult {
 	instructions := s.instructions(contract)
 	var repair *outputRepair
-	repaired, retried := false, false
+	repaired, retried, proofRetried := false, false, false
 	maxCalls := record.RoleMaxCalls
 	if s.role == record.StageContract {
 		maxCalls = record.ContractMaxCalls
@@ -301,17 +299,8 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 		if size > PromptBudget {
 			return s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 		}
-		if s.role == record.StageContract {
-			used, err := callsUsed(s.j)
-			if err != nil {
-				return s.fail(result(domain.TaskFailed, reasonCallCountFailed))
-			}
-			if used >= s.h.maxCalls() {
-				return s.fail(result(domain.TaskBudgetExhausted, reasonBudgetExhausted))
-			}
-		}
-		if err := s.countCall(); err != nil {
-			return s.fail(result(domain.TaskFailed, reasonCallCountFailed))
+		if r := s.reserveCall(); r != nil {
+			return s.fail(*r)
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
 		s.rec.Limitations = noteVersion(s.rec.Limitations, reply)
@@ -323,6 +312,15 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 				call.Outcome = "model_unavailable"
 			}
 			s.rec.Calls = append(s.rec.Calls, call)
+			if reply.WorkspaceProofMismatch() {
+				if s.ctx.Err() != nil {
+					return s.fail(result(domain.TaskCancelled, "cancelled"))
+				}
+				if !proofRetried && attempt < maxCalls {
+					proofRetried = true
+					continue
+				}
+			}
 			return s.fail(failure(reply))
 		}
 		notJSON := reply.Reason != ""
@@ -358,6 +356,25 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 		repair = &outputRepair{OutputErrors: call.OutputErrors}
 	}
 	return s.fail(result(domain.TaskFailed, reasonOutputInvalid))
+}
+
+// reserveCall checks the attempt's ledger before recording a call. Tasks
+// within one attempt execute sequentially, so both operations see the same
+// call count.
+func (s *roleStage) reserveCall() *analysis.TaskResult {
+	used, err := callsUsed(s.j)
+	if err == nil {
+		if used >= s.h.maxCalls() {
+			r := result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
+			return &r
+		}
+		err = s.countCall()
+	}
+	if err != nil {
+		r := result(domain.TaskFailed, reasonCallCountFailed)
+		return &r
+	}
+	return nil
 }
 
 // noteExecutionClaim records at stage level that the platform rejected a
