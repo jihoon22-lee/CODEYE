@@ -32,7 +32,7 @@ func checkInPageLinks(t *testing.T, html []byte) {
 // examples: sections in order of value, no format errors, every in-page
 // link has its target, and the full level is the sectioned layout as it was.
 func TestSummaryLayout(t *testing.T) {
-	for _, path := range []string{"../../examples/report.json", "../../examples/report-slices.json", "testdata/report-slices-builder7.json"} {
+	for _, path := range []string{"../../examples/report.json", "../../examples/report-slices.json"} {
 		t.Run(path, func(t *testing.T) {
 			r := storedExample(t, path)
 			d := strings.Repeat("0", 64)

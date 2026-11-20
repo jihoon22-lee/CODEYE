@@ -575,7 +575,7 @@ def check_doctor_operations(validator, example) -> None:
     bad["tools"][0]["path"] = "/home/user/.local/bin/go"
     cases.append(("tool path in the doctor report", bad))
     bad = copy.deepcopy(example)
-    bad["checks"] = [c for c in bad["checks"] if c["id"] != "database"] + [{"id": "model", "status": "unverified", "reason": "adapter_contract_pending_w10"}]
+    bad["checks"] = [c for c in bad["checks"] if c["id"] != "database"] + [{"id": "model", "status": "unverified", "reason": "adapter_contract_pending"}]
     cases.append(("a check that is no longer reported", bad))
     # The offline readiness section (docs/OPERATIONS.md#오프라인-준비-점검) is optional and closed.
     ensure("offline" in example, "Doctor example lacks the offline readiness section")

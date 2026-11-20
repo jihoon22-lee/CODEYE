@@ -1,0 +1,199 @@
+{
+  "schema_version": "0.2",
+  "pack": {
+    "id": "review",
+    "version": "2.0.0"
+  },
+  "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+  "run_id": "0195f3a0-0000-7000-8000-000000000025",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000026",
+  "stage": "verify",
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "review.documents",
+      "state": "accepted",
+      "sha256": "8c31f1e9edebf2871e8ceaee64c3e5227caf08ba59c2729fa424a8d434eca8dd"
+    },
+    {
+      "source": "review.investigate",
+      "state": "accepted",
+      "sha256": "f6d755d4a0e632ceb4fbb59129847047940aa8d71319bf0d6108c43f5e4087ff"
+    },
+    {
+      "source": "review.interpret",
+      "state": "accepted",
+      "sha256": "3008e62b77d02ee40f2697d565ca9ebf43e3ed7e2e099fa5901ba17116af625d"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_d8975f7e76b3341894d27aec",
+      "path": "gateway.go",
+      "sha256": "a03fee1a659e56ed4175a7562b7a6838839236d736e602444b8ed2fdb65958d8",
+      "start_line": 1,
+      "end_line": 16,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_a663434311b594dfb09cfd15",
+      "path": "README.md",
+      "sha256": "cb8e4c2940c4429f22db9ad7b760e6b0adc48f82d0129177fe406c8da145bd3d",
+      "start_line": 1,
+      "end_line": 9,
+      "kind": "document"
+    },
+    {
+      "id": "ev_405823cae53ecf5dd298c5fd",
+      "path": "gateway.go",
+      "sha256": "a03fee1a659e56ed4175a7562b7a6838839236d736e602444b8ed2fdb65958d8",
+      "start_line": 3,
+      "end_line": 16,
+      "kind": "code",
+      "origin": "observation"
+    },
+    {
+      "id": "ev_5d9c489694fe844d04098f43",
+      "path": "svc/a/normalize.go",
+      "sha256": "2ebaac2aba0720821efc5e7918e69ebf5d29f4af0d88d1bd59124f9b867a89f9",
+      "start_line": 1,
+      "end_line": 10,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_ad346a78e2aa435279e67b62",
+      "path": "svc/b/charge.go",
+      "sha256": "4d5338492857ca28cf5b13535cdfe0af79fa948928a6b508c6f90aa3fa3b7c78",
+      "start_line": 1,
+      "end_line": 8,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_acbae1289c98f99498bc967e",
+      "path": "svc/b/README.md",
+      "sha256": "49ae0cef2ada45c8a3959ef394af12aa0a7d2067310d5c6eed71f021cda99744",
+      "start_line": 1,
+      "end_line": 5,
+      "kind": "document"
+    }
+  ],
+  "observations": [
+    {
+      "id": "obs_0123456789abcdef0123",
+      "task_key": "go-vet",
+      "tool": "go.vet",
+      "rule_id": "unusedresult",
+      "path": "gateway.go",
+      "start_line": 13
+    }
+  ],
+  "candidates": [
+    {
+      "id": "investigate_1",
+      "title": "Forward가 결제 호출에도 재시도를 적용할 수 있음",
+      "condition": "svc/b 결제 호출을 Forward로 감싸는 경우",
+      "impact": "결제가 중복될 수 있다.",
+      "improvement": "결제 경로에서는 재시도를 끈다.",
+      "counterpoint": "Forward를 결제에 쓰는 호출자가 발췌에 없다.",
+      "evidence_ids": [
+        "ev_d8975f7e76b3341894d27aec",
+        "ev_a663434311b594dfb09cfd15"
+      ],
+      "origin": "investigate"
+    },
+    {
+      "id": "interpret_1",
+      "title": "재시도 분기에서 결과를 버릴 수 있음",
+      "condition": "send가 실패한 뒤 다시 호출되는 경우",
+      "impact": "마지막 오류만 남는다.",
+      "improvement": "각 시도의 오류를 기록한다.",
+      "counterpoint": "마지막 오류만 반환하는 것이 문서상 계약일 수 있다.",
+      "evidence_ids": [
+        "ev_405823cae53ecf5dd298c5fd"
+      ],
+      "origin": "interpret",
+      "observation_ids": [
+        "obs_0123456789abcdef0123"
+      ]
+    }
+  ],
+  "verifications": [
+    {
+      "candidate_id": "investigate_1",
+      "verdict": "inconclusive",
+      "category": "error_handling",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "valid_conditions": [],
+      "invalid_conditions": [],
+      "supporting_evidence_ids": [
+        "ev_d8975f7e76b3341894d27aec"
+      ],
+      "counterevidence_ids": [],
+      "unresolved_assumptions": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "next_verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ],
+      "limitations": []
+    },
+    {
+      "candidate_id": "interpret_1",
+      "verdict": "inconclusive",
+      "category": "error_handling",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "valid_conditions": [],
+      "invalid_conditions": [],
+      "supporting_evidence_ids": [
+        "ev_405823cae53ecf5dd298c5fd"
+      ],
+      "counterevidence_ids": [],
+      "unresolved_assumptions": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "next_verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ],
+      "limitations": []
+    }
+  ],
+  "limitations": [
+    "caller_expansion_go_only",
+    "caller_expansion_package_functions_only",
+    "model_input_not_secret_screened",
+    "no_callers_found"
+  ],
+  "calls": [
+    {
+      "role": "verify",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.0.0",
+      "pack_sha256": "341a3ded2a1fee8b7e55c97e4ab4dd14cea8cd44b6772ecb6ffa3f6c8408b042",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml",
+        "verify.md"
+      ],
+      "request_sha256": "8985bc5ce208e669e2fc42ce0ccbed5fd2abe04a23af2d4194489335eeb4857e",
+      "request_bytes": 14694,
+      "usage": {
+        "input": 4879,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

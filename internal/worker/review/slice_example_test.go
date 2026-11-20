@@ -16,7 +16,7 @@ import (
 // clean secrets scan with the one-call script (coverageScript), indented
 // like the stage examples. CODEYE_UPDATE_EXAMPLES=1 rewrites them;
 // otherwise a regenerated run must match byte for byte.
-const sliceExampleDir = "../../../examples/review-r1/slices"
+const sliceExampleDir = "../../../examples/review/slices"
 
 const (
 	sliceExampleSnapshot = "5555555555555555555555555555555555555555555555555555555555555555"
@@ -27,13 +27,13 @@ const (
 func TestSliceExampleRecords(t *testing.T) {
 	j := coverageJob(t)
 	j.Snapshot.Digest, j.RunID, j.AttemptID = sliceExampleSnapshot, sliceExampleRun, sliceExampleAttempt
-	f := &roleCaller{script: coverageScript(t)}
-	_, res := runRoleWith(t, j, RoleHandler{Static: secretsStub{}, Caller: f, MaxCalls: DefaultMaxCalls}, "1.27.4")
+	f := &scriptedCaller{script: coverageScript(t)}
+	_, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: DefaultMaxCalls}, "1.27.4")
 	update := os.Getenv("CODEYE_UPDATE_EXAMPLES") == "1"
 	files := map[string]string{
 		"scope.json":            scopePath(j),
-		"investigate.s001.json": rolePath(j, "investigate.s001"),
-		"verify.s001.json":      rolePath(j, "verify.s001"),
+		"investigate.s001.json": recordPath(j, "investigate.s001"),
+		"verify.s001.json":      recordPath(j, "verify.s001"),
 	}
 	for _, k := range []string{record.TaskScope, "review.investigate.s001", "review.verify.s001"} {
 		if res[k].Status != domain.TaskSucceeded {

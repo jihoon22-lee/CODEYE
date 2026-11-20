@@ -48,7 +48,7 @@ CODEYE 저장소 자체의 자동 테스트(GitHub Actions)는 위 CI 비목표�
 | 실행 형태 | 상태 디렉터리의 관리형 PostgreSQL(기본) 또는 운영자가 준비한 PostgreSQL, loopback 전용 controller와 로컬 에이전트. `codeye up`·`open`·`start`·`stop`·`status`(Linux 전용), 한 머신의 여러 워커와 최소·최대 자동 증감, 취소, lease·fencing |
 | 입력 | 승인된 local source root의 경로, 승인된 HTTPS 호스트의 공개 Git 저장소 브랜치. 설명 없이 등록하고 문서·환경·모듈을 자동 탐색 |
 | 정적 분석 | Go(go vet·Staticcheck), C/C++(cppcheck·clang-tidy), Python(ruff·mypy·pyright·bandit), JS/TS(ESLint·tsc), Rust(cargo check·clippy) 다섯 언어 팩과 언어 무관 구조·중복 지표(lizard·jscpd)·비밀정보(gitleaks). 도구는 운영자가 설치하고 경로를 지정한다 |
-| 모델 검토 | 기본 검토 팩 `review-r1`(이전 기록 재현용 `review-v1`), 승인된 OpenCode 연결. 모델 없이도 도구 결과 보고서가 나온다 |
+| 모델 검토 | 검토 지침 하나(`prompts/review`), 승인된 OpenCode 연결. 모델 없이도 도구 결과 보고서가 나온다 |
 | 보고서 | 종합과 분석 종류별 절(환경·문서·정적 분석·지표·비밀정보·모델 검토·분석 공백), 개별 근거, JSON·Markdown·HTML 내보내기(코드 제외가 기본), 프로젝트별 단계 표시와 가중 진행률, SSE 재접속 |
 | 예약·이력 | 시간대가 있는 예약, 이전 실행과의 비교(absent≠fixed), 사람의 판정(disposition) |
 | 운영 | 저장 영역 상한, 같은 시점 DB·산출물 백업과 새 위치로 복원, `codeye doctor` |

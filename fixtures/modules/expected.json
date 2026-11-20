@@ -1,5 +1,5 @@
 {
-  "description": "W15 first input (docs/TESTING.md, TC-96/TC-97). Expected discovery facts for fixtures/modules/input with the injected node observation below. Digests, blob hashes, sizes, evidence IDs and attempt identities are omitted: the test binds them to the acquired snapshot manifest.",
+  "description": "Modules fixture input (docs/TESTING.md, TC-96/TC-97). Expected discovery facts for fixtures/modules/input with the injected node observation below. Digests, blob hashes, sizes, evidence IDs and attempt identities are omitted: the test binds them to the acquired snapshot manifest.",
   "injected_node_observation": {"go": "1.27.4"},
   "environment": {
     "schema_version": "0.1",

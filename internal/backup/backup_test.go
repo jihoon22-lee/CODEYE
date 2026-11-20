@@ -57,7 +57,7 @@ func freshDatabase(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatal("test DB connection failed")
 	}
-	db := "w25_" + name + "_" + strings.ReplaceAll(domain.NewID(), "-", "")[:12]
+	db := "bkptest_" + name + "_" + strings.ReplaceAll(domain.NewID(), "-", "")[:12]
 	if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{db}.Sanitize()); err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestTC32BackupRestoreRoundTrip(t *testing.T) {
 		}
 	}
 	raw, _ := os.ReadFile(filepath.Join(out, ManifestFile))
-	if strings.Contains(string(raw), "127.0.0.1") || strings.Contains(string(raw), "password") || strings.Contains(string(raw), "w25_src") {
+	if strings.Contains(string(raw), "127.0.0.1") || strings.Contains(string(raw), "password") || strings.Contains(string(raw), "bkptest_src") {
 		t.Fatal("manifest holds connection details")
 	}
 	if _, err := os.Stat(blobPath(filepath.Join(out, BlobDir), lateSHA)); !errors.Is(err, os.ErrNotExist) {

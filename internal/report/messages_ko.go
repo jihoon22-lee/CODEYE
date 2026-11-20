@@ -74,7 +74,6 @@ var Korean = Locale{
 		"tool_version_untested":           "Go: 시험하지 않은 toolchain 버전이다.",
 		"workspace_drift":                 "Go: 실행 중 workspace가 manifest와 달라졌다.",
 		LimReviewLineage:                  "검토 단계 기록이 앞 단계·탐색·도구 산출물과 이어지지 않아 제외했다.",
-		LimReviewPackMismatch:             "계획한 검토 팩과 다른 형식의 검토 기록이라 제외했다.",
 		"review_input_trimmed":            "요청 크기 한도 때문에 일부 발췌를 모델 입력에서 뺐다.",
 		"verification_budget_exceeded":    "요청 크기 한도 때문에 일부 후보를 검증하지 못했다(미검토).",
 		"verification_call_failed":        "후속 검증 호출이 실패해 일부 후보를 검증하지 못했다(미검토). 앞서 수락한 판정은 유지했다.",
@@ -319,7 +318,6 @@ var koSectionLabels = map[string]string{
 	"model.performed_observations":           "모델 해석 — %s 역할의 수락된 기록에서 가져온 모델 서술이다. 도구나 실행으로 확인한 사실이 아니다. 줄 끝의 ID는 정적 분석 절의 진단이다.",
 	"model.not_performed":                    "모델 해석 없음: %s.",
 	"model_reason.review_tasks_not_planned":  "이 실행에는 모델 검토 작업이 계획되지 않았다",
-	"model_reason.role_not_in_pack":          "이 검토 팩에는 이 역할이 없다",
 	"model_reason.role_not_planned":          "이 역할의 작업이 계획되지 않았다",
 	"model_reason.result_rejected":           "역할 기록이 검증에 실패했다",
 	"model_reason.result_missing":            "역할 기록을 읽지 못했다",
@@ -477,8 +475,7 @@ var koSectionLabels = map[string]string{
 	// review was skipped instead).
 	"secrets.model_input.not_screened_unusable": "탐지 작업 %s의 결과를 쓸 수 없어(%s: %s) 모델 입력을 비밀값 기준으로 다 거르지 못했다. 그 결과가 보고한 파일은 뺐고, 나머지 모델 입력은 기본 읽기 필터(민감값 모양·보류 파일)만 거쳤다.",
 
-	"review.pack.role":             "검토 팩: %s(역할 팩)",
-	"review.pack.legacy":           "검토 팩: %s(이전 팩)",
+	"review.pack":                  "검토 팩: %s",
 	"review.pack.none":             "이 실행에는 모델 검토 작업이 계획되지 않았다. 코드 분석은 도구 진단만으로 이뤄졌다.",
 	"review.calls":                 "모델 호출 %d회, 그중 수락 %d회(환경·문서 역할 호출 포함, 전체 합계).",
 	"review.request_bytes":         "모델 요청 크기 합계 %d바이트(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다).",

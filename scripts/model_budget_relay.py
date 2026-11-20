@@ -102,7 +102,7 @@ HALT_STATUSES = ("usage_out_of_bounds", "tier_mismatch", "model_mismatch")
 RETRYABLE_STATUSES = frozenset({408, 409, 429}) | frozenset(range(500, 600))
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
-# Answer blocking. The file is produced by fixtures/r1-quality/corpus.py forbidden.
+# Answer blocking. The file is produced by fixtures/quality-holdout/corpus.py forbidden.
 FORBIDDEN_SCHEMA = "codeye-forbidden-phrases"
 FORBIDDEN_VERSION = 1
 FORBIDDEN_NORMALIZATION = "codeye-words-v1"
@@ -692,7 +692,7 @@ class OpenAIUpstream:
                 "Authorization": "Bearer " + self._api_key,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "codeye-r0-qa-relay/1",
+                "User-Agent": "codeye-qa-relay/1",
             })
             self._tighten(connection, deadline)
             response = connection.getresponse()
@@ -846,7 +846,7 @@ def evaluate_upstream(status: int, body: bytes, prepared: dict, model: str) -> d
 # Client responses
 # ---------------------------------------------------------------------------
 def completion_body(model: str, text: str, finish: str, usage: dict | None) -> bytes:
-    body = {"id": "chatcmpl-r0-" + uuid.uuid4().hex, "object": "chat.completion",
+    body = {"id": "chatcmpl-relay-" + uuid.uuid4().hex, "object": "chat.completion",
             "created": int(time.time()), "model": model,
             "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
                          "finish_reason": finish}]}
@@ -861,7 +861,7 @@ def _client_usage(usage: dict) -> dict:
 
 
 def sse_body(model: str, text: str, finish: str, usage: dict | None, include_usage: bool) -> bytes:
-    cid, created = "chatcmpl-r0-" + uuid.uuid4().hex, int(time.time())
+    cid, created = "chatcmpl-relay-" + uuid.uuid4().hex, int(time.time())
 
     def chunk(choices, extra=None):
         payload = {"id": cid, "object": "chat.completion.chunk", "created": created,
@@ -881,7 +881,7 @@ def sse_body(model: str, text: str, finish: str, usage: dict | None, include_usa
     return "".join(events).encode()
 
 
-def error_body(code: str, kind: str = "r0_gateway_error", extra: dict | None = None) -> bytes:
+def error_body(code: str, kind: str = "qa_relay_error", extra: dict | None = None) -> bytes:
     error = {"message": "relay: " + code, "type": kind, "code": code}
     if extra:
         error.update({k: v for k, v in extra.items() if v is not None})
@@ -990,7 +990,7 @@ class Gateway:
 
     def models(self) -> bytes:
         return json.dumps({"object": "list", "data": [
-            {"id": self.model, "object": "model", "created": 0, "owned_by": "r0-qa-relay"}]}).encode()
+            {"id": self.model, "object": "model", "created": 0, "owned_by": "codeye-qa-relay"}]}).encode()
 
 
 class _UpstreamHTTPError(RequestRejected):
@@ -1004,7 +1004,7 @@ class _UpstreamHTTPError(RequestRejected):
 
 def make_handler(gateway: Gateway):
     class Handler(http.server.BaseHTTPRequestHandler):
-        server_version = "r0-qa-relay"
+        server_version = "codeye-qa-relay"
         sys_version = ""
         timeout = CLIENT_IO_TIMEOUT_S
         error_content_type = "application/json"

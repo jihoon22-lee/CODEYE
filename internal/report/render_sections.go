@@ -522,10 +522,10 @@ func newSecView(r Report, digest string, l Locale) secView {
 	c := r.CodeReview
 	cb := secBlock{ID: SectionCodeReview, Title: title(SectionCodeReview), State: states[SectionCodeReview]}
 	lead = []string{stageLine(l, c.Stage)}
-	if c.Pack == "none" {
+	if len(c.Roles) == 0 {
 		lead = append(lead, l.Label("review.pack.none"))
 	} else {
-		lead = append(lead, tf(l, "review.pack."+c.Pack, optText(c.PackID, "-")+"@"+optText(c.PackVersion, "-")), tf(l, "review.calls", c.Calls, c.AcceptedCalls))
+		lead = append(lead, tf(l, "review.pack", optText(c.PackID, "-")+"@"+optText(c.PackVersion, "-")), tf(l, "review.calls", c.Calls, c.AcceptedCalls))
 		if c.RequestBytes != nil {
 			lead = append(lead, tf(l, "review.request_bytes", *c.RequestBytes))
 		} else {

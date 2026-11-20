@@ -10,7 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// codeGroups is the module grouping of the role-pack code corpus, decided
+// codeGroups is the module grouping of the review code corpus, decided
 // from the snapshot manifest and the scope alone (no file is read): the
 // eligible code and test files of every group in rank order and the order
 // in which a round visits the groups. The overview investigate (codeCorpus)

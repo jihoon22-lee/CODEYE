@@ -115,7 +115,7 @@ func (w screenStub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec
 // input: not as code context, not as an observation window of any tool and
 // not as a verification expansion. The detection itself (fixed message,
 // path, line) is interpreted; a structure metric never is.
-func TestRolePackWithholdsSecretFiles(t *testing.T) {
+func TestReviewWithholdsSecretFiles(t *testing.T) {
 	value := "deploy-token-" + strings.Repeat("q7", 10) // not a Sensitive shape
 	j := modulesJob(t, func(root string) {
 		p := filepath.Join(root, "gateway.go")
@@ -129,9 +129,9 @@ func TestRolePackWithholdsSecretFiles(t *testing.T) {
 	script["interpret"] = func(int, opencode.Request) opencode.Reply {
 		return asJSON(map[string]any{"hypotheses": []any{}, "limits": []any{}})
 	}
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	_, res := runRole(t, j, screenStub{}, f, "1.27.4")
-	if slices.Contains(readRole(t, j, "investigate").Limitations, limNotSecretScreened) {
+	if slices.Contains(readRecord(t, j, "investigate").Limitations, limNotSecretScreened) {
 		t.Fatal("screened inputs marked unscreened")
 	}
 	if res[secretsTaskKey].Status != domain.TaskSucceeded || res["lizard"].Status != domain.TaskSucceeded {
@@ -165,7 +165,7 @@ func TestRolePackWithholdsSecretFiles(t *testing.T) {
 		t.Fatalf("interpret observations %v", rules)
 	}
 	for _, role := range []string{"investigate", "interpret"} {
-		rec := readRole(t, j, role)
+		rec := readRecord(t, j, role)
 		if !slices.Contains(rec.Limitations, limSecretWithheld) {
 			t.Fatalf("%s limitations %v", role, rec.Limitations)
 		}
@@ -191,13 +191,13 @@ func plantedJob(t *testing.T) (analysis.Job, string) {
 	return j, value
 }
 
-// Without a usable screen (screen.go) the role pack runs on the read filters
+// Without a usable screen (screen.go) the review runs on the read filters
 // alone: not run (the stand-in's not_run envelope) and ran but unusable (a
 // failed scan, or no envelope at all, also what a role would see if it ever
 // ran before the secrets task) are one case. No role is skipped, the file
 // reaches the model, every record says model_input_not_secret_screened and
 // no model input carries that code.
-func TestRolePackSecretScreenCases(t *testing.T) {
+func TestReviewSecretScreenCases(t *testing.T) {
 	for _, mode := range []string{"not_run", "failed", "missing"} {
 		t.Run(mode, func(t *testing.T) {
 			j, value := plantedJob(t)
@@ -205,7 +205,7 @@ func TestRolePackSecretScreenCases(t *testing.T) {
 			script["interpret"] = func(int, opencode.Request) opencode.Reply {
 				return asJSON(map[string]any{"hypotheses": []any{}, "limits": []any{}})
 			}
-			f := &roleCaller{script: script}
+			f := &scriptedCaller{script: script}
 			plan, res := runRole(t, j, screenStub{mode: mode}, f, "1.27.4")
 			for _, p := range plan {
 				if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status == domain.TaskSkippedPolicy {
@@ -223,7 +223,7 @@ func TestRolePackSecretScreenCases(t *testing.T) {
 				t.Fatal("unscreened inputs should carry the file (the limitation is the signal)")
 			}
 			for _, role := range []string{"environment", "documents", "investigate", "interpret", "verify"} {
-				if !slices.Contains(readRole(t, j, role).Limitations, limNotSecretScreened) {
+				if !slices.Contains(readRecord(t, j, role).Limitations, limNotSecretScreened) {
 					t.Fatalf("%s record lacks %s", role, limNotSecretScreened)
 				}
 			}
@@ -231,53 +231,9 @@ func TestRolePackSecretScreenCases(t *testing.T) {
 	}
 }
 
-// The legacy pack (review-v1) applies the same screen: its corpus leaves
-// the reported file out, and an unscreened corpus (no scan run, or an
-// unusable one) is sent and recorded (never in the pinned model input).
-func TestLegacyPackSecretScreen(t *testing.T) {
-	for _, mode := range []string{"", "not_run", "failed", "missing"} {
-		t.Run("mode="+mode, func(t *testing.T) {
-			j, value := plantedJob(t)
-			f := &roleCaller{script: map[string]func(int, opencode.Request) opencode.Reply{"context": func(_ int, q opencode.Request) opencode.Reply {
-				in := decodeInput(t, q)
-				return ok(map[string]any{"facts": []any{map[string]any{"kind": "observed", "statement": "게이트웨이는 실패한 호출을 다시 시도한다.", "evidence_ids": []string{in.Scope.Excerpts[0].ID}}}})
-			}}}
-			h := Handler{Static: screenStub{mode: mode}, Caller: f}
-			plan, err := h.Plan(t.Context(), j)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, p := range plan {
-				if !strings.HasPrefix(p.Key, "review.") {
-					h.Run(t.Context(), j, p, nil)
-				}
-			}
-			res := h.Run(t.Context(), j, analysis.TaskSpec{Key: "review.context"}, nil)
-			if res.Status != domain.TaskSucceeded || len(f.requests) != 1 {
-				t.Fatalf("%+v requests %d", res, len(f.requests))
-			}
-			in := decodeInput(t, f.requests[0])
-			hasGateway := slices.ContainsFunc(in.Scope.Excerpts, func(x Excerpt) bool { return x.Path == "gateway.go" })
-			rec, err := readRecord(j, "context")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if mode == "" {
-				if hasGateway || strings.Contains(string(f.requests[0].Input), value) || slices.Contains(rec.Limitations, limNotSecretScreened) || !slices.Contains(rec.Limitations, limSecretWithheld) {
-					t.Fatalf("screened corpus: gateway %v limitations %v", hasGateway, rec.Limitations)
-				}
-				return
-			}
-			if !hasGateway || !slices.Contains(rec.Limitations, limNotSecretScreened) || strings.Contains(string(f.requests[0].Input), limNotSecretScreened) {
-				t.Fatalf("unscreened corpus: gateway %v limitations %v", hasGateway, rec.Limitations)
-			}
-		})
-	}
-}
-
 // A secrets scan that failed after reporting a detection (partial parse) is
 // no screen, but what it reported is not thrown away: the flagged file
-// reaches no model input in either pack, the other files are sent, and the
+// reaches no model input, the other files are sent, and the
 // records carry model_input_not_secret_screened (and secret_files_withheld)
 // (TC-190).
 func TestPartialSecretScanStillWithholdsFlaggedFiles(t *testing.T) {
@@ -286,7 +242,7 @@ func TestPartialSecretScanStillWithholdsFlaggedFiles(t *testing.T) {
 	script["interpret"] = func(int, opencode.Request) opencode.Reply {
 		return asJSON(map[string]any{"hypotheses": []any{}, "limits": []any{}})
 	}
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	// The scripted investigate answer cites the withheld file, so that role
 	// fails on its own output (and verify follows); every role was asked.
 	runRole(t, j, screenStub{mode: "partial"}, f, "1.27.4")
@@ -306,7 +262,7 @@ func TestPartialSecretScanStillWithholdsFlaggedFiles(t *testing.T) {
 		t.Fatal("the files the scan did not flag were not sent")
 	}
 	for _, role := range []string{"investigate", "interpret"} {
-		rec := readRole(t, j, role)
+		rec := readRecord(t, j, role)
 		if !slices.Contains(rec.Limitations, limNotSecretScreened) || !slices.Contains(rec.Limitations, limSecretWithheld) {
 			t.Fatalf("%s limitations %v", role, rec.Limitations)
 		}
@@ -315,27 +271,5 @@ func TestPartialSecretScanStillWithholdsFlaggedFiles(t *testing.T) {
 				t.Fatalf("%s evidence on the flagged file", role)
 			}
 		}
-	}
-	// The legacy pack.
-	j, value = plantedJob(t)
-	lf := &roleCaller{script: map[string]func(int, opencode.Request) opencode.Reply{"context": func(_ int, q opencode.Request) opencode.Reply {
-		in := decodeInput(t, q)
-		return ok(map[string]any{"facts": []any{map[string]any{"kind": "observed", "statement": "게이트웨이는 실패한 호출을 다시 시도한다.", "evidence_ids": []string{in.Scope.Excerpts[0].ID}}}})
-	}}}
-	h := Handler{Static: screenStub{mode: "partial"}, Caller: lf}
-	lplan, err := h.Plan(t.Context(), j)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range lplan {
-		if !strings.HasPrefix(p.Key, "review.") {
-			h.Run(t.Context(), j, p, nil)
-		}
-	}
-	r := h.Run(t.Context(), j, analysis.TaskSpec{Key: "review.context"}, nil)
-	rec, err := readRecord(j, "context")
-	if r.Status != domain.TaskSucceeded || err != nil || len(lf.requests) != 1 || strings.Contains(string(lf.requests[0].Input), value) ||
-		!slices.Contains(rec.Limitations, limNotSecretScreened) || !slices.Contains(rec.Limitations, limSecretWithheld) {
-		t.Fatalf("legacy %+v %v limitations %v", r, err, rec.Limitations)
 	}
 }

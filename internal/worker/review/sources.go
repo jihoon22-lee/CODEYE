@@ -5,16 +5,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
 // Review input selection for the source ecosystems besides Go. Go files,
 // README/AGENTS documents and go.mod keep their own rules byte for byte
-// (priority in context.go, codeCorpus and goIgnored in rolepack_inputs.go);
+// (codeCorpus and goIgnored in inputs.go);
 // this file only decides the C/C++, Python, JS/TS and Rust files.
 // Classification is by path (record/source.go): no file is parsed.
 
@@ -88,47 +86,6 @@ func entryPoint(p string, roots otherModules) bool {
 	return false
 }
 
-// otherScope is what otherPriority needs of the whole snapshot: the
-// ecosystems with source in scope (pack.InScope) and the module roots.
-type otherScope struct {
-	ecosystems []string
-	roots      otherModules
-}
-
-func newOtherScope(m source.Manifest, scope domain.Scope) otherScope {
-	files := map[string]source.Entry{}
-	for _, e := range m.Entries {
-		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil {
-			files[e.Path] = e
-		}
-	}
-	return otherScope{ecosystems: pack.InScope(m, scope), roots: otherModuleRoots(files)}
-}
-
-// otherPriority is the legacy-pack rank of a path the Go rules do not select
-// (context.go priority): entry points 0, other sources 2, build manifests 3
-// and tests 4, for ecosystems with source in scope only (pack.InScope:
-// build files alone never add a manifest). 5 is not selected.
-func otherPriority(name string, o otherScope) (rank int, kind string) {
-	ecosystems := o.ecosystems
-	if eco := record.ManifestEcosystem(name); eco != "" && eco != "go" {
-		if !slices.Contains(ecosystems, eco) || reviewDataPath(name) {
-			return 5, ""
-		}
-		return 3, "config"
-	}
-	eco := otherSource(name)
-	switch {
-	case eco == "" || !slices.Contains(ecosystems, eco):
-		return 5, ""
-	case record.IsTestPath(name):
-		return 4, "test"
-	case entryPoint(name, o.roots):
-		return 0, "code"
-	}
-	return 2, "code"
-}
-
 // otherModules indexes the module roots of the non-Go ecosystems: the
 // directories of their build manifests (record.ManifestEcosystem) outside
 // data directories, in or out of scope, as go.mod directories are for Go.
@@ -164,7 +121,7 @@ func (m otherModules) owner(eco, p string) string {
 	return best
 }
 
-// groupKey is the round-robin group of a non-Go file in the role-pack code corpus:
+// groupKey is the round-robin group of a non-Go file in the review code corpus:
 // its module root and ecosystem. A Go module's key is its bare directory
 // (codeCorpus); a NUL never occurs in a snapshot path.
 func groupKey(dir, eco string) string { return dir + "\x00" + eco }
@@ -204,7 +161,7 @@ func groupOrder(byModule map[string][]source.Entry, secondary func(string) bool)
 	return out
 }
 
-// otherRank is the role-pack code corpus rank of a non-Go file within its group
+// otherRank is the review code corpus rank of a non-Go file within its group
 // (Go: main.go 0, other 1, tests 2).
 func otherRank(p string, roots otherModules) int {
 	switch {

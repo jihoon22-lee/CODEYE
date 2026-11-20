@@ -1,4 +1,4 @@
-// W16 engine overlap measurement (docs/41 §7): one construct per function,
+// Engine overlap measurement (docs/ANALYZERS.md#엔진-중복): one construct per function,
 // each a defect class that cppcheck, clang-tidy or the Clang Static Analyzer
 // reports, then variants of the constructs both engines reported on the same
 // line. Read by cpp.TestRealEngineOverlap; not part of the analyzed fixture.

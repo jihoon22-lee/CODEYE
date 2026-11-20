@@ -1,5 +1,5 @@
 {
-  "name": "w18-fixture",
+  "name": "jsts-fixture",
   "private": true,
   "workspaces": ["packages/*"]
 }

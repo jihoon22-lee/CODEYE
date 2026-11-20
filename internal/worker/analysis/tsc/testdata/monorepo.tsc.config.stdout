@@ -10,7 +10,7 @@
         "skipLibCheck": true,
         "plugins": [
             {
-                "name": "w18-marker-plugin"
+                "name": "jsts-marker-plugin"
             }
         ],
         "noEmit": true,

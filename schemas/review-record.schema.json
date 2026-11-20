@@ -2,37 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.codeye.invalid/v0.1/review-record.schema.json",
   "title": "CODEYE review stage record",
-  "description": "application/vnd.codeye.review+json. schema_version 0.1: review-v1 context, investigation and verifier records with cumulative call metadata (unchanged). schema_version 0.3: a review-r1 record of one review slice (review.investigate.sNNN, review.verify.sNNN): 0.2 plus the required slice {key, modules}; a slice investigate also names review.scope upstream, a slice verify its own slice's investigate record and review.scope, and it carries investigate candidates only. schema_version 0.2: one review-r1 stage record (environment, documents, investigate, interpret, verify; the default pack since 2.0.0) with only its own calls (at most 3: the request, one repair, one retry of a reply that was not JSON); every upstream input is bound by the SHA-256 of the artifact bytes it read. The Go decoder (internal/worker/review/record) is authoritative: it additionally checks evidence IDs against the snapshot, the path rules of evidence kinds (code: a Go, Python, JS/TS, Rust or C/C++ source extension; test: that ecosystem's test path; config: a build manifest), scope rules, JSON-encoded text sizes (400 bytes for 0.2 model text) and execution claims.",
+  "description": "application/vnd.codeye.review+json. schema_version 0.2: one review stage record (environment, documents, investigate, interpret, verify) with only its own calls (at most 3: the request, one repair, one retry of a reply that was not JSON); every upstream input is bound by the SHA-256 of the artifact bytes it read. schema_version 0.3: the record of one review slice (review.investigate.sNNN, review.verify.sNNN): 0.2 plus the required slice {key, modules}; a slice investigate also names review.scope upstream, a slice verify its own slice's investigate record and review.scope, and it carries investigate candidates only. The Go decoder (internal/worker/review/record) is authoritative: it additionally checks evidence IDs against the snapshot, the path rules of evidence kinds (code: a Go, Python, JS/TS, Rust or C/C++ source extension; test: that ecosystem's test path; manifest: a build manifest), scope rules, JSON-encoded text sizes (400 bytes of model text) and execution claims.",
   "type": "object",
-  "required": ["schema_version"],
-  "properties": {"schema_version": {"enum": ["0.1", "0.2", "0.3"]}},
-  "if": {"properties": {"schema_version": {"const": "0.1"}}},
-  "then": {"$ref": "#/$defs/record_v1"},
-  "else": {"$ref": "#/$defs/record_r1"},
+  "$ref": "#/$defs/record",
   "$defs": {
-    "record_v1": {
-      "type": "object", "additionalProperties": false,
-      "required": ["schema_version", "snapshot_manifest_digest", "run_id", "attempt_id", "stage", "evidence", "facts", "candidates", "limitations", "calls"],
-      "properties": {
-        "schema_version": {"const":"0.1"},
-        "snapshot_manifest_digest": {"$ref":"#/$defs/digest"},
-        "run_id": {"$ref":"#/$defs/uuid"}, "attempt_id": {"$ref":"#/$defs/uuid"},
-        "stage": {"$ref":"#/$defs/role"}, "outcome": {"enum":["accepted","failed"]},
-        "failure_reason": {"$ref":"#/$defs/code"},
-        "evidence": {"type":"array","minItems":1,"maxItems":12,"items":{"$ref":"#/$defs/excerpt"}},
-        "facts": {"type":"array","maxItems":4,"items":{"$ref":"#/$defs/fact"}},
-        "candidates": {"type":"array","maxItems":4,"items":{"$ref":"#/$defs/candidate"}},
-        "verifications": {"type":"array","maxItems":4,"items":{"allOf":[{"$ref":"#/$defs/verification"},{"properties":{"candidate_id":{"$ref":"#/$defs/candidate_id"}}}]}},
-        "limitations": {"$ref":"#/$defs/codes"},
-        "calls": {"type":"array","maxItems":4,"items":{"$ref":"#/$defs/call"}}
-      },
-      "allOf": [
-        {"if":{"properties":{"stage":{"const":"verify"}}},"then":{"required":["outcome"]},"else":{"not":{"required":["verifications"]}}},
-        {"if":{"properties":{"stage":{"const":"context"}}},"then":{"properties":{"candidates":{"maxItems":0}}}},
-        {"if":{"required":["outcome"],"properties":{"outcome":{"const":"failed"}}},"then":{"required":["failure_reason"],"properties":{"verifications":{"items":{"properties":{"verdict":{"const":"unreviewed"}}}}}},"else":{"not":{"required":["failure_reason"]},"properties":{"facts":{"minItems":1}}}}
-      ]
-    },
-    "record_r1": {
+    "record": {
       "type": "object", "additionalProperties": false,
       "required": ["schema_version", "pack", "snapshot_manifest_digest", "run_id", "attempt_id", "stage", "outcome", "upstream", "evidence", "observations", "limitations", "calls"],
       "properties": {
@@ -41,21 +15,21 @@
         "pack": {"type":"object","additionalProperties":false,"required":["id","version"],"properties":{"id":{"$ref":"#/$defs/pack_id"},"version":{"$ref":"#/$defs/version"}}},
         "snapshot_manifest_digest": {"$ref":"#/$defs/digest"},
         "run_id": {"$ref":"#/$defs/uuid"}, "attempt_id": {"$ref":"#/$defs/uuid"},
-        "stage": {"$ref":"#/$defs/r1_stage"}, "outcome": {"enum":["accepted","failed"]},
+        "stage": {"$ref":"#/$defs/stage"}, "outcome": {"enum":["accepted","failed"]},
         "failure_reason": {"$ref":"#/$defs/code"},
         "upstream": {"type":"array","maxItems":16,"items":{"$ref":"#/$defs/upstream"}},
-        "evidence": {"type":"array","maxItems":40,"items":{"$ref":"#/$defs/r1_excerpt"}},
+        "evidence": {"type":"array","maxItems":40,"items":{"$ref":"#/$defs/excerpt"}},
         "observations": {"type":"array","maxItems":16,"items":{"$ref":"#/$defs/observation_ref"}},
         "environment_notes": {"type":"array","minItems":1,"maxItems":4,"items":{"$ref":"#/$defs/environment_note"}},
         "contracts": {"type":"array","minItems":1,"maxItems":6,"items":{"$ref":"#/$defs/contract"}},
         "conflicts": {"type":"array","minItems":1,"maxItems":3,"items":{"$ref":"#/$defs/conflict"}},
         "questions": {"type":"array","minItems":1,"maxItems":4,"items":{"$ref":"#/$defs/question"}},
         "instruction_notes": {"type":"array","minItems":1,"maxItems":3,"items":{"$ref":"#/$defs/instruction_note"}},
-        "candidates": {"type":"array","minItems":1,"maxItems":6,"items":{"$ref":"#/$defs/r1_candidate"}},
+        "candidates": {"type":"array","minItems":1,"maxItems":6,"items":{"$ref":"#/$defs/candidate"}},
         "interpretation_limits": {"type":"array","minItems":1,"maxItems":3,"items":{"$ref":"#/$defs/interpretation_limit"}},
-        "verifications": {"type":"array","minItems":1,"maxItems":6,"items":{"allOf":[{"$ref":"#/$defs/verification"},{"properties":{"candidate_id":{"$ref":"#/$defs/r1_candidate_id"}}}]}},
+        "verifications": {"type":"array","minItems":1,"maxItems":6,"items":{"allOf":[{"$ref":"#/$defs/verification"},{"properties":{"candidate_id":{"$ref":"#/$defs/candidate_id"}}}]}},
         "limitations": {"$ref":"#/$defs/codes"},
-        "calls": {"type":"array","maxItems":3,"items":{"$ref":"#/$defs/r1_call"}}
+        "calls": {"type":"array","maxItems":3,"items":{"$ref":"#/$defs/call"}}
       },
       "allOf": [
         {"if":{"properties":{"schema_version":{"const":"0.3"}}},
@@ -83,8 +57,7 @@
     },
     "digest": {"type":"string","pattern":"^[0-9a-f]{64}$"},
     "uuid": {"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
-    "role": {"enum":["context","investigate","verify"]},
-    "r1_stage": {"enum":["environment","documents","investigate","interpret","verify"]},
+    "stage": {"enum":["environment","documents","investigate","interpret","verify"]},
     "pack_id": {"type":"string","pattern":"^[a-z][a-z0-9.-]{0,63}$"},
     "version": {"type":"string","pattern":"^[a-zA-Z0-9_.-]{1,64}$"},
     "code": {"type":"string","pattern":"^[a-z][a-z0-9_]{0,63}$"},
@@ -92,25 +65,15 @@
     "task_key": {"type":"string","pattern":"^[a-z][a-z0-9_.-]{0,63}$"},
     "path": {"type":"string","minLength":1,"maxLength":4096,"pattern":"^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)[^:\\\\\\u0000-\\u001f\\u007f]+(?<!/)$"},
     "scope_path": {"anyOf":[{"const":"."},{"$ref":"#/$defs/path"}]},
-    "text": {"type":"string","minLength":1,"maxLength":2400},
-    "r1_text": {"type":"string","minLength":1,"maxLength":400},
+    "text": {"type":"string","minLength":1,"maxLength":400},
     "statements": {"type":"array","maxItems":4,"items":{"type":"string","minLength":1,"maxLength":600}},
     "id": {"type":"string","pattern":"^ev_[0-9a-f]{24}$"},
     "observation_id": {"type":"string","pattern":"^obs_[0-9a-f]{20}$"},
     "observation_ids": {"type":"array","minItems":1,"maxItems":4,"uniqueItems":true,"items":{"$ref":"#/$defs/observation_id"}},
-    "candidate_id": {"type":"string","pattern":"^candidate_[1-4]$"},
-    "r1_candidate_id": {"type":"string","pattern":"^(investigate|interpret)_[1-4]$"},
+    "candidate_id": {"type":"string","pattern":"^(investigate|interpret)_[1-4]$"},
     "refs": {"type":"array","uniqueItems":true,"maxItems":8,"items":{"$ref":"#/$defs/id"}},
     "citations": {"$ref":"#/$defs/refs","minItems":1,"maxItems":6},
     "excerpt": {
-      "type":"object","additionalProperties":false,"required":["id","path","sha256","start_line","end_line","kind"],
-      "properties": {
-        "id":{"$ref":"#/$defs/id"}, "path":{"$ref":"#/$defs/path"},
-        "sha256":{"$ref":"#/$defs/digest"}, "start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1},
-        "kind":{"enum":["code","test","document","config"]},"origin":{"enum":["context","caller","test"]},"symbol":{"type":"string","pattern":"^[A-Za-z_][A-Za-z0-9_]{0,127}$"}
-      }
-    },
-    "r1_excerpt": {
       "type":"object","additionalProperties":false,"required":["id","path","sha256","start_line","end_line","kind"],
       "properties": {
         "id":{"$ref":"#/$defs/id"}, "path":{"$ref":"#/$defs/path"},
@@ -139,41 +102,33 @@
         "module":{"type":"string","pattern":"^(cpp|go|javascript|python|rust):(\\.|[^:\\u0000-\\u001f]+)$"},
         "requirement_ids":{"type":"array","maxItems":4,"uniqueItems":true,"items":{"type":"string","pattern":"^[a-z][a-z0-9_]{0,63}@[^@\\u0000-\\u001f]+$"}},
         "evidence_ids":{"$ref":"#/$defs/refs","maxItems":4},
-        "affected_checks":{"$ref":"#/$defs/r1_text"},"still_checkable":{"$ref":"#/$defs/r1_text"},"needed_observation":{"$ref":"#/$defs/r1_text"}
+        "affected_checks":{"$ref":"#/$defs/text"},"still_checkable":{"$ref":"#/$defs/text"},"needed_observation":{"$ref":"#/$defs/text"}
       }
     },
     "contract": {
       "type":"object","additionalProperties":false,"required":["statement","applies_to","evidence_ids"],
-      "properties":{"statement":{"$ref":"#/$defs/r1_text"},"applies_to":{"$ref":"#/$defs/scope_path"},"evidence_ids":{"$ref":"#/$defs/refs","minItems":1,"maxItems":4}}
+      "properties":{"statement":{"$ref":"#/$defs/text"},"applies_to":{"$ref":"#/$defs/scope_path"},"evidence_ids":{"$ref":"#/$defs/refs","minItems":1,"maxItems":4}}
     },
     "conflict": {
       "type":"object","additionalProperties":false,"required":["scope","summary","impact","first_evidence_ids","second_evidence_ids"],
-      "properties":{"scope":{"$ref":"#/$defs/scope_path"},"summary":{"$ref":"#/$defs/r1_text"},"impact":{"$ref":"#/$defs/r1_text"},
+      "properties":{"scope":{"$ref":"#/$defs/scope_path"},"summary":{"$ref":"#/$defs/text"},"impact":{"$ref":"#/$defs/text"},
         "first_evidence_ids":{"$ref":"#/$defs/refs","minItems":1,"maxItems":3},"second_evidence_ids":{"$ref":"#/$defs/refs","minItems":1,"maxItems":3}}
     },
     "question": {
       "type":"object","additionalProperties":false,"required":["question","applies_to","evidence_ids"],
-      "properties":{"question":{"$ref":"#/$defs/r1_text"},"applies_to":{"$ref":"#/$defs/scope_path"},"evidence_ids":{"$ref":"#/$defs/refs","minItems":1,"maxItems":4}}
+      "properties":{"question":{"$ref":"#/$defs/text"},"applies_to":{"$ref":"#/$defs/scope_path"},"evidence_ids":{"$ref":"#/$defs/refs","minItems":1,"maxItems":4}}
     },
     "instruction_note": {
       "type":"object","additionalProperties":false,"required":["note","evidence_ids"],
-      "properties":{"note":{"$ref":"#/$defs/r1_text"},"evidence_ids":{"$ref":"#/$defs/refs","minItems":1,"maxItems":3}}
+      "properties":{"note":{"$ref":"#/$defs/text"},"evidence_ids":{"$ref":"#/$defs/refs","minItems":1,"maxItems":3}}
     },
     "interpretation_limit": {
       "type":"object","additionalProperties":false,"required":["observation_ids","statement"],
-      "properties":{"observation_ids":{"$ref":"#/$defs/observation_ids"},"statement":{"$ref":"#/$defs/r1_text"}}
-    },
-    "fact": {
-      "type":"object","additionalProperties":false,"required":["kind","statement","evidence_ids"],
-      "properties":{"kind":{"enum":["documented","observed","inferred"]},"statement":{"$ref":"#/$defs/text"},"evidence_ids":{"$ref":"#/$defs/citations"}}
+      "properties":{"observation_ids":{"$ref":"#/$defs/observation_ids"},"statement":{"$ref":"#/$defs/text"}}
     },
     "candidate": {
-      "type":"object","additionalProperties":false,"required":["id","title","condition","impact","improvement","counterpoint","evidence_ids"],
-      "properties":{"id":{"$ref":"#/$defs/candidate_id"},"title":{"$ref":"#/$defs/text"},"condition":{"$ref":"#/$defs/text"},"impact":{"$ref":"#/$defs/text"},"improvement":{"$ref":"#/$defs/text"},"counterpoint":{"$ref":"#/$defs/text"},"evidence_ids":{"$ref":"#/$defs/citations"}}
-    },
-    "r1_candidate": {
       "type":"object","additionalProperties":false,"required":["id","title","condition","impact","improvement","counterpoint","evidence_ids","origin"],
-      "properties":{"id":{"$ref":"#/$defs/r1_candidate_id"},"title":{"$ref":"#/$defs/r1_text"},"condition":{"$ref":"#/$defs/r1_text"},"impact":{"$ref":"#/$defs/r1_text"},"improvement":{"$ref":"#/$defs/r1_text"},"counterpoint":{"$ref":"#/$defs/r1_text"},
+      "properties":{"id":{"$ref":"#/$defs/candidate_id"},"title":{"$ref":"#/$defs/text"},"condition":{"$ref":"#/$defs/text"},"impact":{"$ref":"#/$defs/text"},"improvement":{"$ref":"#/$defs/text"},"counterpoint":{"$ref":"#/$defs/text"},
         "evidence_ids":{"$ref":"#/$defs/citations"},"origin":{"enum":["investigate","interpret"]},"observation_ids":{"$ref":"#/$defs/observation_ids"}},
       "if":{"properties":{"origin":{"const":"interpret"}}},"then":{"required":["observation_ids"],"properties":{"id":{"pattern":"^interpret_"}}},"else":{"not":{"required":["observation_ids"]},"properties":{"id":{"pattern":"^investigate_"}}}
     },
@@ -195,19 +150,10 @@
       ]
     },
     "call": {
-      "type":"object","additionalProperties":false,"required":["role","model","opencode_version","pack_sha256","pack_files","request_sha256","usage"],
-      "properties": {
-        "role":{"$ref":"#/$defs/role"},"model":{"type":"string","maxLength":160},"opencode_version":{"type":"string","maxLength":64},
-        "pack_sha256":{"$ref":"#/$defs/digest"},"pack_files":{"type":"array","minItems":1,"maxItems":24,"uniqueItems":true,"items":{"type":"string","minLength":1}},
-        "request_sha256":{"oneOf":[{"$ref":"#/$defs/digest"},{"const":""}]},"attempt":{"type":"integer","minimum":1,"maximum":2},"outcome":{"$ref":"#/$defs/code"},
-        "usage":{"type":["object","null"],"additionalProperties":false,"required":["input","output"],"properties":{"input":{"type":"integer","minimum":0},"output":{"type":"integer","minimum":0}}}
-      }
-    },
-    "r1_call": {
       "type":"object","additionalProperties":false,
       "required":["role","model","opencode_version","pack_id","pack_version","pack_sha256","pack_files","request_sha256","request_bytes","usage","attempt","outcome","output_errors"],
       "properties": {
-        "role":{"$ref":"#/$defs/r1_stage"},"model":{"type":"string","maxLength":160},"opencode_version":{"type":"string","maxLength":64},
+        "role":{"$ref":"#/$defs/stage"},"model":{"type":"string","maxLength":160},"opencode_version":{"type":"string","maxLength":64},
         "pack_id":{"$ref":"#/$defs/pack_id"},"pack_version":{"$ref":"#/$defs/version"},
         "pack_sha256":{"$ref":"#/$defs/digest"},"pack_files":{"type":"array","minItems":1,"maxItems":24,"uniqueItems":true,"items":{"$ref":"#/$defs/path"}},
         "request_sha256":{"oneOf":[{"$ref":"#/$defs/digest"},{"const":""}]},"request_bytes":{"type":"integer","minimum":0},"attempt":{"type":"integer","minimum":1,"maximum":3},

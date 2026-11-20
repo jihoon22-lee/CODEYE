@@ -113,7 +113,7 @@ func cppTools(t *testing.T) map[string]string {
 // consistent) and the tool rows carry the rule context and processed paths.
 func TestCppPackWithRealTools(t *testing.T) {
 	tools := cppTools(t)
-	r := runPackFiles(t, cppFixture(t, map[string]string{"_build/gen/config.h": "#define W16_VERSION \"1.0\"\n"}), tools)
+	r := runPackFiles(t, cppFixture(t, map[string]string{"_build/gen/config.h": "#define RINGBUF_VERSION \"1.0\"\n"}), tools)
 	rows := taskRows(r.manifest)
 	if rows["cppcheck"] != "succeeded/" || rows["clang-tidy"] != "succeeded/" {
 		t.Fatalf("tasks %v", rows)
@@ -163,7 +163,7 @@ func TestCppPackWithRealTools(t *testing.T) {
 func TestCppPackHostFileNotStored(t *testing.T) {
 	tools := cppTools(t)
 	host := t.TempDir()
-	const canary = "W16CANARY_E2E_5be03d"
+	const canary = "CPPCANARY_E2E_5be03d"
 	if err := os.WriteFile(filepath.Join(host, "secret.h"), []byte(canary+" token\nstatic int leak(void) { int *p = 0; return *p; } /* "+canary+" */\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

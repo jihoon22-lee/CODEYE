@@ -15,11 +15,6 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-// RequiredReviewTasks are the model review task keys every current profile
-// requires (the legacy review handler plans them). The requirement is met only when the DB task
-// row succeeded and a registered decoder accepted that task's result bytes.
-var RequiredReviewTasks = []string{"review.context", "review.investigate", "review.verify"}
-
 var profiles = map[string]bool{"deep-review": true, "with-tests": true, "focused": true}
 
 var (
@@ -263,11 +258,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 		}
 		r.Artifacts = append(r.Artifacts, item)
 	}
-	if rolePackPlanned(states) {
-		composeRoleReviews(&r, states, lim)
-	} else {
-		composeReviews(&r, states, lim)
-	}
+	composeReviews(&r, states, lim)
 	applyDispositions(&r, in.Reviews, in.Now)
 	sortReport(&r)
 
@@ -383,7 +374,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	// The pull-request section counts changed files sent to the model only
 	// when the run sent the model a request: a run without a model (whose
 	// records hold calls with no request) says so instead of "0 of N sent".
-	r.PullRequest = pullRequestSection(&r, in.PullRequest, index.entries, sentPaths(states, roleRecordKeys(states)), modelRequested(r.Coverage.ReviewCalls))
+	r.PullRequest = pullRequestSection(&r, in.PullRequest, index.entries, sentPaths(states, reviewRecordKeys(states)), modelRequested(r.Coverage.ReviewCalls))
 	if err := ValidateReport(r); err != nil {
 		return Report{}, err
 	}

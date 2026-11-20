@@ -113,9 +113,9 @@ func TestPullRequestSectionClassifiesTheChanges(t *testing.T) {
 // With model calls the section counts the changed files the review records
 // show as sent and lists the rest; without calls it does not count at all.
 func TestPullRequestSectionCountsSentFilesOnlyWithModelCalls(t *testing.T) {
-	states, base := exampleRoleStages(t)
+	states, base := exampleStages(t)
 	r, _, _ := compose(states, base)
-	sent := sentPaths(states, roleRecordKeys(states))
+	sent := sentPaths(states, reviewRecordKeys(states))
 	var seen string
 	for p := range sent {
 		if seen == "" || p < seen {

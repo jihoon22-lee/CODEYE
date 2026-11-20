@@ -21,7 +21,7 @@ const (
 	fixtureExpected = "../../../../fixtures/cpp/expected.json"
 	// generatedHeader is what the fixture's configure step would write.
 	generatedHeaderPath = "_build/gen/config.h"
-	generatedHeader     = "#ifndef W16_CONFIG_H\n#define W16_CONFIG_H\n#define W16_VERSION \"1.0\"\n#endif\n"
+	generatedHeader     = "#ifndef RINGBUF_CONFIG_H\n#define RINGBUF_CONFIG_H\n#define RINGBUF_VERSION \"1.0\"\n#endif\n"
 )
 
 // testTool returns the operator-installed tool named by env, or skips: CI

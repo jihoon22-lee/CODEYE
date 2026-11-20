@@ -34,7 +34,7 @@ import (
 
 // The report example (examples/report.json, examples/report.md) is the
 // builder's own output for fixtures/modules/input: the real discovery and
-// role-pack handlers run in process with a scripted model caller (no model
+// review handlers run in process with a scripted model caller (no model
 // is contacted) and synthetic analyzer results, so every analysis section is
 // populated. The analyzer diagnostics, the metric and the secret detection
 // are synthetic: no tool ran and the fixture holds no secret. Identities and
@@ -132,9 +132,9 @@ func (r exampleDepsRunner) Run(_ context.Context, s executor.Spec) executor.Resu
 			StartedAt: reportExampleTime.Add(30 * time.Second), EndedAt: reportExampleTime.Add(31 * time.Second)}
 	}
 	requires := map[string]string{
-		".":     `{"Module":{"Path":"example.test/w15"},"Require":[{"Path":"github.com/spf13/pflag","Version":"v1.0.9"},{"Path":"golang.org/x/text","Version":"v0.21.0"}]}`,
-		"svc/a": `{"Module":{"Path":"example.test/w15/svc/a"},"Require":[{"Path":"example.test/private/lib","Version":"v0.3.0"}]}`,
-		"svc/b": `{"Module":{"Path":"example.test/w15/svc/b"}}`,
+		".":     `{"Module":{"Path":"example.test/modules"},"Require":[{"Path":"github.com/spf13/pflag","Version":"v1.0.9"},{"Path":"golang.org/x/text","Version":"v0.21.0"}]}`,
+		"svc/a": `{"Module":{"Path":"example.test/modules/svc/a"},"Require":[{"Path":"example.test/private/lib","Version":"v0.3.0"}]}`,
+		"svc/b": `{"Module":{"Path":"example.test/modules/svc/b"}}`,
 	}
 	switch {
 	case s.Args[0] == "version":
@@ -301,7 +301,7 @@ func exampleVet(t *testing.T, j analysis.Job, task pack.Task) analysis.TaskResul
 	key := task.Spec.Key
 	version := "go1.27.4"
 	platform := "linux/amd64"
-	mod, ok := map[string]string{".": "example.test/w15", "svc/a": "example.test/w15/svc/a", "svc/b": "example.test/w15/svc/b"}[task.Module]
+	mod, ok := map[string]string{".": "example.test/modules", "svc/a": "example.test/modules/svc/a", "svc/b": "example.test/modules/svc/b"}[task.Module]
 	if !ok {
 		// A module of the slice example (fixtures/modules/slices/input).
 		mod = "example.test/coverage/" + task.Module
@@ -441,7 +441,7 @@ func exampleScript(t *testing.T) map[string]func(int, opencode.Request) opencode
 			"limits": []map[string]any{{"observation_ids": []string{other.ID}, "statement": "Normalize의 호출자와 비교 용도가 입력에 없어 진단의 영향을 판단할 수 없다."}}})
 	}
 	s["verify"] = func(_ int, q opencode.Request) opencode.Reply {
-		in := decodeAs[roleVerifyInput](t, q)
+		in := decodeAs[verifyInput](t, q)
 		var out []map[string]any
 		for _, c := range in.Candidates {
 			if strings.HasPrefix(c.ID, "interpret") {
@@ -570,12 +570,12 @@ func TestReportExample(t *testing.T) {
 	j.RunID, j.AttemptID = "0195f3a0-0000-7000-8000-000000000501", "0195f3a0-0000-7000-8000-000000000502"
 	pinExampleSnapshot(t, &j)
 	ids := &exampleIDs{n: 2}
-	caller := &roleCaller{script: exampleScript(t)}
+	caller := &scriptedCaller{script: exampleScript(t)}
 	// The dependency tasks run against scripted go commands: the root module
 	// is prepared, svc/a cannot reach its registry, svc/b names no
 	// dependency.
 	j.AllowDependencyFetch = true
-	fetched, err := deps.Wrap(RoleHandler{Static: exampleStatic(t), Caller: caller}, deps.Config{CacheRoot: filepath.Join(t.TempDir(), "deps"), GoExecutable: "/opt/go/bin/go"}, deps.Fetchers()...)
+	fetched, err := deps.Wrap(Handler{Static: exampleStatic(t), Caller: caller}, deps.Config{CacheRoot: filepath.Join(t.TempDir(), "deps"), GoExecutable: "/opt/go/bin/go"}, deps.Fetchers()...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,7 +595,7 @@ func TestReportExample(t *testing.T) {
 		}
 		results[task.Key] = h.Run(t.Context(), j, task, runner)
 	}
-	if b, err := os.ReadFile(rolePath(j, "verify")); err == nil && os.Getenv("EXAMPLE_DEBUG") != "" {
+	if b, err := os.ReadFile(recordPath(j, "verify")); err == nil && os.Getenv("EXAMPLE_DEBUG") != "" {
 		t.Logf("%s", b)
 	}
 	in := exampleInput(t, j, h, plan, results, ids)
@@ -643,7 +643,7 @@ func checkReportExample(t *testing.T, r report.Report, plan []analysis.TaskSpec,
 		rows = append(rows, p.Key+"="+string(results[p.Key].Status)+":"+results[p.Key].Reason)
 	}
 	for _, l := range r.Limitations {
-		if strings.HasPrefix(l, report.LimReviewLineage) || strings.HasPrefix(l, report.LimReviewPackMismatch) || strings.HasPrefix(l, "analysis_artifact_") || strings.HasPrefix(l, "artifact_rejected") ||
+		if strings.HasPrefix(l, report.LimReviewLineage) || strings.HasPrefix(l, "analysis_artifact_") || strings.HasPrefix(l, "artifact_rejected") ||
 			strings.HasPrefix(l, "unrecognized_artifact") || strings.HasPrefix(l, "result_manifest") || strings.HasPrefix(l, "task_not_in_result_manifest") {
 			t.Fatalf("limitation %s in %v (tasks %v)", l, r.Limitations, rows)
 		}
@@ -674,7 +674,7 @@ func checkReportExample(t *testing.T, r report.Report, plan []analysis.TaskSpec,
 		t.Fatalf("metrics %+v", mt)
 	case sec == nil || len(sec.Detections) == 0 || sec.ModelInput != report.ScreenWithheld:
 		t.Fatalf("secrets %+v", sec)
-	case cr == nil || cr.Pack != "role" || len(cr.Roles) == 0 || len(cr.FindingIDs) == 0 || len(cr.Limits) == 0:
+	case cr == nil || cr.PackID == nil || len(cr.Roles) == 0 || len(cr.FindingIDs) == 0 || len(cr.Limits) == 0:
 		t.Fatalf("code review %+v", cr)
 	}
 	validations := map[string]bool{}

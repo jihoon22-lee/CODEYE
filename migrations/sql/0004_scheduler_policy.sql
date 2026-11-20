@@ -1,4 +1,4 @@
--- CODEYE W07: pool 정책 revision, controller 자동 증감 상태, 프로젝트 동시 실행 상한과 공정 배정 기록,
+-- CODEYE: pool 정책 revision, controller 자동 증감 상태, 프로젝트 동시 실행 상한과 공정 배정 기록,
 -- 노드의 워커 증감 방식(static/controller), 워커 상태 변경 시각.
 --
 -- 0001~0003과 같은 규칙: BEGIN/COMMIT 없음, 비한정 이름(current_schema), 트리거는 NEW/OLD/TG_*만 사용,
@@ -6,9 +6,9 @@
 -- 함께 쓴다(IssueEnrollmentToken). 이 파일은 이미 있는 pool만 기본값으로 채운다.
 --
 -- 기존 행 처리:
---   * worker_pools: 각 pool에 docs/09 기본 정책 revision 1(min 0, max 2, idle 180s, scale-up 10s,
+--   * worker_pools: 각 pool에 기본 정책 revision 1(docs/EXECUTION.md 워커 풀과 자동 증감, min 0, max 2, idle 180s, scale-up 10s,
 --     scale-down 60s)과 빈 증감 상태를 만든다. 기존 노드는 모두 static이므로 자동 증감 명령을 받지 않는다.
---   * scheduler_limits: project_max_running 기본 1(docs/09 §5), revision 1.
+--   * scheduler_limits: project_max_running 기본 1(docs/EXECUTION.md 공정 순서), revision 1.
 --   * workers: state_since는 적용 시각으로 채운다(유휴 시간은 이후 관측부터 잰다).
 
 -- ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ CREATE TRIGGER project_dispatch_guard
 
 -- ---------------------------------------------------------------------------
 -- nodes: 워커 증감 방식과 agent 로컬 상한
---   static: agent가 --workers N을 스스로 유지한다(W06). controller는 시작·축소 명령을 보내지 않는다.
+--   static: agent가 --workers N을 스스로 유지한다. controller는 시작·축소 명령을 보내지 않는다.
 --   controller: agent는 0개에서 시작하고 controller 명령으로만 워커를 시작·drain·종료한다.
 -- ---------------------------------------------------------------------------
 

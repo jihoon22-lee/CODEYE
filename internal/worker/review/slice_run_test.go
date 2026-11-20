@@ -201,8 +201,8 @@ func TestSliceAdmissionKeepsTheCeiling(t *testing.T) {
 				if upstream == "three" {
 					script = threeCalls(script)
 				}
-				f := &roleCaller{script: script}
-				plan, res := runRoleWith(t, j, RoleHandler{Static: secretsStub{}, Caller: f, MaxCalls: n}, "1.27.4")
+				f := &scriptedCaller{script: script}
+				plan, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: n}, "1.27.4")
 				keys := taskKeys(plan)
 				if basePlan == nil {
 					basePlan = keys
@@ -256,7 +256,7 @@ func TestSliceAdmissionKeepsTheCeiling(t *testing.T) {
 							t.Fatalf("%s: %+v %+v, %d calls", key, inv, ver, mine)
 						}
 						for _, stage := range []string{"investigate", "verify"} {
-							if _, err := os.Stat(rolePath(j, stage+"."+key)); !errors.Is(err, fs.ErrNotExist) {
+							if _, err := os.Stat(recordPath(j, stage+"."+key)); !errors.Is(err, fs.ErrNotExist) {
 								t.Fatalf("%s.%s has a record", stage, key)
 							}
 						}
@@ -309,8 +309,8 @@ func investigateFiles(t *testing.T, q opencode.Request) []string {
 // run sends more distinct files than the overview alone.
 func TestSlicesNeverRepeatOverviewFiles(t *testing.T) {
 	j := coverageJob(t)
-	f := &roleCaller{script: coverageScript(t)}
-	_, res := runRoleWith(t, j, RoleHandler{Static: secretsStub{}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+	f := &scriptedCaller{script: coverageScript(t)}
+	_, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
 	seen := map[string]string{}
 	instructions := map[string]string{}
 	overview := 0
@@ -362,11 +362,11 @@ func TestSlicesNeverRepeatOverviewFiles(t *testing.T) {
 		}
 		for _, stage := range []string{"investigate", "verify"} {
 			name := stage + "." + sl.Key
-			raw, err := os.ReadFile(rolePath(j, name))
+			raw, err := os.ReadFile(recordPath(j, name))
 			if err != nil {
 				t.Fatal(err)
 			}
-			r, err := record.DecodeRole(raw, expectRecord(j, name))
+			r, err := record.Decode(raw, expectRecord(j, name))
 			if err != nil {
 				t.Fatal(name, err)
 			}
@@ -380,8 +380,8 @@ func TestSlicesNeverRepeatOverviewFiles(t *testing.T) {
 			}
 		}
 	}
-	for _, stage := range record.RoleStages {
-		if _, err := os.Stat(rolePath(j, stage)); err == nil && readRole(t, j, stage).Schema != record.SchemaVersionRole {
+	for _, stage := range record.Stages {
+		if _, err := os.Stat(recordPath(j, stage)); err == nil && readRecord(t, j, stage).Schema != record.SchemaVersion {
 			t.Fatalf("%s is not a 0.2 record", stage)
 		}
 	}
@@ -392,7 +392,7 @@ func TestSlicesNeverRepeatOverviewFiles(t *testing.T) {
 func overviewContext(t *testing.T, j analysis.Job) []string {
 	t.Helper()
 	var out []string
-	for _, e := range readRole(t, j, "investigate").Evidence {
+	for _, e := range readRecord(t, j, "investigate").Evidence {
 		if e.Origin == "context" && (e.Kind == "code" || e.Kind == "test") {
 			out = append(out, e.Path)
 		}
@@ -406,8 +406,8 @@ func overviewContext(t *testing.T, j analysis.Job) []string {
 // PromptBudget and carries the five language guides.
 func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
 	j := worstCaseJob(t, func(root string) { polyglotWorstCase(t, root) })
-	f := &roleCaller{script: maxScript(t)}
-	plan, res := runRoleWith(t, j, RoleHandler{Static: secretsStub{obs: polyglotObservations}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+	f := &scriptedCaller{script: maxScript(t)}
+	plan, res := runRoleWith(t, j, Handler{Static: secretsStub{obs: polyglotObservations}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
 	slicesRun := 0
 	for _, p := range plan {
 		if _, key, ok := record.SliceTask(p.Key); ok {
@@ -420,11 +420,11 @@ func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
 				t.Fatalf("%s %+v", p.Key, r)
 			}
 			name := strings.TrimPrefix(p.Key, "review.")
-			raw, err := os.ReadFile(rolePath(j, name))
+			raw, err := os.ReadFile(recordPath(j, name))
 			if err != nil {
 				t.Fatal(err)
 			}
-			rec, err := record.DecodeRole(raw, expectRecord(j, name))
+			rec, err := record.Decode(raw, expectRecord(j, name))
 			if err != nil {
 				t.Fatal(name, err)
 			}
@@ -470,8 +470,8 @@ func TestSliceSecretGating(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			j := coverageJob(t)
-			f := &roleCaller{script: coverageScript(t)}
-			plan, res := runRoleWith(t, j, RoleHandler{Static: c.static, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+			f := &scriptedCaller{script: coverageScript(t)}
+			plan, res := runRoleWith(t, j, Handler{Static: c.static, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
 			slicesRun := 0
 			for _, p := range plan {
 				_, _, slice := record.SliceTask(p.Key)
@@ -505,8 +505,8 @@ func TestSliceSecretGating(t *testing.T) {
 	t.Run("withheld", func(t *testing.T) {
 		j := coverageJob(t)
 		withhold := []string{"store/cache.go", "store/sync.go", "store/tombstone.go", "store/txn.go", "store/wal.go"}
-		f := &roleCaller{script: coverageScript(t)}
-		plan, res := runRoleWith(t, j, RoleHandler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+		f := &scriptedCaller{script: coverageScript(t)}
+		plan, res := runRoleWith(t, j, Handler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
 		for _, q := range f.requests {
 			if q.Role == "investigate" {
 				for _, p := range investigateFiles(t, q) {
@@ -553,8 +553,8 @@ func TestSliceSecretGating(t *testing.T) {
 
 	t.Run("precedence", func(t *testing.T) {
 		j := coverageJob(t)
-		f := &roleCaller{script: coverageScript(t)}
-		h := RoleHandler{Static: secretsStub{}, Caller: f, MaxCalls: record.WholeRunMaxCalls}
+		f := &scriptedCaller{script: coverageScript(t)}
+		h := Handler{Static: secretsStub{}, Caller: f, MaxCalls: record.WholeRunMaxCalls}
 		inv := analysis.TaskSpec{Key: "review.investigate.s001", Stage: domain.StageCodeReview}
 		static, _ := secretsStub{}.Plan(t.Context(), j)
 		for _, task := range static {
@@ -571,7 +571,7 @@ func TestSliceSecretGating(t *testing.T) {
 			t.Fatalf("not approved %+v", r)
 		}
 		// An unscreened run is not a gate: it too waits for review.scope.
-		if r := (RoleHandler{Static: vetStub{}, Caller: f}).Run(t.Context(), j, inv, nil); r.Reason != reasonDependency {
+		if r := (Handler{Static: vetStub{}, Caller: f}).Run(t.Context(), j, inv, nil); r.Reason != reasonDependency {
 			t.Fatalf("unscreened %+v", r)
 		}
 		if len(f.requests) != 0 {
@@ -582,8 +582,8 @@ func TestSliceSecretGating(t *testing.T) {
 	t.Run("nothing_before_budget", func(t *testing.T) {
 		j := coverageJob(t)
 		withhold := []string{"store/sync.go", "store/tombstone.go", "store/txn.go", "store/wal.go"}
-		f := &roleCaller{script: coverageScript(t)}
-		plan, res := runRoleWith(t, j, RoleHandler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.WholeRunMaxCalls}, "1.27.4")
+		f := &scriptedCaller{script: coverageScript(t)}
+		plan, res := runRoleWith(t, j, Handler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.WholeRunMaxCalls}, "1.27.4")
 		filled := filledSlots(t, j)
 		empty, exhausted := 0, 0
 		for _, key := range sliceKeys(plan) {

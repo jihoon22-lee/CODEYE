@@ -1,3 +1,3 @@
-module example.test/w15
+module example.test/modules
 
 go 1.22

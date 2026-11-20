@@ -4,6 +4,15 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 바뀜 — 검토 기준 하나
+
+- **검토 지침 하나**: 검토 지침은 `prompts/review`(id `review`, 2.0.0) 하나다(A52). 세 역할 이전 지침과 그 기록 schema `0.1`·decoder·보고서 조립 경로·고정 시험, 두 팩 비교 스크립트를 지웠다. 노드 플래그·워커 Hello·개인 설정·회귀 실행에서 지침을 고르는 설정이 없다. 이전 설정 파일에 남은 지침 선택 키는 모르는 키로 거부된다.
+- **이름**: 디렉터리·Go 패키지(`reviewpack`)·예시(`examples/review`)·작업 사본 파일(`review.*`)·schema `$defs`·코드 식별자에서 팩 세대 표시를 뺐다. 지침을 읽지 못한 검토 task의 사유는 `review_instructions_invalid`다. 지침 본문은 공통 지침 제목과 역할 지침 다섯의 머리말 한 줄만 바뀌었다.
+- **보고서 builder 10**: 코드 분석 절의 팩 구분(`pack`)이 없고 호출 행의 `pack_id`·`pack_version`이 필수다. 지침 digest가 바뀌어 예시를 다시 만들었다.
+- **단계 표시 정리**: migration 주석, fixture 안의 이름(C/C++ `ringbuf`, JS/TS `@jsts/*`, Python `py-*`, Go `example.test/modules`), 회귀 실행의 고정 입력 key(`modules`, `caller-closes`), QA relay 식별자(`codeye-qa-relay`, 오류 종류 `qa_relay_error`)에서 작업 단계 표시를 뺐다. 이름을 바꾼 fixture는 실제 cppcheck·clang-tidy·tsc·mypy·pyright로 다시 캡처했다.
+- **데이터베이스 다시 만들기**: migration SQL의 주석과 제약 이름 하나(`snapshots_git_has_sha`)가 바뀌어 checksum이 다르다. 이 변경 전에 만든 데이터베이스는 적용된 migration의 checksum 불일치로 시작하지 않으므로 새로 만들어야 한다.
+- **표시 검사**: `scripts/bundle_checks/docs.py`가 추적하는 모든 텍스트 파일의 내용과 경로에서 팩 세대·작업 단계 표시를 찾으면 실패한다.
+
 ### 추가 — 여러 노드 검증과 운영 수용
 
 - **정리 확인**: `recovery_required` run을 사람이 "노드에 남은 프로세스가 없음"을 확인한 뒤 끝낸다. API `POST /runs/{id}/recover`(`{"cleanup_confirmed": true}`), 운영자 CLI `codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]`(개인 모드는 설정의 DB), 웹의 확인 상자와 단추. 한 트랜잭션에서 attempt `released`·`confirmed`, 예약 해제, run `failed`(`operator_confirmed`), 감사 `run.recovery_confirmed`이고 이어서 다시 시도처럼 대기열에 넣는다(신선한 노드가 snapshot을 가질 때만 같은 run). pull request run은 고정한 pull request(head SHA·변경 파일)와 댓글 선택을 그대로 가진 채 다시 들어간다([정리 확인](docs/API.md#정리-확인), A48, migration 13).
@@ -142,7 +151,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 ### 변경 — `codeye doctor`
 
 - 도구를 PATH 조회 대신 도구 탐지로 찾는다. 에이전트가 쓸 도구와 같은 결과이고, JSON 보고서의 `tools` 배열(경로 없음)과 텍스트의 도구 표로 보인다.
-- 항상 `unverified`이던 `model`·`process_control` 항목과 사유 값 `adapter_contract_pending_w10`·`native_executor_pending_w05`·`runtime_process_control_not_probed`를 없앴다. `python`·`c_cpp`(PATH의 `python3`·`cc`) 항목도 에이전트가 쓰지 않으므로 없앴다. `analyzers`(기준 분석기가 하나라도 쓸 수 있는가)와 `configured_tools`(설정에 적은 도구가 쓸 수 있는가)가 생겼다.
+- 항상 `unverified`이던 `model`·`process_control` 항목과 사유 값 세 가지(모델 어댑터 계약 대기, Native 실행기 대기, `runtime_process_control_not_probed`)를 없앴다. `python`·`c_cpp`(PATH의 `python3`·`cc`) 항목도 에이전트가 쓰지 않으므로 없앴다. `analyzers`(기준 분석기가 하나라도 쓸 수 있는가)와 `configured_tools`(설정에 적은 도구가 쓸 수 있는가)가 생겼다.
 - 종료 코드는 이 모드에서 중요한 항목(`checks[].blocking`)이 실패했을 때만 1이다. 이전에는 늘 1이었다.
 
 ### 추가 — API 키로 모델 설정
@@ -195,9 +204,9 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ### 그대로 둔 이름
 
-- 검토 팩 ID `review-r1`·`review-v1`과 그 디렉터리: 저장된 기록이 팩 ID와 digest로 해석된다.
+- 검토 팩 ID와 그 디렉터리: 저장된 기록이 팩 ID와 digest로 해석된다. (검토 기준 통합에서 바꿨다.)
 - `migrations/sql/`: 적용된 migration은 checksum으로 대조한다.
-- fixture 입력 안의 파일·매크로 이름, 보류 집합 `fixtures/r1-quality/`, 보류 평가 결과 문서: 도구 출력 캡처와 봉인 digest가 그 내용을 고정한다.
+- fixture 입력 안의 파일·매크로 이름, 보류 집합 디렉터리, 보류 평가 결과 문서: 도구 출력 캡처와 봉인 digest가 그 내용을 고정한다.
 
 ## 개인 실용판 — 2026-11-19
 
@@ -226,9 +235,9 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ### 변경
 
-- 검토 지침 팩을 `review-r1` 2.0.0 하나로 합치고 기본값으로 삼았다 (#36). `review-v1`은 이전 기록을 같은 조건으로 재현할 때만 `--review-pack review-v1`로 고른다. 팩을 지정하지 않으면 `review-r1`이다.
+- 검토 지침 팩을 다섯 역할 지침 2.0.0 하나로 합치고 기본값으로 삼았다 (#36). 세 역할 이전 지침은 이전 기록을 같은 조건으로 재현할 때만 노드 설정으로 골랐다.
 - 검토 복구 경로 (#36): JSON이 아닌 모델 응답은 형식 복구와 별도로 한 번 더 요청한다. 검증 역할이 범위 밖 ID만 틀린 항목은 관찰 ID만 제거해 처리하고, 후속 호출이 실패해도 수락 판정을 남긴다.
-- 검토 지침은 역할별로 나뉜 후보 팩(#19)에서 출발해 합쳤다. 문서 범위 일반화, 꾸민 근거, 실행·재현 주장은 검증기가 거부한다.
+- 검토 지침은 역할별로 나눈 지침(#19)에서 출발해 합쳤다. 문서 범위 일반화, 꾸민 근거, 실행·재현 주장은 검증기가 거부한다.
 - 모든 checkout의 줄바꿈을 LF로 고정했다 (#19). Windows에서 지침 파일의 digest가 달라지던 문제를 없앤다.
 - CI의 Linux 작업 제한 시간을 25분으로 늘렸다.
 
@@ -237,7 +246,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - 환경: Ubuntu 26.04 / WSL2 한 호스트(Linux 6.18), Go 1.27.4, Node 24.18.0, PostgreSQL 17.10(임시 Native 인스턴스), Chromium. CI는 Linux와 Windows에서 Go 시험을 실행한다.
 - 분석 도구: staticcheck 2026.2.2, cargo/rustc 1.99.1, clippy 0.1.99, ESLint 10.15.0, TypeScript 6.0.3, clang-tidy 23.1.5, cppcheck 2.22.0, gitleaks 8.30.1, lizard 1.26.1, jscpd 5.4.3, Ruff·mypy·pyright·Bandit(버전 계약은 `docs/ANALYZERS.md`). 실제 도구 출력은 캡처로 보관해 CI에서 재생한다.
 - 단계 표시, 예약, SSE, 비교와 판정은 실제 PostgreSQL, 제품 워커의 Go vet, Chromium으로 확인했다. 첫 입력은 문서 없는 모듈과 노드보다 높은 버전을 요구하는 모듈이 섞인 합성 저장소다.
-- 합성 사례로 기존 검토 팩과 역할별 후보 팩을 같은 모델·같은 입력으로 비교했다. 후보 팩은 같은 결함 포착 수를 더 적은 호출로 냈지만, 조정에 쓴 사례였으므로 독립 평가로 보지 않았다. 이 비교의 승인된 relay 장부 차감은 약 1.50달러(호출 63건)였다.
+- 합성 사례로 세 역할 검토 지침과 역할별로 나눈 다섯 역할 지침을 같은 모델·같은 입력으로 비교했다. 다섯 역할 지침은 같은 결함 포착 수를 더 적은 호출로 냈지만, 조정에 쓴 사례였으므로 독립 평가로 보지 않았다. 이 비교의 승인된 relay 장부 차감은 약 1.50달러(호출 63건)였다.
 - 평가 runner는 가짜 upstream으로 경로 전체를 시험했고, 이어 실제 모델로 보류 평가를 한 번 실행했다. 결과는 `docs/EVALUATION-RESULTS.md`.
 - 기본 팩 통합 뒤 기준 회귀 사례 12개를 실제 모델로 한 번씩 실행했고, 미리 정한 기준에서 회귀가 없었다.
 - 개인 모드는 Linux에서 start·status·stop·백업·복원을 실제 임시 PostgreSQL로 실행했다. Windows 시험 바이너리는 WSL interop으로 실행해 해당 패키지가 통과했다.

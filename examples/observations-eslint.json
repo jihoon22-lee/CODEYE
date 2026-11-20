@@ -115,7 +115,7 @@
   ],
   "module": {
     "dir": "packages/lib",
-    "name": "@w18/lib"
+    "name": "@jsts/lib"
   },
   "observations": [
     {

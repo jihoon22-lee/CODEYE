@@ -158,15 +158,15 @@
       "stderr": {
         "captured_bytes": 114,
         "incomplete": false,
-        "sha256": "ba90354d0c5fc403ee820133448216d475ca068cfb1cc70925ef9bc670d72278",
-        "total_bytes": 171,
+        "sha256": "95ce4914d8f1c9d6744cfb67b9119f986e7b51b7a6fe2be5b4e751aa110ac139",
+        "total_bytes": 204,
         "truncated": false
       },
       "stdout": {
         "captured_bytes": 14334,
         "incomplete": false,
-        "sha256": "112710b61852a9af5fb0bd1a2978c7ff190408439326de70d24bc7d945389787",
-        "total_bytes": 16706,
+        "sha256": "7090bb3c53035753a4687fee228224f7238886867fe52f21d4f84c92d65ac8d1",
+        "total_bytes": 18059,
         "truncated": false
       }
     }
@@ -189,7 +189,7 @@
       "category": "maintainability",
       "id": "obs_2b6977cd24c5c0ddf9c9",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 30,
         "end_line": 2,
@@ -207,13 +207,13 @@
         "json_pointer": "/message",
         "record_index": 0,
         "stream": "stdout",
-        "stream_sha256": "112710b61852a9af5fb0bd1a2978c7ff190408439326de70d24bc7d945389787"
+        "stream_sha256": "7090bb3c53035753a4687fee228224f7238886867fe52f21d4f84c92d65ac8d1"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+            "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
             "column_unit": "byte",
             "end_col": 1,
             "end_line": 3,
@@ -235,7 +235,7 @@
       "category": "maintainability",
       "id": "obs_699d1ddbbc78da2314b5",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 10,
         "end_line": 5,
@@ -253,13 +253,13 @@
         "json_pointer": "/message",
         "record_index": 2,
         "stream": "stdout",
-        "stream_sha256": "112710b61852a9af5fb0bd1a2978c7ff190408439326de70d24bc7d945389787"
+        "stream_sha256": "7090bb3c53035753a4687fee228224f7238886867fe52f21d4f84c92d65ac8d1"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+            "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
             "column_unit": "byte",
             "end_col": 10,
             "end_line": 5,
@@ -281,7 +281,7 @@
       "category": "maintainability",
       "id": "obs_f9a7518704a894bc7387",
       "location": {
-        "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+        "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
         "column_unit": "byte",
         "end_col": 75,
         "end_line": 37,
@@ -299,13 +299,13 @@
         "json_pointer": "/message",
         "record_index": 4,
         "stream": "stdout",
-        "stream_sha256": "112710b61852a9af5fb0bd1a2978c7ff190408439326de70d24bc7d945389787"
+        "stream_sha256": "7090bb3c53035753a4687fee228224f7238886867fe52f21d4f84c92d65ac8d1"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "b3b196831b3058ffbbedb53de499c63359b70edace3ef74ffb2ce5a0ce445f83",
+            "blob_sha256": "1514a4958c154e610179efed41d37fc4c1a58cd9ebea7997e2928e347453ba08",
             "column_unit": "byte",
             "end_col": 75,
             "end_line": 37,
@@ -345,7 +345,7 @@
         "json_pointer": "/message",
         "record_index": 8,
         "stream": "stdout",
-        "stream_sha256": "112710b61852a9af5fb0bd1a2978c7ff190408439326de70d24bc7d945389787"
+        "stream_sha256": "7090bb3c53035753a4687fee228224f7238886867fe52f21d4f84c92d65ac8d1"
       },
       "raw_severity": "warning",
       "related": [
@@ -405,7 +405,7 @@
     "version": "1"
   },
   "schema_version": "0.1",
-  "snapshot_manifest_digest": "700676ea54f689ecae9219fcd2245869f9173f0585a136220fc07c7dac55865b",
+  "snapshot_manifest_digest": "cc109fba603d60079c1bb1dbcd4e3530e6dcd535aa6590f4a632862d65c5f3a3",
   "target": {
     "platform": "x86_64-unknown-linux-gnu",
     "properties": {

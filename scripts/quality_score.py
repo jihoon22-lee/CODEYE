@@ -27,7 +27,7 @@ VERDICTS = ("valid_actionable", "valid_informational", "false_positive", "duplic
 VALID = ("valid_actionable", "valid_informational")
 ACTIONABLE = ("supported", "reproduced")
 PENDING = ("unreviewed", "inconclusive")
-JUDGMENT_SCHEMA = "codeye-r1-judgments"
+JUDGMENT_SCHEMA = "codeye-quality-judgments"
 Z95 = 1.959963984540054
 
 
@@ -249,6 +249,44 @@ def unit_result(views, judged, select, hit):
     return None if unknown else False
 
 
+
+# Validator error codes (docs/REVIEW.md) grouped into the classes the scorecard reports.
+ERROR_CLASS = {
+    **dict.fromkeys(("evidence_id_unknown", "evidence_missing", "evidence_kind_invalid", "observation_id_unknown",
+                     "evidence_not_at_observation", "code_evidence_missing"), "fabricated_evidence"),
+    **dict.fromkeys(("scope_generalized", "scope_unknown_path", "scope_invalid", "module_out_of_scope"), "scope_violation"),
+    "execution_claim": "execution_claim",
+}
+
+
+def report_structure(report: dict, records: list) -> dict:
+    """What one report and its kept review records show without any judgment:
+    whether the summary counts equal the findings, how many stage outputs were
+    rejected, the output errors per call by class, and the limitation markers."""
+    validations = Counter(f["validation"] for f in report["findings"])
+    summary = report["summary"]
+    stats_ok = (
+        summary["total_findings"] == len(report["findings"])
+        and summary["actionable_findings"] == validations["supported"] + validations["reproduced"]
+        and summary["pending_candidates"] == validations["unreviewed"] + validations["inconclusive"]
+        and summary["refuted_findings"] == validations["refuted"]
+    )
+    errors = Counter(
+        ERROR_CLASS.get(e, "other") for r in records for c in r.get("calls", []) for e in c.get("output_errors") or [])
+    markers = Counter(
+        m for r in records for m in r.get("limitations", [])
+        if m in ("execution_claim_rejected", "quarantined") or m.startswith("upstream_"))
+    markers.update(
+        m for r in records for v in r.get("verifications", []) for m in v.get("limitations", [])
+        if m == "reproduction_claim_rejected")
+    return {
+        "stats_consistent": stats_ok,
+        "rejected_outputs": sum(r.get("outcome") not in (None, "", "accepted") for r in records),
+        "output_errors": dict(errors),
+        "markers": dict(markers),
+    }
+
+
 def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir=None):
     name = manifest["batch"]
     valid = [r for r in rows if not r.get("invalid") and r["key"] in reports]
@@ -343,18 +381,13 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
     structural["no_code_variants"] = sorted(u["row"]["key"] for u in units if not u["exposure"]["kinds"].get("code"))         if manifest.get("condition") == "review" else []
     reproduced = sum(v["validation"] == "reproduced" for u in units for v in u["views"])
     errors, stats_bad, rejected, markers = Counter(), 0, 0, Counter()
-    try:
-        import pack_compare
-        for u in units:
-            records = records_of(batch_dir, u["row"]["key"]) if batch_dir else []
-            s = pack_compare.structural({"row": {"status": u["row"]["status"]}, "report": reports[u["row"]["key"]],
-                                             "records": records})
-            errors.update(s["output_errors"])
-            stats_bad += not s["stats_consistent"]
-            rejected += len(s["rejected_outputs"])
-            markers.update(s["markers"])
-    except ImportError:  # pragma: no cover
-        pass
+    for u in units:
+        records = records_of(batch_dir, u["row"]["key"]) if batch_dir else []
+        s = report_structure(reports[u["row"]["key"]], records)
+        errors.update(s["output_errors"])
+        stats_bad += not s["stats_consistent"]
+        rejected += s["rejected_outputs"]
+        markers.update(s["markers"])
     structural["unsupported_assertions_structural"] = {
         "reproduced_without_execution": reproduced, "rejected_model_outputs": rejected,
         "output_errors_by_class": dict(errors), "markers": dict(markers), "stats_inconsistent_reports": stats_bad}
@@ -500,7 +533,8 @@ def fmt(p):
 
 def render_table(result):
     bs = result["batches"]
-    head = "| metric | " + " | ".join(f"{b['condition']}:{b['pack'] or 'analyzers'}{' (dry)' if b['dry_run'] else ''}"
+    # Columns are named by batch: runs of the same instructions before and after a change share a condition.
+    head = "| metric | " + " | ".join(f"{b['batch']} ({b['condition']}{', dry' if b['dry_run'] else ''})"
                                       for b in bs) + " |"
     lines = [head, "|---" * (len(bs) + 1) + "|"]
     rows = [("known-defect recall (judged)", lambda b: fmt(b["metrics"]["known_defect_recall"])),
@@ -585,7 +619,7 @@ def reader_sheets(batch, corpus, sample, seed, output):
         for g in order:
             if groups[g] and len(picked) < sample:
                 picked.append(groups[g].pop())
-    key = {"schema": "codeye-r1-reader-key", "version": 1, "batch": manifest["batch"], "seed": seed, "sheets": []}
+    key = {"schema": "codeye-quality-reader-key", "version": 1, "batch": manifest["batch"], "seed": seed, "sheets": []}
     for i, row in enumerate(picked, 1):
         sheet_id = f"S{i:02d}"
         report = reports[row["key"]]

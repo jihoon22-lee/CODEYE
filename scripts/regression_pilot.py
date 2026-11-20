@@ -21,7 +21,7 @@ DEV_AGENT_MARKER = "<!-- CODEYE test fixture (TC-97)."
 
 # Fixed repository inputs that are not the synthetic defect/fix pairs. The verifier
 # fixture is the caller-closes counterexample TC-100 scores separately.
-FIXED_INPUTS = {"w15": "fixtures/modules/input", "w12-close": "internal/worker/review/testdata/verify"}
+FIXED_INPUTS = {"modules": "fixtures/modules/input", "caller-closes": "internal/worker/review/testdata/verify"}
 
 # The pilot is a copy of this repository at an approved commit. CODEYE_PILOT_COMMIT
 # names another commit (e.g. a clean copy of the current main for a dry run).
@@ -33,7 +33,7 @@ def pilot_commit(root):
     return subprocess.check_output(["git", "rev-parse", name + "^{commit}"], cwd=root, text=True).strip()
 
 
-def materialize_fixed_input(root, destination, label="w15"):
+def materialize_fixed_input(root, destination, label="modules"):
     """Copy a fixed input; drop the development-agent warning comment.
 
     The repository copy of AGENTS.md starts with a comment telling development
@@ -160,7 +160,7 @@ def _test_ledger(ledger):
 
 
 # Report limitations that mean an input of the pilot report was not read.
-_UNREAD = ("artifact_rejected", "review_lineage_mismatch", "review_pack_mismatch", "unrecognized_artifact", "result_manifest", "analysis_artifact_missing")
+_UNREAD = ("artifact_rejected", "review_lineage_mismatch", "unrecognized_artifact", "result_manifest", "analysis_artifact_missing")
 
 
 def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None):
@@ -185,9 +185,9 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
     fake's interpret reply then has no item to give. Any other cause still
     fails, and a paid run gets no exception. Returns the failures and the
     pilot's numbers."""
-    from bundle_checks.review import role_pack
+    from bundle_checks.review import pack_selection
 
-    _, roles = role_pack(("go",))
+    _, roles = pack_selection(("go",))
     test = _test_ledger(ledger)
     failures, pilot = [], None
     for row in rows:
@@ -198,11 +198,10 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
             slices = [t["key"] for t in row["tasks"] if SLICE_TASK.match(t["key"])]
             if slices:
                 failures.append(f"{label}: slice tasks {slices}")
-            if row.get("review_pack", "review-r1") == "review-r1":
-                for call in row["review_calls"]:
-                    want = roles.get(call["role"], {}).get("digest")
-                    if call["pack_sha256"] != want:
-                        failures.append(f"{label}: {call['role']} pack digest {call['pack_sha256']} is not the pinned {want}")
+            for call in row["review_calls"]:
+                want = roles.get(call["role"], {}).get("digest")
+                if call["pack_sha256"] != want:
+                    failures.append(f"{label}: {call['role']} pack digest {call['pack_sha256']} is not the pinned {want}")
             continue
         report = json.loads((output / "pilot.json").read_bytes())
         tasks = {t["key"]: t for t in report["tasks"]}
@@ -312,7 +311,6 @@ def run(base, root, env, web=True, coverage_check=True):
             "--opencode", opencode,
             "--model", "codeye-gateway/gpt-6.2-sol",
             "--model-relay-file", relay,
-            *(["--review-pack", os.environ["CODEYE_PILOT_REVIEW_PACK"]] if os.environ.get("CODEYE_PILOT_REVIEW_PACK") else []),
             # 비밀정보 선별이 있어야 모듈 단위 slice가 실행된다. 호출 상한은 시도마다 적용된다.
             *(["--gitleaks", os.environ["CODEYE_PILOT_GITLEAKS"]] if os.environ.get("CODEYE_PILOT_GITLEAKS") else []),
             *(["--review-max-calls", os.environ["CODEYE_PILOT_REVIEW_MAX_CALLS"]] if os.environ.get("CODEYE_PILOT_REVIEW_MAX_CALLS") else []),
@@ -396,7 +394,7 @@ def run(base, root, env, web=True, coverage_check=True):
                         or report["inputs"]["source_kind"] != "git"
                         or report["coverage"]["ai_review"]["status"] == "performed"
                         or not any(
-                            t["key"] == "review.context"
+                            t["key"].startswith("review.")
                             and t["reason"] == "model_source_not_approved"
                             for t in report["tasks"]
                         )
@@ -425,7 +423,6 @@ def run(base, root, env, web=True, coverage_check=True):
                         {k: v for k, v in t.items() if k in ("key", "status", "reason")}
                         for t in report["tasks"]
                     ],
-                    "review_pack": os.environ.get("CODEYE_PILOT_REVIEW_PACK", "review-r1"),
                     "review_calls": [
                         {k: c.get(k) for k in ("role", "outcome", "pack_sha256")}
                         for c in report["coverage"].get("review_calls", [])

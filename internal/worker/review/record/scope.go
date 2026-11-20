@@ -31,7 +31,7 @@ const (
 	ScopeKind          = "review_scope"
 	ScopeMaxBytes      = 1 << 20
 
-	// Call budget of the role pack (codeye agent --review-max-calls).
+	// Call budget of the review (codeye agent --review-max-calls).
 	DefaultMaxCalls = 99
 	// WholeRunMaxCalls is the most the five whole-run roles can call
 	// (5 x RoleMaxCalls); they are never cut, so it is the ceiling's minimum.
@@ -72,7 +72,7 @@ const (
 	ScreenNotScreened = "not_screened"
 )
 
-// ValidMaxCalls reports a call ceiling the role pack accepts (0 is the
+// ValidMaxCalls reports a call ceiling the review accepts (0 is the
 // default and is resolved before it is recorded).
 func ValidMaxCalls(n int) bool { return n >= WholeRunMaxCalls && n <= MaxMaxCalls }
 

@@ -23,7 +23,6 @@ func composeSections(r *Report, in Input, states map[string]*taskState, keys []s
 		}
 	}
 	c.reviewPlanned = slices.ContainsFunc(keys, func(k string) bool { return strings.HasPrefix(k, "review.") })
-	c.rolePack = rolePackPlanned(states)
 	r.Environment = c.environment()
 	r.Documents = c.documents()
 	r.StaticAnalysis = c.staticAnalysis()
@@ -36,12 +35,12 @@ func composeSections(r *Report, in Input, states map[string]*taskState, keys []s
 }
 
 type sectionContext struct {
-	r                       *Report
-	states                  map[string]*taskState
-	keys                    []string
-	manifest, fixed         bool
-	recorded                bool
-	reviewPlanned, rolePack bool
+	r               *Report
+	states          map[string]*taskState
+	keys            []string
+	manifest, fixed bool
+	recorded        bool
+	reviewPlanned   bool
 }
 
 func strPtr(s string) *string { return &s }
@@ -92,8 +91,8 @@ func (c sectionContext) discovery(key string) (string, *envdoc.Document) {
 	return DiscoveryMissing, nil
 }
 
-// model tells whether the role-pack role key ran and its record was kept.
-func (c sectionContext) model(key string) (ModelInterpretation, *record.RoleRecord) {
+// model tells whether the review role key ran and its record was kept.
+func (c sectionContext) model(key string) (ModelInterpretation, *record.Record) {
 	m := ModelInterpretation{TaskKey: key, State: ModelNotPerformed}
 	st := c.states[key]
 	if st != nil {
@@ -102,8 +101,6 @@ func (c sectionContext) model(key string) (ModelInterpretation, *record.RoleReco
 	switch {
 	case !c.reviewPlanned:
 		m.Reason = strPtr("review_tasks_not_planned")
-	case !c.rolePack:
-		m.Reason = strPtr("role_not_in_pack")
 	case st == nil:
 		m.Reason = strPtr("role_not_planned")
 	case st.facts.Status != string(domain.TaskSucceeded):
@@ -114,17 +111,17 @@ func (c sectionContext) model(key string) (ModelInterpretation, *record.RoleReco
 		m.Reason = strPtr(reason)
 	case st.rejected:
 		m.Reason = strPtr("result_rejected")
-	case !roleAccepted(st):
+	case !reviewAccepted(st):
 		m.Reason = strPtr("result_missing")
 	default:
 		m.State = ModelPerformed
-		return m, st.reviewResult.Role
+		return m, st.reviewResult.Record
 	}
 	return m, nil
 }
 
 // evidenceOf carries the catalog entries the section's statements cite.
-func evidenceOf(rec *record.RoleRecord, lists ...[]string) []SectionEvidence {
+func evidenceOf(rec *record.Record, lists ...[]string) []SectionEvidence {
 	out := []SectionEvidence{}
 	if rec == nil {
 		return out
@@ -173,7 +170,7 @@ func (c sectionContext) environment() *EnvironmentSection {
 		}
 		s.Limitations = append(s.Limitations, doc.Limitations...)
 	}
-	var rec *record.RoleRecord
+	var rec *record.Record
 	if deps := c.dependencies(); len(deps) > 0 {
 		s.Dependencies = deps
 	}
@@ -209,7 +206,7 @@ func (c sectionContext) documents() *DocumentsSection {
 		}
 		s.Limitations = append(s.Limitations, doc.Limitations...)
 	}
-	var rec *record.RoleRecord
+	var rec *record.Record
 	s.Model, rec = c.model("review.documents")
 	var cited [][]string
 	if rec != nil {
@@ -470,8 +467,6 @@ func (c sectionContext) screen() string {
 		switch rr := st.reviewResult; {
 		case rr == nil || st.rejected:
 			continue
-		case rr.Role != nil:
-			lims, decoded = rr.Role.Limitations, decoded || len(rr.Role.Calls) > 0
 		case rr.Record != nil:
 			lims, decoded = rr.Record.Limitations, decoded || len(rr.Record.Calls) > 0
 		}
@@ -502,14 +497,8 @@ func (c sectionContext) screen() string {
 }
 
 func (c sectionContext) codeReview() *CodeReviewSection {
-	s := &CodeReviewSection{Stage: c.stage(domain.StageCodeReview, nil), Pack: "none", Roles: []AIReviewTask{}, InventoryFiles: c.r.Coverage.InventoryFiles,
+	s := &CodeReviewSection{Stage: c.stage(domain.StageCodeReview, nil), Roles: []AIReviewTask{}, InventoryFiles: c.r.Coverage.InventoryFiles,
 		ExposedFiles: c.r.Coverage.LLMExposedFiles, FindingIDs: []string{}, Limits: []InterpretationLimit{}}
-	switch {
-	case c.rolePack:
-		s.Pack = "role"
-	case c.reviewPlanned:
-		s.Pack = "legacy"
-	}
 	ai := c.r.Coverage.AIReview
 	for _, t := range append(append([]AIReviewTask{}, ai.RequiredTasks...), ai.OptionalTasks...) {
 		// The scope and slice tasks are the ledger's rows, not roles.
@@ -530,23 +519,17 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 			s.PackID, s.PackVersion = strPtr(call.PackID), strPtr(call.PackVersion)
 		}
 	}
-	// Request sizes are recorded by role records only; a legacy record
-	// leaves the sum unknown.
-	bytes, known := 0, c.rolePack
-	for _, k := range c.keys {
-		st := c.states[k]
-		if !strings.HasPrefix(k, "review.") || st.rejected || st.reviewResult == nil {
-			continue
+	if c.reviewPlanned {
+		bytes := 0
+		for _, k := range c.keys {
+			st := c.states[k]
+			if !strings.HasPrefix(k, "review.") || st.rejected || st.reviewResult == nil || st.reviewResult.Record == nil {
+				continue
+			}
+			for _, call := range st.reviewResult.Record.Calls {
+				bytes += call.RequestBytes
+			}
 		}
-		if st.reviewResult.Role == nil {
-			known = false
-			continue
-		}
-		for _, call := range st.reviewResult.Role.Calls {
-			bytes += call.RequestBytes
-		}
-	}
-	if known {
 		s.RequestBytes = &bytes
 	}
 	tool := map[string]bool{}
@@ -560,19 +543,19 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 			s.FindingIDs = append(s.FindingIDs, f.ID)
 		}
 	}
-	if st := c.states["review.interpret"]; c.rolePack && roleAccepted(st) {
-		for _, l := range st.reviewResult.Role.Limits {
+	if st := c.states["review.interpret"]; reviewAccepted(st) {
+		for _, l := range st.reviewResult.Record.Limits {
 			s.Limits = append(s.Limits, InterpretationLimit{ObservationIDs: append([]string{}, l.ObservationIDs...), Statement: l.Statement})
 		}
 	}
-	if c.rolePack {
+	if c.reviewPlanned {
 		s.Ledger = c.ledger()
 	}
 	return s
 }
 
 func roleOrder(key string) int {
-	for i, k := range []string{"review.context", "review.investigate", "review.interpret", "review.verify"} {
+	for i, k := range []string{"review.investigate", "review.interpret", "review.verify"} {
 		if k == key {
 			return i
 		}

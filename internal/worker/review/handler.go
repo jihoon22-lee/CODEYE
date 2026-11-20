@@ -3,259 +3,581 @@ package review
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
-	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review-v1"
+	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review"
 )
 
-const MediaType = record.MediaType
+// PromptBudget bounds the full message text of one review request
+// (opencode.Prompt: instructions, contract, repair rules, input and wrapper).
+// The QA relay accepts 49152 UTF-8 bytes of message text per request; the
+// remainder is left for the OpenCode client's own messages.
+const PromptBudget = 40000
 
-type Caller interface {
-	Review(context.Context, executor.Runner, opencode.Request) opencode.Reply
-}
+// repairReserve keeps room for a repair request (rules and error codes).
+const repairReserve = 3072
+
+// Task reasons and limitation codes of the review.
+const (
+	ReasonNoDocuments       = "no_documents"
+	ReasonDocsNotSelected   = "documents_not_selected"
+	ReasonNoToolObservation = "no_tool_observations"
+	ReasonNoEnvironmentGap  = "no_environment_gap"
+	reasonDependency        = "dependency_failed"
+	reasonUnknownRole       = "unknown_review_role"
+	reasonRecordMissing     = "record_missing"
+	reasonRecordInvalid     = "record_invalid"
+	limInputTrimmed         = "review_input_trimmed"
+	// code_excerpts_go_only (code context of Go files only) is no longer
+	// written; the report still names it for earlier records.
+)
+
+// Handler composes the static analyzer with the candidate roles of the
+// review. Planning reads only the manifest; every role reads
+// only platform artifacts of this attempt and accepted earlier role records,
+// each validated again. Model output never decides a task status, a platform
+// verdict or a reproduction.
 type Handler struct {
 	Static analysis.Handler
 	Caller Caller
+	// MaxCalls is the node operator's model call ceiling per attempt
+	// (codeye agent --review-max-calls); 0 means record.DefaultMaxCalls. It
+	// decides which review slices are admitted at run time and never the
+	// plan.
+	MaxCalls int
+	// Secondary is the path rule of test input, examples and third-party
+	// material (docs/REVIEW.md#검토-우선순위); nil means
+	// record.DefaultSecondary. It orders the overview's files and the slots.
+	Secondary *record.SecondaryRule
 }
 
-// Record types live in the I/O-free record package so report decoders can
-// validate artifacts without importing model or process code.
-type (
-	Fact         = record.Fact
-	Candidate    = record.Candidate
-	Provenance   = record.Call
-	Record       = record.Record
-	Excerpt      = record.Excerpt
-	Verification = record.Verification
-)
+var _ analysis.Handler = Handler{}
+
+func (h Handler) secondary() record.SecondaryRule {
+	if h.Secondary == nil {
+		return record.DefaultSecondary
+	}
+	return *h.Secondary
+}
 
 func (h Handler) Info() analysis.HandlerInfo { return h.Static.Info() }
+
+func (h Handler) maxCalls() int {
+	if h.MaxCalls == 0 {
+		return record.DefaultMaxCalls
+	}
+	return h.MaxCalls
+}
+
+// Plan appends the five roles of the review. The documents role is required only when
+// the manifest has guidance documents in scope; environment and interpret
+// roles are optional. When the overview investigate cannot offer every
+// eligible code file, review.scope and one investigate/verify pair per slot
+// follow (planSlices: the plan fixes how many slots exist, review.scope
+// fills them at run time), all optional for the verdict. The slices come after
+// every whole-run role, so the whole-run roles' calls are always spent
+// before any slice is admitted.
 func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec, error) {
 	plan, err := h.Static.Plan(ctx, j)
 	if err != nil {
 		return nil, err
 	}
-	// The legacy pack's context role reads documents and code; it is shown
-	// with the documents stage. Investigation and verification are code review.
-	return append(plan, analysis.TaskSpec{Key: "review.context", Required: true, Title: "프로젝트 맥락 검토", Stage: domain.StageDocuments},
-		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "코드 근거와 반례 검토", Stage: domain.StageCodeReview},
-		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview}), nil
+	docs := len(discovery.EligibleDocuments(j.Snapshot.Manifest, j.Scope)) > 0
+	plan = append(plan,
+		analysis.TaskSpec{Key: "review.environment", Required: false, Title: "환경 영향 검토", Stage: domain.StageEnvironment},
+		analysis.TaskSpec{Key: "review.documents", Required: docs, Title: "문서 계약 검토", Stage: domain.StageDocuments},
+		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "독립 코드 검토", Stage: domain.StageCodeReview},
+		analysis.TaskSpec{Key: "review.interpret", Required: false, Title: "정적 진단 해석", Stage: domain.StageCodeReview},
+		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview})
+	sp := planSlicesFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j))
+	if sp.Slots == 0 {
+		return plan, nil
+	}
+	plan = append(plan, analysis.TaskSpec{Key: record.TaskScope, Required: false, Title: "모듈별 검토 범위", Stage: domain.StageCodeReview})
+	for i := range sp.Slots {
+		inv, ver := slotTaskKeys(sliceKey(i))
+		plan = append(plan,
+			analysis.TaskSpec{Key: inv, Required: false, Title: "모듈별 코드 검토 " + sliceKey(i), Stage: domain.StageCodeReview},
+			analysis.TaskSpec{Key: ver, Required: false, Title: "모듈별 후보 검증 " + sliceKey(i), Stage: domain.StageCodeReview})
+	}
+	return plan, nil
 }
+
 func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
-	role, review := strings.CutPrefix(t.Key, "review.")
-	if !review {
+	role, ok := strings.CutPrefix(t.Key, "review.")
+	if !ok {
 		return h.Static.Run(ctx, j, t, runner)
+	}
+	slice := ""
+	switch stage, key, isSlice := record.SliceTask(t.Key); {
+	case t.Key == record.TaskScope:
+	case isSlice:
+		role, slice = stage, key
+	case !slices.Contains(reviewpack.Roles, role):
+		return result(domain.TaskFailed, reasonUnknownRole)
 	}
 	if !j.AllowModelReview {
 		return result(domain.TaskSkippedPolicy, "model_source_not_approved")
 	}
-	if h.Caller == nil {
-		return result(domain.TaskUnsupported, "model_not_configured")
+	if ctx.Err() != nil {
+		return result(domain.TaskCancelled, "cancelled")
 	}
-	screen := screenSecrets(ctx, h.Static, j)
-	if role == "verify" {
-		return h.verify(ctx, j, runner, screen)
+	// Every role, the scope and the slices follow one screen rule: without a
+	// usable secrets result their inputs go through the read filters only and
+	// the records say model_input_not_secret_screened (screen.go).
+	s := &roleStage{h: h, ctx: ctx, j: j, runner: runner, task: t.Key, role: role, screen: screenSecrets(ctx, h.Static, j)}
+	if t.Key == record.TaskScope {
+		return s.scopeTask()
 	}
-	c, err := buildScreenedCorpus(j.Snapshot, j.Scope, screen.withheld)
-	if err != nil {
-		return result(domain.TaskFailed, "review_input_unavailable")
-	}
-	rec := Record{Schema: "0.1", Snapshot: c.Snapshot, RunID: j.RunID, AttemptID: j.AttemptID, Stage: role,
-		Evidence: append([]Excerpt(nil), c.Excerpts...), Facts: []Fact{}, Candidates: []Candidate{}, Limitations: c.Limitations, Calls: []Provenance{}}
-	for i := range rec.Evidence {
-		rec.Evidence[i].Text = ""
-	}
-	input := struct {
-		Corpus Corpus `json:"scope"`
-		Facts  []Fact `json:"facts,omitempty"`
-	}{Corpus: c}
-	if role == "investigate" {
-		rec, err = readRecord(j, "context")
-		if err != nil || !sameEvidence(rec.Evidence, c.Excerpts) {
-			return result(domain.TaskSkippedPolicy, "dependency_failed")
-		}
-		input.Facts = rec.Facts
-		rec.Stage = role
-	}
-	// The record (never the pinned model input) says when nothing screened
-	// the corpus for secrets.
-	if screen.state == screenUnscreened {
-		rec.Limitations = addLim(rec.Limitations, limNotSecretScreened)
-	}
-	query, err := json.Marshal(input)
-	if err != nil {
-		return result(domain.TaskFailed, "review_input_unavailable")
-	}
-	pack, err := reviewpack.For(role)
-	if err != nil {
-		return result(domain.TaskFailed, "review_pack_invalid")
-	}
-	contract := contracts[role]
-	reply := h.Caller.Review(ctx, runner, opencode.Request{Role: role, Scratch: j.Scratch, SnapshotDigest: c.Snapshot,
-		Instructions: pack.Text + "\n" + contract + "\nUse only the provided excerpts. Review ordinary software behavior and maintainability. No code execution, test generation or external access. Cite only evidence IDs given in scope. Write concise Korean prose.",
-		Input:        query, ProtectedRoots: []string{j.Snapshot.SnapshotDir}})
-	rec.Limitations = noteVersion(rec.Limitations, reply)
-	call := Provenance{Role: role, Model: reply.Model, Version: reply.Version, PackDigest: pack.Digest, PackFiles: pack.Files, RequestDigest: reply.RequestDigest, Usage: usage(reply.Usage), Attempt: 1, Outcome: record.OutcomeAccepted}
-	res := result(domain.TaskSucceeded, "")
-	if reply.Reason != "" {
-		res = failure(reply)
-	} else if err = accept(role, reply.Output, &rec); err != nil {
-		res = result(domain.TaskFailed, "review_evidence_invalid")
-	}
-	if res.Status != domain.TaskSucceeded {
-		call.Outcome = res.Reason
-		rec.Calls = append(rec.Calls, call)
-		return failedRecord(j, rec, res)
-	}
-	rec.Calls = append(rec.Calls, call)
-	rec.Outcome = record.OutcomeAccepted
-	return writeRecord(j, rec)
-}
-
-var contracts = map[string]string{
-	"context":     `For this role use exactly this result contract, ignoring any wider output examples: {"facts":[{"kind":"observed|documented|inferred","statement":"one grounded fact","evidence_ids":["ev_..."]}]}. Return 1-4 facts, including limitations in the statements when needed. Use documented only for document/config references.`,
-	"investigate": `For this role use exactly {"candidates":[{"title":"...","condition":"concrete trigger","impact":"...","improvement":"...","counterpoint":"actual counterevidence or remaining uncertainty","evidence_ids":["ev_..."]}]}. Return zero to four independent quality candidates. Include a code or test evidence ID for each. Do not claim reproduction. Do not produce exploit or attack instructions.`,
-}
-
-func result(status domain.TaskStatus, reason string) analysis.TaskResult {
-	return analysis.TaskResult{Status: status, Reason: reason}
-}
-func failure(reply opencode.Reply) analysis.TaskResult {
-	switch reply.Reason {
-	case "cancelled":
-		return result(domain.TaskCancelled, reply.Reason)
-	case "model_timeout":
-		return result(domain.TaskTimedOut, reply.Reason)
-	case "model_not_configured", "opencode_version_unsupported", opencode.ReasonCredentialUnavailable:
-		return result(domain.TaskUnsupported, reply.Reason)
-	case "policy_blocked":
-		return result(domain.TaskSkippedPolicy, reply.Reason)
-	}
-	return result(domain.TaskFailed, reply.Reason)
-}
-func safeText(s string) bool { return record.SafeText(s) }
-
-// noteVersion adds opencode_version_untested when reply came through an
-// OpenCode release other than the tested one.
-func noteVersion(lims []string, reply opencode.Reply) []string {
-	if opencode.VersionUntested(reply.Version) {
-		return addLim(lims, opencode.LimVersionUntested)
-	}
-	return lims
-}
-func accept(role string, raw json.RawMessage, r *Record) error {
-	bad := errors.New("invalid model evidence")
-	catalog := map[string]Excerpt{}
-	for _, e := range r.Evidence {
-		catalog[e.ID] = e
+	if slice != "" {
+		return s.sliceTask(slice)
 	}
 	switch role {
-	case "context":
-		var res struct {
-			Facts []Fact `json:"facts"`
-		}
-		if domain.DecodeStrict(raw, &res) != nil || len(res.Facts) == 0 || len(res.Facts) > 4 {
-			return bad
-		}
-		for _, f := range res.Facts {
-			kind := ""
-			switch f.Kind {
-			case "documented":
-				kind = "document"
-			case "observed", "inferred":
-			default:
-				return bad
-			}
-			if !safeText(f.Statement) || !record.RefsOK(f.Evidence, catalog, kind, 6) {
-				return bad
-			}
-		}
-		r.Facts = res.Facts
-	case "investigate":
-		var res struct {
-			Candidates []Candidate `json:"candidates"`
-		}
-		if domain.DecodeStrict(raw, &res) != nil || res.Candidates == nil || len(res.Candidates) > 4 {
-			return bad
-		}
-		for i := range res.Candidates {
-			c := &res.Candidates[i]
-			if c.ID != "" || !safeText(c.Title) || !safeText(c.Condition) || !safeText(c.Impact) || !safeText(c.Improvement) || !safeText(c.Counterpoint) || !record.RefsOK(c.Evidence, catalog, "code", 6) {
-				return bad
-			}
-			c.ID = fmt.Sprintf("candidate_%d", i+1)
-		}
-		r.Candidates = res.Candidates
-	default:
-		return bad
+	case record.StageEnvironment:
+		return s.environment()
+	case record.StageDocuments:
+		return s.documents()
+	case record.StageInvestigate:
+		return s.investigate()
+	case record.StageInterpret:
+		return s.interpret()
+	}
+	return s.verify()
+}
+
+// roleStage is one role run of the review.
+type roleStage struct {
+	h      Handler
+	ctx    context.Context
+	j      analysis.Job
+	runner executor.Runner
+	task   string // the task key (review.investigate.s001 for a slice)
+	role   string
+	pack   reviewpack.Selection
+	rec    record.Record
+	// screen is the secrets screen of the run's model inputs (screen.go).
+	screen secretScreen
+	// slice is set for a slice task: its entry of the review.scope artifact
+	// and that artifact's upstream binding (slice_run.go).
+	slice   *record.ScopeSlice
+	scopeUp record.Upstream
+}
+
+// begin loads the pack and the record skeleton; a nil caller is reported
+// only after the skip rules, which need no model.
+func (s *roleStage) begin(upstream []record.Upstream) *analysis.TaskResult {
+	if s.h.Caller == nil {
+		r := result(domain.TaskUnsupported, "model_not_configured")
+		return &r
+	}
+	sel, err := reviewpack.For(s.role, languagesInScope(s.j))
+	if err != nil {
+		r := result(domain.TaskFailed, "review_instructions_invalid")
+		return &r
+	}
+	s.pack = sel
+	if upstream == nil {
+		upstream = []record.Upstream{}
+	}
+	s.rec = record.Record{Schema: record.SchemaVersion, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
+		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Stage: s.role, Outcome: record.OutcomeAccepted, Upstream: upstream,
+		Evidence: []record.Excerpt{}, Observations: []record.ObservationRef{}, Limitations: []string{}, Calls: []record.Call{}}
+	if s.slice != nil {
+		s.rec.Schema = record.SchemaVersionSlice
+		s.rec.Slice = &record.SliceRef{Key: s.slice.Key, Modules: append([]string{}, s.slice.Modules...)}
 	}
 	return nil
 }
 
-// expect binds record validation to this attempt and its immutable snapshot
-// manifest; prior stage records in scratch are not trusted on their own.
-func expect(j analysis.Job, stage string) record.Expect {
-	index := map[string]string{}
-	for _, e := range j.Snapshot.Manifest.Entries {
-		if e.Kind == "file" && e.SHA256 != "" && e.ExcludedReason == "" && inScope(e.Path, j.Scope) {
-			index[e.Path] = e.SHA256
+// screenLimitation is added when the record is written, after the model
+// input was built: the record and the report say the inputs were not
+// screened for secrets; the model input stays as it was.
+func (s *roleStage) screenLimitation(lims []string) []string {
+	if s.screen.state == screenUnscreened {
+		return addLim(lims, limNotSecretScreened)
+	}
+	return lims
+}
+
+// languagesInScope are the source ecosystems whose language guides a role
+// gets: the analyzer packs' one definition of an ecosystem in scope
+// (pack.InScope, docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백) over the job's manifest and scope. Every call
+// records the selected guide files in pack_files.
+func languagesInScope(j analysis.Job) []string {
+	return pack.InScope(j.Snapshot.Manifest, j.Scope)
+}
+
+func (s *roleStage) setEvidence(list []record.Excerpt) {
+	s.rec.Evidence = make([]record.Excerpt, len(list))
+	for i, e := range list {
+		e.Text = ""
+		s.rec.Evidence[i] = e
+	}
+}
+
+func (s *roleStage) instructions(contract string) string {
+	return s.pack.Text + "\n" + contract + requestRules
+}
+
+const requestRules = "\nUse only the provided input. No code execution, test runs, reproduction or external access: never claim any. Cite only evidence and observation IDs given in this input; add no paths, line numbers or other fields. Keep every text field under 120 characters of concise Korean prose."
+
+const repairRules = "\nFormat repair: your previous output was rejected with the platform error codes in input.repair.output_errors. Return the complete result again in the same contract, citing only IDs from this input."
+
+// outputRepair is the only feedback a repair request carries: fixed codes.
+type outputRepair struct {
+	OutputErrors []string `json:"output_errors"`
+}
+
+// fits reports whether the request text fits the budget, keeping room for
+// one repair request when reserve is set.
+func (s *roleStage) fits(instructions string, input []byte, reserve bool) (int, bool) {
+	n := len(opencode.Prompt(opencode.Request{Role: s.role, Instructions: instructions + repairRules, Input: input}))
+	if reserve {
+		n += repairReserve
+	}
+	return n, n <= PromptBudget
+}
+
+// exchange sends one request and at most one bounded format repair. parse
+// validates an output and returns platform error codes; it must keep its
+// result aside until it returns none. A model failure fails the task with
+// the client's reason; an output still invalid after the repair fails it
+// with review_output_invalid and no model content is kept.
+func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte, error), parse func(json.RawMessage) []string) *analysis.TaskResult {
+	instructions := s.instructions(contract)
+	var repair *outputRepair
+	repaired, retried := false, false
+	for attempt := 1; attempt <= record.RoleMaxCalls; attempt++ {
+		if s.ctx.Err() != nil {
+			return s.fail(result(domain.TaskCancelled, "cancelled"))
+		}
+		query, err := input(repair)
+		if err != nil {
+			return s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		}
+		text := instructions
+		if repair != nil {
+			text += repairRules
+		}
+		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: query, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
+		size := len(opencode.Prompt(q))
+		if size > PromptBudget {
+			return s.fail(result(domain.TaskFailed, reasonInputTooLarge))
+		}
+		if err := s.countCall(); err != nil {
+			return s.fail(result(domain.TaskFailed, reasonCallCountFailed))
+		}
+		reply := s.h.Caller.Review(s.ctx, s.runner, q)
+		s.rec.Limitations = noteVersion(s.rec.Limitations, reply)
+		call := record.Call{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,
+			PackFiles: s.pack.Files, RequestDigest: reply.RequestDigest, RequestBytes: size, Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
+		if reply.Reason != "" && reply.Reason != "model_output_invalid" {
+			call.Outcome = reply.Reason
+			if !record.ValidCode(call.Outcome) {
+				call.Outcome = "model_unavailable"
+			}
+			s.rec.Calls = append(s.rec.Calls, call)
+			return s.fail(failure(reply))
+		}
+		notJSON := reply.Reason != ""
+		errs := []string{"output_not_json"}
+		if !notJSON {
+			errs = parse(reply.Output)
+		}
+		if len(errs) == 0 {
+			call.Outcome = callAccepted
+			s.rec.Calls = append(s.rec.Calls, call)
+			return nil
+		}
+		call.Outcome, call.OutputErrors = callRejected, addLim(nil, errs...)
+		s.rec.Calls = append(s.rec.Calls, call)
+		s.noteExecutionClaim(call)
+		// One repair of a rejected output, and one retry of a reply that was
+		// not JSON at all; the retry keeps the earlier repair's codes.
+		if notJSON {
+			if retried {
+				break
+			}
+			retried = true
+			if repair != nil {
+				repair = &outputRepair{OutputErrors: addLim(append([]string{}, repair.OutputErrors...), errs...)}
+				continue
+			}
+		} else {
+			if repaired {
+				break
+			}
+			repaired = true
+		}
+		repair = &outputRepair{OutputErrors: call.OutputErrors}
+	}
+	return s.fail(result(domain.TaskFailed, reasonOutputInvalid))
+}
+
+// noteExecutionClaim records at stage level that the platform rejected a
+// model claim of running or reproducing something, so an evaluation can count
+// it without reading every call.
+func (s *roleStage) noteExecutionClaim(c record.Call) {
+	if slices.Contains(c.OutputErrors, "execution_claim") {
+		s.rec.Limitations = addLim(s.rec.Limitations, record.LimExecutionClaim)
+	}
+}
+
+// fail keeps the attempted calls, the inputs given and the upstream states
+// in a failed record; model content is quarantined (not kept).
+func (s *roleStage) fail(res analysis.TaskResult) *analysis.TaskResult {
+	r := s.rec
+	r.Limitations = s.screenLimitation(r.Limitations)
+	r.Outcome, r.FailureReason = record.OutcomeFailed, res.Reason
+	if !record.ValidCode(r.FailureReason) {
+		r.FailureReason = "review_failed"
+	}
+	r.EnvironmentNotes, r.Contracts, r.Conflicts, r.Questions, r.InstructionNotes, r.Limits = nil, nil, nil, nil, nil, nil
+	if r.Stage != record.StageVerify {
+		r.Candidates = nil
+	} else {
+		r.Verifications = make([]record.Verification, len(r.Candidates))
+		for i, c := range r.Candidates {
+			r.Verifications[i] = unreviewed(c.ID, record.LimNotCompleted)
 		}
 	}
-	return record.Expect{Snapshot: j.Snapshot.Digest, RunID: j.RunID, AttemptID: j.AttemptID, Stage: stage,
-		Lookup: func(p string) (string, bool) { sha, ok := index[p]; return sha, ok }}
+	r.Calls = append([]record.Call{}, r.Calls...)
+	for i := range r.Calls {
+		if r.Calls[i].Outcome == callAccepted {
+			r.Calls[i].Outcome = callDiscarded
+		}
+	}
+	if art, err := persistRecord(s.j, r); err == nil {
+		res.Artifacts = append(res.Artifacts, art)
+	} else {
+		res.Limitations = addLim(res.Limitations, "review_record_failed")
+	}
+	return &res
 }
 
-func readRecord(j analysis.Job, role string) (Record, error) {
-	f, err := os.Open(filepath.Join(j.Scratch, "review."+role+".json"))
+// finish writes the accepted record.
+func (s *roleStage) finish() analysis.TaskResult {
+	s.rec.Limitations = s.screenLimitation(addLim(s.rec.Limitations))
+	art, err := persistRecord(s.j, s.rec)
 	if err != nil {
-		return Record{}, err
+		return result(domain.TaskFailed, "review_record_failed")
 	}
-	defer f.Close()
-	b, err := io.ReadAll(io.LimitReader(f, record.MaxBytes+1))
-	if err != nil {
-		return Record{}, err
-	}
-	rec, err := record.Decode(b, expect(j, role))
-	if err != nil || !rec.Accepted() {
-		return Record{}, errors.New("invalid prior review")
-	}
-	return rec, nil
+	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: s.rec.Limitations}
 }
 
-func persist(j analysis.Job, r Record) (analysis.ArtifactFile, error) {
-	b, err := record.MarshalRecord(r, expect(j, r.Stage))
+// recordPath is the scratch file of a role record: name is a stage, or
+// stage.sNNN for a slice record.
+func recordPath(j analysis.Job, name string) string {
+	return filepath.Join(j.Scratch, "review."+name+".json")
+}
+
+// recordName is the recordPath name of a record.
+func recordName(r record.Record) string {
+	if r.Slice != nil {
+		return r.Stage + "." + r.Slice.Key
+	}
+	return r.Stage
+}
+
+// expectRecord is expectStage for a record name (stage or stage.sNNN).
+func expectRecord(j analysis.Job, name string) record.Expect {
+	stage, slice, _ := strings.Cut(name, ".")
+	e := expectStage(j, stage)
+	e.Slice = slice
+	return e
+}
+
+func expectStage(j analysis.Job, stage string) record.Expect {
+	e := expect(j, stage)
+	// Review manifest evidence (requirement sources) may lie outside a paths
+	// scope: discovery reads a module's manifest when the scope touches it.
+	index := map[string]string{}
+	for _, en := range j.Snapshot.Manifest.Entries {
+		if en.Kind == "file" && en.SHA256 != "" && en.ExcludedReason == "" {
+			index[en.Path] = en.SHA256
+		}
+	}
+	e.Lookup = func(p string) (string, bool) { sha, ok := index[p]; return sha, ok }
+	return e
+}
+
+func persistRecord(j analysis.Job, r record.Record) (analysis.ArtifactFile, error) {
+	b, err := record.Marshal(r, expectRecord(j, recordName(r)))
 	if err != nil {
 		return analysis.ArtifactFile{}, err
 	}
-	p := filepath.Join(j.Scratch, "review."+r.Stage+".json")
+	p := recordPath(j, recordName(r))
 	if err = os.WriteFile(p, bytes.TrimSpace(b), 0600); err != nil {
 		return analysis.ArtifactFile{}, err
 	}
 	return analysis.ArtifactFile{Path: p, Role: "other", MediaType: MediaType}, nil
 }
 
-func writeRecord(j analysis.Job, r Record) analysis.TaskResult {
-	art, err := persist(j, r)
+func digestOf(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+
+func readBounded(p string, max int64) ([]byte, error) {
+	f, err := os.Open(p)
 	if err != nil {
-		return result(domain.TaskFailed, "review_record_failed")
+		return nil, err
 	}
-	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > max {
+		return nil, errors.New("artifact too large")
+	}
+	return b, nil
 }
 
-func usage(u *opencode.Usage) *record.Usage {
-	if u == nil {
-		return nil
+// prior reads an earlier role record of this attempt (name is a stage, or
+// stage.sNNN for a slice record). A missing whole-run record is explained by
+// the stage's own skip rule when it applies.
+func (s *roleStage) prior(name string) (record.Record, record.Upstream) {
+	u := record.Upstream{Source: "review." + name}
+	b, err := readBounded(recordPath(s.j, name), record.MaxBytes)
+	if err != nil {
+		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordMissing
+		if reason := s.skipReason(name); reason != "" {
+			u.State, u.Reason = record.UpstreamSkipped, reason
+		}
+		return record.Record{}, u
 	}
-	return &record.Usage{Input: u.Input, Output: u.Output}
+	r, err := record.Decode(b, expectRecord(s.j, name))
+	switch {
+	case err != nil:
+		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordInvalid
+	case !r.Accepted():
+		u.State, u.Reason = record.UpstreamFailed, r.FailureReason
+	default:
+		u.State, u.SHA256 = record.UpstreamAccepted, digestOf(b)
+		return r, u
+	}
+	return record.Record{}, u
+}
+
+// skipReason recomputes why a stage finished without a record, using the
+// same platform inputs and rules the stage used.
+func (s *roleStage) skipReason(stage string) string {
+	switch stage {
+	case record.StageEnvironment:
+		_, reason := s.environmentFacts()
+		return reason
+	case record.StageDocuments:
+		_, reason := s.documentFacts()
+		return reason
+	case record.StageInterpret:
+		_, _, reason := s.toolFacts()
+		return reason
+	}
+	return ""
+}
+
+// upstreamLimitation records a skipped or failed upstream role.
+func upstreamLimitation(u record.Upstream) string {
+	if u.State == record.UpstreamAccepted {
+		return ""
+	}
+	name := strings.NewReplacer("review.", "", ".", "_", "-", "_").Replace(u.Source)
+	return "upstream_" + name + "_" + u.State
+}
+
+func (s *roleStage) noteUpstream(us ...record.Upstream) {
+	for _, u := range us {
+		if l := upstreamLimitation(u); l != "" {
+			s.rec.Limitations = addLim(s.rec.Limitations, l)
+		}
+	}
+}
+
+// strictList decodes a model result object whose listed keys must all be
+// present (as arrays); unknown keys are rejected.
+func decodeOutput(raw json.RawMessage, into any, keys ...string) []string {
+	var head map[string]json.RawMessage
+	if json.Unmarshal(raw, &head) != nil {
+		return []string{"output_schema_invalid"}
+	}
+	for _, k := range keys {
+		v, ok := head[k]
+		if !ok || len(v) == 0 || v[0] != '[' {
+			return []string{"output_schema_invalid"}
+		}
+	}
+	if domain.DecodeStrict(raw, into) != nil {
+		return []string{"output_schema_invalid"}
+	}
+	return nil
+}
+
+// textErrors returns the codes of invalid model prose.
+func textErrors(texts ...string) []string {
+	var errs []string
+	for _, t := range texts {
+		switch {
+		case record.ClaimsExecution(t):
+			errs = addLim(errs, "execution_claim")
+		case !record.ModelText(t):
+			errs = addLim(errs, "text_invalid")
+		}
+	}
+	return errs
+}
+
+// idErrors checks citations against the IDs given to this call.
+func idErrors(ids []string, given map[string]record.Excerpt, max int, kinds ...string) []string {
+	var errs []string
+	if len(ids) == 0 {
+		return []string{"evidence_missing"}
+	}
+	if len(ids) > max {
+		errs = addLim(errs, "evidence_list_too_long")
+	}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		e, ok := given[id]
+		switch {
+		case !ok:
+			errs = addLim(errs, "evidence_id_unknown")
+		case seen[id]:
+			errs = addLim(errs, "evidence_id_duplicate")
+		case len(kinds) > 0 && !slices.Contains(kinds, e.Kind):
+			errs = addLim(errs, "evidence_kind_invalid")
+		}
+		seen[id] = true
+	}
+	return errs
+}
+
+func catalogOf(list []record.Excerpt) map[string]record.Excerpt {
+	m := map[string]record.Excerpt{}
+	for _, e := range list {
+		m[e.ID] = e
+	}
+	return m
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

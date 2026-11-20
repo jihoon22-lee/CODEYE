@@ -30,7 +30,7 @@ func TestPythonPackOutsideConfigCanary(t *testing.T) {
 	if p, node := os.Getenv("CODEYE_TEST_PYRIGHT"), os.Getenv("CODEYE_TEST_NODE"); p != "" && node != "" {
 		tools["pyright"], tools["node"] = p, node
 	}
-	const canary = "W17CANARY_run_5d2e"
+	const canary = "PYCANARY_run_5d2e"
 	outside := t.TempDir()
 	for name, body := range map[string]string{
 		"canary_mod.py": "\"\"\"" + canary + "\"\"\"\n\n\ndef fetch() -> int:\n    return \"" + canary + "\"\n",

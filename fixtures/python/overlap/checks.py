@@ -1,4 +1,4 @@
-"""Constructs two engines of the pack report (docs/42 section 7)."""
+"""Constructs two engines of the pack report (docs/ANALYZERS.md#엔진-중복)."""
 
 
 def undefined():

@@ -93,14 +93,14 @@
         "captured_bytes": 240,
         "incomplete": false,
         "sha256": "c42131e6819af9ee823e2fedb1123a72d1e3f77baf48aa73625c25853535701c",
-        "total_bytes": 456,
+        "total_bytes": 510,
         "truncated": false
       },
       "stdout": {
-        "captured_bytes": 1500,
+        "captured_bytes": 1504,
         "incomplete": false,
-        "sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b",
-        "total_bytes": 2796,
+        "sha256": "6f176721bb5608bf3b23b92170a153b22d6d5ba61de866ec5e26dd51836f4827",
+        "total_bytes": 3124,
         "truncated": false
       }
     }
@@ -122,27 +122,27 @@
   "observations": [
     {
       "category": "correctness",
-      "id": "obs_5ad980e66e508fcea336",
+      "id": "obs_0a7549178b439f9a7b6f",
       "location": {
-        "blob_sha256": "27ca09310d8b2c2e0609b48d2d89882c3ccf2e58e1c79e4d7275e654153d7ce6",
+        "blob_sha256": "9451830b52d61ccb922b0cd20d369fc8ffa9e62ead1a9bd953c48a90f7b1005c",
         "column_unit": "byte",
         "end_col": 24,
         "end_line": 18,
-        "path": "include/w16/ring.h",
+        "path": "include/ringbuf/ring.h",
         "start_col": 24,
         "start_line": 18
       },
       "location_state": "resolved",
-      "path": "include/w16/ring.h",
+      "path": "include/ringbuf/ring.h",
       "raw_message": "potentially unintended semicolon",
       "raw_ref": {
-        "byte_end": 111,
+        "byte_end": 115,
         "byte_start": 0,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
         "record_index": 0,
         "stream": "stdout",
-        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
+        "stream_sha256": "6f176721bb5608bf3b23b92170a153b22d6d5ba61de866ec5e26dd51836f4827"
       },
       "raw_severity": "warning",
       "related": [],
@@ -155,7 +155,7 @@
       "category": "resource_lifecycle",
       "id": "obs_8d4ba731d7e1efc367a1",
       "location": {
-        "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+        "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
         "column_unit": "byte",
         "end_col": 12,
         "end_line": 12,
@@ -167,19 +167,19 @@
       "path": "src/ring.c",
       "raw_message": "Potential leak of memory pointed to by 'r'",
       "raw_ref": {
-        "byte_end": 221,
-        "byte_start": 111,
+        "byte_end": 225,
+        "byte_start": 115,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
         "record_index": 1,
         "stream": "stdout",
-        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
+        "stream_sha256": "6f176721bb5608bf3b23b92170a153b22d6d5ba61de866ec5e26dd51836f4827"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 20,
             "end_line": 7,
@@ -193,7 +193,7 @@
         },
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 7,
             "end_line": 8,
@@ -207,7 +207,7 @@
         },
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 3,
             "end_line": 8,
@@ -221,7 +221,7 @@
         },
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 7,
             "end_line": 11,
@@ -235,7 +235,7 @@
         },
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 3,
             "end_line": 11,
@@ -249,7 +249,7 @@
         },
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 12,
             "end_line": 12,
@@ -271,7 +271,7 @@
       "category": "correctness",
       "id": "obs_591213413b94f9b25ce7",
       "location": {
-        "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+        "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
         "column_unit": "byte",
         "end_col": 10,
         "end_line": 23,
@@ -283,19 +283,19 @@
       "path": "src/ring.c",
       "raw_message": "Dereference of null pointer (loaded from variable 'slot')",
       "raw_ref": {
-        "byte_end": 733,
-        "byte_start": 599,
+        "byte_end": 737,
+        "byte_start": 603,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
         "record_index": 2,
         "stream": "stdout",
-        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
+        "stream_sha256": "6f176721bb5608bf3b23b92170a153b22d6d5ba61de866ec5e26dd51836f4827"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 3,
             "end_line": 20,
@@ -309,7 +309,7 @@
         },
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 7,
             "end_line": 21,
@@ -323,7 +323,7 @@
         },
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 3,
             "end_line": 21,
@@ -337,7 +337,7 @@
         },
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 10,
             "end_line": 23,
@@ -359,7 +359,7 @@
       "category": "correctness",
       "id": "obs_cd469fc778e87a1daed7",
       "location": {
-        "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
+        "blob_sha256": "5eba5459aa1860cc7c2518c322bd3fec4e387ce1b317b019ebb2c2fd2198eb13",
         "column_unit": "byte",
         "end_col": 10,
         "end_line": 9,
@@ -371,19 +371,19 @@
       "path": "src/util.cpp",
       "raw_message": "'a' used after it was moved",
       "raw_ref": {
-        "byte_end": 1113,
-        "byte_start": 1020,
+        "byte_end": 1117,
+        "byte_start": 1024,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
         "record_index": 3,
         "stream": "stdout",
-        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
+        "stream_sha256": "6f176721bb5608bf3b23b92170a153b22d6d5ba61de866ec5e26dd51836f4827"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
+            "blob_sha256": "5eba5459aa1860cc7c2518c322bd3fec4e387ce1b317b019ebb2c2fd2198eb13",
             "column_unit": "byte",
             "end_col": 19,
             "end_line": 8,
@@ -405,7 +405,7 @@
       "category": "resource_lifecycle",
       "id": "obs_265de289c275fa289c44",
       "location": {
-        "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
+        "blob_sha256": "5eba5459aa1860cc7c2518c322bd3fec4e387ce1b317b019ebb2c2fd2198eb13",
         "column_unit": "byte",
         "end_col": 3,
         "end_line": 22,
@@ -417,19 +417,19 @@
       "path": "src/util.cpp",
       "raw_message": "Memory allocated by 'new[]' should be deallocated by 'delete[]', not 'delete'",
       "raw_ref": {
-        "byte_end": 1329,
-        "byte_start": 1168,
+        "byte_end": 1333,
+        "byte_start": 1172,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
         "record_index": 4,
         "stream": "stdout",
-        "stream_sha256": "fb04aa4917f4f016977df061486cdb786ad8ad01eb0823e306b125d4ee70308b"
+        "stream_sha256": "6f176721bb5608bf3b23b92170a153b22d6d5ba61de866ec5e26dd51836f4827"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
+            "blob_sha256": "5eba5459aa1860cc7c2518c322bd3fec4e387ce1b317b019ebb2c2fd2198eb13",
             "column_unit": "byte",
             "end_col": 17,
             "end_line": 18,
@@ -443,7 +443,7 @@
         },
         {
           "location": {
-            "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
+            "blob_sha256": "5eba5459aa1860cc7c2518c322bd3fec4e387ce1b317b019ebb2c2fd2198eb13",
             "column_unit": "byte",
             "end_col": 3,
             "end_line": 22,
@@ -488,7 +488,7 @@
     "config_files": [
       {
         "path": "compile_commands.json",
-        "sha256": "48d64ed9481ebbf6e68338e4715cc22879ebc8bee8b147355dfc1acebdbb0060"
+        "sha256": "3abe00f9183a19b6ef3b25beea3665c5c02c6b296b3e1bb378ba65ebe70f2514"
       }
     ],
     "id": "codeye-cpp-clang-tidy",
@@ -538,7 +538,7 @@
     "version": "1"
   },
   "schema_version": "0.1",
-  "snapshot_manifest_digest": "7860b5b7c12684ef40be21a880012bc02759dc4ec441a6a54bde806221a4f0b4",
+  "snapshot_manifest_digest": "f2e88923e26968012c86b4971207c7acf260d37a6e7cd7c1011751928167fb8e",
   "target": {
     "platform": "linux/amd64",
     "properties": {

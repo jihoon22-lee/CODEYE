@@ -40,7 +40,7 @@ func events(text string) string {
 func TestBoundWorkspaceRequest(t *testing.T) {
 	scratch := t.TempDir()
 	cfg := Config{Executable: filepath.Join(scratch, "approved-cli"), Model: "opencode/fixture", Timeout: time.Minute}
-	q := Request{Scratch: scratch, SnapshotDigest: strings.Repeat("1", 64), Role: "context", Instructions: "Return the sum.", Input: json.RawMessage(`{"a":2,"b":3}`)}
+	q := Request{Scratch: scratch, SnapshotDigest: strings.Repeat("1", 64), Role: "probe", Instructions: "Return the sum.", Input: json.RawMessage(`{"a":2,"b":3}`)}
 	var workdir string
 	calls := 0
 	reply := cfg.Review(t.Context(), runnerFunc(func(_ context.Context, s executor.Spec) executor.Result {

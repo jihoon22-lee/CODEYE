@@ -1,4 +1,4 @@
-"""W17 findings fixture: intentionally defective code for the Python pack tests."""
+"""Findings fixture: intentionally defective code for the Python pack tests."""
 
 import os
 import subprocess

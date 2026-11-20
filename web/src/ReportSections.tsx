@@ -295,9 +295,9 @@ function DependencyBlock({ dependencies }: { dependencies: Dependency[] }) {
 
 // summaryLines are the overview's sentences: each kind of result with the
 // counts that matter, from the stored report.
-function summaryLines(f: ReturnType<typeof overviewFacts>, pack: string): string[] {
+function summaryLines(f: ReturnType<typeof overviewFacts>, reviewPlanned: boolean): string[] {
   const out: string[] = [];
-  if (!f.model && pack !== 'none') out.push(sm.modelNone);
+  if (!f.model && reviewPlanned) out.push(sm.modelNone);
   if (f.model) {
     const rest = (['reproduced', 'inconclusive', 'refuted', 'unreviewed'] as const).filter((k) => f.model![k] > 0).map((k) => sm.validation[k](f.model![k]));
     out.push(sm.modelFindings(f.model.total, f.model.supported + f.model.reproduced) + (rest.length > 0 ? ' (' + rest.join(', ') + ')' : '') + '. ' + sm.modelNote);
@@ -655,7 +655,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     code_review: (
       <>
         <StageLine stage={cr.stage} />
-        {cr.pack === 'none' ? (
+        {!cr.planned ? (
           <p>{s.noPack}</p>
         ) : (
           <ul>
@@ -727,7 +727,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         <h5 id="report-overview">{s.overview}</h5>
         <Verdict report={report} />
         <ul className="report-summary">
-          {summaryLines(facts, cr.pack).map((line, i) => (
+          {summaryLines(facts, cr.planned).map((line, i) => (
             <li key={i}>{line}</li>
           ))}
         </ul>

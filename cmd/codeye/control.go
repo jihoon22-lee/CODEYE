@@ -55,7 +55,7 @@ Usage:
                [--cargo /abs/toolchain/bin/cargo [--clippy /abs/toolchain/bin/cargo-clippy]]
                [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]
                [--repo-code-source-root ID ...] [--project-analysis-policy] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
-               [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-pack review-r1|review-v1] [--review-max-calls 15..207]
+               [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-max-calls 15..207]
                [--offline] [--ca-bundle /abs/ca-bundle.pem]   (offline: no built-in public registry or model endpoint; the CA bundle the fetch, Git and model processes trust)
 Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema, except that personal mode with database.mode managed migrates on up/start after saving a pg_dump copy.
 Login links: codeye login-link and codeye start write them to a 0600 file; codeye up and codeye open print them and open the browser.

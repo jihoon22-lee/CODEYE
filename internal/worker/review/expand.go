@@ -50,7 +50,7 @@ const (
 type functionName struct{ dir, pkg, name string }
 
 // citedSymbols selects up to maxSymbols package functions from cited Go excerpts.
-func citedSymbols(catalog []Excerpt, candidates []Candidate) map[functionName]bool {
+func citedSymbols(catalog []Excerpt, candidates []CandidateText) map[functionName]bool {
 	byID := map[string]Excerpt{}
 	for _, e := range catalog {
 		byID[e.ID] = e
@@ -116,7 +116,7 @@ func enclosing(lines []string, at int) window {
 
 // expand returns caller/test excerpts for the cited symbols, each bound to
 // the snapshot blob and line range, plus limitation codes.
-func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, catalog []Excerpt, candidates []Candidate) ([]Excerpt, []string, error) {
+func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, catalog []Excerpt, candidates []CandidateText) ([]Excerpt, []string, error) {
 	symbols := citedSymbols(catalog, candidates)
 	lims := []string{limExpansionGoOnly, limDirectCalls}
 	if len(symbols) == 0 {

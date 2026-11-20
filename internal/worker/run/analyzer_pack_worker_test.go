@@ -48,7 +48,7 @@ type packRun struct {
 }
 
 // runPack runs the production deep-review composition (discovery → the
-// analyzer composite → legacy-pack roles) through the real worker on a small
+// analyzer composite → review roles) through the real worker on a small
 // Go module with a go vet and a staticcheck finding.
 func runPack(t *testing.T, tools map[string]string) packRun {
 	return runPackFiles(t, map[string]string{

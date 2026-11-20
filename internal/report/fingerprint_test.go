@@ -43,14 +43,13 @@ func TestToolFingerprintIgnoresPositions(t *testing.T) {
 // platform fixed, not from the model's wording or citation order.
 func TestModelFingerprintStableAcrossTitles(t *testing.T) {
 	compose := func(edit func(states map[string]*taskState)) Finding {
-		states, _ := exampleStages(t)
+		states, base := exampleStages(t)
 		if edit != nil {
 			edit(states)
 		}
-		r := Report{Inputs: Inputs{SnapshotID: "snap"}}
-		composeReviews(&r, states, newSet())
-		if len(r.Findings) != 1 || r.Coverage.AIReview.Status != "" {
-			t.Fatalf("findings=%d", len(r.Findings))
+		r, _, lim := compose(states, base)
+		if len(r.Findings) != 2 || len(lim) != 0 {
+			t.Fatalf("findings=%d limitations %v", len(r.Findings), lim)
 		}
 		if err := validateFinding(r.Findings[0], "snap", nil, nil); err != nil {
 			t.Fatal(err)

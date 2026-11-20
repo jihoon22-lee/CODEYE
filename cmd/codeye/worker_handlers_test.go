@@ -55,7 +55,7 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 			t.Fatal("staticcheck is extra depth, not required")
 		}
 	}
-	// No pack in the hello: the default pack, review-r1, plans its five roles.
+	// The review plans its five roles.
 	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "gitleaks=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.verify=code_review"}
 	if len(keys) != len(want) {
 		t.Fatalf("plan %v", keys)
@@ -67,10 +67,9 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 	}
 }
 
-// --review-pack (via the agent's Hello) selects the pack: review-r1 composes
-// discovery → go vet → the five roles, the legacy review-v1 its three
-// roles; an unknown pack is refused, never replaced by the default.
-func TestWorkerHandlersSelectReviewPack(t *testing.T) {
+// The worker composes discovery → go vet → the five review roles; a call
+// ceiling out of range is refused, never replaced by the default.
+func TestWorkerHandlersComposeReview(t *testing.T) {
 	goExe := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if runtime.GOOS == "windows" {
 		goExe += ".exe"
@@ -78,15 +77,12 @@ func TestWorkerHandlersSelectReviewPack(t *testing.T) {
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
-	if _, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewPack: "review-r2"}, &executor.Executor{}); err == nil {
-		t.Fatal("unknown review pack accepted")
-	}
 	for _, n := range []int{14, 208, -1} {
 		if _, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewMaxCalls: n}, &executor.Executor{}); err == nil {
 			t.Fatalf("call ceiling %d accepted", n)
 		}
 	}
-	hs, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewPack: "review-r1"}, &executor.Executor{})
+	hs, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir()}, &executor.Executor{})
 	if err != nil || len(hs) != 1 {
 		t.Fatal(err)
 	}
@@ -109,21 +105,6 @@ func TestWorkerHandlersSelectReviewPack(t *testing.T) {
 	want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis gitleaks=static_analysis review.environment=environment review.documents=documents review.investigate=code_review review.interpret=code_review review.verify=code_review"
 	if strings.Join(keys, " ") != want {
 		t.Fatalf("plan %v", keys)
-	}
-	hs, _, err = workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewPack: "review-v1"}, &executor.Executor{})
-	if err != nil || len(hs) != 1 {
-		t.Fatal(err)
-	}
-	plan, err = hs[0].Plan(context.Background(), analysis.Job{Scope: domain.Scope{Kind: "full"}, Snapshot: snap})
-	if err != nil {
-		t.Fatal(err)
-	}
-	keys = keys[:0]
-	for _, p := range plan {
-		keys = append(keys, p.Key+"="+string(p.Stage))
-	}
-	if want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis gitleaks=static_analysis review.context=documents review.investigate=code_review review.verify=code_review"; strings.Join(keys, " ") != want {
-		t.Fatalf("legacy plan %v", keys)
 	}
 }
 
