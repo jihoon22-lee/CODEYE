@@ -132,9 +132,9 @@ func (r exampleDepsRunner) Run(_ context.Context, s executor.Spec) executor.Resu
 			StartedAt: reportExampleTime.Add(30 * time.Second), EndedAt: reportExampleTime.Add(31 * time.Second)}
 	}
 	requires := map[string]string{
-		".":     `{"Module":{"Path":"example.test/w15"},"Require":[{"Path":"github.com/spf13/pflag","Version":"v1.0.9"},{"Path":"golang.org/x/text","Version":"v0.21.0"}]}`,
-		"svc/a": `{"Module":{"Path":"example.test/w15/svc/a"},"Require":[{"Path":"example.test/private/lib","Version":"v0.3.0"}]}`,
-		"svc/b": `{"Module":{"Path":"example.test/w15/svc/b"}}`,
+		".":     `{"Module":{"Path":"example.test/modules"},"Require":[{"Path":"github.com/spf13/pflag","Version":"v1.0.9"},{"Path":"golang.org/x/text","Version":"v0.21.0"}]}`,
+		"svc/a": `{"Module":{"Path":"example.test/modules/svc/a"},"Require":[{"Path":"example.test/private/lib","Version":"v0.3.0"}]}`,
+		"svc/b": `{"Module":{"Path":"example.test/modules/svc/b"}}`,
 	}
 	switch {
 	case s.Args[0] == "version":
@@ -301,7 +301,7 @@ func exampleVet(t *testing.T, j analysis.Job, task pack.Task) analysis.TaskResul
 	key := task.Spec.Key
 	version := "go1.27.4"
 	platform := "linux/amd64"
-	mod, ok := map[string]string{".": "example.test/w15", "svc/a": "example.test/w15/svc/a", "svc/b": "example.test/w15/svc/b"}[task.Module]
+	mod, ok := map[string]string{".": "example.test/modules", "svc/a": "example.test/modules/svc/a", "svc/b": "example.test/modules/svc/b"}[task.Module]
 	if !ok {
 		// A module of the slice example (fixtures/modules/slices/input).
 		mod = "example.test/coverage/" + task.Module

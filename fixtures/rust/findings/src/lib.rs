@@ -1,4 +1,4 @@
-//! Findings fixture of the W20 Rust pack: every defect below is intentional.
+//! Findings fixture of the Rust pack: every defect below is intentional.
 use std::collections::HashMap;
 
 pub fn unused_var() -> i32 {

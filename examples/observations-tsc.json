@@ -176,7 +176,7 @@
   ],
   "module": {
     "dir": "packages/app",
-    "name": "@w18/app"
+    "name": "@jsts/app"
   },
   "observations": [
     {

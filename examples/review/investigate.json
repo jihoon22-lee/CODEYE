@@ -13,7 +13,7 @@
     {
       "source": "review.environment",
       "state": "accepted",
-      "sha256": "0e7c192ea664f83f3085e7ccb00f632c9352b27bb4973b74cf5b26cef86285b3"
+      "sha256": "a29aec6cd923fb380a21d9c621036f47bce692da18509d11e475efa1277b4c3d"
     },
     {
       "source": "review.documents",
@@ -100,7 +100,7 @@
         "languages/go.md",
         "pack.yaml"
       ],
-      "request_sha256": "136a414ba8d8c5aadd20e8cc2dfbfc3677794ac17f98c35d2e7b51f64dd86bab",
+      "request_sha256": "515727fa934ab011936b1e8b4f14971c0d0a628890e7f86a014b924bf2af1221",
       "request_bytes": 12280,
       "usage": {
         "input": 3401,

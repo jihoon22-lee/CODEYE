@@ -1,7 +1,7 @@
-/* Fixed-size ring buffer of the W16 sample service. */
+/* Fixed-size ring buffer of the ringbuf sample service. */
 #include <stdlib.h>
 
-#include "w16/ring.h"
+#include "ringbuf/ring.h"
 
 struct ring *ring_new(size_t cap) {
   struct ring *r = malloc(sizeof *r);

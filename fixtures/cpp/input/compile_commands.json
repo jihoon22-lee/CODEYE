@@ -1,36 +1,36 @@
 [
 {
-  "directory": "/build/w16-cpp/_build",
-  "command": "/usr/bin/ccache /usr/bin/cc -DRING_MAX=8 -I/build/w16-cpp/include -I/build/w16-cpp/_build/gen -O2 -g -Wall -Werror -std=c11 -o CMakeFiles/w16.dir/src/ring.c.o -c /build/w16-cpp/src/ring.c",
-  "file": "/build/w16-cpp/src/ring.c",
-  "output": "CMakeFiles/w16.dir/src/ring.c.o"
+  "directory": "/build/ringbuf-cpp/_build",
+  "command": "/usr/bin/ccache /usr/bin/cc -DRING_MAX=8 -I/build/ringbuf-cpp/include -I/build/ringbuf-cpp/_build/gen -O2 -g -Wall -Werror -std=c11 -o CMakeFiles/ringbuf.dir/src/ring.c.o -c /build/ringbuf-cpp/src/ring.c",
+  "file": "/build/ringbuf-cpp/src/ring.c",
+  "output": "CMakeFiles/ringbuf.dir/src/ring.c.o"
 },
 {
-  "directory": "/build/w16-cpp/_build",
-  "command": "/usr/bin/ccache /usr/bin/cc -DRING_MAX=8 -DRING_SHARED -I/build/w16-cpp/include -I/build/w16-cpp/_build/gen -O2 -g -fPIC -std=c11 -o CMakeFiles/w16_shared.dir/src/ring.c.o -c /build/w16-cpp/src/ring.c",
-  "file": "/build/w16-cpp/src/ring.c",
-  "output": "CMakeFiles/w16_shared.dir/src/ring.c.o"
+  "directory": "/build/ringbuf-cpp/_build",
+  "command": "/usr/bin/ccache /usr/bin/cc -DRING_MAX=8 -DRING_SHARED -I/build/ringbuf-cpp/include -I/build/ringbuf-cpp/_build/gen -O2 -g -fPIC -std=c11 -o CMakeFiles/ringbuf_shared.dir/src/ring.c.o -c /build/ringbuf-cpp/src/ring.c",
+  "file": "/build/ringbuf-cpp/src/ring.c",
+  "output": "CMakeFiles/ringbuf_shared.dir/src/ring.c.o"
 },
 {
-  "directory": "/build/w16-cpp/_build",
-  "command": "/usr/bin/c++ -I/build/w16-cpp/include -I/build/w16-cpp/_build/gen -fplugin=/opt/w16-tools/lint-plugin.so -O2 -g -std=c++17 -o CMakeFiles/w16.dir/src/parse.cpp.o -c /build/w16-cpp/src/parse.cpp",
-  "file": "/build/w16-cpp/src/parse.cpp",
-  "output": "CMakeFiles/w16.dir/src/parse.cpp.o"
+  "directory": "/build/ringbuf-cpp/_build",
+  "command": "/usr/bin/c++ -I/build/ringbuf-cpp/include -I/build/ringbuf-cpp/_build/gen -fplugin=/opt/ringbuf-tools/lint-plugin.so -O2 -g -std=c++17 -o CMakeFiles/ringbuf.dir/src/parse.cpp.o -c /build/ringbuf-cpp/src/parse.cpp",
+  "file": "/build/ringbuf-cpp/src/parse.cpp",
+  "output": "CMakeFiles/ringbuf.dir/src/parse.cpp.o"
 },
 {
-  "directory": "/build/w16-cpp/_build",
-  "arguments": ["/usr/bin/c++", "-I/build/w16-cpp/include", "-Xclang", "-load", "-Xclang", "/opt/w16-tools/lint-plugin.so", "@flags.rsp", "-O2", "-std=c++17", "-o", "CMakeFiles/w16.dir/src/util.cpp.o", "-c", "../src/util.cpp"],
+  "directory": "/build/ringbuf-cpp/_build",
+  "arguments": ["/usr/bin/c++", "-I/build/ringbuf-cpp/include", "-Xclang", "-load", "-Xclang", "/opt/ringbuf-tools/lint-plugin.so", "@flags.rsp", "-O2", "-std=c++17", "-o", "CMakeFiles/ringbuf.dir/src/util.cpp.o", "-c", "../src/util.cpp"],
   "file": "../src/util.cpp",
-  "output": "CMakeFiles/w16.dir/src/util.cpp.o"
+  "output": "CMakeFiles/ringbuf.dir/src/util.cpp.o"
 },
 {
-  "directory": "/build/w16-cpp/_build/zlib",
+  "directory": "/build/ringbuf-cpp/_build/zlib",
   "command": "/usr/bin/cc -O2 -o inflate.c.o -c /opt/vendor/zlib/inflate.c",
   "file": "/opt/vendor/zlib/inflate.c"
 },
 {
-  "directory": "/build/w16-cpp/_build",
-  "command": "/usr/bin/cc -I/build/w16-cpp/include -std=c11 -o ring.h.o -c /build/w16-cpp/include/w16/ring.h",
-  "file": "/build/w16-cpp/include/w16/ring.h"
+  "directory": "/build/ringbuf-cpp/_build",
+  "command": "/usr/bin/cc -I/build/ringbuf-cpp/include -std=c11 -o ring.h.o -c /build/ringbuf-cpp/include/ringbuf/ring.h",
+  "file": "/build/ringbuf-cpp/include/ringbuf/ring.h"
 }
 ]

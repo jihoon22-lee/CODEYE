@@ -36,7 +36,7 @@ func TestStructureSecretsPackWithRealTools(t *testing.T) {
 	}
 	block := "function alpha(items, token) {\n  const key = \"" + secret + "\";\n  let total = 0;\n  for (const item of items) {\n    if (item.active && item.value > 10) {\n      total += item.value * 2;\n    } else if (item.value < 0) {\n      total -= item.value;\n    } else {\n      total += 1;\n    }\n  }\n  const label = \"total:\" + total + \":\" + key.length;\n  console.log(label, token);\n  return { total, label, count: items.length };\n}\nmodule.exports = { alpha };\n"
 	r := runPackFiles(t, map[string]string{
-		"go.mod":         "module example.test/w21\n\ngo 1.22\n",
+		"go.mod":         "module example.test/structure\n\ngo 1.22\n",
 		"main.go":        "package main\n\nfunc main() {}\n",
 		"src/app.py":     "import os\n\nAWS_KEY = \"" + secret + "\"\n",
 		"src/complex.py": "def route(v, token=\"" + secret + "\"):\n" + branches + "    return 0\n",

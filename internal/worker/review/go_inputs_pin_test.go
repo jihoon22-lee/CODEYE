@@ -176,7 +176,7 @@ func goPinJobs(t *testing.T) map[string]analysis.Job {
 
 var pinnedGo = map[string][]string{
 	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "environment f8cad434e236e657 0f35e48b1837906c", "documents 733c8eaaa63abb74 96f75808572d08e4", "investigate 968170384ee26d9d 0abc469c5f262c1d", "verify b33ecdaaf28cf4bc e0f027c525ea4547"},
-	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment f8cad434e236e657 025087360cbe1b62", "documents 733c8eaaa63abb74 1c7ade98e8c6af78", "investigate 968170384ee26d9d 507e8ddbf32be184", "interpret 1dd362236e2820bb 6c30210249e618c0", "verify b33ecdaaf28cf4bc 739ea4868928c8e1"},
+	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment f8cad434e236e657 1591d2065785bf02", "documents 733c8eaaa63abb74 1c7ade98e8c6af78", "investigate 968170384ee26d9d b6ad844092149afb", "interpret 1dd362236e2820bb 6c30210249e618c0", "verify b33ecdaaf28cf4bc 739ea4868928c8e1"},
 	// The worst case has more code than the overview offers, so it plans
 	// review.scope and nine slots: the seven the plan-time packing needs and
 	// two of slack, which review.scope leaves empty. Its go vet stand-in is

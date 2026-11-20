@@ -5,12 +5,12 @@
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `4153a5d0a1f8` |
+| digest | `caae64927bcf` |
 | status | `partial` |
 | quality\_verdict | `attention_required` 품질 판정은 안전 인증이 아니다\. |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
 | attempt | `0195f3a0-0000-7000-8000-000000000502` #`1` epoch `1` |
-| snapshot | `0195f3a0-0000-7000-8000-000000000503` manifest `bb0ed6120181` |
+| snapshot | `0195f3a0-0000-7000-8000-000000000503` manifest `789ee42808b8` |
 | profile | `deep-review` |
 | created\_at | `2026-11-18T00:10:00Z` |
 | export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
@@ -282,13 +282,13 @@
 
 > 모델 해석 — review\.environment 역할의 수락된 기록에서 가져온 모델 서술이다\. 도구나 실행으로 확인한 사실이 아니다\. 줄 끝의 근거 ID는 이 절의 근거 표에 있다\.
 
-- go\:svc/b\: 영향 — svc/b 모듈의 go vet은 선언 버전보다 낮은 노드 toolchain 때문에 수행할 수 없다\. / 여전히 확인 가능 — 루트와 svc/a 모듈의 정적 검사와 코드 검토는 가능하다\. / 필요한 관측 — go 1\.30 이상 toolchain의 노드 관측 `ev_d5235bd29437d7ca0c3f6955`
+- go\:svc/b\: 영향 — svc/b 모듈의 go vet은 선언 버전보다 낮은 노드 toolchain 때문에 수행할 수 없다\. / 여전히 확인 가능 — 루트와 svc/a 모듈의 정적 검사와 코드 검토는 가능하다\. / 필요한 관측 — go 1\.30 이상 toolchain의 노드 관측 `ev_513338f17c1a60331a355d2c`
 
 ### 근거
 
 | 근거 ID | 종류 | 위치 | blob sha256 |
 |---|---|---|---|
-| `ev_d5235bd29437d7ca0c3f6955` | `manifest` | `svc/b/go.mod:3-3` | `190d2b487010` |
+| `ev_513338f17c1a60331a355d2c` | `manifest` | `svc/b/go.mod:3-3` | `67b2518c1138` |
 
 ## 문서 분석
 
@@ -344,28 +344,28 @@
 
 ### 문서가 정한 계약
 
-- \[\.\] 하위 호출이 실패하면 최대 3번 재시도한다\. `ev_d0201000bc5f5928f7af84a0`
-- \[svc/b\] 결제 호출은 요청마다 정확히 한 번만 한다\. `ev_22e8085e538626e19e503037`
+- \[\.\] 하위 호출이 실패하면 최대 3번 재시도한다\. `ev_db01a731b6e8e8a2d717118c`
+- \[svc/b\] 결제 호출은 요청마다 정확히 한 번만 한다\. `ev_66e68c327cf89aa79170534a`
 
 ### 안내 사이의 충돌
 
-- \[svc/b\] 루트 안내는 재시도를, svc/b 안내는 재시도 금지를 요구한다\. / 영향\: svc/b 결제 호출의 재시도 여부를 코드에서 확인해야 한다\. `ev_d0201000bc5f5928f7af84a0` `ev_22e8085e538626e19e503037`
+- \[svc/b\] 루트 안내는 재시도를, svc/b 안내는 재시도 금지를 요구한다\. / 영향\: svc/b 결제 호출의 재시도 여부를 코드에서 확인해야 한다\. `ev_db01a731b6e8e8a2d717118c` `ev_66e68c327cf89aa79170534a`
 
 ### 확인할 질문
 
-- \[svc/b\] svc/b의 Charge 호출자가 실패 시 재시도하는가? `ev_22e8085e538626e19e503037`
+- \[svc/b\] svc/b의 Charge 호출자가 실패 시 재시도하는가? `ev_66e68c327cf89aa79170534a`
 
 ### 지침 메모
 
-- 권한·네트워크·키 조회를 요구하는 지침은 분석 자료로만 기록했다\. `ev_a04dcae24bc99f94e2c70208`
+- 권한·네트워크·키 조회를 요구하는 지침은 분석 자료로만 기록했다\. `ev_8d951286edc67ceff72c48a4`
 
 ### 근거
 
 | 근거 ID | 종류 | 위치 | blob sha256 |
 |---|---|---|---|
-| `ev_22e8085e538626e19e503037` | `document` | `svc/b/README.md:1-5` | `49ae0cef2ada` |
-| `ev_a04dcae24bc99f94e2c70208` | `document` | `AGENTS.md:1-11` | `7ae2874cb0c4` |
-| `ev_d0201000bc5f5928f7af84a0` | `document` | `README.md:1-9` | `cb8e4c2940c4` |
+| `ev_66e68c327cf89aa79170534a` | `document` | `svc/b/README.md:1-5` | `49ae0cef2ada` |
+| `ev_8d951286edc67ceff72c48a4` | `document` | `AGENTS.md:1-11` | `7ae2874cb0c4` |
+| `ev_db01a731b6e8e8a2d717118c` | `document` | `README.md:1-9` | `cb8e4c2940c4` |
 
 ## 분석 공백
 
@@ -412,7 +412,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 실행 기록 31개\(exited 31\)\.
 
-산출물 83개, 합계 69205바이트\.
+산출물 83개, 합계 69253바이트\.
 
 작업·실행·산출물의 전체 목록과 개별 진단은 전체 보기\(detail\=full\)와 JSON 내보내기에 있다\.
 
@@ -427,4 +427,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 - 비밀값이 탐지된 파일은 모델 입력에서 뺐다\.
 - tools\_outside\_interpret\_input
 
-digest sha256: `4153a5d0a1f817fad27b8c9a2686bd468acf48d469d467c21c799f3fbe3b9114`
+digest sha256: `caae64927bcf46721c92005721e61a6d83d1a801d005f83dbb94fac30c123f18`

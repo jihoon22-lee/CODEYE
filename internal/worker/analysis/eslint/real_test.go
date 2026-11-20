@@ -29,7 +29,7 @@ import (
 // Fixture sources stay strings (or under fixtures/js-ts) so the
 // repository's own lint never sees the intentionally defective code.
 const (
-	pkgJSON   = "{\"name\":\"w18-case\",\"private\":true}\n"
+	pkgJSON   = "{\"name\":\"jsts-case\",\"private\":true}\n"
 	fixClean  = "export function add(a, b) {\n  return a + b;\n}\n"
 	fixBroken = "export function broken( {\n  return 1;\n}\n"
 	// suppressions (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제): an inline rule-off comment, a disable
@@ -119,7 +119,7 @@ func TestRealESLintMonorepo(t *testing.T) {
 		} else if doc.RulePack.RepositoryConfig != obsdoc.RepoConfigOverridden || len(doc.RulePack.ConfigFiles) != 0 {
 			t.Fatalf("%s: rule pack %+v", c.key, doc.RulePack)
 		}
-		if c.key == "eslint" && !slices.Contains(doc.Limitations, "no_package_json_module") && doc.Module.Name != "w18-fixture" {
+		if c.key == "eslint" && !slices.Contains(doc.Limitations, "no_package_json_module") && doc.Module.Name != "jsts-fixture" {
 			t.Fatalf("root module %+v %v", doc.Module, doc.Limitations)
 		}
 		packtest.AssertNoNodePaths(t, raw, nodePaths(c.a, fx)...)

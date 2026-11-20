@@ -1,5 +1,5 @@
-#ifndef W16_RING_H
-#define W16_RING_H
+#ifndef RINGBUF_RING_H
+#define RINGBUF_RING_H
 
 #include <stddef.h>
 

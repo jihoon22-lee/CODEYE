@@ -1,4 +1,4 @@
-[REDACTED]/include/w16/ring.h:18:24: warning: potentially unintended semicolon [bugprone-suspicious-semicolon]
+[REDACTED]/include/ringbuf/ring.h:18:24: warning: potentially unintended semicolon [bugprone-suspicious-semicolon]
 [REDACTED]/src/parse.cpp:5:10: error: 'config.h' file not found [clang-diagnostic-error]
 [REDACTED]/src/ring.c:12:12: warning: Potential leak of memory pointed to by 'r' [clang-analyzer-unix.Malloc]
 [REDACTED]/src/ring.c:7:20: note: Memory is allocated

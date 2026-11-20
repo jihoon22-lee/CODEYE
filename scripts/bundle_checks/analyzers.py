@@ -237,7 +237,7 @@ def check_cpp_pack_contracts(validators: dict) -> int:
     bad("clang-tidy NOLINT claimed reported", "clang-tidy", lambda d: d["rule_pack"].update(source_suppressions="reported"))
     bad("compile DB digest drift", "cppcheck", lambda d: d["rule_pack"]["config_files"][0].update(sha256="0" * 64))
     bad("compile DB not recorded", "clang-tidy", lambda d: d["rule_pack"].update(config_files=[]))
-    bad("header claimed as processed", "clang-tidy", lambda d: d["coverage"].update(processed_paths=sorted(d["coverage"]["processed_paths"] + ["include/w16/ring.h"])))
+    bad("header claimed as processed", "clang-tidy", lambda d: d["coverage"].update(processed_paths=sorted(d["coverage"]["processed_paths"] + ["include/ringbuf/ring.h"])))
     bad("observation bound to other bytes", "cppcheck", lambda d: d["observations"][0]["location"].update(blob_sha256="0" * 64))
     bad("node path in a property", "clang-tidy", lambda d: d["target"]["properties"].update(drivers="/usr/bin/cc"))
     bad("alias family selected", "clang-tidy", lambda d: d["rule_pack"]["selection"].__setitem__(1, "cert-*"))

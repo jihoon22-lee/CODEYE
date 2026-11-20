@@ -67,12 +67,12 @@ func (packStub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r 
 		severity := "error"
 		doc.Observations = []obsdoc.Observation{{ID: "obs_aaaaaaaaaaaaaaaaaaaa", RuleID: "SA4006", Category: "correctness", RawSeverity: &severity, RawMessage: "this value of err is never used (synthetic fixture)",
 			Path: &p, Location: &obsdoc.Location{Path: p, StartLine: 11, StartCol: 2, EndLine: 11, EndCol: 9, ColumnUnit: "byte", BlobSHA256: sha}, LocationState: obsdoc.LocationResolved,
-			Related: []obsdoc.Related{}, RawRef: obsdoc.RawRef{Execution: "staticcheck.check", Stream: "stdout", StreamSHA256: obsdoc.SHA256Hex(stdout), ByteStart: 0, ByteEnd: int64(len(first))}, Unit: "example.test/w15"}}
+			Related: []obsdoc.Related{}, RawRef: obsdoc.RawRef{Execution: "staticcheck.check", Stream: "stdout", StreamSHA256: obsdoc.SHA256Hex(stdout), ByteStart: 0, ByteEnd: int64(len(first))}, Unit: "example.test/modules"}}
 		// A diagnostic hidden by //lint:ignore, reported with -show-ignored.
 		ignored := "ignored"
 		doc.Observations = append(doc.Observations, obsdoc.Observation{ID: "obs_bbbbbbbbbbbbbbbbbbbb", RuleID: "SA4006", Category: "correctness", RawSeverity: &ignored, RawMessage: "this value of x is never used (synthetic fixture)",
 			Path: &p, Location: &obsdoc.Location{Path: p, StartLine: 12, StartCol: 2, EndLine: 12, EndCol: 9, ColumnUnit: "byte", BlobSHA256: sha}, LocationState: obsdoc.LocationResolved,
-			Related: []obsdoc.Related{}, RawRef: obsdoc.RawRef{Execution: "staticcheck.check", Stream: "stdout", StreamSHA256: obsdoc.SHA256Hex(stdout), ByteStart: int64(len(first)), ByteEnd: int64(len(stdout))}, Unit: "example.test/w15", Suppressed: true})
+			Related: []obsdoc.Related{}, RawRef: obsdoc.RawRef{Execution: "staticcheck.check", Stream: "stdout", StreamSHA256: obsdoc.SHA256Hex(stdout), ByteStart: int64(len(first)), ByteEnd: int64(len(stdout))}, Unit: "example.test/modules", Suppressed: true})
 		doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskSucceeded, ExitClass: obsdoc.ExitSuccessWithFindings}
 		doc.Coverage.ProcessedPaths = []string{"gateway.go"}
 		doc.Parse.OK = true

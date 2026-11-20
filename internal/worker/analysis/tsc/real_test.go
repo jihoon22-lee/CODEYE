@@ -25,7 +25,7 @@ import (
 //	  go test -count=1 -run TestRealTsc ./internal/worker/analysis/tsc/
 
 const (
-	pkgJSON = "{\"name\":\"w18-case\",\"private\":true}\n"
+	pkgJSON = "{\"name\":\"jsts-case\",\"private\":true}\n"
 	// base compiler options of the case fixtures (no automatic @types: TS 6
 	// defaults types to []).
 	opts = "\"target\":\"ES2022\",\"module\":\"ESNext\",\"moduleResolution\":\"Bundler\",\"lib\":[\"ES2022\"],\"strict\":true"
@@ -99,7 +99,7 @@ func TestRealTscMonorepo(t *testing.T) {
 		!slices.Equal(cfgs, []string{"packages/app/tsconfig.json", "tsconfig.base.json"}) {
 		t.Fatalf("rule pack %+v", doc.RulePack)
 	}
-	if doc.Module.Name != "@w18/app" || doc.Target.Properties["strict"] != "true" || doc.Target.Properties["module_resolution"] != "bundler" || !doc.Tool.VersionTested {
+	if doc.Module.Name != "@jsts/app" || doc.Target.Properties["strict"] != "true" || doc.Target.Properties["module_resolution"] != "bundler" || !doc.Tool.VersionTested {
 		t.Fatalf("module/target %+v %+v %+v", doc.Module, doc.Target, doc.Tool)
 	}
 	packtest.AssertNoNodePaths(t, raw, nodePaths(a, fx)...)

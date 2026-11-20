@@ -125,7 +125,7 @@ func gatewayObservation(j analysis.Job) []govet.Observation {
 	p := "gateway.go"
 	return []govet.Observation{{ID: "obs_0123456789abcdef0123", Tool: govet.AnalyzerID, RuleID: "unusedresult", RawMessage: "result of send call not used in a retry branch (synthetic fixture)",
 		Path: &p, Location: &govet.ObsLocation{Path: p, StartLine: 13, StartCol: 2, EndLine: 13, EndCol: 12, ColumnUnit: "byte", BlobSHA256: sha}, LocationState: govet.LocationResolved,
-		RawRef: govet.RawRef{Execution: "go.vet", Stream: "stdout", StreamSHA256: strings.Repeat("a", 64), JSONPointer: "/example.test~1w15/unusedresult/0", ByteStart: 0, ByteEnd: 10}, PackageKey: "example.test/w15"}}
+		RawRef: govet.RawRef{Execution: "go.vet", Stream: "stdout", StreamSHA256: strings.Repeat("a", 64), JSONPointer: "/example.test~1modules/unusedresult/0", ByteStart: 0, ByteEnd: 10}, PackageKey: "example.test/modules"}}
 }
 
 // scriptedCaller scripts the model per role; n counts calls of that role. It never

@@ -39,7 +39,7 @@ func TestPullRequestChangedFilesFirst(t *testing.T) {
 		files[fmt.Sprintf("internal/b/b%02d_test.go", f)] = 2000
 	}
 	for f := range 10 {
-		files[fmt.Sprintf("web/src/w%02d.ts", f)] = 1500
+		files[fmt.Sprintf("web/src/page%02d.ts", f)] = 1500
 		files[fmt.Sprintf("fixtures/m%d/go.mod", f)] = 30
 		files[fmt.Sprintf("fixtures/m%d/main.go", f)] = 300
 	}

@@ -87,17 +87,17 @@
       "name": "cppcheck.check",
       "status": "exited",
       "stderr": {
-        "captured_bytes": 4444,
+        "captured_bytes": 4448,
         "incomplete": false,
-        "sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48",
-        "total_bytes": 5685,
+        "sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143",
+        "total_bytes": 5978,
         "truncated": false
       },
       "stdout": {
         "captured_bytes": 238,
         "incomplete": false,
         "sha256": "b478aa32edb008461beca11ee6c0511e89f68f019e878bd5c4efb282d3c8385e",
-        "total_bytes": 530,
+        "total_bytes": 598,
         "truncated": false
       }
     }
@@ -121,7 +121,7 @@
       "category": "correctness",
       "id": "obs_07764acd2d1602ace576",
       "location": {
-        "blob_sha256": "6e5a0d3f0fdf3a498779a1f83fefe9594ea081bf0490c47867b710b242fc56b2",
+        "blob_sha256": "aca518d63ad2a355f2d33448bc3236f0666272d1714c9ed071f1c3a2b0455ddc",
         "column_unit": "byte",
         "end_col": 11,
         "end_line": 14,
@@ -139,13 +139,13 @@
         "json_pointer": "",
         "record_index": 1,
         "stream": "stderr",
-        "stream_sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48"
+        "stream_sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143"
       },
       "raw_severity": "error",
       "related": [
         {
           "location": {
-            "blob_sha256": "6e5a0d3f0fdf3a498779a1f83fefe9594ea081bf0490c47867b710b242fc56b2",
+            "blob_sha256": "aca518d63ad2a355f2d33448bc3236f0666272d1714c9ed071f1c3a2b0455ddc",
             "column_unit": "byte",
             "end_col": 21,
             "end_line": 13,
@@ -167,7 +167,7 @@
       "category": "resource_lifecycle",
       "id": "obs_f1418a1f246e85144e60",
       "location": {
-        "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+        "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
         "column_unit": "byte",
         "end_col": 5,
         "end_line": 12,
@@ -179,13 +179,13 @@
       "path": "src/ring.c",
       "raw_message": "Memory leak: r",
       "raw_ref": {
-        "byte_end": 2255,
-        "byte_start": 1982,
+        "byte_end": 2259,
+        "byte_start": 1986,
         "execution": "cppcheck.check",
         "json_pointer": "",
         "record_index": 4,
         "stream": "stderr",
-        "stream_sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48"
+        "stream_sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143"
       },
       "raw_severity": "error",
       "related": [],
@@ -198,7 +198,7 @@
       "category": "correctness",
       "id": "obs_33222acf3c259527c2fd",
       "location": {
-        "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+        "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
         "column_unit": "byte",
         "end_col": 11,
         "end_line": 23,
@@ -210,19 +210,19 @@
       "path": "src/ring.c",
       "raw_message": "Possible null pointer dereference: slot",
       "raw_ref": {
-        "byte_end": 2872,
-        "byte_start": 2264,
+        "byte_end": 2876,
+        "byte_start": 2268,
         "execution": "cppcheck.check",
         "json_pointer": "",
         "record_index": 5,
         "stream": "stderr",
-        "stream_sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48"
+        "stream_sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143"
       },
       "raw_severity": "warning",
       "related": [
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 14,
             "end_line": 21,
@@ -236,7 +236,7 @@
         },
         {
           "location": {
-            "blob_sha256": "a39702217352ddfa3555983c05446449f835d469769095a12547359d0af76e26",
+            "blob_sha256": "3f219099fa27b1d97bddfa4cf365cd0485c2a3c502ec176623d9c8c28b4da186",
             "column_unit": "byte",
             "end_col": 15,
             "end_line": 20,
@@ -258,7 +258,7 @@
       "category": "resource_lifecycle",
       "id": "obs_f8eb28831cb7af59d9f0",
       "location": {
-        "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
+        "blob_sha256": "5eba5459aa1860cc7c2518c322bd3fec4e387ce1b317b019ebb2c2fd2198eb13",
         "column_unit": "byte",
         "end_col": 10,
         "end_line": 22,
@@ -270,19 +270,19 @@
       "path": "src/util.cpp",
       "raw_message": "Mismatching allocation and deallocation: counts",
       "raw_ref": {
-        "byte_end": 4180,
-        "byte_start": 3741,
+        "byte_end": 4184,
+        "byte_start": 3745,
         "execution": "cppcheck.check",
         "json_pointer": "",
         "record_index": 8,
         "stream": "stderr",
-        "stream_sha256": "be994a6fb246903874ec1a30e9d2b51e8445d83366fc3965518a41aa6a639c48"
+        "stream_sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143"
       },
       "raw_severity": "error",
       "related": [
         {
           "location": {
-            "blob_sha256": "2c76613ed96108d0ec416edc97d4310bba33fc146b6058e9bbd965c44a004161",
+            "blob_sha256": "5eba5459aa1860cc7c2518c322bd3fec4e387ce1b317b019ebb2c2fd2198eb13",
             "column_unit": "byte",
             "end_col": 17,
             "end_line": 18,
@@ -327,7 +327,7 @@
     "config_files": [
       {
         "path": "compile_commands.json",
-        "sha256": "48d64ed9481ebbf6e68338e4715cc22879ebc8bee8b147355dfc1acebdbb0060"
+        "sha256": "3abe00f9183a19b6ef3b25beea3665c5c02c6b296b3e1bb378ba65ebe70f2514"
       }
     ],
     "id": "codeye-cpp-cppcheck",
@@ -342,7 +342,7 @@
     "version": "1"
   },
   "schema_version": "0.1",
-  "snapshot_manifest_digest": "de14ddc4ee3ba79510952ffa70271eb18af3ae9cbdf902dd657995e2b1f26c43",
+  "snapshot_manifest_digest": "43f1d631d2ff76772b2fc938cdb321e805493cc1cbf77a198a14eafa7c43d72a",
   "target": {
     "platform": "linux/amd64",
     "properties": {
