@@ -181,7 +181,9 @@ describe('analysis sections', () => {
     doc.inputs.source_kind = 'local';
     expect(base()).toBeUndefined();
     doc.inputs.source_kind = 'git';
-    doc.pull_request = { head_repository: 'github.com/fork/repo' };
+    doc.pull_request = { head_repository: 'Owner/Repo' };
+    expect(base()).toBe(`${source}/blob/${sha}`);
+    doc.pull_request = { head_repository: 'fork/repo' };
     expect(base()).toBeUndefined();
     delete doc.pull_request;
 

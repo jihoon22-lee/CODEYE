@@ -127,7 +127,7 @@ function pinnedSourceBase(source: string | null | undefined, commit: string | nu
   if (!name || name === '.' || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*(?::[0-9]{1,5})?$/i.test(authority)) return;
   try {
     const url = new URL(source);
-    if (/^[0-9.]+$/.test(url.hostname) || (head && head.toLowerCase() !== `${authority}/${owner}/${name}`.toLowerCase())) return;
+    if (/^[0-9.]+$/.test(url.hostname) || (head && head.toLowerCase() !== `${owner}/${name}`.toLowerCase())) return;
     return `${url.origin}/${owner}/${name}/blob/${commit}`;
   } catch {
     return;
