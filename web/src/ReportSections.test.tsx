@@ -79,17 +79,20 @@ describe('analysis sections', () => {
     doc.project = { name: 'Billing', source: '/srv/billing' };
     const report = parseAnalysisReport(doc, doc.run_id);
     const finding = report.findings.find(f => f.validation === 'supported')!;
-    render(<ReportDocument report={report} />);
+    const { rerender } = render(<ReportDocument report={report} />);
 
     const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
     const judgment = within(overview).getByRole('region', { name: finding.title });
-    expect(within(judgment).getByText(t.reading.supported)).toBeTruthy();
+    expect(within(judgment).getByText('코드 검토로 확인')).toBeTruthy();
     expect(within(judgment).getByText(finding.impact)).toBeTruthy();
     expect(judgment.textContent).toContain(finding.recommendation);
     expect(overview.querySelectorAll('.report-executive')).toHaveLength(1);
     expect(overview.querySelector('table')).toBeNull();
     expect(overview.querySelector('.model-reading-list')).toBeNull();
     expect(within(overview).queryByText(t.counts.total)).toBeNull();
+    finding.validation = 'reproduced';
+    rerender(<ReportDocument report={report} />);
+    expect(within(judgment).getByText('실행으로 재현')).toBeTruthy();
   });
 
   it('offers one collapsed glossary using only the rendered decision and its citation', () => {
@@ -275,6 +278,31 @@ describe('analysis sections', () => {
     expect(within(details).getByLabelText(t.excerptAt(excerptRange))).toBeTruthy();
   });
 
+  it('opens all 24 saved model lines and rejects a long excerpt outside its citation', () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Routes' };
+    const comparison = doc.documents.comparisons.find((row: {code_evidence_ids: string[]}) => row.code_evidence_ids.length)!;
+    const evidence = doc.documents.evidence.find((row: {id: string}) => row.id === comparison.code_evidence_ids[0])!;
+    const lines = Array.from({ length: 24 }, (_, i) => `// route line ${i + 1}`);
+    lines[12] = '  const parsed = await input.json();';
+    lines[21] = '  return Response.json(result, { status: 500 });';
+    evidence.path = 'route.ts';
+    evidence.start_line = 1;
+    evidence.end_line = 24;
+    evidence.excerpt = { start_line: 1, end_line: 24, text: lines.join('\n') };
+    const report = parseAnalysisReport(doc, doc.run_id);
+    render(<ReportDocument report={report} />);
+    fireEvent.click(screen.getByRole('tab', { name: t.sections.titles.documents }));
+    const panel = screen.getByRole('tabpanel', { name: t.sections.titles.documents });
+    const card = within(panel).getByRole('heading', { name: comparison.statement }).closest('li')!;
+    const control = within(card).getByLabelText(t.sourceActionAt(t.viewCode, 'route.ts:1–24'));
+    const details = openDisclosure(control);
+    const code = within(details).getByLabelText(t.excerptAt('route.ts:1–24'));
+    expect(Array.from(code.querySelectorAll('.source-line'), (line, i) => line.textContent?.slice(String(i + 1).length, -1))).toEqual(lines);
+    evidence.end_line = 23;
+    expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow();
+  });
+
   it('does not put repository links in code-free or local reports, fork PRs or malformed ranges and URLs', () => {
     const doc = example('report.json');
     const sha = '1'.repeat(64);
@@ -289,6 +317,11 @@ describe('analysis sections', () => {
     expect(sourceEvidenceURL(base(), 'src/../a.go', 4, 8)).toBeUndefined();
 
     doc.export.include_code = false;
+    expect(base).toThrow();
+    for (const finding of doc.findings) for (const evidence of finding.evidence) delete evidence.excerpt;
+    for (const section of [doc.environment, doc.documents, doc.code_review]) {
+      for (const evidence of section.evidence ?? []) delete evidence.excerpt;
+    }
     expect(base()).toBeUndefined();
     doc.export.include_code = true;
     doc.inputs.source_kind = 'local';

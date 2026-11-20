@@ -138,7 +138,8 @@ func Build(in Input, reg *Registry) (Report, error) {
 	processedUnion, unionComplete := map[string]bool{}, true
 	obsSeen := map[string]bool{}
 	findSeen := map[string]bool{}
-	var snippets map[sourceexcerpt.Key]sourceexcerpt.Excerpt
+	var snippets map[sourceexcerpt.Key][]sourceexcerpt.Excerpt
+	var legacyExcerpts bool
 	if rm != nil {
 		for _, k := range keys {
 			st := states[k]
@@ -170,11 +171,13 @@ func Build(in Input, reg *Registry) (Report, error) {
 				body := in.Bodies[art.ID]
 				if art.MediaType == sourceexcerpt.MediaType {
 					if doc, ok := sourceexcerpt.Decode(body, in.Run.ID, in.Attempt.ID, in.Snapshot.ManifestDigest, index.Lookup); ok && art.Role == "other" && snippets == nil {
-						snippets = make(map[sourceexcerpt.Key]sourceexcerpt.Excerpt, len(doc.Items))
+						legacyExcerpts = doc.SchemaVersion == sourceexcerpt.LegacyVersion
+						snippets = make(map[sourceexcerpt.Key][]sourceexcerpt.Excerpt, len(doc.Items))
 						for _, item := range doc.Items {
-							snippets[item.Key()] = item.Excerpt
+							key := item.Key()
+							snippets[key] = append(snippets[key], item.Excerpt)
 						}
-						decoderOf[art.ID] = sourceexcerpt.MediaType + ";schema_version=" + sourceexcerpt.Version
+						decoderOf[art.ID] = sourceexcerpt.MediaType + ";schema_version=" + doc.SchemaVersion
 					}
 					continue
 				}
@@ -386,7 +389,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	// change a limitation, note, count, status or verdict.
 	composeSections(&r, in, states, keys, rm != nil)
 	r.QualityVerdict = reportVerdict(r)
-	attachExcerpts(&r, snippets)
+	attachExcerpts(&r, snippets, legacyExcerpts)
 	// The pull-request section counts changed files sent to the model only
 	// when the run sent the model a request: a run without a model (whose
 	// records hold calls with no request) says so instead of "0 of N sent".

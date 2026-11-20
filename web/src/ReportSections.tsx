@@ -405,7 +405,7 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
     title: action.finding.title,
     model: true,
     text: action.finding.impact,
-    status: action.finding.validation === 'supported' ? t.reading.supported : label(t.validation, action.finding.validation),
+    status: action.finding.validation === 'supported' ? t.reading.supported : t.reading.reproduced,
     next: { label: t.reading.nextAction, text: action.finding.recommendation },
     sources: <FindingSourceLink evidence={action.source} preferOriginal />,
   };

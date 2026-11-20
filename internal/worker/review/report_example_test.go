@@ -640,7 +640,7 @@ func TestReportExample(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	doc := sourceexcerpt.Document{SchemaVersion: sourceexcerpt.Version, RunID: j.RunID, AttemptID: j.AttemptID, Snapshot: j.Snapshot.Digest}
+	doc := sourceexcerpt.Document{SchemaVersion: sourceexcerpt.LegacyVersion, RunID: j.RunID, AttemptID: j.AttemptID, Snapshot: j.Snapshot.Digest}
 	for _, e := range j.Snapshot.Manifest.Entries {
 		for _, line := range entries[e.Path] {
 			if excerpt, ok := sourceexcerpt.Read(root, e, line); ok {

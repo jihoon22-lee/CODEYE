@@ -64,6 +64,13 @@ func TestProjectOpeningSelectsLocatedProductionReview(t *testing.T) {
 	if decision.Title != "재현된 조치" || decision.Tone != "action" || len(decision.Sources) != 1 || decision.Sources[0].Location != "store.py:12-27" {
 		t.Fatalf("one strongest grounded decision required: %+v", decision)
 	}
+	if decision.State != "실행으로 재현" {
+		t.Fatalf("the overview should identify execution evidence: %q", decision.State)
+	}
+	v.R.Findings = f[:1]
+	if state := v.projectDecision().State; state != "코드 검토로 확인" {
+		t.Fatalf("the overview should identify code review evidence: %q", state)
+	}
 }
 
 func TestProjectDecisionShowsOneGroundedPriority(t *testing.T) {

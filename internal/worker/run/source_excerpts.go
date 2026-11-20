@@ -30,6 +30,7 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 	}
 	lookup := func(p string) (string, bool) { e, ok := files[p]; return e.SHA256, ok }
 	var model, diagnostics [][]sourceexcerpt.Key
+	modelEnds := map[sourceexcerpt.Key]int{}
 	withheld := map[string]bool{}
 	var host *taskRun
 	for _, task := range tasks {
@@ -60,7 +61,9 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 				}
 				var keys []sourceexcerpt.Key
 				for _, e := range rec.CitedEvidence() {
-					keys = append(keys, sourceexcerpt.Key{Path: e.Path, SHA256: e.SHA256, Line: e.Start})
+					key := sourceexcerpt.Key{Path: e.Path, SHA256: e.SHA256, Line: e.Start}
+					keys = append(keys, key)
+					modelEnds[key] = max(modelEnds[key], e.End)
 				}
 				if len(keys) > 0 {
 					model = append(model, keys)
@@ -82,8 +85,13 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 
 	doc := sourceexcerpt.Document{SchemaVersion: sourceexcerpt.Version, RunID: a.job.Attempt.RunID,
 		AttemptID: a.job.Attempt.ID, Snapshot: a.snapshot.Digest}
-	seen := map[sourceexcerpt.Key]bool{}
-	add := func(groups [][]sourceexcerpt.Key, limit int) {
+	type request struct {
+		sourceexcerpt.Key
+		model bool
+	}
+	seen := map[request]bool{}
+	windows := map[sourceexcerpt.WindowKey]bool{}
+	add := func(groups [][]sourceexcerpt.Key, limit int, model bool) {
 		if len(doc.Items) >= limit {
 			return
 		}
@@ -96,17 +104,28 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 				}
 				active = true
 				key := group[i]
-				if seen[key] || withheld[key.Path] {
+				req := request{key, model}
+				if seen[req] || withheld[key.Path] {
 					continue
 				}
-				seen[key] = true
+				seen[req] = true
 				entry, ok := files[key.Path]
 				if !ok || entry.SHA256 != key.SHA256 {
 					continue
 				}
 				remaining--
-				if e, ok := sourceexcerpt.Read(root, entry, key.Line); ok {
-					doc.Items = append(doc.Items, sourceexcerpt.Item{Path: key.Path, SHA256: key.SHA256, Anchor: key.Line, Excerpt: e})
+				var e sourceexcerpt.Excerpt
+				if model {
+					e, ok = sourceexcerpt.ReadRange(root, entry, key.Line, modelEnds[key])
+				} else {
+					e, ok = sourceexcerpt.Read(root, entry, key.Line)
+				}
+				if ok {
+					item := sourceexcerpt.Item{Path: key.Path, SHA256: key.SHA256, Anchor: key.Line, Excerpt: e}
+					if bounds := item.WindowKey(); !windows[bounds] {
+						doc.Items = append(doc.Items, item)
+						windows[bounds] = true
+					}
 				}
 				if len(doc.Items) == limit || remaining == 0 {
 					return
@@ -117,9 +136,9 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 			}
 		}
 	}
-	add(model, sourceexcerpt.MaxItems/2)
-	add(diagnostics, sourceexcerpt.MaxItems)
-	add(model, sourceexcerpt.MaxItems)
+	add(model, sourceexcerpt.MaxItems/2, true)
+	add(diagnostics, sourceexcerpt.MaxItems, false)
+	add(model, sourceexcerpt.MaxItems, true)
 	if len(doc.Items) == 0 || a.ctx.Err() != nil {
 		return
 	}

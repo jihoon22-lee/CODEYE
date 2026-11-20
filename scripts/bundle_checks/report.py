@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 import re
 
@@ -33,6 +34,7 @@ def check_plan(plan: dict) -> None:
 
 def check_report(report: dict, source_root: Path = ROOT) -> None:
     findings = report["findings"]
+    model_findings = set((report.get("code_review") or {}).get("finding_ids", []))
     ids = [finding["id"] for finding in findings]
     ensure(len(ids) == len(set(ids)), "Duplicate finding ID")
     summary = report["summary"]
@@ -100,7 +102,7 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
                 path = source_location(item["location"], source_root)
                 digest = hashlib.sha256(path.read_bytes()).hexdigest()
                 ensure(digest == item["blob_sha256"], "Evidence hash mismatch: " + str(path))
-                check_excerpt(item, path, item["location"]["start_line"], include_code)
+                check_excerpt(item, path, item["location"], include_code, finding["id"] in model_findings)
     check_sections(report, source_root)
 
 
@@ -176,7 +178,7 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
             path = source_location(location, source_root)
             ensure(hashlib.sha256(path.read_bytes()).hexdigest() == evidence["blob_sha256"], "Section evidence hash mismatch: " + str(path))
             evidence_document_scope(evidence, source_root)
-            check_excerpt(evidence, path, evidence["start_line"], not free)
+            check_excerpt(evidence, path, location, not free, True)
         cited = [i for entries in report[block].values() if isinstance(entries, list)
                  for entry in entries if isinstance(entry, dict)
                  for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids", "document_evidence_ids", "code_evidence_ids") for i in entry.get(key, [])]
@@ -211,16 +213,25 @@ def check_document_comparisons(documents: dict, catalog: dict) -> None:
                "Document comparison verdict lacks implementation evidence")
 
 
-def check_excerpt(evidence: dict, path: Path, anchor: int, include_code: bool | None) -> None:
+def check_excerpt(evidence: dict, path: Path, citation: dict, include_code: bool | None, model: bool) -> None:
     excerpt = evidence.get("excerpt")
     if excerpt is None:
         return
     ensure(include_code is True, "Code-free export carries source excerpts")
     start, end = excerpt["start_line"], excerpt["end_line"]
-    lines = path.read_text(encoding="utf-8").split("\n")
-    ensure(1 <= start <= anchor <= end <= len(lines) and end - start < 9,
+    anchor = citation["start_line"]
+    lines = [line.removesuffix("\r") for line in path.read_bytes().decode("utf-8").removesuffix("\n").split("\n")]
+    ensure(1 <= start <= anchor <= end <= len(lines) and
+           (end - start < 9 or model and start == anchor and end <= citation["end_line"] and end - start < 50),
            "Invalid source excerpt lines: " + str(path))
-    ensure("\n".join(lines[start - 1:end]) == excerpt["text"], "Source excerpt differs from snapshot: " + str(path))
+    text = excerpt["text"]
+    encoded = json.dumps(text, ensure_ascii=False)
+    for ch in "<>&\u2028\u2029":
+        encoded = encoded.replace(ch, f"\\u{ord(ch):04x}")
+    forbidden_control = any(ch not in "\n\t" and (ord(ch) < 32 or 127 <= ord(ch) <= 159) for ch in text)
+    ensure(text.strip() and not forbidden_control and len(encoded.encode("utf-8")) <= 1800,
+           "Invalid source excerpt text: " + str(path))
+    ensure("\n".join(lines[start - 1:end]) == text, "Source excerpt differs from snapshot: " + str(path))
 
 
 DEPS_TASK = re.compile(r"^deps\.(go|rust|javascript|python)(\.m[0-9]{2,3})?$")

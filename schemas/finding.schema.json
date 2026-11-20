@@ -52,7 +52,7 @@
     },
     "strings": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "location": {"type": "object", "additionalProperties": false, "required": ["snapshot_id", "path", "start_line", "end_line"], "properties": {"snapshot_id": {"type": "string", "minLength": 1}, "path": {"type": "string", "minLength": 1}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "symbol": {"type": "string"}}},
-    "sourceExcerpt": {"type": "object", "additionalProperties": false, "required": ["start_line", "end_line", "text"], "properties": {"start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "text": {"type": "string", "minLength": 1, "maxLength": 1800}}},
+    "sourceExcerpt": {"type": "object", "description": "스냅샷에서 저장한 실제 줄 범위. 도구 진단과 이전 발췌는 최대 9줄이며 새 모델 발췌는 인용 범위 안의 최대 50줄이다. 서버는 JSON 인코딩 1,800바이트, 행 수와 인용 위치의 일치를 검사한다.", "additionalProperties": false, "required": ["start_line", "end_line", "text"], "properties": {"start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "text": {"type": "string", "minLength": 1, "maxLength": 1800, "pattern": "^(?:[^\\n]*\\n){0,49}[^\\n]*(?![\\s\\S])"}}},
     "evidence": {
       "type": "object", "additionalProperties": false,
       "required": ["id", "kind", "description"],

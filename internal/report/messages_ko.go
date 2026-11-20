@@ -285,6 +285,8 @@ var koSectionLabels = map[string]string{
 	"decision.preserve":                 "유지할 구현",
 	"decision.related":                  "%s 및 %s",
 	"decision.candidate":                "검증할 후보",
+	"decision.supported":                "코드 검토로 확인",
+	"decision.reproduced":               "실행으로 재현",
 	"decision.next":                     "다음 조치",
 	"decision.comparison.match":         "문서와 구현 일치",
 	"decision.comparison.partial":       "문서와 구현 일부 일치",

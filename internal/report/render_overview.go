@@ -249,6 +249,12 @@ func (v secView) findingDecision(f Finding, pending bool) projectDecision {
 		if productFindingEvidence(f, e) {
 			loc := e.Location
 			d.Sources = []sourceCitation{v.citeEvidence("code", loc.Path, loc.StartLine, loc.EndLine, e.Excerpt)}
+			switch f.Validation {
+			case ValidationSupported:
+				d.State = l.Label("decision.supported")
+			case ValidationReproduced:
+				d.State = l.Label("decision.reproduced")
+			}
 			break
 		}
 	}

@@ -18,7 +18,8 @@ export const reportKo = {
   strengthsTitle: '유지할 만한 구현', scopeTitle: '적용 범위',
   reading: {
     nextAction: '다음 조치', nextCheck: '확인 방법',
-    supported: '코드 근거 있음 · 실행 미재현',
+    supported: '코드 검토로 확인',
+    reproduced: '실행으로 재현',
     implementationUnknown: '구현 미확인',
     documentClaim: '사용 설명에 적힌 동작',
     unconfirmedReason: '코드에서 확인하지 못한 이유',

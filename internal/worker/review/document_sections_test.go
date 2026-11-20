@@ -89,9 +89,9 @@ func TestDocumentContinuationReachesReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	source, ok := sourceexcerpt.Read(root, e, later.StartLine)
-	if !ok || !strings.Contains(source.Text, "### fetchRecords(filter)") {
-		t.Fatalf("source excerpt does not resolve around API lines: %+v", source)
+	source, ok := sourceexcerpt.ReadRange(root, e, later.StartLine, later.EndLine)
+	if !ok || source.StartLine != later.StartLine || source.EndLine != later.EndLine || source.Text != later.Text {
+		t.Fatalf("source excerpt does not match the cited API lines: %+v", source)
 	}
 	b, err := sourceexcerpt.Encode(sourceexcerpt.Document{
 		SchemaVersion: sourceexcerpt.Version, RunID: j.RunID, AttemptID: j.AttemptID, Snapshot: j.Snapshot.Digest,

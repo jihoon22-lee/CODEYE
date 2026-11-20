@@ -65,11 +65,11 @@ func TestReviewRequestSizeOnFixture(t *testing.T) {
 }
 
 func TestDocumentsFitKeepsExcerptsWhenModuleLinksExceedBudget(t *testing.T) {
-	const modules = 24
+	const modules = 32
 	const guidance = 8
 	files := map[string]string{}
 	for i := range guidance {
-		name := fmt.Sprintf("README-%02d-%s.md", i, strings.Repeat("<", 140))
+		name := fmt.Sprintf("README-%02d-%s.md", i, strings.Repeat("&", 32))
 		files[name] = "The cache returns queued values.\n"
 	}
 	for i := range modules {

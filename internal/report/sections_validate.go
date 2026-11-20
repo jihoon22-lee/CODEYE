@@ -250,7 +250,7 @@ func validateModelSections(r Report) error {
 				!slices.Contains([]string{"code", "test", "document", "manifest"}, e.Kind) || !provenance.ValidDirectivePath() {
 				return nil, invalidf("section evidence %s is invalid", e.ID)
 			}
-			if e.Excerpt != nil && (free || !sourceexcerpt.SafePath(e.Path) || !e.Excerpt.Valid(e.StartLine) ||
+			if e.Excerpt != nil && (free || !sourceexcerpt.SafePath(e.Path) || !e.Excerpt.ValidCitation(e.StartLine, e.EndLine) ||
 				e.ID != record.ExcerptID(r.Inputs.ManifestSHA256, e.Path, e.BlobSHA256, e.StartLine, e.EndLine)) {
 				return nil, invalidf("section excerpt is invalid")
 			}
