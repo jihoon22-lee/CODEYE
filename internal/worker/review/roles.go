@@ -12,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/docpath"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -314,15 +315,15 @@ func (s *roleStage) documents() analysis.TaskResult {
 			in.Overlapping = append(in.Overlapping, envdoc.Overlap{Path: o.Path, Documents: short(o.Documents), Assessment: o.Assessment})
 		}
 	}
-	class := map[string]string{}
+	byPath := map[string]envdoc.Doc{}
 	for _, d := range f.selected {
-		class[d.Path] = d.Class
+		byPath[d.Path] = d
 	}
 	withDocuments := func(list []record.Excerpt) docsInput {
 		x := in
 		x.Documents = []docInput{}
 		for _, e := range list {
-			x.Documents = append(x.Documents, docInput{EvidenceID: e.ID, Path: e.Path, AppliesTo: record.DocumentDir(e.Path), Class: class[e.Path], StartLine: e.Start, EndLine: e.End, Text: e.Text})
+			x.Documents = append(x.Documents, docInput{EvidenceID: e.ID, Path: e.Path, AppliesTo: byPath[e.Path].AppliesTo, Class: byPath[e.Path].Class, StartLine: e.Start, EndLine: e.End, Text: e.Text})
 		}
 		return x
 	}
@@ -345,7 +346,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 			return []string{"scope_unknown_path"}
 		}
 		for _, id := range ids {
-			if e, ok := catalog[id]; ok && !record.ScopeUnder(p, record.DocumentDir(e.Path)) {
+			if e, ok := catalog[id]; ok && !record.ScopeUnder(p, byPath[e.Path].AppliesTo) {
 				return []string{"scope_generalized"}
 			}
 		}
@@ -510,7 +511,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		docs.Contracts, docs.Conflicts, docs.Questions = nonNilList(docRec.Contracts), nonNilList(docRec.Conflicts), nonNilList(docRec.Questions)
 		docEv = citedDocuments(docRec)
 		for _, e := range docEv {
-			docs.Evidence = append(docs.Evidence, docEvidence{ID: e.ID, Path: e.Path, AppliesTo: record.DocumentDir(e.Path), StartLine: e.Start, EndLine: e.End})
+			docs.Evidence = append(docs.Evidence, docEvidence{ID: e.ID, Path: e.Path, AppliesTo: docpath.Scope(e.Path), StartLine: e.Start, EndLine: e.End})
 		}
 	}
 	envh := environmentHandoff{State: uEnv.State, Reason: uEnv.Reason, Notes: []record.EnvironmentNote{}}

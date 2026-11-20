@@ -120,7 +120,7 @@
 - 대상은 탐색 산출물에서 `selected` 상태인 안내 문서다. 순서는 에이전트 지침, README, CONTRIBUTING, 설계 문서이고 같은 분류는 얕은 경로가 먼저다.
 - 문서당 첫 40줄·2,000바이트, 최대 8개, 합계 10,000바이트다. 넘으면 `documents_outside_review_input`, 문서 일부만 보내면 `document_excerpt_only`를 남긴다.
 - 읽지 않은 안내 문서(최대 16개), 모듈별 문서 연결과 겹침 묶음(각 최대 32·16개, 목록당 8개)을 함께 준다. 줄이면 `document_lists_shortened`다.
-- 문서 규칙의 적용 경로(`applies_to`)는 인용한 문서의 디렉터리와 같거나 그 아래여야 한다.
+- 문서 규칙의 적용 경로(`applies_to`)는 탐색에서 정한 문서의 적용 디렉터리와 같거나 그 아래여야 한다.
 
 ### 환경 입력(environment)
 
@@ -263,7 +263,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 - 출력은 `workspace_proof`와 `result`를 가진 JSON 객체 하나여야 한다. `result`는 역할 계약의 엄격한 JSON이다. 계약의 목록 key는 모두 배열로 있어야 하고 알 수 없는 필드는 거부한다(`output_schema_invalid`).
 - 그 호출에 준 근거·관찰 ID만 인용할 수 있다. 오류 코드: `evidence_id_unknown`, `evidence_id_duplicate`, `evidence_kind_invalid`, `evidence_missing`, `evidence_list_too_long`, `observation_id_unknown`, `evidence_not_at_observation`, `code_evidence_missing`.
-- 문서 규칙의 적용 경로를 상위 디렉터리나 저장소 전체로 넓히면 거부한다(`scope_generalized`, `scope_unknown_path`, `scope_invalid`). 충돌의 두 쪽은 서로 다른 문서를 인용해야 한다(`conflict_same_document`).
+- 탐색에서 정한 문서의 적용 경로보다 상위로 넓히면 거부한다(`scope_generalized`, `scope_unknown_path`, `scope_invalid`). 충돌의 두 쪽은 서로 다른 문서를 인용해야 한다(`conflict_same_document`).
 - 실행·재현·테스트 통과를 주장하는 서술은 거부한다. 호출 오류 코드는 `execution_claim`이고, 단계 기록에는 `execution_claim_rejected` 한계가 남는다. 이 검사는 정규식 휴리스틱이다. 놓친 주장이 있어도 상태·재현·통계는 구조화 기록에서만 정하므로 모델 서술이 판정을 바꾸지 못한다.
 - 서술 필드는 JSON 인코딩 400바이트 이하다(지침은 120자 이하를 요구한다). 기록에 남는 모델 서술은 2,400바이트 이하이고 민감값 패턴에 걸리지 않아야 한다.
 - 환경 메모는 플랫폼 판정을 다시 쓰거나 올리지 못한다. 판정 필드를 붙인 출력은 거부한다.

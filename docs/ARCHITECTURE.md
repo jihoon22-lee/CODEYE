@@ -408,13 +408,13 @@ Go 모듈, Rust crate, JS/TS 패키지, Python 패키지(wheel만) 의존성 받
 - 상태: `selected`, `budget_exceeded`, `excluded`, `unreadable`. 사유 코드는 `document_too_large`, `read_budget_exhausted`, `out_of_scope`, `credential_like_content`, `not_utf8`, `contains_nul`, `lfs_object_not_acquired`, `not_a_regular_file`과 manifest 제외 사유다.
 - 기본 예산은 문서당 32 KiB, 합계 256 KiB, 최대 1,000개이며 산출물의 `budget`에 기록한다. 예산 초과는 `document_limit_exceeded`·`document_budget_exceeded`, 범위 밖 문서는 `documents_out_of_scope` limitation으로 남긴다.
 - 읽는 순서는 에이전트 지침, README, CONTRIBUTING, 설계, 기타 순이다. 같은 분류 안에서는 얕은 경로가 먼저다.
-- `applies_to`는 문서 디렉터리다. 모듈마다 자기 문서(`own`), 상속 문서(`inherited`), 없음(`none`)을 구분한다. `other` 분류는 목록에만 남기고 모듈 연결과 겹침 묶음에는 넣지 않는다.
+- `applies_to`는 문서가 설명하는 기본 범위다. `docs/`·`doc/` 아래의 설계·요구사항·안내 문서는 그 문서 트리를 담은 프로젝트 또는 모듈 디렉터리에 적용한다. README와 AGENTS 등 지역 안내·지침 파일은 실제 디렉터리에 적용한다. 이전 산출물에 저장된 실제 문서 디렉터리는 그대로 읽는다. 모듈마다 자기 문서(`own`), 상속 문서(`inherited`), 없음(`none`)을 구분한다. `other` 분류는 목록에만 남기고 모듈 연결과 겹침 묶음에는 넣지 않는다.
 - 에이전트 지침 문서는 분석 자료로 분류할 뿐 권한·도구 설정·계획을 바꾸지 않는다.
 - 문서가 없는 것은 정상이다. 읽지 못한 범위만 표시한다.
 
 ### 안내 문서 겹침
 
-같은 경로에 적용되는 문서가 여럿이면 문서 디렉터리마다 `overlapping_guidance`로 묶는다. 의미 충돌 판정은 문서 검토 역할의 몫이다. 모델을 실행하지 않으면 `not_assessed_without_model`로 남고 `semantic_conflicts_not_assessed` limitation이 붙는다.
+같은 경로에 적용되는 문서가 여럿이면 문서의 적용 디렉터리마다 `overlapping_guidance`로 묶는다. 의미 충돌 판정은 문서 검토 역할의 몫이다. 모델을 실행하지 않으면 `not_assessed_without_model`로 남고 `semantic_conflicts_not_assessed` limitation이 붙는다.
 
 ## 의존성 준비
 

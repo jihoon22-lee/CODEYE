@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056c",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "f09eeceed85e5e0d8c0ca2e6da47908f59575eb5f8d9cd31dc8163ae55089023",
+      "sha256": "dda6624cba18ce3e72e4601dad0d7af7b971da6067579fc7181bec4da4a870ab",
       "size_bytes": 21433,
       "task_key": null
     },
@@ -680,8 +680,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000513",
       "media_type": "application/vnd.codeye.environment+json",
       "role": "other",
-      "sha256": "56ed878e137ad2f575852027217505a9662515c3e95e5a5cc6fb5c9a102a80d5",
-      "size_bytes": 2319,
+      "sha256": "3d728df257f36889565b5071d50d3df7eb160a0b72c1e6e46020efce9ac0efb8",
+      "size_bytes": 2271,
       "task_key": "docs.discover"
     },
     {
@@ -725,7 +725,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000565",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "8829aceca419571f1a36af79105c66bb6c20228aefc3b22cf9be688c1a0efb66",
+      "sha256": "2ef7356314ce8573aa82ff873f8d352a5e92e75d4f292e21982dfbb4819dcf09",
       "size_bytes": 2946,
       "task_key": "review.documents"
     },
@@ -734,7 +734,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000567",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "00cf1d4ce3a3b24a23a5402b7f4fea4a201b5137bedc8990e580ea12000d17a7",
+      "sha256": "52b00eb2fff6ff6d96c1202d9e24dfdf6f06e0b3673366fedae2041c44ef3629",
       "size_bytes": 2938,
       "task_key": "review.investigate"
     },
@@ -752,7 +752,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "c276c58894bfcbcae8e1d348847d5ea7b5c3cc2d32f7cf5e67162701b6f00512",
+      "sha256": "972f218b7ba44e2a1237bbb591fd7ca1f13813da9ced3d3b4dc2c90a3fcd49af",
       "size_bytes": 4666,
       "task_key": "review.verify"
     }
@@ -767,7 +767,7 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "0e3766b65c28262fd04f24abd43ee0e770bce6e04a807b49186b1e6835507518",
+    "input_digest": "29e3fb966c8854f858b498025f72aa75b23d61e61e3fcc7165a3f4755f48fa7b",
     "result_manifest_artifact_id": null,
     "version": "11"
   },
@@ -805,7 +805,7 @@
     "inventory_files": 10,
     "pack_id": "review",
     "pack_version": "2.1.0",
-    "request_bytes": 64826,
+    "request_bytes": 64778,
     "roles": [
       {
         "key": "review.investigate",
@@ -903,7 +903,7 @@
         "pack_id": "review",
         "pack_sha256": "df857a95036a2123923a021ec47a463e65af625c74e209e13009731457960502",
         "pack_version": "2.1.0",
-        "request_sha256": "80d9cf0cde627530693e26cc9752cc876240be0a32e8f51250187aa71a3cc731",
+        "request_sha256": "7ab25745140981e1463e016bc9e189ac165b4e3a207e29e786ff7eb896141f40",
         "role": "documents",
         "task_key": "review.documents"
       },
@@ -1380,7 +1380,7 @@
         "status": "selected"
       },
       {
-        "applies_to": "docs",
+        "applies_to": ".",
         "class": "design",
         "line_count": null,
         "path": "docs/design.md",
@@ -1422,7 +1422,8 @@
       {
         "inherited": [
           "AGENTS.md",
-          "README.md"
+          "README.md",
+          "docs/design.md"
         ],
         "module": "go:svc/a",
         "own": [],
@@ -1431,7 +1432,8 @@
       {
         "inherited": [
           "AGENTS.md",
-          "README.md"
+          "README.md",
+          "docs/design.md"
         ],
         "module": "go:svc/b",
         "own": [
@@ -1445,7 +1447,8 @@
         "assessment": "not_assessed_without_model",
         "documents": [
           "AGENTS.md",
-          "README.md"
+          "README.md",
+          "docs/design.md"
         ],
         "path": "."
       },
@@ -1454,15 +1457,7 @@
         "documents": [
           "AGENTS.md",
           "README.md",
-          "docs/design.md"
-        ],
-        "path": "docs"
-      },
-      {
-        "assessment": "not_assessed_without_model",
-        "documents": [
-          "AGENTS.md",
-          "README.md",
+          "docs/design.md",
           "svc/b/README.md"
         ],
         "path": "svc/b"

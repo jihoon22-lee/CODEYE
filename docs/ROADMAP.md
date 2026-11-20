@@ -106,6 +106,7 @@
 필요할 때 별도 작업으로 만든다. 순서는 정하지 않았다.
 
 - Container 실행기(ContainerExecutor). Native 실행을 대체하지 않는 선택 실행기다.
+- 저장소 전체 문서의 계약마다 관련 모듈·호출부를 찾아 검토에 함께 보내는 범위 선정 개선. [평가 결과](EVALUATION-RESULTS.md)의 공개 저장소 사례에서 근거가 부족했던 항목을 기준으로 검증한다.
 - 고비용 interfile 분석.
 - 추가 OS(Windows의 `codeye up`·`start`·`stop` 포함).
 - 인프라 용량 공급자(CapacityProvider): 클라우드 VM 생성·삭제는 초기 범위 밖이다.

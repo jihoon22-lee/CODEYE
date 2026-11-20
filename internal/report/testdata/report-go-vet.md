@@ -55,7 +55,7 @@
 
 ## 발견 항목
 
-코드 발췌 없음\: controller는 snapshot 원본을 보관하지 않는다\. 위치와 blob hash로 snapshot 코드를 확인한다\.
+이전 보고서에는 파일 위치만 기록되어 있습니다\.
 
 ### go\.vet printf 진단 \(example\.go\:5\)
 

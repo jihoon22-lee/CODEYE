@@ -13,7 +13,7 @@
     {
       "source": "docs.discover",
       "state": "accepted",
-      "sha256": "755326cd603c4731339fd84607a769aad3a46762ccb0c4e99aa2ef63e3858005"
+      "sha256": "a6371d7912755a94ad477223d39a102b514b9988778abd45f807364d2fddf74b"
     }
   ],
   "evidence": [
@@ -107,10 +107,10 @@
         "languages/go.md",
         "pack.yaml"
       ],
-      "request_sha256": "eb27a4a4a63a70a0819fb20fd27489ec129f58bf272a2d8a675b982bac2993d6",
-      "request_bytes": 13240,
+      "request_sha256": "ac740764e69a702df3e18babb2a5bd0549bbb9f53a332792ad81a72f8b9f893d",
+      "request_bytes": 13192,
       "usage": {
-        "input": 2539,
+        "input": 2491,
         "output": 50
       },
       "attempt": 1,

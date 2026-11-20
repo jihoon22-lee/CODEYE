@@ -27,7 +27,7 @@
 
 실행 상태는 부분 결과, 품질 판정은 확인할 항목이 있습니다\.\.
 
-모델 검토 발견 2건 중 근거로 지지 1건 \(기각 1건\)\. 지지는 모델이 근거를 들어 내린 판단이며 재현이나 사람의 판정이 아니다\.
+AI가 검토한 문제 2건 중 코드 근거를 확인한 항목 1건 \(기각 1건\)\.
 
 도구 진단 2건\(규칙 2종, 도구 1종\)\. 필수 분석 작업 1개가 성공하지 않아 그 범위는 분석되지 않았다\.
 
@@ -103,7 +103,7 @@ const MaxRetries = 3
 
 모델 호출 5회, 그중 수락 5회\(환경·문서 역할 호출 포함, 전체 합계\)\.
 
-모델 요청 크기 합계 64826바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
+모델 요청 크기 합계 64778바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
 
 모델에 보낸 파일 6개 / snapshot 파일 10개\.
 
@@ -148,7 +148,7 @@ const MaxRetries = 3
 
 상태\: △ 일부 수행 · 작업 9개 중 6개 성공
 
-도구가 보고한 진단과 그 발견이다\. 진단이 0건인 성공은 결함이 없다는 뜻이 아니다\. 성공하지 않은 작업의 범위는 분석되지 않았다\.
+도구별 검사 결과와 확인할 위치입니다\.
 
 | 항목 | 수 |
 |---|---|
@@ -443,16 +443,15 @@ caller instead.
 | 모듈 | 상태 | 자체 문서 | 상위에서 이어받은 문서 |
 |---|---|---|---|
 | `go:.` | 자체 문서 있음 | `AGENTS.md, README.md, docs/design.md` | `-` |
-| `go:svc/a` | 상위 문서만 있음 | `-` | `AGENTS.md, README.md` |
-| `go:svc/b` | 자체 문서 있음 | `svc/b/README.md` | `AGENTS.md, README.md` |
+| `go:svc/a` | 상위 문서만 있음 | `-` | `AGENTS.md, README.md, docs/design.md` |
+| `go:svc/b` | 자체 문서 있음 | `svc/b/README.md` | `AGENTS.md, README.md, docs/design.md` |
 
 ### 같은 범위에 겹치는 안내
 
 | 경로 | 문서 | 평가 |
 |---|---|---|
-| `.` | `AGENTS.md, README.md` | 문서 역할이 함께 읽음\(충돌은 아래 목록\) |
-| `docs` | `AGENTS.md, README.md, docs/design.md` | 문서 역할이 함께 읽음\(충돌은 아래 목록\) |
-| `svc/b` | `AGENTS.md, README.md, svc/b/README.md` | 문서 역할이 함께 읽음\(충돌은 아래 목록\) |
+| `.` | `AGENTS.md, README.md, docs/design.md` | 문서 역할이 함께 읽음\(충돌은 아래 목록\) |
+| `svc/b` | `AGENTS.md, README.md, docs/design.md, svc/b/README.md` | 문서 역할이 함께 읽음\(충돌은 아래 목록\) |
 
 ### 탐색 한계
 
@@ -516,7 +515,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 도구가 처리한 파일 수를 확정할 수 없다\(미측정이며 0이 아니다\)\.
 
-도구가 0건을 보고한 작업이 있다\. 결함이 없다는 뜻이 아니다\.
+진단 없이 마친 검사가 있습니다\.
 
 ### 작업 상태
 
@@ -532,7 +531,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 실행 기록 31개\(exited 31\)\.
 
-산출물 84개, 합계 74165바이트\.
+산출물 84개, 합계 74117바이트\.
 
 작업·실행·산출물의 전체 목록과 개별 진단은 전체 보기\(detail\=full\)와 JSON 내보내기에 있다\.
 
@@ -551,7 +550,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `0bc6b14a9e83` |
+| digest | `d618fd90bbeb` |
 | status | `partial` |
 | quality\_verdict | `attention_required` |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -561,4 +560,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | created\_at | `2026-11-18T00:10:00Z` |
 | export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
 
-digest sha256: `0bc6b14a9e83e51e0e0b95390f3c34623b5e6e7b037d0f52814e2394f697d1a8`
+digest sha256: `d618fd90bbeb664a7520635661e8c2d9a92d9d33daedb8e7fa74164a06772dba`

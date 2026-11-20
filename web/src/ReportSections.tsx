@@ -322,7 +322,7 @@ function summaryLines(f: ReturnType<typeof overviewFacts>, reviewPlanned: boolea
   if (!f.model && reviewPlanned) out.push(sm.modelNone);
   if (f.model) {
     const rest = (['reproduced', 'inconclusive', 'refuted', 'unreviewed'] as const).filter((k) => f.model![k] > 0).map((k) => sm.validation[k](f.model![k]));
-    out.push(sm.modelFindings(f.model.total, f.model.supported + f.model.reproduced) + (rest.length > 0 ? ' (' + rest.join(', ') + ')' : '') + '. ' + sm.modelNote);
+    out.push(sm.modelFindings(f.model.total, f.model.supported + f.model.reproduced) + (rest.length > 0 ? ' (' + rest.join(', ') + ')' : '') + '.');
   }
   if (f.scope) out.push(sm.reviewScope(f.scope.primary, f.scope.primarySent) + (f.scope.secondary > 0 ? ' ' + sm.reviewScopeSecondary(f.scope.secondary, f.scope.secondarySent) : ''));
   const d = f.diagnostics;

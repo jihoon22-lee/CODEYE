@@ -130,3 +130,32 @@ func reason(d *envdoc.Document, module, r string) {
 		}
 	}
 }
+
+func TestDecodeLegacyPhysicalDocumentScope(t *testing.T) {
+	in, _, d := fixture(t)
+	for i, item := range d.Documents.Items {
+		if item.Path == "docs/big.md" {
+			d.Documents.Items[i].AppliesTo = "docs"
+		}
+	}
+	for i, module := range d.Documents.Modules {
+		if module.Module != "go:." {
+			d.Documents.Modules[i].Inherited = []string{"README.md"}
+		}
+	}
+	d.Documents.OverlappingGuidance = []envdoc.Overlap{
+		{Path: "docs", Documents: []string{"README.md", "docs/big.md"}, Assessment: envdoc.AssessmentNoModel},
+		{Path: "svc/b", Documents: []string{"README.md", "svc/b/README.md"}, Assessment: envdoc.AssessmentNoModel},
+	}
+	body, err := json.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := envdoc.Decode(body, in.Expect(d.Kind))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Documents.Items[1].AppliesTo != "docs" {
+		t.Fatalf("legacy document scope changed: %+v", legacy.Documents.Items)
+	}
+}

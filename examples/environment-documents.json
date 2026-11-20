@@ -73,7 +73,7 @@
       },
       {
         "path": "docs/design.md",
-        "applies_to": "docs",
+        "applies_to": ".",
         "class": "design",
         "status": "budget_exceeded",
         "reason": "document_too_large",
@@ -109,7 +109,8 @@
         "own": [],
         "inherited": [
           "AGENTS.md",
-          "README.md"
+          "README.md",
+          "docs/design.md"
         ]
       },
       {
@@ -120,21 +121,14 @@
         ],
         "inherited": [
           "AGENTS.md",
-          "README.md"
+          "README.md",
+          "docs/design.md"
         ]
       }
     ],
     "overlapping_guidance": [
       {
         "path": ".",
-        "documents": [
-          "AGENTS.md",
-          "README.md"
-        ],
-        "assessment": "not_assessed_without_model"
-      },
-      {
-        "path": "docs",
         "documents": [
           "AGENTS.md",
           "README.md",
@@ -147,6 +141,7 @@
         "documents": [
           "AGENTS.md",
           "README.md",
+          "docs/design.md",
           "svc/b/README.md"
         ],
         "assessment": "not_assessed_without_model"

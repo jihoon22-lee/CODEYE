@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/docpath"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -108,11 +109,11 @@ const (
 // Document classes. Guidance classes take part in module attachment and
 // overlap grouping; "other" documents are inventoried only.
 const (
-	ClassReadme       = "readme"
-	ClassAgent        = "agent_instructions"
-	ClassDesign       = "design"
-	ClassContributing = "contributing"
-	ClassOther        = "other"
+	ClassReadme       = docpath.Readme
+	ClassAgent        = docpath.Agent
+	ClassDesign       = docpath.Design
+	ClassContributing = docpath.Contributing
+	ClassOther        = docpath.Other
 )
 
 // Document is one discovery artifact.
@@ -648,7 +649,8 @@ func checkDocuments(ds Documents, modules []Module, want Expect) error {
 		if i > 0 && ds.Items[i-1].Path >= doc.Path {
 			return invalid("documents are not sorted")
 		}
-		if domain.ValidateEvidencePath(doc.Path) != nil || doc.AppliesTo != Dir(doc.Path) || !slices.Contains(classes, doc.Class) {
+		// Historical inventories used the containing directory literally.
+		if domain.ValidateEvidencePath(doc.Path) != nil || (doc.AppliesTo != docpath.Scope(doc.Path) && doc.AppliesTo != Dir(doc.Path)) || !slices.Contains(classes, doc.Class) {
 			return invalid("document %q", doc.Path)
 		}
 		sha, included := want.Lookup(doc.Path)

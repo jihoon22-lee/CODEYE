@@ -10,6 +10,21 @@ from pathlib import PurePosixPath
 from .common import ROOT, ensure, expect_invalid, within_root, yaml_file
 
 
+def document_scope(path: str) -> str:
+    p = PurePosixPath(path)
+    if p.suffix.lower() not in {".md", ".markdown", ".mdx", ".rst", ".adoc", ".asciidoc"}:
+        return str(p.parent)
+    name = p.name.lower()
+    if (name.startswith(("readme", "contributing")) or name in {"agents.md", "agent.md", "claude.md",
+            "claude.local.md", "gemini.md"} or (name == "copilot-instructions.md" and p.parent.name.lower() == ".github")):
+        return str(p.parent)
+    dirs = p.parent.parts
+    for i in range(len(dirs) - 1, -1, -1):
+        if dirs[i].lower() in {"docs", "doc"}:
+            return str(PurePosixPath(*dirs[:i]))
+    return str(p.parent)
+
+
 def check_environment_example(doc: dict) -> None:
     """Bind the discovery examples to the fixture input bytes and evidence IDs."""
     root = ROOT / "fixtures/modules/input"
@@ -20,6 +35,8 @@ def check_environment_example(doc: dict) -> None:
         binding = "\0".join([doc["snapshot_manifest_digest"], src["path"], sha, f'{src["start_line"]}:{src["end_line"]}'])
         ensure(r["evidence_id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24], "Environment evidence ID mismatch")
     for d in doc.get("documents", {}).get("items", []):
+        ensure(d["applies_to"] in (str(PurePosixPath(d["path"]).parent), document_scope(d["path"])),
+               "Unexpected document applicability: " + d["path"])
         if d["sha256"] is not None:
             body = (root / d["path"]).read_bytes()
             ensure(hashlib.sha256(body).hexdigest() == d["sha256"] and len(body) == d["size_bytes"], "Document blob mismatch: " + d["path"])
@@ -105,7 +122,7 @@ def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None
         ensure(all(ref in catalog for ref in cited), "review cites evidence it was not given: " + stage)
         # A rule of a sub-directory is never generalized to a parent scope.
         def covers(ids, scope):
-            dirs = [str(PurePosixPath(catalog[i]["path"]).parent) for i in ids]
+            dirs = [document_scope(catalog[i]["path"]) for i in ids]
             return all(d == "." or scope == d or scope.startswith(d + "/") for d in dirs)
         for c in doc.get("contracts", []) + doc.get("questions", []):
             ensure(covers(c["evidence_ids"], c["applies_to"]), "review scope generalized: " + c["applies_to"])

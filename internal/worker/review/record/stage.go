@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/docpath"
 )
 
 // Review stage records (schema 0.2) are written by the review roles. A
@@ -242,7 +243,7 @@ func ValidScopePath(p string) bool { return p == "." || domain.ValidateEvidenceP
 // ScopeUnder reports whether p is dir or lies below it.
 func ScopeUnder(p, dir string) bool { return dir == "." || p == dir || strings.HasPrefix(p, dir+"/") }
 
-// DocumentDir is the directory a document applies to.
+// DocumentDir returns the containing directory of a snapshot-relative path.
 func DocumentDir(p string) string {
 	d := path.Dir(p)
 	if d == "" {
@@ -501,7 +502,7 @@ func refs(ids []string, catalog map[string]Excerpt, max int, want ...string) boo
 // of a sub-directory is never generalized to a parent or the repository.
 func docsCover(ids []string, catalog map[string]Excerpt, scope string) bool {
 	for _, id := range ids {
-		if !ScopeUnder(scope, DocumentDir(catalog[id].Path)) {
+		if !ScopeUnder(scope, docpath.Scope(catalog[id].Path)) {
 			return false
 		}
 	}
