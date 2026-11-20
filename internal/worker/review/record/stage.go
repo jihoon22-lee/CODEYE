@@ -47,8 +47,7 @@ const (
 	// field, so a downstream request carrying it keeps within the request
 	// budget.
 	maxText = 400
-	// RoleMaxCalls bounds the calls of one stage: the first request, one
-	// repair of rejected output and one retry of a reply that was not JSON.
+	// RoleMaxCalls bounds the first request, repairs and retries together.
 	RoleMaxCalls = 3
 )
 
@@ -504,6 +503,16 @@ func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)
 	if !e.ValidDirectivePath() {
 		return invalid("evidence directive path")
 	}
+	if !e.ValidPackageReference(false) {
+		return invalid("evidence package reference")
+	}
+	if p := e.PackageReference; !p.IsZero() {
+		manifest, manifestOK := lookup(p.ManifestPath)
+		entry, entryOK := lookup(p.EntryPath)
+		if !manifestOK || !entryOK || manifest != p.ManifestSHA256 || entry != p.EntrySHA256 {
+			return invalid("evidence package blobs not in snapshot")
+		}
+	}
 	if e.DirectivePath != "" {
 		if _, ok := lookup(e.DirectivePath); !ok {
 			return invalid("directive path not in snapshot")
@@ -597,7 +606,8 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		}
 	}
 	for _, c := range r.Contracts {
-		if !ModelText(c.Statement) || !ValidScopePath(c.AppliesTo) || !refs(c.EvidenceIDs, catalog, 4, "document") || !docsCover(c.EvidenceIDs, catalog, c.AppliesTo) {
+		if !ModelText(c.Statement) || !ValidScopePath(c.AppliesTo) || !refs(c.EvidenceIDs, catalog, 4, "document") ||
+			!DocumentClaimCovers(c.EvidenceIDs, catalog, c.AppliesTo, c.Statement) {
 			return invalid("contract")
 		}
 	}
@@ -615,7 +625,8 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		}
 	}
 	for _, q := range r.Questions {
-		if !ModelText(q.Question) || !ValidScopePath(q.AppliesTo) || !refs(q.EvidenceIDs, catalog, 4, "document") || !docsCover(q.EvidenceIDs, catalog, q.AppliesTo) {
+		if !ModelText(q.Question) || !ValidScopePath(q.AppliesTo) || !refs(q.EvidenceIDs, catalog, 4, "document") ||
+			!DocumentClaimCovers(q.EvidenceIDs, catalog, q.AppliesTo, q.Question) {
 			return invalid("question")
 		}
 	}

@@ -132,6 +132,10 @@ func (s *roleStage) boundedExcerpt(e source.Entry, kind, origin string, start in
 		Kind: kind, Origin: origin, Text: strings.Join(kept, "\n")}, true
 }
 
+func shortReviewSource(text string, maxBytes int) bool {
+	return len(text) <= maxBytes && strings.Count(text, "\n") < roleMaxCodeLines && record.JSONLen(text) <= maxBytes
+}
+
 // withText re-reads the text of record excerpts from the snapshot, checking
 // each excerpt's ID binding again.
 func (s *roleStage) withText(list []record.Excerpt) ([]record.Excerpt, error) {
@@ -374,6 +378,8 @@ type corpusLinks struct {
 	directCalls   []directCall
 	member        memberPair
 	witnessSource map[string]string
+	wholeWitness  map[string]record.Excerpt
+	partial       map[string]bool
 }
 
 // codeCorpus selects code and test excerpts round-robin over the modules of
@@ -389,15 +395,20 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 	var out []record.Excerpt
 	remain := roleMaxCodeBytes
 	offered := map[string]string{}
+	links := corpusLinks{partial: map[string]bool{}}
+	keep := func(x record.Excerpt, total int) {
+		if x.Start > 1 || x.End < total {
+			lims = addLim(lims, "excerpt_only")
+			links.partial[x.ID] = true
+		}
+		out = append(out, x)
+		offered[x.Path] = x.ID
+		remain -= record.JSONLen(x.Text)
+	}
 	add := func(e source.Entry, start, lines, budget int) error {
 		x, total, ok, err := s.excerpt(e, windowKind(e.Path), "context", start, lines, min(budget, remain))
 		if ok {
-			if x.Start > 1 || x.End < total {
-				lims = addLim(lims, "excerpt_only")
-			}
-			out = append(out, x)
-			offered[x.Path] = x.ID
-			remain -= record.JSONLen(x.Text)
+			keep(x, total)
 		}
 		return err
 	}
@@ -405,16 +416,53 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 	if err != nil {
 		return nil, corpusLinks{}, nil, err
 	}
+	links.member, links.witnessSource = selected.member, selected.sources
+	for _, trace := range selected.goTraces {
+		windows, ok := goWrapperWindows(out, trace.excerpts, remain)
+		if !ok {
+			continue
+		}
+		for _, x := range windows {
+			keep(x, x.End) // Go declarations start after the package clause.
+		}
+		for i, name := range trace.callees {
+			caller, callee := trace.excerpts[i], trace.excerpts[i+1]
+			links.directCalls = append(links.directCalls, directCall{CallerEvidenceID: caller.ID, CalleeEvidenceID: callee.ID, Symbol: name})
+		}
+	}
+	// Preserve a slot for a selected test and at least two ordinary files
+	// when exact Go traces consume more than the usual witness allowance.
+	witnessLimit := max(witnessMaxExcerpts, len(out)+1)
+	if len(out) > 0 {
+		var tests []contractWitness
+		for _, w := range selected.witnesses {
+			if windowKind(w.entry.Path) == "test" {
+				tests = append(tests, w)
+			}
+		}
+		if len(tests) > 0 {
+			selected.witnesses = append(tests[:1], selected.witnesses...)
+		}
+	}
 	for _, w := range selected.witnesses {
+		if len(out) >= witnessLimit {
+			break
+		}
+		if offered[w.entry.Path] != "" {
+			continue
+		}
 		lines := witnessMaxLines
 		if w.end > 0 {
 			lines = w.end - w.line + 1
 		}
+		before := len(out)
 		if err := add(w.entry, w.line, lines, witnessMaxExcerpt); err != nil {
 			return nil, corpusLinks{}, nil, err
 		}
+		if len(out) > before && w.documented && links.partial[out[before].ID] {
+			links.addWholeWitness(s.j.Snapshot.Digest, out[before], selected.sources[w.entry.Path])
+		}
 	}
-	links := corpusLinks{member: selected.member, witnessSource: selected.sources}
 	for _, call := range selected.calls {
 		caller, callee := offered[call.caller.entry.Path], offered[call.callee.entry.Path]
 		if caller != "" && callee != "" {
@@ -434,9 +482,13 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 	if g.eligible > len(offered) {
 		lims = append(lims, "files_outside_review_context")
 	} else if len(out) < roleMaxCodeFiles && len(selected.additional) > 0 {
+		before := len(out)
 		out, err = s.additionalWitnesses(out, selected.additional, remain)
 		if err != nil {
 			return nil, corpusLinks{}, nil, err
+		}
+		for _, x := range out[before:] {
+			links.partial[x.ID] = true
 		}
 	}
 	return out, links, addLim(nil, lims...), nil
@@ -631,6 +683,8 @@ type documentEvidence struct {
 // documentExcerpts reads the selected guidance documents within the bounds.
 func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, error) {
 	files := s.entries()
+	packages := documentPackageResolver{stage: s, files: files}
+	documentSources := map[string][]string{}
 	paths := make([]string, 0, len(selected))
 	bound := 0
 	for _, d := range selected {
@@ -659,6 +713,7 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 	lists := map[string][]documentRange{}
 	remain := roleMaxDocsBytes
 	apiExcerpts := 0
+	packageExcerpts := 0
 	apiEvidence := map[string]bool{}
 	var later [2][]userDocument
 	var primary string
@@ -681,19 +736,25 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 			docpath.Sort(selected[i+1:], selection, file)
 		}
 		lines := strings.Split(content, "\n")
+		documentSources[e.Path] = lines
 		x, ok := s.boundedExcerpt(e, "document", "", 1, lines[:min(len(lines), roleMaxDocLines)], min(roleMaxDocBytes, remain))
 		if !ok {
 			lims = append(lims, "documents_outside_review_input")
 			continue
 		}
-		if x.End < *d.LineCount {
+		var example record.Excerpt
+		if len(out)+1 < roleMaxDocs && packageExcerpts < 2 && selection.Product(d.Path, d.Class) {
+			x, example = packages.keepCrossingExample(e, lines, x, remain)
+		}
+		last := max(x.End, example.End)
+		if last < *d.LineCount {
 			switch strings.ToLower(path.Ext(d.Path)) {
 			case ".md", ".mdx", ".markdown", "":
 				lists[d.Path] = markdownListRanges(lines)
 			}
 		}
-		if x.End < *d.LineCount && selection.Product(d.Path, d.Class) {
-			doc := userDocument{entry: e, lines: lines, after: x.End}
+		if last < *d.LineCount && selection.Product(d.Path, d.Class) {
+			doc := userDocument{entry: e, lines: lines, after: last}
 			rank := 1
 			if d.Class == envdoc.ClassReadme {
 				rank = 0
@@ -724,6 +785,11 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 		}
 		out = append(out, x)
 		remain -= record.JSONLen(x.Text)
+		if example.ID != "" {
+			out = append(out, example)
+			remain -= record.JSONLen(example.Text)
+			packageExcerpts++
+		}
 	}
 	if len(out) < roleMaxDocs && remain >= 128 {
 		budget := min(roleMaxDocBytes, remain)
@@ -746,6 +812,9 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 		}
 	}
 	out = s.fillDocumentCoverage(slices.Concat(later[0], later[1]), primary, out, remain)
+	if err := packages.attach(out, documentSources); err != nil {
+		return documentEvidence{}, err
+	}
 	return documentEvidence{excerpts: out, lists: lists, limitations: addLim(nil, lims...)}, nil
 }
 

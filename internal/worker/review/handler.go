@@ -256,9 +256,11 @@ const requestRules = "\nUse only the provided input. No code execution, test run
 
 const repairRules = "\nFormat repair: your previous output was rejected with the platform error codes in input.repair.output_errors. Return the complete result again in the same contract, citing only IDs from this input."
 
-// outputRepair is the only feedback a repair request carries: fixed codes.
+// outputRepair carries fixed codes and, for document scope failures, choices
+// derived from the excerpts already sent to the model.
 type outputRepair struct {
-	OutputErrors []string `json:"output_errors"`
+	OutputErrors   []string             `json:"output_errors"`
+	DocumentScopes []documentScopeIssue `json:"document_scopes,omitempty"`
 }
 
 // fits reports whether the request text fits the budget, keeping room for

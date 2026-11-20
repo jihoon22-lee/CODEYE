@@ -14,9 +14,10 @@ import (
 const contractOutput = `Return exactly {"contract_comparisons":[{"contract_index":<input.prior.contract_index>,"applies_to":"<input.prior.applies_to>","status":"match|partial|mismatch|unknown","reason":"...","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_..."]}]}. Copy the prior index, scope and document IDs exactly. Cite newly read implementation for any status other than unknown. For partial only, add "partial_support":{"matching":{"condition":"...","evidence_id":"ev_..."},"violating":{"condition":"...","evidence_id":"ev_..."}} inside the comparison. Give distinct conditions and distinct cited implementation excerpts; each must show the stated matching or violating outcome. One confirmed condition and a second unresolved condition leave the contract unknown; mention the confirmed part and cite it if new. A test excerpt is supporting evidence and does not establish an implementation or executed result. For unknown, an empty code_evidence_ids array is allowed.`
 
 const (
-	maxContractExcerpts     = 12
-	maxContractSliceReads   = 80
-	limContractInconclusive = "contract_comparison_inconclusive"
+	maxContractExcerpts         = 12
+	maxContractSliceReads       = 80
+	maxContractStrengthExcerpts = 2
+	limContractInconclusive     = "contract_comparison_inconclusive"
 )
 
 type contractReviewInput struct {
@@ -30,8 +31,9 @@ type contractReviewInput struct {
 }
 
 type contractExcerpt struct {
-	excerpt record.Excerpt
-	sources []record.Upstream
+	excerpt      record.Excerpt
+	sources      []record.Upstream
+	fromStrength bool
 }
 
 type contractModelComparison struct {
@@ -85,30 +87,45 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 		return s.contractInputFailure(err)
 	}
 	contract := doc.Contracts[prior.ContractIndex-1]
-	named, err := s.contractNamedExcerpts(contract, prior.AppliesTo, context[:len(prior.DocumentEvidenceIDs)])
+	keep := len(prior.DocumentEvidenceIDs)
+	documents := context[:keep]
+	named, err := s.contractNamedExcerpts(contract, prior.AppliesTo, documents)
+	if err != nil {
+		return s.contractInputFailure(err)
+	}
+	callers, err := s.contractCallerExcerpts(prior.AppliesTo, append(slices.Clone(named), extra...), inv.Evidence)
 	if err != nil {
 		return s.contractInputFailure(err)
 	}
 	extra = append(extra, named...)
-	later, err := s.contractSliceExcerpts(probe, prior, extra, uDoc, uInv, files)
+	strengthTerms := contractStrengthTerms(contract.Statement, documents)
+	later, err := s.contractSliceExcerpts(probe, prior, extra, uDoc, uInv, files, strengthTerms, inv.Evidence)
 	if err != nil {
 		return s.contractInputFailure(err)
 	}
 	// Keep the original promise, then a new decision window and the limited
 	// supporting context that fits into the bounded model input.
 	seen := map[string]bool{}
-	pool := make([]contractExcerpt, 0, len(context)+len(extra)+len(later))
+	pool := make([]contractExcerpt, 0, len(context)+len(extra)+len(callers)+len(later))
 	add := func(e contractExcerpt) {
 		if !seen[e.excerpt.ID] && (e.excerpt.Kind == "document" || record.ScopeUnder(e.excerpt.Path, prior.AppliesTo)) {
 			seen[e.excerpt.ID] = true
 			pool = append(pool, e)
 		}
 	}
-	for _, e := range context[:len(prior.DocumentEvidenceIDs)] {
+	for _, e := range documents {
 		add(contractExcerpt{excerpt: e})
 	}
 	for _, e := range named {
 		add(contractExcerpt{excerpt: e})
+	}
+	for _, e := range callers {
+		add(contractExcerpt{excerpt: e})
+	}
+	for _, e := range later {
+		if e.fromStrength {
+			add(e)
+		}
 	}
 	for _, e := range extra {
 		add(contractExcerpt{excerpt: e})
@@ -116,10 +133,26 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	for _, e := range later {
 		add(e)
 	}
-	for _, e := range context[len(prior.DocumentEvidenceIDs):] {
+	for _, e := range context[keep:] {
 		add(contractExcerpt{excerpt: e})
 	}
-	keep := len(prior.DocumentEvidenceIDs)
+	var in contractReviewInput
+	in.Contract, in.Prior, in.Scope.Snapshot = contract, prior, s.j.Snapshot.Digest
+	whole, err := s.contractWholeFiles(prior.AppliesTo, extra, inv.Evidence, pool[keep:], files)
+	if err != nil {
+		return s.contractInputFailure(err)
+	}
+	if len(whole) > 0 {
+		in.Scope.Excerpts = append(slices.Clone(documents), whole[0].excerpt)
+		minimum, err := marshal(in)
+		if err != nil {
+			return s.contractInputFailure(err)
+		}
+		if _, fits := s.fits(s.instructions(contractOutput), minimum, true); fits {
+			code := preferWholeContractFiles(whole, pool[keep:], prior.CodeEvidenceIDs)
+			pool = append(pool[:keep], code...)
+		}
+	}
 	validImplementation := make(map[string]bool, len(pool))
 	runtimeImplementation := make(map[string]bool, len(pool))
 	for _, e := range pool[keep:] {
@@ -141,8 +174,6 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	first := pool[keep+fresh]
 	copy(pool[keep+1:], pool[keep:keep+fresh])
 	pool[keep] = first
-	var in contractReviewInput
-	in.Contract, in.Prior, in.Scope.Snapshot = contract, prior, s.j.Snapshot.Digest
 	ordered := make([]record.Excerpt, 0, min(len(pool), maxContractExcerpts))
 	for _, e := range pool[:min(len(pool), maxContractExcerpts)] {
 		ordered = append(ordered, e.excerpt)
@@ -236,22 +267,34 @@ func (s *roleStage) contractInputFailure(err error) analysis.TaskResult {
 func (s *roleStage) contractRead(list []record.Excerpt, files map[string]source.Entry) ([]record.Excerpt, error) {
 	out := make([]record.Excerpt, 0, len(list))
 	for _, x := range list {
-		e, ok := files[x.Path]
-		if !ok || e.SHA256 != x.SHA256 || !inScope(x.Path, normalizedScope(s.j.Scope)) ||
-			x.ID != record.ExcerptID(s.j.Snapshot.Digest, x.Path, x.SHA256, x.Start, x.End) {
-			return nil, errSnapshotIntegrity
-		}
-		text, total, ok, err := s.readLines(e, x.Start, x.End)
+		x, _, err := s.contractReadWindow(x, files)
 		if err != nil {
 			return nil, err
 		}
-		if !ok || x.End > total || strings.TrimSpace(text) == "" {
-			return nil, errSnapshotIntegrity
-		}
-		x.Text = text
 		out = append(out, x)
 	}
 	return out, nil
+}
+
+func (s *roleStage) contractReadWindow(x record.Excerpt, files map[string]source.Entry) (record.Excerpt, string, error) {
+	e, ok := files[x.Path]
+	if !ok || e.SHA256 != x.SHA256 || !inScope(x.Path, normalizedScope(s.j.Scope)) ||
+		x.ID != record.ExcerptID(s.j.Snapshot.Digest, x.Path, x.SHA256, x.Start, x.End) {
+		return record.Excerpt{}, "", errSnapshotIntegrity
+	}
+	text, ok, err := s.readSource(e)
+	if err != nil {
+		return record.Excerpt{}, "", err
+	}
+	lines := strings.Split(text, "\n")
+	if !ok || x.Start < 1 || x.End < x.Start || x.End > len(lines) {
+		return record.Excerpt{}, "", errSnapshotIntegrity
+	}
+	x.Text = strings.Join(lines[x.Start-1:x.End], "\n")
+	if strings.TrimSpace(x.Text) == "" {
+		return record.Excerpt{}, "", errSnapshotIntegrity
+	}
+	return x, text, nil
 }
 
 // Only executable-looking new source can justify a replacement. The model
@@ -271,6 +314,11 @@ func (s *roleStage) contractImplementation(x record.Excerpt, overview []record.E
 	if err != nil || !ok {
 		return false, false, err
 	}
+	runtime, fresh = contractWindowActivity(x, text, overview)
+	return runtime, fresh, nil
+}
+
+func contractWindowActivity(x record.Excerpt, text string, overview []record.Excerpt) (runtime, fresh bool) {
 	contractExecutableLines(text, x.Path, func(line int, _ bool) bool {
 		if line > x.End {
 			return true
@@ -282,10 +330,10 @@ func (s *roleStage) contractImplementation(x record.Excerpt, overview []record.E
 		}
 		return false
 	})
-	return runtime, fresh, nil
+	return runtime, fresh
 }
 
-func (s *roleStage) contractSliceExcerpts(probe record.ContractProbe, prior record.ContractComparison, anchors []record.Excerpt, docUp, invUp record.Upstream, files map[string]source.Entry) ([]contractExcerpt, error) {
+func (s *roleStage) contractSliceExcerpts(probe record.ContractProbe, prior record.ContractComparison, anchors []record.Excerpt, docUp, invUp record.Upstream, files map[string]source.Entry, strengthTerms []string, overview []record.Excerpt) ([]contractExcerpt, error) {
 	scope, scopeUp := s.readScope()
 	if scopeUp.State != record.UpstreamAccepted || !slices.Contains(scope.Upstream, invUp) {
 		return nil, nil
@@ -305,14 +353,21 @@ func (s *roleStage) contractSliceExcerpts(probe record.ContractProbe, prior reco
 	for p := range paths {
 		stems[maintenanceStem(p)] = true
 	}
-	var out []contractExcerpt
-	var seenSources []record.Upstream
-	reads := 0
+	type candidate struct {
+		contractExcerpt
+		named         bool
+		strengthTerms []string
+	}
+	var strengths, ordinary []candidate
+	var groups codeGroups
+	if len(strengthTerms) > 0 {
+		groups = planCodeGroupsFor(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary(), changedPaths(s.j))
+	}
 	for _, slot := range scope.Slices {
 		if err := s.ctx.Err(); err != nil {
 			return nil, err
 		}
-		if len(out) >= maxContractExcerpts || len(seenSources) >= record.MaxContractSliceSources || reads >= maxContractSliceReads {
+		if len(ordinary) >= maxContractSliceReads && (len(strengthTerms) == 0 || len(strengths) >= maxContractSliceReads) {
 			break
 		}
 		inv, iUp := s.prior(record.StageInvestigate + "." + slot.Key)
@@ -332,19 +387,8 @@ func (s *roleStage) contractSliceExcerpts(probe record.ContractProbe, prior reco
 			if !slices.ContainsFunc(role.Calls, func(call record.Call) bool { return call.RequestDigest != "" }) {
 				continue
 			}
-			needed := 0
-			for _, u := range upstreams[i][1:] {
-				if !slices.Contains(seenSources, u) {
-					needed++
-				}
-			}
-			if len(seenSources)+needed > record.MaxContractSliceSources {
-				continue
-			}
+			cited := contractStrengthCitations(role, strengthTerms)
 			for _, e := range role.Evidence {
-				if len(out) >= maxContractExcerpts || reads >= maxContractSliceReads {
-					break
-				}
 				if (e.Kind != "code" && e.Kind != "test") || !record.ScopeUnder(e.Path, prior.AppliesTo) || !inScope(e.Path, normalizedScope(s.j.Scope)) ||
 					(e.Origin != "caller" && e.Origin != "test" && !slices.ContainsFunc(slot.Files, func(f record.ScopeFile) bool {
 						return f.Path == e.Path && f.SHA256 == e.SHA256 && f.State == record.FilePlanned
@@ -352,23 +396,63 @@ func (s *roleStage) contractSliceExcerpts(probe record.ContractProbe, prior reco
 					continue
 				}
 				named := paths[e.Path] || (e.Kind == "test" && stems[maintenanceStem(e.Path)])
-				if !named && len(terms) == 0 {
-					continue
+				item := candidate{contractExcerpt: contractExcerpt{excerpt: e, sources: upstreams[i]}, named: named}
+				if len(strengths) < maxContractSliceReads && len(cited[e.ID]) > 0 && contractRuntimePath(e.Path, e.Kind) &&
+					record.HasNewContractEvidence(e, overview) && s.navigationEligible(groups, e.Path) {
+					item.strengthTerms = cited[e.ID]
+					strengths = append(strengths, item)
 				}
-				reads++
-				window, err := s.contractRead([]record.Excerpt{e}, files)
-				if err != nil {
-					return nil, err
+				if len(ordinary) < maxContractSliceReads && (named || len(terms) > 0) {
+					item.strengthTerms = nil
+					ordinary = append(ordinary, item)
 				}
-				if !named && !slices.ContainsFunc(terms, func(term string) bool { return containsContractLiteral(window[0].Text, term) }) {
-					continue
-				}
-				out = append(out, contractExcerpt{excerpt: window[0], sources: upstreams[i]})
-				for _, u := range upstreams[i][1:] {
-					if !slices.Contains(seenSources, u) {
-						seenSources = append(seenSources, u)
-					}
-				}
+			}
+		}
+	}
+	var out []contractExcerpt
+	var seenSources []record.Upstream
+	seenIDs := map[string]bool{}
+	reads, fromStrength := 0, 0
+	for _, candidate := range append(strengths, ordinary...) {
+		if err := s.ctx.Err(); err != nil {
+			return nil, err
+		}
+		if len(out) >= maxContractExcerpts || len(seenSources) >= record.MaxContractSliceSources || reads >= maxContractSliceReads {
+			break
+		}
+		e := candidate.excerpt
+		if seenIDs[e.ID] || (len(candidate.strengthTerms) > 0 && fromStrength >= maxContractStrengthExcerpts) {
+			continue
+		}
+		needed := 0
+		for _, u := range candidate.sources[1:] {
+			if !slices.Contains(seenSources, u) {
+				needed++
+			}
+		}
+		if len(seenSources)+needed > record.MaxContractSliceSources {
+			continue
+		}
+		reads++
+		window, text, err := s.contractReadWindow(e, files)
+		if err != nil {
+			return nil, err
+		}
+		if len(candidate.strengthTerms) > 0 {
+			if !contractStrengthSource(e, text, candidate.strengthTerms, overview) {
+				continue
+			}
+			candidate.fromStrength = true
+			fromStrength++
+		} else if !candidate.named && !slices.ContainsFunc(terms, func(term string) bool { return containsContractLiteral(window.Text, term) }) {
+			continue
+		}
+		candidate.excerpt = window
+		out = append(out, candidate.contractExcerpt)
+		seenIDs[e.ID] = true
+		for _, u := range candidate.sources[1:] {
+			if !slices.Contains(seenSources, u) {
+				seenSources = append(seenSources, u)
 			}
 		}
 	}

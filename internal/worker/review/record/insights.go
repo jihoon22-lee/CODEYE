@@ -79,7 +79,7 @@ func (s Strength) Valid(catalog map[string]Excerpt) bool {
 func (c ContractComparison) Valid(catalog map[string]Excerpt) bool {
 	if c.ContractIndex < 1 || c.ContractIndex > MaxContractComparisons || !ValidScopePath(c.AppliesTo) ||
 		!insightText(c.Reason) || !ValidComparison(c.Status) ||
-		!refs(c.DocumentEvidenceIDs, catalog, 4, "document") || !docsCover(c.DocumentEvidenceIDs, catalog, c.AppliesTo) {
+		!refs(c.DocumentEvidenceIDs, catalog, 4, "document") || !documentsSupportScope(c.DocumentEvidenceIDs, catalog, c.AppliesTo, "", true) {
 		return false
 	}
 	if len(c.CodeEvidenceIDs) == 0 {
