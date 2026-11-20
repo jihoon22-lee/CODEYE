@@ -177,7 +177,8 @@ class PolicyTests(unittest.TestCase):
     def test_budget_parsing_and_hard_cap(self):
         self.assertEqual(g.parse_budget("9.99"), 9_990_000)
         self.assertEqual(g.parse_budget("0.5"), 500_000)
-        for bad in ("16", "15.000001", "0", "-1", "nan", "inf", "1.0000001", "abc"):
+        self.assertEqual(g.parse_budget("20"), 20_000_000)
+        for bad in ("21", "20.000001", "0", "-1", "nan", "inf", "1.0000001", "abc"):
             with self.assertRaises(ValueError, msg=bad):
                 g.parse_budget(bad)
 
@@ -306,7 +307,7 @@ class LedgerTests(unittest.TestCase):
         ledger.close()
 
     def test_settlement_and_restart_keep_conservative_totals(self):
-        ledger = g.Ledger(self.path, cap_microusd=50_000)
+        ledger = g.Ledger(self.path, cap_microusd=15_000_000)
         ok = self.reserve(ledger, 10_000)
         ledger.settle(ok, status="ok", charged_microusd=700,
                       usage={"prompt_tokens": 40, "completion_tokens": 50, "reasoning_tokens": 10})
@@ -316,11 +317,12 @@ class LedgerTests(unittest.TestCase):
         ledger.close()
         reopened = g.Ledger(self.path, cap_microusd=g.HARD_CAP_MICROUSD)  # cannot raise the cap
         report = reopened.report()
-        self.assertEqual(report["cap_microusd"], 50_000)
+        self.assertEqual(report["cap_microusd"], 15_000_000)
         self.assertEqual(report["reserved_microusd_total"], 30_000)
         self.assertEqual(report["settled_charged_microusd"], 10_700)
         self.assertEqual(report["pending_reserved_microusd"], 10_000)
         self.assertEqual(report["charged_microusd_total"], 20_700)
+        self.assertEqual(report["remaining_microusd"], 14_979_300)
         self.assertEqual(report["usage"]["prompt_tokens"], 40)
         self.assertEqual(report["usage"]["reasoning_tokens"], 10)
         self.assertEqual(report["standard_rate_estimate_microusd"], 40 * 2 + 50 * 10)
@@ -666,7 +668,7 @@ class ProcessTests(unittest.TestCase):
 
     def test_cli_ready_file_shutdown_and_key_never_persisted(self):
         ready = os.path.join(self.dir.name, "ready.json")
-        process = self.start(ready, "--budget-usd", "1.5")
+        process = self.start(ready, "--budget-usd", "20")
         info = self.wait_ready(process, ready)
         self.assertEqual(os.stat(ready).st_mode & 0o777, 0o600)
         self.assertEqual(info["model"], MODEL)
@@ -682,7 +684,8 @@ class ProcessTests(unittest.TestCase):
         for blob in (out, err, body, ready_text.encode(), Path(self.ledger).read_bytes()):
             self.assertNotIn(CANARY_KEY.encode(), blob)
         report = json.loads(self.cli("--ledger", self.ledger, "--report").stdout)
-        self.assertEqual(report["cap_microusd"], 1_500_000)
+        self.assertEqual(report["cap_microusd"], 20_000_000)
+        self.assertEqual(report["max_requests"], 200)
         self.assertEqual(report["settled_by_status"], {"ok": 1})
 
     def test_cli_refuses_unsafe_starts(self):
@@ -691,7 +694,7 @@ class ProcessTests(unittest.TestCase):
         self.assertEqual(self.cli("--ready-file", ready, "--ledger", self.ledger, "--model", MODEL,
                                   key=CANARY_KEY).returncode, 2)
         fresh = os.path.join(self.dir.name, "fresh.json")
-        for args in (["--budget-usd", "16"], ["--budget-usd", "15.001"], ["--model", "gpt-4o"]):
+        for args in (["--budget-usd", "21"], ["--budget-usd", "20.000001"], ["--model", "gpt-4o"]):
             argv = ["--ready-file", fresh, "--ledger", self.ledger, "--model", MODEL, *args]
             self.assertNotEqual(self.cli(*argv, key=CANARY_KEY).returncode, 0, args)
         missing = self.cli("--ready-file", fresh, "--ledger", self.ledger, "--model", MODEL)

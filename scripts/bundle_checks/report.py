@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 import re
 
 from .common import ROOT, ensure, source_location
+from .review import evidence_document_scope
 
 
 def check_plan(plan: dict) -> None:
@@ -32,6 +34,7 @@ def check_plan(plan: dict) -> None:
 
 def check_report(report: dict, source_root: Path = ROOT) -> None:
     findings = report["findings"]
+    model_findings = set((report.get("code_review") or {}).get("finding_ids", []))
     ids = [finding["id"] for finding in findings]
     ensure(len(ids) == len(set(ids)), "Duplicate finding ID")
     summary = report["summary"]
@@ -99,7 +102,7 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
                 path = source_location(item["location"], source_root)
                 digest = hashlib.sha256(path.read_bytes()).hexdigest()
                 ensure(digest == item["blob_sha256"], "Evidence hash mismatch: " + str(path))
-                check_excerpt(item, path, item["location"]["start_line"], include_code)
+                check_excerpt(item, path, item["location"], include_code, finding["id"] in model_findings)
     check_sections(report, source_root)
 
 
@@ -174,23 +177,61 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
                         "snapshot_id": report["inputs"]["snapshot_id"]}
             path = source_location(location, source_root)
             ensure(hashlib.sha256(path.read_bytes()).hexdigest() == evidence["blob_sha256"], "Section evidence hash mismatch: " + str(path))
-            check_excerpt(evidence, path, evidence["start_line"], not free)
+            evidence_document_scope(evidence, source_root)
+            check_excerpt(evidence, path, location, not free, True)
         cited = [i for entries in report[block].values() if isinstance(entries, list)
                  for entry in entries if isinstance(entry, dict)
                  for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids", "document_evidence_ids", "code_evidence_ids") for i in entry.get(key, [])]
         ensure(set(cited) <= set(catalog), "Section statement cites evidence the section does not carry")
+        if block == "documents":
+            check_document_comparisons(report[block], catalog)
 
 
-def check_excerpt(evidence: dict, path: Path, anchor: int, include_code: bool | None) -> None:
+def scope_under(path: str, directory: str) -> bool:
+    return directory == "." or path == directory or path.startswith(directory + "/")
+
+
+def check_document_comparisons(documents: dict, catalog: dict) -> None:
+    """Check published comparisons against their contracts and snapshot evidence."""
+    comparisons = documents.get("comparisons", [])
+    contracts = documents["contracts"]
+    ensure(not comparisons or len(comparisons) == len(contracts), "Document comparison count differs from contracts")
+    for comparison, contract in zip(comparisons, contracts):
+        scope = comparison["applies_to"]
+        doc_ids = comparison["document_evidence_ids"]
+        ensure(comparison["statement"] == contract["statement"] and doc_ids == contract["evidence_ids"]
+               and scope_under(scope, contract["applies_to"]), "Document comparison differs from its contract")
+        docs = [catalog[evidence_id] for evidence_id in doc_ids]
+        ensure(all(item["kind"] == "document" and scope_under(scope, evidence_document_scope(item)) for item in docs),
+               "Document comparison cites evidence outside its scope or of the wrong kind")
+        code = [catalog[evidence_id] for evidence_id in comparison["code_evidence_ids"]]
+        ensure(all(item["kind"] in ("code", "test") and scope_under(item["path"], scope) for item in code),
+               "Document comparison cites implementation outside its scope or evidence of the wrong kind")
+        ensure(comparison["status"] == "unknown" or any(item["kind"] == "code" and not any(
+            doc.get("directive_path") and doc["path"] == item["path"] and item["start_line"] <= doc["end_line"]
+            and doc["start_line"] <= item["end_line"] for doc in docs) for item in code),
+               "Document comparison verdict lacks implementation evidence")
+
+
+def check_excerpt(evidence: dict, path: Path, citation: dict, include_code: bool | None, model: bool) -> None:
     excerpt = evidence.get("excerpt")
     if excerpt is None:
         return
     ensure(include_code is True, "Code-free export carries source excerpts")
     start, end = excerpt["start_line"], excerpt["end_line"]
-    lines = path.read_text(encoding="utf-8").split("\n")
-    ensure(1 <= start <= anchor <= end <= len(lines) and end - start < 9,
+    anchor = citation["start_line"]
+    lines = [line.removesuffix("\r") for line in path.read_bytes().decode("utf-8").removesuffix("\n").split("\n")]
+    ensure(1 <= start <= anchor <= end <= len(lines) and
+           (end - start < 9 or model and start == anchor and end <= citation["end_line"] and end - start < 50),
            "Invalid source excerpt lines: " + str(path))
-    ensure("\n".join(lines[start - 1:end]) == excerpt["text"], "Source excerpt differs from snapshot: " + str(path))
+    text = excerpt["text"]
+    encoded = json.dumps(text, ensure_ascii=False)
+    for ch in "<>&\u2028\u2029":
+        encoded = encoded.replace(ch, f"\\u{ord(ch):04x}")
+    forbidden_control = any(ch not in "\n\t" and (ord(ch) < 32 or 127 <= ord(ch) <= 159) for ch in text)
+    ensure(text.strip() and not forbidden_control and len(encoded.encode("utf-8")) <= 1800,
+           "Invalid source excerpt text: " + str(path))
+    ensure("\n".join(lines[start - 1:end]) == text, "Source excerpt differs from snapshot: " + str(path))
 
 
 DEPS_TASK = re.compile(r"^deps\.(go|rust|javascript|python)(\.m[0-9]{2,3})?$")

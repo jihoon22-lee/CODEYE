@@ -1,5 +1,5 @@
 // Validate the projection used by the report view before rendering any model or tool text.
-import { parseSections, parseExcerpt, type Excerpt, type Sections } from './reportSections';
+import { excerptFits, parseSections, parseExcerpt, type Excerpt, type Sections } from './reportSections';
 
 export type Evidence = {
   id: string;
@@ -60,6 +60,7 @@ export type AnalysisReport = {
   status: string;
   verdict: string;
   aiReview: string;
+  aiReviewReasons: string[];
   counts: {
     total: number;
     actionable: number;
@@ -243,6 +244,7 @@ export function parseAnalysisReport(
   )
     invalid();
   const coverage = object(r.coverage);
+  const aiReview = object(coverage.ai_review);
   const input = object(r.inputs);
   const commit = nullable(input.commit_sha);
   const project = r.project == null ? undefined : (() => {
@@ -250,6 +252,14 @@ export function parseAnalysisReport(
     return { name: str(p.name), source: nullable(p.source), start: nullable(p.started_at), finish: nullable(p.finished_at) };
   })();
   const includesCode = r.export != null && object(r.export).include_code === true;
+  const sections = parseSections(r, observations.map(o => o.id), findings.map(f => f.id), counts.total, includesCode);
+  const modelFindings = new Set(sections?.codeReview.findings);
+  for (const finding of findings) {
+    for (const evidence of finding.evidence) {
+      if (evidence.excerpt && (!includesCode || !evidence.lines || (evidence.kind !== 'code' && evidence.kind !== 'document') ||
+        !excerptFits(evidence.excerpt, evidence.lines.start, evidence.lines.end, modelFindings.has(finding.id)))) invalid();
+    }
+  }
   const head = r.pull_request == null ? null : nullable(object(r.pull_request).head_repository);
   function metric(key: string) {
     return coverage[key] == null ? null : count(coverage[key]);
@@ -279,7 +289,11 @@ export function parseAnalysisReport(
     snapshot: str(input.snapshot_id),
     status: str(r.status),
     verdict: str(r.quality_verdict),
-    aiReview: str(object(object(r.coverage).ai_review).status),
+    aiReview: str(aiReview.status),
+    aiReviewReasons: [
+      ...array(aiReview.required_tasks ?? [], task => nullable(object(task).reason)),
+      nullable(aiReview.reason),
+    ].filter((reason): reason is string => Boolean(reason)),
     counts,
     metricObservations,
     priorities,
@@ -294,12 +308,7 @@ export function parseAnalysisReport(
       };
     }),
     limitations: array(r.limitations, str),
-    sections: parseSections(
-      r,
-      observations.map((o) => o.id),
-      findings.map((f) => f.id),
-      counts.total,
-    ),
+    sections,
   };
 }
 

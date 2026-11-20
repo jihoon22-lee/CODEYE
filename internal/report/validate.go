@@ -150,10 +150,15 @@ func ValidateReport(r Report) error {
 		if err := validateFinding(f, r.Inputs.SnapshotID, obs, arts); err != nil {
 			return err
 		}
+		model := usesModelExcerpts(&r, f.ID)
 		for _, e := range f.Evidence {
-			if e.Excerpt != nil && (!r.Export.IncludeCode || e.Location == nil ||
-				!sourceexcerpt.SafePath(e.Location.Path) || !e.Excerpt.Valid(e.Location.StartLine) ||
-				(e.Kind != "code" && e.Kind != "document")) {
+			if e.Excerpt == nil {
+				continue
+			}
+			if !r.Export.IncludeCode || e.Location == nil || !sourceexcerpt.SafePath(e.Location.Path) ||
+				(e.Kind != "code" && e.Kind != "document") ||
+				(model && !e.Excerpt.ValidCitation(e.Location.StartLine, e.Location.EndLine)) ||
+				(!model && !e.Excerpt.ValidDiagnostic(e.Location.StartLine)) {
 				return invalidf("finding %s excerpt is invalid", f.ID)
 			}
 		}

@@ -98,13 +98,14 @@ type ModelInterpretation struct {
 // SectionEvidence is a snapshot excerpt a model statement of the section
 // cites: the role record's catalog entry, bound to path, blob and lines.
 type SectionEvidence struct {
-	Excerpt    *sourceexcerpt.Excerpt `json:"excerpt,omitempty"`
-	ID         string                 `json:"id"`
-	Kind       string                 `json:"kind"`
-	Path       string                 `json:"path"`
-	StartLine  int                    `json:"start_line"`
-	EndLine    int                    `json:"end_line"`
-	BlobSHA256 string                 `json:"blob_sha256"`
+	Excerpt       *sourceexcerpt.Excerpt `json:"excerpt,omitempty"`
+	ID            string                 `json:"id"`
+	Kind          string                 `json:"kind"`
+	Path          string                 `json:"path"`
+	StartLine     int                    `json:"start_line"`
+	EndLine       int                    `json:"end_line"`
+	BlobSHA256    string                 `json:"blob_sha256"`
+	DirectivePath string                 `json:"directive_path,omitempty"`
 }
 
 // Overview is the 종합 section: one line per section and what to look at

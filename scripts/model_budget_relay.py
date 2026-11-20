@@ -57,7 +57,7 @@ ALLOWED_MODELS = ("gpt-6.2-sol", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna")
 SERVICE_TIER = "default"
 REASONING_EFFORT = "low"
 
-HARD_CAP_MICROUSD = 15_000_000  # $15 for all processes sharing one ledger
+HARD_CAP_MICROUSD = 20_000_000  # $20 for all processes sharing one ledger
 # Integer microUSD per token. $X per 1M tokens == X microUSD per token.
 # Input is priced at the worst case of standard input ($2), 30m cache write
 # ($2.50) and 12h cache write ($5). Output ($10) includes reasoning tokens.
@@ -162,7 +162,7 @@ def _fsync_dir(path: str) -> None:
 
 
 def parse_budget(text: str) -> int:
-    """Parse --budget-usd into integer microUSD, bounded by the hard $15 cap."""
+    """Parse --budget-usd into integer microUSD, bounded by the hard cap."""
     try:
         value = decimal.Decimal(text)
     except decimal.InvalidOperation:
@@ -174,7 +174,7 @@ def parse_budget(text: str) -> int:
         raise ValueError("budget supports at most 6 decimal places")
     micro = int(micro)
     if micro > HARD_CAP_MICROUSD:
-        raise ValueError("budget exceeds the hard cap of 15 USD")
+        raise ValueError(f"budget exceeds the hard cap of {HARD_CAP_MICROUSD // 1_000_000} USD")
     return micro
 
 
@@ -1147,7 +1147,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--ready-file", help="fresh path to write {base_url, token, model} (0600)")
     parser.add_argument("--model", choices=ALLOWED_MODELS)
     parser.add_argument("--budget-usd", default="9.99",
-                        help="ledger cap in USD, <= 15; can lower but never raise an existing ledger")
+                        help=f"ledger cap in USD (default %(default)s, <= {HARD_CAP_MICROUSD // 1_000_000}); "
+                             "can lower but never raise an existing ledger")
     parser.add_argument("--max-requests", type=int, default=None,
                         help=f"ledger-wide request cap (default {DEFAULT_MAX_REQUESTS}, <= {HARD_MAX_REQUESTS})")
     parser.add_argument("--max-input-bytes", type=int, default=DEFAULT_MAX_INPUT_BYTES,

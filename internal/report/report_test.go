@@ -682,7 +682,24 @@ func TestRenderingEscapesHostileText(t *testing.T) {
 	r := build(t, f.in, DefaultRegistry())
 	b, _ := Marshal(r)
 	html, _ := RenderHTML(r, Digest(b), Korean)
+	font := `url("` + reportFontURL + `")`
 	h := string(html)
+	if !strings.Contains(h, font) {
+		t.Fatal("sectioned HTML lacks its offline font")
+	}
+	for _, notice := range []string{
+		"Copyright (c) 2018-2026 The Tabler Authors",
+		"Copyright (c) 2020-2026 Paweł Kuna",
+		"Copyright (c) 2011-2025 The Bootstrap Authors",
+		"Permission is hereby granted",
+		"SIL OPEN FONT LICENSE",
+		"Reserved Font Name",
+	} {
+		if !strings.Contains(h, notice) {
+			t.Fatalf("saved HTML lacks asset notice %q", notice)
+		}
+	}
+	h = strings.Replace(h, font, "", 1)
 	for _, bad := range []string{"<script", "<img", "<iframe", "<link", "<object", "url("} {
 		if strings.Contains(strings.ToLower(h), bad) {
 			t.Fatalf("html contains %q", bad)

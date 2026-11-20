@@ -2,3 +2,6 @@
 # (pack digests, evidence blob hashes, pinned request hashes). Keep every
 # checkout byte-identical across operating systems: no CRLF conversion.
 * text=auto eol=lf
+
+# Keep the embedded upstream license byte-for-byte.
+internal/report/reportui/LICENSE.noto-sans-kr whitespace=-blank-at-eol

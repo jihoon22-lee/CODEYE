@@ -45,6 +45,19 @@ class WebCheck(unittest.TestCase):
             self.skipTest("web/dist not built")
         self.assertEqual(offline_pack.check_web(dist), [])
 
+    def test_only_unchanged_report_license_assets_may_name_license_sites(self):
+        font = (ROOT / "internal" / "report" / "reportui" / "LICENSE.noto-sans-kr").read_bytes()
+        notice = "assets/LICENSE-AB34k_X9.noto-sans-kr"
+        self.assertEqual(self.scan({notice: font}), [])
+        problems = self.scan({
+            notice: font + b'\nfetch("https://scripts.sil.org/load");',
+            "assets/LICENSE-AB34k_X9.noto-sans-kr.css": b'@import url(https://scripts.sil.org/test.css);',
+            "assets/LICENSE-AB34k_X9.noto-sans-kr.js": b'fetch("https://scripts.sil.org/load");',
+            "assets/other.txt": font,
+        })
+        for name in (notice, notice + ".css", notice + ".js", "assets/other.txt"):
+            self.assertIn(f"{name}: external URL host scripts.sil.org", problems)
+
 
 class Archive(unittest.TestCase):
     def stage(self, root: Path) -> Path:

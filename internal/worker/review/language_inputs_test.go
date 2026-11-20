@@ -290,7 +290,7 @@ func TestReviewPolyglotRoundRobin(t *testing.T) {
 	tree["main.go"] = "package main\n\nfunc main() {}\n"
 	j := treeJob(t, tree)
 	s := &roleStage{h: Handler{Caller: &scriptedCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
-	code, lims, err := s.codeCorpus(record.Record{})
+	code, _, lims, err := s.codeCorpus(record.Record{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func TestReviewInputExclusionsHonoured(t *testing.T) {
 		}
 	}
 	s := &roleStage{h: Handler{Caller: &scriptedCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
-	code, lims, err := s.codeCorpus(record.Record{})
+	code, _, lims, err := s.codeCorpus(record.Record{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,7 +507,7 @@ func TestBarrelIndexIsNotAnEntryPoint(t *testing.T) {
 	}
 	j := treeJob(t, tree)
 	s := &roleStage{h: Handler{Caller: &scriptedCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
-	code, _, err := s.codeCorpus(record.Record{})
+	code, _, _, err := s.codeCorpus(record.Record{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -58,6 +58,7 @@ WEB_TEXT_HOSTS = {
 URL = re.compile(rb"(?i)\b(?:https?|wss?|ftp)://([a-z0-9.-]+)")
 # A load that names no scheme: //host in src/href/url()/import.
 SCHEMELESS = re.compile(rb"""(?i)(?:\b(?:src|href|action|poster|data)\s*=\s*["']?|url\(\s*["']?|@import\s+["']|\bimport\s*\(\s*["'])//([a-z0-9.-]+)""")
+REPORT_NOTICE = re.compile(r"assets/LICENSE-[A-Za-z0-9_-]{8}\.(tabler-core|tabler-icons|bootstrap|noto-sans-kr)")
 
 
 def run(argv, **kw):
@@ -78,6 +79,11 @@ def check_web(directory: Path) -> list[str]:
     for path in sorted(p for p in directory.rglob("*") if p.is_file()):
         data = path.read_bytes()
         rel = path.relative_to(directory).as_posix()
+        # Vite copies these licenses as download assets. Only the unchanged
+        # notice may name its publisher or the license site without using them.
+        notice = REPORT_NOTICE.fullmatch(rel)
+        if notice and data == (ROOT / "internal/report/reportui" / f"LICENSE.{notice[1]}").read_bytes():
+            continue
         for m in SCHEMELESS.finditer(data):
             problems.append(f"{rel}: scheme-relative load from {m.group(1).decode()}")
         for m in URL.finditer(data):

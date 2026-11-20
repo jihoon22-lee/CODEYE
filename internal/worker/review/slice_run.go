@@ -100,8 +100,8 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 	plan := planSlicesFor(s.j.Snapshot.Manifest, s.j.Scope, rule, changedPaths(s.j))
 	sent, up := s.overviewOffered()
 	reordered := false
-	for _, x := range sent {
-		reordered = reordered || x.Start > 1
+	for _, windows := range sent {
+		reordered = reordered || len(windows) > 1 || windows[0].Start > 1
 	}
 	for _, f := range plan.Rest {
 		if _, ok := sent[f.Path]; ok {
@@ -128,7 +128,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		if s.secretFiles()[f.Path] {
 			sf.State = record.FileWithheld
 		} else {
-			x, total, ok, err := s.excerpt(e, windowKind(f.Path), "context", 1, 50, roleMaxCodeFile)
+			x, total, ok, err := s.excerpt(e, windowKind(f.Path), "context", 1, roleMaxCodeLines, roleMaxCodeFile)
 			if err != nil {
 				return record.ScopeFile{}, err
 			}
@@ -138,19 +138,24 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 				if f.Class == record.ClassPrimary && record.GeneratedHeader([]byte(x.Text)) {
 					f.Class, f.Secondary = record.ClassSecondary, record.ReasonGeneratedFile
 				}
-			case sent[f.Path].ID == "":
+			case len(sent[f.Path]) == 0:
 				// Not UTF-8, NUL bytes, a sensitive pattern or no text.
 				sf.State = record.FileUnreadable
 			}
 		}
-		if sent, ok := sent[f.Path]; ok {
+		if windows := sent[f.Path]; len(windows) != 0 {
 			sf.State = record.FileCoveredByOverview
-			if sent.Start > 1 {
-				text, total, ok, err := s.readLines(e, sent.Start, sent.End)
-				if err != nil || !ok {
-					return record.ScopeFile{}, errSnapshotIntegrity
+			if len(windows) > 1 || windows[0].Start > 1 {
+				sf.PlannedLines, sf.PlannedBytes = 0, 0
+				for _, w := range windows {
+					text, total, ok, err := s.readLines(e, w.Start, w.End)
+					if err != nil || !ok {
+						return record.ScopeFile{}, errSnapshotIntegrity
+					}
+					sf.PlannedLines += w.End - w.Start + 1
+					sf.PlannedBytes += record.JSONLen(text)
+					sf.TotalLines = total
 				}
-				sf.PlannedLines, sf.PlannedBytes, sf.TotalLines = sent.End-sent.Start+1, record.JSONLen(text), total
 			}
 		}
 		sf.Class, sf.Rank, sf.Secondary, sf.Observations, sf.PullRequest = f.Class, f.Rank, f.Secondary, f.Observations, f.Change
@@ -163,7 +168,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Screen: screenOf(s.screen),
 		Budget: record.ScopeBudget{MaxCalls: s.h.maxCalls(), MaxRequestBytes: PromptBudget, WholeRunMaxCalls: record.WholeRunMaxCalls, SliceReserveCalls: record.SliceReserveCalls,
 			CallsBeforeSlices: min(used, record.WholeRunMaxCalls), Admission: record.AdmissionSequentialReserve},
-		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: 50, MaxSlices: MaxSlices, Slots: plan.Slots},
+		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: roleMaxCodeLines, MaxSlices: MaxSlices, Slots: plan.Slots},
 		Priority: record.ScopePriority{Order: priorityOrder(s.j), Secondary: rule},
 		Upstream: []record.Upstream{up}, Modules: []record.ScopeModule{}, Overview: record.ScopeOverview{Files: []record.ScopeFile{}, Offered: sortedKeys(sent)},
 		Slices: []record.ScopeSlice{}, Excluded: []record.ScopeFile{}, Limitations: s.screenLimitation([]string{})}
@@ -302,7 +307,7 @@ func screenOf(sc secretScreen) string {
 // overviewOffered returns the code and test files the overview investigate
 // sent to the model (the context excerpts of its record, accepted or failed,
 // when it made a call) and the upstream binding of that record.
-func (s *roleStage) overviewOffered() (map[string]record.Excerpt, record.Upstream) {
+func (s *roleStage) overviewOffered() (map[string][]record.Excerpt, record.Upstream) {
 	u := record.Upstream{Source: "review." + record.StageInvestigate}
 	b, err := readBounded(recordPath(s.j, record.StageInvestigate), record.MaxBytes)
 	if err != nil {
@@ -320,10 +325,10 @@ func (s *roleStage) overviewOffered() (map[string]record.Excerpt, record.Upstrea
 		u.State, u.Reason = record.UpstreamFailed, r.FailureReason
 	}
 	sent := slices.ContainsFunc(r.Calls, func(c record.Call) bool { return c.RequestDigest != "" })
-	out := map[string]record.Excerpt{}
+	out := map[string][]record.Excerpt{}
 	for _, e := range r.Evidence {
 		if sent && e.Origin == "context" && (e.Kind == "code" || e.Kind == "test") {
-			out[e.Path] = e
+			out[e.Path] = append(out[e.Path], e)
 		}
 	}
 	return out, u

@@ -1,0 +1,70 @@
+import type { ReactNode } from 'react';
+import type { AnalysisReport } from './analysisReport';
+import { reportKo as t } from './locales/report-ko';
+import { formatInstant, runStatusLabel } from './format';
+import '../../internal/report/reportui/font.css';
+import '../../internal/report/reportui/tabler.css';
+import '../../internal/report/reportui/report.css';
+import './report.css';
+
+type IconName = 'alert' | 'chart' | 'check' | 'chevron' | 'clock' | 'code' | 'external' | 'file' | 'findings' | 'jump' | 'mark' | 'overview' | 'secret' | 'server' | 'terminal';
+
+export function ReportIcon({ name }: { name: IconName }) {
+  return <span className={`icon report-icon report-icon-${name}`} aria-hidden="true" />;
+}
+
+export function ReportLayout({ report, rail, children, className = '' }: {
+  report: AnalysisReport; rail?: ReactNode; children: ReactNode; className?: string;
+}) {
+  const name = report.project?.name;
+  const start = report.project?.start;
+  const finish = report.project?.finish;
+  const startedAt = Date.parse(start ?? '');
+  const finishedAt = Date.parse(finish ?? '');
+  const end = finish && Number.isFinite(finishedAt) ? {label: t.finish, time: finish} :
+    report.published && Number.isFinite(Date.parse(report.published)) ? {label: t.published, time: report.published} : null;
+  const duration = Number.isFinite(startedAt) && Number.isFinite(finishedAt) && finishedAt >= startedAt
+    ? Math.round((finishedAt - startedAt) / 1000) : null;
+  return (
+    <article className={`report-document review-theme web-report ${className}`} aria-label={t.title}>
+      <div className="report-layout">
+        {rail && <aside className="report-rail">
+          <div className="report-brand"><span className="report-mark"><ReportIcon name="mark" /></span><strong>{t.title}</strong></div>
+          {rail}
+        </aside>}
+        <div className="report-main">
+          <header className="report-hero">
+            <p className="report-kicker">{name ? t.title : t.revision(report.revision)}</p>
+            <h4 className="report-name">{name || t.title}</h4>
+            {report.project?.source && <div className="report-hero-source"><span>{t.target}</span><code>{report.project.source}</code></div>}
+            <div className="report-verdict">
+              <span className="badge"><ReportIcon name={report.status === 'completed' ? 'check' : 'clock'} />
+                {Object.hasOwn(t.executionStatuses, report.status) ? t.executionStatuses[report.status] : t.executionStatus(runStatusLabel(report.status))}</span>
+              {end && <span className="report-hero-time"><b>{end.label}</b> <time dateTime={end.time}>{formatInstant(end.time)}</time></span>}
+              {duration !== null && <span className="report-hero-time"><b>{t.duration}</b> {t.durationValue(duration)}</span>}
+            </div>
+          </header>
+          {children}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export function ReportGroup({ title, tone, icon, children, id }: {
+  title: string; tone: 'pending' | 'neutral'; icon: IconName; children: ReactNode; id?: string;
+}) {
+  return <section className="report-group" data-tone={tone}>
+    <header className="report-group-title">
+      <span className="report-group-mark"><ReportIcon name={icon} /></span>
+      <h6 id={id} tabIndex={id ? -1 : undefined}>{title}</h6>
+    </header>
+    <div className="report-cards">{children}</div>
+  </section>;
+}
+
+export function ReportAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return <button type="button" className="btn btn-sm btn-ghost-primary report-card-action" onClick={onClick}>
+    {children}<ReportIcon name="jump" />
+  </button>;
+}

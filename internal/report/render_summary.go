@@ -55,8 +55,7 @@ func RenderHTMLAt(r Report, digest string, l Locale, detail string) ([]byte, err
 	return buf.Bytes(), nil
 }
 
-func (v secView) ReportStatus() string  { return v.L.Label("status." + v.R.Status) }
-func (v secView) ReportVerdict() string { return v.L.Label("verdict." + v.R.QualityVerdict) }
+func (v secView) ReportStatus() string  { return lab(v.L, "report.status", v.R.Status) }
 func (v secView) HasStatusBanner() bool { return v.R.Status != StatusCompleted }
 
 // summaryShown is how many entries a grouped list shows before "외 N".
@@ -251,25 +250,15 @@ func newSummaryView(r Report, digest string, l Locale) secView {
 
 	// Separate the opening review from the structured coverage and totals.
 	ov := byID["overview"]
-	parts := v.projectOpening()
-	needsFallback := len(parts) == 0
-	if limits := v.openingLimits(); len(limits.Paras)+len(limits.List) > 0 {
-		parts = append(parts, limits)
-	}
-	if needsFallback {
-		if tool := v.primaryDiagnostic(); len(tool.List) > 0 {
-			parts = append(parts, tool)
-		}
-	}
-	if len(parts) == 0 {
-		parts = append(parts, secPart{Paras: []string{l.Label("opening.no_highlights")}})
-	}
+	v.Decision = v.projectDecision()
+	ov.Parts = nil
 	if r.PullRequest != nil {
-		parts = append([]secPart{{Paras: pullRequestParas(r, l)[:1]}}, parts...)
+		ov.Parts = []secPart{{Paras: pullRequestParas(r, l)[:1]}}
 	}
-	detail := ov.Parts[0]
+	fullOverview := byID["overview"].Parts
+	detail := fullOverview[0]
 	detail.Paras = append(pullRequestParas(r, l), summarySentences(r, l, obs)...)
-	table := *ov.Parts[1].Table
+	table := *fullOverview[1].Table
 	rows := map[string][]secCell{}
 	for i, s := range r.Overview.Sections {
 		rows[s.Key] = table.Rows[i]
@@ -280,9 +269,11 @@ func newSummaryView(r Report, digest string, l Locale) secView {
 			table.Rows = append(table.Rows, row)
 		}
 	}
-	v.OverviewDetail = []secPart{detail, {Heading: ov.Parts[1].Heading, Table: &table}}
-	v.OverviewDetail = append(v.OverviewDetail, ov.Parts[2:]...)
-	ov.Parts = parts
+	if limits := v.openingLimits(); len(limits.Paras)+len(limits.List) > 0 {
+		v.OverviewDetail = append(v.OverviewDetail, limits)
+	}
+	v.OverviewDetail = append(v.OverviewDetail, detail, secPart{Heading: fullOverview[1].Heading, Table: &table})
+	v.OverviewDetail = append(v.OverviewDetail, fullOverview[2:]...)
 	v.Sections = append(v.Sections, ov)
 
 	for _, k := range order {
@@ -315,8 +306,9 @@ func newSummaryView(r Report, digest string, l Locale) secView {
 			x.ShowEmpty = x.Empty != "" && (x.Table == nil || len(x.Table.Rows) == 0) && len(x.List) == 0 && len(x.Findings) == 0 && len(x.Cards) == 0
 		}
 	}
+	v = withInsights(v)
 	v.dropDanglingLinks()
-	return withInsights(v)
+	return v
 }
 
 // summarySentences say in words what the run found and covered, from the
@@ -488,7 +480,7 @@ func (v secView) findingSummaryParts(ids []string, findings map[string]Finding) 
 			continue
 		}
 		if supported {
-			cards.Cards = append(cards.Cards, v.findingCard(f, true))
+			cards.Cards = append(cards.Cards, v.findingCard(f))
 			continue
 		}
 		other.RowIDs = append(other.RowIDs, f.ID)
@@ -507,25 +499,22 @@ func (v secView) findingSummaryParts(ids []string, findings map[string]Finding) 
 	return out
 }
 
-func (v secView) findingCard(f Finding, detail bool) secCard {
+func (v secView) findingCard(f Finding) secCard {
 	l := v.L
-	c := secCard{Title: f.Title, State: lab(l, "validation", f.Validation) + " · " + lab(l, "severity", f.Severity)}
-	if detail {
-		c.ID = f.ID
-		c.Lines = append(c.Lines, secItem{Label: l.Label("opening.disposition"), Text: lab(l, "disposition", f.Disposition)})
-	}
+	c := secCard{ID: f.ID, Title: f.Title, State: lab(l, "validation", f.Validation) + " · " + lab(l, "severity", f.Severity)}
+	c.Lines = append(c.Lines, secItem{Label: l.Label("opening.disposition"), Text: lab(l, "disposition", f.Disposition)})
+	seen := make(map[string]bool, len(f.Evidence))
 	add := func(label, text string, refs []string) {
 		item := secItem{Label: l.Label(label), Text: openingText(text, "")}
 		for _, e := range f.Evidence {
 			if e.Location == nil || !slices.Contains(refs, e.ID) {
 				continue
 			}
-			excerpt := e.Excerpt
-			if !detail {
-				excerpt = nil
+			x := v.citeEvidence(e.Kind, e.Location.Path, e.Location.StartLine, e.Location.EndLine, e.Excerpt)
+			if !seen[x.Location] {
+				item.Sources = append(item.Sources, x)
+				seen[x.Location] = true
 			}
-			x := v.citeSource(e.Location.Path, e.Location.StartLine, e.Location.EndLine, excerpt)
-			item.addCitations([]sourceCitation{x}, detail)
 		}
 		if item.Text != "" || len(item.Codes) > 0 || len(item.Sources) > 0 {
 			c.Lines = append(c.Lines, item)
@@ -533,34 +522,24 @@ func (v secView) findingCard(f Finding, detail bool) secCard {
 	}
 	for _, x := range f.Conditions {
 		add("opening.condition."+x.Status, x.Statement, x.EvidenceIDs)
-		if !detail {
-			break
-		}
 	}
 	var impactRefs []string
-	printedClaim := false
 	for _, x := range f.Claims {
 		if x.Assertion == f.Impact {
 			impactRefs = append(impactRefs, x.EvidenceIDs...)
 			continue
 		}
-		if (detail || !printedClaim) && (x.Assertion != f.Title || len(f.Conditions) == 0) {
+		if x.Assertion != f.Title || len(f.Conditions) == 0 {
 			add("opening.claim."+x.Kind, x.Assertion, x.EvidenceIDs)
-			printedClaim = true
 		}
 	}
 	add("opening.impact", f.Impact, impactRefs)
-	if detail || f.Validation == ValidationSupported || f.Validation == ValidationReproduced {
-		add("opening.recommendation", f.Recommendation.Summary, nil)
-	}
+	add("opening.recommendation", f.Recommendation.Summary, nil)
 	for _, x := range f.Verification {
 		if !nonempty(x) {
 			continue
 		}
 		add("opening.verification", x, nil)
-		if !detail {
-			break
-		}
 	}
 	return c
 }
@@ -1166,6 +1145,9 @@ func (v *secView) dropDanglingLinks() {
 	ids := map[string]bool{"appendix": true}
 	visit := func(parts []secPart) {
 		for _, p := range parts {
+			if p.Anchor != "" {
+				ids[p.Anchor] = true
+			}
 			for _, c := range p.Cards {
 				ids[c.ID] = true
 			}
@@ -1194,11 +1176,6 @@ func (v *secView) dropDanglingLinks() {
 			for j := range p.List {
 				if p.List[j].Link != "" && !ids[p.List[j].Link] {
 					p.List[j].Link = ""
-				}
-			}
-			for j := range p.Cards {
-				if p.Cards[j].Link != "" && !ids[p.Cards[j].Link] {
-					p.Cards[j].Link = ""
 				}
 			}
 			if t := p.Table; t != nil {
@@ -1238,7 +1215,13 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 		p("# ", mdText(l.Label("title")))
 	}
 	p()
-	p("**", mdText(v.ReportStatus()), "** · ", mdText(v.ReportVerdict()))
+	p("**", mdText(v.ReportStatus()), "**")
+	if source := v.HeaderSource(); source != "" {
+		p(mdText(l.Label("report.target")), " · ", mdCode(source))
+	}
+	if at := v.HeaderTime(); at.Display != "" {
+		p(mdText(at.Label), " · ", mdText(at.Display))
+	}
 	p()
 	if v.HasStatusBanner() {
 		p("> ", mdText(v.Banner))
@@ -1256,6 +1239,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 			mdPart(p, part, l)
 		}
 		if s.ID == "overview" {
+			mdDecision(p, v.Decision, l)
 			p("### ", mdText(l.Label("opening.coverage_details")))
 			p()
 			for _, part := range v.OverviewDetail {
@@ -1276,6 +1260,52 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 	mdTechnical(p, r, v.view, l)
 	p("digest sha256: ", mdCode(digest))
 	return []byte(b.String())
+}
+
+func mdDecision(p func(...string), d projectDecision, l Locale) {
+	p("### ", mdText(d.Title))
+	p()
+	p(mdText(d.State))
+	p()
+	if d.Review && d.DocumentClaim == "" {
+		p("> ", mdText(l.Label("insight.interpretation")))
+		p()
+	}
+	if d.DocumentClaim != "" {
+		p(mdText(d.DocumentClaim))
+		p()
+	}
+	if d.Reason != "" {
+		if d.ReasonLabel != "" {
+			p("**", mdText(d.ReasonLabel), "** ", mdText(d.Reason))
+		} else {
+			p(mdText(d.Reason))
+		}
+		p()
+	}
+	if d.Condition != "" {
+		p("**", mdText(l.Label("decision.option")), "** ", mdText(d.Condition))
+		p()
+	}
+	if d.Boundary != "" {
+		p("**", mdText(l.Label("decision.unconfirmed")), "** ", mdText(d.Boundary))
+		p()
+	}
+	if d.Next != "" {
+		label := "opening.verification"
+		if d.Tone == "action" {
+			label = "decision.next"
+		}
+		p("**", mdText(l.Label(label)), "** ", mdText(d.Next))
+		p()
+	}
+	for _, source := range d.Sources {
+		mdCitations(p, []sourceCitation{source.Brief()})
+	}
+	if d.Coverage != "" {
+		p(mdText(d.Coverage))
+		p()
+	}
 }
 
 // mdCards renders the finding cards of a part.

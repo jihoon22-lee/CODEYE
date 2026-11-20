@@ -29,39 +29,70 @@ var (
 	witnessControl     = regexp.MustCompile(`(^|[[:space:]])(if|else|elif|case|match|switch|raise|throw|return|assert)([[:space:](]|$)`)
 	witnessSeparators  = strings.NewReplacer("_", "", "-", "")
 	witnessPath        = regexp.MustCompile(`[\pL\pN_./-]+\.[A-Za-z0-9]+`)
+	compileCondition   = regexp.MustCompile(`^#[ \t]*(?:if|ifdef|ifndef|elif)[ \t(]`)
+	compileBranchEnd   = regexp.MustCompile(`^#[ \t]*(?:else|elif|endif)(?:[ \t(/]|$)`)
+	cExecutableLine    = regexp.MustCompile(`^(?:(?:if|for|while|switch)[ \t]*\(|(?:return|goto|break|continue)(?:[ \t(;]|$)|[A-Za-z_]\w*[ \t]*[+*/%&|^-]?=[^=]|[A-Za-z_]\w*[ \t]*\([^;{}]*\)[ \t]*;)`)
+	cRawString         = regexp.MustCompile(`R"([^ \t\r\x5c()]{0,16})\(`)
 )
 
 type witnessQuery struct {
-	scope     string
-	terms     map[string]int
-	statement map[string]int
-	paths     map[string]bool
+	scope                string
+	terms                map[string]int
+	statement            map[string]int
+	paths                map[string]bool
+	product              bool
+	operation            bool
+	hasRuntimeJavaScript bool
+	typeContract         bool
+	performance          bool
+	members              []string
+	pythonDocs           map[string][]record.Excerpt
 }
 
 type contractWitness struct {
-	entry       source.Entry
-	line, score int
-	direct      bool
+	entry            source.Entry
+	line, end, score int
+	direct           bool
+	compileBranch    bool
+	query            int
+}
+
+type contractCall struct {
+	caller, callee contractWitness
+	symbol         string
+}
+
+type contractSelection struct {
+	witnesses, additional []contractWitness
+	calls                 []contractCall
+	member                memberPair
 }
 
 // contractWitnesses looks for readable implementation and test locations for
-// accepted document contracts. Its lexical matches are input ordering hints.
-func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) ([]contractWitness, error) {
+// accepted document contracts, including bounded direct calls from lexical
+// matches. Both kinds of matches are input ordering hints.
+func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contractSelection, error) {
 	queries, err := s.witnessQueries(docs)
 	if err != nil || len(queries) == 0 {
-		return nil, err
+		return contractSelection{}, err
 	}
 	type candidate struct {
 		entry      source.Entry
 		pathScore  int
 		inOverview bool
+		penalties  []int
+	}
+	maintenance, err := s.maintenanceWitnesses(g, queries)
+	if err != nil {
+		return contractSelection{}, err
 	}
 	var named, otherCode, otherTests []candidate
 	firstNamed := make([]candidate, len(queries))
+	eligible := map[string]candidate{}
 	natural := 0
 	for e := range g.orderedFiles() {
 		if err := s.ctx.Err(); err != nil {
-			return nil, err
+			return contractSelection{}, err
 		}
 		natural++
 		// Keep unchanged PR files and secondary artifacts in their usual
@@ -74,6 +105,11 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) ([]contr
 			continue
 		}
 		c := candidate{entry: e, inOverview: natural <= roleMaxCodeFiles}
+		benchmark := benchmarkPath(e.Path)
+		declaration := typeDeclarationPath(e.Path)
+		if maintenance[e.Path] || benchmark || declaration {
+			c.penalties = make([]int, len(queries))
+		}
 		var words []string
 		for i, q := range queries {
 			if record.ScopeUnder(e.Path, q.scope) {
@@ -83,6 +119,15 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) ([]contr
 				score := witnessMatch(words, q.terms)
 				if q.names(e.Path) {
 					score += 16
+				}
+				if c.penalties != nil {
+					helper := maintenance[e.Path] && q.product && !q.namesMaintenance(e.Path)
+					typeOnly := declaration && q.hasRuntimeJavaScript && !q.typeContract
+					auxiliaryBenchmark := benchmark && (q.product || q.hasRuntimeJavaScript) && !q.performance
+					if !q.names(e.Path) && (helper || typeOnly || auxiliaryBenchmark) {
+						c.penalties[i] = 2 * witnessMinScore
+					}
+					score = max(0, score-c.penalties[i])
 				}
 				c.pathScore = max(c.pathScore, score)
 				if score >= witnessMinScore && score > firstNamed[i].pathScore {
@@ -94,6 +139,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) ([]contr
 		if words == nil {
 			continue
 		}
+		eligible[e.Path] = c
 		switch {
 		case c.pathScore >= 4:
 			named = append(named, c)
@@ -123,40 +169,132 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) ([]contr
 	candidates = append(candidates, named[namedFirst:]...)
 
 	matches := make([][2][]contractWitness, len(queries))
+	pythonRuntime := make([]contractWitness, len(queries))
+	pythonTests := make([]contractWitness, len(queries))
+	additional := make([][]contractWitness, len(queries))
+	calls := make([][]contractCall, len(queries))
+	members := memberWitnesses{sources: map[memberKey][]contractWitness{}, tests: map[string][]memberTest{}}
+	manifest := make(map[string]source.Entry, len(s.j.Snapshot.Manifest.Entries))
+	for _, entry := range s.j.Snapshot.Manifest.Entries {
+		manifest[entry.Path] = entry
+	}
 	remaining := witnessScanBytes
 	scanned := map[string]bool{}
-	for _, c := range candidates {
+	contents := map[string]string{}
+	definitions := map[[2]string]struct{ start, end int }{}
+	read := func(e source.Entry) (string, bool, error) {
 		if err := s.ctx.Err(); err != nil {
-			return nil, err
+			return "", false, err
 		}
-		if len(scanned) == witnessMaxFiles || remaining == 0 {
-			break
+		if scanned[e.Path] {
+			content, ok := contents[e.Path]
+			return content, ok, nil
 		}
-		e := c.entry
-		if e.Size == nil || scanned[e.Path] || *e.Size > int64(remaining) {
-			continue
+		if len(scanned) >= witnessMaxFiles || e.Size == nil || *e.Size > int64(remaining) {
+			return "", false, nil
 		}
 		scanned[e.Path] = true
 		remaining -= int(*e.Size)
 		content, ok, err := s.readSource(e)
-		if err != nil {
-			return nil, err
+		if ok && !record.GeneratedHeader([]byte(content)) {
+			contents[e.Path] = content
+			return content, true, err
 		}
-		if !ok || record.GeneratedHeader([]byte(content)) {
+		return "", false, err
+	}
+	processed := map[string]bool{}
+	for _, c := range candidates {
+		e := c.entry
+		if e.Size == nil || processed[e.Path] {
+			continue
+		}
+		processed[e.Path] = true
+		content, ok, err := read(e)
+		if err != nil {
+			return contractSelection{}, err
+		}
+		if !ok {
 			continue
 		}
 		found := matchWitnessLines(content, e, queries)
+		for i, query := range queries {
+			if w := documentedPythonWitness(e, content, query); w.line != 0 {
+				w.query = i + 1
+				if w.score > pythonRuntime[i].score {
+					pythonRuntime[i] = w
+				}
+				found[i] = w
+			} else if w := documentedPythonTestRows(e, content, query); w.line != 0 {
+				w.query = i + 1
+				if w.score > pythonTests[i].score {
+					pythonTests[i] = w
+				}
+				found[i] = w
+			}
+		}
 		wholeFile := len(content) <= roleMaxCodeFile && strings.Count(content, "\n") < 50 && record.JSONLen(content) <= roleMaxCodeFile
 		kind := 0
 		if windowKind(e.Path) == "test" {
 			kind = 1
 		}
+		if !maintenance[e.Path] && !benchmarkPath(e.Path) && !typeDeclarationPath(e.Path) {
+			members.observe(e, content, queries, kind == 1)
+		}
 		for i, w := range found {
+			w.query = i + 1
+			if c.penalties != nil {
+				w.score -= c.penalties[i]
+			}
+			if g.eligible < roleMaxCodeFiles && w.score >= witnessMinScore && w.direct && kind == 0 &&
+				!maintenance[e.Path] && !benchmarkPath(e.Path) && !typeDeclarationPath(e.Path) {
+				additional[i] = append(additional[i], w)
+			}
 			// An anchor already visible in the ordinary report's leading
 			// lines does not justify lifting the file out of breadth order.
-			if w.line > 0 && (!c.inOverview || (w.line > 6 && (w.direct || !wholeFile))) {
+			if w.score >= witnessMinScore && (!c.inOverview || (w.line > 6 && (w.direct || !wholeFile))) {
 				matches[i][kind] = append(matches[i][kind], w)
 			}
+		}
+		for i, trace := range contractCalls(content, e, queries, found, c.penalties) {
+			if trace.site.line == 0 || (found[i].end > 0 && len(queries[i].pythonDocs[e.Path]) != 0) {
+				continue
+			}
+			python := callLanguage(e.Path) == "python"
+			p := directModule(manifest, e.Path, trace.site.module, python)
+			if len(queries[i].pythonDocs[p]) > 0 {
+				continue // prefer the executable window after the cited docstring
+			}
+			target, allowed := eligible[p]
+			if !allowed || !record.ScopeUnder(p, queries[i].scope) {
+				continue
+			}
+			definition, ok, err := read(target.entry)
+			if err != nil {
+				return contractSelection{}, err
+			}
+			if !ok {
+				continue
+			}
+			key := [2]string{p, trace.site.symbol}
+			w, cached := definitions[key]
+			if !cached {
+				first, last := directDefinition(callTokens(definition, python), trace.site.symbol, python)
+				if first > 0 && fitsWitness(strings.Split(definition, "\n"), first, last) {
+					w.start, w.end = first, last
+				}
+				definitions[key] = w
+			}
+			if w.start == 0 {
+				continue
+			}
+			if c.inOverview && target.inOverview && inWitnessPrefix(content, trace.site.end) && inWitnessPrefix(definition, w.end) {
+				continue
+			}
+			calls[i] = append(calls[i], contractCall{
+				caller: contractWitness{entry: e, line: trace.start, score: trace.score, query: i + 1},
+				callee: contractWitness{entry: target.entry, line: w.start, query: i + 1},
+				symbol: trace.site.symbol,
+			})
 		}
 	}
 
@@ -168,7 +306,60 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) ([]contr
 		}
 	}
 	var out []contractWitness
+	var linked []contractCall
 	seen := map[string]bool{}
+	hasCode := make([]bool, len(matches))
+	member, paired := members.choose(queries, manifest)
+	if paired {
+		out = append(out, member.source, member.test)
+		seen[member.source.entry.Path], seen[member.test.entry.Path] = true, true
+		hasCode[member.source.query-1] = true
+	}
+	// A directly cited API and its numeric fixture deserve the same slots
+	// before a broad project description claims one of their paths.
+	preferredPython := map[string]contractWitness{}
+	for _, w := range pythonRuntime {
+		if w.score > preferredPython[w.entry.Path].score {
+			preferredPython[w.entry.Path] = w
+		}
+	}
+	for i, w := range pythonRuntime {
+		test := pythonTests[i]
+		if len(out)+2 > witnessMaxExcerpts {
+			break
+		}
+		if w.line > 0 && test.line > 0 && !seen[w.entry.Path] && !seen[test.entry.Path] {
+			out = append(out, preferredPython[w.entry.Path], test)
+			seen[w.entry.Path], seen[test.entry.Path] = true, true
+		}
+	}
+	for i, w := range pythonRuntime {
+		if w.line == 0 {
+			continue
+		}
+		if len(out) < witnessMaxExcerpts && !seen[w.entry.Path] {
+			out = append(out, preferredPython[w.entry.Path])
+			seen[w.entry.Path] = true
+		}
+		hasCode[i] = seen[w.entry.Path]
+	}
+	for i, list := range calls {
+		if len(out)+2 > witnessMaxExcerpts {
+			break
+		}
+		sort.SliceStable(list, func(i, j int) bool { return list[i].caller.score > list[j].caller.score })
+		for _, call := range list {
+			caller, callee := call.caller, call.callee
+			if seen[caller.entry.Path] || seen[callee.entry.Path] {
+				continue
+			}
+			out = append(out, caller, callee)
+			linked = append(linked, call)
+			seen[caller.entry.Path], seen[callee.entry.Path] = true, true
+			hasCode[i] = true
+			break
+		}
+	}
 	take := func(i, kind int) bool {
 		if len(out) >= witnessMaxExcerpts {
 			return false
@@ -183,12 +374,30 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) ([]contr
 		return false
 	}
 	codeLimit := witnessMaxExcerpts
-	if hasTests {
+	if hasTests && !paired {
 		codeLimit--
 	}
-	hasCode := make([]bool, len(matches))
+	if len(out) < codeLimit {
+		var guard contractWitness
+		for _, list := range matches {
+			for _, w := range list[0] {
+				if w.compileBranch && !seen[w.entry.Path] && w.score > guard.score {
+					guard = w
+				}
+			}
+		}
+		if guard.line > 0 {
+			// One complete compile-time branch keeps an explicitly named
+			// setting visible when earlier contracts share the same file.
+			out = append(out, guard)
+			seen[guard.entry.Path] = true
+			hasCode[guard.query-1] = true
+		}
+	}
 	for i := 0; i < len(matches) && len(out) < codeLimit; i++ {
-		hasCode[i] = take(i, 0)
+		if !hasCode[i] {
+			hasCode[i] = take(i, 0)
+		}
 	}
 	// Pair tests with a contract's implementation if possible. Use the
 	// remaining places for other contracts with tests.
@@ -199,12 +408,135 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) ([]contr
 			}
 		}
 	}
-	return out, nil
+	firstQuery := map[string]int{}
+	for _, w := range out {
+		firstQuery[w.entry.Path] = w.query
+	}
+	var extras []contractWitness
+	for _, list := range additional {
+		sort.SliceStable(list, func(i, j int) bool { return list[i].score > list[j].score })
+		for _, w := range list {
+			if firstQuery[w.entry.Path] != w.query {
+				extras = append(extras, w)
+			}
+		}
+	}
+	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member}, nil
 }
 
 func minifiedSource(path string) bool {
 	lower := strings.ToLower(path)
 	return strings.HasSuffix(lower, ".min.js") || strings.HasSuffix(lower, ".min.mjs") || strings.HasSuffix(lower, ".min.cjs")
+}
+
+type contractCallChoice struct {
+	site         callSite
+	start, score int
+}
+
+// contractCalls pairs an explicit direct invocation with its nearby lexical
+// contract anchor. Two equally plausible invocations in the same file are
+// left to the ordinary lexical fallback.
+func contractCalls(content string, e source.Entry, queries []witnessQuery, found []contractWitness, penalties []int) []contractCallChoice {
+	lang := callLanguage(e.Path)
+	if lang == "" {
+		return nil
+	}
+	matched := false
+	for _, w := range found {
+		matched = matched || w.line > 0
+	}
+	if !matched {
+		return nil
+	}
+	python := lang == "python"
+	sites := importedCalls(callTokens(content, python), python)
+	if len(sites) == 0 {
+		return nil
+	}
+	lines := strings.Split(content, "\n")
+	choices := make([]contractCallChoice, len(queries))
+	tied := make([]bool, len(queries))
+	for _, site := range sites {
+		if !fitsWitness(lines, site.line, site.end) {
+			continue
+		}
+		start := site.line
+		anchor := lines[site.line-1]
+		if site.line > 1 {
+			previous := strings.TrimSpace(lines[site.line-2])
+			if len(previous) <= witnessMaxExcerpt && witnessControl.MatchString(previous) && fitsWitness(lines, site.line-1, site.end) {
+				anchor = previous + " " + anchor
+				start--
+			}
+		}
+		words := witnessTerms(anchor)
+		for i, q := range queries {
+			if found[i].line == 0 {
+				continue
+			}
+			score := witnessMatch(words, q.terms)
+			if q.names(e.Path) {
+				score += witnessMinScore
+			}
+			if penalties != nil {
+				score -= penalties[i]
+			}
+			if score < witnessMinScore {
+				continue
+			}
+			switch {
+			case score > choices[i].score:
+				choices[i] = contractCallChoice{site: site, start: start, score: score}
+				tied[i] = false
+			case score == choices[i].score && choices[i].site != site:
+				tied[i] = true
+			}
+		}
+	}
+	for i, tie := range tied {
+		if tie {
+			choices[i] = contractCallChoice{}
+		}
+	}
+	return choices
+}
+
+func fitsWitness(lines []string, start, end int) bool {
+	if end-start >= witnessMaxLines {
+		return false
+	}
+	used := 0
+	for _, line := range lines[start-1 : end] {
+		if len(line) > witnessMaxExcerpt {
+			return false
+		}
+		used += record.JSONLen(line)
+		if used > witnessMaxExcerpt {
+			return false
+		}
+	}
+	return true
+}
+
+func inWitnessPrefix(content string, line int) bool {
+	if line > 50 {
+		return false
+	}
+	used := 0
+	for i, raw := range strings.SplitN(content, "\n", line+1) {
+		if i == line {
+			break
+		}
+		if len(raw) > roleMaxCodeFile {
+			return false
+		}
+		used += record.JSONLen(raw)
+		if used > roleMaxCodeFile {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
@@ -219,15 +551,17 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 		statement := map[string]int{}
 		addWitnessWords(statement, c.Statement, 4)
 		paths := map[string]bool{}
+		var pythonDocs map[string][]record.Excerpt
 		addWitnessPaths(paths, c.Statement)
+		members := documentedMembers(c.Statement, true)
 		terms := map[string]int{}
 		for word, weight := range statement {
 			terms[word] = weight
 		}
 		for _, id := range c.EvidenceIDs {
+			x := catalog[id]
 			raw, cached := cited[id]
 			if !cached {
-				x := catalog[id]
 				e, found := files[x.Path]
 				if !found || x.Kind != "document" || x.SHA256 != e.SHA256 {
 					continue
@@ -242,9 +576,23 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 			passage := witnessPassage(statement, raw)
 			addWitnessWords(terms, passage, 2)
 			addWitnessPaths(paths, passage)
+			if x.DirectivePath != "" {
+				if pythonDocs == nil {
+					pythonDocs = map[string][]record.Excerpt{}
+				}
+				pythonDocs[x.Path] = append(pythonDocs[x.Path], x)
+				paths[x.Path] = true
+				addWitnessWords(terms, strings.TrimSuffix(path.Base(x.Path), ".py"), 4)
+				addPythonDocExampleTerms(terms, raw)
+			}
+			if len(members) == 0 {
+				members = documentedMembers(passage, false)
+			}
 		}
 		if len(terms) != 0 || len(paths) != 0 {
-			out = append(out, witnessQuery{scope: c.AppliesTo, terms: terms, statement: statement, paths: paths})
+			out = append(out, witnessQuery{scope: c.AppliesTo, terms: terms, statement: statement, paths: paths,
+				operation: maintenanceOperation(c.Statement), typeContract: mentionsJavaScriptTypes(c.Statement),
+				performance: performanceContract(c.Statement), members: members, pythonDocs: pythonDocs})
 		}
 	}
 	common := map[string]int{}
@@ -405,8 +753,12 @@ func matchWitnessLines(text string, e source.Entry, queries []witnessQuery) []co
 	}
 	lines := strings.Split(text, "\n")
 	var multiline string
+	cFamily := record.SourceEcosystem(e.Path) == "cpp"
+	continued := false
 	for line, raw := range lines {
 		s := strings.TrimSpace(raw)
+		inContinuation := continued
+		continued = cFamily && strings.HasSuffix(s, "\\")
 		if multiline != "" {
 			if strings.Contains(s, multiline) {
 				multiline = ""
@@ -417,6 +769,14 @@ func matchWitnessLines(text string, e source.Entry, queries []witnessQuery) []co
 			multiline = "*/"
 			continue
 		}
+		if cFamily {
+			if multiline = cRawStringEnd(s); multiline != "" {
+				continue
+			}
+			if inContinuation {
+				continue
+			}
+		}
 		for _, quote := range []string{`"""`, "'''"} {
 			if strings.Count(s, quote)%2 != 0 {
 				multiline = quote
@@ -426,22 +786,24 @@ func matchWitnessLines(text string, e source.Entry, queries []witnessQuery) []co
 		if multiline != "" {
 			continue
 		}
+		guard := cFamily && compileCondition.MatchString(s) && compileBranchVisible(lines, line)
 		if s == "" || len(raw) > witnessMaxExcerpt || strings.HasPrefix(s, "import ") ||
 			strings.HasPrefix(s, "package ") || strings.HasPrefix(s, "from ") ||
 			strings.HasPrefix(s, "use ") || strings.HasPrefix(s, "//") || strings.HasPrefix(s, "/*") ||
-			strings.HasPrefix(s, "* ") || strings.HasPrefix(s, "#") {
+			strings.HasPrefix(s, "* ") || (strings.HasPrefix(s, "#") && !guard) {
 			continue
 		}
 		words := witnessTerms(s)
 		structure := 0
-		if witnessDeclaration.MatchString(s) || witnessControl.MatchString(s) {
+		if guard || witnessDeclaration.MatchString(s) || witnessControl.MatchString(s) {
 			structure = 4
 		}
 		for i, q := range queries {
 			if pathScores[i] < 0 {
 				continue
 			}
-			score := witnessMatch(words, q.terms)
+			lineMatch := witnessMatch(words, q.terms)
+			score := lineMatch
 			named := namedPaths[i]
 			if score == 0 && (!named || structure == 0) {
 				continue
@@ -453,7 +815,7 @@ func matchWitnessLines(text string, e source.Entry, queries []witnessQuery) []co
 			anchor := line
 			// Keep a neighboring guard with the matching error or branch
 			// action. The short report excerpt uses this same anchor.
-			if line > 0 && witnessControl.MatchString(strings.TrimSpace(lines[line-1])) {
+			if !guard && line > 0 && witnessControl.MatchString(strings.TrimSpace(lines[line-1])) {
 				anchor--
 				score += 3
 			}
@@ -463,8 +825,56 @@ func matchWitnessLines(text string, e source.Entry, queries []witnessQuery) []co
 			if anchor != line && record.JSONLen(lines[anchor])+record.JSONLen(raw) > witnessMaxExcerpt {
 				anchor = line
 			}
-			best[i] = contractWitness{entry: e, line: anchor + 1, score: score, direct: named || witnessMatch(words, q.statement) >= witnessMinScore}
+			best[i] = contractWitness{entry: e, line: anchor + 1, score: score, compileBranch: guard && lineMatch >= 4,
+				direct: named || witnessMatch(words, q.statement) >= witnessMinScore}
 		}
 	}
 	return best
+}
+
+// A preprocessor guard is useful evidence if its own branch contains a
+// statement within the same bounded excerpt. A macro declaration or an
+// include alone contributes no executable branch.
+func compileBranchVisible(lines []string, guard int) bool {
+	var multiline string
+	continued := strings.HasSuffix(strings.TrimSpace(lines[guard]), "\\")
+	for i := guard + 1; i < min(len(lines), guard+witnessMaxLines); i++ {
+		raw := strings.TrimSpace(lines[i])
+		inContinuation := continued
+		continued = strings.HasSuffix(raw, "\\")
+		if multiline != "" {
+			if strings.Contains(raw, multiline) {
+				multiline = ""
+			}
+			continue
+		}
+		if strings.HasPrefix(raw, "/*") {
+			if !strings.Contains(raw, "*/") {
+				multiline = "*/"
+			}
+			continue
+		}
+		if multiline = cRawStringEnd(raw); multiline != "" || inContinuation {
+			continue
+		}
+		if compileBranchEnd.MatchString(raw) {
+			return false
+		}
+		if cExecutableLine.MatchString(raw) {
+			return fitsWitness(lines, guard+1, i+1)
+		}
+	}
+	return false
+}
+
+func cRawStringEnd(line string) string {
+	m := cRawString.FindStringSubmatchIndex(line)
+	if m == nil {
+		return ""
+	}
+	close := ")" + line[m[2]:m[3]] + `"`
+	if strings.Contains(line[m[1]:], close) {
+		return ""
+	}
+	return close
 }

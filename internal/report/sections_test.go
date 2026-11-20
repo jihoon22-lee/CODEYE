@@ -387,7 +387,7 @@ func TestExampleFormatsShowSameNumbers(t *testing.T) {
 			}
 		}
 		for _, sec := range []string{"environment", "documents", "static_analysis", "metrics", "secrets", "code_review", "gaps"} {
-			if !strings.Contains(h, `<section id="`+sec+`" data-section="`+sec+`">`) || !strings.Contains(md, "## "+mdText(Korean.Label("section."+sec))+"\n") {
+			if !strings.Contains(h, `<section id="`+sec+`" data-section="`+sec+`"`) || !strings.Contains(md, "## "+mdText(Korean.Label("section."+sec))+"\n") {
 				t.Fatalf("section %s not rendered", sec)
 			}
 		}

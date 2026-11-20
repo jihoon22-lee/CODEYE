@@ -25,6 +25,7 @@ import (
 const (
 	roleMaxCodeFiles    = 8
 	roleMaxCodeFile     = 2400
+	roleMaxCodeLines    = 50
 	roleMaxCodeBytes    = 12000
 	roleMaxDocs         = 8
 	roleMaxDocBytes     = 2000
@@ -106,9 +107,14 @@ func (s *roleStage) excerpt(e source.Entry, kind, origin string, start, maxLines
 	if err != nil || !ok {
 		return record.Excerpt{}, total, false, err
 	}
+	x, ok = s.boundedExcerpt(e, kind, origin, start, strings.Split(text, "\n"), maxBytes)
+	return x, total, ok, nil
+}
+
+func (s *roleStage) boundedExcerpt(e source.Entry, kind, origin string, start int, lines []string, maxBytes int) (record.Excerpt, bool) {
 	var kept []string
 	used := 0
-	for _, line := range strings.Split(text, "\n") {
+	for _, line := range lines {
 		cost := record.JSONLen(line)
 		if used+cost > maxBytes {
 			break
@@ -117,11 +123,11 @@ func (s *roleStage) excerpt(e source.Entry, kind, origin string, start, maxLines
 		used += cost
 	}
 	if len(kept) == 0 || strings.TrimSpace(strings.Join(kept, "")) == "" {
-		return record.Excerpt{}, total, false, nil
+		return record.Excerpt{}, false
 	}
 	end := start + len(kept) - 1
 	return record.Excerpt{ID: record.ExcerptID(s.j.Snapshot.Digest, e.Path, e.SHA256, start, end), Path: e.Path, SHA256: e.SHA256, Start: start, End: end,
-		Kind: kind, Origin: origin, Text: strings.Join(kept, "\n")}, total, true, nil
+		Kind: kind, Origin: origin, Text: strings.Join(kept, "\n")}, true
 }
 
 // withText re-reads the text of record excerpts from the snapshot, checking
@@ -402,6 +408,11 @@ func goIgnored(p string) bool {
 	return false
 }
 
+type corpusLinks struct {
+	directCalls []directCall
+	member      memberPair
+}
+
 // codeCorpus selects code and test excerpts round-robin over the modules of
 // the snapshot, so every module in scope is represented before any module
 // gets a second file. A Go file belongs to its deepest go.mod directory; a
@@ -409,12 +420,12 @@ func goIgnored(p string) bool {
 // ecosystem, and modules are visited ecosystem by ecosystem (sources.go,
 // groupOrder). Accepted document contracts can add targeted windows before
 // the ordinary file prefixes.
-func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, []string, error) {
+func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpusLinks, []string, error) {
 	g := planCodeGroupsFor(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary(), changedPaths(s.j))
 	lims := append([]string{}, g.lims...)
 	var out []record.Excerpt
 	remain := roleMaxCodeBytes
-	offered := map[string]bool{}
+	offered := map[string]string{}
 	add := func(e source.Entry, start, lines, budget int) error {
 		x, total, ok, err := s.excerpt(e, windowKind(e.Path), "context", start, lines, min(budget, remain))
 		if ok {
@@ -422,34 +433,101 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, []str
 				lims = addLim(lims, "excerpt_only")
 			}
 			out = append(out, x)
-			offered[x.Path] = true
+			offered[x.Path] = x.ID
 			remain -= record.JSONLen(x.Text)
 		}
 		return err
 	}
-	witnesses, err := s.contractWitnesses(g, documents)
+	selected, err := s.contractWitnesses(g, documents)
 	if err != nil {
-		return nil, nil, err
+		return nil, corpusLinks{}, nil, err
 	}
-	for _, w := range witnesses {
-		if err := add(w.entry, w.line, witnessMaxLines, witnessMaxExcerpt); err != nil {
-			return nil, nil, err
+	for _, w := range selected.witnesses {
+		lines := witnessMaxLines
+		if w.end > 0 {
+			lines = w.end - w.line + 1
+		}
+		if err := add(w.entry, w.line, lines, witnessMaxExcerpt); err != nil {
+			return nil, corpusLinks{}, nil, err
+		}
+	}
+	links := corpusLinks{member: selected.member}
+	for _, call := range selected.calls {
+		caller, callee := offered[call.caller.entry.Path], offered[call.callee.entry.Path]
+		if caller != "" && callee != "" {
+			links.directCalls = append(links.directCalls, directCall{CallerEvidenceID: caller, CalleeEvidenceID: callee, Symbol: call.symbol})
 		}
 	}
 	for e := range g.orderedFiles() {
 		if len(out) >= roleMaxCodeFiles || remain < 128 {
 			break
 		}
-		if !offered[e.Path] {
-			if err := add(e, 1, 50, roleMaxCodeFile); err != nil {
-				return nil, nil, err
+		if offered[e.Path] == "" {
+			if err := add(e, 1, roleMaxCodeLines, roleMaxCodeFile); err != nil {
+				return nil, corpusLinks{}, nil, err
 			}
 		}
 	}
-	if g.eligible > len(out) {
+	if g.eligible > len(offered) {
 		lims = append(lims, "files_outside_review_context")
+	} else if len(out) < roleMaxCodeFiles && len(selected.additional) > 0 {
+		out, err = s.additionalWitnesses(out, selected.additional, remain)
+		if err != nil {
+			return nil, corpusLinks{}, nil, err
+		}
 	}
-	return out, addLim(nil, lims...), nil
+	return out, links, addLim(nil, lims...), nil
+}
+
+// additionalWitnesses fills at most two spare overview slots after all
+// eligible files have a window. Multiple windows of a single file still
+// fit the per-file byte and line limits and must be disjoint.
+func (s *roleStage) additionalWitnesses(out []record.Excerpt, candidates []contractWitness, remain int) ([]record.Excerpt, error) {
+	limit := min(roleMaxCodeFiles, len(out)+2)
+	const extraWindowLines = (roleMaxCodeLines - witnessMaxLines) / 2
+	selectedQuery := map[int]bool{}
+	for _, w := range candidates {
+		if err := s.ctx.Err(); err != nil {
+			return nil, err
+		}
+		if len(out) >= limit || remain < 128 {
+			break
+		}
+		if selectedQuery[w.query] {
+			continue
+		}
+		maxEnd := w.line + extraWindowLines - 1
+		lines, budget := roleMaxCodeLines, roleMaxCodeFile
+		for _, e := range out {
+			if e.Path != w.entry.Path {
+				continue
+			}
+			if e.Start <= w.line && w.line <= e.End {
+				maxEnd = w.line - 1
+				break
+			}
+			if e.Start > w.line {
+				maxEnd = min(maxEnd, e.Start-1)
+			}
+			lines -= e.End - e.Start + 1
+			budget -= record.JSONLen(e.Text)
+		}
+		budget = min(budget, witnessMaxExcerpt, remain)
+		lines = min(lines, maxEnd-w.line+1)
+		if lines < 6 || budget < 128 {
+			continue
+		}
+		x, _, ok, err := s.excerpt(w.entry, "code", "context", w.line, lines, budget)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			out = append(out, x)
+			remain -= record.JSONLen(x.Text)
+			selectedQuery[w.query] = true
+		}
+	}
+	return out, nil
 }
 
 // observation input of the interpret role
@@ -584,9 +662,18 @@ func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput,
 // documentExcerpts reads the selected guidance documents within the bounds.
 func (s *roleStage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, []string, error) {
 	files := s.entries()
+	var manifest map[string]source.Entry
 	var out []record.Excerpt
 	var lims []string
 	remain := roleMaxDocsBytes
+	apiExcerpts := 0
+	apiEvidence := map[string]bool{}
+	type userDocument struct {
+		entry source.Entry
+		lines []string
+		after int
+	}
+	var later [2][]userDocument
 	for _, d := range selected {
 		e, ok := files[d.Path]
 		if !ok || e.SHA256 != *d.SHA256 {
@@ -596,7 +683,7 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, [
 			lims = append(lims, "documents_outside_review_input")
 			continue
 		}
-		x, _, ok, err := s.excerpt(e, "document", "", 1, roleMaxDocLines, min(roleMaxDocBytes, remain))
+		content, ok, err := s.readSource(e)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -604,11 +691,55 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) ([]record.Excerpt, [
 			lims = append(lims, "documents_outside_review_input")
 			continue
 		}
+		lines := strings.Split(content, "\n")
+		x, ok := s.boundedExcerpt(e, "document", "", 1, lines[:min(len(lines), roleMaxDocLines)], min(roleMaxDocBytes, remain))
+		if !ok {
+			lims = append(lims, "documents_outside_review_input")
+			continue
+		}
 		if x.End < *d.LineCount {
 			lims = append(lims, "document_excerpt_only")
+			if rank := userDocRank(d); rank < len(later) {
+				later[rank] = append(later[rank], userDocument{entry: e, lines: lines, after: x.End})
+			}
+		}
+		if apiExcerpts < maxAPIDocExcerpts && x.End >= *d.LineCount {
+			if target := pythonDocTarget(d.Path, x.Text); target != "" {
+				if manifest == nil {
+					manifest = make(map[string]source.Entry, len(s.j.Snapshot.Manifest.Entries))
+					for _, e := range s.j.Snapshot.Manifest.Entries {
+						manifest[e.Path] = e
+					}
+				}
+				api, ok, err := s.documentedPythonAPI(manifest, files, d, target, min(roleMaxDocBytes, remain))
+				if err != nil {
+					return nil, nil, err
+				}
+				if ok && !apiEvidence[api.ID] {
+					apiEvidence[api.ID] = true
+					apiExcerpts++
+					x = api
+				}
+			}
 		}
 		out = append(out, x)
 		remain -= record.JSONLen(x.Text)
+	}
+	if len(out) < roleMaxDocs && remain >= 128 {
+		budget := min(roleMaxDocBytes, remain)
+		for _, ranked := range later {
+			for _, d := range ranked {
+				start, end := documentationContinuation(d.lines, d.after, path.Ext(d.entry.Path), budget)
+				if start >= 0 {
+					for _, r := range documentationRanges(d.lines, path.Ext(d.entry.Path), start, end, roleMaxDocs-len(out)) {
+						x, _ := s.boundedExcerpt(d.entry, "document", "", r.start+1, d.lines[r.start:r.end], budget)
+						out = append(out, x)
+						budget -= record.JSONLen(x.Text)
+					}
+					return out, addLim(nil, lims...), nil
+				}
+			}
+		}
 	}
 	return out, addLim(nil, lims...), nil
 }

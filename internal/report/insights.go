@@ -84,17 +84,20 @@ func (c sectionContext) addStrengths(s *CodeReviewSection) {
 
 const MaxReportedStrengths = 12
 
-func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key]sourceexcerpt.Excerpt) {
+func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key][]sourceexcerpt.Excerpt, legacy bool) {
 	budget := 256 << 10
-	get := func(path, sha string, anchor int) *sourceexcerpt.Excerpt {
-		if x, ok := snippets[sourceexcerpt.Key{Path: path, SHA256: sha, Line: anchor}]; ok {
-			cost := record.JSONLen(x.Text)
-			if cost <= budget {
-				budget -= cost
-				return &x
-			}
+	get := func(path, sha string, start, end int, model bool) *sourceexcerpt.Excerpt {
+		windows := snippets[sourceexcerpt.Key{Path: path, SHA256: sha, Line: start}]
+		choice := preferredExcerpt(windows, start, end, model, legacy)
+		if choice == nil {
+			return nil
 		}
-		return nil
+		cost := record.JSONLen(choice.Text)
+		if cost > budget {
+			return nil
+		}
+		budget -= cost
+		return choice
 	}
 	withheld := map[string]bool{}
 	for _, d := range r.Secrets.Detections {
@@ -104,10 +107,11 @@ func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key]sourceexcerpt.Exce
 	}
 	for i := range r.Findings {
 		f := &r.Findings[i]
+		model := usesModelExcerpts(r, f.ID)
 		for j := range f.Evidence {
 			e := &f.Evidence[j]
 			if e.Location != nil && !withheld[e.Location.Path] {
-				e.Excerpt = get(e.Location.Path, e.BlobSHA256, e.Location.StartLine)
+				e.Excerpt = get(e.Location.Path, e.BlobSHA256, e.Location.StartLine, e.Location.EndLine, model)
 			}
 		}
 	}
@@ -115,8 +119,38 @@ func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key]sourceexcerpt.Exce
 		for i := range ev {
 			e := &ev[i]
 			if !withheld[e.Path] {
-				e.Excerpt = get(e.Path, e.BlobSHA256, e.StartLine)
+				e.Excerpt = get(e.Path, e.BlobSHA256, e.StartLine, e.EndLine, true)
 			}
 		}
 	}
+}
+
+func usesModelExcerpts(r *Report, id string) bool {
+	return r.CodeReview != nil && slices.Contains(r.CodeReview.FindingIDs, id)
+}
+
+func preferredExcerpt(windows []sourceexcerpt.Excerpt, start, end int, model, legacy bool) *sourceexcerpt.Excerpt {
+	if len(windows) == 0 {
+		return nil
+	}
+	if legacy {
+		return &windows[0]
+	}
+	var forward, context *sourceexcerpt.Excerpt
+	for _, window := range windows {
+		if model {
+			if x, ok := window.AtCitation(start, end); ok && (forward == nil || x.EndLine > forward.EndLine) {
+				forward = &x
+			}
+		}
+		if window.ValidDiagnostic(start) && window.StartLine >= start-3 && window.EndLine-start <= 5 &&
+			(context == nil || window.EndLine-window.StartLine > context.EndLine-context.StartLine ||
+				window.EndLine-window.StartLine == context.EndLine-context.StartLine && window.StartLine < context.StartLine) {
+			context = &window
+		}
+	}
+	if forward != nil {
+		return forward
+	}
+	return context
 }

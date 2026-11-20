@@ -379,7 +379,9 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 ## 보고서 경로
 
-보고서의 `documents.quality`, `documents.comparisons`, `code_review.strengths`는 수락된 모델 해석과 근거 ID를 담는 선택 필드다. `findings[].evidence[]`와 분석 절 근거의 `excerpt`는 있을 때 행 범위와 고정 스냅샷의 원문을 담는다. `include_code=false`에서는 발췌 필드를 생략하고 모델 문장을 생략 문구로 바꾼다. 이전 보고서에는 이 필드가 없을 수 있다.
+보고서의 `documents.quality`, `documents.comparisons`, `code_review.strengths`는 수락된 모델 해석과 근거 ID를 담는 선택 필드다. `findings[].evidence[]`와 분석 절 근거의 `excerpt`에는 고정 스냅샷에서 저장한 실제 줄 범위와 원문이 들어간다. 도구 진단의 문맥은 최대 9줄이며 새 모델 발췌는 인용 시작 줄부터 최대 50줄이다. JSON 인코딩 1,800바이트에 닿으면 마지막으로 저장할 수 있는 완전한 줄까지 담는다. `include_code=false`에서는 발췌 필드를 생략하고 모델 문장을 생략 문구로 바꾼다. 이전 보고서에는 이 필드가 없을 수 있다.
+
+Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `directive_path`로 원래 Markdown 페이지를 가리킨다. `path`, 줄 범위, `blob_sha256`는 docstring이 담긴 스냅샷의 실제 Python 파일을 가리킨다. 코드 미포함 내보내기에도 출처 경로가 남는다.
 
 보고서 내용과 projection 규칙은 [보고서와 화면](REPORT.md)에 있다.
 
@@ -408,7 +410,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `Content-Disposition` | Markdown·HTML은 첨부 파일 `codeye-report-<run>-r<N>[-nocode][-full].md|.html` |
 | `Content-Security-Policy` | HTML은 스크립트·외부 로딩을 막는 보고서 전용 정책 |
 
-관리 서버에는 snapshot 파일 본문이 없으므로 `include_code=true`도 코드 발췌를 주지 않는다. 저장된 도구 메시지와 검토 문구를 준다.
+`include_code=true`는 게시된 발췌, 도구 메시지, 검토 문구를 반환한다. 조회 시에는 스냅샷이나 Git에서 소스 파일을 다시 읽지 않는다.
 
 ### GET /runs/{id}/reports
 

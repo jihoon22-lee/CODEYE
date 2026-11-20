@@ -245,11 +245,12 @@ func validateModelSections(r Report) error {
 	catalog := func(ev []SectionEvidence) (map[string]bool, error) {
 		ids := map[string]bool{}
 		for _, e := range ev {
+			provenance := record.Excerpt{Path: e.Path, Kind: e.Kind, DirectivePath: e.DirectivePath}
 			if ids[e.ID] || domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.BlobSHA256) || e.StartLine < 1 || e.EndLine < e.StartLine ||
-				!slices.Contains([]string{"code", "test", "document", "manifest"}, e.Kind) {
+				!slices.Contains([]string{"code", "test", "document", "manifest"}, e.Kind) || !provenance.ValidDirectivePath() {
 				return nil, invalidf("section evidence %s is invalid", e.ID)
 			}
-			if e.Excerpt != nil && (free || !sourceexcerpt.SafePath(e.Path) || !e.Excerpt.Valid(e.StartLine) ||
+			if e.Excerpt != nil && (free || !sourceexcerpt.SafePath(e.Path) || !e.Excerpt.ValidCitation(e.StartLine, e.EndLine) ||
 				e.ID != record.ExcerptID(r.Inputs.ManifestSHA256, e.Path, e.BlobSHA256, e.StartLine, e.EndLine)) {
 				return nil, invalidf("section excerpt is invalid")
 			}
@@ -440,7 +441,8 @@ func validateInsights(r Report) error {
 	catalog := func(entries []SectionEvidence) map[string]record.Excerpt {
 		out := make(map[string]record.Excerpt, len(entries))
 		for _, e := range entries {
-			out[e.ID] = record.Excerpt{ID: e.ID, Path: e.Path, Kind: e.Kind}
+			out[e.ID] = record.Excerpt{ID: e.ID, Path: e.Path, Kind: e.Kind, DirectivePath: e.DirectivePath,
+				Start: e.StartLine, End: e.EndLine}
 		}
 		return out
 	}

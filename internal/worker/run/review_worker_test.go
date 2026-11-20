@@ -54,7 +54,7 @@ func (f *roleScripted) Review(_ context.Context, _ executor.Runner, q opencode.R
 			EvidenceID string `json:"evidence_id"`
 		} `json:"requirements"`
 		Scope struct {
-			Excerpts []struct{ ID, Kind string } `json:"excerpts"`
+			Excerpts []struct{ ID, Kind, Path string } `json:"excerpts"`
 		} `json:"scope"`
 		Candidates []struct {
 			ID       string   `json:"id"`
@@ -85,6 +85,10 @@ func (f *roleScripted) Review(_ context.Context, _ executor.Runner, q opencode.R
 	case "investigate":
 		code := ""
 		for _, e := range in.Scope.Excerpts {
+			if e.Kind == "code" && e.Path == "gateway.go" {
+				code = e.ID
+				break
+			}
 			if e.Kind == "code" && code == "" {
 				code = e.ID
 			}
@@ -332,7 +336,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
 			}
 			for _, call := range r.Coverage.ReviewCalls {
-				if call.PackID != "review" || call.PackVersion != "2.1.0" {
+				if call.PackID != "review" || call.PackVersion != "2.2.0" {
 					t.Fatalf("call %+v", call)
 				}
 			}
@@ -361,6 +365,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 			}
 			var reviewed []string
 			hasExcerpt := false
+			hasFullModelExcerpt := false
 			observations := map[string]bool{}
 			for _, o := range r.Observations {
 				observations[o.ID] = true
@@ -369,6 +374,19 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				for _, evidence := range f.Evidence {
 					if evidence.Excerpt != nil {
 						hasExcerpt = true
+						if f.ID == "review_investigate_1" && evidence.Location != nil && evidence.Location.Path == "gateway.go" {
+							body, err := os.ReadFile(filepath.Join(e.src, "gateway.go"))
+							if err != nil {
+								t.Fatal(err)
+							}
+							loc, ex := evidence.Location, evidence.Excerpt
+							lines := strings.Split(strings.TrimSuffix(string(body), "\n"), "\n")
+							if loc.EndLine-loc.StartLine < 9 || loc.EndLine > len(lines) || ex.StartLine != loc.StartLine || ex.EndLine != loc.EndLine ||
+								ex.Text != strings.Join(lines[loc.StartLine-1:loc.EndLine], "\n") {
+								t.Fatalf("worker did not save the entire model citation: location=%+v excerpt=%+v", loc, ex)
+							}
+							hasFullModelExcerpt = true
+						}
 					}
 				}
 				if strings.HasPrefix(f.ID, "review_") {
@@ -383,8 +401,8 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 					t.Fatalf("interpret finding without its observation: %+v", f)
 				}
 			}
-			if !hasExcerpt {
-				t.Fatalf("no snapshot excerpt on a finding")
+			if !hasExcerpt || !hasFullModelExcerpt {
+				t.Fatalf("missing snapshot excerpt or full model citation")
 			}
 			if err := report.ValidateReport(report.Project(r, false)); err != nil {
 				t.Fatal(err)
@@ -399,7 +417,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
-			if !strings.Contains(md, "review@2.1.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
+			if !strings.Contains(md, "review@2.2.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
 				t.Fatalf("markdown lacks the pack or the optional row:\n%s", md)
 			}
 		})

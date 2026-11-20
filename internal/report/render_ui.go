@@ -1,0 +1,131 @@
+package report
+
+import (
+	"embed"
+	"encoding/base64"
+	"html/template"
+	"strings"
+	"time"
+)
+
+//go:embed reportui/icons/*.svg
+var reportIcons embed.FS
+
+//go:embed reportui/font.css
+var reportFontCSS string
+
+//go:embed reportui/noto-sans-kr.woff2
+var reportFont []byte
+
+//go:embed reportui/tabler.css
+var reportTablerCSS string
+
+//go:embed reportui/report.css
+var reportThemeCSS string
+
+//go:embed reportui/export.css
+var reportExportCSS string
+
+//go:embed reportui/LICENSE.tabler-core
+var tablerCoreNotice string
+
+//go:embed reportui/LICENSE.tabler-icons
+var tablerIconsNotice string
+
+//go:embed reportui/LICENSE.bootstrap
+var bootstrapNotice string
+
+//go:embed reportui/LICENSE.noto-sans-kr
+var notoSansKRNotice string
+
+// The same font and components are bundled by the web app. The saved HTML has
+// no companion files, so use a data URL for the font in this renderer.
+var reportFontURL = "data:font/woff2;base64," + base64.StdEncoding.EncodeToString(reportFont)
+var sectionedExportCSS = strings.Replace(reportFontCSS, "./noto-sans-kr.woff2", reportFontURL, 1) +
+	reportTablerCSS + reportThemeCSS + reportExportCSS
+
+type reportTimestamp struct{ Label, Original, Display string }
+type reportAssetNotice struct{ Name, Text string }
+
+func (v secView) HeaderSource() string {
+	if p := v.R.Project; p != nil {
+		return p.Source
+	}
+	return ""
+}
+
+func (secView) AssetNotices() []reportAssetNotice {
+	return []reportAssetNotice{
+		{"Tabler Core", tablerCoreNotice},
+		{"Tabler Icons", tablerIconsNotice},
+		{"Bootstrap", bootstrapNotice},
+		{"Noto Sans KR", notoSansKRNotice},
+	}
+}
+
+func (v secView) HeaderTime() reportTimestamp {
+	l, r := v.L, v.R
+	label, raw := l.Label("identity.published"), r.CreatedAt
+	if p := r.Project; p != nil && p.FinishedAt != "" {
+		label, raw = l.Label("identity.finish"), p.FinishedAt
+	}
+	at, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return reportTimestamp{}
+	}
+	return reportTimestamp{label, raw, at.UTC().Format("2006-01-02 15:04 MST")}
+}
+
+func findingCitation(l Locale, evidence Evidence) sourceCitation {
+	if evidence.Location == nil {
+		return sourceCitation{}
+	}
+	loc := evidence.Location
+	return newSourceCitation(l, evidence.Kind, loc.Path, loc.StartLine, loc.EndLine, evidence.Excerpt)
+}
+
+func reportIcon(name string) template.HTML {
+	data, err := reportIcons.ReadFile("reportui/icons/" + name + ".svg")
+	if err != nil {
+		return ""
+	}
+	// These SVGs are local, versioned template assets. The caller supplies an
+	// icon name from the renderer, never markup from a report.
+	return template.HTML(`<span aria-hidden="true" class="report-icon">` + string(data) + `</span>`)
+}
+
+func sectionIcon(key string) string {
+	switch key {
+	case "overview":
+		return "dashboard"
+	case SectionEnvironment:
+		return "server"
+	case SectionDocuments:
+		return "file-description"
+	case SectionStaticAnalysis:
+		return "terminal-2"
+	case SectionMetrics:
+		return "chart-bar"
+	case SectionSecrets:
+		return "shield-lock"
+	case SectionCodeReview:
+		return "code"
+	case SectionGaps:
+		return "alert-triangle"
+	default:
+		return "list-details"
+	}
+}
+
+func groupIcon(tone string) string {
+	switch tone {
+	case "action":
+		return "alert-triangle"
+	case "strength":
+		return "check"
+	case "pending":
+		return "clock"
+	default:
+		return "clipboard-check"
+	}
+}

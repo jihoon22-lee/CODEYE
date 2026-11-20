@@ -2,13 +2,15 @@ import { useId, useState, type ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
 import type { Citation, Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './reportSections';
 import { ComparisonSection } from './HistoryView';
-import { runStatusLabel } from './format';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { Citations, FindingCard, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportScope, ReportTasks, TextList, Verdict, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
+import { Citations, FindingSourceLink, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportReviewStatus, ReportScope, ReportTasks, TextList, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
+import { ReportAction, ReportIcon, ReportLayout } from './ReportLayout';
+import { ReportGlossary } from './ReportGlossary';
 import {
   gapGroups,
   locationPath,
+  matchingDocumentCondition,
   moduleDir,
   moduleSecondary,
   orderFindings,
@@ -16,12 +18,14 @@ import {
   places,
   primaryCitation,
   projectReadings,
+  relatedStrength,
   ruleGroups,
   secondaryDir,
   secondaryPath,
   secondaryReviewFinding,
   secondaryReviewScope,
   severityOf,
+  shareTitleSubject,
   slotRuns,
   toolRows,
   SHOWN,
@@ -30,8 +34,9 @@ import {
 
 const s = t.sections;
 const sm = s.summary;
-const ORDER = ['environment', 'documents', 'static_analysis', 'metrics', 'secrets', 'code_review', 'gaps'];
-const TABS = ['overview', ...ORDER];
+const ORDER = ['environment', 'documents', 'static_analysis', 'metrics', 'secrets', 'code_review', 'gaps'] as const;
+const TABS = ['overview', ...ORDER] as const;
+const TAB_ICONS = { overview: 'overview', environment: 'server', documents: 'file', static_analysis: 'terminal', metrics: 'chart', secrets: 'secret', code_review: 'code', gaps: 'alert' } as const;
 
 function placesText(p: Places) {
   let out = p.shown.join(', ');
@@ -55,7 +60,7 @@ function More({ title, children }: { title: string; children: () => ReactNode })
   const [open, setOpen] = useState(false);
   return (
     <details className="report-more" onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
-      <summary>{title}</summary>
+      <summary><ReportIcon name="chevron" />{title}</summary>
       {open && children()}
     </details>
   );
@@ -139,7 +144,7 @@ function ModelReading({ title, children }: { title: string; children: ReactNode 
   const heading = useId();
   return (
     <section className="model-reading" aria-labelledby={heading}>
-      <header><h6 id={heading}>{title}</h6><span>{t.modelReading}</span></header>
+      <header><h6 id={heading}>{title}</h6><span className="badge">{t.modelReading}</span></header>
       {children}
     </section>
   );
@@ -151,25 +156,24 @@ type Reading = {
   scope?: string;
   status?: string;
   secondary?: boolean;
-  sources: { label?: string; refs: string[] }[];
+  refs: string[];
 };
 
 function ReadingList({ rows, catalog }: { rows: Reading[]; catalog: Citation[] }) {
   return (
-    <ul className="plain model-reading-list">
-      {rows.map(({ title, statement, scope, status, secondary, sources }, i) => (
-        <li className="model-reading-item" key={i}>
-          <div className="reading-title">
-            {status && <span className="pill tone-plain">{status}</span>}
-            {secondary && <span className="pill tone-plain">{t.reading.secondary}</span>}
-            <strong>{title}</strong>
+    <ul className="plain report-cards model-reading-list">
+      {rows.map(({ title, statement, scope, status, secondary, refs }, i) => (
+        <li className="card report-card model-reading-item" key={i}>
+          <div className="card-body">
+            <div className="reading-badges">
+              {status && <span className="badge">{status}</span>}
+              {secondary && <span className="badge">{t.reading.secondary}</span>}
+            </div>
+            <h6 className="card-title">{title}</h6>
+            <p className="report-card-copy">{statement}</p>
+            {scope && scope !== '.' && <p className="report-card-meta">{t.scopeTitle} <code>{scope}</code></p>}
+            {refs.length > 0 && <div className="reading-refs"><Citations refs={refs} catalog={catalog} /></div>}
           </div>
-          <p>{statement}</p>
-          {scope && <p className="small">{t.scopeTitle} <code>{scope}</code></p>}
-          {sources.map(({ label, refs }, j) => refs.length > 0 && <div className="reading-refs" key={j}>
-            {label && <b>{label}</b>}
-            <Citations refs={refs} catalog={catalog} />
-          </div>)}
         </li>
       ))}
     </ul>
@@ -366,10 +370,7 @@ function comparisonReading(row: Sections['documents']['comparisons'][number], ca
     status: label(t.assessment, row.status),
     statement: row.reason,
     secondary: row.codeRefs.length > 0 ? !hasPrimary : secondaryReviewScope(row.scope),
-    sources: [
-      { label: t.reading.documentEvidence, refs: row.documentRefs },
-      { label: t.reading.codeEvidence, refs: row.codeRefs },
-    ],
+    refs: [...row.documentRefs, ...row.codeRefs],
   };
 }
 
@@ -377,76 +378,129 @@ function strengthReading(row: Sections['codeReview']['strengths'][number], catal
   return {
     title: row.title, scope: row.scope, statement: row.benefit,
     secondary: !catalog.some(c => row.refs.includes(c.id) && primaryCitation(c, 'code')),
-    sources: [{ label: t.reading.codeEvidence, refs: row.refs }],
+    refs: row.refs,
   };
 }
 
-function ProjectOverview({ report, sections, go }: { report: AnalysisReport; sections: Sections; go: (key: string) => void }) {
-  const { actions, comparisons, uncertainComparison, strengths, followups, diagnostic } = projectReadings(report, sections);
+type OverviewReading = {
+  title: string;
+  text?: string;
+  documentClaim?: string;
+  reasonLabel?: string;
+  condition?: string;
+  unresolved?: string;
+  status?: string;
+  model?: boolean;
+  next?: { label: string; text: string };
+  sources?: ReactNode;
+};
+
+function selectedReading(report: AnalysisReport, sections: Sections): OverviewReading {
+  const { actions, comparisons, uncertainComparison, documentedBehavior, strengths, followups, diagnostic } = projectReadings(report, sections);
   const { documents, codeReview } = sections;
-  const next = (title: string, decisions: typeof actions) => decisions.length > 0 && (
-    <section className="project-decisions">
-      <h6>{title}</h6>
-      <ul className="plain report-priorities">
-        {decisions.map(decision => <li key={decision.finding.id}><FindingCard f={decision.finding} preview={decision} /></li>)}
-      </ul>
-    </section>
-  );
-  const gaps = sections.gaps.length;
-  const unknown = documents.comparisons.filter(row => row.status === 'unknown').length;
-  const showUnknownCount = unknown > (uncertainComparison ? 1 : 0);
-  const secrets = sections.attention.find(a => a.code === 'secrets_detected');
-  const comparisonRows = uncertainComparison ? [uncertainComparison] : comparisons;
-  const hasReadings = actions.length + comparisonRows.length + strengths.length + followups.length > 0;
-  const documentReading = <section className="project-reading">
-    {comparisonRows.length > 0 ? (
-      <ModelReading title={uncertainComparison ? t.reading.uncertainComparison : t.comparisonsTitle}>
-        <ReadingList rows={comparisonRows.map(row => comparisonReading(row, documents.citations))} catalog={documents.citations} />
-      </ModelReading>
-    ) : <><h6>{t.comparisonsTitle}</h6><p>{t.reading.noComparison}</p></>}
-    <button type="button" className="link" onClick={() => go('documents')}>{s.go(s.titles.documents)}</button>
-  </section>;
+  const source = (catalog: Citation[], refs: string[], kind: 'code' | 'document') =>
+    catalog.find(c => refs.includes(c.id) && primaryCitation(c, kind))?.id;
+  const action = actions[0];
+  if (action) return {
+    title: action.finding.title,
+    model: true,
+    text: action.finding.impact,
+    status: action.finding.validation === 'supported' ? t.reading.supported : t.reading.reproduced,
+    next: { label: t.reading.nextAction, text: action.finding.recommendation },
+    sources: <FindingSourceLink evidence={action.source} preferOriginal />,
+  };
+  const comparison = comparisons[0];
+  const documentReading = (row: NonNullable<typeof comparison>, known: boolean): OverviewReading => {
+    const condition = row.status === 'match'
+      ? matchingDocumentCondition(row, documents.comparisons, documents.citations) : undefined;
+    return {
+      title: known ? row.statement : t.reading.documentClaim,
+      model: known,
+      documentClaim: known ? undefined : row.statement,
+      text: condition ? undefined : row.reason,
+      condition,
+      reasonLabel: known ? undefined : t.reading.unconfirmedReason,
+      status: known ? label(t.assessment, row.status) : t.reading.implementationUnknown,
+      sources: <Citations catalog={documents.citations} preferOriginal refs={[
+        source(documents.citations, row.documentRefs, 'document'),
+        source(documents.citations, row.codeRefs, 'code'),
+      ].filter((id): id is string => id !== undefined)} />,
+    };
+  };
+  if (comparison && comparison.status !== 'match') return documentReading(comparison, true);
+  const followup = followups[0];
+  if (followup?.next) {
+    const confirmed = relatedStrength(followup, strengths, codeReview.citations);
+    return {
+      title: confirmed?.strength.benefit ?? followup.finding.title,
+      model: true,
+      text: !confirmed && followup.condition ? `${t.conditions} · ${followup.condition}` : undefined,
+      unresolved: confirmed ? followup.finding.title : undefined,
+      status: confirmed ? t.reading.recordedStrength : label(t.validation, followup.finding.validation),
+      next: { label: t.reading.nextCheck, text: followup.next },
+      sources: <>
+        {confirmed && <Citations catalog={[confirmed.citation]} refs={[confirmed.citation.id]} preferOriginal actionLabel={t.reading.confirmedCode} />}
+        <FindingSourceLink evidence={followup.source} preferOriginal actionLabel={confirmed ? t.reading.followupCode : undefined} />
+      </>,
+    };
+  }
+  if (comparison) return documentReading(comparison, true);
+  const strength = strengths[0];
+  if (strength) {
+    const first = codeReview.citations.find(c => strength.refs.includes(c.id) && primaryCitation(c, 'code'))!;
+    const related = strengths.slice(1).find(row => row.benefit !== strength.benefit && shareTitleSubject(strength.title, row.title) &&
+      codeReview.citations.some(c => row.refs.includes(c.id) && primaryCitation(c, 'code') && c.path === first.path &&
+        ((first.line <= c.line && c.end <= first.end) || (c.line <= first.line && first.end <= c.end))));
+    const proof = related && codeReview.citations.find(c => related.refs.includes(c.id) && primaryCitation(c, 'code') &&
+      c.path === first.path && c.line <= first.line && first.end <= c.end);
+    return {
+      title: strength.benefit,
+      model: true,
+      text: related?.benefit,
+      status: t.reading.recordedStrength,
+      sources: <Citations catalog={codeReview.citations} preferOriginal refs={[(proof || first).id]} />,
+    };
+  }
+  if (uncertainComparison) return documentReading(uncertainComparison, false);
+  if (documentedBehavior) return documentReading(documentedBehavior, false);
+  if (diagnostic?.location) return {
+    title: diagnostic.message || diagnostic.rule,
+    status: t.reading.staticStatus,
+    sources: <PinnedSourceLink {...diagnostic.location}
+      fallback={sourceLocation(diagnostic.location.path, diagnostic.location.start, diagnostic.location.end)} />,
+  };
+  const reason = report.aiReviewReasons.map(code => [t.reasons, s.modelReasons, ko.stages.reasonLabels]
+    .find(labels => Object.hasOwn(labels, code))?.[code]).find(Boolean);
+  return { title: t.reading.noFindings, text: report.aiReview === 'not_requested' ? t.reading.reviewNotRequested : reason };
+}
+
+function ProjectOverview({ report, sections, openDocuments }: { report: AnalysisReport; sections: Sections; openDocuments: () => void }) {
+  const { status, title, text, documentClaim, reasonLabel, condition, unresolved, next, sources, model } = selectedReading(report, sections);
+  const comparisons = sections.documents.comparisons;
+  const unknown = comparisons.filter(row => row.status === 'unknown').length;
+  const heading = cutLine(title, 165);
+  const detail = text !== title ? cutLine(text ?? null, 205) : '';
+  const claim = cutLine(documentClaim ?? null, 205);
+  const boundary = cutLine(unresolved ?? null, 165);
+  const nextStep = cutLine(next?.text ?? null, 165);
   return (
-    <>
-      {next(t.reading.actions, actions)}
-      <div className={strengths.length ? 'project-readings has-strengths' : 'project-readings'}>
-        {comparisons.length > 0 && documentReading}
-        {strengths.length > 0 && <section className="project-reading">
-          <ModelReading title={t.strengthsTitle}>
-            <ReadingList rows={strengths.map(row => strengthReading(row, codeReview.citations))} catalog={codeReview.citations} />
-          </ModelReading>
-          <button type="button" className="link" onClick={() => go('code_review')}>{s.go(s.titles.code_review)}</button>
-        </section>}
-        {comparisons.length === 0 && documentReading}
+    <section className="card report-card report-executive" aria-labelledby="report-judgment">
+      <div className="card-body">
+        {status && <div className="report-executive-status"><strong>{status}</strong>{model && <span>{t.modelReading}</span>}</div>}
+        <h6 className="card-title" id="report-judgment">{heading}</h6>
+        {claim && <p className="report-card-copy">{claim}</p>}
+        {detail && <p className="report-card-copy">{reasonLabel && <strong>{reasonLabel}{' '}</strong>}{detail}</p>}
+        {condition && <p className="report-card-copy"><strong>{t.reading.option}</strong> {condition}</p>}
+        {boundary && <p className="report-executive-next"><strong>{t.reading.unresolvedBehavior}</strong> {boundary}</p>}
+        {next && nextStep && <p className="report-executive-next"><strong>{next.label}</strong> {nextStep}</p>}
+        {sources && <div className="report-executive-sources">{sources}</div>}
+        <ReportGlossary text={[heading, claim, detail, condition ?? '', boundary, nextStep]} hasSources={Boolean(sources)} />
+        {unknown > 0 && <div className="report-executive-scope">
+          <p>{t.reading.unknownContracts(comparisons.length, unknown)}</p>
+          <ReportAction onClick={openDocuments}>{t.reading.openDocumentAnalysis}</ReportAction>
+        </div>}
       </div>
-      {next(t.reading.followups, followups)}
-      {diagnostic?.location && <section className="project-decisions">
-        <h6>{t.reading.staticTitle}</h6>
-        <div className="report-diagnostic">
-          <span className="pill tone-plain">{t.reading.staticStatus}</span>
-          <code>{[diagnostic.tool, diagnostic.rule].filter(Boolean).join(' · ')}</code>
-          {diagnostic.message && <p>{diagnostic.message}</p>}
-          <PinnedSourceLink {...diagnostic.location} fallback={sourceLocation(diagnostic.location.path, diagnostic.location.start, diagnostic.location.end)} />
-        </div>
-        <button type="button" className="link" onClick={() => go('static_analysis')}>{s.go(s.titles.static_analysis)}</button>
-      </section>}
-      {!hasReadings && !diagnostic && <p>{t.reading.noFindings}</p>}
-      {(gaps > 0 || showUnknownCount || secrets || report.aiReview !== 'performed') && (
-        <section className="project-coverage">
-          <h6>{t.reading.coverage}</h6>
-          {report.aiReview !== 'performed' && <p>{t.reading.modelState(label(t.ai, report.aiReview))}</p>}
-          {showUnknownCount && <p>{t.reading.unknownComparisons(unknown)}</p>}
-          {gaps > 0 && <p>
-            {s.attentionText.analysis_gaps(gaps)}{' '}
-            <button type="button" className="link" onClick={() => go('gaps')}>{s.go(s.titles.gaps)}</button>
-          </p>}
-          {secrets && <p>
-            {s.attentionText.secrets_detected(secrets.count)}{' '}
-            <button type="button" className="link" onClick={() => go('secrets')}>{s.go(s.titles.secrets)}</button>
-          </p>}
-        </section>
-      )}
-    </>
+    </section>
   );
 }
 
@@ -467,8 +521,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const go = (key: string) => {
     if (tabbed) {select(key); return;}
     setOpen((prev) => new Set(prev).add(key));
-    // After the section opened, move focus to its summary.
-    setTimeout(() => document.getElementById(anchor(key))?.querySelector('summary')?.focus(), 0);
+    document.getElementById(anchor(key))?.querySelector('summary')?.focus();
   };
   const toggle = (key: string, isOpen: boolean) =>
     setOpen((prev) => {
@@ -480,8 +533,8 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const overview = new Map(sections.overview.map((x) => [x.key, x]));
   const block = (key: string, body: ReactNode) => {
     const st = overview.get(key)?.state ?? null;
-    if (tabbed) return <section id={anchor(key)} role="tabpanel" aria-labelledby={tabId(key)} hidden={active!==key} tabIndex={0} key={key}>
-      {active===key && <><h5>{label(s.titles,key)}</h5>{body}</>}
+    if (tabbed) return <section className="card report-card report-tab-content" id={anchor(key)} role="tabpanel" aria-labelledby={tabId(key)} hidden={active!==key} tabIndex={0} key={key}>
+      {active===key && <div className="card-body"><h5>{label(s.titles,key)}</h5>{body}</div>}
     </section>;
     return (
       <details key={key} id={anchor(key)} className="report-section" open={open.has(key)} onToggle={(e) => toggle(key, (e.currentTarget as HTMLDetailsElement).open)}>
@@ -543,6 +596,9 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const itemRow = (x: (typeof d.items)[number]) => [<code key="p">{x.path}</code>, x.cls, <code key="a">{x.appliesTo}</code>, label(s.docStatus, x.status), x.reason ? explainReason(x.reason) : '—', x.size ?? '—'];
   const docModuleRow = (x: (typeof d.modules)[number]) => [<code key="m">{x.module}</code>, label(s.docState, x.state), or(x.own.join(', ')), or(x.inherited.join(', '))];
   const docComparisons = d.comparisons.map(c => comparisonReading(c, d.citations));
+  const unpairedContracts = d.contracts.filter(contract => !d.comparisons.some(comparison =>
+    comparison.scope === contract.appliesTo && comparison.statement.trim() === contract.statement.trim() &&
+    contract.evidence.every(id => comparison.documentRefs.includes(id))));
   const strengths = cr.strengths.map(x => strengthReading(x, cr.citations));
   const bodies: Record<string, ReactNode> = {
     environment: (
@@ -603,7 +659,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         )}
         {d.quality.length > 0 && (
           <ModelReading title={t.qualityTitle}>
-            <ReadingList rows={d.quality.map(q => ({ title: label(t.assessment, q.aspect), status: label(t.assessment, q.assessment), statement: q.statement, sources: [{ refs: q.refs }] }))} catalog={d.citations} />
+            <ReadingList rows={d.quality.map(q => ({ title: label(t.assessment, q.aspect), status: label(t.assessment, q.assessment), statement: q.statement, refs: q.refs }))} catalog={d.citations} />
           </ModelReading>
         )}
         <p>{label(s.discovery, d.discovery)}</p>
@@ -636,42 +692,50 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         <ModelNote model={d.model} />
         {d.model.performed && (
           <>
-            <h6>{s.contracts}</h6>
-            <ul>
-              {d.contracts.map((x, i) => (
-                <li key={i}>
-                  [{x.appliesTo}] {x.statement}
-                  <Citations refs={x.evidence} catalog={d.citations} />
-                </li>
-              ))}
-            </ul>
-            <h6>{s.conflicts}</h6>
-            <ul>
-              {d.conflicts.map((x, i) => (
-                <li key={i}>
-                  [{x.scope}] {x.summary} / {x.impact}
-                  <Citations refs={x.evidence} catalog={d.citations} />
-                </li>
-              ))}
-            </ul>
-            <h6>{s.questions}</h6>
-            <ul>
-              {d.questions.map((x, i) => (
-                <li key={i}>
-                  [{x.appliesTo}] {x.question}
-                  <Citations refs={x.evidence} catalog={d.citations} />
-                </li>
-              ))}
-            </ul>
-            <h6>{s.instructionNotes}</h6>
-            <ul>
-              {d.notes.map((x, i) => (
-                <li key={i}>
-                  {x.note}
-                  <Citations refs={x.evidence} catalog={d.citations} />
-                </li>
-              ))}
-            </ul>
+            {unpairedContracts.length > 0 && <>
+              <h6>{s.contracts}</h6>
+              <ul>
+                {unpairedContracts.map((x, i) => (
+                  <li key={i}>
+                    {x.appliesTo !== '.' && x.appliesTo && <code>{x.appliesTo}</code>} {x.statement}
+                    <Citations refs={x.evidence} catalog={d.citations} />
+                  </li>
+                ))}
+              </ul>
+            </>}
+            {d.conflicts.length > 0 && <>
+              <h6>{s.conflicts}</h6>
+              <ul>
+                {d.conflicts.map((x, i) => (
+                  <li key={i}>
+                    {x.scope !== '.' && x.scope && <code>{x.scope}</code>} {x.summary} / {x.impact}
+                    <Citations refs={x.evidence} catalog={d.citations} />
+                  </li>
+                ))}
+              </ul>
+            </>}
+            {d.questions.length > 0 && <>
+              <h6>{s.questions}</h6>
+              <ul>
+                {d.questions.map((x, i) => (
+                  <li key={i}>
+                    {x.appliesTo !== '.' && x.appliesTo && <code>{x.appliesTo}</code>} {x.question}
+                    <Citations refs={x.evidence} catalog={d.citations} />
+                  </li>
+                ))}
+              </ul>
+            </>}
+            {d.notes.length > 0 && <>
+              <h6>{s.instructionNotes}</h6>
+              <ul>
+                {d.notes.map((x, i) => (
+                  <li key={i}>
+                    {x.note}
+                    <Citations refs={x.evidence} catalog={d.citations} />
+                  </li>
+                ))}
+              </ul>
+            </>}
           </>
         )}
       </>
@@ -876,31 +940,27 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       </>
     ),
   };
+  const rail = tabbed ? <div role="tablist" aria-label={t.title} className="nav report-tabs">
+    {TABS.map((key, i) => <button key={key} id={tabId(key)} type="button" role="tab" className="nav-link" aria-selected={active === key}
+      aria-controls={anchor(key)} tabIndex={active === key ? 0 : -1} onClick={() => select(key)}
+      onKeyDown={e => {
+        const next = (i + 1) % TABS.length;
+        const previous = (i + TABS.length - 1) % TABS.length;
+        const to = { ArrowRight: next, ArrowDown: next, ArrowLeft: previous, ArrowUp: previous, Home: 0, End: TABS.length - 1 }[e.key];
+        if (to !== undefined) { e.preventDefault(); select(TABS[to]); }
+      }}><ReportIcon name={TAB_ICONS[key]} /><span>{key === 'overview' ? s.overview : label(s.titles, key)}</span></button>)}
+  </div> : <nav aria-label={t.title} className="nav report-tabs">
+    {ORDER.map(key => <button key={key} type="button" className="nav-link" aria-controls={anchor(key)}
+      onClick={() => go(key)}><ReportIcon name={TAB_ICONS[key]} /><span>{label(s.titles, key)}</span></button>)}
+  </nav>;
   return (
-    <article className="report-document sectioned-report" aria-label={t.title}>
-      <header className="report-masthead">
-        <div className="report-masthead-heading">
-          <div>
-            {report.project?.name && <p>{t.title}</p>}
-            <h4>{report.project?.name || t.title}</h4>
-          </div>
-          <span className="pill tone-plain">{runStatusLabel(report.status)}</span>
-        </div>
-      </header>
-      {tabbed && <div role="tablist" aria-label={t.title} className="report-tabs">
-        {TABS.map((key,i) => <button key={key} id={tabId(key)} type="button" role="tab" aria-selected={active===key}
-          aria-controls={anchor(key)} tabIndex={active===key ? 0 : -1} onClick={() => select(key)}
-          onKeyDown={e => {
-            const to = {ArrowRight:(i+1)%TABS.length, ArrowLeft:(i+TABS.length-1)%TABS.length, Home:0, End:TABS.length-1}[e.key];
-            if (to!==undefined) {e.preventDefault(); select(TABS[to]);}
-          }}>{key==='overview' ? s.overview : label(s.titles,key)}</button>)}
-      </div>}
+    <ReportLayout report={report} rail={rail} className="sectioned-report">
       <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'} tabIndex={tabbed ? 0 : undefined}>
-        <h5 id="report-overview">{s.overview}</h5>
+        <h5 id="report-overview" className="visually-hidden">{s.overview}</h5>
         {(!tabbed || active === 'overview') && <>
-          <ProjectOverview report={report} sections={sections} go={go} />
-          <More title={t.reading.operations}>{() => <>
-            <Verdict report={report} />
+          <ProjectOverview report={report} sections={sections} openDocuments={() => go('documents')} />
+          <More title={t.reading.operations}>{() => <div className="report-more-body">
+            <ReportReviewStatus report={report} />
             <ReportCounts report={report} />
             <ul className="report-summary">
               {summaryLines(facts, report.aiReview).map(line => <li key={line}>{line}</li>)}
@@ -910,7 +970,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               <ul className="attention">
                 {sections.attention.map(a => <li key={a.section + ':' + a.code}>
                   <span>{(s.attentionText[a.code] ?? (() => a.code))(a.count)}</span>
-                  <button type="button" className="link" onClick={() => go(a.section)}>{s.go(label(s.titles, a.section))}</button>
+                  <ReportAction onClick={() => go(a.section)}>{s.go(label(s.titles, a.section))}</ReportAction>
                 </li>)}
               </ul>
             </>}
@@ -920,7 +980,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               rows={ORDER.map(key => {
                 const row = overview.get(key);
                 return [
-                  <button key="b" type="button" className="link" onClick={() => go(key)}>{label(s.titles, key)}</button>,
+                  <ReportAction key="b" onClick={() => go(key)}>{label(s.titles, key)}</ReportAction>,
                   <span key="s" className={stateClass(row?.state ?? null)}>{state(row?.state ?? null)}</span>,
                   row && (s.countOrder[key] ?? [])
                     .filter(k => Object.hasOwn(row.counts, k))
@@ -928,7 +988,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
                 ];
               })}
             />
-          </>}</More>
+          </div>}</More>
           {history && <More title={ko.history.title}>{() => <ComparisonSection load={history.load} reload={history.reload} />}</More>}
         </>}
       </section>
@@ -953,6 +1013,6 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         <ReportTasks report={report} />
       </details>
       <ReportExports report={report} />
-    </article>
+    </ReportLayout>
   );
 }
