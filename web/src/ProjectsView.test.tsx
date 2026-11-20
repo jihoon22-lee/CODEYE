@@ -183,11 +183,19 @@ describe('shared run links', () => {
   });
 
   it('keeps a linked active run on progress until it has a report', async () => {
-    const { calls } = open(report, hash, () => json(200, { ...finished, status: 'running', report: null }));
+    let published = false;
+    const { calls } = open(report, hash, () => json(200, published
+      ? { ...finished, version: 2 }
+      : { ...finished, status: 'running', report: null }));
     await flush();
     expect(within(screen.getByRole('region', { name: t.runs.title })).getByText(t.runs.statusLabels.running!)).toBeTruthy();
     expect(calls.some(call => call.url.includes('/report'))).toBe(false);
     expect(reportScrolls()).toHaveLength(0);
+    published = true;
+    await advance(5000);
+    await flush();
+    expect(document.activeElement).toBe(reportHeading());
+    expect(reportScrolls()).toHaveLength(1);
   });
 
   it.each([403, 404])('keeps the report error in view without moving focus (%s)', async status => {
