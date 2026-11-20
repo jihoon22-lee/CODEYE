@@ -747,7 +747,7 @@ func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 			mdComparisonAnchor(p, decision, part.Anchor)
 			mdPart(p, part, l)
 		}
-		if s.ID == "overview" && len(decision.ComparisonRows) != 0 {
+		if s.ID == "overview" && (len(decision.ComparisonRows) != 0 || slices.ContainsFunc(decision.Sources, func(source sourceCitation) bool { return source.Example != nil })) {
 			mdDecision(p, decision, l)
 		}
 	}
@@ -1037,6 +1037,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{end}}{{end}}{{end}}
 {{define "item"}}{{if .Label}}<strong>{{.Label}}</strong> {{end}}{{if .Link}}<a href="#{{.Link}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}{{range .Codes}} <code>{{.}}</code>{{end}}{{range .Sources}}{{template "citation" .}}{{end}}{{end}}
 {{define "citation"}}<div class="report-evidence">
+{{if .Example}}<p class="report-document-example"><strong>{{.ExampleLabel}}</strong> <code>{{.Example.Call}}</code> → <code>{{.Example.Output}}</code></p>{{end}}
 {{if .Text}}<details class="report-excerpt">
 <summary class="btn btn-sm btn-ghost-primary export-evidence-control" aria-label="{{.ActionLabel}} · {{.Location}}">{{template "citation_action" .}}{{reportIcon "chevron-down"}}</summary>
 {{if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action" target="_blank" rel="noopener noreferrer">{{reportIcon "external-link"}}{{.LinkLabel}}</a>{{end}}

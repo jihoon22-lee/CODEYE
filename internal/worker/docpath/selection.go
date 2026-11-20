@@ -65,11 +65,14 @@ const (
 	notGuide = iota
 	guideTopic
 	guideSection
+	guideRequirements
 )
 
 func topic(name string) int {
 	name = strings.ReplaceAll(name, "_", "-")
 	switch name {
+	case "requirements", "product-requirements", "functional-requirements", "software-requirements", "product-spec", "product-specification", "prd":
+		return guideRequirements
 	case "overview", "getting-started", "get-started", "quickstart", "quick-start", "usage", "configuration", "how-it-works", "user-guide", "가이드", "사용법", "안내":
 		return guideTopic
 	case "guide", "guides", "manual", "tutorial", "tutorials", "reference", "api", "installation":
@@ -140,6 +143,9 @@ func (s *Selection) translation(p string) bool {
 // of the sole shallowest documented region when the root has no README.
 func (s *Selection) Primary(p string) bool { return p == s.primary }
 
+// Linked reports whether the verified main README points to p.
+func (s *Selection) Linked(p string) bool { return s.linked[p] }
+
 // Product reports whether a document can supply additional usage excerpts.
 func (s *Selection) Product(p, class string) bool {
 	return !administrative(p, class) && !s.translation(p) && (class == Readme || s.linked[p] || (class == Design && guide(p) != notGuide))
@@ -150,23 +156,25 @@ func (s *Selection) rank(p, class string) int {
 	case s.Primary(p):
 		return 0
 	case !s.paths[p]:
-		return 9
+		return 10
 	case (s.guides || len(s.linked) > 0) && strings.EqualFold(p, "AGENTS.md"):
 		return 1
 	case class == Other:
-		return 8
+		return 9
 	case administrative(p, class) || s.translation(p):
-		return 7
-	case s.linked[p]:
+		return 8
+	case class == Design && namedGuide(p) == guideRequirements:
 		return 2
-	case class == Design && guide(p) == guideTopic:
+	case s.linked[p]:
 		return 3
-	case class == Design && guide(p) == guideSection:
+	case class == Design && guide(p) == guideTopic:
 		return 4
-	case class == Readme:
+	case class == Design && guide(p) == guideSection:
 		return 5
-	default:
+	case class == Readme:
 		return 6
+	default:
+		return 7
 	}
 }
 

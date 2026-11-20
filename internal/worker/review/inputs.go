@@ -469,6 +469,11 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 			links.directCalls = append(links.directCalls, directCall{CallerEvidenceID: caller, CalleeEvidenceID: callee, Symbol: call.symbol})
 		}
 	}
+	if signature, ok := s.pythonSignatureWitness(out, selected, remain); ok {
+		out = append(out, signature)
+		links.partial[signature.ID] = true
+		remain -= record.JSONLen(signature.Text)
+	}
 	for e := range g.orderedFiles() {
 		if len(out) >= roleMaxCodeFiles || remain < 128 {
 			break
@@ -702,8 +707,14 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 	selection := docpath.NewSelection(paths)
 	file := func(d envdoc.Doc) (string, string) { return d.Path, d.Class }
 	constrained := len(paths) > roleMaxDocs || bound > roleMaxDocsBytes
+	secondaryRule := s.h.secondary()
+	secondary := func(p string) bool { return !selection.Linked(p) && secondaryRule.Match(p) != "" }
+	order := func(list []envdoc.Doc) {
+		docpath.Sort(list, selection, file)
+		sort.SliceStable(list, func(i, j int) bool { return !secondary(list[i].Path) && secondary(list[j].Path) })
+	}
 	if constrained {
-		docpath.Sort(selected, selection, file)
+		order(selected)
 	} else {
 		docpath.Sort(selected, nil, file)
 	}
@@ -716,10 +727,25 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 	packageExcerpts := 0
 	apiEvidence := map[string]bool{}
 	var later [2][]userDocument
+	var productContinuations []userDocument
 	var primary string
+	continuedProduct := false
+	var continuation record.Excerpt
 	for i := range selected {
 		d := selected[i]
 		e := files[d.Path]
+		product := selection.Product(d.Path, d.Class)
+		// Give the product text one more window before unlinked test inputs
+		// and general guidance compete for the remaining slots.
+		if constrained && !continuedProduct && len(productContinuations) > 0 && (secondary(d.Path) || (!product && d.Class != envdoc.ClassAgent)) {
+			continuedProduct = true
+			before := len(out)
+			out = s.fillDocumentCoverage(productContinuations, primary, out, remain, min(roleMaxDocs, before+1))
+			if len(out) > before {
+				continuation = out[before]
+				remain -= record.JSONLen(continuation.Text)
+			}
+		}
 		if len(out) >= roleMaxDocs || remain < 128 {
 			lims = append(lims, "documents_outside_review_input")
 			continue
@@ -733,7 +759,7 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 			continue
 		}
 		if selection.WithReadmeLinks(d.Path, content) && constrained {
-			docpath.Sort(selected[i+1:], selection, file)
+			order(selected[i+1:])
 		}
 		lines := strings.Split(content, "\n")
 		documentSources[e.Path] = lines
@@ -743,18 +769,34 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 			continue
 		}
 		var example record.Excerpt
-		if len(out)+1 < roleMaxDocs && packageExcerpts < 2 && selection.Product(d.Path, d.Class) {
+		if len(out)+1 < roleMaxDocs && packageExcerpts < 2 && product {
 			x, example = packages.keepCrossingExample(e, lines, x, remain)
 		}
+		// Under pressure, a long guide can devote its representative window
+		// to a headed user workflow. Keep a README's introduction and any
+		// import-and-call examples already in the leading window.
+		if constrained && product && d.Class != envdoc.ClassReadme && example.ID == "" && x.End < *d.LineCount {
+			budget := min(roleMaxDocBytes, remain)
+			start, end := bestDocumentationSection(lines, x.End, path.Ext(d.Path), budget, true)
+			if start >= 0 && (!record.PackageGuidePath(d.Path) || len(documentedPackageUses(lines, x.Start, x.End)) == 0) {
+				if workflow, ok := s.boundedExcerpt(e, "document", "", start+1, lines[start:end], budget); ok {
+					x = workflow
+				}
+			}
+		}
 		last := max(x.End, example.End)
-		if last < *d.LineCount {
+		partial := x.Start > 1 || last < *d.LineCount
+		if partial {
 			switch strings.ToLower(path.Ext(d.Path)) {
 			case ".md", ".mdx", ".markdown", "":
 				lists[d.Path] = markdownListRanges(lines)
 			}
 		}
-		if last < *d.LineCount && selection.Product(d.Path, d.Class) {
+		if partial && product {
 			doc := userDocument{entry: e, lines: lines, after: last}
+			if !secondary(d.Path) {
+				productContinuations = append(productContinuations, doc)
+			}
 			rank := 1
 			if d.Class == envdoc.ClassReadme {
 				rank = 0
@@ -764,7 +806,7 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 				primary = d.Path
 			}
 		}
-		if apiExcerpts < maxAPIDocExcerpts && x.End >= *d.LineCount {
+		if apiExcerpts < maxAPIDocExcerpts && x.Start == 1 && x.End >= *d.LineCount {
 			if target := pythonDocTarget(d.Path, x.Text); target != "" {
 				if manifest == nil {
 					manifest = make(map[string]source.Entry, len(s.j.Snapshot.Manifest.Entries))
@@ -796,7 +838,11 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 	preferred:
 		for _, ranked := range later {
 			for _, d := range ranked {
-				start, end := documentationContinuation(d.lines, d.after, path.Ext(d.entry.Path), budget)
+				after := d.after
+				if d.entry.Path == continuation.Path {
+					after = max(after, continuation.End)
+				}
+				start, end := documentationContinuation(d.lines, after, path.Ext(d.entry.Path), budget)
 				if start >= 0 {
 					for _, r := range documentationRanges(d.lines, path.Ext(d.entry.Path), start, end, roleMaxDocs-len(out)) {
 						if x, ok := s.boundedExcerpt(d.entry, "document", "", r.start+1, d.lines[r.start:r.end], budget); ok {
@@ -811,7 +857,7 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 			}
 		}
 	}
-	out = s.fillDocumentCoverage(slices.Concat(later[0], later[1]), primary, out, remain)
+	out = s.fillDocumentCoverage(slices.Concat(later[0], later[1]), primary, out, remain, roleMaxDocs)
 	if err := packages.attach(out, documentSources); err != nil {
 		return documentEvidence{}, err
 	}

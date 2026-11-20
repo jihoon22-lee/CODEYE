@@ -456,7 +456,7 @@ func (v secView) findingSummaryParts(ids []string, findings map[string]Finding) 
 	l := v.L
 	cards := secPart{Heading: l.Label("summary.findings_supported"), Empty: l.Label("summary.findings_supported_none")}
 	head := []string{l.Label("col.finding"), l.Label("col.title"), l.Label("col.validation"), l.Label("col.severity"), l.Label("col.location")}
-	secondarySupported := &secTable{Head: head, RowIDs: []string{}}
+	secondary := &secTable{Head: head, RowIDs: []string{}}
 	other := &secTable{Head: head, RowIDs: []string{}}
 	// Findings on primary paths first; a finding whose every location is
 	// below a secondary path (test input, examples) comes after them.
@@ -474,9 +474,9 @@ func (v secView) findingSummaryParts(ids []string, findings map[string]Finding) 
 			locs = append(locs, sourceRange(x.Path, x.StartLine, x.EndLine))
 		}
 		supported := f.Validation == ValidationSupported || f.Validation == ValidationReproduced
-		if supported && findingSecondary(f) {
-			secondarySupported.RowIDs = append(secondarySupported.RowIDs, f.ID)
-			secondarySupported.Rows = append(secondarySupported.Rows, []secCell{code(f.ID), txt(f.Title), code(f.Validation), code(f.Severity), code(joinOr(locs, "-"))})
+		if findingSecondary(f) {
+			secondary.RowIDs = append(secondary.RowIDs, f.ID)
+			secondary.Rows = append(secondary.Rows, []secCell{code(f.ID), txt(f.Title), code(f.Validation), code(f.Severity), code(joinOr(locs, "-"))})
 			continue
 		}
 		if supported {
@@ -486,12 +486,12 @@ func (v secView) findingSummaryParts(ids []string, findings map[string]Finding) 
 		other.RowIDs = append(other.RowIDs, f.ID)
 		other.Rows = append(other.Rows, []secCell{code(f.ID), txt(f.Title), code(f.Validation), code(f.Severity), code(joinOr(locs, "-"))})
 	}
-	if len(secondarySupported.Rows) > 0 {
+	if len(secondary.Rows) > 0 {
 		cards.Empty = l.Label("summary.findings_supported_primary_none")
 	}
 	out := []secPart{cards}
-	if len(secondarySupported.Rows) > 0 {
-		out = append(out, secPart{Heading: l.Label("summary.findings_supported_secondary"), Table: secondarySupported})
+	if len(secondary.Rows) > 0 {
+		out = append(out, secPart{Heading: l.Label("summary.findings_secondary"), Table: secondary})
 	}
 	if len(other.Rows) > 0 {
 		out = append(out, secPart{Heading: l.Label("summary.findings_other"), Table: other})
@@ -544,9 +544,23 @@ func (v secView) findingCard(f Finding) secCard {
 	return c
 }
 
-// findingSecondary reports a finding whose every location is below a
-// secondary path; a finding without locations is not.
+// findingSecondary reports a finding supported only by secondary source.
+// If no source evidence has line ranges, use the recorded finding locations.
 func findingSecondary(f Finding) bool {
+	hasSource := false
+	for _, e := range f.Evidence {
+		loc := e.Location
+		if (e.Kind != "code" && e.Kind != "test") || loc == nil || loc.Path == "" || loc.StartLine < 1 || loc.EndLine < loc.StartLine {
+			continue
+		}
+		hasSource = true
+		if e.Kind == "code" && productLocation(loc.Path, loc.StartLine, loc.EndLine) {
+			return false
+		}
+	}
+	if hasSource {
+		return true
+	}
 	for _, x := range f.Locations {
 		if !secondaryPath(x.Path) {
 			return false

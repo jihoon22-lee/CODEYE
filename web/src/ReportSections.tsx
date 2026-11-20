@@ -7,6 +7,7 @@ import { reportKo as t } from './locales/report-ko';
 import { Citations, FindingSourceLink, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportReviewStatus, ReportScope, ReportTasks, TextList, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
 import { ReportAction, ReportIcon, ReportLayout } from './ReportLayout';
 import { ReportGlossary } from './ReportGlossary';
+import { citedDocumentExample } from './reportExample';
 import {
   gapGroups,
   locationPath,
@@ -428,6 +429,14 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
     const paired = included && unknown && comparison.statement.trim() !== '' && comparisonText.trim() !== '';
     const condition = included && comparison.status === 'match'
       ? matchingDocumentCondition(comparison, documents.comparisons, documents.citations) : undefined;
+    const conditionRef = condition && source(documents.citations, condition.documentRefs, 'document');
+    const findExample = (statement: string, citationId: string | undefined) => {
+      if (!included || !citationId) return;
+      const example = citedDocumentExample(statement, documents.citations.find(c => c.id === citationId));
+      if (example) return { ...example, citationId };
+    };
+    const example = findExample(comparison.statement, documentRef) ??
+      (condition && !newCode ? findExample(condition.statement, conditionRef) : undefined);
     return {
       comparisonIndex: documents.comparisons.indexOf(comparison),
       title: !included ? t.reading.omitted : paired ? t.reading.documentComparison : unknown ? t.reading.documentClaim : comparison.statement,
@@ -436,7 +445,7 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
       text: included && !paired ? comparisonText : undefined,
       comparisonRows: paired ? [
         { label: t.reading.comparisonDocument, text: comparison.statement,
-          sources: documentRef && <Citations catalog={documents.citations} refs={[documentRef]} /> },
+          sources: documentRef && <Citations catalog={documents.citations} refs={[documentRef]} example={example} /> },
         { label: t.reading.comparisonCode, text: comparisonText,
           sources: codeCatalog.length > 0 ? <Citations catalog={codeCatalog} refs={codeRefs} /> : undefined },
       ] : undefined,
@@ -448,8 +457,8 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
       sources: !paired && <Citations catalog={documents.citations} refs={[
         documentRef,
         ...(newCode ? codeRefs : [codeRef]),
-        condition && source(documents.citations, condition.documentRefs, 'document'),
-      ].filter((id): id is string => id !== undefined)} />,
+        conditionRef,
+      ].filter((id): id is string => id !== undefined)} example={example} />,
       action: action && ['critical', 'high'].includes(action.finding.severity) ? {
         state: actionStatus,
         title: included ? action.finding.title : undefined,
@@ -640,9 +649,11 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   // Review findings: the supported and reproduced ones on primary paths
   // open the section; the others and those on secondary paths come after.
   const reviewFindings = orderFindings(pick(report.findings, cr.findings));
-  const supported = (f: Finding) => (f.validation === 'supported' || f.validation === 'reproduced') && !secondaryReviewFinding(f);
-  const reviewFirst = reviewFindings.filter(supported);
-  const reviewRest = reviewFindings.filter((f) => !supported(f));
+  const supported = (f: Finding) => f.validation === 'supported' || f.validation === 'reproduced';
+  const reviewPrimary = reviewFindings.filter((f) => !secondaryReviewFinding(f));
+  const reviewFirst = reviewPrimary.filter(supported);
+  const reviewRest = reviewPrimary.filter((f) => !supported(f));
+  const reviewSecondary = reviewFindings.filter(secondaryReviewFinding);
   const allDiagnostics = sa.languages.flatMap((l) => l.tools.flatMap((x) => x.observations));
   const suppressed = allDiagnostics.filter((id) => byID.get(id)?.suppressed && !byID.get(id)?.metric).length;
   const largest = (ids: string[]) => {
@@ -951,6 +962,9 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         <StageLine stage={cr.stage} />
         <h6>{sm.supported}</h6>
         <FindingList findings={reviewFirst} history={history} empty={cr.findings.length === 0 ? s.noFindings : sm.supportedNone} />
+        {reviewSecondary.length > 0 && (
+          <More title={sm.secondaryFindings(reviewSecondary.length)}>{() => <FindingList findings={reviewSecondary} history={history} empty={s.noFindings} />}</More>
+        )}
         {reviewRest.length > 0 && (
           <More title={sm.otherFindings(reviewRest.length)}>{() => <FindingList findings={reviewRest} history={history} empty={s.noFindings} />}</More>
         )}

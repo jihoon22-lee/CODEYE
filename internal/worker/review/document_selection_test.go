@@ -86,6 +86,100 @@ func TestReviewStillUsesAdministrativeOnlyGuidance(t *testing.T) {
 	}
 }
 
+func TestDocumentRequestPreservesDistinctProductEvidenceUnderMetadataPressure(t *testing.T) {
+	const requirements = "docs/product-requirements.md"
+	const regionalGuide = "extensions/inbox/docs/usage.md"
+	const oversized = "docs/dashboard-guide.md"
+	const behavior = "A visitor can save a personal filter before choosing which team may see it."
+	const prefix = "# Product requirements\n\n" + "The scope describes the original dashboard design.\n"
+	const usage = "When a visitor opens a shared panel, the original view stays in the menu.\n"
+	longSpec := prefix + strings.Repeat("The overview describes the record layout and initial browser view.\n", 45) +
+		"\n## User workflows\n\n" + behavior + "\nOnly the creator sees a new filter before it is shared.\n" +
+		"The selected team can see the filter after the creator shares it.\n"
+	files := map[string]string{
+		"README.md":                      "# Panels\n\nOpen a panel to see the saved filters.\n",
+		"AGENTS.md":                      "Read the extension guidelines before changing an example.\n",
+		"docs/usage.md":                  usage,
+		"docs/templates/requirements.md": "The policy boilerplate describes a maintenance process.\n",
+		"requirements.txt":               "pytest==8.4.1\n",
+		requirements:                     longSpec,
+		regionalGuide:                    "The inbox extension can display archived messages on demand.\n",
+		oversized:                        strings.Repeat(usage, int(discovery.DefaultBudget.PerDocumentBytes)/len(usage)+1),
+	}
+	for i := range 49 {
+		dir := fmt.Sprintf("modules/component%02d", i)
+		files[dir+"/go.mod"] = "module example.test/" + dir + "\n\ngo 1.27\n"
+		files[dir+"/main.go"] = "package main\nfunc main() {}\n"
+	}
+	for i := range 12 {
+		files[fmt.Sprintf("README-%02d-%s.md", i, strings.Repeat("&", 64))] = "The dashboard opens a local region.\n"
+	}
+	in, stored, inventory := collectDocumentSelection(t, files)
+	if len(in.Modules) >= 32 || len(in.Modules) >= len(inventory.Modules) || len(in.Overlapping) >= len(inventory.OverlappingGuidance) ||
+		!slices.Contains(in.Limitations, "document_lists_shortened") || !slices.Contains(stored.Limitations, "document_lists_shortened") ||
+		!slices.Contains(stored.Limitations, "document_excerpt_only") || !slices.Contains(stored.Limitations, "documents_outside_review_input") ||
+		slices.Contains(stored.Limitations, limInputTrimmed) {
+		t.Fatalf("evidence and optional list coverage: %d/%d modules, %d/%d overlap groups, %v, %v",
+			len(in.Modules), len(inventory.Modules), len(in.Overlapping), len(inventory.OverlappingGuidance), in.Limitations, stored.Limitations)
+	}
+	if len(in.Documents) != len(stored.Evidence) || len(in.Documents) > roleMaxDocs || stored.Calls[0].RequestBytes > PromptBudget {
+		t.Fatalf("request and record limits diverged: %d documents, %d references, %d bytes", len(in.Documents), len(stored.Evidence), stored.Calls[0].RequestBytes)
+	}
+	want := map[string]string{"README.md": ".", requirements: ".", "docs/usage.md": ".", regionalGuide: "extensions/inbox"}
+	var bytes int
+	var workflow bool
+	for i, d := range in.Documents {
+		cost := record.JSONLen(d.Text)
+		bytes += cost
+		if d.Path == oversized || d.Path == "requirements.txt" || cost > roleMaxDocBytes || d.EndLine-d.StartLine+1 > roleMaxDocLines ||
+			stored.Evidence[i].Path != d.Path || stored.Evidence[i].Start != d.StartLine || stored.Evidence[i].End != d.EndLine {
+			t.Fatalf("unexpected evidence %d: %+v", i, d)
+		}
+		if scope, ok := want[d.Path]; ok {
+			if d.AppliesTo != scope {
+				t.Fatalf("%s applies to %s, want %s", d.Path, d.AppliesTo, scope)
+			}
+			delete(want, d.Path)
+		}
+		if d.Path == requirements && strings.Contains(d.Text, behavior) {
+			lines := strings.Split(strings.TrimSuffix(longSpec, "\n"), "\n")
+			workflow = d.StartLine > roleMaxDocLines && d.Text == strings.Join(lines[d.StartLine-1:d.EndLine], "\n")
+		}
+	}
+	if len(want) != 0 || !workflow || bytes > roleMaxDocsBytes {
+		t.Fatalf("product evidence missing or oversized: %v, workflow=%t, bytes=%d", want, workflow, bytes)
+	}
+	if !slices.ContainsFunc(inventory.Items, func(d envdoc.Doc) bool {
+		return d.Path == oversized && d.Status == envdoc.DocBudgetExceeded && d.Reason != nil && *d.Reason == envdoc.ReasonTooLarge
+	}) {
+		t.Fatal("the discovery budget did not account for the oversized guide")
+	}
+}
+
+func TestDocumentSelectionFavorsProductTextOverUnlinkedFixtures(t *testing.T) {
+	const readme = "README.md"
+	const guide = "docs/usage.md"
+	const linked = "examples/inbox/README.md"
+	const extra = "The saved selection is also applied in the desktop client."
+	files := map[string]string{}
+	for i := range 20 {
+		files[fmt.Sprintf("fixtures/panels%02d/README.md", i)] = "This sample panel opens the mock inbox.\n"
+	}
+	in, _, _ := collectDocumentSelection(t, files)
+	if len(in.Documents) != roleMaxDocs || in.Documents[0].Path != "fixtures/panels00/README.md" || in.Documents[0].AppliesTo != "fixtures/panels00" {
+		t.Fatalf("no representative guidance when all candidates are fixtures: %+v", in.Documents)
+	}
+	files[readme] = "# Panels\n\n[Runnable example](" + linked + ")\n" + strings.Repeat("The panel opens to the last selected item.\n", 37) + extra + "\n"
+	files[guide] = "The dashboard supports a shared inbox.\n"
+	files[linked] = "The example shows how to subscribe to the inbox.\n"
+	in, _, _ = collectDocumentSelection(t, files)
+	if len(in.Documents) < 5 || in.Documents[0].Path != readme || in.Documents[1].Path != linked || in.Documents[2].Path != guide ||
+		in.Documents[3].Path != readme || in.Documents[3].StartLine != 41 || in.Documents[3].Text != extra ||
+		!strings.HasPrefix(in.Documents[4].Path, "fixtures/") {
+		t.Fatalf("representative product workflow and linked example should precede unlinked fixtures: %+v", in.Documents)
+	}
+}
+
 func TestDocumentCoverageReadsPlainProseWithinSpareCapacity(t *testing.T) {
 	const prose = "The panel stays active.\n"
 	for _, tc := range []struct {

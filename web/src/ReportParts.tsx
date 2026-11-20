@@ -13,6 +13,7 @@ import iconsLicense from '../../internal/report/reportui/LICENSE.tabler-icons?ur
 import bootstrapLicense from '../../internal/report/reportui/LICENSE.bootstrap?url&no-inline';
 import fontLicense from '../../internal/report/reportui/LICENSE.noto-sans-kr?url&no-inline';
 import { secondaryReviewFinding } from './reportGroups';
+import type { DocumentExample } from './reportExample';
 
 export function label(labels: Record<string, string>, key: string) {
   return Object.hasOwn(labels, key) ? labels[key] : key;
@@ -70,13 +71,16 @@ function SourceAnchor({ href, location, action = t.openSource }: { href: string;
   </a>;
 }
 
-function EvidenceLocation({ location, href, excerpt, path, kind, actionLabel }: {
+function EvidenceLocation({ location, href, excerpt, path, kind, actionLabel, example }: {
   location: string; href?: string; excerpt?: Excerpt | null; path?: string; kind?: string; actionLabel?: string;
+  example?: DocumentExample;
 }) {
   const isDocument = kind === 'document';
   const action = actionLabel ?? (isDocument ? t.viewDocument : kind === 'test' ? t.viewTestCode : kind === 'manifest' ? t.viewManifest : t.viewCode);
   const file = <span className="report-file"><ReportIcon name="file" /><code>{location}</code></span>;
   return <div className="report-evidence">
+    {example && <p className="report-document-example"><strong>{t.reading.documentExample}</strong>{' '}
+      <code>{example.call}</code> → <code>{example.output}</code></p>}
     {excerpt ? <details className="report-excerpt">
       <summary className="btn btn-sm btn-ghost-primary" aria-label={t.sourceActionAt(action, location)}>
         <ReportIcon name={isDocument ? 'file' : 'code'} />{action}<ReportIcon name="chevron" />
@@ -104,18 +108,21 @@ export function FindingSourceLink({ evidence, actionLabel }: { evidence: Evidenc
   return <EvidenceLocation location={sourceLocation(evidence.path, start, end)} href={href} excerpt={evidence.excerpt} path={evidence.path} kind={evidence.kind} actionLabel={actionLabel} />;
 }
 
-export function Citations({ refs, catalog, actionLabel }: { refs: string[]; catalog: Citation[]; actionLabel?: string }) {
+export function Citations({ refs, catalog, actionLabel, example }: {
+  refs: string[]; catalog: Citation[]; actionLabel?: string; example?: DocumentExample & { citationId: string };
+}) {
   const base = useContext(ReportSourceContext);
   const evidence = new Map<string, Citation>();
   for (const e of catalog) {
     if (!refs.includes(e.id)) continue;
     const key = JSON.stringify([e.path, e.line, e.end, e.kind]);
-    if (!evidence.has(key) || e.excerpt) evidence.set(key, e);
+    if (!evidence.has(key) || e.id === example?.citationId || e.excerpt && evidence.get(key)?.id !== example?.citationId) evidence.set(key, e);
   }
   return <>{Array.from(evidence.values(), e => {
     const location = sourceLocation(e.path, e.line, e.end);
     const href = sourceEvidenceURL(base, e.path, e.line, e.end);
-    return <EvidenceLocation key={e.id} location={location} href={href} excerpt={e.excerpt} path={e.path} kind={e.kind} actionLabel={actionLabel} />;
+    return <EvidenceLocation key={e.id} location={location} href={href} excerpt={e.excerpt} path={e.path} kind={e.kind}
+      actionLabel={actionLabel} example={example?.citationId === e.id ? example : undefined} />;
   })}</>;
 }
 
@@ -292,12 +299,13 @@ export function FindingList({ findings, history, empty }: { findings: Finding[];
 
 // ReportCounts presents the counts stored at publication.
 export function ReportCounts({ report }: { report: AnalysisReport }) {
+  const labels = report.sections ? { ...t.sectionedCounts, ...t.counts, raw: t.sectionedCounts.raw } : t.counts;
   return (
     <dl className="report-counts">
-      {(Object.keys(t.counts) as Array<keyof typeof t.counts>).map((key) => (
+      {Object.entries(labels).map(([key, name]) => (
         <div key={key}>
-          <dt>{t.counts[key]}</dt>
-          <dd>{report.counts[key]}</dd>
+          <dt>{name}</dt>
+          <dd>{report.counts[key as keyof AnalysisReport['counts']]}</dd>
         </div>
       ))}
       {report.metricObservations > 0 && (

@@ -68,6 +68,7 @@ export type AnalysisReport = {
     pending: number;
     refuted: number;
     raw: number;
+    unresolved: number;
   };
   // Observations of counts.raw that are structure metrics (omitted as 0).
   metricObservations: number;
@@ -212,11 +213,14 @@ export function parseAnalysisReport(
     pending: count(s.pending_candidates),
     refuted: count(s.refuted_findings),
     raw: count(s.raw_observations),
+    unresolved: s.unresolved_observations === undefined && r.overview == null ? 0 : count(s.unresolved_observations),
   };
   const findings = array(r.findings, finding);
+  let unresolved = 0;
   const observations = array(r.observations, (v) => {
     const o = object(v),
       loc = o.location == null ? null : object(o.location);
+    if (o.evidence_state !== 'verified_against_source_manifest') unresolved++;
     const location = loc ? { path: str(loc.path), start: count(loc.start_line), end: count(loc.end_line) } : null;
     return {
       id: str(o.id),
@@ -241,6 +245,7 @@ export function parseAnalysisReport(
     !priorities.every((id) => findings.some((f) => f.id === id)) ||
     findings.length !== counts.total ||
     counts.raw !== observations.length ||
+    (r.overview != null && counts.unresolved !== unresolved) ||
     metricObservations !== observations.filter((o) => o.metric !== null).length
   )
     invalid();

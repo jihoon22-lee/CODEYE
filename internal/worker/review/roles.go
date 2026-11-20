@@ -288,8 +288,8 @@ type docsInput struct {
 	Repair      *outputRepair       `json:"repair,omitempty"`
 }
 
-// shortenOptionalLists makes room for one genuine document excerpt when
-// even the minimum request does not fit with the full discovery context.
+// shortenOptionalLists makes room for document evidence when the discovery
+// context and the bounded excerpts do not fit together.
 func (in *docsInput) shortenOptionalLists() bool {
 	if len(in.Modules)+len(in.Overlapping)+len(in.NotRead) == 0 {
 		return false
@@ -327,26 +327,29 @@ func (s *roleStage) documents() analysis.TaskResult {
 	}
 	in := docsInput{Snapshot: s.j.Snapshot.Digest, NotRead: []docNotRead{}, Modules: []envdoc.ModuleDocs{}, Overlapping: []envdoc.Overlap{}, Limitations: append([]string{}, f.doc.Limitations...)}
 	for _, it := range f.doc.Documents.Items {
-		if it.Status != envdoc.DocSelected && envdoc.IsGuidance(it.Class) && len(in.NotRead) < 16 {
+		if it.Status != envdoc.DocSelected && envdoc.IsGuidance(it.Class) {
+			if len(in.NotRead) == 16 {
+				in.Limitations = addLim(in.Limitations, "document_lists_shortened")
+				break
+			}
 			in.NotRead = append(in.NotRead, docNotRead{Path: it.Path, AppliesTo: it.AppliesTo, Class: it.Class, Status: it.Status, Reason: it.Reason})
 		}
 	}
 	short := func(l []string) []string {
 		if len(l) > 8 {
-			s.rec.Limitations = addLim(s.rec.Limitations, "document_lists_shortened")
+			in.Limitations = addLim(in.Limitations, "document_lists_shortened")
 			return l[:8]
 		}
 		return l
 	}
-	for _, m := range f.doc.Documents.Modules {
-		if len(in.Modules) < 32 {
-			in.Modules = append(in.Modules, envdoc.ModuleDocs{Module: m.Module, State: m.State, Own: short(m.Own), Inherited: short(m.Inherited)})
-		}
+	if len(f.doc.Documents.Modules) > 32 || len(f.doc.Documents.OverlappingGuidance) > 16 {
+		in.Limitations = addLim(in.Limitations, "document_lists_shortened")
 	}
-	for _, o := range f.doc.Documents.OverlappingGuidance {
-		if len(in.Overlapping) < 16 {
-			in.Overlapping = append(in.Overlapping, envdoc.Overlap{Path: o.Path, Documents: short(o.Documents), Assessment: o.Assessment})
-		}
+	for _, m := range f.doc.Documents.Modules[:min(len(f.doc.Documents.Modules), 32)] {
+		in.Modules = append(in.Modules, envdoc.ModuleDocs{Module: m.Module, State: m.State, Own: short(m.Own), Inherited: short(m.Inherited)})
+	}
+	for _, o := range f.doc.Documents.OverlappingGuidance[:min(len(f.doc.Documents.OverlappingGuidance), 16)] {
+		in.Overlapping = append(in.Overlapping, envdoc.Overlap{Path: o.Path, Documents: short(o.Documents), Assessment: o.Assessment})
 	}
 	byPath := map[string]envdoc.Doc{}
 	for _, d := range f.selected {
@@ -369,26 +372,39 @@ func (s *roleStage) documents() analysis.TaskResult {
 	}
 	build := func(list []record.Excerpt) ([]byte, error) { return marshal(withDocuments(list)) }
 	contract := docsContract + docsEvidenceContract
-	requiredDocuments := 1
-	for i, e := range evidence.excerpts {
+	for _, e := range evidence.excerpts {
 		if !e.PackageReference.IsZero() {
-			requiredDocuments = i + 1
+			contract += docsPackageContract
+			break
 		}
 	}
-	if requiredDocuments > 1 || !evidence.excerpts[0].PackageReference.IsZero() {
-		contract += docsPackageContract
-	}
 	instructions := s.instructions(contract)
-	sent, trimmed, err := s.fitExcerpts(instructions, 1, evidence.excerpts, build)
-	for (errors.Is(err, errTooLarge) || (err == nil && len(sent) < requiredDocuments)) && in.shortenOptionalLists() {
-		s.rec.Limitations = addLim(s.rec.Limitations, "document_lists_shortened")
+	all := len(evidence.excerpts)
+	sent, trimmed, err := s.fitExcerpts(instructions, all, evidence.excerpts, build)
+	for errors.Is(err, errTooLarge) && in.shortenOptionalLists() {
+		sent, trimmed, err = s.fitExcerpts(instructions, all, evidence.excerpts, build)
+	}
+	if errors.Is(err, errTooLarge) {
 		sent, trimmed, err = s.fitExcerpts(instructions, 1, evidence.excerpts, build)
+	}
+	if slices.Contains(in.Limitations, "document_lists_shortened") {
+		s.rec.Limitations = addLim(s.rec.Limitations, "document_lists_shortened")
 	}
 	if err != nil {
 		return s.inputFailure(err)
 	}
 	if trimmed {
 		s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed)
+		covered := make(map[string]bool, len(sent))
+		for _, e := range sent {
+			covered[e.DocumentPath()] = true
+		}
+		for _, e := range evidence.excerpts[len(sent):] {
+			if !covered[e.DocumentPath()] {
+				s.rec.Limitations = addLim(s.rec.Limitations, "documents_outside_review_input")
+				break
+			}
+		}
 	}
 	s.setEvidence(sent)
 	if partialDocumentInput(f.selected, sent) {

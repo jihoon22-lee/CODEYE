@@ -305,6 +305,7 @@
 }
 
 .review-theme .report-comparison-rows {
+  display: block;
   max-inline-size: 45rem;
   margin: .45rem 0 .7rem;
 }
@@ -332,6 +333,20 @@
 .review-theme .report-comparison-rows p code {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.review-theme .report-document-example {
+  margin: .15rem 0 .45rem;
+  font-size: .875rem;
+  overflow-wrap: anywhere;
+}
+
+.review-theme .report-document-example code {
+  white-space: pre-wrap;
+}
+
+.review-theme .report-evidence:has(.report-document-example) {
+  flex-basis: 100%;
 }
 
 .report-card-meta {

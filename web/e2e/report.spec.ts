@@ -38,6 +38,40 @@ test('long saved source scrolls inside the HTML finding card at mobile and deskt
   }
 });
 
+test('comparison rows keep the example and opened document within the web report', async ({page}) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const styles = ['tabler.css', 'report.css'].map(name => readFileSync(new URL(name, assets), 'utf8'));
+  styles.push(...['style.css', 'report.css'].map(name => readFileSync(new URL('../src/' + name, import.meta.url), 'utf8')));
+  await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${styles.join('\n')}</style>
+    <article class="report-document review-theme web-report"><div class="report-layout"><aside class="report-rail">종합</aside>
+    <div class="report-main"><section class="card report-executive"><div class="card-body">
+      <dl class="report-comparison-rows">
+        <div><dt>설명서</dt><dd><p>입력에 따라 표시할 이름을 돌려줍니다.</p>
+          <div class="report-executive-sources"><div class="report-evidence">
+            <p class="report-document-example"><strong>설명서 예시</strong> <code>formatName('a')</code> → <code>'A'</code></p>
+            <details class="report-excerpt"><summary class="btn btn-sm btn-ghost-primary">문서 보기</summary>
+              <pre class="source-window"><code>${'long_source_line_'.repeat(120)}</code></pre>
+            </details>
+          </div></div>
+        </dd></div>
+        <div><dt>코드</dt><dd>반환값을 확인하지 못했습니다.</dd></div>
+      </dl>
+    </div></section></div></div></article>`);
+
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({width, height: 844});
+    const control = page.getByText('문서 보기', {exact: true});
+    await control.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('pre.source-window')).toBeVisible();
+    await expect(page.locator('.report-document-example')).toBeVisible();
+    const rows = await page.locator('.report-comparison-rows > div').evaluateAll(rows => rows.map(row => row.getBoundingClientRect().top));
+    expect(rows[1]).toBeGreaterThan(rows[0]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.keyboard.press('Enter');
+  }
+});
+
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {
   const login = process.env.CODEYE_TEST_REPORT_LOGIN;
   test.skip(!login, '실제 게시 보고서는 회귀 파일럿에서 생성한다');

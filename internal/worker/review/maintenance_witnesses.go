@@ -32,7 +32,7 @@ func (s *roleStage) maintenanceWitnesses(g codeGroups, queries []witnessQuery) (
 			continue
 		}
 		stem := maintenanceStem(p)
-		if maintenanceTool(dirs, stem) {
+		if maintenanceTool(dirs, stem) || qaDriverPath(p) {
 			tools[path.Ext(p)+"\x00"+stem] = true
 			maintenance[p] = true
 			continue
@@ -66,6 +66,19 @@ func benchmarkPath(p string) bool {
 	parts := strings.Split(strings.ToLower(p), "/")
 	return slices.ContainsFunc(parts[:len(parts)-1], bench) ||
 		slices.ContainsFunc(strings.FieldsFunc(maintenanceStem(p), func(r rune) bool { return r == '-' || r == '_' || r == '.' }), bench)
+}
+
+func qaDriverPath(p string) bool {
+	dirs := strings.Split(strings.ToLower(path.Dir(p)), "/")
+	if !slices.ContainsFunc(dirs, func(dir string) bool {
+		return slices.Contains([]string{"scripts", "tools", "automation", "qa"}, dir)
+	}) {
+		return false
+	}
+	stem := strings.ToLower(strings.TrimSuffix(path.Base(p), path.Ext(p)))
+	return slices.ContainsFunc(strings.FieldsFunc(stem, func(r rune) bool { return r == '-' || r == '_' || r == '.' }), func(word string) bool {
+		return slices.Contains([]string{"test", "tests", "regression", "smoke", "harness", "eval", "evaluation"}, word)
+	})
 }
 
 func performanceContract(statement string) bool {

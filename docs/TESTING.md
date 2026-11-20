@@ -247,6 +247,8 @@ TC-270은 README 링크와 번역·기여 문서가 있는 제품, 여러 모듈
 
 TC-270의 긴 문서 시험은 첫 발췌와 뒤쪽 API 절 사이의 본문, 전체가 기존 예산에 들어가는 170줄짜리 안내, 여러 긴 안내의 발췌 순서, 개수나 바이트 상한 초과, 운영 절과 다른 문서가 발췌 자리를 모두 쓰는 경우를 다룬다. 기존 발췌를 유지하고 남은 자리에 추가한 본문의 원래 줄과 근거 ID가 요청과 보고서에서 일치하는지 확인한다. 실제 요청에서 본문이 빠졌으면 `document_excerpt_only`를 기록한다(`TestDocumentContinuationReachesReport`, `TestDocumentCoverage`로 시작하는 시험).
 
+TC-270은 여러 모듈의 부가 목록으로 요청 한도가 부족한 프로젝트에서도 대표 README, 긴 제품 요구사항의 뒤쪽 사용자 흐름과 별도 안내의 원문을 함께 보내는지 확인한다. 지역 안내의 적용 디렉터리와 발췌 줄을 보존하고, 상한을 넘는 파일의 사유와 발췌·부가 목록의 제한을 기록한다. 문서 탐색 예산과 원래 모듈 연결은 유지한다(`TestDocumentRequestPreservesDistinctProductEvidenceUnderMetadataPressure`). 예제와 합성 입력이 많을 때는 대표 README에서 링크한 예제와 남은 제품 본문을 미연결 합성 입력보다 먼저 보낸다. 부차 경로만 범위에 든 경우에도 실제 안내를 보낸다(`TestDocumentSelectionFavorsProductTextOverUnlinkedFixtures`).
+
 TC-270의 목록 시험은 첫 발췌 바로 다음 줄에 마지막 항목이 있는 Markdown 순서 목록과 글머리 목록, 중첩·코드 블록, 남은 발췌 자리나 바이트가 없는 경우를 다룬다. 마지막 항목까지 전달할 수 있으면 연속한 원문 줄을 보내고, 실제 요청에 목록 일부만 남으면 `incomplete_list`를 붙인다(`TestDocumentRequestPreservesListBoundary`, `TestDocumentListBoundaryReflectsFittedWindows`).
 
 TC-267의 `TestNavigationReachesNestedTestAssertions`는 한 디렉터리에 읽기 상한보다 많은 테스트 파일이 있어도 중첩 디렉터리에 읽기 차례를 준다. 테스트 본문에 있는 단언으로 위치를 고르고 준비 함수에만 단언이 있으면 일반 위치를 유지한다. 요청 한도로 빠진 `L` 별칭과 그 정식 ID는 모두 거부하며 나머지 별칭은 같은 위치에 묶인다. 선택 누락·`null`과 유효하지 않은 객체의 차이는 검토 원시 기록에만 남는다.
@@ -259,7 +261,7 @@ TC-97의 범위 복구 시험은 이름 있는 호출의 예제와 같은 페이
 
 TC-268은 일부 구현만 확인한 응답을 미확인으로 유지하는지, 부분 일치의 준수·위반 근거가 같은 파일의 서로 다른 줄 범위에서도 각각 연결되는지 확인한다. 근거를 하나만 인용하거나 같은 조건을 반복하거나 이미 읽은 줄만 참조하면 판정을 바꾸지 않는다. Rust 테스트 전용 블록 중간과 JS·TS 템플릿 문자열 중간에서 시작하는 발췌를 구현으로 인용한 응답을 거부하고, 같은 파일의 실행 코드는 수락한다.
 
-TC-97의 요청 한도 시험은 여러 모듈이 긴 경로의 안내 문서를 상속해 부가 목록만으로 한도를 넘는 경우를 다룬다. 정상 문서 발췌를 담은 모델 요청 한 번을 보내고 요청과 기록의 한계 코드를 확인한다. 탐색의 모듈·문서 연결은 전부 보존한다.
+TC-97의 요청 한도 시험은 여러 모듈이 긴 경로의 안내 문서를 상속해 부가 목록만으로 한도를 넘는 경우를 다룬다. 부가 목록을 먼저 줄여 문서 발췌를 담은 요청을 한 번 보내고 요청과 기록의 한계 코드를 확인한다. 탐색의 모듈·문서 연결은 전부 보존한다.
 
 TC-97의 인용 시험은 전달 순서의 `D1`, `D2`와 형식 복구 시의 같은 대응을 확인한다. 미제공 참조와 짧은 참조·스냅샷 근거 ID가 섞인 중복 인용을 거부한다. 계약, 충돌 양쪽, 질문, 지침 메모, 문서 품질의 유효한 인용은 원래 스냅샷 근거 ID로 저장해 후속 조사로 보낸다.
 
@@ -334,7 +336,13 @@ TC-135는 문서 인용 개수 초과에 대한 필드별 형식 복구와 조�
 
 TC-135는 인용한 예제와 수락한 계약에 정확히 나온 Go 공개 이름을 체크인된 생성 래퍼와 같은 패키지의 수기 구현에 연결한다. 늦은 반환 분기와 관련 테스트가 전체 조사에 나오고 발췌 한도와 `generated_file` 분류를 지키며 장부는 열린 고유 파일을 한 번 센다. 불일치한 이름, 메서드·지역 변수, 인자 변형, 다른 패키지, 중복 정의, 생성된 구현, 비밀값 선별·범위 제외·부차 디렉터리·PR에는 이 호출 연결을 추가하지 않는다(`TestDocumentedGoWrappersReachImplementationAndKeepScopeLedger`, `TestDocumentedGoWrappersRequireExactLocalUnambiguousSource`).
 
+TC-135는 문서와 계약에서 같은 Go CLI 명령을 찾아 QA 스크립트와 시험 입력이 있어도 `cmd`의 실제 인자 전달·분기·호출 대상과 관련 테스트를 고르는지 확인한다. 문서의 다른 인자, 다른 인자 위치, 모호한 분기·패키지, 생성 파일, 보류 파일, 제한된 범위와 PR에서는 이 연결을 만들지 않는다(`TestDocumentedGoCommandPrefersRuntimeRoute`, `TestDocumentedGoCommandRejectsUnverifiedRoutes`). TC-134는 웹과 Markdown·HTML 요약에서 예제와 시험에서만 찾은 항목의 위치와 검토 상태를 유지하고 해당 발견에 출처를 표시하는 경우를 포함한다(`TestSummaryExportsLabelExampleAndTestFindings`, `reportGroups.test.tsx`).
+
+TC-135는 `cmd/<명령>/README`에 인용된 단독·옵션 명령에서 `main`과 여러 번 호출한 한 구현의 전체 줄을 고르는지도 검사한다. 다른 위치의 README, 비슷한 이름, 여러 구현 또는 함수값을 통한 호출도 확인한다(`TestDocumentedStandaloneGoCommandOffersWholeMainAndUniqueCallee`, `TestDocumentedStandaloneGoCommandRequiresTheLocalGuideAndDirectCallee`).
+
 TC-135는 계약에 연결해 선택한 짧은 구현이 앞쪽의 반환 분기까지 포함할 때 넓어진 근거 ID로 대조를 수락하는지도 확인한다. 다른 후보와 테스트를 함께 보내고, 같은 파일의 다른 창이나 직접 호출 연결이 있거나 전체 코드·요청 한도를 넘으면 기존 발췌를 보낸다(`TestOverviewIncludesCompleteDocumentedShortRuntime`, `TestOverviewKeepsExactWitnessesWhenWideningWouldDisplaceInput`).
+
+TC-135는 수락한 계약과 지역 안내가 같은 Python 공개 함수 호출을 인용할 때 기존 구현·테스트와 함께 여러 줄 기본값 및 반환 타입의 실제 선언을 보내는지 확인한다. 파일·줄·바이트 한도와 스냅샷 근거 ID를 보존한다. 문서에 호출이 없거나 중복·가려진 이름·동적 바인딩·지역 함수·보류·범위 밖·PR 비변경·테스트 경로이면 추가 발췌가 생기지 않는다(`TestDocumentedPythonCallSuppliesCompleteScopedSignature`, `TestPythonSignatureRejectsAmbiguousOrNonRuntimeText`, `TestPythonSignatureKeepsReviewScopeAndCitation`).
 
 TC-92·TC-98의 공유 실행 링크 시험은 게시 보고서를 불러온 뒤 제목과 종합 시작으로 한 번 이동하는지 확인한다. 일반 프로젝트 선택, 실행 중 상태, 조회 오류, 늦은 응답 전에 사용자가 고른 화면이나 양식 초점, 숨겨진 브라우저 탭, URL fragment 보존을 함께 검사한다(`ProjectsView.test.tsx`).
 모델 요청의 멤버 연결은 두 발췌의 정확한 ID를 담는다. 요청 축소로 한 발췌가 빠지거나 계약 범위가 한쪽을 제외하면 연결을 생략한다. 연결을 받은 모델이 미확인으로 응답하면 기록도 미확인이다(`TestMemberTestHintFollowsRequestTrimming`, `TestMemberTestHintSelectionRespectsContractScope`).
@@ -345,6 +353,8 @@ TC-135에서 1~24줄을 인용한 모델 발췌를 열면 13줄의 입력 처리
 TC-134·TC-135에서 종합의 같은 파일과 주제에 속하는 확인된 동작과 후보는 각자의 줄 범위로 이동한다. 후보는 기록된 확인 방법을 보이고 발견을 확정한 상태로 바꾸지 않는다. 같은 호출과 정확히 같은 코드 줄을 인용한 일치 대조에서만 이름 있는 옵션의 조건을 함께 보인다. Git URL과 긴 NFS 경로가 표지에서 빠짐없이 보이며 사본 경로는 나타나지 않는다. 분석 대상 경로, 종합의 상태, 상세 근거의 파일·줄 범위와 발췌 조작은 390px·1280px Chromium에서도 확인한다. 코드 미포함 상태에서는 서술 생략을 밝히고 구조화된 상태와 위치를 유지한다.
 
 같은 우선순위의 미확인 대조는 저장된 문서 질문과 적용 범위·문서 인용·구체어가 모두 일치하고 후보가 하나일 때 그 대조를 먼저 보여 준다. 모호한 질문, 문장 없는 이전 보고서 및 코드 미포함에서는 저장 순서를 유지한다. 종합의 선택된 미확인 대조는 설명서와 코드 두 행에 실제 동작과 기존 이유 또는 추가 관찰을 표시한다. 웹·HTML·Markdown에서 링크가 같은 대조에 연결되며 코드 인용과 상세의 상태·집계를 보존한다. 짝을 이룬 백틱 안의 내용은 인라인 코드로 보이고 짝 없는 백틱과 태그처럼 보이는 문장은 평문으로 표시된다. 표지에서는 각각의 라벨로 시작·종료 시각과 작성 시각 대체 표시를 확인하고, 실제 고정 커밋과 시작·종료를 기록한 경우의 소요 시간만 표시되는지 확인한다.
+
+TC-134·TC-135는 종합의 선택된 대조에 정확한 호출·입력·설정·반환값이 연결될 때 같은 저장 인용에서 읽은 설명서 예시 하나를 웹·HTML·Markdown에서 표시하는지 확인한다. 다른 호출, 옵션 누락과 중복, 서로 다른 제목이나 코드 블록 사이에 떨어진 결과, 서로 모순되는 결과, 잘린 발췌, 가린 값은 표시하지 않는다. HTML 태그처럼 보이는 값은 코드 글자로 읽히고 코드 미포함 보고서에는 예시가 없다. 웹 집계의 "도구가 보고한 항목"과 "소스 위치를 확인하지 못한 항목"은 게시된 수를 쓴다.
 
 HTML 내보내기에서 발견 카드의 긴 발췌를 열어도 390px·1280px에서 페이지 너비가 늘어나지 않아야 한다. 좌우로 스크롤해 발췌의 마지막 글자를 읽을 수 있는지 확인한다(`web/e2e/report.spec.ts`).
 
