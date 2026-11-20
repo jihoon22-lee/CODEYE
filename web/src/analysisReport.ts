@@ -60,6 +60,7 @@ export type AnalysisReport = {
   status: string;
   verdict: string;
   aiReview: string;
+  aiReviewReasons: string[];
   counts: {
     total: number;
     actionable: number;
@@ -243,6 +244,7 @@ export function parseAnalysisReport(
   )
     invalid();
   const coverage = object(r.coverage);
+  const aiReview = object(coverage.ai_review);
   const input = object(r.inputs);
   const commit = nullable(input.commit_sha);
   const project = r.project == null ? undefined : (() => {
@@ -279,7 +281,11 @@ export function parseAnalysisReport(
     snapshot: str(input.snapshot_id),
     status: str(r.status),
     verdict: str(r.quality_verdict),
-    aiReview: str(object(object(r.coverage).ai_review).status),
+    aiReview: str(aiReview.status),
+    aiReviewReasons: [
+      ...array(aiReview.required_tasks ?? [], task => nullable(object(task).reason)),
+      nullable(aiReview.reason),
+    ].filter((reason): reason is string => Boolean(reason)),
     counts,
     metricObservations,
     priorities,

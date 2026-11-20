@@ -521,9 +521,13 @@ func mdCode(s string) string {
 
 // --- HTML --------------------------------------------------------------------
 
-// HTMLContentSecurityPolicy is sent as a header and repeated in a meta tag so
-// a saved file keeps the policy: no script, no external fetch of any kind.
-const HTMLContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+// HTMLContentSecurityPolicy permits inline styles and an embedded font. No
+// script or remote resource is allowed by the header or the saved file.
+const HTMLContentSecurityPolicy = savedHTMLContentSecurityPolicy + "; frame-ancestors 'none'"
+
+const htmlResourcePolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'"
+const savedHTMLContentSecurityPolicy = htmlResourcePolicy + "; font-src data:"
+const legacyHTMLContentSecurityPolicy = htmlResourcePolicy + "; frame-ancestors 'none'"
 
 const exportCSS = `body{box-sizing:border-box;margin:0 auto;max-width:76rem;padding:clamp(1rem,4vw,3rem);font-family:system-ui,sans-serif;line-height:1.65;color:#192b2a;background:#fff;overflow-wrap:anywhere}
 h1{margin:0;padding:1.15rem 1.5rem;border-radius:.7rem;background:#153f39;color:#f4fbf8;font-size:clamp(1.35rem,3vw,2rem);letter-spacing:-.03em}
@@ -552,19 +556,23 @@ var htmlFuncs = template.FuncMap{
 		}
 		return strconv.Itoa(*p)
 	},
-	"join":     strings.Join,
-	"short":    short,
-	"code":     func(l Locale, c string) string { return l.Code(c) },
-	"packages": packages,
-	"artref":   artRef,
-	"pair":     func(l Locale, p secPart) partArgs { return partArgs{L: l, P: p} },
+	"join":            strings.Join,
+	"short":           short,
+	"code":            func(l Locale, c string) string { return l.Code(c) },
+	"packages":        packages,
+	"artref":          artRef,
+	"pair":            func(l Locale, p secPart) partArgs { return partArgs{L: l, P: p} },
+	"reportIcon":      reportIcon,
+	"sectionIcon":     sectionIcon,
+	"groupIcon":       groupIcon,
+	"findingCitation": findingCitation,
 }
 
 var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="` + HTMLContentSecurityPolicy + `">
+<meta http-equiv="Content-Security-Policy" content="` + legacyHTMLContentSecurityPolicy + `">
 <meta name="referrer" content="no-referrer">
 <title>{{with .R.Project}}{{.Name}} · {{end}}{{.L.Label "title"}}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -661,8 +669,8 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 </html>
 `))
 
-// RenderHTML renders a self-contained page: html/template escaping, no
-// script, no external resource, links only to in-page fragments.
+// RenderHTML renders a self-contained page with html/template escaping,
+// no script or external resources and navigation to in-page fragments.
 func RenderHTML(r Report, digest string, l Locale) ([]byte, error) {
 	if r.hasSections() {
 		return renderHTMLSections(r, digest, l)

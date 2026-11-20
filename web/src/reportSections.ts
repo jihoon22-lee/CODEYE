@@ -4,7 +4,7 @@
 // section counts add up to the summary, so the screen never shows numbers the
 // stored document does not hold.
 export type Excerpt = { start: number; end: number; text: string };
-export type Citation = { id: string; kind: string; path: string; line: number; end: number; excerpt: Excerpt | null };
+export type Citation = { id: string; kind: string; path: string; line: number; end: number; excerpt: Excerpt | null; directivePath?: string };
 
 export function parseExcerpt(v: unknown): Excerpt | null {
   if (v == null) return null;
@@ -13,7 +13,13 @@ export function parseExcerpt(v: unknown): Excerpt | null {
 }
 function citation(v: unknown): Citation {
   const x = object(v);
-  return { id: str(x.id), kind: str(x.kind), path: str(x.path), line: count(x.start_line), end: count(x.end_line), excerpt: parseExcerpt(x.excerpt) };
+  const result = { id: str(x.id), kind: str(x.kind), path: str(x.path), line: count(x.start_line), end: count(x.end_line), excerpt: parseExcerpt(x.excerpt) };
+  if (x.directive_path === undefined) return result;
+  const directivePath = str(x.directive_path);
+  if (result.kind !== 'document' || !result.path.endsWith('.py') || !/\.(?:md|markdown)$/i.test(directivePath)) {
+    throw new Error('invalid Python API documentation citation');
+  }
+  return { ...result, directivePath };
 }
 export type SectionStage = { state: string; tasks: number; succeeded: number };
 export type ModelState = { task: string; performed: boolean; reason: string | null };

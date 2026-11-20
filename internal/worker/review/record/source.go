@@ -4,7 +4,33 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/docpath"
 )
+
+// MarkdownDirectivePath permits only Markdown guidance with an API reference.
+func MarkdownDirectivePath(p string) bool {
+	return domain.ValidateEvidencePath(p) == nil &&
+		slices.Contains([]string{".md", ".markdown"}, strings.ToLower(path.Ext(p))) &&
+		slices.Contains([]string{docpath.Design, docpath.Readme}, docpath.Classify(p))
+}
+
+// ValidDirectivePath constrains docstring provenance to its own project scope.
+func (e Excerpt) ValidDirectivePath() bool {
+	return e.DirectivePath == "" || (e.Kind == "document" && path.Ext(e.Path) == ".py" &&
+		SourceKind(e.Path) == "code" && MarkdownDirectivePath(e.DirectivePath) && ScopeUnder(e.Path, e.DocumentScope()))
+}
+
+// DocumentPath identifies the authored documentation page.
+func (e Excerpt) DocumentPath() string {
+	if e.DirectivePath != "" {
+		return e.DirectivePath
+	}
+	return e.Path
+}
+
+func (e Excerpt) DocumentScope() string { return docpath.Scope(e.DocumentPath()) }
 
 // Source classification of snapshot paths. It decides from a
 // path alone whether an excerpt may carry kind code, test or config, so the
@@ -52,7 +78,7 @@ func ManifestEcosystem(p string) string {
 //
 //   - Go: *_test.go only (a directory name never makes a Go test);
 //   - Python: test_*.py, *_test.py, conftest.py, or a test/tests directory;
-//   - JS/TS: *.test.* and *.spec.*, or a __tests__/test/tests directory;
+//   - JS/TS: test.js, test.ts, *.test.*, *.test-d.ts and *.spec.*, or a __tests__/test/tests directory;
 //   - Rust: tests.rs, or a tests directory (integration tests);
 //   - C/C++: test_*, *_test, *_tests, *_unittest, *-test, or a test/tests
 //     directory.
@@ -77,12 +103,22 @@ func IsTestPath(p string) bool {
 	case "python":
 		return strings.HasPrefix(base, "test_") || strings.HasSuffix(stem, "_test") || base == "conftest.py" || inDir("test", "tests")
 	case "javascript":
-		return strings.HasSuffix(stem, ".test") || strings.HasSuffix(stem, ".spec") || inDir("__tests__", "test", "tests")
+		return jsTestFile(base) || strings.HasSuffix(stem, ".test") || strings.HasSuffix(stem, ".spec") || inDir("__tests__", "test", "tests")
 	case "rust":
 		return base == "tests.rs" || inDir("tests")
 	}
 	return strings.HasPrefix(stem, "test_") || strings.HasSuffix(stem, "_test") || strings.HasSuffix(stem, "_tests") ||
 		strings.HasSuffix(stem, "_unittest") || strings.HasSuffix(stem, "-test") || inDir("test", "tests")
+}
+
+func jsTestFile(base string) bool {
+	return base == "test.js" || base == "test.ts" || strings.HasSuffix(base, ".test-d.ts")
+}
+
+// SourceKindMatches accepts the former code kind for JavaScript and
+// TypeScript test names recognized after older records were saved.
+func sourceKindMatches(p, kind string) bool {
+	return SourceKind(p) == kind || (kind == "code" && jsTestFile(strings.ToLower(path.Base(p))))
 }
 
 // SourceKind returns the excerpt kind a path may carry as source: "test"

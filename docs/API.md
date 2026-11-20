@@ -381,6 +381,8 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 보고서의 `documents.quality`, `documents.comparisons`, `code_review.strengths`는 수락된 모델 해석과 근거 ID를 담는 선택 필드다. `findings[].evidence[]`와 분석 절 근거의 `excerpt`는 있을 때 행 범위와 고정 스냅샷의 원문을 담는다. `include_code=false`에서는 발췌 필드를 생략하고 모델 문장을 생략 문구로 바꾼다. 이전 보고서에는 이 필드가 없을 수 있다.
 
+Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `directive_path`로 원래 Markdown 페이지를 가리킨다. `path`, 줄 범위, `blob_sha256`는 docstring이 담긴 스냅샷의 실제 Python 파일을 가리킨다. 코드 미포함 내보내기에도 출처 경로가 남는다.
+
 보고서 내용과 projection 규칙은 [보고서와 화면](REPORT.md)에 있다.
 
 ### GET /runs/{id}/report

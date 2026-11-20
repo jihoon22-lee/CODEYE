@@ -16,6 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
@@ -60,6 +61,60 @@ func TestReviewRequestSizeOnFixture(t *testing.T) {
 				t.Fatalf("%s recorded request_bytes %d", stage, c.RequestBytes)
 			}
 		}
+	}
+}
+
+func TestDocumentsFitKeepsExcerptsWhenModuleLinksExceedBudget(t *testing.T) {
+	const modules = 24
+	const guidance = 8
+	files := map[string]string{}
+	for i := range guidance {
+		name := fmt.Sprintf("README-%02d-%s.md", i, strings.Repeat("<", 140))
+		files[name] = "The cache returns queued values.\n"
+	}
+	for i := range modules {
+		dir := fmt.Sprintf("modules/module%02d", i)
+		files[dir+"/go.mod"] = "module example.test/" + dir + "\n\ngo 1.27\n"
+		files[dir+"/main.go"] = "package main\nfunc main() {}\n"
+	}
+	j := treeJob(t, files)
+	script := map[string]func(int, opencode.Request) opencode.Reply{
+		"documents": func(_ int, q opencode.Request) opencode.Reply {
+			input := decodeAs[docsInput](t, q)
+			if len(input.Documents) == 0 || !strings.Contains(input.Documents[0].Text, "queued values") ||
+				len(input.Modules) >= modules || !slices.Contains(input.Limitations, "document_lists_shortened") ||
+				len(opencode.Prompt(q)) > PromptBudget {
+				t.Fatalf("document request did not fit with genuine excerpts: %d docs, %d modules, %v, %d bytes",
+					len(input.Documents), len(input.Modules), input.Limitations, len(opencode.Prompt(q)))
+			}
+			return asJSON(docsOutput{Contracts: []record.Contract{}, Conflicts: []record.Conflict{},
+				Questions: []record.Question{}, InstructionNotes: []record.InstructionNote{}})
+		},
+	}
+	caller := &scriptedCaller{script: script}
+	h, err := discovery.Wrap(Handler{Static: vetStub{}, Caller: caller}, discovery.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := h.Plan(t.Context(), j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range plan {
+		if task.Key == envdoc.TaskDocuments || task.Key == "review.documents" {
+			if result := h.Run(t.Context(), j, task, nil); result.Status != domain.TaskSucceeded {
+				t.Fatalf("%s: %+v", task.Key, result)
+			}
+		}
+	}
+	docs := readRecord(t, j, record.StageDocuments)
+	if caller.calls("documents") != 1 || !slices.Contains(docs.Limitations, "document_lists_shortened") {
+		t.Fatalf("metadata trimming was not recorded in the original call: %+v", docs)
+	}
+	discovered, _ := (&roleStage{j: j}).discoveryDoc(envdoc.KindDocuments)
+	if discovered.Documents == nil || len(discovered.Documents.Modules) != modules ||
+		len(discovered.Documents.Modules[0].Inherited) != guidance {
+		t.Fatal("optional request trimming changed canonical document discovery")
 	}
 }
 

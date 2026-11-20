@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from .common import ROOT, ensure, expect_invalid, within_root, yaml_file
 
@@ -23,6 +23,21 @@ def document_scope(path: str) -> str:
         if dirs[i].lower() in {"docs", "doc"}:
             return str(PurePosixPath(*dirs[:i]))
     return str(p.parent)
+
+
+def evidence_document_scope(evidence: dict, root: Path | None = None) -> str:
+    directive = evidence.get("directive_path")
+    if directive is None:
+        return document_scope(evidence["path"])
+    page = PurePosixPath(directive)
+    scope = document_scope(directive)
+    src = PurePosixPath(evidence["path"])
+    ensure(evidence["kind"] == "document" and src.suffix == ".py" and page.suffix.lower() in {".md", ".markdown"}
+           and not page.is_absolute() and ".." not in page.parts and src.is_relative_to(PurePosixPath(scope)),
+           "Python API documentation provenance is invalid")
+    if root is not None:
+        ensure((root / page).is_file(), "Python API documentation page is missing")
+    return scope
 
 
 def check_environment_example(doc: dict) -> None:
@@ -113,6 +128,7 @@ def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None
             ensure(sha == e["sha256"] and 1 <= e["start_line"] <= e["end_line"] <= len(body.splitlines()), "review evidence blob or range: " + e["path"])
             binding = "\0".join([doc["snapshot_manifest_digest"], e["path"], sha, f'{e["start_line"]}:{e["end_line"]}'])
             ensure(e["id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24] and e["id"] not in catalog, "review evidence ID")
+            evidence_document_scope(e, root)
             catalog[e["id"]] = e
         cited = []
         for key in ("environment_notes", "contracts", "conflicts", "questions", "instruction_notes", "candidates", "verifications"):
@@ -122,7 +138,7 @@ def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None
         ensure(all(ref in catalog for ref in cited), "review cites evidence it was not given: " + stage)
         # A rule of a sub-directory is never generalized to a parent scope.
         def covers(ids, scope):
-            dirs = [document_scope(catalog[i]["path"]) for i in ids]
+            dirs = [evidence_document_scope(catalog[i]) for i in ids]
             return all(d == "." or scope == d or scope.startswith(d + "/") for d in dirs)
         for c in doc.get("contracts", []) + doc.get("questions", []):
             ensure(covers(c["evidence_ids"], c["applies_to"]), "review scope generalized: " + c["applies_to"])

@@ -436,6 +436,12 @@ func exampleScript(t *testing.T) map[string]func(int, opencode.Request) opencode
 	}
 	withOutput("documents", func(q opencode.Request, out map[string]any) {
 		in := decodeAs[docsInput](t, q)
+		rootEvidence := []string{docID(in, "README.md")}
+		out["contracts"] = []record.Contract{
+			{Statement: "게이트웨이에서 하위 호출이 실패하면 최대 3번 재시도한다.", AppliesTo: ".", EvidenceIDs: rootEvidence},
+			{Statement: "결제 호출은 요청마다 정확히 한 번만 한다.", AppliesTo: "svc/b", EvidenceIDs: []string{docID(in, "svc/b/README.md")}},
+			{Statement: "게이트웨이에서 하위 호출이 재시도 끝까지 실패하면 호출자에게 마지막 오류를 반환한다.", AppliesTo: ".", EvidenceIDs: rootEvidence},
+		}
 		out["document_quality"] = []record.DocumentQuality{
 			{Aspect: "actionability", Assessment: "strength", Statement: "루트 README는 최초 호출과 재시도를 합한 호출 상한을 명시한다.", EvidenceIDs: []string{docID(in, "README.md")}},
 			{Aspect: "consistency", Assessment: "weakness", Statement: "실패 시 호출을 반복할지 여부가 루트 안내와 결제 모듈 안내에서 달라 적용 범위를 확인해야 한다.", EvidenceIDs: []string{docID(in, "README.md"), docID(in, "svc/b/README.md")}},
@@ -446,7 +452,8 @@ func exampleScript(t *testing.T) map[string]func(int, opencode.Request) opencode
 		gw := excerptID(in.Scope.Excerpts, "gateway.go")
 		out["strengths"] = []record.Strength{{Title: "성공하면 즉시 종료하는 제한된 재시도", Benefit: "호출 성공 후에는 더 요청하지 않고, 연속 실패 시에는 재시도 횟수를 제한한다.", Scope: ".", EvidenceIDs: []string{gw}}}
 		out["contract_comparisons"] = []record.ContractComparison{
-			{ContractIndex: 1, AppliesTo: ".", Status: "match", Reason: "Forward는 처음의 호출이 실패한 경우 MaxRetries 상수로 반복을 세 번까지 제한한다.", DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{gw}},
+			{ContractIndex: 1, AppliesTo: ".", Status: "match", Reason: "Forward는 send의 오류가 남아 있는 동안 MaxRetries에 도달할 때까지만 send를 다시 호출한다.", DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{gw}},
+			{ContractIndex: 3, AppliesTo: ".", Status: "match", Reason: "Forward는 반복에서 send의 오류를 err에 대입하고 재시도를 마치면 그 값을 반환한다.", DocumentEvidenceIDs: in.Documents.Contracts[2].EvidenceIDs, CodeEvidenceIDs: []string{gw}},
 		}
 	})
 	s["interpret"] = func(_ int, q opencode.Request) opencode.Reply {
@@ -659,7 +666,8 @@ func TestReportExample(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkReportExample(t, r, plan, results)
-	if len(r.Documents.Quality) != 2 || len(r.Documents.Comparisons) != 2 || r.Documents.Comparisons[0].Status != "match" || r.Documents.Comparisons[1].Status != "unknown" ||
+	if len(r.Documents.Quality) != 2 || len(r.Documents.Comparisons) != 3 || r.Documents.Comparisons[0].Status != "match" ||
+		r.Documents.Comparisons[1].Status != "unknown" || r.Documents.Comparisons[2].Status != "match" ||
 		len(r.CodeReview.Strengths) != 1 || len(r.CodeReview.Evidence) != 1 || r.CodeReview.Evidence[0].Excerpt == nil {
 		t.Fatalf("report insight sections were not carried through")
 	}

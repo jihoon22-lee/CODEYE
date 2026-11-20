@@ -3,6 +3,7 @@
 // render_summary.go). Everything is computed from the stored report.
 import type { AnalysisReport, Evidence, Finding, Observation } from './analysisReport';
 import type { Citation, Ledger, Sections, StaticTool } from './reportSections';
+import { reportKo as t } from './locales/report-ko';
 
 // The default secondary path rule of review priority (docs/REVIEW.md#검토-우선순위,
 // record.DefaultSecondary). A test checks it against the rule the scope
@@ -174,6 +175,59 @@ export function primaryCitation(citation: Citation, kind: 'document' | 'code'): 
 export type Decision = { finding: Finding; source: LocatedEvidence; condition?: string; next?: string };
 const hiddenDispositions = new Set(['accepted_risk', 'false_positive', 'suppressed', 'fixed_by_user']);
 
+const genericTitleWords = new Set([
+  '일부', '조건', '동작', '결과', '검사', '검증', '확인', '관리', '처리', '분기', '경로', '실패', '오류', '예외', '반환', '발생', '가능', '필요', '있음', '없음',
+  'the', 'and', 'for', 'after', 'before', 'from', 'with', 'when', 'error', 'errors', 'failure', 'failures', 'failed', 'check', 'checks', 'checking', 'handle', 'handling', 'result', 'state', 'case', 'path', 'paths', 'can', 'may',
+]);
+
+function titleWords(title: string) {
+  return (title.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [])
+    .filter(word => [...word].length >= 2 && /\p{L}/u.test(word) && !genericTitleWords.has(word));
+}
+
+export function shareTitleSubject(a: string, b: string) {
+  const subject = new Set(titleWords(a));
+  return titleWords(b).some(word => subject.has(word));
+}
+
+// A second matched promise may explain an option on the same named operation.
+// Require the same cited range, since shared file or title words are weaker.
+export function matchingDocumentCondition(
+  first: Sections['documents']['comparisons'][number],
+  rows: Sections['documents']['comparisons'],
+  catalog: Citation[],
+) {
+  const names = (text: string) => [...text.matchAll(/\b([A-Za-z_$][A-Za-z0-9_$]{2,})\s*\(/g)].map(match => match[1]);
+  const options = (text: string) => [...text.matchAll(/\b([A-Za-z_$][A-Za-z0-9_$]{2,})\x60?(?:가|이|를|을|은|는)?\s*(?:={1,3}\s*(?:true|false)\b|(?:is\s+)?(?:enabled|disabled)\b|활성화|비활성화|참이면|거짓이면)/g)].map(match => match[1]);
+  const primaryCode = (row: typeof first) => catalog.find(citation => row.codeRefs.includes(citation.id) && primaryCitation(citation, 'code'));
+  const lead = primaryCode(first);
+  const operations = names(first.statement);
+  if (!lead || operations.length === 0) return;
+  return rows.find(row => {
+    if (row.status !== 'match' || row.scope !== first.scope || row.statement === first.statement ||
+      !catalog.some(citation => row.documentRefs.includes(citation.id) && primaryCitation(citation, 'document'))) return false;
+    const code = primaryCode(row);
+    return code?.path === lead.path && code.line === lead.line && code.end === lead.end &&
+      names(row.statement).some(operation => operations.includes(operation)) &&
+      options(row.statement).some(option => !first.statement.includes(option));
+  })?.statement;
+}
+
+// Relate complementary outcomes on a concrete source path only when their titles name a shared subject.
+export function relatedStrength(decision: Decision, strengths: Sections['codeReview']['strengths'], citations: Citation[]) {
+  for (const strength of strengths) {
+    if (!shareTitleSubject(decision.finding.title, strength.title)) continue;
+    const citation = citations.find(c => c.path === decision.source.path && strength.refs.includes(c.id) && primaryCitation(c, 'code'));
+    if (citation) return { strength, citation };
+  }
+}
+
+function nextVerification(steps: string[]) {
+  const observable = /목록|복원|출력|표시|응답|반환값|로그|\b(?:list|restore|output|display|response|return value|logs?)\b/i;
+  const abstract = /호출자|계약|\b(?:caller|contract)\b/i;
+  return steps.find(step => observable.test(step) && !abstract.test(step)) ?? steps.find(step => step.trim());
+}
+
 export function projectReadings(report: AnalysisReport, sections: Sections) {
   const reviewed = new Set(sections.codeReview.findings);
   const actions: Decision[] = [];
@@ -190,7 +244,7 @@ export function projectReadings(report: AnalysisReport, sections: Sections) {
     if (finding.validation === 'supported' || finding.validation === 'reproduced') {
       actions.push({ finding, source });
     } else if (finding.validation === 'inconclusive' || finding.validation === 'unreviewed') {
-      const next = finding.verification.find(text => text.trim());
+      const next = nextVerification(finding.verification);
       if (next && basis) followups.push({ finding, source, condition: basis.statement, next });
     }
   }
@@ -223,7 +277,11 @@ export function projectReadings(report: AnalysisReport, sections: Sections) {
         loc && loc.path && loc.start > 0 && loc.end >= loc.start && !secondaryReviewPath(loc.path);
     });
   }
-  return { actions: actions.slice(0, 3), comparisons: comparisons.slice(0, 3), uncertainComparison, strengths: strengths.slice(0, 3), followups: followups.slice(0, 2), diagnostic };
+  const documentedBehavior = !uncertainComparison && actions.length + comparisons.length + strengths.length + followups.length === 0
+    ? documents.comparisons.find(row => row.status === 'unknown' && row.statement.trim() && row.statement !== t.sections.withheld &&
+      cites(documents.citations, row.documentRefs, 'document'))
+    : undefined;
+  return { actions: actions.slice(0, 3), comparisons: comparisons.slice(0, 3), uncertainComparison, documentedBehavior, strengths, followups: followups.slice(0, 2), diagnostic };
 }
 
 // moduleSecondary: the ledger row's class, or for an earlier builder the path rule.

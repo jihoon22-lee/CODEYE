@@ -85,8 +85,19 @@ func (c ContractComparison) Valid(catalog map[string]Excerpt) bool {
 	if len(c.CodeEvidenceIDs) == 0 {
 		return c.Status == "unknown" && c.CodeEvidenceIDs != nil
 	}
-	return refs(c.CodeEvidenceIDs, catalog, 4, "code", "test") && scopedCode(c.CodeEvidenceIDs, c.AppliesTo, catalog) &&
-		(c.Status == "unknown" || hasKind(c.CodeEvidenceIDs, catalog, "code"))
+	if !refs(c.CodeEvidenceIDs, catalog, 4, "code", "test") || !scopedCode(c.CodeEvidenceIDs, c.AppliesTo, catalog) {
+		return false
+	}
+	if c.Status == "unknown" {
+		return true
+	}
+	return slices.ContainsFunc(c.CodeEvidenceIDs, func(id string) bool {
+		code := catalog[id]
+		return code.Kind == "code" && !slices.ContainsFunc(c.DocumentEvidenceIDs, func(docID string) bool {
+			doc := catalog[docID]
+			return doc.DirectivePath != "" && doc.Path == code.Path && doc.Start <= code.End && code.Start <= doc.End
+		})
+	})
 }
 
 func scopedCode(ids []string, scope string, catalog map[string]Excerpt) bool {

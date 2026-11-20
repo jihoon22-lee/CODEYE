@@ -1,0 +1,490 @@
+/*! Tabler Core 1.7.5 (tabler.io), Tabler Icons 3.52.0 (tabler.io/icons). */
+/*!
+The MIT License (MIT)
+
+Copyright (c) 2011-2025 The Bootstrap Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+/* !
+The MIT License (MIT)
+
+Copyright (c) 2018-2026 The Tabler Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+ */
+/* !
+MIT License
+
+Copyright (c) 2020-2026 Paweł Kuna
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+ */
+
+:where(.review-theme) .btn {
+  --tblr-btn-padding-x: 1rem;
+  --tblr-btn-padding-y: 0.5625rem;
+  --tblr-btn-font-family: var(--tblr-body-font-family);
+  --tblr-btn-font-size: 0.875rem;
+  --tblr-btn-font-weight: var(--tblr-font-weight-medium);
+  --tblr-btn-line-height: 1.25rem;
+  --tblr-btn-color: var(--tblr-body-color);
+  --tblr-btn-bg: transparent;
+  --tblr-btn-border-width: var(--tblr-border-width);
+  --tblr-btn-border-color: transparent;
+  --tblr-btn-border-radius: var(--tblr-border-radius);
+  --tblr-btn-hover-color: var(--tblr-btn-color);
+  --tblr-btn-active-color: var(--tblr-btn-color);
+  --tblr-btn-hover-border-color: transparent;
+  --tblr-btn-box-shadow: var(--tblr-shadow-input);
+  --tblr-btn-disabled-opacity: 0.4;
+  --tblr-btn-disabled-color: var(--tblr-btn-color);
+  --tblr-btn-disabled-bg: var(--tblr-btn-bg);
+  --tblr-btn-disabled-border-color: var(--tblr-btn-border-color);
+  --tblr-btn-active-shadow: 0 0 0 #000;
+  display: inline-block;
+  padding: var(--tblr-btn-padding-y) var(--tblr-btn-padding-x);
+  font-family: var(--tblr-btn-font-family);
+  font-size: var(--tblr-btn-font-size);
+  font-weight: var(--tblr-btn-font-weight);
+  line-height: var(--tblr-btn-line-height);
+  color: var(--tblr-btn-color);
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  border: var(--tblr-btn-border-width) solid var(--tblr-btn-border-color);
+  border-radius: var(--tblr-btn-border-radius);
+  background-color: var(--tblr-btn-bg);
+  box-shadow: var(--tblr-btn-box-shadow);
+  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, outline-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(.review-theme) .btn {
+    transition: none;
+  }
+}
+:where(.review-theme) .btn {
+  outline-color: transparent;
+}
+:where(.review-theme) .btn:hover {
+  color: var(--tblr-btn-hover-color);
+  text-decoration: none;
+  background-color: var(--tblr-btn-hover-bg);
+  border-color: var(--tblr-btn-hover-border-color);
+}
+:where(.review-theme) .btn:focus-visible {
+  color: var(--tblr-btn-hover-color);
+  background-color: var(--tblr-btn-hover-bg);
+  border-color: var(--tblr-btn-hover-border-color);
+  outline: var(--tblr-focus-ring, var(--tblr-focus-ring-width) solid var(--tblr-focus-ring-color));
+  outline-offset: var(--tblr-focus-ring-offset);
+}
+:where(.review-theme) .btn:first-child:active {
+  color: var(--tblr-btn-active-color);
+  background-color: var(--tblr-btn-active-bg);
+  border-color: var(--tblr-btn-active-border-color);
+  box-shadow: var(--tblr-btn-active-shadow);
+}
+:where(.review-theme) .btn:disabled {
+  color: var(--tblr-btn-disabled-color);
+  pointer-events: none;
+  background-color: var(--tblr-btn-disabled-bg);
+  border-color: var(--tblr-btn-disabled-border-color);
+  opacity: var(--tblr-btn-disabled-opacity);
+  box-shadow: none;
+}
+
+:where(.review-theme) .btn-sm {
+  --tblr-btn-padding-y: 0.4375rem;
+  --tblr-btn-padding-x: 0.75rem;
+  --tblr-btn-font-size: 0.75rem;
+  --tblr-btn-border-radius: var(--tblr-border-radius-sm);
+}
+
+:where(.review-theme) .nav {
+  --tblr-nav-link-padding-x: 0.75rem;
+  --tblr-nav-link-padding-y: 0.5rem;
+  --tblr-nav-link-font-size: var(--tblr-body-font-size);
+  --tblr-nav-link-font-weight: ;
+  --tblr-nav-link-color: var(--tblr-secondary-color);
+  --tblr-nav-link-hover-color: var(--tblr-link-hover-color);
+  --tblr-nav-link-disabled-color: var(--tblr-disabled-color);
+  display: flex;
+  flex-wrap: wrap;
+  padding-inline-start: 0;
+  margin-bottom: 0;
+  list-style: none;
+}
+
+:where(.review-theme) .nav-link {
+  display: block;
+  padding: var(--tblr-nav-link-padding-y) var(--tblr-nav-link-padding-x);
+  font-size: var(--tblr-nav-link-font-size);
+  font-weight: var(--tblr-nav-link-font-weight);
+  color: var(--tblr-nav-link-color);
+  background: none;
+  border: 0;
+  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, outline-color 0.15s ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(.review-theme) .nav-link {
+    transition: none;
+  }
+}
+:where(.review-theme) .nav-link {
+  outline-color: transparent;
+}
+:where(.review-theme) .nav-link:hover, :where(.review-theme) .nav-link:focus {
+  color: var(--tblr-nav-link-hover-color);
+  text-decoration: none;
+}
+:where(.review-theme) .nav-link:focus-visible {
+  outline: var(--tblr-focus-ring, var(--tblr-focus-ring-width) solid var(--tblr-focus-ring-color));
+  outline-offset: var(--tblr-focus-ring-offset);
+}
+
+:where(.review-theme) .card {
+  --tblr-card-spacer-y: 1.25rem;
+  --tblr-card-spacer-x: 1.25rem;
+  --tblr-card-title-spacer-y: 1.25rem;
+  --tblr-card-title-color: ;
+  --tblr-card-subtitle-color: ;
+  --tblr-card-border-width: var(--tblr-border-width);
+  --tblr-card-border-color: var(--tblr-border-color-translucent);
+  --tblr-card-border-radius: var(--tblr-border-radius-lg);
+  --tblr-card-box-shadow: var(--tblr-shadow-card);
+  --tblr-card-inner-border-radius: calc(var(--tblr-border-radius-lg) - (var(--tblr-border-width)));
+  --tblr-card-cap-padding-y: 1.25rem;
+  --tblr-card-cap-padding-x: 1.25rem;
+  --tblr-card-cap-bg: var(--tblr-bg-surface-tertiary);
+  --tblr-card-cap-color: inherit;
+  --tblr-card-height: ;
+  --tblr-card-color: inherit;
+  --tblr-card-bg: var(--tblr-bg-surface);
+  --tblr-card-img-overlay-padding: 1rem;
+  --tblr-card-group-margin: 1.5rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: var(--tblr-card-height);
+  color: var(--tblr-body-color);
+  word-wrap: break-word;
+  background-color: var(--tblr-card-bg);
+  background-clip: border-box;
+  border: var(--tblr-card-border-width) solid var(--tblr-card-border-color);
+  border-radius: var(--tblr-card-border-radius);
+  box-shadow: var(--tblr-card-box-shadow);
+}
+
+:where(.review-theme) .card-body {
+  flex: 1 1 auto;
+  padding: var(--tblr-card-spacer-y) var(--tblr-card-spacer-x);
+  color: var(--tblr-card-color);
+}
+
+:where(.review-theme) .card-title {
+  margin-bottom: var(--tblr-card-title-spacer-y);
+  color: var(--tblr-card-title-color);
+}
+
+:where(.review-theme) .card-footer {
+  padding: var(--tblr-card-cap-padding-y) var(--tblr-card-cap-padding-x);
+  color: var(--tblr-card-cap-color);
+  background-color: var(--tblr-card-footer-bg, var(--tblr-card-cap-bg));
+  border-top: var(--tblr-card-border-width) solid var(--tblr-card-border-color);
+}
+:where(.review-theme) .card-footer:last-child {
+  border-radius: 0 0 var(--tblr-card-inner-border-radius) var(--tblr-card-inner-border-radius);
+}
+
+:where(.review-theme) .alert {
+  --tblr-alert-variant-color: var(--tblr-body-color);
+  --tblr-alert-color: var(--tblr-alert-variant-color);
+  --tblr-alert-bg: color-mix(in oklab, var(--tblr-alert-variant-color) 16%, var(--tblr-bg-surface));
+  --tblr-alert-padding-x: 1rem;
+  --tblr-alert-padding-y: 0.75rem;
+  --tblr-alert-margin-bottom: 1rem;
+  --tblr-alert-border-color: color-mix(in oklab, var(--tblr-alert-variant-color) 20%, var(--tblr-bg-surface));
+  --tblr-alert-border: var(--tblr-border-width) solid var(--tblr-alert-border-color);
+  --tblr-alert-border-radius: var(--tblr-border-radius);
+  --tblr-alert-link-color: inherit;
+  --tblr-alert-heading-font-weight: var(--tblr-font-weight-medium);
+  --tblr-alert-heading-margin-bottom: 0.25rem;
+  --tblr-alert-icon-size: 1.25rem;
+  --tblr-alert-padding-inline-end: 3rem;
+  --tblr-alert-gap: 1rem;
+  position: relative;
+  padding: var(--tblr-alert-padding-y) var(--tblr-alert-padding-x);
+  margin-bottom: var(--tblr-alert-margin-bottom);
+  color: var(--tblr-alert-color);
+  background-color: color-mix(in oklab, var(--tblr-alert-bg), var(--tblr-bg-surface));
+  border: var(--tblr-border-width) var(--tblr-border-style) var(--tblr-alert-border-color);
+  border-radius: var(--tblr-alert-border-radius);
+}
+:where(.review-theme) .alert:has(> .alert-icon) {
+  padding-inline-start: calc(var(--tblr-alert-padding-x) + var(--tblr-alert-icon-size) + var(--tblr-alert-gap));
+}
+
+:where(.review-theme) .alert-icon {
+  width: var(--tblr-alert-icon-size) !important;
+  height: var(--tblr-alert-icon-size) !important;
+  margin-inline-end: var(--tblr-alert-gap);
+  color: var(--tblr-alert-color);
+}
+
+:where(.review-theme) .alert > .alert-icon {
+  position: absolute;
+  inset-inline-start: var(--tblr-alert-padding-x);
+  top: var(--tblr-alert-padding-y);
+  margin-inline-end: 0;
+}
+
+:where(.review-theme) .alert-warning {
+  --tblr-alert-variant-color: var(--tblr-warning);
+}
+
+:where(.review-theme) .badge {
+  --tblr-badge-padding-x: 0.5em;
+  --tblr-badge-padding-y: 0.25em;
+  --tblr-badge-font-size: 0.85714285em;
+  --tblr-badge-font-weight: var(--tblr-font-weight-medium);
+  --tblr-badge-color: var(--tblr-secondary);
+  --tblr-badge-border-radius: var(--tblr-border-radius);
+  --tblr-badge-icon-size: 1em;
+  --tblr-badge-line-height: 1;
+  --tblr-badge-gap: 0.25rem;
+  display: inline-flex;
+  gap: var(--tblr-badge-gap);
+  align-items: center;
+  justify-content: center;
+  min-width: calc(1em + var(--tblr-badge-padding-y) * 2 + 2px);
+  padding: var(--tblr-badge-padding-y) var(--tblr-badge-padding-x);
+  overflow: hidden;
+  font-size: var(--tblr-badge-font-size);
+  font-weight: var(--tblr-badge-font-weight);
+  line-height: var(--tblr-badge-line-height);
+  color: var(--tblr-badge-color);
+  text-align: center;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  vertical-align: bottom;
+  -webkit-user-select: none;
+  user-select: none;
+  background: var(--tblr-fill-tertiary);
+  border: var(--tblr-border-width) var(--tblr-border-style) transparent;
+  border-radius: var(--tblr-badge-border-radius);
+}
+
+:where(.review-theme) .badge .icon {
+  width: 1em;
+  height: 1em;
+  font-size: var(--tblr-badge-icon-size);
+  stroke-width: 2;
+}
+
+:where(.review-theme) .btn {
+  --tblr-btn-icon-size: 1.25rem;
+  --tblr-btn-icon-color: inherit;
+  --tblr-btn-bg: var(--tblr-bg-surface);
+  --tblr-btn-color: var(--tblr-body-color);
+  --tblr-btn-border-color: var(--tblr-border-color);
+  --tblr-btn-hover-bg: light-dark(color-mix(in oklab, var(--tblr-body-color) 6%, var(--tblr-bg-surface)), color-mix(in oklab, var(--tblr-body-color) 8%, var(--tblr-bg-surface)));
+  --tblr-btn-hover-border-color: var(--tblr-border-active-color);
+  --tblr-btn-active-color: var(--tblr-primary);
+  --tblr-btn-active-bg: light-dark(color-mix(in oklab, var(--tblr-primary) 4%, var(--tblr-bg-surface)), color-mix(in oklab, var(--tblr-primary) 12%, var(--tblr-bg-surface)));
+  --tblr-btn-active-border-color: var(--tblr-primary);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(var(--tblr-btn-line-height) * 1 + var(--tblr-btn-padding-y) * 2 + var(--tblr-btn-border-width) * 2);
+  min-height: calc(var(--tblr-btn-line-height) * 1 + var(--tblr-btn-padding-y) * 2 + var(--tblr-btn-border-width) * 2);
+  white-space: nowrap;
+  box-shadow: var(--tblr-btn-box-shadow);
+  border-radius: var(--tblr-btn-border-radius);
+}
+:where(.review-theme) .btn .icon {
+  width: var(--tblr-btn-icon-size);
+  min-width: var(--tblr-btn-icon-size);
+  height: var(--tblr-btn-icon-size);
+  margin: 0 calc(var(--tblr-btn-padding-x) / 2) 0 calc(var(--tblr-btn-padding-x) / -4);
+  font-size: var(--tblr-btn-icon-size);
+  color: var(--tblr-btn-icon-color);
+  vertical-align: bottom;
+}
+
+:where(.review-theme) .btn-ghost-primary {
+  --tblr-btn-variant: var(--tblr-primary);
+  --tblr-btn-variant-fg: var(--tblr-primary-fg);
+  --tblr-btn-variant-darken: var(--tblr-primary-darken);
+}
+
+:where(.review-theme) .btn-ghost-primary {
+  --tblr-btn-color: var(--tblr-btn-variant);
+  --tblr-btn-bg: transparent;
+  --tblr-btn-border-color: transparent;
+  --tblr-btn-hover-color: var(--tblr-btn-variant-fg);
+  --tblr-btn-hover-bg: var(--tblr-btn-variant);
+  --tblr-btn-hover-border-color: var(--tblr-btn-variant);
+  --tblr-btn-active-color: var(--tblr-btn-variant-fg);
+  --tblr-btn-active-bg: var(--tblr-btn-variant);
+  --tblr-btn-active-border-color: transparent;
+  --tblr-btn-active-shadow: inset 0 3px 5px color-mix(in oklab, var(--tblr-black) 12.5%, transparent);
+  --tblr-btn-disabled-color: var(--tblr-btn-variant);
+  --tblr-btn-disabled-bg: transparent;
+  --tblr-btn-disabled-border-color: transparent;
+  --tblr-gradient: none;
+  --tblr-btn-gradient: none;
+  --tblr-btn-box-shadow: none;
+}
+
+:where(.review-theme) .btn-sm {
+  --tblr-btn-line-height: 1rem;
+  --tblr-btn-icon-size: 1rem;
+}
+:where(.review-theme) .card {
+  transition: transform 0.3s ease-out, opacity 0.3s ease-out, box-shadow 0.3s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(.review-theme) .card {
+    transition: none;
+  }
+}
+@media print {
+  :where(.review-theme) .card {
+    border: none;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}
+
+:where(.review-theme) .card .card {
+  box-shadow: none;
+}
+
+:where(.review-theme) .card-footer {
+  margin-top: auto;
+}
+:where(.review-theme) .card-footer:last-child {
+  border-radius: 0 0 var(--tblr-card-border-radius) var(--tblr-card-border-radius);
+}
+
+:where(.review-theme) .card-title {
+  --tblr-card-title-margin-bottom: 1rem;
+  --tblr-card-title-line-height: 1.5rem;
+  display: block;
+  margin: 0 0 var(--tblr-card-title-margin-bottom);
+  font-size: 1rem;
+  font-weight: var(--tblr-font-weight-medium);
+  line-height: var(--tblr-card-title-line-height);
+  color: var(--tblr-heading-color);
+}
+
+:where(.review-theme) .card-body {
+  --tblr-card-body-padding-sm: 1rem;
+  --tblr-card-body-padding-md: 2.5rem;
+  --tblr-card-body-padding-lg: 2rem;
+  --tblr-card-body-padding-lg-up: 4rem;
+  position: relative;
+}
+@media print {
+  :where(.review-theme) .card-body {
+    padding: 0;
+  }
+}
+:where(.review-theme) .icon {
+  --tblr-icon-size: 1.25rem;
+  display: inline-block;
+  width: var(--tblr-icon-size);
+  height: var(--tblr-icon-size);
+  font-size: var(--tblr-icon-size);
+  vertical-align: bottom;
+  transform-origin: center;
+  stroke-width: 1.5;
+}
+
+:where(.review-theme) .icon-inline {
+  --tblr-icon-size: 1rem;
+  --tblr-icon-inline-vertical-align: -0.2rem;
+  vertical-align: var(--tblr-icon-inline-vertical-align);
+}
+
+:where(.review-theme) .nav {
+  --tblr-nav-link-hover-bg: var(--tblr-hover-bg);
+  --tblr-nav-link-active-color: var(--tblr-body-color);
+  --tblr-nav-vertical-nested-margin-start: 1.25rem;
+  --tblr-nav-vertical-nested-padding-start: 0.5rem;
+  --tblr-nav-link-toggle-padding-x: 0.25rem;
+  --tblr-nav-link-icon-margin-end: 0.5rem;
+  font-size: var(--tblr-body-font-size);
+}
+
+:where(.review-theme) .nav-vertical {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+:where(.review-theme) .nav-link {
+  display: flex;
+  align-items: center;
+  transition: color 0.3s, background-color 0.3s, outline-color 0.15s ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(.review-theme) .nav-link {
+    transition: none;
+  }
+}
+:where(.review-theme) .nav-link:hover, :where(.review-theme) .nav-link:focus {
+  background-color: var(--tblr-nav-link-hover-bg);
+}

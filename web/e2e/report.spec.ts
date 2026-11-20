@@ -27,29 +27,49 @@ test('published report exposes the same counts, evidence and revision in the bro
   const doc = await response.json();
   const stats = report.locator('details.report-more > summary').filter({hasText: /^분석 상태와 통계$/});
   await expect(report.locator('.report-summary')).toHaveCount(0);
-  const viewport = page.viewportSize();
+  const hero = report.locator('.report-hero');
+  await expect(hero.getByRole('heading', { name: project, exact: true })).toBeVisible();
+  await expect(hero.getByText(doc.project.source, {exact: true})).toBeVisible();
+  const status = {completed: '분석 완료', partial: '분석 일부 완료', failed: '분석 실패', cancelled: '분석 취소됨'}[doc.status as string];
+  await expect(hero.getByText(status!, {exact: true})).toBeVisible();
+  if (doc.project.finished_at) await expect(hero.locator('time')).toHaveAttribute('datetime', doc.project.finished_at);
+  const judgment = report.locator('.report-executive');
+  await expect(judgment).toHaveCount(1);
+  await expect(judgment.locator('table, .model-reading-list')).toHaveCount(0);
+  await expect(judgment.getByText('적용 범위', {exact:true})).toHaveCount(0);
+  expect(await hero.locator('.report-verdict .icon').evaluate(icon => getComputedStyle(icon).maskImage)).not.toBe('none');
+  expect(await hero.evaluate(async () => {
+    await document.fonts.ready;
+    return [...document.fonts].some(font => font.family.replaceAll('"', '') === 'CODEYE Noto Sans KR' && font.status === 'loaded');
+  })).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(report.getByRole('tab', { name: '종합', exact: true })).toBeVisible();
+  const overview = report.getByRole('tab', { name: '종합', exact: true });
+  await expect(overview).toBeVisible();
   await expect.poll(() => report.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
-  if (viewport) await page.setViewportSize(viewport);
+  const glossary = judgment.locator('details.report-glossary');
+  if (await glossary.count()) {
+    await expect(glossary).toHaveCount(1);
+    await expect(glossary.locator('dl')).toBeHidden();
+    await glossary.locator('summary').press('Enter');
+    await expect(glossary.locator('dl')).toBeVisible();
+    await expect.poll(() => report.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+    await glossary.locator('summary').press('Space');
+    await expect(glossary.locator('dl')).toBeHidden();
+  }
+  const rail = report.locator('.report-rail');
+  await expect.poll(async () => (await hero.boundingBox())!.y < (await rail.boundingBox())!.y).toBe(true);
+  await overview.press('ArrowDown');
+  const next = report.locator('[aria-controls="report-section-environment"]');
+  await expect(next).toBeFocused();
+  await expect(next).toHaveAttribute('aria-selected', 'true');
+  await next.press('Home');
+  await expect(overview).toBeFocused();
+  await page.setViewportSize({ width: 1280, height: 960 });
+  await expect.poll(async () => (await rail.boundingBox())!.x < (await hero.boundingBox())!.x).toBe(true);
+  await expect.poll(() => report.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
   await stats.click();
   const rows = report.getByRole('tabpanel', {name: '종합', exact: true}).locator('.report-counts > div');
   await expect(rows.filter({hasText:'발견 사항'}).locator('dd')).toHaveText(String(doc.summary.total_findings));
-  const priority = report.locator('.report-priorities .finding-card').first();
-  if (await priority.count()) {
-    const findingID = await priority.getAttribute('data-finding-id');
-    const finding = doc.findings.find((entry: { id: string }) => entry.id === findingID);
-    expect(doc.code_review.finding_ids).toContain(findingID);
-    expect(['supported', 'reproduced', 'inconclusive', 'unreviewed']).toContain(finding.validation);
-    const title = priority.locator('summary').first();
-    await expect(title).toContainText(finding.title);
-    await title.focus();
-    await page.keyboard.press('Enter');
-    await expect(priority.locator('dd').getByText(finding.impact, {exact:true})).toBeVisible();
-    const excerpt = finding.evidence.find((entry: { excerpt?: unknown }) => entry.excerpt);
-    if (excerpt) await expect(priority.locator('pre').first()).toBeVisible();
-    await expect(report.getByRole('tab', {name:'종합', exact:true})).toHaveAttribute('aria-selected', 'true');
-  }
   if (doc.overview) {
     const tabOrder = ['overview', 'environment', 'documents', 'static_analysis', 'metrics', 'secrets', 'code_review', 'gaps'];
     const tabs = report.getByRole('tablist').getByRole('tab');
@@ -79,7 +99,17 @@ test('published report exposes the same counts, evidence and revision in the bro
     // The claims and evidence sit behind the card's own disclosure.
     await card.locator('details.finding-evidence > summary').click();
     const first = item.evidence.find((entry: { location?: unknown }) => entry.location);
-    if (first) await expect(card.locator('[id]').filter({hasText:first.location.path}).first()).toBeVisible();
+    if (first) {
+      const evidence = card.locator('.finding-evidence li[id]').filter({hasText:first.location.path}).first();
+      await expect(evidence).toBeVisible();
+      const excerpt = evidence.locator('.report-excerpt summary');
+      if (await excerpt.count()) {
+        await expect(excerpt).toHaveCount(1);
+        await expect(evidence.locator('pre')).toBeHidden();
+        await excerpt.press('Enter');
+        await expect(evidence.locator('pre')).toBeVisible();
+      }
+    }
   }
   for (const format of ['json','markdown','html']) {
     const ref = await report.getByRole('link', {name:format.toUpperCase(),exact:true}).getAttribute('href');
@@ -90,5 +120,14 @@ test('published report exposes the same counts, evidence and revision in the bro
     const exported = await page.request.get(target.href);
     expect(exported.status()).toBe(200);
     if (format === 'json') expect((await exported.json()).summary).toEqual(doc.summary);
+  }
+  await report.getByText('화면 자산 라이선스', {exact:true}).click();
+  for (const name of ['Tabler Core (MIT)', 'Tabler Icons (MIT)', 'Bootstrap (MIT)', 'Noto Sans KR (OFL)']) {
+    const asset = await report.getByRole('link', {name, exact:true}).getAttribute('href');
+    const local = new URL(asset!, page.url());
+    expect(local.origin).toBe(new URL(page.url()).origin);
+    const license = await page.request.get(local.href);
+    expect(license.ok()).toBe(true);
+    expect(await license.text()).toContain(name.endsWith('(MIT)') ? 'MIT License' : 'SIL OPEN FONT LICENSE');
   }
 });

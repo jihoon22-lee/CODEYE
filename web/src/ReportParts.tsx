@@ -7,7 +7,12 @@ import { reportURL, sourceEvidenceURL } from './analysisReport';
 import { FindingHistory, HIDDEN, findingBadge, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { secondaryReviewFinding, type Decision } from './reportGroups';
+import { ReportIcon } from './ReportLayout';
+import tablerLicense from '../../internal/report/reportui/LICENSE.tabler-core?url&no-inline';
+import iconsLicense from '../../internal/report/reportui/LICENSE.tabler-icons?url&no-inline';
+import bootstrapLicense from '../../internal/report/reportui/LICENSE.bootstrap?url&no-inline';
+import fontLicense from '../../internal/report/reportui/LICENSE.noto-sans-kr?url&no-inline';
+import { secondaryReviewFinding } from './reportGroups';
 
 export function label(labels: Record<string, string>, key: string) {
   return Object.hasOwn(labels, key) ? labels[key] : key;
@@ -40,6 +45,13 @@ export function ReportIdentity({ report, showStatus = true }: { report: Analysis
   </dl>;
 }
 
+export function ReportReviewStatus({ report }: { report: AnalysisReport }) {
+  return <>
+    <p><strong>{t.reading.verdict}</strong> {label(ko.runs.verdictLabels, report.verdict)}</p>
+    <p><strong>{t.coverage}</strong> {label(t.ai, report.aiReview)}</p>
+  </>;
+}
+
 function CodeWindow({ excerpt, location }: { excerpt: Excerpt; location: string }) {
   return (
     <pre className="source-window" tabIndex={0} aria-label={t.excerptAt(location)}><code>
@@ -52,35 +64,59 @@ function CodeWindow({ excerpt, location }: { excerpt: Excerpt; location: string 
 
 export const ReportSourceContext = createContext<string | undefined>(undefined);
 
-function SourceAnchor({ href, location }: { href: string; location: string }) {
-  return <a className="pinned-source" href={href} target="_blank" rel="noopener noreferrer" aria-label={t.pinnedRangeAt(location)}>{location}</a>;
+function SourceAnchor({ href, location, action = t.openSource }: { href: string; location: string; action?: string }) {
+  return <a className="btn btn-sm btn-ghost-primary report-source-action" href={href} target="_blank" rel="noopener noreferrer" aria-label={t.sourceActionAt(action, location)}>
+    {action}<ReportIcon name="external" />
+  </a>;
+}
+
+function EvidenceLocation({ location, href, excerpt, path, kind, preferOriginal, actionLabel }: {
+  location: string; href?: string; excerpt?: Excerpt | null; path?: string; kind?: string; preferOriginal?: boolean; actionLabel?: string;
+}) {
+  const isDocument = kind === 'document';
+  const action = actionLabel ?? (isDocument ? t.viewDocument : t.viewCode);
+  if (href && preferOriginal) return <div className="report-evidence"><SourceAnchor href={href} location={location} action={action} /></div>;
+  const file = <span className="report-file"><ReportIcon name="file" /><code>{location}</code></span>;
+  return <div className="report-evidence">
+    {excerpt ? <details className="report-excerpt">
+      <summary className="btn btn-sm btn-ghost-primary" aria-label={t.sourceActionAt(action, location)}>
+        <ReportIcon name={isDocument ? 'file' : 'code'} />{action}<ReportIcon name="chevron" />
+      </summary>
+      <div className="report-evidence-row">
+        {file}{href && <SourceAnchor href={href} location={location} />}
+      </div>
+      <p className="report-excerpt-label">{t.excerptAt(path ? sourceLocation(path, excerpt.start, excerpt.end) : location)}</p>
+      <CodeWindow excerpt={excerpt} location={path ? sourceLocation(path, excerpt.start, excerpt.end) : location} />
+    </details> : href ? <SourceAnchor href={href} location={location} action={action} /> : file}
+  </div>;
 }
 
 export function PinnedSourceLink({ path, start, end, fallback }: { path: string; start: number; end: number; fallback?: string }) {
   const base = useContext(ReportSourceContext);
   const href = sourceEvidenceURL(base, path, start, end);
-  return href ? <SourceAnchor href={href} location={sourceLocation(path, start, end)} /> : fallback ? <code>{fallback}</code> : null;
+  return href || fallback ? <EvidenceLocation location={fallback ?? sourceLocation(path, start, end)} href={href} /> : null;
 }
 
-function FindingSourceLink({ evidence, fallback }: { evidence: Evidence; fallback: string }) {
-  return evidence.path && evidence.lines && ['code', 'document', 'test'].includes(evidence.kind)
-    ? <PinnedSourceLink path={evidence.path} {...evidence.lines} fallback={fallback} />
-    : <code>{fallback}</code>;
-}
-
-export function Citations({refs,catalog}: {refs: string[]; catalog: Citation[]}) {
+export function FindingSourceLink({ evidence, preferOriginal, actionLabel }: { evidence: Evidence; preferOriginal?: boolean; actionLabel?: string }) {
   const base = useContext(ReportSourceContext);
-  const evidence = refs.map(id => catalog.find(x => x.id === id)).filter(x => x !== undefined);
-  return <>{evidence.map(e => {
+  if (!evidence.path || !evidence.lines) return null;
+  const { start, end } = evidence.lines;
+  const href = ['code', 'document', 'test'].includes(evidence.kind) ? sourceEvidenceURL(base, evidence.path, start, end) : undefined;
+  return <EvidenceLocation location={sourceLocation(evidence.path, start, end)} href={href} excerpt={evidence.excerpt} path={evidence.path} kind={evidence.kind} preferOriginal={preferOriginal} actionLabel={actionLabel} />;
+}
+
+export function Citations({ refs, catalog, preferOriginal, actionLabel }: { refs: string[]; catalog: Citation[]; preferOriginal?: boolean; actionLabel?: string }) {
+  const base = useContext(ReportSourceContext);
+  const evidence = new Map<string, Citation>();
+  for (const e of catalog) {
+    if (!refs.includes(e.id)) continue;
+    const key = JSON.stringify([e.path, e.line, e.end, e.kind]);
+    if (!evidence.has(key) || e.excerpt) evidence.set(key, e);
+  }
+  return <>{Array.from(evidence.values(), e => {
     const location = sourceLocation(e.path, e.line, e.end);
     const href = sourceEvidenceURL(base, e.path, e.line, e.end);
-    return <div className="source-citation" key={e.id}>
-      {href && <SourceAnchor href={href} location={location} />}
-      {e.excerpt ? <details>
-        <summary aria-label={href ? t.excerptAt(location) : undefined}>{href ? t.showExcerpt : location}</summary>
-        <CodeWindow excerpt={e.excerpt} location={sourceLocation(e.path, e.excerpt.start, e.excerpt.end)} />
-      </details> : !href && <code>{location}</code>}
-    </div>;
+    return <EvidenceLocation key={e.id} location={location} href={href} excerpt={e.excerpt} path={e.path} kind={e.kind} preferOriginal={preferOriginal} actionLabel={actionLabel} />;
   })}</>;
 }
 
@@ -100,50 +136,29 @@ export function TextList({ values }: { values: string[] }) {
 // A finding a reader can scan: the title, severity and validation as words, and where; once
 // opened, the impact and the fix first, then the conditions and how to check, with the claims
 // and evidence behind their own disclosure.
-export function FindingCard({ f, badge, history, preview }: { f: Finding; badge?: string | null; history?: ReactNode; preview?: Decision }) {
-  const [open, setOpen] = useState(false);
-  const base = useContext(ReportSourceContext);
-  const known = (labels: Record<string, string>, key: string) => (Object.hasOwn(labels, key) ? key : 'unknown');
-  const location = preview ? sourceLocation(preview.source.path, preview.source.lines.start, preview.source.lines.end) : f.locations[0];
-  const href = preview && sourceEvidenceURL(base, preview.source.path, preview.source.lines.start, preview.source.lines.end);
-  const status = preview && f.validation === 'supported' ? t.reading.supported : label(t.validation, f.validation);
-  const source = location && href ? <SourceAnchor href={href} location={location} /> : null;
-  const details = (
-    <FindingDetails f={f} history={history} preview={Boolean(preview)} linkedEvidence={href ? preview?.source.id : undefined} />
-  );
+export function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null; history?: ReactNode }) {
+  const known = (labels: Record<string, string>, key: string) => Object.hasOwn(labels, key) ? key : 'unknown';
+  const location = f.locations[0];
   return (
-    <>
-    <details data-finding-id={f.id} className={'finding-card sev-' + known(t.severity, f.severity)} onToggle={preview ? (e) => setOpen(e.currentTarget.open) : undefined}>
-      <summary>
-        <strong>{f.title}</strong>
-        <span>
-          <span className={'pill sev sev-' + known(t.severity, f.severity)}>{t.severityBadge(label(t.severity, f.severity))}</span>
-          <span className={'pill val val-' + known(t.validation, f.validation)}>{status}</span>
-          {badge && <span className="pill tone-plain">{badge}</span>}
-          {!preview && secondaryReviewFinding(f) && <span className="pill tone-plain">{t.reading.secondary}</span>}
-          {location && !href && (
-            <span className="where">
-              {location}
-              {!preview && f.locations.length > 1 && t.morePlaces(f.locations.length - 1)}
-            </span>
-          )}
-        </span>
-        {preview && <span className="finding-preview">
-          {preview.condition && <span><b>{t.reading.basis}</b> {preview.condition}</span>}
-          {preview.next
-            ? <span><b>{t.reading.nextCheck}</b> {preview.next}</span>
-            : <span><b>{t.reading.nextAction}</b> {f.recommendation}</span>}
-        </span>}
-      </summary>
-      {open && source}
-      {(!preview || open) && details}
-    </details>
-    {!open && source}
-    </>
+    <div className="card report-card report-finding">
+      <details data-finding-id={f.id} className="finding-card">
+        <summary>
+          <strong>{f.title}</strong>
+          <span>
+            <span className={'badge pill sev sev-' + known(t.severity, f.severity)}>{t.severityBadge(label(t.severity, f.severity))}</span>
+            <span className={'badge pill val val-' + known(t.validation, f.validation)}>{label(t.validation, f.validation)}</span>
+            {badge && <span className="badge pill tone-plain">{badge}</span>}
+            {secondaryReviewFinding(f) && <span className="badge pill tone-plain">{t.reading.secondary}</span>}
+            {location && <span className="where">{location}{f.locations.length > 1 && t.morePlaces(f.locations.length - 1)}</span>}
+          </span>
+        </summary>
+        <FindingDetails f={f} history={history} />
+      </details>
+    </div>
   );
 }
 
-function FindingDetails({ f, history, preview, linkedEvidence }: { f: Finding; history?: ReactNode; preview: boolean; linkedEvidence?: string }) {
+function FindingDetails({ f, history }: { f: Finding; history?: ReactNode }) {
   const ref = useId();
   return (
     <div className="finding-body">
@@ -153,18 +168,6 @@ function FindingDetails({ f, history, preview, linkedEvidence }: { f: Finding; h
         <dt>{t.recommendation}</dt>
         <dd>{f.recommendation}</dd>
       </dl>
-      {f.evidence.map(e => {
-        if (!e.excerpt) return null;
-        const { start, end } = e.excerpt;
-        const location = sourceLocation(e.path ?? '', start, end);
-        return (
-          <figure key={e.id} className="finding-excerpt">
-            <figcaption>{e.id === linkedEvidence ? <code>{location}</code> : <FindingSourceLink evidence={e} fallback={location} />}</figcaption>
-            <CodeWindow excerpt={e.excerpt} location={location} />
-            <p className="small">{e.description}</p>
-          </figure>
-        );
-      })}
       <dl>
         <dt>{t.conditions}</dt>
         <dd>
@@ -183,28 +186,23 @@ function FindingDetails({ f, history, preview, linkedEvidence }: { f: Finding; h
           <TextList values={f.limitations} />
         </>
       )}
-      <details className="finding-evidence" open={preview && !f.evidence.some(e => e.excerpt)}>
+      <details className="finding-evidence">
         <summary>{t.evidenceToggle(f.evidence.length)}</summary>
         {f.claims.map((claim, i) => (
           <p key={i}>
             <strong>{claim.kind === 'observed' ? t.observed : t.inferred} · </strong>
             {claim.assertion}
-            {claim.evidence.map((id, index) => (
-              <a key={id} className="report-ref" href={`#${ref}-${id}`}>{t.ref(index + 1)}</a>
-            ))}
+            {claim.evidence.map((id, index) => <button key={id} type="button" className="btn btn-sm btn-ghost-primary report-ref"
+              aria-controls={`${ref}-${id}`} onClick={() => document.getElementById(`${ref}-${id}`)?.focus()}>{t.ref(index + 1)}</button>)}
           </p>
         ))}
         <h6>{t.evidence}</h6>
         <ul>
           {f.evidence.map((e) => (
-            <li key={e.id} id={`${ref}-${e.id}`}>
+            <li key={e.id} id={`${ref}-${e.id}`} tabIndex={-1}>
               {f.counter.includes(e.id) && <strong>{t.counter} · </strong>}
               {e.description}
-              {e.path && e.lines && <div>
-                {e.excerpt || e.id === linkedEvidence
-                  ? <code>{e.path}:{e.lines.start}–{e.lines.end}</code>
-                  : <FindingSourceLink evidence={e} fallback={`${e.path}:${e.lines.start}–${e.lines.end}`} />}
-              </div>}
+              <FindingSourceLink evidence={e} />
               {e.artifact && <div>{t.artifact} <code>{e.artifact}</code></div>}
             </li>
           ))}
@@ -293,25 +291,6 @@ export function FindingList({ findings, history, empty }: { findings: Finding[];
   );
 }
 
-// Verdict states the quality verdict in words with what it means; the model review state follows.
-export function Verdict({ report }: { report: AnalysisReport }) {
-  const known = Object.hasOwn(t.verdictLead, report.verdict);
-  return (
-    <div className={'verdict v-' + (known ? report.verdict : 'unknown')}>
-      <span className="icon" aria-hidden="true">
-        {known ? t.verdictIcon[report.verdict] : '?'}
-      </span>
-      <div>
-        <strong>{label(ko.runs.verdictLabels, report.verdict)}</strong>
-        <p>{known ? t.verdictLead[report.verdict] : t.verdictUnknown}</p>
-        <p className="small">
-          {t.coverage} {label(t.ai, report.aiReview)}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // ReportCounts presents the counts stored at publication.
 export function ReportCounts({ report }: { report: AnalysisReport }) {
   return (
@@ -394,24 +373,35 @@ export function ReportTasks({ report }: { report: AnalysisReport }) {
 export function ReportExports({ report }: { report: AnalysisReport }) {
   const [includeCode, setIncludeCode] = useState(false);
   return (
-    <section className="exports">
-      <h5>{t.exports}</h5>
-      <label className="inline">
-        <input type="checkbox" checked={includeCode} onChange={(e) => setIncludeCode(e.target.checked)} /> {t.include}
-      </label>
-      <div className="actions">
-        {['json', 'markdown', 'html'].map((format) => (
-          <a key={format} download href={reportURL(report.runID, format, includeCode, report.revision)}>
-            {format.toUpperCase()}
-          </a>
-        ))}
-        {['markdown', 'html'].map((format) => (
-          <a key={format + '-full'} download href={reportURL(report.runID, format, includeCode, report.revision, 'full')}>
-            {t.exportFull(format.toUpperCase())}
-          </a>
-        ))}
+    <section className="card report-card exports">
+      <div className="card-body">
+        <h5 id="report-exports" tabIndex={-1}>{t.exports}</h5>
+        <label className="inline">
+          <input type="checkbox" checked={includeCode} onChange={(e) => setIncludeCode(e.target.checked)} /> {t.include}
+        </label>
+        <div className="actions">
+          {['json', 'markdown', 'html'].map((format) => (
+            <a key={format} className="btn btn-sm btn-ghost-primary report-card-action" download href={reportURL(report.runID, format, includeCode, report.revision)}>
+              {format.toUpperCase()}
+            </a>
+          ))}
+          {['markdown', 'html'].map((format) => (
+            <a key={format + '-full'} className="btn btn-sm btn-ghost-primary report-card-action" download href={reportURL(report.runID, format, includeCode, report.revision, 'full')}>
+              {t.exportFull(format.toUpperCase())}
+            </a>
+          ))}
+        </div>
+        <p className="small">{t.exportNote}</p>
+        <details className="report-notices">
+          <summary>{t.reading.notices}</summary>
+          <ul>
+            <li><a className="btn btn-sm btn-ghost-primary" href={tablerLicense} download="LICENSE.tabler-core.txt">Tabler Core (MIT)</a></li>
+            <li><a className="btn btn-sm btn-ghost-primary" href={iconsLicense} download="LICENSE.tabler-icons.txt">Tabler Icons (MIT)</a></li>
+            <li><a className="btn btn-sm btn-ghost-primary" href={bootstrapLicense} download="LICENSE.bootstrap.txt">Bootstrap (MIT)</a></li>
+            <li><a className="btn btn-sm btn-ghost-primary" href={fontLicense} download="LICENSE.noto-sans-kr.txt">Noto Sans KR (OFL)</a></li>
+          </ul>
+        </details>
       </div>
-      <p className="small">{t.exportNote}</p>
     </section>
   );
 }

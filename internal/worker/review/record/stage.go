@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/docpath"
 )
 
 // Review stage records (schema 0.2) are written by the review roles. A
@@ -470,7 +469,7 @@ func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)
 		return invalid("evidence location")
 	case !kinds[e.Kind] || !origins[e.Origin] || e.Text != "" || (e.Symbol != "" && !symbol.MatchString(e.Symbol)):
 		return invalid("evidence attributes")
-	case (e.Kind == "code" || e.Kind == "test") && SourceKind(e.Path) != e.Kind:
+	case (e.Kind == "code" || e.Kind == "test") && !sourceKindMatches(e.Path, e.Kind):
 		return invalid("evidence kind")
 	case (e.Origin == "caller" || e.Origin == "test") != (e.Symbol != "") || (e.Origin == "test" && e.Kind != "test") || (e.Origin == "caller" && e.Kind != "code"):
 		return invalid("evidence origin")
@@ -481,6 +480,14 @@ func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)
 	}
 	if sha, ok := lookup(e.Path); !ok || sha != e.SHA256 {
 		return invalid("evidence path or blob not in snapshot")
+	}
+	if !e.ValidDirectivePath() {
+		return invalid("evidence directive path")
+	}
+	if e.DirectivePath != "" {
+		if _, ok := lookup(e.DirectivePath); !ok {
+			return invalid("directive path not in snapshot")
+		}
 	}
 	return nil
 }
@@ -502,7 +509,7 @@ func refs(ids []string, catalog map[string]Excerpt, max int, want ...string) boo
 // of a sub-directory is never generalized to a parent or the repository.
 func docsCover(ids []string, catalog map[string]Excerpt, scope string) bool {
 	for _, id := range ids {
-		if !ScopeUnder(scope, docpath.Scope(catalog[id].Path)) {
+		if !ScopeUnder(scope, catalog[id].DocumentScope()) {
 			return false
 		}
 	}
@@ -577,7 +584,7 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		}
 		for _, a := range c.FirstEvidence {
 			for _, b := range c.SecondEvidence {
-				if catalog[a].Path == catalog[b].Path {
+				if catalog[a].DocumentPath() == catalog[b].DocumentPath() {
 					return invalid("conflict sides cite the same document")
 				}
 			}

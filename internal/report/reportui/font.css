@@ -1,0 +1,7 @@
+@font-face {
+  font-family: "CODEYE Noto Sans KR";
+  src: url("./noto-sans-kr.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 750;
+  font-display: swap;
+}

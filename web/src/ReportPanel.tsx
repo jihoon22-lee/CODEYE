@@ -4,7 +4,8 @@ import type { AnalysisReport } from './analysisReport';
 import { describeError } from './format';
 import { ComparisonSection, type ComparisonLoad } from './HistoryView';
 import { reportKo as t } from './locales/report-ko';
-import { ReportIdentity, FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportSourceContext, ReportTasks, TextList, Verdict, explainReason, type ReportHistory } from './ReportParts';
+import { ReportIdentity, FindingList, ReportCalls, ReportCounts, ReportExports, ReportReviewStatus, ReportScope, ReportSourceContext, ReportTasks, TextList, explainReason, type ReportHistory } from './ReportParts';
+import { ReportGroup, ReportIcon, ReportLayout } from './ReportLayout';
 import { SectionedReport } from './ReportSections';
 
 export type { ReportHistory } from './ReportParts';
@@ -17,26 +18,36 @@ export function ReportDocument({ report, history }: { report: AnalysisReport; hi
 
 // Revisions published before the analysis sections keep this flat layout.
 function FlatReport({ report, history }: { report: AnalysisReport; history?: ReportHistory }) {
+  const rail = <nav aria-label={t.title} className="nav report-tabs">
+    <button type="button" className="nav-link" aria-controls="report-findings" onClick={() => document.getElementById('report-findings')?.focus()}>
+      <ReportIcon name="findings" /><span>{t.findings}</span>
+    </button>
+    <button type="button" className="nav-link" aria-controls="report-inputs" onClick={() => {
+      const details = document.getElementById('report-inputs') as HTMLDetailsElement | null;
+      if (details) {
+        details.open = true;
+        details.querySelector('summary')?.focus();
+      }
+    }}>
+      <ReportIcon name="file" /><span>{t.reading.provenance}</span>
+    </button>
+    <button type="button" className="nav-link" aria-controls="report-exports" onClick={() => document.getElementById('report-exports')?.focus()}>
+      <ReportIcon name="jump" /><span>{t.exports}</span>
+    </button>
+  </nav>;
   return (
-    <article className="report-document" aria-label={t.title}>
-      <header>
-        <h4>{t.title}</h4>
-        {report.project?.name && <p className="report-project">{report.project.name}</p>}
-        <span>{t.revision(report.revision)}</span>
-      </header>
-      <p>{t.reading.reportsOnly}</p>
-      <Verdict report={report} />
-      <h5>{t.findings}</h5>
-      <FindingList findings={report.findings} history={history} empty={t.empty} />
-      <ReportCounts report={report} />
+    <ReportLayout report={report} rail={rail}>
+      <ReportGroup title={t.findings} tone="neutral" icon="findings" id="report-findings">
+        <FindingList findings={report.findings} history={history} empty={t.empty} />
+      </ReportGroup>
+      <ReportGroup title={t.reading.operations} tone="neutral" icon="chart"><ReportReviewStatus report={report} /><ReportCounts report={report} /></ReportGroup>
       {report.limitations.length > 0 && (
-        <section>
-          <h5>{t.scope}</h5>
-          <TextList values={report.limitations.map(explainReason)} />
-        </section>
+        <ReportGroup title={t.scope} tone="pending" icon="alert">
+          <div className="card report-card"><div className="card-body"><TextList values={report.limitations.map(explainReason)} /></div></div>
+        </ReportGroup>
       )}
       {history && <ComparisonSection load={history.load} reload={history.reload} />}
-      <details>
+      <details className="report-section" id="report-inputs">
         <summary>{t.reading.provenance}</summary>
         <ReportIdentity report={report} />
         <p>{t.snapshot} <code>{report.snapshot}</code></p>
@@ -45,7 +56,7 @@ function FlatReport({ report, history }: { report: AnalysisReport; history?: Rep
         <ReportTasks report={report} />
       </details>
       {report.observations.length > 0 && (
-        <details>
+        <details className="report-section">
           <summary>
             {t.observations} ({report.observations.length})
           </summary>
@@ -59,7 +70,7 @@ function FlatReport({ report, history }: { report: AnalysisReport; history?: Rep
         </details>
       )}
       <ReportExports report={report} />
-    </article>
+    </ReportLayout>
   );
 }
 

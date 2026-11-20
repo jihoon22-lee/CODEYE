@@ -298,6 +298,10 @@ def main() -> None:
         "code-free export with model text": lambda d: (d["export"].update(include_code=False), [o.update(raw_message=None) for o in d["observations"]]),
         "section evidence hash mismatch": lambda d: d["documents"]["evidence"][0].update(blob_sha256="0" * 64),
         "section statement cites unknown evidence": lambda d: d["documents"]["contracts"][0]["evidence_ids"].append("ev_missing"),
+        "comparison changes its contract": lambda d: d["documents"]["comparisons"][0].update(statement="다른 문서 계약에 대한 판정이다."),
+        "comparison verdict without implementation": lambda d: d["documents"]["comparisons"][0].update(code_evidence_ids=[]),
+        "comparison uses code outside its scope": lambda d: d["documents"]["comparisons"][1].update(
+            status="match", code_evidence_ids=d["documents"]["comparisons"][0]["code_evidence_ids"]),
     }
     for name, edit in section_cases.items():
         bad = copy.deepcopy(report)

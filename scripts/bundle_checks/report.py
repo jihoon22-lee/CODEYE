@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 
 from .common import ROOT, ensure, source_location
+from .review import evidence_document_scope
 
 
 def check_plan(plan: dict) -> None:
@@ -174,11 +175,40 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
                         "snapshot_id": report["inputs"]["snapshot_id"]}
             path = source_location(location, source_root)
             ensure(hashlib.sha256(path.read_bytes()).hexdigest() == evidence["blob_sha256"], "Section evidence hash mismatch: " + str(path))
+            evidence_document_scope(evidence, source_root)
             check_excerpt(evidence, path, evidence["start_line"], not free)
         cited = [i for entries in report[block].values() if isinstance(entries, list)
                  for entry in entries if isinstance(entry, dict)
                  for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids", "document_evidence_ids", "code_evidence_ids") for i in entry.get(key, [])]
         ensure(set(cited) <= set(catalog), "Section statement cites evidence the section does not carry")
+        if block == "documents":
+            check_document_comparisons(report[block], catalog)
+
+
+def scope_under(path: str, directory: str) -> bool:
+    return directory == "." or path == directory or path.startswith(directory + "/")
+
+
+def check_document_comparisons(documents: dict, catalog: dict) -> None:
+    """Check published comparisons against their contracts and snapshot evidence."""
+    comparisons = documents.get("comparisons", [])
+    contracts = documents["contracts"]
+    ensure(not comparisons or len(comparisons) == len(contracts), "Document comparison count differs from contracts")
+    for comparison, contract in zip(comparisons, contracts):
+        scope = comparison["applies_to"]
+        doc_ids = comparison["document_evidence_ids"]
+        ensure(comparison["statement"] == contract["statement"] and doc_ids == contract["evidence_ids"]
+               and scope_under(scope, contract["applies_to"]), "Document comparison differs from its contract")
+        docs = [catalog[evidence_id] for evidence_id in doc_ids]
+        ensure(all(item["kind"] == "document" and scope_under(scope, evidence_document_scope(item)) for item in docs),
+               "Document comparison cites evidence outside its scope or of the wrong kind")
+        code = [catalog[evidence_id] for evidence_id in comparison["code_evidence_ids"]]
+        ensure(all(item["kind"] in ("code", "test") and scope_under(item["path"], scope) for item in code),
+               "Document comparison cites implementation outside its scope or evidence of the wrong kind")
+        ensure(comparison["status"] == "unknown" or any(item["kind"] == "code" and not any(
+            doc.get("directive_path") and doc["path"] == item["path"] and item["start_line"] <= doc["end_line"]
+            and doc["start_line"] <= item["end_line"] for doc in docs) for item in code),
+               "Document comparison verdict lacks implementation evidence")
 
 
 def check_excerpt(evidence: dict, path: Path, anchor: int, include_code: bool | None) -> None:

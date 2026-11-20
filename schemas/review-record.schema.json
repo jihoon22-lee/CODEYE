@@ -84,11 +84,13 @@
       "properties": {
         "id":{"$ref":"#/$defs/id"}, "path":{"$ref":"#/$defs/path"},
         "sha256":{"$ref":"#/$defs/digest"}, "start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1},
-        "kind":{"enum":["code","test","document","manifest"]},"origin":{"enum":["context","caller","test","observation"]},"symbol":{"type":"string","pattern":"^[A-Za-z_][A-Za-z0-9_]{0,127}$"}
+        "kind":{"enum":["code","test","document","manifest"]},"origin":{"enum":["context","caller","test","observation"]},"symbol":{"type":"string","pattern":"^[A-Za-z_][A-Za-z0-9_]{0,127}$"},
+        "directive_path":{"$ref":"#/$defs/path","description":"Python docstring을 공개 문서에 연결하는 스냅샷 Markdown 페이지 경로."}
       },
       "allOf": [
         {"if":{"properties":{"kind":{"enum":["document","manifest"]}}},"then":{"not":{"required":["origin"]}}},
-        {"if":{"required":["origin"],"properties":{"origin":{"enum":["caller","test"]}}},"then":{"required":["symbol"]},"else":{"not":{"required":["symbol"]}}}
+        {"if":{"required":["origin"],"properties":{"origin":{"enum":["caller","test"]}}},"then":{"required":["symbol"]},"else":{"not":{"required":["symbol"]}}},
+        {"if":{"required":["directive_path"]},"then":{"properties":{"kind":{"const":"document"},"path":{"pattern":"\\.py$"}}}}
       ]
     },
     "upstream": {
