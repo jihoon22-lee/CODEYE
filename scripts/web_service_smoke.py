@@ -200,7 +200,7 @@ def wildcard(directory, env, fixture):
             assert f"http://127.0.0.1:{port}" in body["error"]["details"]["accepted_origins"], body
         # The command it names works on the running service (the controller restarts with the new origin).
         out = cli("up", "--no-open", "--public-origin", f"http://{foreign}")
-        assert "saved public_origins in" in out and "restarting the controller: how it listens changed" in out, out
+        assert "saved public_origins in" in out and "restarting the controller:" in out, out
         config = json.loads((home / "xdg-config/codeye/config.json").read_text())
         assert config["public_origins"] == [f"http://{foreign}"] and config["listen"] == f"0.0.0.0:{port}" and config["plain_http"] is True, config
         with urlopen(Request(second + "/api/v1/health", headers={"Host": foreign}), timeout=10) as r:

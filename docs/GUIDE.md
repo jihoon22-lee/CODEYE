@@ -148,7 +148,7 @@ codeye up --listen 0.0.0.0:7443 --tls-cert /etc/codeye/cert.pem --tls-key /etc/c
 ```sh
 tailnet_ip=$(tailscale ip -4) && test -n "$tailnet_ip" &&
   tailscale serve --bg --tcp=7331 tcp://127.0.0.1:7331 &&
-  codeye up --listen 127.0.0.1:7331 --public-origin "http://${tailnet_ip}:7331"
+  codeye up --listen 127.0.0.1:7331 --plain-http --public-origin "http://${tailnet_ip}:7331"
 ```
 
 `up`은 서비스가 받는 주소를 모두 출력한다. 상대의 네트워크에서 닿는 주소를 골라 알려 준다.
