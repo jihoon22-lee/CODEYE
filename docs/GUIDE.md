@@ -142,7 +142,7 @@ codeye up --listen 0.0.0.0:7331 --plain-http --public-origin http://192.168.0.10
 ```
 
 - 평문 HTTP는 시작할 때 `plain HTTP on 0.0.0.0:7331 (plain_http): sign-in cookies and passwords travel unencrypted on this network`를 한 줄 출력한다. 막지는 않는다.
-- `--public-origin`은 다른 사람이 브라우저에 넣는 주소다. 서버는 이 주소의 Host·Origin만 받고 로그인 쿠키도 이 주소에 맞춘다(TLS면 `__Host-` 쿠키에 Secure). 평문 HTTP에서 특정 주소(`192.168.0.10:7331`)를 들으면 생략할 수 있다. `0.0.0.0`을 들으면 반드시 준다.
+- `--public-origin`은 다른 사람이 브라우저에 넣는 주소다. 서버는 이 주소의 Host·Origin만 받고 로그인 쿠키도 이 주소에 맞춘다(TLS면 `__Host-` 쿠키에 Secure). 평문 HTTP에서는 생략할 수 있다. 특정 주소(`192.168.0.10:7331`)를 들으면 그 주소이고, `0.0.0.0`을 들으면 `up`이 이 머신의 첫 번째 네트워크 주소(loopback 제외)를 골라 출력한다. 이 머신에 주소가 여럿이면(VPN, DNS 이름) 사람들이 쓸 주소를 직접 준다. 다른 주소로 들어온 요청은 Host 검사에서 403 `HOST_REJECTED`다. 같은 머신의 브라우저는 loopback 주소로도 들어온다. `codeye serve`를 직접 띄울 때는 `0.0.0.0`이면 반드시 준다.
 - 출력되는 로그인 링크와 "Other people open …" 줄은 이 공개 주소를 쓴다. 이 머신의 에이전트와 명령은 loopback의 따로 된 주소(기본 듣는 포트 + 1, 설정 `local_listen`)로 controller에 붙는다.
 - 인증서는 운영자가 준비한다. 자체 서명 인증서면 다른 사람의 브라우저가 경고를 보이므로 그 인증서를 믿게 해야 한다.
 - 되돌리려면 설정 파일에서 `listen`·`tls_cert`·`tls_key`·`public_origin`·`plain_http`를 지운다.
