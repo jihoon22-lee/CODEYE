@@ -1179,7 +1179,7 @@ clippy 작업은 allow-by-default인 여섯 lint를 `-W`로 켠다. 소스의 `#
 
 ## 구조·중복 지표와 비밀값 팩
 
-언어와 무관한(`ecosystem: any`) 추가 깊이 분석기 셋이다. **lizard**는 함수 복잡도, **jscpd**는 중복 블록, **gitleaks**는 비밀값을 본다. 공통 실행부는 `internal/worker/analysis/anypack`, 빌트인 연결은 `builtin/w21.go`다.
+언어와 무관한(`ecosystem: any`) 추가 깊이 분석기 셋이다. **lizard**는 함수 복잡도, **jscpd**는 중복 블록, **gitleaks**는 비밀값을 본다. 공통 실행부는 `internal/worker/analysis/anypack`, 빌트인 연결은 `builtin/any_ecosystem.go`다.
 
 - 셋 다 추가 깊이이므로 이 플래그만으로는 deep-review를 광고하지 않는다. 경로가 없으면 작업은 계획되고 `unsupported`(`tool_not_configured`)다.
 - 저장소 코드를 실행하지 않는다(`RepositoryCode=false`). lizard는 넘긴 파일의 구문만 세고, jscpd는 토큰을 비교하고, gitleaks는 파일 바이트를 정규식으로 검사한다.

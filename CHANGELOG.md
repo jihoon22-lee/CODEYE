@@ -9,6 +9,9 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 - **검토 지침 하나**: 검토 지침은 `prompts/review`(id `review`, 2.0.0) 하나다(A52). 세 역할 이전 지침과 그 기록 schema `0.1`·decoder·보고서 조립 경로·고정 시험, 두 팩 비교 스크립트를 지웠다. 노드 플래그·워커 Hello·개인 설정·회귀 실행에서 지침을 고르는 설정이 없다. 이전 설정 파일에 남은 지침 선택 키는 모르는 키로 거부된다.
 - **이름**: 디렉터리·Go 패키지(`reviewpack`)·예시(`examples/review`)·작업 사본 파일(`review.*`)·schema `$defs`·코드 식별자에서 팩 세대 표시를 뺐다. 지침을 읽지 못한 검토 task의 사유는 `review_instructions_invalid`다. 지침 본문은 공통 지침 제목과 역할 지침 다섯의 머리말 한 줄만 바뀌었다.
 - **보고서 builder 10**: 코드 분석 절의 팩 구분(`pack`)이 없고 호출 행의 `pack_id`·`pack_version`이 필수다. 지침 digest가 바뀌어 예시를 다시 만들었다.
+- **단계 표시 정리**: migration 주석, fixture 안의 이름(C/C++ `ringbuf`, JS/TS `@jsts/*`, Python `py-*`, Go `example.test/modules`), 회귀 실행의 고정 입력 key(`modules`, `caller-closes`), QA relay 식별자(`codeye-qa-relay`, 오류 종류 `qa_relay_error`)에서 작업 단계 표시를 뺐다. 이름을 바꾼 fixture는 실제 cppcheck·clang-tidy·tsc·mypy·pyright로 다시 캡처했다.
+- **데이터베이스 다시 만들기**: migration SQL의 주석과 제약 이름 하나(`snapshots_git_has_sha`)가 바뀌어 checksum이 다르다. 이 변경 전에 만든 데이터베이스는 적용된 migration의 checksum 불일치로 시작하지 않으므로 새로 만들어야 한다.
+- **표시 검사**: `scripts/bundle_checks/docs.py`가 추적하는 모든 텍스트 파일의 내용과 경로에서 팩 세대·작업 단계 표시를 찾으면 실패한다.
 
 ### 추가 — 여러 노드 검증과 운영 수용
 
@@ -148,7 +151,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 ### 변경 — `codeye doctor`
 
 - 도구를 PATH 조회 대신 도구 탐지로 찾는다. 에이전트가 쓸 도구와 같은 결과이고, JSON 보고서의 `tools` 배열(경로 없음)과 텍스트의 도구 표로 보인다.
-- 항상 `unverified`이던 `model`·`process_control` 항목과 사유 값 `adapter_contract_pending_w10`·`native_executor_pending_w05`·`runtime_process_control_not_probed`를 없앴다. `python`·`c_cpp`(PATH의 `python3`·`cc`) 항목도 에이전트가 쓰지 않으므로 없앴다. `analyzers`(기준 분석기가 하나라도 쓸 수 있는가)와 `configured_tools`(설정에 적은 도구가 쓸 수 있는가)가 생겼다.
+- 항상 `unverified`이던 `model`·`process_control` 항목과 사유 값 세 가지(모델 어댑터 계약 대기, Native 실행기 대기, `runtime_process_control_not_probed`)를 없앴다. `python`·`c_cpp`(PATH의 `python3`·`cc`) 항목도 에이전트가 쓰지 않으므로 없앴다. `analyzers`(기준 분석기가 하나라도 쓸 수 있는가)와 `configured_tools`(설정에 적은 도구가 쓸 수 있는가)가 생겼다.
 - 종료 코드는 이 모드에서 중요한 항목(`checks[].blocking`)이 실패했을 때만 1이다. 이전에는 늘 1이었다.
 
 ### 추가 — API 키로 모델 설정

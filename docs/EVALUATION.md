@@ -50,8 +50,8 @@
 - 실행 입력에는 평가 라벨, 전후 구분, 확인용 테스트가 들어가지 않는다. 사례는 무작위 이름의 디렉터리에 만든다.
 - 각 원래 구현은 별도 계약 시험에서 실패하고 수정 구현은 통과한다. `python3 fixtures/regression/corpus.py --check`가 모델 없이 이 계약 시험을 실행한다.
 - 고정 입력(`scripts/regression_pilot.py`의 `FIXED_INPUTS`와 기본 입력):
-  - `w15`: [`fixtures/modules/input`](../fixtures/modules/input). 루트 안내가 있는 저장소에 하위 모듈 둘(문서 없는 모듈, 루트와 상충하는 안내와 노드보다 높은 Go 버전 요구를 가진 모듈), 읽기 예산을 넘는 설계 문서, 권한 변경을 요구하는 에이전트 지침을 담는다. 정답 [`expected.json`](../fixtures/modules/expected.json)은 입력 밖에 있다. 평가 스냅샷에서는 개발 에이전트용 경고 주석 한 줄을 뺀다.
-  - `w12-close`: [`internal/worker/review/testdata/verify`](../internal/worker/review/testdata/verify). 상위 호출자가 자원을 닫는 반례로, 검증 역할의 철회 경로를 따로 채점한다.
+  - `modules`: [`fixtures/modules/input`](../fixtures/modules/input). 루트 안내가 있는 저장소에 하위 모듈 둘(문서 없는 모듈, 루트와 상충하는 안내와 노드보다 높은 Go 버전 요구를 가진 모듈), 읽기 예산을 넘는 설계 문서, 권한 변경을 요구하는 에이전트 지침을 담는다. 정답 [`expected.json`](../fixtures/modules/expected.json)은 입력 밖에 있다. 평가 스냅샷에서는 개발 에이전트용 경고 주석 한 줄을 뺀다.
+  - `caller-closes`: [`internal/worker/review/testdata/verify`](../internal/worker/review/testdata/verify). 상위 호출자가 자원을 닫는 반례로, 검증 역할의 철회 경로를 따로 채점한다.
   - `pilot`: 공개 CODEYE의 고정 커밋 사본. `git`: 공개 CODEYE HTTPS `main`(Git 소스이므로 모델 검토는 정책 제외로 끝나는 것이 정상이다).
 - 탐지는 발생 조건과 잘못된 결과가 모두 맞아야 센다. 계약 밖 입력(예: 계약이 비어 있지 않은 입력이나 양의 분모를 명시한 경우)에 대한 경고는 수정 전 결함과 분리해 채점한다.
 
@@ -144,7 +144,7 @@
 
 - 준비물: Go, PostgreSQL 도구(`initdb`, `pg_ctl`, `psql`), 잠금 파일대로 설치한 웹 의존성, Chromium, 고정 버전 OpenCode, 이미 시작한 예산 relay의 ready file. Go 도구는 설치된 로컬 모듈 캐시를 쓴다.
 - 실행: `CODEYE_PILOT_RELAY_FILE`에 relay ready file을, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정하고 `python3 scripts/test_postgres.py --pilot`을 실행한다. 실제 모델 요청을 보낸다.
-- 대상 한정: `CODEYE_PILOT_CASES`에 `Q01-before,Q01-after,...,w15,w12-close,pilot,git`처럼 쉼표로 준다. 비우면 합성 쌍 전체, 고정 공개 커밋, 공개 HTTPS `main`을 실행한다. 고정 입력 `w15`·`w12-close`는 명시할 때만 들어간다.
+- 대상 한정: `CODEYE_PILOT_CASES`에 `Q01-before,Q01-after,...,modules,caller-closes,pilot,git`처럼 쉼표로 준다. 비우면 합성 쌍 전체, 고정 공개 커밋, 공개 HTTPS `main`을 실행한다. 고정 입력 `modules`·`caller-closes`는 명시할 때만 들어간다.
 - 모듈 단위 slice: `CODEYE_PILOT_GITLEAKS`(gitleaks 절대 경로. 없으면 slice는 미선별로 실행되고 보고서에 미선별 공백이 남는다)와 `CODEYE_PILOT_REVIEW_MAX_CALLS`(비우면 에이전트 기본값 99)를 에이전트에 넘긴다. `CODEYE_PILOT_TOOLS`(공백으로 구분한 `name=path`, 예: `ruff=/abs/ruff node=/abs/node eslint=/abs/eslint/bin/eslint.js`)는 에이전트 플래그 `--name path`가 된다. 파일럿 사본은 Python·JS 모듈의 ruff·eslint가 판정에 필요하므로, 이 도구가 없으면 파일럿은 `partial`이고 아래 조건을 통과하지 못한다. `CODEYE_PILOT_LEDGER`를 주면 그 relay 장부도 검사한다. 실행 뒤 `check_coverage`가 다음을 확인하고 결과를 `coverage-check.json`에 남긴다. 하나라도 어긋나면 실행이 실패한다.
   - 파일럿이 아닌 사례에는 slice task가 없고, 검토 호출의 지침 digest가 Go 단독 선택의 고정값이다.
   - 파일럿은 `completed`이고 AI 검토가 `performed`다. 보고서가 검토 산출물을 모두 읽었다(`unrecognized_artifact`·`artifact_rejected`·`review_lineage_mismatch` 등이 없다). 범위 산출물과 보고서 [장부](REPORT.md#모듈별-검토-장부)의 상한이 설정과 같고, 장부의 `calls_used`(slice 앞 attempt 호출 수와 slice 기록의 호출)가 알려져 있고 상한 이하다. `budget_exhausted` slice에는 기록도 호출도 없다. overview와 slice의 investigate가 같은 파일을 보내지 않는다. 장부의 모델에 보낸 파일 합과 보고서의 `llm_exposed_files`가 overview가 보낸 파일 수보다 크다.
@@ -303,7 +303,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 
 ### 단위 시험
 
-`scripts/test_model_budget_relay.py`(relay)와 `scripts/test_quality_eval.py`(runner·채점)는 모델·키·네트워크 없이 돌고, CI의 문서 계약 단계가 `python -m unittest discover`로 실행한다. 실행: `python3 -m unittest discover -s scripts -p 'test_r0_*.py' -v`, `python3 -m unittest discover -s scripts -p 'test_quality_eval.py' -v`. dry run은 runner·relay·채점 경로가 동작한다는 근거일 뿐이고 가짜 upstream의 위치 대조·검토 수·차감에는 품질 의미가 없다.
+`scripts/test_model_budget_relay.py`(relay)와 `scripts/test_quality_eval.py`(runner·채점)는 모델·키·네트워크 없이 돌고, CI의 문서 계약 단계가 `python -m unittest discover`로 실행한다. 실행: `python3 -m unittest discover -s scripts -p 'test_model_budget_relay.py' -v`, `python3 -m unittest discover -s scripts -p 'test_quality_eval.py' -v`. dry run은 runner·relay·채점 경로가 동작한다는 근거일 뿐이고 가짜 upstream의 위치 대조·검토 수·차감에는 품질 의미가 없다.
 
 ## 유료 batch 절차
 

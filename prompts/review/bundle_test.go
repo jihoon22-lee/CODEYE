@@ -200,7 +200,7 @@ func TestGoSelectionDigestsPinned(t *testing.T) {
 // fixtures. An earlier investigate example carried a regression answer
 // (docs/EVALUATION.md#회귀-집합-실행).
 func TestNoCaseSpecificText(t *testing.T) {
-	banned := regexp.MustCompile(`\bQ\d{2}\b|\bR0\b|\bW\d{2}\b|\bTC-\d+|(?i:fixture|corpus|holdout|svc/|example\.test|w12-close|gateway)|\bCharge\b|\bForward\b|\bNormalize\b`)
+	banned := regexp.MustCompile(`\bQ\d{2}\b|\bR0\b|\bW\d{2}\b|\bTC-\d+|(?i:fixture|corpus|holdout|svc/|example\.test|caller-closes|gateway)|\bCharge\b|\bForward\b|\bNormalize\b`)
 	n := 0
 	err := fs.WalkDir(files, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {

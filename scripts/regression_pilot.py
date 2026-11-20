@@ -21,7 +21,7 @@ DEV_AGENT_MARKER = "<!-- CODEYE test fixture (TC-97)."
 
 # Fixed repository inputs that are not the synthetic defect/fix pairs. The verifier
 # fixture is the caller-closes counterexample TC-100 scores separately.
-FIXED_INPUTS = {"w15": "fixtures/modules/input", "w12-close": "internal/worker/review/testdata/verify"}
+FIXED_INPUTS = {"modules": "fixtures/modules/input", "caller-closes": "internal/worker/review/testdata/verify"}
 
 # The pilot is a copy of this repository at an approved commit. CODEYE_PILOT_COMMIT
 # names another commit (e.g. a clean copy of the current main for a dry run).
@@ -33,7 +33,7 @@ def pilot_commit(root):
     return subprocess.check_output(["git", "rev-parse", name + "^{commit}"], cwd=root, text=True).strip()
 
 
-def materialize_fixed_input(root, destination, label="w15"):
+def materialize_fixed_input(root, destination, label="modules"):
     """Copy a fixed input; drop the development-agent warning comment.
 
     The repository copy of AGENTS.md starts with a comment telling development
