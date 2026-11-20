@@ -70,12 +70,11 @@ function SourceAnchor({ href, location, action = t.openSource }: { href: string;
   </a>;
 }
 
-function EvidenceLocation({ location, href, excerpt, path, kind, preferOriginal, actionLabel }: {
-  location: string; href?: string; excerpt?: Excerpt | null; path?: string; kind?: string; preferOriginal?: boolean; actionLabel?: string;
+function EvidenceLocation({ location, href, excerpt, path, kind, actionLabel }: {
+  location: string; href?: string; excerpt?: Excerpt | null; path?: string; kind?: string; actionLabel?: string;
 }) {
   const isDocument = kind === 'document';
   const action = actionLabel ?? (isDocument ? t.viewDocument : kind === 'test' ? t.viewTestCode : kind === 'manifest' ? t.viewManifest : t.viewCode);
-  if (href && preferOriginal) return <div className="report-evidence"><SourceAnchor href={href} location={location} action={action} /></div>;
   const file = <span className="report-file"><ReportIcon name="file" /><code>{location}</code></span>;
   return <div className="report-evidence">
     {excerpt ? <details className="report-excerpt">
@@ -97,15 +96,15 @@ export function PinnedSourceLink({ path, start, end, fallback }: { path: string;
   return href || fallback ? <EvidenceLocation location={fallback ?? sourceLocation(path, start, end)} href={href} /> : null;
 }
 
-export function FindingSourceLink({ evidence, preferOriginal, actionLabel }: { evidence: Evidence; preferOriginal?: boolean; actionLabel?: string }) {
+export function FindingSourceLink({ evidence, actionLabel }: { evidence: Evidence; actionLabel?: string }) {
   const base = useContext(ReportSourceContext);
   if (!evidence.path || !evidence.lines) return null;
   const { start, end } = evidence.lines;
   const href = ['code', 'document', 'test'].includes(evidence.kind) ? sourceEvidenceURL(base, evidence.path, start, end) : undefined;
-  return <EvidenceLocation location={sourceLocation(evidence.path, start, end)} href={href} excerpt={evidence.excerpt} path={evidence.path} kind={evidence.kind} preferOriginal={preferOriginal} actionLabel={actionLabel} />;
+  return <EvidenceLocation location={sourceLocation(evidence.path, start, end)} href={href} excerpt={evidence.excerpt} path={evidence.path} kind={evidence.kind} actionLabel={actionLabel} />;
 }
 
-export function Citations({ refs, catalog, preferOriginal, actionLabel }: { refs: string[]; catalog: Citation[]; preferOriginal?: boolean; actionLabel?: string }) {
+export function Citations({ refs, catalog, actionLabel }: { refs: string[]; catalog: Citation[]; actionLabel?: string }) {
   const base = useContext(ReportSourceContext);
   const evidence = new Map<string, Citation>();
   for (const e of catalog) {
@@ -116,7 +115,7 @@ export function Citations({ refs, catalog, preferOriginal, actionLabel }: { refs
   return <>{Array.from(evidence.values(), e => {
     const location = sourceLocation(e.path, e.line, e.end);
     const href = sourceEvidenceURL(base, e.path, e.line, e.end);
-    return <EvidenceLocation key={e.id} location={location} href={href} excerpt={e.excerpt} path={e.path} kind={e.kind} preferOriginal={preferOriginal} actionLabel={actionLabel} />;
+    return <EvidenceLocation key={e.id} location={location} href={href} excerpt={e.excerpt} path={e.path} kind={e.kind} actionLabel={actionLabel} />;
   })}</>;
 }
 

@@ -80,6 +80,20 @@ test('published report exposes the same counts, evidence and revision in the bro
   await expect(judgment).toHaveCount(1);
   await expect(judgment.locator('table, .model-reading-list')).toHaveCount(0);
   await expect(judgment.getByText('적용 범위', {exact:true})).toHaveCount(0);
+  const comparisonRows = judgment.locator('.report-comparison-rows');
+  const checkComparisonEvidence = async () => {
+    if (!await comparisonRows.count()) return;
+    await expect(comparisonRows.locator('dt')).toHaveText(['설명서', '코드']);
+    for (const excerpt of await comparisonRows.locator('details.report-excerpt').all()) {
+      const control = excerpt.locator('summary');
+      await expect(excerpt.locator('pre')).toBeHidden();
+      await control.press('Enter');
+      await expect(excerpt.locator('pre')).toBeVisible();
+      await expect.poll(() => report.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+      await control.press('Space');
+      await expect(excerpt.locator('pre')).toBeHidden();
+    }
+  };
   expect(await hero.locator('.report-verdict .icon').evaluate(icon => getComputedStyle(icon).maskImage)).not.toBe('none');
   expect(await hero.evaluate(async () => {
     await document.fonts.ready;
@@ -89,6 +103,7 @@ test('published report exposes the same counts, evidence and revision in the bro
   const overview = report.getByRole('tab', { name: '종합', exact: true });
   await expect(overview).toBeVisible();
   await expect.poll(() => report.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await checkComparisonEvidence();
   const glossary = judgment.locator('details.report-glossary');
   if (await glossary.count()) {
     await expect(glossary).toHaveCount(1);
@@ -110,6 +125,7 @@ test('published report exposes the same counts, evidence and revision in the bro
   await page.setViewportSize({ width: 1280, height: 960 });
   await expect.poll(async () => (await rail.boundingBox())!.x < (await hero.boundingBox())!.x).toBe(true);
   await expect.poll(() => report.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await checkComparisonEvidence();
   await stats.click();
   const rows = report.getByRole('tabpanel', {name: '종합', exact: true}).locator('.report-counts > div');
   await expect(rows.filter({hasText:'발견 사항'}).locator('dd')).toHaveText(String(doc.summary.total_findings));

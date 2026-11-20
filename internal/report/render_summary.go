@@ -1240,6 +1240,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 		p("## ", mdText(s.Title))
 		p()
 		for _, part := range s.Parts {
+			mdComparisonAnchor(p, v.Decision, part.Anchor)
 			mdPart(p, part, l)
 		}
 		if s.ID == "overview" {
@@ -1271,9 +1272,24 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 	p()
 	p(mdText(d.State))
 	p()
-	if d.Review && (d.DocumentClaim == "" || d.AdditionalObservation) {
+	if d.Review && (d.DocumentClaim == "" && len(d.ComparisonRows) == 0 || d.AdditionalObservation) {
 		p("> ", mdText(l.Label("insight.interpretation")))
 		p()
+	}
+	for _, row := range d.ComparisonRows {
+		var prose strings.Builder
+		for _, text := range inlineCodeParts(row.Text) {
+			if text.Code {
+				prose.WriteString(mdCodeSpan(oneLine(text.Text)))
+			} else {
+				prose.WriteString(mdText(text.Text))
+			}
+		}
+		p("**", mdText(row.Label), "** ", prose.String())
+		p()
+		for _, source := range row.Sources {
+			mdCitations(p, []sourceCitation{source.Brief()})
+		}
 	}
 	if d.DocumentClaim != "" {
 		p(mdText(d.DocumentClaim))
@@ -1325,6 +1341,17 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 	}
 	if d.Coverage != "" {
 		p(mdText(d.Coverage))
+		p()
+	}
+	if len(d.ComparisonRows) > 0 && d.ComparisonAnchor != "" {
+		p("[", mdText(l.Label("decision.documents")), "](#", d.ComparisonAnchor, ")")
+		p()
+	}
+}
+
+func mdComparisonAnchor(p func(...string), d projectDecision, anchor string) {
+	if len(d.ComparisonRows) > 0 && anchor != "" && anchor == d.ComparisonAnchor {
+		p("<a id=\"", anchor, "\"></a>")
 		p()
 	}
 }

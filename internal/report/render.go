@@ -507,7 +507,10 @@ func longestBacktickRun(s string) int {
 // mdCode renders a code span whose fence is longer than any backtick run in s.
 // Pipes are escaped for table cells (GFM unescapes them inside code spans).
 func mdCode(s string) string {
-	s = strings.ReplaceAll(oneLine(s), "|", "\\|")
+	return mdCodeSpan(strings.ReplaceAll(oneLine(s), "|", "\\|"))
+}
+
+func mdCodeSpan(s string) string {
 	fence := strings.Repeat("`", longestBacktickRun(s)+1)
 	if s == "" {
 		return fence + " " + fence
@@ -542,8 +545,9 @@ a,summary{color:#116955}summary{cursor:pointer;font-weight:650}.model{color:#3e6
 
 // htmlFuncs are the template functions of both HTML layouts.
 var htmlFuncs = template.FuncMap{
-	"itoa": strconv.Itoa,
-	"i64":  func(n int64) string { return strconv.FormatInt(n, 10) },
+	"inlineCodeParts": inlineCodeParts,
+	"itoa":            strconv.Itoa,
+	"i64":             func(n int64) string { return strconv.FormatInt(n, 10) },
 	"deref": func(p *string, def string) string {
 		if p == nil {
 			return def

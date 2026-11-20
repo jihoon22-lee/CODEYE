@@ -88,6 +88,14 @@ type Reply struct {
 	RequestDigest string
 	Cleanup       executor.Cleanup
 	Reason        string
+	proofMismatch bool
+}
+
+// WorkspaceProofMismatch reports a completed model reply that failed the
+// attachment check. Workspace setup failures share the public reason but
+// cannot be retried on this basis.
+func (r Reply) WorkspaceProofMismatch() bool {
+	return r.proofMismatch && r.Reason == "workspace_unreachable" && r.Cleanup == executor.CleanupConfirmed
 }
 
 type packet struct {
@@ -262,6 +270,10 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 		return
 	}
 	reply.Output, reply.Usage, reply.Reason = collect(run.Stdout.Data, proof)
+	if reply.Reason == reasonProofMismatch {
+		reply.proofMismatch = true
+		reply.Reason = "workspace_unreachable"
+	}
 	return
 }
 
@@ -323,6 +335,8 @@ func errorEventReason(line []byte) string {
 	}
 	return "model_unavailable"
 }
+
+const reasonProofMismatch = "workspace_proof_mismatch"
 
 func collect(raw []byte, proof string) (json.RawMessage, *Usage, string) {
 	var buf bytes.Buffer
@@ -389,7 +403,10 @@ func collect(raw []byte, proof string) (json.RawMessage, *Usage, string) {
 		return nil, usage, "model_output_invalid"
 	}
 	if answer.WorkspaceProof != proof {
-		return nil, usage, "workspace_unreachable"
+		return nil, usage, reasonProofMismatch
+	}
+	if bytes.Contains(answer.Result, []byte(proof)) {
+		return nil, usage, "model_output_invalid"
 	}
 	return answer.Result, usage, ""
 }

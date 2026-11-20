@@ -134,18 +134,31 @@
         "literals":{"type":"array","maxItems":3,"uniqueItems":true,"items":{"$ref":"#/$defs/contract_literal"}}
       }
     },
+    "package_reference": {
+      "type":"object","additionalProperties":false,
+      "required":["manifest_path","manifest_sha256","entry_path","entry_sha256","name","callable","export"],
+      "properties": {
+        "manifest_path":{"allOf":[{"$ref":"#/$defs/path"},{"pattern":"(^|/)package\\.json$"}]},
+        "manifest_sha256":{"$ref":"#/$defs/digest"},"entry_path":{"$ref":"#/$defs/path"},"entry_sha256":{"$ref":"#/$defs/digest"},
+        "name":{"type":"string","maxLength":128,"pattern":"^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"},
+        "callable":{"type":"string","pattern":"^[A-Za-z_$][A-Za-z0-9_$]{0,63}(?:\\.[A-Za-z_$][A-Za-z0-9_$]{0,63})?$"},
+        "export":{"type":"string","pattern":"^[A-Za-z_$][A-Za-z0-9_$]{0,63}$"}
+      }
+    },
     "excerpt": {
       "type":"object","additionalProperties":false,"required":["id","path","sha256","start_line","end_line","kind"],
       "properties": {
         "id":{"$ref":"#/$defs/id"}, "path":{"$ref":"#/$defs/path"},
         "sha256":{"$ref":"#/$defs/digest"}, "start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1},
         "kind":{"enum":["code","test","document","manifest"]},"origin":{"enum":["context","caller","test","observation"]},"symbol":{"type":"string","pattern":"^[A-Za-z_][A-Za-z0-9_]{0,127}$"},
-        "directive_path":{"$ref":"#/$defs/path","description":"Python docstring을 공개 문서에 연결하는 스냅샷 Markdown 페이지 경로."}
+        "directive_path":{"$ref":"#/$defs/path","description":"Python docstring을 공개 문서에 연결하는 스냅샷 Markdown 페이지 경로."},
+        "package_reference":{"$ref":"#/$defs/package_reference","description":"문서의 호출 예제에서 검증한 로컬 npm 패키지와 런타임 진입점."}
       },
       "allOf": [
         {"if":{"properties":{"kind":{"enum":["document","manifest"]}}},"then":{"not":{"required":["origin"]}}},
         {"if":{"required":["origin"],"properties":{"origin":{"enum":["caller","test"]}}},"then":{"required":["symbol"]},"else":{"not":{"required":["symbol"]}}},
-        {"if":{"required":["directive_path"]},"then":{"properties":{"kind":{"const":"document"},"path":{"pattern":"\\.py$"}}}}
+        {"if":{"required":["directive_path"]},"then":{"properties":{"kind":{"const":"document"},"path":{"pattern":"\\.py$"}}}},
+        {"if":{"required":["package_reference"]},"then":{"not":{"required":["directive_path"]},"properties":{"kind":{"const":"document"},"path":{"pattern":"\\.[mM]([dD][xX]?|[aA][rR][kK][dD][oO][wW][nN])$"}}}}
       ]
     },
     "upstream": {

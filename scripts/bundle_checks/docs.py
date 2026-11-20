@@ -27,15 +27,23 @@ def check_holdout_corpus() -> None:
 
 
 def heading_anchors(text: str) -> set:
-    """Anchors a Markdown renderer derives from the headings of a document."""
+    """Collect heading anchors and standalone, attribute-free ID targets."""
     seen = {}
     result = set()
-    fenced = False
+    fence = ""
     for line in text.splitlines():
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
+        delimiter = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+        if fence:
+            if delimiter and delimiter[1].startswith(fence) and not delimiter[2].strip():
+                fence = ""
             continue
-        match = None if fenced else re.match(r"#{1,6}\s+(.*?)\s*#*\s*$", line)
+        if delimiter and (delimiter[1].startswith("~") or "`" not in delimiter[2]):
+            fence = delimiter[1]
+            continue
+        if explicit := re.fullmatch(r' {0,3}<a id="([a-z][a-z0-9_-]*)"></a>[ \t]*', line):
+            result.add(explicit[1])
+            continue
+        match = re.match(r"#{1,6}\s+(.*?)\s*#*\s*$", line)
         if not match:
             continue
         title = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", match.group(1))
@@ -44,6 +52,27 @@ def heading_anchors(text: str) -> set:
         seen[slug] = count + 1
         result.add(slug if count == 0 else f"{slug}-{count}")
     return result
+
+
+def check_markdown_anchors() -> None:
+    sample = """# Heading
+# Heading
+<a id="document-comparison-1"></a>
+    <a id="indented-code"></a>
+<a id="extra-attribute" href="/other"></a>
+prefix <a id="inline-html"></a>
+<div id="arbitrary-html"></div>
+````markdown
+```
+<a id="backtick-fence"></a>
+````
+~~~
+<a id="tilde-fence"></a>
+~~~
+## Later heading
+"""
+    ensure(heading_anchors(sample) == {"heading", "heading-1", "document-comparison-1", "later-heading"},
+           "Explicit Markdown anchors must be standalone and outside code blocks")
 
 
 def check_doc_names(markdown_files) -> None:

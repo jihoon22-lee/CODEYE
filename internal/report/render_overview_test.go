@@ -188,8 +188,10 @@ func TestUnknownComparisonKeepsItsEvidenceAndStatus(t *testing.T) {
 	r.Documents.Comparisons = []DocComparison{missing, c, additional}
 	r.CodeReview.FindingIDs, r.CodeReview.Strengths = nil, nil
 	d := newSummaryView(r, "0", Korean).Decision
-	if d.Title != Korean.Label("decision.document_claim") || d.DocumentClaim != c.Statement || d.Reason != c.Reason ||
-		d.ReasonLabel != Korean.Label("decision.unconfirmed_reason") || d.State != Korean.Label("decision.comparison.unknown") || len(d.Sources) != 2 || d.Next != "" {
+	rows := d.ComparisonRows
+	if d.Title != Korean.Label("decision.document_comparison") || d.State != Korean.Label("decision.code_evidence_missing") ||
+		len(rows) != 2 || rows[0].Text != c.Statement || rows[1].Text != c.Reason || len(rows[0].Sources) != 1 ||
+		len(rows[1].Sources) != len(c.CodeEvidenceIDs) || len(d.Sources) != 0 || d.Next != "" {
 		t.Fatalf("the decision upgraded, duplicated or lost its unresolved comparison: %+v", d)
 	}
 	if d.Coverage != tf(Korean, "decision.comparison_all_unknown", 3) {
@@ -229,7 +231,7 @@ func TestDocumentQuestionBreaksOnlyAnUnambiguousUnknownTie(t *testing.T) {
 			r.Documents.Questions = tc.questions
 			selected := newSummaryView(r, "0", Korean).Decision
 			want := r.Documents.Comparisons[tc.want].Statement
-			if selected.DocumentClaim != want || selected.ComparisonAnchor != comparisonAnchor(tc.want) {
+			if len(selected.ComparisonRows) != 2 || selected.ComparisonRows[0].Text != want || selected.ComparisonAnchor != comparisonAnchor(tc.want) {
 				t.Fatalf("selected %+v, want %q", selected, want)
 			}
 		})
@@ -239,10 +241,12 @@ func TestDocumentQuestionBreaksOnlyAnUnambiguousUnknownTie(t *testing.T) {
 		published := Project(r, include)
 		selected := newSummaryView(published, "0", Korean).Decision
 		wantAnchor := comparisonAnchor(0)
+		wantStatus := Korean.Label("decision.comparison.unknown")
 		if include {
 			wantAnchor = comparisonAnchor(1)
+			wantStatus = Korean.Label("decision.code_evidence_missing")
 		}
-		if selected.ComparisonAnchor != wantAnchor || selected.State != Korean.Label("decision.comparison.unknown") {
+		if selected.ComparisonAnchor != wantAnchor || selected.State != wantStatus {
 			t.Fatalf("unexpected decision in include_code=%t: %+v", include, selected)
 		}
 		html, err := RenderHTMLAt(published, "0", Korean, DetailSummary)
@@ -250,7 +254,7 @@ func TestDocumentQuestionBreaksOnlyAnUnambiguousUnknownTie(t *testing.T) {
 			t.Fatal(err)
 		}
 		contents := string(html)
-		if !strings.Contains(contents, `href="#`+wantAnchor+`"`) || !strings.Contains(contents, `id="`+wantAnchor+`" tabindex="-1">`+selected.State) {
+		if !strings.Contains(contents, `href="#`+wantAnchor+`"`) || !strings.Contains(contents, `id="`+wantAnchor+`" tabindex="-1">`+Korean.Label("decision.comparison.unknown")) {
 			t.Fatal("the overview is missing the exact comparison route or matching status")
 		}
 	}
@@ -314,13 +318,49 @@ func TestDocumentOnlyDecisionRemainsUnverifiedInBothExports(t *testing.T) {
 	for _, include := range []bool{true, false} {
 		p := Project(r, include)
 		d := newSummaryView(p, "0", Korean).Decision
-		want, claim := Korean.Label("decision.omitted"), ""
 		if include {
-			want, claim = Korean.Label("decision.document_claim"), c.Statement
-		}
-		if d.Title != want || d.DocumentClaim != claim || d.State != Korean.Label("decision.comparison.unknown") || len(d.Sources) != 1 ||
-			d.Sources[0].Location != "README.md:1-9" || d.Next != "" {
+			rows := d.ComparisonRows
+			if d.Title != Korean.Label("decision.document_comparison") || d.State != Korean.Label("decision.code_evidence_missing") ||
+				len(rows) != 2 || rows[0].Text != c.Statement || len(rows[0].Sources) != 1 ||
+				rows[0].Sources[0].Location != "README.md:1-9" || len(rows[1].Sources) != 0 {
+				t.Fatalf("invalid document-only rows: %+v", d)
+			}
+		} else if d.Title != Korean.Label("decision.omitted") || len(d.ComparisonRows) != 0 || d.State != Korean.Label("decision.comparison.unknown") ||
+			len(d.Sources) != 1 || d.Sources[0].Location != "README.md:1-9" || d.Next != "" {
 			t.Fatalf("include_code=%t: invalid document-only decision: %+v", include, d)
+		}
+	}
+}
+
+func TestUnknownComparisonRowsEscapeTextAndKeepInlineCode(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	c := r.Documents.Comparisons[0]
+	c.Status = "unknown"
+	c.Statement = "설명서는 `Read(path)` 호출을 설명한다. <img src=x>"
+	c.Reason = "코드에서 `<script>probe()</script>`와 ``예시``를 확인했다. 짝 없는 `"
+	r.Documents.Comparisons = []DocComparison{c}
+	for _, detail := range []string{DetailSummary, DetailFull} {
+		raw, err := RenderHTMLAt(r, "0", Korean, detail)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, start, _ := strings.Cut(string(raw), `<dl class="report-comparison-rows">`)
+		rows, _, _ := strings.Cut(start, "</dl>")
+		for _, expected := range []string{"<dt>설명서</dt>", "<dt>코드</dt>", "<code>Read(path)</code>",
+			"&lt;img src=x&gt;", "<code>&lt;script&gt;probe()&lt;/script&gt;</code>", "``예시``", "짝 없는 `"} {
+			if !strings.Contains(rows, expected) {
+				t.Errorf("HTML %s rows missing %q", detail, expected)
+			}
+		}
+		if strings.Contains(rows, "<script>") || strings.Contains(rows, "<img") {
+			t.Errorf("HTML %s created tags from report text", detail)
+		}
+		output := string(RenderMarkdownAt(r, "0", Korean, detail))
+		for _, expected := range []string{"**설명서** 설명서는 `Read(path)`", "**코드** 코드에서 `<script>probe()</script>`",
+			"&lt;img src", "짝 없는 \\`", "[문서 분석에서 보기](#document-comparison-1)", `<a id="document-comparison-1"></a>`} {
+			if !strings.Contains(output, expected) {
+				t.Errorf("Markdown %s missing %q", detail, expected)
+			}
 		}
 	}
 }
@@ -473,5 +513,22 @@ func TestSnapshotBrowserLinksRespectExportProjection(t *testing.T) {
 			!strings.Contains(string(html), "Package gateway forwards billing requests")) {
 			t.Fatal("missing pinned link, its label or the original excerpt")
 		}
+		_, contents, _ := strings.Cut(string(html), `class="card report-group report-decision"`)
+		overview, _, _ := strings.Cut(contents, `<details class="card report-disclosure"`)
+		if strings.Contains(overview, `class="report-excerpt"`) != include || strings.Contains(overview, want) != include {
+			t.Fatalf("overview include_code=%t did not preserve the saved excerpt and fixed link", include)
+		}
+	}
+	for i := range r.Documents.Evidence {
+		r.Documents.Evidence[i].Excerpt = nil
+	}
+	html, err := RenderHTMLAt(r, "0", Korean, DetailSummary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, contents, _ := strings.Cut(string(html), `class="card report-group report-decision"`)
+	overview, _, _ := strings.Cut(contents, `<details class="card report-disclosure"`)
+	if !strings.Contains(overview, `<a href="`+want+`"`) || strings.Contains(overview, `class="report-excerpt"`) {
+		t.Fatal("overview did not fall back to the verified link when the excerpt was absent")
 	}
 }

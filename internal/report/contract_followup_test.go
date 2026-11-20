@@ -18,12 +18,13 @@ func TestFinalContractReportRequiresAcceptedLineage(t *testing.T) {
 		name, taskState, prior, final string
 		edit                          func(*record.Record)
 		replaced, sent, rejected      bool
-		observed, reuseOld            bool
+		observed, reuseOld, mixed     bool
 	}{
 		{name: "matching implementation", taskState: "succeeded", prior: "unknown", final: "match", replaced: true, sent: true},
 		{name: "partial implementation", taskState: "succeeded", prior: "unknown", final: "partial", replaced: true, sent: true},
 		{name: "mismatch", taskState: "succeeded", prior: "unknown", final: "mismatch", replaced: true, sent: true},
 		{name: "unknown with newly cited implementation", taskState: "succeeded", prior: "unknown", final: "unknown", sent: true, observed: true},
+		{name: "unknown with earlier caller and newly cited implementation", taskState: "succeeded", prior: "unknown", final: "unknown", sent: true, observed: true, mixed: true},
 		{name: "unknown with old implementation and new test", taskState: "succeeded", prior: "unknown", final: "unknown", sent: true, reuseOld: true},
 		{name: "unknown without citations", taskState: "succeeded", prior: "unknown", final: "unknown", sent: true,
 			edit: func(r *record.Record) { r.ContractComparisons[0].CodeEvidenceIDs = []string{} }},
@@ -86,6 +87,13 @@ func TestFinalContractReportRequiresAcceptedLineage(t *testing.T) {
 			if tc.reuseOld {
 				final.Evidence = append(final.Evidence, priorCode)
 				changed.CodeEvidenceIDs = []string{priorCode.ID, test.ID}
+			}
+			if tc.mixed {
+				caller := priorCode
+				caller.Start++
+				caller.ID = record.ExcerptID(inv.Snapshot, caller.Path, caller.SHA256, caller.Start, caller.End)
+				final.Evidence = append(final.Evidence, caller)
+				changed.CodeEvidenceIDs = append([]string{caller.ID}, changed.CodeEvidenceIDs...)
 			}
 			if tc.final == "partial" {
 				final.Evidence = append(final.Evidence, priorCode)
@@ -243,10 +251,16 @@ func TestAdditionalUnknownObservationRendersWithoutChangingVerdict(t *testing.T)
 	row := &full.Documents.Comparisons[0]
 	row.Reason = "이전 조사에서는 공개 진입점까지 확인하지 못했습니다."
 	priorOverview, priorVerdict := overviewOf(full), reportVerdict(full)
-	extra := newContractTestExcerpt(full.Inputs.ManifestSHA256, "src/routes.go", "code")
-	full.Documents.Evidence = append(full.Documents.Evidence, SectionEvidence{ID: extra.ID, Kind: extra.Kind, Path: extra.Path,
-		BlobSHA256: extra.SHA256, StartLine: extra.Start, EndLine: extra.End})
-	row.AdditionalObservation = &AdditionalCodeObservation{Reason: "유효한 항목에서 콜백을 호출하지만 공개 진입점과의 연결은 미확인입니다.", CodeEvidenceIDs: []string{extra.ID}}
+	prior := SectionEvidence{Path: "src/routes.go", Kind: "code", BlobSHA256: domain.Digest([]byte("routes")), StartLine: 1, EndLine: 7}
+	extra := prior
+	extra.StartLine, extra.EndLine = 20, 20
+	for _, e := range []*SectionEvidence{&prior, &extra} {
+		e.ID = record.ExcerptID(full.Inputs.ManifestSHA256, e.Path, e.BlobSHA256, e.StartLine, e.EndLine)
+		full.Documents.Evidence = append(full.Documents.Evidence, *e)
+	}
+	row.CodeEvidenceIDs = []string{prior.ID}
+	refs := []string{prior.ID, extra.ID}
+	row.AdditionalObservation = &AdditionalCodeObservation{Reason: "유효한 항목에서 콜백을 호출하지만 공개 진입점과의 연결은 미확인입니다.", CodeEvidenceIDs: refs}
 	overview := overviewOf(full)
 	full.Overview = &overview
 	full.QualityVerdict = reportVerdict(full)
@@ -263,17 +277,24 @@ func TestAdditionalUnknownObservationRendersWithoutChangingVerdict(t *testing.T)
 		}
 		c := read.Documents.Comparisons[0]
 		if c.AdditionalObservation == nil || c.Status != "unknown" || c.Followup || contractDifferences(read.Documents) != originalCount ||
-			!slices.Equal(c.CodeEvidenceIDs, row.CodeEvidenceIDs) || !slices.Equal(c.AdditionalObservation.CodeEvidenceIDs, []string{extra.ID}) {
+			!slices.Equal(c.CodeEvidenceIDs, row.CodeEvidenceIDs) || !slices.Equal(c.AdditionalObservation.CodeEvidenceIDs, refs) {
 			t.Fatalf("additional observation changed the original comparison or its references: %+v", c)
 		}
 		decision := newSummaryView(r, "0", Korean).Decision
 		if !reflect.DeepEqual(*r.Overview, priorOverview) || r.QualityVerdict != priorVerdict {
 			t.Fatal("observed source changed quality or coverage counts")
 		}
-		if decision.Followup || !decision.AdditionalObservation || decision.State != Korean.Label("decision.comparison.unknown") ||
-			len(decision.Sources) != 2 || decision.Sources[1].Location != "src/routes.go:20-20" ||
-			(decision.Reason == row.AdditionalObservation.Reason) != include {
+		if decision.Followup || !decision.AdditionalObservation || decision.State != Korean.Label("decision.comparison.unknown") {
 			t.Fatalf("unresolved observation opening: %+v", decision)
+		}
+		if include {
+			rows := decision.ComparisonRows
+			if len(rows) != 2 || rows[0].Text != row.Statement || rows[1].Text != row.AdditionalObservation.Reason ||
+				len(rows[1].Sources) != 2 || rows[1].Sources[0].Location != "src/routes.go:1-7" || rows[1].Sources[1].Location != "src/routes.go:20-20" {
+				t.Fatalf("unresolved observation rows: %+v", decision)
+			}
+		} else if len(decision.ComparisonRows) != 0 || len(decision.Sources) != 3 || decision.Sources[2].Location != "src/routes.go:20-20" {
+			t.Fatalf("unresolved projection: %+v", decision)
 		}
 		for _, detail := range []string{DetailSummary, DetailFull} {
 			html, err := RenderHTMLAt(r, "0", Korean, detail)
@@ -290,8 +311,46 @@ func TestAdditionalUnknownObservationRendersWithoutChangingVerdict(t *testing.T)
 			}
 		}
 	}
+	detail := comparisonDetailsForTest(full, *row)
+	for _, loc := range []string{"src/routes.go:1-7", "src/routes.go:20-20"} {
+		if strings.Count(detail, loc) != 1 {
+			t.Fatalf("detailed comparison did not show %s exactly once", loc)
+		}
+	}
+	t.Run("historical builder", func(t *testing.T) {
+		legacy := full
+		legacy.Builder.Version = "12"
+		docs := *full.Documents
+		docs.Comparisons = slices.Clone(docs.Comparisons)
+		additional := *row.AdditionalObservation
+		additional.CodeEvidenceIDs = []string{extra.ID}
+		docs.Comparisons[0].AdditionalObservation = &additional
+		legacy.Documents = &docs
+		raw, err := Marshal(legacy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		read, err := Unmarshal(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		observation := read.Documents.Comparisons[0].AdditionalObservation
+		if read.Builder.Version != "12" || observation == nil || !slices.Equal(observation.CodeEvidenceIDs, []string{extra.ID}) {
+			t.Fatalf("historical report was changed: %+v", read.Documents.Comparisons[0])
+		}
+	})
 	row.AdditionalObservation.CodeEvidenceIDs = slices.Clone(row.CodeEvidenceIDs)
 	if err := ValidateReport(full); err == nil {
 		t.Fatal("additional observation with only the original lines validated")
 	}
+}
+
+func comparisonDetailsForTest(r Report, c DocComparison) string {
+	var locations []string
+	for _, item := range newSecView(r, "0", Korean).comparisonDetails(c, r.Documents.Evidence) {
+		for _, source := range item.Sources {
+			locations = append(locations, source.Location)
+		}
+	}
+	return strings.Join(locations, "\n")
 }

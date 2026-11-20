@@ -241,16 +241,33 @@ const docsContract = `For this role use exactly {"contracts":[{"statement":"docu
 
 const docsEvidenceContract = ` Each evidence_ids list in contracts, questions, and document_quality must contain 1 to 4 distinct IDs. Each instruction_notes.evidence_ids, conflicts.first_evidence_ids, and conflicts.second_evidence_ids list must contain 1 to 3 distinct IDs. Use the single most direct excerpt per item or conflict side when it suffices. Add an ID only for necessary additional evidence. An error ending in _evidence_ids_invalid identifies the list to fix.`
 
+const docsPackageContract = ` A contract about a shown API call may use a cited excerpt's verified package_reference.scope if the statement names its callable. Keep each other item inside its cited excerpts' applies_to.`
+
 type docInput struct {
-	EvidenceID     string `json:"evidence_id"`
-	Path           string `json:"path"`
-	AppliesTo      string `json:"applies_to"`
-	Class          string `json:"class"`
-	StartLine      int    `json:"start_line"`
-	EndLine        int    `json:"end_line"`
-	Text           string `json:"text"`
-	DirectivePath  string `json:"directive_path,omitempty"`
-	IncompleteList bool   `json:"incomplete_list,omitempty"`
+	EvidenceID       string           `json:"evidence_id"`
+	Path             string           `json:"path"`
+	AppliesTo        string           `json:"applies_to"`
+	Class            string           `json:"class"`
+	StartLine        int              `json:"start_line"`
+	EndLine          int              `json:"end_line"`
+	Text             string           `json:"text"`
+	DirectivePath    string           `json:"directive_path,omitempty"`
+	IncompleteList   bool             `json:"incomplete_list,omitempty"`
+	PackageReference *docPackageInput `json:"package_reference,omitempty"`
+}
+
+type docPackageInput struct {
+	Name     string `json:"name"`
+	Callable string `json:"callable"`
+	Scope    string `json:"scope"`
+	Entry    string `json:"entry_path"`
+}
+
+func packageInput(p record.PackageReference) *docPackageInput {
+	if p.IsZero() {
+		return nil
+	}
+	return &docPackageInput{Name: p.Name, Callable: p.Callable, Scope: p.Scope(), Entry: p.EntryPath}
 }
 
 type docNotRead struct {
@@ -346,15 +363,24 @@ func (s *roleStage) documents() analysis.TaskResult {
 			}
 			x.Documents = append(x.Documents, docInput{EvidenceID: fmt.Sprintf("D%d", i+1), Path: e.Path, AppliesTo: d.AppliesTo, Class: class,
 				StartLine: e.Start, EndLine: e.End, Text: e.Text, DirectivePath: e.DirectivePath,
-				IncompleteList: incompleteDocumentList(e, list, evidence.lists[e.Path])})
+				IncompleteList: incompleteDocumentList(e, list, evidence.lists[e.Path]), PackageReference: packageInput(e.PackageReference)})
 		}
 		return x
 	}
 	build := func(list []record.Excerpt) ([]byte, error) { return marshal(withDocuments(list)) }
 	contract := docsContract + docsEvidenceContract
+	requiredDocuments := 1
+	for i, e := range evidence.excerpts {
+		if !e.PackageReference.IsZero() {
+			requiredDocuments = i + 1
+		}
+	}
+	if requiredDocuments > 1 || !evidence.excerpts[0].PackageReference.IsZero() {
+		contract += docsPackageContract
+	}
 	instructions := s.instructions(contract)
 	sent, trimmed, err := s.fitExcerpts(instructions, 1, evidence.excerpts, build)
-	for errors.Is(err, errTooLarge) && in.shortenOptionalLists() {
+	for (errors.Is(err, errTooLarge) || (err == nil && len(sent) < requiredDocuments)) && in.shortenOptionalLists() {
 		s.rec.Limitations = addLim(s.rec.Limitations, "document_lists_shortened")
 		sent, trimmed, err = s.fitExcerpts(instructions, 1, evidence.excerpts, build)
 	}
@@ -371,8 +397,12 @@ func (s *roleStage) documents() analysis.TaskResult {
 	in = withDocuments(sent)
 	catalog := catalogOf(sent)
 	byHandle := make(map[string]string, len(sent))
+	reading := documentScopeInputs{input: make(map[string]docInput, len(sent)), catalog: catalog}
+	hasPackage := false
 	for i, e := range in.Documents {
 		byHandle[e.EvidenceID] = sent[i].ID
+		reading.input[sent[i].ID] = e
+		hasPackage = hasPackage || e.PackageReference != nil
 	}
 	evidenceErrors := func(field string, ids []string, max int) []string {
 		// Only handles from the fitted request resolve. The normal checks
@@ -390,39 +420,65 @@ func (s *roleStage) documents() analysis.TaskResult {
 		return errs
 	}
 	var accepted docsOutput
-	scopeErrs := func(p string, ids []string) []string {
+	var issues []documentScopeIssue
+	var scopeRepair bool
+	scopeError := func(p string, ids []string, statement string, packageAllowed bool) string {
 		switch {
 		case !record.ValidScopePath(p):
-			return []string{"scope_invalid"}
+			return "scope_invalid"
 		case !s.existingDir(p):
-			return []string{"scope_unknown_path"}
+			return "scope_unknown_path"
 		}
-		for _, id := range ids {
-			if e, ok := catalog[id]; ok && !record.ScopeUnder(p, byPath[e.DocumentPath()].AppliesTo) {
-				return []string{"scope_generalized"}
-			}
+		outside := reading.outside(p, ids)
+		if len(outside) > 0 && (!packageAllowed || !record.PackageScopeCovers(outside, p, statement)) {
+			return "scope_generalized"
 		}
-		return nil
+		return ""
 	}
 	parse := func(raw json.RawMessage) []string {
+		issues = nil
 		var out docsOutput
 		if errs := decodeOutput(raw, &out, "contracts", "conflicts", "questions", "instruction_notes"); errs != nil {
 			return errs
 		}
 		var errs []string
 		if len(out.Contracts) > 6 || len(out.Conflicts) > 3 || len(out.Questions) > 4 || len(out.InstructionNotes) > 3 || len(out.DocumentQuality) > record.MaxDocumentQuality {
-			errs = addLim(errs, "too_many_items")
+			return []string{"too_many_items"}
 		}
-		for _, c := range out.Contracts {
-			errs = addLim(errs, textErrors(c.Statement)...)
-			errs = addLim(errs, evidenceErrors("contracts_evidence_ids", c.EvidenceIDs, 4)...)
-			errs = addLim(errs, scopeErrs(c.AppliesTo, c.EvidenceIDs)...)
+		kept := docsOutput{InstructionNotes: out.InstructionNotes, DocumentQuality: out.DocumentQuality}
+		narrowed := false
+		checkScope := func(collection string, i int, scope *string, ids []string, statement string, packageAllowed bool) bool {
+			code := scopeError(*scope, ids, statement, packageAllowed)
+			if code == "" {
+				return true
+			}
+			issue := reading.issue(collection, i, ids, packageAllowed)
+			if scopeRepair && code == "scope_generalized" && packageAllowed {
+				if p := reading.narrowPackage(*scope, ids, statement, issue); p != "" {
+					*scope, narrowed = p, true
+					return true
+				}
+			}
+			errs = addLim(errs, code)
+			issues = append(issues, issue)
+			return false
 		}
-		for _, c := range out.Conflicts {
+		for i, c := range out.Contracts {
+			row := addLim(textErrors(c.Statement), evidenceErrors("contracts_evidence_ids", c.EvidenceIDs, 4)...)
+			errs = addLim(errs, row...)
+			if len(row) == 0 && checkScope("contracts", i, &c.AppliesTo, c.EvidenceIDs, c.Statement, true) {
+				kept.Contracts = append(kept.Contracts, c)
+			}
+		}
+		for i, c := range out.Conflicts {
 			errs = addLim(errs, textErrors(c.Summary, c.Impact)...)
-			errs = addLim(errs, evidenceErrors("conflicts_first_evidence_ids", c.FirstEvidence, 3)...)
-			errs = addLim(errs, evidenceErrors("conflicts_second_evidence_ids", c.SecondEvidence, 3)...)
-			errs = addLim(errs, scopeErrs(c.Scope, append(append([]string{}, c.FirstEvidence...), c.SecondEvidence...))...)
+			first := evidenceErrors("conflicts_first_evidence_ids", c.FirstEvidence, 3)
+			second := evidenceErrors("conflicts_second_evidence_ids", c.SecondEvidence, 3)
+			errs = addLim(addLim(errs, first...), second...)
+			ids := slices.Concat(c.FirstEvidence, c.SecondEvidence)
+			if len(first)+len(second) == 0 && checkScope("conflicts", i, &c.Scope, ids, "", false) {
+				kept.Conflicts = append(kept.Conflicts, c)
+			}
 			for _, a := range c.FirstEvidence {
 				for _, b := range c.SecondEvidence {
 					if catalog[a].Path != "" && catalog[a].DocumentPath() == catalog[b].DocumentPath() {
@@ -431,10 +487,12 @@ func (s *roleStage) documents() analysis.TaskResult {
 				}
 			}
 		}
-		for _, q := range out.Questions {
-			errs = addLim(errs, textErrors(q.Question)...)
-			errs = addLim(errs, evidenceErrors("questions_evidence_ids", q.EvidenceIDs, 4)...)
-			errs = addLim(errs, scopeErrs(q.AppliesTo, q.EvidenceIDs)...)
+		for i, q := range out.Questions {
+			row := addLim(textErrors(q.Question), evidenceErrors("questions_evidence_ids", q.EvidenceIDs, 4)...)
+			errs = addLim(errs, row...)
+			if len(row) == 0 && checkScope("questions", i, &q.AppliesTo, q.EvidenceIDs, q.Question, true) {
+				kept.Questions = append(kept.Questions, q)
+			}
 		}
 		for _, n := range out.InstructionNotes {
 			errs = addLim(errs, textErrors(n.Note)...)
@@ -448,12 +506,24 @@ func (s *roleStage) documents() analysis.TaskResult {
 				errs = addLim(errs, "document_quality_invalid")
 			}
 		}
+		if scopeRepair && len(issues) != 0 &&
+			len(kept.Contracts)+len(kept.Conflicts)+len(kept.Questions)+len(kept.InstructionNotes)+len(kept.DocumentQuality) != 0 &&
+			!slices.ContainsFunc(errs, func(code string) bool { return !documentScopeError(code) }) {
+			s.rec.Limitations = addLim(s.rec.Limitations, record.LimDocumentScopeItemsOmitted)
+			errs = nil
+		}
 		if len(errs) == 0 {
-			accepted = out
+			accepted = kept
+			if narrowed {
+				s.rec.Limitations = addLim(s.rec.Limitations, record.LimDocumentPackageNarrowed)
+			}
 		}
 		return errs
 	}
-	input := func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *outputRepair) ([]byte, error) {
+		scopeRepair = hasPackage && r != nil && slices.ContainsFunc(r.OutputErrors, documentScopeError)
+		return s.fitDocumentRepair(in, r, issues, instructions)
+	}
 	if r := s.exchange(contract, input, parse); r != nil {
 		return *r
 	}
@@ -493,12 +563,13 @@ func (scope investigateScope) withExcerpts(list []record.Excerpt, links corpusLi
 }
 
 type docEvidence struct {
-	ID            string `json:"id"`
-	Path          string `json:"path"`
-	AppliesTo     string `json:"applies_to"`
-	StartLine     int    `json:"start_line"`
-	EndLine       int    `json:"end_line"`
-	DirectivePath string `json:"directive_path,omitempty"`
+	ID               string           `json:"id"`
+	Path             string           `json:"path"`
+	AppliesTo        string           `json:"applies_to"`
+	StartLine        int              `json:"start_line"`
+	EndLine          int              `json:"end_line"`
+	DirectivePath    string           `json:"directive_path,omitempty"`
+	PackageReference *docPackageInput `json:"package_reference,omitempty"`
 }
 
 type documentsHandoff struct {
@@ -591,7 +662,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		docEv = citedDocuments(docRec)
 		for _, e := range docEv {
 			docs.Evidence = append(docs.Evidence, docEvidence{ID: e.ID, Path: e.Path, AppliesTo: e.DocumentScope(),
-				StartLine: e.Start, EndLine: e.End, DirectivePath: e.DirectivePath})
+				StartLine: e.Start, EndLine: e.End, DirectivePath: e.DirectivePath, PackageReference: packageInput(e.PackageReference)})
 		}
 		// The same blob and line range have the same identity in every role.
 		// An exact docstring window is documentation even if selected by a
@@ -648,6 +719,14 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	if trimmed {
 		s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, "files_outside_review_context")
 		in.Scope.Limitations = s.rec.Limitations
+	}
+	if len(links.wholeWitness) > 0 {
+		var widened bool
+		sent, widened = s.widenOverviewWitnesses(sent, links, instructions, build)
+		if widened && !slices.ContainsFunc(sent, func(e record.Excerpt) bool { return links.partial[e.ID] }) {
+			s.rec.Limitations = slices.DeleteFunc(s.rec.Limitations, func(lim string) bool { return lim == "excerpt_only" })
+			in.Scope.Limitations = s.rec.Limitations
+		}
 	}
 	in.Scope = in.Scope.withExcerpts(sent, links)
 	contract := investigateContract

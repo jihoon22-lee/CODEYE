@@ -86,7 +86,8 @@ func TestMissingModelAndUnsupportedVersion(t *testing.T) {
 func TestEventGates(t *testing.T) {
 	valid := events(`{"workspace_proof":"proof","result":{}}`)
 	cases := map[string]string{
-		events(`{"workspace_proof":"other","result":{}}`):                 "workspace_unreachable",
+		events(`{"workspace_proof":"other","result":{}}`):                 reasonProofMismatch,
+		events(`{"workspace_proof":"proof","result":{"copy":"proof"}}`):   "model_output_invalid",
 		events(`{"workspace_proof":"proof","result":"ok"}`):               "model_output_invalid",
 		events(`{"workspace_proof":"proof","result":{},"result":{}}`):     "model_output_invalid",
 		strings.Replace(valid, `"reason":"stop"`, `"reason":"length"`, 1): "model_output_incomplete",

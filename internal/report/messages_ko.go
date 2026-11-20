@@ -142,6 +142,8 @@ var Korean = Locale{
 		// (docs/REPORT.md#분석-종류별-절).
 		"document_budget_exceeded":        "읽기 예산을 넘은 문서가 있어 그 문서는 읽지 않았다.",
 		"semantic_conflicts_not_assessed": "탐색은 안내끼리의 의미 충돌을 판단하지 않는다(문서 역할이 판단한다).",
+		"document_scope_items_omitted":    "인용한 문서가 적용 범위를 뒷받침하지 못한 항목을 문서 검토 결과에서 제외했다.",
+		"document_package_scope_narrowed": "호출 예제로 확인한 패키지 경로로 문서 항목의 적용 범위를 좁혔다.",
 		"toolchain_unavailable":           "노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했다.",
 		// Dependency preparation (docs/ARCHITECTURE.md#의존성-준비).
 		"no_dependencies":                  "받을 외부 의존성이 없다.",
@@ -298,6 +300,10 @@ var koSectionLabels = map[string]string{
 	"decision.unconfirmed":              "미확인",
 	"decision.document_claim":           "사용 설명에 적힌 동작",
 	"decision.unconfirmed_reason":       "코드에서 확인하지 못한 이유",
+	"decision.document_comparison":      "문서와 코드 대조",
+	"decision.code_evidence_missing":    "코드 근거 부족",
+	"decision.row_document":             "설명서",
+	"decision.row_code":                 "코드",
 	"decision.option":                   "조건에 따른 동작",
 	"decision.followup":                 "추가 코드 근거로 대조했습니다.",
 	"decision.additional_observation":   "추가 코드에서 확인한 범위",
@@ -657,6 +663,7 @@ var koSectionLabels = map[string]string{
 	"gap.document_budget_exceeded":       "예산 초과로 읽지 않은 문서",
 	"gap.document_excluded":              "제외한 문서",
 	"gap.document_unreadable":            "읽을 수 없는 문서",
+	"gap.document_scope_items_omitted":   "적용 범위를 확인하지 못한 문서 항목을 제외했다",
 	"gap.overlap_not_assessed":           "겹치는 안내를 평가하지 않았다",
 	"gap.task_failed":                    "작업 실패",
 	"gap.task_timed_out":                 "작업 시간 초과",

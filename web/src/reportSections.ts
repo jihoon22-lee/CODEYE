@@ -559,26 +559,27 @@ function checkContractFollowup(r: Record<string, unknown>, documents: Sections['
   const docs = documents.citations.filter(e => row.documentRefs.includes(e.id));
   const cited = row.additional?.codeRefs ?? row.codeRefs;
   const code = documents.citations.filter(e => cited.includes(e.id));
-  const implementation = code.some(e => e.kind === 'code' && !docs.some(doc =>
-    doc.directivePath && e.path === doc.path && doc.line <= e.end && e.line <= doc.end));
+  const implementation = (e: Citation) => e.kind === 'code' && !docs.some(doc =>
+    doc.directivePath && e.path === doc.path && doc.line <= e.end && e.line <= doc.end);
   if (rows.length !== 1 || (row.additional ? row.followup || row.status !== 'unknown' : !['match', 'partial', 'mismatch'].includes(row.status)) ||
     !contract || row.statement !== contract.statement || !scopeUnder(row.scope, contract.appliesTo) ||
     row.documentRefs.length !== contract.evidence.length || row.documentRefs.some((id, i) => id !== contract.evidence[i]) ||
     docs.length === 0 || docs.length !== row.documentRefs.length ||
     docs.some(e => e.kind !== 'document') ||
     code.length !== cited.length || cited.length > 4 || code.some(e => !['code', 'test'].includes(e.kind) || !scopeUnder(e.path, row.scope)) ||
-    !implementation || (!includesCode && (row.statement !== TEXT_OMITTED || row.reason !== TEXT_OMITTED))) invalid();
+    !code.some(implementation) || (!includesCode && (row.statement !== TEXT_OMITTED || row.reason !== TEXT_OMITTED))) invalid();
 
   if (row.additional) {
     const original = documents.citations.filter(e => row.codeRefs.includes(e.id));
-    const addsLine = (e: Citation) => {
-      if (e.end - e.line >= 80 || (e.kind === 'code' && /(?:\.d\.[mc]?ts|\.pyi)$/i.test(e.path))) return false;
+    const addsImplementation = (e: Citation) => {
+      if (!implementation(e) || /(?:\.d\.[mc]?ts|\.pyi)$/i.test(e.path)) return false;
       for (let line = e.line; line <= e.end; line++) {
         if (!original.some(old => old.path === e.path && old.line <= line && line <= old.end)) return true;
       }
       return false;
     };
-    if (!row.additional.reason.trim() || (!includesCode && row.additional.reason !== TEXT_OMITTED) || !code.every(addsLine)) invalid();
+    if (!row.additional.reason.trim() || (!includesCode && row.additional.reason !== TEXT_OMITTED) ||
+      code.some(e => e.line < 1 || e.end < e.line || e.end - e.line >= 80) || !code.some(addsImplementation)) invalid();
   }
 
   const key = 'review.contract';

@@ -731,6 +731,7 @@ func (v secView) observationsPart(heading string, ids []string, obs map[string]O
 
 func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 	v := withInsights(newSecView(r, digest, l))
+	decision := v.projectDecision()
 	var b strings.Builder
 	p := func(s ...string) {
 		for _, x := range s {
@@ -743,7 +744,11 @@ func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 		p("## ", mdText(s.Title))
 		p()
 		for _, part := range s.Parts {
+			mdComparisonAnchor(p, decision, part.Anchor)
 			mdPart(p, part, l)
+		}
+		if s.ID == "overview" && len(decision.ComparisonRows) != 0 {
+			mdDecision(p, decision, l)
 		}
 	}
 	p("## ", mdText(l.Label("section.appendix")))
@@ -968,8 +973,12 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{define "decision"}}{{$l := .L}}{{with .Decision}}
 <div class="card report-group report-decision" data-tone="{{.Tone}}">
 <div class="card-body">
-<div class="report-decision-state"><span class="report-group-mark">{{reportIcon (groupIcon .Tone)}}</span><span class="decision-label">{{.State}}</span>{{if and .Review (or (not .DocumentClaim) .AdditionalObservation)}}<span class="report-group-note" role="note">{{$l.Label "insight.interpretation"}}</span>{{end}}</div>
+<div class="report-decision-state"><span class="report-group-mark">{{reportIcon (groupIcon .Tone)}}</span><span class="decision-label">{{.State}}</span>{{if and .Review (or (and (not .DocumentClaim) (not .ComparisonRows)) .AdditionalObservation)}}<span class="report-group-note" role="note">{{$l.Label "insight.interpretation"}}</span>{{end}}</div>
 <h3>{{.Title}}</h3>
+{{if .ComparisonRows}}<dl class="report-comparison-rows">{{range .ComparisonRows}}<div><dt>{{.Label}}</dt><dd>
+<p>{{range inlineCodeParts .Text}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}</p>
+{{if .Sources}}<div class="report-decision-sources">{{range .Sources}}{{template "citation" .}}{{end}}</div>{{end}}
+</dd></div>{{end}}</dl>{{end}}
 {{if .DocumentClaim}}<p class="report-decision-copy">{{.DocumentClaim}}</p>{{end}}
 {{if .Reason}}<p class="report-decision-copy">{{if .ReasonLabel}}<strong>{{.ReasonLabel}}</strong> {{end}}{{.Reason}}</p>{{end}}
 {{if .Condition}}<p class="report-decision-copy"><strong>{{$l.Label "decision.option"}}</strong> {{.Condition}}</p>{{end}}
@@ -977,9 +986,9 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{if .Next}}<p class="report-decision-next"><strong>{{if eq .Tone "action"}}{{$l.Label "decision.next"}}{{else}}{{$l.Label "opening.verification"}}{{end}}</strong><span>{{.Next}}</span></p>{{end}}
 {{if .Scope}}<p class="report-decision-copy">{{$l.Label "col.applies_to"}} <code>{{.Scope}}</code></p>{{end}}
 {{if .Followup}}<p class="report-decision-copy">{{$l.Label "decision.followup"}}</p>{{end}}
-{{if .Sources}}<div class="report-decision-sources">{{range .Sources}}{{template "citation" .Brief}}{{end}}</div>{{end}}
+{{if .Sources}}<div class="report-decision-sources">{{range .Sources}}{{template "citation" .}}{{end}}</div>{{end}}
 {{if .Action}}<p class="report-decision-next"><strong>{{$l.Label "decision.priority_action"}}</strong> {{.Action.State}}{{if .Action.Title}} · {{.Action.Title}}{{end}}</p>
-<div class="report-decision-sources">{{template "citation" .Action.Source.Brief}}</div>{{end}}
+<div class="report-decision-sources">{{template "citation" .Action.Source}}</div>{{end}}
 {{if .Glossary}}<details class="report-glossary"><summary>{{reportIcon "chevron-down"}} {{$l.Label "decision.glossary"}}</summary><dl>
 {{range .Glossary}}<div><dt>{{.Name}}</dt><dd>{{.Definition}}</dd></div>{{end}}
 </dl></details>{{end}}

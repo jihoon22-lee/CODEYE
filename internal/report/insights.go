@@ -89,36 +89,43 @@ func (c sectionContext) addComparisons(s *DocumentsSection, doc *record.Record) 
 	}
 }
 
-// additionalCodeObservation carries only cited ranges with a line outside the
-// original investigation. Reading a test can supplement new implementation.
+// additionalCodeObservation preserves the final comparison's citations in
+// reading order. At least one cited implementation must add a line.
 func additionalCodeObservation(x record.ContractComparison, final, overview []record.Excerpt) *AdditionalCodeObservation {
 	byID := make(map[string]record.Excerpt, len(final))
 	for _, e := range final {
 		byID[e.ID] = e
 	}
-	var ids []string
-	for _, id := range x.CodeEvidenceIDs {
-		e, ok := byID[id]
-		if ok && freshObservationRange(e, overview) {
-			ids = append(ids, id)
-		}
-	}
-	// Validate with the same scope, citation and implementation checks as a
-	// definitive comparison. Status remains unknown on the published row.
-	check := x
-	check.Status, check.CodeEvidenceIDs = "partial", ids
-	if !check.Valid(byID) {
+	if !validAdditionalObservation(x, byID, overview) {
 		return nil
 	}
-	return &AdditionalCodeObservation{Reason: x.Reason, CodeEvidenceIDs: ids}
+	return &AdditionalCodeObservation{Reason: x.Reason, CodeEvidenceIDs: slices.Clone(x.CodeEvidenceIDs)}
+}
+
+func validAdditionalObservation(x record.ContractComparison, catalog map[string]record.Excerpt, overview []record.Excerpt) bool {
+	// Use the definitive comparison's scope, citation and implementation
+	// checks. The stored decision keeps its unknown status.
+	check := x
+	check.Status = "partial"
+	if !check.Valid(catalog) {
+		return false
+	}
+	hasNewImplementation := false
+	for _, id := range x.CodeEvidenceIDs {
+		e := catalog[id]
+		if e.Start < 1 || e.End < e.Start || e.End-e.Start >= 80 || record.SourceKind(e.Path) != e.Kind {
+			return false
+		}
+		if !hasNewImplementation && e.Kind == "code" && freshObservationRange(e, overview) {
+			check.CodeEvidenceIDs = []string{id}
+			hasNewImplementation = check.Valid(catalog)
+		}
+	}
+	return hasNewImplementation
 }
 
 func freshObservationRange(e record.Excerpt, overview []record.Excerpt) bool {
-	if e.Start < 1 || e.End < e.Start || e.End-e.Start >= 80 || (e.Kind != "code" && e.Kind != "test") ||
-		record.SourceKind(e.Path) != e.Kind {
-		return false
-	}
-	if e.Kind == "code" && slices.ContainsFunc([]string{".d.ts", ".d.mts", ".d.cts", ".pyi"}, func(ext string) bool {
+	if slices.ContainsFunc([]string{".d.ts", ".d.mts", ".d.cts", ".pyi"}, func(ext string) bool {
 		return strings.HasSuffix(strings.ToLower(e.Path), ext)
 	}) {
 		return false

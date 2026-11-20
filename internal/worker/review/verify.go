@@ -14,12 +14,11 @@ import (
 // (per-candidate acceptance, one bounded repair of the rejected candidates,
 // quarantine as unreviewed, reproduction claims downgraded, success without
 // a call when there is no candidate) over the accepted candidates of
-// investigate and interpret. A reply that is not JSON at all gets one retry
-// of its own (it does not use up the repair; at most record.RoleMaxCalls
-// calls); an entry whose only defect is citing observation IDs of the
-// request among its evidence is accepted without them when the rest still
-// meets its verdict's rule (evidence_id_dropped on the call); and a later
-// call that fails keeps the verdicts already accepted (verification_call_failed).
+// investigate and interpret. A non-JSON reply or workspace proof mismatch can
+// be retried once each within record.RoleMaxCalls. An entry citing observation
+// IDs among its evidence is accepted without them when the remaining evidence
+// meets the verdict's rule (evidence_id_dropped on the call). A later call
+// that fails keeps the verdicts already accepted (verification_call_failed).
 const verifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_..."],"counterevidence_ids":["ev_..."],"unresolved_assumptions":["..."],"next_verification":["..."]}]}, ignoring any wider output examples. Return exactly one entry per candidate in input. Before deciding, read the caller and test excerpts (origin caller/test) for guards, deferred cleanup or ownership transfer that would invalidate the candidate, and keep each documents contract to its applies_to path. supported needs a code or test evidence ID and at least one valid condition; refuted needs counterevidence IDs and invalid conditions; otherwise use inconclusive with unresolved assumptions. Nothing was executed: never claim reproduction, test results or runtime output. Cite only evidence IDs given in scope; do not add paths, line numbers or other fields. Give 1-3 next_verification items that are reading or review steps, not commands.`
 
 const verifyRepairRules = "\nFormat repair: your previous output for the candidates listed in input.repair was rejected with the listed platform error codes. Return a verifications entry only for those candidates, citing only IDs from scope.excerpts; accepted_evidence_ids lists every valid ID."
@@ -236,7 +235,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	accepted := map[string]record.Verification{}
 	pending := candidatesSent
 	var repair *repairInput
-	repaired, retried := false, false
+	repaired, retried, proofRetried := false, false, false
 	// Observation IDs are in the request but are not evidence; an entry that
 	// cites one beside valid evidence may be trimmed (parseVerificationItems).
 	observationIDs := map[string]bool{}
@@ -262,8 +261,8 @@ func (s *roleStage) verify() analysis.TaskResult {
 		if size > PromptBudget {
 			return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 		}
-		if err := s.countCall(); err != nil {
-			return *s.fail(result(domain.TaskFailed, reasonCallCountFailed))
+		if r := s.reserveCall(); r != nil {
+			return *s.fail(*r)
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
 		s.rec.Limitations = noteVersion(s.rec.Limitations, reply)
@@ -275,6 +274,15 @@ func (s *roleStage) verify() analysis.TaskResult {
 				call.Outcome = "model_unavailable"
 			}
 			s.rec.Calls = append(s.rec.Calls, call)
+			if reply.WorkspaceProofMismatch() {
+				if s.ctx.Err() != nil {
+					return *s.fail(result(domain.TaskCancelled, "cancelled"))
+				}
+				if !proofRetried && attempt < record.RoleMaxCalls {
+					proofRetried = true
+					continue
+				}
+			}
 			// A later call that fails (timeout, refusal) keeps the verdicts
 			// already accepted; the rest are quarantined and the task ends
 			// incomplete. Cancellation still fails the whole stage.

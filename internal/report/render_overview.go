@@ -14,6 +14,7 @@ type projectDecision struct {
 	Tone, State, Title, Reason, Boundary, Next, Coverage string
 	DocumentClaim, ReasonLabel, Condition, Scope         string
 	ComparisonAnchor                                     string
+	ComparisonRows                                       []secItem
 	Sources                                              []sourceCitation
 	Action                                               *projectAction
 	Followup                                             bool
@@ -324,19 +325,42 @@ func (v secView) comparisonDecision(c DocComparison, code bool) projectDecision 
 	}
 	d := projectDecision{Tone: tone, State: l.Label("decision.comparison." + c.Status), Title: c.Statement,
 		Reason: openingText(c.Reason, ""), Scope: displayDocumentScope(c.AppliesTo), Review: true, Followup: c.Followup}
+	document := bestProductEvidence(c.DocumentEvidenceIDs, evidence, "document")
+	additional := additionalPrimaryCode(c, evidence)
+	if c.Status == "unknown" && v.R.Export.IncludeCode && openingText(c.Statement, "") != "" {
+		codeRefs := c.CodeEvidenceIDs
+		if additional != nil && openingText(c.AdditionalObservation.Reason, "") != "" {
+			d.AdditionalObservation = true
+			d.Reason = c.AdditionalObservation.Reason
+			codeRefs = c.AdditionalObservation.CodeEvidenceIDs
+		}
+		if d.Reason != "" {
+			d.Title = l.Label("decision.document_comparison")
+			if !d.AdditionalObservation {
+				d.State = l.Label("decision.code_evidence_missing")
+			}
+			docRow := secItem{Label: l.Label("decision.row_document"), Text: c.Statement}
+			if document != nil {
+				docRow.Sources = []sourceCitation{v.citeSectionEvidence(*document)}
+			}
+			d.ComparisonRows = []secItem{docRow, {Label: l.Label("decision.row_code"), Text: d.Reason, Sources: v.sourceCitations(codeRefs, evidence)}}
+			d.Reason = ""
+			return d
+		}
+	}
 	if c.Status == "unknown" {
 		d.Title = l.Label("decision.document_claim")
 		d.DocumentClaim = c.Statement
 		d.ReasonLabel = l.Label("decision.unconfirmed_reason")
 	}
-	if doc := bestProductEvidence(c.DocumentEvidenceIDs, evidence, "document"); doc != nil {
-		d.Sources = append(d.Sources, v.citeSectionEvidence(*doc))
+	if document != nil {
+		d.Sources = append(d.Sources, v.citeSectionEvidence(*document))
 	}
-	if extra := additionalPrimaryCode(c, evidence); extra != nil {
+	if additional != nil {
 		d.AdditionalObservation = true
 		d.Reason = openingText(c.AdditionalObservation.Reason, "")
 		d.ReasonLabel = l.Label("decision.additional_observation")
-		d.Sources = append(d.Sources, v.citeSectionEvidence(*extra))
+		d.Sources = append(d.Sources, v.sourceCitations(c.AdditionalObservation.CodeEvidenceIDs, evidence)...)
 		return d
 	}
 	if code {
@@ -363,6 +387,27 @@ func additionalPrimaryCode(c DocComparison, evidence []SectionEvidence) *Section
 		return bestProductEvidence(c.AdditionalObservation.CodeEvidenceIDs, evidence, "code")
 	}
 	return nil
+}
+
+var backtickRuns = regexp.MustCompile("`+")
+
+// inlineCodeParts preserves unmatched delimiters as text. Only two single
+// backticks delimit a code span and all parts remain ordinary text.
+func inlineCodeParts(s string) []secCell {
+	var parts []secCell
+	start, open := 0, -1
+	for _, run := range backtickRuns.FindAllStringIndex(s, -1) {
+		if run[1]-run[0] != 1 {
+			continue
+		}
+		if open < 0 {
+			open = run[0]
+			continue
+		}
+		parts = append(parts, secCell{Text: s[start:open]}, secCell{Text: s[open+1 : run[0]], Code: true})
+		start, open = run[1], -1
+	}
+	return append(parts, secCell{Text: s[start:]})
 }
 
 var namedDocumentOperation = regexp.MustCompile(`\b([A-Za-z_$][A-Za-z0-9_$]{2,})\s*\(`)
@@ -485,7 +530,13 @@ func (v secView) comparisonDetails(c DocComparison, evidence []SectionEvidence) 
 		}
 		items = append(items, secItem{Label: l.Label(label), Text: reason})
 	}
-	if sources := v.sourceCitations(append(slices.Clone(c.DocumentEvidenceIDs), c.CodeEvidenceIDs...), evidence); len(sources) > 0 {
+	priorRefs := slices.Clone(c.DocumentEvidenceIDs)
+	for _, id := range c.CodeEvidenceIDs {
+		if c.AdditionalObservation == nil || !slices.Contains(c.AdditionalObservation.CodeEvidenceIDs, id) {
+			priorRefs = append(priorRefs, id)
+		}
+	}
+	if sources := v.sourceCitations(priorRefs, evidence); len(sources) > 0 {
 		items = append(items, secItem{Sources: sources})
 	}
 	if extra := c.AdditionalObservation; extra != nil {

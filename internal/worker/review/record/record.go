@@ -47,7 +47,8 @@ type Excerpt struct {
 	Symbol string `json:"symbol,omitempty"`
 	// DirectivePath is the Markdown page authoring the Python docstring into
 	// the public docs. Path still identifies the actual .py blob and lines.
-	DirectivePath string `json:"directive_path,omitempty"`
+	DirectivePath    string           `json:"directive_path,omitempty"`
+	PackageReference PackageReference `json:"package_reference,omitzero"`
 	// Text is sent to the model only; records never store source text.
 	Text string `json:"text,omitempty"`
 }

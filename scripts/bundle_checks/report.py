@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 
 from .common import ROOT, ensure, source_location
-from .review import evidence_document_scope
+from .review import document_claim_covers, evidence_document_scope, package_reference_scope
 
 
 def check_plan(plan: dict) -> None:
@@ -180,6 +180,7 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
             path = source_location(location, source_root)
             ensure(hashlib.sha256(path.read_bytes()).hexdigest() == evidence["blob_sha256"], "Section evidence hash mismatch: " + str(path))
             evidence_document_scope(evidence, source_root)
+            package_reference_scope(evidence, source_root, redacted=free)
             check_excerpt(evidence, path, location, not free, True)
         cited = [i for entries in report[block].values() if isinstance(entries, list)
                  for entry in entries if isinstance(entry, dict)
@@ -213,15 +214,20 @@ def check_document_comparisons(report: dict, catalog: dict) -> None:
                and any(c.get("task_key") == "review.contract" and c["role"] == "contract" and c["outcome"] == "accepted" and c["request_sha256"]
                        for c in report["coverage"].get("review_calls", [])), "Document comparison followup is invalid")
     contracts = documents["contracts"]
+    free = not report["export"]["include_code"]
     ensure(not comparisons or len(comparisons) == len(contracts), "Document comparison count differs from contracts")
+    for group, field in (("contracts", "statement"), ("questions", "question")):
+        for claim in documents[group]:
+            docs = [catalog[id] for id in claim["evidence_ids"]]
+            ensure(all(item["kind"] == "document" for item in docs) and
+                   document_claim_covers(docs, claim["applies_to"], claim[field], free),
+                   "Document claim cites evidence outside its scope or of the wrong kind")
     for comparison, contract in zip(comparisons, contracts):
         scope = comparison["applies_to"]
         doc_ids = comparison["document_evidence_ids"]
         ensure(comparison["statement"] == contract["statement"] and doc_ids == contract["evidence_ids"]
                and scope_under(scope, contract["applies_to"]), "Document comparison differs from its contract")
         docs = [catalog[evidence_id] for evidence_id in doc_ids]
-        ensure(all(item["kind"] == "document" and scope_under(scope, evidence_document_scope(item)) for item in docs),
-               "Document comparison cites evidence outside its scope or of the wrong kind")
         code = [catalog[evidence_id] for evidence_id in comparison["code_evidence_ids"]]
         ensure(all(item["kind"] in ("code", "test") and scope_under(item["path"], scope) for item in code),
                "Document comparison cites implementation outside its scope or evidence of the wrong kind")
@@ -235,19 +241,21 @@ def check_document_comparisons(report: dict, catalog: dict) -> None:
                "Document comparison verdict lacks implementation evidence")
         if extra := comparison.get("additional_observation"):
             refs = extra["code_evidence_ids"]
-            ensure(set(refs) <= set(catalog), "Additional document observation cites unknown evidence")
+            ensure(1 <= len(refs) <= 4 and len(set(refs)) == len(refs) and set(refs) <= set(catalog),
+                   "Additional document observation has invalid evidence references")
             observations = [catalog[evidence_id] for evidence_id in refs]
+            ensure(all(item["kind"] in ("code", "test") and scope_under(item["path"], scope)
+                       and 0 <= item["end_line"] - item["start_line"] < 80 and item["start_line"] >= 1
+                       for item in observations), "Additional document observation cites invalid scoped evidence")
 
-            def fresh(item: dict) -> bool:
-                if item["kind"] not in ("code", "test") or not scope_under(item["path"], scope) or item["end_line"] - item["start_line"] >= 80:
-                    return False
-                if item["kind"] == "code" and item["path"].lower().endswith((".d.ts", ".d.mts", ".d.cts", ".pyi")):
+            def fresh_implementation(item: dict) -> bool:
+                if not implementation(item) or item["path"].lower().endswith((".d.ts", ".d.mts", ".d.cts", ".pyi")):
                     return False
                 return any(not any(old["path"] == item["path"] and old["blob_sha256"] == item["blob_sha256"]
                                    and old["start_line"] <= line <= old["end_line"] for old in code)
                            for line in range(item["start_line"], item["end_line"] + 1))
 
-            ensure(all(fresh(item) for item in observations) and any(implementation(item) for item in observations),
+            ensure(any(fresh_implementation(item) for item in observations),
                    "Additional document observation lacks fresh scoped implementation evidence")
 
 

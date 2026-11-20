@@ -50,12 +50,15 @@ type witnessQuery struct {
 	members              []string
 	navigationNames      []string
 	pythonDocs           map[string][]record.Excerpt
+	packageEntry         string
+	goExamples           []goContractExample
 }
 
 type contractWitness struct {
 	entry            source.Entry
 	line, end, score int
 	direct           bool
+	documented       bool
 	compileBranch    bool
 	query            int
 }
@@ -70,6 +73,7 @@ type contractSelection struct {
 	calls                 []contractCall
 	member                memberPair
 	sources               map[string]string
+	goTraces              []goWrapperTrace
 }
 
 // contractWitnesses looks for readable implementation and test locations for
@@ -185,13 +189,14 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 	remaining := witnessScanBytes
 	scanned := map[string]bool{}
 	contents := map[string]string{}
+	safe := map[string]string{}
 	definitions := map[[2]string]struct{ start, end int }{}
-	read := func(e source.Entry) (string, bool, error) {
+	readSafe := func(e source.Entry) (string, bool, error) {
 		if err := s.ctx.Err(); err != nil {
 			return "", false, err
 		}
 		if scanned[e.Path] {
-			content, ok := contents[e.Path]
+			content, ok := safe[e.Path]
 			return content, ok, nil
 		}
 		if len(scanned) >= witnessMaxFiles || e.Size == nil || *e.Size > int64(remaining) {
@@ -200,11 +205,22 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		scanned[e.Path] = true
 		remaining -= int(*e.Size)
 		content, ok, err := s.readSource(e)
-		if ok && !record.GeneratedHeader([]byte(content)) {
-			contents[e.Path] = content
-			return content, true, err
+		if ok {
+			safe[e.Path] = content
 		}
-		return "", false, err
+		return content, ok, err
+	}
+	goTraces, err := s.goWrapperTraces(g, queries, readSafe)
+	if err != nil {
+		return contractSelection{}, err
+	}
+	read := func(e source.Entry) (string, bool, error) {
+		content, ok, err := readSafe(e)
+		if !ok || record.GeneratedHeader([]byte(content)) {
+			return "", false, err
+		}
+		contents[e.Path] = content
+		return content, true, err
 	}
 	processed := map[string]bool{}
 	for _, c := range candidates {
@@ -236,7 +252,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 				found[i] = w
 			}
 		}
-		wholeFile := len(content) <= roleMaxCodeFile && strings.Count(content, "\n") < 50 && record.JSONLen(content) <= roleMaxCodeFile
+		wholeFile := shortReviewSource(content, roleMaxCodeFile)
 		kind := 0
 		if windowKind(e.Path) == "test" {
 			kind = 1
@@ -425,7 +441,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 		}
 	}
-	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents}, nil
+	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents, goTraces: goTraces}, nil
 }
 
 func minifiedSource(path string) bool {
@@ -556,6 +572,8 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 		addWitnessWords(statement, c.Statement, 4)
 		paths := map[string]bool{}
 		var pythonDocs map[string][]record.Excerpt
+		var packageEntry string
+		var goExamples []goContractExample
 		addWitnessPaths(paths, c.Statement)
 		members := documentedMembers(c.Statement, true)
 		names := navigationIdentifiers(c.Statement)
@@ -580,6 +598,9 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 				cited[id] = raw
 			}
 			passage := witnessPassage(statement, raw)
+			if x.DirectivePath == "" && c.AppliesTo == x.DocumentScope() {
+				goExamples = goExamplesInContract(goExamples, c.Statement, raw)
+			}
 			addWitnessWords(terms, passage, 2)
 			addWitnessPaths(paths, passage)
 			for _, name := range names {
@@ -596,6 +617,14 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 				addWitnessWords(terms, strings.TrimSuffix(path.Base(x.Path), ".py"), 4)
 				addPythonDocExampleTerms(terms, raw)
 			}
+			if ref := x.PackageReference; !ref.IsZero() && ref.Scope() == c.AppliesTo && ref.Matches(c.Statement) {
+				paths[ref.EntryPath] = true
+				packageEntry = ref.EntryPath
+				if ref.Export != "default" && !slices.Contains(exactNames, ref.Export) {
+					exactNames = append(exactNames, ref.Export)
+					addWitnessWords(terms, ref.Export, witnessMinScore)
+				}
+			}
 			if len(members) == 0 {
 				members = documentedMembers(passage, false)
 			}
@@ -603,7 +632,8 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 		if len(terms) != 0 || len(paths) != 0 {
 			out = append(out, witnessQuery{contractIndex: i + 1, scope: c.AppliesTo, terms: terms, statement: statement, paths: paths,
 				operation: maintenanceOperation(c.Statement), typeContract: mentionsJavaScriptTypes(c.Statement),
-				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, pythonDocs: pythonDocs})
+				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, pythonDocs: pythonDocs,
+				packageEntry: packageEntry, goExamples: goExamples})
 		}
 	}
 	common := map[string]int{}
@@ -758,6 +788,9 @@ func matchWitnessLines(text string, e source.Entry, queries []witnessQuery) []co
 		if record.ScopeUnder(e.Path, q.scope) {
 			pathScores[i] = min(8, witnessMatch(pathWords, q.terms))
 			namedPaths[i] = q.names(e.Path)
+			if q.packageEntry == e.Path {
+				best[i] = contractWitness{entry: e, line: 1, score: witnessMinScore}
+			}
 		} else {
 			pathScores[i] = -1
 		}
@@ -837,7 +870,8 @@ func matchWitnessLines(text string, e source.Entry, queries []witnessQuery) []co
 				anchor = line
 			}
 			best[i] = contractWitness{entry: e, line: anchor + 1, score: score, compileBranch: guard && lineMatch >= 4,
-				direct: named || witnessMatch(words, q.statement) >= witnessMinScore}
+				direct:     named || witnessMatch(words, q.statement) >= witnessMinScore,
+				documented: named || slices.ContainsFunc(q.navigationNames, func(name string) bool { return containsContractLiteral(s, name) })}
 		}
 	}
 	return best

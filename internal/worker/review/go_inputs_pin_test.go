@@ -175,8 +175,8 @@ func goPinJobs(t *testing.T) map[string]analysis.Job {
 }
 
 var pinnedGo = map[string][]string{
-	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c 0f35e48b1837906c", "documents 72c9c26a908b1b14 cbb9d0c83ce64f50", "investigate a45cc428223e67cd c3580ccbe7f93361", "verify 342e0998c8220242 e0f027c525ea4547"},
-	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c 1591d2065785bf02", "documents 72c9c26a908b1b14 08a42b5c8a8e52c9", "investigate a45cc428223e67cd 7fab296a9fdf4def", "interpret 07f3d86f118cca51 6c30210249e618c0", "verify 342e0998c8220242 739ea4868928c8e1"},
+	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c 0f35e48b1837906c", "documents 1d7b999197f49e1c cbb9d0c83ce64f50", "investigate a45cc428223e67cd c3580ccbe7f93361", "verify 342e0998c8220242 e0f027c525ea4547"},
+	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c 1591d2065785bf02", "documents 1d7b999197f49e1c 08a42b5c8a8e52c9", "investigate a45cc428223e67cd 7fab296a9fdf4def", "interpret 07f3d86f118cca51 6c30210249e618c0", "verify 342e0998c8220242 739ea4868928c8e1"},
 	// The worst case has more code than the overview offers, so it plans
 	// review.scope and nine slots: the seven the plan-time packing needs and
 	// two of slack, which review.scope leaves empty. The fixture has no
@@ -192,7 +192,7 @@ var pinnedGo = map[string][]string{
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
 		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 72c9c26a908b1b14 8949450c226e85cf", "investigate a45cc428223e67cd 4c9b255a73219e7c", "interpret 07f3d86f118cca51 0ba79c5a6cd9bbf3", "verify 342e0998c8220242 a3579848cffcabeb",
+		"review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 1d7b999197f49e1c 8949450c226e85cf", "investigate a45cc428223e67cd 4c9b255a73219e7c", "interpret 07f3d86f118cca51 0ba79c5a6cd9bbf3", "verify 342e0998c8220242 a3579848cffcabeb",
 		"investigate a45cc428223e67cd e974e862da159923", "verify 342e0998c8220242 5ef3cf21e54e4d46", "investigate a45cc428223e67cd 1d3e98a1d772eb70", "verify 342e0998c8220242 78a5855122d165ae",
 		"investigate a45cc428223e67cd d4a19db5bcea1b14", "verify 342e0998c8220242 7be8876032bafd15", "investigate a45cc428223e67cd 4e5d7047024a2994", "verify 342e0998c8220242 0b1da9de5113145e",
 		"investigate a45cc428223e67cd b02f5fe18573d22f", "verify 342e0998c8220242 15ac4b1a24bafdaf", "investigate a45cc428223e67cd 212a07f3c6943ca2", "verify 342e0998c8220242 9d6853628eba4f96",
@@ -208,7 +208,7 @@ var pinnedGo = map[string][]string{
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
 		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 72c9c26a908b1b14 8949450c226e85cf", "investigate a45cc428223e67cd 4c9b255a73219e7c", "interpret 07f3d86f118cca51 71915d5d7b19dc70", "verify 342e0998c8220242 a3579848cffcabeb",
+		"review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 1d7b999197f49e1c 8949450c226e85cf", "investigate a45cc428223e67cd 4c9b255a73219e7c", "interpret 07f3d86f118cca51 71915d5d7b19dc70", "verify 342e0998c8220242 a3579848cffcabeb",
 		"investigate a45cc428223e67cd e974e862da159923", "verify 342e0998c8220242 5ef3cf21e54e4d46", "investigate a45cc428223e67cd 1d3e98a1d772eb70", "verify 342e0998c8220242 78a5855122d165ae",
 		"investigate a45cc428223e67cd d4a19db5bcea1b14", "verify 342e0998c8220242 7be8876032bafd15", "investigate a45cc428223e67cd 4e5d7047024a2994", "verify 342e0998c8220242 0b1da9de5113145e",
 		"investigate a45cc428223e67cd b02f5fe18573d22f", "verify 342e0998c8220242 15ac4b1a24bafdaf", "investigate a45cc428223e67cd 212a07f3c6943ca2", "verify 342e0998c8220242 9d6853628eba4f96",

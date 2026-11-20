@@ -422,7 +422,7 @@ func TestContractFollowupRereadsAcceptedSliceEvidence(t *testing.T) {
 	probe := record.ContractProbe{Candidates: []record.ContractLocation{{Path: selected.Path}}}
 	prior := record.ContractComparison{AppliesTo: record.DocumentDir(selected.Path)}
 	files := stage.entries()
-	found, err := stage.contractSliceExcerpts(probe, prior, nil, docs, overview, files)
+	found, err := stage.contractSliceExcerpts(probe, prior, nil, docs, overview, files, nil, nil)
 	if err != nil || !slices.ContainsFunc(found, func(item contractExcerpt) bool {
 		e := item.excerpt
 		e.Text = ""
@@ -432,7 +432,7 @@ func TestContractFollowupRereadsAcceptedSliceEvidence(t *testing.T) {
 		t.Fatalf("slice evidence or provenance missing: %+v, %v", found, err)
 	}
 	overview.SHA256 = strings.Repeat("0", 64)
-	found, err = stage.contractSliceExcerpts(probe, prior, nil, docs, overview, files)
+	found, err = stage.contractSliceExcerpts(probe, prior, nil, docs, overview, files, nil, nil)
 	if err != nil || len(found) != 0 {
 		t.Fatalf("slice evidence from scope with different overview digest: %+v, %v", found, err)
 	}

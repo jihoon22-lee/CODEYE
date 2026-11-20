@@ -2,7 +2,7 @@
   "schema_version": "0.4",
   "pack": {
     "id": "review",
-    "version": "2.3.1"
+    "version": "2.4.0"
   },
   "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
   "run_id": "0195f3a0-0000-7000-8000-000000000025",
@@ -13,12 +13,12 @@
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "216d49aa42fe456e8afad009b95f540f47dfe81fbc26966d963bf7f414e3422a"
+      "sha256": "d4fec82d12e6e120ebd7de76b455e963927c381fcce403d4ed636412d0c3ab04"
     },
     {
       "source": "review.investigate",
       "state": "accepted",
-      "sha256": "f8eb435b87d9deabc5fb39a6f5a921362406f3d64fe676409bc022071d9b252f"
+      "sha256": "a1b0601c3f7f65c90239bd66a16c06747acb2c21642b1b972b7b7bfb53364607"
     }
   ],
   "evidence": [
@@ -64,8 +64,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.3.1",
-      "pack_sha256": "7fa5404a4bd14d0d30763826107f6a364b7d73b23c4658be6729a4464a6de65d",
+      "pack_version": "2.4.0",
+      "pack_sha256": "16ada68fa0588f905d4d506840103b0149007de2f3d98416c649d33bc39a189b",
       "pack_files": [
         "00-core.md",
         "contract.md",
