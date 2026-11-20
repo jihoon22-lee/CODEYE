@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/httpapi"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
@@ -306,8 +307,11 @@ type serveConfig struct {
 	// httpapi.DefaultSessionTTL). codeye start gives httpapi.ServiceSessionTTL.
 	sessionTTL time.Duration
 	// stateDir is the installation's state directory (httpapi.Instance):
-	// the setup summary, detected tools and the users' GitHub tokens.
+	// the setup summary, detected tools and platform GitHub credentials.
 	stateDir string
+	offline  bool
+	gitHosts []string
+	caBundle string
 }
 
 func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
@@ -327,6 +331,15 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fs.Func("public-origin", "", func(v string) error { c.publicOrigins = append(c.publicOrigins, v); return nil })
 		fs.DurationVar(&c.sessionTTL, "session-ttl", 0, "")
 		fs.StringVar(&c.stateDir, "state-dir", "", "")
+		fs.BoolVar(&c.offline, "offline", false, "")
+		fs.Func("git-host", "", func(v string) error {
+			if err := domain.ValidateHost(v); err != nil {
+				return err
+			}
+			c.gitHosts = append(c.gitHosts, strings.ToLower(v))
+			return nil
+		})
+		fs.StringVar(&c.caBundle, "ca-bundle", "", "")
 	}) {
 		return 2
 	}
@@ -414,8 +427,8 @@ func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig
 	cfg := httpapi.Config{Listen: c.addr, WebDir: c.webDir, Logger: logger, ArtifactDir: c.artifactDir, ReconcileInterval: c.reconcile,
 		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigins: c.publicOrigins, PlainHTTP: c.plainHTTP, LocalListen: c.local}
 	cfg.SessionTTL = c.sessionTTL
-	if c.stateDir != "" {
-		cfg.Instance = &httpapi.Instance{StateDir: c.stateDir}
+	if c.stateDir != "" || c.offline {
+		cfg.Instance = &httpapi.Instance{StateDir: c.stateDir, Offline: c.offline, GitHosts: c.gitHosts, CABundle: c.caBundle}
 	}
 	srv, err := httpapi.New(cfg, store)
 	if err != nil {

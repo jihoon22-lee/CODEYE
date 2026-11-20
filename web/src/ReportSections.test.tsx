@@ -39,6 +39,25 @@ describe('analysis sections', () => {
     expect(screen.getByRole('tabpanel',{name:t.sections.titles.documents})).toBeTruthy();
   });
 
+  it('opens a priority finding with its impact and published excerpt in the overview', async () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Billing', source: '/srv/billing' };
+    const report = parseAnalysisReport(doc, doc.run_id);
+    const finding = report.findings.find(f => f.evidence.some(e => e.excerpt))!;
+    const evidence = finding.evidence.find(e => e.excerpt)!;
+    render(<ReportDocument report={{ ...report, priorities: [finding.id] }} />);
+
+    const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
+    const card = within(overview).getByText(finding.title).closest('details')!;
+    expect(within(card).queryByText(finding.impact)).toBeNull();
+    card.open = true;
+    fireEvent(card, new Event('toggle'));
+    expect(await within(card).findByText(finding.impact)).toBeTruthy();
+    expect(card.querySelector('pre')?.textContent).toContain(evidence.excerpt!.text.split('\n')[0]);
+    expect(card.querySelector('figcaption')?.textContent).toContain(evidence.path);
+    expect(screen.getByRole('tab', { name: t.sections.overview }).getAttribute('aria-selected')).toBe('true');
+  });
+
   it('shows the overview first, one collapsible section per analysis kind and the same numbers as the document', () => {
     const doc = example('report.json');
     const r = parseAnalysisReport(doc, doc.run_id);
@@ -88,7 +107,7 @@ describe('analysis sections', () => {
       more.open = true;
       fireEvent(more, new Event('toggle'));
     }
-    expect(container.querySelectorAll('details.finding-card').length).toBe(doc.findings.length);
+    expect(container.querySelectorAll('details.report-section .finding-card').length).toBe(doc.findings.length);
     // The overview lists the summary's priority findings in order.
     const priorities = Array.from(container.querySelectorAll('.report-priorities > li')).map((li) => li.textContent ?? '');
     expect(priorities.length).toBe(doc.summary.priorities.length);

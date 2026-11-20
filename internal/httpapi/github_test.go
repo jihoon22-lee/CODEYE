@@ -225,15 +225,13 @@ func TestOfflineGHESPullRequestUsesConfiguredPlatform(t *testing.T) {
 	_, port, _ := net.SplitHostPort(api.Listener.Addr().String())
 	host := "localhost:" + port
 	state := t.TempDir()
-	if err := os.Mkdir(filepath.Join(state, "run"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(InstanceSetup{SchemaVersion: "0.1", Git: true, GitHosts: []string{host}, CABundle: certFile, Offline: true})
-	if err := os.WriteFile(filepath.Join(state, "run", InstanceSetupFile), raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	public := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("offline controller contacted the public GitHub API fixture")
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(public.Close)
 	writeGitHubCredential(t, state, host, token, "codeye")
-	e.inst = &Instance{StateDir: state}
+	e.inst = &Instance{StateDir: state, Offline: true, GitHosts: []string{host}, CABundle: certFile, GitHubAPI: public.URL}
 	e.start(t.TempDir())
 	u := e.newUser()
 	ctx := context.Background()
@@ -248,4 +246,17 @@ func TestOfflineGHESPullRequestUsesConfiguredPlatform(t *testing.T) {
 	if preview.body["current_head_sha"] != head || strings.Contains(string(preview.raw), token) {
 		t.Fatalf("enterprise preview rejected or exposed its credential: status %d", preview.status)
 	}
+	publicProvider, _, err := e.store.EnsureProvider(ctx, "github.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicProject, err := e.store.RegisterProject(ctx, u.id, postgres.ProjectRegistration{Source: domain.Source{Kind: domain.SourceGit,
+		ProviderID: publicProvider.ID, RepositoryURL: "https://github.com/acme/widget"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicRuns := "/api/v1/projects/" + publicProject.ID + "/runs"
+	e.do("POST", publicRuns, body, opts{cookie: u.cookie, csrf: u.csrf, idem: domain.NewID()}).want(t, 422, "PULL_REQUEST_UNSUPPORTED")
+	delete(body, "pull_request")
+	e.do("POST", publicRuns, body, opts{cookie: u.cookie, csrf: u.csrf, idem: domain.NewID()}).want(t, 422, "SOURCE_UNSUPPORTED")
 }

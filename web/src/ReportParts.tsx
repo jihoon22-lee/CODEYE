@@ -87,12 +87,12 @@ export function FindingCard({ f, badge, history, priority = false }: { f: Findin
           )}
         </span>
       </summary>
-      {(!priority || open) && <FindingDetails f={f} history={history} />}
+      {(!priority || open) && <FindingDetails f={f} history={history} priority={priority} />}
     </details>
   );
 }
 
-function FindingDetails({ f, history }: { f: Finding; history?: ReactNode }) {
+function FindingDetails({ f, history, priority }: { f: Finding; history?: ReactNode; priority: boolean }) {
   const ref = useId();
   return (
     <div className="finding-body">
@@ -102,13 +102,18 @@ function FindingDetails({ f, history }: { f: Finding; history?: ReactNode }) {
         <dt>{t.recommendation}</dt>
         <dd>{f.recommendation}</dd>
       </dl>
-      {f.evidence.map(e => e.excerpt && (
-        <figure key={e.id} className="finding-excerpt">
-          <figcaption><code>{e.path}:{e.range}</code></figcaption>
-          <CodeWindow excerpt={e.excerpt} location={`${e.path}:${e.range}`} />
-          <p className="small">{e.description}</p>
-        </figure>
-      ))}
+      {f.evidence.map(e => {
+        if (!e.excerpt) return null;
+        const { start, end } = e.excerpt;
+        const location = `${e.path}:${start === end ? start : `${start}–${end}`}`;
+        return (
+          <figure key={e.id} className="finding-excerpt">
+            <figcaption><code>{location}</code></figcaption>
+            <CodeWindow excerpt={e.excerpt} location={location} />
+            <p className="small">{e.description}</p>
+          </figure>
+        );
+      })}
       <dl>
         <dt>{t.conditions}</dt>
         <dd>
@@ -127,7 +132,7 @@ function FindingDetails({ f, history }: { f: Finding; history?: ReactNode }) {
           <TextList values={f.limitations} />
         </>
       )}
-      <details className="finding-evidence">
+      <details className="finding-evidence" open={priority && !f.evidence.some(e => e.excerpt)}>
         <summary>{t.evidenceToggle(f.evidence.length)}</summary>
         {f.claims.map((claim, i) => (
           <p key={i}>

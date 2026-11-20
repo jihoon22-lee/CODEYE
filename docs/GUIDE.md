@@ -48,7 +48,7 @@ model: none (set OPENAI_API_KEY, ANTHROPIC_API_KEY or OPENCODE_API_KEY and run c
 github: platform account codeye-platform on github.com
 initialized a PostgreSQL 17.10 cluster in /home/user/.local/state/codeye/postgres/data (binaries: /usr/lib/postgresql/17/bin)
 PostgreSQL 17.10 started on 127.0.0.1:55432 (log /home/user/.local/state/codeye/logs/postgres.log)
-database schema created (migration 13)
+database schema created (migration 16)
 created the administrator user 2ce93dc8-…
 registered source root "home" (f655c03e-…)
 registered the Git host github.com
@@ -65,7 +65,7 @@ The browser stays signed in for 7 days. New link: codeye open. Stop: codeye stop
 
 - 주소의 `#launch=` 값은 한 번만 쓰는 10분짜리 로그인 토큰이다. 브라우저가 읽자마자 주소창에서 지운다. 화면을 다시 열 때는 `codeye open`을 한다(새 링크를 출력하고 브라우저를 연다). 브라우저를 열지 않으려면 `up`·`open`에 `--no-open`을 준다.
 - 로그인은 7일 동안 유지된다.
-- 경로 없이 `codeye up`만 하면 시작(또는 이미 실행 중이면 새 링크)만 한다. 실행 중에 다른 폴더로 `codeye up`을 하면 그 폴더를 source root로 더하고, 에이전트를 다시 등록한다. 에이전트는 실행 중인 분석을 끝낸 뒤 다시 시작한다.
+- 경로 없이 `codeye up`만 하면 시작(또는 이미 실행 중이면 새 링크)만 한다. 다른 폴더를 지정하면 서비스 계정으로 읽을 수 있는지 확인하고 그 폴더의 분석을 요청한다. 새 경로를 분석할 때마다 에이전트를 재시작할 필요는 없다.
 - 상태 디렉터리나 백업 디렉터리를 품거나 그 안에 있는 폴더(예: 홈 디렉터리 전체)는 받지 않는다. 오류가 문제의 폴더를 알려 주므로 프로젝트가 든 하위 폴더를 준다. 화면에서 등록하든 root와 상대 경로로 등록하든 같고, 에이전트도 소스를 읽기 전에 다시 확인한다.
 - 홈 디렉터리는 설정에 적지 않아도 읽을 수 있는 폴더(`home` root)다. 다른 곳의 폴더는 처음 한 번 `codeye up <폴더>`로 더한다.
 
@@ -141,6 +141,14 @@ codeye up --listen 0.0.0.0:7331 --plain-http
 
 # TLS: 인증서와 키(PEM), 사람들이 여는 https 주소
 codeye up --listen 0.0.0.0:7443 --tls-cert /etc/codeye/cert.pem --tls-key /etc/codeye/key.pem --public-origin https://codeye.example:7443
+```
+
+**WSL에서 나만 접속하기.** 아래 예시는 WSL 안에서 Tailscale을 실행하고 본인 기기만 이 포트에 접속하도록 tailnet 접근 정책을 정한 경우다. CODEYE는 loopback에서 받고, Tailscale Serve는 같은 머신의 TCP 포트로 전달한다. 브라우저에는 `--public-origin`에 지정한 주소를 입력한다. [Tailscale Serve 포트 전달](https://tailscale.com/docs/reference/tailscale-cli/serve)
+
+```sh
+tailnet_ip=$(tailscale ip -4) && test -n "$tailnet_ip" &&
+  tailscale serve --bg --tcp=7331 tcp://127.0.0.1:7331 &&
+  codeye up --listen 127.0.0.1:7331 --public-origin "http://${tailnet_ip}:7331"
 ```
 
 `up`은 서비스가 받는 주소를 모두 출력한다. 상대의 네트워크에서 닿는 주소를 골라 알려 준다.

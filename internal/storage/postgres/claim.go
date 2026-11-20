@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
@@ -27,6 +28,18 @@ const candidatePage = 200
 // ClaimResult is a claim outcome. Response is nil for "nothing claimable" (204).
 type ClaimResult struct {
 	Response *nodeproto.ClaimResponse
+}
+
+type offlineGitHostsKey struct{}
+
+// WithOfflineGitHosts restricts fresh Git acquisition to these controller hosts.
+func WithOfflineGitHosts(ctx context.Context, hosts []string) context.Context {
+	return context.WithValue(ctx, offlineGitHostsKey{}, hosts)
+}
+
+func freshGitAllowed(ctx context.Context, host string) bool {
+	hosts, offline := ctx.Value(offlineGitHostsKey{}).([]string)
+	return !offline || github.HostAllowed(host, true, hosts)
 }
 
 type candidate struct {
@@ -250,6 +263,9 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 			if err := json.Unmarshal(stored, &resp); err != nil {
 				return ClaimResult{}, err
 			}
+			if resp.Job.Snapshot == nil && resp.Job.Source.Kind == "git" && !freshGitAllowed(ctx, resp.Job.Source.Host) {
+				return ClaimResult{}, nil
+			}
 			return ClaimResult{Response: &resp}, nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -393,7 +409,7 @@ func fairPage(ctx context.Context, tx pgx.Tx, projectLimit int64, after *candida
 		count++
 		lc := c
 		last = &lc
-		if ok {
+		if ok && (c.snapshotID != nil || c.source.Kind != domain.SourceGit || freshGitAllowed(ctx, c.gitHost)) {
 			out = append(out, c)
 		}
 	}

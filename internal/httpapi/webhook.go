@@ -206,7 +206,6 @@ func (s *Server) handleWebhookDelivery(ctx context.Context, d postgres.WebhookDe
 	if !allowed {
 		return "pull_request_ineligible", false
 	}
-	pin.Comment = project.Analysis.CommentOnPullRequest
 	if err := s.store.EnqueueWebhookPullRequest(ctx, d, pin); err != nil {
 		return webhookStoreFailure(err)
 	}

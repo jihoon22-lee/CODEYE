@@ -169,9 +169,14 @@ export function ProjectsView({ api, userId, idempotency, link }: Props) {
       <h1 id="projects-title">{p.title}</h1>
       <p>{p.intro}</p>
     </section>
-    {create}{list}
-    {selected && <ProjectDetail key={`${selected.id}:${opened?.project === selected.id ? opened.run : ''}`} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)}
-      setup={setup} initialRun={opened?.project === selected.id ? opened.run : null} />}
+    {create}
+    <div className={selected ? 'project-workspace has-project' : 'project-workspace'}>
+      {list}
+      {selected && <div className="project-detail">
+        <ProjectDetail key={`${selected.id}:${opened?.project === selected.id ? opened.run : ''}`} api={api} userId={userId} project={selected} idempotency={idempotency} onRunChange={wake} source={describeSource(selected, roots.items, providers.items)}
+          setup={setup} initialRun={opened?.project === selected.id ? opened.run : null} />
+      </div>}
+    </div>
   </>;
 }
 

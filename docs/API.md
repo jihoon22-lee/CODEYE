@@ -97,7 +97,7 @@
 | 413 | `PAYLOAD_TOO_LARGE` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` |
 | 429 | `RATE_LIMITED`(`retryable=true`, `Retry-After`, `details.retry_after_seconds`): 로그인과 비밀번호 변경의 실패 한도 |
-| 422 | `VALIDATION_FAILED`(의미 제약), `SOURCE_UNSUPPORTED`(ssh·scp·`git://`), `ATTACHMENTS_UNSUPPORTED`, 폴더 경로의 `FOLDER_NOT_READABLE`·`FOLDER_NOT_FOUND`·`FOLDER_HOLDS_CODEYE_DATA`([프로젝트 등록](#프로젝트-등록)), 노드 `INTEGRITY_MISMATCH`·`PROTOCOL_UNSUPPORTED`, pull request run의 `PULL_REQUEST_UNSUPPORTED`·`PULL_REQUEST_NOT_FOUND`·`GITHUB_TOKEN_REFUSED`·`GITHUB_FORBIDDEN`([pull request run](#pull-request-run)) |
+| 422 | `VALIDATION_FAILED`(의미 제약), `SOURCE_UNSUPPORTED`(ssh·scp·`git://` 및 오프라인 모드에서 허용되지 않은 Git 호스트의 새 소스 확보), `ATTACHMENTS_UNSUPPORTED`, 폴더 경로의 `FOLDER_NOT_READABLE`·`FOLDER_NOT_FOUND`·`FOLDER_HOLDS_CODEYE_DATA`([프로젝트 등록](#프로젝트-등록)), 노드 `INTEGRITY_MISMATCH`·`PROTOCOL_UNSUPPORTED`, pull request run의 `PULL_REQUEST_UNSUPPORTED`·`PULL_REQUEST_NOT_FOUND`·`GITHUB_TOKEN_REFUSED`·`GITHUB_FORBIDDEN`([pull request run](#pull-request-run)) |
 | 500 | `INTERNAL`, `REPORT_INVALID`(저장된 보고서가 검증에 실패) |
 | 502 | `GITHUB_UNAVAILABLE`(`retryable=true`): pull request를 확인할 GitHub API에 닿지 못함 |
 | 503 | `UNAVAILABLE`(`retryable=true`). DB 오류 뒤에는 202를 반환하지 않는다. 이벤트 스트림 상한 초과도 503이다. `GITHUB_RATE_LIMITED`(`retryable=true`)는 GitHub API rate limit 소진이다. |

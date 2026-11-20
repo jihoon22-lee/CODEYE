@@ -1,6 +1,6 @@
 import { useId, useState, type ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
-import type { Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './reportSections';
+import type { Citation, Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './reportSections';
 import { ComparisonSection } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
@@ -72,12 +72,12 @@ function anchor(key: string) {
   return 'report-section-' + key;
 }
 
-function Table({ head, rows, empty, compact, stacked }: { head: string[]; rows: ReactNode[][]; empty?: string; compact?: boolean; stacked?: boolean }) {
+function Table({ head, rows, empty, compact }: { head: string[]; rows: ReactNode[][]; empty?: string; compact?: boolean }) {
   if (rows.length === 0) return empty ? <p>{empty}</p> : null;
   // Columns of numbers align right in tabular figures.
   const numeric = head.map((_, j) => rows.every((row) => typeof row[j] === 'number'));
   return (
-    <div className={'table' + (compact ? ' compact' : '') + (stacked ? ' report-reading-table' : '')}>
+    <div className={'table' + (compact ? ' compact' : '')}>
       <table>
         <thead>
           <tr>
@@ -92,7 +92,7 @@ function Table({ head, rows, empty, compact, stacked }: { head: string[]; rows: 
           {rows.map((row, i) => (
             <tr key={i}>
               {row.map((cell, j) => (
-                <td key={j} data-label={stacked ? head[j] : undefined} className={numeric[j] ? 'num' : undefined}>{cell}</td>
+                <td key={j} className={numeric[j] ? 'num' : undefined}>{cell}</td>
               ))}
             </tr>
           ))}
@@ -139,6 +139,23 @@ function ModelReading({ title, children }: { title: string; children: ReactNode 
       <header><h6 id={heading}>{title}</h6><span>{t.modelReading}</span></header>
       {children}
     </section>
+  );
+}
+
+type Reading = { title: string; statement?: string; scope?: string; status?: string; refs?: string[] };
+
+function ReadingList({ rows, catalog }: { rows: Reading[]; catalog?: Citation[] }) {
+  return (
+    <ul className="plain model-reading-list">
+      {rows.map(({ title, statement, scope, status, refs }, i) => (
+        <li className="model-reading-item" key={i}>
+          <div className="reading-title"><strong>{title}</strong>{status && <span className="pill tone-plain">{status}</span>}</div>
+          {statement && <p>{statement}</p>}
+          {scope && <p className="small">{t.scopeTitle} <code>{scope}</code></p>}
+          {refs && catalog && <div className="reading-refs"><Citations refs={refs} catalog={catalog} /></div>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -341,6 +358,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     document.getElementById(tabId(key))?.focus();
   };
   const byID = new Map(report.observations.map((o) => [o.id, o]));
+  const byFindingID = new Map(report.findings.map((f) => [f.id, f]));
   const go = (key: string) => {
     if (tabbed) {select(key); return;}
     setOpen((prev) => new Set(prev).add(key));
@@ -357,7 +375,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const overview = new Map(sections.overview.map((x) => [x.key, x]));
   const block = (key: string, body: ReactNode) => {
     const st = overview.get(key)?.state ?? null;
-    if (tabbed) return <section id={anchor(key)} role="tabpanel" aria-labelledby={tabId(key)} hidden={active!==key} key={key}>
+    if (tabbed) return <section id={anchor(key)} role="tabpanel" aria-labelledby={tabId(key)} hidden={active!==key} tabIndex={0} key={key}>
       {active===key && <><h5>{label(s.titles,key)}</h5>{body}</>}
     </section>;
     return (
@@ -419,6 +437,8 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const verdictRow = (x: (typeof e.verdicts)[number]) => [<code key="m">{x.module}</code>, x.tool, label(s.verdictStatus, x.status), or(x.reason)];
   const itemRow = (x: (typeof d.items)[number]) => [<code key="p">{x.path}</code>, x.cls, <code key="a">{x.appliesTo}</code>, label(s.docStatus, x.status), x.reason ? explainReason(x.reason) : '—', x.size ?? '—'];
   const docModuleRow = (x: (typeof d.modules)[number]) => [<code key="m">{x.module}</code>, label(s.docState, x.state), or(x.own.join(', ')), or(x.inherited.join(', '))];
+  const docComparisons = d.comparisons.map(c => ({ title: c.statement, scope: c.scope, status: label(t.assessment, c.status), statement: c.reason, refs: c.refs }));
+  const strengths = cr.strengths.map(x => ({ title: x.title, scope: x.scope, statement: x.benefit, refs: x.refs }));
   const bodies: Record<string, ReactNode> = {
     environment: (
       <>
@@ -473,14 +493,12 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         <StageLine stage={d.stage} />
         {d.comparisons.length > 0 && (
           <ModelReading title={t.comparisonsTitle}>
-            <Table stacked head={[t.statementTitle, t.scopeTitle, s.col.status, t.basisTitle, t.reference]}
-              rows={d.comparisons.map(c => [c.statement, c.scope, label(t.assessment, c.status), c.reason, <Citations refs={c.refs} catalog={d.citations} />])} />
+            <ReadingList rows={docComparisons} catalog={d.citations} />
           </ModelReading>
         )}
         {d.quality.length > 0 && (
           <ModelReading title={t.qualityTitle}>
-            <Table stacked head={[s.col.status, t.scopeTitle, t.basisTitle, t.reference]}
-              rows={d.quality.map(q => [label(t.assessment, q.assessment), label(t.assessment, q.aspect), q.statement, <Citations refs={q.refs} catalog={d.citations} />])} />
+            <ReadingList rows={d.quality.map(q => ({ title: label(t.assessment, q.aspect), status: label(t.assessment, q.assessment), statement: q.statement, refs: q.refs }))} catalog={d.citations} />
           </ModelReading>
         )}
         <p>{label(s.discovery, d.discovery)}</p>
@@ -693,8 +711,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         )}
         {cr.strengths.length > 0 && (
           <ModelReading title={t.strengthsTitle}>
-            <Table stacked head={[t.impactTitle, t.scopeTitle, t.reference]}
-              rows={cr.strengths.map(x => [<><strong>{x.title}</strong><p>{x.benefit}</p></>, x.scope, <Citations refs={x.refs} catalog={cr.citations} />])} />
+            <ReadingList rows={strengths} catalog={cr.citations} />
           </ModelReading>
         )}
         {!cr.planned ? (
@@ -771,16 +788,17 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
             if (to!==undefined) {e.preventDefault(); select(tabs[to]);}
           }}>{key==='overview' ? s.overview : label(s.titles,key)}</button>)}
       </div>}
-      <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'}>
+      <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'} tabIndex={tabbed ? 0 : undefined}>
         <h5 id="report-overview">{s.overview}</h5>
         <Verdict report={report} />
         {report.priorities.length > 0 && (
           <>
             <h6>{s.priorities}</h6>
             <ol className="report-priorities">
-              {pick(report.findings, report.priorities)
-                .sort((a, b) => report.priorities.indexOf(a.id) - report.priorities.indexOf(b.id))
-                .map(f => <li key={f.id}><FindingCard f={f} priority /></li>)}
+              {report.priorities.map(id => {
+                const finding = byFindingID.get(id);
+                return finding && <li key={id}><FindingCard f={finding} priority /></li>;
+              })}
             </ol>
           </>
         )}
@@ -807,14 +825,13 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         <ReportCounts report={report} />
         {cr.strengths.length > 0 && (
           <ModelReading title={t.strengthsTitle}>
-            <ul>{cr.strengths.slice(0, 3).map(x => <li key={x.title}><strong>{x.title}</strong> · {x.benefit} <small>{t.scopeTitle} <code>{x.scope}</code></small></li>)}</ul>
+            <ReadingList rows={strengths.slice(0, 3)} />
             <button type="button" className="link" onClick={() => go('code_review')}>{s.go(s.titles.code_review)}</button>
           </ModelReading>
         )}
         {d.comparisons.length > 0 && (
           <ModelReading title={t.comparisonsTitle}>
-            <Table stacked head={[t.statementTitle, t.scopeTitle, s.col.status]}
-              rows={d.comparisons.slice(0, 3).map(x => [x.statement, x.scope, label(t.assessment, x.status)])} />
+            <ReadingList rows={docComparisons.slice(0, 3)} />
             <button type="button" className="link" onClick={() => go('documents')}>{s.go(s.titles.documents)}</button>
           </ModelReading>
         )}

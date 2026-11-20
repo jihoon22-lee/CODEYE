@@ -54,7 +54,7 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
     }
   }
 
-  return <section className="panel" aria-labelledby="run-title">
+  return <section className="panel run-panel" aria-labelledby="run-title">
     <div className="run-head">
       <h2 id="run-title">{t.runs.title}</h2>
       <button type="button" className={activeId ? undefined : 'primary'} onClick={start} disabled={pending || !canRun} aria-busy={pending} aria-describedby={canRun ? undefined : 'run-not-allowed'}>{pending ? t.runs.starting : t.runs.start}</button>

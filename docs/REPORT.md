@@ -154,7 +154,7 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 
 | `quality_verdict` | 조건(처음 맞는 것) |
 |---|---|
-| `attention_required` | 조치 항목이 있거나, 문서와 구현 대조에서 불일치·부분 일치가 확인됐다. 문서 대조 결과는 발견 건수와 별도로 센다. |
+| `attention_required` | 조치 항목이 있거나, 문서와 구현 대조에서 불일치·부분 일치가 확인됐다. 문서 대조 결과는 발견 건수와 별도로 센다. 확인할 항목이 없고 근거가 부족한 문서 계약만 남으면 판정을 보류한다. |
 | `inconclusive` | 상태가 `completed`가 아니거나, AI 검토가 `performed`가 아니거나, 미확정 후보나 위치 미확인 진단이 남아 있다. |
 | `no_actionable_findings` | 확인한 범위에서 조치할 항목을 찾지 못했다. |
 

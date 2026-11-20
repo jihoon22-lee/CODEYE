@@ -67,6 +67,7 @@ type secTable struct {
 
 // secCard is one finding of the summary layout: its title and a few lines.
 type secCard struct {
+	Sources   []sourceCitation
 	ID, Title string
 	Lines     []secItem
 }
@@ -922,7 +923,8 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 </ul></section>
 {{end}}{{range .Cards}}<section class="finding" id="{{.ID}}" data-finding="{{.ID}}">
 <h4>{{.Title}}</h4>
-<ul>{{range .Lines}}<li>{{.Text}}{{range .Codes}} <code>{{.}}</code>{{end}}</li>{{end}}</ul></section>
+<ul>{{range .Lines}}<li>{{.Text}}{{range .Codes}} <code>{{.}}</code>{{end}}</li>{{end}}</ul>
+{{range .Sources}}<p><code>{{.Location}}</code></p><pre><code>{{.Text}}</code></pre>{{end}}</section>
 {{end}}{{if .ShowEmpty}}<p>{{.Empty}}</p>
 {{end}}{{end}}{{end}}`))
 

@@ -528,6 +528,7 @@ python3 scripts/offline_pack.py check-web web/dist
 | GitHub | 명시한 `github.token_env`와 승인된 GitHub.com/GHES API를 사용 | `git_hosts`에 지정한 사내 GHES의 인증정보만 읽는다. GitHub.com은 이전 등록 여부와 관계없이 연결하지 않는다 |
 | 모델 | 키 파일·환경변수 키·OpenCode `auth.json`, 공급자 공개 endpoint | `base_url`(사내 endpoint)이 있는 키 파일이나 relay만 쓴다. `base_url` 없는 키 파일은 쓰지 않고 이유를 출력한다. 환경변수의 키는 저장하지도 쓰지도 않는다. OpenCode `auth.json`을 찾지 않는다. 키 없는 공급자 모델은 쓰지 않는다. 모델 검토의 이유는 `model_endpoint_not_configured`다 |
 
+- 관리형 서비스는 시작할 때 controller에 오프라인 Git 호스트와 CA를 전달한다. 화면용 설정 요약 파일을 읽지 못해도 이 정책을 적용한다. 기존 큐에서 허용되지 않은 호스트의 새 Git 확보는 기다리며, 이미 보관한 스냅샷은 원격 확보 없이 다시 사용할 수 있다.
 - 도구 탐지는 원래 이 머신의 파일과 `--version` 실행만 한다. 오프라인 모드와 관계없이 네트워크를 쓰지 않는다.
 - CODEYE에는 telemetry·업데이트 확인·원격 규칙 다운로드가 없다. 웹 화면도 외부를 부르지 않는다.
 - OpenCode(1.19.5)는 플러그인을 꺼도 시작할 때마다 npm 레지스트리에 `GET /@opencode-ai%2fplugin`을 보낸다(측정). CODEYE는 OpenCode 실행 환경에 `npm_config_registry=http://127.0.0.1:9/`를 넣어 이 요청을 loopback의 닫힌 포트로 보낸다. 요청은 즉시 실패하고 검토는 계속된다. 오프라인이 아닐 때도 같다. 그 밖에 OpenCode가 하는 일은 아래 측정 범위만 안다. 자동 업데이트·모델 목록 받기·공유·기본 플러그인은 원래 끈다([검토](REVIEW.md)).

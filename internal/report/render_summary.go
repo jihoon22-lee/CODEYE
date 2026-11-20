@@ -474,6 +474,12 @@ func findingSummaryParts(l Locale, ids []string, findings map[string]Finding) []
 				{Text: l.Label("summary.card_impact") + " " + f.Impact},
 				{Text: l.Label("summary.card_recommendation") + " " + f.Recommendation.Summary},
 			}}
+			for _, e := range f.Evidence {
+				if e.Location != nil && e.Excerpt != nil {
+					card.Sources = append(card.Sources, sourceCitation{Location: e.Location.Path + ":" + strconv.Itoa(e.Excerpt.StartLine), Text: e.Excerpt.Text})
+					break
+				}
+			}
 			cards.Cards = append(cards.Cards, card)
 			continue
 		}
@@ -1186,5 +1192,6 @@ func mdCards(p func(...string), cards []secCard) {
 			p(line)
 		}
 		p()
+		mdCitations(p, c.Sources)
 	}
 }

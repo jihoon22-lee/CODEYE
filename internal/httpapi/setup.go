@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
+	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 	"github.com/jihoon22-lee/CODEYE/internal/toolfind"
 )
 
@@ -30,6 +32,10 @@ type Instance struct {
 	// GitHubAPI is the GitHub REST API base; "" is github.APIBase() (tests
 	// point it at a fake).
 	GitHubAPI string
+	// Offline policy passed at controller startup is independent of the setup summary.
+	Offline   bool
+	GitHosts  []string
+	CABundle  string
 	protected []string
 }
 
@@ -68,10 +74,20 @@ func (p *Instance) platform() github.Platform {
 	if p.GitHubAPI != "" {
 		platform.PublicAPI = p.GitHubAPI
 	}
-	if setup := p.readSetup(); setup != nil {
+	if p.Offline {
+		platform.Offline, platform.Hosts, platform.CABundle = true, p.GitHosts, p.CABundle
+	} else if setup := p.readSetup(); setup != nil {
 		platform.Offline, platform.Hosts, platform.CABundle = setup.Offline, setup.GitHosts, setup.CABundle
 	}
 	return platform
+}
+
+func (p *Instance) gitSourceContext(ctx context.Context) context.Context {
+	platform := p.platform()
+	if platform.Offline {
+		return postgres.WithOfflineGitHosts(ctx, platform.Hosts)
+	}
+	return ctx
 }
 
 // SetupGitHub is the host's platform account status. It holds no credential.
@@ -215,9 +231,9 @@ func (s *Server) getSetup(q *request) {
 		return
 	}
 	st := s.inst.readSetup()
-	v := setupView{IsAdmin: q.session.IsAdmin, ServiceOrigin: optString(s.Origin()), ReadableFolders: []string{}, GitHubConnections: []SetupGitHub{}, Offline: st != nil && st.Offline,
-		AnalysisDefaults: analysisDefaults{offered(domain.DefaultAnalysisChoices(domain.SourceLocal), offer), offered(domain.DefaultAnalysisChoices(domain.SourceGit), offer)}}
 	platform := s.inst.platform()
+	v := setupView{IsAdmin: q.session.IsAdmin, ServiceOrigin: optString(s.Origin()), ReadableFolders: []string{}, GitHubConnections: []SetupGitHub{}, Offline: platform.Offline,
+		AnalysisDefaults: analysisDefaults{offered(domain.DefaultAnalysisChoices(domain.SourceLocal), offer), offered(domain.DefaultAnalysisChoices(domain.SourceGit), offer)}}
 	hosts := []string{}
 	for _, p := range provs {
 		if github.HostAllowed(p.Host, platform.Offline, platform.Hosts) {

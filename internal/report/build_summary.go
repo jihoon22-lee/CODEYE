@@ -47,7 +47,15 @@ func reportVerdict(r Report) string {
 	if contractDifferences(r.Documents) > 0 {
 		return VerdictAttention
 	}
-	return DecideVerdict(r.Status, r.Summary, r.Coverage.AIReview.Status)
+	verdict := DecideVerdict(r.Status, r.Summary, r.Coverage.AIReview.Status)
+	if verdict == VerdictNoActionable && r.Documents != nil {
+		for _, c := range r.Documents.Comparisons {
+			if c.Status == "unknown" {
+				return VerdictInconclusive
+			}
+		}
+	}
+	return verdict
 }
 
 var hiddenDisposition = map[string]bool{"false_positive": true, "suppressed": true, "accepted_risk": true, "fixed_by_user": true}

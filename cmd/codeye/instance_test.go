@@ -50,7 +50,7 @@ func TestInstanceAgentArgv(t *testing.T) {
 	layout := instance.Layout{Root: cfg.StateDir}
 	instanceModelEnv = func() instance.ModelEnv { return instance.ModelEnv{} }
 	t.Cleanup(func() { instanceModelEnv = instance.SystemModelEnv })
-	argv := agentArgv(cfg, layout, []rootGrant{{SourceRoot: cfg.SourceRoots[0], ID: "root-1"}}, true)
+	argv := agentArgv(cfg, layout, []sourceRootMapping{{SourceRoot: cfg.SourceRoots[0], ID: "root-1"}}, true)
 	got := strings.Join(argv, " ")
 	want := "agent --controller http://127.0.0.1:7331 --state-dir /srv/codeye/state/agent --name local --autoscale --max-workers 3 --toolchain-path /usr/bin:/bin --advertise-without-baseline" +
 		" --enroll-token-file /srv/codeye/state/run/enroll-token --source-root root-1=/srv/src --project-analysis-policy --controller-sources --protected-dir /srv/codeye/state --protected-dir /srv/codeye/state-backups --git /usr/bin/git --git-host github.com" +

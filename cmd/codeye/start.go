@@ -73,7 +73,6 @@ type running struct {
 	store         *postgres.Store
 	db            *instanceDB
 	user          string
-	roots         []rootGrant
 	controllerPID int
 	agentPID      int
 	// already: both processes were running with the configured arguments;
@@ -190,7 +189,7 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 	if err := writeInstanceSetup(cfg, layout, model, gh); err != nil {
 		return fail("cannot write installation setup:", err)
 	}
-	res := &running{store: store, db: db, user: user, roots: roots}
+	res := &running{store: store, db: db, user: user}
 	var agentRec, ctrlRec *instance.Record
 	for _, p := range state.Processes {
 		if p.State == instance.ProcRunning {
@@ -213,16 +212,24 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 		_ = layout.RemoveRecord(instance.RoleAgent)
 		agentUp, agentRec = false, nil
 	}
-	// A controller that listens differently from the configuration (a new
-	// public origin, another listen address) is restarted; the agent and
-	// running work stay (the agent reconnects).
+	// The controller restarts when its listeners or offline Git policy change.
+	// Agents with unchanged configuration reconnect and keep running their work.
 	ctrlListen := cfg.Listen
 	if ctrlUp && !cfg.ListenExplicit() && ctrlRec.Listen != "" {
 		ctrlListen = ctrlRec.Listen
 	}
 	ctrlArgs := append([]string{"serve", "--session-ttl", httpapi.ServiceSessionTTL.String(), "--state-dir", layout.Root, "--listen", ctrlListen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}, controllerListenArgs(cfg)...)
+	if cfg.Offline {
+		ctrlArgs = append(ctrlArgs, "--offline")
+		for _, host := range cfg.GitHosts {
+			ctrlArgs = append(ctrlArgs, "--git-host", host)
+		}
+		if cfg.CABundle != "" {
+			ctrlArgs = append(ctrlArgs, "--ca-bundle", cfg.CABundle)
+		}
+	}
 	if ctrlUp && ctrlRec.Args != nil && !slices.Equal(ctrlRec.Args, ctrlArgs) {
-		fmt.Fprintln(out, "restarting the controller: how it listens changed")
+		fmt.Fprintln(out, "restarting the controller: its configuration changed")
 		if err := ctrlRec.Terminate(); err != nil && !errors.Is(err, instance.ErrProcessGone) {
 			return fail("cannot stop the controller:", signalAction(err, "terminate_requested"))
 		}
@@ -491,8 +498,8 @@ func ensureAdmin(ctx context.Context, s *postgres.Store, user string) error {
 	return nil
 }
 
-// rootGrant is one configured source root resolved to its database ID.
-type rootGrant struct {
+// sourceRootMapping is one configured source root resolved to its database ID.
+type sourceRootMapping struct {
 	instance.SourceRoot
 	ID string
 }
@@ -500,8 +507,8 @@ type rootGrant struct {
 // reconcileRoots registers configured node mappings. A label registered
 // with another path is an error:
 // source roots are immutable.
-func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *instance.Config, out io.Writer) ([]rootGrant, error) {
-	var roots []rootGrant
+func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *instance.Config, out io.Writer) ([]sourceRootMapping, error) {
+	var roots []sourceRootMapping
 	for i := range cfg.SourceRoots {
 		r := cfg.SourceRoots[i]
 		rec, err := s.SourceRootByLabel(ctx, r.Label)
@@ -532,7 +539,7 @@ func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *instance.Config
 				fmt.Fprintf(out, "note: source root %q (%s) is not an existing directory; its projects cannot be analyzed until it is back (or remove it from source_roots)\n", r.Label, r.Path)
 			}
 		}
-		roots = append(roots, rootGrant{SourceRoot: r, ID: rec.ID})
+		roots = append(roots, sourceRootMapping{SourceRoot: r, ID: rec.ID})
 	}
 	return roots, nil
 }
@@ -542,7 +549,7 @@ func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *instance.Config
 // database does not know is retired (its state directory is renamed, never
 // deleted) after checking that its journal holds no unfinished work. It
 // returns true when an enrollment token file was written.
-func prepareEnrollment(ctx context.Context, s *postgres.Store, layout instance.Layout, roots []rootGrant, out io.Writer) (bool, error) {
+func prepareEnrollment(ctx context.Context, s *postgres.Store, layout instance.Layout, roots []sourceRootMapping, out io.Writer) (bool, error) {
 	want := make([]string, 0, len(roots))
 	for _, r := range roots {
 		want = append(want, r.ID)
@@ -592,7 +599,7 @@ func prepareEnrollment(ctx context.Context, s *postgres.Store, layout instance.L
 }
 
 // agentArgv builds the local agent's argv from the config.
-func agentArgv(cfg *instance.Config, layout instance.Layout, roots []rootGrant, enroll bool) []string {
+func agentArgv(cfg *instance.Config, layout instance.Layout, roots []sourceRootMapping, enroll bool) []string {
 	a := cfg.Agent
 	name := a.Name
 	if name == "" {

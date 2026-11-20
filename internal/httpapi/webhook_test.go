@@ -28,6 +28,7 @@ func TestGitHubWebhookDelivery(t *testing.T) {
 	const repo, token = "acme/project", "fixture-api-token-for-webhook"
 	var permission atomic.Value
 	permission.Store("write")
+	var beforeFiles atomic.Pointer[func()]
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+token {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -38,6 +39,9 @@ func TestGitHubWebhookDelivery(t *testing.T) {
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/files") {
+			if f := beforeFiles.Swap(nil); f != nil {
+				(*f)()
+			}
 			_ = json.NewEncoder(w).Encode([]map[string]any{})
 			return
 		}
@@ -196,11 +200,32 @@ func TestGitHubWebhookDelivery(t *testing.T) {
 	for e.srv.processWebhook(ctx) {
 	}
 	countRuns(1)
-	send(mention, domain.NewID(), secret, "", comment(15, "@CODEYE-bot", "developer", "User"), 202)
+	updated := make(chan error, 1)
+	disableComment := func() {
+		choices := domain.DefaultAnalysisChoices(domain.SourceGit)
+		_, err := e.store.SetProjectAnalysis(ctx, owner.id, project, choices)
+		updated <- err
+	}
+	beforeFiles.Store(&disableComment)
+	mentionDelivery := domain.NewID()
+	send(mention, mentionDelivery, secret, "", comment(15, "@CODEYE-bot", "developer", "User"), 202)
 	send(mention, domain.NewID(), secret, "", comment(15, "@CODEYE-bot", "developer", "User"), 202)
 	for e.srv.processWebhook(ctx) {
 	}
 	countRuns(2)
+	select {
+	case err := <-updated:
+		if err != nil {
+			t.Fatal(err)
+		}
+	default:
+		t.Fatal("the comment choice did not change during PR resolution")
+	}
+	var commentRequested bool
+	if err := e.pool.QueryRow(ctx, `SELECT (r.pull_request->>'comment')::boolean FROM runs r
+		JOIN github_webhook_deliveries d ON d.run_id=r.id WHERE d.project_id=$1 AND d.delivery_id=$2`, project, mentionDelivery).Scan(&commentRequested); err != nil || commentRequested {
+		t.Fatalf("webhook used obsolete comment choice: %v, %v", commentRequested, err)
+	}
 	send(mention, domain.NewID(), secret, "", comment(16, "@codeye-bot", "developer", "User"), 202)
 	if _, err := e.pool.Exec(ctx, "UPDATE users SET disabled_at=now() WHERE id=$1", owner.id); err != nil {
 		t.Fatal(err)

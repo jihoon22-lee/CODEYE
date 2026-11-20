@@ -179,6 +179,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) string {
 				return rt.name
 			}
 		}
+		r = r.WithContext(s.inst.gitSourceContext(r.Context()))
 		s.dispatch(rt, &request{w: w, r: r, params: params, route: rt.name})
 		return rt.name
 	}

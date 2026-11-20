@@ -39,7 +39,7 @@ func TestInstanceModelFromSecret(t *testing.T) {
 	layout := instance.Layout{Root: state}
 	instanceModelEnv = func() instance.ModelEnv { return instance.ModelEnv{Home: home} }
 	t.Cleanup(func() { instanceModelEnv = instance.SystemModelEnv })
-	roots := []rootGrant{{SourceRoot: cfg.SourceRoots[0], ID: "root-1"}, {SourceRoot: cfg.SourceRoots[1], ID: "root-2"}}
+	roots := []sourceRootMapping{{SourceRoot: cfg.SourceRoots[0], ID: "root-1"}, {SourceRoot: cfg.SourceRoots[1], ID: "root-2"}}
 	if got := strings.Join(modelAgentArgs(cfg, layout), " "); got != "" {
 		t.Fatalf("no key, no model flags: %s", got)
 	}

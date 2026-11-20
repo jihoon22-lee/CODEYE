@@ -139,25 +139,6 @@ func (s *Store) EnqueuePullRequest(ctx context.Context, actor, project, key stri
 	})
 }
 
-// pullRequestMatchesSource reports whether the pin belongs to the project's
-// current Git source (host and OWNER/REPO, ignoring case and .git).
-func pullRequestMatchesSource(ctx context.Context, tx pgx.Tx, project string, pin json.RawMessage) (bool, error) {
-	var raw []byte
-	if err := tx.QueryRow(ctx, "SELECT pr.config->'source' FROM projects p JOIN project_revisions pr ON pr.project_id=p.id AND pr.revision=p.current_revision WHERE p.id=$1", project).Scan(&raw); err != nil {
-		return false, err
-	}
-	src, err := domain.ParseSource(raw)
-	if err != nil || src.Kind != domain.SourceGit {
-		return false, nil
-	}
-	p, err := domain.ParsePullRequest(pin)
-	if err != nil {
-		return false, nil
-	}
-	host, err := domain.RepositoryHost(src.RepositoryURL)
-	return err == nil && strings.EqualFold(host, p.Host) && strings.EqualFold(domain.RepositoryPath(src.RepositoryURL), p.Repository), nil
-}
-
 // RunOrigin is the non-manual trigger of a run.
 type RunOrigin struct {
 	ScheduleID   string
@@ -204,15 +185,39 @@ func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canon
 	if json.Unmarshal(canonical, &named) != nil || (named.PullRequest != nil) != (pin != nil) {
 		return Run{}, domain.ErrInvalid
 	}
+	var source domain.Source
+	var analysis []byte
+	var gitHost string
+	if _, offline := ctx.Value(offlineGitHostsKey{}).([]string); offline || pin != nil {
+		var raw []byte
+		if err := tx.QueryRow(ctx, `SELECT pr.config->'source',pr.config->'analysis'
+			FROM projects p JOIN project_revisions pr ON pr.project_id=p.id AND pr.revision=p.current_revision WHERE p.id=$1`, project).Scan(&raw, &analysis); err != nil {
+			return Run{}, err
+		}
+		source, err = domain.ParseSource(raw)
+		if err != nil {
+			return Run{}, err
+		}
+		if source.Kind == domain.SourceGit {
+			gitHost, _ = domain.RepositoryHost(source.RepositoryURL)
+			if !freshGitAllowed(ctx, gitHost) {
+				return Run{}, domain.ErrUnsupported
+			}
+		}
+	}
 	var pinText *string
 	if pin != nil {
-		if p, err := domain.ParsePullRequest(pin); err != nil || p.Number != named.PullRequest.Number {
+		p, err := domain.ParsePullRequest(pin)
+		if err != nil || p.Number != named.PullRequest.Number || !strings.EqualFold(gitHost, p.Host) ||
+			!strings.EqualFold(domain.RepositoryPath(source.RepositoryURL), p.Repository) {
 			return Run{}, domain.ErrInvalid
 		}
-		if ok, err := pullRequestMatchesSource(ctx, tx, project, pin); err != nil {
-			return Run{}, err
-		} else if !ok {
-			return Run{}, domain.ErrInvalid
+		if origin != nil && origin.Webhook {
+			p.Comment = domain.AnalysisChoicesOf(analysis, source.Kind).CommentOnPullRequest
+			pin, err = p.Marshal()
+			if err != nil {
+				return Run{}, err
+			}
 		}
 		t := string(pin)
 		pinText = &t

@@ -115,7 +115,7 @@ func (s *Store) NewerPullRequestCommentPosted(ctx context.Context, runID string)
 		return false, domain.ErrInvalid
 	}
 	var newer bool
-	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pull_request_comments c JOIN pull_request_comments o ON o.repository=c.repository AND o.number=c.number AND o.run_id<>c.run_id
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pull_request_comments c JOIN pull_request_comments o ON o.project_id=c.project_id AND o.repository=c.repository AND o.number=c.number AND o.run_id<>c.run_id
 		JOIN runs rc ON rc.id=c.run_id JOIN runs ro ON ro.id=o.run_id
 		WHERE c.run_id=$1 AND o.state='posted' AND ro.created_at>rc.created_at)`, runID).Scan(&newer)
 	return newer, err

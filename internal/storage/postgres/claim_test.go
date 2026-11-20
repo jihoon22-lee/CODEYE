@@ -3,6 +3,7 @@ package postgres
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -312,11 +313,43 @@ func TestGitSourceClaimEligibility(t *testing.T) {
 		t.Fatalf("waiting %q", got)
 	}
 	with := e.enroll("git")
-	e.beat(with, hb(with.workers, "idle", []string{nodeproto.AnalysisCapability("deep-review"), nodeproto.GitSourceCapability("github.com")}))
+	e.policy(PoolPolicyUpdate{MinWorkers: intp(0), MaxWorkers: intp(2)})
+	e.ctlBeat(with, 2, 0, []string{nodeproto.AnalysisCapability("deep-review"), nodeproto.GitSourceCapability("github.com")},
+		map[string]string{with.workers[0]: "idle", with.workers[1]: "idle"})
+	offline := WithOfflineGitHosts(ctx, []string{"github.com", "ghe.example"})
+	e.ctx = offline
+	e.noClaim(with, with.workers[0], "offline")
+	if got := e.waiting(r.ID); got != nodeproto.WaitingNoCapableNode {
+		t.Fatalf("offline waiting reason %q", got)
+	}
+	pools, err := s.ReconcilePools(offline)
+	if err != nil || len(pools) != 1 || pools[0].Status.QueuedDemand != 0 {
+		t.Fatalf("offline queue contributed autoscaler demand: %+v %v", pools, err)
+	}
+	e.ctx = ctx
 	c := e.claimOK(with, with.workers[0], "k")
 	src := c.Job.Source
 	if c.Lease.RunID != r.ID || src.Kind != "git" || src.RepositoryURL != "https://github.com/acme/widget.git" || src.Branch != "main" || src.Host != "github.com" || src.SourceRootID != "" {
 		t.Fatalf("git job %+v", src)
+	}
+	e.ctx = offline
+	e.noClaim(with, with.workers[0], "k") // An online claim cannot be replayed offline before dispatch.
+	o := owner(with, c)
+	manifest := domain.Digest([]byte("git manifest"))
+	sha := strings.Repeat("a", 40)
+	mid := e.artifact(with, o, "source_manifest", manifest)
+	e.mustEvent(with, o, nodeproto.EventSnapshotFixed, nodeproto.SnapshotFixedPayload{ManifestDigest: manifest, Kind: "git", Consistency: "git_commit", SourceSHA: &sha, ManifestArtifactID: mid})
+	e.finish(with, c)
+	finished, err := s.GetRun(ctx, user, r.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Retry(offline, user, r.ID, finished.Version); err != nil {
+		t.Fatal(err)
+	}
+	retry := e.claimOK(with, with.workers[1], "offline-retained")
+	if retry.Lease.RunID != r.ID || retry.Job.Snapshot == nil || retry.Job.Snapshot.ManifestDigest != manifest {
+		t.Fatalf("offline lost the retained snapshot: %+v", retry)
 	}
 }
 
