@@ -13,16 +13,15 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
 // Review input selection covers C/C++, Python, JS/TS and Rust besides Go.
-// Go inputs must not move: these pins were captured on the code before the
-// other ecosystems were added (aa2ae13) and hash every request of both
-// packs, with fixed snapshot, run and attempt identities, on the existing Go
-// fixtures and on a Go tree that also holds build files of other ecosystems,
+// Go inputs must not move: these pins hash every request, with fixed
+// snapshot, run and attempt identities, on the modules fixture, its worst
+// case and a Go tree that also holds build files of other ecosystems,
 // vendored and data directories (no non-Go source, so no other ecosystem is
-// in scope). TestLegacyPackIsPinned, TestRolePackExampleRecords and
-// TestGoSelectionDigestsPinned stay as they were.
+// in scope).
 
 const (
 	pinSnapshot = "7777777777777777777777777777777777777777777777777777777777777777"
@@ -76,60 +75,19 @@ var goBuildFilesTree = map[string]string{
 	"compile_commands.json": "[]\n",
 }
 
-// legacyGeneric answers every legacy-pack role validly on any corpus.
-func legacyGeneric(t *testing.T) *fakeCaller {
-	return &fakeCaller{t: t, reply: func(_ int, q opencode.Request) opencode.Reply {
-		in := decodeInput(t, q)
-		code := ""
-		for _, e := range in.Scope.Excerpts {
-			if code == "" && (e.Kind == "code" || e.Kind == "test") {
-				code = e.ID
-			}
-		}
-		switch q.Role {
-		case "context":
-			return ok(map[string]any{"facts": []any{map[string]any{"kind": "observed", "statement": "발췌한 코드는 설정을 읽어 요청을 처리한다.", "evidence_ids": []string{in.Scope.Excerpts[0].ID}}}})
-		case "investigate":
-			return ok(map[string]any{"candidates": []any{map[string]any{"title": "입력 검증 누락 가능성", "condition": "빈 입력이 들어오는 경우", "impact": "잘못된 결과를 반환할 수 있다.",
-				"improvement": "입력 계약을 확인한다.", "counterpoint": "호출자가 미리 검사할 수 있다.", "evidence_ids": []string{code}}}})
-		}
-		var out []any
-		for _, c := range in.Candidates {
-			out = append(out, verdict(c.ID, "inconclusive", func(m map[string]any) {
-				m["unresolved_assumptions"] = []string{"호출자의 입력 검사를 확인하지 못했다."}
-			}))
-		}
-		return ok(map[string]any{"verifications": out})
-	}}
-}
-
 func pinHash(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:])[:16] }
 
-// legacyRequests runs the three legacy-pack roles and hashes every request.
-func legacyRequests(t *testing.T, j analysis.Job) []string {
+// reviewRequests runs every review role and hashes every request.
+func reviewRequests(t *testing.T, j analysis.Job, static analysis.Handler, script map[string]func(int, opencode.Request) opencode.Reply) []string {
 	t.Helper()
-	f := legacyGeneric(t)
-	if _, r := runStages(t, j, f); r.Status != domain.TaskSucceeded {
-		t.Fatalf("verify %+v", r)
-	}
-	var out []string
-	for _, q := range f.requests {
-		out = append(out, fmt.Sprintf("%s %s %s", q.Role, pinHash([]byte(q.Instructions)), pinHash(q.Input)))
-	}
-	return out
+	return reviewRequestsWith(t, j, Handler{Static: static}, script)
 }
 
-// roleRequests runs every role-pack role and hashes every request.
-func roleRequests(t *testing.T, j analysis.Job, static analysis.Handler, script map[string]func(int, opencode.Request) opencode.Reply) []string {
-	t.Helper()
-	return roleRequestsWith(t, j, RoleHandler{Static: static}, script)
-}
-
-// roleRequestsWith is roleRequests with a configured role handler (call
+// reviewRequestsWith is reviewRequests with a configured role handler (call
 // ceiling); slices the ceiling refuses end budget_exhausted.
-func roleRequestsWith(t *testing.T, j analysis.Job, rh RoleHandler, script map[string]func(int, opencode.Request) opencode.Reply) []string {
+func reviewRequestsWith(t *testing.T, j analysis.Job, rh Handler, script map[string]func(int, opencode.Request) opencode.Reply) []string {
 	t.Helper()
-	f := &roleCaller{script: script}
+	f := &scriptedCaller{script: script}
 	rh.Caller = f
 	plan, res := runRoleWith(t, j, rh, "1.27.4")
 	for _, p := range plan {
@@ -149,6 +107,55 @@ func roleRequestsWith(t *testing.T, j analysis.Job, rh RoleHandler, script map[s
 	return out
 }
 
+// fixtureJob is a one-package Go snapshot (a metrics function with an
+// off-by-one loop), with or without a README.
+func fixtureJob(t *testing.T, docs bool) analysis.Job {
+	t.Helper()
+	root := t.TempDir()
+	write := func(name, s string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(root, name), []byte(s), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("metrics.go", "package metrics\n// Sum returns the sum of every sample.\nfunc Sum(samples []int) int {\n n:=0\n for i:=0;i+1<len(samples);i++ { n+=samples[i] }\n return n\n}\n")
+	if docs {
+		write("README.md", "Sum includes every sample, including the last. An empty input sums to zero.\n")
+	}
+	write("service.go", "package metrics\nconst password = \"long_fixture_dummy_value\"")
+	s, err := source.AcquireLocal(t.Context(), root, ".", t.TempDir(), source.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return analysis.Job{RunID: domain.NewID(), AttemptID: domain.NewID(), Epoch: 1, Snapshot: s, Scratch: t.TempDir(), Scope: domain.Scope{Kind: "full"}, AllowModelReview: true}
+}
+
+// verifyJob acquires the testdata fixture as an immutable snapshot.
+func verifyJob(t *testing.T, docs bool) analysis.Job {
+	t.Helper()
+	root := t.TempDir()
+	for _, name := range []string{"store.go", "load.go", "store_test.go", "go.mod"} {
+		b, err := os.ReadFile(filepath.Join("testdata", "verify", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), b, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if docs {
+		if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("store.Open hands the file to the caller, which closes it.\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, err := source.AcquireLocal(t.Context(), root, ".", t.TempDir(), source.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return analysis.Job{RunID: domain.NewID(), AttemptID: domain.NewID(), Epoch: 1, Snapshot: s, Scratch: t.TempDir(), Scope: domain.Scope{Kind: "full"}, AllowModelReview: true}
+}
+
+// goPinJobs are small Go snapshots; none plans a review slice.
 func goPinJobs(t *testing.T) map[string]analysis.Job {
 	metricsTree := map[string]string{
 		"go.mod":     "module sample.test/metrics\n\ngo 1.23\n",
@@ -167,20 +174,9 @@ func goPinJobs(t *testing.T) map[string]analysis.Job {
 	}
 }
 
-var pinnedGoLegacy = map[string][]string{
-	"go-build-files": {"context 355003a09ceebfb7 267de9a5d3e3f492", "investigate 5320a19e77e14cdf 8e2e97d3a545a576", "verify bdd78ed463a1e7f8 556edce420344247"},
-	"go-vet":         {"context 355003a09ceebfb7 396b5ab108ec2076", "investigate 5320a19e77e14cdf 78f861b79d289f70", "verify bdd78ed463a1e7f8 860e0e4b571b3e7a"},
-	"metrics-docs":   {"context 355003a09ceebfb7 18ebce24d6a3c9de", "investigate 5320a19e77e14cdf 9ceb2b66139bb81a", "verify bdd78ed463a1e7f8 bd22987692c57292"},
-	"metrics-nodocs": {"context 355003a09ceebfb7 4240c78b372a9fee", "investigate 5320a19e77e14cdf 673859093323b077", "verify bdd78ed463a1e7f8 cfde2d1b3852aeab"},
-	"metrics-tree":   {"context 355003a09ceebfb7 ae7bc3615292281f", "investigate 5320a19e77e14cdf 4bf20e752f4534d9", "verify bdd78ed463a1e7f8 d883e8e3baea8079"},
-	"verify-docs":    {"context 355003a09ceebfb7 f4fe9aec8d34c643", "investigate 5320a19e77e14cdf 7a78b71ea5f997d2", "verify bdd78ed463a1e7f8 300f6bcd8454edd8"},
-	"verify-nodocs":  {"context 355003a09ceebfb7 2b3579abee6cf0e4", "investigate 5320a19e77e14cdf 42bffbe217ff1098", "verify bdd78ed463a1e7f8 20162075f564aa1a"},
-	"modules":        {"context 355003a09ceebfb7 89fa61077d06084d", "investigate 5320a19e77e14cdf ae6d304680c96536", "verify bdd78ed463a1e7f8 b3e3b2ed3305f8f3"},
-}
-
-var pinnedGoRole = map[string][]string{
-	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "environment e44b353d678a2b55 0f35e48b1837906c", "documents 6cd0e37915e181ac 96f75808572d08e4", "investigate 0811ea5731925461 0abc469c5f262c1d", "verify 1237fcad33c639ca e0f027c525ea4547"},
-	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment e44b353d678a2b55 025087360cbe1b62", "documents 6cd0e37915e181ac 1c7ade98e8c6af78", "investigate 0811ea5731925461 507e8ddbf32be184", "interpret 7031ffa47de47a37 6c30210249e618c0", "verify 1237fcad33c639ca 739ea4868928c8e1"},
+var pinnedGo = map[string][]string{
+	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "environment f8cad434e236e657 0f35e48b1837906c", "documents 733c8eaaa63abb74 96f75808572d08e4", "investigate 968170384ee26d9d 0abc469c5f262c1d", "verify b33ecdaaf28cf4bc e0f027c525ea4547"},
+	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment f8cad434e236e657 1591d2065785bf02", "documents 733c8eaaa63abb74 1c7ade98e8c6af78", "investigate 968170384ee26d9d b6ad844092149afb", "interpret 1dd362236e2820bb 6c30210249e618c0", "verify b33ecdaaf28cf4bc 739ea4868928c8e1"},
 	// The worst case has more code than the overview offers, so it plans
 	// review.scope and nine slots: the seven the plan-time packing needs and
 	// two of slack, which review.scope leaves empty. Its go vet stand-in is
@@ -196,11 +192,11 @@ var pinnedGoRole = map[string][]string{
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
 		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"environment e44b353d678a2b55 a26534f4af3e1545", "documents 6cd0e37915e181ac 8d417c5a891273d2", "investigate 0811ea5731925461 4164875e5225f917", "interpret 7031ffa47de47a37 0ba79c5a6cd9bbf3", "verify 1237fcad33c639ca 11e709f191c805fa",
-		"investigate 0811ea5731925461 2bcd0f8700b89737", "verify 1237fcad33c639ca 1e0b3bf55f240a5a", "investigate 0811ea5731925461 3b87f684621ff34c", "verify 1237fcad33c639ca 0d99b05c7e7f51df",
-		"investigate 0811ea5731925461 360f2ee9ae2d69af", "verify 1237fcad33c639ca 7e1901d8a090ab12", "investigate 0811ea5731925461 3afca3570b302a87", "verify 1237fcad33c639ca 9b0b4be18897149f",
-		"investigate 0811ea5731925461 5d014697e0b54014", "verify 1237fcad33c639ca b8fe29c64fa3881a", "investigate 0811ea5731925461 c9494c60bcbeb2c9", "verify 1237fcad33c639ca cf20fd606eed6738",
-		"investigate 0811ea5731925461 0a1345f0a1616ef1", "verify 1237fcad33c639ca e6fe2f48261ec762"},
+		"environment f8cad434e236e657 a26534f4af3e1545", "documents 733c8eaaa63abb74 8d417c5a891273d2", "investigate 968170384ee26d9d 4164875e5225f917", "interpret 1dd362236e2820bb 0ba79c5a6cd9bbf3", "verify b33ecdaaf28cf4bc 11e709f191c805fa",
+		"investigate 968170384ee26d9d 2bcd0f8700b89737", "verify b33ecdaaf28cf4bc 1e0b3bf55f240a5a", "investigate 968170384ee26d9d 3b87f684621ff34c", "verify b33ecdaaf28cf4bc 0d99b05c7e7f51df",
+		"investigate 968170384ee26d9d 360f2ee9ae2d69af", "verify b33ecdaaf28cf4bc 7e1901d8a090ab12", "investigate 968170384ee26d9d 3afca3570b302a87", "verify b33ecdaaf28cf4bc 9b0b4be18897149f",
+		"investigate 968170384ee26d9d 5d014697e0b54014", "verify b33ecdaaf28cf4bc b8fe29c64fa3881a", "investigate 968170384ee26d9d c9494c60bcbeb2c9", "verify b33ecdaaf28cf4bc cf20fd606eed6738",
+		"investigate 968170384ee26d9d 0a1345f0a1616ef1", "verify b33ecdaaf28cf4bc e6fe2f48261ec762"},
 	// The worst case behind a completed secrets screen at the default
 	// ceiling: the whole-run requests are those of modules-worst except
 	// interpret (it also lists the secrets task), and every slot request
@@ -212,45 +208,33 @@ var pinnedGoRole = map[string][]string{
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
 		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"environment e44b353d678a2b55 a26534f4af3e1545", "documents 6cd0e37915e181ac 8d417c5a891273d2", "investigate 0811ea5731925461 4164875e5225f917", "interpret 7031ffa47de47a37 71915d5d7b19dc70", "verify 1237fcad33c639ca 11e709f191c805fa",
-		"investigate 0811ea5731925461 2bcd0f8700b89737", "verify 1237fcad33c639ca 1e0b3bf55f240a5a", "investigate 0811ea5731925461 3b87f684621ff34c", "verify 1237fcad33c639ca 0d99b05c7e7f51df",
-		"investigate 0811ea5731925461 360f2ee9ae2d69af", "verify 1237fcad33c639ca 7e1901d8a090ab12", "investigate 0811ea5731925461 3afca3570b302a87", "verify 1237fcad33c639ca 9b0b4be18897149f",
-		"investigate 0811ea5731925461 5d014697e0b54014", "verify 1237fcad33c639ca b8fe29c64fa3881a", "investigate 0811ea5731925461 c9494c60bcbeb2c9", "verify 1237fcad33c639ca cf20fd606eed6738",
-		"investigate 0811ea5731925461 0a1345f0a1616ef1", "verify 1237fcad33c639ca e6fe2f48261ec762"},
+		"environment f8cad434e236e657 a26534f4af3e1545", "documents 733c8eaaa63abb74 8d417c5a891273d2", "investigate 968170384ee26d9d 4164875e5225f917", "interpret 1dd362236e2820bb 71915d5d7b19dc70", "verify b33ecdaaf28cf4bc 11e709f191c805fa",
+		"investigate 968170384ee26d9d 2bcd0f8700b89737", "verify b33ecdaaf28cf4bc 1e0b3bf55f240a5a", "investigate 968170384ee26d9d 3b87f684621ff34c", "verify b33ecdaaf28cf4bc 0d99b05c7e7f51df",
+		"investigate 968170384ee26d9d 360f2ee9ae2d69af", "verify b33ecdaaf28cf4bc 7e1901d8a090ab12", "investigate 968170384ee26d9d 3afca3570b302a87", "verify b33ecdaaf28cf4bc 9b0b4be18897149f",
+		"investigate 968170384ee26d9d 5d014697e0b54014", "verify b33ecdaaf28cf4bc b8fe29c64fa3881a", "investigate 968170384ee26d9d c9494c60bcbeb2c9", "verify b33ecdaaf28cf4bc cf20fd606eed6738",
+		"investigate 968170384ee26d9d 0a1345f0a1616ef1", "verify b33ecdaaf28cf4bc e6fe2f48261ec762"},
 }
 
 func TestGoReviewInputsUnchanged(t *testing.T) {
-	got := map[string][]string{}
-	for name, j := range goPinJobs(t) {
-		got[name] = legacyRequests(t, fixIdentity(j))
-	}
-	gotRole := map[string][]string{
-		"modules":        roleRequests(t, fixIdentity(modulesJob(t, nil)), vetStub{obs: gatewayObservation}, validScript(t)),
-		"modules-worst":  roleRequests(t, fixIdentity(worstCaseJob(t, nil)), vetStub{obs: worstCaseObservations}, maxScript(t)),
-		"go-build-files": roleRequests(t, fixIdentity(treeJob(t, goBuildFilesTree)), vetStub{}, goBuildFilesScript(t)),
-		"modules-worst-screened": roleRequestsWith(t, fixIdentity(worstCaseJob(t, nil)),
-			RoleHandler{Static: secretsStub{obs: worstCaseObservations}, MaxCalls: DefaultMaxCalls}, maxScript(t)),
+	got := map[string][]string{
+		"modules":        reviewRequests(t, fixIdentity(modulesJob(t, nil)), vetStub{obs: gatewayObservation}, validScript(t)),
+		"modules-worst":  reviewRequests(t, fixIdentity(worstCaseJob(t, nil)), vetStub{obs: worstCaseObservations}, maxScript(t)),
+		"go-build-files": reviewRequests(t, fixIdentity(treeJob(t, goBuildFilesTree)), vetStub{}, goBuildFilesScript(t)),
+		"modules-worst-screened": reviewRequestsWith(t, fixIdentity(worstCaseJob(t, nil)),
+			Handler{Static: secretsStub{obs: worstCaseObservations}, MaxCalls: DefaultMaxCalls}, maxScript(t)),
 	}
 	if os.Getenv("CODEYE_PRINT_PINS") == "1" {
 		for _, name := range sortedKeys(got) {
-			t.Logf("legacy %q: %q,", name, got[name])
-		}
-		for _, name := range sortedKeys(gotRole) {
-			t.Logf("role %q: %q,", name, gotRole[name])
+			t.Logf("role %q: %q,", name, got[name])
 		}
 	}
-	for name, want := range pinnedGoLegacy {
+	for name, want := range pinnedGo {
 		if !slices.Equal(got[name], want) {
-			t.Errorf("review-v1 requests on %s changed:\n got %q\nwant %q", name, got[name], want)
+			t.Errorf("review requests on %s changed:\n got %q\nwant %q", name, got[name], want)
 		}
 	}
-	for name, want := range pinnedGoRole {
-		if !slices.Equal(gotRole[name], want) {
-			t.Errorf("review-r1 requests on %s changed:\n got %q\nwant %q", name, gotRole[name], want)
-		}
-	}
-	if len(pinnedGoLegacy) != len(got) || len(pinnedGoRole) != len(gotRole) {
-		t.Fatalf("pins cover %d/%d legacy and %d/%d role-pack fixtures", len(pinnedGoLegacy), len(got), len(pinnedGoRole), len(gotRole))
+	if len(pinnedGo) != len(got) {
+		t.Fatalf("pins cover %d/%d fixtures", len(pinnedGo), len(got))
 	}
 }
 

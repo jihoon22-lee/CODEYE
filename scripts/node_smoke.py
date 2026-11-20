@@ -508,7 +508,7 @@ def run(base, root, env, *, browser=False):
         assert go_activity["detail"] == "recorded", go_activity
         go_stages = stage_map(go_activity)
         assert go_stages["source"]["state"] == "succeeded", go_stages
-        # The default pack (review-r1) plans review.environment next to env.discover;
+        # The review plans review.environment next to env.discover;
         # the model is not approved for this source, so that task is skipped by policy
         # and the stage is partial, never succeeded.
         env_stage = go_stages["environment"]
@@ -527,7 +527,7 @@ def run(base, root, env, *, browser=False):
         assert static_stage["planned"] == 5 and go_stages["report"]["state"] == "succeeded", go_stages
         # The model review was not approved for this source: excluded by policy, never success.
         assert go_stages["code_review"]["state"] == "skipped" and go_stages["code_review"]["reasons"] == ["model_source_not_approved"], go_stages
-        assert go_stages["code_review"]["planned"] == 3, go_stages  # review-r1 investigate, interpret, verify
+        assert go_stages["code_review"]["planned"] == 3, go_stages  # investigate, interpret, verify
         assert go_stages["documents"]["succeeded"] == 1 and "model_source_not_approved" in go_stages["documents"]["reasons"], go_stages
         print(f"PASS: 실제 Go run 단계 표시 detail={go_activity['detail']} (목록/상세 일치)")
         streamed, plan_revision = stream_agrees(session, actual)

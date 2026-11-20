@@ -33,32 +33,13 @@ func TestSourceKinds(t *testing.T) {
 	}
 }
 
-// Both decoders accept excerpts of every review ecosystem with the kind
-// their path allows and reject a kind the path does not allow.
+// The decoder accepts excerpts of every review ecosystem with the kind
+// their path allows and rejects a kind the path does not allow.
 func TestExcerptKindsOfOtherLanguages(t *testing.T) {
 	snapshot, sha := strings.Repeat("7", 64), strings.Repeat("a", 64)
 	lookup := func(string) (string, bool) { return sha, true }
 	ex := func(p, kind, origin string, end int) Excerpt {
 		return Excerpt{ID: ExcerptID(snapshot, p, sha, 1, end), Path: p, SHA256: sha, Start: 1, End: end, Kind: kind, Origin: origin}
-	}
-	legacy := []struct {
-		e  Excerpt
-		ok bool
-	}{
-		{ex("app/store.py", "code", "context", 30), true},
-		{ex("tests/test_store.py", "test", "context", 10), true},
-		{ex("tests/test_store.py", "code", "context", 10), true}, // as a Go test file, code is accepted
-		{ex("pyproject.toml", "config", "context", 4), true},
-		{ex("src/lib.rs", "code", "", 3), true},
-		{ex("app/store.py", "test", "context", 30), false},
-		{ex("README.md", "code", "context", 3), false},
-		{ex("Makefile", "config", "context", 3), false},
-		{ex("app/store.py", "config", "context", 3), false},
-	}
-	for _, c := range legacy {
-		if err := checkExcerpt(c.e, snapshot, lookup); (err == nil) != c.ok {
-			t.Errorf("legacy %s %s: %v", c.e.Path, c.e.Kind, err)
-		}
 	}
 	role := []struct {
 		e  Excerpt
@@ -73,7 +54,7 @@ func TestExcerptKindsOfOtherLanguages(t *testing.T) {
 		{ex("package.json", "code", "context", 8), false},
 	}
 	for _, c := range role {
-		if err := checkRoleExcerpt(c.e, snapshot, lookup); (err == nil) != c.ok {
+		if err := checkExcerpt(c.e, snapshot, lookup); (err == nil) != c.ok {
 			t.Errorf("role %s %s/%s: %v", c.e.Path, c.e.Kind, c.e.Origin, err)
 		}
 	}

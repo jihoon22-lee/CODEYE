@@ -213,8 +213,7 @@ type Model struct {
 	CredentialFile string `json:"credential_file,omitempty"`
 	RelayFile      string `json:"relay_file,omitempty"`
 	// TimeoutSeconds bounds one model call (default 180, 1..1800).
-	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
-	ReviewPack     string `json:"review_pack,omitempty"`
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 	// ReviewMaxCalls is the model call ceiling per review attempt
 	// (codeye agent --review-max-calls); 0 means the default.
 	ReviewMaxCalls int `json:"review_max_calls,omitempty"`
@@ -532,9 +531,6 @@ func (c *Config) validate(knownTools []string) error {
 		}
 		if m.TimeoutSeconds < 0 || m.TimeoutSeconds > 1800 {
 			return errors.New("agent.model.timeout_seconds must be 1..1800 (0 = 180)")
-		}
-		if m.ReviewPack != "" && m.ReviewPack != "review-r1" && m.ReviewPack != "review-v1" {
-			return errors.New("agent.model.review_pack must be review-r1 (default) or review-v1 (legacy)")
 		}
 		if m.ReviewMaxCalls != 0 && !record.ValidMaxCalls(m.ReviewMaxCalls) {
 			return errors.New("agent.model.review_max_calls must be between 15 and 207")

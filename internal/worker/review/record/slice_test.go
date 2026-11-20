@@ -12,11 +12,11 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// roleExample decodes a role-pack example record (examples/review-r1, written
+// example decodes a review example record (examples/review, written
 // for fixtures/modules/input) with a lookup built from the fixture itself.
-func roleExample(t *testing.T, stage string) ([]byte, RoleRecord, Expect) {
+func example(t *testing.T, stage string) ([]byte, Record, Expect) {
 	t.Helper()
-	b, err := os.ReadFile("../../../../examples/review-r1/" + stage + ".json")
+	b, err := os.ReadFile("../../../../examples/review/" + stage + ".json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,12 +38,12 @@ func roleExample(t *testing.T, stage string) ([]byte, RoleRecord, Expect) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var head RoleRecord
+	var head Record
 	if err := json.Unmarshal(b, &head); err != nil {
 		t.Fatal(err)
 	}
 	want := Expect{Snapshot: head.Snapshot, RunID: head.RunID, AttemptID: head.AttemptID, Stage: stage, Lookup: func(p string) (string, bool) { s, ok := lookup[p]; return s, ok }}
-	r, err := DecodeRole(compact.Bytes(), want)
+	r, err := Decode(compact.Bytes(), want)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func roleExample(t *testing.T, stage string) ([]byte, RoleRecord, Expect) {
 
 // asSlice turns a whole-run investigate or verify record into a record of
 // slice s001 (schema 0.3, its own upstream names).
-func asSlice(r RoleRecord) RoleRecord {
+func asSlice(r Record) Record {
 	r.Schema = SchemaVersionSlice
 	r.Slice = &SliceRef{Key: "s001", Modules: []string{"go:.", "go:svc/b"}}
 	r.Upstream = append([]Upstream{}, r.Upstream...)
@@ -70,46 +70,46 @@ func asSlice(r RoleRecord) RoleRecord {
 // slice; a 0.3 record needs its slice key, sorted module IDs, the slice
 // upstream names and (verify) its own slice's investigate candidates only.
 func TestSliceRecordSchema(t *testing.T) {
-	raw, inv, want := roleExample(t, StageInvestigate)
-	again, err := MarshalRole(inv, want)
+	raw, inv, want := example(t, StageInvestigate)
+	again, err := Marshal(inv, want)
 	if err != nil || !bytes.Equal(again, raw) || bytes.Contains(raw, []byte(`"slice"`)) {
 		t.Fatalf("0.2 record bytes changed: %v", err)
 	}
 	sliceWant := want
 	sliceWant.Slice = "s001"
 	good := asSlice(inv)
-	b, err := MarshalRole(good, sliceWant)
+	b, err := Marshal(good, sliceWant)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := DecodeRole(b, sliceWant); err != nil {
+	if _, err := Decode(b, sliceWant); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := DecodeRole(b, want); err == nil {
+	if _, err := Decode(b, want); err == nil {
 		t.Fatal("slice record accepted as a whole-run record")
 	}
-	mutations := map[string]func(*RoleRecord){
-		"no slice on 0.3":  func(r *RoleRecord) { r.Slice = nil },
-		"slice on 0.2":     func(r *RoleRecord) { r.Schema = SchemaVersionRole },
-		"key s000":         func(r *RoleRecord) { r.Slice.Key = "s000" },
-		"key s033":         func(r *RoleRecord) { r.Slice.Key = "s033" },
-		"other slice":      func(r *RoleRecord) { r.Slice.Key = "s002" },
-		"upper case key":   func(r *RoleRecord) { r.Slice.Key = "S001" },
-		"no modules":       func(r *RoleRecord) { r.Slice.Modules = []string{} },
-		"nil modules":      func(r *RoleRecord) { r.Slice.Modules = nil },
-		"unsorted modules": func(r *RoleRecord) { r.Slice.Modules = []string{"go:svc/b", "go:."} },
-		"duplicate module": func(r *RoleRecord) { r.Slice.Modules = []string{"go:.", "go:."} },
-		"invalid module":   func(r *RoleRecord) { r.Slice.Modules = []string{"go"} },
-		"absolute module":  func(r *RoleRecord) { r.Slice.Modules = []string{"go:/etc"} },
-		"too many modules": func(r *RoleRecord) {
+	mutations := map[string]func(*Record){
+		"no slice on 0.3":  func(r *Record) { r.Slice = nil },
+		"slice on 0.2":     func(r *Record) { r.Schema = SchemaVersion },
+		"key s000":         func(r *Record) { r.Slice.Key = "s000" },
+		"key s033":         func(r *Record) { r.Slice.Key = "s033" },
+		"other slice":      func(r *Record) { r.Slice.Key = "s002" },
+		"upper case key":   func(r *Record) { r.Slice.Key = "S001" },
+		"no modules":       func(r *Record) { r.Slice.Modules = []string{} },
+		"nil modules":      func(r *Record) { r.Slice.Modules = nil },
+		"unsorted modules": func(r *Record) { r.Slice.Modules = []string{"go:svc/b", "go:."} },
+		"duplicate module": func(r *Record) { r.Slice.Modules = []string{"go:.", "go:."} },
+		"invalid module":   func(r *Record) { r.Slice.Modules = []string{"go"} },
+		"absolute module":  func(r *Record) { r.Slice.Modules = []string{"go:/etc"} },
+		"too many modules": func(r *Record) {
 			r.Slice.Modules = strings.Split("go:a go:b go:c go:d go:e go:f go:g go:h go:i", " ")
 		},
-		"interpret stage": func(r *RoleRecord) { r.Stage = StageInterpret },
-		"unknown schema":  func(r *RoleRecord) { r.Schema = "0.4" },
-		"interpret upstream": func(r *RoleRecord) {
+		"interpret stage": func(r *Record) { r.Stage = StageInterpret },
+		"unknown schema":  func(r *Record) { r.Schema = "0.4" },
+		"interpret upstream": func(r *Record) {
 			r.Upstream = append(r.Upstream, Upstream{Source: "review.interpret", State: UpstreamSkipped, Reason: "no_tool_observations"})
 		},
-		"other slice upstream": func(r *RoleRecord) {
+		"other slice upstream": func(r *Record) {
 			r.Upstream = append(r.Upstream, Upstream{Source: "review.investigate.s002", State: UpstreamSkipped, Reason: "x"})
 		},
 	}
@@ -117,11 +117,11 @@ func TestSliceRecordSchema(t *testing.T) {
 		r := asSlice(inv)
 		r.Slice = &SliceRef{Key: r.Slice.Key, Modules: append([]string(nil), r.Slice.Modules...)}
 		mutate(&r)
-		if _, err := MarshalRole(r, sliceWant); err == nil {
+		if _, err := Marshal(r, sliceWant); err == nil {
 			t.Errorf("%s accepted", name)
 		}
 		if b, err := json.Marshal(r); err == nil {
-			if _, err := DecodeRole(b, sliceWant); err == nil {
+			if _, err := Decode(b, sliceWant); err == nil {
 				t.Errorf("%s decoded", name)
 			}
 		}
@@ -132,16 +132,16 @@ func TestSliceRecordSchema(t *testing.T) {
 	}
 	unknown["slice"].(map[string]any)["tasks"] = []string{"x"}
 	if b, _ := json.Marshal(unknown); b != nil {
-		if _, err := DecodeRole(b, sliceWant); err == nil {
+		if _, err := Decode(b, sliceWant); err == nil {
 			t.Error("unknown slice field decoded")
 		}
 	}
 
 	// A slice verify carries its own slice's investigate candidates only.
-	_, ver, verWant := roleExample(t, StageVerify)
+	_, ver, verWant := example(t, StageVerify)
 	verWant.Slice = "s001"
 	slice := asSlice(ver)
-	if _, err := MarshalRole(slice, verWant); err == nil {
+	if _, err := Marshal(slice, verWant); err == nil {
 		t.Fatal("slice verify with interpret candidates accepted")
 	}
 	slice.Candidates, slice.Verifications = slice.Candidates[:1], slice.Verifications[:1]
@@ -153,11 +153,11 @@ func TestSliceRecordSchema(t *testing.T) {
 		}
 	}
 	slice.Upstream = kept
-	if _, err := MarshalRole(slice, verWant); err != nil {
+	if _, err := Marshal(slice, verWant); err != nil {
 		t.Fatalf("slice verify: %v", err)
 	}
 	slice.Upstream = append(slice.Upstream, Upstream{Source: "review.investigate", State: UpstreamSkipped, Reason: "x"})
-	if _, err := MarshalRole(slice, verWant); err == nil {
+	if _, err := Marshal(slice, verWant); err == nil {
 		t.Fatal("slice verify naming the overview investigate accepted")
 	}
 }
@@ -196,7 +196,7 @@ func validScope() (ScopeDoc, Expect) {
 	}
 	observed := file("a/c.go", "go:a", FilePlanned, RankToolObservations, 50)
 	observed.Observations, observed.Severity = 3, "high"
-	d := ScopeDoc{Schema: ScopeSchemaVersion, Kind: ScopeKind, Pack: PackRef{ID: "review-r1", Version: "2.0.0"}, Snapshot: want.Snapshot, RunID: want.RunID, AttemptID: want.AttemptID,
+	d := ScopeDoc{Schema: ScopeSchemaVersion, Kind: ScopeKind, Pack: PackRef{ID: "review", Version: "2.0.0"}, Snapshot: want.Snapshot, RunID: want.RunID, AttemptID: want.AttemptID,
 		Screen: ScreenApplied, Budget: ScopeBudget{MaxCalls: DefaultMaxCalls, MaxRequestBytes: 40000, WholeRunMaxCalls: WholeRunMaxCalls, SliceReserveCalls: SliceReserveCalls, CallsBeforeSlices: 7, Admission: AdmissionSequentialReserve},
 		Limits:   ScopeLimits{MaxFiles: 8, MaxBytes: 12000, MaxFileBytes: 2400, MaxFileLines: 50, MaxSlices: MaxSlices, Slots: 1},
 		Priority: ScopePriority{Order: PriorityOrder, Secondary: DefaultSecondary},
@@ -293,7 +293,7 @@ func TestScopeArtifactValidation(t *testing.T) {
 func TestScopeArtifactPlannedSchema(t *testing.T) {
 	sha := strings.Repeat("a", 64)
 	want := Expect{Snapshot: strings.Repeat("7", 64), RunID: domain.NewID(), AttemptID: domain.NewID(), Lookup: func(p string) (string, bool) { return sha, p == "a/b.go" || p == "a/main.go" }}
-	body := `{"schema_version":"0.1","kind":"review_scope","pack":{"id":"review-r1","version":"2.0.0"},"snapshot_manifest_digest":"` + want.Snapshot + `","run_id":"` + want.RunID + `","attempt_id":"` + want.AttemptID + `",` +
+	body := `{"schema_version":"0.1","kind":"review_scope","pack":{"id":"review","version":"2.0.0"},"snapshot_manifest_digest":"` + want.Snapshot + `","run_id":"` + want.RunID + `","attempt_id":"` + want.AttemptID + `",` +
 		`"screen":"applied","budget":{"max_calls":99,"max_request_bytes":40000,"whole_run_max_calls":15,"slice_reserve_calls":6,"calls_before_slices":5,"admission":"sequential_reserve"},` +
 		`"limits":{"max_files":8,"max_bytes":12000,"max_file_bytes":2400,"max_file_lines":50,"max_slices":32},"upstream":[{"source":"review.investigate","state":"accepted","reason":"","sha256":"` + strings.Repeat("b", 64) + `"}],` +
 		`"modules":[{"id":"go:a","discovered":true,"files_eligible":2,"files_not_planned":0}],` +

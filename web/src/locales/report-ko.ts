@@ -338,7 +338,6 @@ export const reportKo = {
     noModel: (reason: string) => `모델 해석 없음: ${reason}`,
     modelReasons: {
       review_tasks_not_planned: '이 실행에는 모델 검토 작업이 계획되지 않았습니다',
-      role_not_in_pack: '이 검토 팩에는 이 역할이 없습니다',
       role_not_planned: '이 역할의 작업이 계획되지 않았습니다',
       result_rejected: '역할 기록이 검증에 실패했습니다',
       result_missing: '역할 기록을 읽지 못했습니다',

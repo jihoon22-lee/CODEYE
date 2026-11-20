@@ -1,8 +1,8 @@
-// String helpers of the W16 sample service.
+// String helpers of the ringbuf sample service.
 #include <string>
 #include <utility>
 
-namespace w16 {
+namespace ringbuf {
 
 std::size_t joined_size(std::string a) {
   std::string b = std::move(a);
@@ -23,4 +23,4 @@ int first_count() {
   return first;
 }
 
-} // namespace w16
+} // namespace ringbuf

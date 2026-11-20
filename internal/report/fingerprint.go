@@ -150,7 +150,7 @@ func ToolFingerprint(analyzer, rule, path, symbol, message string) (string, Fing
 // paths. It must run after the verdict was applied to f. Candidates of one
 // file without symbols share a fingerprint; such weak identities never carry
 // a disposition automatically (see DispositionCarries).
-func setModelFingerprint(f *Finding, c record.Candidate, catalog map[string]record.Excerpt, linked []Observation) {
+func setModelFingerprint(f *Finding, c record.CandidateText, catalog map[string]record.Excerpt, linked []Observation) {
 	cause := CauseCandidate + ":unclassified"
 	if f.Validation != "unreviewed" {
 		cause = CauseCandidate + ":" + f.Category

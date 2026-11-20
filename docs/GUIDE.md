@@ -323,13 +323,12 @@ codeye up
 "agent": {
   "model": {"name": "openai/gpt-6.2-sol", "opencode": "/home/user/.opencode/bin/opencode",
             "credential_file": "/home/user/.config/codeye/model.json", "timeout_seconds": 180,
-            "review_pack": "review-r1", "review_max_calls": 99}
+            "review_max_calls": 99}
 }
 ```
 
 - `opencode`를 비우면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`를 쓴다. `name`을 비우면 키 provider의 기본 모델이다. `credential_file`은 키 파일을 다른 곳에 둘 때만 적는다. `timeout_seconds`는 모델 호출 한 번의 제한시간이다(기본 180).
 - `relay_file`은 승인된 로컬 relay를 쓸 때만 넣는다. 이 저장소의 `scripts/model_budget_relay.py`는 예산 상한을 강제하는 QA 전용 relay이며 제품 구성요소가 아니다. 사용법은 그 파일의 머리말과 `--help`에 있다.
-- `review_pack`의 기본은 `review-r1`이다. 비워 두면 `review-r1`을 쓴다. `review-v1`은 이전 기록을 같은 조건으로 재현할 때만 고른다([검토](REVIEW.md)).
 - `review_max_calls`는 run 하나(시도 하나)가 쓸 수 있는 모델 호출 수의 상한이다. 비우면 99이고 15~207을 받는다. 처음 다섯 역할이 최대 15회를 쓰고, 남은 호출로 overview가 보내지 못한 파일을 모듈 단위로 더 검토한다. 기본값으로 중간 규모 저장소의 대부분이 모델에 간다. 비용: 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 `review_max_calls`를 낮춘다(예: 33). 15는 처음 다섯 역할만 실행하고 모듈 단위 추가 검토를 하지 않는다. 비밀값 선별(`agent.tools.gitleaks`)이 있으면 선별된 파일을 빼고 보내고, 없으면 기본 민감값 패턴 필터만 거쳐 보내며 보고서에 "비밀값 미선별"이 표시된다([검토](REVIEW.md#모듈-단위-검토-분할)).
 - 모델 연결은 `codeye model probe`(서비스 설정의 모델) 또는 `codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`로 확인한다. 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다. `codeye doctor`는 모델을 호출하지 않는다.
 

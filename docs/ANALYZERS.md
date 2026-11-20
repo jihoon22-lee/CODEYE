@@ -447,7 +447,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 
 ### 검토 해석 입력
 
-review-r1의 `review.interpret` 역할은 계획된 분석기 task의 envelope를 `obsdoc.Decode`로 검증해 읽는다. 없으면 go-vet 소유 key에 한해 v0.1 문서를 읽는다. 둘 다 없으면 상류 `unavailable`(`record_missing`)이며 0건으로 바꾸지 않는다. 억제된 관찰과 지표 관찰은 넣지 않는다. 도구 상태 행은 최대 8개, 관찰은 최대 8개이고 넘치면 `tools_outside_interpret_input`, `observations_outside_interpret_input` 제약을 남긴다. `related` 위치는 envelope와 해석 입력에만 있고 보고서 finding은 주 위치만 보인다. 역할 구성은 [검토](REVIEW.md)를 따른다.
+`review.interpret` 역할은 계획된 분석기 task의 envelope를 `obsdoc.Decode`로 검증해 읽는다. 없으면 go-vet 소유 key에 한해 v0.1 문서를 읽는다. 둘 다 없으면 상류 `unavailable`(`record_missing`)이며 0건으로 바꾸지 않는다. 억제된 관찰과 지표 관찰은 넣지 않는다. 도구 상태 행은 최대 8개, 관찰은 최대 8개이고 넘치면 `tools_outside_interpret_input`, `observations_outside_interpret_input` 제약을 남긴다. `related` 위치는 envelope와 해석 입력에만 있고 보고서 finding은 주 위치만 보인다. 역할 구성은 [검토](REVIEW.md)를 따른다.
 
 ### 엔진 중복
 
@@ -1179,7 +1179,7 @@ clippy 작업은 allow-by-default인 여섯 lint를 `-W`로 켠다. 소스의 `#
 
 ## 구조·중복 지표와 비밀값 팩
 
-언어와 무관한(`ecosystem: any`) 추가 깊이 분석기 셋이다. **lizard**는 함수 복잡도, **jscpd**는 중복 블록, **gitleaks**는 비밀값을 본다. 공통 실행부는 `internal/worker/analysis/anypack`, 빌트인 연결은 `builtin/w21.go`다.
+언어와 무관한(`ecosystem: any`) 추가 깊이 분석기 셋이다. **lizard**는 함수 복잡도, **jscpd**는 중복 블록, **gitleaks**는 비밀값을 본다. 공통 실행부는 `internal/worker/analysis/anypack`, 빌트인 연결은 `builtin/any_ecosystem.go`다.
 
 - 셋 다 추가 깊이이므로 이 플래그만으로는 deep-review를 광고하지 않는다. 경로가 없으면 작업은 계획되고 `unsupported`(`tool_not_configured`)다.
 - 저장소 코드를 실행하지 않는다(`RepositoryCode=false`). lizard는 넘긴 파일의 구문만 세고, jscpd는 토큰을 비교하고, gitleaks는 파일 바이트를 정규식으로 검사한다.
@@ -1276,11 +1276,11 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 
 ### 모델 입력의 비밀값 선별
 
-검토 역할은 모델 입력을 만들기 전에 비밀값 분석기(`purpose=secrets`인 descriptor와 envelope)의 envelope로 파일을 거른다. `review-r1`과 `review-v1` 두 검토 팩 모두 같은 규칙(`internal/worker/review/screen.go`)이며, 세 경우(실행 안 됨 → 선별 없이 보내고 `model_input_not_secret_screened`, 실행했으나 쓸 수 없음 → 실행 안 됨과 같이 보내되 읽을 수 있는 결과가 보고한 파일은 빼고 `model_input_not_secret_screened`, 완전한 성공 → 탐지 파일을 모든 발췌에서 빼고 `secret_files_withheld`)의 처리는 [검토](REVIEW.md)가 정한다. 분석기 쪽에서 지켜야 할 것은 다음과 같다.
+검토 역할은 모델 입력을 만들기 전에 비밀값 분석기(`purpose=secrets`인 descriptor와 envelope)의 envelope로 파일을 거른다. 규칙은 `internal/worker/review/screen.go`에 있고, 세 경우(실행 안 됨 → 선별 없이 보내고 `model_input_not_secret_screened`, 실행했으나 쓸 수 없음 → 실행 안 됨과 같이 보내되 읽을 수 있는 결과가 보고한 파일은 빼고 `model_input_not_secret_screened`, 완전한 성공 → 탐지 파일을 모든 발췌에서 빼고 `secret_files_withheld`)의 처리는 [검토](REVIEW.md)가 정한다. 분석기 쪽에서 지켜야 할 것은 다음과 같다.
 
 - "실행 안 됨"은 비밀값 작업이 계획에 없거나, `unsupported`이면서 `not_run`인 envelope(도구 미설정 등)일 때뿐이다. 계획에 있는데 envelope가 없거나 무효이면 쓸 수 없는 결과로 본다. 실패·부분 envelope라도 해석되면 그 관찰 경로는 모델 입력에서 뺀다. 워커는 계획 순서대로 작업을 하나씩 실행하고 검토 역할은 정적 계획 뒤에 붙으므로 검토가 읽을 때 비밀값 작업은 끝나 있다.
 - "완전한 성공"은 `succeeded`, 부분 파싱 아님, parse OK다. 이때 탐지 파일에 위치한 다른 도구 관찰은 규칙과 위치만 보내고 문구를 뺀다. 하드코딩 암호 규칙처럼 문구가 값을 인용할 수 있기 때문이다.
-- review-r1 역할은 선별을 언어 지침 선택과 요청 작성보다 먼저 한다. review-v1의 고정 요청 바이트는 바뀌지 않으며 선별은 corpus에서 파일을 빼는 방식으로만 반영된다.
+- 검토 역할은 선별을 언어 지침 선택과 요청 작성보다 먼저 한다.
 
 ### 선별의 한계
 

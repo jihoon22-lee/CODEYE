@@ -49,12 +49,12 @@ func (SliceReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte
 	if !ok || art.Role != "other" {
 		return Contribution{}, invalidf("review slice record attached to unexpected task or role")
 	}
-	r, err := record.DecodeRole(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest,
+	r, err := record.Decode(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest,
 		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Slice: key, Lookup: ctx.Source.Lookup})
 	if err != nil {
 		return Contribution{}, err
 	}
-	return Contribution{Review: &ReviewResult{Accepted: r.Accepted(), Role: &r}, Limitations: r.Limitations}, nil
+	return Contribution{Review: &ReviewResult{Accepted: r.Accepted(), Record: &r}, Limitations: r.Limitations}, nil
 }
 
 // ScopeDecoder validates the review scope artifact of review.scope against
@@ -114,12 +114,12 @@ func sliceKeys(states map[string]*taskState) []string {
 	return out
 }
 
-// roleRecordKeys are the review tasks that may hold a role record, in the
+// reviewRecordKeys are the review tasks that may hold a role record, in the
 // order their lineage is checked: the whole-run roles, then each slice's
 // investigate before its verify.
-func roleRecordKeys(states map[string]*taskState) []string {
+func reviewRecordKeys(states map[string]*taskState) []string {
 	var out []string
-	for _, stage := range record.RoleStages {
+	for _, stage := range record.Stages {
 		out = append(out, "review."+stage)
 	}
 	for _, key := range sliceKeys(states) {
@@ -139,11 +139,11 @@ func sentPaths(states map[string]*taskState, keys []string) map[string]bool {
 	out := map[string]bool{}
 	for _, k := range keys {
 		st := states[k]
-		if !roleAccepted(st) {
+		if !reviewAccepted(st) {
 			continue
 		}
-		rec := st.reviewResult.Role
-		if slices.ContainsFunc(rec.Calls, func(c record.RoleCall) bool { return c.RequestDigest != "" }) {
+		rec := st.reviewResult.Record
+		if slices.ContainsFunc(rec.Calls, func(c record.Call) bool { return c.RequestDigest != "" }) {
 			for _, e := range rec.Evidence {
 				out[e.Path] = true
 			}
@@ -162,12 +162,12 @@ func (c sectionContext) ledger() *ReviewLedger {
 	}
 	// The scope task holds an artifact, not a review record: it is accepted
 	// when the report kept that artifact.
-	scopeItem, _ := reviewItem(record.TaskScope, scopeState, true)
+	scopeItem, _ := reviewItem(record.TaskScope, scopeState)
 	if scopeAccepted(scopeState) {
 		scopeItem.Result = "accepted"
 	}
 	l := &ReviewLedger{Scope: scopeItem, Modules: []LedgerModule{}}
-	keys := roleRecordKeys(c.states)
+	keys := reviewRecordKeys(c.states)
 	sent := sentPaths(c.states, keys)
 
 	// Calls: those before the slices as the scope artifact counted them (the
@@ -187,8 +187,8 @@ func (c sectionContext) ledger() *ReviewLedger {
 		}
 		whole := !isSliceTask(k)
 		switch {
-		case roleAccepted(st):
-			for _, call := range st.reviewResult.Role.Calls {
+		case reviewAccepted(st):
+			for _, call := range st.reviewResult.Record.Calls {
 				bytes += call.RequestBytes
 				if !whole || doc == nil {
 					calls++
@@ -197,8 +197,8 @@ func (c sectionContext) ledger() *ReviewLedger {
 		case noCallStatus(st.facts.Status):
 			// A record of a call that was not made (model_not_configured)
 			// still states its request size; the section sums every record.
-			if !st.rejected && st.reviewResult != nil && st.reviewResult.Role != nil {
-				for _, call := range st.reviewResult.Role.Calls {
+			if !st.rejected && st.reviewResult != nil && st.reviewResult.Record != nil {
+				for _, call := range st.reviewResult.Record.Calls {
 					bytes += call.RequestBytes
 				}
 			}
@@ -252,7 +252,7 @@ func (c sectionContext) ledger() *ReviewLedger {
 				if f.PlannedLines < f.TotalLines {
 					row.FilesTruncated++
 				}
-				if roleAccepted(c.states[verify]) {
+				if reviewAccepted(c.states[verify]) {
 					row.FilesWithCompletedReview++
 				}
 				if f.Class == record.ClassSecondary {

@@ -47,17 +47,17 @@
     "manifests": [
       {
         "path": "go.mod",
-        "sha256": "ce63d0c6484a9b8a95a2e05199747a4d930591d085372edf8d8ede5c1590e3fa",
+        "sha256": "b851ba562ace3454b149785a167c70e93d01c791c3d062ce1fbee8d6ef55a238",
         "status": "parsed"
       },
       {
         "path": "svc/a/go.mod",
-        "sha256": "8bdecfdaf4a6cf771b6e9e16e7929928c133a8872ea13059649759a565831cda",
+        "sha256": "44e1bc70c32642aafcb8d39343738c8a0693366e46b614bc5a4b2d3d6c01d45c",
         "status": "parsed"
       },
       {
         "path": "svc/b/go.mod",
-        "sha256": "190d2b4870102860c723cba70861e8277061a117ed60678000bf45fd9dcb803c",
+        "sha256": "67b2518c1138ca37ef84d62ecda10a10ca79f7c8b6a928f2af72b8ea6eacba2e",
         "status": "parsed"
       }
     ],
@@ -71,11 +71,11 @@
         "comparison": "minimum",
         "source": {
           "path": "go.mod",
-          "sha256": "ce63d0c6484a9b8a95a2e05199747a4d930591d085372edf8d8ede5c1590e3fa",
+          "sha256": "b851ba562ace3454b149785a167c70e93d01c791c3d062ce1fbee8d6ef55a238",
           "start_line": 3,
           "end_line": 3
         },
-        "evidence_id": "ev_92fd01835bf0e2e5c4de9ffe"
+        "evidence_id": "ev_a9a15473b6c79bdf4b280dae"
       },
       {
         "id": "go_directive@svc/a/go.mod",
@@ -86,11 +86,11 @@
         "comparison": "minimum",
         "source": {
           "path": "svc/a/go.mod",
-          "sha256": "8bdecfdaf4a6cf771b6e9e16e7929928c133a8872ea13059649759a565831cda",
+          "sha256": "44e1bc70c32642aafcb8d39343738c8a0693366e46b614bc5a4b2d3d6c01d45c",
           "start_line": 3,
           "end_line": 3
         },
-        "evidence_id": "ev_ec9437fcf999b4649a4d386c"
+        "evidence_id": "ev_10100ce7645c0d53bb08881b"
       },
       {
         "id": "go_directive@svc/b/go.mod",
@@ -101,11 +101,11 @@
         "comparison": "minimum",
         "source": {
           "path": "svc/b/go.mod",
-          "sha256": "190d2b4870102860c723cba70861e8277061a117ed60678000bf45fd9dcb803c",
+          "sha256": "67b2518c1138ca37ef84d62ecda10a10ca79f7c8b6a928f2af72b8ea6eacba2e",
           "start_line": 3,
           "end_line": 3
         },
-        "evidence_id": "ev_5211e79b42ecd5995a6ad747"
+        "evidence_id": "ev_661c3d03d6c25886e2c99a85"
       }
     ],
     "observations": [

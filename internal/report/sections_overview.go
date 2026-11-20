@@ -127,7 +127,7 @@ func (c sectionContext) gaps() []Gap {
 		}
 	}
 	if cr := r.CodeReview; cr != nil {
-		if cr.Pack == "none" {
+		if len(cr.Roles) == 0 {
 			add(SectionCodeReview, "review_tasks_not_planned", nil, nil)
 		}
 		for _, t := range cr.Roles {
@@ -136,7 +136,7 @@ func (c sectionContext) gaps() []Gap {
 			}
 			add(SectionCodeReview, "role_"+t.Result, strPtr(t.Key), t.Reason)
 		}
-		if cr.Pack != "none" && cr.ExposedFiles == nil {
+		if len(cr.Roles) > 0 && cr.ExposedFiles == nil {
 			add(SectionCodeReview, "exposure_unknown", nil, nil)
 		}
 		if cr.Ledger != nil {

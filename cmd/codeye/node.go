@@ -63,9 +63,6 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// call; it is never an argument (docs/REVIEW.md#모델-설정).
 	modelCredential := fs.String("model-credential-file", "", "")
 	modelTimeout := fs.Duration("model-timeout", opencode.DefaultTimeout, "")
-	// The review pack is a node operator setting only; runs and profiles
-	// cannot select it. The default is review-r1 (the role pack); review-v1 is the legacy pack.
-	reviewPack := fs.String("review-pack", review.PackRole, "")
 	reviewMaxCalls := fs.Int("review-max-calls", review.DefaultMaxCalls, "")
 	fs.Var(&modelRoots, "model-source-root", "")
 	// The repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가) is a node operator setting
@@ -139,10 +136,6 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid agent options; use codeye --help")
 		return agent.ExitUsage
 	}
-	if !review.ValidPack(*reviewPack) {
-		fmt.Fprintln(stderr, "invalid --review-pack; expected review-r1 (default) or review-v1 (legacy)")
-		return agent.ExitUsage
-	}
 	if !review.ValidMaxCalls(*reviewMaxCalls) {
 		fmt.Fprintln(stderr, "invalid --review-max-calls; expected 15..207 (default 99)")
 		return agent.ExitUsage
@@ -208,7 +201,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
 		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GitCredentialFile: *gitCredential, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
-		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewPack: *reviewPack, ReviewMaxCalls: *reviewMaxCalls,
+		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewMaxCalls: *reviewMaxCalls,
 		RepositoryCodeSourceRoots: codeApproved,
 		StorageQuota:              limits,
 		StorageLogDir:             *storageLogDir,
@@ -290,14 +283,6 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 // toolchains (--node) and every configured analyzer tool. The test-only fixture handler is left
 // unwrapped.
 func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
-	pack := h.ReviewPack
-	if pack == "" {
-		pack = review.PackRole
-	}
-	if !review.ValidPack(pack) {
-		// No silent fallback to the default pack.
-		return nil, nil, errors.New("unknown review pack")
-	}
 	if h.ReviewMaxCalls != 0 && !review.ValidMaxCalls(h.ReviewMaxCalls) {
 		return nil, nil, errors.New("review call ceiling out of range")
 	}
@@ -342,10 +327,7 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 			}
 			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, CredentialFile: h.ModelCredentialFile, Timeout: timeout,
 				Offline: h.Offline, CABundle: h.CABundle}
-			var reviewed analysis.Handler = review.Handler{Static: handler, Caller: caller}
-			if pack == review.PackRole {
-				reviewed = review.RoleHandler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
-			}
+			reviewed := review.Handler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
 			// Dependency tasks run after discovery and before the analyzers;
 			// review plans only through the static handler and never sees them.
 			fetched, err := deps.Wrap(reviewed, depCfg, deps.Fetchers()...)

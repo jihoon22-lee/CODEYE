@@ -1,228 +1,350 @@
 package review
 
 import (
-	"context"
-	"encoding/json"
+	"errors"
 	"slices"
-	"sort"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
-	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review-v1"
 )
 
-// verifyBudget keeps instructions+input under the OpenCode request limit with
-// room for a repair list.
-const verifyBudget = 60 << 10
+// The review verifier applies the verification semantics
+// (per-candidate acceptance, one bounded repair of the rejected candidates,
+// quarantine as unreviewed, reproduction claims downgraded, success without
+// a call when there is no candidate) over the accepted candidates of
+// investigate and interpret. A reply that is not JSON at all gets one retry
+// of its own (it does not use up the repair; at most record.RoleMaxCalls
+// calls); an entry whose only defect is citing observation IDs of the
+// request among its evidence is accepted without them when the rest still
+// meets its verdict's rule (evidence_id_dropped on the call); and a later
+// call that fails keeps the verdicts already accepted (verification_call_failed).
+const verifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_..."],"counterevidence_ids":["ev_..."],"unresolved_assumptions":["..."],"next_verification":["..."]}]}, ignoring any wider output examples. Return exactly one entry per candidate in input. Before deciding, read the caller and test excerpts (origin caller/test) for guards, deferred cleanup or ownership transfer that would invalidate the candidate, and keep each documents contract to its applies_to path. supported needs a code or test evidence ID and at least one valid condition; refuted needs counterevidence IDs and invalid conditions; otherwise use inconclusive with unresolved assumptions. Nothing was executed: never claim reproduction, test results or runtime output. Cite only evidence IDs given in scope; do not add paths, line numbers or other fields. Give 1-3 next_verification items that are reading or review steps, not commands.`
 
-const verifyContract = `For this role use exactly {"verifications":[{"candidate_id":"candidate_N","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_..."],"counterevidence_ids":["ev_..."],"unresolved_assumptions":["..."],"next_verification":["..."]}]}, ignoring any wider output examples. Return exactly one entry per candidate in input. Before deciding, read the caller and test excerpts (origin caller/test) for guards, deferred cleanup or ownership transfer that would invalidate the candidate. supported needs a code or test evidence ID and at least one valid condition; refuted needs counterevidence IDs and invalid conditions; otherwise use inconclusive with unresolved assumptions. Nothing was executed: never claim reproduction, test results or runtime output. Cite only evidence IDs given in scope; do not add paths, line numbers or other fields. Give 1-3 next_verification items that are reading or review steps, not commands.`
-
-const verifyRules = "\nUse only the provided excerpts. Review ordinary software behavior and maintainability. No code execution, test generation or external access. Cite only evidence IDs given in scope. Write concise Korean prose."
-
-const repairRules = "\nFormat repair: your previous output for the candidates listed in input.repair was rejected with the listed platform error codes. Return a verifications entry only for those candidates, citing only IDs from scope.excerpts; accepted_evidence_ids lists every valid ID."
+const verifyRepairRules = "\nFormat repair: your previous output for the candidates listed in input.repair was rejected with the listed platform error codes. Return a verifications entry only for those candidates, citing only IDs from scope.excerpts; accepted_evidence_ids lists every valid ID."
 
 type verifyInput struct {
-	Scope      Corpus       `json:"scope"`
-	Facts      []Fact       `json:"facts"`
-	Candidates []Candidate  `json:"candidates"`
-	Repair     *repairInput `json:"repair,omitempty"`
+	Scope struct {
+		Snapshot    string           `json:"snapshot_manifest_digest"`
+		Excerpts    []record.Excerpt `json:"excerpts"`
+		Limitations []string         `json:"limitations"`
+	} `json:"scope"`
+	Contracts    []record.Contract       `json:"contracts"`
+	Observations []record.ObservationRef `json:"observations"`
+	Candidates   []record.Candidate      `json:"candidates"`
+	Repair       *repairInput            `json:"repair,omitempty"`
 }
 
-type repairInput struct {
-	OutputErrors []string     `json:"output_errors"`
-	Candidates   []repairItem `json:"candidates"`
-	AcceptedIDs  []string     `json:"accepted_evidence_ids"`
-}
+// limVerifyBudget marks candidates left unreviewed because the verifier
+// request could not carry them within PromptBudget.
+const limVerifyBudget = "verification_budget_exceeded"
 
-type repairItem struct {
-	ID     string   `json:"candidate_id"`
-	Errors []string `json:"errors"`
-}
-
-// modelVerification is the only shape a model may return. Unknown fields
-// (paths, line numbers, execution IDs) make the item invalid.
-type modelVerification struct {
-	CandidateID           string   `json:"candidate_id"`
-	Verdict               string   `json:"verdict"`
-	Category              string   `json:"category"`
-	Severity              string   `json:"severity"`
-	SeverityReason        string   `json:"severity_reason"`
-	Impact                string   `json:"impact"`
-	ValidConditions       []string `json:"valid_conditions"`
-	InvalidConditions     []string `json:"invalid_conditions"`
-	SupportingEvidence    []string `json:"supporting_evidence_ids"`
-	Counterevidence       []string `json:"counterevidence_ids"`
-	UnresolvedAssumptions []string `json:"unresolved_assumptions"`
-	NextVerification      []string `json:"next_verification"`
-}
-
-// Limitation and reason codes of the verify stage.
-const (
-	limNoCandidates     = "no_candidates_to_verify"
-	reasonOutputInvalid = "review_output_invalid"
-	reasonInputTooLarge = "review_input_too_large"
-	callAccepted        = record.OutcomeAccepted
-	callRejected        = "output_rejected"
-	callDiscarded       = "result_discarded"
-)
-
-func addLim(list []string, codes ...string) []string {
-	list = append(list, codes...)
-	sort.Strings(list)
-	return slices.Compact(list)
-}
-
-func nonNil(s []string) []string {
-	if s == nil {
-		return []string{}
+func verificationClaimsExecution(v record.Verification) bool {
+	for _, t := range append(append(append([]string{v.SeverityReason, v.Impact}, v.ValidConditions...), v.InvalidConditions...), append(v.UnresolvedAssumptions, v.NextVerification...)...) {
+		if record.ClaimsExecution(t) {
+			return true
+		}
 	}
-	return s
+	return false
 }
 
-func unreviewed(id, lim string) Verification {
-	return Verification{CandidateID: id, Verdict: record.VerdictUnreviewed, ValidConditions: []string{}, InvalidConditions: []string{},
-		SupportingEvidence: []string{}, Counterevidence: []string{}, UnresolvedAssumptions: []string{}, NextVerification: []string{}, Limitations: []string{lim}}
-}
-
-// sameEvidence requires the prior record's catalog to be exactly the corpus
-// rebuilt now from the immutable snapshot (ID, path, blob, range, kind).
-func sameEvidence(prior, now []Excerpt) bool {
-	if len(prior) != len(now) {
+// verify checks the accepted investigate and interpret candidates of the
+// whole run or, for a slice task, its own slice's investigate candidates
+// only (with the review.scope artifact as upstream).
+func (s *roleStage) verify() analysis.TaskResult {
+	docRec, uDoc := s.prior(record.StageDocuments)
+	var invRec, intRec record.Record
+	var uInv, uInt record.Upstream
+	var upstream []record.Upstream
+	if s.slice == nil {
+		invRec, uInv = s.prior(record.StageInvestigate)
+		intRec, uInt = s.prior(record.StageInterpret)
+		upstream = []record.Upstream{uDoc, uInv, uInt}
+	} else {
+		invRec, uInv = s.prior(record.StageInvestigate + "." + s.slice.Key)
+		upstream = []record.Upstream{uDoc, uInv, s.scopeUp}
+	}
+	if uInv.State != record.UpstreamAccepted && uInt.State != record.UpstreamAccepted {
+		return result(domain.TaskSkippedPolicy, reasonDependency)
+	}
+	if r := s.begin(upstream); r != nil {
+		return *r
+	}
+	s.noteUpstream(upstream...)
+	var candidates []record.Candidate
+	var context []record.Excerpt
+	seen := map[string]bool{}
+	addEvidence := func(list []record.Excerpt) {
+		for _, e := range list {
+			if !seen[e.ID] {
+				seen[e.ID] = true
+				context = append(context, e)
+			}
+		}
+	}
+	if uInv.State == record.UpstreamAccepted {
+		candidates = append(candidates, invRec.Candidates...)
+		addEvidence(invRec.Evidence)
+	}
+	if uInt.State == record.UpstreamAccepted {
+		candidates = append(candidates, intRec.Candidates...)
+		addEvidence(intRec.Evidence)
+		used := map[string]bool{}
+		for _, c := range intRec.Candidates {
+			for _, id := range c.ObservationIDs {
+				used[id] = true
+			}
+		}
+		for _, o := range intRec.Observations {
+			if used[o.ID] {
+				s.rec.Observations = append(s.rec.Observations, o)
+			}
+		}
+	}
+	contracts := []record.Contract{}
+	if uDoc.State == record.UpstreamAccepted {
+		contracts = nonNilList(docRec.Contracts)
+		addEvidence(citedDocuments(docRec))
+	}
+	s.rec.Candidates = nonNilList(candidates)
+	if len(candidates) == 0 {
+		s.setEvidence(context)
+		s.rec.Verifications = []record.Verification{}
+		s.rec.Limitations = addLim(s.rec.Limitations, limNoCandidates)
+		return s.finish()
+	}
+	withText, err := s.withText(context)
+	if err != nil {
+		s.setEvidence(context)
+		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+	}
+	plain := make([]CandidateText, len(candidates))
+	cited := map[string]bool{}
+	for i, c := range candidates {
+		plain[i] = c.CandidateText
+		for _, id := range c.Evidence {
+			cited[id] = true
+		}
+	}
+	extra, lims, err := expand(s.ctx, s.j.Snapshot, normalizedScope(s.j.Scope), withText, plain)
+	if err != nil {
+		s.setEvidence(context)
+		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+	}
+	// Callers and tests in a file a secret analyzer reported stay out.
+	extra = slices.DeleteFunc(extra, func(x Excerpt) bool {
+		if s.secretFiles()[x.Path] {
+			s.rec.Limitations = addLim(s.rec.Limitations, limSecretWithheld)
+			return true
+		}
 		return false
-	}
-	for i, p := range prior {
-		n := now[i]
-		if p.ID != n.ID || p.Path != n.Path || p.SHA256 != n.SHA256 || p.Start != n.Start || p.End != n.End || p.Kind != n.Kind || (p.Origin != "" && p.Origin != "context") {
-			return false
+	})
+	s.rec.Limitations = addLim(s.rec.Limitations, lims...)
+	// The request must fit PromptBudget. Expansion, uncited context and
+	// contracts go first; then candidates are verified as a prefix (investigate
+	// before interpret) and the rest stay unreviewed with a limitation. Every
+	// sent candidate keeps all excerpts it cites.
+	in := verifyInput{Observations: s.rec.Observations}
+	in.Scope.Snapshot = s.j.Snapshot.Digest
+	instructions := s.instructions(verifyContract)
+	var sent []record.Excerpt
+	verified := 0
+	fitted := false
+	for n := len(candidates); n >= 1 && !fitted; n-- {
+		citedBy := map[string]bool{}
+		for _, c := range candidates[:n] {
+			for _, id := range c.Evidence {
+				citedBy[id] = true
+			}
 		}
-	}
-	return true
-}
-
-func (h Handler) verify(ctx context.Context, j analysis.Job, runner executor.Runner, screen secretScreen) analysis.TaskResult {
-	prior, err := readRecord(j, "investigate")
-	if err != nil {
-		return result(domain.TaskSkippedPolicy, "dependency_failed")
-	}
-	c, err := buildScreenedCorpus(j.Snapshot, j.Scope, screen.withheld)
-	if err != nil {
-		return result(domain.TaskFailed, "review_input_unavailable")
-	}
-	if !sameEvidence(prior.Evidence, c.Excerpts) {
-		return result(domain.TaskFailed, "review_evidence_invalid")
-	}
-	for i := range c.Excerpts {
-		c.Excerpts[i].Origin = "context"
-	}
-	rec := Record{Schema: record.SchemaVersion, Snapshot: c.Snapshot, RunID: j.RunID, AttemptID: j.AttemptID, Stage: "verify", Outcome: record.OutcomeAccepted,
-		Facts: prior.Facts, Candidates: prior.Candidates, Limitations: addLim(nil, c.Limitations...), Calls: append([]Provenance{}, prior.Calls...)}
-	setEvidence := func(list []Excerpt) {
-		rec.Evidence = make([]Excerpt, len(list))
-		for i, e := range list {
-			e.Text = ""
-			rec.Evidence[i] = e
+		var ordered []record.Excerpt
+		for _, e := range withText {
+			if citedBy[e.ID] {
+				ordered = append(ordered, e)
+			}
 		}
-	}
-	setEvidence(c.Excerpts)
-	if screen.state == screenUnscreened {
-		rec.Limitations = addLim(rec.Limitations, limNotSecretScreened)
-	}
-	if len(prior.Candidates) == 0 {
-		rec.Limitations = addLim(rec.Limitations, limNoCandidates)
-		res := writeRecord(j, rec)
-		res.Limitations = rec.Limitations
-		return res
-	}
-	extra, lims, err := expand(ctx, j.Snapshot, j.Scope, c.Excerpts, prior.Candidates)
-	if err != nil {
-		return failedRecord(j, rec, result(domain.TaskFailed, "review_input_unavailable"))
-	}
-	// Callers and tests in a file the secrets screen withholds stay out.
-	if n := len(extra); n > 0 {
-		extra = slices.DeleteFunc(extra, func(x Excerpt) bool { return screen.withheld[x.Path] })
-		if len(extra) < n {
-			lims = addLim(lims, limSecretWithheld)
+		keep := len(ordered)
+		ordered = append(ordered, extra...)
+		for _, e := range withText {
+			if !citedBy[e.ID] {
+				ordered = append(ordered, e)
+			}
 		}
-	}
-	pack, err := reviewpack.For("verify")
-	if err != nil {
-		return failedRecord(j, rec, result(domain.TaskFailed, "review_pack_invalid"))
-	}
-	instructions := pack.Text + "\n" + verifyContract + verifyRules
-	scope := c
-	scope.Limitations = addLim(append([]string{}, c.Limitations...), lims...)
-	for {
-		scope.Excerpts = append(append([]Excerpt{}, c.Excerpts...), extra...)
-		b, err := json.Marshal(verifyInput{Scope: scope, Facts: prior.Facts, Candidates: prior.Candidates})
-		if err == nil && len(b)+len(instructions)+len(repairRules)+4096 <= verifyBudget {
+		if len(ordered) > 40 {
+			ordered = ordered[:max(keep, 40)]
+		}
+		for _, withContracts := range []bool{true, false} {
+			x := in
+			x.Candidates, x.Contracts = candidates[:n], []record.Contract{}
+			if withContracts {
+				x.Contracts = contracts
+			}
+			build := func(list []record.Excerpt) ([]byte, error) {
+				y := x
+				y.Scope.Excerpts, y.Scope.Limitations = list, s.rec.Limitations
+				return marshal(y)
+			}
+			list, trimmed, err := s.fitExcerpts(instructions, keep, ordered, build)
+			if errors.Is(err, errTooLarge) {
+				continue
+			}
+			if err != nil {
+				s.setEvidence(context)
+				return s.inputFailure(err)
+			}
+			if trimmed {
+				s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, limCallersOutside)
+			}
+			if !withContracts && len(contracts) > 0 {
+				s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, "contracts_outside_verify_input")
+			}
+			in, sent, verified, fitted = x, list, n, true
 			break
 		}
-		if len(extra) == 0 {
-			return failedRecord(j, rec, result(domain.TaskFailed, reasonInputTooLarge))
-		}
-		extra = extra[:len(extra)-1]
-		scope.Limitations = addLim(scope.Limitations, limCallersOutside)
 	}
-	rec.Limitations = addLim(rec.Limitations, scope.Limitations...)
-	setEvidence(scope.Excerpts)
-	catalog := map[string]Excerpt{}
-	ids := make([]string, 0, len(scope.Excerpts))
-	for _, e := range rec.Evidence {
-		catalog[e.ID] = e
+	if !fitted {
+		s.setEvidence(context)
+		return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
+	}
+	in.Scope.Excerpts, in.Scope.Limitations = sent, s.rec.Limitations
+	// The record keeps every candidate (its lineage) with the excerpts they
+	// cite, plus what was sent.
+	recorded := append([]record.Excerpt{}, sent...)
+	have := catalogOf(sent)
+	for _, e := range context {
+		if _, ok := have[e.ID]; !ok && cited[e.ID] {
+			recorded = append(recorded, e)
+		}
+	}
+	s.setEvidence(recorded)
+	catalog := catalogOf(sent)
+	for id, e := range catalog {
+		e.Text = ""
+		catalog[id] = e
+	}
+	ids := make([]string, 0, len(sent))
+	for _, e := range sent {
 		ids = append(ids, e.ID)
 	}
+	budgetDropped := candidates[verified:]
+	candidatesSent := candidates[:verified]
+	if len(budgetDropped) > 0 {
+		s.rec.Limitations = addLim(s.rec.Limitations, limVerifyBudget)
+	}
 
-	accepted := map[string]Verification{}
-	pending := prior.Candidates
+	accepted := map[string]record.Verification{}
+	pending := candidatesSent
 	var repair *repairInput
-	for attempt := 1; attempt <= 2 && len(pending) > 0; attempt++ {
-		if ctx.Err() != nil {
-			return failedRecord(j, rec, result(domain.TaskCancelled, "cancelled"))
+	repaired, retried := false, false
+	// Observation IDs are in the request but are not evidence; an entry that
+	// cites one beside valid evidence may be trimmed (parseVerificationItems).
+	observationIDs := map[string]bool{}
+	for _, o := range in.Observations {
+		observationIDs[o.ID] = true
+	}
+	for attempt := 1; attempt <= record.RoleMaxCalls && len(pending) > 0; attempt++ {
+		if s.ctx.Err() != nil {
+			return *s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
-		in := verifyInput{Scope: scope, Facts: prior.Facts, Candidates: pending, Repair: repair}
-		query, err := json.Marshal(in)
+		x := in
+		x.Candidates, x.Repair = pending, repair
+		query, err := marshal(x)
 		if err != nil {
-			return failedRecord(j, rec, result(domain.TaskFailed, "review_input_unavailable"))
+			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 		}
 		text := instructions
 		if repair != nil {
-			text += repairRules
+			text += verifyRepairRules
 		}
-		reply := h.Caller.Review(ctx, runner, opencode.Request{Role: "verify", Scratch: j.Scratch, SnapshotDigest: c.Snapshot,
-			Instructions: text, Input: query, ProtectedRoots: []string{j.Snapshot.SnapshotDir}})
-		rec.Limitations = noteVersion(rec.Limitations, reply)
-		call := Provenance{Role: "verify", Model: reply.Model, Version: reply.Version, PackDigest: pack.Digest, PackFiles: pack.Files,
-			RequestDigest: reply.RequestDigest, Usage: usage(reply.Usage), Attempt: attempt}
+		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: query, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
+		size := len(opencode.Prompt(q))
+		if size > PromptBudget {
+			return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
+		}
+		if err := s.countCall(); err != nil {
+			return *s.fail(result(domain.TaskFailed, reasonCallCountFailed))
+		}
+		reply := s.h.Caller.Review(s.ctx, s.runner, q)
+		s.rec.Limitations = noteVersion(s.rec.Limitations, reply)
+		call := record.Call{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,
+			PackFiles: s.pack.Files, RequestDigest: reply.RequestDigest, RequestBytes: size, Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
 		if reply.Reason != "" && reply.Reason != "model_output_invalid" {
 			call.Outcome = reply.Reason
 			if !record.ValidCode(call.Outcome) {
 				call.Outcome = "model_unavailable"
 			}
-			rec.Calls = append(rec.Calls, call)
-			// A failed process cannot back a succeeded task (the worker checks
-			// every recorded execution), so a failed repair call fails the task.
-			return failedRecord(j, rec, failure(reply))
+			s.rec.Calls = append(s.rec.Calls, call)
+			// A later call that fails (timeout, refusal) keeps the verdicts
+			// already accepted; the rest are quarantined and the task ends
+			// incomplete. Cancellation still fails the whole stage.
+			if len(accepted) == 0 || s.ctx.Err() != nil || call.Outcome == "cancelled" {
+				return *s.fail(failure(reply))
+			}
+			s.rec.Limitations = addLim(s.rec.Limitations, "verification_call_failed")
+			break
 		}
 		want := map[string]bool{}
 		for _, p := range pending {
 			want[p.ID] = true
 		}
-		got, itemErrs, outputErrs := map[string]Verification{}, map[string][]string{}, []string{"output_not_json"}
-		if reply.Reason == "" {
-			got, itemErrs, outputErrs = parseVerifications(reply.Output, want, catalog)
+		notJSON := reply.Reason != ""
+		got, itemErrs, outputErrs, dropped := map[string]record.Verification{}, map[string][]string{}, []string{"output_not_json"}, []string(nil)
+		if !notJSON {
+			got, itemErrs, outputErrs, dropped = parseVerificationItems(reply.Output, want, catalog, observationIDs)
 		}
-		call.Outcome = callRejected
+		for id, v := range got {
+			if verificationClaimsExecution(v) {
+				delete(got, id)
+				itemErrs[id] = addLim(itemErrs[id], "execution_claim")
+			}
+		}
+		all := addLim(nil, outputErrs...)
+		for _, errs := range itemErrs {
+			all = addLim(all, errs...)
+		}
+		for _, id := range dropped {
+			if _, ok := got[id]; ok {
+				all = addLim(all, "evidence_id_dropped")
+			}
+		}
+		call.Outcome, call.OutputErrors = callRejected, nonNil(all)
 		if len(got) > 0 {
 			call.Outcome = callAccepted
 		}
-		rec.Calls = append(rec.Calls, call)
+		s.rec.Calls = append(s.rec.Calls, call)
+		s.noteExecutionClaim(call)
 		for id, v := range got {
 			accepted[id] = v
 		}
-		var next []Candidate
+		// A reply that is not JSON says nothing about the items: it gets one
+		// retry of the same request (with the earlier item errors, if any)
+		// and does not use up the repair of the rejected items.
+		if notJSON {
+			if retried {
+				break
+			}
+			retried = true
+		} else {
+			if repaired {
+				var next []record.Candidate
+				for _, p := range pending {
+					if _, ok := accepted[p.ID]; !ok {
+						next = append(next, p)
+					}
+				}
+				pending = next
+				break
+			}
+			repaired = true
+		}
+		prior := map[string][]string{}
+		if notJSON && repair != nil {
+			for _, item := range repair.Candidates {
+				prior[item.ID] = item.Errors
+			}
+		}
+		var next []record.Candidate
 		repair = &repairInput{OutputErrors: nonNil(outputErrs), Candidates: []repairItem{}, AcceptedIDs: ids}
 		for _, p := range pending {
 			if _, ok := accepted[p.ID]; ok {
@@ -231,6 +353,9 @@ func (h Handler) verify(ctx context.Context, j analysis.Job, runner executor.Run
 			next = append(next, p)
 			errs := itemErrs[p.ID]
 			if len(errs) == 0 {
+				errs = prior[p.ID]
+			}
+			if len(errs) == 0 {
 				errs = []string{"verification_missing"}
 			}
 			repair.Candidates = append(repair.Candidates, repairItem{ID: p.ID, Errors: errs})
@@ -238,240 +363,31 @@ func (h Handler) verify(ctx context.Context, j analysis.Job, runner executor.Run
 		pending = next
 	}
 	if len(accepted) == 0 {
-		return failedRecord(j, rec, result(domain.TaskFailed, reasonOutputInvalid))
+		return *s.fail(result(domain.TaskFailed, reasonOutputInvalid))
 	}
-	rec.Verifications = make([]Verification, len(rec.Candidates))
-	for i, cand := range rec.Candidates {
-		v, ok := accepted[cand.ID]
-		if !ok {
-			v = unreviewed(cand.ID, record.LimQuarantined)
-			rec.Limitations = addLim(rec.Limitations, record.LimQuarantined)
+	s.rec.Verifications = make([]record.Verification, len(candidates))
+	for i, c := range candidates {
+		v, ok := accepted[c.ID]
+		switch {
+		case ok:
+		case i >= verified:
+			v = unreviewed(c.ID, limVerifyBudget)
+		default:
+			v = unreviewed(c.ID, record.LimQuarantined)
+			s.rec.Limitations = addLim(s.rec.Limitations, record.LimQuarantined)
 		}
 		if slices.Contains(v.Limitations, record.LimReproductionRejected) {
-			rec.Limitations = addLim(rec.Limitations, record.LimReproductionRejected)
+			s.rec.Limitations = addLim(s.rec.Limitations, record.LimReproductionRejected)
 		}
-		rec.Verifications[i] = v
+		s.rec.Verifications[i] = v
 	}
-	res := writeRecord(j, rec)
-	if res.Status == domain.TaskSucceeded && len(pending) > 0 {
+	res := s.finish()
+	switch {
+	case res.Status != domain.TaskSucceeded:
+	case len(pending) > 0:
 		res.Status, res.Reason = domain.TaskFailed, "review_output_incomplete"
-	}
-	res.Limitations = rec.Limitations
-	return res
-}
-
-// fail keeps the attempted calls and candidates (all unreviewed) in a failed
-// record so a report can show what was tried; no model result is retained.
-func failedRecord(j analysis.Job, rec Record, res analysis.TaskResult) analysis.TaskResult {
-	rec.Outcome, rec.FailureReason = record.OutcomeFailed, res.Reason
-	if !record.ValidCode(rec.FailureReason) {
-		rec.FailureReason = "review_failed"
-	}
-	if rec.Stage == "verify" {
-		rec.Verifications = make([]Verification, len(rec.Candidates))
-		for i, cand := range rec.Candidates {
-			rec.Verifications[i] = unreviewed(cand.ID, record.LimNotCompleted)
-		}
-	}
-	for i := range rec.Calls {
-		if rec.Calls[i].Role == rec.Stage && rec.Calls[i].Outcome == callAccepted {
-			rec.Calls[i].Outcome = callDiscarded
-		}
-	}
-	if art, err := persist(j, rec); err == nil {
-		res.Artifacts = append(res.Artifacts, art)
-	} else {
-		res.Limitations = addLim(res.Limitations, "review_record_failed")
+	case len(budgetDropped) > 0:
+		res.Status, res.Reason = domain.TaskFailed, "review_input_incomplete"
 	}
 	return res
-}
-
-// parseVerifications accepts each entry independently. Output-level errors
-// and per-candidate error codes are fixed platform strings; no model text is
-// echoed into a repair request.
-func parseVerifications(raw json.RawMessage, want map[string]bool, catalog map[string]Excerpt) (map[string]Verification, map[string][]string, []string) {
-	got, itemErrs, outputErrs, _ := parseVerificationItems(raw, want, catalog, nil)
-	return got, itemErrs, outputErrs
-}
-
-// parseVerificationItems is parseVerifications; an entry whose only defect
-// is citing, in its evidence lists, IDs the platform itself gave in the
-// request as something other than evidence (droppable: the observation IDs)
-// is accepted without them when what remains passes every check of its
-// verdict on its own. Any other unknown ID keeps the entry rejected. Those
-// candidates are returned in dropped.
-func parseVerificationItems(raw json.RawMessage, want map[string]bool, catalog map[string]Excerpt, droppable map[string]bool) (map[string]Verification, map[string][]string, []string, []string) {
-	got, itemErrs := map[string]Verification{}, map[string][]string{}
-	var dropped []string
-	var res struct {
-		Verifications []json.RawMessage `json:"verifications"`
-	}
-	if domain.DecodeStrict(raw, &res) != nil || res.Verifications == nil {
-		return got, itemErrs, []string{"output_schema_invalid"}, dropped
-	}
-	var outputErrs []string
-	count := map[string]int{}
-	heads := make([]string, len(res.Verifications))
-	for i, item := range res.Verifications {
-		var head struct {
-			CandidateID string `json:"candidate_id"`
-		}
-		if json.Unmarshal(item, &head) != nil || !want[head.CandidateID] {
-			outputErrs = addLim(outputErrs, "unknown_candidate_id")
-			continue
-		}
-		heads[i] = head.CandidateID
-		count[head.CandidateID]++
-	}
-	for i, item := range res.Verifications {
-		id := heads[i]
-		if id == "" {
-			continue
-		}
-		if count[id] > 1 {
-			itemErrs[id] = []string{"duplicate_candidate_verification"}
-			continue
-		}
-		var m modelVerification
-		if domain.DecodeStrict(item, &m) != nil {
-			itemErrs[id] = []string{"item_schema_invalid"}
-			continue
-		}
-		v, errs := checkModel(m, catalog)
-		if len(droppable) > 0 && slices.Equal(errs, []string{"evidence_id_unknown"}) && onlyDroppable(m.SupportingEvidence, catalog, droppable) && onlyDroppable(m.Counterevidence, catalog, droppable) {
-			known := m
-			known.SupportingEvidence, known.Counterevidence = knownIDs(m.SupportingEvidence, catalog), knownIDs(m.Counterevidence, catalog)
-			if kv, kerrs := checkModel(known, catalog); len(kerrs) == 0 {
-				v, errs = kv, nil
-				dropped = append(dropped, id)
-			}
-		}
-		if len(errs) > 0 {
-			itemErrs[id] = errs
-		} else {
-			got[id] = v
-		}
-	}
-	return got, itemErrs, outputErrs, dropped
-}
-
-// onlyDroppable reports whether every ID of list outside catalog is droppable.
-func onlyDroppable(list []string, catalog map[string]Excerpt, droppable map[string]bool) bool {
-	for _, id := range list {
-		if _, ok := catalog[id]; !ok && !droppable[id] {
-			return false
-		}
-	}
-	return true
-}
-
-// knownIDs keeps the IDs of list that are in catalog, in order.
-func knownIDs(list []string, catalog map[string]Excerpt) []string {
-	if list == nil {
-		return nil
-	}
-	out := []string{}
-	for _, id := range list {
-		if _, ok := catalog[id]; ok {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-func checkModel(m modelVerification, catalog map[string]Excerpt) (Verification, []string) {
-	v := Verification{CandidateID: m.CandidateID, Verdict: m.Verdict, Category: m.Category, Severity: m.Severity, SeverityReason: m.SeverityReason, Impact: m.Impact,
-		ValidConditions: nonNil(m.ValidConditions), InvalidConditions: nonNil(m.InvalidConditions), SupportingEvidence: nonNil(m.SupportingEvidence),
-		Counterevidence: nonNil(m.Counterevidence), UnresolvedAssumptions: nonNil(m.UnresolvedAssumptions), NextVerification: nonNil(m.NextVerification), Limitations: []string{}}
-	var errs []string
-	bad := func(code string) { errs = addLim(errs, code) }
-	if m.ValidConditions == nil || m.InvalidConditions == nil || m.SupportingEvidence == nil || m.Counterevidence == nil || m.UnresolvedAssumptions == nil || m.NextVerification == nil {
-		bad("item_schema_invalid")
-	}
-	if v.Verdict == "reproduced" {
-		// Only a platform execution artifact can reproduce; verification has none.
-		v.Verdict = record.VerdictInconclusive
-		v.Limitations = []string{record.LimReproductionRejected}
-	}
-	switch v.Verdict {
-	case record.VerdictSupported, record.VerdictRefuted, record.VerdictInconclusive:
-	default:
-		bad("verdict_invalid")
-	}
-	if !slices.Contains(record.Categories, v.Category) {
-		bad("category_invalid")
-	}
-	if v.Severity == "critical" {
-		bad("severity_not_assignable")
-	} else if !slices.Contains(record.Severities, v.Severity) {
-		bad("severity_invalid")
-	}
-	if !record.SafeText(v.SeverityReason) || !record.SafeText(v.Impact) {
-		bad("text_invalid")
-	}
-	for _, list := range [][]string{v.ValidConditions, v.InvalidConditions, v.UnresolvedAssumptions, v.NextVerification} {
-		if len(list) > 4 {
-			bad("list_too_long")
-		}
-		for _, s := range list {
-			if !record.SafeText(s) || len(s) > 600 {
-				bad("text_invalid")
-			}
-		}
-	}
-	if len(v.NextVerification) == 0 || len(v.NextVerification) > 3 {
-		bad("next_verification_invalid")
-	}
-	for _, list := range [][]string{v.SupportingEvidence, v.Counterevidence} {
-		if len(list) > 8 {
-			bad("evidence_list_too_long")
-		}
-		seen := map[string]bool{}
-		for _, id := range list {
-			if _, ok := catalog[id]; !ok {
-				bad("evidence_id_unknown")
-			}
-			if seen[id] {
-				bad("evidence_id_duplicate")
-			}
-			seen[id] = true
-		}
-	}
-	switch v.Verdict {
-	case record.VerdictSupported:
-		code := false
-		for _, id := range v.SupportingEvidence {
-			k := catalog[id].Kind
-			code = code || k == "code" || k == "test"
-		}
-		if !code {
-			bad("supported_without_code_evidence")
-		}
-		if len(v.ValidConditions) == 0 {
-			bad("valid_conditions_missing")
-		}
-	case record.VerdictRefuted:
-		if !record.RefsOK(v.Counterevidence, catalog, "code", 8) {
-			bad("refuted_without_counterevidence")
-		}
-		if len(v.InvalidConditions) == 0 {
-			bad("invalid_conditions_missing")
-		}
-	case record.VerdictInconclusive:
-		if len(v.UnresolvedAssumptions) == 0 && len(v.Limitations) == 0 {
-			bad("unresolved_assumptions_missing")
-		}
-	}
-	if len(errs) == 0 && record.CheckVerification(v, catalog) != nil {
-		bad("verification_invalid")
-	}
-	if len(errs) == 0 && slices.Contains(v.Limitations, record.LimReproductionRejected) {
-		// A model claiming execution supplies no trusted account of what happened.
-		v.Severity = "info"
-		v.SeverityReason = "실행 근거가 없어 영향을 확정하지 못했다."
-		v.Impact = "실행 결과를 확인할 수 없다."
-		v.ValidConditions, v.InvalidConditions, v.UnresolvedAssumptions = []string{}, []string{}, []string{}
-		v.NextVerification = []string{"인용한 코드와 실제 호출 조건을 대조한다."}
-	}
-	return v, errs
 }

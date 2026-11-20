@@ -1,0 +1,73 @@
+{
+  "schema_version": "0.2",
+  "pack": {
+    "id": "review",
+    "version": "2.0.0"
+  },
+  "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+  "run_id": "0195f3a0-0000-7000-8000-000000000025",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000026",
+  "stage": "environment",
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "env.discover",
+      "state": "accepted",
+      "sha256": "c80bd911ac91b30e0fb197e8fa1cc0e4240d458fcf9a39dc55571b10617b85e3"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_5b684fd3aa8c75f7c4389017",
+      "path": "svc/b/go.mod",
+      "sha256": "67b2518c1138ca37ef84d62ecda10a10ca79f7c8b6a928f2af72b8ea6eacba2e",
+      "start_line": 3,
+      "end_line": 3,
+      "kind": "manifest"
+    }
+  ],
+  "observations": [],
+  "environment_notes": [
+    {
+      "module": "go:svc/b",
+      "requirement_ids": [
+        "go_directive@svc/b/go.mod"
+      ],
+      "evidence_ids": [
+        "ev_5b684fd3aa8c75f7c4389017"
+      ],
+      "affected_checks": "svc/b 모듈의 go vet은 선언 버전보다 낮은 노드 toolchain 때문에 수행할 수 없다.",
+      "still_checkable": "루트와 svc/a 모듈의 정적 검사와 코드 검토는 가능하다.",
+      "needed_observation": "go 1.30 이상 toolchain의 노드 관측"
+    }
+  ],
+  "limitations": [
+    "model_input_not_secret_screened"
+  ],
+  "calls": [
+    {
+      "role": "environment",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.0.0",
+      "pack_sha256": "ac3da059a7fd12bbba9c509ed2e8e8001a0d503f7e587482b9e01b64b73e5e28",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "environment.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "d7bcef2e3c1f44f7400c61370d8cbdfd83574e0a2d0bbcb991f9cf5728924006",
+      "request_bytes": 9973,
+      "usage": {
+        "input": 781,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

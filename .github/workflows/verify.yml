@@ -81,6 +81,7 @@ jobs:
           python -m unittest discover -s scripts -p test_model_budget_relay.py -v
           python -m unittest discover -s scripts -p test_quality_eval.py -v
           python -m unittest discover -s scripts -p test_offline_pack.py -v
+          python -m unittest discover -s scripts -p test_stage_labels.py -v
           python scripts/validate_bundle.py
           python -m unittest discover -s fixtures/cleanup -p 'test_*.py' -v
           python fixtures/regression/corpus.py --check

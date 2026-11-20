@@ -37,7 +37,7 @@
         {
             "file": "[REDACTED]/mod/use.py",
             "severity": "error",
-            "message": "Import \"not_a_real_module_w17\" could not be resolved",
+            "message": "Import \"not_a_real_module_pkg\" could not be resolved",
             "range": {
                 "start": {
                     "line": 5,

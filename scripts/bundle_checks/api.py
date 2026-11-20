@@ -481,7 +481,7 @@ def check_account_contracts() -> None:
 
 
 def check_shared_service_contracts() -> None:
-    """One service, per-user permissions (docs/API.md#설치-정보, A52): the
+    """One service, per-user permissions (docs/API.md#설치-정보, A53): the
     answers recorded from a real `codeye up --plain-http` fit their OpenAPI
     schemas; a user's setup says why a path cannot be used exactly when no
     folder is readable; the GitHub connection never carries a token."""
@@ -626,7 +626,7 @@ def check_doctor_operations(validator, example) -> None:
     bad["tools"][0]["path"] = "/home/user/.local/bin/go"
     cases.append(("tool path in the doctor report", bad))
     bad = copy.deepcopy(example)
-    bad["checks"] = [c for c in bad["checks"] if c["id"] != "database"] + [{"id": "model", "status": "unverified", "reason": "adapter_contract_pending_w10"}]
+    bad["checks"] = [c for c in bad["checks"] if c["id"] != "database"] + [{"id": "model", "status": "unverified", "reason": "adapter_contract_pending"}]
     cases.append(("a check that is no longer reported", bad))
     # The offline readiness section (docs/OPERATIONS.md#오프라인-준비-점검) is optional and closed.
     ensure("offline" in example, "Doctor example lacks the offline readiness section")

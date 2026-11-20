@@ -17,13 +17,13 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
-	rolepack "github.com/jihoon22-lee/CODEYE/prompts/review-r1"
+	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review"
 )
 
 // Running the review slices (docs/REVIEW.md#모듈-단위-검토-분할).
 //
 // The call budget is attempt-local: one attempt is one worker process that
-// runs its tasks one after another, and every role-pack model call of the
+// runs its tasks one after another, and every review model call of the
 // attempt appends one line to a counter file in the attempt scratch before
 // the call is made (countCall). A slice investigate is admitted, in plan
 // order, only while the ceiling minus the calls made so far is at least
@@ -48,10 +48,10 @@ const DefaultMaxCalls = record.DefaultMaxCalls
 // whole-run roles' worst case, at most what every slice could use.
 func ValidMaxCalls(n int) bool { return record.ValidMaxCalls(n) }
 
-func callsPath(j analysis.Job) string { return filepath.Join(j.Scratch, "review.r1.calls") }
-func scopePath(j analysis.Job) string { return filepath.Join(j.Scratch, "review.r1.scope.json") }
+func callsPath(j analysis.Job) string { return filepath.Join(j.Scratch, "review.calls") }
+func scopePath(j analysis.Job) string { return filepath.Join(j.Scratch, "review.scope.json") }
 func admissionPath(j analysis.Job, key string) string {
-	return filepath.Join(j.Scratch, "review.r1.admission."+key)
+	return filepath.Join(j.Scratch, "review.admission."+key)
 }
 
 // countCall records one model call of this attempt before it is made. A
@@ -89,9 +89,9 @@ func callsUsed(j analysis.Job) (int, error) {
 // docs/REVIEW.md#검토-우선순위) and writes the scope artifact the slots run
 // from.
 func (s *roleStage) scopeTask() analysis.TaskResult {
-	sel, err := rolepack.For(record.StageInvestigate, languagesInScope(s.j))
+	sel, err := reviewpack.For(record.StageInvestigate, languagesInScope(s.j))
 	if err != nil {
-		return result(domain.TaskFailed, "review_pack_invalid")
+		return result(domain.TaskFailed, "review_instructions_invalid")
 	}
 	used, err := callsUsed(s.j)
 	if err != nil {
@@ -283,12 +283,12 @@ func screenOf(sc secretScreen) string {
 // when it made a call) and the upstream binding of that record.
 func (s *roleStage) overviewOffered() ([]string, record.Upstream) {
 	u := record.Upstream{Source: "review." + record.StageInvestigate}
-	b, err := readBounded(rolePath(s.j, record.StageInvestigate), record.MaxBytes)
+	b, err := readBounded(recordPath(s.j, record.StageInvestigate), record.MaxBytes)
 	if err != nil {
 		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordMissing
 		return []string{}, u
 	}
-	r, err := record.DecodeRole(b, expectRole(s.j, record.StageInvestigate))
+	r, err := record.Decode(b, expectStage(s.j, record.StageInvestigate))
 	if err != nil {
 		u.State, u.Reason = record.UpstreamUnavailable, reasonRecordInvalid
 		return []string{}, u
@@ -298,7 +298,7 @@ func (s *roleStage) overviewOffered() ([]string, record.Upstream) {
 	} else {
 		u.State, u.Reason = record.UpstreamFailed, r.FailureReason
 	}
-	sent := slices.ContainsFunc(r.Calls, func(c record.RoleCall) bool { return c.RequestDigest != "" })
+	sent := slices.ContainsFunc(r.Calls, func(c record.Call) bool { return c.RequestDigest != "" })
 	out := []string{}
 	for _, e := range r.Evidence {
 		if sent && e.Origin == "context" && (e.Kind == "code" || e.Kind == "test") && !slices.Contains(out, e.Path) {
@@ -310,7 +310,7 @@ func (s *roleStage) overviewOffered() ([]string, record.Upstream) {
 }
 
 func scopeExpect(j analysis.Job) record.Expect {
-	e := expectRole(j, "")
+	e := expectStage(j, "")
 	e.Stage = ""
 	return e
 }

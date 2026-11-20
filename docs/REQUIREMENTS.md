@@ -41,14 +41,14 @@ CODEYE 저장소 자체의 자동 테스트(GitHub Actions)는 위 CI 비목표�
 
 ## 현재 제공 범위
 
-지금 쓸 수 있는 것은 **한 Linux 머신에서 `codeye up`으로 띄우는 웹 서비스**다. 혼자 써도, 다른 머신의 여러 사용자를 초대해도 같은 서비스이며 로그인한 사람마다 받은 권한으로 분석할 수 있는 것이 정해진다(A52). 설치와 사용은 [사용 안내서](GUIDE.md)를 따른다.
+지금 쓸 수 있는 것은 **한 Linux 머신에서 `codeye up`으로 띄우는 웹 서비스**다. 혼자 써도, 다른 머신의 여러 사용자를 초대해도 같은 서비스이며 로그인한 사람마다 받은 권한으로 분석할 수 있는 것이 정해진다(A53). 설치와 사용은 [사용 안내서](GUIDE.md)를 따른다.
 
 | 영역 | 현재 제공 |
 |---|---|
 | 실행 형태 | 상태 디렉터리의 관리형 PostgreSQL(기본) 또는 운영자가 준비한 PostgreSQL, controller(loopback, 또는 다른 머신용 TLS·명시적 평문 HTTP)와 로컬 에이전트. `codeye up`·`open`·`start`·`stop`·`status`(Linux 전용), 한 머신의 여러 워커와 최소·최대 자동 증감, 취소, lease·fencing |
 | 입력 | 사용자에게 허가된(또는 모두에게 연) 서버 폴더의 경로, 승인된 HTTPS 호스트의 Git 저장소 브랜치와 github.com pull request(비공개 저장소는 run을 시작한 사람의 token). 설명 없이 등록하고 문서·환경·모듈을 자동 탐색 |
 | 정적 분석 | Go(go vet·Staticcheck), C/C++(cppcheck·clang-tidy), Python(ruff·mypy·pyright·bandit), JS/TS(ESLint·tsc), Rust(cargo check·clippy) 다섯 언어 팩과 언어 무관 구조·중복 지표(lizard·jscpd)·비밀정보(gitleaks). 도구는 운영자가 설치하고 경로를 지정한다 |
-| 모델 검토 | 기본 검토 팩 `review-r1`(이전 기록 재현용 `review-v1`), 승인된 OpenCode 연결. 모델 없이도 도구 결과 보고서가 나온다 |
+| 모델 검토 | 검토 지침 하나(`prompts/review`), 승인된 OpenCode 연결. 모델 없이도 도구 결과 보고서가 나온다 |
 | 보고서 | 종합과 분석 종류별 절(환경·문서·정적 분석·지표·비밀정보·모델 검토·분석 공백), 개별 근거, JSON·Markdown·HTML 내보내기(코드 제외가 기본), 프로젝트별 단계 표시와 가중 진행률, SSE 재접속 |
 | 예약·이력 | 시간대가 있는 예약, 이전 실행과의 비교(absent≠fixed), 사람의 판정(disposition) |
 | 운영 | 저장 영역 상한, 같은 시점 DB·산출물 백업과 새 위치로 복원, `codeye doctor` |

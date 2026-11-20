@@ -108,10 +108,10 @@
         "truncated": false
       },
       "stdout": {
-        "captured_bytes": 711,
+        "captured_bytes": 712,
         "incomplete": false,
-        "sha256": "b64156a05d60904320bd4fc8a533fc52dcbc45271e5cf4d204a166d1ec9302c0",
-        "total_bytes": 711,
+        "sha256": "7e08eddc2a7d16752978fdec0dd98d284c7bf8930050729cb678318509c9448d",
+        "total_bytes": 712,
         "truncated": false
       }
     },
@@ -176,7 +176,7 @@
   ],
   "module": {
     "dir": "packages/app",
-    "name": "@w18/app"
+    "name": "@jsts/app"
   },
   "observations": [
     {
@@ -237,7 +237,7 @@
     "config_files": [
       {
         "path": "packages/app/tsconfig.json",
-        "sha256": "6e8504255df5122cae9693a5ef84818aa505e05b8cb602d4781f1d982f873131"
+        "sha256": "c9cf52563b57ba304daf7fc2603179ec6302e75a2999936109edcce830445c0f"
       },
       {
         "path": "tsconfig.base.json",
@@ -262,7 +262,7 @@
     "version": "1"
   },
   "schema_version": "0.1",
-  "snapshot_manifest_digest": "f9577ceb6c85377061a50a8d28f609b72dd3c3072f2fb5a1624ed627a5a20146",
+  "snapshot_manifest_digest": "e72b2e460c4b220d05c27a5a7617e403a87d07bfb1023e568cb43e757afcb9f9",
   "target": {
     "platform": null,
     "properties": {

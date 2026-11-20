@@ -3,7 +3,7 @@
 import requests
 import yaml
 
-import not_a_real_module_w17
+import not_a_real_module_pkg
 
 
 class Session(requests.Session):
@@ -11,7 +11,7 @@ class Session(requests.Session):
 
 
 def get(url: str) -> int:
-    return not_a_real_module_w17.fetch(url).status
+    return not_a_real_module_pkg.fetch(url).status
 
 
 def load(s: str) -> int:

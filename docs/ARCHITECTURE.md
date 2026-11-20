@@ -495,7 +495,7 @@ task key와 단계의 대응:
 | task | 단계 |
 |---|---|
 | `env.discover`, `review.environment` | `environment` |
-| `docs.discover`, `review.documents`, `review.context`(review-v1) | `documents` |
+| `docs.discover`, `review.documents` | `documents` |
 | 분석기 task(go vet 등) | `static_analysis` |
 | `review.investigate`, `review.interpret`, `review.verify` | `code_review` |
 | `review.scope`, `review.investigate.sNNN`, `review.verify.sNNN`(모듈 단위 slice, [검토](REVIEW.md#모듈-단위-검토-분할)) | `code_review` |

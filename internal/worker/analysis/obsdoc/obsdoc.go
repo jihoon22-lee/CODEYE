@@ -2,7 +2,7 @@
 // analyzer packs (docs/ANALYZERS.md). One document describes one analyzer
 // task: which tool ran where, how each execution ended, what the parser read
 // and which raw tool diagnostics it kept. It is I/O free so the worker, the
-// role pack roles and the report decoder validate the same bytes with the
+// review roles and the report decoder validate the same bytes with the
 // same rules. A parser failure is never encoded as "no observations".
 package obsdoc
 
@@ -376,7 +376,7 @@ func invalid(format string, a ...any) error {
 }
 
 // ArtifactPath is where an analyzer task writes its envelope in attempt
-// scratch; later roles of the attempt (role pack interpret role) read it there
+// scratch; later roles of the attempt (review interpret role) read it there
 // and validate it again.
 func ArtifactPath(scratch, taskKey string) string {
 	return filepath.Join(scratch, "analyzers", taskKey, "observations.json")

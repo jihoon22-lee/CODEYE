@@ -69,11 +69,6 @@ func TestUpGitTarget(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		return
 	}
-	// The new configuration has no state_dir: keep the default state
-	// directory inside the test's own home.
-	t.Setenv("HOME", dir)
-	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "state"))
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 	var out, errb bytes.Buffer
 	code := personalUp(context.Background(), []string{"--config", filepath.Join(dir, "p.json"), "git@github.com:o/r.git"}, &out, &errb)
 	if code != 2 || !strings.Contains(errb.String(), "only HTTPS") {

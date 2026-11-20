@@ -5,7 +5,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000506",
       "media_type": "application/vnd.codeye.source-manifest+json",
       "role": "source_manifest",
-      "sha256": "bb0ed61201811310aa90a4c749482ce1750da7f2afc35103e36bca82f9c624c6",
+      "sha256": "789ee42808b86d981d379efccbce3b62931f9ad8ee20d11ffdb58e873885f8c4",
       "size_bytes": 2081,
       "task_key": null
     },
@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056b",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "d456675cbe8b25fec6f1612bfdbe49ed98225e252a7218e0b86d82b9bb0e36bd",
+      "sha256": "f72a9ef193df248de041d3858e9f20a80dbccf1b4b8ac2129462b7aeaa588a5c",
       "size_bytes": 21210,
       "task_key": null
     },
@@ -23,8 +23,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000532",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
-      "sha256": "4e4af1e70e5412fcd5bb003c557472c33c1996e277a2d3e2d71c5bc88bdfdd40",
-      "size_bytes": 3006,
+      "sha256": "0746e93ed5c18ddd5025112d9957bb8bd22b3236b464bcba2d76b9e22e81edb0",
+      "size_bytes": 3014,
       "task_key": "go-vet"
     },
     {
@@ -32,8 +32,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000053c",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
-      "sha256": "307cbc6cbdb30b5648e22d7132978f21d3ac0aa496fdf547d8e3d4f816c283c5",
-      "size_bytes": 3038,
+      "sha256": "f0312868bdf4e3a46aa92a6955a38e8ad2dd47408bc5144136e8a7c475143280",
+      "size_bytes": 3046,
       "task_key": "go-vet.m01"
     },
     {
@@ -41,8 +41,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000542",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
-      "sha256": "16adcaf2411bd6ec09ad14373f9aeb036adef56e485289c372fbbacd95d83a6f",
-      "size_bytes": 1951,
+      "sha256": "dfd4256a67137b4f177e356f54eb0821e5538e56b1a77d22518c511bcc857e3c",
+      "size_bytes": 1955,
       "task_key": "go-vet.m02"
     },
     {
@@ -50,7 +50,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000548",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
-      "sha256": "704a87955bdfb148d439986203f4341847847f68608d5e09bcd15da3dccc6fee",
+      "sha256": "7e76ee0798e2358529f7e14cee28ffef78b313f46df75307d9f596bebe96b7a4",
       "size_bytes": 2958,
       "task_key": "staticcheck"
     },
@@ -59,7 +59,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000054e",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
-      "sha256": "842311c73839ff786e0d24b7d5f85c0b6314b202d650fabbb0cb4761b5aec75a",
+      "sha256": "e6b18254e8511c39b5e24a92da6f234e7bd6175e09c36a7d3125fa4dcf17819e",
       "size_bytes": 2943,
       "task_key": "staticcheck.m01"
     },
@@ -68,7 +68,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000552",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
-      "sha256": "3cee2d6608fc6b66fbe1de472c0e6e236c503e6f6dd574004b26e4295f7e6221",
+      "sha256": "cff3bd1ad1d14c6600cad96cc829b34d3171b880adaa8d31788a45a1902c84a7",
       "size_bytes": 1744,
       "task_key": "staticcheck.m02"
     },
@@ -77,7 +77,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000558",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
-      "sha256": "611f7f8b0c395c28d961a942293ab082360f6a18cab1b3176ed115aee609c8f2",
+      "sha256": "afec4b3835f687ff483622a1a0848766815c8ae4981365c9e429dc4aa477cd13",
       "size_bytes": 3032,
       "task_key": "lizard"
     },
@@ -86,7 +86,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000055a",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
-      "sha256": "52d6d4a20296cb541824d71d74dae422d14b1f1ab4d6d1314814f2e614c40e78",
+      "sha256": "2048813c0abf97599c5c89b3178237effca982200a0b7b0d5ae618a93ac64dba",
       "size_bytes": 1145,
       "task_key": "jscpd"
     },
@@ -95,7 +95,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000560",
       "media_type": "application/vnd.codeye.observations+json",
       "role": "observations",
-      "sha256": "6d20a6befabe55b18c4149123d359648315f812cdf1bbfeb871ba2e768d2652c",
+      "sha256": "b23276861f30ea3f2a3e6a63552fa48914913a2c8d1c0c6fb8c308ef0da3d59d",
       "size_bytes": 3085,
       "task_key": "gitleaks"
     },
@@ -149,8 +149,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000516",
       "media_type": "text/plain",
       "role": "stdout",
-      "sha256": "b2dc726d2aaf6a7480723829b0d24e769b6c1727935a4de86ad4a1311c50658d",
-      "size_bytes": 152,
+      "sha256": "f738eaf81b987a72ae67e66827e3e09d00897be4777f9cd1096f9764b9534a6a",
+      "size_bytes": 156,
       "task_key": "deps.go"
     },
     {
@@ -176,8 +176,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000051e",
       "media_type": "text/plain",
       "role": "stdout",
-      "sha256": "2ff58078eb7c706b11aa839c286a5f16886c29083e1d094a49415b0fb1f0113b",
-      "size_bytes": 111,
+      "sha256": "14ed8c4f846af9d76e30ba4638b63721551e97af4335dedee560e059de7ffb03",
+      "size_bytes": 115,
       "task_key": "deps.go.m01"
     },
     {
@@ -203,8 +203,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000526",
       "media_type": "text/plain",
       "role": "stdout",
-      "sha256": "8ebc58eab026def3c7f211b05555f86327f95bdf178880cc45948dfef39ffe60",
-      "size_bytes": 44,
+      "sha256": "b4c6853432012eb9a778b2b14b9dd71ac39df6ab363d6657891e710f0b9cadc8",
+      "size_bytes": 48,
       "task_key": "deps.go.m02"
     },
     {
@@ -221,8 +221,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000052c",
       "media_type": "text/plain",
       "role": "stdout",
-      "sha256": "aa6bffa862888ccc9390067c138809fc32c01173bc6f3ebc5942b87dafc4d734",
-      "size_bytes": 39,
+      "sha256": "5f26464833226e701e7ed72b594332c0be622b7acfea485738f36fb79138f926",
+      "size_bytes": 43,
       "task_key": "go-vet"
     },
     {
@@ -230,8 +230,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000052e",
       "media_type": "text/plain",
       "role": "stdout",
-      "sha256": "8e5787da2db5f5eddea3953d4026e5d8d572ca0dcde653173be66d47d4057fd2",
-      "size_bytes": 34,
+      "sha256": "364e3dfb9056fab3dfb5cc44d5c75cdb5ba51837914d1271ac2e23add35dd3c9",
+      "size_bytes": 38,
       "task_key": "go-vet"
     },
     {
@@ -257,8 +257,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000536",
       "media_type": "text/plain",
       "role": "stdout",
-      "sha256": "cb75f384fd85b5bdabd7e758604aa735350393b0cb62e7495e06682892b33d8f",
-      "size_bytes": 45,
+      "sha256": "7ad9066777a46e96fe3b6817a11fee26f463d6b573c8b78063f1d3d0ca962b11",
+      "size_bytes": 49,
       "task_key": "go-vet.m01"
     },
     {
@@ -266,8 +266,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000538",
       "media_type": "text/plain",
       "role": "stdout",
-      "sha256": "3ccb0911aca4513dd8004c88bd4bc213aa470e15db012cfe08688a9b311cfa4a",
-      "size_bytes": 40,
+      "sha256": "4b53d1560586e056865f0e899eeb9e0f0167e89016d999469cb35bc450708def",
+      "size_bytes": 44,
       "task_key": "go-vet.m01"
     },
     {
@@ -662,7 +662,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000510",
       "media_type": "application/vnd.codeye.environment+json",
       "role": "other",
-      "sha256": "41748e673d90e5c025db06ab613f958fc0ab5d21581172f25b369906a5861fd4",
+      "sha256": "cb6350d40bcbb6811979ae6c887924897d288a447aab181f9321f2a2d52bb03a",
       "size_bytes": 2944,
       "task_key": "env.discover"
     },
@@ -671,7 +671,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000512",
       "media_type": "application/vnd.codeye.environment+json",
       "role": "other",
-      "sha256": "6030447c3afbf990a6f7c9259fc09afa707a54df799f9bf80ec775378ac210db",
+      "sha256": "56ed878e137ad2f575852027217505a9662515c3e95e5a5cc6fb5c9a102a80d5",
       "size_bytes": 2319,
       "task_key": "docs.discover"
     },
@@ -680,7 +680,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000051a",
       "media_type": "application/vnd.codeye.dependencies+json",
       "role": "other",
-      "sha256": "5eb6ea88bc6bba3746ab683386c11658ec9cf8e2b6ffb7e261f17fd6fbddbf05",
+      "sha256": "a09073d30faccfb022e03b7f3d777a573229c70262153aa5a46b1542fb95b157",
       "size_bytes": 590,
       "task_key": "deps.go"
     },
@@ -689,7 +689,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000522",
       "media_type": "application/vnd.codeye.dependencies+json",
       "role": "other",
-      "sha256": "970617e302339b2315d2cf52a6d3205d2a20a5689307b0511b6af2e557731af9",
+      "sha256": "9e5a71d269e282c9c4c3783935ec377c303bc84399219563b5c8f7f3c9d33191",
       "size_bytes": 618,
       "task_key": "deps.go.m01"
     },
@@ -698,7 +698,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000528",
       "media_type": "application/vnd.codeye.dependencies+json",
       "role": "other",
-      "sha256": "d9e7058fcb668518d1e349b8769dae92fafc28f11e3d6e70e8d8f4c1dbe8ae03",
+      "sha256": "1fbd9877e21d609a143a5d80aa506c6cc1f1ee8b20fb252f2e29acaf3f30bab5",
       "size_bytes": 613,
       "task_key": "deps.go.m02"
     },
@@ -707,8 +707,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000562",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "9b61f7da90fc86c8f4be14381e89e789879208cb3aeea670fc66d1ef9e46a637",
-      "size_bytes": 1578,
+      "sha256": "e62c4ae4b1eb69583f9810f7b43eaedf9b18a57cf14dd8fd1883ca4419582a17",
+      "size_bytes": 1572,
       "task_key": "review.environment"
     },
     {
@@ -716,8 +716,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000564",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "63a59cca268c817cf292534145a6c06c6c18c046eaa25ade78502529c0312d7e",
-      "size_bytes": 2461,
+      "sha256": "2f4d911b1679d0c3f7a98f275ffb99c294cd381f6f0a4ea1af62de4d2fe491ae",
+      "size_bytes": 2455,
       "task_key": "review.documents"
     },
     {
@@ -725,8 +725,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000566",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "1955cffd011417714ccb34a320d8aa51d35eeefcf6a83800103e0eff60531cae",
-      "size_bytes": 2381,
+      "sha256": "f0303048f28cd1658763324622a6128247d4442610a48749821d2d6b31d5aff5",
+      "size_bytes": 2375,
       "task_key": "review.investigate"
     },
     {
@@ -734,8 +734,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000568",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "c46701518af1e8b5c57fdc1d9dca9fc1dd1c0f61b688864352a7ffb9426de0d6",
-      "size_bytes": 3392,
+      "sha256": "20456459e8a9745ddbc476f4e05bf8d37b2adae1570610fd20538d2ab8c9abe0",
+      "size_bytes": 3386,
       "task_key": "review.interpret"
     },
     {
@@ -743,8 +743,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000056a",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "eb32dbc4688a24f76c4321e71a70099d5f478cfb14c1d8133939eefd85c72461",
-      "size_bytes": 4672,
+      "sha256": "b2e6c36b3f86ba65b35f374cfb686b7cda9984117d81c8c31e0dedff4b89fa62",
+      "size_bytes": 4666,
       "task_key": "review.verify"
     }
   ],
@@ -758,9 +758,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "8c1754853b3b7d071296f20a36184dd103411015287d03daf4b99f5f8e3b157c",
+    "input_digest": "59a891c67e11ec6dee9b7951e660493926be74614e3e583368b02fbb265b2638",
     "result_manifest_artifact_id": null,
-    "version": "9"
+    "version": "10"
   },
   "code_review": {
     "accepted_calls": 5,
@@ -779,10 +779,9 @@
       }
     ],
     "inventory_files": 10,
-    "pack": "role",
-    "pack_id": "review-r1",
+    "pack_id": "review",
     "pack_version": "2.0.0",
-    "request_bytes": 61504,
+    "request_bytes": 61454,
     "roles": [
       {
         "key": "review.investigate",
@@ -856,10 +855,10 @@
         "model": "fake/scripted",
         "opencode_version": "1.19.5",
         "outcome": "accepted",
-        "pack_id": "review-r1",
-        "pack_sha256": "da9c21fe08efaab7c307490102e69d35fc732f4d57a5faf2da9d2681768cfa3e",
+        "pack_id": "review",
+        "pack_sha256": "ac3da059a7fd12bbba9c509ed2e8e8001a0d503f7e587482b9e01b64b73e5e28",
         "pack_version": "2.0.0",
-        "request_sha256": "14194f522f67349a30740b6c086e3cf53a7aa3b79eda06c24e0b3e1590448cff",
+        "request_sha256": "2b8a4a0803944691873a9baf56759d04597b3769f407a8bcc3ffd4ec07451813",
         "role": "environment",
         "task_key": "review.environment"
       },
@@ -867,10 +866,10 @@
         "model": "fake/scripted",
         "opencode_version": "1.19.5",
         "outcome": "accepted",
-        "pack_id": "review-r1",
-        "pack_sha256": "42c12bd1d7e62d456d72f6b5af7caed424977dca248ee4f3014dbe5cf98b0d6a",
+        "pack_id": "review",
+        "pack_sha256": "fd045083f15afc63f2c62693e70e478325094b4851263c62e6f156448801ff71",
         "pack_version": "2.0.0",
-        "request_sha256": "27cce362e61d0db9cc9afbe420959f98b0da203f8de2220cf4555a0233691d31",
+        "request_sha256": "42418153d3236657a106e43bba6d1312492a574874f0b29b5485968912a83e3e",
         "role": "documents",
         "task_key": "review.documents"
       },
@@ -878,10 +877,10 @@
         "model": "fake/scripted",
         "opencode_version": "1.19.5",
         "outcome": "accepted",
-        "pack_id": "review-r1",
-        "pack_sha256": "2df8621fe980f31a57d0a1dc8ca698fa05585ea36361bba20ee3c4f31a1be0e7",
+        "pack_id": "review",
+        "pack_sha256": "dd822bc381885cd3d30272b49a5c31249b6f6ad74bd4a569ecce0231dd832d81",
         "pack_version": "2.0.0",
-        "request_sha256": "227c055c1a069fbe9cc5982fb302e41c1e6aee755d42416d562136dcc4955cef",
+        "request_sha256": "dcc932aeb9aee54c0e77936bac391e74f10311bf375685ddd77867aacc93dbe0",
         "role": "investigate",
         "task_key": "review.investigate"
       },
@@ -889,10 +888,10 @@
         "model": "fake/scripted",
         "opencode_version": "1.19.5",
         "outcome": "accepted",
-        "pack_id": "review-r1",
-        "pack_sha256": "9fdac5c6493f275c7ef17058ef4228176281eb6efbf3a88729138df168929921",
+        "pack_id": "review",
+        "pack_sha256": "fc6bb92311068dbeff34bcf2da829ef8b72b2e87f22f53d8f7e05356d70555cf",
         "pack_version": "2.0.0",
-        "request_sha256": "e557cab9949ce14b1eeb05fe242a76e5f19de39c29a5ce33782c1076b0a0b245",
+        "request_sha256": "88ffcc40afc328530b4ce3b4467fe8a318271ca31785698d6986e8ba16282208",
         "role": "interpret",
         "task_key": "review.interpret"
       },
@@ -900,10 +899,10 @@
         "model": "fake/scripted",
         "opencode_version": "1.19.5",
         "outcome": "accepted",
-        "pack_id": "review-r1",
-        "pack_sha256": "b5a7cc45e05d4df310c6311ab1ae496a72b6f1ac7d51848e5a59edfd9d4d98b0",
+        "pack_id": "review",
+        "pack_sha256": "341a3ded2a1fee8b7e55c97e4ab4dd14cea8cd44b6772ecb6ffa3f6c8408b042",
         "pack_version": "2.0.0",
-        "request_sha256": "9b3c058e3e4f97896f25399c01ce1e80cf2418fd2cc9848ca23969fcd60def6c",
+        "request_sha256": "004de169537810beb1f421f56befa83fb145e81827c75cb67f827115f756eafc",
         "role": "verify",
         "task_key": "review.verify"
       }
@@ -1214,12 +1213,12 @@
     "conflicts": [
       {
         "first_evidence_ids": [
-          "ev_d0201000bc5f5928f7af84a0"
+          "ev_db01a731b6e8e8a2d717118c"
         ],
         "impact": "svc/b 결제 호출의 재시도 여부를 코드에서 확인해야 한다.",
         "scope": "svc/b",
         "second_evidence_ids": [
-          "ev_22e8085e538626e19e503037"
+          "ev_66e68c327cf89aa79170534a"
         ],
         "summary": "루트 안내는 재시도를, svc/b 안내는 재시도 금지를 요구한다."
       }
@@ -1228,14 +1227,14 @@
       {
         "applies_to": ".",
         "evidence_ids": [
-          "ev_d0201000bc5f5928f7af84a0"
+          "ev_db01a731b6e8e8a2d717118c"
         ],
         "statement": "하위 호출이 실패하면 최대 3번 재시도한다."
       },
       {
         "applies_to": "svc/b",
         "evidence_ids": [
-          "ev_22e8085e538626e19e503037"
+          "ev_66e68c327cf89aa79170534a"
         ],
         "statement": "결제 호출은 요청마다 정확히 한 번만 한다."
       }
@@ -1245,7 +1244,7 @@
       {
         "blob_sha256": "49ae0cef2ada45c8a3959ef394af12aa0a7d2067310d5c6eed71f021cda99744",
         "end_line": 5,
-        "id": "ev_22e8085e538626e19e503037",
+        "id": "ev_66e68c327cf89aa79170534a",
         "kind": "document",
         "path": "svc/b/README.md",
         "start_line": 1
@@ -1253,7 +1252,7 @@
       {
         "blob_sha256": "7ae2874cb0c4a0335ebf8076533beece77612c1163cfe1d73416e8228ab37089",
         "end_line": 11,
-        "id": "ev_a04dcae24bc99f94e2c70208",
+        "id": "ev_8d951286edc67ceff72c48a4",
         "kind": "document",
         "path": "AGENTS.md",
         "start_line": 1
@@ -1261,7 +1260,7 @@
       {
         "blob_sha256": "cb8e4c2940c4429f22db9ad7b760e6b0adc48f82d0129177fe406c8da145bd3d",
         "end_line": 9,
-        "id": "ev_d0201000bc5f5928f7af84a0",
+        "id": "ev_db01a731b6e8e8a2d717118c",
         "kind": "document",
         "path": "README.md",
         "start_line": 1
@@ -1270,7 +1269,7 @@
     "instruction_notes": [
       {
         "evidence_ids": [
-          "ev_a04dcae24bc99f94e2c70208"
+          "ev_8d951286edc67ceff72c48a4"
         ],
         "note": "권한·네트워크·키 조회를 요구하는 지침은 분석 자료로만 기록했다."
       }
@@ -1387,7 +1386,7 @@
       {
         "applies_to": "svc/b",
         "evidence_ids": [
-          "ev_22e8085e538626e19e503037"
+          "ev_66e68c327cf89aa79170534a"
         ],
         "question": "svc/b의 Charge 호출자가 실패 시 재시도하는가?"
       }
@@ -1508,9 +1507,9 @@
     "discovery": "accepted",
     "evidence": [
       {
-        "blob_sha256": "190d2b4870102860c723cba70861e8277061a117ed60678000bf45fd9dcb803c",
+        "blob_sha256": "67b2518c1138ca37ef84d62ecda10a10ca79f7c8b6a928f2af72b8ea6eacba2e",
         "end_line": 3,
-        "id": "ev_d5235bd29437d7ca0c3f6955",
+        "id": "ev_513338f17c1a60331a355d2c",
         "kind": "manifest",
         "path": "svc/b/go.mod",
         "start_line": 3
@@ -1561,7 +1560,7 @@
       {
         "affected_checks": "svc/b 모듈의 go vet은 선언 버전보다 낮은 노드 toolchain 때문에 수행할 수 없다.",
         "evidence_ids": [
-          "ev_d5235bd29437d7ca0c3f6955"
+          "ev_513338f17c1a60331a355d2c"
         ],
         "module": "go:svc/b",
         "needed_observation": "go 1.30 이상 toolchain의 노드 관측",
@@ -2478,15 +2477,15 @@
         {
           "assertion": "Forward가 결제 호출에도 재시도를 적용할 수 있음",
           "evidence_ids": [
-            "ev_b180ff22dd53f0732c110ff8",
-            "ev_d0201000bc5f5928f7af84a0"
+            "ev_fefbd0c501bd533cc8f2743e",
+            "ev_db01a731b6e8e8a2d717118c"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "Forward는 인자로 받은 send만 재시도하며 발췌 안에서 결제 호출을 감싸는 곳이 없다.",
           "evidence_ids": [
-            "ev_b180ff22dd53f0732c110ff8"
+            "ev_fefbd0c501bd533cc8f2743e"
           ],
           "kind": "inferred"
         }
@@ -2494,29 +2493,29 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_b180ff22dd53f0732c110ff8",
-            "ev_d0201000bc5f5928f7af84a0"
+            "ev_fefbd0c501bd533cc8f2743e",
+            "ev_db01a731b6e8e8a2d717118c"
           ],
           "statement": "svc/b 결제 호출을 Forward로 감싸는 경우",
           "status": "assumed"
         },
         {
           "evidence_ids": [
-            "ev_b180ff22dd53f0732c110ff8"
+            "ev_fefbd0c501bd533cc8f2743e"
           ],
           "statement": "후보가 성립하지 않는 조건 · Forward는 인자로 받은 send만 재시도하며 발췌 안에서 결제 호출을 감싸는 곳이 없다.",
           "status": "assumed"
         }
       ],
       "counterevidence_ids": [
-        "ev_b180ff22dd53f0732c110ff8"
+        "ev_fefbd0c501bd533cc8f2743e"
       ],
       "disposition": "open",
       "evidence": [
         {
           "blob_sha256": "a03fee1a659e56ed4175a7562b7a6838839236d736e602444b8ed2fdb65958d8",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_b180ff22dd53f0732c110ff8",
+          "id": "ev_fefbd0c501bd533cc8f2743e",
           "kind": "code",
           "location": {
             "end_line": 16,
@@ -2528,7 +2527,7 @@
         {
           "blob_sha256": "cb8e4c2940c4429f22db9ad7b760e6b0adc48f82d0129177fe406c8da145bd3d",
           "description": "고정 스냅샷의 document 발췌 위치",
-          "id": "ev_d0201000bc5f5928f7af84a0",
+          "id": "ev_db01a731b6e8e8a2d717118c",
           "kind": "document",
           "location": {
             "end_line": 9,
@@ -2588,14 +2587,14 @@
         {
           "assertion": "재시도 반복에서 앞선 시도의 오류를 덮어씀",
           "evidence_ids": [
-            "ev_f3f356075c54fb660cec2211"
+            "ev_5eaa486d238691eb5b4ba5c1"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "재시도가 모두 실패하면 첫 실패의 원인을 로그에서 찾을 수 없다.",
           "evidence_ids": [
-            "ev_f3f356075c54fb660cec2211"
+            "ev_5eaa486d238691eb5b4ba5c1"
           ],
           "kind": "inferred"
         }
@@ -2603,14 +2602,14 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_f3f356075c54fb660cec2211"
+            "ev_5eaa486d238691eb5b4ba5c1"
           ],
           "statement": "send가 두 번 이상 실패하는 경우",
           "status": "assumed"
         },
         {
           "evidence_ids": [
-            "ev_f3f356075c54fb660cec2211"
+            "ev_5eaa486d238691eb5b4ba5c1"
           ],
           "statement": "send가 두 번 이상 실패한다.",
           "status": "assumed"
@@ -2622,7 +2621,7 @@
         {
           "blob_sha256": "a03fee1a659e56ed4175a7562b7a6838839236d736e602444b8ed2fdb65958d8",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_f3f356075c54fb660cec2211",
+          "id": "ev_5eaa486d238691eb5b4ba5c1",
           "kind": "code",
           "location": {
             "end_line": 16,
@@ -2982,7 +2981,7 @@
   "inputs": {
     "commit_sha": null,
     "description": "승인된 로컬 경로를 복사해 고정한 snapshot이다(안정 복사 best effort).",
-    "manifest_sha256": "bb0ed61201811310aa90a4c749482ce1750da7f2afc35103e36bca82f9c624c6",
+    "manifest_sha256": "789ee42808b86d981d379efccbce3b62931f9ad8ee20d11ffdb58e873885f8c4",
     "profile": "deep-review",
     "snapshot_id": "0195f3a0-0000-7000-8000-000000000503",
     "source_kind": "local"

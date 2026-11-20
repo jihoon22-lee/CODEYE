@@ -84,7 +84,6 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
     evidence: dict[str, str] = {}
     _evidence(review_input, evidence)
     code = [i for i, k in evidence.items() if k == "code"]
-    docs = [i for i, k in evidence.items() if k == "document"]
     title = "Placeholder candidate (dry run)" + (": " + echo if echo else "")
     candidate = {"title": title, "condition": TEXT, "impact": TEXT,
                  "improvement": TEXT, "counterpoint": TEXT, "evidence_ids": code[:1]}
@@ -92,10 +91,6 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
         data = review_input if isinstance(review_input, dict) else {}
         a, b = data.get("a"), data.get("b")
         return {"sum": a + b} if isinstance(a, int) and isinstance(b, int) else {}
-    if role == "context":  # review-v1
-        if code:
-            return {"facts": [{"kind": "observed", "statement": TEXT, "evidence_ids": code[:1]}]}
-        return {"facts": [{"kind": "documented", "statement": TEXT, "evidence_ids": docs[:1]}]}
     if role == "investigate":
         return {"candidates": [candidate] if code else []}
     if role == "verify":
@@ -110,7 +105,7 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
         return {"verifications": out}
     if role == "documents":
         return {"contracts": [], "conflicts": [], "questions": [], "instruction_notes": []}
-    if role == "environment":  # review-r1: one note per gap module, citing that module's requirements
+    if role == "environment":  # one note per gap module, citing that module's requirements
         data = review_input if isinstance(review_input, dict) else {}
         reqs = [r for r in data.get("requirements") or [] if isinstance(r, dict)]
         notes = []
@@ -120,7 +115,7 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
                           "evidence_ids": sorted({r.get("evidence_id") for r in own if r.get("evidence_id")}),
                           "affected_checks": TEXT, "still_checkable": TEXT, "needed_observation": TEXT})
         return {"notes": notes}
-    if role == "interpret":  # review-r1: at least one item; a limit for the first observation
+    if role == "interpret":  # at least one item; a limit for the first observation
         data = review_input if isinstance(review_input, dict) else {}
         ids = [o.get("id") for o in data.get("observations") or [] if isinstance(o, dict) and o.get("id")]
         return {"hypotheses": [], "limits": [{"observation_ids": ids[:1], "statement": TEXT}] if ids else []}

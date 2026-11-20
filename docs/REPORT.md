@@ -10,7 +10,7 @@ CODEYE 보고서가 지금 담는 내용, 발견 항목을 읽는 방법, 웹 �
 |---|---|
 | `schema_version` | `0.1`. 새 필드는 모두 선택 필드로 추가했다. |
 | `demo` | 제품이 게시한 보고서는 항상 `false`다. [`examples/report.json`](../examples/report.json)은 현재 builder가 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이고, [`examples/report-go-vet.json`](../examples/report-go-vet.json)은 builder 1 시절의 실제 코드 미포함 내보내기다(분석 종류별 절 없음). |
-| `builder.id` / `builder.version` | `codeye-report` / `9`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를, 버전 5부터 [분석 종류별 절](#분석-종류별-절)을, 버전 6부터 [모듈 단위 검토 분할](#모듈별-검토-장부)의 기록·발견·장부와 `review_calls[].task_key`를, 버전 7부터 환경 절의 [의존성 목록](#의존성-목록)과 의존성 공백을, 버전 8부터 [검토 우선순위](REVIEW.md#검토-우선순위)로 채운 범위 산출물(schema 0.2)의 분류(장부 행의 `class`와 부차 파일 수, 상한에 막힌 주요 slot 수)를, 버전 9부터 pull request run의 [`pull_request` 절](#pull-request-보고서)을 기록한다. |
+| `builder.id` / `builder.version` | `codeye-report` / `10`. 버전 3부터 `fp2` 발견 식별을, 버전 4부터 도구 행의 `rule_context`와 관찰의 `suppressed`를, 버전 5부터 [분석 종류별 절](#분석-종류별-절)을, 버전 6부터 [모듈 단위 검토 분할](#모듈별-검토-장부)의 기록·발견·장부와 `review_calls[].task_key`를, 버전 7부터 환경 절의 [의존성 목록](#의존성-목록)과 의존성 공백을, 버전 8부터 [검토 우선순위](REVIEW.md#검토-우선순위)로 채운 범위 산출물(schema 0.2)의 분류(장부 행의 `class`와 부차 파일 수, 상한에 막힌 주요 slot 수)를, 버전 9부터 pull request run의 [`pull_request` 절](#pull-request-보고서)을 기록한다. 버전 10부터 코드 분석 절에 팩 구분(`pack`)이 없고 모든 호출 행이 `pack_id`·`pack_version`을 싣는다. |
 | `builder.input_digest` | builder 입력(run·snapshot·attempt 사실, task 행, 결과 manifest, 산출물 행, 게시 시점 판정 집합, pull request run이면 고정한 pull request, builder ID·버전·스키마 버전)의 SHA-256. 보고서 ID·리비전·생성 시각은 넣지 않는다. |
 | `export.include_code` | 저장본은 `true`다. 코드 미포함 내보내기는 같은 저장본의 projection이며 `false`다. |
 
@@ -171,9 +171,9 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | `not_performed` | 필수 검토 task가 계획되지 않았거나(`review_tasks_not_planned`) 수락된 것이 없다(`review_results_not_accepted`). |
 | `not_requested` | 스키마 enum에 있으나 현재 builder는 쓰지 않는다. |
 
-필수 역할은 계획에서 정한다. 계획에 `review-r1` 역할(`review.environment`, `review.documents`, `review.interpret` 중 하나)이 있으면 `required_for_verdict`인 `review.*` task가 필수이고, 나머지는 `optional_tasks`에 결과·사유와 함께 적으며 수행으로 세지 않는다. 그 밖의 계획(`review-v1` 기록, 검토 task 없음)은 `review.context`, `review.investigate`, `review.verify` 세 역할로 해석하고 계획되지 않은 역할은 `not_planned`로 적는다. task별 `result`는 `accepted`, `not_planned`, `not_succeeded`, `result_missing`, `result_rejected`, `skipped`(review-r1의 정책 생략)다.
+필수 역할은 계획에서 정한다. `required_for_verdict`인 `review.*` task가 필수이고, 나머지는 `optional_tasks`에 결과·사유와 함께 적으며 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없고 AI 검토는 `not_performed`(`review_tasks_not_planned`)다. task별 `result`는 `accepted`, `not_planned`, `not_succeeded`, `result_missing`, `result_rejected`, `skipped`(정책 생략)다.
 
-`coverage.review_calls`는 검토 기록이 있는 리비전에서 호출마다 역할·모델·OpenCode 버전·지침 팩 digest·요청 SHA-256·호출 결과를 실제 담당 역할에 한 번씩 싣는다. review-r1 기록은 `pack_id`·`pack_version`도 싣는다. 호출 결과가 `accepted`여도 후보의 판정은 `refuted`일 수 있다. 수락한 응답이 실제 실행이나 사람의 확인을 대신하지 않는다. 검토 산출물의 수락 조건과 단계 연결 검사(`review_lineage_mismatch:<task>`, `review_pack_mismatch:<task>`)는 [검토](REVIEW.md)에 있다.
+`coverage.review_calls`는 검토 기록이 있는 리비전에서 호출마다 역할·모델·OpenCode 버전·지침 id·version·digest·요청 SHA-256·호출 결과를 실제 담당 역할에 한 번씩 싣는다. 호출 결과가 `accepted`여도 후보의 판정은 `refuted`일 수 있다. 수락한 응답이 실제 실행이나 사람의 확인을 대신하지 않는다. 검토 산출물의 수락 조건과 단계 연결 검사(`review_lineage_mismatch:<task>`)는 [검토](REVIEW.md)에 있다.
 
 ## 집계
 

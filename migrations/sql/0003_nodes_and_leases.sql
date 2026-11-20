@@ -1,18 +1,18 @@
--- CODEYE W06: 노드 등록·인증, 워커, 원자적 claim 예약, 노드 명령, 멱등 이벤트, artifact 메타데이터,
+-- CODEYE: 노드 등록·인증, 워커, 원자적 claim 예약, 노드 명령, 멱등 이벤트, artifact 메타데이터,
 -- snapshot 위치와 manifest digest 분리.
 --
 -- 0001/0002와 같은 규칙: BEGIN/COMMIT 없음, 비한정 이름(current_schema), 트리거는 NEW/OLD/TG_*만 사용,
 -- 외래키는 ON DELETE RESTRICT, token·secret 원문은 저장하지 않고 SHA-256 hex만 저장한다.
 --
 -- 기존 행 처리:
---   * runs.request: W03은 요청 본문을 저장하지 않고 canonical JSON의 SHA-256(request_digest)만 저장했다.
---     W03이 받던 scope=full 본문 세 가지(profile 3종 × source_policy 1종)는 canonical bytes가 하나로
+--   * runs.request: 0002까지는 요청 본문을 저장하지 않고 canonical JSON의 SHA-256(request_digest)만 저장했다.
+--     그때 받던 scope=full 본문 세 가지(profile 3종 × source_policy 1종)는 canonical bytes가 하나로
 --     정해지므로 digest가 정확히 일치하는 행만 그 본문으로 복원한다. 일치하지 않는 행(scope=paths 등)은
 --     NULL로 남고 claim 대상이 아니다(waiting_reason request_unavailable).
 --   * snapshots: 기존 Git 행의 digest는 커밋 SHA이고 manifest가 없다. 불변 행이므로 갱신하지 않는다.
---     manifest_digest/source_sha가 NULL인 행은 "W06 이전 snapshot"이며 snapshot_locations가 없으므로
+--     manifest_digest/source_sha가 NULL인 행은 manifest 도입 전 snapshot이며 snapshot_locations가 없으므로
 --     고정 입력 재시도가 배정되지 않는다(snapshot_unavailable). 새 행은 digest = manifest_digest다.
---   * attempts.node_id/worker_id: W02 시험 경로의 미등록 식별자가 있을 수 있으므로 nodes 외래키를 두지 않는다.
+--   * attempts.node_id/worker_id: 노드 등록 전 시험 경로의 미등록 식별자가 있을 수 있으므로 nodes 외래키를 두지 않는다.
 
 -- ---------------------------------------------------------------------------
 -- runs.request (claim이 job을 만드는 원천)
@@ -82,7 +82,7 @@ ALTER TABLE snapshots
     ADD COLUMN source_sha text NULL CHECK (source_sha IS NULL OR source_sha ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'),
     ADD CONSTRAINT snapshots_manifest_is_digest CHECK (manifest_digest IS NULL OR manifest_digest = digest),
     ADD CONSTRAINT snapshots_source_sha_git_only CHECK (source_sha IS NULL OR consistency = 'git_commit'),
-    ADD CONSTRAINT snapshots_w06_git_has_sha CHECK (
+    ADD CONSTRAINT snapshots_git_has_sha CHECK (
         manifest_digest IS NULL OR consistency <> 'git_commit' OR source_sha IS NOT NULL);
 
 -- ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ CREATE TRIGGER worker_pools_immutable
     BEFORE UPDATE ON worker_pools
     FOR EACH ROW EXECUTE FUNCTION codeye_reject_mutation();
 
--- 단일 행. claim 트랜잭션의 첫 잠금이며 전역 동시 실행 상한이다(W07에서 pool 정책 revision 추가).
+-- 단일 행. claim 트랜잭션의 첫 잠금이며 전역 동시 실행 상한이다(pool 정책 revision은 0004가 더한다).
 CREATE TABLE scheduler_limits (
     singleton          boolean PRIMARY KEY DEFAULT true CHECK (singleton),
     global_max_running integer NOT NULL CHECK (global_max_running BETWEEN 0 AND 10000)
@@ -217,7 +217,7 @@ CREATE TABLE node_source_roots (
 CREATE INDEX node_source_roots_root_idx ON node_source_roots (source_root_id);
 
 -- ---------------------------------------------------------------------------
--- workers (W06 정적 모드: agent가 ID를 만들고 첫 heartbeat에서 등록)
+-- workers (정적 모드: agent가 ID를 만들고 첫 heartbeat에서 등록)
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE workers (

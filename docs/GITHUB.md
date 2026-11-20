@@ -141,7 +141,7 @@ provider는 host, API base URL, clone policy, CA bundle, App identity, credentia
 
 ## 다중 사용자 설치 (설계 계약)
 
-지금의 token 방식은 사람마다 자기 token으로 동작한다(A52). 조직 단위의 GitHub App과 webhook은 여전히 계획이다. 이 절은 코드에 없다. pull request를 주기적으로 확인하는 polling 방식은 만들지 않았다(A46 6).
+지금의 token 방식은 사람마다 자기 token으로 동작한다(A53). 조직 단위의 GitHub App과 webhook은 여전히 계획이다. 이 절은 코드에 없다. pull request를 주기적으로 확인하는 polling 방식은 만들지 않았다(A46 6).
 
 ### 역할
 

@@ -1,0 +1,114 @@
+{
+  "schema_version": "0.2",
+  "pack": {
+    "id": "review",
+    "version": "2.0.0"
+  },
+  "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+  "run_id": "0195f3a0-0000-7000-8000-000000000025",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000026",
+  "stage": "investigate",
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "review.environment",
+      "state": "accepted",
+      "sha256": "a29aec6cd923fb380a21d9c621036f47bce692da18509d11e475efa1277b4c3d"
+    },
+    {
+      "source": "review.documents",
+      "state": "accepted",
+      "sha256": "8c31f1e9edebf2871e8ceaee64c3e5227caf08ba59c2729fa424a8d434eca8dd"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_d8975f7e76b3341894d27aec",
+      "path": "gateway.go",
+      "sha256": "a03fee1a659e56ed4175a7562b7a6838839236d736e602444b8ed2fdb65958d8",
+      "start_line": 1,
+      "end_line": 16,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_5d9c489694fe844d04098f43",
+      "path": "svc/a/normalize.go",
+      "sha256": "2ebaac2aba0720821efc5e7918e69ebf5d29f4af0d88d1bd59124f9b867a89f9",
+      "start_line": 1,
+      "end_line": 10,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_ad346a78e2aa435279e67b62",
+      "path": "svc/b/charge.go",
+      "sha256": "4d5338492857ca28cf5b13535cdfe0af79fa948928a6b508c6f90aa3fa3b7c78",
+      "start_line": 1,
+      "end_line": 8,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_a663434311b594dfb09cfd15",
+      "path": "README.md",
+      "sha256": "cb8e4c2940c4429f22db9ad7b760e6b0adc48f82d0129177fe406c8da145bd3d",
+      "start_line": 1,
+      "end_line": 9,
+      "kind": "document"
+    },
+    {
+      "id": "ev_acbae1289c98f99498bc967e",
+      "path": "svc/b/README.md",
+      "sha256": "49ae0cef2ada45c8a3959ef394af12aa0a7d2067310d5c6eed71f021cda99744",
+      "start_line": 1,
+      "end_line": 5,
+      "kind": "document"
+    }
+  ],
+  "observations": [],
+  "candidates": [
+    {
+      "id": "investigate_1",
+      "title": "Forward가 결제 호출에도 재시도를 적용할 수 있음",
+      "condition": "svc/b 결제 호출을 Forward로 감싸는 경우",
+      "impact": "결제가 중복될 수 있다.",
+      "improvement": "결제 경로에서는 재시도를 끈다.",
+      "counterpoint": "Forward를 결제에 쓰는 호출자가 발췌에 없다.",
+      "evidence_ids": [
+        "ev_d8975f7e76b3341894d27aec",
+        "ev_a663434311b594dfb09cfd15"
+      ],
+      "origin": "investigate"
+    }
+  ],
+  "limitations": [
+    "model_input_not_secret_screened"
+  ],
+  "calls": [
+    {
+      "role": "investigate",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.0.0",
+      "pack_sha256": "dd822bc381885cd3d30272b49a5c31249b6f6ad74bd4a569ecce0231dd832d81",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "investigate.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "515727fa934ab011936b1e8b4f14971c0d0a628890e7f86a014b924bf2af1221",
+      "request_bytes": 12280,
+      "usage": {
+        "input": 3401,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

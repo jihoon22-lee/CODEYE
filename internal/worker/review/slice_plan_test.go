@@ -332,7 +332,7 @@ func TestSmallRepositoriesPlanNoSlices(t *testing.T) {
 		if plan.Slots != 0 || len(plan.Slices) != 0 || len(plan.NotPlanned) != 0 {
 			t.Errorf("%s: %d slices", name, len(plan.Slices))
 		}
-		specs, err := RoleHandler{Static: stubStatic{}}.Plan(t.Context(), j)
+		specs, err := Handler{Static: stubStatic{}}.Plan(t.Context(), j)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -422,7 +422,7 @@ func repoLikePlan(t *testing.T) slicePlan {
 		files[fmt.Sprintf("internal/b/b%02d_test.go", f)] = 2000
 	}
 	for f := range 10 {
-		files[fmt.Sprintf("web/src/w%02d.ts", f)] = 1500
+		files[fmt.Sprintf("web/src/page%02d.ts", f)] = 1500
 		files[fmt.Sprintf("scripts/s%02d.py", f)] = 1500
 		files[fmt.Sprintf("fixtures/m%d/go.mod", f)] = 30
 		files[fmt.Sprintf("fixtures/m%d/main.go", f)] = 300
@@ -450,7 +450,7 @@ func TestPackSlotsPriority(t *testing.T) {
 		switch rest[i].Path {
 		case "internal/b/b17.go":
 			rest[i].Rank, rest[i].Observations, rest[i].Severity = record.RankToolObservations, 2, 3
-		case "web/src/w07.ts":
+		case "web/src/page07.ts":
 			rest[i].Rank, rest[i].Observations, rest[i].Severity = record.RankToolObservations, 9, 1
 		case "fixtures/m4/main.go":
 			rest[i].Rank, rest[i].Observations, rest[i].Severity = record.RankToolObservations, 40, 3
@@ -481,7 +481,7 @@ func TestPackSlotsPriority(t *testing.T) {
 	}
 	// The two diagnosed files share the first slot (the higher severity
 	// first); the other primary modules each get a slot right after it.
-	if len(slots[0].Files) != 2 || slots[0].Files[1].Path != "web/src/w07.ts" {
+	if len(slots[0].Files) != 2 || slots[0].Files[1].Path != "web/src/page07.ts" {
 		t.Fatalf("first slot %+v", slots[0].Files)
 	}
 	if firstOf["python:scripts"] > 3 || firstOf["go:."] > 0 {

@@ -1,3 +1,3 @@
-module example.test/w15/svc/b
+module example.test/modules/svc/b
 
 go 1.30

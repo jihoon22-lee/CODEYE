@@ -206,7 +206,7 @@ func (h *Handler) Probe(ctx context.Context, runner executor.Runner, dir string)
 }
 
 // ObservationsPath is where the go-vet task key writes its observations
-// artifact in attempt scratch. Later roles of the same attempt (role pack
+// artifact in attempt scratch. Later roles of the same attempt (review
 // interpret) read it from there and validate it again.
 func ObservationsPath(scratch, key string) string {
 	return filepath.Join(scratch, "go-vet", key, "observations.json")

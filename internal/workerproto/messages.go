@@ -76,8 +76,6 @@ type Limits struct {
 // Hello is the first agent→worker message.
 type Hello struct {
 	ModelExecutable string `json:"model_executable,omitempty"`
-	// ReviewPack is the node operator's review pack (review-r1 default, review-v1 legacy).
-	ReviewPack string `json:"review_pack,omitempty"`
 	// ReviewMaxCalls is the node operator's model call ceiling per review
 	// attempt; 0 means the default (docs/REVIEW.md#모듈-단위-검토-분할).
 	ReviewMaxCalls int `json:"review_max_calls,omitempty"`

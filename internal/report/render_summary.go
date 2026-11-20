@@ -325,7 +325,7 @@ func summarySentences(r Report, l Locale, obs map[string]Observation) []string {
 				s += " (" + strings.Join(rest, ", ") + ")"
 			}
 			out = append(out, s+". "+l.Label("summary.model_note"))
-		} else if c.Pack != "none" {
+		} else if len(c.Roles) > 0 {
 			out = append(out, l.Label("summary.model_none"))
 		}
 		if x := c.Ledger; x != nil && len(x.Modules) > 0 {

@@ -1,4 +1,4 @@
--- CODEYE W25: 저장 영역 quota(docs/47 §4).
+-- CODEYE: 저장 영역 quota(docs/OPERATIONS.md 저장 영역과 상한).
 --
 -- 0001~0008과 같은 규칙: BEGIN/COMMIT 없음, 비한정 이름(current_schema), 외래키는 ON DELETE RESTRICT.
 -- 기존 테이블에는 기본값이 있는 열만 더한다. 기존 행은 "한도 없음·초과 없음"으로 읽힌다.

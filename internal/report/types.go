@@ -33,8 +33,11 @@ const (
 	// review_primary_not_sent attention. Version 9 writes the pull_request
 	// section of a pull-request run (docs/REPORT.md#pull-request-보고서) and
 	// its pull_request_focus note; a report of any other run is the same as
-	// version 8 wrote it.
-	BuilderVersion = "9"
+	// version 8 wrote it. Version 10 reads review records of schema 0.2 and
+	// 0.3 only: the code review section has no pack field, every review call
+	// carries pack_id and pack_version, and a plan without a review task
+	// requires none.
+	BuilderVersion = "10"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -157,7 +160,7 @@ type Summary struct {
 	MetricObservations int `json:"metric_observations,omitempty"`
 }
 
-// ReviewCall records one request once across the cumulative stage artifacts.
+// ReviewCall records one model request of a review record.
 type ReviewCall struct {
 	Role          string `json:"role"`
 	Model         string `json:"model"`
@@ -165,12 +168,11 @@ type ReviewCall struct {
 	PackDigest    string `json:"pack_sha256"`
 	RequestDigest string `json:"request_sha256"`
 	Outcome       string `json:"outcome"`
-	// PackID/PackVersion are set for role-pack records (schema 0.2), which
-	// record the pack identity; legacy-pack (0.1) calls leave them out.
-	PackID      string `json:"pack_id,omitempty"`
-	PackVersion string `json:"pack_version,omitempty"`
-	// TaskKey is the review task whose record holds the call (builder 6,
-	// role-pack records): a whole-run role or a slice task.
+	// PackID/PackVersion are the instruction pack the call was made with.
+	PackID      string `json:"pack_id"`
+	PackVersion string `json:"pack_version"`
+	// TaskKey is the review task whose record holds the call (builder 6): a
+	// whole-run role or a slice task.
 	TaskKey string `json:"task_key,omitempty"`
 }
 
@@ -193,7 +195,7 @@ type AIReview struct {
 	Reason        *string        `json:"reason"`
 	RequiredTasks []AIReviewTask `json:"required_tasks"`
 	// OptionalTasks are planned review tasks not required for the verdict
-	// (role-pack environment/interpret, documents without documents). They
+	// (environment/interpret, documents without documents). They
 	// are listed with their outcome and reason and never count as performed.
 	OptionalTasks []AIReviewTask `json:"optional_tasks,omitempty"`
 }
@@ -205,7 +207,7 @@ type AIReviewTask struct {
 	Key        string  `json:"key"`
 	TaskStatus *string `json:"task_status"`
 	Result     string  `json:"result"`
-	// Reason is the task's reason code (role-pack plans only).
+	// Reason is the task's reason code (every plan).
 	Reason *string `json:"reason,omitempty"`
 }
 

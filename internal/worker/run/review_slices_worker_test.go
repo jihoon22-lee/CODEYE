@@ -158,7 +158,7 @@ func copyCoverageFixture(t *testing.T, dst string) {
 }
 
 // runSlices runs the coverage fixture through the real worker with the
-// role pack at the given ceiling and returns the completion, the result
+// review at the given ceiling and returns the completion, the result
 // manifest's task rows and the agent.
 func runSlices(t *testing.T, caller *sliceScripted, maxCalls int, cancelOnBlock bool) (*workerproto.Complete, []string, *fakeAgent, analysis.ResultManifest) {
 	t.Helper()
@@ -171,7 +171,7 @@ func runSlices(t *testing.T, caller *sliceScripted, maxCalls int, cancelOnBlock 
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
-	h, err := discovery.Wrap(review.RoleHandler{Static: cleanScreen{}, Caller: caller, MaxCalls: maxCalls}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
+	h, err := discovery.Wrap(review.Handler{Static: cleanScreen{}, Caller: caller, MaxCalls: maxCalls}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
 	if err != nil {
 		t.Fatal(err)
 	}
