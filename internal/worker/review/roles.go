@@ -455,7 +455,24 @@ type investigateScope struct {
 	Modules     []string         `json:"modules"`
 	Excerpts    []record.Excerpt `json:"excerpts"`
 	DirectCalls []directCall     `json:"direct_calls,omitempty"`
+	MemberTest  *memberTestHint  `json:"member_test,omitempty"`
 	Limitations []string         `json:"limitations"`
+}
+
+func (scope investigateScope) withExcerpts(list []record.Excerpt, links corpusLinks) investigateScope {
+	scope.Excerpts = list
+	scope.DirectCalls, scope.MemberTest = nil, nil
+	if !scope.WholeRun {
+		return scope
+	}
+	for _, call := range links.directCalls {
+		if slices.ContainsFunc(list, func(e record.Excerpt) bool { return e.ID == call.CallerEvidenceID }) &&
+			slices.ContainsFunc(list, func(e record.Excerpt) bool { return e.ID == call.CalleeEvidenceID }) {
+			scope.DirectCalls = append(scope.DirectCalls, call)
+		}
+	}
+	scope.MemberTest = links.member.hint(list)
+	return scope
 }
 
 type docEvidence struct {
@@ -531,13 +548,13 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	}
 	s.noteUpstream(upstream...)
 	var code []record.Excerpt
-	var directCalls []directCall
+	var links corpusLinks
 	var lims []string
 	var err error
 	if s.slice != nil {
 		code, lims, err = s.sliceCorpus()
 	} else {
-		code, directCalls, lims, err = s.codeCorpus(docRec)
+		code, links, lims, err = s.codeCorpus(docRec)
 	}
 	if err != nil {
 		if s.ctx.Err() != nil {
@@ -592,20 +609,9 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		modules = modules[:32]
 	}
 	in := investigateInput{Scope: investigateScope{WholeRun: s.slice == nil, Snapshot: s.j.Snapshot.Digest, Modules: nonNilList(modules), Limitations: s.rec.Limitations}, Documents: docs, Environment: envh}
-	scopeWith := func(list []record.Excerpt) investigateScope {
-		scope := in.Scope
-		scope.Excerpts = list
-		for _, call := range directCalls {
-			if slices.ContainsFunc(list, func(e record.Excerpt) bool { return e.ID == call.CallerEvidenceID }) &&
-				slices.ContainsFunc(list, func(e record.Excerpt) bool { return e.ID == call.CalleeEvidenceID }) {
-				scope.DirectCalls = append(scope.DirectCalls, call)
-			}
-		}
-		return scope
-	}
 	build := func(list []record.Excerpt) ([]byte, error) {
 		x := in
-		x.Scope = scopeWith(list)
+		x.Scope = in.Scope.withExcerpts(list, links)
 		return marshal(x)
 	}
 	instructions := s.instructions(investigateContract)
@@ -625,7 +631,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, "files_outside_review_context")
 		in.Scope.Limitations = s.rec.Limitations
 	}
-	in.Scope = scopeWith(sent)
+	in.Scope = in.Scope.withExcerpts(sent, links)
 	s.setEvidence(append(append([]record.Excerpt{}, sent...), docEv...))
 	catalog := catalogOf(s.rec.Evidence)
 	var candidates []record.Candidate

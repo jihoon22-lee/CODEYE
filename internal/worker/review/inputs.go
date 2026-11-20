@@ -408,6 +408,11 @@ func goIgnored(p string) bool {
 	return false
 }
 
+type corpusLinks struct {
+	directCalls []directCall
+	member      memberPair
+}
+
 // codeCorpus selects code and test excerpts round-robin over the modules of
 // the snapshot, so every module in scope is represented before any module
 // gets a second file. A Go file belongs to its deepest go.mod directory; a
@@ -415,7 +420,7 @@ func goIgnored(p string) bool {
 // ecosystem, and modules are visited ecosystem by ecosystem (sources.go,
 // groupOrder). Accepted document contracts can add targeted windows before
 // the ordinary file prefixes.
-func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, []directCall, []string, error) {
+func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpusLinks, []string, error) {
 	g := planCodeGroupsFor(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary(), changedPaths(s.j))
 	lims := append([]string{}, g.lims...)
 	var out []record.Excerpt
@@ -435,7 +440,7 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, []dir
 	}
 	selected, err := s.contractWitnesses(g, documents)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, corpusLinks{}, nil, err
 	}
 	for _, w := range selected.witnesses {
 		lines := witnessMaxLines
@@ -443,14 +448,14 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, []dir
 			lines = w.end - w.line + 1
 		}
 		if err := add(w.entry, w.line, lines, witnessMaxExcerpt); err != nil {
-			return nil, nil, nil, err
+			return nil, corpusLinks{}, nil, err
 		}
 	}
-	var links []directCall
+	links := corpusLinks{member: selected.member}
 	for _, call := range selected.calls {
 		caller, callee := offered[call.caller.entry.Path], offered[call.callee.entry.Path]
 		if caller != "" && callee != "" {
-			links = append(links, directCall{CallerEvidenceID: caller, CalleeEvidenceID: callee, Symbol: call.symbol})
+			links.directCalls = append(links.directCalls, directCall{CallerEvidenceID: caller, CalleeEvidenceID: callee, Symbol: call.symbol})
 		}
 	}
 	for e := range g.orderedFiles() {
@@ -459,7 +464,7 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, []dir
 		}
 		if offered[e.Path] == "" {
 			if err := add(e, 1, roleMaxCodeLines, roleMaxCodeFile); err != nil {
-				return nil, nil, nil, err
+				return nil, corpusLinks{}, nil, err
 			}
 		}
 	}
@@ -468,7 +473,7 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, []dir
 	} else if len(out) < roleMaxCodeFiles && len(selected.additional) > 0 {
 		out, err = s.additionalWitnesses(out, selected.additional, remain)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, corpusLinks{}, nil, err
 		}
 	}
 	return out, links, addLim(nil, lims...), nil

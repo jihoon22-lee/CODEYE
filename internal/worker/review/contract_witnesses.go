@@ -65,6 +65,7 @@ type contractCall struct {
 type contractSelection struct {
 	witnesses, additional []contractWitness
 	calls                 []contractCall
+	member                memberPair
 }
 
 // contractWitnesses looks for readable implementation and test locations for
@@ -420,7 +421,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 		}
 	}
-	return contractSelection{witnesses: out, additional: extras, calls: linked}, nil
+	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member}, nil
 }
 
 func minifiedSource(path string) bool {

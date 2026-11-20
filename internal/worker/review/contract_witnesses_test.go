@@ -284,7 +284,7 @@ func TestContractDirectCallFallback(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(links) != 0 || code[0].Path != caller || !strings.Contains(code[0].Text, lexicalAnchor) {
+			if len(links.directCalls) != 0 || code[0].Path != caller || !strings.Contains(code[0].Text, lexicalAnchor) {
 				t.Fatalf("fallback did not retain the relevant caller: %+v, %+v", links, code)
 			}
 			if tc.withheld && (!slices.Contains(s.rec.Limitations, limSecretWithheld) ||

@@ -20,7 +20,7 @@ export function parseExcerpt(v: unknown): Excerpt | null {
   const encoded = JSON.stringify(excerpt.text).replace(/[<>&\u2028\u2029]/g,
     character => '\\u' + character.charCodeAt(0).toString(16).padStart(4, '0'));
   if (excerpt.start < 1 || lines < 1 || lines > modelExcerptLines || lines !== excerpt.text.split('\n').length ||
-    !excerpt.text.trim() || /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/.test(excerpt.text) ||
+    !/\P{White_Space}/u.test(excerpt.text) || /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/.test(excerpt.text) ||
     excerptEncoder.encode(encoded).length > excerptBytes) invalid();
   return excerpt;
 }

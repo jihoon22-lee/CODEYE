@@ -40,6 +40,34 @@ func documentedMembers(text string, includeCalls bool) []string {
 
 type memberPair struct {
 	source, test contractWitness
+	name         string
+}
+
+type memberTestHint struct {
+	ImplementationEvidenceID string `json:"implementation_evidence_id"`
+	TestEvidenceID           string `json:"test_evidence_id"`
+	Member                   string `json:"member"`
+}
+
+// hint ties the selected member and its test to their exact input windows.
+func (m memberPair) hint(excerpts []record.Excerpt) *memberTestHint {
+	if m.name == "" {
+		return nil
+	}
+	id := func(w contractWitness, kind string) string {
+		for _, e := range excerpts {
+			if e.Kind == kind && e.Path == w.entry.Path && e.SHA256 == w.entry.SHA256 &&
+				e.Start == w.line && e.End == w.end {
+				return e.ID
+			}
+		}
+		return ""
+	}
+	implementation, test := id(m.source, "code"), id(m.test, "test")
+	if implementation == "" || test == "" {
+		return nil
+	}
+	return &memberTestHint{ImplementationEvidenceID: implementation, TestEvidenceID: test, Member: m.name}
 }
 
 type memberTest struct {
@@ -290,7 +318,7 @@ func (m memberWitnesses) choose(queries []witnessQuery, files map[string]source.
 				}
 				source := definitions[0]
 				source.query, test.witness.query = i+1, i+1
-				best = memberPair{source, test.witness}
+				best = memberPair{source: source, test: test.witness, name: name}
 			}
 		}
 	}
