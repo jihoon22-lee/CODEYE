@@ -346,7 +346,7 @@ func controllerListenArgs(cfg *personal.Config) []string {
 // syncAdminGitHubToken makes the token `codeye up` found (GH_TOKEN,
 // GITHUB_TOKEN or gh) the GitHub connection of the administrator who runs
 // the service: it is copied to that user's token file, which the controller
-// and the agent read for that user's projects only. A token the
+// and the agent read for the calls made for that user only. A token the
 // administrator pasted in the web is kept; a discovered token that is gone
 // is removed again.
 func syncAdminGitHubToken(layout personal.Layout, user string, gh personal.GitHubSetup) error {
@@ -460,22 +460,22 @@ func personalUser(ctx context.Context, s *postgres.Store, layout personal.Layout
 	if id != nil {
 		active, err := s.UserActive(ctx, id.UserID)
 		if err != nil {
-			return "", fmt.Errorf("cannot read the personal user: %w", err)
+			return "", fmt.Errorf("cannot read the administrator user: %w", err)
 		}
 		if !active {
-			return "", errors.New("the personal user in personal.json does not exist in this database or is disabled; restore the matching backup or use a fresh state_dir")
+			return "", errors.New("the administrator user in personal.json does not exist in this database or is disabled; restore the matching backup or use a fresh state_dir")
 		}
 		return id.UserID, ensurePersonalAdmin(ctx, s, id.UserID)
 	}
-	u, err := s.CreateAccount(ctx, postgres.OperatorPrincipal(), postgres.NewAccount{DisplayName: "personal", IsAdmin: true})
+	u, err := s.CreateAccount(ctx, postgres.OperatorPrincipal(), postgres.NewAccount{DisplayName: "admin", IsAdmin: true})
 	if err != nil {
-		return "", fmt.Errorf("cannot create the personal user: %w", err)
+		return "", fmt.Errorf("cannot create the administrator user: %w", err)
 	}
 	user := u.ID
 	if err := layout.WriteIdentity(user); err != nil {
 		return "", errors.New("cannot store personal.json")
 	}
-	fmt.Fprintln(out, "created the personal user", user)
+	fmt.Fprintln(out, "created the administrator user", user)
 	return user, nil
 }
 
@@ -485,13 +485,13 @@ func personalUser(ctx context.Context, s *postgres.Store, layout personal.Layout
 func ensurePersonalAdmin(ctx context.Context, s *postgres.Store, user string) error {
 	u, err := s.FindUser(ctx, user)
 	if err != nil {
-		return fmt.Errorf("cannot read the personal user: %w", err)
+		return fmt.Errorf("cannot read the administrator user: %w", err)
 	}
 	if u.IsAdmin {
 		return nil
 	}
 	if _, err := s.SetAdmin(ctx, postgres.OperatorPrincipal(), user, true); err != nil {
-		return fmt.Errorf("cannot make the personal user an administrator: %w", err)
+		return fmt.Errorf("cannot make the configured user an administrator: %w", err)
 	}
 	return nil
 }
@@ -503,7 +503,7 @@ type rootGrant struct {
 }
 
 // reconcileRoots registers missing configured source roots and grants them
-// to the personal user. A label registered with another path is an error:
+// to the administrator user. A label registered with another path is an error:
 // source roots are immutable.
 func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *personal.Config, user string, out io.Writer) ([]rootGrant, error) {
 	var roots []rootGrant

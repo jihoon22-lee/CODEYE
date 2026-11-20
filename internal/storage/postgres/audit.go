@@ -307,7 +307,8 @@ var auditActions = map[string]bool{
 	AuditFindingReviewRecorded: true, AuditScheduleCreated: true, AuditScheduleUpdated: true, AuditScheduleDeleted: true,
 	AuditEnrollTokenCreated: true, AuditEnrollTokenRevoked: true, AuditNodeEnrolled: true, AuditNodeRevoked: true,
 	AuditPoolPolicySet: true, AuditSchedulerLimitsSet: true, AuditArtifactQuotaSet: true, AuditStaleRejected: true,
-	AuditRecoveryConfirmed: true, AuditRetentionApplied: true,
+	AuditRecoveryConfirmed: true, AuditRetentionApplied: true, AuditSourceRootEveryone: true, AuditServiceSettingsSet: true,
+	AuditGitHubTokenSet: true, AuditGitHubTokenRemoved: true,
 }
 
 // AuditActions lists the closed action vocabulary.

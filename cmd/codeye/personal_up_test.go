@@ -25,6 +25,9 @@ func TestUpArguments(t *testing.T) {
 		{[]string{"--config=c.json"}, "", []string{"--config=c.json"}},
 		{[]string{"--", "-odd"}, "-odd", nil},
 		{[]string{"a", "b"}, "a", []string{"b"}},
+		{[]string{"--listen", "0.0.0.0:7331", "--plain-http", "proj"}, "proj", []string{"--listen", "0.0.0.0:7331", "--plain-http"}},
+		{[]string{"--listen", "10.0.0.5:443", "--tls-cert", "c.pem", "--tls-key", "k.pem", "--public-origin", "https://codeye.lan"}, "",
+			[]string{"--listen", "10.0.0.5:443", "--tls-cert", "c.pem", "--tls-key", "k.pem", "--public-origin", "https://codeye.lan"}},
 	} {
 		target, rest := splitTarget(c.args)
 		if target != c.target || !slices.Equal(rest, c.rest) {
@@ -66,6 +69,11 @@ func TestUpGitTarget(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		return
 	}
+	// The new configuration has no state_dir: keep the default state
+	// directory inside the test's own home.
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "state"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 	var out, errb bytes.Buffer
 	code := personalUp(context.Background(), []string{"--config", filepath.Join(dir, "p.json"), "git@github.com:o/r.git"}, &out, &errb)
 	if code != 2 || !strings.Contains(errb.String(), "only HTTPS") {

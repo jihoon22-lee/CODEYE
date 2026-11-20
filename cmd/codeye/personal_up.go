@@ -212,7 +212,7 @@ func personalOpen(ctx context.Context, args []string, out, stderr io.Writer) int
 	}
 	id, err := layout.ReadIdentity()
 	if err != nil || id == nil {
-		fmt.Fprintln(stderr, "no personal user in", layout.IdentityFile(), "- run codeye up")
+		fmt.Fprintln(stderr, "no administrator user in", layout.IdentityFile(), "- run codeye up")
 		return 1
 	}
 	opCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -258,7 +258,10 @@ func signIn(ctx context.Context, s *postgres.Store, user, origin string, fragmen
 func splitTarget(args []string) (string, []string) {
 	var target string
 	var rest []string
-	valueFlags := map[string]bool{"-config": true, "--config": true, "-postgres-bin-dir": true, "--postgres-bin-dir": true, "-comment-wait": true, "--comment-wait": true}
+	valueFlags := map[string]bool{}
+	for _, name := range []string{"config", "postgres-bin-dir", "comment-wait", "listen", "tls-cert", "tls-key", "public-origin"} {
+		valueFlags["-"+name], valueFlags["--"+name] = true, true
+	}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {

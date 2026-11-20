@@ -151,7 +151,7 @@ type Identity struct {
 	UserID        string `json:"user_id"`
 }
 
-// ReadIdentity returns the personal user, or (nil, nil) when none is stored.
+// ReadIdentity returns the administrator user `codeye up` signs in, or (nil, nil) when none is stored.
 func (l Layout) ReadIdentity() (*Identity, error) {
 	b, err := os.ReadFile(l.IdentityFile())
 	if errors.Is(err, fs.ErrNotExist) {
@@ -167,7 +167,7 @@ func (l Layout) ReadIdentity() (*Identity, error) {
 	return &id, nil
 }
 
-// WriteIdentity stores the personal user (0600).
+// WriteIdentity stores the administrator user `codeye up` signs in (0600).
 func (l Layout) WriteIdentity(userID string) error {
 	b, err := json.Marshal(Identity{SchemaVersion: recordSchema, UserID: userID})
 	if err != nil {

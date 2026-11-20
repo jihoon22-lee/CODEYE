@@ -41,7 +41,7 @@ const (
 	DatabaseExternal = "external"
 )
 
-// Config is the personal configuration (docs/OPERATIONS.md#개인-모드-설정-파일). Unknown fields are
+// Config is the personal configuration (docs/OPERATIONS.md#서비스-설정-파일). Unknown fields are
 // rejected; paths must be absolute and clean.
 type Config struct {
 	SchemaVersion string       `json:"schema_version"`

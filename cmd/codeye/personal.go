@@ -123,7 +123,7 @@ func completeConfig(cfg *personal.Config) personal.Layout {
 // homeDir is the user's home directory (tests replace it).
 var homeDir = os.UserHomeDir
 
-// addHomeRoot adds $HOME as a readable folder of the personal user unless a
+// addHomeRoot adds $HOME as a readable folder of the administrator unless a
 // configured root already holds it, so any folder under the home directory
 // can be analyzed from the web UI by its path. The root is implicit: it is
 // not written to the configuration file. The state directory may lie inside
