@@ -14,7 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// Permissions of the shared service (docs/SECURITY.md#누가-무엇을-분석하는가): who may use a
+// Permissions of the shared service (docs/SECURITY.md#서버-경로-허가): who may use a
 // source root, the administrator's service switches and the effective analysis
 // choices a claim hands to a node.
 
@@ -199,10 +199,10 @@ func (s *Store) RecordGitHubToken(ctx context.Context, user string, set bool, ho
 
 // ServiceSettings are the administrator's service-wide switches.
 type ServiceSettings struct {
-	// OthersModelReview: projects owned by a user who is not an
+	// OthersModelReview: runs started by a user who is not an
 	// administrator may send source to the model (default true).
 	OthersModelReview bool
-	// OthersBuildScripts: projects owned by a user who is not an
+	// OthersBuildScripts: runs started by a user who is not an
 	// administrator may run their build scripts as the service account
 	// (default false).
 	OthersBuildScripts bool

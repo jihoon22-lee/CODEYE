@@ -253,10 +253,10 @@ type Job struct {
 	Source    JobSource               `json:"source"`
 	Snapshot  *JobSnapshot            `json:"snapshot"`
 	Resources Resources               `json:"resources"`
-	// Offered is what the service lets this project's analysis use (the
-	// administrator's switches for projects of other users); nil from older
-	// controllers means everything. A node never allows more than its own
-	// configuration and the project's choices either.
+	// Offered is what the service lets the run use (an administrator's
+	// run everything, another user's run the administrator's switches);
+	// nil from older controllers means everything. A node never allows more
+	// than its own configuration and the project's choices either.
 	Offered *AnalysisOffer `json:"offered,omitempty"`
 	// GitCredentialUser is the user who started the run (a scheduled run:
 	// the schedule's author). A node with a per-user Git

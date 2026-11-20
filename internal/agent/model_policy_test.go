@@ -96,9 +96,9 @@ func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
 // The service's offer bounds the project's choices and what only the offer
 // took away is marked as withheld; a node on the controller's machine
 // (ControllerSources) takes a root or Git host the administrator added in
-// the web from the job; a Git fetch reads the project owner's own token
-// file.
-func TestOfferControllerSourcesAndOwnerToken(t *testing.T) {
+// the web from the job; a Git fetch reads the own token file of the user
+// who started the run.
+func TestOfferControllerSourcesAndRequesterToken(t *testing.T) {
 	both := domain.AnalysisChoices{SendSourceToModel: true, RunBuildScripts: true}
 	owner := domain.NewID()
 	dir := filepath.Join(t.TempDir(), "github-users")
@@ -121,7 +121,7 @@ func TestOfferControllerSourcesAndOwnerToken(t *testing.T) {
 	if j := ag.buildJob(&a); j.AllowRepositoryCode || j.RepositoryCodeWithheld || j.ModelReviewWithheld {
 		t.Fatalf("not chosen: %+v", j)
 	}
-	// Git: the host from the job, the owner's token file.
+	// Git: the host from the job, the token file of the user who started the run.
 	a.job.Source = nodeproto.JobSource{Kind: "git", RepositoryURL: "https://ghe.example.com/o/r", Host: "GHE.example.com"}
 	a.job.GitCredentialUser = owner
 	if j := ag.buildJob(&a); j.Source.AllowedHost != "ghe.example.com" || j.GitCredentialFile != filepath.Join(dir, owner+".json") {
@@ -129,7 +129,7 @@ func TestOfferControllerSourcesAndOwnerToken(t *testing.T) {
 	}
 	a.job.GitCredentialUser = "../x"
 	if j := ag.buildJob(&a); j.GitCredentialFile != "" {
-		t.Fatalf("bad owner id read %q", j.GitCredentialFile)
+		t.Fatalf("bad user id read %q", j.GitCredentialFile)
 	}
 	// A separately started node takes neither from the job, and keeps its
 	// single credential file.

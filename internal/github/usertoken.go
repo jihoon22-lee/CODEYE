@@ -18,8 +18,9 @@ const TokenFromWeb = "web"
 // UserTokens is the directory of per-user GitHub tokens
 // (<state>/secrets/github-users, 0700): <user_id>.json, 0600, readable by
 // the service account only. The controller reads a user's file for the
-// GitHub API calls of that user's projects and the agent's worker for their
-// Git fetches; nothing else sees a token, and the API never returns one.
+// GitHub API calls made for that user and the agent's worker for the Git
+// fetches of the runs they start; nothing else sees a token, and the API
+// never returns one.
 type UserTokens string
 
 // UserTokensDir is the directory under a state directory.

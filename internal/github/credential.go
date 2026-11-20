@@ -18,7 +18,7 @@ type Credential struct {
 	SchemaVersion string `json:"schema_version"`
 	Host          string `json:"host"`
 	Token         string `json:"token"`
-	// Source is where the token came from: GH_TOKEN, GITHUB_TOKEN or gh.
+	// Source is where the token came from: GH_TOKEN, GITHUB_TOKEN, gh or web.
 	Source string `json:"source"`
 	// Login is the token's account; "" when GitHub could not be asked.
 	Login string `json:"login,omitempty"`

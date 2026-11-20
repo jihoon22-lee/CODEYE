@@ -36,7 +36,7 @@ func (s Stage) Valid() bool {
 const (
 	ReasonModelSourceNotApproved = "model_source_not_approved"
 	// ReasonModelReviewNotOffered: the project chose the model review but the
-	// service administrator does not offer it to projects of other users.
+	// service administrator does not offer it to runs other users start.
 	ReasonModelReviewNotOffered = "model_review_not_offered"
 	ReasonNoDocuments           = "no_documents"
 	ReasonNoToolObservations    = "no_tool_observations"

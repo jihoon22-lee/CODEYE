@@ -16,11 +16,11 @@ import (
 // One service, many users: a user without an allowed folder is told so and
 // shown none; the administrator opens a folder to everyone in the web; each
 // user stores their own GitHub token, which is never answered, logged or
-// audited; a pull request of a project is resolved with its owner's token
-// only (also when a member with a token of their own starts the run), and a
-// project of a user without a token reaches public repositories only; the
-// administrator's switches change what other users' projects get and the
-// setup screen says why.
+// audited; a pull request is resolved, previewed and commented on with the
+// token of the user who starts or asks (never the project owner's for a
+// member), and a user without a token reaches public repositories only; the
+// administrator's switches change what other users' runs get and the setup
+// screen says why.
 func TestSharedServiceForOtherUsers(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("private file modes")

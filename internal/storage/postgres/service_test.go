@@ -12,8 +12,8 @@ import (
 // (registration, readable lists, claim re-check); closing it refuses new
 // registrations and queued runs again. A node on the controller's machine
 // (source:controller) takes the root without having it in its enrollment
-// and gets its path; the job names the project owner for the Git token and
-// carries the service's offer for that owner.
+// and gets its path; the job names the user who started the run for the
+// Git token and carries the service's offer for that user.
 func TestEveryoneRootsOfferAndControllerNode(t *testing.T) {
 	e := newNodeEnv(t)
 	s, ctx := e.s, e.ctx
@@ -68,7 +68,7 @@ func TestEveryoneRootsOfferAndControllerNode(t *testing.T) {
 	if resp.Job.Source.RootPath != dir || resp.Job.Offered == nil || !resp.Job.Offered.ModelReview || resp.Job.Offered.BuildScripts {
 		t.Fatalf("job %+v offer %+v", resp.Job.Source, resp.Job.Offered)
 	}
-	// The administrator's switches change what other users' projects get.
+	// The administrator's switches change what other users' runs get.
 	off, on := false, true
 	if _, err := s.SetServiceSettings(ctx, by, ServiceSettingsPatch{OthersModelReview: &off, OthersBuildScripts: &on}); err != nil {
 		t.Fatal(err)
