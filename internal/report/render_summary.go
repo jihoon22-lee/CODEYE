@@ -1219,8 +1219,12 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 	if source := v.HeaderSource(); source != "" {
 		p(mdText(l.Label("report.target")), " · ", mdCode(source))
 	}
-	if at := v.HeaderTime(); at.Display != "" {
+	timing := v.HeaderTiming()
+	for _, at := range timing.Times {
 		p(mdText(at.Label), " · ", mdText(at.Display))
+	}
+	if timing.Duration != "" {
+		p(mdText(l.Label("identity.duration")), " · ", mdText(timing.Duration))
 	}
 	p()
 	if v.HasStatusBanner() {
@@ -1267,7 +1271,7 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 	p()
 	p(mdText(d.State))
 	p()
-	if d.Review && d.DocumentClaim == "" {
+	if d.Review && (d.DocumentClaim == "" || d.AdditionalObservation) {
 		p("> ", mdText(l.Label("insight.interpretation")))
 		p()
 	}
@@ -1299,8 +1303,25 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 		p("**", mdText(l.Label(label)), "** ", mdText(d.Next))
 		p()
 	}
+	if d.Scope != "" {
+		p(mdText(l.Label("col.applies_to")), " ", mdCode(d.Scope))
+		p()
+	}
+	if d.Followup {
+		p(mdText(l.Label("decision.followup")))
+		p()
+	}
 	for _, source := range d.Sources {
 		mdCitations(p, []sourceCitation{source.Brief()})
+	}
+	if d.Action != nil {
+		line := d.Action.State
+		if d.Action.Title != "" {
+			line += " · " + d.Action.Title
+		}
+		p("**", mdText(l.Label("decision.priority_action")), "** ", mdText(line))
+		p()
+		mdCitations(p, []sourceCitation{d.Action.Source.Brief()})
 	}
 	if d.Coverage != "" {
 		p(mdText(d.Coverage))

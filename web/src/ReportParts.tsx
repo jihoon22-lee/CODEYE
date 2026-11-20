@@ -74,7 +74,7 @@ function EvidenceLocation({ location, href, excerpt, path, kind, preferOriginal,
   location: string; href?: string; excerpt?: Excerpt | null; path?: string; kind?: string; preferOriginal?: boolean; actionLabel?: string;
 }) {
   const isDocument = kind === 'document';
-  const action = actionLabel ?? (isDocument ? t.viewDocument : t.viewCode);
+  const action = actionLabel ?? (isDocument ? t.viewDocument : kind === 'test' ? t.viewTestCode : kind === 'manifest' ? t.viewManifest : t.viewCode);
   if (href && preferOriginal) return <div className="report-evidence"><SourceAnchor href={href} location={location} action={action} /></div>;
   const file = <span className="report-file"><ReportIcon name="file" /><code>{location}</code></span>;
   return <div className="report-evidence">

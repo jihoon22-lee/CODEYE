@@ -75,7 +75,9 @@ function FlatReport({ report, history }: { report: AnalysisReport; history?: Rep
 }
 
 // The report of a finished run opens by itself; extra renders above it (the improvement hints).
-export function ReportPanel({ api, runID, extra }: { api: Api; runID: string; extra?: (report: AnalysisReport) => ReactNode }) {
+export function ReportPanel({ api, runID, extra, claimReportLanding }: {
+  api: Api; runID: string; extra?: (report: AnalysisReport) => ReactNode; claimReportLanding?: (runId: string) => boolean;
+}) {
   const [requested, setRequested] = useState(1);
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [error, setError] = useState('');
@@ -83,6 +85,23 @@ export function ReportPanel({ api, runID, extra }: { api: Api; runID: string; ex
   const [loads, setLoads] = useState(0);
   const reload = useCallback(() => setLoads((n) => n + 1), []);
   const revision = report?.revision;
+  const attachReport = useCallback((container: HTMLDivElement | null) => {
+    if (!claimReportLanding || !container) return;
+    const reveal = () => {
+      if (document.visibilityState === 'hidden') return;
+      document.removeEventListener('visibilitychange', reveal);
+      const heading = container.querySelector<HTMLElement>('.report-name');
+      if (!heading || !claimReportLanding(runID)) return;
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+      heading.closest('article')?.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+    };
+    if (document.visibilityState === 'hidden') {
+      document.addEventListener('visibilitychange', reveal);
+      return () => document.removeEventListener('visibilitychange', reveal);
+    }
+    reveal();
+  }, [claimReportLanding, runID]);
   useEffect(() => {
     if (revision === undefined) return;
     // The comparison is of the revision shown, never of a newer one published meanwhile.
@@ -108,7 +127,10 @@ export function ReportPanel({ api, runID, extra }: { api: Api; runID: string; ex
       });
     return () => controller.abort();
   }, [api, runID, requested]);
-  if (report) return <><ReportDocument report={report} history={{ load, api, reload }} />{extra?.(report)}</>;
+  if (report) return <>
+    <div ref={attachReport}><ReportDocument report={report} history={{ load, api, reload }} /></div>
+    {extra?.(report)}
+  </>;
   return (
     <section>
       {error && <p role="alert">{error}</p>}

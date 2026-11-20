@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import sectioned from '../../examples/report.json';
 import { PROVIDERS, advance, backend, flush, renderApp, runCalls } from './harness';
 import { ko as t } from './locales/ko';
-import { PROJECT, apiError, json } from './test-utils';
+import { reportKo } from './locales/report-ko';
+import { PROJECT, apiError, json, runView } from './test-utils';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -76,6 +78,125 @@ describe('projects', () => {
     click(t.projects.reload);
     await flush();
     expect(screen.getByRole('button', { name: /sample/ })).toBeTruthy();
+  });
+});
+
+describe('shared run links', () => {
+  const projectId = '01969cc2-a4dc-7b69-bc31-0a784675c954';
+  const runId = '01969cc2-a4dc-7b69-bc31-0a784675c955';
+  const hash = `#project=${projectId}&run=${runId}`;
+  const project = { ...PROJECT, id: projectId, last_run: { id: runId, status: 'partial' } };
+  const finished = runView({ id: runId, project_id: projectId, status: 'partial', report: { revision: 1 } });
+  const report = () => json(200, { ...sectioned, demo: false, run_id: runId });
+  const reportHeading = () => within(screen.getByRole('article', { name: reportKo.title }))
+    .getByRole('heading', { level: 4, name: sectioned.project.name });
+  const scroll = vi.fn();
+  const reportScrolls = () => scroll.mock.contexts.filter(element => element instanceof HTMLElement && element.matches('.report-document'));
+  const originalScroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+  const showTab = (value: 'visible' | 'hidden') => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value });
+    fireEvent(document, new Event('visibilitychange'));
+  };
+
+  function open(reportResponse: () => Response | Promise<Response> = report, url = hash, runResponse = () => json(200, finished)) {
+    return renderApp(backend({
+      'GET /api/v1/projects': () => json(200, { items: [project], next_cursor: null }),
+      [`GET /api/v1/projects/${projectId}/schedules`]: () => json(200, { items: [], can_manage: false }),
+      [`GET /api/v1/runs/${runId}`]: runResponse,
+      [`GET /api/v1/runs/${runId}/report`]: reportResponse,
+    }), { hash: url });
+  }
+
+  beforeEach(() => {
+    scroll.mockClear();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll });
+  });
+  afterEach(() => {
+    if (originalScroll) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScroll);
+    else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  });
+
+  it('focuses and scrolls to the loaded report once without replacing the link', async () => {
+    const { replaceState } = open();
+    await flush();
+    expect(document.activeElement).toBe(reportHeading());
+    expect(reportHeading().tabIndex).toBe(-1);
+    expect(reportScrolls()).toHaveLength(1);
+    expect(replaceState).not.toHaveBeenCalled();
+    click(t.accounts.tabs.members);
+    click(t.accounts.tabs.run);
+    await flush();
+    expect(reportHeading()).toBeTruthy();
+    expect(reportScrolls()).toHaveLength(1);
+  });
+
+  it('waits to land until the browser tab is visible', async () => {
+    let reply!: (response: Response) => void;
+    open(() => new Promise(resolve => { reply = resolve; }));
+    await flush();
+    showTab('hidden');
+    reply(report());
+    await flush();
+    expect(document.activeElement).toBe(document.body);
+    expect(reportScrolls()).toHaveLength(0);
+    showTab('visible');
+    await flush();
+    expect(document.activeElement).toBe(reportHeading());
+    expect(reportScrolls()).toHaveLength(1);
+  });
+
+  it('keeps the user on their chosen project tab when a report loads later', async () => {
+    let reply!: (response: Response) => void;
+    let calls = 0;
+    open(() => calls++ === 0 ? new Promise(resolve => { reply = resolve; }) : report());
+    await flush();
+    click(t.accounts.tabs.members);
+    reply(report());
+    await flush();
+    expect(screen.getByRole('button', { name: t.accounts.tabs.members }).getAttribute('aria-current')).toBe('page');
+    click(t.accounts.tabs.run);
+    await flush();
+    expect(reportHeading()).toBeTruthy();
+    expect(reportScrolls()).toHaveLength(0);
+  });
+
+  it('respects focus already moved to a form while the report was loading', async () => {
+    let reply!: (response: Response) => void;
+    open(() => new Promise(resolve => { reply = resolve; }));
+    await flush();
+    const field = screen.getByRole('textbox', { name: t.quick.field });
+    field.focus();
+    reply(report());
+    await flush();
+    expect(reportHeading()).toBeTruthy();
+    expect(document.activeElement).toBe(field);
+    expect(reportScrolls()).toHaveLength(0);
+  });
+
+  it.each(['', `#project=${projectId}`])('keeps ordinary project selection at the project details (%s)', async url => {
+    open(report, url);
+    await flush();
+    if (!url) fireEvent.click(screen.getByRole('button', { name: /sample/ }));
+    await flush();
+    expect(reportHeading()).toBeTruthy();
+    expect(reportScrolls()).toHaveLength(0);
+  });
+
+  it('keeps a linked active run on progress until it has a report', async () => {
+    const { calls } = open(report, hash, () => json(200, { ...finished, status: 'running', report: null }));
+    await flush();
+    expect(within(screen.getByRole('region', { name: t.runs.title })).getByText(t.runs.statusLabels.running!)).toBeTruthy();
+    expect(calls.some(call => call.url.includes('/report'))).toBe(false);
+    expect(reportScrolls()).toHaveLength(0);
+  });
+
+  it.each([403, 404])('keeps the report error in view without moving focus (%s)', async status => {
+    open(() => apiError(status, status === 403 ? 'FORBIDDEN' : 'NOT_FOUND'));
+    await flush();
+    expect(within(screen.getByRole('region', { name: t.runs.title })).getByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('button', { name: reportKo.retry })).toBeTruthy();
+    expect(screen.queryByRole('article', { name: reportKo.title })).toBeNull();
+    expect(reportScrolls()).toHaveLength(0);
   });
 });
 

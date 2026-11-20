@@ -189,11 +189,13 @@ func TestCodeFreeSections(t *testing.T) {
 	full := exampleReport(t)
 	codeLike := "func Charge(pay func() error) error { return pay() }"
 	secretLike := "api_key = \"" + "sk-" + "abcdefghijklmnop12" + "\""
+	pendingLocation := "private/config.go:357–372"
 	planted := clone(t, full)
 	planted.Documents.Contracts[0].Statement = codeLike
 	planted.Documents.Conflicts[0].Summary = secretLike
 	planted.Documents.Conflicts[0].Impact = codeLike
 	planted.Documents.Questions[0].Question = codeLike + " " + secretLike
+	planted.Documents.Comparisons[0].Reason = pendingLocation + "에서 구현 여부를 확인할 수 있다."
 	p := Project(planted, false)
 	if err := ValidateReport(p); err != nil {
 		t.Fatal(err)
@@ -202,7 +204,7 @@ func TestCodeFreeSections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range []string{codeLike, "sk-" + "abcdefghijklmnop12", "func Charge", full.Documents.Contracts[1].Statement, full.Environment.Notes[0].AffectedChecks, full.CodeReview.Limits[0].Statement} {
+	for _, s := range []string{codeLike, "sk-" + "abcdefghijklmnop12", "func Charge", pendingLocation, full.Documents.Contracts[1].Statement, full.Environment.Notes[0].AffectedChecks, full.CodeReview.Limits[0].Statement} {
 		if bytes.Contains(b, []byte(s)) {
 			t.Fatalf("code-free projection carries %q", s)
 		}

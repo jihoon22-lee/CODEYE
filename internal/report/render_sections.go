@@ -230,14 +230,6 @@ func modelPart(l Locale, m ModelInterpretation) secPart {
 	return secPart{Paras: []string{tf(l, "model.not_performed", reasonText(l, optText(m.Reason, m.State)))}}
 }
 
-func evidencePart(l Locale, ev []SectionEvidence) secPart {
-	p := secPart{Heading: l.Label("evidence"), Empty: l.Label("evidence_none"), Table: &secTable{Head: []string{l.Label("col.evidence_id"), l.Label("col.kind"), l.Label("col.location"), l.Label("col.blob")}}}
-	for _, e := range ev {
-		p.Table.Rows = append(p.Table.Rows, []secCell{{Text: e.ID, Code: true, Anchor: ""}, code(e.Kind), code(e.Path + ":" + strconv.Itoa(e.StartLine) + "-" + strconv.Itoa(e.EndLine)), code(short(e.BlobSHA256))})
-	}
-	return p
-}
-
 func listPart(heading string, items []secItem, empty string) secPart {
 	return secPart{Heading: heading, List: items, Empty: empty}
 }
@@ -351,14 +343,12 @@ func newSecView(r Report, digest string, l Locale) secView {
 	if e.Model.State == ModelPerformed {
 		mp.Heading = l.Label("env.notes")
 		for _, n := range e.Notes {
-			mp.List = append(mp.List, secItem{Text: tf(l, "env.note", n.Module, n.AffectedChecks, n.StillCheckable, n.NeededObservation), Codes: n.EvidenceIDs})
+			mp.List = append(mp.List, secItem{Text: tf(l, "env.note", n.Module, n.AffectedChecks, n.StillCheckable, n.NeededObservation),
+				Sources: v.sourceCitations(n.EvidenceIDs, e.Evidence)})
 		}
 		mp.Empty = l.Label("none")
 	}
 	env.Parts = append(env.Parts, mp)
-	if len(e.Evidence) > 0 {
-		env.Parts = append(env.Parts, evidencePart(l, e.Evidence))
-	}
 	v.Sections = append(v.Sections, env)
 
 	// Documents.
@@ -432,9 +422,6 @@ func newSecView(r Report, digest string, l Locale) secView {
 			items = append(items, secItem{Text: x.Note, Sources: v.sourceCitations(x.EvidenceIDs, d.Evidence)})
 		}
 		docs.Parts = append(docs.Parts, listPart(l.Label("docs.instruction_notes"), items, l.Label("none")))
-	}
-	if len(d.Evidence) > 0 {
-		docs.Parts = append(docs.Parts, evidencePart(l, d.Evidence))
 	}
 	v.Sections = append(v.Sections, docs)
 
@@ -550,7 +537,12 @@ func newSecView(r Report, digest string, l Locale) secView {
 	if len(c.Roles) > 0 {
 		rt := &secTable{Head: []string{l.Label("col.role"), l.Label("col.task_status"), l.Label("col.result"), l.Label("col.reason")}}
 		for _, x := range c.Roles {
-			rt.Rows = append(rt.Rows, []secCell{code(x.Key), txt(lab(l, "task_status", optText(x.TaskStatus, "-"))), code(x.Result), code(optText(x.Reason, "-"))})
+			reason := optText(x.Reason, "-")
+			detail := code(reason)
+			if reason == "no_review_scope" {
+				detail = txt(reasonText(l, reason))
+			}
+			rt.Rows = append(rt.Rows, []secCell{code(x.Key), txt(lab(l, "task_status", optText(x.TaskStatus, "-"))), code(x.Result), detail})
 		}
 		cb.Parts = append(cb.Parts, secPart{Heading: l.Label("review.roles"), Table: rt})
 	}
@@ -894,8 +886,9 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <div class="report-verdict">
 <span class="badge">{{if .HasStatusBanner}}{{reportIcon "clock"}}{{else}}{{reportIcon "circle-check"}}{{end}} {{.ReportStatus}}</span>
 </div>
-{{$when := .HeaderTime}}{{if or $when.Display .R.Inputs.CommitSHA}}<dl class="export-hero-meta">
-{{if $when.Display}}<div>{{reportIcon "clock"}}<dt>{{$when.Label}}</dt><dd><time datetime="{{$when.Original}}">{{$when.Display}}</time></dd></div>{{end}}
+{{$timing := .HeaderTiming}}{{if or $timing.Times .R.Inputs.CommitSHA}}<dl class="export-hero-meta">
+{{range $timing.Times}}<div>{{reportIcon "clock"}}<dt>{{.Label}}</dt><dd><time datetime="{{.Original}}">{{.Display}}</time></dd></div>{{end}}
+{{with $timing.Duration}}<div><dt>{{$.L.Label "identity.duration"}}</dt><dd>{{.}}</dd></div>{{end}}
 {{with .R.Inputs.CommitSHA}}<div>{{reportIcon "git-commit"}}<dt>{{$.L.Label "identity.commit"}}</dt><dd><code title="{{.}}">{{short .}}</code></dd></div>{{end}}
 </dl>{{end}}
 {{if .HasStatusBanner}}<p class="report-hero-note" role="status">{{.Banner}}</p>{{end}}
@@ -975,18 +968,22 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{define "decision"}}{{$l := .L}}{{with .Decision}}
 <div class="card report-group report-decision" data-tone="{{.Tone}}">
 <div class="card-body">
-<div class="report-decision-state"><span class="report-group-mark">{{reportIcon (groupIcon .Tone)}}</span><span class="decision-label">{{.State}}</span>{{if and .Review (not .DocumentClaim)}}<span class="report-group-note" role="note">{{$l.Label "insight.interpretation"}}</span>{{end}}</div>
+<div class="report-decision-state"><span class="report-group-mark">{{reportIcon (groupIcon .Tone)}}</span><span class="decision-label">{{.State}}</span>{{if and .Review (or (not .DocumentClaim) .AdditionalObservation)}}<span class="report-group-note" role="note">{{$l.Label "insight.interpretation"}}</span>{{end}}</div>
 <h3>{{.Title}}</h3>
 {{if .DocumentClaim}}<p class="report-decision-copy">{{.DocumentClaim}}</p>{{end}}
 {{if .Reason}}<p class="report-decision-copy">{{if .ReasonLabel}}<strong>{{.ReasonLabel}}</strong> {{end}}{{.Reason}}</p>{{end}}
 {{if .Condition}}<p class="report-decision-copy"><strong>{{$l.Label "decision.option"}}</strong> {{.Condition}}</p>{{end}}
 {{if .Boundary}}<p class="report-decision-copy"><strong>{{$l.Label "decision.unconfirmed"}}</strong> {{.Boundary}}</p>{{end}}
 {{if .Next}}<p class="report-decision-next"><strong>{{if eq .Tone "action"}}{{$l.Label "decision.next"}}{{else}}{{$l.Label "opening.verification"}}{{end}}</strong><span>{{.Next}}</span></p>{{end}}
+{{if .Scope}}<p class="report-decision-copy">{{$l.Label "col.applies_to"}} <code>{{.Scope}}</code></p>{{end}}
+{{if .Followup}}<p class="report-decision-copy">{{$l.Label "decision.followup"}}</p>{{end}}
 {{if .Sources}}<div class="report-decision-sources">{{range .Sources}}{{template "citation" .Brief}}{{end}}</div>{{end}}
+{{if .Action}}<p class="report-decision-next"><strong>{{$l.Label "decision.priority_action"}}</strong> {{.Action.State}}{{if .Action.Title}} · {{.Action.Title}}{{end}}</p>
+<div class="report-decision-sources">{{template "citation" .Action.Source.Brief}}</div>{{end}}
 {{if .Glossary}}<details class="report-glossary"><summary>{{reportIcon "chevron-down"}} {{$l.Label "decision.glossary"}}</summary><dl>
 {{range .Glossary}}<div><dt>{{.Name}}</dt><dd>{{.Definition}}</dd></div>{{end}}
 </dl></details>{{end}}
-{{if .Coverage}}<div class="report-decision-coverage"><p>{{.Coverage}}</p><a href="#documents" class="btn btn-sm btn-ghost-primary report-card-action">{{$l.Label "decision.documents"}}{{reportIcon "chevron-right"}}</a></div>{{end}}
+{{if or .Coverage .ComparisonAnchor}}<div class="report-decision-coverage">{{if .Coverage}}<p>{{.Coverage}}</p>{{end}}<a href="#{{or .ComparisonAnchor "documents"}}" class="btn btn-sm btn-ghost-primary report-card-action">{{$l.Label "decision.documents"}}{{reportIcon "chevron-right"}}</a></div>{{end}}
 </div>
 </div>
 {{end}}{{end}}

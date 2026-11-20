@@ -176,18 +176,33 @@ export type Decision = { finding: Finding; source: LocatedEvidence; condition?: 
 const hiddenDispositions = new Set(['accepted_risk', 'false_positive', 'suppressed', 'fixed_by_user']);
 
 const genericTitleWords = new Set([
-  '일부', '조건', '동작', '결과', '검사', '검증', '확인', '관리', '처리', '분기', '경로', '실패', '오류', '예외', '반환', '발생', '가능', '필요', '있음', '없음',
-  'the', 'and', 'for', 'after', 'before', 'from', 'with', 'when', 'error', 'errors', 'failure', 'failures', 'failed', 'check', 'checks', 'checking', 'handle', 'handling', 'result', 'state', 'case', 'path', 'paths', 'can', 'may',
+  '코드', '구현', '동작', '보류', '기능', '확인', '확인한다', '오류', '실패', '처리', '검사', '결과', '때문', '조건', '일부', '검증', '관리', '분기', '경로', '예외', '반환', '발생', '가능', '필요', '있음', '없음',
+  '문서', '범위', '지원', '버전', '환경', '여부', '사용', '실제', '설정',
+  'code', 'error', 'errors', 'failed', 'failure', 'failures', 'check', 'checks', 'checking', 'test', 'during', 'with', 'the', 'and', 'when', 'from', 'not', 'may', 'can', 'does', 'is', 'in', 'on', 'to', 'of', 'or',
+  'for', 'after', 'before', 'handle', 'handling', 'result', 'state', 'case', 'path', 'paths',
+  'document', 'documentation', 'support', 'supported', 'scope', 'version', 'environment', 'actual', 'configuration',
 ]);
 
 function titleWords(title: string) {
-  return (title.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [])
+  return (title.toLowerCase().match(/[\p{L}\p{Nd}_]+/gu) ?? [])
     .filter(word => [...word].length >= 2 && /\p{L}/u.test(word) && !genericTitleWords.has(word));
 }
 
 export function shareTitleSubject(a: string, b: string) {
   const subject = new Set(titleWords(a));
   return titleWords(b).some(word => subject.has(word));
+}
+
+// Match the earliest question that identifies exactly one tied comparison by
+// its scope, cited document and subject. Fall back to the published order.
+function questionComparison(documents: Sections['documents'], tied: Sections['documents']['comparisons']) {
+  if (tied.length < 2) return tied[0];
+  for (const question of documents.questions) {
+    const matches = tied.filter(row => row.scope === question.appliesTo && shareTitleSubject(row.statement, question.question) &&
+      documents.citations.some(c => primaryCitation(c, 'document') && row.documentRefs.includes(c.id) && question.evidence.includes(c.id)));
+    if (matches.length === 1) return matches[0];
+  }
+  return tied[0];
 }
 
 // A second matched promise may explain an option on the same named operation.
@@ -210,7 +225,7 @@ export function matchingDocumentCondition(
     return code?.path === lead.path && code.line === lead.line && code.end === lead.end &&
       names(row.statement).some(operation => operations.includes(operation)) &&
       options(row.statement).some(option => !first.statement.includes(option));
-  })?.statement;
+  });
 }
 
 // Relate complementary outcomes on a concrete source path only when their titles name a shared subject.
@@ -260,11 +275,16 @@ export function projectReadings(report: AnalysisReport, sections: Sections) {
     cites(documents.citations, row.documentRefs, 'document') && cites(documents.citations, row.codeRefs, 'code');
   const comparisons: Sections['documents']['comparisons'] = [];
   for (const status of ['mismatch', 'partial', 'match']) {
-    comparisons.push(...documents.comparisons.filter(row => row.status === status && hasComparisonEvidence(row)).slice(0, 2));
+    const rows = documents.comparisons.filter(row => row.status === status && hasComparisonEvidence(row));
+    comparisons.push(...rows.sort((a, b) => Number(Boolean(b.followup)) - Number(Boolean(a.followup))).slice(0, 2));
   }
-  const uncertainComparison = comparisons.length === 0
-    ? documents.comparisons.find(row => row.status === 'unknown' && hasComparisonEvidence(row))
-    : undefined;
+  const unknownRows = comparisons.length === 0 ? documents.comparisons.filter(row => row.status === 'unknown' && row.statement.trim() &&
+    cites(documents.citations, row.documentRefs, 'document')) : [];
+  const observations = unknownRows.filter(row => row.additional && cites(documents.citations, row.additional.codeRefs, 'code'));
+  const cited = unknownRows.filter(hasComparisonEvidence);
+  const tied = observations.length > 0 ? observations : cited.length > 0 ? cited : unknownRows;
+  const preferredUnknown = report.includesCode === false ? tied[0] : questionComparison(documents, tied);
+  const uncertainComparison = observations.length + cited.length > 0 ? preferredUnknown : undefined;
   const strengths = codeReview.strengths.filter(row => cites(codeReview.citations, row.refs, 'code'));
 
   let diagnostic: Observation | undefined;
@@ -277,10 +297,7 @@ export function projectReadings(report: AnalysisReport, sections: Sections) {
         loc && loc.path && loc.start > 0 && loc.end >= loc.start && !secondaryReviewPath(loc.path);
     });
   }
-  const documentedBehavior = !uncertainComparison && actions.length + comparisons.length + strengths.length + followups.length === 0
-    ? documents.comparisons.find(row => row.status === 'unknown' && row.statement.trim() && row.statement !== t.sections.withheld &&
-      cites(documents.citations, row.documentRefs, 'document'))
-    : undefined;
+  const documentedBehavior = uncertainComparison ? undefined : preferredUnknown;
   return { actions: actions.slice(0, 3), comparisons: comparisons.slice(0, 3), uncertainComparison, documentedBehavior, strengths, followups: followups.slice(0, 2), diagnostic };
 }
 

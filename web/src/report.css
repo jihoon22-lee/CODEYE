@@ -39,7 +39,7 @@
   color: #d3e1f8;
   font-size: .82rem;
 }
-.web-report .report-hero-source code {
+.web-report :is(.report-hero-source, .report-hero-time) code {
   padding: 0;
   color: #f4f8ff;
   background: none;

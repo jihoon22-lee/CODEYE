@@ -61,12 +61,17 @@ func TestProjectOpeningSelectsLocatedProductionReview(t *testing.T) {
 	}
 	v := secView{view: view{L: Korean, R: Report{Export: Export{IncludeCode: true}, CodeReview: c, Documents: d, Findings: f}}}
 	decision := v.projectDecision()
-	if decision.Title != "재현된 조치" || decision.Tone != "action" || len(decision.Sources) != 1 || decision.Sources[0].Location != "store.py:12-27" {
-		t.Fatalf("one strongest grounded decision required: %+v", decision)
+	if decision.Title != "불일치 계약" || len(decision.Sources) != 2 || decision.Sources[0].Location != "README.md:2-7" || decision.Action == nil {
+		t.Fatalf("the documented behavior and independent high priority action should both appear: %+v", decision)
 	}
-	if decision.State != "실행으로 재현" {
-		t.Fatalf("the overview should identify execution evidence: %q", decision.State)
+	if decision.Action.Title != "재현된 조치" || decision.Action.State != "실행으로 재현" || decision.Action.Source.Location != "store.py:12-27" {
+		t.Fatalf("the overview should identify evidence for the strongest independent action: %+v", decision.Action)
 	}
+	v.R.Findings = f[4:6]
+	if decision = v.projectDecision(); decision.Title != "불일치 계약" || decision.Action != nil {
+		t.Fatalf("lower priority findings should stay in their section: %+v", decision)
+	}
+	v.R.Documents = &DocumentsSection{}
 	v.R.Findings = f[:1]
 	if state := v.projectDecision().State; state != "코드 검토로 확인" {
 		t.Fatalf("the overview should identify code review evidence: %q", state)
@@ -192,6 +197,65 @@ func TestUnknownComparisonKeepsItsEvidenceAndStatus(t *testing.T) {
 	}
 }
 
+func TestDocumentQuestionBreaksOnlyAnUnambiguousUnknownTie(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	r.CodeReview.FindingIDs, r.CodeReview.Strengths = nil, nil
+	readme := SectionEvidence{ID: "readme", Path: "README.md", Kind: "document", StartLine: 2, EndLine: 12}
+	guide := SectionEvidence{ID: "guide", Path: "docs/guide.md", Kind: "document", StartLine: 2, EndLine: 12}
+	r.Documents.Evidence = []SectionEvidence{readme, guide}
+	const queue = "대기열 보존 조건을 확인한다."
+	const restore = "복원 기록을 확인한다."
+	row := func(statement string) DocComparison {
+		return DocComparison{Statement: statement, AppliesTo: ".", Status: "unknown", Reason: "공개 진입점은 확인하지 못했다.",
+			DocumentEvidenceIDs: []string{readme.ID}}
+	}
+	r.Documents.Comparisons = []DocComparison{row("지원 범위와 실행 환경을 설명한다."), row("대기열 항목은 연결을 끊어도 보존된다."), row("복원 기록을 읽을 수 있다.")}
+	question := func(prose, scope, id string) DocQuestion {
+		return DocQuestion{Question: prose, AppliesTo: scope, EvidenceIDs: []string{id}}
+	}
+	for _, tc := range []struct {
+		name      string
+		questions []DocQuestion
+		want      int
+	}{
+		{name: "earliest distinct subject", questions: []DocQuestion{question(queue, ".", readme.ID), question(restore, ".", readme.ID)}, want: 1},
+		{name: "citation differs", questions: []DocQuestion{question(queue, ".", guide.ID)}},
+		{name: "scope differs", questions: []DocQuestion{question(queue, "module", readme.ID)}},
+		{name: "ambiguous", questions: []DocQuestion{question("대기열 또는 복원 동작을 확인한다.", ".", readme.ID)}},
+		{name: "all generic", questions: []DocQuestion{question("지원 범위 확인", ".", readme.ID)}},
+		{name: "older document"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r.Documents.Questions = tc.questions
+			selected := newSummaryView(r, "0", Korean).Decision
+			want := r.Documents.Comparisons[tc.want].Statement
+			if selected.DocumentClaim != want || selected.ComparisonAnchor != comparisonAnchor(tc.want) {
+				t.Fatalf("selected %+v, want %q", selected, want)
+			}
+		})
+	}
+	r.Documents.Questions = []DocQuestion{question(queue, ".", readme.ID)}
+	for _, include := range []bool{true, false} {
+		published := Project(r, include)
+		selected := newSummaryView(published, "0", Korean).Decision
+		wantAnchor := comparisonAnchor(0)
+		if include {
+			wantAnchor = comparisonAnchor(1)
+		}
+		if selected.ComparisonAnchor != wantAnchor || selected.State != Korean.Label("decision.comparison.unknown") {
+			t.Fatalf("unexpected decision in include_code=%t: %+v", include, selected)
+		}
+		html, err := RenderHTMLAt(published, "0", Korean, DetailSummary)
+		if err != nil {
+			t.Fatal(err)
+		}
+		contents := string(html)
+		if !strings.Contains(contents, `href="#`+wantAnchor+`"`) || !strings.Contains(contents, `id="`+wantAnchor+`" tabindex="-1">`+selected.State) {
+			t.Fatal("the overview is missing the exact comparison route or matching status")
+		}
+	}
+}
+
 func TestDocumentDetailCollapsesOnlyAnEquivalentContract(t *testing.T) {
 	r := storedExample(t, "../../examples/report.json")
 	c := r.Documents.Comparisons[0]
@@ -226,10 +290,12 @@ func TestMatchedComparisonAddsOptionFromSameOperationAndCodeRange(t *testing.T) 
 	e := *bestProductEvidence(first.CodeEvidenceIDs, r.Documents.Evidence, "code")
 	e.ID, e.EndLine = "another-range", e.EndLine+1
 	otherRange.CodeEvidenceIDs = []string{e.ID}
-	r.Documents.Evidence = append(r.Documents.Evidence, e)
+	optionSource := SectionEvidence{ID: "option-doc", Kind: "document", Path: "docs/options.md", StartLine: 5, EndLine: 8}
+	second.DocumentEvidenceIDs = []string{optionSource.ID}
+	r.Documents.Evidence = append(r.Documents.Evidence, e, optionSource)
 	r.Documents.Comparisons = []DocComparison{first, otherOperation, otherRange, second}
 	d := newSummaryView(r, "0", Korean).Decision
-	if d.Title != first.Statement || d.Condition != second.Statement || d.Reason != "" || len(d.Sources) != 2 {
+	if d.Title != first.Statement || d.Condition != second.Statement || d.Reason != first.Reason || len(d.Sources) != 3 || d.Sources[2].Location != "docs/options.md:5-8" {
 		t.Fatalf("expected one matched comparison with the grounded option: %+v", d)
 	}
 	r.Documents.Comparisons = r.Documents.Comparisons[:3]
@@ -252,7 +318,7 @@ func TestDocumentOnlyDecisionRemainsUnverifiedInBothExports(t *testing.T) {
 		if include {
 			want, claim = Korean.Label("decision.document_claim"), c.Statement
 		}
-		if d.Title != want || d.DocumentClaim != claim || d.State != Korean.Label("opening.implementation_unknown") || len(d.Sources) != 1 ||
+		if d.Title != want || d.DocumentClaim != claim || d.State != Korean.Label("decision.comparison.unknown") || len(d.Sources) != 1 ||
 			d.Sources[0].Location != "README.md:1-9" || d.Next != "" {
 			t.Fatalf("include_code=%t: invalid document-only decision: %+v", include, d)
 		}
@@ -297,6 +363,7 @@ func TestReportCoverUsesOnlyRegisteredSourceAndRecordedTime(t *testing.T) {
 	r := storedExample(t, "../../examples/report.json")
 	r.Inputs.Description = "scratch/workspace/provisional-copy"
 	r.Status = "partial"
+	r.Project.StartedAt = "2026-11-20T21:00:20+09:00"
 	r.Project.FinishedAt = "2026-11-20T21:01:52+09:00"
 	for _, source := range []string{
 		"https://github.com/owner/" + strings.Repeat("long-", 35) + "project.git",
@@ -313,7 +380,10 @@ func TestReportCoverUsesOnlyRegisteredSourceAndRecordedTime(t *testing.T) {
 				t.Fatal("missing report cover")
 			}
 			cover, _, _ := strings.Cut(rest, "</header>")
-			for _, want := range []string{r.Project.Name, source, "일부 검사 미완료로 종료", "종료 시각", "2026-11-20 12:01 UTC"} {
+			for _, want := range []string{r.Project.Name, source, "일부 검사 미완료로 종료",
+				`시작 시각</dt><dd><time datetime="2026-11-20T21:00:20&#43;09:00">2026-11-20 12:00 UTC`,
+				`종료 시각</dt><dd><time datetime="2026-11-20T21:01:52&#43;09:00">2026-11-20 12:01 UTC`,
+				"소요 시간</dt><dd>1분 32초"} {
 				if !strings.Contains(cover, want) {
 					t.Fatalf("cover lacks %q", want)
 				}
@@ -328,6 +398,24 @@ func TestReportCoverUsesOnlyRegisteredSourceAndRecordedTime(t *testing.T) {
 				t.Fatal("rendered report has a duplicate evidence label or a scope placeholder")
 			}
 		}
+	}
+}
+
+func TestReportCoverKeepsCommitAndPublicationFallback(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	commit := strings.Repeat("ab", 20)
+	r.Inputs.CommitSHA = &commit
+	r.Project.StartedAt, r.Project.FinishedAt, r.CreatedAt = "2026-11-20T12:00:00Z", "", "2026-11-20T12:01:00Z"
+	html, err := RenderHTMLAt(r, "0", Korean, DetailSummary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rest, _ := strings.Cut(string(html), `<header class="report-hero">`)
+	cover, _, _ := strings.Cut(rest, `</header>`)
+	if !strings.Contains(cover, `title="`+commit+`">`+commit[:12]) || !strings.Contains(cover, "시작 시각") ||
+		!strings.Contains(cover, `보고서 작성 시각</dt><dd><time datetime="2026-11-20T12:01:00Z">`) ||
+		strings.Contains(cover, "종료 시각") || strings.Contains(cover, "소요 시간") {
+		t.Fatalf("bad cover: %s", cover)
 	}
 }
 

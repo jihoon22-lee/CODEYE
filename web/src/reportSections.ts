@@ -5,11 +5,13 @@
 // stored document does not hold.
 export type Excerpt = { start: number; end: number; text: string };
 export type Citation = { id: string; kind: string; path: string; line: number; end: number; excerpt: Excerpt | null; directivePath?: string };
+type AdditionalObservation = { reason: string; codeRefs: string[] };
 
 const diagnosticExcerptLines = 9;
 const modelExcerptLines = 50;
 const excerptBytes = 1800;
 const excerptEncoder = new TextEncoder();
+const TEXT_OMITTED = '원문 생략(코드 미포함 내보내기).';
 
 export function parseExcerpt(v: unknown): Excerpt | null {
   if (v == null) return null;
@@ -104,7 +106,7 @@ export type Sections = {
   documents: {
     citations: Citation[];
     quality: {aspect: string; assessment: string; statement: string; refs: string[]}[];
-    comparisons: {statement: string; scope: string; status: string; reason: string; documentRefs: string[]; codeRefs: string[]}[];
+    comparisons: {statement: string; scope: string; status: string; reason: string; documentRefs: string[]; codeRefs: string[]; followup?: true; additional?: AdditionalObservation}[];
     stage: SectionStage;
     discovery: string;
     budget: { perDocument: number; total: number; read: number } | null;
@@ -382,7 +384,10 @@ export function parseSections(
       }),
       comparisons: array(d.comparisons ?? [], v => {
         const x = object(v);
-        return { statement: str(x.statement), scope: str(x.applies_to), status: str(x.status), reason: str(x.reason),
+        const followup = x.followup === undefined ? undefined : x.followup === true ? true : invalid();
+        const extra = x.additional_observation === undefined ? undefined : object(x.additional_observation);
+        const additional = extra && { reason: str(extra.reason), codeRefs: array(extra.code_evidence_ids, str) };
+        return { statement: str(x.statement), scope: str(x.applies_to), status: str(x.status), reason: str(x.reason), followup, additional,
           documentRefs: array(x.document_evidence_ids, str), codeRefs: array(x.code_evidence_ids, str) };
       }),
       stage: stage(d.stage),
@@ -534,6 +539,7 @@ export function parseSections(
   const sectionCount = (key: string, name: string) => out.overview.find((s) => s.key === key)?.counts[name] ?? invalid();
   if (sectionCount('static_analysis', 'findings') + sectionCount('code_review', 'findings') !== totalFindings) invalid();
   if (sectionCount('gaps', 'gaps') !== out.gaps.length) invalid();
+  checkContractFollowup(r, out.documents, includesCode);
   const ledger = out.codeReview.ledger;
   if (ledger !== null && ledger.modules.length > 0) {
     // The overview's reviewed scope is the ledger's: files sent to the model.
@@ -542,4 +548,50 @@ export function parseSections(
     if (sectionCount('code_review', 'files_sent_to_model') !== sent || sectionCount('code_review', 'files_not_sent_to_model') !== eligible - sent) invalid();
   }
   return out;
+}
+
+function checkContractFollowup(r: Record<string, unknown>, documents: Sections['documents'], includesCode: boolean) {
+  const rows = documents.comparisons.filter(row => row.followup || row.additional);
+  if (rows.length === 0) return;
+  const [row] = rows;
+  const contract = documents.contracts[documents.comparisons.indexOf(row)];
+  const scopeUnder = (path: string, scope: string) => scope === '.' || path === scope || path.startsWith(scope + '/');
+  const docs = documents.citations.filter(e => row.documentRefs.includes(e.id));
+  const cited = row.additional?.codeRefs ?? row.codeRefs;
+  const code = documents.citations.filter(e => cited.includes(e.id));
+  const implementation = code.some(e => e.kind === 'code' && !docs.some(doc =>
+    doc.directivePath && e.path === doc.path && doc.line <= e.end && e.line <= doc.end));
+  if (rows.length !== 1 || (row.additional ? row.followup || row.status !== 'unknown' : !['match', 'partial', 'mismatch'].includes(row.status)) ||
+    !contract || row.statement !== contract.statement || !scopeUnder(row.scope, contract.appliesTo) ||
+    row.documentRefs.length !== contract.evidence.length || row.documentRefs.some((id, i) => id !== contract.evidence[i]) ||
+    docs.length === 0 || docs.length !== row.documentRefs.length ||
+    docs.some(e => e.kind !== 'document') ||
+    code.length !== cited.length || cited.length > 4 || code.some(e => !['code', 'test'].includes(e.kind) || !scopeUnder(e.path, row.scope)) ||
+    !implementation || (!includesCode && (row.statement !== TEXT_OMITTED || row.reason !== TEXT_OMITTED))) invalid();
+
+  if (row.additional) {
+    const original = documents.citations.filter(e => row.codeRefs.includes(e.id));
+    const addsLine = (e: Citation) => {
+      if (e.end - e.line >= 80 || (e.kind === 'code' && /(?:\.d\.[mc]?ts|\.pyi)$/i.test(e.path))) return false;
+      for (let line = e.line; line <= e.end; line++) {
+        if (!original.some(old => old.path === e.path && old.line <= line && line <= old.end)) return true;
+      }
+      return false;
+    };
+    if (!row.additional.reason.trim() || (!includesCode && row.additional.reason !== TEXT_OMITTED) || !code.every(addsLine)) invalid();
+  }
+
+  const key = 'review.contract';
+  const coverage = object(r.coverage);
+  const aiReview = object(coverage.ai_review);
+  const tasks = array(r.tasks, object);
+  const roles = array(aiReview.optional_tasks ?? [], object);
+  const codeRoles = array(object(r.code_review).roles, object);
+  const calls = array(coverage.review_calls ?? [], object);
+  const accepted = (role: Record<string, unknown>) => role.key === key && role.task_status === 'succeeded' && role.result === 'accepted';
+  if (!(Number(str(object(r.builder).version)) >= 12) ||
+    !tasks.some(task => task.key === key && task.status === 'succeeded' && task.required_for_verdict === false) ||
+    !roles.some(accepted) || !codeRoles.some(accepted) ||
+    !calls.some(call => call.task_key === key && call.role === 'contract' && call.outcome === 'accepted' &&
+      typeof call.request_sha256 === 'string' && /^[0-9a-f]{64}$/.test(call.request_sha256))) invalid();
 }

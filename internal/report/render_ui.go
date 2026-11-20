@@ -44,7 +44,14 @@ var reportFontURL = "data:font/woff2;base64," + base64.StdEncoding.EncodeToStrin
 var sectionedExportCSS = strings.Replace(reportFontCSS, "./noto-sans-kr.woff2", reportFontURL, 1) +
 	reportTablerCSS + reportThemeCSS + reportExportCSS
 
-type reportTimestamp struct{ Label, Original, Display string }
+type reportTimestamp struct {
+	Label, Original, Display string
+	at                       time.Time
+}
+type reportTiming struct {
+	Times    []reportTimestamp
+	Duration string
+}
 type reportAssetNotice struct{ Name, Text string }
 
 func (v secView) HeaderSource() string {
@@ -63,17 +70,43 @@ func (secView) AssetNotices() []reportAssetNotice {
 	}
 }
 
-func (v secView) HeaderTime() reportTimestamp {
-	l, r := v.L, v.R
-	label, raw := l.Label("identity.published"), r.CreatedAt
-	if p := r.Project; p != nil && p.FinishedAt != "" {
-		label, raw = l.Label("identity.finish"), p.FinishedAt
-	}
+func recordedTimestamp(label, raw string) reportTimestamp {
 	at, err := time.Parse(time.RFC3339, raw)
 	if err != nil {
 		return reportTimestamp{}
 	}
-	return reportTimestamp{label, raw, at.UTC().Format("2006-01-02 15:04 MST")}
+	return reportTimestamp{label, raw, at.UTC().Format("2006-01-02 15:04 MST"), at}
+}
+
+func (v secView) HeaderTiming() reportTiming {
+	l, r := v.L, v.R
+	var out reportTiming
+	var end reportTimestamp
+	if p := r.Project; p != nil {
+		start := recordedTimestamp(l.Label("identity.start"), p.StartedAt)
+		end = recordedTimestamp(l.Label("identity.finish"), p.FinishedAt)
+		if start.Display != "" {
+			out.Times = append(out.Times, start)
+		}
+		if start.Display != "" && end.Display != "" && !end.at.Before(start.at) {
+			seconds := int64(end.at.Sub(start.at).Round(time.Second) / time.Second)
+			var units []string
+			if hours := seconds / 3600; hours > 0 {
+				units = append(units, tf(l, "identity.duration_hours", hours))
+			}
+			if minutes := seconds / 60 % 60; minutes > 0 {
+				units = append(units, tf(l, "identity.duration_minutes", minutes))
+			}
+			out.Duration = strings.Join(append(units, tf(l, "identity.duration_seconds", seconds%60)), " ")
+		}
+	}
+	if end.Display == "" {
+		end = recordedTimestamp(l.Label("identity.published"), r.CreatedAt)
+	}
+	if end.Display != "" {
+		out.Times = append(out.Times, end)
+	}
+	return out
 }
 
 func findingCitation(l Locale, evidence Evidence) sourceCitation {

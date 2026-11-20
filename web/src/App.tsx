@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AdminView } from './AdminView';
 import { personName } from './accounts';
 import type { Api } from './api';
@@ -21,8 +21,15 @@ export function App({ api, controller, idempotency, link }: Props) {
   const session = useSyncExternalStore(controller.subscribe, controller.getState);
   const [view, setView] = useState<View>('projects');
   const [passwordSet, setPasswordSet] = useState(false);
+  const pendingReport = useRef(link?.run ?? null);
+  const dismissReportLanding = () => { pendingReport.current = null; };
+  const claimReportLanding = useCallback((runId: string) => {
+    if (runId !== pendingReport.current) return false;
+    pendingReport.current = null;
+    return document.activeElement === document.body;
+  }, []);
   useEffect(() => { void controller.start(); }, [controller]);
-  const go = (next: View) => { setPasswordSet(false); setView(next); };
+  const go = (next: View) => { dismissReportLanding(); setPasswordSet(false); setView(next); };
 
   const signedIn = session.status === 'authenticated' ? session : null;
   // A session that must change its password sees only that screen and logout: nothing else is
@@ -30,6 +37,7 @@ export function App({ api, controller, idempotency, link }: Props) {
   const forced = signedIn?.mustChangePassword === true;
   // The admin area exists only for admins; a stale choice falls back to projects.
   const shown: View = forced ? 'account' : view === 'admin' && !signedIn?.isAdmin ? 'projects' : (view === 'account') && !signedIn ? 'projects' : view;
+  const cancelLanding = shown === 'projects' && signedIn && link?.run ? dismissReportLanding : undefined;
   // The project screen names its project and run in the title itself.
   useEffect(() => {
     if (shown === 'projects' && signedIn) return;
@@ -41,8 +49,8 @@ export function App({ api, controller, idempotency, link }: Props) {
   }, [shown, signedIn]);
 
   return <>
-    <a className="skip" href="#main">{t.skipToMain}</a>
-    <main>
+    <a className="skip" href="#main" onClick={dismissReportLanding}>{t.skipToMain}</a>
+    <main onClickCapture={cancelLanding} onKeyDownCapture={cancelLanding} onWheelCapture={cancelLanding} onTouchMoveCapture={cancelLanding}>
       <header>
         <span className="brand">{t.appName}<span>{t.eyebrow}</span></span>
         {!forced && <nav aria-label={t.nav.label}>
@@ -64,7 +72,7 @@ export function App({ api, controller, idempotency, link }: Props) {
             {!forced && <p><button type="button" onClick={() => go('projects')}>{t.accounts.password.back}</button></p>}
           </>
           : shown === 'admin' ? <AdminView api={api} controller={controller} me={signedIn.userId} />
-          : <ProjectsView api={api} userId={signedIn.userId} idempotency={idempotency} link={link} />}
+          : <ProjectsView api={api} userId={signedIn.userId} idempotency={idempotency} link={link} claimReportLanding={claimReportLanding} />}
       </div>
     </main>
   </>;
