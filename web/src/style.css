@@ -2,16 +2,16 @@
    States always pair an icon and a word with their colour (docs/REPORT.md#접근성). */
 :root {
   /* colour: text on --surface and --bg is at least 4.5:1, borders of controls at least 3:1 */
-  --bg: #f4f6f8;
+  --bg: #f3f6f4;
   --surface: #ffffff;
-  --surface-2: #f0f3f6;
+  --surface-2: #eef3f0;
   --border: #dbe1e7;
   --border-strong: #75828f;
   --text: #17222d;
   --text-muted: #4c5967;
-  --accent: #1d5d89;
-  --accent-hover: #164a6e;
-  --accent-soft: #e5eff7;
+  --accent: #116955;
+  --accent-hover: #0d5044;
+  --accent-soft: #dff1e9;
   --ok: #1b6b38;
   --ok-soft: #e3f3e8;
   --ok-line: #9ccfae;
@@ -21,7 +21,7 @@
   --bad: #a3221e;
   --bad-soft: #fbe6e5;
   --bad-line: #e7a5a2;
-  --info: #1d5d89;
+  --info: #21675d;
   --info-soft: #e5eff7;
   --info-line: #a9c7de;
   --neutral: #44515e;
@@ -29,8 +29,8 @@
   --neutral-line: #c6ced6;
   --focus: #2b78b8;
   /* type and space */
-  --font: system-ui, -apple-system, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-  --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
   --fs-xs: 12.5px;
   --fs-sm: 14px;
   --fs-md: 15.5px;
@@ -459,4 +459,87 @@ td [role='group'] p { margin: 0 0 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
   summary::before { transition: none; }
+}
+
+/* Report navigation and line-numbered evidence share the workspace palette. */
+.report-tabs {
+  display: flex;
+  gap: .25rem;
+  flex-wrap: wrap;
+  margin: 1.4rem 0;
+  padding: .35rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: .75rem;
+}
+.report-tabs [role=tab] {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: .5rem;
+  color: var(--text-muted);
+  min-height: 2.4rem;
+  padding: .35rem .8rem;
+}
+.report-tabs [role=tab][aria-selected=true] {
+  color: var(--accent);
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: 0 1px 3px #153e3912;
+  font-weight: 700;
+}
+.report-document [role=tabpanel] { margin: 1rem 0 2rem; }
+.report-document [role=tabpanel][hidden] { display: none; }
+.report-document > header { border-bottom: 2px solid var(--text); padding-bottom: .8rem; }
+.report-document > header h4 { font-size: clamp(1.3rem, 2vw, 1.8rem); letter-spacing: -.035em; }
+.report-identity { margin: .7rem 0; table-layout: fixed; }
+.report-identity th { width: clamp(6rem, 17%, 11rem); color: var(--text-muted); font-weight: 600; }
+.report-identity th, .report-identity td { border-bottom: 1px solid var(--border); padding: .48rem .6rem; }
+.report-identity td { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.report-document .source-window {
+  margin: .6rem 0 1rem;
+  border-radius: .65rem;
+  padding: .9rem;
+  overflow: auto;
+  max-width: 100%;
+  color: #e6f0ec;
+  background: #152b2b;
+  line-height: 1.65;
+  tab-size: 4;
+}
+.report-document .source-window code { white-space: pre; color: inherit; background: none; padding: 0; }
+.source-line > span { color: #a4c5b9; display: inline-block; width: 3ch; margin-right: 1.5ch; text-align: right; user-select: none; }
+.report-document td details { margin: .2rem 0; }
+.report-document td details summary { color: var(--accent); cursor: pointer; word-break: break-word; }
+.report-document [role=tabpanel] h6 { margin-top: 1.25rem; }
+@media (max-width: 640px) {
+  .report-tabs { flex-wrap: nowrap; overflow-x: auto; }
+  .report-tabs [role=tab] { flex: none; }
+}
+
+.brand { position: relative; padding-inline-start: 2.75rem; }
+.brand::before {
+  content: ""; position: absolute; left: .18rem; top: .5rem; width: 1.65rem; height: 1.65rem;
+  border: 2px solid var(--accent); border-radius: 74% 18%; transform: rotate(45deg);
+  background: radial-gradient(circle, var(--accent) 0 22%, transparent 25% 33%, var(--accent) 35% 40%, transparent 42%);
+}
+.report-document > .report-masthead {
+  margin: 0 0 1rem; padding: 1.1rem 1.4rem;
+  color: #f2faf5; border: 0; border-radius: .75rem;
+  background: linear-gradient(110deg, #133b36, #1d5650);
+}
+.report-document > .report-masthead h4 { margin: 0; color: inherit; font-weight: 700; }
+.report-identity col.identity-label { width: 7.5rem; }
+.report-identity tr:first-child td { font-weight: 700; font-size: 1.13rem; }
+.report-identity th { background: var(--surface-2); }
+.report-identity td, .report-identity th { padding-inline: .85rem; }
+@media (max-width: 640px) { .report-identity col.identity-label { width: 5.6rem; } }
+@media (max-width: 640px) {
+  .report-reading-table, .report-reading-table tbody, .report-reading-table tr { display: block; }
+  .report-reading-table table { display: block; min-width: 0; }
+  .report-reading-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .report-reading-table tr + tr { border-top: 1px solid var(--border-strong); }
+  .report-reading-table td { display: grid; grid-template-columns: minmax(4.4rem, 22%) minmax(0, 1fr); gap: .65rem; align-items: baseline; padding: .55rem .65rem; }
+  .report-reading-table td::before { content: attr(data-label); color: var(--text-muted); font-size: var(--fs-xs); }
+  .report-reading-table td > * { grid-column: 2; min-width: 0; }
+  .report-reading-table .source-window { overflow-x: auto; }
 }

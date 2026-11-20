@@ -168,7 +168,7 @@ function AddMember({ api, projectId, onAdded }: { api: Api; projectId: string; o
     <h3 id={`${uid}-title`}>{s.add}</h3>
     <div className="field">
       <label htmlFor={`${uid}-user`}>{s.addUsername}</label>
-      <input id={`${uid}-user`} type="text" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={64} value={username}
+      <input id={`${uid}-user`} type="text" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={1024} value={username}
         onChange={e => setUsername(e.target.value)} aria-describedby={`${uid}-help`} />
       <small id={`${uid}-help`} className="small">{s.addHelp}</small>
     </div>

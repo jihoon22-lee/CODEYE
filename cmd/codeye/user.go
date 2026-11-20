@@ -234,8 +234,12 @@ func userPasswd(ctx context.Context, args []string, out, stderr io.Writer) int {
 		if !ok {
 			return 1
 		}
-		if u.Username == nil || u.DisabledAt != nil {
-			fmt.Fprintln(stderr, "only an enabled user with a username can have a password")
+		identifier := u.Email
+		if u.Username != nil {
+			identifier = u.Username
+		}
+		if identifier == nil || u.DisabledAt != nil {
+			fmt.Fprintln(stderr, "only an enabled user with a login identifier can have a password")
 			return 1
 		}
 		pw, err := readPassword(pwFile, stderr, true)
@@ -247,7 +251,7 @@ func userPasswd(ctx context.Context, args []string, out, stderr io.Writer) int {
 		if u.DisplayName != nil {
 			display = *u.DisplayName
 		}
-		h, err := derivePassword(pw, *u.Username, display)
+		h, err := derivePassword(pw, *identifier, display)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
@@ -274,6 +278,7 @@ func userList(ctx context.Context, args []string, out, stderr io.Writer) int {
 		type item struct {
 			ID                 string  `json:"id"`
 			Username           *string `json:"username"`
+			Email              *string `json:"email,omitempty"`
 			DisplayName        *string `json:"display_name"`
 			IsAdmin            bool    `json:"is_admin"`
 			HasPassword        bool    `json:"has_password"`
@@ -283,7 +288,7 @@ func userList(ctx context.Context, args []string, out, stderr io.Writer) int {
 		}
 		items := make([]item, 0, len(users))
 		for _, u := range users {
-			it := item{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, HasPassword: u.HasPassword,
+			it := item{ID: u.ID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, HasPassword: u.HasPassword,
 				MustChangePassword: u.MustChangePassword, Disabled: u.DisabledAt != nil}
 			if u.LastLoginAt != nil {
 				t := u.LastLoginAt.UTC().Format(time.RFC3339)

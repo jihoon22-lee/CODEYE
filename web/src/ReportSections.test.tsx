@@ -19,10 +19,26 @@ function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.jso
   const docs = { 'report.json': sectioned, 'report-go-vet.json': flat, 'report-slices.json': withSlices, 'report-unscreened.json': unscreened, 'report-screen-unusable.json': screenUnusable };
   const doc = structuredClone(docs[name]) as Record<string, any>;
   doc.demo = false;
+  // Exercise the archived disclosure layout; new publication metadata enables tabs.
+  delete doc.project;
   return doc;
 }
 
 describe('analysis sections', () => {
+  it('shows run identity and navigates the published report tabs by keyboard', () => {
+    const doc = example('report.json');
+    doc.project = {name:'Billing',source:'/srv/billing',started_at:'2026-01-01T10:00:00Z',finished_at:'2026-01-01T10:02:00Z'};
+    const report = parseAnalysisReport(doc, doc.run_id);
+    render(<ReportDocument report={report} />);
+    expect(screen.getByText('/srv/billing')).toBeTruthy();
+    const tab = screen.getByRole('tab',{name:t.sections.overview});
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(tab,{key:'ArrowRight'});
+    const docs = screen.getByRole('tab',{name:t.sections.titles.documents});
+    expect(docs.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel',{name:t.sections.titles.documents})).toBeTruthy();
+  });
+
   it('shows the overview first, one collapsible section per analysis kind and the same numbers as the document', () => {
     const doc = example('report.json');
     const r = parseAnalysisReport(doc, doc.run_id);
@@ -64,7 +80,7 @@ describe('analysis sections', () => {
     expect(jscpd.textContent).not.toMatch(/\b0\b.*규칙/);
     // Model interpretation is labeled with its role.
     expect(within(article).getAllByText(t.sections.model('review.documents')).length).toBe(1);
-    expect(within(article).getByText(/하위 호출이 실패하면 최대 3번 재시도한다/)).toBeTruthy();
+    expect(within(article).getAllByText(/하위 호출이 실패하면 최대 3번 재시도한다/).length).toBeGreaterThan(0);
     // Each finding is listed once, in the static or the code review section
     // (with every disclosure open).
     for (const more of Array.from(container.querySelectorAll('details.report-more')) as HTMLDetailsElement[]) {

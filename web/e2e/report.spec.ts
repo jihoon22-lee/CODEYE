@@ -28,16 +28,9 @@ test('published report exposes the same counts, evidence and revision in the bro
   const rows = report.locator('.report-counts > div');
   await expect(rows.filter({hasText:'발견 사항'}).locator('dd')).toHaveText(String(doc.summary.total_findings));
   if (doc.overview) {
-    // Analysis sections: collapsed ones are opened from their summary, then
-    // every stored count must be on the screen.
-    const sections = report.locator('details.report-section[id]');
-    await expect(sections).toHaveCount(doc.overview.sections.length);
-    for (let i = 0; i < await sections.count(); i++) {
-      const section = sections.nth(i);
-      if (!(await section.evaluate((d) => (d as HTMLDetailsElement).open))) await section.locator('summary').first().click();
-    }
     for (const section of doc.overview.sections) {
       if (section.key === 'gaps') continue;
+      await report.getByRole('tablist').locator('[aria-controls="report-section-' + section.key + '"]').click();
       const counts = report.locator('[data-section-counts="' + section.key + '"]');
       for (const [key, value] of Object.entries(section.counts as Record<string, number>)) {
         const cell = counts.locator('[data-count="' + key + '"] dd');
@@ -49,7 +42,9 @@ test('published report exposes the same counts, evidence and revision in the bro
   if (doc.findings.length) {
     // The summary view keeps the full lists (static findings, the other
     // review findings) behind disclosures that render when opened.
-    const more = report.locator('details.report-more:not([open]) > summary');
+    const key = doc.code_review.finding_ids.includes(doc.findings[0].id) ? 'code_review' : 'static_analysis';
+    await report.getByRole('tablist').locator('[aria-controls="report-section-' + key + '"]').click();
+    const more = report.locator('details.report-more:not([open]) > summary:visible');
     while (await more.count() > 0) await more.first().click();
     const item = doc.findings[0];
     const card = report.locator('details.finding-card').filter({has: page.locator('summary > strong').getByText(item.title, {exact:true})}).first();

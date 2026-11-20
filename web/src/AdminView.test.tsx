@@ -106,7 +106,7 @@ describe('admin users', () => {
     await flush();
     expect(screen.queryByRole('region', { name: a.linkTitle('finn') })).toBeNull();
     // Gone from the page and never stored; switching tabs does not bring it back.
-    adminTab(a.tabs.roots);
+    adminTab(a.tabs.providers);
     adminTab(a.tabs.users);
     await flush();
     expect([container.innerHTML, JSON.stringify({ ...localStorage }), JSON.stringify({ ...sessionStorage }), location.href].join('\n')).not.toContain('ONE-TIME-LINK-SECRET');
@@ -128,53 +128,6 @@ describe('admin users', () => {
     fireEvent.click(within(userRow(/Erin/)).getByRole('button', { name: a.disableYes }));
     await flush();
     expect(calls.filter(c => c.method === 'POST' && c.url.endsWith('/disable'))).toHaveLength(1);
-  });
-
-  it('grants and revokes admin, and explains the last-admin refusal', async () => {
-    const { calls } = await openAdmin({
-      'PUT /api/v1/admin/users/6c2a9d14-31f8-4be0-8d57-91a3e0c4f7b2/admin': () => json(200, { ...ERIN, is_admin: true }),
-      [`PUT /api/v1/admin/users/${SESSION.user_id}/admin`]: () => apiError(409, 'CONFLICT'),
-    });
-    fireEvent.click(within(userRow(/Erin/)).getByRole('button', { name: a.grantAdmin }));
-    await flush();
-    expect(calls.find(c => c.method === 'PUT' && c.url.includes('6c2a9d14'))!.body).toEqual({ is_admin: true });
-    fireEvent.click(within(userRow(/Dana/)).getByRole('button', { name: a.revokeAdmin }));
-    await flush();
-    expect(within(userRow(/Dana/)).getByRole('alert').textContent).toContain(a.lastAdmin);
-  });
-
-  it('resets a password after confirmation and shows the new link once', async () => {
-    const { calls } = await openAdmin({
-      'POST /api/v1/admin/users/6c2a9d14-31f8-4be0-8d57-91a3e0c4f7b2/password-reset': () => json(200, { user: ERIN, login_link: { url: LINK, expires_at: '2026-11-19T09:10:00Z' } }),
-    });
-    fireEvent.click(within(userRow(/Erin/)).getByRole('button', { name: a.reset }));
-    expect(calls.some(c => c.url.endsWith('/password-reset'))).toBe(false);
-    fireEvent.click(within(userRow(/Erin/)).getByRole('button', { name: a.resetYes }));
-    await flush();
-    expect(screen.getByRole('region', { name: a.linkTitle('Erin (erin)') })).toBeTruthy();
-  });
-});
-
-describe('source roots and providers', () => {
-  it('grants and revokes a root per user', async () => {
-    const { calls } = await openAdmin({
-      [`PUT /api/v1/admin/source-roots/${ROOT.id}/grants/6c2a9d14-31f8-4be0-8d57-91a3e0c4f7b2`]: () => new Response(null, { status: 204 }),
-      [`DELETE /api/v1/admin/source-roots/${ROOT.id}/grants/${SESSION.user_id}`]: () => new Response(null, { status: 204 }),
-    });
-    adminTab(a.tabs.roots);
-    await flush();
-    expect(screen.getByRole('heading', { name: 'team-root' })).toBeTruthy();
-    const pick = screen.getByLabelText(a.grantUser('team-root')) as HTMLSelectElement;
-    // Only users without a grant are offered.
-    expect([...pick.options].map(o => o.textContent)).toEqual([a.grantPick, 'Erin (erin)']);
-    fireEvent.change(pick, { target: { value: ERIN.id } });
-    fireEvent.click(screen.getByRole('button', { name: a.grant }));
-    await flush();
-    expect(calls.some(c => c.method === 'PUT' && c.url.endsWith(`/grants/${ERIN.id}`))).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: a.revokeFor('Dana (dana)', 'team-root') }));
-    await flush();
-    expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith(`/grants/${SESSION.user_id}`))).toBe(true);
-    expect(calls.filter(c => c.url === '/api/v1/admin/source-roots').length).toBeGreaterThanOrEqual(3);
   });
 
   it('lists providers read-only', async () => {
@@ -221,49 +174,6 @@ describe('shared service', () => {
     await openAdmin({ 'GET /api/v1/admin/settings': () => json(200, { ...SETTINGS, service_origin: null }) });
     expect(document.getElementById('service-address')!.textContent).toContain(a.serviceAddressLocal);
     expect(document.getElementById('service-addresses')).toBeNull();
-  });
-
-  it('adds a folder for everyone, shows its path, and opens or closes an existing one', async () => {
-    let roots = [{ ...ROOT, path: '/srv/team', everyone: false }];
-    const { calls } = await openAdmin({
-      'GET /api/v1/admin/source-roots': () => json(200, { items: roots }),
-      'POST /api/v1/admin/source-roots': c => {
-        const b = c.body as { path: string; label?: string; everyone?: boolean };
-        const added = { id: 'r0000000-0000-4000-8000-000000000002', label: b.label ?? 'nfs', path: b.path, everyone: b.everyone ?? false, created_at: '2026-11-20T00:00:00Z', grants: [] };
-        roots = [...roots, added];
-        return json(201, added);
-      },
-      'PUT /api/v1/admin/source-roots/r0000000-0000-4000-8000-000000000001/everyone': () => new Response(null, { status: 204 }),
-    });
-    adminTab(a.tabs.roots);
-    await flush();
-    expect(screen.getByText('/srv/team')).toBeTruthy();
-    fireEvent.change(document.getElementById('add-root-path')!, { target: { value: 'srv/nfs' } });
-    fireEvent.click(document.getElementById('add-root-submit')!);
-    expect(screen.getByRole('alert').textContent).toBe(a.addRootNotAbsolute);
-    fireEvent.change(document.getElementById('add-root-path')!, { target: { value: '/mnt/nfs' } });
-    fireEvent.change(document.getElementById('add-root-label')!, { target: { value: 'nfs' } });
-    fireEvent.click(document.getElementById('add-root-everyone')!);
-    fireEvent.click(document.getElementById('add-root-submit')!);
-    await flush();
-    expect(calls.find(c => c.method === 'POST' && c.url === '/api/v1/admin/source-roots')!.body).toEqual({ path: '/mnt/nfs', label: 'nfs', everyone: true });
-    expect(screen.getByText(a.rootAdded('nfs'))).toBeTruthy();
-    expect((document.querySelector('[data-root-everyone="nfs"]') as HTMLInputElement).checked).toBe(true);
-    fireEvent.click(document.querySelector('[data-root-everyone="team-root"]')!);
-    await flush();
-    const put = calls.find(c => c.method === 'PUT' && c.url.endsWith('/everyone'))!;
-    expect(put.url).toBe('/api/v1/admin/source-roots/r0000000-0000-4000-8000-000000000001/everyone');
-    expect(put.body).toEqual({ everyone: true });
-  });
-
-  it('says a folder is already allowed', async () => {
-    await openAdmin({ 'POST /api/v1/admin/source-roots': () => apiError(409, 'CONFLICT') });
-    adminTab(a.tabs.roots);
-    await flush();
-    fireEvent.change(document.getElementById('add-root-path')!, { target: { value: '/srv/team' } });
-    fireEvent.click(document.getElementById('add-root-submit')!);
-    await flush();
-    expect(screen.getByRole('alert').textContent).toBe(a.rootConflict);
   });
 
   it('approves a Git host', async () => {

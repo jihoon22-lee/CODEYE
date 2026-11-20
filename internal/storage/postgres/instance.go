@@ -2,7 +2,10 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +18,16 @@ import (
 
 // SourceRootRecord is a source root with its server-local path (operator only).
 type SourceRootRecord struct{ ID, Label, Path string }
+
+// ProviderForHost finds the registered HTTPS provider for host.
+func (s *Store) ProviderForHost(ctx context.Context, host string) (Provider, error) {
+	if domain.ValidateHost(host) != nil {
+		return Provider{}, domain.ErrInvalid
+	}
+	var p Provider
+	err := s.pool.QueryRow(ctx, "SELECT id::text,kind,host,coalesce(api_url,'') FROM providers WHERE host=$1 ORDER BY kind LIMIT 1", strings.ToLower(host)).Scan(&p.ID, &p.Kind, &p.Host, &p.APIURL)
+	return p, classify(err)
+}
 
 // EnsureProvider returns the provider of host, registering it (github for
 // github.com, ghes otherwise) when there is none. created reports a new row.
@@ -34,6 +47,53 @@ func (s *Store) EnsureProvider(ctx context.Context, host string) (Provider, bool
 	}
 	p, err = s.AddProvider(ctx, kind, host, "")
 	return p, err == nil, err
+}
+
+// SourceRootPath locates an existing mapping for an explicit local source.
+func (s *Store) SourceRootPath(ctx context.Context, id string) (string, error) {
+	if !domain.ValidID(id) {
+		return "", domain.ErrInvalid
+	}
+	var path string
+	err := s.pool.QueryRow(ctx, "SELECT path FROM source_roots WHERE id=$1", id).Scan(&path)
+	return path, classify(err)
+}
+
+// LocalSourceForPath maps a resolved readable path to the most specific
+// existing source root. If necessary it registers the directory itself so the
+// colocated agent can use the same immutable root mapping as older projects.
+func (s *Store) LocalSourceForPath(ctx context.Context, path string) (domain.Source, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(path) > 4096 {
+		return domain.Source{}, domain.ErrInvalid
+	}
+	ancestors := []string{path}
+	for p := path; filepath.Dir(p) != p; {
+		p = filepath.Dir(p)
+		rel, err := filepath.Rel(p, path)
+		if err == nil && domain.ValidateRelativeSourcePath(filepath.ToSlash(rel)) == nil {
+			ancestors = append(ancestors, p)
+		}
+	}
+	var id, root string
+	err := s.pool.QueryRow(ctx, `SELECT id::text,path FROM source_roots WHERE path=ANY($1)
+		ORDER BY char_length(path) DESC,created_at,id LIMIT 1`, ancestors).Scan(&id, &root)
+	if err == nil {
+		rel, err := filepath.Rel(root, path)
+		return domain.Source{Kind: domain.SourceLocal, SourceRootID: id, RelativePath: filepath.ToSlash(rel)}, err
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return domain.Source{}, classify(err)
+	}
+	id, err = transaction(ctx, s, func(tx pgx.Tx) (string, error) {
+		label := fmt.Sprintf("local-%x", sha256.Sum256([]byte(path)))
+		if _, err := tx.Exec(ctx, "INSERT INTO source_roots(id,label,path) VALUES($1,$2,$3) ON CONFLICT(label) DO NOTHING", domain.NewID(), label, path); err != nil {
+			return "", err
+		}
+		var id string
+		err := tx.QueryRow(ctx, "SELECT id::text FROM source_roots WHERE label=$1 AND path=$2", label, path).Scan(&id)
+		return id, err
+	})
+	return domain.Source{Kind: domain.SourceLocal, SourceRootID: id, RelativePath: "."}, err
 }
 
 // GrantedRootPaths are the source roots granted to actor with their paths

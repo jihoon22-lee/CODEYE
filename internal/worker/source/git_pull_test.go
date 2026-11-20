@@ -167,4 +167,10 @@ func TestReadHostToken(t *testing.T) {
 	if ReadHostToken(p, "GitHub.com") != "tok12345678" || ReadHostToken(p, "ghe.example") != "" {
 		t.Fatal("host binding")
 	}
+	if err := os.WriteFile(p, []byte(`{"github.com":{"schema_version":"0.1","host":"github.com","token":"tok12345678","source":"platform"},"ghe.example:9443":{"schema_version":"0.1","host":"ghe.example:9443","token":"tok87654321","source":"platform"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ReadHostToken(p, "github.com") != "tok12345678" || ReadHostToken(p, "ghe.example:9443") != "tok87654321" || ReadHostToken(p, "ghe.example") != "" {
+		t.Fatal("platform host or port binding")
+	}
 }

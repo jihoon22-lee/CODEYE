@@ -297,7 +297,7 @@ func newSummaryView(r Report, digest string, l Locale) secView {
 		}
 	}
 	v.dropDanglingLinks()
-	return v
+	return withInsights(v)
 }
 
 // summarySentences say in words what the run found and covered, from the
@@ -1152,8 +1152,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 		b.WriteByte('\n')
 	}
 	mdHeader(p, r, v.view, l)
-	p("> ", mdText(l.Label("summary.layout_note")))
-	p()
+
 	for _, s := range v.Sections {
 		p("## ", mdText(s.Title))
 		p()
@@ -1166,6 +1165,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 	for _, part := range v.Appendix {
 		mdPart(p, part, l)
 	}
+	mdTechnical(p, r, v.view, l)
 	p("digest sha256: ", mdCode(digest))
 	return []byte(b.String())
 }

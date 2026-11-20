@@ -175,8 +175,8 @@ func goPinJobs(t *testing.T) map[string]analysis.Job {
 }
 
 var pinnedGo = map[string][]string{
-	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "environment f8cad434e236e657 0f35e48b1837906c", "documents 733c8eaaa63abb74 96f75808572d08e4", "investigate 968170384ee26d9d 0abc469c5f262c1d", "verify b33ecdaaf28cf4bc e0f027c525ea4547"},
-	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment f8cad434e236e657 1591d2065785bf02", "documents 733c8eaaa63abb74 1c7ade98e8c6af78", "investigate 968170384ee26d9d b6ad844092149afb", "interpret 1dd362236e2820bb 6c30210249e618c0", "verify b33ecdaaf28cf4bc 739ea4868928c8e1"},
+	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "environment 5a399a3b40ccea8c 0f35e48b1837906c", "documents 91ec418a6a9861bd 96f75808572d08e4", "investigate 260f86ff9e85c12d c3580ccbe7f93361", "verify 969bdee6217e9f4e e0f027c525ea4547"},
+	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "environment 5a399a3b40ccea8c 1591d2065785bf02", "documents 91ec418a6a9861bd 1c7ade98e8c6af78", "investigate 260f86ff9e85c12d 7fab296a9fdf4def", "interpret 07f3d86f118cca51 6c30210249e618c0", "verify 969bdee6217e9f4e 739ea4868928c8e1"},
 	// The worst case has more code than the overview offers, so it plans
 	// review.scope and nine slots: the seven the plan-time packing needs and
 	// two of slack, which review.scope leaves empty. Its go vet stand-in is
@@ -192,11 +192,11 @@ var pinnedGo = map[string][]string{
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
 		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"environment f8cad434e236e657 a26534f4af3e1545", "documents 733c8eaaa63abb74 8d417c5a891273d2", "investigate 968170384ee26d9d 4164875e5225f917", "interpret 1dd362236e2820bb 0ba79c5a6cd9bbf3", "verify b33ecdaaf28cf4bc 11e709f191c805fa",
-		"investigate 968170384ee26d9d 2bcd0f8700b89737", "verify b33ecdaaf28cf4bc 1e0b3bf55f240a5a", "investigate 968170384ee26d9d 3b87f684621ff34c", "verify b33ecdaaf28cf4bc 0d99b05c7e7f51df",
-		"investigate 968170384ee26d9d 360f2ee9ae2d69af", "verify b33ecdaaf28cf4bc 7e1901d8a090ab12", "investigate 968170384ee26d9d 3afca3570b302a87", "verify b33ecdaaf28cf4bc 9b0b4be18897149f",
-		"investigate 968170384ee26d9d 5d014697e0b54014", "verify b33ecdaaf28cf4bc b8fe29c64fa3881a", "investigate 968170384ee26d9d c9494c60bcbeb2c9", "verify b33ecdaaf28cf4bc cf20fd606eed6738",
-		"investigate 968170384ee26d9d 0a1345f0a1616ef1", "verify b33ecdaaf28cf4bc e6fe2f48261ec762"},
+		"environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 91ec418a6a9861bd 8d417c5a891273d2", "investigate 260f86ff9e85c12d 7fe8358e86097a74", "interpret 07f3d86f118cca51 0ba79c5a6cd9bbf3", "verify 969bdee6217e9f4e a3579848cffcabeb",
+		"investigate 260f86ff9e85c12d aeafd9fcb82918dc", "verify 969bdee6217e9f4e cd05e65614d0799e", "investigate 260f86ff9e85c12d 09a9f87c75e0c2ad", "verify 969bdee6217e9f4e a5550428954e2027",
+		"investigate 260f86ff9e85c12d 596007b18402b636", "verify 969bdee6217e9f4e 40276ed3d25f55c1", "investigate 260f86ff9e85c12d 3dda5f04424a7a1b", "verify 969bdee6217e9f4e 0b9a6176bf0e4478",
+		"investigate 260f86ff9e85c12d a697d9d836ce73a5", "verify 969bdee6217e9f4e 8e0168af6c87f7d3", "investigate 260f86ff9e85c12d af8cf97036b7204c", "verify 969bdee6217e9f4e aeae2ffe561dd1e4",
+		"investigate 260f86ff9e85c12d f5a2fbaae7df9bb5", "verify 969bdee6217e9f4e 71534e3b97c6afdb"},
 	// The worst case behind a completed secrets screen at the default
 	// ceiling: the whole-run requests are those of modules-worst except
 	// interpret (it also lists the secrets task), and every slot request
@@ -208,11 +208,11 @@ var pinnedGo = map[string][]string{
 		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
 		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
 		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"environment f8cad434e236e657 a26534f4af3e1545", "documents 733c8eaaa63abb74 8d417c5a891273d2", "investigate 968170384ee26d9d 4164875e5225f917", "interpret 1dd362236e2820bb 71915d5d7b19dc70", "verify b33ecdaaf28cf4bc 11e709f191c805fa",
-		"investigate 968170384ee26d9d 2bcd0f8700b89737", "verify b33ecdaaf28cf4bc 1e0b3bf55f240a5a", "investigate 968170384ee26d9d 3b87f684621ff34c", "verify b33ecdaaf28cf4bc 0d99b05c7e7f51df",
-		"investigate 968170384ee26d9d 360f2ee9ae2d69af", "verify b33ecdaaf28cf4bc 7e1901d8a090ab12", "investigate 968170384ee26d9d 3afca3570b302a87", "verify b33ecdaaf28cf4bc 9b0b4be18897149f",
-		"investigate 968170384ee26d9d 5d014697e0b54014", "verify b33ecdaaf28cf4bc b8fe29c64fa3881a", "investigate 968170384ee26d9d c9494c60bcbeb2c9", "verify b33ecdaaf28cf4bc cf20fd606eed6738",
-		"investigate 968170384ee26d9d 0a1345f0a1616ef1", "verify b33ecdaaf28cf4bc e6fe2f48261ec762"},
+		"environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 91ec418a6a9861bd 8d417c5a891273d2", "investigate 260f86ff9e85c12d 7fe8358e86097a74", "interpret 07f3d86f118cca51 71915d5d7b19dc70", "verify 969bdee6217e9f4e a3579848cffcabeb",
+		"investigate 260f86ff9e85c12d aeafd9fcb82918dc", "verify 969bdee6217e9f4e cd05e65614d0799e", "investigate 260f86ff9e85c12d 09a9f87c75e0c2ad", "verify 969bdee6217e9f4e a5550428954e2027",
+		"investigate 260f86ff9e85c12d 596007b18402b636", "verify 969bdee6217e9f4e 40276ed3d25f55c1", "investigate 260f86ff9e85c12d 3dda5f04424a7a1b", "verify 969bdee6217e9f4e 0b9a6176bf0e4478",
+		"investigate 260f86ff9e85c12d a697d9d836ce73a5", "verify 969bdee6217e9f4e 8e0168af6c87f7d3", "investigate 260f86ff9e85c12d af8cf97036b7204c", "verify 969bdee6217e9f4e aeae2ffe561dd1e4",
+		"investigate 260f86ff9e85c12d f5a2fbaae7df9bb5", "verify 969bdee6217e9f4e 71534e3b97c6afdb"},
 }
 
 func TestGoReviewInputsUnchanged(t *testing.T) {

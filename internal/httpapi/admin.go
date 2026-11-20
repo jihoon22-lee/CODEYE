@@ -23,6 +23,7 @@ const launchTTL = 10 * time.Minute
 type userView struct {
 	ID                 string     `json:"id"`
 	Username           *string    `json:"username"`
+	Email              *string    `json:"email,omitempty"`
 	DisplayName        *string    `json:"display_name"`
 	IsAdmin            bool       `json:"is_admin"`
 	MustChangePassword bool       `json:"must_change_password"`
@@ -34,7 +35,7 @@ type userView struct {
 }
 
 func viewUser(u postgres.User) userView {
-	return userView{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, MustChangePassword: u.MustChangePassword,
+	return userView{ID: u.ID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, MustChangePassword: u.MustChangePassword,
 		HasPassword: u.HasPassword, Disabled: u.DisabledAt != nil, DisabledAt: u.DisabledAt, CreatedAt: u.CreatedAt, LastLoginAt: u.LastLoginAt}
 }
 
@@ -182,7 +183,7 @@ func (s *Server) adminSetAdmin(q *request) {
 // POST /admin/users/{id}/password-reset: the password is cleared, every
 // session revoked and a single-use login link returned; the user then sets
 // a new password. An administrator's own password changes through
-// POST /session/password, and a user without a username has nothing to
+// POST /session/password, and a login-link-only user has nothing to
 // reset (both 409 with their own message). Whoever signs in with the link is
 // attributed to this administrator, and the user sees the reset.
 func (s *Server) adminResetPassword(q *request) {

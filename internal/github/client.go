@@ -79,11 +79,15 @@ func New(base, token string) *Client {
 	return &Client{BaseURL: strings.TrimSuffix(base, "/"), Token: token}
 }
 
+var defaultHTTP = http.Client{Timeout: 30 * time.Second}
+
 func (c *Client) http() *http.Client {
+	h := defaultHTTP
 	if c.HTTP != nil {
-		return c.HTTP
+		h = *c.HTTP
 	}
-	return &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	h.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &h
 }
 
 // maxResponse bounds one response body.
@@ -224,6 +228,7 @@ type PullRequestInfo struct {
 		Ref  string `json:"ref"`
 		SHA  string `json:"sha"`
 		Repo *struct {
+			ID       int64  `json:"id"`
 			FullName string `json:"full_name"`
 		} `json:"repo"`
 	} `json:"base"`
@@ -231,6 +236,7 @@ type PullRequestInfo struct {
 		Ref  string `json:"ref"`
 		SHA  string `json:"sha"`
 		Repo *struct {
+			ID       int64  `json:"id"`
 			FullName string `json:"full_name"`
 		} `json:"repo"`
 	} `json:"head"`

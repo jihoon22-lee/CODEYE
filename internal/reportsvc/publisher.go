@@ -135,7 +135,14 @@ func (p *Publisher) PublishRun(ctx context.Context, runID string) (Outcome, erro
 	if !ok {
 		return reject("source_manifest_integrity_failed", nil)
 	}
-	in := report.Input{ReportID: domain.NewID(), Revision: pub.NextRevision, Now: p.now(),
+	project := &report.ProjectInfo{Name: pub.ProjectName, Source: pub.SourceLocation}
+	if pub.StartedAt != nil {
+		project.StartedAt = pub.StartedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if pub.FinishedAt != nil {
+		project.FinishedAt = pub.FinishedAt.UTC().Format(time.RFC3339Nano)
+	}
+	in := report.Input{Project: project, ReportID: domain.NewID(), Revision: pub.NextRevision, Now: p.now(),
 		Run:      report.RunFacts{ID: pub.Run.ID, ProjectID: pub.Run.ProjectID, Profile: pub.Profile, ScopeKind: pub.ScopeKind, FinalStatus: final},
 		Snapshot: report.SnapshotFacts{ID: pub.Snapshot.ID, ManifestDigest: *pub.Snapshot.ManifestDigest, Consistency: pub.Snapshot.Consistency, SourceSHA: pub.Snapshot.SourceSHA},
 		Attempt: report.AttemptFacts{ID: a.ID, Number: a.Number, Epoch: a.Epoch, Cleanup: a.Cleanup, Reason: a.CompletionReason,

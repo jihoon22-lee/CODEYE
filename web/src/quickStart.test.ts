@@ -3,7 +3,7 @@ import type { Project, Setup } from './api';
 import { improvementHints, operatorHints, type Gap } from './improve';
 import type { Dependency } from './reportSections';
 import { ko as t } from './locales/ko';
-import { choiceLocked, choicesFor, noFolderFor, parseTarget, quickBody, unavailableReason } from './quickStart';
+import { choiceLocked, choicesFor, parseTarget, quickBody, unavailableReason } from './quickStart';
 
 const SETUP: Setup = {
   is_admin: false,
@@ -81,11 +81,7 @@ describe('the one field', () => {
     expect(unavailableReason({ ...SETUP, available: { model_review: { available: false, reason: 'later_reason' } } }, 'model_review')).toBe(t.quick.reasonUnknown('later_reason'));
     expect(choiceLocked(limited, 'run_build_scripts')).toBe(true);
     expect(choicesFor('local', limited, { run_build_scripts: true, send_source_to_model: true })).toEqual({ send_source_to_model: false, run_build_scripts: false, fetch_dependencies: true });
-    // A folder path with no folder allowed is refused before asking the server; Git is not.
-    expect(noFolderFor({ kind: 'local', path: '/srv/x' }, limited)).toBe(true);
-    expect(noFolderFor({ kind: 'local', path: '/srv/x' }, SETUP)).toBe(false);
-    expect(noFolderFor(parseTarget('github.com/o/r').target!, limited)).toBe(false);
-    expect(noFolderFor({ kind: 'local', path: '/srv/x' }, null)).toBe(false);
+
   });
 });
 

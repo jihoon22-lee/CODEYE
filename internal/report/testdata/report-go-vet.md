@@ -2,18 +2,11 @@
 
 | 항목 | 값 |
 |---|---|
-| report | `eebfcfd1-b7c6-4417-ab52-cf481ccf487a` rev `1` |
-| digest | `90b935ba6a3c` |
-| status | `partial` |
-| quality\_verdict | `inconclusive` 품질 판정은 안전 인증이 아니다\. |
-| run | `e54c0dd2-aa43-4f1c-9422-0b0c33e3fc4b` |
-| attempt | `0db5c46f-5d30-4c27-aebe-628fa8730b26` #`1` epoch `1` |
-| snapshot | `742de1c6-d825-4b33-8101-b1669082cf18` manifest `934b65c3121b` |
-| profile | `deep-review` |
-| created\_at | `2026-11-17T23:50:09.29466596Z` |
-| export | 코드 미포함 내보내기\: 도구 원문 메시지와 서술 원문을 생략했다 |
+| 진행 상태 | 부분 결과 |
+| 검토 결과 | 추가 확인이 필요합니다\. |
+| 보고서 작성 시각 | 2026\-11\-17T23\:50\:09\.29466596Z |
 
-> 이 보고서는 부분 결과다\. 필수 작업이나 AI 검토가 수행·검증되지 않았다\.
+> 일부 검사를 마치지 못했습니다\. 분석 범위에서 해당 항목을 확인할 수 있습니다\.
 
 ## 요약
 
@@ -115,6 +108,21 @@
 ## 한계와 공백
 
 - AI 검토를 수행하지 않았거나 그 결과를 검증하지 못했다\. 도구 진단만 포함한다\.
-- controller는 snapshot 원본을 보관하지 않아 코드 발췌를 넣지 않았다\.
+- 고정 스냅샷에서 표시할 발췌를 확보하지 못했다\.
+
+### 기술 상세
+
+| 항목 | 값 |
+|---|---|
+| report | `eebfcfd1-b7c6-4417-ab52-cf481ccf487a` rev `1` |
+| digest | `90b935ba6a3c` |
+| status | `partial` |
+| quality\_verdict | `inconclusive` |
+| run | `e54c0dd2-aa43-4f1c-9422-0b0c33e3fc4b` |
+| attempt | `0db5c46f-5d30-4c27-aebe-628fa8730b26` #`1` epoch `1` |
+| snapshot | `742de1c6-d825-4b33-8101-b1669082cf18` manifest `934b65c3121b` |
+| profile | `deep-review` |
+| created\_at | `2026-11-17T23:50:09.29466596Z` |
+| export | 코드 미포함 내보내기\: 도구 원문 메시지와 서술 원문을 생략했다 |
 
 digest sha256: `90b935ba6a3ca1e6eef5e59c4350a66649e6fbcf092ee383a8d2e0816488cfb7`

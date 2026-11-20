@@ -318,8 +318,7 @@ func TestSectionStageNotRecorded(t *testing.T) {
 
 // A published builder-1 revision (examples/report-go-vet.json) stays as
 // stored: it validates, carries no section, and the Markdown and HTML
-// renderers keep the flat layout byte for byte (testdata goldens rendered by
-// the builder-4 tree).
+// renderers show the legacy sections under the current identity header.
 func TestOldRevisionRendersFlat(t *testing.T) {
 	b, err := os.ReadFile("../../examples/report-go-vet.json")
 	if err != nil {

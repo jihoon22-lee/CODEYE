@@ -1,4 +1,28 @@
 export const reportKo = {
+  project: '프로젝트', sourcePath: '분석 경로', commit: '커밋', start: '분석 시작', finish: '분석 종료', published: '작성 시각',
+  status: '분석 상태', codeWindow: '코드 보기', reference: '근거 보기', excerptAt: (location: string) => `${location} 코드 발췌`,
+  qualityTitle: '문서 품질', comparisonsTitle: '문서와 구현', modelReading: 'AI 해석',
+  strengthsTitle: '유지할 만한 구현', impactTitle: '구현과 효과', scopeTitle: '적용 범위', statementTitle: '문서에 적힌 동작', basisTitle: '판단 근거',
+  assessment: {clarity: '명확성', completeness: '설명 범위', actionability: '따라 하기', consistency: '일관성', strength: '잘된 점', weakness: '보완할 점',
+    match: '일치', partial: '부분 일치', mismatch: '불일치', unknown: '확인 보류'} as Record<string,string>,
+  glossary: '검사별 설명',
+  tools: {
+    'go vet': 'Go 코드에서 잘못된 서식 문자열이나 잠금 복사처럼 실행 전에 확인할 수 있는 실수를 찾습니다.',
+    staticcheck: 'Go 코드의 호출과 값의 흐름을 살펴 잘못된 사용이나 효과가 없는 코드를 찾습니다.',
+    cppcheck: 'C와 C++ 코드에서 메모리 사용과 조건 분기 문제를 찾습니다.',
+    'clang-tidy': '컴파일 설정을 바탕으로 C와 C++ 코드의 사용 규칙과 오류 가능성을 검사합니다.',
+    ruff: 'Python 코드에서 사용하지 않는 이름과 의심스러운 구문을 찾습니다.',
+    mypy: 'Python 함수에 전달하거나 돌려주는 값이 선언한 타입과 맞는지 검사합니다.',
+    pyright: 'Python 타입을 추론해 잘못된 인자와 속성 접근을 찾습니다.',
+    bandit: 'Python에서 보안상 주의가 필요한 호출 방식을 찾습니다.',
+    eslint: 'JavaScript와 TypeScript의 코드 규칙 위반과 오류 가능성을 찾습니다.',
+    tsc: 'TypeScript 컴파일러로 타입 오류를 확인합니다.',
+    'cargo check': 'Rust 프로젝트가 타입 검사와 컴파일 전 단계 검사를 통과하는지 확인합니다.',
+    clippy: 'Rust 코드의 잘못된 사용과 개선 가능한 표현을 찾습니다.',
+    lizard: '함수의 길이와 분기 복잡도를 측정합니다.',
+    jscpd: '여러 위치에 반복된 코드 블록을 찾습니다.',
+    gitleaks: '저장소에 포함된 인증정보 후보의 위치를 찾습니다.',
+  } as Record<string,string>,
   reasons: {
     excerpt_only: '검토는 선택된 코드 발췌 범위에 한정됩니다.',
     no_document_in_selected_context:
@@ -8,7 +32,7 @@ export const reportKo = {
       '호출자 추적 범위는 같은 패키지의 직접 호출입니다.',
     no_candidates_to_verify: '탐색 단계에서 반증할 후보가 없었습니다.',
     controller_holds_no_snapshot_bytes:
-      '서버에는 원문 코드 대신 스냅샷 위치와 해시가 저장됩니다.',
+      '고정 스냅샷에서 표시할 발췌를 확보하지 못했습니다.',
     ai_review_partial: '필수 모델 검토 중 일부만 수행했습니다.',
     ai_review_not_performed: '필수 모델 검토를 수행하지 못했습니다.',
     required_task_not_succeeded: '완료되지 않은 필수 작업이 있습니다.',
@@ -146,9 +170,9 @@ export const reportKo = {
   open: '보고서 열기',
   // The verdict in words, first: what it means and what to do next.
   verdictLead: {
-    attention_required: '근거가 있는 발견이 있습니다. 아래 "먼저 볼 것"부터 확인하세요.',
+    attention_required: '근거를 확인할 항목이 있습니다.',
     inconclusive: '결론을 내리지 않았습니다. 일부 분석을 하지 못했거나 확인되지 않은 후보가 남아 있습니다. 아래에서 이유를 확인하세요.',
-    no_actionable_findings: '조치할 항목을 찾지 못했습니다. 품질 판정은 안전 인증이 아닙니다. 분석하지 못한 범위는 아래 분석 공백에 있습니다.',
+    no_actionable_findings: '이번에 확인한 범위에서 조치가 필요한 항목을 찾지 못했습니다.',
   } as Record<string, string>,
   verdictIcon: { attention_required: '!', inconclusive: '?', no_actionable_findings: '✓' } as Record<string, string>,
   verdictUnknown: '이 화면이 모르는 판정입니다. 조치할 항목이 없다는 뜻으로 읽지 마세요.',
@@ -267,6 +291,7 @@ export const reportKo = {
       secrets_detected: (n: number) => `비밀정보로 보이는 값이 ${n}곳에서 탐지됐습니다.`,
       required_tools_not_succeeded: (n: number) => `판정에 필요한 분석 작업 ${n}개가 성공하지 않았습니다.`,
       environment_mismatch: (n: number) => `모듈이 선언한 도구 요구와 노드 관측이 ${n}건 어긋납니다.`,
+      contract_differences: (n:number) => `문서의 설명과 구현이 다른 항목이 ${n}개 있습니다.`,
       document_conflicts: (n: number) => `문서 안내끼리 충돌하는 곳이 ${n}건 있습니다(모델 해석).`,
       model_review_not_performed: () => '모델 검토를 수행하지 않았거나 그 결과를 검증하지 못했습니다.',
       pending_candidates: (n: number) => `확인되지 않은 후보 ${n}개가 남아 있습니다.`,
@@ -367,7 +392,7 @@ export const reportKo = {
     instructionNotes: '지침 메모',
     budget: (b: { perDocument: number; total: number; read: number }) =>
       `읽기 예산: 문서당 ${b.perDocument}바이트, 전체 ${b.total}바이트. 이번에 읽은 양은 ${b.read}바이트입니다.`,
-    staticLead: '도구가 보고한 진단과 그 발견입니다. 진단이 0건인 성공은 결함이 없다는 뜻이 아니며, 성공하지 않은 작업의 범위는 분석되지 않았습니다.',
+    staticLead: '검사별 실행 결과와 확인할 위치를 모았습니다.',
     language: (eco: string | null) => (eco === null ? '언어 미확정(분석기 결과를 읽지 못한 작업)' : eco === 'any' ? '언어 무관(지표·비밀정보 도구)' : `언어: ${eco}`),
     anyNote: '이 도구들의 측정값과 탐지는 구조·중복 지표와 비밀정보 절에 있습니다.',
     notRun: '실행하지 않음',
@@ -517,7 +542,6 @@ export const reportKo = {
     // The summary view (docs/REPORT.md#내보내기-상세도): grouped rows first,
     // every row behind a disclosure that renders only when opened.
     summary: {
-      note: '요약 보기입니다. 긴 목록은 묶고 앞의 몇 개만 보입니다. 각 절의 "전체 목록"을 열면 모든 항목이 나옵니다.',
       more: (n: number) => `외 ${n}개`,
       morePlaces: (n: number) => `외 ${n}곳`,
       ofSecondary: (n: number) => `(그중 부차 경로 ${n}곳)`,

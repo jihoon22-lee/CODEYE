@@ -158,11 +158,11 @@ func pullRequestMatchesSource(ctx context.Context, tx pgx.Tx, project string, pi
 	return err == nil && strings.EqualFold(host, p.Host) && strings.EqualFold(domain.RepositoryPath(src.RepositoryURL), p.Repository), nil
 }
 
-// RunOrigin is the schedule occurrence a run was requested for. A run
-// without one was requested manually.
+// RunOrigin is the non-manual trigger of a run.
 type RunOrigin struct {
 	ScheduleID   string
 	ScheduledFor time.Time
+	Webhook      bool
 }
 
 // enqueueTx is the one enqueue path for manual and scheduled runs: the
@@ -175,6 +175,15 @@ func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canon
 	digest := domain.Digest(canonical)
 	if err := requireProject(ctx, tx, actor, project, false, true); err != nil {
 		return Run{}, err
+	}
+	if origin != nil && origin.Webhook {
+		var enabled bool
+		if err := tx.QueryRow(ctx, "SELECT disabled_at IS NULL FROM users WHERE id=$1 FOR SHARE", actor).Scan(&enabled); err != nil {
+			return Run{}, err
+		}
+		if !enabled {
+			return Run{}, domain.ErrForbidden
+		}
 	}
 	var existing, stored string
 	err := tx.QueryRow(ctx, "SELECT id::text,request_digest FROM runs WHERE project_id=$1 AND actor_id=$2 AND idempotency_key=$3", project, actor, key).Scan(&existing, &stored)
@@ -211,7 +220,9 @@ func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canon
 	var scheduleID *string
 	var scheduledFor *time.Time
 	payload := map[string]any{"status": domain.RunQueued, "trigger": TriggerManual}
-	if origin != nil {
+	if origin != nil && origin.Webhook {
+		payload["trigger"] = TriggerWebhook
+	} else if origin != nil {
 		at := origin.ScheduledFor.UTC()
 		scheduleID, scheduledFor = &origin.ScheduleID, &at
 		payload["trigger"], payload["schedule_id"], payload["scheduled_for"] = TriggerSchedule, origin.ScheduleID, at
@@ -233,7 +244,7 @@ func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canon
 	}
 	_ = json.Unmarshal(canonical, &req)
 	detail := map[string]any{"profile": truncateAudit(req.Profile), "scope_kind": truncateAudit(req.Scope.Kind), "trigger": payload["trigger"]}
-	if origin != nil {
+	if scheduleID != nil {
 		detail["schedule_id"] = origin.ScheduleID
 	}
 	if pin != nil {
@@ -248,6 +259,7 @@ func enqueueTx(ctx context.Context, tx pgx.Tx, actor, project, key string, canon
 const (
 	TriggerManual   = "manual"
 	TriggerSchedule = "schedule"
+	TriggerWebhook  = "github_webhook"
 )
 
 func (s *Store) GetRun(ctx context.Context, actor, id string) (Run, error) {

@@ -53,17 +53,20 @@ import uuid
 UPSTREAM_HOST = "api.openai.com"
 UPSTREAM_PORT = 443
 UPSTREAM_PATH = "/v1/responses"  # OpenCode-facing side stays /v1/chat/completions
-ALLOWED_MODELS = ("gpt-6.2-sol", "gpt-6.1-sol")
+ALLOWED_MODELS = ("gpt-6.2-sol", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna")
 SERVICE_TIER = "default"
 REASONING_EFFORT = "low"
 
-HARD_CAP_MICROUSD = 9_990_000  # $9.99 for all processes sharing one ledger
+HARD_CAP_MICROUSD = 15_000_000  # $15 for all processes sharing one ledger
 # Integer microUSD per token. $X per 1M tokens == X microUSD per token.
 # Input is priced at the worst case of standard input ($2), 30m cache write
 # ($2.50) and 12h cache write ($5). Output ($10) includes reasoning tokens.
 PRICE_INPUT_WORST = 5
 PRICE_OUTPUT = 10
-PRICE_INPUT_STANDARD = 2  # informational estimate only, never used for admission
+# Tenths of a microUSD per token, uncached Standard prices. Informational
+# only; admission and settlement keep the shared worst-case rates above.
+STANDARD_RATES = {"gpt-6.2-sol": (20, 100), "gpt-6.1-sol": (20, 100),
+                  "gpt-6.1-terra": (10, 50), "gpt-6-luna": (1, 5)}
 RESERVATION_MULTIPLIER = 2
 RESERVATION_FIXED_MICROUSD = 1000
 PER_MESSAGE_TOKENS = 16
@@ -159,7 +162,7 @@ def _fsync_dir(path: str) -> None:
 
 
 def parse_budget(text: str) -> int:
-    """Parse --budget-usd into integer microUSD, bounded by the hard $9.99 cap."""
+    """Parse --budget-usd into integer microUSD, bounded by the hard $15 cap."""
     try:
         value = decimal.Decimal(text)
     except decimal.InvalidOperation:
@@ -171,7 +174,7 @@ def parse_budget(text: str) -> int:
         raise ValueError("budget supports at most 6 decimal places")
     micro = int(micro)
     if micro > HARD_CAP_MICROUSD:
-        raise ValueError("budget exceeds the hard cap of 9.99 USD")
+        raise ValueError("budget exceeds the hard cap of 15 USD")
     return micro
 
 
@@ -446,7 +449,7 @@ class Ledger:
         usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0,
                         "reasoning_tokens": 0}
         by_status: dict[str, int] = {}
-        standard_estimate = 0
+        standard_tenths = 0
         for record in state["settles"].values():
             by_status[record["status"]] = by_status.get(record["status"], 0) + 1
             usage = record.get("usage") or {}
@@ -454,8 +457,9 @@ class Ledger:
                 if _is_count(usage.get(key)):
                     usage_totals[key] += usage[key]
             if _is_count(usage.get("prompt_tokens")) and _is_count(usage.get("completion_tokens")):
-                standard_estimate += (usage["prompt_tokens"] * PRICE_INPUT_STANDARD
-                                      + usage["completion_tokens"] * PRICE_OUTPUT)
+                model = state["reserves"][record["id"]]["model"]
+                input_rate, output_rate = STANDARD_RATES[model]
+                standard_tenths += usage["prompt_tokens"] * input_rate + usage["completion_tokens"] * output_rate
         reserved_total = sum(r["reserved_microusd"] for r in state["reserves"].values())
         return {
             "ledger": os.path.abspath(self.path),
@@ -472,7 +476,7 @@ class Ledger:
             "charged_microusd_total": state["committed_microusd"],
             "remaining_microusd": max(0, state["cap_microusd"] - state["committed_microusd"]),
             "usage": usage_totals,
-            "standard_rate_estimate_microusd": standard_estimate,
+            "standard_rate_estimate_microusd": (standard_tenths + 9) // 10,
             "halted": state["halted"],
             "halt_reasons": state["halt_reasons"],
             "consecutive_failures": state["consecutive_failures"],
@@ -486,7 +490,7 @@ class Ledger:
             "records": len(records),
             "note": ("charged_microusd_total is the conservative budget debit (worst-case rates; "
                      "full reservation for failures, missing usage and pending/crashed requests). "
-                     "standard_rate_estimate_microusd uses reported usage at $2/$10 per 1M and is "
+                     "standard_rate_estimate_microusd uses reported usage at each model's uncached Standard rates and is "
                      "informational only; neither is an OpenAI invoice."),
         }
 
@@ -1143,7 +1147,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--ready-file", help="fresh path to write {base_url, token, model} (0600)")
     parser.add_argument("--model", choices=ALLOWED_MODELS)
     parser.add_argument("--budget-usd", default="9.99",
-                        help="ledger cap in USD, <= 9.99; can lower but never raise an existing ledger")
+                        help="ledger cap in USD, <= 15; can lower but never raise an existing ledger")
     parser.add_argument("--max-requests", type=int, default=None,
                         help=f"ledger-wide request cap (default {DEFAULT_MAX_REQUESTS}, <= {HARD_MAX_REQUESTS})")
     parser.add_argument("--max-input-bytes", type=int, default=DEFAULT_MAX_INPUT_BYTES,

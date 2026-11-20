@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
@@ -55,17 +56,13 @@ func (w *worker) acquire(a *attempt) string {
 		}
 		reason = sourceReason(err)
 	case job.Source.Kind == "git":
-		if w.hello.GitExecutable == "" || job.Source.AllowedHost == "" {
+		if w.hello.GitExecutable == "" || job.Source.AllowedHost == "" || (w.hello.Offline && github.PublicHost(job.Source.AllowedHost)) {
 			err, reason = source.ErrUnsupported, nodeproto.ReasonSourceUnsupported
 			break
 		}
 		a.anyProc.Store(true)
-		credential := job.GitCredentialFile
-		if credential == "" {
-			credential = w.hello.GitCredentialFile
-		}
 		opts := source.GitOptions{Executable: w.hello.GitExecutable, AllowedHost: job.Source.AllowedHost, AllowedLocalRoot: job.Source.AllowedLocalRoot, Timeout: 10 * time.Minute, CABundle: w.hello.CABundle,
-			Token: source.ReadHostToken(credential, job.Source.AllowedHost)}
+			Token: source.ReadHostToken(w.hello.GitCredentialFile, job.Source.AllowedHost)}
 		branch := job.Source.Branch
 		if pr := job.PullRequest; pr != nil {
 			// A pull request names its own head; the project's branch is not fetched.

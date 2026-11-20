@@ -66,6 +66,15 @@ func RelayProvider(r *LocalModelRelay) *ModelProvider {
 // Relay reports whether p is the QA relay.
 func (p *ModelProvider) Relay() bool { return p != nil && p.relay != nil }
 
+// MeteredModel reports whether the budget relay accepts this upstream model.
+func MeteredModel(id string) bool {
+	switch id {
+	case "gpt-6.2-sol", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna":
+		return true
+	}
+	return false
+}
+
 func (r *LocalModelRelay) valid(name string) bool {
 	u, err := url.Parse(r.BaseURL)
 	if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.User != nil ||
@@ -73,7 +82,7 @@ func (r *LocalModelRelay) valid(name string) bool {
 		return false
 	}
 	n, err := strconv.Atoi(u.Port())
-	return err == nil && n > 0 && n <= 65535 && (r.Model == "gpt-6.2-sol" || r.Model == "gpt-6.1-sol") &&
+	return err == nil && n > 0 && n <= 65535 && MeteredModel(r.Model) &&
 		name == GatewayProvider+"/"+r.Model && len(r.Token) >= 32 && len(r.Token) <= 256 && !strings.ContainsAny(r.Token, "\r\n\x00")
 }
 

@@ -3,6 +3,18 @@
 // every observation and finding belongs to exactly one section and that the
 // section counts add up to the summary, so the screen never shows numbers the
 // stored document does not hold.
+export type Excerpt = { start: number; end: number; text: string };
+export type Citation = { id: string; path: string; line: number; excerpt: Excerpt | null };
+
+export function parseExcerpt(v: unknown): Excerpt | null {
+  if (v == null) return null;
+  const x = object(v);
+  return { start: count(x.start_line), end: count(x.end_line), text: str(x.text) };
+}
+function citation(v: unknown): Citation {
+  const x = object(v);
+  return { id: str(x.id), path: str(x.path), line: count(x.start_line), excerpt: parseExcerpt(x.excerpt) };
+}
 export type SectionStage = { state: string; tasks: number; succeeded: number };
 export type ModelState = { task: string; performed: boolean; reason: string | null };
 export type StaticTool = {
@@ -50,6 +62,7 @@ export type Sections = {
   overview: { key: string; state: string | null; counts: Record<string, number> }[];
   attention: { section: string; code: string; count: number }[];
   environment: {
+    citations: Citation[];
     stage: SectionStage;
     discovery: string;
     modules: { id: string; ecosystem: string; path: string; inScope: boolean }[];
@@ -63,6 +76,9 @@ export type Sections = {
     dependencies: Dependency[];
   };
   documents: {
+    citations: Citation[];
+    quality: {aspect: string; assessment: string; statement: string; refs: string[]}[];
+    comparisons: {statement: string; scope: string; status: string; reason: string; refs: string[]}[];
     stage: SectionStage;
     discovery: string;
     budget: { perDocument: number; total: number; read: number } | null;
@@ -88,6 +104,8 @@ export type Sections = {
     detections: { observation: string; rule: string; place: string; finding: string | null }[];
   };
   codeReview: {
+    citations: Citation[];
+    strengths: {title: string; benefit: string; scope: string; refs: string[]}[];
     stage: SectionStage;
     // planned is whether the run planned model review roles at all.
     planned: boolean;
@@ -293,6 +311,7 @@ export function parseSections(
       return { section: str(x.section), code: str(x.code), count: count(x.count) };
     }),
     environment: {
+      citations: array(e.evidence ?? [],citation),
       stage: stage(e.stage),
       discovery: str(e.discovery),
       modules: array(e.modules, (v) => {
@@ -329,6 +348,16 @@ export function parseSections(
       dependencies: array(e.dependencies ?? [], dependency),
     },
     documents: {
+      citations: array(d.evidence ?? [], citation),
+      quality: array(d.quality ?? [], v => {
+        const x = object(v);
+        return { aspect: str(x.aspect), assessment: str(x.assessment), statement: str(x.statement), refs: array(x.evidence_ids, str) };
+      }),
+      comparisons: array(d.comparisons ?? [], v => {
+        const x = object(v);
+        return { statement: str(x.statement), scope: str(x.applies_to), status: str(x.status), reason: str(x.reason),
+          refs: [...array(x.document_evidence_ids, str), ...array(x.code_evidence_ids, str)] };
+      }),
       stage: stage(d.stage),
       discovery: str(d.discovery),
       budget:
@@ -436,6 +465,11 @@ export function parseSections(
       }),
     },
     codeReview: {
+      citations: array(cr.evidence ?? [], citation),
+      strengths: array(cr.strengths ?? [], v => {
+        const x = object(v);
+        return { title: str(x.title), benefit: str(x.benefit), scope: str(x.scope), refs: array(x.evidence_ids, str) };
+      }),
       stage: stage(cr.stage),
       planned: array(cr.roles, (v) => v).length > 0,
       packID: cr.pack_id == null ? null : str(cr.pack_id) + '@' + str(cr.pack_version),

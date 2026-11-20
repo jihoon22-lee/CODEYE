@@ -112,8 +112,7 @@ type planChangeView struct {
 	RecordedAt    *time.Time `json:"recorded_at"`
 }
 
-// triggerView says why a run exists: a manual request or a schedule
-// occurrence.
+// triggerView says why a run exists.
 type triggerView struct {
 	Kind         string     `json:"kind"`
 	ScheduleID   *string    `json:"schedule_id,omitempty"`
@@ -167,8 +166,12 @@ func runViewOf(v postgres.RunView) runView {
 		RawEvidenceRemovedAt: v.RawEvidenceRemovedAt,
 		PullRequest:          pullRequestViewOf(v.PullRequest)}
 	if o := v.Origin; o != nil {
-		id, at := o.ScheduleID, o.ScheduledFor
-		out.Trigger = triggerView{Kind: postgres.TriggerSchedule, ScheduleID: &id, ScheduledFor: &at}
+		if o.Webhook {
+			out.Trigger = triggerView{Kind: postgres.TriggerWebhook}
+		} else {
+			id, at := o.ScheduleID, o.ScheduledFor
+			out.Trigger = triggerView{Kind: postgres.TriggerSchedule, ScheduleID: &id, ScheduledFor: &at}
+		}
 	}
 	detail, stages := stagesOf(&v.Stages.View)
 	out.Progress.Detail, out.Progress.Stages = *detail, stages

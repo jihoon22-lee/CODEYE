@@ -283,7 +283,7 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 - outcome은 구조화 상태로만 정한다. 사용자 취소는 `cancelled`, lease 상실·agent 종료는 `failed`(reason `lease_lost`·`agent_shutdown`)다. 필수 task가 모두 성공하면 `succeeded`, 일부만 읽을 수 있는 결과가 있으면 `partial`, 그 외는 `failed`다.
 - result manifest는 `analysis.ResultManifest`로 만든다. `Validate`와 canonical JSON을 거치고, 노드 절대 경로는 workspace 상대 경로나 `[REDACTED]`로 바꾼다.
 - cleanup은 실행·확보·intent 중 하나라도 불확실하면 `uncertain`이다. agent journal에 열린 intent가 있으면 워커가 `confirmed`라고 보고해도 `uncertain`으로 덮어쓴다.
-- 완료 사유 코드: `snapshot_unavailable`, `source_unavailable`, `source_unstable`, `source_limit_exceeded`, `source_unsupported`, `snapshot_integrity_failed`, `analysis_unsupported`, `lease_lost`, `agent_shutdown`, `worker_lost`, `cancelled`, `handler_error`, `artifact_upload_failed`, `dependency_failed`, `actor_revoked`, `source_grant_revoked` 등. 형식은 `^[a-z][a-z0-9_]{0,63}$`다.
+- 완료 사유 코드: `snapshot_unavailable`, `source_unavailable`, `source_unstable`, `source_limit_exceeded`, `source_unsupported`, `snapshot_integrity_failed`, `analysis_unsupported`, `lease_lost`, `agent_shutdown`, `worker_lost`, `cancelled`, `handler_error`, `artifact_upload_failed`, `dependency_failed`, `actor_revoked` 등. 형식은 `^[a-z][a-z0-9_]{0,63}$`다.
 
 ### lease watchdog
 
@@ -397,14 +397,14 @@ claim 트랜잭션:
 1. `scheduler_limits` 행을 잠그고 노드 행을 잠근다. 노드 철회, heartbeat 신선도(20초), 전역 활성 예약 수 < 상한, 노드 여유, 노드 저장 영역 상한, 산출물 저장 상한, pool 상한을 확인한다.
 2. queued run을 공정 순서로 keyset page(200개)씩 끝까지 훑어 호환 run을 찾는다. 앞쪽의 비호환 run이 뒤 run을 굶기지 않는다. 프로젝트 동시 실행 상한에 걸린 프로젝트의 run은 건너뛴다.
 3. 호환 조건: `analysis:<profile>` 능력. local이면 `source:local:<root>` 능력과 등록 토큰의 root 허가, 또는 controller와 같은 머신의 노드가 알리는 `source:controller`(모든 root). Git이면 `source:git:<host>` 또는 `source:controller`(승인된 모든 host). 고정 snapshot이면 그 노드의 `snapshot_locations`. 저장된 요청·소스가 현재 규칙으로 해석되지 않는 run은 배정하지 않고 그대로 둔다.
-4. 후보의 project·run을 잠근 뒤 `queued` 여부와 미해제 attempt 부재를 다시 확인한다. 요청자가 비활성이거나 실행 권한을 잃었으면 `actor_revoked`, local 프로젝트의 source root 권한을 잃었으면 `source_grant_revoked`로 run을 실패 처리하고 대기 task를 `skipped_policy`로 둔다.
+4. 후보의 project·run을 잠근 뒤 `queued` 여부와 미해제 attempt 부재를 다시 확인한다. 요청자가 비활성이거나 프로젝트 실행 권한을 잃었으면 `actor_revoked`로 run을 실패 처리하고 대기 task를 `skipped_policy`로 둔다.
 5. attempt(epoch+1), `capacity_reservations`, run `preparing`, 워커 `busy`, 프로젝트 배정 시각, `attempt.leased` 이벤트, 멱등 응답을 같은 트랜잭션에 기록한다. 어느 단계든 실패하면 전부 rollback된다.
 
 claim 응답의 job:
 
 - local source는 `source_root_id`·`relative_path`만 보낸다. 서버는 노드 경로를 저장하지 않는다. `source:controller` 노드(`codeye up`이 띄운 에이전트, `--controller-sources`)에는 웹에서 더한 root도 쓸 수 있도록 controller의 root 경로(`root_path`)를 함께 보낸다. Git은 URL·branch·host를 보낸다.
 - `analysis`는 프로젝트의 분석 선택, `offered`는 run을 시작한 사람에게 서비스가 허용하는 것(`{model_review, build_scripts}`, 활성 관리자는 둘 다 true, 아니면 관리자 스위치)이다. 프로젝트 선택을 따르는 노드는 둘의 교집합만 하고, `offered` 때문에 빠진 것은 보고서 한계 `model_review_not_offered`·`repository_code_not_offered`가 된다.
-- `git_credential_user`는 run을 시작한 사람(예약 run은 예약을 만든 사람)이다. `--git-credential-dir`를 받은 노드는 그 사람의 token 파일만 읽고, 없으면 token 없이 가져온다([누구의 token인가](GITHUB.md#누구의-token인가)).
+- Git fetch는 워커가 설정된 플랫폼 인증정보 파일에서 배정된 저장소 호스트의 토큰만 읽는다. 웹 요청자의 신원은 소스 인증정보 선택에 쓰지 않는다. [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정)
 - 고정 입력 재시도는 `job.snapshot`(ID, manifest digest, kind, consistency, source SHA)을 함께 보낸다. 워커는 그것을 로컬에서 `Load`하고 다시 가져오지 않는다.
 - `resources`는 그 claim이 잡은 예약이다(OS 제한이 아니다).
 

@@ -4,24 +4,28 @@
 
 | 항목 | 값 |
 |---|---|
-| report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `caae64927bcf` |
-| status | `partial` |
-| quality\_verdict | `attention_required` 품질 판정은 안전 인증이 아니다\. |
-| run | `0195f3a0-0000-7000-8000-000000000501` |
-| attempt | `0195f3a0-0000-7000-8000-000000000502` #`1` epoch `1` |
-| snapshot | `0195f3a0-0000-7000-8000-000000000503` manifest `789ee42808b8` |
-| profile | `deep-review` |
-| created\_at | `2026-11-18T00:10:00Z` |
-| export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
+| 프로젝트 | Billing gateway |
+| 분석 경로 | fixtures/modules/input |
+| 분석 시작 | 2026\-11\-18T00\:00\:00Z |
+| 분석 종료 | 2026\-11\-18T00\:10\:00Z |
+| 진행 상태 | 부분 결과 |
+| 검토 결과 | 확인할 항목이 있습니다\. |
 
-> 이 보고서는 부분 결과다\. 필수 작업이나 AI 검토가 수행·검증되지 않았다\.
-
-> 요약 보기다\. 긴 목록은 묶고 앞의 몇 개만 보인다\. 모든 항목은 전체 보기\(detail\=full\)와 JSON 내보내기에 있다\.
+> 일부 검사를 마치지 못했습니다\. 분석 범위에서 해당 항목을 확인할 수 있습니다\.
 
 ## 종합
 
-실행 상태는 부분 결과, 품질 판정은 확인·조치할 항목이 있다\.
+### 프로젝트 종합 분석
+
+> AI 검토
+
+| 검토 결과 | 적용 범위 | 검토 내용 |
+|---|---|---|
+| 일치 | `.` | 하위 호출이 실패하면 최대 3번 재시도한다\. |
+| 확인 보류 | `svc/b` | 결제 호출은 요청마다 정확히 한 번만 한다\. |
+| 잘된 점 | `.` | 성공하면 즉시 종료하는 제한된 재시도 · 호출 성공 후에는 더 요청하지 않고, 연속 실패 시에는 재시도 횟수를 제한한다\. |
+
+실행 상태는 부분 결과, 품질 판정은 확인할 항목이 있습니다\.\.
 
 모델 검토 발견 2건 중 근거로 지지 1건 \(기각 1건\)\. 지지는 모델이 근거를 들어 내린 판단이며 재현이나 사람의 판정이 아니다\.
 
@@ -74,13 +78,32 @@
 
 ## 코드 분석\(모델 검토\)
 
+### 잘된 점 · 성공하면 즉시 종료하는 제한된 재시도
+
+적용 범위 · \.
+
+호출 성공 후에는 더 요청하지 않고, 연속 실패 시에는 재시도 횟수를 제한한다\.
+
+> AI 검토
+
+`gateway.go:1-6`
+
+```
+// Package gateway forwards billing requests to a downstream service.
+package gateway
+
+// MaxRetries is how many times Forward repeats a failed call, following the
+// repository guidance to retry failed calls up to 3 times.
+const MaxRetries = 3
+```
+
 상태\: ✓ 성공 · 작업 3개 중 3개 성공
 
-검토 팩\: review@2\.0\.0
+검토 팩\: review@2\.1\.0
 
 모델 호출 5회, 그중 수락 5회\(환경·문서 역할 호출 포함, 전체 합계\)\.
 
-모델 요청 크기 합계 61454바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
+모델 요청 크기 합계 64826바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
 
 모델에 보낸 파일 6개 / snapshot 파일 10개\.
 
@@ -292,6 +315,102 @@
 
 ## 문서 분석
 
+### 따라 하기 · 잘된 점
+
+루트 README는 최초 호출과 재시도를 합한 호출 상한을 명시한다\.
+
+> AI 검토
+
+`README.md:1-6`
+
+```
+# Billing gateway
+
+This repository holds a small billing gateway and two services under `svc/`.
+
+## Guidance for every module
+
+```
+
+### 일관성 · 보완할 점
+
+실패 시 호출을 반복할지 여부가 루트 안내와 결제 모듈 안내에서 달라 적용 범위를 확인해야 한다\.
+
+> AI 검토
+
+`README.md:1-6`
+
+```
+# Billing gateway
+
+This repository holds a small billing gateway and two services under `svc/`.
+
+## Guidance for every module
+
+```
+
+`svc/b/README.md:1-5`
+
+```
+# Payment client
+
+Call the payment endpoint exactly once per request. Never retry a failed
+call: a repeated call may charge the customer twice. Return the error to the
+caller instead.
+```
+
+### 문서와 구현 · 일치
+
+적용 범위 · \.
+
+하위 호출이 실패하면 최대 3번 재시도한다\.
+
+Forward는 처음의 호출이 실패한 경우 MaxRetries 상수로 반복을 세 번까지 제한한다\.
+
+> AI 검토
+
+`README.md:1-6`
+
+```
+# Billing gateway
+
+This repository holds a small billing gateway and two services under `svc/`.
+
+## Guidance for every module
+
+```
+
+`gateway.go:1-6`
+
+```
+// Package gateway forwards billing requests to a downstream service.
+package gateway
+
+// MaxRetries is how many times Forward repeats a failed call, following the
+// repository guidance to retry failed calls up to 3 times.
+const MaxRetries = 3
+```
+
+### 문서와 구현 · 확인 보류
+
+적용 범위 · svc/b
+
+결제 호출은 요청마다 정확히 한 번만 한다\.
+
+이 문서 계약에 대한 코드 대조 결과가 기록되지 않았습니다\.
+
+> AI 검토
+
+`svc/b/README.md:1-5`
+
+```
+# Payment client
+
+Call the payment endpoint exactly once per request. Never retry a failed
+call: a repeated call may charge the customer twice. Return the error to the
+caller instead.
+```
+
 상태\: ✓ 성공 · 작업 2개 중 2개 성공
 
 탐색 산출물을 검증해 사용했다\.
@@ -366,6 +485,7 @@
 | `ev_66e68c327cf89aa79170534a` | `document` | `svc/b/README.md:1-5` | `49ae0cef2ada` |
 | `ev_8d951286edc67ceff72c48a4` | `document` | `AGENTS.md:1-11` | `7ae2874cb0c4` |
 | `ev_db01a731b6e8e8a2d717118c` | `document` | `README.md:1-9` | `cb8e4c2940c4` |
+| `ev_fefbd0c501bd533cc8f2743e` | `code` | `gateway.go:1-16` | `a03fee1a659e` |
 
 ## 분석 공백
 
@@ -412,7 +532,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 실행 기록 31개\(exited 31\)\.
 
-산출물 83개, 합계 69253바이트\.
+산출물 84개, 합계 74165바이트\.
 
 작업·실행·산출물의 전체 목록과 개별 진단은 전체 보기\(detail\=full\)와 JSON 내보내기에 있다\.
 
@@ -420,11 +540,25 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 - caller\_expansion\_go\_only
 - caller\_expansion\_package\_functions\_only
-- controller는 snapshot 원본을 보관하지 않아 코드 발췌를 넣지 않았다\.
 - files\_outside\_review\_context
 - no\_callers\_found
 - 필수 작업 중 성공하지 않은 작업이 있다\.
 - 비밀값이 탐지된 파일은 모델 입력에서 뺐다\.
 - tools\_outside\_interpret\_input
 
-digest sha256: `caae64927bcf46721c92005721e61a6d83d1a801d005f83dbb94fac30c123f18`
+### 기술 상세
+
+| 항목 | 값 |
+|---|---|
+| report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
+| digest | `0bc6b14a9e83` |
+| status | `partial` |
+| quality\_verdict | `attention_required` |
+| run | `0195f3a0-0000-7000-8000-000000000501` |
+| attempt | `0195f3a0-0000-7000-8000-000000000502` #`1` epoch `1` |
+| snapshot | `0195f3a0-0000-7000-8000-000000000503` manifest `789ee42808b8` |
+| profile | `deep-review` |
+| created\_at | `2026-11-18T00:10:00Z` |
+| export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
+
+digest sha256: `0bc6b14a9e83e51e0e0b95390f3c34623b5e6e7b037d0f52814e2394f697d1a8`

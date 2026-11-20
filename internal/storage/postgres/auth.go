@@ -73,10 +73,10 @@ const (
 // request re-reads (so a disable, demotion or reset applies at the next
 // request). The raw token is never stored.
 type Session struct {
-	ID, UserID            string
-	ExpiresAt             time.Time
-	Username, DisplayName *string
-	IsAdmin               bool
+	ID, UserID                   string
+	ExpiresAt                    time.Time
+	Username, Email, DisplayName *string
+	IsAdmin                      bool
 	// MustChangePassword is the account's flag or this session's own
 	// requirement (it began from an account-creation or reset link).
 	MustChangePassword bool
@@ -103,11 +103,11 @@ type PasswordReset struct {
 	ByUsername *string
 }
 
-const sessionSelect = `SELECT s.id::text,s.user_id::text,s.expires_at,u.username,u.display_name,u.is_admin,
+const sessionSelect = `SELECT s.id::text,s.user_id::text,s.expires_at,u.username,u.email,u.display_name,u.is_admin,
 	u.must_change_password OR s.password_required,u.password_kdf IS NOT NULL,s.link_issued_by::text,
 	r.at,r.by_id,r.by_username
 	FROM auth_sessions s JOIN users u ON u.id=s.user_id
-	LEFT JOIN LATERAL (SELECT u.password_reset_at AS at,u.password_reset_by::text AS by_id,(SELECT username FROM users a WHERE a.id=u.password_reset_by) AS by_username
+	LEFT JOIN LATERAL (SELECT u.password_reset_at AS at,u.password_reset_by::text AS by_id,(SELECT coalesce(username,email) FROM users a WHERE a.id=u.password_reset_by) AS by_username
 		WHERE u.password_reset_at > clock_timestamp()-interval '` + resetNoticeDays + ` days') r ON true`
 
 func scanSession(row pgx.Row) (Session, error) {
@@ -115,7 +115,7 @@ func scanSession(row pgx.Row) (Session, error) {
 	var at *time.Time
 	var by *string
 	var byName *string
-	err := row.Scan(&sess.ID, &sess.UserID, &sess.ExpiresAt, &sess.Username, &sess.DisplayName, &sess.IsAdmin, &sess.MustChangePassword, &sess.HasPassword,
+	err := row.Scan(&sess.ID, &sess.UserID, &sess.ExpiresAt, &sess.Username, &sess.Email, &sess.DisplayName, &sess.IsAdmin, &sess.MustChangePassword, &sess.HasPassword,
 		&sess.LinkIssuedBy, &at, &by, &byName)
 	if err == nil && at != nil && by != nil {
 		sess.PasswordReset = &PasswordReset{At: at.UTC(), ByUserID: *by, ByUsername: byName}

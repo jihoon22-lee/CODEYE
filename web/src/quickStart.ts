@@ -93,11 +93,6 @@ export function choicesFor(kind: 'local' | 'git', setup: Setup | null, touched: 
   };
 }
 
-// A folder path for a user the server allows no folder: say so before asking the server.
-export function noFolderFor(target: QuickTarget, setup: Setup | null): boolean {
-  return target.kind === 'local' && setup !== null && setup.readable_folders.length === 0;
-}
-
 // quickBody builds the registration; a repository needs the provider of its host.
 export function quickBody(target: QuickTarget, name: string, branch: string, choices: AnalysisChoices, providers: Provider[], setup: Setup | null): { body: CreateProjectBody | null; error: string | null } {
   const label = name.trim();

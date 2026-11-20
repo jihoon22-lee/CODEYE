@@ -109,7 +109,9 @@ function RunStatus({ api, runId, project, setup, canRun, placeholder, onRunChang
     </div>
     {status !== null && !isKnownRunStatus(status) && <p className="notice">{t.runs.statusUnknownNote} <code>{shorten(status, 40)}</code></p>}
     {run?.pull_request && <PullRequestPanel api={api} runId={runId} pr={run.pull_request} hasReport={!!run.reportRevision} />}
-    {run && <RunDetails run={run} confirmedAt={error !== null ? confirmedAt : null} />}
+    {run && (terminal && run.reportRevision
+      ? <details className="disclosure"><summary>{t.stages.title}</summary><RunDetails run={run} confirmedAt={error !== null ? confirmedAt : null} /></details>
+      : <RunDetails run={run} confirmedAt={error !== null ? confirmedAt : null} />)}
     {!run && <dl><dt>{t.runs.id}</dt><dd><code>{runId}</code></dd>{version !== null && <><dt>{t.runs.version}</dt><dd>{version}</dd></>}</dl>}
     {error !== null && <p role="alert" className="error">{stopped ? t.runs.pollStopped : t.runs.pollError} {describeError(error).message}</p>}
     <div className="actions">
@@ -142,6 +144,7 @@ function updateText(mode: StreamMode): string {
 
 function triggerText(trigger: RunTrigger): string {
   if (trigger.kind === 'manual') return t.runs.triggerManual;
+  if (trigger.kind === 'github_webhook') return t.runs.triggerGitHubWebhook;
   if (trigger.kind === 'schedule' && trigger.scheduled_for) return t.runs.triggerSchedule(formatInstant(trigger.scheduled_for));
   return t.runs.triggerUnknown(shorten(trigger.kind, 40));
 }

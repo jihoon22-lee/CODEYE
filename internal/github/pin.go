@@ -4,19 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 )
 
-// ErrNotGitHubProject: the project's source is not a github.com
-// repository, so it has no pull requests CODEYE can resolve.
+// ErrNotGitHubProject indicates a project without an approved GitHub API.
 var ErrNotGitHubProject = errors.New("pull_request_unsupported_source")
 
 // PinForProject is the one resolution path of a pull-request run (the web
 // API's run creation and `codeye up URL/pull/N` both use it): the project's
-// source must be a github.com repository; the pull request is resolved with
+// source must have an approved GitHub API; the pull request is resolved with
 // c and the run's comment choice is ref.Comment, or remembered (the
 // project's comment_on_pull_request) when the request leaves it out.
 func PinForProject(ctx context.Context, c *Client, source json.RawMessage, ref domain.PullRequestRef, remembered bool, now time.Time) (domain.PullRequest, error) {
@@ -25,7 +23,7 @@ func PinForProject(ctx context.Context, c *Client, source json.RawMessage, ref d
 		return domain.PullRequest{}, ErrNotGitHubProject
 	}
 	host, err := domain.RepositoryHost(src.RepositoryURL)
-	if err != nil || !strings.EqualFold(host, Host) {
+	if err != nil || c == nil {
 		return domain.PullRequest{}, ErrNotGitHubProject
 	}
 	p, err := Resolve(ctx, c, host, domain.RepositoryPath(src.RepositoryURL), ref.Number, now)

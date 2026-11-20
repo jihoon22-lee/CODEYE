@@ -2,9 +2,12 @@ package history
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/report"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
 // A builder-4 baseline against a current-builder run compares exactly like
@@ -27,7 +30,11 @@ func TestBuilderFourBaselineAgainstCurrentBuilder(t *testing.T) {
 	cur.Report.Overview = &report.Overview{Sections: []report.OverviewSection{}, Attention: []report.Attention{}}
 	cur.Report.StaticAnalysis = &report.StaticAnalysisSection{Languages: []report.StaticLanguage{}}
 	cur.Report.PullRequest = &report.PullRequestSection{Number: 7, Items: []report.PullRequestItem{}}
-	if report.BuilderVersion != "10" {
+	cur.Report.Documents = &report.DocumentsSection{Comparisons: []report.DocComparison{{Status: "match", Statement: "same behavior"}}}
+	cur.Report.CodeReview = &report.CodeReviewSection{Strengths: []record.Strength{{Title: "guarded return"}}}
+	cur.Report.Findings = slices.Clone(old.Report.Findings)
+	cur.Report.Findings[0].Evidence = []report.Evidence{{Kind: "code", Excerpt: &sourceexcerpt.Excerpt{StartLine: 5, EndLine: 5, Text: "return nil"}}}
+	if report.BuilderVersion != "11" {
 		t.Fatalf("builder version %s: revisit this test", report.BuilderVersion)
 	}
 

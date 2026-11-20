@@ -12,6 +12,21 @@ type Locale struct {
 // Korean is the default locale.
 var Korean = Locale{
 	Labels: map[string]string{
+		"insight.overview": "프로젝트 종합 분석", "insight.statement": "검토 내용", "insight.interpretation": "AI 검토",
+		"insight.scope":   "적용 범위",
+		"insight.clarity": "명확성", "insight.completeness": "설명 범위", "insight.actionability": "따라 하기",
+		"insight.consistency": "일관성", "insight.strength": "잘된 점", "insight.weakness": "보완할 점",
+		"insight.comparison": "문서와 구현", "insight.match": "일치", "insight.partial": "부분 일치",
+		"insight.mismatch": "불일치", "insight.unknown": "확인 보류",
+		"identity.project":   "프로젝트",
+		"identity.source":    "분석 경로",
+		"identity.start":     "분석 시작",
+		"identity.finish":    "분석 종료",
+		"identity.commit":    "커밋",
+		"identity.status":    "진행 상태",
+		"identity.verdict":   "검토 결과",
+		"identity.published": "보고서 작성 시각",
+		"identity.technical": "기술 상세",
 		"title":              "CODEYE 분석 보고서",
 		"export_full":        "코드 포함 내보내기(권한 있는 사용자 전용)",
 		"export_codefree":    "코드 미포함 내보내기: 도구 원문 메시지와 서술 원문을 생략했다",
@@ -30,11 +45,10 @@ var Korean = Locale{
 		"unknown":            "미확정",
 		"none":               "없음",
 		"message_omitted":    "(코드 미포함: 생략)",
-		"banner_partial":     "이 보고서는 부분 결과다. 필수 작업이나 AI 검토가 수행·검증되지 않았다.",
-		"banner_failed":      "이 실행은 실패했다. 아래 내용은 수집된 구조화 기록이며 분석 결과로 간주하지 않는다.",
-		"banner_cancelled":   "이 실행은 취소되었다. 아래 내용은 취소 전까지 수집된 기록이다.",
-		"banner_completed":   "필수 작업과 AI 검토가 모두 확인되었다. 품질 판정은 안전 인증이 아니다.",
-		"verdict_note":       "품질 판정은 안전 인증이 아니다.",
+		"banner_partial":     "일부 검사를 마치지 못했습니다. 분석 범위에서 해당 항목을 확인할 수 있습니다.",
+		"banner_failed":      "분석 도중 오류가 발생했습니다. 실패하기 전까지의 기록을 보여줍니다.",
+		"banner_cancelled":   "분석이 취소되었습니다. 취소 시점까지의 결과를 보여줍니다.",
+		"banner_completed":   "계획된 필수 검사를 마쳤습니다.",
 		"code_excerpt_none":  "코드 발췌 없음: controller는 snapshot 원본을 보관하지 않는다. 위치와 blob hash로 snapshot 코드를 확인한다.",
 		"ai_review_optional": "선택 검토 작업(판정에 필요하지 않으며 수행으로 세지 않음)",
 		// Structure metrics and secret detection (docs/ANALYZERS.md).
@@ -54,7 +68,7 @@ var Korean = Locale{
 		LimArtifactRejected:               "분석 산출물 검증에 실패해 해당 작업의 결과를 제외했다.",
 		LimArtifactMissing:                "분석 산출물을 읽지 못했다.",
 		LimUnrecognizedArtifact:           "해석기가 등록되지 않은 산출물이 있다(결과에 반영하지 않음).",
-		LimNoCodeExcerpts:                 "controller는 snapshot 원본을 보관하지 않아 코드 발췌를 넣지 않았다.",
+		LimNoCodeExcerpts:                 "고정 스냅샷에서 표시할 발췌를 확보하지 못했다.",
 		LimTaskNotInManifest:              "결과 manifest에 없는 작업이 있다.",
 		LimTaskStatusMismatch:             "산출물의 작업 상태가 controller가 접수한 상태와 달라 접수 상태를 따랐다.",
 		LimRunCancelled:                   "실행이 취소되었다.",
@@ -74,6 +88,7 @@ var Korean = Locale{
 		"tool_version_untested":           "Go: 시험하지 않은 toolchain 버전이다.",
 		"workspace_drift":                 "Go: 실행 중 workspace가 manifest와 달라졌다.",
 		LimReviewLineage:                  "검토 단계 기록이 앞 단계·탐색·도구 산출물과 이어지지 않아 제외했다.",
+		"environment_notes_outside_input": "코드 근거를 먼저 담기 위해 일부 환경 해석을 조사 입력에서 뺐다.",
 		"review_input_trimmed":            "요청 크기 한도 때문에 일부 발췌를 모델 입력에서 뺐다.",
 		"verification_budget_exceeded":    "요청 크기 한도 때문에 일부 후보를 검증하지 못했다(미검토).",
 		"verification_call_failed":        "후속 검증 호출이 실패해 일부 후보를 검증하지 못했다(미검토). 앞서 수락한 판정은 유지했다.",
@@ -226,9 +241,9 @@ var koSectionLabels = map[string]string{
 	"status.failed":    "실패",
 	"status.cancelled": "취소됨",
 
-	"verdict.attention_required":     "확인·조치할 항목이 있다",
-	"verdict.inconclusive":           "판단 보류: 확인하지 못한 범위나 미확정 후보가 남아 있다",
-	"verdict.no_actionable_findings": "조치 항목 없음(안전 인증이 아니다)",
+	"verdict.attention_required":     "확인할 항목이 있습니다.",
+	"verdict.inconclusive":           "추가 확인이 필요합니다.",
+	"verdict.no_actionable_findings": "조치가 필요한 항목을 찾지 못했습니다.",
 	"overview_lead":                  "실행 상태는 %s, 품질 판정은 %s.",
 
 	// Pull-request runs (pull_request.go).
@@ -258,6 +273,7 @@ var koSectionLabels = map[string]string{
 	"attention.secrets_detected":             "비밀정보로 보이는 값이 %d곳에서 탐지됐다.",
 	"attention.required_tools_not_succeeded": "판정에 필요한 분석 작업 %d개가 성공하지 않았다.",
 	"attention.environment_mismatch":         "모듈이 선언한 도구 요구와 노드 관측이 %d건 어긋난다.",
+	"attention.contract_differences":         "문서의 설명과 구현이 다른 항목이 %d개 있습니다.",
 	"attention.document_conflicts":           "문서 안내끼리 충돌하는 곳이 %d건 있다(모델 해석).",
 	"attention.model_review_not_performed":   "모델 검토를 수행하지 않았거나 그 결과를 검증하지 못했다.",
 	"attention.pending_candidates":           "확인되지 않은 후보 %d개가 남아 있다.",
@@ -492,7 +508,6 @@ var koSectionLabels = map[string]string{
 	"col.task_status":              "작업 상태",
 
 	// The summary layout (render_summary.go, docs/REPORT.md#내보내기-상세도).
-	"summary.layout_note":                     "요약 보기다. 긴 목록은 묶고 앞의 몇 개만 보인다. 모든 항목은 전체 보기(detail=full)와 JSON 내보내기에 있다.",
 	"summary.more":                            "외 %d개",
 	"summary.more_places":                     "외 %d곳",
 	"summary.of_secondary":                    "(그중 부차 경로 %d곳)",

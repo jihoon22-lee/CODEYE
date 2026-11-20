@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { unsafeRelativePath, urlHasCredentials, validateProjectForm, type FormValues } from './projectForm';
+import { urlHasCredentials, validateProjectForm, type FormValues } from './projectForm';
 
-const base: FormValues = { name: '', kind: 'local', sourceRootId: 'root1', relativePath: 'team/service', providerId: '', repositoryUrl: '', branch: '' };
-const git: FormValues = { ...base, kind: 'git', sourceRootId: '', relativePath: '', providerId: 'gh', repositoryUrl: 'https://github.com/org/repo.git', branch: 'main' };
+const base: FormValues = { name: '', kind: 'local', localPath: '/srv/team/service', providerId: '', repositoryUrl: '', branch: '' };
+const git: FormValues = { ...base, kind: 'git', localPath: '', providerId: 'gh', repositoryUrl: 'https://github.com/org/repo.git', branch: 'main' };
 
 describe('validateProjectForm', () => {
   it('builds the local source body and omits an empty name (no description field exists)', () => {
     const { body, errors } = validateProjectForm(base);
     expect(errors).toEqual({});
-    expect(body).toEqual({ source: { kind: 'local', source_root_id: 'root1', relative_path: 'team/service' } });
+    expect(body).toEqual({ local_path: '/srv/team/service' });
     expect(body).not.toHaveProperty('description');
   });
   it('includes a trimmed name when given', () => {
@@ -18,9 +18,9 @@ describe('validateProjectForm', () => {
     expect(validateProjectForm(git).body).toEqual({ source: { kind: 'git', provider_id: 'gh', repository_url: 'https://github.com/org/repo.git', branch: 'main' } });
   });
   it('reports each missing field and returns no body', () => {
-    const local = validateProjectForm({ ...base, sourceRootId: '', relativePath: ' ' });
+    const local = validateProjectForm({ ...base, localPath: ' ' });
     expect(local.body).toBeNull();
-    expect(Object.keys(local.errors).sort()).toEqual(['relativePath', 'sourceRootId']);
+    expect(Object.keys(local.errors).sort()).toEqual(['localPath']);
     const remote = validateProjectForm({ ...git, providerId: '', repositoryUrl: '', branch: '' });
     expect(Object.keys(remote.errors).sort()).toEqual(['providerId', 'repositoryUrl']);
     // No branch: the repository's default branch.
@@ -36,11 +36,8 @@ describe('validateProjectForm', () => {
 });
 
 describe('path and URL checks', () => {
-  it.each(['/etc', '../x', 'a/../b', 'a/./b', 'a//b', 'a/', 'a\\b', 'C:foo', 'a:b', '..'])('flags %j as unsafe', path => {
-    expect(unsafeRelativePath(path)).toBe(true);
-  });
-  it.each(['.', 'a', 'team/service', '한글/경로', '..hidden/file', 'a/b.c'])('accepts %j', path => {
-    expect(unsafeRelativePath(path)).toBe(false);
+  it.each(['../x', 'a/../b', 'C:foo', 'a:b', '..'])('rejects relative path %j', localPath => {
+    expect(validateProjectForm({ ...base, localPath }).body).toBeNull();
   });
   it('allows ssh-style addresses and plain https', () => {
     expect(urlHasCredentials('git@github.com:org/repo.git')).toBe(false);

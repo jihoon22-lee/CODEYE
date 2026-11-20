@@ -21,6 +21,41 @@ func Resolve(ctx context.Context, c *Client, host, repository string, number int
 	if err != nil {
 		return domain.PullRequest{}, err
 	}
+	return resolveInfo(ctx, c, host, repository, number, now, info)
+}
+
+// ResolveWebhook checks that both sides still belong to the configured
+// repository. An old event cannot request a newer head, and an external fork
+// cannot enter native analysis through the webhook.
+func ResolveWebhook(ctx context.Context, c *Client, host, repository string, id int64, number int, head string, now time.Time) (domain.PullRequest, bool, error) {
+	info, err := c.PullRequest(ctx, repository, number)
+	if err != nil {
+		return domain.PullRequest{}, false, err
+	}
+	if !sameRepositoryPullRequest(info, id, repository) || (head != "" && info.Head.SHA != head) {
+		return domain.PullRequest{}, false, nil
+	}
+	pin, err := resolveInfo(ctx, c, host, repository, number, now, info)
+	if err != nil {
+		return domain.PullRequest{}, false, err
+	}
+	latest, err := c.PullRequest(ctx, repository, number)
+	if err != nil {
+		return domain.PullRequest{}, false, err
+	}
+	// The files endpoint follows the live pull request. Check that the
+	// commits used to pin the file range did not move while listing it.
+	unchanged := latest.Number == number && latest.Base.SHA == pin.BaseSHA && latest.Head.SHA == pin.HeadSHA
+	return pin, unchanged && sameRepositoryPullRequest(latest, id, repository), nil
+}
+
+func sameRepositoryPullRequest(info PullRequestInfo, id int64, repository string) bool {
+	return info.Base.Repo != nil && info.Head.Repo != nil && info.Base.Repo.ID == id && info.Head.Repo.ID == id &&
+		strings.EqualFold(info.Base.Repo.FullName, repository) && strings.EqualFold(info.Head.Repo.FullName, repository) &&
+		info.State == "open" && !info.Draft
+}
+
+func resolveInfo(ctx context.Context, c *Client, host, repository string, number int, now time.Time, info PullRequestInfo) (domain.PullRequest, error) {
 	if info.Number != number || !domain.ValidObjectID(info.Base.SHA) || !domain.ValidObjectID(info.Head.SHA) {
 		return domain.PullRequest{}, &Error{Kind: KindInvalid}
 	}

@@ -454,8 +454,8 @@ func TestProjectsSourcesAndACL(t *testing.T) {
 		t.Logf("case %d", i)
 		e.do("POST", "/api/v1/projects", c.body, a.o()).want(t, c.status, c.code)
 	}
-	// b has no grant on the root: same 404 as a nonexistent root.
-	e.do("POST", "/api/v1/projects", local("."), b.o()).want(t, 404, "NOT_FOUND")
+	// The platform root is available to b, who owns the separate project.
+	bProject := e.do("POST", "/api/v1/projects", local("."), b.o()).want(t, 201, "").body["id"]
 
 	// Listing and pagination.
 	l1 := e.do("GET", "/api/v1/projects?limit=1", nil, a.o()).want(t, 200, "")
@@ -468,8 +468,8 @@ func TestProjectsSourcesAndACL(t *testing.T) {
 	}
 	e.do("GET", "/api/v1/projects?limit=0", nil, a.o()).want(t, 400, "INVALID_REQUEST")
 	e.do("GET", "/api/v1/projects?cursor=zzz", nil, a.o()).want(t, 400, "INVALID_REQUEST")
-	if items := e.do("GET", "/api/v1/projects", nil, b.o()).want(t, 200, "").body["items"].([]any); len(items) != 0 {
-		t.Fatal("non-member sees projects")
+	if items := e.do("GET", "/api/v1/projects", nil, b.o()).want(t, 200, "").body["items"].([]any); len(items) != 1 || items[0].(map[string]any)["id"] != bProject {
+		t.Fatal("non-member sees projects of another account")
 	}
 
 	// Non-members get 404 (existence hidden); members with a low role get 403.

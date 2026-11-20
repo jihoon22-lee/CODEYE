@@ -16,7 +16,7 @@ test('password sign-in, admin-created user, forced password change', async ({ pa
   await page.getByLabel('사용자 이름').fill(username);
   await page.getByLabel('비밀번호', { exact: true }).fill(`${password}-wrong`);
   await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(page.getByText('로그인하지 못했습니다. 사용자 이름과 비밀번호를 확인하세요.')).toBeVisible();
+  await expect(page.getByText('로그인하지 못했습니다. 이메일 또는 사용자 이름과 비밀번호를 확인하세요.')).toBeVisible();
   await expect(page.getByLabel('비밀번호', { exact: true })).toHaveValue('');
   await page.getByLabel('비밀번호', { exact: true }).fill(password);
   await page.getByRole('button', { name: '로그인', exact: true }).click();
@@ -70,20 +70,12 @@ test('password sign-in, admin-created user, forced password change', async ({ pa
   await expect(row).toContainText('✓ 활성');
   await expect(row).not.toContainText('비밀번호 설정 대기');
 
-  // Source-root grants, providers and the server audit log, against the real server.
+  // Providers and the server audit log, against the real server.
   const adminTabs = page.getByRole('navigation', { name: '관리 화면' });
-  await adminTabs.getByRole('button', { name: '폴더', exact: true }).click();
-  await page.getByLabel('browser-fixture-root에 허가할 사용자').selectOption({ label: 'browser-newcomer' });
-  await page.getByRole('button', { name: '허가', exact: true }).click();
-  const revoke = page.getByRole('button', { name: 'browser-fixture-root에서 browser-newcomer의 허가 철회' });
-  await expect(revoke).toBeVisible();
-  await revoke.click();
-  await expect(revoke).toHaveCount(0);
   await adminTabs.getByRole('button', { name: 'Git 공급자', exact: true }).click();
   await expect(page.getByText('등록된 Git 공급자가 없습니다.')).toBeVisible();
   await adminTabs.getByRole('button', { name: '감사 기록', exact: true }).click();
   const audit = page.getByRole('table', { name: '감사 기록(최신순)' });
-  await expect(audit).toContainText('소스 루트 허가 철회');
   await expect(audit).toContainText('사용자 생성');
   await page.getByLabel('작업').selectOption('auth.login_failed');
   await page.getByRole('button', { name: '적용', exact: true }).click();
@@ -91,4 +83,34 @@ test('password sign-in, admin-created user, forced password change', async ({ pa
   await expect(audit).toContainText('로그인 실패');
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
   await expect(page.getByRole('heading', { name: '로그인이 필요합니다' })).toBeVisible();
+});
+
+test('email signup, duplicate signup, login and password settings', async ({ page }) => {
+  const password = 'example-signup-password-42';
+  const email = 'browser-signup@example.test';
+  await page.goto('/');
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
+  await page.getByLabel('이메일', { exact: true }).fill('Browser-Signup@EXAMPLE.Test');
+  await page.getByLabel('비밀번호', { exact: true }).fill(password);
+  await page.getByRole('button', { name: '가입하기', exact: true }).click();
+  const account = page.getByRole('group', { name: '내 계정' });
+  await expect(account).toContainText(email);
+  await expect(account).not.toContainText('★ 관리자');
+  expect(await page.content()).not.toContain(password);
+
+  await page.getByRole('button', { name: '로그아웃', exact: true }).click();
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
+  await page.getByLabel('이메일', { exact: true }).fill(email);
+  await page.getByLabel('비밀번호', { exact: true }).fill(password);
+  await page.getByRole('button', { name: '가입하기', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('이미 가입한 이메일입니다.');
+  await expect(page.getByLabel('비밀번호', { exact: true })).toHaveValue('');
+
+  await page.getByRole('button', { name: '로그인 화면으로', exact: true }).click();
+  await page.getByLabel('이메일 또는 사용자 이름', { exact: true }).fill(` ${email.toUpperCase()} `);
+  await page.getByLabel('비밀번호', { exact: true }).fill(password);
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
+  await expect(account).toContainText(email);
+  await page.getByRole('button', { name: '비밀번호 바꾸기', exact: true }).click();
+  await expect(page.getByLabel('현재 비밀번호')).toBeVisible();
 });

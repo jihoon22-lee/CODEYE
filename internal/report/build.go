@@ -13,6 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
 var profiles = map[string]bool{"deep-review": true, "with-tests": true, "focused": true}
@@ -66,6 +67,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	lim := newSet()
 	notes := newSet()
 	r := Report{
+		Project:       in.Project,
 		SchemaVersion: SchemaVersion, ID: in.ReportID, RunID: in.Run.ID, Revision: in.Revision, CreatedAt: formatTime(in.Now),
 		Builder: Builder{ID: BuilderID, Version: BuilderVersion, InputDigest: InputDigest(in)},
 		Export:  Export{IncludeCode: true},
@@ -77,7 +79,6 @@ func Build(in Input, reg *Registry) (Report, error) {
 	r.Coverage = Coverage{ScopeMode: in.Run.ScopeKind, InventoryFiles: index.files, TestStatus: "not_run", Tools: []ToolCoverage{}}
 	notes.add(NoteInventoryAllLanguages)
 	notes.add(NoteNoTestsPlanned)
-	lim.add(LimNoCodeExcerpts)
 
 	states := map[string]*taskState{}
 	keys := []string{}
@@ -137,6 +138,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	processedUnion, unionComplete := map[string]bool{}, true
 	obsSeen := map[string]bool{}
 	findSeen := map[string]bool{}
+	var snippets map[sourceexcerpt.Key]sourceexcerpt.Excerpt
 	if rm != nil {
 		for _, k := range keys {
 			st := states[k]
@@ -166,6 +168,16 @@ func Build(in Input, reg *Registry) (Report, error) {
 			for _, ma := range st.manifest.Artifacts {
 				art := artByID[ma.ArtifactID]
 				body := in.Bodies[art.ID]
+				if art.MediaType == sourceexcerpt.MediaType {
+					if doc, ok := sourceexcerpt.Decode(body, in.Run.ID, in.Attempt.ID, in.Snapshot.ManifestDigest, index.Lookup); ok && art.Role == "other" && snippets == nil {
+						snippets = make(map[sourceexcerpt.Key]sourceexcerpt.Excerpt, len(doc.Items))
+						for _, item := range doc.Items {
+							snippets[item.Key()] = item.Excerpt
+						}
+						decoderOf[art.ID] = sourceexcerpt.MediaType + ";schema_version=" + sourceexcerpt.Version
+					}
+					continue
+				}
 				d, ok := reg.lookup(art, body)
 				if !ok {
 					if strings.HasSuffix(art.MediaType, "+json") {
@@ -362,15 +374,19 @@ func Build(in Input, reg *Registry) (Report, error) {
 		lim.add(LimRunFailed)
 	}
 	r.Summary = ComputeSummary(r.Findings, r.Observations)
-	r.QualityVerdict = DecideVerdict(r.Status, r.Summary, r.Coverage.AIReview.Status)
 	if in.PullRequest != nil {
 		notes.add(NotePullRequestFocus)
 	}
 	r.Coverage.Notes = notes.list()
+	if len(snippets) == 0 {
+		lim.add(LimNoCodeExcerpts)
+	}
 	r.Limitations = lim.list()
 	// The sections read the finished report and the task states; they never
 	// change a limitation, note, count, status or verdict.
 	composeSections(&r, in, states, keys, rm != nil)
+	r.QualityVerdict = reportVerdict(r)
+	attachExcerpts(&r, snippets)
 	// The pull-request section counts changed files sent to the model only
 	// when the run sent the model a request: a run without a model (whose
 	// records hold calls with no request) says so instead of "0 of N sent".

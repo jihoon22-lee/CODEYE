@@ -1,5 +1,5 @@
 // Validate the projection used by the report view before rendering any model or tool text.
-import { parseSections, type Sections } from './reportSections';
+import { parseSections, parseExcerpt, type Excerpt, type Sections } from './reportSections';
 
 export type Evidence = {
   id: string;
@@ -8,6 +8,7 @@ export type Evidence = {
   path?: string;
   range?: string;
   artifact?: string;
+  excerpt?: Excerpt | null;
 };
 export type Finding = {
   id: string;
@@ -46,6 +47,9 @@ export type Observation = {
   metric: { name: string; value: number; threshold: number; unit: string } | null;
 };
 export type AnalysisReport = {
+  project?: {name: string; source: string | null; start: string | null; finish: string | null};
+  commit?: string | null;
+  published?: string | null;
   runID: string;
   revision: number;
   snapshot: string;
@@ -117,6 +121,7 @@ function evidence(v: unknown): Evidence {
     range: loc
       ? String(count(loc.start_line)) + '–' + String(count(loc.end_line))
       : undefined,
+    excerpt: parseExcerpt(e.excerpt),
     artifact: nullable(e.artifact_id) ?? undefined,
   };
 }
@@ -218,6 +223,11 @@ export function parseAnalysisReport(
         pack: str(c.pack_sha256),
       };
     }),
+    project: r.project == null ? undefined : (() => {
+      const p = object(r.project);
+      return {name: str(p.name), source: nullable(p.source), start: nullable(p.started_at), finish: nullable(p.finished_at)};
+    })(),
+    commit: nullable(object(r.inputs).commit_sha), published: nullable(r.created_at),
     runID: expectedID,
     revision: count(r.revision),
     snapshot: str(object(r.inputs).snapshot_id),

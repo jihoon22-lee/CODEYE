@@ -1,5 +1,10 @@
 package report
 
+import (
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
+)
+
 // Per-analysis sections (docs/REPORT.md#분석-종류별-절). Builder 5 adds them to every report it
 // builds; earlier revisions carry none and keep the flat layout. Sections
 // reference observations and findings by ID and carry computed counts; the
@@ -93,12 +98,13 @@ type ModelInterpretation struct {
 // SectionEvidence is a snapshot excerpt a model statement of the section
 // cites: the role record's catalog entry, bound to path, blob and lines.
 type SectionEvidence struct {
-	ID         string `json:"id"`
-	Kind       string `json:"kind"`
-	Path       string `json:"path"`
-	StartLine  int    `json:"start_line"`
-	EndLine    int    `json:"end_line"`
-	BlobSHA256 string `json:"blob_sha256"`
+	Excerpt    *sourceexcerpt.Excerpt `json:"excerpt,omitempty"`
+	ID         string                 `json:"id"`
+	Kind       string                 `json:"kind"`
+	Path       string                 `json:"path"`
+	StartLine  int                    `json:"start_line"`
+	EndLine    int                    `json:"end_line"`
+	BlobSHA256 string                 `json:"blob_sha256"`
 }
 
 // Overview is the 종합 section: one line per section and what to look at
@@ -241,8 +247,10 @@ type EnvNote struct {
 // --- 문서 분석 -----------------------------------------------------------------
 
 type DocumentsSection struct {
-	Stage     SectionStage `json:"stage"`
-	Discovery string       `json:"discovery"`
+	Quality     []record.DocumentQuality `json:"quality,omitempty"`
+	Comparisons []DocComparison          `json:"comparisons,omitempty"`
+	Stage       SectionStage             `json:"stage"`
+	Discovery   string                   `json:"discovery"`
 	// Budget is null without an accepted docs.discover document.
 	Budget      *DocBudget   `json:"budget"`
 	Items       []DocItem    `json:"items"`
@@ -419,9 +427,11 @@ type SecretDetection struct {
 // CodeReviewSection is the model code review: pack, roles, calls, what the
 // model saw, the candidates and their verification outcome.
 type CodeReviewSection struct {
-	Stage       SectionStage `json:"stage"`
-	PackID      *string      `json:"pack_id"`
-	PackVersion *string      `json:"pack_version"`
+	Strengths   []record.Strength `json:"strengths,omitempty"`
+	Evidence    []SectionEvidence `json:"evidence,omitempty"`
+	Stage       SectionStage      `json:"stage"`
+	PackID      *string           `json:"pack_id"`
+	PackVersion *string           `json:"pack_version"`
 	// Roles are the code_review stage review tasks with their result.
 	Roles         []AIReviewTask `json:"roles"`
 	Calls         int            `json:"calls"`

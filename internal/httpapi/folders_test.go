@@ -42,11 +42,6 @@ func TestFolderPathsAndSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, r := range []string{rootHome.ID, rootWork.ID} {
-		if err := e.store.GrantSourceRoot(ctx, r, u.id); err != nil {
-			t.Fatal(err)
-		}
-	}
 	// A controller without a state directory maps paths too; it knows no
 	// model or tools and cannot store GitHub tokens.
 	svc := e.do("POST", "/api/v1/projects", map[string]any{"local_path": filepath.Join(home, "work", "svc")}, u.o()).want(t, 201, "")
@@ -54,7 +49,7 @@ func TestFolderPathsAndSetup(t *testing.T) {
 		t.Fatalf("%s", svc.raw)
 	}
 	if v := e.do("GET", "/api/v1/setup", nil, u.o()).want(t, 200, ""); v.body["model"] != nil || v.body["tools"] != nil ||
-		v.body["github"].(map[string]any)["enabled"] != false || len(v.body["readable_folders"].([]any)) != 2 {
+		v.body["available"].(map[string]any)["local_path"].(map[string]any)["available"] != true {
 		t.Fatalf("setup without state %s", v.raw)
 	}
 
@@ -87,18 +82,16 @@ func TestFolderPathsAndSetup(t *testing.T) {
 		t.Fatalf("defaults %s", work.raw)
 	}
 	for path, code := range map[string]string{
-		filepath.Join(base, "elsewhere"):  "FOLDER_NOT_READABLE",
-		filepath.Join(home, "missing"):    "FOLDER_NOT_FOUND",
-		"relative/path":                   "FOLDER_NOT_FOUND",
-		home:                              "FOLDER_HOLDS_CODEYE_DATA",
-		filepath.Join(state, "run"):       "FOLDER_HOLDS_CODEYE_DATA",
-		filepath.Join(home, "src", "a:b"): "FOLDER_NAME_UNSUPPORTED",
+
+		filepath.Join(home, "missing"): "FOLDER_NOT_FOUND",
+		"relative/path":                "FOLDER_NOT_FOUND",
+		home:                           "FOLDER_HOLDS_CODEYE_DATA",
+		filepath.Join(state, "run"):    "FOLDER_HOLDS_CODEYE_DATA",
 	} {
-		r := e.do("POST", "/api/v1/projects", map[string]any{"local_path": path}, u.o()).want(t, 422, code)
-		if code == "FOLDER_NOT_READABLE" && (!strings.Contains(r.body["error"].(map[string]any)["message"].(string), "ask the administrator") ||
-			len(r.body["error"].(map[string]any)["details"].(map[string]any)["readable_folders"].([]any)) != 2) {
-			t.Fatalf("%s", r.raw)
-		}
+		e.do("POST", "/api/v1/projects", map[string]any{"local_path": path}, u.o()).want(t, 422, code)
+	}
+	for _, path := range []string{filepath.Join(base, "elsewhere"), filepath.Join(home, "src", "a:b")} {
+		e.do("POST", "/api/v1/projects", map[string]any{"local_path": path}, u.o()).want(t, 201, "")
 	}
 	e.do("POST", "/api/v1/projects", map[string]any{"local_path": filepath.Join(home, "src", "app"), "source": map[string]any{"kind": "local", "source_root_id": rootHome.ID, "relative_path": "."}}, u.o()).want(t, 400, "INVALID_REQUEST")
 	// The root-and-relative-path form gets the same check: "." under $HOME holds the state directory.
@@ -138,7 +131,7 @@ func TestFolderPathsAndSetup(t *testing.T) {
 
 	// GET /setup: nothing recorded yet, then the summary and the tool table.
 	v := e.do("GET", "/api/v1/setup", nil, u.o()).want(t, 200, "")
-	if v.body["tools"] != nil || v.body["model"] != nil || v.body["git"].(map[string]any)["hosts"].([]any)[0] != "github.com" || v.body["github"].(map[string]any)["enabled"] != true {
+	if v.body["tools"] != nil || v.body["model"] != nil || v.body["git"].(map[string]any)["hosts"].([]any)[0] != "github.com" {
 		t.Fatalf("empty setup %s", v.raw)
 	}
 	raw, _ := json.Marshal(InstanceSetup{SchemaVersion: "0.1", Model: &SetupModel{ID: "openai/gpt-6.2-sol", Probe: ProbeVerified}, Git: true, GitHosts: []string{"github.com"}})
@@ -153,7 +146,7 @@ func TestFolderPathsAndSetup(t *testing.T) {
 	folders := v.body["readable_folders"].([]any)
 	tools := v.body["tools"].(map[string]any)["tools"].([]any)
 	if m["configured"] != true || m["id"] != "openai/gpt-6.2-sol" || m["probe"] != "verified" || v.body["git"].(map[string]any)["available"] != true ||
-		len(folders) != 2 || len(tools) != 1 || tools[0].(map[string]any)["hint"] != nil {
+		len(folders) != 0 || len(tools) != 1 || tools[0].(map[string]any)["hint"] != nil {
 		t.Fatalf("setup %s", v.raw)
 	}
 	// A user who is not an administrator: build scripts are not offered by

@@ -38,6 +38,7 @@ type secBlock struct {
 // secPart is one piece of a section, rendered in field order: heading,
 // paragraphs, the model-interpretation label, counts, table, list, findings.
 type secPart struct {
+	Sources  []sourceCitation
 	Heading  string
 	Paras    []string
 	Model    string
@@ -725,7 +726,7 @@ func (v secView) observationsPart(heading string, ids []string, obs map[string]O
 // --- Markdown ----------------------------------------------------------------
 
 func renderMarkdownSections(r Report, digest string, l Locale) []byte {
-	v := newSecView(r, digest, l)
+	v := withInsights(newSecView(r, digest, l))
 	var b strings.Builder
 	p := func(s ...string) {
 		for _, x := range s {
@@ -749,6 +750,7 @@ func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 	mdCoverage(p, r, v.view, l, "### ")
 	mdTasks(p, r, l, "### ")
 	mdAppendix(p, r, v.view, l, "### ")
+	mdTechnical(p, r, v.view, l)
 	p("digest sha256: ", mdCode(digest))
 	return []byte(b.String())
 }
@@ -813,6 +815,7 @@ func mdPart(p func(...string), part secPart, l Locale) {
 	for _, f := range part.Findings {
 		mdFinding(p, f, "#### ")
 	}
+	mdCitations(p, part.Sources)
 	mdCards(p, part.Cards)
 	if part.ShowEmpty {
 		p(mdText(part.Empty))
@@ -828,37 +831,18 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="` + HTMLContentSecurityPolicy + `">
 <meta name="referrer" content="no-referrer">
-<title>{{.L.Label "title"}} {{.R.ID}} rev {{.R.Revision}}</title>
-<style>
-body{font-family:system-ui,sans-serif;margin:2rem;max-width:72rem;color:#111;background:#fff;line-height:1.5}
-table{border-collapse:collapse;margin:.5rem 0}td,th{border:1px solid #888;padding:.25rem .5rem;text-align:left;vertical-align:top}
-code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
-.banner{border:2px solid #000;padding:.5rem 1rem;font-weight:600}
-.finding{border:1px solid #444;padding:.5rem 1rem;margin:1rem 0}
-.model{border-left:4px solid #555;padding:.25rem .75rem;font-style:italic}
-.scroll{overflow-x:auto}
-nav ol{columns:2}
-</style>
+<title>{{with .R.Project}}{{.Name}} · {{end}}{{.L.Label "title"}}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>` + exportCSS + `</style>
 </head>
 <body>
 <h1>{{.L.Label "title"}}</h1>
 <table>
-<tr><th>report</th><td><code>{{.R.ID}}</code> rev <span data-field="revision">{{.R.Revision}}</span></td></tr>
-<tr><th>digest</th><td><code data-field="digest">{{.DigestShort}}</code></td></tr>
-<tr><th>status</th><td><code data-field="status">{{.R.Status}}</code></td></tr>
-<tr><th>quality_verdict</th><td><code data-field="quality_verdict">{{.R.QualityVerdict}}</code> {{.L.Label "verdict_note"}}</td></tr>
-<tr><th>run</th><td><code>{{.R.RunID}}</code></td></tr>
-<tr><th>attempt</th><td><code>{{.R.Attempt.ID}}</code> #{{i64 .R.Attempt.Number}} epoch {{i64 .R.Attempt.LeaseEpoch}}</td></tr>
-<tr><th>snapshot</th><td><code>{{.R.Inputs.SnapshotID}}</code> manifest <code>{{.ManifestShort}}</code></td></tr>
-{{with .R.Inputs.CommitSHA}}<tr><th>commit</th><td><code>{{.}}</code></td></tr>{{end}}
-<tr><th>profile</th><td><code>{{.R.Inputs.Profile}}</code></td></tr>
-<tr><th>created_at</th><td><code>{{.R.CreatedAt}}</code></td></tr>
-<tr><th>export</th><td>{{if .R.Export.IncludeCode}}{{.L.Label "export_full"}}{{else}}{{.L.Label "export_codefree"}}{{end}}</td></tr>
+{{range .Identity}}<tr><th scope="row">{{.Label}}</th><td>{{.Value}}</td></tr>{{end}}
 </table>
 <p class="banner" role="status">{{.Banner}}</p>
 <nav aria-label="{{.L.Label "overview_sections"}}"><ol>{{range .Sections}}<li><a href="#{{.ID}}">{{.Title}}</a>{{if .State}} — {{.State}}{{end}}</li>{{end}}<li><a href="#appendix">{{.L.Label "section.appendix"}}</a></li></ol></nav>
-{{$l := .L}}{{if .Summary}}<p class="banner" role="note">{{.L.Label "summary.layout_note"}}</p>
-{{end}}{{range .Sections}}<section id="{{.ID}}" data-section="{{.ID}}">
+{{$l := .L}}{{range .Sections}}<section id="{{.ID}}" data-section="{{.ID}}">
 <h2>{{.Title}}</h2>
 {{range .Parts}}{{template "part" (pair $l .)}}{{end}}</section>
 {{end}}<section id="appendix">
@@ -891,7 +875,22 @@ nav ol{columns:2}
 <h3>{{.L.Label "limitations"}}</h3>
 <ul>{{range .Limitations}}<li>{{.}}</li>{{end}}</ul>
 {{end}}</section>
+<details><summary>{{.L.Label "identity.technical"}}</summary>
+<table>
+<tr><th>report</th><td><code>{{.R.ID}}</code> rev <span data-field="revision">{{.R.Revision}}</span></td></tr>
+<tr><th>digest</th><td><code data-field="digest">{{.DigestShort}}</code></td></tr>
+<tr><th>status</th><td><code data-field="status">{{.R.Status}}</code></td></tr>
+<tr><th>quality_verdict</th><td><code data-field="quality_verdict">{{.R.QualityVerdict}}</code></td></tr>
+<tr><th>run</th><td><code>{{.R.RunID}}</code></td></tr>
+<tr><th>attempt</th><td><code>{{.R.Attempt.ID}}</code> #{{i64 .R.Attempt.Number}} epoch {{i64 .R.Attempt.LeaseEpoch}}</td></tr>
+<tr><th>snapshot</th><td><code>{{.R.Inputs.SnapshotID}}</code> manifest <code>{{.ManifestShort}}</code></td></tr>
+{{with .R.Inputs.CommitSHA}}<tr><th>commit</th><td><code>{{.}}</code></td></tr>{{end}}
+<tr><th>profile</th><td><code>{{.R.Inputs.Profile}}</code></td></tr>
+<tr><th>created_at</th><td><code>{{.R.CreatedAt}}</code></td></tr>
+<tr><th>export</th><td>{{if .R.Export.IncludeCode}}{{.L.Label "export_full"}}{{else}}{{.L.Label "export_codefree"}}{{end}}</td></tr>
+</table>
 <p>digest sha256: <code>{{.Digest}}</code></p>
+</details>
 </body>
 </html>
 {{define "part"}}{{$l := .L}}{{with .P}}{{if .Heading}}<h3>{{.Heading}}</h3>
@@ -904,7 +903,7 @@ nav ol{columns:2}
 {{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}</tr>
 {{end}}</table></div>
 {{end}}{{if .List}}<ul>{{range .List}}<li>{{if .Link}}<a href="#{{.Link}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}{{range .Codes}} <code>{{.}}</code>{{end}}</li>{{end}}</ul>
-{{end}}{{range .Findings}}<section class="finding" id="{{.ID}}" data-finding="{{.ID}}">
+{{end}}{{range .Sources}}<p><code>{{.Location}}</code></p>{{if .Text}}<pre><code>{{.Text}}</code></pre>{{end}}{{end}}{{range .Findings}}<section class="finding" id="{{.ID}}" data-finding="{{.ID}}">
 <h4>{{.Title}}</h4>
 <ul>
 <li>id: <code>{{.ID}}</code></li>
@@ -915,7 +914,7 @@ nav ol{columns:2}
 {{if .CounterevidenceIDs}}<li>반대 근거 <code>{{join .CounterevidenceIDs ","}}</code></li>{{end}}
 <li>impact: {{.Impact}}</li>
 {{range .Claims}}<li>claim (<code>{{.Kind}}</code>): {{.Assertion}} <code>{{join .EvidenceIDs ","}}</code></li>{{end}}
-{{range .Evidence}}<li>evidence <code>{{.ID}}</code> (<code>{{.Kind}}</code>): {{.Description}} {{with .Location}}<code>{{.Path}}:{{.StartLine}}</code>{{end}} {{with .ArtifactID}}<code>{{.}}</code>{{end}} {{with .JSONPointer}}<code>{{.}}</code>{{end}}</li>{{end}}
+{{range .Evidence}}<li>evidence <code>{{.ID}}</code> (<code>{{.Kind}}</code>): {{.Description}} {{with .Location}}<code>{{.Path}}:{{.StartLine}}</code>{{end}} {{with .ArtifactID}}<code>{{.}}</code>{{end}} {{with .JSONPointer}}<code>{{.}}</code>{{end}}{{with .Excerpt}}<pre><code>{{.Text}}</code></pre>{{end}}</li>{{end}}
 {{range .ObservationIDs}}<li>observation <a href="#{{.}}"><code>{{.}}</code></a></li>{{end}}
 <li>recommendation: {{.Recommendation.Summary}}</li>
 {{range .Verification}}<li>verification: {{.}}</li>{{end}}
@@ -934,7 +933,7 @@ type partArgs struct {
 
 func renderHTMLSections(r Report, digest string, l Locale) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := htmlSectionsTemplate.Execute(&buf, newSecView(r, digest, l)); err != nil {
+	if err := htmlSectionsTemplate.Execute(&buf, withInsights(newSecView(r, digest, l))); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

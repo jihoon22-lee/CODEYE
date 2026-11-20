@@ -260,7 +260,7 @@ func TestClaimPagesPastIncompatibleQueueHead(t *testing.T) {
 	}
 }
 
-func TestClaimRechecksActorPermissionAndSourceGrant(t *testing.T) {
+func TestClaimRechecksActorPermission(t *testing.T) {
 	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
@@ -283,16 +283,14 @@ func TestClaimRechecksActorPermissionAndSourceGrant(t *testing.T) {
 	if got.Status != domain.RunFailed || e.count("SELECT count(*) FROM events WHERE run_id=$1 AND payload->>'reason'='actor_revoked'", r1.ID) != 1 {
 		t.Fatalf("revoked actor run %s", got.Status)
 	}
-	// The owner lost the source-root grant (no revoke CLI yet; direct SQL).
-	r2 := e.enqueue("o1", deepReview)
-	sqlExec(t, e.s, "DELETE FROM source_root_grants WHERE source_root_id=$1 AND user_id=$2", e.root.ID, e.user)
-	e.noClaim(n, n.workers[0], "k2")
-	got, _ = e.s.GetRun(e.ctx, e.user, r2.ID)
-	if got.Status != domain.RunFailed || e.count("SELECT count(*) FROM events WHERE run_id=$1 AND payload->>'reason'='source_grant_revoked'", r2.ID) != 1 {
-		t.Fatalf("revoked grant run %s", got.Status)
-	}
 	if e.count("SELECT count(*) FROM attempts") != 0 {
 		t.Fatal("attempt created for revoked actor")
+	}
+	// Legacy source grants do not govern platform acquisition.
+	r2 := e.enqueue("o1", deepReview)
+	sqlExec(t, e.s, "DELETE FROM source_root_grants WHERE source_root_id=$1 AND user_id=$2", e.root.ID, e.user)
+	if got := e.claimOK(n, n.workers[0], "k2"); got.Lease.RunID != r2.ID {
+		t.Fatalf("claimed run %s, want %s", got.Lease.RunID, r2.ID)
 	}
 }
 

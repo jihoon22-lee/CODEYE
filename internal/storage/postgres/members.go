@@ -18,6 +18,7 @@ const RoleOwner = "owner"
 type Member struct {
 	UserID      string
 	Username    *string
+	Email       *string
 	DisplayName *string
 	Role        string
 	Disabled    bool
@@ -33,12 +34,12 @@ func (s *Store) ListMembers(ctx context.Context, actor, project string) ([]Membe
 		if err := requireProject(ctx, tx, actor, project, true, false); err != nil {
 			return nil, err
 		}
-		rows, err := tx.Query(ctx, `SELECT id,username,display_name,role,disabled FROM (
-			SELECT u.id::text AS id,u.username,u.display_name,'owner' AS role,u.disabled_at IS NOT NULL AS disabled FROM projects p JOIN users u ON u.id=p.owner_id WHERE p.id=$1
+		rows, err := tx.Query(ctx, `SELECT id,username,email,display_name,role,disabled FROM (
+			SELECT u.id::text AS id,u.username,u.email,u.display_name,'owner' AS role,u.disabled_at IS NOT NULL AS disabled FROM projects p JOIN users u ON u.id=p.owner_id WHERE p.id=$1
 			UNION ALL
-			SELECT u.id::text,u.username,u.display_name,m.role,u.disabled_at IS NOT NULL FROM project_members m JOIN users u ON u.id=m.user_id JOIN projects p ON p.id=m.project_id
+			SELECT u.id::text,u.username,u.email,u.display_name,m.role,u.disabled_at IS NOT NULL FROM project_members m JOIN users u ON u.id=m.user_id JOIN projects p ON p.id=m.project_id
 			WHERE m.project_id=$1 AND m.user_id<>p.owner_id) x
-			ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'manager' THEN 1 WHEN 'runner' THEN 2 ELSE 3 END, username NULLS LAST, id`, project)
+			ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'manager' THEN 1 WHEN 'runner' THEN 2 ELSE 3 END, coalesce(username,email) NULLS LAST, id`, project)
 		if err != nil {
 			return nil, err
 		}
@@ -63,15 +64,23 @@ func (s *Store) PutMember(ctx context.Context, actor, project, user string, role
 // (case-insensitive, as stored). The caller's manager role is checked before
 // the lookup; an unknown, malformed or disabled username is ErrNotFound.
 func (s *Store) AddMemberByUsername(ctx context.Context, actor, project, username string, role domain.Role) (Member, error) {
+	name, _ := account.NormalizeUsername(username)
+	return s.addMemberByIdentifier(ctx, actor, project, "username=$1", name, role)
+}
+
+// AddMemberByEmail is PutMember for the user with the normalized email.
+func (s *Store) AddMemberByEmail(ctx context.Context, actor, project, email string, role domain.Role) (Member, error) {
+	name, _ := account.NormalizeEmail(email)
+	return s.addMemberByIdentifier(ctx, actor, project, "email=$1", name, role)
+}
+
+func (s *Store) addMemberByIdentifier(ctx context.Context, actor, project, where, identifier string, role domain.Role) (Member, error) {
 	if !validIDs(actor, project) || !role.Valid() {
 		return Member{}, domain.ErrInvalid
 	}
-	name, err := account.NormalizeUsername(username)
-	if err != nil {
-		name = "" // matches no user, after the role check
-	}
 	return transaction(ctx, s, func(tx pgx.Tx) (Member, error) {
-		return putMember(ctx, tx, actor, project, "username=$1", name, role)
+		// An invalid identifier matches no user after the role check.
+		return putMember(ctx, tx, actor, project, where, identifier, role)
 	})
 }
 
@@ -83,8 +92,8 @@ func putMember(ctx context.Context, tx pgx.Tx, actor, project, where string, arg
 	}
 	m := Member{Role: string(role)}
 	var enabled bool
-	if err := tx.QueryRow(ctx, "SELECT id::text,username,display_name,disabled_at IS NULL FROM users WHERE "+where+" FOR SHARE", arg).
-		Scan(&m.UserID, &m.Username, &m.DisplayName, &enabled); err != nil {
+	if err := tx.QueryRow(ctx, "SELECT id::text,username,email,display_name,disabled_at IS NULL FROM users WHERE "+where+" FOR SHARE", arg).
+		Scan(&m.UserID, &m.Username, &m.Email, &m.DisplayName, &enabled); err != nil {
 		return Member{}, err
 	}
 	if !enabled {

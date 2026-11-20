@@ -162,7 +162,7 @@ export function ProjectsView({ api, userId, idempotency, link }: Props) {
     {(roots.error || providers.error) && <p role="alert" className="error">{p.lookupFailed} {(roots.error ?? providers.error)!.message}</p>}
     <QuickStart api={api} userId={userId} idempotency={idempotency} setup={setup} providers={providers.items}
       onStarted={(project, run) => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setOpened({ project: project.id, run }); setSelectedId(project.id); setStarted(n => n + 1); wake(); }} />
-    <details><summary>{p.otherForm}</summary><ProjectForm api={api} roots={roots.items} providers={providers.items} onCreated={created} /></details>
+    <details><summary>{p.otherForm}</summary><ProjectForm api={api} providers={providers.items} onCreated={created} /></details>
   </section>;
   return <>
     <section className="page-head" aria-labelledby="projects-title">

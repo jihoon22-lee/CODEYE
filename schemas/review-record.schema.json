@@ -25,6 +25,9 @@
         "conflicts": {"type":"array","minItems":1,"maxItems":3,"items":{"$ref":"#/$defs/conflict"}},
         "questions": {"type":"array","minItems":1,"maxItems":4,"items":{"$ref":"#/$defs/question"}},
         "instruction_notes": {"type":"array","minItems":1,"maxItems":3,"items":{"$ref":"#/$defs/instruction_note"}},
+        "document_quality": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "object", "additionalProperties": false, "required": ["aspect", "assessment", "statement", "evidence_ids"], "properties": {"aspect": {"enum": ["clarity", "completeness", "actionability", "consistency"]}, "assessment": {"enum": ["strength", "weakness"]}, "statement": {"$ref": "#/$defs/text"}, "evidence_ids": {"$ref": "#/$defs/refs", "minItems": 1, "maxItems": 4}}}},
+        "strengths": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "object", "additionalProperties": false, "required": ["title", "benefit", "scope", "evidence_ids"], "properties": {"title": {"$ref": "#/$defs/text"}, "benefit": {"$ref": "#/$defs/text"}, "scope": {"$ref": "#/$defs/scope_path"}, "evidence_ids": {"$ref": "#/$defs/refs", "minItems": 1, "maxItems": 4}}}},
+        "contract_comparisons": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "object", "additionalProperties": false, "required": ["contract_index", "applies_to", "status", "reason", "document_evidence_ids", "code_evidence_ids"], "properties": {"contract_index": {"type": "integer", "minimum": 1, "maximum": 6}, "applies_to": {"$ref": "#/$defs/scope_path"}, "status": {"enum": ["match", "partial", "mismatch", "unknown"]}, "reason": {"$ref": "#/$defs/text"}, "document_evidence_ids": {"$ref": "#/$defs/refs", "minItems": 1, "maxItems": 4}, "code_evidence_ids": {"$ref": "#/$defs/refs", "minItems": 0, "maxItems": 4}}}},
         "candidates": {"type":"array","minItems":1,"maxItems":6,"items":{"$ref":"#/$defs/candidate"}},
         "interpretation_limits": {"type":"array","minItems":1,"maxItems":3,"items":{"$ref":"#/$defs/interpretation_limit"}},
         "verifications": {"type":"array","minItems":1,"maxItems":6,"items":{"allOf":[{"$ref":"#/$defs/verification"},{"properties":{"candidate_id":{"$ref":"#/$defs/candidate_id"}}}]}},
@@ -32,6 +35,9 @@
         "calls": {"type":"array","maxItems":3,"items":{"$ref":"#/$defs/call"}}
       },
       "allOf": [
+        {"if": {"required": ["contract_comparisons"]}, "then": {"properties": {"stage": {"const": "investigate"}, "outcome": {"const": "accepted"}, "schema_version": {"const": "0.2"}}}},
+        {"if": {"required": ["strengths"]}, "then": {"properties": {"stage": {"const": "investigate"}, "outcome": {"const": "accepted"}}}},
+        {"if": {"required": ["document_quality"]}, "then": {"properties": {"stage": {"const": "documents"}, "outcome": {"const": "accepted"}}}},
         {"if":{"properties":{"schema_version":{"const":"0.3"}}},
          "then":{"required":["slice"],"properties":{"stage":{"enum":["investigate","verify"]},"candidates":{"items":{"properties":{"origin":{"const":"investigate"}}}}}},
          "else":{"not":{"required":["slice"]},"properties":{"upstream":{"items":{"properties":{"source":{"not":{"pattern":"^review\\.(scope|investigate\\.s[0-9]{3})$"}}}}}}}},

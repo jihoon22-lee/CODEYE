@@ -1,4 +1,20 @@
 {
+  "registration": {
+    "email": " Dana+review@EXAMPLE.Test ",
+    "password": "example value for registration only"
+  },
+  "registration_session": {
+    "user_id": "ea9f4a52-dc76-4b9b-b16f-cfdcfe434d6e",
+    "csrf_token": "EXAMPLE",
+    "expires_at": "2026-11-19T21:00:00Z",
+    "username": null,
+    "email": "dana+review@example.test",
+    "display_name": null,
+    "is_admin": false,
+    "must_change_password": false,
+    "has_password": true,
+    "password_reset": null
+  },
   "session": {
     "user_id": "0b5f3c1e-7d2a-4c11-9a63-2f0e5b8d4a10",
     "csrf_token": "q8n3VfJ6mXgS1u0yZkP4aRw2tLb7cHd9eQo5iTs8jUv",

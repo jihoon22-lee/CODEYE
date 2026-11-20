@@ -55,8 +55,8 @@ func TestSummaryLayout(t *testing.T) {
 					t.Fatalf("section order %v", at)
 				}
 			}
-			if !strings.Contains(md, mdText(Korean.Label("summary.layout_note"))) {
-				t.Fatal("summary without its note")
+			if strings.Contains(strings.SplitN(md, "## ", 2)[0], r.RunID) {
+				t.Fatal("technical identifiers in report header")
 			}
 			full := RenderMarkdownAt(r, d, Korean, DetailFull)
 			checkTableWidths(t, string(full))

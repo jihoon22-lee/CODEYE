@@ -92,9 +92,8 @@ type running struct {
 func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, o bringUpOptions, out, stderr io.Writer) (*running, int) {
 	// Detected tools and the model complete the configuration before the
 	// agent argv is built and compared with a running agent's.
-	tools := applyDetectedTools(ctx, cfg, out)
+	applyDetectedTools(ctx, cfg, out)
 	model := setupInstanceModel(ctx, cfg, layout, o.noProbe, out)
-	gh, ghCred := setupInstanceGitHub(ctx, cfg, tools, out)
 	opCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	db, err := instanceDatabase(opCtx, cfg, layout, dbOptions{start: true, flagBinDir: o.postgresBinDir, notices: out})
@@ -171,10 +170,7 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 	if err != nil {
 		return fail(err)
 	}
-	if err := syncAdminGitHubToken(layout, user, ghCred); err != nil {
-		fmt.Fprintln(out, "github:", err)
-	}
-	roots, err := reconcileRoots(opCtx, store, cfg, user, out)
+	roots, err := reconcileRoots(opCtx, store, cfg, out)
 	if err != nil {
 		return fail(err)
 	}
@@ -184,11 +180,15 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 	if err := ensureGitProviders(opCtx, store, cfg, out); err != nil {
 		return fail(err)
 	}
+	gh, err := configurePlatformGitHub(opCtx, store, cfg, layout, out)
+	if err != nil {
+		return fail("cannot configure platform GitHub access:", err)
+	}
 	if err := ensurePoolWorkers(opCtx, store, cfg); err != nil {
 		return fail(err)
 	}
 	if err := writeInstanceSetup(cfg, layout, model, gh); err != nil {
-		fmt.Fprintln(out, "note: cannot write", httpapi.InstanceSetupFile, "- the web UI shows the setup as unknown:", err)
+		return fail("cannot write installation setup:", err)
 	}
 	res := &running{store: store, db: db, user: user, roots: roots}
 	var agentRec, ctrlRec *instance.Record
@@ -364,45 +364,19 @@ func controllerListenArgs(cfg *instance.Config) []string {
 	return args
 }
 
-// syncAdminGitHubToken makes the token `codeye up` found (GH_TOKEN,
-// GITHUB_TOKEN or gh) the GitHub connection of the administrator who runs
-// the service: that user's token file is the only place it is stored, and
-// the controller and the agent read it for the calls made for that user
-// only. A token the administrator pasted in the web is kept; a discovered
-// token that is gone (signed out, refused, discovery off, offline) is
-// removed again.
-func syncAdminGitHubToken(layout instance.Layout, user string, found *github.Credential) error {
-	dir := github.UserTokensDir(layout.Root)
-	have, _ := dir.Read(user)
-	if have != nil && have.Source == github.TokenFromWeb {
-		return nil
-	}
-	if found == nil {
-		if have != nil {
-			return dir.Remove(user)
-		}
-		return nil
-	}
-	if have != nil && *have == *found {
-		return nil
-	}
-	return dir.Write(user, *found)
-}
-
 // ensureGitProviders registers the configured Git hosts as providers, so
 // projects can be added by repository URL with nothing else set up.
 func ensureGitProviders(ctx context.Context, s *postgres.Store, cfg *instance.Config, out io.Writer) error {
 	for _, h := range cfg.GitHosts {
+		if !github.HostAllowed(h, cfg.Offline, cfg.GitHosts) {
+			continue
+		}
 		_, created, err := s.EnsureProvider(ctx, h)
 		if err != nil {
 			return fmt.Errorf("cannot register the Git host %s: %w", h, err)
 		}
 		if created {
-			what := "public repositories"
-			if h == "github.com" && cfg.GitHub.On() {
-				what = "public repositories, and private ones the GitHub token can read"
-			}
-			fmt.Fprintf(out, "registered the Git host %s (%s)\n", h, what)
+			fmt.Fprintf(out, "registered the Git host %s\n", h)
 		}
 	}
 	return nil
@@ -422,10 +396,10 @@ func ensurePoolWorkers(ctx context.Context, s *postgres.Store, cfg *instance.Con
 // writeInstanceSetup records for the controller what the web app shows on
 // the first screen: the model, Git, the GitHub account and the backup
 // directory (no key, no token).
-func writeInstanceSetup(cfg *instance.Config, layout instance.Layout, m *instance.ResolvedModel, gh instance.GitHubSetup) error {
+func writeInstanceSetup(cfg *instance.Config, layout instance.Layout, m *instance.ResolvedModel, gh []httpapi.SetupGitHub) error {
 	deps := cfg.Agent.DependenciesEnabled()
 	st := httpapi.InstanceSetup{SchemaVersion: "0.1", Git: cfg.Agent.Git != "", GitHosts: append([]string{}, cfg.GitHosts...), BackupDir: backupDirOf(cfg),
-		GitHub: setupGitHubOf(gh), Offline: cfg.Offline, DependencyFetch: &deps}
+		GitHubConnections: gh, Offline: cfg.Offline, CABundle: cfg.CABundle, DependencyFetch: &deps}
 	if m != nil {
 		st.Model = &httpapi.SetupModel{ID: m.ID, Probe: instance.ModelProbeResult(layout, m)}
 	}
@@ -523,10 +497,10 @@ type rootGrant struct {
 	ID string
 }
 
-// reconcileRoots registers missing configured source roots and grants them
-// to the administrator user. A label registered with another path is an error:
+// reconcileRoots registers configured node mappings. A label registered
+// with another path is an error:
 // source roots are immutable.
-func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *instance.Config, user string, out io.Writer) ([]rootGrant, error) {
+func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *instance.Config, out io.Writer) ([]rootGrant, error) {
 	var roots []rootGrant
 	for i := range cfg.SourceRoots {
 		r := cfg.SourceRoots[i]
@@ -557,9 +531,6 @@ func reconcileRoots(ctx context.Context, s *postgres.Store, cfg *instance.Config
 			if st, err := os.Stat(r.Path); err != nil || !st.IsDir() {
 				fmt.Fprintf(out, "note: source root %q (%s) is not an existing directory; its projects cannot be analyzed until it is back (or remove it from source_roots)\n", r.Label, r.Path)
 			}
-		}
-		if err := s.GrantSourceRoot(ctx, rec.ID, user); err != nil {
-			return nil, fmt.Errorf("cannot grant source root %q: %w", r.Label, err)
 		}
 		roots = append(roots, rootGrant{SourceRoot: r, ID: rec.ID})
 	}
@@ -656,9 +627,11 @@ func agentArgv(cfg *instance.Config, layout instance.Layout, roots []rootGrant, 
 	if a.Git != "" {
 		args = append(args, "--git", a.Git)
 		for _, h := range cfg.GitHosts {
-			args = append(args, "--git-host", h)
+			if github.HostAllowed(h, cfg.Offline, cfg.GitHosts) {
+				args = append(args, "--git-host", h)
+			}
 		}
-		args = append(args, gitHubCredentialArgs(cfg, layout)...)
+		args = append(args, "--git-credential-file", github.PlatformCredentialFile(layout.Root))
 	}
 	if a.Go != "" {
 		args = append(args, "--go", a.Go)

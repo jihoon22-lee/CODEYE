@@ -38,7 +38,7 @@
 
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
-| TC-02 | **일부**(여러 사용자 계정 사이의 격리는 설계(미구현)). OS 계정은 읽지만 웹 사용자는 권한 없는 경로 | 등록·목록·보고서·SSE 모두 접근 거부 | REQ-002,015; NFR-006,007 |
+| TC-02 | 웹 계정이 플랫폼 소스로 각각의 프로젝트를 등록하고 타인 프로젝트·보고서·SSE 접근을 시도 | 서비스 계정이 읽을 수 있는 소스는 등록. 프로젝트 접근은 구성원 ACL에 따라 제한 | REQ-002,015; NFR-006,007 |
 | TC-31 | **일부**(회사 SSO·GitHub App 권한 철회는 미실행). 권한 철회/삭제·code-free export | source/report/SSE 차단, export 내용과 metadata 민감값 제거. 구성원 제거와 사용자 비활성화가 열린 SSE를 `access_revoked`·`unauthenticated`로 닫고 다음 요청이 404·401인 것, 노드 철회가 실행 중 에이전트를 종료 코드 4로 끝내는 것은 TC-255 D8이 실행한다 | REQ-028,029,031; NFR-006,007 |
 | TC-46 | loopback 강제, Host/Origin/CSRF 거부 | 요청 거부 | NFR-006 |
 | TC-47 | 일회용 launch token, 동시 교환·비활성화, 세션 만료/폐기 | 한 번만 교환되고 만료·폐기 뒤 거부 | REQ-002; NFR-006 |
@@ -48,7 +48,7 @@
 | TC-51 | readiness 조회, serve의 구/신/변조 schema | readiness는 읽기 전용, 맞지 않는 schema 거부 | NFR-003 |
 | TC-52 | 정적 파일 경계·CSP·비밀값 비노출·실브라우저 요청/취소 | 경계 밖 파일 없음, CSP 적용, 비밀값 없음, 브라우저에서 요청·취소 동작 | NFR-005,006 |
 
-TC-02·TC-31의 권한 부분은 owner·프로젝트 구성원 ACL, source root grant와 모두에게 연 폴더로 시험한다(TC-259·TC-261). 코드 제외 내보내기의 식별 정보 제거는 구현돼 있다.
+TC-02·TC-31은 소유자와 프로젝트 구성원 ACL, 플랫폼 소스 접근을 분리해 시험한다(TC-258·TC-259·TC-261).
 
 ## 계정·권한·감사
 
@@ -73,6 +73,7 @@ TC-02·TC-31의 권한 부분은 owner·프로젝트 구성원 ACL, source root 
 | TC-154 | `codeye user create/passwd/list/disable/admin`, `--password` 인자, 접근 가능한 비밀번호 파일, 약한 비밀번호, 중복 이름, 마지막 관리자 | 비밀번호는 표준 입력·0600 파일에서만 읽고 출력·감사 detail에 없다. 인자는 거부(2), 넓은 mode 파일 거부, 약한 비밀번호 2, 중복 1, 마지막 관리자 1. 변경마다 `operator_cli` 감사 행 | REQ-002; NFR-006 |
 | TC-156 | 관리자 재설정의 기록과 표시: 이름 없는 사용자 재설정, 자기 재설정, 재설정 링크 세션(계정 표시를 지워도), 링크 로그인과 그 세션의 이후 행, 운영자 링크, 사용자의 세션 조회(여러 번 로그인, 지우기 시도, 30일 뒤), 경로 표 전체를 재설정 링크 세션으로 요청 | 이름 없는 사용자와 자기 재설정은 각기 다른 문구의 409. 재설정 링크 세션은 계정 표시와 무관하게 비밀번호 변경 전까지 403 `PASSWORD_CHANGE_REQUIRED`. 로그인 행에 `link_issued_by`(관리자 ID)·`link_purpose`, 그 세션의 이후 모든 행에 `link_issued_by`. 운영자 링크는 `operator_cli`. 세션 조회의 `password_reset`이 관리자·시각을 로그인마다 주고, 지우는 경로는 없으며(404), 30일 뒤에는 null이다. 격리 표의 manager 세션이 재설정 링크로 시작해 그 세션이 쓴 모든 행이 관리자를 가리킨다 | REQ-002; NFR-006 |
 | TC-157 | 사용자 이름으로 구성원 추가: 대소문자가 다른 이름, 같은 이름으로 역할 변경, 없는·비활성·형식이 틀린 이름, owner 이름, viewer의 요청(있는 이름과 없는 이름) | 추가·변경은 200 `Member`와 `project.member_set` 한 행씩. 없는·비활성·형식이 틀린 이름은 404, owner는 409. viewer는 두 이름 모두 403이라 존재를 알 수 없다. 격리 표에서도 manager 이상만 200이다 | REQ-002; NFR-006 |
+| TC-266 | 기존 DB migration, 이메일 대소문자와 공백을 달리한 동시 가입, 틀린 입력·Origin, 비밀번호 로그인과 변경, 같은 Git 주소를 등록한 두 계정. Chromium 가입·중복·재로그인 | 기존 사용자 ID·세션·프로젝트 소유권 보존. DB는 정규형만 받고 동시 가입 중 한 계정·세션만 저장. 다른 사용자의 프로젝트·실행·보고서는 ACL로 차단되고 같은 주소로 각자 실행 가능. 기존 사용자 이름·로그인 링크와 신규 이메일 로그인이 동작(`TestEmailAccountsMigrationKeepsLegacyOwnership`, `TestEmailRegistrationAndLogin`, `TestSignedUpUsersOwnIndependentProjects`, `web/e2e/password.spec.ts`) | REQ-001,002,031; NFR-006 |
 | TC-155 | 계약 검사: 감사 action·행위자·대상 목록이 migration(0010·0011·0013·0014)·저장 계층·OpenAPI에서 같음, `examples/accounts.json`, 허용 detail key 이름 | `scripts/validate_bundle.py`가 대조하고 목록 차이·비밀번호 key·모르는 action·hash 필드 같은 부정 사례를 거부한다. 보조 검사이며 TC-140~TC-154를 대신하지 않는다 | NFR-006 |
 
 TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한다. 웹 화면에서 역할에 따라 버튼을 숨기는 시험은 화면이 생길 때 더한다.
@@ -297,6 +298,7 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-132 | 문서 계약·충돌·질문과 환경 메모에 코드 같은 문장과 비밀값 같은 문장을 심은 기록, 코드 미포함 projection | projection은 모델 문장을 생략 문구로 바꾸고 버전 제약이 아닌 요구 문자열을 지운다. 코드 미포함 보고서에 문장이 남거나, 어느 보고서든 비밀값 같은 문장이 있으면 검증이 거부한다. 수락된 역할 기록의 문장만 오고 절 근거 목록에 없는 근거 ID는 거부한다. | REQ-012,013,031; NFR-006 |
 | TC-133 | 모델 검토 없는 실행(정책 생략·미계획)과 실행하지 않은 분석기 | 환경·문서·코드 분석 절의 모델 상태가 `not_performed`와 사유 코드이고 모델 문장이 없다. 실행하지 않은 도구 행은 "실행하지 않음"으로 보이며 어느 형식에서도 0건으로 읽히지 않는다. 판정과 상태 규칙은 바뀌지 않는다. | REQ-012,013; TC-81 |
 | TC-134 | 예시 보고서와 실제 게시 보고서의 세 형식과 웹 화면(실제 Chromium 포함) | 종합이 먼저 오고 분석 종류별 절이 순서대로 하나씩 있다. 절별 수가 JSON 종합 블록, Markdown 표, HTML `data-count`, 웹 화면에서 같다. 웹 절은 키보드로 열 수 있고 종합의 버튼이 해당 절을 연다. 상태는 글자와 기호로 보인다. 모델 문장에는 "모델 해석" 표시가 붙는다. | REQ-012,013; NFR-005; TC-95 |
+| TC-135 | 근거 있는 문서 품질·코드 강점·문서 계약 대조, 스냅샷 줄 발췌, 발췌에 해당하는 비밀값 파일, 코드 미포함 projection | 문서 대조는 적용 범위와 문서 근거에 묶이고 일치·부분 일치·불일치에는 구현 근거가 있다. 근거 없는 계약은 미확인이다. 저장한 발췌는 스냅샷 원문과 일치하고 자격증명 패턴이나 탐지 경로의 원문을 담지 않는다. 코드 미포함 보고서는 발췌를 싣지 않는다. | REQ-005,009,011,012,027,031; TC-15 |
 
 보고서 계약은 [보고서와 화면](REPORT.md)에 있다.
 
@@ -344,15 +346,15 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-125 | `codeye start`·`stop`·`status`: 실행 중 작업의 drain, drain 시간 초과, stale 기록·재사용 pid·기록 없는 에이전트·포트 점유, 설정 오류 | drain은 실행 작업을 끝낸 뒤 추가 claim 없이 종료한다. 시간 초과는 취소하고 정리를 확인한다. 불확실하면 `recovery_required`다. 기록과 시작 시각이 다른 프로세스에는 신호를 보내지 않는다. 상태 파일은 0600·0700이고 DB URL과 장기 secret이 없다. | REQ-021,022; NFR-006 |
 | TC-126 | `codeye doctor --config`: 상한 초과 영역, 백업 없음·오래됨·읽을 수 없음, 불일치 상태, 진행 중 start/stop | 선택 필드 `operations`만 더하고 기존 check는 같다. schema가 상태와 필드 조합을 강제한다. | REQ-018; NFR-006 |
 | TC-127 | 개인 사용 경로: 시작, 프로젝트 추가, Go 분석, 정지, 백업, 새 DB·산출물 디렉터리로 복원, 복원본 시작, 보고서·근거 확인 | 모든 단계가 실제 바이너리로 끝난다. 복원본의 보고서·근거 hash·사람 판정이 원본과 같다. 안내서의 명령은 모두 실행한 것이다. | REQ-012; NFR-003 |
-| TC-170 | 설정 파일도 DB도 없는 상태에서 `codeye up --no-open <Go 폴더>`(PostgreSQL 프로그램은 PATH 탐색), 환경에 `CODEYE_DATABASE_URL`·`PGHOST`·`PGPASSWORD` | `schema_version`과 `source_roots`만 담은 0600 설정 파일이 생긴다. 상태 디렉터리에 cluster가 초기화되고(비밀번호 파일 0600) 127.0.0.1의 55432 이상 포트에서 뜬다. schema가 만들어지고 프로젝트가 등록되고 run이 보고서와 함께 끝난다. 출력에 환경 변수를 무시했다는 알림과 `#launch=…&project=…&run=…` 링크가 있고 DB URL·셸의 비밀번호는 없다. `status`의 `database.postgres`는 `running`이다. | REQ-001,004; NFR-006 |
+| TC-170 | 설정 파일도 DB도 없는 상태에서 `codeye up --no-open <Go 폴더>`(PostgreSQL 프로그램은 PATH 탐색), 환경에 `CODEYE_DATABASE_URL`·`PGHOST`·`PGPASSWORD` | `schema_version`만 담은 0600 설정 파일이 생긴다. 상태 디렉터리에 cluster가 초기화되고(비밀번호 파일 0600) 127.0.0.1의 55432 이상 포트에서 뜬다. schema가 만들어지고 프로젝트가 등록되고 run이 보고서와 함께 끝난다. 출력에 환경 변수를 무시했다는 알림과 `#launch=…&project=…&run=…` 링크가 있고 DB URL·셸의 비밀번호는 없다. `status`의 `database.postgres`는 `running`이다. | REQ-001,004; NFR-006 |
 | TC-171 | TC-170이 출력한 링크를 Chromium으로 연다 | 한 번에 로그인되고 주소에 토큰이 남지 않으며 `project`만 남는다. 그 프로젝트와 현재 실행이 열려 있고 보고서를 연다. 세션 만료는 6일 뒤보다 늦다(7일). 웹 단위 시험: 깊은 링크는 canonical UUID인 `project`·`run`만 남기고 나머지는 지운다. | REQ-001; NFR-006 |
-| TC-172 | 실행 중에 다른 폴더로 `codeye up`, 설정의 root 아래 폴더, 상태 디렉터리를 포함하는 폴더, Git URL | 새 폴더는 root로 설정에 더해지고 에이전트가 drain 뒤 다시 등록되며 그 run도 보고서로 끝난다. root 아래 폴더는 그 root와 상대 경로를 쓰고 설정을 바꾸지 않는다. 데이터 디렉터리를 포함하는 폴더는 거부한다. Git URL은 아무것도 쓰거나 띄우지 않고 clone 안내와 종료 코드 2다. | REQ-001,015 |
+| TC-172 | 서비스 실행 중 기존 root 밖의 읽을 수 있는 폴더를 `up PATH`에 입력 | 설정 파일 변경이나 노드 재등록 없이 두 번째 폴더를 분석한다. 보호 데이터 폴더와 겹치면 거부한다 | REQ-001,002,019 |
 | TC-173 | `codeye stop` 뒤 `codeye up`, 정지 상태의 `codeye backup`(설정에 `backup_dir` 없음), 새 `state_dir`로의 `codeye restore` | stop의 `database`는 `stopped`이고 그 cluster의 PostgreSQL 프로세스가 없다. 다시 up하면 초기화·사용자 생성 없이 같은 프로젝트가 보인다. 백업은 `<state_dir>-backups` 아래에 세트를 만들고 띄운 PostgreSQL을 다시 멈춘다. 비밀번호는 `postgres/password` 밖의 상태 파일에 없다. 복원은 새 상태 디렉터리에 cluster를 만들고 복원하며 그 뒤 up이 새 노드로 시작한다(복원은 수동 실행으로 확인, smoke에는 없다). | NFR-003,006 |
 | TC-174 | PostgreSQL 프로그램 디렉터리: 16·17·13 설치, 프로그램이 빠진 디렉터리, 명시한 틀린 경로, 아무것도 없음, 주 버전 16 데이터 디렉터리와 17 프로그램, `PG_VERSION` 없는 비어 있지 않은 디렉터리 | 명시가 없으면 가장 높은 주 버전(14 이상), 데이터 디렉터리가 있으면 그 버전을 고른다. 플래그가 설정보다 먼저다. 명시한 경로가 조건을 채우지 않으면 다른 곳을 찾지 않고 그 경로와 이유를 말한다. 없으면 설치 방법·`postgres_bin_dir`·`external`을 알리는 오류다. 다른 주 버전 데이터 디렉터리와 정체 모를 디렉터리는 거부한다. | REQ-004; NFR-006 |
 | TC-175 | `{"schema_version":"0.1"}`만 있는 설정, `up`의 설정 편집(필드 순서·기본값·잘못된 결과), 기본 포트 7331을 다른 프로그램이 쓰는 상태, 설정에 적은 포트를 다른 프로그램이 쓰는 상태 | 기본값은 관리형 DB, `$XDG_STATE_HOME/codeye`(없으면 `~/.local/state/codeye`), root 없음이다. 편집은 다른 필드와 순서를 보존하고 기본값을 쓰지 않으며, 검증을 통과하지 못하면 파일을 바꾸지 않는다. 기본 포트가 쓰이면 7332 이후 빈 포트로 띄우고 `stop`·`status`·`open`이 그 주소를 쓴다. 적은 포트가 쓰이면 시작하지 않는다(포트 이동은 수동 실행으로 확인). | REQ-001; NFR-006 |
 | TC-240 | `offline_pack.py build`를 두 번, `verify`에 바뀐·빠진·더해진 파일, ELF 프로그램 헤더(interpreter·dynamic·없음) | 같은 commit에서 묶음 바이트가 같다(이 머신 sha256 일치). 묶음은 정적 실행 파일·`web/dist`·문서·설정 예시·INSTALL.md·MANIFEST.json·SHA256SUMS이고 `sha256sum -c`가 통과한다. verify는 세 변경을 모두 보고한다. 동적 실행 파일은 묶지 않는다(`scripts/test_offline_pack.py`, 수동 build) | REQ-030; NFR-007 |
 | TC-241 | 웹 산출물의 외부 글꼴·CDN script·CSS `@import`·`url()`·`fetch`·원격 source map, 식별자·문구 주소, 빌드된 `web/dist` | 외부 load마다 실패하고 식별자·문구 주소는 통과한다. 빌드된 화면은 통과한다(CI 웹 작업의 `check-web`, `scripts/test_offline_pack.py`) | REQ-030 |
-| TC-242 | `offline: true`·`up --offline`: git_hosts 없음, Go proxy 없음·캐시 있음·없음·`off`·사내 proxy, npm·pip·cargo 미러 없음, `base_url` 없는 키 파일, 환경변수 키, 키 없는 모델, relay | 설정에 저장되고 에이전트가 `--offline`을 받는다. git_hosts는 빈 목록이다. Go는 운영자 캐시만 읽거나 사내 proxy만 쓰고 그 밖은 `offline_no_registry_configured`, GOSUMDB는 `off`다. 다른 생태계는 받지 않는다. 모델은 `base_url`이나 relay만 쓰고 환경변수 키는 키 파일을 바꾸지 않는다(`TestOfflineConfiguration`, `TestEditFileSetsOffline`, `TestOfflineModelNeedsAnEndpoint`, `TestInstanceAgentArgvOffline`, `TestInstanceOfflineExampleParses`, `TestSetupInstanceModelOfflineKeepsKeyFile`, `TestOfflineGo*`, `TestOfflineJSAndPythonAndRustNeedARegistry`, `TestOfflineNeedsAConfiguredEndpoint`, `TestManagedOpenCodePinsTheNpmRegistry`). GitHub은 꺼진다: token을 찾지 않고(gh·환경변수를 묻지 않음) 저장된 token을 지우며, 에이전트에 credential 파일을 주지 않고, pull request 주소를 `up`과 API가 거부하며 controller가 GitHub을 부르지 않는다(`TestSetupGitHubOfflineLooksUpNothing`, `TestOfflineTurnsGitHubOff`, `TestPullRequestRunsOverHTTP`의 오프라인 단계) | REQ-030; NFR-006 |
+| TC-242 | `offline: true`·`up --offline`: git_hosts 없음, Go proxy 없음·캐시 있음·없음·`off`·사내 proxy, npm·pip·cargo 미러 없음, `base_url` 없는 키 파일, 환경변수 키, 키 없는 모델, relay | 설정에 저장되고 에이전트가 `--offline`을 받는다. git_hosts는 빈 목록이다. Go는 운영자 캐시만 읽거나 사내 proxy만 쓰고 그 밖은 `offline_no_registry_configured`, GOSUMDB는 `off`다. 다른 생태계는 받지 않는다. 모델은 `base_url`이나 relay만 쓰고 환경변수 키는 키 파일을 바꾸지 않는다(`TestOfflineConfiguration`, `TestEditFileSetsOffline`, `TestOfflineModelNeedsAnEndpoint`, `TestInstanceAgentArgvOffline`, `TestInstanceOfflineExampleParses`, `TestSetupInstanceModelOfflineKeepsKeyFile`, `TestOfflineGo*`, `TestOfflineJSAndPythonAndRustNeedARegistry`, `TestOfflineNeedsAConfiguredEndpoint`, `TestManagedOpenCodePinsTheNpmRegistry`). GitHub.com은 오프라인에서 요청하지 않으며 설정한 사내 GHES는 인증정보와 사내 CA로 연결한다(`TestOfflinePullRequestHost`, `TestPullRequestRunsOverHTTP`, `TestOfflineGHESPullRequestUsesConfiguredPlatform`) | REQ-030; NFR-006 |
 | TC-243 | `ca_bundle`: 상대 경로, 인증서 없는 파일, 사설 CA HTTPS 미러에 go·git·npm·pnpm·yarn·pip·uv·OpenCode를 CA 변수 있이·없이 | 설정·에이전트가 잘못된 파일을 거부한다. 다섯 변수가 같은 파일을 가리킨다. 변수가 있으면 성공하고 없으면 인증서 검증 오류다. OpenCode는 `NODE_EXTRA_CA_CERTS`만, `SSL_CERT_FILE`만으로도 성공한다. git은 CA 변수와 GitHub header를 함께 환경으로 받고 token은 argv에 없다(`TestCheckCABundle`, `TestCAEnvNamesOneBundleForEveryTool`, `TestGitCommandsTrustTheConfiguredCABundle`, `TestGitGetsTheCABundleAndTheTokenTogether`, `scripts/offline_smoke.py`). cargo는 실행하지 않았다 | REQ-030; NFR-006 |
 | TC-244 | `doctor --config`의 `offline`: 오프라인 켬·끔, 미러·사용자 go env·npm 설정·기본값, CA 상태, PostgreSQL 프로그램, 언어별 빠진 도구. `tools --checklist` | 접속할 곳마다 출처와 받지 않는 이유가 있고 schema(if/then)가 조합을 강제한다. 점검표는 모든 도구에 옮기는 방법과 시험한 계열을 적는다(`TestOfflineReadiness`, `TestChecklistCoversEveryTool`, `validate_bundle.py`의 doctor 음성 사례) | REQ-030 |
 | TC-245 | 묶음을 빈 디렉터리에 풀고 그 실행 파일만으로, 새 HOME·설정·상태, network namespace(loopback만)와 connect·DNS 기록: 모듈 캐시에 있는 Go 프로젝트, 없는 프로젝트, 사설 CA 미러·가짜 모델 upstream(TLS)으로 Go·Python·JS 프로젝트와 Git 주소, doctor·점검표·웹 화면 | 캐시 프로젝트는 `prepared`, 없는 프로젝트는 `offline_no_registry_configured`다. 미러 단계는 미러에서 받고 모델 검토가 사내 endpoint로 `performed`다. loopback 밖 connect와 DNS 조회가 없다. 웹 화면은 묶음의 `index.html`이다(`scripts/offline_smoke.py`, 수동·CI 밖, Linux) | REQ-030; NFR-001,006 |
@@ -364,20 +366,20 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
 | TC-27 | **설계(미구현)**: GitHub App 연결 상태. webhook이 없지만 repository readable | 수동/예약 사용 가능, PR 기능만 연결 미완료 | REQ-024,025 |
-| TC-28 | **설계(미구현)**: webhook·댓글 명령. 잘못된 HMAC·중복 delivery·무권한 mention | 요청 차단/멱등 처리, 승인된 사용자만 실행 | REQ-024,025 |
+| TC-28 | 로컬 가짜 GitHub API와 PostgreSQL로 저장소 웹훅, 잘못된 HMAC, 저장소 불일치, 중복·충돌, 권한 철회, 다른 head, 포크와 댓글 명령 시험 | 같은 배달과 같은 PR head는 중복 실행 없이 처리한다. 다른 본문을 같은 배달 ID로 보내면 409다. 봇·인용·코드·읽기 전용 사용자의 명령과 포크 PR은 실행되지 않는다. 허용된 댓글은 설정한 프로젝트 계정으로 고정 PR 실행을 만든다. 실제 GitHub.com·GHES 웹훅은 미실행(`TestGitHubWebhookDelivery`, `TestWebhookMentionIgnoresQuotesAndCode`) | REQ-024,025 |
 | TC-29 | **일부**(token 경로의 결과 댓글은 TC-228·235, App 경로는 설계): PR 결과 댓글. PR head 변경 후 이전 결과 완료·댓글 API 실패 | stale 표기, 최신 댓글 미덮어쓰기, outbox만 재시도 | REQ-024,025 |
 | TC-35 | 문서·코드·서비스 설정의 기능 검토 | 기존 CI 연결 및 초기 CVE 기능이 없음 | REQ-032,033 |
 
-TC-27의 수동·예약 분석 부분은 승인된 HTTPS 호스트의 Git 입력으로 지금도 동작한다. App의 연결 상태 표시와 이벤트는 없다. 사용자 token의 pull request·결과 댓글은 아래 TC-227~236, 누구의 token을 쓰는지는 TC-258이다. 연결 계약은 [GitHub 연결](GITHUB.md)에 있다.
+TC-27의 수동·예약 분석은 승인된 HTTPS 호스트의 Git 입력으로 동작한다. 플랫폼 계정의 PR·댓글은 TC-227~236·TC-258에서 확인한다. [GitHub 연결](GITHUB.md)
 
 GitHub token, pull request, 결과 댓글([GitHub 연결](GITHUB.md), [pull request 보고서](REPORT.md#pull-request-보고서), A46):
 
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
-| TC-227 | 가짜 GitHub API와 Git 미러, `GH_TOKEN`, `codeye up --comment …/pull/7`(fork head, 삭제 파일 하나, 변경 줄의 go vet 진단과 기존 코드의 진단) | `up`이 계정·출처와 고정한 head·base·fork를 출력하고 선택을 기억한다. run의 `pull_request`와 보고서 `inputs.commit_sha`가 고정 head다. 보고서 절은 삭제 파일 1, 검토 대상 1, 줄 기준이고 진단을 변경된 줄과 기존 코드로 나눈다. Markdown 요약이 pull request와 "같은 깊이로 검토하지 않았을 수 있다"를 말한다. 댓글 하나가 게시되고 `GET /setup`의 `github`에 token이 없다(`scripts/instance_smoke.py`) | REQ-024 |
+| TC-227 | 가짜 GitHub API와 Git 미러, `github.token_env`에 지정한 플랫폼 환경변수, `codeye up --comment …/pull/7`(fork head, 삭제 파일 하나, 변경 줄의 go vet 진단과 기존 코드의 진단) | `up`이 플랫폼 계정와 고정한 head·base·fork를 출력하고 선택을 기억한다. run의 `pull_request`와 보고서 `inputs.commit_sha`가 고정 head다. 보고서 절은 삭제 파일 1, 검토 대상 1, 줄 기준이고 진단을 변경된 줄과 기존 코드로 나눈다. Markdown 요약이 pull request와 "같은 깊이로 검토하지 않았을 수 있다"를 말한다. 댓글 하나가 게시되고 `GET /setup`의 `github_connections`에는 계정 상태만 있다(`scripts/instance_smoke.py`) | REQ-024 |
 | TC-228 | TC-227 뒤 새 push(ref 이동), 같은 주소로 다시 `up` | 새 head의 새 run, 같은 댓글 하나가 새 head로 고쳐진다. 비교 기준은 이전 run이다(`scripts/instance_smoke.py`) | REQ-024 |
-| TC-229 | `--dry-run-comment`, 그 뒤 상태 디렉터리 전체 | GitHub 쓰기 요청 0, 댓글 미리 보기 출력, 기억한 선택 유지. 모든 GitHub 요청에 token이 있고, token은 관리자의 `secrets/github-users/<user_id>.json`(0600) 하나에만 있다(`scripts/instance_smoke.py`) | REQ-024; NFR-006 |
-| TC-230 | token 발견 순서, 거부된 token, GitHub에 닿지 못함, 발견 끔, 여러 줄 token, gh 없음 | 순서대로 고르고 거부된 token과 이전 파일을 지운다. 닿지 못하면 token을 두고 계정을 모른다. 끄면 파일이 없다(`TestSetupGitHubDiscoversStoresAndRemoves`, `TestGitHubConfigField`) | REQ-024; NFR-006 |
+| TC-229 | `--dry-run-comment`, 그 뒤 상태 디렉터리 전체 | GitHub 쓰기 요청 0, 댓글 미리 보기 출력, 기억한 선택 유지. 모든 GitHub 요청에 token이 있고, token은 `secrets/github-platform.json`(0600) 하나에만 있다(`scripts/instance_smoke.py`) | REQ-024; NFR-006 |
+| TC-230 | 명시적 호스트별 환경변수, 기본 `GH_TOKEN`과 `GITHUB_TOKEN`, 오프라인 GitHub.com | 이름을 지정한 해당 호스트만 인증정보를 읽으며 개인 설정을 승격하지 않는다(`TestSetupGitHubUsesExplicitPlatformSource`, `TestGitHubConfigField`) | REQ-024; NFR-006 |
 | TC-231 | API client: page 넘김, fork·파일 상태, 짧은 목록, 오류 종류(401·403·404·429·5xx), 다른 origin의 다음 page, redirect, patch의 변경 줄 | 고정값이 정확하고 잘린 목록을 표시한다. token은 API host 밖으로 가지 않는다(`TestResolvePaginatesAndKeepsTheForkAndTheFileStatuses`, `TestResolveMarksAShortListingTruncated`, `TestErrorKinds`, `TestTokenStaysOnTheAPIHost`, `TestChangedLines`) | REQ-024; NFR-006 |
 | TC-232 | `refs/pull/N/head` 가져오기, ref가 움직인 뒤 고정 SHA, 고정 없음·브랜치와 함께, token 전달 | 고정 SHA를 확보하고 ref가 움직여도 그 SHA다. token은 git 환경변수의 header로만 가고 argv·URL·작업 사본에 없다(`TestGitFetchesThePullRequestHead`, `TestGitPullRequestThatMovedFetchesThePinnedCommit`, `TestGitPullRequestNeedsAPinnedHeadAndNoBranch`, `TestGitTokenTravelsInTheEnvironmentOnly`, `TestReadHostToken`) | REQ-024; NFR-006 |
 | TC-233 | HTTP: 상태 디렉터리 없는 controller, run 보기·미리 보기, 브랜치 run, 기억·명시 댓글, GitHub 404·429·403·401, 번호 0, 다른 host, 예약, 격리 표의 새 경로 | 정한 코드로 거절하고 미리 보기는 쓰지 않는다. 비구성원은 404다(`TestPullRequestRunsOverHTTP`, 격리 표 `runs.pull_request_comment`) | REQ-024,025 |
@@ -387,18 +389,18 @@ GitHub token, pull request, 결과 댓글([GitHub 연결](GITHUB.md), [pull requ
 
 ## 여러 사용자의 한 서비스
 
-`codeye up` 하나가 다른 머신의 사용자에게도 서비스하고, 각 사용자가 무엇을 분석할 수 있는지는 사용자별 허가로 정한다([사용 안내서](GUIDE.md#다른-사람-초대), [보안](SECURITY.md#서버-경로-허가), A53):
+`codeye up` 하나가 다른 머신의 사용자에게도 서비스한다. 플랫폼 소스 접근과 사용자별 프로젝트 권한을 아래 시험에서 확인한다. [사용 안내서](GUIDE.md#다른-사람-초대)
 
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
 | TC-256 | 다른 머신에 서비스: 비 loopback listen을 TLS(인증서·키·https public origin)로, `--plain-http`로, 둘 다 없이. 평문 public face의 Host·Origin·cookie, 로컬 listener(기본 listen 포트 + 1)의 Host, 로컬에서 만든 세션을 public face에 보냄, 로그인 링크, `0.0.0.0`의 TLS | 둘 다 없으면 시작하지 않는다. 평문은 경고 한 줄과 함께 시작하고 public origin의 Host·Origin만 받으며 cookie는 Secure가 아니다. 로컬 listener는 loopback Host만 받고 그 세션은 public face에서 쓰이지 않는다. 로그인 링크와 "이 서비스 주소"는 public origin이다(`TestServeOtherMachines`, `TestPlainHTTPServiceAndLocalListener`, `TestTLSServerOnWildcardAddress`, `TestListenRules`) | REQ-002; NFR-006 |
-| TC-257 | 사용자별 GitHub token: 거부된 token, 맞는 token 저장·교체·삭제, 다른 사용자의 연결 조회, 응답·로그·감사 detail, 파일 mode, 사용자 ID가 아닌 이름 | 거부된 token은 저장하지 않는다(422). 저장한 token은 어떤 응답에도 없고 상태는 계정·출처만 말한다. 파일은 `secrets/github-users/<user_id>.json`(0600, 디렉터리 0700)이고 삭제하면 없다. 감사 행 `account.github_token_set`·`account.github_token_removed`에 token이 없다(`TestSharedServiceForOtherUsers`, `TestUserTokensStoreReplaceAndRemove`) | REQ-024; NFR-006 |
-| TC-258 | 누구의 token인가: 소유자의 비공개 저장소 PR run을 소유자·runner 구성원이 시작, 구성원의 미리 보기, 저장소가 공개된 뒤 구성원의 run, 결과 댓글 게시, 노드의 Git fetch | 가짜 GitHub가 받은 token은 언제나 run을 시작하거나 미리 보기를 요청한 사용자의 것이다. 구성원의 token으로 보이지 않는 비공개 저장소는 422 `PULL_REQUEST_NOT_FOUND`이고 소유자의 token으로 대신하지 않는다. 공개된 뒤의 댓글은 그 구성원의 token으로 간다. 노드는 job의 사용자 파일만 읽는다(`TestSharedServiceForOtherUsers`, 격리 시험의 미리 보기 대조, `TestPosterPostsWithTheRequestersToken`, `TestOfferControllerSourcesAndRequesterToken`) | REQ-024,025; NFR-006 |
-| TC-259 | 서버 폴더: 허용된 폴더가 없는 사용자의 경로, 허용된 폴더 밖, 관리자가 모두에게 연 폴더, 다시 닫은 폴더의 등록·대기 run, 데이터 디렉터리 안의 폴더, 같은 폴더 두 번 | 허용된 폴더가 없으면 `FOLDER_NOT_READABLE`이 정한 안내 문장과 빈 `readable_folders`를 싣는다. 모두에게 연 폴더는 grant 없이 쓰이고, 닫으면 새 등록과 대기 run이 다시 거절된다. 데이터 디렉터리 안은 `FOLDER_HOLDS_CODEYE_DATA`다(`TestFolderPathsAndSetup`, `TestSharedServiceForOtherUsers`, `TestEveryoneRootsOfferAndControllerNode`) | REQ-002,015; NFR-006 |
+| TC-257 | 플랫폼 GitHub 인증정보와 이전 버전의 사용자별 토큰 파일, API 응답·로그·감사 detail, 권한 모드 | 이전 토큰은 쓰이지 않고 플랫폼 토큰만 서비스 파일(0600)에 있다. 응답·로그·감사 detail에 값이 없다(`TestSharedServiceForOtherUsers`, `scripts/instance_smoke.py`) | REQ-024; NFR-006 |
+| TC-258 | 두 사용자와 runner 구성원이 비공개 PR을 분석·미리 보기, 댓글 게시, 호스트별 인증정보 | 허가된 요청은 같은 플랫폼 계정을 쓰고 댓글은 호스트별 플랫폼 계정으로 게시한다(`TestSharedServiceForOtherUsers`, `TestPosterPostsWithHostPlatformToken`) | REQ-024,025; NFR-006 |
+| TC-259 | Linux 계정이 읽을 수 있는 서버 폴더 등록·재사용, 없는 폴더, CODEYE 데이터 폴더, 노드 배정과 ACL | 별도 폴더 허가 없이 등록하고 기존 경로를 다시 선택해도 같은 프로젝트를 쓴다. 보호 폴더는 거부하고 배정은 프로젝트 실행 권한을 다시 확인한다(`TestFolderPathsAndSetup`, `TestClaimRechecksActorPermission`) | REQ-001~003; NFR-006 |
 | TC-260 | 관리자 스위치 "다른 사용자도 모델 검토 사용"·"다른 사용자의 저장소 빌드 스크립트 실행 허용": 기본값, 바꾸기, 같은 값, 관리자의 run, 다른 사용자의 run(관리자 프로젝트를 구성원이 시작한 경우 포함), `GET /setup` | 기본은 모델 켬·빌드 스크립트 끔이다. offer는 run을 시작한 사용자 기준이며 관리자의 run은 영향이 없다. 스위치가 끈 것만 `model_review_not_offered`·`repository_code_not_offered`로 보고서에 남고 project가 고르지 않은 것은 남지 않는다. setup은 사용자마다 `available`과 이유를 답하고 관리자가 아니면 도구 안내가 없다. 같은 값은 감사 행이 없다(`TestSharedServiceForOtherUsers`, `TestEveryoneRootsOfferAndControllerNode`, `TestOfferControllerSourcesAndRequesterToken`, `quickStart.test.ts`) | REQ-002,004,026 |
-| TC-261 | 격리 표의 새 경로: `/account/github`(조회·저장·삭제), `/admin/source-roots`(추가, 모두에게), `/admin/providers`, `/admin/settings`(조회·변경) | 관리자 경로는 관리자만, 계정 경로는 자기 연결만 바꾼다. 거절된 요청은 감사 행이 없고 받아들인 변경은 선언한 action 하나다. 미리 보기는 각 사용자 자신의 token을 쓴다(`TestRouteIsolationAndAuditTable`, `TestRouteGatesForEveryRoute`) | REQ-002,031; NFR-006 |
+| TC-261 | 프로젝트·관리·보고서 API와 PR 댓글 미리 보기 | 관리 API는 관리자만 쓸 수 있다. 프로젝트 권한은 역할에 따라 적용한다. 권한을 통과한 미리 보기는 플랫폼 자격증명을 쓴다(`TestRouteIsolationAndAuditTable`, `TestRouteGatesForEveryRoute`) | REQ-002,031; NFR-006 |
 | TC-262 | `codeye up`이 띄운 노드(`--controller-sources`): 웹에서 더한 root와 Git host, 따로 띄운 노드 | up의 노드는 등록에 없던 root의 경로와 승인 host를 job에서 받고 project 선택을 offer 안에서 따른다. 따로 띄운 노드는 job에서 아무것도 받지 않고 운영자 플래그가 상한이다(`TestOfferControllerSourcesAndRequesterToken`, `TestEveryoneRootsOfferAndControllerNode`, `TestInstanceAgentArgv`, `TestInstanceAgentArgvOffline`) | REQ-002,018,019 |
-| TC-263 | 두 사용자의 실제 화면(`scripts/web_service_smoke.py`, Chromium 두 context): 관리자가 `codeye up --plain-http`(loopback 별칭)과 자체 서명 TLS로 시작, 사용자 추가와 로그인 링크, 다른 사용자의 시작 화면, 허용된 폴더 없는 경로, GitHub 연결 저장·삭제, 관리자의 폴더(모두에게)·Git host·두 스위치·서비스 주소, 다시 경로 | 다른 사용자는 같은 시작 화면에서 허용된 폴더 없음 안내를 보고, 관리자가 폴더를 열면 그 폴더로 프로젝트를 만든다. token은 화면·응답·상태 파일 밖에 없다. 스위치를 바꾸면 그 사용자의 안내가 바뀐다. `CODEYE_TEST_SCREENSHOTS`를 주면 화면을 그 디렉터리에 남긴다(`scripts/test_postgres.py --web-service`) | REQ-002,024; NFR-005,006 |
+| TC-263 | 한 웹 서비스의 두 사용자(`scripts/web_service_smoke.py`, Chromium), HTTP와 자체 서명 TLS, 이메일 가입, 서버 폴더와 비공개 PR | 신규 계정이 서비스 계정의 읽을 수 있는 폴더를 분석하고 같은 호스트의 플랫폼 계정으로 비공개 PR을 시작한다. 보호된 폴더는 거부한다 | REQ-002,024; NFR-005,006 |
 | TC-264 | 사람이 실제로 쓰는 주소: `0.0.0.0`의 평문 HTTP를 `--public-origin` 없이, 이 머신의 인터페이스 주소·VPN 주소·호스트 이름·search domain 이름·loopback 주소들·대괄호 IPv6·기본 포트를 뺀 Host, 다른 포트·접두사만 같은 이름·남의 이름, loopback으로만 듣는 서비스에 쓴 호스트 이름·인터페이스 주소·다른 loopback 주소, 다른 받는 주소의 Origin, loopback과 VPN 주소에서 만든 로그인 링크, 받지 않는 Host의 화면과 JSON, 그 안내의 명령 실행 | loopback이 아닌 주소로 들으면 플래그 없이 이 머신의 이름·주소는 모두 받고 나머지는 403이다. loopback으로만 들으면 loopback 이름·듣는 주소·설정한 origin만 받는다. 받는 주소로 로그인과 POST가 되고 다른 받는 주소의 Origin은 `ORIGIN_REJECTED`다. 링크는 관리자가 연 주소를 쓰고 loopback이면 알려 줄 주소다. 403은 쓴 주소(모양이 맞을 때만, HTML escape), 받는 주소, `codeye up --public-origin …`을 말하고 그 명령 뒤 controller만 다시 떠서 그 주소를 받는다. `up`과 관리 화면은 받는 주소를 묶어 보이고 `0.0.0.0`·bridge 주소는 보이지 않는다(`TestHostAcceptance`, `TestHostRejectionTellsWhatWorks`, `TestPlainHTTPServiceAndLocalListener`, `internal/hostaddr`, `TestControllerListenArgs`, `TestEditFileServeAndPublicOrigins`, `scripts/web_service_smoke.py` wildcard) | REQ-001,002; NFR-006 |
 | TC-265 | 명령줄 도움말: `codeye`, `codeye --help`·`-h`·`help`, `codeye up --help`, start·stop·status·open·tools·doctor의 `-h`·`--help`, `codeye user --help`, `codeye user create --help`, 다른 인자·모르는 플래그와 함께 쓴 `--help`, 없는 명령의 `--help` | 모두 0으로 끝난다. 전체 도움말은 자주 쓰는 명령(up, up --listen, open, status, stop, tools, doctor)을 운영 명령과 따로 띄운 controller·노드의 관리 명령보다 먼저 보이고 명령마다 한 줄 설명을 단다. 명령의 도움말은 `Usage:`와 그 명령의 줄만 보인다(`user`는 user 명령 모두). 없는 명령이면 전체 도움말이다. 명령과 플래그는 바뀌지 않는다(`TestCommandHelpExitsZero`, `TestHelpPutsEverydayCommandsFirst`, `TestUsageEntriesMatchTheirLines`) | REQ-001 |
 
@@ -409,7 +411,7 @@ GitHub token, pull request, 결과 댓글([GitHub 연결](GITHUB.md), [pull requ
 | 요구 | 주요 문서 | 수용 테스트 |
 |---|---|---|
 | REQ-001,004,005 | ARCHITECTURE, REVIEW, REPORT, OPERATIONS | TC-01,05,96,97,265 |
-| REQ-002,015 | ARCHITECTURE, EXECUTION, SECURITY | TC-02,04,17, TC-256~264 |
+| REQ-002,015 | ARCHITECTURE, EXECUTION, SECURITY | TC-02,04,17,266, TC-256~264 |
 | REQ-003 | ARCHITECTURE | TC-03,04 |
 | REQ-006,007,008 | ARCHITECTURE, ANALYZERS | TC-06,07,08 |
 | REQ-009,010,011 | REQUIREMENTS, REVIEW, ARCHITECTURE | TC-09,10,11,16 |
@@ -425,7 +427,7 @@ GitHub token, pull request, 결과 댓글([GitHub 연결](GITHUB.md), [pull requ
 | REQ-027 | REVIEW, EVALUATION | TC-33,97,100 |
 | REQ-028,029 | ARCHITECTURE, REPORT | TC-14,31 |
 | REQ-030 | SECURITY, OPERATIONS | TC-30,170,240~245 |
-| REQ-031 | REPORT, SECURITY | TC-15,31 |
+| REQ-031 | REPORT, SECURITY | TC-15,31,266 |
 | REQ-032,033 | REQUIREMENTS | TC-35 |
 | NFR-001,009 | EXECUTION, OPERATIONS | TC-17,18,23 |
 | NFR-002,003 | EXECUTION, API, OPERATIONS | TC-21,23,25,32 |

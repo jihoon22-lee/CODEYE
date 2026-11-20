@@ -270,3 +270,51 @@ func TestVerifyLaterCallFailureKeepsAccepted(t *testing.T) {
 		t.Fatalf("first-call timeout %+v calls=%d", r, f.calls("verify"))
 	}
 }
+
+func TestReviewInsightsRepairNonKoreanProse(t *testing.T) {
+	j := modulesJob(t, nil)
+	script := validScript(t)
+	script["documents"] = func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[docsInput](t, q)
+		statement := "这里明确列出了失败后的调用上限。"
+		if n > 1 {
+			if in.Repair == nil || !slices.Contains(in.Repair.OutputErrors, record.InsightLanguageError) {
+				t.Fatalf("document repair does not explain the language issue: %+v", in.Repair)
+			}
+			statement = "「失败后的调用上限」은 실패 시 호출 횟수를 설명한다."
+		}
+		id := docID(in, "README.md")
+		return asJSON(map[string]any{
+			"contracts": []record.Contract{{Statement: "실패한 호출은 세 번까지 재시도한다.", AppliesTo: ".", EvidenceIDs: []string{id}}},
+			"conflicts": []any{}, "questions": []any{}, "instruction_notes": []any{},
+			"document_quality": []record.DocumentQuality{{Aspect: "clarity", Assessment: "strength", Statement: statement, EvidenceIDs: []string{id}}},
+		})
+	}
+	script["investigate"] = func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		reason := "实现把失败后的重试次数限制为三次。"
+		if n > 1 {
+			if in.Repair == nil || !slices.Contains(in.Repair.OutputErrors, record.InsightLanguageError) {
+				t.Fatalf("investigation repair does not explain the language issue: %+v", in.Repair)
+			}
+			reason = "Forward에서 실패 후 재시도 횟수를 세 번으로 제한한다."
+		}
+		return asJSON(map[string]any{
+			"candidates": []any{}, "strengths": []any{},
+			"contract_comparisons": []record.ContractComparison{{ContractIndex: 1, AppliesTo: ".", Status: "match", Reason: reason,
+				DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{excerptID(in.Scope.Excerpts, "gateway.go")}}},
+		})
+	}
+	f := &scriptedCaller{script: script}
+	_, results := runRole(t, j, vetStub{}, f, "1.27.4")
+	for _, role := range []string{"documents", "investigate"} {
+		got := results["review."+role]
+		if got.Status != domain.TaskSucceeded || f.calls(role) != 2 {
+			t.Fatalf("%s result %+v, %d requests", role, got, f.calls(role))
+		}
+		calls := readRecord(t, j, role).Calls
+		if calls[0].Outcome != callRejected || !slices.Contains(calls[0].OutputErrors, record.InsightLanguageError) || calls[1].Outcome != callAccepted {
+			t.Fatalf("%s calls %+v", role, calls)
+		}
+	}
+}

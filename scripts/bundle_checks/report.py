@@ -78,6 +78,7 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
         ensure(not (include and context["config"] == "recorded")
                or bool(re.fullmatch(r"[0-9a-f]{64}", str(context.get("config_digest", "")))),
                "Recorded rule context without digest")
+    include_code = report.get("export", {}).get("include_code")
     for finding in findings:
         evidence = finding["evidence"]
         evidence_ids = {item["id"] for item in evidence}
@@ -98,6 +99,7 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
                 path = source_location(item["location"], source_root)
                 digest = hashlib.sha256(path.read_bytes()).hexdigest()
                 ensure(digest == item["blob_sha256"], "Evidence hash mismatch: " + str(path))
+                check_excerpt(item, path, item["location"]["start_line"], include_code)
     check_sections(report, source_root)
 
 
@@ -150,29 +152,45 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
     # Model statements: none without a performed role; code-free exports carry only the label.
     free = not report["export"]["include_code"]
     def statements(block: dict, lists: dict) -> list[str]:
-        out = [entry[field] for name, fields in lists.items() for entry in block[name] for field in fields]
+        out = [entry[field] for name, fields in lists.items() for entry in block.get(name, []) for field in fields]
         ensure(block["model"]["state"] == "performed" or not out, "Model statements without a performed role")
         return out
     texts = statements(report["environment"], {"notes": ("affected_checks", "still_checkable", "needed_observation")})
     texts += statements(report["documents"], {"contracts": ("statement",), "conflicts": ("summary", "impact"),
-                                              "questions": ("question",), "instruction_notes": ("note",)})
+                                              "questions": ("question",), "instruction_notes": ("note",),
+                                              "quality": ("statement",), "comparisons": ("statement", "reason")})
+    texts += [entry[field] for entry in report["code_review"].get("strengths", []) for field in ("title", "benefit")]
     texts += [limit["statement"] for limit in report["code_review"]["interpretation_limits"]]
     check_ledger(report)
     check_dependencies(report)
     ensure(not free or all(text == TEXT_OMITTED for text in texts), "Code-free export carries model text")
     # Section evidence resolves in the snapshot named by the report.
-    for block in ("environment", "documents"):
-        catalog = {e["id"]: e for e in report[block]["evidence"]}
-        ensure(len(catalog) == len(report[block]["evidence"]), "Duplicate section evidence")
+    for block in ("environment", "documents", "code_review"):
+        evidence_rows = report[block].get("evidence", [])
+        catalog = {e["id"]: e for e in evidence_rows}
+        ensure(len(catalog) == len(evidence_rows), "Duplicate section evidence")
         for evidence in catalog.values():
             location = {"path": evidence["path"], "start_line": evidence["start_line"], "end_line": evidence["end_line"],
                         "snapshot_id": report["inputs"]["snapshot_id"]}
             path = source_location(location, source_root)
             ensure(hashlib.sha256(path.read_bytes()).hexdigest() == evidence["blob_sha256"], "Section evidence hash mismatch: " + str(path))
+            check_excerpt(evidence, path, evidence["start_line"], not free)
         cited = [i for entries in report[block].values() if isinstance(entries, list)
                  for entry in entries if isinstance(entry, dict)
-                 for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids") for i in entry.get(key, [])]
+                 for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids", "document_evidence_ids", "code_evidence_ids") for i in entry.get(key, [])]
         ensure(set(cited) <= set(catalog), "Section statement cites evidence the section does not carry")
+
+
+def check_excerpt(evidence: dict, path: Path, anchor: int, include_code: bool | None) -> None:
+    excerpt = evidence.get("excerpt")
+    if excerpt is None:
+        return
+    ensure(include_code is True, "Code-free export carries source excerpts")
+    start, end = excerpt["start_line"], excerpt["end_line"]
+    lines = path.read_text(encoding="utf-8").split("\n")
+    ensure(1 <= start <= anchor <= end <= len(lines) and end - start < 9,
+           "Invalid source excerpt lines: " + str(path))
+    ensure("\n".join(lines[start - 1:end]) == excerpt["text"], "Source excerpt differs from snapshot: " + str(path))
 
 
 DEPS_TASK = re.compile(r"^deps\.(go|rust|javascript|python)(\.m[0-9]{2,3})?$")

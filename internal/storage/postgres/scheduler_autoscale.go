@@ -262,7 +262,7 @@ func reconcilePool(ctx context.Context, tx pgx.Tx, poolID string) (PoolReconcile
 					return out, err
 				}
 				if !allowed {
-					continue // the next claim fails this run (actor_revoked / source_grant_revoked)
+					continue // the next claim fails this run (actor_revoked)
 				}
 				placed := false
 				for _, n := range eligible {
@@ -515,8 +515,7 @@ func contains(xs []string, x string) bool {
 }
 
 // runnable is the read-only form of ClaimAttempt's requester check: the
-// actor may still run in the project and, for a local source, still holds
-// the source-root grant.
+// actor may still run in the project.
 func runnable(ctx context.Context, tx pgx.Tx, c candidate) (bool, error) {
 	var owner string
 	if err := tx.QueryRow(ctx, "SELECT owner_id::text FROM projects WHERE id=$1 AND deleted_at IS NULL", c.projectID).Scan(&owner); err != nil {
@@ -525,16 +524,5 @@ func runnable(ctx context.Context, tx pgx.Tx, c candidate) (bool, error) {
 		}
 		return false, err
 	}
-	ok, err := actorMayRun(ctx, tx, c.actorID, c.projectID, owner)
-	if err != nil || !ok {
-		return false, err
-	}
-	if c.source.Kind == domain.SourceLocal {
-		var granted bool
-		if err := tx.QueryRow(ctx, "SELECT "+rootAllowedSQL("$1", "$2"), c.source.SourceRootID, c.actorID).Scan(&granted); err != nil {
-			return false, err
-		}
-		return granted, nil
-	}
-	return true, nil
+	return actorMayRun(ctx, tx, c.actorID, c.projectID, owner)
 }

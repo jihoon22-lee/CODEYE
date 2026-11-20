@@ -4,32 +4,25 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
-<title>CODEYE 분석 보고서 eebfcfd1-b7c6-4417-ab52-cf481ccf487a rev 1</title>
-<style>
-body{font-family:system-ui,sans-serif;margin:2rem;max-width:72rem;color:#111;background:#fff;line-height:1.5}
-table{border-collapse:collapse;margin:.5rem 0}td,th{border:1px solid #888;padding:.25rem .5rem;text-align:left;vertical-align:top}
-code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
-.banner{border:2px solid #000;padding:.5rem 1rem;font-weight:600}
-.finding{border:1px solid #444;padding:.5rem 1rem;margin:1rem 0}
-.scroll{overflow-x:auto}
+<title>CODEYE 분석 보고서</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{box-sizing:border-box;margin:0 auto;max-width:76rem;padding:clamp(1rem,4vw,3rem);font-family:system-ui,sans-serif;line-height:1.65;color:#192b2a;background:#fff;overflow-wrap:anywhere}
+h1{margin:0;padding:1.15rem 1.5rem;border-radius:.7rem;background:#153f39;color:#f4fbf8;font-size:clamp(1.35rem,3vw,2rem);letter-spacing:-.03em}
+h2{margin-top:2.6rem;border-bottom:2px solid #25483d;padding-bottom:.55rem}h3{margin:1.5rem 0 .5rem}
+table{width:100%;border-collapse:collapse;margin:.65rem 0 1.2rem;font-variant-numeric:tabular-nums}td,th{border-bottom:1px solid #d9e3df;padding:.5rem .65rem;text-align:left;vertical-align:top}th{background:#eff4f1;color:#334c43}
+body>table:first-of-type th{width:8rem}.banner{border-left:3px solid #178066;padding:.65rem .95rem;background:#eff7f4}
+code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}pre{background:#172f2d;color:#eff6f1;border-radius:.6rem;padding:.95rem;tab-size:4}
+a,summary{color:#116955}summary{cursor:pointer;font-weight:650}.model{color:#3e6357;font-size:.86em}.finding{border:1px solid #ceded6;padding:.4rem 1rem;margin:1rem 0;border-radius:.65rem}
+.scroll{overflow-x:auto}nav ol{display:flex;flex-wrap:wrap;gap:.45rem 1.2rem;padding:.6rem 0;list-style:none;font-size:.92rem}
+@media print{body{max-width:none;padding:0}h1{color:#172f2d;background:white}h2,h3,summary{break-after:avoid}pre,tr{break-inside:avoid}}
 </style>
 </head>
 <body>
 <h1>CODEYE 분석 보고서</h1>
 <table>
-<tr><th>report</th><td><code>eebfcfd1-b7c6-4417-ab52-cf481ccf487a</code> rev <span data-field="revision">1</span></td></tr>
-<tr><th>digest</th><td><code data-field="digest">90b935ba6a3c</code></td></tr>
-<tr><th>status</th><td><code data-field="status">partial</code></td></tr>
-<tr><th>quality_verdict</th><td><code data-field="quality_verdict">inconclusive</code> 품질 판정은 안전 인증이 아니다.</td></tr>
-<tr><th>run</th><td><code>e54c0dd2-aa43-4f1c-9422-0b0c33e3fc4b</code></td></tr>
-<tr><th>attempt</th><td><code>0db5c46f-5d30-4c27-aebe-628fa8730b26</code> #1 epoch 1</td></tr>
-<tr><th>snapshot</th><td><code>742de1c6-d825-4b33-8101-b1669082cf18</code> manifest <code>934b65c3121b</code></td></tr>
-
-<tr><th>profile</th><td><code>deep-review</code></td></tr>
-<tr><th>created_at</th><td><code>2026-11-17T23:50:09.29466596Z</code></td></tr>
-<tr><th>export</th><td>코드 미포함 내보내기: 도구 원문 메시지와 서술 원문을 생략했다</td></tr>
+<tr><th scope="row">진행 상태</th><td>부분 결과</td></tr><tr><th scope="row">검토 결과</th><td>추가 확인이 필요합니다.</td></tr><tr><th scope="row">보고서 작성 시각</th><td>2026-11-17T23:50:09.29466596Z</td></tr>
 </table>
-<p class="banner" role="status">이 보고서는 부분 결과다. 필수 작업이나 AI 검토가 수행·검증되지 않았다.</p>
+<p class="banner" role="status">일부 검사를 마치지 못했습니다. 분석 범위에서 해당 항목을 확인할 수 있습니다.</p>
 <h2 id="summary">요약</h2>
 <table><tr><th>원시 진단 수와 항목 수</th><th>수</th></tr>
 <tr><td>원시 도구 진단</td><td data-count="raw_observations">1</td></tr>
@@ -111,7 +104,22 @@ code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:a
 <tr><td><code>bb65a06a-175c-4dd5-b7a3-48ac39dce4d2</code></td><td><code>go-vet</code></td><td><code>stderr</code></td><td><code>text/plain</code></td><td><code>e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</code></td><td>0</td><td><code>-</code></td></tr>
 </table></div>
 <h2 id="limitations">한계와 공백</h2>
-<ul><li>AI 검토를 수행하지 않았거나 그 결과를 검증하지 못했다. 도구 진단만 포함한다.</li><li>controller는 snapshot 원본을 보관하지 않아 코드 발췌를 넣지 않았다.</li></ul>
+<ul><li>AI 검토를 수행하지 않았거나 그 결과를 검증하지 못했다. 도구 진단만 포함한다.</li><li>고정 스냅샷에서 표시할 발췌를 확보하지 못했다.</li></ul>
+<details><summary>기술 상세</summary>
+<table>
+<tr><th>report</th><td><code>eebfcfd1-b7c6-4417-ab52-cf481ccf487a</code> rev <span data-field="revision">1</span></td></tr>
+<tr><th>digest</th><td><code data-field="digest">90b935ba6a3c</code></td></tr>
+<tr><th>status</th><td><code data-field="status">partial</code></td></tr>
+<tr><th>quality_verdict</th><td><code data-field="quality_verdict">inconclusive</code></td></tr>
+<tr><th>run</th><td><code>e54c0dd2-aa43-4f1c-9422-0b0c33e3fc4b</code></td></tr>
+<tr><th>attempt</th><td><code>0db5c46f-5d30-4c27-aebe-628fa8730b26</code> #1 epoch 1</td></tr>
+<tr><th>snapshot</th><td><code>742de1c6-d825-4b33-8101-b1669082cf18</code> manifest <code>934b65c3121b</code></td></tr>
+
+<tr><th>profile</th><td><code>deep-review</code></td></tr>
+<tr><th>created_at</th><td><code>2026-11-17T23:50:09.29466596Z</code></td></tr>
+<tr><th>export</th><td>코드 미포함 내보내기: 도구 원문 메시지와 서술 원문을 생략했다</td></tr>
+</table>
 <p>digest sha256: <code>90b935ba6a3ca1e6eef5e59c4350a66649e6fbcf092ee383a8d2e0816488cfb7</code></p>
+</details>
 </body>
 </html>

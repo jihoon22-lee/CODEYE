@@ -4,6 +4,7 @@
   "offline": true,
   "ca_bundle": "/etc/pki/tls/certs/ca-bundle.crt",
   "git_hosts": ["git.corp.example"],
+  "github": {"token_env": {"git.corp.example": "CODEYE_PLATFORM_GHES_TOKEN"}},
   "database": {
     "mode": "managed",
     "postgres_bin_dir": "/usr/pgsql-17/bin"

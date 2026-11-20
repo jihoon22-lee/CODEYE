@@ -19,23 +19,23 @@
 | 작업 | 선행 |
 |---|---|
 | GitHub 연결(App) | 없음 |
-| PR·댓글 분석(App) | GitHub 연결(App) |
+| GitHub App 설치 토큰으로 PR·댓글 검증 | GitHub 연결(App) |
 | 다중 노드 검증 | 없음. GitHub 연결·PR·댓글 분석과 병행 |
 | 폐쇄망 실기 확인 | 다중 노드 검증 |
 | 운영 수용 | PR·댓글 분석, 폐쇄망 실기 확인 |
 
 ## 여러 사용자·GitHub 연동·분산 운영
 
-사용자별 GitHub token, 비공개 저장소, pull request 분석과 결과 댓글 하나는 끝났다([GitHub 연결](GITHUB.md), A46·A53). `codeye up` 하나가 다른 머신의 사용자에게도 서비스하고, 각 사람이 무엇을 분석할 수 있는지는 사용자별 허가로 정한다(A53). 아래 두 작업은 token 대신 GitHub App으로 연결하는 경로다. 지금의 고정·게시 경로(`runs.pull_request`, 댓글 outbox)를 그대로 쓴다.
+수동·예약 분석과 저장소 웹훅은 설치에 지정한 플랫폼 GitHub 계정을 사용한다. 아래 두 작업은 조직 단위 GitHub App으로 연결하는 경로다. 현재 PR 고정과 댓글 outbox를 함께 사용한다. [GitHub 연결](GITHUB.md)
 
 ### GitHub 연결
 
-실제 GitHub.com App으로 연결한다. GitHub 계정 로그인도 여기서 붙인다. 이벤트는 webhook 수신과, 외부에서 들어올 주소가 없는 호스트를 위한 polling 방식 둘로 받는다. GHES는 같은 계약을 따르지만 시험하지 않은 상태로 둔다. 계약은 [GitHub 연결](GITHUB.md)에 있다.
+실제 GitHub.com App으로 연결한다. 웹 사용자는 이메일·비밀번호로 로그인한다. 이벤트는 webhook 수신과, 외부에서 들어올 주소가 없는 호스트를 위한 polling 방식 둘로 받는다. GHES는 같은 계약을 따르지만 시험하지 않은 상태로 둔다. 계약은 [GitHub 연결](GITHUB.md)에 있다.
 
 완료 조건:
 - 연결 가이드와 최소 권한(내용 읽기, PR 읽기, 결과 댓글 쓰기). Checks/Actions 권한을 요구하지 않는다. 플랫폼이 Git 권한을 자동으로 바꾸지 않는다.
 - 연결 상태 `repository_readable`·`branch_resolvable`·`webhook_verified`·`pr_readable`·`comment_writable`·`report_url_reachable`을 각각 진단한다. webhook이 없어도 읽기가 되면 수동·예약 분석이 동작한다(TC-27).
-- webhook: 크기·시간 제한, constant-time HMAC 검증, provider+delivery ID dedupe(같은 ID 다른 payload는 거부·감사), durable 저장 뒤 비동기 2xx 응답(목표 2초), 큐 저장 실패를 성공으로 응답하지 않음(TC-28).
+- App 설치 ID와 대상 저장소·프로젝트 권한을 검증하고 저장소 웹훅의 서명 검사와 영속 큐를 재사용한다. 실제 App에서 전달과 재전송을 검증한다.
 - polling(제안, 아직 명세 없음): webhook과 같은 dedupe와 작업 의도 저장을 거치고, 놓친 이벤트를 무제한 따라잡지 않는다. 주기·조회 범위·rate limit 처리는 이 작업에서 명세한다.
 - App private key와 게시 credential은 관리 서버만 갖는다. 노드에는 저장소·기간이 제한된 읽기 credential만 주고 checkout 뒤 제거한다. 다른 호스트 인증으로 fallback하지 않는다.
 
@@ -43,16 +43,7 @@
 
 ### PR·댓글 분석
 
-PR 이벤트와 권한 있는 사용자의 댓글 명령(`@codeye analyze`, `@codeye analyze deep`, `@codeye analyze tests`)으로 분석하고 결과 댓글을 게시한다.
-
-완료 조건:
-- PR number·base SHA·head SHA·repository ID를 고정한다. 변경 범위를 중심으로 보되 필요한 호출부는 전체 snapshot에서 읽고, 관련 경로를 읽었다고 전체 저장소를 같은 깊이로 검토했다고 하지 않는다.
-- 댓글 작성자의 저장소 권한과 CODEYE 실행 권한을 모두 확인한다. 인용문·코드 블록 안 명령과 봇 자신의 댓글은 무시한다.
-- 외부 fork·신뢰하지 않는 기여자의 PR은 Native 실행을 자동 승인하지 않는다(승인 대기 또는 제한된 읽기 분석).
-- marker로 찾은 댓글 하나를 갱신하고, publication version으로 오래된 완료가 새 SHA 결과를 덮지 못하게 한다. 새 커밋이 있으면 이전 결과임을 표시한다(TC-29).
-- 댓글 실패는 outbox만 재시도한다. 댓글에 원시 소스·secret을 넣지 않는다.
-
-GitHub.com에서는 시험용 저장소와 App으로 검증한다. GHES는 [아래 목록](#실제-환경에서만-검증할-수-있는-것)에 있다.
+플랫폼 계정의 PR 이벤트와 멘션 처리, 원본 저장소·작성자 확인, 중복 전달 처리와 결과 댓글은 [저장소 웹훅](GITHUB.md#저장소-웹훅)을 따른다. 남은 검증은 실제 GitHub.com·GHES 인스턴스에서 배달 지연과 권한 철회를 확인하는 일이다. GitHub App 설치 토큰을 추가할 때도 같은 프로젝트 귀속과 실행 중복 방지 규칙을 사용한다.
 
 ### 다중 노드 검증
 
@@ -117,8 +108,8 @@ GitHub.com에서는 시험용 저장소와 App으로 검증한다. GHES는 [아�
 - Container 실행기(ContainerExecutor). Native 실행을 대체하지 않는 선택 실행기다.
 - 고비용 interfile 분석.
 - 추가 OS(Windows의 `codeye up`·`start`·`stop` 포함).
-- 서버 폴더 허가에 OS 계정 권한(POSIX 소유자·그룹) 확인을 더하는 것. 지금은 관리자가 연 폴더를 서비스 계정 권한으로 읽는다([서버 경로 허가](SECURITY.md#서버-경로-허가)).
 - 인프라 용량 공급자(CapacityProvider): 클라우드 VM 생성·삭제는 초기 범위 밖이다.
+- 분석한 주요 사용 경로를 대상으로 격리된 테스트 환경에서 E2E 테스트와 부하 벤치마크를 실행하고 결과를 보고서에 연결한다.
 - PDF 내보내기.
 
 ## 작업 티켓 형식

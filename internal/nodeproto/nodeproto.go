@@ -258,11 +258,6 @@ type Job struct {
 	// nil from older controllers means everything. A node never allows more
 	// than its own configuration and the project's choices either.
 	Offered *AnalysisOffer `json:"offered,omitempty"`
-	// GitCredentialUser is the user who started the run (a scheduled run:
-	// the schedule's author). A node with a per-user Git
-	// credential directory fetches with that user's stored token only
-	// (docs/GITHUB.md#누구의-token인가), never another user's.
-	GitCredentialUser string `json:"git_credential_user,omitempty"`
 	// PullRequest is set only for a pull-request run of a Git source: the
 	// worker fetches its head commit and reviews its changed files first
 	// (docs/GITHUB.md). Absent for every other run.

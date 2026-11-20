@@ -356,6 +356,7 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 	if a.ctx.Err() != nil {
 		return nodeproto.OutcomeCancelled, nodeproto.ReasonCancelled, nil
 	}
+	w.saveSourceExcerpts(a, tasks)
 	outcome, reason := decideOutcome(tasks)
 	if outcome == nodeproto.OutcomeFailed {
 		// Tasks ran but none succeeded: still upload the result manifest so the

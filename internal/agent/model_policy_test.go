@@ -2,7 +2,6 @@ package agent
 
 import (
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -99,11 +98,9 @@ func TestProjectAnalysisPolicyFollowsTheProject(t *testing.T) {
 // (ControllerSources) takes a root or Git host the administrator added in
 // the web from the job; a Git fetch reads the own token file of the user
 // who started the run.
-func TestOfferControllerSourcesAndRequesterToken(t *testing.T) {
+func TestOfferAndControllerSources(t *testing.T) {
 	both := domain.AnalysisChoices{SendSourceToModel: true, RunBuildScripts: true}
-	owner := domain.NewID()
-	dir := filepath.Join(t.TempDir(), "github-users")
-	ag := Agent{cfg: Config{ModelName: "openai/m", ProjectAnalysisPolicy: true, ControllerSources: true, GitCredentialDir: dir}}
+	ag := Agent{cfg: Config{ModelName: "openai/m", ProjectAnalysisPolicy: true, ControllerSources: true}}
 	root := t.TempDir()
 	a := activeAttempt{}
 	a.job.Source = nodeproto.JobSource{Kind: "local", SourceRootID: domain.NewID(), RootPath: root, RelativePath: "."}
@@ -122,22 +119,25 @@ func TestOfferControllerSourcesAndRequesterToken(t *testing.T) {
 	if j := ag.buildJob(&a); j.AllowRepositoryCode || j.RepositoryCodeWithheld || j.ModelReviewWithheld {
 		t.Fatalf("not chosen: %+v", j)
 	}
-	// Git: the host from the job, the token file of the user who started the run.
-	a.job.Source = nodeproto.JobSource{Kind: "git", RepositoryURL: "https://ghe.example.com/o/r", Host: "GHE.example.com"}
-	a.job.GitCredentialUser = owner
-	if j := ag.buildJob(&a); j.Source.AllowedHost != "ghe.example.com" || j.GitCredentialFile != filepath.Join(dir, owner+".json") {
+	a.job.Source = nodeproto.JobSource{Kind: "git", RepositoryURL: "https://ghe.example.com/o/r", Host: "ghe.example.com"}
+	if j := ag.buildJob(&a); j.Source.AllowedHost != "ghe.example.com" {
 		t.Fatalf("git job %+v", j.Source)
 	}
-	a.job.GitCredentialUser = "../x"
-	if j := ag.buildJob(&a); j.GitCredentialFile != "" {
-		t.Fatalf("bad user id read %q", j.GitCredentialFile)
+	ag.cfg.Offline = true
+	if j := ag.buildJob(&a); j.Source.AllowedHost != "" {
+		t.Fatalf("unconfigured offline host: %+v", j.Source)
 	}
-	// A separately started node takes neither from the job, and keeps its
-	// single credential file.
-	plain := Agent{cfg: Config{ModelName: "openai/m", ProjectAnalysisPolicy: true, GitCredentialFile: "/srv/github.json"}}
-	a.job.GitCredentialUser = owner
-	if j := plain.buildJob(&a); j.Source.AllowedHost != "" || j.GitCredentialFile != "/srv/github.json" {
-		t.Fatalf("separate node git job %+v %q", j.Source, j.GitCredentialFile)
+	ag.cfg.GitHosts = []string{"ghe.example.com", "github.com"}
+	if j := ag.buildJob(&a); j.Source.AllowedHost != "ghe.example.com" {
+		t.Fatalf("configured offline host: %+v", j.Source)
+	}
+	a.job.Source = nodeproto.JobSource{Kind: "git", RepositoryURL: "https://github.com/o/r", Host: "github.com"}
+	if j := ag.buildJob(&a); j.Source.AllowedHost != "" {
+		t.Fatalf("public GitHub offline: %+v", j.Source)
+	}
+	plain := Agent{cfg: Config{ModelName: "openai/m", ProjectAnalysisPolicy: true}}
+	if j := plain.buildJob(&a); j.Source.AllowedHost != "" {
+		t.Fatalf("separate node git job %+v", j.Source)
 	}
 	a.job.Source = nodeproto.JobSource{Kind: "local", SourceRootID: domain.NewID(), RootPath: root, RelativePath: "."}
 	if j := plain.buildJob(&a); j.Source.ApprovedRoot != "" {

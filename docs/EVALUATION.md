@@ -371,6 +371,8 @@ python3 scripts/quality_eval.py reader "$R/paid" --sample 6 --seed S --output "$
 - 지침 개정 전후를 비교할 때: 개정 전 checkout(baseline)과 개정 뒤 checkout(candidate)에서 같은 표본으로 2단계 capture와 5~6단계를 각각 하고(`--batch capture-baseline`, `--batch paid-baseline`처럼 이름으로 구분한다), 7단계 `score`에 두 batch를 나란히 준다. 상한 호출이 큰 쪽을 먼저 실행하고, 끝난 뒤의 장부로 다른 쪽을 다시 계획한다. 거절이면 다른 쪽을 실행하지 않는다. 시작 전 남은 요청이 적으면 `남은 요청 − 먼저 실행한 쪽 기대 호출 − 5 ≥ 다른 쪽 상한 호출`이 되는 표본을 고른다.
 - 결과 수치와 판단은 [평가 결과](EVALUATION-RESULTS.md)에 쓰고 batch 디렉터리는 저장소 밖에 둔다.
 
+검토 모델을 비교할 때는 같은 고정 입력을 `gpt-6.1-terra`와 `gpt-6-luna`로 번갈아 실행하고 두 relay가 장부 하나를 공유한다. 파일럿의 모델 ID는 ready 파일에서 읽는다.
+
 ## 예산 relay와 장부
 
 [`scripts/model_budget_relay.py`](../scripts/model_budget_relay.py)는 사람이 승인한 실모델 평가에서 유료 모델 호출 상한을 강제하는 QA 전용 보조 도구다. 제품 런타임·CI 의존성이 아니다. 모델 연결 방식(허용된 OpenCode 우선, 자동 fallback 금지)을 바꾸지 않는다. 제품 쪽 relay 파일 사용은 [모델 검토](REVIEW.md)에 있다. 이 저장소의 시험은 과금 호출을 하지 않는다.
@@ -388,13 +390,13 @@ python3 scripts/quality_eval.py reader "$R/paid" --sample 6 --seed S --output "$
 python3 scripts/model_budget_relay.py \
   --ready-file "$DIR/ready-$(date +%s).json" \
   --ledger "$LEDGER" \
-  --model gpt-6.2-sol            # --budget-usd 기본 9.99, 그 이하만 허용
+  --model gpt-6.2-sol            # --budget-usd 기본 9.99, 소유자 승인 범위에서 최대 15
 ```
 
 | 옵션 | 기본 | 제한 |
 |---|---|---|
-| `--model` | — | `gpt-6.2-sol` 또는 `gpt-6.1-sol`만 |
-| `--budget-usd` | 9.99 | 0 초과 9.99 이하, 소수 6자리까지. 기존 장부의 상한을 낮출 수만 있다 |
+| `--model` | — | `gpt-6.2-sol`, `gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-luna` |
+| `--budget-usd` | 9.99 | 0 초과 15 이하, 소수 6자리까지. 기존 장부의 상한을 낮출 수만 있다 |
 | `--max-requests` | 200 | 1~1000. 장부 전체 요청 수 상한이며 낮출 수만 있다 |
 | `--max-input-bytes` | 49152 | 1~65536. 요청당 메시지 텍스트 UTF-8 바이트 합 |
 | `--port` | 0(임시) | 항상 127.0.0.1에만 bind |
@@ -402,7 +404,7 @@ python3 scripts/model_budget_relay.py \
 | `--allow-model-echo` | 꺼짐 | 위 정답 차단의 예외 방식. 목록 없이 주면 종료 코드 2 |
 | `--test-upstream` | 없음 | dry run 전용. `http://127.0.0.1:PORT`만 받는다. 키를 읽지 않고 환경에서 지운다. 장부 header에 `upstream: test-loopback`을 남기고 실제 장부와 섞지 않는다 |
 
-- 상한은 장부 하나에 걸린다(`HARD_CAP_MICROUSD = 9_990_000`, 모든 relay 프로세스 합계 USD 9.99). 장부를 잃거나 새 경로를 쓰면 새 USD 9.99 예산이 생기므로, 예산 보장은 같은 장부 파일을 유지하는 운영 절차에 의존한다. 예산 기간마다 영구 경로의 장부 하나를 쓰고(`/tmp` 같은 휘발 경로 금지), 소유자 승인 없이 새 장부를 만들지 않는다.
+- 상한은 장부 하나에 걸린다(`HARD_CAP_MICROUSD = 15_000_000`, 모든 relay 프로세스 합계 최대 USD 15). 장부를 잃거나 새 경로를 쓰면 별도 예산이 생기므로, 예산 보장은 같은 장부 파일을 유지하는 운영 절차에 의존한다. 예산 기간마다 영구 경로의 장부 하나를 쓰고(`/tmp` 같은 휘발 경로 금지), 소유자 승인 없이 새 장부를 만들지 않는다.
 - ready file은 반드시 새 경로여야 한다(이미 있으면 종료 코드 2). 0600으로 원자적으로 만들고 내용은 `{"base_url":"http://127.0.0.1:PORT/v1","token":"...","model":"gpt-6.2-sol","pid":N}`이다. SIGTERM/SIGINT 정상 종료 시 삭제한다. SIGKILL 뒤 남은 파일은 무효 token을 담으므로 지운 뒤 새 경로로 다시 시작한다.
 - OpenCode는 OpenAI 호환 provider의 `baseURL`·`apiKey`에 ready file의 `base_url`·`token`을, 모델 ID에 `model`을 쓴다. CODEYE에서는 `--model codeye-gateway/<model> --model-relay-file READY`로 고른다.
 - 보고: `python3 scripts/model_budget_relay.py --ledger PATH --report`(키 불필요).
@@ -448,7 +450,7 @@ python3 scripts/model_budget_relay.py \
 | `settled_charged_microusd` / `pending_reserved_microusd` | 정산된 보수적 차감액 / 미정산 예약 |
 | `charged_microusd_total` | 예산 차감 기준(위 둘의 합). `remaining_microusd`는 상한과의 차 |
 | `usage` | 응답이 보고한 prompt/completion/cached/reasoning 토큰 합 |
-| `standard_rate_estimate_microusd` | 보고 usage × $2/$10 정보용 추정. 청구서가 아니며 승인에 쓰지 않는다 |
+| `standard_rate_estimate_microusd` | 보고된 입력·출력 토큰에 요청 모델의 Standard 요율을 적용한 정보용 추정(캐시 할인 미적용). 청구서가 아니며 승인에 쓰지 않는다 |
 | `settled_by_status`, `halted`, `halt_reasons` | 결과 분포와 정지 상태 |
 | `upstream`, `forbidden_lists`, `blocked_answer_leaks`, `blocked_by_role`, `echo_exempted_requests`, `echo_exempted_by_role`, `refused_by_code` | 장부 종류(시험용이면 `test-loopback`), 읽은 정답 목록과 `allow_model_echo`, 차단·예외·거절 수 |
 

@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
+	"slices"
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
@@ -166,20 +167,6 @@ func (ag *Agent) claimFor(w *workerProc, key string) {
 	}
 }
 
-// gitCredentialFor is the token file a Git fetch for user (who started the
-// run) reads: with a per-user credential directory that user's own file ("" for
-// an unusable ID, so the fetch is anonymous), else the agent's single
-// --git-credential-file.
-func (ag *Agent) gitCredentialFor(user string) string {
-	if ag.cfg.GitCredentialDir == "" {
-		return ag.cfg.GitCredentialFile
-	}
-	if !domain.ValidID(user) {
-		return ""
-	}
-	return filepath.Join(ag.cfg.GitCredentialDir, user+".json")
-}
-
 // buildJob resolves the job source from the agent's private configuration.
 func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 	l, j := att.lease, att.job
@@ -203,17 +190,13 @@ func (ag *Agent) buildJob(att *activeAttempt) *workerproto.Job {
 		job.Source.ProtectedDirs = ag.cfg.ProtectedDirs
 	case "git":
 		job.Source.RepositoryURL, job.Source.Branch = j.Source.RepositoryURL, j.Source.Branch
-		for _, h := range ag.cfg.GitHosts {
-			if strings.EqualFold(h, j.Source.Host) {
-				job.Source.AllowedHost = strings.ToLower(h)
+		if github.HostAllowed(j.Source.Host, ag.cfg.Offline, ag.cfg.GitHosts) {
+			if ag.cfg.ControllerSources || slices.Contains(ag.cfg.GitHosts, j.Source.Host) {
+				job.Source.AllowedHost = j.Source.Host
 			}
-		}
-		if job.Source.AllowedHost == "" && ag.cfg.ControllerSources && j.Source.Host != "" {
-			job.Source.AllowedHost = strings.ToLower(j.Source.Host)
 		}
 		job.Source.RepositoryURL, job.Source.AllowedLocalRoot = testGitMirror(job.Source.RepositoryURL, job.Source.AllowedHost)
 		job.PullRequest = j.PullRequest
-		job.GitCredentialFile = ag.gitCredentialFor(j.GitCredentialUser)
 	}
 	// The project's own choices; a job from a controller that sends none
 	// gets the defaults.

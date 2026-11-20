@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { Api } from './api';
 import type { AnalysisReport, Finding } from './analysisReport';
+import { formatInstant, runStatusLabel } from './format';
+import type { Citation, Excerpt } from './reportSections';
 import { reportURL } from './analysisReport';
 import { FindingHistory, HIDDEN, findingBadge, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';
@@ -18,6 +20,42 @@ export function explainReason(value: string) {
   if (text == null) return value;
   return [text, ...detail].join(' · ');
 }
+export function ReportIdentity({ report }: { report: AnalysisReport }) {
+  const p = report.project;
+  const facts = [
+    { label: t.sourcePath, value: p?.source, wide: true },
+    { label: t.status, value: runStatusLabel(report.status) },
+    { label: t.start, value: p?.start && formatInstant(p.start) },
+    { label: t.finish, value: p?.finish && formatInstant(p.finish) },
+    { label: t.published, value: !p?.finish && report.published ? formatInstant(report.published) : null },
+    { label: t.commit, value: report.commit, wide: true },
+  ];
+  return <dl className="report-identity">
+    {facts.map(({ label, value, wide }) => value && (
+      <div key={label} className={wide ? 'identity-wide' : undefined}>
+        <dt>{label}</dt><dd>{value}</dd>
+      </div>
+    ))}
+  </dl>;
+}
+
+function CodeWindow({ excerpt, location }: { excerpt: Excerpt; location: string }) {
+  return (
+    <pre className="source-window" tabIndex={0} aria-label={t.excerptAt(location)}><code>
+      {excerpt.text.split('\n').map((line, i) => (
+        <span className="source-line" key={i}><span aria-hidden="true">{excerpt.start + i}</span>{line}{'\n'}</span>
+      ))}
+    </code></pre>
+  );
+}
+
+export function Citations({refs,catalog}: {refs: string[]; catalog: Citation[]}) {
+  const evidence = refs.map(id => catalog.find(x => x.id === id)).filter(x => x !== undefined);
+  return <>{evidence.map(e => e.excerpt
+    ? <details key={e.id}><summary>{e.path}:{e.line}</summary><CodeWindow excerpt={e.excerpt} location={`${e.path}:${e.line}`} /></details>
+    : <div key={e.id}><code>{e.path}:{e.line}</code></div>)}</>;
+}
+
 export function TextList({ values }: { values: string[] }) {
   return (
     <ul>
@@ -30,10 +68,11 @@ export function TextList({ values }: { values: string[] }) {
 // A finding a reader can scan: the title, severity and validation as words, and where; once
 // opened, the impact and the fix first, then the conditions and how to check, with the claims
 // and evidence behind their own disclosure.
-function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null; history?: ReactNode }) {
+export function FindingCard({ f, badge, history, priority = false }: { f: Finding; badge?: string | null; history?: ReactNode; priority?: boolean }) {
+  const [open, setOpen] = useState(false);
   const known = (labels: Record<string, string>, key: string) => (Object.hasOwn(labels, key) ? key : 'unknown');
   return (
-    <details className={'finding-card sev-' + known(t.severity, f.severity)}>
+    <details className={'finding-card sev-' + known(t.severity, f.severity)} onToggle={priority ? (e) => setOpen(e.currentTarget.open) : undefined}>
       <summary>
         <strong>{f.title}</strong>
         <span>
@@ -48,13 +87,28 @@ function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null;
           )}
         </span>
       </summary>
-      {history}
+      {(!priority || open) && <FindingDetails f={f} history={history} />}
+    </details>
+  );
+}
+
+function FindingDetails({ f, history }: { f: Finding; history?: ReactNode }) {
+  const ref = useId();
+  return (
+    <div className="finding-body">
       <dl className="key">
         <dt>{t.impact}</dt>
         <dd>{f.impact}</dd>
         <dt>{t.recommendation}</dt>
         <dd>{f.recommendation}</dd>
       </dl>
+      {f.evidence.map(e => e.excerpt && (
+        <figure key={e.id} className="finding-excerpt">
+          <figcaption><code>{e.path}:{e.range}</code></figcaption>
+          <CodeWindow excerpt={e.excerpt} location={`${e.path}:${e.range}`} />
+          <p className="small">{e.description}</p>
+        </figure>
+      ))}
       <dl>
         <dt>{t.conditions}</dt>
         <dd>
@@ -74,43 +128,30 @@ function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null;
         </>
       )}
       <details className="finding-evidence">
-      <summary>{t.evidenceToggle(f.evidence.length)}</summary>
-      {f.claims.map((claim, i) => (
-        <p key={i}>
-          <strong>
-            {claim.kind === 'observed' ? t.observed : t.inferred} ·{' '}
-          </strong>
-          {claim.assertion}
-          {claim.evidence.map((id, index) => (
-            <a key={id} className="report-ref" href={'#ev-' + f.id + '-' + id}>
-              {t.ref(index + 1)}
-            </a>
-          ))}
-        </p>
-      ))}
-      <h6>{t.evidence}</h6>
-      <ul>
-        {f.evidence.map((e) => (
-          <li key={e.id} id={'ev-' + f.id + '-' + e.id}>
-            {f.counter.includes(e.id) && <strong>{t.counter} · </strong>}
-            {e.description}
-            {e.path && (
-              <div>
-                <code>
-                  {e.path}:{e.range}
-                </code>
-              </div>
-            )}
-            {e.artifact && (
-              <div>
-                {t.artifact} <code>{e.artifact}</code>
-              </div>
-            )}
-          </li>
+        <summary>{t.evidenceToggle(f.evidence.length)}</summary>
+        {f.claims.map((claim, i) => (
+          <p key={i}>
+            <strong>{claim.kind === 'observed' ? t.observed : t.inferred} · </strong>
+            {claim.assertion}
+            {claim.evidence.map((id, index) => (
+              <a key={id} className="report-ref" href={`#${ref}-${id}`}>{t.ref(index + 1)}</a>
+            ))}
+          </p>
         ))}
-      </ul>
+        <h6>{t.evidence}</h6>
+        <ul>
+          {f.evidence.map((e) => (
+            <li key={e.id} id={`${ref}-${e.id}`}>
+              {f.counter.includes(e.id) && <strong>{t.counter} · </strong>}
+              {e.description}
+              {e.path && <div><code>{e.path}:{e.range}</code></div>}
+              {e.artifact && <div>{t.artifact} <code>{e.artifact}</code></div>}
+            </li>
+          ))}
+        </ul>
       </details>
-    </details>
+      {history}
+    </div>
   );
 }
 

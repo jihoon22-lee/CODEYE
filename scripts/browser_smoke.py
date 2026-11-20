@@ -23,8 +23,6 @@ def run(base: Path, root: Path, env: dict):
     source = base / "source"
     source.mkdir()
     (source / "README.md").write_text("browser source fixture\n")
-    source_id = json.loads(cli("source-root", "add", "--label", "browser-fixture-root", "--path", str(source)))["id"]
-    cli("source-root", "grant", "--root", source_id, "--user", user)
     # An administrator with a password for the sign-in form; the password exists only in this 0600 file.
     admin_password = base / "admin-password"
     admin_password.write_text("browser-admin-" + secrets.token_urlsafe(18) + "\n")
@@ -53,7 +51,7 @@ def run(base: Path, root: Path, env: dict):
                     time.sleep(0.1)
             else:
                 raise RuntimeError("브라우저 fixture 서버 준비 시간 초과")
-            browser_env = dict(env, CODEYE_TEST_BASE_URL=origin, CODEYE_TEST_LOGIN_FILE=str(link),
+            browser_env = dict(env, CODEYE_TEST_BASE_URL=origin, CODEYE_TEST_LOGIN_FILE=str(link), CODEYE_TEST_SOURCE_PATH=str(source),
                                CODEYE_TEST_ADMIN_USERNAME="browser-admin", CODEYE_TEST_ADMIN_PASSWORD_FILE=str(admin_password))
             subprocess.run(["npm", "run", "test:e2e", "--", "control.spec.ts", "password.spec.ts"],
                            cwd=root / "web", env=browser_env, check=True, timeout=180)
@@ -63,6 +61,7 @@ def run(base: Path, root: Path, env: dict):
             assert token not in text and env["CODEYE_DATABASE_URL"] not in text, "HTTP 로그 credential 노출"
             assert admin_password.read_text().strip() not in text, "HTTP 로그 비밀번호 노출"
             assert "newcomer-browser-password-42" not in text, "HTTP 로그 비밀번호 노출"
+            assert "example-signup-password-42" not in text, "HTTP 로그 가입 비밀번호 노출"
             assert (source / "README.md").read_text() == "browser source fixture\n", "원본 fixture 변경"
         finally:
             server.send_signal(signal.SIGINT)

@@ -67,7 +67,7 @@ var usageGroups = []usageGroup{
 			"                  [--scale-up-cooldown-seconds S] [--scale-down-cooldown-seconds S] [--expect-revision R]", ""},
 		{"pool list", "codeye pool list", ""},
 		{"agent", "codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]\n" +
-			"             [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ... [--git-credential-file PATH | --git-credential-dir DIR]] [--controller-sources] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]\n" +
+			"             [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ... [--git-credential-file PATH]] [--controller-sources] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]\n" +
 			"             [--cppcheck /abs/cppcheck] [--clang-tidy /abs/clang-tidy]\n" +
 			"             [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit] [--advertise-without-baseline]\n" +
 			"             [--eslint /abs/eslint/bin/eslint.js] [--tsc /abs/typescript/bin/tsc]\n" +

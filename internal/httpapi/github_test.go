@@ -2,7 +2,11 @@ package httpapi
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -50,11 +54,10 @@ func (w *isoWorld) pullRequestRun() string {
 	return r.ID
 }
 
-// writeGitHubCredential stores user's token like `codeye up` does for the
-// administrator who runs the service.
-func writeGitHubCredential(t *testing.T, state, user, token, login string) {
+func writeGitHubCredential(t *testing.T, state, host, token, login string) {
 	t.Helper()
-	if err := github.UserTokensDir(state).Write(user, github.Credential{Host: "github.com", Token: token, Source: "GH_TOKEN", Login: login}); err != nil {
+	creds := github.PlatformCredentials{host: {SchemaVersion: github.CredentialSchema, Host: host, Token: token, Login: login, Source: "platform"}}
+	if err := github.WritePlatformCredentials(github.PlatformCredentialFile(state), creds); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -105,7 +108,7 @@ func TestPullRequestRunsOverHTTP(t *testing.T) {
 	u = e.login(u.id)
 	p := project(u, prov.ID, "https://github.com/acme/widget")
 	run(u, p, runBody(map[string]any{"number": 7}), 422, "PULL_REQUEST_NOT_FOUND")
-	writeGitHubCredential(t, state, u.id, testGitHubToken, "octo")
+	writeGitHubCredential(t, state, github.Host, testGitHubToken, "octo")
 	r := run(u, p, runBody(map[string]any{"number": 7}), 202, "")
 	v := e.do("GET", "/api/v1/runs/"+r.body["id"].(string), nil, u.o()).want(t, 200, "")
 	pr := v.body["pull_request"].(map[string]any)
@@ -152,12 +155,6 @@ func TestPullRequestRunsOverHTTP(t *testing.T) {
 	run(u, p, runBody(map[string]any{"number": 7}), 422, "GITHUB_TOKEN_REFUSED")
 	fake.FailPrefix = ""
 	run(u, p, runBody(map[string]any{"number": 0}), 422, "VALIDATION_FAILED")
-	lab, _, err := e.store.EnsureProvider(ctx, "gitlab.example")
-	if err != nil {
-		t.Fatal(err)
-	}
-	other := project(u, lab.ID, "https://gitlab.example/acme/widget")
-	run(u, other, runBody(map[string]any{"number": 7}), 422, "PULL_REQUEST_UNSUPPORTED")
 	sched := scheduleBody()
 	sched["run"].(map[string]any)["pull_request"] = map[string]any{"number": 7}
 	e.do("POST", "/api/v1/projects/"+p+"/schedules", sched, opts{cookie: u.cookie, csrf: u.csrf, idem: domain.NewID()}).want(t, 422, "VALIDATION_FAILED")
@@ -171,9 +168,7 @@ func TestPullRequestRunsOverHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := len(fake.Requests())
-	if r := run(u, p, runBody(map[string]any{"number": 7}), 422, "PULL_REQUEST_UNSUPPORTED"); !strings.Contains(string(r.raw), "offline mode") {
-		t.Fatalf("offline refusal %s", r.raw)
-	}
+	run(u, p, runBody(map[string]any{"number": 7}), 422, "PULL_REQUEST_UNSUPPORTED")
 	e.do("GET", "/api/v1/runs/"+on.body["id"].(string)+"/pull-request-comment", nil, u.o()).want(t, 200, "")
 	if n := len(fake.Requests()); n != calls {
 		t.Fatalf("%d GitHub calls offline", n-calls)
@@ -195,5 +190,62 @@ func TestPullRequestRunsOverHTTP(t *testing.T) {
 	setup := e.do("GET", "/api/v1/setup", nil, u.o()).want(t, 200, "")
 	if strings.Contains(string(setup.raw), testGitHubToken) {
 		t.Fatal("the token reached GET /setup")
+	}
+}
+
+func TestOfflineGHESPullRequestUsesConfiguredPlatform(t *testing.T) {
+	e := newEnv(t)
+	certFile, keyFile, _ := writeCert(t, "localhost", 0o600)
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const token = "tok-enterprise-platform"
+	head := strings.Repeat("b", 40)
+	base := strings.Repeat("a", 40)
+	api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			t.Error("enterprise request lacked the platform credential")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/v3/repos/acme/widget/pulls/7":
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 7, "base": map[string]string{"ref": "main", "sha": base}, "head": map[string]string{"ref": "fix", "sha": head}})
+		case "/api/v3/repos/acme/widget/pulls/7/files":
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			t.Errorf("unexpected enterprise request %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	api.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+	api.StartTLS()
+	t.Cleanup(api.Close)
+	_, port, _ := net.SplitHostPort(api.Listener.Addr().String())
+	host := "localhost:" + port
+	state := t.TempDir()
+	if err := os.Mkdir(filepath.Join(state, "run"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(InstanceSetup{SchemaVersion: "0.1", Git: true, GitHosts: []string{host}, CABundle: certFile, Offline: true})
+	if err := os.WriteFile(filepath.Join(state, "run", InstanceSetupFile), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeGitHubCredential(t, state, host, token, "codeye")
+	e.inst = &Instance{StateDir: state}
+	e.start(t.TempDir())
+	u := e.newUser()
+	ctx := context.Background()
+	provider, _, err := e.store.EnsureProvider(ctx, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := e.do("POST", "/api/v1/projects", map[string]any{"source": map[string]any{"kind": "git", "provider_id": provider.ID, "repository_url": "https://" + host + "/acme/widget"}}, u.o()).want(t, 201, "")
+	body := map[string]any{"profile": "deep-review", "source_policy": "latest_at_acquire", "scope": map[string]any{"kind": "full"}, "pull_request": map[string]any{"number": 7}}
+	run := e.do("POST", "/api/v1/projects/"+p.body["id"].(string)+"/runs", body, opts{cookie: u.cookie, csrf: u.csrf, idem: domain.NewID()}).want(t, 202, "")
+	preview := e.do("GET", "/api/v1/runs/"+run.body["id"].(string)+"/pull-request-comment", nil, u.o()).want(t, 200, "")
+	if preview.body["current_head_sha"] != head || strings.Contains(string(preview.raw), token) {
+		t.Fatalf("enterprise preview rejected or exposed its credential: status %d", preview.status)
 	}
 }

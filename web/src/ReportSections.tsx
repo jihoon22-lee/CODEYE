@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
 import type { Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './reportSections';
 import { ComparisonSection } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportTasks, TextList, Verdict, explainReason, label, type ReportHistory } from './ReportParts';
+import { Citations, FindingCard, FindingList, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportScope, ReportTasks, TextList, Verdict, explainReason, label, type ReportHistory } from './ReportParts';
 import {
   findingSecondary,
   gapGroups,
@@ -72,12 +72,12 @@ function anchor(key: string) {
   return 'report-section-' + key;
 }
 
-function Table({ head, rows, empty, compact }: { head: string[]; rows: ReactNode[][]; empty?: string; compact?: boolean }) {
+function Table({ head, rows, empty, compact, stacked }: { head: string[]; rows: ReactNode[][]; empty?: string; compact?: boolean; stacked?: boolean }) {
   if (rows.length === 0) return empty ? <p>{empty}</p> : null;
   // Columns of numbers align right in tabular figures.
   const numeric = head.map((_, j) => rows.every((row) => typeof row[j] === 'number'));
   return (
-    <div className={compact ? 'table compact' : 'table'}>
+    <div className={'table' + (compact ? ' compact' : '') + (stacked ? ' report-reading-table' : '')}>
       <table>
         <thead>
           <tr>
@@ -92,7 +92,7 @@ function Table({ head, rows, empty, compact }: { head: string[]; rows: ReactNode
           {rows.map((row, i) => (
             <tr key={i}>
               {row.map((cell, j) => (
-                <td key={j} className={numeric[j] ? 'num' : undefined}>{cell}</td>
+                <td key={j} data-label={stacked ? head[j] : undefined} className={numeric[j] ? 'num' : undefined}>{cell}</td>
               ))}
             </tr>
           ))}
@@ -132,9 +132,14 @@ function ModelNote({ model }: { model: ModelState }) {
   return <p>{s.noModel(label(s.modelReasons, model.reason ?? '') || explainReason(model.reason ?? ''))}</p>;
 }
 
-function Codes({ ids }: { ids: string[] }) {
-  if (ids.length === 0) return null;
-  return <small> {s.evidence(ids)}</small>;
+function ModelReading({ title, children }: { title: string; children: ReactNode }) {
+  const heading = useId();
+  return (
+    <section className="model-reading" aria-labelledby={heading}>
+      <header><h6 id={heading}>{title}</h6><span>{t.modelReading}</span></header>
+      {children}
+    </section>
+  );
 }
 
 function ObservationTable({ ids, byID }: { ids: string[]; byID: Map<string, Observation> }) {
@@ -326,8 +331,18 @@ function pick(findings: Finding[], ids: string[]) {
 export function SectionedReport({ report, sections, history }: { report: AnalysisReport; sections: Sections; history?: ReportHistory }) {
   // Sections the overview points at start open; the rest stay collapsed.
   const [open, setOpen] = useState<Set<string>>(() => new Set(sections.attention.map((a) => a.section)));
+  const tabbed = Boolean(report.project);
+  const id = useId();
+  const [active,setActive] = useState('overview');
+  const tabs = ['overview','documents','code_review','static_analysis','metrics','secrets','environment','gaps'];
+  const tabId = (key:string) => id + '-tab-' + key;
+  const select = (key:string) => {
+    setActive(key);
+    document.getElementById(tabId(key))?.focus();
+  };
   const byID = new Map(report.observations.map((o) => [o.id, o]));
   const go = (key: string) => {
+    if (tabbed) {select(key); return;}
     setOpen((prev) => new Set(prev).add(key));
     // After the section opened, move focus to its summary.
     setTimeout(() => document.getElementById(anchor(key))?.querySelector('summary')?.focus(), 0);
@@ -342,6 +357,9 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const overview = new Map(sections.overview.map((x) => [x.key, x]));
   const block = (key: string, body: ReactNode) => {
     const st = overview.get(key)?.state ?? null;
+    if (tabbed) return <section id={anchor(key)} role="tabpanel" aria-labelledby={tabId(key)} hidden={active!==key} key={key}>
+      {active===key && <><h5>{label(s.titles,key)}</h5>{body}</>}
+    </section>;
     return (
       <details key={key} id={anchor(key)} className="report-section" open={open.has(key)} onToggle={(e) => toggle(key, (e.currentTarget as HTMLDetailsElement).open)}>
         <summary>
@@ -443,7 +461,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
             {e.notes.map((n, i) => (
               <li key={i}>
                 {s.note(n)}
-                <Codes ids={n.evidence} />
+                <Citations refs={n.evidence} catalog={e.citations} />
               </li>
             ))}
           </ul>
@@ -453,6 +471,18 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     documents: (
       <>
         <StageLine stage={d.stage} />
+        {d.comparisons.length > 0 && (
+          <ModelReading title={t.comparisonsTitle}>
+            <Table stacked head={[t.statementTitle, t.scopeTitle, s.col.status, t.basisTitle, t.reference]}
+              rows={d.comparisons.map(c => [c.statement, c.scope, label(t.assessment, c.status), c.reason, <Citations refs={c.refs} catalog={d.citations} />])} />
+          </ModelReading>
+        )}
+        {d.quality.length > 0 && (
+          <ModelReading title={t.qualityTitle}>
+            <Table stacked head={[s.col.status, t.scopeTitle, t.basisTitle, t.reference]}
+              rows={d.quality.map(q => [label(t.assessment, q.assessment), label(t.assessment, q.aspect), q.statement, <Citations refs={q.refs} catalog={d.citations} />])} />
+          </ModelReading>
+        )}
         <p>{label(s.discovery, d.discovery)}</p>
         {d.budget && <p>{s.budget(d.budget)}</p>}
         <SectionCounts sections={sections} keyName="documents" />
@@ -488,7 +518,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               {d.contracts.map((x, i) => (
                 <li key={i}>
                   [{x.appliesTo}] {x.statement}
-                  <Codes ids={x.evidence} />
+                  <Citations refs={x.evidence} catalog={d.citations} />
                 </li>
               ))}
             </ul>
@@ -497,7 +527,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               {d.conflicts.map((x, i) => (
                 <li key={i}>
                   [{x.scope}] {x.summary} / {x.impact}
-                  <Codes ids={x.evidence} />
+                  <Citations refs={x.evidence} catalog={d.citations} />
                 </li>
               ))}
             </ul>
@@ -506,7 +536,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               {d.questions.map((x, i) => (
                 <li key={i}>
                   [{x.appliesTo}] {x.question}
-                  <Codes ids={x.evidence} />
+                  <Citations refs={x.evidence} catalog={d.citations} />
                 </li>
               ))}
             </ul>
@@ -515,7 +545,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               {d.notes.map((x, i) => (
                 <li key={i}>
                   {x.note}
-                  <Codes ids={x.evidence} />
+                  <Citations refs={x.evidence} catalog={d.citations} />
                 </li>
               ))}
             </ul>
@@ -527,6 +557,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <>
         <StageLine stage={sa.stage} />
         <p>{s.staticLead}</p>
+        <details><summary>{t.glossary}</summary><Table head={[s.col.tool,s.col.message]} rows={Object.entries(t.tools)} /></details>
         <SectionCounts sections={sections} keyName="static_analysis" />
         {sa.languages.map((lang) => {
           const groups = ruleGroups(lang.tools, byID, sevOf);
@@ -655,6 +686,17 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     code_review: (
       <>
         <StageLine stage={cr.stage} />
+        <h6>{sm.supported}</h6>
+        <FindingList findings={reviewFirst} history={history} empty={cr.findings.length === 0 ? s.noFindings : sm.supportedNone} />
+        {reviewRest.length > 0 && (
+          <More title={sm.otherFindings(reviewRest.length)}>{() => <FindingList findings={reviewRest} history={history} empty={s.noFindings} />}</More>
+        )}
+        {cr.strengths.length > 0 && (
+          <ModelReading title={t.strengthsTitle}>
+            <Table stacked head={[t.impactTitle, t.scopeTitle, t.reference]}
+              rows={cr.strengths.map(x => [<><strong>{x.title}</strong><p>{x.benefit}</p></>, x.scope, <Citations refs={x.refs} catalog={cr.citations} />])} />
+          </ModelReading>
+        )}
         {!cr.planned ? (
           <p>{s.noPack}</p>
         ) : (
@@ -673,11 +715,6 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
           </>
         )}
         {cr.ledger && <LedgerBlock ledger={cr.ledger} />}
-        <h6>{sm.supported}</h6>
-        <FindingList findings={reviewFirst} history={history} empty={cr.findings.length === 0 ? s.noFindings : sm.supportedNone} />
-        {reviewRest.length > 0 && (
-          <More title={sm.otherFindings(reviewRest.length)}>{() => <FindingList findings={reviewRest} history={history} empty={s.noFindings} />}</More>
-        )}
         {cr.limits.length > 0 && (
           <>
             <h6>{s.limits}</h6>
@@ -719,13 +756,34 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   };
   return (
     <article className="report-document" aria-label={t.title}>
-      <header>
-        <h4>{t.title}</h4>
-        <span>{t.revision(report.revision)}</span>
+      <header className="report-masthead">
+        <div className="report-masthead-heading">
+          <h4>{t.title}</h4>
+          {report.project?.name && <p className="report-project">{report.project.name}</p>}
+        </div>
+        <ReportIdentity report={report} />
       </header>
-      <section aria-labelledby="report-overview">
+      {tabbed && <div role="tablist" aria-label={t.title} className="report-tabs">
+        {tabs.map((key,i) => <button key={key} id={tabId(key)} type="button" role="tab" aria-selected={active===key}
+          aria-controls={anchor(key)} tabIndex={active===key ? 0 : -1} onClick={() => select(key)}
+          onKeyDown={e => {
+            const to = {ArrowRight:(i+1)%tabs.length, ArrowLeft:(i+tabs.length-1)%tabs.length, Home:0, End:tabs.length-1}[e.key];
+            if (to!==undefined) {e.preventDefault(); select(tabs[to]);}
+          }}>{key==='overview' ? s.overview : label(s.titles,key)}</button>)}
+      </div>}
+      <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'}>
         <h5 id="report-overview">{s.overview}</h5>
         <Verdict report={report} />
+        {report.priorities.length > 0 && (
+          <>
+            <h6>{s.priorities}</h6>
+            <ol className="report-priorities">
+              {pick(report.findings, report.priorities)
+                .sort((a, b) => report.priorities.indexOf(a.id) - report.priorities.indexOf(b.id))
+                .map(f => <li key={f.id}><FindingCard f={f} priority /></li>)}
+            </ol>
+          </>
+        )}
         <ul className="report-summary">
           {summaryLines(facts, cr.planned).map((line, i) => (
             <li key={i}>{line}</li>
@@ -746,30 +804,21 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
             ))}
           </ul>
         )}
-        {report.priorities.length > 0 && (
-          <>
-            <h6>{s.priorities}</h6>
-            <ol className="report-priorities">
-              {report.priorities.map((id) => {
-                const f = report.findings.find((x) => x.id === id)!;
-                // A priority finding is listed in the code review or the static analysis section.
-                const section = sections.codeReview.findings.includes(id) ? 'code_review' : 'static_analysis';
-                return (
-                  <li key={id}>
-                    {f.title} — {label(t.validation, f.validation)} · {label(t.severity, f.severity)}{' '}
-                    <button type="button" className="link" onClick={() => go(section)}>
-                      {s.go(label(s.titles, section))}
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          </>
-        )}
         <ReportCounts report={report} />
-        <p className="small" role="note">
-          {sm.note}
-        </p>
+        {cr.strengths.length > 0 && (
+          <ModelReading title={t.strengthsTitle}>
+            <ul>{cr.strengths.slice(0, 3).map(x => <li key={x.title}><strong>{x.title}</strong> · {x.benefit} <small>{t.scopeTitle} <code>{x.scope}</code></small></li>)}</ul>
+            <button type="button" className="link" onClick={() => go('code_review')}>{s.go(s.titles.code_review)}</button>
+          </ModelReading>
+        )}
+        {d.comparisons.length > 0 && (
+          <ModelReading title={t.comparisonsTitle}>
+            <Table stacked head={[t.statementTitle, t.scopeTitle, s.col.status]}
+              rows={d.comparisons.slice(0, 3).map(x => [x.statement, x.scope, label(t.assessment, x.status)])} />
+            <button type="button" className="link" onClick={() => go('documents')}>{s.go(s.titles.documents)}</button>
+          </ModelReading>
+        )}
+
         <h6>{s.stateTable}</h6>
         <Table
           head={[s.section, s.col.status, s.counts]}
@@ -788,12 +837,13 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
           })}
         />
       </section>
-      {history && <ComparisonSection load={history.load} reload={history.reload} />}
+      {history && (!tabbed || active==='overview') && <ComparisonSection load={history.load} reload={history.reload} />}
       {ORDER.map((key) => block(key, bodies[key]))}
       <details className="report-section">
         <summary>
           <strong>{s.appendix}</strong>
         </summary>
+        <p>{t.revision(report.revision)}</p>
         <ReportScope report={report} />
         <ReportCalls report={report} />
         <p>

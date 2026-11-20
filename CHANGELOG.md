@@ -4,6 +4,17 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 플랫폼 계정으로 소스 읽기와 근거 중심 보고서
+
+- 설치에 지정한 GitHub.com·GHES 계정과 Linux 계정으로 소스를 읽는다. 사용자는 Git URL 또는 로컬/NFS 프로젝트 경로를 입력한다. 같은 주소로 시작한 서로 다른 사용자의 프로젝트와 보고서는 독립적으로 보관한다.
+- 문서 품질, 문서와 구현의 일치 여부, 코드 강점에 적용 범위와 근거를 연결했다. 웹 보고서는 프로젝트·경로·실행 시각과 상태로 시작하고, 문서 및 코드 탭에서 분석 당시 줄을 펼칠 수 있다. 코드 미포함 내보내기는 발췌와 모델 서술을 제외한다.
+- GPT-6.1-Terra와 GPT-6-Luna로 같은 입력을 반복 평가할 수 있다. 평가 relay 하나의 장부가 명시적으로 승인된 예산(최대 15달러)을 두 모델에 함께 적용한다.
+
+### 추가 — 이메일 계정과 GitHub 저장소 웹훅
+
+- 이메일과 비밀번호로 회원가입하면 바로 로그인한다. 정규화된 주소는 PostgreSQL에서 유일하다. 이전 사용자 이름과 로그인 링크, 프로젝트 소유권을 유지하며 같은 소스를 등록한 사용자도 각자 프로젝트를 소유한다. PostgreSQL 경쟁·격리와 Chromium 가입·중복·재로그인을 확인했다(TC-266).
+- 지정한 GitHub.com·GHES 저장소의 서명된 PR 이벤트와 실제 플랫폼 계정 멘션은 설정한 프로젝트의 실행을 요청한다. 중복 전달은 PostgreSQL에서 처리하고 포크 PR은 자동 실행에서 제외한다. 가짜 GitHub API와 PostgreSQL로 확인했다(TC-28). 실제 GitHub.com·GHES의 웹훅 전달은 미실행이다.
+
 ### 고침 — Git 입력 확보
 
 - Git 입력을 확보하는 임시 저장소에서 git의 자동 유지보수(`maintenance.auto`, `gc.auto`)를 끈다. git 2.56은 fetch 뒤에 분리된 유지보수 프로세스를 띄우는데, 한 번 쓰고 지우는 저장소에는 필요 없고 다음 명령과 겹칠 수 있다. CI에서 `TestGitPullRequestThatMovedFetchesThePinnedCommit`이 간헐적으로 `source_unavailable`로 실패한 뒤 넣었다. 로컬(git 2.53·2.56)에서는 그 실패를 재현하지 못했으므로 원인으로 확정한 것은 아니다.
@@ -22,7 +33,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 - **다른 머신에 서비스**: `codeye up --listen ADDR --plain-http`(경고 한 줄과 함께 평문 HTTP) 또는 `--tls-cert`·`--tls-key`·`--public-origin`(TLS). 듣는 방식은 설정 파일에 저장돼 `codeye start`와 사용자 서비스도 같은 주소로 뜬다. 이 머신의 에이전트와 명령은 loopback listener(기본은 listen 포트 + 1)를 쓴다. 로그인 링크와 관리 화면의 "이 서비스 주소"는 public origin이다([다른 사람 초대](docs/GUIDE.md#다른-사람-초대), A53).
 - **모드 대신 사용자별 허가**: 같은 시작 화면에서 각 사람이 분석할 수 있는 것을 허가로 정한다. 관리자는 웹에서 서버 폴더를 더하고 사용자별로 또는 모두에게 열며(`POST /admin/source-roots`, `PUT /admin/source-roots/{id}/everyone`), Git host를 승인하고(`POST /admin/providers`), 두 스위치 "다른 사용자도 모델 검토 사용"(기본 켬)·"다른 사용자의 저장소 빌드 스크립트 실행 허용"(기본 끔)을 바꾼다(`GET`·`PUT /admin/settings`). 스위치는 run을 시작한 사람 기준이고, 스위치 때문에 빠진 것만 보고서에 `model_review_not_offered`·`repository_code_not_offered`로 남는다. 허용된 폴더가 없는 사람에게는 "이 서버에서 읽도록 허용된 폴더가 없습니다. …"와 읽을 수 있는 폴더 목록을 보인다. `GET /setup`은 사용자마다 답하고 `mode` 필드가 없어졌다.
-- **사용자별 GitHub token**: 계정 메뉴의 GitHub 연결(`GET`·`PUT`·`DELETE /account/github`). token은 `secrets/github-users/<user_id>.json`(0600)에 있고 응답·로그·감사 detail에 없다. `codeye up`이 찾은 token은 관리자의 연결이고 관리자의 token 파일 하나에만 둔다(이전의 `secrets/github.json`은 없어졌다). 모든 GitHub 호출은 그 호출이 대신하는 사람의 token을 쓴다(pull request 고정·Git fetch·결과 댓글은 run을 시작한 사람, 미리 보기는 요청한 사람). token이 없으면 공개 저장소만 읽고 댓글은 `no_token`으로 남는다([누구의 token인가](docs/GITHUB.md#누구의-token인가)).
+- **사용자별 GitHub token**: 계정 메뉴의 GitHub 연결(`GET`·`PUT`·`DELETE /account/github`). token은 `secrets/github-users/<user_id>.json`(0600)에 있고 응답·로그·감사 detail에 없다. `codeye up`이 찾은 token은 관리자의 연결이고 관리자의 token 파일 하나에만 둔다(이전의 `secrets/github.json`은 없어졌다). 모든 GitHub 호출은 그 호출이 대신하는 사람의 token을 쓴다(pull request 고정·Git fetch·결과 댓글은 run을 시작한 사람, 미리 보기는 요청한 사람). token이 없으면 공개 저장소만 읽고 댓글은 `no_token`으로 남는다([누구의 token인가](docs/GITHUB.md#플랫폼-github-계정)).
 - **`codeye up`의 에이전트**는 웹에서 더한 폴더와 Git host를 job에서 받는다(`--controller-sources`, `--git-credential-dir`). 따로 띄운 노드는 운영자 플래그를 상한으로 둔다.
 - migration 0014(`source_root_everyone`, `service_settings`, 감사 action `source_root.everyone_set`·`service.settings_set`·`account.github_token_set`·`account.github_token_removed`). `POST /projects`의 `open_existing`(같은 폴더·저장소면 그 프로젝트를 연다).
 - **고침**: `codeye up --listen ADDR`이 ADDR를 분석 대상으로 읽던 것. 시험 하나(`TestUpGitTarget`)가 실행한 사람의 실제 상태 디렉터리(`~/.local/state/codeye`)를 만들던 것. 새 설치의 관리자 표시 이름은 `admin`이다(기존 설치는 그대로).
@@ -75,7 +86,7 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ### 추가 — GitHub token, pull request 분석, 결과 댓글(개인 모드)
 
-- **token**: `codeye up`이 `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token --hostname github.com` 순으로 github.com token을 찾아 `GET /user`로 확인하고 `<state>/secrets/github.json`(0600)에 둔다. 출력과 `GET /setup`의 `github`는 있음·계정·출처·이유만 보인다. 설정 `"github": {"enabled": false}`가 끈다. 워커는 파일 경로(`--git-credential-file`)만 받아 github.com fetch의 HTTP header로만 보낸다(git 환경변수, argv·URL·작업 사본에 없음). 비공개 github.com 저장소를 읽는다([GitHub token](docs/GITHUB.md#github-token), A46).
+- **token**: `codeye up`이 `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token --hostname github.com` 순으로 github.com token을 찾아 `GET /user`로 확인하고 `<state>/secrets/github.json`(0600)에 둔다. 출력과 `GET /setup`의 `github`는 있음·계정·출처·이유만 보인다. 설정 `"github": {"enabled": false}`가 끈다. 워커는 파일 경로(`--git-credential-file`)만 받아 github.com fetch의 HTTP header로만 보낸다(git 환경변수, argv·URL·작업 사본에 없음). 비공개 github.com 저장소를 읽는다([GitHub token](docs/GITHUB.md#플랫폼-github-계정), A46).
 - **pull request 분석**: `codeye up https://github.com/OWNER/REPO/pull/N`과 화면 입력란. controller가 base/head SHA, head 저장소(fork), 변경 파일·상태·변경 줄을 run에 한 번 고정하고(`runs.pull_request`, migration 12, `POST /projects/{id}/runs`의 `pull_request: {number, comment?}`), 워커가 `refs/pull/N/head`를 받아 고정 SHA를 확인한다. snapshot manifest는 branch 대신 `source_ref`를 싣는다. 새 push 뒤 다시 주면 새 run이고 비교 기준은 같은 pull request의 이전 run이다([pull request 분석](docs/GITHUB.md#pull-request-분석)).
 - **검토 순서**: pull request run은 변경 파일, 같은 폴더 파일, 나머지 순서가 A45의 분류·순위보다 앞선다. 삭제 파일은 검토하지 않는다. 범위 산출물 order `pull_request_changed_first`, 파일 label `changed`·`neighbor`. pull request가 아닌 run의 계획과 요청 바이트는 그대로다(기존 계획·요청 바이트 고정 시험 통과. 회귀 집합 dry run은 실행하지 않았다)([검토 우선순위](docs/REVIEW.md#검토-우선순위)).
 - **보고서 builder 9**: `pull_request` 절이 발견·도구 진단을 변경된 줄·변경 파일·변경 파일의 다른 줄·그 밖으로 나누고(patch가 없으면 파일 단위), 요약이 pull request·SHA·모델에 보낸 변경 파일 수를 말하며 "저장소의 나머지는 같은 깊이로 검토하지 않았을 수 있다"고 쓴다([pull request 보고서](docs/REPORT.md#pull-request-보고서), [예시](examples/report-pull-request.json)).

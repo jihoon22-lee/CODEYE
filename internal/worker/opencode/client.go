@@ -109,7 +109,7 @@ func (cfg Config) valid() bool {
 	switch {
 	case cfg.RelayFile != "":
 		return gateway && cfg.CredentialFile == "" && filepath.IsAbs(cfg.RelayFile) &&
-			(cfg.Model == "codeye-gateway/gpt-6.2-sol" || cfg.Model == "codeye-gateway/gpt-6.1-sol")
+			executor.MeteredModel(strings.TrimPrefix(cfg.Model, executor.GatewayProvider+"/"))
 	case cfg.CredentialFile != "":
 		return !gateway && filepath.IsAbs(cfg.CredentialFile)
 	}

@@ -10,7 +10,10 @@
 // tasks succeeded and a registered decoder accepted their result bytes.
 package report
 
-import "time"
+import (
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
+	"time"
+)
 
 // Version identifiers of this builder. BuilderVersion is part of the input
 // digest: a new builder version publishes a new report revision.
@@ -37,7 +40,8 @@ const (
 	// 0.3 only: the code review section has no pack field, every review call
 	// carries pack_id and pack_version, and a plan without a review task
 	// requires none.
-	BuilderVersion = "10"
+	// Version 11 adds report context, source excerpts and document/code insights.
+	BuilderVersion = "11"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -66,6 +70,7 @@ const (
 // Report is the stored, canonical report document. Field names follow
 // schemas/report.schema.json (v0.1 plus the builder's additive properties).
 type Report struct {
+	Project        *ProjectInfo  `json:"project,omitempty"`
 	SchemaVersion  string        `json:"schema_version"`
 	Demo           bool          `json:"demo"`
 	ID             string        `json:"id"`
@@ -117,6 +122,14 @@ type Builder struct {
 // include_code=true; Project(false) produces the code-free export.
 type Export struct {
 	IncludeCode bool `json:"include_code"`
+}
+
+// ProjectInfo records the source and worker interval for this revision.
+type ProjectInfo struct {
+	Name       string `json:"name"`
+	Source     string `json:"source,omitempty"`
+	StartedAt  string `json:"started_at,omitempty"`
+	FinishedAt string `json:"finished_at,omitempty"`
 }
 
 type Inputs struct {
@@ -400,15 +413,16 @@ type Claim struct {
 // Evidence is a reference to a collected fact. Only the collection layer
 // (decoders over verified artifacts) creates evidence.
 type Evidence struct {
-	ID              string    `json:"id"`
-	Kind            string    `json:"kind"`
-	Description     string    `json:"description"`
-	Location        *Location `json:"location,omitempty"`
-	BlobSHA256      string    `json:"blob_sha256,omitempty"`
-	ArtifactID      string    `json:"artifact_id,omitempty"`
-	TaskExecutionID string    `json:"task_execution_id,omitempty"`
-	ExitStatus      string    `json:"exit_status,omitempty"`
-	JSONPointer     *string   `json:"json_pointer,omitempty"`
+	Excerpt         *sourceexcerpt.Excerpt `json:"excerpt,omitempty"`
+	ID              string                 `json:"id"`
+	Kind            string                 `json:"kind"`
+	Description     string                 `json:"description"`
+	Location        *Location              `json:"location,omitempty"`
+	BlobSHA256      string                 `json:"blob_sha256,omitempty"`
+	ArtifactID      string                 `json:"artifact_id,omitempty"`
+	TaskExecutionID string                 `json:"task_execution_id,omitempty"`
+	ExitStatus      string                 `json:"exit_status,omitempty"`
+	JSONPointer     *string                `json:"json_pointer,omitempty"`
 }
 
 type Recommendation struct {

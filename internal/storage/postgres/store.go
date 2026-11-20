@@ -109,7 +109,7 @@ func classify(err error) error {
 	}
 	// Store sentinels that carry a reason the API states; each wraps a
 	// domain class, so callers that only test the class still match.
-	for _, e := range []error{ErrIdempotencyConflict, ErrSelfReset, ErrResetNeedsUsername} {
+	for _, e := range []error{ErrIdempotencyConflict, ErrSelfReset, ErrResetNeedsUsername, ErrEmailTaken} {
 		if errors.Is(err, e) {
 			return e
 		}

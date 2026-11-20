@@ -1,15 +1,12 @@
 import { useId, useState, type FormEvent } from 'react';
-import { ApiError, SETUP_AVAILABLE_KEYS, type AnalysisChoices, type Api, type Project, type Provider, type Setup } from './api';
+import { SETUP_AVAILABLE_KEYS, type AnalysisChoices, type Api, type Project, type Provider, type Setup } from './api';
 import { describeError, isTerminalRun, type ErrorText } from './format';
 import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
-import { CHOICE_AVAILABILITY, choiceLocked, choicesFor, noFolderFor, parseTarget, quickBody, unavailableReason } from './quickStart';
+import { CHOICE_AVAILABILITY, choiceLocked, choicesFor, parseTarget, quickBody, unavailableReason } from './quickStart';
 import { ErrorNote } from './RunPanel';
 
 type Props = { api: Api; userId: string; idempotency: Idempotency; setup: Setup | null; providers: Provider[]; onStarted: (project: Project, runId: string) => void };
-
-// A refused folder path: what to say and the folders this user may read.
-type FolderProblem = { message: string; folders: string[] };
 
 // The first screen for every user: one field (a Git address, or a folder on the server the user
 // may read) and the analyze button. The project is registered (or the user's existing one of the
@@ -22,7 +19,6 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
   const [touched, setTouched] = useState<Partial<AnalysisChoices>>({});
   const [comment, setComment] = useState<boolean | null>(null); // null: the project's remembered choice
   const [error, setError] = useState<string | null>(null);
-  const [folderProblem, setFolderProblem] = useState<FolderProblem | null>(null);
   const [serverError, setServerError] = useState<ErrorText | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const uid = useId();
@@ -39,10 +35,8 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
     event.preventDefault();
     if (submitting) return;
     setServerError(null);
-    setFolderProblem(null);
     const { target, error: invalid } = parseTarget(input);
     if (!target) { setError(invalid); return; }
-    if (noFolderFor(target, setup)) { setError(null); setFolderProblem({ message: q.noFolder, folders: [] }); return; }
     const { body, error: refused } = quickBody(target, name, shownBranch, choices, providers, setup);
     if (!body) { setError(refused); return; }
     setError(null);
@@ -74,12 +68,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
       setComment(null);
       onStarted(project, runId);
     } catch (e) {
-      if (e instanceof ApiError && (e.code === 'LOCAL_PATH_NOT_ALLOWED' || e.code === 'FOLDER_NOT_READABLE')) {
-        const folders = e.readableFolders ?? setup?.readable_folders ?? [];
-        setFolderProblem({ message: e.code === 'FOLDER_NOT_READABLE' && folders.length > 0 ? q.outsideFolders : q.noFolder, folders });
-      } else {
-        setServerError(describeError(e));
-      }
+      setServerError(describeError(e));
     } finally {
       setSubmitting(false);
     }
@@ -101,15 +90,11 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
     <div className="field">
       <label htmlFor="start-target">{q.field}</label>
       <input id="start-target" type="text" autoComplete="off" spellCheck={false} placeholder={q.placeholder} value={input}
-        aria-invalid={error !== null || folderProblem !== null} aria-describedby={`${uid}-help${error ? ` ${uid}-error` : ''}${folderProblem ? ' start-folder-error' : ''}`}
-        onChange={e => { setInput(e.target.value); setError(null); setFolderProblem(null); }} />
+        aria-invalid={error !== null} aria-describedby={`${uid}-help${error ? ` ${uid}-error` : ''}`}
+        onChange={e => { setInput(e.target.value); setError(null); }} />
       <small id={`${uid}-help`} className="small">{q.help}</small>
       {error && <small id={`${uid}-error`} role="alert" className="error">{error}</small>}
-      {folderProblem && <div id="start-folder-error" role="alert" className="error">
-        <p>{folderProblem.message}</p>
-        <p className="small">{q.allowedFolders}: {folderProblem.folders.length === 0 ? q.allowedFoldersNone : null}</p>
-        {folderProblem.folders.length > 0 && <ul className="plain">{folderProblem.folders.map(f => <li key={f}><code>{f}</code></li>)}</ul>}
-      </div>}
+
     </div>
     {limits.length > 0 && <div id="start-unavailable" className="notice small">
       <p>{q.limitsTitle}</p>

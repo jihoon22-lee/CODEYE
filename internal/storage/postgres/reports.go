@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -45,9 +46,11 @@ type PublicationTask struct {
 
 // Publication is everything the report service loads for one run.
 type Publication struct {
-	Run                Run
-	Profile, ScopeKind string
-	Snapshot           struct {
+	ProjectName, SourceLocation string
+	StartedAt, FinishedAt       *time.Time
+	Run                         Run
+	Profile, ScopeKind          string
+	Snapshot                    struct {
 		ID, Consistency string
 		ManifestDigest  *string
 		SourceSHA       *string
@@ -128,6 +131,20 @@ func (s *Store) LoadPublication(ctx context.Context, runID string) (Publication,
 		if err = tx.QueryRow(ctx, "SELECT id::text,consistency,manifest_digest,source_sha FROM snapshots WHERE id=$1", *r.SnapshotID).
 			Scan(&p.Snapshot.ID, &p.Snapshot.Consistency, &p.Snapshot.ManifestDigest, &p.Snapshot.SourceSHA); err != nil {
 			return p, err
+		}
+		var source, root string
+		if err := tx.QueryRow(ctx, `SELECT p.name, COALESCE(pr.config->'source'->>'repository_url',pr.config->'source'->>'relative_path',''),
+              COALESCE(sr.path,''), c.created_at,c.released_at
+            FROM projects p JOIN project_revisions pr ON pr.project_id=p.id AND pr.revision=$2
+            LEFT JOIN source_roots sr ON sr.id::text=pr.config->'source'->>'source_root_id'
+            LEFT JOIN attempts a ON a.run_id=$3 AND a.epoch=$4
+            LEFT JOIN capacity_reservations c ON c.attempt_id=a.id
+            WHERE p.id=$1`, r.ProjectID, r.ProjectRevision, runID, r.LeaseEpoch).Scan(&p.ProjectName, &source, &root, &p.StartedAt, &p.FinishedAt); err != nil {
+			return p, err
+		}
+		p.SourceLocation = source
+		if root != "" {
+			p.SourceLocation = filepath.Join(root, filepath.FromSlash(source))
 		}
 		a := &p.Attempt
 		if err = tx.QueryRow(ctx, `SELECT id::text,number,epoch,status,cleanup_state,completion_status,completion_reason,result_manifest_id::text

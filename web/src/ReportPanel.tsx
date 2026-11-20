@@ -5,7 +5,7 @@ import { describeError } from './format';
 import { ComparisonSection, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportTasks, TextList, Verdict, explainReason, type ReportHistory } from './ReportParts';
+import { ReportIdentity, FindingList, ReportCalls, ReportCounts, ReportExports, ReportScope, ReportTasks, TextList, Verdict, explainReason, type ReportHistory } from './ReportParts';
 import { SectionedReport } from './ReportSections';
 
 export type { ReportHistory } from './ReportParts';
@@ -17,8 +17,10 @@ export function ReportDocument({ report, history }: { report: AnalysisReport; hi
     <article className="report-document" aria-label={t.title}>
       <header>
         <h4>{t.title}</h4>
+        {report.project?.name && <p className="report-project">{report.project.name}</p>}
         <span>{t.revision(report.revision)}</span>
       </header>
+      <ReportIdentity report={report} />
       <Verdict report={report} />
       <ReportCounts report={report} />
       {report.limitations.length > 0 && (
@@ -89,7 +91,7 @@ export function ReportPanel({ api, runID, extra }: { api: Api; runID: string; ex
       });
     return () => controller.abort();
   }, [api, runID, requested]);
-  if (report) return <>{extra?.(report)}<ReportDocument report={report} history={{ load, api, reload }} /></>;
+  if (report) return <><ReportDocument report={report} history={{ load, api, reload }} />{extra?.(report)}</>;
   return (
     <section>
       {error && <p role="alert">{error}</p>}

@@ -421,10 +421,17 @@ def check_account_contracts() -> None:
     check_account_vocabulary(vocabulary)
     example = json_file(ROOT / "examples/accounts.json")
     session, with_link, member, page = (api_validator(n) for n in ("SessionView", "UserWithLink", "Member", "AuditPage"))
+    registration = api_validator("Registration")
     role = api_validator("ProjectRole")
 
     def check(doc: dict) -> None:
         session.validate(doc["session"])
+        registration.validate(doc["registration"])
+        signed_up = doc["registration_session"]
+        session.validate(signed_up)
+        ensure(signed_up["email"] == doc["registration"]["email"].strip().lower(), "Registration response email is canonical")
+        ensure(signed_up["has_password"] and not signed_up["is_admin"] and not signed_up["must_change_password"]
+               and signed_up["username"] is None and "password" not in signed_up, "A registered user has a regular password session")
         with_link.validate(doc["created_user"])
         ensure(doc["created_user"]["user"]["must_change_password"] and not doc["created_user"]["user"]["has_password"],
                "An account created by an administrator has no password and must set one")
@@ -457,6 +464,9 @@ def check_account_contracts() -> None:
         ("unknown audit action", lambda d: d["audit"]["items"][0].update(action="report.viewed")),
         ("audit detail with a password", lambda d: d["audit"]["items"][2]["detail"].update(password="hunter2hunter2")),
         ("session without must_change_password", lambda d: d["session"].pop("must_change_password")),
+        ("signup request sets admin role", lambda d: d["registration"].update(is_admin=True)),
+        ("signup response exposes password", lambda d: d["registration_session"].update(password=d["registration"]["password"])),
+        ("signup response exposes an unnormalized email", lambda d: d["registration_session"].update(email="Dana+review@EXAMPLE.Test")),
         ("reset notice without its time", lambda d: d["session"]["password_reset"].pop("reset_at")),
         ("reset notice that can be dismissed", lambda d: d["session"]["password_reset"].update(acknowledged=True)),
         ("user view with a password hash", lambda d: d["created_user"]["user"].update(password_hash="00")),
@@ -481,20 +491,17 @@ def check_account_contracts() -> None:
 
 
 def check_shared_service_contracts() -> None:
-    """One service, per-user permissions (docs/API.md#설치-정보, A53): the
-    answers recorded from a real `codeye up --plain-http` fit their OpenAPI
-    schemas; a user's setup says why a path cannot be used exactly when no
-    folder is readable; the GitHub connection never carries a token."""
+    """Shared platform source access and per-user analysis options."""
     example = json_file(ROOT / "examples/shared-service.json")
-    setup, account, settings, root, provider, error = (api_validator(n) for n in ("Setup", "AccountGitHub", "ServiceSettings", "AdminSourceRoot", "AdminProvider", "Error"))
+    setup, settings, root, provider, error = (api_validator(n) for n in ("Setup", "ServiceSettings", "AdminSourceRoot", "AdminProvider", "Error"))
 
     def check(doc: dict) -> None:
         for key in ("setup_member", "setup_member_after"):
             s = doc[key]
             setup.validate(s)
             path = s["available"]["local_path"]
-            ensure(path["available"] == bool(s["readable_folders"]) and (path["reason"] == "no_allowed_folder") == (not s["readable_folders"]),
-                   "local_path availability must follow readable_folders")
+            ensure(path["available"] and path["reason"] is None and s["readable_folders"] == [],
+                   "Local path registration follows service account permissions without exposing server folder lists")
             for tool in (s["tools"] or {}).get("tools", []):
                 ensure(s["is_admin"] or not {"path", "hint", "source"} & set(tool), "A user who is not an administrator sees no tool path or hint")
             built = s["available"]["build_scripts"]
@@ -502,10 +509,8 @@ def check_shared_service_contracts() -> None:
                    "A switch that is off must also turn the default off")
         error.validate(doc["folder_refusal"])
         refusal = doc["folder_refusal"]["error"]
-        ensure(refusal["code"] in ("LOCAL_PATH_NOT_ALLOWED", "FOLDER_NOT_READABLE") and isinstance(refusal.get("details", {}).get("readable_folders"), list),
-               "A refused path names the folders the user may read")
-        account.validate(doc["account_github"])
-        ensure("token" not in doc["account_github"], "The GitHub connection never answers the token")
+        ensure(refusal["code"] == "FOLDER_NOT_READABLE" and "details" not in refusal,
+               "A refused path reports the permission failure without exposing server folders")
         settings.validate(doc["settings"])
         ensure(doc["settings"]["service_origin"] in [a["origin"] for a in doc["settings"]["service_addresses"]],
                "The address to share is one the service answers on")
@@ -517,22 +522,21 @@ def check_shared_service_contracts() -> None:
                "A refused address is told which addresses work and the command that adds it")
         root.validate(doc["source_root"])
         provider.validate(doc["provider"])
-        ensure(doc["source_root"]["path"] in doc["setup_member_after"]["readable_folders"] and doc["source_root"]["everyone"],
-               "A folder opened to everyone is readable by every user")
+
 
     check(example)
     negatives = 0
     for name, edit in (
         ("setup with a mode", lambda d: d["setup_member"].update(mode="server")),
-        ("connection that answers the token", lambda d: d["account_github"].update(token="ghp_example-token")),
-        ("path available without a folder", lambda d: d["setup_member"]["available"]["local_path"].update(available=True, reason=None)),
+        ("connection that answers the token", lambda d: d["setup_member"]["github_connections"][0].update(token="ghp_example-token")),
+        ("path gated by a grant", lambda d: d["setup_member"]["available"]["local_path"].update(available=False, reason="no_allowed_folder")),
         ("tool path shown to a user", lambda d: d["setup_member"]["tools"]["tools"][0].update(path="/usr/bin/go")),
         ("reason outside the vocabulary", lambda d: d["setup_member"]["available"]["build_scripts"].update(reason="server_mode")),
         ("settings without the service address", lambda d: d["settings"].pop("service_origin")),
         ("settings without the address list", lambda d: d["settings"].pop("service_addresses")),
         ("address of an unknown kind", lambda d: d["settings"]["service_addresses"][0].update(kind="docker")),
         ("refused address without the command", lambda d: d["host_refusal"]["error"]["details"].pop("add_command")),
-        ("refusal without readable folders", lambda d: d["folder_refusal"]["error"].pop("details")),
+        ("refusal with server folders", lambda d: d["folder_refusal"]["error"].update(details={"readable_folders": ["/srv/private"]})),
         ("provider of another kind", lambda d: d["provider"].update(kind="gitlab")),
     ):
         bad = copy.deepcopy(example)

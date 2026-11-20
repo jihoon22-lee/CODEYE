@@ -177,7 +177,7 @@ class PolicyTests(unittest.TestCase):
     def test_budget_parsing_and_hard_cap(self):
         self.assertEqual(g.parse_budget("9.99"), 9_990_000)
         self.assertEqual(g.parse_budget("0.5"), 500_000)
-        for bad in ("10", "9.990001", "0", "-1", "nan", "inf", "1.0000001", "abc"):
+        for bad in ("16", "15.000001", "0", "-1", "nan", "inf", "1.0000001", "abc"):
             with self.assertRaises(ValueError, msg=bad):
                 g.parse_budget(bad)
 
@@ -691,7 +691,7 @@ class ProcessTests(unittest.TestCase):
         self.assertEqual(self.cli("--ready-file", ready, "--ledger", self.ledger, "--model", MODEL,
                                   key=CANARY_KEY).returncode, 2)
         fresh = os.path.join(self.dir.name, "fresh.json")
-        for args in (["--budget-usd", "10"], ["--budget-usd", "9.991"], ["--model", "gpt-4o"]):
+        for args in (["--budget-usd", "16"], ["--budget-usd", "15.001"], ["--model", "gpt-4o"]):
             argv = ["--ready-file", fresh, "--ledger", self.ledger, "--model", MODEL, *args]
             self.assertNotEqual(self.cli(*argv, key=CANARY_KEY).returncode, 0, args)
         missing = self.cli("--ready-file", fresh, "--ledger", self.ledger, "--model", MODEL)

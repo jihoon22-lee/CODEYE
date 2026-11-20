@@ -260,6 +260,7 @@ def run(base, root, env, web=True, coverage_check=True):
     relay = Path(os.environ["CODEYE_PILOT_RELAY_FILE"]).resolve(strict=True)
     output = Path(os.environ["CODEYE_PILOT_RESULTS"]).resolve()
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    model = json.loads(relay.read_text())["model"]
     binary = base / "codeye"
     opencode = shutil.which("opencode")
     go = shutil.which("go")
@@ -309,7 +310,7 @@ def run(base, root, env, web=True, coverage_check=True):
             "--go-mod-cache", subprocess.check_output([go, "env", "GOMODCACHE"], text=True).strip(),
             "--model-source-root", root_id,
             "--opencode", opencode,
-            "--model", "codeye-gateway/gpt-6.2-sol",
+            "--model", "codeye-gateway/" + model,
             "--model-relay-file", relay,
             # 비밀정보 선별이 있어야 모듈 단위 slice가 실행된다. 호출 상한은 시도마다 적용된다.
             *(["--gitleaks", os.environ["CODEYE_PILOT_GITLEAKS"]] if os.environ.get("CODEYE_PILOT_GITLEAKS") else []),

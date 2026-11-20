@@ -39,13 +39,10 @@ type PullRequestComment struct {
 // request always has a higher version) and the report revision to render.
 type CommentJob struct {
 	RunID, ProjectID string
-	// RequesterID is the user who started the run: the comment is posted
-	// with that user's GitHub token only (without one it is not posted).
-	RequesterID    string
-	Pin            domain.PullRequest
-	Version        int64
-	Attempts       int
-	ReportRevision int
+	Pin              domain.PullRequest
+	Version          int64
+	Attempts         int
+	ReportRevision   int
 }
 
 // CommentOutcome is how one posting attempt ended. State pending with
@@ -83,7 +80,7 @@ func (s *Store) DuePullRequestComments(ctx context.Context, limit int, lease tim
 	return transaction(ctx, s, func(tx pgx.Tx) ([]CommentJob, error) {
 		rows, err := tx.Query(ctx, `UPDATE pull_request_comments c SET attempts=c.attempts+1,next_attempt_at=clock_timestamp()+$2*interval '1 millisecond',updated_at=clock_timestamp()
 			FROM runs r WHERE r.id=c.run_id AND c.run_id IN (SELECT run_id FROM pull_request_comments WHERE state='pending' AND next_attempt_at<=clock_timestamp() ORDER BY next_attempt_at LIMIT $1 FOR UPDATE SKIP LOCKED)
-			RETURNING c.run_id::text,c.project_id::text,r.actor_id::text,r.pull_request,r.created_at,c.attempts,c.report_revision`, limit, lease.Milliseconds())
+			RETURNING c.run_id::text,c.project_id::text,r.pull_request,r.created_at,c.attempts,c.report_revision`, limit, lease.Milliseconds())
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +91,7 @@ func (s *Store) DuePullRequestComments(ctx context.Context, limit int, lease tim
 			var raw []byte
 			var revision *int
 			var created time.Time
-			if err := rows.Scan(&j.RunID, &j.ProjectID, &j.RequesterID, &raw, &created, &j.Attempts, &revision); err != nil {
+			if err := rows.Scan(&j.RunID, &j.ProjectID, &raw, &created, &j.Attempts, &revision); err != nil {
 				return nil, err
 			}
 			j.Version = created.UnixMicro()
