@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { userLabel, type AdminProvider, type AdminSourceRoot, type UserView } from './accounts';
+import { userLabel, type AdminProvider, type UserView } from './accounts';
 import { AdminUsers } from './AdminUsers';
 import { ApiError, type Api, type ServiceAddress, type ServiceAddressKind, type ServiceSettings } from './api';
 import { CopyText } from './CopyText';
-import { isAbsolutePath } from './quickStart';
 import { AuditLog, type ActorOption } from './AuditLog';
-import { describeError, formatInstant, shorten, type ErrorText } from './format';
+import { describeError, shorten, type ErrorText } from './format';
 import { ko as t } from './locales/ko';
 import { ErrorNote } from './RunPanel';
 import type { SessionController } from './session';
 
-// The administrator area: the address to share, accounts, the service switches, the folders on
-// the server and who may read them, the approved Git hosts and the server-wide audit log. Being
+// The administrator area: the address to share, accounts, the service switches, the approved Git hosts and the server-wide audit log. Being
 // an administrator opens no project; the screen says so.
 
-type Tab = 'users' | 'service' | 'roots' | 'providers' | 'audit';
-const TABS: Tab[] = ['users', 'service', 'roots', 'providers', 'audit'];
+type Tab = 'users' | 'service' | 'providers' | 'audit';
+const TABS: Tab[] = ['users', 'service', 'providers', 'audit'];
 // Pickers need every user; the list is small in practice, so follow the cursor to a fixed bound.
 const MAX_USER_PAGES = 50;
 
@@ -78,7 +76,6 @@ export function AdminView({ api, controller, me }: Props) {
       <h2 id="admin-tab-title">{s.tabs[tab]}</h2>
       {tab === 'users' && <AdminUsers api={api} me={me} users={users} onChanged={reloadUsers} onForbidden={forbidden} />}
       {tab === 'service' && <ServiceSwitches api={api} settings={current} error={settings.error} reload={settings.reload} onSaved={settings.set} onForbidden={forbidden} />}
-      {tab === 'roots' && <SourceRoots api={api} users={users} onForbidden={forbidden} />}
       {tab === 'providers' && <Providers api={api} onForbidden={forbidden} />}
       {tab === 'audit' && <AuditLog load={loadAudit} actors={actors} projectFilter intro={t.accounts.audit.globalIntro} onForbidden={forbidden} />}
     </section>
@@ -142,57 +139,6 @@ function ServiceSwitches({ api, settings, error, reload, onSaved, onForbidden }:
   </>;
 }
 
-function AddSourceRoot({ api, onAdded, onForbidden }: { api: Api; onAdded: () => void; onForbidden: () => void }) {
-  const [path, setPath] = useState('');
-  const [label, setLabel] = useState('');
-  const [everyone, setEveryone] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | ErrorText | null>(null);
-  const [done, setDone] = useState<string | null>(null);
-  const s = t.accounts.admin;
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (busy) return;
-    setDone(null);
-    const value = path.trim();
-    if (value === '') { setError(s.addRootEmpty); return; }
-    if (!isAbsolutePath(value)) { setError(s.addRootNotAbsolute); return; }
-    setBusy(true);
-    setError(null);
-    try {
-      const root = await api.addSourceRoot({ path: value, ...(label.trim() === '' ? {} : { label: label.trim() }), everyone });
-      setPath('');
-      setLabel('');
-      setEveryone(false);
-      setDone(s.rootAdded(root.label));
-      onAdded();
-    } catch (e) {
-      setError(e instanceof ApiError && e.code === 'CONFLICT' ? s.rootConflict : describeError(e));
-      if (e instanceof ApiError && e.status === 403) onForbidden();
-    } finally {
-      setBusy(false);
-    }
-  }
-  return <form className="panel" onSubmit={submit} noValidate aria-labelledby="add-root-title">
-    <h3 id="add-root-title">{s.addRoot}</h3>
-    <div className="field">
-      <label htmlFor="add-root-path">{s.addRootPath}</label>
-      <input id="add-root-path" type="text" autoComplete="off" spellCheck={false} value={path} aria-describedby="add-root-path-help" onChange={e => { setPath(e.target.value); setError(null); }} />
-      <small id="add-root-path-help" className="small">{s.addRootPathHelp}</small>
-    </div>
-    <div className="field">
-      <label htmlFor="add-root-label">{s.addRootLabel}</label>
-      <input id="add-root-label" type="text" maxLength={100} autoComplete="off" value={label} onChange={e => setLabel(e.target.value)} />
-    </div>
-    <div className="field">
-      <label className="inline"><input id="add-root-everyone" type="checkbox" checked={everyone} onChange={e => setEveryone(e.target.checked)} /> {s.addRootEveryone}</label>
-    </div>
-    <button id="add-root-submit" type="submit" className="primary" disabled={busy} aria-busy={busy}>{busy ? s.addingRoot : s.addRootSubmit}</button>
-    <div aria-live="polite">{done && <p role="status">{done}</p>}</div>
-    {typeof error === 'string' ? <p role="alert" className="error">{error}</p> : error && <ErrorNote error={error} />}
-  </form>;
-}
-
 function AddProvider({ api, onAdded, onForbidden }: { api: Api; onAdded: () => void; onForbidden: () => void }) {
   const [host, setHost] = useState('');
   const [busy, setBusy] = useState(false);
@@ -231,104 +177,6 @@ function AddProvider({ api, onAdded, onForbidden }: { api: Api; onAdded: () => v
     <div aria-live="polite">{done && <p role="status">{done}</p>}</div>
     {typeof error === 'string' ? <p role="alert" className="error">{error}</p> : error && <ErrorNote error={error} />}
   </form>;
-}
-
-function SourceRoots({ api, users, onForbidden }: { api: Api; users: UsersState; onForbidden: () => void }) {
-  const { items, error, reload } = useAdminList<AdminSourceRoot>(signal => api.listAdminSourceRoots(signal), onForbidden);
-  const s = t.accounts.admin;
-  return <>
-    <p className="small">{s.rootsIntro}</p>
-    <AddSourceRoot api={api} onAdded={reload} onForbidden={onForbidden} />
-    <p className="small">{s.revokeNote}</p>
-    {error && <><ErrorNote error={{ ...error, message: `${s.rootsLoadFailed} ${error.message}` }} /><button type="button" onClick={reload}>{s.reload}</button></>}
-    {items === null && !error && <p>{s.loading}</p>}
-    {items?.length === 0 && <p>{s.rootsEmpty}</p>}
-    {users.truncated && <p className="small">{s.usersTruncated}</p>}
-    <ul className="plain roots">{items?.map(root => <RootItem key={root.id} api={api} root={root} users={users.items} onChanged={reload} onForbidden={onForbidden} />)}</ul>
-  </>;
-}
-
-function RootItem({ api, root, users, onChanged, onForbidden }: { api: Api; root: AdminSourceRoot; users: UserView[]; onChanged: () => void; onForbidden: () => void }) {
-  const [pick, setPick] = useState('');
-  const [busy, setBusy] = useState<string | null>(null); // user id being changed, or 'grant'
-  const [error, setError] = useState<ErrorText | null>(null);
-  const [done, setDone] = useState(false);
-  const uid = useId();
-  const s = t.accounts.admin;
-  const granted = new Set(root.grants.map(g => g.user_id));
-  const candidates = users.filter(u => !u.disabled && !granted.has(u.id));
-  const nameOf = (id: string, username: string | null) => {
-    const u = users.find(x => x.id === id);
-    return u ? userLabel(u) : username ?? id.slice(0, 8);
-  };
-
-  async function change(userId: string, action: 'grant' | 'revoke') {
-    setBusy(action === 'grant' ? 'grant' : userId);
-    setError(null);
-    setDone(false);
-    try {
-      if (action === 'grant') await api.grantSourceRoot(root.id, userId);
-      else await api.revokeSourceRoot(root.id, userId);
-      setPick('');
-      setDone(true);
-      onChanged();
-    } catch (e) {
-      setError(describeError(e));
-      if (e instanceof ApiError && e.status === 403) onForbidden();
-      else onChanged();
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function setEveryone(everyone: boolean) {
-    setBusy('everyone');
-    setError(null);
-    setDone(false);
-    try {
-      await api.setSourceRootEveryone(root.id, everyone);
-      setDone(true);
-      onChanged();
-    } catch (e) {
-      setError(describeError(e));
-      if (e instanceof ApiError && e.status === 403) onForbidden();
-      else onChanged();
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  return <li data-root={root.label}>
-    <h3>{root.label}</h3>
-    {root.path && <p>{s.rootPath}: <code>{root.path}</code></p>}
-    <p className="small">{s.rootCreated(formatInstant(root.created_at))} · <code>{root.id}</code></p>
-    <div className="field">
-      <label className="inline"><input type="checkbox" data-root-everyone={root.label} checked={root.everyone} disabled={busy !== null} aria-label={s.rootEveryoneFor(root.label)}
-        onChange={e => void setEveryone(e.target.checked)} /> {s.rootEveryone}</label>
-      {root.everyone && <small className="small">{s.rootEveryoneOn}</small>}
-    </div>
-    <h4>{s.grants}</h4>
-    {root.grants.length === 0 ? <p className="small">{s.grantsNone}</p>
-      : <ul className="plain">{root.grants.map(g => {
-        const name = nameOf(g.user_id, g.username);
-        return <li key={g.user_id}>
-          {name} <span className="small">{s.grantedAt(formatInstant(g.granted_at))}</span>{' '}
-          <button type="button" aria-label={s.revokeFor(name, root.label)} onClick={() => void change(g.user_id, 'revoke')} disabled={busy !== null}>
-            {busy === g.user_id ? s.revoking : s.revoke}
-          </button>
-        </li>;
-      })}</ul>}
-    <div className="field">
-      <label htmlFor={`${uid}-pick`}>{s.grantUser(root.label)}</label>
-      <select id={`${uid}-pick`} value={pick} onChange={e => setPick(e.target.value)} disabled={busy !== null}>
-        <option value="">{candidates.length === 0 ? s.grantNone : s.grantPick}</option>
-        {candidates.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
-      </select>
-    </div>
-    <button type="button" onClick={() => void change(pick, 'grant')} disabled={pick === '' || busy !== null}>{busy === 'grant' ? s.granting : s.grant}</button>
-    <div aria-live="polite">{done && <p role="status">{s.changed}</p>}</div>
-    {error && <ErrorNote error={error} />}
-  </li>;
 }
 
 function Providers({ api, onForbidden }: { api: Api; onForbidden: () => void }) {

@@ -32,14 +32,10 @@
         "reason": null
       },
       "local_path": {
-        "available": false,
-        "reason": "no_allowed_folder"
-      },
-      "pull_requests": {
         "available": true,
         "reason": null
       },
-      "github_token": {
+      "pull_requests": {
         "available": true,
         "reason": null
       },
@@ -202,34 +198,23 @@
         }
       ]
     },
-    "github": {
-      "enabled": true,
-      "host": "github.com",
-      "token": false,
-      "account": null,
-      "source": null,
-      "reason": null
-    },
-    "offline": false
+    "offline": false,
+    "github_connections": [
+      {
+        "enabled": true,
+        "host": "github.com",
+        "token": true,
+        "account": "codeye-platform"
+      }
+    ]
   },
   "folder_refusal": {
     "error": {
-      "code": "LOCAL_PATH_NOT_ALLOWED",
-      "message": "this server allows you no folder to read; use a Git address or ask the administrator to allow a folder",
+      "code": "FOLDER_NOT_READABLE",
+      "message": "the service account cannot read this folder",
       "retryable": false,
-      "request_id": "req_36c10e79117b9eaa7c370f84",
-      "details": {
-        "readable_folders": []
-      }
+      "request_id": "req_36c10e79117b9eaa7c370f84"
     }
-  },
-  "account_github": {
-    "host": "github.com",
-    "connected": true,
-    "account": "bob-gh",
-    "source": "web",
-    "storable": true,
-    "reason": null
   },
   "settings": {
     "others_model_review": true,
@@ -288,9 +273,7 @@
         "github.com"
       ]
     },
-    "readable_folders": [
-      "/srv/code/shared"
-    ],
+    "readable_folders": [],
     "analysis_defaults": {
       "local": {
         "send_source_to_model": true,
@@ -313,10 +296,6 @@
         "reason": null
       },
       "pull_requests": {
-        "available": true,
-        "reason": null
-      },
-      "github_token": {
         "available": true,
         "reason": null
       },
@@ -479,15 +458,15 @@
         }
       ]
     },
-    "github": {
-      "enabled": true,
-      "host": "github.com",
-      "token": true,
-      "account": "bob-gh",
-      "source": "web",
-      "reason": null
-    },
-    "offline": false
+    "offline": false,
+    "github_connections": [
+      {
+        "enabled": true,
+        "host": "github.com",
+        "token": true,
+        "account": "codeye-platform"
+      }
+    ]
   },
   "host_refusal": {
     "error": {

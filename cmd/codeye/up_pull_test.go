@@ -12,7 +12,7 @@ import (
 // browser's /files tab too); other hosts and plain repository addresses are
 // not; --comment knows whether it was given.
 func TestPullRequestTargetAndCommentFlag(t *testing.T) {
-	cfg := &instance.Config{GitHosts: []string{"github.com", "gitlab.example"}}
+	cfg := &instance.Config{GitHosts: []string{"github.com", "ghe.example"}}
 	for in, want := range map[string]int{
 		"https://github.com/acme/widget/pull/7":        7,
 		"https://github.com/acme/widget/pull/12/files": 12,
@@ -23,10 +23,10 @@ func TestPullRequestTargetAndCommentFlag(t *testing.T) {
 			t.Fatalf("%s: %+v %v %v", in, tg, ok, err)
 		}
 	}
-	if _, ok, err := pullRequestTarget(cfg, "https://gitlab.example/acme/widget/pull/7"); !ok || err == nil {
+	if target, ok, err := pullRequestTarget(cfg, "https://ghe.example/acme/widget/pull/7"); !ok || err != nil || target.host != "ghe.example" {
 		t.Fatalf("another host: %v %v", ok, err)
 	}
-	if _, ok, _ := pullRequestTarget(&instance.Config{GitHosts: []string{"gitlab.example"}}, "https://github.com/acme/widget/pull/7"); !ok {
+	if _, ok, _ := pullRequestTarget(&instance.Config{GitHosts: []string{"ghe.example"}}, "https://github.com/acme/widget/pull/7"); !ok {
 		t.Fatal("a host outside git_hosts is not refused as a pull request")
 	}
 	for _, in := range []string{"", "https://github.com/acme/widget", "https://github.com/acme/widget/tree/main", "./pull/7"} {

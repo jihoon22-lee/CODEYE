@@ -9,7 +9,7 @@ import { ErrorNote } from './RunPanel';
 const t = ko.tools;
 
 // The tools panel: the tools `codeye up` found (<state>/tools.json), how to add a missing one,
-// the model, Git and the folders this user may read. A controller that recorded no setup (started
+// the model and platform source access. A controller that recorded no setup (started
 // on its own) does not know its nodes' tools; there the doctor file view stays. Tool paths and
 // hints reach administrators only.
 export function ToolsView({ api }: { api: Api }) {
@@ -52,7 +52,12 @@ export function ToolsView({ api }: { api: Api }) {
         <dt>{t.git}</dt>
         <dd>{setup.git?.available ? t.gitOn(setup.git.hosts.join(', ')) : t.gitOff}</dd>
         <dt>{t.folders}</dt>
-        <dd>{setup.readable_folders.length === 0 ? t.foldersNone : <ul className="plain">{setup.readable_folders.map(f => <li key={f}><code>{f}</code></li>)}</ul>}<p className="small">{t.foldersNote}</p></dd>
+        <dd>{t.foldersNote}</dd>
+        {(setup.github_connections?.length ?? 0) > 0 && <>
+          <dt>{t.githubConnections}</dt>
+          <dd><ul className="plain">{setup.github_connections?.map(g => <li key={g.host}><code>{g.host}</code> {g.account ? t.githubAccount(g.account) : g.token ? t.githubConfigured : t.githubPublic}</li>)}</ul>
+          {setup.is_admin && <p className="small">{t.githubConfigHelp}</p>}</dd>
+        </>}
       </dl>
     </section>
   </>;

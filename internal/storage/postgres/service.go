@@ -14,24 +14,16 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// Permissions of the shared service (docs/SECURITY.md#서버-경로-허가): who may use a
-// source root, the administrator's service switches and the effective analysis
-// choices a claim hands to a node.
+// Settings of the shared service (docs/SECURITY.md#서버-경로-접근): legacy
+// source listings, approved providers, and the analysis offer for each run.
 
 // rootAllowedSQL is the one predicate "user $u may use source root r": a
-// grant for the user, or the root is open to everyone. Registration, the
-// claim re-check, the waiting check and the readable-folder lists all use it.
+// grant for the user, or the root is open to everyone. The legacy root list
+// keeps this filter so it does not reveal private server paths.
 // $1 is the root column or parameter, $2 the user.
 func rootAllowedSQL(root, user string) string {
 	return "(EXISTS(SELECT 1 FROM source_root_grants g WHERE g.source_root_id=" + root + " AND g.user_id=" + user + ")" +
 		" OR EXISTS(SELECT 1 FROM source_root_everyone e WHERE e.source_root_id=" + root + "))"
-}
-
-// rootAllowedLockedSQL is rootAllowedSQL taking share locks on the rows it
-// reads (ordered against a concurrent revoke or close).
-func rootAllowedLockedSQL(root, user string) string {
-	return "(EXISTS(SELECT 1 FROM source_root_grants g WHERE g.source_root_id=" + root + " AND g.user_id=" + user + " FOR SHARE)" +
-		" OR EXISTS(SELECT 1 FROM source_root_everyone e WHERE e.source_root_id=" + root + " FOR SHARE))"
 }
 
 // AddSourceRootBy registers a server folder as a source root (an
@@ -173,28 +165,6 @@ func (s *Store) OfferFor(ctx context.Context, user string) (nodeproto.AnalysisOf
 	}
 	o, err := analysisOffer(ctx, s.pool, user)
 	return o, classify(err)
-}
-
-// RecordGitHubToken writes the audit row of a user storing (set) or
-// removing their own GitHub token. The token itself lives in a file only the
-// service account reads; the row names the host and the account, never the
-// token.
-func (s *Store) RecordGitHubToken(ctx context.Context, user string, set bool, host, login string) error {
-	if !validIDs(user) {
-		return domain.ErrInvalid
-	}
-	action := AuditGitHubTokenRemoved
-	detail := map[string]any{"host": truncateAudit(host)}
-	if set {
-		action = AuditGitHubTokenSet
-		if login != "" {
-			detail["login"] = truncateAudit(login)
-		}
-	}
-	_, err := transaction(ctx, s, func(tx pgx.Tx) (bool, error) {
-		return true, writeAudit(ctx, tx, userAudit(ctx, user, action).target("user", user).with(detail))
-	})
-	return err
 }
 
 // ServiceSettings are the administrator's service-wide switches.

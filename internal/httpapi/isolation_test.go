@@ -25,7 +25,7 @@ import (
 type access int
 
 const (
-	// anyone: no session (POST /session); the request uses no actor cookie.
+	// anyone: no session; the request uses no actor cookie.
 	anyone access = iota
 	// signedIn: any session; the result does not depend on project roles.
 	signedIn
@@ -33,8 +33,6 @@ const (
 	viewerRole
 	runnerRole
 	managerRole
-	// rootHolder: only users granted the source root (the owner here).
-	rootHolder
 	// adminRole: an enabled administrator.
 	adminRole
 )
@@ -133,6 +131,9 @@ func isoCases() map[string]isoCase {
 	return map[string]isoCase{
 		"health": {need: anyone, ok: 200},
 		"ready":  {need: anyone, ok: 200},
+		"account.register": {need: anyone, ok: 201, body: func(w *isoWorld) any {
+			return map[string]string{"email": w.name("member") + "@example.test", "password": "a long enough passphrase"}
+		}},
 		"session.create": {need: anyone, ok: 201, body: func(w *isoWorld) any {
 			token := NewToken()
 			if err := w.e.store.IssueLaunchToken(context.Background(), w.namedUser(), TokenHash(token), time.Minute); err != nil {
@@ -146,7 +147,7 @@ func isoCases() map[string]isoCase {
 		"source_roots.list": {need: signedIn, ok: 200},
 		"providers.list":    {need: signedIn, ok: 200},
 		"projects.list":     {need: signedIn, ok: 200},
-		"projects.create": {need: rootHolder, ok: 201, body: func(w *isoWorld) any {
+		"projects.create": {need: signedIn, ok: 201, body: func(w *isoWorld) any {
 			return map[string]any{"name": w.name("p"), "source": map[string]any{"kind": "local", "source_root_id": w.f.root.ID, "relative_path": "."}}
 		}},
 		"projects.get": {need: viewerRole, ok: 200, ids: isoProject},
@@ -220,9 +221,6 @@ func isoCases() map[string]isoCase {
 		"admin.providers.list": {need: adminRole, ok: 200},
 		"audit.list":           {need: adminRole, ok: 200},
 		// Each actor stores a token of its own (the fake GitHub knows whose).
-		"account.github.get":    {need: signedIn, ok: 200},
-		"account.github.put":    {need: signedIn, ok: 200, body: func(w *isoWorld) any { return map[string]string{"token": isoToken(w.actor)} }},
-		"account.github.delete": {need: signedIn, ok: 204},
 		"admin.source_roots.create": {need: adminRole, ok: 201, body: func(w *isoWorld) any {
 			return map[string]any{"path": w.e.t.TempDir(), "label": w.name("folder"), "everyone": true}
 		}},
@@ -255,11 +253,6 @@ func (w *isoWorld) expected(c isoCase, actor string) (int, string) {
 	switch c.need {
 	case anyone, signedIn:
 		return c.ok, ""
-	case rootHolder:
-		if actor == "owner" {
-			return c.ok, ""
-		}
-		return 404, "NOT_FOUND"
 	case adminRole:
 		if actor == "admin" {
 			return c.ok, ""
@@ -350,8 +343,8 @@ func TestRouteIsolationAndAuditTable(t *testing.T) {
 	actors := []string{"admin", "stranger", "viewer", "runner", "manager", "owner"}
 	covered := map[string]bool{}
 	for _, rt := range e.srv.routes {
-		if rt.node != nodeNone {
-			// Node routes never take a user session.
+		if rt.node != nodeNone || rt.webhook {
+			// Node and webhook routes never take a user session.
 			ids := []string{}
 			for _, part := range rt.parts {
 				if part == "{id}" {
@@ -366,7 +359,7 @@ func TestRouteIsolationAndAuditTable(t *testing.T) {
 				}
 			}
 			if len(rt.audit) == 0 {
-				t.Errorf("node route %s declares no audit", rt.name)
+				t.Errorf("service route %s declares no audit", rt.name)
 			}
 			continue
 		}
@@ -436,12 +429,8 @@ func TestRouteIsolationAndAuditTable(t *testing.T) {
 			t.Errorf("isolation case %s matches no route", name)
 		}
 	}
-	// A GitHub call carries the token of the user it acts for only: each
-	// member's preview of the owner's run uses that member's own token, never
-	// the owner's; a token never reaches a response or the log.
-	for _, a := range actors {
-		e.do("PUT", "/api/v1/account/github", map[string]string{"token": isoToken(a)}, w.actors[a].o()).want(t, 200, "")
-	}
+	// Each authorized preview uses the site's GitHub credential.
+	writeGitHubCredential(t, e.inst.StateDir, "github.com", isoToken("owner"), "gh-owner")
 	for _, a := range []string{"viewer", "manager", "owner"} {
 		before := len(w.gh.Requests())
 		e.do("GET", "/api/v1/runs/"+w.pullRequestRun()+"/pull-request-comment", nil, w.actors[a].o()).want(t, 200, "")
@@ -450,15 +439,13 @@ func TestRouteIsolationAndAuditTable(t *testing.T) {
 			t.Errorf("%s's preview asked GitHub nothing", a)
 		}
 		for _, rq := range calls {
-			if rq.Login != "gh-"+a {
+			if rq.Login != "gh-owner" {
 				t.Errorf("%s's preview carried %q's token: %+v", a, rq.Login, rq)
 			}
 		}
 	}
-	for _, a := range actors {
-		if strings.Contains(e.logs.String(), isoToken(a)) {
-			t.Errorf("%s's token reached the log", a)
-		}
+	if strings.Contains(e.logs.String(), isoToken("owner")) {
+		t.Error("platform token reached the log")
 	}
 	// The manager's session began from the administrator's reset link: its
 	// sign-in row and every row it wrote over the whole table name the
@@ -494,7 +481,7 @@ func TestRouteGatesForEveryRoute(t *testing.T) {
 	}
 	checked := 0
 	for _, rt := range e.srv.routes {
-		if rt.node != nodeNone {
+		if rt.node != nodeNone || rt.webhook {
 			continue
 		}
 		ids := []string{}

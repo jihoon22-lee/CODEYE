@@ -445,7 +445,7 @@ func (s *Server) scaleLoop(ctx context.Context) {
 			s.log.Info("schedule occurrence", "schedule_id", d.ScheduleID, "scheduled_for", d.ScheduledFor, "state", d.State, "reason", d.Reason, "run_id", d.RunID)
 		}
 		sctx, cancel = context.WithTimeout(ctx, storeTimeout)
-		rs, err := s.store.ReconcilePools(sctx)
+		rs, err := s.store.ReconcilePools(s.inst.gitSourceContext(sctx))
 		cancel()
 		if err != nil && ctx.Err() == nil {
 			s.log.Warn("pool reconcile failed", "error_class", errorClass(err))

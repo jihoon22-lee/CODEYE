@@ -398,9 +398,9 @@ func TestReportAPIFormatsAndACL(t *testing.T) {
 	}
 	// The Markdown and HTML exports are the summary by default; detail=full
 	// prints every row (docs/REPORT.md#내보내기-상세도). JSON ignores it.
-	note := "요약 보기다"
+
 	fullMD := e.do("GET", base+"?format=markdown&detail=full", nil, u).want(t, 200, "")
-	if !strings.Contains(string(md.raw), note) || strings.Contains(string(fullMD.raw), note) || !strings.Contains(fullMD.header.Get("Content-Disposition"), "-full.md") {
+	if string(md.raw) == string(fullMD.raw) || !strings.Contains(fullMD.header.Get("Content-Disposition"), "-full.md") {
 		t.Fatalf("markdown detail levels: %v", fullMD.header)
 	}
 	if summary := e.do("GET", base+"?format=markdown&detail=summary", nil, u).want(t, 200, ""); string(summary.raw) != string(md.raw) {

@@ -217,8 +217,8 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 
 ### 등록과 접근
 
-- Git 등록은 provider ID·repository URL·branch를 저장한다. 로컬 등록은 source root ID와 그 아래 상대 경로를 저장한다. 서버는 노드의 절대 경로를 보내지도 저장하지도 않는다. 노드가 root ID를 자기 경로로 매핑한다.
-- 운영자가 허용 source root를 등록하고 사용자에게 권한을 준다. 프로젝트는 그 하위 경로만 고른다. 사용자 인증과 OS 접근 검사를 둘 다 통과해야 한다.
+- Git 등록은 provider ID·repository URL·branch를 저장한다. 로컬 등록은 source root ID와 그 아래 상대 경로를 저장한다. 서비스 머신의 워커는 컨트롤러가 기록한 서버 경로를 사용한다. 별도 노드는 운영자가 지정한 로컬 매핑을 사용한다.
+- 서비스는 입력한 폴더를 실제 경로로 해석하고 Linux 계정의 접근을 확인한 뒤 프로젝트 소스로 등록한다. NFS 마운트에도 같은 절차를 적용한다.
 - 브라우저 PC의 경로와 서버·노드의 경로를 혼동하지 않는다. NFS의 같은 경로가 모든 노드에서 같은 권한으로 보인다고 가정하지 않는다.
 - 운영자 명령(`codeye source-root add`, `source-root grant`, `provider add`)은 [운영](OPERATIONS.md)에 있다.
 
@@ -324,7 +324,7 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 - snapshot은 만든 노드의 `data/` 아래에 남고 그 노드의 `snapshot_locations` 행으로 기록된다. 고정 snapshot 재시도는 그 노드에만 배정된다. 보유 노드가 철회되면 `snapshot_unavailable`이다.
 - snapshot cache GC, 보관 기간 만료, 노드 간 snapshot 전송은 없다. 공간 정리는 운영자가 한다.
 - 실패 단계 재시도에서 선행 산출물을 재사용하는 기능은 설계 계약(미구현)이다. 재사용할 때는 해시·환경이 일치해야 한다.
-- 입력이 삭제됐거나 접근 권한이 철회되면 이전 결과로 권한을 우회하지 않는다. 대기 중 요청자 권한이나 source root 권한을 잃은 run은 배정 시 `actor_revoked`·`source_grant_revoked`로 실패한다([실행](EXECUTION.md)).
+- 입력이 삭제됐거나 접근 권한이 철회되면 이전 결과로 권한을 우회하지 않는다. 대기 중 요청자가 권한을 잃으면 배정 시 거절하고, 실제 파일을 읽을 수 없는 경우 소스 확보 단계에 이유를 기록한다([실행](EXECUTION.md)).
 
 ### 프로젝트 환경 준비
 
@@ -408,13 +408,13 @@ Go 모듈, Rust crate, JS/TS 패키지, Python 패키지(wheel만) 의존성 받
 - 상태: `selected`, `budget_exceeded`, `excluded`, `unreadable`. 사유 코드는 `document_too_large`, `read_budget_exhausted`, `out_of_scope`, `credential_like_content`, `not_utf8`, `contains_nul`, `lfs_object_not_acquired`, `not_a_regular_file`과 manifest 제외 사유다.
 - 기본 예산은 문서당 32 KiB, 합계 256 KiB, 최대 1,000개이며 산출물의 `budget`에 기록한다. 예산 초과는 `document_limit_exceeded`·`document_budget_exceeded`, 범위 밖 문서는 `documents_out_of_scope` limitation으로 남긴다.
 - 읽는 순서는 에이전트 지침, README, CONTRIBUTING, 설계, 기타 순이다. 같은 분류 안에서는 얕은 경로가 먼저다.
-- `applies_to`는 문서 디렉터리다. 모듈마다 자기 문서(`own`), 상속 문서(`inherited`), 없음(`none`)을 구분한다. `other` 분류는 목록에만 남기고 모듈 연결과 겹침 묶음에는 넣지 않는다.
+- `applies_to`는 문서가 설명하는 기본 범위다. `docs/`·`doc/` 아래의 설계·요구사항·안내 문서는 그 문서 트리를 담은 프로젝트 또는 모듈 디렉터리에 적용한다. README와 AGENTS 등 지역 안내·지침 파일은 실제 디렉터리에 적용한다. 이전 산출물에 저장된 실제 문서 디렉터리는 그대로 읽는다. 모듈마다 자기 문서(`own`), 상속 문서(`inherited`), 없음(`none`)을 구분한다. `other` 분류는 목록에만 남기고 모듈 연결과 겹침 묶음에는 넣지 않는다.
 - 에이전트 지침 문서는 분석 자료로 분류할 뿐 권한·도구 설정·계획을 바꾸지 않는다.
 - 문서가 없는 것은 정상이다. 읽지 못한 범위만 표시한다.
 
 ### 안내 문서 겹침
 
-같은 경로에 적용되는 문서가 여럿이면 문서 디렉터리마다 `overlapping_guidance`로 묶는다. 의미 충돌 판정은 문서 검토 역할의 몫이다. 모델을 실행하지 않으면 `not_assessed_without_model`로 남고 `semantic_conflicts_not_assessed` limitation이 붙는다.
+같은 경로에 적용되는 문서가 여럿이면 문서의 적용 디렉터리마다 `overlapping_guidance`로 묶는다. 의미 충돌 판정은 문서 검토 역할의 몫이다. 모델을 실행하지 않으면 `not_assessed_without_model`로 남고 `semantic_conflicts_not_assessed` limitation이 붙는다.
 
 ## 의존성 준비
 
@@ -588,6 +588,8 @@ task key와 단계의 대응:
 | [0011](../migrations/sql/0011_link_attribution_and_throttle.sql) | `auth_launch_tokens.issued_by`·`purpose`(불변), `auth_sessions.link_issued_by`(불변)·`password_required`(true→false만), `users.password_reset_at`·`password_reset_by`(둘 다 있거나 둘 다 없음), `auth_throttle` 재생성(scope `pair`·`client`, 지연 종료 시각 없음, `last_failure_at` 색인), 감사 action 추가 | 로그인 링크 발급자와 재설정 알림, (이름, 주소) 쌍 중심 로그인 제한. 발급자를 모르는 쓰지 않은 이전 링크는 끝내고 이전 카운터는 버린다. |
 | [0012](../migrations/sql/0012_pull_request_runs.sql) | `runs.pull_request`(만들 때 한 번만), `pull_request_comments` | pull request run의 고정값(base/head SHA, 변경 파일과 줄 범위, 댓글 선택)과 결과 댓글 게시 outbox. 기존 행은 바꾸지 않는다. |
 | [0013](../migrations/sql/0013_retention_and_recovery.sql) | `artifacts.content_removed_at`(한 번만), `artifacts_content_present_idx`, 감사 action `run.recovery_confirmed`·`storage.retention_applied` | 보존 정리가 원시 산출물 내용을 지운 표시와 사람의 정리 확인. 기존 행은 바꾸지 않는다. |
+| [0015](../migrations/sql/0015_email_accounts.sql) | `users.email`(정규형·고유, 한 번 정하면 불변), 비밀번호 사용 계정의 식별자 제약 | 기존 사용자 행과 프로젝트 소유권을 유지하고 이메일 계정이 같은 비밀번호·세션·감사 구조를 쓴다. |
+| [0016](../migrations/sql/0016_github_webhooks.sql) | `github_webhook_deliveries` | 서명을 확인한 저장소 웹훅의 중복 방지, 후속 처리 lease·상태, 그 전달이 만든 run 참조. |
 
 migration 이력은 `codeye_schema_migrations(version, name, checksum, applied_at)`다. 0006~0010은 기존 행을 바꾸지 않는다(0010은 새 열의 기본값만 채운다). 0011은 쓰지 않은 로그인 링크를 끝내고 로그인 제한 카운터를 버린다.
 

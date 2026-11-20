@@ -9,6 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/progress"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
 // requirementConstraintPattern is the declared requirement text the
@@ -248,6 +249,10 @@ func validateModelSections(r Report) error {
 				!slices.Contains([]string{"code", "test", "document", "manifest"}, e.Kind) {
 				return nil, invalidf("section evidence %s is invalid", e.ID)
 			}
+			if e.Excerpt != nil && (free || !sourceexcerpt.SafePath(e.Path) || !e.Excerpt.Valid(e.StartLine) ||
+				e.ID != record.ExcerptID(r.Inputs.ManifestSHA256, e.Path, e.BlobSHA256, e.StartLine, e.EndLine)) {
+				return nil, invalidf("section excerpt is invalid")
+			}
 			ids[e.ID] = true
 		}
 		return ids, nil
@@ -284,7 +289,7 @@ func validateModelSections(r Report) error {
 		}
 	}
 	d := r.Documents
-	if err := model(d.Model, len(d.Contracts)+len(d.Conflicts)+len(d.Questions)+len(d.InstructionNotes)); err != nil {
+	if err := model(d.Model, len(d.Contracts)+len(d.Conflicts)+len(d.Questions)+len(d.InstructionNotes)+len(d.Quality)+len(d.Comparisons)); err != nil {
 		return err
 	}
 	if ids, err = catalog(d.Evidence); err != nil {
@@ -322,6 +327,12 @@ func validateModelSections(r Report) error {
 			return err
 		}
 	}
+	if _, err := catalog(r.CodeReview.Evidence); err != nil {
+		return err
+	}
+	if err := validateInsights(r); err != nil {
+		return err
+	}
 	for _, l := range r.CodeReview.Limits {
 		if !text(l.Statement) {
 			return invalidf("interpretation limit text does not follow the export mode")
@@ -337,6 +348,7 @@ func validateModelSections(r Report) error {
 func projectSections(out *Report, r Report) {
 	if e := r.Environment; e != nil {
 		c := *e
+		c.Evidence = projectSectionEvidence(e.Evidence)
 		c.Requirements = make([]EnvRequirement, len(e.Requirements))
 		for i, q := range e.Requirements {
 			if q.Constraint != nil && !keepConstraint(*q.Constraint) {
@@ -354,6 +366,16 @@ func projectSections(out *Report, r Report) {
 	}
 	if d := r.Documents; d != nil {
 		c := *d
+		c.Evidence = projectSectionEvidence(d.Evidence)
+		c.Quality = slices.Clone(d.Quality)
+		for i := range c.Quality {
+			c.Quality[i].Statement = textOmitted
+		}
+		c.Comparisons = slices.Clone(d.Comparisons)
+		for i := range c.Comparisons {
+			c.Comparisons[i].Statement = textOmitted
+			c.Comparisons[i].Reason = textOmitted
+		}
 		c.Contracts = make([]DocContract, len(d.Contracts))
 		for i, x := range d.Contracts {
 			x.Statement, x.EvidenceIDs = textOmitted, slices.Clone(x.EvidenceIDs)
@@ -379,6 +401,12 @@ func projectSections(out *Report, r Report) {
 	}
 	if cr := r.CodeReview; cr != nil {
 		c := *cr
+		c.Evidence = projectSectionEvidence(cr.Evidence)
+		c.Strengths = slices.Clone(cr.Strengths)
+		for i := range c.Strengths {
+			c.Strengths[i].Title = textOmitted
+			c.Strengths[i].Benefit = textOmitted
+		}
 		c.Limits = make([]InterpretationLimit, len(cr.Limits))
 		for i, l := range cr.Limits {
 			l.Statement, l.ObservationIDs = textOmitted, slices.Clone(l.ObservationIDs)
@@ -396,4 +424,52 @@ func projectSections(out *Report, r Report) {
 		}
 		out.CodeReview = &c
 	}
+}
+
+func projectSectionEvidence(src []SectionEvidence) []SectionEvidence {
+	out := slices.Clone(src)
+	for i := range out {
+		out[i].Excerpt = nil
+	}
+	return out
+}
+
+func validateInsights(r Report) error {
+	docs := r.Documents
+	code := r.CodeReview
+	catalog := func(entries []SectionEvidence) map[string]record.Excerpt {
+		out := make(map[string]record.Excerpt, len(entries))
+		for _, e := range entries {
+			out[e.ID] = record.Excerpt{ID: e.ID, Path: e.Path, Kind: e.Kind}
+		}
+		return out
+	}
+	text := func(s string) bool { return record.ModelText(s) && (r.Export.IncludeCode || s == textOmitted) }
+	if len(docs.Quality) > record.MaxDocumentQuality || len(docs.Comparisons) > record.MaxContractComparisons ||
+		(len(docs.Comparisons) > 0 && len(docs.Contracts) != len(docs.Comparisons)) ||
+		len(code.Strengths) > MaxReportedStrengths {
+		return invalidf("review insight counts are invalid")
+	}
+	byDoc := catalog(docs.Evidence)
+	byCode := catalog(code.Evidence)
+	for _, q := range docs.Quality {
+		if !q.Valid(byDoc) || !text(q.Statement) {
+			return invalidf("document quality is invalid")
+		}
+	}
+	for i, x := range docs.Comparisons {
+		d := docs.Contracts[i]
+		comparison := record.ContractComparison{ContractIndex: i + 1, AppliesTo: x.AppliesTo,
+			Status: x.Status, Reason: x.Reason, DocumentEvidenceIDs: x.DocumentEvidenceIDs, CodeEvidenceIDs: x.CodeEvidenceIDs}
+		if !comparison.Valid(byDoc) || !record.ScopeUnder(x.AppliesTo, d.AppliesTo) ||
+			!slices.Equal(x.DocumentEvidenceIDs, d.EvidenceIDs) || x.Statement != d.Statement || !text(x.Reason) {
+			return invalidf("document comparison is invalid")
+		}
+	}
+	for _, x := range code.Strengths {
+		if !x.Valid(byCode) || !text(x.Title) || !text(x.Benefit) {
+			return invalidf("strength is invalid")
+		}
+	}
+	return nil
 }

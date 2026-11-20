@@ -98,21 +98,17 @@ func TestUpResolvesTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out bytes.Buffer
-	tg, next, err := resolveTarget(path, cfg, filepath.Join(work, "svc", "api"), &out)
-	if err != nil || tg.rootPath != work || tg.relative != "svc/api" || next != cfg {
-		t.Fatalf("inside a root: %+v %v", tg, err)
+	for _, want := range []string{filepath.Join(work, "svc", "api"), filepath.Join(base, "other", "work")} {
+		if tg, err := resolveTarget(cfg, want); err != nil || tg.path != want {
+			t.Fatalf("folder %s: %+v %v", want, tg, err)
+		}
 	}
-	tg, next, err = resolveTarget(path, cfg, filepath.Join(base, "other", "work"), &out)
-	if err != nil || tg.rootPath != filepath.Join(base, "other", "work") || tg.relative != "." || len(next.SourceRoots) != 2 || next.SourceRoots[1].Label != "work-2" {
-		t.Fatalf("new root: %+v %v", tg, err)
-	}
-	if reloaded, err := instance.Load(path, knownTools()); err != nil || len(reloaded.SourceRoots) != 2 || reloaded.SourceRoots[1].Path != filepath.Join(base, "other", "work") {
-		t.Fatalf("config not updated: %v", err)
+	if reloaded, err := instance.Load(path, knownTools()); err != nil || len(reloaded.SourceRoots) != 1 {
+		t.Fatalf("config changed: %v", err)
 	}
 	for _, bad := range []string{base, filepath.Join(state, "x"), filepath.Join(base, "missing")} {
 		_ = os.MkdirAll(filepath.Join(state, "x"), 0o700)
-		if _, _, err := resolveTarget(path, next, bad, &out); err == nil {
+		if _, err := resolveTarget(cfg, bad); err == nil {
 			t.Errorf("%s accepted", bad)
 		}
 	}
@@ -145,16 +141,15 @@ func TestHomeRoot(t *testing.T) {
 	if len(cfg.SourceRoots) != 1 || cfg.SourceRoots[0].Path != home || cfg.SourceRoots[0].Label != "home" || !cfg.SourceRoots[0].Implicit {
 		t.Fatalf("%+v", cfg.SourceRoots)
 	}
-	var out bytes.Buffer
-	tg, next, err := resolveTarget(path, cfg, filepath.Join(home, "src", "app"), &out)
-	if err != nil || tg.rootPath != home || tg.relative != "src/app" || next != cfg || out.Len() != 0 {
-		t.Fatalf("%+v %v %s", tg, err, out.String())
+	tg, err := resolveTarget(cfg, filepath.Join(home, "src", "app"))
+	if err != nil || tg.path != filepath.Join(home, "src", "app") {
+		t.Fatalf("%+v %v", tg, err)
 	}
 	if raw, _ := os.ReadFile(path); strings.Contains(string(raw), "source_roots") {
 		t.Fatalf("the home root was written: %s", raw)
 	}
 	// The home directory itself holds the state directory: refused.
-	if _, _, err := resolveTarget(path, cfg, home, &out); err == nil {
+	if _, err := resolveTarget(cfg, home); err == nil {
 		t.Fatal("home accepted")
 	}
 	// A configured root that holds $HOME replaces it.

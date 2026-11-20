@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,28 +10,20 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/github/githubtest"
-	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// One service, many users: a user without an allowed folder is told so and
-// shown none; the administrator opens a folder to everyone in the web; each
-// user stores their own GitHub token, which is never answered, logged or
-// audited; a pull request is resolved, previewed and commented on with the
-// token of the user who starts or asks (never the project owner's for a
-// member), and a user without a token reaches public repositories only; the
-// administrator's switches change what other users' runs get and the setup
-// screen says why.
+// Web accounts share platform source access and keep project-specific permissions.
 func TestSharedServiceForOtherUsers(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("private file modes")
 	}
-	const tokA, tokB = "tok-alice-123456", "tok-bob-1234567"
+	const platformToken, legacyToken = "tok-platform-123456", "tok-private-1234567"
 	e := newEnv(t)
-	fake := githubtest.New("", "")
+	fake := githubtest.New(platformToken, "platform")
 	defer fake.Close()
-	fake.Users = map[string]string{tokA: "alice", tokB: "bob"}
-	fake.Private = map[string]string{"acme/widget": "alice"}
+	fake.Private = map[string]string{"acme/widget": "platform"}
 	fake.AddPullRequest("acme/widget", githubtest.PullRequest{Number: 7, Title: "Fix", State: "open", BaseRef: "main", BaseSHA: strings.Repeat("a", 40), HeadRef: "fix", HeadSHA: strings.Repeat("b", 40), HeadRepo: "acme/widget"})
 	e.inst = &Instance{StateDir: filepath.Join(t.TempDir(), "state"), GitHubAPI: fake.URL}
 	e.start(t.TempDir())
@@ -39,47 +32,25 @@ func TestSharedServiceForOtherUsers(t *testing.T) {
 	bob := e.login(e.account("bob", "", false))
 	ctx := context.Background()
 
-	// No folder yet: the path is refused with the reason and the (empty) list.
+	// A readable folder is available without a root or per-user grant.
 	dir := t.TempDir()
-	r := e.do("POST", "/api/v1/projects", map[string]any{"local_path": dir}, bob.o()).want(t, 422, "LOCAL_PATH_NOT_ALLOWED")
-	if d := r.body["error"].(map[string]any)["details"].(map[string]any); len(d["readable_folders"].([]any)) != 0 {
-		t.Fatalf("%s", r.raw)
-	}
-	if v := e.do("GET", "/api/v1/setup", nil, bob.o()).want(t, 200, ""); v.body["available"].(map[string]any)["local_path"].(map[string]any)["reason"] != "no_allowed_folder" {
+	local := e.do("POST", "/api/v1/projects", map[string]any{"local_path": dir}, bob.o()).want(t, 201, "")
+	id := local.body["id"].(string)
+	e.do("GET", "/api/v1/projects/"+id, nil, alice.o()).want(t, 404, "NOT_FOUND")
+	if v := e.do("GET", "/api/v1/setup", nil, bob.o()).want(t, 200, ""); v.body["available"].(map[string]any)["local_path"].(map[string]any)["available"] != true {
 		t.Fatalf("setup %s", v.raw)
 	}
-	// The administrator opens the folder to everyone.
-	e.do("POST", "/api/v1/admin/source-roots", map[string]any{"path": dir}, bob.o()).want(t, 403, "FORBIDDEN")
-	e.do("POST", "/api/v1/admin/source-roots", map[string]any{"path": filepath.Join(dir, "missing")}, admin.o()).want(t, 422, "FOLDER_NOT_FOUND")
-	// A folder inside the data directory is refused (one that contains it,
-	// like a home directory, is not: its projects are checked one by one).
-	if err := os.MkdirAll(filepath.Join(e.inst.StateDir, "run"), 0o700); err != nil {
+	// Legacy personal tokens cannot be promoted to service credentials.
+	legacyDir := filepath.Join(e.inst.StateDir, "secrets", "github-users")
+	if err := os.MkdirAll(legacyDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	e.do("POST", "/api/v1/admin/source-roots", map[string]any{"path": filepath.Join(e.inst.StateDir, "run")}, admin.o()).want(t, 422, "FOLDER_HOLDS_CODEYE_DATA")
-	root := e.do("POST", "/api/v1/admin/source-roots", map[string]any{"path": dir, "everyone": true}, admin.o()).want(t, 201, "")
-	if root.body["everyone"] != true || root.body["label"] == "" {
-		t.Fatalf("%s", root.raw)
+	legacy, _ := json.Marshal(github.Credential{SchemaVersion: github.CredentialSchema, Host: github.Host, Token: legacyToken, Source: "web"})
+	if err := os.WriteFile(filepath.Join(legacyDir, alice.id+".json"), legacy, 0o600); err != nil {
+		t.Fatal(err)
 	}
-	e.do("POST", "/api/v1/admin/source-roots", map[string]any{"path": dir}, admin.o()).want(t, 409, "CONFLICT")
-	e.do("POST", "/api/v1/projects", map[string]any{"local_path": dir}, bob.o()).want(t, 201, "")
-	list := e.do("GET", "/api/v1/admin/source-roots", nil, admin.o()).want(t, 200, "")
-	if items := list.body["items"].([]any); len(items) != 1 || items[0].(map[string]any)["path"] != root.body["path"] || items[0].(map[string]any)["everyone"] != true {
-		t.Fatalf("%s", list.raw)
-	}
+	e.do("PUT", "/api/v1/account/github", map[string]string{"token": legacyToken}, alice.o()).want(t, 404, "NOT_FOUND")
 
-	// Tokens: a refused one is not stored; a good one is never answered.
-	e.do("PUT", "/api/v1/account/github", map[string]string{"token": "tok-wrong-123456"}, alice.o()).want(t, 422, "GITHUB_TOKEN_REFUSED")
-	if v := e.do("GET", "/api/v1/account/github", nil, alice.o()).want(t, 200, ""); v.body["connected"] != false || v.body["storable"] != true {
-		t.Fatalf("%s", v.raw)
-	}
-	put := e.do("PUT", "/api/v1/account/github", map[string]string{"token": tokA}, alice.o()).want(t, 200, "")
-	if put.body["connected"] != true || put.body["account"] != "alice" || put.body["source"] != "web" || strings.Contains(string(put.raw), tokA) {
-		t.Fatalf("%s", put.raw)
-	}
-	e.do("PUT", "/api/v1/account/github", map[string]string{"token": tokB}, bob.o()).want(t, 200, "")
-
-	// alice's private repository, bob a runner of it.
 	prov, _, err := e.store.EnsureProvider(ctx, "github.com")
 	if err != nil {
 		t.Fatal(err)
@@ -115,41 +86,23 @@ func TestSharedServiceForOtherUsers(t *testing.T) {
 			}
 		}
 	}
-	// alice's own run: her token reads her private repository.
+	runPR(alice, pa, 422, "PULL_REQUEST_NOT_FOUND")
+	only(0, "")
+	writeGitHubCredential(t, e.inst.StateDir, github.Host, platformToken, "platform")
 	n := len(fake.Requests())
 	run := runPR(alice, pa, 202, "")
-	only(n, "alice")
-	// bob starts a run of alice's project: his own token, which GitHub does
-	// not show alice's private repository - never alice's token.
-	n = len(fake.Requests())
-	runPR(bob, pa, 422, "PULL_REQUEST_NOT_FOUND")
-	only(n, "bob")
-	// bob's preview of alice's run asks with bob's token too.
-	n = len(fake.Requests())
-	e.do("GET", "/api/v1/runs/"+run.body["id"].(string)+"/pull-request-comment", nil, bob.o()).want(t, 200, "")
-	only(n, "bob")
-	// bob's own project of the same repository: bob's token.
-	n = len(fake.Requests())
-	runPR(bob, pb, 422, "PULL_REQUEST_NOT_FOUND")
-	only(n, "bob")
-	// Once the repository is public, bob's run of alice's project is pinned
-	// with bob's token, and its comment would be posted as bob.
-	fake.Private = nil
+	only(n, "platform")
 	n = len(fake.Requests())
 	bobRun := runPR(bob, pa, 202, "")
-	only(n, "bob")
-	if src, err := e.store.PullRequestCommentSource(ctx, bobRun.body["id"].(string), 0); err != nil || src.RequesterID != bob.id {
-		t.Fatalf("comment of bob's run acts for %q (%v)", src.RequesterID, err)
-	}
-	fake.Private = map[string]string{"acme/widget": "alice"}
-	e.do("DELETE", "/api/v1/account/github", nil, bob.o()).want(t, 204, "")
-	if v := e.do("GET", "/api/v1/account/github", nil, bob.o()).want(t, 200, ""); v.body["connected"] != false {
-		t.Fatalf("%s", v.raw)
-	}
+	only(n, "platform")
 	n = len(fake.Requests())
-	runPR(bob, pb, 422, "PULL_REQUEST_NOT_FOUND")
-	if got := logins(n); len(got) == 0 || got[0] != "" {
-		t.Fatalf("bob without a token used %v", got)
+	e.do("GET", "/api/v1/runs/"+run.body["id"].(string)+"/pull-request-comment", nil, bob.o()).want(t, 200, "")
+	only(n, "platform")
+	n = len(fake.Requests())
+	runPR(bob, pb, 202, "")
+	only(n, "platform")
+	if src, err := e.store.PullRequestCommentSource(ctx, bobRun.body["id"].(string), 0); err != nil || src.RequesterID != bob.id {
+		t.Fatalf("analysis requester %q (%v)", src.RequesterID, err)
 	}
 
 	// The administrator's switches.
@@ -174,13 +127,9 @@ func TestSharedServiceForOtherUsers(t *testing.T) {
 	if err := e.pool.QueryRow(ctx, "SELECT coalesce(string_agg(detail::text, ' '), '') FROM audit_events").Scan(&audits); err != nil {
 		t.Fatal(err)
 	}
-	for _, tok := range []string{tokA, tokB, "tok-wrong-123456"} {
+	for _, tok := range []string{platformToken, legacyToken} {
 		if strings.Contains(e.logs.String(), tok) || strings.Contains(audits, tok) {
 			t.Fatalf("token %s reached the log or the audit", tok[:8])
 		}
-	}
-	var set, removed int
-	if err := e.pool.QueryRow(ctx, "SELECT count(*) FILTER (WHERE action=$1), count(*) FILTER (WHERE action=$2) FROM audit_events", postgres.AuditGitHubTokenSet, postgres.AuditGitHubTokenRemoved).Scan(&set, &removed); err != nil || set != 2 || removed != 1 {
-		t.Fatalf("token audit rows: %d set, %d removed (%v)", set, removed, err)
 	}
 }

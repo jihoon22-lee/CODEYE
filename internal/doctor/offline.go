@@ -151,31 +151,25 @@ func destinations(cfg *instance.Config, res toolfind.Result, menv instance.Model
 			pick("pip_index", d.PipIndexURL, "", "", defaultPipIndex),
 			pick("crates_registry", "", "", "", defaultCrates))
 	}
-	if len(cfg.GitHosts) == 0 {
-		out = append(out, Destination{Kind: "git_host", Origin: "none", Reason: "git_hosts_empty"})
-	}
+	haveGit := false
 	for _, h := range cfg.GitHosts {
+		if !github.HostAllowed(h, cfg.Offline, cfg.GitHosts) {
+			continue
+		}
+		haveGit = true
 		origin := "config"
 		if !cfg.GitHostsExplicit() {
 			origin = "builtin_default"
 		}
 		out = append(out, Destination{Kind: "git_host", Value: h, Origin: origin})
+		base, _ := github.ProviderAPI(h, "")
+		out = append(out, Destination{Kind: "github_api", Value: base, Origin: origin})
 	}
-	out = append(out, gitHubDestination(cfg))
+	if !haveGit {
+		out = append(out, Destination{Kind: "git_host", Origin: "none", Reason: "git_hosts_empty"})
+		out = append(out, Destination{Kind: "github_api", Origin: "none", Reason: "git_hosts_empty"})
+	}
 	return append(out, modelDestination(cfg, menv))
-}
-
-// gitHubDestination is the GitHub API the service asks for the token's
-// account, pull requests and result comments: none offline (no token is
-// looked up, github.com is no Git host), none when github.enabled is false.
-func gitHubDestination(cfg *instance.Config) Destination {
-	switch {
-	case cfg.Offline:
-		return Destination{Kind: "github_api", Origin: "none", Reason: instance.GitHubOffline}
-	case !cfg.GitHub.On():
-		return Destination{Kind: "github_api", Origin: "none", Reason: "github_disabled"}
-	}
-	return Destination{Kind: "github_api", Value: github.DefaultAPIURL, Origin: "builtin_default"}
 }
 
 // modelDestination resolves the model like the local agent's start.

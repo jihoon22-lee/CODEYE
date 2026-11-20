@@ -15,6 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/deps/depdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
 // ErrInvalidInput wraps every input the builder refuses. It is deterministic:
@@ -69,6 +70,7 @@ type ArtifactRef struct {
 // Input is everything Build may read. The publisher fills Bodies only with
 // bytes it read from the artifact store and re-hashed against the row.
 type Input struct {
+	Project  *ProjectInfo
 	ReportID string
 	Revision int
 	Now      time.Time
@@ -112,6 +114,9 @@ func InputDigest(in Input) string {
 	}
 	w(BuilderID, BuilderVersion, SchemaVersion)
 	w("run", in.Run.ID, in.Run.Profile, in.Run.ScopeKind, in.Run.FinalStatus)
+	if p := in.Project; p != nil {
+		w("project", p.Name, p.Source, p.StartedAt, p.FinishedAt)
+	}
 	w("snapshot", in.Snapshot.ID, in.Snapshot.ManifestDigest, in.Snapshot.Consistency, deref(in.Snapshot.SourceSHA))
 	w("attempt", in.Attempt.ID, strconv.FormatInt(in.Attempt.Number, 10), strconv.FormatInt(in.Attempt.Epoch, 10), in.Attempt.CompletionStatus, in.Attempt.Cleanup, deref(in.Attempt.Reason))
 	tasks := append([]TaskFacts(nil), in.Tasks...)
@@ -295,6 +300,9 @@ func (r *Registry) lookup(art ArtifactRef, body []byte) (ArtifactDecoder, bool) 
 // Wants reports whether some decoder could own artifacts of this media type,
 // so the publisher loads only bytes a decoder may read.
 func (r *Registry) Wants(mediaType string) bool {
+	if mediaType == sourceexcerpt.MediaType {
+		return true
+	}
 	if r == nil {
 		return false
 	}

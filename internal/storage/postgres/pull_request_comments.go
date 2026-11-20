@@ -39,13 +39,10 @@ type PullRequestComment struct {
 // request always has a higher version) and the report revision to render.
 type CommentJob struct {
 	RunID, ProjectID string
-	// RequesterID is the user who started the run: the comment is posted
-	// with that user's GitHub token only (without one it is not posted).
-	RequesterID    string
-	Pin            domain.PullRequest
-	Version        int64
-	Attempts       int
-	ReportRevision int
+	Pin              domain.PullRequest
+	Version          int64
+	Attempts         int
+	ReportRevision   int
 }
 
 // CommentOutcome is how one posting attempt ended. State pending with
@@ -83,7 +80,7 @@ func (s *Store) DuePullRequestComments(ctx context.Context, limit int, lease tim
 	return transaction(ctx, s, func(tx pgx.Tx) ([]CommentJob, error) {
 		rows, err := tx.Query(ctx, `UPDATE pull_request_comments c SET attempts=c.attempts+1,next_attempt_at=clock_timestamp()+$2*interval '1 millisecond',updated_at=clock_timestamp()
 			FROM runs r WHERE r.id=c.run_id AND c.run_id IN (SELECT run_id FROM pull_request_comments WHERE state='pending' AND next_attempt_at<=clock_timestamp() ORDER BY next_attempt_at LIMIT $1 FOR UPDATE SKIP LOCKED)
-			RETURNING c.run_id::text,c.project_id::text,r.actor_id::text,r.pull_request,r.created_at,c.attempts,c.report_revision`, limit, lease.Milliseconds())
+			RETURNING c.run_id::text,c.project_id::text,r.pull_request,r.created_at,c.attempts,c.report_revision`, limit, lease.Milliseconds())
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +91,7 @@ func (s *Store) DuePullRequestComments(ctx context.Context, limit int, lease tim
 			var raw []byte
 			var revision *int
 			var created time.Time
-			if err := rows.Scan(&j.RunID, &j.ProjectID, &j.RequesterID, &raw, &created, &j.Attempts, &revision); err != nil {
+			if err := rows.Scan(&j.RunID, &j.ProjectID, &raw, &created, &j.Attempts, &revision); err != nil {
 				return nil, err
 			}
 			j.Version = created.UnixMicro()
@@ -118,7 +115,7 @@ func (s *Store) NewerPullRequestCommentPosted(ctx context.Context, runID string)
 		return false, domain.ErrInvalid
 	}
 	var newer bool
-	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pull_request_comments c JOIN pull_request_comments o ON o.repository=c.repository AND o.number=c.number AND o.run_id<>c.run_id
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pull_request_comments c JOIN pull_request_comments o ON o.project_id=c.project_id AND o.repository=c.repository AND o.number=c.number AND o.run_id<>c.run_id
 		JOIN runs rc ON rc.id=c.run_id JOIN runs ro ON ro.id=o.run_id
 		WHERE c.run_id=$1 AND o.state='posted' AND ro.created_at>rc.created_at)`, runID).Scan(&newer)
 	return newer, err

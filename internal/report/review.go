@@ -87,6 +87,17 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 			return false
 		}
 	}
+	if len(rec.ContractComparisons) > 0 {
+		st := states["review.documents"]
+		if !reviewAccepted(st) {
+			return false
+		}
+		for _, x := range rec.ContractComparisons {
+			if !x.MatchesContract(st.reviewResult.Record.Contracts) {
+				return false
+			}
+		}
+	}
 	if rec.Stage != record.StageVerify {
 		return true
 	}

@@ -75,6 +75,7 @@ const (
 var auditDetailKeys = map[string]bool{
 	"method": true, "client_address": true, "scope": true, "retry_after_seconds": true,
 	"username": true, "display_name": true, "is_admin": true, "previous_is_admin": true, "must_change_password": true,
+	"self_registered":  true,
 	"sessions_revoked": true, "label": true, "kind": true, "host": true, "user_id": true,
 	"role": true, "previous_role": true, "name": true, "source_kind": true, "source_root_id": true, "provider_id": true,
 	"revision": true, "profile": true, "scope_kind": true, "trigger": true, "schedule_id": true, "status": true,

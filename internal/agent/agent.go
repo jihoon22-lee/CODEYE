@@ -77,10 +77,7 @@ type Config struct {
 	// jobs for any source root the controller approves arrive with the
 	// root's path, and any Git host the controller approves is fetched.
 	ControllerSources bool
-	// GitCredentialDir (--git-credential-dir) holds one token file per user
-	// (<dir>/<user_id>.json); a Git job is fetched with the file of its
-	// nodeproto.Job.GitCredentialUser only. It replaces GitCredentialFile.
-	GitCredentialDir string
+
 	// ProtectedDirs (--protected-dir): a local project folder that contains
 	// or lies inside one of these is refused before acquisition, however
 	// the project was registered (the service: the state and backup
@@ -238,10 +235,12 @@ func New(cfg Config) (*Agent, error) {
 			return nil, &ExitError{ExitUsage, "repository-code source root must have a local source mapping"}
 		}
 	}
-	for _, h := range cfg.GitHosts {
-		if domain.ValidateHost(strings.ToLower(h)) != nil {
+	for i, h := range cfg.GitHosts {
+		h = strings.ToLower(h)
+		if domain.ValidateHost(h) != nil {
 			return nil, &ExitError{ExitUsage, "invalid --git-host"}
 		}
+		cfg.GitHosts[i] = h
 	}
 	if cfg.ReviewMaxCalls == 0 {
 		cfg.ReviewMaxCalls = record.DefaultMaxCalls
@@ -280,10 +279,7 @@ func New(cfg Config) (*Agent, error) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}
 	}
-	if cfg.GitCredentialDir != "" && cfg.GitCredentialFile != "" {
-		return nil, &ExitError{ExitUsage, "--git-credential-dir and --git-credential-file are alternatives"}
-	}
-	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile, cfg.GitCredentialFile, cfg.GitCredentialDir} {
+	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile, cfg.GitCredentialFile} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}

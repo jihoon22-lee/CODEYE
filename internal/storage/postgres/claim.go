@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
@@ -27,6 +28,18 @@ const candidatePage = 200
 // ClaimResult is a claim outcome. Response is nil for "nothing claimable" (204).
 type ClaimResult struct {
 	Response *nodeproto.ClaimResponse
+}
+
+type offlineGitHostsKey struct{}
+
+// WithOfflineGitHosts restricts fresh Git acquisition to these controller hosts.
+func WithOfflineGitHosts(ctx context.Context, hosts []string) context.Context {
+	return context.WithValue(ctx, offlineGitHostsKey{}, hosts)
+}
+
+func freshGitAllowed(ctx context.Context, host string) bool {
+	hosts, offline := ctx.Value(offlineGitHostsKey{}).([]string)
+	return !offline || github.HostAllowed(host, true, hosts)
 }
 
 type candidate struct {
@@ -250,6 +263,9 @@ func (s *Store) ClaimAttempt(ctx context.Context, node, worker, key string) (Cla
 			if err := json.Unmarshal(stored, &resp); err != nil {
 				return ClaimResult{}, err
 			}
+			if resp.Job.Snapshot == nil && resp.Job.Source.Kind == "git" && !freshGitAllowed(ctx, resp.Job.Source.Host) {
+				return ClaimResult{}, nil
+			}
 			return ClaimResult{Response: &resp}, nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -393,7 +409,7 @@ func fairPage(ctx context.Context, tx pgx.Tx, projectLimit int64, after *candida
 		count++
 		lc := c
 		last = &lc
-		if ok {
+		if ok && (c.snapshotID != nil || c.source.Kind != domain.SourceGit || freshGitAllowed(ctx, c.gitHost)) {
 			out = append(out, c)
 		}
 	}
@@ -447,26 +463,13 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 	if err != nil {
 		return nil, false, err
 	}
-	reason := nodeproto.ReasonActorRevoked
-	if allowed && c.source.Kind == domain.SourceLocal {
-		// The requester must still be allowed the source root the project was
-		// registered under, by grant or because it is open to everyone (FOR
-		// SHARE: ordered against a concurrent revoke or close).
-		var granted bool
-		if err := tx.QueryRow(ctx, "SELECT "+rootAllowedLockedSQL("$1", "$2"), c.source.SourceRootID, r.ActorID).Scan(&granted); err != nil {
-			return nil, false, err
-		}
-		if !granted {
-			allowed, reason = false, nodeproto.ReasonSourceGrantRevoked
-		}
-	}
 	if !allowed {
 		// The requester lost run permission (or was disabled) while the run
 		// waited: it must not execute on their behalf.
-		if _, err := tx.Exec(ctx, "UPDATE tasks SET status='skipped_policy',version=version+1,reason=$2,finished_at=clock_timestamp() WHERE run_id=$1 AND status IN ('queued','blocked')", r.ID, reason); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE tasks SET status='skipped_policy',version=version+1,reason=$2,finished_at=clock_timestamp() WHERE run_id=$1 AND status IN ('queued','blocked')", r.ID, nodeproto.ReasonActorRevoked); err != nil {
 			return nil, false, err
 		}
-		return nil, false, transitionRun(ctx, tx, &r, domain.RunFailed, "run.failed", map[string]any{"status": domain.RunFailed, "reason": reason})
+		return nil, false, transitionRun(ctx, tx, &r, domain.RunFailed, "run.failed", map[string]any{"status": domain.RunFailed, "reason": nodeproto.ReasonActorRevoked})
 	}
 	a, err := readAttempt(tx.QueryRow(ctx, "INSERT INTO attempts(id,run_id,node_id,worker_id,number,epoch,expires_at,status) SELECT $1,$2,$3,$4,coalesce(max(number),0)+1,$5,clock_timestamp()+$6*interval '1 second','leased' FROM attempts WHERE run_id=$2 RETURNING "+attemptColumns,
 		domain.NewID(), r.ID, node, worker, r.LeaseEpoch+1, LeaseTTL.Seconds()))
@@ -497,10 +500,7 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 		Job: nodeproto.Job{Profile: c.request.Profile, Scope: c.request.Scope, Analysis: &c.analysis,
 			Resources: nodeproto.Resources{CPUMillis: ReserveCPUMillis, MemoryBytes: ReserveMemoryBytes, DiskBytes: ReserveDiskBytes}},
 	}
-	// The service's offer and the Git token are those of the user who started
-	// the run: one person's token never fetches a repository on behalf of
-	// another, and an administrator's allowance does not carry over to a
-	// member's run of the administrator's project.
+	// The service’s analysis offer follows the requesting web account.
 	offer, err := analysisOffer(ctx, tx, r.ActorID)
 	if err != nil {
 		return nil, false, err
@@ -516,7 +516,6 @@ func claimCandidate(ctx context.Context, tx pgx.Tx, c candidate, node, worker st
 		}
 	case domain.SourceGit:
 		resp.Job.Source = nodeproto.JobSource{Kind: "git", RepositoryURL: c.source.RepositoryURL, Branch: c.source.Branch, Host: c.gitHost}
-		resp.Job.GitCredentialUser = r.ActorID
 		if c.pullRequest != nil {
 			resp.Job.PullRequest = c.pullRequest.Job()
 		}

@@ -122,6 +122,7 @@ describe('summary grouping', () => {
     const lines = Array.from(container.querySelectorAll('.report-summary > li')).map((x) => x.textContent);
     const f = overviewFacts(r, r.sections!);
     expect(lines.some((x) => x!.startsWith(t.sections.summary.static(f.diagnostics.total, f.diagnostics.rules, f.diagnostics.tools)))).toBe(true);
+    if (r.project) fireEvent.click(within(container).getByRole('tab',{name:t.sections.titles.gaps}));
     const gaps = container.querySelector('#report-section-gaps') as HTMLElement;
     const more = within(gaps).getByText(t.sections.summary.allGaps(r.sections!.gaps.length));
     // A native summary element: focusable and toggled by the keyboard.

@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/hostaddr"
 	"github.com/jihoon22-lee/CODEYE/internal/httpapi"
 	"github.com/jihoon22-lee/CODEYE/internal/instance"
@@ -160,11 +161,10 @@ func cmdUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 			return 2
 		}
 	case target != "":
-		if proj, cfg, err = resolveTarget(path, cfg, target, out); err != nil {
+		if proj, err = resolveTarget(cfg, target); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		layout = completeConfig(cfg)
 	}
 	up, code := bringUp(ctx, cfg, layout, bringUpOptions{postgresBinDir: binDir, noProbe: noProbe}, out, stderr)
 	if up == nil {
@@ -177,7 +177,7 @@ func cmdUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintf(out, "CODEYE is running at %s (controller pid %d, agent pid %d); logs in %s\n", cfg.ServiceOrigin(), up.controllerPID, up.agentPID, layout.LogDir())
 	}
 	if cfg.Public() {
-		fmt.Fprintf(out, "Other people open %s; add them under 관리 > 사용자 and send them their sign-in link.\n", cfg.ServiceOrigin())
+		fmt.Fprintf(out, "Other people can register with email and password at %s.\n", cfg.ServiceOrigin())
 		printAddresses(out, cfg.ServiceAddresses())
 	}
 	if cfg.WebDir == "" {
@@ -201,7 +201,7 @@ func cmdUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if code != 0 || !pull.dryRunComment {
 		return code
 	}
-	return printCommentPreview(ctx, up.store, layout, up.user, runID, pull.wait, out, stderr)
+	return printCommentPreview(ctx, up.store, platformGitHub(cfg, layout), up.user, runID, pull.wait, out, stderr)
 }
 
 func cmdOpen(ctx context.Context, args []string, out, stderr io.Writer) int {
@@ -313,11 +313,11 @@ func isGitURL(s string) bool {
 }
 
 // upTarget is the folder or repository `codeye up` analyzes: a folder under
-// the source root at rootPath, or a repository (repoURL, branch "" for the
+// the server, or a repository (repoURL, branch "" for the
 // default branch) of an approved Git host.
 type upTarget struct {
-	path, rootPath, relative string
-	repoURL, branch, host    string
+	path                  string
+	repoURL, branch, host string
 	// pullRequest is the pull-request number of a /pull/N address.
 	pullRequest int
 }
@@ -357,7 +357,7 @@ func gitTarget(cfg *instance.Config, target string) (*upTarget, error) {
 		return nil, errors.New("not a repository URL: use https://HOST/OWNER/REPO (optionally /tree/BRANCH)")
 	}
 	host, _ := domain.RepositoryHost(repo)
-	if !slices.Contains(cfg.GitHosts, host) {
+	if !slices.Contains(cfg.GitHosts, host) || !github.HostAllowed(host, cfg.Offline, cfg.GitHosts) {
 		if cfg.Offline {
 			return nil, fmt.Errorf("the Git host %s is not in git_hosts (offline mode allows no host by default); add the internal Git host to git_hosts", host)
 		}
@@ -366,52 +366,36 @@ func gitTarget(cfg *instance.Config, target string) (*upTarget, error) {
 	return &upTarget{repoURL: repo, branch: branch, host: host}, nil
 }
 
-// resolveTarget maps PATH to a configured source root (the root itself or a
-// folder under it) or adds the folder as a new source root to the
-// configuration file. It returns the (possibly changed) configuration.
-func resolveTarget(configPath string, cfg *instance.Config, target string, out io.Writer) (*upTarget, *instance.Config, error) {
+// resolveTarget resolves a readable folder on the service machine.
+func resolveTarget(cfg *instance.Config, target string) (*upTarget, error) {
 	abs, err := filepath.Abs(target)
 	if err != nil {
-		return nil, nil, errors.New("the path cannot be resolved")
+		return nil, errors.New("the path cannot be resolved")
 	}
 	real, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s does not exist", abs)
+		return nil, fmt.Errorf("cannot resolve folder %s", abs)
 	}
 	if st, err := os.Stat(real); err != nil || !st.IsDir() {
-		return nil, nil, fmt.Errorf("%s is not a folder", real)
+		return nil, fmt.Errorf("%s is not a readable folder", real)
 	}
 	for _, dir := range []string{cfg.StateDir, backupDirOf(cfg)} {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			dir = resolved
+		}
 		if pathWithin(dir, real) || pathWithin(real, dir) {
-			return nil, nil, fmt.Errorf("%s contains or is inside the CODEYE data directory %s; pass a project folder", real, dir)
+			return nil, fmt.Errorf("%s contains or is inside the CODEYE data directory %s; pass a project folder", real, dir)
 		}
 	}
-	best := -1
-	rel := ""
-	for i, r := range cfg.SourceRoots {
-		if !pathWithin(real, r.Path) || (best >= 0 && len(r.Path) <= len(cfg.SourceRoots[best].Path)) {
-			continue
-		}
-		p, err := filepath.Rel(r.Path, real)
-		if err != nil {
-			continue
-		}
-		p = filepath.ToSlash(p)
-		if domain.ValidateRelativeSourcePath(p) != nil {
-			continue
-		}
-		best, rel = i, p
-	}
-	if best >= 0 {
-		return &upTarget{path: real, rootPath: cfg.SourceRoots[best].Path, relative: rel}, cfg, nil
-	}
-	label := uniqueLabel(cfg, filepath.Base(real))
-	next, err := instance.EditFile(configPath, knownTools(), instance.ConfigEdit{AddRoot: &instance.SourceRoot{Label: label, Path: real}})
+	folder, err := os.Open(real)
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("%s is not a readable folder", real)
 	}
-	fmt.Fprintf(out, "added source root %q (%s) to %s\n", label, real, configPath)
-	return &upTarget{path: real, rootPath: real, relative: "."}, next, nil
+	defer folder.Close()
+	if _, err := folder.Readdirnames(1); err != nil && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("%s is not a readable folder", real)
+	}
+	return &upTarget{path: real}, nil
 }
 
 // pathWithin reports whether p is base or below it.
@@ -457,13 +441,10 @@ func analyzeTarget(ctx context.Context, up *running, cfg *instance.Config, layou
 		src = domain.Source{Kind: domain.SourceGit, ProviderID: p.ID, RepositoryURL: t.repoURL, Branch: t.branch}
 		name = domain.RepositoryName(t.repoURL)
 	} else {
-		for _, r := range up.roots {
-			if r.Path == t.rootPath {
-				src = domain.Source{Kind: domain.SourceLocal, SourceRootID: r.ID, RelativePath: t.relative}
-			}
-		}
-		if src.Kind == "" {
-			return "", "", fmt.Errorf("the source root of %s is not registered", t.path)
+		var err error
+		src, err = up.store.LocalSourceForPath(ctx, t.path)
+		if err != nil {
+			return "", "", fmt.Errorf("cannot register local folder %s: %w", t.path, err)
 		}
 		name = filepath.Base(t.path)
 	}
@@ -475,7 +456,7 @@ func analyzeTarget(ctx context.Context, up *running, cfg *instance.Config, layou
 		}
 		for i, p := range page.Items {
 			var have domain.Source
-			if json.Unmarshal(p.Source, &have) == nil && domain.SameSource(have, src) {
+			if p.Role == postgres.RoleOwner && json.Unmarshal(p.Source, &have) == nil && domain.SameSource(have, src) {
 				project = &page.Items[i]
 				break
 			}
@@ -503,7 +484,7 @@ func analyzeTarget(ctx context.Context, up *running, cfg *instance.Config, layou
 		fmt.Fprintf(out, "registered project %q (%s)\n", name, t.repoURLOrPath())
 	}
 	if t.pullRequest > 0 {
-		run, err := queuePullRequest(ctx, up, layout, projectID, t, pull, out)
+		run, err := queuePullRequest(ctx, up, platformGitHub(cfg, layout), projectID, t, pull, out)
 		return projectID, run, err
 	}
 	run, err := up.store.Enqueue(ctx, up.user, projectID, "up-"+domain.NewID(), json.RawMessage(upRunBody))

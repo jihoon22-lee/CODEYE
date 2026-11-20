@@ -1,4 +1,4 @@
-// Package account holds the local-account rules: the username form, the
+// Package account holds the local-account rules: login identifiers, the
 // password policy and the password key derivation. It has no storage and
 // no clock; the store calls it outside database transactions so a slow
 // derivation never holds a connection or a row lock.
@@ -41,9 +41,31 @@ var (
 	ErrPasswordPolicy = errors.New("account: password does not meet the policy")
 	// ErrUsername is a username outside the allowed form.
 	ErrUsername = errors.New("account: invalid username")
+	// ErrEmail is an email address outside the supported form.
+	ErrEmail = errors.New("account: invalid email")
 )
 
 var usernameForm = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,63}$`)
+var emailForm = regexp.MustCompile("^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
+
+// NormalizeEmail trims surrounding whitespace and folds ASCII letters to
+// lowercase. It accepts a single address with a DNS domain.
+func NormalizeEmail(s string) (string, error) {
+	n := strings.TrimSpace(s)
+	if len(n) > 254 || strings.IndexByte(n, '@') > 64 {
+		return "", ErrEmail
+	}
+	for i := 0; i < len(n); i++ {
+		if n[i] >= utf8.RuneSelf {
+			return "", ErrEmail
+		}
+	}
+	n = strings.ToLower(n)
+	if !emailForm.MatchString(n) {
+		return "", ErrEmail
+	}
+	return n, nil
+}
 
 // NormalizeUsername lower-cases ASCII letters and checks the stored form:
 // 2..64 characters of a-z, 0-9, '.', '_' and '-', starting with a letter or
@@ -57,9 +79,9 @@ func NormalizeUsername(s string) (string, error) {
 }
 
 // CheckPassword applies the policy: 12..256 characters of valid UTF-8 without
-// NUL, not equal to the username or the display name (ignoring case), and
+// NUL, not equal to the login identifier or the display name (ignoring case), and
 // not one character repeated. There are no composition rules.
-func CheckPassword(password, username, displayName string) error {
+func CheckPassword(password, identifier, displayName string) error {
 	if !utf8.ValidString(password) || strings.ContainsRune(password, 0) {
 		return ErrPasswordPolicy
 	}
@@ -67,7 +89,7 @@ func CheckPassword(password, username, displayName string) error {
 	if n < MinPasswordLength || n > MaxPasswordLength {
 		return ErrPasswordPolicy
 	}
-	if username != "" && strings.EqualFold(password, username) {
+	if identifier != "" && strings.EqualFold(password, identifier) {
 		return ErrPasswordPolicy
 	}
 	if strings.TrimSpace(displayName) != "" && strings.EqualFold(password, strings.TrimSpace(displayName)) {

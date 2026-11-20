@@ -15,13 +15,14 @@ import (
 type memberView struct {
 	UserID      string  `json:"user_id"`
 	Username    *string `json:"username"`
+	Email       *string `json:"email,omitempty"`
 	DisplayName *string `json:"display_name"`
 	Role        string  `json:"role"`
 	Disabled    bool    `json:"disabled"`
 }
 
 func viewMember(m postgres.Member) memberView {
-	return memberView{UserID: m.UserID, Username: m.Username, DisplayName: m.DisplayName, Role: m.Role, Disabled: m.Disabled}
+	return memberView{UserID: m.UserID, Username: m.Username, Email: m.Email, DisplayName: m.DisplayName, Role: m.Role, Disabled: m.Disabled}
 }
 
 func (s *Server) listMembers(q *request) {
@@ -59,10 +60,8 @@ func decodeRole(q *request) (domain.Role, bool) {
 	return role, true
 }
 
-// POST /projects/{id}/members {username, role}: add or change a member named
-// by exact username. Unknown and disabled usernames are the same 404 as a
-// project the caller cannot see; the role is checked first, so only a
-// project manager learns that a username exists.
+// POST /projects/{id}/members adds or changes a member by email or username.
+// Unknown and disabled accounts use the same 404 as an inaccessible project.
 func (s *Server) addMember(q *request) {
 	body, ok := q.readBody()
 	if !ok {
@@ -70,10 +69,11 @@ func (s *Server) addMember(q *request) {
 	}
 	var in struct {
 		Username string `json:"username"`
+		Email    string `json:"email"`
 		Role     string `json:"role"`
 	}
-	if domain.DecodeStrict(body, &in) != nil || in.Username == "" || len(in.Username) > 256 {
-		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", `body must be {"username": string, "role": "manager"|"runner"|"viewer"}`, false)
+	if domain.DecodeStrict(body, &in) != nil || (in.Username == "") == (in.Email == "") || len(in.Username) > 256 || len(in.Email) > 1024 {
+		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", `body must contain a role and either an email or a username`, false)
 		return
 	}
 	role := domain.Role(in.Role)
@@ -83,7 +83,13 @@ func (s *Server) addMember(q *request) {
 	}
 	ctx, cancel := q.ctx()
 	defer cancel()
-	m, err := s.store.AddMemberByUsername(ctx, q.session.UserID, q.params[0], in.Username, role)
+	var m postgres.Member
+	var err error
+	if in.Email != "" {
+		m, err = s.store.AddMemberByEmail(ctx, q.session.UserID, q.params[0], in.Email, role)
+	} else {
+		m, err = s.store.AddMemberByUsername(ctx, q.session.UserID, q.params[0], in.Username, role)
+	}
 	if err != nil {
 		s.storeError(q, err)
 		return

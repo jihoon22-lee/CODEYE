@@ -8,6 +8,7 @@ export type AnonymousReason = 'none' | 'launch_rejected' | 'expired' | 'logged_o
 export type SessionUser = {
   userId: string;
   username: string | null;
+  email?: string;
   displayName: string | null;
   isAdmin: boolean;
   mustChangePassword: boolean;
@@ -69,6 +70,7 @@ export function createSessionController(api: Api, env?: Env) {
       status: 'authenticated',
       userId: info.user_id,
       username: info.username,
+      ...(info.email === undefined ? {} : { email: info.email }),
       displayName: info.display_name,
       isAdmin: info.is_admin,
       mustChangePassword: info.must_change_password,
@@ -151,15 +153,24 @@ export function createSessionController(api: Api, env?: Env) {
       started = begin(null);
       return started;
     },
-    // Username and password sign-in. The caller clears its password field whatever the outcome.
-    async login(username: string, password: string): Promise<CredentialResult> {
+    // Password sign-in. The caller clears its password field whatever the outcome.
+    async login(identifier: string, password: string): Promise<CredentialResult> {
       try {
-        authenticated(await api.loginWithPassword(username, password));
+        authenticated(await api.loginWithPassword(identifier, password));
         return { ok: true };
       } catch (error) {
         if (error instanceof ApiError && error.kind === 'http' && error.status === 429) return { ok: false, kind: 'throttled', retryAfter: error.retryAfter };
         if (unreachable(error) && !(error instanceof ApiError && error.status === 404)) return { ok: false, kind: 'unavailable' };
         return { ok: false, kind: 'rejected' };
+      }
+    },
+    async register(email: string, password: string): Promise<CredentialResult> {
+      try {
+        authenticated(await api.registerAccount(email, password));
+        return { ok: true };
+      } catch (error) {
+        if (unreachable(error)) return { ok: false, kind: 'unavailable' };
+        return { ok: false, kind: 'error', error };
       }
     },
     // The server ends the user's other sessions and unused login links; this session stays.

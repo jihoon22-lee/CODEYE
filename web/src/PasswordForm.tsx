@@ -51,7 +51,8 @@ export function PasswordForm({ controller, user, forced, onDone }: Props) {
   }
 
   const titleId = `${uid}-title`;
-  if (user.username === null) {
+  const identifier = user.email ?? user.username;
+  if (identifier === null) {
     return <section className="panel" aria-labelledby={titleId}>
       <h1 id={titleId}>{forced ? s.forcedTitle : s.title}</h1>
       <p className="notice">{s.linkOnly}</p>
@@ -63,19 +64,19 @@ export function PasswordForm({ controller, user, forced, onDone }: Props) {
     {forced && <p className="notice">{s.forcedIntro}</p>}
     <form onSubmit={submit} noValidate aria-labelledby={titleId}>
       {/* Lets password managers attach the new password to the right account. */}
-      <input type="text" name="username" autoComplete="username" value={user.username} readOnly hidden />
+      <input type="text" name="username" autoComplete="username" value={identifier} readOnly hidden />
       {needsCurrent && <div className="field">
         <label htmlFor={`${uid}-current`}>{s.current}</label>
-        <input id={`${uid}-current`} ref={current} type="password" autoComplete="current-password" maxLength={256} />
+        <input id={`${uid}-current`} ref={current} type="password" autoComplete="current-password" maxLength={512} />
       </div>}
       <div className="field">
         <label htmlFor={`${uid}-next`}>{s.next}</label>
-        <input id={`${uid}-next`} ref={next} type="password" autoComplete="new-password" maxLength={256} aria-describedby={`${uid}-rules`} />
+        <input id={`${uid}-next`} ref={next} type="password" autoComplete="new-password" maxLength={512} aria-describedby={`${uid}-rules`} />
         <small id={`${uid}-rules`} className="small">{s.rules}</small>
       </div>
       <div className="field">
         <label htmlFor={`${uid}-confirm`}>{s.confirm}</label>
-        <input id={`${uid}-confirm`} ref={confirm} type="password" autoComplete="new-password" maxLength={256} />
+        <input id={`${uid}-confirm`} ref={confirm} type="password" autoComplete="new-password" maxLength={512} />
       </div>
       <p className="small">{s.effect}</p>
       <button type="submit" className="primary" disabled={pending || blocked} aria-busy={pending}>{pending ? s.submitting : s.submit}</button>

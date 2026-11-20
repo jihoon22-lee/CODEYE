@@ -46,18 +46,17 @@
       "items": [
         {"path": "AGENTS.md", "applies_to": ".", "class": "agent_instructions", "status": "selected", "reason": null, "line_count": 11},
         {"path": "README.md", "applies_to": ".", "class": "readme", "status": "selected", "reason": null, "line_count": 9},
-        {"path": "docs/design.md", "applies_to": "docs", "class": "design", "status": "budget_exceeded", "reason": "document_too_large", "line_count": null},
+        {"path": "docs/design.md", "applies_to": ".", "class": "design", "status": "budget_exceeded", "reason": "document_too_large", "line_count": null},
         {"path": "svc/b/README.md", "applies_to": "svc/b", "class": "readme", "status": "selected", "reason": null, "line_count": 5}
       ],
       "modules": [
         {"module": "go:.", "state": "own", "own": ["AGENTS.md", "README.md", "docs/design.md"], "inherited": []},
-        {"module": "go:svc/a", "state": "inherited", "own": [], "inherited": ["AGENTS.md", "README.md"]},
-        {"module": "go:svc/b", "state": "own", "own": ["svc/b/README.md"], "inherited": ["AGENTS.md", "README.md"]}
+        {"module": "go:svc/a", "state": "inherited", "own": [], "inherited": ["AGENTS.md", "README.md", "docs/design.md"]},
+        {"module": "go:svc/b", "state": "own", "own": ["svc/b/README.md"], "inherited": ["AGENTS.md", "README.md", "docs/design.md"]}
       ],
       "overlapping_guidance": [
-        {"path": ".", "documents": ["AGENTS.md", "README.md"], "assessment": "not_assessed_without_model"},
-        {"path": "docs", "documents": ["AGENTS.md", "README.md", "docs/design.md"], "assessment": "not_assessed_without_model"},
-        {"path": "svc/b", "documents": ["AGENTS.md", "README.md", "svc/b/README.md"], "assessment": "not_assessed_without_model"}
+        {"path": ".", "documents": ["AGENTS.md", "README.md", "docs/design.md"], "assessment": "not_assessed_without_model"},
+        {"path": "svc/b", "documents": ["AGENTS.md", "README.md", "docs/design.md", "svc/b/README.md"], "assessment": "not_assessed_without_model"}
       ]
     },
     "limitations": ["document_budget_exceeded", "semantic_conflicts_not_assessed"]

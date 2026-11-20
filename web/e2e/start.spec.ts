@@ -30,8 +30,8 @@ test('the tools panel lists what was found and how to add the rest', async () =>
   await page.getByRole('button', { name: '도구', exact: true }).click();
   const table = page.getByRole('table');
   await expect(table.getByRole('row').filter({ hasText: /^go/ }).first()).toContainText('찾음');
-  await expect(page.getByText('경로로 분석할 수 있는 폴더', { exact: true })).toBeVisible();
-  await expect(page.getByText(/공개 저장소를 받을 수 있습니다: github\.com/)).toBeVisible();
+  await expect(page.getByText('서버 폴더', { exact: true })).toBeVisible();
+  await expect(page.getByText(/연결할 수 있는 호스트: github\.com/)).toBeVisible();
 });
 
 test('a folder path goes straight to its run, and the report opens with what would make it better', async () => {

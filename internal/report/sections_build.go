@@ -222,12 +222,19 @@ func (c sectionContext) documents() *DocumentsSection {
 			s.Questions = append(s.Questions, DocQuestion{Question: x.Question, AppliesTo: x.AppliesTo, EvidenceIDs: append([]string{}, x.EvidenceIDs...)})
 			cited = append(cited, x.EvidenceIDs)
 		}
+		s.Quality = append(s.Quality, rec.DocumentQuality...)
+		for _, x := range s.Quality {
+			cited = append(cited, x.EvidenceIDs)
+		}
 		for _, x := range rec.InstructionNotes {
 			s.InstructionNotes = append(s.InstructionNotes, DocInstructionNote{Note: x.Note, EvidenceIDs: append([]string{}, x.EvidenceIDs...)})
 			cited = append(cited, x.EvidenceIDs)
 		}
 	}
 	s.Evidence = evidenceOf(rec, cited...)
+	if rec != nil {
+		c.addComparisons(s, rec)
+	}
 	return s
 }
 
@@ -551,6 +558,7 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 	if c.reviewPlanned {
 		s.Ledger = c.ledger()
 	}
+	c.addStrengths(s)
 	return s
 }
 

@@ -511,8 +511,7 @@ def inner(args) -> int:
     try:
         out, session, run_id = up(src / "seeded", ["--offline"], dict(env, OPENAI_API_KEY="sk-env-key-not-stored", GH_TOKEN="ghp_envtokennotused0123456789"))
         assert 'saved "offline": true' in out, out
-        assert "github: off (offline mode)" in out, out
-        assert not any((state / "secrets/github-users").glob("*.json")), "a GitHub token was stored offline"
+        assert json.loads((state / "secrets/github-platform.json").read_text()) == {}, "an unconfigured GitHub token was stored"
         assert "has no base_url" in out, out
         assert secret.read_bytes() == before, "the environment key replaced the key file"
         saved = json.loads(config.read_text())
@@ -532,7 +531,7 @@ def inner(args) -> int:
         assert any(f["name"] == missing_module for f in d["failed_items"]), d["failed_items"]
         step("offline, module not in the cache", run=view["status"], deps_go=f"{d['task_status']}/{why(d)}", failed_items=[f["reason"] for f in d["failed_items"]])
         pr = sh([exe, "up", "--config", config, "--no-open", "--postgres-bin-dir", args.postgres_bin_dir, "https://github.com/octo/demo/pull/1"], env=env, check=False)
-        assert pr.returncode == 2 and "offline mode does not use GitHub" in pr.stderr, (pr.returncode, pr.stdout, pr.stderr)
+        assert pr.returncode == 2 and "offline mode allows no host by default" in pr.stderr, (pr.returncode, pr.stdout, pr.stderr)
         step("offline, pull request refused", exit=pr.returncode, message=pr.stderr.strip().splitlines()[-1][:80])
         doctor1 = sh([exe, "doctor", "--config", config, "--format", "json", "--work-dir", work / "doctor-work"], env=env, check=False).stdout
         (work / "doctor-offline.json").write_text(doctor1)
@@ -628,10 +627,10 @@ def inner(args) -> int:
         off = json.loads(doctor2)["offline"]
         asked = [line for line in gh_log.read_text().splitlines()] if gh_log.exists() else []
         assert all(line == "--version" for line in asked), asked
-        assert not any((state / "secrets/github-users").glob("*.json")), "a GitHub token was stored offline"
+        assert json.loads((state / "secrets/github-platform.json").read_text()) == {}, "an unconfigured GitHub token was stored"
         setup = json.loads(session.request("GET", "setup", raw=True)[0])
-        assert (setup.get("github") or {}).get("reason") == "offline_mode", setup.get("github")
-        step("GitHub offline", gh_invocations=sorted(set(asked)) or "none", setup_github=setup["github"]["reason"], token_file="absent")
+        assert [g["host"] for g in setup["github_connections"]] == doc["git_hosts"], setup["github_connections"]
+        step("GitHub offline", gh_invocations=sorted(set(asked)) or "none", setup_git_hosts=setup["git"]["hosts"], token_file="empty")
         step("doctor", schema=schema_ok, destinations={d["kind"]: d["origin"] for d in off["destinations"]}, ca_bundle=off["ca_bundle"]["status"])
         checklist = sh([exe, "tools", "--config", config, "--checklist"], env=env).stdout
         (work / "checklist.md").write_text(checklist)

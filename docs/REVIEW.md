@@ -24,7 +24,7 @@
 
 | `pack.yaml` id·version | 기록 schema | 역할 |
 |---|---|---|
-| `review` 2.0.0 | `0.2`(slice는 `0.3`) | environment, documents, investigate, interpret, verify |
+| `review` 2.1.0 | `0.2`(slice는 `0.3`) | environment, documents, investigate, interpret, verify |
 
 - 지침 개정은 이 지침 하나에 한다. 개정의 검증 절차는 [평가](EVALUATION.md)에 있다.
 - 보고서는 Go가 만들므로 종합·보고 역할에 모델을 호출하지 않는다.
@@ -54,8 +54,8 @@
 | task | 단계 | 판정 필수 | 호출 없이 끝나는 경우 | 입력 | 출력 |
 |---|---|---|---|---|---|
 | `review.environment` | `environment` | 아니오 | 선언된 요구가 모두 `satisfied`면 `no_environment_gap`. 탐색 산출물을 쓸 수 없으면 `dependency_failed` | 차이가 있는 모듈의 요구·근거 ID·노드 관측·판정 | gap 모듈마다 영향 메모 하나. 플랫폼 판정은 바꾸지 못한다 |
-| `review.documents` | `documents` | 계획 시 범위 안에 안내 문서가 있을 때만 | 문서 없음 `no_documents`(필수 아님), 선택된 문서 없음 `documents_not_selected`, `dependency_failed` | 선택 문서 발췌 | 적용 경로가 있는 계약·충돌·질문, 지침성 문구 메모 |
-| `review.investigate` | `code_review` | 예 | — | 수락된 문서·환경 결과, 모듈별 코드·테스트 발췌. 원시 도구 진단은 넣지 않는다(REQ-009) | 후보 `investigate_N`(0~4개) |
+| `review.documents` | `documents` | 계획 시 범위 안에 안내 문서가 있을 때만 | 문서 없음 `no_documents`(필수 아님), 선택된 문서 없음 `documents_not_selected`, `dependency_failed` | 선택 문서 발췌 | 적용 경로가 있는 계약·충돌·질문, 지침성 문구 메모, 근거가 있는 문서 품질 판단 |
+| `review.investigate` | `code_review` | 예 | — | 수락된 문서·환경 결과, 모듈별 코드·테스트 발췌. 원시 도구 진단은 넣지 않는다(REQ-009) | 후보 `investigate_N`(0~4개), 구현 근거가 있는 강점, 전체 조사에서 문서 계약과 코드의 대조 |
 | `review.interpret` | `code_review` | 아니오 | 해석할 도구 관찰이 없으면 `no_tool_observations` | 관찰 ID·규칙·위치와 주변 줄 창 | 관찰에 연결한 가설 `interpret_N`(최대 2) 또는 해석 한계 |
 | `review.verify` | `code_review` | 예 | investigate·interpret가 모두 수락되지 않으면 `dependency_failed`. 후보가 없으면 호출 없이 성공(`no_candidates_to_verify`) | 수락된 두 역할의 후보, 문서 계약, 관찰, 발췌와 호출자·테스트 확장 | 후보별 판정 |
 
@@ -70,7 +70,7 @@
 | [후보 검증](../prompts/review/verify.md) | 이전 후보 원문과 ID, 호출부·테스트·반대 근거 | 지지·기각·판단 보류의 이유, 유효·무효 조건, 추가 확인 사항 |
 
 - 도구 진단 해석은 독립 조사와 별도 입력으로 수행하고 원시 메시지·규칙·위치를 보존한다. 도구의 실행 상태, finding 수, 심각도를 다시 말하지 않고, 진단이 없다는 사실을 깨끗한 코드로 서술하지 않는다.
-- 출력 개수 한도: documents는 계약 6, 충돌 3, 질문 4, 지침성 문구 메모 3개까지. interpret는 가설 2, 한계 3개까지이고 합해서 하나 이상. investigate는 후보 4개까지.
+- 출력 개수 한도: documents는 계약 6, 충돌 3, 질문 4, 지침성 문구 메모 3개까지. interpret는 가설 2, 한계 3개까지이고 합해서 하나 이상. investigate는 후보 4개와 강점 3개까지다. 문서 검토는 명확성·완전성·실행 가능성·일관성에 관한 근거 있는 판단을 4개까지, 전체 조사 역할은 고른 문서 계약과 코드의 대조를 6개까지 기록한다. 대조는 계약 순번과 그 문서 근거에 묶인다. 일치·부분 일치·불일치에는 해당 경로의 구현 코드 근거가 필요하고, 미확인은 근거 부족을 설명한다. 보고서에서 대조가 없는 수락 계약은 미확인으로 표시한다.
 - 하위 역할은 수락된 결과만 받는다. 앞 역할이 생략·실패·사용 불가면 `upstream_<역할>_<상태>` 한계를 남긴다(예: `upstream_documents_skipped`).
 - 모델 전송이 승인되지 않으면 모든 역할이 `skipped_policy`(`model_source_not_approved`)다.
 
@@ -120,7 +120,7 @@
 - 대상은 탐색 산출물에서 `selected` 상태인 안내 문서다. 순서는 에이전트 지침, README, CONTRIBUTING, 설계 문서이고 같은 분류는 얕은 경로가 먼저다.
 - 문서당 첫 40줄·2,000바이트, 최대 8개, 합계 10,000바이트다. 넘으면 `documents_outside_review_input`, 문서 일부만 보내면 `document_excerpt_only`를 남긴다.
 - 읽지 않은 안내 문서(최대 16개), 모듈별 문서 연결과 겹침 묶음(각 최대 32·16개, 목록당 8개)을 함께 준다. 줄이면 `document_lists_shortened`다.
-- 문서 규칙의 적용 경로(`applies_to`)는 인용한 문서의 디렉터리와 같거나 그 아래여야 한다.
+- 문서 규칙의 적용 경로(`applies_to`)는 탐색에서 정한 문서의 적용 디렉터리와 같거나 그 아래여야 한다.
 
 ### 환경 입력(environment)
 
@@ -263,7 +263,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 - 출력은 `workspace_proof`와 `result`를 가진 JSON 객체 하나여야 한다. `result`는 역할 계약의 엄격한 JSON이다. 계약의 목록 key는 모두 배열로 있어야 하고 알 수 없는 필드는 거부한다(`output_schema_invalid`).
 - 그 호출에 준 근거·관찰 ID만 인용할 수 있다. 오류 코드: `evidence_id_unknown`, `evidence_id_duplicate`, `evidence_kind_invalid`, `evidence_missing`, `evidence_list_too_long`, `observation_id_unknown`, `evidence_not_at_observation`, `code_evidence_missing`.
-- 문서 규칙의 적용 경로를 상위 디렉터리나 저장소 전체로 넓히면 거부한다(`scope_generalized`, `scope_unknown_path`, `scope_invalid`). 충돌의 두 쪽은 서로 다른 문서를 인용해야 한다(`conflict_same_document`).
+- 탐색에서 정한 문서의 적용 경로보다 상위로 넓히면 거부한다(`scope_generalized`, `scope_unknown_path`, `scope_invalid`). 충돌의 두 쪽은 서로 다른 문서를 인용해야 한다(`conflict_same_document`).
 - 실행·재현·테스트 통과를 주장하는 서술은 거부한다. 호출 오류 코드는 `execution_claim`이고, 단계 기록에는 `execution_claim_rejected` 한계가 남는다. 이 검사는 정규식 휴리스틱이다. 놓친 주장이 있어도 상태·재현·통계는 구조화 기록에서만 정하므로 모델 서술이 판정을 바꾸지 못한다.
 - 서술 필드는 JSON 인코딩 400바이트 이하다(지침은 120자 이하를 요구한다). 기록에 남는 모델 서술은 2,400바이트 이하이고 민감값 패턴에 걸리지 않아야 한다.
 - 환경 메모는 플랫폼 판정을 다시 쓰거나 올리지 못한다. 판정 필드를 붙인 출력은 거부한다.
@@ -332,7 +332,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 모델은 관리형 로컬 OpenCode CLI로 호출한다([`client.go`](../internal/worker/opencode/client.go), [`executor/opencode.go`](../internal/worker/executor/opencode.go)). 실행 규칙(argv, 제한시간, 프로세스 트리 정리)은 [실행](EXECUTION.md)을 따른다. 원격 OpenCode attach나 별도 serve 연결은 구현하지 않았다. 추가할 때는 인증·버전·취소·workspace marker/digest를 대상 환경에서 검증한다.
 
 - **버전.** 시험한 버전은 OpenCode 1.19.5다(`opencode.Version`). 호출마다 먼저 `--version`(8초 이하)을 실행한다. 다른 릴리스(`MAJOR.MINOR.PATCH[-…]`)도 실행하고 그 단계 기록에 `opencode_version_untested`를 남긴다. 릴리스 형식이 아닌 응답만 `opencode_version_unsupported`다. `codeye doctor`의 버전 확인은 모델 비용을 쓰지 않는다.
-- **운영자 설정.** 실행 파일은 절대 경로다. 모델 ID는 `PROVIDER/MODEL`이다. provider는 소문자·숫자·`._-`, 모델 부분은 영숫자와 `._:@+-/`이고 `.`·`..` 경로 조각은 받지 않는다(라우터식 `vendor/model`은 받는다). `codeye-gateway/gpt-6.2-sol`·`codeye-gateway/gpt-6.1-sol`은 relay 파일이 있을 때만 쓴다. 호출당 제한시간은 `--model-timeout`(기본 180초, 1초~30분)이다. 설정이 없거나 형식이 틀리면 요청을 보내지 않는다(`model_not_configured`). 공급자 변경은 운영자 선택이다([모델 설정](#모델-설정)).
+- **운영자 설정.** 실행 파일은 절대 경로다. 모델 ID는 `PROVIDER/MODEL`이다. provider는 소문자·숫자·`._-`, 모델 부분은 영숫자와 `._:@+-/`이고 `.`·`..` 경로 조각은 받지 않는다(라우터식 `vendor/model`은 받는다). 평가용 `codeye-gateway`의 Sol·Terra·Luna 모델은 relay 파일이 있을 때만 쓴다. 호출당 제한시간은 `--model-timeout`(기본 180초, 1초~30분)이다. 설정이 없거나 형식이 틀리면 요청을 보내지 않는다(`model_not_configured`). 공급자 변경은 운영자 선택이다([모델 설정](#모델-설정)).
 - **작업 디렉터리와 workspace digest.** 요청마다 attempt scratch 아래 새 디렉터리를 만든다. 그 안의 `identity.txt`에 snapshot digest, 요청 digest, 무작위 32바이트 nonce에 묶인 확인값을 쓰고 첨부로 준다. 응답의 `workspace_proof`가 이 값과 다르면 `workspace_unreachable`이다. 프롬프트와 선택된 데이터는 표준 입력으로만 전달한다. 요청 digest는 정확한 메시지 텍스트의 SHA-256이다.
 - **권한 차단.** `run --pure`로 실행하고, 실행별 HOME/TMP와 플랫폼이 만든 설정(`OPENCODE_CONFIG_CONTENT`)만 쓴다. 설정은 `permission: deny`, 모든 도구 `false`, share·snapshot·autoupdate·LSP·formatter·plugin 끔, 허용 provider 하나다. 프로젝트 설정, 기본 플러그인, 외부 skill, 모델 목록 조회, LSP 다운로드는 환경변수로 끈다. 사용자 설정과 대상 프로젝트 설정을 읽는 경로를 분리한다. 스냅샷 디렉터리는 보호 루트로 넘긴다.
 - **응답 수집.** 한 세션·한 메시지의 완료된 응답만 받는다. `tool_use`·`permission` 이벤트는 `policy_blocked`, `error`는 `model_unavailable`, 세션 불일치·순서 위반은 `model_output_invalid`, 완료 사유가 `stop`이 아니거나 잘린 출력(64 KiB 초과)은 `model_output_incomplete`다. `reasoning` 이벤트는 버린다. 공급자 사용량 제한 메시지는 `model_rate_limited`로만 남긴다.

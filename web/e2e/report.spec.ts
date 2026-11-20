@@ -27,17 +27,22 @@ test('published report exposes the same counts, evidence and revision in the bro
   const doc = await response.json();
   const rows = report.locator('.report-counts > div');
   await expect(rows.filter({hasText:'발견 사항'}).locator('dd')).toHaveText(String(doc.summary.total_findings));
+  if (doc.summary.priorities.length) {
+    const finding = doc.findings.find((entry: { id: string }) => entry.id === doc.summary.priorities[0]);
+    const priority = report.locator('.report-priorities .finding-card').first();
+    const title = priority.locator('summary').first();
+    await expect(title).toContainText(finding.title);
+    await title.focus();
+    await page.keyboard.press('Enter');
+    await expect(priority.getByText(finding.impact, {exact:true})).toBeVisible();
+    const excerpt = finding.evidence.find((entry: { excerpt?: unknown }) => entry.excerpt);
+    if (excerpt) await expect(priority.locator('pre').first()).toBeVisible();
+    await expect(report.getByRole('tab', {name:'종합', exact:true})).toHaveAttribute('aria-selected', 'true');
+  }
   if (doc.overview) {
-    // Analysis sections: collapsed ones are opened from their summary, then
-    // every stored count must be on the screen.
-    const sections = report.locator('details.report-section[id]');
-    await expect(sections).toHaveCount(doc.overview.sections.length);
-    for (let i = 0; i < await sections.count(); i++) {
-      const section = sections.nth(i);
-      if (!(await section.evaluate((d) => (d as HTMLDetailsElement).open))) await section.locator('summary').first().click();
-    }
     for (const section of doc.overview.sections) {
       if (section.key === 'gaps') continue;
+      await report.getByRole('tablist').locator('[aria-controls="report-section-' + section.key + '"]').click();
       const counts = report.locator('[data-section-counts="' + section.key + '"]');
       for (const [key, value] of Object.entries(section.counts as Record<string, number>)) {
         const cell = counts.locator('[data-count="' + key + '"] dd');
@@ -49,10 +54,12 @@ test('published report exposes the same counts, evidence and revision in the bro
   if (doc.findings.length) {
     // The summary view keeps the full lists (static findings, the other
     // review findings) behind disclosures that render when opened.
-    const more = report.locator('details.report-more:not([open]) > summary');
+    const key = doc.code_review.finding_ids.includes(doc.findings[0].id) ? 'code_review' : 'static_analysis';
+    await report.getByRole('tablist').locator('[aria-controls="report-section-' + key + '"]').click();
+    const more = report.locator('details.report-more:not([open]) > summary:visible');
     while (await more.count() > 0) await more.first().click();
     const item = doc.findings[0];
-    const card = report.locator('details.finding-card').filter({has: page.locator('summary > strong').getByText(item.title, {exact:true})}).first();
+    const card = report.locator('#report-section-' + key).locator('details.finding-card').filter({has: page.locator('summary > strong').getByText(item.title, {exact:true})}).first();
     await card.locator('summary').first().click();
     await expect(card.getByText(item.impact, {exact:true}).first()).toBeVisible();
     // The claims and evidence sit behind the card's own disclosure.

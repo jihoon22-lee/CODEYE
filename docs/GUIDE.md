@@ -45,13 +45,13 @@ go           found    1.27.4    /usr/local/go/bin/go
 opencode     missing  -         not found - install OpenCode (`curl -fsSL https://opencode.ai/install | bash`) or set `agent.model.opencode`
 go module cache: ~/go/pkg/mod; python type checkers: mypy and pyright both run
 model: none (set OPENAI_API_KEY, ANTHROPIC_API_KEY or OPENCODE_API_KEY and run codeye up again) - static analysis only
-github: signed in as octocat on github.com (token from gh) - private repositories and pull requests you can read
+github: platform account codeye-platform on github.com
 initialized a PostgreSQL 17.10 cluster in /home/user/.local/state/codeye/postgres/data (binaries: /usr/lib/postgresql/17/bin)
 PostgreSQL 17.10 started on 127.0.0.1:55432 (log /home/user/.local/state/codeye/logs/postgres.log)
-database schema created (migration 13)
+database schema created (migration 16)
 created the administrator user 2ce93dc8-…
 registered source root "home" (f655c03e-…)
-registered the Git host github.com (public repositories, and private ones the GitHub token can read)
+registered the Git host github.com
 CODEYE is running at http://127.0.0.1:7331 (controller pid 4101, agent pid 4113); logs in /home/user/.local/state/codeye/logs
 registered project "myproject" (/home/user/src/myproject)
 queued an analysis of "myproject" (run 4699c64a-…); the browser shows its progress and the report
@@ -65,7 +65,7 @@ The browser stays signed in for 7 days. New link: codeye open. Stop: codeye stop
 
 - 주소의 `#launch=` 값은 한 번만 쓰는 10분짜리 로그인 토큰이다. 브라우저가 읽자마자 주소창에서 지운다. 화면을 다시 열 때는 `codeye open`을 한다(새 링크를 출력하고 브라우저를 연다). 브라우저를 열지 않으려면 `up`·`open`에 `--no-open`을 준다.
 - 로그인은 7일 동안 유지된다.
-- 경로 없이 `codeye up`만 하면 시작(또는 이미 실행 중이면 새 링크)만 한다. 실행 중에 다른 폴더로 `codeye up`을 하면 그 폴더를 source root로 더하고, 에이전트를 다시 등록한다. 에이전트는 실행 중인 분석을 끝낸 뒤 다시 시작한다.
+- 경로 없이 `codeye up`만 하면 시작(또는 이미 실행 중이면 새 링크)만 한다. 다른 폴더를 지정하면 서비스 계정으로 읽을 수 있는지 확인하고 그 폴더의 분석을 요청한다. 새 경로를 분석할 때마다 에이전트를 재시작할 필요는 없다.
 - 상태 디렉터리나 백업 디렉터리를 품거나 그 안에 있는 폴더(예: 홈 디렉터리 전체)는 받지 않는다. 오류가 문제의 폴더를 알려 주므로 프로젝트가 든 하위 폴더를 준다. 화면에서 등록하든 root와 상대 경로로 등록하든 같고, 에이전트도 소스를 읽기 전에 다시 확인한다.
 - 홈 디렉터리는 설정에 적지 않아도 읽을 수 있는 폴더(`home` root)다. 다른 곳의 폴더는 처음 한 번 `codeye up <폴더>`로 더한다.
 
@@ -90,7 +90,7 @@ Open CODEYE (signed in; the link works once, within 10 minutes):
 ```
 
 - 받는 주소는 `https://HOST/OWNER/REPO`다(`https://`는 생략해도 된다). 허용 호스트는 설정의 `git_hosts`이고 기본은 `["github.com"]`이다. `git`이 없으면 주소를 받지 않고 그렇다고 알린다.
-- **비공개 github.com 저장소**는 분석을 시작한 사람의 GitHub token이 있으면 그대로 읽는다. 관리자의 token은 `codeye up`이 `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token` 순으로 찾아 `github:` 줄에 계정과 출처만 보인다(token은 출력하지 않는다). `gh auth login`을 해 두었으면 할 일이 없다. token이 없거나 그 token으로 읽을 수 없는 주소(없는 저장소 포함)는 소스 확보가 "저장소를 읽을 권한이 없음"으로 실패한다. 호스트에 닿지 못하면 "Git 호스트에 연결하지 못함"이다. 관리자 token 찾기를 끄려면 설정에 `"github": {"enabled": false}`를 둔다. 다른 사람은 **계정 > GitHub 연결**에 자기 token을 넣는다([GitHub token](GITHUB.md#github-token)). 다른 호스트에는 token을 보내지 않는다.
+- **비공개 GitHub.com·GHES 저장소**는 플랫폼 GitHub 계정에 읽기 권한을 주고 주소를 붙여넣는다. 서비스 시작 때 호스트별 계정이 표시된다. 토큰 설정과 갱신은 [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정)을 따른다.
 - 저장소의 빌드 스크립트(`cargo check` 등)는 기본으로 실행하지 않는다([프로젝트별 분석 선택](#프로젝트별-분석-선택)).
 - `web/dist`가 없으면 화면 없이 API만 뜨고 `web UI not built - run …`을 출력한다.
 - `codeye up`을 실행한 사람(설정의 사용자)은 관리자다. 사용자 이름과 비밀번호 없이 로그인 링크로 들어간다. 관리자 역할은 계정·폴더·Git host·서비스 스위치를 다룰 뿐 프로젝트 권한은 아니며, 각 사람은 자기가 등록한 프로젝트의 소유자다. 다른 사람을 들이는 방법은 [다른 사람 초대](#다른-사람-초대)에 있다.
@@ -106,7 +106,7 @@ codeye up --dry-run-comment https://github.com/OWNER/REPO/pull/123  # 게시하�
 실제 출력(공개 저장소 `spf13/cobra`의 fork pull request, 모델 없음, `--dry-run-comment`. 도구 표를 빼고 계정 이름을 바꿨으며 ID·링크 토큰만 줄였다):
 
 ```text
-github: signed in as octocat on github.com (token from gh) - private repositories and pull requests you can read
+github: platform account codeye-platform on github.com
 registered project "cobra" (https://github.com/spf13/cobra)
 queued an analysis of pull request #2580 of spf13/cobra (feat/completion-install from A-RYAN-1/cobra, head 75f6f3e, base main adbc881, 7 changed files; comment: dry run (nothing is posted)) (run 2a2fccd3-…)
 …
@@ -120,7 +120,7 @@ waiting for the report of run 2a2fccd3-… to preview its pull-request comment (
 ----- end of preview -----
 ```
 
-- 받는 주소는 github.com의 `…/pull/N`(과 `…/pull/N/files` 같은 탭 주소)다. 비공개 저장소의 pull request는 token이 있어야 한다.
+- GitHub.com과 승인한 GHES의 `…/pull/N` 주소를 받는다. 비공개 저장소는 해당 호스트의 플랫폼 계정에 PR 읽기 권한이 있어야 한다.
 - run은 그때의 head SHA를 고정해 분석한다. 새 push 뒤 같은 명령을 다시 하면 새 head로 새 run을 만들고, 비교 기준은 같은 pull request의 이전 run이다.
 - 결과 댓글은 기본으로 꺼져 있다. `--comment`(화면은 "고급"의 "pull request에 결과 댓글 남기기")로 켜면 그 프로젝트의 다음 pull request run에도 남긴다. `--comment=false`로 끈다. 댓글은 pull request마다 하나이고 새 run이 같은 댓글을 고친다. 게시가 실패해도 분석 결과는 그대로이고 실행 화면에 댓글 상태와 이유가 나온다. 댓글에는 코드·도구 원문·비밀정보를 싣지 않는다([결과 댓글](GITHUB.md#결과-댓글)).
 - `--dry-run-comment`는 아무것도 게시하지 않고 보고서를 기다려(`--comment-wait`, 기본 1시간) 댓글 본문을 출력한다. 화면에서는 실행 화면의 pull request 줄에서 "미리 보기"를 누른다.
@@ -143,6 +143,14 @@ codeye up --listen 0.0.0.0:7331 --plain-http
 codeye up --listen 0.0.0.0:7443 --tls-cert /etc/codeye/cert.pem --tls-key /etc/codeye/key.pem --public-origin https://codeye.example:7443
 ```
 
+**WSL에서 나만 접속하기.** 아래 예시는 WSL 안에서 Tailscale을 실행하고 본인 기기만 이 포트에 접속하도록 tailnet 접근 정책을 정한 경우다. CODEYE는 loopback에서 받고, Tailscale Serve는 같은 머신의 TCP 포트로 전달한다. 브라우저에는 `--public-origin`에 지정한 주소를 입력한다. [Tailscale Serve 포트 전달](https://tailscale.com/docs/reference/tailscale-cli/serve)
+
+```sh
+tailnet_ip=$(tailscale ip -4) && test -n "$tailnet_ip" &&
+  tailscale serve --bg --tcp=7331 tcp://127.0.0.1:7331 &&
+  codeye up --listen 127.0.0.1:7331 --plain-http --public-origin "http://${tailnet_ip}:7331"
+```
+
 `up`은 서비스가 받는 주소를 모두 출력한다. 상대의 네트워크에서 닿는 주소를 골라 알려 준다.
 
 ```text
@@ -163,7 +171,9 @@ The service answers on:
 
 ### 사용자 더하기
 
-웹의 **관리 > 사용자**에서 사용자 이름을 넣어 더하고, 나온 로그인 링크를 복사해 그 사람에게 전한다. 링크는 한 번만, 정해진 시간 안에만 쓴다. 그 사람은 링크로 들어와 비밀번호를 정한다. **관리** 화면 맨 위의 "이 서비스 주소"가 다른 사람이 여는 주소다. 명령줄의 [계정과 관리자 CLI](OPERATIONS.md#계정과-관리자-cli)도 같다.
+다른 사람에게 **관리** 화면의 서비스 주소를 알려 준다. 그 주소에서 **회원가입**을 눌러 이메일과 비밀번호를 입력하면 바로 로그인된다. 이후에는 같은 이메일과 비밀번호로 들어간다. 이메일의 대소문자와 앞뒤 공백은 무시한다. 이메일 확인 메일은 보내지 않는다.
+
+기존 사용자 이름과 비밀번호 또는 일회용 로그인 링크로도 로그인할 수 있다. 관리자가 일회용 링크로 사용자를 추가하는 방법은 [계정과 관리자 CLI](OPERATIONS.md#계정과-관리자-cli)에 있다. 같은 저장소 주소를 입력해도 각 사용자는 자기 프로젝트와 보고서를 갖는다. 프로젝트를 공유하려면 **구성원**에서 상대방의 이메일이나 기존 사용자 이름을 입력한다.
 
 ### 다른 사람이 분석할 수 있는 것
 
@@ -172,22 +182,21 @@ The service answers on:
 | 할 수 있는 것 | 누가 | 정하는 곳 |
 |---|---|---|
 | 공개 Git 저장소 분석 | 모두 | 승인된 Git host(기본 github.com, **관리 > Git 공급자**에서 GitHub Enterprise Server host를 더함) |
-| 비공개 github.com 저장소, pull request 결과 댓글 | 자기 GitHub token을 넣은 사람 | 각자 **계정 > GitHub 연결** |
-| 서버 폴더를 경로로 분석 | 그 폴더를 허용받은 사람, 또는 모두에게 연 폴더 | **관리 > 폴더** |
+| 비공개 GitHub.com·GHES 저장소, pull request 결과 댓글 | 프로젝트를 실행할 수 있는 사용자 | 플랫폼 GitHub 계정의 저장소 읽기 권한과 선택적인 댓글 쓰기 권한 |
+| 서버 폴더를 경로로 분석 | 로그인한 사용자 | 서비스 Linux 계정이 읽을 수 있는 프로젝트 폴더의 절대 경로 |
 | 모델 검토 | 관리자, 그리고 "다른 사용자도 모델 검토 사용"이 켜져 있으면(기본 켬) 모두 | **관리 > 서비스** |
 | 저장소의 빌드 스크립트 실행 | 관리자, 그리고 "다른 사용자의 저장소 빌드 스크립트 실행 허용"이 켜져 있으면(기본 끔) 모두 | **관리 > 서비스** |
 | 다른 사람의 프로젝트 | 소유자가 구성원으로 더한 사람(보기·실행·관리) | 프로젝트의 **구성원** |
 
-- **GitHub token은 분석을 시작한 사람의 것만 쓴다.** 내가 시작한 분석(구성원으로서 남의 프로젝트를 실행해도)은 내 token으로 pull request를 읽고 받고 댓글을 남긴다. 다른 사람의 token은 쓰이지 않는다. token이 없으면 공개 저장소만 읽고, 결과 댓글은 남기지 않고 실행 화면에 이유(`no_token`)를 남긴다. 예약 실행은 예약을 만든(마지막으로 고친) 사람의 분석이다.
-- token은 **계정 > GitHub 연결**에 붙여넣는다. 서버의 상태 디렉터리에 서비스 계정만 읽는 파일(0600)로 저장되고, 화면·로그·감사 기록에 다시 나오지 않는다. 같은 화면에서 지운다. 관리자의 연결은 `codeye up`이 `gh`·`GH_TOKEN`에서 찾은 token이며, 관리자가 웹에서 넣은 token이 있으면 그것이 우선이다.
-- 서버 폴더를 경로로 넣었는데 허용된 폴더가 없으면 "이 서버에서 읽도록 허용된 폴더가 없습니다. Git 주소를 쓰거나 관리자에게 폴더 허용을 요청하세요."가 나오고, 허용된 폴더 목록을 함께 보여 준다. 관리자가 **관리 > 폴더**에서 폴더(예: NFS mount)를 더하고 사람마다 허용하거나 "모두에게 열기"를 켠다. 웹에서 더한 폴더와 Git host는 서비스를 다시 시작하지 않아도 바로 쓰인다.
+- 요청자는 CODEYE 웹 계정으로 기록된다. Git fetch, PR 확인과 댓글 게시에는 호스트별 플랫폼 계정을 사용한다.
+- 서버 폴더를 입력할 때는 서버 Linux 계정에서 읽을 수 있는 절대 경로를 준다. WSL 경로와 서버에 마운트된 NFS 경로는 같은 방식으로 쓴다. 상태·백업 폴더를 담는 경로는 거부한다.
 - 관리자 스위치는 관리자가 아닌 사람이 시작한 분석에 적용된다. 관리자가 시작한 분석은 영향을 받지 않는다. 스위치 때문에 빠진 검토는 보고서에 "관리자가 다른 사용자의 모델 검토를 허용하지 않아 …"처럼 그 이유로 나온다.
 - 사람마다 남의 프로젝트·보고서·감사 기록은 보이지 않는다(구성원이 아니면 없는 것처럼 404).
-- 서버 폴더를 운영체제 계정 권한으로도 확인하는 연결점은 남겨 두었지만 지금은 CODEYE의 폴더 허용만 본다. 서버 폴더는 서비스를 띄운 계정의 권한으로 읽힌다.
+- 새 사용자가 만든 프로젝트와 보고서는 그 사용자의 것이다. 기존 프로젝트에 함께 접근하려면 [구성원](API.md#구성원)에 추가한다.
 
 ## 설정 파일
 
-기본 위치는 `~/.config/codeye/config.json`이다(`XDG_CONFIG_HOME`을 따른다). 다른 위치는 모든 명령에 `--config PATH`로 준다. `codeye up`이 만든 파일은 `schema_version`뿐이고, `up`은 자기가 다루는 필드(`source_roots`에 더한 폴더, `database.postgres_bin_dir`, `--listen`·`--tls-cert`·`--tls-key`·`--public-origin`·`--plain-http`로 준 수신 설정)만 고친다. 기본값은 파일에 쓰지 않는다. 더 정하고 싶은 것만 적는다. 예시는 [examples/config.json](../examples/config.json)이다.
+기본 위치는 `~/.config/codeye/config.json`이다(`XDG_CONFIG_HOME`을 따른다). 다른 위치는 모든 명령에 `--config PATH`로 준다. `codeye up`이 만든 파일은 `schema_version`뿐이고, `up`은 자기가 다루는 필드(`database.postgres_bin_dir`, `--listen`·`--tls-cert`·`--tls-key`·`--public-origin`·`--plain-http`로 준 수신 설정)만 고친다. 기본값은 파일에 쓰지 않는다. 더 정하고 싶은 것만 적는다. 예시는 [examples/config.json](../examples/config.json)이다.
 
 ```json
 {
@@ -213,7 +222,7 @@ codeye start
 
 ## 프로젝트와 source root
 
-**source root**는 분석할 프로젝트가 들어 있는 디렉터리다. 에이전트는 설정에 적힌 root 안만 읽는다. `codeye up PATH`는 PATH가 이미 있는 root 안이면 그 root를 쓰고(상대 경로로 등록), 아니면 PATH 자체를 새 root로 더한다. root의 label은 폴더 이름이다(겹치면 `-2`를 붙인다).
+**source root**는 실행 노드의 내부 경로 매핑이다. `codeye up PATH`와 웹 등록은 경로를 해석해 기존 매핑을 재사용하거나 새 매핑을 DB에 기록한다.
 
 설정에 직접 root를 더해도 된다(`{"label": "more", "path": "/home/user/more"}`). 그 뒤 `codeye up`을 하면 root를 등록하고 에이전트를 다시 등록한다. 이전 에이전트 상태는 지우지 않고 이름만 바꿔 둔다.
 
@@ -223,7 +232,7 @@ restarting the agent: its configuration changed (running work finishes first, up
 re-enrolling the local agent: the configured source roots changed (previous state kept in /…/state/agent.retired-…)
 ```
 
-화면에서는 "분석할 코드"의 **폴더 경로 또는 Git 주소** 입력란에 절대 경로나 저장소 주소를 붙여넣고 **분석**을 누른다. 프로젝트를 등록하고(같은 폴더·저장소면 그 프로젝트를 쓴다) 분석을 요청한 뒤 바로 그 실행 화면으로 간다. 분석이 아직 진행 중이면 새로 요청하지 않고 그 실행을 보여 준다. 접힌 **고급**에는 이름, 브랜치(`…/tree/브랜치` 주소면 채워진다), 아래의 선택이 있다. pull request 주소(`…/pull/N`)를 넣으면 "pull request에 결과 댓글 남기기"도 있다. source root를 골라 상대 경로로 등록하는 이전 양식은 "등록된 폴더(소스 루트)에서 골라 등록" 아래에 있다. 등록한 프로젝트는 입력란 아래 "프로젝트 목록"에 카드로 보이고, 카드를 고르면 그 프로젝트의 최근 실행과 보고서가 열린다. 프로젝트 설명이나 요구사항 문서는 필요 없다. CODEYE가 문서·환경·소스를 직접 조사한다.
+화면에서는 "분석할 코드"의 **폴더 경로 또는 Git 주소** 입력란에 절대 경로나 저장소 주소를 붙여넣고 **분석**을 누른다. 프로젝트를 등록하고(같은 폴더·저장소면 그 프로젝트를 쓴다) 분석을 요청한 뒤 바로 그 실행 화면으로 간다. 분석이 아직 진행 중이면 새로 요청하지 않고 그 실행을 보여 준다. 접힌 **고급**에는 이름, 브랜치(`…/tree/브랜치` 주소면 채워진다), 아래의 선택이 있다. pull request 주소(`…/pull/N`)를 넣으면 "pull request에 결과 댓글 남기기"도 있다. 실행 없이 먼저 등록하려면 **프로젝트 등록만 하기**를 연다. 등록한 프로젝트는 입력란 아래 "프로젝트 목록"에 카드로 보이고, 카드를 고르면 그 프로젝트의 최근 실행과 보고서가 열린다. 프로젝트 설명이나 요구사항 문서는 필요 없다. CODEYE가 문서·환경·소스를 직접 조사한다.
 
 ### 프로젝트별 분석 선택
 
@@ -245,7 +254,7 @@ re-enrolling the local agent: the configured source roots changed (previous stat
 codeye tools
 ```
 
-이 머신에서 찾은 도구(경로와 버전), 찾지 못한 도구와 추가하는 방법을 표로 보여 준다. 화면의 **도구** 메뉴도 `codeye up`이 마지막으로 찾은 같은 표와 모델·Git·경로로 분석할 수 있는 폴더를 보여 준다(도구 경로는 관리자에게만 보인다). `codeye up`은 시작할 때 같은 탐색을 하므로 도구 경로를 설정에 적지 않아도 된다. 설정의 `agent.tools.<이름>`에 적은 경로는 항상 탐색보다 우선한다. 없는 도구에 해당하는 분석은 보고서에 "미지원"으로 나온다([도구 찾기](ANALYZERS.md#도구-찾기), [운영](OPERATIONS.md#codeye-tools)).
+이 머신에서 찾은 도구(경로와 버전), 찾지 못한 도구와 추가하는 방법을 표로 보여 준다. 화면의 **도구** 메뉴도 `codeye up`이 마지막으로 찾은 같은 표와 모델과 호스트별 플랫폼 GitHub 연결 상태를 보여 준다(도구 경로는 관리자에게만 보인다). `codeye up`은 시작할 때 같은 탐색을 하므로 도구 경로를 설정에 적지 않아도 된다. 설정의 `agent.tools.<이름>`에 적은 경로는 항상 탐색보다 우선한다. 없는 도구에 해당하는 분석은 보고서에 "미지원"으로 나온다([도구 찾기](ANALYZERS.md#도구-찾기), [운영](OPERATIONS.md#codeye-tools)).
 
 ## 분석 실행
 
@@ -255,14 +264,14 @@ codeye tools
 - **대기 사유**: 시작하지 않은 run에는 이유가 표시된다. 저장 공간 상한에 걸리면 "저장 공간 상한에 도달해 새 작업을 시작하지 않습니다"가 나온다([저장 공간](#저장-공간)).
 - 실행을 취소하면 실행 중인 도구 프로세스를 정리하고 정리 결과를 확인한 뒤 취소로 표시한다. 확인하지 못하면 "정리 확인 필요"(`recovery_required`)로 남는다.
 - **다시 시도**: 실패·일부 완료·취소된 실행에 "다시 시도" 버튼이 있다. 고정한 입력이 노드에 남아 있는 실패·취소 실행은 같은 입력으로 다시 하고, 그 밖(소스 확보 실패, 도구를 설치하거나 선택을 바꾼 뒤)에는 소스를 다시 받아 새 실행을 시작한다. 화면은 그 실행을 따라간다. `recovery_required`는 다시 시도하지 못한다.
-- 소스를 읽지 못한 실행은 이유를 보여 준다. 예: "저장소를 읽을 권한이 없음 — 비공개 github.com 저장소는 분석을 시작한 사람이 계정 메뉴의 GitHub 연결에 token을 넣으면 읽습니다".
+- 소스를 읽지 못한 실행은 이유를 보여 준다. 비공개 저장소의 읽기 권한을 플랫폼 GitHub 계정에 부여했는지와 주소를 확인한다.
 
 ## 보고서 읽기
 
 실행이 끝나 보고서가 게시되면 실행 화면에 저절로 열린다. 보고서의 구조와 판정 규칙은 [보고서](REPORT.md#분석-종류별-절)에 있다. 보고서는 분석 종류별 절로 나뉜다. 맨 위 종합부터 읽고, 필요한 절을 펼친다.
 
 - **더 나은 결과를 얻으려면.** 보고서 위에, 분석 공백 중 사용자가 채울 수 있는 것을 짧게 적는다. 없는 도구는 설치 방법(도구 화면과 같은 문구), 모델이 없으면 키 설정, 호출 상한 때문에 못 본 파일이 있으면 `review_max_calls`(장부가 있으면 이번 실행이 쓴 호출 수와, 거절된 slot을 모두 검토하는 데 필요한 상한. slot 상한 96개 밖이라 계획하지 않은 파일은 상한을 올려도 검토되지 않는다고 따로 적는다), Git 저장소의 빌드 스크립트가 꺼져 빠진 분석이 있으면 "켜고 다시 시도" 버튼이다. 버튼은 프로젝트 관리자에게만 보인다. 도구를 설치한 뒤에는 `codeye up`을 다시 하고 "다시 시도"를 누른다.
-- **종합.** 품질 판정을 기호·색과 함께 한 문장으로 먼저 말하고(조치할 항목이 없어도 안전 인증이 아니라고 함께 쓴다), 수를 센 문장(모델 검토 발견 중 근거로 지지한 수, 주요 경로 파일 중 모델에 보낸 수, 도구 진단의 규칙·도구 종류, 지표·비밀정보·공백), 먼저 볼 것, 우선 확인할 발견, 도구 진단·발견 사항·조치 검토·미확정·반증됨의 수, 분석 종류별 상태 표 순이다. 표의 절 이름이나 먼저 볼 것의 버튼을 누르면 그 절이 열린다. 수치는 저장된 구조화 데이터에서 계산한다. 모델의 서술로 바뀌지 않는다.
+- **종합.** 첫 표에서 프로젝트·분석 경로·커밋·시작·종료와 상태를 확인한다. 문서와 구현 대조 표의 판정과 유지할 만한 구현을 보고, 문서 또는 코드 분석 탭에서 당시 코드 줄을 펼쳐 읽을 수 있다. 품질 판정을 기호·색과 함께 한 문장으로 먼저 말하고, 수를 센 문장(모델 검토 발견 중 근거로 지지한 수, 주요 경로 파일 중 모델에 보낸 수, 도구 진단의 규칙·도구 종류, 지표·비밀정보·공백), 먼저 볼 것, 우선 확인할 발견, 도구 진단·발견 사항·조치 검토·미확정·반증됨의 수, 분석 종류별 상태 표 순이다. 표의 절 이름이나 먼저 볼 것의 버튼을 누르면 그 절이 열린다. 수치는 저장된 구조화 데이터에서 계산한다. 모델의 서술로 바뀌지 않는다.
 - **이전 실행과 비교.** 종합 아래에 화면에서만 보인다([이전 실행과 비교](#이전-실행과-비교)). 내보낸 파일에는 없다.
 - **환경 분석.** 모듈, 모듈이 선언한 도구 요구(예: `go 1.22`), 노드에서 관측한 도구 버전, 요구별 판정(충족·불일치·판단 불가)이다.
 - **문서 분석.** 찾은 문서와 읽었는지 여부(예산 초과·제외 포함), 모듈별로 적용되는 문서, 같은 범위에 겹치는 안내다.

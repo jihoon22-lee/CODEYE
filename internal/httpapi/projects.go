@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
@@ -84,36 +86,40 @@ func (s *Server) createProject(q *request) {
 		writeError(q.w, q.r, http.StatusUnprocessableEntity, "ATTACHMENTS_UNSUPPORTED", "attachments are not supported yet", false)
 		return
 	}
+	var sourceName string
 	var src domain.Source
 	var err error
 	if in.LocalPath != nil {
-		// A path on this server, for a user allowed at least one folder.
+		real, err := s.inst.resolveFolder(*in.LocalPath)
+		if err != nil {
+			s.folderError(q, err)
+			return
+		}
+		sourceName = filepath.Base(real)
 		ctx, cancel := q.ctx()
-		roots, err := s.store.GrantedRootPaths(ctx, q.session.UserID)
+		src, err = s.store.LocalSourceForPath(ctx, real)
 		cancel()
 		if err != nil {
 			s.storeError(q, err)
-			return
-		}
-		if src, err = s.localSource(*in.LocalPath, roots); err != nil {
-			readable := make([]string, 0, len(roots))
-			for _, r := range roots {
-				readable = append(readable, r.Path)
-			}
-			s.folderError(q, err, readable)
 			return
 		}
 	} else if src, err = domain.ParseSource(in.Source); err != nil {
 		s.storeError(q, err)
 		return
 	} else if src.Kind == domain.SourceLocal {
-		// However a folder is declared, it must not hold CODEYE's data.
 		if err := s.checkLocalSource(q, src); err != nil {
-			s.folderError(q, err, nil)
+			s.folderError(q, err)
+			return
+		}
+	} else {
+		host, _ := domain.RepositoryHost(src.RepositoryURL)
+		platform := s.inst.platform()
+		if !github.HostAllowed(host, platform.Offline, platform.Hosts) {
+			writeError(q.w, q.r, http.StatusUnprocessableEntity, "SOURCE_UNSUPPORTED", "offline mode allows only configured internal Git hosts", false)
 			return
 		}
 	}
-	reg := postgres.ProjectRegistration{Source: src}
+	reg := postgres.ProjectRegistration{Source: src, Name: sourceName}
 	if in.Analysis != nil && string(in.Analysis) != "null" {
 		choices, err := domain.ParseAnalysisChoices(in.Analysis)
 		if err != nil {
@@ -173,7 +179,7 @@ func (s *Server) createProject(q *request) {
 	writeJSON(q.w, http.StatusCreated, viewOf(created, gaps))
 }
 
-// existingProject finds a project the caller can see whose current source
+// existingProject finds a project the caller owns whose current source
 // is src. ok is false when the error response was written.
 func (s *Server) existingProject(q *request, src domain.Source, reuse bool) (postgres.ProjectSummary, bool, bool) {
 	if !reuse {
@@ -188,7 +194,7 @@ func (s *Server) existingProject(q *request, src domain.Source, reuse bool) (pos
 			return postgres.ProjectSummary{}, false, false
 		}
 		for _, p := range page.Items {
-			if sameSource(p.Source, src) {
+			if p.Role == postgres.RoleOwner && sameSource(p.Source, src) {
 				return p, true, true
 			}
 		}

@@ -30,6 +30,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
 // The report example (examples/report.json, examples/report.md) is the
@@ -422,6 +423,32 @@ func exampleStatic(t *testing.T) *pack.Composite {
 // (the interpret candidate supported, the investigate candidate refuted).
 func exampleScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Reply {
 	s := validScript(t)
+	withOutput := func(role string, extra func(opencode.Request, map[string]any)) {
+		base := s[role]
+		s[role] = func(i int, q opencode.Request) opencode.Reply {
+			var out map[string]any
+			if err := json.Unmarshal(base(i, q).Output, &out); err != nil {
+				t.Fatal(err)
+			}
+			extra(q, out)
+			return asJSON(out)
+		}
+	}
+	withOutput("documents", func(q opencode.Request, out map[string]any) {
+		in := decodeAs[docsInput](t, q)
+		out["document_quality"] = []record.DocumentQuality{
+			{Aspect: "actionability", Assessment: "strength", Statement: "루트 README는 최초 호출과 재시도를 합한 호출 상한을 명시한다.", EvidenceIDs: []string{docID(in, "README.md")}},
+			{Aspect: "consistency", Assessment: "weakness", Statement: "실패 시 호출을 반복할지 여부가 루트 안내와 결제 모듈 안내에서 달라 적용 범위를 확인해야 한다.", EvidenceIDs: []string{docID(in, "README.md"), docID(in, "svc/b/README.md")}},
+		}
+	})
+	withOutput("investigate", func(q opencode.Request, out map[string]any) {
+		in := decodeAs[investigateInput](t, q)
+		gw := excerptID(in.Scope.Excerpts, "gateway.go")
+		out["strengths"] = []record.Strength{{Title: "성공하면 즉시 종료하는 제한된 재시도", Benefit: "호출 성공 후에는 더 요청하지 않고, 연속 실패 시에는 재시도 횟수를 제한한다.", Scope: ".", EvidenceIDs: []string{gw}}}
+		out["contract_comparisons"] = []record.ContractComparison{
+			{ContractIndex: 1, AppliesTo: ".", Status: "match", Reason: "Forward는 처음의 호출이 실패한 경우 MaxRetries 상수로 반복을 세 번까지 제한한다.", DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{gw}},
+		}
+	})
 	s["interpret"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[interpretInput](t, q)
 		var gw, other *obsInput
@@ -598,12 +625,44 @@ func TestReportExample(t *testing.T) {
 	if b, err := os.ReadFile(recordPath(j, "verify")); err == nil && os.Getenv("EXAMPLE_DEBUG") != "" {
 		t.Logf("%s", b)
 	}
+	entries := map[string][]int{
+		"AGENTS.md": {1}, "README.md": {1}, "gateway.go": {1, 10, 12}, "svc/a/normalize.go": {1, 4}, "svc/b/README.md": {1}, "svc/b/go.mod": {3},
+	}
+	root, err := os.OpenRoot(j.Snapshot.SnapshotDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	doc := sourceexcerpt.Document{SchemaVersion: sourceexcerpt.Version, RunID: j.RunID, AttemptID: j.AttemptID, Snapshot: j.Snapshot.Digest}
+	for _, e := range j.Snapshot.Manifest.Entries {
+		for _, line := range entries[e.Path] {
+			if excerpt, ok := sourceexcerpt.Read(root, e, line); ok {
+				doc.Items = append(doc.Items, sourceexcerpt.Item{Path: e.Path, SHA256: e.SHA256, Anchor: line, Excerpt: excerpt})
+			}
+		}
+	}
+	excerpts, err := sourceexcerpt.Encode(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	excerptPath := filepath.Join(j.Scratch, "report-example-excerpts.json")
+	if err := os.WriteFile(excerptPath, excerpts, 0600); err != nil {
+		t.Fatal(err)
+	}
+	first := results[plan[0].Key]
+	first.Artifacts = append(first.Artifacts, analysis.ArtifactFile{Path: excerptPath, Role: nodeproto.RoleOther, MediaType: sourceexcerpt.MediaType})
+	results[plan[0].Key] = first
 	in := exampleInput(t, j, h, plan, results, ids)
+	in.Project = &report.ProjectInfo{Name: "Billing gateway", Source: "fixtures/modules/input", StartedAt: reportExampleTime.Format(time.RFC3339), FinishedAt: in.Now.Format(time.RFC3339)}
 	r, err := report.Build(in, report.DefaultRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkReportExample(t, r, plan, results)
+	if len(r.Documents.Quality) != 2 || len(r.Documents.Comparisons) != 2 || r.Documents.Comparisons[0].Status != "match" || r.Documents.Comparisons[1].Status != "unknown" ||
+		len(r.CodeReview.Strengths) != 1 || len(r.CodeReview.Evidence) != 1 || r.CodeReview.Evidence[0].Excerpt == nil {
+		t.Fatalf("report insight sections were not carried through")
+	}
 	// The stored example is marked demo: Marshal accepts product reports
 	// only, so the flag is set on the canonical bytes.
 	raw, err := report.Marshal(r)

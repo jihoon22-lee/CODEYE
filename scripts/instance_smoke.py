@@ -176,9 +176,7 @@ def run(base, root, env, probe_env):
         assert status["state"] == "running" and status["controller"]["ready"] and status["agent"]["heartbeat_fresh"], status
         assert {s["area"] for s in status["storage"]} == {"snapshot", "workspace", "cache", "logs", "artifacts"}, status
         session = Session(state_a, origin_a)
-        work = next(r for r in session.request("GET", "source-roots")["items"] if r["label"] == "work")
-        project = session.request("POST", "projects", {"name": "hello", "source": {
-            "kind": "local", "source_root_id": work["id"], "relative_path": "hello"}})
+        project = session.request("POST", "projects", {"name": "hello", "local_path": str(source / "hello")})
         first = session.finished(session.enqueue(project["id"]))
         assert first["status"] in ("partial", "completed") and first["report"], first
         report = session.request("GET", f"runs/{first['id']}/report?revision={first['report']['revision']}")
@@ -262,9 +260,7 @@ def run(base, root, env, probe_env):
         cli(fixture, "migrate", db="instance_c")
         cli(fixture, "start", "--config", cfg_c, db="instance_c", timeout=200)
         fixture_session = Session(state_c, origin_c)
-        froot = next(r for r in fixture_session.request("GET", "source-roots")["items"] if r["label"] == "fixture")
-        fproject = fixture_session.request("POST", "projects", {"name": "fixture", "source": {
-            "kind": "local", "source_root_id": froot["id"], "relative_path": "."}})
+        fproject = fixture_session.request("POST", "projects", {"name": "fixture", "local_path": str(fsrc)})
         sleeping = fixture_session.enqueue(fproject["id"])
         wait_for("sleep 작업 실행", lambda: fixture_session.request("GET", f"runs/{sleeping}")["status"] == "running")
         busy = json.loads(cli(fixture, "status", "--config", cfg_c, "--format", "json", db="instance_c").stdout)
@@ -473,7 +469,7 @@ def pull_request(root, env, directory, fixture):
     """TC-227~229: a pull-request address, its pinned head, the one result comment and the dry run.
 
     The fixture build reads CODEYE_TEST_GIT_MIRROR (the repository and its refs/pull/7/head) and
-    CODEYE_TEST_GITHUB_API (scripts/fake_github.py): no network. The token comes from GH_TOKEN.
+    CODEYE_TEST_GITHUB_API (scripts/fake_github.py): no network. The test explicitly configures the platform token environment variable.
     """
     from fake_github import FakeGitHub
 
@@ -509,7 +505,12 @@ def pull_request(root, env, directory, fixture):
     fake.add_pull("acme/widget", 7, base_sha=base, head_sha=head1, files=pull_files(work, base, head1), head_repo="someone/widget")
     state = user_home / ".local/state/codeye"
     menv = {k: v for k, v in env.items() if k not in ("CODEYE_DATABASE_URL", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "GITHUB_TOKEN") and not k.startswith("PG")}
-    menv.update(HOME=str(user_home), BROWSER="/bin/true", CODEYE_TEST_GIT_MIRROR=str(mirror), CODEYE_TEST_GITHUB_API=fake.url, GH_TOKEN=token)
+    menv.update(HOME=str(user_home), BROWSER="/bin/true", CODEYE_TEST_GIT_MIRROR=str(mirror), CODEYE_TEST_GITHUB_API=fake.url, CODEYE_TEST_PLATFORM_TOKEN=token)
+
+    config = user_home / ".config/codeye/config.json"
+    config.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    config.write_text(json.dumps({"schema_version": "0.1", "github": {"token_env": {"github.com": "CODEYE_TEST_PLATFORM_TOKEN"}}}))
+    config.chmod(0o600)
 
     def cli(*args, expect=0, timeout=300):
         result = subprocess.run([binary, *map(str, args)], cwd=home, env=menv, capture_output=True, text=True, timeout=timeout)
@@ -532,7 +533,7 @@ def pull_request(root, env, directory, fixture):
     try:
         # TC-227: up with a pull-request address and --comment.
         first = cli("up", "--no-open", "--comment", "https://github.com/acme/widget/pull/7")
-        assert "github: signed in as codeye-bot on github.com (token from GH_TOKEN)" in first, first
+        assert "github: platform account codeye-bot on github.com" in first, first
         assert f"queued an analysis of pull request #7 of acme/widget (feature from someone/widget, head {head1[:7]}" in first, first
         assert "comment: on" in first and "pull-request comments are now on" in first, first
         link, origin = link_of(first)
@@ -555,7 +556,7 @@ def pull_request(root, env, directory, fixture):
         comments = fake.comment_list("acme/widget", 7)
         assert len(comments) == 1 and head1 in comments[0]["body"] and "parse.go" in comments[0]["body"], comments
         setup = session.request("GET", "setup")
-        assert setup["github"] == {"enabled": True, "host": "github.com", "token": True, "account": "codeye-bot", "source": "GH_TOKEN", "reason": None}, setup["github"]
+        assert setup["github_connections"] == [{"enabled": True, "host": "github.com", "token": True, "account": "codeye-bot"}], setup["github_connections"]
         # TC-228: a push, then the same address again: a new run on the new head updates the one comment.
         (work / "parse.go").write_text('package widget\n\nimport "fmt"\n\nfunc Parse(s string) string {\n\tfmt.Printf("%d %d\\n", s, s)\n\treturn s\n}\n')
         git(work, "commit", "-q", "-am", "push")
@@ -580,16 +581,14 @@ def pull_request(root, env, directory, fixture):
         projects = {p["name"]: p for p in session.request("GET", "projects?limit=100")["items"]}
         assert projects["widget"]["analysis"].get("comment_on_pull_request") is True, projects["widget"]["analysis"]
         assert all(authorized for _, _, authorized in fake.requests), "token 없는 GitHub 호출"
-        # The token is only in the administrator's own token file.
-        assert not (state / "secrets/github.json").exists(), "the token is stored a second time"
-        users = state / "secrets/github-users"
-        own = list(users.iterdir())
-        assert len(own) == 1 and token.encode() in own[0].read_bytes(), own
-        assert stat.S_IMODE(own[0].stat().st_mode) == 0o600 and stat.S_IMODE(users.stat().st_mode) == 0o700
+        credential = state / "secrets/github-platform.json"
+        assert token.encode() in credential.read_bytes()
+        assert stat.S_IMODE(credential.stat().st_mode) == 0o600
+        assert stat.S_IMODE(credential.parent.stat().st_mode) == 0o700
         for path in state.rglob("*"):
-            if path.is_file() and not path.is_symlink() and path != own[0]:
-                assert token.encode() not in path.read_bytes(), f"token이 상태 파일에 있음: {path.relative_to(state)}"
-        print("PASS: pull request 주소·head 고정·변경 부분 보고서·결과 댓글 하나(새 push에 갱신)·dry run 미게시·token은 관리자 token 파일 하나에만")
+            if path.is_file() and not path.is_symlink() and path != credential:
+                assert token.encode() not in path.read_bytes(), f"token이 다른 상태 파일에 있음: {path.relative_to(state)}"
+        print("PASS: pull request 주소·head 고정·변경 보고서·댓글 갱신·dry run·플랫폼 인증정보")
     finally:
         subprocess.run([binary, "stop"], cwd=home, env=menv, capture_output=True, timeout=300)
         fake.close()
@@ -662,7 +661,7 @@ def managed(base, root, env, directory, source):
                      "opened the browser with " + str(stub)):
             assert want in first, (want, first)
         written = json.loads(config.read_text())
-        assert set(written) == {"schema_version", "source_roots"} and written["source_roots"][0]["path"] == str(source / "hello"), written
+        assert written == {"schema_version": "0.1"}, written
         assert stat.S_IMODE(config.stat().st_mode) == 0o600 and stat.S_IMODE((state / "postgres/password").stat().st_mode) == 0o600
         up_link, origin = link_of(first)
         assert "&project=" in up_link and "&run=" in up_link, up_link
@@ -684,9 +683,9 @@ def managed(base, root, env, directory, source):
             subprocess.run(["npm", "run", "test:e2e", "--", "up.spec.ts"], cwd=root / "web", check=True, timeout=180,
                            env=dict(env, CODEYE_TEST_BASE_URL=origin, CODEYE_TEST_UP_LINK_FILE=str(link_file), CODEYE_TEST_UP_PROJECT="hello"))
 
-        # TC-172: another folder while running: new source root, the agent drains and re-enrolls.
+        # Another folder is analyzed without changing the configuration or restarting the agent.
         again = cli("up", "--no-open", second).stdout
-        assert "added source root \"src-b\"" in again and "restarting the agent" in again and "re-enrolling the local agent" in again, again
+        assert "registered project" in again and "restarting the agent" not in again, again
         link_b, _ = link_of(again)
         finished(Session(state, origin, link_b), link_b.rsplit("&run=", 1)[1])
 

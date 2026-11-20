@@ -1,15 +1,15 @@
 import { useId, useState, type FormEvent } from 'react';
-import type { Api, Project, Provider, SourceRoot } from './api';
+import type { Api, Project, Provider } from './api';
 import { describeError, type ErrorText } from './format';
 import { ko as t } from './locales/ko';
 import { validateProjectForm, type FormErrors, type FormValues } from './projectForm';
 import { ErrorNote } from './RunPanel';
 
-const empty: FormValues = { name: '', kind: 'local', sourceRootId: '', relativePath: '', providerId: '', repositoryUrl: '', branch: '' };
+const empty: FormValues = { name: '', kind: 'local', localPath: '', providerId: '', repositoryUrl: '', branch: '' };
 
-type Props = { api: Api; roots: SourceRoot[]; providers: Provider[]; onCreated: (project: Project) => void };
+type Props = { api: Api; providers: Provider[]; onCreated: (project: Project) => void };
 
-export function ProjectForm({ api, roots, providers, onCreated }: Props) {
+export function ProjectForm({ api, providers, onCreated }: Props) {
   const [values, setValues] = useState<FormValues>(empty);
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState<ErrorText | null>(null);
@@ -64,13 +64,7 @@ export function ProjectForm({ api, roots, providers, onCreated }: Props) {
       <label className="inline"><input type="radio" name={`${uid}-kind`} checked={values.kind === 'local'} onChange={() => set('kind', 'local')} /> {p.kindLocal}</label>
       <label className="inline"><input type="radio" name={`${uid}-kind`} checked={values.kind === 'git'} onChange={() => set('kind', 'git')} /> {p.kindGit}</label>
     </fieldset>
-    {values.kind === 'local' ? <>
-      {field('sourceRootId', p.sourceRoot, props => <select {...props} value={values.sourceRootId} onChange={e => set('sourceRootId', e.target.value)}>
-        <option value="">{roots.length === 0 ? p.sourceRootNone : p.sourceRootPick}</option>
-        {roots.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-      </select>)}
-      {field('relativePath', p.relativePath, props => <input {...props} type="text" autoComplete="off" spellCheck={false} value={values.relativePath} onChange={e => set('relativePath', e.target.value)} />, p.relativePathHelp)}
-    </> : <>
+    {values.kind === 'local' ? field('localPath', p.localPath, props => <input {...props} type="text" autoComplete="off" spellCheck={false} value={values.localPath} onChange={e => set('localPath', e.target.value)} />, t.tools.foldersNote) : <>
       {field('providerId', p.provider, props => <select {...props} value={values.providerId} onChange={e => set('providerId', e.target.value)}>
         <option value="">{providers.length === 0 ? p.providerNone : p.sourceRootPick}</option>
         {providers.map(x => <option key={x.id} value={x.id}>{`${x.host} (${x.kind})`}</option>)}

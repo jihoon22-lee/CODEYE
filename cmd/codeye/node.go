@@ -86,7 +86,6 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// A Git host token file (the service's GitHub token): workers read it
 	// for a fetch of its host; the token is never an argument.
 	gitCredential := fs.String("git-credential-file", "", "")
-	gitCredentialDir := fs.String("git-credential-dir", "", "")
 	controllerSources := fs.Bool("controller-sources", false, "")
 	goExe := fs.String("go", "", "")
 	goModCache := fs.String("go-mod-cache", "", "")
@@ -220,7 +219,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		}
 	}
 	cfg.ProjectAnalysisPolicy = *projectPolicy
-	cfg.ControllerSources, cfg.GitCredentialDir = *controllerSources, *gitCredentialDir
+	cfg.ControllerSources = *controllerSources
 	for _, d := range protectedDirs {
 		if !filepath.IsAbs(d) {
 			fmt.Fprintln(stderr, "invalid --protected-dir; expected an absolute path")

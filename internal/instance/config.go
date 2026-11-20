@@ -68,7 +68,7 @@ type Config struct {
 	// a Git host or the model endpoint should trust (it replaces the system
 	// store for some of them, so it holds the system CAs too).
 	CABundle string `json:"ca_bundle,omitempty"`
-	// GitHub is the token discovery of github.com (docs/GITHUB.md).
+	// GitHub binds platform credentials to configured Git hosts (docs/GITHUB.md).
 	GitHub GitHub `json:"github"`
 	// TLSCert and TLSKey (PEM files) serve listen over HTTPS; PublicOrigins
 	// (https://HOST[:PORT]) are then required.
@@ -577,6 +577,9 @@ func (c *Config) validate(knownTools []string) error {
 			return errors.New("git_hosts entries must be unique DNS host names with an optional port (for example github.com)")
 		}
 		hosts[h], c.GitHosts[i] = true, h
+	}
+	if err := c.GitHub.validate(hosts); err != nil {
+		return errors.New("github.token_env must map configured git_hosts to environment variable names")
 	}
 	if c.Stop.DrainTimeoutSeconds == 0 {
 		c.Stop.DrainTimeoutSeconds = DefaultDrainSeconds

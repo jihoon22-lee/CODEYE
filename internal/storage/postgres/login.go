@@ -256,28 +256,28 @@ func (s *Store) reapThrottle(ctx context.Context) {
 
 // credential is a user's stored verifier as read before derivation.
 type credential struct {
-	userID   string
-	enabled  bool
-	hash     *account.Hash
-	username string
-	display  string
+	userID     string
+	enabled    bool
+	hash       *account.Hash
+	identifier string
+	display    string
 }
 
 func readCredential(ctx context.Context, tx pgx.Tx, where string, arg any, lock string) (credential, error) {
 	var c credential
-	var kdf, username, display *string
+	var kdf, identifier, display *string
 	var iter *int
 	var salt, key []byte
-	err := tx.QueryRow(ctx, `SELECT id::text,disabled_at IS NULL,password_kdf,password_iterations,password_salt,password_hash,username,display_name
-		FROM users WHERE `+where+` `+lock, arg).Scan(&c.userID, &c.enabled, &kdf, &iter, &salt, &key, &username, &display)
+	err := tx.QueryRow(ctx, `SELECT id::text,disabled_at IS NULL,password_kdf,password_iterations,password_salt,password_hash,coalesce(username,email),display_name
+		FROM users WHERE `+where+` `+lock, arg).Scan(&c.userID, &c.enabled, &kdf, &iter, &salt, &key, &identifier, &display)
 	if err != nil {
 		return c, err
 	}
 	if kdf != nil && iter != nil {
 		c.hash = &account.Hash{KDF: *kdf, Iterations: *iter, Salt: salt, Key: key}
 	}
-	if username != nil {
-		c.username = *username
+	if identifier != nil {
+		c.identifier = *identifier
 	}
 	if display != nil {
 		c.display = *display
@@ -292,16 +292,16 @@ func (c credential) sameHash(o credential) bool {
 	return c.hash.Equal(*o.hash)
 }
 
-// PasswordLogin is a username/password login from a client address.
+// PasswordLogin is an email or username and password login from a client address.
 type PasswordLogin struct {
-	Username, Password string
+	Username, Email, Password string
 	// Client is the normalized connection address (IPv4, or IPv6 /64).
 	Client             string
 	SessionTokenSHA256 string
 	TTL                time.Duration
 }
 
-// PasswordLogin verifies a username and password and creates a session.
+// PasswordLogin verifies credentials and creates a session.
 // Every failure (unknown user, user without a password, disabled user,
 // wrong password) is ErrUnauthenticated after one derivation with the
 // current parameters; a throttled login is *ThrottledError before any
@@ -309,7 +309,8 @@ type PasswordLogin struct {
 // the login fails with ErrUnavailable. With every derivation slot busy for
 // the whole wait the login is ErrUnavailable and nothing is counted.
 func (s *Store) PasswordLogin(ctx context.Context, in PasswordLogin) (Session, error) {
-	if !hexDigest.MatchString(in.SessionTokenSHA256) || in.TTL < time.Second || in.TTL > maxSessionTTL || in.Username == "" || len(in.Username) > 256 || len(in.Password) > 4*account.MaxPasswordLength {
+	if !hexDigest.MatchString(in.SessionTokenSHA256) || in.TTL < time.Second || in.TTL > maxSessionTTL || (in.Username == "") == (in.Email == "") ||
+		len(in.Username) > 256 || len(in.Email) > 1024 || len(in.Password) > 4*account.MaxPasswordLength {
 		return Session{}, domain.ErrInvalid
 	}
 	release, err := s.acquireKDF(ctx)
@@ -318,13 +319,18 @@ func (s *Store) PasswordLogin(ctx context.Context, in PasswordLogin) (Session, e
 	}
 	defer release()
 	name, nameErr := account.NormalizeUsername(in.Username)
+	where, throttleName := "username=$1", in.Username
+	if in.Email != "" {
+		name, nameErr = account.NormalizeEmail(in.Email)
+		where, throttleName = "email=$1", strings.TrimSpace(in.Email)
+	}
 	type gate struct {
 		wait time.Duration
 		keys []throttleKey
 		cred *credential
 	}
 	g, err := transaction(ctx, s, func(tx pgx.Tx) (gate, error) {
-		keys, err := throttleKeys(ctx, tx, in.Username, in.Client)
+		keys, err := throttleKeys(ctx, tx, throttleName, in.Client)
 		if err != nil {
 			return gate{}, err
 		}
@@ -341,7 +347,7 @@ func (s *Store) PasswordLogin(ctx context.Context, in PasswordLogin) (Session, e
 		}
 		g := gate{keys: keys}
 		if nameErr == nil {
-			c, err := readCredential(ctx, tx, "username=$1", name, "")
+			c, err := readCredential(ctx, tx, where, name, "")
 			switch {
 			case err == nil:
 				g.cred = &c
@@ -478,20 +484,20 @@ func (s *Store) ChangePassword(ctx context.Context, in PasswordChange) (Session,
 		if err != nil {
 			return gate{}, err
 		}
-		if !c.enabled || c.username == "" {
-			// A user without a username cannot hold a password.
+		if !c.enabled || c.identifier == "" {
+			// A login-link-only user cannot hold a password.
 			return gate{cred: c}, domain.ErrConflict
 		}
 		// The policy is checked before anything is counted: a rejected new
 		// password says nothing about the current one and costs no attempt.
-		if account.CheckPassword(in.New, c.username, c.display) != nil {
+		if account.CheckPassword(in.New, c.identifier, c.display) != nil {
 			return gate{}, domain.ErrInvalid
 		}
 		g := gate{cred: c}
 		if c.hash == nil {
 			return g, nil
 		}
-		keys, err := throttleKeys(ctx, tx, c.username, in.Client)
+		keys, err := throttleKeys(ctx, tx, c.identifier, in.Client)
 		if err != nil {
 			return gate{}, err
 		}
@@ -573,7 +579,7 @@ func retireLaunchTokens(ctx context.Context, tx pgx.Tx, user string) error {
 func storeHash(ctx context.Context, tx pgx.Tx, user string, h *account.Hash, mustChange bool) error {
 	if h == nil {
 		_, err := tx.Exec(ctx, `UPDATE users SET password_kdf=NULL,password_iterations=NULL,password_salt=NULL,password_hash=NULL,password_set_at=NULL,
-			must_change_password=$2 AND username IS NOT NULL WHERE id=$1`, user, mustChange)
+			must_change_password=$2 AND (username IS NOT NULL OR email IS NOT NULL) WHERE id=$1`, user, mustChange)
 		return err
 	}
 	_, err := tx.Exec(ctx, `UPDATE users SET password_kdf=$2,password_iterations=$3,password_salt=$4,password_hash=$5,password_set_at=clock_timestamp(),

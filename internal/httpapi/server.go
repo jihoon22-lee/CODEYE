@@ -41,6 +41,7 @@ import (
 type Store interface {
 	SchemaStatus(ctx context.Context) (postgres.SchemaState, error)
 	ExchangeLaunchTokenFrom(ctx context.Context, client, tokenSHA256, sessionTokenSHA256 string, ttl time.Duration) (postgres.Session, error)
+	RegisterAccount(ctx context.Context, in postgres.Registration) (postgres.Session, error)
 	PasswordLogin(ctx context.Context, in postgres.PasswordLogin) (postgres.Session, error)
 	ChangePassword(ctx context.Context, in postgres.PasswordChange) (postgres.Session, error)
 	SessionByTokenHash(ctx context.Context, tokenSHA256 string) (postgres.Session, error)
@@ -62,21 +63,27 @@ type Store interface {
 	ListMembers(ctx context.Context, actor, project string) ([]postgres.Member, error)
 	PutMember(ctx context.Context, actor, project, user string, role domain.Role) (postgres.Member, error)
 	AddMemberByUsername(ctx context.Context, actor, project, username string, role domain.Role) (postgres.Member, error)
+	AddMemberByEmail(ctx context.Context, actor, project, email string, role domain.Role) (postgres.Member, error)
 	RemoveMember(ctx context.Context, actor, project, user string) error
 	ListSourceRoots(ctx context.Context, actor string) ([]postgres.SourceRoot, error)
 	ListProviders(ctx context.Context, actor string) ([]postgres.Provider, error)
+	ProviderForHost(ctx context.Context, host string) (postgres.Provider, error)
 	RegisterProject(ctx context.Context, actor string, in postgres.ProjectRegistration) (postgres.Project, error)
 	ListProjects(ctx context.Context, actor, cursor string, limit int) (postgres.ProjectPage, error)
 	GetProjectSummary(ctx context.Context, actor, id string) (postgres.ProjectSummary, error)
 	Enqueue(ctx context.Context, actor, project, key string, body json.RawMessage) (postgres.Run, error)
 	EnqueuePullRequest(ctx context.Context, actor, project, key string, body json.RawMessage, pin domain.PullRequest) (postgres.Run, error)
+	StoreWebhookDelivery(ctx context.Context, d postgres.WebhookDelivery) error
+	ClaimWebhookDelivery(ctx context.Context) (postgres.WebhookDelivery, error)
+	FinishWebhookDelivery(ctx context.Context, d postgres.WebhookDelivery, reason string, retry bool) error
+	EnqueueWebhookPullRequest(ctx context.Context, d postgres.WebhookDelivery, pin domain.PullRequest) error
 	GetRunView(ctx context.Context, actor, id string) (postgres.RunView, error)
 	CancelRun(ctx context.Context, actor, id string) (postgres.Run, bool, error)
 	SetProjectAnalysis(ctx context.Context, actor, id string, c domain.AnalysisChoices) (int64, error)
 	RetryRun(ctx context.Context, actor, id string) (postgres.Run, string, error)
 	ConfirmRecovery(ctx context.Context, by postgres.Principal, id string) (postgres.Recovery, error)
-	// GrantedRootPaths: the source roots the actor may use, with paths.
-	GrantedRootPaths(ctx context.Context, actor string) ([]postgres.SourceRootRecord, error)
+	SourceRootPath(ctx context.Context, id string) (string, error)
+	LocalSourceForPath(ctx context.Context, path string) (domain.Source, error)
 	// The shared service: folders and Git hosts the administrator adds, the
 	// service switches, what they offer a user, and token audit rows.
 	AddSourceRootBy(ctx context.Context, by postgres.Principal, label, path string) (postgres.SourceRootRecord, error)
@@ -85,7 +92,6 @@ type Store interface {
 	GetServiceSettings(ctx context.Context) (postgres.ServiceSettings, error)
 	SetServiceSettings(ctx context.Context, by postgres.Principal, p postgres.ServiceSettingsPatch) (postgres.ServiceSettings, error)
 	OfferFor(ctx context.Context, user string) (nodeproto.AnalysisOffer, error)
-	RecordGitHubToken(ctx context.Context, user string, set bool, host, login string) error
 	// Run event stream and schedules.
 	RunEvents(ctx context.Context, actor, id string, after int64, limit int) (postgres.EventPage, error)
 	ListSchedules(ctx context.Context, actor, project string) ([]postgres.Schedule, bool, error)
@@ -171,7 +177,7 @@ type Config struct {
 	Stream StreamConfig
 	// Instance is the installation's state directory (`codeye serve
 	// --state-dir`, always set by `codeye up`): GET /setup reads the model,
-	// Git and the detected tools from it, the users' GitHub tokens live in
+	// Git and the detected tools from it, the platform GitHub credentials live in
 	// it and no project may contain it. Nil serves the same API without
 	// those (tokens cannot be stored).
 	Instance *Instance
@@ -341,6 +347,13 @@ func New(cfg Config, store Store) (*Server, error) {
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
 	}
+	if s.inst == nil {
+		s.inst = &Instance{}
+	} else {
+		inst := *s.inst
+		s.inst = &inst
+	}
+	s.inst.protected = []string{cfg.ArtifactDir}
 	if cfg.ArtifactDir != "" {
 		a, err := artifactstore.Open(cfg.ArtifactDir)
 		if err != nil {
@@ -363,7 +376,7 @@ func New(cfg Config, store Store) (*Server, error) {
 	if s.artifacts != nil {
 		s.publisher = &reportsvc.Publisher{Store: store, Artifacts: s.artifacts, Registry: report.DefaultRegistry(), Log: s.log}
 		s.publishKick = make(chan struct{}, 1)
-		s.commenter = &prcomment.Poster{Store: store, GitHub: s.inst.gitHubFor, Log: s.log}
+		s.commenter = &prcomment.Poster{Store: store, GitHub: s.platformGitHub, Log: s.log}
 	}
 	if cfg.WebDir != "" {
 		if root, err := os.OpenRoot(cfg.WebDir); err == nil {
@@ -460,6 +473,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 	if s.publisher != nil && s.publishEvery > 0 {
 		go s.publishLoop(sweepCtx)
+	}
+	if s.inst != nil && s.inst.StateDir != "" {
+		go s.webhookLoop(sweepCtx)
 	}
 	select {
 	case err := <-errc:

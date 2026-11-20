@@ -14,10 +14,11 @@ import (
 )
 
 // User is an account as the administrator API and CLI show it. A user
-// without Username signs in only with a login link.
+// without a username or email signs in only with a login link.
 type User struct {
 	ID                 string
 	Username           *string
+	Email              *string
 	DisplayName        *string
 	IsAdmin            bool
 	MustChangePassword bool
@@ -28,12 +29,12 @@ type User struct {
 	LastLoginAt *time.Time
 }
 
-const userSelect = `SELECT u.id::text,u.username,u.display_name,u.is_admin,u.must_change_password,u.password_kdf IS NOT NULL,u.disabled_at,u.created_at,
+const userSelect = `SELECT u.id::text,u.username,u.email,u.display_name,u.is_admin,u.must_change_password,u.password_kdf IS NOT NULL,u.disabled_at,u.created_at,
 	(SELECT max(created_at) FROM auth_sessions WHERE user_id=u.id) FROM users u`
 
 func scanUser(row pgx.Row) (User, error) {
 	var u User
-	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.MustChangePassword, &u.HasPassword, &u.DisabledAt, &u.CreatedAt, &u.LastLoginAt)
+	err := row.Scan(&u.ID, &u.Username, &u.Email, &u.DisplayName, &u.IsAdmin, &u.MustChangePassword, &u.HasPassword, &u.DisabledAt, &u.CreatedAt, &u.LastLoginAt)
 	u.CreatedAt = u.CreatedAt.UTC()
 	if u.DisabledAt != nil {
 		t := u.DisabledAt.UTC()
@@ -245,18 +246,18 @@ func (s *Store) SetAdmin(ctx context.Context, by Principal, id string, admin boo
 
 // SetPassword is the operator's password set (CLI "user passwd"): the
 // verifier is derived by the caller, every session of the user is revoked.
-// The user must have a username.
+// The user must have a login identifier.
 func (s *Store) SetPassword(ctx context.Context, id string, h account.Hash, mustChange bool) (User, error) {
 	if !validIDs(id) {
 		return User{}, domain.ErrInvalid
 	}
 	return transaction(ctx, s, func(tx pgx.Tx) (User, error) {
-		var username *string
+		var identifier *string
 		var enabled bool
-		if err := tx.QueryRow(ctx, "SELECT username,disabled_at IS NULL FROM users WHERE id=$1 FOR UPDATE", id).Scan(&username, &enabled); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT coalesce(username,email),disabled_at IS NULL FROM users WHERE id=$1 FOR UPDATE", id).Scan(&identifier, &enabled); err != nil {
 			return User{}, err
 		}
-		if username == nil || !enabled {
+		if identifier == nil || !enabled {
 			return User{}, domain.ErrConflict
 		}
 		if err := storeHash(ctx, tx, id, &h, mustChange); err != nil {
@@ -282,9 +283,9 @@ var (
 	// ErrSelfReset: an administrator's own password changes through the
 	// session, not a reset.
 	ErrSelfReset = fmt.Errorf("%w: an administrator cannot reset their own password", domain.ErrConflict)
-	// ErrResetNeedsUsername: a user without a username has no password to
+	// ErrResetNeedsUsername: a user without a login identifier has no password to
 	// reset; such users get login links from the operator CLI only.
-	ErrResetNeedsUsername = fmt.Errorf("%w: the user has no username", domain.ErrConflict)
+	ErrResetNeedsUsername = fmt.Errorf("%w: the user has no login identifier", domain.ErrConflict)
 )
 
 // ResetPassword clears the user's password, revokes every session and
@@ -293,7 +294,7 @@ var (
 // is flagged must_change_password and the link's session is gated to the
 // password change on its own. An administrator's reset is recorded on the user (time
 // and administrator) for the session view, and the link records its issuer, so
-// whoever signs in with it is attributed. A user without a username is
+// whoever signs in with it is attributed. A user without a login identifier is
 // ErrResetNeedsUsername; an administrator's own reset is ErrSelfReset.
 func (s *Store) ResetPassword(ctx context.Context, by Principal, id, tokenSHA256 string, ttl time.Duration) (User, error) {
 	if !validIDs(id) || !hexDigest.MatchString(tokenSHA256) || ttl < time.Second || ttl > maxLaunchTTL {
@@ -307,14 +308,14 @@ func (s *Store) ResetPassword(ctx context.Context, by Principal, id, tokenSHA256
 			return User{}, err
 		}
 		var enabled bool
-		var username *string
-		if err := tx.QueryRow(ctx, "SELECT disabled_at IS NULL,username FROM users WHERE id=$1 FOR UPDATE", id).Scan(&enabled, &username); err != nil {
+		var identifier *string
+		if err := tx.QueryRow(ctx, "SELECT disabled_at IS NULL,coalesce(username,email) FROM users WHERE id=$1 FOR UPDATE", id).Scan(&enabled, &identifier); err != nil {
 			return User{}, err
 		}
 		if !enabled {
 			return User{}, domain.ErrNotFound
 		}
-		if username == nil {
+		if identifier == nil {
 			return User{}, ErrResetNeedsUsername
 		}
 		if err := storeHash(ctx, tx, id, nil, true); err != nil {

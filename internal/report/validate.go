@@ -10,6 +10,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
 var (
@@ -35,6 +36,22 @@ func ValidateReport(r Report) error {
 	}
 	if _, err := time.Parse(time.RFC3339Nano, r.CreatedAt); err != nil {
 		return invalidf("created_at is invalid")
+	}
+	if p := r.Project; p != nil {
+		if p.Name == "" {
+			return invalidf("empty project name")
+		}
+		var start time.Time
+		for _, stamp := range []string{p.StartedAt, p.FinishedAt} {
+			if stamp == "" {
+				continue
+			}
+			at, err := time.Parse(time.RFC3339Nano, stamp)
+			if err != nil || at.Before(start) {
+				return invalidf("invalid project interval")
+			}
+			start = at
+		}
 	}
 	if !statuses[r.Status] || !verdicts[r.QualityVerdict] || r.Builder.ID != BuilderID || !hex64.MatchString(r.Builder.InputDigest) {
 		return invalidf("status, verdict or builder is invalid")
@@ -68,7 +85,7 @@ func ValidateReport(r Report) error {
 	if r.Status == StatusCompleted && (requiredMissing || r.Coverage.AIReview.Status != AIReviewPerformed) {
 		return invalidf("completed report with incomplete required work or AI review")
 	}
-	if r.QualityVerdict != DecideVerdict(r.Status, r.Summary, r.Coverage.AIReview.Status) {
+	if r.QualityVerdict != reportVerdict(r) {
 		return invalidf("quality verdict does not follow the rules")
 	}
 	arts := map[string]bool{}
@@ -132,6 +149,13 @@ func ValidateReport(r Report) error {
 	for _, f := range r.Findings {
 		if err := validateFinding(f, r.Inputs.SnapshotID, obs, arts); err != nil {
 			return err
+		}
+		for _, e := range f.Evidence {
+			if e.Excerpt != nil && (!r.Export.IncludeCode || e.Location == nil ||
+				!sourceexcerpt.SafePath(e.Location.Path) || !e.Excerpt.Valid(e.Location.StartLine) ||
+				(e.Kind != "code" && e.Kind != "document")) {
+				return invalidf("finding %s excerpt is invalid", f.ID)
+			}
 		}
 		for _, id := range f.ObservationIDs {
 			if suppressed[id] {
@@ -380,6 +404,7 @@ func Project(r Report, includeCode bool) Report {
 		g.Evidence = make([]Evidence, len(f.Evidence))
 		for j, e := range f.Evidence {
 			e.Description = safeText(e.Description)
+			e.Excerpt = nil
 			if e.Location != nil {
 				l := *e.Location
 				l.Symbol = ""

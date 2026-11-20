@@ -255,6 +255,7 @@ func overviewOf(r Report) Overview {
 		}
 		line(SectionDocuments, &d.Stage, n)
 		need("4", SectionDocuments, "document_conflicts", n["conflicts"])
+		need("1", SectionDocuments, "contract_differences", contractDifferences(d))
 	}
 	if s := r.StaticAnalysis; s != nil {
 		n := map[string]int{"tools": 0, "succeeded": 0, "not_succeeded": 0, "observations": 0, "findings": 0, "actionable": 0, "pending": 0}

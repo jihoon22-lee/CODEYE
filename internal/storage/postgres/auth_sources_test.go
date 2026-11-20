@@ -205,8 +205,10 @@ func TestSourceRegistryAndRegisterProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.RegisterProject(ctx, other, ProjectRegistration{Source: local})
-	expect(t, err, domain.ErrNotFound) // root not granted
+	otherProject, err := s.RegisterProject(ctx, other, ProjectRegistration{Source: local})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if roots, _ := s.ListSourceRoots(ctx, other); len(roots) != 0 {
 		t.Fatalf("ungranted roots visible: %+v", roots)
 	}
@@ -222,7 +224,7 @@ func TestSourceRegistryAndRegisterProject(t *testing.T) {
 	}
 	_, err = s.ListProjects(ctx, user, "!!", 2)
 	expect(t, err, domain.ErrInvalid)
-	if none, err := s.ListProjects(ctx, other, "", 10); err != nil || len(none.Items) != 0 {
+	if none, err := s.ListProjects(ctx, other, "", 10); err != nil || len(none.Items) != 1 || none.Items[0].ID != otherProject.ID {
 		t.Fatalf("other sees %+v, %v", none, err)
 	}
 	src, err := domain.ParseSource(page2.Items[0].Source)

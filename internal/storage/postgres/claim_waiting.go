@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
@@ -46,6 +47,9 @@ func waitingReason(ctx context.Context, tx pgx.Tx, runID string) (*string, error
 		if pinned {
 			return reason(nodeproto.WaitingSnapshotUnavailable)
 		}
+		return reason(nodeproto.WaitingNoCapableNode)
+	}
+	if c.snapshotID == nil && c.source.Kind == domain.SourceGit && !freshGitAllowed(ctx, c.gitHost) {
 		return reason(nodeproto.WaitingNoCapableNode)
 	}
 	var views []nodeView

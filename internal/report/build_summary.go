@@ -30,6 +30,34 @@ func DecideVerdict(status string, s Summary, ai string) string {
 	return VerdictNoActionable
 }
 
+// contractDifferences counts scoped comparisons with evidence of divergence.
+func contractDifferences(d *DocumentsSection) int {
+	count := 0
+	if d != nil {
+		for _, c := range d.Comparisons {
+			if c.Status == "mismatch" || c.Status == "partial" {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func reportVerdict(r Report) string {
+	if contractDifferences(r.Documents) > 0 {
+		return VerdictAttention
+	}
+	verdict := DecideVerdict(r.Status, r.Summary, r.Coverage.AIReview.Status)
+	if verdict == VerdictNoActionable && r.Documents != nil {
+		for _, c := range r.Documents.Comparisons {
+			if c.Status == "unknown" {
+				return VerdictInconclusive
+			}
+		}
+	}
+	return verdict
+}
+
 var hiddenDisposition = map[string]bool{"false_positive": true, "suppressed": true, "accepted_risk": true, "fixed_by_user": true}
 
 var severityRank = map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}

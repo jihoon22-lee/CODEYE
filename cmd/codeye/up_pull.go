@@ -17,8 +17,8 @@ import (
 )
 
 // `codeye up https://github.com/OWNER/REPO/pull/N` (docs/GITHUB.md): the
-// pull request is resolved through the GitHub API with the token `codeye
-// up` found, pinned on a new run and analyzed at its head commit.
+// pull request is resolved through its host’s GitHub API with the platform
+// credential, pinned on a new run and analyzed at its head commit.
 // --comment turns the result comment on (and remembers it for the project),
 // --comment=false off; --dry-run-comment posts nothing, waits for the report
 // and prints the comment the run would post.
@@ -46,42 +46,23 @@ type pullOptions struct {
 }
 
 // pullRequestTarget recognizes a pull-request address of an approved Git
-// host (github.com only: other hosts have no pull-request API here).
+// host.
 func pullRequestTarget(cfg *instance.Config, target string) (*upTarget, bool, error) {
 	repo, number, ok := domain.SplitPullRequestURL(target)
 	if !ok {
 		return nil, false, nil
 	}
-	if cfg.Offline {
-		// The pin, the changed files and the comment come from the GitHub
-		// API, which offline mode does not reach.
-		return nil, true, errors.New("offline mode does not use GitHub: pull requests cannot be analyzed (analyze a folder or a repository of a host in git_hosts)")
-	}
 	t, err := gitTarget(cfg, repo)
 	if err != nil {
 		return nil, true, err
-	}
-	if t.host != github.Host {
-		return nil, true, fmt.Errorf("pull requests can be analyzed for %s repositories only", github.Host)
 	}
 	t.pullRequest = number
 	return t, true, nil
 }
 
-// gitHubClient is the API client acting for user (the administrator `codeye
-// up` signs in): that user's own GitHub connection, the same one the web
-// uses for them (none: anonymous, public repositories only).
-func gitHubClient(layout instance.Layout, user string) *github.Client {
-	cred, err := github.UserTokensDir(layout.Root).Read(user)
-	if err != nil || cred == nil || cred.Host != github.Host {
-		return github.New(github.APIBase(), "")
-	}
-	return github.New(github.APIBase(), cred.Token)
-}
-
 // queuePullRequest resolves t's pull request for the project, remembers an
 // explicit --comment choice and queues the run.
-func queuePullRequest(ctx context.Context, up *running, layout instance.Layout, projectID string, t *upTarget, o pullOptions, out io.Writer) (string, error) {
+func queuePullRequest(ctx context.Context, up *running, platform github.Platform, projectID string, t *upTarget, o pullOptions, out io.Writer) (string, error) {
 	p, err := up.store.GetProjectSummary(ctx, up.user, projectID)
 	if err != nil {
 		return "", fmt.Errorf("cannot read the project: %w", err)
@@ -107,7 +88,12 @@ func queuePullRequest(ctx context.Context, up *running, layout instance.Layout, 
 	} else if o.comment.set {
 		ref.Comment = &o.comment.value
 	}
-	pin, err := github.PinForProject(ctx, gitHubClient(layout, up.user), p.Source, ref, remembered, time.Now())
+	provider, err := up.store.ProviderForHost(ctx, t.host)
+	if err != nil {
+		return "", err
+	}
+	client, _ := platform.Client(provider.Host, provider.APIURL)
+	pin, err := github.PinForProject(ctx, client, p.Source, ref, remembered, time.Now())
 	if err != nil {
 		return "", pullRequestError(err, t)
 	}
@@ -142,18 +128,18 @@ func queuePullRequest(ctx context.Context, up *running, layout instance.Layout, 
 // pullRequestError explains a resolution failure.
 func pullRequestError(err error, t *upTarget) error {
 	if errors.Is(err, github.ErrNotGitHubProject) {
-		return fmt.Errorf("%s is not a %s repository project", t.repoURL, github.Host)
+		return fmt.Errorf("the GitHub API for %s is unavailable on this installation", t.host)
 	}
 	where := fmt.Sprintf("pull request #%d of %s", t.pullRequest, domain.RepositoryPath(t.repoURL))
 	switch github.KindOf(err) {
 	case github.KindNotFound:
-		return fmt.Errorf("GitHub shows no %s to this installation (a private repository needs a token: gh auth login, then codeye up)", where)
+		return fmt.Errorf("GitHub shows no %s to this installation (grant the platform GitHub account access for a private repository)", where)
 	case github.KindUnauthorized:
-		return errors.New("GitHub refused the stored token; sign in again (gh auth login) and run codeye up")
+		return errors.New("GitHub refused the platform credential")
 	case github.KindForbidden:
-		return fmt.Errorf("the GitHub token may not read %s", where)
+		return fmt.Errorf("the platform GitHub account may not read %s", where)
 	case github.KindRateLimited:
-		return errors.New("the GitHub API rate limit is exhausted; try again later (a token raises the limit: gh auth login)")
+		return errors.New("the GitHub API rate limit is exhausted; try again later")
 	default:
 		return fmt.Errorf("cannot reach the GitHub API to resolve %s: %v", where, err)
 	}
@@ -168,7 +154,7 @@ func shortSHA(s string) string {
 
 // printCommentPreview waits until the run has a report (or ends without
 // one) and prints the comment it would post. Nothing is posted.
-func printCommentPreview(ctx context.Context, store *postgres.Store, layout instance.Layout, user, runID string, wait time.Duration, out, stderr io.Writer) int {
+func printCommentPreview(ctx context.Context, store *postgres.Store, platform github.Platform, user, runID string, wait time.Duration, out, stderr io.Writer) int {
 	fmt.Fprintf(out, "waiting for the report of run %s to preview its pull-request comment (nothing is posted)...\n", runID)
 	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
@@ -203,7 +189,13 @@ func printCommentPreview(ctx context.Context, store *postgres.Store, layout inst
 		fmt.Fprintln(stderr, "cannot load the report:", err)
 		return 1
 	}
-	body, _, err := prcomment.Preview(ctx, gitHubClient(layout, user), src)
+	provider, err := store.ProviderForHost(ctx, src.Pin.Host)
+	if err != nil {
+		fmt.Fprintln(stderr, "cannot load the GitHub host:", err)
+		return 1
+	}
+	client, _ := platform.Client(provider.Host, provider.APIURL)
+	body, _, err := prcomment.Preview(ctx, client, src)
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot render the comment:", err)
 		return 1

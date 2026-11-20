@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/docpath"
 )
 
 // Review stage records (schema 0.2) are written by the review roles. A
@@ -168,22 +169,25 @@ type Record struct {
 	Stage     string  `json:"stage"`
 	// Slice is set on 0.3 records only (nil is omitted, so 0.2 bytes do not
 	// change).
-	Slice            *SliceRef             `json:"slice,omitempty"`
-	Outcome          string                `json:"outcome"`
-	FailureReason    string                `json:"failure_reason,omitempty"`
-	Upstream         []Upstream            `json:"upstream"`
-	Evidence         []Excerpt             `json:"evidence"`
-	Observations     []ObservationRef      `json:"observations"`
-	EnvironmentNotes []EnvironmentNote     `json:"environment_notes,omitempty"`
-	Contracts        []Contract            `json:"contracts,omitempty"`
-	Conflicts        []Conflict            `json:"conflicts,omitempty"`
-	Questions        []Question            `json:"questions,omitempty"`
-	InstructionNotes []InstructionNote     `json:"instruction_notes,omitempty"`
-	Candidates       []Candidate           `json:"candidates,omitempty"`
-	Limits           []InterpretationLimit `json:"interpretation_limits,omitempty"`
-	Verifications    []Verification        `json:"verifications,omitempty"`
-	Limitations      []string              `json:"limitations"`
-	Calls            []Call                `json:"calls"`
+	Slice               *SliceRef             `json:"slice,omitempty"`
+	Outcome             string                `json:"outcome"`
+	FailureReason       string                `json:"failure_reason,omitempty"`
+	Upstream            []Upstream            `json:"upstream"`
+	Evidence            []Excerpt             `json:"evidence"`
+	Observations        []ObservationRef      `json:"observations"`
+	EnvironmentNotes    []EnvironmentNote     `json:"environment_notes,omitempty"`
+	Contracts           []Contract            `json:"contracts,omitempty"`
+	Conflicts           []Conflict            `json:"conflicts,omitempty"`
+	Questions           []Question            `json:"questions,omitempty"`
+	InstructionNotes    []InstructionNote     `json:"instruction_notes,omitempty"`
+	DocumentQuality     []DocumentQuality     `json:"document_quality,omitempty"`
+	Strengths           []Strength            `json:"strengths,omitempty"`
+	ContractComparisons []ContractComparison  `json:"contract_comparisons,omitempty"`
+	Candidates          []Candidate           `json:"candidates,omitempty"`
+	Limits              []InterpretationLimit `json:"interpretation_limits,omitempty"`
+	Verifications       []Verification        `json:"verifications,omitempty"`
+	Limitations         []string              `json:"limitations"`
+	Calls               []Call                `json:"calls"`
 }
 
 // Accepted reports whether the record carries an accepted stage result.
@@ -239,7 +243,7 @@ func ValidScopePath(p string) bool { return p == "." || domain.ValidateEvidenceP
 // ScopeUnder reports whether p is dir or lies below it.
 func ScopeUnder(p, dir string) bool { return dir == "." || p == dir || strings.HasPrefix(p, dir+"/") }
 
-// DocumentDir is the directory a document applies to.
+// DocumentDir returns the containing directory of a snapshot-relative path.
 func DocumentDir(p string) string {
 	d := path.Dir(p)
 	if d == "" {
@@ -344,6 +348,9 @@ func Validate(r Record, want Expect) error {
 		observations[o.ID] = o
 	}
 	if err := checkStageContent(r, catalog, observations); err != nil {
+		return err
+	}
+	if err := checkInsights(r, catalog); err != nil {
 		return err
 	}
 	return checkCalls(r)
@@ -495,7 +502,7 @@ func refs(ids []string, catalog map[string]Excerpt, max int, want ...string) boo
 // of a sub-directory is never generalized to a parent or the repository.
 func docsCover(ids []string, catalog map[string]Excerpt, scope string) bool {
 	for _, id := range ids {
-		if !ScopeUnder(scope, DocumentDir(catalog[id].Path)) {
+		if !ScopeUnder(scope, docpath.Scope(catalog[id].Path)) {
 			return false
 		}
 	}

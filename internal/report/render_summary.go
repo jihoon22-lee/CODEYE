@@ -297,7 +297,7 @@ func newSummaryView(r Report, digest string, l Locale) secView {
 		}
 	}
 	v.dropDanglingLinks()
-	return v
+	return withInsights(v)
 }
 
 // summarySentences say in words what the run found and covered, from the
@@ -324,7 +324,7 @@ func summarySentences(r Report, l Locale, obs map[string]Observation) []string {
 			if len(rest) > 0 {
 				s += " (" + strings.Join(rest, ", ") + ")"
 			}
-			out = append(out, s+". "+l.Label("summary.model_note"))
+			out = append(out, s+".")
 		} else if len(c.Roles) > 0 {
 			out = append(out, l.Label("summary.model_none"))
 		}
@@ -474,6 +474,12 @@ func findingSummaryParts(l Locale, ids []string, findings map[string]Finding) []
 				{Text: l.Label("summary.card_impact") + " " + f.Impact},
 				{Text: l.Label("summary.card_recommendation") + " " + f.Recommendation.Summary},
 			}}
+			for _, e := range f.Evidence {
+				if e.Location != nil && e.Excerpt != nil {
+					card.Sources = append(card.Sources, sourceCitation{Location: e.Location.Path + ":" + strconv.Itoa(e.Excerpt.StartLine), Text: e.Excerpt.Text})
+					break
+				}
+			}
 			cards.Cards = append(cards.Cards, card)
 			continue
 		}
@@ -1152,8 +1158,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 		b.WriteByte('\n')
 	}
 	mdHeader(p, r, v.view, l)
-	p("> ", mdText(l.Label("summary.layout_note")))
-	p()
+
 	for _, s := range v.Sections {
 		p("## ", mdText(s.Title))
 		p()
@@ -1166,6 +1171,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 	for _, part := range v.Appendix {
 		mdPart(p, part, l)
 	}
+	mdTechnical(p, r, v.view, l)
 	p("digest sha256: ", mdCode(digest))
 	return []byte(b.String())
 }
@@ -1186,5 +1192,6 @@ func mdCards(p func(...string), cards []secCard) {
 			p(line)
 		}
 		p()
+		mdCitations(p, c.Sources)
 	}
 }

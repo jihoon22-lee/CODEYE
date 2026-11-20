@@ -87,7 +87,7 @@ func TestOfflineReadiness(t *testing.T) {
 		"pip_index":       {Kind: "pip_index", Value: "https://pypi.corp.example/simple", Origin: "config"},
 		"crates_registry": {Kind: "crates_registry", Origin: "none", Reason: "offline_no_registry_configured"},
 		"git_host":        {Kind: "git_host", Origin: "none", Reason: "git_hosts_empty"},
-		"github_api":      {Kind: "github_api", Origin: "none", Reason: "offline_mode"},
+		"github_api":      {Kind: "github_api", Origin: "none", Reason: "git_hosts_empty"},
 		"model_endpoint":  {Kind: "model_endpoint", Origin: "none", Reason: "model_not_configured"},
 	} {
 		if got := destinationOf(o, kind); got != want {

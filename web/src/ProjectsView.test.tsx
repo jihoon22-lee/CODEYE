@@ -38,7 +38,7 @@ describe('projects', () => {
     renderApp(backend({ 'GET /api/v1/projects': () => json(200, { items: [], next_cursor: null }) }));
     await flush();
     expect(screen.getByText(t.projects.listEmpty)).toBeTruthy();
-    expect(screen.getByLabelText(t.projects.relativePath)).toBeTruthy();
+    expect(screen.getByLabelText(t.projects.localPath)).toBeTruthy();
   });
 
   it('shows an unknown source status and capability as such, not as verified', async () => {
@@ -84,22 +84,20 @@ describe('project registration', () => {
     const { calls } = renderApp();
     await flush();
     click(t.projects.submit);
-    expect(screen.getByText(t.projects.validation.sourceRootMissing)).toBeTruthy();
-    expect(screen.getByText(t.projects.validation.relativePathEmpty)).toBeTruthy();
-    expect(screen.getByLabelText(t.projects.relativePath).getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByText(t.quick.validation.notAbsolute)).toBeTruthy();
+    expect(screen.getByLabelText(t.projects.localPath).getAttribute('aria-invalid')).toBe('true');
     expect(calls.some(c => c.method === 'POST')).toBe(false);
 
-    type(t.projects.relativePath, '../escape');
-    type(t.projects.sourceRoot, 'root1');
+    type(t.projects.localPath, '../escape');
     click(t.projects.submit);
-    expect(screen.getByText(t.projects.validation.relativePathUnsafe)).toBeTruthy();
+    expect(screen.getByText(t.quick.validation.notAbsolute)).toBeTruthy();
     expect(calls.some(c => c.method === 'POST')).toBe(false);
 
-    type(t.projects.relativePath, 'team/service');
+    type(t.projects.localPath, '/srv/team/service');
     click(t.projects.submit);
     await flush();
     const post = calls.find(c => c.method === 'POST' && c.url === '/api/v1/projects')!;
-    expect(post.body).toEqual({ source: { kind: 'local', source_root_id: 'root1', relative_path: 'team/service' } });
+    expect(post.body).toEqual({ local_path: '/srv/team/service' });
     expect(screen.getByText(t.projects.created)).toBeTruthy();
     expect(screen.getByRole('heading', { name: /team\/service|팀 저장소 루트/ })).toBeTruthy(); // new project is selected
   });
@@ -135,22 +133,20 @@ describe('project registration', () => {
   it('shows a server validation failure with its request id and keeps the input', async () => {
     renderApp(backend({ 'POST /api/v1/projects': () => apiError(400, 'VALIDATION_FAILED', 'relative_path escapes the root') }));
     await flush();
-    type(t.projects.sourceRoot, 'root1');
-    type(t.projects.relativePath, 'a/b');
+    type(t.projects.localPath, '/srv/a/b');
     click(t.projects.submit);
     await flush();
     const alert = screen.getByText(new RegExp(t.errors.codes.VALIDATION_FAILED!));
     expect(alert.textContent).toContain('relative_path escapes the root');
     expect(alert.textContent).toContain('req-1');
-    expect((screen.getByLabelText(t.projects.relativePath) as HTMLInputElement).value).toBe('a/b');
+    expect((screen.getByLabelText(t.projects.localPath) as HTMLInputElement).value).toBe('/srv/a/b');
   });
 
   it('prevents double submission while a request is in flight', async () => {
     let release!: (r: Response) => void;
     const { calls } = renderApp(backend({ 'POST /api/v1/projects': () => new Promise<Response>(r => { release = r; }) as never }));
     await flush();
-    type(t.projects.sourceRoot, 'root1');
-    type(t.projects.relativePath, 'a');
+    type(t.projects.localPath, '/srv/a');
     click(t.projects.submit);
     await flush();
     expect((screen.getByRole('button', { name: t.projects.submitting }) as HTMLButtonElement).disabled).toBe(true);

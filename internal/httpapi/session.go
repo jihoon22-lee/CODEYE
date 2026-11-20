@@ -66,6 +66,7 @@ type sessionView struct {
 	CSRFToken          string    `json:"csrf_token"`
 	ExpiresAt          time.Time `json:"expires_at"`
 	Username           *string   `json:"username"`
+	Email              *string   `json:"email,omitempty"`
 	DisplayName        *string   `json:"display_name"`
 	IsAdmin            bool      `json:"is_admin"`
 	MustChangePassword bool      `json:"must_change_password"`
@@ -83,7 +84,7 @@ type resetView struct {
 }
 
 func viewSession(sess postgres.Session, token string) sessionView {
-	v := sessionView{UserID: sess.UserID, CSRFToken: csrfToken(token), ExpiresAt: sess.ExpiresAt.UTC(), Username: sess.Username,
+	v := sessionView{UserID: sess.UserID, CSRFToken: csrfToken(token), ExpiresAt: sess.ExpiresAt.UTC(), Username: sess.Username, Email: sess.Email,
 		DisplayName: sess.DisplayName, IsAdmin: sess.IsAdmin, MustChangePassword: sess.MustChangePassword, HasPassword: sess.HasPassword}
 	if r := sess.PasswordReset; r != nil {
 		v.PasswordReset = &resetView{ResetAt: r.At, ResetByUserID: r.ByUserID, ResetByUsername: r.ByUsername}
@@ -102,7 +103,37 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, token 
 	http.SetCookie(w, c)
 }
 
-// POST /session: {launch_token} or {username, password}. Every credential
+func (s *Server) registerAccount(q *request) {
+	body, ok := q.readBody()
+	if !ok {
+		return
+	}
+	var in struct {
+		Email    *string `json:"email"`
+		Password *string `json:"password"`
+	}
+	if domain.DecodeStrict(body, &in) != nil || in.Email == nil || in.Password == nil {
+		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", `body must be {"email": string, "password": string}`, false)
+		return
+	}
+	token := NewToken()
+	ctx, cancel := q.ctx()
+	defer cancel()
+	sess, err := s.store.RegisterAccount(ctx, postgres.Registration{Email: *in.Email, Password: *in.Password, SessionTokenSHA256: TokenHash(token), TTL: s.sessionTTL})
+	switch {
+	case errors.Is(err, postgres.ErrEmailTaken):
+		writeError(q.w, q.r, http.StatusConflict, "EMAIL_TAKEN", "the email address is already registered", false)
+	case errors.Is(err, domain.ErrInvalid):
+		writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "a valid email address and a password that meets the policy (12 to 256 characters) are required", false)
+	case err != nil:
+		s.storeError(q, err)
+	default:
+		s.setSessionCookie(q.w, q.r, token, sess.ExpiresAt)
+		writeJSON(q.w, http.StatusCreated, viewSession(sess, token))
+	}
+}
+
+// POST /session: {launch_token}, {email, password}, or {username, password}. Every credential
 // failure is the same 401 with the same message; throttled attempts are 429
 // with Retry-After.
 func (s *Server) createSession(q *request) {
@@ -113,17 +144,16 @@ func (s *Server) createSession(q *request) {
 	var in struct {
 		LaunchToken *string `json:"launch_token"`
 		Username    *string `json:"username"`
+		Email       *string `json:"email"`
 		Password    *string `json:"password"`
 	}
-	if domain.DecodeStrict(body, &in) != nil {
-		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", `body must be {"launch_token": string} or {"username": string, "password": string}`, false)
+	if domain.DecodeStrict(body, &in) != nil ||
+		(in.LaunchToken != nil && (in.Username != nil || in.Email != nil || in.Password != nil)) ||
+		(in.LaunchToken == nil && (in.Password == nil || (in.Username == nil) == (in.Email == nil))) {
+		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", `body must be {"launch_token": string}, {"email": string, "password": string}, or {"username": string, "password": string}`, false)
 		return
 	}
 	launch := in.LaunchToken != nil
-	if launch == (in.Username != nil || in.Password != nil) || (!launch && (in.Username == nil || in.Password == nil)) {
-		writeError(q.w, q.r, http.StatusBadRequest, "INVALID_REQUEST", `body must be {"launch_token": string} or {"username": string, "password": string}`, false)
-		return
-	}
 	token := NewToken()
 	ctx, cancel := q.ctx()
 	defer cancel()
@@ -136,19 +166,24 @@ func (s *Server) createSession(q *request) {
 		}
 		sess, err = s.store.ExchangeLaunchTokenFrom(ctx, clientAddress(q.r), TokenHash(*in.LaunchToken), TokenHash(token), s.sessionTTL)
 	} else {
-		if *in.Username == "" || len(*in.Username) > 256 || len(*in.Password) > 1024 {
-			writeError(q.w, q.r, http.StatusUnauthorized, "UNAUTHENTICATED", "username or password is incorrect", false)
+		creds := postgres.PasswordLogin{Password: *in.Password, Client: clientAddress(q.r), SessionTokenSHA256: TokenHash(token), TTL: s.sessionTTL}
+		if in.Email != nil {
+			creds.Email = *in.Email
+		} else {
+			creds.Username = *in.Username
+		}
+		if (creds.Username == "" && creds.Email == "") || len(creds.Username) > 256 || len(creds.Email) > 1024 || len(creds.Password) > 1024 {
+			writeError(q.w, q.r, http.StatusUnauthorized, "UNAUTHENTICATED", "login identifier or password is incorrect", false)
 			return
 		}
-		sess, err = s.store.PasswordLogin(ctx, postgres.PasswordLogin{Username: *in.Username, Password: *in.Password, Client: clientAddress(q.r),
-			SessionTokenSHA256: TokenHash(token), TTL: s.sessionTTL})
+		sess, err = s.store.PasswordLogin(ctx, creds)
 	}
 	if err != nil {
 		switch {
 		case launch && errors.Is(err, domain.ErrNotFound):
 			writeError(q.w, q.r, http.StatusUnauthorized, "UNAUTHENTICATED", "launch token is invalid, used or expired", false)
 		case errors.Is(err, domain.ErrUnauthenticated):
-			writeError(q.w, q.r, http.StatusUnauthorized, "UNAUTHENTICATED", "username or password is incorrect", false)
+			writeError(q.w, q.r, http.StatusUnauthorized, "UNAUTHENTICATED", "login identifier or password is incorrect", false)
 		default:
 			s.storeError(q, err)
 		}
@@ -206,7 +241,7 @@ func (s *Server) changePassword(q *request) {
 		case errors.Is(err, domain.ErrUnauthenticated):
 			writeError(q.w, q.r, http.StatusForbidden, "PASSWORD_INCORRECT", "the current password is incorrect", false)
 		case errors.Is(err, domain.ErrInvalid):
-			writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "the new password does not meet the policy (12 to 256 characters, not the username)", false)
+			writeError(q.w, q.r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "the new password does not meet the policy (12 to 256 characters, distinct from the login identifier)", false)
 		default:
 			s.storeError(q, err)
 		}

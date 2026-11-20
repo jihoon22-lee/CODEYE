@@ -45,7 +45,7 @@ func guidesOf(files []string) []string {
 
 func TestDefaultPackSelection(t *testing.T) {
 	id, version, err := Identity()
-	if err != nil || id != "review" || version != "2.0.0" {
+	if err != nil || id != "review" || version != "2.1.0" {
 		t.Fatal(id, version, err)
 	}
 	pack, err := os.ReadFile("pack.yaml")
@@ -181,11 +181,11 @@ func mustEmbedded(t *testing.T, name string) []byte {
 // changing an instruction byte changes them together.
 func TestGoSelectionDigestsPinned(t *testing.T) {
 	want := map[string]string{
-		"environment": "ac3da059a7fd12bbba9c509ed2e8e8001a0d503f7e587482b9e01b64b73e5e28",
-		"documents":   "fd045083f15afc63f2c62693e70e478325094b4851263c62e6f156448801ff71",
-		"investigate": "dd822bc381885cd3d30272b49a5c31249b6f6ad74bd4a569ecce0231dd832d81",
-		"interpret":   "fc6bb92311068dbeff34bcf2da829ef8b72b2e87f22f53d8f7e05356d70555cf",
-		"verify":      "341a3ded2a1fee8b7e55c97e4ab4dd14cea8cd44b6772ecb6ffa3f6c8408b042",
+		"environment": "23c5aa5846c1fc88ab9fcdbdd45c633373a00ead20220c8762a8db183e6c8d8b",
+		"documents":   "df857a95036a2123923a021ec47a463e65af625c74e209e13009731457960502",
+		"investigate": "0acc91aed95420c1a263b27cb8bb0453b9fb9bbfa06f6ec27a18bc84ef339514",
+		"interpret":   "fe763f6d39a58293c3ff75de59ebfeb383fad8d4991fa32a3ac432a27cc94ab0",
+		"verify":      "d9b2714005a4bd26b8cf5e8bbc4af2f16a9ff38e15d52a03bdf772e1c758c181",
 	}
 	for _, role := range Roles {
 		s, err := For(role, []string{"go"})

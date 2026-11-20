@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"net/http"
+
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 )
 
 func (s *Server) listSourceRoots(q *request) {
@@ -37,7 +39,11 @@ func (s *Server) listProviders(q *request) {
 		Host string `json:"host"`
 	}
 	items := make([]item, 0, len(provs))
+	platform := s.inst.platform()
 	for _, p := range provs {
+		if !github.HostAllowed(p.Host, platform.Offline, platform.Hosts) {
+			continue
+		}
 		items = append(items, item{p.ID, p.Kind, p.Host})
 	}
 	writeJSON(q.w, http.StatusOK, map[string]any{"items": items})

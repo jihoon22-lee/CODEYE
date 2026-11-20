@@ -5,17 +5,18 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 )
 
-// ReadHostToken reads the token of host from a Git credential file (the
-// service writes <state>/secrets/github-users/<user_id>.json: {"host": ...,
-// "token": ...}). It
-// returns "" when path is empty, the file is missing or unreadable, or it
-// holds a token of another host: the fetch then runs without credentials, as
-// for any public repository.
+// ReadHostToken returns the credential bound to this fetch's exact host.
+// Manually configured agents may also use a single-host token file.
 func ReadHostToken(path, host string) string {
 	if path == "" || host == "" {
 		return ""
+	}
+	if creds, err := github.ReadPlatformCredentials(path); err == nil {
+		return creds[host].Token
 	}
 	f, err := os.Open(path)
 	if err != nil {

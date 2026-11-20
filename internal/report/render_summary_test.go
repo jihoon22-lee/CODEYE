@@ -55,8 +55,8 @@ func TestSummaryLayout(t *testing.T) {
 					t.Fatalf("section order %v", at)
 				}
 			}
-			if !strings.Contains(md, mdText(Korean.Label("summary.layout_note"))) {
-				t.Fatal("summary without its note")
+			if strings.Contains(strings.SplitN(md, "## ", 2)[0], r.RunID) {
+				t.Fatal("technical identifiers in report header")
 			}
 			full := RenderMarkdownAt(r, d, Korean, DetailFull)
 			checkTableWidths(t, string(full))
@@ -192,5 +192,28 @@ func TestSummaryCodeFreeKeepsMessagesOut(t *testing.T) {
 		if o.RawMessage != nil && len(*o.RawMessage) > 12 && strings.Contains(md, mdText(cutLine(*o.RawMessage, summaryMessageRunes))) {
 			t.Fatalf("code-free summary shows tool text %q", *o.RawMessage)
 		}
+	}
+}
+
+// A documented mismatch can need attention even when no defect candidate was
+// proposed. A comparison still awaiting evidence also affects the verdict.
+func TestContractDivergenceInVerdict(t *testing.T) {
+	r := Report{Status: StatusCompleted, Coverage: Coverage{AIReview: AIReview{Status: AIReviewPerformed}}}
+	for _, tc := range []struct{ comparison, want string }{{"match", VerdictNoActionable}, {"unknown", VerdictInconclusive}, {"partial", VerdictAttention}, {"mismatch", VerdictAttention}} {
+		r.Documents = &DocumentsSection{Comparisons: []DocComparison{{Status: tc.comparison}}}
+		if got := reportVerdict(r); got != tc.want {
+			t.Fatalf("comparison %s: %s", tc.comparison, got)
+		}
+	}
+}
+
+// Backticks in a repository document must not close the Markdown export's
+// code block and turn the rest of the excerpt into page markup.
+func TestSnapshotMarkdownFence(t *testing.T) {
+	var lines []string
+	text := "~~~\n````\n<img src='https://invalid.test'>"
+	mdCitations(func(parts ...string) { lines = append(lines, strings.Join(parts, "")) }, []sourceCitation{{Location: "README.md:3", Text: text}})
+	if len(lines) != 6 || lines[2] != "`````" || lines[3] != text || lines[4] != lines[2] {
+		t.Fatalf("unexpected code block: %q", lines)
 	}
 }

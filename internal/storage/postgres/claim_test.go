@@ -3,6 +3,7 @@ package postgres
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -260,7 +261,7 @@ func TestClaimPagesPastIncompatibleQueueHead(t *testing.T) {
 	}
 }
 
-func TestClaimRechecksActorPermissionAndSourceGrant(t *testing.T) {
+func TestClaimRechecksActorPermission(t *testing.T) {
 	e := newNodeEnv(t)
 	n := e.enroll("a", e.root.ID)
 	e.idle(n)
@@ -283,16 +284,14 @@ func TestClaimRechecksActorPermissionAndSourceGrant(t *testing.T) {
 	if got.Status != domain.RunFailed || e.count("SELECT count(*) FROM events WHERE run_id=$1 AND payload->>'reason'='actor_revoked'", r1.ID) != 1 {
 		t.Fatalf("revoked actor run %s", got.Status)
 	}
-	// The owner lost the source-root grant (no revoke CLI yet; direct SQL).
-	r2 := e.enqueue("o1", deepReview)
-	sqlExec(t, e.s, "DELETE FROM source_root_grants WHERE source_root_id=$1 AND user_id=$2", e.root.ID, e.user)
-	e.noClaim(n, n.workers[0], "k2")
-	got, _ = e.s.GetRun(e.ctx, e.user, r2.ID)
-	if got.Status != domain.RunFailed || e.count("SELECT count(*) FROM events WHERE run_id=$1 AND payload->>'reason'='source_grant_revoked'", r2.ID) != 1 {
-		t.Fatalf("revoked grant run %s", got.Status)
-	}
 	if e.count("SELECT count(*) FROM attempts") != 0 {
 		t.Fatal("attempt created for revoked actor")
+	}
+	// Legacy source grants do not govern platform acquisition.
+	r2 := e.enqueue("o1", deepReview)
+	sqlExec(t, e.s, "DELETE FROM source_root_grants WHERE source_root_id=$1 AND user_id=$2", e.root.ID, e.user)
+	if got := e.claimOK(n, n.workers[0], "k2"); got.Lease.RunID != r2.ID {
+		t.Fatalf("claimed run %s, want %s", got.Lease.RunID, r2.ID)
 	}
 }
 
@@ -314,11 +313,43 @@ func TestGitSourceClaimEligibility(t *testing.T) {
 		t.Fatalf("waiting %q", got)
 	}
 	with := e.enroll("git")
-	e.beat(with, hb(with.workers, "idle", []string{nodeproto.AnalysisCapability("deep-review"), nodeproto.GitSourceCapability("github.com")}))
+	e.policy(PoolPolicyUpdate{MinWorkers: intp(0), MaxWorkers: intp(2)})
+	e.ctlBeat(with, 2, 0, []string{nodeproto.AnalysisCapability("deep-review"), nodeproto.GitSourceCapability("github.com")},
+		map[string]string{with.workers[0]: "idle", with.workers[1]: "idle"})
+	offline := WithOfflineGitHosts(ctx, []string{"github.com", "ghe.example"})
+	e.ctx = offline
+	e.noClaim(with, with.workers[0], "offline")
+	if got := e.waiting(r.ID); got != nodeproto.WaitingNoCapableNode {
+		t.Fatalf("offline waiting reason %q", got)
+	}
+	pools, err := s.ReconcilePools(offline)
+	if err != nil || len(pools) != 1 || pools[0].Status.QueuedDemand != 0 {
+		t.Fatalf("offline queue contributed autoscaler demand: %+v %v", pools, err)
+	}
+	e.ctx = ctx
 	c := e.claimOK(with, with.workers[0], "k")
 	src := c.Job.Source
 	if c.Lease.RunID != r.ID || src.Kind != "git" || src.RepositoryURL != "https://github.com/acme/widget.git" || src.Branch != "main" || src.Host != "github.com" || src.SourceRootID != "" {
 		t.Fatalf("git job %+v", src)
+	}
+	e.ctx = offline
+	e.noClaim(with, with.workers[0], "k") // An online claim cannot be replayed offline before dispatch.
+	o := owner(with, c)
+	manifest := domain.Digest([]byte("git manifest"))
+	sha := strings.Repeat("a", 40)
+	mid := e.artifact(with, o, "source_manifest", manifest)
+	e.mustEvent(with, o, nodeproto.EventSnapshotFixed, nodeproto.SnapshotFixedPayload{ManifestDigest: manifest, Kind: "git", Consistency: "git_commit", SourceSHA: &sha, ManifestArtifactID: mid})
+	e.finish(with, c)
+	finished, err := s.GetRun(ctx, user, r.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Retry(offline, user, r.ID, finished.Version); err != nil {
+		t.Fatal(err)
+	}
+	retry := e.claimOK(with, with.workers[1], "offline-retained")
+	if retry.Lease.RunID != r.ID || retry.Job.Snapshot == nil || retry.Job.Snapshot.ManifestDigest != manifest {
+		t.Fatalf("offline lost the retained snapshot: %+v", retry)
 	}
 }
 

@@ -8,12 +8,8 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// A folder opened to everyone is usable by every user without a grant
-// (registration, readable lists, claim re-check); closing it refuses new
-// registrations and queued runs again. A node on the controller's machine
-// (source:controller) takes the root without having it in its enrollment
-// and gets its path; the job names the user who started the run for the
-// Git token and carries the service's offer for that user.
+// A colocated node takes a local project without a root enrollment and gets
+// the service’s analysis offer for the web account that requested it.
 func TestEveryoneRootsOfferAndControllerNode(t *testing.T) {
 	e := newNodeEnv(t)
 	s, ctx := e.s, e.ctx
@@ -38,9 +34,6 @@ func TestEveryoneRootsOfferAndControllerNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	reg := ProjectRegistration{Source: domain.Source{Kind: domain.SourceLocal, SourceRootID: shared.ID, RelativePath: "."}}
-	if _, err := s.RegisterProject(ctx, other, reg); !errors.Is(err, domain.ErrNotFound) {
-		t.Fatalf("closed root: %v", err)
-	}
 	if err := s.SetSourceRootEveryone(ctx, by, shared.ID, true); err != nil {
 		t.Fatal(err)
 	}
@@ -82,24 +75,12 @@ func TestEveryoneRootsOfferAndControllerNode(t *testing.T) {
 	if _, err := s.SetServiceSettings(ctx, UserPrincipal(other), ServiceSettingsPatch{OthersModelReview: &on}); !errors.Is(err, domain.ErrForbidden) {
 		t.Fatalf("non-admin settings: %v", err)
 	}
-	// Closing the folder refuses the queued run of a user without a grant.
-	queued, err := s.Enqueue(ctx, other, p.ID, "k2", []byte(deepReview))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Closing a legacy folder listing only hides its mapping.
 	if err := s.SetSourceRootEveryone(ctx, by, shared.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	if roots, _ := s.GrantedRootPaths(ctx, other); len(roots) != 0 {
-		t.Fatalf("closed root still readable: %v", roots)
-	}
-	res, err := s.ClaimAttempt(ctx, n.id, n.workers[1], "c2")
-	if err != nil || res.Response != nil {
-		t.Fatalf("claim after close: %+v %v", res.Response, err)
-	}
-	var status string
-	if err := s.pool.QueryRow(ctx, "SELECT status FROM runs WHERE id=$1", queued.ID).Scan(&status); err != nil || status != string(domain.RunFailed) {
-		t.Fatalf("queued run after close: %q %v", status, err)
+		t.Fatalf("closed root still listed: %v", roots)
 	}
 	// The offer follows who started the run, not who owns the project: a
 	// member's run of the administrator's project gets the member's offer.

@@ -142,7 +142,7 @@ export type SetupTool = { name: string; status: string; version: string | null; 
 // reason is an open string: no_git_host, no_allowed_folder, offline, no_state_dir, not_offered,
 // model_not_configured, node_disabled, unknown.
 export type SetupAvailable = { available: boolean; reason: string | null };
-export const SETUP_AVAILABLE_KEYS = ['git_url', 'local_path', 'pull_requests', 'github_token', 'model_review', 'build_scripts', 'fetch_dependencies'] as const;
+export const SETUP_AVAILABLE_KEYS = ['git_url', 'local_path', 'pull_requests', 'model_review', 'build_scripts', 'fetch_dependencies'] as const;
 export type SetupAvailableKey = (typeof SETUP_AVAILABLE_KEYS)[number];
 export type Setup = {
   is_admin: boolean;
@@ -155,11 +155,10 @@ export type Setup = {
   available: Partial<Record<SetupAvailableKey, SetupAvailable>>;
   tools: { detected_at: string | null; tools: SetupTool[] } | null;
   github: SetupGitHub | null;
+  github_connections?: SetupGitHub[];
   offline: boolean;
 };
 export type SetupGitHub = { enabled: boolean; host: string; token: boolean; account: string | null; source: string | null; reason: string | null };
-// GET /account/github: the signed-in user's own GitHub connection. It never holds the token.
-export type AccountGitHub = { host: string; connected: boolean; account: string | null; source: string | null; storable: boolean; reason: string | null };
 // One address the service answers on and what kind of network reaches it.
 export type ServiceAddressKind = 'configured' | 'this_machine' | 'name' | 'lan' | 'vpn';
 export type ServiceAddress = { origin: string; kind: ServiceAddressKind };
@@ -285,15 +284,17 @@ export function createApi(options: ApiOptions = {}) {
     createSession: (launchToken: string) => json({ method: 'POST', path: '/api/v1/session', body: { launch_token: launchToken }, session: true }, parseSession),
     deleteSession: () => json({ method: 'DELETE', path: '/api/v1/session', session: true }, () => undefined),
     // Every failed sign-in is the same 401; it is not a lost session, so it does not call onUnauthorized.
-    loginWithPassword: (username: string, password: string) =>
-      json({ method: 'POST', path: '/api/v1/session', body: { username, password }, session: true }, parseSession),
+    loginWithPassword: (identifier: string, password: string) =>
+      json({ method: 'POST', path: '/api/v1/session', body: identifier.includes('@') ? { email: identifier, password } : { username: identifier, password }, session: true }, parseSession),
+    registerAccount: (email: string, password: string) =>
+      json({ method: 'POST', path: '/api/v1/account/register', body: { email, password }, session: true }, parseSession),
     // current_password is sent only when the user has one (has_password).
     changePassword: (body: { current_password?: string; new_password: string }) =>
       json({ method: 'POST', path: '/api/v1/session/password', body }, parseSession),
     // ---- project members and project audit (owner and manager) ----
     listMembers: (projectId: string, signal?: AbortSignal) => json({ method: 'GET', path: `${project(projectId)}/members`, signal }, parseMembers),
-    addMember: (projectId: string, username: string, role: MemberRole) =>
-      json({ method: 'POST', path: `${project(projectId)}/members`, body: { username, role } }, parseMember),
+    addMember: (projectId: string, identifier: string, role: MemberRole) =>
+      json({ method: 'POST', path: `${project(projectId)}/members`, body: identifier.includes('@') ? { email: identifier, role } : { username: identifier, role } }, parseMember),
     setMemberRole: (projectId: string, userId: string, role: MemberRole) =>
       json({ method: 'PUT', path: `${project(projectId)}/members/${encodeURIComponent(userId)}`, body: { role } }, parseMember),
     removeMember: (projectId: string, userId: string) =>
@@ -318,10 +319,6 @@ export function createApi(options: ApiOptions = {}) {
     getSettings: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/admin/settings', signal }, parseSettings),
     putSettings: (patch: Partial<Pick<ServiceSettings, 'others_model_review' | 'others_build_scripts'>>) =>
       json({ method: 'PUT', path: '/api/v1/admin/settings', body: patch }, parseSettings),
-    // ---- the signed-in user's own GitHub connection (the token is sent, never answered) ----
-    getAccountGitHub: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/account/github', signal }, parseAccountGitHub),
-    putAccountGitHub: (token: string) => json({ method: 'PUT', path: '/api/v1/account/github', body: { token } }, parseAccountGitHub),
-    deleteAccountGitHub: () => json({ method: 'DELETE', path: '/api/v1/account/github' }, () => undefined),
     listAudit: (filter: AuditFilter, cursor: string | null, signal?: AbortSignal) =>
       json({ method: 'GET', path: `/api/v1/audit${auditQuery(filter, cursor)}`, signal }, parseAuditPage),
     listSourceRoots: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/source-roots', signal }, items(parseSourceRoot)),
@@ -524,12 +521,12 @@ function parseSetup(v: unknown): Setup {
     is_admin: o.is_admin === true,
     service_origin: nullableStr(o.service_origin),
     model, git, readable_folders: list(str)(o.readable_folders ?? []), analysis_defaults: { local: parseChoices(d.local), git: parseChoices(d.git) },
-    available, tools, github, offline: o.offline === true,
+    available, tools, github, github_connections: list(parseSetupGitHub)(o.github_connections ?? []), offline: o.offline === true,
   };
 }
-function parseAccountGitHub(v: unknown): AccountGitHub {
-  const o = rec(v);
-  return { host: str(o.host), connected: bool(o.connected), account: nullableStr(o.account), source: nullableStr(o.source), storable: bool(o.storable), reason: nullableStr(o.reason) };
+function parseSetupGitHub(v: unknown): SetupGitHub {
+  const g = rec(v);
+  return { enabled: bool(g.enabled), host: str(g.host), token: bool(g.token), account: nullableStr(g.account), source: nullableStr(g.source), reason: nullableStr(g.reason) };
 }
 function parseSettings(v: unknown): ServiceSettings {
   const o = rec(v);

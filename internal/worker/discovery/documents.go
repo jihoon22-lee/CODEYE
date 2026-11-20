@@ -9,6 +9,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/docpath"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -107,7 +108,7 @@ func Inventory(m source.Manifest, scope envdoc.Scope, modules []envdoc.Module, b
 	}
 	for _, c := range cands {
 		e := c.e
-		d := envdoc.Doc{Path: e.Path, AppliesTo: envdoc.Dir(e.Path), Class: c.class}
+		d := envdoc.Doc{Path: e.Path, AppliesTo: docpath.Scope(e.Path), Class: c.class}
 		regular := e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil
 		if regular {
 			sha, size := e.SHA256, *e.Size

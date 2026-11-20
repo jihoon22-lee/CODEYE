@@ -13,11 +13,10 @@ test('real session, project registration, durable request and cancellation', asy
   expect(await page.content()).not.toContain(secret);
   await page.reload();
   await expect(page.getByRole('heading', { name: '프로젝트', exact: true })).toBeVisible();
-  // The start field leads; registering from a source root is folded under it.
-  await page.getByText('허용된 폴더(소스 루트)나 Git 공급자에서 골라 등록', { exact: true }).click();
+  // The quick-start field leads; the register-only form accepts an absolute path.
+  await page.getByText('프로젝트 등록만 하기', { exact: true }).click();
   await page.getByLabel('이름 (선택)', { exact: true }).fill('browser-fixture');
-  await page.getByLabel('소스 루트', { exact: true }).selectOption({ label: 'browser-fixture-root' });
-  await page.getByLabel('루트 아래 상대 경로').fill('.');
+  await page.getByLabel('서버 폴더의 절대 경로').fill(process.env.CODEYE_TEST_SOURCE_PATH!);
   await page.getByRole('button', { name: '프로젝트 등록', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'browser-fixture', exact: true })).toBeVisible();
   const enqueued = page.waitForResponse(r => r.request().method() === 'POST' && /\/projects\/[^/]+\/runs$/.test(new URL(r.url()).pathname));

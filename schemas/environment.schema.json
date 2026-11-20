@@ -152,7 +152,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["path", "applies_to", "class", "status", "reason", "size_bytes", "sha256", "line_count"],
       "properties": {
-        "path": {"$ref": "#/$defs/path"}, "applies_to": {"$ref": "#/$defs/dir"},
+        "path": {"$ref": "#/$defs/path"}, "applies_to": {"$ref": "#/$defs/dir", "description": "문서의 기본 적용 범위. docs/doc 안내 문서는 그 트리를 담은 경로이며 README·AGENTS와 이전 산출물은 실제 문서 디렉터리다."},
         "class": {"enum": ["readme", "agent_instructions", "design", "contributing", "other"]},
         "status": {"enum": ["selected", "budget_exceeded", "excluded", "unreadable"]},
         "reason": {"anyOf": [{"$ref": "#/$defs/code"}, {"type": "null"}]},

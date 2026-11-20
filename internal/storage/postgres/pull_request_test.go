@@ -247,6 +247,21 @@ func TestPullRequestCommentOutbox(t *testing.T) {
 	if superseded, _ := s.NewerPullRequestCommentPosted(ctx, newer.ID); superseded {
 		t.Fatal("the newest run is superseded")
 	}
+	other, err := s.RegisterProject(ctx, user, ProjectRegistration{Source: domain.Source{Kind: domain.SourceGit, ProviderID: prov.ID, RepositoryURL: "https://github.com/acme/widget"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherRun, err := s.EnqueuePullRequest(ctx, user, other.ID, "c1", json.RawMessage(prBody), testPullRequestPin(strings.Repeat("3", 40), true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue(otherRun.ID, 1)
+	if err := s.FinishPullRequestComment(ctx, otherRun.ID, CommentOutcome{State: CommentPosted, CommentID: 100}); err != nil {
+		t.Fatal(err)
+	}
+	if superseded, err := s.NewerPullRequestCommentPosted(ctx, newer.ID); err != nil || superseded {
+		t.Fatalf("a different project superseded the run: %v, %v", superseded, err)
+	}
 	retryAt := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)
 	if err := s.FinishPullRequestComment(ctx, older.ID, CommentOutcome{State: CommentPending, Reason: "github_rate_limited", RetryAt: retryAt}); err != nil {
 		t.Fatal(err)

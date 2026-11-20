@@ -332,7 +332,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
 			}
 			for _, call := range r.Coverage.ReviewCalls {
-				if call.PackID != "review" || call.PackVersion != "2.0.0" {
+				if call.PackID != "review" || call.PackVersion != "2.1.0" {
 					t.Fatalf("call %+v", call)
 				}
 			}
@@ -360,11 +360,17 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				}
 			}
 			var reviewed []string
+			hasExcerpt := false
 			observations := map[string]bool{}
 			for _, o := range r.Observations {
 				observations[o.ID] = true
 			}
 			for _, f := range r.Findings {
+				for _, evidence := range f.Evidence {
+					if evidence.Excerpt != nil {
+						hasExcerpt = true
+					}
+				}
 				if strings.HasPrefix(f.ID, "review_") {
 					reviewed = append(reviewed, f.ID+"="+f.Validation)
 				}
@@ -377,6 +383,12 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 					t.Fatalf("interpret finding without its observation: %+v", f)
 				}
 			}
+			if !hasExcerpt {
+				t.Fatalf("no snapshot excerpt on a finding")
+			}
+			if err := report.ValidateReport(report.Project(r, false)); err != nil {
+				t.Fatal(err)
+			}
 			slices.Sort(reviewed)
 			// go-vet.m02 failed on this node, so the report stays partial even
 			// with the review performed.
@@ -387,7 +399,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
-			if !strings.Contains(md, "review@2.0.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
+			if !strings.Contains(md, "review@2.1.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
 				t.Fatalf("markdown lacks the pack or the optional row:\n%s", md)
 			}
 		})

@@ -156,6 +156,7 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 	}
 	p()
 	mdAppendix(p, r, v, l, "## ")
+	mdTechnical(p, r, v, l)
 	p("digest sha256: ", mdCode(digest))
 	return []byte(b.String())
 }
@@ -167,10 +168,50 @@ func mdHeader(p func(...string), r Report, v view, l Locale) {
 	p("| 항목 | 값 |")
 	p("|---|---|")
 	row := func(k, val string) { p("| ", mdText(k), " | ", val, " |") }
+	for _, field := range v.Identity() {
+		row(field.Label, mdText(field.Value))
+	}
+	p()
+	p("> ", mdText(v.Banner))
+	p()
+}
+
+// Identity shows only recorded facts. Older revisions have a publication time
+// but no worker interval or project metadata.
+func (v view) Identity() []countRow {
+	var fields []countRow
+	add := func(key, value string) {
+		if value != "" {
+			fields = append(fields, countRow{Name: key, Label: v.L.Label(key), Value: value})
+		}
+	}
+	if p := v.R.Project; p != nil {
+		add("identity.project", p.Name)
+		add("identity.source", p.Source)
+		add("identity.start", p.StartedAt)
+		add("identity.finish", p.FinishedAt)
+	}
+	if v.R.Inputs.CommitSHA != nil {
+		add("identity.commit", *v.R.Inputs.CommitSHA)
+	}
+	add("identity.status", v.L.Label("status."+v.R.Status))
+	add("identity.verdict", v.L.Label("verdict."+v.R.QualityVerdict))
+	if v.R.Project == nil || v.R.Project.FinishedAt == "" {
+		add("identity.published", v.R.CreatedAt)
+	}
+	return fields
+}
+
+func mdTechnical(p func(...string), r Report, v view, l Locale) {
+	p("### ", mdText(l.Label("identity.technical")))
+	p()
+	p("| 항목 | 값 |")
+	p("|---|---|")
+	row := func(k, val string) { p("| ", mdText(k), " | ", val, " |") }
 	row("report", mdCode(r.ID)+" rev "+mdCode(strconv.Itoa(r.Revision)))
 	row("digest", mdCode(v.DigestShort))
 	row("status", mdCode(r.Status))
-	row("quality_verdict", mdCode(r.QualityVerdict)+" "+mdText(l.Label("verdict_note")))
+	row("quality_verdict", mdCode(r.QualityVerdict))
 	row("run", mdCode(r.RunID))
 	row("attempt", mdCode(r.Attempt.ID)+" #"+mdCode(strconv.FormatInt(r.Attempt.Number, 10))+" epoch "+mdCode(strconv.FormatInt(r.Attempt.LeaseEpoch, 10)))
 	row("snapshot", mdCode(r.Inputs.SnapshotID)+" manifest "+mdCode(v.ManifestShort))
@@ -184,8 +225,6 @@ func mdHeader(p func(...string), r Report, v view, l Locale) {
 	} else {
 		row("export", mdText(l.Label("export_codefree")))
 	}
-	p()
-	p("> ", mdText(v.Banner))
 	p()
 }
 
@@ -297,6 +336,11 @@ func mdFinding(p func(...string), f Finding, h string) {
 	p("- id: ", mdCode(f.ID))
 	p("- category / severity: ", mdCode(f.Category), " / ", mdCode(f.Severity), " — ", mdText(f.SeverityReason))
 	p("- validation / disposition: ", mdCode(f.Validation), " / ", mdCode(f.Disposition))
+	for _, e := range f.Evidence {
+		if e.Excerpt != nil && e.Location != nil {
+			mdCitations(p, []sourceCitation{{Location: e.Location.Path + ":" + strconv.Itoa(e.Excerpt.StartLine), Text: e.Excerpt.Text}})
+		}
+	}
 	for _, loc := range f.Locations {
 		p("- location: ", mdCode(loc.Path+":"+strconv.Itoa(loc.StartLine)+"-"+strconv.Itoa(loc.EndLine)))
 	}
@@ -440,10 +484,7 @@ func mdText(s string) string {
 	return b.String()
 }
 
-// mdCode renders a code span whose fence is longer than any backtick run in s.
-// Pipes are escaped for table cells (GFM unescapes them inside code spans).
-func mdCode(s string) string {
-	s = strings.ReplaceAll(oneLine(s), "|", "\\|")
+func longestBacktickRun(s string) int {
 	longest, run := 0, 0
 	for _, r := range s {
 		if r == '`' {
@@ -455,7 +496,14 @@ func mdCode(s string) string {
 			run = 0
 		}
 	}
-	fence := strings.Repeat("`", longest+1)
+	return longest
+}
+
+// mdCode renders a code span whose fence is longer than any backtick run in s.
+// Pipes are escaped for table cells (GFM unescapes them inside code spans).
+func mdCode(s string) string {
+	s = strings.ReplaceAll(oneLine(s), "|", "\\|")
+	fence := strings.Repeat("`", longestBacktickRun(s)+1)
 	if s == "" {
 		return fence + " " + fence
 	}
@@ -471,6 +519,17 @@ func mdCode(s string) string {
 // HTMLContentSecurityPolicy is sent as a header and repeated in a meta tag so
 // a saved file keeps the policy: no script, no external fetch of any kind.
 const HTMLContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+const exportCSS = `body{box-sizing:border-box;margin:0 auto;max-width:76rem;padding:clamp(1rem,4vw,3rem);font-family:system-ui,sans-serif;line-height:1.65;color:#192b2a;background:#fff;overflow-wrap:anywhere}
+h1{margin:0;padding:1.15rem 1.5rem;border-radius:.7rem;background:#153f39;color:#f4fbf8;font-size:clamp(1.35rem,3vw,2rem);letter-spacing:-.03em}
+h2{margin-top:2.6rem;border-bottom:2px solid #25483d;padding-bottom:.55rem}h3{margin:1.5rem 0 .5rem}
+table{width:100%;border-collapse:collapse;margin:.65rem 0 1.2rem;font-variant-numeric:tabular-nums}td,th{border-bottom:1px solid #d9e3df;padding:.5rem .65rem;text-align:left;vertical-align:top}th{background:#eff4f1;color:#334c43}
+body>table:first-of-type th{width:8rem}.banner{border-left:3px solid #178066;padding:.65rem .95rem;background:#eff7f4}
+code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}pre{background:#172f2d;color:#eff6f1;border-radius:.6rem;padding:.95rem;tab-size:4}
+a,summary{color:#116955}summary{cursor:pointer;font-weight:650}.model{color:#3e6357;font-size:.86em}.finding{border:1px solid #ceded6;padding:.4rem 1rem;margin:1rem 0;border-radius:.65rem}
+.scroll{overflow-x:auto}nav ol{display:flex;flex-wrap:wrap;gap:.45rem 1.2rem;padding:.6rem 0;list-style:none;font-size:.92rem}
+@media print{body{max-width:none;padding:0}h1{color:#172f2d;background:white}h2,h3,summary{break-after:avoid}pre,tr{break-inside:avoid}}
+`
 
 // htmlFuncs are the template functions of both HTML layouts.
 var htmlFuncs = template.FuncMap{
@@ -502,30 +561,14 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="` + HTMLContentSecurityPolicy + `">
 <meta name="referrer" content="no-referrer">
-<title>{{.L.Label "title"}} {{.R.ID}} rev {{.R.Revision}}</title>
-<style>
-body{font-family:system-ui,sans-serif;margin:2rem;max-width:72rem;color:#111;background:#fff;line-height:1.5}
-table{border-collapse:collapse;margin:.5rem 0}td,th{border:1px solid #888;padding:.25rem .5rem;text-align:left;vertical-align:top}
-code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
-.banner{border:2px solid #000;padding:.5rem 1rem;font-weight:600}
-.finding{border:1px solid #444;padding:.5rem 1rem;margin:1rem 0}
-.scroll{overflow-x:auto}
-</style>
+<title>{{with .R.Project}}{{.Name}} · {{end}}{{.L.Label "title"}}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>` + exportCSS + `</style>
 </head>
 <body>
 <h1>{{.L.Label "title"}}</h1>
 <table>
-<tr><th>report</th><td><code>{{.R.ID}}</code> rev <span data-field="revision">{{.R.Revision}}</span></td></tr>
-<tr><th>digest</th><td><code data-field="digest">{{.DigestShort}}</code></td></tr>
-<tr><th>status</th><td><code data-field="status">{{.R.Status}}</code></td></tr>
-<tr><th>quality_verdict</th><td><code data-field="quality_verdict">{{.R.QualityVerdict}}</code> {{.L.Label "verdict_note"}}</td></tr>
-<tr><th>run</th><td><code>{{.R.RunID}}</code></td></tr>
-<tr><th>attempt</th><td><code>{{.R.Attempt.ID}}</code> #{{i64 .R.Attempt.Number}} epoch {{i64 .R.Attempt.LeaseEpoch}}</td></tr>
-<tr><th>snapshot</th><td><code>{{.R.Inputs.SnapshotID}}</code> manifest <code>{{.ManifestShort}}</code></td></tr>
-{{with .R.Inputs.CommitSHA}}<tr><th>commit</th><td><code>{{.}}</code></td></tr>{{end}}
-<tr><th>profile</th><td><code>{{.R.Inputs.Profile}}</code></td></tr>
-<tr><th>created_at</th><td><code>{{.R.CreatedAt}}</code></td></tr>
-<tr><th>export</th><td>{{if .R.Export.IncludeCode}}{{.L.Label "export_full"}}{{else}}{{.L.Label "export_codefree"}}{{end}}</td></tr>
+{{range .Identity}}<tr><th scope="row">{{.Label}}</th><td>{{.Value}}</td></tr>{{end}}
 </table>
 <p class="banner" role="status">{{.Banner}}</p>
 <h2 id="summary">{{.L.Label "summary"}}</h2>
@@ -593,7 +636,22 @@ code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:a
 {{end}}</table></div>
 <h2 id="limitations">{{.L.Label "limitations"}}</h2>
 <ul>{{range .Limitations}}<li>{{.}}</li>{{end}}</ul>
+<details><summary>{{.L.Label "identity.technical"}}</summary>
+<table>
+<tr><th>report</th><td><code>{{.R.ID}}</code> rev <span data-field="revision">{{.R.Revision}}</span></td></tr>
+<tr><th>digest</th><td><code data-field="digest">{{.DigestShort}}</code></td></tr>
+<tr><th>status</th><td><code data-field="status">{{.R.Status}}</code></td></tr>
+<tr><th>quality_verdict</th><td><code data-field="quality_verdict">{{.R.QualityVerdict}}</code></td></tr>
+<tr><th>run</th><td><code>{{.R.RunID}}</code></td></tr>
+<tr><th>attempt</th><td><code>{{.R.Attempt.ID}}</code> #{{i64 .R.Attempt.Number}} epoch {{i64 .R.Attempt.LeaseEpoch}}</td></tr>
+<tr><th>snapshot</th><td><code>{{.R.Inputs.SnapshotID}}</code> manifest <code>{{.ManifestShort}}</code></td></tr>
+{{with .R.Inputs.CommitSHA}}<tr><th>commit</th><td><code>{{.}}</code></td></tr>{{end}}
+<tr><th>profile</th><td><code>{{.R.Inputs.Profile}}</code></td></tr>
+<tr><th>created_at</th><td><code>{{.R.CreatedAt}}</code></td></tr>
+<tr><th>export</th><td>{{if .R.Export.IncludeCode}}{{.L.Label "export_full"}}{{else}}{{.L.Label "export_codefree"}}{{end}}</td></tr>
+</table>
 <p>digest sha256: <code>{{.Digest}}</code></p>
+</details>
 </body>
 </html>
 `))

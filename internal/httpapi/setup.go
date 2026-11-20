@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,13 +26,17 @@ type Instance struct {
 	// StateDir is the installation's state directory. The tool detection
 	// (tools.json) and the setup summary (run/setup.json) are read
 	// from it on each request, because `codeye up` rewrites them while the
-	// controller keeps running; no project may contain it. The users' GitHub
-	// tokens (secrets/github-users/<user>.json) are read from it for each
-	// GitHub API call.
+	// controller keeps running. The controller also reads the platform GitHub
+	// credentials from the state directory for each GitHub API call.
 	StateDir string
 	// GitHubAPI is the GitHub REST API base; "" is github.APIBase() (tests
 	// point it at a fake).
 	GitHubAPI string
+	// Offline policy passed at controller startup is independent of the setup summary.
+	Offline   bool
+	GitHosts  []string
+	CABundle  string
+	protected []string
 }
 
 // InstanceSetupFile is the setup summary `codeye up`/`start` writes under
@@ -49,32 +55,48 @@ type InstanceSetup struct {
 	GitHosts []string `json:"git_hosts"`
 	// BackupDir is where backups go; no project may contain it.
 	BackupDir string `json:"backup_dir,omitempty"`
-	// GitHub is the token discovery `codeye up` did for the administrator
-	// who runs it; nil from older setups.
-	GitHub *SetupGitHub `json:"github,omitempty"`
-	// Offline is the configuration's offline mode: the controller makes no
-	// GitHub API call (no pull-request pin, preview lookup, comment or token
-	// check).
-	Offline bool `json:"offline,omitempty"`
+	// GitHub decodes older setup summaries.
+	GitHub            *SetupGitHub  `json:"github,omitempty"`
+	GitHubConnections []SetupGitHub `json:"github_connections,omitempty"`
+	Offline           bool          `json:"offline,omitempty"`
+	CABundle          string        `json:"ca_bundle,omitempty"`
 	// DependencyFetch is the local agent's dependency switch (nil from
 	// older setups: unknown).
 	DependencyFetch *bool `json:"dependency_fetch,omitempty"`
 }
 
-// offline reports the installation's offline mode from the setup summary.
-func (p *Instance) offline() bool {
-	s := p.readSetup()
-	return s != nil && s.Offline
+func (p *Instance) platform() github.Platform {
+	platform := github.Platform{PublicAPI: github.APIBase()}
+	if p == nil {
+		return platform
+	}
+	platform.CredentialFile = github.PlatformCredentialFile(p.StateDir)
+	if p.GitHubAPI != "" {
+		platform.PublicAPI = p.GitHubAPI
+	}
+	if p.Offline {
+		platform.Offline, platform.Hosts, platform.CABundle = true, p.GitHosts, p.CABundle
+	} else if setup := p.readSetup(); setup != nil {
+		platform.Offline, platform.Hosts, platform.CABundle = setup.Offline, setup.GitHosts, setup.CABundle
+	}
+	return platform
 }
 
-// SetupGitHub is the GitHub token discovery of `codeye up`: whether it is
-// on, whether a token was found and whose it is. It never holds the token.
+func (p *Instance) gitSourceContext(ctx context.Context) context.Context {
+	platform := p.platform()
+	if platform.Offline {
+		return postgres.WithOfflineGitHosts(ctx, platform.Hosts)
+	}
+	return ctx
+}
+
+// SetupGitHub is the host's platform account status. It holds no credential.
 type SetupGitHub struct {
 	Enabled bool   `json:"enabled"`
 	Host    string `json:"host"`
 	Token   bool   `json:"token"`
 	Account string `json:"account,omitempty"`
-	// Source is GH_TOKEN, GITHUB_TOKEN or gh.
+	// Source decodes older setup summaries.
 	Source string `json:"source,omitempty"`
 	// Reason is why no token is available, or why the account is unknown.
 	Reason string `json:"reason,omitempty"`
@@ -129,10 +151,9 @@ type setupView struct {
 	AnalysisDefaults analysisDefaults `json:"analysis_defaults"`
 	Available        availability     `json:"available"`
 	// Tools are the detected tools; paths only for administrators.
-	Tools *toolfind.Result `json:"tools"`
-	// GitHub is the signed-in user's own GitHub connection (no token).
-	GitHub  setupGitHubView `json:"github"`
-	Offline bool            `json:"offline"`
+	Tools             *toolfind.Result `json:"tools"`
+	GitHubConnections []SetupGitHub    `json:"github_connections"`
+	Offline           bool             `json:"offline"`
 }
 
 // availability says, per thing a user may want, whether it is available to
@@ -141,7 +162,6 @@ type availability struct {
 	GitURL            availableItem `json:"git_url"`
 	LocalPath         availableItem `json:"local_path"`
 	PullRequests      availableItem `json:"pull_requests"`
-	GitHubToken       availableItem `json:"github_token"`
 	ModelReview       availableItem `json:"model_review"`
 	BuildScripts      availableItem `json:"build_scripts"`
 	FetchDependencies availableItem `json:"fetch_dependencies"`
@@ -158,19 +178,6 @@ type availableItem struct {
 func yes() availableItem { return availableItem{Available: true} }
 func no(reason string) availableItem {
 	return availableItem{Reason: &reason}
-}
-
-type setupGitHubView struct {
-	// Enabled: this user can store a token here (a state directory, not
-	// offline).
-	Enabled bool    `json:"enabled"`
-	Host    string  `json:"host"`
-	Token   bool    `json:"token"`
-	Account *string `json:"account"`
-	// Source is web (pasted in the account screen) or, for the
-	// administrator who runs the service, GH_TOKEN, GITHUB_TOKEN or gh.
-	Source *string `json:"source"`
-	Reason *string `json:"reason"`
 }
 
 func optString(s string) *string {
@@ -218,50 +225,30 @@ func (s *Server) getSetup(q *request) {
 		s.storeError(q, err)
 		return
 	}
-	roots, err := s.store.GrantedRootPaths(ctx, q.session.UserID)
-	if err != nil {
-		s.storeError(q, err)
-		return
-	}
 	provs, err := s.store.ListProviders(ctx, q.session.UserID)
 	if err != nil {
 		s.storeError(q, err)
 		return
 	}
 	st := s.inst.readSetup()
-	v := setupView{IsAdmin: q.session.IsAdmin, ServiceOrigin: optString(s.Origin()), ReadableFolders: []string{}, Offline: st != nil && st.Offline,
+	platform := s.inst.platform()
+	v := setupView{IsAdmin: q.session.IsAdmin, ServiceOrigin: optString(s.Origin()), ReadableFolders: []string{}, GitHubConnections: []SetupGitHub{}, Offline: platform.Offline,
 		AnalysisDefaults: analysisDefaults{offered(domain.DefaultAnalysisChoices(domain.SourceLocal), offer), offered(domain.DefaultAnalysisChoices(domain.SourceGit), offer)}}
-	for _, r := range roots {
-		v.ReadableFolders = append(v.ReadableFolders, r.Path)
-	}
 	hosts := []string{}
 	for _, p := range provs {
-		hosts = append(hosts, p.Host)
+		if github.HostAllowed(p.Host, platform.Offline, platform.Hosts) {
+			hosts = append(hosts, p.Host)
+		}
 	}
 	gitExe := st == nil || st.Git
 	v.Git = &setupGitView{Available: gitExe && len(hosts) > 0, Hosts: hosts}
 	a := &v.Available
-	a.GitURL, a.LocalPath, a.PullRequests, a.GitHubToken = yes(), yes(), yes(), yes()
+	a.GitURL, a.LocalPath, a.PullRequests = yes(), yes(), yes()
 	if !v.Git.Available {
-		a.GitURL = no("no_git_host")
+		a.GitURL, a.PullRequests = no("no_git_host"), no("no_git_host")
 	}
-	if len(roots) == 0 {
-		a.LocalPath = no("no_allowed_folder")
-	}
-	gh := setupGitHubView{Enabled: true, Host: github.Host}
-	switch {
-	case v.Offline:
-		a.PullRequests, a.GitHubToken = no("offline"), no("offline")
-		gh.Enabled, gh.Reason = false, optString("offline_mode")
-	case s.inst.tokens() == "":
-		a.GitHubToken = no("no_state_dir")
-		gh.Enabled, gh.Reason = false, optString("no_state_dir")
-	}
-	if cred := s.inst.userToken(q.session.UserID); cred != nil && !v.Offline {
-		gh.Token, gh.Account, gh.Source = true, optString(cred.Login), optString(cred.Source)
-	}
-	v.GitHub = gh
 	if st != nil {
+		v.GitHubConnections = append(v.GitHubConnections, st.GitHubConnections...)
 		v.Model = &setupModelView{}
 		if st.Model != nil {
 			id, probe := st.Model.ID, st.Model.Probe
@@ -316,10 +303,8 @@ func withoutPaths(r toolfind.Result) toolfind.Result {
 
 // Errors of a local_path project registration.
 var (
-	errFolderMissing     = errors.New("the folder does not exist or is not a directory on this server")
-	errFolderOutside     = errors.New("the folder is not inside a folder this server allows you to read; use a Git address or ask the administrator to allow the folder")
-	errNoAllowedFolder   = errors.New("this server allows you no folder to read; use a Git address or ask the administrator to allow a folder")
-	errFolderUnsupported = errors.New("a folder name on this path is not supported (for example a ':'); ask the administrator to allow the folder itself")
+	errFolderMissing    = errors.New("the folder does not exist or is not a directory on this server")
+	errFolderUnreadable = errors.New("the service account cannot read this folder")
 )
 
 // folderHoldsData is a project folder that contains, or lies inside, one of
@@ -338,7 +323,7 @@ func (p *Instance) protectedDirs() []string {
 	if p == nil {
 		return nil
 	}
-	dirs := []string{p.StateDir}
+	dirs := append([]string{p.StateDir}, p.protected...)
 	if st := p.readSetup(); st != nil {
 		dirs = append(dirs, st.BackupDir)
 	}
@@ -378,81 +363,48 @@ func (p *Instance) checkRootFolder(real string) error {
 	return nil
 }
 
-// checkLocalSource applies checkFolder to a local source declared by root
-// and relative path. A root the caller may not use is left to the
-// registration, which answers 404.
+// checkLocalSource applies the folder check to the legacy root-relative form.
 func (s *Server) checkLocalSource(q *request, src domain.Source) error {
 	ctx, cancel := q.ctx()
 	defer cancel()
-	roots, err := s.store.GrantedRootPaths(ctx, q.session.UserID)
+	root, err := s.store.SourceRootPath(ctx, src.SourceRootID)
 	if err != nil {
 		return err
 	}
-	for _, r := range roots {
-		if r.ID != src.SourceRootID {
-			continue
-		}
-		folder := filepath.Join(r.Path, filepath.FromSlash(src.RelativePath))
-		if real, err := filepath.EvalSymlinks(folder); err == nil {
-			folder = real
-		}
-		return s.inst.checkFolder(filepath.Clean(folder))
+	folder := filepath.Join(root, filepath.FromSlash(src.RelativePath))
+	if resolved, err := filepath.EvalSymlinks(folder); err == nil {
+		folder = resolved
 	}
-	return nil
+	return s.inst.checkFolder(folder)
 }
 
-// localSource maps an absolute folder path on this server onto the longest
-// source root the caller may use that holds it. The path is resolved
-// through symbolic links; a folder that contains or lies inside the state or
-// backup directory is refused. roots are the caller's allowed roots.
-//
-// Only the CODEYE permission (a grant, or a root open to everyone) is
-// checked. A stricter rule that maps a CODEYE account to an operating-system
-// account and checks the folder's POSIX permissions for that account would
-// plug in here, after the root match and before the source is returned
-// (docs/SECURITY.md#서버-경로-허가); the claim-time re-check in the store would
-// need the same rule.
-func (s *Server) localSource(path string, roots []postgres.SourceRootRecord) (domain.Source, error) {
+// resolveFolder checks readability as the controller's service account.
+func (p *Instance) resolveFolder(path string) (string, error) {
 	if path == "" || len(path) > 4096 || !utf8.ValidString(path) || strings.ContainsRune(path, 0) || !filepath.IsAbs(path) {
-		return domain.Source{}, errFolderMissing
-	}
-	if len(roots) == 0 {
-		return domain.Source{}, errNoAllowedFolder
+		return "", errFolderMissing
 	}
 	real, err := filepath.EvalSymlinks(filepath.Clean(path))
+	if errors.Is(err, os.ErrPermission) {
+		return "", errFolderUnreadable
+	}
 	if err != nil {
-		return domain.Source{}, errFolderMissing
+		return "", errFolderMissing
+	}
+	if err := p.checkFolder(real); err != nil {
+		return "", err
 	}
 	if st, err := os.Stat(real); err != nil || !st.IsDir() {
-		return domain.Source{}, errFolderMissing
+		return "", errFolderMissing
 	}
-	if err := s.inst.checkFolder(real); err != nil {
-		return domain.Source{}, err
+	folder, err := os.Open(real)
+	if err != nil {
+		return "", errFolderUnreadable
 	}
-	var best postgres.SourceRootRecord
-	bestLen, rel := -1, ""
-	for _, r := range roots {
-		root := r.Path
-		if resolved, err := filepath.EvalSymlinks(root); err == nil {
-			root = resolved
-		}
-		if !pathWithin(real, root) || len(root) <= bestLen {
-			continue
-		}
-		p, err := filepath.Rel(root, real)
-		if err != nil {
-			continue
-		}
-		best, bestLen, rel = r, len(root), filepath.ToSlash(p)
+	defer folder.Close()
+	if _, err := folder.Readdirnames(1); err != nil && !errors.Is(err, io.EOF) {
+		return "", errFolderUnreadable
 	}
-	if bestLen < 0 {
-		return domain.Source{}, errFolderOutside
-	}
-	src := domain.Source{Kind: domain.SourceLocal, SourceRootID: best.ID, RelativePath: rel}
-	if src.Validate() != nil {
-		return domain.Source{}, errFolderUnsupported
-	}
-	return src, nil
+	return real, nil
 }
 
 // pathWithin reports whether p is base or below it.
@@ -461,9 +413,8 @@ func pathWithin(p, base string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-// folderError writes the response of a refused local_path. readable are the
-// caller's allowed folders, sent with the refusals they explain.
-func (s *Server) folderError(q *request, err error, readable []string) {
+// folderError writes a source-path refusal.
+func (s *Server) folderError(q *request, err error) {
 	code := ""
 	var holds folderHoldsData
 	switch {
@@ -471,20 +422,13 @@ func (s *Server) folderError(q *request, err error, readable []string) {
 		code = "FOLDER_HOLDS_CODEYE_DATA"
 	case errors.Is(err, errFolderMissing):
 		code = "FOLDER_NOT_FOUND"
-	case errors.Is(err, errNoAllowedFolder):
-		code = "LOCAL_PATH_NOT_ALLOWED"
-	case errors.Is(err, errFolderOutside):
+	case errors.Is(err, errFolderUnreadable):
 		code = "FOLDER_NOT_READABLE"
-	case errors.Is(err, errFolderUnsupported):
-		code = "FOLDER_NAME_UNSUPPORTED"
 	default:
 		s.storeError(q, err)
 		return
 	}
-	if readable == nil {
-		readable = []string{}
-	}
-	writeErrorDetails(q.w, q.r, http.StatusUnprocessableEntity, code, err.Error(), false, map[string]any{"readable_folders": readable})
+	writeError(q.w, q.r, http.StatusUnprocessableEntity, code, err.Error(), false)
 }
 
 // sameSource reports whether a stored project source declares src (a

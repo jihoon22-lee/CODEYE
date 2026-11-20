@@ -65,13 +65,16 @@ type route struct {
 	audit []string
 	// node marks node-protocol routes: nodePublic (enroll) or nodeAuth
 	// (Bearer node secret). They never read cookies and reject Origin.
-	node   nodeAuthKind
-	handle func(*Server, *request)
+	node nodeAuthKind
+	// webhook is authenticated with a project-specific GitHub signature.
+	webhook bool
+	handle  func(*Server, *request)
 }
 
 func (rt route) admins() route                  { rt.admin = true; return rt }
 func (rt route) allowPending() route            { rt.pending = true; return rt }
 func (rt route) audits(actions ...string) route { rt.audit = actions; return rt }
+func (rt route) githubWebhook() route           { rt.webhook = true; return rt }
 
 func (s *Server) apiRoutes() []route {
 	r := func(method, path, name string, auth, body bool, h func(*Server, *request)) route {
@@ -80,6 +83,8 @@ func (s *Server) apiRoutes() []route {
 	return append([]route{
 		r("GET", "health", "health", false, false, (*Server).health),
 		r("GET", "ready", "ready", false, false, (*Server).ready),
+		r("POST", "github/webhooks/{id}", "github.webhook", false, false, (*Server).githubWebhook).githubWebhook().audits(postgres.AuditRunRequested),
+		r("POST", "account/register", "account.register", false, true, (*Server).registerAccount).audits(postgres.AuditUserCreated),
 		r("POST", "session", "session.create", false, true, (*Server).createSession).audits(postgres.AuditLoginSucceeded),
 		r("GET", "session", "session.get", true, false, (*Server).getSession).allowPending(),
 		r("DELETE", "session", "session.delete", true, false, (*Server).deleteSession).allowPending().audits(postgres.AuditLogout),
@@ -106,9 +111,6 @@ func (s *Server) apiRoutes() []route {
 		r("POST", "runs/{id}/retry", "runs.retry", true, false, (*Server).retryRun).audits(postgres.AuditRunRequested),
 		r("POST", "runs/{id}/recover", "runs.recover", true, true, (*Server).recoverRun).audits(postgres.AuditRecoveryConfirmed),
 		r("GET", "setup", "setup.get", true, false, (*Server).getSetup),
-		r("GET", "account/github", "account.github.get", true, false, (*Server).getAccountGitHub),
-		r("PUT", "account/github", "account.github.put", true, true, (*Server).putAccountGitHub).audits(postgres.AuditGitHubTokenSet),
-		r("DELETE", "account/github", "account.github.delete", true, false, (*Server).deleteAccountGitHub).audits(postgres.AuditGitHubTokenRemoved),
 		r("GET", "runs/{id}/report", "runs.report", true, false, (*Server).getReport).audits(postgres.AuditReportExported),
 		r("GET", "runs/{id}/reports", "runs.reports", true, false, (*Server).listReports),
 		r("GET", "runs/{id}/comparison", "runs.comparison", true, false, (*Server).getComparison),
@@ -177,6 +179,7 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) string {
 				return rt.name
 			}
 		}
+		r = r.WithContext(s.inst.gitSourceContext(r.Context()))
 		s.dispatch(rt, &request{w: w, r: r, params: params, route: rt.name})
 		return rt.name
 	}
@@ -197,6 +200,14 @@ func (s *Server) dispatch(rt route, q *request) {
 	w, r := q.w, q.r
 	if rt.node != nodeNone {
 		s.dispatchNode(rt, q)
+		return
+	}
+	if rt.webhook {
+		if r.Header.Get("Origin") != "" || r.Header.Get("Sec-Fetch-Site") != "" {
+			writeError(w, r, http.StatusForbidden, "ORIGIN_REJECTED", "webhooks require server delivery", false)
+			return
+		}
+		rt.handle(s, q)
 		return
 	}
 	if unsafeMethod(r.Method) {

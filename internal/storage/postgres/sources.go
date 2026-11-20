@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/github"
 )
 
 // SourceRoot is an operator-registered server-local directory under which
@@ -193,9 +193,8 @@ func (s *Store) AddProvider(ctx context.Context, kind, host, apiURL string) (Pro
 	}
 	var api any
 	if apiURL != "" {
-		u, err := url.Parse(apiURL)
-		if err != nil || u.Scheme != "https" || u.User != nil || u.Host == "" || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(apiURL, " \t\r\n#?@") {
-			return Provider{}, domain.ErrInvalid
+		if _, err := github.ProviderAPI(host, apiURL); err != nil {
+			return Provider{}, err
 		}
 		api = apiURL
 	}
@@ -226,7 +225,7 @@ func (s *Store) ListProviders(ctx context.Context, actor string) ([]Provider, er
 }
 
 // ProjectRegistration is a user's declared project. Registration validates the
-// declaration and the actor's right to use the root or provider; it never
+// declaration and the registered root or provider; it never
 // touches the filesystem or the network.
 type ProjectRegistration struct {
 	Name        string
@@ -240,8 +239,8 @@ type ProjectRegistration struct {
 const maxDescription = 20000
 
 // RegisterProject creates a project whose revision-1 config is
-// {"config_version":1,"source":...,"description":...}. A root not granted to
-// the actor or an unknown provider yields ErrNotFound; a repository host that
+// {"config_version":1,"source":...,"description":...}. An unknown root or
+// provider yields ErrNotFound; a repository host that
 // differs from the provider host yields ErrInvalid.
 func (s *Store) RegisterProject(ctx context.Context, actor string, in ProjectRegistration) (Project, error) {
 	if !validIDs(actor) || len(in.Description) > maxDescription || !utf8.ValidString(in.Description) {
@@ -270,13 +269,8 @@ func (s *Store) RegisterProject(ctx context.Context, actor string, in ProjectReg
 		switch in.Source.Kind {
 		case domain.SourceLocal:
 			var label string
-			var allowed bool
-			err := tx.QueryRow(ctx, `SELECT r.label,`+rootAllowedLockedSQL("r.id", "$2::uuid")+` FROM source_roots r WHERE r.id=$1`, in.Source.SourceRootID, actor).Scan(&label, &allowed)
-			if err != nil {
+			if err := tx.QueryRow(ctx, "SELECT label FROM source_roots WHERE id=$1", in.Source.SourceRootID).Scan(&label); err != nil {
 				return Project{}, err
-			}
-			if !allowed {
-				return Project{}, domain.ErrNotFound
 			}
 			derived = label
 			if p := in.Source.RelativePath; p != "." {
@@ -343,8 +337,7 @@ type ProjectSummary struct {
 	HasReport bool
 	// Role is the reading actor's role: owner, manager, runner or viewer.
 	Role string
-	// OwnerID is the user who registered the project; its GitHub calls use
-	// that user's token only.
+	// OwnerID is the web account that registered the project.
 	OwnerID string
 	// Activity is the representative run's stage view. Store reads
 	// always fill it; a hand-built summary has CheckedAt zero.
@@ -542,8 +535,7 @@ type RunView struct {
 	LatestReport *ReportSummary
 	// Stages is the stage view, computed like the project activity.
 	Stages RunStages
-	// Origin is the schedule occurrence the run was requested for; nil
-	// for a manual request.
+	// Origin is the schedule occurrence or webhook; nil for a manual request.
 	Origin *RunOrigin
 	// RawEvidenceRemovedAt is when retention last removed raw artifact
 	// contents of this run (codeye cleanup); nil while they are all kept.
@@ -566,11 +558,15 @@ func (s *Store) GetRunView(ctx context.Context, actor, id string) (RunView, erro
 		v := RunView{Run: r}
 		var scheduleID *string
 		var scheduledFor *time.Time
-		if err = tx.QueryRow(ctx, "SELECT schedule_id::text,scheduled_for FROM runs WHERE id=$1", id).Scan(&scheduleID, &scheduledFor); err != nil {
+		var webhook bool
+		if err = tx.QueryRow(ctx, `SELECT schedule_id::text,scheduled_for,EXISTS(SELECT 1 FROM github_webhook_deliveries WHERE run_id=$1)
+			FROM runs WHERE id=$1`, id).Scan(&scheduleID, &scheduledFor, &webhook); err != nil {
 			return v, err
 		}
 		if scheduleID != nil && scheduledFor != nil {
 			v.Origin = &RunOrigin{ScheduleID: *scheduleID, ScheduledFor: scheduledFor.UTC()}
+		} else if webhook {
+			v.Origin = &RunOrigin{Webhook: true}
 		}
 		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status IN ('succeeded','failed','timed_out','cancelled','unsupported','skipped_policy','budget_exhausted')),count(*)
 			FROM tasks WHERE run_id=$1`, id).Scan(&v.CompletedTasks, &v.TotalTasks)

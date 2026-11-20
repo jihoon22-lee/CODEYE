@@ -12,18 +12,20 @@ export type SessionInfo = {
   user_id: string;
   csrf_token: string;
   expires_at: string;
-  username: string | null; // null for a user that only signs in through login links
+  username: string | null;
+  email?: string;
   display_name: string | null;
   is_admin: boolean;
   must_change_password: boolean;
   has_password: boolean;
 };
 
-export type Member = { user_id: string; username: string | null; display_name: string | null; role: ProjectRole; disabled: boolean };
+export type Member = { user_id: string; username: string | null; email?: string; display_name: string | null; role: ProjectRole; disabled: boolean };
 
 export type UserView = {
   id: string;
   username: string | null;
+  email?: string;
   display_name: string | null;
   is_admin: boolean;
   must_change_password: boolean;
@@ -134,6 +136,7 @@ export function parseSession(v: unknown): SessionInfo {
     csrf_token: str(o.csrf_token),
     expires_at: date(o.expires_at),
     username: nullableStr(o.username),
+    ...(o.email === undefined ? {} : { email: str(o.email) }),
     display_name: nullableStr(o.display_name),
     is_admin: bool(o.is_admin),
     must_change_password: bool(o.must_change_password),
@@ -143,7 +146,8 @@ export function parseSession(v: unknown): SessionInfo {
 
 export function parseMember(v: unknown): Member {
   const o = rec(v);
-  return { user_id: str(o.user_id), username: nullableStr(o.username), display_name: nullableStr(o.display_name), role: parseRole(o.role), disabled: bool(o.disabled) };
+  return { user_id: str(o.user_id), username: nullableStr(o.username), ...(o.email === undefined ? {} : { email: str(o.email) }),
+    display_name: nullableStr(o.display_name), role: parseRole(o.role), disabled: bool(o.disabled) };
 }
 export const parseMembers = (v: unknown): Member[] => list(rec(v).items, parseMember);
 
@@ -152,6 +156,7 @@ export function parseUser(v: unknown): UserView {
   return {
     id: str(o.id),
     username: nullableStr(o.username),
+    ...(o.email === undefined ? {} : { email: str(o.email) }),
     display_name: nullableStr(o.display_name),
     is_admin: bool(o.is_admin),
     must_change_password: bool(o.must_change_password),
@@ -221,10 +226,11 @@ export function parseAuditPage(v: unknown): AuditPage {
 }
 
 // "Dana (dana)", "dana", "Dana", or null for a user known only by ID.
-export function personName(p: { username: string | null; display_name: string | null }): string | null {
-  if (p.display_name && p.username && p.display_name !== p.username) return `${p.display_name} (${p.username})`;
-  return p.display_name ?? p.username;
+export function personName(p: { username: string | null; email?: string; display_name: string | null }): string | null {
+  const identifier = p.email ?? p.username;
+  if (p.display_name && identifier && p.display_name !== identifier) return `${p.display_name} (${identifier})`;
+  return p.display_name ?? identifier;
 }
 
 // A user's name for lists and pickers; the short ID when the user has no name.
-export const userLabel = (u: { id: string; username: string | null; display_name: string | null }) => personName(u) ?? u.id.slice(0, 8);
+export const userLabel = (u: { id: string; username: string | null; email?: string; display_name: string | null }) => personName(u) ?? u.id.slice(0, 8);
