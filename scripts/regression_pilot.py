@@ -394,7 +394,7 @@ def run(base, root, env, web=True, coverage_check=True):
                         or report["inputs"]["source_kind"] != "git"
                         or report["coverage"]["ai_review"]["status"] == "performed"
                         or not any(
-                            t["key"] == "review.context"
+                            t["key"].startswith("review.")
                             and t["reason"] == "model_source_not_approved"
                             for t in report["tasks"]
                         )
