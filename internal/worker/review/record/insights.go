@@ -171,7 +171,9 @@ func checkInsights(r Record, catalog map[string]Excerpt) error {
 	quality, strengths, comparisons := r.DocumentQuality, r.Strengths, r.ContractComparisons
 	if len(quality) > MaxDocumentQuality || len(strengths) > MaxReviewStrengths || len(comparisons) > MaxContractComparisons ||
 		(len(quality) > 0 && (!r.Accepted() || r.Stage != StageDocuments)) ||
-		(len(strengths)+len(comparisons) > 0 && (!r.Accepted() || r.Stage != StageInvestigate)) ||
+		(len(strengths) > 0 && (!r.Accepted() || r.Stage != StageInvestigate)) ||
+		(len(comparisons) > 0 && (!r.Accepted() || (r.Stage != StageInvestigate && r.Stage != StageContract))) ||
+		(r.Stage == StageContract && r.Accepted() && len(comparisons) != 1) ||
 		(len(comparisons) > 0 && r.Slice != nil) {
 		return invalid("insight content")
 	}
@@ -192,5 +194,12 @@ func checkInsights(r Record, catalog map[string]Excerpt) error {
 		}
 		seen[x.ContractIndex] = true
 	}
-	return nil
+	if r.Stage == StageContract && r.Accepted() {
+		if !validContractPartial(comparisons[0], r.PartialSupport, catalog) {
+			return invalid("contract partial support")
+		}
+	} else if r.PartialSupport != nil {
+		return invalid("unexpected contract partial support")
+	}
+	return checkContractProbe(r)
 }

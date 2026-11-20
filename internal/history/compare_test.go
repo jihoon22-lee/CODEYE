@@ -192,6 +192,15 @@ func TestModelAbsenceIsNotResolution(t *testing.T) {
 			t.Fatalf("%s: %q want %q", status, reason(e), want)
 		}
 	}
+	cur.Report.Coverage.AIReview.Status = report.AIReviewPerformed
+	cur.Report.Coverage.ReviewCalls = append(slices.Clone(calls), report.ReviewCall{Role: "contract", TaskKey: "review.contract", Model: "m", PackDigest: "q"})
+	comparison := Compare(cur, base)
+	if e := only(t, comparison, StateAbsentUnverified); reason(e) != ReasonModelAbsence {
+		t.Fatalf("optional document work changed how finding absence is classified: %q", reason(e))
+	}
+	if !slices.ContainsFunc(comparison.Differences, func(d Difference) bool { return d.Key == "review:contract" && d.Current != nil }) {
+		t.Fatal("comparison did not record the additional document review")
+	}
 	cur.Report.Coverage.AIReview.Status, cur.Report.Coverage.ReviewCalls = report.AIReviewPerformed, []report.ReviewCall{{Role: "investigate", Model: "m2", PackDigest: "p"}}
 	if e := only(t, Compare(cur, base), StateAbsentUnverified); reason(e) != ReasonRulesChanged {
 		t.Fatalf("model change: %q", reason(e))

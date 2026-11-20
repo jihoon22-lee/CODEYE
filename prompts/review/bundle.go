@@ -19,7 +19,7 @@ import (
 var files embed.FS
 
 // Roles are the model roles of the review in plan order.
-var Roles = []string{"environment", "documents", "investigate", "interpret", "verify"}
+var Roles = []string{"environment", "documents", "investigate", "interpret", "verify", "contract"}
 
 var roleFiles = map[string]string{
 	"environment": "environment.md",
@@ -27,6 +27,7 @@ var roleFiles = map[string]string{
 	"investigate": "investigate.md",
 	"interpret":   "interpret-diagnostics.md",
 	"verify":      "verify.md",
+	"contract":    "contract.md",
 }
 
 // languageFiles are the language guides by source ecosystem (the envdoc and

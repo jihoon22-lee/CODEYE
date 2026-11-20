@@ -135,13 +135,13 @@ class PlannerTests(unittest.TestCase):
         est = quality_eval.estimate(plan)
         self.assertEqual(est["variants"], 10)
         self.assertTrue(est["basis"].startswith("constants:"))
-        self.assertEqual(est["upper"]["calls"], 55)  # 5 roles x 10 variants x 1.1
-        self.assertAlmostEqual(est["upper"]["ledger_microusd"], 10 * 5 * 1.1 * 22_148 * 1.5, delta=2)
+        self.assertEqual(est["upper"]["calls"], 75)  # 5 original roles and up to 2 followup calls per variant
+        self.assertAlmostEqual(est["upper"]["ledger_microusd"], 10 * (5 * 1.1 + 2) * 22_148 * 1.5, delta=2)
         self.assertLess(est["expected"]["ledger_microusd"], est["upper"]["ledger_microusd"])
-        report = {"remaining_microusd": 3_000_000, "max_requests": 200, "requests": 63, "halted": False}
+        report = {"remaining_microusd": 4_000_000, "max_requests": 200, "requests": 63, "halted": False}
         self.assertEqual(quality_eval.budget_gate(est, report, 1_000_000, 5), [])
         report["remaining_microusd"] = 2_500_000
-        self.assertEqual(len(quality_eval.budget_gate(est, report, 1_000_000, 5)), 1)  # 1.83 USD > 2.5 - 1.0
+        self.assertEqual(len(quality_eval.budget_gate(est, report, 1_000_000, 5)), 1)
         report.update(remaining_microusd=9_000_000, requests=150)
         self.assertIn("requests", quality_eval.budget_gate(est, report, 1_000_000, 5)[0])
         report.update(requests=0, halted=True)
@@ -181,8 +181,8 @@ class PlannerTests(unittest.TestCase):
             per_call = est["per_call_microusd"]
             self.assertEqual(est["max_calls"], 40)
             self.assertEqual(est["expected"]["calls"], 12)
-            self.assertEqual(est["upper"]["calls"], 40 + int(5 * 1.1 + 0.999))
-            dearest = max(per_call["investigate"], per_call["verify"])
+            self.assertEqual(est["upper"]["calls"], 40 + int(5 * 1.1 + 2 + 0.999))
+            dearest = max(per_call[r] for r in ("investigate", "verify", "contract"))
             self.assertGreaterEqual(est["upper"]["ledger_microusd"], int(40 * dearest * 1.5))
 
 

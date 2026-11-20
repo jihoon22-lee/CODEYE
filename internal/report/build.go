@@ -30,6 +30,8 @@ type taskState struct {
 	decoded      bool
 	review       bool
 	reviewResult *ReviewResult
+	// The final contract record decoded, but its comparison was not applicable.
+	contractLineageRejected bool
 	// decodedSHA is the SHA-256 of each accepted artifact by media type; an
 	// role record binds its upstream inputs to these digests.
 	decodedSHA map[string]string

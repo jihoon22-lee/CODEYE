@@ -125,6 +125,9 @@ func reviewRecordKeys(states map[string]*taskState) []string {
 	for _, key := range sliceKeys(states) {
 		out = append(out, "review."+record.StageInvestigate+"."+key, "review."+record.StageVerify+"."+key)
 	}
+	if states[record.TaskContract] != nil {
+		out = append(out, record.TaskContract)
+	}
 	return out
 }
 
@@ -133,13 +136,20 @@ func noCallStatus(s string) bool {
 	return s == string(domain.TaskSkippedPolicy) || s == string(domain.TaskUnsupported) || s == string(domain.TaskBudgetExhausted)
 }
 
-// sentPaths are the snapshot paths the accepted role records sent to the
-// model: the evidence of every record with a call that sent a request.
+// contractCallRecord keeps a decoded record of the optional contract call
+// even when the task or its lineage makes its verdict unusable.
+func contractCallRecord(st *taskState) bool {
+	return st != nil && (!st.rejected || st.contractLineageRejected) &&
+		st.reviewResult != nil && st.reviewResult.Record != nil
+}
+
+// sentPaths are the snapshot paths the model received according to the
+// accepted role records and the optional contract call record.
 func sentPaths(states map[string]*taskState, keys []string) map[string]bool {
 	out := map[string]bool{}
 	for _, k := range keys {
 		st := states[k]
-		if !reviewAccepted(st) {
+		if !reviewAccepted(st) && !(k == record.TaskContract && contractCallRecord(st)) {
 			continue
 		}
 		rec := st.reviewResult.Record
@@ -168,7 +178,14 @@ func (c sectionContext) ledger() *ReviewLedger {
 	}
 	l := &ReviewLedger{Scope: scopeItem, Modules: []LedgerModule{}}
 	keys := reviewRecordKeys(c.states)
-	sent := sentPaths(c.states, keys)
+	// Module rows describe the ranges planned for the overview and slices.
+	// The final contract's independently selected ranges count in the
+	// report-wide exposure and request budget.
+	moduleKeys := keys
+	if len(keys) != 0 && keys[len(keys)-1] == record.TaskContract {
+		moduleKeys = keys[:len(keys)-1]
+	}
+	sent := sentPaths(c.states, moduleKeys)
 
 	// Calls: those before the slices as the scope artifact counted them (the
 	// attempt's own counter, failed whole-run calls included), else the
@@ -185,12 +202,15 @@ func (c sectionContext) ledger() *ReviewLedger {
 		if st == nil {
 			continue
 		}
-		whole := !isSliceTask(k)
+		whole := !isSliceTask(k) && k != record.TaskContract
 		switch {
-		case reviewAccepted(st):
+		case reviewAccepted(st), k == record.TaskContract && contractCallRecord(st):
 			for _, call := range st.reviewResult.Record.Calls {
+				if k == record.TaskContract && call.RequestDigest == "" {
+					continue
+				}
 				bytes += call.RequestBytes
-				if !whole || doc == nil {
+				if (!whole || doc == nil) && call.RequestDigest != "" {
 					calls++
 				}
 			}
@@ -378,6 +398,21 @@ var (
 	sliceFindingID = regexp.MustCompile(`^review_(s[0-9]{3})_`)
 )
 
+func hasAcceptedContractReview(r Report) bool {
+	version, _ := strconv.Atoi(r.Builder.Version)
+	acceptedRole := func(t AIReviewTask) bool {
+		return t.Key == record.TaskContract && t.Result == "accepted" && deref(t.TaskStatus) == string(domain.TaskSucceeded)
+	}
+	return version >= ContractReviewSince && r.CodeReview != nil &&
+		slices.ContainsFunc(r.Tasks, func(t Task) bool {
+			return t.Key == record.TaskContract && t.Status == string(domain.TaskSucceeded) && !t.RequiredForVerdict
+		}) &&
+		slices.ContainsFunc(r.Coverage.AIReview.OptionalTasks, acceptedRole) && slices.ContainsFunc(r.CodeReview.Roles, acceptedRole) &&
+		slices.ContainsFunc(r.Coverage.ReviewCalls, func(c ReviewCall) bool {
+			return c.TaskKey == record.TaskContract && c.Role == record.StageContract && c.Outcome == record.OutcomeAccepted && c.RequestDigest != ""
+		})
+}
+
 // validateLedger checks the ledger against the builder version and the
 // report: present exactly when review.scope is a task of a builder-6 report;
 // the scope item and every slice entry repeat their task rows; each module
@@ -391,6 +426,10 @@ func validateLedger(r Report) error {
 	n, _ := strconv.Atoi(r.Builder.Version)
 	_, planned := tasks[record.TaskScope]
 	for _, c := range r.Coverage.ReviewCalls {
+		if c.Role == record.StageContract &&
+			(n < ContractReviewSince || c.TaskKey != record.TaskContract || tasks[c.TaskKey].RequiredForVerdict) {
+			return invalidf("contract review call lacks an optional task")
+		}
 		if c.TaskKey == "" {
 			continue
 		}

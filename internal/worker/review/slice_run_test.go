@@ -304,7 +304,7 @@ func investigateFiles(t *testing.T, q opencode.Request) []string {
 
 // TC-167 (docs/REVIEW.md#모듈-단위-검토-분할): no code or test file reaches two
 // investigate requests of a run; every slice request carries the
-// overview's instructions byte for byte (same pack, contract and guides);
+// overview's review instructions, without its optional location selection;
 // slice records are schema 0.3 records bound to the scope artifact, and the
 // run sends more distinct files than the overview alone.
 func TestSlicesNeverRepeatOverviewFiles(t *testing.T) {
@@ -315,10 +315,19 @@ func TestSlicesNeverRepeatOverviewFiles(t *testing.T) {
 	instructions := map[string]string{}
 	overview := 0
 	for _, q := range f.requests {
-		if prior, ok := instructions[q.Role]; ok && prior != q.Instructions {
+		common := q.Instructions
+		if q.Role == record.StageInvestigate {
+			in := decodeAs[investigateInput](t, q)
+			hasProbe := strings.Contains(common, investigateProbeContract)
+			if hasProbe != (len(in.NavigationCandidates) > 0) || !in.Scope.WholeRun && hasProbe {
+				t.Fatal("navigation instructions do not match the investigation inputs")
+			}
+			common = strings.Replace(common, investigateProbeContract, "", 1)
+		}
+		if prior, ok := instructions[q.Role]; ok && prior != common {
 			t.Fatalf("%s instructions differ between requests", q.Role)
 		}
-		instructions[q.Role] = q.Instructions
+		instructions[q.Role] = common
 		if q.Role != "investigate" {
 			continue
 		}

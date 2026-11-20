@@ -162,6 +162,8 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
     texts += statements(report["documents"], {"contracts": ("statement",), "conflicts": ("summary", "impact"),
                                               "questions": ("question",), "instruction_notes": ("note",),
                                               "quality": ("statement",), "comparisons": ("statement", "reason")})
+    texts += [row["additional_observation"]["reason"] for row in report["documents"].get("comparisons", [])
+              if "additional_observation" in row]
     texts += [entry[field] for entry in report["code_review"].get("strengths", []) for field in ("title", "benefit")]
     texts += [limit["statement"] for limit in report["code_review"]["interpretation_limits"]]
     check_ledger(report)
@@ -184,16 +186,32 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
                  for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids", "document_evidence_ids", "code_evidence_ids") for i in entry.get(key, [])]
         ensure(set(cited) <= set(catalog), "Section statement cites evidence the section does not carry")
         if block == "documents":
-            check_document_comparisons(report[block], catalog)
+            check_document_comparisons(report, catalog)
 
 
 def scope_under(path: str, directory: str) -> bool:
     return directory == "." or path == directory or path.startswith(directory + "/")
 
 
-def check_document_comparisons(documents: dict, catalog: dict) -> None:
+def check_document_comparisons(report: dict, catalog: dict) -> None:
     """Check published comparisons against their contracts and snapshot evidence."""
+    documents = report["documents"]
     comparisons = documents.get("comparisons", [])
+    followed = [row for row in comparisons if "followup" in row or "additional_observation" in row]
+    if followed:
+        row = followed[0]
+        updated = row.get("followup") is True and row["status"] != "unknown" and "additional_observation" not in row
+        observed = row["status"] == "unknown" and "followup" not in row and "additional_observation" in row
+        ensure(len(followed) == 1 and (updated or observed)
+               and int(report["builder"]["version"]) >= 12
+               and any(t["key"] == "review.contract" and t["status"] == "succeeded" and not t["required_for_verdict"]
+                       for t in report["tasks"])
+               and any(t["key"] == "review.contract" and t["result"] == "accepted" and t["task_status"] == "succeeded"
+                       for t in report["coverage"]["ai_review"].get("optional_tasks", []))
+               and any(t["key"] == "review.contract" and t["result"] == "accepted" and t["task_status"] == "succeeded"
+                       for t in report["code_review"]["roles"])
+               and any(c.get("task_key") == "review.contract" and c["role"] == "contract" and c["outcome"] == "accepted" and c["request_sha256"]
+                       for c in report["coverage"].get("review_calls", [])), "Document comparison followup is invalid")
     contracts = documents["contracts"]
     ensure(not comparisons or len(comparisons) == len(contracts), "Document comparison count differs from contracts")
     for comparison, contract in zip(comparisons, contracts):
@@ -207,10 +225,30 @@ def check_document_comparisons(documents: dict, catalog: dict) -> None:
         code = [catalog[evidence_id] for evidence_id in comparison["code_evidence_ids"]]
         ensure(all(item["kind"] in ("code", "test") and scope_under(item["path"], scope) for item in code),
                "Document comparison cites implementation outside its scope or evidence of the wrong kind")
-        ensure(comparison["status"] == "unknown" or any(item["kind"] == "code" and not any(
-            doc.get("directive_path") and doc["path"] == item["path"] and item["start_line"] <= doc["end_line"]
-            and doc["start_line"] <= item["end_line"] for doc in docs) for item in code),
+
+        def implementation(item: dict) -> bool:
+            return item["kind"] == "code" and not any(
+                doc.get("directive_path") and doc["path"] == item["path"] and item["start_line"] <= doc["end_line"]
+                and doc["start_line"] <= item["end_line"] for doc in docs)
+
+        ensure(comparison["status"] == "unknown" or any(implementation(item) for item in code),
                "Document comparison verdict lacks implementation evidence")
+        if extra := comparison.get("additional_observation"):
+            refs = extra["code_evidence_ids"]
+            ensure(set(refs) <= set(catalog), "Additional document observation cites unknown evidence")
+            observations = [catalog[evidence_id] for evidence_id in refs]
+
+            def fresh(item: dict) -> bool:
+                if item["kind"] not in ("code", "test") or not scope_under(item["path"], scope) or item["end_line"] - item["start_line"] >= 80:
+                    return False
+                if item["kind"] == "code" and item["path"].lower().endswith((".d.ts", ".d.mts", ".d.cts", ".pyi")):
+                    return False
+                return any(not any(old["path"] == item["path"] and old["blob_sha256"] == item["blob_sha256"]
+                                   and old["start_line"] <= line <= old["end_line"] for old in code)
+                           for line in range(item["start_line"], item["end_line"] + 1))
+
+            ensure(all(fresh(item) for item in observations) and any(implementation(item) for item in observations),
+                   "Additional document observation lacks fresh scoped implementation evidence")
 
 
 def check_excerpt(evidence: dict, path: Path, citation: dict, include_code: bool | None, model: bool) -> None:
@@ -275,6 +313,10 @@ def check_ledger(report: dict) -> None:
     builder = int(report["builder"]["version"])
     tasks = {t["key"]: t for t in report["tasks"]}
     for call in report["coverage"].get("review_calls", []):
+        if call["role"] == "contract":
+            task = tasks.get("review.contract")
+            ensure(builder >= 12 and call.get("task_key") == "review.contract" and task is not None
+                   and not task["required_for_verdict"], "Contract review call lacks an optional task")
         if "task_key" in call:
             match = SLICE_TASK.match(call["task_key"])
             stage = match.group(1) if match else call["task_key"].removeprefix("review.")

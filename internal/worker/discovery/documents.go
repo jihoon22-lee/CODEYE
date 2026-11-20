@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"slices"
 	"sort"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -38,13 +37,9 @@ const (
 	LimConflictsUnassessed = "semantic_conflicts_not_assessed"
 )
 
-var priority = map[string]int{envdoc.ClassAgent: 0, envdoc.ClassReadme: 1, envdoc.ClassContributing: 2, envdoc.ClassDesign: 3, envdoc.ClassOther: 4}
-
 // Classify returns the document class of a snapshot path, or "" when the
 // path is not a document (envdoc.ClassifyDocument).
 func Classify(p string) string { return envdoc.ClassifyDocument(p) }
-
-func depth(p string) int { return strings.Count(p, "/") }
 
 // EligibleDocuments lists, from the manifest alone, the guidance documents
 // docs.discover may read in this scope: included regular files of a guidance
@@ -70,43 +65,49 @@ func EligibleDocuments(m source.Manifest, scope domain.Scope) []string {
 // a snapshot integrity failure.
 type readFunc func(e source.Entry) ([]byte, error)
 
-// Inventory lists documents under the budget. Reading follows a fixed order
-// (agent instructions, README, CONTRIBUTING, design, other; shallow first;
-// then path), so the same snapshot and budget select the same documents.
+// Inventory lists documents under the budget. Under selection pressure,
+// product guidance competes for the read budget before general documents.
 func Inventory(m source.Manifest, scope envdoc.Scope, modules []envdoc.Module, budget Budget, read readFunc) (envdoc.Documents, []string, error) {
 	type cand struct {
 		e     source.Entry
 		class string
 	}
 	var cands []cand
+	var readable []string
+	var readBytes int64
 	for _, e := range m.Entries {
 		if e.Kind == "directory" {
 			continue
 		}
 		if c := Classify(e.Path); c != "" {
 			cands = append(cands, cand{e, c})
+			if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil &&
+				e.Encoding == "utf-8" && *e.Size <= budget.PerDocumentBytes && pathInScope(e.Path, scope) {
+				readable = append(readable, e.Path)
+				readBytes += *e.Size
+			}
 		}
 	}
-	sort.Slice(cands, func(i, j int) bool {
-		a, b := cands[i], cands[j]
-		if priority[a.class] != priority[b.class] {
-			return priority[a.class] < priority[b.class]
-		}
-		if depth(a.e.Path) != depth(b.e.Path) {
-			return depth(a.e.Path) < depth(b.e.Path)
-		}
-		return a.e.Path < b.e.Path
-	})
+	var selection *docpath.Selection
+	if len(cands) > budget.MaxDocuments || readBytes > budget.TotalBytes {
+		selection = docpath.NewSelection(readable)
+	}
+	file := func(c cand) (string, string) { return c.e.Path, c.class }
+	if selection != nil && selection.HasDesign() {
+		docpath.Sort(cands, selection, file)
+	} else {
+		docpath.Sort(cands, nil, file)
+	}
 	var lims []string
 	if len(cands) > budget.MaxDocuments {
-		cands = cands[:budget.MaxDocuments]
 		lims = append(lims, LimDocumentLimit)
 	}
 	ds := envdoc.Documents{
 		Budget: envdoc.Budget{TotalBytes: budget.TotalBytes, PerDocumentBytes: budget.PerDocumentBytes, MaxDocuments: budget.MaxDocuments},
 		Items:  []envdoc.Doc{}, Modules: []envdoc.ModuleDocs{}, OverlappingGuidance: []envdoc.Overlap{},
 	}
-	for _, c := range cands {
+	for i := range min(len(cands), budget.MaxDocuments) {
+		c := cands[i]
 		e := c.e
 		d := envdoc.Doc{Path: e.Path, AppliesTo: docpath.Scope(e.Path), Class: c.class}
 		regular := e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil
@@ -159,6 +160,9 @@ func Inventory(m source.Manifest, scope envdoc.Scope, modules []envdoc.Module, b
 					n = len(lines(b))
 				}
 				d.LineCount = &n
+				if selection != nil && selection.Primary(e.Path) && selection.WithReadmeLinks(e.Path, string(b)) {
+					docpath.Sort(cands[i+1:], selection, file)
+				}
 			}
 		}
 		ds.Items = append(ds.Items, d)

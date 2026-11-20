@@ -531,10 +531,14 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 		bytes := 0
 		for _, k := range c.keys {
 			st := c.states[k]
-			if !strings.HasPrefix(k, "review.") || st.rejected || st.reviewResult == nil || st.reviewResult.Record == nil {
+			if !strings.HasPrefix(k, "review.") || (st.rejected && !st.contractLineageRejected) ||
+				st.reviewResult == nil || st.reviewResult.Record == nil {
 				continue
 			}
 			for _, call := range st.reviewResult.Record.Calls {
+				if k == record.TaskContract && call.RequestDigest == "" {
+					continue
+				}
 				bytes += call.RequestBytes
 			}
 		}
@@ -564,7 +568,7 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 }
 
 func roleOrder(key string) int {
-	for i, k := range []string{"review.investigate", "review.interpret", "review.verify"} {
+	for i, k := range []string{"review.investigate", "review.interpret", "review.verify", record.TaskContract} {
 		if k == key {
 			return i
 		}

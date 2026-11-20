@@ -57,6 +57,8 @@ def test_display_count(args, expected):
 	})
 	script := maxScript(t)
 	var documented docInput
+	var documentedCanonical string
+	e := includedFiles(j.Snapshot.Manifest)[impl]
 	script["documents"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[docsInput](t, q)
 		var readmeID string
@@ -76,6 +78,7 @@ def test_display_count(args, expected):
 		if documented.Text != strings.Join(strings.Split(body, "\n")[documented.StartLine-1:documented.EndLine], "\n") {
 			t.Fatal("docstring input differs from the snapshot's physical lines")
 		}
+		documentedCanonical = record.ExcerptID(j.Snapshot.Digest, impl, e.SHA256, documented.StartLine, documented.EndLine)
 		p := scope
 		if in.Repair == nil {
 			p = "." // the declared package scope may not be widened
@@ -115,7 +118,7 @@ def test_display_count(args, expected):
 		return asJSON(map[string]any{"candidates": []any{}, "contract_comparisons": []record.ContractComparison{{
 			ContractIndex: 2, AppliesTo: scope, Status: "match",
 			Reason:              "기본값은 90을 10으로 나누어 9.0 pkt, blocks=True이면 12로 나누어 7.5 blk를 반환한다.",
-			DocumentEvidenceIDs: []string{documented.EvidenceID}, CodeEvidenceIDs: []string{codeID, testID},
+			DocumentEvidenceIDs: []string{documentedCanonical}, CodeEvidenceIDs: []string{codeID, testID},
 		}}})
 	}
 	h := Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}}
@@ -126,8 +129,7 @@ def test_display_count(args, expected):
 		}
 	}
 	doc := readRecord(t, j, "documents")
-	excerpt := catalogOf(doc.Evidence)[documented.EvidenceID]
-	e := includedFiles(j.Snapshot.Manifest)[impl]
+	excerpt := catalogOf(doc.Evidence)[documentedCanonical]
 	if excerpt.DirectivePath != page || excerpt.Text != "" ||
 		excerpt.ID != record.ExcerptID(j.Snapshot.Digest, impl, e.SHA256, documented.StartLine, documented.EndLine) {
 		t.Fatalf("docstring record does not bind to the source file and lines: %+v", excerpt)
@@ -189,7 +191,8 @@ func TestLiteralPythonAPIRejectionAndObjectResolution(t *testing.T) {
 			e := s.entries()[page]
 			n := strings.Count(c.markdown, "\n")
 			in := []envdoc.Doc{{Path: page, Class: envdoc.ClassDesign, AppliesTo: ".", SHA256: &e.SHA256, LineCount: &n}}
-			excerpts, _, err := s.documentExcerpts(in)
+			evidence, err := s.documentExcerpts(in)
+			excerpts := evidence.excerpts
 			if err != nil || len(excerpts) != 1 || (excerpts[0].DirectivePath == page) != c.wantAPI {
 				t.Fatalf("incorrect document selection: %+v, err %v", excerpts, err)
 			}

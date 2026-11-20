@@ -74,6 +74,9 @@ func TestRolesAcceptValidOutputs(t *testing.T) {
 	f := &scriptedCaller{script: validScript(t)}
 	plan, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	for _, r := range rows(plan, res) {
+		if r.key == record.TaskContract && r.status == "skipped_policy" && r.reason == domain.ReasonNoReviewScope && !r.required {
+			continue
+		}
 		if r.status != "succeeded" {
 			t.Fatalf("%+v", rows(plan, res))
 		}
@@ -85,7 +88,7 @@ func TestRolesAcceptValidOutputs(t *testing.T) {
 	}
 	env := readRecord(t, j, "environment")
 	if len(env.EnvironmentNotes) != 1 || env.EnvironmentNotes[0].Module != "go:svc/b" || env.Upstream[0].Source != "env.discover" || env.Upstream[0].State != record.UpstreamAccepted ||
-		env.Pack.ID != "review" || env.Calls[0].PackID != "review" || env.Calls[0].PackVersion != "2.2.0" {
+		env.Pack.ID != "review" || env.Calls[0].PackID != "review" || env.Calls[0].PackVersion != "2.3.1" {
 		t.Fatalf("environment %+v", env)
 	}
 	docs := readRecord(t, j, "documents")

@@ -41,7 +41,8 @@ const (
 	// carries pack_id and pack_version, and a plan without a review task
 	// requires none.
 	// Version 11 adds report context, source excerpts and document/code insights.
-	BuilderVersion = "11"
+	// Version 12 reads optional evidence from the final contract review.
+	BuilderVersion = "12"
 )
 
 // Report statuses (schemas/report.schema.json).

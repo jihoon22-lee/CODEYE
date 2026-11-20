@@ -49,7 +49,8 @@ sys.path.insert(0, str(SCRIPTS))
 CORPUS_DIR = ROOT / "fixtures/quality-holdout"
 GATEWAY = SCRIPTS / "model_budget_relay.py"
 PACK = "review"
-PACK_ROLES = ("environment", "documents", "investigate", "interpret", "verify")
+BASE_REVIEW_ROLES = ("environment", "documents", "investigate", "interpret", "verify")
+PACK_ROLES = (*BASE_REVIEW_ROLES, "contract")
 MANIFEST_SCHEMA = "codeye-quality-eval-manifest"
 REGISTRY = "holdout-registry.jsonl"
 HOLDOUT_LABEL = "holdout_seen_by_prior_revision"
@@ -329,15 +330,16 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
 
     expected: per-role calls of the same variant in history (else history's per-variant average,
     else CONSTANTS) times a per-call cost.
-    upper: every role of the pack is called once per variant (unless history shows the exact
+    upper: every original role is called once per variant (unless history shows the exact
     variant needs fewer: never fewer than history's own count), plus repair_rate extra calls,
+    and up to two requests for a contract followup.
     each at the per-call cost times margin. Per-call cost: history usage when real, else
     request bytes / bytes_per_token input tokens and output_tokens_upper output tokens at the
     relay's worst-case prices, else CONSTANTS.
     Module slices (docs/REVIEW.md#모듈-단위-검토-분할): a variant whose history made
-    more calls than the pack has roles planned slices; slices are admitted while calls are
-    left, so with repairs it can use the whole per-attempt ceiling. Its upper is max_calls
-    calls at the dearest per-call cost of investigate and verify. A variant without history is
+    more original-role calls than original roles may have planned slices. Slices and final
+    contract followup share the per-attempt ceiling. Its upper is max_calls calls at the
+    dearest per-call cost of investigate, verify and contract. A variant without history is
     estimated as above (the constants are single-file inputs without slices); run the capture
     dry run with the same selection first.
     """
@@ -367,14 +369,16 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
         counts = {r: seen.get(r, 0) for r in roles} if seen is not None else {r: rates.get(r, 0) for r in roles}
         expected_calls += sum(counts.values())
         expected_cost += sum(counts[r] * per_call[r] for r in roles)
-        if seen is not None and sum(seen.values()) > len(roles):
+        if seen is not None and sum(seen.get(r, 0) for r in BASE_REVIEW_ROLES) > len(BASE_REVIEW_ROLES):
             upper_calls += max_calls
-            upper_cost += max_calls * max(per_call["investigate"], per_call["verify"]) * margin
+            upper_cost += max_calls * max(per_call[r] for r in ("investigate", "verify", "contract")) * margin
             continue
-        for r in roles:
+        for r in BASE_REVIEW_ROLES:
             count = max(1, seen.get(r, 0)) if seen is not None else 1
             upper_calls += count * (1 + repair_rate)
             upper_cost += count * (1 + repair_rate) * per_call[r] * margin
+        upper_calls += 2
+        upper_cost += 2 * per_call["contract"] * margin
     return {"variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,
             "per_call_microusd": per_call, "calls_per_variant": rates,
             "expected": {"calls": round(expected_calls, 1), "ledger_microusd": int(expected_cost)},

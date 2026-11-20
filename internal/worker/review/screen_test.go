@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 // screenStub is the go vet stub plus the structure and secrets envelopes
@@ -194,7 +195,7 @@ func plantedJob(t *testing.T) (analysis.Job, string) {
 // Without a usable screen (screen.go) the review runs on the read filters
 // alone: not run (the stand-in's not_run envelope) and ran but unusable (a
 // failed scan, or no envelope at all, also what a role would see if it ever
-// ran before the secrets task) are one case. No role is skipped, the file
+// ran before the secrets task) are one case. The original roles run, the file
 // reaches the model, every record says model_input_not_secret_screened and
 // no model input carries that code.
 func TestReviewSecretScreenCases(t *testing.T) {
@@ -207,7 +208,11 @@ func TestReviewSecretScreenCases(t *testing.T) {
 			}
 			f := &scriptedCaller{script: script}
 			plan, res := runRole(t, j, screenStub{mode: mode}, f, "1.27.4")
+			requireUnusedContract(t, res, f)
 			for _, p := range plan {
+				if p.Key == record.TaskContract {
+					continue
+				}
 				if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status == domain.TaskSkippedPolicy {
 					t.Fatalf("%s skipped: %+v", p.Key, res[p.Key])
 				}

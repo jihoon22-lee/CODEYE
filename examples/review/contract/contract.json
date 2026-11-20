@@ -1,0 +1,87 @@
+{
+  "schema_version": "0.4",
+  "pack": {
+    "id": "review",
+    "version": "2.3.1"
+  },
+  "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+  "run_id": "0195f3a0-0000-7000-8000-000000000025",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000026",
+  "stage": "contract",
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "review.documents",
+      "state": "accepted",
+      "sha256": "216d49aa42fe456e8afad009b95f540f47dfe81fbc26966d963bf7f414e3422a"
+    },
+    {
+      "source": "review.investigate",
+      "state": "accepted",
+      "sha256": "f8eb435b87d9deabc5fb39a6f5a921362406f3d64fe676409bc022071d9b252f"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_a663434311b594dfb09cfd15",
+      "path": "README.md",
+      "sha256": "cb8e4c2940c4429f22db9ad7b760e6b0adc48f82d0129177fe406c8da145bd3d",
+      "start_line": 1,
+      "end_line": 9,
+      "kind": "document"
+    },
+    {
+      "id": "ev_37bd5beceea0a96e4ad0b92f",
+      "path": "gateway.go",
+      "sha256": "a03fee1a659e56ed4175a7562b7a6838839236d736e602444b8ed2fdb65958d8",
+      "start_line": 4,
+      "end_line": 16,
+      "kind": "code",
+      "origin": "context"
+    }
+  ],
+  "observations": [],
+  "contract_comparisons": [
+    {
+      "contract_index": 1,
+      "applies_to": ".",
+      "status": "match",
+      "reason": "하위 호출이 실패하면 최대 세 번 더 호출하고 마지막 오류를 반환한다.",
+      "document_evidence_ids": [
+        "ev_a663434311b594dfb09cfd15"
+      ],
+      "code_evidence_ids": [
+        "ev_37bd5beceea0a96e4ad0b92f"
+      ]
+    }
+  ],
+  "limitations": [
+    "model_input_not_secret_screened"
+  ],
+  "calls": [
+    {
+      "role": "contract",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.3.1",
+      "pack_sha256": "7fa5404a4bd14d0d30763826107f6a364b7d73b23c4658be6729a4464a6de65d",
+      "pack_files": [
+        "00-core.md",
+        "contract.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "62ba39badc4adcfb11d609d1e6be9bb62cb933150effbe739da00f549c7861e1",
+      "request_bytes": 11919,
+      "usage": {
+        "input": 1663,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

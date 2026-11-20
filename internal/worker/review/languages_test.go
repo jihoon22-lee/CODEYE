@@ -143,7 +143,11 @@ func TestRecordsShowLanguageGuides(t *testing.T) {
 	})
 	f := &scriptedCaller{script: validScript(t)}
 	plan, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
+	requireUnusedContract(t, res, f)
 	for _, p := range plan {
+		if p.Key == record.TaskContract {
+			continue
+		}
 		if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status != domain.TaskSucceeded {
 			t.Fatalf("%s %+v", p.Key, res[p.Key])
 		}

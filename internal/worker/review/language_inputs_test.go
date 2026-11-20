@@ -171,7 +171,11 @@ func TestReviewInputsPerLanguage(t *testing.T) {
 			j := langJob(t, c.eco)
 			f := &scriptedCaller{script: maxScript(t)}
 			plan, res := runRole(t, j, c.stub(), f, "1.27.4")
+			requireUnusedContract(t, res, f)
 			for _, p := range plan {
+				if p.Key == record.TaskContract {
+					continue
+				}
 				if r := res[p.Key]; strings.HasPrefix(p.Key, "review.") && r.Status != domain.TaskSucceeded && !(p.Key == "review.environment" && r.Reason == ReasonNoEnvironmentGap) {
 					t.Fatalf("%s %+v", p.Key, r)
 				}
@@ -399,6 +403,7 @@ func TestSecretScreenOnPython(t *testing.T) {
 			j := planted(t)
 			f := &scriptedCaller{script: maxScript(t)}
 			plan, res := runRole(t, j, stub, f, "1.27.4")
+			requireUnusedContract(t, res, f)
 			if mode != "hit" {
 				// An unusable scan is no screen: the roles run on the read
 				// filters alone and every record says so.
@@ -406,6 +411,9 @@ func TestSecretScreenOnPython(t *testing.T) {
 					t.Fatal("no review request after an unusable scan")
 				}
 				for _, p := range plan {
+					if p.Key == record.TaskContract {
+						continue
+					}
 					if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status == domain.TaskSkippedPolicy {
 						t.Fatalf("%s skipped: %+v", p.Key, res[p.Key])
 					}

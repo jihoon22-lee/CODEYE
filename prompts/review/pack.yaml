@@ -1,5 +1,5 @@
 id: review
-version: 2.2.0
+version: 2.3.1
 schema_version: '0.2'
 language: ko
 status: default
@@ -11,6 +11,7 @@ roles:
   investigate: investigate.md
   interpret: interpret-diagnostics.md
   verify: verify.md
+  contract: contract.md
 domains: domains.md
 languages:
   cpp: languages/cpp.md

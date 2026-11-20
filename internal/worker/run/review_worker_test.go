@@ -291,7 +291,8 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 			// go-vet.m02 (svc/b, go 1.30) fails on a node older than go1.30,
 			// as in TestDiscoveryTasksThroughTheWorker.
 			want := []string{"env.discover=succeeded", "docs.discover=succeeded", "go-vet=succeeded", "go-vet.m01=succeeded", "go-vet.m02=failed:" + govet.ReasonToolchain,
-				"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", tc.interpret, "review.verify=succeeded"}
+				"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", tc.interpret, "review.verify=succeeded",
+				"review.contract=skipped_policy:no_review_scope"}
 			if !slices.Equal(got, want) {
 				t.Fatalf("tasks\n got %v\nwant %v", got, want)
 			}
@@ -329,14 +330,14 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				optional = append(optional, row)
 			}
 			if ai.Status != report.AIReviewPerformed || !slices.Equal(required, []string{"review.documents=accepted", "review.investigate=accepted", "review.verify=accepted"}) ||
-				!slices.Equal(optional, tc.optional) {
+				!slices.Equal(optional, append(slices.Clone(tc.optional), "review.contract=skipped:no_review_scope")) {
 				t.Fatalf("ai review %s required %v optional %v limitations %v", ai.Status, required, optional, r.Limitations)
 			}
 			if len(r.Coverage.ReviewCalls) != len(strings.Split(tc.calls, ",")) || r.Coverage.LLMExposedFiles == nil || *r.Coverage.LLMExposedFiles == 0 {
 				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
 			}
 			for _, call := range r.Coverage.ReviewCalls {
-				if call.PackID != "review" || call.PackVersion != "2.2.0" {
+				if call.PackID != "review" || call.PackVersion != "2.3.1" {
 					t.Fatalf("call %+v", call)
 				}
 			}
@@ -417,7 +418,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
-			if !strings.Contains(md, "review@2.2.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
+			if !strings.Contains(md, "review@2.3.1") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
 				t.Fatalf("markdown lacks the pack or the optional row:\n%s", md)
 			}
 		})
