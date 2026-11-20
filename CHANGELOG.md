@@ -4,6 +4,10 @@ CODEYE가 얻은 기능을 최신순으로 적는다. 항목 끝의 `#NN`은 병
 
 ## 진행 중
 
+### 고침 — Git 입력 확보
+
+- Git 입력을 확보하는 임시 저장소에서 git의 자동 유지보수(`maintenance.auto`, `gc.auto`)를 끈다. git 2.56은 fetch 뒤에 분리된 유지보수 프로세스를 띄우는데, 한 번 쓰고 지우는 저장소에는 필요 없고 다음 명령과 겹칠 수 있다. CI에서 `TestGitPullRequestThatMovedFetchesThePinnedCommit`이 간헐적으로 `source_unavailable`로 실패한 뒤 넣었다. 로컬(git 2.53·2.56)에서는 그 실패를 재현하지 못했으므로 원인으로 확정한 것은 아니다.
+
 ### 추가 — 사람이 쓰는 주소, 다른 사용자의 안내, 명령줄 도움말
 
 - **이 머신의 주소를 모두 받는다**: controller는 listen 포트에서 이 머신의 인터페이스 주소(LAN, Tailscale 같은 VPN, WSL2 내부 주소), loopback, `localhost`, 호스트 이름과 search domain을 붙인 이름을 Host로 받는다. `--listen 0.0.0.0:PORT --plain-http`에 `--public-origin`이 필요 없다. DNS는 묻지 않는다. 이름은 정확히 같을 때만 받는다. loopback으로만 들으면(기본 `codeye up`) 이전처럼 loopback 이름과 설정한 origin만 받는다. 상태 변경 요청의 Origin은 그 요청의 Host와 같아야 한다([받는 주소](docs/OPERATIONS.md#받는-주소), A53 7).
