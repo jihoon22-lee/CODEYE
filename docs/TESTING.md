@@ -499,6 +499,7 @@ python3 -m unittest discover -s fixtures/cleanup -p 'test_*.py' -v  # 합성 결
 python3 -m unittest discover -s scripts -p test_model_budget_relay.py -v
 python3 -m unittest discover -s scripts -p test_quality_eval.py -v
 python3 -m unittest discover -s scripts -p test_offline_pack.py -v  # 배포팩 재현·검증·웹 외부 주소(TC-240·241)
+python3 -m unittest discover -s scripts -p test_stage_labels.py -v  # 내용·경로의 단계·팩 세대 표시 검사와 허용 목록
 ```
 
 배포팩 전체 경로(TC-245, Linux, 수동):
@@ -516,7 +517,7 @@ python3 scripts/offline_smoke.py --pack .codeye/pack/codeye-VERSION-linux-amd64.
 
 | 작업 | 실행 내용 |
 |---|---|
-| Linux / PostgreSQL / contracts (ubuntu-24.04) | Go 1.27.4·Python 3.14.4·Node 24.18.0. 웹 빌드, Playwright Chromium 설치, `gofmt`·`go vet`, `scripts/test_postgres.py --nodes --web --scheduler --personal`, scripts 단위 시험(배포팩 `test_offline_pack.py` 포함), `validate_bundle.py`, cleanup fixture 시험, `fixtures/regression/corpus.py --check`, CLI 빌드 |
+| Linux / PostgreSQL / contracts (ubuntu-24.04) | Go 1.27.4·Python 3.14.4·Node 24.18.0. 웹 빌드, Playwright Chromium 설치, `gofmt`·`go vet`, `scripts/test_postgres.py --nodes --web --scheduler --personal`, scripts 단위 시험(배포팩 `test_offline_pack.py`, 표시 검사 `test_stage_labels.py` 포함), `validate_bundle.py`, cleanup fixture 시험, `fixtures/regression/corpus.py --check`, CLI 빌드 |
 | Linux / several nodes on one host (ubuntu-24.04) | `scripts/test_postgres.py --smokes-only --multinode`(TC-250~254). 개발 호스트에서 약 2분이라 Linux 작업의 25분 예산과 나누어 따로 돈다. 러너에는 ruff가 없어 "go 없는 노드"를 `--advertise-without-baseline`으로 띄운다. IPv6 loopback이 없으면 IPv4 loopback(`127.0.0.1`·`127.0.0.2`)으로 바꿔 실행한다. 호스팅 러너에서는 아직 실행하지 않아 소요 시간을 모른다 |
 | Windows / Go unit tests (windows-2025) | `go test -count=1 ./...`, `go vet`, CLI 빌드만. DB 통합·smoke·실도구 시험은 없다 |
 | Web / tests and build | `npm ci`, `npm test`, `npm run build`, 빌드한 화면의 외부 주소 검사(`offline_pack.py check-web web/dist`) |
