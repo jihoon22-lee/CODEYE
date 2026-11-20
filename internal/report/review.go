@@ -113,8 +113,18 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 		if !reviewAccepted(st) {
 			return false
 		}
+		docs := st.reviewResult.Record
+		docEvidence := make(map[string]record.Excerpt, len(docs.Evidence))
+		for _, e := range docs.Evidence {
+			docEvidence[e.ID] = e
+		}
+		for _, e := range rec.Evidence {
+			if old, ok := docEvidence[e.ID]; ok && (e.PackageReference != old.PackageReference) {
+				return false
+			}
+		}
 		for _, x := range rec.ContractComparisons {
-			if !x.MatchesContract(st.reviewResult.Record.Contracts) {
+			if !x.MatchesContract(docs.Contracts) {
 				return false
 			}
 		}

@@ -42,7 +42,10 @@ const (
 	// requires none.
 	// Version 11 adds report context, source excerpts and document/code insights.
 	// Version 12 reads optional evidence from the final contract review.
-	BuilderVersion = "12"
+	// Version 13 retains supporting citations from the final contract review,
+	// binds JavaScript package guidance to the snapshot and reports the
+	// document scope items omitted during model review.
+	BuilderVersion = "13"
 )
 
 // Report statuses (schemas/report.schema.json).

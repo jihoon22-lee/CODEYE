@@ -272,7 +272,7 @@ describe('analysis sections', () => {
 
   it('keeps a scoped new source observation with an unresolved comparison', () => {
     const doc = example('report.json');
-    doc.builder.version = '12';
+    doc.builder.version = '13';
     doc.project = { name: 'Callbacks' };
     const key = 'review.contract';
     const keep = (entry: {key: string}) => entry.key !== key;
@@ -285,15 +285,23 @@ describe('analysis sections', () => {
     const row = doc.documents.comparisons[0];
     const priorReason = row.reason;
     const newReason = '유효한 항목에서 콜백 호출은 보이지만 공개 진입점과의 연결은 확인되지 않았습니다.';
-    const newEvidence = { id: 'extra-evidence', path: 'src/routes.go', start_line: 21, end_line: 22, kind: 'code',
+    const priorEvidence = doc.documents.evidence.find((e: {id: string}) => row.code_evidence_ids.includes(e.id))!;
+    const priorLocation = `${priorEvidence.path}:${priorEvidence.start_line}–${priorEvidence.end_line}`;
+    const newEvidence = { id: 'extra-evidence', path: priorEvidence.path, start_line: 21, end_line: 22, kind: 'code',
       excerpt: { start_line: 21, end_line: 22, text: 'if valid {\n  callback(value)' } };
+    const newLocation = `${newEvidence.path}:21–22`;
     doc.documents.evidence.push(newEvidence);
-    row.additional_observation = { reason: newReason, code_evidence_ids: [newEvidence.id] };
+    const refs = [newEvidence.id, priorEvidence.id];
+    row.additional_observation = { reason: newReason, code_evidence_ids: refs };
     const parse = () => parseAnalysisReport(doc, doc.run_id);
     const { rerender } = render(<ReportDocument report={parse()} />);
-    const opening = within(screen.getByRole('region', { name: t.reading.documentClaim }));
+    const opening = within(screen.getByRole('region', { name: t.reading.documentComparison }));
     expect(opening.getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
-    expect(opening.getByText(newReason, {exact: false})).toBeTruthy();
+    const codeRow = opening.getByText(t.reading.comparisonCode, {exact:true}).closest('div')!;
+    expect(within(codeRow).getByText(newReason)).toBeTruthy();
+    expect(Array.from(codeRow.querySelectorAll('summary'), el => el.getAttribute('aria-label'))).toEqual([
+      t.sourceActionAt(t.viewCode, newLocation), t.sourceActionAt(t.viewCode, priorLocation),
+    ]);
     expect(opening.queryByText(priorReason)).toBeNull();
     expect(opening.queryByText(t.reading.followedContract)).toBeNull();
     expect(opening.getByText(t.reading.unknownContracts(doc.documents.comparisons.length, doc.documents.comparisons.length))).toBeTruthy();
@@ -301,12 +309,18 @@ describe('analysis sections', () => {
     const detail = within(screen.getByRole('tabpanel', { name: t.sections.titles.documents }));
     expect(detail.getByText(priorReason)).toBeTruthy();
     expect(detail.getByText(newReason, {exact: false})).toBeTruthy();
-    const newCode = detail.getByLabelText(t.sourceActionAt(t.viewCode, 'src/routes.go:21–22'));
+    const newCode = detail.getByLabelText(t.sourceActionAt(t.viewCode, newLocation));
+    const activeComparison = document.activeElement?.closest('li');
+    expect(activeComparison).toBeTruthy();
+    expect(within(activeComparison!).getAllByLabelText(t.sourceActionAt(t.viewCode, priorLocation))).toHaveLength(1);
     expect(openDisclosure(newCode).querySelector('pre')?.textContent).toContain('callback(value)');
 
     row.additional_observation.code_evidence_ids = row.code_evidence_ids;
     expect(parse).toThrow();
-    row.additional_observation.code_evidence_ids = [newEvidence.id];
+    row.additional_observation.code_evidence_ids = refs;
+    newEvidence.kind = 'test';
+    expect(parse).toThrow();
+    newEvidence.kind = 'code';
     doc.export.include_code = false;
     const omitted = '원문 생략(코드 미포함 내보내기).';
     for (const finding of doc.findings) for (const e of finding.evidence) delete e.excerpt;
@@ -318,7 +332,8 @@ describe('analysis sections', () => {
     rerender(<ReportDocument report={parse()} />);
     fireEvent.click(screen.getByRole('tab', { name: t.sections.overview }));
     const projected = within(screen.getByRole('region', { name: t.reading.omitted }));
-    expect(projected.getByText('src/routes.go:21–22')).toBeTruthy();
+    expect(projected.queryByText(t.reading.comparisonCode)).toBeNull();
+    expect(projected.getByText(newLocation)).toBeTruthy();
     expect(projected.getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
     expect(projected.queryByText(newReason, {exact: false})).toBeNull();
     delete row.additional_observation;
@@ -339,10 +354,11 @@ describe('analysis sections', () => {
     render(<ReportDocument report={report} />);
 
     const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
-    const judgment = within(overview).getByRole('region', { name: t.reading.documentClaim });
-    expect(within(judgment).getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
+    const judgment = within(overview).getByRole('region', { name: t.reading.documentComparison });
+    expect(within(judgment).getByText(t.reading.codeEvidenceMissing)).toBeTruthy();
     expect(within(judgment).getByText(comparison.statement)).toBeTruthy();
-    expect(within(judgment).getByText(t.reading.unconfirmedReason)).toBeTruthy();
+    expect(within(judgment).getByText(t.reading.comparisonDocument)).toBeTruthy();
+    expect(within(judgment).getByText(t.reading.comparisonCode, {exact:true})).toBeTruthy();
     expect(within(judgment).queryByText(t.modelReading)).toBeNull();
     expect(within(judgment).getByText(t.viewDocument)).toBeTruthy();
     expect(within(judgment).queryByText(t.viewCode)).toBeNull();
@@ -366,10 +382,10 @@ describe('analysis sections', () => {
       { ...question, question: '복원 기록을 확인한다.' }];
 
     const { rerender } = render(<ReportDocument report={report} />);
-    const judgment = () => within(screen.getByRole('region', { name: t.reading.documentClaim }));
+    const judgment = () => within(screen.getByRole('region', { name: t.reading.documentComparison }));
     expect(judgment().getByText(queue.statement)).toBeTruthy();
     expect(judgment().queryByText(first.statement)).toBeNull();
-    expect(judgment().getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
+    expect(judgment().getByText(t.reading.codeEvidenceMissing)).toBeTruthy();
     fireEvent.click(judgment().getByRole('button', { name: t.reading.openDocumentAnalysis }));
     const selected = screen.getByRole('heading', { name: queue.statement });
     expect(document.activeElement).toBe(selected);
@@ -417,7 +433,7 @@ describe('analysis sections', () => {
     expect(within(judgment).getByText(peer.statement)).toBeTruthy();
     expect(within(judgment).queryByText(wrongOperation.statement)).toBeNull();
     expect(within(judgment).queryByText(wrongRange.statement)).toBeNull();
-    expect(within(judgment).getAllByRole('link', { name: new RegExp(t.viewCode) })).toHaveLength(1);
+    expect(within(judgment).getAllByText(t.viewCode, { selector: 'summary' })).toHaveLength(1);
   });
 
   it('keeps one code-cited unknown explicitly unconfirmed', () => {
@@ -433,20 +449,40 @@ describe('analysis sections', () => {
     codeReview.strengths = [];
     const { rerender } = render(<ReportDocument report={report} />);
     const overview = () => screen.getByRole('tabpanel', { name: t.sections.overview });
-    expect(within(overview()).getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
-    expect(within(overview()).getByRole('heading', { name: t.reading.documentClaim })).toBeTruthy();
-    expect(within(overview()).getByText(t.reading.unconfirmedReason)).toBeTruthy();
+    expect(within(overview()).getByText(t.reading.codeEvidenceMissing)).toBeTruthy();
+    expect(within(overview()).getByRole('heading', { name: t.reading.documentComparison })).toBeTruthy();
+    expect(within(overview()).getByText(t.reading.comparisonCode, {exact:true})).toBeTruthy();
     expect(within(overview()).getByText(uncertain.reason)).toBeTruthy();
     expect(within(overview()).queryByText(unanchored.statement)).toBeNull();
     expect(within(overview()).queryByText('다른 계약')).toBeNull();
 
     documents.comparisons = [uncertain, known];
     rerender(<ReportDocument report={report} />);
-    expect(within(overview()).queryByText(t.reading.comparisonStatus.unknown)).toBeNull();
+    expect(within(overview()).queryByText(t.reading.codeEvidenceMissing)).toBeNull();
     expect(within(overview()).getByText(t.reading.comparisonStatus.match)).toBeTruthy();
   });
 
-  it('shows the registered Git URL and opens the full cited span at the fixed commit', () => {
+  it('preserves unmatched backticks and escapes source text in the comparison rows', () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Documentation' };
+    const report = parseAnalysisReport(doc, doc.run_id);
+    const { documents } = report.sections!;
+    const base = documents.comparisons.find(row => row.documentRefs.length > 0)!;
+    documents.comparisons = [{ ...base, status: 'unknown', codeRefs: [],
+      statement: '설명서는 `Read(path)` 호출을 설명한다. <img src=x>',
+      reason: '코드에서 `<script>probe()</script>`와 ``예시``를 확인했다. 짝 없는 `' }];
+    render(<ReportDocument report={report} />);
+    const judgment = screen.getByRole('region', { name: t.reading.documentComparison });
+    const rows = judgment.querySelectorAll('.report-comparison-rows > div');
+    expect(Array.from(rows, row => row.querySelector('dt')?.textContent)).toEqual([t.reading.comparisonDocument, t.reading.comparisonCode]);
+    expect(rows[0].querySelector('p > code')?.textContent).toBe('Read(path)');
+    expect(rows[0].querySelector('p')?.textContent).toContain('<img src=x>');
+    expect(rows[1].querySelector('p > code')?.textContent).toBe('<script>probe()</script>');
+    expect(rows[1].querySelector('p')?.textContent).toContain('``예시``를 확인했다. 짝 없는 `');
+    expect(judgment.querySelectorAll('img, script')).toHaveLength(0);
+  });
+
+  it('opens saved overview evidence first and keeps the fixed-commit link', () => {
     const doc = example('report.json');
     const sha = 'a'.repeat(40);
     doc.project = { name: 'Billing', source: 'https://git.example.test:8443/Owner/Billing.git/' };
@@ -455,9 +491,12 @@ describe('analysis sections', () => {
     const comparison = doc.documents.comparisons.find((c: { status: string }) => c.status === 'match');
     const citation = doc.documents.evidence.find((e: { id: string }) => comparison.code_evidence_ids.includes(e.id));
     citation.excerpt = { ...citation.excerpt, end_line: citation.excerpt.start_line, text: citation.excerpt.text.split('\n')[0] };
-    const report = parseAnalysisReport(doc, doc.run_id);
-    report.sections!.codeReview.findings = [];
-    render(<ReportDocument report={report} />);
+    const view = () => {
+      const report = parseAnalysisReport(doc, doc.run_id);
+      report.sections!.codeReview.findings = [];
+      return <ReportDocument report={report} />;
+    };
+    const { rerender } = render(view());
     const hero = screen.getByRole('heading', { name: 'Billing' }).closest('header')!;
     expect(within(hero).getByText(doc.project.source)).toBeTruthy();
     expect(within(hero).getByText(t.commit)).toBeTruthy();
@@ -467,10 +506,15 @@ describe('analysis sections', () => {
     const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
     const url = `https://git.example.test:8443/Owner/Billing/blob/${sha}/${citation.path}#L${citation.start_line}-L${citation.end_line}`;
     const visibleRange = `${citation.path}:${citation.start_line}–${citation.end_line}`;
-    const link = within(overview).getByRole('link', { name: t.sourceActionAt(t.viewCode, visibleRange) });
+    const excerptRange = `${citation.path}:${citation.excerpt.start_line}`;
+    const openingSource = within(overview).getByLabelText(t.sourceActionAt(t.viewCode, visibleRange));
+    expect(openingSource.tagName).toBe('SUMMARY');
+    expect(openingSource.closest('details')!.open).toBe(false);
+    const opened = within(openDisclosure(openingSource));
+    expect(opened.getByLabelText(t.excerptAt(excerptRange)).textContent).toContain(citation.excerpt.text);
+    const link = opened.getByRole('link', { name: t.sourceActionAt(t.openSource, visibleRange) });
     expect(link.getAttribute('href')).toBe(url);
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
-    expect(within(overview).queryByText(t.openSource)).toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: t.sections.titles.documents }));
     const panel = screen.getByRole('tabpanel', { name: t.sections.titles.documents });
@@ -479,8 +523,12 @@ describe('analysis sections', () => {
     expect(control.closest('details')!.open).toBe(false);
     const details = openDisclosure(control);
     expect(within(details).getByRole('link', { name: t.sourceActionAt(t.openSource, visibleRange) }).getAttribute('href')).toBe(url);
-    const excerptRange = `${citation.path}:${citation.excerpt.start_line}`;
     expect(within(details).getByLabelText(t.excerptAt(excerptRange))).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: t.sections.overview }));
+    delete citation.excerpt;
+    rerender(view());
+    expect(within(overview).getByRole('link', { name: t.sourceActionAt(t.viewCode, visibleRange) }).getAttribute('href')).toBe(url);
   });
 
   it('opens all 24 saved model lines and rejects a long excerpt outside its citation', () => {

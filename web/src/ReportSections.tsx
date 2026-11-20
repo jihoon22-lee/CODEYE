@@ -376,7 +376,7 @@ function comparisonReading(row: Sections['documents']['comparisons'][number], ca
     status: label(t.reading.comparisonStatus, row.status) + (row.followup ? ' · ' + t.reading.followedContract : ''),
     statement: row.reason,
     secondary: row.codeRefs.length > 0 ? !hasPrimary : secondaryReviewScope(row.scope),
-    refs: [...row.documentRefs, ...row.codeRefs],
+    refs: [...row.documentRefs, ...row.codeRefs.filter(id => !row.additional?.codeRefs.includes(id))],
     additional: row.additional,
   };
 }
@@ -395,6 +395,7 @@ type OverviewReading = {
   text?: string;
   documentClaim?: string;
   reasonLabel?: string;
+  comparisonRows?: { label: string; text: string; sources?: ReactNode }[];
   condition?: string;
   scope?: string;
   followedContract?: boolean;
@@ -418,28 +419,41 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
     const included = report.includesCode !== false;
     const unknown = comparison.status === 'unknown';
     const newCode = comparison.additional && source(documents.citations, comparison.additional.codeRefs, 'code');
+    const documentRef = source(documents.citations, comparison.documentRefs, 'document');
+    const codeRef = newCode ?? source(documents.citations, comparison.codeRefs, 'code');
+    const newObservation = newCode && comparison.additional?.reason.trim() ? comparison.additional : undefined;
+    const comparisonText = newObservation?.reason ?? comparison.reason;
+    const codeRefs = newObservation?.codeRefs ?? comparison.codeRefs;
+    const codeCatalog = codeRefs.flatMap(id => documents.citations.find(e => e.id === id) ?? []);
+    const paired = included && unknown && comparison.statement.trim() !== '' && comparisonText.trim() !== '';
     const condition = included && comparison.status === 'match'
       ? matchingDocumentCondition(comparison, documents.comparisons, documents.citations) : undefined;
     return {
       comparisonIndex: documents.comparisons.indexOf(comparison),
-      title: !included ? t.reading.omitted : unknown ? t.reading.documentClaim : comparison.statement,
-      model: included ? !unknown || Boolean(newCode) : true,
-      documentClaim: included && unknown ? comparison.statement : undefined,
-      text: included ? (newCode ? comparison.additional?.reason : comparison.reason) : undefined,
+      title: !included ? t.reading.omitted : paired ? t.reading.documentComparison : unknown ? t.reading.documentClaim : comparison.statement,
+      model: included ? !unknown || Boolean(newObservation) : true,
+      documentClaim: included && unknown && !paired ? comparison.statement : undefined,
+      text: included && !paired ? comparisonText : undefined,
+      comparisonRows: paired ? [
+        { label: t.reading.comparisonDocument, text: comparison.statement,
+          sources: documentRef && <Citations catalog={documents.citations} refs={[documentRef]} /> },
+        { label: t.reading.comparisonCode, text: comparisonText,
+          sources: codeCatalog.length > 0 ? <Citations catalog={codeCatalog} refs={codeRefs} /> : undefined },
+      ] : undefined,
       condition: condition?.statement,
       scope: comparison.scope !== '.' ? comparison.scope : undefined,
       followedContract: comparison.followup,
       reasonLabel: newCode ? t.reading.additionalObservation : unknown ? t.reading.unconfirmedReason : undefined,
-      status: label(t.reading.comparisonStatus, comparison.status),
-      sources: <Citations catalog={documents.citations} preferOriginal refs={[
-        source(documents.citations, comparison.documentRefs, 'document'),
-        newCode ?? source(documents.citations, comparison.codeRefs, 'code'),
+      status: paired && !newObservation ? t.reading.codeEvidenceMissing : label(t.reading.comparisonStatus, comparison.status),
+      sources: !paired && <Citations catalog={documents.citations} refs={[
+        documentRef,
+        ...(newCode ? codeRefs : [codeRef]),
         condition && source(documents.citations, condition.documentRefs, 'document'),
       ].filter((id): id is string => id !== undefined)} />,
       action: action && ['critical', 'high'].includes(action.finding.severity) ? {
         state: actionStatus,
         title: included ? action.finding.title : undefined,
-        source: <FindingSourceLink evidence={action.source} preferOriginal />,
+        source: <FindingSourceLink evidence={action.source} />,
       } : undefined,
     };
   }
@@ -449,7 +463,7 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
     text: report.includesCode === false ? undefined : action.finding.impact,
     status: actionStatus,
     next: report.includesCode === false ? undefined : { label: t.reading.nextAction, text: action.finding.recommendation },
-    sources: <FindingSourceLink evidence={action.source} preferOriginal />,
+    sources: <FindingSourceLink evidence={action.source} />,
   };
   const followup = followups[0];
   if (followup?.next) {
@@ -462,8 +476,8 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
       status: confirmed ? t.reading.recordedStrength : label(t.validation, followup.finding.validation),
       next: { label: t.reading.nextCheck, text: followup.next },
       sources: <>
-        {confirmed && <Citations catalog={[confirmed.citation]} refs={[confirmed.citation.id]} preferOriginal actionLabel={t.reading.confirmedCode} />}
-        <FindingSourceLink evidence={followup.source} preferOriginal actionLabel={confirmed ? t.reading.followupCode : undefined} />
+        {confirmed && <Citations catalog={[confirmed.citation]} refs={[confirmed.citation.id]} actionLabel={t.reading.confirmedCode} />}
+        <FindingSourceLink evidence={followup.source} actionLabel={confirmed ? t.reading.followupCode : undefined} />
       </>,
     };
   }
@@ -480,7 +494,7 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
       model: true,
       text: related?.benefit,
       status: t.reading.recordedStrength,
-      sources: <Citations catalog={codeReview.citations} preferOriginal refs={[(proof || first).id]} />,
+      sources: <Citations catalog={codeReview.citations} refs={[(proof || first).id]} />,
     };
   }
    if (diagnostic?.location) return {
@@ -494,8 +508,29 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
   return { title: t.reading.noFindings, text: report.aiReview === 'not_requested' ? t.reading.reviewNotRequested : reason };
 }
 
+// Only pairs of single backticks format code. Text and unmatched delimiters
+// stay as React children, including any markup-like characters.
+function inlineComparisonCode(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let start = 0;
+  let open = -1;
+  for (const run of text.matchAll(/`+/g)) {
+    if (run[0].length !== 1) continue;
+    const at = run.index;
+    if (open < 0) {
+      open = at;
+      continue;
+    }
+    parts.push(text.slice(start, open), <code key={open}>{text.slice(open + 1, at)}</code>);
+    start = at + 1;
+    open = -1;
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
 function ProjectOverview({ report, sections, openDocuments }: { report: AnalysisReport; sections: Sections; openDocuments: (index?: number) => void }) {
-  const { status, title, text, documentClaim, reasonLabel, condition, scope, comparisonIndex, followedContract, action, unresolved, next, sources, model } = selectedReading(report, sections);
+  const { status, title, text, documentClaim, reasonLabel, comparisonRows, condition, scope, comparisonIndex, followedContract, action, unresolved, next, sources, model } = selectedReading(report, sections);
   const comparisons = sections.documents.comparisons;
   const unknown = comparisons.filter(row => row.status === 'unknown').length;
   const heading = cutLine(title, 165);
@@ -508,6 +543,12 @@ function ProjectOverview({ report, sections, openDocuments }: { report: Analysis
       <div className="card-body">
         {status && <div className="report-executive-status"><strong>{status}</strong>{model && <span>{t.modelReading}</span>}</div>}
         <h6 className="card-title" id="report-judgment">{heading}</h6>
+        {comparisonRows && <dl className="report-comparison-rows">
+          {comparisonRows.map(row => <div key={row.label}><dt>{row.label}</dt><dd>
+            <p>{inlineComparisonCode(row.text)}</p>
+            {row.sources && <div className="report-executive-sources">{row.sources}</div>}
+          </dd></div>)}
+        </dl>}
         {claim && <p className="report-card-copy">{claim}</p>}
         {detail && <p className="report-card-copy">{reasonLabel && <strong>{reasonLabel}{' '}</strong>}{detail}</p>}
         {condition && <p className="report-card-copy"><strong>{t.reading.option}</strong> {condition}</p>}
@@ -520,7 +561,8 @@ function ProjectOverview({ report, sections, openDocuments }: { report: Analysis
           <p className="report-executive-next"><strong>{t.reading.priorityAction}</strong> {action.state}{action.title && <> · {cutLine(action.title, 165)}</>}</p>
           <div className="report-executive-sources">{action.source}</div>
         </>}
-        <ReportGlossary text={[heading, claim, detail, condition ?? '', boundary, nextStep]} hasSources={Boolean(sources || action)} />
+        <ReportGlossary text={[heading, claim, detail, condition ?? '', boundary, nextStep, ...(comparisonRows?.map(row => row.text) ?? [])]}
+          hasSources={Boolean(sources || action || comparisonRows?.some(row => row.sources))} />
         {(unknown > 0 || comparisonIndex !== undefined) && <div className="report-executive-scope">
           {unknown > 0 && <p>{t.reading.unknownContracts(comparisons.length, unknown)}</p>}
           <ReportAction onClick={() => openDocuments(comparisonIndex)}>{t.reading.openDocumentAnalysis}</ReportAction>

@@ -5,6 +5,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 var gapSectionOrder = map[string]int{SectionEnvironment: 0, SectionDocuments: 1, SectionStaticAnalysis: 2, SectionMetrics: 3, SectionSecrets: 4, SectionCodeReview: 5, SectionReport: 6}
@@ -21,6 +22,8 @@ func (c sectionContext) gaps() []Gap {
 		switch code, detail := splitCode(l); code {
 		case LimResultManifestMissing, LimResultManifestRejected:
 			add(SectionReport, code, nil, detail)
+		case record.LimDocumentScopeItemsOmitted:
+			add(SectionDocuments, code, nil, detail)
 		}
 	}
 	if r.Coverage.TestStatus == "not_run" {

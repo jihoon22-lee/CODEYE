@@ -29,12 +29,18 @@ var overviewGlossary = func() []reportTerm {
 }()
 
 func decisionGlossary(d projectDecision) []reportTerm {
+	texts := []string{d.Title, d.DocumentClaim, d.Reason, d.Condition, d.Boundary, d.Next}
+	hasSources := len(d.Sources) > 0
+	for _, row := range d.ComparisonRows {
+		texts = append(texts, row.Text)
+		hasSources = hasSources || len(row.Sources) > 0
+	}
 	var terms []reportTerm
 	for _, term := range overviewGlossary {
-		if term.Source && len(d.Sources) > 0 {
+		if term.Source && hasSources {
 			terms = append(terms, term)
 		} else if term.match != nil {
-			for _, text := range []string{d.Title, d.DocumentClaim, d.Reason, d.Condition, d.Boundary, d.Next} {
+			for _, text := range texts {
 				if term.match.MatchString(text) {
 					terms = append(terms, term)
 					break

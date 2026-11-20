@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate CODEYE contracts and examples, independently of runtime tests.
 
-Checks local Markdown file links (not rendered anchors), JSON Schemas,
+Checks local Markdown links and anchors, JSON Schemas,
 examples, evidence locations/hashes, counts, DAGs, prompt references,
 OpenAPI references/path parameters, and a small set of negative cases.
 It is not a complete OpenAPI semantic validator or a product E2E test.
@@ -24,14 +24,15 @@ except ImportError as exc:
 
 # Other scripts import these names from validate_bundle.
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
-from bundle_checks.report import check_analyzer, check_observations, check_plan, check_report
+from bundle_checks.report import check_analyzer, check_document_comparisons, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
 from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, pack_selection, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
-from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_mode_names, check_stage_labels, heading_anchors
+from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_markdown_anchors, check_mode_names, check_stage_labels, heading_anchors
 
 
 def main() -> None:
+    check_markdown_anchors()
     link_count = 0
     ignored = {".git", ".claude", ".codeye", ".venv", "node_modules", "dist", "bin", "coverage", "__pycache__"}
     markdown_files = []
@@ -105,6 +106,7 @@ def main() -> None:
     # (internal/worker/review/report_example_test.go); its evidence hashes bind to that tree.
     modules_root = ROOT / "fixtures/modules/input"
     check_report(report, modules_root)
+    observation_negatives = check_additional_observation_example(report, validators["report.schema.json"])
     # examples/report-slices.json is the builder's output for fixtures/modules/slices/input
     # under call ceiling 15 (internal/worker/review/report_slices_example_test.go): review slices and the ledger.
     slices_report = json_file(ROOT / "examples/report-slices.json")
@@ -447,10 +449,59 @@ def main() -> None:
     print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 23 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
-    print(f"PASS: {25 + len(section_cases) + len(role_negative)} negative cases; example policy timing; prompt manifest")
+    print(f"PASS: {25 + len(section_cases) + len(role_negative) + observation_negatives} negative cases; example policy timing; prompt manifest")
     print("Prompt pack SHA-256:", digest.hexdigest())
     print(f"review instructions {pack_doc['version']} (Go-only selection):", ", ".join(f"{role} {value['digest'][:12]}" for role, value in role_files.items()))
     print("Scope: documentation/fixture contracts only; not CODEYE runtime or model-quality evidence.")
+
+
+def check_additional_observation_example(report: dict, validator) -> int:
+    observed = copy.deepcopy(report)
+    row = observed["documents"]["comparisons"][0]
+    row["status"] = "unknown"
+    catalog = {e["id"]: e for e in observed["documents"]["evidence"]}
+    source = catalog[row["code_evidence_ids"][0]]
+    split = (source["start_line"] + source["end_line"]) // 2
+
+    def window(start, end):
+        evidence = dict(source, start_line=start, end_line=end)
+        evidence.pop("excerpt", None)
+        identity = f'{observed["inputs"]["manifest_sha256"]}\0{evidence["path"]}\0{evidence["blob_sha256"]}\0{start}:{end}'
+        evidence["id"] = "ev_" + hashlib.sha256(identity.encode()).hexdigest()[:24]
+        observed["documents"]["evidence"].append(evidence)
+        catalog[evidence["id"]] = evidence
+        return evidence["id"]
+
+    prior = window(source["start_line"], split)
+    covered = window(source["start_line"] + 1, split)
+    new = window(split + 1, source["end_line"])
+    row["code_evidence_ids"] = [prior]
+    row["additional_observation"] = {"reason": "호출부에서 별도의 처리 함수까지 읽었지만 전체 경로는 미확인이다.",
+                                     "code_evidence_ids": [covered, prior, new]}
+    key = "review.contract"
+    task = next(t for t in observed["tasks"] if t["key"] == key)
+    task.update(status="succeeded")
+    role = {"key": key, "result": "accepted", "task_status": "succeeded"}
+    for roles in (observed["coverage"]["ai_review"]["optional_tasks"], observed["code_review"]["roles"]):
+        roles[:] = [r for r in roles if r["key"] != key] + [role]
+    calls = observed["coverage"]["review_calls"]
+    calls.append(dict(calls[0], task_key=key, role="contract", outcome="accepted"))
+    validator.validate(observed)
+    check_document_comparisons(observed, catalog)
+
+    invalid_refs = (("old evidence only", [covered, prior]), ("duplicate evidence", [prior, new, prior]),
+                    ("unknown evidence", [new, "ev_" + "0" * 24]))
+    for name, refs in invalid_refs:
+        row["additional_observation"]["code_evidence_ids"] = refs
+        expect_invalid(name, lambda r: check_document_comparisons(r, catalog), observed)
+
+    row["additional_observation"]["code_evidence_ids"] = [prior, new]
+    catalog[new] = dict(catalog[new], kind="test")
+    expect_invalid("only a test adds lines", lambda r: check_document_comparisons(r, catalog), observed)
+    catalog[new] = dict(catalog[new], kind="code", path="other/file.go")
+    row["applies_to"] = source["path"]
+    expect_invalid("new observation outside narrowed scope", lambda r: check_document_comparisons(r, catalog), observed)
+    return len(invalid_refs) + 2
 
 
 if __name__ == "__main__":

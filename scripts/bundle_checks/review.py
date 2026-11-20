@@ -41,6 +41,56 @@ def evidence_document_scope(evidence: dict, root: Path | None = None) -> str:
     return scope
 
 
+def package_reference_scope(evidence: dict, root: Path | None = None, redacted: bool = False) -> str | None:
+    package = evidence.get("package_reference")
+    if package is None:
+        return None
+    manifest, entry = (PurePosixPath(package[field]) for field in ("manifest_path", "entry_path"))
+    doc = PurePosixPath(evidence["path"])
+    scope = manifest.parent
+    runtime_exts = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}
+    excluded_dirs = {"dist", "build", "out", "node_modules", "vendor", "third_party", "testdata", "test", "tests", "__tests__"}
+    ensure(evidence["kind"] == "document" and "directive_path" not in evidence and doc.suffix.lower() in {".md", ".mdx", ".markdown"}
+           and manifest.name == "package.json" and not manifest.is_absolute() and ".." not in manifest.parts
+           and not entry.is_absolute() and ".." not in entry.parts and entry.is_relative_to(scope)
+           and entry.suffix.lower() in runtime_exts and not excluded_dirs.intersection(p.lower() for p in entry.parent.parts)
+           and not entry.name.lower().endswith((".d.ts", ".d.mts", ".d.cts", ".test-d.ts"))
+           and entry.name.lower() not in {"test.js", "test.ts"} and not entry.stem.lower().endswith((".test", ".spec"))
+           and ".min." not in entry.name.lower()
+           and not doc.is_relative_to(scope) and not scope.is_relative_to(PurePosixPath(evidence_document_scope(evidence))),
+           "Package documentation provenance is invalid")
+    ensure(all((field in package) != redacted for field in ("name", "callable", "export")), "Package names violate report export mode")
+    if root is not None:
+        for key, p in (("manifest", manifest), ("entry", entry)):
+            ensure(hashlib.sha256((root / p).read_bytes()).hexdigest() == package[key + "_sha256"],
+                   "Package documentation blob mismatch: " + str(p))
+        if not redacted:
+            ensure(json.loads((root / manifest).read_bytes()).get("name") == package["name"], "Package name differs from its manifest")
+    return str(scope)
+
+
+def document_claim_covers(evidence: list[dict], scope: str, statement: str, redacted: bool = False) -> bool:
+    outside = [e for e in evidence if not PurePosixPath(scope).is_relative_to(PurePosixPath(evidence_document_scope(e)))]
+    if not outside:
+        return True
+    def names(name: str) -> bool:
+        boundary = r"a-zA-Z0-9_.$@/\-"
+        return re.search(rf"(?<![{boundary}]){re.escape(name)}(?![{boundary}])", statement) is not None
+
+    anchors = [e for e in outside if "package_reference" in e]
+    for anchor in anchors:
+        if package_reference_scope(anchor, redacted=redacted) != scope:
+            return False
+        package = anchor["package_reference"]
+        if not redacted and not (names(package["callable"]) or (package["export"] != "default" and names(package["name"]) and names(package["export"]))):
+            return False
+    return bool(anchors) and all(any(
+        "directive_path" not in doc and doc["path"] == anchor["path"]
+        and doc.get("blob_sha256", doc.get("sha256")) == anchor.get("blob_sha256", anchor.get("sha256"))
+        and (anchor["start_line"] - doc["end_line"] == 1 or doc["start_line"] - anchor["end_line"] == 1)
+        for anchor in anchors) for doc in outside if "package_reference" not in doc)
+
+
 def check_environment_example(doc: dict) -> None:
     """Bind the discovery examples to the fixture input bytes and evidence IDs."""
     root = ROOT / "fixtures/modules/input"
@@ -131,6 +181,7 @@ def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None
             binding = "\0".join([doc["snapshot_manifest_digest"], e["path"], sha, f'{e["start_line"]}:{e["end_line"]}'])
             ensure(e["id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24] and e["id"] not in catalog, "review evidence ID")
             evidence_document_scope(e, root)
+            package_reference_scope(e, root)
             catalog[e["id"]] = e
         cited = []
         for key in ("environment_notes", "contracts", "conflicts", "questions", "instruction_notes", "candidates", "verifications"):
@@ -142,8 +193,10 @@ def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None
         def covers(ids, scope):
             dirs = [evidence_document_scope(catalog[i]) for i in ids]
             return all(d == "." or scope == d or scope.startswith(d + "/") for d in dirs)
-        for c in doc.get("contracts", []) + doc.get("questions", []):
-            ensure(covers(c["evidence_ids"], c["applies_to"]), "review scope generalized: " + c["applies_to"])
+        for group, field in (("contracts", "statement"), ("questions", "question")):
+            for c in doc.get(group, []):
+                ensure(document_claim_covers([catalog[id] for id in c["evidence_ids"]], c["applies_to"], c[field]),
+                       "review scope generalized: " + c["applies_to"])
         for c in doc.get("conflicts", []):
             ensure(covers(c["first_evidence_ids"] + c["second_evidence_ids"], c["scope"]), "review conflict scope generalized")
         observations = {o["id"] for o in doc["observations"]}

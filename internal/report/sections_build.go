@@ -135,7 +135,7 @@ func evidenceOf(rec *record.Record, lists ...[]string) []SectionEvidence {
 	for _, e := range rec.Evidence {
 		if want[e.ID] {
 			out = append(out, SectionEvidence{ID: e.ID, Kind: e.Kind, Path: e.Path, StartLine: e.Start, EndLine: e.End,
-				BlobSHA256: e.SHA256, DirectivePath: e.DirectivePath})
+				BlobSHA256: e.SHA256, DirectivePath: e.DirectivePath, PackageReference: e.PackageReference})
 			delete(want, e.ID)
 		}
 	}

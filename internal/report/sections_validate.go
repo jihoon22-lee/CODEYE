@@ -245,10 +245,13 @@ func validateModelSections(r Report) error {
 	catalog := func(ev []SectionEvidence) (map[string]bool, error) {
 		ids := map[string]bool{}
 		for _, e := range ev {
-			provenance := record.Excerpt{Path: e.Path, Kind: e.Kind, DirectivePath: e.DirectivePath}
+			provenance := record.Excerpt{Path: e.Path, Kind: e.Kind, DirectivePath: e.DirectivePath, PackageReference: e.PackageReference}
 			if ids[e.ID] || domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.BlobSHA256) || e.StartLine < 1 || e.EndLine < e.StartLine ||
-				!slices.Contains([]string{"code", "test", "document", "manifest"}, e.Kind) || !provenance.ValidDirectivePath() {
+				!slices.Contains([]string{"code", "test", "document", "manifest"}, e.Kind) || !provenance.ValidDirectivePath() || !provenance.ValidPackageReference(free) {
 				return nil, invalidf("section evidence %s is invalid", e.ID)
+			}
+			if !e.PackageReference.IsZero() && e.ID != record.ExcerptID(r.Inputs.ManifestSHA256, e.Path, e.BlobSHA256, e.StartLine, e.EndLine) {
+				return nil, invalidf("section package evidence is not bound to the document citation")
 			}
 			if e.Excerpt != nil && (free || !sourceexcerpt.SafePath(e.Path) || !e.Excerpt.ValidCitation(e.StartLine, e.EndLine) ||
 				e.ID != record.ExcerptID(r.Inputs.ManifestSHA256, e.Path, e.BlobSHA256, e.StartLine, e.EndLine)) {
@@ -434,6 +437,8 @@ func projectSectionEvidence(src []SectionEvidence) []SectionEvidence {
 	out := slices.Clone(src)
 	for i := range out {
 		out[i].Excerpt = nil
+		p := &out[i].PackageReference
+		p.Name, p.Callable, p.Export = "", "", ""
 	}
 	return out
 }
@@ -444,7 +449,7 @@ func validateInsights(r Report) error {
 	catalog := func(entries []SectionEvidence) map[string]record.Excerpt {
 		out := make(map[string]record.Excerpt, len(entries))
 		for _, e := range entries {
-			out[e.ID] = record.Excerpt{ID: e.ID, Path: e.Path, Kind: e.Kind, DirectivePath: e.DirectivePath,
+			out[e.ID] = record.Excerpt{ID: e.ID, Path: e.Path, Kind: e.Kind, DirectivePath: e.DirectivePath, PackageReference: e.PackageReference,
 				Start: e.StartLine, End: e.EndLine, SHA256: e.BlobSHA256}
 		}
 		return out
@@ -457,6 +462,22 @@ func validateInsights(r Report) error {
 	}
 	byDoc := catalog(docs.Evidence)
 	byCode := catalog(code.Evidence)
+	claimScope := func(ids []string, scope, statement string) bool {
+		if !r.Export.IncludeCode {
+			statement = ""
+		}
+		return record.DocumentClaimCovers(ids, byDoc, scope, statement)
+	}
+	for _, d := range docs.Contracts {
+		if !claimScope(d.EvidenceIDs, d.AppliesTo, d.Statement) {
+			return invalidf("document evidence does not support contract scope")
+		}
+	}
+	for _, q := range docs.Questions {
+		if !claimScope(q.EvidenceIDs, q.AppliesTo, q.Question) {
+			return invalidf("document evidence does not support question scope")
+		}
+	}
 	for _, q := range docs.Quality {
 		if !q.Valid(byDoc) || !text(q.Statement) {
 			return invalidf("document quality is invalid")
@@ -480,16 +501,12 @@ func validateInsights(r Report) error {
 			}
 		}
 		if extra := x.AdditionalObservation; extra != nil {
-			var original, cited []record.Excerpt
+			var original []record.Excerpt
 			for _, id := range x.CodeEvidenceIDs {
 				original = append(original, byDoc[id])
 			}
-			for _, id := range append(slices.Clone(x.DocumentEvidenceIDs), extra.CodeEvidenceIDs...) {
-				cited = append(cited, byDoc[id])
-			}
 			comparison.Reason, comparison.CodeEvidenceIDs = extra.Reason, extra.CodeEvidenceIDs
-			validated := additionalCodeObservation(comparison, cited, original)
-			if !text(extra.Reason) || validated == nil || !slices.Equal(validated.CodeEvidenceIDs, extra.CodeEvidenceIDs) {
+			if !text(extra.Reason) || !validAdditionalObservation(comparison, byDoc, original) {
 				return invalidf("additional document observation is invalid")
 			}
 		}

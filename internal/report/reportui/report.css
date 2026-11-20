@@ -304,6 +304,36 @@
   max-inline-size: 66ch;
 }
 
+.review-theme .report-comparison-rows {
+  max-inline-size: 45rem;
+  margin: .45rem 0 .7rem;
+}
+
+.review-theme .report-comparison-rows > div {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr);
+  gap: .55rem;
+  padding-block: .55rem;
+  border-block-start: 1px solid var(--report-line);
+}
+
+.review-theme .report-comparison-rows dt {
+  color: var(--report-ink);
+  font-size: .86rem;
+  font-weight: 750;
+}
+
+.review-theme .report-comparison-rows dd,
+.review-theme .report-comparison-rows p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-theme .report-comparison-rows p code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .report-card-meta {
   color: var(--report-muted);
   font-size: .82rem;
