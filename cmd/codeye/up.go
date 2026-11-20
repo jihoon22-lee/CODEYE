@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/hostaddr"
 	"github.com/jihoon22-lee/CODEYE/internal/httpapi"
 	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
@@ -45,7 +46,7 @@ func cmdUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fs.Func("listen", "", func(v string) error { serveFlags.Listen, listenSet = v, true; return nil })
 		fs.StringVar(&serveFlags.TLSCert, "tls-cert", "", "")
 		fs.StringVar(&serveFlags.TLSKey, "tls-key", "", "")
-		fs.StringVar(&serveFlags.PublicOrigin, "public-origin", "", "")
+		fs.Func("public-origin", "", func(v string) error { serveFlags.PublicOrigins = append(serveFlags.PublicOrigins, v); return nil })
 		fs.BoolVar(&serveFlags.PlainHTTP, "plain-http", false, "")
 		fs.StringVar(&configFlag, "config", "", "")
 		fs.StringVar(&binDir, "postgres-bin-dir", "", "")
@@ -101,7 +102,14 @@ func cmdUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 		}
 		fmt.Fprintln(out, "saved \"offline\": true in", path)
 	}
-	if listenSet || serveFlags.TLSCert != "" || serveFlags.TLSKey != "" || serveFlags.PublicOrigin != "" || serveFlags.PlainHTTP {
+	if !listenSet && serveFlags.TLSCert == "" && serveFlags.TLSKey == "" && !serveFlags.PlainHTTP && len(serveFlags.PublicOrigins) != 0 {
+		// Only the addresses people use change; how the service listens stays.
+		if cfg, err = instance.EditFile(path, knownTools(), instance.ConfigEdit{PublicOrigins: serveFlags.PublicOrigins}); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		fmt.Fprintln(out, "saved public_origins in", path)
+	} else if listenSet || serveFlags.TLSCert != "" || serveFlags.TLSKey != "" || serveFlags.PlainHTTP {
 		// How the service listens is saved, so that codeye start and the
 		// user service serve the same address.
 		if !listenSet {
@@ -170,6 +178,7 @@ func cmdUp(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	if cfg.Public() {
 		fmt.Fprintf(out, "Other people open %s; add them under 관리 > 사용자 and send them their sign-in link.\n", cfg.ServiceOrigin())
+		printAddresses(out, cfg.ServiceAddresses())
 	}
 	if cfg.WebDir == "" {
 		fmt.Fprintf(out, "web UI not built - run `cd web && npm ci && npm run build` next to the codeye binary (or set web_dir); API is up at %s/api/v1\n", cfg.Origin())
@@ -555,4 +564,30 @@ func onWSL() bool {
 	}
 	raw, err := os.ReadFile("/proc/sys/kernel/osrelease")
 	return err == nil && strings.Contains(strings.ToLower(string(raw)), "microsoft")
+}
+
+// addressGroups are the headings of `codeye up`'s address list.
+var addressGroups = []struct{ kind, label string }{
+	{hostaddr.KindConfigured, "configured"}, {hostaddr.KindLAN, "LAN"}, {hostaddr.KindVPN, "VPN"},
+	{hostaddr.KindName, "name"}, {hostaddr.KindThisMachine, "this machine"},
+}
+
+// printAddresses lists every address the service answers on, grouped, so
+// the person sharing it can pick the one the other side's network reaches.
+func printAddresses(out io.Writer, addrs []hostaddr.Address) {
+	if len(addrs) == 0 {
+		return
+	}
+	fmt.Fprintln(out, "The service answers on:")
+	for _, g := range addressGroups {
+		var origins []string
+		for _, a := range addrs {
+			if a.Kind == g.kind {
+				origins = append(origins, a.Origin)
+			}
+		}
+		if len(origins) > 0 {
+			fmt.Fprintf(out, "  %-13s %s\n", g.label, strings.Join(origins, "  "))
+		}
+	}
 }

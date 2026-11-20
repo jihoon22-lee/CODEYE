@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -25,6 +24,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/hostaddr"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -70,15 +70,16 @@ type Config struct {
 	CABundle string `json:"ca_bundle,omitempty"`
 	// GitHub is the token discovery of github.com (docs/GITHUB.md).
 	GitHub GitHub `json:"github"`
-	// TLSCert and TLSKey (PEM files) serve listen over HTTPS with
-	// PublicOrigin (https://HOST[:PORT]) as the address people open.
+	// TLSCert and TLSKey (PEM files) serve listen over HTTPS; PublicOrigins
+	// (https://HOST[:PORT]) are then required.
 	TLSCert string `json:"tls_cert,omitempty"`
 	TLSKey  string `json:"tls_key,omitempty"`
-	// PublicOrigin is the address other people open (https:// with TLS,
-	// http:// with plain_http). Without it a plain-HTTP service on a
-	// specific address uses http://listen, and on 0.0.0.0 the first
-	// non-loopback address of this machine.
-	PublicOrigin string `json:"public_origin,omitempty"`
+	// PublicOrigins are addresses other people open that are not this
+	// machine's own (a DNS name, a port forwarded to it): https:// with TLS,
+	// http:// with plain_http. The first is the address to share. The
+	// service answers on its own names and addresses without them
+	// (docs/OPERATIONS.md#받는-주소).
+	PublicOrigins []string `json:"public_origins,omitempty"`
 	// PlainHTTP serves a non-loopback listen without TLS (a trusted
 	// network): sign-in cookies and passwords then travel unencrypted.
 	PlainHTTP bool `json:"plain_http,omitempty"`
@@ -396,17 +397,26 @@ func (c *Config) validate(knownTools []string) error {
 		return errors.New("tls_cert/tls_key and plain_http are alternatives")
 	case tls && (!absClean(c.TLSCert) || !absClean(c.TLSKey)):
 		return errors.New("tls_cert and tls_key must both be absolute, clean paths")
-	case tls && !strings.HasPrefix(c.PublicOrigin, "https://"):
-		return errors.New("TLS needs public_origin https://HOST[:PORT], the address people open")
-	case c.PlainHTTP && c.PublicOrigin != "" && !strings.HasPrefix(c.PublicOrigin, "http://"):
-		return errors.New("plain_http needs public_origin http://HOST[:PORT] (or none)")
-	case !tls && !c.PlainHTTP && c.PublicOrigin != "":
-		return errors.New("public_origin needs tls_cert and tls_key, or plain_http")
+	case tls && len(c.PublicOrigins) == 0:
+		return errors.New("TLS needs public_origins [\"https://HOST[:PORT]\"], the address people open")
+	case !tls && !c.PlainHTTP && len(c.PublicOrigins) != 0:
+		return errors.New("public_origins needs tls_cert and tls_key, or plain_http")
 	case !tls && !c.PlainHTTP && !ap.Addr().IsLoopback():
-		return errors.New("a non-loopback listen needs tls_cert, tls_key and public_origin, or plain_http true (codeye up --listen ADDR --plain-http)")
+		return errors.New("a non-loopback listen needs tls_cert, tls_key and public_origins, or plain_http true (codeye up --listen ADDR --plain-http)")
 	}
-	if strings.ContainsAny(c.PublicOrigin, " \t\r\n") || len(c.PublicOrigin) > 300 {
-		return errors.New("public_origin must be one URL")
+	if len(c.PublicOrigins) > 20 {
+		return errors.New("public_origins has at most 20 entries")
+	}
+	for i, o := range c.PublicOrigins {
+		scheme := "http"
+		if tls {
+			scheme = "https"
+		}
+		canon, _, err := hostaddr.ParseOrigin(o, scheme)
+		if err != nil {
+			return fmt.Errorf("public_origins: %q must be %s://HOST[:PORT] without a path", o, scheme)
+		}
+		c.PublicOrigins[i] = canon
 	}
 	if c.LocalListen != "" {
 		lp, err := netip.ParseAddrPort(c.LocalListen)
@@ -644,56 +654,27 @@ func (c *Config) InternalListen() string {
 func (c *Config) Origin() string { return "http://" + c.InternalListen() }
 
 // ServiceOrigin is the address to open in a browser and to share: the
-// public origin when configured, http://listen for a plain-HTTP service on
-// a specific address, the first non-loopback address of this machine for
-// one on an unspecified address, else the loopback origin.
+// first configured public origin, else the first LAN, VPN or name address
+// of ServiceAddresses (never 0.0.0.0), else the loopback origin.
 func (c *Config) ServiceOrigin() string {
-	if c.PublicOrigin != "" {
-		return strings.TrimSuffix(c.PublicOrigin, "/")
+	if p := hostaddr.Primary(c.ServiceAddresses()); p != "" {
+		return p
 	}
-	ap, err := netip.ParseAddrPort(c.Listen)
-	if !c.PlainHTTP || err != nil {
-		return "http://" + c.Listen
-	}
-	if !ap.Addr().IsUnspecified() {
-		return "http://" + c.Listen
-	}
-	if ip := firstInterfaceAddr(ap.Addr().Is6() && !ap.Addr().Is4In6()); ip.IsValid() {
-		return "http://" + netip.AddrPortFrom(ip, ap.Port()).String()
-	}
-	return "http://" + netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), ap.Port()).String()
+	return "http://" + c.Listen
 }
 
-// firstInterfaceAddr is the first up, non-loopback unicast address of this
-// machine (IPv4 unless v6), or the zero Addr.
-func firstInterfaceAddr(v6 bool) netip.Addr {
-	ifs, err := net.Interfaces()
+// ServiceAddresses are the addresses the service answers on, for people
+// to use: the configured public origins, then this machine's loopback,
+// name, LAN and VPN addresses on the listen port (only listen itself for a
+// specific address; container bridges left out).
+func (c *Config) ServiceAddresses() []hostaddr.Address {
+	ap, err := netip.ParseAddrPort(c.Listen)
 	if err != nil {
-		return netip.Addr{}
+		return nil
 	}
-	for _, i := range ifs {
-		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := i.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, a := range addrs {
-			n, ok := a.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			ip, ok := netip.AddrFromSlice(n.IP)
-			if !ok {
-				continue
-			}
-			ip = ip.Unmap()
-			if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.Is4() == v6 {
-				continue
-			}
-			return ip
-		}
+	scheme := "http"
+	if c.TLS() {
+		scheme = "https"
 	}
-	return netip.Addr{}
+	return hostaddr.SystemMachine().Addresses(scheme, ap, c.PublicOrigins)
 }

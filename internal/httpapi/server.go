@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/artifactstore"
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/hostaddr"
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 	"github.com/jihoon22-lee/CODEYE/internal/prcomment"
 	"github.com/jihoon22-lee/CODEYE/internal/report"
@@ -128,15 +130,17 @@ type Config struct {
 	// PlainHTTP.
 	Listen netip.AddrPort
 	// TLSCertFile and TLSKeyFile (PEM) switch the server to HTTPS; the key
-	// file must not be group or world accessible. PublicOrigin
-	// (https://HOST[:PORT]) is then required: it is the only accepted Host
-	// and Origin and the origin of login links.
-	TLSCertFile, TLSKeyFile, PublicOrigin string
+	// file must not be group or world accessible. At least one
+	// PublicOrigins entry (https://HOST[:PORT]) is then required.
+	TLSCertFile, TLSKeyFile string
+	// PublicOrigins are the addresses other people open (https:// with TLS,
+	// http:// with PlainHTTP), the first one the address to share. Their
+	// Hosts are accepted besides this machine's own names and addresses on
+	// the listen port (hostaddr.Machine): localhost, the hostname, any
+	// loopback address and every interface address.
+	PublicOrigins []string
 	// PlainHTTP serves a non-loopback Listen without TLS, when the operator
 	// says so (a trusted network): sign-in cookies then travel unencrypted.
-	// PublicOrigin (http://HOST[:PORT]) is the origin other machines use; it
-	// defaults to http://Listen for a specific address and is required for
-	// an unspecified one (0.0.0.0, ::). Loopback names stay accepted too.
 	PlainHTTP bool
 	// LocalListen is an optional second, loopback, plain-HTTP address (served
 	// by ServeLocal) for the agent and the commands on the controller's own
@@ -171,6 +175,9 @@ type Config struct {
 	// it and no project may contain it. Nil serves the same API without
 	// those (tokens cannot be stored).
 	Instance *Instance
+	// Machine answers which Hosts name this machine (nil: the real one,
+	// hostaddr.SystemMachine; tests give a fixed one).
+	Machine *hostaddr.Machine
 }
 
 // DefaultSessionTTL is the absolute browser session lifetime.
@@ -180,13 +187,17 @@ const DefaultSessionTTL = 12 * time.Hour
 // starts (`codeye serve --session-ttl 168h`): people sign in once a week.
 const ServiceSessionTTL = 7 * 24 * time.Hour
 
-// face is how one listener meets browsers: the Host names it accepts, the
-// origin state-changing requests must carry ("" = "http://"+Host), TLS and
-// the session cookie name.
+// face is how one listener meets browsers: the Host values it accepts (the
+// configured ones, and with machine those naming this machine on port),
+// TLS, whether plain HTTP was chosen for a non-loopback address, and the
+// session cookie name. A state-changing request's Origin must be
+// scheme://Host of that very request.
 type face struct {
 	hosts      map[string]bool
+	machine    *hostaddr.Machine
+	port       uint16
 	tls        *tls.Config
-	origin     string
+	plain      bool
 	cookieName string
 }
 
@@ -195,6 +206,9 @@ type Server struct {
 	store Store
 	// pub is the face of Listen; local the face of LocalListen (nil without).
 	pub, local *face
+	// listen and origins are Config.Listen and the canonical PublicOrigins.
+	listen     netip.AddrPort
+	origins    []string
 	sessionTTL time.Duration
 	web        *os.Root
 	log        *slog.Logger
@@ -236,10 +250,10 @@ func ParseListen(s string) (netip.AddrPort, error) {
 	return ap, nil
 }
 
-// loopbackFace accepts the loopback names of port with origin "http://"+Host.
+// loopbackFace accepts the loopback names of port.
 func loopbackFace(port uint16) *face {
 	p := strconv.Itoa(int(port))
-	return &face{cookieName: sessionCookie, hosts: map[string]bool{"127.0.0.1:" + p: true, "localhost:" + p: true, "[::1]:" + p: true}}
+	return &face{cookieName: sessionCookie, port: port, hosts: map[string]bool{"127.0.0.1:" + p: true, "localhost:" + p: true, "[::1]:" + p: true}}
 }
 
 // New builds the server. Without TLS the listen address must be loopback
@@ -254,6 +268,7 @@ func New(cfg Config, store Store) (*Server, error) {
 	}
 	s := &Server{
 		store:       store,
+		listen:      cfg.Listen,
 		pub:         loopbackFace(cfg.Listen.Port()),
 		sessionTTL:  cfg.SessionTTL,
 		log:         cfg.Logger,
@@ -267,34 +282,40 @@ func New(cfg Config, store Store) (*Server, error) {
 	}
 	switch {
 	case cfg.TLSCertFile != "" || cfg.TLSKeyFile != "":
-		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.PublicOrigin == "" {
+		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || len(cfg.PublicOrigins) == 0 {
 			return nil, errors.New("TLS needs all of --tls-cert, --tls-key and --public-origin")
 		}
 		if cfg.PlainHTTP {
 			return nil, errors.New("--plain-http and TLS are alternatives")
 		}
-		origin, hosts, err := ParsePublicOrigin(cfg.PublicOrigin)
-		if err != nil {
-			return nil, err
-		}
 		tc, err := loadTLS(cfg.TLSCertFile, cfg.TLSKeyFile)
 		if err != nil {
 			return nil, err
 		}
-		s.pub = &face{tls: tc, origin: origin, cookieName: secureSessionCookie, hosts: map[string]bool{}}
-		for _, h := range hosts {
-			s.pub.hosts[h] = true
-		}
+		s.pub = &face{tls: tc, cookieName: secureSessionCookie, hosts: map[string]bool{}}
 	case cfg.PlainHTTP:
-		f, err := plainFace(cfg.Listen, cfg.PublicOrigin)
+		s.pub = &face{plain: true, cookieName: sessionCookie, hosts: map[string]bool{}}
+	case len(cfg.PublicOrigins) != 0:
+		return nil, errors.New("--public-origin needs TLS (--tls-cert, --tls-key) or --plain-http")
+	case !cfg.Listen.Addr().IsLoopback():
+		return nil, ErrTLSRequired
+	}
+	s.pub.port = cfg.Listen.Port()
+	s.pub.machine = hostaddr.SystemMachine()
+	if cfg.Machine != nil {
+		s.pub.machine = cfg.Machine
+	}
+	for _, o := range cfg.PublicOrigins {
+		canon, hosts, err := parseOrigin(o, s.scheme())
 		if err != nil {
 			return nil, err
 		}
-		s.pub = f
-	case cfg.PublicOrigin != "":
-		return nil, errors.New("TLS needs all of --tls-cert, --tls-key and --public-origin (or --plain-http with an http:// origin)")
-	case !cfg.Listen.Addr().IsLoopback():
-		return nil, ErrTLSRequired
+		if !slices.Contains(s.origins, canon) {
+			s.origins = append(s.origins, canon)
+		}
+		for _, h := range hosts {
+			s.pub.hosts[h] = true
+		}
 	}
 	if cfg.LocalListen.IsValid() {
 		if !cfg.LocalListen.Addr().IsLoopback() || cfg.LocalListen.Port() == 0 {
@@ -523,9 +544,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.log.Info("http", "request_id", rid, "method", r.Method, "route", route, "status", rec.status, "duration_ms", time.Since(start).Milliseconds())
 	}()
-	if !s.faceOf(r).hosts[strings.ToLower(r.Host)] {
+	if !s.faceOf(r).accepts(r.Host) {
 		route = "host_rejected"
-		writeError(rec, r, http.StatusForbidden, "HOST_REJECTED", "host is not allowed", false)
+		s.rejectHost(rec, r)
 		return
 	}
 	if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {

@@ -15,17 +15,6 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// nodeAdminUsage documents the operator node commands.
-const nodeAdminUsage = `  codeye node token create --pool NAME [--source-root ID[,ID...]] [--output .codeye/enroll-token] [--ttl 10m]
-  codeye node token revoke --id TOKEN_ID
-  codeye node list
-  codeye node revoke --id NODE_ID
-  codeye scheduler set [--global-max-running N] [--project-max-running N] [--artifact-quota-bytes N]
-  codeye pool set --name NAME [--min-workers N] [--max-workers N] [--idle-timeout-seconds S]
-                  [--scale-up-cooldown-seconds S] [--scale-down-cooldown-seconds S] [--expect-revision R]
-  codeye pool list
-`
-
 const defaultEnrollTTL = 10 * time.Minute
 
 // runNodeAdmin handles the trusted operator node commands. args is the full

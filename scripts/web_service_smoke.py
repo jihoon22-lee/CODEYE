@@ -5,6 +5,8 @@ plain: loopback 별칭 127.0.0.2의 `--plain-http`. 관리자가 사용자를 �
 GitHub 연결 저장·삭제, 관리자의 폴더(모두에게)·Git host·빌드 스크립트 스위치, 그 폴더의 분석 보고서, 그 사용자의 token으로
 보이지 않는 비공개 pull request의 거절까지(Chromium 두 context, web/e2e/service.spec.ts).
 tls: 127.0.0.3의 자체 서명 TLS. 초대·시작 화면·안내까지와 Secure cookie, 로컬 agent의 loopback listener.
+wildcard(TC-264): `--listen 0.0.0.0:PORT --plain-http`만으로 띄운다. up이 받는 주소를 모두 출력하고, 듣는 주소가 아닌
+127.0.0.2로 로그인·사용자 추가(POST)가 되며, 받지 않는 Host는 받는 주소와 더하는 명령을 듣고, 그 명령 뒤에는 받는다.
 
 시험용 빌드(-tags codeye_fixture)가 가짜 GitHub(scripts/fake_github.py)를 읽는다. 관리 PostgreSQL은 PATH의 프로그램으로
 상태 디렉터리 아래에 만든다. HOME·XDG 디렉터리는 시험 디렉터리 안이다. CODEYE_TEST_SCREENSHOTS가 있으면 화면을 거기에 남긴다.
@@ -71,6 +73,7 @@ def run(base, root, env):
     try:
         for variant in ("plain", "tls"):
             serve(directory, root, env, fixture, fake, variant, shared, outside, admin_token, bob_token, shots)
+        wildcard(directory, env, fixture)
     finally:
         fake.close()
 
@@ -154,5 +157,69 @@ def serve(directory, root, env, fixture, fake, variant, shared, outside, admin_t
                   "모두에게 연 폴더의 보고서·Git host·스위치·비공개 pull request는 그 사용자의 token으로만 물음·token은 그 사용자 파일에만")
         else:
             print("PASS: 한 서비스의 두 사용자(자체 서명 TLS): 초대·시작 화면·허용된 폴더 없음 안내·Secure __Host- cookie·로컬 listener의 status")
+    finally:
+        subprocess.run([str(fixture), "stop"], cwd=home, env=menv, capture_output=True, timeout=300)
+
+
+def wildcard(directory, env, fixture):
+    """TC-264: every address of this machine works, with no extra flag."""
+    import urllib.error
+    from urllib.request import Request, urlopen
+    from instance_smoke import Session
+
+    home = directory / "wildcard"
+    home.mkdir(mode=0o700)
+    menv = {k: v for k, v in env.items() if k not in ("CODEYE_DATABASE_URL",) and not k.startswith("PG")}
+    menv.update(HOME=str(home), XDG_STATE_HOME=str(home / "xdg-state"), XDG_CONFIG_HOME=str(home / "xdg-config"), BROWSER="/bin/true")
+
+    def cli(*args):
+        result = subprocess.run([str(fixture), *map(str, args)], cwd=home, env=menv, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            raise RuntimeError(f"{args[0]} 종료 코드 {result.returncode}: {(result.stdout + result.stderr)[-3000:]}")
+        return result.stdout + result.stderr
+
+    port = free_port("0.0.0.0")
+    try:
+        out = cli("up", "--no-open", "--listen", f"0.0.0.0:{port}", "--plain-http")
+        print("--- codeye up (wildcard) ---\n" + "\n".join(line for line in out.splitlines() if "#launch=" not in line))
+        assert "The service answers on:" in out and f"http://127.0.0.1:{port}" in out and f"http://localhost:{port}" in out, out
+        assert f"0.0.0.0:{port}/" not in out and f"//0.0.0.0" not in out, out
+        link = next(line.strip() for line in out.splitlines() if "#launch=" in line)
+        primary = link.split("/#launch=", 1)[0]
+        config = json.loads((home / "xdg-config/codeye/config.json").read_text())
+        assert config["listen"] == f"0.0.0.0:{port}" and config["plain_http"] is True and "public_origins" not in config, config
+        # Sign in and post through an address that is not the listen address nor the one up printed first.
+        second = f"http://127.0.0.2:{port}"
+        session = Session(None, second, link)
+        setup = session.request("GET", "setup")
+        assert setup["is_admin"] and setup["service_origin"] == primary, setup["service_origin"]
+        made = session.request("POST", "admin/users", {"username": "carol"})
+        # 127.0.0.2 is loopback: the link is for someone else, so it carries the address to share.
+        assert made["login_link"]["url"].startswith(primary + "/#launch="), made["login_link"]
+        settings = session.request("GET", "admin/settings")
+        kinds = {a["kind"] for a in settings["service_addresses"]}
+        assert "this_machine" in kinds and all("0.0.0.0" not in a["origin"] for a in settings["service_addresses"]), settings
+        # A Host this machine does not answer to hears which addresses work and how to add it.
+        foreign = f"not-this-machine.example:{port}"
+        try:
+            urlopen(Request(second + "/api/v1/health", headers={"Host": foreign}), timeout=10)
+            raise AssertionError("a foreign Host was answered")
+        except urllib.error.HTTPError as e:
+            body = json.load(e)
+            assert e.code == 403 and body["error"]["code"] == "HOST_REJECTED", body
+            command = f"codeye up --public-origin http://{foreign}"
+            assert body["error"]["details"]["add_command"] == command and command in body["error"]["message"], body
+            assert f"http://127.0.0.1:{port}" in body["error"]["details"]["accepted_origins"], body
+        # The command it names works on the running service (the controller restarts with the new origin).
+        out = cli("up", "--no-open", "--public-origin", f"http://{foreign}")
+        assert "saved public_origins in" in out and "restarting the controller: how it listens changed" in out, out
+        config = json.loads((home / "xdg-config/codeye/config.json").read_text())
+        assert config["public_origins"] == [f"http://{foreign}"] and config["listen"] == f"0.0.0.0:{port}" and config["plain_http"] is True, config
+        with urlopen(Request(second + "/api/v1/health", headers={"Host": foreign}), timeout=10) as r:
+            assert r.status == 200
+        status = json.loads(cli("status", "--format", "json"))
+        assert status["state"] == "running", status
+        print(f"PASS: 0.0.0.0의 plain HTTP(플래그 없이 이 머신의 모든 주소): 받는 주소 출력·두 번째 주소({second})로 로그인과 POST·"
+              "loopback에서 만든 링크는 알려 줄 주소·받지 않는 Host의 안내와 그 명령으로 더하기(controller 재시작)")
     finally:
         subprocess.run([str(fixture), "stop"], cwd=home, env=menv, capture_output=True, timeout=300)

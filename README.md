@@ -21,7 +21,7 @@ CODEYE는 `codeye up`으로 띄우는 웹 서비스 하나입니다. 혼자 쓸 
 
    ```bash
    ./bin/codeye up --listen 0.0.0.0:7443 --tls-cert /path/cert.pem --tls-key /path/key.pem --public-origin https://codeye.example:7443
-   ./bin/codeye up --listen 0.0.0.0:7331 --plain-http --public-origin http://192.168.0.10:7331   # 로그인 쿠키가 암호화되지 않습니다
+   ./bin/codeye up --listen 0.0.0.0:7331 --plain-http   # 이 머신의 모든 주소로 받습니다. 로그인 쿠키가 암호화되지 않습니다
    ```
 
    웹의 **관리 > 사용자**에서 사용자를 더하고 로그인 링크를 복사해 전달합니다. 설정은 `~/.config/codeye/config.json`에 남습니다.

@@ -1753,7 +1753,9 @@ components:
         PASSWORD_CHANGE_REQUIRED/PASSWORD_INCORRECT(403), NOT_FOUND(404), METHOD_NOT_ALLOWED(405),
         CONFLICT/IDEMPOTENCY_CONFLICT(409), PAYLOAD_TOO_LARGE(413), UNSUPPORTED_MEDIA_TYPE(415),
         VALIDATION_FAILED/SOURCE_UNSUPPORTED/ATTACHMENTS_UNSUPPORTED(422), RATE_LIMITED(429, retryable, Retry-After),
-        INTERNAL/REPORT_INVALID(500), UNAVAILABLE(503, retryable). 노드 code: NODE_UNAUTHENTICATED(401), STALE_ATTEMPT(409),
+        INTERNAL/REPORT_INVALID(500), UNAVAILABLE(503, retryable). HOST_REJECTED의 message는 쓴 주소, 받는 주소와
+        그 주소를 더하는 명령을 한국어로 말하고 details에 host·accepted_origins·add_command가 있다(브라우저가 연 화면이면 같은
+        내용의 HTML). 노드 code: NODE_UNAUTHENTICATED(401), STALE_ATTEMPT(409),
         LENGTH_REQUIRED(411), INTEGRITY_MISMATCH/PROTOCOL_UNSUPPORTED(422). If-Match 누락·형식 오류는 INVALID_REQUEST(400),
         version 불일치는 CONFLICT(409).
       content:
@@ -2228,12 +2230,24 @@ components:
     ServiceSettings:
       type: object
       additionalProperties: false
-      required: [others_model_review, others_build_scripts, updated_at, service_origin]
+      required: [others_model_review, others_build_scripts, updated_at, service_origin, service_addresses]
       properties:
         others_model_review: {type: boolean, description: '"다른 사용자도 모델 검토 사용"(기본 true)'}
         others_build_scripts: {type: boolean, description: '"다른 사용자의 저장소 빌드 스크립트 실행 허용"(기본 false)'}
         updated_at: {type: string, format: date-time}
-        service_origin: {type: [string, 'null'], description: '다른 사람에게 알려 줄 주소. loopback에서만 들으면 null'}
+        service_origin: {type: [string, 'null'], description: '다른 사람에게 알려 줄 주소(설정한 첫 public origin, 없으면 이 머신의 LAN·VPN 주소). loopback에서만 들으면 null'}
+        service_addresses:
+          type: array
+          description: >-
+            이 서비스가 받는 주소 전부. 설정한 public origin, 이 머신의 loopback, 이름, LAN, VPN(Tailscale 등) 주소 순이고
+            컨테이너 bridge와 link-local 주소는 뺀다. 특정 주소를 들으면 그 주소와 설정한 주소만이다.
+          items:
+            type: object
+            additionalProperties: false
+            required: [origin, kind]
+            properties:
+              origin: {type: string}
+              kind: {type: string, enum: [configured, this_machine, name, lan, vpn]}
     PullRequestRef:
       type: object
       additionalProperties: false

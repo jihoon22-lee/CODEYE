@@ -45,7 +45,7 @@ codeye source-root grant --root ROOT_ID --user USER_ID
 codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
 codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
 codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s]
-             [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT] | --plain-http [--public-origin http://HOST[:PORT]]]
+             [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT]... | --plain-http [--public-origin http://HOST[:PORT]]...]
              [--local-listen 127.0.0.1:PORT] [--state-dir DIR]
 codeye node token create --pool NAME [--source-root ID[,ID...]] [--output .codeye/enroll-token] [--ttl 10m]
 codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--autoscale --max-workers N] ...
@@ -55,7 +55,7 @@ codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--auto
 - `serve --listen`이 loopback이 아니면 `--tls-cert`, `--tls-key`, `--public-origin`이 모두 있거나 `--plain-http`가 있어야 한다. 아니면 종료 코드 2로 시작하지 않는다. 셋 중 일부만 주는 것도 loopback에서 같은 오류다. [TLS 수신](#tls-수신)을 본다.
 - `--local-listen`은 loopback 수신 주소를 하나 더 연다(같은 머신의 에이전트·명령용, 평문 loopback 규칙). `--state-dir`은 사용자별 GitHub token·도구 기록·데이터 폴더 검사에 쓰는 상태 디렉터리다. 없으면 사용자 token을 저장할 수 없고 `GET /setup`의 모델·도구가 null이다.
 - 로그인 링크와 등록 토큰은 0600 파일에만 쓴다. 표준 출력에는 토큰을 쓰지 않는다. DB에는 SHA-256만 저장한다.
-- 에이전트의 옵션 전체는 `codeye --help`에 있다. 풀의 최소·최대와 전역 상한은 `codeye pool set`, `codeye scheduler set`으로 조정한다. 노드 철회는 `codeye node revoke --id NODE_ID`다.
+- 에이전트의 옵션 전체는 `codeye agent --help`에 있다. 풀의 최소·최대와 전역 상한은 `codeye pool set`, `codeye scheduler set`으로 조정한다. 노드 철회는 `codeye node revoke --id NODE_ID`다.
 - 한 머신 밖의 노드를 쓰는 배포는 검증하지 않았다([서버·노드 배포](#서버노드-배포)).
 
 ### 계정과 관리자 CLI
@@ -87,14 +87,27 @@ codeye serve --listen 0.0.0.0:8443 --tls-cert /etc/codeye/tls/cert.pem --tls-key
 ```
 
 - `--tls-cert`는 PEM 인증서 체인, `--tls-key`는 그 개인키다. 키 파일 mode가 group·other에 열려 있으면(예: 0640) 시작하지 않는다. 인증서·키를 읽지 못한 오류 문구는 파일 내용을 담지 않는다.
-- `--public-origin`은 사용자가 브라우저에 입력하는 `https://HOST[:PORT]`다. path·query·사용자 정보는 받지 않는다. Host 허용 목록과 Origin 비교, 로그인 링크가 이 값을 쓴다. 인증서의 이름이 이 host와 맞아야 브라우저가 연결한다.
+- `--public-origin`은 사용자가 브라우저에 입력하는 `https://HOST[:PORT]`다. 여러 번 줄 수 있고 첫 값이 알려 줄 주소다. path·query·사용자 정보는 받지 않는다. 이 머신의 이름과 주소는 따로 주지 않아도 받는다([받는 주소](#받는-주소)). 인증서의 이름이 브라우저가 연 host와 맞아야 경고 없이 연결한다.
 - TLS 1.2 이상, HTTP/1.1이다. 세션 cookie는 `__Host-codeye_session`(Secure)이고 HSTS(`max-age=31536000`)를 보낸다. 같은 포트로 평문 HTTP 요청을 보내면 API를 주지 않는다.
 - 인증서 갱신은 재시작으로 반영한다.
 - Host 검사는 노드 경로에도 적용되므로 노드 에이전트도 `--controller https://HOST[:PORT]`(public origin)로 접속한다. 에이전트가 사설 CA나 자체 서명 인증서를 신뢰하게 하는 설정은 시험하지 않았다.
 - TLS를 앞단 reverse proxy에서 종료하는 배포는 지원하지 않는다. 서버가 forwarded 헤더를 읽지 않아 접속 주소별 로그인 제한과 Origin·Host 검사가 맞지 않는다.
-- `codeye up`도 같은 수신을 한다. `codeye up --listen 0.0.0.0:7443 --tls-cert … --tls-key … --public-origin https://HOST:7443`이 설정 파일에 값을 저장하고 controller에 넘긴다. 같은 머신의 에이전트와 명령은 loopback 주소(`local_listen`, 기본 공개 포트 + 1)로 붙는다. 출력하는 로그인 링크와 "Other people open …" 줄은 public origin을 쓴다.
-- **평문 HTTP.** 믿을 수 있는 LAN에서는 `--plain-http`(설정 `plain_http: true`)로 TLS 없이 받는다. `0.0.0.0`·`[::]`이면 `--public-origin http://HOST[:PORT]`가 필요하고 특정 주소면 생략할 수 있다(`codeye up`은 그때 그 주소를, unspecified면 이 머신의 첫 비 loopback 주소를 쓴다). 시작할 때 `plain HTTP on ADDR … sign-in cookies and passwords travel unencrypted on this network` 한 줄을 출력한다. 세션 cookie는 `codeye_session`이고 Secure가 아니며 HSTS를 보내지 않는다.
+- `codeye up`도 같은 수신을 한다. `codeye up --listen 0.0.0.0:7443 --tls-cert … --tls-key … --public-origin https://HOST:7443`이 설정 파일에 값을 저장하고 controller에 넘긴다. 같은 머신의 에이전트와 명령은 loopback 주소(`local_listen`, 기본 공개 포트 + 1)로 붙는다. 출력하는 로그인 링크와 "Other people open …" 줄은 알려 줄 주소를 쓰고, 그 아래에 받는 주소 전부를 묶어 출력한다.
+- **평문 HTTP.** 믿을 수 있는 LAN에서는 `--plain-http`(설정 `plain_http: true`)로 TLS 없이 받는다. `0.0.0.0`·`[::]`에도 `--public-origin`이 필요 없다. 시작할 때 `plain HTTP on ADDR … sign-in cookies and passwords travel unencrypted on this network` 한 줄을 출력한다. 세션 cookie는 `codeye_session`이고 Secure가 아니며 HSTS를 보내지 않는다.
 - `codeye login-link --origin`은 `https://HOST[:PORT]`와 평문 HTTP의 `http://HOST[:PORT]`(loopback이 아닌 host)도 받는다.
+
+### 받는 주소
+
+사람이 서비스를 여는 주소는 네트워크마다 다르다(LAN, VPN, 이 머신의 이름). controller는 다음 Host를 모두 받는다. 따로 정할 것은 없다.
+
+- 이 머신의 이름과 주소에 listen 포트를 붙인 것: `localhost`, 모든 loopback 주소(`127.0.0.0/8`, `::1`), 호스트 이름과 `호스트이름.local`, `/etc/resolv.conf`의 search domain을 붙인 이름(예: Tailscale MagicDNS의 `main.tail1234.ts.net`), 네트워크 인터페이스의 모든 주소(IPv4, 대괄호의 IPv6). 인터페이스는 몇 초마다 다시 읽어 나중에 켠 VPN 주소도 받는다. 이름은 정확히 같아야 하고(대소문자 무시) 앞부분만 같은 이름(`main.evil.example`)은 받지 않는다. 기본 포트(평문 80, TLS 443)면 포트 없는 Host도 받는다. DNS는 묻지 않는다.
+- `--public-origin`(설정 `public_origins`)의 Host. 이 머신의 것이 아닌 주소, 예를 들어 다른 머신이 포트를 전달해 주는 주소나 DNS 이름을 더한다.
+
+상태를 바꾸는 요청의 `Origin`은 그 요청의 scheme + Host와 같아야 한다. 받는 주소 A로 연 화면이 받는 다른 주소 B의 Origin을 보내면 거절한다. 세션 cookie는 연 주소마다 따로다.
+
+`codeye up`은 받는 주소를 묶어 출력하고 관리 화면의 "이 서비스가 받는 주소"도 같다. 순서는 설정한 주소, LAN, VPN(Tailscale `100.64.0.0/10`·`fd7a:115c:a1e0::/48`, 이름이 `tailscale`·`wg`·`zt`·`tun`인 인터페이스), 이 머신 이름, 이 머신에서만(loopback)이다. 컨테이너 bridge(`docker*`, `br-*`, `veth*`, `virbr*`, `cni*`, `podman*` 등)와 link-local 주소는 보이지 않을 뿐 받는다. 특정 주소를 들으면 그 주소와 설정한 주소만 보인다. 알려 줄 주소(`Other people open …`, `service_origin`)는 첫 설정 주소, 없으면 첫 LAN, VPN, 이름 주소다. 관리 화면에서 만든 로그인 링크는 관리자가 지금 연 주소를 쓴다. 관리자가 loopback으로 열었으면 알려 줄 주소를 쓴다.
+
+받지 않는 Host의 요청은 403 `HOST_REJECTED`다. 브라우저가 연 화면이면 쓴 주소, 받는 주소, 그 주소를 더하는 명령(`codeye up --public-origin http://그주소:PORT`, 이미 설정한 주소도 함께)을 한국어 화면으로 보이고, API는 같은 내용을 `message`와 `details`(`host`, `accepted_origins`, `add_command`)로 준다. 쓴 주소는 `host[:port]` 모양일 때만 되풀이한다. 받는 주소 목록은 Host를 틀린 누구에게나 보이므로 이 머신의 인터페이스 주소가 드러난다([보안](SECURITY.md#네트워크와-브라우저)). `codeye up --public-origin …`만 주면 `public_origins`만 바꾸고(그 값으로 바꾼다) 듣는 방식은 그대로 둔다. 실행 중인 controller의 인자가 설정과 달라지면 `up`이 controller만 다시 띄운다(에이전트와 실행 중인 작업은 그대로).
 
 ## codeye tools
 
@@ -156,8 +169,8 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `schema_version` | (필수) | `"0.1"` |
 | `state_dir` | `$XDG_STATE_HOME/codeye`, 없으면 `~/.local/state/codeye` | 절대 경로. 0700으로 만들고, 소유자가 다르거나 symlink면 거부한다. source root를 품으면 안 된다 |
 | `listen` | `127.0.0.1:7331`(쓰이고 있으면 7340까지 다음 빈 포트) | IP와 0이 아닌 포트. loopback이 아니면 TLS 필드나 `plain_http`가 있어야 한다. 적으면 그 주소만 쓴다. 기본값에서 옮긴 주소는 controller 기록(`run/controller.json`의 `listen`)에 남고 `stop`·`status`·`open`이 그것을 쓴다. `up --listen`이 저장한다 |
-| `tls_cert`, `tls_key` | 빈 값 | 둘 다 절대 경로(PEM). 있으면 `public_origin`(`https://`)이 필요하고 `plain_http`와 함께 쓰지 않는다. `up --tls-cert`·`--tls-key`가 저장한다([TLS 수신](#tls-수신)) |
-| `public_origin` | 빈 값 | 다른 사람이 여는 주소. TLS면 `https://HOST[:PORT]`, 평문이면 `http://HOST[:PORT]`. TLS나 `plain_http` 없이는 받지 않는다 |
+| `tls_cert`, `tls_key` | 빈 값 | 둘 다 절대 경로(PEM). 있으면 `public_origins`(`https://`)가 하나 이상 필요하고 `plain_http`와 함께 쓰지 않는다. `up --tls-cert`·`--tls-key`가 저장한다([TLS 수신](#tls-수신)) |
+| `public_origins` | 없음 | 다른 사람이 여는 주소 중 이 머신의 것이 아닌 주소의 목록(최대 20). TLS면 `https://HOST[:PORT]`, 평문이면 `http://HOST[:PORT]`이고 첫 값이 알려 줄 주소다. TLS나 `plain_http` 없이는 받지 않는다. `up --public-origin`(여러 번)이 저장한다([받는 주소](#받는-주소)) |
 | `plain_http` | false | true면 loopback이 아닌 `listen`을 TLS 없이 받는다(시작할 때 한 줄 경고). `up --plain-http`가 저장한다 |
 | `local_listen` | `127.0.0.1:<listen 포트 + 1>`(TLS이거나 `listen`이 loopback이 아닐 때만 쓴다) | loopback 주소와 0이 아닌 포트. 이 머신의 에이전트와 명령이 controller에 붙는 주소 |
 | `web_dir` | 실행 파일 옆 `web/dist`, 없으면 `../web/dist`(`index.html`이 있을 때), 아니면 빈 값(API만) | 빌드된 `web/dist`의 절대 경로 |
@@ -189,12 +202,14 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 
 ```text
 codeye up     [PATH | GIT-URL] [--config PATH] [--postgres-bin-dir DIR] [--no-open] [--offline]
-              [--listen ADDR] [--tls-cert PEM --tls-key PEM --public-origin https://HOST[:PORT] | --plain-http [--public-origin http://HOST[:PORT]]]
+              [--listen ADDR] [--tls-cert PEM --tls-key PEM --public-origin https://HOST[:PORT]... | --plain-http [--public-origin http://HOST[:PORT]]...]
 codeye open   [--config PATH] [--no-open]
 codeye start  [--config PATH]
 codeye stop   [--config PATH] [--format text|json]
 codeye status [--config PATH] [--format text|json]
 ```
+
+`codeye --help`는 자주 쓰는 명령(서비스 띄우기와 분석, 다른 머신에 열기, open·status·stop·tools·doctor)을 먼저 보이고, 그다음 운영(백업·복원, 정리, 사용자 서비스, 실행 복구, 모델 확인), 따로 띄운 controller와 노드의 관리 명령 순으로 묶는다. `codeye COMMAND --help`(또는 `-h`)는 그 명령의 사용법만 보이고 0으로 끝난다(`codeye user --help`는 user 명령 모두).
 
 ### 상태 디렉터리
 
@@ -227,7 +242,7 @@ codeye status [--config PATH] [--format text|json]
 1. schema가 이 바이너리의 migration(현재 14)과 같은지 확인한다. external 모드에서 다르면 `run "codeye migrate" explicitly` 오류로 끝난다. 관리형 모드에서 이전 버전이면 migration을 적용한다. 이미 적용된 migration이 있으면(데이터가 있으면) 먼저 `pg_dump --format=custom`으로 `<백업 디렉터리>/codeye-pre-migrate-<UTC>/database.dump`(0600)를 쓰고, 실패하면 아무것도 바꾸지 않고 끝난다. 바이너리보다 새 schema나 불일치는 거부한다.
 2. 관리자 사용자를 만들거나 다시 쓴다. 설정의 사용자는 관리자다(이전 버전에서 만든 사용자는 이때 관리자로 지정되고 감사 기록이 남는다). `up`이 찾은 GitHub token을 그 사용자의 token 파일(`secrets/github-users/<id>.json`)에 옮긴다(웹에서 넣은 token은 그대로). 설정의 source root를 label로 등록하고 사용자에게 허가한다. 같은 label이 다른 경로로 등록돼 있으면 거부한다. `quota.artifacts_bytes`를 `scheduler_limits.artifact_quota_bytes`에 반영한다(0이면 제거).
 3. 등록이 필요한지 정한다. 처음 시작했거나, 노드가 철회됐거나, DB가 노드를 모르거나(복원 뒤), source root 집합이 바뀌었으면 다시 등록한다. 다시 등록하기 전에 에이전트 journal에 끝나지 않은 작업이 없는지 확인한다. 이전 노드는 철회하고, 이전 `agent/`는 `agent.retired-<ns>`로 이름만 바꾼다(삭제하지 않는다). 등록 토큰은 10분짜리 일회용이며 0600 파일로만 전달한다.
-4. `codeye serve --session-ttl 168h --state-dir <state_dir>`을 setsid로 띄운다(설정의 수신 필드가 있으면 `--tls-cert`·`--tls-key`·`--public-origin` 또는 `--plain-http`·`--public-origin`과 `--local-listen`도 준다. 브라우저 세션 7일, 경로로 등록·`GET /setup`·사용자 GitHub token·데이터 폴더 검사에 상태 디렉터리를 쓴다). 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다. 기록에 listen 주소를 남긴다.
+4. `codeye serve --session-ttl 168h --state-dir <state_dir>`을 setsid로 띄운다(설정의 수신 필드가 있으면 `--tls-cert`·`--tls-key` 또는 `--plain-http`, 설정한 주소마다 `--public-origin`, `--local-listen`도 준다. 브라우저 세션 7일, 경로로 등록·`GET /setup`·사용자 GitHub token·데이터 폴더 검사에 상태 디렉터리를 쓴다). 환경은 PATH·HOME·LANG·TZ와 `CODEYE_DATABASE_URL`뿐이다. `/api/v1/ready`를 30초까지 기다린다. 기록에 listen 주소와 argv를 남긴다. 실행 중인 controller의 기록 argv가 설정에서 만든 argv와 다르면(예: `public_origins`를 바꿈) controller만 SIGTERM으로 멈추고(45초) 다시 띄운다. 에이전트는 그대로 두고 다시 붙는다.
 5. `codeye agent`를 띄운다. 환경은 PATH·LANG뿐이며 DB 정보가 없다. argv는 설정에서 만든다(source root, `--project-analysis-policy`, `--controller-sources`, 상태·백업 디렉터리의 `--protected-dir`, git과 `--git-host`, 사용자별 token 디렉터리 `--git-credential-dir`(오프라인이 아닐 때), 도구, 모델(`--opencode`·`--model`·`--model-credential-file`), `--storage-quota`, `--storage-log-dir`). `--project-analysis-policy`는 root별 허가 대신 각 프로젝트의 분석 선택(소스를 모델에 보냄, 저장소의 빌드 스크립트 실행)을 로컬·Git 모두에 적용하게 하고, 배정의 `offered`(관리자 스위치)도 따르게 한다. `--controller-sources`는 웹에서 더한 폴더·Git host를 배정이 준 경로·host로 재시작 없이 받게 한다. `--protected-dir`은 그 디렉터리를 품거나 그 안에 있는 프로젝트 폴더의 소스 확보를 `source_holds_codeye_data`로 거절하게 한다. 기록에 등록 토큰 플래그를 뺀 argv를 남긴다. `node.json`이 생기고 DB에 신선한 heartbeat가 올 때까지 120초를 기다린다. 실행 중인 에이전트의 기록 argv가 설정에서 만든 argv와 다르면(예: source root 추가) drain을 요청해 실행 중인 작업을 끝내게 하고(`stop.drain_timeout_seconds`까지), 끝나면 3단계부터 다시 띄운다. 그 안에 끝나지 않으면 취소하지 않고 오류로 끝난다. 에이전트는 작업을 마친 뒤 스스로 종료한다.
 6. 실패하면 이 명령이 띄운 프로세스를 역순으로 SIGTERM하고 45초 기다린다. 끝나지 않은 프로세스의 기록은 지우지 않는다. 이 명령이 띄운 관리형 PostgreSQL은 다른 CODEYE 프로세스가 없으면 다시 멈춘다.
 

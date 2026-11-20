@@ -20,53 +20,6 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-const usage = `CODEYE control plane
-Usage:
-  codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--config PATH]
-  codeye tools [--config PATH] [--json | --checklist]   (the tools found on this machine, what is missing and how to add it; --checklist: offline preparation)
-  codeye version [--json]
-  codeye model probe [--config PATH] [--timeout 180s] [--json]
-  codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH] [--timeout 180s] [--json]
-  codeye migrate
-  codeye user create [--name NAME] [--username NAME [--password-file PATH]] [--admin]
-  codeye user passwd (--id USER_ID | --username NAME) [--password-file PATH] [--must-change]
-  codeye user list
-  codeye user disable (--id USER_ID | --username NAME)
-  codeye user admin (--id USER_ID | --username NAME) (--set | --unset)
-  codeye source-root add --label LABEL --path ABSOLUTE_DIR
-  codeye source-root grant --root ROOT_ID --user USER_ID
-  codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
-  codeye login-link --user USER_ID [--output .codeye/login-link] [--origin http://127.0.0.1:7331 | https://HOST[:PORT]]
-  codeye serve [--listen 127.0.0.1:7331] [--web-dir web/dist] [--artifact-dir .codeye/artifacts] [--reconcile-interval 5s] [--user USER_ID [--login-link-file .codeye/login-link]] [--session-ttl 12h (at most 168h)] [--state-dir DIR] [--local-listen 127.0.0.1:PORT]
-               [--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT] | --plain-http [--public-origin http://HOST:PORT]]   (one of them for a non-loopback --listen)
-` + nodeAdminUsage + operationsUsage + `  codeye up [PATH|URL] [--config PATH] [--postgres-bin-dir DIR] [--offline] [--no-open] [--no-probe]   (Linux: starts the web service - PostgreSQL + controller + local agent; analyzes PATH or a repository URL)
-  codeye up --listen IP:PORT (--tls-cert CERT.pem --tls-key KEY.pem --public-origin https://HOST[:PORT] | --plain-http [--public-origin http://HOST:PORT])   (serve other machines; saved in the configuration)
-  codeye up https://github.com/OWNER/REPO/pull/N [--comment[=false]] [--dry-run-comment] [--comment-wait DURATION]   (analyzes a pull request; --comment posts one result comment and is remembered; --dry-run-comment prints it without posting)
-  codeye open [--config PATH] [--no-open]   (a new signed-in browser link)
-  codeye start [--config PATH]      (starts the service without a project or browser)
-  codeye stop [--config PATH] [--format text|json]
-  codeye status [--config PATH] [--format text|json]
-  codeye backup [--config PATH] [--output DIR] [--format text|json]   (default output: <backup_dir>/codeye-<UTC>)
-  codeye restore [--config PATH] --from DIR [--format text|json]   (new empty database and state_dir only)
-  codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--name NAME] [--source-root ID=/abs/path ...]
-               [--workers N | --autoscale [--max-workers N]] [--toolchain-path PATH] [--git /abs/git --git-host HOST ... [--git-credential-file PATH | --git-credential-dir DIR]] [--controller-sources] [--go /abs/go] [--go-mod-cache DIR] [--node /abs/node] [--staticcheck /abs/staticcheck]
-               [--cppcheck /abs/cppcheck] [--clang-tidy /abs/clang-tidy]
-               [--ruff /abs/ruff] [--mypy /abs/mypy] [--pyright /abs/pyright/index.js] [--python-both-type-checkers] [--bandit /abs/bandit] [--advertise-without-baseline]
-               [--eslint /abs/eslint/bin/eslint.js] [--tsc /abs/typescript/bin/tsc]
-               [--cargo /abs/toolchain/bin/cargo [--clippy /abs/toolchain/bin/cargo-clippy]]
-               [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]
-               [--repo-code-source-root ID ...] [--project-analysis-policy] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
-               [--opencode /abs/opencode --model PROVIDER/MODEL --model-source-root ID ...] [--model-relay-file PATH] [--review-max-calls 15..207]
-               [--offline] [--ca-bundle /abs/ca-bundle.pem]   (offline: no built-in public registry or model endpoint; the CA bundle the fetch, Git and model processes trust)
-Database: CODEYE_DATABASE_URL (controller commands and migrations). Only "migrate" changes the schema, except that up/start with database.mode managed migrate after saving a pg_dump copy.
-Login links: codeye login-link and codeye start write them to a 0600 file; codeye up and codeye open print them and open the browser.
-Passwords are read from --password-file (mode 0600) or standard input (echo off on a Linux terminal), never from arguments.
-"serve" runs the controller API, the node protocol (enrollment, claims, leases, artifacts), the pool autoscaler and project schedules.
-Runs stay queued (waiting_reason) until an enrolled node advertises a matching analysis capability.
-Enrollment tokens are written to a 0600 file; the token is never printed.
-up/start/stop/status: the config path defaults to $XDG_CONFIG_HOME/codeye/config.json (codeye up creates it); database.mode managed (default) runs PostgreSQL in the state directory, external uses CODEYE_DATABASE_URL.
-`
-
 const launchTTL = 10 * time.Minute
 
 // openStore is replaced in tests to bind an isolated schema.
@@ -337,11 +290,13 @@ func loginLink(ctx context.Context, args []string, out, stderr io.Writer) int {
 
 // serveConfig is the parsed serve command line.
 type serveConfig struct {
-	addr                          netip.AddrPort
-	webDir, user, linkFile        string
-	artifactDir                   string
-	reconcile                     time.Duration
-	tlsCert, tlsKey, publicOrigin string
+	addr                   netip.AddrPort
+	webDir, user, linkFile string
+	artifactDir            string
+	reconcile              time.Duration
+	tlsCert, tlsKey        string
+	// publicOrigins are the --public-origin values (repeatable).
+	publicOrigins []string
 	// plainHTTP serves a non-loopback address without TLS (--plain-http).
 	plainHTTP bool
 	// local is the optional loopback address for the agent and commands on
@@ -369,7 +324,7 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fs.StringVar(&c.linkFile, "login-link-file", filepath.Join(".codeye", "login-link"), "")
 		fs.StringVar(&c.tlsCert, "tls-cert", "", "")
 		fs.StringVar(&c.tlsKey, "tls-key", "", "")
-		fs.StringVar(&c.publicOrigin, "public-origin", "", "")
+		fs.Func("public-origin", "", func(v string) error { c.publicOrigins = append(c.publicOrigins, v); return nil })
 		fs.DurationVar(&c.sessionTTL, "session-ttl", 0, "")
 		fs.StringVar(&c.stateDir, "state-dir", "", "")
 	}) {
@@ -398,24 +353,22 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 	case tls && c.plainHTTP:
 		fmt.Fprintln(stderr, "--plain-http and --tls-cert/--tls-key are alternatives")
 		return 2
-	case tls && (c.tlsCert == "" || c.tlsKey == "" || c.publicOrigin == ""):
+	case tls && (c.tlsCert == "" || c.tlsKey == "" || len(c.publicOrigins) == 0):
 		fmt.Fprintln(stderr, "TLS needs all of --tls-cert, --tls-key and --public-origin https://HOST[:PORT]")
 		return 2
-	case !tls && !c.plainHTTP && c.publicOrigin != "":
+	case !tls && !c.plainHTTP && len(c.publicOrigins) != 0:
 		fmt.Fprintln(stderr, "--public-origin needs TLS (--tls-cert, --tls-key) or --plain-http")
 		return 2
 	case !tls && !c.plainHTTP && !addr.Addr().IsLoopback():
 		fmt.Fprintln(stderr, httpapi.ErrTLSRequired)
 		return 2
 	}
-	if tls {
-		if _, _, err := httpapi.ParsePublicOrigin(c.publicOrigin); err != nil {
-			fmt.Fprintln(stderr, "--public-origin:", err)
-			return 2
+	for _, o := range c.publicOrigins {
+		parseOrigin := httpapi.ParseHTTPOrigin
+		if tls {
+			parseOrigin = httpapi.ParsePublicOrigin
 		}
-	}
-	if c.plainHTTP && c.publicOrigin != "" {
-		if _, _, err := httpapi.ParseHTTPOrigin(c.publicOrigin); err != nil {
+		if _, _, err := parseOrigin(o); err != nil {
 			fmt.Fprintln(stderr, "--public-origin:", err)
 			return 2
 		}
@@ -459,7 +412,7 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig, out, stderr io.Writer) int {
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
 	cfg := httpapi.Config{Listen: c.addr, WebDir: c.webDir, Logger: logger, ArtifactDir: c.artifactDir, ReconcileInterval: c.reconcile,
-		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigin: c.publicOrigin, PlainHTTP: c.plainHTTP, LocalListen: c.local}
+		TLSCertFile: c.tlsCert, TLSKeyFile: c.tlsKey, PublicOrigins: c.publicOrigins, PlainHTTP: c.plainHTTP, LocalListen: c.local}
 	cfg.SessionTTL = c.sessionTTL
 	if c.stateDir != "" {
 		cfg.Instance = &httpapi.Instance{StateDir: c.stateDir}

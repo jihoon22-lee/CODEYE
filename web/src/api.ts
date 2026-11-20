@@ -160,8 +160,11 @@ export type Setup = {
 export type SetupGitHub = { enabled: boolean; host: string; token: boolean; account: string | null; source: string | null; reason: string | null };
 // GET /account/github: the signed-in user's own GitHub connection. It never holds the token.
 export type AccountGitHub = { host: string; connected: boolean; account: string | null; source: string | null; storable: boolean; reason: string | null };
-// GET/PUT /admin/settings: the two service switches and the address to share.
-export type ServiceSettings = { others_model_review: boolean; others_build_scripts: boolean; updated_at: string; service_origin: string | null };
+// One address the service answers on and what kind of network reaches it.
+export type ServiceAddressKind = 'configured' | 'this_machine' | 'name' | 'lan' | 'vpn';
+export type ServiceAddress = { origin: string; kind: ServiceAddressKind };
+// GET/PUT /admin/settings: the two service switches, the address to share and every address the service answers on.
+export type ServiceSettings = { others_model_review: boolean; others_build_scripts: boolean; updated_at: string; service_origin: string | null; service_addresses: ServiceAddress[] };
 export type AddSourceRootBody = { path: string; label?: string; everyone?: boolean };
 
 // ---- schedules (members list; managers create and delete) ----
@@ -530,7 +533,15 @@ function parseAccountGitHub(v: unknown): AccountGitHub {
 }
 function parseSettings(v: unknown): ServiceSettings {
   const o = rec(v);
-  return { others_model_review: bool(o.others_model_review), others_build_scripts: bool(o.others_build_scripts), updated_at: date(o.updated_at), service_origin: nullableStr(o.service_origin) };
+  return { others_model_review: bool(o.others_model_review), others_build_scripts: bool(o.others_build_scripts), updated_at: date(o.updated_at), service_origin: nullableStr(o.service_origin),
+    service_addresses: list(parseServiceAddress)(o.service_addresses ?? []) };
+}
+const ADDRESS_KINDS: readonly ServiceAddressKind[] = ['configured', 'this_machine', 'name', 'lan', 'vpn'];
+function parseServiceAddress(v: unknown): ServiceAddress {
+  const o = rec(v);
+  const kind = str(o.kind);
+  if (!(ADDRESS_KINDS as readonly string[]).includes(kind)) throw new TypeError('address kind');
+  return { origin: str(o.origin), kind: kind as ServiceAddressKind };
 }
 function date(v: unknown): string {
   const s = str(v);

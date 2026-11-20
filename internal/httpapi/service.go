@@ -11,6 +11,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/github"
+	"github.com/jihoon22-lee/CODEYE/internal/hostaddr"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
@@ -245,10 +246,13 @@ type settingsView struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 	// ServiceOrigin is the address to share (null: loopback only).
 	ServiceOrigin *string `json:"service_origin"`
+	// ServiceAddresses are all the addresses the service answers on, for
+	// people to pick the one their network reaches.
+	ServiceAddresses []hostaddr.Address `json:"service_addresses"`
 }
 
 func (s *Server) settingsViewOf(st postgres.ServiceSettings) settingsView {
-	return settingsView{OthersModelReview: st.OthersModelReview, OthersBuildScripts: st.OthersBuildScripts, UpdatedAt: st.UpdatedAt, ServiceOrigin: optString(s.pub.origin)}
+	return settingsView{OthersModelReview: st.OthersModelReview, OthersBuildScripts: st.OthersBuildScripts, UpdatedAt: st.UpdatedAt, ServiceOrigin: optString(s.Origin()), ServiceAddresses: s.Addresses()}
 }
 
 func (s *Server) adminGetSettings(q *request) {

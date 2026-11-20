@@ -12,13 +12,6 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
-// operationsUsage documents the operator commands for recovery, retention
-// and the user service.
-const operationsUsage = `  codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]   (a recovery_required run: you checked that none of its processes is left on the node)
-  codeye cleanup [--config PATH | --artifact-dir DIR] [--agent-state-dir DIR] [--older-than 30d] [--apply] [--format text|json]   (dry run unless --apply)
-  codeye service install|uninstall|print [--config PATH] [--name codeye]   (systemd user unit running codeye start/stop, Linux)
-`
-
 // runOperations handles run recover, cleanup and service. ok is false for
 // other commands.
 func runOperations(ctx context.Context, args []string, out, stderr io.Writer) (code int, ok bool) {

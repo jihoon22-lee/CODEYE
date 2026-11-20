@@ -123,15 +123,20 @@ type ConfigEdit struct {
 	// Offline sets "offline": true (codeye up --offline).
 	Offline bool
 	// Serve replaces how the service listens (codeye up --listen ...):
-	// listen, tls_cert, tls_key, public_origin and plain_http; empty values
+	// listen, tls_cert, tls_key, public_origins and plain_http; empty values
 	// remove their key.
 	Serve *ServeEdit
+	// PublicOrigins replaces public_origins alone (codeye up --public-origin
+	// without --listen, --tls-cert, --tls-key or --plain-http): nil leaves
+	// the key, an empty list is not used.
+	PublicOrigins []string
 }
 
 // ServeEdit is the listening part of the configuration.
 type ServeEdit struct {
-	Listen, TLSCert, TLSKey, PublicOrigin string
-	PlainHTTP                             bool
+	Listen, TLSCert, TLSKey string
+	PublicOrigins           []string
+	PlainHTTP               bool
 }
 
 // EditFile applies e to the file at path, validates the result like Load and
@@ -165,12 +170,17 @@ func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
 		}
 	}
 	if s := e.Serve; s != nil {
-		for key, v := range map[string]string{"listen": s.Listen, "tls_cert": s.TLSCert, "tls_key": s.TLSKey, "public_origin": s.PublicOrigin} {
+		for key, v := range map[string]string{"listen": s.Listen, "tls_cert": s.TLSCert, "tls_key": s.TLSKey} {
 			if v == "" {
 				doc.unset(key)
 			} else if err := doc.set(key, v); err != nil {
 				return nil, err
 			}
+		}
+		if len(s.PublicOrigins) == 0 {
+			doc.unset("public_origins")
+		} else if err := doc.set("public_origins", s.PublicOrigins); err != nil {
+			return nil, err
 		}
 		if s.PlainHTTP {
 			if err := doc.set("plain_http", true); err != nil {
@@ -178,6 +188,11 @@ func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
 			}
 		} else {
 			doc.unset("plain_http")
+		}
+	}
+	if len(e.PublicOrigins) != 0 {
+		if err := doc.set("public_origins", e.PublicOrigins); err != nil {
+			return nil, err
 		}
 	}
 	if e.AddRoot != nil {

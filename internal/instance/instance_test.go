@@ -29,7 +29,7 @@ func TestServeOtherMachines(t *testing.T) {
 	base := t.TempDir()
 	state := filepath.Join(base, "state")
 	cert, key := q(filepath.Join(base, "c.pem")), q(filepath.Join(base, "k.pem"))
-	tlsCfg, err := Parse([]byte(cfg(state, `,"listen":"0.0.0.0:7443","tls_cert":`+cert+`,"tls_key":`+key+`,"public_origin":"https://codeye.lan:7443"`)), tools)
+	tlsCfg, err := Parse([]byte(cfg(state, `,"listen":"0.0.0.0:7443","tls_cert":`+cert+`,"tls_key":`+key+`,"public_origins":["https://codeye.lan:7443"]`)), tools)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,6 +43,20 @@ func TestServeOtherMachines(t *testing.T) {
 	if plain.TLS() || !plain.Public() || plain.Origin() != "http://127.0.0.1:7400" || plain.ServiceOrigin() != "http://192.0.2.10:7331" {
 		t.Fatalf("plain: origin %s service %s", plain.Origin(), plain.ServiceOrigin())
 	}
+	// Several public origins, canonical; the first is the one to share.
+	multi, err := Parse([]byte(cfg(state, `,"listen":"0.0.0.0:7331","plain_http":true,"public_origins":["http://CODEYE.lan:7331/","http://codeye.vpn:80"]`)), tools)
+	if err != nil || len(multi.PublicOrigins) != 2 || multi.PublicOrigins[0] != "http://codeye.lan:7331" || multi.PublicOrigins[1] != "http://codeye.vpn" || multi.ServiceOrigin() != "http://codeye.lan:7331" {
+		t.Fatalf("multi: %v %v %s", err, multi.PublicOrigins, multi.ServiceOrigin())
+	}
+	if a := multi.ServiceAddresses(); len(a) < 4 || a[0].Origin != "http://codeye.lan:7331" || a[2].Origin != "http://127.0.0.1:7331" {
+		t.Fatalf("addresses %v", a)
+	}
+	// A wildcard listen without origins shares one of this machine's own
+	// addresses, never 0.0.0.0.
+	wild, err := Parse([]byte(cfg(state, `,"listen":"0.0.0.0:7331","plain_http":true`)), tools)
+	if err != nil || strings.Contains(wild.ServiceOrigin(), "0.0.0.0") || !strings.HasPrefix(wild.ServiceOrigin(), "http://") {
+		t.Fatalf("wildcard: %v %s", err, wild.ServiceOrigin())
+	}
 	// A loopback alias over plain HTTP needs no second listener.
 	alias, err := Parse([]byte(cfg(state, `,"listen":"127.0.0.2:7331","plain_http":true`)), tools)
 	if err != nil || alias.NeedsLocalListen() || alias.Origin() != "http://127.0.0.2:7331" || alias.ServiceOrigin() != "http://127.0.0.2:7331" {
@@ -50,13 +64,15 @@ func TestServeOtherMachines(t *testing.T) {
 	}
 	for name, extra := range map[string]string{
 		"non-loopback without TLS":  `,"listen":"0.0.0.0:7331"`,
-		"TLS and plain":             `,"listen":"0.0.0.0:7443","tls_cert":` + cert + `,"tls_key":` + key + `,"public_origin":"https://codeye.lan:7443","plain_http":true`,
+		"TLS and plain":             `,"listen":"0.0.0.0:7443","tls_cert":` + cert + `,"tls_key":` + key + `,"public_origins":["https://codeye.lan:7443"],"plain_http":true`,
 		"TLS without origin":        `,"listen":"0.0.0.0:7443","tls_cert":` + cert + `,"tls_key":` + key,
-		"TLS with an http origin":   `,"listen":"0.0.0.0:7443","tls_cert":` + cert + `,"tls_key":` + key + `,"public_origin":"http://codeye.lan:7443"`,
-		"key without cert":          `,"listen":"0.0.0.0:7443","tls_key":` + key + `,"public_origin":"https://codeye.lan:7443"`,
-		"relative cert":             `,"listen":"0.0.0.0:7443","tls_cert":"c.pem","tls_key":` + key + `,"public_origin":"https://codeye.lan:7443"`,
-		"plain with https origin":   `,"listen":"0.0.0.0:7331","plain_http":true,"public_origin":"https://codeye.lan"`,
-		"origin without TLS/plain":  `,"public_origin":"https://codeye.lan"`,
+		"TLS with an http origin":   `,"listen":"0.0.0.0:7443","tls_cert":` + cert + `,"tls_key":` + key + `,"public_origins":["http://codeye.lan:7443"]`,
+		"key without cert":          `,"listen":"0.0.0.0:7443","tls_key":` + key + `,"public_origins":["https://codeye.lan:7443"]`,
+		"relative cert":             `,"listen":"0.0.0.0:7443","tls_cert":"c.pem","tls_key":` + key + `,"public_origins":["https://codeye.lan:7443"]`,
+		"plain with https origin":   `,"listen":"0.0.0.0:7331","plain_http":true,"public_origins":["https://codeye.lan"]`,
+		"origin without TLS/plain":  `,"public_origins":["https://codeye.lan"]`,
+		"origin with a path":        `,"listen":"0.0.0.0:7331","plain_http":true,"public_origins":["http://codeye.lan/app"]`,
+		"origin as a string":        `,"listen":"0.0.0.0:7331","plain_http":true,"public_origins":"http://codeye.lan"`,
 		"non-loopback local listen": `,"listen":"0.0.0.0:7331","plain_http":true,"local_listen":"0.0.0.0:7400"`,
 	} {
 		if _, err := Parse([]byte(cfg(state, extra)), tools); err == nil {

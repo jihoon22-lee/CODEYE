@@ -507,6 +507,14 @@ def check_shared_service_contracts() -> None:
         account.validate(doc["account_github"])
         ensure("token" not in doc["account_github"], "The GitHub connection never answers the token")
         settings.validate(doc["settings"])
+        ensure(doc["settings"]["service_origin"] in [a["origin"] for a in doc["settings"]["service_addresses"]],
+               "The address to share is one the service answers on")
+        error.validate(doc["host_refusal"])
+        refused = doc["host_refusal"]["error"]
+        details = refused.get("details", {})
+        ensure(refused["code"] == "HOST_REJECTED" and details.get("accepted_origins") and details.get("add_command", "").startswith("codeye up ")
+               and details["add_command"] in refused["message"] and details.get("host", "") in refused["message"],
+               "A refused address is told which addresses work and the command that adds it")
         root.validate(doc["source_root"])
         provider.validate(doc["provider"])
         ensure(doc["source_root"]["path"] in doc["setup_member_after"]["readable_folders"] and doc["source_root"]["everyone"],
@@ -521,6 +529,9 @@ def check_shared_service_contracts() -> None:
         ("tool path shown to a user", lambda d: d["setup_member"]["tools"]["tools"][0].update(path="/usr/bin/go")),
         ("reason outside the vocabulary", lambda d: d["setup_member"]["available"]["build_scripts"].update(reason="server_mode")),
         ("settings without the service address", lambda d: d["settings"].pop("service_origin")),
+        ("settings without the address list", lambda d: d["settings"].pop("service_addresses")),
+        ("address of an unknown kind", lambda d: d["settings"]["service_addresses"][0].update(kind="docker")),
+        ("refused address without the command", lambda d: d["host_refusal"]["error"]["details"].pop("add_command")),
         ("refusal without readable folders", lambda d: d["folder_refusal"]["error"].pop("details")),
         ("provider of another kind", lambda d: d["provider"].update(kind="gitlab")),
     ):

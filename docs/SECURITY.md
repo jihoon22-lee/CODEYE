@@ -27,16 +27,18 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 
 수신 방식은 세 가지다. loopback 주소는 평문 HTTP로 받는다. 그 밖의 주소(`0.0.0.0`, `[::]`, LAN 주소)는 TLS(`--tls-cert --tls-key --public-origin`을 모두)로 받거나, 운영자가 `--plain-http`(설정 `plain_http: true`)를 명시했을 때만 평문 HTTP로 받는다. 둘 다 없으면 서버가 시작하지 않고(`ErrTLSRequired`), 서버 코드도 그 경우 loopback이 아닌 listener를 거부한다. 평문 HTTP를 고르면 `codeye up`·`codeye serve`가 시작할 때 "로그인 쿠키와 비밀번호가 암호화되지 않고 네트워크를 지난다"는 한 줄을 출력한다. 막지는 않는다(사용을 막는 관문 대신 한계를 기록한다는 제품 방향).
 
-공개 주소(TLS나 평문 HTTP)로 들을 때 `codeye up`은 controller에 loopback 수신 주소를 하나 더 준다(`--local-listen`, 기본 공개 포트 + 1). 같은 머신의 에이전트와 명령은 그 주소를 쓴다. 두 수신 주소는 Host·Origin·cookie 규칙을 따로 가진다(접속한 listener가 정한다). 공개 주소는 public origin의 Host·Origin만, loopback 주소는 loopback Host·Origin만 받는다.
+공개 주소(TLS나 평문 HTTP)로 들을 때 `codeye up`은 controller에 loopback 수신 주소를 하나 더 준다(`--local-listen`, 기본 공개 포트 + 1). 같은 머신의 에이전트와 명령은 그 주소를 쓴다. 두 수신 주소는 Host·Origin·cookie 규칙을 따로 가진다(접속한 listener가 정한다). loopback 주소는 loopback Host만 받는다.
+
+공개 수신 주소의 Host 검사는 DNS rebinding(이 머신으로 풀리게 만든 남의 이름)을 막는 것이 목적이다. 그래서 사람이 쓰는 주소를 하나로 정하지 않고, 이 머신 자신의 이름과 주소(인터페이스 주소, loopback, 호스트 이름, search domain을 붙인 이름)와 설정한 public origin을 받는다([받는 주소](OPERATIONS.md#받는-주소)). 이름은 정확히 일치해야 하며 접두사로 비교하지 않는다. 받지 않는 Host에 주는 403은 받는 주소 목록과 더하는 명령을 담는다. 쓰기 쉬움을 위해 고른 것이고, 그 결과 Host를 틀린 요청 누구에게나 이 머신의 LAN·VPN 주소와 호스트 이름이 보인다(서비스가 이미 그 주소에서 듣고 있으므로 접근 범위는 바뀌지 않는다).
 
 | 항목 | loopback(평문) | 공개 평문 HTTP(`--plain-http`) | TLS |
 |---|---|---|---|
-| 수신 | loopback IP와 0이 아닌 포트 | 아무 IP. `0.0.0.0`·`[::]`이면 `--public-origin http://HOST[:PORT]`가 필수 | 아무 IP. TLS 1.2 이상, 인증서·키는 운영자가 준다. 키 파일은 group·other가 읽거나 쓸 수 없어야 한다(POSIX mode 검사, Windows ACL은 검사하지 않음). 같은 포트의 평문 요청에는 API를 주지 않는다 |
-| Host | `127.0.0.1:P`, `localhost:P`, `[::1]:P`만(DNS rebinding 방어). 정적 파일 포함 모든 요청 | public origin의 host와(듣는 주소가 loopback·unspecified면) loopback Host | public origin의 host(`host`, 기본 포트면 `host:443`도)만 |
-| Origin | 상태 변경 요청은 `Origin`이 `http://`+Host와 정확히 같아야 한다 | 같다(`http://`+받은 Host) | 상태 변경 요청은 `Origin`이 public origin과 정확히 같아야 한다 |
+| 수신 | loopback IP와 0이 아닌 포트 | 아무 IP. `0.0.0.0`·`[::]`도 `--public-origin` 없이 | 아무 IP. TLS 1.2 이상, 인증서·키는 운영자가 준다. 키 파일은 group·other가 읽거나 쓸 수 없어야 한다(POSIX mode 검사, Windows ACL은 검사하지 않음). 같은 포트의 평문 요청에는 API를 주지 않는다 |
+| Host | 이 머신의 이름·주소에 listen 포트(DNS rebinding 방어). 정적 파일 포함 모든 요청 | 이 머신의 이름·주소와 public origin의 host | 같다(기본 포트면 포트 없는 Host도) |
+| Origin | 상태 변경 요청은 `Origin`이 `http://`+Host와 정확히 같아야 한다 | 같다(`http://`+받은 Host) | `https://`+받은 Host와 같아야 한다 |
 | 세션 cookie | `codeye_session` | `codeye_session`(Secure 아님) | `__Host-codeye_session`(`Secure`, Domain 없음). 평문 이름의 cookie는 읽지 않는다 |
 | HSTS | 보내지 않는다 | 보내지 않는다 | `Strict-Transport-Security: max-age=31536000` |
-| 로그인 링크 origin | 요청의 loopback origin | public origin | public origin |
+| 로그인 링크 origin | 요청의 loopback origin | 관리자가 연 주소(loopback으로 열었으면 알려 줄 주소) | 같다 |
 
 두 방식에 공통인 규칙은 다음과 같다.
 

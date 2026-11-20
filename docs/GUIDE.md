@@ -33,6 +33,8 @@ codeye up ~/src/myproject
 5. 홈 디렉터리 아래 폴더는 기본 root `home` 아래 상대 경로로, 그 밖의 폴더는 그 폴더 자체를 root로 설정에 더해 프로젝트로 등록하고 분석을 요청한다. 이미 등록한 폴더면 그 프로젝트에 새 분석을 요청한다(분석이 아직 대기·실행 중이면 그것을 보여 준다).
 6. 로그인된 주소를 출력하고 브라우저로 연다. WSL에서는 `wslview` 또는 `explorer.exe`로 Windows 브라우저를 연다. 그 주소는 해당 프로젝트와 실행 화면으로 바로 간다.
 
+명령 목록은 `codeye --help`가 자주 쓰는 명령부터 보이고, 한 명령의 옵션은 `codeye up --help`처럼 그 명령에 `--help`를 붙여 본다.
+
 첫 실행의 출력(실제 실행의 출력에서 경로·ID·pid만 예시로 바꾸고, 찾은 도구 줄은 줄였다):
 
 ```text
@@ -131,21 +133,33 @@ waiting for the report of run 2a2fccd3-… to preview its pull-request comment (
 
 ### 다른 머신에서 열 수 있게 하기
 
-기본 주소 `127.0.0.1:7331`은 이 머신에서만 열린다. 다른 머신에서 열려면 듣는 주소와 사람들이 여는 주소를 정해 한 번 `up`을 한다. 값은 설정 파일에 저장되므로 다음부터는 `codeye up`만 하면 된다.
+기본 주소 `127.0.0.1:7331`은 이 머신에서만 열린다. 다른 머신에서 열려면 듣는 주소를 정해 한 번 `up`을 한다. 값은 설정 파일에 저장되므로 다음부터는 `codeye up`만 하면 된다.
 
 ```sh
-# TLS(권장): 인증서와 키(PEM), 사람들이 여는 https 주소
-codeye up --listen 0.0.0.0:7443 --tls-cert /etc/codeye/cert.pem --tls-key /etc/codeye/key.pem --public-origin https://codeye.example:7443
+# 믿을 수 있는 LAN·VPN에서 평문 HTTP를 명시적으로 고를 때
+codeye up --listen 0.0.0.0:7331 --plain-http
 
-# 믿을 수 있는 LAN에서 평문 HTTP를 명시적으로 고를 때
-codeye up --listen 0.0.0.0:7331 --plain-http --public-origin http://192.168.0.10:7331
+# TLS: 인증서와 키(PEM), 사람들이 여는 https 주소
+codeye up --listen 0.0.0.0:7443 --tls-cert /etc/codeye/cert.pem --tls-key /etc/codeye/key.pem --public-origin https://codeye.example:7443
+```
+
+`up`은 서비스가 받는 주소를 모두 출력한다. 상대의 네트워크에서 닿는 주소를 골라 알려 준다.
+
+```text
+The service answers on:
+  LAN           http://192.168.0.10:7331
+  VPN           http://100.101.102.103:7331
+  name          http://mybox:7331
+  this machine  http://127.0.0.1:7331  http://localhost:7331
 ```
 
 - 평문 HTTP는 시작할 때 `plain HTTP on 0.0.0.0:7331 (plain_http): sign-in cookies and passwords travel unencrypted on this network`를 한 줄 출력한다. 막지는 않는다.
-- `--public-origin`은 다른 사람이 브라우저에 넣는 주소다. 서버는 이 주소의 Host·Origin만 받고 로그인 쿠키도 이 주소에 맞춘다(TLS면 `__Host-` 쿠키에 Secure). 평문 HTTP에서는 생략할 수 있다. 특정 주소(`192.168.0.10:7331`)를 들으면 그 주소이고, `0.0.0.0`을 들으면 `up`이 이 머신의 첫 번째 네트워크 주소(loopback 제외)를 골라 출력한다. 이 머신에 주소가 여럿이면(VPN, DNS 이름) 사람들이 쓸 주소를 직접 준다. 다른 주소로 들어온 요청은 Host 검사에서 403 `HOST_REJECTED`다. 같은 머신의 브라우저는 loopback 주소로도 들어온다. `codeye serve`를 직접 띄울 때는 `0.0.0.0`이면 반드시 준다.
-- 출력되는 로그인 링크와 "Other people open …" 줄은 이 공개 주소를 쓴다. 이 머신의 에이전트와 명령은 loopback의 따로 된 주소(기본 듣는 포트 + 1, 설정 `local_listen`)로 controller에 붙는다.
+- 서비스는 이 머신의 이름과 모든 주소(LAN, Tailscale 같은 VPN, loopback)로 들어오는 요청을 받는다. 로그인 쿠키는 연 주소마다 따로다(TLS면 `__Host-` 쿠키에 Secure).
+- `--public-origin`은 이 머신의 것이 아닌 주소를 더한다. 예를 들어 다른 머신이 포트를 전달해 주는 주소나 DNS 이름이다. 여러 번 줄 수 있고 첫 값이 "Other people open …"의 주소가 된다. TLS에서는 하나 이상 필요하다.
+- 받지 않는 주소로 열면 "이 주소로는 CODEYE에 들어올 수 없습니다" 화면이 쓴 주소, 받는 주소, 더하는 명령(`codeye up --public-origin http://그주소:7331`)을 보인다. 그 명령을 서비스를 띄운 머신에서 실행하면 controller만 다시 뜬다.
+- 출력되는 로그인 링크와 "Other people open …" 줄은 알려 줄 주소(첫 설정 주소, 없으면 첫 LAN·VPN 주소)를 쓴다. 관리 화면에서 만든 로그인 링크는 관리자가 지금 연 주소를 쓴다(VPN 주소로 열었으면 VPN 주소의 링크). 이 머신의 에이전트와 명령은 loopback의 따로 된 주소(기본 듣는 포트 + 1, 설정 `local_listen`)로 controller에 붙는다.
 - 인증서는 운영자가 준비한다. 자체 서명 인증서면 다른 사람의 브라우저가 경고를 보이므로 그 인증서를 믿게 해야 한다.
-- 되돌리려면 설정 파일에서 `listen`·`tls_cert`·`tls_key`·`public_origin`·`plain_http`를 지운다.
+- 되돌리려면 설정 파일에서 `listen`·`tls_cert`·`tls_key`·`public_origins`·`plain_http`를 지운다.
 
 ### 사용자 더하기
 
@@ -186,7 +200,7 @@ codeye up --listen 0.0.0.0:7331 --plain-http --public-origin http://192.168.0.10
 ```
 
 - 경로는 모두 절대 경로다. `state_dir`와 source root는 서로 포함하면 안 된다. 알 수 없는 필드가 있으면 설정 전체를 거부한다.
-- `listen`은 기본 `127.0.0.1:7331`이다. 적으면 그 주소만 쓴다(쓰이고 있으면 시작하지 않는다). loopback이 아닌 주소는 TLS(`tls_cert`·`tls_key`·`public_origin`)나 `plain_http`가 있어야 한다([다른 사람 초대](#다른-사람-초대)).
+- `listen`은 기본 `127.0.0.1:7331`이다. 적으면 그 주소만 쓴다(쓰이고 있으면 시작하지 않는다). loopback이 아닌 주소는 TLS(`tls_cert`·`tls_key`·`public_origins`)나 `plain_http`가 있어야 한다([다른 사람 초대](#다른-사람-초대)).
 - 필드 전체 표는 [서비스 설정 파일](OPERATIONS.md#서비스-설정-파일)에 있다.
 
 **이미 있는 PostgreSQL을 쓰려면**(`"database": {"mode": "external", "postgres_bin_dir": "/usr/pgsql-17/bin"}`) 운영자가 서버와 CODEYE 전용의 빈 데이터베이스·사용자를 준비하고, 연결은 명령을 실행하는 셸의 `CODEYE_DATABASE_URL` 환경변수로 준다. 형식은 `postgresql://USER:PASSWORD@127.0.0.1:5432/DBNAME?sslmode=disable`이다. loopback이 아니면 `sslmode`를 생략해 `verify-full`로 둔다. 이 모드에서는 `codeye migrate`를 직접 하고, `PG*` 변수가 환경에 있으면 DB 열기를 거부하며, 백업·복원의 `pg_dump`·`pg_restore`는 `postgres_bin_dir`에서만 찾는다.
