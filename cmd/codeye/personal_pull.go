@@ -68,10 +68,11 @@ func pullRequestTarget(cfg *personal.Config, target string) (*upTarget, bool, er
 	return t, true, nil
 }
 
-// gitHubClient is the API client with the token `codeye up` stored (none:
-// anonymous, public repositories only).
-func gitHubClient(layout personal.Layout) *github.Client {
-	cred, err := github.ReadCredential(layout.GitHubSecret())
+// gitHubClient is the API client acting for user (the administrator `codeye
+// up` signs in): that user's own GitHub connection, the same one the web
+// uses for them (none: anonymous, public repositories only).
+func gitHubClient(layout personal.Layout, user string) *github.Client {
+	cred, err := github.UserTokensDir(layout.Root).Read(user)
 	if err != nil || cred == nil || cred.Host != github.Host {
 		return github.New(github.APIBase(), "")
 	}
@@ -106,7 +107,7 @@ func queuePullRequest(ctx context.Context, up *running, layout personal.Layout, 
 	} else if o.comment.set {
 		ref.Comment = &o.comment.value
 	}
-	pin, err := github.PinForProject(ctx, gitHubClient(layout), p.Source, ref, remembered, time.Now())
+	pin, err := github.PinForProject(ctx, gitHubClient(layout, up.user), p.Source, ref, remembered, time.Now())
 	if err != nil {
 		return "", pullRequestError(err, t)
 	}
@@ -202,7 +203,7 @@ func printCommentPreview(ctx context.Context, store *postgres.Store, layout pers
 		fmt.Fprintln(stderr, "cannot load the report:", err)
 		return 1
 	}
-	body, _, err := prcomment.Preview(ctx, gitHubClient(layout), src)
+	body, _, err := prcomment.Preview(ctx, gitHubClient(layout, user), src)
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot render the comment:", err)
 		return 1
