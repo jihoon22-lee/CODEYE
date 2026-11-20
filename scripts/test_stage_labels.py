@@ -71,12 +71,11 @@ class StageLabelTests(unittest.TestCase):
         self.assertEqual(docs.stage_labels("golang.org/x/text v0.21.0 h1:4/" + W + "12+abc="), [])
         self.assertTrue(docs.stage_labels("\"name\": \"" + W + "18-fixture\", " + integrity))
 
-    def test_paths_are_checked_and_sealed_paths_are_never_opened(self):
-        with self.assertRaises(ValueError) as caught:
-            docs.check_stage_labels(["fixtures/cpp/input/include/" + W + "16/ring.h"])
-        self.assertIn("path", str(caught.exception))
-        sealed = ["fixtures/" + R + "1-quality/does-not-exist.json", "docs/EVALUATION-RESULTS.md", "scripts/quality_eval.py"]
-        self.assertEqual(docs.check_stage_labels(sealed), 0)
+    def test_paths_are_checked(self):
+        for path in ("fixtures/cpp/input/include/" + W + "16/ring.h", "fixtures/" + R + "1-quality/corpus.json"):
+            with self.assertRaises(ValueError) as caught:
+                docs.check_stage_labels([path])
+            self.assertIn("path", str(caught.exception))
 
     def test_repository_passes(self):
         self.assertGreater(docs.check_stage_labels(), 1000)

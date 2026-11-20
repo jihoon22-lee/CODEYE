@@ -1,4 +1,4 @@
-"""R1 다언어 보류 평가 사례를 만들고, 정답과 분리된 실행 검사로 결함 여부를 확인한다.
+"""다언어 보류 평가 사례를 만들고, 정답과 분리된 실행 검사로 결함 여부를 확인한다.
 
 하위 명령:
   materialize <id> <before|after> <dest> [--documented]  분석 입력만 쓰고 입력 트리 digest를 출력
@@ -307,11 +307,11 @@ def leakage_selftest(case):
     return all(planted) and clean, len(planted)
 
 
-# ---------------------------------------------------------------- forbidden phrases (W24 answer blocking)
+# ---------------------------------------------------------------- forbidden phrases (answer blocking)
 
 FORBIDDEN_SCHEMA = "codeye-forbidden-phrases"
 FORBIDDEN_VERSION = 1
-# Matching rule shared with the relay (scripts/r0_openai_gateway.py). The modes are the leakage() rules:
+# Matching rule shared with the relay (scripts/model_budget_relay.py). The modes are the leakage() rules:
 #   subword   - one [a-z0-9]+ token, compared with subwords() (whole tokens and camelCase/snake_case parts)
 #   words     - several tokens, compared as a run of words() separated by single spaces
 #   substring - anything else, compared with the lowercased text
@@ -354,7 +354,7 @@ def allowed_texts(paths):
         files = sorted(p for p in path.rglob("*") if p.is_file()) if path.is_dir() else [path]
         for f in files:
             data = f.read_bytes()
-            name = f.relative_to(path.parent).as_posix() if path.is_dir() else f.name  # e.g. review-r1/roles/x.md
+            name = f.relative_to(path.parent).as_posix() if path.is_dir() else f.name  # e.g. review/roles/x.md
             out.append((name, hashlib.sha256(data).hexdigest(), data.decode("utf-8", errors="replace")))
     return out
 
@@ -461,7 +461,7 @@ def validate_case(case, errors):
     if language not in LANGUAGES:
         fail(errors, case, "unknown language")
         return
-    if not re.fullmatch(rf"R1-{ID_PREFIX[language]}-\d{{2}}", case["id"]):
+    if not re.fullmatch(rf"HOLD-{ID_PREFIX[language]}-\d{{2}}", case["id"]):
         fail(errors, case, "id does not match language")
     if case["split"] != "holdout":
         fail(errors, case, "split must be holdout")
@@ -722,7 +722,7 @@ def verify(cases, args):
             for attempt in range(args.repeat):
                 jobs.append((case, variant, want, attempt))
     results = {}
-    with tempfile.TemporaryDirectory(prefix="codeye-r1-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="codeye-holdout-") as tmp:
         scratch = Path(tmp)
         shared = scratch / "shared"
         shared.mkdir()

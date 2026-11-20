@@ -63,7 +63,8 @@
 
 | 봉인 | corpus digest(SHA-256) | 비고 |
 |---|---|---|
-| 현재 | `ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4` | 지침 조정에 쓰지 않았고, 작성자는 지침과 과거 모델 결과를 읽지 않았다 |
+| 현재 | `99904b7bdf1239eb3f0732a465a43ec51ff735594f15f23af11ec701bbc424be` | 사례 ID와 디렉터리 이름만 바꾼 뒤의 값이다. 사례 내용과 변형별 입력 digest는 그대로이고, corpus digest가 사례 ID를 포함하므로 값이 달라졌다 |
+| 이름 변경 전 | `ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4` | 지침 조정에 쓰지 않았고, 작성자는 지침과 과거 모델 결과를 읽지 않았다. 첫 보류 평가가 이 값으로 실행됐다 |
 
 - 확인: `python3 scripts/validate_bundle.py`가 `python3 -I fixtures/quality-holdout/corpus.py validate`와 `... digest`를 실행해 구조·위치·digest·누설 검사와 봉인 digest 일치를 확인한다. 불일치면 실패한다.
 - 봉인을 바꾸면 이전 봉인으로 얻은 결과와 새 결과는 다른 집합의 결과다. 같은 표에서 비교하지 않는다.
@@ -136,7 +137,7 @@
 - 보류 사례나 결과를 본 사람(조정자)은 지침 문구를 쓰지 않는다. 결과에서 알게 된 실패는 지침 문구를 그 사례에 맞추지 않고, 가능하면 구조(플랫폼 검사)로 막는다.
 - 지침 작성 지시에 보류 결과에서 얻은 관찰을 옮기지 않는다. 옮겼다면 그 사실을 결과와 함께 기록한다.
 - 결과는 [평가 결과](EVALUATION-RESULTS.md)에만 둔다. 다른 문서, 코드 주석, 지침, 커밋 메시지에 결과 수치나 사례 내용을 옮기지 않는다.
-- holdout 등록부(아래)가 같은 지침의 이전 digest 실행을 표시한다. 현재 지침은 이전 digest가 현재 보류 집합으로 실행된 적이 있으므로 이후 실행은 `holdout_seen_by_prior_revision`으로 표시된다. 현재 지침의 독립 보류 평가에는 새 사례(새 봉인)가 필요하다.
+- holdout 등록부(아래)가 같은 지침 id의 이전 digest 실행을 표시한다. 현재 보류 집합은 이미 한 번 평가에 쓰였다([평가 결과](EVALUATION-RESULTS.md)). 그 평가는 사례 ID를 바꾸기 전 corpus digest로 등록됐으므로 등록부가 이를 자동으로 연결하지 않는다. 같은 사례로 하는 이후 평가는 독립 비교가 아니고, 독립 보류 평가에는 새 사례(새 봉인)가 필요하다.
 
 ## 회귀 집합 실행
 
@@ -162,7 +163,7 @@
 | 하위 명령 | 역할 |
 |---|---|
 | `plan` | 층별 표본 선택과 호출·비용 추정만. 제품을 실행하지 않는다. `--ledger`를 주면 거절 판단까지 한다(거절이면 종료 코드 1) |
-| `run` | batch 하나 실행. `--condition tools`(분석기만) 또는 `--condition review --pack review` |
+| `run` | batch 하나 실행. `--condition tools`(분석기만) 또는 `--condition review`(제품 전체 경로) |
 | `score` | 판정 지표와 Wilson 구간, batch 나란히 비교 |
 | `allow-text` | tools batch의 도구 메시지와 capture dry run의 envelope를 허용 텍스트로 모은다 |
 | `capture-list` | 아무것도 막지 않는 감시용 목록(`purpose: envelope_capture`). 시험용 upstream 전용 |
@@ -194,7 +195,7 @@
 
 batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay token은 넣지 않고, 경로는 `~` 기준 상대 경로로 적는다.
 
-- 팩 id·version·status, `prompts/<팩>` 트리 digest, 보고서 `review_calls`에서 관측한 역할별 `pack_sha256`
+- 팩 id·version·status, `prompts/review` 트리 digest, 보고서 `review_calls`에서 관측한 역할별 `pack_sha256`
 - corpus digest, 모델 id와 OpenCode 버전, checkout commit과 수정 여부, OS·Python
 - 분석기 실행 파일의 SHA-256, 보고서에서 관측한 분석기별 도구 버전, 저장소 코드 허가, toolchain 경로
 - 장부의 시작·끝 상태와 batch 차감, 예약·여유, 계획 추정, 정답 목록 SHA-256·항목 수·허용 텍스트
@@ -319,7 +320,6 @@ TOOLS=(--go "$GO" --tool staticcheck="$STATICCHECK" --tool cargo="$CARGO" --tool
        --tool node="$NODE" --tool eslint="$ESLINT_JS" --tool tsc="$TSC_JS")
 REVIEW=(--opencode "$OPENCODE" --model codeye-gateway/gpt-6.2-sol)
 SEL=(--sample N --seed S)   # 표본. 5단계 plan으로 예산 안인지 확인한다
-PACK=review
 
 # 1. tools(모델 없음): 전체와 비교용 표본
 python3 scripts/quality_eval.py run --condition tools --results-root "$R" --batch tools-all "${TOOLS[@]}" --max-workers 3
@@ -337,8 +337,8 @@ env -u OPENAI_API_KEY python3 scripts/model_budget_relay.py --ready-file "$R/cap
   --test-upstream "http://127.0.0.1:$PORT" &
 CAP_RELAY_PID=$!
 until [ -s "$R/cap/relay.json" ]; do sleep 0.2; done
-python3 scripts/quality_eval.py run --condition review --pack $PACK --dry-run --results-root "$R" \
-  --batch capture-$PACK "${SEL[@]}" --relay-file "$R/cap/relay.json" --ledger "$R/cap/ledger.jsonl" \
+python3 scripts/quality_eval.py run --condition review --dry-run --results-root "$R" \
+  --batch capture "${SEL[@]}" --relay-file "$R/cap/relay.json" --ledger "$R/cap/ledger.jsonl" \
   --forbidden-phrases "$R/capture-list.json" "${TOOLS[@]}" "${REVIEW[@]}"
 kill $CAP_RELAY_PID $FAKE_PID
 
@@ -355,19 +355,20 @@ until [ -s "$READY" ]; do sleep 0.2; done
 RELAY=(--relay-file "$READY" --ledger "$LEDGER" --forbidden-phrases "$R/forbidden.json")
 
 # 5. 계획과 장부 확인(거절이면 종료 코드 1, 출력의 refusal에 사유)
-python3 scripts/quality_eval.py plan --pack $PACK "${SEL[@]}" --history "$R/capture-$PACK" --ledger "$LEDGER"
+python3 scripts/quality_eval.py plan "${SEL[@]}" --history "$R/capture" --ledger "$LEDGER"
 
 # 6. 유료 batch
-python3 scripts/quality_eval.py run --condition review --pack $PACK --results-root "$R" --batch paid-$PACK \
-  "${SEL[@]}" --history "$R/capture-$PACK" "${RELAY[@]}" "${TOOLS[@]}" "${REVIEW[@]}"
+python3 scripts/quality_eval.py run --condition review --results-root "$R" --batch paid \
+  "${SEL[@]}" --history "$R/capture" "${RELAY[@]}" "${TOOLS[@]}" "${REVIEW[@]}"
 
 # 7. 판정과 채점: 각 batch의 judgments-template.json을 채운 뒤
-python3 scripts/quality_eval.py score "$R/tools-sel" "$R/paid-$PACK" \
+python3 scripts/quality_eval.py score "$R/tools-sel" "$R/paid" \
   --judgments J1.json [--judgments J2.json] --output "$R/score.json"
-python3 scripts/quality_eval.py reader "$R/paid-$PACK" --sample 6 --seed S --output "$R/reading-$PACK"
+python3 scripts/quality_eval.py reader "$R/paid" --sample 6 --seed S --output "$R/reading"
 ```
 
 - 2단계 capture는 유료 batch와 같은 `SEL`로 돌린다. 시험 장부의 요청 상한(기본 200건) 안에 들어가야 한다. 넘으면 언어마다 새 시험 relay를 쓴다.
+- 지침 개정 전후를 비교할 때: 개정 전 checkout(baseline)과 개정 뒤 checkout(candidate)에서 같은 표본으로 2단계 capture와 5~6단계를 각각 하고(`--batch capture-baseline`, `--batch paid-baseline`처럼 이름으로 구분한다), 7단계 `score`에 두 batch를 나란히 준다. 상한 호출이 큰 쪽을 먼저 실행하고, 끝난 뒤의 장부로 다른 쪽을 다시 계획한다. 거절이면 다른 쪽을 실행하지 않는다. 시작 전 남은 요청이 적으면 `남은 요청 − 먼저 실행한 쪽 기대 호출 − 5 ≥ 다른 쪽 상한 호출`이 되는 표본을 고른다.
 - 결과 수치와 판단은 [평가 결과](EVALUATION-RESULTS.md)에 쓰고 batch 디렉터리는 저장소 밖에 둔다.
 
 ## 예산 relay와 장부

@@ -80,10 +80,6 @@ def pack_selection(languages=ROLE_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
     return pack, roles
 
 
-# scripts/test_quality_eval.py imports the selection under this name.
-role_pack = pack_selection
-
-
 def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None:
     """Bind the review stage examples to the fixture bytes, the pack
     files, each other (upstream SHA-256, candidates) and the scope rules."""

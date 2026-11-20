@@ -7,21 +7,21 @@ from pathlib import Path
 import re
 import sys
 
-from .common import ROOT, ensure, holdout_corpus
+from .common import ROOT, ensure
 
 
 def check_holdout_corpus() -> None:
     """보류 corpus의 구조·위치·digest·누설을 도구 없이 확인하고 봉인 digest와 대조한다."""
     import subprocess
 
-    corpus = holdout_corpus()
+    corpus = ROOT / "fixtures/quality-holdout/corpus.py"
     env = {"PATH": os.environ.get("PATH", ""), "LANG": "C.UTF-8"}
     result = subprocess.run([sys.executable, "-I", str(corpus), "validate"], capture_output=True, text=True, timeout=300, env=env)
     tail = " | ".join((result.stdout + result.stderr).strip().splitlines()[-5:])
     ensure(result.returncode == 0, "holdout corpus validate failed: " + tail)
     out = subprocess.run([sys.executable, "-I", str(corpus), "digest"], capture_output=True, text=True, timeout=300, env=env)
     ensure(out.returncode == 0 and out.stdout.split(), "holdout corpus digest failed")
-    sealed = "ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4"
+    sealed = "99904b7bdf1239eb3f0732a465a43ec51ff735594f15f23af11ec701bbc424be"
     ensure(out.stdout.split()[-1] == sealed, "holdout corpus digest differs from the sealed digest; a changed holdout needs a new seal recorded in docs/EVALUATION.md")
     print(f"PASS: holdout corpus (structure, locations, digests, leakage scan; sealed digest {sealed[:12]})")
 
@@ -108,20 +108,6 @@ STAGE_KEEP = ("x86_64-w64-mingw32",)
 # Dependency lock files carry content hashes; a hash is not a name.
 LOCK_HASH = re.compile(r"\bsha(?:1|256|384|512)-[A-Za-z0-9+/=]+|\bh1:[A-Za-z0-9+/=]+")
 
-# Temporary exemptions: the sealed holdout material and the evaluation scripts
-# that read it are renamed together in a separate change by an author who may
-# read them; this check must not open them. The holdout directory is spelled in
-# parts so this file passes its own check.
-STAGE_SEALED = (
-    "docs/EVALUATION-RESULTS.md",
-    "fixtures/" + "r1" + "-quality/",
-    "scripts/testdata/quality_eval/",
-    "scripts/quality_eval.py",
-    "scripts/quality_score.py",
-    "scripts/test_quality_eval.py",
-)
-
-
 def stage_labels(text: str) -> list:
     """The stage-style labels in text, after the keep-list and lock-file hashes are removed."""
     text = LOCK_HASH.sub("", text)
@@ -147,11 +133,9 @@ def tracked_files() -> list:
 
 
 def check_stage_labels(paths=None) -> int:
-    """No tracked text file names or contains a stage-style label (STAGE_PATTERNS), outside STAGE_SEALED."""
+    """No tracked text file names or contains a stage-style label (STAGE_PATTERNS)."""
     count = 0
     for relative in tracked_files() if paths is None else paths:
-        if relative.startswith(STAGE_SEALED):
-            continue
         found = stage_labels(relative)
         ensure(not found, "Stage label in path " + relative + ": " + ", ".join(found))
         path = ROOT / relative

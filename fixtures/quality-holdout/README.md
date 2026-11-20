@@ -1,13 +1,13 @@
-# R1 다언어 보류 평가 사례
+# 다언어 보류 평가 사례
 
-R1 검토 지침과 모델 구성을 평가할 때 쓰는 보류(holdout) 사례 집합이다. C/C++, Python, JavaScript/TypeScript, Go, Rust마다 결함 쌍 9개와 까다로운 정상 사례 2개가 있다. 모든 사례는 실제 도구로 실행되는 검사를 가진다. 결함 쌍의 before는 검사에 실패하고 after는 통과한다. 정상 사례는 통과한다. 평가 방법과 지표는 [16. 분석 품질 평가와 회귀 검증](../../docs/EVALUATION.md)을 따른다.
+검토 지침과 모델 구성을 평가할 때 쓰는 보류(holdout) 사례 집합이다. C/C++, Python, JavaScript/TypeScript, Go, Rust마다 결함 쌍 9개와 까다로운 정상 사례 2개가 있다. 모든 사례는 실제 도구로 실행되는 검사를 가진다. 결함 쌍의 before는 검사에 실패하고 after는 통과한다. 정상 사례는 통과한다. 평가 방법과 지표는 [분석 품질 평가](../../docs/EVALUATION.md)을 따른다.
 
 이 디렉터리는 평가 자료일 뿐이다. 플랫폼 기능이나 CI 단계로 연결되어 있지 않으며, 여기 있는 검사가 통과했다고 해서 CODEYE 플랫폼 구현이 통과한 것은 아니다.
 
 ## 독립성 규칙
 
 - 사례는 검토 지침(`prompts/`), 지침 설계 문서, 과거 모델 결과를 보지 않고 작성했다. 지침이 사례에 맞춰지지 않게 하고, 사례가 지침에 맞춰지지 않게 하기 위해서다.
-- R0 사례(`fixtures/r0-quality/`)의 결함 계열과 그 변형은 다시 쓰지 않았다. 형식만 참고했다.
+- 회귀 집합(`fixtures/regression/`)의 결함 계열과 그 변형은 다시 쓰지 않았다. 형식만 참고했다.
 - 코드는 모두 새로 작성했다. 공개 데이터셋이나 공개 저장소의 코드를 복사하지 않았다.
 - 모델 입력이 되는 파일에는 정답을 암시하는 내용을 넣지 않는다. `BUG`·`FIXME`·`leak` 같은 주석, 결함을 이름으로 드러내는 식별자, 테스트 파일, 라벨 문장과 사례별 고유 표현, 변형 이름이 금지된다. `verify`와 `validate`는 이를 자동으로 검사하는 누설 검사를 돌리고, 일부러 심은 누설 4종을 잡아내는지 자체 시험도 한다.
 - 계약(contract)은 실제 프로젝트처럼 코드의 문서 주석에 들어가고, `--documented`로 만들면 README에도 들어간다. 입력 도메인을 명시해서 계약 밖 입력에 대한 지적과 결함 지적을 구분할 수 있게 했다.
@@ -30,7 +30,7 @@ R1 검토 지침과 모델 구성을 평가할 때 쓰는 보류(holdout) 사례
 
 | 필드 | 뜻 |
 |---|---|
-| `id` | `R1-<언어>-<번호>`. 정상 사례는 언어마다 `-10`, `-11`이다. |
+| `id` | `HOLD-<언어>-<번호>`. 정상 사례는 언어마다 `-10`, `-11`이다. |
 | `language`, `split` | 언어와 분할. `split`은 항상 `holdout`이다. |
 | `family`, `category` | 결함 계열(사례마다 고유)과 7개 범주 중 하나. |
 | `kind` | `defect_pair` 또는 `tricky_normal`. |
@@ -46,11 +46,11 @@ R1 검토 지침과 모델 구성을 평가할 때 쓰는 보류(holdout) 사례
 
 작성 시점(2026-11-18)에 before 입력에 분석기를 한 번 실행한 결과는 다음과 같다.
 
-- 기본 설정(g++ `-Wall -Wextra`, clang-tidy 기본 검사, ruff 기본 규칙, ESLint recommended, `go vet`, staticcheck, clippy)이 정답 위치를 지적한 사례: R1-CPP-04, R1-JS-02, R1-GO-06, R1-GO-09, R1-RS-09. 기본 설정이 지적한 `semantic_only` 사례는 없었다.
-- 이름 붙은 규칙을 켜거나 더 엄격한 preset을 써야 지적된 사례: R1-CPP-02, R1-CPP-03, R1-PY-09(근처 위치), R1-JS-05, R1-JS-07.
-- 실행하지 않은 보안 분석 질의에 기댄 예상: R1-JS-04, R1-GO-07.
-- 정상 사례의 의심 위치를 지적해 오탐이 되는 경우: R1-CPP-11(bugprone-empty-catch), R1-PY-10(SIM115), R1-PY-11(BLE001).
-- 처음에 `static_likely`로 예상했지만 실행한 도구가 지적하지 않아 `semantic_only`로 바꾼 사례: R1-CPP-05, R1-PY-06, R1-GO-03.
+- 기본 설정(g++ `-Wall -Wextra`, clang-tidy 기본 검사, ruff 기본 규칙, ESLint recommended, `go vet`, staticcheck, clippy)이 정답 위치를 지적한 사례: HOLD-CPP-04, HOLD-JS-02, HOLD-GO-06, HOLD-GO-09, HOLD-RS-09. 기본 설정이 지적한 `semantic_only` 사례는 없었다.
+- 이름 붙은 규칙을 켜거나 더 엄격한 preset을 써야 지적된 사례: HOLD-CPP-02, HOLD-CPP-03, HOLD-PY-09(근처 위치), HOLD-JS-05, HOLD-JS-07.
+- 실행하지 않은 보안 분석 질의에 기댄 예상: HOLD-JS-04, HOLD-GO-07.
+- 정상 사례의 의심 위치를 지적해 오탐이 되는 경우: HOLD-CPP-11(bugprone-empty-catch), HOLD-PY-10(SIM115), HOLD-PY-11(BLE001).
+- 처음에 `static_likely`로 예상했지만 실행한 도구가 지적하지 않아 `semantic_only`로 바꾼 사례: HOLD-CPP-05, HOLD-PY-06, HOLD-GO-03.
 
 검사 결과는 구조화 데이터로만 분류한다. 빌드 단계는 종료 코드 0이어야 한다. 실행 결과는 다음과 같이 나뉜다.
 
@@ -64,18 +64,18 @@ R1 검토 지침과 모델 구성을 평가할 때 쓰는 보류(holdout) 사례
 
 ```sh
 # 구조, 위치, digest, 누설 검사 (도구 불필요)
-python3 -I fixtures/r1-quality/corpus.py validate
+python3 -I fixtures/quality-holdout/corpus.py validate
 
 # 실제 도구로 before 실패, after 통과, 정상 사례 통과 확인
-python3 -I fixtures/r1-quality/corpus.py verify \
+python3 -I fixtures/quality-holdout/corpus.py verify \
   --go /abs/path/go --python /abs/path/python3 --node /abs/path/node \
   --rustc /abs/path/rustc --cxx /abs/path/g++ --require-all --repeat 3
 
 # 모델 입력만 만들기 (입력 트리 digest 출력)
-python3 -I fixtures/r1-quality/corpus.py materialize R1-GO-03 before /tmp/r1-go-03 --documented
+python3 -I fixtures/quality-holdout/corpus.py materialize HOLD-GO-03 before /tmp/hold-go-03 --documented
 
 # 보류 집합 봉인용 corpus digest
-python3 -I fixtures/r1-quality/corpus.py digest
+python3 -I fixtures/quality-holdout/corpus.py digest
 ```
 
 - 실행된 사례가 하나도 없으면 `verify`는 실패한다. `--require-all`은 건너뛴 언어나 사례가 하나라도 있으면 실패한다. `--language`, `--case`로 일부만 실행할 수 있다.
@@ -94,11 +94,11 @@ python3 -I fixtures/r1-quality/corpus.py digest
 ## 알려진 한계
 
 - C/C++ 검사는 g++ 15.2(libstdc++)에서만 실행했다. 이 환경의 clang++ 23은 기본 설정으로 libstdc++ 헤더를 찾지 못해 검사 실행에는 쓰지 않았다(정적 분석에는 `--gcc-install-dir`을 주어 사용했다).
-- 새니타이저에 의존하는 검사가 있다. R1-CPP-01·02·10은 AddressSanitizer, R1-CPP-03은 UndefinedBehaviorSanitizer 보고를 실패 근거로 쓴다. 새니타이저가 없는 컴파일러에서는 결과가 다를 수 있다.
-- R1-CPP-09는 libstdc++의 terminate 처리기가 출력하는 문구를 서명으로 쓴다. 다른 표준 라이브러리에서는 서명을 바꿔야 한다.
-- 시간과 스레드 실행 순서에 기대는 검사가 있다(R1-JS-06, R1-JS-10, R1-GO-01, R1-GO-10, R1-CPP-05, R1-CPP-09, R1-CPP-10). 여유를 두었고 반복 실행으로 확인했지만, 매우 느리거나 부하가 큰 머신에서는 흔들릴 수 있다. R1-PY-04, R1-RS-01, R1-RS-08은 멈춤을 감지하는 감시 시간을 쓴다.
-- R1-GO-06은 Go 런타임의 동시 map 쓰기 감지나 합계 불일치로 실패가 드러나며, 둘 다 스케줄링에 따라 확률적이다. 반복 실행에서는 매번 실패했다.
-- Linux 전용 요소가 있다. R1-GO-03은 `RLIMIT_NOFILE`, R1-JS-11은 `/proc/self/fd`, R1-CPP-11은 `/dev/full`을 쓴다.
+- 새니타이저에 의존하는 검사가 있다. HOLD-CPP-01·02·10은 AddressSanitizer, HOLD-CPP-03은 UndefinedBehaviorSanitizer 보고를 실패 근거로 쓴다. 새니타이저가 없는 컴파일러에서는 결과가 다를 수 있다.
+- HOLD-CPP-09는 libstdc++의 terminate 처리기가 출력하는 문구를 서명으로 쓴다. 다른 표준 라이브러리에서는 서명을 바꿔야 한다.
+- 시간과 스레드 실행 순서에 기대는 검사가 있다(HOLD-JS-06, HOLD-JS-10, HOLD-GO-01, HOLD-GO-10, HOLD-CPP-05, HOLD-CPP-09, HOLD-CPP-10). 여유를 두었고 반복 실행으로 확인했지만, 매우 느리거나 부하가 큰 머신에서는 흔들릴 수 있다. HOLD-PY-04, HOLD-RS-01, HOLD-RS-08은 멈춤을 감지하는 감시 시간을 쓴다.
+- HOLD-GO-06은 Go 런타임의 동시 map 쓰기 감지나 합계 불일치로 실패가 드러나며, 둘 다 스케줄링에 따라 확률적이다. 반복 실행에서는 매번 실패했다.
+- Linux 전용 요소가 있다. HOLD-GO-03은 `RLIMIT_NOFILE`, HOLD-JS-11은 `/proc/self/fd`, HOLD-CPP-11은 `/dev/full`을 쓴다.
 - TypeScript 사례는 Node의 타입 제거 실행만 확인했다. `tsc` 타입 검사는 검사 조건이 아니다.
 - 검사는 계약의 일부만 확인한다. 검사 통과가 after나 정상 사례의 모든 측면이 옳다는 증명은 아니다.
 - 사례 수가 언어마다 11개라 언어별 지표의 신뢰구간이 넓다. 범주별 비교는 참고용이다.
