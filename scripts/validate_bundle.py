@@ -28,7 +28,7 @@ from bundle_checks.report import check_analyzer, check_observations, check_plan,
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
 from bundle_checks.review import ROLE_STAGES, check_environment_example, check_stage_examples, check_slice_examples, pack_selection, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
-from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_stage_labels, heading_anchors
+from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_mode_names, check_stage_labels, heading_anchors
 
 
 def main() -> None:
@@ -56,6 +56,7 @@ def main() -> None:
     check_doc_names(markdown_files)
     code_refs = check_code_doc_refs()
     named = check_stage_labels()
+    moded = check_mode_names()
     validators = make_validators()
     validators["doctor.schema.json"].validate(json_file(ROOT / "examples/doctor.json"))
     tools_example = json_file(ROOT / "examples/tools.json")
@@ -434,6 +435,7 @@ def main() -> None:
     ensure(not (ROOT / "docs/02-benchmark.md").exists(), "Standalone comparison document is out of scope")
     print(f"PASS: {code_refs} document references from source, schema and example files")
     print(f"PASS: {named} tracked text files and their paths without stage labels")
+    print(f"PASS: {moded} tracked text files and their paths without run-mode names (outside the history files)")
     print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 23 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
