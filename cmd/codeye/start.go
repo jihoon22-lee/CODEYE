@@ -219,14 +219,17 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 		ctrlListen = ctrlRec.Listen
 	}
 	ctrlArgs := append([]string{"serve", "--session-ttl", httpapi.ServiceSessionTTL.String(), "--state-dir", layout.Root, "--listen", ctrlListen, "--artifact-dir", layout.ArtifactDir(), "--web-dir", cfg.WebDir}, controllerListenArgs(cfg)...)
+	if path := cfg.FilePath(); path != "" {
+		ctrlArgs = append(ctrlArgs, "--instance-config", path)
+	}
 	if cfg.Offline {
 		ctrlArgs = append(ctrlArgs, "--offline")
 		for _, host := range cfg.GitHosts {
 			ctrlArgs = append(ctrlArgs, "--git-host", host)
 		}
-		if cfg.CABundle != "" {
-			ctrlArgs = append(ctrlArgs, "--ca-bundle", cfg.CABundle)
-		}
+	}
+	if cfg.CABundle != "" {
+		ctrlArgs = append(ctrlArgs, "--ca-bundle", cfg.CABundle)
 	}
 	if ctrlUp && ctrlRec.Args != nil && !slices.Equal(ctrlRec.Args, ctrlArgs) {
 		fmt.Fprintln(out, "restarting the controller: its configuration changed")
@@ -279,7 +282,7 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 		return nil, 1
 	}
 	if !ctrlUp {
-		ctrlEnv := append(childEnv(append([]string{"PATH", "HOME", "LANG", "TZ"}, fixtureControllerEnv...)...), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
+		ctrlEnv := append(childEnv(append([]string{"PATH", "HOME", "LANG", "TZ", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"}, fixtureControllerEnv...)...), "CODEYE_DATABASE_URL="+os.Getenv("CODEYE_DATABASE_URL"))
 		cmd, rec, err := instance.Spawn(instance.RoleController, exe, ctrlArgs, ctrlEnv, layout.Root, layout.LogFile(instance.RoleController))
 		if err != nil {
 			if cmd != nil {
@@ -309,7 +312,7 @@ func bringUp(ctx context.Context, cfg *instance.Config, layout instance.Layout, 
 		res.controllerPID = rec.PID
 	}
 	if !agentUp {
-		cmd, arec, err := instance.Spawn(instance.RoleAgent, exe, agentArgv(cfg, layout, roots, enroll), childEnv(append([]string{"PATH", "LANG"}, fixtureAgentEnv...)...), layout.Root, layout.LogFile(instance.RoleAgent))
+		cmd, arec, err := instance.Spawn(instance.RoleAgent, exe, agentArgv(cfg, layout, roots, enroll), childEnv(append([]string{"PATH", "LANG", "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"}, fixtureAgentEnv...)...), layout.Root, layout.LogFile(instance.RoleAgent))
 		if err != nil {
 			if cmd != nil {
 				_ = cmd.Wait()

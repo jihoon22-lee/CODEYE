@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
 // With only a stored API key (no agent.model), codeye start gives the agent
@@ -176,5 +179,63 @@ func TestModelProbeOutput(t *testing.T) {
 	if code := modelCommand(context.Background(), []string{"probe", "--json", "--executable", exe, "--model", "openai/gpt-6.2-sol", "--credential-file", filepath.Join(dir, "none.json")}, &out, &errb); code != 1 ||
 		!strings.Contains(out.String(), `"stage":"credential"`) || !strings.Contains(out.String(), `"reason":"model_credential_unavailable"`) {
 		t.Fatalf("%d %s", code, out.String())
+	}
+}
+
+func TestManagedWorkerLoadsModelBeforeSourceAndProtectsFiles(t *testing.T) {
+	root := t.TempDir()
+	state, service := filepath.Join(root, "state"), filepath.Join(root, "service.json")
+	profile := filepath.Join(root, "settings", "custom-name.jsonc")
+	credential := filepath.Join(root, "auth", "existing.json")
+	privateHeader := filepath.Join(root, "tokens", "private-header")
+	for _, dir := range []string{filepath.Dir(profile), filepath.Dir(credential), filepath.Dir(privateHeader), filepath.Join(root, "project")} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// state_dir is deliberately omitted, as in a default installation.
+	const config = `{"schema_version":"0.1","database":{"mode":"external"}`
+	write(service, config+`}`)
+	worker := &instanceModelCaller{settings: localModelSettings(service, state, instance.ModelEnv{}), offline: true}
+	first, next := filepath.Join(root, "first"), filepath.Join(root, "next")
+	worker.prepareAttempt(first)
+	if worker.caller.Model != "" {
+		t.Fatal("the initial configuration unexpectedly enables model review")
+	}
+	write(service, config+fmt.Sprintf(`,"agent":{"model":{"opencode":%q,"config_file":%q,"credential_file":%q}}}`, filepath.Join(root, "opencode"), profile, credential))
+	write(profile, `{"model":"corp/default","provider":{"corp":{"options":{"baseURL":"http://127.0.0.1:9000/v1","headers":{"X-Token":"{file:../tokens/private-header}"}}}}}`)
+	write(credential, `{"corp":{"type":"api","key":"credential-fixture"}}`)
+	write(privateHeader, "header-fixture\n")
+	worker.prepareAttempt(first)
+	if worker.caller.Model != "" {
+		t.Fatal("saved settings changed an active attempt")
+	}
+	protected := worker.prepareAttempt(next)
+	if worker.caller.Model != "corp/default" || worker.caller.NativeConfigDigest == "" || worker.caller.CredentialFile != credential || !worker.caller.Offline {
+		t.Fatal("the next worker attempt did not resolve the saved offline configuration")
+	}
+	for _, name := range []string{"settings", "auth", "tokens"} {
+		if err := source.CheckProtected(root, name, protected); !errors.Is(err, source.ErrHoldsProtected) {
+			t.Fatalf("source containing selected %s not protected: %v", name, err)
+		}
+	}
+	if err := source.CheckProtected(root, "project", protected); err != nil {
+		t.Fatalf("sibling project unexpectedly protected: %v", err)
+	}
+	write(profile, `{invalid native file`)
+	protected = worker.prepareAttempt(filepath.Join(root, "after"))
+	if worker.caller.Model != "" {
+		t.Fatal("an unreadable native configuration left a stale caller active")
+	}
+	for _, name := range []string{"settings", "auth", "tokens"} {
+		if err := source.CheckProtected(root, name, protected); !errors.Is(err, source.ErrHoldsProtected) {
+			t.Fatalf("invalid native config cleared %s protection: %v", name, err)
+		}
 	}
 }

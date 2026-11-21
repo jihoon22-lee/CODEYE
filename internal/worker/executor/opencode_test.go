@@ -2,6 +2,7 @@ package executor
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -108,5 +109,36 @@ func TestProviderProfile(t *testing.T) {
 	// listing it in Redact.
 	if v := secretValues(Spec{OpenCodeProvider: p}); len(v) != 1 || v[0] != p.APIKey {
 		t.Fatal(v)
+	}
+}
+
+func TestNativeProviderProfileKeepsIsolationAndMasksHeaders(t *testing.T) {
+	p := &ModelProvider{ID: "internal", BaseURL: "http://127.0.0.1:9000/v1", Native: &NativeModel{
+		Package: "@ai-sdk/openai-compatible", ID: "upstream/model",
+		Headers: map[string]string{"X-Test": "fixture", "Authorization": "Bearer private-token"},
+	}}
+	if !validOpenCode("internal/alias", p) || validOpenCode("unrelated/alias", p) {
+		t.Fatal("native keyless provider validation")
+	}
+	var profile struct {
+		Permission string          `json:"permission"`
+		Plugin     []string        `json:"plugin"`
+		Tools      map[string]bool `json:"tools"`
+		Provider   map[string]struct {
+			Options map[string]any            `json:"options"`
+			Models  map[string]map[string]any `json:"models"`
+		} `json:"provider"`
+	}
+	if err := json.Unmarshal([]byte(managedOpenCodeEnv("internal/alias", p)["OPENCODE_CONFIG_CONTENT"]), &profile); err != nil {
+		t.Fatal(err)
+	}
+	provider := profile.Provider["internal"]
+	if profile.Permission != "deny" || len(profile.Plugin) != 0 || len(profile.Tools) != 1 || profile.Tools["*"] ||
+		provider.Options["apiKey"] != nil || provider.Options["baseURL"] != p.BaseURL || provider.Models["alias"]["tool_call"] != false || provider.Models["alias"]["id"] != "upstream/model" {
+		t.Fatal("native provider profile failed keyless or isolation requirements")
+	}
+	secrets := secretValues(Spec{OpenCodeProvider: p})
+	if output := redactString("Bearer private-token, private-token, fixture", secrets); strings.Contains(output, "private-token") || strings.Contains(output, "fixture") {
+		t.Fatal("native header credentials survived redaction")
 	}
 }

@@ -30,6 +30,9 @@ type Config struct {
 	Out      io.Writer
 	Stderr   io.Writer
 	Handlers HandlerFactory
+	// PrepareAttempt fixes local adapter settings before source acquisition
+	// and returns any additional host paths local projects must not contain.
+	PrepareAttempt func(scratch string) []string
 	// Runner executes processes; default is a zero executor.Executor.
 	Runner executor.Runner
 	// HelloTimeout bounds the wait for hello (default 30s).

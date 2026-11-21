@@ -186,6 +186,12 @@ type ServeEdit struct {
 // replaces the file atomically (0600). The returned configuration is the
 // validated new one.
 func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
+	return EditFileChecked(path, knownTools, e, nil)
+}
+
+// EditFileChecked also validates the candidate against the running installation
+// before a successful atomic write. A rejected connection keeps the old one.
+func EditFileChecked(path string, knownTools []string, e ConfigEdit, check func(*Config) error) (*Config, error) {
 	absolutePath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, errors.New("config path cannot be resolved")
@@ -283,6 +289,11 @@ func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
 	cfg, err := Parse(out, knownTools)
 	if err != nil {
 		return nil, err
+	}
+	if check != nil {
+		if err := check(cfg); err != nil {
+			return nil, err
+		}
 	}
 	if err := writePrivate(path, out); err != nil {
 		return nil, errors.New("cannot write the configuration file")

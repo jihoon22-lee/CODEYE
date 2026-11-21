@@ -55,7 +55,22 @@ type ModelProvider struct {
 	// completions) provider package, for endpoints that are not one of
 	// OpenCode's built-in providers.
 	OpenAICompatible bool
-	relay            *LocalModelRelay
+	// Native holds the selected provider and model settings projected from
+	// an explicit OpenCode configuration file.
+	Native *NativeModel
+	relay  *LocalModelRelay
+}
+
+// NativeModel carries the subset of OpenCode settings used by the managed
+// adapter. It does not carry instructions, plugins or local module paths.
+type NativeModel struct {
+	Package      string
+	ID           string
+	Name         string
+	Limit        map[string]int
+	Headers      map[string]string
+	Timeouts     map[string]any
+	IncludeUsage *bool
 }
 
 // RelayProvider is the QA relay as a model provider.
@@ -100,7 +115,13 @@ func validOpenCode(name string, p *ModelProvider) bool {
 	if p.relay != nil {
 		return p.ID == GatewayProvider && p.relay.valid(name)
 	}
-	return p.ID == provider && ValidProvider(p)
+	if p.ID != provider {
+		return false
+	}
+	if p.Native != nil && p.APIKey == "" {
+		return provider != GatewayProvider && (p.BaseURL == "" || ValidBaseURL(p.BaseURL))
+	}
+	return ValidProvider(p)
 }
 
 // ValidProvider checks a credential-backed provider (not the relay): an ID
@@ -137,6 +158,39 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 			"options": map[string]any{"apiKey": r.Token, "baseURL": r.BaseURL},
 			"models":  map[string]any{r.Model: map[string]any{"id": r.Model, "name": r.Model, "tool_call": false, "limit": map[string]int{"context": 64000, "output": 1536}}},
 		}}
+	case p != nil && p.Native != nil:
+		n := p.Native
+		options := map[string]any{}
+		for key, value := range n.Timeouts {
+			options[key] = value
+		}
+		if n.IncludeUsage != nil {
+			options["includeUsage"] = *n.IncludeUsage
+		}
+		if p.APIKey != "" {
+			options["apiKey"] = p.APIKey
+		}
+		if p.BaseURL != "" {
+			options["baseURL"] = p.BaseURL
+		}
+		if len(n.Headers) > 0 {
+			options["headers"] = n.Headers
+		}
+		entry := map[string]any{"tool_call": false}
+		if n.ID != "" {
+			entry["id"] = n.ID
+		}
+		if n.Name != "" {
+			entry["name"] = n.Name
+		}
+		if len(n.Limit) > 0 {
+			entry["limit"] = n.Limit
+		}
+		block := map[string]any{"options": options, "models": map[string]any{name: entry}}
+		if n.Package != "" {
+			block["npm"] = n.Package
+		}
+		settings["provider"] = map[string]any{provider: block}
 	case p != nil:
 		options := map[string]any{"apiKey": p.APIKey}
 		if p.BaseURL != "" {

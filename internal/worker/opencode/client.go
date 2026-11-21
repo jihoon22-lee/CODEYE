@@ -61,6 +61,12 @@ type Config struct {
 	// CredentialFile holds the provider's API key (a CODEYE model credential
 	// or an OpenCode auth.json); it is read at every call.
 	CredentialFile string
+	// ConfigFile supplies native OpenCode provider and model settings.
+	ConfigFile string
+	// NativeHome resolves ~/ when the native profile names a private file.
+	NativeHome string
+	// NativeConfigDigest is the config pinned before source acquisition.
+	NativeConfigDigest string
 	// Offline: a call goes only to an endpoint the operator named (the
 	// credential's base_url or the relay); a provider's public default
 	// endpoint and keyless models are refused (ReasonEndpointNotConfigured).
@@ -124,8 +130,10 @@ func (cfg Config) valid() bool {
 	gateway := cfg.Provider() == executor.GatewayProvider
 	switch {
 	case cfg.RelayFile != "":
-		return gateway && cfg.CredentialFile == "" && filepath.IsAbs(cfg.RelayFile) &&
+		return gateway && cfg.CredentialFile == "" && cfg.ConfigFile == "" && filepath.IsAbs(cfg.RelayFile) &&
 			executor.MeteredModel(strings.TrimPrefix(cfg.Model, executor.GatewayProvider+"/"))
+	case cfg.ConfigFile != "":
+		return !gateway && filepath.IsAbs(cfg.ConfigFile) && (cfg.CredentialFile == "" || filepath.IsAbs(cfg.CredentialFile))
 	case cfg.CredentialFile != "":
 		return !gateway && filepath.IsAbs(cfg.CredentialFile)
 	}
@@ -145,6 +153,17 @@ func (cfg Config) provider() (*executor.ModelProvider, string) {
 			return nil, "model_relay_unavailable"
 		}
 		return executor.RelayProvider(relay), ""
+	case cfg.ConfigFile != "":
+		_, p, err := nativeSelection(cfg.ConfigFile, cfg.Model, cfg.CredentialFile, cfg.Offline, cfg.NativeHome, cfg.NativeConfigDigest)
+		switch {
+		case errors.Is(err, ErrNativeEndpoint):
+			return nil, ReasonEndpointNotConfigured
+		case errors.Is(err, ErrCredentialUnavailable):
+			return nil, ReasonCredentialUnavailable
+		case err != nil:
+			return nil, "model_not_configured"
+		}
+		return p, ""
 	case cfg.CredentialFile != "":
 		p, err := ReadCredential(cfg.CredentialFile, cfg.Provider())
 		if err != nil {

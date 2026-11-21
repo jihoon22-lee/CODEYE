@@ -147,8 +147,10 @@ def run(base, root, env, probe_env):
         probe = cli("model", "probe", "--config", cfg).stdout
         assert "provider openai, model openai/gpt-6.2-sol" in probe and "OK" in probe, probe
         session = Session(state, origin)
-        work = next(r for r in session.request("GET", "source-roots")["items"] if r["label"] == "work")
-        project = session.request("POST", "projects", {"name": "ledger", "source": {"kind": "local", "source_root_id": work["id"], "relative_path": "ledger"}})
+        project = session.request("POST", "projects", {
+            "name": "ledger", "local_path": str(source / "ledger"),
+            "analysis": {"send_source_to_model": True, "fetch_dependencies": False, "run_build_scripts": False},
+        })
 
         # 1. 모델 검토 수행.
         view, report = analyze(session, project["id"])
