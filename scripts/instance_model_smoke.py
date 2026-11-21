@@ -11,6 +11,7 @@ base_url만 바꾼 가짜 upstream(scripts/fake_model_upstream.py)이다. 모델
    그 사유를 적는다.
 3. --version만 다른 값을 답하는 OpenCode wrapper로 재시작 → 검토는 실행되고 기록·보고서에
    opencode_version_untested가 남는다.
+4. 관리자가 웹 API로 OpenCode JSONC와 auth.json을 지정하고 연결을 확인한 뒤, 같은 서비스에서 다시 분석한다.
 매 단계 키가 키 파일 밖(state·로그·산출물·보고서·DB dump·프로세스 argv)에 없는지 확인한다.
 
 CODEYE_SMOKE_REAL_MODEL_CREDENTIAL=PATH(0600 CODEYE 키 파일, base_url 없음)를 주면 가짜 upstream
@@ -193,6 +194,26 @@ def run(base, root, env, probe_env):
         assert report["coverage"]["ai_review"]["status"] == "performed", report["coverage"]["ai_review"]
         assert "opencode_version_untested" in report["limitations"], report["limitations"]
         print(f"  시험하지 않은 OpenCode: run {view['status']}, 한계 opencode_version_untested")
+
+        native = directory / "platform.jsonc"
+        native.write_text("// Platform OpenCode profile\n" + json.dumps({
+            "model": "openai/gpt-6.2-sol",
+            "provider": {"openai": {"options": {"baseURL": f"http://127.0.0.1:{good_port}/v1"}}},
+        }))
+        auth = directory / "auth.json"
+        auth.write_text(json.dumps({"openai": {"type": "api", "key": KEY}}))
+        auth.chmod(0o600)
+        saved = session.request("PUT", "admin/opencode", {
+            "executable": opencode, "config_file": str(native), "credential_file": str(auth), "model": "",
+        })
+        assert saved["configured"] and saved["effective_model"] == "openai/gpt-6.2-sol", saved
+        assert saved["probe"] == "not_probed", saved
+        verified = session.request("POST", "admin/opencode/probe", {}, timeout=200)
+        assert verified["probe"] == "verified" and KEY not in json.dumps(verified), verified["probe"]
+        view, report = analyze(session, project["id"])
+        assert report["coverage"]["ai_review"]["status"] == "performed", report["coverage"]["ai_review"]
+        assert "opencode_version_untested" not in report["limitations"], report["limitations"]
+        print("  웹 설정 저장·연결 확인 후 새 OpenCode 실행 파일과 JSONC로 검토 완료")
 
         cli("stop", "--config", cfg)
         checked = no_key_on_disk()

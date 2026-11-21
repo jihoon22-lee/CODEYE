@@ -52,14 +52,14 @@ class Session:
         self.token = link.split("#launch=", 1)[1].split("&", 1)[0]
         self.csrf = self.request("POST", "session", {"launch_token": self.token})["csrf_token"]
 
-    def request(self, method, path, payload=None, headers=None, raw=False):
+    def request(self, method, path, payload=None, headers=None, raw=False, timeout=10):
         fields = dict(headers or {})
         if method != "GET":
             fields.update({"Origin": self.origin, "Content-Type": "application/json"})
             if self.csrf:
                 fields["X-CODEYE-CSRF"] = self.csrf
         data = json.dumps(payload).encode() if payload is not None else None
-        with self.client.open(Request(self.origin + "/api/v1/" + path, method=method, data=data, headers=fields), timeout=10) as r:
+        with self.client.open(Request(self.origin + "/api/v1/" + path, method=method, data=data, headers=fields), timeout=timeout) as r:
             return (r.read(), r.headers) if raw else json.load(r)
 
     def enqueue(self, project_id):
