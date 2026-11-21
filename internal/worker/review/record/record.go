@@ -114,6 +114,9 @@ var (
 	Severities = []string{"high", "medium", "low", "info"}
 )
 
+// ValidEvidenceSymbol reports whether a source symbol can be stored in evidence.
+func ValidEvidenceSymbol(s string) bool { return symbol.MatchString(s) }
+
 // ValidCode reports a fixed reason/limitation code.
 func ValidCode(s string) bool { return code.MatchString(s) }
 

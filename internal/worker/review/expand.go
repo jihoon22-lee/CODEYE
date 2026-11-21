@@ -53,15 +53,16 @@ type expansionSource struct {
 	lines     []string
 }
 
-// citedSymbols selects package functions whose declarations or bodies
+// citedSymbols selects functions and methods whose declarations or bodies
 // intersect the lines a candidate actually cites.
 func citedSymbols(catalog []Excerpt, candidates []CandidateText, files map[string]source.Entry,
-	load func(source.Entry) (*expansionSource, error)) (map[functionName]bool, error) {
+	load func(source.Entry) (*expansionSource, error)) (map[functionName]bool, map[*ast.Ident]string, error) {
 	byID := map[string]Excerpt{}
 	for _, e := range catalog {
 		byID[e.ID] = e
 	}
 	out := map[functionName]bool{}
+	methods := map[*ast.Ident]string{}
 	for _, c := range candidates {
 		for _, id := range c.Evidence {
 			e, ok := byID[id]
@@ -75,25 +76,56 @@ func citedSymbols(catalog []Excerpt, candidates []CandidateText, files map[strin
 			}
 			parsed, err := load(src)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if parsed == nil || e.Start < 1 || e.End > len(parsed.lines) {
 				continue
 			}
+			var overlapping []*ast.FuncDecl
 			for _, decl := range parsed.file.Decls {
 				f, ok := decl.(*ast.FuncDecl)
-				if !ok || f.Recv != nil || f.Body == nil || f.Name.Name == "main" || f.Name.Name == "init" || len(out) >= maxSymbols {
+				if !ok || f.Body == nil || f.Name.Name == "main" || f.Name.Name == "init" ||
+					!record.ValidEvidenceSymbol(f.Name.Name) || len(out)+len(methods) >= maxSymbols {
 					continue
 				}
 				first := parsed.positions.PositionFor(f.Pos(), false).Line
 				last := parsed.positions.PositionFor(f.End(), false).Line
 				if first <= e.End && e.Start <= last {
-					out[functionName{path.Dir(e.Path), parsed.file.Name.Name, f.Name.Name}] = true
+					if f.Recv != nil {
+						overlapping = append(overlapping, f)
+					} else {
+						out[functionName{path.Dir(e.Path), parsed.file.Name.Name, f.Name.Name}] = true
+					}
+				}
+			}
+			for _, f := range overlapping {
+				if len(out)+len(methods) >= maxSymbols {
+					break
+				}
+				// A broad source window alone does not choose between
+				// distinct methods. A name from the candidate can only
+				// disambiguate declarations that intersect its evidence.
+				if len(overlapping) == 1 || explicitlyNamedMethod(c, f, overlapping) {
+					methods[f.Name] = e.Path
 				}
 			}
 		}
 	}
-	return out, nil
+	return out, methods, nil
+}
+
+func explicitlyNamedMethod(c CandidateText, fn *ast.FuncDecl, overlapping []*ast.FuncDecl) bool {
+	named := func(name string) bool {
+		quoted := "`" + name + "`"
+		return strings.Contains(c.Title, quoted) || strings.Contains(c.Condition, quoted)
+	}
+	name := fn.Name.Name
+	if named(methodReceiverName(fn) + "." + name) {
+		return true
+	}
+	return named(name) && !slices.ContainsFunc(overlapping, func(other *ast.FuncDecl) bool {
+		return other != fn && other.Name.Name == name
+	})
 }
 
 type window struct{ lo, hi int } // 0-based inclusive
@@ -133,7 +165,7 @@ func enclosing(lines []string, at int) window {
 
 // expand returns caller/test excerpts for the cited symbols, each bound to
 // the snapshot blob and line range, plus limitation codes.
-func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, catalog []Excerpt, candidates []CandidateText) ([]Excerpt, []string, error) {
+func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, catalog []Excerpt, candidates []CandidateText, withheld, changed map[string]bool) ([]Excerpt, []string, error) {
 	lims := []string{limExpansionGoOnly, limDirectCalls}
 	if !slices.ContainsFunc(catalog, func(e Excerpt) bool { return strings.HasSuffix(e.Path, ".go") }) {
 		return nil, append(lims, limNoSymbol), nil
@@ -141,7 +173,8 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 	eligible := map[string]source.Entry{}
 	for _, e := range snapshot.Manifest.Entries {
 		if e.Kind == "file" && e.SHA256 != "" && e.Size != nil && e.ExcludedReason == "" && strings.HasSuffix(e.Path, ".go") &&
-			inScope(e.Path, scope) && *e.Size <= maxFileBytes && domain.ValidateEvidencePath(e.Path) == nil {
+			inScope(e.Path, scope) && *e.Size <= maxFileBytes &&
+			domain.ValidateEvidencePath(e.Path) == nil && !record.Sensitive([]byte(e.Path)) {
 			eligible[e.Path] = e
 		}
 	}
@@ -153,9 +186,14 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 	overflow := false
 	scannedBytes := int64(0)
 	parsedFiles := map[string]*expansionSource{}
+	positions := token.NewFileSet()
 	load := func(f source.Entry) (*expansionSource, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if withheld[f.Path] {
+			lims = addLim(lims, limSecretWithheld)
+			return nil, nil
 		}
 		if p, cached := parsedFiles[f.Path]; cached {
 			return p, nil
@@ -173,8 +211,7 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || record.Sensitive(b) {
 			return nil, nil
 		}
-		positions := token.NewFileSet()
-		file, err := parser.ParseFile(positions, f.Path, b, 0)
+		file, err := parser.ParseFile(positions, f.Path, b, parser.ParseComments|parser.DeclarationErrors)
 		if err != nil {
 			overflow = true
 			return nil, nil
@@ -183,11 +220,11 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 		parsedFiles[f.Path] = p
 		return p, nil
 	}
-	symbols, err := citedSymbols(catalog, candidates, eligible, load)
+	symbols, methods, err := citedSymbols(catalog, candidates, eligible, load)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(symbols) == 0 {
+	if len(symbols)+len(methods) == 0 {
 		if overflow {
 			lims = append(lims, limCallersOutside)
 		}
@@ -196,6 +233,9 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 	dirs := map[string]bool{}
 	for sym := range symbols {
 		dirs[sym.dir] = true
+	}
+	for _, filename := range methods {
+		dirs[path.Dir(filename)] = true
 	}
 	var files []source.Entry
 	for _, e := range eligible {
@@ -225,6 +265,43 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 	}
 	var out []Excerpt
 	used, hits := 0, 0
+	if len(methods) > 0 {
+		lims = slices.DeleteFunc(lims, func(lim string) bool { return lim == limDirectCalls })
+		methodFiles := files
+		if changed != nil {
+			methodFiles = slices.DeleteFunc(slices.Clone(files), func(e source.Entry) bool { return !changed[e.Path] })
+		}
+		if err := scanMethodFiles(methodFiles, methods, load); err != nil {
+			return nil, nil, err
+		}
+		required := map[string]bool{}
+		for _, candidate := range candidates {
+			for _, id := range candidate.Evidence {
+				required[id] = true
+			}
+		}
+		anchors := slices.DeleteFunc(slices.Clone(catalog), func(x Excerpt) bool { return !required[x.ID] })
+		matches, found, err := methodCallers(ctx, positions, methodFiles, parsedFiles, methods, anchors)
+		if err != nil {
+			return nil, nil, err
+		}
+		hits = found
+		for _, match := range matches {
+			size := len(match.Text) + 1
+			if slices.ContainsFunc(out, func(e Excerpt) bool {
+				return e.Path == match.Path && e.Start <= match.End && match.Start <= e.End
+			}) {
+				continue
+			}
+			if len(out) >= maxExpansion || used+size > maxExpansionBytes {
+				overflow = true
+				continue
+			}
+			match.ID = record.ExcerptID(snapshot.Digest, match.Path, match.SHA256, match.Start, match.End)
+			out = append(out, match)
+			used += size
+		}
+	}
 	for _, f := range files {
 		p, err := load(f)
 		if err != nil {

@@ -58,6 +58,7 @@ type witnessQuery struct {
 	goCommands           []goContractCommand
 	hasGoCommandRoute    bool
 	goDefaults           []string
+	goJSONFields         []string
 }
 
 type contractWitness struct {
@@ -81,6 +82,8 @@ type contractSelection struct {
 	sources               map[string]string
 	goTraces              []goWrapperTrace
 	goOption              goOptionTrace
+	goJSONFields          []goJSONTrace
+	claimWitnesses        [][]contractWitness
 	cDefinitions          []contractWitness
 	cFamily               []contractWitness
 	queries               []witnessQuery
@@ -380,6 +383,10 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 	if err != nil {
 		return contractSelection{}, err
 	}
+	goJSONFields, err := s.goJSONFieldTraces(queries, contents)
+	if err != nil {
+		return contractSelection{}, err
+	}
 	hasTests := false
 	for i := range matches {
 		hasTests = hasTests || len(matches[i][1]) > 0
@@ -532,7 +539,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		}
 	}
 	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents,
-		goTraces: goTraces, goOption: goOption, cDefinitions: cRuntime.choose(queries), cFamily: cFamilies.choose(queries), queries: queries}, nil
+		goTraces: goTraces, goOption: goOption, goJSONFields: goJSONFields, cDefinitions: cRuntime.choose(queries), cFamily: cFamilies.choose(queries), queries: queries, claimWitnesses: contractClaimCandidates(matches)}, nil
 }
 
 func minifiedSource(path string) bool {
@@ -673,7 +680,7 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 		var packageEntry string
 		var goExamples []goContractExample
 		var goCommands []goContractCommand
-		var goDefaults []string
+		var goDefaults, goJSONFields []string
 		addWitnessPaths(paths, c.Statement)
 		members := documentedMembers(c.Statement, true)
 		names := navigationIdentifiers(c.Statement)
@@ -710,6 +717,7 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 				goCommands = goCommandsInContract(goCommands, c.Statement, raw)
 				if hasGo {
 					goDefaults = append(goDefaults, goDefaultFields(c.Statement, raw)...)
+					goJSONFields = documentedGoJSONFields(goJSONFields, c.Statement, raw)
 				}
 				formula.fromPassage(c.Statement, passage)
 				if hasC {
@@ -756,7 +764,7 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 				operation: maintenanceOperation(c.Statement), typeContract: mentionsJavaScriptTypes(c.Statement),
 				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, pythonDocs: pythonDocs, pythonCalls: pythonCalls,
 				formula: formula, cFamilies: cFamilies, packageEntry: packageEntry, goExamples: goExamples, goCommands: goCommands,
-				goDefaults: goDefaults})
+				goDefaults: goDefaults, goJSONFields: goJSONFields})
 		}
 	}
 	common := map[string]int{}
