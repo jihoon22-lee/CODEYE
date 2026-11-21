@@ -139,19 +139,18 @@ func (s *roleStage) verify() analysis.TaskResult {
 			cited[id] = true
 		}
 	}
-	extra, lims, err := expand(s.ctx, s.j.Snapshot, normalizedScope(s.j.Scope), withText, plain)
+	var changed map[string]bool
+	if s.j.PullRequest != nil {
+		changed = make(map[string]bool, len(s.j.PullRequest.Changed))
+		for _, p := range s.j.PullRequest.Changed {
+			changed[p] = true
+		}
+	}
+	extra, lims, err := expand(s.ctx, s.j.Snapshot, normalizedScope(s.j.Scope), withText, plain, s.secretFiles(), changed)
 	if err != nil {
 		s.setEvidence(context)
 		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 	}
-	// Callers and tests in a file a secret analyzer reported stay out.
-	extra = slices.DeleteFunc(extra, func(x Excerpt) bool {
-		if s.secretFiles()[x.Path] {
-			s.rec.Limitations = addLim(s.rec.Limitations, limSecretWithheld)
-			return true
-		}
-		return false
-	})
 	s.rec.Limitations = addLim(s.rec.Limitations, lims...)
 	// The request must fit PromptBudget. Expansion, uncited context and
 	// contracts go first; then candidates are verified as a prefix (investigate
@@ -178,7 +177,12 @@ func (s *roleStage) verify() analysis.TaskResult {
 			}
 		}
 		keep := len(ordered)
-		ordered = append(ordered, extra...)
+		for _, e := range extra {
+			if !citedBy[e.ID] {
+				ordered = append(ordered, e)
+				citedBy[e.ID] = true
+			}
+		}
 		for _, e := range withText {
 			if !citedBy[e.ID] {
 				ordered = append(ordered, e)

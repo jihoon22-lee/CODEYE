@@ -86,7 +86,7 @@ func TestExpansionScopeAndBounds(t *testing.T) {
 	catalog := wholeExcerpts(t, j, "store.go")
 	store := catalog[0]
 	cands := []CandidateText{{ID: "candidate_1", Evidence: []string{store.ID}}}
-	extra, lims, err := expand(t.Context(), j.Snapshot, j.Scope, catalog, cands)
+	extra, lims, err := expand(t.Context(), j.Snapshot, j.Scope, catalog, cands, nil, nil)
 	if err != nil || len(extra) != 2 || slices.Contains(lims, limNoCallers) {
 		t.Fatal(extra, lims, err)
 	}
@@ -96,12 +96,12 @@ func TestExpansionScopeAndBounds(t *testing.T) {
 		}
 	}
 	// A scope limited to store.go never reads callers elsewhere.
-	extra, lims, err = expand(t.Context(), j.Snapshot, domain.Scope{Kind: "paths", Paths: []string{"store.go"}}, catalog, cands)
+	extra, lims, err = expand(t.Context(), j.Snapshot, domain.Scope{Kind: "paths", Paths: []string{"store.go"}}, catalog, cands, nil, nil)
 	if err != nil || len(extra) != 0 || !slices.Contains(lims, limNoCallers) {
 		t.Fatal(extra, lims, err)
 	}
 	// No declared function in cited code: nothing to expand.
-	extra, lims, _ = expand(t.Context(), j.Snapshot, j.Scope, catalog, []CandidateText{{ID: "candidate_1", Evidence: []string{"ev_unknown"}}})
+	extra, lims, _ = expand(t.Context(), j.Snapshot, j.Scope, catalog, []CandidateText{{ID: "candidate_1", Evidence: []string{"ev_unknown"}}}, nil, nil)
 	if len(extra) != 0 || !slices.Contains(lims, limNoSymbol) {
 		t.Fatal(extra, lims)
 	}

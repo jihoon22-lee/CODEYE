@@ -418,6 +418,7 @@ type corpusLinks struct {
 	wholeWitness  map[string]record.Excerpt
 	partial       map[string]bool
 	workflow      []workflowLink
+	claims        contractAllocation
 }
 
 // codeCorpus selects code and test excerpts round-robin over the modules of
@@ -500,6 +501,16 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 		for i, name := range trace.callees {
 			caller, callee := trace.excerpts[i], trace.excerpts[i+1]
 			links.directCalls = append(links.directCalls, directCall{CallerEvidenceID: caller.ID, CalleeEvidenceID: callee.ID, Symbol: name})
+		}
+	}
+	// Keep one fully bound value path in the initial investigation when it
+	// fits alongside established links and ordinary breadth windows.
+	for _, trace := range selected.goJSONFields {
+		if windows, ok := wholeTraceWindows(out, trace.excerpts, remain, roleMaxCodeFiles-2); ok && len(windows) > 0 {
+			for _, x := range windows {
+				keep(x, x.End+1)
+			}
+			break
 		}
 	}
 	if len(selected.cFamily) > 0 {
@@ -617,6 +628,7 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 			links.partial[x.ID] = true
 		}
 	}
+	links.claims = s.contractClaimAllocation(out, selected, workflow, documents)
 	return out, links, addLim(nil, lims...), nil
 }
 

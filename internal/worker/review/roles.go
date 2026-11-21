@@ -589,14 +589,15 @@ func (s *roleStage) documents() analysis.TaskResult {
 const investigateContract = `For this role use exactly {"candidates":[{"title":"...","condition":"concrete trigger","impact":"...","improvement":"...","counterpoint":"actual counterevidence or remaining uncertainty","evidence_ids":["ev_..."]}],"strengths":[{"title":"specific engineering practice","benefit":"what it prevents or enables","scope":"directory","evidence_ids":["ev_..."]}],"contract_comparisons":[{"contract_index":1,"applies_to":"directory","status":"match|partial|mismatch|unknown","reason":"specific link or missing evidence","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_..."]}]}. Return at most 4 candidates and 3 strengths. Cite scope.excerpts code or test for candidates and scoped implementation code for strengths. For whole_run only, compare up to 6 documents.contracts, using its 1-based index, scope or narrower directory and unmodified evidence_ids. Cite scoped implementation for match, partial or mismatch. Unknown may cite no code. Slices return no comparisons. Do not claim reproduction or provide attack instructions.`
 
 type investigateScope struct {
-	WholeRun       bool                    `json:"whole_run"`
-	Snapshot       string                  `json:"snapshot_manifest_digest"`
-	Modules        []string                `json:"modules"`
-	Excerpts       []record.Excerpt        `json:"excerpts"`
-	DirectCalls    []directCall            `json:"direct_calls,omitempty"`
-	MemberTest     *memberTestHint         `json:"member_test,omitempty"`
-	WorkflowRoutes []workflowEvidenceInput `json:"workflow_routes,omitempty"`
-	Limitations    []string                `json:"limitations"`
+	WholeRun        bool                    `json:"whole_run"`
+	Snapshot        string                  `json:"snapshot_manifest_digest"`
+	Modules         []string                `json:"modules"`
+	Excerpts        []record.Excerpt        `json:"excerpts"`
+	DirectCalls     []directCall            `json:"direct_calls,omitempty"`
+	MemberTest      *memberTestHint         `json:"member_test,omitempty"`
+	WorkflowRoutes  []workflowEvidenceInput `json:"workflow_routes,omitempty"`
+	ContractAnchors []contractAnchorInput   `json:"contract_anchors,omitempty"`
+	Limitations     []string                `json:"limitations"`
 }
 
 func (scope investigateScope) withExcerpts(list []record.Excerpt, links corpusLinks) investigateScope {
@@ -794,6 +795,13 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		}
 	}
 	in.Scope = in.Scope.withExcerpts(sent, links)
+	if links.claims.keep > 0 {
+		if balanced, ok := s.fitContractAllocation(in, links, docEv); ok {
+			sent = balanced
+			in.Scope = in.Scope.withExcerpts(sent, links)
+			in.Scope.ContractAnchors = links.claims.submitted(sent)
+		}
+	}
 	contract := investigateContract
 	var navigation []contractNavigationCandidate
 	if s.slice == nil && uDoc.State == record.UpstreamAccepted {
