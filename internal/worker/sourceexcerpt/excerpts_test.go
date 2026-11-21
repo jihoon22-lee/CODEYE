@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
@@ -137,5 +138,100 @@ func TestDecodeChecksAnchorAndSnapshot(t *testing.T) {
 	body, _ = Encode(doc)
 	if _, ok := Decode(body, doc.RunID, doc.AttemptID, doc.Snapshot, lookup); ok {
 		t.Fatal("excerpt with a missing anchor accepted")
+	}
+}
+
+func TestReadDocumentCitationPreservesApprovedLineRange(t *testing.T) {
+	// The first 16 lines of docs/REPORT.md at 974491f. Both claims fell
+	// beyond the old generic storage cap, despite being sent to the model.
+	body, err := os.ReadFile("testdata/report-citation.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.SplitN(string(body), "\n", 17)
+	if len(lines) != 17 || lines[15] != "" {
+		t.Fatal("fixture must retain the blank line at the end of the citation")
+	}
+	text := strings.Join(lines[:16], "\n")
+	if record.JSONLen(text) != 1971 {
+		t.Fatalf("pinned document range does not reproduce the encoded input size: %d", record.JSONLen(text))
+	}
+	dir := t.TempDir()
+	write := func(name, content string) source.Entry {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		size := int64(len(content))
+		return source.Entry{Path: name, Kind: "file", Size: &size, SHA256: domain.Digest([]byte(content))}
+	}
+	entry := write("REPORT.md", string(body))
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+
+	if generic, ok := ReadRange(root, entry, 1, 16); !ok || generic.EndLine != 13 || !generic.ValidCitation(1, 16) {
+		t.Fatalf("generic/legacy policy changed: %+v", generic)
+	}
+	got, ok := ReadDocumentRange(root, entry, 1, 16)
+	if !ok || got.Text != text || !got.ValidDocumentCitation(1, 16) || got.ValidCitation(1, 16) ||
+		!strings.Contains(lines[13], "builder.input_digest") || !strings.Contains(lines[14], "export.include_code") {
+		t.Fatalf("approved document citation lost source: %d–%d", got.StartLine, got.EndLine)
+	}
+	if clipped, ok := got.AtDocumentCitation(1, 15); !ok || clipped.Text != strings.Join(lines[:15], "\n") {
+		t.Fatalf("shared start did not preserve the shorter citation: %d–%d", clipped.StartLine, clipped.EndLine)
+	}
+	if _, ok := got.AtDocumentCitation(1, 17); ok {
+		t.Fatal("attached a shorter typed window to a longer citation")
+	}
+	secret := "example" + "token0987654321"
+	for _, tc := range []struct {
+		name, body string
+		end        int
+	}{
+		{"beyond EOF", string(body), 18},
+		{"beyond line limit", strings.Repeat("line\n", DocumentLines+1), DocumentLines + 1},
+		{"beyond encoded byte limit", strings.Repeat("<", DocumentBytes/6+1) + "\n", 1},
+		{"credential outside citation", string(body) + "\nvar token = \"" + secret + "\"\n", 16},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := write("invalid.md", tc.body)
+			if _, ok := ReadDocumentRange(root, input, 1, tc.end); ok {
+				t.Fatal("accepted incomplete or unsafe document text")
+			}
+		})
+	}
+	write("REPORT.md", string(body)+"\nsource drift\n")
+	if _, ok := ReadDocumentRange(root, entry, 1, 16); ok {
+		t.Fatal("captured a document after invalidating its snapshot hash")
+	}
+}
+
+func TestDecodeUsesTheWiderLimitOnlyForNewDocumentItems(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	lookup := func(path string) (string, bool) { return sha, path == "README.md" }
+	item := Item{Path: "README.md", SHA256: sha, Anchor: 1, Excerpt: Excerpt{StartLine: 1, EndLine: 1, Text: strings.Repeat("x", 1900)}}
+	for _, tc := range []struct {
+		version, kind string
+		accept        bool
+	}{
+		{LegacyVersion, "", false},
+		{Version, "", false},
+		{Version, DocumentKind, false},
+		{DocumentVersion, "", false},
+		{DocumentVersion, "code", false},
+		{DocumentVersion, DocumentKind, true},
+	} {
+		item.Kind = tc.kind
+		doc := Document{SchemaVersion: tc.version, RunID: "run", AttemptID: "attempt", Snapshot: "snapshot", Items: []Item{item}}
+		body, err := Encode(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := Decode(body, "run", "attempt", "snapshot", lookup); ok != tc.accept {
+			t.Errorf("edition %s with kind %q accepted=%t, want %t", tc.version, tc.kind, ok, tc.accept)
+		}
 	}
 }

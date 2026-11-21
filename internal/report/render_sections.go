@@ -64,8 +64,9 @@ type secPart struct {
 }
 
 type secTable struct {
-	Head []string
-	Rows [][]secCell
+	Head        []string
+	Rows        [][]secCell
+	TestResults bool
 	// Details is parallel to Rows when a table has an individual inspection.
 	// Details in every table with the same DetailGroup open one at a time.
 	Details     []secTableDetail
@@ -104,6 +105,9 @@ type secCell struct {
 	Text   string
 	Code   bool
 	Anchor string
+	URL    string
+	Note   string
+	Suffix string
 }
 
 // secItem is one list entry: text followed by code spans.
@@ -794,10 +798,17 @@ func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 }
 
 func mdCell(c secCell) string {
+	text := mdText(c.Text)
 	if c.Code {
-		return mdCode(c.Text)
+		text = mdCode(c.Text + c.Suffix)
 	}
-	return mdText(c.Text)
+	if c.URL != "" {
+		text = "[" + text + "](<" + c.URL + ">)"
+	}
+	if c.Note != "" {
+		text += " · " + mdText(c.Note)
+	}
+	return text
 }
 
 func mdInspectionDetail(p func(...string), d secTableDetail) {
@@ -988,7 +999,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <h2>{{.Title}}</h2>
 {{if eq .ID "overview"}}
 {{template "reading_overview" $}}
-{{if eq $.R.Inputs.Profile "with-tests"}}<div id="test-results">{{template "part" (pair $l $.TestRunPart)}}</div>{{end}}
+{{if eq $.R.Inputs.Profile "with-tests"}}<div id="test-results" class="report-test-results" data-test-status="{{$.R.Coverage.TestStatus}}">{{template "part" (pair $l $.TestRunPart)}}</div>{{end}}
 {{if $.Summary}}{{range .Parts}}{{template "part" (pair $l .)}}{{end}}{{end}}
 <details class="card report-disclosure">
 <summary>{{reportIcon "chevron-down"}} {{$l.Label "reading.context_details"}}</summary>
@@ -1170,8 +1181,8 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{end}}{{if .Counts}}<table><tr><th>{{$l.Label "col.item"}}</th><th>{{$l.Label "col.count"}}</th></tr>
 {{range .Counts}}<tr><td>{{.Label}}</td><td data-count="{{.Name}}">{{.Value}}</td></tr>
 {{end}}</table>
-{{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table{{if eq .Table.DetailGroup "metrics-detail"}} class="report-measurement-table"{{end}}><tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}{{if .Table.Details}}<th scope="col">{{$l.Label "inspection.detail_column"}}</th>{{end}}</tr>
-{{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}{{if $t.Details}}<td><details class="report-row-toggle" name="{{$t.DetailGroup}}"><summary aria-controls="{{(index $t.Details $i).ID}}" aria-label="{{(index $t.Details $i).Label}}">{{$l.Label "inspection.open_detail"}}</summary></details></td>{{end}}</tr>
+{{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table{{if eq .Table.DetailGroup "metrics-detail"}} class="report-measurement-table"{{else if .Table.TestResults}} class="report-test-result-table"{{end}}>{{if .Table.TestResults}}<thead>{{end}}<tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}{{if .Table.Details}}<th scope="col">{{$l.Label "inspection.detail_column"}}</th>{{end}}</tr>{{if .Table.TestResults}}</thead>{{end}}
+{{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $column, $cell := $row}}<td{{if $t.TestResults}} data-label="{{index $t.Head $column}}"{{end}}>{{if $t.TestResults}}<div class="report-cell-value">{{end}}{{if .Anchor}}<a href="#{{.Anchor}}">{{else if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{end}}{{if .Code}}<code>{{if $t.TestResults}}{{range $i, $segment := pathSegments .Text}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}{{with .Suffix}}<span class="report-test-line">{{.}}</span>{{end}}{{else}}{{.Text}}{{end}}</code>{{else}}{{.Text}}{{end}}{{if or .Anchor .URL}}</a>{{end}}{{if .Note}}<small class="report-test-detail">{{.Note}}</small>{{end}}{{if $t.TestResults}}</div>{{end}}</td>{{end}}{{if $t.Details}}<td><details class="report-row-toggle" name="{{$t.DetailGroup}}"><summary aria-controls="{{(index $t.Details $i).ID}}" aria-label="{{(index $t.Details $i).Label}}">{{$l.Label "inspection.open_detail"}}</summary></details></td>{{end}}</tr>
 {{if $t.Details}}{{with index $t.Details $i}}<tr class="report-row-detail" id="{{.ID}}"><td colspan="{{$t.DetailColumns}}">
 {{template "inspection_detail" (inspectionPair $l .)}}</td></tr>{{end}}{{end}}
 {{end}}</table></div>
@@ -1226,6 +1237,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{if .PrintLocation}}<p class="report-print-citation">{{template "citation_file" .}}</p>{{end}}
 {{else if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action export-evidence-control" target="_blank" rel="noopener noreferrer" aria-label="{{.ActionLabel}} · {{.Location}}">{{template "citation_action" .}}{{reportIcon "external-link"}}</a>
 {{else}}{{template "citation_file" .}}{{end}}
+{{if .Coverage}}<small class="report-source-coverage">{{.Coverage}}</small>{{end}}
 </div>{{end}}
 {{define "source_preview"}}{{with .}}<div class="report-selected-source">
 <p class="report-excerpt-label"><code class="report-path-text">{{range $i, $segment := pathSegments .File}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code></p>

@@ -104,7 +104,7 @@ func comparisonAnchor(i int) string { return "document-comparison-" + strconv.It
 func strengthAnchor(i int) string   { return "code-strength-" + strconv.Itoa(i+1) }
 
 type sourceCitation struct {
-	File, Range, Location                             string
+	File, Range, Location, Coverage                   string
 	ID, Anchor, Jump                                  string
 	ExcerptLocation, Text                             string
 	URL, LinkLabel                                    string
@@ -260,6 +260,9 @@ func newSourceCitation(l Locale, kind, path string, start, end int, excerpt *sou
 	switch kind {
 	case "document":
 		s.ActionLabel = l.Label("evidence.view_document")
+		if excerpt != nil && (excerpt.StartLine > start || excerpt.EndLine < end) {
+			s.Coverage = tf(l, "docs.citation_stored_ranges", start, end, excerpt.StartLine, excerpt.EndLine)
+		}
 	case "test":
 		s.ActionLabel = l.Label("evidence.view_test_code")
 	case "manifest":

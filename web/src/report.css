@@ -104,9 +104,9 @@
 .web-report .report-item-category { display: block; color: var(--report-muted); }
 .web-report .report-reading-groups > .report-reading-group { border: 0; background: transparent; padding: 0; }
 
-.web-report .report-test-results > summary { color: #815114; }
-.web-report .report-test-results[data-test-status='failed'] > summary { color: #a33041; }
-.web-report .report-test-results[data-test-status='passed'] > summary { color: #176049; }
+.web-report .report-test-results > summary { color: var(--report-warn); }
+.web-report .report-test-results[data-test-status='failed'] > summary { color: var(--report-bad); }
+.web-report .report-test-results[data-test-status='passed'] > summary { color: var(--report-good); }
 .web-report .report-test-reason { display: block; margin-inline-start: 1rem; color: var(--report-muted); }
 
 .web-report .report-executive { margin-top: .55rem; }
@@ -278,7 +278,7 @@
   .web-report .report-rail .report-search:has(.report-search-toggle[aria-expanded='true']) { grid-column: 1 / -1; }
   .web-report .report-rail:has(.report-search-toggle[aria-expanded='true']) .report-tabs { grid-column: 1 / -1; }
   .web-report .report-main > [role='tabpanel'] { margin: 0; }
-  .web-report :is(.report-tab-content, .report-section, .report-reading-groups [tabindex='-1'], .finding-card summary) { scroll-margin-block-start: 4rem; }
+  .web-report :is(.report-tab-content, .report-section, .report-reading-groups [tabindex='-1'], .finding-card summary, .report-test-results, .report-test-results > summary) { scroll-margin-block-start: 4rem; }
 }
 
 @container codeye-report (max-width: 32rem) {

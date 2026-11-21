@@ -50,6 +50,7 @@ type Publication struct {
 	StartedAt, FinishedAt       *time.Time
 	Run                         Run
 	Profile, ScopeKind          string
+	ScopePaths                  []string
 	Snapshot                    struct {
 		ID, Consistency string
 		ManifestDigest  *string
@@ -119,15 +120,13 @@ func (s *Store) LoadPublication(ctx context.Context, runID string) (Publication,
 			p.PullRequest = &pr
 		}
 		var req struct {
-			Profile string `json:"profile"`
-			Scope   struct {
-				Kind string `json:"kind"`
-			} `json:"scope"`
+			Profile string       `json:"profile"`
+			Scope   domain.Scope `json:"scope"`
 		}
 		if request == nil || json.Unmarshal(request, &req) != nil {
 			return p, domain.ErrInvalid
 		}
-		p.Profile, p.ScopeKind = req.Profile, req.Scope.Kind
+		p.Profile, p.ScopeKind, p.ScopePaths = req.Profile, req.Scope.Kind, req.Scope.Paths
 		if err = tx.QueryRow(ctx, "SELECT id::text,consistency,manifest_digest,source_sha FROM snapshots WHERE id=$1", *r.SnapshotID).
 			Scan(&p.Snapshot.ID, &p.Snapshot.Consistency, &p.Snapshot.ManifestDigest, &p.Snapshot.SourceSHA); err != nil {
 			return p, err

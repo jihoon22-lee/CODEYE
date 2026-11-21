@@ -15,6 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/testexec/faildoc"
 )
 
 var profiles = map[string]bool{"deep-review": true, "with-tests": true, "focused": true}
@@ -140,12 +141,13 @@ func Build(in Input, reg *Registry) (Report, error) {
 	processedUnion, unionComplete := map[string]bool{}, true
 	obsSeen := map[string]bool{}
 	findSeen := map[string]bool{}
-	var snippets map[sourceexcerpt.Key][]sourceexcerpt.Excerpt
+	var snippets, documentSnippets map[sourceexcerpt.Key][]sourceexcerpt.Excerpt
 	var legacyExcerpts bool
 	var goGraphs []gograph.Document
 	graphTasks := map[string]bool{}
 	graphBudget := gograph.MaxBytes
 	if rm != nil {
+		testFailureEvidence := in.decodeGoTestFailureEvidence(manifest, *rm, artByID, states)
 		for _, k := range keys {
 			st := states[k]
 			if st.manifest == nil {
@@ -169,11 +171,19 @@ func Build(in Input, reg *Registry) (Report, error) {
 				if e.Name != "unreported" {
 					ctx.Executions[e.Name] = ref
 				}
-				r.Executions = append(r.Executions, executionOf(ref, k, ctx.TaskExecutionID))
+				execution := executionOf(ref, k, ctx.TaskExecutionID)
+				if evidence, ok := testFailureEvidence[k]; ok && e.Name == "test.run" {
+					execution.GoTestFailures = evidence.rows
+					decoderOf[evidence.sidecar] = goTestFailureDecoder
+				}
+				r.Executions = append(r.Executions, execution)
 			}
 			for _, ma := range st.manifest.Artifacts {
 				art := artByID[ma.ArtifactID]
 				body := in.Bodies[art.ID]
+				if art.MediaType == faildoc.MediaType {
+					continue // The accepted test.run owns this optional evidence.
+				}
 				if art.MediaType == gograph.MediaType {
 					list, found := ctx.Executions["go.list"]
 					if found && list.Stdout != nil && len(body) <= graphBudget && art.Role == "other" && !graphTasks[k] && (k == "go-vet" || strings.HasPrefix(k, "go-vet.m")) {
@@ -192,9 +202,14 @@ func Build(in Input, reg *Registry) (Report, error) {
 					if doc, ok := sourceexcerpt.Decode(body, in.Run.ID, in.Attempt.ID, in.Snapshot.ManifestDigest, index.Lookup); ok && art.Role == "other" && snippets == nil {
 						legacyExcerpts = doc.SchemaVersion == sourceexcerpt.LegacyVersion
 						snippets = make(map[sourceexcerpt.Key][]sourceexcerpt.Excerpt, len(doc.Items))
+						documentSnippets = make(map[sourceexcerpt.Key][]sourceexcerpt.Excerpt)
 						for _, item := range doc.Items {
+							windows := snippets
+							if item.Kind == sourceexcerpt.DocumentKind {
+								windows = documentSnippets
+							}
 							key := item.Key()
-							snippets[key] = append(snippets[key], item.Excerpt)
+							windows[key] = append(windows[key], item.Excerpt)
 						}
 						decoderOf[art.ID] = sourceexcerpt.MediaType + ";schema_version=" + doc.SchemaVersion
 					}
@@ -416,7 +431,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 		notes.add(NotePullRequestFocus)
 	}
 	r.Coverage.Notes = notes.list()
-	if len(snippets) == 0 {
+	if len(snippets) == 0 && len(documentSnippets) == 0 {
 		lim.add(LimNoCodeExcerpts)
 	}
 	r.Limitations = lim.list()
@@ -425,7 +440,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	composeSections(&r, in, states, keys, rm != nil)
 	r.Metrics.GoDependencies = goGraphs
 	r.QualityVerdict = reportVerdict(r)
-	attachExcerpts(&r, snippets, legacyExcerpts)
+	attachExcerpts(&r, snippets, documentSnippets, legacyExcerpts)
 	// The pull-request section counts changed files sent to the model only
 	// when the run sent the model a request: a run without a model (whose
 	// records hold calls with no request) says so instead of "0 of N sent".

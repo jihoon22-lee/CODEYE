@@ -254,7 +254,7 @@ func validateModelSections(r Report) error {
 			if !e.PackageReference.IsZero() && e.ID != record.ExcerptID(r.Inputs.ManifestSHA256, e.Path, e.BlobSHA256, e.StartLine, e.EndLine) {
 				return nil, invalidf("section package evidence is not bound to the document citation")
 			}
-			if e.Excerpt != nil && (free || !sourceexcerpt.SafePath(e.Path) || !e.Excerpt.ValidCitation(e.StartLine, e.EndLine) ||
+			if e.Excerpt != nil && (free || !sourceexcerpt.SafePath(e.Path) || !validReportCitation(*e.Excerpt, e.StartLine, e.EndLine, e.Kind, r.Builder.Version) ||
 				e.ID != record.ExcerptID(r.Inputs.ManifestSHA256, e.Path, e.BlobSHA256, e.StartLine, e.EndLine)) {
 				return nil, invalidf("section excerpt is invalid")
 			}

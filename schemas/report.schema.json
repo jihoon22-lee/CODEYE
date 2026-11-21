@@ -240,7 +240,24 @@
         "stdout_truncated": {"type": "boolean"},
         "stderr_truncated": {"type": "boolean"},
         "started_at": {"type": ["string", "null"]},
-        "ended_at": {"type": ["string", "null"]}
+        "ended_at": {"type": ["string", "null"]},
+        "go_test_failures": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"$ref": "#/$defs/goTestFailure"}}
+      },
+      "if": {"required": ["go_test_failures"]},
+      "then": {"properties": {
+        "task_key": {"pattern": "^test\\.go(?:\\.m[0-9]{2,})?$"}, "name": {"const": "test.run"},
+        "status": {"const": "exited"}, "cleanup": {"const": "confirmed"}, "exit_code": {"type": "integer", "minimum": 1},
+        "started_at": {"type": "string"}, "ended_at": {"type": "string"}, "stdout_artifact_id": {"type": "string", "minLength": 1},
+        "stdout_truncated": {"const": false}, "stderr_truncated": {"const": false}
+      }}
+    },
+    "goTestFailure": {
+      "type": "object", "additionalProperties": false, "required": ["path", "line"],
+      "description": "검증한 Go 테스트 실패 위치. 원시 출력, 테스트 메시지, 패키지 이름은 싣지 않는다.",
+      "properties": {
+        "name": {"type": "string", "maxLength": 128, "pattern": "^Test(?:(?:[A-Z0-9_]|[^\\x00-\\x7F])(?:[A-Za-z0-9_]|[^\\x00-\\x7F])*)?$", "description": "코드 포함 보고서에서만 제공하는 Go 테스트 함수 이름."},
+        "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\\\:\\r\\n]+_test\\.go$"},
+        "line": {"type": "integer", "minimum": 1}
       }
     },
     "artifact": {
@@ -343,7 +360,7 @@
         "entry_path": {"type": "string", "minLength": 1}, "entry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }}
     ]},
-    "sectionEvidence": {"type": "object", "additionalProperties": false, "required": ["id", "kind", "path", "start_line", "end_line", "blob_sha256"], "properties": {"id": {"type": "string", "pattern": "^ev_[0-9a-f]{24}$"}, "kind": {"enum": ["code", "test", "document", "manifest"]}, "path": {"type": "string", "minLength": 1}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "excerpt": {"$ref": "https://schemas.codeye.invalid/v0.1/finding.schema.json#/$defs/sourceExcerpt"}, "blob_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "directive_path": {"type": "string", "minLength": 1, "description": "Python docstring을 공개 문서에 연결하는 스냅샷 Markdown 페이지 경로."}, "package_reference": {"$ref": "#/$defs/packageReference"}}, "allOf": [{"if": {"required": ["directive_path"]}, "then": {"properties": {"kind": {"const": "document"}, "path": {"pattern": "\\.py$"}}}}, {"if": {"required": ["package_reference"]}, "then": {"not": {"required": ["directive_path"]}, "properties": {"kind": {"const": "document"}, "path": {"pattern": "\\.[mM]([dD][xX]?|[aA][rR][kK][dD][oO][wW][nN])$"}}}}]},
+    "sectionEvidence": {"type": "object", "additionalProperties": false, "required": ["id", "kind", "path", "start_line", "end_line", "blob_sha256"], "properties": {"id": {"type": "string", "pattern": "^ev_[0-9a-f]{24}$"}, "kind": {"enum": ["code", "test", "document", "manifest"]}, "path": {"type": "string", "minLength": 1}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "excerpt": {"anyOf": [{"$ref": "https://schemas.codeye.invalid/v0.1/finding.schema.json#/$defs/sourceExcerpt"}, {"$ref": "https://schemas.codeye.invalid/v0.1/finding.schema.json#/$defs/documentSourceExcerpt"}]}, "blob_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "directive_path": {"type": "string", "minLength": 1, "description": "Python docstring을 공개 문서에 연결하는 스냅샷 Markdown 페이지 경로."}, "package_reference": {"$ref": "#/$defs/packageReference"}}, "allOf": [{"if": {"properties": {"kind": {"not": {"const": "document"}}}}, "then": {"properties": {"excerpt": {"$ref": "https://schemas.codeye.invalid/v0.1/finding.schema.json#/$defs/sourceExcerpt"}}}}, {"if": {"required": ["directive_path"]}, "then": {"properties": {"kind": {"const": "document"}, "path": {"pattern": "\\.py$"}}}}, {"if": {"required": ["package_reference"]}, "then": {"not": {"required": ["directive_path"]}, "properties": {"kind": {"const": "document"}, "path": {"pattern": "\\.[mM]([dD][xX]?|[aA][rR][kK][dD][oO][wW][nN])$"}}}}]},
     "pull_request_counts": {"type": "object", "additionalProperties": false, "required": ["changed_lines", "changed_file", "changed_file_other_lines", "elsewhere"],
       "description": "changed_lines: 변경된 줄 위, changed_file: 변경 줄을 모르는 변경 파일(파일 단위로 변경에 넣는다), changed_file_other_lines: 변경 파일의 다른 줄(기존), elsewhere: 변경하지 않은 파일(기존)",
       "properties": {"changed_lines": {"type": "integer", "minimum": 0}, "changed_file": {"type": "integer", "minimum": 0}, "changed_file_other_lines": {"type": "integer", "minimum": 0}, "elsewhere": {"type": "integer", "minimum": 0}}},
@@ -409,6 +426,22 @@
         {"required": ["metrics"], "properties": {"metrics": {"required": ["go_package_dependencies"]}}}
       ]},
       "then": {"required": ["builder"], "properties": {"builder": {"properties": {"version": {"pattern": "^(1[7-9]|[2-9][0-9]|[1-9][0-9]{2,})$"}}}}}},
+    {"if": {"required": ["executions"], "properties": {"executions": {"contains": {"required": ["go_test_failures"]}}}},
+     "then": {
+       "required": ["builder", "export", "attempt", "artifacts"],
+       "properties": {
+         "builder": {"properties": {"version": {"pattern": "^(1[89]|[2-9][0-9]|[1-9][0-9]{2,})$"}}},
+         "inputs": {"required": ["profile"], "properties": {"profile": {"const": "with-tests"}}},
+         "coverage": {"properties": {"test_status": {"const": "failed"}}},
+         "tasks": {"contains": {"required": ["key"], "properties": {"key": {"pattern": "^test\\.go(?:\\.m[0-9]{2,})?$"}, "status": {"const": "failed"}, "reason": {"enum": ["test_command_failed", "test_dependencies_unavailable"]}}}},
+         "attempt": {"properties": {"cleanup_state": {"const": "confirmed"}}},
+         "artifacts": {"contains": {"required": ["decoder", "task_key"], "properties": {"decoder": {"const": "application/vnd.codeye.go-test-failures+json;schema_version=0.1"}, "role": {"const": "other"}, "media_type": {"const": "application/vnd.codeye.go-test-failures+json"}, "task_key": {"pattern": "^test\\.go(?:\\.m[0-9]{2,})?$"}}}}
+       },
+       "if": {"properties": {"export": {"properties": {"include_code": {"const": true}}}}},
+       "then": {"properties": {"executions": {"items": {"properties": {"go_test_failures": {"items": {"required": ["name"]}}}}}}},
+       "else": {"properties": {"executions": {"items": {"properties": {"go_test_failures": {"items": {"not": {"required": ["name"]}}}}}}}}
+     }},
+    {"if": {"not": {"required": ["builder"], "properties": {"builder": {"required": ["version"], "properties": {"version": {"pattern": "^(1[89]|[2-9][0-9]|[1-9][0-9]{2,})$"}}}}}}, "then": {"properties": {"documents": {"properties": {"evidence": {"items": {"properties": {"excerpt": {"$ref": "https://schemas.codeye.invalid/v0.1/finding.schema.json#/$defs/sourceExcerpt"}}}}}}, "environment": {"properties": {"evidence": {"items": {"properties": {"excerpt": {"$ref": "https://schemas.codeye.invalid/v0.1/finding.schema.json#/$defs/sourceExcerpt"}}}}}}, "code_review": {"properties": {"evidence": {"items": {"properties": {"excerpt": {"$ref": "https://schemas.codeye.invalid/v0.1/finding.schema.json#/$defs/sourceExcerpt"}}}}}}, "findings": {"items": {"properties": {"evidence": {"items": {"properties": {"excerpt": {"$ref": "https://schemas.codeye.invalid/v0.1/finding.schema.json#/$defs/sourceExcerpt"}}}}}}}}}},
     {"$comment": "코드 미포함 문서 근거에서 패키지와 호출 이름을 생략한다.",
      "if": {"required": ["export"], "properties": {"export": {"properties": {"include_code": {"const": false}}}}},
      "then": {"properties": {"documents": {"properties": {"evidence": {"items": {"properties": {"package_reference": {"not": {"required": ["name"]}}}}}}}}}},

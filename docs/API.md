@@ -406,9 +406,11 @@ C/C++ 진단의 `observations[].related_locations`에는 도구가 근거로 제
 }
 ```
 
-Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `directive_path`로 원래 Markdown 페이지를 가리킨다. `path`, 줄 범위, `blob_sha256`는 docstring이 담긴 스냅샷의 실제 Python 파일을 가리킨다. 코드 미포함 내보내기에도 출처 경로가 남는다.
+Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `directive_path`로 원래 Markdown 페이지를 가리킨다. `path`, 줄 범위, `blob_sha256`는 docstring이 담긴 스냅샷의 실제 Python 파일을 가리킨다. 코드 미포함 내보내기에도 출처 경로가 남는다. 생성기 18의 문서 근거 `excerpt`는 인용 시작과 끝이 일치하는 경우 최대 40줄·JSON 문자열 2,000바이트까지 담는다. 코드·테스트·도구 진단의 발췌는 기존 한도를 따른다.
 
 보고서 생성기 15부터 수락된 전체 검토에 조회·변경 코드와 실행 결과를 확인하는 테스트 단언이 함께 기록되면 연결된 문서 대조 행에 `related_workflow`가 생긴다. 이 객체의 `read_evidence_id`, `change_evidence_id`, `test_evidence_id`는 각각 `documents.evidence[]`의 코드·코드·테스트 위치를 참조한다. 예를 들어 `{"read_evidence_id":"ev_6de50b26e09a4a13b5a3ee60","change_evidence_id":"ev_a960e56bf22c43f2163e9f0d","test_evidence_id":"ev_d8c2833bb7f0d017d94f0eb0"}`는 합성 검토 예시의 값을 참조한다. 이 위치로 `status`, `reason`, `code_evidence_ids`, `coverage.test_status`를 바꾸지 않는다. 코드 미포함 내보내기는 위치와 ID를 남긴다. [검토 예시](../examples/review/investigate-workflow-reading.json)
+
+생성기 18부터 `with-tests`의 실패한 Go 실행에 선택 배열 `executions[].go_test_failures`가 생길 수 있다. 각 항목은 해당 스냅샷의 테스트 선언을 가리키는 `path`와 1부터 시작하는 `line`을 담는다. 코드 포함 JSON에는 `name`도 있다. 예를 들어 `{"name":"TestAnswer","path":"pkg/answer_test.go","line":5}`를 읽고, 같은 보고서의 코드 미포함 응답에서는 `name` 속성이 빠진다. 원시 stdout은 이 배열에 포함되지 않는다. 같은 실행에서 다른 패키지의 의존성 오류와 이름 있는 실패가 함께 확인되면 작업 사유와 실패 위치를 모두 제공한다. 배열이 없는 경우에는 상위 실행의 상태·종료 코드와 `coverage.test_status`를 읽는다. [워커 근거 예시](../examples/go-test-failures.json)
 
 문서의 호출 예제를 로컬 npm 패키지와 연결하면 `documents.evidence[].package_reference`에 `manifest_path`, `manifest_sha256`, `entry_path`, `entry_sha256`을 기록한다. 코드 포함 JSON은 패키지의 `name`, 사용 예제의 `callable`, 대응하는 `export`도 담는다. 문서 근거 자체의 `path`, 줄 범위와 `blob_sha256`는 안내 원문을 가리킨다. 계약의 구현 근거는 `code_evidence_ids`에서 읽는다.
 

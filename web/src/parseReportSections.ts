@@ -11,10 +11,12 @@ export type RelatedWorkflow = { read: string; change: string; test: string };
 const diagnosticExcerptLines = 9;
 const modelExcerptLines = 50;
 const excerptBytes = 1800;
+const documentExcerptBytes = 2000;
+const documentExcerptLines = 40;
 const excerptEncoder = new TextEncoder();
 const TEXT_OMITTED = '원문 생략(코드 미포함 내보내기).';
 
-export function parseExcerpt(v: unknown): Excerpt | null {
+export function parseExcerpt(v: unknown, documentBounds?: { start: number; end: number }): Excerpt | null {
   if (v == null) return null;
   const x = object(v);
   const excerpt = { start: count(x.start_line), end: count(x.end_line), text: str(x.text) };
@@ -22,9 +24,11 @@ export function parseExcerpt(v: unknown): Excerpt | null {
   // Go's excerpt budget counts the JSON string, including HTML escaping.
   const encoded = JSON.stringify(excerpt.text).replace(/[<>&\u2028\u2029]/g,
     character => '\\u' + character.charCodeAt(0).toString(16).padStart(4, '0'));
+  const size = excerptEncoder.encode(encoded).length;
   if (excerpt.start < 1 || lines < 1 || lines > modelExcerptLines || lines !== excerpt.text.split('\n').length ||
-    !/\P{White_Space}/u.test(excerpt.text) || /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/.test(excerpt.text) ||
-    excerptEncoder.encode(encoded).length > excerptBytes) invalid();
+    !/\P{White_Space}/u.test(excerpt.text) || /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/.test(excerpt.text)) invalid();
+  if (size > excerptBytes && (!documentBounds || size > documentExcerptBytes || lines > documentExcerptLines ||
+    excerpt.start !== documentBounds.start || excerpt.end !== documentBounds.end)) invalid();
   return excerpt;
 }
 
@@ -33,9 +37,11 @@ export function excerptFits(excerpt: Excerpt, start: number, end: number, model:
     (excerpt.end - excerpt.start < diagnosticExcerptLines || model && excerpt.start === start && excerpt.end <= end);
 }
 
-function citation(v: unknown, includesCode: boolean): Citation {
+function citation(v: unknown, includesCode: boolean, expandedDocuments: boolean): Citation {
   const x = object(v);
-  const result = { id: str(x.id), kind: str(x.kind), path: str(x.path), line: count(x.start_line), end: count(x.end_line), excerpt: parseExcerpt(x.excerpt) };
+  const kind = str(x.kind), line = count(x.start_line), end = count(x.end_line);
+  const bounds = expandedDocuments && includesCode && kind === 'document' ? { start: line, end } : undefined;
+  const result = { id: str(x.id), kind, path: str(x.path), line, end, excerpt: parseExcerpt(x.excerpt, bounds) };
   if (result.excerpt && (!includesCode || !excerptFits(result.excerpt, result.line, result.end, true))) invalid();
   if (x.directive_path === undefined) return result;
   const directivePath = str(x.directive_path);
@@ -424,6 +430,7 @@ export function parseSections(
   findingIDs: string[],
   totalFindings: number,
   includesCode: boolean,
+  expandedDocuments: boolean,
 ): Sections | null {
   const present = BLOCKS.filter((k) => r[k] != null);
   if (present.length === 0) {
@@ -453,7 +460,7 @@ export function parseSections(
       return { section: str(x.section), code: str(x.code), count: count(x.count) };
     }),
     environment: {
-      citations: array(e.evidence ?? [], v => citation(v, includesCode)),
+      citations: array(e.evidence ?? [], v => citation(v, includesCode, expandedDocuments)),
       stage: stage(e.stage),
       discovery: str(e.discovery),
       modules: array(e.modules, (v) => {
@@ -490,7 +497,7 @@ export function parseSections(
       dependencies: array(e.dependencies ?? [], dependency),
     },
     documents: {
-      citations: array(d.evidence ?? [], v => citation(v, includesCode)),
+      citations: array(d.evidence ?? [], v => citation(v, includesCode, expandedDocuments)),
       quality: array(d.quality ?? [], v => {
         const x = object(v);
         return { aspect: str(x.aspect), assessment: str(x.assessment), statement: str(x.statement), refs: array(x.evidence_ids, str) };
@@ -618,7 +625,7 @@ export function parseSections(
       }),
     },
     codeReview: {
-      citations: array(cr.evidence ?? [], v => citation(v, includesCode)),
+      citations: array(cr.evidence ?? [], v => citation(v, includesCode, expandedDocuments)),
       strengths: array(cr.strengths ?? [], v => {
         const x = object(v);
         return { title: str(x.title), benefit: str(x.benefit), scope: str(x.scope), refs: array(x.evidence_ids, str) };

@@ -91,9 +91,9 @@ function sourceWrapDefault() {
   return typeof window.matchMedia === 'function' && window.matchMedia(sourceWrapQuery).matches;
 }
 
-export function ReportPath({ value, className }: { value: string; className?: string }) {
+export function ReportPath({ value, className, children }: { value: string; className?: string; children?: ReactNode }) {
   return <code className={className ? `report-path-text ${className}` : 'report-path-text'}>{value.split(/(?<=\/)/).map((part, index) =>
-    <Fragment key={index}>{index > 0 && <wbr />}{part}</Fragment>)}</code>;
+    <Fragment key={index}>{index > 0 && <wbr />}{part}</Fragment>)}{children}</code>;
 }
 
 export function ReportPreview({ path, start, end, excerpt, title }: { path: string; start: number; end: number; excerpt: Excerpt; title?: string }) {

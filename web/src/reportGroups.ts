@@ -244,6 +244,13 @@ export function reportStageTone(value: string | undefined): ReportTone {
   }
 }
 
+export function testResultSummary(results: NonNullable<AnalysisReport['testResults']>) {
+  if (results.status === 'failed' && results.tasks.some(task => task.failures.length)) return t.tests.testFailed;
+  if (results.status === 'not_run' && results.tasks.every(task =>
+    !task.attempted && !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(task.status))) return t.tests.notStarted;
+  return label(t.tests.summary, results.status);
+}
+
 export function readingSummary(report: AnalysisReport): ReadingSummaryRow[] {
   const recorded = report.findings.filter(f => !hiddenDispositions.has(f.disposition) &&
     (f.validation === 'supported' || f.validation === 'reproduced'));
@@ -282,8 +289,8 @@ export function readingSummary(report: AnalysisReport): ReadingSummaryRow[] {
   }
   if (report.testResults) {
     const results = report.testResults;
-    rows.push({ section: 'tests', label: t.reading.testsOutcome, tone: results.status === 'passed' ? 'ready' : results.status === 'failed' ? 'failed' : results.status === 'partial' ? 'partial' : 'neutral', value: results.status === 'not_run' && results.tasks.every(task =>
-      !task.attempted && !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(task.status)) ? t.tests.notStarted : (t.tests.summary[results.status] ?? results.status) });
+    rows.push({ section: 'tests', label: t.reading.testsOutcome, tone: results.status === 'passed' ? 'ready' : results.status === 'failed' ? 'failed' : results.status === 'partial' ? 'partial' : 'neutral',
+      value: testResultSummary(results) });
   }
   const incomplete = ['failed', 'timed_out', 'unsupported', 'skipped_policy'].flatMap(status => {
     const count = required.filter(task => task.status === status).length;

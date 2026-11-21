@@ -53,7 +53,7 @@ export function ReportDocumentReading({ documents, includesCode, id, comparisonI
   const groupId = (index: number) => `${id}-document-path-${index + 1}`;
   const groupTitle = (path: string) => path || r.unlocated;
   const citationsByRef = (refs: string[]) => {
-    const locations = new Map<string, { id: string; anchor?: string; href?: string }>();
+    const locations = new Map<string, { id: string; anchor?: string; href?: string; coverage?: string }>();
     const otherRefs: string[] = [];
     for (const ref of refs) {
       const citation = citations.get(ref);
@@ -64,9 +64,13 @@ export function ReportDocumentReading({ documents, includesCode, id, comparisonI
       const location = sourceLocation(citation.path, citation.line, citation.end);
       const source = sourceByRef.get(ref);
       if (!locations.has(location) || source && !locations.get(location)?.anchor) {
+        const excerpt = includesCode ? citation.excerpt : undefined;
         locations.set(location, {
           id: ref, anchor: source && sourceId(source.index),
           href: sourceEvidenceURL(includesCode ? sourceBase : undefined, citation.path, citation.line, citation.end),
+          coverage: excerpt && (excerpt.start > citation.line || excerpt.end < citation.end)
+            ? r.sourceCoverage(r.lineRange(citation.line, citation.end), r.lineRange(excerpt.start, excerpt.end))
+            : undefined,
         });
       }
     }
@@ -79,6 +83,7 @@ export function ReportDocumentReading({ documents, includesCode, id, comparisonI
             <code>{location}</code>}
           {link.anchor && link.href && <a className="report-reading-source-link" href={link.href} target="_blank" rel="noopener noreferrer"
             aria-label={t.sourceActionAt(t.openSource, location)} title={t.openSource}><ReportIcon name="external" /></a>}
+          {link.coverage && <small className="report-source-coverage">{link.coverage}</small>}
         </li>)}
       </ul>}
       {otherRefs.length > 0 && <Citations refs={otherRefs} catalog={catalog} />}

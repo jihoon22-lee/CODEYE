@@ -206,11 +206,19 @@ func (c sectionContext) addStrengths(s *CodeReviewSection) {
 
 const MaxReportedStrengths = 12
 
-func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key][]sourceexcerpt.Excerpt, legacy bool) {
+func attachExcerpts(r *Report, snippets, documents map[sourceexcerpt.Key][]sourceexcerpt.Excerpt, legacy bool) {
 	budget := 256 << 10
-	get := func(path, sha string, start, end int, model bool) *sourceexcerpt.Excerpt {
-		windows := snippets[sourceexcerpt.Key{Path: path, SHA256: sha, Line: start}]
-		choice := preferredExcerpt(windows, start, end, model, legacy)
+	get := func(path, sha string, start, end int, model, document bool) *sourceexcerpt.Excerpt {
+		key := sourceexcerpt.Key{Path: path, SHA256: sha, Line: start}
+		choice := preferredExcerpt(snippets[key], start, end, model, legacy)
+		if model && document {
+			for _, window := range documents[key] {
+				if x, ok := window.AtDocumentCitation(start, end); ok && record.JSONLen(x.Text) <= budget &&
+					(choice == nil || choice.StartLine != start || x.EndLine > choice.EndLine) {
+					choice = &x
+				}
+			}
+		}
 		if choice == nil {
 			return nil
 		}
@@ -233,7 +241,7 @@ func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key][]sourceexcerpt.Ex
 		for j := range f.Evidence {
 			e := &f.Evidence[j]
 			if e.Location != nil && !withheld[e.Location.Path] {
-				e.Excerpt = get(e.Location.Path, e.BlobSHA256, e.Location.StartLine, e.Location.EndLine, model)
+				e.Excerpt = get(e.Location.Path, e.BlobSHA256, e.Location.StartLine, e.Location.EndLine, model, e.Kind == "document")
 			}
 		}
 	}
@@ -241,7 +249,7 @@ func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key][]sourceexcerpt.Ex
 		for i := range ev {
 			e := &ev[i]
 			if !withheld[e.Path] {
-				e.Excerpt = get(e.Path, e.BlobSHA256, e.StartLine, e.EndLine, true)
+				e.Excerpt = get(e.Path, e.BlobSHA256, e.StartLine, e.EndLine, true, e.Kind == "document")
 			}
 		}
 	}
@@ -257,7 +265,7 @@ func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key][]sourceexcerpt.Ex
 			return nil
 		}
 		used[key] = true
-		return get(l.Path, l.BlobSHA256, l.StartLine, l.EndLine, false)
+		return get(l.Path, l.BlobSHA256, l.StartLine, l.EndLine, false, false)
 	}
 	for _, o := range r.Observations {
 		for i := range o.Related {
@@ -267,7 +275,7 @@ func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key][]sourceexcerpt.Ex
 					related.RawMessage = nil
 					continue
 				}
-				related.Excerpt = get(l.Path, l.BlobSHA256, l.StartLine, l.EndLine, false)
+				related.Excerpt = get(l.Path, l.BlobSHA256, l.StartLine, l.EndLine, false, false)
 			}
 		}
 		if o.Metric == nil || o.EvidenceState != EvidenceVerified {
@@ -276,6 +284,10 @@ func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key][]sourceexcerpt.Ex
 		o.Metric.Excerpt = metricWindow(o.Location)
 		o.Metric.CounterpartExcerpt = metricWindow(o.Metric.Counterpart)
 	}
+}
+
+func validReportCitation(e sourceexcerpt.Excerpt, start, end int, kind, builder string) bool {
+	return e.ValidCitation(start, end) || kind == "document" && builderAtLeast(builder, DocumentExcerptSince) && e.ValidDocumentCitation(start, end)
 }
 
 func usesModelExcerpts(r *Report, id string) bool {

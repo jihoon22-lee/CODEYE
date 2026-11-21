@@ -1,6 +1,7 @@
 package report
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -76,10 +77,10 @@ func (v secView) TestRunPart() secPart {
 	}
 	l := v.L
 	executions := testExecutions(r.Executions)
-	status := lab(l, "tests.summary", r.Coverage.TestStatus)
+	statusSummary := lab(l, "tests.summary", r.Coverage.TestStatus)
 	notStarted := len(executions) == 0
 	reasons := map[string]bool{}
-	table := &secTable{Head: []string{l.Label("tests.suite"), l.Label("tests.directory"), l.Label("col.status"), l.Label("tests.exit"), l.Label("col.reason")}}
+	table := &secTable{Head: []string{l.Label("tests.test"), l.Label("tests.declaration"), l.Label("col.status")}, TestResults: true}
 	for _, task := range r.Tasks {
 		if !testTaskKey(task.Key) {
 			continue
@@ -103,22 +104,61 @@ func (v secView) TestRunPart() secPart {
 		}
 		reasons[reason] = true
 		kind, _, _ := strings.Cut(strings.TrimPrefix(task.Key, "test."), ".")
-		suite := lab(l, "tests.suite", kind) + " (" + task.Key + ")"
+		suite := lab(l, "tests.suite", kind)
 		directory := execution.Cwd
-		if directory == "[REDACTED]" || directory != "." && domain.ValidateEvidencePath(directory) != nil {
-			directory = "-"
+		if directory == "." || directory == "[REDACTED]" || domain.ValidateEvidencePath(directory) != nil {
+			directory = ""
 		}
-		table.Rows = append(table.Rows, []secCell{txt(suite), code(directory), txt(label), txt(optInt(execution.ExitCode, "-")), txt(reason)})
+		details := []string{}
+		if execution.ExitCode != nil {
+			details = append(details, tf(l, "tests.command_exit", *execution.ExitCode))
+		}
+		if task.Reason != nil && *task.Reason != "test_command_failed" {
+			details = append(details, reason)
+		}
+		state := secCell{Text: label, Note: strings.Join(details, " · ")}
+		if status == TestFailed && len(execution.GoTestFailures) > 0 {
+			state.Text = l.Label("tests.test_failed")
+			statusSummary = state.Text
+			for i, failure := range execution.GoTestFailures {
+				test := txt(l.Label("tests.name_withheld"))
+				if r.Export.IncludeCode && failure.Name != "" {
+					test = code(failure.Name)
+				}
+				result := state
+				if i == 0 {
+					test.Note = suite
+					if directory != "" {
+						test.Note += " · " + directory
+					}
+				} else {
+					result.Note = ""
+				}
+				location := code(failure.Path)
+				location.Suffix = ":" + strconv.Itoa(failure.Line)
+				location.URL = snapshotBrowserURL(r, failure.Path, failure.Line, failure.Line)
+				table.Rows = append(table.Rows, []secCell{test, location, result})
+			}
+			continue
+		}
+		var suiteNotes []string
+		if directory != "" {
+			suiteNotes = append(suiteNotes, directory)
+		}
+		if status == TestFailed {
+			suiteNotes = append(suiteNotes, l.Label("tests.unidentified"))
+		}
+		table.Rows = append(table.Rows, []secCell{{Text: suite, Note: strings.Join(suiteNotes, " · ")}, txt("—"), state})
 	}
 	if r.Coverage.TestStatus == TestNotRun {
 		if notStarted {
-			status = l.Label("tests.not_started")
+			statusSummary = l.Label("tests.not_started")
 		}
 		if len(reasons) == 1 && !reasons["-"] {
 			for reason := range reasons {
-				status += " · " + reason
+				statusSummary += " · " + reason
 			}
 		}
 	}
-	return secPart{Fold: status, Table: table}
+	return secPart{Fold: statusSummary, Table: table}
 }
