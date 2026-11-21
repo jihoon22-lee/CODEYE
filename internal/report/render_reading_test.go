@@ -146,3 +146,28 @@ func TestEmptyCodeReadingUsesAcceptedCodeEvidence(t *testing.T) {
 		t.Fatalf("accepted code investigation did not report its empty action list: %v", notes)
 	}
 }
+
+func TestDocumentReadingLabelsPartialStoredCitation(t *testing.T) {
+	r := exampleReport(t)
+	r.Builder.Version = "17"
+	r.Inputs.SourceKind = "git"
+	r.Inputs.CommitSHA = strPtr(strings.Repeat("9", 40))
+	r.Project = &ProjectInfo{Name: "Billing", Source: "https://github.com/example/billing"}
+	r.Export.IncludeCode = true
+	evidence := SectionEvidence{ID: "partial-doc", Kind: "document", Path: "docs/REPORT.md", StartLine: 1, EndLine: 16,
+		Excerpt: &sourceexcerpt.Excerpt{StartLine: 1, EndLine: 13, Text: strings.Repeat("stored line\n", 12) + "last stored line"}}
+	r.Documents.Evidence = append(r.Documents.Evidence, evidence)
+	r.Documents.Comparisons = []DocComparison{{Statement: "보고서는 저장 입력 digest를 표시한다.", AppliesTo: ".", Status: "unknown",
+		DocumentEvidenceIDs: []string{evidence.ID}}}
+	html, err := RenderHTMLAt(r, "test", Korean, DetailSummary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, document, _ := strings.Cut(string(html), `data-section="documents"`)
+	document, _, _ = strings.Cut(document, `data-section="static_analysis"`)
+	for _, want := range []string{"인용 1–16행 · 저장 발췌 1–13행", "/docs/REPORT.md#L1-L16", "last stored line"} {
+		if !strings.Contains(document, want) {
+			t.Errorf("missing citation detail %q", want)
+		}
+	}
+}

@@ -143,7 +143,7 @@ func (p *Publisher) PublishRun(ctx context.Context, runID string) (Outcome, erro
 		project.FinishedAt = pub.FinishedAt.UTC().Format(time.RFC3339Nano)
 	}
 	in := report.Input{Project: project, ReportID: domain.NewID(), Revision: pub.NextRevision, Now: p.now(),
-		Run:      report.RunFacts{ID: pub.Run.ID, ProjectID: pub.Run.ProjectID, Profile: pub.Profile, ScopeKind: pub.ScopeKind, FinalStatus: final},
+		Run:      report.RunFacts{ID: pub.Run.ID, ProjectID: pub.Run.ProjectID, Profile: pub.Profile, ScopeKind: pub.ScopeKind, FinalStatus: final, ScopePaths: pub.ScopePaths},
 		Snapshot: report.SnapshotFacts{ID: pub.Snapshot.ID, ManifestDigest: *pub.Snapshot.ManifestDigest, Consistency: pub.Snapshot.Consistency, SourceSHA: pub.Snapshot.SourceSHA},
 		Attempt: report.AttemptFacts{ID: a.ID, Number: a.Number, Epoch: a.Epoch, Cleanup: a.Cleanup, Reason: a.CompletionReason,
 			CompletionStatus: "not_recorded"},
@@ -188,6 +188,7 @@ func (p *Publisher) PublishRun(ctx context.Context, runID string) (Outcome, erro
 	if a.ResultManifestID != nil && in.ResultManifest == nil {
 		return reject("result_manifest_not_attempt_artifact", nil)
 	}
+	readGoTestFailureBodies(&in, pub.Artifacts, p.read)
 	digest := report.InputDigest(in)
 	built, err := report.Build(in, p.Registry)
 	if err != nil {

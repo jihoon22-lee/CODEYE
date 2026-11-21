@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1",
+  "run_id": "0195f3a0-0000-7000-8000-000000000101",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000102",
+  "snapshot_manifest_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "task_key": "test.go",
+  "stdout_sha256": "ef8801afa7a5aa8b3861fc1f45d5e16ec2c01d3aa9e8e424e51b3c370c24d030",
+  "failures": [
+    {
+      "package": "example.test/module/pkg",
+      "test": "TestAnswer",
+      "path": "pkg/answer_test.go",
+      "line": 5,
+      "blob_sha256": "8269da801b671b4a3fcd5e7bdcc10f52c72324d0278a81371e7bcb685f0f079f",
+      "byte_start": 73,
+      "byte_end": 146
+    }
+  ]
+}

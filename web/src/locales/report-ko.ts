@@ -29,7 +29,9 @@ export const reportKo = {
   } as Partial<Record<string, string>>,
   strengthsTitle: '코드에서 관찰한 동작', scopeTitle: '적용 범위',
   tests: {
-    heading: '기존 테스트 실행 결과', suite: '테스트 종류', directory: '작업 사본 경로', exit: '종료 코드', unverified: '실행 결과 미확인',
+    heading: '기존 테스트 실행 결과', test: '테스트', declaration: '테스트 선언 위치', unverified: '실행 결과 미확인',
+    testFailed: '테스트 실패', unidentified: '개별 테스트 미식별', nameWithheld: '테스트 이름 생략',
+    commandExit: (code: number) => `명령 종료 코드 ${code}`,
     notStarted: '테스트 미실행',
     summary: { passed: '테스트 통과', failed: '테스트 명령 실패', partial: '일부 테스트 통과', not_run: '테스트 결과 미확인', no_tests: '실행할 테스트 없음' } as Record<string, string>,
     statuses: {
@@ -41,6 +43,7 @@ export const reportKo = {
   },
   documentReading: {
     lineRange: (start: number, end: number) => start === end ? `${start}행` : `${start}–${end}행`,
+    sourceCoverage: (cited: string, stored: string) => `인용 ${cited} · 저장 발췌 ${stored}`,
     files: '문서별로 이동', unlocated: '인용 위치가 없는 문서 검토', otherNotes: '그 밖의 문서 검토',
     sources: '문서 원문 발췌', discovery: '문서 탐색과 적용 범위',
     sharedWith: (path: string) => `${path}에서도 함께 인용`,

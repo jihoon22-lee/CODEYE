@@ -33,6 +33,7 @@ func invalidf(format string, args ...any) error {
 type RunFacts struct {
 	ID, ProjectID, Profile, ScopeKind string
 	FinalStatus                       string
+	ScopePaths                        []string
 }
 
 // SnapshotFacts are the run's fixed snapshot.
@@ -101,6 +102,11 @@ func TaskExecutionID(attempt, task string, ordinal int64) string {
 	return attempt + "/" + task + "/" + strconv.FormatInt(ordinal, 10)
 }
 
+func builderAtLeast(version string, minimum int) bool {
+	n, err := strconv.Atoi(version)
+	return err == nil && n >= minimum && strconv.Itoa(n) == version
+}
+
 // InputDigest identifies the builder input for idempotent publication. It
 // excludes ReportID, Revision and Now, so a reconcile pass after a crash or a
 // second controller computes the same value.
@@ -115,6 +121,9 @@ func InputDigest(in Input) string {
 	}
 	w(BuilderID, BuilderVersion, SchemaVersion)
 	w("run", in.Run.ID, in.Run.Profile, in.Run.ScopeKind, in.Run.FinalStatus)
+	if len(in.Run.ScopePaths) != 0 {
+		w(append([]string{"scope_paths"}, in.Run.ScopePaths...)...)
+	}
 	if p := in.Project; p != nil {
 		w("project", p.Name, p.Source, p.StartedAt, p.FinishedAt)
 	}

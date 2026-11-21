@@ -148,6 +148,9 @@ func ValidateReport(r Report) error {
 			return invalidf("test status differs from accepted task and execution records")
 		}
 	}
+	if err := validateGoTestFailureEvidence(r); err != nil {
+		return err
+	}
 	if err := validateGoGraphs(r); err != nil {
 		return err
 	}
@@ -233,7 +236,7 @@ func ValidateReport(r Report) error {
 			}
 			if !r.Export.IncludeCode || e.Location == nil || !sourceexcerpt.SafePath(e.Location.Path) ||
 				(e.Kind != "code" && e.Kind != "document") ||
-				(model && !e.Excerpt.ValidCitation(e.Location.StartLine, e.Location.EndLine)) ||
+				(model && !validReportCitation(*e.Excerpt, e.Location.StartLine, e.Location.EndLine, e.Kind, r.Builder.Version)) ||
 				(!model && !e.Excerpt.ValidDiagnostic(e.Location.StartLine)) {
 				return invalidf("finding %s excerpt is invalid", f.ID)
 			}
@@ -432,6 +435,14 @@ func Project(r Report, includeCode bool) Report {
 	}
 	out := r
 	out.Export = Export{IncludeCode: false}
+	out.Executions = slices.Clone(r.Executions)
+	for i := range out.Executions {
+		rows := slices.Clone(out.Executions[i].GoTestFailures)
+		for j := range rows {
+			rows[j].Name = ""
+		}
+		out.Executions[i].GoTestFailures = rows
+	}
 	// The configuration digest and paths of a rule context are removed like
 	// fingerprint_basis: a digest over configuration bytes would confirm
 	// guessed content. The rows are copied; r is not changed.

@@ -40,7 +40,185 @@ function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.jso
   return doc;
 }
 
+describe('existing test results', () => {
+  const failure = { name: 'TestRetainsDeclaration', path: 'internal/billing/adjustment_test.go', line: 42 };
+  const commit = '9'.repeat(40);
+  function testReport() {
+    const doc = example('report.json');
+    doc.builder.version = '18';
+    doc.inputs = { ...doc.inputs, profile: 'with-tests', source_kind: 'git', commit_sha: commit };
+    doc.project = { name: 'Billing', source: 'https://github.com/example/billing' };
+    doc.coverage.test_status = 'failed';
+    const execution = { name: 'test.run', status: 'exited', cleanup: 'confirmed', cwd: '.' };
+    doc.tasks.push(
+      { key: 'test.go', status: 'failed', reason: 'test_command_failed' },
+      { key: 'test.go.m02', status: 'succeeded', reason: null },
+      { key: 'test.python', status: 'failed', reason: 'test_command_failed' },
+    );
+    doc.executions.push(
+      { ...execution, task_key: 'test.go', exit_code: 1, go_test_failures: [failure] },
+      { ...execution, task_key: 'test.go.m02', exit_code: 0, cwd: 'modules/fees' },
+      { ...execution, task_key: 'test.python', exit_code: 2 },
+    );
+    return doc;
+  }
+
+  it('shows the failed test declaration, command exit and older task outcomes distinctly', () => {
+    const doc = testReport();
+    const { container } = render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    fireEvent.click(screen.getByRole('button', { name: t.reading.viewArea(t.reading.testsOutcome) }));
+    const results = container.querySelector<HTMLDetailsElement>('.report-test-results')!;
+    expect(results.open).toBe(true);
+    const table = within(results).getByRole('table');
+    expect(within(table).getAllByRole('columnheader').map(cell => cell.textContent)).toEqual([t.tests.test, t.tests.declaration, t.sections.col.status]);
+    const known = within(table).getByText(failure.name).closest('tr')!;
+    const location = `${failure.path}:${failure.line}`;
+    const link = within(known).getByRole('link', { name: t.sourceActionAt(t.viewTestCode, location) });
+    expect(link.textContent).toBe(location);
+    expect(link.getAttribute('href')).toBe(`https://github.com/example/billing/blob/${commit}/${failure.path}#L42-L42`);
+    expect(within(known).getByText(t.tests.testFailed)).toBeTruthy();
+    expect(within(known).getByText(t.tests.commandExit(1))).toBeTruthy();
+    expect(within(table).getByText(t.tests.unidentified).closest('tr')?.textContent).toContain(t.tests.statuses.failed);
+    expect(within(table).getByText(t.tests.statuses.passed).closest('tr')?.textContent).toContain(t.tests.commandExit(0));
+    expect(within(table).queryByText('test.go')).toBeNull();
+  });
+
+  it('shows command metadata once for multiple failed tests in a single suite', () => {
+    const doc = testReport();
+    const execution = doc.executions.find((e: Record<string, unknown>) => e.task_key === 'test.go');
+    execution.go_test_failures = [failure, { name: 'TestAnotherDeclaration', path: failure.path, line: 12 }];
+    const { container } = render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    fireEvent.click(screen.getByRole('button', { name: t.reading.viewArea(t.reading.testsOutcome) }));
+    const results = container.querySelector<HTMLDetailsElement>('.report-test-results')!;
+    expect(within(results).getAllByText(t.tests.commandExit(1))).toHaveLength(1);
+    const other = within(results).getByText('TestAnotherDeclaration').closest('tr')!;
+    expect(within(other).getByText(t.tests.testFailed)).toBeTruthy();
+    expect(other.querySelector('.report-test-line')?.textContent).toBe(':12');
+  });
+
+  it('preserves a named failure and dependency reason when a Go command had both outcomes', () => {
+    const doc = testReport();
+    doc.tasks.find((task: Record<string, unknown>) => task.key === 'test.go').reason = 'test_dependencies_unavailable';
+    doc.tasks.push({ key: 'test.go.m03', status: 'failed', reason: 'test_dependencies_unavailable' });
+    doc.executions.push({ name: 'test.run', task_key: 'test.go.m03', status: 'exited', cleanup: 'confirmed', exit_code: 1, cwd: 'modules/deps' });
+    const { container } = render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    fireEvent.click(screen.getByRole('button', { name: t.reading.viewArea(t.reading.testsOutcome) }));
+    const results = container.querySelector<HTMLDetailsElement>('.report-test-results')!;
+    const observed = within(results).getByText(failure.name).closest('tr')!;
+    expect(within(observed).getByText(t.tests.testFailed)).toBeTruthy();
+    expect(within(observed).getByText(t.tests.commandExit(1))).toBeTruthy();
+    expect(within(observed).getByText(t.reasons.test_dependencies_unavailable)).toBeTruthy();
+    const withoutFailureEvidence = within(results).getByText('modules/deps').closest('tr')!;
+    expect(within(withoutFailureEvidence).getByText(t.tests.unidentified)).toBeTruthy();
+    expect(within(withoutFailureEvidence).getByText(t.tests.statuses.failed)).toBeTruthy();
+    expect(within(withoutFailureEvidence).getByText(t.reasons.test_dependencies_unavailable)).toBeTruthy();
+  });
+
+  it('validates declaration evidence while preserving reports that predate it', () => {
+    const doc = testReport();
+    const run = doc.executions.find((e: Record<string, unknown>) => e.task_key === 'test.go');
+    for (const failureRecords of [
+      [{ ...failure, name: 'TestRetainsDeclaration/child' }],
+      [{ ...failure, name: 'Testlowercase' }],
+      [{ ...failure, path: '../outside_test.go' }],
+      [{ ...failure, path: 'script.go' }],
+      [{ ...failure, line: 0 }],
+      [failure, failure],
+    ]) {
+      run.go_test_failures = failureRecords;
+      expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
+    }
+    run.go_test_failures = [failure];
+    run.cleanup = 'unconfirmed';
+    expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
+    run.cleanup = 'confirmed';
+    doc.builder.version = '17';
+    expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
+    delete run.go_test_failures;
+    expect(parseAnalysisReport(doc, doc.run_id).testResults?.tasks[0].failures).toEqual([]);
+  });
+
+  it('keeps the declaration without a source link or test name in code-free reports', () => {
+    const doc = testReport();
+    const removeExcerpts = (value: unknown) => {
+      if (!value || typeof value !== 'object') return;
+      for (const [name, item] of Object.entries(value)) {
+        if (['excerpt', 'counterpart_excerpt'].includes(name)) Reflect.deleteProperty(value, name);
+        else removeExcerpts(item);
+      }
+    };
+    removeExcerpts(doc);
+    doc.export.include_code = false;
+    expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
+    const run = doc.executions.find((e: Record<string, unknown>) => e.task_key === 'test.go');
+    run.go_test_failures = [{ path: failure.path, line: failure.line }];
+    const { container } = render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    fireEvent.click(screen.getByRole('button', { name: t.reading.viewArea(t.reading.testsOutcome) }));
+    const results = container.querySelector<HTMLDetailsElement>('.report-test-results')!;
+    expect(within(results).getByText(`${failure.path}:${failure.line}`)).toBeTruthy();
+    expect(within(results).getByText(t.tests.nameWithheld)).toBeTruthy();
+    expect(within(results).queryByText(failure.name)).toBeNull();
+    expect(within(results).queryByRole('link')).toBeNull();
+  });
+});
+
 describe('analysis sections', () => {
+  it('labels a legacy clipped document excerpt beside its whole pinned citation', () => {
+    const doc = example('report.json');
+    doc.builder.version = '17';
+    const sha = '9'.repeat(40);
+    doc.inputs = { ...doc.inputs, source_kind: 'git', commit_sha: sha };
+    doc.project = { name: 'Billing', source: 'https://github.com/example/billing' };
+    const comparison = doc.documents.comparisons[0];
+    comparison.statement = '보고서 저장본의 입력을 확인한다.';
+    comparison.status = 'unknown';
+    comparison.code_evidence_ids = [];
+    const citation = doc.documents.evidence.find((e: Record<string, unknown>) => e.id === comparison.document_evidence_ids[0]);
+    citation.start_line = 1;
+    citation.end_line = 16;
+    citation.excerpt = { start_line: 1, end_line: 13, text: 'stored line\n'.repeat(12) + 'last stored line' };
+    render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    const tab = screen.getByRole('tab', { name: t.sections.titles.documents });
+    fireEvent.click(tab);
+    const panel = screen.getByRole('tabpanel', { name: t.sections.titles.documents });
+    const row = within(panel).getByRole('heading', { name: comparison.statement, exact: true }).closest('details')!;
+    row.open = true;
+    expect(within(row).getByText('인용 1–16행 · 저장 발췌 1–13행')).toBeTruthy();
+    expect(within(row).getByText('last stored line')).toBeTruthy();
+    const url = `https://github.com/example/billing/blob/${sha}/${citation.path}#L1-L16`;
+    expect(Array.from(row.querySelectorAll('a')).some(a => a.getAttribute('href') === url)).toBe(true);
+  });
+
+  it('allows larger exact document excerpts only on current code-included reports', () => {
+    const doc = example('report.json');
+    const match = doc.documents.evidence.find((e: Record<string, unknown>) => e.kind === 'document');
+    const lines = Array.from({length: 16}, (_, i) => `line ${i + 1}: ${'x'.repeat(112)}`);
+    const start = match.start_line, end = start + lines.length - 1;
+    const full = { start_line: start, end_line: end, text: lines.join('\n') };
+    match.end_line = end;
+    match.excerpt = full;
+    doc.builder.version = '18';
+    expect(parseAnalysisReport(doc, doc.run_id).sections!.documents.citations.find(c => c.id === match.id)?.excerpt?.end).toBe(end);
+    doc.builder.version = '17';
+    expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
+    doc.builder.version = '18';
+    const model = doc.findings.find((f: Record<string, unknown>) => doc.code_review.finding_ids.includes(f.id));
+    const witness = model.evidence.find((e: Record<string, unknown>) => e.kind === 'code' && e.location);
+    witness.kind = 'document';
+    witness.location = { ...witness.location, path: match.path, start_line: start, end_line: end };
+    witness.excerpt = full;
+    expect(parseAnalysisReport(doc, doc.run_id).findings.find(f => f.id === model.id)?.evidence.find(e => e.id === witness.id)?.excerpt?.end).toBe(end);
+    witness.kind = 'code';
+    expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
+    witness.kind = 'document';
+    match.excerpt = { ...full, end_line: end - 1, text: lines.slice(0, -1).join('\n') };
+    expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
+    match.excerpt = { ...full, end_line: start + 11, text: lines.slice(0, 12).join('\n') };
+    doc.builder.version = '17';
+    delete witness.excerpt;
+    expect(parseAnalysisReport(doc, doc.run_id).sections!.documents.citations.find(c => c.id === match.id)?.excerpt?.end).toBe(start + 11);
+  });
+
   it('counts only successful accepted regular diagnostics in both static summaries', () => {
     const doc = example('report.json');
     const report = parseAnalysisReport(doc, doc.run_id);
@@ -109,10 +287,10 @@ describe('analysis sections', () => {
     doc.executions.push({ task_key: 'test.go', name: 'test.run', status: 'exited', exit_code: 0, cleanup: 'confirmed' });
     render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
     const results = openDisclosure(screen.getByText(t.tests.summary.partial, { selector: 'summary' }));
-    const go = within(results).getByText('test.go').closest('tr')!;
+    const go = within(results).getByText(t.tests.suites.go).closest('tr')!;
     expect(within(go).getByText(t.tests.statuses.passed)).toBeTruthy();
-    expect(within(go).getByText('0')).toBeTruthy();
-    const python = within(results).getByText('test.python').closest('tr')!;
+    expect(within(go).getByText(t.tests.commandExit(0))).toBeTruthy();
+    const python = within(results).getByText(t.tests.suites.python).closest('tr')!;
     expect(within(python).getByText(t.sections.taskStatus.unsupported)).toBeTruthy();
     expect(within(python).getByText(t.reasons.test_tool_unavailable)).toBeTruthy();
   });

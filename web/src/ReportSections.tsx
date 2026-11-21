@@ -1,11 +1,11 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { AnalysisReport, Finding, Observation } from './analysisReport';
+import { useContext, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { sourceEvidenceURL, type AnalysisReport, type Finding, type GoTestFailure, type Observation } from './analysisReport';
 import type { Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './parseReportSections';
 import { ComparisonSection, HIDDEN } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
 import { inspectionsKo } from './locales/report-inspections-ko';
-import { Citations, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportReviewStatus, ReportScope, ReportTasks, TextList, explainReason, label, type ReportHistory } from './ReportParts';
+import { Citations, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportPath, ReportReviewStatus, ReportScope, ReportSourceContext, ReportTasks, TextList, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
 import { ReportAction, ReportIcon, ReportLayout } from './ReportLayout';
 import { ProjectOverview } from './ProjectOverview';
 import { ReportDocumentReading } from './ReportDocumentReading';
@@ -31,6 +31,7 @@ import {
   sevRank,
   severityOf,
   slotRuns,
+  testResultSummary,
   SHOWN,
 } from './reportGroups';
 
@@ -127,22 +128,48 @@ function StageLine({ stage }: { stage: SectionStage }) {
   return <p>{s.stageLine(state(stage.state), stage.tasks, stage.succeeded)}</p>;
 }
 
+function TestDeclaration({ path, line }: GoTestFailure) {
+  const base = useContext(ReportSourceContext);
+  const location = sourceLocation(path, line, line);
+  const href = sourceEvidenceURL(base, path, line, line);
+  const label = <ReportPath value={path}><span className="report-test-line">:{line}</span></ReportPath>;
+  return href ? <a href={href} target="_blank" rel="noopener noreferrer" aria-label={t.sourceActionAt(t.viewTestCode, location)}>{label}</a> : label;
+}
+
 function TestRunOverview({ results, id }: { results: NonNullable<AnalysisReport['testResults']>; id: string }) {
   const reasons = new Set(results.tasks.map(task => task.reason));
   const reason = results.status === 'not_run' && reasons.size === 1 ? [...reasons][0] : null;
-  const notStarted = results.status === 'not_run' && results.tasks.every(task =>
-    !task.attempted && !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(task.status));
+  const rows = results.tasks.flatMap(task => {
+    const suite = label(t.tests.suites, task.key.split('.')[1]);
+    const directory = task.directory && task.directory !== '.' ? task.directory : null;
+    const taskStatus = task.result !== 'unverified' ? label(t.tests.statuses, task.result) :
+      task.status === 'succeeded' ? t.tests.unverified : label(s.taskStatus, task.status);
+    const exit = task.exit === null ? null : t.tests.commandExit(task.exit);
+    const explanation = task.reason && task.reason !== 'test_command_failed' ? explainReason(task.reason) : null;
+    const status = (text: string, showCommand = true) => <span key="status">{text}
+      {showCommand && exit && <small className="report-test-detail">{exit}</small>}
+      {showCommand && explanation && <small className="report-test-detail">{explanation}</small>}
+    </span>;
+    if (task.failures.length) return task.failures.map((failure, index): ReactNode[] => [
+      <span key="test">{failure.name ? <code>{failure.name}</code> : t.tests.nameWithheld}
+        {index === 0 && <small className="report-test-detail">{suite}{directory && <> · <ReportPath value={directory} /></>}</small>}
+      </span>,
+      <TestDeclaration key="position" {...failure} />,
+      status(t.tests.testFailed, index === 0),
+    ]);
+    return [[
+      <span key="suite">{suite}{directory && <small className="report-test-detail"><ReportPath value={directory} /></small>}
+        {task.result === 'failed' && <small className="report-test-detail">{t.tests.unidentified}</small>}
+      </span>,
+      '—',
+      status(taskStatus),
+    ]];
+  });
   return <details id={id} className="report-reading-records report-test-results" data-test-status={results.status} aria-label={t.tests.heading}>
-    <summary>{notStarted ? t.tests.notStarted : label(t.tests.summary, results.status)}
+    <summary>{testResultSummary(results)}
       {reason && <small className="report-test-reason">{explainReason(reason)}</small>}
     </summary>
-    <Table head={[t.tests.suite, t.tests.directory, s.col.status, t.tests.exit, s.col.reason]} rows={results.tasks.map(task => [
-      <span key="task">{label(t.tests.suites, task.key.split('.')[1])} <small><code>{task.key}</code></small></span>,
-      task.directory ? <code key="dir">{task.directory}</code> : '—',
-      task.result !== 'unverified' ? label(t.tests.statuses, task.result) : task.status === 'succeeded' ? t.tests.unverified : label(s.taskStatus, task.status),
-      task.exit ?? '—',
-      task.reason ? explainReason(task.reason) : '—',
-    ])} />
+    <Table head={[t.tests.test, t.tests.declaration, s.col.status]} rows={rows} />
   </details>;
 }
 

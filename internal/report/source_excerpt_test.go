@@ -2,9 +2,11 @@ package report
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
@@ -28,7 +30,7 @@ func TestModelReferencesSharingAStartUseTheirOwnCitationEnd(t *testing.T) {
 	r.CodeReview.FindingIDs = []string{"model"}
 	r.Documents.Evidence = []SectionEvidence{{Kind: "code", Path: file, BlobSHA256: sha, StartLine: 1, EndLine: 14}}
 	key := sourceexcerpt.Key{Path: file, SHA256: sha, Line: 1}
-	attachExcerpts(&r, map[sourceexcerpt.Key][]sourceexcerpt.Excerpt{key: {want(24), want(6)}}, false)
+	attachExcerpts(&r, map[sourceexcerpt.Key][]sourceexcerpt.Excerpt{key: {want(24), want(6)}}, nil, false)
 	for _, tc := range []struct {
 		excerpt *sourceexcerpt.Excerpt
 		end     int
@@ -62,7 +64,7 @@ func TestMetricEvidenceExcerptsAppearOnlyInCodeDetail(t *testing.T) {
 			windows[key] = []sourceexcerpt.Excerpt{{StartLine: loc.StartLine, EndLine: loc.StartLine, Text: name}}
 		}
 	}
-	attachExcerpts(&r, windows, false)
+	attachExcerpts(&r, windows, nil, false)
 	if err := ValidateReport(r); err != nil {
 		t.Fatal(err)
 	}
@@ -87,5 +89,49 @@ func TestMetricEvidenceExcerptsAppearOnlyInCodeDetail(t *testing.T) {
 	summary, err := RenderHTMLAt(r, strings.Repeat("a", 64), Korean, DetailSummary)
 	if err != nil || strings.Contains(string(summary), name) {
 		t.Fatalf("source appeared in the summary, render error %v", err)
+	}
+}
+
+func TestLongDocumentExcerptPreservesCitedTailOnlyForDocumentEvidence(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	sha, file := strings.Repeat("a", 64), "docs/REPORT.md"
+	body, err := os.ReadFile("../worker/sourceexcerpt/testdata/report-citation.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.SplitN(string(body), "\n", 17)
+	if len(lines) != 17 || lines[15] != "" {
+		t.Fatal("fixture must retain the blank line at the end of the citation")
+	}
+	text := strings.Join(lines[:16], "\n")
+	if record.JSONLen(text) != 1971 {
+		t.Fatalf("unexpected encoded citation size: %d", record.JSONLen(text))
+	}
+	full := sourceexcerpt.Excerpt{StartLine: 1, EndLine: 16, Text: text}
+	short := sourceexcerpt.Excerpt{StartLine: 1, EndLine: 13, Text: strings.Join(lines[:13], "\n")}
+	if full.ValidCitation(1, 16) || !full.ValidDocumentCitation(1, 16) {
+		t.Fatal("the test must distinguish document and general source budgets")
+	}
+	key := sourceexcerpt.Key{Path: file, SHA256: sha, Line: 1}
+	r.Documents.Evidence = []SectionEvidence{
+		{Kind: "document", Path: file, BlobSHA256: sha, StartLine: 1, EndLine: 16},
+		{Kind: "document", Path: file, BlobSHA256: sha, StartLine: 1, EndLine: 17},
+		{Kind: "code", Path: file, BlobSHA256: sha, StartLine: 1, EndLine: 16},
+	}
+	attachExcerpts(&r, map[sourceexcerpt.Key][]sourceexcerpt.Excerpt{key: {short}},
+		map[sourceexcerpt.Key][]sourceexcerpt.Excerpt{key: {full}}, false)
+	for i, want := range []sourceexcerpt.Excerpt{full, short, short} {
+		got := r.Documents.Evidence[i].Excerpt
+		if got == nil || *got != want {
+			t.Errorf("citation %d range = %+v, want %d–%d", i, got, want.StartLine, want.EndLine)
+		}
+	}
+	if !validReportCitation(full, 1, 16, "document", BuilderVersion) || validReportCitation(full, 1, 16, "document", "17") ||
+		validReportCitation(full, 1, 16, "code", BuilderVersion) || validReportCitation(full, 1, 17, "document", BuilderVersion) {
+		t.Fatal("extended document scope or builder bound is invalid")
+	}
+	free := Project(r, false)
+	if free.Documents.Evidence[0].Excerpt != nil || free.Documents.Evidence[0].EndLine != 16 {
+		t.Fatal("code-free export should retain the document location only")
 	}
 }

@@ -150,6 +150,7 @@ func (h *Handler) run(ctx context.Context, job analysis.Job, p testPlan, runner 
 	if !pack.ExitedZero(&isolation) || !pack.StreamsComplete(&isolation) {
 		return analysis.TaskResult{Status: domain.TaskUnsupported, Reason: isolationUnavailable, Executions: executions}
 	}
+	var goModulePath string
 	if key == "go" {
 		probe := spec
 		probe.Args, probe.Timeout = []string{"mod", "edit", "-json"}, 20*time.Second
@@ -160,7 +161,8 @@ func (h *Handler) run(ctx context.Context, job analysis.Job, p testPlan, runner 
 		if status, reason, _ := pack.ExecutionOutcome([]*executor.Result{&res}, ctx.Err() != nil); reason != "" {
 			return analysis.TaskResult{Status: status, Reason: reason, Executions: executions}
 		}
-		_, replaces, parsed := govet.ParseModEdit(res.Stdout.Data)
+		modulePath, replaces, parsed := govet.ParseModEdit(res.Stdout.Data)
+		goModulePath = modulePath
 		if !pack.ExitedZero(&res) || !pack.StreamsComplete(&res) || !parsed {
 			return analysis.TaskResult{Status: domain.TaskFailed, Reason: "test_command_failed", Executions: executions}
 		}
@@ -196,6 +198,12 @@ func (h *Handler) run(ctx context.Context, job analysis.Job, p testPlan, runner 
 		out.Status, out.Reason = domain.TaskUnsupported, "no_tests_executed"
 	default:
 		out.Status = domain.TaskSucceeded
+	}
+	if key == "go" && out.Status == domain.TaskFailed && (out.Reason == "test_command_failed" || out.Reason == dependenciesUnavailable) &&
+		pack.ExitCode(&res) > 0 && res.Cleanup == executor.CleanupConfirmed {
+		if artifact, ok := goFailureArtifact(ctx, job, p, scratch, goModulePath, res); ok {
+			out.Artifacts = append(out.Artifacts, artifact)
+		}
 	}
 	return out
 }

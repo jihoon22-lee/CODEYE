@@ -34,7 +34,11 @@ export type Finding = {
   observations: string[];
 };
 export type Task = { key: string; status: string; reason: string | null; required?: boolean };
-type TestResult = Task & { attempted: boolean; directory: string | null; exit: number | null; result: 'passed' | 'failed' | 'unverified' };
+export type GoTestFailure = { name?: string; path: string; line: number };
+type TestResult = Task & {
+  attempted: boolean; directory: string | null; exit: number | null; result: 'passed' | 'failed' | 'unverified';
+  failures: GoTestFailure[];
+};
 export type ObservationPlace = { path: string; start: number; end: number };
 export type RelatedObservation = {
   kind: string; message: string | null; location: ObservationPlace | null; state: string; excerpt: Excerpt | null;
@@ -146,30 +150,35 @@ function pinnedSourceBase(source: string | null | undefined, commit: string | nu
   }
 }
 
+function snapshotPath(path: string) {
+  return !/[\\:\x00-\x1f\x7f]/.test(path) && new TextEncoder().encode(path).length <= 4096 &&
+    path.split('/').every(part => part && part !== '.' && part !== '..');
+}
+
 export function sourceEvidenceURL(base: string | undefined, path: string, start: number, end: number) {
-  if (!base || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start || /[\\:\x00-\x1f\x7f]/.test(path)) return;
-  const segments = path.split('/');
-  if (segments.some(part => !part || part === '.' || part === '..') || new TextEncoder().encode(path).length > 4096) return;
+  if (!base || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start || !snapshotPath(path)) return;
   try {
-    return `${base}/${segments.map(encodeURIComponent).join('/')}#L${start}-L${end}`;
+    return `${base}/${path.split('/').map(encodeURIComponent).join('/')}#L${start}-L${end}`;
   } catch {
     return;
   }
 }
-function evidence(v: unknown): Evidence {
+function evidence(v: unknown, expandedDocuments: boolean): Evidence {
   const e = object(v);
   const loc = e.location == null ? null : object(e.location);
+  const kind = str(e.kind);
+  const lines = loc ? { start: count(loc.start_line), end: count(loc.end_line) } : undefined;
   return {
     id: str(e.id),
-    kind: str(e.kind),
+    kind,
     description: str(e.description),
     path: loc ? str(loc.path) : undefined,
-    lines: loc ? { start: count(loc.start_line), end: count(loc.end_line) } : undefined,
-    excerpt: parseExcerpt(e.excerpt),
+    lines,
+    excerpt: parseExcerpt(e.excerpt, expandedDocuments && kind === 'document' ? lines : undefined),
     artifact: nullable(e.artifact_id) ?? undefined,
   };
 }
-function finding(v: unknown): Finding {
+function finding(v: unknown, expandedDocuments: boolean): Finding {
   const f = object(v);
   return {
     id: str(f.id),
@@ -196,7 +205,7 @@ function finding(v: unknown): Finding {
     recommendation: str(object(f.recommendation).summary),
     verification: array(f.verification, str),
     limitations: array(f.limitations, str),
-    evidence: array(f.evidence, evidence),
+    evidence: array(f.evidence, v => evidence(v, expandedDocuments)),
     counter: array(f.counterevidence_ids, str),
     locations: array(f.locations ?? [], (l) => str(object(l).path)),
     observations: array(f.observation_ids ?? [], str),
@@ -224,7 +233,11 @@ export function parseAnalysisReport(
     raw: count(s.raw_observations),
     unresolved: s.unresolved_observations === undefined && r.overview == null ? 0 : count(s.unresolved_observations),
   };
-  const findings = array(r.findings, finding);
+  const builderVersion = r.builder != null ? object(r.builder).version : undefined;
+  const builder18 = typeof builderVersion === 'string' && /^(?:1[89]|[2-9][0-9]|[1-9][0-9]{2,})$/.test(builderVersion);
+  const includesCode = r.export != null && object(r.export).include_code === true;
+  const expandedDocuments = builder18 && includesCode;
+  const findings = array(r.findings, v => finding(v, expandedDocuments));
   let unresolved = 0;
   const observations = array(r.observations, (v) => {
     const o = object(v),
@@ -287,7 +300,6 @@ export function parseAnalysisReport(
     const p = object(r.project);
     return { name: str(p.name), source: nullable(p.source), start: nullable(p.started_at), finish: nullable(p.finished_at) };
   })();
-  const includesCode = r.export != null && object(r.export).include_code === true;
   for (const observation of observations) {
     if (observation.related.length > 64 || observation.related.length > 0 &&
       (!['cpp.cppcheck', 'cpp.clang_tidy'].includes(observation.tool ?? '') ||
@@ -299,7 +311,7 @@ export function parseAnalysisReport(
         !excerptFits(excerpt, place.start, place.end, false))) invalid();
     }
   }
-  const sections = parseSections(r, observations.map(o => o.id), findings.map(f => f.id), counts.total, includesCode);
+  const sections = parseSections(r, observations.map(o => o.id), findings.map(f => f.id), counts.total, includesCode, expandedDocuments);
   const modelFindings = new Set(sections?.codeReview.findings);
   for (const finding of findings) {
     for (const evidence of finding.evidence) {
@@ -312,11 +324,37 @@ export function parseAnalysisReport(
     const task = object(v);
     return { key: str(task.key), status: str(task.status), reason: nullable(task.reason), required: task.required_for_verdict === true };
   });
-  const testResults = input.profile === 'with-tests' ? (() => {
-    const executions = new Map<string, Record<string, unknown>>();
-    for (const execution of array(r.executions ?? [], object)) {
-      if (execution.name === 'test.run') executions.set(str(execution.task_key), execution);
+  const executions = new Map<string, Record<string, unknown>>();
+  const failedTests = new Map<string, GoTestFailure[]>();
+  for (const execution of array(r.executions ?? [], object)) {
+    if (execution.name === 'test.run') {
+      const key = str(execution.task_key);
+      if (failedTests.has(key) || executions.has(key) && execution.go_test_failures !== undefined) invalid();
+      executions.set(key, execution);
     }
+    if (execution.go_test_failures === undefined) continue;
+    const key = str(execution.task_key);
+    const exit = execution.exit_code;
+    const cwd = str(execution.cwd);
+    if (input.profile !== 'with-tests' || coverage.test_status !== 'failed' || !builder18 ||
+      execution.name !== 'test.run' || !/^test\.go(?:\.m[0-9]{2,})?$/.test(key) || execution.status !== 'exited' || execution.cleanup !== 'confirmed' ||
+      typeof exit !== 'number' || !Number.isSafeInteger(exit) || exit < 1 || (cwd !== '.' && (cwd === '[REDACTED]' || !snapshotPath(cwd))) ||
+      !tasks.some(task => task.key === key && task.status === 'failed' && ['test_command_failed', 'test_dependencies_unavailable'].includes(task.reason ?? '')) || failedTests.has(key)) invalid();
+    const failures = array(execution.go_test_failures, value => {
+      const record = object(value);
+      const path = str(record.path);
+      const line = count(record.line);
+      const name = record.name === undefined ? undefined : str(record.name);
+      const validName = name !== undefined && /^Test(?!\p{Ll})[\p{L}\p{Nd}_]*(?![\s\S])/u.test(name) && new TextEncoder().encode(name).length <= 128;
+      if (!snapshotPath(path) || !path.endsWith('_test.go') || line < 1 || cwd !== '.' && !path.startsWith(cwd + '/') ||
+        (includesCode ? !validName : name !== undefined)) invalid();
+      return { name, path, line };
+    });
+    if (!failures.length || failures.length > 64 || includesCode &&
+      new Set(failures.map(failure => JSON.stringify([failure.name, failure.path, failure.line]))).size !== failures.length) invalid();
+    failedTests.set(key, failures);
+  }
+  const testResults = input.profile === 'with-tests' ? (() => {
     return {
       status: str(coverage.test_status),
       tasks: tasks.filter(task => task.key.startsWith('test.')).map((task): TestResult => {
@@ -328,7 +366,7 @@ export function parseAnalysisReport(
         const cwd = typeof e?.cwd === 'string' ? e.cwd : '';
         const directory = cwd === '.' || cwd && cwd !== '[REDACTED]' && !/[:\\\u0000-\u001f\u007f]/.test(cwd) &&
           cwd.split('/').every(segment => segment && segment !== '.' && segment !== '..') ? cwd : null;
-        return { ...task, attempted: e !== undefined, directory, exit, result };
+        return { ...task, attempted: e !== undefined, directory, exit, result, failures: failedTests.get(task.key) ?? [] };
       }),
     };
   })() : undefined;

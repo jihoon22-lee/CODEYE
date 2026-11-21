@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
 import re
 
-from .common import ROOT, ensure, source_location
+from .common import ROOT, ensure, expect_invalid, json_file, source_location
 from .review import document_claim_covers, evidence_document_scope, package_reference_scope
 
 
@@ -30,6 +31,79 @@ def check_plan(plan: dict) -> None:
         visited.add(node)
     for task_id in graph:
         visit(task_id)
+
+
+def check_go_test_failure_contracts(validators: dict, base: dict) -> int:
+    sidecar = json_file(ROOT / "examples/go-test-failures.json")
+    check_sidecar = validators["go-test-failures.schema.json"].validate
+    check_sidecar(sidecar)
+    failure = sidecar["failures"][0]
+    for key, value in (("test", "TestAnswer/child"), ("path", "../answer_test.go"), ("line", 0), ("byte_end", 8388609)):
+        expect_invalid("invalid Go test sidecar " + key, check_sidecar, sidecar | {"failures": [failure | {key: value}]})
+
+    report = {key: copy.deepcopy(base[key]) for key in (
+        "schema_version", "id", "run_id", "revision", "created_at", "builder", "inputs", "attempt",
+    )}
+    report.update(demo=True, status="partial", quality_verdict="inconclusive", export={"include_code": True},
+                  findings=[], tasks=[], executions=[], artifacts=[], limitations=[])
+    report["summary"] = {"total_findings": 0, "actionable_findings": 0, "pending_candidates": 0, "refuted_findings": 0, "priorities": []}
+    report["coverage"] = {"scope_mode": "full", "inventory_files": 1, "tool_processed_files": 0, "llm_exposed_files": 0,
+                          "test_status": "failed", "notes": []}
+    report["builder"]["version"] = "18"
+    report["inputs"]["profile"] = "with-tests"
+    now = report["created_at"]
+    report["tasks"].append({"id": "go-test-fixture", "key": "test.go", "status": "failed",
+                            "required_for_verdict": True, "reason": "test_dependencies_unavailable"})
+    report["executions"].append({
+        "id": "test.go/test.run", "task_key": "test.go", "task_execution_id": "go-test-fixture", "name": "test.run",
+        "status": "exited", "exit_code": 1, "reason": None, "cleanup": "confirmed", "argv": ["go", "test", "-json", "./..."],
+        "cwd": ".", "env_keys": [], "stdout_artifact_id": "go-test-stdout", "stderr_artifact_id": None,
+        "stdout_truncated": False, "stderr_truncated": False, "started_at": now, "ended_at": now,
+        "go_test_failures": [{"name": failure["test"], "path": failure["path"], "line": failure["line"]}],
+    })
+    media = "application/vnd.codeye.go-test-failures+json"
+    report["artifacts"].append({"id": "go-test-sidecar", "task_key": "test.go", "role": "other", "media_type": media,
+                                "sha256": hashlib.sha256((ROOT / "examples/go-test-failures.json").read_bytes()).hexdigest(),
+                                "size_bytes": (ROOT / "examples/go-test-failures.json").stat().st_size,
+                                "decoder": media + ";schema_version=0.1"})
+    check_report_schema = validators["report.schema.json"].validate
+    check_report_schema(report)
+    for key, value in (("exit_code", 0), ("stdout_truncated", True), ("name", "test.isolation"), ("task_key", "test.python")):
+        bad = copy.deepcopy(report)
+        bad["executions"][-1][key] = value
+        expect_invalid("invalid Go test execution " + key, check_report_schema, bad)
+    bad = copy.deepcopy(report)
+    bad["builder"]["version"] = "17"
+    expect_invalid("Go test failure evidence predates its builder", check_report_schema, bad)
+    bad["builder"]["version"] = "18"
+    bad["export"]["include_code"] = False
+    expect_invalid("code-free Go test failure exposes a name", check_report_schema, bad)
+    del bad["executions"][-1]["go_test_failures"][0]["name"]
+    check_report_schema(bad)
+    bad["export"]["include_code"] = True
+    expect_invalid("code-inclusive Go test failure has no name", check_report_schema, bad)
+    return 11
+
+
+def check_document_excerpt_contracts(validators: dict, base: dict) -> int:
+    report = copy.deepcopy(base)
+    report["builder"]["version"] = "18"
+    lines = ["Readable document clause. " * 7 for _ in range(10)] + ["The revision is excluded." * 3]
+    row = {"id": "ev_" + "a" * 24, "kind": "document", "path": "README.md", "start_line": 1, "end_line": len(lines),
+           "blob_sha256": "a" * 64, "excerpt": {"start_line": 1, "end_line": len(lines), "text": "\n".join(lines)}}
+    ensure(1800 < len(row["excerpt"]["text"]) <= 2000, "Document excerpt contract fixture does not distinguish budgets")
+    report["documents"]["evidence"].append(row)
+    check_report_schema = validators["report.schema.json"].validate
+    check_report_schema(report)
+    report["builder"]["version"] = "17"
+    expect_invalid("long document excerpt predates its builder", check_report_schema, report)
+    report["builder"]["version"] = "18"
+    row["kind"] = "code"
+    expect_invalid("code cannot use the document excerpt budget", check_report_schema, report)
+    row["kind"] = "document"
+    row["excerpt"]["text"] += "x" * 200
+    expect_invalid("document excerpt exceeds its own budget", check_report_schema, report)
+    return 3
 
 
 def check_report(report: dict, source_root: Path = ROOT) -> None:
@@ -147,7 +221,8 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
                 path = source_location(item["location"], source_root)
                 digest = hashlib.sha256(path.read_bytes()).hexdigest()
                 ensure(digest == item["blob_sha256"], "Evidence hash mismatch: " + str(path))
-                check_excerpt(item, path, item["location"], include_code, finding["id"] in model_findings)
+                check_excerpt(item, path, item["location"], include_code, finding["id"] in model_findings,
+                              int(report.get("builder", {}).get("version", "0")) >= 18)
     check_sections(report, source_root)
 
 
@@ -226,7 +301,7 @@ def check_sections(report: dict, source_root: Path = ROOT) -> None:
             ensure(hashlib.sha256(path.read_bytes()).hexdigest() == evidence["blob_sha256"], "Section evidence hash mismatch: " + str(path))
             evidence_document_scope(evidence, source_root)
             package_reference_scope(evidence, source_root, redacted=free)
-            check_excerpt(evidence, path, location, not free, True)
+            check_excerpt(evidence, path, location, not free, True, int(report["builder"]["version"]) >= 18)
         cited = [i for entries in report[block].values() if isinstance(entries, list)
                  for entry in entries if isinstance(entry, dict)
                  for key in ("evidence_ids", "first_evidence_ids", "second_evidence_ids", "document_evidence_ids", "code_evidence_ids") for i in entry.get(key, [])]
@@ -304,7 +379,8 @@ def check_document_comparisons(report: dict, catalog: dict) -> None:
                    "Additional document observation lacks fresh scoped implementation evidence")
 
 
-def check_excerpt(evidence: dict, path: Path, citation: dict, include_code: bool | None, model: bool) -> None:
+def check_excerpt(evidence: dict, path: Path, citation: dict, include_code: bool | None, model: bool,
+                  allow_long_document: bool = False) -> None:
     excerpt = evidence.get("excerpt")
     if excerpt is None:
         return
@@ -320,7 +396,10 @@ def check_excerpt(evidence: dict, path: Path, citation: dict, include_code: bool
     for ch in "<>&\u2028\u2029":
         encoded = encoded.replace(ch, f"\\u{ord(ch):04x}")
     forbidden_control = any(ch not in "\n\t" and (ord(ch) < 32 or 127 <= ord(ch) <= 159) for ch in text)
-    ensure(text.strip() and not forbidden_control and len(encoded.encode("utf-8")) <= 1800,
+    size = len(encoded.encode("utf-8"))
+    complete_document = (allow_long_document and model and evidence.get("kind") == "document"
+                         and start == anchor and end == citation["end_line"] and end - start < 40)
+    ensure(text.strip() and not forbidden_control and (size <= 1800 or complete_document and size <= 2000),
            "Invalid source excerpt text: " + str(path))
     ensure("\n".join(lines[start - 1:end]) == text, "Source excerpt differs from snapshot: " + str(path))
 

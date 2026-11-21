@@ -24,7 +24,7 @@ except ImportError as exc:
 
 # Other scripts import these names from validate_bundle.
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
-from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_observations, check_plan, check_report
+from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_document_excerpt_contracts, check_go_test_failure_contracts, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
 from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_workflow_example, pack_selection, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
@@ -102,6 +102,10 @@ def main() -> None:
     observations = json_file(ROOT / "examples/observations-go-vet.json")
     validators["plan.schema.json"].validate(plan)
     validators["report.schema.json"].validate(report)
+    test_failure_negatives = check_go_test_failure_contracts(validators, report)
+    print(f"PASS: Go test failure evidence and code-free report projection; {test_failure_negatives} negative cases")
+    document_excerpt_negatives = check_document_excerpt_contracts(validators, report)
+    print(f"PASS: complete document excerpt bounds and builder compatibility; {document_excerpt_negatives} negative cases")
     validators["analyzer.schema.json"].validate(analyzer)
     validators["analyzer.schema.json"].validate(go_vet)
     validators["go-vet-observations.schema.json"].validate(observations)
@@ -475,7 +479,7 @@ def main() -> None:
     print(f"PASS: {code_refs} document references from source, schema and example files")
     print(f"PASS: {named} tracked text files and their paths without stage labels")
     print(f"PASS: {moded} tracked text files and their paths without run-mode names (outside the history files)")
-    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 23 example contracts")
+    print(f"PASS: {link_count} local Markdown file links; {len(validators)} JSON Schemas; 24 example contracts")
     print(f"PASS: example evidence hashes/ranges/counts; DAG; {len(required)} requirements traced; {openapi_refs} OpenAPI references")
     print(f"PASS: task stage enums (domain/OpenAPI/migration 0006/progress: {len(stage_order)} stages, {len(stage_states)} states)")
     print(f"PASS: {25 + len(section_cases) + len(role_negative) + observation_negatives} negative cases; example policy timing; prompt manifest")

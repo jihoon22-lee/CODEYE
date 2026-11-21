@@ -175,7 +175,7 @@ func TestFinalContractReportRequiresAcceptedLineage(t *testing.T) {
 				key := sourceexcerpt.Key{Path: impl.Path, SHA256: impl.SHA256, Line: impl.Start}
 				attachExcerpts(&r, map[sourceexcerpt.Key][]sourceexcerpt.Excerpt{
 					key: {{StartLine: impl.Start, EndLine: impl.End, Text: "return checkout()"}},
-				}, false)
+				}, nil, false)
 				found := slices.ContainsFunc(section.Evidence, func(e SectionEvidence) bool { return e.ID == impl.ID && e.Excerpt != nil })
 				if !found {
 					t.Fatal("the newly cited source range lost its saved excerpt")

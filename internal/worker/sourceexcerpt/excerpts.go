@@ -21,6 +21,8 @@ import (
 const (
 	MediaType       = "application/vnd.codeye.source-excerpts+json"
 	Version         = "0.2"
+	DocumentVersion = "0.3"
+	DocumentKind    = "document"
 	LegacyVersion   = "0.1"
 	MaxItems        = 128
 	MaxBytes        = 384 << 10
@@ -28,6 +30,8 @@ const (
 	maxText         = 1800 // JSON-encoded bytes per item
 	DiagnosticLines = 9
 	ModelLines      = 50
+	DocumentLines   = 40
+	DocumentBytes   = 2000 // JSON-encoded bytes in an accepted document citation
 )
 
 type Excerpt struct {
@@ -37,6 +41,7 @@ type Excerpt struct {
 }
 
 type Item struct {
+	Kind   string `json:"kind,omitempty"`
 	Path   string `json:"path"`
 	SHA256 string `json:"blob_sha256"`
 	Anchor int    `json:"anchor_line"`
@@ -62,9 +67,10 @@ func (i Item) Key() Key { return Key{i.Path, i.SHA256, i.Anchor} }
 type WindowKey struct {
 	Key
 	Start, End int
+	Kind       string
 }
 
-func (i Item) WindowKey() WindowKey { return WindowKey{i.Key(), i.StartLine, i.EndLine} }
+func (i Item) WindowKey() WindowKey { return WindowKey{i.Key(), i.StartLine, i.EndLine, i.Kind} }
 
 var moreCredentials = regexp.MustCompile(`(?i)(\bgithub_pat_[a-z0-9_]{15,}|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\b(?:xox[baprs]-|glpat-|npm_)[a-z0-9_/-]{12,}|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{8,}|[a-z][a-z0-9+.-]*://[^\s/@:]+:[^\s/@]+@|\b(?:api[_-]?key|password|passwd|secret|token)\s*[:=]\s*["'][^"'\r\n]{8,}["'])`)
 
@@ -75,15 +81,15 @@ func safeText(b []byte) bool {
 // SafeDiagnosticText applies the code excerpt credential screen to tool notes.
 func SafeDiagnosticText(text string) bool { return safeText([]byte(text)) }
 
-func (e Excerpt) validText(anchor int) bool {
+func (e Excerpt) validText(anchor, maxBytes int) bool {
 	return e.StartLine >= 1 && anchor >= e.StartLine && anchor <= e.EndLine &&
 		e.EndLine-e.StartLine == strings.Count(e.Text, "\n") &&
-		strings.TrimSpace(e.Text) != "" && record.JSONLen(e.Text) <= maxText && safeText([]byte(e.Text)) &&
+		strings.TrimSpace(e.Text) != "" && record.JSONLen(e.Text) <= maxBytes && safeText([]byte(e.Text)) &&
 		strings.IndexFunc(e.Text, func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\t' }) < 0
 }
 
 func (e Excerpt) ValidDiagnostic(anchor int) bool {
-	return e.validText(anchor) && e.EndLine-e.StartLine < DiagnosticLines
+	return e.validText(anchor, maxText) && e.EndLine-e.StartLine < DiagnosticLines
 }
 
 // ValidCitation accepts the context window of a stored report and requires a
@@ -93,7 +99,26 @@ func (e Excerpt) ValidCitation(start, end int) bool {
 }
 
 func (e Excerpt) validModel(start, end int) bool {
-	return e.StartLine == start && e.EndLine <= end && e.validText(start) && e.EndLine-start < ModelLines
+	return e.StartLine == start && e.EndLine <= end && e.validText(start, maxText) && e.EndLine-start < ModelLines
+}
+
+// ValidDocumentCitation accepts an exact assigned document citation. This
+// wider byte cap is never used for code or diagnostic context.
+func (e Excerpt) ValidDocumentCitation(start, end int) bool {
+	return e.StartLine == start && e.EndLine == end && e.validText(start, DocumentBytes) && e.EndLine-e.StartLine < DocumentLines
+}
+
+// AtDocumentCitation can reuse a complete stored document window for a
+// shorter citation that shares its start. It never claims a missing tail.
+func (e Excerpt) AtDocumentCitation(start, end int) (Excerpt, bool) {
+	if end < start || end > e.EndLine || !e.ValidDocumentCitation(start, e.EndLine) {
+		return Excerpt{}, false
+	}
+	if end < e.EndLine {
+		lines := strings.SplitN(e.Text, "\n", end-start+2)
+		e.EndLine, e.Text = end, strings.Join(lines[:end-start+1], "\n")
+	}
+	return e, e.ValidDocumentCitation(start, end)
 }
 
 // AtCitation narrows a new forward window to one of the references that
@@ -122,7 +147,7 @@ func SafePath(p string) bool {
 func Decode(body []byte, run, attempt, snapshot string, lookup func(string) (string, bool)) (Document, bool) {
 	var doc Document
 	if len(body) > MaxBytes || domain.DecodeStrict(body, &doc) != nil ||
-		(doc.SchemaVersion != Version && doc.SchemaVersion != LegacyVersion) ||
+		(doc.SchemaVersion != Version && doc.SchemaVersion != LegacyVersion && doc.SchemaVersion != DocumentVersion) ||
 		doc.RunID != run || doc.AttemptID != attempt || doc.Snapshot != snapshot ||
 		len(doc.Items) == 0 || len(doc.Items) > MaxItems {
 		return Document{}, false
@@ -135,7 +160,13 @@ func Decode(body []byte, run, attempt, snapshot string, lookup func(string) (str
 		if legacy {
 			key.Start, key.End = 0, 0
 		}
-		valid := i.ValidDiagnostic(i.Anchor) || !legacy && i.validModel(i.Anchor, i.EndLine)
+		valid := false
+		switch i.Kind {
+		case "":
+			valid = i.ValidDiagnostic(i.Anchor) || !legacy && i.validModel(i.Anchor, i.EndLine)
+		case DocumentKind:
+			valid = doc.SchemaVersion == DocumentVersion && i.ValidDocumentCitation(i.Anchor, i.EndLine)
+		}
 		if !ok || sha != i.SHA256 || !SafePath(i.Path) || !valid || seen[key] {
 			return Document{}, false
 		}
@@ -189,6 +220,17 @@ func ReadRange(root *os.Root, entry source.Entry, start, end int) (Excerpt, bool
 		e = Excerpt{StartLine: start, EndLine: start + i, Text: text}
 	}
 	return e, e.validModel(start, end)
+}
+
+// ReadDocumentRange retains an approved document citation in full. It can
+// omit an invalid window without changing other stored excerpts.
+func ReadDocumentRange(root *os.Root, entry source.Entry, start, end int) (Excerpt, bool) {
+	if start < 1 || start > maxFile+1 || end < start || end-start >= DocumentLines {
+		return Excerpt{}, false
+	}
+	lines := readLines(root, entry, start, end)
+	e := Excerpt{StartLine: start, EndLine: end, Text: strings.Join(lines, "\n")}
+	return e, len(lines) == end-start+1 && e.ValidDocumentCitation(start, end)
 }
 
 func readLines(root *os.Root, entry source.Entry, start, end int) []string {

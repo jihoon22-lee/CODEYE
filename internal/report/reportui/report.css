@@ -716,6 +716,8 @@
   padding: 0;
 }
 
+.review-theme .report-source-coverage { display: block; color: var(--report-muted); font-size: .78rem; }
+
 .review-theme .report-reading-source-link {
   display: inline-flex;
   align-items: center;

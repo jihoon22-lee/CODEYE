@@ -31,8 +31,21 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 		}
 	}
 	lookup := func(p string) (string, bool) { e, ok := files[p]; return e.SHA256, ok }
-	var model, workflow, diagnostics [][]sourceexcerpt.Key
-	modelEnds := map[sourceexcerpt.Key]int{}
+	type request struct {
+		sourceexcerpt.Key
+		model, document bool
+	}
+	var model, workflow, diagnostics [][]request
+	modelEnds := map[request]int{}
+	modelRequests := func(evidence []record.Excerpt) []request {
+		var keys []request
+		for _, e := range evidence {
+			req := request{Key: sourceexcerpt.Key{Path: e.Path, SHA256: e.SHA256, Line: e.Start}, model: true, document: e.Kind == "document"}
+			keys = append(keys, req)
+			modelEnds[req] = max(modelEnds[req], e.End)
+		}
+		return keys
+	}
 	withheld := map[string]bool{}
 	var scope domain.Scope
 	if len(a.job.Scope) > 0 {
@@ -50,9 +63,12 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 				if len(body) == 0 {
 					continue
 				}
-				keys := diagnosticAnchors(body, task.spec.Key, a.snapshot.Digest, lookup, withheld, scope)
-				if len(keys) > 0 {
-					diagnostics = append(diagnostics, keys)
+				var group []request
+				for _, key := range diagnosticAnchors(body, task.spec.Key, a.snapshot.Digest, lookup, withheld, scope) {
+					group = append(group, request{Key: key})
+				}
+				if len(group) > 0 {
+					diagnostics = append(diagnostics, group)
 				}
 			case record.MediaType:
 				if task.status != domain.TaskSucceeded {
@@ -65,23 +81,11 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 				if err != nil || !rec.Accepted() {
 					continue
 				}
-				var keys []sourceexcerpt.Key
-				for _, e := range rec.CitedEvidence() {
-					key := sourceexcerpt.Key{Path: e.Path, SHA256: e.SHA256, Line: e.Start}
-					keys = append(keys, key)
-					modelEnds[key] = max(modelEnds[key], e.End)
-				}
-				if len(keys) > 0 {
+				if keys := modelRequests(rec.CitedEvidence()); len(keys) > 0 {
 					model = append(model, keys)
 				}
 				if task.spec.Key == "review.investigate" && rec.WorkflowReading != nil {
-					var related []sourceexcerpt.Key
-					for _, e := range rec.WorkflowReadingEvidence() {
-						key := sourceexcerpt.Key{Path: e.Path, SHA256: e.SHA256, Line: e.Start}
-						related = append(related, key)
-						modelEnds[key] = max(modelEnds[key], e.End)
-					}
-					workflow = append(workflow, related)
+					workflow = append(workflow, modelRequests(rec.WorkflowReadingEvidence()))
 				}
 			}
 		}
@@ -99,14 +103,26 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 	defer root.Close()
 
 	doc := sourceexcerpt.Document{SchemaVersion: sourceexcerpt.Version, RunID: a.job.Attempt.RunID,
-		AttemptID: a.job.Attempt.ID, Snapshot: a.snapshot.Digest}
-	type request struct {
-		sourceexcerpt.Key
-		model bool
-	}
+		AttemptID: a.job.Attempt.ID, Snapshot: a.snapshot.Digest, Items: []sourceexcerpt.Item{}}
+	budget := newSourceExcerptBudget(doc)
 	seen := map[request]bool{}
 	windows := map[sourceexcerpt.WindowKey]bool{}
-	add := func(groups [][]sourceexcerpt.Key, limit int, model bool) {
+	addItem := func(item sourceexcerpt.Item) bool {
+		bounds := item.WindowKey()
+		if windows[bounds] {
+			return true
+		}
+		if !budget.admit(item, len(doc.Items) > 0) {
+			return false
+		}
+		windows[bounds] = true
+		doc.Items = append(doc.Items, item)
+		if item.Kind == sourceexcerpt.DocumentKind {
+			doc.SchemaVersion = sourceexcerpt.DocumentVersion
+		}
+		return true
+	}
+	add := func(groups [][]request, limit int) {
 		if len(doc.Items) >= limit {
 			return
 		}
@@ -118,29 +134,37 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 					continue
 				}
 				active = true
-				key := group[i]
-				req := request{key, model}
-				if seen[req] || withheld[key.Path] {
+				req := group[i]
+				if seen[req] || withheld[req.Path] {
 					continue
 				}
 				seen[req] = true
-				entry, ok := files[key.Path]
-				if !ok || entry.SHA256 != key.SHA256 {
+				entry, ok := files[req.Path]
+				if !ok || entry.SHA256 != req.SHA256 {
 					continue
 				}
 				remaining--
-				var e sourceexcerpt.Excerpt
-				if model {
-					e, ok = sourceexcerpt.ReadRange(root, entry, key.Line, modelEnds[key])
-				} else {
-					e, ok = sourceexcerpt.Read(root, entry, key.Line)
-				}
-				if ok {
-					item := sourceexcerpt.Item{Path: key.Path, SHA256: key.SHA256, Anchor: key.Line, Excerpt: e}
-					if bounds := item.WindowKey(); !windows[bounds] {
-						doc.Items = append(doc.Items, item)
-						windows[bounds] = true
+				item := sourceexcerpt.Item{Path: req.Path, SHA256: req.SHA256, Anchor: req.Line}
+				if req.model {
+					end := modelEnds[req]
+					if req.document {
+						item.Excerpt, ok = sourceexcerpt.ReadDocumentRange(root, entry, req.Line, end)
+						if ok {
+							if !item.Excerpt.ValidCitation(req.Line, end) {
+								item.Kind = sourceexcerpt.DocumentKind
+							}
+							ok = addItem(item)
+						}
 					}
+					if !req.document || !ok {
+						item.Kind = ""
+						item.Excerpt, ok = sourceexcerpt.ReadRange(root, entry, req.Line, end)
+						if ok {
+							addItem(item)
+						}
+					}
+				} else if item.Excerpt, ok = sourceexcerpt.Read(root, entry, req.Line); ok {
+					addItem(item)
 				}
 				if len(doc.Items) == limit || remaining == 0 {
 					return
@@ -151,10 +175,10 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 			}
 		}
 	}
-	add(model, sourceexcerpt.MaxItems/2, true)
-	add(workflow, min(sourceexcerpt.MaxItems, len(doc.Items)+3), true)
-	add(diagnostics, sourceexcerpt.MaxItems, false)
-	add(model, sourceexcerpt.MaxItems, true)
+	add(model, sourceexcerpt.MaxItems/2)
+	add(workflow, min(sourceexcerpt.MaxItems, len(doc.Items)+3))
+	add(diagnostics, sourceexcerpt.MaxItems)
+	add(model, sourceexcerpt.MaxItems)
 	if len(doc.Items) == 0 || a.ctx.Err() != nil {
 		return
 	}
@@ -173,6 +197,29 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 			SHA256: domain.Digest(body), SizeBytes: int64(len(body)),
 		})
 	}
+}
+
+// Keep the bundle within its existing byte cap even when source paths or
+// complete document citations take more room. JSON array separators and
+// item bytes are the only growth. Both active editions have equal length.
+type sourceExcerptBudget int
+
+func newSourceExcerptBudget(doc sourceexcerpt.Document) sourceExcerptBudget {
+	body, _ := sourceexcerpt.Encode(doc) // The empty header has no failing JSON field type.
+	return sourceExcerptBudget(sourceexcerpt.MaxBytes - len(body))
+}
+
+func (b *sourceExcerptBudget) admit(item sourceexcerpt.Item, comma bool) bool {
+	body, err := json.Marshal(item)
+	need := len(body)
+	if comma {
+		need++
+	}
+	if err != nil || need > int(*b) {
+		return false
+	}
+	*b -= sourceExcerptBudget(need)
+	return true
 }
 
 func diagnosticAnchors(body []byte, task, snapshot string, lookup func(string) (string, bool), withheld map[string]bool, scope domain.Scope) []sourceexcerpt.Key {
