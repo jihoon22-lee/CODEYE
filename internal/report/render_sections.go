@@ -279,6 +279,8 @@ func newSecView(r Report, digest string, l Locale) secView {
 			states[s.Key] = lab(l, "state", *s.State)
 		}
 	}
+	staticLanguages := regularStaticLanguages(r)
+	staticPlanned, staticAccepted := staticCheckCounts(staticLanguages)
 
 	// Overview.
 	ov := secBlock{ID: "overview", Title: title("overview")}
@@ -293,7 +295,11 @@ func newSecView(r Report, digest string, l Locale) secView {
 		if s.State != nil {
 			st = lab(l, "state", *s.State)
 		}
-		t.Rows = append(t.Rows, []secCell{{Text: title(s.Key), Anchor: s.Key}, txt(st), txt(strings.Join(parts, " · "))})
+		name := title(s.Key)
+		if s.Key == SectionStaticAnalysis {
+			name = l.Label("inspection.all_analyzer_counts")
+		}
+		t.Rows = append(t.Rows, []secCell{{Text: name, Anchor: s.Key}, txt(st), txt(strings.Join(parts, " · "))})
 	}
 	ov.Parts = append(ov.Parts, secPart{Heading: l.Label("overview_sections"), Table: t})
 	var attention []secItem
@@ -425,11 +431,17 @@ func newSecView(r Report, digest string, l Locale) secView {
 	v.Sections = append(v.Sections, docs)
 
 	// Static analysis.
-	s := r.StaticAnalysis
-	st := secBlock{ID: SectionStaticAnalysis, Title: title(SectionStaticAnalysis), State: states[SectionStaticAnalysis]}
-	st.Parts = append(st.Parts, secPart{Paras: []string{stageLine(l, s.Stage), l.Label("static.lead")}, Counts: countsOf(l, SectionStaticAnalysis, overviewCounts(r, SectionStaticAnalysis), countOrder[SectionStaticAnalysis])})
+	st := secBlock{ID: SectionStaticAnalysis, Title: title(SectionStaticAnalysis)}
+	staticHeadline := l.Label("inspection.no_static_tasks")
+	if staticPlanned > 0 {
+		staticHeadline = tf(l, "reading.static_results", staticAccepted, staticPlanned)
+	}
+	st.Parts = append(st.Parts, secPart{Paras: []string{staticHeadline, l.Label("static.lead")}, Parts: []secPart{{
+		Fold:   l.Label("inspection.all_analyzer_counts"),
+		Counts: countsOf(l, SectionStaticAnalysis, overviewCounts(r, SectionStaticAnalysis), countOrder[SectionStaticAnalysis]),
+	}}})
 	var diag []string
-	for _, lang := range s.Languages {
+	for _, lang := range staticLanguages {
 		st.Parts = append(st.Parts, v.staticResults(lang, obs))
 		st.Parts = append(st.Parts, v.staticInspectionParts(lang, obs)...)
 		for _, tool := range lang.Tools {
@@ -442,7 +454,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 		records.Fold = tf(l, "inspection.all_diagnostics", len(diag))
 		st.Parts = append(st.Parts, records)
 	}
-	st.Parts = append(st.Parts, secPart{Heading: l.Label("static.findings"), Findings: pick(StaticFindingIDs(r)), Empty: l.Label("static.no_findings")})
+	st.Parts = append(st.Parts, secPart{Heading: l.Label("inspection.all_analyzer_findings"), Findings: pick(StaticFindingIDs(r)), Empty: l.Label("static.no_findings")})
 	v.Sections = append(v.Sections, st)
 
 	// Metrics.
@@ -1129,7 +1141,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{end}}{{if .Counts}}<table><tr><th>{{$l.Label "col.item"}}</th><th>{{$l.Label "col.count"}}</th></tr>
 {{range .Counts}}<tr><td>{{.Label}}</td><td data-count="{{.Name}}">{{.Value}}</td></tr>
 {{end}}</table>
-{{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table><tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}{{if .Table.Details}}<th scope="col">{{$l.Label "inspection.detail_column"}}</th>{{end}}</tr>
+{{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table{{if eq .Table.DetailGroup "metrics-detail"}} class="report-measurement-table"{{end}}><tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}{{if .Table.Details}}<th scope="col">{{$l.Label "inspection.detail_column"}}</th>{{end}}</tr>
 {{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}{{if $t.Details}}<td><details class="report-row-toggle" name="{{$t.DetailGroup}}"><summary aria-controls="{{(index $t.Details $i).ID}}" aria-label="{{(index $t.Details $i).Label}}">{{$l.Label "inspection.open_detail"}}</summary></details></td>{{end}}</tr>
 {{if $t.Details}}{{with index $t.Details $i}}<tr class="report-row-detail" id="{{.ID}}"><td colspan="{{$t.DetailColumns}}">
 {{range .Sources}}<div class="report-evidence">{{with .InspectionPreview}}{{template "source_preview" .}}{{else}}{{template "citation_file" .}}{{end}}{{if .URL}} <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.LinkLabel}}</a>{{end}}</div>{{end}}
@@ -1176,7 +1188,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{else if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action export-evidence-control" target="_blank" rel="noopener noreferrer" aria-label="{{.ActionLabel}} · {{.Location}}">{{template "citation_action" .}}{{reportIcon "external-link"}}</a>
 {{else}}{{template "citation_file" .}}{{end}}
 </div>{{end}}
-{{define "source_preview"}}{{with .}}<div class="report-selected-source"><p><code>{{.Location}}</code></p><pre class="source-window" tabindex="0" aria-label="{{.Location}}"><code>{{range .Lines}}<span class="source-line"{{if .Focus}} data-focus="true"{{end}}><span aria-hidden="true">{{.Number}}</span>{{.Text}}</span>{{end}}</code></pre></div>{{end}}{{end}}
+{{define "source_preview"}}{{with .}}<div class="report-selected-source"><p class="report-excerpt-label">{{.Label}} <code>{{.Location}}</code></p>{{if .Citation}}<p class="report-excerpt-label">{{.CitationLabel}} <code>{{.Citation}}</code></p>{{end}}<pre class="source-window" tabindex="0" aria-label="{{.Location}}"><code>{{range .Lines}}<span class="source-line"{{if .Focus}} data-focus="true"{{end}}><span class="source-line-number" aria-hidden="true">{{.Number}}</span><span class="source-line-code">{{.Text}}</span></span>{{end}}</code></pre></div>{{end}}{{end}}
 {{define "citation_action"}}<span class="export-evidence-label">{{.ActionLabel}}</span>{{template "citation_file" .}}{{end}}
 {{define "citation_file"}}<span class="report-file" title="{{.Location}}">{{reportIcon "file-description"}}<code class="report-file-name">{{.File}}</code><code class="report-file-lines">:{{.Range}}</code></span>{{end}}`))
 

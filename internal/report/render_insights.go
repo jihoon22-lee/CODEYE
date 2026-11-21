@@ -109,14 +109,15 @@ type sourceCitation struct {
 	ExcerptLocation, Text            string
 	URL, LinkLabel                   string
 	ActionLabel, StoredLabel         string
+	CitationLabel                    string
 	Example                          *documentExample
 	ExampleLabel                     string
 	StartLine, EndLine, ExcerptStart int
 }
 
 type sourcePreview struct {
-	Location string
-	Lines    []sourcePreviewLine
+	Location, Label, Citation, CitationLabel string
+	Lines                                    []sourcePreviewLine
 }
 
 type sourcePreviewLine struct {
@@ -136,8 +137,14 @@ func (s sourceCitation) previewFor(title string) *sourcePreview {
 		return nil
 	}
 	lines := strings.Split(s.Text, "\n")
-	focus := previewSymbolLine(lines, title)
-	if focus < 0 && s.StartLine >= s.ExcerptStart && s.EndLine < s.ExcerptStart+len(lines) && s.EndLine-s.StartLine < 5 {
+	inside := s.StartLine >= s.ExcerptStart && s.EndLine < s.ExcerptStart+len(lines)
+	focus := -1
+	if inside && s.StartLine == s.EndLine {
+		focus = s.StartLine - s.ExcerptStart
+	} else {
+		focus = previewSymbolLine(lines, title)
+	}
+	if focus < 0 && inside && s.EndLine-s.StartLine < 5 {
 		focus = s.StartLine - s.ExcerptStart
 	}
 	first, last := 0, len(lines)
@@ -145,7 +152,10 @@ func (s sourceCitation) previewFor(title string) *sourcePreview {
 		first = max(0, min(focus-1, len(lines)-5))
 		last = min(first+5, len(lines))
 	}
-	preview := &sourcePreview{Location: sourceRange(s.File, s.ExcerptStart+first, s.ExcerptStart+last-1)}
+	preview := &sourcePreview{Location: sourceRange(s.File, s.ExcerptStart+first, s.ExcerptStart+last-1), Label: s.StoredLabel}
+	if s.EndLine-s.StartLine >= 5 && preview.Location != s.Location {
+		preview.Citation, preview.CitationLabel = s.Location, s.CitationLabel
+	}
 	for index := first; index < last; index++ {
 		preview.Lines = append(preview.Lines, sourcePreviewLine{s.ExcerptStart + index, lines[index], index == focus})
 	}
@@ -153,6 +163,22 @@ func (s sourceCitation) previewFor(title string) *sourcePreview {
 }
 
 func previewSymbolLine(lines []string, title string) int {
+	if exact := strings.TrimSpace(title); exact != "" {
+		found := -1
+		for i, line := range lines {
+			if strings.TrimSpace(line) != exact {
+				continue
+			}
+			if found >= 0 {
+				found = -1
+				break
+			}
+			found = i
+		}
+		if found >= 0 {
+			return found
+		}
+	}
 	for _, part := range inlineCodeParts(title) {
 		if !part.Code || !previewIdentifier.MatchString(part.Text) {
 			continue
@@ -223,6 +249,7 @@ func newSourceCitation(l Locale, kind, path string, start, end int, excerpt *sou
 		s.ActionLabel = l.Label("evidence.view_manifest")
 	}
 	s.StoredLabel = l.Label("evidence.stored_excerpt")
+	s.CitationLabel = l.Label("evidence.cited_range")
 	return s
 }
 

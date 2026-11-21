@@ -185,7 +185,7 @@
 }
 .web-report .report-excerpt pre { margin-bottom: 0; }
 .web-report .source-window { background: #142540; border-radius: .6rem; color: #e9f1ff; max-height: 23rem; }
-.web-report .source-line > span { color: #b3c5e1; }
+.web-report .source-line-number { color: #b3c5e1; }
 .web-report .report-selected-source .source-window > code { white-space: pre; overflow-wrap: normal; }
 
 .web-report .report-finding { margin-block: .5rem; }

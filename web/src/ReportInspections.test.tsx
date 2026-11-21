@@ -134,3 +134,23 @@ it('opens only the selected static diagnostic with stored, matching source', () 
   expect(screen.getByText(longerDiagnostic)).toBeTruthy();
   expect(screen.getByText('이 위치에 저장된 코드 발췌가 없습니다.')).toBeTruthy();
 });
+
+it('prefers main source over a fixture when rule severity ties across tools', () => {
+  const raw = [
+    ['fixture-low', 'fixtures/low.go', 'low'],
+    ['fixture-high', 'fixtures/high.go', 'high'],
+    ['source-low', 'internal/report/impl.go', 'low'],
+  ];
+  const observations: Observation[] = raw.map(([rule, file, severity]) => ({
+    id: rule, rule, tool: null, message: rule, path: file + ':5',
+    location: { path: file, start: 5, end: 5 }, state: 'resolved',
+    evidenceState: 'verified_against_source_manifest', severity, suppressed: false, metric: null,
+  }));
+  const languages = [{ ecosystem: 'go', tools: [
+    tool('go-vet', 'go.vet', { observations: ['fixture-low', 'fixture-high'] }),
+    tool('staticcheck', 'go.staticcheck', { observations: ['source-low'] }),
+  ] }];
+  const { container } = render(<StaticDiagnosticReading languages={languages} findings={[]} byID={new Map(observations.map(o => [o.id, o]))} severityOf={new Map()} />);
+  const groups = [...container.querySelectorAll('tbody tr')].map(row => row.querySelector('td code')?.textContent);
+  expect(groups).toEqual(['fixture-high', 'source-low', 'fixture-low']);
+});

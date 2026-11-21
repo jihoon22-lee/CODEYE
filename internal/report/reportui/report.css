@@ -247,8 +247,19 @@
 .review-theme .report-selected-source .source-window { overflow-x: auto; white-space: pre; }
 .review-theme .source-window > code { display: block; min-inline-size: max-content; white-space: pre; overflow-wrap: normal; }
 .review-theme .source-line { display: block; white-space: pre; }
-.review-theme .source-line > span { display: inline-block; inline-size: 5ch; padding-inline-end: 1ch; text-align: end; user-select: none; }
+.review-theme .source-line-number { display: inline-block; inline-size: 5ch; padding-inline-end: 1ch; text-align: end; user-select: none; }
 .review-theme .report-selected-source .source-line[data-focus='true'] { background: #314a68; color: #fff; }
+@container codeye-report (max-width: 32rem) {
+  .review-theme .report-selected-source .source-window > code:has(> .source-line[data-focus='true']) { min-inline-size: 0; }
+  .review-theme .report-selected-source .source-line[data-focus='true'] {
+    display: grid;
+    grid-template-columns: 5ch minmax(0, 1fr);
+  }
+  .review-theme .report-selected-source .source-line[data-focus='true'] > .source-line-code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
 
 .report-group {
   --report-tone: var(--report-blue);

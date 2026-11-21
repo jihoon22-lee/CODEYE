@@ -15,6 +15,7 @@ import { ReportCodeStrengths } from './ReportCodeStrengths';
 import { ReportSearch, focusReportFinding, focusReportSearchLocation, type ReportSearchTarget } from './ReportSearch';
 import { projectBehaviors } from './reportBehaviors';
 import {
+  acceptedStaticResult,
   gapGroups,
   duplicateReadingFindings,
   locationPath,
@@ -22,6 +23,7 @@ import {
   moduleSecondary,
   overviewFacts,
   readingSummary,
+  regularStaticLanguages,
   secondaryDir,
   secondaryPath,
   secondaryReviewFinding,
@@ -451,7 +453,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     });
   const overview = new Map(sections.overview.map((x) => [x.key, x]));
   const block = (key: string, body: ReactNode) => {
-    const st = overview.get(key)?.state ?? null;
+    const st = key === 'static_analysis' ? null : overview.get(key)?.state ?? null;
     if (tabbed) return <section className="card report-card report-tab-content" id={anchor(key)} role="tabpanel" aria-labelledby={tabId(key)} hidden={active!==key} tabIndex={0} key={key}>
       {active===key && <div className="card-body"><h5>{label(s.titles,key)}</h5>{body}</div>}
     </section>;
@@ -468,7 +470,9 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const e = sections.environment;
   const d = sections.documents;
   const behaviors = projectBehaviors(d, report.includesCode !== false);
-  const sa = sections.staticAnalysis;
+  const staticLanguages = regularStaticLanguages(sections);
+  const staticTools = staticLanguages.flatMap(language => language.tools);
+  const staticAccepted = staticTools.filter(acceptedStaticResult).length;
   const m = sections.metrics;
   const sc = sections.secrets;
   // Not screened because a secrets task ran but its result is unusable: name
@@ -479,7 +483,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const cr = sections.codeReview;
   const investigationRequests = report.calls.filter(call => call.requested && !call.purpose && call.role === 'investigate').length;
   const verificationRequests = report.calls.filter(call => call.requested && !call.purpose && call.role === 'verify').length;
-  const staticFindings = sa.languages.flatMap((l) => l.tools.flatMap((x) => x.findings));
+  const staticFindings = sections.staticAnalysis.languages.flatMap(language => language.tools.flatMap(tool => tool.findings));
   const sevOf = severityOf(report.findings, staticFindings);
   const facts = overviewFacts(report, sections);
   const readingSignals = readingSummary(report);
@@ -506,7 +510,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const hasCodeReview = cr.findings.length > 0 || cr.strengths.length > 0 || cr.roles.some(role =>
     role.result === 'accepted' && (role.key === 'review.investigate' || role.key === 'review.verify')
   ) || cr.ledger?.modules.some(module => module.completed > 0);
-  const allDiagnostics = sa.languages.flatMap((l) => l.tools.flatMap((x) => x.observations));
+  const allDiagnostics = staticTools.flatMap(tool => tool.observations);
   const suppressed = allDiagnostics.filter((id) => byID.get(id)?.suppressed && !byID.get(id)?.metric).length;
 
   const detectionsPrimary = sc.detections.filter((x) => !secondaryPath(locationPath(x.place)));
@@ -617,27 +621,25 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     ),
     static_analysis: (
       <>
-        <StageLine stage={sa.stage} />
-        <StaticDiagnosticReading languages={sa.languages} findings={report.findings} byID={byID} severityOf={sevOf} />
-        {sa.languages.map(lang => (
+        <p>{staticTools.length ? t.reading.staticResults(staticAccepted, staticTools.length) : inspectionsKo.noStaticTasks}</p>
+        <StaticDiagnosticReading languages={staticLanguages} findings={report.findings} byID={byID} severityOf={sevOf} />
+        {staticLanguages.map(lang => (
           <InspectionReading key={lang.ecosystem ?? 'unknown'} language={lang} byID={byID} />
         ))}
-        <details><summary>{inspectionsKo.counts}</summary><SectionCounts sections={sections} keyName="static_analysis" /></details>
+        <details><summary>{inspectionsKo.allAnalyzerCounts}</summary><SectionCounts sections={sections} keyName="static_analysis" /></details>
         <details><summary>{t.glossary}</summary><Table head={[s.col.tool,s.col.message]} rows={Object.entries(t.tools)} /></details>
         <p className="small">{sm.rulesNote}</p>
         {suppressed > 0 && <p className="small">{sm.suppressedRows(suppressed)}</p>}
         <More title={sm.allDiagnostics(allDiagnostics.length)} reveal={findingTarget?.section === 'static_analysis' ? findingTarget : undefined}>
           {() => (
             <>
-              {sa.languages.map((lang) => (
+              {staticLanguages.map((lang) => (
                 <section key={lang.ecosystem ?? 'unknown'}>
                   <h6>{s.language(lang.ecosystem)}</h6>
                   <Table
                     head={[s.col.task, s.col.tool, s.col.required, s.col.status, s.col.result, s.col.version, s.col.files, s.col.diagnostics, s.col.rules]}
                     rows={lang.tools.map((x) => {
-                      const ran = x.status === 'succeeded' && x.result === 'accepted';
-                      // A task that did not run never reads as zero diagnostics.
-                      const diagnostics = !ran ? s.notRun : x.purpose === 'metrics' ? s.metricCount(x.metrics) : x.purpose === 'secrets' ? s.secretCount(x.secrets) : String(x.observations.length);
+                      const diagnostics = acceptedStaticResult(x) ? String(x.observations.length) : s.notRun;
                       return [
                         <code key="k">{x.task}</code>,
                         <code key="t">{or(x.analyzer)}</code>,
@@ -658,7 +660,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               ))}
               <h6>{t.observations}</h6>
               <ObservationTable ids={allDiagnostics} byID={byID} />
-              <h6>{s.staticFindings}</h6>
+              <h6>{inspectionsKo.allAnalyzerFindings}</h6>
               <FindingList findings={pick(report.findings, staticFindings)} history={history} empty={s.noFindings} reveal={findingTarget} />
             </>
           )}
@@ -848,7 +850,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               rows={ORDER.map(key => {
                 const row = overview.get(key);
                 return [
-                  <ReportAction key="b" onClick={() => go(key)}>{label(s.titles, key)}</ReportAction>,
+                  <ReportAction key="b" onClick={() => go(key)}>{key === 'static_analysis' ? inspectionsKo.allAnalyzerCounts : label(s.titles, key)}</ReportAction>,
                   <span key="s" className={stateClass(row?.state ?? null)}>{state(row?.state ?? null)}</span>,
                   row && (s.countOrder[key] ?? [])
                     .filter(k => Object.hasOwn(row.counts, k))

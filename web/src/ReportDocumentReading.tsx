@@ -117,6 +117,7 @@ export function ReportDocumentReading({ documents, includesCode, id, comparisonI
                 reading.value.codeRefs.map(ref => citations.get(ref)).find(c => c?.kind === 'code' && c.excerpt) : undefined;
               const location = reading.refs.map(ref => citations.get(ref)).find(c => c?.path === path);
               const preview = codePreview ?? (includesCode ? location : undefined);
+              const statement = reading.kind === 'comparison' || reading.kind === 'quality' ? reading.value.statement : undefined;
               const category = reading.kind === 'comparison' ? t.comparisonsTitle : reading.kind === 'quality' ? t.qualityTitle : type;
               return <tr key={anchor} className="report-reading-row"><td colSpan={3}>
                 <details name={`${id}-document-reading`} className="report-result-details">
@@ -126,7 +127,7 @@ export function ReportDocumentReading({ documents, includesCode, id, comparisonI
                       {secondary && <span className="badge report-reading-status">{t.reading.secondary}</span>}</span>
                     <span className="report-index-location">{location ? t.documentReading.lineRange(location.line, location.end) : '—'}</span>
                   </summary>
-                {preview?.excerpt && <ReportPreview path={preview.path} start={preview.line} end={preview.end} excerpt={preview.excerpt} />}
+                {preview?.excerpt && <ReportPreview path={preview.path} start={preview.line} end={preview.end} excerpt={preview.excerpt} title={statement} />}
                 {(scope && scope !== '.') && <p className="report-card-meta">{t.scopeTitle} <code>{scope}</code></p>}
                 {reading.kind === 'comparison' && <>
                   {reading.value.followup && <small>{t.reading.followedContract}</small>}

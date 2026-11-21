@@ -195,6 +195,7 @@ export const ko = {
     title: '프로젝트',
     intro: '폴더나 Git 저장소를 넣으면 CODEYE가 문서·환경·소스를 직접 살펴보고 정적 분석과 코드 검토 결과를 보고서로 보여 줍니다.',
     listTitle: '프로젝트 목록',
+    openList: '목록 열기', closeList: '목록 접기',
     listEmpty: '아직 분석한 프로젝트가 없습니다. 위에 폴더 경로나 Git 주소를 붙여넣어 시작하세요.',
     loading: '불러오는 중…',
     loadMore: '더 보기',

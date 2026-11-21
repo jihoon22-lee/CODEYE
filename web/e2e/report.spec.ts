@@ -121,6 +121,29 @@ test('comparison rows keep the example and opened document within the web report
   }
 });
 
+test('focused source wraps inside the mobile excerpt while context stays scrollable', async ({page}) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const line = '    fmt.Printf("the report records this format expression", firstArgument, secondArgument)';
+  await page.setViewportSize({width:390,height:844});
+  await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
+    <article class="report-document review-theme"><div class="report-selected-source"><pre class="source-window" tabindex="0"><code>
+    <span class="source-line"><span class="source-line-number" aria-hidden="true">4</span><span class="source-line-code">${'long_context_'.repeat(34)}</span></span>
+    <span class="source-line" data-focus="true"><span class="source-line-number" aria-hidden="true">5</span><span class="source-line-code">${line}</span></span>
+    </code></pre></div></article>`);
+  const source = page.locator('.source-window');
+  expect(await source.evaluate(pre => pre.scrollWidth > pre.clientWidth)).toBe(true);
+  const selection = await source.locator('[data-focus] .source-line-code').evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const pre = element.closest('pre')!.getBoundingClientRect();
+    const lines = Array.from(range.getClientRects());
+    return {count:lines.length, contained:lines.every(line => line.left >= pre.left && line.right <= pre.right + 1)};
+  });
+  expect(selection.count).toBeGreaterThan(1);
+  expect(selection.contained).toBe(true);
+});
+
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {
   const login = process.env.CODEYE_TEST_REPORT_LOGIN;
   test.skip(!login, '실제 게시 보고서는 회귀 파일럿에서 생성한다');
@@ -142,6 +165,19 @@ test('published report exposes the same counts, evidence and revision in the bro
   await target.click();
   const report = page.getByRole('article', {name:'분석 보고서'});
   await expect(report).toBeVisible();
+  const listToggle = page.getByRole('button', {name:'목록 열기',exact:true});
+  const workspace = page.locator('.project-workspace');
+  for (const width of [1280,390]) {
+    await page.setViewportSize({width,height:844});
+    await expect.poll(() => workspace.evaluate(element => element.clientWidth - element.querySelector<HTMLElement>('.project-detail')!.clientWidth)).toBeLessThanOrEqual(1);
+    await listToggle.focus();
+    await expect(target).toBeHidden();
+    await listToggle.press('Enter');
+    await expect(target).toBeVisible();
+    await expect(target).toHaveAttribute('aria-pressed','true');
+    await page.getByRole('button', {name:'목록 접기',exact:true}).press('Space');
+    await expect(target).toBeHidden();
+  }
   const response = await page.request.get('/api/v1/runs/' + id + '/report?format=json&include_code=true');
   expect(response.ok()).toBe(true);
   const doc = await response.json();

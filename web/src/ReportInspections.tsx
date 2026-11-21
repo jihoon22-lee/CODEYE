@@ -3,7 +3,7 @@ import type { Finding, Observation, ObservationPlace } from './analysisReport';
 import type { Excerpt, Sections, StaticTool } from './parseReportSections';
 import { explainReason, label, PinnedSourceLink, ReportPreview, sourceLocation } from './ReportParts';
 import { cutLine } from './format';
-import { ruleGroups, secondaryPath } from './reportGroups';
+import { acceptedStaticResult as shown, ruleGroups, secondaryReviewPath, sevRank } from './reportGroups';
 import { reportKo } from './locales/report-ko';
 import { inspectionsKo as i } from './locales/report-inspections-ko';
 
@@ -26,10 +26,6 @@ function category(tool: StaticTool) {
   if (knownTypes.has(id)) return 'type';
   if (id === 'python.bandit') return 'other';
   return 'lint';
-}
-
-function shown(tool: StaticTool) {
-  return tool.status === 'succeeded' && tool.result === 'accepted';
 }
 
 function scope(tool: StaticTool) {
@@ -168,8 +164,9 @@ export function StaticDiagnosticReading({ languages, findings, byID, severityOf 
   return <>{languages.map(lang => {
     const groups = ruleGroups(lang.tools, byID, severityOf);
     const rows = groups.map(g => {
-      const rank = (o: Observation) => !o.location ? 3 : secondaryPath(o.location.path) ? 2 : evidenceByObservation.has(o.id) ? 0 : 1;
-      const candidates = g.observations.map(id => byID.get(id)!).sort((a, b) => rank(a) - rank(b));
+      const rank = (o: Observation) => !o.location ? 3 : secondaryReviewPath(o.location.path) ? 2 : evidenceByObservation.has(o.id) ? 0 : 1;
+      const severity = (o: Observation) => sevRank(severityOf.get(o.id) ?? o.severity ?? '');
+      const candidates = g.observations.map(id => byID.get(id)!).sort((a, b) => severity(b) - severity(a) || rank(a) - rank(b));
       const o = candidates[0];
       const message = reportKo.ruleDescriptions[g.analyzer + ':' + g.rule] ?? cutLine(o.message);
       return {

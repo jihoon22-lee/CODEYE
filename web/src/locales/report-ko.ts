@@ -11,6 +11,7 @@ export const reportKo = {
     `${seconds % 60}초`,
   ].filter(Boolean).join(' '),
   status: '분석 상태', excerptAt: (location: string) => `${location} 원문 발췌`,
+  savedExcerpt: '발췌', citedRange: '인용 범위',
   target: '분석 대상',
   projectIntro: '프로젝트 소개',
   executionStatus: (status: string) => `분석 ${status}`,
@@ -74,7 +75,8 @@ export const reportKo = {
     viewArea: (area: string) => `${area} 상세 보기`,
     outcomeStatus: { failed: '실패', timed_out: '시간 초과', unsupported: '미지원', skipped_policy: '정책 제외' } as Record<string, string>,
     codeOutcome: '코드 분석', modelScopeLabel: '모델 조사', testsOutcome: '기존 테스트', requiredOutcome: '필수 분석 작업',
-    staticOutcome: (accepted: number, planned: number, primary: number) => `결과 확보 ${accepted}/${planned}개 작업 · 주요 코드 진단 ${primary}건`,
+    staticResults: (accepted: number, planned: number) => `결과 확보 ${accepted}/${planned}개 작업`,
+    staticDiagnostics: (primary: number) => `주요 코드 진단 ${primary}건`,
     documentsPending: '대조 보류', documentsRead: '문서 읽음', environmentMismatch: '요구 불일치',
     documentsOutcome: (read: number, assessed: number, unknown: number) => [
       `${n(read)}개 읽음`, assessed > 0 ? `구현 대조 ${n(assessed)}건` : '', unknown > 0 ? `구현 미확인 ${n(unknown)}건` : '',

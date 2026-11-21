@@ -40,6 +40,49 @@ func checkCompleted(tool StaticTool) bool {
 	return tool.TaskStatus == string(domain.TaskSucceeded) && tool.Result == DiscoveryAccepted
 }
 
+func regularStaticLanguages(r Report) []StaticLanguage {
+	if r.StaticAnalysis == nil {
+		return nil
+	}
+	specialized := map[string]bool{}
+	if r.Metrics != nil {
+		for _, key := range r.Metrics.TaskKeys {
+			specialized[key] = true
+		}
+	}
+	if r.Secrets != nil {
+		for _, key := range r.Secrets.TaskKeys {
+			specialized[key] = true
+		}
+	}
+	var languages []StaticLanguage
+	for _, language := range r.StaticAnalysis.Languages {
+		tools := make([]StaticTool, 0, len(language.Tools))
+		for _, tool := range language.Tools {
+			if !specialized[tool.TaskKey] && optText(tool.Purpose, PurposeDiagnostics) == PurposeDiagnostics {
+				tools = append(tools, tool)
+			}
+		}
+		if len(tools) > 0 {
+			language.Tools = tools
+			languages = append(languages, language)
+		}
+	}
+	return languages
+}
+
+func staticCheckCounts(languages []StaticLanguage) (planned, accepted int) {
+	for _, language := range languages {
+		for _, tool := range language.Tools {
+			planned++
+			if checkCompleted(tool) {
+				accepted++
+			}
+		}
+	}
+	return planned, accepted
+}
+
 func checkOutcome(l Locale, tool StaticTool) string {
 	status := lab(l, "task_status", tool.TaskStatus)
 	if tool.TaskReason != nil {
@@ -203,7 +246,11 @@ func (v secView) staticResults(language StaticLanguage, obs map[string]Observati
 	l := v.L
 	severity := map[string]string{}
 	excerpts := map[string]*sourceexcerpt.Excerpt{}
-	for _, finding := range findingsOf(v.R, StaticFindingIDs(v.R)) {
+	var findingIDs []string
+	for _, tool := range language.Tools {
+		findingIDs = append(findingIDs, tool.FindingIDs...)
+	}
+	for _, finding := range findingsOf(v.R, findingIDs) {
 		for _, id := range finding.ObservationIDs {
 			if sevRank(finding.Severity) > sevRank(severity[id]) {
 				severity[id] = finding.Severity
@@ -227,7 +274,7 @@ func (v secView) staticResults(language StaticLanguage, obs map[string]Observati
 			switch {
 			case o.Location == nil:
 				return 3
-			case secondaryPath(o.Location.Path):
+			case !productLocation(o.Location.Path, o.Location.StartLine, o.Location.EndLine):
 				return 2
 			case excerpts[o.ID] != nil:
 				return 0
@@ -236,8 +283,15 @@ func (v secView) staticResults(language StaticLanguage, obs map[string]Observati
 			}
 		}
 		o := obs[g.ObservationIDs[0]]
+		severityRank := func(observation Observation) int {
+			if s := severity[observation.ID]; s != "" {
+				return sevRank(s)
+			}
+			return sevRank(optText(observation.RawSeverity, ""))
+		}
 		for _, id := range g.ObservationIDs[1:] {
-			if next := obs[id]; rank(next) < rank(o) {
+			next := obs[id]
+			if a, b := severityRank(next), severityRank(o); a > b || a == b && rank(next) < rank(o) {
 				o = next
 			}
 		}

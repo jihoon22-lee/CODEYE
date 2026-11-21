@@ -109,8 +109,8 @@ export function ReportSearch({ report, navigate }: { report: AnalysisReport; nav
       }
     }}>
       <button ref={trigger} type="button" className="btn btn-sm btn-ghost-primary report-search-toggle"
-        aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
-        {s.title}
+        aria-expanded={open} aria-controls={id} aria-label={s.title} onClick={() => setOpen(!open)}>
+        <span className="report-search-label">{s.title}</span><span className="report-search-icon" aria-hidden="true" />
       </button>
       <div id={id} hidden={!open}>
         {open && <>

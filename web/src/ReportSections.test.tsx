@@ -41,6 +41,31 @@ function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.jso
 }
 
 describe('analysis sections', () => {
+  it('counts only successful accepted regular diagnostics in both static summaries', () => {
+    const doc = example('report.json');
+    const report = parseAnalysisReport(doc, doc.run_id);
+    const sections = report.sections!;
+    const source = sections.staticAnalysis.languages.flatMap(language => language.tools)[0];
+    const tools = Array.from({length: 119}, (_, index) => ({
+      ...source, task: 'check.m' + index, analyzer: 'go.vet', purpose: 'diagnostics',
+      status: index < 73 ? 'succeeded' : 'unsupported', result: index < 73 ? 'accepted' : 'not_in_result_manifest',
+      observations: [], findings: [], rules: [],
+    }));
+    // The old aggregate stage includes three specialized tasks even when
+    // older tool rows don't state their purpose.
+    const specialized = ['lizard', 'jscpd', 'gitleaks'].map(task => ({
+      ...tools[0], task, purpose: null,
+    }));
+    sections.staticAnalysis = { stage: { state: 'partial', tasks: 122, succeeded: 76 },
+      languages: [{ ecosystem: 'go', tools: [...tools, ...specialized] }] };
+    sections.metrics.tasks = ['lizard', 'jscpd'];
+    sections.secrets.tasks = ['gitleaks'];
+    render(<ReportDocument report={report} />);
+    expect(screen.getByText('결과 확보 73/119개 작업')).toBeTruthy();
+    expect(screen.getByText('결과 확보 73/119개 작업 · 주요 코드 진단 0건')).toBeTruthy();
+    expect(screen.queryByText(/작업 122개 중 76개 성공/)).toBeNull();
+  });
+
   it('uses the unique named symbol for a broad finding and leaves ambiguous excerpts unhighlighted', () => {
     const lines = [
       '// danger only appears in commentary here', 'use std::collections::HashMap;', '', 'fn unrelated() {}', '',
@@ -911,8 +936,7 @@ describe('analysis sections', () => {
     }
     // States are text with an icon, never color alone.
     expect(within(article).getAllByText(/△ 일부 수행/).length).toBeGreaterThan(0);
-    // The measurement section explains why jscpd did not run. Its task is
-    // also available in the static section's detailed tool inventory.
+    // The measurement section, separate from regular diagnostics, explains why jscpd did not run.
     const jscpdRow = () => within(article).getAllByText(/^jscpd/).map((x) => x.closest('tr')!).filter(Boolean);
     const measurements = container.querySelector('#report-section-metrics') as HTMLElement;
     const duplication = within(measurements).getByRole('heading', { name: '코드 중복', hidden: true }).parentElement!;
@@ -922,9 +946,7 @@ describe('analysis sections', () => {
     const all = staticSection.querySelector('details.report-more') as HTMLDetailsElement;
     all.open = true;
     fireEvent(all, new Event('toggle'));
-    const jscpd = jscpdRow().find((tr) => tr.cells.length === 9)!;
-    expect(jscpd.textContent).toContain(t.sections.notRun);
-    expect(jscpd.textContent).not.toMatch(/\b0\b.*규칙/);
+    expect(jscpdRow().find((tr) => tr.cells.length === 9)).toBeUndefined();
     // Model interpretation is labeled with its role.
     expect(within(article).queryByText(t.sections.model('review.documents'))).toBeNull();
     expect(within(article).getAllByText(/하위 호출이 실패하면 최대 3번 재시도한다/).length).toBeGreaterThan(0);

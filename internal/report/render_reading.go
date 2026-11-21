@@ -27,6 +27,7 @@ type readingCategory struct {
 
 type readingRow struct {
 	ID, Title, Type, Status, SharedPath, Location string
+	Statement                                     string
 	Aliases                                       []string
 	Details                                       []secItem
 	Sources                                       []sourceCitation
@@ -86,7 +87,7 @@ func (v secView) documentReading(doc *DocumentsSection) *sectionReading {
 				row.Location = tf(l, "docs.reading_line_range", e.StartLine, e.EndLine)
 			}
 			if row.Preview == nil && v.R.Export.IncludeCode {
-				row.Preview = v.citeSectionEvidence(e).Preview()
+				row.Preview = v.citeSectionEvidence(e).previewFor(row.Statement)
 			}
 			if !slices.Contains(paths, e.Path) {
 				paths = append(paths, e.Path)
@@ -112,19 +113,19 @@ func (v secView) documentReading(doc *DocumentsSection) *sectionReading {
 			if status != "unknown" && v.R.Export.IncludeCode {
 				for _, id := range c.CodeEvidenceIDs {
 					if evidence := evidenceByID[id]; evidence.Kind == "code" {
-						preview = v.citeSectionEvidence(evidence).Preview()
+						preview = v.citeSectionEvidence(evidence).previewFor(c.Statement)
 						if preview != nil {
 							break
 						}
 					}
 				}
 			}
-			add(readingRow{ID: comparisonAnchor(i), Title: title, Status: l.Label("decision.comparison." + c.Status), Details: continueAt,
+			add(readingRow{ID: comparisonAnchor(i), Title: title, Statement: c.Statement, Status: l.Label("decision.comparison." + c.Status), Details: continueAt,
 				Workflow: v.workflowCitations(c.RelatedWorkflow, doc.Evidence), Preview: preview}, l.Label("docs.reading_comparisons"), c.DocumentEvidenceIDs)
 		}
 	}
 	for i, q := range doc.Quality {
-		add(readingRow{ID: "document-quality-" + strconv.Itoa(i+1), Title: l.Label("insight." + q.Aspect), Status: l.Label("insight." + q.Assessment),
+		add(readingRow{ID: "document-quality-" + strconv.Itoa(i+1), Title: l.Label("insight." + q.Aspect), Statement: q.Statement, Status: l.Label("insight." + q.Assessment),
 			Details: readingScopeAndText(l, "", q.Statement), Sources: v.sourceCitations(q.EvidenceIDs, doc.Evidence)}, l.Label("docs.reading_quality"), q.EvidenceIDs)
 	}
 	if doc.Model.State == ModelPerformed {
@@ -549,16 +550,12 @@ func (v secView) ReadingOverview() []overviewReadingRow {
 		}
 		rows[len(rows)-1].Status = ""
 	}
-	planned, successful := 0, 0
+	languages := regularStaticLanguages(v.R)
+	planned, accepted := staticCheckCounts(languages)
 	observed := map[string]bool{}
-	for _, language := range v.R.StaticAnalysis.Languages {
+	for _, language := range languages {
 		for _, tool := range language.Tools {
-			if optText(tool.Purpose, "diagnostics") != "diagnostics" {
-				continue
-			}
-			planned++
-			if tool.TaskStatus == "succeeded" && tool.Result == DiscoveryAccepted {
-				successful++
+			if checkCompleted(tool) {
 				for _, id := range tool.ObservationIDs {
 					observed[id] = true
 				}
@@ -573,7 +570,7 @@ func (v secView) ReadingOverview() []overviewReadingRow {
 				primary++
 			}
 		}
-		add(SectionStaticAnalysis, "section.static_analysis", tf(v.L, "reading.static_outcome", successful, planned, primary))
+		add(SectionStaticAnalysis, "section.static_analysis", tf(v.L, "reading.static_results", accepted, planned)+" · "+tf(v.L, "reading.static_diagnostics", primary))
 	}
 	if test := v.TestRunPart(); test.Fold != "" {
 		status, _, _ := strings.Cut(test.Fold, " · ")

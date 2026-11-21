@@ -62,12 +62,23 @@ export const sevRank = (s: string) => SEVERITY[s] ?? 0;
 // RuleGroup is the diagnostics of one rule of one analyzer in one language.
 export type RuleGroup = { analyzer: string; rule: string; count: number; severity: string; message: string | null; primary: string[]; secondary: string[]; observations: string[] };
 
+export function regularStaticLanguages(sections: Pick<Sections, 'staticAnalysis' | 'metrics' | 'secrets'>) {
+  const specialized = new Set([...sections.metrics.tasks, ...sections.secrets.tasks]);
+  return sections.staticAnalysis.languages.map(({ ecosystem, tools }) => ({
+    ecosystem,
+    tools: tools.filter(tool => !specialized.has(tool.task) && (tool.purpose ?? 'diagnostics') === 'diagnostics'),
+  })).filter(language => language.tools.length > 0);
+}
+
+export function acceptedStaticResult(tool: StaticTool) {
+  return tool.status === 'succeeded' && tool.result === 'accepted';
+}
+
 // ruleGroups groups a language's diagnostics (not suppressed, not metrics)
-// by analyzer and rule, the .mNN tasks of an analyzer together: by analyzer,
-// then groups with a primary location, highest severity, most diagnostics, rule.
+// by analyzer and rule. Higher severity comes first, then main source locations.
 export function ruleGroups(tools: StaticTool[], byID: Map<string, Observation>, severityOf: Map<string, string>): RuleGroup[] {
   const order = new Map<string, number>();
-  const groups = new Map<string, RuleGroup & { order: number; sev: number }>();
+  const groups = new Map<string, RuleGroup & { order: number; sev: number; main: boolean }>();
   for (const x of tools) {
     if ((x.purpose ?? 'diagnostics') !== 'diagnostics') continue;
     const analyzer = x.analyzer ?? x.task;
@@ -78,7 +89,7 @@ export function ruleGroups(tools: StaticTool[], byID: Map<string, Observation>, 
       const key = analyzer + '\u0000' + o.rule;
       let g = groups.get(key);
       if (!g) {
-        g = { analyzer, rule: o.rule, count: 0, severity: '', sev: -1, message: o.message, primary: [], secondary: [], observations: [], order: order.get(analyzer)! };
+        g = { analyzer, rule: o.rule, count: 0, severity: '', sev: -1, message: o.message, primary: [], secondary: [], observations: [], order: order.get(analyzer)!, main: false };
         groups.set(key, g);
       }
       g.count++;
@@ -89,12 +100,13 @@ export function ruleGroups(tools: StaticTool[], byID: Map<string, Observation>, 
         g.sev = sevRank(sev);
       }
       const loc = o.path ?? '—';
+      if (o.location && o.evidenceState === 'verified_against_source_manifest' && !secondaryReviewPath(o.location.path)) g.main = true;
       if (o.path && secondaryPath(locationPath(o.path))) g.secondary.push(loc);
       else g.primary.push(loc);
     }
   }
   return [...groups.values()]
-    .sort((a, b) => a.order - b.order || Number(b.primary.length > 0) - Number(a.primary.length > 0) || b.sev - a.sev || b.count - a.count || (a.rule < b.rule ? -1 : a.rule > b.rule ? 1 : 0))
+    .sort((a, b) => b.sev - a.sev || Number(b.main) - Number(a.main) || b.count - a.count || a.order - b.order || (a.rule < b.rule ? -1 : a.rule > b.rule ? 1 : 0))
     .map(({ analyzer, rule, count, severity, message, primary, secondary, observations }) => ({ analyzer, rule, count, severity, message, primary, secondary, observations }));
 }
 
@@ -243,15 +255,14 @@ export function readingSummary(report: AnalysisReport): ReadingSummaryRow[] {
     const lines = sections?.codeReview.ledger?.files?.reduce((sum, file) => ({ accepted: sum.accepted + file.accepted, total: sum.total + file.total }), { accepted: 0, total: 0 });
     rows.push({ section: 'code_review', label: t.reading.modelScopeLabel, value: accepted !== null ? t.reading.modelScope(accepted, eligible, lines) : t.reading.modelSent(requested, eligible) });
   }
-  const staticTools = report.sections?.staticAnalysis.languages.flatMap(language => language.tools)
-    .filter(tool => tool.purpose !== 'metrics' && tool.purpose !== 'secrets') ?? [];
+  const staticTools = sections ? regularStaticLanguages(sections).flatMap(language => language.tools) : [];
   if (staticTools.length > 0) {
-    const successful = staticTools.filter(tool => tool.status === 'succeeded' && tool.result === 'accepted');
+    const successful = staticTools.filter(acceptedStaticResult);
     const observed = new Set(successful.flatMap(tool => tool.observations));
     const primary = report.observations.filter(o => observed.has(o.id) && !o.suppressed && !o.metric && o.location &&
       o.evidenceState === 'verified_against_source_manifest' && !secondaryReviewPath(o.location.path));
-    rows.push({ section: 'static_analysis', label: t.sections.titles.static_analysis, status: stage(sections?.staticAnalysis.stage.state),
-      value: t.reading.staticOutcome(successful.length, staticTools.length, primary.length) });
+    rows.push({ section: 'static_analysis', label: t.sections.titles.static_analysis,
+      value: t.reading.staticResults(successful.length, staticTools.length) + ' · ' + t.reading.staticDiagnostics(primary.length) });
   }
   if (report.testResults) {
     const results = report.testResults;

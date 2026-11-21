@@ -57,13 +57,21 @@ export function CodeWindow({ excerpt, location, focusLine }: { excerpt: Excerpt;
   return (
     <pre className="source-window" tabIndex={0} aria-label={t.excerptAt(location)}><code>
       {excerpt.text.split('\n').map((line, i) => (
-        <span className="source-line" key={i} data-focus={excerpt.start + i === focusLine ? 'true' : undefined}><span aria-hidden="true">{excerpt.start + i}</span>{line}</span>
+        <span className="source-line" key={i} data-focus={excerpt.start + i === focusLine ? 'true' : undefined}>
+          <span className="source-line-number" aria-hidden="true">{excerpt.start + i}</span><span className="source-line-code">{line}</span>
+        </span>
       ))}
     </code></pre>
   );
 }
 
 function sourceFocus(title: string | undefined, lines: string[], excerpt: Excerpt, start: number, end: number) {
+  if (start === end && start >= excerpt.start && start <= excerpt.end) return start;
+  const exact = title?.trim();
+  if (exact) {
+    const matches = lines.map((line, index) => line.trim() === exact ? index : -1).filter(index => index >= 0);
+    if (matches.length === 1) return excerpt.start + matches[0];
+  }
   for (const [, symbol] of title?.matchAll(/`([a-zA-Z_][a-zA-Z_0-9]*)`/g) ?? []) {
     const token = new RegExp(`\\b${symbol}\\b`);
     const matches = lines.map((line, index) => !/^\s*(?:\/\/|\/\*|\* |# )/.test(line) && token.test(line) ? index : -1).filter(index => index >= 0);
@@ -78,9 +86,12 @@ export function ReportPreview({ path, start, end, excerpt, title }: { path: stri
   const first = focus === undefined ? excerpt.start : Math.max(excerpt.start, Math.min(focus - 1, excerpt.end - 4));
   const last = focus === undefined ? excerpt.end : Math.min(excerpt.end, first + 4);
   const text = lines.slice(first - excerpt.start, last - excerpt.start + 1).join('\n');
+  const location = sourceLocation(path, first, last);
+  const broadCitation = end - start >= 5 && (start !== first || end !== last);
   return <div className="report-selected-source">
-    <p><code>{sourceLocation(path, first, last)}</code></p>
-    <CodeWindow location={sourceLocation(path, first, last)} excerpt={{ start: first, end: last, text }} focusLine={focus} />
+    <p className="report-excerpt-label">{t.savedExcerpt} <code>{location}</code></p>
+    {broadCitation && <p className="report-excerpt-label">{t.citedRange} <code>{sourceLocation(path, start, end)}</code></p>}
+    <CodeWindow location={location} excerpt={{ start: first, end: last, text }} focusLine={focus} />
   </div>;
 }
 

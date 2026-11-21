@@ -366,6 +366,29 @@
   min-inline-size: 38rem;
 }
 
+.report-export .report-measurement-table {
+  min-inline-size: 16rem;
+  table-layout: fixed;
+}
+
+.report-export .report-measurement-table th:first-child {
+  width: 5.25rem;
+  white-space: nowrap;
+}
+
+.report-export .report-measurement-table td:first-child {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.report-export .report-measurement-table:has(.report-row-toggle) th:last-child {
+  width: 5.35rem;
+}
+
+.report-export .report-measurement-table .report-row-toggle summary {
+  white-space: nowrap;
+}
+
 .report-export :is(th, td) {
   padding: .6rem .7rem;
   border: 1px solid var(--report-line);

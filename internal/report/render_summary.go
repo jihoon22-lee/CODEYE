@@ -154,13 +154,13 @@ type ruleGroup struct {
 	Primary, Secondary []string
 	ObservationIDs     []string
 	order              int
+	main               bool
 }
 
 // staticGroups groups the located and unlocated diagnostics of a language's
 // diagnostics tools by analyzer and rule (the .mNN tasks of one analyzer
-// merge). Suppressed diagnostics and metrics are not in a group. Groups
-// come by analyzer (first appearance), then those with a primary location,
-// highest severity, most diagnostics, rule.
+// merge). Suppressed diagnostics and metrics are not in a group. Higher
+// severity comes first, then main source locations.
 func (v secView) staticGroups(lang StaticLanguage, obs map[string]Observation, sevOf map[string]string) []ruleGroup {
 	byKey := map[string]*ruleGroup{}
 	var groups []*ruleGroup
@@ -197,6 +197,9 @@ func (v secView) staticGroups(lang StaticLanguage, obs map[string]Observation, s
 			loc := l0(v.L)
 			if o.Location != nil {
 				loc = sourceRange(o.Location.Path, o.Location.StartLine, o.Location.EndLine)
+				if o.EvidenceState == EvidenceVerified && productLocation(o.Location.Path, o.Location.StartLine, o.Location.EndLine) {
+					g.main = true
+				}
 			}
 			if o.Location != nil && secondaryPath(o.Location.Path) {
 				g.Secondary = append(g.Secondary, loc)
@@ -215,14 +218,14 @@ func (v secView) staticGroups(lang StaticLanguage, obs map[string]Observation, s
 	sort.SliceStable(out, func(a, b int) bool {
 		x, y := out[a], out[b]
 		switch {
-		case x.order != y.order:
-			return x.order < y.order
-		case (len(x.Primary) > 0) != (len(y.Primary) > 0):
-			return len(x.Primary) > 0
 		case x.sev != y.sev:
 			return x.sev > y.sev
+		case x.main != y.main:
+			return x.main
 		case x.Count != y.Count:
 			return x.Count > y.Count
+		case x.order != y.order:
+			return x.order < y.order
 		}
 		return x.Rule < y.Rule
 	})
@@ -662,7 +665,7 @@ func (v secView) summaryLedger(x ReviewLedger) []secPart {
 // and one table of rule groups.
 func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings map[string]Finding) secBlock {
 	l := v.L
-	s := v.R.StaticAnalysis
+	languages := regularStaticLanguages(v.R)
 	sevOf := map[string]string{}
 	for _, id := range StaticFindingIDs(v.R) {
 		if f, ok := findings[id]; ok {
@@ -674,7 +677,7 @@ func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings 
 		}
 	}
 	parts := []secPart{b.Parts[0]}
-	for _, lang := range s.Languages {
+	for _, lang := range languages {
 		reading := v.staticInspectionParts(lang, obs)
 		parts = append(parts, reading...)
 		heading := l.Label("static.language_unknown")
@@ -698,7 +701,7 @@ func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings 
 		parts = append(parts, secPart{Heading: tf(l, "summary.static_rules", heading), Table: gt})
 	}
 	suppressed := 0
-	for _, lang := range s.Languages {
+	for _, lang := range languages {
 		for _, x := range lang.Tools {
 			for _, id := range x.ObservationIDs {
 				if o, ok := obs[id]; ok && o.Suppressed && o.Metric == nil {
